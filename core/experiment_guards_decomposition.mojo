@@ -147,6 +147,56 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_C57_CANDIDATE_STATE"](), "removed 2026-11-15 (lane/expdel2-07-base): C57_CANDIDATE_STATE (Decomposition (MinCovDet candidate mean retained for its covariance, IDENTICAL)) was unmeasured opt-in arm; the opt-in arm is gone and the default path is unchanged; code recoverable at 5bb9e1659f; see docs/TOMBSTONES.md"
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_TSQR_REUSE.patch
     comptime assert not is_defined["MOJOLEARN_IDN_TSQR_REUSE"](), "removed 2026-11-15 (lane/expdel2-07-base): IDN_TSQR_REUSE (Decomposition (TSQR immutable-factor reuse across RHS calls, I22)) was opt-in arm; component screening only (I22 source5b), never a full-operation A/B; the opt-in arm is gone and the default path is unchanged; code recoverable at c336036020; see docs/TOMBSTONES.md"
+    # Lane expdel2-17-decomposition (2026-11-15), removed under "An unmeasured arm is deleted" (docs/TOMBSTONES.md,
+    # docs/apple-fast/EXPERIMENTS.md, experiments/removed/*.patch).
+    # Restore: git apply experiments/removed/MOJOLEARN_AFCL_L13.patch
+    comptime assert not is_defined["MOJOLEARN_AFCL_L13"](), "removed 2026-11-15 (lane/expdel2-17-decomposition): AFCL_L13 (never-run Apple FAST card, MinCovDet support selection on four SIMD groups) is gone; the default path is the only one; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_DECOMP_FAST_OMP_BLOCK.patch
+    comptime assert not is_defined["MOJOLEARN_DECOMP_FAST_OMP_BLOCK"](), "removed 2026-11-15 (lane/expdel2-17-decomposition): DECOMP_FAST_OMP_BLOCK (FAST Apple opt-in OMP block per row, never A/B'd) is gone; the default path is the only one; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_FA_GRAM_ONCE.patch
+    comptime assert not is_defined["MOJOLEARN_FA_GRAM_ONCE"](), "removed 2026-11-15 (lane/expdel2-17-decomposition): FA_GRAM_ONCE (FAST Apple opt-in Gram-once Python EM loop, HOLD-quality) is gone; the default path is the only one; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_FA_GRAM_QOLD.patch
+    comptime assert not is_defined["MOJOLEARN_FA_GRAM_QOLD"](), "removed 2026-11-15 (lane/expdel2-17-decomposition): FA_GRAM_QOLD (rollback of the FactorAnalysis QUALITY-FIX to the float32 Gram) is gone; the default path is the only one; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_FA_ITER_DEVICE_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_FA_ITER_DEVICE_OFF"](), "removed 2026-11-15 (lane/expdel2-17-decomposition): FA_ITER_DEVICE_OFF (rollback of the FAST Apple FactorAnalysis device EM loop) is gone; the default path is the only one; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_FA_LIVEBUF.patch
+    comptime assert not is_defined["MOJOLEARN_FA_LIVEBUF"](), "removed 2026-11-15 (lane/expdel2-17-decomposition): FA_LIVEBUF (FAST Apple opt-in arena scratch for the FactorAnalysis EM loop) is gone; the default path is the only one; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_FA_SVD_GROUP_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_FA_SVD_GROUP_OFF"](), "removed 2026-11-15 (lane/expdel2-17-decomposition): FA_SVD_GROUP_OFF (rollback of the FactorAnalysis grid SVD to one readback per sweep) is gone; the default path is the only one; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_MCD_CHOL.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_MCD_CHOL"](), "removed 2026-11-15 (lane/expdel2-17-decomposition): IDN_MCD_CHOL (IDENTICAL opt-in Cholesky C-step for MinCovDet, A/B owed and never run) is gone; the default path is the only one; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_LDA_FUSED_SS_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_LDA_FUSED_SS_OFF"](), "removed 2026-11-15 (lane/expdel2-17-decomposition): LDA_FUSED_SS_OFF (rollback of the FAST Apple fused LDA E-step) is gone; the default path is the only one; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_LDA_V_CAP_HALF_PAGE.patch
+    comptime assert not is_defined["MOJOLEARN_LDA_V_CAP_HALF_PAGE"](), "removed 2026-11-15 (lane/expdel2-17-decomposition): LDA_V_CAP_HALF_PAGE (opt-in half-page LDA vocabulary cap) is gone; the default path is the only one; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_LDA_V_CAP_RULE_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_LDA_V_CAP_RULE_OFF"](), "removed 2026-11-15 (lane/expdel2-17-decomposition): LDA_V_CAP_RULE_OFF (rollback of the LDA vocabulary cap to 320) is gone; the default path is the only one; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_LEGACY_NARROW_LDA_FUSED_V.patch
+    comptime assert not is_defined["MOJOLEARN_LEGACY_NARROW_LDA_FUSED_V"](), "removed 2026-11-15 (lane/expdel2-17-decomposition): LEGACY_NARROW_LDA_FUSED_V (legacy 320-word LDA cap) is gone; the default path is the only one; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_LU_FAST_MMA_NB.patch
+    comptime assert not is_defined["MOJOLEARN_LU_FAST_MMA_NB"](), "removed 2026-11-15 (lane/expdel2-17-decomposition): LU_FAST_MMA_NB (outer-block width knob of the FAST Apple matrix-unit LU) is gone; the default path is the only one; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_LU_FAST_MMA_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_LU_FAST_MMA_OFF"](), "removed 2026-11-15 (lane/expdel2-17-decomposition): LU_FAST_MMA_OFF (rollback of the FAST Apple matrix-unit LU trailing updates) is gone; the default path is the only one; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_LU_FAST_PIVOT_SHUFFLE_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_LU_FAST_PIVOT_SHUFFLE_OFF"](), "removed 2026-11-15 (lane/expdel2-17-decomposition): LU_FAST_PIVOT_SHUFFLE_OFF (rollback of the LU panel warp-fold pivot search) is gone; the default path is the only one; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_LU_FAST_STEP1_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_LU_FAST_STEP1_OFF"](), "removed 2026-11-15 (lane/expdel2-17-decomposition): LU_FAST_STEP1_OFF (rollback of the one-launch LU panel step) is gone; the default path is the only one; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_LU_QOLD.patch
+    comptime assert not is_defined["MOJOLEARN_LU_QOLD"](), "removed 2026-11-15 (lane/expdel2-17-decomposition): LU_QOLD (rollback of the FAST LU refinement QUALITY-FIX) is gone; the default path is the only one; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_MCD_BATCH_MMA_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_MCD_BATCH_MMA_OFF"](), "removed 2026-11-15 (lane/expdel2-17-decomposition): MCD_BATCH_MMA_OFF (rollback of the FAST Apple batched MinCovDet route) is gone; the default path is the only one; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_MCD_BMMA_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_MCD_BMMA_OFF"](), "removed 2026-11-15 (lane/expdel2-17-decomposition): MCD_BMMA_OFF (rollback of the batched MinCovDet GEMM launches) is gone; the default path is the only one; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_MCD_DEFLATE_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_MCD_DEFLATE_OFF"](), "removed 2026-11-15 (lane/expdel2-17-decomposition): MCD_DEFLATE_OFF (rollback of the wide MinCovDet pinvh deflation) is gone; the default path is the only one; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_MCD_SKIP_PINVH_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_MCD_SKIP_PINVH_OFF"](), "removed 2026-11-15 (lane/expdel2-17-decomposition): MCD_SKIP_PINVH_OFF (rollback of the unread-pinvh skip) is gone; the default path is the only one; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_MCD_WIDE_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_MCD_WIDE_OFF"](), "removed 2026-11-15 (lane/expdel2-17-decomposition): MCD_WIDE_OFF (rollback of the wide batched MinCovDet search) is gone; the default path is the only one; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_TSVD_QOLD.patch
+    comptime assert not is_defined["MOJOLEARN_TSVD_QOLD"](), "removed 2026-11-15 (lane/expdel2-17-decomposition): TSVD_QOLD (rollback of the FAST TruncatedSVD QUALITY-FIX) is gone; the default path is the only one; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_XDECOMP_HOST_SERIAL.patch
+    comptime assert not is_defined["MOJOLEARN_XDECOMP_HOST_SERIAL"](), "removed 2026-11-15 (lane/expdel2-17-decomposition): XDECOMP_HOST_SERIAL (serial host decomposition groups) is gone; the default path is the only one; see docs/TOMBSTONES.md"
     return True
 
 

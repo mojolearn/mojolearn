@@ -974,6 +974,30 @@ in the tables after the sections.
 | [`MOJOLEARN_IDN_SMR_RADIX_RANK_OFF`](#mojolearn_idn_smr_radix_rank_off-old-path-deleted-2026-11-15) | hdbscan | removed (old path beside the default; V2) | 2026-11-15 | [MOJOLEARN_IDN_SMR_RADIX_RANK_OFF.patch](../experiments/removed/MOJOLEARN_IDN_SMR_RADIX_RANK_OFF.patch) |
 | [`MOJOLEARN_SL_FAST_BORUVKA_OFF`](#mojolearn_sl_fast_boruvka_off-old-path-deleted-2026-11-15) | hierarchy (single linkage) | removed (old path beside the default; V2) | 2026-11-15 | [MOJOLEARN_SL_FAST_BORUVKA_OFF.patch](../experiments/removed/MOJOLEARN_SL_FAST_BORUVKA_OFF.patch) |
 | [`MOJOLEARN_SMR_TILED_OFF`](#mojolearn_smr_tiled_off-old-path-deleted-2026-11-15) | hdbscan | removed (old path beside the default; V2) | 2026-11-15 | [MOJOLEARN_SMR_TILED_OFF.patch](../experiments/removed/MOJOLEARN_SMR_TILED_OFF.patch) |
+| [`MOJOLEARN_AFCL_L13`](#mojolearn_afcl_l13-never-run-card-deleted-2026-11-15) | MinCovDet / EllipticEnvelope FAST Apple (x_decomp/mcd_fast.mojo) | removed (never-run Apple FAST programme card; V2 rule g) | 2026-11-15 | [MOJOLEARN_AFCL_L13.patch](../experiments/removed/MOJOLEARN_AFCL_L13.patch) |
+| [`MOJOLEARN_DECOMP_FAST_OMP_BLOCK`](#mojolearn_decomp_fast_omp_block-unmeasured-arm-deleted-2026-11-15) | SparseCoder / dictionary OMP, FAST Apple (x_decomp/omp_block.mojo) | removed (opt-in arm, no A/B recorded or record read; V2) | 2026-11-15 | [MOJOLEARN_DECOMP_FAST_OMP_BLOCK.patch](../experiments/removed/MOJOLEARN_DECOMP_FAST_OMP_BLOCK.patch) |
+| [`MOJOLEARN_FA_GRAM_ONCE`](#mojolearn_fa_gram_once-unmeasured-arm-deleted-2026-11-15) | FactorAnalysis FAST Apple (x_decomp/fa_fast.mojo) | removed (opt-in arm, no A/B recorded or record read; V2) | 2026-11-15 | [MOJOLEARN_FA_GRAM_ONCE.patch](../experiments/removed/MOJOLEARN_FA_GRAM_ONCE.patch) |
+| [`MOJOLEARN_FA_GRAM_QOLD`](#mojolearn_fa_gram_qold-old-path-deleted-2026-11-15) | FactorAnalysis FAST Apple (x_decomp/fa_fast.mojo) | removed (old path beside the default; V2) | 2026-11-15 | [MOJOLEARN_FA_GRAM_QOLD.patch](../experiments/removed/MOJOLEARN_FA_GRAM_QOLD.patch) |
+| [`MOJOLEARN_FA_ITER_DEVICE_OFF`](#mojolearn_fa_iter_device_off-old-path-deleted-2026-11-15) | FactorAnalysis FAST Apple (x_decomp/fa_fast.mojo) | removed (old path beside the default; V2) | 2026-11-15 | [MOJOLEARN_FA_ITER_DEVICE_OFF.patch](../experiments/removed/MOJOLEARN_FA_ITER_DEVICE_OFF.patch) |
+| [`MOJOLEARN_FA_LIVEBUF`](#mojolearn_fa_livebuf-unmeasured-arm-deleted-2026-11-15) | FactorAnalysis FAST Apple (x_decomp/fa_fast.mojo) | removed (opt-in arm, no A/B recorded or record read; V2) | 2026-11-15 | [MOJOLEARN_FA_LIVEBUF.patch](../experiments/removed/MOJOLEARN_FA_LIVEBUF.patch) |
+| [`MOJOLEARN_FA_SVD_GROUP_OFF`](#mojolearn_fa_svd_group_off-old-path-deleted-2026-11-15) | FactorAnalysis FAST Apple (x_decomp/fa_fast.mojo) | removed (old path beside the default; V2) | 2026-11-15 | [MOJOLEARN_FA_SVD_GROUP_OFF.patch](../experiments/removed/MOJOLEARN_FA_SVD_GROUP_OFF.patch) |
+| [`MOJOLEARN_IDN_MCD_CHOL`](#mojolearn_idn_mcd_chol-unmeasured-arm-deleted-2026-11-15) | MinCovDet / EllipticEnvelope IDENTICAL (x_decomp/mcd.mojo, x_decomp/kit_device.mojo) | removed (opt-in arm, no A/B recorded or record read; V2) | 2026-11-15 | [MOJOLEARN_IDN_MCD_CHOL.patch](../experiments/removed/MOJOLEARN_IDN_MCD_CHOL.patch) |
+| [`MOJOLEARN_LDA_FUSED_SS_OFF`](#mojolearn_lda_fused_ss_off-old-path-deleted-2026-11-15) | LatentDirichletAllocation FAST Apple (x_decomp/lda_fast.mojo) | removed (old path beside the default; V2) | 2026-11-15 | [MOJOLEARN_LDA_FUSED_SS_OFF.patch](../experiments/removed/MOJOLEARN_LDA_FUSED_SS_OFF.patch) |
+| [`MOJOLEARN_LDA_V_CAP_HALF_PAGE`](#mojolearn_lda_v_cap_half_page-unmeasured-arm-deleted-2026-11-15) | LatentDirichletAllocation FAST Apple (x_decomp/lda_fast.mojo) | removed (opt-in arm, no A/B recorded or record read; V2) | 2026-11-15 | [MOJOLEARN_LDA_V_CAP_HALF_PAGE.patch](../experiments/removed/MOJOLEARN_LDA_V_CAP_HALF_PAGE.patch) |
+| [`MOJOLEARN_LDA_V_CAP_RULE_OFF`](#mojolearn_lda_v_cap_rule_off-old-path-deleted-2026-11-15) | LatentDirichletAllocation FAST Apple (x_decomp/lda_fast.mojo) | removed (old path beside the default; V2) | 2026-11-15 | [MOJOLEARN_LDA_V_CAP_RULE_OFF.patch](../experiments/removed/MOJOLEARN_LDA_V_CAP_RULE_OFF.patch) |
+| [`MOJOLEARN_LEGACY_NARROW_LDA_FUSED_V`](#mojolearn_legacy_narrow_lda_fused_v-old-path-deleted-2026-11-15) | LatentDirichletAllocation FAST Apple (x_decomp/lda_fast.mojo) | removed (old path beside the default; V2) | 2026-11-15 | [MOJOLEARN_LEGACY_NARROW_LDA_FUSED_V.patch](../experiments/removed/MOJOLEARN_LEGACY_NARROW_LDA_FUSED_V.patch) |
+| [`MOJOLEARN_LU_FAST_MMA_NB`](#mojolearn_lu_fast_mma_nb-unmeasured-arm-deleted-2026-11-15) | lu-factor / lu-solve FAST Apple (x_decomp/lu_fast_mma.mojo) | removed (opt-in arm, no A/B recorded or record read; V2) | 2026-11-15 | [MOJOLEARN_LU_FAST_MMA_NB.patch](../experiments/removed/MOJOLEARN_LU_FAST_MMA_NB.patch) |
+| [`MOJOLEARN_LU_FAST_MMA_OFF`](#mojolearn_lu_fast_mma_off-old-path-deleted-2026-11-15) | lu-factor / lu-solve FAST Apple (x_decomp/lu_fast_mma.mojo) | removed (old path beside the default; V2) | 2026-11-15 | [MOJOLEARN_LU_FAST_MMA_OFF.patch](../experiments/removed/MOJOLEARN_LU_FAST_MMA_OFF.patch) |
+| [`MOJOLEARN_LU_FAST_PIVOT_SHUFFLE_OFF`](#mojolearn_lu_fast_pivot_shuffle_off-old-path-deleted-2026-11-15) | lu-factor / lu-solve FAST Apple and IDENTICAL (x_decomp/lu_fast.mojo) | removed (old path beside the default; V2) | 2026-11-15 | [MOJOLEARN_LU_FAST_PIVOT_SHUFFLE_OFF.patch](../experiments/removed/MOJOLEARN_LU_FAST_PIVOT_SHUFFLE_OFF.patch) |
+| [`MOJOLEARN_LU_FAST_STEP1_OFF`](#mojolearn_lu_fast_step1_off-old-path-deleted-2026-11-15) | lu-factor / lu-solve FAST Apple and IDENTICAL (x_decomp/lu_fast.mojo) | removed (old path beside the default; V2) | 2026-11-15 | [MOJOLEARN_LU_FAST_STEP1_OFF.patch](../experiments/removed/MOJOLEARN_LU_FAST_STEP1_OFF.patch) |
+| [`MOJOLEARN_LU_QOLD`](#mojolearn_lu_qold-old-path-deleted-2026-11-15) | solve / lu-solve FAST (x_decomp/qfix.mojo) | removed (old path beside the default; V2) | 2026-11-15 | [MOJOLEARN_LU_QOLD.patch](../experiments/removed/MOJOLEARN_LU_QOLD.patch) |
+| [`MOJOLEARN_MCD_BATCH_MMA_OFF`](#mojolearn_mcd_batch_mma_off-old-path-deleted-2026-11-15) | MinCovDet / EllipticEnvelope FAST Apple (x_decomp/mcd_fast.mojo) | removed (old path beside the default; V2) | 2026-11-15 | [MOJOLEARN_MCD_BATCH_MMA_OFF.patch](../experiments/removed/MOJOLEARN_MCD_BATCH_MMA_OFF.patch) |
+| [`MOJOLEARN_MCD_BMMA_OFF`](#mojolearn_mcd_bmma_off-old-path-deleted-2026-11-15) | MinCovDet / EllipticEnvelope FAST Apple (x_decomp/mcd_fast.mojo) | removed (old path beside the default; V2) | 2026-11-15 | [MOJOLEARN_MCD_BMMA_OFF.patch](../experiments/removed/MOJOLEARN_MCD_BMMA_OFF.patch) |
+| [`MOJOLEARN_MCD_DEFLATE_OFF`](#mojolearn_mcd_deflate_off-old-path-deleted-2026-11-15) | MinCovDet / EllipticEnvelope FAST Apple (x_decomp/mcd_fast.mojo) | removed (old path beside the default; V2) | 2026-11-15 | [MOJOLEARN_MCD_DEFLATE_OFF.patch](../experiments/removed/MOJOLEARN_MCD_DEFLATE_OFF.patch) |
+| [`MOJOLEARN_MCD_SKIP_PINVH_OFF`](#mojolearn_mcd_skip_pinvh_off-old-path-deleted-2026-11-15) | MinCovDet / EllipticEnvelope FAST Apple (x_decomp/mcd_fast.mojo) | removed (old path beside the default; V2) | 2026-11-15 | [MOJOLEARN_MCD_SKIP_PINVH_OFF.patch](../experiments/removed/MOJOLEARN_MCD_SKIP_PINVH_OFF.patch) |
+| [`MOJOLEARN_MCD_WIDE_OFF`](#mojolearn_mcd_wide_off-old-path-deleted-2026-11-15) | MinCovDet / EllipticEnvelope FAST Apple (x_decomp/mcd_fast.mojo) | removed (old path beside the default; V2) | 2026-11-15 | [MOJOLEARN_MCD_WIDE_OFF.patch](../experiments/removed/MOJOLEARN_MCD_WIDE_OFF.patch) |
+| [`MOJOLEARN_TSVD_QOLD`](#mojolearn_tsvd_qold-old-path-deleted-2026-11-15) | TruncatedSVD FAST (x_decomp/qfix.mojo) | removed (old path beside the default; V2) | 2026-11-15 | [MOJOLEARN_TSVD_QOLD.patch](../experiments/removed/MOJOLEARN_TSVD_QOLD.patch) |
+| [`MOJOLEARN_XDECOMP_HOST_SERIAL`](#mojolearn_xdecomp_host_serial-unmeasured-arm-deleted-2026-11-15) | decomposition host column (x_decomp/host.mojo) | removed (opt-in arm, no A/B recorded or record read; V2) | 2026-11-15 | [MOJOLEARN_XDECOMP_HOST_SERIAL.patch](../experiments/removed/MOJOLEARN_XDECOMP_HOST_SERIAL.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -9506,3 +9530,197 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2
 - **Deleted by**: lane/expdel2-11-cluster (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `4cadcc3fbd`.
 - **Restore**: `git apply experiments/removed/MOJOLEARN_SMR_TILED_OFF.patch`, then delete the `MOJOLEARN_SMR_TILED_OFF` refusal in `core/experiment_guards_cluster.mojo`.
 - **Records**: refusal in `core/experiment_guards_cluster.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-11-cluster section).
+
+## Experiment deletions V2: lane expdel2-17-decomposition (2026-11-15)
+
+### MOJOLEARN_AFCL_L13: never-run card deleted (2026-11-15)
+
+- **What it was**: the never-run Apple FAST programme card AFCL-L13: each trial's support selected by four SIMD groups (128 threads) instead of eight; `MF_SELECT_TPB` is now the constant `MF_TPB`.
+- **Verdict**: no record: a never-run Apple FAST programme card (plan rule g). Deleted under AGENTS.md "An unmeasured arm is deleted" (Andrew, 2026-11-15). No bit change on any vendor or the host column: the default path is untouched.
+- **Deleted by**: lane/expdel2-17-decomposition (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `e11cb757b8` (deletion commit `0d75c7cca2`).
+- **Restore**: `git apply experiments/removed/MOJOLEARN_AFCL_L13.patch`, then delete the `MOJOLEARN_AFCL_L13` refusal in `core/experiment_guards_decomposition.mojo`.
+- **Records**: refusal in `core/experiment_guards_decomposition.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-17-decomposition section).
+
+### MOJOLEARN_DECOMP_FAST_OMP_BLOCK: unmeasured arm deleted (2026-11-15)
+
+- **What it was**: the FAST Apple opt-in arm that ran `DevExec.omp_rows` as one OMP block per row (`omp_block_kernel`) instead of `omp_rows_kernel`. The alias `DECOMP_FAST_OMP_BLOCK` stays as the constant False for x_decomp/device.mojo (another lane); the kernel then has no caller.
+- **Verdict**: EXP:449 OPEN: queued once, no recorded result; no A/B recorded for the opt-in arm (plan rule a). Deleted under AGENTS.md "An unmeasured arm is deleted" (Andrew, 2026-11-15). No bit change on any vendor or the host column: the default path is untouched.
+- **Deleted by**: lane/expdel2-17-decomposition (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `0d75c7cca2` (deletion commit `9914fb0c3e`).
+- **Restore**: `git apply experiments/removed/MOJOLEARN_DECOMP_FAST_OMP_BLOCK.patch`, then delete the `MOJOLEARN_DECOMP_FAST_OMP_BLOCK` refusal in `core/experiment_guards_decomposition.mojo`.
+- **Records**: refusal in `core/experiment_guards_decomposition.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-17-decomposition section).
+
+### MOJOLEARN_FA_GRAM_ONCE: unmeasured arm deleted (2026-11-15)
+
+- **What it was**: the FAST Apple opt-in arm in which the Python EM loop took the eigh of D G D / n on a once-formed Gram. The alias stays as the constant False (x_decomp/decomp_owner_dev.mojo fa_flags bit 1 reads it); the FA_ITER_DEVICE default already forms G once.
+- **Verdict**: EXP:1260 HOLD-quality; never A/B'd alone (plan rule a). Deleted under AGENTS.md "An unmeasured arm is deleted" (Andrew, 2026-11-15). No bit change on any vendor or the host column: the default path is untouched.
+- **Deleted by**: lane/expdel2-17-decomposition (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `816fd77809` (deletion commit `a0f1f9fb9c`).
+- **Restore**: `git apply experiments/removed/MOJOLEARN_FA_GRAM_ONCE.patch`, then delete the `MOJOLEARN_FA_GRAM_ONCE` refusal in `core/experiment_guards_decomposition.mojo`.
+- **Records**: refusal in `core/experiment_guards_decomposition.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-17-decomposition section).
+
+### MOJOLEARN_FA_GRAM_QOLD: old path deleted (2026-11-15)
+
+- **What it was**: the rollback of the ITER_DEVICE loop's double-float Gram + SVD QUALITY-FIX to the float32 Gram + eigh route; `FA_GRAM_DF` is now `FA_ITER_DEVICE`.
+- **Verdict**: record read (plan rule e): EXP:1263 KEPT (QUALITY-FIX) is the default. Deleted under AGENTS.md "An unmeasured arm is deleted" (Andrew, 2026-11-15). No bit change on any vendor or the host column: the default path is untouched.
+- **Deleted by**: lane/expdel2-17-decomposition (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `319c915ad2` (deletion commit `ab9f4a5c5d`).
+- **Restore**: `git apply experiments/removed/MOJOLEARN_FA_GRAM_QOLD.patch`, then delete the `MOJOLEARN_FA_GRAM_QOLD` refusal in `core/experiment_guards_decomposition.mojo`.
+- **Records**: refusal in `core/experiment_guards_decomposition.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-17-decomposition section).
+
+### MOJOLEARN_FA_ITER_DEVICE_OFF: old path deleted (2026-11-15)
+
+- **What it was**: the rollback of the FAST Apple device EM loop to the Python EM loop; `FA_ITER_DEVICE` is now `FA_FAST_APPLE` (the FA_LIVEBUF term that also forced it went with FA_LIVEBUF).
+- **Verdict**: record read (plan rule d): EXP:1280 ACCEPT/DEFAULT on FAST + Apple, the only vendor FAST runs on, so no other vendor is owed. Deleted under AGENTS.md "An unmeasured arm is deleted" (Andrew, 2026-11-15). No bit change on any vendor or the host column: the default path is untouched.
+- **Deleted by**: lane/expdel2-17-decomposition (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `a0f1f9fb9c` (deletion commit `19144bed20`).
+- **Restore**: `git apply experiments/removed/MOJOLEARN_FA_ITER_DEVICE_OFF.patch`, then delete the `MOJOLEARN_FA_ITER_DEVICE_OFF` refusal in `core/experiment_guards_decomposition.mojo`.
+- **Records**: refusal in `core/experiment_guards_decomposition.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-17-decomposition section).
+
+### MOJOLEARN_FA_LIVEBUF: unmeasured arm deleted (2026-11-15)
+
+- **What it was**: the FAST Apple opt-in arm that held the EM loop's scratch in one arena buffer and read W + psi back in one copy; `_FaMem` lost its arena mode and `seal`.
+- **Verdict**: EXP:457 OPEN; no A/B recorded for the opt-in arm (plan rule a). Deleted under AGENTS.md "An unmeasured arm is deleted" (Andrew, 2026-11-15). No bit change on any vendor or the host column: the default path is untouched.
+- **Deleted by**: lane/expdel2-17-decomposition (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `19144bed20` (deletion commit `319c915ad2`).
+- **Restore**: `git apply experiments/removed/MOJOLEARN_FA_LIVEBUF.patch`, then delete the `MOJOLEARN_FA_LIVEBUF` refusal in `core/experiment_guards_decomposition.mojo`.
+- **Records**: refusal in `core/experiment_guards_decomposition.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-17-decomposition section).
+
+### MOJOLEARN_FA_SVD_GROUP_OFF: old path deleted (2026-11-15)
+
+- **What it was**: the rollback of the grid SVD's four sweeps per convergence readback to one readback per sweep; `FA_SVD_GROUP` is the constant 4.
+- **Verdict**: record read (plan rule e): EXP:2145 DEFAULT (bit-neutral). Deleted under AGENTS.md "An unmeasured arm is deleted" (Andrew, 2026-11-15). No bit change on any vendor or the host column: the default path is untouched.
+- **Deleted by**: lane/expdel2-17-decomposition (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `ab9f4a5c5d` (deletion commit `395d3136ad`).
+- **Restore**: `git apply experiments/removed/MOJOLEARN_FA_SVD_GROUP_OFF.patch`, then delete the `MOJOLEARN_FA_SVD_GROUP_OFF` refusal in `core/experiment_guards_decomposition.mojo`.
+- **Records**: refusal in `core/experiment_guards_decomposition.mojo`; `apple-slow-paths.json` control `fa_svd_group`: moved to `removed`; `docs/apple-fast/EXPERIMENTS.md` row (expdel2-17-decomposition section).
+
+### MOJOLEARN_IDN_MCD_CHOL: unmeasured arm deleted (2026-11-15)
+
+- **What it was**: the IDENTICAL opt-in Cholesky C-step (potrf_lower + chol_logdet, distances by L^{-1} = trsm_lower(L, I)), with `Chol` / `DChol`, `chol`, `mahal_chol`, `dist_from`, `c_step_chol`, the `Est` / `DEst` field `p_chol` and the Cholesky imports of kit_device.mojo that only it used. `Exec.chol_inv` (x_decomp/exec_trait.mojo, device.mojo, host.mojo, other lanes and the trait) is now unread by MinCovDet.
+- **Verdict**: EXP:581 RUN OWED; no A/B recorded for the opt-in arm (plan rule a); the measured LU + Jacobi pinvh C-step is the default since 2026-11-13. Deleted under AGENTS.md "An unmeasured arm is deleted" (Andrew, 2026-11-15). No bit change on any vendor or the host column: the default path is untouched.
+- **Deleted by**: lane/expdel2-17-decomposition (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `c387c0b2c1` (deletion commit `7b5151da9b`).
+- **Restore**: `git apply experiments/removed/MOJOLEARN_IDN_MCD_CHOL.patch`, then delete the `MOJOLEARN_IDN_MCD_CHOL` refusal in `core/experiment_guards_decomposition.mojo`.
+- **Records**: refusal in `core/experiment_guards_decomposition.mojo`; `apple-holes.json` control `mcd_chol`: moved to `removed`; `docs/apple-fast/EXPERIMENTS.md` row (expdel2-17-decomposition section).
+
+### MOJOLEARN_LDA_FUSED_SS_OFF: old path deleted (2026-11-15)
+
+- **What it was**: the rollback of the fused E-step + sufficient statistics launch to main's chain; `LDA_FUSED_SS` is FAST and Apple.
+- **Verdict**: record read (plan rule d): EXP:416 KEPT a7b8b9513 on FAST + Apple, the only vendor FAST runs on, so no other vendor is owed. Deleted under AGENTS.md "An unmeasured arm is deleted" (Andrew, 2026-11-15). No bit change on any vendor or the host column: the default path is untouched.
+- **Deleted by**: lane/expdel2-17-decomposition (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `d203a04705` (deletion commit `6bed172f77`).
+- **Restore**: `git apply experiments/removed/MOJOLEARN_LDA_FUSED_SS_OFF.patch`, then delete the `MOJOLEARN_LDA_FUSED_SS_OFF` refusal in `core/experiment_guards_decomposition.mojo`.
+- **Records**: refusal in `core/experiment_guards_decomposition.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-17-decomposition section).
+
+### MOJOLEARN_LDA_V_CAP_HALF_PAGE: unmeasured arm deleted (2026-11-15)
+
+- **What it was**: the opt-in half-page vocabulary cap (416 words, two blocks per core) with `lfs_page_bytes`, `lfs_v_cap_rule`, `LFS_APPLE_TG_BYTES` and `LFS_PAGE_BUDGET`; `LFS_V_CAP` is the full-page cap.
+- **Verdict**: no record: no A/B recorded for the opt-in arm (plan rule a). Deleted under AGENTS.md "An unmeasured arm is deleted" (Andrew, 2026-11-15). No bit change on any vendor or the host column: the default path is untouched.
+- **Deleted by**: lane/expdel2-17-decomposition (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `cea962efe5` (deletion commit `855b464e2c`).
+- **Restore**: `git apply experiments/removed/MOJOLEARN_LDA_V_CAP_HALF_PAGE.patch`, then delete the `MOJOLEARN_LDA_V_CAP_HALF_PAGE` refusal in `core/experiment_guards_decomposition.mojo`.
+- **Records**: refusal in `core/experiment_guards_decomposition.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-17-decomposition section).
+
+### MOJOLEARN_LDA_V_CAP_RULE_OFF: old path deleted (2026-11-15)
+
+- **What it was**: the rollback of the vocabulary cap to the taxi-tuned 320.
+- **Verdict**: no record: no A/B recorded for the old path (plan rule b). Deleted under AGENTS.md "An unmeasured arm is deleted" (Andrew, 2026-11-15). No bit change on any vendor or the host column: the default path is untouched.
+- **Deleted by**: lane/expdel2-17-decomposition (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `9507b8ad74` (deletion commit `cea962efe5`).
+- **Restore**: `git apply experiments/removed/MOJOLEARN_LDA_V_CAP_RULE_OFF.patch`, then delete the `MOJOLEARN_LDA_V_CAP_RULE_OFF` refusal in `core/experiment_guards_decomposition.mojo`.
+- **Records**: refusal in `core/experiment_guards_decomposition.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-17-decomposition section).
+
+### MOJOLEARN_LEGACY_NARROW_LDA_FUSED_V: old path deleted (2026-11-15)
+
+- **What it was**: the legacy 320-word cap and one fused kernel compiled at it, in place of the occupancy tiers.
+- **Verdict**: record read (plan rule d): EXP:1343 ACCEPT on FAST + Apple (merged via lane/apple-fast-verdicts-5), the only vendor FAST runs on, so no other vendor is owed. Deleted under AGENTS.md "An unmeasured arm is deleted" (Andrew, 2026-11-15). No bit change on any vendor or the host column: the default path is untouched.
+- **Deleted by**: lane/expdel2-17-decomposition (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `6bed172f77` (deletion commit `9507b8ad74`).
+- **Restore**: `git apply experiments/removed/MOJOLEARN_LEGACY_NARROW_LDA_FUSED_V.patch`, then delete the `MOJOLEARN_LEGACY_NARROW_LDA_FUSED_V` refusal in `core/experiment_guards_decomposition.mojo`.
+- **Records**: refusal in `core/experiment_guards_decomposition.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-17-decomposition section).
+
+### MOJOLEARN_LU_FAST_MMA_NB: unmeasured arm deleted (2026-11-15)
+
+- **What it was**: the outer-block width knob of the matrix-unit LU; `LFM_NB` is the constant 256.
+- **Verdict**: no record: no A/B recorded for other widths (plan rule a). Deleted under AGENTS.md "An unmeasured arm is deleted" (Andrew, 2026-11-15). No bit change on any vendor or the host column: the default path is untouched.
+- **Deleted by**: lane/expdel2-17-decomposition (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `d5d5200eb1` (deletion commit `c387c0b2c1`).
+- **Restore**: `git apply experiments/removed/MOJOLEARN_LU_FAST_MMA_NB.patch`, then delete the `MOJOLEARN_LU_FAST_MMA_NB` refusal in `core/experiment_guards_decomposition.mojo`.
+- **Records**: refusal in `core/experiment_guards_decomposition.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-17-decomposition section).
+
+### MOJOLEARN_LU_FAST_MMA_OFF: old path deleted (2026-11-15)
+
+- **What it was**: the rollback of the matrix-unit delayed trailing updates to main's per-32-column scalar updates; `LU_FAST_MMA` is `LU_FAST_STEP1 and AFN_GEMM_APPLE`.
+- **Verdict**: EXP:1401 READY-AB: no A/B recorded for the old path beside the Apple FAST default (plan rule b). Deleted under AGENTS.md "An unmeasured arm is deleted" (Andrew, 2026-11-15). No bit change on any vendor or the host column: the default path is untouched.
+- **Deleted by**: lane/expdel2-17-decomposition (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `53eb025cc0` (deletion commit `d5d5200eb1`).
+- **Restore**: `git apply experiments/removed/MOJOLEARN_LU_FAST_MMA_OFF.patch`, then delete the `MOJOLEARN_LU_FAST_MMA_OFF` refusal in `core/experiment_guards_decomposition.mojo`.
+- **Records**: refusal in `core/experiment_guards_decomposition.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-17-decomposition section).
+
+### MOJOLEARN_LU_FAST_PIVOT_SHUFFLE_OFF: old path deleted (2026-11-15)
+
+- **What it was**: the rollback of the panel kernels' warp-fold pivot search to the shared-tree barriers. The panel kernels run only under LU_FAST_STEP1, so the warp fold is unconditional in them.
+- **Verdict**: record read (plan rule e): EXP:1007 DEFAULT merged (promotion 0769e1d92). Deleted under AGENTS.md "An unmeasured arm is deleted" (Andrew, 2026-11-15). No bit change on any vendor or the host column: the default path is untouched.
+- **Deleted by**: lane/expdel2-17-decomposition (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `855b464e2c` (deletion commit `0b8dd725c3`).
+- **Restore**: `git apply experiments/removed/MOJOLEARN_LU_FAST_PIVOT_SHUFFLE_OFF.patch`, then delete the `MOJOLEARN_LU_FAST_PIVOT_SHUFFLE_OFF` refusal in `core/experiment_guards_decomposition.mojo`.
+- **Records**: refusal in `core/experiment_guards_decomposition.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-17-decomposition section).
+
+### MOJOLEARN_LU_FAST_STEP1_OFF: old path deleted (2026-11-15)
+
+- **What it was**: the rollback of the one-launch-per-column panel step to the five-launch step; `LU_FAST_STEP1` is FAST + Apple or IDENTICAL.
+- **Verdict**: record read (plan rule e): EXP:460 DEFAULT (FAST + Apple; IDENTICAL via lane/idn-gates). Deleted under AGENTS.md "An unmeasured arm is deleted" (Andrew, 2026-11-15). No bit change on any vendor or the host column: the default path is untouched.
+- **Deleted by**: lane/expdel2-17-decomposition (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `0b8dd725c3` (deletion commit `e8f262523b`).
+- **Restore**: `git apply experiments/removed/MOJOLEARN_LU_FAST_STEP1_OFF.patch`, then delete the `MOJOLEARN_LU_FAST_STEP1_OFF` refusal in `core/experiment_guards_decomposition.mojo`.
+- **Records**: refusal in `core/experiment_guards_decomposition.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-17-decomposition section).
+
+### MOJOLEARN_LU_QOLD: old path deleted (2026-11-15)
+
+- **What it was**: the rollback that dropped the FAST iterative refinement step (float-float residual); `LU_QFIX` is FAST.
+- **Verdict**: record read (plan rule e): EXP:1283 QUALITY-FIX KEPT as the FAST default. Deleted under AGENTS.md "An unmeasured arm is deleted" (Andrew, 2026-11-15). No bit change on any vendor or the host column: the default path is untouched.
+- **Deleted by**: lane/expdel2-17-decomposition (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `5a5cbac00a` (deletion commit `fae1fb3f50`).
+- **Restore**: `git apply experiments/removed/MOJOLEARN_LU_QOLD.patch`, then delete the `MOJOLEARN_LU_QOLD` refusal in `core/experiment_guards_decomposition.mojo`.
+- **Records**: refusal in `core/experiment_guards_decomposition.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-17-decomposition section).
+
+### MOJOLEARN_MCD_BATCH_MMA_OFF: old path deleted (2026-11-15)
+
+- **What it was**: the rollback of the batched matrix-unit C-step route to main's per-candidate path. The route itself runs only under MCD_BATCH_MMA (kit_device.mojo reads MCD_DEVICE_CSTEPS = MCD_BATCH_MMA), so its non-MMA branches were unreachable; they and the scalar `mf_dist_kernel`, `mf_cov_part_kernel` and `mf_cov_kernel` went with it.
+- **Verdict**: record read (plan rule e): EXP:2281 (the HOLD-quality COMPAT-only arm was deleted; this default kept). Deleted under AGENTS.md "An unmeasured arm is deleted" (Andrew, 2026-11-15). No bit change on any vendor or the host column: the default path is untouched.
+- **Deleted by**: lane/expdel2-17-decomposition (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `715cd1cdfd` (deletion commit `17bcfd0411`).
+- **Restore**: `git apply experiments/removed/MOJOLEARN_MCD_BATCH_MMA_OFF.patch`, then delete the `MOJOLEARN_MCD_BATCH_MMA_OFF` refusal in `core/experiment_guards_decomposition.mojo`.
+- **Records**: refusal in `core/experiment_guards_decomposition.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-17-decomposition section).
+
+### MOJOLEARN_MCD_BMMA_OFF: old path deleted (2026-11-15)
+
+- **What it was**: the rollback of the one-launch batched GEMMs to one `_launch_gemm_mma` per candidate; `MCD_BMMA` is `MCD_BATCH_MMA`.
+- **Verdict**: record read (plan rule e): EXP:804 DEFAULT (FAST + Apple). Deleted under AGENTS.md "An unmeasured arm is deleted" (Andrew, 2026-11-15). No bit change on any vendor or the host column: the default path is untouched.
+- **Deleted by**: lane/expdel2-17-decomposition (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `17bcfd0411` (deletion commit `5098454334`).
+- **Restore**: `git apply experiments/removed/MOJOLEARN_MCD_BMMA_OFF.patch`, then delete the `MOJOLEARN_MCD_BMMA_OFF` refusal in `core/experiment_guards_decomposition.mojo`.
+- **Records**: refusal in `core/experiment_guards_decomposition.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-17-decomposition section).
+
+### MOJOLEARN_MCD_DEFLATE_OFF: old path deleted (2026-11-15)
+
+- **What it was**: the rollback of the wide pinvh's zero-row deflation to the full-width Jacobi; `MCD_DEFLATE` is `MCD_WIDE`.
+- **Verdict**: record read (plan rule d): EXP:1273 ACCEPT/DEFAULT on FAST + Apple, the only vendor FAST runs on, so no other vendor is owed. Deleted under AGENTS.md "An unmeasured arm is deleted" (Andrew, 2026-11-15). No bit change on any vendor or the host column: the default path is untouched.
+- **Deleted by**: lane/expdel2-17-decomposition (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `17b6afcf09` (deletion commit `e11cb757b8`).
+- **Restore**: `git apply experiments/removed/MOJOLEARN_MCD_DEFLATE_OFF.patch`, then delete the `MOJOLEARN_MCD_DEFLATE_OFF` refusal in `core/experiment_guards_decomposition.mojo`.
+- **Records**: refusal in `core/experiment_guards_decomposition.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-17-decomposition section).
+
+### MOJOLEARN_MCD_SKIP_PINVH_OFF: old path deleted (2026-11-15)
+
+- **What it was**: the rollback that computed the pinvh feeding final distances nobody reads; the skip is unconditional on the route.
+- **Verdict**: EXP:929 HOLD (opt-in); no A/B recorded for the old path (plan rule b). Deleted under AGENTS.md "An unmeasured arm is deleted" (Andrew, 2026-11-15). No bit change on any vendor or the host column: the default path is untouched.
+- **Deleted by**: lane/expdel2-17-decomposition (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `494530a064` (deletion commit `17b6afcf09`).
+- **Restore**: `git apply experiments/removed/MOJOLEARN_MCD_SKIP_PINVH_OFF.patch`, then delete the `MOJOLEARN_MCD_SKIP_PINVH_OFF` refusal in `core/experiment_guards_decomposition.mojo`.
+- **Records**: refusal in `core/experiment_guards_decomposition.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-17-decomposition section).
+
+### MOJOLEARN_MCD_WIDE_OFF: old path deleted (2026-11-15)
+
+- **What it was**: the rollback of the batched search for 64 < d <= 256 to the fast_mcd_dev fallback; the wide branches are unconditional on the route.
+- **Verdict**: record read (plan rule e): EXP:804 DEFAULT (FAST + Apple, with MCD_BMMA). Deleted under AGENTS.md "An unmeasured arm is deleted" (Andrew, 2026-11-15). No bit change on any vendor or the host column: the default path is untouched.
+- **Deleted by**: lane/expdel2-17-decomposition (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `5098454334` (deletion commit `494530a064`).
+- **Restore**: `git apply experiments/removed/MOJOLEARN_MCD_WIDE_OFF.patch`, then delete the `MOJOLEARN_MCD_WIDE_OFF` refusal in `core/experiment_guards_decomposition.mojo`.
+- **Records**: refusal in `core/experiment_guards_decomposition.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-17-decomposition section).
+
+### MOJOLEARN_TSVD_QOLD: old path deleted (2026-11-15)
+
+- **What it was**: the rollback of the TSQR-R components QUALITY-FIX to the float32 Gram eigenvectors; `TSVD_QFIX` is FAST.
+- **Verdict**: record read (plan rule e): EXP:1287 QUALITY-FIX KEPT as the FAST default. Deleted under AGENTS.md "An unmeasured arm is deleted" (Andrew, 2026-11-15). No bit change on any vendor or the host column: the default path is untouched.
+- **Deleted by**: lane/expdel2-17-decomposition (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `9914fb0c3e` (deletion commit `5a5cbac00a`).
+- **Restore**: `git apply experiments/removed/MOJOLEARN_TSVD_QOLD.patch`, then delete the `MOJOLEARN_TSVD_QOLD` refusal in `core/experiment_guards_decomposition.mojo`.
+- **Records**: refusal in `core/experiment_guards_decomposition.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-17-decomposition section).
+
+### MOJOLEARN_XDECOMP_HOST_SERIAL: unmeasured arm deleted (2026-11-15)
+
+- **What it was**: the opt-in arm that ran the host decomposition groups one after another on the calling thread instead of the host pool.
+- **Verdict**: no record: no A/B recorded for the opt-in arm (plan rule a). Deleted under AGENTS.md "An unmeasured arm is deleted" (Andrew, 2026-11-15). No bit change on any vendor or the host column: the default path is untouched.
+- **Deleted by**: lane/expdel2-17-decomposition (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `395d3136ad` (deletion commit `d203a04705`).
+- **Restore**: `git apply experiments/removed/MOJOLEARN_XDECOMP_HOST_SERIAL.patch`, then delete the `MOJOLEARN_XDECOMP_HOST_SERIAL` refusal in `core/experiment_guards_decomposition.mojo`.
+- **Records**: refusal in `core/experiment_guards_decomposition.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-17-decomposition section).
