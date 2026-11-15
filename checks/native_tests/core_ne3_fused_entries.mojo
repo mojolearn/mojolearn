@@ -61,7 +61,8 @@ from neighbors.neighbors_semi_run import (
     xn_lp_laplacian_deg_request, xn_lp_static_weight, xn_lp_labels_request, xn_lp_clamp_request, xn_lp_mode,
     xn_lp_iterate_knn_request, xn_lp_iterate_request, xn_lp_iterations, xn_lp_dense_proba_request,
 )
-from experiments.classical_identical_ideas.graph_controls import C43_RESIDENT_NORMALIZATION
+# TOMBSTONE: MOJOLEARN_C43_RESIDENT_NORMALIZATION (unmeasured opt-in arm, owner expdel2-05-base; non-owner sites) deleted 2026-11-15 by lane/expdel2-10-cluster; code recoverable at f379abdf05.
+# Restore: git apply experiments/removed/MOJOLEARN_C43_RESIDENT_NORMALIZATION.expdel2-10-cluster.patch; record in docs/TOMBSTONES.md.
 from x_neighbors.descriptor_schema import xn_operation_id
 from x_neighbors.native_descriptor_host import xn_native_v1
 from x_neighbors.native_descriptor_device import xn_native_v1 as xn_native_v1_gpu
@@ -490,7 +491,8 @@ def _lp_fit(driver: XnDriver, b: Blobs, spreading: Bool, knn: Bool, gamma: Float
     var affinity = List[Float32]()
     var dense = List[Float32]()
     var degree = List[Float32]()
-    var raw = C43_RESIDENT_NORMALIZATION
+    # TOMBSTONE: MOJOLEARN_C43_RESIDENT_NORMALIZATION (unmeasured opt-in arm, owner expdel2-05-base; non-owner sites) deleted 2026-11-15 by lane/expdel2-10-cluster; code recoverable at f379abdf05.
+    # Restore: git apply experiments/removed/MOJOLEARN_C43_RESIDENT_NORMALIZATION.expdel2-10-cluster.patch; record in docs/TOMBSTONES.md.
     if knn:
         dist = List[Float32](length=n * k, fill=0)
         idx = List[Int32](length=n * k, fill=0)
@@ -504,9 +506,7 @@ def _lp_fit(driver: XnDriver, b: Blobs, spreading: Bool, knn: Bool, gamma: Float
         affinity = List[Float32](length=n * n, fill=0)
         _op(driver, xn_semi_rbf_request(xa, xa, Int(affinity.unsafe_ptr()), n, n, d, KERNEL_RBF,
                                         Int(status.unsafe_ptr()), gamma))
-        if raw:
-            dense = affinity.copy()
-        elif not spreading:
+        if not spreading:
             dense = List[Float32](length=n * n, fill=0)
             _op(driver, xn_semi_row_normalize_request(Int(affinity.unsafe_ptr()), Int(dense.unsafe_ptr()), n, n))
         else:
@@ -529,7 +529,7 @@ def _lp_fit(driver: XnDriver, b: Blobs, spreading: Bool, knn: Bool, gamma: Float
     else:
         _op(driver, xn_lp_iterate_request(Int(dense.unsafe_ptr()), Int(ld.unsafe_ptr()), Int(ystatic.unsafe_ptr()),
                                           Int(unlabeled.unsafe_ptr()), Int(info.unsafe_ptr()), n, nc, max_iter,
-                                          xn_lp_mode(spreading, raw), 0.001, alpha))
+                                          xn_lp_mode(spreading, False), 0.001, alpha))
     var n_iter = xn_lp_iterations(Int(info.unsafe_ptr()))
     var final = List[Float32](length=n * nc, fill=0)
     _op(driver, xn_semi_row_normalize_request(Int(ld.unsafe_ptr()), Int(final.unsafe_ptr()), n, nc))
