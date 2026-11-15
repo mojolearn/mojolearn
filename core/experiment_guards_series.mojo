@@ -91,8 +91,7 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_AFCL_P12"](), "removed 2026-11-15 (lane/expdel2-37-series): AFCL_P12 (never-run Apple FAST card, Time series (ARIMA Kalman block width); no A/B recorded) is gone; the default path is the only one; code recoverable at 145be10898; restore: experiments/removed/MOJOLEARN_AFCL_P12.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_AFCL_P14.patch
     comptime assert not is_defined["MOJOLEARN_AFCL_P14"](), "removed 2026-11-15 (lane/expdel2-37-series): AFCL_P14 (never-run Apple FAST card, Time series (Holt-Winters optimizer block width); no A/B recorded) is gone; the default path is the only one; code recoverable at 82df561cdb; restore: experiments/removed/MOJOLEARN_AFCL_P14.patch"
-    # Restore: git apply experiments/removed/MOJOLEARN_ARIMA_ASYNC_ALL.patch
-    comptime assert not is_defined["MOJOLEARN_ARIMA_ASYNC_ALL"](), "removed 2026-11-15 (lane/expdel2-37-series): ARIMA_ASYNC_ALL (opt-in arm, Time series (ARIMA per-series L-BFGS on every route); no A/B recorded) is gone; the default path is the only one; code recoverable at b3b95c7aa8; restore: experiments/removed/MOJOLEARN_ARIMA_ASYNC_ALL.patch"
+    # MOJOLEARN_ARIMA_ASYNC_ALL: refusal removed 2026-11-15 (restored; owed B arm, see docs/TOMBSTONES.md Restored table)
     # Restore: git apply experiments/removed/MOJOLEARN_ARIMA_FAST_BATCH_GRAD_OFF.patch
     comptime assert not is_defined["MOJOLEARN_ARIMA_FAST_BATCH_GRAD_OFF"](), "removed 2026-11-15 (lane/expdel2-37-series): ARIMA_FAST_BATCH_GRAD_OFF (old path, Time series (ARIMA stacked gradient, Apple FAST); no A/B recorded) is gone; the default is kept; code recoverable at b22c6673d4; restore: experiments/removed/MOJOLEARN_ARIMA_FAST_BATCH_GRAD_OFF.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_ARIMA_FAST_CONST_BOTH.patch

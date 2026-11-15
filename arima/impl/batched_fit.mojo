@@ -114,7 +114,7 @@ from arima.impl.estimate_x0 import StartParamsResult, estimate_x0_x
 from arima.impl.fast_eval_ws import FastEvalWS
 from arima.impl.fast_order_state import ARIMA_ORDER_BATCH, order_min_lbfgs
 from arima.impl.eval_batch import arima_eval
-from arima.impl.fast_lbfgs_async import AsyncLBFGSOut, async_min_lbfgs
+from arima.impl.fast_lbfgs_async import ARIMA_ASYNC_ALL, AsyncLBFGSOut, async_min_lbfgs
 from arima.impl.lbfgs_device import (
     LBFGS_TPB,
     lbfgs_accept_kernel,
@@ -274,7 +274,8 @@ def batched_min_lbfgs(
     holds the stacked evaluation workspace (FAST on Apple without exog,
     IDENTICAL within `IDN_EVAL_WS_MAX_CELLS`), and the lock-step solver
     (`_lockstep_min_lbfgs`) otherwise (FAST on NVIDIA / AMD, FAST on Apple
-    with exog, IDENTICAL above the bound). Both give each series the same
+    with exog, IDENTICAL above the bound); `-D MOJOLEARN_ARIMA_ASYNC_ALL`
+    takes the per-series solver everywhere. Both give each series the same
     iterates, `n_iter` and `retcode`.
 
     THE SHAPE. Every still-running series proposes its own candidate, all B
@@ -320,10 +321,12 @@ def batched_min_lbfgs(
     # measured default: M3 A/B autoarima taxi-hourly 39,639 -> 24,563 ms);
     # the lock-step solver everywhere else, as before lane
     # n10-dictl-arima-loops (never measured against the per-series one on
-    # those routes).
+    # those routes). `-D MOJOLEARN_ARIMA_ASYNC_ALL` takes the per-series solver
+    # on every route: the A/B's B arm.
     # TOMBSTONE: MOJOLEARN_ARIMA_ASYNC_ALL (opt-in A/B arm, RUN OWED and never run) deleted 2026-11-15 by lane/expdel2-37-series; code recoverable at b3b95c7aa8.
     # Restore: git apply experiments/removed/MOJOLEARN_ARIMA_ASYNC_ALL.patch; record in docs/TOMBSTONES.md.
-    if Bool(ews):
+    # RESTORED 2026-11-15 by lane/expdel2-restore-owed: owed B arm (owed-pre0867.json), under four weeks old; the deletion was premature.
+    if Bool(ews) or ARIMA_ASYNC_ALL:
         var ar = async_min_lbfgs(ctx, ews, d_y_kf, d_exog_kf, n_obs_kf, bs, scale, order_kf, x0, param, h)
         _ = ews^
         return _answer(trace, ar)
