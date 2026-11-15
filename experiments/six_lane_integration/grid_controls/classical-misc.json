@@ -81,25 +81,6 @@
       "grid": "exclude",
       "note": "UNREACHED: classical:ols takes the TSQR route (x_decomp/api.mojo:585 IDN_OLS_ONE_ENTRY) and never calls ols_fit; :208 is FAST-Apple only, :340 weighted only."
     },
-    "c15_factor_solve": {
-      "define": "MOJOLEARN_CLASSICAL_C15_FACTOR_SOLVE",
-      "kind": "switch",
-      "arms": {
-        "off": [],
-        "on": [
-          "MOJOLEARN_CLASSICAL_C15_FACTOR_SOLVE"
-        ]
-      },
-      "default": "off",
-      "source": [
-        "x_linear/bayes.mojo:902",
-        "x_linear/bayes.mojo:922"
-      ],
-      "binding": "_mojolearn_x_linear",
-      "bits_change": true,
-      "status": "kept",
-      "note": "ARD only; lead thread does a fixed-order dk triangular solve."
-    },
     "c16_glm_fused": {
       "define": "MOJOLEARN_CLASSICAL_C16_GLM_FUSED",
       "kind": "switch",
@@ -413,9 +394,7 @@
     "expanded:ard": {
       "binding": "_mojolearn_x_linear",
       "route": "fit: ARDRegression -> ard_fit_grid -> _ard_sc_body -> _t_ard_coef (x_linear/bayes.mojo:902)",
-      "controls": [
-        "c15_factor_solve"
-      ],
+      "controls": [],
       "interaction_groups": []
     },
     "expanded:poisson": {
@@ -683,6 +662,11 @@
       "define": "MOJOLEARN_CLASSICAL_C14_GROUP_RHS",
       "control": "c14_group_rhs",
       "reason": "DELETED 2026-11-15 (lane/expdel2-06-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md; recoverable at 9b13c93ee0; patch experiments/removed/MOJOLEARN_CLASSICAL_C14_GROUP_RHS.patch): unmeasured opt-in arm. no record: no A/B was recorded for the opt-in arm (plan rule a; AGENTS.md \"An unmeasured arm is deleted\", Andrew 2026-11-15); the grid note called the lu-solve form an expected loser. Refused in core/experiment_guards_linear.mojo; docs/TOMBSTONES.md."
+    },
+    {
+      "define": "MOJOLEARN_CLASSICAL_C15_FACTOR_SOLVE",
+      "control": "c15_factor_solve",
+      "reason": "DELETED 2026-11-15 (lane/expdel2-06-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md; recoverable at 72270680f8; patch experiments/removed/MOJOLEARN_CLASSICAL_C15_FACTOR_SOLVE.patch): unmeasured opt-in arm. no record: no A/B was recorded for the opt-in arm (plan rule a; AGENTS.md \"An unmeasured arm is deleted\", Andrew 2026-11-15). Refused in core/experiment_guards_linear.mojo; docs/TOMBSTONES.md."
     }
   ],
   "owed_removal_ab": [

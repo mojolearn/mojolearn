@@ -128,6 +128,8 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_CLASSICAL_C13_LOGCV_WEIGHTS"](), "removed 2026-11-15 (lane/expdel2-06-base): CLASSICAL_C13_LOGCV_WEIGHTS (Linear (weighted LogisticRegressionCV fold weight sums, IDENTICAL)) was unmeasured opt-in arm; the opt-in arm is gone and the default path is unchanged; code recoverable at 337c096a5b; see docs/TOMBSTONES.md"
     # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C14_GROUP_RHS.patch
     comptime assert not is_defined["MOJOLEARN_CLASSICAL_C14_GROUP_RHS"](), "removed 2026-11-15 (lane/expdel2-06-base): CLASSICAL_C14_GROUP_RHS (Linear / decomposition (triangular solves in groups of four RHS, IDENTICAL)) was unmeasured opt-in arm; the opt-in arm is gone and the default path is unchanged; code recoverable at 9b13c93ee0; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C15_FACTOR_SOLVE.patch
+    comptime assert not is_defined["MOJOLEARN_CLASSICAL_C15_FACTOR_SOLVE"](), "removed 2026-11-15 (lane/expdel2-06-base): CLASSICAL_C15_FACTOR_SOLVE (Linear (ARD posterior mean from the Cholesky factor, IDENTICAL)) was unmeasured opt-in arm; the opt-in arm is gone and the default path is unchanged; code recoverable at 72270680f8; see docs/TOMBSTONES.md"
     return True
 
 
