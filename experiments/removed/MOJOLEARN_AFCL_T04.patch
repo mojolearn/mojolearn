@@ -1,0 +1,16 @@
+diff --git a/gbdt/apple_fast_classical.mojo b/gbdt/apple_fast_classical.mojo
+index 55680ad1a7..c96cc8b7ff 100644
+--- a/gbdt/apple_fast_classical.mojo
++++ b/gbdt/apple_fast_classical.mojo
+@@ -35,9 +35,8 @@ comptime AFCL_T03 = False
+ 
+ # AFCL-T04: four Apple SIMD groups per partition-metadata block instead
+ # of eight; all kernels retain their grid stride and visit every row.
+-# TOMBSTONE: MOJOLEARN_AFCL_T04 (DELETE-EXPERIMENT, never-run Apple FAST programme card, rule g) deleted 2026-11-15 by lane/expdel2-41-trees; code recoverable at 358548637a.
+-# Restore: git apply experiments/removed/MOJOLEARN_AFCL_T04.patch; record in docs/TOMBSTONES.md.
+-comptime AFCL_T04 = False
++# NEVER RUN — PENDING MEASUREMENT; uncompiled/unverified; default OFF.
++comptime AFCL_T04 = AFCL_APPLE_FAST and is_defined["MOJOLEARN_AFCL_T04"]()
+ 
+ # AFCL-T05: four adjacent score records per lane before advancing a
+ # cooperative block; comparator and final reduction order stay unchanged.

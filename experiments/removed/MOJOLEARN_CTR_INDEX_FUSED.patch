@@ -1,0 +1,17 @@
+diff --git a/gbdt/ctrs/fast_prep.mojo b/gbdt/ctrs/fast_prep.mojo
+index 5a0533e233..0ec0a54196 100644
+--- a/gbdt/ctrs/fast_prep.mojo
++++ b/gbdt/ctrs/fast_prep.mojo
+@@ -152,9 +152,9 @@ comptime CTR_SORT_ONCE = T28_SORT or _SYM_CTR_FAST_APPLE
+ #: EXPERIMENTS.md (Oct 4): sym-ctr-index-fused-taxicat-x on the old batch
+ #: base 3150d75c1, 27,240 -> 25,566 ms (-6.1%), AUC .630808 -> .630766,
+ #: HOLD (old base). Owed: current-main A/B.
+-# TOMBSTONE: MOJOLEARN_CTR_INDEX_FUSED (DELETE-ARM, EXP:1274 force knob under the SYM_CTR_ALL default, rule e) deleted 2026-11-15 by lane/expdel2-41-trees; code recoverable at f2886a9013.
+-# Restore: git apply experiments/removed/MOJOLEARN_CTR_INDEX_FUSED.patch; record in docs/TOMBSTONES.md.
+-comptime CTR_INDEX_FUSED = _SYM_CTR_FAST_APPLE
++comptime CTR_INDEX_FUSED = _SYM_CTR_FAST_APPLE and (
++    is_defined["MOJOLEARN_CTR_INDEX_FUSED"]() or SYM_CTR_ALL
++)
+ #: recovery 2026-10-04 (lane/apple-fast-rec-sym): source
+ #: lane/apple-fast-sym-ctr@39c3c9daf; SYM_CTR_ALL rc=1 at 13547eaf1 (two
+ #: fast_prep read_column errors, fixed at 4e08a1922), no passing build yet,
