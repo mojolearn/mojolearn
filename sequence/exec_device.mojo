@@ -70,8 +70,6 @@ from autograd.ops import OP_AGK_GEMM_EPI, agk_colsum_args
 from sequence.ops import OP_COLSUM_DIV
 from sequence.ops import OP_THETA
 from sequence.ops import OP_LN_BWD_X, OP_LN_FWD, OP_AF_RMEAN, OP_AF_ROW, OP_AF_COL
-from sequence.adafactor import AF_COL_CHUNK_FOLD
-from sequence.adafactor_candidates import AF_COL_LANES, af_col_chunk_kernel
 from sequence.theta_spec import THETA_SPEC
 from sequence.ets_spec import ETS_SPEC, op_ets_spec
 from sequence.ops import OP_CHOLSOLVE, OP_VAR_FORECAST, TSA2_VAR, OP_COLSCALE, OP_VAR_SIGMA, SEQ_FAST_VAR_COOP
@@ -983,15 +981,8 @@ struct DeviceExec(Exec, Movable):
                     raise Error("sequence DeviceExec: an integer argument does not fit Int32 (" + String(v) + ")")
         # TOMBSTONE (lane/postmerge-act-5, 2026-10-09: -D MOJOLEARN_IDN_AF_VEC_FUSED (Adafactor fused vector step)): the OP_AF_VFUSE / OP_AF_VFIN
         # launches were NOISE: NV 13.671 -> 13.738 ms (1.00x, nv2 v1010/v1012), AMD 8.620 -> 8.186 ms (0.95x, a1141/a1143), avg 0.98x, digest aa99a3dc unchanged; recoverable at main 0a7b206f1.
-        # NI54 neural optimizer-only opcode. Every lane's logical leaf is
-        # shared with HostExec's op_af_col; no statistical estimator op moves.
-        comptime if AF_COL_CHUNK_FOLD and OP == OP_AF_COL:
-            self.ctx.enqueue_function[af_col_chunk_kernel](
-                a.p0, a.p1, Int32(a.i0), Int32(a.i1), a.f0,
-                grid_dim=(n, 1, 1), block_dim=(AF_COL_LANES, 1, 1),
-            )
-            self.execution_profile.kernel()
-            return
+        # TOMBSTONE: MOJOLEARN_IDN_AF_COL_CHUNK_FOLD (unmeasured opt-in arm: NI54 64-row leaf column fold for Adafactor) deleted 2026-11-15 by lane/expdel2-28-neural; code recoverable at ab421749bb.
+        # Restore: git apply experiments/removed/MOJOLEARN_IDN_AF_COL_CHUNK_FOLD.patch; record in docs/TOMBSTONES.md.
         # lane apple-fast-gap-lstm (sequence/recurrent_scan.mojo): the whole
         # recurrence of a layer, one block per batch row (n = B rows); the
         # integers packed as seq_kernel's (lane ag-pass5-recurrent)
