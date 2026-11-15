@@ -16,7 +16,6 @@ The runs are synchronous launches over caller-owned buffers; each kernel
 parallelizes inside. The dispatch is a fixed comparison chain on the
 operation code, no data work.
 """
-from gbdt.trees_identical_switches import T30_ADABOOST
 from core.hostptr import f32_ptr, f64_ptr, i32_ptr
 from checks.numerics import identical_log64, GLOBAL_NUMERIC_MODE
 from checks.kernel_matrix import COLUMN_CPU, TARGET_COLUMN
@@ -472,25 +471,15 @@ def samme_step_run(c: XtCall) raises -> Int:
     var n = _i(c, 0)
     if n <= 0:
         raise Error("x_trees_samme_step: n must be positive")
-    # T30 tree-base metadata only; custom non-tree estimators retain B.
-    # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
-    var cache_tree = False
-    if c.n_params > 4:
-        cache_tree = _i(c, 4) != 0
-    if T30_ADABOOST and cache_tree:
-        comptime if XTREES_DEVICE_OPS:
-            boost_dev.samme_step_device[True](f64_ptr(w), i32_ptr(pred), i32_ptr(y), n, _i(c, 1),
-                                        _f(c, 2), _i(c, 3) != 0, f64_ptr(stats))
-        else:
-            samme_step[True](f64_ptr(w), i32_ptr(pred), i32_ptr(y), n, _i(c, 1),
-                       _f(c, 2), _i(c, 3) != 0, f64_ptr(stats))
+    # T30 tree-base metadata (params[4]) is accepted and not read.
+    # TOMBSTONE: MOJOLEARN_TREES_T30_ADABOOST (opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-46-trees; code recoverable at ec57bb3501.
+    # Restore: git apply experiments/removed/MOJOLEARN_TREES_T30_ADABOOST.expdel2-46-trees.patch; record in docs/TOMBSTONES.md.
+    comptime if XTREES_DEVICE_OPS:
+        boost_dev.samme_step_device(f64_ptr(w), i32_ptr(pred), i32_ptr(y), n, _i(c, 1),
+                                    _f(c, 2), _i(c, 3) != 0, f64_ptr(stats))
     else:
-        comptime if XTREES_DEVICE_OPS:
-            boost_dev.samme_step_device[False](f64_ptr(w), i32_ptr(pred), i32_ptr(y), n, _i(c, 1),
-                                        _f(c, 2), _i(c, 3) != 0, f64_ptr(stats))
-        else:
-            samme_step[False](f64_ptr(w), i32_ptr(pred), i32_ptr(y), n, _i(c, 1),
-                       _f(c, 2), _i(c, 3) != 0, f64_ptr(stats))
+        samme_step[False](f64_ptr(w), i32_ptr(pred), i32_ptr(y), n, _i(c, 1),
+                   _f(c, 2), _i(c, 3) != 0, f64_ptr(stats))
     return n
 
 
@@ -506,25 +495,15 @@ def r2_step_run(c: XtCall) raises -> Int:
     var n = _i(c, 0)
     if n <= 0:
         raise Error("x_trees_r2_step: n must be positive")
-    # T30 tree-base metadata only; custom non-tree estimators retain B.
-    # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
-    var cache_tree = False
-    if c.n_params > 4:
-        cache_tree = _i(c, 4) != 0
-    if T30_ADABOOST and cache_tree:
-        comptime if XTREES_DEVICE_OPS:
-            boost_dev.r2_step_device[True](f64_ptr(w), f32_ptr(pred), f32_ptr(y), n, _i(c, 1),
-                                     _f(c, 2), _i(c, 3) != 0, f64_ptr(stats))
-        else:
-            r2_step[True](f64_ptr(w), f32_ptr(pred), f32_ptr(y), n, _i(c, 1),
-                    _f(c, 2), _i(c, 3) != 0, f64_ptr(stats))
+    # T30 tree-base metadata (params[4]) is accepted and not read.
+    # TOMBSTONE: MOJOLEARN_TREES_T30_ADABOOST (opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-46-trees; code recoverable at ec57bb3501.
+    # Restore: git apply experiments/removed/MOJOLEARN_TREES_T30_ADABOOST.expdel2-46-trees.patch; record in docs/TOMBSTONES.md.
+    comptime if XTREES_DEVICE_OPS:
+        boost_dev.r2_step_device(f64_ptr(w), f32_ptr(pred), f32_ptr(y), n, _i(c, 1),
+                                 _f(c, 2), _i(c, 3) != 0, f64_ptr(stats))
     else:
-        comptime if XTREES_DEVICE_OPS:
-            boost_dev.r2_step_device[False](f64_ptr(w), f32_ptr(pred), f32_ptr(y), n, _i(c, 1),
-                                     _f(c, 2), _i(c, 3) != 0, f64_ptr(stats))
-        else:
-            r2_step[False](f64_ptr(w), f32_ptr(pred), f32_ptr(y), n, _i(c, 1),
-                    _f(c, 2), _i(c, 3) != 0, f64_ptr(stats))
+        r2_step[False](f64_ptr(w), f32_ptr(pred), f32_ptr(y), n, _i(c, 1),
+                _f(c, 2), _i(c, 3) != 0, f64_ptr(stats))
     return n
 
 
