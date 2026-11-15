@@ -78,10 +78,13 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from x_prep.prims import add
 
 comptime _IDN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-#: lane classical-te-gmm: te_global / te_enc in the blocked order `BLT` (docstring), default OFF
-comptime IDN_TE_BLOCKED = _IDN and is_defined["MOJOLEARN_CLASSICAL_TE_BLOCKED_FOLD"]()
-comptime IDN_TE_GLOBAL_TREE = _IDN and not is_defined["MOJOLEARN_IDN_TE_GLOBAL_TREE_OFF"]() and not IDN_TE_BLOCKED
-comptime IDN_TE_ENC_TREE = _IDN and not is_defined["MOJOLEARN_IDN_TE_ENC_TREE_OFF"]() and not IDN_TE_BLOCKED
+#: lane classical-te-gmm: te_global / te_enc in the blocked order `BLT` (docstring); the arm is deleted,
+#: the alias stays False for x_prep/target.mojo
+# TOMBSTONE: MOJOLEARN_CLASSICAL_TE_BLOCKED_FOLD (no A/B recorded for the opt-in arm) deleted 2026-11-15 by lane/expdel2-22-linear; code recoverable at 74754fe939.
+# Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_TE_BLOCKED_FOLD.patch
+comptime IDN_TE_BLOCKED = False
+comptime IDN_TE_GLOBAL_TREE = _IDN and not is_defined["MOJOLEARN_IDN_TE_GLOBAL_TREE_OFF"]()
+comptime IDN_TE_ENC_TREE = _IDN and not is_defined["MOJOLEARN_IDN_TE_ENC_TREE_OFF"]()
 comptime IDN_II_GRAM_TILE = _IDN and not is_defined["MOJOLEARN_IDN_II_GRAM_TILE_OFF"]()
 #: K14's non-eigh part: ii_conv's max over the row sums by a threadgroup tree
 #: (device only: a max is exact, the unit's word, so the host is unchanged)
