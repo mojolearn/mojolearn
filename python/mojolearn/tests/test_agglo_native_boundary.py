@@ -15,8 +15,11 @@ def _x():
 
 
 def _model(**options):
+    # AgglomerativeClustering has no `numeric_mode=` constructor parameter (its
+    # fit uses the process default mode, `identical`, since c8539dd9b1); the
+    # public way to pick a mode is `mojolearn.set_numeric_mode`.
     settings = dict(n_clusters=2, linkage="single", metric="euclidean",
-                    prediction_data=True, numeric_mode="identical")
+                    prediction_data=True)
     settings.update(options)
     return ml.AgglomerativeClustering(**settings)
 

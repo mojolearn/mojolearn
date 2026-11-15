@@ -77,7 +77,9 @@ def test_native_looking_python_type_is_not_registered(name, has_finalizer):
     linear = ml.Ridge(alpha=1.0)
     linear.coef_ = fake
     try:
-        with pytest.raises(TypeError, match="native.*(owner|parameter|release)"):
+        # The classical model's field admission refuses the Python-defined
+        # look-alike before any release ("requires native input types").
+        with pytest.raises(TypeError, match="native.*(owner|parameter|release)|requires native input types"):
             linear.set_params(alpha=2.0)
         assert linear.alpha == 1.0
         assert linear.coef_ is fake
