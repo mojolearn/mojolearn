@@ -56,6 +56,7 @@ from checks.native_tests.decomp_ne2_g_decomp_entries import register as register
 from checks.native_tests.eigh_route import register as register_eigh_route
 from checks.native_tests.embedding_ne3_entries import register as register_embedding_ne3_entries
 from checks.native_tests.embedding_surface import register as register_embedding_surface
+from checks.native_tests.fresh_state_zeros import register as register_fresh_state_zeros
 from checks.native_tests.gbdt_ova_link import register as register_gbdt_ova_link
 from checks.native_tests.gbdt_public_fits import register as register_gbdt_public_fits
 from checks.native_tests.gbdt_resident_ns_predict import register as register_gbdt_resident_ns_predict
@@ -227,6 +228,7 @@ def all_checks() -> List[Check]:
     checks.append(register_eigh_route())
     checks.append(register_embedding_ne3_entries())
     checks.append(register_embedding_surface())
+    checks.append(register_fresh_state_zeros())
     checks.append(register_gbdt_ova_link())
     checks.append(register_gbdt_public_fits())
     checks.append(register_gbdt_resident_ns_predict())
