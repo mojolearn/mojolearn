@@ -31,9 +31,7 @@ DEVICE I/O (lane neural-io-2, 2026-10-09): an x made by
 returns y as a `SequenceDeviceTensor` and keeps the routing outputs there
 too (`router_logits_`, `selected_experts_`, `routing_weights_` are read
 back when first accessed), so nothing crosses the bus inside the call
-(`sequence/moe_dev.mojo`, the same launches on the same values). A binding
-built with -D MOJOLEARN_SEQ_MOE_DEVICE_IO_OFF has no `moe_forward_dev`; a
-resident x is then read back once and the host-array entry runs. The
+(`sequence/moe_dev.mojo`, the same launches on the same values). The
 host-array entry's outputs are `np.empty` (the binding stores every cell)."""
 import os as _os
 from ._optional_numpy import require_numpy
@@ -49,8 +47,7 @@ _WEIGHTS = ("router", "gate_up_proj", "down_proj")
 # once by `moe_weights_put` instead of uploading the three arrays every call; any assignment of
 # router / gate_up_proj / down_proj (or load_state_dict) re-copies on the next forward, and the
 # read-only host copies make a stale device copy impossible. Device I/O (lane neural-io-2): a
-# resident x keeps y and the routing outputs on the device (`sequence/moe_dev.mojo`); a binding
-# built with -D MOJOLEARN_SEQ_MOE_DEVICE_IO_OFF has no `moe_forward_dev` and the host entry runs.
+# resident x keeps y and the routing outputs on the device (`sequence/moe_dev.mojo`).
 class MoEBlock:
     """Sparse mixture-of-experts feed-forward block, as Mixtral's `MixtralSparseMoeBlock`.
 

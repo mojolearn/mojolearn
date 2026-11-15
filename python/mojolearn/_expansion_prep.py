@@ -84,22 +84,21 @@ _OPS = dict(
     cal_fold_part=142, cal_fold_scan=143, cal_fold_rank=144, cal_fold_assign=145, cal_lofo_merge=146,
     cal_eps_folds=147, cal_params_folds=148, cal_jll_folds=149, cal_platt_init=150, cal_platt_setup=151,
     cal_platt_part=152, cal_platt_step=153, cal_platt_ls_part=154, cal_platt_ls_pick=155, cal_sigmoid_avg=156,
-    # lane apple-fast-gap-cls2 (x_prep/cat_cls2.mojo): only the FAST + Apple binding (default;
-    # -D MOJOLEARN_X_PREP_FAST_CLS2_PACK_OFF has none) runs them (it exports x_prep_cls2_cat)
+    # lane apple-fast-gap-cls2 (x_prep/cat_cls2.mojo): only the FAST + Apple binding (default)
+    # runs them (it exports x_prep_cls2_cat)
     cat_zero=157, cat_present=158, pres_count=159, pres_write=160, cat_pack=161,
-    # lane idn-int-prep (x_prep/blocked.mojo): the IDENTICAL bindings (device and host column;
-    # -D MOJOLEARN_IDN_NB_ONEPASS_OFF has none) run them (`_idn_int` bit 2); IDENTICAL also
+    # lane idn-int-prep (x_prep/blocked.mojo): the IDENTICAL bindings (device and host column)
+    # run them (`_idn_int` bit 2); IDENTICAL also
     # compiles 157-160 (x_prep/label_fast.mojo IDN_LABEL)
     csb1_part=162, csb1_neg=163,
     # lane idn-all (x_prep/blocked.mojo `csr_dense_unit`): the IDENTICAL device binding
-    # (`_idn_int` bit 8; -D MOJOLEARN_IDN_NB_CSR_DENSE_OFF has none) densifies a CSR input
+    # (`_idn_int` bit 8) densifies a CSR input
     csr_dense=164,
     # lane fam-prep-metrics: the IDENTICAL bindings (device and host column) run them
-    # (`_idn_fam` bit 2: csb1_ss, x_prep/blocked.mojo, -D MOJOLEARN_IDN_CLASS_ONEPASS_OFF has
-    # none; bit 4: the blocked univariate scores, x_prep/select_blocked.mojo,
-    # -D MOJOLEARN_IDN_SELECT_BLOCKED_OFF has none)
+    # (`_idn_fam` bit 2: csb1_ss, x_prep/blocked.mojo; bit 4: the blocked univariate scores,
+    # x_prep/select_blocked.mojo)
     csb1_ss=165, fcb_part=166, fcb_fin=167, frb_part1=168, frb_mean=169, frb_part2=170, frb_fin=171,
-    # bit 8: PowerTransformer's blocked folds, x_prep/pt_blocked.mojo, -D MOJOLEARN_IDN_PT_BLOCKED_OFF has none
+    # bit 8: PowerTransformer's blocked folds, x_prep/pt_blocked.mojo
     ptb_part1=172, ptb_mean=173, ptb_part2=174, ptb_fin=175, ptb_step=176,
     # lane apple-fast-py2mojo-prep (x_prep/py2mojo.mojo, a range of its own): every binding
     # runs them (lane pyglue-numeric deleted the OFF arm and its Python loops)
@@ -121,7 +120,7 @@ _OPS = dict(
     # TOMBSTONE: MOJOLEARN_IDN_LAB_UNIQUE_HIST, MOJOLEARN_IDN_LAB_CODES_DIRECT, MOJOLEARN_IDN_LAB_ONE_ENTRY (losers: label-encoder 2.1-2.6x, label-binarizer istella 1.15-1.39x slower, NV + AMD) deleted 2026-10-11 by de9ce7b39; code recoverable at de9ce7b39^.
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_LAB_UNIQUE_HIST_CODES_DIRECT_ONE_ENTRY.patch
     # lane apple-fast-q-clf (x_prep/proba64.mojo, in the py2mojo range): staged only when the
-    # binding exports x_prep_proba64 (FAST, not -D MOJOLEARN_PROBA64_QOLD)
+    # binding exports x_prep_proba64 (FAST)
     q64_softmax=213,
 )
 
@@ -1126,9 +1125,8 @@ class _DiscreteNB(_Classifier):
         NB_TEXT_CSR (lane apple-fast-nb, default since the M3 A/B; it exports
         `x_prep_nb_csr_fit`). The bench hands such a build the text block as
         CSR. Also IDENTICAL on every vendor's device binding (lane
-        idn-int-prep, IDN_NB_CSR, -D MOJOLEARN_IDN_NB_CSR_OFF). False
-        everywhere else: FAST off Apple, the host column,
-        -D MOJOLEARN_NB_TEXT_CSR_OFF."""
+        idn-int-prep, IDN_NB_CSR). False everywhere else: FAST off Apple
+        and the host column."""
         return _CLS_CALL(cls, "nb_csr_ready", (cls._csr_ok,), _CLS_CONTEXT)
 
     def fit(self, X, y, sample_weight=None):

@@ -83,7 +83,7 @@ class ReuseTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError,'did not pass'):self.validate()
 
     def test_flags_and_toolchain_refused(self):
-        self.att['mojo_build_flags']='-D MOJOLEARN_IDN_ALL_OFF=1';self.flush()
+        self.att['mojo_build_flags']='-D MOJOLEARN_IDN_TEST=1';self.flush()
         with self.assertRaisesRegex(ValueError,'flags'):self.validate()
         self.att['mojo_build_flags']='';self.flush();self.compiler.write_bytes(b'changed')
         with self.assertRaisesRegex(ValueError,'hash'):self.validate()

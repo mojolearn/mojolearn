@@ -411,8 +411,7 @@ class StandardScaler(_ScalerProtocol):
         """
         return _STANDARD_FIT(self, X, y, sample_weight, _STANDARD_CONTEXT)
 
-    # MOJOLEARN_X_PREP_FAST_FIT_TRANSFORM_FUSED (a fast + Apple build's
-    # experiment, default off; lane apple-fast-round2): the binding's
+    # (lane apple-fast-round2; its opt-in define was deleted 2026-11-15): the binding's
     # `standard_fit_transform_direct` uploads X once and runs the transform on
     # the resident copy (preprocessing/estimator.mojo has the cost reasoning).
     # Routing only: the same kernels on the same words. NaN input, sample

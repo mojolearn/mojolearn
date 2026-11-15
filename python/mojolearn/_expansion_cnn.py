@@ -36,9 +36,8 @@ class _Layer:
 
 # lane fam-neural (2026-10-04): the binding's `x_cnn_idn_flags` names the
 # lane's IDENTICAL switches this build has on (x_cnn/device.mojo "lane
-# fam-neural: `_m` forms"; each has a `-D ..._OFF` before arm and all are off
-# under MOJOLEARN_IDN_ALL_OFF, in FAST, and on the CPU twin, which has no
-# such entry). The glue takes a new path only when its bit is set; otherwise
+# fam-neural: `_m` forms"; each is off in FAST and on the CPU twin, which
+# has no such entry). The glue takes a new path only when its bit is set; otherwise
 # every layer runs exactly the calls it ran before.
 # TOMBSTONE: MOJOLEARN_IDN_CNN_BN_FUSE (DROPPED-noise) deleted 2026-10-10 by lane/postmerge-act-6; code recoverable at 9f83ea479.
 # Tried: _F_BN_FUSE = 64, the fused BatchNorm flag bit.
@@ -53,8 +52,8 @@ class _Layer:
 # Bit 2 (lane fix-n1-lm-neural): GCNConv's remaining self loops come from
 # `x_cnn_gcn_loops` (a stable device sort and two gathers; the host twin on a
 # CPU-only install), not host NumPy. Copies only: no bit moves.
-# Bit 3: the candidate fold block 256. Bit 4 (lane/review-fixes): the binding
-# was built with -D MOJOLEARN_IDN_ALL_OFF.
+# Bits 3 and 4 (the fold-block-256 candidate and the IDN_ALL_OFF build) are
+# always 0: their defines were deleted 2026-11-15 (docs/TOMBSTONES.md).
 # Both flag words are read natively (python/mojolearn/_native_xcnn_bridge.py connects them;
 # bindings/xcnn_common_door.mojo decides each route).
 # TOMBSTONE: the Python layer glue `_mixed`, `_idn`, `_idn2`, `_dev_of`, `_device_io_off`, `_size`,
@@ -132,14 +131,9 @@ class _Dev:
 # `__array__`) takes the host entry on the downloaded words.
 # MOJOLEARN_XCNN_DEVICE_IO_OFF=1 is the A/B before arm (the same device
 # kernels either way): `to_device` returns the array it was given and the
-# graph layers upload their ones vector per call again. The wave's OFF arm
-# (`-D MOJOLEARN_IDN_ALL_OFF=1` in the build and `MOJOLEARN_IDN_ALL_OFF=1` in
-# the environment, tools/identical_wave_runner.py) turns it off too, so that
-# arm runs the old form throughout (audit F4). lane/review-fixes: a binding
-# built with the define reports it (`x_cnn_idn2_flags` bit 4), so the OFF arm
-# holds even when the environment variable is not set (`_device_io_off`).
-_DEVICE_IO_OFF = (__import__("os").environ.get("MOJOLEARN_XCNN_DEVICE_IO_OFF", "") == "1"
-                  or __import__("os").environ.get("MOJOLEARN_IDN_ALL_OFF", "") == "1")
+# graph layers upload their ones vector per call again. (The identical wave's
+# all-off arm, which also turned it off, was deleted 2026-11-15.)
+_DEVICE_IO_OFF = __import__("os").environ.get("MOJOLEARN_XCNN_DEVICE_IO_OFF", "") == "1"
 
 
 # lane fam2-neural (2026-10-04): PINNED LAYER WEIGHTS. A layer given a
@@ -152,14 +146,13 @@ _DEVICE_IO_OFF = (__import__("os").environ.get("MOJOLEARN_XCNN_DEVICE_IO_OFF", "
 # p3-cnn-sequence-tsa (2026-11-06): a pinned layer's `weight_` / `bias_` are
 # read-only arrays (bindings/xcnn_conv_native_door.mojo `_pin_values`), so an
 # in-place edit raises instead of running on the stale device copy.
-# `x_cnn_idn_flags` bit 5 (`-D MOJOLEARN_IDN_PIN_WEIGHTS_OFF`); with it off,
-# on FAST or on the CPU twin `pin_weights()` does nothing.
+# `x_cnn_idn_flags` bit 5; on FAST or on the CPU twin `pin_weights()` does
+# nothing.
 
 
 # lane cnn-resident-glue (2026-10-11, G3): CNN resident grads,
 # `x_cnn_idn_flags` bit 7, default ON since 2026-10-11 (lane/w2-decide-neural,
-# avg 0.754 over 9 layer lanes, same bits); `-D MOJOLEARN_IDN_CNN_RESIDENT_GRADS_OFF`
-# clears the bit (x_cnn/device.mojo
+# avg 0.754 over 9 layer lanes, same bits; x_cnn/device.mojo
 # IDN_CNN_RESIDENT_GRADS has the structural reason and the expected gain).
 # With it on, a resident call keeps everything on the device: Conv2d (and
 # the BasicBlock's convs) pin their weights on first use (`_auto_pin`; a

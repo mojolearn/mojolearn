@@ -90,8 +90,8 @@ def validate_receipt(receipt, *, sha, vendor, arch, arm, builders, environment, 
     require(att.get('source_sha') == sha, 'attested source SHA differs')
     require(all(att.get(k) == v for k, v in dict(vendor=vendor, gpu_arch=arch, arm=arm, mode='identical', jobs=1).items()),
             'attested build configuration differs')
-    flags = '-D MOJOLEARN_IDN_ALL_OFF=1' if arm == 'off' else ''
-    require(att.get('mojo_build_flags') == flags, 'arm flags differ')
+    require(arm == 'on', 'only the on arm exists (IDN_ALL_OFF deleted 2026-11-15)')
+    require(att.get('mojo_build_flags') == '', 'arm flags differ')
     require(att.get('compile_environment') == dict(MOJOLEARN_NUMERIC_MODE='identical',
             MOJOLEARN_COMPILE_JOBS='1', MOJOLEARN_GPU_ARCHS=arch, MOJOLEARN_TARGET_COLUMN=vendor),
             'compile environment differs')

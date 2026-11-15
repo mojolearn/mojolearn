@@ -437,7 +437,7 @@ _TE_ADA_SESSION_SHARE = 4
 #     per launch sweep (`x_trees_kshap_means` + `x_trees_kshap_solve_ey`).
 _KSHAP_FAST_BATCH = 8
 #   MOJOLEARN_AGN_IDN_SYN_POOL (lane idn-shap-pca; an IDENTICAL build's
-#     switch, -D MOJOLEARN_AGN_IDN_SYN_POOL_OFF clears it): Kernel/Permutation
+#     default): Kernel/Permutation
 #     SHAP hand every chunk the same host buffer for the synthetic rows (the
 #     device side builds them in one pooled buffer). Moves no bit.
 _AGN_IDN_SYN_POOL = 16
@@ -1094,9 +1094,8 @@ class _DARTBase(_TreesEnsembleBase):
     # -------------------------------------------- lane/apple-fast-dart
     # The boosting round on the device (xtrees/dart_device.mojo): FAST on
     # every GPU vendor (Apple since lane/apple-fast-dart, NVIDIA and AMD since
-    # lane cpu2-l5-trees; default unless -D MOJOLEARN_DART_DEVICE_OFF) and, since lane
-    # fam2-forests, every IDENTICAL build (GPU kernels and the host twin
-    # xtrees/dart_host.mojo, default unless -D MOJOLEARN_IDN_DART_DEVICE_OFF);
+    # lane cpu2-l5-trees) and, since lane fam2-forests, every IDENTICAL build
+    # (GPU kernels and the host twin xtrees/dart_host.mojo);
     # the only builds that register x_trees_dart_open; lane py-runtime-b deleted
     # main's host loop `_boost_loop`, so the round is required). The score, gradients and leaf values are
     # float32 on the device and the dropped trees come off and go back as
@@ -2088,7 +2087,7 @@ class StackingRegressor(_MetaRegressorScore, RegressorScoreMixin, _StackingBase)
 # :200, one clone per column of Y; predict stacks the columns;
 # MultiOutputClassifier.predict_proba :500 returns a list). Y is a numeric
 # 2-D buffer; a classifier's labels per column are encoded to codes.
-#: lane apple-fast-meta (FAST + Apple default, -D MOJOLEARN_MULTIOUT_RIDGE_OFF turns it off):
+#: lane apple-fast-meta (FAST + Apple default):
 #: MultiOutputRegressor(Ridge) fits every target in ONE ridge program
 #: (glm/impl/ridge_multi.mojo) when the estimators binding publishes the
 #: ridge multi table (core/linear_entry_table_multi.mojo); the native owner takes that route (trees_public_meta.mojo

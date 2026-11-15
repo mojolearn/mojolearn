@@ -4,9 +4,9 @@
 ``matmul_fused`` is ``C = epi(op(a) @ op(b))`` with the epilogue applied in
 the kernel's store: a bias, a bias and a residual, or a bias followed by
 SiLU or GELU (exact erf). It exists only in a FAST linalg binding built on
-an Apple GPU with ``-D MOJOLEARN_AFN_GEMM_EPILOGUE`` (or ``_ALL``); every
-other binding raises ``NotImplementedError`` naming the define, so a caller
-can fall back to ``matmul`` plus its own epilogue. No identity claim: FAST.
+an Apple GPU that exports it; every other binding raises
+``NotImplementedError``, so a caller can fall back to ``matmul`` plus its own
+epilogue. No identity claim: FAST.
 
 The attention, mamba and MLP lanes are the intended callers (their Mojo
 blocks call ``gemm.afn_apple_fast.afn_gemm_fused_into`` directly; this
@@ -44,8 +44,8 @@ def matmul_fused(a, b, *, bias=None, residual=None, activation=None,
 
 # Import-time binding only. All BF16 argument handling, packing, allocations,
 # launches, synchronization and consumed-output construction run in Mojo.
-# Apple FAST BF16 defaults on through MOJOLEARN_AFN_GEMM_BF16_MMA=1;
-# explicit =0 disables it. No identical fallback is used. A missing native
+# Apple FAST BF16 is the default (the =0 opt-out define was deleted
+# 2026-11-15). No identical fallback is used. A missing native
 # export is an installation error; never fall back to the Python wrapper.
 _bf16_binding = _load()
 has_bf16 = _bf16_binding.fast_bf16_available

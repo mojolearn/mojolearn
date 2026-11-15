@@ -1710,8 +1710,7 @@ class SGDOneClassSVM(NumericModeMixin):
         # step, a float-float intercept and an IMPLICIT intercept step,
         # x_linear/sgd.mojo `oc_solve`: the explicit step oscillated the
         # offset, board istella nu 0.1 flagged 0.374 of the training rows at
-        # batch 256, sklearn 0.055); FAST builds, or
-        # MOJOLEARN_SGD_OC_IDN_MB_DEFAULT_OFF, the per-sample fit
+        # batch 256, sklearn 0.055); FAST builds, the per-sample fit
         # (lane/neural-pass132's default). 0 asks for the per-sample fit, a
         # positive batch_size for that minibatch.
         self.batch_size = batch_size
