@@ -5,7 +5,6 @@ from core.native_descriptor_abi import NativeDescriptorCall, NativeDescriptorErr
 from core.native_descriptor_call import native_descriptor_words, native_descriptor_report
 from x_neighbors.descriptor_schema import XN_ABI_NAME, xn_schema, xn_min_ints
 from x_neighbors.native_descriptor_aux_device import xn_aux_execute
-from experiments.classical_identical_ideas.graph_controls import C43_RESIDENT_NORMALIZATION
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from x_neighbors.device_ops import op_softmax64
 from x_neighbors.proba64_nc import NC_PROBA64

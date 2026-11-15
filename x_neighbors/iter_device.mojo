@@ -11,8 +11,6 @@ same values; only the stopping sum crosses back, one float per iteration,
 compared in double exactly as Python compared it. The CPU column runs the
 same loop over the items (`x_neighbors/iter_host.mojo`).
 """
-from experiments.classical_identical_ideas.graph_controls import C43_RESIDENT_NORMALIZATION
-from x_neighbors.classical_graph import classical_graph_degree, classical_graph_product
 from experiments.classical_identical_ideas.stats_controls import C54_PREDICT_TILES
 from experiments.classical_identical_ideas.graph_controls import C33_FROZEN_CHUNKS, C33_CHUNK
 from x_neighbors.items import matmul_item
@@ -121,15 +119,13 @@ def xn_tree_fold_kernel(part: FP, res: FP, nb_: Int64):
 
 # TOMBSTONE: MOJOLEARN_C33_FROZEN_CHUNKS in op_lp_iterate (REFACTORED: the frozen-chunk body is the only path, on autograd/program_loop_device.mojo) deleted 2026-11-09 by lane/n4-mds-labelprop-nmf-loops; code recoverable at f59d913b0b.
 # Restore: git apply -3 experiments/removed/N4_MDS_LABELPROP_NMF_HOST_LOOPS.patch; record in docs/TOMBSTONES.md.
-def lp_dense_product_gated(gate: IP, graph: FP, cur: FP, nxt: FP, n: Int32, c: Int32, degree: FP, raw_graph: Int32, variant: Int32):
-    """The dense graph product (`matmul_item`, or the raw affinity's
-    `classical_graph_product`) while the bounded loop runs (gate[0] == 0)."""
+# TOMBSTONE: MOJOLEARN_C43_RESIDENT_NORMALIZATION (unmeasured opt-in arm: raw affinity graph with resident row normalization; non-owner sites) deleted 2026-11-15 by lane/expdel2-15-cluster; code recoverable at 35bdee28db.
+# Restore: git apply experiments/removed/MOJOLEARN_C43_RESIDENT_NORMALIZATION.expdel2-15-cluster.patch; record in docs/TOMBSTONES.md.
+def lp_dense_product_gated(gate: IP, graph: FP, cur: FP, nxt: FP, n: Int32, c: Int32):
+    """The dense graph product (`matmul_item`) while the bounded loop runs (gate[0] == 0)."""
     var t = Int(block_idx.x)*Int(block_dim.x)+Int(thread_idx.x)
     if gate[0] == 0 and t < Int(n)*Int(c):
-        if raw_graph != 0:
-            classical_graph_product(t,graph,degree,cur,nxt,Int(n),Int(c),Int(variant))
-        else:
-            matmul_item(t,graph,cur,nxt,Int(n),Int(n),Int(c))
+        matmul_item(t,graph,cur,nxt,Int(n),Int(n),Int(c))
 
 
 def lp_clamp_gated(gate: IP, nxt: FP, ys: FP, unl: IP, output: FP, n: Int32, c: Int32, variant: Int32, alpha: Float32):
@@ -145,12 +141,6 @@ def lp_clamp_gated(gate: IP, nxt: FP, ys: FP, unl: IP, output: FP, n: Int32, c: 
         ls_clamp_item(t,nxt,ys,output,Int(n)*Int(c),alpha)
 
 
-def _c43_graph_degree(a: FP,degree: FP,n: Int32,variant: Int32):
-    var t=_tid()
-    if t < Int(n):
-        classical_graph_degree(t,a,degree,Int(n),Int(variant))
-
-
 # The step keeps its device addresses untracked (a struct field cannot expose
 # AnyOrigin); enqueue_step hands the kernels MutAnyOrigin views of them.
 comptime _LpF = MutPointer[Float32, MutUntrackedOrigin]
@@ -158,15 +148,13 @@ comptime _LpI = MutPointer[Int32, MutUntrackedOrigin]
 
 
 struct _LpDenseStep(LoopStep, Movable):
-    """One iteration of `_LabelPropagationBase.fit` over the dense (or raw
-    affinity) graph as a step of the bounded device loop: the stopping sum
+    """One iteration of `_LabelPropagationBase.fit` over the dense graph as a step of the bounded device loop: the stopping sum
     (`absdiff_sum`'s blocked fold) and its criterion first, then the gated
     product (the ELL SpMM op over G's nonzeros when sparse) and the gated
     clamp into the buffer the old prev held. The ping-pong pair is chosen by
     the iteration's parity, so a stop at iteration `it` leaves the last
     distributions in a when (it - 1) is even."""
     var graph: _LpF
-    var degree: _LpF
     var a: _LpF
     var b: _LpF
     var nxt: _LpF
@@ -181,19 +169,17 @@ struct _LpDenseStep(LoopStep, Movable):
     var n: Int
     var c: Int
     var maxk: Int
-    var raw_graph: Bool
     var use_sparse: Bool
     var variant: Int
     var alpha: Float32
     var threshold: Float32
 
     def __init__(
-        out self, graph: FP, degree: FP, a: FP, b: FP, nxt: FP, ys: FP, unl: IP, part: FP, cnt: IP, cols: IP,
+        out self, graph: FP, a: FP, b: FP, nxt: FP, ys: FP, unl: IP, part: FP, cnt: IP, cols: IP,
         vals: FP, s: DeviceBuffer[DType.float32], flag: DeviceBuffer[DType.int32], n: Int, c: Int, maxk: Int,
-        raw_graph: Bool, use_sparse: Bool, variant: Int, alpha: Float32, threshold: Float32,
+        use_sparse: Bool, variant: Int, alpha: Float32, threshold: Float32,
     ):
         self.graph = graph.unsafe_origin_cast[MutUntrackedOrigin]()
-        self.degree = degree.unsafe_origin_cast[MutUntrackedOrigin]()
         self.a = a.unsafe_origin_cast[MutUntrackedOrigin]()
         self.b = b.unsafe_origin_cast[MutUntrackedOrigin]()
         self.nxt = nxt.unsafe_origin_cast[MutUntrackedOrigin]()
@@ -208,7 +194,6 @@ struct _LpDenseStep(LoopStep, Movable):
         self.n = n
         self.c = c
         self.maxk = maxk
-        self.raw_graph = raw_graph
         self.use_sparse = use_sparse
         self.variant = variant
         self.alpha = alpha
@@ -219,7 +204,6 @@ struct _LpDenseStep(LoopStep, Movable):
     ) raises:
         var nc = self.n * self.c
         var graph: FP = self.graph.unsafe_origin_cast[MutAnyOrigin]()
-        var degree: FP = self.degree.unsafe_origin_cast[MutAnyOrigin]()
         var a: FP = self.a.unsafe_origin_cast[MutAnyOrigin]()
         var b: FP = self.b.unsafe_origin_cast[MutAnyOrigin]()
         var nxt: FP = self.nxt.unsafe_origin_cast[MutAnyOrigin]()
@@ -241,8 +225,7 @@ struct _LpDenseStep(LoopStep, Movable):
             lp_ell_spmm_enqueue(ctx, gate, self.flag, cnt, cols, vals, self.maxk, graph, cur, nxt, self.n, self.c, BLOCK)
         else:
             ctx.enqueue_function[lp_dense_product_gated](
-                gate, graph, cur, nxt, Int32(self.n), Int32(self.c), degree,
-                Int32(1 if self.raw_graph else 0), Int32(self.variant), grid_dim=_grid(nc), block_dim=BLOCK,
+                gate, graph, cur, nxt, Int32(self.n), Int32(self.c), grid_dim=_grid(nc), block_dim=BLOCK,
             )
         loop_lap(ctx, timers, "product")
         # prev = ld; ld = clamp(nxt): the clamp writes over the buffer the old
@@ -259,7 +242,7 @@ def op_lp_iterate(
     n: Int, c: Int, max_iter: Int, variant: Int, tol_hi: Int, tol_lo: Int,
     alpha: Float32,
 ) raises:
-    """variant 0 propagation, 1 spreading; C43 adds 2 for raw affinity.
+    """variant 0 propagation, 1 spreading (variant % 2 is used).
     `ld` in:
     the initial label distributions, out: the last. info (int32 x 2): the
     fit's n_iter_ and converged.
@@ -275,14 +258,12 @@ def op_lp_iterate(
     home every iteration and the frozen-chunk body
     (`-D MOJOLEARN_C33_FROZEN_CHUNKS`) was a second, dense-only copy."""
     var tol = bitcast[DType.float64]((UInt64(tol_hi) << UInt64(32)) | UInt64(tol_lo))
-    var raw_graph = C43_RESIDENT_NORMALIZATION and variant >= 2
+    # TOMBSTONE: MOJOLEARN_C43_RESIDENT_NORMALIZATION (unmeasured opt-in arm: raw affinity graph with resident row normalization; non-owner sites) deleted 2026-11-15 by lane/expdel2-15-cluster; code recoverable at 35bdee28db.
+    # Restore: git apply experiments/removed/MOJOLEARN_C43_RESIDENT_NORMALIZATION.expdel2-15-cluster.patch; record in docs/TOMBSTONES.md.
     var clamp_variant = variant % 2
     var nc = n * c
     var ctx = xn_ctx()
     var d_g = _buf(ctx, g, n * n, True)
-    var d_degree = ctx.enqueue_create_buffer[DType.float32](max(n,1) if raw_graph else 1)
-    if raw_graph and n > 0:
-        ctx.enqueue_function[_c43_graph_degree](_p(d_g),_p(d_degree),Int32(n),Int32(clamp_variant),grid_dim=_grid(n),block_dim=BLOCK)
     var d_a = _buf(ctx, ld, nc, True)
     var d_b = _buf(ctx, 0, nc, False)
     ctx.enqueue_memset(d_b, Float32(0))
@@ -307,7 +288,7 @@ def op_lp_iterate(
     ctx.synchronize()
     var nnz = Int(hst[0])
     var maxk = Int(hst[1])
-    var use_sparse = not raw_graph and nnz > 0 and nnz * 8 < n * n
+    var use_sparse = nnz > 0 and nnz * 8 < n * n
     var ell = n * maxk if use_sparse else 1
     var d_cols = ctx.enqueue_create_buffer[DType.int32](max(ell, 1))
     var d_vals = ctx.enqueue_create_buffer[DType.float32](max(ell, 1))
@@ -317,10 +298,10 @@ def op_lp_iterate(
             grid_dim=_grid(n), block_dim=(BLOCK if n > 1 else 1),
         )
     var step = _LpDenseStep(
-        _p(d_g), _p(d_degree), _p(d_a), _p(d_b), _p(d_nxt), _p(d_ys),
+        _p(d_g), _p(d_a), _p(d_b), _p(d_nxt), _p(d_ys),
         d_unl.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), d_part.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
         d_cnt.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), d_cols.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
-        d_vals.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), d_s, d_flag, n, c, maxk, raw_graph, use_sparse,
+        d_vals.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), d_s, d_flag, n, c, maxk, use_sparse,
         clamp_variant, alpha, _lpki_tol_ceil(tol),
     )
     var registers = LoopRegisters(ctx)
@@ -355,7 +336,6 @@ def op_lp_iterate(
     _ = d_cols^
     _ = d_vals^
     _ = d_g^
-    _ = d_degree^
     _ = d_a^
     _ = d_b^
     _ = d_nxt^
