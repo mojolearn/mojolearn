@@ -5,48 +5,6 @@
  "head": "bea554330",
  "note": "NOT COMPILED (lanes never compile). All four keep bits by construction (same Int32 addends, integer sums); IDCHECK still owed. Host column unchanged (bits unchanged). Apple column compiles the incumbent arithmetic for PACKED_GH and WARP_AGG.",
  "controls": {
-  "hist_packed_gh": {
-   "define": "MOJOLEARN_TREES_HIST_PACKED_GH",
-   "kind": "switch",
-   "arms": {
-    "off": [],
-    "on": [
-     "MOJOLEARN_TREES_HIST_PACKED_GH"
-    ]
-   },
-   "default": "off",
-   "source": [
-    "gbdt/trees_hist_switches.mojo:31",
-    "gbdt/methods/greedy_subsets_searcher/kernel/hist_2_one_byte_8bit.mojo:105",
-    "gbdt/methods/greedy_subsets_searcher/kernel/hist_2_one_byte_8bit.mojo:146",
-    "gbdt/methods/greedy_subsets_searcher/kernel/hist_2_one_byte_8bit.mojo:249"
-   ],
-   "binding": "_mojolearn_gbdt",
-   "bits_change": false,
-   "status": "new",
-   "reach": "every fused 8-bit two-stat histogram launch (>128 folds, stat_count 2): symmetric, depthwise, lossguide, rank; NVIDIA/AMD only"
-  },
-  "hist_warp_agg": {
-   "define": "MOJOLEARN_TREES_HIST_WARP_AGG",
-   "kind": "switch",
-   "arms": {
-    "off": [],
-    "on": [
-     "MOJOLEARN_TREES_HIST_WARP_AGG"
-    ]
-   },
-   "default": "off",
-   "source": [
-    "gbdt/trees_hist_switches.mojo:36",
-    "gbdt/methods/greedy_subsets_searcher/kernel/hist_2_one_byte_8bit.mojo:193",
-    "gbdt/methods/greedy_subsets_searcher/kernel/hist_2_one_byte_8bit.mojo:549",
-    "gbdt/methods/greedy_subsets_searcher/kernel/hist_2_one_byte_8bit.mojo:815"
-   ],
-   "binding": "_mojolearn_gbdt",
-   "bits_change": false,
-   "status": "new",
-   "reach": "body loop of the fused 8-bit kernels (direct + gather); whole-wave same-bin aggregation only; NVIDIA/AMD only"
-  },
   "hist_sym_feature_parallel": {
    "define": "MOJOLEARN_TREES_HIST_SYM_FEATURE_PARALLEL",
    "kind": "switch",
@@ -191,6 +149,16 @@
    "define": "MOJOLEARN_TREES_HIST_MULTISTAT",
    "control": "hist_multistat",
    "reason": "DELETED 2026-10-08 (lane grid-act-2): IDENTICAL grid ge123e6f9 loser, both arms. arm/off ms ratio NV/AMD on gbdt-multiclass: =4 istella 1.038/1.410, taxi 1.066/1.110 (1.147x combined); =8 istella 0.994/1.311, taxi 1.106/1.136 (1.131x combined); accuracy and mlogloss SAME. The MultiClass >128-bin blocks take launch_one_byte[8] again; the wide kernel stays for HIST_SYM_FEATURE_PARALLEL. Code recoverable at main 42d1e42c6; define refused in core/six_lane_experiment_guards.mojo."
+  },
+  {
+   "define": "MOJOLEARN_TREES_HIST_PACKED_GH",
+   "control": "hist_packed_gh",
+   "reason": "DELETED 2026-11-15 (lane/expdel2-45-trees, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md): no record -- no A/B recorded for the opt-in arm (V2 rule a). Under \"An unmeasured arm is deleted\" the opt-in arm goes, the default stays (no bit change); code at e312bd1c25; patch experiments/removed/MOJOLEARN_TREES_HIST_PACKED_GH.patch"
+  },
+  {
+   "define": "MOJOLEARN_TREES_HIST_WARP_AGG",
+   "control": "hist_warp_agg",
+   "reason": "DELETED 2026-11-15 (lane/expdel2-45-trees, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md): no record -- no A/B recorded for the opt-in arm (V2 rule a). Under \"An unmeasured arm is deleted\" the opt-in arm goes, the default stays (no bit change); code at 1082bcb01c; patch experiments/removed/MOJOLEARN_TREES_HIST_WARP_AGG.patch"
   }
  ]
 }

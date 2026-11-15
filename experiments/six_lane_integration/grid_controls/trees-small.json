@@ -4,49 +4,6 @@
  "branch": "lane/trees-small",
  "head": "d9532aeb3",
  "controls": {
-  "HIST_REP_SM": {
-   "define": "MOJOLEARN_TREES_HIST_REP_SM",
-   "kind": "arms",
-   "arms": {
-    "device": [],
-    "pinned32": [
-     "MOJOLEARN_TREES_HIST_REP_SM_OFF"
-    ],
-    "64": [
-     "MOJOLEARN_TREES_HIST_REP_SM=64"
-    ],
-    "device_bpsm4": [
-     "MOJOLEARN_TREES_HIST_REP_SM=1"
-    ]
-   },
-   "default": "device",
-   "source": [
-    "gbdt/trees_small_switches.mojo:68",
-    "gbdt/methods/greedy_subsets_searcher/greedy_search_helper.mojo:3088",
-    "gbdt/methods/greedy_subsets_searcher/greedy_search_helper.mojo:2278",
-    "gbdt/methods/greedy_subsets_searcher/greedy_search_helper.mojo:2309",
-    "gbdt/methods/greedy_subsets_searcher/greedy_search_helper.mojo:2514",
-    "gbdt/methods/greedy_subsets_searcher/greedy_search_helper.mojo:2582",
-    "gbdt/methods/greedy_subsets_searcher/greedy_search_helper.mojo:2719",
-    "gbdt/methods/greedy_subsets_searcher/greedy_search_helper.mojo:2761",
-    "gbdt/methods/greedy_subsets_searcher/greedy_search_helper.mojo:2841"
-   ],
-   "binding": "_mojolearn_gbdt",
-   "bits_change": false,
-   "status": "promoted:ge123e6f9",
-   "note": "SM count of the IDENTICAL histogram replication target, Int32 families only (fused two-stat 8-bit, shared-Int32 one-byte ladder, wide 8-bit, launch_one_byte/launch_hist2_one_byte in HIST_SMEM_SHARED2_I32). Float binary/half-byte families, level quantize and multi-GPU shards keep the pinned 32. Per-row Int32 quantize + associative atomics: no bit moves; host unchanged. Default device (0, device SMs x 2) in IDENTICAL; arm pinned32 (`MOJOLEARN_TREES_HIST_REP_SM_OFF`) is the old pinned replication_for. Grid run ge123e6f9 (NVIDIA L40S + AMD MI325X, full board data, one scored run per arm); PROMOTED to the IDENTICAL default by lane/grid-flips-1 2026-10-08 (Andrew 13:00Z); numbers at the declaration and in docs/apple-fast/EXPERIMENTS.md.",
-   "merged_from": [
-    "HIST_REP_BPSM",
-    "MOJOLEARN_TREES_HIST_REP_BPSM"
-   ],
-   "legal_set": [
-    64,
-    128,
-    0,
-    1
-   ],
-   "prune_note": "target = blocks-per-SM x SMs: BPSM=4 alone == SM=64 and SM64+BPSM4 == SM128 (merged, lane/grid-prune 2026-10-07). Arms: 64 (2x pinned), device (2 per SM, the CatBoost formula), device_bpsm4 (4 per SM, define value 1). 128 dropped: within 10% of device on NV (142 SMs). Not on gbdt-ordered (no replication_int32_for caller on the ordered route)."
-  },
   "IF_BUILD_TPB": {
    "define": "MOJOLEARN_TREES_IF_BUILD_TPB",
    "kind": "int_sweep",
@@ -327,6 +284,11 @@
    "define": "MOJOLEARN_TREES_PREDICT_ROW_OUTPUTS",
    "control": "PREDICT_ROW_OUTPUTS",
    "reason": "DELETED 2026-11-15 (lane/expdel2-03-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md): no record: no A/B recorded for the opt-in arm (V2 rule a); under \"An unmeasured arm is deleted\" the arm goes, the default stays (no bit change); code at 432acbb3df; patch experiments/removed/MOJOLEARN_TREES_PREDICT_ROW_OUTPUTS.patch."
+  },
+  {
+   "define": "MOJOLEARN_TREES_HIST_REP_SM",
+   "control": "HIST_REP_SM",
+   "reason": "DELETED 2026-11-15 (lane/expdel2-45-trees, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md): EXP:1640 PROMOTED -- record read: loser, superseded, default-equal force knob, or never measured (V2 rule e). Under \"An unmeasured arm is deleted\" the opt-in arm goes, the default stays (no bit change); code at cf752f933b; patch experiments/removed/MOJOLEARN_TREES_HIST_REP_SM.patch"
   }
  ]
 }

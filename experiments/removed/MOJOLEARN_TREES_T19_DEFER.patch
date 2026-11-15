@@ -1,0 +1,15 @@
+diff --git a/gbdt/trees_identical_switches.mojo b/gbdt/trees_identical_switches.mojo
+index 958beeb903..be2704ccea 100644
+--- a/gbdt/trees_identical_switches.mojo
++++ b/gbdt/trees_identical_switches.mojo
+@@ -100,9 +100,7 @@ comptime T30 = False
+ 
+ # Independent sub-arms preserve the incumbent when omitted.
+ # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
+-# TOMBSTONE: MOJOLEARN_TREES_T19_DEFER (DELETE-ARM, rule e, EXP:1627 DROP (quality loss)) deleted 2026-11-15 by lane/expdel2-45-trees; code recoverable at 2f68cbff39.
+-# Restore: git apply experiments/removed/MOJOLEARN_TREES_T19_DEFER.patch
+-comptime T19_DEFER = False
++comptime T19_DEFER = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_TREES_T19_DEFER"]()
+ # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
+ comptime T28_SORT = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_TREES_T28_SORT"]()
+ # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.

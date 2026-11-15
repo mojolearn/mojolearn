@@ -5,297 +5,6 @@
  "head": "78c441468",
  "mode": "identical",
  "controls": {
-  "T17_BATCH": {
-   "define": "MOJOLEARN_TREES_T17_BATCH",
-   "kind": "int_sweep",
-   "arms": {
-    "128": [],
-    "32": [
-     "MOJOLEARN_TREES_T17_BATCH=32"
-    ],
-    "64": [
-     "MOJOLEARN_TREES_T17_BATCH=64"
-    ]
-   },
-   "default": "128",
-   "source": [
-    "gbdt/trees_identical_switches.mojo:27",
-    "gbdt/methods/greedy_subsets_searcher/greedy_search_helper_depthwise.mojo:1254"
-   ],
-   "binding": "_mojolearn_gbdt",
-   "bits_change": false,
-   "status": "promoted:ge123e6f9",
-   "note": "Lossguide exact best-first batch width; absent = 128 in IDENTICAL; arm 32 is the pre-flip width. Grid run ge123e6f9 (NVIDIA L40S + AMD MI325X, full board data, one scored run per arm); PROMOTED to the IDENTICAL default by lane/grid-flips-1 2026-10-08 (Andrew 13:00Z); numbers at the declaration and in docs/apple-fast/EXPERIMENTS.md."
-  },
-  "T18": {
-   "define": "MOJOLEARN_TREES_T18",
-   "kind": "switch",
-   "arms": {
-    "off": [],
-    "on": [
-     "MOJOLEARN_TREES_T18"
-    ]
-   },
-   "default": "off",
-   "source": [
-    "gbdt/trees_identical_switches.mojo:20",
-    "gbdt/methods/doc_parallel_boosting.mojo:3612"
-   ],
-   "binding": "_mojolearn_gbdt",
-   "bits_change": false,
-   "status": "kept",
-   "note": "real only for multi-permutation ordered/categorical fits"
-  },
-  "T19_DEFER": {
-   "define": "MOJOLEARN_TREES_T19_DEFER",
-   "kind": "switch",
-   "arms": {
-    "off": [],
-    "on": [
-     "MOJOLEARN_TREES_T19_DEFER"
-    ]
-   },
-   "default": "off",
-   "source": [
-    "gbdt/trees_identical_switches.mojo:59",
-    "gbdt/methods/greedy_subsets_searcher/greedy_search_helper_depthwise.mojo:173"
-   ],
-   "binding": "_mojolearn_gbdt",
-   "bits_change": false,
-   "status": "kept",
-   "note": "deferred parent-hist copy (= GBDT_ID_DEFER_COPY); Apple IDENTICAL default already; changes NV/AMD only"
-  },
-  "T21": {
-   "define": "MOJOLEARN_TREES_T21",
-   "kind": "switch",
-   "arms": {
-    "off": [],
-    "on": [
-     "MOJOLEARN_TREES_T21"
-    ]
-   },
-   "default": "off",
-   "source": [
-    "gbdt/trees_identical_switches.mojo:28",
-    "gbdt/methods/greedy_subsets_searcher/greedy_search_helper_depthwise.mojo:238"
-   ],
-   "binding": "_mojolearn_gbdt",
-   "bits_change": false,
-   "status": "kept",
-   "note": "per-feature-group width for non-symmetric drivers"
-  },
-  "T21_STREAMS": {
-   "define": "MOJOLEARN_TREES_T21_STREAMS",
-   "kind": "int_sweep",
-   "arms": {
-    "1": [],
-    "2": [
-     "MOJOLEARN_TREES_T21_STREAMS=2"
-    ]
-   },
-   "default": "1",
-   "source": [
-    "gbdt/trees_identical_switches.mojo:34",
-    "gbdt/methods/greedy_subsets_searcher/greedy_search_helper.mojo:2275"
-   ],
-   "binding": "_mojolearn_gbdt",
-   "bits_change": false,
-   "status": "rewritten",
-   "note": "symmetric 8-bit histogram replica streams; replaces T21_STREAM / T21_STREAM4",
-   "exclusive_with": [
-    "MOJOLEARN_TREES_HIST_SYM_FEATURE_PARALLEL"
-   ]
-  },
-  "T22": {
-   "define": "MOJOLEARN_TREES_T22_OFF",
-   "kind": "switch",
-   "arms": {
-    "on": [],
-    "off": [
-     "MOJOLEARN_TREES_T22_OFF"
-    ]
-   },
-   "default": "on",
-   "source": [
-    "gbdt/trees_identical_switches.mojo:59",
-    "gbdt/methods/oblivious_tree_doc_parallel_structure_searcher.mojo:507"
-   ],
-   "binding": "_mojolearn_gbdt",
-   "bits_change": false,
-   "status": "promoted:ge123e6f9",
-   "note": "Default ON in IDENTICAL; `_OFF` is the incumbent storage. Grid run ge123e6f9 (NVIDIA L40S + AMD MI325X, full board data, one scored run per arm); PROMOTED to the IDENTICAL default by lane/grid-flips-1 2026-10-08 (Andrew 13:00Z); numbers at the declaration and in docs/apple-fast/EXPERIMENTS.md."
-  },
-  "T23": {
-   "define": "MOJOLEARN_TREES_T23",
-   "kind": "switch",
-   "arms": {
-    "off": [],
-    "on": [
-     "MOJOLEARN_TREES_T23"
-    ]
-   },
-   "default": "off",
-   "source": [
-    "gbdt/trees_identical_switches.mojo:68",
-    "gbdt/methods/leaves_estimation/device_walker.mojo:615"
-   ],
-   "binding": "_mojolearn_gbdt",
-   "bits_change": false,
-   "status": "kept"
-  },
-  "T24": {
-   "define": "MOJOLEARN_TREES_T24",
-   "kind": "switch",
-   "arms": {
-    "off": [],
-    "on": [
-     "MOJOLEARN_TREES_T24"
-    ]
-   },
-   "default": "off",
-   "source": [
-    "gbdt/trees_identical_switches.mojo:71",
-    "gbdt/methods/ordered_boosting.mojo:678"
-   ],
-   "binding": "_mojolearn_gbdt",
-   "bits_change": false,
-   "status": "kept"
-  },
-  "T25": {
-   "define": "MOJOLEARN_TREES_T25",
-   "kind": "switch",
-   "arms": {
-    "off": [],
-    "on": [
-     "MOJOLEARN_TREES_T25"
-    ]
-   },
-   "default": "off",
-   "source": [
-    "gbdt/trees_identical_switches.mojo:40",
-    "gbdt/methods/ordered_boosting.mojo:1572"
-   ],
-   "binding": "_mojolearn_gbdt",
-   "bits_change": false,
-   "status": "kept"
-  },
-  "T26": {
-   "define": "MOJOLEARN_TREES_T26",
-   "kind": "switch",
-   "arms": {
-    "off": [],
-    "on": [
-     "MOJOLEARN_TREES_T26"
-    ]
-   },
-   "default": "off",
-   "source": [
-    "gbdt/trees_identical_switches.mojo:74",
-    "gbdt/methods/doc_parallel_boosting.mojo:3551",
-    "gbdt/host/gbdt_oracle_depthwise.mojo:1177"
-   ],
-   "binding": "_mojolearn_gbdt",
-   "bits_change": true,
-   "status": "kept",
-   "note": "numeric version: host column changes together; RMSE depthwise/lossguide, 1 permutation",
-   "grid": "exclude",
-   "prune_note": "RMSE-only; no RMSE board lane"
-  },
-  "T28": {
-   "define": "MOJOLEARN_TREES_T28",
-   "kind": "arms",
-   "arms": {
-    "off": [],
-    "on": [
-     "MOJOLEARN_TREES_T28"
-    ],
-    "sort": [
-     "MOJOLEARN_TREES_T28",
-     "MOJOLEARN_TREES_T28_SORT"
-    ],
-    "prefix": [
-     "MOJOLEARN_TREES_T28",
-     "MOJOLEARN_TREES_T28_PREFIX"
-    ],
-    "sort_prefix": [
-     "MOJOLEARN_TREES_T28",
-     "MOJOLEARN_TREES_T28_SORT",
-     "MOJOLEARN_TREES_T28_PREFIX"
-    ]
-   },
-   "default": "off",
-   "source": [
-    "gbdt/trees_identical_switches.mojo:46",
-    "gbdt/ctrs/fast_prep.mojo:135"
-   ],
-   "binding": "_mojolearn_gbdt",
-   "bits_change": false,
-   "status": "kept"
-  },
-  "T29": {
-   "define": "MOJOLEARN_TREES_T29",
-   "kind": "arms",
-   "arms": {
-    "off": [],
-    "on": [
-     "MOJOLEARN_TREES_T29"
-    ]
-   },
-   "default": "off",
-   "source": [
-    "gbdt/trees_identical_switches.mojo:70",
-    "gbdt/targets/kernel/pair_logit_group.mojo:634"
-   ],
-   "binding": "_mojolearn_gbdt",
-   "bits_change": false,
-   "status": "kept",
-   "note": "'on' does not change bits. The 'versioned' arm (MOJOLEARN_TREES_T29_VERSIONED, generated V1 PairLogit objective with its host oracle) was deleted 2026-10-08 by lane/grid-act-2 (grid ge123e6f9 loser, see removed)."
-  },
-  "T30": {
-   "define": "MOJOLEARN_TREES_T30",
-   "kind": "arms",
-   "arms": {
-    "off": [],
-    "dart": [
-     "MOJOLEARN_TREES_T30"
-    ],
-    "dart_adaboost": [
-     "MOJOLEARN_TREES_T30",
-     "MOJOLEARN_TREES_T30_ADABOOST"
-    ]
-   },
-   "default": "off",
-   "source": [
-    "gbdt/trees_identical_switches.mojo:55",
-    "xtrees/dart_device.mojo:407",
-    "xtrees/api.mojo:405"
-   ],
-   "binding": "_mojolearn_rf,_mojolearn_x_trees",
-   "bits_change": false,
-   "status": "kept",
-   "note": "DART/AdaBoost: not on the board lane list (peripheral)"
-  },
-  "C45_GBDT": {
-   "define": "MOJOLEARN_TREES_C45_GBDT",
-   "kind": "switch",
-   "arms": {
-    "off": [],
-    "on": [
-     "MOJOLEARN_TREES_C45_GBDT"
-    ]
-   },
-   "default": "off",
-   "source": [
-    "gbdt/trees_identical_switches.mojo:83",
-    "gbdt/methods/greedy_subsets_searcher/greedy_search_helper.mojo:2892",
-    "gbdt/methods/greedy_subsets_searcher/greedy_search_helper_depthwise.mojo:2465"
-   ],
-   "binding": "_mojolearn_gbdt",
-   "bits_change": false,
-   "status": "kept",
-   "grid": "exclude",
-   "prune_note": "one-block score grid needs <=256 cells; unreachable at 254 borders x >1 feature"
-  },
   "T40": {
    "define": "MOJOLEARN_TREES_T40_ROWMAJOR",
    "kind": "switch",
@@ -384,41 +93,6 @@
    "binding": "_mojolearn_svm",
    "bits_change": false,
    "status": "kept"
-  },
-  "C50_IF": {
-   "define": "MOJOLEARN_TREES_C50_IF_PACKED",
-   "kind": "switch",
-   "arms": {
-    "off": [],
-    "on": [
-     "MOJOLEARN_TREES_C50_IF_PACKED"
-    ]
-   },
-   "default": "off",
-   "source": [
-    "isolation_forest/impl/isolation_forest.mojo:116"
-   ],
-   "binding": "_mojolearn_svm",
-   "bits_change": false,
-   "status": "kept"
-  },
-  "T43": {
-   "define": "MOJOLEARN_TREES_T43_RADIX_SELECT",
-   "kind": "switch",
-   "arms": {
-    "off": [],
-    "on": [
-     "MOJOLEARN_TREES_T43_RADIX_SELECT"
-    ]
-   },
-   "default": "off",
-   "source": [
-    "isolation_forest/impl/isolation_forest.mojo:1496"
-   ],
-   "binding": "_mojolearn_svm",
-   "bits_change": false,
-   "status": "kept",
-   "note": "contamination variant only"
   },
   "T45": {
    "define": "MOJOLEARN_TREES_T45_LINEAR_UNWIND",
@@ -884,6 +558,86 @@
    "define": "MOJOLEARN_TREES_C48",
    "control": "C48",
    "reason": "DELETED 2026-11-15 (lane/expdel2-39-trees, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md): no record: no A/B recorded for the opt-in arm (V2 rule a). Under \"An unmeasured arm is deleted\" the arm goes, the default stays (no bit change); code at faf4eceab2^; patch experiments/removed/MOJOLEARN_TREES_C48.patch."
+  },
+  {
+   "define": "MOJOLEARN_TREES_C50_IF_PACKED",
+   "control": "C50_IF",
+   "reason": "DELETED 2026-11-15 (lane/expdel2-45-trees, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md): no record -- no A/B recorded for the opt-in arm (V2 rule a). Under \"An unmeasured arm is deleted\" the opt-in arm goes, the default stays (no bit change); code at 931e7ca76a; patch experiments/removed/MOJOLEARN_TREES_C50_IF_PACKED.patch"
+  },
+  {
+   "define": "MOJOLEARN_TREES_T43_RADIX_SELECT",
+   "control": "T43",
+   "reason": "DELETED 2026-11-15 (lane/expdel2-45-trees, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md): no record -- no A/B recorded for the opt-in arm (V2 rule a). Under \"An unmeasured arm is deleted\" the opt-in arm goes, the default stays (no bit change); code at b623cedc91; patch experiments/removed/MOJOLEARN_TREES_T43_RADIX_SELECT.patch"
+  },
+  {
+   "define": "MOJOLEARN_TREES_T17_BATCH",
+   "control": "T17_BATCH",
+   "reason": "DELETED 2026-11-15 (lane/expdel2-45-trees, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md): EXP:1641 PROMOTED -- record read: loser, superseded, default-equal force knob, or never measured (V2 rule e). Under \"An unmeasured arm is deleted\" the opt-in arm goes, the default stays (no bit change); code at fe9794876a; patch experiments/removed/MOJOLEARN_TREES_T17_BATCH.patch"
+  },
+  {
+   "define": "MOJOLEARN_TREES_T18",
+   "control": "T18",
+   "reason": "DELETED 2026-11-15 (lane/expdel2-45-trees, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md): no record -- no A/B recorded for the opt-in arm (V2 rule a). Under \"An unmeasured arm is deleted\" the opt-in arm goes, the default stays (no bit change); code at 967d4d7eef; patch experiments/removed/MOJOLEARN_TREES_T18.patch"
+  },
+  {
+   "define": "MOJOLEARN_TREES_T21",
+   "control": "T21",
+   "reason": "DELETED 2026-11-15 (lane/expdel2-45-trees, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md): no record -- no A/B recorded for the opt-in arm (V2 rule a). Under \"An unmeasured arm is deleted\" the opt-in arm goes, the default stays (no bit change); code at 80865e2e25; patch experiments/removed/MOJOLEARN_TREES_T21.patch"
+  },
+  {
+   "define": "MOJOLEARN_TREES_T21_STREAMS",
+   "control": "T21_STREAMS",
+   "reason": "DELETED 2026-11-15 (lane/expdel2-45-trees, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md): no record -- no A/B recorded for the opt-in arm (V2 rule a). Under \"An unmeasured arm is deleted\" the opt-in arm goes, the default stays (no bit change); code at 293d3da2dd; patch experiments/removed/MOJOLEARN_TREES_T21_STREAMS.patch"
+  },
+  {
+   "define": "MOJOLEARN_TREES_T22_OFF",
+   "control": "T22",
+   "reason": "DELETED 2026-11-15 (lane/expdel2-45-trees, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md): EXP:1636 PROMOTED -- record read: the default is the recorded winner or the kept path (V2 rule e). Under \"An unmeasured arm is deleted\" the old path goes, the default stays (no bit change); code at 0fcc31241b; patch experiments/removed/MOJOLEARN_TREES_T22_OFF.patch"
+  },
+  {
+   "define": "MOJOLEARN_TREES_T25",
+   "control": "T25",
+   "reason": "DELETED 2026-11-15 (lane/expdel2-45-trees, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md): no record -- no A/B recorded for the opt-in arm (V2 rule a). Under \"An unmeasured arm is deleted\" the opt-in arm goes, the default stays (no bit change); code at 5de73a4228; patch experiments/removed/MOJOLEARN_TREES_T25.patch"
+  },
+  {
+   "define": "MOJOLEARN_TREES_T28",
+   "control": "T28",
+   "reason": "DELETED 2026-11-15 (lane/expdel2-45-trees, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md): no record -- no A/B recorded for the opt-in arm (V2 rule a). Under \"An unmeasured arm is deleted\" the opt-in arm goes, the default stays (no bit change); code at 5c0baaca38; patch experiments/removed/MOJOLEARN_TREES_T28.patch"
+  },
+  {
+   "define": "MOJOLEARN_TREES_T29",
+   "control": "T29",
+   "reason": "DELETED 2026-11-15 (lane/expdel2-45-trees, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md): EXP:1869 KEPT (code stays) -- record read: loser, superseded, default-equal force knob, or never measured (V2 rule e). Under \"An unmeasured arm is deleted\" the opt-in arm goes, the default stays (no bit change); code at a6ac1678d7; patch experiments/removed/MOJOLEARN_TREES_T29.patch"
+  },
+  {
+   "define": "MOJOLEARN_TREES_T30",
+   "control": "T30",
+   "reason": "DELETED 2026-11-15 (lane/expdel2-45-trees, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md): no record -- no A/B recorded for the opt-in arm (V2 rule a). Under \"An unmeasured arm is deleted\" the opt-in arm goes, the default stays (no bit change); code at b0f082dd3e; patch experiments/removed/MOJOLEARN_TREES_T30.patch"
+  },
+  {
+   "define": "MOJOLEARN_TREES_T19_DEFER",
+   "control": "T19_DEFER",
+   "reason": "DELETED 2026-11-15 (lane/expdel2-45-trees, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md): EXP:1627 DROP (quality loss), code deleted -- record read: loser, superseded, default-equal force knob, or never measured (V2 rule e). Under \"An unmeasured arm is deleted\" the opt-in arm goes, the default stays (no bit change); code at 2f68cbff39; patch experiments/removed/MOJOLEARN_TREES_T19_DEFER.patch"
+  },
+  {
+   "define": "MOJOLEARN_TREES_T23",
+   "control": "T23",
+   "reason": "DELETED 2026-11-15 (lane/expdel2-45-trees, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md): no record -- no A/B recorded for the opt-in arm (V2 rule a). Under \"An unmeasured arm is deleted\" the opt-in arm goes, the default stays (no bit change); code at 35309dcb55; patch experiments/removed/MOJOLEARN_TREES_T23.patch"
+  },
+  {
+   "define": "MOJOLEARN_TREES_T24",
+   "control": "T24",
+   "reason": "DELETED 2026-11-15 (lane/expdel2-45-trees, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md): no record -- no A/B recorded for the opt-in arm (V2 rule a). Under \"An unmeasured arm is deleted\" the opt-in arm goes, the default stays (no bit change); code at fca63c0b28; patch experiments/removed/MOJOLEARN_TREES_T24.patch"
+  },
+  {
+   "define": "MOJOLEARN_TREES_T26",
+   "control": "T26",
+   "reason": "DELETED 2026-11-15 (lane/expdel2-45-trees, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md): no record -- no A/B recorded for the opt-in arm (V2 rule a). Under \"An unmeasured arm is deleted\" the opt-in arm goes, the default stays (no bit change); code at 0242b4a432; patch experiments/removed/MOJOLEARN_TREES_T26.patch"
+  },
+  {
+   "define": "MOJOLEARN_TREES_C45_GBDT",
+   "control": "C45_GBDT",
+   "reason": "DELETED 2026-11-15 (lane/expdel2-45-trees, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md): no record -- no A/B recorded for the opt-in arm (V2 rule a). Under \"An unmeasured arm is deleted\" the opt-in arm goes, the default stays (no bit change); code at 92620cf9db; patch experiments/removed/MOJOLEARN_TREES_C45_GBDT.patch"
   }
  ],
  "stage0_build": {

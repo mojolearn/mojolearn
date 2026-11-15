@@ -1,0 +1,68 @@
+diff --git a/isolation_forest/impl/isolation_forest.mojo b/isolation_forest/impl/isolation_forest.mojo
+index c43fb9860a..88ee5620b6 100644
+--- a/isolation_forest/impl/isolation_forest.mojo
++++ b/isolation_forest/impl/isolation_forest.mojo
+@@ -110,10 +110,9 @@ from core.device_scan import device_classify_nonfinite, device_first_nonfinite
+ from metrics.checks.device_io import upload_i32
+ 
+ 
+-# TOMBSTONE: MOJOLEARN_TREES_C50_IF_PACKED (DELETE-ARM, opt-in, no A/B recorded, rule a) deleted 2026-11-15 by lane/expdel2-45-trees; code recoverable at 931e7ca76a.
+-# Restore: git apply experiments/removed/MOJOLEARN_TREES_C50_IF_PACKED.patch
+-# The alias stays False for its importers (forest_io, multi_gpu); `if_packed_paths_kernel` went with the arm.
+-comptime IF_C50_PACKED = False
++# C50 / T31: exact IF vector nodes, independent of the RF/ET packed control.
++# Default OFF. NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
++comptime IF_C50_PACKED = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_TREES_C50_IF_PACKED"]()
+ 
+ 
+ def if_pack_nodes_kernel(feature: MutPointer[Int32, MutAnyOrigin], threshold: MutPointer[Float32, MutAnyOrigin],
+@@ -126,6 +125,24 @@ def if_pack_nodes_kernel(feature: MutPointer[Int32, MutAnyOrigin], threshold: Mu
+         packed.unsafe_store(4*i+3, right.unsafe_load(i))
+ 
+ 
++def if_packed_paths_kernel(x: MutPointer[Float32, MutAnyOrigin], packed: MutPointer[Int32, MutAnyOrigin],
++    offsets: MutPointer[Int32, MutAnyOrigin], result: MutPointer[Float32, MutAnyOrigin], rows: Int32, features: Int32, trees: Int32):
++    var row = Int(block_idx.x)*Int(block_dim.x)+Int(thread_idx.x)
++    if row >= Int(rows):
++        return
++    var total = Float32(0)
++    for t in range(Int(trees)):
++        var base = Int(offsets.unsafe_load(t))
++        var node = 0
++        var words = packed.unsafe_load[width=4](4*base)
++        while words[0] >= 0:
++            var value = x.unsafe_load(row*Int(features)+Int(words[0]))
++            node = Int(words[2] if value < bitcast[DType.float32](words[1]) else words[3])
++            words = packed.unsafe_load[width=4](4*(base+node))
++        total = ftz(total+bitcast[DType.float32](words[1]))
++    result.unsafe_store(row, ftz(total/Float32(trees)))
++
++
+ # ---------------------------------------------------------------------------
+ # isolation_forest.hpp:27-34
+ # ---------------------------------------------------------------------------
+@@ -1160,6 +1177,11 @@ struct IsolationForest(Movable):
+         comptime if DIAG_TRACE:
+             print("if_diag: build kernel synchronize returned", flush=True)
+ 
++        comptime if IF_C50_PACKED:
++            model.packed_nodes = ctx.enqueue_create_buffer[DType.int32](4*total_nodes)
++            ctx.enqueue_function[if_pack_nodes_kernel](model.node_feature.unsafe_ptr(), model.node_threshold.unsafe_ptr(),
++                model.node_left.unsafe_ptr(), model.node_right.unsafe_ptr(), model.packed_nodes.value().unsafe_ptr(), Int32(total_nodes),
++                grid_dim=(total_nodes+255)//256, block_dim=256)
+         model.tree_n_nodes_host = read_i32(ctx, model.global_tree_n_nodes, n_trees)
+         model.tree_max_depth_host = read_i32(ctx, model.global_tree_max_depth, n_trees)
+         model.shards = List[IFModelShard]()
+@@ -1263,6 +1285,12 @@ struct IsolationForest(Movable):
+         var threads = path_tpb
+         var path_rows_per_block = threads * AFT_IF_PATH_ROWS
+         var blocks = (n_rows + path_rows_per_block - 1) // path_rows_per_block
++        comptime if IF_C50_PACKED:
++            ctx.enqueue_function[if_packed_paths_kernel](_mp_f32(input_rowmajor), _mp_i32(model.packed_nodes.value()),
++                _mp_i32(model.global_tree_offsets), avg_path_lengths.unsafe_ptr(), Int32(n_rows), Int32(n_cols),
++                Int32(self.params.n_estimators), grid_dim=(blocks,1,1), block_dim=(threads,1,1))
++            ctx.synchronize()
++            return
+         comptime if DIAG_TRACE:
+             print("if_diag: path kernel enqueue begin", flush=True)
+         ctx.enqueue_function[compute_path_lengths_global_kernel](

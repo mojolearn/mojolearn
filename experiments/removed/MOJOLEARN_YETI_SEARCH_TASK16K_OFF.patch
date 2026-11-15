@@ -1,0 +1,23 @@
+diff --git a/gbdt/targets/kernel/yeti_rank.mojo b/gbdt/targets/kernel/yeti_rank.mojo
+index 0c3165de5a..ff12b80b2c 100644
+--- a/gbdt/targets/kernel/yeti_rank.mojo
++++ b/gbdt/targets/kernel/yeti_rank.mojo
+@@ -492,14 +492,16 @@ def yeti_task_16k_for[column: Int]() -> Bool:
+ 
+     Default on FAST Apple since the M3 A/B yeti-task16k (istellarank, n=2,
+     same hash): 5,315 -> 5,102 ms (-4%); yeti-both 5,296 -> 5,110.
++    `-D MOJOLEARN_YETI_SEARCH_TASK16K_OFF` is the A arm; the old
++    `-D MOJOLEARN_YETI_SEARCH_TASK16K` is harmless.
+ 
+     DEPENDENCY. This kernel keeps the rank-merge sort; `YETI_FAST_SORT`
+     (default, M3 aft-ab-ysort1 -37%) lives only in the 32 KiB kernel. The
+     16 KiB kernel therefore steps aside while `YETI_FAST_SORT` is on (the
+     `YETI_FAST_SORT_OFF` switch that let it take over is deleted; the kernel
+     stays, a measured winner)."""
+-    # TOMBSTONE: MOJOLEARN_YETI_SEARCH_TASK16K_OFF (DELETE-OLD-PATH, rule e, EXP:155 DROPPED-noise) deleted 2026-11-15 by lane/expdel2-45-trees; code recoverable at eba0f3a418.
+-    # Restore: git apply experiments/removed/MOJOLEARN_YETI_SEARCH_TASK16K_OFF.patch
++    comptime if is_defined["MOJOLEARN_YETI_SEARCH_TASK16K_OFF"]():
++        return False
+     comptime if yeti_fast_sort_for[column]():
+         return False
+     comptime if column == COLUMN_APPLE and GLOBAL_NUMERIC_MODE == NUMERIC_FAST:
