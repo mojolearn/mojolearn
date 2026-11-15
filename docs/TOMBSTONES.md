@@ -1699,56 +1699,6 @@ in the tables after the sections.
 | [`MOJOLEARN_TREES_T14`](#mojolearn_trees_t14) | Trees (RandomForest MSE moments) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_TREES_T14.patch](../experiments/removed/MOJOLEARN_TREES_T14.patch) |
 | [`MOJOLEARN_TREES_T14_EXACT`](#mojolearn_trees_t14_exact) | Trees (RandomForest MSE moments) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_TREES_T14_EXACT.patch](../experiments/removed/MOJOLEARN_TREES_T14_EXACT.patch) |
 | [`MOJOLEARN_TREES_T15`](#mojolearn_trees_t15) | Trees (RandomForest importance / OOB) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_TREES_T15.patch](../experiments/removed/MOJOLEARN_TREES_T15.patch) |
-
-## Retired by lane debt-block-per-n (2026-10-21)
-
-These are rollback or gate arms, not measured losers: each selected a launch that the `block-per-n` / `one-block-n`
-rules of `tools/hooks/no_host_routes.py` refuse (one block per output walking all n rows). The row-tile-then-fold order
-that replaced them is the shape of `glm/impl/qn/glm_base.mojo::qn_tile_sum_classes`, with the host column in the same
-order. No A/B was run (lanes never measure); the speed check on NVIDIA and AMD is owed with the next freeze. Code
-recoverable at `28b8ed11b` (main before the lane).
-
-### MOJOLEARN_IDN_XTY_TILED_OFF
-
-- Tried: `core/xtdz_coalesced.mojo` `xty_launch` / `column_mean_launch` in the STATS_TPB-chain order (`xty_kernel`,
-  `column_mean_kernel`: one block per column; Apple's row-coalesced `mean_partial_kernel` / `mean_fold_kernel` and
-  `xtdz_coalesced` of the same chains). Also the direct `column_mean_kernel` arm of
-  `decomposition/estimator.mojo::_column_variance` (`MOJOLEARN_IDN_DECOMP_MEAN_LAUNCH_OFF`), Apple FAST's
-  `PCA_FAST_COLMEAN` (rab20-pcacolmean: pca taxi 106.2 -> 85.0 ms vs the one-block kernel) and `TSVD_FAST_COLVAR`
-  (rab15-tsvdcolvar: tsvd taxi 40.9 -> 27.8 ms vs the one-block kernel), and `glm/impl/ridge_multi.mojo`'s Y means.
-- Now: the tile order (`xty_tiled`) in every mode; host column `core/host_tile_fold.mojo` (IDN_XTY_TILED is True).
-- Bits: IDENTICAL defaults unchanged; FAST and the retired arms move to the tile order.
-- Files: core/xtdz_coalesced.mojo, core/host_tile_fold.mojo, decomposition/estimator.mojo, decomposition/mean_switch.mojo,
-  glm/impl/ridge_multi.mojo. Patch: `experiments/removed/MOJOLEARN_IDN_XTY_TILED_OFF.patch` (reverse of lane commit
-  584cd1b8c on the code files).
-
-### MOJOLEARN_QN_TILED_MULTI_OFF
-
-- Tried: `glm/impl/qn/glm_base.mojo::linear_bwd` with `xtdz_multi_kernel` / `xty_kernel` (one block per gradient cell)
-  wherever the tile rule did not apply: `C > 1` gradients of at most 256 cells, gradients whose tile partials passed
-  QNTM_MAX_WS, `-D MOJOLEARN_QN_TILED_MULTI_OFF`, IDENTICAL `C == 1` with QN_TILED off, and FAST off Apple.
-- Now: `qntm_tiled_into` (chunked by the workspace bound, same chains and fold) for every `C > 1` gradient and for
-  IDENTICAL's `C == 1` `linear_bwd`; FAST keeps its Apple forms. Host column `glm/host/qn_oracle.mojo` and the check
-  mirrors move with it.
-- Bits: narrow multinomial gradients (`d * c <= 256`) move to the tile order on NVIDIA, AMD, Apple and the host column
-  together; the QN_TILED-off `C == 1` gradient likewise.
-- Patch: `experiments/removed/MOJOLEARN_QN_TILED_MULTI_OFF.patch` (reverse of lane commit 4b8a8e8f2).
-
-### MOJOLEARN_LOSS_SABOTAGE_REDUCE_SERIAL
-
-- Tried: the loss gate's contract-5.4 sabotage, the batch's n_rows per-row losses folded by `ce_serial_fold_kernel` in
-  ONE thread of one block (`training/checks/loss.mojo`), inert at N <= 128.
-- Now: refused; the batch fold's witnesses are the gemm switches reached through the loss entry points.
-- Bits: none (a gate-only arm).
-- Patch: `experiments/removed/MOJOLEARN_LOSS_SABOTAGE_REDUCE_SERIAL.patch` (reverse of lane commit 8476d0774).
-
-## Restored
-
-Deletions reversed by new evidence. The code is back on main; the section and the patch are kept as the record.
-
-| define | area | deleted | restored | now | patch |
-|---|---|---|---|---|---|
-| [`MOJOLEARN_CLASSICAL_C25_PROJECTION_REUSE`](#mojolearn_classical_c25_projection_reuse) | Decomp | 2026-10-08 (`ab4e8e543`) | 2026-10-10 (lane/c25-restore-promote) | IDENTICAL default; `_OFF` restores the old path | [MOJOLEARN_CLASSICAL_C25_PROJECTION_REUSE.patch](../experiments/removed/MOJOLEARN_CLASSICAL_C25_PROJECTION_REUSE.patch) |
 | [GaussianMixture Python entries gmm_fit, gmm_fit_predict and the four scoring entries (native entries)](#dead-native-entries-gaussianmixture-python-entries-2026-11-11) | Mixture (GPU, host and inference-only host bindings) | removed (dead native entries: no live caller) | 2026-11-11 | [dead_entries_gmm_python.patch](../experiments/removed/dead_entries_gmm_python.patch) |
 | [TREES_LEGACY_PYTHON_ENTRIES: 36 rf/et Python fit registrations (rowmajor, weighted, shard and shard-export forms) (native entries)](#dead-native-entries-trees-legacy-python-entries-2026-11-12) | Forests (rf, rf host, trees, trees host bindings) | removed (dead native entries: no live caller) | 2026-11-12 | [TREES_LEGACY_PYTHON_ENTRIES.patch](../experiments/removed/TREES_LEGACY_PYTHON_ENTRIES.patch) |
 | [LABELS_NATIVE_API_V1_V2: the labels_native_api_v1 / v2 provider publications (native entries)](#dead-native-entries-labels-provider-v1-and-v2-2026-11-12) | Labels (base GPU and core host bindings) | removed (dead native entries: no live caller) | 2026-11-12 | [LABELS_NATIVE_API_V1_V2.patch](../experiments/removed/LABELS_NATIVE_API_V1_V2.patch) |
@@ -1881,6 +1831,56 @@ Deletions reversed by new evidence. The code is back on main; the section and th
 | [`MOJOLEARN_TREE_EXACT_SIBLING_HIST`](#mojolearn_tree_exact_sibling_hist) | Trees (I18 retained-count sibling histograms, IDENTICAL) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_TREE_EXACT_SIBLING_HIST.patch](../experiments/removed/MOJOLEARN_TREE_EXACT_SIBLING_HIST.patch) |
 | [`MOJOLEARN_TREE_EXACT_SIBLING_HIST_AUDIT`](#mojolearn_tree_exact_sibling_hist_audit) | Trees (I18 retained-count reuse audit) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_TREE_EXACT_SIBLING_HIST_AUDIT.patch](../experiments/removed/MOJOLEARN_TREE_EXACT_SIBLING_HIST_AUDIT.patch) |
 | [`MOJOLEARN_TREE_EXACT_SIBLING_HIST_BYTES`](#mojolearn_tree_exact_sibling_hist_bytes) | Trees (I18 retained-count byte budget) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_TREE_EXACT_SIBLING_HIST_BYTES.patch](../experiments/removed/MOJOLEARN_TREE_EXACT_SIBLING_HIST_BYTES.patch) |
+
+## Retired by lane debt-block-per-n (2026-10-21)
+
+These are rollback or gate arms, not measured losers: each selected a launch that the `block-per-n` / `one-block-n`
+rules of `tools/hooks/no_host_routes.py` refuse (one block per output walking all n rows). The row-tile-then-fold order
+that replaced them is the shape of `glm/impl/qn/glm_base.mojo::qn_tile_sum_classes`, with the host column in the same
+order. No A/B was run (lanes never measure); the speed check on NVIDIA and AMD is owed with the next freeze. Code
+recoverable at `28b8ed11b` (main before the lane).
+
+### MOJOLEARN_IDN_XTY_TILED_OFF
+
+- Tried: `core/xtdz_coalesced.mojo` `xty_launch` / `column_mean_launch` in the STATS_TPB-chain order (`xty_kernel`,
+  `column_mean_kernel`: one block per column; Apple's row-coalesced `mean_partial_kernel` / `mean_fold_kernel` and
+  `xtdz_coalesced` of the same chains). Also the direct `column_mean_kernel` arm of
+  `decomposition/estimator.mojo::_column_variance` (`MOJOLEARN_IDN_DECOMP_MEAN_LAUNCH_OFF`), Apple FAST's
+  `PCA_FAST_COLMEAN` (rab20-pcacolmean: pca taxi 106.2 -> 85.0 ms vs the one-block kernel) and `TSVD_FAST_COLVAR`
+  (rab15-tsvdcolvar: tsvd taxi 40.9 -> 27.8 ms vs the one-block kernel), and `glm/impl/ridge_multi.mojo`'s Y means.
+- Now: the tile order (`xty_tiled`) in every mode; host column `core/host_tile_fold.mojo` (IDN_XTY_TILED is True).
+- Bits: IDENTICAL defaults unchanged; FAST and the retired arms move to the tile order.
+- Files: core/xtdz_coalesced.mojo, core/host_tile_fold.mojo, decomposition/estimator.mojo, decomposition/mean_switch.mojo,
+  glm/impl/ridge_multi.mojo. Patch: `experiments/removed/MOJOLEARN_IDN_XTY_TILED_OFF.patch` (reverse of lane commit
+  584cd1b8c on the code files).
+
+### MOJOLEARN_QN_TILED_MULTI_OFF
+
+- Tried: `glm/impl/qn/glm_base.mojo::linear_bwd` with `xtdz_multi_kernel` / `xty_kernel` (one block per gradient cell)
+  wherever the tile rule did not apply: `C > 1` gradients of at most 256 cells, gradients whose tile partials passed
+  QNTM_MAX_WS, `-D MOJOLEARN_QN_TILED_MULTI_OFF`, IDENTICAL `C == 1` with QN_TILED off, and FAST off Apple.
+- Now: `qntm_tiled_into` (chunked by the workspace bound, same chains and fold) for every `C > 1` gradient and for
+  IDENTICAL's `C == 1` `linear_bwd`; FAST keeps its Apple forms. Host column `glm/host/qn_oracle.mojo` and the check
+  mirrors move with it.
+- Bits: narrow multinomial gradients (`d * c <= 256`) move to the tile order on NVIDIA, AMD, Apple and the host column
+  together; the QN_TILED-off `C == 1` gradient likewise.
+- Patch: `experiments/removed/MOJOLEARN_QN_TILED_MULTI_OFF.patch` (reverse of lane commit 4b8a8e8f2).
+
+### MOJOLEARN_LOSS_SABOTAGE_REDUCE_SERIAL
+
+- Tried: the loss gate's contract-5.4 sabotage, the batch's n_rows per-row losses folded by `ce_serial_fold_kernel` in
+  ONE thread of one block (`training/checks/loss.mojo`), inert at N <= 128.
+- Now: refused; the batch fold's witnesses are the gemm switches reached through the loss entry points.
+- Bits: none (a gate-only arm).
+- Patch: `experiments/removed/MOJOLEARN_LOSS_SABOTAGE_REDUCE_SERIAL.patch` (reverse of lane commit 8476d0774).
+
+## Restored
+
+Deletions reversed by new evidence. The code is back on main; the section and the patch are kept as the record.
+
+| define | area | deleted | restored | now | patch |
+|---|---|---|---|---|---|
+| [`MOJOLEARN_CLASSICAL_C25_PROJECTION_REUSE`](#mojolearn_classical_c25_projection_reuse) | Decomp | 2026-10-08 (`ab4e8e543`) | 2026-10-10 (lane/c25-restore-promote) | IDENTICAL default; `_OFF` restores the old path | [MOJOLEARN_CLASSICAL_C25_PROJECTION_REUSE.patch](../experiments/removed/MOJOLEARN_CLASSICAL_C25_PROJECTION_REUSE.patch) |
 
 ## Trees
 
