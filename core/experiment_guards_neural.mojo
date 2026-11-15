@@ -304,6 +304,9 @@ def _check_configuration() -> Bool:
     # TOMBSTONE: MOJOLEARN_AFN_OPTIM_ALL (NEUTRAL) deleted 2026-11-15 by lane/expdel-04-neural; code recoverable at 54b6a264fc.
     # Restore: git apply experiments/removed/MOJOLEARN_AFN_OPTIM_ALL.patch
     comptime assert not is_defined["MOJOLEARN_AFN_OPTIM_ALL"](), "removed 2026-11-15 (lane/expdel-04-neural): MOJOLEARN_AFN_OPTIM_ALL (bundle of the Apple FAST optimizer candidates) was NEUTRAL: M3 rab2-combo equals TRAIN_OPT_FAST_PIPE_DOWN alone, digest moves; set the candidate defines one by one; recoverable at 54b6a264fc; see docs/TOMBSTONES.md"
+    # TOMBSTONE: MOJOLEARN_AF_FAST_NOFILL_OFF (superseded (AF_FAST_NOFILL default won)) deleted 2026-11-15 by lane/expdel-04-neural; code recoverable at 4ebe87a042.
+    # Restore: git apply experiments/removed/MOJOLEARN_AF_FAST_NOFILL_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_AF_FAST_NOFILL_OFF"](), "removed 2026-11-15 (lane/expdel-04-neural): MOJOLEARN_AF_FAST_NOFILL_OFF rolled back AF_FAST_NOFILL, the FAST + Apple default that won M3 rab10-afnofill (adafactor 393.2 -> 380.1 ms, digest identical); drop the define; recoverable at 4ebe87a042; see docs/TOMBSTONES.md"
     # ---- end lane expdel-04-neural
     return True
 

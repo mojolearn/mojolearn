@@ -2427,3 +2427,4 @@ per arm, NVIDIA and AMD; the verdict is the average of the two vendors' ratios (
 | define | algorithm / dataset | branch@sha | A/B tag | before -> after | verdict | reason |
 |---|---|---|---|---|---|---|
 | `MOJOLEARN_AFN_OPTIM_ALL` | sgd, adam, adamw / synthetic | lane/expdel-04-neural (recoverable at 54b6a264fc) | rab2-combo | = TRAIN_OPT_FAST_PIPE_DOWN alone | DELETED 2026-11-15 (NEUTRAL) | bundle alias removed; the candidates stay opt-in one by one; patch experiments/removed/MOJOLEARN_AFN_OPTIM_ALL.patch |
+| `MOJOLEARN_AF_FAST_NOFILL_OFF` | adafactor / board | lane/expdel-04-neural (recoverable at 4ebe87a042) | rab10-afnofill | 393.2 -> 380.1 (NOFILL) | DELETED 2026-11-15 (old path; NOFILL default kept) | rollback switch removed; patch experiments/removed/MOJOLEARN_AF_FAST_NOFILL_OFF.patch |
