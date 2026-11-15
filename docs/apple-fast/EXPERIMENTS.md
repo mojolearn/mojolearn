@@ -2484,3 +2484,4 @@ sections and patches). No bits change: each deleted arm was off by default.
 | define | algorithm / dataset | branch@sha | A/B tag | before -> after | verdict | reason |
 |---|---|---|---|---|---|---|
 | `MOJOLEARN_AF_FAST_RESIDENT_OFF` | adafactor / board (FAST Apple) | lane/expdel-06-base-cluster-kernel (code at a656258c20) | rab10-afresident | 392.8 -> 205.2 | DELETED (old path) | old path of the KEEP FAST+Apple default (digest identical); define read removed, per-call entry stays for builds without AF_RESIDENT; no bit change |
+| `MOJOLEARN_APPLE_FAST_GEMM_TN_V1_OFF` | ols / istella (FAST Apple) | lane/expdel-06-base-cluster-kernel (code at 1005624c27) | tier-ols-tnv1b | 2,219 -> 935 | DELETED (old path) | old path of the KEPT FAST+Apple default (r2 .3211 -> .3319); define read removed, gemm_tn_via_transpose stays for other builds; no bit change |

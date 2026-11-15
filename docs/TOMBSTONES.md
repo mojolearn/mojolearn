@@ -649,6 +649,7 @@ in the tables after the sections.
 | [`MOJOLEARN_YR_TASK_FUSED`](#mojolearn_yr_task_fused) | Trees (GBDT, Apple FAST) | NEUTRAL | 2026-11-15 | [MOJOLEARN_YR_TASK_FUSED.patch](../experiments/removed/MOJOLEARN_YR_TASK_FUSED.patch) |
 | [`MOJOLEARN_KSHAP_FAST_BATCH_OFF`](#mojolearn_kshap_fast_batch_off) | Trees (GBDT, Apple FAST) | removed (old path; KSHAP_FAST_BATCH KEPT) | 2026-11-15 | [MOJOLEARN_KSHAP_FAST_BATCH_OFF.patch](../experiments/removed/MOJOLEARN_KSHAP_FAST_BATCH_OFF.patch) |
 | [`MOJOLEARN_AF_FAST_RESIDENT_OFF`](#mojolearn_af_fast_resident_off-old-path-deleted-2026-11-15) | Sequence (Adafactor resident second moment, FAST Apple) | removed (old path; FAST+Apple default KEEP, rab10-afresident) | 2026-11-15 | [MOJOLEARN_AF_FAST_RESIDENT_OFF.patch](../experiments/removed/MOJOLEARN_AF_FAST_RESIDENT_OFF.patch) |
+| [`MOJOLEARN_APPLE_FAST_GEMM_TN_V1_OFF`](#mojolearn_apple_fast_gemm_tn_v1_off-old-path-deleted-2026-11-15) | Core (gemm_tn past split-K, FAST Apple) | removed (old path; FAST+Apple default KEPT 7484503b6, tier-ols-tnv1b) | 2026-11-15 | [MOJOLEARN_APPLE_FAST_GEMM_TN_V1_OFF.patch](../experiments/removed/MOJOLEARN_APPLE_FAST_GEMM_TN_V1_OFF.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -6310,4 +6311,12 @@ bits change on any vendor or the host column, no board row needs re-timing.
 - **Verdict**: KEEP, FAST+Apple default (EXPERIMENTS.md `AF_FAST_RESIDENT`, rab10-afresident): M3 one run per arm, adafactor 392.8 -> 205.2 ms, digest identical A == B. No bit change on any column.
 - **Deleted by**: lane/expdel-06-base-cluster-kernel (expdel-06-base-cluster-kernel, docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md); code recoverable at `a656258c20`.
 - **Restore**: `git apply experiments/removed/MOJOLEARN_AF_FAST_RESIDENT_OFF.patch`, then delete the `MOJOLEARN_AF_FAST_RESIDENT_OFF` refusal in `core/experiment_guards_base.mojo`.
+- **Records**: refusal in `core/experiment_guards_base.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel-06-base-cluster-kernel section).
+
+## MOJOLEARN_APPLE_FAST_GEMM_TN_V1_OFF: old path deleted (2026-11-15)
+
+- **What it was**: the FAST+Apple rollback of square `gemm_tn` past split-K from IDENTICAL's `gemm_tn_identical_v1` arm to the vendor matmul via `gemm_tn_via_transpose` (`core/gemm.mojo` APPLE_FAST_GEMM_TN_V1). Only the define read is deleted: `gemm_tn_via_transpose` stays the path of every other build and of m != n.
+- **Verdict**: KEPT 7484503b6, FAST+Apple default (EXPERIMENTS.md `APPLE_FAST_GEMM_TN_V1`, tier-ols-tnv1b): M3, ols istella 2,219 -> 935 ms (-58%), r2 .3211 -> .3319. No bit change on any column.
+- **Deleted by**: lane/expdel-06-base-cluster-kernel (expdel-06-base-cluster-kernel, docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md); code recoverable at `1005624c27`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_APPLE_FAST_GEMM_TN_V1_OFF.patch`, then delete the `MOJOLEARN_APPLE_FAST_GEMM_TN_V1_OFF` refusal in `core/experiment_guards_base.mojo`.
 - **Records**: refusal in `core/experiment_guards_base.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel-06-base-cluster-kernel section).
