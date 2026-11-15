@@ -64,7 +64,9 @@ comptime ANN3_TSNE_RB64 = is_defined["MOJOLEARN_ANN3_TSNE_RB64"]()
 #: The IVF-PQ and IVF-SQ builds download their code arrays (n x pq_dim and
 #: n x dim int32) straight into the caller's arrays, instead of a host
 #: buffer, then a list, then the caller's array. Plain copies: no bit moves.
-comptime ANN3_DIRECT_OUT = is_defined["MOJOLEARN_ANN3_DIRECT_OUT"]()
+# TOMBSTONE: MOJOLEARN_ANN3_DIRECT_OUT (unmeasured opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-14-cluster; code recoverable at 09d08d6e01.
+# Restore: git apply experiments/removed/MOJOLEARN_ANN3_DIRECT_OUT.patch; record in docs/TOMBSTONES.md.
+comptime ANN3_DIRECT_OUT = False
 
 #: The coarse quantizer's FAST training sample is gathered row by row with
 #: memcpy into a list made by length (one append per float otherwise).
