@@ -2,7 +2,6 @@
 """The existing linear solver switches, shared by native and address doors."""
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST as _OLS_FAST
 from core.accelerator_target import TARGET_HAS_APPLE_GPU
-from std.sys.compile import is_defined
 
 #: Lane apple-fast-olsne (2026-10-03): LinearRegression.fit takes the
 #: equilibrated normal equations (DEVIATION 2620) with X and y uploaded once

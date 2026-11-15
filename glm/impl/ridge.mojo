@@ -65,7 +65,6 @@ no equivalent), and `n_alpha > 1` (their signature carries an array and
 reads `alpha[0]` only: `ridge.cuh:67`).
 """
 
-from std.sys.compile import is_defined
 from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from max.gpu.host import DeviceBuffer, DeviceContext
 
