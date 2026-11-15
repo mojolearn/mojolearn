@@ -175,14 +175,14 @@ def yeti_block_parallel_for[column: Int]() -> Bool:
     # sort of distinct composites, each document's float sums in the one
     # order the sequential kernel uses), needs 32 KiB of block shared memory
     # (the MI300/MI325 give 64 KiB) and no warp primitive outside the
-    # Apple-only `YETI_FAST_SORT`. `-D MOJOLEARN_IDN_GBDT_YETI_BLOCK_AMD_OFF`
-    # restores the sequential kernel on AMD.
+    # Apple-only `YETI_FAST_SORT`.
+    # TOMBSTONE: MOJOLEARN_IDN_GBDT_YETI_BLOCK_AMD_OFF (DELETE-OLD-PATH, EXP:1584 DROP, rule e) deleted 2026-11-15 by lane/expdel2-45-trees; code recoverable at c25340638d.
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_GBDT_YETI_BLOCK_AMD_OFF.patch
     # TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (DELETE-OLD-PATH, rule e, EXP:2438; non-owner fold to False) deleted 2026-11-15 by lane/expdel2-45-trees; code recoverable at 882d15f175.
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-45-trees.patch; record in docs/TOMBSTONES.md.
     comptime if (
         column == COLUMN_AMD
         and GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-        and not is_defined["MOJOLEARN_IDN_GBDT_YETI_BLOCK_AMD_OFF"]()
     ):
         return True
     return column == COLUMN_NVIDIA
