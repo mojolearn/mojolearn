@@ -138,7 +138,7 @@ def op_act_bwd(t: Int, a: Args):
 #: MI325X, HIGGS 1M x 28, (256,) b512, 1954 batches, MOJOLEARN_AG_PROFILE=2:
 #: codes 26/28/90/91/92 are ~360 ms of a 1218 ms profiled tape step.
 #:
-#: Before (MLP_BLOCKED_FOLDS, -D MOJOLEARN_MLP_LOSSBLOCK_OFF keeps it), per
+#: Before (MLP_BLOCKED_FOLDS, the deleted MOJOLEARN_MLP_LOSSBLOCK_OFF arm), per
 #: batch, L <= 4 layers: 5 launches (L > 4: 2 L + 3).
 #:   OP_MLP_ROWLOSS (26)  B threads; chain O loss terms a row.
 #:   OP_MLP_L2PART  (90)  one thread per AF_NORM_BLOCK = 4096 weights; chain
