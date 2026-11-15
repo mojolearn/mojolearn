@@ -76,10 +76,10 @@ from checks.numerics import ftz, identical_cos, identical_div, identical_mul, id
 # 1000..1010 (autograd/ops.mojo); sequence/dispatch.mojo routes the range
 # and asserts it overlaps no other family.
 comptime OP_AGO_SUMSQ_PART = 1110
-comptime OP_AGO_CLIP_COEF = 1111
-comptime OP_AGO_CLIP_SCALE = 1112
+# (Sweep 2026-11-15: OP_AGO_CLIP_COEF (1111) and OP_AGO_CLIP_SCALE (1112), never emitted since the clip fused into
+# OP_AGH_OPT_CLIP, removed with op_ago_clip_coef / op_ago_clip_scale; the family range is the one op.)
 comptime OP_AGO_FIRST = OP_AGO_SUMSQ_PART
-comptime OP_AGO_LAST = OP_AGO_CLIP_SCALE
+comptime OP_AGO_LAST = OP_AGO_SUMSQ_PART
 
 # Lane ag-pass6-host (2026-10-19, PASS6_IDEAS idea H(2)), default on: the
 # clip's coefficient and scale run inside the update launch. After the
@@ -93,7 +93,7 @@ comptime OP_AGO_LAST = OP_AGO_CLIP_SCALE
 # and CLIP_SCALE).
 # TOMBSTONE: MOJOLEARN_AUTOGRAD_OPT_CLIP_FUSE_OFF (the three clip launches before OP_OPT, arm A; old path, no A/B
 # recorded) deleted 2026-11-15 by lane/expdel2-24-neural with clip_grad_norm and the AUTOGRAD_OPT_CLIP_FUSE alias;
-# code recoverable at e770fd25b9. OP_AGO_CLIP_COEF / OP_AGO_CLIP_SCALE stay registered in the dispatch range.
+# code recoverable at e770fd25b9.
 # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_OPT_CLIP_FUSE_OFF.patch
 
 # The pass-6 host lane's family (2400..; sequence/dispatch.mojo routes the
@@ -125,30 +125,6 @@ def op_ago_sumsq_part(t: Int, a: Args):
         var g = ld(a.p0, k)
         s = fma3(g, g, s)
     st(a.p1, t, s)
-
-
-@always_inline
-def op_ago_clip_coef(t: Int, a: Args):
-    """One thread. p0 partials (i0 of them), p1 cell [total_norm, coef];
-    f0 max_norm. The partials are added ascending from +0.0; total_norm =
-    sqrt(sum); coef = min(1, max_norm / (total_norm + 1e-6))."""
-    var s = Float32(0)
-    for k in range(a.i0):
-        s = add(s, ld(a.p0, k))
-    var norm = ftz(identical_sqrt(s))
-    var coef = ftz(identical_div(a.f0, add(norm, CLIP_EPS)))
-    if not (coef < Float32(1.0)):
-        coef = Float32(1.0)
-    st(a.p1, 0, norm)
-    st(a.p1, 1, coef)
-
-
-@always_inline
-def op_ago_clip_scale(t: Int, a: Args):
-    """p0 gradient, p1 cell [total_norm, coef]. g_t <- coef g_t, every
-    element (no skip at coef = 1: the multiply's flushes are part of the
-    result, as in the certified clip)."""
-    st(a.p0, t, mul(ld(a.p1, 1), ld(a.p0, t)))
 
 
 @always_inline
@@ -190,10 +166,6 @@ def apply_optim_fused[OP: Int](t: Int, a: Args):
 def apply_optim[OP: Int](t: Int, a: Args):
     comptime if OP == OP_AGO_SUMSQ_PART:
         op_ago_sumsq_part(t, a)
-    elif OP == OP_AGO_CLIP_COEF:
-        op_ago_clip_coef(t, a)
-    elif OP == OP_AGO_CLIP_SCALE:
-        op_ago_clip_scale(t, a)
 
 
 # ------------------------------------------------------------------ configuration
