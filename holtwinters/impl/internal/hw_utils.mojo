@@ -46,10 +46,8 @@ not a property anyone should be relying on for a recorded stage.
 """
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
-from std.sys.compile import is_defined
 from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from std.memory import bitcast
-from std.sys.compile import is_defined
 
 # ---------------------------------------------------------------------------
 # Sabotage switchboard (all no-ops unless the define is named on the command
@@ -152,12 +150,9 @@ comptime PG_EPS = Float32(Float64(1e-10))
 comptime MAX_BLOCKS_PER_DIM = 65535
 
 # The seasonal fit path's fixed optimizer launch width (`hw_optim.cuh:862-863`).
-# AFCL-P14: NEVER RUN — PENDING MEASUREMENT. Uncompiled/unverified.
-# Half as many independent optimizer series per block lowers per-block
-# register demand for long seasonal state. It does not change any recurrence,
-# season length, initial state, parameter search or stopping budget.
-comptime AFCL_P14 = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU and is_defined["MOJOLEARN_AFCL_P14"]()
-comptime HW_OPTIM_TPB = 64 if AFCL_P14 else 128
+# TOMBSTONE: MOJOLEARN_AFCL_P14 (never-run Apple FAST programme card: 64-wide optimizer blocks) deleted 2026-11-15 by lane/expdel2-37-series; code recoverable at 82df561cdb.
+# Restore: git apply experiments/removed/MOJOLEARN_AFCL_P14.patch; record in docs/TOMBSTONES.md.
+comptime HW_OPTIM_TPB = 128
 
 
 def get_threads_per_block(n: Int, max_threads: Int = 512) -> Int:
@@ -247,10 +242,10 @@ def hw_is_finite(v: Float32) -> Bool:
     return v == v and abs(v) != hw_float32_inf()
 
 
+# TOMBSTONE: MOJOLEARN_HW_EST_BLOCK64 (opt-in arm keeping the 64-wide FAST block, no A/B recorded) deleted 2026-11-15 by lane/expdel2-37-series; code recoverable at 82df561cdb.
+# Restore: git apply experiments/removed/MOJOLEARN_HW_EST_BLOCK64.patch; record in docs/TOMBSTONES.md.
 comptime HW_EST_FAST_BLOCK = 32 if (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and TARGET_HAS_APPLE_GPU
-    and not is_defined["MOJOLEARN_HW_EST_BLOCK64"]()
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
 ) else 64
 """FAST on Apple: a (series, start) block with `d <= 32` runs as ONE SIMD
 group with its threadgroup layout sized for 32 (5 KB instead of 18 KB), so
