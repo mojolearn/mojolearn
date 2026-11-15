@@ -627,6 +627,7 @@ in the tables after the sections.
 | [`P1_ONEHOT_WARN_IN_NATIVE` (`warnings.warn` called from the native OneHotEncoder transform)](#lane-p1-python-callbacks-removed-from-native-operations-2026-11-09) | Prep (OneHotEncoder.transform) | removed (Python code on a product path; native or a refusal instead; not an experiment) | 2026-11-09 | [P1_ONEHOT_WARN_IN_NATIVE.patch](../experiments/removed/P1_ONEHOT_WARN_IN_NATIVE.patch) |
 | [`P1_NATIVE_SKLEARN_TAGS` (`bindings/classical_tags.mojo`, `bindings/scaler_tags_native.mojo` and their tag operations)](#lane-p1-python-callbacks-removed-from-native-operations-2026-11-09) | sklearn tags (linear models, scalers) | removed (Python code on a product path; native or a refusal instead; not an experiment) | 2026-11-09 | [P1_NATIVE_SKLEARN_TAGS.patch](../experiments/removed/P1_NATIVE_SKLEARN_TAGS.patch) |
 | [`P1_DEAD_PY_CURVE_DRIVERS` (unreachable Python drivers (`_FoldCurve`, `_curves`, `roc_auc_options`, ... 91 defs))](#lane-p1-python-callbacks-removed-from-native-operations-2026-11-09) | Metrics, decomp, prep, linear model (Python) | removed (Python code on a product path; native or a refusal instead; not an experiment) | 2026-11-09 | [P1_DEAD_PY_CURVE_DRIVERS.patch](../experiments/removed/P1_DEAD_PY_CURVE_DRIVERS.patch) |
+| [`MOJOLEARN_AFN_OPTIM_ALL`](#mojolearn_afn_optim_all) | Neural (Apple FAST optimizer candidates bundle) | NEUTRAL | 2026-11-15 | [MOJOLEARN_AFN_OPTIM_ALL.patch](../experiments/removed/MOJOLEARN_AFN_OPTIM_ALL.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -5901,3 +5902,16 @@ replacement computes the same values in the same order (see the bit notes below)
 - **Restore**: `git apply experiments/removed/LABELS_NATIVE_API_V1_V2.patch` (the two binding files), then re-add
   `labels_native_api_v2` to the core host export list in `python/mojolearn/host_surface.py`.
 - **Guard / records**: no `-D` define was removed, so no guard refusal and no `grid_controls` entry moves.
+
+## Experiment deletions: lane expdel-04-neural (2026-11-15)
+
+Deletions from docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md (section expdel-04-neural); each evidence row was read before the deletion. No bit changes: every deletion removes a non-default arm.
+
+### MOJOLEARN_AFN_OPTIM_ALL
+
+- Tried: one define that turned on every Apple FAST optimizer candidate of `training/afn_optim.mojo` at once (`AFN_OPT_CLIP_FUSE`, `AFN_OPT_MULTITENSOR`, `AFN_LOSS_FUSED`; earlier also FUSE_SCAN, VEC4, RESIDENT_STATE, deleted 2026-10-09).
+- Verdict: NEUTRAL (docs/apple-fast/EXPERIMENTS.md row `TRAIN_OPT_FAST_PIPE_DOWN + AFN_OPTIM_ALL`, reconciled 2026-10-05): M3 rab2-combo sgd 332.05 -> 207.78 ms, adam 332.94 -> 205.79, adamw 336.45 -> 204.48 equals TRAIN_OPT_FAST_PIPE_DOWN alone (rab2-pipedown 208.8 / 209.6 / 209.8); the bundle adds nothing and moves the output digest; no quality metric. Apple FAST only; no NVIDIA / AMD arm.
+- Removed: the `AFN_OPTIM_ALL` alias and its `AFN_OPTIM_ALL or` term in the three candidate switches; each candidate keeps its own define (still opt-in). Default unchanged: no bits move.
+- Files: training/afn_optim.mojo.
+- Deleted by: lane/expdel-04-neural (2026-11-15); code recoverable at `54b6a264fc`.
+- Restore: `git apply experiments/removed/MOJOLEARN_AFN_OPTIM_ALL.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.

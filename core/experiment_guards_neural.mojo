@@ -300,6 +300,11 @@ def _check_configuration() -> Bool:
     # Restore: git apply experiments/removed/MOJOLEARN_AFN_ATTN_ARENA.patch
     comptime assert not is_defined["MOJOLEARN_AFN_ATTN_ARENA"](), "removed 2026-11-09 (lane/m2-neural-leftovers): MOJOLEARN_AFN_ATTN_ARENA (A07, Apple FAST, never measured) put TransformerWorkspace's buffers in one device arena; nothing built that workspace after the block forward moved onto the attention step op (lanes x45c, x6), so the workspace, its key and the arena arm are deleted. Restore with experiments/removed/MOJOLEARN_AFN_ATTN_ARENA.patch"
     # ---- end lane m2-neural-leftovers
+    # ---- lane expdel-04-neural (2026-11-15): experiment deletions (docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md)
+    # TOMBSTONE: MOJOLEARN_AFN_OPTIM_ALL (NEUTRAL) deleted 2026-11-15 by lane/expdel-04-neural; code recoverable at 54b6a264fc.
+    # Restore: git apply experiments/removed/MOJOLEARN_AFN_OPTIM_ALL.patch
+    comptime assert not is_defined["MOJOLEARN_AFN_OPTIM_ALL"](), "removed 2026-11-15 (lane/expdel-04-neural): MOJOLEARN_AFN_OPTIM_ALL (bundle of the Apple FAST optimizer candidates) was NEUTRAL: M3 rab2-combo equals TRAIN_OPT_FAST_PIPE_DOWN alone, digest moves; set the candidate defines one by one; recoverable at 54b6a264fc; see docs/TOMBSTONES.md"
+    # ---- end lane expdel-04-neural
     return True
 
 
