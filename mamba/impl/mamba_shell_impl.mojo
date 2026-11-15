@@ -1036,13 +1036,10 @@ def _m3_export_weights_run(mut s: Mamba3PrefillSession, a: List[Int], dm: Int, d
 # This removes both forward recomputation and device-to-host input comparison.
 # Arithmetic is unchanged; CPU retains its equivalent recompute path. No
 # compilation, identity, quality or end-to-end measurements have been run.
-comptime IDN_SAMBA_M3_FORWARD_TAPE = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    # TOMBSTONE: MOJOLEARN_IDN_ACT_RETAIN_OFF (old path beside the retained-activation default, EXP:2365) deleted 2026-11-15 by lane/expdel2-27-neural; code recoverable at 85d71d91bc.
-    # Restore: git apply experiments/removed/MOJOLEARN_IDN_ACT_RETAIN_OFF.patch
-    and get_defined_int["MOJOLEARN_IDN_ACT_RETAIN", 2]() == 3  # NI48 arm (default 2 since 2026-10-08)
-    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_IDN_ACT_RETAIN (the =3 NI48 owned forward tape arm beside the default 2, EXP:2365 superseded) deleted 2026-11-15 by lane/expdel2-27-neural; code recoverable at 2c7917382c.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ACT_RETAIN.patch
+# The name stays False for its importers (bindings, mamba/native_tape_dispatch.mojo).
+comptime IDN_SAMBA_M3_FORWARD_TAPE = False
 
 
 struct Mamba3ForwardTape(Movable, Writable):
