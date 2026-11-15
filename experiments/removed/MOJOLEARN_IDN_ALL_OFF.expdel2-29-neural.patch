@@ -1,0 +1,903 @@
+diff --git a/sequence/moe_reg.mojo b/sequence/moe_reg.mojo
+index 731c05fc0f..7d0858eb75 100644
+--- a/sequence/moe_reg.mojo
++++ b/sequence/moe_reg.mojo
+@@ -52,14 +52,12 @@ from sequence.ops import FP, add, fma3, ld, mul, st, sub
+ # IDENTICAL default on every vendor: every cell's chain is the item's (the
+ # same flushed operands, ascending, through the same fma3 from +0.0) and the
+ # route tail is the item's statements on the stored logits.
+-# TOMBSTONE: MOJOLEARN_IDN_GATES_OFF (old path; EXP:2479 DELETED) read deleted here 2026-11-15 by lane/expdel2-29-neural; code recoverable at 3dfeb158c0.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_GATES_OFF.expdel2-29-neural.patch
+-# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old path umbrella; EXP:2438 DELETED) read deleted here 2026-11-15 by lane/expdel2-29-neural; code recoverable at 3dfeb158c0.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-29-neural.patch
++# -D MOJOLEARN_IDN_GATES_OFF (or MOJOLEARN_MOE_REGTILE_OFF) restores
++# sequence/moe_tiled.mojo in IDENTICAL.
+ comptime MOE_REGTILE = (
+     (
+         (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU)
+-        or GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
++        or (GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (is_defined["MOJOLEARN_IDN_GATES_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()))
+     )
+     and not is_defined["MOJOLEARN_MOE_REGTILE_OFF"]()
+ )
+diff --git a/sequence/moe_grouped_fold.mojo b/sequence/moe_grouped_fold.mojo
+index 985ff122f4..e7835b51b9 100644
+--- a/sequence/moe_grouped_fold.mojo
++++ b/sequence/moe_grouped_fold.mojo
+@@ -6,7 +6,8 @@ AND THE SWITCH. HOST-SAFE (no device construct): `sequence/moe.mojo`'s items
+ import this file, `sequence/moe_grouped.mojo` holds the device side.
+ 
+ MOJOLEARN_IDN_MOE_GROUPED_GEMM: the IDENTICAL default since 2026-10-10
+-(lane/postmerge-act-6; the old on-define is refused in
++(lane/postmerge-act-6; `-D MOJOLEARN_IDN_MOE_GROUPED_GEMM_OFF` restores
++`moe_reg`'s one-chain tile; the old on-define is refused in
+ core/six_lane_experiment_guards.mojo). Post-merge A/B, one run per arm (nv2
+ L40S v1052 -> v1055 on main 9f83ea479, MI325X a1152 -> a1155 on main
+ 0a7b206f1): moe NV 23.16 -> 14.22 ms (0.61x) / AMD 18.79 -> 15.15 ms (0.81x);
+@@ -29,15 +30,16 @@ NVIDIA and AMD move together, by the contract.
+ `check_stack_fold_is_the_contract_tree`), spelled on an `InlineArray` so this
+ file imports nothing from the device GEMM.
+ """
++from std.sys.compile import is_defined
+ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_mul_add
+ from gemm.contract import contract_leaf_size, leaf_count
+ from sequence.ops import FP
+ 
+-# TOMBSTONE: MOJOLEARN_IDN_MOE_GROUPED_GEMM_OFF (old path; EXP:1944 PROMOTED, the grouped GEMM is the IDENTICAL default) deleted 2026-11-15 by lane/expdel2-29-neural; code recoverable at 072f2eee14.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_MOE_GROUPED_GEMM_OFF.patch
+-# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old path umbrella; EXP:2438 DELETED) read deleted here 2026-11-15 by lane/expdel2-29-neural; code recoverable at 072f2eee14.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-29-neural.patch
+-comptime MOE_GROUPED_GEMM = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
++comptime MOE_GROUPED_GEMM = (
++    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
++    and not is_defined["MOJOLEARN_IDN_MOE_GROUPED_GEMM_OFF"]()
++    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
++)
+ # TOMBSTONE: MOJOLEARN_IDN_MOE_RESIDENT (LOSER 4.64x moe synthetic) deleted 2026-10-11 by 978e7f43b; code recoverable at 978e7f43b^.
+ # Restore: git apply experiments/removed/MOJOLEARN_IDN_MOE_RESIDENT.patch
+ 
+diff --git a/sequence/moe_group.mojo b/sequence/moe_group.mojo
+index 6daafe5e37..4c062687d3 100644
+--- a/sequence/moe_group.mojo
++++ b/sequence/moe_group.mojo
+@@ -18,6 +18,8 @@ pick order), so the words do not. The products' grids are the upper bound
+ """
+ from max.gpu import block_dim, block_idx, thread_idx
+ from std.atomic import Atomic
++from std.sys.compile import is_defined
++from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+ 
+ # NN44: deterministic ascending-pair grouping; OFF and unmeasured. Each
+ # expert scans the pairs once, replacing contended atomic scatter cursors.
+@@ -38,12 +40,11 @@ comptime MOE_GROUP_TPB = 256
+ # cheap expert comparisons for atomics, so whole-workload benefit is unproven.
+ # Host item execution is unaffected because it consumes original pair IDs.
+ # This S subarm does not claim a MoE backward/training path that does not exist.
+-# TOMBSTONE: MOJOLEARN_IDN_MOE_STABLE_PACK (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-29-neural; code recoverable at d1f44888a3.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_MOE_STABLE_PACK.patch
+-# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old path umbrella; EXP:2438 DELETED) read deleted here 2026-11-15 by lane/expdel2-29-neural; code recoverable at d1f44888a3.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-29-neural.patch
+-# Kept False for sequence/exec_device.mojo (another lane's file), which still names the stable kernel below.
+-comptime MOE_STABLE_PACK = False
++comptime MOE_STABLE_PACK = (
++    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
++    and is_defined["MOJOLEARN_IDN_MOE_STABLE_PACK"]()
++    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
++)
+ 
+ 
+ def moe_group_blocks(n_pairs: Int, n_experts: Int, n_tiles: Int) -> Int:
+diff --git a/sequence/moe_tiled.mojo b/sequence/moe_tiled.mojo
+index ccd529a828..eb4f47ddab 100644
+--- a/sequence/moe_tiled.mojo
++++ b/sequence/moe_tiled.mojo
+@@ -25,12 +25,17 @@ from std.memory import stack_allocation
+ from max.gpu.memory import AddressSpace
+ from max.gpu.sync import barrier
+ 
+-from checks.numerics import ftz, identical_silu
++from std.sys.compile import is_defined
++from checks.numerics import ftz, identical_silu, GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+ 
+-# TOMBSTONE: MOJOLEARN_NN44_EXPERT_BISECT (unmeasured opt-in arm: the expert upper-bound search) deleted 2026-11-15 by lane/expdel2-29-neural; code recoverable at 5a1c6385fe.
+-# Restore: git apply experiments/removed/MOJOLEARN_NN44_EXPERT_BISECT.patch
+-# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old path umbrella; EXP:2438 DELETED) read deleted here 2026-11-15 by lane/expdel2-29-neural; code recoverable at 5a1c6385fe.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-29-neural.patch
++# NN44 independent arm: integer upper-bound search, including empty experts.
++# OFF, unmeasured. O(log E) lookup reduces scheduling overhead as E grows;
++# no floating arithmetic, routing decision, or combine order changes.
++comptime NN44_EXPERT_BISECT = (
++    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
++    and is_defined["MOJOLEARN_NN44_EXPERT_BISECT"]()
++    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
++)
+ from sequence.ops import FP, fma3, ld, mul, st
+ 
+ #: pairs (token, pick) per block, outputs (features or d) per block, and the
+@@ -44,6 +49,16 @@ comptime MOE_TPB = TILE_P * TILE_Q
+ @always_inline
+ def _block_expert(boff: FP, n_experts: Int, b: Int) -> Int:
+     """The expert whose blocks hold block b (`boff[e] <= b < boff[e + 1]`)."""
++    comptime if NN44_EXPERT_BISECT:
++        var lo = 0
++        var hi = n_experts
++        while lo + 1 < hi:
++            var mid = (lo + hi) // 2
++            if Int(boff.unsafe_load(mid)) <= b:
++                lo = mid
++            else:
++                hi = mid
++        return lo
+     var e = 0
+     while e + 1 < n_experts and Int(boff.unsafe_load(e + 1)) <= b:
+         e += 1
+diff --git a/sequence/mlp.mojo b/sequence/mlp.mojo
+index d8ef84da9e..46512cdda0 100644
+--- a/sequence/mlp.mojo
++++ b/sequence/mlp.mojo
+@@ -34,6 +34,7 @@ from std.sys.compile import is_defined
+ #:   block sums ascending (`op_mlp_rowpart`, `op_mlp_bloss`). A layer of at
+ #:   most AF_NORM_BLOCK weights and a batch of at most MLP_ROW_BLOCK rows is
+ #:   one block: the old chain, the old bits; larger ones get new bits.
++#:   -D MOJOLEARN_IDN_MLP_BLOCKED_FOLDS_OFF.
+ #: MLP_EPOCH_DEV (roadmap D13): the epoch order is `op_mlp_perm` on the
+ #:   executor (the x_cnn Feistel permutation, integers only) instead of a
+ #:   host Fisher-Yates walk and an N-word upload per epoch, and the epoch
+@@ -42,12 +43,9 @@ from std.sys.compile import is_defined
+ #:   host of every batch loss; one word comes back per epoch for the
+ #:   stopping rule. New shuffle order and new curve bits on every column.
+ #:   -D MOJOLEARN_IDN_MLP_EPOCH_DEV_OFF.
+-# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old path umbrella; EXP:2438 DELETED) read deleted here 2026-11-15 by lane/expdel2-29-neural; code recoverable at 92d4b79ec8.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-29-neural.patch
+-comptime _MLP_IDN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+-# TOMBSTONE: MOJOLEARN_IDN_MLP_BLOCKED_FOLDS_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-29-neural; code recoverable at 92d4b79ec8.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_MLP_BLOCKED_FOLDS_OFF.patch
+-comptime MLP_BLOCKED_FOLDS = _MLP_IDN
++#: Both also turn off under MOJOLEARN_IDN_ALL_OFF.
++comptime _MLP_IDN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
++comptime MLP_BLOCKED_FOLDS = _MLP_IDN and not is_defined["MOJOLEARN_IDN_MLP_BLOCKED_FOLDS_OFF"]()
+ comptime MLP_EPOCH_DEV = _MLP_IDN and not is_defined["MOJOLEARN_IDN_MLP_EPOCH_DEV_OFF"]()
+ #: MLP_LOSSBLOCK (lane ag-pass3-lossblock, 2026-10-19; the loss-section
+ #:   comment block below): the per-batch seed, row-loss and L2 sums in two
+diff --git a/sequence/layernorm.mojo b/sequence/layernorm.mojo
+index a52e2112b6..f6dab65601 100644
+--- a/sequence/layernorm.mojo
++++ b/sequence/layernorm.mojo
+@@ -15,7 +15,8 @@ from sequence.fold32 import FOLD_L, tree32
+ from max.gpu.primitives.warp import shuffle_xor
+ 
+ #: lane layernorm-idn N3 (2026-10-09), MOJOLEARN_IDN_LN_ROW_WARP, IDENTICAL,
+-#: the DEFAULT since 2026-10-10 (lane/postmerge-act-6; the old on-define
++#: the DEFAULT since 2026-10-10 (lane/postmerge-act-6; `-D
++#: MOJOLEARN_IDN_LN_ROW_WARP_OFF` restores the one-chain row; the old on-define
+ #: is refused in core/six_lane_experiment_guards.mojo). Post-merge A/B, one run
+ #: per arm (nv2 L40S v1056 -> v1057 on main 9f83ea479, MI325X a1156 -> a1157 on
+ #: main 0a7b206f1): layernorm NV 1.394 -> 1.071 ms (0.77x) / AMD 1.446 -> 1.143
+@@ -44,9 +45,11 @@ from max.gpu.primitives.warp import shuffle_xor
+ #: the tree shape does not depend on the row width; a wider row only gives
+ #: each lane more sequential terms (D/32), still bandwidth-paced.
+ #: dweight / dbias column folds are untouched (LN_FOLD_BLOCK above).
+-# TOMBSTONE: MOJOLEARN_IDN_LN_ROW_WARP_OFF (old path; EXP:1945 PROMOTED, the row warp is the IDENTICAL default) deleted 2026-11-15 by lane/expdel2-29-neural; code recoverable at b395beef95.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_LN_ROW_WARP_OFF.patch
+-comptime LN_ROW_WARP = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
++comptime LN_ROW_WARP = (
++    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
++    and not is_defined["MOJOLEARN_IDN_LN_ROW_WARP_OFF"]()
++    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
++)
+ #: logical lanes of the row fold (the tree has log2(LN_RW_LANES) = 5 levels)
+ comptime LN_RW_LANES = FOLD_L
+ 
+diff --git a/sequence/layernorm.mojo b/sequence/layernorm.mojo
+index f6dab65601..d929c211f6 100644
+--- a/sequence/layernorm.mojo
++++ b/sequence/layernorm.mojo
+@@ -60,15 +60,14 @@ comptime LN_RW_LANES = FOLD_L
+ #: thread per column adds the block partials ascending from +0.0. The block
+ #: size is a function of M alone. One block (M <= 64) is the single chain.
+ #: It replaced one M-term chain per column.
++#: `-D MOJOLEARN_LN_FOLD_BLOCK_OFF` restores the single chain.
+ # F20 M3 2026-10-06 MEASURED FAST block-fold; stays OFF. Shapes131x17,137x65,
+ # 257x129: forward B/A0.9739/1.1342/0.9834, backward0.8322/2.0792/1.0993,
+ # downstream0.6184/1.2856/0.9373. Mixed/regression, one warmup+score; FAST quality
+ # varies within recorded contract. Existing IDENTICAL decision separate. ab-20261006/repairs-54c1f35a5/F20.
+ # TOMBSTONE: MOJOLEARN_LN_FAST_BLOCK_FOLD (Apple FAST opt-in arm, F20 mixed/regression, never promoted) deleted 2026-11-15 by lane/expdel2-29-neural; code recoverable at 52392b3b15.
+ # Restore: git apply experiments/removed/MOJOLEARN_LN_FAST_BLOCK_FOLD.patch
+-# TOMBSTONE: MOJOLEARN_LN_FOLD_BLOCK_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-29-neural; code recoverable at 8e9b1a9eb5.
+-# Restore: git apply experiments/removed/MOJOLEARN_LN_FOLD_BLOCK_OFF.patch
+-comptime LN_FOLD_BLOCK = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
++comptime LN_FOLD_BLOCK = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (is_defined["MOJOLEARN_LN_FOLD_BLOCK_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
+ 
+ 
+ def ln_fold_rows(M: Int) -> Int:
+diff --git a/sequence/layernorm.mojo b/sequence/layernorm.mojo
+index fc6572096b..e021e7e4c3 100644
+--- a/sequence/layernorm.mojo
++++ b/sequence/layernorm.mojo
+@@ -9,7 +9,7 @@ reference's closed form dx = rstd (g - mean(g) - xhat mean(g xhat)) with
+ g = dy w."""
+ from sequence.ops import FP, Args, add, fma3, ld, mul, st, sub
+ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, NUMERIC_FAST, ftz, identical_div, identical_rsqrt
+-from std.sys.compile import is_defined
++from std.sys.compile import is_defined, get_defined_int
+ from core.accelerator_target import TARGET_HAS_APPLE_GPU
+ from sequence.fold32 import FOLD_L, tree32
+ from max.gpu.primitives.warp import shuffle_xor
+@@ -70,11 +70,18 @@ comptime LN_FOLD_BLOCK = (GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (is_d
+ 
+ def ln_fold_rows(M: Int) -> Int:
+     """Rows per block: the smallest power of two R >= 64 with R * R >= M."""
+-    # TOMBSTONE: MOJOLEARN_IDN_SEQ_LN_LEAF (unmeasured opt-in leaf 32, validation never run) deleted 2026-11-15 by lane/expdel2-29-neural; code recoverable at 07dabb1b82.
+-    # Restore: git apply experiments/removed/MOJOLEARN_IDN_SEQ_LN_LEAF.patch
+-    # TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old path umbrella; EXP:2438 DELETED) reads deleted here 2026-11-15 by lane/expdel2-29-neural; code recoverable at 07dabb1b82.
+-    # Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-29-neural.patch
++    # NI51 independent V arm: more independent parameter-gradient leaves;
++    # sqrt(M) growth still bounds scratch. Shared HostExec/DeviceExec operation
++    # source; only neural LayerNorm changes. Default OFF, validation NOT RUN.
++    # L11 (2026-10-07): a leaf parameter, -D MOJOLEARN_IDN_SEQ_LN_LEAF=64|32
++    # (default 64; legal set asserted in core/six_lane_experiment_guards).
+     var r = 64
++    comptime if (
++        GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and LN_FOLD_BLOCK
++        and get_defined_int["MOJOLEARN_IDN_SEQ_LN_LEAF", 64]() == 32
++        and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
++    ):
++        r = 32
+     while r * r < M:
+         r *= 2
+     return r
+diff --git a/sequence/gemm_tiled.mojo b/sequence/gemm_tiled.mojo
+index cbacb1690b..70dd3e9ab5 100644
+--- a/sequence/gemm_tiled.mojo
++++ b/sequence/gemm_tiled.mojo
+@@ -129,6 +129,7 @@ from max.gpu import block_idx, thread_idx
+ from std.memory import stack_allocation
+ from max.gpu.memory import AddressSpace
+ from max.gpu.sync import barrier
++from std.sys.compile import is_defined
+ from core.accelerator_target import TARGET_HAS_APPLE_GPU
+ 
+ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_sigmoid, identical_tanh
+@@ -427,20 +428,24 @@ comptime GR_TILE16 = 5
+ # 16 x 16 tile (the HIGGS MLP's dW1, M 28, stays on it; its Z1, 512 x 256
+ # over K 28, moves to the micro-tile with the same words).
+ # Slab page (64 x 33 + 32 x 65) x 4 B = 16.8 KB (< the 32 KB limit).
++# -D MOJOLEARN_IDN_SEQ_GEMM_MICRO_OFF (or MOJOLEARN_IDN_ALL_OFF): the 16 x 16
++# tile for every product with both edges >= 8 (arm A).
+ # DEFAULT OFF since 2026-10-19 (orchestrator): the 64x64 micro-tile lost on both vendors on the HIGGS MLP, one run per arm
+-# (NVIDIA L40S 0.1735 -> 0.1954 s with it, AMD MI325X 0.336 -> 0.362; average 1.11x), same bits (8f410a4ae2d620af).
+-# TOMBSTONE: MOJOLEARN_IDN_SEQ_GEMM_MICRO (opt-in arm, no A/B on its target shapes) deleted 2026-11-15 by lane/expdel2-29-neural; code recoverable at 84eb54a8c8.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_SEQ_GEMM_MICRO.patch
+-# TOMBSTONE: MOJOLEARN_IDN_SEQ_GEMM_MICRO_OFF (force-off of the deleted arm; EXP:2179 PENDING) deleted 2026-11-15 by lane/expdel2-29-neural; code recoverable at 84eb54a8c8.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_SEQ_GEMM_MICRO_OFF.patch
+-# seq_gemm_micro_kernel stays: the forced route GR_MICRO (gemm_launch_route, the GEMM check) still launches it.
++# (NVIDIA L40S 0.1735 -> 0.1954 s with it, AMD MI325X 0.336 -> 0.362; average 1.11x), same bits (8f410a4ae2d620af). Its target
++# shapes (square products with edges >= 64 at the opbench sizes) were never timed with it on; -D MOJOLEARN_IDN_SEQ_GEMM_MICRO
++# opts in for that A/B. MOJOLEARN_IDN_SEQ_GEMM_MICRO_OFF / IDN_ALL_OFF still force it off.
++comptime GT_MICRO = is_defined["MOJOLEARN_IDN_SEQ_GEMM_MICRO"]() and not (
++    is_defined["MOJOLEARN_IDN_SEQ_GEMM_MICRO_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
++)
++comptime GT_MICRO_EDGE = 64
+ 
+ 
+ @always_inline
+ def seq_gemm_micro_on(M: Int, N: Int) -> Bool:
+-    """GR_TILE never runs the micro-tile (its opt-in arm is deleted); kept
+-    for sequence/exec_device.mojo."""
+-    return False
++    """GR_TILE runs the micro-tile (both edges >= GT_MICRO_EDGE)."""
++    comptime if not GT_MICRO:
++        return False
++    return M >= GT_MICRO_EDGE and N >= GT_MICRO_EDGE
+ comptime GM_M = 64
+ comptime GM_N = 64
+ comptime GM_K = 32
+diff --git a/sequence/gemm_tiled.mojo b/sequence/gemm_tiled.mojo
+index 70dd3e9ab5..414ae6e636 100644
+--- a/sequence/gemm_tiled.mojo
++++ b/sequence/gemm_tiled.mojo
+@@ -385,8 +385,11 @@ comptime GEMM_DISPATCH_V1 = False
+ #: same slot, and the fold is the same chain, acc = fma3(A(m, k), B(k, n),
+ #: acc), k ascending from the same initial word; the column sums the same
+ #: add chain over the same staged words. Only when a load is issued moves.
+-# TOMBSTONE: MOJOLEARN_IDN_SEQ_GEMM_TILED_V3_OFF (old path, the pass-4 slab loops; EXP:2163 PENDING) deleted 2026-11-15 by lane/expdel2-29-neural; code recoverable at fcf169192e.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_SEQ_GEMM_TILED_V3_OFF.patch
++#: -D MOJOLEARN_IDN_SEQ_GEMM_TILED_V3_OFF (or MOJOLEARN_IDN_ALL_OFF) keeps the
++#: pass-4 loops (the A/B arm).
++comptime GT_V3 = not (
++    is_defined["MOJOLEARN_IDN_SEQ_GEMM_TILED_V3_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
++)
+ comptime GT_FOLD_STAGE = 16
+ comptime GT_MIN_K = 4
+ #: the thin tile: GT_THIN cells along the long edge, GT_THIN_K-term slabs
+@@ -648,14 +651,52 @@ def seq_gemm_tile_kernel[TM: Int, TN: Int, TK: Int, EK: Int](
+     var k0 = 0
+     while k0 < K:
+         var cnt = min(TK, K - k0)
+-        # register-staged slabs: every load of this thread's words is
+-        # issued before the first store (slot q = tid + j GT_TPB; the
+-        # same index math, the same guards, the same words and slots)
+-        var av = Array[Float32, NA](fill=Float32(0.0))
+-        var aslot = Array[Int32, NA](fill=Int32(-1))
+-        comptime for j in range(NA):
+-            var q = tid + j * GT_TPB
+-            if q < TM * cnt:
++        comptime if GT_V3:
++            # register-staged slabs: every load of this thread's words is
++            # issued before the first store (slot q = tid + j GT_TPB; the
++            # same index math, the same guards, the same words and slots)
++            var av = Array[Float32, NA](fill=Float32(0.0))
++            var aslot = Array[Int32, NA](fill=Int32(-1))
++            comptime for j in range(NA):
++                var q = tid + j * GT_TPB
++                if q < TM * cnt:
++                    var row: Int
++                    var kk: Int
++                    if a_rows_fast:
++                        kk = q // TM
++                        row = q - kk * TM
++                    else:
++                        row = q // cnt
++                        kk = q - row * cnt
++                    aslot[j] = Int32(row * AS + kk)
++                    if m0 + row < M:
++                        av[j] = ld(pa, (m0 + row) * SAM + (k0 + kk) * SAK)
++            var bv = Array[Float32, NB](fill=Float32(0.0))
++            var bslot = Array[Int32, NB](fill=Int32(-1))
++            comptime for j in range(NB):
++                var q = tid + j * GT_TPB
++                if q < cnt * TN:
++                    var kk: Int
++                    var col: Int
++                    if b_terms_fast:
++                        col = q // cnt
++                        kk = q - col * cnt
++                    else:
++                        kk = q // TN
++                        col = q - kk * TN
++                    bslot[j] = Int32(kk * BS + col)
++                    if n0 + col < N:
++                        bv[j] = ld(pb, (k0 + kk) * SBK + (n0 + col) * SBN)
++            comptime for j in range(NA):
++                if aslot[j] >= 0:
++                    a_s[Int(aslot[j])] = av[j]
++            comptime for j in range(NB):
++                if bslot[j] >= 0:
++                    b_s[Int(bslot[j])] = bv[j]
++        else:
++            # the A slab: TM rows of cnt terms (a_s[row * AS + kk])
++            var q = tid
++            while q < TM * cnt:
+                 var row: Int
+                 var kk: Int
+                 if a_rows_fast:
+@@ -664,14 +705,14 @@ def seq_gemm_tile_kernel[TM: Int, TN: Int, TK: Int, EK: Int](
+                 else:
+                     row = q // cnt
+                     kk = q - row * cnt
+-                aslot[j] = Int32(row * AS + kk)
++                var v = Float32(0.0)
+                 if m0 + row < M:
+-                    av[j] = ld(pa, (m0 + row) * SAM + (k0 + kk) * SAK)
+-        var bv = Array[Float32, NB](fill=Float32(0.0))
+-        var bslot = Array[Int32, NB](fill=Int32(-1))
+-        comptime for j in range(NB):
+-            var q = tid + j * GT_TPB
+-            if q < cnt * TN:
++                    v = ld(pa, (m0 + row) * SAM + (k0 + kk) * SAK)
++                a_s[row * AS + kk] = v
++                q += GT_TPB
++            # the B slab: cnt terms of TN columns (b_s[kk * BS + col])
++            q = tid
++            while q < cnt * TN:
+                 var kk: Int
+                 var col: Int
+                 if b_terms_fast:
+@@ -680,40 +721,45 @@ def seq_gemm_tile_kernel[TM: Int, TN: Int, TK: Int, EK: Int](
+                 else:
+                     kk = q // TN
+                     col = q - kk * TN
+-                bslot[j] = Int32(kk * BS + col)
++                var v = Float32(0.0)
+                 if n0 + col < N:
+-                    bv[j] = ld(pb, (k0 + kk) * SBK + (n0 + col) * SBN)
+-        comptime for j in range(NA):
+-            if aslot[j] >= 0:
+-                a_s[Int(aslot[j])] = av[j]
+-        comptime for j in range(NB):
+-            if bslot[j] >= 0:
+-                b_s[Int(bslot[j])] = bv[j]
++                    v = ld(pb, (k0 + kk) * SBK + (n0 + col) * SBN)
++                b_s[kk * BS + col] = v
++                q += GT_TPB
+         barrier()
+-        # the staged fold: GT_FOLD_STAGE slab words into registers, then
+-        # their fmas in order; cs_on implies live (tile row 0 of tile
+-        # row 0 is row 0 < M, and cs_on tests n < N), so the column sum
+-        # chain reads the same staged B words, i ascending
+-        if live:
+-            var i = 0
+-            while i + GT_FOLD_STAGE <= cnt:
+-                var fa = SIMD[DType.float32, GT_FOLD_STAGE]()
+-                var fb = SIMD[DType.float32, GT_FOLD_STAGE]()
+-                comptime for j in range(GT_FOLD_STAGE):
+-                    fa[j] = a_s[r * AS + i + j]
+-                    fb[j] = b_s[(i + j) * BS + c]
+-                comptime for j in range(GT_FOLD_STAGE):
+-                    acc = fma3(fa[j], fb[j], acc)
+-                if cs_on:
++        comptime if GT_V3:
++            # the staged fold: GT_FOLD_STAGE slab words into registers, then
++            # their fmas in order; cs_on implies live (tile row 0 of tile
++            # row 0 is row 0 < M, and cs_on tests n < N), so the column sum
++            # chain reads the same staged B words, i ascending
++            if live:
++                var i = 0
++                while i + GT_FOLD_STAGE <= cnt:
++                    var fa = SIMD[DType.float32, GT_FOLD_STAGE]()
++                    var fb = SIMD[DType.float32, GT_FOLD_STAGE]()
++                    comptime for j in range(GT_FOLD_STAGE):
++                        fa[j] = a_s[r * AS + i + j]
++                        fb[j] = b_s[(i + j) * BS + c]
+                     comptime for j in range(GT_FOLD_STAGE):
+-                        cs = add(cs, fb[j])
+-                i += GT_FOLD_STAGE
+-            while i < cnt:
+-                var wb = b_s[i * BS + c]
+-                acc = fma3(a_s[r * AS + i], wb, acc)
+-                if cs_on:
+-                    cs = add(cs, wb)
+-                i += 1
++                        acc = fma3(fa[j], fb[j], acc)
++                    if cs_on:
++                        comptime for j in range(GT_FOLD_STAGE):
++                            cs = add(cs, fb[j])
++                    i += GT_FOLD_STAGE
++                while i < cnt:
++                    var wb = b_s[i * BS + c]
++                    acc = fma3(a_s[r * AS + i], wb, acc)
++                    if cs_on:
++                        cs = add(cs, wb)
++                    i += 1
++        else:
++            if live:
++                for i in range(cnt):
++                    acc = fma3(a_s[r * AS + i], b_s[i * BS + c], acc)
++            if cs_on:
++                # op_colsum: acc = add(acc, ld(X, r * i2 + c)), r ascending
++                for i in range(cnt):
++                    cs = add(cs, b_s[i * BS + c])
+         barrier()
+         k0 += TK
+     if live:
+diff --git a/sequence/gemm_tiled.mojo b/sequence/gemm_tiled.mojo
+index 7f19d454c7..ae2d1d7349 100644
+--- a/sequence/gemm_tiled.mojo
++++ b/sequence/gemm_tiled.mojo
+@@ -475,9 +475,12 @@ comptime GM_UNROLL = 4
+ # bias + logistic and bias + tanh epilogues get their own comptime kinds
+ # (GK_BIAS_LOGISTIC, GK_BIAS_TANH: act_value's branch alone, no runtime
+ # activation switch; opbench NV bias_sigmoid 512x64->64 16.8 us vs
+-# bias_tanh 9.2).
+-# TOMBSTONE: MOJOLEARN_IDN_GEMM_ROUTE_P6_OFF (old path, pass 5's thin-only-when-fused rule; EXP:2181 PENDING) deleted 2026-11-15 by lane/expdel2-29-neural; code recoverable at a9e416c657.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_GEMM_ROUTE_P6_OFF.patch
++# bias_tanh 9.2). -D MOJOLEARN_IDN_GEMM_ROUTE_P6_OFF (or
++# MOJOLEARN_IDN_ALL_OFF): pass 5's rule (thin only for fused launches) and
++# kinds (sigmoid / tanh through GK_BIAS_ACT), arm A.
++comptime GEMM_ROUTE_P6 = not (
++    is_defined["MOJOLEARN_IDN_GEMM_ROUTE_P6_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
++)
+ comptime GT_THIN_CELLS = 1 << 15
+ 
+ #: the epilogue kinds of seq_gemm_tile_kernel (comptime, so each kernel
+@@ -517,11 +520,31 @@ def seq_gemm_route(M: Int, N: Int, K: Int, fused: Bool) -> Int:
+         return GR_TILE
+     if M >= GT_MIN_EDGE and N >= GT_MIN_EDGE:
+         return GR_TILE
+-    # the interim rule (pass 6, above): the cell count decides; `fused`
+-    # no longer moves the route (pass 5's thin-only-when-fused rule is
+-    # deleted)
+-    if M * N >= GT_THIN_CELLS:
++    comptime if GEMM_ROUTE_P6:
++        # the interim rule (pass 6, above): the cell count decides
++        if M * N >= GT_THIN_CELLS:
++            return GR_CELL
++        if N <= M:
++            return GR_THIN_N
++        return GR_THIN_M
++    # THIN EDGE (AMD MI325X phase 5, one run per arm, same bits on both
++    # routes: the plain OP_GEMM 327 -> 375 ms for 9770 launches with the
++    # thin tile on its N = 1 products, while the hand's OP_GEMM_EPI and the
++    # tape's 1401 with the same thin tile went 0.972 -> 0.458 s and
++    # 0.737 -> 0.480 s). Cost: on a thin edge each output word has K terms
++    # and no reuse, so the 16 x 1 tile loads the same 2K words per output as
++    # one thread a cell, only staged; it buys fewer load rounds (K / 256
++    # instead of K / 16) at the price of two barriers a slab with 240 of
++    # 256 threads idle in the fold. For a bare product the one-thread cells
++    # (M N threads, GEMM_STAGE loads in flight each) hide those rounds
++    # themselves, so they are the cheaper route. The tile pays only when the
++    # launch also carries fused work: the column sums (off the tile, a
++    # second launch: one thread a column over all K rows) and the epilogue
++    # (the one-thread epilogue body is the runtime EPI x activation switch;
++    # the tile's is compiled for its kind alone).
++    if not fused:
+         return GR_CELL
++    # the thin tile runs along the long edge
+     if N <= M:
+         return GR_THIN_N
+     return GR_THIN_M
+@@ -539,10 +562,11 @@ def seq_gemm_epi_kind(epi: Int, act: Int) -> Int:
+             return GK_BIAS
+         if act == ACT_RELU:
+             return GK_BIAS_RELU
+-        if act == ACT_LOGISTIC:
+-            return GK_BIAS_LOGISTIC
+-        if act == ACT_TANH:
+-            return GK_BIAS_TANH
++        comptime if GEMM_ROUTE_P6:
++            if act == ACT_LOGISTIC:
++                return GK_BIAS_LOGISTIC
++            if act == ACT_TANH:
++                return GK_BIAS_TANH
+         return GK_BIAS_ACT
+     if epi == EPI_L2GRAD:
+         return GK_L2GRAD
+diff --git a/sequence/gemm_tiled.mojo b/sequence/gemm_tiled.mojo
+index ae2d1d7349..c7aa612cfa 100644
+--- a/sequence/gemm_tiled.mojo
++++ b/sequence/gemm_tiled.mojo
+@@ -124,7 +124,9 @@ each staged B word of their column, k ascending from +0.0, and store
+ div(sum, f1) into p4[n]: `op_colsum` then `op_divs` (OP_COLSUM_DIV) word for
+ word, so the fused linear node's bias gradient rides in its dW launch.
+ 
+-IDENTICAL, NVIDIA and AMD (Apple keeps its measured paths)."""
++IDENTICAL, NVIDIA and AMD (Apple keeps its measured paths).
++-D MOJOLEARN_IDN_SEQ_GEMM_TILED_OFF (or MOJOLEARN_IDN_ALL_OFF) restores the
++one-thread launch."""
+ from max.gpu import block_idx, thread_idx
+ from std.memory import stack_allocation
+ from max.gpu.memory import AddressSpace
+@@ -157,9 +159,11 @@ comptime GT_PAGE_BYTES = (GT_M * GT_AS + GT_K * GT_BS) * 4
+ #: not keyed to any data shape)
+ comptime GT_MIN_EDGE = 8
+ 
+-# TOMBSTONE: MOJOLEARN_IDN_SEQ_GEMM_TILED_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-29-neural; code recoverable at 4f0461d50d.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_SEQ_GEMM_TILED_OFF.patch
+-comptime SEQ_GEMM_TILED = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not TARGET_HAS_APPLE_GPU
++comptime SEQ_GEMM_TILED = (
++    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
++    and not TARGET_HAS_APPLE_GPU
++    and not (is_defined["MOJOLEARN_IDN_SEQ_GEMM_TILED_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
++)
+ 
+ 
+ @always_inline
+diff --git a/sequence/gemm_tiled.mojo b/sequence/gemm_tiled.mojo
+index c7aa612cfa..cdc120f142 100644
+--- a/sequence/gemm_tiled.mojo
++++ b/sequence/gemm_tiled.mojo
+@@ -97,7 +97,7 @@ every thread then folds ITS cell's chain over the slab:
+ which is `gemm_dot`'s chain term for term (same flushed operands, same fused
+ step, same order), so the stored word is the one-thread op's word on every
+ column and on the host. Only the loads are shared; no fold order changes.
+-The page is GT_PAGE_BYTES (16.6 KB), under every
++The page is GT_PAGE_BYTES (16.6 KB with GT_V2, 4 KB without), under every
+ column's threadgroup limit (the fits gate is the comptime assert below).
+ 
+ GT_V2 (lane ag-pass3-impl, 2026-10-19, default on; PASS3_IDEAS idea 6):
+@@ -117,6 +117,7 @@ consecutive pieces; padding terms k >= K are never folded, i < cnt). The
+ load mapping and the padding only decide which thread fetches a word and
+ where it sits in threadgroup memory, never the word (each is ld(), flushed,
+ as gemm_dot reads it) or the position it is folded at.
++-D MOJOLEARN_IDN_SEQ_GEMM_TILED_V2_OFF restores GT_K = 32 and the old mapping.
+ 
+ The epilogue kernel can also fold the column sums of B (lane ag-pass3-impl,
+ PASS3_IDEAS idea 2): `colsum != 0` makes the first tile row's 16 threads add
+@@ -141,16 +142,15 @@ from sequence.mlp import div, gemm_epi_value, act_bwd_value, EPI_BIAS_ACT, EPI_L
+ from sequence.mlp import ACT_LOGISTIC, ACT_TANH
+ from sequence.gemm_split import SK_MAX_S, gemm_split_block, gemm_split_lanes, gemm_split_on, gemm_split_partial, gemm_split_shape
+ 
+-# TOMBSTONE: MOJOLEARN_IDN_SEQ_GEMM_TILED_V2_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-29-neural; code recoverable at 27a4108c9f.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_SEQ_GEMM_TILED_V2_OFF.patch
+-# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old path umbrella; EXP:2438 DELETED) reads deleted here 2026-11-15 by lane/expdel2-29-neural; code recoverable at 27a4108c9f.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-29-neural.patch
++comptime GT_V2 = not (
++    is_defined["MOJOLEARN_IDN_SEQ_GEMM_TILED_V2_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
++)
+ comptime GT_M = 16
+ comptime GT_N = 16
+-comptime GT_K = 128
+-#: slab row strides in threadgroup memory (one padding word a row, GT_V2)
+-comptime GT_AS = GT_K + 1
+-comptime GT_BS = GT_N + 1
++comptime GT_K = 128 if GT_V2 else 32
++#: slab row strides in threadgroup memory (one padding word a row under GT_V2)
++comptime GT_AS = (GT_K + 1) if GT_V2 else GT_K
++comptime GT_BS = (GT_N + 1) if GT_V2 else GT_N
+ comptime GT_TPB = GT_M * GT_N
+ #: threadgroup bytes of the two slabs (the smallest column limit is 32 KB)
+ comptime GT_PAGE_BYTES = (GT_M * GT_AS + GT_K * GT_BS) * 4
+@@ -194,8 +194,8 @@ def seq_gemm_tiled_kernel(
+     var SBK = Int(sbk)
+     var SBN = Int(sbn)
+     # GT_V2: load each slab along its operand's unit stride (same words)
+-    var a_rows_fast = SAM == 1 and SAK != 1
+-    var b_terms_fast = SBK == 1 and SBN != 1
++    var a_rows_fast = GT_V2 and SAM == 1 and SAK != 1
++    var b_terms_fast = GT_V2 and SBK == 1 and SBN != 1
+     var ntn = (N + GT_N - 1) // GT_N
+     var b = Int(block_idx.x)
+     var tm = b // ntn
+@@ -281,8 +281,8 @@ def seq_gemm_epi_tiled_kernel(
+     var SAK = Int(sak)
+     var SBK = Int(sbk)
+     var SBN = Int(sbn)
+-    var a_rows_fast = SAM == 1 and SAK != 1
+-    var b_terms_fast = SBK == 1 and SBN != 1
++    var a_rows_fast = GT_V2 and SAM == 1 and SAK != 1
++    var b_terms_fast = GT_V2 and SBK == 1 and SBN != 1
+     var ntn = (N + GT_N - 1) // GT_N
+     var b = Int(block_idx.x)
+     var tm = b // ntn
+diff --git a/sequence/gemm_split.mojo b/sequence/gemm_split.mojo
+index 8de75adf2e..0cf5b453f7 100644
+--- a/sequence/gemm_split.mojo
++++ b/sequence/gemm_split.mojo
+@@ -32,17 +32,19 @@ chain, k ascending from +0.0 (OP_GK_SPLIT with i11 = 1 runs them in its
+ own launch on the device, extra blocks one thread a column; the host runs
+ OP_COLSUM_DIV after the cells), the same word as every other route.
+ 
+-FAST keeps its own routes (no split here)."""
++-D MOJOLEARN_IDN_GEMM_SPLITK_OFF (or MOJOLEARN_IDN_ALL_OFF) restores the
++one chain a cell on every column (arm A: today's digests). FAST keeps its
++own routes (no split here)."""
++from std.sys.compile import is_defined
++
+ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+ from sequence.ops import FP, Args, OP_GEMM, OP_GEMM_EPI, add, gemm_dot, ld, st
+ from sequence.mlp import gemm_epi_value
+ from autograd.ops import OP_AGK_GEMM_EPI
+ 
+-# TOMBSTONE: MOJOLEARN_IDN_GEMM_SPLITK_OFF (old path; EXP:2180 PENDING, no A/B recorded) deleted 2026-11-15 by lane/expdel2-29-neural; code recoverable at 6817978647.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_GEMM_SPLITK_OFF.patch
+-# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old path umbrella; EXP:2438 DELETED) read deleted here 2026-11-15 by lane/expdel2-29-neural; code recoverable at 6817978647.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-29-neural.patch
+-comptime GEMM_SPLITK = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
++comptime GEMM_SPLITK = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
++    is_defined["MOJOLEARN_IDN_GEMM_SPLITK_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
++)
+ 
+ #: the split opcode (pass-6 gemm range 2100..2199, registered in
+ #: sequence/dispatch.mojo): element t = one output cell, the whole split
+@@ -52,8 +54,8 @@ comptime OP_GK_SPLIT = 2100
+ comptime OP_GK_FIRST = OP_GK_SPLIT
+ comptime OP_GK_LAST = OP_GK_SPLIT
+ 
+-#: the shortest block: 64 terms (four gemm_dot rounds of GEMM_STAGE 16;
+-#: the 64-wide stage it was sized for is deleted)
++#: the shortest block: one gemm_dot round of 64 staged terms
++#: (GEMM_STAGE_V2_WIDE), so every block but the last is one load round
+ comptime SK_MIN_BLOCK = 64
+ #: the most blocks a cell: the device folds a cell's partials inside one
+ #: 256-thread block (threadgroup memory), so S <= 256
+@@ -73,9 +75,10 @@ comptime SK_REUSE_EDGE = 8
+ #:    GPU, so the tile's reuse cannot pay for the idle device;
+ #:  - both edges >= SK_WIDE_EDGE (the 64 x 64 tile family) below
+ #:    SK_WIDE_BLOCKS 64 x 64 tiles: under 8 busy multiprocessors of 142 /
+-#:    304, each folding the whole K. The family is the shape's.
++#:    304, each folding the whole K. The family is the shape's, never the
++#:    -D MOJOLEARN_IDN_SEQ_GEMM_MICRO_OFF arm's, so that define moves no bit.
+ #: Above every bound the tiles' reuse costs less than the split's loads
+-#: (an estimate; the split's A/B was never run).
++#: (an estimate the A/B decides: MOJOLEARN_IDN_GEMM_SPLITK_OFF).
+ comptime SK_THIN_CELLS = 1 << 15
+ comptime SK_TILE_CELLS = 1 << 14
+ comptime SK_WIDE_EDGE = 64
+diff --git a/sequence/fit_team.mojo b/sequence/fit_team.mojo
+index 9143896dd7..f5b2372394 100644
+--- a/sequence/fit_team.mojo
++++ b/sequence/fit_team.mojo
+@@ -37,6 +37,7 @@ Slicing: the optimizers stop at an iteration boundary (`nm_steps`,
+ `lbfgs_steps` with a budget) and keep their state in each thread's private
+ row, so a resumed fit runs the same iterations as one call."""
+ from std.memory import bitcast
++from std.sys.compile import is_defined
+ from std.sys.info import is_amd_gpu, is_apple_gpu, is_nvidia_gpu
+ from core.accelerator_target import TARGET_HAS_APPLE_GPU
+ from x_linear.team import team_barrier
+@@ -166,11 +167,11 @@ def garch_team_shared(n: Int) -> Int:
+ #: (`_garch_sigma2_reg`, sequence/garch.mojo `_garch_step_reg`'s statements,
+ #: which are garch_sigma2's for these orders) instead of reading both back
+ #: from device memory each step; sigma2 is still stored. Bits unchanged.
+-# TOMBSTONE: MOJOLEARN_IDN_GARCH_LEAD_REG_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-29-neural; code recoverable at 476f794798.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_GARCH_LEAD_REG_OFF.patch
+-# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old path umbrella; EXP:2438 DELETED) read deleted here 2026-11-15 by lane/expdel2-29-neural; code recoverable at 476f794798.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-29-neural.patch
+-comptime GARCH_LEAD_REG = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
++#: -D MOJOLEARN_IDN_GARCH_LEAD_REG_OFF (or MOJOLEARN_IDN_ALL_OFF) restores
++#: garch_sigma2 on the lead.
++comptime GARCH_LEAD_REG = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
++    is_defined["MOJOLEARN_IDN_GARCH_LEAD_REG_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
++)
+ 
+ 
+ @always_inline
+diff --git a/sequence/garch.mojo b/sequence/garch.mojo
+index 53423007f2..a6f54a7dcb 100644
+--- a/sequence/garch.mojo
++++ b/sequence/garch.mojo
+@@ -18,6 +18,7 @@ from sequence.nm import Objective, nelder_mead
+ from sequence.ops import FP, Args, add, fma3, ld, mul, st, sub
+ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL, ftz, identical_div, identical_log, identical_pow, identical_sqrt
+ from sequence.fold32 import FOLD_L, tree32
++from std.sys.compile import is_defined
+ from core.accelerator_target import TARGET_HAS_APPLE_GPU
+ 
+ #: lane/apple-fast-seq (2026-10-02). `GarchObj.eval` writes the n residuals
+@@ -81,9 +82,11 @@ comptime GARCH_FOLD32 = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+ #: only (the board's GARCH(1, 1)); other orders keep the stored recursion.
+ #: CHANGES THE BITS (the composed maps round differently from the step by
+ #: step recursion), on NVIDIA, AMD, Apple and the host column together.
+-# TOMBSTONE: MOJOLEARN_IDN_GARCH_COOP_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-29-neural; code recoverable at 02b0c1f6db.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_GARCH_COOP_OFF.patch
+-comptime GARCH_COOP_IDN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
++#: -D MOJOLEARN_IDN_GARCH_COOP_OFF (or MOJOLEARN_IDN_ALL_OFF) restores the
++#: lead thread's recursion everywhere.
++comptime GARCH_COOP_IDN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
++    is_defined["MOJOLEARN_IDN_GARCH_COOP_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
++)
+ #: the chunks of garch_nll_coop: the team's threads (fit_team.mojo
+ #: SEQ_TEAM_TPB, asserted equal in fit_team_py.mojo garch_team_py)
+ comptime GARCH_CHUNKS = 64
+diff --git a/sequence/garch.mojo b/sequence/garch.mojo
+index a6f54a7dcb..69bfefd489 100644
+--- a/sequence/garch.mojo
++++ b/sequence/garch.mojo
+@@ -65,12 +65,11 @@ comptime GARCH_GRID_N = 64
+ #: the slots on up to 32 threads, the tree on every thread; `garch_nll`
+ #: below (the host column) replays the same slots and tree. CHANGES THE BITS
+ #: of every GARCH log-likelihood, on NVIDIA, AMD, Apple and the host column
+-#: together.
+-# TOMBSTONE: MOJOLEARN_IDN_GARCH_FOLD32_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-29-neural; code recoverable at 869fa6e1fb.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_GARCH_FOLD32_OFF.patch
+-# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old path umbrella; EXP:2438 DELETED) reads deleted here 2026-11-15 by lane/expdel2-29-neural; code recoverable at 869fa6e1fb.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-29-neural.patch
+-comptime GARCH_FOLD32 = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
++#: together. -D MOJOLEARN_IDN_GARCH_FOLD32_OFF (or MOJOLEARN_IDN_ALL_OFF)
++#: restores the ascending chain everywhere.
++comptime GARCH_FOLD32 = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
++    is_defined["MOJOLEARN_IDN_GARCH_FOLD32_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
++)
+ #: lane fix-t1-seq (audit T1, F10). The chunked GARCH(1, 1) likelihood of
+ #: Apple FAST (`GARCH_COOP`, sequence/fit_team.mojo `garch_nll_coop`: one
+ #: chunk of the series per thread, the chunk's affine variance map composed
+diff --git a/sequence/ops.mojo b/sequence/ops.mojo
+index 4bca321598..8c1cafadae 100644
+--- a/sequence/ops.mojo
++++ b/sequence/ops.mojo
+@@ -403,14 +403,15 @@ comptime SUMSQ_STAGE = 64
+ #: peer's). SAME BITS: the fold is the same chain, acc = fma3(A(k), B(k),
+ #: acc), k ascending from acc0, on the same `ld`-flushed words; only how
+ #: many loads are in flight before the fmas changes.
++#: -D MOJOLEARN_IDN_GEMM_STAGE_OFF (or MOJOLEARN_IDN_ALL_OFF) restores 16 and
++#: the serial tail (the A/B arm).
+ # DEFAULT OFF since 2026-10-19 (orchestrator): on AMD MI325X the 64-wide stage cost the HIGGS MLP 30% (fused arm 0.361 ->
+ # 0.250 s with it off, same bits 8f410a4ae2d620af) and spilled the one-thread recurrent cells 2.7x before 3c5f15500; NVIDIA
+-# never measured it (the L40S pod lost its runtime during the A/B).
+-# TOMBSTONE: MOJOLEARN_IDN_GEMM_STAGE64 (opt-in arm; AMD loser, NVIDIA never measured) deleted 2026-11-15 by lane/expdel2-29-neural; code recoverable at 6a66db5157.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_GEMM_STAGE64.patch
+-# TOMBSTONE: MOJOLEARN_IDN_GEMM_STAGE_OFF (force-off of the deleted arm, EXP:2164 PENDING) deleted 2026-11-15 by lane/expdel2-29-neural; code recoverable at 6a66db5157.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_GEMM_STAGE_OFF.patch
+-comptime GEMM_STAGE_V2 = False
++# never measured it (the L40S pod lost its runtime during the A/B). It stays available as -D MOJOLEARN_IDN_GEMM_STAGE64 for
++# the owed NVIDIA A/B; MOJOLEARN_IDN_GEMM_STAGE_OFF / IDN_ALL_OFF still force it off.
++comptime GEMM_STAGE_V2 = not TARGET_HAS_APPLE_GPU and is_defined["MOJOLEARN_IDN_GEMM_STAGE64"]() and not (
++    is_defined["MOJOLEARN_IDN_GEMM_STAGE_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
++)
+ comptime GEMM_STAGE = 16
+ comptime GEMM_STAGE_V2_WIDE = 64
+ #: lane ag-pass5-recurrent (2026-10-19, orchestrator p6-01 AMD bisect): the
+diff --git a/sequence/ops.mojo b/sequence/ops.mojo
+index 2e1469d8c5..ab3555790d 100644
+--- a/sequence/ops.mojo
++++ b/sequence/ops.mojo
+@@ -67,10 +67,10 @@ comptime SEQUENCE_HOST_SABOTAGE = is_defined["MOJOLEARN_HOST_SABOTAGE"]()
+ #: nr-small D9 (2026-10-04): softmax / cross-entropy rows compute each exp
+ #: once and park it in the output row (the same flushed word the second exp
+ #: produced, so the same bits on every column and the host).
+-# TOMBSTONE: MOJOLEARN_IDN_SEQ_SOFTMAX_ONE_EXP_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-29-neural; code recoverable at 38b93382d0.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_SEQ_SOFTMAX_ONE_EXP_OFF.patch
+-# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old path umbrella; EXP:2438 DELETED) read deleted here 2026-11-15 by lane/expdel2-29-neural; code recoverable at 38b93382d0.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-29-neural.patch
++#: -D MOJOLEARN_IDN_SEQ_SOFTMAX_ONE_EXP_OFF (or MOJOLEARN_IDN_ALL_OFF).
++comptime SEQ_SOFTMAX_ONE_EXP = not (
++    is_defined["MOJOLEARN_IDN_SEQ_SOFTMAX_ONE_EXP_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
++)
+ 
+ #: Apple FAST switches of lane/apple-fast-tsa2. Default ON for FAST + Apple
+ #: since the M3 A/B (n=1, quality same; STL taxi-hourly 359.0 -> 7.0 ms,
+@@ -828,13 +828,22 @@ def op_ce(t: Int, a: Args):
+             m = v
+     var y = Int(a.p1.unsafe_load(t))
+     var s = Float32(0.0)
+-    # each exp once: parked in the grad row, read back for the division
++    comptime if SEQ_SOFTMAX_ONE_EXP:
++        # each exp once: parked in the grad row, read back for the division
++        for c in range(C):
++            var e = ftz(identical_exp(sub(ld(a.p0, base + c), m)))
++            st(a.p2, base + c, e)
++            s = add(s, e)
++        for c in range(C):
++            var p = ftz(identical_div(ld(a.p2, base + c), s))
++            if c == y:
++                p = sub(p, Float32(1.0))
++            st(a.p2, base + c, mul(p, a.f0))
++        return
+     for c in range(C):
+-        var e = ftz(identical_exp(sub(ld(a.p0, base + c), m)))
+-        st(a.p2, base + c, e)
+-        s = add(s, e)
++        s = add(s, ftz(identical_exp(sub(ld(a.p0, base + c), m))))
+     for c in range(C):
+-        var p = ftz(identical_div(ld(a.p2, base + c), s))
++        var p = ftz(identical_div(ftz(identical_exp(sub(ld(a.p0, base + c), m))), s))
+         if c == y:
+             p = sub(p, Float32(1.0))
+         st(a.p2, base + c, mul(p, a.f0))
+@@ -1069,11 +1078,17 @@ def op_softmax(t: Int, a: Args):
+         if v > m:
+             m = v
+     var s = Float32(0.0)
+-    # each exp once: parked in the output row (p1 may be p0: element c
+-    # is read before it is written), read back for the division
++    comptime if SEQ_SOFTMAX_ONE_EXP:
++        # each exp once: parked in the output row (p1 may be p0: element c
++        # is read before it is written), read back for the division
++        for c in range(C):
++            var e = ftz(identical_exp(sub(ld(a.p0, base + c), m)))
++            st(a.p1, base + c, e)
++            s = add(s, e)
++        for c in range(C):
++            st(a.p1, base + c, ftz(identical_div(ld(a.p1, base + c), s)))
++        return
+     for c in range(C):
+-        var e = ftz(identical_exp(sub(ld(a.p0, base + c), m)))
+-        st(a.p1, base + c, e)
+-        s = add(s, e)
++        s = add(s, ftz(identical_exp(sub(ld(a.p0, base + c), m))))
+     for c in range(C):
+-        st(a.p1, base + c, ftz(identical_div(ld(a.p1, base + c), s)))
++        st(a.p1, base + c, ftz(identical_div(ftz(identical_exp(sub(ld(a.p0, base + c), m))), s)))
+diff --git a/sequence/ops.mojo b/sequence/ops.mojo
+index 4c1ab2066c..67f3895416 100644
+--- a/sequence/ops.mojo
++++ b/sequence/ops.mojo
+@@ -37,10 +37,14 @@ from core.accelerator_target import TARGET_HAS_APPLE_GPU
+ from std.math import fma as _std_fma
+ from std.memory import bitcast
+ 
+-# TOMBSTONE: MOJOLEARN_NN42_INPUT_BIAS_FUSED (unmeasured opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-29-neural; code recoverable at c906dcaf57.
+-# Restore: git apply experiments/removed/MOJOLEARN_NN42_INPUT_BIAS_FUSED.patch
+-# Kept False for autograd/rules_recurrent.mojo (the input bias stays in GX).
+-comptime NN42_INPUT_BIAS_FUSED = False
++# NN42: unmeasured, default OFF. Only neural recurrent callers mark i5.
++# The input projection is rounded by GEMM, biased with op_bias's add, then
++# stored before the gate reads it. The same body runs on host and every GPU.
++comptime NN42_INPUT_BIAS_FUSED = (
++    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
++    and is_defined["MOJOLEARN_NN42_INPUT_BIAS_FUSED"]()
++    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
++)
+ 
+ comptime FP = MutPointer[Float32, MutUntrackedOrigin]
+ 
+@@ -742,6 +746,9 @@ def op_cell_fwd_h(t: Int, a: Args):
+     var u = t - b * H
+     for g in range(gates_of(a.i0)):
+         var n = g * H + u
++        comptime if NN42_INPUT_BIAS_FUSED:
++            if a.i5 != 0:
++                st(a.p0, b * GH + n, add(ld(a.p0, b * GH + n), ld(a.p9, n)))
+         var acc = gemm_dot[SEQ_REC_GEMM_STAGE_V2](a.p3, b * H, 1, a.p7, n * H, 1, H, Float32(0.0))
+         st(a.p1, b * GH + n, add(ftz(acc), ld(a.p8, n)))
+     op_cell_fwd(t, a)

@@ -1,0 +1,26 @@
+diff --git a/sequence/ops.mojo b/sequence/ops.mojo
+index 4bca321598..8c1cafadae 100644
+--- a/sequence/ops.mojo
++++ b/sequence/ops.mojo
+@@ -403,14 +403,15 @@ comptime SUMSQ_STAGE = 64
+ #: peer's). SAME BITS: the fold is the same chain, acc = fma3(A(k), B(k),
+ #: acc), k ascending from acc0, on the same `ld`-flushed words; only how
+ #: many loads are in flight before the fmas changes.
++#: -D MOJOLEARN_IDN_GEMM_STAGE_OFF (or MOJOLEARN_IDN_ALL_OFF) restores 16 and
++#: the serial tail (the A/B arm).
+ # DEFAULT OFF since 2026-10-19 (orchestrator): on AMD MI325X the 64-wide stage cost the HIGGS MLP 30% (fused arm 0.361 ->
+ # 0.250 s with it off, same bits 8f410a4ae2d620af) and spilled the one-thread recurrent cells 2.7x before 3c5f15500; NVIDIA
+-# never measured it (the L40S pod lost its runtime during the A/B).
+-# TOMBSTONE: MOJOLEARN_IDN_GEMM_STAGE64 (opt-in arm; AMD loser, NVIDIA never measured) deleted 2026-11-15 by lane/expdel2-29-neural; code recoverable at 6a66db5157.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_GEMM_STAGE64.patch
+-# TOMBSTONE: MOJOLEARN_IDN_GEMM_STAGE_OFF (force-off of the deleted arm, EXP:2164 PENDING) deleted 2026-11-15 by lane/expdel2-29-neural; code recoverable at 6a66db5157.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_GEMM_STAGE_OFF.patch
+-comptime GEMM_STAGE_V2 = False
++# never measured it (the L40S pod lost its runtime during the A/B). It stays available as -D MOJOLEARN_IDN_GEMM_STAGE64 for
++# the owed NVIDIA A/B; MOJOLEARN_IDN_GEMM_STAGE_OFF / IDN_ALL_OFF still force it off.
++comptime GEMM_STAGE_V2 = not TARGET_HAS_APPLE_GPU and is_defined["MOJOLEARN_IDN_GEMM_STAGE64"]() and not (
++    is_defined["MOJOLEARN_IDN_GEMM_STAGE_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
++)
+ comptime GEMM_STAGE = 16
+ comptime GEMM_STAGE_V2_WIDE = 64
+ #: lane ag-pass5-recurrent (2026-10-19, orchestrator p6-01 AMD bisect): the

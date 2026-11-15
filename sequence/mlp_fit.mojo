@@ -135,7 +135,7 @@ from sequence.ops import dummy_ptr
 # reasoning": the promotion had no measurement): the hand-built OP_OPT launch is the default again, as it was before
 # X3 (the define's default at f7d10d2b09 was off).
 # TOMBSTONE: MOJOLEARN_AUTOGRAD_OPTIM (opt-in arm restored 2026-11-09, no A/B recorded) deleted 2026-11-15 by lane/expdel2-29-neural; code recoverable at ff6c789744.
-# Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_OPTIM.patch
+# Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_OPTIM.2026-11-15.patch
 
 comptime SOLVER_ADAM = 0
 comptime SOLVER_SGD = 1

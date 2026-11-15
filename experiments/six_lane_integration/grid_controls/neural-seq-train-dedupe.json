@@ -241,82 +241,6 @@
     "2": "nn43_fixed128"
    }
   },
-  "seq_ln_leaf": {
-   "define": "MOJOLEARN_IDN_SEQ_LN_LEAF",
-   "kind": "int_sweep",
-   "arms": {
-    "32": [
-     "MOJOLEARN_IDN_SEQ_LN_LEAF=32"
-    ],
-    "64": []
-   },
-   "default": "64",
-   "source": [
-    "sequence/layernorm.mojo:40"
-   ],
-   "binding": "_mojolearn_x_sequence",
-   "bits_change": true,
-   "status": "rewritten",
-   "entries": [
-    "NI51"
-   ],
-   "board": "off-board (x_sequence)",
-   "tags": [
-    "off_board",
-    "bit_version"
-   ],
-   "note": "Was IDN_SEQ_LN_LEAF32."
-  },
-  "moe_stable_pack": {
-   "define": "MOJOLEARN_IDN_MOE_STABLE_PACK",
-   "kind": "switch",
-   "arms": {
-    "off": [],
-    "on": [
-     "MOJOLEARN_IDN_MOE_STABLE_PACK=1"
-    ]
-   },
-   "default": "off",
-   "source": [
-    "sequence/moe_group.mojo:45",
-    "sequence/exec_device.mojo:699"
-   ],
-   "binding": "_mojolearn_x_sequence",
-   "bits_change": false,
-   "status": "split_from:NN44+NI53",
-   "entries": [
-    "NN44",
-    "NI53"
-   ],
-   "board": "off-board (x_sequence)",
-   "tags": [
-    "off_board"
-   ]
-  },
-  "moe_expert_bisect": {
-   "define": "MOJOLEARN_NN44_EXPERT_BISECT",
-   "kind": "switch",
-   "arms": {
-    "off": [],
-    "on": [
-     "MOJOLEARN_NN44_EXPERT_BISECT=1"
-    ]
-   },
-   "default": "off",
-   "source": [
-    "sequence/moe_tiled.mojo:36"
-   ],
-   "binding": "_mojolearn_x_sequence",
-   "bits_change": false,
-   "status": "split_from:NN44",
-   "entries": [
-    "NN44"
-   ],
-   "board": "off-board (x_sequence)",
-   "tags": [
-    "off_board"
-   ]
-  },
   "ce_token_fold": {
    "define": "MOJOLEARN_IDN_CE_TOKEN_FOLD",
    "kind": "arms",
@@ -642,31 +566,6 @@
    "tags": [],
    "note": "bits_change not re-assessed by L11 (unchanged switch)",
    "reach_note": "Declared for samba-forward and samba-train-step by lane/grid-prune 2026-10-07: samba layers are mamba3/attention (python/mojolearn/_samba_impl.py:55) and run mamba3_siso.mojo, where m3_angle_parallel is already declared for samba."
-  },
-  "nn42_input_bias": {
-   "define": "MOJOLEARN_NN42_INPUT_BIAS_FUSED",
-   "kind": "switch",
-   "arms": {
-    "off": [],
-    "on": [
-     "MOJOLEARN_NN42_INPUT_BIAS_FUSED=1"
-    ]
-   },
-   "default": "off",
-   "source": [
-    "sequence/ops.mojo:45"
-   ],
-   "binding": "_mojolearn_x_sequence",
-   "bits_change": false,
-   "status": "kept",
-   "entries": [
-    "NN42"
-   ],
-   "board": "off-board (x_sequence)",
-   "tags": [
-    "off_board"
-   ],
-   "note": "bits_change not re-assessed by L11 (unchanged switch)"
   },
   "nn46_gather_bounds": {
    "define": "MOJOLEARN_NN46_GATHER_BOUNDS",
@@ -1554,6 +1453,26 @@
    "define": "MOJOLEARN_NN50_OWNED_RUNS",
    "control": "nn50_owned_runs",
    "reason": "DELETED 2026-11-15 (lane/expdel2-23-neural, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md; recoverable at 4f9d2d5288; patch experiments/removed/MOJOLEARN_NN50_OWNED_RUNS.patch): unmeasured opt-in arm; the default is kept, no bit change. Refused in core/experiment_guards_neural.mojo; docs/TOMBSTONES.md."
+  },
+  {
+   "define": "MOJOLEARN_IDN_SEQ_LN_LEAF",
+   "control": "seq_ln_leaf",
+   "reason": "DELETED 2026-11-15 (lane/expdel2-29-neural, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md; recoverable at 07dabb1b82; patch experiments/removed/MOJOLEARN_IDN_SEQ_LN_LEAF.patch): unmeasured opt-in arm; no record; validation never run (rule a); the default is kept, no bit change. Refused in core/experiment_guards_neural.mojo; docs/TOMBSTONES.md."
+  },
+  {
+   "define": "MOJOLEARN_IDN_MOE_STABLE_PACK",
+   "control": "moe_stable_pack",
+   "reason": "DELETED 2026-11-15 (lane/expdel2-29-neural, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md; recoverable at d1f44888a3; patch experiments/removed/MOJOLEARN_IDN_MOE_STABLE_PACK.patch): unmeasured opt-in arm; no record; no A/B recorded for the opt-in arm (rule a); the default is kept, no bit change. Refused in core/experiment_guards_neural.mojo; docs/TOMBSTONES.md."
+  },
+  {
+   "define": "MOJOLEARN_NN44_EXPERT_BISECT",
+   "control": "moe_expert_bisect",
+   "reason": "DELETED 2026-11-15 (lane/expdel2-29-neural, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md; recoverable at 5a1c6385fe; patch experiments/removed/MOJOLEARN_NN44_EXPERT_BISECT.patch): unmeasured opt-in arm; no record; no A/B recorded for the opt-in arm (rule a); the default is kept, no bit change. Refused in core/experiment_guards_neural.mojo; docs/TOMBSTONES.md."
+  },
+  {
+   "define": "MOJOLEARN_NN42_INPUT_BIAS_FUSED",
+   "control": "nn42_input_bias",
+   "reason": "DELETED 2026-11-15 (lane/expdel2-29-neural, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md; recoverable at c906dcaf57; patch experiments/removed/MOJOLEARN_NN42_INPUT_BIAS_FUSED.patch): unmeasured opt-in arm; no record; no A/B recorded for the opt-in arm (rule a); the default is kept, no bit change. Refused in core/experiment_guards_neural.mojo; docs/TOMBSTONES.md."
   }
  ],
  "notes": {
