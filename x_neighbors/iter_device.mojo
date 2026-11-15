@@ -871,7 +871,7 @@ comptime KNN_TILE_MAX_D = 64
 #: flushed df = +-0 gives; a device that reads a subnormal operand as zero
 #: computes the same.
 #:
-#: XN_KNN_PRUNE (default ON; -D MOJOLEARN_IDN_XN_KNN_PRUNE_OFF): a pair's
+#: XN_KNN_PRUNE (IDENTICAL): a pair's
 #: chain stops once its partial sum is not below its row's current k-th
 #: distance. The chain never decreases (every term is >= 0), so the full
 #: value would fail the insertion's strict `<` too: the same lists. In the
@@ -884,7 +884,9 @@ comptime _XN_KNN_IDN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 # TOMBSTONE: MOJOLEARN_IDN_XN_KNN_LEAN_OFF (old path: four ftz per pair-feature in the IDENTICAL fused k-NN; no A/B row) deleted 2026-11-15 by lane/expdel2-15-cluster; code recoverable at 50df4c2ba5.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_XN_KNN_LEAN_OFF.patch; record in docs/TOMBSTONES.md.
 comptime XN_KNN_LEAN = _XN_KNN_IDN
-comptime XN_KNN_PRUNE = _XN_KNN_IDN and not is_defined["MOJOLEARN_IDN_XN_KNN_PRUNE_OFF"]()
+# TOMBSTONE: MOJOLEARN_IDN_XN_KNN_PRUNE_OFF (old path: every pair's chain run to the end in the IDENTICAL fused k-NN; no A/B row) deleted 2026-11-15 by lane/expdel2-15-cluster; code recoverable at 2511f69d69.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_XN_KNN_PRUNE_OFF.patch; record in docs/TOMBSTONES.md.
+comptime XN_KNN_PRUNE = _XN_KNN_IDN
 
 
 @always_inline
