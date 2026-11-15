@@ -88,7 +88,9 @@ comptime T14_EXACT = False
 # TOMBSTONE: MOJOLEARN_TREES_T15 (unmeasured arm) deleted 2026-11-15 by expdel2-39-trees; code recoverable at the deletion commit^.
 # Restore: git apply experiments/removed/MOJOLEARN_TREES_T15.patch
 comptime T15 = False
-comptime C48 = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_TREES_C48"]()
+# TOMBSTONE: MOJOLEARN_TREES_C48 (unmeasured arm) deleted 2026-11-15 by expdel2-39-trees; code recoverable at the deletion commit^.
+# Restore: git apply experiments/removed/MOJOLEARN_TREES_C48.patch
+comptime C48 = False
 
 @always_inline
 def histogram_task_rows(histogram_bytes: Int, row_bytes: Int, reference: Int) -> Int:
