@@ -27,8 +27,9 @@ def qualify():
         if 'norm' in name or name.endswith('.D'):
             weights[name].fill(1)
     models, states = [], []
-    for switch in ('0', '1'):
-        os.environ['MOJOLEARN_NEURAL_NATIVE_DISPATCH'] = switch
+    # Two independently built default stacks (native dispatch is the build
+    # default since lane flag-native-dispatch-gate; no environment arm).
+    for _ in range(2):
         model = SambaStack(config, weights=weights)
         models.append(model)
         states.append(model.allocate_state(1, 12))
@@ -38,7 +39,6 @@ def qualify():
     for t in range(ids.shape[1]):
         outputs = []
         for arm, (model, state) in enumerate(zip(models, states)):
-            os.environ['MOJOLEARN_NEURAL_NATIVE_DISPATCH'] = str(arm)
             if arm == 1 and t in (0, ids.shape[1] - 1):
                 audit = audit_native_call(model.step, ids[:, t], state)
                 RUNTIME_AUDITS.append(dict(operation='SambaStack.step', step=t, report=audit.report()))
@@ -58,8 +58,9 @@ def qualify():
             assert now is cache, 'provider reconnected for unchanged block admission'
             assert new_link is linked, 'session handle reconnected for unchanged owner'
         cache, linked = now, new_link
-    assert vars(models[1]._blocks[0])['_native_mamba_state'] is not None
-    assert vars(models[1])['_native_primitives'] is not None
+    for stack in models:
+        assert vars(stack._blocks[0])['_native_mamba_state'] is not None
+        assert vars(stack)['_native_primitives'] is not None
     module = neural.CONTEXT['bindings']['gpu:identical']['transformer']
     assert module.transformer_vendor() == 'metal'
     saved = module.transformer_native_api_v1
