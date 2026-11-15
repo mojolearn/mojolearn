@@ -31,7 +31,33 @@ from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from checks.numerics import ftz, identical_div, GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from checks.kernel_matrix import TARGET_COLUMN, forest_row_threads_for
-from core.forest_experiments import forest_chunk_finish
+# (Sweep 2026-11-15: core/forest_experiments.mojo was removed: its folded T34-T38/C50 constants had no reader
+# after the fold, and forest_chunk_finish was used only by the unlaunched T38 helpers. Its markers follow.)
+# TOMBSTONE: MOJOLEARN_TREES_T31_PACKED_A (dead code) deleted 2026-10-07 by bad9c74ce; code recoverable at bad9c74ce^.
+# Restore: git apply experiments/removed/MOJOLEARN_TREES_T31_PACKED_A.patch; record in docs/TOMBSTONES.md.
+# T31_PACKED_A/B removed (trees-cleanup 2026-10-07): packed nodes are already
+# the default layout (core/forest_inference.mojo FOREST_PACKED_NODES), so A was
+# a no-op and B duplicated MOJOLEARN_FOREST_SEPARATE_NODES.
+# TOMBSTONE: MOJOLEARN_TREES_T32_SHARED_ROWS (IDENTICAL opt-in shared-row staging, core/forest_inference.mojo; no A/B recorded) deleted 2026-11-15 by lane/expdel2-03-base; code recoverable at a5502e594d.
+# Restore: git apply experiments/removed/MOJOLEARN_TREES_T32_SHARED_ROWS.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_TREES_T33_COST_SCHEDULE (IDENTICAL opt-in cache-cost grove schedule, core/forest_inference.mojo; no A/B recorded) deleted 2026-11-15 by lane/expdel2-03-base; code recoverable at 1cad80e23b.
+# Restore: git apply experiments/removed/MOJOLEARN_TREES_T33_COST_SCHEDULE.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_TREES_T34_CHUNK_FOLD (IDENTICAL opt-in chunk fold version: FOREST_CHUNK, chunk_add, forest_chunk_sum; no A/B recorded) deleted 2026-11-15 by lane/expdel2-03-base; code recoverable at cfad8788a0.
+# Restore: git apply experiments/removed/MOJOLEARN_TREES_T34_CHUNK_FOLD.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_TREES_FOREST_ROUTE (forest prediction routes 1/2: leaf IDs once, then every output folds from them, old T35;
+# and route 2 with the finiteness check fused into the leaf-ID pass, old T36; no A/B recorded) deleted 2026-11-15 by
+# lane/expdel2-03-base; code recoverable at c44dc3c017.
+# Restore: git apply experiments/removed/MOJOLEARN_TREES_FOREST_ROUTE.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_TREES_T37_WORKSPACE (IDENTICAL opt-in resident prediction workspace, core/forest_inference_model.mojo; no A/B recorded) deleted 2026-11-15 by lane/expdel2-03-base; code recoverable at 07f7a0733b.
+# Restore: git apply experiments/removed/MOJOLEARN_TREES_T37_WORKSPACE.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_TREES_T38_FUSED_LABELS (IDENTICAL opt-in fused prediction labels; this lane also dropped core/forest_inference.mojo's unused import of it; no A/B recorded) deleted 2026-11-15 by lane/expdel2-03-base; code recoverable at 81c34fb4fb.
+# Restore: git apply experiments/removed/MOJOLEARN_TREES_T38_FUSED_LABELS.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_TREES_T44_METADATA_CACHE (IDENTICAL opt-in metadata cache; this alias had no importer, providers/python/xtrees_api_pyapi_door.mojo reads the define in its own lane; no A/B recorded) deleted 2026-11-15 by lane/expdel2-03-base; code recoverable at 3e9cbbd919.
+# Restore: git apply experiments/removed/MOJOLEARN_TREES_T44_METADATA_CACHE.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_TREES_T39_AUXILIARY_WALK (IDENTICAL opt-in shared auxiliary walk, core/forest_auxiliary_units.mojo; no A/B recorded) deleted 2026-11-15 by lane/expdel2-03-base; code recoverable at 96ee21ad13.
+# Restore: git apply experiments/removed/MOJOLEARN_TREES_T39_AUXILIARY_WALK.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_TREES_C50_GB_PACKED (IDENTICAL opt-in packed GBDT predict nodes; no A/B recorded) deleted 2026-11-15 by lane/expdel2-03-base; code recoverable at 03a43eb1ec.
+# Restore: git apply experiments/removed/MOJOLEARN_TREES_C50_GB_PACKED.patch; record in docs/TOMBSTONES.md.
 
 # TOMBSTONE: MOJOLEARN_AFCL_T08 (never-run Apple FAST card: two SIMD groups per RF traversal workgroup) deleted 2026-11-15 by lane/expdel2-03-base; code recoverable at 5bc2865240.
 # Restore: git apply experiments/removed/MOJOLEARN_AFCL_T08.patch; record in docs/TOMBSTONES.md.
@@ -1034,152 +1060,6 @@ def forest_predict_gpu[RF_INPUT: Bool, GROVE: Bool](
         raise Error("forest inference prototype requires finite Float32 values")
     return result^
 
-# T38 helpers (fused labels), kept while core/forest_inference_model.mojo imports them. Default OFF through core.forest_experiments.
-# NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
-@always_inline
-def forest_prediction_value[RF_INPUT: Bool, GROVE: Bool, PACKED: Bool](  # device-helper: one row's tree fold inside the forest kernels
-    offsets: MutPointer[Int32, MutAnyOrigin], columns: MutPointer[Int32, MutAnyOrigin],
-    thresholds: MutPointer[Float32, MutAnyOrigin], left: MutPointer[Int32, MutAnyOrigin],
-    leaves: MutPointer[Float32, MutAnyOrigin], x: MutPointer[Float32, MutAnyOrigin],
-    row: Int, features: Int, outputs: Int, trees: Int, channel: Int,
-) -> Float32:
-    var total = Float32(0)
-    comptime if GROVE:
-        var sums = Array[Float32, 32](fill=Float32(0))
-        for lane in range(32):
-            var tree = lane
-            while tree < trees:
-                var node = reached_leaf[RF_INPUT, PACKED](offsets, columns, thresholds, left, x, tree, row, features)
-                sums[lane] = forest_add(sums[lane], leaves.unsafe_load(node*outputs+channel))
-                tree += 32
-        var step = 16
-        while step > 0:
-            for i in range(step):
-                sums[i] = forest_add(sums[i], sums[i+step])
-            step //= 2
-        total = sums[0]
-    else:
-        for tree in range(trees):
-            var node = reached_leaf[RF_INPUT, PACKED](offsets, columns, thresholds, left, x, tree, row, features)
-            total = forest_add(total, leaves.unsafe_load(node*outputs+channel))
-    return forest_chunk_finish(total, trees)
-
-
-@always_inline
-def _forest_leaf_value[GROVE: Bool](ids: MutPointer[Int32, MutAnyOrigin], leaves: MutPointer[Float32, MutAnyOrigin],  # device-helper: one row's leaf fold inside the leaf kernels
-                                   row: Int, k: Int, nt: Int, channel: Int) -> Float32:
-    var total = Float32(0)
-    var sums = Array[Float32, 32](fill=Float32(0))
-    comptime if GROVE:
-        for lane in range(32):
-            var t = lane
-            while t < nt:
-                sums[lane] = forest_add(sums[lane], leaves.unsafe_load(Int(ids.unsafe_load(row*nt+t))*k+channel))
-                t += 32
-        var step = 16
-        while step > 0:
-            for i in range(step):
-                sums[i] = forest_add(sums[i], sums[i+step])
-            step //= 2
-        total = sums[0]
-    else:
-        for t in range(nt):
-            total = forest_add(total, leaves.unsafe_load(Int(ids.unsafe_load(row*nt+t))*k+channel))
-    return forest_chunk_finish(total, nt)
-
-
-def forest_labels_kernel[RF_INPUT: Bool, GROVE: Bool, PACKED: Bool](
-    offsets: MutPointer[Int32, MutAnyOrigin], columns: MutPointer[Int32, MutAnyOrigin],
-    thresholds: MutPointer[Float32, MutAnyOrigin], left: MutPointer[Int32, MutAnyOrigin],
-    leaves: MutPointer[Float32, MutAnyOrigin], x: MutPointer[Float32, MutAnyOrigin], codes: MutPointer[Int32, MutAnyOrigin],
-    bad: MutPointer[Int32, MutAnyOrigin], rows: Int32, features: Int32, outputs: Int32, trees: Int32,
-):
-    var row = Int(block_idx.x)*Int(block_dim.x)+Int(thread_idx.x)
-    if row >= Int(rows):
-        return
-    var best = 0
-    var best_value = Float32(0)
-    for c in range(Int(outputs)):
-        var value = forest_prediction_value[RF_INPUT, GROVE, PACKED](offsets, columns, thresholds, left, leaves, x,
-            row, Int(features), Int(outputs), Int(trees), c)
-        if (bitcast[DType.uint32](value)&UInt32(0x7f800000)) == UInt32(0x7f800000):
-            _ = Atomic.max(bad, Int32(1))
-            codes.unsafe_store(row, Int32(-1))
-            return
-        if c == 0 or value > best_value:
-            best = c
-            best_value = value
-    codes.unsafe_store(row, Int32(best))
-
-# The bounded leaf preparation of the fused labels (T38).
-# Arithmetic is solely in the following output fold. Shared tiles carry all
-# feature bits and every required row is checked, including unused columns.
-def forest_leaf_ids_grouped_kernel[RF_INPUT: Bool, PACKED: Bool](
-    offsets: MutPointer[Int32, MutAnyOrigin], columns: MutPointer[Int32, MutAnyOrigin],
-    thresholds: MutPointer[Float32, MutAnyOrigin], left: MutPointer[Int32, MutAnyOrigin],
-    x: MutPointer[Float32, MutAnyOrigin], ids: MutPointer[Int32, MutAnyOrigin],
-    row_start: Int32, rows: Int32, features: Int32, trees: Int32, bad: MutPointer[Int32, MutAnyOrigin],
-):
-    var tid = Int(thread_idx.x)
-    var group = tid//32
-    var lane = tid%32
-    var first = Int(block_idx.x)*4
-    var row = first+group
-    if row < Int(rows):
-        var tree = lane
-        while tree < Int(trees):
-            var node = reached_leaf[RF_INPUT, PACKED](offsets, columns, thresholds, left, x, tree, Int(row_start)+row, Int(features))
-            ids.unsafe_store(row*Int(trees)+tree, Int32(node))
-            tree += 32
-
-
-def _launch_leaf_ids[RF_INPUT: Bool, PACKED: Bool](ctx: DeviceContext,
-    mut offsets: DeviceBuffer[DType.int32], mut columns: DeviceBuffer[DType.int32],
-    mut thresholds: DeviceBuffer[DType.float32], mut left: DeviceBuffer[DType.int32],
-    mut x: DeviceBuffer[DType.float32], mut ids: DeviceBuffer[DType.int32], mut bad: DeviceBuffer[DType.int32],
-    first: Int, rows: Int, features: Int, trees: Int) raises:
-    ctx.enqueue_function[forest_leaf_ids_grouped_kernel[RF_INPUT, PACKED]](
-        offsets.unsafe_ptr(), columns.unsafe_ptr(), thresholds.unsafe_ptr(), left.unsafe_ptr(), x.unsafe_ptr(), ids.unsafe_ptr(),
-        Int32(first), Int32(rows), Int32(features), Int32(trees), bad.unsafe_ptr(), grid_dim=(rows+3)//4, block_dim=128)
-
-
-def forest_leaf_labels_kernel[GROVE: Bool](ids: MutPointer[Int32, MutAnyOrigin], leaves: MutPointer[Float32, MutAnyOrigin],
-    codes: MutPointer[Int32, MutAnyOrigin], bad: MutPointer[Int32, MutAnyOrigin], first: Int32, rows: Int32, outputs: Int32, trees: Int32):
-    var row = Int(block_idx.x)*Int(block_dim.x)+Int(thread_idx.x)
-    if row < Int(rows):
-        var best = 0
-        var best_value = Float32(0)
-        for c in range(Int(outputs)):
-            var value = _forest_leaf_value[GROVE](ids, leaves, row, Int(outputs), Int(trees), c)
-            if (bitcast[DType.uint32](value)&UInt32(0x7f800000)) == UInt32(0x7f800000):
-                _ = Atomic.max(bad, Int32(1))
-                return
-            if c == 0 or value > best_value:
-                best = c
-                best_value = value
-        codes.unsafe_store(Int(first)+row, Int32(best))
-
-
-def launch_forest_leaf_labels[RF_INPUT: Bool, GROVE: Bool, PACKED: Bool](ctx: DeviceContext,
-    mut offsets: DeviceBuffer[DType.int32], mut columns: DeviceBuffer[DType.int32], mut thresholds: DeviceBuffer[DType.float32],
-    mut left: DeviceBuffer[DType.int32], mut leaves: DeviceBuffer[DType.float32], mut x: DeviceBuffer[DType.float32],
-    mut codes: DeviceBuffer[DType.int32], rows: Int, features: Int, outputs: Int, trees: Int) raises:
-    var capacity = max(1, min(rows, (8*1024*1024)//max(4*trees, 1)))
-    var ids = ctx.enqueue_create_buffer[DType.int32](capacity*trees)
-    var bad = ctx.enqueue_create_buffer[DType.int32](1)
-    ctx.enqueue_memset(bad, Int32(0))
-    var first = 0
-    while first < rows:
-        var count = min(capacity, rows-first)
-        _launch_leaf_ids[RF_INPUT, PACKED](ctx, offsets, columns, thresholds, left, x, ids, bad, first, count, features, trees)
-        ctx.enqueue_function[forest_leaf_labels_kernel[GROVE]](ids.unsafe_ptr(), leaves.unsafe_ptr(), codes.unsafe_ptr(), bad.unsafe_ptr(),
-            Int32(first), Int32(count), Int32(outputs), Int32(trees), grid_dim=(count+127)//128, block_dim=128)
-        first += count
-    var host_bad = ctx.enqueue_create_host_buffer[DType.int32](1)
-    ctx.enqueue_copy(dst_ptr=host_bad.unsafe_ptr(), src_buf=bad)
-    ctx.synchronize()
-    if host_bad.unsafe_ptr().unsafe_load(0) != 0:
-        raise Error("resident forest requires finite Float32 values")
-    _ = host_bad^
-    _ = bad^
-    _ = ids^
+# (Sweep 2026-11-15: the unlaunched T38 fused-label helpers forest_prediction_value, _forest_leaf_value,
+# forest_labels_kernel, forest_leaf_ids_grouped_kernel, _launch_leaf_ids, forest_leaf_labels_kernel and
+# launch_forest_leaf_labels were removed; MOJOLEARN_TREES_T38_FUSED_LABELS was deleted 2026-11-15 by lane/expdel2-03-base.)
