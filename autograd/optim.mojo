@@ -68,10 +68,9 @@ from checks.numerics import ftz, identical_cos, identical_div, identical_mul, id
 # parameter tensor pair fewer each step (the composed tape MLP: 4 a batch
 # for one hidden layer).
 # TOMBSTONE: MOJOLEARN_AUTOGRAD_OPT_FUSE_OFF (separate finish launches, arm A; old path, no A/B recorded) deleted
-# 2026-11-15 by lane/expdel2-24-neural; code recoverable at 8535432c53. AUTOGRAD_OPT_FUSE stays as the constant
-# sequence/mlp_fit.mojo imports.
+# 2026-11-15 by lane/expdel2-24-neural; code recoverable at 8535432c53.
 # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_OPT_FUSE_OFF.patch
-comptime AUTOGRAD_OPT_FUSE = True
+# (Sweep 2026-11-15: the AUTOGRAD_OPT_FUSE = True constant removed; nothing imports it.)
 
 # Operation codes of this family, a range of their own clear of the tape's
 # 1000..1010 (autograd/ops.mojo); sequence/dispatch.mojo routes the range
