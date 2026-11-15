@@ -655,6 +655,7 @@ in the tables after the sections.
 | [`MOJOLEARN_RIDGE_FAST_CLS1_CODES_OFF`](#mojolearn_ridge_fast_cls1_codes_off-old-path-deleted-2026-11-15) | Linear (RidgeClassifier device +-1 targets, FAST Apple) | removed (old path; FAST+Apple default KEPT, gapcls1-rccodes-taxi) | 2026-11-15 | [MOJOLEARN_RIDGE_FAST_CLS1_CODES_OFF.patch](../experiments/removed/MOJOLEARN_RIDGE_FAST_CLS1_CODES_OFF.patch) |
 | [`MOJOLEARN_X_LINEAR_LARS_FAST_GRAM_OFF`](#mojolearn_x_linear_lars_fast_gram_off-old-path-deleted-2026-11-15) | Linear (Lars / LassoLars grid Gram moments, FAST Apple) | removed (old path; FAST+Apple default KEPT, gram-lars-taxi) | 2026-11-15 | [MOJOLEARN_X_LINEAR_LARS_FAST_GRAM_OFF.patch](../experiments/removed/MOJOLEARN_X_LINEAR_LARS_FAST_GRAM_OFF.patch) |
 | [`MOJOLEARN_X_LINEAR_RIDGE_FAST_GRAM_OFF`](#mojolearn_x_linear_ridge_fast_gram_off-old-path-deleted-2026-11-15) | Linear (RidgeClassifier / RidgeCV grid Gram moments, FAST Apple) | removed (old path; FAST+Apple default KEPT, gram-ridgeclf-taxi) | 2026-11-15 | [MOJOLEARN_X_LINEAR_RIDGE_FAST_GRAM_OFF.patch](../experiments/removed/MOJOLEARN_X_LINEAR_RIDGE_FAST_GRAM_OFF.patch) |
+| [`MOJOLEARN_SGD_PERC_AVG`](#mojolearn_sgd_perc_avg-loser-deleted-2026-11-15) | Linear (minibatch Perceptron epoch-end averaging, FAST) | removed (loser; REVERTED rab5-perc, accuracy worse) | 2026-11-15 | [MOJOLEARN_SGD_PERC_AVG.patch](../experiments/removed/MOJOLEARN_SGD_PERC_AVG.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -6364,4 +6365,12 @@ bits change on any vendor or the host column, no board row needs re-timing.
 - **Verdict**: KEPT c5e1bbeb6 (EXPERIMENTS.md `X_LINEAR_RIDGE_FAST_GRAM`, gram-ridgeclf-taxi, gram-ridgecv-taxi): M3 one run per arm, ridge-clf taxi 168 -> 122 ms, ridge-cv taxi 3,614 -> 37 ms, quality the same. No bit change on any column.
 - **Deleted by**: lane/expdel-03-linear (expdel-03-linear, docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md); code recoverable at `9eb96f91e6`.
 - **Restore**: `git apply experiments/removed/MOJOLEARN_X_LINEAR_RIDGE_FAST_GRAM_OFF.patch`, then delete the `MOJOLEARN_X_LINEAR_RIDGE_FAST_GRAM_OFF` refusal in `core/experiment_guards_linear.mojo`.
+- **Records**: refusal in `core/experiment_guards_linear.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel-03-linear section).
+
+## MOJOLEARN_SGD_PERC_AVG: loser deleted (2026-11-15)
+
+- **What it was**: the opt-in FAST arm that returned the minibatch Perceptron's mean of its epoch-end iterates from epoch max_iter // 2 on instead of the last iterate: `SGD_PERC_AVG`, `sgd_perc_avg_on`, `sgd_perc_avg_from` (x_linear/sgd.mojo), the host column's `avg_from` sums in `sgd_mb_one` and its scratch tail (x_linear/sgd_host.mojo), and the device's `avg`/`avg_from`/`dacc` state with `sgd_avg_acc_kernel` / `sgd_avg_fin_kernel` (x_linear/device.mojo, x_linear/sgd_avg.mojo, file deleted; its SGD_PERC_QOLD marker moved to x_linear/sgd.mojo). The default (last iterate) is untouched.
+- **Verdict**: REVERTED (EXPERIMENTS.md `SGD_PERC_AVG`, rab5-perc): M3 afc_ab_def one run per arm, perceptron taxi accuracy 0.76219 (last iterate) -> 0.74097 (averaged), worse; 1401.1 -> 1400.3 ms. No bit change on any column (the arm was default off).
+- **Deleted by**: lane/expdel-03-linear (expdel-03-linear, docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md); code recoverable at `8b2e35c54e`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_SGD_PERC_AVG.patch`, then delete the `MOJOLEARN_SGD_PERC_AVG` refusal in `core/experiment_guards_linear.mojo`.
 - **Records**: refusal in `core/experiment_guards_linear.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel-03-linear section).

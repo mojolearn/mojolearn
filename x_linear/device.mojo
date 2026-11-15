@@ -61,8 +61,8 @@ from x_linear.sgd import LR_INVSCALING
 from x_linear.sgd import (
     sgd_batch, mb_dot, mb_oc_mode, mb_oc_row, oc_delta, oc_count, oc_count_tie, oc_hinge_at, mb_oc_bias_step,
 )
-from x_linear.sgd import sgd_perc_avg_on, sgd_perc_avg_from
-from x_linear.sgd_avg import sgd_avg_acc_kernel, sgd_avg_fin_kernel
+# TOMBSTONE: MOJOLEARN_SGD_PERC_AVG (loser) deleted 2026-11-15 by lane/expdel-03-linear (sgd_perc_avg_on, sgd_perc_avg_from, x_linear/sgd_avg.mojo); code recoverable at 8b2e35c54e.
+# Restore: git apply experiments/removed/MOJOLEARN_SGD_PERC_AVG.patch; record in docs/TOMBSTONES.md.
 from x_linear.sgd import sgd_mb_on, mb_sub_size, mb_dblk, mb_row, mb_row_dot, mb_rowsq, mb_block_dot, MB_DBLK, LR_PA1, LR_PA2, mb_part, mb_step, mb_bias_step, mb_subs, mb_eta, mb_optimal_init, mb_penalty, LR_OPTIMAL, LR_ADAPTIVE, P_L2, P_L1
 from x_linear.bayes import bayes_wy_part, bayes_wx_part, bayes_wgram_part, bayes_wxty_part, bayes_wvar_part, bayes_coef_one
 from x_linear.bayes import bayes_coef, bayes_step, bayes_finish, _sse_part, bayes_eig_place, bayes_eig_prep, bayes_yvar_part, GRAM_SSE_TRUST, BAYES_EIGH_REFUSAL
@@ -1878,7 +1878,6 @@ struct _SgdMbEpochs(LoopStep, Movable):
     var dsq: DeviceBuffer[DType.float32]
     var dstt: DeviceBuffer[DType.float32]
     var dvp: DeviceBuffer[DType.float32]
-    var dacc: DeviceBuffer[DType.float32]
     var dact: DeviceBuffer[DType.int32]
     var dres: DeviceBuffer[DType.float32]
     var hci: List[Int32]
@@ -1919,8 +1918,6 @@ struct _SgdMbEpochs(LoopStep, Movable):
     var pa_rate: Bool
     var dev_eta: Int
     var need_obj: Bool
-    var avg: Bool
-    var avg_from: Int
     var c: Int
     var wpos: Float32
     var wneg: Float32
@@ -2045,10 +2042,6 @@ struct _SgdMbEpochs(LoopStep, Movable):
         self.dact.enqueue_fill(Int32(1))
         self.dev_eta = 0 if (lr == LR_PA1 or lr == LR_PA2 or lr == LR_OPTIMAL or lr == LR_INVSCALING) else 1
         self.need_obj = tol > Float32(-3.0e38)
-        # SGD_PERC_AVG (x_linear/sgd_avg.mojo): the epoch-end iterate sums
-        self.avg = sgd_perc_avg_on(loss, lr, k, max_iter)
-        self.avg_from = sgd_perc_avg_from(max_iter)
-        self.dacc = ctx.enqueue_create_buffer[DType.float32](d + 1)
         var arm = SGD_ARM_THREE
         if SGD_FAST_EPOCH_RESIDENT and ocm == 0 and sub == XG_TPB:
             arm = SGD_ARM_FAST_RESIDENT
@@ -2109,7 +2102,7 @@ struct _SgdMbEpochs(LoopStep, Movable):
         """The launches of one epoch on this fit's arm (the cost of an epoch
         enqueued past the stop: each returns at once)."""
         var nb = (self.n + self.batch - 1) // max(self.batch, 1)
-        var tail = 3 + (1 if self.do_shuffle else 0) + (1 if self.avg else 0)
+        var tail = 3 + (1 if self.do_shuffle else 0)
         if self.arm == SGD_ARM_FAST_RESIDENT:
             return nb + 1 + tail
         if self.arm == SGD_ARM_CHUNK:
@@ -2125,8 +2118,6 @@ struct _SgdMbEpochs(LoopStep, Movable):
         problem's loop ended on a read, so the host words are free."""
         var cx = self.ctx.copy()
         self.c = c
-        if self.avg:
-            self.dacc.enqueue_fill(Float32(0))
         # the targets and the identity order on the device (sgd_fit's statements)
         cx.enqueue_function[sgd_ys_kernel](
             self.dy.unsafe_ptr(), self.dys.unsafe_ptr(), self.didx.unsafe_ptr(), Int32(self.n), Int32(self.k), Int32(c),
@@ -2419,30 +2410,15 @@ struct _SgdMbEpochs(LoopStep, Movable):
             if tries >= WITNESS_TRIES:
                 self.wit.fail()
         var flags = FP(unsafe_from_address=Int(self.dstt.unsafe_ptr())) + SGD_MB_FLAGS
-        if self.avg and epoch >= self.avg_from:
-            # the stopping epoch's iterate enters the mean, a failed one not
-            cx.enqueue_function[sgd_avg_acc_kernel](
-                self.dw.unsafe_ptr(), self.dbias.unsafe_ptr(), self.dacc.unsafe_ptr(), Int32(d), gate, flags + 1,
-                grid_dim=_xg_blocks(d + 1), block_dim=XG_TPB,
-            )
         cx.enqueue_function[sgd_flags_crit_kernel](  # small-launch(one word): the epoch loop's stop criterion
             gate, flags, Int32(it), grid_dim=1, block_dim=1,
         )
         loop_lap(ctx, timers, "sgd_epoch")
 
     def end_problem(mut self, outcome: LoopOutcome, failed: Bool) raises -> Int:
-        """Problem c's averaged iterate (SGD_PERC_AVG) and result words; the
-        epochs it ran."""
+        """Problem c's result words; the epochs it ran."""
         var cx = self.ctx.copy()
         var epochs = outcome.stop_iteration if outcome.converged else max(self.max_iter, 0)
-        var navg = 0
-        if self.avg and epochs > self.avg_from:
-            navg = epochs - self.avg_from
-        if navg > 0 and not failed:
-            cx.enqueue_function[sgd_avg_fin_kernel](
-                self.dw.unsafe_ptr(), self.dbias.unsafe_ptr(), self.dacc.unsafe_ptr(), Int32(self.d),
-                Float32(1) / Float32(navg), grid_dim=_xg_blocks(self.d + 1), block_dim=XG_TPB,
-            )
         cx.enqueue_function[sgd_mb_res_kernel](
             self.dw.unsafe_ptr(), self.dbias.unsafe_ptr(), self.dres.unsafe_ptr(), Int32(self.c), Int32(self.d),
             Int32(self.problems), Int32((2 if self.ocm != 0 else 1) if self.one_class else 0),

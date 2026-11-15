@@ -420,41 +420,11 @@ def _sgd_target(k: Int, c: Int, v: Float32) -> Float32:
     return Float32(1) if v == i2f(c) else Float32(-1)
 
 
-#: lane apple-fast-q-clf (2026-10-04), QUALITY-FIX candidate, REVERTED the
-#: same day (OUTCOME below): opt-in `-D MOJOLEARN_SGD_PERC_AVG` (every vendor
-#: and the FAST host column); the final iterate is the default. The minibatch Perceptron (constant rate, the batch-SUM step,
-#: tol=None never settles on non-separable data) returns the MEAN of its
-#: epoch-end iterates from epoch max_iter // 2 on (weights and intercept),
-#: not the last one. Audit: perceptron taxi FAST accuracy 0.46538 vs
-#: scikit-learn 0.75052 (board-quality-audit-2026-10-04). The last iterate is
-#: a lottery: a float32 numpy model of this exact step on the board's taxi
-#: block (1M rows, batch 256, 20 epochs, standardized) gave last-iterate
-#: accuracy 0.543 / 0.774 / 0.668 / 0.757 over four shuffle seeds and the
-#: second-half epoch-end mean 0.771 / 0.769 / 0.774 (base rate 0.7596;
-#: ~/mojolearn-evidence/apple-fast-q-clf/sim_mb_perceptron.py). IDENTICAL
-#: is untouched. Applies to loss perceptron at learning_rate 'constant' only,
-#: never the one-class problem; a fit that stops before epoch max_iter // 2
-#: keeps its last iterate.
-#: OUTCOME (M3 afc_ab_def, full board size, 1 run per arm, 2026-10-04, tag
-#: rab5-perc): perceptron taxi accuracy 0.76219 (last iterate, A) -> 0.74097
-#: (averaged, B), worse; 1401.1 -> 1400.3 ms. REVERTED: the last iterate is
-#: the default again; averaging is opt-in `-D MOJOLEARN_SGD_PERC_AVG` (the old
-#: `-D MOJOLEARN_SGD_PERC_QOLD` is harmless).
-comptime SGD_PERC_AVG = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and is_defined["MOJOLEARN_SGD_PERC_AVG"]()
-
-
-@always_inline
-def sgd_perc_avg_on(loss: Int, lr: Int, k: Int, max_iter: Int) -> Bool:
-    """Whether problem fits average their epoch-end iterates (SGD_PERC_AVG)."""
-    comptime if SGD_PERC_AVG:
-        return loss == L_PERCEPTRON and lr == LR_CONSTANT and k != 1 and max_iter >= 2
-    return False
-
-
-@always_inline
-def sgd_perc_avg_from(max_iter: Int) -> Int:
-    """The first 0-based epoch whose end iterate enters the mean."""
-    return max_iter // 2
+# TOMBSTONE: MOJOLEARN_SGD_PERC_AVG (loser, REVERTED rab5-perc) deleted 2026-11-15 by lane/expdel-03-linear; code recoverable at 8b2e35c54e.
+# Restore: git apply experiments/removed/MOJOLEARN_SGD_PERC_AVG.patch; record in docs/TOMBSTONES.md.
+# The SGD_PERC_QOLD marker below moved here from x_linear/sgd_avg.mojo (file deleted with SGD_PERC_AVG).
+# TOMBSTONE: MOJOLEARN_SGD_PERC_QOLD (DROPPED-quality) deleted 2026-10-04 by 170cbedc0; code recoverable at 170cbedc0^.
+# Restore: git apply experiments/removed/MOJOLEARN_SGD_PERC_QOLD.patch; record in docs/TOMBSTONES.md.
 
 
 @always_inline
@@ -1244,11 +1214,10 @@ def sgd_mb_one(
     lr: Int, eta0: Float32, power_t: Float32, eps: Float32, fit_intercept: Bool, max_iter: Int, tol: Float32,
     nic: Int, do_shuffle: Bool, seed: UInt64, w: FP, woff: Int, b: FP, boff: Int, idx: IP,
     swp: FP, has_sw: Bool, wpos: Float32, wneg: Float32, has_cw: Bool, batch: Int, scratch: FP,
-    one_class: Bool = False, bsum: Bool = False, avg_from: Int = -1,
+    one_class: Bool = False, bsum: Bool = False,
 ) -> Int:
     """One problem on the host (the CPU binding's form of the device's batches).
-    scratch: dl batch | loss batch | partials (d + 2) * subs, then (avg_from
-    >= 0, SGD_PERC_AVG) d + 1 sums of the epoch-end weights and intercept.
+    scratch: dl batch | loss batch | partials (d + 2) * subs.
     Returns epochs, -1 on a non-finite weight."""
     # lane sgd-quality (2026-10-17): the penalty's l1_ratio as the device
     # drivers take it (x_linear/device.mojo `_sgd_mb_grid`: 0 for 'l2', 1 for
@@ -1265,10 +1234,6 @@ def sgd_mb_one(
     var sub = mb_sub_size(batch)
     var dblk = mb_dblk(batch)
     var nsub = mb_subs(batch, sub)
-    var acc = parts + (d + 2) * nsub
-    var navg = 0
-    if avg_from >= 0:
-        fill(acc, 0, d + 1, Float32(0))
     fill(w, woff, d, Float32(0))
     var bias = Float32(1) if one_class else Float32(0)
     var bl = Float32(0)  # one-class (SGD_OC_MB_IMPLICIT): the intercept's low word
@@ -1348,12 +1313,6 @@ def sgd_mb_one(
             st(b, boff, Float32(0))
             fill(w, woff, d, Float32(0))
             return -1
-        if avg_from >= 0 and epoch >= avg_from:
-            # SGD_PERC_AVG: this epoch's end iterate enters the mean
-            for j in range(d):
-                st(acc, j, fa(ld(acc, j), ld(w, woff + j)))
-            st(acc, d, fa(ld(acc, d), bias))
-            navg += 1
         if need_obj:
             var mean_obj = fa(fd(objective, i2f(n)), mb_penalty(w, woff, d, alpha, l1r, penalty))
             if one_class:
@@ -1370,13 +1329,6 @@ def sgd_mb_one(
                     no_improve = 0
                 else:
                     break
-    if navg > 0:
-        # SGD_PERC_AVG: the mean of the epoch-end iterates replaces the last
-        var inv = fd(Float32(1), i2f(navg))
-        for j in range(d):
-            st(w, woff + j, fm(ld(acc, j), inv))
-        bias = fm(ld(acc, d), inv)
-        bl = Float32(0)  # the mean carries the intercept's high word only (merge 2026-10-05)
     # one-class: the slot holds offset_ = 1 - intercept (`oc_offset`; bl is 0 with ocm 0)
     st(b, boff, (oc_offset(bias, bl) if ocm != 0 else fs(Float32(1), bias)) if one_class else bias)
     return epochs

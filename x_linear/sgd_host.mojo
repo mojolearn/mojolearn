@@ -22,8 +22,6 @@ from x_linear.sgd import (
     sgd_mb_on,
     sgd_mb_one,
     sgd_one,
-    sgd_perc_avg_from,
-    sgd_perc_avg_on,
 )
 
 
@@ -92,8 +90,9 @@ def sgd_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: 
             var ep: Int
             if sgd_mb_on(batch, k, lr):
                 # lane/neural-pass103: the minibatch form (x_linear/sgd_mb.mojo)
-                var avg_from = sgd_perc_avg_from(max_iter) if sgd_perc_avg_on(loss, lr, k, max_iter) else -1
-                var sl = List[Float32](length=2 * batch + (d + 2) * mb_subs(batch, mb_sub_size(batch)) + d + 1,
+                # TOMBSTONE: MOJOLEARN_SGD_PERC_AVG (loser) deleted 2026-11-15 by lane/expdel-03-linear; code recoverable at 8b2e35c54e.
+                # Restore: git apply experiments/removed/MOJOLEARN_SGD_PERC_AVG.patch; record in docs/TOMBSTONES.md.
+                var sl = List[Float32](length=2 * batch + (d + 2) * mb_subs(batch, mb_sub_size(batch)),
                                        fill=Float32(0))
                 ep = sgd_mb_one(
                     x, ys, n, d, loss, penalty, alpha, l1r, lr, eta0, power_t, eps,
@@ -101,7 +100,7 @@ def sgd_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: 
                     seed + UInt64(1000003) * UInt64(c), res, c * d, res, problems * d + c, idx,
                     swp, has_sw, ld(fp, 6 + c) if has_cw else Float32(1),
                     ld(fp, 6 + problems + c) if has_cw else Float32(1), has_cw, batch,
-                    FP(unsafe_from_address=Int(sl.unsafe_ptr())), k == 1, bsum, avg_from,
+                    FP(unsafe_from_address=Int(sl.unsafe_ptr())), k == 1, bsum,
                 )
                 _ = sl^
             else:
