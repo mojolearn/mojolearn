@@ -15,7 +15,10 @@ def _points():
 
 
 def _model(**options):
-    model = LinearSVR(C=2, epsilon=0.1, loss="squared_epsilon_insensitive",
+    # The expected values below are the l2 optimum of mean(sw * (|r| - eps)^2) + w^2 / (2C):
+    # unweighted w = 0.72; weighted w = 27/35, b = 9/140. LinearSVR's default penalty is 'l1'
+    # (cuML's), whose optimum here is 0.65 and 11/15, so the penalty is set explicitly.
+    model = LinearSVR(C=2, epsilon=0.1, penalty="l2", loss="squared_epsilon_insensitive",
                       tol=1e-6, max_iter=200, numeric_mode="identical", **options)
     model.penalty_normalized = False
     return model
