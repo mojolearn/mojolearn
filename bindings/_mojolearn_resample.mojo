@@ -22,7 +22,7 @@ from core.experiment_guards_series import SERIES_GUARDS_OK
 from bindings.device_plan_binding_pack import device_plan_enter_binding, device_plan_exit_binding, device_plan_log_binding
 from std.os import abort
 from core.hostptr import i32_ptr, read_f32
-from core.resample_impl import resample_store_indices
+
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
@@ -41,10 +41,8 @@ from resample.mojolearn_resample_run import (
     _mc_run,
 )
 from resample.estimator import (
-    resample_indices_host,
     resample_indices_replace_into,
     resample_indices_permute_into,
-    RESAMPLE_IDX_DIRECT,
     RESAMPLE_GPU_GATHER,
     resample_gather_gpu, resample_permutation_gather_gpu,
     resample_fast_defines,
@@ -307,10 +305,8 @@ def permutation_samples_binding(
     return PythonObject(0)
 
 
-#: Every tier writes the drawn indices into the caller's buffer, except the
-#: FAST + Apple build compiled with MOJOLEARN_RESAMPLE_FAST_IDX_DIRECT_OFF
-#: (RESAMPLE_IDX_DIRECT's measured B arm keeps its List route).
-comptime _IDX_INTO = RESAMPLE_IDX_DIRECT or not (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU)
+# TOMBSTONE: MOJOLEARN_RESAMPLE_FAST_IDX_DIRECT_OFF (old path, superseded by the FAST+Apple default) deleted 2026-11-15 by lane/expdel-02-decomposition-series; code recoverable at 080e0e6f72.
+# Restore: git apply experiments/removed/MOJOLEARN_RESAMPLE_FAST_IDX_DIRECT_OFF.patch; record in docs/TOMBSTONES.md.
 
 
 def resample_indices_binding(
@@ -329,19 +325,12 @@ def resample_indices_binding(
     # lane ne2-b-rounds (N053): both arms write the caller's int32 buffer
     # directly on every tier (`*_into`: one device-to-host copy for replace,
     # the keys once into a host buffer and the order straight into `op` for
-    # replace=False). The same integers as the List route below, which stays
-    # only as the B arm of RESAMPLE_IDX_DIRECT on FAST + Apple
-    # (-D MOJOLEARN_RESAMPLE_FAST_IDX_DIRECT_OFF).
-    comptime if _IDX_INTO:
-        with GILReleased(Python()):
-            if replace:
-                resample_indices_replace_into(n, count, seed, op)
-            else:
-                resample_indices_permute_into(n, count, seed, op)
-        return PythonObject(0)
+    # replace=False). The same integers as `resample_indices_host`.
     with GILReleased(Python()):
-        var idx = resample_indices_host(n, count, replace, seed)
-        resample_store_indices(op, idx, count)
+        if replace:
+            resample_indices_replace_into(n, count, seed, op)
+        else:
+            resample_indices_permute_into(n, count, seed, op)
     return PythonObject(0)
 
 

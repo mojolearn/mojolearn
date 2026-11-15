@@ -650,6 +650,7 @@ in the tables after the sections.
 | [`MOJOLEARN_KSHAP_FAST_BATCH_OFF`](#mojolearn_kshap_fast_batch_off) | Trees (GBDT, Apple FAST) | removed (old path; KSHAP_FAST_BATCH KEPT) | 2026-11-15 | [MOJOLEARN_KSHAP_FAST_BATCH_OFF.patch](../experiments/removed/MOJOLEARN_KSHAP_FAST_BATCH_OFF.patch) |
 | [`MOJOLEARN_ARIMA_FAST_LLONLY_OFF`](#mojolearn_arima_fast_llonly_off-old-path-deleted-2026-11-15) | Time series (AutoARIMA Kalman loop, FAST Apple) | removed (old path; FAST+Apple default KEPT 6c54b7e87) | 2026-11-15 | [MOJOLEARN_ARIMA_FAST_LLONLY_OFF.patch](../experiments/removed/MOJOLEARN_ARIMA_FAST_LLONLY_OFF.patch) |
 | [`MOJOLEARN_ARIMA_FAST_EVAL_WS_OFF`](#mojolearn_arima_fast_eval_ws_off-old-path-deleted-2026-11-15) | Time series (AutoARIMA fit evaluation workspace, FAST Apple) | removed (old path; FAST+Apple default KEPT 6c54b7e87) | 2026-11-15 | [MOJOLEARN_ARIMA_FAST_EVAL_WS_OFF.patch](../experiments/removed/MOJOLEARN_ARIMA_FAST_EVAL_WS_OFF.patch) |
+| [`MOJOLEARN_RESAMPLE_FAST_IDX_DIRECT_OFF`](#mojolearn_resample_fast_idx_direct_off-old-path-deleted-2026-11-15) | Resample (resample(replace=True) row indices, FAST Apple) | removed (old path; FAST+Apple default KEPT, gmp-rs-idx) | 2026-11-15 | [MOJOLEARN_RESAMPLE_FAST_IDX_DIRECT_OFF.patch](../experiments/removed/MOJOLEARN_RESAMPLE_FAST_IDX_DIRECT_OFF.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -6323,4 +6324,12 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md (section expdel-02-
 - **Verdict**: KEPT 6c54b7e87 (EXPERIMENTS.md `ARIMA_FAST_EVAL_WS + ARIMA_FAST_LLONLY`, tsa-both-autoarima): M3 one run per arm, autoarima taxi-hourly 50,500 -> 39,504 ms (-21.8%) for both, EVAL_WS alone 50,299 -> 42,921 ms (code comment of the same A/B), forecast rmse 74.66 identical. No bit change on any column.
 - **Deleted by**: lane/expdel-02-decomposition-series (docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md); code recoverable at `33f865ad21`.
 - **Restore**: `git apply experiments/removed/MOJOLEARN_ARIMA_FAST_EVAL_WS_OFF.patch`, then delete the `MOJOLEARN_ARIMA_FAST_EVAL_WS_OFF` refusal in `core/experiment_guards_series.mojo`.
+- **Records**: refusal in `core/experiment_guards_series.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel-02-decomposition-series section).
+
+### MOJOLEARN_RESAMPLE_FAST_IDX_DIRECT_OFF: old path deleted (2026-11-15)
+
+- **What it was**: the FAST+Apple rollback of `RESAMPLE_IDX_DIRECT` (`resample/estimator.mojo`): with `-D MOJOLEARN_RESAMPLE_FAST_IDX_DIRECT_OFF` `resample_indices_binding` (`bindings/_mojolearn_resample.mojo`) took the List route (`resample_indices_host` then `resample_store_indices`). Every other tier already wrote the caller's buffer (`_IDX_INTO`). Deleted: the define read, `RESAMPLE_IDX_DIRECT`, `_IDX_INTO`, the binding's List route and its `resample_store_indices` import. `resample_indices_host` stays (native checks and the host column use it).
+- **Verdict**: KEPT, FAST+Apple default (EXPERIMENTS.md `RESAMPLE_FAST_IDX_DIRECT`, gmp-rs-idx-taxi / gmp-rs-idx-istella): M3, resample taxi 71.7 -> 62.8 ms (-12.4%), istella -1.8%, max_mean_shift the same, same integers. No bit change on any column.
+- **Deleted by**: lane/expdel-02-decomposition-series (docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md); code recoverable at `080e0e6f72`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_RESAMPLE_FAST_IDX_DIRECT_OFF.patch`, then delete the `MOJOLEARN_RESAMPLE_FAST_IDX_DIRECT_OFF` refusal in `core/experiment_guards_series.mojo`.
 - **Records**: refusal in `core/experiment_guards_series.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel-02-decomposition-series section).

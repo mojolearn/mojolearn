@@ -2196,10 +2196,11 @@ def mc_closed_form_for[
 # Array (1,000,000 rows at the board). On FAST + Apple the device rows go
 # straight into the caller's int32 buffer in one copy. The same integers.
 # Default since the M3 A/B gmp-rs-idx-* (resample taxi 71.7 -> 62.8 ms,
-# istella -1.8%, max_mean_shift the same); -D
-# MOJOLEARN_RESAMPLE_FAST_IDX_DIRECT_OFF restores the List route.
-comptime RESAMPLE_IDX_DIRECT = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
-                                and not is_defined["MOJOLEARN_RESAMPLE_FAST_IDX_DIRECT_OFF"]())
+# istella -1.8%, max_mean_shift the same). Every tier now takes the direct
+# copy (bindings/_mojolearn_resample.mojo); the switch and its List-route
+# B arm are gone.
+# TOMBSTONE: MOJOLEARN_RESAMPLE_FAST_IDX_DIRECT_OFF (old path, superseded by the FAST+Apple default) deleted 2026-11-15 by lane/expdel-02-decomposition-series; code recoverable at 080e0e6f72.
+# Restore: git apply experiments/removed/MOJOLEARN_RESAMPLE_FAST_IDX_DIRECT_OFF.patch; record in docs/TOMBSTONES.md.
 
 
 def resample_indices_replace_into(
