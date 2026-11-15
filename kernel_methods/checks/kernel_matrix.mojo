@@ -526,12 +526,13 @@ def km_rbf_cell_kernel(
 #: BITS CHANGE (the chain, not the GEMM profile's fold): NVIDIA, AMD and Apple
 #: run this kernel and the host column runs the same line. The chain reads
 #: a_ic * b_jc, the same word as b_jc * a_ic, so a self-kernel computes the
-#: upper triangle and mirrors it. `-D MOJOLEARN_IDN_KM_DOT_CELL_D16` lowers
-#: the bound to 16 on every column, for timing the crossover.
+#: upper triangle and mirrors it.
 comptime KM_IDN_DOT_CELL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
     is_defined["MOJOLEARN_IDN_KM_DOT_CELL_OFF"]()
 )
-comptime KM_DOT_CELL_MAX_D = 16 if is_defined["MOJOLEARN_IDN_KM_DOT_CELL_D16"]() else 64
+# TOMBSTONE: MOJOLEARN_IDN_KM_DOT_CELL_D16 (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-19-kernel; code recoverable at b1d14459cf.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_KM_DOT_CELL_D16.patch; record in docs/TOMBSTONES.md.
+comptime KM_DOT_CELL_MAX_D = 64
 
 
 def km_dot_cell_kernel(

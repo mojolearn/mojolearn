@@ -228,7 +228,9 @@ comptime KMH_RBF_CELL_MAX_D = 64
 comptime KMH_DOT_CELL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
     is_defined["MOJOLEARN_IDN_KM_DOT_CELL_OFF"]()
 )
-comptime KMH_DOT_CELL_MAX_D = 16 if is_defined["MOJOLEARN_IDN_KM_DOT_CELL_D16"]() else 64
+# TOMBSTONE: MOJOLEARN_IDN_KM_DOT_CELL_D16 (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-19-kernel; code recoverable at b1d14459cf.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_KM_DOT_CELL_D16.patch; record in docs/TOMBSTONES.md.
+comptime KMH_DOT_CELL_MAX_D = 64
 
 
 def kmh_row_norms(x: List[Float32], n_rows: Int, k: Int) -> List[Float32]:
