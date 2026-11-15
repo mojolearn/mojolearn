@@ -67,9 +67,9 @@ comptime AFN_W2EPI_APPLE = (
 )
 # TOMBSTONE: MOJOLEARN_AFN_EPI_ALL (neural MERGED-UNMEASURED FAST+Apple opt-in arm: the w2-epi bundle) deleted 2026-11-15 by lane/expdel2-27-neural; code recoverable at 1d8bc94f90.
 # Restore: git apply experiments/removed/MOJOLEARN_AFN_EPI_ALL.patch
-comptime AFN_MAMBA_PROJ_EPILOGUE = (
-    AFN_W2EPI_APPLE and is_defined["MOJOLEARN_AFN_MAMBA_PROJ_EPILOGUE"]()
-)
+# TOMBSTONE: MOJOLEARN_AFN_MAMBA_PROJ_EPILOGUE (neural MERGED-UNMEASURED FAST+Apple opt-in arm: Mamba-1/2/3 in_proj/out_proj on the FAST matrix-unit gemm with the residual folded in) deleted 2026-11-15 by lane/expdel2-27-neural; code recoverable at f98dbab5bb.
+# Restore: git apply experiments/removed/MOJOLEARN_AFN_MAMBA_PROJ_EPILOGUE.patch
+comptime AFN_MAMBA_PROJ_EPILOGUE = False
 # TOMBSTONE: MOJOLEARN_AFN_MAMBA_PROJ_SPLITK (neural MERGED-UNMEASURED FAST+Apple opt-in arm: the out_proj split-k policy) deleted 2026-11-15 by lane/expdel2-27-neural; code recoverable at 590e7e3230.
 # Restore: git apply experiments/removed/MOJOLEARN_AFN_MAMBA_PROJ_SPLITK.patch
 #: in_proj and out_proj take the matrix-unit route under EPILOGUE.
@@ -106,22 +106,7 @@ def afn_proj_gemm_into(
     (the in_proj call). True when served; False (nothing enqueued) when the
     route is off or the shape/op is not one it serves, and the caller runs
     main's GEMM."""
-    comptime if not AFN_MAMBA_PROJ_ROUTE:
-        return False
-    else:
-        if m <= 0 or n <= 0 or k <= 0:
-            return False
-        if op != OP_NN and op != OP_NT and op != OP_TN:
-            return False
-        var st = _afn_strides(op, m, n, k)
-        var tile = afn_gemm_tile(m, n)
-        var cp = c.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
-        var ap = a.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
-        var bp = b.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
-        _afn_launch_tile[DType.float32, DType.float32, False, AFN_EPI_NONE](
-            ctx, tile, cp, ap, bp, cp, cp, m, n, k, st, 1, k
-        )
-        return True
+    return False
 
 
 def afn_proj_gemm_resid_into(
@@ -141,22 +126,4 @@ def afn_proj_gemm_resid_into(
     with f32 atomic adds. `out` and `x` must each hold exactly `m n` floats
     (a guard-banded buffer declines). True when served; False (nothing
     enqueued) otherwise, and the caller runs main's GEMM and residual."""
-    comptime if not AFN_MAMBA_PROJ_ROUTE:
-        return False
-    else:
-        if m <= 0 or n <= 0 or k <= 0:
-            return False
-        if op != OP_NN and op != OP_NT and op != OP_TN:
-            return False
-        if len(out_buf) != m * n or len(x) != m * n:
-            return False
-        var st = _afn_strides(op, m, n, k)
-        var tile = afn_gemm_tile(m, n)
-        ctx.enqueue_copy(dst_buf=out_buf, src_buf=x)
-        var cp = out_buf.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
-        var ap = a.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
-        var bp = b.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
-        _afn_launch_tile[DType.float32, DType.float32, True, AFN_EPI_NONE](
-            ctx, tile, cp, ap, bp, cp, cp, m, n, k, st, 1, k
-        )
-        return True
+    return False
