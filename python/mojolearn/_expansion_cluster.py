@@ -48,10 +48,6 @@ class _XCluster(NumericModeMixin):
     _mojolearn_native_public = True
     _BINDING = "_mojolearn_x_cluster"
 
-    def _check_fitted(self, attr):
-        if getattr(self, attr, None) is None:
-            raise RuntimeError(f"this {type(self).__name__} is not fitted yet")
-
 
 class _CentersMixin:
     """predict / transform / score against `cluster_centers_` (squared

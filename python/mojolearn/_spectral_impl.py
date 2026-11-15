@@ -25,7 +25,6 @@ metrics functions and is loaded through `_metrics_impl._get_binding`.
 
 from . import _native_archive_bridge, _native_family_bridge
 from ._mode import ParamsMixin, available_if
-from ._buffer import _native, addr, empty
 from . import _native_spectral_umap_bridge
 
 __all__ = ["SpectralClustering", "SpectralEmbedding", "spectral_embedding"]
@@ -494,34 +493,8 @@ _native_archive_bridge.register(SpectralClustering, _SPECTRAL_FORMAT, (
 ), host_archive_spectral_affinities=tuple(_CLUSTER_AFFINITIES))
 
 
-class _DenseCOO:
-    """A dense float32 matrix (rows `r`, columns `c`, host address `addr`) as the duck-typed COO
-    `_coo_triples` reads: row-major order, exact zeros dropped (what
-    `sp.coo_matrix(dense)` keeps), -0.0 a zero and NaN kept. The scan is the
-    base binding's `nonzero_f32_count` / `nonzero_f32_fill`
-    (core/dense_coo.mojo, lane/py-dn-kern 2026-09-28; its CPU route is the
-    core host binding), which replaced a Python n^2 loop making the same
-    `v != 0.0` test on the same float32 values (DEVIATION 2489's float32
-    twin). Pure data movement."""
-
-    def __init__(self, m):
-        n_r, n_c = m.r, m.c
-        src = m.addr
-        nnz = int(_native("nonzero_f32_count")(src, n_r * n_c)) if n_r * n_c else 0  # cpu-route: float32 host matrix read once by nonzero_f32_count on a CPU-only install
-        self.shape = (n_r, n_c)
-        self.row = empty((nnz,), "<i4")
-        self.col = empty((nnz,), "<i4")
-        self.data = empty((nnz,), "<f4")
-        if nnz:
-            wrote = int(_native("nonzero_f32_fill")(  # cpu-route: float32 host matrix read once by nonzero_f32_fill on a CPU-only install
-                src, n_r, n_c,
-                [addr(self.row, name="rows"), addr(self.col, name="cols"), addr(self.data, name="vals")],
-                nnz))
-            if wrote != nnz:
-                raise RuntimeError(f"mojolearn: nonzero_f32_fill wrote {wrote} of {nnz} entries")
-
-    def tocoo(self):
-        return self
+# `_DenseCOO` (the Python wrapper over nonzero_f32_count / nonzero_f32_fill)
+# had no caller left and is deleted (lane py-tail, 2026-11-15).
 
 
 # Maintainer notes (moved from the docstring). Reference: cuML's
