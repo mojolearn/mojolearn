@@ -1245,12 +1245,9 @@ def lanczos_restart_fast(
 #: seams (`alpha + uu_i`, the clamps, `identical_sqrt`, the normalize's
 #: zero test) run as one-thread kernels on the same words, so the arithmetic
 #: is the pinned step's; only the per-step waits and read-backs are gone.
-#: `-D MOJOLEARN_LANCZOS_ID_DEV_OFF` keeps the host-driven step.
-comptime LANCZOS_ID_DEV = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and has_accelerator()
-    and not is_defined["MOJOLEARN_LANCZOS_ID_DEV_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_LANCZOS_ID_DEV_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-13-cluster; code recoverable at 3f2857a7e3.
+# Restore: git apply experiments/removed/MOJOLEARN_LANCZOS_ID_DEV_OFF.patch; record in docs/TOMBSTONES.md.
+comptime LANCZOS_ID_DEV = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and has_accelerator()
 #: LANCZOS_ID_DEV with the per-element launches of a step fused (the same
 #: words, element by element, in the same order).
 #: `-D MOJOLEARN_LANCZOS_ID_DEV_FUSE_OFF` keeps one launch per host kernel.
