@@ -1,7 +1,6 @@
 """The native host converters of DEVIATION 2470 (`cast_f64_to_f32`), 2471
 (`cast_colmajor_f64_to_f32`) and 2472 (`transpose_f32`) through the Python
-boundary: the binding's refusals and empty short cuts, and `_buffer`'s
-conversions against NumPy.
+boundary: the binding's refusals and empty short cuts.
 
 The element arithmetic (every shape, edge value, tie, tail length and both
 transpose directions, word for word against an independent round-to-nearest-
@@ -178,111 +177,5 @@ def test_missing_symbol_is_a_stale_build_not_a_fallback(monkeypatch):
         _buffer._native("no_such_helper_2026")
 
 
-@pytest.mark.parametrize("shape", _shapes())
-@pytest.mark.parametrize("src_order", ["C", "F"])
-@pytest.mark.parametrize("src_dtype", [np.float64, np.float32])
-def test_as_f32_c_matches_numpy(shape, src_order, src_dtype):
-    x = _matrix(shape, seed=11).astype(src_dtype)
-    if src_order == "F":
-        x = np.asfortranarray(x)
-    if src_dtype is np.float32 and (src_order == "C" or 1 in shape):
-        pytest.skip("already float32 in the target layout: a borrow, tested below")
-    want = np.ascontiguousarray(x, dtype=np.float32)
-    arr, copied = _buffer.as_f32_c(x, name="X")
-    assert copied and arr.dtype == "<f4" and arr.order == "C"
-    _bytes_equal(arr.tobytes(), want.tobytes())
-    assert arr.shape == tuple(shape)
-
-
-@pytest.mark.parametrize("shape", _shapes())
-@pytest.mark.parametrize("src_order", ["C", "F"])
-@pytest.mark.parametrize("src_dtype", [np.float64, np.float32])
-def test_as_f32_colmajor_matches_numpy(shape, src_order, src_dtype):
-    x = _matrix(shape, seed=17).astype(src_dtype)
-    if src_order == "F":
-        x = np.asfortranarray(x)
-    if src_dtype is np.float32 and (src_order == "F" or 1 in shape):
-        pytest.skip("already float32 in the target layout: a borrow, tested below")
-    want = np.asfortranarray(x, dtype=np.float32)
-    arr, copied = _buffer.as_f32_colmajor(x, name="X")
-    assert copied and arr.dtype == "<f4"
-    assert arr._has_order("F")
-    # NumPy's tobytes() serializes in C order WHATEVER the memory layout;
-    # the column-major bytes need order="F"
-    _bytes_equal(arr.tobytes(), want.tobytes(order="F"))
-    # the storage IS the column-major flat
-    assert arr._flat().tobytes() == want.T.reshape(-1).tobytes()
-    assert np.array_equal(np.asarray(arr), want, equal_nan=True)
-
-
-def test_float32_in_target_order_is_still_a_borrow(monkeypatch):
-    """The native path is for float64 input only; a float32 block already
-    in the target order stays a zero-copy borrow of the caller's memory."""
-    _forced_present(monkeypatch)
-    xc = np.ascontiguousarray(np.arange(60, dtype=np.float32).reshape(6, 10))
-    a, copied = _buffer.as_f32_c(xc, name="X")
-    assert not copied and a._addr == xc.ctypes.data
-    xf = np.asfortranarray(xc)
-    a, copied = _buffer.as_f32_colmajor(xf, name="X")
-    assert not copied and a._addr == xf.ctypes.data
-
-
-def test_native_result_owns_fresh_storage(monkeypatch):
-    """The converted Array must not alias the caller's float64 buffer."""
-    _forced_present(monkeypatch)
-    x = np.ones((4, 3), dtype=np.float64)
-    a, _ = _buffer.as_f32_colmajor(x, name="X")
-    x[:] = 5.0
-    assert np.asarray(a).tolist() == np.ones((4, 3)).tolist()
-    assert isinstance(a, Array) and a._base is None
-
-
-def test_native_store_behaves_like_an_array_store(monkeypatch):
-    """The native converters write into an owned raw allocation. The
-    resulting Array must do everything an array.array-backed one does."""
-    _forced_present(monkeypatch)
-    x = _matrix((300, 7), seed=2471)
-    a, copied = _buffer.as_f32_colmajor(x, name="X")
-    assert copied
-    assert isinstance(a._store._allocation, _buffer._RawAllocation)
-    want = np.asfortranarray(x, dtype=np.float32)
-    assert a.tobytes() == want.tobytes(order="F")
-    assert np.array_equal(np.asarray(a), want, equal_nan=True)
-    assert np.asarray(a).ctypes.data == a._addr  # zero-copy view
-    c = a.copy()
-    assert c.tobytes() == a.tobytes() and c._addr != a._addr
-    r = a.reshape(-1)  # F -> C copy then flat view
-    assert r.tobytes() == np.ascontiguousarray(want).reshape(-1).tobytes()
-    assert a._flat().tobytes() == want.T.reshape(-1).tobytes()
-    # feeding the Array back in is a zero-copy borrow of the mapping
-    b, copied = _buffer.as_f32_colmajor(a, name="X")
-    assert not copied and b._addr == a._addr
-    # and a C-order request from it goes through the pure reorder
-    d, copied = _buffer.as_f32_c(a, name="X")
-    assert copied and d.tobytes() == np.ascontiguousarray(want).tobytes()
-    # element access and reductions read the right values
-    assert a[2, 3] == float(want[2, 3]) or (math.isnan(a[2, 3]) and math.isnan(want[2, 3]))
-    assert _buffer.all_finite(a) is False  # the edge values include inf/nan
-
-
-def test_native_allocation_lives_until_last_view(monkeypatch):
-    import gc
-    import weakref
-    _forced_present(monkeypatch)
-    a, copied = _buffer.as_f32_colmajor(_matrix((300, 7), seed=2473), name="X")
-    owner = weakref.ref(a._store._allocation)
-    borrowed = np.asarray(a)
-    expected = borrowed.copy()
-    del a
-    gc.collect()
-    assert owner() is not None
-    np.testing.assert_array_equal(borrowed, expected)
-    del borrowed
-    gc.collect()
-    assert owner() is None
-
-
-def test_native_allocation_failure(monkeypatch):
-    monkeypatch.setattr(_buffer, "_RAW_MALLOC", lambda n: None)
-    with pytest.raises(MemoryError, match="native conversion output"):
-        _buffer._output_store("f", 64)
+# TOMBSTONE: the `_buffer.as_f32_c` / `as_f32_colmajor` conversion and native-store tests (they tested the
+# deleted Python conversion layer) deleted 2026-11-15 by lane py-tail-2; code recoverable at 1a9d8c01bd.
