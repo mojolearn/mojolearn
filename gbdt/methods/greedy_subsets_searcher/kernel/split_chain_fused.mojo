@@ -1,7 +1,6 @@
 """The non-symmetric split chain in four launches (FAST Apple default).
 
-Depthwise only; off with `-D MOJOLEARN_GBDT_DW_FUSED_CHAIN_OFF` (lane
-apple-fast-depthwise). The chain
+Depthwise only (lane apple-fast-depthwise). The chain
 `greedy_search_helper_depthwise.mojo` runs per level on the row-index-only
 schedule (DEVIATION 1902) is eight launches:
 
@@ -37,7 +36,6 @@ schedule change against the FAST path it replaces.
 
 from gbdt.gpu_data.gpu_structures import CFeature
 from max.gpu import block_dim, block_idx, grid_dim, thread_idx
-from gbdt.apple_fast_tree_experiments import AFT_N05
 # Mojo 1.2.0 removed max.gpu.intrinsics.ldg. Every former ldg(ptr) is now
 # ptr.unsafe_load[..., invariant=True](), the same invariant (non-coherent) load ldg emitted.
 from std.memory import bitcast
@@ -297,11 +295,9 @@ def fused_copy_back_kernel[GUARD: Bool = False](
 
 # ---- DW_NO_LEVEL_SYNC (FAST, Apple; default) -----------------------------
 #: `dw_select_splits_kernel`'s block (one thread per scored leaf).
-# N05: four simdgroups select/pack leaf split descriptors per block,
-# amortizing threadgroup scheduling across more independent leaves. The
-# strict gain test and prefix rank defining creation order stay unchanged.
-# No performance/quality evidence; source only, default OFF.
-comptime DW_SELECT_BLOCK = 128 if AFT_N05 else 64
+# TOMBSTONE: MOJOLEARN_AFT_N05 (DELETE-EXPERIMENT, never-run Apple FAST programme card, rule g; non-owner fold to False) deleted 2026-11-15 by lane/expdel2-43-trees; code recoverable at f2d53d03bd.
+# Restore: git apply experiments/removed/MOJOLEARN_AFT_N05.expdel2-43-trees.patch; record in docs/TOMBSTONES.md.
+comptime DW_SELECT_BLOCK = 64
 #: Words per `CFeature` record in the split payload (`CFEATURE_BYTES // 4`).
 comptime DW_FEAT_WORDS = 6
 #: The fold's record layout (`split_resolve.WINNER_RECORD_WORDS` and

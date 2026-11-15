@@ -2247,6 +2247,8 @@ Files: `gbdt/methods/greedy_subsets_searcher/greedy_search_helper_depthwise.mojo
 
 Owned here (patch, TOMBSTONES.md section, refusal, grid and EXPERIMENTS.md records): `GBDT_DW2_SCAN_SMEM_OFF`, `GBDT_DW_FUSED_CHAIN_OFF`, `GBDT_DW_MODE_SKIP_OFF`, `GBDT_IDENTICAL_SPLIT_COPY`, `GBDT_ID_DEFER_COPY`, `GBDT_LG_BATCH`, `GBDT_LG_BATCH2`, `GBDT_LG_BATCH32`, `GBDT_LG_BATCH4`, `GBDT_LG_BATCH8`, `GBDT_LG_BATCH_OFF`, `GBDT_LG_EXACT_BATCH128`, `GBDT_LG_EXACT_BATCH128_OFF`, `GBDT_LG_EXACT_BATCH32`, `GBDT_LG_EXACT_BATCH64`, `GBDT_LG_EXACT_BATCH_OFF`, `GBDT_LG_EXACT_ID_OFF`, `GBDT_NS_INHERIT_ID_OFF`, `GBDT_NS_INHERIT_PARTITION_OFF`, `IDN_GBDT_NS_SCALE_DEVICE_OFF`, `SYM_RESOLVE_BLOCK`
 
+Lane result (expdel2-43-trees, 2026-11-15): 41 defines folded in the 11 files (21 owned with records, 20 non-owner with markers and patches); KEPT `IDN_GBDT_STEP_OLD` (restore switch, A/B owed this wave) and `COLUMN_CPU`. `ORD_HIST_FOLD_SKIP`: the ord_small_fold_* kernels stay in pointwise_hist2_one_byte_templ.mojo while pointwise_kernels.mojo imports them; `TREES_C45_GBDT`: fused_root_scan_score_kernel in compute_scores.mojo is left unreferenced.
+
 ### expdel2-44-trees (44 defines, 17 code files)
 
 | define | decision | rule | sites | lines | evidence / why |

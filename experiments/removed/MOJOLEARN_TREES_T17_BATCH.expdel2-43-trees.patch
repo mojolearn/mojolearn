@@ -1,0 +1,35 @@
+diff --git a/gbdt/methods/greedy_subsets_searcher/greedy_search_helper_depthwise.mojo b/gbdt/methods/greedy_subsets_searcher/greedy_search_helper_depthwise.mojo
+index f7085b6a35..af900f57a4 100644
+--- a/gbdt/methods/greedy_subsets_searcher/greedy_search_helper_depthwise.mojo
++++ b/gbdt/methods/greedy_subsets_searcher/greedy_search_helper_depthwise.mojo
+@@ -62,7 +62,7 @@ from checks.soft_f64 import (
+     sf64_to_f32,
+ )
+ from std.sys.compile import is_defined
+-from gbdt.trees_identical_switches import T18, T21, C45_GBDT, LG_LEVEL_ROUNDS
++from gbdt.trees_identical_switches import T17_BATCH, T18, T21, C45_GBDT, LG_LEVEL_ROUNDS
+ 
+ from core.accelerator_target import TARGET_HAS_APPLE_GPU
+ from std.builtin.sort import sort
+@@ -1302,13 +1302,15 @@ comptime LG_EXACT_BATCH_WIDTH = (
+         32 if is_defined["MOJOLEARN_GBDT_LG_EXACT_BATCH32"]() else 64
+     )
+ ) if GLOBAL_NUMERIC_MODE == NUMERIC_FAST else (
+-    64 if is_defined["MOJOLEARN_GBDT_LG_EXACT_BATCH64"]() else 128
++    T17_BATCH if T17_BATCH > 0 else (
++        64 if is_defined["MOJOLEARN_GBDT_LG_EXACT_BATCH64"]() else 32
++    )
+ )
+-# TOMBSTONE: MOJOLEARN_TREES_T17_BATCH (DELETE-ARM of the int sweep, EXP:1641 PROMOTED 128 kept as the constant, rule e; non-owner fold to the default 128) deleted 2026-11-15 by lane/expdel2-43-trees; code recoverable at b7f9fb3a4a.
+-# Restore: git apply experiments/removed/MOJOLEARN_TREES_T17_BATCH.expdel2-43-trees.patch; record in docs/TOMBSTONES.md.
+-# T17 (trees-cleanup 2026-10-07): the IDENTICAL batch width is 128 since
+-# lane/grid-flips-1 (2026-10-08, grid ge123e6f9: lossguide taxi NV 0.908,
+-# AMD 0.929; istella NV 0.935, AMD 0.918; quality same). Scheduling only:
++# T17 (trees-cleanup 2026-10-07): the IDENTICAL batch width is one int sweep,
++# `-D MOJOLEARN_TREES_T17_BATCH=32|64|128`, absent = 128 since
++# lane/grid-flips-1 (2026-10-08, grid ge123e6f9; numbers at the
++# declaration); it wins over the older `MOJOLEARN_GBDT_LG_EXACT_BATCH64`
++# arm, which IDENTICAL now reaches only with `-D MOJOLEARN_TREES_T17_BATCH=0`. Scheduling only:
+ # the exact replay admits leaves in global best-first order at every width.
+ 
+ #: FAST on Apple (trees-apple3): THE ESTIMATOR INHERITS THE SEARCHER'S

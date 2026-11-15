@@ -34,14 +34,9 @@ defined and ties only another default).
 """
 
 from max.gpu.host import DeviceBuffer, DeviceContext
-from max.gpu.memory import AddressSpace
-from max.gpu.sync import barrier
 from max.gpu import block_dim, block_idx, grid_dim, thread_idx
-from std.memory import stack_allocation
 from std.sys.compile import is_defined
-from gbdt.gpu_data.apple_fast_trees_experiments import AFT_G03
 
-from gbdt.methods.kernel.sym_fast import SYM_RESOLVE_BLOCK
 from gbdt.apple_fast_classical import AFCL_RESOLVE_RECORDS
 from gbdt.methods.pointwise_optimization_subsets import SPLIT_BLOCK_SIZE
 
@@ -310,10 +305,11 @@ def launch_pw_pack_winner(
 # keep the incumbent), block (0, 0) thread 0 makes the chain's stores
 # (`best_*`, `winners_*`, `score_before`, `split_desc`), and every thread
 # takes the descriptor from its registers. Integer and compare work only;
-# the bins written are the unfused kernel's. `-D
-# MOJOLEARN_GBDT_FUSED_LEVEL_OFF` restores the chain.
+# the bins written are the unfused kernel's.
 # ====================================================================
-comptime PW_FUSED_LEVEL = not is_defined["MOJOLEARN_GBDT_FUSED_LEVEL_OFF"]()
+# TOMBSTONE: MOJOLEARN_GBDT_FUSED_LEVEL_OFF (DELETE-OLD-PATH, no A/B recorded for the old path, rule b; non-owner fold, PW_FUSED_LEVEL kept as the constant True for its importers) deleted 2026-11-15 by lane/expdel2-43-trees; code recoverable at c91aa521d9.
+# Restore: git apply experiments/removed/MOJOLEARN_GBDT_FUSED_LEVEL_OFF.expdel2-43-trees.patch; record in docs/TOMBSTONES.md.
+comptime PW_FUSED_LEVEL = True
 # the searcher's fused launch alone, for bisecting
 comptime PW_FUSED_SEARCH = PW_FUSED_LEVEL and not is_defined[
     "MOJOLEARN_GBDT_FUSED_PW_OFF"
@@ -353,129 +349,6 @@ def _fold_winner_kern(
             g_gain = loc_gain
 
 
-@always_inline
-def _fold_block(
-    r0_ids: MutPointer[UInt32, MutAnyOrigin],
-    r0_scores: MutPointer[Float32, MutAnyOrigin],
-    n0: Int,
-    r1_ids: MutPointer[UInt32, MutAnyOrigin],
-    r1_scores: MutPointer[Float32, MutAnyOrigin],
-    n1: Int,
-    r2_ids: MutPointer[UInt32, MutAnyOrigin],
-    r2_scores: MutPointer[Float32, MutAnyOrigin],
-    n2: Int,
-    mut g_fid: UInt32,
-    mut g_bin: UInt32,
-    mut g_score: Float32,
-    mut g_gain: Float32,
-):
-    """lane/apple-fast-sym-hist, `-D MOJOLEARN_SYM_RESOLVE_BLOCK` (FAST +
-    Apple only): the three `_fold_helper` calls as ONE fold per
-    threadgroup. Threads stride the concatenated record list (helper 0,
-    then 1, then 2), each folding from the sentinel under `_record_less`,
-    then a shared-memory tree reduce under the same order. `_record_less`
-    is a strict total order on (gain, feature, bin) and a tie means
-    identical records (a feature lives in one policy; the sentinel and the
-    `bf[0]`-at-FLOAT32_MAX fillers tie only themselves), so every fold
-    order returns the same record as the sequential one. Every thread
-    reads the result from slot 0. Requires `block_dim.x ==
-    SPLIT_BLOCK_SIZE`, a power of two, which `pw_resolve_pack_bins_kernel`'s
-    launch guarantees."""
-    var tid = Int(thread_idx.x)
-    var threads = Int(block_dim.x)
-    var total = n0 + n1 + n2
-
-    var loc_fid = PW_SENTINEL_ID
-    var loc_bin = UInt32(0)
-    var loc_score = FLOAT32_MAX
-    var loc_gain = FLOAT32_MAX
-    # AFCL-T05 changes only the assignment of the same complete candidate
-    # list to lanes. Four adjacent records improve per-lane metadata reuse;
-    # tails are guarded before any record load.
-    var first = tid * AFCL_RESOLVE_RECORDS
-    while first < total:
-        for record in range(AFCL_RESOLVE_RECORDS):
-            var r = first + record
-            if r >= total:
-                break
-            var c_fid: UInt32
-            var c_bin: UInt32
-            var c_score: Float32
-            var c_gain: Float32
-            if r < n0:
-                c_fid = r0_ids.unsafe_load(2 * r)
-                c_bin = r0_ids.unsafe_load(2 * r + 1)
-                c_score = r0_scores.unsafe_load(2 * r)
-                c_gain = r0_scores.unsafe_load(2 * r + 1)
-            elif r < n0 + n1:
-                var q = r - n0
-                c_fid = r1_ids.unsafe_load(2 * q)
-                c_bin = r1_ids.unsafe_load(2 * q + 1)
-                c_score = r1_scores.unsafe_load(2 * q)
-                c_gain = r1_scores.unsafe_load(2 * q + 1)
-            else:
-                var q = r - n0 - n1
-                c_fid = r2_ids.unsafe_load(2 * q)
-                c_bin = r2_ids.unsafe_load(2 * q + 1)
-                c_score = r2_scores.unsafe_load(2 * q)
-                c_gain = r2_scores.unsafe_load(2 * q + 1)
-            if _record_less(c_gain, c_fid, c_bin, loc_gain, loc_fid, loc_bin):
-                loc_fid = c_fid
-                loc_bin = c_bin
-                loc_score = c_score
-                loc_gain = c_gain
-        first += threads * AFCL_RESOLVE_RECORDS
-
-    var s_fid = stack_allocation[
-        SPLIT_BLOCK_SIZE,
-        Scalar[DType.uint32],
-        address_space = AddressSpace.SHARED,
-    ]()
-    var s_bin = stack_allocation[
-        SPLIT_BLOCK_SIZE,
-        Scalar[DType.uint32],
-        address_space = AddressSpace.SHARED,
-    ]()
-    var s_score = stack_allocation[
-        SPLIT_BLOCK_SIZE,
-        Scalar[DType.float32],
-        address_space = AddressSpace.SHARED,
-    ]()
-    var s_gain = stack_allocation[
-        SPLIT_BLOCK_SIZE,
-        Scalar[DType.float32],
-        address_space = AddressSpace.SHARED,
-    ]()
-    s_fid[unsafe_offset=tid] = loc_fid
-    s_bin[unsafe_offset=tid] = loc_bin
-    s_score[unsafe_offset=tid] = loc_score
-    s_gain[unsafe_offset=tid] = loc_gain
-    barrier()
-
-    var s = threads >> 1
-    while s > 0:
-        if tid < s:
-            if _record_less(
-                s_gain[unsafe_offset=tid + s],
-                s_fid[unsafe_offset=tid + s],
-                s_bin[unsafe_offset=tid + s],
-                s_gain[unsafe_offset=tid],
-                s_fid[unsafe_offset=tid],
-                s_bin[unsafe_offset=tid],
-            ):
-                s_fid[unsafe_offset=tid] = s_fid[unsafe_offset=tid + s]
-                s_bin[unsafe_offset=tid] = s_bin[unsafe_offset=tid + s]
-                s_score[unsafe_offset=tid] = s_score[unsafe_offset=tid + s]
-                s_gain[unsafe_offset=tid] = s_gain[unsafe_offset=tid + s]
-        barrier()
-        s >>= 1
-
-    g_fid = s_fid[unsafe_offset=0]
-    g_bin = s_bin[unsafe_offset=0]
-    g_score = s_score[unsafe_offset=0]
-    g_gain = s_gain[unsafe_offset=0]
-
-
 def pw_resolve_pack_bins_kernel(
     r0_ids: MutPointer[UInt32, MutAnyOrigin],
     r0_scores: MutPointer[Float32, MutAnyOrigin],
@@ -510,41 +383,13 @@ def pw_resolve_pack_bins_kernel(
     var g_bin = UInt32(0)
     var g_score = FLOAT32_MAX
     var g_gain = FLOAT32_MAX
-    comptime if AFT_G03:
-        # G03: preserve the original serial record order, but only lane 0
-        # performs it. Broadcast costs one barrier and sixteen shared bytes,
-        # avoiding both per-row folds and the older block-tree reduction.
-        # Uncompiled/unverified/unmeasured; original tie comparison retained.
-        var ids = stack_allocation[
-            2, UInt32, address_space=AddressSpace.SHARED
-        ]()
-        var scores = stack_allocation[
-            2, Float32, address_space=AddressSpace.SHARED
-        ]()
-        if Int(thread_idx.x) == 0:
-            _fold_winner_kern(r0_ids, r0_scores, Int(n0_in), g_fid, g_bin, g_score, g_gain)
-            _fold_winner_kern(r1_ids, r1_scores, Int(n1_in), g_fid, g_bin, g_score, g_gain)
-            _fold_winner_kern(r2_ids, r2_scores, Int(n2_in), g_fid, g_bin, g_score, g_gain)
-            ids[unsafe_offset=0] = g_fid
-            ids[unsafe_offset=1] = g_bin
-            scores[unsafe_offset=0] = g_score
-            scores[unsafe_offset=1] = g_gain
-        barrier()
-        g_fid = ids[unsafe_offset=0]
-        g_bin = ids[unsafe_offset=1]
-        g_score = scores[unsafe_offset=0]
-        g_gain = scores[unsafe_offset=1]
-    elif SYM_RESOLVE_BLOCK:
-        _fold_block(
-            r0_ids, r0_scores, Int(n0_in),
-            r1_ids, r1_scores, Int(n1_in),
-            r2_ids, r2_scores, Int(n2_in),
-            g_fid, g_bin, g_score, g_gain,
-        )
-    else:
-        _fold_winner_kern(r0_ids, r0_scores, Int(n0_in), g_fid, g_bin, g_score, g_gain)
-        _fold_winner_kern(r1_ids, r1_scores, Int(n1_in), g_fid, g_bin, g_score, g_gain)
-        _fold_winner_kern(r2_ids, r2_scores, Int(n2_in), g_fid, g_bin, g_score, g_gain)
+    # TOMBSTONE: MOJOLEARN_AFT_G03 (DELETE-EXPERIMENT, never-run Apple FAST programme card, rule g; non-owner fold to False) deleted 2026-11-15 by lane/expdel2-43-trees; code recoverable at 65839d0178.
+    # Restore: git apply experiments/removed/MOJOLEARN_AFT_G03.expdel2-43-trees.patch; record in docs/TOMBSTONES.md.
+    # TOMBSTONE: MOJOLEARN_SYM_RESOLVE_BLOCK (DELETE-EXPERIMENT, EXP:1303 NEUTRAL alone, never built or timed as its own arm, rule g) deleted 2026-11-15 by lane/expdel2-43-trees; code recoverable at e301d611ef.
+    # Restore: git apply experiments/removed/MOJOLEARN_SYM_RESOLVE_BLOCK.patch; record in docs/TOMBSTONES.md.
+    _fold_winner_kern(r0_ids, r0_scores, Int(n0_in), g_fid, g_bin, g_score, g_gain)
+    _fold_winner_kern(r1_ids, r1_scores, Int(n1_in), g_fid, g_bin, g_score, g_gain)
+    _fold_winner_kern(r2_ids, r2_scores, Int(n2_in), g_fid, g_bin, g_score, g_gain)
 
     # `pw_pack_winner_kernel`'s descriptor, in registers
     var fid_c = Int(g_fid)

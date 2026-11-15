@@ -1807,6 +1807,27 @@ in the tables after the sections.
 | [`MOJOLEARN_CTR_SORT_ONCE`](#mojolearn_ctr_sort_once) | Trees (CatBoost-style CTR prep, FeatureFreq sort once) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_CTR_SORT_ONCE.patch](../experiments/removed/MOJOLEARN_CTR_SORT_ONCE.patch) |
 | [`MOJOLEARN_CTR_INDEX_FUSED`](#mojolearn_ctr_index_fused) | Trees (CatBoost-style CTR prep, device CTR output) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_CTR_INDEX_FUSED.patch](../experiments/removed/MOJOLEARN_CTR_INDEX_FUSED.patch) |
 | [`MOJOLEARN_CTR_ONEHOT_DEVICE`](#mojolearn_ctr_onehot_device) | Trees (CatBoost-style CTR prep, device dense-code pass) | removed (never-run card, no A/B recorded) | 2026-11-15 | [MOJOLEARN_CTR_ONEHOT_DEVICE.patch](../experiments/removed/MOJOLEARN_CTR_ONEHOT_DEVICE.patch) |
+| [`MOJOLEARN_GBDT_DW2_SCAN_SMEM_OFF`](#mojolearn_gbdt_dw2_scan_smem_off) | Trees (GBDT depthwise, FAST Apple shared-memory histogram scan) | removed (old path; default kept) | 2026-11-15 | [MOJOLEARN_GBDT_DW2_SCAN_SMEM_OFF.patch](../experiments/removed/MOJOLEARN_GBDT_DW2_SCAN_SMEM_OFF.patch) |
+| [`MOJOLEARN_GBDT_DW_FUSED_CHAIN_OFF`](#mojolearn_gbdt_dw_fused_chain_off) | Trees (GBDT depthwise, FAST Apple fused split chain) | removed (old path; default kept) | 2026-11-15 | [MOJOLEARN_GBDT_DW_FUSED_CHAIN_OFF.patch](../experiments/removed/MOJOLEARN_GBDT_DW_FUSED_CHAIN_OFF.patch) |
+| [`MOJOLEARN_GBDT_DW_MODE_SKIP_OFF`](#mojolearn_gbdt_dw_mode_skip_off) | Trees (GBDT quantized histogram, FAST Apple mode-bin skip) | removed (old path; default kept) | 2026-11-15 | [MOJOLEARN_GBDT_DW_MODE_SKIP_OFF.patch](../experiments/removed/MOJOLEARN_GBDT_DW_MODE_SKIP_OFF.patch) |
+| [`MOJOLEARN_GBDT_IDENTICAL_SPLIT_COPY`](#mojolearn_gbdt_identical_split_copy) | Trees (GBDT depthwise/lossguide, Apple IDENTICAL split-time histogram copy) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_GBDT_IDENTICAL_SPLIT_COPY.patch](../experiments/removed/MOJOLEARN_GBDT_IDENTICAL_SPLIT_COPY.patch) |
+| [`MOJOLEARN_GBDT_ID_DEFER_COPY`](#mojolearn_gbdt_id_defer_copy) | Trees (GBDT depthwise/lossguide, NVIDIA/AMD IDENTICAL deferred histogram copy) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_GBDT_ID_DEFER_COPY.patch](../experiments/removed/MOJOLEARN_GBDT_ID_DEFER_COPY.patch) |
+| [`MOJOLEARN_GBDT_LG_BATCH`](#mojolearn_gbdt_lg_batch) | Trees (GBDT lossguide, FAST Apple B-best-leaves batch) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_GBDT_LG_BATCH.patch](../experiments/removed/MOJOLEARN_GBDT_LG_BATCH.patch) |
+| [`MOJOLEARN_GBDT_LG_BATCH2`](#mojolearn_gbdt_lg_batch2) | Trees (GBDT lossguide, FAST Apple B-best-leaves batch) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_GBDT_LG_BATCH2.patch](../experiments/removed/MOJOLEARN_GBDT_LG_BATCH2.patch) |
+| [`MOJOLEARN_GBDT_LG_BATCH4`](#mojolearn_gbdt_lg_batch4) | Trees (GBDT lossguide, FAST Apple B-best-leaves batch) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_GBDT_LG_BATCH4.patch](../experiments/removed/MOJOLEARN_GBDT_LG_BATCH4.patch) |
+| [`MOJOLEARN_GBDT_LG_BATCH8`](#mojolearn_gbdt_lg_batch8) | Trees (GBDT lossguide, FAST Apple B-best-leaves batch) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_GBDT_LG_BATCH8.patch](../experiments/removed/MOJOLEARN_GBDT_LG_BATCH8.patch) |
+| [`MOJOLEARN_GBDT_LG_BATCH32`](#mojolearn_gbdt_lg_batch32) | Trees (GBDT lossguide, FAST Apple B-best-leaves batch) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_GBDT_LG_BATCH32.patch](../experiments/removed/MOJOLEARN_GBDT_LG_BATCH32.patch) |
+| [`MOJOLEARN_GBDT_LG_BATCH_OFF`](#mojolearn_gbdt_lg_batch_off) | Trees (GBDT lossguide, FAST Apple B-best-leaves batch) | removed (old path, no A/B recorded) | 2026-11-15 | [MOJOLEARN_GBDT_LG_BATCH_OFF.patch](../experiments/removed/MOJOLEARN_GBDT_LG_BATCH_OFF.patch) |
+| [`MOJOLEARN_GBDT_LG_EXACT_BATCH128`](#mojolearn_gbdt_lg_exact_batch128) | Trees (GBDT lossguide, FAST exact-batch width 128 force knob) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_GBDT_LG_EXACT_BATCH128.patch](../experiments/removed/MOJOLEARN_GBDT_LG_EXACT_BATCH128.patch) |
+| [`MOJOLEARN_GBDT_LG_EXACT_BATCH128_OFF`](#mojolearn_gbdt_lg_exact_batch128_off) | Trees (GBDT lossguide, FAST Apple exact-batch width 128) | removed (old path; default kept) | 2026-11-15 | [MOJOLEARN_GBDT_LG_EXACT_BATCH128_OFF.patch](../experiments/removed/MOJOLEARN_GBDT_LG_EXACT_BATCH128_OFF.patch) |
+| [`MOJOLEARN_GBDT_LG_EXACT_BATCH32`](#mojolearn_gbdt_lg_exact_batch32) | Trees (GBDT lossguide, FAST exact-batch width 32) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_GBDT_LG_EXACT_BATCH32.patch](../experiments/removed/MOJOLEARN_GBDT_LG_EXACT_BATCH32.patch) |
+| [`MOJOLEARN_GBDT_LG_EXACT_BATCH64`](#mojolearn_gbdt_lg_exact_batch64) | Trees (GBDT lossguide, IDENTICAL exact-batch width 64) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_GBDT_LG_EXACT_BATCH64.patch](../experiments/removed/MOJOLEARN_GBDT_LG_EXACT_BATCH64.patch) |
+| [`MOJOLEARN_GBDT_LG_EXACT_BATCH_OFF`](#mojolearn_gbdt_lg_exact_batch_off) | Trees (GBDT lossguide, FAST Apple exact best-first batch) | removed (old path, no A/B recorded) | 2026-11-15 | [MOJOLEARN_GBDT_LG_EXACT_BATCH_OFF.patch](../experiments/removed/MOJOLEARN_GBDT_LG_EXACT_BATCH_OFF.patch) |
+| [`MOJOLEARN_GBDT_LG_EXACT_ID_OFF`](#mojolearn_gbdt_lg_exact_id_off) | Trees (GBDT lossguide, IDENTICAL exact best-first batch) | removed (old path, no A/B recorded) | 2026-11-15 | [MOJOLEARN_GBDT_LG_EXACT_ID_OFF.patch](../experiments/removed/MOJOLEARN_GBDT_LG_EXACT_ID_OFF.patch) |
+| [`MOJOLEARN_GBDT_NS_INHERIT_ID_OFF`](#mojolearn_gbdt_ns_inherit_id_off) | Trees (GBDT non-symmetric, IDENTICAL inherited partition) | removed (old path, no A/B recorded) | 2026-11-15 | [MOJOLEARN_GBDT_NS_INHERIT_ID_OFF.patch](../experiments/removed/MOJOLEARN_GBDT_NS_INHERIT_ID_OFF.patch) |
+| [`MOJOLEARN_GBDT_NS_INHERIT_PARTITION_OFF`](#mojolearn_gbdt_ns_inherit_partition_off) | Trees (GBDT non-symmetric, FAST Apple inherited partition) | removed (old path, no A/B recorded) | 2026-11-15 | [MOJOLEARN_GBDT_NS_INHERIT_PARTITION_OFF.patch](../experiments/removed/MOJOLEARN_GBDT_NS_INHERIT_PARTITION_OFF.patch) |
+| [`MOJOLEARN_IDN_GBDT_NS_SCALE_DEVICE_OFF`](#mojolearn_idn_gbdt_ns_scale_device_off) | Trees (GBDT non-symmetric, IDENTICAL device fixed-point scale) | removed (old path, no A/B recorded) | 2026-11-15 | [MOJOLEARN_IDN_GBDT_NS_SCALE_DEVICE_OFF.patch](../experiments/removed/MOJOLEARN_IDN_GBDT_NS_SCALE_DEVICE_OFF.patch) |
+| [`MOJOLEARN_SYM_RESOLVE_BLOCK`](#mojolearn_sym_resolve_block) | Trees (GBDT symmetric, FAST Apple per-threadgroup resolve fold) | removed (never-run card, no A/B recorded) | 2026-11-15 | [MOJOLEARN_SYM_RESOLVE_BLOCK.patch](../experiments/removed/MOJOLEARN_SYM_RESOLVE_BLOCK.patch) |
 | [GaussianMixture Python entries gmm_fit, gmm_fit_predict and the four scoring entries (native entries)](#dead-native-entries-gaussianmixture-python-entries-2026-11-11) | Mixture (GPU, host and inference-only host bindings) | removed (dead native entries: no live caller) | 2026-11-11 | [dead_entries_gmm_python.patch](../experiments/removed/dead_entries_gmm_python.patch) |
 | [TREES_LEGACY_PYTHON_ENTRIES: 36 rf/et Python fit registrations (rowmajor, weighted, shard and shard-export forms) (native entries)](#dead-native-entries-trees-legacy-python-entries-2026-11-12) | Forests (rf, rf host, trees, trees host bindings) | removed (dead native entries: no live caller) | 2026-11-12 | [TREES_LEGACY_PYTHON_ENTRIES.patch](../experiments/removed/TREES_LEGACY_PYTHON_ENTRIES.patch) |
 | [LABELS_NATIVE_API_V1_V2: the labels_native_api_v1 / v2 provider publications (native entries)](#dead-native-entries-labels-provider-v1-and-v2-2026-11-12) | Labels (base GPU and core host bindings) | removed (dead native entries: no live caller) | 2026-11-12 | [LABELS_NATIVE_API_V1_V2.patch](../experiments/removed/LABELS_NATIVE_API_V1_V2.patch) |
@@ -20568,3 +20589,241 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2
 - Deleted by: lane/expdel2-46-trees `ec57bb3501` (2026-11-15); code recoverable at `4a48287b38`.
 - Restore: `git apply experiments/removed/MOJOLEARN_IDN_DART_DEVICE_OFF.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
 - Records: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-46-trees section).
+## Experiment deletions: lane expdel2-43-trees (2026-11-15)
+
+Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2-43-trees), under AGENTS.md "An unmeasured arm is deleted" (Andrew, 2026-11-15). Each record named below was read first. No bit changes: every deletion removes a non-default arm, a never-run card or a rollback beside the default, and the default branch is kept as it was. Every hand-tuned GBDT kernel the default path launches stays.
+
+### MOJOLEARN_GBDT_DW2_SCAN_SMEM_OFF
+
+- Tried: Trees (GBDT depthwise, FAST Apple shared-memory histogram scan).
+- Evidence: EXP:110 KEPT c55b8c377 (M3: depthwise taxi 13,861 -> 13,127 ms, istella 17,237 -> 17,014 ms); promoted on Apple only (rule d). Owed: NVIDIA/AMD never apply (FAST Apple only). Verdict: deleted (V2 rule, DELETE-OLD-PATH).
+- Removed: the `_OFF` read in DW2_SCAN_SMEM. Default unchanged: no bits move.
+- Files: gbdt/methods/greedy_subsets_searcher/greedy_search_helper_depthwise.mojo.
+- Deleted by: lane/expdel2-43-trees `ba59d96b6a` (2026-11-15); code recoverable at `1effc69adf`.
+- Restore: `git apply experiments/removed/MOJOLEARN_GBDT_DW2_SCAN_SMEM_OFF.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
+- Records: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-43-trees section).
+
+### MOJOLEARN_GBDT_DW_FUSED_CHAIN_OFF
+
+- Tried: Trees (GBDT depthwise, FAST Apple fused split chain).
+- Evidence: EXP:137 DROPPED-noise for the stacked sync arms; the fused chain default stays (rule e). Verdict: deleted (V2 rule, DELETE-OLD-PATH).
+- Removed: the `_OFF` read in DW_FUSED_CHAIN. Default unchanged: no bits move.
+- Files: gbdt/methods/greedy_subsets_searcher/greedy_search_helper_depthwise.mojo.
+- Deleted by: lane/expdel2-43-trees `608bbc1936` (2026-11-15); code recoverable at `e717a7e088`.
+- Restore: `git apply experiments/removed/MOJOLEARN_GBDT_DW_FUSED_CHAIN_OFF.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
+- Records: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-43-trees section).
+
+### MOJOLEARN_GBDT_DW_MODE_SKIP_OFF
+
+- Tried: Trees (GBDT quantized histogram, FAST Apple mode-bin skip).
+- Evidence: EXP:112 KEPT 7736fa5b8 (M3: depthwise taxi 13,744 -> 12,930 ms, istella 17,297 -> 16,975 ms); promoted on Apple only (rule d). Verdict: deleted (V2 rule, DELETE-OLD-PATH).
+- Removed: the `_OFF` read in QH_MODE_SKIP and the is_defined import. Default unchanged: no bits move.
+- Files: gbdt/methods/greedy_subsets_searcher/quantized_hist_launcher.mojo.
+- Deleted by: lane/expdel2-43-trees `058ceff3bf` `7789d02c24` (2026-11-15); code recoverable at `2c8d6bbc8e`.
+- Restore: `git apply experiments/removed/MOJOLEARN_GBDT_DW_MODE_SKIP_OFF.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
+- Records: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-43-trees section).
+
+### MOJOLEARN_GBDT_IDENTICAL_SPLIT_COPY
+
+- Tried: Trees (GBDT depthwise/lossguide, Apple IDENTICAL split-time histogram copy).
+- Evidence: no A/B recorded for the opt-in arm (rule a). Verdict: deleted (V2 rule, DELETE-ARM).
+- Removed: its read in DEFER_HIST_COPY_1903. Default unchanged: no bits move.
+- Files: gbdt/methods/greedy_subsets_searcher/greedy_search_helper_depthwise.mojo.
+- Deleted by: lane/expdel2-43-trees `e717a7e088` (2026-11-15); code recoverable at `7be6f0b80e`.
+- Restore: `git apply experiments/removed/MOJOLEARN_GBDT_IDENTICAL_SPLIT_COPY.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
+- Records: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-43-trees section).
+
+### MOJOLEARN_GBDT_ID_DEFER_COPY
+
+- Tried: Trees (GBDT depthwise/lossguide, NVIDIA/AMD IDENTICAL deferred histogram copy).
+- Evidence: EXP:1503 KEPT as switch with no A/B on NVIDIA or AMD (rule e). Verdict: deleted (V2 rule, DELETE-ARM).
+- Removed: its read (and the IDN_ALL_OFF companion read) in DEFER_HIST_COPY_1903. Default unchanged: no bits move.
+- Files: gbdt/methods/greedy_subsets_searcher/greedy_search_helper_depthwise.mojo.
+- Deleted by: lane/expdel2-43-trees `7be6f0b80e` (2026-11-15); code recoverable at `8c20167f4f`.
+- Restore: `git apply experiments/removed/MOJOLEARN_GBDT_ID_DEFER_COPY.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
+- Records: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-43-trees section).
+
+### MOJOLEARN_GBDT_LG_BATCH
+
+- Tried: Trees (GBDT lossguide, FAST Apple B-best-leaves batch).
+- Evidence: no A/B recorded for the opt-in arm (rule a); the batch was taken off the FAST default 2026-09-26 for a quality loss (Istella RMSE about +2%). Verdict: deleted (V2 rule, DELETE-ARM).
+- Removed: _LG_FAST_APPLE, GBDT_LG_BATCH, _lossguide_top_b and the batch branch of the Lossguide selection. Default unchanged: no bits move.
+- Files: gbdt/methods/greedy_subsets_searcher/greedy_search_helper_depthwise.mojo.
+- Deleted by: lane/expdel2-43-trees `c556cd4e1d` (2026-11-15); code recoverable at `ba59d96b6a`.
+- Restore: `git apply experiments/removed/MOJOLEARN_GBDT_LG_BATCH.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
+- Records: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-43-trees section).
+
+### MOJOLEARN_GBDT_LG_BATCH2
+
+- Tried: Trees (GBDT lossguide, FAST Apple B-best-leaves batch).
+- Evidence: no A/B recorded for the opt-in arm (rule a); the batch was taken off the FAST default 2026-09-26 for a quality loss (Istella RMSE about +2%). Verdict: deleted (V2 rule, DELETE-ARM).
+- Removed: _LG_FAST_APPLE, GBDT_LG_BATCH, _lossguide_top_b and the batch branch of the Lossguide selection. Default unchanged: no bits move.
+- Files: gbdt/methods/greedy_subsets_searcher/greedy_search_helper_depthwise.mojo.
+- Deleted by: lane/expdel2-43-trees `c556cd4e1d` (2026-11-15); code recoverable at `ba59d96b6a`.
+- Restore: `git apply experiments/removed/MOJOLEARN_GBDT_LG_BATCH2.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
+- Records: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-43-trees section).
+
+### MOJOLEARN_GBDT_LG_BATCH4
+
+- Tried: Trees (GBDT lossguide, FAST Apple B-best-leaves batch).
+- Evidence: no A/B recorded for the opt-in arm (rule a); the batch was taken off the FAST default 2026-09-26 for a quality loss (Istella RMSE about +2%). Verdict: deleted (V2 rule, DELETE-ARM).
+- Removed: _LG_FAST_APPLE, GBDT_LG_BATCH, _lossguide_top_b and the batch branch of the Lossguide selection. Default unchanged: no bits move.
+- Files: gbdt/methods/greedy_subsets_searcher/greedy_search_helper_depthwise.mojo.
+- Deleted by: lane/expdel2-43-trees `c556cd4e1d` (2026-11-15); code recoverable at `ba59d96b6a`.
+- Restore: `git apply experiments/removed/MOJOLEARN_GBDT_LG_BATCH4.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
+- Records: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-43-trees section).
+
+### MOJOLEARN_GBDT_LG_BATCH8
+
+- Tried: Trees (GBDT lossguide, FAST Apple B-best-leaves batch).
+- Evidence: no A/B recorded for the opt-in arm (rule a); the batch was taken off the FAST default 2026-09-26 for a quality loss (Istella RMSE about +2%). Verdict: deleted (V2 rule, DELETE-ARM).
+- Removed: _LG_FAST_APPLE, GBDT_LG_BATCH, _lossguide_top_b and the batch branch of the Lossguide selection. Default unchanged: no bits move.
+- Files: gbdt/methods/greedy_subsets_searcher/greedy_search_helper_depthwise.mojo.
+- Deleted by: lane/expdel2-43-trees `c556cd4e1d` (2026-11-15); code recoverable at `ba59d96b6a`.
+- Restore: `git apply experiments/removed/MOJOLEARN_GBDT_LG_BATCH8.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
+- Records: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-43-trees section).
+
+### MOJOLEARN_GBDT_LG_BATCH32
+
+- Tried: Trees (GBDT lossguide, FAST Apple B-best-leaves batch).
+- Evidence: no A/B recorded for the opt-in arm (rule a); the batch was taken off the FAST default 2026-09-26 for a quality loss (Istella RMSE about +2%). Verdict: deleted (V2 rule, DELETE-ARM).
+- Removed: _LG_FAST_APPLE, GBDT_LG_BATCH, _lossguide_top_b and the batch branch of the Lossguide selection. Default unchanged: no bits move.
+- Files: gbdt/methods/greedy_subsets_searcher/greedy_search_helper_depthwise.mojo.
+- Deleted by: lane/expdel2-43-trees `c556cd4e1d` (2026-11-15); code recoverable at `ba59d96b6a`.
+- Restore: `git apply experiments/removed/MOJOLEARN_GBDT_LG_BATCH32.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
+- Records: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-43-trees section).
+
+### MOJOLEARN_GBDT_LG_BATCH_OFF
+
+- Tried: Trees (GBDT lossguide, FAST Apple B-best-leaves batch).
+- Evidence: no A/B recorded for the old path (rule b); the arm it turned off is deleted with it. Verdict: deleted (V2 rule, DELETE-OLD-PATH).
+- Removed: its read in _LG_FAST_APPLE. Default unchanged: no bits move.
+- Files: gbdt/methods/greedy_subsets_searcher/greedy_search_helper_depthwise.mojo.
+- Deleted by: lane/expdel2-43-trees `c556cd4e1d` (2026-11-15); code recoverable at `ba59d96b6a`.
+- Restore: `git apply experiments/removed/MOJOLEARN_GBDT_LG_BATCH_OFF.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
+- Records: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-43-trees section).
+
+### MOJOLEARN_GBDT_LG_EXACT_BATCH128
+
+- Tried: Trees (GBDT lossguide, FAST exact-batch width 128 force knob).
+- Evidence: EXP:113 KEPT 9722e5a2b: 128 is already the FAST Apple default; the force-on read is default-equal (rule e). Verdict: deleted (V2 rule, DELETE-ARM).
+- Removed: its read in _LG_EXACT_BATCH128. Default unchanged: no bits move.
+- Files: gbdt/methods/greedy_subsets_searcher/greedy_search_helper_depthwise.mojo.
+- Deleted by: lane/expdel2-43-trees `e50ac0e432` (2026-11-15); code recoverable at `25eeaf016e`.
+- Restore: `git apply experiments/removed/MOJOLEARN_GBDT_LG_EXACT_BATCH128.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
+- Records: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-43-trees section).
+
+### MOJOLEARN_GBDT_LG_EXACT_BATCH128_OFF
+
+- Tried: Trees (GBDT lossguide, FAST Apple exact-batch width 128).
+- Evidence: EXP:113 KEPT 9722e5a2b (M3: lossguide taxi 13,148 -> 12,921 ms); promoted on Apple only (rule d). Verdict: deleted (V2 rule, DELETE-OLD-PATH).
+- Removed: its read in _LG_EXACT_BATCH128. Default unchanged: no bits move.
+- Files: gbdt/methods/greedy_subsets_searcher/greedy_search_helper_depthwise.mojo.
+- Deleted by: lane/expdel2-43-trees `c9cb94022d` (2026-11-15); code recoverable at `e50ac0e432`.
+- Restore: `git apply experiments/removed/MOJOLEARN_GBDT_LG_EXACT_BATCH128_OFF.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
+- Records: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-43-trees section).
+
+### MOJOLEARN_GBDT_LG_EXACT_BATCH32
+
+- Tried: Trees (GBDT lossguide, FAST exact-batch width 32).
+- Evidence: no A/B recorded for the opt-in arm (rule a). Verdict: deleted (V2 rule, DELETE-ARM).
+- Removed: its reads in _LG_EXACT_BATCH128 and LG_EXACT_BATCH_WIDTH. Default unchanged: no bits move.
+- Files: gbdt/methods/greedy_subsets_searcher/greedy_search_helper_depthwise.mojo.
+- Deleted by: lane/expdel2-43-trees `ad8530ee49` (2026-11-15); code recoverable at `c9cb94022d`.
+- Restore: `git apply experiments/removed/MOJOLEARN_GBDT_LG_EXACT_BATCH32.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
+- Records: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-43-trees section).
+
+### MOJOLEARN_GBDT_LG_EXACT_BATCH64
+
+- Tried: Trees (GBDT lossguide, IDENTICAL exact-batch width 64).
+- Evidence: EXP:114 KEPT is the FAST width (superseded by 128); the IDENTICAL arm 64 was never measured (rule e). Verdict: deleted (V2 rule, DELETE-ARM).
+- Removed: its read in LG_EXACT_BATCH_WIDTH. Default unchanged: no bits move.
+- Files: gbdt/methods/greedy_subsets_searcher/greedy_search_helper_depthwise.mojo.
+- Deleted by: lane/expdel2-43-trees `25eeaf016e` (2026-11-15); code recoverable at `d61b232e98`.
+- Restore: `git apply experiments/removed/MOJOLEARN_GBDT_LG_EXACT_BATCH64.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
+- Records: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-43-trees section).
+
+### MOJOLEARN_GBDT_LG_EXACT_BATCH_OFF
+
+- Tried: Trees (GBDT lossguide, FAST Apple exact best-first batch).
+- Evidence: no A/B recorded for the old path (rule b). Verdict: deleted (V2 rule, DELETE-OLD-PATH).
+- Removed: its read in LG_EXACT_BATCH. Default unchanged: no bits move.
+- Files: gbdt/methods/greedy_subsets_searcher/greedy_search_helper_depthwise.mojo.
+- Deleted by: lane/expdel2-43-trees `74a26fca92` (2026-11-15); code recoverable at `c556cd4e1d`.
+- Restore: `git apply experiments/removed/MOJOLEARN_GBDT_LG_EXACT_BATCH_OFF.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
+- Records: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-43-trees section).
+
+### MOJOLEARN_GBDT_LG_EXACT_ID_OFF
+
+- Tried: Trees (GBDT lossguide, IDENTICAL exact best-first batch).
+- Evidence: no A/B recorded for the old path (rule b). Verdict: deleted (V2 rule, DELETE-OLD-PATH).
+- Removed: its read in LG_EXACT_ID. Default unchanged: no bits move.
+- Files: gbdt/methods/greedy_subsets_searcher/greedy_search_helper_depthwise.mojo.
+- Deleted by: lane/expdel2-43-trees `cb4478ec40` (2026-11-15); code recoverable at `ad8530ee49`.
+- Restore: `git apply experiments/removed/MOJOLEARN_GBDT_LG_EXACT_ID_OFF.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
+- Records: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-43-trees section).
+
+### MOJOLEARN_GBDT_NS_INHERIT_ID_OFF
+
+- Tried: Trees (GBDT non-symmetric, IDENTICAL inherited partition).
+- Evidence: no A/B recorded for the old path (rule b). Verdict: deleted (V2 rule, DELETE-OLD-PATH).
+- Removed: its read in NS_INHERIT_ID. Default unchanged: no bits move.
+- Files: gbdt/methods/greedy_subsets_searcher/greedy_search_helper_depthwise.mojo.
+- Deleted by: lane/expdel2-43-trees `3b8ce77de5` (2026-11-15); code recoverable at `cb4478ec40`.
+- Restore: `git apply experiments/removed/MOJOLEARN_GBDT_NS_INHERIT_ID_OFF.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
+- Records: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-43-trees section).
+
+### MOJOLEARN_GBDT_NS_INHERIT_PARTITION_OFF
+
+- Tried: Trees (GBDT non-symmetric, FAST Apple inherited partition).
+- Evidence: no A/B recorded for the old path (rule b). Verdict: deleted (V2 rule, DELETE-OLD-PATH).
+- Removed: its read in NS_INHERIT_PARTITION. Default unchanged: no bits move.
+- Files: gbdt/methods/greedy_subsets_searcher/greedy_search_helper_depthwise.mojo.
+- Deleted by: lane/expdel2-43-trees `7ca0acd8ed` (2026-11-15); code recoverable at `3b8ce77de5`.
+- Restore: `git apply experiments/removed/MOJOLEARN_GBDT_NS_INHERIT_PARTITION_OFF.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
+- Records: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-43-trees section).
+
+### MOJOLEARN_IDN_GBDT_NS_SCALE_DEVICE_OFF
+
+- Tried: Trees (GBDT non-symmetric, IDENTICAL device fixed-point scale).
+- Evidence: no A/B recorded for the old path (rule b). Verdict: deleted (V2 rule, DELETE-OLD-PATH).
+- Removed: its read in IDN_NS_SCALE_DEVICE. Default unchanged: no bits move.
+- Files: gbdt/methods/greedy_subsets_searcher/greedy_search_helper_depthwise.mojo.
+- Deleted by: lane/expdel2-43-trees `1effc69adf` (2026-11-15); code recoverable at `608bbc1936`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_GBDT_NS_SCALE_DEVICE_OFF.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
+- Records: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-43-trees section).
+
+### MOJOLEARN_SYM_RESOLVE_BLOCK
+
+- Tried: Trees (GBDT symmetric, FAST Apple per-threadgroup resolve fold).
+- Evidence: EXP:1303 RECORD NEUTRAL; never built or timed as its own arm; its umbrella SYM_HIST_ALL was deleted NEUTRAL by expdel-05 (rule g). Verdict: deleted (V2 rule, DELETE-EXPERIMENT).
+- Removed: the SYM_RESOLVE_BLOCK alias in sym_fast.mojo, its branch in pw_resolve_pack_bins_kernel, the _fold_block helper and the imports only it used. Default unchanged: no bits move.
+- Files: gbdt/methods/kernel/pointwise_split_resolve.mojo, gbdt/methods/kernel/sym_fast.mojo.
+- Deleted by: lane/expdel2-43-trees `971db746c6` `c91aa521d9` (2026-11-15); code recoverable at `e301d611ef`.
+- Restore: `git apply experiments/removed/MOJOLEARN_SYM_RESOLVE_BLOCK.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
+- Records: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-43-trees section).
+
+### Non-owner folds by lane expdel2-43-trees
+
+- `MOJOLEARN_TREES_T19_DEFER`: folded to False in gbdt/methods/greedy_subsets_searcher/greedy_search_helper_depthwise.mojo; `8c20167f4f`, recoverable at `931e7ca76a`; `experiments/removed/MOJOLEARN_TREES_T19_DEFER.expdel2-43-trees.patch`.
+- `MOJOLEARN_AFT_N01`: folded to False in gbdt/methods/greedy_subsets_searcher/greedy_search_helper_depthwise.mojo; `b7f9fb3a4a`, recoverable at `74a26fca92`; `experiments/removed/MOJOLEARN_AFT_N01.expdel2-43-trees.patch`.
+- `MOJOLEARN_TREES_T17_BATCH`: folded to its default 128 in gbdt/methods/greedy_subsets_searcher/greedy_search_helper_depthwise.mojo; `d61b232e98`, recoverable at `b7f9fb3a4a`; `experiments/removed/MOJOLEARN_TREES_T17_BATCH.expdel2-43-trees.patch`.
+- `MOJOLEARN_TREES_C45_GBDT`: folded to False in gbdt/methods/greedy_subsets_searcher/greedy_search_helper_depthwise.mojo; `2c3151597f`, recoverable at `7ca0acd8ed`; `experiments/removed/MOJOLEARN_TREES_C45_GBDT.expdel2-43-trees.patch`.
+- `MOJOLEARN_AFT_N02`: folded to False in gbdt/methods/greedy_subsets_searcher/greedy_search_helper_depthwise.mojo and gbdt/methods/greedy_subsets_searcher/quantized_hist_launcher.mojo; `97d33c09d6`, `2c8d6bbc8e`, recoverable at `2c3151597f`; `experiments/removed/MOJOLEARN_AFT_N02.expdel2-43-trees.patch`.
+- `MOJOLEARN_TREES_LG_LEVEL_ROUNDS`: folded to False in gbdt/methods/greedy_subsets_searcher/greedy_search_helper_depthwise.mojo; `1d37619083`, recoverable at `97d33c09d6`; `experiments/removed/MOJOLEARN_TREES_LG_LEVEL_ROUNDS.expdel2-43-trees.patch`.
+- `MOJOLEARN_IDN_ALL_OFF`: folded to False in gbdt/methods/greedy_subsets_searcher/greedy_search_helper_depthwise.mojo; `e6d002c73c`, recoverable at `1d37619083`; `experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-43-trees.patch`.
+- `MOJOLEARN_AFT_N03`: folded to False in gbdt/methods/greedy_subsets_searcher/kernel/dw2_level.mojo; `85f432a43b`, recoverable at `e6d002c73c`; `experiments/removed/MOJOLEARN_AFT_N03.expdel2-43-trees.patch`.
+- `MOJOLEARN_AFT_N04`: folded to False in gbdt/methods/greedy_subsets_searcher/kernel/dw2_level.mojo; `42ccfefe05`, recoverable at `85f432a43b`; `experiments/removed/MOJOLEARN_AFT_N04.expdel2-43-trees.patch`.
+- `MOJOLEARN_AFT_N06`: folded to False in gbdt/methods/greedy_subsets_searcher/kernel/dw2_level.mojo; `38d2e7127f`, `fdbf0a0b1b`, recoverable at `42ccfefe05`; `experiments/removed/MOJOLEARN_AFT_N06.expdel2-43-trees.patch`.
+- `MOJOLEARN_TREES_HIST_WARP_AGG`: folded to False in gbdt/methods/greedy_subsets_searcher/kernel/hist_2_one_byte_8bit.mojo (h8_add_point_wave goes); `02e2a7dbe7`, recoverable at `fdbf0a0b1b`; `experiments/removed/MOJOLEARN_TREES_HIST_WARP_AGG.expdel2-43-trees.patch`.
+- `MOJOLEARN_TREES_HIST_PACKED_GH`: folded to False in gbdt/methods/greedy_subsets_searcher/kernel/hist_2_one_byte_8bit.mojo (h8_unpack_pairs goes); `c58005809d`, recoverable at `02e2a7dbe7`; `experiments/removed/MOJOLEARN_TREES_HIST_PACKED_GH.expdel2-43-trees.patch`.
+- `MOJOLEARN_AFCL_T01`: folded to False in gbdt/methods/greedy_subsets_searcher/kernel/hist_quantized_shared.mojo; `7b43f615be`, recoverable at `f04baade37`; `experiments/removed/MOJOLEARN_AFCL_T01.expdel2-43-trees.patch`.
+- `MOJOLEARN_AFCL_T02`: folded to False in gbdt/methods/greedy_subsets_searcher/kernel/hist_quantized_shared.mojo; `f2d53d03bd`, recoverable at `7b43f615be`; `experiments/removed/MOJOLEARN_AFCL_T02.expdel2-43-trees.patch`.
+- `MOJOLEARN_AFT_N05`: folded to False in gbdt/methods/greedy_subsets_searcher/kernel/split_chain_fused.mojo; `2184373a86`, recoverable at `f2d53d03bd`; `experiments/removed/MOJOLEARN_AFT_N05.expdel2-43-trees.patch`.
+- `MOJOLEARN_ORD_HIST_FOLD_SKIP`: folded to False in gbdt/methods/kernel/pointwise_hist2_one_byte_templ.mojo (the ord_small_fold_* kernels stay: pointwise_kernels.mojo imports them); `65839d0178`, recoverable at `7789d02c24`; `experiments/removed/MOJOLEARN_ORD_HIST_FOLD_SKIP.expdel2-43-trees.patch`.
+- `MOJOLEARN_AFT_G03`: folded to False in gbdt/methods/kernel/pointwise_split_resolve.mojo; `e301d611ef`, recoverable at `65839d0178`; `experiments/removed/MOJOLEARN_AFT_G03.expdel2-43-trees.patch`.
+- `MOJOLEARN_GBDT_FUSED_LEVEL_OFF`: folded in gbdt/methods/kernel/pointwise_split_resolve.mojo; PW_FUSED_LEVEL kept as the constant True; `61398a4eb6`, recoverable at `c91aa521d9`; `experiments/removed/MOJOLEARN_GBDT_FUSED_LEVEL_OFF.expdel2-43-trees.patch`.
+- `MOJOLEARN_AFT_G04`: folded to False in gbdt/methods/kernel/pointwise_scores.mojo; `acfd453fec`, recoverable at `61398a4eb6`; `experiments/removed/MOJOLEARN_AFT_G04.expdel2-43-trees.patch`.
+- `MOJOLEARN_AFT_G08`: folded to False in gbdt/methods/kernel_add_model_value.mojo; `a61d0e7d75`, recoverable at `acfd453fec`; `experiments/removed/MOJOLEARN_AFT_G08.expdel2-43-trees.patch`.
+
+Not deleted, contrary to the plan: `MOJOLEARN_IDN_GBDT_STEP_OLD` (restore switch; its NVIDIA + AMD A/B is owed this wave) and `MOJOLEARN_COLUMN_CPU` (the CPU-column build switch).

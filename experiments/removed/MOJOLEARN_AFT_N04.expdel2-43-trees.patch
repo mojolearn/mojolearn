@@ -1,0 +1,28 @@
+diff --git a/gbdt/methods/greedy_subsets_searcher/kernel/dw2_level.mojo b/gbdt/methods/greedy_subsets_searcher/kernel/dw2_level.mojo
+index 1fd17c1632..a945177f22 100644
+--- a/gbdt/methods/greedy_subsets_searcher/kernel/dw2_level.mojo
++++ b/gbdt/methods/greedy_subsets_searcher/kernel/dw2_level.mojo
+@@ -41,7 +41,7 @@ from max.gpu.primitives.block import prefix_sum as block_prefix_sum
+ from max.gpu.sync import barrier
+ 
+ from checks.numerics import ftz
+-from gbdt.apple_fast_tree_experiments import AFT_N06
++from gbdt.apple_fast_tree_experiments import AFT_N04, AFT_N06
+ 
+ # ---- MOJOLEARN_GBDT_DW2_PART_VEC4 ------------------------------------------
+ # TOMBSTONE: MOJOLEARN_AFT_N03 (DELETE-EXPERIMENT, never-run Apple FAST programme card, rule g; non-owner fold to False) deleted 2026-11-15 by lane/expdel2-43-trees; code recoverable at e6d002c73c.
+@@ -378,9 +378,11 @@ def dw2_copy_back_kernel[GUARD: Bool = False](
+ # ---- MOJOLEARN_GBDT_DW2_SCAN_SMEM ------------------------------------------
+ #: Features per block. 16 x 255 folds fits the page with room for the
+ #: alignment head and tail.
+-# TOMBSTONE: MOJOLEARN_AFT_N04 (DELETE-EXPERIMENT, never-run Apple FAST programme card, rule g; non-owner fold to False) deleted 2026-11-15 by lane/expdel2-43-trees; code recoverable at 85f432a43b.
+-# Restore: git apply experiments/removed/MOJOLEARN_AFT_N04.expdel2-43-trees.patch; record in docs/TOMBSTONES.md.
+-comptime DW2_SCAN_FT = 16
++# N04: eight features and an 8 KiB slab (plus alignment slack) instead
++# of sixteen/16 KiB. More independent leaf/stat tiles may reside together;
++# each feature still performs the complete ordered bin prefix. Source only:
++# no performance/quality evidence, default OFF.
++comptime DW2_SCAN_FT = 8 if AFT_N04 else 16
+ comptime DW2_SCAN_CAP = DW2_SCAN_FT * 256 + 8
+ comptime DW2_SCAN_BLOCK = 256
+ 

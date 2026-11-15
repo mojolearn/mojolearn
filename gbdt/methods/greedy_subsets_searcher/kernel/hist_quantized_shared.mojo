@@ -130,22 +130,23 @@ from checks.kernel_matrix import (
     quantized_hist_group_features_for,
 )
 from checks.numerics import ftz
-from gbdt.apple_fast_classical import AFCL_T01, AFCL_T02
 
 comptime QH_BLOCK = 512
 comptime QH_BINS = 256
 comptime QH_STATS = 2
 #: DEV 1913: features per block from the COLUMN's shared budget
 #: (`quantized_hist_group_features_for` -- 16/24/32, never 227 KB).
-comptime QH_GROUP_FEATURES = (
-    8 if AFCL_T02 else quantized_hist_group_features_for[TARGET_COLUMN]()
-)
+# TOMBSTONE: MOJOLEARN_AFCL_T02 (DELETE-EXPERIMENT, never-run Apple FAST programme card, rule g; non-owner fold to False) deleted 2026-11-15 by lane/expdel2-43-trees; code recoverable at 7b43f615be.
+# Restore: git apply experiments/removed/MOJOLEARN_AFCL_T02.expdel2-43-trees.patch; record in docs/TOMBSTONES.md.
+comptime QH_GROUP_FEATURES = quantized_hist_group_features_for[TARGET_COLUMN]()
 #: whole compressed-index words per group; the row guarantees 4 | G.
 comptime QH_GROUP_WORDS = QH_GROUP_FEATURES // 4
 #: Int32 cells of the ONE per-block shared histogram.
 comptime QH_SMEM = QH_GROUP_FEATURES * QH_BINS * QH_STATS
 #: DEV 1914: XGBoost `kMinItemsPerBlock` (`histogram.cu:405-419`).
-comptime QH_MIN_ITEMS_PER_BLOCK = 4096 if AFCL_T01 else 8192
+# TOMBSTONE: MOJOLEARN_AFCL_T01 (DELETE-EXPERIMENT, never-run Apple FAST programme card, rule g; non-owner fold to False) deleted 2026-11-15 by lane/expdel2-43-trees; code recoverable at f04baade37.
+# Restore: git apply experiments/removed/MOJOLEARN_AFCL_T01.expdel2-43-trees.patch; record in docs/TOMBSTONES.md.
+comptime QH_MIN_ITEMS_PER_BLOCK = 8192
 #: DEV 1914: LightGBM `min_grid_dim_y_ = 160`
 #: (`cuda_histogram_constructor.hpp:152`); read by the launcher.
 comptime QH_MIN_TOTAL_BLOCKS = 160
@@ -492,7 +493,7 @@ def qh_write_hist_kernel(
         dst_histogram.unsafe_store(dst, val)
 
 
-# ---- QH_MODE_SKIP (FAST, Apple; default, off `-D MOJOLEARN_GBDT_DW_MODE_SKIP_OFF`)
+# ---- QH_MODE_SKIP (FAST, Apple; default)
 # Lane apple-fast-dwgap. A low-cardinality feature sends most of a block's
 # rows to ONE bin, so every lane's two threadgroup atomics land on the same
 # two cells and serialize (taxi: store_fwd, mta_tax, airport_fee,

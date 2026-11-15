@@ -48,9 +48,7 @@ from checks.kernel_matrix import (
     greedy_quantized_hist_for,
 )
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
-from std.sys.compile import is_defined
 from core.accelerator_target import TARGET_HAS_APPLE_GPU
-from gbdt.apple_fast_tree_experiments import AFT_N02
 
 #: THE ONE TRUTH the driver keys its dispatch on. Comptime, so the
 #: IDENTICAL build folds every consumer away and executes the pre-round
@@ -67,14 +65,16 @@ comptime QUANTIZED_HIST_LIVE = greedy_quantized_hist_for[
 #: and Lossguide). Default since the M3 A/B (lane/apple-fast-dwgap
 #: 23cbc3195, n=2, both SEP): depthwise taxi 13,744 -> 12,930 ms (-5.9%),
 #: auc .6325 -> .6324; istella 17,297 -> 16,975 ms (-1.9%), auc .9832 same.
-#: Off: `-D MOJOLEARN_GBDT_DW_MODE_SKIP_OFF`. The old opt-in define
+#: The old opt-in define
 #: `-D MOJOLEARN_GBDT_DW_MODE_SKIP` is harmless (no longer read).
 comptime QH_MODE_SKIP = (
     QUANTIZED_HIST_LIVE
     and GLOBAL_NUMERIC_MODE == NUMERIC_FAST
     and TARGET_HAS_APPLE_GPU
-    and not is_defined["MOJOLEARN_GBDT_DW_MODE_SKIP_OFF"]()
 )
+# TOMBSTONE: MOJOLEARN_GBDT_DW_MODE_SKIP_OFF (DELETE-OLD-PATH, EXP:112 KEPT 7736fa5b8 on Apple M3; one-vendor promotion, rule d) deleted 2026-11-15 by lane/expdel2-43-trees; code recoverable at 2c8d6bbc8e.
+# Restore: git apply experiments/removed/MOJOLEARN_GBDT_DW_MODE_SKIP_OFF.patch; record in docs/TOMBSTONES.md.
+
 
 
 def quantized_hist_shape_ok(
@@ -153,14 +153,8 @@ def qh_replicas(
         work_cap = floor_rep
     if rep > work_cap:
         rep = work_cap
-    # N02 also reaches the Apple-default quantized histogram family, not
-    # only the generic fallback. Halve the occupancy/work-derived replicas
-    # to trade independent row walkers for fewer partial histograms and
-    # less fixed-point atomic contention. Every row remains in the stride;
-    # this changes no feature/bin precision or active-leaf membership.
-    # Source only, default OFF; no performance or quality evidence.
-    comptime if AFT_N02:
-        rep = max(1, (rep + 1) // 2)
+    # TOMBSTONE: MOJOLEARN_AFT_N02 (DELETE-EXPERIMENT, never-run Apple FAST programme card, rule g; non-owner fold to False) deleted 2026-11-15 by lane/expdel2-43-trees; code recoverable at 2184373a86.
+    # Restore: git apply experiments/removed/MOJOLEARN_AFT_N02.expdel2-43-trees.patch; record in docs/TOMBSTONES.md.
     return rep
 
 
