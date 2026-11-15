@@ -255,33 +255,15 @@ comptime KNN_CERTIFIED_MMA = (
     # Recorded cloud timings are not A/B evidence; Apple qualification remains pending.
     and not is_defined["MOJOLEARN_KNN_CERTIFIED_MMA_OFF"]()
 )
-# Experimental metadata only: no new query route or device work. This
-# serial campaign counter uses the exact fallback total already read by
-# the existing driver and is absent from ordinary builds.
-struct _CertifiedReach(Defaultable,Movable):
-    var calls: Int
-    var queries: Int
-    var fallback: Int
-    def __init__(out self):
-        self.calls=0; self.queries=0; self.fallback=0
-comptime _CERTIFIED_REACH = SharedSlot[_CertifiedReach, "MojolearnCertifiedKnnReachV2"]
-
-# I15 experiment qualification pending: compile/fixtures do not establish
-# four-column identity or NVIDIA+AMD full-operation speed. Existing promoted
-# defaults stay unchanged; this campaign attributes explicit experiment arms.
+# TOMBSTONE: MOJOLEARN_IDN_KNN_CERTIFIED_REACH (opt-in I15 reach counter, never run) deleted 2026-11-15 by lane/expdel2-12-cluster; code recoverable at a40e1d3d34.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_KNN_CERTIFIED_REACH.patch; record in docs/TOMBSTONES.md.
+# The two readers stay (no-op clear, zero counts) for their importer
+# experiments/performance_ideas/I15/certified_caller.mojo.
 def certified_knn_reach_clear() raises:
-    # NEVER RUN — PENDING MEASUREMENT
-    comptime if is_defined["MOJOLEARN_IDN_KNN_CERTIFIED_REACH"]():
-        var p=_CERTIFIED_REACH.get_or_create_ptr()
-        p[].calls=0; p[].queries=0; p[].fallback=0
+    pass
 
 def certified_knn_reach_read() raises -> Array[Int,3]:
-    var values=Array[Int,3](fill=0)
-    # NEVER RUN — PENDING MEASUREMENT
-    comptime if is_defined["MOJOLEARN_IDN_KNN_CERTIFIED_REACH"]():
-        var p=_CERTIFIED_REACH.get_or_create_ptr()
-        values[0]=p[].calls; values[1]=p[].queries; values[2]=p[].fallback
-    return values^
+    return Array[Int,3](fill=0)
 
 comptime CERT_MAX_K = 24
 comptime CERT_MAX_D = 32
@@ -350,7 +332,6 @@ from neighbors.impl.distance.detail.distance_ops import (
     metric_norm_takes_sqrt,
     metric_uses_norms,
 )
-from core.shared_slot import SharedSlot
 
 
 # DEVIATION 2667 (kernel-matrix row `knn_fused_distance_select_for`): the
@@ -2393,10 +2374,6 @@ def certified_mma_knn(
     # device (ascending, by an exclusive scan), not downloaded and walked
     var rows = ctx.enqueue_create_buffer[DType.int32](n_queries)
     var nf = device_compact_equal_i32(ctx, flags, n_queries, Int32(0), rows)
-    # NEVER RUN — PENDING MEASUREMENT
-    comptime if is_defined["MOJOLEARN_IDN_KNN_CERTIFIED_REACH"]():
-        var reached=_CERTIFIED_REACH.get_or_create_ptr()
-        reached[].calls+=1; reached[].queries+=n_queries; reached[].fallback+=nf
     if getenv("MOJOLEARN_STAGE_TIMES") == "1":
         print("CERT_KNN queries=" + String(n_queries) + " kc=" + String(kc)
               + " tiled_fallback=" + String(nf))
