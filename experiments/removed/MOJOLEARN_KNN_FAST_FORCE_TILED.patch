@@ -1,0 +1,15 @@
+diff --git a/neighbors/impl/detail/knn_brute_force.mojo b/neighbors/impl/detail/knn_brute_force.mojo
+index 1bed264e1a..b4d46aab62 100644
+--- a/neighbors/impl/detail/knn_brute_force.mojo
++++ b/neighbors/impl/detail/knn_brute_force.mojo
+@@ -2208,8 +2208,8 @@ def brute_force_knn_impl(
+                 want_fused = g[0] == 1
+                 # TOMBSTONE: MOJOLEARN_KNN_FAST_FORCE_FUSED (Apple FAST opt-in, no A/B row) deleted 2026-11-15 by lane/expdel2-12-cluster; code recoverable at f73a667df4.
+                 # Restore: git apply experiments/removed/MOJOLEARN_KNN_FAST_FORCE_FUSED.patch; record in docs/TOMBSTONES.md.
+-                # TOMBSTONE: MOJOLEARN_KNN_FAST_FORCE_TILED (Apple FAST opt-in, no A/B row) deleted 2026-11-15 by lane/expdel2-12-cluster; code recoverable at 224c244027.
+-                # Restore: git apply experiments/removed/MOJOLEARN_KNN_FAST_FORCE_TILED.patch; record in docs/TOMBSTONES.md.
++                comptime if is_defined["MOJOLEARN_KNN_FAST_FORCE_TILED"]():
++                    want_fused = False
+ 
+     # DEVIATION 512: THE ARM MUST EXIST ON THIS COLUMN BEFORE AUTO PICKS IT.
+     #

@@ -197,22 +197,12 @@ comptime KNN_LARGE_MIN_INDEX = 65536
 
 @always_inline
 def knn_large_request(n_index: Int, n_queries: Int, n_features: Int, k: Int) -> Bool:
-    comptime if is_defined["MOJOLEARN_LEGACY_SHAPE_KNN_BOARD"]():
-        # LEGACY (default OFF): the exact knn board shape (400k index,
-        # 4k queries, 32 features, k in {10, 15}). Removed Oct 4 as
-        # benchmark-shape tuning; the size rule below is unmeasured.
-        # This define exists ONLY as the B arm of the owed removal A/B
-        # (A = size rule, B = -D MOJOLEARN_LEGACY_SHAPE_KNN_BOARD), timed on
-        # NVIDIA + AMD over neighboring shapes and one non-board dataset:
-        # experiments/six_lane_integration/grid_controls/classical-misc.json
-        # `owed_removal_ab`. Gates only NVIDIA vector index loads and Apple
-        # preflight metadata (both bit-neutral). Delete it once that A/B lands.
-        # Never enable it in a shipped build.
-        return n_index == 400000 and n_queries == 4000 and n_features == 32 and (k == 10 or k == 15)
+    # TOMBSTONE: MOJOLEARN_LEGACY_SHAPE_KNN_BOARD (board-shape B arm of the owed removal A/B, never run) deleted 2026-11-15 by lane/expdel2-12-cluster; code recoverable at 147979bdbf.
+    # Restore: git apply experiments/removed/MOJOLEARN_LEGACY_SHAPE_KNN_BOARD.patch; record in docs/TOMBSTONES.md.
     # merge 2026-10-05: main's KNN_LARGE_MIN_* rule and the IDENTICAL lane's
     # pair-count rule both replaced the board shape; the IDENTICAL lane's
-    # `knn_large_request(n_index, n_queries)` (below) is the one rule, the
-    # legacy board-shape arm above stays. KNN_LARGE_MIN_* are kept for reference.
+    # `knn_large_request(n_index, n_queries)` (below) is the one rule.
+    # KNN_LARGE_MIN_* are kept for reference.
     return knn_large_request(n_index, n_queries)
 comptime KNN_INDEX_TILE_IDENTICAL = knn_index_tile_columns_for[
     TARGET_COLUMN, IDENTICAL_BUILD
@@ -228,60 +218,37 @@ comptime KNN_PHASE_TIMERS = is_defined["MOJOLEARN_KNN_PHASE_TIMERS"]()
 #: lane/apple-identical-neural (2026-09-27): Apple IDENTICAL's expanded-L2
 #: distance tile on the simdgroup matrix unit, same bits as the register
 #: tile (`neighbors/checks/apple_mma_distance.mojo`).
-#: `-D MOJOLEARN_KNN_APPLE_MMA_OFF` keeps the register tile.
-comptime KNN_APPLE_MMA_DIST = (
-    APPLE_MMA
-    and GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not is_defined["MOJOLEARN_KNN_APPLE_MMA_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_KNN_APPLE_MMA_OFF (old register-tile path beside the Apple default, no A/B row) deleted 2026-11-15 by lane/expdel2-12-cluster; code recoverable at 5d1ec60884.
+# Restore: git apply experiments/removed/MOJOLEARN_KNN_APPLE_MMA_OFF.patch; record in docs/TOMBSTONES.md.
+comptime KNN_APPLE_MMA_DIST = APPLE_MMA and GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 
 
 #: lane/neighbors-apple (2026-09-28): Apple IDENTICAL expanded-L2 k-NN
 #: takes its candidates from the simdgroup-matrix arm and its answer from
 #: the pinned chain under a per-query certificate; an uncertified query is
 #: answered by the tiled arm (`neighbors/impl/detail/certified_mma_knn.mojo`).
-#: Same keys, same bits. `-D MOJOLEARN_KNN_CERTIFIED_MMA_OFF` keeps the
-#: tiled arm for every query.
+#: Same keys, same bits.
 # I15 M3 2026-10-06 measured Apple-only public KNN component: n100000/q2000/
 # d8/k8 baseline19.793ms candidate10.354ms (B/A0.5231); n131071/q1024/d17/k16
 # baseline20.326ms candidate14.339ms (0.7055). One same-process warmup+score;
 # timingdriver f32549d28, ab-20261006/repairs-i15-f32549d28. Prior identity
 # evidence reused, no new numerical oracle or cross-vendor IDENTICAL vote.
-# Confirm existing Apple-only default; keep OFF escape. No default change.
+# Confirm existing Apple-only default. No default change.
+# I15 2026-10-06: NVIDIA/AMD have NO_DISTINCT_RUNTIME_ARM (Apple-only guard).
+# TOMBSTONE: MOJOLEARN_KNN_CERTIFIED_MMA_OFF (tiled-arm rollback of the Apple certified MMA default, no two-vendor A/B row) deleted 2026-11-15 by lane/expdel2-12-cluster; code recoverable at b8ff403d5b.
+# Restore: git apply experiments/removed/MOJOLEARN_KNN_CERTIFIED_MMA_OFF.patch; record in docs/TOMBSTONES.md.
 comptime KNN_CERTIFIED_MMA = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and TARGET_COLUMN == COLUMN_APPLE
-    # I15 2026-10-06: NVIDIA/AMD have NO_DISTINCT_RUNTIME_ARM (Apple-only guard).
-    # Recorded cloud timings are not A/B evidence; Apple qualification remains pending.
-    and not is_defined["MOJOLEARN_KNN_CERTIFIED_MMA_OFF"]()
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and TARGET_COLUMN == COLUMN_APPLE
 )
-# Experimental metadata only: no new query route or device work. This
-# serial campaign counter uses the exact fallback total already read by
-# the existing driver and is absent from ordinary builds.
-struct _CertifiedReach(Defaultable,Movable):
-    var calls: Int
-    var queries: Int
-    var fallback: Int
-    def __init__(out self):
-        self.calls=0; self.queries=0; self.fallback=0
-comptime _CERTIFIED_REACH = SharedSlot[_CertifiedReach, "MojolearnCertifiedKnnReachV2"]
-
-# I15 experiment qualification pending: compile/fixtures do not establish
-# four-column identity or NVIDIA+AMD full-operation speed. Existing promoted
-# defaults stay unchanged; this campaign attributes explicit experiment arms.
+# TOMBSTONE: MOJOLEARN_IDN_KNN_CERTIFIED_REACH (opt-in I15 reach counter, never run) deleted 2026-11-15 by lane/expdel2-12-cluster; code recoverable at a40e1d3d34.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_KNN_CERTIFIED_REACH.patch; record in docs/TOMBSTONES.md.
+# The two readers stay (no-op clear, zero counts) for their importer
+# experiments/performance_ideas/I15/certified_caller.mojo.
 def certified_knn_reach_clear() raises:
-    # NEVER RUN — PENDING MEASUREMENT
-    comptime if is_defined["MOJOLEARN_IDN_KNN_CERTIFIED_REACH"]():
-        var p=_CERTIFIED_REACH.get_or_create_ptr()
-        p[].calls=0; p[].queries=0; p[].fallback=0
+    pass
 
 def certified_knn_reach_read() raises -> Array[Int,3]:
-    var values=Array[Int,3](fill=0)
-    # NEVER RUN — PENDING MEASUREMENT
-    comptime if is_defined["MOJOLEARN_IDN_KNN_CERTIFIED_REACH"]():
-        var p=_CERTIFIED_REACH.get_or_create_ptr()
-        values[0]=p[].calls; values[1]=p[].queries; values[2]=p[].fallback
-    return values^
+    return Array[Int,3](fill=0)
 
 comptime CERT_MAX_K = 24
 comptime CERT_MAX_D = 32
@@ -350,7 +317,6 @@ from neighbors.impl.distance.detail.distance_ops import (
     metric_norm_takes_sqrt,
     metric_uses_norms,
 )
-from core.shared_slot import SharedSlot
 
 
 # DEVIATION 2667 (kernel-matrix row `knn_fused_distance_select_for`): the
@@ -469,8 +435,7 @@ struct KnnIndexCache(Movable):
         self.pool_busy = 0
 
 
-# K4 (lane fg-knn-nb, 2026-10-09): `-D MOJOLEARN_KNN_SCRATCH_POOL_OFF=1`
-# restores the per-call allocations. DEFAULT ON (a waste removal): a search
+# K4 (lane fg-knn-nb, 2026-10-09), the only route (a waste removal): a search
 # over a resident index used to create and free, on every call, the query
 # copy, both norm vectors, the `query_tile x index_tile` distance tile
 # (1 GiB at a 4096 x 65,536 tile), the `query_tile x 2 x buf_len` radix
@@ -483,7 +448,8 @@ struct KnnIndexCache(Movable):
 # owned by the resident entry, dropped with it before its context, and only
 # used on a single-device search; a call that keeps its device indices takes
 # a fresh `out_idx` (it is moved out to the caller).
-comptime KNN_SCRATCH_POOL = not is_defined["MOJOLEARN_KNN_SCRATCH_POOL_OFF"]()
+# TOMBSTONE: MOJOLEARN_KNN_SCRATCH_POOL_OFF (per-call allocation rollback of the CONFIRMED pool) deleted 2026-11-15 by lane/expdel2-12-cluster; code recoverable at 465cb20ca0.
+# Restore: git apply experiments/removed/MOJOLEARN_KNN_SCRATCH_POOL_OFF.patch; record in docs/TOMBSTONES.md.
 
 
 def knn_pool_view[dtype: DType](
@@ -2230,10 +2196,10 @@ def brute_force_knn_impl(
             else:
                 var g = fused_l2_knn_grid(n_queries, n_index)
                 want_fused = g[0] == 1
-                comptime if is_defined["MOJOLEARN_KNN_FAST_FORCE_FUSED"]():
-                    want_fused = True
-                comptime if is_defined["MOJOLEARN_KNN_FAST_FORCE_TILED"]():
-                    want_fused = False
+                # TOMBSTONE: MOJOLEARN_KNN_FAST_FORCE_FUSED (Apple FAST opt-in, no A/B row) deleted 2026-11-15 by lane/expdel2-12-cluster; code recoverable at f73a667df4.
+                # Restore: git apply experiments/removed/MOJOLEARN_KNN_FAST_FORCE_FUSED.patch; record in docs/TOMBSTONES.md.
+                # TOMBSTONE: MOJOLEARN_KNN_FAST_FORCE_TILED (Apple FAST opt-in, no A/B row) deleted 2026-11-15 by lane/expdel2-12-cluster; code recoverable at 224c244027.
+                # Restore: git apply experiments/removed/MOJOLEARN_KNN_FAST_FORCE_TILED.patch; record in docs/TOMBSTONES.md.
 
     # DEVIATION 512: THE ARM MUST EXIST ON THIS COLUMN BEFORE AUTO PICKS IT.
     #
@@ -2393,10 +2359,6 @@ def certified_mma_knn(
     # device (ascending, by an exclusive scan), not downloaded and walked
     var rows = ctx.enqueue_create_buffer[DType.int32](n_queries)
     var nf = device_compact_equal_i32(ctx, flags, n_queries, Int32(0), rows)
-    # NEVER RUN — PENDING MEASUREMENT
-    comptime if is_defined["MOJOLEARN_IDN_KNN_CERTIFIED_REACH"]():
-        var reached=_CERTIFIED_REACH.get_or_create_ptr()
-        reached[].calls+=1; reached[].queries+=n_queries; reached[].fallback+=nf
     if getenv("MOJOLEARN_STAGE_TIMES") == "1":
         print("CERT_KNN queries=" + String(n_queries) + " kc=" + String(kc)
               + " tiled_fallback=" + String(nf))

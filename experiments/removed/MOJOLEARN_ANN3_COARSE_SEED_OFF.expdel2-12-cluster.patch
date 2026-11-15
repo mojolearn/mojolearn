@@ -1,0 +1,30 @@
+diff --git a/ivf/impl/neighbors/ivf_flat/ivf_flat_build.mojo b/ivf/impl/neighbors/ivf_flat/ivf_flat_build.mojo
+index 5ecb246690..0e93a3e600 100644
+--- a/ivf/impl/neighbors/ivf_flat/ivf_flat_build.mojo
++++ b/ivf/impl/neighbors/ivf_flat/ivf_flat_build.mojo
+@@ -126,7 +126,7 @@ comptime IVF_IDN_DEVICE_SCALE = GLOBAL_NUMERIC_MODE == _IVF_NUMERIC_IDENTICAL
+ from core.accelerator_target import TARGET_HAS_APPLE_GPU
+ from std.memory import unsafe_memcpy
+ from x_ann.stage_timer import AnnStages
+-from x_ann.switches import ANN3_HOST_PASSES
++from x_ann.switches import ANN3_COARSE_SEED, ANN3_HOST_PASSES
+ from x_ann.kpp_seed_device import kpp_seed_device
+ 
+ # TOMBSTONE: MOJOLEARN_IVF_FAST_STRIDED_COARSE (DROPPED-noise) deleted 2026-10-15 by 1a76955b5; code recoverable at 1a76955b5^.
+@@ -142,10 +142,12 @@ comptime IVF_FAST_ROWS_PER_LIST = 256
+ 
+ # TOMBSTONE: MOJOLEARN_IVF_FAST_STRIDED_COARSE (DROPPED-noise) deleted 2026-10-15 by 1a76955b5; code recoverable at 1a76955b5^.
+ # Restore: git apply experiments/removed/MOJOLEARN_IVF_FAST_STRIDED_COARSE.patch
+-# TOMBSTONE: MOJOLEARN_ANN3_COARSE_SEED_OFF (old path, EXP:2135 OPEN) folded here 2026-11-15 by lane/expdel2-12-cluster; code recoverable at ee8f7b22c2.
+-# Restore: git apply experiments/removed/MOJOLEARN_ANN3_COARSE_SEED_OFF.expdel2-12-cluster.patch; record in docs/TOMBSTONES.md.
+-comptime IVF_FAST_SEED = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
+-"""FAST on Apple, DEFAULT (lane ann-apple3):
++comptime IVF_FAST_SEED = (
++    ANN3_COARSE_SEED
++    and GLOBAL_NUMERIC_MODE == NUMERIC_FAST
++    and TARGET_HAS_APPLE_GPU
++)
++"""FAST on Apple, DEFAULT (lane ann-apple3; `-D MOJOLEARN_ANN3_COARSE_SEED_OFF` reverts):
+ the coarse quantizer is seeded by k-means++ over a stride sample of its
+ training rows and cluster/'s k-means starts from those seeds (`INIT_ARRAY`).
+ An untraced build only. The seeding runs on the device (below)."""

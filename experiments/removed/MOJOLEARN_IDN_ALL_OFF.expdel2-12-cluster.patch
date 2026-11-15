@@ -1,0 +1,197 @@
+diff --git a/ivf/impl/neighbors/ivf_flat/ivf_finite_device.mojo b/ivf/impl/neighbors/ivf_flat/ivf_finite_device.mojo
+index 544058e83a..c843b77e56 100644
+--- a/ivf/impl/neighbors/ivf_flat/ivf_finite_device.mojo
++++ b/ivf/impl/neighbors/ivf_flat/ivf_finite_device.mojo
+@@ -24,7 +24,7 @@ an output: on a hit the caller re-runs the host walk ONLY to raise the same
+ message (the failure path), so the refusal text is unchanged.
+ 
+ IDENTICAL only; FAST keeps the host walk. `-D MOJOLEARN_IDN_IVF_DEVICE_FINITE_OFF`
+-restores the host walk before the upload. No bit
++(or `MOJOLEARN_IDN_ALL_OFF`) restores the host walk before the upload. No bit
+ of any output moves either way (a scan only refuses).
+ """
+ 
+@@ -41,10 +41,8 @@ from ivf.impl.neighbors.ivf_flat.ivf_flat_index import (
+     ivf_validate_data,
+ )
+ 
+-# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch, EXP:2438 DELETED) folded here 2026-11-15 by lane/expdel2-12-cluster; code recoverable at f81bc0a348.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-12-cluster.patch; record in docs/TOMBSTONES.md.
+ comptime IVF_IDN_DEVICE_FINITE = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
+-    is_defined["MOJOLEARN_IDN_IVF_DEVICE_FINITE_OFF"]()
++    is_defined["MOJOLEARN_IDN_IVF_DEVICE_FINITE_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+ )
+ """Default ON in IDENTICAL; see the module docstring."""
+ 
+diff --git a/ivf/impl/neighbors/ivf_flat/ivf_flat_build.mojo b/ivf/impl/neighbors/ivf_flat/ivf_flat_build.mojo
+index 425797da57..bfb72ecac2 100644
+--- a/ivf/impl/neighbors/ivf_flat/ivf_flat_build.mojo
++++ b/ivf/impl/neighbors/ivf_flat/ivf_flat_build.mojo
+@@ -117,11 +117,10 @@ from ivf.impl.neighbors.ivf_flat.ivf_finite_device import (
+ #: restatement (ivf/host/ivf_host.mojo), so this makes the device build's
+ #: scale the host column's by construction; the scale is snapped to a power
+ #: of two, so it moves only when the two sums straddle a snap boundary.
+-#: -D MOJOLEARN_IDN_IVF_DEVICE_SCALE_OFF restores the host walk.
+-# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch, EXP:2438 DELETED) folded here 2026-11-15 by lane/expdel2-12-cluster; code recoverable at f81bc0a348.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-12-cluster.patch; record in docs/TOMBSTONES.md.
++#: -D MOJOLEARN_IDN_IVF_DEVICE_SCALE_OFF (or MOJOLEARN_IDN_ALL_OFF) restores
++#: the host walk.
+ comptime IVF_IDN_DEVICE_SCALE = GLOBAL_NUMERIC_MODE == _IVF_NUMERIC_IDENTICAL and not (
+-    is_defined["MOJOLEARN_IDN_IVF_DEVICE_SCALE_OFF"]()
++    is_defined["MOJOLEARN_IDN_IVF_DEVICE_SCALE_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+ )
+ from core.accelerator_target import TARGET_HAS_APPLE_GPU
+ from std.memory import unsafe_memcpy
+diff --git a/ivf/impl/neighbors/ivf_flat/ivf_flat_search.mojo b/ivf/impl/neighbors/ivf_flat/ivf_flat_search.mojo
+index bc770a428e..d68b50cbb8 100644
+--- a/ivf/impl/neighbors/ivf_flat/ivf_flat_search.mojo
++++ b/ivf/impl/neighbors/ivf_flat/ivf_flat_search.mojo
+@@ -196,9 +196,8 @@ comptime IVF_IDENTICAL_SCAN = (
+ comptime IVF_IDENTICAL_SCAN_ANY_DIM = (
+     IVF_IDENTICAL_SCAN
+     and not is_defined["MOJOLEARN_IVF_IDENTICAL_ANY_DIM_OFF"]()
++    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+ )
+-# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch, EXP:2438 DELETED) folded here 2026-11-15 by lane/expdel2-12-cluster; code recoverable at f81bc0a348.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-12-cluster.patch; record in docs/TOMBSTONES.md.
+ """lane/no-dim-idn (2026-10-04): the IDENTICAL batched scans take every
+ dimension. The old `dim <= 256` gate was the size of the shared query stage
+ (IIVF_MAX_DIM), and it sat just above the board's widest row (istella, 220);
+@@ -207,8 +206,8 @@ kernels now read a query wider than the stage straight from global memory,
+ value for value (`ftz` of the same element, the same ascending
+ `identical_mul_add` chain), so the distances, the top-k and the bits are the
+ per-query path's (`ivf_query_device.mojo`, the same chain) and the host
+-column's. `-D MOJOLEARN_IVF_IDENTICAL_ANY_DIM_OFF` restores the cap
+-(A/B arm B). The FAST kernel keeps
++column's. `-D MOJOLEARN_IVF_IDENTICAL_ANY_DIM_OFF` (and
++`MOJOLEARN_IDN_ALL_OFF`) restore the cap (A/B arm B). The FAST kernel keeps
+ FIVF_MAX_DIM (FAST is out of this lane's scope)."""
+ # lane/neural-net-experiment (2026-09-30, the classical pass): EVERY
+ # vendor, not Apple alone. The Apple gate left NVIDIA and AMD on the host
+@@ -229,12 +228,10 @@ FIVF_MAX_DIM (FAST is out of this lane's scope)."""
+ #: the L2SqrtExpanded root over the n_queries x k selected distances runs in
+ #: a kernel before the download (`ivf_sqrt_kernel`, `postprocess_distances`'
+ #: statement per cell: the same words). Before, the host walked the
+-#: downloaded list. -D MOJOLEARN_IDN_IVF_DEVICE_SQRT_OFF restores the host
+-#: walk.
+-# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch, EXP:2438 DELETED) folded here 2026-11-15 by lane/expdel2-12-cluster; code recoverable at f81bc0a348.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-12-cluster.patch; record in docs/TOMBSTONES.md.
++#: downloaded list. -D MOJOLEARN_IDN_IVF_DEVICE_SQRT_OFF (or
++#: MOJOLEARN_IDN_ALL_OFF) restores the host walk.
+ comptime IVF_IDN_DEVICE_SQRT = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
+-    is_defined["MOJOLEARN_IDN_IVF_DEVICE_SQRT_OFF"]()
++    is_defined["MOJOLEARN_IDN_IVF_DEVICE_SQRT_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+ )
+ 
+ 
+diff --git a/mixture/chol_order.mojo b/mixture/chol_order.mojo
+index 6bded1564a..dfa0ab7f66 100644
+--- a/mixture/chol_order.mojo
++++ b/mixture/chol_order.mojo
+@@ -40,8 +40,9 @@ this version, on all four columns together. The unblocked factor with a
+ fused multiply-add per term is at least as accurate as the blocked one.
+ 
+ `-D MOJOLEARN_IDN_GMM_FUSED_CHOL_OFF=1` restores the per-component chain on
+-the device AND in the host columns (they read this same constant). The
+-define must reach the host-column build as well as the device build.
++the device AND in the host columns (they read this same constant), as does
++the master `-D MOJOLEARN_IDN_ALL_OFF=1`. The define must reach the
++host-column build as well as the device build.
+ """
+ 
+ from std.sys.compile import is_defined
+@@ -80,10 +81,11 @@ comptime GMM_IDN_CHOL_MAX_D = GMM_IDN_CHOL_TPB
+ # Retain both existing ON defaults and the full-board limitation.
+ comptime IDN_GMM_FUSED_CHOL = (
+     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+-    and not is_defined["MOJOLEARN_IDN_GMM_FUSED_CHOL_OFF"]()
++    and not (
++        is_defined["MOJOLEARN_IDN_GMM_FUSED_CHOL_OFF"]()
++        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
++    )
+ )
+-# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch, EXP:2438 DELETED) folded here 2026-11-15 by lane/expdel2-12-cluster; code recoverable at f81bc0a348.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-12-cluster.patch; record in docs/TOMBSTONES.md.
+ 
+ 
+ def gmm_idn_chol_applies(d: Int) -> Bool:
+diff --git a/mixture/nk_order.mojo b/mixture/nk_order.mojo
+index 39a09aa632..c49b706a3f 100644
+--- a/mixture/nk_order.mojo
++++ b/mixture/nk_order.mojo
+@@ -15,8 +15,9 @@ every vendor. The chain it replaces was one thread per component walking all
+ n rows every EM iteration (K threads busy on the whole device).
+ 
+ `-D MOJOLEARN_IDN_GMM_NK_LEVELS_OFF=1` restores the ascending chain on the
+-device AND in the host columns (they read this same constant). The define
+-must reach the host-column build as well as the device build.
++device AND in the host columns (they read this same constant), as does the
++master `-D MOJOLEARN_IDN_ALL_OFF=1`. The define must reach the host-column
++build as well as the device build.
+ """
+ 
+ from std.sys.compile import is_defined
+@@ -27,10 +28,11 @@ comptime GMM_NK_CHUNK = 256
+ 
+ comptime IDN_GMM_NK_LEVELS = (
+     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+-    and not is_defined["MOJOLEARN_IDN_GMM_NK_LEVELS_OFF"]()
++    and not (
++        is_defined["MOJOLEARN_IDN_GMM_NK_LEVELS_OFF"]()
++        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
++    )
+ )
+-# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch, EXP:2438 DELETED) folded here 2026-11-15 by lane/expdel2-12-cluster; code recoverable at f81bc0a348.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-12-cluster.patch; record in docs/TOMBSTONES.md.
+ 
+ 
+ def gmm_nk_levels_floats(n: Int, ncomp: Int) -> Int:
+diff --git a/neighbors/impl/knn/knn.mojo b/neighbors/impl/knn/knn.mojo
+index 6dc98ee405..3b80a4ed67 100644
+--- a/neighbors/impl/knn/knn.mojo
++++ b/neighbors/impl/knn/knn.mojo
+@@ -45,11 +45,9 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+ #: n_index labels per output and sorted them on the device for the unique
+ #: set. The same buffers feed the same vote kernels: no bit moves, the host
+ #: column is untouched. A traced call takes the uncached route (its records).
+-#: -D MOJOLEARN_IDN_KNN_VOTE_CACHE_OFF off.
+-# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch, EXP:2438 DELETED) folded here 2026-11-15 by lane/expdel2-12-cluster; code recoverable at f81bc0a348.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-12-cluster.patch; record in docs/TOMBSTONES.md.
++#: -D MOJOLEARN_IDN_KNN_VOTE_CACHE_OFF (or MOJOLEARN_IDN_ALL_OFF) off.
+ comptime KNN_IDN_VOTE_CACHE = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
+-    is_defined["MOJOLEARN_IDN_KNN_VOTE_CACHE_OFF"]()
++    is_defined["MOJOLEARN_IDN_KNN_VOTE_CACHE_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+ )
+ 
+ 
+diff --git a/neighbors/impl/selection/knn.mojo b/neighbors/impl/selection/knn.mojo
+index c8dc17ee4a..e0e6d38612 100644
+--- a/neighbors/impl/selection/knn.mojo
++++ b/neighbors/impl/selection/knn.mojo
+@@ -94,11 +94,10 @@ from neighbors.impl.selection.distance_weights import (
+ #: copies, a host round trip of the set, five drains) and a subtract-one
+ #: pass, on every predict. Integer only; the tally reads the same column
+ #: indices, so no output bit moves and the host column is untouched.
+-#: -D MOJOLEARN_IDN_KNN_DIRECT_RELABEL_OFF restores the old sequence.
+-# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch, EXP:2438 DELETED) folded here 2026-11-15 by lane/expdel2-12-cluster; code recoverable at f81bc0a348.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-12-cluster.patch; record in docs/TOMBSTONES.md.
++#: -D MOJOLEARN_IDN_KNN_DIRECT_RELABEL_OFF (or MOJOLEARN_IDN_ALL_OFF)
++#: restores the old sequence.
+ comptime KNN_IDN_DIRECT_RELABEL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
+-    is_defined["MOJOLEARN_IDN_KNN_DIRECT_RELABEL_OFF"]()
++    is_defined["MOJOLEARN_IDN_KNN_DIRECT_RELABEL_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+ )
+ 
+ #: lane/fam2-neighbors (2026-10-04), IDENTICAL on every vendor, default ON:
+@@ -112,10 +111,8 @@ comptime KNN_IDN_DIRECT_RELABEL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and n
+ #: every mode and when traced (the trace records the device weights); the
+ #: host loop and this define's off arm are gone from the vote. The constant
+ #: stays for callers that still read it.
+-# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch, EXP:2438 DELETED) folded here 2026-11-15 by lane/expdel2-12-cluster; code recoverable at f81bc0a348.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-12-cluster.patch; record in docs/TOMBSTONES.md.
+ comptime KNN_IDN_DEVICE_WEIGHTS = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
+-    is_defined["MOJOLEARN_IDN_KNN_DEVICE_WEIGHTS_OFF"]()
++    is_defined["MOJOLEARN_IDN_KNN_DEVICE_WEIGHTS_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+ )
+ 
+ comptime KNN_TPB_X = 32

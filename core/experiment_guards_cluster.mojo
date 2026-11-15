@@ -339,6 +339,79 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_SMR_TILED_OFF"](), "removed 2026-11-15 (lane/expdel2-11-cluster): SMR_TILED_OFF (old path beside the default, hdbscan) is gone; the default path is the only one"
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_SL_SPARSE_MST.patch (its row knob)
     comptime assert not is_defined["MOJOLEARN_IDN_SL_SPARSE_MIN_ROWS"](), "removed 2026-11-15 (lane/expdel2-11-cluster): IDN_SL_SPARSE_MIN_ROWS was the row knob of the deleted IDN_SL_SPARSE_MST arm"
+    # Lane expdel2-12-cluster (2026-11-15): unmeasured arms and old paths deleted under "An unmeasured arm is deleted" (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md, docs/TOMBSTONES.md).
+    # Restore: git apply experiments/removed/MOJOLEARN_AFCL_G01.patch
+    comptime assert not is_defined["MOJOLEARN_AFCL_G01"](), "removed 2026-11-15 (lane/expdel2-12-cluster): AFCL_G01 (never-run card, Brute-force kNN MMA block (FAST Apple)) is gone; the default stays; code recoverable at 76c3debd2e; restore: experiments/removed/MOJOLEARN_AFCL_G01.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_AFCL_G02.patch
+    comptime assert not is_defined["MOJOLEARN_AFCL_G02"](), "removed 2026-11-15 (lane/expdel2-12-cluster): AFCL_G02 (never-run card, Fused top-k kNN staged chunk (FAST Apple)) is gone; the default stays; code recoverable at 9e73d27c38; restore: experiments/removed/MOJOLEARN_AFCL_G02.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_KNN_FAST_QUERY_GROUP4.patch
+    comptime assert not is_defined["MOJOLEARN_KNN_FAST_QUERY_GROUP4"](), "removed 2026-11-15 (lane/expdel2-12-cluster): KNN_FAST_QUERY_GROUP4 (opt-in arm, Fused top-k kNN queries per thread (FAST Apple)) is gone; the default stays; code recoverable at 9c8a5bb983; restore: experiments/removed/MOJOLEARN_KNN_FAST_QUERY_GROUP4.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_KNN_FAST_TOPK_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_KNN_FAST_TOPK_OFF"](), "removed 2026-11-15 (lane/expdel2-12-cluster): KNN_FAST_TOPK_OFF (old path, Fused top-k kNN arm (FAST Apple)) is gone; the default stays; code recoverable at 22513d08dc; restore: experiments/removed/MOJOLEARN_KNN_FAST_TOPK_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_KNN_FAST_MMA_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_KNN_FAST_MMA_OFF"](), "removed 2026-11-15 (lane/expdel2-12-cluster): KNN_FAST_MMA_OFF (old path, Brute-force kNN MMA arm (FAST Apple)) is gone; the default stays; code recoverable at 2beee3664f; restore: experiments/removed/MOJOLEARN_KNN_FAST_MMA_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_RBC_FAST_EPS_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_RBC_FAST_EPS_OFF"](), "removed 2026-11-15 (lane/expdel2-12-cluster): RBC_FAST_EPS_OFF (old path, Ball-cover eps neighbourhood (Apple)) is gone; the default stays; code recoverable at afb468bfd6; restore: experiments/removed/MOJOLEARN_RBC_FAST_EPS_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_AFCL_G09.patch
+    comptime assert not is_defined["MOJOLEARN_AFCL_G09"](), "removed 2026-11-15 (lane/expdel2-12-cluster): AFCL_G09 (never-run card, IVF-Flat batched scan (FAST Apple)) is gone; the default stays; code recoverable at 06b0e453ba; restore: experiments/removed/MOJOLEARN_AFCL_G09.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_GMM_INIT_FILL.patch
+    comptime assert not is_defined["MOJOLEARN_GMM_INIT_FILL"](), "removed 2026-11-15 (lane/expdel2-12-cluster): GMM_INIT_FILL (opt-in arm, GaussianMixture initial responsibilities (host)) is gone; the default stays; code recoverable at 1feb1c083e; restore: experiments/removed/MOJOLEARN_GMM_INIT_FILL.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_GMM_FUSED_CHOL_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_GMM_FUSED_CHOL_OFF"](), "removed 2026-11-15 (lane/expdel2-12-cluster): IDN_GMM_FUSED_CHOL_OFF (old path, GaussianMixture Cholesky order (IDENTICAL)) is gone; the default stays; code recoverable at fe73c6b687; restore: experiments/removed/MOJOLEARN_IDN_GMM_FUSED_CHOL_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_GMM_NK_LEVELS_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_GMM_NK_LEVELS_OFF"](), "removed 2026-11-15 (lane/expdel2-12-cluster): IDN_GMM_NK_LEVELS_OFF (old path, GaussianMixture Nk sums (IDENTICAL)) is gone; the default stays; code recoverable at d14a8860af; restore: experiments/removed/MOJOLEARN_IDN_GMM_NK_LEVELS_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_IVF_DEVICE_FINITE_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_IVF_DEVICE_FINITE_OFF"](), "removed 2026-11-15 (lane/expdel2-12-cluster): IDN_IVF_DEVICE_FINITE_OFF (old path, IVF build finiteness scan (IDENTICAL)) is gone; the default stays; code recoverable at e3895d9d95; restore: experiments/removed/MOJOLEARN_IDN_IVF_DEVICE_FINITE_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_IVF_DEVICE_SCALE_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_IVF_DEVICE_SCALE_OFF"](), "removed 2026-11-15 (lane/expdel2-12-cluster): IDN_IVF_DEVICE_SCALE_OFF (old path, IVF build sum scale (IDENTICAL)) is gone; the default stays; code recoverable at 8c59f74e0d; restore: experiments/removed/MOJOLEARN_IDN_IVF_DEVICE_SCALE_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_IVF_FAST_TRAINSET_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IVF_FAST_TRAINSET_OFF"](), "removed 2026-11-15 (lane/expdel2-12-cluster): IVF_FAST_TRAINSET_OFF (old path, IVF coarse trainset (FAST Apple)) is gone; the default stays; code recoverable at da99e6f6f6; restore: experiments/removed/MOJOLEARN_IVF_FAST_TRAINSET_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_IVF_COARSE_RANDOM_INIT_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IVF_COARSE_RANDOM_INIT_OFF"](), "removed 2026-11-15 (lane/expdel2-12-cluster): IVF_COARSE_RANDOM_INIT_OFF (old path, IVF coarse start (FAST Apple)) is gone; the default stays; code recoverable at c09e6cced1; restore: experiments/removed/MOJOLEARN_IVF_COARSE_RANDOM_INIT_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_IVF_DEVICE_VALIDATE_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IVF_DEVICE_VALIDATE_OFF"](), "removed 2026-11-15 (lane/expdel2-12-cluster): IVF_DEVICE_VALIDATE_OFF (old path, IVF build validate (FAST Apple)) is gone; the default stays; code recoverable at 1893f23d4a; restore: experiments/removed/MOJOLEARN_IVF_DEVICE_VALIDATE_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_IVF_TRAINSET_STRIDE_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IVF_TRAINSET_STRIDE_OFF"](), "removed 2026-11-15 (lane/expdel2-12-cluster): IVF_TRAINSET_STRIDE_OFF (old path, IVF coarse strided trainset) is gone; the default stays; code recoverable at 4615a42f93; restore: experiments/removed/MOJOLEARN_IVF_TRAINSET_STRIDE_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_IVF_IDN_RECLUSTER_CAP_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IVF_IDN_RECLUSTER_CAP_OFF"](), "removed 2026-11-15 (lane/expdel2-12-cluster): IVF_IDN_RECLUSTER_CAP_OFF (old path, IVF coarse recluster cap (not FAST)) is gone; the default stays; code recoverable at 9c51ef3a83; restore: experiments/removed/MOJOLEARN_IVF_IDN_RECLUSTER_CAP_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_IVF_IDN_STRIDED_INIT_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IVF_IDN_STRIDED_INIT_OFF"](), "removed 2026-11-15 (lane/expdel2-12-cluster): IVF_IDN_STRIDED_INIT_OFF (old path, IVF coarse strided start (not FAST)) is gone; the default stays; code recoverable at bdd885b9b1; restore: experiments/removed/MOJOLEARN_IVF_IDN_STRIDED_INIT_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_IVF_IDENTICAL_ANY_DIM_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IVF_IDENTICAL_ANY_DIM_OFF"](), "removed 2026-11-15 (lane/expdel2-12-cluster): IVF_IDENTICAL_ANY_DIM_OFF (old path, IVF-Flat batched scan width (IDENTICAL)) is gone; the default stays; code recoverable at 8c3413769b; restore: experiments/removed/MOJOLEARN_IVF_IDENTICAL_ANY_DIM_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_IVF_IDENTICAL_SCAN_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IVF_IDENTICAL_SCAN_OFF"](), "removed 2026-11-15 (lane/expdel2-12-cluster): IVF_IDENTICAL_SCAN_OFF (old path, IVF-Flat batched scan (IDENTICAL)) is gone; the default stays; code recoverable at c4611d659f; restore: experiments/removed/MOJOLEARN_IVF_IDENTICAL_SCAN_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_IVF_DEVICE_SQRT_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_IVF_DEVICE_SQRT_OFF"](), "removed 2026-11-15 (lane/expdel2-12-cluster): IDN_IVF_DEVICE_SQRT_OFF (old path, IVF search L2 root (IDENTICAL)) is gone; the default stays; code recoverable at 0faa031c3c; restore: experiments/removed/MOJOLEARN_IDN_IVF_DEVICE_SQRT_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_IVF_FAST_SCAN_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IVF_FAST_SCAN_OFF"](), "removed 2026-11-15 (lane/expdel2-12-cluster): IVF_FAST_SCAN_OFF (old path, IVF-Flat batched scan (FAST)) is gone; the default stays; code recoverable at 4f59e7202c; restore: experiments/removed/MOJOLEARN_IVF_FAST_SCAN_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_KNN_VOTE_CACHE_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_KNN_VOTE_CACHE_OFF"](), "removed 2026-11-15 (lane/expdel2-12-cluster): IDN_KNN_VOTE_CACHE_OFF (old path, kNN resident vote cache (IDENTICAL)) is gone; the default stays; code recoverable at 38a095aad3; restore: experiments/removed/MOJOLEARN_IDN_KNN_VOTE_CACHE_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_KNN_DIRECT_RELABEL_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_KNN_DIRECT_RELABEL_OFF"](), "removed 2026-11-15 (lane/expdel2-12-cluster): IDN_KNN_DIRECT_RELABEL_OFF (old path, kNN classifier vote relabel (IDENTICAL)) is gone; the default stays; code recoverable at 33130c2d0a; restore: experiments/removed/MOJOLEARN_IDN_KNN_DIRECT_RELABEL_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_KNN_DEVICE_WEIGHTS_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_KNN_DEVICE_WEIGHTS_OFF"](), "removed 2026-11-15 (lane/expdel2-12-cluster): IDN_KNN_DEVICE_WEIGHTS_OFF (old path, kNN distance weights (IDENTICAL)) is gone; the default stays; code recoverable at bb292f4946; restore: experiments/removed/MOJOLEARN_IDN_KNN_DEVICE_WEIGHTS_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_KNN_I32_LABEL_RANGE_OLD.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_KNN_I32_LABEL_RANGE_OLD"](), "removed 2026-11-15 (lane/expdel2-12-cluster): IDN_KNN_I32_LABEL_RANGE_OLD (old path, k-NN classifier fit int32 labels) is gone; the default stays; code recoverable at b5975648b6; restore: experiments/removed/MOJOLEARN_IDN_KNN_I32_LABEL_RANGE_OLD.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_KNN_DOOR_FIT_XN_EAGER.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_KNN_DOOR_FIT_XN_EAGER"](), "removed 2026-11-15 (lane/expdel2-12-cluster): IDN_KNN_DOOR_FIT_XN_EAGER (opt-in arm, k-NN fit door (x_neighbors admission)) is gone; the default stays; code recoverable at 10c4fb4ffc; restore: experiments/removed/MOJOLEARN_IDN_KNN_DOOR_FIT_XN_EAGER.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_KNN_LEGACY_QUERY_TILE.patch
+    comptime assert not is_defined["MOJOLEARN_KNN_LEGACY_QUERY_TILE"](), "removed 2026-11-15 (lane/expdel2-12-cluster): KNN_LEGACY_QUERY_TILE (old path, kNN query tile (IDENTICAL)) is gone; the default stays; code recoverable at 31c68bae2d; restore: experiments/removed/MOJOLEARN_KNN_LEGACY_QUERY_TILE.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_KNN_IDENTICAL_QUERY_TILE_512.patch
+    comptime assert not is_defined["MOJOLEARN_KNN_IDENTICAL_QUERY_TILE_512"](), "removed 2026-11-15 (lane/expdel2-12-cluster): KNN_IDENTICAL_QUERY_TILE_512 (opt-in arm, kNN query tile (IDENTICAL)) is gone; the default stays; code recoverable at 2535c4cc75; restore: experiments/removed/MOJOLEARN_KNN_IDENTICAL_QUERY_TILE_512.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_KNN_CERTIFIED_REACH.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_KNN_CERTIFIED_REACH"](), "removed 2026-11-15 (lane/expdel2-12-cluster): IDN_KNN_CERTIFIED_REACH (opt-in arm, Certified MMA kNN reach counter (I15)) is gone; the default stays; code recoverable at a40e1d3d34; restore: experiments/removed/MOJOLEARN_IDN_KNN_CERTIFIED_REACH.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_KNN_APPLE_MMA_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_KNN_APPLE_MMA_OFF"](), "removed 2026-11-15 (lane/expdel2-12-cluster): KNN_APPLE_MMA_OFF (old path, kNN distance tile (Apple IDENTICAL)) is gone; the default stays; code recoverable at 5d1ec60884; restore: experiments/removed/MOJOLEARN_KNN_APPLE_MMA_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_KNN_CERTIFIED_MMA_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_KNN_CERTIFIED_MMA_OFF"](), "removed 2026-11-15 (lane/expdel2-12-cluster): KNN_CERTIFIED_MMA_OFF (old path, Certified MMA kNN (Apple IDENTICAL)) is gone; the default stays; code recoverable at b8ff403d5b; restore: experiments/removed/MOJOLEARN_KNN_CERTIFIED_MMA_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_KNN_FAST_FORCE_FUSED.patch
+    comptime assert not is_defined["MOJOLEARN_KNN_FAST_FORCE_FUSED"](), "removed 2026-11-15 (lane/expdel2-12-cluster): KNN_FAST_FORCE_FUSED (opt-in arm, Brute-force kNN AUTO dispatch) is gone; the default stays; code recoverable at f73a667df4; restore: experiments/removed/MOJOLEARN_KNN_FAST_FORCE_FUSED.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_KNN_FAST_FORCE_TILED.patch
+    comptime assert not is_defined["MOJOLEARN_KNN_FAST_FORCE_TILED"](), "removed 2026-11-15 (lane/expdel2-12-cluster): KNN_FAST_FORCE_TILED (opt-in arm, Brute-force kNN AUTO dispatch) is gone; the default stays; code recoverable at 224c244027; restore: experiments/removed/MOJOLEARN_KNN_FAST_FORCE_TILED.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_LEGACY_SHAPE_KNN_BOARD.patch
+    comptime assert not is_defined["MOJOLEARN_LEGACY_SHAPE_KNN_BOARD"](), "removed 2026-11-15 (lane/expdel2-12-cluster): LEGACY_SHAPE_KNN_BOARD (old path, Brute-force kNN large-request rule) is gone; the default stays; code recoverable at 147979bdbf; restore: experiments/removed/MOJOLEARN_LEGACY_SHAPE_KNN_BOARD.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_KNN_SCRATCH_POOL_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_KNN_SCRATCH_POOL_OFF"](), "removed 2026-11-15 (lane/expdel2-12-cluster): KNN_SCRATCH_POOL_OFF (old path, kNN resident scratch pool) is gone; the default stays; code recoverable at 465cb20ca0; restore: experiments/removed/MOJOLEARN_KNN_SCRATCH_POOL_OFF.patch"
     return True
 
 

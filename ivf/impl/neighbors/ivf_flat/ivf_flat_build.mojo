@@ -12,7 +12,7 @@ THE REFERENCE'S THREE STEPS AND THIS IMPLEMENTATION'S
 
 | reference | line | here |
 |---|---|---|
-| train the quantizer on a strided subsample | `:414-437` | the strided subsample in exact integers (`IVF_TRAINSET_STRIDE`, `ivf_trainset_stride`, lane gap-ivf 2026-10-08; the whole dataset under `-D MOJOLEARN_IVF_TRAINSET_STRIDE_OFF`, DEVIATION 1781) through the implemented k-means |
+| train the quantizer on a strided subsample | `:414-437` | the strided subsample in exact integers (`IVF_TRAINSET_STRIDE`, `ivf_trainset_stride`, lane gap-ivf 2026-10-08, DEVIATION 1781) through the implemented k-means |
 | `kmeans::predict` the labels, in batches | `:222-224` | `cluster/impl/kmeans.mojo::predict`, one call |
 | `build_index_kernel` scatters into the lists | `:317-325` | `ivf/checks/list_layout.mojo::build_list_layout` (DEVIATIONS 1782/1783) |
 
@@ -117,24 +117,23 @@ from ivf.impl.neighbors.ivf_flat.ivf_finite_device import (
 #: restatement (ivf/host/ivf_host.mojo), so this makes the device build's
 #: scale the host column's by construction; the scale is snapped to a power
 #: of two, so it moves only when the two sums straddle a snap boundary.
-#: -D MOJOLEARN_IDN_IVF_DEVICE_SCALE_OFF (or MOJOLEARN_IDN_ALL_OFF) restores
-#: the host walk.
-comptime IVF_IDN_DEVICE_SCALE = GLOBAL_NUMERIC_MODE == _IVF_NUMERIC_IDENTICAL and not (
-    is_defined["MOJOLEARN_IDN_IVF_DEVICE_SCALE_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
+#: FAST keeps the host walk.
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch, EXP:2438 DELETED) folded here 2026-11-15 by lane/expdel2-12-cluster; code recoverable at f81bc0a348.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-12-cluster.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_IDN_IVF_DEVICE_SCALE_OFF (old path, no A/B row) deleted 2026-11-15 by lane/expdel2-12-cluster; code recoverable at 8c59f74e0d.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_IVF_DEVICE_SCALE_OFF.patch; record in docs/TOMBSTONES.md.
+comptime IVF_IDN_DEVICE_SCALE = GLOBAL_NUMERIC_MODE == _IVF_NUMERIC_IDENTICAL
 from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from std.memory import unsafe_memcpy
 from x_ann.stage_timer import AnnStages
-from x_ann.switches import ANN3_COARSE_SEED, ANN3_HOST_PASSES, ANN3_TRAINSET_COPY
+from x_ann.switches import ANN3_HOST_PASSES
 from x_ann.kpp_seed_device import kpp_seed_device
 
 # TOMBSTONE: MOJOLEARN_IVF_FAST_STRIDED_COARSE (DROPPED-noise) deleted 2026-10-15 by 1a76955b5; code recoverable at 1a76955b5^.
 # Restore: git apply experiments/removed/MOJOLEARN_IVF_FAST_STRIDED_COARSE.patch
-comptime IVF_FAST_TRAINSET = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and TARGET_HAS_APPLE_GPU
-    and not is_defined["MOJOLEARN_IVF_FAST_TRAINSET_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_IVF_FAST_TRAINSET_OFF (old path beside the Apple FAST default, no A/B row) deleted 2026-11-15 by lane/expdel2-12-cluster; code recoverable at da99e6f6f6.
+# Restore: git apply experiments/removed/MOJOLEARN_IVF_FAST_TRAINSET_OFF.patch; record in docs/TOMBSTONES.md.
+comptime IVF_FAST_TRAINSET = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
 """FAST on Apple: the coarse quantizer trains on at most
 `IVF_FAST_ROWS_PER_LIST` rows per list, a seeded uniform sample (FAISS's
 rule; cuVS trains on `kmeans_trainset_fraction` of the rows). Every row is
@@ -143,12 +142,10 @@ comptime IVF_FAST_ROWS_PER_LIST = 256
 
 # TOMBSTONE: MOJOLEARN_IVF_FAST_STRIDED_COARSE (DROPPED-noise) deleted 2026-10-15 by 1a76955b5; code recoverable at 1a76955b5^.
 # Restore: git apply experiments/removed/MOJOLEARN_IVF_FAST_STRIDED_COARSE.patch
-comptime IVF_FAST_SEED = (
-    ANN3_COARSE_SEED
-    and GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and TARGET_HAS_APPLE_GPU
-)
-"""FAST on Apple, DEFAULT (lane ann-apple3; `-D MOJOLEARN_ANN3_COARSE_SEED_OFF` reverts):
+# TOMBSTONE: MOJOLEARN_ANN3_COARSE_SEED_OFF (old path, EXP:2135 OPEN) folded here 2026-11-15 by lane/expdel2-12-cluster; code recoverable at ee8f7b22c2.
+# Restore: git apply experiments/removed/MOJOLEARN_ANN3_COARSE_SEED_OFF.expdel2-12-cluster.patch; record in docs/TOMBSTONES.md.
+comptime IVF_FAST_SEED = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
+"""FAST on Apple, DEFAULT (lane ann-apple3):
 the coarse quantizer is seeded by k-means++ over a stride sample of its
 training rows and cluster/'s k-means starts from those seeds (`INIT_ARRAY`).
 An untraced build only. The seeding runs on the device (below)."""
@@ -167,17 +164,13 @@ An untraced build only. The seeding runs on the device (below)."""
 
 # TOMBSTONE: MOJOLEARN_IVF_FAST_STRIDED_COARSE (DROPPED-noise) deleted 2026-10-15 by 1a76955b5; code recoverable at 1a76955b5^.
 # Restore: git apply experiments/removed/MOJOLEARN_IVF_FAST_STRIDED_COARSE.patch
-comptime IVF_FAST_RANDOM_INIT = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and TARGET_HAS_APPLE_GPU
-    and not is_defined["MOJOLEARN_IVF_COARSE_RANDOM_INIT_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_IVF_COARSE_RANDOM_INIT_OFF (old path beside the Apple FAST default, EXP:2135 OPEN) deleted 2026-11-15 by lane/expdel2-12-cluster; code recoverable at c09e6cced1.
+# Restore: git apply experiments/removed/MOJOLEARN_IVF_COARSE_RANDOM_INIT_OFF.patch; record in docs/TOMBSTONES.md.
+comptime IVF_FAST_RANDOM_INIT = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
 #: DEFAULT (FAST + Apple) since 2026-10-04: VSEARCH_ALL A/B on the M3 (afc_ab_def, full board size, 1 run per arm,
 #: 2026-10-04, source ad265a028; x_ann/vsearch_fast.mojo has every row): 9/9
-#: IVF-family rows faster, recall_at_10 identical. ACCEPT;
-#: rollback `-D MOJOLEARN_IVF_COARSE_RANDOM_INIT_OFF` (k-means|| seeding).
-"""FAST on Apple, DEFAULT since 2026-10-04 (lane af-vsearch, 2026-10-03;
-rollback `-D MOJOLEARN_IVF_COARSE_RANDOM_INIT_OFF`): the coarse quantizer starts from n_lists
+#: IVF-family rows faster, recall_at_10 identical. ACCEPT.
+"""FAST on Apple, DEFAULT since 2026-10-04 (lane af-vsearch, 2026-10-03): the coarse quantizer starts from n_lists
 DISTINCT training rows drawn with the fit's seed (FAISS's `Clustering`
 rule) and handed to cluster/'s k-means as INIT_ARRAY, so its scalable
 k-means|| seeding (8 rounds of every-row-to-candidate distances, each with
@@ -191,17 +184,13 @@ bits (another start): paired recall check."""
 # Tried: FAISS's random-row coarse start with the IVF_FAST_SEED k-means++ seeding skipped; ivf-sq recall@10 istella .60895 -> .51065, taxi .83325 -> .76685 (rab5-ivfinit).
 # Restore: git apply experiments/removed/MOJOLEARN_IVF_COARSE_FAISS_INIT.patch; record in docs/TOMBSTONES.md.
 
-comptime IVF_FAST_DEVICE_VALIDATE = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and TARGET_HAS_APPLE_GPU
-    and not is_defined["MOJOLEARN_IVF_DEVICE_VALIDATE_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_IVF_DEVICE_VALIDATE_OFF (old path of the KEPT FAST+Apple default, EXP:352) deleted 2026-11-15 by lane/expdel2-12-cluster; code recoverable at 1893f23d4a.
+# Restore: git apply experiments/removed/MOJOLEARN_IVF_DEVICE_VALIDATE_OFF.patch; record in docs/TOMBSTONES.md.
+comptime IVF_FAST_DEVICE_VALIDATE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
 #: DEFAULT (FAST + Apple) since 2026-10-04: VSEARCH_ALL A/B on the M3 (afc_ab_def, full board size, 1 run per arm,
 #: 2026-10-04, source ad265a028; x_ann/vsearch_fast.mojo has every row): 9/9
-#: IVF-family rows faster, recall_at_10 identical. ACCEPT;
-#: rollback `-D MOJOLEARN_IVF_DEVICE_VALIDATE_OFF` (host word scan).
-"""FAST on Apple, DEFAULT since 2026-10-04 (lane af-vsearch; rollback
-`-D MOJOLEARN_IVF_DEVICE_VALIDATE_OFF`):
+#: IVF-family rows faster, recall_at_10 identical. ACCEPT.
+"""FAST on Apple, DEFAULT since 2026-10-04 (lane af-vsearch):
 `ivf_validate_data`'s word scan of the n x dim dataset (one host pass over
 352 MB on Istella) runs on the device after the upload (`ivf_refused_words_kernel`,
 one flag word read back); a refused dataset then runs the host scan, which
@@ -700,17 +689,13 @@ def _ivf_flat_build_impl[resident: Bool](
     var xt = List[Float32]()
     if n_train < n_rows and not strided:
         var rows = ivf_trainset_rows(n_rows, n_train, UInt64(params.seed))
-        comptime if ANN3_TRAINSET_COPY:
-            # lane ann-apple3, OPT-IN: one memcpy per sampled row
-            xt = List[Float32](length=n_train * dim, fill=Float32(0.0))
-            for r in range(n_train):
-                unsafe_memcpy(dest=xt.unsafe_ptr() + r * dim, src=x.unsafe_ptr() + rows[r] * dim, count=dim)
-        else:
-            xt = List[Float32](capacity=n_train * dim)
-            for r in range(n_train):
-                var b = rows[r] * dim
-                for c in range(dim):
-                    xt.append(x[b + c])
+        # TOMBSTONE: MOJOLEARN_ANN3_TRAINSET_COPY (opt-in arm, no A/B row) folded here 2026-11-15 by lane/expdel2-12-cluster; code recoverable at f4251b23d5.
+        # Restore: git apply experiments/removed/MOJOLEARN_ANN3_TRAINSET_COPY.expdel2-12-cluster.patch; record in docs/TOMBSTONES.md.
+        xt = List[Float32](capacity=n_train * dim)
+        for r in range(n_train):
+            var b = rows[r] * dim
+            for c in range(dim):
+                xt.append(x[b + c])
 
     var sum_scale = Float64(0.0)
     comptime if not IVF_IDN_DEVICE_SCALE:
@@ -858,8 +843,7 @@ def _ivf_flat_build_impl[resident: Bool](
             st.host("random_init")
 
     comptime if IVF_IDN_STRIDED_INIT:
-        # lane fg-ivf B1 (IDENTICAL default since postmerge-act-3; -D
-        # MOJOLEARN_IVF_IDN_STRIDED_INIT_OFF rolls back): the strided
+        # lane fg-ivf B1 (IDENTICAL default since postmerge-act-3): the strided
         # training rows are the start; no k-means|| rounds, no recluster. The
         # host column (ivf/host/ivf_host.mojo) starts from the same rows.
         if kp.init == INIT_KMEANS_PLUS_PLUS and n_train >= n_lists:

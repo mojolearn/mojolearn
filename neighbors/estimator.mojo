@@ -123,7 +123,6 @@ from core.identity_trace import IdentityTrace
 from core.device_fold import device_sum_i32
 from core.device_plan import DevicePlan
 from neighbors.impl.multi_gpu import knn_device_count, neighbors_device_plan, parallel_knn_rows
-from std.sys.compile import is_defined
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, NUMERIC_FAST
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from std.math import sqrt
@@ -146,7 +145,6 @@ from neighbors.impl.detail.knn_brute_force import (
     KNN_METHOD_AUTO,
     METRIC_FROM_IS_SQRT,
     KNN_RESIDENT_CACHE,
-    KNN_SCRATCH_POOL,
     KnnIndexCachePointer,
     knn_pool_view,
     knn_pool_host_dist,
@@ -258,15 +256,17 @@ from neighbors.impl.ball_cover.ball_cover import (
 
 
 # Measured NVIDIA IDENTICAL query batching; row arithmetic is unchanged.
-# Other columns retain 256 unless explicitly opting into qualification.
+# Other columns retain 256.
 from checks.kernel_matrix import TARGET_COLUMN, COLUMN_NVIDIA, knn_query_tile_for, knn_nvidia_schedule_column
 # K1 (lane fg-knn-nb): the AMD column takes NVIDIA's scope too
 # (`knn_nvidia_schedule_column`; AMD's legacy 256 arm was removed
 # 2026-10-10, docs/TOMBSTONES.md). Query tiling never moves a bit.
+# TOMBSTONE: MOJOLEARN_KNN_LEGACY_QUERY_TILE (old 256 tile path, no A/B row) deleted 2026-11-15 by lane/expdel2-12-cluster; code recoverable at 31c68bae2d.
+# Restore: git apply experiments/removed/MOJOLEARN_KNN_LEGACY_QUERY_TILE.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_KNN_IDENTICAL_QUERY_TILE_512 (opt-in 512 tile on the other columns, no A/B row) deleted 2026-11-15 by lane/expdel2-12-cluster; code recoverable at 2535c4cc75.
+# Restore: git apply experiments/removed/MOJOLEARN_KNN_IDENTICAL_QUERY_TILE_512.patch; record in docs/TOMBSTONES.md.
 comptime QUERY_TILE_512_CANDIDATE = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not is_defined["MOJOLEARN_KNN_LEGACY_QUERY_TILE"]()
-    and (knn_nvidia_schedule_column(TARGET_COLUMN) or is_defined["MOJOLEARN_KNN_IDENTICAL_QUERY_TILE_512"]())
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and knn_nvidia_schedule_column(TARGET_COLUMN)
 )
 # DEVIATION 2631 (kernel-matrix row `knn_query_tile_for`): the row's tile
 # replaces the 512 candidate where it is set; 0 keeps the historical rule.
@@ -1262,14 +1262,14 @@ def _knn_search_on_device_index(
     `devices` and `buf_len` are the plan's (`_knn_search_plan`). Split out
     2026-09-17 (DEVIATION 2921) so a resident index enters here; every
     statement below is where it was."""
-    # K4 (KNN_SCRATCH_POOL, `-D MOJOLEARN_KNN_SCRATCH_POOL_OFF=1` restores
-    # the per-call allocations; see knn_brute_force.mojo): a single-device
+    # K4 (the scratch pool; see knn_brute_force.mojo): a single-device
     # search over a resident index takes exact-length views of the handle's
     # pooled scratch instead of allocating it per call.
+    # TOMBSTONE: MOJOLEARN_KNN_SCRATCH_POOL_OFF (per-call allocation rollback of the CONFIRMED pool) deleted 2026-11-15 by lane/expdel2-12-cluster; code recoverable at 465cb20ca0.
+    # Restore: git apply experiments/removed/MOJOLEARN_KNN_SCRATCH_POOL_OFF.patch; record in docs/TOMBSTONES.md.
     var pooled = False
-    comptime if KNN_SCRATCH_POOL:
-        if cache and devices <= 1:
-            pooled = knn_pool_acquire(cache.value())
+    if cache and devices <= 1:
+        pooled = knn_pool_acquire(cache.value())
     var n_dist_cells = tiled_distance_tile_cells(query_tile, n_index, n_features, k, mtr)
     var queries: DeviceBuffer[DType.float32]
     var index_norm: DeviceBuffer[DType.float32]

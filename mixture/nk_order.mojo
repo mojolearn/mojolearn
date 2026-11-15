@@ -14,25 +14,19 @@ alone, so the device (one thread a chunk a component,
 every vendor. The chain it replaces was one thread per component walking all
 n rows every EM iteration (K threads busy on the whole device).
 
-`-D MOJOLEARN_IDN_GMM_NK_LEVELS_OFF=1` restores the ascending chain on the
-device AND in the host columns (they read this same constant), as does the
-master `-D MOJOLEARN_IDN_ALL_OFF=1`. The define must reach the host-column
-build as well as the device build.
+FAST keeps the ascending chain on the device and in the host columns (they
+read this same constant).
 """
-
-from std.sys.compile import is_defined
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz
 
 comptime GMM_NK_CHUNK = 256
 
-comptime IDN_GMM_NK_LEVELS = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not (
-        is_defined["MOJOLEARN_IDN_GMM_NK_LEVELS_OFF"]()
-        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-    )
-)
+# TOMBSTONE: MOJOLEARN_IDN_GMM_NK_LEVELS_OFF (old path, no A/B row) deleted 2026-11-15 by lane/expdel2-12-cluster; code recoverable at d14a8860af.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_GMM_NK_LEVELS_OFF.patch; record in docs/TOMBSTONES.md.
+comptime IDN_GMM_NK_LEVELS = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch, EXP:2438 DELETED) folded here 2026-11-15 by lane/expdel2-12-cluster; code recoverable at f81bc0a348.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-12-cluster.patch; record in docs/TOMBSTONES.md.
 
 
 def gmm_nk_levels_floats(n: Int, ncomp: Int) -> Int:

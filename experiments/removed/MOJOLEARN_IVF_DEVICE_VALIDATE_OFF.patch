@@ -1,0 +1,27 @@
+diff --git a/ivf/impl/neighbors/ivf_flat/ivf_flat_build.mojo b/ivf/impl/neighbors/ivf_flat/ivf_flat_build.mojo
+index bbd0f0caf3..af8f7bab9d 100644
+--- a/ivf/impl/neighbors/ivf_flat/ivf_flat_build.mojo
++++ b/ivf/impl/neighbors/ivf_flat/ivf_flat_build.mojo
+@@ -186,13 +186,17 @@ bits (another start): paired recall check."""
+ # Tried: FAISS's random-row coarse start with the IVF_FAST_SEED k-means++ seeding skipped; ivf-sq recall@10 istella .60895 -> .51065, taxi .83325 -> .76685 (rab5-ivfinit).
+ # Restore: git apply experiments/removed/MOJOLEARN_IVF_COARSE_FAISS_INIT.patch; record in docs/TOMBSTONES.md.
+ 
+-# TOMBSTONE: MOJOLEARN_IVF_DEVICE_VALIDATE_OFF (old path of the KEPT FAST+Apple default, EXP:352) deleted 2026-11-15 by lane/expdel2-12-cluster; code recoverable at 1893f23d4a.
+-# Restore: git apply experiments/removed/MOJOLEARN_IVF_DEVICE_VALIDATE_OFF.patch; record in docs/TOMBSTONES.md.
+-comptime IVF_FAST_DEVICE_VALIDATE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
++comptime IVF_FAST_DEVICE_VALIDATE = (
++    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
++    and TARGET_HAS_APPLE_GPU
++    and not is_defined["MOJOLEARN_IVF_DEVICE_VALIDATE_OFF"]()
++)
+ #: DEFAULT (FAST + Apple) since 2026-10-04: VSEARCH_ALL A/B on the M3 (afc_ab_def, full board size, 1 run per arm,
+ #: 2026-10-04, source ad265a028; x_ann/vsearch_fast.mojo has every row): 9/9
+-#: IVF-family rows faster, recall_at_10 identical. ACCEPT.
+-"""FAST on Apple, DEFAULT since 2026-10-04 (lane af-vsearch):
++#: IVF-family rows faster, recall_at_10 identical. ACCEPT;
++#: rollback `-D MOJOLEARN_IVF_DEVICE_VALIDATE_OFF` (host word scan).
++"""FAST on Apple, DEFAULT since 2026-10-04 (lane af-vsearch; rollback
++`-D MOJOLEARN_IVF_DEVICE_VALIDATE_OFF`):
+ `ivf_validate_data`'s word scan of the n x dim dataset (one host pass over
+ 352 MB on Istella) runs on the device after the upload (`ivf_refused_words_kernel`,
+ one flag word read back); a refused dataset then runs the host scan, which

@@ -335,11 +335,10 @@ def knn_check_int32_labels(low: Int, high: Int) raises:
         raise Error("mojolearn: y does not fit int32")
 
 
-#: wave2-knn-0844-gap (2026-11-13): B arm of the owed A/B. Defined, the
-#: classifier fit widens int32 labels to int64, reads their minimum and maximum
-#: (two device reductions: two uploads of the label words, two launches, two
-#: synchronisations) and narrows them back, as every release since 0.8.44 did.
-comptime KNN_I32_LABEL_RANGE_OLD = is_defined["MOJOLEARN_IDN_KNN_I32_LABEL_RANGE_OLD"]()
+# TOMBSTONE: MOJOLEARN_IDN_KNN_I32_LABEL_RANGE_OLD (old int64 widen-and-range path, EXP:2412 PENDING, never run) deleted 2026-11-15 by lane/expdel2-12-cluster; code recoverable at b5975648b6.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_KNN_I32_LABEL_RANGE_OLD.patch; record in docs/TOMBSTONES.md.
+# The alias stays False for its importers (checks/native_tests/neighbors_knn_run_suite.mojo).
+comptime KNN_I32_LABEL_RANGE_OLD = False
 
 
 def knn_labels_already_int32(typestr: String) -> Bool:
@@ -349,8 +348,6 @@ def knn_labels_already_int32(typestr: String) -> Bool:
     the same words (the widen-then-narrow round trip is the identity on them),
     so the bits do not change. Every other dtype keeps the widening and the
     range check."""
-    comptime if KNN_I32_LABEL_RANGE_OLD:
-        return False
     return typestr == "<i4"
 
 
@@ -421,16 +418,13 @@ def knn_copy_proba_block(dst_address: Int, src_address: Int, offset: Int, rows: 
 
 # ------------------------------------------------------------------ door switches and timers
 
-#: fix-knn-door-fixed-cost (2026-11-14): B arm of the owed A/B (row id
-#: fix-knn-door-fixed-cost). Defined, every KNeighborsClassifier /
-#: KNeighborsRegressor fit resolves and admits the x_neighbors binding up front
-#: (estimator_arguments + xn_admit_arguments, the form b412ea02f4 introduced
-#: with the native door), whether or not the fit uses it. Default (0.8.55's
-#: form, neighbors.py `self._bind(_XN)` only inside the multi-output branch):
-#: the binding is resolved only where a fit runs its one consumer, the
-#: multi-output label transpose (`n_outputs > 1`). Same kernels, same words:
-#: no bit change.
-comptime KNN_DOOR_FIT_XN_EAGER = is_defined["MOJOLEARN_IDN_KNN_DOOR_FIT_XN_EAGER"]()
+#: fix-knn-door-fixed-cost (2026-11-14): the k-NN fit door resolves the
+#: x_neighbors binding only where a fit runs its one consumer, the
+#: multi-output label transpose (`n_outputs > 1`), 0.8.55's form.
+# TOMBSTONE: MOJOLEARN_IDN_KNN_DOOR_FIT_XN_EAGER (opt-in B arm, EXP:2420 PENDING, never run) deleted 2026-11-15 by lane/expdel2-12-cluster; code recoverable at 10c4fb4ffc.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_KNN_DOOR_FIT_XN_EAGER.patch; record in docs/TOMBSTONES.md.
+# The alias stays False for its importers (checks/native_tests/neighbors_knn_run_suite.mojo, bindings/neighbors_knn_native_door.mojo).
+comptime KNN_DOOR_FIT_XN_EAGER = False
 
 
 def knn_fit_xn_eager() -> Bool:
