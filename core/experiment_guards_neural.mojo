@@ -752,8 +752,7 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_IDN_CHUNKED_LM_HEAD_V2"](), "removed 2026-11-15 (lane/expdel2-32-neural): IDN_CHUNKED_LM_HEAD_V2 (opt-in arm, record read: never measured) is gone; the default path is the only one; code recoverable at 311b50e05c; restore: experiments/removed/MOJOLEARN_IDN_CHUNKED_LM_HEAD_V2.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_LM_VIEWS.patch
     comptime assert not is_defined["MOJOLEARN_IDN_LM_VIEWS"](), "removed 2026-11-15 (lane/expdel2-32-neural): IDN_LM_VIEWS (opt-in arm, no record) is gone; the default path is the only one; code recoverable at 311b50e05c; restore: experiments/removed/MOJOLEARN_IDN_LM_VIEWS.patch"
-    # Restore: git apply experiments/removed/MOJOLEARN_IDN_NORM_FIXED_LANES.patch
-    comptime assert not is_defined["MOJOLEARN_IDN_NORM_FIXED_LANES"](), "removed 2026-11-15 (lane/expdel2-32-neural): IDN_NORM_FIXED_LANES (opt-in arm, EXP:2246 PENDING) is gone; the default path is the only one; code recoverable at c48e5cad76; restore: experiments/removed/MOJOLEARN_IDN_NORM_FIXED_LANES.patch"
+    # MOJOLEARN_IDN_NORM_FIXED_LANES: refusal removed 2026-11-15 (restored; RUN #6 of docs/plans/DELETED_ARMS_WORTH_RUNNING_2026-11-15.md, see docs/TOMBSTONES.md Restored table)
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_OPT_CLIP_BATCHED_OFF.patch
     comptime assert not is_defined["MOJOLEARN_IDN_OPT_CLIP_BATCHED_OFF"](), "removed 2026-11-15 (lane/expdel2-32-neural): IDN_OPT_CLIP_BATCHED_OFF (old path, no record) is gone; the default is kept; code recoverable at 25599a616f; restore: experiments/removed/MOJOLEARN_IDN_OPT_CLIP_BATCHED_OFF.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_OPT_GATE_SCAN_OFF.patch

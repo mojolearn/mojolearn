@@ -224,6 +224,10 @@
   "attn-fold-v2-on": {
    "define": "MOJOLEARN_IDN_ATTN_FOLD_V2",
    "status": "define in code (transformer/impl/llama/attn_fold_v2.mojo ATTN_FOLD_V2, restored 2026-11-15 by lane restore-run-arms-neural): B = the attention key axis folded in 128-key leaves plus the GEMM contract's carry tree, fused forward split into row-tile x leaf blocks (hd64/hd128), eager v2 kernels otherwise, host oracle and byte-LM host kernels on the same fold; A = v1's serial chains"
+  },
+  "norm-fixed-lanes-on": {
+   "define": "MOJOLEARN_IDN_NORM_FIXED_LANES",
+   "status": "define in code (transformer/experiments/norm_fixed_lanes.mojo IDN_NORM_FIXED_LANES, restored 2026-11-15 by lane restore-run-arms-neural): B = RMSNorm / LayerNorm statistics and the norm-backward dot as one 32-lane cell per row (shuffle tree, chain depth d -> d/32 + 5) on every column; A = the one-thread serial row chain"
   }
  },
  "rows": [
@@ -1399,6 +1403,22 @@
     "attn-fold-v2-on"
    ],
    "decides": "NVIDIA L40S only (the NVIDIA-only campaign): B changes bits on every column (fold order); promote it (with a _OFF define) when the three rows are faster than A with quality (loss / perplexity) not worse; then the release's one verification records every vendor column and the host column on the new fold; otherwise delete the arm with a tombstone"
+  },
+  {
+   "id": "norm-fixed-lanes",
+   "source": "restore-run-arms-neural (2026-11-15; RUN #6 of docs/plans/DELETED_ARMS_WORTH_RUNNING_2026-11-15.md: transformer-forward 6.1 ms NV L40S (torch 2.4); lm-forward 58.6 [0.8.55 44.9]; lm-train-step 36.0 (torch 10.8))",
+   "kind": "ab",
+   "lane": [
+    "transformer-forward",
+    "lm-forward",
+    "lm-train-step"
+   ],
+   "dataset": "*",
+   "rows": "full",
+   "b_arms": [
+    "norm-fixed-lanes-on"
+   ],
+   "decides": "NVIDIA L40S only (the NVIDIA-only campaign): B changes bits on every column (fold order); promote it (with a _OFF define) when the three rows are faster than A with quality (loss / perplexity) not worse; then the release's one verification records every vendor column and the host column on the new fold; otherwise delete the arm with a tombstone. Time it alone and with attn-fold-v2-on only if both win alone"
   }
  ]
 }

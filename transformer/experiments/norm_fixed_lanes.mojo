@@ -1,8 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """MOJOLEARN_IDN_NORM_FIXED_LANES (lane norm-folds, 2026-10-28; idea 12 of
-the Oct 28 neural report, roadmap C4b / D10). IDENTICAL only; the switch was deleted 2026-11-15 (unmeasured), the fold
-helpers stay for their importers until they fold the False constant.
+the Oct 28 neural report, roadmap C4b / D10). IDENTICAL only, default OFF.
 
 BITS CHANGE across versions (allowed: every column moves together in one
 commit). The transformer/LM RMSNorm row statistic (contract S1, `sum x_j^2`),
@@ -39,7 +38,10 @@ coalesced. Thirty-two lanes, not 64 or a block, so a cell is one warp /
 simdgroup / half-wave on every vendor with no shared memory or barrier and
 the tree shape never depends on the row width.
 """
-from checks.numerics import ftz, identical_mul_add
+from max.gpu import block_dim, block_idx, thread_idx
+from max.gpu.primitives.warp import shuffle_xor
+from std.sys.compile import is_defined
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_mul_add
 
 # TOMBSTONE: MOJOLEARN_IDN_NORM_FIXED_LANES (opt-in fixed 32-lane norm fold, EXP:2246 pending, never measured; the one-thread row chain stays) deleted 2026-11-15 by lane/expdel2-32-neural; code recoverable at c48e5cad76.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_NORM_FIXED_LANES.patch
@@ -47,17 +49,36 @@ from checks.numerics import ftz, identical_mul_add
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-32-neural.patch
 # (Sweep 2026-11-15: IDN_NORM_FIXED_LANES = False and the cell helpers nfl_cell, nfl_cell_total, nfl_cell_dot removed with
 # every reader's dead arm in transformer/impl/llama/modeling_llama.mojo and autograd/kernels/transformer.mojo.)
+# RESTORED 2026-11-15 by lane/restore-run-arms-neural: RUN #6 of docs/plans/DELETED_ARMS_WORTH_RUNNING_2026-11-15.md
+# (transformer-forward, lm-forward, lm-train-step; NVIDIA L40S A/B owed): the switch, the cell helpers and every reader's
+# arm are back (reverse of fce9f4413c, f192693134, 0bbe4a511b, 6ce75b82de and the sweep 5d0bda260a). The IDN_ALL_OFF
+# term stays deleted. The S1 arm in transformer/experiments/attention_schedules.mojo (640121d63a) is not restored: that
+# file is deleted (f1316b4aa6) and its rms_sumsq_kernel ran only under the deleted NN25_RMS_SPLIT_SCALE arm.
+comptime IDN_NORM_FIXED_LANES = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and is_defined["MOJOLEARN_IDN_NORM_FIXED_LANES"]()
+)
 #: logical lanes of the fold (the tree has log2(NFL_LANES) = 5 levels)
 comptime NFL_LANES = 32
 #: threads a row-statistic kernel launches per token row: one 32-lane cell
 #: under the define, the one-thread row owner otherwise (arm B unchanged)
-comptime NORM_ROW_LANES = 1
+comptime NORM_ROW_LANES = NFL_LANES if IDN_NORM_FIXED_LANES else 1
 
 
 @always_inline
 def norm_row_threads(rows: Int) -> Int:
     """Threads a row kernel needs for `rows` rows (rows itself when off)."""
     return rows * NORM_ROW_LANES
+
+
+@always_inline
+def nfl_cell(rows: Int) -> Tuple[Int, Int, Bool]:
+    """(row, lane, live) of this thread in a cell launch. A cell is 32
+    consecutive threads; the launch block is a multiple of 32, so a cell
+    never straddles a warp and its lanes leave together when not live."""
+    var g = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var row = g // NFL_LANES
+    return (row, g - row * NFL_LANES, row < rows)
 
 
 @always_inline
@@ -116,3 +137,29 @@ def nfl_square(
     return _tree(p)
 
 
+@always_inline
+def nfl_cell_total(v: Float32) -> Float32:
+    """The tree on a 32-lane cell: level h (16, 8, 4, 2, 1) gives lane l
+    `ftz(t_l + t_(l^h))`; for l < h that is the tree's `s[l] + s[l + h]`,
+    for l >= h the same two operands (IEEE add commutes), so after five
+    levels every lane holds s[0]. Strides below 32 stay in a 32-lane half."""
+    var t = v
+    comptime for lv in range(5):
+        comptime h = NFL_LANES >> (lv + 1)
+        t = ftz(t + shuffle_xor(t, UInt32(h)))
+    return t
+
+
+@always_inline
+def nfl_cell_dot(
+    a: MutPointer[Float32, MutAnyOrigin], b: MutPointer[Float32, MutAnyOrigin],
+    abase: Int, bbase: Int, width: Int, lane: Int,
+) -> Float32:
+    """`nfl_dot` on a cell: lane `lane` is slot `lane` (coalesced loads),
+    then the shuffle tree; the total on every lane."""
+    var acc = Float32(0.0)
+    var j = lane
+    while j < width:  # device-loop: this lane's slot of one row
+        acc = ftz(identical_mul_add(ftz(a.unsafe_load(abase + j)), ftz(b.unsafe_load(bbase + j)), acc))
+        j += NFL_LANES
+    return nfl_cell_total(acc)
