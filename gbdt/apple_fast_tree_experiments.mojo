@@ -35,7 +35,9 @@ comptime AFT_N07 = False
 # TOMBSTONE: MOJOLEARN_AFT_N08 (DELETE-EXPERIMENT, never-run Apple FAST programme card, rule g) deleted 2026-11-15 by lane/expdel2-41-trees; code recoverable at 7127af55a3.
 # Restore: git apply experiments/removed/MOJOLEARN_AFT_N08.patch; record in docs/TOMBSTONES.md.
 comptime AFT_N08 = False
-comptime AFT_N09 = _APPLE_FAST and is_defined["MOJOLEARN_AFT_N09"]()
+# TOMBSTONE: MOJOLEARN_AFT_N09 (DELETE-EXPERIMENT, never-run Apple FAST programme card, rule g) deleted 2026-11-15 by lane/expdel2-41-trees; code recoverable at 6a830e56b0.
+# Restore: git apply experiments/removed/MOJOLEARN_AFT_N09.patch; record in docs/TOMBSTONES.md.
+comptime AFT_N09 = False
 comptime AFT_N10 = _APPLE_FAST and is_defined["MOJOLEARN_AFT_N10"]()
 comptime AFT_N11 = _APPLE_FAST and is_defined["MOJOLEARN_AFT_N11"]()
 comptime AFT_N12 = _APPLE_FAST and is_defined["MOJOLEARN_AFT_N12"]()
