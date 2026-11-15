@@ -43,8 +43,7 @@ comptime _ENABLED = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 # (NI27). Aliases only; no arithmetic changes.
 # TOMBSTONE: MOJOLEARN_IDN_LM_VIEWS (arms 1-3, opt-in, no A/B recorded) deleted 2026-11-15 by lane/expdel2-32-neural; code recoverable at 311b50e05c.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_LM_VIEWS.patch
-comptime IDN_LM_VIEWS_ARM = 0
-comptime IDN_LM_PARAM_VIEWS = False
+# (Sweep 2026-11-15: IDN_LM_VIEWS_ARM = 0 and IDN_LM_PARAM_VIEWS = False removed with their readers' dead arms.)
 # TOMBSTONE: MOJOLEARN_IDN_PARAM_GRAD_VIEWS deleted 2026-11-09 by lane x7b-step-ops-host-arm (its train step went with lane x7); refused in core/experiment_guards_neural.mojo.
 # TOMBSTONE: MOJOLEARN_IDN_LM_RESIDENT_TOKENS (NI32 / NN51 arms) deleted 2026-11-09 by lane x7b-step-ops-host-arm (no reader since lane x7); refused in core/experiment_guards_neural.mojo.
 # NI33: keep the original per-cell divides and the same ignored-row stores.
