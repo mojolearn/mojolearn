@@ -97,7 +97,6 @@ from ivf.impl.neighbors.ivf_flat.fast_ivf_scan import (
     FIVF_QPB,
     fast_ivf_scan_kernel,
 )
-from std.sys.compile import is_defined
 from std.os import getenv
 from x_ann.io import upload_i32
 from core.device_fold import device_count_less_i32
@@ -242,10 +241,9 @@ def _ivf_sqrt_device(ctx: DeviceContext, mut d_od: DeviceBuffer[DType.float32], 
         )
 
 
-comptime IVF_FAST_SCAN = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and not is_defined["MOJOLEARN_IVF_FAST_SCAN_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_IVF_FAST_SCAN_OFF (old per-query path beside the FAST default, no A/B row) deleted 2026-11-15 by lane/expdel2-12-cluster; code recoverable at 4f59e7202c.
+# Restore: git apply experiments/removed/MOJOLEARN_IVF_FAST_SCAN_OFF.patch; record in docs/TOMBSTONES.md.
+comptime IVF_FAST_SCAN = GLOBAL_NUMERIC_MODE == NUMERIC_FAST
 """FAST on Apple: steps 3-5 for every query in one launch
 (`fast_ivf_scan.mojo`) instead of a host round trip per query."""
 # TOMBSTONE: MOJOLEARN_IVF_FAST_BALANCED_TASKS (never measured, deleted) deleted 2026-11-09 by 0c3399062b; code
