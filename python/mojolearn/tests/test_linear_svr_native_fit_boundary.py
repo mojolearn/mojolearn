@@ -47,7 +47,8 @@ def test_linear_svr_weighted_intercept_and_metadata_keep_original_values():
 
 def test_linear_svr_target_refusal_retains_input_publication_order():
     model = _model()
-    with pytest.raises(ValueError, match="X and y lengths differ"):
+    # The length refusal now uses scikit-learn's wording at admission.
+    with pytest.raises(ValueError, match=r"inconsistent numbers of samples: \[8, 1\]"):
         model.fit(_points(), [1])
     assert "input_copied_" in vars(model)
     assert "_w" not in vars(model)
