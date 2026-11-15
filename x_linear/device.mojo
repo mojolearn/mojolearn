@@ -1372,12 +1372,11 @@ def sgd_mb_chunk_kernel(
 # launch a live problem, and ONE read brings every problem's stop words
 # home. Each problem's statements are the sequential driver's on its own
 # words: NO BIT MOVES, the host column is untouched.
-# `-D MOJOLEARN_SGD_IDN_OVR_PAR_OFF` restores
-# the sequential problems.
+# TOMBSTONE: MOJOLEARN_SGD_IDN_OVR_PAR_OFF (unmeasured old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-21-linear; code recoverable at 255a84c8ff.
+# Restore: git apply experiments/removed/MOJOLEARN_SGD_IDN_OVR_PAR_OFF.patch; record in docs/TOMBSTONES.md.
 comptime SGD_IDN_OVR_PAR = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     # I12 current experiment: NEVER RUN — PENDING MEASUREMENT; existing defaults preserved.
-    and not is_defined["MOJOLEARN_SGD_IDN_OVR_PAR_OFF"]()
 )
 #: `cf` words a problem (`_sgd_mb_chunk_kernel_body`'s nine)
 comptime SGD_OVR_CF = 9
