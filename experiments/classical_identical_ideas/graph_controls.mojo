@@ -22,7 +22,7 @@ comptime GRAPH_IDENTICAL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 comptime KNN_DIRECT_DISTANCE = False
 # TOMBSTONE: MOJOLEARN_KDE_DIRECT_DISTANCE (unmeasured arm) deleted 2026-11-15 by lane/expdel2-05-base; code recoverable at 1fef4f5d4a.
 # Restore: git apply experiments/removed/MOJOLEARN_KDE_DIRECT_DISTANCE.patch; record in docs/TOMBSTONES.md.
-comptime KDE_DIRECT_DISTANCE = False
+# (Sweep 2026-11-15: comptime KDE_DIRECT_DISTANCE removed; nothing read it.)
 # TOMBSTONE: MOJOLEARN_DBSCAN_DIRECT_DISTANCE (DELETE-noise: dbscan taxi on main ef1e7e9f9 NV L40S 13336 -> 13184 ms (v1462 vs v1234),
 # AMD MI325X 7108 -> 7118 ms (a1599 vs a1593), 0.99x / 1.00x; istella 1.00x / 1.00x; hash d6fa652f / 7494ce8e unchanged) turned off
 # 2026-10-11 by lane/grid-act-16; code recoverable at 49a19b003. Reader branches are dead comptime code: CLEANUP OWED.
