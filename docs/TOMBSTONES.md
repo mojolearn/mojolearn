@@ -692,6 +692,7 @@ Deletions reversed by new evidence. The code is back on main; the section and th
 | [`MOJOLEARN_X_CLUSTER_FAST_MINIBATCH_OFF`](#mojolearn_x_cluster_fast_minibatch_off-old-path-deleted-2026-11-15) | Cluster (MiniBatchKMeans resident steps, FAST Apple) | removed (old path; FAST+Apple default KEPT 4b1311c12) | 2026-11-15 | [MOJOLEARN_X_CLUSTER_FAST_MINIBATCH_OFF.patch](../experiments/removed/MOJOLEARN_X_CLUSTER_FAST_MINIBATCH_OFF.patch) |
 | [`MOJOLEARN_X_CLUSTER_FAST_MEANSHIFT_OFF`](#mojolearn_x_cluster_fast_meanshift_off-old-path-deleted-2026-11-15) | Cluster (MeanShift shift grid, FAST Apple) | removed (old path; FAST+Apple default KEPT 4b1311c12) | 2026-11-15 | [MOJOLEARN_X_CLUSTER_FAST_MEANSHIFT_OFF.patch](../experiments/removed/MOJOLEARN_X_CLUSTER_FAST_MEANSHIFT_OFF.patch) |
 | [`MOJOLEARN_XN_FAST_ACHI2_DEVSCAN_OFF`](#mojolearn_xn_fast_achi2_devscan_off-old-path-deleted-2026-11-15) | Neighbors (AdditiveChi2Sampler fit negative check, FAST Apple) | removed (old path; FAST+Apple DEFAULT, w2-w3kf-xn-q PASS) | 2026-11-15 | [MOJOLEARN_XN_FAST_ACHI2_DEVSCAN_OFF.patch](../experiments/removed/MOJOLEARN_XN_FAST_ACHI2_DEVSCAN_OFF.patch) |
+| [`MOJOLEARN_XN_FAST_SCHI2_MOJO_MT_OFF`](#mojolearn_xn_fast_schi2_mojo_mt_off-old-path-deleted-2026-11-15) | Neighbors (SkewedChi2Sampler fit draws, FAST Apple) | removed (old path; FAST+Apple DEFAULT, w2-kfeat-xn-q-r1 PASS) | 2026-11-15 | [MOJOLEARN_XN_FAST_SCHI2_MOJO_MT_OFF.patch](../experiments/removed/MOJOLEARN_XN_FAST_SCHI2_MOJO_MT_OFF.patch) |
 
 ## Trees
 
@@ -6008,4 +6009,12 @@ replacement computes the same values in the same order (see the bit notes below)
 - **Verdict**: DEFAULT (FAST+Apple) per EXPERIMENTS.md `XN_FAST_ACHI2_DEVSCAN + size gate`: M3 one run per arm (ea6b2035e) istella 11.2 -> 4.4 ms, taxi 0.9 -> 1.1 ms (below the gate, host path: noise); w2-w3kf-xn-q PASS. No bit change on any column.
 - **Deleted by**: lane/expdel-01-cluster (expdel-01-cluster, docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md); code recoverable at `327ba1435e`.
 - **Restore**: `git apply experiments/removed/MOJOLEARN_XN_FAST_ACHI2_DEVSCAN_OFF.patch`, then delete the `MOJOLEARN_XN_FAST_ACHI2_DEVSCAN_OFF` refusal in `core/experiment_guards_cluster.mojo`.
+- **Records**: refusal in `core/experiment_guards_cluster.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel-01-cluster section).
+
+## MOJOLEARN_XN_FAST_SCHI2_MOJO_MT_OFF: old path deleted (2026-11-15)
+
+- **What it was**: the FAST+Apple rollback of SkewedChi2Sampler.fit's legacy MT19937 draws from Mojo (`x_neighbors/kfeat_dev.mojo` XN_FAST_SCHI2_MOJO_MT, bit 2 of `kfeat_flags`) to the Python loop and list comprehensions. Only the define read is deleted: the bit is 0 on every other build, where the binding's other path is unchanged.
+- **Verdict**: DEFAULT (FAST+Apple) per EXPERIMENTS.md `XN_FAST_SCHI2_MOJO_MT`: M3 one run per arm, skewed-chi2 istella 9.0 -> 2.2 ms, taxi 2.5 -> 1.5 ms; w2-kfeat-xn-q-r1 PASS (byte-identical outputs and refusals). No bit change on any column.
+- **Deleted by**: lane/expdel-01-cluster (expdel-01-cluster, docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md); code recoverable at `0d5b3201e0`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_XN_FAST_SCHI2_MOJO_MT_OFF.patch`, then delete the `MOJOLEARN_XN_FAST_SCHI2_MOJO_MT_OFF` refusal in `core/experiment_guards_cluster.mojo`.
 - **Records**: refusal in `core/experiment_guards_cluster.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel-01-cluster section).
