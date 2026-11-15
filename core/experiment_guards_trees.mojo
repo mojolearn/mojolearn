@@ -74,6 +74,8 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_SYM_FEAT_ALL"](), "removed 2026-11-15 (lane/expdel-05-trees): MOJOLEARN_SYM_FEAT_ALL, the FAST Apple umbrella of the six symmetric feature-set switches, was NEUTRAL: rab4-symfeat istella -1.3%, taxi -0.1%, quality noise; the switches it kept keep their own defines; code at 54b6a264fc; see docs/TOMBSTONES.md"
     # Restore: git apply experiments/removed/MOJOLEARN_GBDT_BOOT_DEVICE.patch
     comptime assert not is_defined["MOJOLEARN_GBDT_BOOT_DEVICE"](), "removed 2026-11-15 (lane/expdel-05-trees): MOJOLEARN_GBDT_BOOT_DEVICE, the FAST Apple device bootstrap seed fill, was NEUTRAL: rab7-gbdtbootdevice istella -0.2%; the device seed fill is every build's default, the switch read nothing; code at 2f51f8b97d; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_GBDT_EVAL_SKIP_EMPTY.patch
+    comptime assert not is_defined["MOJOLEARN_GBDT_EVAL_SKIP_EMPTY"](), "removed 2026-11-15 (lane/expdel-05-trees): MOJOLEARN_GBDT_EVAL_SKIP_EMPTY, the FAST Apple one-word held-out index for an empty eval set, was NEUTRAL: rab7-gbdtevalskipem istella +0.0%, taxi +0.4%; code at 8815b00d75; see docs/TOMBSTONES.md"
     return True
 
 

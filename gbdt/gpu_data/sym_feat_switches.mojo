@@ -47,16 +47,9 @@ comptime GBDT_INDEX_PACK_DEVICE = SYM_FEAT_FAST_APPLE and (
 comptime GBDT_QUANT_DEVICE = SYM_FEAT_FAST_APPLE and (
     is_defined["MOJOLEARN_GBDT_QUANT_DEVICE"]() or GBDT_INDEX_PACK_DEVICE
 )
-#: `-D MOJOLEARN_GBDT_EVAL_SKIP_EMPTY`: with NO eval set `train` still ran
-#: `_build_cindex_from_floats` over a one-row dummy (two uploads and a
-#: launch per bordered feature, a drain per eight) for a test arm nothing
-#: reads; the switch allocates the one-word index and skips the launches.
-#: recovery 2026-10-04 (lane/apple-fast-rec-sym): source
-#: lane/apple-fast-sym-feat@bca0e3a48; never built (compile owed at the
-#: source), never timed.
-comptime GBDT_EVAL_SKIP_EMPTY = SYM_FEAT_FAST_APPLE and (
-    is_defined["MOJOLEARN_GBDT_EVAL_SKIP_EMPTY"]()
-)
+# TOMBSTONE: MOJOLEARN_GBDT_EVAL_SKIP_EMPTY (NEUTRAL) deleted 2026-11-15 by lane/expdel-05-trees; code recoverable at
+# 8815b00d75.
+# Restore: git apply experiments/removed/MOJOLEARN_GBDT_EVAL_SKIP_EMPTY.patch
 #: `-D MOJOLEARN_GBDT_EVAL_FUSED`: the held-out arm's per-tree apply takes
 #: ONE packed upload (split records and leaf values in one pinned buffer)
 #: instead of six, and when no overfitting detector can stop the fit the

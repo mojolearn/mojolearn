@@ -169,7 +169,6 @@ from core.accelerator_target import TARGET_HAS_APPLE_GPU
 #: lane/apple-fast-sym-feat (2026-10-03): the switches live in
 #: `gbdt/gpu_data/sym_feat_switches.mojo` (FAST + Apple only, default OFF).
 from gbdt.gpu_data.sym_feat_switches import (
-    GBDT_EVAL_SKIP_EMPTY,
     GBDT_INDEX_PACK_DEVICE,
     GBDT_QUANT_DEVICE,
 )
@@ -330,26 +329,9 @@ from gbdt.options.catboost_options import (
 
 
 
-def _sym_feat_test_cindex(
-    ctx: DeviceContext,
-    x_colmajor: List[Float32],
-    n_rows: Int,
-    borders: List[List[Float32]],
-    fold_counts: List[Int],
-    nan_treatment: List[Int],
-    eval_rows: Int,
-) raises -> DeviceBuffer[DType.uint32]:
-    """The held-out arm's compressed index: `_build_cindex_from_floats`,
-    except under `GBDT_EVAL_SKIP_EMPTY` (lane/apple-fast-sym-feat, FAST +
-    Apple only) with NO held-out rows, where nothing reads the index and
-    the one-row dummy build (a launch and two uploads per bordered feature,
-    a drain per eight) is replaced by a one-word allocation."""
-    comptime if GBDT_EVAL_SKIP_EMPTY:
-        if eval_rows == 0:
-            return ctx.enqueue_create_buffer[DType.uint32](1)
-    return _build_cindex_from_floats(
-        ctx, x_colmajor, n_rows, borders, fold_counts, nan_treatment,
-    )
+# TOMBSTONE: MOJOLEARN_GBDT_EVAL_SKIP_EMPTY (NEUTRAL: rab7-gbdtevalskipem istella +0.0%, taxi +0.4%) deleted 2026-11-15
+# by lane/expdel-05-trees (`_sym_feat_test_cindex`, the one-word index for an empty eval set); code recoverable at 8815b00d75.
+# Restore: git apply experiments/removed/MOJOLEARN_GBDT_EVAL_SKIP_EMPTY.patch
 
 
 def _build_cindex_from_floats(
@@ -2986,9 +2968,9 @@ def train(
         for _ in range(len(fold_counts)):  # small-loop(fold_counts: features of the one-row placeholder): one zero per feature for an empty eval set
             eval_expanded.append(Float32(0.0))
 
-    var test_cindex = _sym_feat_test_cindex(
+    var test_cindex = _build_cindex_from_floats(
         ctx, eval_expanded, t_rows, borders, fold_counts,
-        column_nan_treatment, eval_rows,
+        column_nan_treatment,
     )
 
     var approx_dim = 1

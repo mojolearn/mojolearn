@@ -629,6 +629,7 @@ in the tables after the sections.
 | [`P1_DEAD_PY_CURVE_DRIVERS` (unreachable Python drivers (`_FoldCurve`, `_curves`, `roc_auc_options`, ... 91 defs))](#lane-p1-python-callbacks-removed-from-native-operations-2026-11-09) | Metrics, decomp, prep, linear model (Python) | removed (Python code on a product path; native or a refusal instead; not an experiment) | 2026-11-09 | [P1_DEAD_PY_CURVE_DRIVERS.patch](../experiments/removed/P1_DEAD_PY_CURVE_DRIVERS.patch) |
 | [`MOJOLEARN_SYM_FEAT_ALL`](#mojolearn_sym_feat_all) | Trees (GBDT, Apple FAST) | NEUTRAL | 2026-11-15 | [MOJOLEARN_SYM_FEAT_ALL.patch](../experiments/removed/MOJOLEARN_SYM_FEAT_ALL.patch) |
 | [`MOJOLEARN_GBDT_BOOT_DEVICE`](#mojolearn_gbdt_boot_device) | Trees (GBDT, Apple FAST) | NEUTRAL | 2026-11-15 | [MOJOLEARN_GBDT_BOOT_DEVICE.patch](../experiments/removed/MOJOLEARN_GBDT_BOOT_DEVICE.patch) |
+| [`MOJOLEARN_GBDT_EVAL_SKIP_EMPTY`](#mojolearn_gbdt_eval_skip_empty) | Trees (GBDT, Apple FAST) | NEUTRAL | 2026-11-15 | [MOJOLEARN_GBDT_EVAL_SKIP_EMPTY.patch](../experiments/removed/MOJOLEARN_GBDT_EVAL_SKIP_EMPTY.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -5928,3 +5929,12 @@ bits change on any vendor or the host column, no board row needs re-timing.
 - Files the patch restores: `gbdt/gpu_data/sym_feat_switches.mojo`, `gbdt/gpu_util/kernel/bootstrap.mojo`
 - Guard refusal: core/experiment_guards_trees.mojo (lane expdel-05-trees block). No `grid_controls` entry named it.
 - EXPERIMENTS.md rows: 167, 1303; appended row in the "Lane expdel-05-trees" section.
+
+### MOJOLEARN_GBDT_EVAL_SKIP_EMPTY
+
+- Tried: with no eval set, a one-word held-out compressed index instead of the one-row dummy `_build_cindex_from_floats` build (`_sym_feat_test_cindex`), FAST + Apple only.
+- Verdict: NEUTRAL. rab7-gbdtevalskipem (M3 Ultra, Verdicts batch 4, 2026-10-05): gbdt-symmetric istella +0.0%, taxi +0.4%; stays off. The caller now calls `_build_cindex_from_floats` directly, as the default arm did. Deleted 2026-11-15 by lane/expdel-05-trees (one commit for this define).
+- Recoverable at `8815b00d75`. Patch: `experiments/removed/MOJOLEARN_GBDT_EVAL_SKIP_EMPTY.patch` (the reverse of the deletion commit, code files only; apply in reverse deletion order when restoring several of this lane).
+- Files the patch restores: `gbdt/gpu_data/sym_feat_switches.mojo`, `gbdt/train.mojo`
+- Guard refusal: core/experiment_guards_trees.mojo (lane expdel-05-trees block). No `grid_controls` entry named it.
+- EXPERIMENTS.md rows: 169, 1303; appended row in the "Lane expdel-05-trees" section.
