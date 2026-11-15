@@ -670,7 +670,9 @@ def dev_lu_aux_run(
 #: the same values: the same words. Needs IDN_QR_R_DIRECT (its helper).
 #: -D MOJOLEARN_IDN_QR_R_RESIDENT_OFF (or -D MOJOLEARN_IDN_ALL_OFF) leaves the
 #: entry out and Python keeps the host-address call.
-comptime IDN_QR_R_RESIDENT = IDN_QR_R_DIRECT and not is_defined["MOJOLEARN_IDN_QR_R_RESIDENT_OFF"]()
+# TOMBSTONE: MOJOLEARN_IDN_QR_R_RESIDENT_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-18-decomposition; code recoverable at e25d523eff.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_QR_R_RESIDENT_OFF.patch; record in docs/TOMBSTONES.md.
+comptime IDN_QR_R_RESIDENT = IDN_QR_R_DIRECT
 # lane fix-d1-decomp (2026-10-04, audit F8): the resident QR held X twice
 # (the operand and the device copy the factorization destroys). When the
 # caller gives the operand up (p[2] != 0: FactorAnalysis's centered X, never
