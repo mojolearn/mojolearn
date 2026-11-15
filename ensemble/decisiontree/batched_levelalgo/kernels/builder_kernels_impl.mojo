@@ -380,7 +380,7 @@ which already priced the width for the reduction this scratch feeds.
 
 from ensemble.tree_moments import moment_pair, moment_finish
 from checks.soft_f64 import sf64_from_f32
-from ensemble.tree_identical_ideas import T04, T05, T07, T08, T14, C48
+from ensemble.tree_identical_ideas import T05, T07, T08, T14, C48
 from max.gpu import (
     WARP_SIZE,
     block_dim,
@@ -3893,28 +3893,7 @@ def merge_split_candidates_parallel_kernel[dtype: DType](
             splits[unsafe_offset=nid] = best
 
 
-def clear_live_histogram_bins_kernel[O: ObjectiveLike](
-    argsp: MutPointer[HistogramArgs[O], MutAnyOrigin],
-    hist: MutPointer[O.BinT, MutAnyOrigin],
-    columns: MutPointer[Int32, MutAnyOrigin],
-    col_start: Int32, max_bins: Int32,
-):
-    """T04: initialize exactly the cells both histogram and score consume.
-
-    NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
-    All padded node tasks are cleared too, including zero-row tasks; no reader
-    sees stale storage. Actual per-feature bins exclude unused max_bins tails.
-    """
-    ref args = argsp[unsafe_offset=0]
-    var node = Int(block_idx.x)
-    var col = Int(columns.unsafe_load(node*Int(args.dataset.n_sampled_cols)+Int(col_start)+Int(block_idx.y)))
-    var outputs = Int(args.objective.NumClasses())
-    var count = Int(args.quantiles.n_bins_array.unsafe_load(col))*outputs
-    var base = (node*Int(grid_dim.y)+Int(block_idx.y))*Int(max_bins)*outputs
-    var i = Int(thread_idx.x)
-    while i < count:
-        hist[unsafe_offset=base+i] = O.BinT()
-        i += Int(block_dim.x)
+# (Sweep 2026-11-15: clear_live_histogram_bins_kernel, launched only under the folded T04, removed.)
 
 
 def publish_histogram_child_counts_kernel[dtype: DType](

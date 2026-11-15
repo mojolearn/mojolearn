@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Random Forest decision-tree builder and device training pipeline, aligned with the pinned cuML batched-level algorithm."""
 
-from ensemble.tree_identical_ideas import T04, T05, T05_ROW_VISITS, T07, T13, T13_BYTES
+from ensemble.tree_identical_ideas import T05, T05_ROW_VISITS, T07, T13, T13_BYTES
 from max.gpu import WARP_SIZE
 from std.sys.compile import is_defined
 from std.math import ceildiv
@@ -53,7 +53,6 @@ from ensemble.decisiontree.batched_levelalgo.kernels.builder_kernels_impl import
     small_node_split_kernel,
     merge_split_candidates_kernel,
     merge_split_candidates_parallel_kernel,
-    clear_live_histogram_bins_kernel,
     launch_gather_sampled_order_kernel,
     launch_leaf_kernel,
     launch_node_split_kernel,
@@ -2314,14 +2313,7 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
         # 14.4 s HIGGS 1M FAST fit on the M4, `core/device_zero.mojo`);
         # the launch costs 10 us and writes the same zeros.
         var t_h = instr.times.start()
-        comptime if T04:
-            ctx.enqueue_function[clear_live_histogram_bins_kernel[Self.O]](
-                hist_argsp.unsafe_origin_cast[MutAnyOrigin](),
-                self._hist_ptr().unsafe_origin_cast[MutAnyOrigin](),
-                self.column_samples.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
-                Int32(col), Int32(n_bins), grid_dim=(n_work_items,n_blocks_dimy), block_dim=128,
-            )
-        elif HIST_ZERO_AFTER_READ_DEFAULT:
+        comptime if HIST_ZERO_AFTER_READ_DEFAULT:
             # Every cell this round's (node, column) blocks can touch lies
             # in its first `len_histograms` bins; the part below the
             # high-water mark is zero already, so only the new tail is
@@ -2394,7 +2386,7 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
         t_h = instr.times.start()
         launch_find_best_splits_kernel[
             Self.O,
-            zero_after=HIST_ZERO_AFTER_READ_DEFAULT and not T04,
+            zero_after=HIST_ZERO_AFTER_READ_DEFAULT,
             candidates=HIST_SPLIT_CANDIDATES_DEFAULT,
         ](
             ctx,

@@ -7,7 +7,7 @@ from core.tree_math import tree_log
 from ensemble.tree_moments import balanced_mse_gain, et_leaf_moment_host
 # TOMBSTONE: MOJOLEARN_TREES_T11_LEVELS, MOJOLEARN_TREES_T14_EXACT, MOJOLEARN_TREES_T12_BYTES, MOJOLEARN_TREES_T13_BYTES (T11/T14_EXACT folded to their constants here; T12/T13 byte budgets read their default constants) deleted 2026-11-15 by lane/expdel2-40-trees; code recoverable at 6641db4b18.
 # Restore: git apply experiments/removed/MOJOLEARN_TREES_T11_LEVELS.expdel2-40-trees.patch; experiments/removed/MOJOLEARN_TREES_T14_EXACT.expdel2-40-trees.patch; experiments/removed/MOJOLEARN_TREES_T12_BYTES.expdel2-40-trees.patch; experiments/removed/MOJOLEARN_TREES_T13_BYTES.expdel2-40-trees.patch
-from ensemble.tree_identical_ideas import T04, T05, T06, T07, T12, T12_BYTES, T13, T13_BYTES, T14, C48
+from ensemble.tree_identical_ideas import T05, T06, T07, T12, T12_BYTES, T13, T13_BYTES, T14, C48
 from std.memory import bitcast, unsafe_memcpy
 
 from ensemble.instruments import StageTimes
@@ -4936,11 +4936,8 @@ def search_batch_enqueue(
     # of their old phases; the timed program was always the serialized
     # one, and no seeded value moves.
     # =================================================================
-    # T04: every future larger frontier is initialized at its own extent.
-    # Dummy nodes inside n_nodes remain initialized; capacity tails are unread.
-    # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
-    var setup_nodes = n_nodes if T04 else ws.cap_nodes
-    var setup_report = Int32(sampler_report_len(n_nodes) if T04 else ws.cap_report) if use_sampler else Int32(0)
+    var setup_nodes = ws.cap_nodes
+    var setup_report = Int32(ws.cap_report) if use_sampler else Int32(0)
     var setup_a_extent = n_cells
     if Int(setup_report) > setup_a_extent:
         setup_a_extent = Int(setup_report)
@@ -7772,11 +7769,8 @@ def search_batch_regression_enqueue(
     # no grid sync) is at the classification twin's launch. The one twin
     # difference: the class-accumulator extent is `n_cells` (one output),
     # exactly what the old score-init launch passed here.
-    # T04: every future larger frontier is initialized at its own extent.
-    # Dummy nodes inside n_nodes remain initialized; capacity tails are unread.
-    # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
-    var setup_nodes = n_nodes if T04 else ws.cap_nodes
-    var setup_report = Int32(sampler_report_len(n_nodes) if T04 else ws.cap_report) if use_sampler else Int32(0)
+    var setup_nodes = ws.cap_nodes
+    var setup_report = Int32(ws.cap_report) if use_sampler else Int32(0)
     var setup_a_extent = n_cells
     if Int(setup_report) > setup_a_extent:
         setup_a_extent = Int(setup_report)
