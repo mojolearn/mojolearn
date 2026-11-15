@@ -1512,9 +1512,8 @@ default before the estash flip (its backward is the shipped
 comptime ATTN_APPLE_ESTASH_RECOMPUTE = False
 """Always False: a denied Apple process keeps the round 3 backward."""
 
-comptime ATTN_APPLE_ESTASH_FORCE_DENY = is_defined["MOJOLEARN_ATTN_APPLE_ESTASH_FORCE_DENY"]()
-"""Measurement arm (lane/neural-apple2): the grant always refuses the kept
-stashes, so a large-memory Mac times the denied path."""
+# TOMBSTONE: MOJOLEARN_ATTN_APPLE_ESTASH_FORCE_DENY (unmeasured Apple opt-in arm) deleted 2026-11-15 by lane/expdel2-34-neural; code recoverable at 9125339d58.
+# Restore: git apply experiments/removed/MOJOLEARN_ATTN_APPLE_ESTASH_FORCE_DENY.patch
 
 
 struct _AttnEstashGate(Defaultable, Movable):
@@ -1573,7 +1572,7 @@ def attention_estash_memory_grant(
     )
     var mem = ctx.get_memory_info()
     var free = Int(mem[0])
-    var ok = need * 100 <= free * 35 and not ATTN_APPLE_ESTASH_FORCE_DENY
+    var ok = need * 100 <= free * 35
     var g = _ATTN_ESTASH_GATE.get_or_create_ptr()
     g[].need = need
     g[].free = free
