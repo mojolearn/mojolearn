@@ -8,8 +8,6 @@ reuse. No cache of numerical values, hidden upload, or device fallback.
 The caller owns one context and may not begin overlapping uses of a pool.
 """
 from max.gpu.host import DeviceContext,DeviceBuffer
-from checks.numerics import GLOBAL_NUMERIC_MODE,NUMERIC_IDENTICAL
-from std.sys.compile import is_defined
 from std.atomic import Atomic,Ordering
 
 # I20 2026-10-06 L40S representative resident score_samples: candidate
@@ -23,9 +21,10 @@ from std.atomic import Atomic,Ordering
 # One same-process warmup and score on the resident public caller; existing
 # identity evidence reused, not rerun. Synthetic scope; no default promotion.
 # Evidence: overnight-ab-20261006/amd/normalized-measurements.json, I20.
-# Pool requires IDENTICAL + MOJOLEARN_IDN_KDE_PARTIAL_POOL; original allocation path retained.
-# Default OFF; enabling it remains a pending experiment, not a promoted route.
-comptime KDE_CHUNK_POOL_ON=GLOBAL_NUMERIC_MODE==NUMERIC_IDENTICAL and is_defined["MOJOLEARN_IDN_KDE_PARTIAL_POOL"]()
+# TOMBSTONE: MOJOLEARN_IDN_KDE_PARTIAL_POOL (unmeasured opt-in arm (I20 mixed, no promotion)) deleted 2026-11-15 by lane/expdel2-19-kernel; code recoverable at 3af082d6f4.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_KDE_PARTIAL_POOL.patch; record in docs/TOMBSTONES.md.
+# KDE_CHUNK_POOL_ON stays as a constant for importers (the I20 check); no product path pools.
+comptime KDE_CHUNK_POOL_ON=False
 comptime KDE_CHUNK_POOL_BYTES=64*1024*1024
 
 

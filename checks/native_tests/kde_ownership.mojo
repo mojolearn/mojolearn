@@ -12,7 +12,8 @@ from core.host_parallel import host_parallelize
 from core.kde_native_api import KDENativeDriver, KDEPrepareRequest, KDEResidentQuery, kde_native_v1
 from core.kde_native_device import KDEDeviceKernels
 from kde.resident_fit import KdeFitLease, _kde_fit_lease, _kde_fit_return
-from kde.impl.chunk_workspace import KDE_CHUNK_POOL_ON
+# TOMBSTONE: MOJOLEARN_IDN_KDE_PARTIAL_POOL (unmeasured opt-in arm (I20 mixed, no promotion)) deleted 2026-11-15 by lane/expdel2-19-kernel; code recoverable at 3af082d6f4.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_KDE_PARTIAL_POOL.patch; record in docs/TOMBSTONES.md.
 from kde.checks.kde_fixture import train_fixture, query_fixture, weight_fixture
 from checks.native_tests.pca_native import guards, PCA_TEST_GUARD
 from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require
@@ -85,13 +86,6 @@ def fixture(unit: Int) raises:
         var minted = handle
         var first = _kde_fit_lease(handle)
         try:
-            comptime if KDE_CHUNK_POOL_ON:
-                if not first.partial_pool:
-                    raise Error("KDE retained workspace missing after two eligible queries")
-                require(first.partial_pool.value().allocations == 4 and first.partial_pool.value().reuse_calls == 1,
-                    "KDE original sequential allocation4/reuse1 contract")
-                require(first.partial_pool.value().retained_bytes() <= first.partial_pool.value().budget_bytes,
-                    "KDE retained workspace respects its budget")
             var second = _kde_fit_lease(handle)
             try:
                 require(not second.partial_pool, "KDE active leases never alias one cached workspace")
@@ -121,12 +115,6 @@ def fixture(unit: Int) raises:
                     var next_lease = _kde_fit_lease(handle)
                     try:
                         if unit == 1:
-                            comptime if KDE_CHUNK_POOL_ON:
-                                if not next_lease.partial_pool:
-                                    raise Error("KDE clean returned workspace was not retained")
-                                require(next_lease.partial_pool.value().allocations == 4
-                                    and next_lease.partial_pool.value().reuse_calls == 1,
-                                    "KDE clean return keeps the existing workspace and counters")
                             _kde_fit_return(handle, next_lease, True)
                         else:
                             require(not next_lease.partial_pool, "KDE unclean workspace is never recached")
