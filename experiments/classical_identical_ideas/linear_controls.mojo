@@ -133,7 +133,7 @@ comptime ENETCV_FB_CHUNKS = 64
 comptime ENETCV_SCORE_BLOCKS = 1024 if CLASSICAL_IDN else 0
 # TOMBSTONE: MOJOLEARN_CLASSICAL_C15_FACTOR_SOLVE (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-06-base; code recoverable at 72270680f8.
 # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C15_FACTOR_SOLVE.patch; record in docs/TOMBSTONES.md.
-comptime C15_FACTOR_SOLVE = False
+# (Sweep 2026-11-15: comptime C15_FACTOR_SOLVE removed; nothing read it.)
 # lane/classical-structural (2026-10-07): LINEAR_GRAM_SOLVE (OLS and Ridge).
 # One resident centered-Gram fit (glm/impl/gram_solve.mojo) instead of OLS's
 # 14-panel TSQR of a centered copy and Ridge's four PCIe crossings + untiled
