@@ -18,7 +18,6 @@ import numpy as np
 import pytest
 
 from mojolearn import _backend
-from mojolearn import _expansion_metrics as X
 
 
 def _data(n=3000):
@@ -90,7 +89,7 @@ def _calls(d):
 
 def _gpu_available():
     try:
-        X._binding(None)
+        _backend.binding("_mojolearn_x_metrics", _backend.default_mode())
         return True
     except Exception:  # a CPU-only install has no GPU binding
         return False
