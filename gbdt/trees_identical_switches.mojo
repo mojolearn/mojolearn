@@ -69,7 +69,7 @@ comptime T22 = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
 # TOMBSTONE: MOJOLEARN_TREES_T25 (DELETE-ARM, opt-in, no A/B recorded, rule a) deleted 2026-11-15 by lane/expdel2-45-trees; code recoverable at 5de73a4228.
 # Restore: git apply experiments/removed/MOJOLEARN_TREES_T25.patch
-comptime T25 = False
+# (Sweep 2026-11-15: T25 removed; readers in gbdt/methods/ordered_boosting.mojo folded.)
 
 # T27 (alias of MOJOLEARN_2030_FUSED_EST_MOVE) deleted by lane/grid-prune 2026-10-07.
 
@@ -115,7 +115,7 @@ comptime T25 = False
 # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
 # TOMBSTONE: MOJOLEARN_TREES_T24 (DELETE-ARM, opt-in, no A/B recorded, rule a) deleted 2026-11-15 by lane/expdel2-45-trees; code recoverable at fca63c0b28.
 # Restore: git apply experiments/removed/MOJOLEARN_TREES_T24.patch
-comptime T24 = False
+# (Sweep 2026-11-15: T24 removed; readers in gbdt/methods/ordered_boosting.mojo folded.)
 
 # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
 # TOMBSTONE: MOJOLEARN_TREES_T26 (DELETE-ARM, opt-in, no A/B recorded, rule a) deleted 2026-11-15 by lane/expdel2-45-trees; code recoverable at 0242b4a432.
