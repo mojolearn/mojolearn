@@ -116,8 +116,7 @@ def _check_configuration() -> Bool:
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_HPDEV_REDUCE_OFF.patch
     comptime assert not is_defined["MOJOLEARN_IDN_HPDEV_REDUCE_OFF"](), "removed 2026-11-15 (lane/expdel2-04-base): IDN_HPDEV_REDUCE_OFF (old path, Hotpath device steps (IDENTICAL reduce); no A/B recorded beside the default (rule b)) is gone; the default stays; code recoverable at 8ec3732a1b; restore: experiments/removed/MOJOLEARN_IDN_HPDEV_REDUCE_OFF.patch"
     # MOJOLEARN_IDN_OLS_PREDICT_TILED: refusal removed 2026-11-15 (restored; owed B arm, see docs/TOMBSTONES.md Restored table)
-    # Restore: git apply experiments/removed/MOJOLEARN_IDN_QUERY_X_HELD_OFF.patch
-    comptime assert not is_defined["MOJOLEARN_IDN_QUERY_X_HELD_OFF"](), "removed 2026-11-15 (lane/expdel2-04-base): IDN_QUERY_X_HELD_OFF (old path, Resident kernel query buffers (IDENTICAL); EXPERIMENTS.md RUN OWED row (owed row fix-svc-query-resident, never run)) is gone; the default stays; code recoverable at a75f345253; restore: experiments/removed/MOJOLEARN_IDN_QUERY_X_HELD_OFF.patch"
+    # MOJOLEARN_IDN_QUERY_X_HELD_OFF: refusal removed 2026-11-15 (restored; owed B arm, see docs/TOMBSTONES.md Restored table)
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_SCRATCH_POOL.patch
     comptime assert not is_defined["MOJOLEARN_IDN_SCRATCH_POOL"](), "removed 2026-11-15 (lane/expdel2-04-base): IDN_SCRATCH_POOL (opt-in arm, Scratch buffer pool (IDENTICAL); no A/B recorded for the opt-in arm (rule a)) is gone; the default stays; code recoverable at 25fca5d3e3; restore: experiments/removed/MOJOLEARN_IDN_SCRATCH_POOL.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_SCRATCH_POOL_OFF.patch

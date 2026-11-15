@@ -2165,6 +2165,7 @@ Deletions reversed by new evidence. The code is back on main; the section and th
 | [`MOJOLEARN_IDN_MLP_GEMM_LEAF128_OFF`](#mojolearn_idn_mlp_gemm_leaf128_off) | Neural (small MLP step GEMMs) | 2026-11-15 (`1acdb0bcd1`) | 2026-11-15 (lane/expdel2-restore-owed) | opt-in B arm, default unchanged, A/B owed at the wave sha | [MOJOLEARN_IDN_MLP_GEMM_LEAF128_OFF.patch](../experiments/removed/MOJOLEARN_IDN_MLP_GEMM_LEAF128_OFF.patch) |
 | [`MOJOLEARN_IDN_TSQR_WY_PAIR_OFF`](#mojolearn_idn_tsqr_wy_pair_off) | Decomposition (TSQR panel-pair WY update, IDENTICAL) | 2026-11-15 (`bc3f9433a3`) | 2026-11-15 (lane/expdel2-restore-owed) | opt-in B arm, default unchanged, A/B owed at the wave sha | [MOJOLEARN_IDN_TSQR_WY_PAIR_OFF.patch](../experiments/removed/MOJOLEARN_IDN_TSQR_WY_PAIR_OFF.patch) |
 | [`MOJOLEARN_RSVD_FAST_DEVSCAN_OFF`](#mojolearn_rsvd_fast_devscan_off) | Decomposition (randomized_svd finiteness scan, FAST+Apple) | 2026-11-15 (`82c5c6ef43`) | 2026-11-15 (lane/expdel2-restore-owed) | opt-in B arm, default unchanged, A/B owed at the wave sha | [MOJOLEARN_RSVD_FAST_DEVSCAN_OFF.patch](../experiments/removed/MOJOLEARN_RSVD_FAST_DEVSCAN_OFF.patch) |
+| [`MOJOLEARN_IDN_QUERY_X_HELD_OFF`](#mojolearn_idn_query_x_held_off-old-path-deleted-2026-11-15) | Resident kernel query buffers (IDENTICAL) | 2026-11-15 (`a75f345253`) | 2026-11-15 (lane/expdel2-restore-owed) | opt-in B arm, default unchanged, A/B owed at the wave sha | [MOJOLEARN_IDN_QUERY_X_HELD_OFF.patch](../experiments/removed/MOJOLEARN_IDN_QUERY_X_HELD_OFF.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -9439,6 +9440,7 @@ Restored 2026-11-15 (lane/expdel2-restore-owed): owed B arm, deletion premature;
 - **Deleted by**: lane/expdel2-04-base (expdel2-04-base); code recoverable at `a75f345253`.
 - **Restore**: `git apply experiments/removed/MOJOLEARN_IDN_QUERY_X_HELD_OFF.patch`, then delete the `MOJOLEARN_IDN_QUERY_X_HELD_OFF` refusal in `core/six_lane_experiment_guards.mojo`.
 - **Records**: refusal in `core/six_lane_experiment_guards.mojo`; no `grid_controls` entry (none names it as a control); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-04-base section).
+Restored 2026-11-15 (lane/expdel2-restore-owed): owed B arm, deletion premature; see Restored table.
 
 ## MOJOLEARN_IDN_SCRATCH_POOL: opt-in arm deleted (2026-11-15)
 
