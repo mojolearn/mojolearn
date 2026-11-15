@@ -35,7 +35,6 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL, ftz
 from std.memory import stack_allocation
-from std.sys.compile import is_defined
 from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from checks.kernel_matrix import COLUMN_AMD, COLUMN_NVIDIA, TARGET_COLUMN
 from max.gpu.memory import AddressSpace
@@ -53,7 +52,6 @@ comptime SYMMETRIZE_TPB = 128
 #: search returns the LOWEST position among equal columns, the entry the
 #: ascending scan stops at, so the output is the same. Rows longer than
 #: FS_MAX_ROW or n >= 2^20 keep the scan.
-#: `-D MOJOLEARN_SYMMETRIZE_FAST_OFF` keeps the scan.
 #: fam-cluster (2026-10-04): IDENTICAL on the NVIDIA and AMD columns takes
 #: the sorted lookup too (it was Apple only). The same entry is found, so
 #: the output is the scan's.
@@ -65,15 +63,14 @@ comptime IDN_SYMMETRIZE_SORTED = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     and (TARGET_COLUMN == COLUMN_NVIDIA or TARGET_COLUMN == COLUMN_AMD)
 )
+# TOMBSTONE: MOJOLEARN_SYMMETRIZE_FAST_OFF (old path, no A/B recorded beside the Apple fast default) deleted 2026-11-15 by lane/expdel2-13-cluster; code recoverable at 3fb0ad4eef.
+# Restore: git apply experiments/removed/MOJOLEARN_SYMMETRIZE_FAST_OFF.patch; record in docs/TOMBSTONES.md.
 comptime SYMMETRIZE_FAST = (
     (
-        (
-            (GLOBAL_NUMERIC_MODE == NUMERIC_FAST or GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL)
-            and TARGET_HAS_APPLE_GPU
-        )
-        or IDN_SYMMETRIZE_SORTED
+        (GLOBAL_NUMERIC_MODE == NUMERIC_FAST or GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL)
+        and TARGET_HAS_APPLE_GPU
     )
-    and not is_defined["MOJOLEARN_SYMMETRIZE_FAST_OFF"]()
+    or IDN_SYMMETRIZE_SORTED
 )
 comptime FS_MAX_ROW = 4096
 comptime FS_TPB = 1024
