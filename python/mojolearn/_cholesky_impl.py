@@ -46,7 +46,7 @@ purpose (its header, point 3).
 NO SPEED CLAIM. The lane has no published number and this door adds none.
 """
 from . import _backend, _native_archive_bridge, _native_family_bridge
-from ._buffer import addr, addr_ro, as_f32_c, empty
+from ._buffer import addr, addr_ro, empty
 from ._mode import NumericModeMixin
 
 #: `checks/numerics.mojo` codes, duplicated from `_backend._MODE_CODE` on
