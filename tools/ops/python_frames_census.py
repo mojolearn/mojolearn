@@ -1,0 +1,841 @@
+#!/usr/bin/env python3
+# SPDX-License-Identifier: Apache-2.0
+"""Python frames census: the Python that actually RUNS inside each public call of an INSTALLED wheel.
+
+AGENTS.md "No Python in the runtime": a public method is ONE binding call, and runtime behaviour, never a source
+count, establishes compliance. This tool generalizes python/mojolearn/tests/test_public_call_no_mode_wrappers.py
+(one estimator per family) to every public class member and public function: each is called under `sys.setprofile`
+and the census records the Python functions entered inside the call (module:qualname, count; the public method's
+own frame excluded, wrapper frames before it included) and how many native binding calls the call made.
+
+Fixtures are verify's own, never new ones written here:
+  api:<public>   one process per public class (or public function): the bounded endpoint fixtures of
+                 `python -m mojolearn verify` (_verify_api_runner.registry(), the family checkers of
+                 _verify_api_*.py, routed exactly as _verify_api_runner.capture() routes them). An estimator class
+                 the estimator fixture applies to is also run through it for every one of its members in
+                 _verify_api_estimators.METHODS (fit, transform, predict_proba, ...; predict through the
+                 fixture's consumed-output read), and a class with get_params through the metadata fixture.
+  light:<case>   one process per light tape case of verify (_verify_light.EXPECTED_CASES: ops.Session, the
+                 training ops and optimizers on at most sixteen input elements).
+  lane:<lane>    one process per CPU lane of verify's identity harness (mojolearn._identity_break, the lanes the
+                 smoke's `lanes` step runs): the lane's fit on the base fixture, then the harness's own
+                 _probe_fit (infer, model bytes, reload) and _probe_batch.
+A public call is the outermost entry into product code (python/mojolearn outside tests/, verify and the harness)
+made while no other public call is active: a Python frame of a product file, or a C call of a member installed as
+a native function. A member no fixture reaches is listed UNCOVERED, never skipped.
+
+EXEMPT BY RULE (AGENTS.md "scikit-learn tags"): `__sklearn_tags__` and the helpers used solely to build its tag
+metadata (TAG_ROOTS and everything they call) are tagged `exempt` and not counted. Frames under the import system
+(a lazy import inside a call) are tagged `import` and not counted either: they run once per process, not per call.
+
+Subcommands (run by `tools/ops/wheel_verify_smoke.py frames`, which owns the parallel pool):
+  inventory --surface FILE --out DIR   in the wheel's python: resolve the members and plan the units
+  unit --inventory FILE --unit NAME --out DIR   in the wheel's python: run one unit, write DIR/<unit>.json
+  report --dir DIR                     anywhere: census.tsv, functions.tsv, unattributed.tsv, SUMMARY lines
+  run --python PY --out OUT            convenience: wheel_verify_smoke.py frames --python PY --out OUT
+
+The inventory and unit subcommands import only the standard library and the installed `mojolearn`, so they run
+under `python -I` from an empty directory. Python threads started inside a call are not profiled (setprofile is
+per thread); the rule forbids Python workers, and a member that starts one shows the thread start as a frame.
+"""
+import argparse
+import collections
+import json
+import os
+import re
+import sys
+import time
+import types
+from pathlib import Path
+
+#: `__sklearn_tags__` and its tag-only helpers (AGENTS.md "scikit-learn tags"): a frame of one of these names and
+#: everything it calls is exempt. `_sk_validate._input_tag` and `_target_tag` are NOT here: input validation in
+#: fit reads them, so they run as product work; called beneath a root below they are exempt with it.
+TAG_ROOTS = frozenset(("__sklearn_tags__", "sklearn_tags", "_sklearn_instance_target_tags"))
+#: public protocol dunders counted as members beside the public (non-underscore) names
+MEMBER_DUNDERS = ("__init__", "__call__", "__getstate__", "__setstate__")
+#: package files that are fixtures, not product: tests, verification, the identity harness copy
+_FIXTURE_PREFIXES = ("_verify", "_verification", "_identity")
+_FIXTURE_DIRS = ("tests", "verify_reference")
+TOP_FUNCTIONS = 30
+
+
+# --------------------------------------------------------------------------------------------------------------
+# inventory (wheel python)
+# --------------------------------------------------------------------------------------------------------------
+
+def _member_kind(cls, attr):
+    """How `cls.attr` runs, or None when it is not a callable member defined by the package (a plain value, an
+    instance attribute, or an attribute inherited from outside mojolearn)."""
+    owner = next((k for k in cls.__mro__ if attr in vars(k)), None)
+    if owner is None or not (getattr(owner, "__module__", "") or "").startswith("mojolearn"):
+        return None
+    raw = vars(owner)[attr]
+    if isinstance(raw, (staticmethod, classmethod)):
+        raw = raw.__func__
+    if isinstance(raw, property):
+        return "property"
+    if isinstance(raw, types.FunctionType):
+        return "method"
+    if isinstance(raw, (types.GetSetDescriptorType, types.MemberDescriptorType)):
+        return "native_attribute"
+    if isinstance(raw, (types.BuiltinFunctionType, types.MethodDescriptorType, types.WrapperDescriptorType,
+                        types.ClassMethodDescriptorType)):
+        return "native"
+    if hasattr(type(raw), "__get__") and callable(getattr(type(raw), "__get__")) and not isinstance(raw, type):
+        return "descriptor"
+    if callable(raw) and not isinstance(raw, type):
+        return "callable"
+    return None
+
+
+def _family(paths, obj):
+    """The public submodule a member is exported from (linear_model, ensemble, nn, ...); for a name exported only
+    at the top level, its defining module without the package prefix, leading underscores and the internal
+    expansion_/native_/x_ prefixes and _impl suffix."""
+    subs = sorted(p.split(".")[1] for p in paths if p.count(".") >= 2)
+    if subs:
+        return subs[0]
+    mod = (getattr(obj, "__module__", "") or "").split(".")
+    name = mod[1] if len(mod) > 1 and mod[0] == "mojolearn" else (mod[0] if mod else "")
+    name = name.lstrip("_")
+    for prefix in ("expansion_", "native_", "x_"):
+        if name.startswith(prefix):
+            name = name[len(prefix):]
+    return re.sub(r"_impl$", "", name) or "mojolearn"
+
+
+def cmd_inventory(args):
+    import importlib
+    import inspect
+    import mojolearn
+    out = Path(args.out)
+    out.mkdir(parents=True, exist_ok=True)
+    exports, static_methods = [], collections.defaultdict(set)
+    for line in Path(args.surface).read_text().splitlines():
+        kind, _, rest = line.partition(":")
+        if kind == "export":
+            mod, _, name = rest.rpartition(".")
+            exports.append((mod, name))
+        elif kind == "method":
+            cname, _, attr = rest.partition(".")
+            static_methods[cname].add(attr)
+    errors, objects = [], {}
+    for mod, name in exports:
+        modname = "mojolearn" if mod == "mojolearn" else "mojolearn." + mod
+        try:
+            obj = getattr(importlib.import_module(modname), name)
+        except Exception as exc:   # an export this install cannot resolve: listed, never a census failure
+            errors.append(f"{modname}.{name}\t{type(exc).__name__}: {str(exc)[:200]}")
+            continue
+        path = modname + "." + name
+        entry = objects.setdefault(id(obj), [obj, []])
+        entry[1].append(path)
+    classes, functions, members = [], [], []
+    for obj, paths in objects.values():
+        canonical = min(paths, key=lambda p: (p.count("."), p))
+        family = _family(paths, obj)
+        module = getattr(obj, "__module__", "") or ""
+        if isinstance(obj, type):
+            if not module.startswith("mojolearn"):
+                continue
+            try:
+                listed = set(dir(obj))
+            except Exception:
+                listed = set()
+            names = set(static_methods.get(obj.__name__, ())) | {a for a in listed if not a.startswith("_")}
+            names |= {d for d in MEMBER_DUNDERS if d in listed}
+            attrs = {}
+            for attr in sorted(names):
+                if attr.startswith("_") and attr not in MEMBER_DUNDERS:
+                    continue
+                try:
+                    kind = _member_kind(obj, attr)
+                except Exception:
+                    kind = None
+                if kind is not None:
+                    attrs[attr] = kind
+            classes.append(dict(id=canonical, module=module, qualname=obj.__qualname__, family=family,
+                                aliases=sorted(paths), attrs=attrs))
+            members += [dict(id=f"{canonical}.{a}", family=family, kind=k) for a, k in attrs.items()]
+        elif callable(obj) and (module.startswith("mojolearn") or isinstance(obj, types.BuiltinFunctionType)):
+            if isinstance(obj, types.FunctionType):
+                kind, qual = "function", obj.__qualname__
+            elif isinstance(obj, types.BuiltinFunctionType):
+                owner = getattr(obj, "__self__", None)
+                kind = "native_function"
+                module = getattr(owner, "__name__", module) if isinstance(owner, types.ModuleType) else module
+                qual = obj.__name__
+                if not (module or "").startswith(("mojolearn", "_mojolearn")):
+                    continue
+            else:
+                continue
+            functions.append(dict(id=canonical, module=module, qualname=qual, family=family, kind=kind,
+                                  aliases=sorted(paths)))
+            members.append(dict(id=canonical, family=family, kind=kind))
+    # the units: verify's endpoint fixtures per public object, the harness lanes per lane
+    units = []
+    from mojolearn import _verify_api_runner as runner, _verify_api_estimators as est
+    from mojolearn._verification_api_targets import TARGETS
+    routed = {r["public"] for r in TARGETS}
+    by_path = {}
+    for c in classes:
+        for p in c["aliases"]:
+            by_path[p] = c
+    for f in functions:
+        for p in f["aliases"]:
+            by_path[p] = f
+    groups = collections.defaultdict(set)
+    for public in routed:
+        owner = by_path.get(public)
+        groups[owner["id"] if owner else public].add(public)
+    for c in classes:
+        attrs = set(c["attrs"])
+        if (est.applicable(c["id"], sorted(attrs & est.METHODS)) or "get_params" in attrs
+                or any(p in routed for p in c["aliases"])):
+            groups[c["id"]].add(c["id"])
+    for uid, publics in sorted(groups.items()):
+        units.append(dict(name="api:" + uid, kind="api", id=uid, publics=sorted(publics)))
+    try:   # verify's light tape cases (ops.Session and the training ops), one unit per case
+        light = importlib.import_module("mojolearn._verify_light")
+        units += [dict(name="light:" + c, kind="light", id=c) for c in light.EXPECTED_CASES]
+    except Exception as exc:
+        errors.append(f"mojolearn._verify_light\t{type(exc).__name__}: {str(exc)[:200]}")
+    try:
+        h = importlib.import_module("mojolearn._identity_break")
+        lanes = [n for n in h.LANES if not n.startswith(h.RECORD_EXCLUDED_PREFIXES) and n not in h.GPU_ONLY_LANES]
+    except Exception as exc:
+        errors.append(f"mojolearn._identity_break\t{type(exc).__name__}: {str(exc)[:200]}")
+        lanes = []
+    for lane in lanes:
+        try:
+            src = inspect.getsource(h.LANES[lane])
+        except (OSError, TypeError):
+            src = ""
+        refs = sorted(set(re.findall(r"\bml\.([A-Z]\w*)", src)))
+        units.append(dict(name="lane:" + lane, kind="lane", id=lane, classes=refs))
+    inv = dict(format="mojolearn.python-frames-inventory.v1", version=mojolearn.__version__,
+               package=os.path.dirname(os.path.abspath(mojolearn.__file__)), classes=classes,
+               functions=functions, members=members, units=units, export_errors=errors)
+    (out / "inventory.json").write_text(json.dumps(inv, indent=1, sort_keys=True) + "\n")
+    print(f"inventory: {len(members)} members ({len(classes)} classes, {len(functions)} functions), "
+          f"{len(units)} units ({len(lanes)} lanes), {len(errors)} export errors", flush=True)
+    return 0
+
+
+# --------------------------------------------------------------------------------------------------------------
+# the profiler (wheel python)
+# --------------------------------------------------------------------------------------------------------------
+
+class _Call:
+    __slots__ = ("kind", "entry", "carg_name", "carg_self", "mids", "pre", "funcs", "n", "bindings", "bnames",
+                 "exempt", "imports", "exempt_root", "import_root")
+
+    def __init__(self, kind, entry):
+        self.kind, self.entry = kind, entry
+        self.carg_name = self.carg_self = None
+        self.mids = None
+        self.pre = []
+        self.funcs = collections.Counter()
+        self.n = self.bindings = self.exempt = self.imports = 0
+        self.bnames = collections.Counter()
+        self.exempt_root = self.import_root = None
+
+
+def _new_stats():
+    return dict(calls=0, zero=0, frames=0, frames_max=0, bindings_max=0, bindings_total=0, multi_binding=0,
+                no_binding=0, exempt=0, imports=0, funcs=collections.Counter(), bnames=collections.Counter())
+
+
+class Census:
+    """Per-process profiler state: public calls seen and the Python each one ran."""
+
+    def __init__(self, inv):
+        import importlib.machinery
+        self.pkg = inv["package"]
+        self.pkg_real = os.path.realpath(self.pkg)
+        self.site = os.path.dirname(self.pkg_real)
+        self.ext = tuple(importlib.machinery.EXTENSION_SUFFIXES) + (".so", ".pyd", ".dylib")
+        self.classes = {(c["module"], c["qualname"]): c for c in inv["classes"]}
+        self.functions = {(f["module"], f["qualname"]): f["id"] for f in inv["functions"]}
+        self.members = {}
+        self.unattributed = collections.Counter()
+        self.where_cache, self.key_cache = {}, {}
+        self.type_cache, self.code_maps, self.native_names = {}, {}, {}
+        self.native_ids = collections.defaultdict(set)
+        self.binding_cache = {}
+        self.seen = set()
+        self.call = None
+        self.errors = collections.Counter()
+
+    # ---- classification -------------------------------------------------------------------------------------
+    def where(self, code):
+        """1 product, 2 fixture (tests, verification, harness), 0 outside the package."""
+        w = self.where_cache.get(code)
+        if w is None:
+            fn = code.co_filename
+            w = 0
+            for root in (self.pkg, self.pkg_real):
+                if fn.startswith(root + os.sep):
+                    rel = fn[len(root) + 1:].split(os.sep)
+                    w = 2 if (rel[0] in _FIXTURE_DIRS or rel[-1].startswith(_FIXTURE_PREFIXES)
+                              or rel[0].startswith(_FIXTURE_PREFIXES)) else 1
+                    break
+            self.where_cache[code] = w
+        return w
+
+    def key(self, code, frame):
+        k = self.key_cache.get(code)
+        if k is None:
+            k = f"{frame.f_globals.get('__name__', '?')}:{getattr(code, 'co_qualname', code.co_name)}"
+            self.key_cache[code] = k
+        return k
+
+    def public_class(self, T):
+        """(class record, the public class object in T's MRO) or None."""
+        if T in self.type_cache:
+            return self.type_cache[T]
+        found = None
+        for K in getattr(T, "__mro__", ()):
+            c = self.classes.get((getattr(K, "__module__", None), getattr(K, "__qualname__", None)))
+            if c is not None:
+                found = (c, K)
+                break
+        self.type_cache[T] = found
+        return found
+
+    def codes_for(self, record, K):
+        """{code: [member ids]} of a public class (innermost function of each member, unwrapped from its
+        decorators), built once per class; registers its native members too."""
+        cid = record["id"]
+        m = self.code_maps.get(cid)
+        if m is not None:
+            return m
+        import inspect
+        m = collections.defaultdict(list)
+        names = collections.defaultdict(list)
+        for attr, kind in record["attrs"].items():
+            mid = f"{cid}.{attr}"
+            try:
+                raw = inspect.getattr_static(K, attr)
+            except AttributeError:
+                continue
+            if kind in ("native", "callable"):
+                try:
+                    value = getattr(K, attr)
+                except Exception:
+                    value = raw
+                self.native_ids[id(value)].add(mid)
+                names[getattr(value, "__name__", attr)].append(mid)
+                if getattr(value, "__name__", attr) != attr:
+                    names[attr].append(mid)
+                continue
+            for code in _codes(raw):
+                if mid not in m[code]:
+                    m[code].append(mid)
+        self.code_maps[cid] = m
+        self.native_names[cid] = names
+        self.seen.add(cid)
+        return m
+
+    def prebuild(self, cls):
+        pc = self.public_class(cls)
+        if pc:
+            self.codes_for(*pc)
+
+    def resolve(self, frame, code):
+        """The member ids whose own function this frame runs, or None."""
+        if code.co_argcount or code.co_posonlyargcount:
+            try:
+                obj = frame.f_locals.get(code.co_varnames[0])
+            except Exception:
+                obj = None
+            if obj is not None:
+                pc = self.public_class(obj if isinstance(obj, type) else type(obj))
+                if pc is not None:
+                    mids = self.codes_for(*pc).get(code)
+                    if mids:
+                        return mids
+        fid = self.functions.get((frame.f_globals.get("__name__"), getattr(code, "co_qualname", code.co_name)))
+        return [fid] if fid else None
+
+    def native_member(self, arg):
+        owner = getattr(arg, "__self__", None)
+        name = getattr(arg, "__name__", None)
+        if owner is not None and not isinstance(owner, types.ModuleType):
+            pc = self.public_class(owner if isinstance(owner, type) else type(owner))
+            if pc is not None:
+                self.codes_for(*pc)
+                mids = self.native_names.get(pc[0]["id"], {}).get(name)
+                if mids:
+                    return list(mids)
+        cands = self.native_ids.get(id(arg))
+        if cands:
+            seen = [m for m in cands if m.rsplit(".", 1)[0] in self.seen]
+            if len(cands) == 1:
+                return list(cands)
+            if len(seen) == 1:
+                return seen
+        if isinstance(owner, types.ModuleType):
+            fid = self.functions.get((owner.__name__, name))
+            if fid:
+                return [fid]
+        return None
+
+    def binding(self, arg):
+        """(is a native mojolearn binding, its name) for a C callable."""
+        owner = getattr(arg, "__self__", None)
+        if isinstance(owner, types.ModuleType):
+            mod, modname = owner, owner.__name__
+        else:
+            modname = getattr(arg, "__module__", None) or (type(owner).__module__ if owner is not None else None)
+            mod = sys.modules.get(modname) if modname else None
+        ck = id(mod) if mod is not None else modname
+        hit = self.binding_cache.get(ck)
+        if hit is None:
+            raw = getattr(mod, "__file__", None) if mod is not None else None
+            fn = os.path.realpath(raw) if isinstance(raw, str) and raw else ""
+            native_file = fn.endswith(self.ext)
+            ours = (fn.startswith(self.site + os.sep)
+                    and fn[len(self.site) + 1:].split(os.sep)[0].lstrip("_").startswith("mojolearn"))
+            # a C callable of a module (or native type) named mojolearn*/_mojolearn*, or of an extension file
+            # installed under a mojolearn* directory of site-packages
+            named = (modname or "").lstrip("_").startswith("mojolearn")
+            hit = named or (native_file and ours)
+            self.binding_cache[ck] = hit
+        return hit, f"{modname}.{getattr(arg, '__name__', '?')}"
+
+    # ---- the profile function ---------------------------------------------------------------------------------
+    def profile(self, frame, event, arg):
+        try:
+            call = self.call
+            if event == "call":
+                code = frame.f_code
+                if call is None:
+                    # a module body runs once, at import: never a public call
+                    if code.co_name != "<module>" and self.where(code) == 1:
+                        self.start(frame, code)
+                    return
+                self.inner(call, frame, code)
+            elif event == "return":
+                if call is None:
+                    return
+                if call.exempt_root is frame:
+                    call.exempt_root = None
+                elif call.import_root is frame:
+                    call.import_root = None
+                if call.kind == "py" and frame is call.entry:
+                    self.finish(call)
+            elif event == "c_call":
+                if call is None:
+                    if self.where(frame.f_code) != 1:
+                        mids = self.native_member(arg)
+                        if mids:
+                            call = self.call = _Call("c", frame)
+                            call.carg_name = getattr(arg, "__name__", None)
+                            call.carg_self = getattr(arg, "__self__", None)
+                            call.mids = mids
+                            hit, name = self.binding(arg)
+                            if hit:
+                                call.bindings, call.bnames[name] = 1, 1
+                    return
+                if call.exempt_root is None and call.import_root is None:
+                    hit, name = self.binding(arg)
+                    if hit:
+                        call.bindings += 1
+                        call.bnames[name] += 1
+            elif event in ("c_return", "c_exception"):
+                if (call is not None and call.kind == "c" and frame is call.entry
+                        and getattr(arg, "__name__", None) == call.carg_name
+                        and getattr(arg, "__self__", None) is call.carg_self):
+                    self.finish(call)
+        except Exception as exc:   # the profiler must never raise into the call it measures
+            self.errors[type(exc).__name__] += 1
+
+    def start(self, frame, code):
+        call = self.call = _Call("py", frame)
+        if code.co_name in TAG_ROOTS:   # the fixture asked for the tags themselves: exempt, not a public call
+            call.exempt_root = frame
+            return
+        call.mids = self.resolve(frame, code)
+        if call.mids is None:
+            call.pre.append(self.key(code, frame))
+
+    def inner(self, call, frame, code):
+        if call.exempt_root is not None:
+            call.exempt += 1
+            return
+        if call.import_root is not None:
+            call.imports += 1
+            return
+        if code.co_name in TAG_ROOTS:
+            call.exempt_root = frame
+            call.exempt += 1
+            return
+        fn = code.co_filename
+        if fn.startswith("<frozen importlib") or (os.sep + "importlib" + os.sep) in fn:
+            call.import_root = frame
+            call.imports += 1
+            return
+        if call.mids is None and self.where(code) == 1:
+            mids = self.resolve(frame, code)
+            if mids:
+                call.mids = mids   # the public method's own frame: not counted
+                return
+        call.funcs[self.key(code, frame)] += 1
+        call.n += 1
+
+    def finish(self, call):
+        self.call = None
+        if call.mids is None:
+            for k in call.pre:
+                self.unattributed[k] += 1
+            return
+        for k in call.pre:   # a wrapper entered before the public method's own frame
+            call.funcs[k] += 1
+            call.n += 1
+        for mid in call.mids:
+            st = self.members.get(mid)
+            if st is None:
+                st = self.members[mid] = _new_stats()
+            st["calls"] += 1
+            st["zero"] += call.n == 0
+            st["frames"] += call.n
+            st["frames_max"] = max(st["frames_max"], call.n)
+            st["bindings_max"] = max(st["bindings_max"], call.bindings)
+            st["bindings_total"] += call.bindings
+            st["multi_binding"] += call.bindings > 1
+            st["no_binding"] += call.bindings == 0
+            st["exempt"] += call.exempt
+            st["imports"] += call.imports
+            st["funcs"].update(call.funcs)
+            st["bnames"].update(call.bnames)
+
+    def run(self, operation):
+        """operation() under the profiler; (ok, error text)."""
+        previous = sys.getprofile()
+        sys.setprofile(self.profile)
+        try:
+            operation()
+            return True, None
+        except BaseException as exc:   # a fixture that fails still leaves the calls it made recorded
+            if isinstance(exc, (KeyboardInterrupt, SystemExit)):
+                raise
+            return False, f"{type(exc).__name__}: {str(exc)[:300]}"
+        finally:
+            sys.setprofile(previous)
+            if self.call is not None:   # unwound without its return event (should not happen): close it
+                self.errors["unclosed_call"] += 1
+                self.finish(self.call)
+
+
+def _codes(raw):
+    """Code objects of the innermost functions a class attribute runs (property accessors included)."""
+    if isinstance(raw, (staticmethod, classmethod)):
+        raw = raw.__func__
+    cands = [raw.fget, raw.fset, raw.fdel] if isinstance(raw, property) else [raw]
+    out = []
+    for f in cands:
+        for _ in range(8):   # descriptor wrappers (available_if and similar) hold the function as fn/func
+            inner = next((getattr(f, a) for a in ("fn", "func", "__func__")
+                          if isinstance(getattr(f, a, None), types.FunctionType)), None)
+            if inner is None or inner is f:
+                break
+            f = inner
+        seen = 0
+        while getattr(f, "__wrapped__", None) is not None and seen < 16:
+            f = f.__wrapped__
+            seen += 1
+        code = getattr(f, "__code__", None)
+        if code is not None:
+            out.append(code)
+    return out
+
+
+# --------------------------------------------------------------------------------------------------------------
+# one unit (wheel python)
+# --------------------------------------------------------------------------------------------------------------
+
+class _Recorder:
+    """Stands in for _verify_api.Recorder: every endpoint the fixture asks for runs once, under the profiler."""
+
+    def __init__(self, census, record, done):
+        self.census, self.record, self.done = census, record, done
+        self.rows = {}
+
+    def check(self, endpoint, operation, *, kind="numerical"):
+        if endpoint in self.rows:
+            return self.rows[endpoint]
+        ok, error = self.census.run(operation)
+        self.rows[endpoint] = dict(status="captured" if ok else "failed", kind=kind)
+        self.record(endpoint, ok, error)
+        self.done()
+        return self.rows[endpoint]
+
+
+def _api_unit(census, unit, record, done, inv_classes):
+    from mojolearn import _verify_api_runner as runner, _verify_api_estimators as est
+    from mojolearn import _verify_api_metadata as metadata
+    from mojolearn._verification_api_targets import TARGETS
+    from mojolearn._verify_api import resolve
+    rec = _Recorder(census, record, done)
+    publics = set(unit["publics"])
+    classes = {c["id"]: c for c in inv_classes}
+    try:
+        obj = resolve(unit["id"])
+        if isinstance(obj, type):
+            census.prebuild(obj)
+    except Exception as exc:
+        record(f"resolve {unit['id']}", False, f"{type(exc).__name__}: {str(exc)[:300]}")
+        obj = None
+    routes = runner.registry()
+    groups = {}
+    for row in TARGETS:
+        if row["public"] in publics and row["endpoint"] in routes:
+            family, module, public, method = routes[row["endpoint"]]
+            groups.setdefault((family, public), (module, []))[1].append(method)
+    # verify's estimator and metadata fixtures, widened to every member they can drive on this class
+    # (the class's own members from the inventory, so a default inherited from `object` is never driven)
+    attrs = set(classes.get(unit["id"], {}).get("attrs", ()))
+    extra = sorted(attrs & est.METHODS)
+    if extra and est.applicable(unit["id"], extra):
+        key = next((k for k in groups if k[0] == "estimators"), ("estimators", unit["id"]))
+        groups[key] = (est, sorted(set(groups.get(key, (est, []))[1]) | set(extra)))
+    if "get_params" in attrs and not any(f == "metadata" for f, _ in groups):
+        groups[("metadata", unit["id"])] = (metadata, [])
+    names = {"estimators": "estimator", "optimizers": "optimizer", "neural": "neural", "training": "training",
+             "programs": "program", "models": "model", "misc": "misc"}
+    for (family, public), (module, methods) in sorted(groups.items(), key=lambda kv: kv[0]):
+        try:
+            if family == "metadata":
+                module.parameter_checks(rec, public)
+            elif family == "utilities":
+                module.utility_checks(rec, [r for r in TARGETS if r["public"] == public
+                                            and r["endpoint"] in routes and routes[r["endpoint"]][0] == family])
+            else:
+                getattr(module, names[family] + "_checks")(rec, public, methods)
+            record(f"{family}:{public}", True, None)
+        except Exception as exc:   # the checker itself failed outside an endpoint: listed, the unit goes on
+            record(f"{family}:{public}", False, f"{type(exc).__name__}: {str(exc)[:300]}")
+        done()
+
+
+def _lane_unit(census, unit, record, done):
+    import importlib
+    import mojolearn as ml
+    h = importlib.import_module("mojolearn._identity_break")
+    lane = unit["id"]
+    for name in unit.get("classes", ()):
+        try:
+            census.prebuild(getattr(ml, name))
+        except Exception:
+            pass
+    X, yc, yr = h.fixture("base")
+    held = h.heldout("base")
+    h._DUMP_TAG = f"{lane}/base/0"
+    box = {}
+
+    def fit():
+        box["fit"] = h.LANES[lane](ml, X, yc, yr, held.copy())
+    ok, error = census.run(fit)
+    record("fit", ok, error)
+    done()
+    if not ok:
+        return
+    for stage, op in (("probe_fit", lambda: h._probe_fit(box["fit"], lane)),
+                      ("probe_batch", lambda: h._probe_batch(box["fit"], lane, ml, held.copy(), h.BATCH_ALONE,
+                                                             False))):
+        ok, error = census.run(op)
+        record(stage, ok, error)
+        done()
+
+
+def cmd_unit(args):
+    inv = json.loads(Path(args.inventory).read_text())
+    unit = next((u for u in inv["units"] if u["name"] == args.unit), None)
+    if unit is None:
+        print(f"unknown unit {args.unit}", file=sys.stderr)
+        return 2
+    out = Path(args.out)
+    out.mkdir(parents=True, exist_ok=True)
+    path = out / (re.sub(r"[^A-Za-z0-9_.-]", "_", unit["name"]) + ".json")
+    census = Census(inv)
+    fixtures = []
+    started = time.time()
+
+    def record(name, ok, error):
+        fixtures.append(dict(fixture=name, ok=ok, error=error))
+
+    def done():   # partial results after every fixture, so a crash later in the unit keeps what ran
+        doc = dict(unit=unit["name"], seconds=round(time.time() - started, 2), fixtures=fixtures,
+                   profiler_errors=dict(census.errors), unattributed=dict(census.unattributed),
+                   members={m: dict(st, funcs=dict(st["funcs"]), bnames=dict(st["bnames"]))
+                            for m, st in census.members.items()})
+        tmp = path.with_suffix(".tmp")
+        tmp.write_text(json.dumps(doc, sort_keys=True) + "\n")
+        os.replace(tmp, path)
+    try:
+        if unit["kind"] == "api":
+            _api_unit(census, unit, record, done, inv["classes"])
+        elif unit["kind"] == "light":
+            import importlib
+            case = getattr(importlib.import_module("mojolearn._verify_light"), unit["id"])
+            ok, error = census.run(case)
+            record(unit["id"], ok, error)
+        else:
+            _lane_unit(census, unit, record, done)
+    except Exception as exc:
+        record("unit", False, f"{type(exc).__name__}: {str(exc)[:300]}")
+    done()
+    bad = sum(1 for f in fixtures if not f["ok"])
+    print(f"{unit['name']}: {len(census.members)} members called, {len(fixtures)} fixtures, {bad} failed, "
+          f"profiler errors {dict(census.errors)}", flush=True)
+    return 0
+
+
+# --------------------------------------------------------------------------------------------------------------
+# report (any python)
+# --------------------------------------------------------------------------------------------------------------
+
+def report(directory):
+    """Merge the unit results; write census.tsv, functions.tsv, unattributed.tsv; return the SUMMARY lines."""
+    d = Path(directory)
+    inv = json.loads((d / "inventory.json").read_text())
+    merged = {m["id"]: dict(m, stats=_new_stats(), units=set()) for m in inv["members"]}
+    unattributed = collections.Counter()
+    fixture_errors, missing, profiler_errors = 0, [], collections.Counter()
+    for unit in inv["units"]:
+        p = d / "units" / (re.sub(r"[^A-Za-z0-9_.-]", "_", unit["name"]) + ".json")
+        try:
+            doc = json.loads(p.read_text())
+        except (OSError, ValueError):
+            missing.append(unit["name"])
+            continue
+        fixture_errors += sum(1 for f in doc.get("fixtures", ()) if not f.get("ok"))
+        unattributed.update(doc.get("unattributed", {}))
+        profiler_errors.update(doc.get("profiler_errors", {}))
+        for mid, st in doc.get("members", {}).items():
+            row = merged.setdefault(mid, dict(id=mid, family="?", kind="seen-only", stats=_new_stats(), units=set()))
+            acc = row["stats"]
+            for k in ("calls", "zero", "frames", "bindings_total", "multi_binding", "no_binding", "exempt", "imports"):
+                acc[k] += st.get(k, 0)
+            acc["frames_max"] = max(acc["frames_max"], st.get("frames_max", 0))
+            acc["bindings_max"] = max(acc["bindings_max"], st.get("bindings_max", 0))
+            acc["funcs"].update(st.get("funcs", {}))
+            acc["bnames"].update(st.get("bnames", {}))
+            row["units"].add(unit["name"])
+
+    def status(row):
+        st = row["stats"]
+        if st["calls"] == 0:
+            return "NATIVE_ATTRIBUTE" if row["kind"] == "native_attribute" else "UNCOVERED"
+        if st["frames_max"] > 0:
+            return "PYTHON"
+        return "MULTI_BINDING" if st["bindings_max"] > 1 else ("ZERO" if st["bindings_max"] == 1 else "NO_BINDING")
+    rows = sorted(merged.values(), key=lambda r: (r["family"], r["id"]))
+    with open(d / "census.tsv", "w") as fh:
+        fh.write("member\tfamily\tkind\tstatus\tcalls\tzero_frame_calls\tpy_frames\tpy_frames_max_per_call\t"
+                 "distinct_functions\tbinding_calls_max\tbinding_calls_total\texempt_tag_frames\timport_frames\t"
+                 "units\ttop_functions\tbindings\n")
+        for r in rows:
+            st = r["stats"]
+            top = "; ".join(f"{k} x{n}" for k, n in st["funcs"].most_common(8))
+            bn = "; ".join(f"{k} x{n}" for k, n in st["bnames"].most_common(3))
+            units = ",".join(sorted(r["units"])[:4]) + (f",+{len(r['units']) - 4}" if len(r["units"]) > 4 else "")
+            fh.write(f"{r['id']}\t{r['family']}\t{r['kind']}\t{status(r)}\t{st['calls']}\t{st['zero']}\t"
+                     f"{st['frames']}\t{st['frames_max']}\t{len(st['funcs'])}\t{st['bindings_max']}\t"
+                     f"{st['bindings_total']}\t{st['exempt']}\t{st['imports']}\t{units or '-'}\t{top or '-'}\t"
+                     f"{bn or '-'}\n")
+    by_func = collections.defaultdict(lambda: [0, 0, []])
+    for r in rows:
+        for k, n in r["stats"]["funcs"].items():
+            e = by_func[k]
+            e[0] += 1
+            e[1] += n
+            e[2].append(r["id"])
+    funcs = sorted(by_func.items(), key=lambda kv: (-kv[1][0], -kv[1][1], kv[0]))
+    with open(d / "functions.tsv", "w") as fh:
+        fh.write("function\tpublic_members\tentries\tmembers\n")
+        for k, (nm, ne, ms) in funcs:
+            fh.write(f"{k}\t{nm}\t{ne}\t{', '.join(sorted(ms)[:12])}{' ...' if len(ms) > 12 else ''}\n")
+    with open(d / "unattributed.tsv", "w") as fh:
+        fh.write("entry\tcount\n")
+        for k, n in unattributed.most_common():
+            fh.write(f"{k}\t{n}\n")
+    counts = collections.Counter(status(r) for r in rows)
+    measured = sum(1 for r in rows if r["stats"]["calls"])
+    lines = [f"frames rc=0 members={len(rows)} measured={measured} uncovered={counts['UNCOVERED']} "
+             f"zero_python={counts['ZERO'] + counts['NO_BINDING'] + counts['MULTI_BINDING']} "
+             f"(one_binding_call={counts['ZERO']} multi_binding={counts['MULTI_BINDING']} "
+             f"no_binding={counts['NO_BINDING']}) with_python={counts['PYTHON']} "
+             f"native_attributes={counts['NATIVE_ATTRIBUTE']} units={len(inv['units'])} "
+             f"units_without_results={len(missing)} fixture_errors={fixture_errors} "
+             f"export_errors={len(inv.get('export_errors', ()))} profiler_errors={sum(profiler_errors.values())} "
+             f"(reports; gates nothing) census=python-frames/census.tsv"]
+    for i, (k, (nm, ne, _)) in enumerate(funcs[:TOP_FUNCTIONS], 1):
+        lines.append(f"  frames top{i:02d} members={nm} entries={ne} {k}")
+    fams = collections.defaultdict(collections.Counter)
+    for r in rows:
+        f = fams[r["family"]]
+        f["members"] += 1
+        f["measured"] += bool(r["stats"]["calls"])
+        f[status(r)] += 1
+        f["frames"] += r["stats"]["frames"]
+    for fam, f in sorted(fams.items(), key=lambda kv: (-kv[1]["PYTHON"], kv[0])):
+        lines.append(f"  frames family {fam}: members={f['members']} measured={f['measured']} "
+                     f"uncovered={f['UNCOVERED']} zero_python={f['ZERO'] + f['NO_BINDING'] + f['MULTI_BINDING']} "
+                     f"with_python={f['PYTHON']} py_frames={f['frames']}")
+    if unattributed:
+        lines.append(f"  frames unattributed entries (product Python entered outside any public member): "
+                     f"{len(unattributed)} distinct, {sum(unattributed.values())} entries; top: "
+                     + "; ".join(f"{k} x{n}" for k, n in unattributed.most_common(5)) + " (unattributed.tsv)")
+    exempt = sum(r["stats"]["exempt"] for r in rows)
+    lines.append(f"  frames exempt by rule (__sklearn_tags__ and its helpers): {exempt} frames, not counted; "
+                 f"import frames (lazy imports inside a call, not counted): {sum(r['stats']['imports'] for r in rows)}")
+    if missing:
+        lines.append(f"  frames units without results (crashed or timed out before their first fixture): "
+                     + ", ".join(missing[:40]) + (f" ... (+{len(missing) - 40})" if len(missing) > 40 else ""))
+    return lines
+
+
+def cmd_report(args):
+    for line in report(args.dir):
+        print(line)
+    return 0
+
+
+def cmd_run(args):
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    import wheel_verify_smoke
+    argv = ["frames", "--python", args.python, "--out", args.out]
+    if args.jobs:
+        argv += ["--jobs", str(args.jobs)]
+    return wheel_verify_smoke.main(argv)
+
+
+def main(argv=None):
+    ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
+    sub = ap.add_subparsers(dest="cmd", required=True)
+    p = sub.add_parser("inventory")
+    p.add_argument("--surface", required=True)
+    p.add_argument("--out", required=True)
+    p.set_defaults(func=cmd_inventory)
+    p = sub.add_parser("unit")
+    p.add_argument("--inventory", required=True)
+    p.add_argument("--unit", required=True)
+    p.add_argument("--out", required=True)
+    p.set_defaults(func=cmd_unit)
+    p = sub.add_parser("report")
+    p.add_argument("--dir", required=True)
+    p.set_defaults(func=cmd_report)
+    p = sub.add_parser("run")
+    p.add_argument("--python", required=True)
+    p.add_argument("--out", required=True)
+    p.add_argument("--jobs", type=int, default=0)
+    p.set_defaults(func=cmd_run)
+    args = ap.parse_args(argv)
+    return args.func(args)
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
