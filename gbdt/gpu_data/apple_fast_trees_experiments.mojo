@@ -30,7 +30,9 @@ comptime AFT_G02 = False
 comptime AFT_G03 = False
 # G04: 512-thread partition reduction, without chunk atomics or extra planes.
 # No performance/quality evidence; FAST reduction order may change.
-comptime AFT_G04 = AFT_G_APPLE_FAST and is_defined["MOJOLEARN_AFT_G04"]()
+# TOMBSTONE: MOJOLEARN_AFT_G04 (DELETE-EXPERIMENT, never-run Apple FAST programme card, rule g) deleted 2026-11-15 by lane/expdel2-42-trees; code recoverable at 6df465532f.
+# Restore: git apply experiments/removed/MOJOLEARN_AFT_G04.patch; record in docs/TOMBSTONES.md.
+comptime AFT_G04 = False
 # G05: 512-thread quantization block at the original eight rows per lane.
 # No performance/quality evidence; identical borders and comparison routine.
 comptime AFT_G05 = AFT_G_APPLE_FAST and is_defined["MOJOLEARN_AFT_G05"]()
