@@ -211,10 +211,9 @@ def yeti_est_reuse_search_for[column: Int]() -> Bool:
     (comptime FAST + Apple only), and the A/B gates quality (ndcg/map).
     One kernel launch (the scatter) replaces six, and the task kernel, the
     fit's dominant cost, runs once per tree instead of twice.
-
-    `-D MOJOLEARN_YETI_EST_REUSE_SEARCH_OFF` is the A arm."""
-    comptime if is_defined["MOJOLEARN_YETI_EST_REUSE_SEARCH_OFF"]():
-        return False
+"""
+    # TOMBSTONE: MOJOLEARN_YETI_EST_REUSE_SEARCH_OFF (DELETE-OLD-PATH, rule d, EXP:125 KEPT 269ffa57a on the M3 only) deleted 2026-11-15 by lane/expdel2-45-trees; code recoverable at 935028c9f7. Owed: no NVIDIA/AMD vote exists or applies (FAST is Apple only).
+    # Restore: git apply experiments/removed/MOJOLEARN_YETI_EST_REUSE_SEARCH_OFF.patch
     comptime if column == COLUMN_APPLE and GLOBAL_NUMERIC_MODE == NUMERIC_FAST:
         return True
     return False
