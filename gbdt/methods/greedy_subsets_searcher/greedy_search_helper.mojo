@@ -620,9 +620,8 @@ model digest (steward 1790608403999). Off on every other column."""
 #
 # DEFAULT ON UNDER IDENTICAL since 2026-09-11 (MI300X Hot Aisle, tools/
 # flip_verdict.py FLIP geomean=0.995 taxi=1.006 istella=0.985 quality=ok);
-# `-D MOJOLEARN_2581_GROUP_WIDTH_OFF=1` restores the block-widest ladder.
-# FAST stays OPT-IN (`-D MOJOLEARN_2581_GROUP_WIDTH=1`; NO FLIP geomean=1.007
-# on the same box). What it reaches today: Istella-S's one-byte block is 32
+# FAST keeps the block-widest ladder (its opt-in arm measured NO FLIP
+# geomean=1.007 on the same box; both switches deleted 2026-11-15). What it reaches today: Istella-S's one-byte block is 32
 # groups, 31 of them 8-bit and one short 7-bit group, so one group leaves the
 # 8-bit route; taxi's two groups are both 8-bit and only change launcher.
 # Named checks, one per side, both instantiated explicitly whatever the
@@ -646,10 +645,11 @@ MOJOLEARN_LEGACY_NARROW_SYM_RIDX` restores the cap in FAST. IDENTICAL still
 uses the board-shaped rule; generalize it on every vendor together
 (same-bits rule), owed to the IDENTICAL program."""
 
-comptime SYM_GROUP_WIDTH_2581 = is_defined["MOJOLEARN_2581_GROUP_WIDTH"]() or (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not is_defined["MOJOLEARN_2581_GROUP_WIDTH_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_2581_GROUP_WIDTH (DELETE-ARM, FAST opt-in arm, NO FLIP on MI300X, rule a) deleted 2026-11-15 by lane/expdel2-42-trees; code recoverable at a0d1816b17.
+# Restore: git apply experiments/removed/MOJOLEARN_2581_GROUP_WIDTH.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_2581_GROUP_WIDTH_OFF (DELETE-OLD-PATH, IDENTICAL block-widest ladder, no A/B recorded for the old path, rule b) deleted 2026-11-15 by lane/expdel2-42-trees; code recoverable at a0d1816b17.
+# Restore: git apply experiments/removed/MOJOLEARN_2581_GROUP_WIDTH_OFF.patch; record in docs/TOMBSTONES.md.
+comptime SYM_GROUP_WIDTH_2581 = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 
 #: Threads per block of the level quantize launch; no shared memory.
 comptime LEVEL_QUANT_BLOCK = 512
