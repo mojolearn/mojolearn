@@ -112,6 +112,8 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_PREP_FAST_MINMAX_OFF"](), "removed 2026-11-15 (lane/expdel-03-linear): PREP_FAST_MINMAX_OFF (FAST+Apple rollback of MinMaxScaler to extrema_chunks_kernel) is gone; the row-tiled extrema are the FAST+Apple path (minmax-scaler istella 152 -> 106 ms, KEPT f419ea9f1); code recoverable at 6c544e9855"
     # Restore: git apply experiments/removed/MOJOLEARN_X_PREP_FAST_STAGED_OUT_OFF.patch
     comptime assert not is_defined["MOJOLEARN_X_PREP_FAST_STAGED_OUT_OFF"](), "removed 2026-11-15 (lane/expdel-03-linear): X_PREP_FAST_STAGED_OUT_OFF (FAST+Apple rollback to raw host-pointer copies of the x_prep output) is gone; the staged download is the FAST+Apple path (label-binarizer taxi 563 -> 345 ms, digests the same); code recoverable at 509aa1c3a5"
+    # Restore: git apply experiments/removed/MOJOLEARN_X_PREP_FAST_TE_GLOBAL_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_X_PREP_FAST_TE_GLOBAL_OFF"](), "removed 2026-11-15 (lane/expdel-03-linear): X_PREP_FAST_TE_GLOBAL_OFF (FAST+Apple rollback of TargetEncoder te_global to one thread per unit) is gone; the threadgroup tree is the FAST+Apple path (target-encoder taxi 201.4 -> 90.2 ms, digest identical); code recoverable at d1ba1439d6"
     return True
 
 

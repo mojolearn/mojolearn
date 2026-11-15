@@ -662,6 +662,7 @@ in the tables after the sections.
 | [`MOJOLEARN_QN_FAST_BLOCKS_OFF`](#mojolearn_qn_fast_blocks_off-old-path-deleted-2026-11-15) | Linear (QN one-class objective in two launches, FAST Apple) | removed (old path; FAST+Apple default KEPT, linear-*-blocks-istella) | 2026-11-15 | [MOJOLEARN_QN_FAST_BLOCKS_OFF.patch](../experiments/removed/MOJOLEARN_QN_FAST_BLOCKS_OFF.patch) |
 | [`MOJOLEARN_PREP_FAST_MINMAX_OFF`](#mojolearn_prep_fast_minmax_off-old-path-deleted-2026-11-15) | Preprocessing (MinMaxScaler row-tiled extrema, FAST Apple) | removed (old path; FAST+Apple default KEPT, prep-minmax-istella) | 2026-11-15 | [MOJOLEARN_PREP_FAST_MINMAX_OFF.patch](../experiments/removed/MOJOLEARN_PREP_FAST_MINMAX_OFF.patch) |
 | [`MOJOLEARN_X_PREP_FAST_STAGED_OUT_OFF`](#mojolearn_x_prep_fast_staged_out_off-old-path-deleted-2026-11-15) | Preprocessing (x_prep staged output download, FAST Apple) | removed (old path; FAST+Apple default KEPT, gmp-staged-*) | 2026-11-15 | [MOJOLEARN_X_PREP_FAST_STAGED_OUT_OFF.patch](../experiments/removed/MOJOLEARN_X_PREP_FAST_STAGED_OUT_OFF.patch) |
+| [`MOJOLEARN_X_PREP_FAST_TE_GLOBAL_OFF`](#mojolearn_x_prep_fast_te_global_off-old-path-deleted-2026-11-15) | Preprocessing (TargetEncoder te_global by threadgroup, FAST Apple) | removed (old path; FAST+Apple DEFAULT, afc_ab_def) | 2026-11-15 | [MOJOLEARN_X_PREP_FAST_TE_GLOBAL_OFF.patch](../experiments/removed/MOJOLEARN_X_PREP_FAST_TE_GLOBAL_OFF.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -6427,4 +6428,12 @@ bits change on any vendor or the host column, no board row needs re-timing.
 - **Verdict**: KEPT, FAST+Apple default (EXPERIMENTS.md `X_PREP_FAST_STAGED_OUT`, gmp-staged-lb-taxi, gmp-staged-mlb-taxi, gmp-staged-te-taxi): M3 one run per arm, label-binarizer taxi 563 -> 345 ms, multilabel-binarizer 287 -> 193, target-encoder 281 -> 272, digests the same (copies only). No bit change on any column.
 - **Deleted by**: lane/expdel-03-linear (expdel-03-linear, docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md); code recoverable at `509aa1c3a5`.
 - **Restore**: `git apply experiments/removed/MOJOLEARN_X_PREP_FAST_STAGED_OUT_OFF.patch`, then delete the `MOJOLEARN_X_PREP_FAST_STAGED_OUT_OFF` refusal in `core/experiment_guards_linear.mojo`.
+- **Records**: refusal in `core/experiment_guards_linear.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel-03-linear section).
+
+## MOJOLEARN_X_PREP_FAST_TE_GLOBAL_OFF: old path deleted (2026-11-15)
+
+- **What it was**: the FAST+Apple rollback of TargetEncoder's te_global stage from one threadgroup per (fold, target) with a tree (`te_global_fast_kernel`) to the one-thread `te_global_unit`. `X_PREP_FAST_TE_GLOBAL` and the `te_global` field of `Prep2Switches` (x_prep/fastprep2.mojo) are gone: `prep2_fast_stage` runs only under PREP2_FAST, where the field was always true. `te_global_unit` stays the path of every non-FAST-Apple build.
+- **Verdict**: ACCEPT/DEFAULT, FAST+Apple (EXPERIMENTS.md `X_PREP_FAST_TE_GLOBAL`, afc_ab_def, lane/apple-fast-rec-ab3 @ 0ca521cc5): M3 full board, one run per arm, target-encoder taxi 201.4 -> 90.2 ms, output digest identical (measured apart from TE_ENC). No bit change on any column.
+- **Deleted by**: lane/expdel-03-linear (expdel-03-linear, docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md); code recoverable at `d1ba1439d6`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_X_PREP_FAST_TE_GLOBAL_OFF.patch`, then delete the `MOJOLEARN_X_PREP_FAST_TE_GLOBAL_OFF` refusal in `core/experiment_guards_linear.mojo`.
 - **Records**: refusal in `core/experiment_guards_linear.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel-03-linear section).

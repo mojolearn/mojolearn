@@ -1,0 +1,59 @@
+diff --git b/x_prep/fastprep2.mojo a/x_prep/fastprep2.mojo
+index 4284bac1c1..701ebef468 100644
+--- b/x_prep/fastprep2.mojo
++++ a/x_prep/fastprep2.mojo
+@@ -10,7 +10,7 @@ call, so the IDENTICAL binding and the other vendors compile none of this.
+ Switches (`Prep2Switches`; build defines where marked -D, else env read on
+ the host at dispatch time):
+ 
+-  te_global  (FAST + Apple default since 2026-10-04; the `_OFF` rollback was deleted 2026-11-15) by a threadgroup per (fold,
++  -D MOJOLEARN_X_PREP_FAST_TE_GLOBAL_OFF  (default ON since 2026-10-04; rollback define) te_global by a threadgroup per (fold,
+       target) with a tree, instead of ONE thread per (fold, target) walking
+       every row twice (x_prep/target.mojo te_global_unit: (F+1)*T = 5
+       threads for a 1M-row fit).
+@@ -93,12 +93,11 @@ comptime PREP2_FAST_EIGH_BLOCK = PREP2_FAST and not is_defined["MOJOLEARN_PREP2_
+ #: as Int32 (a float32 count stops being exact past 2^24 rows).
+ #: OUTCOME (M3 afc_ab_def, full board size, 1 run per arm, 2026-10-04, lane/
+ #: apple-fast-rec-ab3 @ 0ca521cc5): target-encoder taxi 201.4 -> 90.2 ms; output
+-#: digest identical. KEEP: the FAST + Apple default since then, the only
+-#: form under PREP2_FAST (the old -D name is harmless).
++#: digest identical. KEEP: the FAST + Apple default since then; rollback
++#: -D MOJOLEARN_X_PREP_FAST_TE_GLOBAL_OFF (the old -D name is harmless).
+ #: Measured apart from TE_ENC (a different stage, OP_TE_GLOBAL vs OP_TE_ENC;
+ #: the two compose, both on by default; the pair was not timed together).
+-# TOMBSTONE: MOJOLEARN_X_PREP_FAST_TE_GLOBAL_OFF (old path, superseded by the measured FAST+Apple default) deleted 2026-11-15 by lane/expdel-03-linear; code recoverable at d1ba1439d6.
+-# Restore: git apply experiments/removed/MOJOLEARN_X_PREP_FAST_TE_GLOBAL_OFF.patch; record in docs/TOMBSTONES.md.
++comptime X_PREP_FAST_TE_GLOBAL = PREP2_FAST and not is_defined["MOJOLEARN_X_PREP_FAST_TE_GLOBAL_OFF"]()
+ #: (FAST + Apple, default ON since 2026-10-04) TargetEncoder's te_enc stage by one
+ #: threadgroup per (fold, column, category, target) over the category's
+ #: gathered bucket (`te_enc_fast_kernel`), in place of ONE thread walking
+@@ -138,15 +137,17 @@ def _on(name: String) -> Bool:
+ 
+ struct Prep2Switches(Copyable, Movable):
+     """The lane's switches, read once per program on the host (every field
+-    False outside FAST + Apple): env switches, and `eigh_block` and `te_enc`
+-    the build defines PREP2_FAST_EIGH_BLOCK and X_PREP_FAST_TE_ENC. te_global
+-    always takes its threadgroup form under PREP2_FAST."""
++    False outside FAST + Apple): env switches, and `eigh_block`, `te_global`
++    and `te_enc` the build defines PREP2_FAST_EIGH_BLOCK,
++    X_PREP_FAST_TE_GLOBAL and X_PREP_FAST_TE_ENC."""
++    var te_global: Bool
+     var te_enc: Bool
+     var ii_conv: Bool
+     var ii_gram_tile: Bool
+     var eigh_block: Bool
+ 
+     def __init__(out self):
++        self.te_global = X_PREP_FAST_TE_GLOBAL
+         self.te_enc = X_PREP_FAST_TE_ENC
+         self.ii_conv = False
+         self.ii_gram_tile = False
+@@ -749,7 +750,7 @@ def prep2_fast_stage(ctx: DeviceContext, mut df: DeviceBuffer[DType.float32], mu
+             raise Error("x_prep: quantile SELECT takes at most 4 fractions")
+         qselect_device(ctx, f, w, qp, Int(hq[0]), Int(hq[1]), Int(hq[2]), Int(hq[4]))
+         return True
+-    if op == OP_TE_GLOBAL:
++    if sw.te_global and op == OP_TE_GLOBAL:
+         ctx.enqueue_function[te_global_fast_kernel](f, qp, grid_dim=total, block_dim=TE_TGR)
+         return True
+     if sw.te_enc and op == OP_TE_ENC and Int(hq[11]) > 0 and Int(hq[13]) > 0:
