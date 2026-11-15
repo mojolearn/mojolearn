@@ -24,7 +24,8 @@ def _artifact(path, scale=1.0):
 
 
 def test_artifact_torch_execution_matches_array_route_and_refreshes_inputs(tmp_path):
-    import torch
+    torch = pytest.importorskip("torch")
+    pytest.importorskip("onnx")
     path = tmp_path / "model.onnx"
     _artifact(path)
     admitted = audit_native_call(import_model, str(path), numeric_mode="identical")
@@ -41,7 +42,8 @@ def test_artifact_torch_execution_matches_array_route_and_refreshes_inputs(tmp_p
 
 
 def test_weights_are_artifact_snapshots_and_change_only_on_explicit_import(tmp_path):
-    import torch
+    torch = pytest.importorskip("torch")
+    pytest.importorskip("onnx")
     path = tmp_path / "model.onnx"
     _artifact(path)
     first = import_model(str(path), numeric_mode="identical")
