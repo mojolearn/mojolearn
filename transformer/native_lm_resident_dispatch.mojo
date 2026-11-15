@@ -5,7 +5,7 @@
 from core.native_session_group import NativeSessionGroup
 from transformer.transformer_binding_impl import (
     CausalLMSession, TransformerDecodeSession, _require_session_open,
-    _lm_open_run, _lm_open_run_int15, _lm_run, _lm_forward_run, LM_RESIDENT_GENERATE,
+    _lm_open_run, _lm_open_run_int15, _lm_run, _lm_forward_run,
 )
 
 
@@ -117,9 +117,8 @@ def transformer_lm_resident_operation(op: Int, a: List[Int], p: List[Int], f: Li
         raise Error("causal lm session open: null input address")
     # a[1] (the final norm) is 0 for a model without one; admitted only by
     # the MOJOLEARN_IDN_LM_RESIDENT_GENERATE experiment.
-    comptime if not LM_RESIDENT_GENERATE:
-        if a[1] == 0:
-            raise Error("causal lm session open: null input address")
+    if a[1] == 0:
+        raise Error("causal lm session open: null input address")
     if not owner[].busy:
         raise Error("causal lm session open: owner must be reserved")
     try:

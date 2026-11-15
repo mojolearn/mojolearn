@@ -1264,15 +1264,8 @@ comptime _LM_ARGMAX_NONE: Int32 = 2147483647
 
 # TOMBSTONE: MOJOLEARN_IDN_LM_RESIDENT_GENERATE (DELETE-ARM: no A/B recorded; owner lane/expdel2-02-base) folded here 2026-11-15 by lane/expdel2-33-neural; code recoverable at c3d1c7865f.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_LM_RESIDENT_GENERATE.expdel2-33-neural.patch
-comptime LM_RESIDENT_GENERATE = False
-"""Folded constant (the experiment is deleted; `transformer/native_lm_resident_dispatch.mojo`
-imports the name). Was: experiment, default off (lane lm-resident-generate-20261028): the resident
-session also opens for a model without a final norm (`final_norm=False`,
-norm address 0). Its head then reads the stack output itself, as the
-per-layer route's head does (`hn` is a device copy of `x`): no float
-operation changes. The B arm is today's behavior: such models are refused
-here and take the per-layer route, one stage allocation, upload and download
-per layer per token."""
+# (Sweep 2026-11-15: LM_RESIDENT_GENERATE = False removed with its reader in transformer/native_lm_resident_dispatch.mojo
+# and the unreachable no-final-norm branches of _lm_forward_run: both session opens refuse a null norm.)
 
 
 @always_inline
@@ -1603,12 +1596,7 @@ def _lm_forward_run(
     _lm_layers_run(ctx, layers, x, b, l)
     var sumsq = ctx.enqueue_create_buffer[DType.float32](m)
     var hn = ctx.enqueue_create_buffer[DType.float32](m * d)
-    if s.norm:
-        llama_rms_norm(ctx, sumsq, hn, x, s.norm.value(), m, d, s.eps)
-    else:
-        # No final norm (LM_RESIDENT_GENERATE): the head reads the stack
-        # output, as the per-layer route's head does; a copy, no arithmetic.
-        ctx.enqueue_copy(dst_buf=hn, src_buf=x)
+    llama_rms_norm(ctx, sumsq, hn, x, s.norm.value(), m, d, s.eps)
     var logits = ctx.enqueue_create_buffer[DType.float32](m * v)
     var ws_n = 1
     if not s.head15:
@@ -1620,12 +1608,9 @@ def _lm_forward_run(
         identical_gemm_into[ROLE=ROLE_HEAD](ctx, logits, hn, s.embed.value(), ws, m, v, d, OP_NT)
     else:
         identical_gemm_into[ROLE=ROLE_HEAD](ctx, logits, hn, s.head.value(), ws, m, v, d, OP_NT)
-    if s.norm:
-        # Without a norm only the head's input scan applies (on `hn`, the
-        # copy of `x`), as on the per-layer route.
-        var bad_x = device_first_nonfinite(ctx, x, m * d)
-        if bad_x >= 0:
-            raise Error("mojolearn samba ops: non-finite rms_norm input at flat index " + String(bad_x))
+    var bad_x = device_first_nonfinite(ctx, x, m * d)
+    if bad_x >= 0:
+        raise Error("mojolearn samba ops: non-finite rms_norm input at flat index " + String(bad_x))
     var bad_hn = device_first_nonfinite(ctx, hn, m * d)
     if bad_hn >= 0:
         raise Error("mojolearn samba ops: non-finite linear input at flat index " + String(bad_hn))
