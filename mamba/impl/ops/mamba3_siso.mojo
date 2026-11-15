@@ -2064,7 +2064,9 @@ def m3_siso_forward(
             block_dim=(MAMBA3_TPB, 1, 1),
         )
         m3_phase_tick(ctx, phase_tick, String("m3_state_scan_kernel"))
-    comptime if not is_defined["MOJOLEARN_MAMBA3_LEGACY_QKS"]() and lib_smem_page_fits_for[TARGET_COLUMN, 5248]():
+    # TOMBSTONE: MOJOLEARN_MAMBA3_LEGACY_QKS (unmeasured old path: the scalar qk_s kernel where the tile fits; non-owner sites) deleted 2026-11-15 by lane/expdel2-28-neural; code recoverable at acdae84cf3.
+    # Restore: git apply experiments/removed/MOJOLEARN_MAMBA3_LEGACY_QKS.expdel2-28-neural.patch; record in docs/TOMBSTONES.md.
+    comptime if lib_smem_page_fits_for[TARGET_COLUMN, 5248]():
         ctx.enqueue_function[m3_qk_s_tiled_kernel](
             qk_s.unsafe_ptr(),
             rotq_work.unsafe_ptr(),
