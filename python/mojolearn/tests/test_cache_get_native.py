@@ -361,6 +361,7 @@ def test_cache_reads_preserve_numpy_free_startup():
 import sys
 from types import SimpleNamespace
 from mojolearn import _arena_io as a
+from mojolearn import model_selection  # connects the arena row/cache doors (_native_arena_rows.connect); families load on first touch
 from mojolearn._buffer import _native
 from mojolearn._verify_native_runtime import audit_native_call
 assert 'numpy' not in sys.modules
@@ -428,6 +429,7 @@ import builtins, json
 from types import SimpleNamespace
 import numpy as np
 from mojolearn import _arena_io as a
+from mojolearn import model_selection  # connects the arena row/cache doors (_native_arena_rows.connect); families load on first touch
 from mojolearn._buffer import _native
 from mojolearn._verify_native_runtime import audit_native_call
 c=a.DeviceCache(SimpleNamespace(x_dev_put=_native('msel_put'),x_dev_free=_native('msel_free')),'x')
