@@ -760,6 +760,7 @@ in the tables after the sections.
 | [`MOJOLEARN_IDN_ATTN_STASH`](#mojolearn_idn_attn_stash-arm-deleted-2026-11-15) | Neural (fused attention exp-stash memory profile arms 1 recompute / 2 packed / 3 alias_y, IDENTICAL) | removed (opt-in arms; EXP:1757 split the Samba winner into its own define, lm-train-step 1.24x slower) | 2026-11-15 | [MOJOLEARN_IDN_ATTN_STASH.patch](../experiments/removed/MOJOLEARN_IDN_ATTN_STASH.patch) |
 | [`MOJOLEARN_IDN_ATTN_HEAD_SHARE`](#mojolearn_idn_attn_head_share-arm-deleted-2026-11-15) | Neural (attention forward: one K/V page for four query heads, IDENTICAL) | removed (opt-in arm; EXP:1483 DROP for the two-head form, four-head arm never A/B'd) | 2026-11-15 | [MOJOLEARN_IDN_ATTN_HEAD_SHARE.patch](../experiments/removed/MOJOLEARN_IDN_ATTN_HEAD_SHARE.patch) |
 | [`MOJOLEARN_MEASURE_I06_GQA`](#mojolearn_measure_i06_gqa-unmeasured-arm-deleted-2026-11-15) | Neural (I06 forward GQA reuse timing arm of the attention driver) | removed (unmeasured opt-in arm) | 2026-11-15 | [MOJOLEARN_MEASURE_I06_GQA.patch](../experiments/removed/MOJOLEARN_MEASURE_I06_GQA.patch) |
+| [`MOJOLEARN_MEASURE_I07_LIFETIME`](#mojolearn_measure_i07_lifetime-unmeasured-arm-deleted-2026-11-15) | Neural (I07 retained-estash lifetime timing arm of the attention driver) | removed (unmeasured opt-in arm) | 2026-11-15 | [MOJOLEARN_MEASURE_I07_LIFETIME.patch](../experiments/removed/MOJOLEARN_MEASURE_I07_LIFETIME.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -7364,4 +7365,12 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md (section expdel-02-
 - **Verdict**: no record: no A/B was recorded for the opt-in arm (plan rule a; AGENTS.md "An unmeasured arm is deleted", Andrew 2026-11-15). No bit change on any column.
 - **Deleted by**: lane/expdel2-07-base (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `dbdaaf2c5e`.
 - **Restore**: `git apply experiments/removed/MOJOLEARN_MEASURE_I06_GQA.patch`, then delete the `MOJOLEARN_MEASURE_I06_GQA` refusal in `core/experiment_guards_neural.mojo`.
+- **Records**: refusal in `core/experiment_guards_neural.mojo`; no `grid_controls` entry named it; `docs/apple-fast/EXPERIMENTS.md` row (expdel2-07-base section).
+
+## MOJOLEARN_MEASURE_I07_LIFETIME: unmeasured arm deleted (2026-11-15)
+
+- **What it was**: the I07 arm of the timing driver `experiments/performance_ideas/attention_time.mojo` (retained-estash lifetime word and its kept-cells admission check).
+- **Verdict**: no record: no A/B was recorded for the opt-in arm (plan rule a; AGENTS.md "An unmeasured arm is deleted", Andrew 2026-11-15). No bit change on any column.
+- **Deleted by**: lane/expdel2-07-base (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `6ada715def`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_MEASURE_I07_LIFETIME.patch`, then delete the `MOJOLEARN_MEASURE_I07_LIFETIME` refusal in `core/experiment_guards_neural.mojo`.
 - **Records**: refusal in `core/experiment_guards_neural.mojo`; no `grid_controls` entry named it; `docs/apple-fast/EXPERIMENTS.md` row (expdel2-07-base section).
