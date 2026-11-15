@@ -3604,9 +3604,6 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
         two nodes); `depth_counter` is the deepest child's depth
         (`:133-134`), which is the LAST node's: the FIFO hands out ids in
         non-decreasing depth."""
-        comptime if RETAINED_COUNT_HIST:
-            if self.retained_counts and not self.retained_counts_reset:
-                self.retained_counts.value().publish_audit(ctx)
         # a deferred finish still in flight owns the leaf staging below
         self._settle_pending(ctx)
         var n_out = Int(ts.ds.num_outputs)
