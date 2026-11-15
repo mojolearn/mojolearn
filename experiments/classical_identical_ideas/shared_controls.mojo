@@ -101,7 +101,7 @@ comptime C08_DICTIONARY = C08_TARGET_CODES
 comptime C08_UNIQUE_SCAN = CLASSICAL_IDENTICAL
 # TOMBSTONE: MOJOLEARN_CLASSICAL_C09_REG_BUNDLE (no A/B recorded for the opt-in arm) deleted 2026-11-15 by lane/expdel2-07-base; code recoverable at eb41a7f7fc.
 # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C09_REG_BUNDLE.patch
-comptime C09_REG_BUNDLE = False
+# (Sweep 2026-11-15: comptime C09_REG_BUNDLE removed; nothing read it.)
 # TOMBSTONE: MOJOLEARN_CLASSICAL_C10_RANK_REUSE (no A/B recorded for the opt-in arm) deleted 2026-11-15 by lane/expdel2-07-base; code recoverable at cf7f3199b2.
 # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C10_RANK_REUSE.patch
 comptime C10_RANK_REUSE = False
