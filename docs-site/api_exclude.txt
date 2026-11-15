@@ -51,7 +51,7 @@ linalg_fast.has_bf16	experimental Apple BF16 candidate; installed-release qualif
 linalg_fast.to_bf16	experimental Apple BF16 candidate; installed-release qualification pending
 linalg_fast.from_bf16	experimental Apple BF16 candidate; installed-release qualification pending
 linalg_fast.matmul_bf16	experimental Apple BF16 candidate; installed-release qualification pending
-linalg_fast.matmul_fused	AFN epilogue arm deleted 2026-11-15
+linalg_fast.matmul_fused	Apple fast opt-in arm (MOJOLEARN_AFN_GEMM_EPILOGUE), never run
 # Direct native aliases report their binding module to autodoc.
 _mojolearn_linalg.has_bf16	experimental Apple BF16 candidate; installed-release qualification pending
 _mojolearn_linalg.to_bf16	experimental Apple BF16 candidate; installed-release qualification pending
