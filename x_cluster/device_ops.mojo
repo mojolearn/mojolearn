@@ -53,7 +53,6 @@ from x_cluster.bodies import (
     sqrt_cell,
     flush_cell,
     tree_descend,
-    ward_cell,
     lance_williams,
     LINK_WARD,
 )
@@ -1180,40 +1179,6 @@ def _optics_step_kernel(
         part[((s + 1) & 1) * NB + b] = red[0]
 
 
-comptime WNN_TPB = 256
-
-
-# FAST ONLY (lane cluster-apple3): one round of the ward tree's reciprocal
-# nearest neighbours. Not an IDENTICAL path.
-def _ward_nn_kernel(c: FPtr, sz: FPtr, l: Int32, d: Int32, nn: IPtr, md: FPtr):
-    """Block `p`: the cluster q != p at the lowest `bodies.ward_cell`, the
-    lowest q on a tie, by an integer min of `(float bits, q)` keys (the
-    values are >= +0, so their bits order as they do). Every thread reads
-    its own stride of the centroids; the keys fold in threadgroup memory."""
-    var p = Int(block_idx.x)
-    var tid = Int(thread_idx.x)
-    var L = Int(l)
-    var D = Int(d)
-    var red = stack_allocation[WNN_TPB, Scalar[DType.uint64], address_space = AddressSpace.SHARED]()
-    var mine = UInt64(0xFFFFFFFFFFFFFFFF)
-    for q in range(tid, L, WNN_TPB):
-        if q != p:
-            var v = ward_cell(c, sz, D, p, q)
-            mine = min(mine, (UInt64(bitcast[DType.uint32](v)) << 32) | UInt64(UInt32(q)))
-    red[tid] = mine
-    barrier()
-    var off = WNN_TPB // 2
-    while off > 0:
-        if tid < off:
-            red[tid] = min(red[tid], red[tid + off])
-        barrier()
-        off //= 2
-    if tid == 0:
-        var key = red[0]
-        nn[p] = Int32(Int(UInt32(key & UInt64(0xFFFFFFFF))))
-        md[p] = bitcast[DType.float32](UInt32(key >> 32))
-
-
 @always_inline
 def _grid(n: Int) -> Int:
     return (n + TPB - 1) // TPB if n > 0 else 1
@@ -2200,17 +2165,6 @@ struct DeviceOps(ClusterOps):
     def fast_device(self) -> Bool:
         return GLOBAL_NUMERIC_MODE == NUMERIC_FAST
 
-    def ward_nn(mut self, c: Int, sz: Int, l: Int, d: Int, nn: Int, md: Int) raises:
-        self._ph0()
-        if l < 2:
-            self._ph1("ward_nn")
-            return
-        self.ctx.enqueue_function[_ward_nn_kernel](
-            self._fp(c), self._fp(sz), Int32(l), Int32(d), self._ip(nn), self._fp(md),
-            grid_dim=l, block_dim=WNN_TPB,
-        )
-        self._ph1("ward_nn")
-
     def kth_flat(mut self, m: Int, n: Int, k: Int) raises -> Float32:
         self._ph0()
         var per = KF_TPB * KF_VPT
@@ -3161,10 +3115,6 @@ struct DeviceOps(ClusterOps):
         )
         self._ph1("kpp_search")
 
-    def kpp_distinct(mut self, centers: Int, ids: Int, nt: Int, x: Int, n: Int, d: Int, output: Int) raises:
-        self.ctx.enqueue_function[_c38_distinct_kernel[False]](self._fp(centers),self._ip(ids),Int32(nt),self._fp(x),Int32(n),Int32(d),self._fp(output),grid_dim=_grid(nt*n),block_dim=TPB)
-        self.ctx.enqueue_function[_c38_distinct_kernel[True]](self._fp(centers),self._ip(ids),Int32(nt),self._fp(x),Int32(n),Int32(d),self._fp(output),grid_dim=_grid(nt*n),block_dim=TPB)
-
     def kpp_pots(mut self, dc: Int, closest: Int, w: Int, nt: Int, m: Int) raises -> List[Float64]:
         self._ph0()
         var o = self.zeros(2 * nt)
@@ -3384,21 +3334,3 @@ def _mb_assign_kernel(src: FPtr, d: Int32, idx: IPtr, m: Int32, c: FPtr, k: Int3
         labels[t] = Int32(bi)
         dist[t] = best
 
-
-def _c38_distinct_kernel[COPY: Bool](c: FPtr,ids: IPtr,nt: Int32,x: FPtr,n: Int32,d: Int32,output: FPtr):
-    var cell=_tid()
-    if cell>=Int(nt)*Int(n):
-        return
-    var trial=cell//Int(n)
-    var row=cell%Int(n)
-    var first=trial
-    for t in range(trial):
-        if ids[t]==ids[trial]:
-            first=t
-            break
-    comptime if COPY:
-        if first!=trial:
-            output[cell]=output[first*Int(n)+row]
-    else:
-        if first==trial:
-            output[cell]=sq_dist_rows(c,trial,x,row,Int(d))

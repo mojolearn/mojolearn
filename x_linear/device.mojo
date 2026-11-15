@@ -3468,7 +3468,7 @@ def glm_init_finish_kernel(parts: FP, nf: Float32, nb: Int32, d: Int32, fi: Int3
     witness_end(wf, woff, nonce)
 
 def glm_obj_map_kernel(x: FP, y: FP, n: Int32, d: Int32, fi: Int32, power: Float32, link: Int32, sw: Int32,
-                       theta: FP, eta: FP, lt: FP, gr: FP, hr: FP, wf: IP, woff: Int32, nonce: Int32):
+                       theta: FP, eta: FP, lt: FP, wf: IP, woff: Int32, nonce: Int32):
     """`_objective_team`'s row statements, one thread a row."""
     var i = Int(block_idx.x) * XG_TPB + Int(thread_idx.x)
     var nn = Int(n)
@@ -3705,7 +3705,7 @@ def _glm_grid_objective_enqueue(
     while True:
         var nonce = wit.begin()
         ctx.enqueue_function[glm_obj_map_kernel](x, y, Int32(n), Int32(d), Int32(fi), power, Int32(link), Int32(sw),
-                                                 theta, eta, lt, gr, hr, wit.p(), Int32(0), nonce,
+                                                 theta, eta, lt, wit.p(), Int32(0), nonce,
                                                  grid_dim=rows_grid, block_dim=XG_TPB)
         var nb = fold_blocks(n)
         ctx.enqueue_function[glm_obj_parts_kernel](lt, Int32(n), Int32(nb), fparts, wit.p(), Int32(rows_grid), nonce,

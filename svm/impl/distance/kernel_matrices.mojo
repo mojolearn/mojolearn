@@ -507,20 +507,6 @@ def idn_rbf_fused_tile(
     return True
 
 
-def kernel_op_takes_triangle(
-    kp: KernelParams,
-    a: DeviceBuffer[DType.float32],
-    b: DeviceBuffer[DType.float32],
-    m: Int,
-    n: Int,
-) -> Bool:
-    """True when `kernel_op` answers with its C22 symmetric triangle launch:
-    never, since the C22 arm is deleted. The multi-device dispatcher
-    (svm/multi_gpu.mojo) still asks before it shards; the integrator drops
-    the question with this function."""
-    return False
-
-
 def kernel_op(
     ctx: DeviceContext,
     kp: KernelParams,

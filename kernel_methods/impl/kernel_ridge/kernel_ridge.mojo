@@ -161,8 +161,6 @@ from cholesky.checks.potrf import (
     potrf_lower,
 )
 from cholesky.checks.trsm import CHOL_SOLVE_TPB, cho_solve
-from cholesky.chol_ops import chol_op_cho_solve, chol_op_factor
-from core.device_zero import enqueue_fill
 from core.identity_trace import IdentityTrace
 from kernel_methods.checks.km_sabotage import (
     KMSAB_NONE,
@@ -348,32 +346,9 @@ def kernel_ridge_solve(
     return 0
 
 
-def kernel_ridge_ops_route(trace: IdentityTrace) raises -> Bool:
-    """False: the factor and the solve run as `potrf_lower` / `cho_solve`
-    (the measured 0.8.66 route). Kept for kernel_methods/estimator.mojo's
-    import until that file folds it."""
-    # TOMBSTONE: MOJOLEARN_IDN_CHOL_OPS_FIT (opt-in B arm, EXP:581 RUN OWED; AMD 1.14-1.25x slower 2026-11-13) deleted 2026-11-15 by lane/expdel2-16-decomposition; code recoverable at 860e94a3f4.
-    # Restore: git apply experiments/removed/MOJOLEARN_IDN_CHOL_OPS_FIT.patch; record in docs/TOMBSTONES.md.
-    return False
-
-
-def kernel_ridge_factor_solve_enqueue(
-    ctx: DeviceContext,
-    mut k: DeviceBuffer[DType.float32],
-    mut y: DeviceBuffer[DType.float32],
-    mut info: DeviceBuffer[DType.int32],
-    n: Int,
-    n_targets: Int,
-) raises:
-    """`posv` on the ridged `k` (n x n) and `y` (n x n_targets) as the
-    executor's Cholesky ops (cholesky/chol_ops.mojo), ENQUEUED and read-free:
-    `k` becomes `L`, `y` the dual coefficients, `info[0]` LAPACK's info on
-    the device. A failed factor leaves `y` holding the targets (the solve
-    is skipped on the device, DEVIATION 1662). The caller reads `info` at
-    its own sync, beside the outputs."""
-    enqueue_fill(ctx, info, Int32(0))
-    chol_op_factor(ctx, k, info, n)
-    chol_op_cho_solve(ctx, k, y, info, n, n_targets)
+# TOMBSTONE: MOJOLEARN_IDN_CHOL_OPS_FIT (opt-in B arm, EXP:581 RUN OWED; AMD 1.14-1.25x slower 2026-11-13) deleted 2026-11-15 by lane/expdel2-16-decomposition; code recoverable at 860e94a3f4.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_CHOL_OPS_FIT.patch; record in docs/TOMBSTONES.md.
+# (Sweep 2026-11-15: kernel_ridge_ops_route (always False) and kernel_ridge_factor_solve_enqueue removed.)
 
 
 def kernel_ridge_workspace_floats(n: Int) -> Int:

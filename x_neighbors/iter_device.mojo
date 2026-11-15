@@ -17,13 +17,31 @@ from x_neighbors.items import matmul_item
 
 from checks.kernel_matrix import lib_smem_page_fits_for, TARGET_COLUMN
 from x_neighbors.svgp_ff import (
-    matmul_tn_acc_ff_item, svgp_ff_init_item, svgp_ff_chol_item, svgp_ff_chol_s_item, svgp_ff_column_item,
-    svgp_ff_x_item, svgp_ff_qmu_item, svgp_ff_qsqrt_item, svgp_ff_part_item, svgp_ff_fin_item, svgp_ff_nbn,
-    svgp_ff_nbm, svgp_ff_ws_size, matmul_tn_sym_ff_tile_item, svgp_sym_nb,
-    svgp_ff_col_solve_item, svgp_ff_col_fin_item, svgp_ff_mat,
+    matmul_tn_acc_ff_item,
+    svgp_ff_init_item,
+    svgp_ff_chol_item,
+    svgp_ff_chol_s_item,
+    svgp_ff_column_item,
+    svgp_ff_x_item,
+    svgp_ff_qmu_item,
+    svgp_ff_qsqrt_item,
+    svgp_ff_part_item,
+    svgp_ff_nbn,
+    svgp_ff_nbm,
+    svgp_ff_ws_size,
+    matmul_tn_sym_ff_tile_item,
+    svgp_sym_nb,
+    svgp_ff_col_solve_item,
+    svgp_ff_col_fin_item,
+    svgp_ff_mat,
 )
 from x_neighbors.svgp_ff import (
-    SVGP_TREE, SVGP_TREE_ON, SV8, svgp_ff_tree_comb, svgp_ff_tree_slot, svgp_ff_bound, svgp_ff_failed,
+    SVGP_TREE,
+    SV8,
+    svgp_ff_tree_comb,
+    svgp_ff_tree_slot,
+    svgp_ff_bound,
+    svgp_ff_failed,
 )
 from x_linear.ff import FF
 from x_neighbors.svgp_b32_gate import (
@@ -2225,11 +2243,6 @@ def svgp_ff_part_kernel(y: FP, bvh: FP, bvl: FP, w: FP, m_: Int64, n_: Int64):
         svgp_ff_part_item(t, y, bvh, bvl, w, Int(m_), Int(n_))
 
 
-def svgp_ff_fin_kernel(w: FP, info: FP, nbn_: Int64, nbm_: Int64, nf: Float32, noise: Float32, kdiag: Float32):
-    if _tid() == 0:
-        svgp_ff_fin_item(w, info, Int(nbn_), Int(nbm_), nf, noise, kdiag)
-
-
 comptime _SVGP_TREE_SMEM_FITS = lib_smem_page_fits_for[TARGET_COLUMN, SVGP_TREE * 8 * 4]()
 
 
@@ -2680,16 +2693,11 @@ def op_svgp_fit_ff(
         ctx.enqueue_function[svgp_ff_part_kernel](
             yp, _p(d_bvh), _p(d_bvl), wp, Int64(m), Int64(n), grid_dim=_grid(nbn + nbm), block_dim=BLOCK,
         )
-    comptime if SVGP_TREE_ON:
-        # lane apple-fast-purity: one block of SVGP_TREE threads folds the
-        # nbn + nbm block partials (svgp_ff_fin_item's tree order)
-        ctx.enqueue_function[svgp_ff_fin_tree_kernel](
-            wp, _p(d_info), Int64(nbn), Int64(nbm), Float32(n), noise, kdiag, grid_dim=1, block_dim=SVGP_TREE,
-        )
-    else:
-        ctx.enqueue_function[svgp_ff_fin_kernel](
-            wp, _p(d_info), Int64(nbn), Int64(nbm), Float32(n), noise, kdiag, grid_dim=1, block_dim=1,
-        )
+    # lane apple-fast-purity: one block of SVGP_TREE threads folds the
+    # nbn + nbm block partials (svgp_ff_fin_item's tree order)
+    ctx.enqueue_function[svgp_ff_fin_tree_kernel](
+        wp, _p(d_info), Int64(nbn), Int64(nbm), Float32(n), noise, kdiag, grid_dim=1, block_dim=SVGP_TREE,
+    )
     _down(ctx, d_alpha, alpha, m)
     _down(ctx, d_c, cmat, mm)
     _down(ctx, d_qmu, qmu, m)

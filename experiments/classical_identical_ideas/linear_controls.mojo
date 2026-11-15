@@ -74,7 +74,7 @@ comptime ENETCV_FB_CHUNKS = 64
 # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C13_CD_FOLD_STATS.patch; record in docs/TOMBSTONES.md.
 # TOMBSTONE: MOJOLEARN_CLASSICAL_C14_GROUP_RHS (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-06-base; code recoverable at 9b13c93ee0.
 # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C14_GROUP_RHS.patch; record in docs/TOMBSTONES.md.
-comptime C14_GROUP_RHS = False
+# (Sweep 2026-11-15: comptime C14_GROUP_RHS removed; nothing read it.)
 # lane/classical-cv-folds (2026-10-07), NEW, opt-in, NOT MEASURED: RidgeCV's
 # float-float fallback (x_linear/ridge_ff_blocks.mojo). The incumbent runs one
 # thread per statistic serially over every training row (`kf_ff_unit_kernel`,
@@ -90,7 +90,7 @@ comptime C14_GROUP_RHS = False
 # that, with each block's threads reading the same row tile. No shape rule.
 # TOMBSTONE: MOJOLEARN_CLASSICAL_RIDGECV_FF_BLOCKED (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-06-base; code recoverable at 49c61a4093.
 # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_RIDGECV_FF_BLOCKED.patch; record in docs/TOMBSTONES.md.
-comptime RIDGECV_FF_BLOCKED = False
+# (Sweep 2026-11-15: comptime RIDGECV_FF_BLOCKED removed; nothing read it.)
 # lane/classical-cv-folds (2026-10-07); PROMOTED to the IDENTICAL default
 # 2026-10-08 (lane/grid-act-2, grid run ge123e6f9: NVIDIA L40S sm_89 + AMD
 # MI325X gfx942, full board data, one run per arm; r2 and rmse identical A vs
@@ -133,7 +133,7 @@ comptime RIDGECV_FF_BLOCKED = False
 comptime ENETCV_SCORE_BLOCKS = 1024 if CLASSICAL_IDN else 0
 # TOMBSTONE: MOJOLEARN_CLASSICAL_C15_FACTOR_SOLVE (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-06-base; code recoverable at 72270680f8.
 # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C15_FACTOR_SOLVE.patch; record in docs/TOMBSTONES.md.
-comptime C15_FACTOR_SOLVE = False
+# (Sweep 2026-11-15: comptime C15_FACTOR_SOLVE removed; nothing read it.)
 # lane/classical-structural (2026-10-07): LINEAR_GRAM_SOLVE (OLS and Ridge).
 # One resident centered-Gram fit (glm/impl/gram_solve.mojo) instead of OLS's
 # 14-panel TSQR of a centered copy and Ridge's four PCIe crossings + untiled
@@ -163,13 +163,13 @@ comptime C15_FACTOR_SOLVE = False
 comptime LINEAR_GRAM_SOLVE = CLASSICAL_IDN
 # TOMBSTONE: MOJOLEARN_CLASSICAL_C16_GLM_FUSED (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-06-base; code recoverable at 2a301a3aa3.
 # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C16_GLM_FUSED.patch; record in docs/TOMBSTONES.md.
-comptime C16_GLM_FUSED = False
+# (Sweep 2026-11-15: comptime C16_GLM_FUSED removed; nothing read it.)
 # TOMBSTONE: MOJOLEARN_CLASSICAL_C17_OVR (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-06-base; code recoverable at 8c1b568a83.
 # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C17_OVR.patch; record in docs/TOMBSTONES.md.
-comptime C17_OVR = False
+# (Sweep 2026-11-15: comptime C17_OVR removed; nothing read it.)
 # TOMBSTONE: MOJOLEARN_CLASSICAL_C17_LS_TRIALS (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-06-base; code recoverable at 10e3cad6a6.
 # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C17_LS_TRIALS.patch; record in docs/TOMBSTONES.md.
-comptime C17_LS_TRIALS = False
+# (Sweep 2026-11-15: comptime C17_LS_TRIALS removed; nothing read it.)
 # T.C18.residual-only, measured source 6fe3cfce38fd: remain opt-in/off, pending
 # qualification. Full LassoCV Taxi/Istella, ElasticNetCV Taxi/Istella ratios
 # (candidate/baseline): NVIDIA sm90 1.0088/1.0061/0.9697/1.0067;
@@ -182,7 +182,7 @@ comptime C17_LS_TRIALS = False
 # and BOARD.md; C13+C18 quality failures do not establish C18 as their cause.
 # TOMBSTONE: MOJOLEARN_CLASSICAL_C18_RESIDUAL_NEXT (unqualified opt-in arm, neutral) deleted 2026-11-15 by lane/expdel2-06-base; code recoverable at 7ca2a3400c.
 # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C18_RESIDUAL_NEXT.patch; record in docs/TOMBSTONES.md.
-comptime C18_RESIDUAL_NEXT = False
+# (Sweep 2026-11-15: comptime C18_RESIDUAL_NEXT removed; nothing read it.)
 # C19: ONE integer sweep (was ORDERED_128/ORDERED_32, two defines where 32
 # silently won when both were on). SGD_PS samples per ordered launch; legal
 # set {32, 128, 2048}; absent = 2048 = incumbent. Sample order, time index and
@@ -197,13 +197,13 @@ comptime C19_SGD_CHUNK = 2048
 # C20_ROW_CACHE deleted 2026-10-07 (serial per-row host loop); refused in core/six_lane_experiment_guards.mojo.
 # TOMBSTONE: MOJOLEARN_CLASSICAL_C20_PAIR_LOAD (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-06-base; code recoverable at 911bf993d5.
 # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C20_PAIR_LOAD.patch; record in docs/TOMBSTONES.md.
-comptime C20_PAIR_LOAD = False
+# (Sweep 2026-11-15: comptime C20_PAIR_LOAD removed; nothing read it.)
 # TOMBSTONE: MOJOLEARN_CLASSICAL_C21_EXTREMA (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-06-base; code recoverable at 9aca9aa819.
 # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C21_EXTREMA.patch; record in docs/TOMBSTONES.md.
-comptime C21_EXTREMA = False
+# (Sweep 2026-11-15: comptime C21_EXTREMA removed; nothing read it.)
 # TOMBSTONE: MOJOLEARN_CLASSICAL_C22_TRIANGLE (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-06-base; code recoverable at 45379ff055.
 # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C22_TRIANGLE.patch; record in docs/TOMBSTONES.md.
-comptime C22_TRIANGLE = False
+# (Sweep 2026-11-15: comptime C22_TRIANGLE removed; nothing read it.)
 # lane classical-decomp (2026-10-07): the old C23_CENTERED_PANELS define is
 # split per algorithm family. Its PCA use (the ONE_PASS arm of
 # MOJOLEARN_CLASSICAL_PCA_COV, =23) was deleted 2026-10-08 (below); its MCD use is C23_MCD. Both run
@@ -215,7 +215,7 @@ comptime C22_TRIANGLE = False
 # column), now computed in parallel. NOT MEASURED.
 # TOMBSTONE: MOJOLEARN_CLASSICAL_C23_MCD (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-06-base; code recoverable at 4ab2967a7e.
 # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C23_MCD.patch; record in docs/TOMBSTONES.md.
-comptime C23_MCD = False
+# (Sweep 2026-11-15: comptime C23_MCD removed; nothing read it.)
 # PCA covariance: MOJOLEARN_CLASSICAL_PCA_COV is gone; the incumbent
 # (column_mean_launch, then split-K or shift + gemm_tn) is the only route.
 # Tried 2026-10-08 (MOJOLEARN_CLASSICAL_PCA_COV=23, the C23 one-pass Chan covariance arm, run ge123e6f9): NV/AMD pca
@@ -231,7 +231,7 @@ comptime C23_MCD = False
 # Grid g50ebe26a5: tsvd NV/AMD istella 2.34x/3.46x, taxi 1.83x/1.38x SLOWER (combined 2.84x / 1.59x).
 # TOMBSTONE: MOJOLEARN_CLASSICAL_C24_PANEL8 (measured arm not promoted) deleted 2026-11-15 by lane/expdel2-06-base; code recoverable at 2d9d6f1bd4.
 # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C24_PANEL8.patch; record in docs/TOMBSTONES.md.
-comptime C24_PANEL8 = False
+# (Sweep 2026-11-15: comptime C24_PANEL8 removed; nothing read it.)
 # C24 ROWS2048: TSQR leaf blocks of 2048 rows instead of 4096
 # (x_decomp/tsqr_core.mojo TS_ROWS; twice the leaf blocks in flight per
 # panel, a fixed row count, not a data shape). Bits change (the leaf
@@ -253,7 +253,7 @@ comptime C24_PANEL8 = False
 comptime C24_ROWS2048 = CLASSICAL_IDN
 # TOMBSTONE: MOJOLEARN_CLASSICAL_C24_TREE4 (measured arm not promoted) deleted 2026-11-15 by lane/expdel2-06-base; code recoverable at ba795517d7.
 # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C24_TREE4.patch; record in docs/TOMBSTONES.md.
-comptime C24_TREE4 = False
+# (Sweep 2026-11-15: comptime C24_TREE4 removed; nothing read it.)
 # C25_PROJECTION_REUSE (IDENTICAL default since 2026-10-10): RBFSampler's projection
 # runs as classical_projection_kernel (kernel_methods/rbf_fused.mojo), four rows per
 # thread reusing each projection weight, the GEMM-v1 leaf/tree fold, for every d.
@@ -270,16 +270,16 @@ comptime C24_TREE4 = False
 comptime C25_PROJECTION_REUSE = CLASSICAL_IDN
 # TOMBSTONE: MOJOLEARN_CLASSICAL_C26_PRODUCTS (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-06-base; code recoverable at 5f3b85c06c.
 # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C26_PRODUCTS.patch; record in docs/TOMBSTONES.md.
-comptime C26_PRODUCTS = False
+# (Sweep 2026-11-15: comptime C26_PRODUCTS removed; nothing read it.)
 # TOMBSTONE: MOJOLEARN_CLASSICAL_C26_UPDATE_FUSED (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-06-base; code recoverable at 749e439c5c.
 # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C26_UPDATE_FUSED.patch; record in docs/TOMBSTONES.md.
-comptime C26_UPDATE_FUSED = False
+# (Sweep 2026-11-15: comptime C26_UPDATE_FUSED removed; nothing read it.)
 # TOMBSTONE: MOJOLEARN_CLASSICAL_C27_COMPONENTS (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-06-base; code recoverable at 82b2284405.
 # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C27_COMPONENTS.patch; record in docs/TOMBSTONES.md.
-comptime C27_COMPONENTS = False
+# (Sweep 2026-11-15: comptime C27_COMPONENTS removed; nothing read it.)
 # TOMBSTONE: MOJOLEARN_CLASSICAL_C28_BUCKET_SOLVES (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-06-base; code recoverable at 272ae35230.
 # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C28_BUCKET_SOLVES.patch; record in docs/TOMBSTONES.md.
-comptime C28_BUCKET_SOLVES = False
+# (Sweep 2026-11-15: comptime C28_BUCKET_SOLVES removed; nothing read it.)
 
 # Additional independent component/residual sub-arms; the header status applies.
 # TOMBSTONE: MOJOLEARN_CLASSICAL_C18_TILE64 (unmeasured) deleted 2026-10-07 by f4de82db4; code recoverable at f4de82db4^.
@@ -288,10 +288,10 @@ comptime C28_BUCKET_SOLVES = False
 # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C13_CD_FOLD_STATS.patch; record in docs/TOMBSTONES.md.
 # TOMBSTONE: MOJOLEARN_CLASSICAL_C27_FA_COMPONENTS (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-06-base; code recoverable at f0d29c7b95.
 # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C27_FA_COMPONENTS.patch; record in docs/TOMBSTONES.md.
-comptime C27_FA_COMPONENTS = False
+# (Sweep 2026-11-15: comptime C27_FA_COMPONENTS removed; nothing read it.)
 # TOMBSTONE: MOJOLEARN_CLASSICAL_C27_NORM_VECTOR (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-06-base; code recoverable at 5bdab7e3c8.
 # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C27_NORM_VECTOR.patch; record in docs/TOMBSTONES.md.
-comptime C27_NORM_VECTOR = False
+# (Sweep 2026-11-15: comptime C27_NORM_VECTOR removed; nothing read it.)
 # TOMBSTONE: MOJOLEARN_CLASSICAL_C13_LOGCV_WEIGHTS (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-06-base; code recoverable at 337c096a5b.
 # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C13_LOGCV_WEIGHTS.patch; record in docs/TOMBSTONES.md.
-comptime C13_LOGCV_WEIGHTS = False
+# (Sweep 2026-11-15: comptime C13_LOGCV_WEIGHTS removed; nothing read it.)

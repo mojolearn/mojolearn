@@ -42,7 +42,7 @@ comptime PARAMS = 14
 # an integer sweep -D MOJOLEARN_CLASSICAL_C01_LEAF=32|64|128 (absent = 32).
 # Fixed leaves, adjacent binary carries and FTZ use the same PairSum/parallel
 # planner on host and all GPU vendors. NOT MEASURED.
-from experiments.classical_identical_ideas.shared_controls import C01_LEAF, C01_LEAF_LEGAL
+from experiments.classical_identical_ideas.shared_controls import C01_LEAF
 comptime LEAF = C01_LEAF
 comptime STACK = 48
 
@@ -133,7 +133,6 @@ struct PairSum(Movable):
     var nleaf: Int
 
     def __init__(out self):
-        comptime assert C01_LEAF_LEGAL, "MOJOLEARN_CLASSICAL_C01_LEAF must be 32, 64 or 128"
         self.stack = Array[Float32, STACK](fill=Float32(0))
         self.depth = 0
         self.count = 0

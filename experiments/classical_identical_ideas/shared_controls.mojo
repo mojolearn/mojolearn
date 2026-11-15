@@ -13,16 +13,16 @@ comptime CLASSICAL_IDENTICAL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 # LEAF), 32 on every tier.
 # TOMBSTONE: MOJOLEARN_CLASSICAL_C01_LEAF (DROPPED-slower, EXP:1530; the 64/128 arms never won) deleted 2026-11-15 by lane/expdel2-07-base; code recoverable at 561d08802a.
 # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C01_LEAF.patch
-comptime C01_LEAF_LEGAL = True
+# (Sweep 2026-11-15: comptime C01_LEAF_LEGAL removed; its one reader was an always-true assert in x_metrics/common.mojo, removed.)
 comptime C01_LEAF = 32
 # C01_MEAN: the leaf column-sum mean arm of core/xtdz_coalesced.mojo column_mean_launch, never measured.
 # TOMBSTONE: MOJOLEARN_CLASSICAL_C01_MEAN (no A/B recorded for the opt-in arm) deleted 2026-11-15 by lane/expdel2-07-base; code recoverable at 569d288205.
 # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C01_MEAN.patch
-comptime C01_MEAN = False
+# (Sweep 2026-11-15: comptime C01_MEAN removed; nothing read it.)
 comptime C02_STATS_PAIR = CLASSICAL_IDENTICAL and is_defined["MOJOLEARN_CLASSICAL_C02_STATS_PAIR"]()
 # TOMBSTONE: MOJOLEARN_CLASSICAL_C03_FINITE_EXTREMA (no A/B recorded for the opt-in arm) deleted 2026-11-15 by lane/expdel2-07-base; code recoverable at cf8de5ae6c.
 # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C03_FINITE_EXTREMA.patch
-comptime C03_FINITE_EXTREMA = False
+# (Sweep 2026-11-15: comptime C03_FINITE_EXTREMA removed; nothing read it.)
 # C04 is split (lane classical-decomp, 2026-10-07): its PCA use was the =4 arm of
 # MOJOLEARN_CLASSICAL_PCA_COV (deleted 2026-10-10, lane/grid-act-6); C04_LDA is the x_prep
 # `centered_matmul` op (LDA transform, solver != eigen), behavior unchanged.
@@ -34,10 +34,10 @@ comptime C03_FINITE_EXTREMA = False
 # not transform. Bit 2 (value 4) of `x_prep_classical_shared`.
 # TOMBSTONE: MOJOLEARN_CLASSICAL_C04_LDA (no A/B recorded for the opt-in arm) deleted 2026-11-15 by lane/expdel2-07-base; code recoverable at 1c0b13a0e4.
 # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C04_LDA.patch
-comptime C04_LDA = False
+# (Sweep 2026-11-15: comptime C04_LDA removed; nothing read it.)
 # TOMBSTONE: MOJOLEARN_CLASSICAL_C05_PHASE_SCRATCH (no A/B recorded for the opt-in arm) deleted 2026-11-15 by lane/expdel2-07-base; code recoverable at 1ebc49831d.
 # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C05_PHASE_SCRATCH.patch
-comptime C05_PHASE_SCRATCH = False
+# (Sweep 2026-11-15: comptime C05_PHASE_SCRATCH removed; nothing read it.)
 # C06 (lane classical-kmeans, 2026-10-07): ONE control with arms, replacing
 # ROWS2/ROWS4 (two defines where ROWS4 silently won). Rows per norm block,
 # legal set 2|4; absent = the incumbent one-row block.
@@ -52,7 +52,7 @@ comptime C06_ROWS_ON = C06_NORM_ROWS > 1
 # the bound).
 # TOMBSTONE: MOJOLEARN_CLASSICAL_C06_SMALL_D_THREAD (no A/B recorded for the opt-in arm) deleted 2026-11-15 by lane/expdel2-07-base; code recoverable at 6a40fe1b92.
 # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C06_SMALL_D_THREAD.patch
-comptime C06_SMALL_D_THREAD = False
+# (Sweep 2026-11-15: comptime C06_SMALL_D_THREAD removed; nothing read it.)
 # C07 (lane classical-encoders, 2026-10-07): two integer sweeps of the device
 # radix sort (x_prep/dradix.mojo), replacing DIGIT4/DIGIT6/KEYS1024/KEYS4096,
 # which silently overrode each other. The sort has one answer, so no arm
@@ -78,10 +78,10 @@ comptime C07_RADIX_ROWS = 2048
 comptime C08_TARGET_CODES = CLASSICAL_IDENTICAL and is_defined["MOJOLEARN_CLASSICAL_C08_TARGET_CODES"]()
 # TOMBSTONE: MOJOLEARN_CLASSICAL_C08_ONEHOT_FT (no A/B recorded for the opt-in arm) deleted 2026-11-15 by lane/expdel2-07-base; code recoverable at d42f92b40b.
 # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C08_ONEHOT_FT.patch
-comptime C08_ONEHOT_FT = False
+# (Sweep 2026-11-15: comptime C08_ONEHOT_FT removed; nothing read it.)
 # TOMBSTONE: MOJOLEARN_CLASSICAL_C08_ORDINAL_FT (no A/B recorded for the opt-in arm) deleted 2026-11-15 by lane/expdel2-07-base; code recoverable at 535c024b7f.
 # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C08_ORDINAL_FT.patch
-comptime C08_ORDINAL_FT = False
+# (Sweep 2026-11-15: comptime C08_ORDINAL_FT removed; nothing read it.)
 #: derived, not a define: some route compiles the `unique_inverse` op
 comptime C08_DICTIONARY = C08_TARGET_CODES
 # C08_UNIQUE_SCAN: the device `unique_cols` op (every IDENTICAL `_fit_categories`:
@@ -101,38 +101,38 @@ comptime C08_DICTIONARY = C08_TARGET_CODES
 comptime C08_UNIQUE_SCAN = CLASSICAL_IDENTICAL
 # TOMBSTONE: MOJOLEARN_CLASSICAL_C09_REG_BUNDLE (no A/B recorded for the opt-in arm) deleted 2026-11-15 by lane/expdel2-07-base; code recoverable at eb41a7f7fc.
 # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C09_REG_BUNDLE.patch
-comptime C09_REG_BUNDLE = False
+# (Sweep 2026-11-15: comptime C09_REG_BUNDLE removed; nothing read it.)
 # TOMBSTONE: MOJOLEARN_CLASSICAL_C10_RANK_REUSE (no A/B recorded for the opt-in arm) deleted 2026-11-15 by lane/expdel2-07-base; code recoverable at cf7f3199b2.
 # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C10_RANK_REUSE.patch
-comptime C10_RANK_REUSE = False
+# (Sweep 2026-11-15: comptime C10_RANK_REUSE removed; nothing read it.)
 # TOMBSTONE: MOJOLEARN_CLASSICAL_C11_DRAW_GATHER (no A/B recorded for the opt-in arm) deleted 2026-11-15 by lane/expdel2-07-base; code recoverable at bfc7696dd0.
 # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C11_DRAW_GATHER.patch
-comptime C11_DRAW_GATHER = False
+# (Sweep 2026-11-15: comptime C11_DRAW_GATHER removed; nothing read it.)
 # TOMBSTONE: MOJOLEARN_CLASSICAL_C12_SPARSE_COUNTS (no A/B recorded for the opt-in arm) deleted 2026-11-15 by lane/expdel2-07-base; code recoverable at 9f2212b4b1.
 # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C12_SPARSE_COUNTS.patch
-comptime C12_SPARSE_COUNTS = False
+# (Sweep 2026-11-15: comptime C12_SPARSE_COUNTS removed; nothing read it.)
 # TOMBSTONE: MOJOLEARN_CLASSICAL_C55_CLASS_GROUP (quality loss) deleted 2026-10-07 by 213f349ed; code recoverable at 213f349ed^.
 # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C55_CLASS_GROUP.patch; record in docs/TOMBSTONES.md.
 # C08 independent grouped one-hot emission; immutable dictionary is unchanged.
 # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
 # TOMBSTONE: MOJOLEARN_CLASSICAL_C08_GROUPED_OUTPUT (no A/B recorded for the opt-in arm) deleted 2026-11-15 by lane/expdel2-07-base; code recoverable at 9a0b339815.
 # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C08_GROUPED_OUTPUT.patch
-comptime C08_GROUPED_OUTPUT = False
+# (Sweep 2026-11-15: comptime C08_GROUPED_OUTPUT removed; nothing read it.)
 
 # Independent C02 linear sums and C56 LDA input reuse, default OFF.
 # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
 # TOMBSTONE: MOJOLEARN_CLASSICAL_C02_LINEAR_PAIR (no A/B recorded for the opt-in arm) deleted 2026-11-15 by lane/expdel2-07-base; code recoverable at c95b22c391.
 # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C02_LINEAR_PAIR.patch
-comptime C02_LINEAR_PAIR = False
+# (Sweep 2026-11-15: comptime C02_LINEAR_PAIR removed; nothing read it.)
 # TOMBSTONE: MOJOLEARN_CLASSICAL_C56_LDA_INPUT (no A/B recorded for the opt-in arm) deleted 2026-11-15 by lane/expdel2-07-base; code recoverable at e96891c8e7.
 # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C56_LDA_INPUT.patch
-comptime C56_LDA_INPUT = False
+# (Sweep 2026-11-15: comptime C56_LDA_INPUT removed; nothing read it.)
 
 # C05 independent invocation-owned OLS covariance/inverse phase storage.
 # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
 # TOMBSTONE: MOJOLEARN_CLASSICAL_C05_OLS_PHASE (no A/B recorded for the opt-in arm) deleted 2026-11-15 by lane/expdel2-07-base; code recoverable at eb67cbe21f.
 # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C05_OLS_PHASE.patch
-comptime C05_OLS_PHASE = False
+# (Sweep 2026-11-15: comptime C05_OLS_PHASE removed; nothing read it.)
 
 # C61 (lane classical-nbda, 2026-10-07): single-pass blocked class statistics
 # (MOJOLEARN_CLASSICAL_C61_NB_CLASS_STATS=1|2 for GaussianNB,

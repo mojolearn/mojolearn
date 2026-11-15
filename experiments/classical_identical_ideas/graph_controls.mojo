@@ -22,11 +22,11 @@ comptime GRAPH_IDENTICAL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 comptime KNN_DIRECT_DISTANCE = False
 # TOMBSTONE: MOJOLEARN_KDE_DIRECT_DISTANCE (unmeasured arm) deleted 2026-11-15 by lane/expdel2-05-base; code recoverable at 1fef4f5d4a.
 # Restore: git apply experiments/removed/MOJOLEARN_KDE_DIRECT_DISTANCE.patch; record in docs/TOMBSTONES.md.
-comptime KDE_DIRECT_DISTANCE = False
+# (Sweep 2026-11-15: comptime KDE_DIRECT_DISTANCE removed; nothing read it.)
 # TOMBSTONE: MOJOLEARN_DBSCAN_DIRECT_DISTANCE (DELETE-noise: dbscan taxi on main ef1e7e9f9 NV L40S 13336 -> 13184 ms (v1462 vs v1234),
 # AMD MI325X 7108 -> 7118 ms (a1599 vs a1593), 0.99x / 1.00x; istella 1.00x / 1.00x; hash d6fa652f / 7494ce8e unchanged) turned off
 # 2026-10-11 by lane/grid-act-16; code recoverable at 49a19b003. Reader branches are dead comptime code: CLEANUP OWED.
-comptime DBSCAN_DIRECT_DISTANCE = False
+# (Sweep 2026-11-15: comptime DBSCAN_DIRECT_DISTANCE removed; its readers in dbscan/ folded.)
 # KNN covers the brute-force/RBC kNN primitive and its
 # host twin wherever it is called (KNN, the kNN graphs of HDBSCAN/UMAP/Spectral,
 # DBSCAN's RBC eps route through rbc_cmp_dist). KDE covers kde/impl/distance,
@@ -59,36 +59,28 @@ comptime IVF_DIRECT_DISTANCE = GRAPH_IDENTICAL
 # row in docs/apple-fast/EXPERIMENTS.md.
 # TOMBSTONE: MOJOLEARN_KMEANS_ROW_ASSIGN (unmeasured arm) deleted 2026-11-15 by lane/expdel2-05-base; code recoverable at b97e8ccd99.
 # Restore: git apply experiments/removed/MOJOLEARN_KMEANS_ROW_ASSIGN.patch; record in docs/TOMBSTONES.md.
-comptime KMEANS_ROW_ASSIGN_ROWS = 0
-comptime KMEANS_ROW_ASSIGN = False
-# Cost rule for the EXPANDED row arms: a thread owns a k*d serial fma chain per
-# row with no register reuse across rows of the tile, while the tiled kernel
-# reuses each staged value 4x4. Past 512 chain terms per row the chain latency
-# dominates, so the tiled kernel keeps those launches. Not a board shape: the
-# bound is a per-thread chain length, a power of two, far from k*d at any
-# board row (88 and 1760).
-comptime KMEANS_ROW_ASSIGN_MAX_KD = 512
+# (Sweep 2026-11-15: comptime KMEANS_ROW_ASSIGN, KMEANS_ROW_ASSIGN_ROWS and KMEANS_ROW_ASSIGN_MAX_KD removed with their reader.)
 # TOMBSTONE: MOJOLEARN_C31_DEVICE_BUCKETS (unmeasured arm) deleted 2026-11-15 by lane/expdel2-05-base; code recoverable at 337c096a5b.
 # Restore: git apply experiments/removed/MOJOLEARN_C31_DEVICE_BUCKETS.patch; record in docs/TOMBSTONES.md.
-comptime C31_DEVICE_BUCKETS = False
+# (Sweep 2026-11-15: comptime C31_DEVICE_BUCKETS removed; nothing read it.)
 # TOMBSTONE: MOJOLEARN_C32_COUNT_FUSION (unmeasured arm) deleted 2026-11-15 by lane/expdel2-05-base; code recoverable at 0445dd8786.
 # Restore: git apply experiments/removed/MOJOLEARN_C32_COUNT_FUSION.patch; record in docs/TOMBSTONES.md.
-comptime C32_COUNT_FUSION = False
+# (Sweep 2026-11-15: comptime C32_COUNT_FUSION removed; nothing read it.)
 # TOMBSTONE: MOJOLEARN_C32_EMIT_FUSION (unmeasured arm) deleted 2026-11-15 by lane/expdel2-05-base; code recoverable at 330982c9db.
 # Restore: git apply experiments/removed/MOJOLEARN_C32_EMIT_FUSION.patch; record in docs/TOMBSTONES.md.
-comptime C32_EMIT_FUSION = False
+# (Sweep 2026-11-15: comptime C32_EMIT_FUSION removed; nothing read it.)
 # TOMBSTONE: MOJOLEARN_C33_FROZEN_CHUNKS (superseded / unmeasured arm) deleted 2026-11-15 by lane/expdel2-05-base; code recoverable at b41ab5891f.
 # Restore: git apply experiments/removed/MOJOLEARN_C33_FROZEN_CHUNKS.patch; record in docs/TOMBSTONES.md.
-comptime C33_FROZEN_CHUNKS = False
+# (Sweep 2026-11-15: comptime C33_FROZEN_CHUNKS removed; nothing read it.)
 # TOMBSTONE: MOJOLEARN_C33_CHUNK_4 (unmeasured arm) deleted 2026-11-15 by lane/expdel2-05-base; code recoverable at 77dc9e2f62.
 # Restore: git apply experiments/removed/MOJOLEARN_C33_CHUNK_4.patch; record in docs/TOMBSTONES.md.
 comptime C33_CHUNK = 16
 # TOMBSTONE: MOJOLEARN_C34_PARALLEL_EDGES (unmeasured arm) deleted 2026-11-15 by lane/expdel2-05-base; code recoverable at c7dfed9ef3.
 # Restore: git apply experiments/removed/MOJOLEARN_C34_PARALLEL_EDGES.patch; record in docs/TOMBSTONES.md.
-comptime C34_PARALLEL_EDGES = False
+# (Sweep 2026-11-15: comptime C34_PARALLEL_EDGES removed; nothing read it.)
 # TOMBSTONE: MOJOLEARN_C35_PACKED_LISTS (unmeasured arm) deleted 2026-11-15 by lane/expdel2-05-base; code recoverable at d391e6ab95.
 # Restore: git apply experiments/removed/MOJOLEARN_C35_PACKED_LISTS.patch; record in docs/TOMBSTONES.md.
-comptime C35_PACKED_LISTS = False
+# (Sweep 2026-11-15: comptime C35_PACKED_LISTS removed; nothing read it.)
 # TOMBSTONE: MOJOLEARN_C35_ROWS_128 (unmeasured arm) deleted 2026-11-15 by lane/expdel2-05-base; code recoverable at 54b5cb96f6.
 # Restore: git apply experiments/removed/MOJOLEARN_C35_ROWS_128.patch; record in docs/TOMBSTONES.md.
 comptime C35_TASK_ROWS = 256
@@ -104,8 +96,9 @@ comptime C35_TASK_ROWS = 256
 # row-register kernel, R rows per thread. Arms off|2|4 (one define, int value).
 # TOMBSTONE: MOJOLEARN_XCLUSTER_ROW_ASSIGN (unmeasured arm) deleted 2026-11-15 by lane/expdel2-05-base; code recoverable at b1f48f8126.
 # Restore: git apply experiments/removed/MOJOLEARN_XCLUSTER_ROW_ASSIGN.patch; record in docs/TOMBSTONES.md.
-comptime XCLUSTER_ROW_ASSIGN_ROWS = 0
-comptime XCLUSTER_ROW_ASSIGN = False
+# (Sweep 2026-11-15: comptime XCLUSTER_ROW_ASSIGN_ROWS removed; nothing read it.)
+# (Sweep 2026-11-15: comptime XCLUSTER_ROW_ASSIGN removed; nothing read it.)
+
 # Tried 2026-10-08 (MOJOLEARN_C37_FUSED_ACCUMULATE + MOJOLEARN_C37_FUSED_ROWS, run ge123e6f9): the C37 rewrite fused the
 # Lloyd assignment with the Int32 row-block centroid accumulation in shared memory (cluster/impl/detail/kmeans_fused_accumulate.mojo).
 # NV/AMD kmeans istella 104.8x/0.841x, taxi 68.6x/0.895x (vendor split: AMD faster, NVIDIA collapses); combined 9.4x/7.8x
@@ -116,28 +109,28 @@ comptime XCLUSTER_ROW_ASSIGN = False
 # behavior under this name.
 # TOMBSTONE: MOJOLEARN_XCLUSTER_KPP_DISTINCT (dropped / unmeasured arm) deleted 2026-11-15 by lane/expdel2-05-base; code recoverable at c3dc42fd2c.
 # Restore: git apply experiments/removed/MOJOLEARN_XCLUSTER_KPP_DISTINCT.patch; record in docs/TOMBSTONES.md.
-comptime XCLUSTER_KPP_DISTINCT = False
+# (Sweep 2026-11-15: comptime XCLUSTER_KPP_DISTINCT removed; nothing read it.)
 # TOMBSTONE: MOJOLEARN_C39_RETAIN_STATE (unmeasured arm) deleted 2026-11-15 by lane/expdel2-05-base; code recoverable at 9ac1d53067.
 # Restore: git apply experiments/removed/MOJOLEARN_C39_RETAIN_STATE.patch; record in docs/TOMBSTONES.md.
-comptime C39_RETAIN_STATE = False
+# (Sweep 2026-11-15: comptime C39_RETAIN_STATE removed; nothing read it.)
 # TOMBSTONE: MOJOLEARN_C40_SEED_TILES (unmeasured arm) deleted 2026-11-15 by lane/expdel2-05-base; code recoverable at 2c7364c31b.
 # Restore: git apply experiments/removed/MOJOLEARN_C40_SEED_TILES.patch; record in docs/TOMBSTONES.md.
-comptime C40_SEED_TILES = False
+# (Sweep 2026-11-15: comptime C40_SEED_TILES removed; nothing read it.)
 # TOMBSTONE: MOJOLEARN_C40_ACTIVE_SEEDS (unmeasured arm) deleted 2026-11-15 by lane/expdel2-05-base; code recoverable at a72d2aefd3.
 # Restore: git apply experiments/removed/MOJOLEARN_C40_ACTIVE_SEEDS.patch; record in docs/TOMBSTONES.md.
-comptime C40_ACTIVE_SEEDS = False
+# (Sweep 2026-11-15: comptime C40_ACTIVE_SEEDS removed; nothing read it.)
 # TOMBSTONE: MOJOLEARN_C41_FUSED_MINIMA (unmeasured arm) deleted 2026-11-15 by lane/expdel2-05-base; code recoverable at 77d0694779.
 # Restore: git apply experiments/removed/MOJOLEARN_C41_FUSED_MINIMA.patch; record in docs/TOMBSTONES.md.
-comptime C41_FUSED_MINIMA = False
+# (Sweep 2026-11-15: comptime C41_FUSED_MINIMA removed; nothing read it.)
 # TOMBSTONE: MOJOLEARN_C42_ACTIVE_TRIANGLE (unmeasured arm) deleted 2026-11-15 by lane/expdel2-05-base; code recoverable at 9276415968.
 # Restore: git apply experiments/removed/MOJOLEARN_C42_ACTIVE_TRIANGLE.patch; record in docs/TOMBSTONES.md.
-comptime C42_ACTIVE_TRIANGLE = False
+# (Sweep 2026-11-15: comptime C42_ACTIVE_TRIANGLE removed; nothing read it.)
 # TOMBSTONE: MOJOLEARN_C43_RESIDENT_NORMALIZATION (unmeasured arm) deleted 2026-11-15 by lane/expdel2-05-base; code recoverable at a4aa6b55b6.
 # Restore: git apply experiments/removed/MOJOLEARN_C43_RESIDENT_NORMALIZATION.patch; record in docs/TOMBSTONES.md.
-comptime C43_RESIDENT_NORMALIZATION = False
+# (Sweep 2026-11-15: comptime C43_RESIDENT_NORMALIZATION removed; nothing read it.)
 # TOMBSTONE: MOJOLEARN_C44_SAMPLING_DESCRIPTORS (unmeasured arm) deleted 2026-11-15 by lane/expdel2-05-base; code recoverable at 4fdc7dda1a.
 # Restore: git apply experiments/removed/MOJOLEARN_C44_SAMPLING_DESCRIPTORS.patch; record in docs/TOMBSTONES.md.
-comptime C44_SAMPLING_DESCRIPTORS = False
+# (Sweep 2026-11-15: comptime C44_SAMPLING_DESCRIPTORS removed; nothing read it.)
 # C61 (lane classical-misc, 2026-10-07): HDBSCAN sparse mutual-reachability
 # Boruvka search, tiled kernel (NVIDIA/AMD default): skip a j tile whose points
 # all lie in the block's single component. Those cells are excluded anyway, so
@@ -146,4 +139,4 @@ comptime C44_SAMPLING_DESCRIPTORS = False
 # NOT TESTED — NOT MEASURED. Default OFF.
 # TOMBSTONE: MOJOLEARN_C62_SAME_COMPONENT_SKIP (unmeasured arm) deleted 2026-11-15 by lane/expdel2-05-base; code recoverable at 774f01dc6b.
 # Restore: git apply experiments/removed/MOJOLEARN_C62_SAME_COMPONENT_SKIP.patch; record in docs/TOMBSTONES.md.
-comptime C62_SAME_COMPONENT_SKIP = False
+# (Sweep 2026-11-15: comptime C62_SAME_COMPONENT_SKIP removed; nothing read it.)

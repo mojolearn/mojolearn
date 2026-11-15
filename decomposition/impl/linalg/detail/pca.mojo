@@ -242,6 +242,7 @@ def pca_validate(n_rows: Int, n_cols: Int, n_components: Int) raises:
 
 # TOMBSTONE: MOJOLEARN_IDN_GEMM_TN_CENTERED (unmeasured opt-in arm P3, grid fg-pca hold) deleted 2026-11-15 by lane/expdel2-16-decomposition; code recoverable at 4b13787b83.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_GEMM_TN_CENTERED.patch; record in docs/TOMBSTONES.md.
+# (Sweep 2026-11-15: gemm/tn_centered.mojo, its last importer gone, deleted; restore it from 7c6df8f9f7 with the patch.)
 
 
 #: P2, lane fg-pca (2026-10-09), IDENTICAL default. `pca_fit_host` uploads X into a

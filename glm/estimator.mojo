@@ -544,8 +544,7 @@ def qn_fit_host(
 #: hands each class's solver a device copy of X. Same fits, same bits.
 # TOMBSTONE: MOJOLEARN_QN_OVR_ONE_UPLOAD_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-20-linear; the MOJOLEARN_IDN_ALL_OFF term goes with it here; code recoverable at 021105e119.
 # Restore: git apply experiments/removed/MOJOLEARN_QN_OVR_ONE_UPLOAD_OFF.patch; record in docs/TOMBSTONES.md.
-# QN_OVR_ONE_UPLOAD stays as the constant its importers read.
-comptime QN_OVR_ONE_UPLOAD = True
+# (Sweep 2026-11-15: comptime QN_OVR_ONE_UPLOAD removed with its readers in bindings/_mojolearn_estimators.mojo and glm/logistic_native_device.mojo.)
 
 
 def _ovr_target_kernel(
@@ -781,8 +780,7 @@ def qn_predict_binary_host(
 #: No bit moves: the same strict `>` from column 0.
 # TOMBSTONE: MOJOLEARN_QN_DEV_ARGMAX_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-20-linear; the MOJOLEARN_IDN_ALL_OFF term goes with it here; code recoverable at 4218560b53.
 # Restore: git apply experiments/removed/MOJOLEARN_QN_DEV_ARGMAX_OFF.patch; record in docs/TOMBSTONES.md.
-# QN_DEV_ARGMAX stays as the constant its importers read.
-comptime QN_DEV_ARGMAX = True
+# (Sweep 2026-11-15: comptime QN_DEV_ARGMAX removed with its readers in bindings/_mojolearn_estimators.mojo and glm/logistic_native_device.mojo.)
 
 
 # Lane a8c: the code kernels (`_positive_code_kernel`, `_argmax_key`,

@@ -184,12 +184,6 @@ trait ClusterOps(Movable):
         and every IDENTICAL build answer False."""
         ...
 
-    def ward_nn(mut self, c: Int, sz: Int, l: Int, d: Int, nn: Int, md: Int) raises:
-        """FAST ward: nn[p], md[p] = the cluster q != p among the first `l`
-        (centroids c, l x d; sizes sz) at the lowest `bodies.ward_cell`, the
-        lowest q on a tie."""
-        ...
-
     def kth_flat(mut self, m: Int, n: Int, k: Int) raises -> Float32:
         """The k-th smallest (1-based) of the first `n` values of slot `m`
         (non-negative), the value `kth` gives for one row of n columns. On
@@ -499,9 +493,6 @@ trait ClusterOps(Movable):
     def kpp_search(mut self, closest: Int, w: Int, m: Int, vs: List[Float64], ids: Int) raises:
         """ids[t] = `post_bodies.kpp_search_cell` of vs[t] over the running
         table of closest (times w when w >= 0)."""
-        ...
-
-    def kpp_distinct(mut self, centers: Int, ids: Int, nt: Int, x: Int, n: Int, d: Int, output: Int) raises:
         ...
 
     def kpp_pots(mut self, dc: Int, closest: Int, w: Int, nt: Int, m: Int) raises -> List[Float64]:

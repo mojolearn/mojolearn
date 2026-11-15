@@ -34,7 +34,7 @@ comptime ANN3_HOST_PASSES = True
 #: 0.0155, refine 0.0315 -> 0.0295; IVF-Flat first search 0.047 -> 0.042.
 # TOMBSTONE: MOJOLEARN_ANN3_PREPARE_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-14-cluster; code recoverable at c089be9c4a.
 # Restore: git apply experiments/removed/MOJOLEARN_ANN3_PREPARE_OFF.patch; record in docs/TOMBSTONES.md.
-comptime ANN3_PREPARE = True
+# (Sweep 2026-11-15: comptime ANN3_PREPARE removed; always True, nothing read it.)
 
 #: FAST on Apple: the IVF-PQ subspace codebooks are seeded by this family's
 #: host k-means++ (x_ann/kpp_seed.mojo) and handed to cluster/'s k-means as
@@ -42,7 +42,7 @@ comptime ANN3_PREPARE = True
 #: paired recall check.
 # TOMBSTONE: MOJOLEARN_ANN3_PQ_SEED (unmeasured opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-14-cluster; code recoverable at fa411f5da5.
 # Restore: git apply experiments/removed/MOJOLEARN_ANN3_PQ_SEED.patch; record in docs/TOMBSTONES.md.
-comptime ANN3_PQ_SEED = False
+# (Sweep 2026-11-15: comptime ANN3_PQ_SEED removed; its PQ_FAST_SEED reader folded.)
 
 #: FAST on Apple: the same for the IVF coarse quantizer (all four IVF
 #: indexes). Moves FAST bits: paired recall check. ON by default (consumer
@@ -51,7 +51,7 @@ comptime ANN3_PQ_SEED = False
 #: 5976 -> 5253 ms (-12.1%), recall_at_10 .5995 -> .6071.
 # TOMBSTONE: MOJOLEARN_ANN3_COARSE_SEED_OFF (old path, no A/B recorded for the old path) deleted 2026-11-15 by lane/expdel2-14-cluster; code recoverable at d8754520a2.
 # Restore: git apply experiments/removed/MOJOLEARN_ANN3_COARSE_SEED_OFF.patch; record in docs/TOMBSTONES.md.
-comptime ANN3_COARSE_SEED = True
+# (Sweep 2026-11-15: comptime ANN3_COARSE_SEED removed; always True, nothing read it.)
 
 #: FAST on Apple: rows per threadgroup of the t-SNE repulsion (128 in a
 #: default build). At 10,000 rows 128 makes 79 threadgroups, and the M3 Ultra
@@ -67,14 +67,14 @@ comptime ANN3_COARSE_SEED = True
 #: buffer, then a list, then the caller's array. Plain copies: no bit moves.
 # TOMBSTONE: MOJOLEARN_ANN3_DIRECT_OUT (unmeasured opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-14-cluster; code recoverable at 09d08d6e01.
 # Restore: git apply experiments/removed/MOJOLEARN_ANN3_DIRECT_OUT.patch; record in docs/TOMBSTONES.md.
-comptime ANN3_DIRECT_OUT = False
+# (Sweep 2026-11-15: comptime ANN3_DIRECT_OUT removed; its two readers in x_ann/ivf_pq_device.mojo folded.)
 
 #: The coarse quantizer's FAST training sample is gathered row by row with
 #: memcpy into a list made by length (one append per float otherwise).
 #: Plain copies: no bit moves.
 # TOMBSTONE: MOJOLEARN_ANN3_TRAINSET_COPY (unmeasured opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-14-cluster; code recoverable at 8d1d604991.
 # Restore: git apply experiments/removed/MOJOLEARN_ANN3_TRAINSET_COPY.patch; record in docs/TOMBSTONES.md.
-comptime ANN3_TRAINSET_COPY = False
+# (Sweep 2026-11-15: comptime ANN3_TRAINSET_COPY removed; always False, nothing read it.)
 
 #: The IVF-PQ / IVF-SQ residual launch and the IVF-SQ encode launch run one
 #: thread per ROW, each walking its row's cells in order, instead of one
@@ -82,7 +82,7 @@ comptime ANN3_TRAINSET_COPY = False
 #: on the same words: no bit moves.
 # TOMBSTONE: MOJOLEARN_ANN3_ROW_THREADS (unmeasured opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-14-cluster; code recoverable at 74902fa9a1.
 # Restore: git apply experiments/removed/MOJOLEARN_ANN3_ROW_THREADS.patch; record in docs/TOMBSTONES.md.
-comptime ANN3_ROW_THREADS = False
+# (Sweep 2026-11-15: comptime ANN3_ROW_THREADS removed; its two readers in x_ann/ivf_pq_device.mojo folded, residual_rows_kernel and sq_encode_rows_kernel deleted.)
 
 #: FAST on Apple: the IVF scan's top-k (k <= 16) is one launch per chunk of
 #: queries: each thread keeps its partial top-k in registers, the threadgroup
@@ -92,7 +92,7 @@ comptime ANN3_ROW_THREADS = False
 #: so the k least are the same entries: expected to move no bit.
 # TOMBSTONE: MOJOLEARN_ANN3_SCAN_SELECT (unmeasured opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-14-cluster; code recoverable at 5f0cf5941a.
 # Restore: git apply experiments/removed/MOJOLEARN_ANN3_SCAN_SELECT.patch; record in docs/TOMBSTONES.md.
-comptime ANN3_SCAN_SELECT = False
+# (Sweep 2026-11-15: comptime ANN3_SCAN_SELECT removed; always False, nothing read it.)
 
 
 #: FAST on Apple, t-SNE: the step launch runs one thread per ROW, which
@@ -110,7 +110,7 @@ comptime ANN3_SCAN_SELECT = False
 #: insertions in the same order). Expected to move no bit.
 # TOMBSTONE: MOJOLEARN_ANN3_CAGRA_TEAM (unmeasured opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-14-cluster; code recoverable at 6e4834bbfa.
 # Restore: git apply experiments/removed/MOJOLEARN_ANN3_CAGRA_TEAM.patch; record in docs/TOMBSTONES.md.
-comptime ANN3_CAGRA_TEAM = False
+# (Sweep 2026-11-15: comptime ANN3_CAGRA_TEAM removed; always False, nothing read it.)
 
 
 #: lane fg-ivf (plan flagship-gaps-2026-10-09, read_ivf.md idea A1), DEFAULT ON

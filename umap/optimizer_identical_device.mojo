@@ -555,7 +555,7 @@ def _umap_epochs_download(
 #: lane cpu3-neighbors (2026-10-04): every mode and no _OFF arm (owner
 #: rule: the host compaction is not a GPU route), so
 #: `MOJOLEARN_IDN_UMAP_DEVICE_CSR_OFF` is retired.
-comptime UMAP_IDN_DEVICE_CSR = True
+# (Sweep 2026-11-15: comptime UMAP_IDN_DEVICE_CSR removed; always True, nothing read it.)
 
 comptime _UC_I32P = MutPointer[Int32, MutAnyOrigin]
 comptime _UC_U32P = MutPointer[UInt32, MutAnyOrigin]

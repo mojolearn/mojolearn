@@ -942,7 +942,7 @@ def dev_eigh_to_run(ia: Int, iw: Int, iv: Int, n: Int, uplo: Int) raises -> Int:
 comptime _CLS2_FAST_APPLE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
 # TOMBSTONE: MOJOLEARN_XD_FAST_CLS2_GRP_NOSCAN (unmeasured Apple FAST opt-in arm, EXP:466 PARKED) deleted 2026-11-15 by lane/expdel2-18-decomposition; code recoverable at 081ec2e9c2.
 # Restore: git apply experiments/removed/MOJOLEARN_XD_FAST_CLS2_GRP_NOSCAN.patch; record in docs/TOMBSTONES.md.
-comptime GRP_CLS2_NOSCAN = False
+# (Sweep 2026-11-15: comptime GRP_CLS2_NOSCAN removed; its flag-bit readers folded (bit 1 stays 0).)
 #: lane/idn-gates (2026-10-04): DEVSCAN alone is also the IDENTICAL default
 #: on every vendor (the refusal is a predicate: no output word depends on
 #: where it runs). NOSCAN, LAZY and FUSED stay FAST + Apple.
@@ -958,7 +958,7 @@ comptime GRP_CLS2_DEVSCAN = (
 )
 # TOMBSTONE: MOJOLEARN_XD_FAST_CLS2_GRP_LAZY (unmeasured Apple FAST opt-in arm) deleted 2026-11-15 by lane/expdel2-18-decomposition; code recoverable at 17fa14cc92.
 # Restore: git apply experiments/removed/MOJOLEARN_XD_FAST_CLS2_GRP_LAZY.patch; record in docs/TOMBSTONES.md.
-comptime GRP_CLS2_LAZY = False
+# (Sweep 2026-11-15: comptime GRP_CLS2_LAZY removed; its flag-bit readers folded (bit 4 stays 0).)
 #: lane apple-fast-gap-kapprox2 (2026-10-03), the FAST + Apple default since
 #: the M3 A/Bs kap2-grp-fused-{taxi,istella}, kap2-srp-fused-{taxi,istella}
 #: (gaussian-rp taxi 3.4 -> 2.1 ms, istella -4.6%; sparse-rp taxi -10.7%,

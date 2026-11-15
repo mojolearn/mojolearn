@@ -155,11 +155,6 @@ from x_decomp.tsqr_device import (
 from x_decomp.tsqr_core import RSVD_IDN_TSQR_ORTHO, orth_tsqr_shape_ok
 from x_decomp.tsqr_multi_gpu import ts_factor_dispatch, tsqr_plan_current
 from glm.impl.center_device import col_means_buf, col_sums_buf, col_sums_pair_buf
-from cholesky.checks.potrf import (
-    CHOL_ELEM_TPB, CHOL_NB_PINNED, add_jitter, chol_logdet, chol_nb_for, chol_workspace_floats, potrf_lower,
-)
-from cholesky.checks.trsm import CHOL_SOLVE_TPB, trsm_lower
-from core.identity_trace import IdentityTrace
 from x_decomp.jacobi_par import (
     PJ_TPB,
     eigh_par_cs_kernel,
@@ -226,9 +221,8 @@ comptime XD_SVD_GROUP = 4 if IDN_XD_SVD_GROUP else 1
 
 # TOMBSTONE: MOJOLEARN_XD_FAST_SVD_ONE_BLOCK (unmeasured opt-in arm, EXP:2366 PENDING) deleted 2026-11-15 by lane/expdel2-16-decomposition; code recoverable at 0564fdef0e.
 # Restore: git apply experiments/removed/MOJOLEARN_XD_FAST_SVD_ONE_BLOCK.patch; record in docs/TOMBSTONES.md.
-#: `DevExec._svd_on` and the kit's `DKit.svd` take the round launches; the name stays False for
-#: x_decomp/kit_device.mojo's import until that file folds it.
-comptime XD_FAST_SVD_ONE_BLOCK = False
+#: `DevExec._svd_on` and the kit's `DKit.svd` take the round launches.
+# (Sweep 2026-11-15: comptime XD_FAST_SVD_ONE_BLOCK removed with its reader in x_decomp/kit_device.mojo.)
 # TOMBSTONE: MOJOLEARN_IDN_SVD_TALL_LEAN (noise) deleted 2026-10-11 by f4b8fa942; code recoverable at f4b8fa942^.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_SVD_TALL_LEAN.patch
 
@@ -1136,65 +1130,6 @@ def omp_rows_kernel(g: F32Ptr, q: F32Ptr, w: F32Ptr, s: F32Ptr, na: F32Ptr, n: I
     var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     if i < Int(n):
         na.unsafe_store(i, omp_row(g, q, w, s, i, Int(k), Int(nnz)))
-
-
-# C28 shared-Gram sparse-code tasks: stable descriptors group equal active
-# workspace scale, while every row retains its original scratch and tie order.
-# Lane expdel2-16-decomposition (2026-11-15): the arm is deleted in this file; these two kernels and
-# `launch_classical_code_rows` stay only for x_decomp/kit_device.mojo's import (another lane's file)
-# and go with that file's fold.
-# NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
-def classical_code_bucket_kernel(q: F32Ptr, w: F32Ptr, keys: U32Ptr, order: U32Ptr, n: Int32, k: Int32,
-                                  kind: Int32, alpha: Float32):
-    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
-    if i < Int(n):
-        var count = 0
-        for j in range(Int(k)):
-            var value = ftz(q.unsafe_load(i * Int(k) + j))
-            if kind == 0:
-                if ftz(w.unsafe_load(i * Int(k) + j)) != Float32(0) or abs(value) > alpha:
-                    count += 1
-            elif value != Float32(0):
-                count += 1
-        var bucket = UInt32(0)
-        while count > 0:
-            count >>= 1
-            bucket += 1
-        keys.unsafe_store(i, bucket)
-        order.unsafe_store(i, UInt32(i))
-
-
-def classical_code_rows_kernel(g: F32Ptr, q: F32Ptr, w: F32Ptr, s: F32Ptr, counts: F32Ptr, order: U32Ptr,
-                                 n: Int32, k: Int32, kind: Int32, a: Int32, b: Int32, alpha: Float32, tol: Float32):
-    var slot = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
-    if slot < Int(n):
-        var i = Int(order.unsafe_load(slot))
-        var count = Float32(0)
-        if kind == 0:
-            count = lasso_row(g, q, w, s, i, Int(k), alpha, Int(a), tol, b != 0)
-        elif kind == 1:
-            count = lars_row(g, q, w, s, i, Int(k), Int(a), Int(b))
-        else:
-            count = omp_row(g, q, w, s, i, Int(k), Int(a))
-        counts.unsafe_store(i, count)
-
-
-def launch_classical_code_rows(ctx: DeviceContext, g: F32Ptr, q: F32Ptr, w: F32Ptr, s: F32Ptr, counts: F32Ptr,
-                                n: Int, k: Int, kind: Int, a: Int, b: Int, alpha: Float32, tol: Float32) raises:
-    if n <= 0:
-        return
-    var keys = ctx.enqueue_create_buffer[DType.uint32](n)
-    var order = ctx.enqueue_create_buffer[DType.uint32](n)
-    var tk = ctx.enqueue_create_buffer[DType.uint32](n)
-    var tv = ctx.enqueue_create_buffer[DType.uint32](n)
-    var cnt = ctx.enqueue_create_buffer[DType.int32](max(frs_counts_len(n), 1))
-    ctx.enqueue_function[classical_code_bucket_kernel](q, w, keys.unsafe_ptr(), order.unsafe_ptr(), Int32(n), Int32(k),
-        Int32(kind), alpha, grid_dim=_blocks(n), block_dim=TPB)
-    fast_radix_sort_pairs_u32(ctx, n, keys, order, tk, tv, cnt)
-    # One wave of 32 independent rows shares the same immutable Gram allocation;
-    # power-of-two workspace buckets reduce warp divergence for neighboring shapes.
-    ctx.enqueue_function[classical_code_rows_kernel](g, q, w, s, counts, order.unsafe_ptr(), Int32(n), Int32(k),
-        Int32(kind), Int32(a), Int32(b), alpha, tol, grid_dim=(n + 31) // 32, block_dim=32)
 
 
 def gamma_kernel(dst: F32Ptr, count: Int32, seed: UInt32, stream: UInt32, shape: Float32):
@@ -2741,43 +2676,6 @@ struct DevExec(Exec):
         _ = cx^
 
     @staticmethod
-    def chol_inv(a: F32Ptr, li: F32Ptr, st: F32Ptr, n: Int) raises:
-        """`Exec.chol_inv` (lane apple-holes, MinCovDet's IDN_MCD_CHOL):
-        `potrf_lower` at +0.0 ridge, `chol_logdet`, L^{-1} by `trsm_lower`
-        against I. The resident kit's `DMcd.chol` (x_decomp/kit_device.mojo)
-        runs the same calls on its pooled matrices."""
-        # Lane fix-chol-ops-remaining-callers (2026-11-13): the 0.8.66 route
-        # (potrf_lower with its info read per panel, the chol_logdet wait,
-        # trsm_lower against I), restored from 49e8c5b633^.
-        # TOMBSTONE: MOJOLEARN_IDN_CHOL_OPS_FIT (opt-in B arm, EXP:581 RUN OWED; AMD 1.14-1.25x slower 2026-11-13) deleted 2026-11-15 by lane/expdel2-16-decomposition; code recoverable at 860e94a3f4.
-        # Restore: git apply experiments/removed/MOJOLEARN_IDN_CHOL_OPS_FIT.patch; record in docs/TOMBSTONES.md.
-        var ctx = xd_ctx()
-        var da = _up(ctx, a, n * n)
-        var nb = chol_nb_for(n, CHOL_NB_PINNED)
-        var ws = ctx.enqueue_create_buffer[DType.float32](max(chol_workspace_floats(n, nb), 1))
-        var trace = IdentityTrace()
-        add_jitter(ctx, da, n, Float32(0.0), CHOL_ELEM_TPB)
-        var run = potrf_lower(ctx, da, ws, n, trace)
-        st.unsafe_store(0, Float32(run.info))
-        st.unsafe_store(1, Float32(0.0))
-        if run.info == 0:
-            var dwork = ctx.enqueue_create_buffer[DType.float32](n + 1)
-            st.unsafe_store(1, chol_logdet(ctx, da, dwork, n, trace, CHOL_ELEM_TPB))
-            var db = ctx.enqueue_create_buffer[DType.float32](n * n)
-            ctx.enqueue_function[pj_identity_kernel](
-                db.unsafe_ptr(), Int32(n), grid_dim=_blocks(n * n), block_dim=TPB
-            )
-            trsm_lower(ctx, da, db, n, n, trace, "mcd.linv", CHOL_SOLVE_TPB)
-            _down(ctx, db, li, n * n)
-            ctx.synchronize()
-            _ = db^
-            _ = dwork^
-        ctx.synchronize()
-        _ = ws^
-        _ = da^
-        _ = ctx^
-
-    @staticmethod
     def chol(a: F32Ptr, info: F32Ptr, n: Int) raises:
         var ctx = xd_ctx()
         var da = _up(ctx, a, n * n)
@@ -3603,6 +3501,9 @@ struct DevExec(Exec):
         var per = k * k + 3 * k
         # TOMBSTONE: MOJOLEARN_DECOMP_FAST_OMP_BLOCK (unmeasured Apple FAST opt-in arm, EXP:449 verdict owed) deleted 2026-11-15 by lane/expdel2-16-decomposition; code recoverable at 6aa22d61f9.
         # Restore: git apply experiments/removed/MOJOLEARN_DECOMP_FAST_OMP_BLOCK.expdel2-16-decomposition.patch; record in docs/TOMBSTONES.md.
+        # TOMBSTONE: MOJOLEARN_DECOMP_FAST_OMP_BLOCK (opt-in arm: one OMP block per row; EXP:449 OPEN, no A/B recorded) deleted 2026-11-15 by lane/expdel2-17-decomposition; code recoverable at 0d75c7cca2.
+        # Restore: git apply experiments/removed/MOJOLEARN_DECOMP_FAST_OMP_BLOCK.patch; record in docs/TOMBSTONES.md.
+        # (Sweep 2026-11-15: x_decomp/omp_block.mojo (DECOMP_FAST_OMP_BLOCK, omp_block_fits, omp_block_kernel), with no importer left, deleted; restore it from 7c6df8f9f7 with the patch.)
         var dg = _up(ctx, g, k * k)
         var dq = _up(ctx, q, n * k)
         var dw = ctx.enqueue_create_buffer[DType.float32](n * k if n * k > 0 else 1)

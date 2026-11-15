@@ -16,14 +16,22 @@ from x_decomp.rotation_dev import ortho_rotation_dev_run
 from x_decomp.resident import IDN_QR_R_RESIDENT, dev_lda_bound_run, dev_lda_rows_run, dev_qr_r_run, dev_sqdist_run
 from x_decomp.lanczos_dev import dev_eigh_tridiag_run, dev_lanczos_run
 from x_decomp.resident import (
-    GRP_CLS2_ANY, GRP_CLS2_DEVSCAN, GRP_CLS2_LAZY, GRP_CLS2_NOSCAN, GRP_FAST_FUSED, GRP_FAST_SRP_STRAT,
-    dev_project_run, grp_fit_fused_run,
+    GRP_CLS2_ANY,
+    GRP_CLS2_DEVSCAN,
+    GRP_FAST_FUSED,
+    GRP_FAST_SRP_STRAT,
+    dev_project_run,
+    grp_fit_fused_run,
 )
 from x_decomp.lda_fit import LdaArgs
 from x_decomp.lda_fit_dev import lda_fit_dev_run
 from x_decomp.kit_device import lda_online_dev_run
 from x_decomp.fa_fast import (
-    FA_FAST_APPLE, FA_GRAM_DF, FA_GRAM_ONCE, FA_ITER_DEVICE, fa_em_run, fa_gram_run,
+    FA_FAST_APPLE,
+    FA_GRAM_DF,
+    FA_ITER_DEVICE,
+    fa_em_run,
+    fa_gram_run,
 )
 
 
@@ -85,8 +93,6 @@ struct DevDecomp(DecompDev):
         # `x_decomp_fa_defines` is registered only under FA_FAST_APPLE
         var f = 0
         comptime if FA_FAST_APPLE:
-            comptime if FA_GRAM_ONCE:
-                f |= 1
             comptime if FA_ITER_DEVICE:
                 f |= 2
             # TOMBSTONE: MOJOLEARN_FA_TRANSFORM_FUSED (NEUTRAL loser, rab7-fatransform istella +2.0%) deleted 2026-11-15 by lane/expdel-02-decomposition-series; code recoverable at 7e904cf531 (bit 4 is 0).
@@ -148,12 +154,8 @@ struct DevDecomp(DecompDev):
         # `grp_cls2_py`'s bits; `x_decomp_grp_cls2` is registered only under GRP_CLS2_ANY
         var f = 0
         comptime if GRP_CLS2_ANY:
-            comptime if GRP_CLS2_NOSCAN:
-                f |= 1
             comptime if GRP_CLS2_DEVSCAN:
                 f |= 2
-            comptime if GRP_CLS2_LAZY:
-                f |= 4
             comptime if GRP_FAST_FUSED:
                 f |= 8
             comptime if GRP_FAST_SRP_STRAT:

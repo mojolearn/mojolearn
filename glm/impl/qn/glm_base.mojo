@@ -2050,7 +2050,6 @@ struct GLMWithData(Movable):
         mut w: DeviceBuffer[DType.float32],
         mut g: DeviceBuffer[DType.float32],
         pen_len: Int,
-        drain: Bool = True,
     ) raises -> Float32:
         """`evaluate`, and when `pen_len > 0` also `nrm1(w[0:pen_len])` into
         `last_pen` (OWL-QN's `f_wrap` term, `qn_linesearch.owlqn_objective`).
@@ -2068,10 +2067,9 @@ struct GLMWithData(Movable):
         words of `slots` and come home behind ONE synchronize, where there
         were two (three with `grad_norm`, four under OWL-QN). The host
         arithmetic on them is unchanged."""
-        if not drain:
-            # TOMBSTONE: MOJOLEARN_IDN_QN_EXACT_TRIALS (opt-in arm, no A/B recorded; I12 loser) deleted 2026-11-15 by lane/expdel2-20-linear, with the MOJOLEARN_CLASSICAL_C17_LS_TRIALS reads here (non-owner, owner expdel2-06-base); code recoverable at fb9523bf09.
-            # Restore: git apply experiments/removed/MOJOLEARN_IDN_QN_EXACT_TRIALS.patch (and MOJOLEARN_CLASSICAL_C17_LS_TRIALS.expdel2-20-linear.patch); record in docs/TOMBSTONES.md.
-            raise Error("qn: deferred exact evaluation requires IDENTICAL trial experiment")
+        # TOMBSTONE: MOJOLEARN_IDN_QN_EXACT_TRIALS (opt-in arm, no A/B recorded; I12 loser) deleted 2026-11-15 by lane/expdel2-20-linear, with the MOJOLEARN_CLASSICAL_C17_LS_TRIALS reads here (non-owner, owner expdel2-06-base); code recoverable at fb9523bf09.
+        # Restore: git apply experiments/removed/MOJOLEARN_IDN_QN_EXACT_TRIALS.patch (and MOJOLEARN_CLASSICAL_C17_LS_TRIALS.expdel2-20-linear.patch); record in docs/TOMBSTONES.md.
+        # (Sweep 2026-11-15: the `drain` parameter (always True: no caller passed it) and its refusal and deferred-return branches removed.)
         self.n_evals += 1
         self.gnorm_at = 0
         var s1 = self.slots.create_sub_buffer[DType.float32](1, 1)
@@ -2157,15 +2155,10 @@ struct GLMWithData(Movable):
                 s3.unsafe_ptr(), w.unsafe_ptr(), Int32(pen_len),
                 grid_dim=(1, 1, 1), block_dim=(STATS_TPB, 1, 1),
             )
-        if drain:
-            read_scalars(ctx, self.slots, self.stage, 4 if pen_len > 0 else 3)
+        read_scalars(ctx, self.slots, self.stage, 4 if pen_len > 0 else 3)
         _ = s1^
         _ = s2^
         _ = s3^
-        if not drain:
-            # Caller copies slots before the next evaluation reuses them,
-            # then performs the same host scalar finish after one wait.
-            return Float32(0)
         var loss_host = self.stage.unsafe_ptr().unsafe_load(0)
         self.gnorm_raw = self.stage.unsafe_ptr().unsafe_load(2)
         self.gnorm_at = Int(g.unsafe_ptr())

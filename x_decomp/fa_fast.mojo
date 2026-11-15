@@ -95,7 +95,7 @@ comptime FA_FAST_APPLE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPL
 # TOMBSTONE: MOJOLEARN_FA_GRAM_ONCE (opt-in arm, EXP:1260 HOLD-quality, no A/B of its own) deleted 2026-11-15 by lane/expdel2-17-decomposition; code recoverable at 816fd77809.
 # Restore: git apply experiments/removed/MOJOLEARN_FA_GRAM_ONCE.patch; record in docs/TOMBSTONES.md.
 # The name stays (x_decomp/decomp_owner_dev.mojo fa_flags bit 1 reads it) as the folded constant.
-comptime FA_GRAM_ONCE = False
+# (Sweep 2026-11-15: comptime FA_GRAM_ONCE removed; its flag-bit reader folded (bit 1 stays 0).)
 #: (FAST + Apple, default ON since 2026-10-04; implies GRAM_ONCE's pass) the whole EM loop as
 #: ONE binding call on the resident G (`fa_em_py`): per iteration
 #: `fa_scale_kernel`, main's round-robin eigh, `fa_finish_kernel` (order, sign,

@@ -30,7 +30,6 @@ from x_neighbors.host_ops import X_NEIGHBORS_HOST_SABOTAGE, op_sqdist, op_nan_sq
 from x_neighbors.iter_host import op_nc_stats, op_lp_knn_graph, op_lp_knn_product, op_lp_iterate, op_pr_iterate_sparse, op_pcs_resident, op_knn_sq_tiled, op_knn_impute_tiled, op_cc_iterate, op_cc_iterate_csr, op_nan_cells, op_kpca_transform, op_kernel_matmul, op_svgp_fit_ff, op_svgp_predict, op_lp_iterate_knn
 from x_neighbors.ocsvm_host import op_ocsvm
 from providers.python.x_neighbors_host_pyapi_door import ocsvm_alpha_init_binding
-from x_neighbors.ocsvm_init import XN_OCSVM_DEV_INIT
 from providers.python.x_neighbors_host_pyapi_door import unit_ff_binding
 from providers.python.x_neighbors_host_pyapi_door import ocsvm_labels_binding, nc_labels_binding, nc_proba_binding, lp_dense_proba_binding
 from x_neighbors.graph_host import op_louvain, op_pr_csr, op_louvain_csr
@@ -1239,8 +1238,7 @@ def build__mojolearn_x_neighbors_host() -> PythonObject:
         # Restore: git apply experiments/removed/x_neighbors_purity_flags.patch
         m.def_function[kpca_resident_binding]("x_neighbors_kpca_resident")
         # lane/fam2-neighbors: the host column of the device alpha start
-        comptime if XN_OCSVM_DEV_INIT:
-            m.def_function[ocsvm_alpha_init_binding]("x_neighbors_ocsvm_alpha_init")
+        m.def_function[ocsvm_alpha_init_binding]("x_neighbors_ocsvm_alpha_init")
         # lane/fam2-neighbors: PageRank's caller vectors normalized by the op
         # TOMBSTONE: MOJOLEARN_IDN_XN_UNIT_DEV_OFF (old path, no A/B row) deleted 2026-11-15 by lane/expdel2-10-cluster; code recoverable at 7107e38be7.
         # Restore: git apply experiments/removed/MOJOLEARN_IDN_XN_UNIT_DEV_OFF.patch; record in docs/TOMBSTONES.md.

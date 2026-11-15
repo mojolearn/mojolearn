@@ -49,8 +49,7 @@ from x_prep.blocked import XB
 comptime IDN_GRAM_BLOCKED = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 # TOMBSTONE: MOJOLEARN_IDN_GRAM_ROWTILE (opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-09-base; code recoverable at eb6ccbf3bc.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_GRAM_ROWTILE.patch; record in docs/TOMBSTONES.md.
-# The alias stays False for x_prep/fam2.mojo (its importer, in no V2 lane); the integrator drops it with gb_part_row_unit.
-comptime IDN_GRAM_ROWTILE = False
+# (Sweep 2026-11-15: comptime IDN_GRAM_ROWTILE, its x_prep/fam2.mojo op F2_BASE + 7 case and gb_part_row_unit removed.)
 # TOMBSTONE: MOJOLEARN_IDN_GRAM_ROWS_512 (opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-09-base; code recoverable at 00a8ccee0a.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_GRAM_ROWS_512.patch; record in docs/TOMBSTONES.md.
 # TOMBSTONE: MOJOLEARN_IDN_GRAM_ROWS_8192 (opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-09-base; code recoverable at 46e0b201cf.
@@ -86,27 +85,6 @@ def gb_part_unit(t: Int, f: FP, q: IP):
     for i in range(full, hi):
         acc = mm_step(acc, ld(f, Z + i * d + a), ld(f, Z + i * d + b))
     st(f, p(q, 3) + t, acc)
-
-
-def gb_part_row_unit(t: Int, f: FP, q: IP):
-    """q = [Z, n, d, P, nb, BR]; t = blk*d + a (the candidate schedule):
-    every P[(blk*d + a)*d + b], b >= a, from one walk of the block's rows;
-    each cell's chain is gb_part's."""
-    var d = p(q, 2)
-    var a = t % d
-    var blk = t // d
-    var n = p(q, 1)
-    var br = p(q, 5)
-    var lo = blk * br
-    var hi = min(n, lo + br)
-    var Z = p(q, 0)
-    var base = p(q, 3) + t * d
-    for b in range(a, d):
-        f.unsafe_store(base + b, Float32(0))
-    for i in range(lo, hi):
-        var za = ld(f, Z + i * d + a)
-        for b in range(a, d):
-            st(f, base + b, mm_step(raw(f, base + b), za, ld(f, Z + i * d + b)))
 
 
 def gb_fold_unit(t: Int, f: FP, q: IP):
