@@ -135,7 +135,8 @@ def test_multiclass_oracle_spells_the_bit_carrying_constructs():
 
 
 def test_binding_dispatches_and_refuses_by_name():
-    src = _read(host_surface.binding_source("gbdt"))
+    # 285ac89b42 moved the binding's RUN into gbdt/mojolearn_gbdt_host_run.mojo; the binding keeps the exports.
+    src = _read(host_surface.binding_source("gbdt")) + _read("gbdt/mojolearn_gbdt_host_run.mojo")
     # the call carries the group and pairs tails since lane/gbdt-learning-to-rank
     # (indentation-independent: the call moved one block deeper)
     assert re.search(r"gbdt_losses_host_fit\(\s*x, y, n_rows, n_features, p, pw_loss, host_group_sizes,", src)

@@ -72,6 +72,9 @@ else:
             if fullname == "numpy" or fullname.startswith("numpy."):
                 raise ModuleNotFoundError("NumPy is absent in this fixture", name="numpy")
     sys.meta_path.insert(0, BlockNumPy())
+# as the product worker (_native_parallel_cv_worker.py) does since 153a13ac6c (lazy family import)
+from mojolearn import _families
+_families.load_all()
 from mojolearn import model_selection as ms
 from mojolearn._verify_native_runtime import audit_native_call
 active = [False]

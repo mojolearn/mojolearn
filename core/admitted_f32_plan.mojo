@@ -63,8 +63,19 @@ def admitted_f32_shape_check(rank: Int, expected_rank: Int, column: Bool,
     if rank > 2:
         raise Error(name + " must be at most 2-D")
     if rows < 1 or cols < 1:
-        raise Error(name + " is empty")
+        var shape = "(" + String(rows) + ",)" if rank == 1 else "(" + String(rows) + ", " + String(cols) + ")"
+        admitted_empty_refuse(name, shape, rank == 2 and rows != 0)
     return rank if expected_rank < 0 else expected_rank
+
+
+def admitted_empty_refuse(name: String, shape: String, features: Bool) raises:
+    """The product's one empty-input refusal (the wording of the deleted
+    `_buffer._as_typed`, kept by `admit_family_refuse_empty` and
+    `admitted_typed_c`): smoke 2026-11-15 found e04d904c22's bare
+    "X is empty" on the shared float32 admission."""
+    var what = String("feature(s)") if features else String("sample(s)")
+    raise Error("mojolearn: " + name + " is empty, shape " + shape + ": Found array with 0 " + what
+                + " (shape=" + shape + ") while a minimum of 1 is required.")
 
 
 def admitted_f32_byte_order(native_order: Bool, name: String) raises:
@@ -137,7 +148,7 @@ def admitted_x_shape_refuse(status: Int, rank: Int, shape: String, format: Strin
     if status == 6:
         raise Error("TypeError: mojolearn: X has buffer format " + format + ", which is not a numeric array")
     if status == 7:
-        raise Error("X is empty")
+        admitted_empty_refuse("X", shape, rank == 2 and not shape.startswith("(0,"))
 
 
 def admitted_target_present(present: Bool, estimator: String) raises:

@@ -323,7 +323,10 @@ def msel_native_clone(model: PythonObject, context: PythonObject, depth: Int = 0
     if plan["forest"] is not None:
         # call-table: member forest get_params (trees door over the Python model) has no native entry yet
         given = family_call(plan["entry"], model, "trees_forest_get_params", Python.tuple(), plan["context"])
-    elif plan["init"] is None:
+    elif plan["init"] is None or not py_contains(plan["methods"], "get_params"):
+        # A native initializer without a get_params recipe (KernelDensity,
+        # ARIMA, Cholesky): its constructor stores each parameter under its
+        # own name, so the stored fields are the parameters.
         given = py_call(plan["fields_get"], model, py_type(model))
     else:
         given = _msel_admitted_dispatch(model, "get_params", Python.tuple(), context,

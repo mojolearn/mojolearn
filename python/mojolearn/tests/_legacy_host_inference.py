@@ -146,7 +146,7 @@ def kernel_model(model, X, name, public=True):
     import numpy as np
     x, _ = as_f32_dense_c(X, ndim=2, name="X")
     m, d = x.shape
-    ext = model._extension()
+    ext = model._bind()  # c253411a1e deleted `_extension` (`_bind()` plus a mode cross-check the native door owns)
     if name == "KernelRidge":
         n, t = model.X_fit_.shape[0], model.n_targets_
         kernel, degree, gamma, coef0, alpha = model._kernel_params

@@ -176,7 +176,13 @@ def _gp_classifier_target(source: PythonObject, rows: Int, name: String, context
                 raise Error(admitted_finite_wording(name, "y"))
             if floor(number) != number:
                 raise Error("Unknown label type: continuous. Maybe you are trying to fit a classifier, which expects discrete classes on a regression target with continuous values.")
-        py_setitem(flat, i, item)
+        # The primitive number is for the checks above only: the encoder keeps
+        # the first ORIGINAL label object of each class (gp_mixed_classes,
+        # 48664c4c59); writing the converted number back replaced NumPy scalar
+        # labels with new Python numbers (1ec92cef40; smoke 2026-11-15). A 0-d
+        # ndarray label is not a scalar the encoder admits: it keeps the number.
+        if py_type(flat[i]) is py_get(context, "ndarray"):
+            py_setitem(flat, i, item)
     return flat
 
 

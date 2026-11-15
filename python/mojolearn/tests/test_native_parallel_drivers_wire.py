@@ -184,7 +184,7 @@ def test_sharded_drivers_keep_the_partition_and_the_negative_control():
     shift = run[run.index("def shard_read_shift("):run.index("def shard_faults_take(")]
     # `_parallel_pool.driver_read_shift`, word for word
     assert "if first < 1 or n_devices < 2 or index % n_devices == 0:" in shift
-    assert "_driver_sabotage()" in shift and "getenv" not in shift
+    assert "_driver_sabotage()" in shift and "getenv(" not in shift  # the docstring says "no getenv"
     switch = run[run.index("def _driver_sabotage("):run.index("def shard_fault_mark(")]
     assert '"MOJOLEARN_PAR_DRIVER_SABOTAGE")) == "1"' in switch and '"MOJOLEARN_HOST_ALLOW_SABOTAGE")) == "1"' in switch
     ranges = common[common.index("def shard_ranges("):common.index("def shard_devices(")]

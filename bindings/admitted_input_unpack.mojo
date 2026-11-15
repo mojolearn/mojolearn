@@ -604,7 +604,7 @@ def _x_shape_unpack(view: PythonObject, est: String, context: PythonObject,
     var kind = classical_kind(view, context)
     var status = admitted_x_shape_error(nd, rows, cols, admitted_numeric_kind(kind), kind == "c", classical)
     if status:
-        var shape = _repr(view.shape) if status >= 2 and status <= 5 else String("")
+        var shape = _repr(view.shape) if (status >= 2 and status <= 5) or status == 7 else String("")
         var format = _repr(py_call(native_loaded_module("builtins").memoryview, view).format) if status == 6 else String("")
         admitted_x_shape_refuse(status, nd, shape, format, est)
     return AdmittedInputShape(nd, rows, cols)

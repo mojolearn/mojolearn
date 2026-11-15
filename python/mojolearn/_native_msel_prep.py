@@ -27,12 +27,12 @@ def connect(context, register, registry):
     keyword = lambda name, default=None: ('keyword', name, default)
     binding = lambda name: ('binding', name)
 
-    def add(cls, entry, owner, methods, *, initial=None, parameters=None):
+    def add(cls, entry, owner, methods, *, initial=None, parameters=None, init=None):
         # glue: constructor names are copied from the exact built-in class.
         if cls in registry:
             return registry[cls]  # connected when its family first loaded
         names = tuple(inspect.signature(cls).parameters) if parameters is None else parameters
-        register(cls, entry, owner, names, None, methods)
+        register(cls, entry, owner, names, init, methods)
         plan = registry[cls]
         plan['initial_fields'] = {} if initial is None else initial
         plan['keywords'] = {
@@ -185,6 +185,24 @@ def connect(context, register, registry):
         add(neighbors.RadiusNeighbors, neighbors._NATIVE, neighbors._NATIVE_CONTEXT, {
             'fit': ('family_xn_radius_fit', (arg(0), arg(1))),
         }, initial={'_index': None, '_metric_value': None, '_metric_arg': None})
+    # KernelDensity, ARIMA and Cholesky were pending migration since f4d37e5eec deleted the Python
+    # model_selection._clone: the native clone refused them (smoke 2026-11-15). Their native initializers
+    # derive fields (ARIMA's k_, n_exog_), so the clone runs the initializer with the stored parameters.
+    density, arima, cholesky = loaded('density'), loaded('_arima_impl'), loaded('_cholesky_impl')
+    if density is not None:
+        add(density.KernelDensity, density._NATIVE, density._NATIVE_CONTEXT, {
+            'fit': ('family_density_kde_fit', (arg(0), arg(1), keyword('sample_weight'))),
+            'score_samples': ('family_density_kde_score_samples', (arg(0),)),
+            'score': ('family_density_kde_score', (arg(0),)),
+        }, init='family_density_kde_initialize')
+    if arima is not None:
+        add(arima.ARIMA, arima._TSA, arima._TSA_CONTEXT, {
+            'fit': ('arima_fit', (arg(0), keyword('exog'))),
+        }, init='arima_initialize')
+    if cholesky is not None:
+        add(cholesky.Cholesky, cholesky._NATIVE, cholesky._NATIVE_CONTEXT, {
+            'fit': ('family_chol_fit', (constant(None), arg(0))),
+        }, init='family_chol_initialize')
     if km is not None:
         # Nystroem and RBFSampler (pending migration until 2026-11-15, as above).
         for cls, prefix in ((km.Nystroem, 'nys'), (km.RBFSampler, 'rbf')):  # glue: fixed ABI metadata connected once during package import

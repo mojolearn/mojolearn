@@ -6,6 +6,13 @@ from mojolearn import (RandomForestClassifier, RandomForestRegressor,
                        ExtraTreesClassifier, ExtraTreesRegressor)
 from mojolearn import _backend, _serialize
 
+def _npz_format(z):
+    # An independent NumPy read of the stored tag. `_serialize.scalar_str` takes the members `read_npz`/`peek_npz`
+    # return, not a NumPy NpzFile (native codec 120cedb0c6).
+    tag = z['format'].reshape(-1)[0]
+    return tag.decode() if isinstance(tag, bytes) else str(tag)
+
+
 CLASSES = [RandomForestClassifier, RandomForestRegressor, ExtraTreesClassifier, ExtraTreesRegressor]
 
 
@@ -43,7 +50,7 @@ def test_versioned_gpu_archive_and_legacy_default(cls, tmp_path, monkeypatch):
     legacy = fitted(cls, 'sequential')
     legacy.save(path)
     with np.load(path, allow_pickle=False) as z:
-        old_format = _serialize.scalar_str(z, 'format')
+        old_format = _npz_format(z)
         assert 'numeric_mode' not in z.files
     restored = cls.load(path)
     assert restored.inference_engine == 'sequential'
@@ -175,9 +182,9 @@ def test_identical_auto_keeps_sequential_bits_and_archive(cls, tmp_path):
     loaded = cls.load(path)
     assert loaded.inference_engine == loaded.inference_engine_ == 'sequential'
     with np.load(path, allow_pickle=False) as z:
-        assert 'parallel-groves' not in _serialize.scalar_str(z, 'format')
+        assert 'parallel-groves' not in _npz_format(z)
     groves, _ = real_fit(cls, 'parallel_groves')
     groves.save(path)
     with np.load(path, allow_pickle=False) as z:
-        assert 'parallel-groves' in _serialize.scalar_str(z, 'format')
+        assert 'parallel-groves' in _npz_format(z)
     assert cls.load(path).inference_engine_ == 'parallel_groves'

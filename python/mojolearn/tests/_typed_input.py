@@ -31,6 +31,9 @@ def materialize(obj, name="X"):
     float, else int64), and whether that copied."""
     if isinstance(obj, Array):
         return obj, False
+    if isinstance(obj, range):
+        # the deleted `_buffer` materialized a range as the sequence it is (5c1d770282^ _buffer.py:1065)
+        obj = list(obj)
     if isinstance(obj, (list, tuple)):
         try:
             return Array.from_list(obj, "<i8"), True
@@ -45,9 +48,19 @@ def materialize(obj, name="X"):
             obj = np.asarray(obj)
         if isinstance(obj, np.ndarray):
             copied = False
+            # The deleted `_buffer` refusals (5c1d770282^ _buffer.py:478, :554), which the product keeps
+            # (bindings/host_iforest_fit_native_door.mojo:216,222).
+            if obj.dtype.kind in "US":
+                raise TypeError(f"mojolearn: {name} has buffer format {memoryview(obj).format!r}, "
+                                "which is not a numeric array")
             if obj.dtype == object:
+                if any(isinstance(v, str) for v in obj.ravel().tolist()):
+                    raise TypeError(f"mojolearn: {name} holds a str, not a number")
                 obj = np.asarray(obj.tolist(), dtype=np.float64)
                 copied = True
+            if obj.dtype.kind == "u" and obj.dtype.itemsize == 8 and obj.size and int(obj.max()) > 2 ** 63 - 1:
+                # the product refuses uint64 storage past int64 (core/host_sparse_impl.mojo host_sparse_uint64_bound)
+                raise OverflowError("int too big to convert")
             if obj.dtype.str not in _CODE:
                 natural = {"|b1": "<u1", "|i1": "<i4", "<i2": "<i4", "<u2": "<u4", "<u8": "<i8"}
                 obj = obj.astype(natural.get(obj.dtype.newbyteorder("<").str, obj.dtype.newbyteorder("<").str))
@@ -68,7 +81,9 @@ def as_typed(obj, dtype, order="C", ndim=None, name="X"):
     if ndim is not None and a.ndim != ndim:
         raise ValueError(f"mojolearn: {name} must be {ndim}-D, got {a.ndim}-D shape {a.shape}")
     if a.size == 0:
-        raise ValueError(f"mojolearn: {name} is empty, shape {a.shape}")
+        what = "feature(s)" if a.ndim == 2 and a.shape[0] != 0 else "sample(s)"
+        raise ValueError(f"mojolearn: {name} is empty, shape {a.shape}: Found array with 0 {what} "
+                         f"(shape={a.shape}) while a minimum of 1 is required.")
     if a.dtype != dtype:
         a = a.astype(dtype)
         copied = True

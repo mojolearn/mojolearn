@@ -125,7 +125,9 @@ def test_explicit_host_logistic_keeps_native_constructor_and_cpu_binding():
     owner = _LR_CONTEXT['lr_host_contexts'][HostLogisticRegression]
     entries = owner['lr_bindings']['identical']
     assert type(entries) is dict
-    assert entries['estimators_vendor']() == 'cpu'
+    # 48de8844b5: the owner keeps the one typed entry; its module is the CPU estimators binding.
+    assert set(entries) == {'logistic_native_api_v1'}
+    assert entries['logistic_native_api_v1'].__self__.estimators_vendor() == 'cpu'
     x, y = data()
     clean(model.fit, x, y)
     assert np.asarray(clean(model.predict, x)).shape == y.shape

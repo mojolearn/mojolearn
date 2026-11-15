@@ -54,6 +54,10 @@ def connect(context, formats, cleanup_entries, forest_metadata):
     archive.update(forest_metadata)
     archive["host_archive_formats"].update(forest_metadata["host_archive_extra_formats"])
     archive["host_archive_lifetime_layouts"] = {}
+    # iforest_validate's absent-field sentinel (bindings/trees_public_iforest_door.mojo `_field`): a saved forest
+    # loads into HostIsolationForest through THIS context (classical_trees_door host_archive_load); e05037cd81 put
+    # it in host_inference_context only, so the load raised KeyError-as-ValueError 'trees_missing'.
+    archive["trees_missing"] = object()
     module = _binding()._module
     finalize = getattr(module, "host_archive_finalize_call", None)
     if finalize is not None:

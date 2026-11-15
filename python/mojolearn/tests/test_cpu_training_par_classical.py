@@ -310,7 +310,7 @@ def test_par_driver_sabotage_switch_is_off_by_default_and_inert_at_one_device():
     shift = source[source.index("def shard_read_shift("):source.index("def shard_faults_take(")]
     assert "if first < 1 or n_devices < 2 or index % n_devices == 0:" in shift
     # the switch: both variables, read once per process, or the native arm
-    assert "_driver_sabotage()" in shift and "getenv" not in shift
+    assert "_driver_sabotage()" in shift and "getenv(" not in shift  # the docstring says "no getenv"
     switch = source[source.index("def _driver_sabotage("):source.index("def shard_fault_mark(")]
     assert '"MOJOLEARN_PAR_DRIVER_SABOTAGE")) == "1"' in switch and '"MOJOLEARN_HOST_ALLOW_SABOTAGE")) == "1"' in switch
     if not _cpu_only_with("_mojolearn_preprocessing_host"):
