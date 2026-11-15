@@ -57,19 +57,23 @@ from gbdt.gpu_util.kernel.fill import launch_make_sequence
 from gbdt.gpu_util.kernel.radix_sort import launch_radix_sort_bins
 from gbdt.gpu_util.kernel.reorder_one_bit import REORDER_BLOCK
 
+from std.sys.compile import is_defined
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 
 # TOMBSTONE: MOJOLEARN_2551_DEVICE_PARTITION (DELETE-ARM, opt-in force arm, no A/B recorded, rule a) deleted 2026-11-15 by lane/expdel2-44-trees; code recoverable at f431553766.
 # Restore: git apply experiments/removed/MOJOLEARN_2551_DEVICE_PARTITION.patch; record in docs/TOMBSTONES.md.
 # TOMBSTONE: MOJOLEARN_2551_DEVICE_PARTITION_OFF (DELETE-OLD-PATH, no A/B recorded for the old path, rule b) deleted 2026-11-15 by lane/expdel2-44-trees; code recoverable at 269778f8c9.
 # Restore: git apply experiments/removed/MOJOLEARN_2551_DEVICE_PARTITION_OFF.patch; record in docs/TOMBSTONES.md.
-comptime DEVICE_LEAF_PARTITION = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+# RESTORED 2026-11-15 by lane/restore-apple-fast-trees: MOJOLEARN_2551_DEVICE_PARTITION opt-in arm back as it was (forces the device partition in FAST), default off; default path unchanged.
+comptime DEVICE_LEAF_PARTITION = is_defined["MOJOLEARN_2551_DEVICE_PARTITION"]() or (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+)
 """DEVIATION 2551 (2026-09-11). DEFAULT ON UNDER IDENTICAL since
 2026-09-11 (DigitalOcean MI325X, taxi and Istella-S on one box, combined
 over depthwise and lossguide: FLIP geomean=0.898 cells=4 quality=ok);
 Its rollback `MOJOLEARN_2551_DEVICE_PARTITION_OFF` was deleted 2026-11-15.
-FAST stays on the host partition (its force define
-`MOJOLEARN_2551_DEVICE_PARTITION` was deleted 2026-11-15): its verdict
+FAST stays OPT-IN (`-D MOJOLEARN_2551_DEVICE_PARTITION=1`, restored
+2026-11-15 after its deletion the same day): its verdict
 read NO FLIP on a taxi quality flag that is FAST's own round-to-round fit
 variation, left to the maintainer. `partition_from_bins` below
 (DEVIATION 90) reads every row's leaf back to the host, counting-sorts
