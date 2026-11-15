@@ -192,7 +192,9 @@ from core.shared_slot import SharedSlot
 comptime ATTN_REPAIR_MASKED_TAIL = attn_masked_tail_replay_for[TARGET_COLUMN]()
 comptime ATTN_REPAIR_SAB_Z = is_defined["MOJOLEARN_ATTN_REPAIR_SAB_Z"]()
 comptime ATTN_REPAIR_SAB_DQ = is_defined["MOJOLEARN_ATTN_REPAIR_SAB_DQ"]()
-comptime ATTN_EXACT_TAIL_GUARD = ATTN_REPAIR_MASKED_TAIL or is_defined["MOJOLEARN_ATTN_EXACT_TAIL_GUARD"]() or is_defined["MOJOLEARN_ATTN_KV_CORNER_GUARD"]()
+# TOMBSTONE: MOJOLEARN_ATTN_EXACT_TAIL_GUARD (unmeasured force-on arm) deleted 2026-11-15 by lane/expdel2-34-neural; code recoverable at c7f24015f7.
+# Restore: git apply experiments/removed/MOJOLEARN_ATTN_EXACT_TAIL_GUARD.patch
+comptime ATTN_EXACT_TAIL_GUARD = ATTN_REPAIR_MASKED_TAIL or is_defined["MOJOLEARN_ATTN_KV_CORNER_GUARD"]()
 comptime ATTN_TAIL_GUARD_SABOTAGE = is_defined["MOJOLEARN_ATTN_TAIL_GUARD_SABOTAGE"]()
 
 comptime FUSED_RAN = 0
