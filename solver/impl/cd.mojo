@@ -988,8 +988,8 @@ def cd_sweep_end_kernel(
 # arithmetic, and `solver/impl/cd_gram_rule.mojo` is the one shape rule both
 # read. A traced fit (MOJOLEARN_IDENTITY_TRACE) and a fit that wants the
 # residual keep the row sweeps on both columns, so the stage card and its
-# checks are unchanged. `-D MOJOLEARN_CD_IDN_GRAM_OFF` restores the row
-# sweeps (pass it to the host build too).
+# checks are unchanged. MOJOLEARN_CD_IDN_GRAM_OFF is deleted (TOMBSTONE in
+# solver/impl/cd_gram_rule.mojo).
 comptime CD_IDN_GRAM = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     and CD_IDN_GRAM_ON
