@@ -10,7 +10,6 @@ from mamba.host.device_shim import DeviceBuffer, DeviceContext
 from std.memory import stack_allocation
 # TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch) term deleted 2026-11-15 by lane/expdel2-23-neural (non-owner, owner expdel2-37-series); code recoverable at 62f98b1ca0.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-23-neural.patch; record in docs/TOMBSTONES.md.
-from std.os import getenv
 from std.time import perf_counter_ns
 from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
@@ -329,11 +328,37 @@ comptime M3_S16_SMEM48_BYTES = (M3_S16_QK_MAXQ * M3_D_STATE + M3_S16_QK_MAXQ * M
 comptime M3_S16_SMEM48_FITS = False
 
 
+# The S16 q/k arm and the Mamba timing ticks (lane envgate-train-seq-mamba,
+# 2026-11-15): build constants. Before, MOJOLEARN_MAMBA3_S16_QK_ARM was an
+# environment read per backward call (an arm name) and MOJOLEARN_MAMBA_TIMING
+# one per launch helper. The arm keeps today's per-column default;
+# `-D MOJOLEARN_MAMBA3_S16_QK_ARM_<NAIVE|SHARED|REGS|SMEM48|REGS2|REGS2H|REGSH>`
+# picks another (same bits on every arm). ROUTE-DEFAULT-SUSPECT: the NVIDIA
+# default `regs` was read on the L4 against `regs2` only; B arm
+# `-D MOJOLEARN_MAMBA3_S16_QK_ARM_REGS2H` on NVIDIA RUN OWED in
+# bench/results/paper_compare/owed-pre0867.json ("mamba3-s16-qk-regs2h").
+comptime _M3_S16_QK_ARM_DEFAULT = 5 if (TARGET_COLUMN == COLUMN_AMD or TARGET_COLUMN == COLUMN_APPLE) else 2
+comptime M3_S16_QK_ARM = (
+    0 if is_defined["MOJOLEARN_MAMBA3_S16_QK_ARM_NAIVE"]()
+    else 1 if is_defined["MOJOLEARN_MAMBA3_S16_QK_ARM_SHARED"]()
+    else 4 if is_defined["MOJOLEARN_MAMBA3_S16_QK_ARM_REGS2"]()
+    else 3 if is_defined["MOJOLEARN_MAMBA3_S16_QK_ARM_SMEM48"]()
+    else 2 if is_defined["MOJOLEARN_MAMBA3_S16_QK_ARM_REGS"]()
+    else 5 if is_defined["MOJOLEARN_MAMBA3_S16_QK_ARM_REGS2H"]()
+    else 6 if is_defined["MOJOLEARN_MAMBA3_S16_QK_ARM_REGSH"]()
+    else _M3_S16_QK_ARM_DEFAULT
+)
+#: `-D MOJOLEARN_MAMBA_TIMING`: a wall per S16 kernel (and per backward and
+#: prefill phase); compiled out of the default build.
+comptime MAMBA_TIMING = is_defined["MOJOLEARN_MAMBA_TIMING"]()
+
+
+@always_inline
 def m3_s16_qk_arm() -> Int:
     """The S16 q/k arm: `regs` by default (lane/neural-pass4, 2026-09-30:
     on the L4 `regs` read 9.2 ms against `regs2`'s 10.8 at the board shape
     and 83.5 against 86.0 at the default shape, the same bits on every arm;
-    `regs2` was the S16 pass's default and stays one env value away).
+    `regs2` was the S16 pass's default and stays one -D arm away).
     On the AMD column the default is `regs2h` (lane/mamba3-amd-regs2h,
     2026-10-01, MI325X at B=2 L=512 d_model=384: the q/k stage read 4.5 ms
     on `regs2h` against `regs2`'s 11.5 and `regs`'s 18.6, the backward's
@@ -342,18 +367,8 @@ def m3_s16_qk_arm() -> Int:
     column the default is `regs2h` (lane/neural-apple3, 2026-10-01): the
     full-page arms are over Metal's 32 KB and fell through to the naive
     kernel; the half-page arms fit (M3 Ultra: 2.5x the naive run;
-    `regsh` is the A/B)."""
-    var a = String(getenv("MOJOLEARN_MAMBA3_S16_QK_ARM"))
-    if a == "naive":
-        return 0
-    if a == "shared":
-        return 1
-    if a == "regs2":
-        return 4
-    if a == "smem48":
-        return 3
-    if a == "regs":
-        return 2
+    `regsh` is the A/B). The build constant M3_S16_QK_ARM."""
+    return M3_S16_QK_ARM
     if a == "regs2h":
         return 5
     if a == "regsh":
@@ -449,13 +464,17 @@ def mamba3_s16_qk_smem48_kernel(gid_: Int,
     abort("mamba host: mamba3_s16_qk_smem48_kernel uses threadgroup shared memory and has no host restatement; the host takes the unshared arm (tools/mamba_host_gen.py)")
 
 
-def _s16_tick(ctx: DeviceContext, on: Bool, mut t: Int, name: String) raises:
-    """MOJOLEARN_MAMBA_TIMING: a wall per S16 kernel, `timing m3bwd.s16.<name>`."""
+@always_inline
+def _s16_tick(ctx: DeviceContext, on: Bool, mut t: Int, name: StaticString) raises:
+    """-D MOJOLEARN_MAMBA_TIMING: a wall per S16 kernel,
+    `timing m3bwd.s16.<name>`. Compiled out of the default build."""
+    comptime if not MAMBA_TIMING:
+        return
     if not on:
         return
     ctx.synchronize()
     var now = Int(perf_counter_ns())
-    print("timing m3bwd.s16." + name + " " + String(Float64(now - t) / 1000000.0) + " ms")
+    print(String("timing m3bwd.s16.") + String(name) + " " + String(Float64(now - t) / 1000000.0) + " ms")
     t = now
 
 
@@ -543,7 +562,7 @@ def mamba3_backward_s16_s15_into(
         if qsize > M3_S16_V_MAXQ:
             raise Error("mamba3 backward S16: chunk size " + String(qsize) + " above the shared d_v page (" + String(M3_S16_V_MAXQ) + ")")
         comptime if M3_S16_QK_SHARED:
-            var ton = String(getenv("MOJOLEARN_MAMBA_TIMING")) != ""
+            var ton = MAMBA_TIMING
             var tk = Int(perf_counter_ns())
             var arm = m3_s16_qk_arm()
             if arm == 0:
@@ -721,7 +740,7 @@ def mamba3_backward_s16_s15_into(
         host_launch(_launch_12, launch_count((b*l*dims.nheads,1,1), (M3_HEADDIM,1,1)), 0)
         comptime if M3_S16_QK_SHARED:
             var tv = Int(perf_counter_ns())
-            _s16_tick(ctx, String(getenv("MOJOLEARN_MAMBA_TIMING")) != "", tv, "v_shared")
+            _s16_tick(ctx, MAMBA_TIMING, tv, "v_shared")
     else:
         mamba3_s16_qkv_backward_host(d_q.unsafe_ptr(), d_ks.unsafe_ptr(), d_v.unsafe_ptr(), d_y.unsafe_ptr(), q.unsafe_ptr(), ks.unsafe_ptr(), v.unsafe_ptr(), seg_l.unsafe_ptr(), Int32(b), Int32(l), Int32(dims.nheads), Int32(qsize), grid_dim=(_grid(cells),1,1), block_dim=(M3_BWD_TPB,1,1))
     var _l13_a0 = d_krot.unsafe_ptr()
