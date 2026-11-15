@@ -759,8 +759,10 @@ def linear_gram_fit_binding(
     (glm/host/gram_solve_host.mojo): params `n_rows, n_features, alpha,
     center`; returns 0 (coef, and with center mu and ymean, written) or 1
     (nothing written; the caller's incumbent route)."""
+    # TOMBSTONE: MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE_OFF (old path; the Gram solve is the recorded winner, EXP:2015) deleted 2026-11-15 by lane/expdel2-01-base; code recoverable at 501c279651.
+    # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE_OFF.expdel2-01-base.patch
     comptime if not LINEAR_GRAM_SOLVE:
-        raise Error("linear_gram_fit: this build lacks the route (FAST, or -D MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE_OFF)")
+        raise Error("linear_gram_fit: this build lacks the route (FAST)")
     if len(params) != 4:
         raise Error("linear_gram_fit: params must contain n_rows, n_features, alpha, center")
     var x_address = _index(x_addr)

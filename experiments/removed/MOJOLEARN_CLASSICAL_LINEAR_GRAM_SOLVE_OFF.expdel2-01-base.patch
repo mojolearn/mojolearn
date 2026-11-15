@@ -1,0 +1,32 @@
+diff --git b/bindings/_mojolearn_estimators.mojo a/bindings/_mojolearn_estimators.mojo
+index d1478d2a73..4ddb501cdc 100644
+--- b/bindings/_mojolearn_estimators.mojo
++++ a/bindings/_mojolearn_estimators.mojo
+@@ -1017,10 +1017,8 @@ def linear_gram_fit_binding(
+     alpha, center (0/1). Returns 0 with coef (and, with center, mu float32
+     [n_features] and ymean float64 [1]) written, or 1 with nothing written
+     when the Gram is not trusted: the caller then runs its incumbent route."""
+-    # TOMBSTONE: MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE_OFF (old path; the Gram solve is the recorded winner, EXP:2015) deleted 2026-11-15 by lane/expdel2-01-base; code recoverable at 501c279651.
+-    # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE_OFF.expdel2-01-base.patch
+     comptime if not LINEAR_GRAM_SOLVE:
+-        raise Error("linear_gram_fit: this build lacks the route (FAST)")
++        raise Error("linear_gram_fit: this build lacks the route (FAST, or -D MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE_OFF)")
+     if len(params) != 4:
+         raise Error("linear_gram_fit: params must contain n_rows, n_features, alpha, center")
+     var xp = _f32_ptr(Int(py=x_addr))
+diff --git b/bindings/_mojolearn_estimators_host.mojo a/bindings/_mojolearn_estimators_host.mojo
+index 8df3ea4c62..b94e4bbd7c 100644
+--- b/bindings/_mojolearn_estimators_host.mojo
++++ a/bindings/_mojolearn_estimators_host.mojo
+@@ -759,10 +759,8 @@ def linear_gram_fit_binding(
+     (glm/host/gram_solve_host.mojo): params `n_rows, n_features, alpha,
+     center`; returns 0 (coef, and with center mu and ymean, written) or 1
+     (nothing written; the caller's incumbent route)."""
+-    # TOMBSTONE: MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE_OFF (old path; the Gram solve is the recorded winner, EXP:2015) deleted 2026-11-15 by lane/expdel2-01-base; code recoverable at 501c279651.
+-    # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE_OFF.expdel2-01-base.patch
+     comptime if not LINEAR_GRAM_SOLVE:
+-        raise Error("linear_gram_fit: this build lacks the route (FAST)")
++        raise Error("linear_gram_fit: this build lacks the route (FAST, or -D MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE_OFF)")
+     if len(params) != 4:
+         raise Error("linear_gram_fit: params must contain n_rows, n_features, alpha, center")
+     var x_address = _index(x_addr)
