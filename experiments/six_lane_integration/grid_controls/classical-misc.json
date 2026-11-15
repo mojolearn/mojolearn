@@ -184,26 +184,6 @@
       "status": "kept",
       "note": "4 adjacent cells per thread, ascending per-cell sums; autoarima d=0 round only (max_d=1)."
     },
-    "c61_same_component_skip": {
-      "define": "MOJOLEARN_C62_SAME_COMPONENT_SKIP",
-      "kind": "switch",
-      "arms": {
-        "off": [],
-        "on": [
-          "MOJOLEARN_C62_SAME_COMPONENT_SKIP"
-        ]
-      },
-      "default": "off",
-      "source": [
-        "experiments/classical_identical_ideas/graph_controls.mojo:43",
-        "hdbscan/impl/cluster/detail/sparse_mr_mst.mojo:290",
-        "hdbscan/impl/cluster/detail/sparse_mr_mst.mojo:325"
-      ],
-      "binding": "_mojolearn_hdbscan",
-      "bits_change": false,
-      "status": "new",
-      "note": "NEW (this lane, NOT COMPILED): in sparse_mr_search_tiled_kernel (NV/AMD default arm) skip a j tile when every listed point of the block and every j of the tile share one component; those cells are already excluded by the epilogue (cj != ci), so outputs are identical. Block-uniform flag via two barriers; per-block uniform-component scan is one thread over the fixed SMR_TI (not a runtime size). Gain depends on later Boruvka rounds; unmeasured."
-    },
     "arima_search_reuse": {
       "define": "MOJOLEARN_ARIMA_FAST_SEARCH_REUSE",
       "kind": "switch",
@@ -436,15 +416,8 @@
     "classical:hdbscan": {
       "binding": "_mojolearn_hdbscan",
       "route": "fit: hdbscan/impl/runner.mojo:316 -> single_linkage.mojo:201 -> sparse_mr_mst.mojo sparse_mr_search_tiled_kernel (SMR_TILED, NV/AMD default)",
-      "controls": [
-        "c61_same_component_skip"
-      ],
-      "interaction_groups": [
-        [
-          "c61_same_component_skip",
-          "C30_DIRECT_DISTANCE(lane L1, graph split)"
-        ]
-      ]
+      "controls": [],
+      "interaction_groups": []
     }
   },
   "removed": [
@@ -546,6 +519,11 @@
       "define": "MOJOLEARN_CLASSICAL_C22_TRIANGLE",
       "control": "c22_triangle",
       "reason": "DELETED 2026-11-15 (lane/expdel2-06-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md; recoverable at 45379ff055; patch experiments/removed/MOJOLEARN_CLASSICAL_C22_TRIANGLE.patch): unmeasured opt-in arm. no record: no A/B was recorded for the opt-in arm (plan rule a; AGENTS.md \"An unmeasured arm is deleted\", Andrew 2026-11-15); the grid note says it owed its own A/B and changes bits. Refused in core/experiment_guards_kernel.mojo; docs/TOMBSTONES.md."
+    },
+    {
+      "define": "MOJOLEARN_C62_SAME_COMPONENT_SKIP",
+      "control": "c61_same_component_skip",
+      "reason": "DELETED 2026-11-15 (lane/expdel2-05-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md): unmeasured opt-in arm (V2 rule a). Code recoverable at 774f01dc6b."
     }
   ],
   "owed_removal_ab": [

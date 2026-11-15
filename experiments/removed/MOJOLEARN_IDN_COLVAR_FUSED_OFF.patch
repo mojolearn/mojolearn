@@ -1,0 +1,134 @@
+diff --git a/decomposition/estimator.mojo b/decomposition/estimator.mojo
+index 78673a9924..69749c01f9 100644
+--- a/decomposition/estimator.mojo
++++ b/decomposition/estimator.mojo
+@@ -487,6 +487,18 @@ def tsvd_fit_device(
+     return False
+ 
+ 
++def square_in_place_kernel(
++    a: MutPointer[Float32, MutAnyOrigin],
++    n_in: Int32,
++):
++    """`a[i] = ftz(a[i] * a[i])`, the multiply pinned (lane/algos-decomp,
++    2026-09-27; `tsvd_explained_host`)."""
++    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
++    if i < Int(n_in):
++        var v = a.unsafe_load(i)
++        a.unsafe_store(i, ftz(identical_mul(v, v)))
++
++
+ # lane fam2-decomp (2026-10-04), IDENTICAL: the column mean is launched
+ # through core/xtdz_coalesced.mojo `column_mean_launch` (the launch
+ # decomposition/impl/linalg/detail/pca.mojo already uses): the same chains,
+@@ -495,19 +507,19 @@ def tsvd_fit_device(
+ # Since lane debt-block-per-n (2026-10-21) it is the only arm in every mode;
+ # -D MOJOLEARN_IDN_DECOMP_MEAN_LAUNCH_OFF (the direct one-block-per-column
+ # launch) is retired and refused.
++from decomposition.mean_switch import IDN_DECOMP_MEAN_LAUNCH
+ # TOMBSTONE: MOJOLEARN_CLASSICAL_TSVD_FUSED_STATS (slower) deleted 2026-10-10 by lane/grid-act-6; code recoverable at 328b0ae58.
+ # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_TSVD_FUSED_STATS.patch; record in docs/TOMBSTONES.md.
+ 
+ 
+-from core.host_tile_fold import XTY_TILE_ROWS, xty_tiles
++from core.host_tile_fold import IDN_XTY_TILED, XTY_TILE_ROWS, xty_tiles
+ from core.xtdz_coalesced import XTY_TILE_TPB, xty_tile_fold_kernel
+ from checks.numerics import identical_mul_add
+ 
+ #: T2, lane fg-pca (2026-10-09), MOJOLEARN_IDN_COLVAR_FUSED: the IDENTICAL
+-#: DEFAULT since 2026-10-10 (lane/postmerge-act-6), now the only form in every
+-#: mode (the shift + square passes and their `-D MOJOLEARN_IDN_COLVAR_FUSED_OFF`
+-#: rollback are deleted; the old on-define is refused in
+-#: core/six_lane_experiment_guards.mojo). fg2 A/B on
++#: DEFAULT since 2026-10-10 (lane/postmerge-act-6; `-D
++#: MOJOLEARN_IDN_COLVAR_FUSED_OFF` restores the shift + square passes; the old
++#: on-define is refused in core/six_lane_experiment_guards.mojo). fg2 A/B on
+ #: main 0a7b206f1, one run per arm (nv2 L40S v1021-v1050, MI325X a1161-a1190;
+ #: ratio = arm / fg2 default): tsvd taxi NV 0.76x / AMD 0.97x, tsvd istella NV
+ #: 0.97x / AMD 0.97x, pca istella 1.00x / 1.00x, pca taxi NV 1.03x / AMD 1.00x;
+@@ -527,8 +539,11 @@ from checks.numerics import identical_mul_add
+ #: debt-block-per-n, 2026-10-21).
+ # TOMBSTONE: MOJOLEARN_CLASSICAL_C01_MEAN (DROPPED-slower, EXP C01_MEAN row) deleted 2026-11-15 by lane/expdel2-05-base; code recoverable at eeba85eb55.
+ # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C01_MEAN.expdel2-05-base.patch; record in docs/TOMBSTONES.md.
+-# TOMBSTONE: MOJOLEARN_IDN_COLVAR_FUSED_OFF (old path of the PROMOTED default) deleted 2026-11-15 by lane/expdel2-05-base; code recoverable at 7fdb249ce5.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_COLVAR_FUSED_OFF.patch; record in docs/TOMBSTONES.md.
++comptime IDN_COLVAR_FUSED = (
++    IDN_XTY_TILED
++    and IDN_DECOMP_MEAN_LAUNCH
++    and not is_defined["MOJOLEARN_IDN_COLVAR_FUSED_OFF"]()
++)
+ 
+ 
+ def colvar_tile_partial_kernel(
+@@ -570,33 +585,48 @@ def _column_variance(
+     n_rows: Int,
+     n_cols: Int,
+ ) raises:
+-    """numpy's `var(axis=0)` (ddof 0) of `m`, `m` read-only: the column mean
+-    (`column_mean_launch`), then the column mean of the pinned centered
+-    squares formed in registers in the same tile order (T2)."""
++    """numpy's `var(axis=0)` (ddof 0) of `m`, IN PLACE over `m`: the column
++    mean (`column_mean_launch`), the centering (`shift_columns_kernel`),
++    the pinned square, then the column mean of the squares."""
+     comptime assert not (is_defined["MOJOLEARN_IDN_DECOMP_MEAN_LAUNCH_OFF"]() or is_defined["MOJOLEARN_TSVD_FAST_COLVAR_OFF"]()), "removed (lane debt-block-per-n, 2026-10-21): IDN_DECOMP_MEAN_LAUNCH_OFF / TSVD_FAST_COLVAR_OFF chose a column mean with one block per column walking all n rows (or its STATS_TPB-chain twin); the row-tile order is the only one"
+-    # T2: the mean (xty_tiled), then the centered squares' mean in the
+-    # same tile order, `m` read-only
++    var cells = n_rows * n_cols
++    comptime if IDN_COLVAR_FUSED:
++        # T2: the mean (xty_tiled), then the centered squares' mean in the
++        # same tile order, `m` read-only
++        column_mean_launch(ctx, mu, m, n_rows, n_cols)
++        var tiles = xty_tiles(n_rows)
++        var tcells = tiles * n_cols
++        var ws = ctx.enqueue_create_buffer[DType.float32](max(tcells, 1))
++        ctx.enqueue_function[colvar_tile_partial_kernel](
++            ws.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
++            m.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
++            mu.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
++            Int32(n_rows), Int32(n_cols), Int32(tiles),
++            grid_dim=((tcells + XTY_TILE_TPB - 1) // XTY_TILE_TPB, 1, 1),
++            block_dim=(XTY_TILE_TPB, 1, 1),
++        )
++        ctx.enqueue_function[xty_tile_fold_kernel](  # small-launch(n_rows: the mean divisor only): folds the xty_tiles(n_rows) tile partials of one column, never walks rows
++            var_out.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
++            ws.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
++            Int32(tiles), Int32(n_rows), Int32(1),
++            grid_dim=(n_cols, 1, 1),
++            block_dim=(STATS_TPB, 1, 1),
++        )
++        ctx.synchronize()
++        _ = ws^
++        return
++    # lane debt-block-per-n (2026-10-21): the tile order only; the direct
++    # one-block-per-column `column_mean_kernel` arm is retired
+     column_mean_launch(ctx, mu, m, n_rows, n_cols)
+-    var tiles = xty_tiles(n_rows)
+-    var tcells = tiles * n_cols
+-    var ws = ctx.enqueue_create_buffer[DType.float32](max(tcells, 1))
+-    ctx.enqueue_function[colvar_tile_partial_kernel](
+-        ws.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+-        m.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+-        mu.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+-        Int32(n_rows), Int32(n_cols), Int32(tiles),
+-        grid_dim=((tcells + XTY_TILE_TPB - 1) // XTY_TILE_TPB, 1, 1),
+-        block_dim=(XTY_TILE_TPB, 1, 1),
++    ctx.enqueue_function[shift_columns_kernel](
++        m.unsafe_ptr(), mu.unsafe_ptr(), Int32(n_rows), Int32(n_cols), Float32(-1.0),
++        grid_dim=((cells + 255) // 256, 1, 1), block_dim=(256, 1, 1),
+     )
+-    ctx.enqueue_function[xty_tile_fold_kernel](  # small-launch(n_rows: the mean divisor only): folds the xty_tiles(n_rows) tile partials of one column, never walks rows
+-        var_out.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+-        ws.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+-        Int32(tiles), Int32(n_rows), Int32(1),
+-        grid_dim=(n_cols, 1, 1),
+-        block_dim=(STATS_TPB, 1, 1),
++    ctx.enqueue_function[square_in_place_kernel](
++        m.unsafe_ptr(), Int32(cells),
++        grid_dim=((cells + 255) // 256, 1, 1), block_dim=(256, 1, 1),
+     )
+-    ctx.synchronize()
+-    _ = ws^
++    column_mean_launch(ctx, var_out, m, n_rows, n_cols)
+ 
+ 
+ @always_inline

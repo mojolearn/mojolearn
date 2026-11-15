@@ -135,6 +135,46 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_KNN_FAST_REFINE"](), "removed 2026-11-15 (lane/expdel-06-base-cluster-kernel): KNN_FAST_REFINE (FAST opt-in k-NN pool + exact re-rank) is gone: NEUTRAL, rab5-knnref istella +3.7%, taxi -1.5%, recall identical; restore: experiments/removed/MOJOLEARN_KNN_FAST_REFINE.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_XN_FAST_NAN_COLMISS_ONLY_OFF.patch
     comptime assert not is_defined["MOJOLEARN_XN_FAST_NAN_COLMISS_ONLY_OFF"](), "removed 2026-11-15 (lane/expdel-06-base-cluster-kernel): XN_FAST_NAN_COLMISS_ONLY_OFF (FAST+Apple rollback of KNNImputer.fit to the full NaN cell-list pass) is gone; the column-count kernel is the FAST+Apple fit path (KEPT with TIE_MEAN, gmp-imp-taxi); restore: experiments/removed/MOJOLEARN_XN_FAST_NAN_COLMISS_ONLY_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_C31_DEVICE_BUCKETS.patch
+    comptime assert not is_defined["MOJOLEARN_C31_DEVICE_BUCKETS"](), "removed 2026-11-15 (lane/expdel2-05-base): C31_DEVICE_BUCKETS (opt-in IDENTICAL arm, never measured) is gone; the incumbent path is the only one"
+    # Restore: git apply experiments/removed/MOJOLEARN_C32_COUNT_FUSION.patch
+    comptime assert not is_defined["MOJOLEARN_C32_COUNT_FUSION"](), "removed 2026-11-15 (lane/expdel2-05-base): C32_COUNT_FUSION (opt-in IDENTICAL arm, never measured) is gone; the incumbent path is the only one"
+    # Restore: git apply experiments/removed/MOJOLEARN_C32_EMIT_FUSION.patch
+    comptime assert not is_defined["MOJOLEARN_C32_EMIT_FUSION"](), "removed 2026-11-15 (lane/expdel2-05-base): C32_EMIT_FUSION (opt-in IDENTICAL arm, never measured) is gone; the incumbent path is the only one"
+    # Restore: git apply experiments/removed/MOJOLEARN_C33_FROZEN_CHUNKS.patch
+    comptime assert not is_defined["MOJOLEARN_C33_FROZEN_CHUNKS"](), "removed 2026-11-15 (lane/expdel2-05-base): C33_FROZEN_CHUNKS (opt-in IDENTICAL arm, never measured) is gone; the incumbent path is the only one"
+    # Restore: git apply experiments/removed/MOJOLEARN_C33_CHUNK_4.patch
+    comptime assert not is_defined["MOJOLEARN_C33_CHUNK_4"](), "removed 2026-11-15 (lane/expdel2-05-base): C33_CHUNK_4 (opt-in IDENTICAL arm, never measured) is gone; the incumbent path is the only one"
+    # Restore: git apply experiments/removed/MOJOLEARN_C34_PARALLEL_EDGES.patch
+    comptime assert not is_defined["MOJOLEARN_C34_PARALLEL_EDGES"](), "removed 2026-11-15 (lane/expdel2-05-base): C34_PARALLEL_EDGES (opt-in IDENTICAL arm, never measured) is gone; the incumbent path is the only one"
+    # Restore: git apply experiments/removed/MOJOLEARN_C35_PACKED_LISTS.patch
+    comptime assert not is_defined["MOJOLEARN_C35_PACKED_LISTS"](), "removed 2026-11-15 (lane/expdel2-05-base): C35_PACKED_LISTS (opt-in IDENTICAL arm, never measured) is gone; the incumbent path is the only one"
+    # Restore: git apply experiments/removed/MOJOLEARN_C35_ROWS_128.patch
+    comptime assert not is_defined["MOJOLEARN_C35_ROWS_128"](), "removed 2026-11-15 (lane/expdel2-05-base): C35_ROWS_128 (opt-in IDENTICAL arm, never measured) is gone; the incumbent path is the only one"
+    # Restore: git apply experiments/removed/MOJOLEARN_XCLUSTER_ROW_ASSIGN.patch
+    comptime assert not is_defined["MOJOLEARN_XCLUSTER_ROW_ASSIGN"](), "removed 2026-11-15 (lane/expdel2-05-base): XCLUSTER_ROW_ASSIGN (opt-in IDENTICAL arm, never measured) is gone; the incumbent path is the only one"
+    # Restore: git apply experiments/removed/MOJOLEARN_XCLUSTER_KPP_DISTINCT.patch
+    comptime assert not is_defined["MOJOLEARN_XCLUSTER_KPP_DISTINCT"](), "removed 2026-11-15 (lane/expdel2-05-base): XCLUSTER_KPP_DISTINCT (opt-in IDENTICAL arm, never measured) is gone; the incumbent path is the only one"
+    # Restore: git apply experiments/removed/MOJOLEARN_C39_RETAIN_STATE.patch
+    comptime assert not is_defined["MOJOLEARN_C39_RETAIN_STATE"](), "removed 2026-11-15 (lane/expdel2-05-base): C39_RETAIN_STATE (opt-in IDENTICAL arm, never measured) is gone; the incumbent path is the only one"
+    # Restore: git apply experiments/removed/MOJOLEARN_C40_SEED_TILES.patch
+    comptime assert not is_defined["MOJOLEARN_C40_SEED_TILES"](), "removed 2026-11-15 (lane/expdel2-05-base): C40_SEED_TILES (opt-in IDENTICAL arm, never measured) is gone; the incumbent path is the only one"
+    # Restore: git apply experiments/removed/MOJOLEARN_C40_ACTIVE_SEEDS.patch
+    comptime assert not is_defined["MOJOLEARN_C40_ACTIVE_SEEDS"](), "removed 2026-11-15 (lane/expdel2-05-base): C40_ACTIVE_SEEDS (opt-in IDENTICAL arm, never measured) is gone; the incumbent path is the only one"
+    # Restore: git apply experiments/removed/MOJOLEARN_C41_FUSED_MINIMA.patch
+    comptime assert not is_defined["MOJOLEARN_C41_FUSED_MINIMA"](), "removed 2026-11-15 (lane/expdel2-05-base): C41_FUSED_MINIMA (opt-in IDENTICAL arm, never measured) is gone; the incumbent path is the only one"
+    # Restore: git apply experiments/removed/MOJOLEARN_C42_ACTIVE_TRIANGLE.patch
+    comptime assert not is_defined["MOJOLEARN_C42_ACTIVE_TRIANGLE"](), "removed 2026-11-15 (lane/expdel2-05-base): C42_ACTIVE_TRIANGLE (opt-in IDENTICAL arm, never measured) is gone; the incumbent path is the only one"
+    # Restore: git apply experiments/removed/MOJOLEARN_C43_RESIDENT_NORMALIZATION.patch
+    comptime assert not is_defined["MOJOLEARN_C43_RESIDENT_NORMALIZATION"](), "removed 2026-11-15 (lane/expdel2-05-base): C43_RESIDENT_NORMALIZATION (opt-in IDENTICAL arm, never measured) is gone; the incumbent path is the only one"
+    # Restore: git apply experiments/removed/MOJOLEARN_C44_SAMPLING_DESCRIPTORS.patch
+    comptime assert not is_defined["MOJOLEARN_C44_SAMPLING_DESCRIPTORS"](), "removed 2026-11-15 (lane/expdel2-05-base): C44_SAMPLING_DESCRIPTORS (opt-in IDENTICAL arm, never measured) is gone; the incumbent path is the only one"
+    # Restore: git apply experiments/removed/MOJOLEARN_KMEANS_ROW_ASSIGN.patch
+    comptime assert not is_defined["MOJOLEARN_KMEANS_ROW_ASSIGN"](), "removed 2026-11-15 (lane/expdel2-05-base): KMEANS_ROW_ASSIGN (opt-in row-register KMeans assignment, never measured on its own) is gone; the tiled fused L2-NN is the only arm"
+    # Restore: git apply experiments/removed/MOJOLEARN_IVF_DIRECT_DISTANCE_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IVF_DIRECT_DISTANCE_OFF"](), "removed 2026-11-15 (lane/expdel2-05-base): IVF_DIRECT_DISTANCE_OFF (rollback of the IVF scan to the distance expansion) is gone; the direct distances are the IDENTICAL path"
+    # Restore: git apply experiments/removed/MOJOLEARN_C62_SAME_COMPONENT_SKIP.patch
+    comptime assert not is_defined["MOJOLEARN_C62_SAME_COMPONENT_SKIP"](), "removed 2026-11-15 (lane/expdel2-05-base): C62_SAME_COMPONENT_SKIP (opt-in HDBSCAN same-component tile skip, never measured) is gone; the incumbent tiled search is the only one"
     return True
 
 

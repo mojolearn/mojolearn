@@ -46,6 +46,8 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_CLASSICAL_C22_TRIANGLE"](), "removed 2026-11-15 (lane/expdel2-06-base): CLASSICAL_C22_TRIANGLE (Kernel (SMO square tile upper triangle mirrored, IDENTICAL)) was unmeasured opt-in arm; the opt-in arm is gone and the default path is unchanged; code recoverable at 45379ff055; see docs/TOMBSTONES.md"
     # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C25_PROJECTION_REUSE_OFF.patch
     comptime assert not is_defined["MOJOLEARN_CLASSICAL_C25_PROJECTION_REUSE_OFF"](), "removed 2026-11-15 (lane/expdel2-06-base): CLASSICAL_C25_PROJECTION_REUSE_OFF (Kernel (RBFSampler projection old path, IDENTICAL old path)) was old path, superseded by the measured IDENTICAL default; the measured IDENTICAL default is the only path; code recoverable at 935328056e; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_KDE_DIRECT_DISTANCE.patch
+    comptime assert not is_defined["MOJOLEARN_KDE_DIRECT_DISTANCE"](), "removed 2026-11-15 (lane/expdel2-05-base): KDE_DIRECT_DISTANCE (opt-in IDENTICAL arm, never measured) is gone; the incumbent path is the only one"
     return True
 
 

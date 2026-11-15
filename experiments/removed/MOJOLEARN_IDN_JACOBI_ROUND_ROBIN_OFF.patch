@@ -1,0 +1,26 @@
+diff --git a/experiments/classical_identical_ideas/fg_linear_controls.mojo b/experiments/classical_identical_ideas/fg_linear_controls.mojo
+index 69be7d928c..36243589de 100644
+--- a/experiments/classical_identical_ideas/fg_linear_controls.mojo
++++ b/experiments/classical_identical_ideas/fg_linear_controls.mojo
+@@ -37,8 +37,8 @@ comptime _FGL_IDN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+ # Restore: git apply experiments/removed/MOJOLEARN_IDN_RIDGE_RESIDENT_OFF.patch; record in docs/TOMBSTONES.md.
+ comptime IDN_RIDGE_RESIDENT = LINEAR_GRAM_SOLVE
+ 
+-# L1 (DEFAULT ON since 2026-10-09, lane/postmerge-act-5; the -D
+-# MOJOLEARN_IDN_JACOBI_ROUND_ROBIN_OFF rollback is deleted;
++# L1 (DEFAULT ON since 2026-10-09, lane/postmerge-act-5; -D
++# MOJOLEARN_IDN_JACOBI_ROUND_ROBIN_OFF restores the one-block cyclic Jacobi;
+ # the old on-define is refused in core/six_lane_experiment_guards.mojo).
+ # Post-merge A/B on main 0a7b206f1, one run per arm (nv2 L40S v1021-v1050,
+ # MI325X a1161-a1190; ratio = arm / fg2.default-linear): ridge istella NV
+@@ -71,9 +71,7 @@ comptime IDN_RIDGE_RESIDENT = LINEAR_GRAM_SOLVE
+ # this flag through decomposition/host/jacobi_select_host.mojo). Lane fg-pca's
+ # PCA-only switches (MOJOLEARN_IDN_PCA_RR_*) stay theirs: if they change the
+ # inside of `_eig_rr_device` the linear models inherit it under both flags.
+-# TOMBSTONE: MOJOLEARN_IDN_JACOBI_ROUND_ROBIN_OFF (old path of the PROMOTED default) deleted 2026-11-15 by lane/expdel2-05-base; code recoverable at 8ee233b8d9.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_JACOBI_ROUND_ROBIN_OFF.patch; record in docs/TOMBSTONES.md.
+-comptime IDN_JACOBI_ROUND_ROBIN = _FGL_IDN
++comptime IDN_JACOBI_ROUND_ROBIN = _FGL_IDN and not is_defined["MOJOLEARN_IDN_JACOBI_ROUND_ROBIN_OFF"]()
+ 
+ # L3 (DEFAULT ON since 2026-10-09, lane/postmerge-act-5; -D
+ # MOJOLEARN_IDN_GRAM_FF_FALLBACK_OFF restores the direct eig-route fallback;

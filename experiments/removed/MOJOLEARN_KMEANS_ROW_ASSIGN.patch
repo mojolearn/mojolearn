@@ -1,0 +1,30 @@
+diff --git a/experiments/classical_identical_ideas/graph_controls.mojo b/experiments/classical_identical_ideas/graph_controls.mojo
+index 29c06e8422..78a62fe2b4 100644
+--- a/experiments/classical_identical_ideas/graph_controls.mojo
++++ b/experiments/classical_identical_ideas/graph_controls.mojo
+@@ -51,18 +51,19 @@ comptime DBSCAN_DIRECT_DISTANCE = False
+ # "off" arm). The old opt-in define is refused in
+ # core/six_lane_experiment_guards.mojo.
+ comptime IVF_DIRECT_DISTANCE = GRAPH_IDENTICAL and not is_defined["MOJOLEARN_IVF_DIRECT_DISTANCE_OFF"]()
+-# KMEANS_ASSIGN: ONE control replacing C30 (kmeans part) and C36: the
+-# incumbent tiled fused L2-NN is the only arm.
++# KMEANS_ASSIGN: ONE control replacing C30 (kmeans part) and C36 (whose
++# ROWS_4 knob set the same value as C30_ROWS_4):
++#   tiled   (no define)                      incumbent tiled fused L2-NN
++#   rows2   MOJOLEARN_KMEANS_ROW_ASSIGN=2    row-register kernel, expanded L2
++#   rows4   MOJOLEARN_KMEANS_ROW_ASSIGN=4
+ # The row arms keep the incumbent's bits (same ascending-d fma chain, same
+ # epilogue, same (value, lowest index) minimum), so no host change.
+ # Tried 2026-10-08 (MOJOLEARN_KMEANS_DIRECT_DISTANCE, arms direct2/direct4, run ge123e6f9): (x-c)^2 distances on the row kernel at
+ # every size (plus k-means++, k-means|| and transform, host oracle following); direct4 NV/AMD kmeans istella 12.7x/6.2x, taxi
+ # 1.78x/1.96x SLOWER; inertia SAME -> deleted (direct2 shares the code and was not a grid arm). Recoverable at main 42d1e42c6;
+ # row in docs/apple-fast/EXPERIMENTS.md.
+-# TOMBSTONE: MOJOLEARN_KMEANS_ROW_ASSIGN (unmeasured arm) deleted 2026-11-15 by lane/expdel2-05-base; code recoverable at b97e8ccd99.
+-# Restore: git apply experiments/removed/MOJOLEARN_KMEANS_ROW_ASSIGN.patch; record in docs/TOMBSTONES.md.
+-comptime KMEANS_ROW_ASSIGN_ROWS = 0
+-comptime KMEANS_ROW_ASSIGN = False
++comptime KMEANS_ROW_ASSIGN_ROWS = get_defined_int["MOJOLEARN_KMEANS_ROW_ASSIGN", 0]()
++comptime KMEANS_ROW_ASSIGN = GRAPH_IDENTICAL and KMEANS_ROW_ASSIGN_ROWS > 0
+ # Cost rule for the EXPANDED row arms: a thread owns a k*d serial fma chain per
+ # row with no register reuse across rows of the tile, while the tiled kernel
+ # reuses each staged value 4x4. Past 512 chain terms per row the chain latency

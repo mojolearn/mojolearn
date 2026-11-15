@@ -726,6 +726,36 @@ in the tables after the sections.
 | [`MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS_OFF`](#mojolearn_classical_enetcv_score_blocks_off-old-path-deleted-2026-11-15) | Linear (LassoCV / ElasticNetCV 4096-row score blocks, IDENTICAL old path) | removed (old path; IDENTICAL default kept) | 2026-11-15 | [MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS_OFF.patch](../experiments/removed/MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS_OFF.patch) |
 | [`MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE_OFF`](#mojolearn_classical_linear_gram_solve_off-old-path-deleted-2026-11-15) | Linear (OLS / Ridge incumbent routes beside the resident Gram, IDENTICAL old path) | removed (old path; IDENTICAL default kept) | 2026-11-15 | [MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE_OFF.patch](../experiments/removed/MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE_OFF.patch) |
 | [`MOJOLEARN_CLASSICAL_RIDGECV_FF_BLOCKED`](#mojolearn_classical_ridgecv_ff_blocked-unmeasured-arm-deleted-2026-11-15) | Linear (RidgeCV float-float fallback in block partials, IDENTICAL) | removed (opt-in arm; unmeasured opt-in arm) | 2026-11-15 | [MOJOLEARN_CLASSICAL_RIDGECV_FF_BLOCKED.patch](../experiments/removed/MOJOLEARN_CLASSICAL_RIDGECV_FF_BLOCKED.patch) |
+| [`MOJOLEARN_C31_DEVICE_BUCKETS`](#mojolearn_c31_device_buckets-unmeasured-arm-deleted-2026-11-15) | Classical IDENTICAL graph / cluster candidate (ball-cover kNN) | removed (unmeasured opt-in arm; plan V2 rule a) | 2026-11-15 | [MOJOLEARN_C31_DEVICE_BUCKETS.patch](../experiments/removed/MOJOLEARN_C31_DEVICE_BUCKETS.patch) |
+| [`MOJOLEARN_C32_COUNT_FUSION`](#mojolearn_c32_count_fusion-unmeasured-arm-deleted-2026-11-15) | Classical IDENTICAL graph / cluster candidate (ball-cover kNN) | removed (unmeasured opt-in arm; plan V2 rule a) | 2026-11-15 | [MOJOLEARN_C32_COUNT_FUSION.patch](../experiments/removed/MOJOLEARN_C32_COUNT_FUSION.patch) |
+| [`MOJOLEARN_C32_EMIT_FUSION`](#mojolearn_c32_emit_fusion-unmeasured-arm-deleted-2026-11-15) | Classical IDENTICAL graph / cluster candidate (ball-cover kNN) | removed (unmeasured opt-in arm; plan V2 rule a) | 2026-11-15 | [MOJOLEARN_C32_EMIT_FUSION.patch](../experiments/removed/MOJOLEARN_C32_EMIT_FUSION.patch) |
+| [`MOJOLEARN_C33_FROZEN_CHUNKS`](#mojolearn_c33_frozen_chunks-unmeasured-arm-deleted-2026-11-15) | Classical IDENTICAL graph / cluster candidate (dbscan, label-propagation) | removed (unmeasured opt-in arm; plan V2 rule a) | 2026-11-15 | [MOJOLEARN_C33_FROZEN_CHUNKS.patch](../experiments/removed/MOJOLEARN_C33_FROZEN_CHUNKS.patch) |
+| [`MOJOLEARN_C33_CHUNK_4`](#mojolearn_c33_chunk_4-unmeasured-arm-deleted-2026-11-15) | Classical IDENTICAL graph / cluster candidate (dbscan, label-propagation) | removed (unmeasured opt-in arm; plan V2 rule a) | 2026-11-15 | [MOJOLEARN_C33_CHUNK_4.patch](../experiments/removed/MOJOLEARN_C33_CHUNK_4.patch) |
+| [`MOJOLEARN_C34_PARALLEL_EDGES`](#mojolearn_c34_parallel_edges-unmeasured-arm-deleted-2026-11-15) | Classical IDENTICAL graph / cluster candidate (hdbscan, agglomerative) | removed (unmeasured opt-in arm; plan V2 rule a) | 2026-11-15 | [MOJOLEARN_C34_PARALLEL_EDGES.patch](../experiments/removed/MOJOLEARN_C34_PARALLEL_EDGES.patch) |
+| [`MOJOLEARN_C35_PACKED_LISTS`](#mojolearn_c35_packed_lists-unmeasured-arm-deleted-2026-11-15) | Classical IDENTICAL graph / cluster candidate (ivf) | removed (unmeasured opt-in arm; plan V2 rule a) | 2026-11-15 | [MOJOLEARN_C35_PACKED_LISTS.patch](../experiments/removed/MOJOLEARN_C35_PACKED_LISTS.patch) |
+| [`MOJOLEARN_C35_ROWS_128`](#mojolearn_c35_rows_128-unmeasured-arm-deleted-2026-11-15) | Classical IDENTICAL graph / cluster candidate (ivf) | removed (unmeasured opt-in arm; plan V2 rule a) | 2026-11-15 | [MOJOLEARN_C35_ROWS_128.patch](../experiments/removed/MOJOLEARN_C35_ROWS_128.patch) |
+| [`MOJOLEARN_XCLUSTER_ROW_ASSIGN`](#mojolearn_xcluster_row_assign-unmeasured-arm-deleted-2026-11-15) | Classical IDENTICAL graph / cluster candidate (minibatch-kmeans, bisecting-kmeans) | removed (unmeasured opt-in arm; plan V2 rule a) | 2026-11-15 | [MOJOLEARN_XCLUSTER_ROW_ASSIGN.patch](../experiments/removed/MOJOLEARN_XCLUSTER_ROW_ASSIGN.patch) |
+| [`MOJOLEARN_XCLUSTER_KPP_DISTINCT`](#mojolearn_xcluster_kpp_distinct-unmeasured-arm-deleted-2026-11-15) | Classical IDENTICAL graph / cluster candidate (minibatch-kmeans, bisecting-kmeans) | removed (unmeasured opt-in arm; plan V2 rule a) | 2026-11-15 | [MOJOLEARN_XCLUSTER_KPP_DISTINCT.patch](../experiments/removed/MOJOLEARN_XCLUSTER_KPP_DISTINCT.patch) |
+| [`MOJOLEARN_C39_RETAIN_STATE`](#mojolearn_c39_retain_state-unmeasured-arm-deleted-2026-11-15) | Classical IDENTICAL graph / cluster candidate (bisecting-kmeans) | removed (unmeasured opt-in arm; plan V2 rule a) | 2026-11-15 | [MOJOLEARN_C39_RETAIN_STATE.patch](../experiments/removed/MOJOLEARN_C39_RETAIN_STATE.patch) |
+| [`MOJOLEARN_C40_SEED_TILES`](#mojolearn_c40_seed_tiles-unmeasured-arm-deleted-2026-11-15) | Classical IDENTICAL graph / cluster candidate (mean-shift) | removed (unmeasured opt-in arm; plan V2 rule a) | 2026-11-15 | [MOJOLEARN_C40_SEED_TILES.patch](../experiments/removed/MOJOLEARN_C40_SEED_TILES.patch) |
+| [`MOJOLEARN_C40_ACTIVE_SEEDS`](#mojolearn_c40_active_seeds-unmeasured-arm-deleted-2026-11-15) | Classical IDENTICAL graph / cluster candidate (mean-shift) | removed (unmeasured opt-in arm; plan V2 rule a) | 2026-11-15 | [MOJOLEARN_C40_ACTIVE_SEEDS.patch](../experiments/removed/MOJOLEARN_C40_ACTIVE_SEEDS.patch) |
+| [`MOJOLEARN_C41_FUSED_MINIMA`](#mojolearn_c41_fused_minima-unmeasured-arm-deleted-2026-11-15) | Classical IDENTICAL graph / cluster candidate (x_cluster) | removed (unmeasured opt-in arm; plan V2 rule a) | 2026-11-15 | [MOJOLEARN_C41_FUSED_MINIMA.patch](../experiments/removed/MOJOLEARN_C41_FUSED_MINIMA.patch) |
+| [`MOJOLEARN_C42_ACTIVE_TRIANGLE`](#mojolearn_c42_active_triangle-unmeasured-arm-deleted-2026-11-15) | Classical IDENTICAL graph / cluster candidate (x_cluster) | removed (unmeasured opt-in arm; plan V2 rule a) | 2026-11-15 | [MOJOLEARN_C42_ACTIVE_TRIANGLE.patch](../experiments/removed/MOJOLEARN_C42_ACTIVE_TRIANGLE.patch) |
+| [`MOJOLEARN_C43_RESIDENT_NORMALIZATION`](#mojolearn_c43_resident_normalization-unmeasured-arm-deleted-2026-11-15) | Classical IDENTICAL graph / cluster candidate (spectral, x_neighbors graphs) | removed (unmeasured opt-in arm; plan V2 rule a) | 2026-11-15 | [MOJOLEARN_C43_RESIDENT_NORMALIZATION.patch](../experiments/removed/MOJOLEARN_C43_RESIDENT_NORMALIZATION.patch) |
+| [`MOJOLEARN_C44_SAMPLING_DESCRIPTORS`](#mojolearn_c44_sampling_descriptors-unmeasured-arm-deleted-2026-11-15) | Classical IDENTICAL graph / cluster candidate (umap) | removed (unmeasured opt-in arm; plan V2 rule a) | 2026-11-15 | [MOJOLEARN_C44_SAMPLING_DESCRIPTORS.patch](../experiments/removed/MOJOLEARN_C44_SAMPLING_DESCRIPTORS.patch) |
+| [`MOJOLEARN_KDE_DIRECT_DISTANCE`](#mojolearn_kde_direct_distance-unmeasured-arm-deleted-2026-11-15) | Classical IDENTICAL graph / cluster candidate (kde) | removed (unmeasured opt-in arm; plan V2 rule a) | 2026-11-15 | [MOJOLEARN_KDE_DIRECT_DISTANCE.patch](../experiments/removed/MOJOLEARN_KDE_DIRECT_DISTANCE.patch) |
+| [`MOJOLEARN_KMEANS_ROW_ASSIGN`](#mojolearn_kmeans_row_assign-unmeasured-arm-deleted-2026-11-15) | Cluster (KMeans row-register assignment, IDENTICAL) | removed (unmeasured opt-in arm; KEPT row withdrawn, no own verdict) | 2026-11-15 | [MOJOLEARN_KMEANS_ROW_ASSIGN.patch](../experiments/removed/MOJOLEARN_KMEANS_ROW_ASSIGN.patch) |
+| [`MOJOLEARN_IVF_DIRECT_DISTANCE_OFF`](#mojolearn_ivf_direct_distance_off-old-path-deleted-2026-11-15) | Neighbors (IVF-Flat direct distances, IDENTICAL) | removed (old path; IDENTICAL default PROMOTED ge123e6f9, _OFF loses recall g50ebe26a5) | 2026-11-15 | [MOJOLEARN_IVF_DIRECT_DISTANCE_OFF.patch](../experiments/removed/MOJOLEARN_IVF_DIRECT_DISTANCE_OFF.patch) |
+| [`MOJOLEARN_C62_SAME_COMPONENT_SKIP`](#mojolearn_c62_same_component_skip-unmeasured-arm-deleted-2026-11-15) | Classical IDENTICAL graph / cluster candidate (hdbscan) | removed (unmeasured opt-in arm; EXPERIMENTS.md OPEN, never measured) | 2026-11-15 | [MOJOLEARN_C62_SAME_COMPONENT_SKIP.patch](../experiments/removed/MOJOLEARN_C62_SAME_COMPONENT_SKIP.patch) |
+| [`MOJOLEARN_IDN_RIDGE_RESIDENT_OFF`](#mojolearn_idn_ridge_resident_off-old-path-deleted-2026-11-15) | Linear (Ridge resident eig fallback at the Gram gate, IDENTICAL) | removed (old path; IDENTICAL default CONFIRMED fg2, _OFF ridge istella NV 2.22x / AMD 1.28x slower) | 2026-11-15 | [MOJOLEARN_IDN_RIDGE_RESIDENT_OFF.patch](../experiments/removed/MOJOLEARN_IDN_RIDGE_RESIDENT_OFF.patch) |
+| [`MOJOLEARN_IDN_JACOBI_ROUND_ROBIN_OFF`](#mojolearn_idn_jacobi_round_robin_off-old-path-deleted-2026-11-15) | Linear / Decomposition (round-robin Jacobi of the linear models' eig routes, IDENTICAL) | removed (old path; IDENTICAL default PROMOTED fg2, ridge istella NV 0.25x / AMD 0.14x) | 2026-11-15 | [MOJOLEARN_IDN_JACOBI_ROUND_ROBIN_OFF.patch](../experiments/removed/MOJOLEARN_IDN_JACOBI_ROUND_ROBIN_OFF.patch) |
+| [`MOJOLEARN_IDN_GRAM_FF_FALLBACK_OFF`](#mojolearn_idn_gram_ff_fallback_off-old-path-deleted-2026-11-15) | Linear (float-float Gram second chance for a gate-rejected Ridge fit, IDENTICAL) | removed (old path; IDENTICAL default PROMOTED fg2, ridge istella NV 0.96x / AMD 0.51x) | 2026-11-15 | [MOJOLEARN_IDN_GRAM_FF_FALLBACK_OFF.patch](../experiments/removed/MOJOLEARN_IDN_GRAM_FF_FALLBACK_OFF.patch) |
+| [`MOJOLEARN_IDN_GFF_GRAM_TILED_OFF`](#mojolearn_idn_gff_gram_tiled_off-old-path-deleted-2026-11-15) | Linear (register-tiled float-float leaf Gram, IDENTICAL) | removed (old path; IDENTICAL default PROMOTED w2-decide-linalg, ridge istella 0.917) | 2026-11-15 | [MOJOLEARN_IDN_GFF_GRAM_TILED_OFF.patch](../experiments/removed/MOJOLEARN_IDN_GFF_GRAM_TILED_OFF.patch) |
+| [`MOJOLEARN_IDN_COLVAR_FUSED_OFF`](#mojolearn_idn_colvar_fused_off-old-path-deleted-2026-11-15) | Decomposition (TruncatedSVD column variance in registers, IDENTICAL) | removed (old path; IDENTICAL default PROMOTED fg2, tsvd taxi NV 0.76x / AMD 0.97x) | 2026-11-15 | [MOJOLEARN_IDN_COLVAR_FUSED_OFF.patch](../experiments/removed/MOJOLEARN_IDN_COLVAR_FUSED_OFF.patch) |
+| [`MOJOLEARN_IDN_TSVD_ONE_UPLOAD_OFF`](#mojolearn_idn_tsvd_one_upload_off-old-path-deleted-2026-11-15) | Decomposition (TruncatedSVD one upload of X, IDENTICAL) | removed (old path; IDENTICAL default CONFIRMED g50ebe26a5, _OFF 1.610x slower) | 2026-11-15 | [MOJOLEARN_IDN_TSVD_ONE_UPLOAD_OFF.patch](../experiments/removed/MOJOLEARN_IDN_TSVD_ONE_UPLOAD_OFF.patch) |
+| [`MOJOLEARN_PCA_FAST_POOL_OFF`](#mojolearn_pca_fast_pool_off-old-path-deleted-2026-11-15) | Decomposition (PCA pooled device copy of X, FAST Apple) | removed (old path; FAST+Apple default, READY-AB with no A/B row (V2 rule b)) | 2026-11-15 | [MOJOLEARN_PCA_FAST_POOL_OFF.patch](../experiments/removed/MOJOLEARN_PCA_FAST_POOL_OFF.patch) |
+| [`MOJOLEARN_SAMBA_WEIGHT_EPOCH_GLOBAL`](#mojolearn_samba_weight_epoch_global-unmeasured-arm-deleted-2026-11-15) | Neural (Samba resident copy keyed by the process weight epoch) | removed (unmeasured B arm; EXPERIMENTS.md PENDING, owed A/B never ran) | 2026-11-15 | [MOJOLEARN_SAMBA_WEIGHT_EPOCH_GLOBAL.patch](../experiments/removed/MOJOLEARN_SAMBA_WEIGHT_EPOCH_GLOBAL.patch) |
+| [`MOJOLEARN_FOREST_DEVICE_FINITE_OFF`](#mojolearn_forest_device_finite_off-old-path-deleted-2026-11-15) | Trees (RandomForest / ExtraTrees device finite scan, FAST Apple) | removed (old path; FAST+Apple default KEPT 69f7a41fd, promoted on Apple M3 only) | 2026-11-15 | [MOJOLEARN_FOREST_DEVICE_FINITE_OFF.patch](../experiments/removed/MOJOLEARN_FOREST_DEVICE_FINITE_OFF.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -7059,3 +7089,246 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md (section expdel-02-
 - **Deleted by**: lane/expdel2-06-base (expdel2-06-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `49c61a4093`.
 - **Restore**: `git apply experiments/removed/MOJOLEARN_CLASSICAL_RIDGECV_FF_BLOCKED.patch`, then delete the `MOJOLEARN_CLASSICAL_RIDGECV_FF_BLOCKED` refusal in `core/experiment_guards_linear.mojo`.
 - **Records**: refusal in `core/experiment_guards_linear.mojo`; `classical-cv-folds.json` control `ridgecv_ff_blocked`: `removed` entry added (control removed from `controls` and from its algorithms); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-06-base section).
+## Experiment deletions: lane expdel2-05-base (2026-11-15)
+
+Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2-05-base, "An unmeasured arm is deleted", Andrew 2026-11-15); each evidence row named in the plan was read before the deletion. No bit changes: every deletion removes a non-default arm or the rollback of a default, and the default path is unchanged.
+
+### MOJOLEARN_C31_DEVICE_BUCKETS: unmeasured arm deleted (2026-11-15)
+
+- **What it was**: Opt-in IDENTICAL arm (classical source-only candidate C31): random ball cover landmark buckets built on the device. The alias `C31_DEVICE_BUCKETS` in `experiments/classical_identical_ideas/graph_controls.mojo` stays as the constant `False` so its readers (neighbors/checks/ball_cover_canonical_order.mojo) compile unchanged until their lanes fold it.
+- **Verdict**: no record (no A/B recorded for the opt-in arm); deleted under "An unmeasured arm is deleted" (Andrew, 2026-11-15). The default build never set it, so no bit changes on any column.
+- **Deleted by**: lane/expdel2-05-base (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `337c096a5b`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_C31_DEVICE_BUCKETS.patch`, then delete the `MOJOLEARN_C31_DEVICE_BUCKETS` refusal in `core/experiment_guards_cluster.mojo`.
+- **Records**: refusal in `core/experiment_guards_cluster.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-05-base section).
+
+### MOJOLEARN_C32_COUNT_FUSION: unmeasured arm deleted (2026-11-15)
+
+- **What it was**: Opt-in IDENTICAL arm (candidate C32): the ball-cover register pass fused with its count pass. The alias `C32_COUNT_FUSION` in `experiments/classical_identical_ideas/graph_controls.mojo` stays as the constant `False` so its readers (neighbors/impl/ball_cover/registers.mojo) compile unchanged until their lanes fold it.
+- **Verdict**: no record (no A/B recorded for the opt-in arm); deleted under "An unmeasured arm is deleted" (Andrew, 2026-11-15). The default build never set it, so no bit changes on any column.
+- **Deleted by**: lane/expdel2-05-base (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `0445dd8786`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_C32_COUNT_FUSION.patch`, then delete the `MOJOLEARN_C32_COUNT_FUSION` refusal in `core/experiment_guards_cluster.mojo`.
+- **Records**: refusal in `core/experiment_guards_cluster.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-05-base section).
+
+### MOJOLEARN_C32_EMIT_FUSION: unmeasured arm deleted (2026-11-15)
+
+- **What it was**: Opt-in IDENTICAL arm (candidate C32): the ball-cover register pass fused with its emit pass. The alias `C32_EMIT_FUSION` in `experiments/classical_identical_ideas/graph_controls.mojo` stays as the constant `False` so its readers (neighbors/impl/ball_cover/registers.mojo) compile unchanged until their lanes fold it.
+- **Verdict**: no record (no A/B recorded for the opt-in arm); deleted under "An unmeasured arm is deleted" (Andrew, 2026-11-15). The default build never set it, so no bit changes on any column.
+- **Deleted by**: lane/expdel2-05-base (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `330982c9db`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_C32_EMIT_FUSION.patch`, then delete the `MOJOLEARN_C32_EMIT_FUSION` refusal in `core/experiment_guards_cluster.mojo`.
+- **Records**: refusal in `core/experiment_guards_cluster.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-05-base section).
+
+### MOJOLEARN_C33_FROZEN_CHUNKS: unmeasured arm deleted (2026-11-15)
+
+- **What it was**: Opt-in IDENTICAL arm (candidate C33): graph label iteration in frozen chunks of C33_CHUNK iterations between convergence checks (DBSCAN components, LPK batch). The alias `C33_FROZEN_CHUNKS` in `experiments/classical_identical_ideas/graph_controls.mojo` stays as the constant `False` so its readers (dbscan/impl/sparse/detail/csr.mojo, x_neighbors/iter_device.mojo) compile unchanged until their lanes fold it.
+- **Verdict**: EXPERIMENTS.md row "C33_FROZEN_CHUNKS (label propagation use)": DELETED (superseded) for label propagation, no A/B for the DBSCAN / LPK_BATCH use; deleted under "An unmeasured arm is deleted" (Andrew, 2026-11-15). The default build never set it, so no bit changes on any column.
+- **Deleted by**: lane/expdel2-05-base (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `b41ab5891f`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_C33_FROZEN_CHUNKS.patch`, then delete the `MOJOLEARN_C33_FROZEN_CHUNKS` refusal in `core/experiment_guards_cluster.mojo`.
+- **Records**: refusal in `core/experiment_guards_cluster.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-05-base section).
+
+### MOJOLEARN_C33_CHUNK_4: unmeasured arm deleted (2026-11-15)
+
+- **What it was**: Knob of the C33 frozen-chunk arm: 4 iterations a chunk instead of 16. The alias `C33_CHUNK` in `experiments/classical_identical_ideas/graph_controls.mojo` stays as the constant `16` so its readers (dbscan/impl/sparse/detail/csr.mojo, x_neighbors/iter_device.mojo) compile unchanged until their lanes fold it.
+- **Verdict**: no record (no A/B recorded for the opt-in arm); deleted under "An unmeasured arm is deleted" (Andrew, 2026-11-15). The default build never set it, so no bit changes on any column.
+- **Deleted by**: lane/expdel2-05-base (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `77dc9e2f62`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_C33_CHUNK_4.patch`, then delete the `MOJOLEARN_C33_CHUNK_4` refusal in `core/experiment_guards_cluster.mojo`.
+- **Records**: refusal in `core/experiment_guards_cluster.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-05-base section).
+
+### MOJOLEARN_C34_PARALLEL_EDGES: unmeasured arm deleted (2026-11-15)
+
+- **What it was**: Opt-in IDENTICAL arm (candidate C34): the MST cheapest-edge selection with parallel edge scans. The alias `C34_PARALLEL_EDGES` in `experiments/classical_identical_ideas/graph_controls.mojo` stays as the constant `False` so its readers (hdbscan/impl/cluster/detail/sparse_mr_mst.mojo, hierarchy/impl/sparse/solver/detail/mst_kernels.mojo) compile unchanged until their lanes fold it.
+- **Verdict**: no record (no A/B recorded for the opt-in arm); deleted under "An unmeasured arm is deleted" (Andrew, 2026-11-15). The default build never set it, so no bit changes on any column.
+- **Deleted by**: lane/expdel2-05-base (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `c7dfed9ef3`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_C34_PARALLEL_EDGES.patch`, then delete the `MOJOLEARN_C34_PARALLEL_EDGES` refusal in `core/experiment_guards_cluster.mojo`.
+- **Records**: refusal in `core/experiment_guards_cluster.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-05-base section).
+
+### MOJOLEARN_C35_PACKED_LISTS: unmeasured arm deleted (2026-11-15)
+
+- **What it was**: Opt-in IDENTICAL arm (candidate C35): IVF-Flat scan over packed inverted lists in balanced row tasks. The alias `C35_PACKED_LISTS` in `experiments/classical_identical_ideas/graph_controls.mojo` stays as the constant `False` so its readers (ivf/impl/neighbors/ivf_flat/ivf_balanced_tasks.mojo, ivf/impl/neighbors/ivf_flat/ivf_flat_search.mojo) compile unchanged until their lanes fold it.
+- **Verdict**: no record (no A/B recorded for the opt-in arm); deleted under "An unmeasured arm is deleted" (Andrew, 2026-11-15). The default build never set it, so no bit changes on any column.
+- **Deleted by**: lane/expdel2-05-base (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `d391e6ab95`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_C35_PACKED_LISTS.patch`, then delete the `MOJOLEARN_C35_PACKED_LISTS` refusal in `core/experiment_guards_cluster.mojo`.
+- **Records**: refusal in `core/experiment_guards_cluster.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-05-base section).
+
+### MOJOLEARN_C35_ROWS_128: unmeasured arm deleted (2026-11-15)
+
+- **What it was**: Knob of the C35 packed-list arm: 128 rows a task instead of 256. The alias `C35_TASK_ROWS` in `experiments/classical_identical_ideas/graph_controls.mojo` stays as the constant `256` so its readers (ivf/impl/neighbors/ivf_flat/ivf_balanced_tasks.mojo) compile unchanged until their lanes fold it.
+- **Verdict**: no record (no A/B recorded for the opt-in arm); deleted under "An unmeasured arm is deleted" (Andrew, 2026-11-15). The default build never set it, so no bit changes on any column.
+- **Deleted by**: lane/expdel2-05-base (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `54b5cb96f6`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_C35_ROWS_128.patch`, then delete the `MOJOLEARN_C35_ROWS_128` refusal in `core/experiment_guards_cluster.mojo`.
+- **Records**: refusal in `core/experiment_guards_cluster.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-05-base section).
+
+### MOJOLEARN_XCLUSTER_ROW_ASSIGN: unmeasured arm deleted (2026-11-15)
+
+- **What it was**: Opt-in IDENTICAL arm (C36 x_cluster half): MiniBatchKMeans / BisectingKMeans nearest center as a row-register kernel, 2 or 4 rows a thread. `XCLUSTER_ROW_ASSIGN` is now `False` too. The alias `XCLUSTER_ROW_ASSIGN_ROWS` in `experiments/classical_identical_ideas/graph_controls.mojo` stays as the constant `0` so its readers (x_cluster/device_ops.mojo) compile unchanged until their lanes fold it.
+- **Verdict**: no record (no A/B recorded for the opt-in arm); deleted under "An unmeasured arm is deleted" (Andrew, 2026-11-15). The default build never set it, so no bit changes on any column.
+- **Deleted by**: lane/expdel2-05-base (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `b1f48f8126`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_XCLUSTER_ROW_ASSIGN.patch`, then delete the `MOJOLEARN_XCLUSTER_ROW_ASSIGN` refusal in `core/experiment_guards_cluster.mojo`.
+- **Records**: refusal in `core/experiment_guards_cluster.mojo`; `experiments/six_lane_integration/grid_controls/classical-kmeans.json` control `xcluster_row_assign` moved to `removed` (the generated grid/grid-plan.json and grid/GRID.md still list it until the next grid regeneration); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-05-base section).
+
+### MOJOLEARN_XCLUSTER_KPP_DISTINCT: unmeasured arm deleted (2026-11-15)
+
+- **What it was**: Opt-in IDENTICAL arm (C38 x_cluster half): k-means++ trial distances computed once per distinct candidate. The alias `XCLUSTER_KPP_DISTINCT` in `experiments/classical_identical_ideas/graph_controls.mojo` stays as the constant `False` so its readers (x_cluster/common.mojo, x_cluster/minibatch.mojo) compile unchanged until their lanes fold it.
+- **Verdict**: EXPERIMENTS.md XCLUSTER_KPP_DISTINCT row DROPPED (deleted); the opt-in read was still live, never measured; deleted under "An unmeasured arm is deleted" (Andrew, 2026-11-15). The default build never set it, so no bit changes on any column.
+- **Deleted by**: lane/expdel2-05-base (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `c3dc42fd2c`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_XCLUSTER_KPP_DISTINCT.patch`, then delete the `MOJOLEARN_XCLUSTER_KPP_DISTINCT` refusal in `core/experiment_guards_cluster.mojo`.
+- **Records**: refusal in `core/experiment_guards_cluster.mojo`; `experiments/six_lane_integration/grid_controls/classical-kmeans.json` control `xcluster_kpp_distinct` moved to `removed` (the generated grid/grid-plan.json and grid/GRID.md still list it until the next grid regeneration); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-05-base section).
+
+### MOJOLEARN_C39_RETAIN_STATE: unmeasured arm deleted (2026-11-15)
+
+- **What it was**: Opt-in IDENTICAL arm (candidate C39): BisectingKMeans keeps one fit-owned subset arena and split state across bisections. The alias `C39_RETAIN_STATE` in `experiments/classical_identical_ideas/graph_controls.mojo` stays as the constant `False` so its readers (x_cluster/bisect.mojo) compile unchanged until their lanes fold it.
+- **Verdict**: no record (no A/B recorded for the opt-in arm); deleted under "An unmeasured arm is deleted" (Andrew, 2026-11-15). The default build never set it, so no bit changes on any column.
+- **Deleted by**: lane/expdel2-05-base (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `9ac1d53067`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_C39_RETAIN_STATE.patch`, then delete the `MOJOLEARN_C39_RETAIN_STATE` refusal in `core/experiment_guards_cluster.mojo`.
+- **Records**: refusal in `core/experiment_guards_cluster.mojo`; `experiments/six_lane_integration/grid_controls/classical-kmeans.json` control `c39_retain_state` moved to `removed` (the generated grid/grid-plan.json and grid/GRID.md still list it until the next grid regeneration); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-05-base section).
+
+### MOJOLEARN_C40_SEED_TILES: unmeasured arm deleted (2026-11-15)
+
+- **What it was**: Opt-in IDENTICAL arm (candidate C40): MeanShift seeds in tiles. The alias `C40_SEED_TILES` in `experiments/classical_identical_ideas/graph_controls.mojo` stays as the constant `False` so its readers (x_cluster/meanshift_idn.mojo) compile unchanged until their lanes fold it.
+- **Verdict**: no record (no A/B recorded for the opt-in arm); deleted under "An unmeasured arm is deleted" (Andrew, 2026-11-15). The default build never set it, so no bit changes on any column.
+- **Deleted by**: lane/expdel2-05-base (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `2c7364c31b`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_C40_SEED_TILES.patch`, then delete the `MOJOLEARN_C40_SEED_TILES` refusal in `core/experiment_guards_cluster.mojo`.
+- **Records**: refusal in `core/experiment_guards_cluster.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-05-base section).
+
+### MOJOLEARN_C40_ACTIVE_SEEDS: unmeasured arm deleted (2026-11-15)
+
+- **What it was**: Opt-in IDENTICAL arm (candidate C40): MeanShift iterates only the seeds not yet converged. The alias `C40_ACTIVE_SEEDS` in `experiments/classical_identical_ideas/graph_controls.mojo` stays as the constant `False` so its readers (x_cluster/meanshift_idn.mojo) compile unchanged until their lanes fold it.
+- **Verdict**: no record (no A/B recorded for the opt-in arm); deleted under "An unmeasured arm is deleted" (Andrew, 2026-11-15). The default build never set it, so no bit changes on any column.
+- **Deleted by**: lane/expdel2-05-base (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `a72d2aefd3`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_C40_ACTIVE_SEEDS.patch`, then delete the `MOJOLEARN_C40_ACTIVE_SEEDS` refusal in `core/experiment_guards_cluster.mojo`.
+- **Records**: refusal in `core/experiment_guards_cluster.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-05-base section).
+
+### MOJOLEARN_C41_FUSED_MINIMA: unmeasured arm deleted (2026-11-15)
+
+- **What it was**: Opt-in IDENTICAL arm (candidate C41): x_cluster post-processing minima fused into one pass. The alias `C41_FUSED_MINIMA` in `experiments/classical_identical_ideas/graph_controls.mojo` stays as the constant `False` so its readers (x_cluster/device_post.mojo) compile unchanged until their lanes fold it.
+- **Verdict**: no record (no A/B recorded for the opt-in arm); deleted under "An unmeasured arm is deleted" (Andrew, 2026-11-15). The default build never set it, so no bit changes on any column.
+- **Deleted by**: lane/expdel2-05-base (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `77d0694779`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_C41_FUSED_MINIMA.patch`, then delete the `MOJOLEARN_C41_FUSED_MINIMA` refusal in `core/experiment_guards_cluster.mojo`.
+- **Records**: refusal in `core/experiment_guards_cluster.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-05-base section).
+
+### MOJOLEARN_C42_ACTIVE_TRIANGLE: unmeasured arm deleted (2026-11-15)
+
+- **What it was**: Opt-in IDENTICAL arm (candidate C42): x_cluster pairwise work over the active triangle only. The alias `C42_ACTIVE_TRIANGLE` in `experiments/classical_identical_ideas/graph_controls.mojo` stays as the constant `False` so its readers (x_cluster/device_ops.mojo) compile unchanged until their lanes fold it.
+- **Verdict**: no record (no A/B recorded for the opt-in arm); deleted under "An unmeasured arm is deleted" (Andrew, 2026-11-15). The default build never set it, so no bit changes on any column.
+- **Deleted by**: lane/expdel2-05-base (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `9276415968`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_C42_ACTIVE_TRIANGLE.patch`, then delete the `MOJOLEARN_C42_ACTIVE_TRIANGLE` refusal in `core/experiment_guards_cluster.mojo`.
+- **Records**: refusal in `core/experiment_guards_cluster.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-05-base section).
+
+### MOJOLEARN_C43_RESIDENT_NORMALIZATION: unmeasured arm deleted (2026-11-15)
+
+- **What it was**: Opt-in IDENTICAL arm (candidate C43): graph normalization (Laplacian / affinity) kept resident on the device. The alias `C43_RESIDENT_NORMALIZATION` in `experiments/classical_identical_ideas/graph_controls.mojo` stays as the constant `False` so its readers (bindings/_mojolearn_x_neighbors*.mojo, checks/native_tests/core_ne3_fused_entries.mojo, spectral/impl/sparse/linalg/detail/laplacian.mojo, x_neighbors/*) compile unchanged until their lanes fold it.
+- **Verdict**: no record (no A/B recorded for the opt-in arm); deleted under "An unmeasured arm is deleted" (Andrew, 2026-11-15). The default build never set it, so no bit changes on any column.
+- **Deleted by**: lane/expdel2-05-base (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `a4aa6b55b6`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_C43_RESIDENT_NORMALIZATION.patch`, then delete the `MOJOLEARN_C43_RESIDENT_NORMALIZATION` refusal in `core/experiment_guards_cluster.mojo`.
+- **Records**: refusal in `core/experiment_guards_cluster.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-05-base section).
+
+### MOJOLEARN_C44_SAMPLING_DESCRIPTORS: unmeasured arm deleted (2026-11-15)
+
+- **What it was**: Opt-in IDENTICAL arm (candidate C44): UMAP keeps one epoch sampling-descriptor arena through the optimization. The alias `C44_SAMPLING_DESCRIPTORS` in `experiments/classical_identical_ideas/graph_controls.mojo` stays as the constant `False` so its readers (umap/optimizer_identical_device.mojo) compile unchanged until their lanes fold it.
+- **Verdict**: no record (no A/B recorded for the opt-in arm); deleted under "An unmeasured arm is deleted" (Andrew, 2026-11-15). The default build never set it, so no bit changes on any column.
+- **Deleted by**: lane/expdel2-05-base (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `4fdc7dda1a`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_C44_SAMPLING_DESCRIPTORS.patch`, then delete the `MOJOLEARN_C44_SAMPLING_DESCRIPTORS` refusal in `core/experiment_guards_cluster.mojo`.
+- **Records**: refusal in `core/experiment_guards_cluster.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-05-base section).
+
+### MOJOLEARN_KDE_DIRECT_DISTANCE: unmeasured arm deleted (2026-11-15)
+
+- **What it was**: Opt-in IDENTICAL arm (C30 split, KDE family): (x-y)^2 direct distances in kde/impl/distance and its host twin instead of the expansion. The alias `KDE_DIRECT_DISTANCE` in `experiments/classical_identical_ideas/graph_controls.mojo` stays as the constant `False` so its readers (kde/host/kde_oracle.mojo, kde/impl/distance/distance.mojo, kde/impl/neighbors/kernel_density.mojo) compile unchanged until their lanes fold it.
+- **Verdict**: no record (no A/B recorded for the opt-in arm); deleted under "An unmeasured arm is deleted" (Andrew, 2026-11-15). The default build never set it, so no bit changes on any column.
+- **Deleted by**: lane/expdel2-05-base (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `1fef4f5d4a`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_KDE_DIRECT_DISTANCE.patch`, then delete the `MOJOLEARN_KDE_DIRECT_DISTANCE` refusal in `core/experiment_guards_kernel.mojo`.
+- **Records**: refusal in `core/experiment_guards_kernel.mojo`; `experiments/six_lane_integration/grid_controls/classical-kmeans.json` control `kde_direct` moved to `removed` (the generated grid/grid-plan.json and grid/GRID.md still list it until the next grid regeneration); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-05-base section).
+
+### MOJOLEARN_KMEANS_ROW_ASSIGN: unmeasured arm deleted (2026-11-15)
+
+- **What it was**: The `kmeans_assign` grid control's rows2 / rows4 arms: `-D MOJOLEARN_KMEANS_ROW_ASSIGN=2|4` ran the Lloyd / k-means++ / transform nearest center as a row-register kernel (R rows a thread, expanded L2, incumbent bits). `KMEANS_ROW_ASSIGN_ROWS` (read by cluster/impl/detail/classical_assignment.mojo) stays as the constant 0 and `KMEANS_ROW_ASSIGN` as `False`; the incumbent tiled fused L2-NN is the only arm.
+- **Verdict**: EXPERIMENTS.md KMEANS_ROW_ASSIGN row: KEPT (owed row withdrawn): the DROP row belonged to KMEANS_DIRECT_DISTANCE; the rows arms had no own verdict. Deleted under "An unmeasured arm is deleted" (Andrew, 2026-11-15). No bit changes on any column.
+- **Deleted by**: lane/expdel2-05-base (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `b97e8ccd99`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_KMEANS_ROW_ASSIGN.patch`, then delete the `MOJOLEARN_KMEANS_ROW_ASSIGN` refusal in `core/experiment_guards_cluster.mojo`.
+- **Records**: refusal in `core/experiment_guards_cluster.mojo`; `experiments/six_lane_integration/grid_controls/classical-kmeans.json` control `kmeans_assign` moved to `removed` (the generated grid/grid-plan.json and grid/GRID.md still list it until the next grid regeneration); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-05-base section).
+
+### MOJOLEARN_IVF_DIRECT_DISTANCE_OFF: old path deleted (2026-11-15)
+
+- **What it was**: The rollback of `IVF_DIRECT_DISTANCE` (IVF-Flat scan distances as direct sums of squared differences, device scan + balanced tasks + ivf_host twin) to the -2 q.x + |q|^2 + |x|^2 expansion. `IVF_DIRECT_DISTANCE` is now `GRAPH_IDENTICAL`; its readers keep their branches for FAST until their lanes fold them.
+- **Verdict**: PROMOTED 2026-10-08 (lane/grid-flips-1, grid ge123e6f9, one run per arm): ivf istella NV 2259 -> 2117 ms (0.937x), AMD 1562 -> 1505 (0.964x); taxi NV 225.5 -> 201.6 (0.894x), AMD 243.3 -> 242.1 (0.995x); recall better on istella. CONFIRMED on g50ebe26a5 (_OFF arm loses recall). No bit change on any column.
+- **Deleted by**: lane/expdel2-05-base (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `3cf1b7b6af`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_IVF_DIRECT_DISTANCE_OFF.patch`, then delete the `MOJOLEARN_IVF_DIRECT_DISTANCE_OFF` refusal in `core/experiment_guards_cluster.mojo`.
+- **Records**: refusal in `core/experiment_guards_cluster.mojo`; `experiments/six_lane_integration/grid_controls/classical-kmeans.json` control `ivf_direct` moved to `removed` (the generated grid/grid-plan.json and grid/GRID.md still list it until the next grid regeneration); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-05-base section).
+
+### MOJOLEARN_C62_SAME_COMPONENT_SKIP: unmeasured arm deleted (2026-11-15)
+
+- **What it was**: Opt-in IDENTICAL arm (candidate C61/C62, lane classical-misc): the HDBSCAN sparse mutual-reachability Boruvka tiled search skips a j tile whose points all lie in the block's single component (bit-identical by construction). The alias stays as the constant `False` for hdbscan/impl/cluster/detail/sparse_mr_mst.mojo until its lane folds it. With this commit graph_controls.mojo reads no define (the `is_defined` / `get_defined_int` imports go).
+- **Verdict**: EXPERIMENTS.md C62_SAME_COMPONENT_SKIP row: unmeasured, OPEN (lane/classical-misc @ f7abb25cf). Deleted under "An unmeasured arm is deleted" (Andrew, 2026-11-15). No bit changes on any column.
+- **Deleted by**: lane/expdel2-05-base (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `774f01dc6b`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_C62_SAME_COMPONENT_SKIP.patch`, then delete the `MOJOLEARN_C62_SAME_COMPONENT_SKIP` refusal in `core/experiment_guards_cluster.mojo`.
+- **Records**: refusal in `core/experiment_guards_cluster.mojo`; `experiments/six_lane_integration/grid_controls/classical-misc.json` control `c61_same_component_skip` moved to `removed` (the generated grid/grid-plan.json and grid/GRID.md still list it until the next grid regeneration); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-05-base section).
+
+### MOJOLEARN_IDN_RIDGE_RESIDENT_OFF: old path deleted (2026-11-15)
+
+- **What it was**: The rollback of `IDN_RIDGE_RESIDENT` (L2, lane fg-linear): with the define a Ridge fit the resident Gram gate rejected returned status 1 to Python (four PCIe crossings of X) instead of running the eig route on the resident X / y and means. `IDN_RIDGE_RESIDENT` is now `LINEAR_GRAM_SOLVE` (read by glm/impl/gram_solve.mojo).
+- **Verdict**: CONFIRMED (EXPERIMENTS.md IDN_RIDGE_RESIDENT_OFF rows, fg2 nv2 v1021-v1050 / MI325X a1161-a1190, one run per arm): _OFF arm ridge istella NV 2.22x / AMD 1.28x slower, taxi NV 0.87x / AMD 0.99x; hashes unchanged in every arm. No bit change on any column.
+- **Deleted by**: lane/expdel2-05-base (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `fe4ab80cd9`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_IDN_RIDGE_RESIDENT_OFF.patch`, then delete the `MOJOLEARN_IDN_RIDGE_RESIDENT_OFF` refusal in `core/experiment_guards_linear.mojo`.
+- **Records**: refusal in `core/experiment_guards_linear.mojo`; `experiments/six_lane_integration/grid_controls/fg-linear.json` control `ridge_resident` moved to `removed` (the generated grid/grid-plan.json and grid/GRID.md still list it until the next grid regeneration); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-05-base section).
+
+### MOJOLEARN_IDN_JACOBI_ROUND_ROBIN_OFF: old path deleted (2026-11-15)
+
+- **What it was**: The rollback of `IDN_JACOBI_ROUND_ROBIN` (L1, lane fg-linear) to the one-block cyclic Jacobi in Ridge svdEig, OLS lstsqEig and the minimum-norm Gram. `IDN_JACOBI_ROUND_ROBIN` is now `_FGL_IDN` (read by glm/impl/linalg/detail/{svd,lstsq,lstsq_min_norm}.mojo, glm/host/glm_oracle.mojo, decomposition/host/jacobi_select_host.mojo).
+- **Verdict**: PROMOTED 2026-10-09 (lane/postmerge-act-5, fg2 nv2 v1021-v1050 / MI325X a1161-a1190, one run per arm): ridge istella NV 0.25x / AMD 0.14x (avg 0.20x, same new hash on both vendors), ridge taxi NV 0.99x / AMD 1.15x (vendor split), ols 0.99-1.02x. No bit change on any column (the default is unchanged).
+- **Deleted by**: lane/expdel2-05-base (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `8ee233b8d9`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_IDN_JACOBI_ROUND_ROBIN_OFF.patch`, then delete the `MOJOLEARN_IDN_JACOBI_ROUND_ROBIN_OFF` refusal in `core/experiment_guards_decomposition.mojo`.
+- **Records**: refusal in `core/experiment_guards_decomposition.mojo`; `experiments/six_lane_integration/grid_controls/fg-linear.json` control `jacobi_round_robin` moved to `removed` (the generated grid/grid-plan.json and grid/GRID.md still list it until the next grid regeneration); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-05-base section).
+
+### MOJOLEARN_IDN_GRAM_FF_FALLBACK_OFF: old path deleted (2026-11-15)
+
+- **What it was**: The rollback of `IDN_GRAM_FF_FALLBACK` (L3, lane fg-linear) to the direct eig-route fallback when the float32 Gram fails the trust gate on a Ridge fit. `IDN_GRAM_FF_FALLBACK` is now `LINEAR_GRAM_SOLVE` (read by glm/impl/gram_solve.mojo, glm/host/gram_solve_host.mojo).
+- **Verdict**: PROMOTED 2026-10-09 (lane/postmerge-act-5, fg2 nv2 v1021-v1050 / MI325X a1161-a1190, one run per arm): ridge istella NV 0.96x / AMD 0.51x (avg 0.74x), ridge taxi NV 0.91x / AMD 0.99x, ols 0.98-1.03x. No bit change on any column (the default is unchanged).
+- **Deleted by**: lane/expdel2-05-base (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `438e34e369`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_IDN_GRAM_FF_FALLBACK_OFF.patch`, then delete the `MOJOLEARN_IDN_GRAM_FF_FALLBACK_OFF` refusal in `core/experiment_guards_linear.mojo`.
+- **Records**: refusal in `core/experiment_guards_linear.mojo`; `experiments/six_lane_integration/grid_controls/fg-linear.json` control `gram_ff_fallback` moved to `removed` (the generated grid/grid-plan.json and grid/GRID.md still list it until the next grid regeneration); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-05-base section).
+
+### MOJOLEARN_IDN_GFF_GRAM_TILED_OFF: old path deleted (2026-11-15)
+
+- **What it was**: The rollback of `IDN_GFF_GRAM_TILED` (C1, lane ridge-ff-tiled) to the per-cell `gff_leaf_kernel` in the float-float leaf Gram of IDN_GRAM_FF_FALLBACK. `IDN_GFF_GRAM_TILED` is now `IDN_GRAM_FF_FALLBACK` (read by glm/impl/gram_solve.mojo). With this commit fg_linear_controls.mojo reads no define (the `is_defined` import goes).
+- **Verdict**: PROMOTED 2026-10-11 (lane w2-decide-linalg, main c8ef6c66d, one run per arm, NV == AMD digests): ridge istella 0.917 (NV 0.857 / AMD 0.977; v0135/a1717 vs v0134/a1716), ridge taxi 0.973 (v0080/a1662 vs v0079/a1661); ols / ard / bayesian-ridge / ridge-cv 1.00; same bits. No bit change on any column.
+- **Deleted by**: lane/expdel2-05-base (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `bdbba2b676`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_IDN_GFF_GRAM_TILED_OFF.patch`, then delete the `MOJOLEARN_IDN_GFF_GRAM_TILED_OFF` refusal in `core/experiment_guards_linear.mojo`.
+- **Records**: refusal in `core/experiment_guards_linear.mojo`; `experiments/six_lane_integration/grid_controls/fg-linear.json` control `gff_gram_tiled` moved to `removed` (the generated grid/grid-plan.json and grid/GRID.md still list it until the next grid regeneration); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-05-base section).
+
+### MOJOLEARN_IDN_COLVAR_FUSED_OFF: old path deleted (2026-11-15)
+
+- **What it was**: The rollback of `IDN_COLVAR_FUSED` (T2, lane fg-pca) in `decomposition/estimator.mojo::_column_variance`: the mean pass, the centering pass (`shift_columns_kernel` over m), the square pass (`square_in_place_kernel`) and the mean of the squares, instead of the read-only fused centered-square tile fold. With `IDN_XTY_TILED` and `IDN_DECOMP_MEAN_LAUNCH` both the constant True (and C01_MEAN folded to False), the alias was True in every mode, so the alias, the old passes and `square_in_place_kernel` (read only by them) are deleted, and `_column_variance` no longer writes `m`.
+- **Verdict**: PROMOTED 2026-10-10 (lane/postmerge-act-6, fg2 nv2 v1021-v1050 / MI325X a1161-a1190, one run per arm): tsvd taxi NV 0.76x / AMD 0.97x, tsvd istella 0.97x / 0.97x, pca 1.00-1.03x; hashes unchanged (same words into the same fold). No bit change on any column.
+- **Deleted by**: lane/expdel2-05-base (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `7fdb249ce5`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_IDN_COLVAR_FUSED_OFF.patch`, then delete the `MOJOLEARN_IDN_COLVAR_FUSED_OFF` refusal in `core/experiment_guards_decomposition.mojo`.
+- **Records**: refusal in `core/experiment_guards_decomposition.mojo`; `experiments/six_lane_integration/grid_controls/fg-pca.json` control `colvar_fused` moved to `removed` (the generated grid/grid-plan.json and grid/GRID.md still list it until the next grid regeneration); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-05-base section).
+
+### MOJOLEARN_IDN_TSVD_ONE_UPLOAD_OFF: old path deleted (2026-11-15)
+
+- **What it was**: The rollback of `TSVD_ONE_UPLOAD` (T1, lane fg-pca): `tsvd_fit_explained_host` ran `tsvd_fit_host` then `tsvd_explained_host`, two H2D copies of X. `TSVD_ONE_UPLOAD` is now `GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL`; FAST keeps its two-call pooled pair (that branch stays, it is mode-dependent).
+- **Verdict**: CONFIRMED (EXPERIMENTS.md IDN_TSVD_ONE_UPLOAD_OFF rows): grid g50ebe26a5 _OFF arm 1.610x combined slower; fg2 with PCA_LEAN_SCRATCH_OFF: tsvd istella NV 1.60x / AMD 1.48x slower. No bit change on any column.
+- **Deleted by**: lane/expdel2-05-base (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `34a0226192`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_IDN_TSVD_ONE_UPLOAD_OFF.patch`, then delete the `MOJOLEARN_IDN_TSVD_ONE_UPLOAD_OFF` refusal in `core/experiment_guards_decomposition.mojo`.
+- **Records**: refusal in `core/experiment_guards_decomposition.mojo`; `experiments/six_lane_integration/grid_controls/fg-pca.json` control `tsvd_one_upload` moved to `removed` (the generated grid/grid-plan.json and grid/GRID.md still list it until the next grid regeneration); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-05-base section).
+
+### MOJOLEARN_PCA_FAST_POOL_OFF: old path deleted (2026-11-15)
+
+- **What it was**: The FAST+Apple rollback of `PCA_FAST_POOL` (on top of PCA_FAST_GRAM_MMA): fresh n x d allocations each fit instead of the core/device_pool copy of X. `PCA_FAST_POOL` is now `PCA_FAST_GRAM_MMA` (read by x_decomp/s_linalg_fast.mojo).
+- **Verdict**: EXPERIMENTS.md: FAST Apple DEFAULT, merged d8e7825cf (M3 w2-w4d-pca-istella-r1 471.2 -> 217.8 ms, quality PASS); the _OFF arm was READY-AB with no A/B recorded. Deleted under "An unmeasured arm is deleted" (Andrew, 2026-11-15). Copies and allocations only: no bit change on any column.
+- **Deleted by**: lane/expdel2-05-base (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `b261ccae4f`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_PCA_FAST_POOL_OFF.patch`, then delete the `MOJOLEARN_PCA_FAST_POOL_OFF` refusal in `core/experiment_guards_decomposition.mojo`.
+- **Records**: refusal in `core/experiment_guards_decomposition.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-05-base section).
+
+### MOJOLEARN_SAMBA_WEIGHT_EPOCH_GLOBAL: unmeasured arm deleted (2026-11-15)
+
+- **What it was**: The B arm of the owed A/B fix-samba-weight-epoch-per-model (bench/results/paper_compare/owed-pre0867.json): `registry_epoch`, `registry_epoch_bump`, `RegistryKey.take` and `RegistryKey.current` read and bumped the process-wide `weight_epoch` instead of the per-registry stamp. The four branches are folded to the per-registry form; the alias stays `False` for checks/native_tests/registry_epoch_suite.mojo until its lane folds it.
+- **Verdict**: EXPERIMENTS.md SAMBA_WEIGHT_EPOCH_GLOBAL row: PENDING (A = per-registry key is the default); no A/B ran. Deleted under "An unmeasured arm is deleted" (Andrew, 2026-11-15). Only the upload count differed between arms: no bit change on any column.
+- **Deleted by**: lane/expdel2-05-base (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `4fdfffd7c8`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_SAMBA_WEIGHT_EPOCH_GLOBAL.patch`, then delete the `MOJOLEARN_SAMBA_WEIGHT_EPOCH_GLOBAL` refusal in `core/experiment_guards_neural.mojo`.
+- **Records**: refusal in `core/experiment_guards_neural.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-05-base section).
+
+### MOJOLEARN_FOREST_DEVICE_FINITE_OFF: old path deleted (2026-11-15)
+
+- **What it was**: The FAST+Apple rollback of `FOREST_DEVICE_FINITE` (ensemble/device_finite.mojo): the RandomForest / ExtraTrees fits kept the Python one-thread host scan of every cell and the RF binding its pooled host NaN scan instead of the device scan of the uploaded X. `FOREST_DEVICE_FINITE` is now FAST and Apple GPU (read by bindings/_mojolearn_rf.mojo, bindings/_mojolearn_trees.mojo, core/mojolearn_rf_run.mojo, extratrees/.../builder.mojo).
+- **Verdict**: KEPT 69f7a41fd (M3 A/B b272364e4, n=2, identical output hashes): ET taxi 2,867 -> 2,829 ms, istella 4,143 -> 4,059 ms; RF neutral. V2 rule d: promoted on Apple only; the path is FAST+Apple only, so no NVIDIA / AMD arm exists and none is owed. The scan only reads X: no bit change on any column.
+- **Deleted by**: lane/expdel2-05-base (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `cffcc56511`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_FOREST_DEVICE_FINITE_OFF.patch`, then delete the `MOJOLEARN_FOREST_DEVICE_FINITE_OFF` refusal in `core/experiment_guards_trees.mojo`.
+- **Records**: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-05-base section).

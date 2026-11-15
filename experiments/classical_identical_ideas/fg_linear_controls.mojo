@@ -11,13 +11,12 @@ import here: the host bindings read the same flags, so the device columns
 and the host column switch together. Every rule below is by width / work /
 bytes, never by a board shape.
 """
-from std.sys.compile import is_defined
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from experiments.classical_identical_ideas.linear_controls import LINEAR_GRAM_SOLVE
 
 comptime _FGL_IDN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 
-# L2 (DEFAULT ON, -D MOJOLEARN_IDN_RIDGE_RESIDENT_OFF restores the old path).
+# L2 (DEFAULT ON; the -D MOJOLEARN_IDN_RIDGE_RESIDENT_OFF rollback is deleted).
 # When the resident Gram solve (LINEAR_GRAM_SOLVE) rejects a Ridge fit at its
 # trust gate, the entry no longer returns status 1 to Python (which then made
 # four PCIe crossings of X: column sums, center, centered download, the fit's
@@ -33,10 +32,12 @@ comptime _FGL_IDN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 # Python glue reaches and the eig route is the same kernels and launch shapes
 # (ridge_eig_scratch_traced's contract), so the host column (whose own gate
 # reject runs the host eig route) is unchanged. ID check owed (nv == amd).
-comptime IDN_RIDGE_RESIDENT = LINEAR_GRAM_SOLVE and not is_defined["MOJOLEARN_IDN_RIDGE_RESIDENT_OFF"]()
+# TOMBSTONE: MOJOLEARN_IDN_RIDGE_RESIDENT_OFF (old path of the PROMOTED default) deleted 2026-11-15 by lane/expdel2-05-base; code recoverable at fe4ab80cd9.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_RIDGE_RESIDENT_OFF.patch; record in docs/TOMBSTONES.md.
+comptime IDN_RIDGE_RESIDENT = LINEAR_GRAM_SOLVE
 
-# L1 (DEFAULT ON since 2026-10-09, lane/postmerge-act-5; -D
-# MOJOLEARN_IDN_JACOBI_ROUND_ROBIN_OFF restores the one-block cyclic Jacobi;
+# L1 (DEFAULT ON since 2026-10-09, lane/postmerge-act-5; the -D
+# MOJOLEARN_IDN_JACOBI_ROUND_ROBIN_OFF rollback is deleted;
 # the old on-define is refused in core/six_lane_experiment_guards.mojo).
 # Post-merge A/B on main 0a7b206f1, one run per arm (nv2 L40S v1021-v1050,
 # MI325X a1161-a1190; ratio = arm / fg2.default-linear): ridge istella NV
@@ -69,10 +70,12 @@ comptime IDN_RIDGE_RESIDENT = LINEAR_GRAM_SOLVE and not is_defined["MOJOLEARN_ID
 # this flag through decomposition/host/jacobi_select_host.mojo). Lane fg-pca's
 # PCA-only switches (MOJOLEARN_IDN_PCA_RR_*) stay theirs: if they change the
 # inside of `_eig_rr_device` the linear models inherit it under both flags.
-comptime IDN_JACOBI_ROUND_ROBIN = _FGL_IDN and not is_defined["MOJOLEARN_IDN_JACOBI_ROUND_ROBIN_OFF"]()
+# TOMBSTONE: MOJOLEARN_IDN_JACOBI_ROUND_ROBIN_OFF (old path of the PROMOTED default) deleted 2026-11-15 by lane/expdel2-05-base; code recoverable at 8ee233b8d9.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_JACOBI_ROUND_ROBIN_OFF.patch; record in docs/TOMBSTONES.md.
+comptime IDN_JACOBI_ROUND_ROBIN = _FGL_IDN
 
-# L3 (DEFAULT ON since 2026-10-09, lane/postmerge-act-5; -D
-# MOJOLEARN_IDN_GRAM_FF_FALLBACK_OFF restores the direct eig-route fallback;
+# L3 (DEFAULT ON since 2026-10-09, lane/postmerge-act-5; the -D
+# MOJOLEARN_IDN_GRAM_FF_FALLBACK_OFF rollback is deleted;
 # the old on-define is refused in core/six_lane_experiment_guards.mojo).
 # Post-merge A/B on main 0a7b206f1, one run per arm (nv2 L40S v1021-v1050,
 # MI325X a1161-a1190; ratio = arm / fg2.default-linear): ridge istella NV
@@ -95,13 +98,15 @@ comptime IDN_JACOBI_ROUND_ROBIN = _FGL_IDN and not is_defined["MOJOLEARN_IDN_JAC
 # When the float-float gate fails too, the L2 / status-1 fallback runs.
 # BITS CHANGE for the fits it takes (normal equations instead of eig); the
 # host column (glm/host/gram_solve_host.mojo) runs the same cells.
-comptime IDN_GRAM_FF_FALLBACK = LINEAR_GRAM_SOLVE and not is_defined["MOJOLEARN_IDN_GRAM_FF_FALLBACK_OFF"]()
+# TOMBSTONE: MOJOLEARN_IDN_GRAM_FF_FALLBACK_OFF (old path of the PROMOTED default) deleted 2026-11-15 by lane/expdel2-05-base; code recoverable at 438e34e369.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_GRAM_FF_FALLBACK_OFF.patch; record in docs/TOMBSTONES.md.
+comptime IDN_GRAM_FF_FALLBACK = LINEAR_GRAM_SOLVE
 
 # C1 (lane ridge-ff-tiled, 2026-10-11). PROMOTED to the IDENTICAL default 2026-10-11
 # (lane w2-decide-linalg; same box, main c8ef6c66d, one run per arm, NV==AMD digests):
 # ridge istella 0.917 (NV 0.857 / AMD 0.977; v0135/a1717 vs A v0134/a1716), ridge taxi
 # 0.973 (v0080/a1662 vs A v0079/a1661); ols / ard / bayesian-ridge / ridge-cv 1.00;
-# same bits. -D MOJOLEARN_IDN_GFF_GRAM_TILED_OFF restores the per-cell gff_leaf_kernel.
+# same bits. The -D MOJOLEARN_IDN_GFF_GRAM_TILED_OFF rollback is deleted.
 # The float-float leaf Gram of IDN_GRAM_FF_FALLBACK (the route ridge istella
 # takes: the fp32 gate rejects it) as register tiles: a block owns one 64 x 64
 # tile of the extended (d + 1) x (d + 1) upper triangle ([X | y], the cross
@@ -118,7 +123,9 @@ comptime IDN_GRAM_FF_FALLBACK = LINEAR_GRAM_SOLVE and not is_defined["MOJOLEARN_
 # each cell's sequence is unchanged (ff_centered of the same words, ff_mul
 # (c_i, c_j), ff_add into the cell, rows ascending within the leaf, the same
 # leaf cut), so the host column (glm/host/gram_solve_host.mojo) is untouched.
-comptime IDN_GFF_GRAM_TILED = IDN_GRAM_FF_FALLBACK and not is_defined["MOJOLEARN_IDN_GFF_GRAM_TILED_OFF"]()
+# TOMBSTONE: MOJOLEARN_IDN_GFF_GRAM_TILED_OFF (old path of the PROMOTED default) deleted 2026-11-15 by lane/expdel2-05-base; code recoverable at bdbba2b676.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_GFF_GRAM_TILED_OFF.patch; record in docs/TOMBSTONES.md.
+comptime IDN_GFF_GRAM_TILED = IDN_GRAM_FF_FALLBACK
 
 # TOMBSTONE: MOJOLEARN_IDN_GS_SOLVE_ONE_LAUNCH (noise) deleted 2026-10-11 by fbf3d50a0; code recoverable at fbf3d50a0^.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_GS_SOLVE_ONE_LAUNCH.patch

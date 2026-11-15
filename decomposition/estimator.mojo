@@ -77,7 +77,6 @@ from std.sys.compile import is_defined
 
 #: FAST Apple default proposal, measured source 34b4f6c72 (2026-10-04).
 #: M3 w2-w4d-pca-istella-r1: 471.2 -> 217.8 ms; quality PASS (16 checks).
-#: `-D MOJOLEARN_PCA_FAST_POOL_OFF` restores fresh allocations.
 #: (FAST + Apple, on top of PCA_FAST_GRAM_MMA): when the fit takes the MMA
 #: Gram arm (d past the split-K Gram, Istella's 220), the fit's n x d device
 #: copy of X comes from core/device_pool (kept between calls, up to
@@ -85,7 +84,9 @@ from std.sys.compile import is_defined
 #: fresh allocation each call (fresh-page cost; x_prep's POOL_ARENA measured
 #: ~50 ms per GB), and the two n x d alias buffers that arm never reads are
 #: 1 float. Copies and allocations only: no bit moves.
-comptime PCA_FAST_POOL = PCA_FAST_GRAM_MMA and not is_defined["MOJOLEARN_PCA_FAST_POOL_OFF"]()
+# TOMBSTONE: MOJOLEARN_PCA_FAST_POOL_OFF (old path of the FAST+Apple default, no A/B row) deleted 2026-11-15 by lane/expdel2-05-base; code recoverable at b261ccae4f.
+# Restore: git apply experiments/removed/MOJOLEARN_PCA_FAST_POOL_OFF.patch; record in docs/TOMBSTONES.md.
+comptime PCA_FAST_POOL = PCA_FAST_GRAM_MMA
 comptime _PCA_POOL = "MojolearnEstimatorsPcaFastXV2"
 #: lane/apple-fast-s-linalg (2026-10-04), FAST + Apple only; both the
 #: default since verdicts batch 6 (2026-10-05). TruncatedSVD.fit's `tsvd_explained_host` (every fit, both component
@@ -487,18 +488,6 @@ def tsvd_fit_device(
     return False
 
 
-def square_in_place_kernel(
-    a: MutPointer[Float32, MutAnyOrigin],
-    n_in: Int32,
-):
-    """`a[i] = ftz(a[i] * a[i])`, the multiply pinned (lane/algos-decomp,
-    2026-09-27; `tsvd_explained_host`)."""
-    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
-    if i < Int(n_in):
-        var v = a.unsafe_load(i)
-        a.unsafe_store(i, ftz(identical_mul(v, v)))
-
-
 # lane fam2-decomp (2026-10-04), IDENTICAL: the column mean is launched
 # through core/xtdz_coalesced.mojo `column_mean_launch` (the launch
 # decomposition/impl/linalg/detail/pca.mojo already uses): the same chains,
@@ -507,20 +496,19 @@ def square_in_place_kernel(
 # Since lane debt-block-per-n (2026-10-21) it is the only arm in every mode;
 # -D MOJOLEARN_IDN_DECOMP_MEAN_LAUNCH_OFF (the direct one-block-per-column
 # launch) is retired and refused.
-from decomposition.mean_switch import IDN_DECOMP_MEAN_LAUNCH
 # TOMBSTONE: MOJOLEARN_CLASSICAL_TSVD_FUSED_STATS (slower) deleted 2026-10-10 by lane/grid-act-6; code recoverable at 328b0ae58.
 # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_TSVD_FUSED_STATS.patch; record in docs/TOMBSTONES.md.
 
 
-from core.host_tile_fold import IDN_XTY_TILED, XTY_TILE_ROWS, xty_tiles
+from core.host_tile_fold import XTY_TILE_ROWS, xty_tiles
 from core.xtdz_coalesced import XTY_TILE_TPB, xty_tile_fold_kernel
-from experiments.classical_identical_ideas.shared_controls import C01_MEAN
 from checks.numerics import identical_mul_add
 
 #: T2, lane fg-pca (2026-10-09), MOJOLEARN_IDN_COLVAR_FUSED: the IDENTICAL
-#: DEFAULT since 2026-10-10 (lane/postmerge-act-6; `-D
-#: MOJOLEARN_IDN_COLVAR_FUSED_OFF` restores the shift + square passes; the old
-#: on-define is refused in core/six_lane_experiment_guards.mojo). fg2 A/B on
+#: DEFAULT since 2026-10-10 (lane/postmerge-act-6), now the only form in every
+#: mode (the shift + square passes and their `-D MOJOLEARN_IDN_COLVAR_FUSED_OFF`
+#: rollback are deleted; the old on-define is refused in
+#: core/six_lane_experiment_guards.mojo). fg2 A/B on
 #: main 0a7b206f1, one run per arm (nv2 L40S v1021-v1050, MI325X a1161-a1190;
 #: ratio = arm / fg2 default): tsvd taxi NV 0.76x / AMD 0.97x, tsvd istella NV
 #: 0.97x / AMD 0.97x, pca istella 1.00x / 1.00x, pca taxi NV 1.03x / AMD 1.00x;
@@ -537,13 +525,11 @@ from checks.numerics import identical_mul_add
 #: -2 read/write passes over the matrix (-4 n*c words) at any shape. Bits:
 #: none (the same words into the same fold); the host column is unchanged.
 #: Taken only where the mean pass is `xty_tiled` (every mode since lane
-#: debt-block-per-n, 2026-10-21; not under the C01_MEAN arm).
-comptime IDN_COLVAR_FUSED = (
-    IDN_XTY_TILED
-    and IDN_DECOMP_MEAN_LAUNCH
-    and not C01_MEAN
-    and not is_defined["MOJOLEARN_IDN_COLVAR_FUSED_OFF"]()
-)
+#: debt-block-per-n, 2026-10-21).
+# TOMBSTONE: MOJOLEARN_CLASSICAL_C01_MEAN (DROPPED-slower, EXP C01_MEAN row) deleted 2026-11-15 by lane/expdel2-05-base; code recoverable at eeba85eb55.
+# Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C01_MEAN.expdel2-05-base.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_IDN_COLVAR_FUSED_OFF (old path of the PROMOTED default) deleted 2026-11-15 by lane/expdel2-05-base; code recoverable at 7fdb249ce5.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_COLVAR_FUSED_OFF.patch; record in docs/TOMBSTONES.md.
 
 
 def colvar_tile_partial_kernel(
@@ -585,48 +571,33 @@ def _column_variance(
     n_rows: Int,
     n_cols: Int,
 ) raises:
-    """numpy's `var(axis=0)` (ddof 0) of `m`, IN PLACE over `m`: the column
-    mean (`column_mean_launch`), the centering (`shift_columns_kernel`),
-    the pinned square, then the column mean of the squares."""
+    """numpy's `var(axis=0)` (ddof 0) of `m`, `m` read-only: the column mean
+    (`column_mean_launch`), then the column mean of the pinned centered
+    squares formed in registers in the same tile order (T2)."""
     comptime assert not (is_defined["MOJOLEARN_IDN_DECOMP_MEAN_LAUNCH_OFF"]() or is_defined["MOJOLEARN_TSVD_FAST_COLVAR_OFF"]()), "removed (lane debt-block-per-n, 2026-10-21): IDN_DECOMP_MEAN_LAUNCH_OFF / TSVD_FAST_COLVAR_OFF chose a column mean with one block per column walking all n rows (or its STATS_TPB-chain twin); the row-tile order is the only one"
-    var cells = n_rows * n_cols
-    comptime if IDN_COLVAR_FUSED:
-        # T2: the mean (xty_tiled), then the centered squares' mean in the
-        # same tile order, `m` read-only
-        column_mean_launch(ctx, mu, m, n_rows, n_cols)
-        var tiles = xty_tiles(n_rows)
-        var tcells = tiles * n_cols
-        var ws = ctx.enqueue_create_buffer[DType.float32](max(tcells, 1))
-        ctx.enqueue_function[colvar_tile_partial_kernel](
-            ws.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
-            m.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
-            mu.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
-            Int32(n_rows), Int32(n_cols), Int32(tiles),
-            grid_dim=((tcells + XTY_TILE_TPB - 1) // XTY_TILE_TPB, 1, 1),
-            block_dim=(XTY_TILE_TPB, 1, 1),
-        )
-        ctx.enqueue_function[xty_tile_fold_kernel](  # small-launch(n_rows: the mean divisor only): folds the xty_tiles(n_rows) tile partials of one column, never walks rows
-            var_out.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
-            ws.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
-            Int32(tiles), Int32(n_rows), Int32(1),
-            grid_dim=(n_cols, 1, 1),
-            block_dim=(STATS_TPB, 1, 1),
-        )
-        ctx.synchronize()
-        _ = ws^
-        return
-    # lane debt-block-per-n (2026-10-21): the tile order only; the direct
-    # one-block-per-column `column_mean_kernel` arm is retired
+    # T2: the mean (xty_tiled), then the centered squares' mean in the
+    # same tile order, `m` read-only
     column_mean_launch(ctx, mu, m, n_rows, n_cols)
-    ctx.enqueue_function[shift_columns_kernel](
-        m.unsafe_ptr(), mu.unsafe_ptr(), Int32(n_rows), Int32(n_cols), Float32(-1.0),
-        grid_dim=((cells + 255) // 256, 1, 1), block_dim=(256, 1, 1),
+    var tiles = xty_tiles(n_rows)
+    var tcells = tiles * n_cols
+    var ws = ctx.enqueue_create_buffer[DType.float32](max(tcells, 1))
+    ctx.enqueue_function[colvar_tile_partial_kernel](
+        ws.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+        m.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+        mu.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+        Int32(n_rows), Int32(n_cols), Int32(tiles),
+        grid_dim=((tcells + XTY_TILE_TPB - 1) // XTY_TILE_TPB, 1, 1),
+        block_dim=(XTY_TILE_TPB, 1, 1),
     )
-    ctx.enqueue_function[square_in_place_kernel](
-        m.unsafe_ptr(), Int32(cells),
-        grid_dim=((cells + 255) // 256, 1, 1), block_dim=(256, 1, 1),
+    ctx.enqueue_function[xty_tile_fold_kernel](  # small-launch(n_rows: the mean divisor only): folds the xty_tiles(n_rows) tile partials of one column, never walks rows
+        var_out.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+        ws.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+        Int32(tiles), Int32(n_rows), Int32(1),
+        grid_dim=(n_cols, 1, 1),
+        block_dim=(STATS_TPB, 1, 1),
     )
-    column_mean_launch(ctx, var_out, m, n_rows, n_cols)
+    ctx.synchronize()
+    _ = ws^
 
 
 @always_inline
@@ -743,8 +714,8 @@ def _tsvd_explained_tail(
     _ = xt^
 
 
-#: T1, lane fg-pca (2026-10-09), IDENTICAL default; rollback
-#: `-D MOJOLEARN_IDN_TSVD_ONE_UPLOAD_OFF`. `TruncatedSVD.fit` called
+#: T1, lane fg-pca (2026-10-09), IDENTICAL default (the
+#: `-D MOJOLEARN_IDN_TSVD_ONE_UPLOAD_OFF` rollback is deleted). `TruncatedSVD.fit` called
 #: `tsvd_fit` and then `tsvd_explained`, and each copied X host -> device
 #: (n*d*4 bytes each: 880 MB at 1M x 220, about 46 ms per copy at a
 #: pageable ~19 GB/s) and allocated its own n*d buffer. `tsvd_fit_explained`
@@ -753,12 +724,10 @@ def _tsvd_explained_tail(
 #: SAME device buffer. Cost: -1 H2D copy of X and -1 n*d allocation per fit at
 #: any shape. Bits: none (the same kernels on the same words in the same
 #: order; the components reach the tail through the same Float32 output
-#: array). The OFF arm (and FAST, which keeps its pooled pair) runs the two
-#: calls in order.
-comptime TSVD_ONE_UPLOAD = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not is_defined["MOJOLEARN_IDN_TSVD_ONE_UPLOAD_OFF"]()
-)
+#: array). FAST, which keeps its pooled pair, runs the two calls in order.
+# TOMBSTONE: MOJOLEARN_IDN_TSVD_ONE_UPLOAD_OFF (old path of the CONFIRMED default) deleted 2026-11-15 by lane/expdel2-05-base; code recoverable at 34a0226192.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_TSVD_ONE_UPLOAD_OFF.patch; record in docs/TOMBSTONES.md.
+comptime TSVD_ONE_UPLOAD = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 
 
 def tsvd_fit_explained_host(

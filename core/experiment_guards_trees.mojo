@@ -98,6 +98,8 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_DT_BINS_QOLD"](), "removed 2026-11-15 (lane/expdel2-01-base): MOJOLEARN_DT_BINS_QOLD (rollback of the FAST DecisionTreeRegressor default to 128 quantile bins) is gone; RF_DT_DEFAULT_BINS is 256 under FAST, 128 otherwise (rab5-dtbins); restore: experiments/removed/MOJOLEARN_DT_BINS_QOLD.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_IF_RESIDENT_OFF.patch
     comptime assert not is_defined["MOJOLEARN_IDN_IF_RESIDENT_OFF"](), "removed 2026-11-15 (lane/expdel2-01-base): MOJOLEARN_IDN_IF_RESIDENT_OFF (rollback of IsolationForest to a refit of the whole forest inside every scoring call) is gone, no A/B was ever recorded for it; the resident forest that fit built is the path on every tier; restore: experiments/removed/MOJOLEARN_IDN_IF_RESIDENT_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_FOREST_DEVICE_FINITE_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_FOREST_DEVICE_FINITE_OFF"](), "removed 2026-11-15 (lane/expdel2-05-base): FOREST_DEVICE_FINITE_OFF (FAST+Apple rollback of the forest fits to the host finite scans) is gone; the device scan is the FAST+Apple path"
     return True
 
 

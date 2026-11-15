@@ -19,7 +19,6 @@ new arrays, which bump at their first use. In-place edits of a frozen weight
 are refused by the array itself.
 """
 from std.atomic import Atomic, Ordering
-from std.sys.compile import is_defined
 from core.shared_slot import SharedSlot, shared_slot_lock, shared_slot_unlock
 
 
@@ -108,12 +107,10 @@ struct WeightKey(Copyable, Movable):
 # (bindings/samba_training_native_door.mojo, samba_inference_native_door.mojo)
 # and read only the process epoch.
 #
-# -D MOJOLEARN_SAMBA_WEIGHT_EPOCH_GLOBAL (default off) keys the Samba copies by
-# the process epoch again (every registry reads and bumps `weight_epoch`): the
-# B arm of the owed A/B (row fix-samba-weight-epoch-per-model in
-# bench/results/paper_compare/owed-pre0867.json). Same kernels, same bytes
-# uploaded when an upload happens: only the upload COUNT differs.
-comptime SAMBA_WEIGHT_EPOCH_GLOBAL = is_defined["MOJOLEARN_SAMBA_WEIGHT_EPOCH_GLOBAL"]()
+# TOMBSTONE: MOJOLEARN_SAMBA_WEIGHT_EPOCH_GLOBAL (unmeasured B arm) deleted 2026-11-15 by lane/expdel2-05-base; code recoverable at 4fdfffd7c8.
+# Restore: git apply experiments/removed/MOJOLEARN_SAMBA_WEIGHT_EPOCH_GLOBAL.patch; record in docs/TOMBSTONES.md.
+# The alias stays False for checks/native_tests/registry_epoch_suite.mojo until its lane folds it.
+comptime SAMBA_WEIGHT_EPOCH_GLOBAL = False
 
 comptime _REGISTRY_LAYOUT = 2
 comptime _REGISTRY_NAME = "MojolearnRegistryEpochV2"
@@ -214,12 +211,9 @@ def registry_word(addr: Int, mut epoch: Int) raises -> Int:
 def registry_epoch(addr: Int) raises -> Int:
     """The epoch (>= 1) of the registry at host address `addr` (its slot's
     word; a load-time read, never on a call's path)."""
-    comptime if SAMBA_WEIGHT_EPOCH_GLOBAL:
-        return weight_epoch()
-    else:
-        var epoch = 0
-        _ = registry_word(addr, epoch)
-        return epoch
+    var epoch = 0
+    _ = registry_word(addr, epoch)
+    return epoch
 
 
 def registry_epoch_bump(addr: Int) raises:
@@ -227,18 +221,15 @@ def registry_epoch_bump(addr: Int) raises:
     it reloads at its next use; copies of other registries are untouched.
     A zero address (no registry) stamps nothing; nor does a registry no copy
     was ever keyed by (it has no slot, so no key can hold it)."""
-    comptime if SAMBA_WEIGHT_EPOCH_GLOBAL:
-        weight_epoch_bump()
-    else:
-        if addr == 0:
-            return
-        var slot = _REGISTRY.get_or_create_ptr()
-        var lock = _lock_word(slot)
-        shared_slot_lock(lock)
-        var i = _find(slot, addr)
-        if i >= 0:
-            Atomic.store[ordering=Ordering.RELEASE](_slot_word(slot, i), _next_stamp(slot))
-        shared_slot_unlock(lock)
+    if addr == 0:
+        return
+    var slot = _REGISTRY.get_or_create_ptr()
+    var lock = _lock_word(slot)
+    shared_slot_lock(lock)
+    var i = _find(slot, addr)
+    if i >= 0:
+        Atomic.store[ordering=Ordering.RELEASE](_slot_word(slot, i), _next_stamp(slot))
+    shared_slot_unlock(lock)
 
 
 struct RegistryKey(Copyable, Movable):
@@ -270,12 +261,9 @@ struct RegistryKey(Copyable, Movable):
     @staticmethod
     def take(addr: Int) raises -> RegistryKey:
         """The key of a copy loaded now from the registry at `addr`."""
-        comptime if SAMBA_WEIGHT_EPOCH_GLOBAL:
-            return RegistryKey(addr, weight_epoch(), 0)
-        else:
-            var epoch = 0
-            var word = registry_word(addr, epoch)
-            return RegistryKey(addr, epoch, word)
+        var epoch = 0
+        var word = registry_word(addr, epoch)
+        return RegistryKey(addr, epoch, word)
 
     def current(self, addr: Int) raises -> Bool:
         """Whether the copy still holds the bytes of the registry at `addr`:
@@ -283,8 +271,5 @@ struct RegistryKey(Copyable, Movable):
         atomic load of the held word; no lock, no table scan."""
         if self.epoch == 0 or self.addr != addr:
             return False
-        comptime if SAMBA_WEIGHT_EPOCH_GLOBAL:
-            return self.epoch == weight_epoch()
-        else:
-            return self.word != 0 and self.epoch == Int(
-                Atomic.load[ordering=Ordering.ACQUIRE](_EpochWord(unsafe_from_address=self.word)))
+        return self.word != 0 and self.epoch == Int(
+            Atomic.load[ordering=Ordering.ACQUIRE](_EpochWord(unsafe_from_address=self.word)))
