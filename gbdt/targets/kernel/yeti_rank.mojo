@@ -95,7 +95,6 @@ the block kernel, the order this DEVIATION must not change.
 """
 
 from max.gpu import block_dim, block_idx, grid_dim, thread_idx
-from gbdt.apple_fast_tree_experiments import AFT_N11
 from max.gpu.primitives.warp import shuffle_xor
 from std.memory import bitcast, stack_allocation
 from std.sys import is_defined
@@ -152,7 +151,9 @@ comptime AFT_YETI_TASKS_PER_BLOCK = 1
 # TOMBSTONE: MOJOLEARN_AFT_N10 (DELETE-EXPERIMENT, never-run Apple FAST card, rule g; non-owner fold) deleted 2026-11-15 by lane/expdel2-45-trees; code recoverable at 3e94c34cf5.
 # Restore: git apply experiments/removed/MOJOLEARN_AFT_N10.expdel2-45-trees.patch; record in docs/TOMBSTONES.md
 comptime AFT_YETI_MERGE_LANES = YETI_LANES
-comptime AFT_YETI_ROW_THREADS = 128 if AFT_N11 else MSE_BLOCK_SIZE
+# TOMBSTONE: MOJOLEARN_AFT_N11 (DELETE-EXPERIMENT, never-run Apple FAST card, rule g; non-owner fold) deleted 2026-11-15 by lane/expdel2-45-trees; code recoverable at 0fd7d7dfa3.
+# Restore: git apply experiments/removed/MOJOLEARN_AFT_N11.expdel2-45-trees.patch; record in docs/TOMBSTONES.md
+comptime AFT_YETI_ROW_THREADS = MSE_BLOCK_SIZE
 
 
 def yeti_block_parallel_for[column: Int]() -> Bool:
