@@ -342,7 +342,7 @@ TEST2_HOLD_TICKS=12   # --test-2gpu: each tiny body holds 12 x 10 s
 # THE 2GPU CPU OPPONENT DENY LIST: the trees and classical opponent drivers
 # (CatBoost, scikit-learn, LightGBM, XGBoost, cuML on the CPU or beside our
 # arm) and the Python arms they run. Their CPU tuple is the 13-core VM.
-CPU_OPPONENT_DENY="trees_leg.sh trees_amd_leg.sh trees_amd_remote.sh trees_identical_remote.sh trees_identical_ab.sh vendor_trees_leg.sh vendor_preflight.sh local_speed_run.sh do_speed_leg.sh gbdt_accuracy_ab.sh grow_policy_ab.sh nvidia_bench.sh nvidia_forest_bench.sh knn_reference_leg.sh speed_gbdt_arm.py speed_cuml_arm.py vendor_preflight.py catboost_arm.py catboost_end2end_arm.py catboost_logloss_arm.py catboost_multiclass_arm.py catboost_reference.py knn_cuml_reference.py forest_speed_arm.py classical_ladder_arm.py nvidia_identical_trees.py rf_higgs_columns_ab.py forest_inference_ab.py"
+CPU_OPPONENT_DENY="trees_leg.sh trees_amd_leg.sh trees_amd_remote.sh trees_identical_remote.sh trees_identical_ab.sh vendor_trees_leg.sh vendor_preflight.sh local_speed_run.sh do_speed_leg.sh gbdt_accuracy_ab.sh grow_policy_ab.sh nvidia_bench.sh nvidia_forest_bench.sh knn_reference_leg.sh speed_gbdt_arm.py speed_cuml_arm.py vendor_preflight.py catboost_arm.py catboost_end2end_arm.py catboost_logloss_arm.py catboost_multiclass_arm.py catboost_reference.py knn_cuml_reference.py forest_speed_arm.py classical_ladder_arm.py nvidia_identical_trees.py forest_inference_ab.py"
 CPU_OPPONENT_ENV_DENY="MOJOLEARN_SPEED_ MOJOLEARN_VT_ MOJOLEARN_TREES_ MOJOLEARN_LADDER_ MOJOLEARN_KNN_REF_"
 
 usage() { sed -n '2,/^# SAFETY, BAKED IN/p' "${BASH_SOURCE[0]}" | sed '$d' | sed 's/^# \{0,1\}//'; }

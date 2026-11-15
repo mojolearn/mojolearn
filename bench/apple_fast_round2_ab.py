@@ -5,20 +5,17 @@ A/Bs (tools/afr2_ab.sh builds the two arms; this runs one arm's .so).
 
 The board rows do not reach two of the lane's switches: kernel-shap and
 permutation-shap explain a NumPy ridge closure (no device model exists for a
-callable), and standard-scaler times fit(X) then transform(Xq) of a
-different array. So:
+callable). So:
 
   kshap-rf   KernelExplainer over a mojolearn RandomForestRegressor
              (MOJOLEARN_KSHAP_FAST_DEVICE_MODEL)
   pshap-rf   PermutationExplainer over the same forest
              (MOJOLEARN_PSHAP_FAST_DEVICE_MODEL)
-  scaler-ft  StandardScaler.fit_transform(X)
-             (MOJOLEARN_X_PREP_FAST_FIT_TRANSFORM_FUSED)
+  (scaler-ft, MOJOLEARN_X_PREP_FAST_FIT_TRANSFORM_FUSED, was deleted 2026-11-15)
 
 Prints one line: AFR2 case=<case> ms=<timed ms> quality=<metric>=<value>.
 Quality (outside the clock, NumPy, a bench tool, not the runtime): SHAP
-additivity max |sum(phi) + E[f] - f(x)|; scaler max |fit_transform -
-fit().transform()|. Shapes are generic sizes, not board dimensions.
+additivity max |sum(phi) + E[f] - f(x)|. Shapes are generic sizes, not board dimensions.
 """
 import sys
 import time
@@ -54,26 +51,12 @@ def shap_case(kind):
     return ms, "additivity_max_abs=%.3e" % err
 
 
-def scaler_case():
-    import mojolearn as ml
-    rng = np.random.default_rng(5)
-    X = (3.0 * rng.standard_normal((750_000, 160), dtype=np.float32) + 1.5).astype(np.float32)
-    ml.StandardScaler(numeric_mode="fast").fit_transform(X[:4096])   # warm the binding and context
-    t0 = time.perf_counter()
-    Z = ml.StandardScaler(numeric_mode="fast").fit_transform(X)
-    ms = (time.perf_counter() - t0) * 1e3
-    R = ml.StandardScaler(numeric_mode="fast").fit(X).transform(X)
-    return ms, "max_abs_vs_two_step=%.3e" % np.abs(np.asarray(Z) - np.asarray(R)).max()
-
-
 def main():
     case = sys.argv[1]
     if case in ("kshap-rf", "pshap-rf"):
         ms, q = shap_case(case)
-    elif case == "scaler-ft":
-        ms, q = scaler_case()
     else:
-        raise SystemExit("cases: kshap-rf pshap-rf scaler-ft")
+        raise SystemExit("cases: kshap-rf pshap-rf")
     print("AFR2 case=%s ms=%.1f quality=%s" % (case, ms, q))
 
 
