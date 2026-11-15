@@ -130,7 +130,9 @@ comptime C56_LDA_INPUT = False
 
 # C05 independent invocation-owned OLS covariance/inverse phase storage.
 # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
-comptime C05_OLS_PHASE = CLASSICAL_IDENTICAL and is_defined["MOJOLEARN_CLASSICAL_C05_OLS_PHASE"]()
+# TOMBSTONE: MOJOLEARN_CLASSICAL_C05_OLS_PHASE (no A/B recorded for the opt-in arm) deleted 2026-11-15 by lane/expdel2-07-base; code recoverable at eb67cbe21f.
+# Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C05_OLS_PHASE.patch
+comptime C05_OLS_PHASE = False
 
 # C61 (lane classical-nbda, 2026-10-07): single-pass blocked class statistics
 # (MOJOLEARN_CLASSICAL_C61_NB_CLASS_STATS=1|2 for GaussianNB,

@@ -745,6 +745,7 @@ in the tables after the sections.
 | [`MOJOLEARN_CLASSICAL_C08_GROUPED_OUTPUT`](#mojolearn_classical_c08_grouped_output-unmeasured-arm-deleted-2026-11-15) | Prep (grouped one-hot emission, IDENTICAL) | removed (unmeasured opt-in arm) | 2026-11-15 | [MOJOLEARN_CLASSICAL_C08_GROUPED_OUTPUT.patch](../experiments/removed/MOJOLEARN_CLASSICAL_C08_GROUPED_OUTPUT.patch) |
 | [`MOJOLEARN_CLASSICAL_C02_LINEAR_PAIR`](#mojolearn_classical_c02_linear_pair-unmeasured-arm-deleted-2026-11-15) | Linear (OLS / Ridge independent C02 linear sums, IDENTICAL) | removed (unmeasured opt-in arm) | 2026-11-15 | [MOJOLEARN_CLASSICAL_C02_LINEAR_PAIR.patch](../experiments/removed/MOJOLEARN_CLASSICAL_C02_LINEAR_PAIR.patch) |
 | [`MOJOLEARN_CLASSICAL_C56_LDA_INPUT`](#mojolearn_classical_c56_lda_input-unmeasured-arm-deleted-2026-11-15) | Prep (LDA input reuse, IDENTICAL) | removed (unmeasured opt-in arm) | 2026-11-15 | [MOJOLEARN_CLASSICAL_C56_LDA_INPUT.patch](../experiments/removed/MOJOLEARN_CLASSICAL_C56_LDA_INPUT.patch) |
+| [`MOJOLEARN_CLASSICAL_C05_OLS_PHASE`](#mojolearn_classical_c05_ols_phase-unmeasured-arm-deleted-2026-11-15) | Linear (invocation-owned OLS covariance / inverse phase storage, IDENTICAL) | removed (unmeasured opt-in arm) | 2026-11-15 | [MOJOLEARN_CLASSICAL_C05_OLS_PHASE.patch](../experiments/removed/MOJOLEARN_CLASSICAL_C05_OLS_PHASE.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -7230,3 +7231,11 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md (section expdel-02-
 - **Deleted by**: lane/expdel2-07-base (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `e96891c8e7`.
 - **Restore**: `git apply experiments/removed/MOJOLEARN_CLASSICAL_C56_LDA_INPUT.patch`, then delete the `MOJOLEARN_CLASSICAL_C56_LDA_INPUT` refusal in `core/experiment_guards_base.mojo`.
 - **Records**: refusal in `core/experiment_guards_base.mojo`; `classical-nbda.json` control `c56_lda_input`: `removed` entry added (control removed from `controls` and from its algorithms); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-07-base section).
+
+## MOJOLEARN_CLASSICAL_C05_OLS_PHASE: unmeasured arm deleted (2026-11-15)
+
+- **What it was**: the opt-in arm behind `C05_OLS_PHASE` in `experiments/classical_identical_ideas/shared_controls.mojo`; the alias stays as the folded constant so importers in other lanes compile, and each importer's lane deletes its branch.
+- **Verdict**: no record: no A/B was recorded for the opt-in arm (plan rule a; AGENTS.md "An unmeasured arm is deleted", Andrew 2026-11-15). No bit change on any column.
+- **Deleted by**: lane/expdel2-07-base (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `eb67cbe21f`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_CLASSICAL_C05_OLS_PHASE.patch`, then delete the `MOJOLEARN_CLASSICAL_C05_OLS_PHASE` refusal in `core/experiment_guards_linear.mojo`.
+- **Records**: refusal in `core/experiment_guards_linear.mojo`; `classical-misc.json` control `c05_ols_phase`: `removed` entry added (control removed from `controls` and from its algorithms); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-07-base section).
