@@ -100,6 +100,8 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_CAGRA_FAST_IVFG_OFF"](), "removed 2026-11-15 (lane/expdel-01-cluster): CAGRA_FAST_IVFG_OFF (FAST+Apple rollback to the exact CAGRA build graph) is gone; IVFG is the FAST+Apple build graph (cagra istella 21,239 -> 1,254.3 ms, recall .9972, KEPT 3852df59b); restore: experiments/removed/MOJOLEARN_CAGRA_FAST_IVFG_OFF.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_AP_EXACT.patch
     comptime assert not is_defined["MOJOLEARN_AP_EXACT"](), "removed 2026-11-15 (lane/expdel-01-cluster): AP_EXACT (FAST opt-in AffinityPropagation steps: radix median, device diagonals, early equality scan, FAST top-2 R walk) was SUPERSEDED: every build takes the steps; the FAST top-2 arm is gone; restore: experiments/removed/MOJOLEARN_AP_EXACT.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_BISECT_FAST_ZEROCOPY_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_BISECT_FAST_ZEROCOPY_OFF"](), "removed 2026-11-15 (lane/expdel-01-cluster): BISECT_FAST_ZEROCOPY_OFF (FAST+Apple rollback to the copied-list BisectingKMeans fit) is gone; the zero-copy device-centered entry is the FAST+Apple path (istella 2,033 -> 848 ms, silhouette identical); restore: experiments/removed/MOJOLEARN_BISECT_FAST_ZEROCOPY_OFF.patch"
     return True
 
 

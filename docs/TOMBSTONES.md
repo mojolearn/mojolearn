@@ -686,6 +686,7 @@ Deletions reversed by new evidence. The code is back on main; the section and th
 | [`MOJOLEARN_CAGRA_FAST_IVFG_LOWD_SEEDS4_OFF`](#mojolearn_cagra_fast_ivfg_lowd_seeds4_off-old-path-deleted-2026-11-15) | ANN (CAGRA low-d graph + 4x seeds, FAST Apple) | removed (old path; FAST+Apple DEFAULT, w2-cagra-lowds4-q PASS) | 2026-11-15 | [MOJOLEARN_CAGRA_FAST_IVFG_LOWD_SEEDS4_OFF.patch](../experiments/removed/MOJOLEARN_CAGRA_FAST_IVFG_LOWD_SEEDS4_OFF.patch) |
 | [`MOJOLEARN_CAGRA_FAST_IVFG_OFF`](#mojolearn_cagra_fast_ivfg_off-old-path-deleted-2026-11-15) | ANN (CAGRA build graph, FAST Apple) | removed (old path; FAST+Apple default KEPT 3852df59b) | 2026-11-15 | [MOJOLEARN_CAGRA_FAST_IVFG_OFF.patch](../experiments/removed/MOJOLEARN_CAGRA_FAST_IVFG_OFF.patch) |
 | [`MOJOLEARN_AP_EXACT`](#mojolearn_ap_exact-loser-deleted-2026-11-15) | Cluster (AffinityPropagation, FAST opt-in) | removed (SUPERSEDED: its steps are in every build) | 2026-11-15 | [MOJOLEARN_AP_EXACT.patch](../experiments/removed/MOJOLEARN_AP_EXACT.patch) |
+| [`MOJOLEARN_BISECT_FAST_ZEROCOPY_OFF`](#mojolearn_bisect_fast_zerocopy_off-old-path-deleted-2026-11-15) | Cluster (BisectingKMeans, FAST Apple) | removed (old path; FAST+Apple default KEPT) | 2026-11-15 | [MOJOLEARN_BISECT_FAST_ZEROCOPY_OFF.patch](../experiments/removed/MOJOLEARN_BISECT_FAST_ZEROCOPY_OFF.patch) |
 
 ## Trees
 
@@ -5954,4 +5955,12 @@ replacement computes the same values in the same order (see the bit notes below)
 - **Verdict**: SUPERSEDED (EXPERIMENTS.md `AP_EXACT`, reconciled 2026-10-05): affinity-prop istella -4% (LEDGER 2026-10-03), the steps taken by every build, the define changes nothing. Default-off arm: no bit change on any column.
 - **Deleted by**: lane/expdel-01-cluster (expdel-01-cluster, docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md); code recoverable at `854fde92db`.
 - **Restore**: `git apply experiments/removed/MOJOLEARN_AP_EXACT.patch`, then delete the `MOJOLEARN_AP_EXACT` refusal in `core/experiment_guards_cluster.mojo`.
+- **Records**: refusal in `core/experiment_guards_cluster.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel-01-cluster section).
+
+## MOJOLEARN_BISECT_FAST_ZEROCOPY_OFF: old path deleted (2026-11-15)
+
+- **What it was**: the FAST+Apple rollback of BisectingKMeans from the zero-copy device-centered entry (`x_cluster/bisect_fast.mojo` BISECT_FAST_ZEROCOPY, taken in `x_cluster/device_execution.mojo`) to the generic copied-list fit. Only the define read is deleted: the generic fit stays the path outside FAST+Apple.
+- **Verdict**: KEPT, FAST+Apple default (EXPERIMENTS.md `BISECT_FAST_ZEROCOPY`, clus3-bisect-zc-istella): M3 n=1, bisecting-kmeans istella 2,033 -> 848 ms (-58.3%), silhouette .1183 identical. No bit change on any column.
+- **Deleted by**: lane/expdel-01-cluster (expdel-01-cluster, docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md); code recoverable at `a8d747b743`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_BISECT_FAST_ZEROCOPY_OFF.patch`, then delete the `MOJOLEARN_BISECT_FAST_ZEROCOPY_OFF` refusal in `core/experiment_guards_cluster.mojo`.
 - **Records**: refusal in `core/experiment_guards_cluster.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel-01-cluster section).
