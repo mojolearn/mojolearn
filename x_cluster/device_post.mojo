@@ -17,7 +17,6 @@ from std.memory import stack_allocation
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 
-from std.sys.compile import is_defined
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_sqrt
 from x_cluster.bodies import FPtr, IPtr
@@ -365,15 +364,14 @@ def optics_step_kernel(
 #: for 2n + 1. The keys (`order_key`), the relaxation (`optics_relax_cell`)
 #: and the set each step scans are the two kernels' own, so the picks, the
 #: reachabilities and the predecessors are the same words.
-#: `-D MOJOLEARN_IDN_OPTICS_FUSED_STEP_OFF=1` restores the two launches.
+#: FAST keeps the two launches.
+# TOMBSTONE: MOJOLEARN_IDN_OPTICS_FUSED_STEP_OFF (old path, no A/B row) deleted 2026-11-15 by lane/expdel2-15-cluster; code recoverable at 86b423bf4b.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_OPTICS_FUSED_STEP_OFF.patch; record in docs/TOMBSTONES.md.
 # TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch, EXP:2438 DELETED; non-owner sites) deleted 2026-11-15 by lane/expdel2-15-cluster; code recoverable at 6837570bd9.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-15-cluster.patch; record in docs/TOMBSTONES.md.
 # TOMBSTONE: MOJOLEARN_C41_FUSED_MINIMA (unmeasured arm; non-owner site) deleted 2026-11-15 by lane/expdel2-15-cluster; code recoverable at d8f5e1c77a.
 # Restore: git apply experiments/removed/MOJOLEARN_C41_FUSED_MINIMA.expdel2-15-cluster.patch; record in docs/TOMBSTONES.md.
-comptime IDN_OPTICS_FUSED_STEP = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not is_defined["MOJOLEARN_IDN_OPTICS_FUSED_STEP_OFF"]()
-)
+comptime IDN_OPTICS_FUSED_STEP = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 
 
 def optics_fused_kernel(
