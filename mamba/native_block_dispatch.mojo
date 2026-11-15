@@ -95,7 +95,9 @@ def mamba3_prefill_image_caps() -> Int:
     """The image's fixed capability bits (NEURAL_MAMBA3_SESSION_CAPS): the
     build condition under which the image registered its former session
     Python entries (`mamba3_prefill_session_*`, `mamba3_owned_weights_enabled`)."""
-    comptime if not (GLOBAL_NUMERIC_MODE <= NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_MAMBA3_LEGACY_FRESH_PREFILL"]()):
+    # TOMBSTONE: MOJOLEARN_MAMBA3_LEGACY_FRESH_PREFILL (unmeasured old path: no fresh-prefill session) deleted 2026-11-15 by lane/expdel2-08-base; code recoverable at d28d0a8014.
+    # Restore: git apply experiments/removed/MOJOLEARN_MAMBA3_LEGACY_FRESH_PREFILL.expdel2-08-base.patch; record in docs/TOMBSTONES.md.
+    comptime if not (GLOBAL_NUMERIC_MODE <= NUMERIC_IDENTICAL):
         return 0
     var caps = MAMBA3_CAP_SESSION_PREFILL
     comptime if IDN_MAMBA3_REPORTS_ON_REQUEST:
