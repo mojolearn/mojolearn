@@ -70,7 +70,7 @@ comptime KMEANS_ROW_ASSIGN = False
 comptime KMEANS_ROW_ASSIGN_MAX_KD = 512
 # TOMBSTONE: MOJOLEARN_C31_DEVICE_BUCKETS (unmeasured arm) deleted 2026-11-15 by lane/expdel2-05-base; code recoverable at 337c096a5b.
 # Restore: git apply experiments/removed/MOJOLEARN_C31_DEVICE_BUCKETS.patch; record in docs/TOMBSTONES.md.
-comptime C31_DEVICE_BUCKETS = False
+# (Sweep 2026-11-15: comptime C31_DEVICE_BUCKETS removed; nothing read it.)
 # TOMBSTONE: MOJOLEARN_C32_COUNT_FUSION (unmeasured arm) deleted 2026-11-15 by lane/expdel2-05-base; code recoverable at 0445dd8786.
 # Restore: git apply experiments/removed/MOJOLEARN_C32_COUNT_FUSION.patch; record in docs/TOMBSTONES.md.
 comptime C32_COUNT_FUSION = False
