@@ -39,19 +39,10 @@ comptime T08_BITS = 8
 # Restore: git apply experiments/removed/MOJOLEARN_TREES_T09.patch; record in docs/TOMBSTONES.md.
 # T09 (the ExtraTrees bootstrap-locality sort) was deleted by lane/grid-prune
 # (2026-10-07): unreachable on the board, host sync inside the fit.
-# RF bootstrap sample route: ONE switch with three arms (trees-cleanup
-# 2026-10-07; replaces RF T09 and T10, which silently disabled each other).
-#   -D MOJOLEARN_TREES_RF_SAMPLE=0  drawn order, two launches (sample, gather)
-#   -D MOJOLEARN_TREES_RF_SAMPLE=1  sorted bootstrap rows at every width (old RF T09)
-#   -D MOJOLEARN_TREES_RF_SAMPLE=2  fused sample + label gather (old T10)
-# Absent: the per-vendor incumbent, stated explicitly: NVIDIA = 2 (fused,
-# shipped from the H100 Taxi/Istella trials), AMD = 0 (a small MI325X Taxi
-# regression kept the two-launch route), Apple = its ROWS_SORTED_MIN_COLS
-# rule. Every arm draws the same multiset; only row order and launch count move.
-comptime RF_SAMPLE_SET = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_TREES_RF_SAMPLE"]()
-comptime RF_SAMPLE_ARM = get_defined_int["MOJOLEARN_TREES_RF_SAMPLE", -1]()
-comptime RF_SAMPLE_SORTED = RF_SAMPLE_SET and RF_SAMPLE_ARM == 1
-comptime RF_SAMPLE_FUSED = RF_SAMPLE_SET and RF_SAMPLE_ARM == 2
+# TOMBSTONE: MOJOLEARN_TREES_RF_SAMPLE (ALWAYS_OFF_DELETE, EXP:1610) deleted 2026-11-15 by expdel2-39-trees; code recoverable at the deletion commit^.
+# Restore: git apply experiments/removed/MOJOLEARN_TREES_RF_SAMPLE.patch
+# The per-vendor incumbent stays in ensemble/randomforest.mojo: NVIDIA fused
+# sample + label gather, AMD two launches, Apple sorted rows from 64 columns.
 # T11 device frontier levels per header drain: one int sweep
 # `-D MOJOLEARN_TREES_T11_LEVELS=1|2|4|8|16` (absent = incumbent K=4; the
 # older IDN K1/K2/K8 defines are deleted). Scheduling only, no bit moves. RF K1/K2/K8 already
