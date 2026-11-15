@@ -55,8 +55,9 @@ comptime AFCL_T06 = False
 
 # AFCL-T07: four SIMD groups per resident prediction block rather than
 # eight; rows remain independent and each row visits trees in order.
-# NEVER RUN — PENDING MEASUREMENT; uncompiled/unverified; default OFF.
-comptime AFCL_T07 = AFCL_APPLE_FAST and is_defined["MOJOLEARN_AFCL_T07"]()
+# TOMBSTONE: MOJOLEARN_AFCL_T07 (DELETE-EXPERIMENT, never-run Apple FAST programme card, rule g) deleted 2026-11-15 by lane/expdel2-41-trees; code recoverable at f22e75ee88.
+# Restore: git apply experiments/removed/MOJOLEARN_AFCL_T07.patch; record in docs/TOMBSTONES.md.
+comptime AFCL_T07 = False
 comptime AFCL_PREDICT_BLOCK = 256
 
 # AFCL-T12: four SIMD groups per CTR elementwise block rather than eight;
