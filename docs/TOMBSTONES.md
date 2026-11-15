@@ -717,6 +717,7 @@ in the tables after the sections.
 | [`MOJOLEARN_CLASSICAL_C26_PRODUCTS`](#mojolearn_classical_c26_products-unmeasured-arm-deleted-2026-11-15) | Decomposition (NMF fixed H products reuse, IDENTICAL) | removed (opt-in arm; unmeasured opt-in arm) | 2026-11-15 | [MOJOLEARN_CLASSICAL_C26_PRODUCTS.patch](../experiments/removed/MOJOLEARN_CLASSICAL_C26_PRODUCTS.patch) |
 | [`MOJOLEARN_CLASSICAL_C26_UPDATE_FUSED`](#mojolearn_classical_c26_update_fused-unmeasured-arm-deleted-2026-11-15) | Decomposition (NMF fused pointwise MU update, IDENTICAL) | removed (opt-in arm; unmeasured opt-in arm) | 2026-11-15 | [MOJOLEARN_CLASSICAL_C26_UPDATE_FUSED.patch](../experiments/removed/MOJOLEARN_CLASSICAL_C26_UPDATE_FUSED.patch) |
 | [`MOJOLEARN_CLASSICAL_C27_COMPONENTS`](#mojolearn_classical_c27_components-unmeasured-arm-deleted-2026-11-15) | Decomposition (FastICA shared score / nonlinearity values, IDENTICAL) | removed (opt-in arm; unmeasured opt-in arm) | 2026-11-15 | [MOJOLEARN_CLASSICAL_C27_COMPONENTS.patch](../experiments/removed/MOJOLEARN_CLASSICAL_C27_COMPONENTS.patch) |
+| [`MOJOLEARN_CLASSICAL_C27_FA_COMPONENTS`](#mojolearn_classical_c27_fa_components-unmeasured-arm-deleted-2026-11-15) | Decomposition (FactorAnalysis fused loading map, IDENTICAL) | removed (opt-in arm; unmeasured opt-in arm) | 2026-11-15 | [MOJOLEARN_CLASSICAL_C27_FA_COMPONENTS.patch](../experiments/removed/MOJOLEARN_CLASSICAL_C27_FA_COMPONENTS.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -6924,4 +6925,12 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md (section expdel-02-
 - **Verdict**: no record: no A/B was recorded for the opt-in arm (plan rule a; AGENTS.md "An unmeasured arm is deleted", Andrew 2026-11-15). No bit change on any vendor or the host column: the default arm is untouched.
 - **Deleted by**: lane/expdel2-06-base (expdel2-06-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `82b2284405`.
 - **Restore**: `git apply experiments/removed/MOJOLEARN_CLASSICAL_C27_COMPONENTS.patch`, then delete the `MOJOLEARN_CLASSICAL_C27_COMPONENTS` refusal in `core/experiment_guards_decomposition.mojo`.
+- **Records**: refusal in `core/experiment_guards_decomposition.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-06-base section).
+
+## MOJOLEARN_CLASSICAL_C27_FA_COMPONENTS: unmeasured arm deleted (2026-11-15)
+
+- **What it was**: the opt-in arm in which FactorAnalysis EM fused the independent factor loading map with preserved add / max / sqrt / multiply seams (x_decomp/fa_em.mojo, fa_em_dev.mojo). `experiments/classical_identical_ideas/linear_controls.mojo` now defines `C27_FA_COMPONENTS` as the constant of the kept default, so the importers in other lanes compile before and after; the integrator folds their dead branches.
+- **Verdict**: no record: no A/B was recorded for the opt-in arm (plan rule a; AGENTS.md "An unmeasured arm is deleted", Andrew 2026-11-15). No bit change on any vendor or the host column: the default arm is untouched.
+- **Deleted by**: lane/expdel2-06-base (expdel2-06-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `f0d29c7b95`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_CLASSICAL_C27_FA_COMPONENTS.patch`, then delete the `MOJOLEARN_CLASSICAL_C27_FA_COMPONENTS` refusal in `core/experiment_guards_decomposition.mojo`.
 - **Records**: refusal in `core/experiment_guards_decomposition.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-06-base section).

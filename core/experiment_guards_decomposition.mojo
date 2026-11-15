@@ -127,6 +127,8 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_CLASSICAL_C26_UPDATE_FUSED"](), "removed 2026-11-15 (lane/expdel2-06-base): CLASSICAL_C26_UPDATE_FUSED (Decomposition (NMF fused pointwise MU update, IDENTICAL)) was unmeasured opt-in arm; the opt-in arm is gone and the default path is unchanged; code recoverable at 749e439c5c; see docs/TOMBSTONES.md"
     # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C27_COMPONENTS.patch
     comptime assert not is_defined["MOJOLEARN_CLASSICAL_C27_COMPONENTS"](), "removed 2026-11-15 (lane/expdel2-06-base): CLASSICAL_C27_COMPONENTS (Decomposition (FastICA shared score / nonlinearity values, IDENTICAL)) was unmeasured opt-in arm; the opt-in arm is gone and the default path is unchanged; code recoverable at 82b2284405; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C27_FA_COMPONENTS.patch
+    comptime assert not is_defined["MOJOLEARN_CLASSICAL_C27_FA_COMPONENTS"](), "removed 2026-11-15 (lane/expdel2-06-base): CLASSICAL_C27_FA_COMPONENTS (Decomposition (FactorAnalysis fused loading map, IDENTICAL)) was unmeasured opt-in arm; the opt-in arm is gone and the default path is unchanged; code recoverable at f0d29c7b95; see docs/TOMBSTONES.md"
     return True
 
 
