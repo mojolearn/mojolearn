@@ -774,8 +774,7 @@ def gemv_n(
     """`z[m] = x[m x k] ."""
     comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
         # NVIDIA / AMD: the same chain per row, X staged through shared
-        # memory (NV_AMD_IDENTICAL_STEPS; -D MOJOLEARN_NV_AMD_STEPS_OFF=1
-        # restores the plain kernel).
+        # memory (NV_AMD_IDENTICAL_STEPS).
         comptime if NV_AMD_IDENTICAL_STEPS:
             ctx.enqueue_function[pinned_gemv_n_tiled_kernel](
                 z.unsafe_ptr(),

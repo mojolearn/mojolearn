@@ -27,7 +27,6 @@ WHERE. Apple, IDENTICAL only, like every other Apple-scheduling choice: the
 NVIDIA, AMD and CPU columns compile the unchanged loop.
 """
 
-from std.sys.compile import is_defined
 from core.accelerator_target import TARGET_HAS_AMD_GPU, TARGET_HAS_APPLE_GPU, TARGET_HAS_NVIDIA_GPU
 
 from checks.numerics import (
@@ -63,12 +62,12 @@ comptime APPLE_FAST_STEP_UNROLL = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET
 #: `gemv_n` (`core/gemm.mojo::pinned_gemv_n_tiled_kernel`). Every one keeps
 #: its chain and fold, so the words are main's; only the loads move. The
 #: host column compiles none of it, so the device-vs-host ID check compares
-#: the new kernels against the old ones. `-D MOJOLEARN_NV_AMD_STEPS_OFF=1`
-#: restores main's kernels (the A/B define).
+#: the new kernels against the old ones.
+# TOMBSTONE: MOJOLEARN_NV_AMD_STEPS_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-04-base; code recoverable at d1fe4369a6.
+# Restore: git apply experiments/removed/MOJOLEARN_NV_AMD_STEPS_OFF.patch; record in docs/TOMBSTONES.md.
 comptime NV_AMD_IDENTICAL_STEPS = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     and (TARGET_HAS_NVIDIA_GPU or TARGET_HAS_AMD_GPU)
-    and not is_defined["MOJOLEARN_NV_AMD_STEPS_OFF"]()
 )
 
 comptime STRIDED_UNROLL = 32
