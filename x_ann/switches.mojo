@@ -79,7 +79,9 @@ comptime ANN3_TRAINSET_COPY = False
 #: thread per ROW, each walking its row's cells in order, instead of one
 #: thread per cell (28 M threads at 1M x 28). Each cell is the same statement
 #: on the same words: no bit moves.
-comptime ANN3_ROW_THREADS = is_defined["MOJOLEARN_ANN3_ROW_THREADS"]()
+# TOMBSTONE: MOJOLEARN_ANN3_ROW_THREADS (unmeasured opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-14-cluster; code recoverable at 74902fa9a1.
+# Restore: git apply experiments/removed/MOJOLEARN_ANN3_ROW_THREADS.patch; record in docs/TOMBSTONES.md.
+comptime ANN3_ROW_THREADS = False
 
 #: FAST on Apple: the IVF scan's top-k (k <= 16) is one launch per chunk of
 #: queries: each thread keeps its partial top-k in registers, the threadgroup
