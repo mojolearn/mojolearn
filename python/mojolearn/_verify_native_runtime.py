@@ -17,6 +17,7 @@ import gc
 import sys
 import threading
 from collections import Counter
+from contextlib import contextmanager
 from types import ModuleType
 
 #: The audited call stands in for a user's: the public methods answer this
@@ -25,6 +26,27 @@ __mojolearn_user_boundary__ = True
 
 
 _FORBIDDEN_NATIVE_MODULES = ("numpy", "scipy", "sklearn")
+
+
+def loaded_binding(name, mode="identical", report=None):
+    """The `mojolearn.runtime_report()` row of binding `name` (for example
+    `_mojolearn_x_sequence`) loaded in tier `mode`, or None when no loaded
+    binding of that tier is in the report. A row counts when the binding's
+    own compiled read-back says `mode`; a binding without that read-back
+    counts as the tier it was loaded for (its tier set, or the process tier
+    for the selected binding). Call it AFTER the work that loads the binding:
+    the report never loads one."""
+    if report is None:
+        from . import runtime_report
+        report = runtime_report()
+    for key, tier in ((f"mojolearn._sets.{mode}.{name}", mode), (f"mojolearn.{name}", report["numeric_mode"])):
+        row = report["bindings"].get(key)
+        if row is None or not row["loaded"] or row["path"] is None:
+            continue
+        compiled = row.get("compiled_mode")
+        if compiled == mode or (compiled is None and tier == mode):
+            return row
+    return None
 
 
 def _ordinary_field(fields, wanted):
@@ -161,6 +183,32 @@ def audit_native_call(operation, *args, **kwargs):
     not standalone proof that the operation executed no Python callbacks.
     """
     return _audit_call(operation, args, kwargs, {})
+
+
+def audited(audits, name, operation, *args, **kwargs):
+    """Audit one complete public call, append its trace (with ``operation``
+    set to ``name``) to the list ``audits`` and return its value; a call that
+    entered Python raises (``assert_native``)."""
+    audit = audit_native_call(operation, *args, **kwargs)
+    entry = audit.report()
+    entry["operation"] = name
+    audits.append(entry)
+    return audit.assert_native()
+
+
+@contextmanager
+def audited_context(audits, name, operation, *args, **kwargs):
+    """Open a context-managed public object with ``operation`` and audit its
+    construction, ``__enter__`` and ``__exit__`` as three complete public
+    boundaries (``name``, ``name.enter``, ``name.exit``), each appended to
+    ``audits``. The one shared controller of the distributed and partitioned
+    program verifiers."""
+    instance = audited(audits, name, operation, *args, **kwargs)
+    try:
+        assert audited(audits, name + ".enter", instance.__enter__) is instance
+        yield instance
+    finally:
+        audited(audits, name + ".exit", instance.__exit__, None, None, None)
 
 
 def audit_compatible_call(operation, *args, **kwargs):

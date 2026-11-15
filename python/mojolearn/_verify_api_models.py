@@ -11,7 +11,7 @@ def applicable(public,method):return public.startswith('mojolearn.models.')
 
 def model_checks(recorder,public,methods):
     import numpy as np
-    from . import models, _backend
+    from . import models
     from ._causal_lm_fixtures import _llama_config,_llama_tensors,_write_checkpoint
     name=public.rsplit('.',1)[-1]
     def check(method):

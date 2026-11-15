@@ -43,11 +43,22 @@ def sidecar_path(path):
 
 
 def _np():
-    from ._optional_numpy import require_numpy
-    return require_numpy("mojolearn verify-model")
+    try:
+        import numpy
+    except ModuleNotFoundError as exc:
+        if exc.name != "numpy":
+            raise
+        raise ModuleNotFoundError(
+            "mojolearn: verify-model requires optional NumPy support. "
+            "Install it with `pip install numpy`.") from None
+    return numpy
 
 
 def _binding(numeric_mode=None):
+    # KEPT (docs/plans/VERIFY_DECOUPLE_2026-11-15.md): verify-model's own
+    # native entries (verify_digest, verify_fill, verify_file_sha256,
+    # verify_model_info) live in the x_sequence binding; this is the one
+    # place verify resolves them, so no product API exposes them.
     from . import _backend
     return _backend.binding("_mojolearn_x_sequence", numeric_mode)
 
@@ -76,20 +87,17 @@ def _seeded(b, shapes, seed, kinds=None):
 
 
 def _install(numeric_mode):
-    from . import _backend
+    from . import runtime_report
     from ._verify import describe_device
     try:
-        from ._version import __version__ as version
-    except Exception:  # pragma: no cover
-        version = "unknown"
-    try:
-        vendor = _backend.vendor()
+        report = runtime_report()
+        version, vendor, default_mode = report["version"], report["vendor"], report["default_mode"]
     except Exception as exc:
-        vendor = f"unknown ({type(exc).__name__})"
+        version, vendor, default_mode = "unknown", f"unknown ({type(exc).__name__})", None
     import platform
     return {
         "mojolearn_version": version,
-        "numeric_mode": numeric_mode or _backend.default_mode(),
+        "numeric_mode": numeric_mode or default_mode,
         "vendor": vendor or "unknown",
         "device": describe_device(),
         "platform": f"{platform.system()} {platform.machine()}",
@@ -157,7 +165,7 @@ def verify(path, *, inputs=None, expect=None, numeric_mode=None):
     the seeded inputs; ``expect`` a report dict whose seed, input shapes and
     names are reused when ``inputs`` is None."""
     from .ops import Session
-    from ._x_sequence_model import Sequential
+    from . import Sequential
     b = _binding(numeric_mode)
     try:
         kind, _ = b.verify_model_info(os.fspath(path))  # verification: model file read on the host
@@ -175,14 +183,14 @@ def verify(path, *, inputs=None, expect=None, numeric_mode=None):
             prog = s.load_program(path)
             n = len(prog.input_shapes)
             if inputs is None:
-                arrays, names_in, source = _seeded(s._b, prog.input_shapes, seed, getattr(prog, "input_kinds", None)), _names(exp_names_in, prog.input_shapes, "input"), "seeded"
+                arrays, names_in, source = _seeded(b, prog.input_shapes, seed, getattr(prog, "input_kinds", None)), _names(exp_names_in, prog.input_shapes, "input"), "seeded"
             else:
                 names_in, arrays = _load_inputs(inputs, exp_names_in, n)
                 source = "file"
             outs = prog.run(*arrays)
             outs = outs if isinstance(outs, tuple) else (outs,)
             names_out = _names(exp_names_out, outs, "output")
-            return _report(s._b, path, numeric_mode, names_in, arrays, source, seed, names_out, outs)
+            return _report(b, path, numeric_mode, names_in, arrays, source, seed, names_out, outs)
     if kind in _SEQUENTIAL:
         model = Sequential.load(path, numeric_mode=numeric_mode)
         if inputs is None:

@@ -132,9 +132,11 @@ def host_surface():
 # --------------------------------------------------------------------------
 
 def harness_path():
-    """(path, how): MOJOLEARN_IDENTITY_BREAK, the wheel copy, or the checkout."""
-    from . import _identity
-    return _identity.harness_path()
+    """(path, how): MOJOLEARN_IDENTITY_BREAK, the wheel copy, or the checkout,
+    as `mojolearn.runtime_report()["harness_source"]` names it. Raises
+    FileNotFoundError when this install carries none."""
+    from . import _verify
+    return _verify.harness_path()
 
 
 def load_harness(path=None):
@@ -576,17 +578,16 @@ def run_models(harness, ml, table, pkg_dir=None, log=None, repeats=1, host_only=
 
 def _device_block(ml, harness):
     from . import _verify
-    from . import _backend
-    from . import _identity
-    commit, commit_source = _identity.commit_witness()
+    report = ml.runtime_report()
+    commit, commit_source = report["source_commit"]["commit"], report["source_commit"]["how"]
     if not commit:
         commit = _verify._git_commit(_pkg_dir())
         commit_source = "git checkout beside the package" if commit else "none (no witness in this install)"
-    vendor = _backend.vendor()
+    vendor = report["vendor"]
     return dict(
         mojolearn_version=getattr(ml, "__version__", "unknown"),
         commit=commit, commit_source=commit_source,
-        numeric_mode=_backend.numeric_mode(),
+        numeric_mode=report["numeric_mode"],
         vendor=vendor, device_class=vref.VENDOR_CLASS.get(vendor),
         device=_verify.describe_device(), cpu_model=harness.cpu_model(),
         requested_parallel_devices=list(harness._par_devices()),
@@ -1015,17 +1016,15 @@ def self_test(harness, ml, table, log=None):
         raise CannotRun("self-test: the one-ULP perturbation did not change the input at all, so "
                         "the perturbed arm would be identical to the clean one and prove nothing")
 
-    from ._cpu_reference import reference_training
     rows = []
-    with reference_training():
-        for arm, data in (("clean", (X, yc, yr)), ("perturbed", (Xp, yc, yr))):
-            parts = run_cell(harness, ml, lane, fixture, data, held, 1)
-            value, error = parts["train"]
-            from ._verify_worker import unhealthy
-            if unhealthy(parts):
-                raise CannotRun(f"self-test unhealthy device: {error or parts}")
-            rows.append(dict(lane=lane, fixture=fixture, part="train", value=value, error=error, arm=arm))
-            log(f"  {arm:<10} {lane}/{fixture} train -> {value}")
+    for arm, data in (("clean", (X, yc, yr)), ("perturbed", (Xp, yc, yr))):
+        parts = run_cell(harness, ml, lane, fixture, data, held, 1)
+        value, error = parts["train"]
+        from ._verify_worker import unhealthy
+        if unhealthy(parts):
+            raise CannotRun(f"self-test unhealthy device: {error or parts}")
+        rows.append(dict(lane=lane, fixture=fixture, part="train", value=value, error=error, arm=arm))
+        log(f"  {arm:<10} {lane}/{fixture} train -> {value}")
 
     judged = judge_rows([{k: v for k, v in r.items() if k != "arm"} for r in rows], table)
     for r, j in zip(rows, judged):
@@ -1190,7 +1189,7 @@ def _cross_check_result(vendor, lanes, fixtures, rows, skipped):
 
 def _cross_check_batched(lanes, fixtures, cpu_threads, log):
     """Run the complete selection serially; retain failures and continue."""
-    from . import _backend
+    import mojolearn as ml
     rows, skipped, jobs = [], {}, []
     for fixture in fixtures:
         for start in range(0, len(lanes), CROSS_CHECK_BATCH_LANES):
@@ -1220,13 +1219,31 @@ def _cross_check_batched(lanes, fixtures, cpu_threads, log):
             except (ValueError, KeyError, TypeError) as exc:
                 for lane in selected:
                     skipped[f'{lane}/{fixture}'] = f'cross-check process failed (exit {proc.returncode}): {exc}'
-    result = _cross_check_result(_backend.vendor(), lanes, fixtures, rows, skipped)
+    result = _cross_check_result(ml.vendor(), lanes, fixtures, rows, skipped)
     result['batches'] = jobs
     if any(job['exit'] != EXIT_VERIFIED for job in jobs):
         result['complete'] = False
         if result['passed'] is not None:
             result['passed'] = False
     return result
+
+
+def _require_forest_host_binding(report):
+    """The host forest binding that answered must be this install's: the file
+    `MOJOLEARN_FOREST_HOST_BINARY` names, else one inside the report's
+    `host_dir` (its own file or the merged file serving it). Otherwise the
+    cross-check would compare a thing to itself."""
+    row = report["bindings"].get("mojolearn._host._mojolearn_forest_host")
+    if row is None or not row["loaded"] or row["path"] is None:
+        raise RuntimeError("the host forest binding that answered is not in mojolearn.runtime_report(); "
+                           "which binary answered cannot be established, so this would compare a thing to itself")
+    bound = os.path.realpath(row["path"])
+    override = os.environ.get("MOJOLEARN_FOREST_HOST_BINARY", "").strip()
+    expected = os.path.realpath(override) if override else None
+    inside = os.path.dirname(bound) == os.path.realpath(report["host_dir"])
+    if (expected is not None and bound != expected) or (expected is None and not inside):
+        raise RuntimeError(f"the host binding that answered is {bound}, not "
+                           f"{expected or report['host_dir']}; this would compare a thing to itself")
 
 
 def cross_check(harness, ml, lanes, fixtures, log=None):
@@ -1255,9 +1272,8 @@ def cross_check(harness, ml, lanes, fixtures, log=None):
     here.
     """
     import tempfile
-    from . import _backend
     log = log or (lambda s: None)
-    vendor = _backend.vendor()
+    vendor = ml.vendor()
     if vendor == "cpu":
         return dict(ran=False, vendor=vendor, lanes=[],
                     reason=("no GPU in this installation, so there is no second piece of hardware "
@@ -1265,7 +1281,6 @@ def cross_check(harness, ml, lanes, fixtures, log=None):
                             "cross-check did not run. `verify --all` still checks this machine "
                             "against the recorded columns, and `--self-test` still shows the "
                             "comparison can fail."))
-    from ._forest_host import host_model, binary_path
     rows, skipped = [], {}
     for lane in lanes:
         for fx in fixtures:
@@ -1307,16 +1322,13 @@ def cross_check(harness, ml, lanes, fixtures, log=None):
                 with tempfile.TemporaryDirectory(prefix="mojolearn_cross_") as tmp:
                     path = os.path.join(tmp, f"{lane}{suffix}")
                     getattr(fit.est, save)(path)
-                    host = host_model(path)
+                    host = ml.host_model(path)
                     # This is fixture input, not learned state. The batch
                     # probe needs the same held-out affinity on both devices.
                     if lane == 'spectral-precomputed':
                         host._identity_heldout_affinity = fit.est._identity_heldout_affinity
-                    bound = getattr(getattr(host, "_binding", None), "__file__", None)
-                    if bound is not None and type(host).__name__ in ("HostGBDT", "HostForest") and (
-                            os.path.realpath(bound) != os.path.realpath(binary_path())):
-                        raise RuntimeError(f"the host binding that answered is {bound}, not "
-                                           f"{binary_path()}; this would compare a thing to itself")
+                    if type(host).__name__ in ("HostGBDT", "HostForest"):
+                        _require_forest_host_binding(ml.runtime_report())
                     pair["infer"][1] = harness._h(*fit.probe(host))
                     if "batch" in pair and pair["batch"][1] is None:
                         hfit = harness.Fit({})
@@ -1434,8 +1446,7 @@ def _cmd_cross_check(args, ml):
 
     log(f"# cross-check ({scope}): {len(chosen)} of {len(every)} intersection lanes x "
         f"{len(fixtures)} fixture(s)")
-    from . import _backend
-    if scope == 'all' and _backend.vendor() != 'cpu':
+    if scope == 'all' and ml.vendor() != 'cpu':
         result = _cross_check_batched(chosen, fixtures, getattr(args, 'cpu_threads', 1), log)
     else:
         result = cross_check(harness, ml, chosen, fixtures, log=log)
@@ -3363,16 +3374,14 @@ def _cmd_challenge(args, ml):
             f"building the challenge fixture raised {type(exc).__name__}: {exc}")
     started = time.time()
     rows = []
-    from ._cpu_reference import reference_training
     fixture_name = f"challenge:{challenge[:12]}"
-    with reference_training():
-        for lane in lanes:
-            t0 = time.time()
-            parts = run_cell(harness, ml, lane, fixture_name, data, held,
-                             max(1, int(getattr(args, "repeats", 1) or 1)))
-            for part, (value, error) in parts.items():
-                rows.append(dict(lane=lane, part=part, value=value, error=error))
-            log(f"  {lane:<34} {time.time() - t0:6.1f}s")
+    for lane in lanes:
+        t0 = time.time()
+        parts = run_cell(harness, ml, lane, fixture_name, data, held,
+                         max(1, int(getattr(args, "repeats", 1) or 1)))
+        for part, (value, error) in parts.items():
+            rows.append(dict(lane=lane, part=part, value=value, error=error))
+        log(f"  {lane:<34} {time.time() - t0:6.1f}s")
     doc[CHALLENGE_KEY] = dict(
         format=CHALLENGE_FORMAT, challenge=challenge, derived_from=derived_from,
         fixture=fixture_block, harness_sha256=harness_sha, lanes=lanes,
@@ -3743,8 +3752,7 @@ def cmd_verify_all(args):
     requested = os.environ.get("MOJOLEARN_NUMERIC_MODE", "").strip().lower()
     try:
         import mojolearn as ml
-        from . import _backend
-        loaded = _backend.numeric_mode()
+        loaded = ml.numeric_mode()
     except Exception as exc:
         return _finish(args, EXIT_CANNOT_RUN, "CANNOT RUN", f"importing mojolearn raised {type(exc).__name__}: {exc}")
     if loaded != "identical":
@@ -3780,7 +3788,7 @@ def cmd_verify_all(args):
     except CannotRun as exc:
         return _finish(args, EXIT_CANNOT_RUN, "CANNOT RUN", str(exc))
 
-    vendor = _backend.vendor()
+    vendor = ml.vendor()
     vclass = vref.VENDOR_CLASS.get(vendor)
     if vclass is None:
         return _finish(args, EXIT_CANNOT_RUN, "CANNOT RUN", f"unknown vendor read-back {vendor!r}")
@@ -4368,8 +4376,8 @@ def _finish(args, code, headline, detail):
 # --------------------------------------------------------------------------
 
 def _checkout_root():
-    from . import _identity
-    return _identity._checkout_root()
+    from . import runtime_report
+    return runtime_report()["checkout_root"]
 
 
 def _cmd_emit_reference(args):
@@ -4445,9 +4453,8 @@ def _cmd_emit_models(args, ml):
     GPU install), and write the manifest only for models whose file bytes equal
     the table's model reference, so a shipped file is the file every
     recorded vendor wrote."""
-    from . import _backend
     out_dir = args.emit_models
-    vendor = _backend.vendor()
+    vendor = ml.vendor()
     if vref.VENDOR_CLASS.get(vendor) in (None, "cpu"):
         _emit(f"CANNOT RUN: --emit-models saves GPU-trained models; this install's vendor is {vendor!r}", sys.stderr)
         return EXIT_CANNOT_RUN

@@ -96,8 +96,8 @@ portable conformance bundle; docs/CONFORMANCE.md is its document.
 # entered (`python -m mojolearn verify`, or a tool importing this module).
 from . import _families as _verify_families
 _verify_families.load_all()
-from . import _buffer as _buffers, _bufcheck as _checks
-from ._array import Array as _Array
+from . import Array as _Array, runtime_report as _runtime_report
+import array as _stdarray
 import hashlib
 import importlib
 import importlib.util
@@ -233,23 +233,32 @@ def build_fixture():
     DEVIATION 2433: fixture values are written directly to Float32 buffers;
     the published byte-hash gate is unchanged and NumPy is not required.
     """
-    x = _buffers.empty((KM_N, KM_D), '<f4')
-    xv = _checks.flat_view(x, 'f')
+    # Public construction only (lane verify-runtime-report): a float32
+    # `array.array` filled in index order, handed to `mojolearn.Array`
+    # through `Array.from_buffer`; the values and bytes are unchanged.
+    xv = _stdarray.array('f', bytes(4 * KM_N * KM_D))
     for i in range(KM_N):
         for f in range(KM_D):
             xv[i*KM_D+f] = _coord(i, f, KM_SALT)
-    c = _buffers.empty((KM_K, KM_D), '<f4')
-    cv = _checks.flat_view(c, 'f')
+    cv = _stdarray.array('f', bytes(4 * KM_K * KM_D))
     for k in range(KM_K):
         for f in range(KM_D):
             cv[k*KM_D+f] = _coord(k * KM_CENTROID_STRIDE, f, KM_SALT)
+    x = _Array.from_buffer(memoryview(xv).cast('B').cast('f', (KM_N, KM_D)))
+    c = _Array.from_buffer(memoryview(cv).cast('B').cast('f', (KM_K, KM_D)))
     return x, c
 
 
 def _le_bytes(arr):
     """Raw little-endian bytes, in index order. The card's hash is over
     exactly these, so the comparison must be over exactly these."""
-    return _checks.le_bytes(arr, 'f')
+    raw = arr.tobytes()
+    if sys.byteorder == "big":
+        swapped = _stdarray.array('f')
+        swapped.frombytes(raw)
+        swapped.byteswap()
+        raw = swapped.tobytes()
+    return raw
 
 
 # --------------------------------------------------------------------------
@@ -403,37 +412,20 @@ def _mode_report():
         rep.requested = "identical"
 
     try:
-        from . import _backend
-    except Exception as exc:            # pragma: no cover - import-time only
-        rep.problem = "cannot import mojolearn._backend (%s)" % exc
-        return rep
-
-    try:
-        rep.loaded = _backend.numeric_mode()
+        report = _runtime_report()
     except Exception as exc:
-        # _backend raises when the loaded gbdt binary was compiled for the
-        # other arm. That is exactly the mislabelled-measurement failure it
-        # exists to prevent, and it must not be swallowed.
+        # The report raises when the loaded gbdt binary was compiled for the
+        # other arm (the same check as `mojolearn.numeric_mode()`). That is
+        # exactly the mislabelled-measurement failure it exists to prevent,
+        # and it must not be swallowed.
         rep.problem = str(exc)
         return rep
+    rep.loaded = report["numeric_mode"]
+    # The loaded gbdt binary's own compile-time answer, by name ('identical',
+    # 'fast' or 'unknown'), or None when no gbdt binary is loaded.
+    rep.compiled = report["code_mode"]
 
     pkg_name = __name__.rsplit(".", 1)[0]
-    gb = sys.modules.get(pkg_name + "._mojolearn_gbdt")
-    try:
-        _readable = gb is not None and hasattr(gb, "gbdt_numeric_mode")
-    except (ImportError, AttributeError):
-        # A stub raises ImportError from __getattr__, and `hasattr` only
-        # swallows AttributeError. See `_backend.numeric_mode`.
-        _readable = False
-    if _readable:
-        try:
-            # A NAME lookup rather than a boolean.
-            rep.compiled = _backend._CODE_MODE.get(
-                gb.gbdt_numeric_mode(), "unknown"
-            )
-        except Exception:
-            rep.compiled = None
-
     pkg_dir = os.path.dirname(os.path.abspath(__file__))
     rep.ident_dir = os.path.realpath(os.path.join(pkg_dir, "identical"))
     fixture_mod = sys.modules.get(pkg_name + "._mojolearn")
@@ -599,6 +591,34 @@ def environment_json(mode=None):
     return result
 
 
+def harness_path():
+    """(path, how) of the identity harness, as
+    `mojolearn.runtime_report()["harness_source"]` names it:
+    MOJOLEARN_IDENTITY_BREAK, the wheel copy or the checkout. Raises
+    FileNotFoundError naming what was tried when this install carries none.
+    The one reader for `verify` (`_verify_all`) and `identity` (`_identity`)."""
+    report = _runtime_report()
+    source = report["harness_source"]
+    if source["path"] is None:
+        tried = [p for p in (os.environ.get("MOJOLEARN_IDENTITY_BREAK", "").strip(),) if p]
+        tried += [os.path.join(report["package_dir"], "_identity_break.py"), "<checkout>/tools/identity_break.py"]
+        raise FileNotFoundError(
+            "tools/identity_break.py is not in this install, so there is no harness to run. "
+            "Looked at:\n  " + "\n  ".join(tried)
+            + "\nInstall a wheel built with the packaging step that copies it in, "
+            "run from a checkout, or point MOJOLEARN_IDENTITY_BREAK at the file.")
+    return source["path"], source["how"]
+
+
+def commit_witness():
+    """(commit, source) for the local column, as
+    `mojolearn.runtime_report()["source_commit"]` names it: MOJOLEARN_COMMIT,
+    the wheel's COMMIT witness, or None (the harness then reads `git
+    rev-parse HEAD` of the checkout it lives in)."""
+    source = _runtime_report()["source_commit"]
+    return source["commit"], source["how"]
+
+
 def _vendor_text():
     """'cuda (the box probe ...)' and so on: what `_backend.vendor()` read
     back from the loaded binaries, and how the directory was chosen. Printed
@@ -606,9 +626,8 @@ def _vendor_text():
     Linux the wheel carries two vendors' sets and a card must say which one
     produced it. A failure to establish it is reported, never hidden."""
     try:
-        from . import _backend
-        v = _backend.vendor()
-        how = _backend.vendor_how()
+        report = _runtime_report()
+        v, how = report["vendor"], report["vendor_how"]
     except Exception as exc:
         return "unknown (%s: %s)" % (type(exc).__name__, exc)
     if v is None:

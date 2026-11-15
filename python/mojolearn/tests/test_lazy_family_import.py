@@ -154,7 +154,7 @@ def test_every_public_name_is_routed_once_and_doors_match_their_all():
     public = _literal(PKG / "__init__.py", "__all__")
     eager = {"Array", "BpeTokenizer", "tokenizer", "GPT2Tokenizer", "__version__", "numeric_mode",
              "set_numeric_mode", "numeric_profile", "set_numeric_profile", "numeric_profiles",
-             "numeric_profile_measured", "vendor", "gpu_arch", "gpu_arch_how"}
+             "numeric_profile_measured", "vendor", "gpu_arch", "gpu_arch_how", "runtime_report"}
     unrouted = sorted(name for name in public if name not in table and name not in eager)
     assert not unrouted, f"public names neither core nor routed: {unrouted}"
     for name, where in table.items():
