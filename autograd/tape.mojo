@@ -22,7 +22,7 @@ from autograd.ops import (
     DIVIDE, RELU, SIGMOID, TANH, EXP, LOG, SQRT, SCALE, TRANSPOSE, RESHAPE,
     REDUCE, SOFTMAX, LOG_SOFTMAX, MATMUL, LINEAR, CUSTOM, AXIS_ALL, AXIS_ROWS, AXIS_COLS,
     ag_fold_block, unary_vjp_reads_input, unary_vjp_reads_output, LOSS_ELEM, LOSS_CE, LOSS_SCE,
-    OP_AGK_BIN_VJP_PART, OP_AGK_GEMM_EPI, AUTOGRAD_PASS3_DB,
+    OP_AGK_BIN_VJP_PART, OP_AGK_GEMM_EPI,
     LOSS_REDUCED, AUTOGRAD_LOSS_REDUCED, AUTOGRAD_TRANSPOSE_VIEW, AUTOGRAD_CURVE_WORD,
 )
 from autograd.loss_ops import (
@@ -2431,9 +2431,8 @@ struct Tape(Movable):
                 alpha = n.saved.f0
                 dw_epi = EPI_L2GRAD
             # _backward's fuse_db rule (W's gradient is wanted, checked above)
-            comptime if AUTOGRAD_PASS3_DB:
-                db = (n.count == 3 and n.saved.i1 == 1 and n.saved.f1 > 0
-                      and self._nodes[self._parents[n.start + 2]].requires_grad)
+            db = (n.count == 3 and n.saved.i1 == 1 and n.saved.f1 > 0
+                  and self._nodes[self._parents[n.start + 2]].requires_grad)
         # The route rule (AUTOGRAD_PAIR comment): neither product on the tile,
         # and no few-cell long-K weight product.
         if seq_gemm_route(rows, fi, fo, dx_epi != 0) == GR_TILE:
@@ -2722,11 +2721,9 @@ struct Tape(Movable):
                     if n.op == LINEAR:
                         # AUTOGRAD_PASS3_DB: with a bias, a divisor and both
                         # parameter gradients wanted, db rides in dW's launch
-                        var fuse_db = False
-                        comptime if AUTOGRAD_PASS3_DB:
-                            fuse_db = (n.count == 3 and n.saved.i1 == 1 and n.saved.f1 > 0
-                                       and self._nodes[self._parents[n.start + 1]].requires_grad
-                                       and self._nodes[self._parents[n.start + 2]].requires_grad)
+                        var fuse_db = (n.count == 3 and n.saved.i1 == 1 and n.saved.f1 > 0
+                                   and self._nodes[self._parents[n.start + 1]].requires_grad
+                                   and self._nodes[self._parents[n.start + 2]].requires_grad)
                         var db_dst = contributions[2] if fuse_db else dummy_ptr()
                         self._linear_vjp(ex, n, edge, contribution, first[edge], dz, consumers, db_dst, fuse_db)
                     elif n.op == MATMUL:

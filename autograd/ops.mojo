@@ -133,8 +133,10 @@ def agk_colsum_args(a: Args) -> Args:
 # every column and the host together. Other linear nodes keep pass 2's db.
 # The column sum is one chain over the batch rows a column, run by a thread
 # that also folds its own K = rows GEMM chain in the same tile, so the tile
-# keeps the GEMM's shape of parallelism. -D MOJOLEARN_AUTOGRAD_PASS3_DB_OFF.
-comptime AUTOGRAD_PASS3_DB = not is_defined["MOJOLEARN_AUTOGRAD_PASS3_DB_OFF"]()
+# keeps the GEMM's shape of parallelism.
+# TOMBSTONE: MOJOLEARN_AUTOGRAD_PASS3_DB_OFF (old path, no A/B recorded) deleted 2026-11-15 by
+# lane/expdel2-24-neural with the AUTOGRAD_PASS3_DB alias; code recoverable at 0399c92e07.
+# Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_PASS3_DB_OFF.patch
 
 # Lane ag-pass6-fold (2026-10-19, PASS6_IDEAS ideas D(2), F(2), H(1)): tape-
 # side changes, identical (no word moves), each default on with an _OFF arm.
