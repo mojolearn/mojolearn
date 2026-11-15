@@ -606,6 +606,68 @@ def _check_configuration() -> Bool:
     # Restore: git apply experiments/removed/MOJOLEARN_SMALL_MLP_GENERIC_OPS.patch
     comptime assert not is_defined["MOJOLEARN_SMALL_MLP_GENERIC_OPS"](), "removed 2026-11-15 (lane/expdel2-24-neural): SMALL_MLP_GENERIC_OPS (opt-in arm, Neural (small MLP program capture); no A/B recorded) is gone; the default path is the only one; code recoverable at 1acdb0bcd1; restore: experiments/removed/MOJOLEARN_SMALL_MLP_GENERIC_OPS.patch"
     # ---- end lane expdel2-24-neural
+    # Lane expdel2-31-neural (2026-11-15): unmeasured arms and old paths deleted under "An unmeasured arm is deleted" (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md, docs/TOMBSTONES.md).
+    # Restore: git apply experiments/removed/MOJOLEARN_AFN_LM_ALL.patch
+    comptime assert not is_defined["MOJOLEARN_AFN_LM_ALL"](), "removed 2026-11-15 (lane/expdel2-31-neural): AFN_LM_ALL (opt-in arm, Neural (Apple FAST byte LM, all arms); no A/B recorded) is gone; the default path is the only one; code recoverable at f6652fc1ac; restore: experiments/removed/MOJOLEARN_AFN_LM_ALL.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_AFN_LM_NOSYNC.patch
+    comptime assert not is_defined["MOJOLEARN_AFN_LM_NOSYNC"](), "removed 2026-11-15 (lane/expdel2-31-neural): AFN_LM_NOSYNC (opt-in arm, Neural (Apple FAST byte LM one-wait step); no A/B recorded) is gone; the default path is the only one; code recoverable at f6652fc1ac; restore: experiments/removed/MOJOLEARN_AFN_LM_NOSYNC.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_AFN26_LM_NOSYNC.patch
+    comptime assert not is_defined["MOJOLEARN_AFN26_LM_NOSYNC"](), "removed 2026-11-15 (lane/expdel2-31-neural): AFN26_LM_NOSYNC (opt-in arm, Neural (Apple FAST byte LM one-wait step, AFN26 alias); no A/B recorded) is gone; the default path is the only one; code recoverable at f6652fc1ac; restore: experiments/removed/MOJOLEARN_AFN26_LM_NOSYNC.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_AFN_LM_BWD_FUSE.patch
+    comptime assert not is_defined["MOJOLEARN_AFN_LM_BWD_FUSE"](), "removed 2026-11-15 (lane/expdel2-31-neural): AFN_LM_BWD_FUSE (opt-in arm, Neural (Apple FAST byte LM block backward fusion); no A/B recorded) is gone; the default path is the only one; code recoverable at f6652fc1ac; restore: experiments/removed/MOJOLEARN_AFN_LM_BWD_FUSE.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_AFN26_LM_BWD_FUSE.patch
+    comptime assert not is_defined["MOJOLEARN_AFN26_LM_BWD_FUSE"](), "removed 2026-11-15 (lane/expdel2-31-neural): AFN26_LM_BWD_FUSE (opt-in arm, Neural (Apple FAST byte LM block backward fusion, AFN26 alias); no A/B recorded) is gone; the default path is the only one; code recoverable at f6652fc1ac; restore: experiments/removed/MOJOLEARN_AFN26_LM_BWD_FUSE.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_AFN_LM_PARAM_VIEWS.patch
+    comptime assert not is_defined["MOJOLEARN_AFN_LM_PARAM_VIEWS"](), "removed 2026-11-15 (lane/expdel2-31-neural): AFN_LM_PARAM_VIEWS (opt-in arm, Neural (Apple FAST byte LM block weight views); no A/B recorded) is gone; the default path is the only one; code recoverable at f6652fc1ac; restore: experiments/removed/MOJOLEARN_AFN_LM_PARAM_VIEWS.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_AFN26_LM_PARAM_VIEWS.patch
+    comptime assert not is_defined["MOJOLEARN_AFN26_LM_PARAM_VIEWS"](), "removed 2026-11-15 (lane/expdel2-31-neural): AFN26_LM_PARAM_VIEWS (opt-in arm, Neural (Apple FAST byte LM block weight views, AFN26 alias); no A/B recorded) is gone; the default path is the only one; code recoverable at f6652fc1ac; restore: experiments/removed/MOJOLEARN_AFN26_LM_PARAM_VIEWS.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_AFN_LM_HEAD_FUSE.patch
+    comptime assert not is_defined["MOJOLEARN_AFN_LM_HEAD_FUSE"](), "removed 2026-11-15 (lane/expdel2-31-neural): AFN_LM_HEAD_FUSE (opt-in arm, Neural (Apple FAST byte LM fused CE head); no A/B recorded) is gone; the default path is the only one; code recoverable at f6652fc1ac; restore: experiments/removed/MOJOLEARN_AFN_LM_HEAD_FUSE.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_AFN26_LM_HEAD_FUSE.patch
+    comptime assert not is_defined["MOJOLEARN_AFN26_LM_HEAD_FUSE"](), "removed 2026-11-15 (lane/expdel2-31-neural): AFN26_LM_HEAD_FUSE (opt-in arm, Neural (Apple FAST byte LM fused CE head, AFN26 alias); no A/B recorded) is gone; the default path is the only one; code recoverable at f6652fc1ac; restore: experiments/removed/MOJOLEARN_AFN26_LM_HEAD_FUSE.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_AFN26_LM_CE_BLOCK128.patch
+    comptime assert not is_defined["MOJOLEARN_AFN26_LM_CE_BLOCK128"](), "removed 2026-11-15 (lane/expdel2-31-neural): AFN26_LM_CE_BLOCK128 (opt-in arm, Neural (Apple FAST fused CE block size); no A/B recorded) is gone; the default path is the only one; code recoverable at f6652fc1ac; restore: experiments/removed/MOJOLEARN_AFN26_LM_CE_BLOCK128.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_AFN26_LM_CE_BLOCK512.patch
+    comptime assert not is_defined["MOJOLEARN_AFN26_LM_CE_BLOCK512"](), "removed 2026-11-15 (lane/expdel2-31-neural): AFN26_LM_CE_BLOCK512 (opt-in arm, Neural (Apple FAST fused CE block size); no A/B recorded) is gone; the default path is the only one; code recoverable at f6652fc1ac; restore: experiments/removed/MOJOLEARN_AFN26_LM_CE_BLOCK512.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_AFN_LM_BWD_NOSYNC_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_AFN_LM_BWD_NOSYNC_OFF"](), "removed 2026-11-15 (lane/expdel2-31-neural): AFN_LM_BWD_NOSYNC_OFF (old path, Neural (Apple FAST block backward norm waits); no A/B recorded) is gone; the default is kept; code recoverable at f6652fc1ac; restore: experiments/removed/MOJOLEARN_AFN_LM_BWD_NOSYNC_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_BYTE_LM_CE_UNALIASED.patch
+    comptime assert not is_defined["MOJOLEARN_BYTE_LM_CE_UNALIASED"](), "removed 2026-11-15 (lane/expdel2-31-neural): BYTE_LM_CE_UNALIASED (opt-in arm, Neural (byte LM CE buffers); no A/B recorded) is gone; the default path is the only one; code recoverable at 578fb1af7e; restore: experiments/removed/MOJOLEARN_BYTE_LM_CE_UNALIASED.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_BYTE_LM_STICKY_EAGER.patch
+    comptime assert not is_defined["MOJOLEARN_BYTE_LM_STICKY_EAGER"](), "removed 2026-11-15 (lane/expdel2-31-neural): BYTE_LM_STICKY_EAGER (opt-in arm, Neural (byte LM attention eager fallback); no A/B recorded) is gone; the default path is the only one; code recoverable at d879623fb2; restore: experiments/removed/MOJOLEARN_BYTE_LM_STICKY_EAGER.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_BYTE_LM_RELEASE_EAGER.patch
+    comptime assert not is_defined["MOJOLEARN_BYTE_LM_RELEASE_EAGER"](), "removed 2026-11-15 (lane/expdel2-31-neural): BYTE_LM_RELEASE_EAGER (opt-in arm, Neural (byte LM eager scratch release); no A/B recorded) is gone; the default path is the only one; code recoverable at d879623fb2; restore: experiments/removed/MOJOLEARN_BYTE_LM_RELEASE_EAGER.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_BYTE_LM_RETAIN_EAGER.patch
+    comptime assert not is_defined["MOJOLEARN_BYTE_LM_RETAIN_EAGER"](), "removed 2026-11-15 (lane/expdel2-31-neural): BYTE_LM_RETAIN_EAGER (opt-in arm, Neural (byte LM eager scratch release); no A/B recorded) is gone; the default path is the only one; code recoverable at d879623fb2; restore: experiments/removed/MOJOLEARN_BYTE_LM_RETAIN_EAGER.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_BYTE_LM_COPY_EMB_HEAD.patch
+    comptime assert not is_defined["MOJOLEARN_BYTE_LM_COPY_EMB_HEAD"](), "removed 2026-11-15 (lane/expdel2-31-neural): BYTE_LM_COPY_EMB_HEAD (opt-in arm, Neural (byte LM embedding / head weights); no A/B recorded) is gone; the default path is the only one; code recoverable at 9cc10dddc6; restore: experiments/removed/MOJOLEARN_BYTE_LM_COPY_EMB_HEAD.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_BYTE_LM_PROGRAM_STEP.patch
+    comptime assert not is_defined["MOJOLEARN_BYTE_LM_PROGRAM_STEP"](), "removed 2026-11-15 (lane/expdel2-31-neural): BYTE_LM_PROGRAM_STEP (opt-in arm, Neural (byte LM training step); no A/B recorded) is gone; the default path is the only one; code recoverable at f0bffede56; restore: experiments/removed/MOJOLEARN_BYTE_LM_PROGRAM_STEP.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_NORM.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_NORM"](), "removed 2026-11-15 (lane/expdel2-31-neural): IDN_NORM (opt-in arm, Neural (host byte LM legacy norm block); no A/B recorded) is gone; the default path is the only one; code recoverable at dc698300f4; restore: experiments/removed/MOJOLEARN_IDN_NORM.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_NN53_HEAD_CHUNK512.patch
+    comptime assert not is_defined["MOJOLEARN_NN53_HEAD_CHUNK512"](), "removed 2026-11-15 (lane/expdel2-31-neural): NN53_HEAD_CHUNK512 (opt-in arm, Neural (chunked LM head panel width); no A/B recorded) is gone; the default path is the only one; code recoverable at cba6209bbd; restore: experiments/removed/MOJOLEARN_NN53_HEAD_CHUNK512.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_NN53_HEAD_CHUNK2048.patch
+    comptime assert not is_defined["MOJOLEARN_NN53_HEAD_CHUNK2048"](), "removed 2026-11-15 (lane/expdel2-31-neural): NN53_HEAD_CHUNK2048 (opt-in arm, Neural (chunked LM head panel width); no A/B recorded) is gone; the default path is the only one; code recoverable at cba6209bbd; restore: experiments/removed/MOJOLEARN_NN53_HEAD_CHUNK2048.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_TRAIN_DEV_TENSORS_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_TRAIN_DEV_TENSORS_OFF"](), "removed 2026-11-15 (lane/expdel2-31-neural): IDN_TRAIN_DEV_TENSORS_OFF (old path, Neural (training device tensors); no A/B recorded) is gone; the default is kept; code recoverable at 89a7547f4e; restore: experiments/removed/MOJOLEARN_IDN_TRAIN_DEV_TENSORS_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_OPT_SCRATCH_POOL_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_OPT_SCRATCH_POOL_OFF"](), "removed 2026-11-15 (lane/expdel2-31-neural): IDN_OPT_SCRATCH_POOL_OFF (old path, Neural (optimizer scratch pool); no A/B recorded) is gone; the default is kept; code recoverable at 51b81017d7; restore: experiments/removed/MOJOLEARN_IDN_OPT_SCRATCH_POOL_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_MAXIMIZE_DEV_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_MAXIMIZE_DEV_OFF"](), "removed 2026-11-15 (lane/expdel2-31-neural): IDN_MAXIMIZE_DEV_OFF (old path, Neural (optimizer maximize on device); no A/B recorded) is gone; the default is kept; code recoverable at 51b81017d7; restore: experiments/removed/MOJOLEARN_IDN_MAXIMIZE_DEV_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_OPT_PARAMS_RESIDENT_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_OPT_PARAMS_RESIDENT_OFF"](), "removed 2026-11-15 (lane/expdel2-31-neural): IDN_OPT_PARAMS_RESIDENT_OFF (old path, Neural (optimizer resident params entries); no A/B recorded) is gone; the default is kept; code recoverable at 51b81017d7; restore: experiments/removed/MOJOLEARN_IDN_OPT_PARAMS_RESIDENT_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_CE_PIPE_UP_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_CE_PIPE_UP_OFF"](), "removed 2026-11-15 (lane/expdel2-31-neural): IDN_CE_PIPE_UP_OFF (old path, Neural (CE logits upload pipeline); no A/B recorded) is gone; the default is kept; code recoverable at 51b81017d7; restore: experiments/removed/MOJOLEARN_IDN_CE_PIPE_UP_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_TRAIN_OPT_FAST_PIPE_DOWN_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_TRAIN_OPT_FAST_PIPE_DOWN_OFF"](), "removed 2026-11-15 (lane/expdel2-31-neural): TRAIN_OPT_FAST_PIPE_DOWN_OFF (old path, Neural (Apple FAST optimizer download pipeline); no A/B recorded) is gone; the default is kept; code recoverable at 51b81017d7; restore: experiments/removed/MOJOLEARN_TRAIN_OPT_FAST_PIPE_DOWN_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_BYTE_LM_VSUM_HD_GENERIC_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_BYTE_LM_VSUM_HD_GENERIC_OFF"](), "removed 2026-11-15 (lane/expdel2-31-neural): BYTE_LM_VSUM_HD_GENERIC_OFF (old path, Neural (host byte LM attention value sum); no A/B recorded) is gone; the default is kept; code recoverable at 68a9b6cf9e; restore: experiments/removed/MOJOLEARN_BYTE_LM_VSUM_HD_GENERIC_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_BYTE_LM_HOST_LEGACY_GEMM.patch
+    comptime assert not is_defined["MOJOLEARN_BYTE_LM_HOST_LEGACY_GEMM"](), "removed 2026-11-15 (lane/expdel2-31-neural): BYTE_LM_HOST_LEGACY_GEMM (old path, Neural (host byte LM weight GEMMs); no A/B recorded) is gone; the default is kept; code recoverable at fb518878c4; restore: experiments/removed/MOJOLEARN_BYTE_LM_HOST_LEGACY_GEMM.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_OPT_TRUST_INPUTS.patch
+    comptime assert not is_defined["MOJOLEARN_OPT_TRUST_INPUTS"](), "removed 2026-11-15 (lane/expdel2-31-neural): OPT_TRUST_INPUTS (opt-in arm, Neural (optimizer input refusal scans); no A/B recorded) is gone; the default path is the only one; code recoverable at 943c1ff5fe; restore: experiments/removed/MOJOLEARN_OPT_TRUST_INPUTS.patch"
+    # ---- end lane expdel2-31-neural
     return True
 
 

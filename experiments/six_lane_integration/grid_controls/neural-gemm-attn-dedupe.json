@@ -61,48 +61,6 @@
       "bits_change": false,
       "status": "kept"
     },
-    "norm": {
-      "define": "MOJOLEARN_IDN_NORM",
-      "kind": "arms",
-      "arms": {
-        "off": [],
-        "lanes8": [
-          "MOJOLEARN_IDN_NORM=1"
-        ],
-        "split_scale": [
-          "MOJOLEARN_IDN_NORM=2"
-        ],
-        "row_block": [
-          "MOJOLEARN_IDN_NORM=3"
-        ]
-      },
-      "default": "off",
-      "source": [
-        "transformer/experiments/norm_profile_contract.mojo:14",
-        "transformer/experiments/attention_schedules.mojo:25",
-        "training/neural_identical_experiments.mojo:28",
-        "transformer/impl/llama/modeling_llama.mojo:2193"
-      ],
-      "binding": [
-        "_mojolearn_transformer",
-        "_mojolearn_byte_lm",
-        "_mojolearn_training"
-      ],
-      "bits_change": true,
-      "status": "rewritten",
-      "merged_from": [
-        "I.N.NN24",
-        "I.N.NN25",
-        "I.N.NI25"
-      ],
-      "note": "lanes8 arms change bits (host oracle and every device column); split_scale and row_block are schedules over the v1 fold (no bit change). row_block does not implement lanes8, hence no lanes8_row_block arm.",
-      "phase2_combinations": {
-        "lanes8_split_scale": [
-          "MOJOLEARN_IDN_NORM=4"
-        ],
-        "reason": "pre-built combination of lanes8 and split_scale; phase 2 only if both win"
-      }
-    },
     "rope": {
       "define": "MOJOLEARN_IDN_ROPE",
       "kind": "arms",
@@ -767,6 +725,11 @@
       "define": "MOJOLEARN_IDN_MLP_GEMM_LEAF128_OFF",
       "control": "mlp_gemm_leaf128",
       "reason": "DELETED 2026-11-15 (lane/expdel2-24-neural, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md; recoverable at 530116e4ff; patch experiments/removed/MOJOLEARN_IDN_MLP_GEMM_LEAF128_OFF.patch): the rollback to the incumbent dispatch beside the measured leaf-128 default (EXP:2373 KEPT); no bit change. Refused in core/experiment_guards_neural.mojo; docs/TOMBSTONES.md."
+    },
+    {
+      "define": "MOJOLEARN_IDN_NORM",
+      "control": "norm",
+      "reason": "DELETED 2026-11-15 (lane/expdel2-31-neural, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md; recoverable at dc698300f4; patch experiments/removed/MOJOLEARN_IDN_NORM.patch) (every arm 1-4): opt-in arm, no A/B recorded. Deleted under AGENTS.md \"An unmeasured arm is deleted\" (Andrew, 2026-11-15). Refused in core/experiment_guards_neural.mojo; docs/TOMBSTONES.md."
     }
   ],
   "catalog_note": "experiments/six_lane_integration/catalog.json and build_plan.json still name the retired defines; they must be regenerated from these controls (tools/six_lane_ab.py now refuses retired defines). lane/neural-small 2026-10-07: neural:mamba-forward replaced by neural:mamba1/2/3-forward (neural-small.json); gemm_leaf all256 split to gemm_contract_leaf."

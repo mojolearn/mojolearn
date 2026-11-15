@@ -722,32 +722,6 @@
       ],
       "note": "bits_change not re-assessed by L11 (unchanged switch)"
     },
-    "nn53_head_chunk": {
-      "define": "MOJOLEARN_NN53_HEAD_CHUNK512",
-      "kind": "switch",
-      "arms": {
-        "off": [],
-        "on": [
-          "MOJOLEARN_NN53_HEAD_CHUNK512=1"
-        ]
-      },
-      "default": "off",
-      "source": [
-        "training/chunked_lm_head_profile.mojo:12"
-      ],
-      "binding": "_mojolearn_training",
-      "bits_change": false,
-      "status": "kept",
-      "entries": [
-        "NN53"
-      ],
-      "board": "off-board (opt-in chunked_lm_head_v2)",
-      "tags": [
-        "off_board",
-        "opt_in"
-      ],
-      "note": "bits_change not re-assessed by L11 (unchanged switch)"
-    },
     "chunked_lm_head_v2": {
       "define": "MOJOLEARN_IDN_CHUNKED_LM_HEAD_V2",
       "kind": "switch",
@@ -1481,6 +1455,11 @@
       "define": "MOJOLEARN_IDN_M1_SCAN",
       "control": "m1_scan",
       "reason": "DELETED 2026-11-15 (lane/expdel2-26-neural; recoverable at 5fc464dce4; see docs/TOMBSTONES.md section expdel2-26-neural): unmeasured arm deleted under AGENTS.md 'An unmeasured arm is deleted'; default kept, no bits move"
+    },
+    {
+      "define": "MOJOLEARN_NN53_HEAD_CHUNK512",
+      "control": "nn53_head_chunk",
+      "reason": "DELETED 2026-11-15 (lane/expdel2-31-neural, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md; recoverable at cba6209bbd; patch experiments/removed/MOJOLEARN_NN53_HEAD_CHUNK512.patch) (and MOJOLEARN_NN53_HEAD_CHUNK2048, the same control's other width; patch experiments/removed/MOJOLEARN_NN53_HEAD_CHUNK2048.patch): opt-in arm, no A/B recorded. Deleted under AGENTS.md \"An unmeasured arm is deleted\" (Andrew, 2026-11-15). Refused in core/experiment_guards_neural.mojo; docs/TOMBSTONES.md."
     }
   ],
   "notes": {

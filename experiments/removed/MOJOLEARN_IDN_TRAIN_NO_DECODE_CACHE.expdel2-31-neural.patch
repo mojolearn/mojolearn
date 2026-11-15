@@ -1,0 +1,70 @@
+diff --git a/training/byte_lm.mojo b/training/byte_lm.mojo
+index 14335b5e81..781120b95e 100644
+--- a/training/byte_lm.mojo
++++ b/training/byte_lm.mojo
+@@ -44,11 +44,8 @@ from core.hostptr import list_i32
+ from core.neural_context import neural_ctx
+ from core.identity_trace import IdentityTrace
+ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+-# TOMBSTONE: MOJOLEARN_IDN_TRAIN_NO_DECODE_CACHE (opt-in arm, no A/B recorded; owner elsewhere) folded to False
+-# 2026-11-15 by lane/expdel2-31-neural (retain_kv_cache=True); code recoverable at f105b7dcfb.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_TRAIN_NO_DECODE_CACHE.expdel2-31-neural.patch
+ from training.neural_identical_experiments import (
+-    IDN_LM_PARAM_VIEWS, IDN_LM_VIEWS_ARM,
++    IDN_LM_PARAM_VIEWS, IDN_TRAIN_NO_DECODE_CACHE, IDN_LM_VIEWS_ARM,
+ )
+ from checks.vendor import COMPILED_VENDOR
+ # TOMBSTONE: MOJOLEARN_AFN_LM_PARAM_VIEWS / MOJOLEARN_AFN26_LM_PARAM_VIEWS (Apple FAST opt-in, never promoted) folded to False
+@@ -1553,11 +1550,11 @@ def _byte_forward_loss(ctx: DeviceContext, mut tr: ByteTrainer,
+                     next_norm_out=Optional(tr.forward[layer].norm1_out.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()),
+                     next_norm_weight=Optional(tr.weights[layer + 1].norm1_w.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()),
+                     next_norm_eps=Optional(tr.weights[layer + 1].eps),
+-                    retain_kv_cache=True)
++                    retain_kv_cache=not IDN_TRAIN_NO_DECODE_CACHE)
+             else:
+                 llama_decoder_layer_forward(ctx, stages, tr.prefill_cache, tr.rope, tr.weights[layer],
+                     tr.buffers.x, config.batch, config.length, 0, trace, prefix,
+-                    norm1_ready=norm1_ready, retain_kv_cache=True)
++                    norm1_ready=norm1_ready, retain_kv_cache=not IDN_TRAIN_NO_DECODE_CACHE)
+         else:
+             if fuse_next:
+                 llama_decoder_layer_forward(ctx, stages, tr.prefill_cache, tr.rope, tr.weights[layer],
+@@ -1567,11 +1564,11 @@ def _byte_forward_loss(ctx: DeviceContext, mut tr: ByteTrainer,
+                     next_norm_out=Optional(tr.forward[layer].norm1_out.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()),
+                     next_norm_weight=Optional(tr.weights[layer + 1].norm1_w.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()),
+                     next_norm_eps=Optional(tr.weights[layer + 1].eps),
+-                    retain_kv_cache=True)
++                    retain_kv_cache=not IDN_TRAIN_NO_DECODE_CACHE)
+             else:
+                 llama_decoder_layer_forward(ctx, stages, tr.prefill_cache, tr.rope, tr.weights[layer],
+                     tr.forward[layer - 1].residual2, config.batch, config.length, 0, trace, prefix,
+-                    norm1_ready=norm1_ready, retain_kv_cache=True)
++                    norm1_ready=norm1_ready, retain_kv_cache=not IDN_TRAIN_NO_DECODE_CACHE)
+         if _byte_layer_sync():
+             step_count_sync()
+             ctx.synchronize()
+diff --git a/training/byte_lm_layer_pool.mojo b/training/byte_lm_layer_pool.mojo
+index 8d01797ba2..7c178a8f49 100644
+--- a/training/byte_lm_layer_pool.mojo
++++ b/training/byte_lm_layer_pool.mojo
+@@ -15,10 +15,7 @@ from training.byte_lm import (
+     _require_finite_params, _require_device_finite,
+ )
+ from training.byte_lm_config import ByteConfig
+-# TOMBSTONE: MOJOLEARN_IDN_TRAIN_NO_DECODE_CACHE (opt-in arm, no A/B recorded; owner elsewhere) folded to False
+-# 2026-11-15 by lane/expdel2-31-neural (retain_kv_cache=True); code recoverable at f105b7dcfb.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_TRAIN_NO_DECODE_CACHE.expdel2-31-neural.patch
+-from training.neural_identical_experiments import IDN_LM_PARAM_VIEWS
++from training.neural_identical_experiments import IDN_LM_PARAM_VIEWS, IDN_TRAIN_NO_DECODE_CACHE
+ from training.byte_lm_parallel import _ordered_add_kernel
+ from training.checks.train_loop import _zeros, _copy_into, download_f32
+ from transformer.impl.llama.modeling_llama import (
+@@ -192,7 +189,7 @@ struct ByteLayerPool(Movable):
+                     self.caches[owner], self.ropes[owner], layer.weights, layer.input,
+                     self.config.batch, self.config.length, 0, trace,
+                     String("byte.block")+String(i)+".forward",
+-                    retain_kv_cache=True)
++                    retain_kv_cache=not IDN_TRAIN_NO_DECODE_CACHE)
+                 self.contexts[owner].synchronize()
+                 if i < len(self.layers):
+                     layer.forward.residual2.enqueue_copy_to(self.layers[i].input)
