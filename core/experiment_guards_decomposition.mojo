@@ -93,6 +93,8 @@ def _check_configuration() -> Bool:
     # Lane expdel-02-decomposition-series (2026-11-15): owed deletions of docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md (docs/TOMBSTONES.md).
     # Restore: git apply experiments/removed/MOJOLEARN_DECOMP_FAST_DICT_DEV_OFF.patch
     comptime assert not is_defined["MOJOLEARN_DECOMP_FAST_DICT_DEV_OFF"](), "removed 2026-11-15 (lane/expdel-02-decomposition-series): DECOMP_FAST_DICT_DEV_OFF (FAST rollback to the kit's per-atom dictionary loop) is gone; the resident two-launch atom update is the FAST path (mb-dict-learning istella 6,832 -> 5,193 ms, sparsity and reconstruction error identical); restore: experiments/removed/MOJOLEARN_DECOMP_FAST_DICT_DEV_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_DECOMP_FAST_LASSO_GRP_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_DECOMP_FAST_LASSO_GRP_OFF"](), "removed 2026-11-15 (lane/expdel-02-decomposition-series): DECOMP_FAST_LASSO_GRP_OFF (FAST+Apple rollback to lasso_rows_kernel, a thread per row with H in device memory) is gone; the 32-thread group per row is the FAST+Apple path (mb-dict-learning istella 6,827 -> 3,185 ms, sparsity and reconstruction error identical); restore: experiments/removed/MOJOLEARN_DECOMP_FAST_LASSO_GRP_OFF.patch"
     return True
 
 

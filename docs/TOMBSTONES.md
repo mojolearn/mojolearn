@@ -656,6 +656,7 @@ in the tables after the sections.
 | [`MOJOLEARN_CV_FAST_TRUST_FOLDS_OFF`](#mojolearn_cv_fast_trust_folds_off-old-path-deleted-2026-11-15) | Model selection (cross_val_score fold checks, FAST Apple) | removed (old path; FAST+Apple default ACCEPT, rab1d-cvtrust) | 2026-11-15 | [MOJOLEARN_CV_FAST_TRUST_FOLDS_OFF.patch](../experiments/removed/MOJOLEARN_CV_FAST_TRUST_FOLDS_OFF.patch) |
 | [`MOJOLEARN_TSA_FAST_SELD_FUSED_OFF`](#mojolearn_tsa_fast_seld_fused_off-old-path-deleted-2026-11-15) | Time series (select_d KPSS rounds, FAST Apple) | removed (old path; FAST+Apple default KEPT 6c0ba4379) | 2026-11-15 | [MOJOLEARN_TSA_FAST_SELD_FUSED_OFF.patch](../experiments/removed/MOJOLEARN_TSA_FAST_SELD_FUSED_OFF.patch) |
 | [`MOJOLEARN_DECOMP_FAST_DICT_DEV_OFF`](#mojolearn_decomp_fast_dict_dev_off-old-path-deleted-2026-11-15) | Decomp (MiniBatchDictionaryLearning atom update, FAST) | removed (old path; FAST+Apple default KEPT, clus3-mbdl-dictdev) | 2026-11-15 | [MOJOLEARN_DECOMP_FAST_DICT_DEV_OFF.patch](../experiments/removed/MOJOLEARN_DECOMP_FAST_DICT_DEV_OFF.patch) |
+| [`MOJOLEARN_DECOMP_FAST_LASSO_GRP_OFF`](#mojolearn_decomp_fast_lasso_grp_off-old-path-deleted-2026-11-15) | Decomp (MiniBatchDictionaryLearning Lasso CD rows, FAST Apple) | removed (old path; FAST+Apple default KEPT, clus3-mbdl-lassogrp) | 2026-11-15 | [MOJOLEARN_DECOMP_FAST_LASSO_GRP_OFF.patch](../experiments/removed/MOJOLEARN_DECOMP_FAST_LASSO_GRP_OFF.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -6377,4 +6378,12 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md (section expdel-02-
 - **Verdict**: KEPT, FAST+Apple default (EXPERIMENTS.md `DECOMP_FAST_DICT_DEV`, clus3-mbdl-dictdev-istella): M3 one run per arm, mb-dict-learning istella 6,832 -> 5,193 ms (-24%), sparsity .08636 and reconstruction error .6483 identical. No bit change on any column.
 - **Deleted by**: lane/expdel-02-decomposition-series (docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md); code recoverable at `539ab9e04b`.
 - **Restore**: `git apply experiments/removed/MOJOLEARN_DECOMP_FAST_DICT_DEV_OFF.patch`, then delete the `MOJOLEARN_DECOMP_FAST_DICT_DEV_OFF` refusal in `core/experiment_guards_decomposition.mojo`.
+- **Records**: refusal in `core/experiment_guards_decomposition.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel-02-decomposition-series section).
+
+### MOJOLEARN_DECOMP_FAST_LASSO_GRP_OFF: old path deleted (2026-11-15)
+
+- **What it was**: the FAST+Apple rollback of `DECOMP_FAST_LASSO_GRP` (`x_decomp/lasso_grp.mojo`, taken by `x_decomp/device.mojo` `DevExec.lasso_rows`): with `-D MOJOLEARN_DECOMP_FAST_LASSO_GRP_OFF` every k took `lasso_rows_kernel`. Deleted: the define read (and the now-unused `is_defined` import); `DECOMP_FAST_LASSO_GRP` is FAST and Apple. `lasso_rows_kernel` stays (k > 64 and every other build).
+- **Verdict**: KEPT, FAST+Apple default (EXPERIMENTS.md `DECOMP_FAST_LASSO_GRP`, clus3-mbdl-lassogrp-istella): M3 one run per arm, mb-dict-learning istella 6,827 -> 3,185 ms (-53%), sparsity .08636 and reconstruction error .6483 identical. No bit change on any column.
+- **Deleted by**: lane/expdel-02-decomposition-series (docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md); code recoverable at `08bb175b23`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_DECOMP_FAST_LASSO_GRP_OFF.patch`, then delete the `MOJOLEARN_DECOMP_FAST_LASSO_GRP_OFF` refusal in `core/experiment_guards_decomposition.mojo`.
 - **Records**: refusal in `core/experiment_guards_decomposition.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel-02-decomposition-series section).
