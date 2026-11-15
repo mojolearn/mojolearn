@@ -110,7 +110,7 @@ from x_decomp.eigh_tridiag_cells import (
 comptime EIGH_FAST_TRIDIAG = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
 #: lane gap-linalg (2026-10-08; docs/plans/gaps-2026-10-08.md section 3.1):
 #: the same algorithm promoted to IDENTICAL on NVIDIA and AMD. Default on
-#: since 2026-10-11 (see below); `_OFF` reverts. What makes it identical:
+#: since 2026-10-11 (see below). What makes it identical:
 #:   1. every product that meets an add, every division and every sqrt in
 #:      this file is spelled through checks/numerics (`identical_mul_add`,
 #:      `identical_mul`, `identical_div`, `identical_sqrt`): one rounding
@@ -148,8 +148,7 @@ comptime EIGH_FAST_TRIDIAG = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_
 #:   NVIDIA L40S 21119.9 ms -> 367.2 ms (run v0006)
 #:   digest dbbb891997... on both vendors (NV == AMD: identical);
 #:   max_eigenvalue_error 5.95e-05 -> 3.69e-07, relative_residual 6.67e-07.
-#: `-D MOJOLEARN_IDN_EIGH_TRIDIAG_OFF` (or MOJOLEARN_IDN_ALL_OFF) restores
-#: the Jacobi path, which stays compiled as the refusal fallback.
+#: The Jacobi path stays compiled as the refusal fallback.
 #: Either route: `DevExec._eigh_on` reads this.
 comptime EIGH_TRIDIAG_ROUTE = EIGH_FAST_TRIDIAG or EIGH_TD_IDN
 # TOMBSTONE: MOJOLEARN_EIGH_FAST_PANEL_DF (DROPPED-slower: rab3-eighdf 693.09 -> 1107.60 ms, +59.8%) and its _OFF deleted
