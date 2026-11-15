@@ -36,8 +36,7 @@ THE HELD QUERY (lane fix-svc-query-resident, 2026-11-14). A handle also
 holds its predict query buffers (`QueryXBuffers`, core/query_x_held.mojo):
 taken by one predict under the lock, given back after its synchronisation
 (kept while the handle is live and the bytes fit an eighth of the device
-memory, read once), freed with the handle at release. `-D
-MOJOLEARN_IDN_QUERY_X_HELD_OFF` keeps the per-call buffers.
+memory, read once), freed with the handle at release.
 """
 from std.atomic import Atomic, Ordering
 

@@ -1,0 +1,41 @@
+diff --git a/glm/impl/ridge_multi.mojo b/glm/impl/ridge_multi.mojo
+index 81da381ab0..351a7f9b01 100644
+--- a/glm/impl/ridge_multi.mojo
++++ b/glm/impl/ridge_multi.mojo
+@@ -1,7 +1,7 @@
+ # SPDX-License-Identifier: Apache-2.0
+ # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
+ """MultiOutputRegressor(Ridge): every target in ONE ridge program (lane
+-apple-fast-meta). FAST + Apple ONLY: the
++apple-fast-meta, -D MOJOLEARN_MULTIOUT_RIDGE). FAST + Apple ONLY: the
+ estimators binding publishes its runs (core/linear_multi_device.mojo) in the
+ ridge multi table (core/linear_entry_table_multi.mojo) under MULTIOUT_RIDGE.
+ 
+@@ -15,6 +15,7 @@ reference solve's last two ops, glm/impl/ridge.mojo). Y arrives row-major
+ kernels, one thread per row. predict is one kernel, one thread per row,
+ every target's dot product and intercept, written row-major (n x m).
+ """
++from std.sys.compile import is_defined
+ from core.accelerator_target import TARGET_HAS_APPLE_GPU
+ from max.gpu import block_dim, block_idx, thread_idx
+ from max.gpu.host import DeviceBuffer, DeviceContext
+@@ -34,12 +35,14 @@ from glm.impl.matrix.math import (
+     set_small_values_zero_kernel,
+ )
+ 
+-#: the route: FAST + Apple, the default since the M3 A/B (lane/apple-fast-meta
++#: the switch: FAST + Apple, on by default since the M3 A/B (lane/apple-fast-meta
+ #: 18b4150df, taxi MultiOutputRegressor(Ridge) 163.0 -> 53.2 ms, r2 .604241 ->
+-#: .604240; EXP:244 KEPT 24ed76679).
+-# TOMBSTONE: MOJOLEARN_MULTIOUT_RIDGE_OFF (old path of the FAST Apple default, EXP:244; promoted on Apple M3 only, FAST is Apple only so no NVIDIA/AMD A/B is owed) deleted 2026-11-15 by lane/expdel2-08-base; code recoverable at 7866bd9303.
+-# Restore: git apply experiments/removed/MOJOLEARN_MULTIOUT_RIDGE_OFF.patch; record in docs/TOMBSTONES.md.
+-comptime MULTIOUT_RIDGE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
++#: .604240); -D MOJOLEARN_MULTIOUT_RIDGE_OFF turns it off, the old
++#: -D MOJOLEARN_MULTIOUT_RIDGE is harmless
++comptime MULTIOUT_RIDGE = (
++    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
++    and not is_defined["MOJOLEARN_MULTIOUT_RIDGE_OFF"]()
++)
+ comptime _ROW_TPB = 256
+ 
+ 

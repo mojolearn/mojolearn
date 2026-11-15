@@ -117,7 +117,6 @@ query row copied into a `local_x_ptr[MAX_COL_Q]` register array and used when
 register array needs the dimension at compile time. Recorded in the lane file
 as unimplemented with that reason.
 """
-from experiments.classical_identical_ideas.graph_controls import C32_COUNT_FUSION, C32_EMIT_FUSION
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 
@@ -700,25 +699,8 @@ def block_rbc_kernel_eps_max_k_copy(
 # ---------------------------------------------------------------------------
 
 
-def _c32_radius_stream[EMIT: Bool](
-    data: MutPointer[Float32,MutAnyOrigin], query: MutPointer[Float32,MutAnyOrigin],
-    ids: MutPointer[Int32,MutAnyOrigin], offsets: MutPointer[Int32,MutAnyOrigin],
-    counts: MutPointer[Int32,MutAnyOrigin], output: MutPointer[Int32,MutAnyOrigin],
-    nq: Int32, nr: Int32, d: Int32, radius: Float32, metric: Int32, metric_arg: Float32,
-):
-    var q=Int(block_idx.x)*Int(block_dim.x)+Int(thread_idx.x)
-    if q>=Int(nq):
-        return
-    var count=0
-    var threshold=rbc_cmp_bound(Int(metric),radius)
-    for col in range(Int(nr)):
-        var distance=rbc_cmp_dist(query,q*Int(d),data,col*Int(d),Int(d),Int(metric),metric_arg)
-        if distance<=threshold:
-            comptime if EMIT:
-                output[Int(offsets[q])+count]=ids[col]
-            count+=1
-    comptime if not EMIT:
-        counts[q]=Int32(count)
+# TOMBSTONE: MOJOLEARN_C32_EMIT_FUSION (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-08-base; code recoverable at a302618f3a.
+# Restore: git apply experiments/removed/MOJOLEARN_C32_EMIT_FUSION.expdel2-08-base.patch; record in docs/TOMBSTONES.md.
 
 
 def rbc_eps_pass_count(
@@ -756,11 +738,8 @@ def rbc_eps_pass_count(
                 ctx, x_reordered, query, r, r_indptr, r_1nn_cols, r_1nn_dists,
                 r_radius, vd, adj_ia, n_queries, n_cols, n_landmarks, eps, False,
             )
-    comptime if C32_COUNT_FUSION:
-        # Offsets/output are unused in COUNT; one raw view avoids duplicate mutable borrows.
-        var offsets_ptr = adj_ia.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
-        ctx.enqueue_function[_c32_radius_stream[False]](x_reordered.unsafe_ptr(),query.unsafe_ptr(),r_1nn_cols.unsafe_ptr(),offsets_ptr,vd.unsafe_ptr(),offsets_ptr,Int32(n_queries),Int32(len(x_reordered)//n_cols),Int32(n_cols),eps,Int32(metric),metric_arg,grid_dim=((n_queries+127)//128,1,1),block_dim=128)
-        fast_done=True
+    # TOMBSTONE: MOJOLEARN_C32_COUNT_FUSION (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-08-base; code recoverable at 75cd76f812.
+    # Restore: git apply experiments/removed/MOJOLEARN_C32_COUNT_FUSION.expdel2-08-base.patch; record in docs/TOMBSTONES.md.
     # fg-tsne-dbscan D1: the tiled count (IDN_DBSCAN_EPS_TILE), the same degrees
     comptime if IDN_DBSCAN_EPS_TILE:
         if not fast_done and metric == RBC_METRIC_DEFAULT:
@@ -841,11 +820,8 @@ def rbc_eps_pass_fill(
                 r_radius, adj_ia, adj_ja, n_queries, n_cols, n_landmarks, eps,
                 True,
             )
-    comptime if C32_EMIT_FUSION:
-        # Counts is unused in EMIT; offsets are read only during this launch.
-        var offsets_ptr = adj_ia.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
-        ctx.enqueue_function[_c32_radius_stream[True]](x_reordered.unsafe_ptr(),query.unsafe_ptr(),r_1nn_cols.unsafe_ptr(),offsets_ptr,offsets_ptr,adj_ja.unsafe_ptr(),Int32(n_queries),Int32(len(x_reordered)//n_cols),Int32(n_cols),eps,Int32(metric),metric_arg,grid_dim=((n_queries+127)//128,1,1),block_dim=128)
-        fast_done=True
+    # TOMBSTONE: MOJOLEARN_C32_EMIT_FUSION (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-08-base; code recoverable at a302618f3a.
+    # Restore: git apply experiments/removed/MOJOLEARN_C32_EMIT_FUSION.expdel2-08-base.patch; record in docs/TOMBSTONES.md.
     # fg-tsne-dbscan D1: the tiled fill (IDN_DBSCAN_EPS_TILE); the rows are
     # canonicalized below, so the same columns
     comptime if IDN_DBSCAN_EPS_TILE:
@@ -909,10 +885,9 @@ def rbc_eps_pass_fill(
 # ===========================================================================
 # fg-tsne-dbscan D1 / D2 (IDENTICAL, NVIDIA and AMD, lane fg-tsne-dbscan
 # 2026-10-09). PROMOTED TOGETHER to the IDENTICAL DEFAULT 2026-10-10
-# (lane/postmerge-act-7): `-D MOJOLEARN_IDN_DBSCAN_ADJ_BITMAP_OFF` restores
-# D1's second distance pass (fill by recompute), `-D
-# MOJOLEARN_IDN_DBSCAN_EPS_TILE_OFF` restores today's warp-per-query count and
-# fill (and with it turns D2 off); the old on-defines are refused in
+# (lane/postmerge-act-7); D2's `_OFF` rollback (fill by recompute) was
+# deleted 2026-11-15 (see the TOMBSTONE below), and so was D1's (the
+# warp-per-query count and fill); the old on-defines are refused in
 # core/six_lane_experiment_guards.mojo. fg2 board-bridge A/B on main
 # 0a7b206f1, one run per arm (nv2 L40S default v1023, EPS_TILE v1042, EPS_TILE
 # + ADJ_BITMAP v1043; MI325X a1163 / a1182 / a1183; ratio = arm / fg2 default
@@ -922,7 +897,7 @@ def rbc_eps_pass_fill(
 # timed out (board-bridge timeout) in every arm and in the default on both
 # vendors: no taxi number.
 #
-# D1 (MOJOLEARN_IDN_DBSCAN_EPS_TILE, now default; _OFF restores): THE EPS COUNT AND FILL AS A
+# D1 (MOJOLEARN_IDN_DBSCAN_EPS_TILE, the IDENTICAL NVIDIA/AMD default): THE EPS COUNT AND FILL AS A
 # REGISTER-TILED BLOCK. `block_rbc_kernel_eps_csr_pass` walks one query per
 # warp and one candidate per lane, each lane reading its candidate's whole
 # row from device memory (rows `n_cols * 4` bytes apart, so the warp's loads
@@ -961,7 +936,7 @@ def rbc_eps_pass_fill(
 # kernel. Bits: none. Expected: the two eps passes at tile rates instead of
 # warp-per-query rates.
 #
-# D2 (MOJOLEARN_IDN_DBSCAN_ADJ_BITMAP, now default; needs D1): the count pass also
+# D2 (MOJOLEARN_IDN_DBSCAN_ADJ_BITMAP, the default wherever D1 runs): the count pass also
 # writes a bit per (query, candidate slot), and the fill becomes a scan of
 # the set bits (`rbc_eps_bitscan_fill_kernel`), so a range's columns cost one
 # distance pass, not two. Layout: query q's bits for landmark L's slots
@@ -977,9 +952,12 @@ comptime IDN_DBSCAN_EPS_TILE = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     and (TARGET_COLUMN == COLUMN_NVIDIA or TARGET_COLUMN == COLUMN_AMD)
     and not KNN_DIRECT_DISTANCE
-    and not is_defined["MOJOLEARN_IDN_DBSCAN_EPS_TILE_OFF"]()
 )
-comptime IDN_DBSCAN_ADJ_BITMAP = IDN_DBSCAN_EPS_TILE and not is_defined["MOJOLEARN_IDN_DBSCAN_ADJ_BITMAP_OFF"]()
+# TOMBSTONE: MOJOLEARN_IDN_DBSCAN_EPS_TILE_OFF (old path of the PROMOTED IDENTICAL default, EXP:1971) deleted 2026-11-15 by lane/expdel2-08-base; code recoverable at 4225a08bd5.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_DBSCAN_EPS_TILE_OFF.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_IDN_DBSCAN_ADJ_BITMAP_OFF (old path of the PROMOTED IDENTICAL default, EXP:1971) deleted 2026-11-15 by lane/expdel2-08-base; code recoverable at 6c9e7778e6.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_DBSCAN_ADJ_BITMAP_OFF.patch; record in docs/TOMBSTONES.md.
+comptime IDN_DBSCAN_ADJ_BITMAP = IDN_DBSCAN_EPS_TILE
 comptime ET_TI = 64
 comptime ET_TJ = 64
 comptime ET_KC = 16

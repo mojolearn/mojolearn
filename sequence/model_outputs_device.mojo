@@ -14,9 +14,12 @@ from sequence.neural_model_dispatch import NeuralModelRequest, MODEL_ARGMAX, MOD
 # Same definitions as bindings/hotpath_device.mojo; these switches describe
 # general dtype/size coverage, with no benchmark-specific dispatch.
 comptime _OUTPUT_DEVICE = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not HOTPATH_SABOTAGE and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-comptime _OUTPUT_REDUCE = _OUTPUT_DEVICE and not is_defined["MOJOLEARN_IDN_HPDEV_REDUCE_OFF"]()
-comptime _OUTPUT_ELEM = _OUTPUT_DEVICE and not is_defined["MOJOLEARN_IDN_HPDEV_ELEM_OFF"]()
-comptime _OUTPUT_INIT = _OUTPUT_DEVICE and not is_defined["MOJOLEARN_IDN_HPDEV_INIT_OFF"]()
+# TOMBSTONE: MOJOLEARN_IDN_HPDEV_REDUCE_OFF (unmeasured old path) deleted 2026-11-15 by lane/expdel2-08-base; code recoverable at 5e88534639.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_HPDEV_REDUCE_OFF.expdel2-08-base.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_IDN_HPDEV_ELEM_OFF (unmeasured old path) deleted 2026-11-15 by lane/expdel2-08-base; code recoverable at 975047f4b1.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_HPDEV_ELEM_OFF.expdel2-08-base.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_IDN_HPDEV_INIT_OFF (unmeasured old path) deleted 2026-11-15 by lane/expdel2-08-base; code recoverable at f60f88656d.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_HPDEV_INIT_OFF.expdel2-08-base.patch; record in docs/TOMBSTONES.md.
 
 
 def model_output_device(mut ex: DeviceExec, op: Int, r: NeuralModelRequest) raises -> Int:
@@ -34,7 +37,7 @@ def model_output_device(mut ex: DeviceExec, op: Int, r: NeuralModelRequest) rais
             raise Error("argmax_rows_f32: more rows or columns than the device argmax holds")
         device_argmax_rows(ex.ctx, a[0], False, n, p[1], a[1])
         return 0
-    comptime if _OUTPUT_REDUCE:
+    comptime if _OUTPUT_DEVICE:
         if op == MODEL_MIN and n >= 1 and n <= HPD_MAX_N and a[0] != 0:
             if a[1] == 0:
                 raise Error("native model: null minimum output")
@@ -43,11 +46,11 @@ def model_output_device(mut ex: DeviceExec, op: Int, r: NeuralModelRequest) rais
                 var at = device_reduce_arg(ex.ctx, a[0], HPD_F32, n, False)
                 MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=a[1])[0] = Float64(source[at])
                 return 0
-    comptime if _OUTPUT_ELEM:
+    comptime if _OUTPUT_DEVICE:
         if op == MODEL_THRESHOLD and n >= 1 and n <= HPD_MAX_N and a[0] != 0 and a[1] != 0:
             device_threshold_labels_i64(ex.ctx, a[0], HPD_F32, n, 0.5, True, 0, 1, a[1])
             return 0
-    comptime if _OUTPUT_INIT:
+    comptime if _OUTPUT_DEVICE:
         if op == MODEL_UNIFORM:
             var lo = r.floats[0]
             var hi = r.floats[1]

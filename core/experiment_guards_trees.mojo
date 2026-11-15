@@ -166,6 +166,13 @@ def _check_configuration() -> Bool:
     # Restore: git apply experiments/removed/MOJOLEARN_RF_FAST_BATCH32K.patch
     comptime assert not is_defined["MOJOLEARN_RF_FAST_BATCH32K"](), "removed 2026-11-15 (lane/expdel2-04-base): RF_FAST_BATCH32K (opt-in arm, RandomForest fit node batch (FAST Apple); no A/B recorded (Apple fast opt-in, rule a)) is gone; the default stays; code recoverable at 1f8a4570c6; restore: experiments/removed/MOJOLEARN_RF_FAST_BATCH32K.patch"
     # ---- end lane expdel2-04-base
+    # Lane expdel2-08-base (2026-11-15): unmeasured arms and superseded old paths deleted, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (docs/TOMBSTONES.md).
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_TREE_SHAPE_NATIVE_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_TREE_SHAPE_NATIVE_OFF"](), "removed 2026-11-15 (lane/expdel2-08-base): IDN_TREE_SHAPE_NATIVE_OFF (unmeasured old path) is gone; the default is kept; code at 3f0e029eb4; restore: experiments/removed/MOJOLEARN_IDN_TREE_SHAPE_NATIVE_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_TE_NATIVE_SPLITS_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_TE_NATIVE_SPLITS_OFF"](), "removed 2026-11-15 (lane/expdel2-08-base): TE_NATIVE_SPLITS_OFF (old path of the FAST Apple default) is gone; the default is kept; code at 6037d8cab6; restore: experiments/removed/MOJOLEARN_TE_NATIVE_SPLITS_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_TE_ADA_SESSION_SHARE_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_TE_ADA_SESSION_SHARE_OFF"](), "removed 2026-11-15 (lane/expdel2-08-base): TE_ADA_SESSION_SHARE_OFF (old path of the FAST Apple default) is gone; the default is kept; code at 1eebdbdc8f; restore: experiments/removed/MOJOLEARN_TE_ADA_SESSION_SHARE_OFF.patch"
     return True
 
 

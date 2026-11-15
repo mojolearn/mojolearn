@@ -254,6 +254,11 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_XN_FAST_CLS2_OCSVM_2L_OFF"](), "removed 2026-11-15 (lane/expdel2-10-cluster): XN_FAST_CLS2_OCSVM_2L_OFF (old path; default kept: three launches per SMO iteration on FAST + Apple) is gone; see docs/TOMBSTONES.md"
     # Restore: git apply experiments/removed/MOJOLEARN_XN_FAST_CLS2_OCSVM_CHUNK256_OFF.patch
     comptime assert not is_defined["MOJOLEARN_XN_FAST_CLS2_OCSVM_CHUNK256_OFF"](), "removed 2026-11-15 (lane/expdel2-10-cluster): XN_FAST_CLS2_OCSVM_CHUNK256_OFF (old path; default kept: 64 SMO iterations between two stop-flag reads on FAST + Apple) is gone; see docs/TOMBSTONES.md"
+    # Lane expdel2-08-base (2026-11-15): unmeasured arms and superseded old paths deleted, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (docs/TOMBSTONES.md).
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_DBSCAN_ADJ_BITMAP_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_DBSCAN_ADJ_BITMAP_OFF"](), "removed 2026-11-15 (lane/expdel2-08-base): IDN_DBSCAN_ADJ_BITMAP_OFF (old path of the PROMOTED IDENTICAL default) is gone; the default is kept; code at 6c9e7778e6; restore: experiments/removed/MOJOLEARN_IDN_DBSCAN_ADJ_BITMAP_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_DBSCAN_EPS_TILE_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_DBSCAN_EPS_TILE_OFF"](), "removed 2026-11-15 (lane/expdel2-08-base): IDN_DBSCAN_EPS_TILE_OFF (old path of the PROMOTED IDENTICAL default) is gone; the default is kept; code at 4225a08bd5; restore: experiments/removed/MOJOLEARN_IDN_DBSCAN_EPS_TILE_OFF.patch"
     return True
 
 

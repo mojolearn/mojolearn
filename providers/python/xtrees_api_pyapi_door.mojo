@@ -121,9 +121,11 @@ def _xt_owned(var addrs: List[Int], params: PythonObject) raises -> XtOwned:
     return owned^
 
 
-# T44/C51 retained snapshot ABI, shared by GPU and host registrations.
-# NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
-comptime _TREE_SHAP_CACHE = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_TREES_T44_METADATA_CACHE"]()
+# T44/C51 retained snapshot ABI, shared by GPU and host registrations: the
+# entries stay registered and report the cache as absent.
+# TOMBSTONE: MOJOLEARN_TREES_T44_METADATA_CACHE (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-08-base; code recoverable at adde5aacdd.
+# Restore: git apply experiments/removed/MOJOLEARN_TREES_T44_METADATA_CACHE.expdel2-08-base.patch; record in docs/TOMBSTONES.md.
+comptime _TREE_SHAP_CACHE = False
 
 
 def tree_shap_cache_enabled_binding() raises -> PythonObject:
@@ -136,26 +138,7 @@ def tree_shap_cache_create_args(forest: PythonObject, params: PythonObject) rais
     cache functions itself (the GPU binding over `xtrees/shap_device.mojo`,
     the host binding over `xtrees/shap_host.mojo`), so the GPU binding's
     import graph never reaches the host runner's threads."""
-    comptime if not _TREE_SHAP_CACHE:
-        raise Error("TreeSHAP cache requires the opt-in T44 binding")
-    else:
-        _need(params, 4, "x_trees_tree_shap_cache_create")
-        if len(forest) != 5:
-            raise Error("TreeSHAP cache requires five forest addresses")
-        var out = List[Int]()
-        for i in range(5):  # driver-loop: over fixed call structure, small-loop(the five forest address words)
-            out.append(Int(py=forest[i]))
-        var d = _i(params, 0)
-        var trees = _i(params, 1)
-        var k = _i(params, 2)
-        var nodes = _i(params, 3)
-        if d < 1 or trees < 1 or k < 1 or nodes < trees:
-            raise Error("TreeSHAP cache requires positive model dimensions")
-        out.append(d)
-        out.append(trees)
-        out.append(k)
-        out.append(nodes)
-        return out^
+    raise Error("TreeSHAP cache requires the opt-in T44 binding")
 
 
 def tree_shap_cache_values_args(params: PythonObject) raises -> List[Int]:
@@ -949,11 +932,11 @@ def leaf_numbering_binding(left: PythonObject, node_col: PythonObject, params: P
 #: lane fam2-forests (2026-10-04): `get_depth` / `get_n_leaves` walk the tree's
 #: nodes in this binding (xtrees/ops.mojo `tree_shape`) instead of a Python
 #: loop over `tolist()` rows. Integers; every build and both tiers.
-#: `-D MOJOLEARN_IDN_TREE_SHAPE_NATIVE_OFF` (or `MOJOLEARN_IDN_ALL_OFF`)
-#: leaves the entry unregistered and the Python walk runs.
-comptime XTREES_TREE_SHAPE_NATIVE = not (
-    is_defined["MOJOLEARN_IDN_TREE_SHAPE_NATIVE_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
+#: `-D MOJOLEARN_IDN_ALL_OFF` leaves the entry unregistered and the Python
+#: walk runs.
+# TOMBSTONE: MOJOLEARN_IDN_TREE_SHAPE_NATIVE_OFF (unmeasured old path: the Python tree walk) deleted 2026-11-15 by lane/expdel2-08-base; code recoverable at 3f0e029eb4.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_TREE_SHAPE_NATIVE_OFF.patch; record in docs/TOMBSTONES.md.
+comptime XTREES_TREE_SHAPE_NATIVE = not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 
 
 def tree_shape_binding(left: PythonObject, res: PythonObject, params: PythonObject) raises -> PythonObject:
@@ -1006,10 +989,14 @@ def column_f64_binding(src: PythonObject, dst: PythonObject, params: PythonObjec
 #: longer a switch (lane m1-followups-misc: every build opens it; bits 2 and
 #: 128 are always 0), only SHARE is.
 comptime _XT_FAST_APPLE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
-comptime _XT_NATIVE_SPLITS = _XT_FAST_APPLE and not is_defined["MOJOLEARN_TE_NATIVE_SPLITS_OFF"]()
+# TOMBSTONE: MOJOLEARN_TE_NATIVE_SPLITS_OFF (old path of the FAST Apple default, EXP:124 KEPT ed49f2b11; promoted on Apple M3 only, FAST is Apple only so no NVIDIA/AMD A/B is owed) deleted 2026-11-15 by lane/expdel2-08-base; code recoverable at 6037d8cab6.
+# Restore: git apply experiments/removed/MOJOLEARN_TE_NATIVE_SPLITS_OFF.patch; record in docs/TOMBSTONES.md.
+comptime _XT_NATIVE_SPLITS = _XT_FAST_APPLE
 # TOMBSTONE: MOJOLEARN_TE_ADA_SESSION_OFF (escape from the AdaBoost data session) deleted 2026-11-09 by lane/m1-followups-misc; code recoverable at 5b5490960d.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_ADA_SESSION_OFF.patch
-comptime _XT_ADA_SESSION_SHARE = _XT_FAST_APPLE and not is_defined["MOJOLEARN_TE_ADA_SESSION_SHARE_OFF"]()
+# TOMBSTONE: MOJOLEARN_TE_ADA_SESSION_SHARE_OFF (old path of the FAST Apple default, EXP:123 KEPT ed49f2b11; promoted on Apple M3 only, FAST is Apple only so no NVIDIA/AMD A/B is owed) deleted 2026-11-15 by lane/expdel2-08-base; code recoverable at 1eebdbdc8f.
+# Restore: git apply experiments/removed/MOJOLEARN_TE_ADA_SESSION_SHARE_OFF.patch; record in docs/TOMBSTONES.md.
+comptime _XT_ADA_SESSION_SHARE = _XT_FAST_APPLE
 # TOMBSTONE: MOJOLEARN_IDN_ADA_SESSION_OFF (`_XT_IDN_ADA_SESSION`, bit 128: the IDENTICAL escape from the AdaBoost data
 # session; the session moved no bit) deleted 2026-11-09 by lane/m1-followups-misc; code recoverable at 5b5490960d.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_ADA_SESSION_OFF.patch

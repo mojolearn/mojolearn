@@ -612,6 +612,16 @@ in the tables after the sections.
 | [`MOJOLEARN_IDN_PT_BLOCKED_OFF`](#mojolearn_idn_pt_blocked_off) | Preprocessing (IDENTICAL PowerTransformer) | removed (old path, no A/B recorded) | 2026-11-15 | [MOJOLEARN_IDN_PT_BLOCKED_OFF.patch](../experiments/removed/MOJOLEARN_IDN_PT_BLOCKED_OFF.patch) |
 | [`MOJOLEARN_IDN_SELECT_BLOCKED_OFF`](#mojolearn_idn_select_blocked_off) | Preprocessing (IDENTICAL feature selection statistics) | removed (old path, no A/B recorded) | 2026-11-15 | [MOJOLEARN_IDN_SELECT_BLOCKED_OFF.patch](../experiments/removed/MOJOLEARN_IDN_SELECT_BLOCKED_OFF.patch) |
 | [`MOJOLEARN_KPCA_RESIDENT_OFF`](#mojolearn_kpca_resident_off) | Neighbors / kernel approximation (FAST+Apple KernelPCA) | removed (old path) | 2026-11-15 | [MOJOLEARN_KPCA_RESIDENT_OFF.patch](../experiments/removed/MOJOLEARN_KPCA_RESIDENT_OFF.patch) |
+| [`MOJOLEARN_IDN_DBSCAN_ADJ_BITMAP_OFF`](#mojolearn_idn_dbscan_adj_bitmap_off) | Cluster (DBSCAN ball-cover eps fill) | removed (old path of the PROMOTED IDENTICAL default) | 2026-11-15 | [MOJOLEARN_IDN_DBSCAN_ADJ_BITMAP_OFF.patch](../experiments/removed/MOJOLEARN_IDN_DBSCAN_ADJ_BITMAP_OFF.patch) |
+| [`MOJOLEARN_IDN_DBSCAN_EPS_TILE_OFF`](#mojolearn_idn_dbscan_eps_tile_off) | Cluster (DBSCAN ball-cover eps count and fill) | removed (old path of the PROMOTED IDENTICAL default) | 2026-11-15 | [MOJOLEARN_IDN_DBSCAN_EPS_TILE_OFF.patch](../experiments/removed/MOJOLEARN_IDN_DBSCAN_EPS_TILE_OFF.patch) |
+| [`MOJOLEARN_MULTIOUT_RIDGE_OFF`](#mojolearn_multiout_ridge_off) | Linear (MultiOutputRegressor(Ridge), FAST Apple) | removed (old path of the FAST Apple default) | 2026-11-15 | [MOJOLEARN_MULTIOUT_RIDGE_OFF.patch](../experiments/removed/MOJOLEARN_MULTIOUT_RIDGE_OFF.patch) |
+| [`MOJOLEARN_PROGRAM_RUN_ENTRY`](#mojolearn_program_run_entry) | Autograd (Program.run door) | removed (unmeasured B arm) | 2026-11-15 | [MOJOLEARN_PROGRAM_RUN_ENTRY.patch](../experiments/removed/MOJOLEARN_PROGRAM_RUN_ENTRY.patch) |
+| [`MOJOLEARN_SESSION_CALL_DESCRIPTOR`](#mojolearn_session_call_descriptor) | Autograd (Session call door) | removed (unmeasured B arm) | 2026-11-15 | [MOJOLEARN_SESSION_CALL_DESCRIPTOR.patch](../experiments/removed/MOJOLEARN_SESSION_CALL_DESCRIPTOR.patch) |
+| [`MOJOLEARN_TRANSFORMER_DECODE_PER_TOKEN_ADMISSION`](#mojolearn_transformer_decode_per_token_admission) | Neural (TransformerDecodeSession step) | removed (unmeasured B arm) | 2026-11-15 | [MOJOLEARN_TRANSFORMER_DECODE_PER_TOKEN_ADMISSION.patch](../experiments/removed/MOJOLEARN_TRANSFORMER_DECODE_PER_TOKEN_ADMISSION.patch) |
+| [`MOJOLEARN_TRANSFORMER_DECODE_PER_TOKEN_DOOR`](#mojolearn_transformer_decode_per_token_door) | Neural (TransformerDecodeSession door) | removed (unmeasured B arm) | 2026-11-15 | [MOJOLEARN_TRANSFORMER_DECODE_PER_TOKEN_DOOR.patch](../experiments/removed/MOJOLEARN_TRANSFORMER_DECODE_PER_TOKEN_DOOR.patch) |
+| [`MOJOLEARN_IDN_TREE_SHAPE_NATIVE_OFF`](#mojolearn_idn_tree_shape_native_off) | Trees (get_depth / get_n_leaves) | removed (unmeasured old path) | 2026-11-15 | [MOJOLEARN_IDN_TREE_SHAPE_NATIVE_OFF.patch](../experiments/removed/MOJOLEARN_IDN_TREE_SHAPE_NATIVE_OFF.patch) |
+| [`MOJOLEARN_TE_NATIVE_SPLITS_OFF`](#mojolearn_te_native_splits_off) | Trees (FAST Apple wrapper splits) | removed (old path of the FAST Apple default) | 2026-11-15 | [MOJOLEARN_TE_NATIVE_SPLITS_OFF.patch](../experiments/removed/MOJOLEARN_TE_NATIVE_SPLITS_OFF.patch) |
+| [`MOJOLEARN_TE_ADA_SESSION_SHARE_OFF`](#mojolearn_te_ada_session_share_off) | Trees (FAST Apple AdaBoost session) | removed (old path of the FAST Apple default) | 2026-11-15 | [MOJOLEARN_TE_ADA_SESSION_SHARE_OFF.patch](../experiments/removed/MOJOLEARN_TE_ADA_SESSION_SHARE_OFF.patch) |
 
 | [`MOJOLEARN_IDN_EIGH_SMALL_OFF`](#n9-every-dense-eigh-on-the-executor-ops-2026-11-09) | Decomposition (dense eigh, IDENTICAL) | removed (superseded: the one-launch Jacobi is the op's only route below TD_MIN_N) | 2026-11-09 | [MOJOLEARN_IDN_EIGH_SMALL.patch](../experiments/removed/MOJOLEARN_IDN_EIGH_SMALL.patch) |
 | [`MOJOLEARN_IDN_EIGH_SMALL_N64`](#n9-every-dense-eigh-on-the-executor-ops-2026-11-09) | Decomposition (dense eigh, IDENTICAL candidate arm) | removed (superseded: no small-n cut left) | 2026-11-09 | [MOJOLEARN_IDN_EIGH_SMALL.patch](../experiments/removed/MOJOLEARN_IDN_EIGH_SMALL.patch) |
@@ -9034,3 +9044,119 @@ Not deleted: `MOJOLEARN_COLUMN_CPU` (the CPU-column build switch, KEEP by the pl
 - **Deleted by**: lane/expdel2-10-cluster `f379abdf05` (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `0dffcf5903`.
 - **Restore**: `git apply experiments/removed/MOJOLEARN_XN_FAST_CLS2_OCSVM_CHUNK256_OFF.patch`, then delete the `MOJOLEARN_XN_FAST_CLS2_OCSVM_CHUNK256_OFF` refusal in `core/experiment_guards_cluster.mojo`.
 - **Records**: refusal in `core/experiment_guards_cluster.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-10-cluster section).
+## Experiment deletions: lane expdel2-08-base (2026-11-15)
+
+Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2-08-base), under AGENTS.md "An unmeasured arm is deleted" (Andrew, 2026-11-15). Each record named below was read first. No bit changes: every deletion removes a non-default arm or a rollback beside the default, and the default branch is kept byte for byte.
+
+### MOJOLEARN_IDN_DBSCAN_ADJ_BITMAP_OFF
+
+- Tried: old path: D2's rollback to the fill by recompute (a second distance pass per range) instead of the adjacency bitmap scan.
+- Evidence: EXPERIMENTS.md row 1971 PROMOTED 2026-10-10 together with EPS_TILE (fg2 A/B nv2 v1023 -> v1043, amd a1163 -> a1183: dbscan istella NV 0.20x / AMD 0.20x, hash unchanged); grid fg-tsne-dbscan.json dbscan_adj_bitmap default on. The old path never won: deleted (rule e of the V2 plan).
+- Removed: the `and not is_defined` term: `IDN_DBSCAN_ADJ_BITMAP = IDN_DBSCAN_EPS_TILE`; the recompute fill stays for the builds where the tile does not run. Default unchanged: no bits move.
+- Files: neighbors/impl/ball_cover/registers.mojo.
+- Deleted by: lane/expdel2-08-base `4225a08bd5` (2026-11-15); code recoverable at `6c9e7778e6`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_DBSCAN_ADJ_BITMAP_OFF.patch`, then delete the refusal in `core/experiment_guards_cluster.mojo`.
+
+### MOJOLEARN_IDN_DBSCAN_EPS_TILE_OFF
+
+- Tried: old path: D1's rollback to the warp-per-query eps count and fill (block_rbc_kernel_eps_csr_pass) on IDENTICAL NVIDIA/AMD.
+- Evidence: EXPERIMENTS.md row 1971 PROMOTED 2026-10-10 (fg2 A/B: EPS_TILE alone dbscan istella NV 0.42x / AMD 0.34x, hash unchanged); grid fg-tsne-dbscan.json dbscan_eps_tile default on. Deleted (rule e of the V2 plan).
+- Removed: the `and not is_defined` term of `IDN_DBSCAN_EPS_TILE`; the warp-per-query kernel stays for FAST, other metrics, KNN_DIRECT_DISTANCE and the other columns. Default unchanged: no bits move.
+- Files: neighbors/impl/ball_cover/registers.mojo.
+- Deleted by: lane/expdel2-08-base `75cd76f812` (2026-11-15); code recoverable at `4225a08bd5`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_DBSCAN_EPS_TILE_OFF.patch`, then delete the refusal in `core/experiment_guards_cluster.mojo`.
+
+### MOJOLEARN_MULTIOUT_RIDGE_OFF
+
+- Tried: old path: FAST Apple MultiOutputRegressor(Ridge) cloned Ridge per target instead of one ridge program for every target.
+- Evidence: EXPERIMENTS.md row 244 KEPT 24ed76679 (M3: multioutput-reg taxi 163.0 -> 53.2 ms, r2 same). Promoted on Apple only; FAST is Apple only, so no NVIDIA/AMD A/B is owed. Deleted (rule d of the V2 plan).
+- Removed: the `and not is_defined` term and the `is_defined` import: `MULTIOUT_RIDGE` is FAST + Apple; the per-target route stays for every other build. Default unchanged: no bits move.
+- Files: glm/impl/ridge_multi.mojo.
+- Deleted by: lane/expdel2-08-base `d28d0a8014` (2026-11-15); code recoverable at `7866bd9303`.
+- Restore: `git apply experiments/removed/MOJOLEARN_MULTIOUT_RIDGE_OFF.patch`, then delete the refusal in `core/experiment_guards_linear.mojo`.
+
+### MOJOLEARN_PROGRAM_RUN_ENTRY
+
+- Tried: B arm: every Program.run on program_execute_run (zero-filled input alloc per run, OpsProgram copies, a fresh replay, host staging per output) and the full Session door chain, instead of the restored run_program route.
+- Evidence: EXPERIMENTS.md row 2394 RESTORED (A = run_program, the 0.8.55 route, default); the owed A/B restore-executor-program-run never ran. Deleted unmeasured (rule e of the V2 plan).
+- Removed: the alias and its three gates: the direct doors to `_program_run_fixed` in `ops_program_execute_py` and `ops_program_public_call_py` are unconditional, as by default; dynamic_shapes, optimize and profile keep program_execute_run. Default unchanged: no bits move.
+- Files: providers/python/autograd_program_pyapi_door.mojo, providers/python/autograd_program_public_request_pyapi_pack.mojo.
+- Deleted by: lane/expdel2-08-base `8fe6eaaa01` (2026-11-15); code recoverable at `a435c824c4`.
+- Restore: `git apply experiments/removed/MOJOLEARN_PROGRAM_RUN_ENTRY.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+
+### MOJOLEARN_SESSION_CALL_DESCRIPTOR
+
+- Tried: B arm: every Session call, including one into the calling image, through the descriptor record and the C ABI entry, and read-backs into a zero-filled result array read through `__array_interface__`.
+- Evidence: EXPERIMENTS.md row 2395 RESTORED (A = direct typed call when the calling image owns the registry, default); the owed A/B restore-executor-session-call never ran. Deleted unmeasured (rule e of the V2 plan).
+- Removed: both aliases, the B read-back branch and the `output_array` import; same-image calls go straight to `ops_session_call_admitted_py`; sessions of another image keep the descriptor route. Default unchanged: no bits move.
+- Files: providers/python/autograd_ops_frontend_pyapi_door.mojo, providers/python/autograd_session_public_request_pyapi_pack.mojo.
+- Deleted by: lane/expdel2-08-base `c33bc3f5d0` (2026-11-15); code recoverable at `8fe6eaaa01`.
+- Restore: `git apply experiments/removed/MOJOLEARN_SESSION_CALL_DESCRIPTOR.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+
+### MOJOLEARN_TRANSFORMER_DECODE_PER_TOKEN_ADMISSION
+
+- Tried: B arm: the per-token admission of lanes N177 / fix-transformer-decode-door (owner record, generation words, tail content, a new NativeModules per token) instead of the admitted 0.8.55-shape step.
+- Evidence: EXPERIMENTS.md row 2406 PENDING (owed A/B fix-transformer-decode-step-admission, never run). Deleted unmeasured (rule a of the V2 plan).
+- Removed: the alias and its term in the admitted-step gate. Default unchanged: no bits move.
+- Files: providers/python/transformer_decode_pyapi_door.mojo.
+- Deleted by: lane/expdel2-08-base `b891c32944` (2026-11-15); code recoverable at `c33bc3f5d0`.
+- Restore: `git apply experiments/removed/MOJOLEARN_TRANSFORMER_DECODE_PER_TOKEN_ADMISSION.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+
+### MOJOLEARN_TRANSFORMER_DECODE_PER_TOKEN_DOOR
+
+- Tried: B arm: the Python-owned TransformerDecodeSession reached through the `transformer_decode_session_*` binding entries with `py_ints` lists, a (B, 1, d_model) view per token, and the step op's position word filled every token.
+- Evidence: EXPERIMENTS.md rows 2405 and 2408 PENDING (owed A/B wave2-transformer-decode-loop, never run). Deleted unmeasured (rule a of the V2 plan).
+- Removed: both aliases; the B open, input view and the `handle.device` step/decode/forward/load/export/close calls (reached only with the B arm's word 0); the six `transformer_decode_session_*` entry lookups at open (host entries renumbered 0-2); `_word_each_token` in attn_step_session (the word is left due per token, as by default); the `_neural_input` and `is_defined` imports. Default unchanged: no bits move.
+- Files: providers/python/transformer_decode_pyapi_door.mojo, transformer/attn_step_session.mojo.
+- Deleted by: lane/expdel2-08-base `adde5aacdd` (2026-11-15); code recoverable at `b891c32944`.
+- Restore: `git apply experiments/removed/MOJOLEARN_TRANSFORMER_DECODE_PER_TOKEN_DOOR.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+
+### MOJOLEARN_IDN_TREE_SHAPE_NATIVE_OFF
+
+- Tried: old path: left `x_trees_tree_shape` unregistered so the Python walk over `tolist()` rows ran.
+- Evidence: no EXPERIMENTS.md row, no grid control: no A/B recorded. Deleted unmeasured (rule b of the V2 plan).
+- Removed: the define's term: `XTREES_TREE_SHAPE_NATIVE = not is_defined["MOJOLEARN_IDN_ALL_OFF"]()` (the umbrella keeps its read). Default unchanged: no bits move.
+- Files: providers/python/xtrees_api_pyapi_door.mojo.
+- Deleted by: lane/expdel2-08-base `6037d8cab6` (2026-11-15); code recoverable at `3f0e029eb4`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_TREE_SHAPE_NATIVE_OFF.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
+
+### MOJOLEARN_TE_NATIVE_SPLITS_OFF
+
+- Tried: old path: cleared fast-switch bit 1, so the FAST Apple wrappers' splits ran in Python.
+- Evidence: EXPERIMENTS.md row 124 KEPT ed49f2b11 (M3: stacking-clf istella 9,875 -> 9,370, calibrated 4,992 -> 4,515, and more). Promoted on Apple only; FAST is Apple only, so no NVIDIA/AMD A/B is owed. Deleted (rule d of the V2 plan).
+- Removed: the define's term: `_XT_NATIVE_SPLITS = _XT_FAST_APPLE`. Default unchanged: no bits move.
+- Files: providers/python/xtrees_api_pyapi_door.mojo.
+- Deleted by: lane/expdel2-08-base `1eebdbdc8f` (2026-11-15); code recoverable at `6037d8cab6`.
+- Restore: `git apply experiments/removed/MOJOLEARN_TE_NATIVE_SPLITS_OFF.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
+
+### MOJOLEARN_TE_ADA_SESSION_SHARE_OFF
+
+- Tried: old path: cleared fast-switch bit 4, so FAST Apple AdaBoost members did not share the data session.
+- Evidence: EXPERIMENTS.md row 123 KEPT ed49f2b11 (M3: adaboost-clf taxi 2,056 -> 1,608, acc identical). Promoted on Apple only; FAST is Apple only, so no NVIDIA/AMD A/B is owed. Deleted (rule d of the V2 plan).
+- Removed: the define's term: `_XT_ADA_SESSION_SHARE = _XT_FAST_APPLE`. Default unchanged: no bits move.
+- Files: providers/python/xtrees_api_pyapi_door.mojo.
+- Deleted by: lane/expdel2-08-base `c940fa760f` (2026-11-15); code recoverable at `1eebdbdc8f`.
+- Restore: `git apply experiments/removed/MOJOLEARN_TE_ADA_SESSION_SHARE_OFF.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
+
+### Non-owner sites folded by lane expdel2-08-base
+
+The owner lanes write these defines' sections; here the inline markers and `experiments/removed/<DEFINE>.expdel2-08-base.patch` (each the reverse of the one commit, code files only).
+
+- `MOJOLEARN_C44_SAMPLING_DESCRIPTORS`: the C44 sampling and epoch kernels and the samples arena in umap/optimizer_identical_device.mojo; `1ff002b526`, recoverable at `75ea427c34`; `experiments/removed/MOJOLEARN_C44_SAMPLING_DESCRIPTORS.expdel2-08-base.patch`.
+- `MOJOLEARN_UMAP_LIVE_BOTH_ARM`: the both-moves-live trial branch of the device epoch kernels in umap/optimizer_identical_device.mojo; `5e88534639`, recoverable at `1ff002b526`; `experiments/removed/MOJOLEARN_UMAP_LIVE_BOTH_ARM.expdel2-08-base.patch`.
+- `MOJOLEARN_IDN_HPDEV_REDUCE_OFF`: the rollback term of `_OUTPUT_REDUCE` in sequence/model_outputs_device.mojo; `975047f4b1`, recoverable at `5e88534639`; `experiments/removed/MOJOLEARN_IDN_HPDEV_REDUCE_OFF.expdel2-08-base.patch`.
+- `MOJOLEARN_IDN_HPDEV_ELEM_OFF`: the rollback term of `_OUTPUT_ELEM` in sequence/model_outputs_device.mojo; `f60f88656d`, recoverable at `975047f4b1`; `experiments/removed/MOJOLEARN_IDN_HPDEV_ELEM_OFF.expdel2-08-base.patch`.
+- `MOJOLEARN_IDN_HPDEV_INIT_OFF`: the rollback term of `_OUTPUT_INIT` in sequence/model_outputs_device.mojo; `6c9e7778e6`, recoverable at `f60f88656d`; `experiments/removed/MOJOLEARN_IDN_HPDEV_INIT_OFF.expdel2-08-base.patch`.
+- `MOJOLEARN_C32_COUNT_FUSION`: the fused brute-force count launch in neighbors/impl/ball_cover/registers.mojo; `a302618f3a`, recoverable at `75cd76f812`; `experiments/removed/MOJOLEARN_C32_COUNT_FUSION.expdel2-08-base.patch`.
+- `MOJOLEARN_C32_EMIT_FUSION`: the fused brute-force fill launch and `_c32_radius_stream` in neighbors/impl/ball_cover/registers.mojo; `8e550429b6`, recoverable at `a302618f3a`; `experiments/removed/MOJOLEARN_C32_EMIT_FUSION.expdel2-08-base.patch`.
+- `MOJOLEARN_C31_DEVICE_BUCKETS`: `_rbc_bucket_all_levels` and its launch in neighbors/checks/ball_cover_canonical_order.mojo; `07692a4f78`, recoverable at `8e550429b6`; `experiments/removed/MOJOLEARN_C31_DEVICE_BUCKETS.expdel2-08-base.patch`.
+- `MOJOLEARN_C53_CENTER4`: the four-plane centering group (`GMM_CENTER_GROUP` is 2) in mixture/checks/mstep.mojo; `2fef9eaba4`, recoverable at `07692a4f78`; `experiments/removed/MOJOLEARN_C53_CENTER4.expdel2-08-base.patch`.
+- `MOJOLEARN_CLASSICAL_C56_QDA_PROJECT`: the W-wide QDA projection branch in naive_bayes/da.mojo; `ac48a6d766`, recoverable at `2fef9eaba4`; `experiments/removed/MOJOLEARN_CLASSICAL_C56_QDA_PROJECT.expdel2-08-base.patch`.
+- `MOJOLEARN_C58_TEAM_MIB`: the int sweep (`SEQ_TEAM_BYTES` is 256 MiB) in sequence/fit_team_impl.mojo; `0e69fe9c69`, recoverable at `ac48a6d766`; `experiments/removed/MOJOLEARN_C58_TEAM_MIB.expdel2-08-base.patch`.
+- `MOJOLEARN_CLASSICAL_C02_LINEAR_PAIR`: paired X/y column sums, `cs_pair_partial_kernel`, the LF_FLAGS paired-means term in glm/impl/center_device.mojo, glm/host/linear_fit_native.mojo, glm/linear_fit_device.mojo; `62fba45282`, recoverable at `0e69fe9c69`; `experiments/removed/MOJOLEARN_CLASSICAL_C02_LINEAR_PAIR.expdel2-08-base.patch`.
+- `MOJOLEARN_CLASSICAL_C20_PAIR_LOAD`: the paired gather launch at both sites in svm/impl/kernelcache.mojo; `32e78d9b95`, recoverable at `62fba45282`; `experiments/removed/MOJOLEARN_CLASSICAL_C20_PAIR_LOAD.expdel2-08-base.patch`.
+- `MOJOLEARN_CLASSICAL_C21_EXTREMA`: the four-way tuple tree of `_tree_dual` in svm/impl/smoblocksolve.mojo; `7866bd9303`, recoverable at `32e78d9b95`; `experiments/removed/MOJOLEARN_CLASSICAL_C21_EXTREMA.expdel2-08-base.patch`.
+- `MOJOLEARN_MAMBA3_LEGACY_FRESH_PREFILL`: its term in `mamba3_prefill_image_caps` in mamba/native_block_dispatch.mojo; `a435c824c4`, recoverable at `d28d0a8014`; `experiments/removed/MOJOLEARN_MAMBA3_LEGACY_FRESH_PREFILL.expdel2-08-base.patch`.
+- `MOJOLEARN_TREES_T44_METADATA_CACHE`: `_TREE_SHAP_CACHE` is False; the create-args check refuses in providers/python/xtrees_api_pyapi_door.mojo; `3f0e029eb4`, recoverable at `adde5aacdd`; `experiments/removed/MOJOLEARN_TREES_T44_METADATA_CACHE.expdel2-08-base.patch`.
+
+Not deleted, contrary to the plan (KEEP set): `MOJOLEARN_NATIVE_CONV_BAD_GRADIENT`, `MOJOLEARN_NATIVE_OPTIMIZER_BAD_REFERENCE` and `MOJOLEARN_NATIVE_SVM_BAD_PREDICTION` (fixture-only negative controls of packaging/native_only/cases: sabotage arms); `MOJOLEARN_SCRATCH` (the A/B toggle of the standalone probe tools/lowbit_amd_tuned/scratch_first.mojo, built both ways by scratch_first.sh); `MOJOLEARN_UMAP_IDENTICAL_OPT_TPB_64` / `_256` (the launch-width builds of the UMAP fingerprint gate in tools/umap_lane_pod_run.sh); `MOJOLEARN_COLUMN_CPU` (coordinator correction) and the `MOJOLEARN_IDN_ALL_OFF` umbrella reads (kept as the plan's Method says). The remaining defines of the section are read in this lane's files only through mode-dependent aliases owned by other lanes' files, which stay as they are.

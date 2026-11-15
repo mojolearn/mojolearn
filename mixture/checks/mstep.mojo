@@ -99,7 +99,6 @@ preference.
 ==========================================================================
 """
 
-from experiments.classical_identical_ideas.stats_controls import C53_CENTER4
 from max.gpu import WARP_SIZE, block_dim, block_idx, thread_idx
 from max.gpu.primitives.warp import shuffle_xor
 from std.memory import stack_allocation
@@ -623,9 +622,9 @@ def means_divide_kernel(
 # Evidence: experiments/performance_ideas/measurements/20261006/index.json.
 comptime GMM_CENTER_PAIR = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_IDN_GMM_CENTER_PAIR"]() and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 comptime GMM_CENTER_PAIR_MAX_CELLS = 1 << 20  # four Float32 planes <=16 MiB
-# C53 uses four component planes under the SAME 16 MiB live-byte budget.
-# NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
-comptime GMM_CENTER_GROUP = 4 if C53_CENTER4 else 2
+# TOMBSTONE: MOJOLEARN_C53_CENTER4 (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-08-base; code recoverable at 07692a4f78.
+# Restore: git apply experiments/removed/MOJOLEARN_C53_CENTER4.expdel2-08-base.patch; record in docs/TOMBSTONES.md.
+comptime GMM_CENTER_GROUP = 2
 comptime GMM_CENTER_CELLS = (16 * 1024 * 1024) // (2 * GMM_CENTER_GROUP * 4)
 
 @always_inline
@@ -2712,7 +2711,7 @@ def gmm_m_step(
             ncomp_loop = 0
     var pair_buffers=List[DeviceBuffer[DType.float32]]()
     var paired=False
-    comptime if GMM_CENTER_PAIR or C53_CENTER4:
+    comptime if GMM_CENTER_PAIR:
         paired=sabotage==0 and not fast_gram and ncomp_loop>0 and n>0 and d>0 and n<=GMM_CENTER_CELLS//d
         if paired:
             pair_buffers.append(gmm_keep_buffer(ctx, keep_addr, GMM_KEEP_PAIR_DIFF, GMM_CENTER_GROUP*n*d))

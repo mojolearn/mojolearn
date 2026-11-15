@@ -358,6 +358,15 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_MEASURE_I07_LIFETIME"](), "removed 2026-11-15 (lane/expdel2-07-base): MEASURE_I07_LIFETIME (Neural (I07 retained-estash lifetime timing arm of the attention driver)) was unmeasured opt-in arm; the opt-in arm is gone and the default path is unchanged; code recoverable at 6ada715def; see docs/TOMBSTONES.md"
     # Restore: git apply experiments/removed/MOJOLEARN_TRAIN_LIVE_STATUS.patch
     comptime assert not is_defined["MOJOLEARN_TRAIN_LIVE_STATUS"](), "removed 2026-11-15 (lane/expdel2-07-base): TRAIN_LIVE_STATUS (Neural (byte LM train step live-status candidate, I10)) was unmeasured opt-in arm; the opt-in arm is gone and the default path is unchanged; code recoverable at c38a3b0613; see docs/TOMBSTONES.md"
+    # Lane expdel2-08-base (2026-11-15): unmeasured arms and superseded old paths deleted, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (docs/TOMBSTONES.md).
+    # Restore: git apply experiments/removed/MOJOLEARN_PROGRAM_RUN_ENTRY.patch
+    comptime assert not is_defined["MOJOLEARN_PROGRAM_RUN_ENTRY"](), "removed 2026-11-15 (lane/expdel2-08-base): PROGRAM_RUN_ENTRY (unmeasured B arm) is gone; the default is kept; code at a435c824c4; restore: experiments/removed/MOJOLEARN_PROGRAM_RUN_ENTRY.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_SESSION_CALL_DESCRIPTOR.patch
+    comptime assert not is_defined["MOJOLEARN_SESSION_CALL_DESCRIPTOR"](), "removed 2026-11-15 (lane/expdel2-08-base): SESSION_CALL_DESCRIPTOR (unmeasured B arm) is gone; the default is kept; code at 8fe6eaaa01; restore: experiments/removed/MOJOLEARN_SESSION_CALL_DESCRIPTOR.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_TRANSFORMER_DECODE_PER_TOKEN_ADMISSION.patch
+    comptime assert not is_defined["MOJOLEARN_TRANSFORMER_DECODE_PER_TOKEN_ADMISSION"](), "removed 2026-11-15 (lane/expdel2-08-base): TRANSFORMER_DECODE_PER_TOKEN_ADMISSION (unmeasured B arm) is gone; the default is kept; code at c33bc3f5d0; restore: experiments/removed/MOJOLEARN_TRANSFORMER_DECODE_PER_TOKEN_ADMISSION.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_TRANSFORMER_DECODE_PER_TOKEN_DOOR.patch
+    comptime assert not is_defined["MOJOLEARN_TRANSFORMER_DECODE_PER_TOKEN_DOOR"](), "removed 2026-11-15 (lane/expdel2-08-base): TRANSFORMER_DECODE_PER_TOKEN_DOOR (unmeasured B arm) is gone; the default is kept; code at b891c32944; restore: experiments/removed/MOJOLEARN_TRANSFORMER_DECODE_PER_TOKEN_DOOR.patch"
     return True
 
 

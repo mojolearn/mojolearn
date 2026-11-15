@@ -15,7 +15,6 @@ from core.linear_metadata import linear_vendor_code
 from core.neural_context import process_ctx
 from core.shared_slot import SharedSlot
 from experiments.classical_identical_ideas.linear_controls import LINEAR_GRAM_SOLVE
-from experiments.classical_identical_ideas.shared_controls import C02_LINEAR_PAIR
 from glm.estimator import ridge_fit_host, ridge_fit_resident_host, ols_fit_host, ols_fit_resident_host
 from glm.impl.gram_solve import linear_gram_fit_host
 from glm.impl.ols_prep_device import ols_prep_device
@@ -30,7 +29,9 @@ def linear_fit_device_v1(operation: Int, aa: Int, na: Int, pp: Int, np: Int,
         linear_fit_check_spans(operation, aa, na, pp, np, ff, nf, result)
         var value = 0
         if operation == LF_FLAGS:
-            value = Int(LINEAR_GRAM_SOLVE) * LF_HAS_GRAM + Int(RIDGE_FAST_RESIDENT) * LF_HAS_RIDGE_RESIDENT + Int(C02_LINEAR_PAIR) * LF_PAIRED_MEANS + Int(OLS_FAST_NORMAL_EQ) * LF_HAS_OLS_RESIDENT
+            value = Int(LINEAR_GRAM_SOLVE) * LF_HAS_GRAM + Int(RIDGE_FAST_RESIDENT) * LF_HAS_RIDGE_RESIDENT + Int(OLS_FAST_NORMAL_EQ) * LF_HAS_OLS_RESIDENT
+            # TOMBSTONE: MOJOLEARN_CLASSICAL_C02_LINEAR_PAIR (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-08-base; code recoverable at 0e69fe9c69.
+            # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C02_LINEAR_PAIR.expdel2-08-base.patch; record in docs/TOMBSTONES.md.
         elif operation == LF_MODE:
             value = GLOBAL_NUMERIC_MODE
         elif operation == LF_VENDOR:
@@ -61,7 +62,7 @@ def linear_fit_device_v1(operation: Int, aa: Int, na: Int, pp: Int, np: Int,
                             f32_ptr(a[3]), f64_ptr(a[4]), p[0], p[1], Float32(f[0]), p[2] != 0)
                         ctx.synchronize()
                 else:
-                    raise Error("linear_gram_fit: this build lacks the route (FAST, or -D MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE_OFF)")
+                    raise Error("linear_gram_fit: this build lacks the route (FAST)")
             elif operation == LF_RIDGE_RESIDENT:
                 comptime if RIDGE_FAST_RESIDENT:
                     if p[0] <= 0 or p[1] <= 0:
@@ -70,7 +71,7 @@ def linear_fit_device_v1(operation: Int, aa: Int, na: Int, pp: Int, np: Int,
                         f32_ptr(a[3]), f64_ptr(a[4]), p[0], p[1], Float32(f[0]), p[2] != 0)
                     ctx.synchronize()
                 else:
-                    raise Error("ridge_fit_resident: only the FAST Apple build without -D MOJOLEARN_RIDGE_RESIDENT_OFF has this route")
+                    raise Error("ridge_fit_resident: only the FAST Apple build has this route")
             elif operation == LF_OLS_RESIDENT:
                 comptime if OLS_FAST_NORMAL_EQ:
                     if p[0] <= 0 or p[1] <= 0:
