@@ -8,16 +8,16 @@
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_fields, py_contains
-from bindings.xseq_native_common_door import xseq_key, xseq_base, xseq_addr, xseq_column_i64, xseq_copy
+from bindings.xseq_native_common_door import xseq_key, xseq_base, xseq_addr, xseq_column_i64
 from core.entry_table import EntryRef
 from sequence.xseq_prophet_run import (
-    ProphetFitRequest, ProphetPredictRequest, prophet_run_days, prophet_run_check_days, prophet_run_features,
-    prophet_run_auto_period, prophet_run_scale, prophet_run_check_y_rank, prophet_run_check_lengths,
-    prophet_run_check_finite, prophet_run_changepoint_plan, prophet_run_changepoint_count, prophet_run_changepoints,
-    prophet_run_check_changepoints, prophet_run_parameter_count, prophet_run_fit, prophet_run_check_stored_dtype,
-    prophet_run_check_ranks, prophet_run_check_holidays_given, prophet_run_check_order, prophet_run_check_schema,
-    prophet_run_check_info_shape, prophet_run_check_params_shape, prophet_run_check_holiday_columns,
-    prophet_run_predict,
+    ProphetPredictRequest, prophet_run_days, prophet_run_features, prophet_run_parameter_count,
+    prophet_run_check_stored_dtype, prophet_run_check_ranks, prophet_run_check_holidays_given, prophet_run_check_order,
+    prophet_run_check_schema, prophet_run_check_info_shape, prophet_run_check_params_shape,
+    prophet_run_check_holiday_columns, prophet_run_predict,
+    ProphetSeason, ProphetAuto, ProphetTimes, ProphetFitInput, ProphetFitPlan, PROPHET_AUTO_AUTO, PROPHET_AUTO_ON,
+    PROPHET_AUTO_OFF, PROPHET_AUTO_ORDER, prophet_run_prepare_fit, prophet_run_prior_count, prophet_run_fit_plan,
+    prophet_run_copy_changepoints,
 )
 from bindings.native_loaded_module_door import native_loaded_module
 from bindings.sequential_arrays_door import sequential_array
@@ -94,27 +94,34 @@ def _contig(value: PythonObject, dtype: PythonObject, context: PythonObject) rai
     return prophet_contiguous(prophet_source(value, context), dtype is context["float64"], context)
 
 
+def _times(source: PythonObject, context: PythonObject, mut owner: PythonObject) raises -> ProphetTimes:
+    """UNPACK of a time column: float64 values, or int64 nanoseconds of a
+    datetime64 column, contiguous (n,); `owner` holds the buffer."""
+    var t = prophet_source(source, context)
+    var datetime = False
+    if String(t.dtype.kind) == "M":
+        owner = prophet_nanoseconds(t, context)
+        datetime = True
+    else:
+        owner = py_call(prophet_contiguous(t, True, context).reshape, -1)
+    var n = Int(py=owner.size)
+    return ProphetTimes(Int(py=xseq_addr(owner)) if n else 0, n, datetime)
+
+
 def _days(source: PythonObject, key: EntryRef, context: PythonObject) raises -> PythonObject:
     """`_days(t, mode)`: (days float64 (N,), info [status, span, least
     spacing]), converted and checked by `prophet_days`."""
-    var t = prophet_source(source, context)
     var src = PythonObject(None)
-    var datetime = False
-    if String(t.dtype.kind) == "M":
-        src = prophet_nanoseconds(t, context)
-        datetime = True
-    else:
-        src = py_call(prophet_contiguous(t, True, context).reshape, -1)
-    var n = Int(py=src.size)
+    var times = _times(source, context, src)
+    var n = times.n
     var days = sequential_array(Python.tuple(n), context["float64"], context)
     var info = sequential_array(Python.tuple(3), context["float64"], context)
     if n:
-        var src_addr = Int(py=xseq_addr(src))
         var days_addr = Int(py=xseq_addr(days))
         var info_addr = Int(py=xseq_addr(info))
         var py = Python()
         with GILReleased(py):
-            prophet_run_days(key, src_addr, days_addr, info_addr, n, datetime)
+            prophet_run_days(key, times.src, days_addr, info_addr, n, times.datetime)
         _ = info  # keep the Python object alive through the native call above
         _ = days  # keep the Python object alive through the native call above
         _ = src  # keep the Python object alive through the native call above
@@ -160,33 +167,47 @@ def _features(fields: PythonObject, days: PythonObject, key: EntryRef, context: 
     return Python.tuple(tsc, frac)
 
 
-def _auto(fields: PythonObject, name: String, arg: PythonObject, default_order: Int, ok: Bool) raises:
-    """`_auto(name, arg, default_order, ok)`."""
+def _auto_setting(fields: PythonObject, name: String, arg: PythonObject) raises -> ProphetAuto:
+    """UNPACK of `yearly_seasonality`, ...: 'auto', True, False or an order.
+    A season the model already has is never read (the former `_auto`
+    returned before decoding its setting)."""
+    var b = _b()
+    if py_contains(fields["seasonalities"], name):
+        return ProphetAuto(PROPHET_AUTO_OFF, 0)
+    if Bool(py=py_call(b.isinstance, arg, b.str)) and String(py=arg) == "auto":
+        return ProphetAuto(PROPHET_AUTO_AUTO, 0)
+    if arg is PythonObject(True):
+        return ProphetAuto(PROPHET_AUTO_ON, 0)
+    if arg is PythonObject(False):
+        return ProphetAuto(PROPHET_AUTO_OFF, 0)
+    return ProphetAuto(PROPHET_AUTO_ORDER, Int(py=py_call(b.int, arg)))
+
+
+def _seasons(fields: PythonObject) raises -> List[ProphetSeason]:
+    """UNPACK of the snapshotted seasonality records, in dictionary order."""
     var b = _b()
     var seasons = fields["seasonalities"]
-    if py_contains(seasons, name):
-        return
-    var use: Bool
-    var order: Int
-    if Bool(py=py_call(b.isinstance, arg, b.str)) and String(py=arg) == "auto":
-        use = ok
-        order = default_order
-    elif arg is PythonObject(True):
-        use = True
-        order = default_order
-    elif arg is PythonObject(False):
-        use = False
-        order = 0
-    else:
-        use = True
-        order = Int(py=py_call(b.int, arg))
-    if use:
-        var period = prophet_run_auto_period(name)
-        var spec = b.dict()
-        py_setitem(spec, "period", period)
-        py_setitem(spec, "fourier_order", order)
-        py_setitem(spec, "prior_scale", fields["seasonality_prior_scale"])
-        py_setitem(seasons, name, spec)
+    var keys = py_call(b.list, seasons)
+    var result = List[ProphetSeason]()
+    for i in range(len(keys)):  # driver-loop: over the model's seasonalities (one record each)
+        var spec = seasons[keys[i]]
+        result.append(ProphetSeason(String(py=keys[i]), Float64(py=py_call(b.float, spec["period"])),
+                                    Int(py=py_call(b.int, spec["fourier_order"])),
+                                    Float64(py=py_call(b.float, spec["prior_scale"]))))
+    return result^
+
+
+def _prepare(key: EntryRef, fit_input: ProphetFitInput) raises -> ProphetFitPlan:
+    with GILReleased(Python()):
+        return prophet_run_prepare_fit(key, fit_input)
+
+
+def _fit_plan(key: EntryRef, plan: ProphetFitPlan, y: Int, batch: Int, holidays: Int, nh: Int,
+              holidays_prior_scale: Float64, params: Int, info: Int, multiplicative: Bool, max_iter: Int,
+              changepoint_prior_scale: Float64) raises:
+    with GILReleased(Python()):
+        prophet_run_fit_plan(key, plan, y, batch, holidays, nh, holidays_prior_scale, params, info, multiplicative,
+                             max_iter, changepoint_prior_scale)
 
 
 def _orders(fields: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -202,74 +223,66 @@ def _orders(fields: PythonObject, context: PythonObject) raises -> PythonObject:
 
 
 def prophet_fit(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
+    """UNPACK the settings and the t, y and holiday buffers into the typed
+    fit entry (`prophet_run_prepare_fit`, `prophet_run_fit_plan`), then PACK
+    the plan and the fitted buffers into the model (lane py-tail)."""
     var b = _b()
     var original = prophet_fields(model, context)
     var fields = _state(original, context)
     var key = xseq_key(fields, context)
-    var dd = _days(args[0], key, context)
-    var days = dd[0]
-    var info = dd[1]
-    var status = Int(py=py_call(b.int, info[0]))
-    var span = Float64(py=py_call(b.float, info[1]))
-    var dmin = Float64(py=py_call(b.float, info[2]))
-    prophet_run_check_days(status)
+    var t_owner = PythonObject(None)
+    var t = _times(args[0], context, t_owner)
     var y = prophet_source(args[1], context)
-    if Bool(py=y.dtype == context["float64"]):
-        raise Error("TypeError: " + _P + "float64 y is refused; pass float32")
-    var one = Int(py=y.ndim) == 1
-    prophet_run_check_y_rank(Int(py=y.ndim))
-    py_setitem(fields, "_one", one)
-    var Y = prophet_contiguous(y, False, context)
-    if one:
-        Y = py_call(Y.reshape, 1, -1)
-    var B = Int(py=Y.shape[0])
-    var N = Int(py=Y.shape[1])
-    prophet_run_check_lengths(N, len(days))
-    # call-table: base helper
-    prophet_run_check_finite(Int(py=py_call(xseq_base(context, "all_finite_f32"), xseq_addr(Y), Y.size)) == 1)
-    _ = Y  # keep the Python object alive through the native calls above
-    _auto(fields, "yearly", fields["yearly_seasonality"], 10, span >= 730)
-    _auto(fields, "weekly", fields["weekly_seasonality"], 3, span >= 14 and dmin < 7)
-    _auto(fields, "daily", fields["daily_seasonality"], 4, span >= 2 and dmin < 1)
-    py_setitem(fields, "start_", py_call(b.float, days[0]))
-    py_setitem(fields, "t_scale_", prophet_run_scale(span))
-    var ft = _features(fields, days, key, context)
-    var user = PythonObject(None)
-    var n_user: Int
-    var hist: Int
-    var n_cp: Int
-    if fields["changepoints"] is not None:
-        user = _days(fields["changepoints"], key, context)[0]
-        n_user = len(user)
-        hist = 0
-        n_cp = 0
+    var y_float64 = Bool(py=y.dtype == context["float64"])
+    var rank = Int(py=y.ndim)
+    var one = rank == 1
+    var Y = PythonObject(None)
+    var B = 0
+    var N = 0
+    var finite = True
+    if not y_float64 and (rank == 1 or rank == 2):
+        Y = prophet_contiguous(y, False, context)
+        if one:
+            Y = py_call(Y.reshape, 1, -1)
+        B = Int(py=Y.shape[0])
+        N = Int(py=Y.shape[1])
+        if N >= 2 and N == t.n:
+            # call-table: base helper
+            finite = Int(py=py_call(xseq_base(context, "all_finite_f32"), xseq_addr(Y), Y.size)) == 1
+    var cp_owner = PythonObject(None)
+    var has_cp = fields["changepoints"] is not None
+    var cp_times = ProphetTimes(0, 0, False)
+    var changepoint_range = 0.0
+    var n_changepoints = 0
+    if has_cp:
+        cp_times = _times(fields["changepoints"], context, cp_owner)
     else:
-        user = sequential_array(Python.tuple(1), context["float64"], context)
-        n_user = -1
-        var plan = prophet_run_changepoint_plan(N, Float64(py=fields["changepoint_range"]),
-                                                Int(py=fields["n_changepoints"]))
-        hist = plan[0]
-        n_cp = plan[1]
-    var cpt = sequential_array(Python.tuple(prophet_run_changepoint_count(n_user, n_cp)), context["float32"], context)
-    var days_addr = Int(py=xseq_addr(days))
-    var user_addr = Int(py=xseq_addr(user))
-    var cpt_addr = Int(py=xseq_addr(cpt))
-    var cp_start = Float64(py=fields["start_"])
-    var cp_scale = Float64(py=fields["t_scale_"])
-    var S = 0
-    var py = Python()
-    with GILReleased(py):
-        S = prophet_run_changepoints(key, days_addr, user_addr, cpt_addr, N, n_user, hist, n_cp, cp_start, cp_scale)
-    _ = cpt  # keep the Python object alive through the native call above
-    _ = user  # keep the Python object alive through the native call above
-    _ = days  # keep the Python object alive through the native call above
-    prophet_run_check_changepoints(S)
-    _ = cpt  # keep the Python object alive through the native calls above
-    _ = user  # keep the Python object alive through the native calls above
-    _ = days  # keep the Python object alive through the native calls above
-    var cpts = xseq_copy(cpt.__getitem__(py_call(b.slice, PythonObject(None), S)))
-    _ = user  # keep the Python object alive through the native call above
-    _ = days  # keep the Python object alive through the native call above
+        changepoint_range = Float64(py=fields["changepoint_range"])
+        n_changepoints = Int(py=fields["n_changepoints"])
+    var fit_input = ProphetFitInput(
+        t.copy(), y_float64, rank, N, finite, _seasons(fields),
+        _auto_setting(fields, "yearly", fields["yearly_seasonality"]),
+        _auto_setting(fields, "weekly", fields["weekly_seasonality"]),
+        _auto_setting(fields, "daily", fields["daily_seasonality"]),
+        Float64(py=py_call(b.float, fields["seasonality_prior_scale"])), has_cp, cp_times.copy(), changepoint_range,
+        n_changepoints)
+    var plan = _prepare(key, fit_input)
+    _ = t_owner  # keep the Python objects alive through the native call above
+    _ = cp_owner
+    _ = Y
+    py_setitem(fields, "_one", one)
+    # PACK: the automatic seasonalities this fit added (published by _commit)
+    var seasons = fields["seasonalities"]
+    for i in range(len(plan.seasons) - plan.n_added, len(plan.seasons)):  # driver-loop: over the automatic seasonality additions (at most three)
+        var spec = b.dict()
+        py_setitem(spec, "period", plan.seasons[i].period)
+        py_setitem(spec, "fourier_order", plan.seasons[i].fourier_order)
+        py_setitem(spec, "prior_scale", fields["seasonality_prior_scale"])
+        py_setitem(seasons, plan.seasons[i].name, spec)
+    py_setitem(fields, "start_", plan.start)
+    py_setitem(fields, "t_scale_", plan.t_scale)
+    var cpts = sequential_array(Python.tuple(plan.s), context["float32"], context)
+    prophet_run_copy_changepoints(plan, Int(py=xseq_addr(cpts)) if plan.s else 0)
     py_setitem(fields, "changepoints_t_", cpts)
     var nh = 0
     var H = sequential_array(Python.tuple(N, 1), context["float32"], context)
@@ -278,43 +291,20 @@ def prophet_fit(model: PythonObject, args: PythonObject, context: PythonObject) 
         H = py_call(prophet_contiguous(holidays, False, context).reshape, N, -1)
         nh = Int(py=H.shape[1])
     py_setitem(fields, "_nh", nh)
-    var od = _orders(fields, context)
-    # the prior scale of every Fourier parameter, then of every holiday column
-    var sig = Python.list()
-    var rows = _seasonal_rows(fields)
-    for i in range(len(rows)):  # driver-loop: over the user seasonalities
-        for _ in range(2 * Int(py=rows[i]["fourier_order"])):  # driver-loop: over one seasonality's Fourier parameters (model structure)
-            _ = py_call(sig.append, rows[i]["prior_scale"])
-    for _ in range(nh):  # driver-loop: over the holiday columns (model structure)
-        _ = py_call(sig.append, fields["holidays_prior_scale"])
-    var K = len(sig)
+    var K = prophet_run_prior_count(plan, nh)
     py_setitem(fields, "_K", K)
-    if K == 0:
-        _ = py_call(sig.append, 1.0)
-    var sig_a = _contig(sig, context["float32"], context)
-    var S2 = len(cpts)
-    var P = prophet_run_parameter_count(S2, K)
+    var P = prophet_run_parameter_count(plan.s, K)
     var params = sequential_array(Python.tuple(B, P), context["float32"], context)
     var info_out = sequential_array(Python.tuple(B, 4), context["float32"], context)
     var multiplicative = String(py=fields["seasonality_mode"]) == "multiplicative"
-    var request = ProphetFitRequest(
-        Int(py=xseq_addr(Y)), Int(py=xseq_addr(ft[0])), Int(py=xseq_addr(ft[1])), Int(py=xseq_addr(od[0])),
-        Int(py=xseq_addr(H)), Int(py=xseq_addr(cpts)), Int(py=xseq_addr(sig_a)), Int(py=xseq_addr(params)),
-        Int(py=xseq_addr(info_out)), B, N, Int(py=od[1]), nh, K, S2, multiplicative, Int(py=fields["max_iter"]),
-        Float64(py=fields["changepoint_prior_scale"]))
-    var fit_py = Python()
-    with GILReleased(fit_py):
-        prophet_run_fit(key, request)
-    # Raw addresses do not retain the arrays owned by these two tuples.
-    # Both feature buffers and Fourier orders must survive the native call.
-    _ = ft
-    _ = od
-    _ = H  # keep the Python object alive through the native call above
-    _ = Y  # keep the Python object alive through the native call above
-    _ = info_out  # keep the Python object alive through the native call above
-    _ = params  # keep the Python object alive through the native call above
-    _ = sig_a  # keep the Python object alive through the native call above
-    _ = cpts  # keep the Python object alive through the native call above
+    var holidays_prior_scale = Float64(py=py_call(b.float, fields["holidays_prior_scale"])) if nh > 0 else 0.0
+    _fit_plan(key, plan, Int(py=xseq_addr(Y)), B, Int(py=xseq_addr(H)), nh, holidays_prior_scale,
+              Int(py=xseq_addr(params)), Int(py=xseq_addr(info_out)), multiplicative, Int(py=fields["max_iter"]),
+              Float64(py=fields["changepoint_prior_scale"]))
+    _ = H  # keep the Python objects alive through the native call above
+    _ = Y
+    _ = info_out
+    _ = params
     py_setitem(fields, "params_", params)
     py_setitem(fields, "info_", info_out)
     # diagnostics from info_ (y_scale, objective, iterations, 0): views only

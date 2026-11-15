@@ -450,3 +450,15 @@ def prophet_run_fit_plan(entry: EntryRef, plan: ProphetFitPlan, y: Int, batch: I
     prophet_run_fit(entry, request)
     _ = len(orders)  # keep the orders and priors alive through the glue call above
     _ = len(priors)
+
+
+def prophet_run_copy_changepoints(plan: ProphetFitPlan, dst: Int) raises:
+    """`changepoints_t_`: the plan's first `s` changepoints into the caller's
+    float32 (s,) buffer."""
+    if plan.s <= 0:
+        return
+    if dst == 0:
+        raise Error("ProphetForecaster: null changepoint buffer")
+    var target = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=dst)
+    for i in range(plan.s):  # driver-loop: over the changepoints (model structure, at most n_changepoints)
+        target[i] = plan.changepoints[i]
