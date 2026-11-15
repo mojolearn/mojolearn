@@ -178,13 +178,13 @@ def sparse_mr_search_kernel(
 # ascending from 0.0, then `mr_edge_weight`; the per-point minimum is over
 # the total order (key, j), so the merge order of threads, slices and
 # launches cannot move it. `smr_fold_slices_kernel` folds the slices on the
-# device and only n_todo pairs come back. No launch bound off Apple. -D
-# MOJOLEARN_SMR_TILED_OFF=1 restores the per-pair kernel and the bound.
+# device and only n_todo pairs come back. No launch bound off Apple.
+# TOMBSTONE: MOJOLEARN_SMR_TILED_OFF (old path: the per-pair search and its launch bound on NVIDIA and AMD; no A/B recorded) deleted 2026-11-15 by lane/expdel2-11-cluster; code recoverable at 4cadcc3fbd.
+# Restore: git apply experiments/removed/MOJOLEARN_SMR_TILED_OFF.patch; record in docs/TOMBSTONES.md.
 comptime SMR_TILED = (
-    (TARGET_COLUMN == COLUMN_NVIDIA or TARGET_COLUMN == COLUMN_AMD)
-    and not is_defined["MOJOLEARN_SMR_TILED_OFF"]()
+    TARGET_COLUMN == COLUMN_NVIDIA or TARGET_COLUMN == COLUMN_AMD
 ) or HDB_SMR_TILED
-#: lane af-hdbscan2 (2026-10-03), FAST on Apple only, -D MOJOLEARN_HDB_SMR_TILED:
+#: lane af-hdbscan2 (2026-10-03), FAST on Apple only (HDB_SMR_TILED, the default):
 #: the tiled kernel above runs on Apple too, under a launch bound of
 #: SMR_APPLE_TILED_MACS multiply-adds (16x the per-pair kernel's: the tiled
 #: kernel issues 16 FMAs per 8 threadgroup reads, so a launch of this size is
