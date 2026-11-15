@@ -629,6 +629,7 @@ in the tables after the sections.
 | [`P1_DEAD_PY_CURVE_DRIVERS` (unreachable Python drivers (`_FoldCurve`, `_curves`, `roc_auc_options`, ... 91 defs))](#lane-p1-python-callbacks-removed-from-native-operations-2026-11-09) | Metrics, decomp, prep, linear model (Python) | removed (Python code on a product path; native or a refusal instead; not an experiment) | 2026-11-09 | [P1_DEAD_PY_CURVE_DRIVERS.patch](../experiments/removed/P1_DEAD_PY_CURVE_DRIVERS.patch) |
 | [`MOJOLEARN_AFN_OPTIM_ALL`](#mojolearn_afn_optim_all) | Neural (Apple FAST optimizer candidates bundle) | NEUTRAL | 2026-11-15 | [MOJOLEARN_AFN_OPTIM_ALL.patch](../experiments/removed/MOJOLEARN_AFN_OPTIM_ALL.patch) |
 | [`MOJOLEARN_AF_FAST_NOFILL_OFF`](#mojolearn_af_fast_nofill_off) | Neural (Apple FAST Adafactor step, x_sequence) | superseded (AF_FAST_NOFILL default won) | 2026-11-15 | [MOJOLEARN_AF_FAST_NOFILL_OFF.patch](../experiments/removed/MOJOLEARN_AF_FAST_NOFILL_OFF.patch) |
+| [`MOJOLEARN_LN_FAST_NOFILL_OFF`](#mojolearn_ln_fast_nofill_off) | Neural (Apple FAST LayerNorm, x_sequence) | superseded (LN_FAST_NOFILL default won) | 2026-11-15 | [MOJOLEARN_LN_FAST_NOFILL_OFF.patch](../experiments/removed/MOJOLEARN_LN_FAST_NOFILL_OFF.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -5925,3 +5926,12 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md (section expdel-04-
 - Files: sequence/ops_impl.mojo.
 - Deleted by: lane/expdel-04-neural (2026-11-15); code recoverable at `4ebe87a042`.
 - Restore: `git apply experiments/removed/MOJOLEARN_AF_FAST_NOFILL_OFF.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+
+### MOJOLEARN_LN_FAST_NOFILL_OFF
+
+- Tried: the rollback of `LN_FAST_NOFILL` in `sequence/ops_impl.mojo` `layer_norm_impl`: under FAST + Apple, allocate x and dy and upload into them instead of binding the host buffers.
+- Verdict: the NOFILL default won (docs/apple-fast/EXPERIMENTS.md row `LN_FAST_NOFILL`, lane/apple-fast-rec-ab2 @ 40027eb8e, M3 afc_ab_def, full board, one run per arm, 2026-10-04: layernorm 48.2 -> 45.5 ms, digest identical A == B). KEEP: FAST + Apple default. Apple FAST only.
+- Removed: the `_OFF` term of `LN_NOFILL` (now `_PY_APPLE_FAST`). The alloc + upload arm stays: IDENTICAL and FAST off Apple compile it. No bits move.
+- Files: sequence/ops_impl.mojo.
+- Deleted by: lane/expdel-04-neural (2026-11-15); code recoverable at `3004379441`.
+- Restore: `git apply experiments/removed/MOJOLEARN_LN_FAST_NOFILL_OFF.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
