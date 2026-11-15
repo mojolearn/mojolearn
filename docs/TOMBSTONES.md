@@ -737,6 +737,7 @@ in the tables after the sections.
 | [`MOJOLEARN_CLASSICAL_C07_RADIX_ROWS`](#mojolearn_classical_c07_radix_rows-unmeasured-arm-deleted-2026-11-15) | Prep (device radix sort keys per task 1024/4096, IDENTICAL) | removed (unmeasured opt-in arm) | 2026-11-15 | [MOJOLEARN_CLASSICAL_C07_RADIX_ROWS.patch](../experiments/removed/MOJOLEARN_CLASSICAL_C07_RADIX_ROWS.patch) |
 | [`MOJOLEARN_CLASSICAL_C08_ONEHOT_FT`](#mojolearn_classical_c08_onehot_ft-unmeasured-arm-deleted-2026-11-15) | Prep (OneHotEncoder.fit_transform dictionary + codes in one program, IDENTICAL) | removed (unmeasured opt-in arm) | 2026-11-15 | [MOJOLEARN_CLASSICAL_C08_ONEHOT_FT.patch](../experiments/removed/MOJOLEARN_CLASSICAL_C08_ONEHOT_FT.patch) |
 | [`MOJOLEARN_CLASSICAL_C08_ORDINAL_FT`](#mojolearn_classical_c08_ordinal_ft-unmeasured-arm-deleted-2026-11-15) | Prep (OrdinalEncoder.fit_transform dictionary + codes in one program, IDENTICAL) | removed (unmeasured opt-in arm) | 2026-11-15 | [MOJOLEARN_CLASSICAL_C08_ORDINAL_FT.patch](../experiments/removed/MOJOLEARN_CLASSICAL_C08_ORDINAL_FT.patch) |
+| [`MOJOLEARN_CLASSICAL_C08_UNIQUE_SCAN_OFF`](#mojolearn_classical_c08_unique_scan_off-old-path-deleted-2026-11-15) | Prep (unique_cols one-thread-per-column walk, IDENTICAL old path) | removed (old path, superseded by the measured IDENTICAL default) | 2026-11-15 | [MOJOLEARN_CLASSICAL_C08_UNIQUE_SCAN_OFF.patch](../experiments/removed/MOJOLEARN_CLASSICAL_C08_UNIQUE_SCAN_OFF.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -7158,3 +7159,11 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md (section expdel-02-
 - **Deleted by**: lane/expdel2-07-base (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `535c024b7f`.
 - **Restore**: `git apply experiments/removed/MOJOLEARN_CLASSICAL_C08_ORDINAL_FT.patch`, then delete the `MOJOLEARN_CLASSICAL_C08_ORDINAL_FT` refusal in `core/experiment_guards_base.mojo`.
 - **Records**: refusal in `core/experiment_guards_base.mojo`; `classical-encoders.json` control `c08_ordinal_ft`: `removed` entry added (control removed from `controls` and from its algorithms); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-07-base section).
+
+## MOJOLEARN_CLASSICAL_C08_UNIQUE_SCAN_OFF: old path deleted (2026-11-15)
+
+- **What it was**: the `_OFF` rollback of `C08_UNIQUE_SCAN` (`shared_controls.mojo`) to the one-thread-per-column `unique_cols` walk under IDENTICAL. `C08_UNIQUE_SCAN` is now `CLASSICAL_IDENTICAL`; the walk stays the FAST path in the importers.
+- **Verdict**: EXP:1740 PROMOTED (IDENTICAL default, grid ge123e6f9, nv n0063, amd a0059): the run scan 0.525x combined over onehot / ordinal / target-encoder on istella and taxi, digests equal; the `_OFF` rollback is the losing old path. No bit change on any column.
+- **Deleted by**: lane/expdel2-07-base (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `9b76c98115`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_CLASSICAL_C08_UNIQUE_SCAN_OFF.patch`, then delete the `MOJOLEARN_CLASSICAL_C08_UNIQUE_SCAN_OFF` refusal in `core/experiment_guards_linear.mojo`.
+- **Records**: refusal in `core/experiment_guards_linear.mojo`; `classical-encoders.json` control `c08_unique_scan`: `removed` entry added (control removed from `controls` and from its algorithms); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-07-base section).

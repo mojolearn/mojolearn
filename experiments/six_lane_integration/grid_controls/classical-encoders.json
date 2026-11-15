@@ -4,27 +4,6 @@
  "branch": "lane/classical-encoders",
  "head": "c1ebc6314",
  "controls": {
-  "c08_unique_scan": {
-   "define": "MOJOLEARN_CLASSICAL_C08_UNIQUE_SCAN_OFF",
-   "kind": "switch",
-   "arms": {
-    "on": [],
-    "off": [
-     "MOJOLEARN_CLASSICAL_C08_UNIQUE_SCAN_OFF"
-    ]
-   },
-   "default": "on",
-   "source": [
-    "experiments/classical_identical_ideas/shared_controls.mojo:84",
-    "x_prep/device.mojo:567",
-    "x_prep/ddict.mojo:209",
-    "core/six_lane_experiment_guards.mojo:193"
-   ],
-   "binding": "_mojolearn_x_prep",
-   "bits_change": false,
-   "status": "promoted:ge123e6f9",
-   "notes": "PROMOTED 2026-10-08 (lane grid-act-3, grid ge123e6f9): incumbent -> scan ms NV/AMD istella, taxi: onehot 53.9->46.7 / 75.2->21.2, 41.7->32.1 / 72.1->18.2; ordinal 65.0->46.2 / 75.2->21.2, 49.0->30.2 / 71.5->17.5; target-encoder 188.3->175.4 / 142.3->88.4, 148.2->133.0 / 134.3->78.8; 0.525x combined; digests equal to the incumbent (no bits). Default on in IDENTICAL; arm off = MOJOLEARN_CLASSICAL_C08_UNIQUE_SCAN_OFF (old one-thread-per-column walk); the old on define is refused. device unique_cols op as a chunked run scan (count / per-column offsets / write) over all columns in 3 launches, replacing one thread per column walking n sorted rows; same words and counts as unique_cols_unit"
-  },
   "c08_target_codes": {
    "define": "MOJOLEARN_CLASSICAL_C08_TARGET_CODES",
    "kind": "switch",
@@ -71,7 +50,6 @@
    "binding": "_mojolearn_x_prep",
    "route": "fit: TargetEncoder._run -> (C08_TARGET_CODES) _fit_categories_with_codes: sort_cols[skipped on device] + unique_inverse[ddict] | (off) _fit_categories: sort_cols[radix] + unique_cols[C08_UNIQUE_SCAN] then _codes lookup; then fold target stats; transform: _codes + encode",
    "controls": [
-    "c08_unique_scan",
     "c08_target_codes"
    ],
    "interaction_groups": [
@@ -90,7 +68,6 @@
    "binding": "_mojolearn_x_prep",
    "route": "fit: _fit_categories: sort_cols[radix] + unique_cols[C08_UNIQUE_SCAN]; transform: codes + onehot op 9[C08_GROUPED_OUTPUT]",
    "controls": [
-    "c08_unique_scan",
     "c08_grouped_output"
    ],
    "interaction_groups": [
@@ -103,9 +80,7 @@
   "expanded:ordinal": {
    "binding": "_mojolearn_x_prep",
    "route": "fit: _fit_categories: sort_cols[radix] + unique_cols[C08_UNIQUE_SCAN]; transform: codes lookup",
-   "controls": [
-    "c08_unique_scan"
-   ],
+   "controls": [],
    "interaction_groups": [
     [
      "c07_radix_bits",
@@ -183,6 +158,11 @@
    "define": "MOJOLEARN_CLASSICAL_C08_ORDINAL_FT",
    "control": "c08_ordinal_ft",
    "reason": "DELETED 2026-11-15 (lane/expdel2-07-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md; recoverable at 535c024b7f; patch experiments/removed/MOJOLEARN_CLASSICAL_C08_ORDINAL_FT.patch): unmeasured opt-in arm. no record: no A/B was recorded for the opt-in arm (plan rule a; AGENTS.md \"An unmeasured arm is deleted\", Andrew 2026-11-15). Refused in core/experiment_guards_base.mojo; docs/TOMBSTONES.md."
+  },
+  {
+   "define": "MOJOLEARN_CLASSICAL_C08_UNIQUE_SCAN_OFF",
+   "control": "c08_unique_scan",
+   "reason": "DELETED 2026-11-15 (lane/expdel2-07-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md; recoverable at 9b76c98115; patch experiments/removed/MOJOLEARN_CLASSICAL_C08_UNIQUE_SCAN_OFF.patch): old path, superseded by the measured IDENTICAL default. EXP:1740 PROMOTED (IDENTICAL default, grid ge123e6f9, nv n0063, amd a0059): the run scan 0.525x combined over onehot / ordinal / target-encoder on istella and taxi, digests equal; the `_OFF` rollback is the losing old path. Refused in core/experiment_guards_linear.mojo; docs/TOMBSTONES.md."
   }
  ]
 }
