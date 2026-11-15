@@ -87,9 +87,10 @@ from checks.kernel_matrix import (
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 from core.apple_air import simdgroup_load_legacy_air
 from gemm.contract import OP_NN, OP_NT, OP_TN
-# lane/apple-fast-neural-w2-gemm2: the second-round kernel (AFN_GEMM2_ON is
-# False unless FAST + Apple + a MOJOLEARN_AFN_GEMM2_* define).
-from gemm.afn_apple_fast2 import AFN_GEMM2_ON, afn2_gemm_dispatch
+# TOMBSTONE: MOJOLEARN_AFN_GEMM2_ALL, MOJOLEARN_AFN_GEMM2_BIGTILE, MOJOLEARN_AFN_GEMM2_DBUF, MOJOLEARN_AFN_GEMM2_DIRECT_B,
+# MOJOLEARN_AFN_GEMM2_SWIZZLE, MOJOLEARN_AFN_GEMM2_SWZ_G (never measured, Apple FAST second-round kernel gemm/afn_apple_fast2.mojo)
+# deleted 2026-11-15 by lane/expdel2-25-neural; code recoverable at 45d3386430.
+# Restore: git apply experiments/removed/MOJOLEARN_AFN_GEMM2_ALL.patch; record in docs/TOMBSTONES.md.
 
 
 # ===========================================================================
@@ -103,7 +104,7 @@ comptime AFN_GEMM_APPLE = (
     and TARGET_COLUMN == COLUMN_APPLE
 )
 comptime AFN_GEMM_ALL = AFN_GEMM_APPLE and is_defined["MOJOLEARN_AFN_GEMM_ALL"]()
-comptime AFN_GEMM_SIMDGROUP = AFN_GEMM_ALL or AFN_GEMM2_ON or (
+comptime AFN_GEMM_SIMDGROUP = AFN_GEMM_ALL or (
     AFN_GEMM_APPLE and is_defined["MOJOLEARN_AFN_GEMM_SIMDGROUP"]()
 )
 comptime AFN_GEMM_SPLITK = AFN_GEMM_ALL or (
@@ -758,12 +759,6 @@ def _afn_dispatch[
         return False
     var st = _afn_strides(op, m, n, k)
     var tile = afn_gemm_tile(m, n)
-    # w2-gemm2: the second-round kernel takes every product this route
-    # would run at the square tile without a split.
-    comptime if AFN_GEMM2_ON and EPI == AFN_EPI_NONE:
-        if tile == AFN_TILE_SQUARE and afn_gemm_k_split(afn_gemm_tile_count(tile, m, n), k) == 0:
-            if afn2_gemm_dispatch[AT, BT](ctx, c, a, b, m, n, k, op):
-                return True
     comptime if AFN_GEMM_SPLITK and EPI == AFN_EPI_NONE:
         var k_split = afn_gemm_k_split(afn_gemm_tile_count(tile, m, n), k)
         if k_split > 0:
