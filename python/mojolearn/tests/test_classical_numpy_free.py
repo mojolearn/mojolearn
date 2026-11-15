@@ -164,13 +164,16 @@ for name, cls, host in (("LinearRegression", LinearRegression, HostLinearRegress
         assert [sys.getrefcount(v) for v in (X, y, w)] == counts
         # An Array takes no weak reference: an output held by one name must
         # count as a fresh Array held the same way, and a fitted coef_ as one
-        # held by a dictionary and a name.
+        # held by a dictionary and a name, plus the one pin of the model's
+        # native state record (LinearStateOwner, fc1ae0c62e: the native state
+        # reads coef_ by address, so the record keeps it alive; the record is
+        # the model's and dies with it, which the weak references below check).
         fresh = Array((n,), "<f8")
         assert sys.getrefcount(result) == sys.getrefcount(fresh)
         coef = object.__getattribute__(local, "coef_")
         holder = {"coef_": Array((d,))}
         held = holder["coef_"]
-        assert sys.getrefcount(coef) == sys.getrefcount(held)
+        assert sys.getrefcount(coef) == sys.getrefcount(held) + 1
         return [weakref.ref(local), weakref.ref(restored)]
     references = run()
     gc.collect()
