@@ -11,7 +11,10 @@ and compiles main's code unchanged: each use site is a `comptime if` whose
 `else` arm is main's spelling verbatim.
 
 Candidates (docs/apple-fast/notes/neural-mamba.md has the profile and
-docs/apple-fast/ab-neural/mamba.md the one-paragraph mechanisms):
+docs/apple-fast/ab-neural/mamba.md the one-paragraph mechanisms). Every one
+below was deleted unmeasured on 2026-11-15 (docs/TOMBSTONES.md); the names
+stay as False constants (ARENA and DEVICE_REFUSAL as their IDENTICAL
+defaults) for their importers:
 
   MOJOLEARN_AFN_MAMBA1_CHUNKSCAN   Mamba-1 selective scan as a chunked
                                    parallel scan over time (one launch, 32
@@ -134,8 +137,7 @@ comptime IDN_MAMBA_CONV_CELL = _IDN_MAMBA_DEVICE and not is_defined[
     "MOJOLEARN_IDN_MAMBA_CONV_CELL_OFF"
 ]()
 #: lane nr-mamba (2026-10-04, roadmap B1) IDN_M2_SSD_TILES (default ON where
-#: the 20,480-byte shared page fits the column; `-D
-#: MOJOLEARN_IDN_ALL_OFF` restores main): the Mamba-2 SSD Y_diag (S13/S14) and C_state (S16) cells and the
+#: the 20,480-byte shared page fits the column): the Mamba-2 SSD Y_diag (S13/S14) and C_state (S16) cells and the
 #: backward's ydiag/xd reverse as threadgroup tiles. M = G o L is formed once
 #: per (row, column) and B * decay once per (row, n) in shared memory instead
 #: of once per output column p; X_d / d_y rows are staged once per tile. Every

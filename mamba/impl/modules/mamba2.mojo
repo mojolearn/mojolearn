@@ -1211,8 +1211,6 @@ def mamba2_block_forward(
     )
 
     # ---- S4: in_proj (mamba2.py:211), gemm v1 OP_NT, k = d_model.
-    #      lane w2-epi (MOJOLEARN_AFN_MAMBA_PROJ_EPILOGUE / _SPLITK): the
-    #      FAST matrix-unit kernel, main's GEMM if it declines.
     mamba_proj_gemm(
         ctx, stages.in_proj, stages.norm_out, w.w_in, m, dip, dm, OP_NT
     )
@@ -1556,10 +1554,6 @@ def mamba2_block_forward(
 
     # ---- S4: out_proj (mamba2.py:275), gemm v1 OP_NT, k = d_inner.
     # ---- S22: residual (HF :630), the REUSED Mamba-1 kernel.
-    #      lane w2-epi (MOJOLEARN_AFN_MAMBA_PROJ_EPILOGUE / _SPLITK): an
-    #      untraced call runs both as ONE matrix-unit launch seeded with `x`
-    #      (`residual_out = x + gnorm_out . w_out^T`; the out_proj stage is
-    #      not written); a traced call, or a declined shape, runs main's two.
     mamba_proj_gemm(
         ctx, stages.out_proj, stages.gnorm_out, w.w_out, m, dm, di, OP_NT
     )

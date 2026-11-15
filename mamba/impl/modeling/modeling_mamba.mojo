@@ -1822,8 +1822,6 @@ def mamba_mixer_forward(
     #      GEMM v1 OP_NT: C[M, 2di] = norm_out[M, dm] . w_in[2di, dm]^T.
     #      `k = d_model <= 128` so `P == 1` -- gemm contract 7.1's serial
     #      ascending chain with nothing to fold.
-    #      lane w2-epi (MOJOLEARN_AFN_MAMBA_PROJ_EPILOGUE / _SPLITK): the
-    #      FAST matrix-unit kernel, main's GEMM if it declines.
     mamba_proj_gemm(
         ctx,
         stages.in_proj,
@@ -1931,10 +1929,6 @@ def mamba_mixer_forward(
 
     # ---- out_proj (:481). `nn.Linear(d_inner, d_model, bias=use_bias)` with
     #      `use_bias` False. C[M, dm] = gate_out[M, di] . w_out[dm, di]^T.
-    #      lane w2-epi (MOJOLEARN_AFN_MAMBA_PROJ_EPILOGUE / _SPLITK): an
-    #      untraced call runs out_proj in `mamba_block_forward`, fused with
-    #      the residual add (`residual_out = x + gate_out . w_out^T`); a
-    #      traced call keeps main's GEMM here so `out_proj.out` is recorded.
     mamba_proj_gemm(
         ctx,
         stages.out_proj,
@@ -2037,10 +2031,6 @@ def mamba_block_forward(
     mamba_mixer_forward(ctx, stages, state, w, b, l, trace, prefix)
 
     # ---- residual + hidden_states (:527). S16.
-    #      lane w2-epi (MOJOLEARN_AFN_MAMBA_PROJ_EPILOGUE / _SPLITK): untraced,
-    #      out_proj and this add are ONE matrix-unit launch seeded with `x`
-    #      (the mixer skipped its out_proj GEMM); if the fused route declines,
-    #      main's out_proj GEMM then main's add.
     ctx.enqueue_function[residual_add_kernel](
         stages.residual_out.unsafe_ptr(),
         x.unsafe_ptr(),

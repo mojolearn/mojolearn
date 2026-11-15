@@ -671,17 +671,15 @@ comptime M2_SSD_TILED = (
 # tile across 16 value channels (18 KiB). Both fit inside the existing
 # conservative 20 KiB resource guard. No dataset/shape-specific dispatch.
 # All newly introduced switches are OFF, uncompiled and unmeasured.
-# L11 (2026-10-07): the NN33 booleans became integer tile sweeps, one per
-# kernel: -D MOJOLEARN_IDN_M2_YD_ROWS=4|8 (default 4; 8 also halves YD_JC to
-# 32 to keep the page) and -D MOJOLEARN_IDN_M2_CS_PT=8|16 (default 8). The
-# legal sets are asserted in core/six_lane_experiment_guards.mojo. Tiles
-# move no bit; they may be tuned per vendor.
+# L11 (2026-10-07): the NN33 booleans became integer tile sweeps; both
+# sweeps were deleted 2026-11-15 (YD_ROWS 8, CS_PT 8 are the constants).
+# Tiles move no bit.
 # TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (the IDENTICAL old-path umbrella; resident defaults kept, EXP:2438) folded here 2026-11-15 by lane/expdel2-27-neural (non-owner); code recoverable at dc4096f0f8.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-27-neural.patch
 comptime _M2_TILE_SWEEP = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 # PROMOTED 2026-10-11 (grid g50ebe26a5, single-switch arm m2_yd_rows=8 vs today's defaults, one run per arm): mamba2-forward
 # gaussian NV L40S 13.079 -> 5.688 ms (v1223), AMD MI325X 4.551 -> 4.388 ms (a1344); avg ratio 0.648; hash 0350b90b on both
-# vendors. Default is now 8; -D MOJOLEARN_IDN_M2_YD_ROWS=4 restores the old tile.
+# vendors. Default is now 8.
 # TOMBSTONE: MOJOLEARN_IDN_M2_YD_ROWS (the =4 old tile beside the promoted 8-row default, EXP:2012) deleted 2026-11-15 by lane/expdel2-27-neural; code recoverable at 0de19ddf45.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_M2_YD_ROWS.patch
 comptime NN33_YDIAG_ROWS8 = _M2_TILE_SWEEP
