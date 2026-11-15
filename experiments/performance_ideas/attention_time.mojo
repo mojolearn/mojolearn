@@ -22,10 +22,8 @@ def main() raises:
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_ATTN_GQA_HEAD_REUSE.patch; record in docs/TOMBSTONES.md.
     # TOMBSTONE: MOJOLEARN_IDN_ATTN_HEAD_SHARE (EXP:1483 DROP for two heads; the four-head arm never ran an A/B) deleted 2026-11-15 by lane/expdel2-07-base; code recoverable at 7605a821c7.
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_ATTN_HEAD_SHARE.patch
-    # Isolate I06's forward GQA reuse: both variants must keep the same
-    # existing backward kvgrid schedule. The original driver changed both.
-    comptime if is_defined["MOJOLEARN_MEASURE_I06_GQA"]():
-        arm=fused_attention_arm_parse(String("stash_tiled_fgrid_r32_qres_pf_kvgrid_r32"))
+    # TOMBSTONE: MOJOLEARN_MEASURE_I06_GQA (no A/B recorded for the opt-in arm) deleted 2026-11-15 by lane/expdel2-07-base; code recoverable at dbdaaf2c5e.
+    # Restore: git apply experiments/removed/MOJOLEARN_MEASURE_I06_GQA.patch
     # I07 measures the existing retained-estash lifetime against its existing
     # recompute macro. The original no-estash word ran the same path twice.
     # Keep I06's selector unchanged; only affected I07 driver builds opt in.
