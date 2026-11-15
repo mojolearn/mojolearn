@@ -47,7 +47,7 @@ GPU module imports host threads); those split their element and GEMM work
 across cores.
 """
 from sequence.ops import FP
-from x_cnn.ops import FP as XFP, IP as XIP, NN14_BOUNDED_IM2COL, neural_tape_budget_bytes
+from x_cnn.ops import FP as XFP, IP as XIP, neural_tape_budget_bytes
 from x_cnn.shape_words import (
     conv_params, pool_params, CP_N, CP_C, CP_OC, CP_KH, CP_KW, CP_OH, CP_OW, PP_OH, PP_OW,
 )
@@ -110,11 +110,12 @@ def cnn_block_out_dims(cprm: List[Int32], pprm: List[Int32], pool: Bool) -> Tupl
 
 
 def cnn_block_saved_sizes(cprm: List[Int32]) -> Tuple[Int, Int]:
-    """Words of the saved im2col matrix (one word under the bounded im2col,
-    whose tiles the entries keep in their own workspace) and conv output."""
+    """Words of the saved im2col matrix and conv output."""
     var ckk = Int(cprm[CP_C]) * Int(cprm[CP_KH]) * Int(cprm[CP_KW])
     var rows = Int(cprm[CP_N]) * Int(cprm[CP_OH]) * Int(cprm[CP_OW])
-    var cols = 1 if NN14_BOUNDED_IM2COL else rows * ckk
+    # TOMBSTONE: MOJOLEARN_NN14_BOUNDED_IM2COL (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-23-neural (non-owner); code recoverable at f839bce651.
+    # Restore: git apply experiments/removed/MOJOLEARN_NN14_BOUNDED_IM2COL.expdel2-23-neural.patch; record in docs/TOMBSTONES.md.
+    var cols = rows * ckk
     return (cols, rows * Int(cprm[CP_OC]))
 
 
