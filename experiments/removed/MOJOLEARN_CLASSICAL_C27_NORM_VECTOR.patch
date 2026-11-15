@@ -1,0 +1,15 @@
+diff --git b/experiments/classical_identical_ideas/linear_controls.mojo a/experiments/classical_identical_ideas/linear_controls.mojo
+index 2fd3394447..2e80312e06 100644
+--- b/experiments/classical_identical_ideas/linear_controls.mojo
++++ a/experiments/classical_identical_ideas/linear_controls.mojo
+@@ -284,9 +284,7 @@ comptime C28_BUCKET_SOLVES = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_C
+ # TOMBSTONE: MOJOLEARN_CLASSICAL_C27_FA_COMPONENTS (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-06-base; code recoverable at f0d29c7b95.
+ # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C27_FA_COMPONENTS.patch; record in docs/TOMBSTONES.md.
+ comptime C27_FA_COMPONENTS = False
+-# TOMBSTONE: MOJOLEARN_CLASSICAL_C27_NORM_VECTOR (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-06-base; code recoverable at 5bdab7e3c8.
+-# Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C27_NORM_VECTOR.patch; record in docs/TOMBSTONES.md.
+-comptime C27_NORM_VECTOR = False
++comptime C27_NORM_VECTOR = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_C27_NORM_VECTOR"]()
+ # TOMBSTONE: MOJOLEARN_CLASSICAL_C13_LOGCV_WEIGHTS (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-06-base; code recoverable at 337c096a5b.
+ # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C13_LOGCV_WEIGHTS.patch; record in docs/TOMBSTONES.md.
+ comptime C13_LOGCV_WEIGHTS = False
