@@ -8,9 +8,11 @@ column's weight and bias gradients over rows. The backward is the
 reference's closed form dx = rstd (g - mean(g) - xhat mean(g xhat)) with
 g = dy w."""
 from sequence.ops import FP, Args, add, fma3, ld, mul, st, sub
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_div, identical_rsqrt
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, NUMERIC_FAST, ftz, identical_div, identical_rsqrt
 from sequence.fold32 import FOLD_L, tree32
 from max.gpu.primitives.warp import shuffle_xor
+from std.sys.compile import is_defined
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 
 #: lane layernorm-idn N3 (2026-10-09), MOJOLEARN_IDN_LN_ROW_WARP, IDENTICAL,
 #: the DEFAULT since 2026-10-10 (lane/postmerge-act-6; the old on-define
@@ -63,7 +65,8 @@ comptime LN_RW_LANES = FOLD_L
 # Restore: git apply experiments/removed/MOJOLEARN_LN_FAST_BLOCK_FOLD.patch
 # TOMBSTONE: MOJOLEARN_LN_FOLD_BLOCK_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-29-neural; code recoverable at 8e9b1a9eb5.
 # Restore: git apply experiments/removed/MOJOLEARN_LN_FOLD_BLOCK_OFF.patch
-comptime LN_FOLD_BLOCK = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+# RESTORED 2026-11-15 (lane/restore-apple-fast-neural): MOJOLEARN_LN_FAST_BLOCK_FOLD opt-in arm back, default off, Apple fast only (Andrew: a paused programme's arms are kept).
+comptime LN_FOLD_BLOCK = (GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL) or (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU and is_defined["MOJOLEARN_LN_FAST_BLOCK_FOLD"]())
 
 
 def ln_fold_rows(M: Int) -> Int:
