@@ -376,8 +376,7 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_AFN_SAMBA_ALL"](), "removed 2026-11-15 (lane/expdel2-23-neural): AFN_SAMBA_ALL (arm) is gone; the default path is the only one; code at 4f8466c7ca; restore: experiments/removed/MOJOLEARN_AFN_SAMBA_ALL.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_GATHER_EPOCH_OFF.patch
     comptime assert not is_defined["MOJOLEARN_AUTOGRAD_GATHER_EPOCH_OFF"](), "removed 2026-11-15 (lane/expdel2-23-neural): AUTOGRAD_GATHER_EPOCH_OFF (old path) is gone; the default is kept; code at f96a014a39; restore: experiments/removed/MOJOLEARN_AUTOGRAD_GATHER_EPOCH_OFF.patch"
-    # Restore: git apply experiments/removed/MOJOLEARN_BYTE_LM_GENERIC_OPS.patch
-    comptime assert not is_defined["MOJOLEARN_BYTE_LM_GENERIC_OPS"](), "removed 2026-11-15 (lane/expdel2-23-neural): BYTE_LM_GENERIC_OPS (arm) is gone; the default path is the only one; code at b4f0e643f7; restore: experiments/removed/MOJOLEARN_BYTE_LM_GENERIC_OPS.patch"
+    # MOJOLEARN_BYTE_LM_GENERIC_OPS: refusal removed 2026-11-15 (restored; owed B arm, see docs/TOMBSTONES.md Restored table)
     # Restore: git apply experiments/removed/MOJOLEARN_CNN_GENERIC_OPS.patch
     comptime assert not is_defined["MOJOLEARN_CNN_GENERIC_OPS"](), "removed 2026-11-15 (lane/expdel2-23-neural): CNN_GENERIC_OPS (arm) is gone; the default path is the only one; code at aefeacb577; restore: experiments/removed/MOJOLEARN_CNN_GENERIC_OPS.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_EMB_AUTO_SORT_MIN_CELLS.patch
