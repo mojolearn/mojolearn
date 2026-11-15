@@ -27,6 +27,17 @@ a native function. A member no fixture reaches is listed UNCOVERED, never skippe
 EXEMPT BY RULE (AGENTS.md "scikit-learn tags"): `__sklearn_tags__` and the helpers used solely to build its tag
 metadata (TAG_ROOTS and everything they call) are tagged `exempt` and not counted. Frames under the import system
 (a lazy import inside a call) are tagged `import` and not counted either: they run once per process, not per call.
+Product frames entered while an import runs outside any public call (a family's import-time connections, the
+package's meta-path finders consulted for every import) are import time, never a public call: counted apart as
+`import_time` (py-census-30, 2026-11-15: they had been read as calls and attributed to the first member they reached).
+
+ATTRIBUTION. An outermost product frame that is not a public member (a decorator wrapper, or a private helper the
+fixture calls) adopts the member it calls only when that member's frame is its direct child and the wrapper is not a
+private (single underscore) name; any other public member reached inside it, and a public class's `__del__` reached
+anywhere (a finalizer the collector runs inside whatever call is active), is measured as its own call while the outer
+one waits. The unattributed entry keeps its own frames (unattributed.tsv, `inside`). A member never called itself but
+whose defining function ran through a subclass's member is VIA_SUBCLASS (a mixin's or protocol's method), not
+UNCOVERED.
 
 Subcommands (run by `tools/ops/wheel_verify_smoke.py frames`, which owns the parallel pool):
   inventory --surface FILE --out DIR   in the wheel's python: resolve the members and plan the units
@@ -53,7 +64,7 @@ from pathlib import Path
 #: fit reads them, so they run as product work; called beneath a root below they are exempt with it.
 TAG_ROOTS = frozenset(("__sklearn_tags__", "sklearn_tags", "_sklearn_instance_target_tags"))
 #: public protocol dunders counted as members beside the public (non-underscore) names
-MEMBER_DUNDERS = ("__init__", "__call__", "__getstate__", "__setstate__")
+MEMBER_DUNDERS = ("__init__", "__call__", "__getstate__", "__setstate__", "__del__")
 #: package files that are fixtures, not product: tests, verification, the identity harness copy
 _FIXTURE_PREFIXES = ("_verify", "_verification", "_identity")
 _FIXTURE_DIRS = ("tests", "verify_reference")
@@ -120,6 +131,20 @@ def cmd_inventory(args):
         elif kind == "method":
             cname, _, attr = rest.partition(".")
             static_methods[cname].add(attr)
+    # The static surface reads literal `__all__` lists only; a package that extends `__all__` at import (the lazy
+    # expansion doors' names in mojolearn/__init__.py) exports more than it lists. Add the live `__all__` of every
+    # module the surface names (py-census-30: BayesianRidge and the other door classes were missing).
+    listed = set(exports)
+    for mod in sorted({m for m, _ in exports} | {"mojolearn"}):
+        modname = "mojolearn" if mod == "mojolearn" else "mojolearn." + mod
+        try:
+            live = tuple(getattr(importlib.import_module(modname), "__all__", ()) or ())
+        except Exception:   # the export loop below records the module's error once per listed name
+            continue
+        for name in live:
+            if isinstance(name, str) and (mod, name) not in listed:
+                listed.add((mod, name))
+                exports.append((mod, name))
     errors, objects = [], {}
     for mod, name in exports:
         modname = "mojolearn" if mod == "mojolearn" else "mojolearn." + mod
@@ -145,7 +170,7 @@ def cmd_inventory(args):
                 listed = set()
             names = set(static_methods.get(obj.__name__, ())) | {a for a in listed if not a.startswith("_")}
             names |= {d for d in MEMBER_DUNDERS if d in listed}
-            attrs = {}
+            attrs, defined = {}, {}
             for attr in sorted(names):
                 if attr.startswith("_") and attr not in MEMBER_DUNDERS:
                     continue
@@ -155,9 +180,12 @@ def cmd_inventory(args):
                     kind = None
                 if kind is not None:
                     attrs[attr] = kind
+                    owner = next(k for k in obj.__mro__ if attr in vars(k))
+                    defined[attr] = f"{owner.__module__}.{owner.__qualname__}.{attr}"
             classes.append(dict(id=canonical, module=module, qualname=obj.__qualname__, family=family,
                                 aliases=sorted(paths), attrs=attrs))
-            members += [dict(id=f"{canonical}.{a}", family=family, kind=k) for a, k in attrs.items()]
+            members += [dict(id=f"{canonical}.{a}", family=family, kind=k, defined=defined[a])
+                        for a, k in attrs.items()]
         elif callable(obj) and (module.startswith("mojolearn") or isinstance(obj, types.BuiltinFunctionType)):
             if isinstance(obj, types.FunctionType):
                 kind, qual = "function", obj.__qualname__
@@ -172,7 +200,7 @@ def cmd_inventory(args):
                 continue
             functions.append(dict(id=canonical, module=module, qualname=qual, family=family, kind=kind,
                                   aliases=sorted(paths)))
-            members.append(dict(id=canonical, family=family, kind=kind))
+            members.append(dict(id=canonical, family=family, kind=kind, defined=canonical))
     # the units: verify's endpoint fixtures per public object, the harness lanes per lane
     units = []
     from mojolearn import _verify_api_runner as runner, _verify_api_estimators as est
@@ -266,6 +294,10 @@ class Census:
         self.binding_cache = {}
         self.seen = set()
         self.call = None
+        self.suspended = []            # outer calls waiting while a member reached inside them runs as its own
+        self.import_frame = None       # the outermost import frame entered while no call is active
+        self.import_time = collections.Counter()
+        self.unattributed_inside = collections.Counter()
         self.errors = collections.Counter()
 
     # ---- classification -------------------------------------------------------------------------------------
@@ -412,6 +444,13 @@ class Census:
             if event == "call":
                 code = frame.f_code
                 if call is None:
+                    if self.import_frame is not None:   # import time: never a public call
+                        if self.where(code) == 1:
+                            self.import_time[self.key(code, frame)] += 1
+                        return
+                    if _is_import(code.co_filename):
+                        self.import_frame = frame
+                        return
                     # a module body runs once, at import: never a public call
                     if code.co_name != "<module>" and self.where(code) == 1:
                         self.start(frame, code)
@@ -419,6 +458,8 @@ class Census:
                 self.inner(call, frame, code)
             elif event == "return":
                 if call is None:
+                    if frame is self.import_frame:
+                        self.import_frame = None
                     return
                 if call.exempt_root is frame:
                     call.exempt_root = None
@@ -428,7 +469,7 @@ class Census:
                     self.finish(call)
             elif event == "c_call":
                 if call is None:
-                    if self.where(frame.f_code) != 1:
+                    if self.import_frame is None and self.where(frame.f_code) != 1:
                         mids = self.native_member(arg)
                         if mids:
                             call = self.call = _Call("c", frame)
@@ -472,24 +513,33 @@ class Census:
             call.exempt_root = frame
             call.exempt += 1
             return
-        fn = code.co_filename
-        if fn.startswith("<frozen importlib") or (os.sep + "importlib" + os.sep) in fn:
+        if _is_import(code.co_filename):
             call.import_root = frame
             call.imports += 1
             return
-        if call.mids is None and self.where(code) == 1:
+        finalizer = code.co_name == "__del__"
+        if (call.mids is None or finalizer) and self.where(code) == 1:
             mids = self.resolve(frame, code)
             if mids:
-                call.mids = mids   # the public method's own frame: not counted
+                entry = call.entry.f_code.co_name if call.kind == "py" else ""
+                if (call.mids is None and not finalizer and frame.f_back is call.entry
+                        and not _private(entry)):
+                    call.mids = mids   # the public method's own frame under its wrapper: not counted
+                    return
+                # a member reached inside a private helper or deeper inside a wrapper, or a finalizer: its own call
+                self.suspended.append(call)
+                nested = self.call = _Call("py", frame)
+                nested.mids = mids
                 return
         call.funcs[self.key(code, frame)] += 1
         call.n += 1
 
     def finish(self, call):
-        self.call = None
+        self.call = self.suspended.pop() if self.suspended else None
         if call.mids is None:
             for k in call.pre:
                 self.unattributed[k] += 1
+            self.unattributed_inside.update(call.funcs)
             return
         for k in call.pre:   # a wrapper entered before the public method's own frame
             call.funcs[k] += 1
@@ -524,9 +574,19 @@ class Census:
             return False, f"{type(exc).__name__}: {str(exc)[:300]}"
         finally:
             sys.setprofile(previous)
-            if self.call is not None:   # unwound without its return event (should not happen): close it
+            while self.call is not None:   # unwound without its return event (should not happen): close it
                 self.errors["unclosed_call"] += 1
                 self.finish(self.call)
+            self.import_frame = None
+
+
+def _is_import(filename):
+    return filename.startswith("<frozen importlib") or (os.sep + "importlib" + os.sep) in filename
+
+
+def _private(name):
+    """A single-underscore name (a private helper), not a dunder."""
+    return name.startswith("_") and not (name.startswith("__") and name.endswith("__"))
 
 
 def _codes(raw):
@@ -534,9 +594,19 @@ def _codes(raw):
     if isinstance(raw, (staticmethod, classmethod)):
         raw = raw.__func__
     cands = [raw.fget, raw.fset, raw.fdel] if isinstance(raw, property) else [raw]
+    # Every function along the wrapper chain: the installed wrapper runs first (a functools.wraps constructor such
+    # as _forest_protocol's `initialize` was unmapped while only its __wrapped__ original was, so the forest
+    # constructors read as unattributed entries and their __init__ as UNCOVERED); the original it wraps, when it
+    # runs, is then a frame inside the call, as a wrapper frame before it used to be.
     out = []
+
+    def add(fn):
+        code = getattr(fn, "__code__", None)
+        if code is not None and code not in out:
+            out.append(code)
     for f in cands:
         for _ in range(8):   # descriptor wrappers (available_if and similar) hold the function as fn/func
+            add(f)
             inner = next((getattr(f, a) for a in ("fn", "func", "__func__")
                           if isinstance(getattr(f, a, None), types.FunctionType)), None)
             if inner is None or inner is f:
@@ -544,11 +614,10 @@ def _codes(raw):
             f = inner
         seen = 0
         while getattr(f, "__wrapped__", None) is not None and seen < 16:
+            add(f)
             f = f.__wrapped__
             seen += 1
-        code = getattr(f, "__code__", None)
-        if code is not None:
-            out.append(code)
+        add(f)
     return out
 
 
@@ -669,6 +738,7 @@ def cmd_unit(args):
     def done():   # partial results after every fixture, so a crash later in the unit keeps what ran
         doc = dict(unit=unit["name"], seconds=round(time.time() - started, 2), fixtures=fixtures,
                    profiler_errors=dict(census.errors), unattributed=dict(census.unattributed),
+                   unattributed_inside=dict(census.unattributed_inside), import_time=dict(census.import_time),
                    members={m: dict(st, funcs=dict(st["funcs"]), bnames=dict(st["bnames"]))
                             for m, st in census.members.items()})
         tmp = path.with_suffix(".tmp")
@@ -702,7 +772,7 @@ def report(directory):
     d = Path(directory)
     inv = json.loads((d / "inventory.json").read_text())
     merged = {m["id"]: dict(m, stats=_new_stats(), units=set()) for m in inv["members"]}
-    unattributed = collections.Counter()
+    unattributed, inside, import_time = collections.Counter(), collections.Counter(), collections.Counter()
     fixture_errors, missing, profiler_errors = 0, [], collections.Counter()
     for unit in inv["units"]:
         p = d / "units" / (re.sub(r"[^A-Za-z0-9_.-]", "_", unit["name"]) + ".json")
@@ -713,6 +783,8 @@ def report(directory):
             continue
         fixture_errors += sum(1 for f in doc.get("fixtures", ()) if not f.get("ok"))
         unattributed.update(doc.get("unattributed", {}))
+        inside.update(doc.get("unattributed_inside", {}))
+        import_time.update(doc.get("import_time", {}))
         profiler_errors.update(doc.get("profiler_errors", {}))
         for mid, st in doc.get("members", {}).items():
             row = merged.setdefault(mid, dict(id=mid, family="?", kind="seen-only", stats=_new_stats(), units=set()))
@@ -725,10 +797,15 @@ def report(directory):
             acc["bnames"].update(st.get("bnames", {}))
             row["units"].add(unit["name"])
 
+    # a member whose defining function ran through another member (a mixin's method called on a subclass)
+    ran = {r.get("defined") for r in merged.values() if r["stats"]["calls"] and r.get("defined")}
+
     def status(row):
         st = row["stats"]
         if st["calls"] == 0:
-            return "NATIVE_ATTRIBUTE" if row["kind"] == "native_attribute" else "UNCOVERED"
+            if row["kind"] == "native_attribute":
+                return "NATIVE_ATTRIBUTE"
+            return "VIA_SUBCLASS" if row.get("defined") in ran else "UNCOVERED"
         if st["frames_max"] > 0:
             return "PYTHON"
         return "MULTI_BINDING" if st["bindings_max"] > 1 else ("ZERO" if st["bindings_max"] == 1 else "NO_BINDING")
@@ -759,12 +836,17 @@ def report(directory):
         for k, (nm, ne, ms) in funcs:
             fh.write(f"{k}\t{nm}\t{ne}\t{', '.join(sorted(ms)[:12])}{' ...' if len(ms) > 12 else ''}\n")
     with open(d / "unattributed.tsv", "w") as fh:
-        fh.write("entry\tcount\n")
-        for k, n in unattributed.most_common():
-            fh.write(f"{k}\t{n}\n")
+        # entry: product Python entered outside any public member (a helper the fixture called, a door class the
+        # inventory does not list); inside: the frames those entries ran; import_time: product frames run by an
+        # import outside any call (connections, meta-path finders)
+        fh.write("where\tfunction\tcount\n")
+        for where, counter in (("entry", unattributed), ("inside", inside), ("import_time", import_time)):
+            for k, n in counter.most_common():
+                fh.write(f"{where}\t{k}\t{n}\n")
     counts = collections.Counter(status(r) for r in rows)
     measured = sum(1 for r in rows if r["stats"]["calls"])
     lines = [f"frames rc=0 members={len(rows)} measured={measured} uncovered={counts['UNCOVERED']} "
+             f"via_subclass={counts['VIA_SUBCLASS']} "
              f"zero_python={counts['ZERO'] + counts['NO_BINDING'] + counts['MULTI_BINDING']} "
              f"(one_binding_call={counts['ZERO']} multi_binding={counts['MULTI_BINDING']} "
              f"no_binding={counts['NO_BINDING']}) with_python={counts['PYTHON']} "
@@ -789,6 +871,10 @@ def report(directory):
         lines.append(f"  frames unattributed entries (product Python entered outside any public member): "
                      f"{len(unattributed)} distinct, {sum(unattributed.values())} entries; top: "
                      + "; ".join(f"{k} x{n}" for k, n in unattributed.most_common(5)) + " (unattributed.tsv)")
+    if import_time:
+        lines.append(f"  frames import time (product frames an import ran outside any call, not counted): "
+                     f"{sum(import_time.values())} frames; top: "
+                     + "; ".join(f"{k} x{n}" for k, n in import_time.most_common(5)))
     exempt = sum(r["stats"]["exempt"] for r in rows)
     lines.append(f"  frames exempt by rule (__sklearn_tags__ and its helpers): {exempt} frames, not counted; "
                  f"import frames (lazy imports inside a call, not counted): {sum(r['stats']['imports'] for r in rows)}")
