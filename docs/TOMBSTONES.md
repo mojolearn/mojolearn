@@ -2155,6 +2155,7 @@ Deletions reversed by new evidence. The code is back on main; the section and th
 | [`MOJOLEARN_MAMBA_CALL_PROGRAM`](#mojolearn_mamba_call_program) | Neural (per-call Mamba door x in place) | 2026-11-15 (`449d72a027`) | 2026-11-15 (lane/expdel2-restore-owed) | opt-in B arm, default unchanged, A/B owed at the wave sha | [MOJOLEARN_MAMBA_CALL_PROGRAM.patch](../experiments/removed/MOJOLEARN_MAMBA_CALL_PROGRAM.patch) |
 | [`MOJOLEARN_PROGRAM_RUN_ENTRY`](#mojolearn_program_run_entry) | Autograd (Program.run door) | 2026-11-15 (`8fe6eaaa01`) | 2026-11-15 (lane/expdel2-restore-owed) | opt-in B arm, default unchanged, A/B owed at the wave sha | [MOJOLEARN_PROGRAM_RUN_ENTRY.patch](../experiments/removed/MOJOLEARN_PROGRAM_RUN_ENTRY.patch) |
 | [`MOJOLEARN_SAMBA_WEIGHT_EPOCH_GLOBAL`](#mojolearn_samba_weight_epoch_global-unmeasured-arm-deleted-2026-11-15) | Neural (Samba resident copy keyed by the process weight epoch) | 2026-11-15 (`4fdfffd7c8`) | 2026-11-15 (lane/expdel2-restore-owed) | opt-in B arm, default unchanged, A/B owed at the wave sha | [MOJOLEARN_SAMBA_WEIGHT_EPOCH_GLOBAL.patch](../experiments/removed/MOJOLEARN_SAMBA_WEIGHT_EPOCH_GLOBAL.patch) |
+| [`MOJOLEARN_SESSION_CALL_DESCRIPTOR`](#mojolearn_session_call_descriptor) | Autograd (Session call door) | 2026-11-15 (`c33bc3f5d0`) | 2026-11-15 (lane/expdel2-restore-owed) | opt-in B arm, default unchanged, A/B owed at the wave sha | [MOJOLEARN_SESSION_CALL_DESCRIPTOR.patch](../experiments/removed/MOJOLEARN_SESSION_CALL_DESCRIPTOR.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -10474,6 +10475,7 @@ Restored 2026-11-15 (lane/expdel2-restore-owed): owed B arm, deletion premature;
 - Files: providers/python/autograd_ops_frontend_pyapi_door.mojo, providers/python/autograd_session_public_request_pyapi_pack.mojo.
 - Deleted by: lane/expdel2-08-base `c33bc3f5d0` (2026-11-15); code recoverable at `8fe6eaaa01`.
 - Restore: `git apply experiments/removed/MOJOLEARN_SESSION_CALL_DESCRIPTOR.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+Restored 2026-11-15 (lane/expdel2-restore-owed): owed B arm, deletion premature; see Restored table.
 
 ### MOJOLEARN_TRANSFORMER_DECODE_PER_TOKEN_ADMISSION
 
