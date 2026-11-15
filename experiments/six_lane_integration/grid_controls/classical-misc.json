@@ -24,23 +24,22 @@
       "note": "256-lane fixed halving tree, two streams per barrier; StandardScaler mean pass only (finite input)."
     },
     "arima_search_reuse": {
-      "define": "MOJOLEARN_ARIMA_FAST_SEARCH_REUSE",
+      "define": "MOJOLEARN_ARIMA_FAST_SEARCH_REUSE_OFF",
       "kind": "switch",
       "arms": {
-        "off": [],
-        "on": [
-          "MOJOLEARN_ARIMA_FAST_SEARCH_REUSE"
+        "on": [],
+        "off": [
+          "MOJOLEARN_ARIMA_FAST_SEARCH_REUSE_OFF"
         ]
       },
-      "default": "off",
+      "default": "on",
       "source": [
-        "arima/impl/fast_order_search.mojo:125",
-        "python/mojolearn/_x_sequence_autoarima.py"
+        "arima/impl/fast_order_search.mojo"
       ],
       "binding": "_mojolearn_arima",
-      "bits_change": false,
-      "status": "kept",
-      "note": "EXISTING define (name says FAST but it is gated only on ARIMA_ORDER_BATCH, which is on under IDENTICAL on every vendor). AutoARIMA adopts the order search fit instead of refitting; aic/bic come from the device ic kernel (lane arima-ics). Apple FAST: taxi-hourly 16386 -> 9872 ms. Must confirm IDENTICAL outputs equal the refit (ID check) before keeping."
+      "bits_change": true,
+      "status": "promoted",
+      "note": "EXISTING define (name says FAST but it is gated only on ARIMA_ORDER_BATCH, which is on under IDENTICAL on every vendor). AutoARIMA adopts the order search fit instead of refitting; aic/bic come from the device ic kernel (lane arima-ics). Apple FAST: taxi-hourly 16386 -> 9872 ms. Must confirm IDENTICAL outputs equal the refit (ID check) before keeping. PROMOTED 2026-11-15 (lane/expdel2-47-promote): default on FAST + Apple only (M3 rab16-arimareuse synthetic 18229.7 -> 13688.1 ms, taxi-hourly 16386.5 -> 9872.2 ms, forecast_rmse identical); IDENTICAL and NVIDIA/AMD/host unchanged (the switch is now gated on NUMERIC_FAST and TARGET_HAS_APPLE_GPU); rollback -D MOJOLEARN_ARIMA_FAST_SEARCH_REUSE_OFF; the old positive define is refused."
     }
   },
   "algorithms": {

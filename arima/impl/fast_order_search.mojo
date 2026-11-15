@@ -109,14 +109,22 @@ comptime ORDER_TPB = 128
 #: SEARCH_REUSE OUTCOME (M3 afc_ab_def, full board size, 1 run per arm,
 #: 2026-10-05, rab16-arimareuse): autoarima synthetic 18229.7 -> 13688.1 ms,
 #: taxi-hourly 16386.5 -> 9872.2 ms, forecast_rmse identical. KEEP: the
-#: OFF again since 2026-10-05 (opt-in -D MOJOLEARN_ARIMA_FAST_SEARCH_REUSE): the reuse path adopts the search's fit without the
+#: OFF again 2026-10-05 to 2026-11-15 (was opt-in): the reuse path adopts the search's fit without the
 #: device-written aic/bic (ARIMA._adopt_fit got no `ics`), so FAST AutoARIMA failed on main (NameError, then TypeError on M3 rab23/rab24).
 #: Computing aic/bic in Python is not allowed (no-host-routes). Lane arima-ics (2026-10-05): ARIMA._adopt_fit now gets them from the
 #: plain fit's device kernel (`arima_ic_kernel` via `arima_ic_from_loglike`) over the adopted log-likelihood; still opt-in pending the M3 A/B.
 #: The bundle with GROUPS/D_CONCURRENT (rab16-arimaall, both deleted) was slower than this
 #: alone, so only this one is on.
+#: PROMOTED 2026-11-15 (lane/expdel2-47-promote, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md "PROMOTE"):
+#: the default on its measured column only, FAST + Apple GPU; rollback -D MOJOLEARN_ARIMA_FAST_SEARCH_REUSE_OFF.
+#: A/B rab16-arimareuse (M3 Ultra, afc_ab_def, full board size, 1 run per arm, 2026-10-05; EXPERIMENTS.md
+#: ARIMA_FAST_SEARCH_REUSE row, KEEP): autoarima synthetic 18229.7 -> 13688.1 ms (0.751x), taxi-hourly
+#: 16386.5 -> 9872.2 ms (0.602x), forecast_rmse identical. Apple only, NVIDIA/AMD never measured (FAST is Apple
+#: only). IDENTICAL is untouched on every vendor and the host column (the mode term below is False there): no
+#: IDENTICAL bit changes. The old positive define is refused in core/experiment_guards_series.mojo.
 comptime ARIMA_FAST_SEARCH_REUSE = (
-    ARIMA_ORDER_BATCH and is_defined["MOJOLEARN_ARIMA_FAST_SEARCH_REUSE"]()
+    ARIMA_ORDER_BATCH and GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
+    and not is_defined["MOJOLEARN_ARIMA_FAST_SEARCH_REUSE_OFF"]()
 )
 
 

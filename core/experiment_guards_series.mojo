@@ -150,6 +150,18 @@ def _check_configuration() -> Bool:
     # Restore: git apply experiments/removed/MOJOLEARN_X0_FAST_LS_OFF.patch
     comptime assert not is_defined["MOJOLEARN_X0_FAST_LS_OFF"](), "removed 2026-11-15 (lane/expdel2-37-series): X0_FAST_LS_OFF (old path, Time series (ARIMA start-point LS, Apple FAST); no A/B recorded) is gone; the default is kept; code recoverable at 8c2c6d7d01; restore: experiments/removed/MOJOLEARN_X0_FAST_LS_OFF.patch"
     # ---- end lane expdel2-37-series
+    # Lane expdel2-47-promote (2026-11-15): old paths deleted and ARIMA_FAST_SEARCH_REUSE promoted (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md, docs/TOMBSTONES.md).
+    # Promoted: the old positive define is refused; -D MOJOLEARN_ARIMA_FAST_SEARCH_REUSE_OFF restores the refit path.
+    comptime assert not is_defined["MOJOLEARN_ARIMA_FAST_SEARCH_REUSE"](), "promoted 2026-11-15 (lane/expdel2-47-promote): AutoARIMA search-fit reuse is the FAST + Apple default (M3 rab16-arimareuse: synthetic 18229.7 -> 13688.1 ms, taxi-hourly 16386.5 -> 9872.2 ms, forecast_rmse identical; IDENTICAL unchanged); drop -D MOJOLEARN_ARIMA_FAST_SEARCH_REUSE, -D MOJOLEARN_ARIMA_FAST_SEARCH_REUSE_OFF restores the refit"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_ARIMA_IC_DEVICE_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_ARIMA_IC_DEVICE_OFF"](), "removed 2026-11-15 (lane/expdel2-47-promote): IDN_ARIMA_IC_DEVICE_OFF (old path, Time series (AutoARIMA IC argmin on device, IDENTICAL); no A/B recorded) is gone; the default is kept; restore: experiments/removed/MOJOLEARN_IDN_ARIMA_IC_DEVICE_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_ARIMA_ORDER_CAP_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_ARIMA_ORDER_CAP_OFF"](), "removed 2026-11-15 (lane/expdel2-47-promote): IDN_ARIMA_ORDER_CAP_OFF (old path, Time series (AutoARIMA order-group workspace cap, IDENTICAL); no A/B recorded) is gone; the default is kept; restore: experiments/removed/MOJOLEARN_IDN_ARIMA_ORDER_CAP_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_ARIMA_ORDER_DEVICE_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_ARIMA_ORDER_DEVICE_OFF"](), "removed 2026-11-15 (lane/expdel2-47-promote): IDN_ARIMA_ORDER_DEVICE_OFF (old path, Time series (AutoARIMA order search on device, IDENTICAL); no A/B recorded) is gone; the default is kept; restore: experiments/removed/MOJOLEARN_IDN_ARIMA_ORDER_DEVICE_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_ARIMA_ORDER_SEASONAL_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_ARIMA_ORDER_SEASONAL_OFF"](), "removed 2026-11-15 (lane/expdel2-47-promote): IDN_ARIMA_ORDER_SEASONAL_OFF (old path, Time series (AutoARIMA seasonal grouped search, IDENTICAL); no A/B recorded) is gone; the default is kept; restore: experiments/removed/MOJOLEARN_IDN_ARIMA_ORDER_SEASONAL_OFF.patch"
+    # ---- end lane expdel2-47-promote
     return True
 
 
