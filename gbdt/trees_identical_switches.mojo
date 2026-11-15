@@ -205,7 +205,9 @@ comptime CTR_SORTFREE_SUMS = False
 # model (output hash unchanged). A traced run keeps the tasks (trace.enabled),
 # so `*.perm.<last>.fold.*` records stay comparable with the host column; the
 # host column (`gbdt_oracle_ordered`) is untouched.
-comptime ORD_SKIP_UNSEARCHED_PERM = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_ORD_SKIP_UNSEARCHED_PERM_OFF"]()
+# TOMBSTONE: MOJOLEARN_ORD_SKIP_UNSEARCHED_PERM_OFF (DELETE-OLD-PATH, no A/B recorded for the old path, rule b) deleted 2026-11-15 by lane/expdel2-45-trees; code recoverable at b54053d9c0.
+# Restore: git apply experiments/removed/MOJOLEARN_ORD_SKIP_UNSEARCHED_PERM_OFF.patch
+comptime ORD_SKIP_UNSEARCHED_PERM = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 
 # C IDN_ORD_CAT_PLANES (default ON, launch removal; `_OFF` restores).
 # Each learn permutation's F fold cursors live in ONE buffer at the
