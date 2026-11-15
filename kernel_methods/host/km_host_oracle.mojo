@@ -538,10 +538,10 @@ struct KmhNystroem(Movable):
 
 
 #: fam-kernel-gp (2026-10-04): the host column of
-#: `kernel_methods/estimator.mojo::NYS_IDN_RR_EIGH`, the same two defines.
-comptime KMH_NYS_RR = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
-    is_defined["MOJOLEARN_IDN_NYS_RR_EIGH_OFF"]()
-)
+#: `kernel_methods/estimator.mojo::NYS_IDN_RR_EIGH`, the same gate.
+# TOMBSTONE: MOJOLEARN_IDN_NYS_RR_EIGH_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-19-kernel; code recoverable at 0e594fa5e2.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_NYS_RR_EIGH_OFF.patch; record in docs/TOMBSTONES.md.
+comptime KMH_NYS_RR = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 
 #: fam-kernel-gp (2026-10-04): the host column of
 #: `kernel_methods/estimator.mojo::RBF_IDN_FUSED`, the same gate and

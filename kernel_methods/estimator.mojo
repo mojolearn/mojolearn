@@ -1426,9 +1426,8 @@ def _nystroem_rr_eigh(
 
 
 #: fam-kernel-gp (2026-10-04), IDENTICAL, ON by default
-#: (`-D MOJOLEARN_IDN_NYS_RR_EIGH_OFF` restores the cyclic one-block solver
-#: on the device AND in the host column, `km_host_oracle.mojo::KMH_NYS_RR`
-#: reads the same define): Nystroem's q x q eigendecomposition is the
+#: (FAST keeps the cyclic one-block solver; the host column,
+#: `km_host_oracle.mojo::KMH_NYS_RR`, follows the same gate): Nystroem's q x q eigendecomposition is the
 #: two-sided Jacobi in the round-robin ordering (x_decomp's `eigh` order:
 #: `eigh_par_cs_kernel` + `eigh_par_update_kernel` per round, the q / 2
 #: disjoint rotations of a round across the grid, the convergence test
@@ -1439,9 +1438,9 @@ def _nystroem_rr_eigh(
 #: run these same kernels and the host column runs `x_decomp/rr.mojo::
 #: host_eigh_rr`, the same rounds, test and sweep budget (RR_EIGH_SWEEPS).
 #: Not converged in the budget raises on every column, as the cyclic one does.
-comptime NYS_IDN_RR_EIGH = _CTX_MODE == _CTX_IDENTICAL and not (
-    is_defined["MOJOLEARN_IDN_NYS_RR_EIGH_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_IDN_NYS_RR_EIGH_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-19-kernel; code recoverable at 0e594fa5e2.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_NYS_RR_EIGH_OFF.patch; record in docs/TOMBSTONES.md.
+comptime NYS_IDN_RR_EIGH = _CTX_MODE == _CTX_IDENTICAL
 #: Rounds between waits on Apple (x_decomp/device.mojo `PJ_SYNC_ROUNDS`).
 comptime NYS_IDN_RR_SYNC_ROUNDS = 512
 
