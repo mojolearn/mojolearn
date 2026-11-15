@@ -2399,7 +2399,7 @@ def resample_gather_grouped(
 # Evidence ab-20261006/repairs-54c1f35a5/F19; no unmeasured combination promotion.
 # TOMBSTONE: MOJOLEARN_RESAMPLE_FAST_DEVICE_PERMUTE (opt-in FAST arm, F19 slower, no promotion) deleted 2026-11-15 by lane/expdel2-37-series; code recoverable at 6b87cc7de9.
 # Restore: git apply experiments/removed/MOJOLEARN_RESAMPLE_FAST_DEVICE_PERMUTE.patch; record in docs/TOMBSTONES.md.
-comptime RESAMPLE_FAST_DEVICE_PERMUTE = False
+# (Sweep 2026-11-15: comptime RESAMPLE_FAST_DEVICE_PERMUTE removed; always False, nothing read it.)
 
 def resample_permutation_gather_gpu(
     n: Int, count: Int, seed: UInt64, srcs: List[Int], dsts: List[Int], widths: List[Int],
