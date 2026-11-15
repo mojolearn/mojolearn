@@ -106,6 +106,8 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_HUBER_FAST_BLOCK512_OFF"](), "removed 2026-11-15 (lane/expdel-03-linear): HUBER_FAST_BLOCK512_OFF (FAST+Apple rollback to FOLD_BLOCK partials in the device L-BFGS Huber fit) is gone; 512-row partials are the only form (huber taxi 192.0 -> 161.6 ms, r2 equal, rab19-huber512); code recoverable at 246a53ea57"
     # Restore: git apply experiments/removed/MOJOLEARN_FAST_OLS_NORMAL_EQ_OFF.patch
     comptime assert not is_defined["MOJOLEARN_FAST_OLS_NORMAL_EQ_OFF"](), "removed 2026-11-15 (lane/expdel-03-linear): FAST_OLS_NORMAL_EQ_OFF (FAST+Apple rollback of LinearRegression to the blocked TSQR) is gone; the resident normal equations are the FAST+Apple path (ols taxi 286 -> 110 ms, istella 2,921 -> 842 ms, KEPT 94cb5ba59); code recoverable at ed9ef96a34"
+    # Restore: git apply experiments/removed/MOJOLEARN_QN_FAST_BLOCKS_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_QN_FAST_BLOCKS_OFF"](), "removed 2026-11-15 (lane/expdel-03-linear): QN_FAST_BLOCKS_OFF (FAST+Apple rollback to the nine-launch QN evaluation) is gone; the two-launch block evaluation is the FAST+Apple path (logreg istella 3,893 -> 3,612 ms, linearsvr 913 -> 219, KEPT 0ae9c28cd); code recoverable at 1385d5e6ff"
     return True
 
 

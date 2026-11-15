@@ -659,6 +659,7 @@ in the tables after the sections.
 | [`MOJOLEARN_SGDOC_FAST_TAIL_OFF`](#mojolearn_sgdoc_fast_tail_off-old-path-deleted-2026-11-15) | Linear (SGDOneClassSVM tail replay, FAST Apple) | removed (old path; FAST+Apple DEFAULT, w2-sgdoc-q PASS) | 2026-11-15 | [MOJOLEARN_SGDOC_FAST_TAIL_OFF.patch](../experiments/removed/MOJOLEARN_SGDOC_FAST_TAIL_OFF.patch) |
 | [`MOJOLEARN_HUBER_FAST_BLOCK512_OFF`](#mojolearn_huber_fast_block512_off-old-path-deleted-2026-11-15) | Linear (HuberRegressor fast-fit 512-row partials, FAST Apple) | removed (old path; FAST+Apple default KEEP, rab19-huber512) | 2026-11-15 | [MOJOLEARN_HUBER_FAST_BLOCK512_OFF.patch](../experiments/removed/MOJOLEARN_HUBER_FAST_BLOCK512_OFF.patch) |
 | [`MOJOLEARN_FAST_OLS_NORMAL_EQ_OFF`](#mojolearn_fast_ols_normal_eq_off-old-path-deleted-2026-11-15) | Linear (LinearRegression resident normal equations, FAST Apple) | removed (old path; FAST+Apple default KEPT, olsne-taxi / olsne-istella) | 2026-11-15 | [MOJOLEARN_FAST_OLS_NORMAL_EQ_OFF.patch](../experiments/removed/MOJOLEARN_FAST_OLS_NORMAL_EQ_OFF.patch) |
+| [`MOJOLEARN_QN_FAST_BLOCKS_OFF`](#mojolearn_qn_fast_blocks_off-old-path-deleted-2026-11-15) | Linear (QN one-class objective in two launches, FAST Apple) | removed (old path; FAST+Apple default KEPT, linear-*-blocks-istella) | 2026-11-15 | [MOJOLEARN_QN_FAST_BLOCKS_OFF.patch](../experiments/removed/MOJOLEARN_QN_FAST_BLOCKS_OFF.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -6400,4 +6401,12 @@ bits change on any vendor or the host column, no board row needs re-timing.
 - **Verdict**: KEPT 94cb5ba59 (EXPERIMENTS.md `FAST_OLS_NORMAL_EQ (_OFF)`, olsne-taxi, olsne-istella): M3 one run per arm, ols taxi 286 -> 110 ms (r2 .9088 same), istella 2,921 -> 842 ms (r2 .3325 -> .3319). No bit change on any column.
 - **Deleted by**: lane/expdel-03-linear (expdel-03-linear, docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md); code recoverable at `ed9ef96a34`.
 - **Restore**: `git apply experiments/removed/MOJOLEARN_FAST_OLS_NORMAL_EQ_OFF.patch`, then delete the `MOJOLEARN_FAST_OLS_NORMAL_EQ_OFF` refusal in `core/experiment_guards_linear.mojo`.
+- **Records**: refusal in `core/experiment_guards_linear.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel-03-linear section).
+
+## MOJOLEARN_QN_FAST_BLOCKS_OFF: old path deleted (2026-11-15)
+
+- **What it was**: the FAST+Apple rollback of the quasi-Newton one-class objective evaluation (glm/impl/qn/glm_base.mojo) from two block launches (rows' z, loss and dZ with a per-block fold, then one epilogue block) to the nine-launch evaluation. Only the `and not is_defined` term of `QN_FAST_BLOCKS` is gone; the nine-launch evaluation stays the path of every non-FAST-Apple build.
+- **Verdict**: KEPT 0ae9c28cd (EXPERIMENTS.md `QN_FAST_BLOCKS`, linear-logreg-blocks-istella, linear-svc-blocks-istella, linear-svr-blocks-istella): M3 one run per arm, logreg istella 3,893 -> 3,612 ms, linearsvc 773 -> 733, linearsvr 913 -> 219, quality same. No bit change on any column.
+- **Deleted by**: lane/expdel-03-linear (expdel-03-linear, docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md); code recoverable at `1385d5e6ff`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_QN_FAST_BLOCKS_OFF.patch`, then delete the `MOJOLEARN_QN_FAST_BLOCKS_OFF` refusal in `core/experiment_guards_linear.mojo`.
 - **Records**: refusal in `core/experiment_guards_linear.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel-03-linear section).
