@@ -789,8 +789,7 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_NN59_DROPOUT_RESIDUAL"](), "removed 2026-11-15 (lane/expdel2-32-neural): NN59_DROPOUT_RESIDUAL (opt-in arm, no record) is gone; the default path is the only one; code recoverable at f75eb67b37; restore: experiments/removed/MOJOLEARN_NN59_DROPOUT_RESIDUAL.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_NN63_CANONICAL_SHARD_MERGE.patch
     comptime assert not is_defined["MOJOLEARN_NN63_CANONICAL_SHARD_MERGE"](), "removed 2026-11-15 (lane/expdel2-32-neural): NN63_CANONICAL_SHARD_MERGE (opt-in arm, no record) is gone; the default path is the only one; code recoverable at 5f27699bee; restore: experiments/removed/MOJOLEARN_NN63_CANONICAL_SHARD_MERGE.patch"
-    # Restore: git apply experiments/removed/MOJOLEARN_SAMBA_PROGRAM_FORWARD.patch
-    comptime assert not is_defined["MOJOLEARN_SAMBA_PROGRAM_FORWARD"](), "removed 2026-11-15 (lane/expdel2-32-neural): SAMBA_PROGRAM_FORWARD (opt-in arm, EXP:2399 PENDING (B arm of the owed samba-forward A/B; the measured resident forward is the default)) is gone; the default path is the only one; code recoverable at 311b50e05c; restore: experiments/removed/MOJOLEARN_SAMBA_PROGRAM_FORWARD.patch"
+    # MOJOLEARN_SAMBA_PROGRAM_FORWARD: refusal removed 2026-11-15 (restored; owed B arm, see docs/TOMBSTONES.md Restored table)
     # ---- end lane expdel2-32-neural
     # Lane expdel2-31-neural (2026-11-15): unmeasured arms and old paths deleted under "An unmeasured arm is deleted" (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md, docs/TOMBSTONES.md).
     # Restore: git apply experiments/removed/MOJOLEARN_AFN_LM_ALL.patch

@@ -8,6 +8,7 @@ this revision. Full-workload NVIDIA/AMD A/B and host/Apple identity remain
 required before any promotion. The unmeasured arms were deleted 2026-11-15
 (expdel2-32-neural); the names stay as constants for their importers.
 """
+from std.sys.compile import is_defined
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 
 # TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old-path umbrella term; owner another lane) deleted 2026-11-15 by lane/expdel2-32-neural; code recoverable at 311b50e05c.
@@ -126,7 +127,10 @@ comptime IDN_CHUNKED_LM_HEAD_V2 = False
 # samba-forward NV 12.0 -> 5.3 / AMD 8.8 -> 5.8 ms, samba-train-step NV 96.0 -> 39.2 / AMD 147.2 -> 114.2 ms, hashes
 # equal) deleted 2026-11-15 by lane/expdel-04-neural; code recoverable at 5bfce25001.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_SAMBA_RESIDENT_STEP_OFF.patch
-comptime IDN_SAMBA_RESIDENT_STEP = _ENABLED
+comptime IDN_SAMBA_RESIDENT_STEP = (
+    _ENABLED
+    and not is_defined["MOJOLEARN_IDN_CHUNKED_LM_HEAD_V2"]()
+)
 # Samba stateless forward route (lane restore-samba-resident-forward,
 # 2026-11-13). Default: the resident forward (`samba_resident_forward`,
 # descriptor op 16), the measured winner: IDN_SAMBA_RESIDENT_STEP PROMOTED
@@ -143,7 +147,8 @@ comptime IDN_SAMBA_RESIDENT_STEP = _ENABLED
 # image's own op 24 (IDN_SAMBA_RESIDENT_STEP) still decides availability.
 # TOMBSTONE: MOJOLEARN_SAMBA_PROGRAM_FORWARD (opt-in B arm of the owed samba-forward A/B, EXP:2399 pending; the measured resident forward stays the default) deleted 2026-11-15 by lane/expdel2-32-neural; code recoverable at 311b50e05c.
 # Restore: git apply experiments/removed/MOJOLEARN_SAMBA_PROGRAM_FORWARD.patch
-comptime IDN_SAMBA_PROGRAM_FORWARD = False
+# RESTORED 2026-11-15 by lane/expdel2-restore-owed: owed B arm (owed-pre0867.json), under four weeks old; the deletion was premature.
+comptime IDN_SAMBA_PROGRAM_FORWARD = is_defined["MOJOLEARN_SAMBA_PROGRAM_FORWARD"]()
 # attn_stash=recompute for the Samba training step only (lane grid-act-4,
 # 2026-10-08, IDENTICAL grid ge123e6f9, one run per arm, stash -> recompute
 # ms): samba-train-step NV 96.0 -> 79.5, AMD 147.2 -> 145.7 (0.905x) but
@@ -161,4 +166,4 @@ comptime IDN_SAMBA_PROGRAM_FORWARD = False
 # the Samba step too.
 # TOMBSTONE: MOJOLEARN_IDN_SAMBA_ATTN_RECOMPUTE_OFF (old path: the stash on the Samba step beside the promoted recompute default, EXP:1757) deleted 2026-11-15 by lane/expdel2-32-neural; code recoverable at 311b50e05c.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_SAMBA_ATTN_RECOMPUTE_OFF.patch
-comptime IDN_SAMBA_ATTN_RECOMPUTE = _ENABLED
+comptime IDN_SAMBA_ATTN_RECOMPUTE = _ENABLED and not is_defined["MOJOLEARN_IDN_SAMBA_ATTN_RECOMPUTE_OFF"]()

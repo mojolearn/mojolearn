@@ -24,9 +24,11 @@ def native_resident_arity(op: Int, na: Int, np: Int, nf: Int) raises:
     # Restore: git apply experiments/removed/SAMBA_THREE_TIER_FORWARD.patch
     # RESTORED 2026-11-13 (lane restore-samba-resident-forward): operation 16 is
     # again the default stateless SambaStack.forward (the measured winner,
-    # IDN_SAMBA_RESIDENT_STEP).
+    # IDN_SAMBA_RESIDENT_STEP); SambaStackProgram is its B arm behind
+    # -D MOJOLEARN_SAMBA_PROGRAM_FORWARD (bindings/samba_inference_native_door.mojo).
     # TOMBSTONE: MOJOLEARN_SAMBA_PROGRAM_FORWARD (the SambaStackProgram B arm, EXP:2399 pending) deleted 2026-11-15 by lane/expdel2-32-neural; code recoverable at 2ea7c618fc.
     # Restore: git apply experiments/removed/MOJOLEARN_SAMBA_PROGRAM_FORWARD.patch
+    # RESTORED 2026-11-15 by lane/expdel2-restore-owed: owed B arm (owed-pre0867.json), under four weeks old; the deletion was premature.
     elif op == 17:
         valid = na == 7 and np == 8 and nf == 8
     elif op == 18:
