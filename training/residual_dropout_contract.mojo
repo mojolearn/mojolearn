@@ -5,17 +5,13 @@ Philox mapping is core.philox_neural's (block low/high, stream, 0), keyed by
 seed low/high. The ten-round integer body below is shared verbatim by this
 layer's host and GPU routes, avoiding a host import of a device runtime module.
 """
-from std.sys.compile import is_defined
 from std.memory import bitcast
 from std.math import isfinite
 from checks.numerics import GLOBAL_NUMERIC_MODE,NUMERIC_IDENTICAL,ftz,identical_mul,identical_div
 
-comptime NN59_DROPOUT_RESIDUAL = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and is_defined["MOJOLEARN_NN59_DROPOUT_RESIDUAL"]()
-    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-    and not is_defined["MOJOLEARN_NN59_CONTROL"]()
-)
+# TOMBSTONE: MOJOLEARN_NN59_DROPOUT_RESIDUAL (opt-in fused residual-dropout schedule, no A/B recorded), its A/B baseline switch MOJOLEARN_NN59_CONTROL and the MOJOLEARN_IDN_ALL_OFF term deleted 2026-11-15 by lane/expdel2-32-neural; code recoverable at f75eb67b37.
+# Restore: git apply experiments/removed/MOJOLEARN_NN59_DROPOUT_RESIDUAL.patch
+comptime NN59_DROPOUT_RESIDUAL = False
 
 
 @always_inline

@@ -129,10 +129,10 @@ RISK: WHAT IS LEAST LIKELY TO COMPILE
     is `^`.
 """
 
-from transformer.experiments.norm_profile_contract import (
-    NN24_NORM_LANES8, NN24_LANES, _sum, _square, norm_profile_dot,
-)
-from transformer.experiments.norm_fixed_lanes import IDN_NORM_FIXED_LANES, nfl_dot
+# TOMBSTONE: MOJOLEARN_IDN_NORM (arms 1 and 4, the NN24 eight-lane fold; owner another lane) oracle arms deleted here 2026-11-15 by lane/expdel2-32-neural; code recoverable at f192693134.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_NORM.expdel2-32-neural.patch
+# TOMBSTONE: MOJOLEARN_IDN_NORM_FIXED_LANES (opt-in fixed 32-lane norm fold, EXP:2246 pending, never measured) oracle arms deleted 2026-11-15 by lane/expdel2-32-neural; code recoverable at fce9f4413c.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_NORM_FIXED_LANES.patch
 from std.math import min
 from std.memory import bitcast
 
@@ -738,15 +738,6 @@ def rms_norm_backward_into(
                 var dhj = ftz(identical_mul(ftz(dy[t * dm + j]), ftz(wnorm[j])))
                 dh.append(dhj)
                 c = ftz(identical_mul_add(dhj, ftz(x[t * dm + j]), c))
-            comptime if NN24_NORM_LANES8:
-                c = norm_profile_dot[NN24_LANES](
-                    rebind[MutPointer[Float32, MutAnyOrigin]](dh.unsafe_ptr()),
-                    rebind[MutPointer[Float32, MutAnyOrigin]](x.unsafe_ptr()), 0, t * dm, dm)
-            comptime if IDN_NORM_FIXED_LANES:
-                # MOJOLEARN_IDN_NORM_FIXED_LANES: the fixed 32-lane fold
-                c = nfl_dot(
-                    rebind[MutPointer[Float32, MutAnyOrigin]](dh.unsafe_ptr()),
-                    rebind[MutPointer[Float32, MutAnyOrigin]](x.unsafe_ptr()), 0, t * dm, dm)
             c = ftz(c)
             dot[t] = c
 

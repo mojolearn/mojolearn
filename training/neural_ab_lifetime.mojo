@@ -6,16 +6,14 @@ liveness from pointer equality. A native model owner must supply the exact
 last device consumer (including backward/replay/error handling) and must retain
 the arena until its final context drain. Public-model integration remains owed.
 """
-from std.sys.compile import is_defined, get_defined_int
 from max.gpu.host import DeviceBuffer, DeviceContext
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 
 # Arms 2 and 3 of MOJOLEARN_IDN_TRAIN_SCRATCH (training/neural_identical_experiments.mojo).
-comptime NN62_LIFETIME_ARENA = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and get_defined_int["MOJOLEARN_IDN_TRAIN_SCRATCH", 0]() >= 2
-    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_IDN_TRAIN_SCRATCH (arms 2 and 3, opt-in, no A/B recorded) deleted 2026-11-15 by lane/expdel2-32-neural; code recoverable at 19d2549589.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_TRAIN_SCRATCH.patch
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old-path umbrella term; owner another lane) deleted 2026-11-15 by lane/expdel2-32-neural; code recoverable at 19d2549589.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-32-neural.patch
+comptime NN62_LIFETIME_ARENA = False
 
 
 @fieldwise_init

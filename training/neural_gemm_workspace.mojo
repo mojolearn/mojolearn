@@ -5,18 +5,16 @@ Source-only, default OFF, no validation or measurement in this revision.
 Only scratch is retained, never operands or outputs. Each entry owns its
 device context; the public training tensor operation drains before returning.
 """
-from std.sys.compile import is_defined
 from max.gpu.host import DeviceBuffer, DeviceContext
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from core.ctx_key import ctx_cache_key, ctx_cache_slot
 from gemm.experiments.bounded_workspace import BoundedGemmWorkspace
 from core.shared_slot import SharedSlot
 
-comptime IDN_TRAINING_GEMM_WORKSPACE = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and is_defined["MOJOLEARN_NI01_TRAINING_WORKSPACE"]()
-    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_NI01_TRAINING_WORKSPACE (opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-32-neural; code recoverable at 19d2549589.
+# Restore: git apply experiments/removed/MOJOLEARN_NI01_TRAINING_WORKSPACE.patch
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old-path umbrella term; owner another lane) deleted 2026-11-15 by lane/expdel2-32-neural; code recoverable at 19d2549589.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-32-neural.patch
+comptime IDN_TRAINING_GEMM_WORKSPACE = False
 # A 16 MiB per-context retained-memory budget, independent of matrix shapes.
 # Larger calls use the existing bounded owner's temporary-and-wait path.
 comptime TRAINING_GEMM_RETAINED_FLOATS = (16 * 1024 * 1024) // 4

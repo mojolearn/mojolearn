@@ -10,7 +10,7 @@ from core.philox_neural import neural_rng_host
 from training.estimator import identical_ce_loss_host
 from training.accumulate_multi_gpu import parallel_accumulate_host
 from training.chunked_lm_head_v2 import chunked_lm_head_v2_loss_host, chunked_lm_head_v2_train_host
-from training.neural_identical_experiments import IDN_SAMBA_RESIDENT_STEP, IDN_CHUNKED_LM_HEAD_V2
+from training.neural_identical_experiments import IDN_SAMBA_RESIDENT_STEP
 from training.native_resident_dispatch import native_resident_arity, native_resident_operation
 from training.samba_ops import (
     samba_embedding_forward_host, samba_embedding_backward_host,
@@ -26,7 +26,9 @@ def native_primitive_operation(op: Int, a: List[Int], p: List[Int], f: List[Floa
     if op == 24:
         return Int(IDN_SAMBA_RESIDENT_STEP)
     if op == 28:
-        return Int(IDN_CHUNKED_LM_HEAD_V2)
+        # TOMBSTONE: MOJOLEARN_IDN_CHUNKED_LM_HEAD_V2 (opt-in chunked head, never measured) deleted 2026-11-15 by lane/expdel2-32-neural; code recoverable at 2ea7c618fc.
+        # Restore: git apply experiments/removed/MOJOLEARN_IDN_CHUNKED_LM_HEAD_V2.patch
+        return 0
     var ctx = neural_ctx[PRIMITIVE_CONTEXT]()
     if op >= 12:
         return native_resident_operation(ctx, op, a, p, f)

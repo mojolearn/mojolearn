@@ -1514,6 +1514,37 @@ in the tables after the sections.
 | [`MOJOLEARN_IDN_NEURAL_NN16`](#mojolearn_idn_neural_nn16-unmeasured-arm-deleted-2026-11-15) | neural GEMM experiments IDENTICAL (gemm/experiments/neural_streaming.mojo) | removed (opt-in arm, no A/B recorded or record read; V2) | 2026-11-15 | [MOJOLEARN_IDN_NEURAL_NN16.patch](../experiments/removed/MOJOLEARN_IDN_NEURAL_NN16.patch) |
 | [`MOJOLEARN_INT_SLICES_FORCE_FLAT`](#mojolearn_int_slices_force_flat-unmeasured-arm-deleted-2026-11-15) | GEMM int slices research profile (gemm/int_slices.mojo) | removed (opt-in arm, no A/B recorded or record read; V2) | 2026-11-15 | [MOJOLEARN_INT_SLICES_FORCE_FLAT.patch](../experiments/removed/MOJOLEARN_INT_SLICES_FORCE_FLAT.patch) |
 | [`MOJOLEARN_NI07_GROUPED_PROJECTIONS`](#mojolearn_ni07_grouped_projections-unmeasured-arm-deleted-2026-11-15) | neural GEMM experiments IDENTICAL (gemm/experiments/neural_tiled_v2.mojo) | removed (opt-in arm, no A/B recorded or record read; V2) | 2026-11-15 | [MOJOLEARN_NI07_GROUPED_PROJECTIONS.patch](../experiments/removed/MOJOLEARN_NI07_GROUPED_PROJECTIONS.patch) |
+| [`MOJOLEARN_AFN_SAMBA_ARENA`](#mojolearn_afn_samba_arena) | Samba Apple FAST ops (training/samba_afn.mojo) | removed (opt-in arm, no A/B recorded or record read; V2) | 2026-11-15 | [MOJOLEARN_AFN_SAMBA_ARENA.patch](../experiments/removed/MOJOLEARN_AFN_SAMBA_ARENA.patch) |
+| [`MOJOLEARN_AFN_SAMBA_DEVICE_ADMIT`](#mojolearn_afn_samba_device_admit) | Samba Apple FAST ops (training/samba_afn.mojo) | removed (opt-in arm, no A/B recorded or record read; V2) | 2026-11-15 | [MOJOLEARN_AFN_SAMBA_DEVICE_ADMIT.patch](../experiments/removed/MOJOLEARN_AFN_SAMBA_DEVICE_ADMIT.patch) |
+| [`MOJOLEARN_AFN_SAMBA_EMB_ATOMIC`](#mojolearn_afn_samba_emb_atomic) | Samba Apple FAST ops (training/samba_afn.mojo) | removed (opt-in arm, no A/B recorded or record read; V2) | 2026-11-15 | [MOJOLEARN_AFN_SAMBA_EMB_ATOMIC.patch](../experiments/removed/MOJOLEARN_AFN_SAMBA_EMB_ATOMIC.patch) |
+| [`MOJOLEARN_AFN_SAMBA_FUSE`](#mojolearn_afn_samba_fuse) | Samba Apple FAST fused entries (training/samba_afn.mojo, training/samba_ops.mojo) | removed (opt-in arm, no A/B recorded or record read; V2) | 2026-11-15 | [MOJOLEARN_AFN_SAMBA_FUSE.patch](../experiments/removed/MOJOLEARN_AFN_SAMBA_FUSE.patch) |
+| [`MOJOLEARN_AFN_SAMBA_HEAD_GEMM`](#mojolearn_afn_samba_head_gemm) | Samba Apple FAST head GEMMs (training/samba_afn.mojo) | removed (opt-in arm, no A/B recorded or record read; V2) | 2026-11-15 | [MOJOLEARN_AFN_SAMBA_HEAD_GEMM.patch](../experiments/removed/MOJOLEARN_AFN_SAMBA_HEAD_GEMM.patch) |
+| [`MOJOLEARN_ATTN_ES_TQ16`](#mojolearn_attn_es_tq16) | attention estash-zdot routing check (transformer/checks/attention_zdot_routing_check.mojo) | removed (opt-in arm, no A/B recorded or record read; V2) | 2026-11-15 | [MOJOLEARN_ATTN_ES_TQ16.patch](../experiments/removed/MOJOLEARN_ATTN_ES_TQ16.patch) |
+| [`MOJOLEARN_ATTN_ES_TQ8`](#mojolearn_attn_es_tq8) | attention estash-zdot routing check (transformer/checks/attention_zdot_routing_check.mojo) | removed (opt-in arm, no A/B recorded or record read; V2) | 2026-11-15 | [MOJOLEARN_ATTN_ES_TQ8.patch](../experiments/removed/MOJOLEARN_ATTN_ES_TQ8.patch) |
+| [`MOJOLEARN_HOST_RMS_FORCE_SERIAL`](#mojolearn_host_rms_force_serial) | Samba host oracle (training/host/samba_ops_oracle.mojo) | removed (opt-in arm, no A/B recorded or record read; V2) | 2026-11-15 | [MOJOLEARN_HOST_RMS_FORCE_SERIAL.patch](../experiments/removed/MOJOLEARN_HOST_RMS_FORCE_SERIAL.patch) |
+| [`MOJOLEARN_IDN_CE_DENOM_ROWFOLD`](#mojolearn_idn_ce_denom_rowfold) | CE denominator (training/neural_identical_experiments.mojo) | removed (opt-in arm, no A/B recorded or record read; V2) | 2026-11-15 | [MOJOLEARN_IDN_CE_DENOM_ROWFOLD.patch](../experiments/removed/MOJOLEARN_IDN_CE_DENOM_ROWFOLD.patch) |
+| [`MOJOLEARN_IDN_CE_GRAD_FUSED`](#mojolearn_idn_ce_grad_fused) | CE backward (training/neural_identical_experiments.mojo) | removed (opt-in arm, no A/B recorded or record read; V2) | 2026-11-15 | [MOJOLEARN_IDN_CE_GRAD_FUSED.patch](../experiments/removed/MOJOLEARN_IDN_CE_GRAD_FUSED.patch) |
+| [`MOJOLEARN_IDN_CE_TOKEN_FOLD`](#mojolearn_idn_ce_token_fold) | CE token-total fold (training/neural_ab_profile_contract.mojo) | removed (opt-in arm, no A/B recorded or record read; V2) | 2026-11-15 | [MOJOLEARN_IDN_CE_TOKEN_FOLD.patch](../experiments/removed/MOJOLEARN_IDN_CE_TOKEN_FOLD.patch) |
+| [`MOJOLEARN_IDN_CHUNKED_LM_HEAD_V2`](#mojolearn_idn_chunked_lm_head_v2) | LM chunked head (training/neural_identical_experiments.mojo) | removed (opt-in arm, no A/B recorded or record read; V2) | 2026-11-15 | [MOJOLEARN_IDN_CHUNKED_LM_HEAD_V2.patch](../experiments/removed/MOJOLEARN_IDN_CHUNKED_LM_HEAD_V2.patch) |
+| [`MOJOLEARN_IDN_LM_VIEWS`](#mojolearn_idn_lm_views) | byte LM weight views (training/neural_identical_experiments.mojo) | removed (opt-in arm, no A/B recorded or record read; V2) | 2026-11-15 | [MOJOLEARN_IDN_LM_VIEWS.patch](../experiments/removed/MOJOLEARN_IDN_LM_VIEWS.patch) |
+| [`MOJOLEARN_IDN_NORM_FIXED_LANES`](#mojolearn_idn_norm_fixed_lanes) | transformer RMSNorm fold (transformer/experiments/norm_fixed_lanes.mojo) | removed (opt-in arm, no A/B recorded or record read; V2) | 2026-11-15 | [MOJOLEARN_IDN_NORM_FIXED_LANES.patch](../experiments/removed/MOJOLEARN_IDN_NORM_FIXED_LANES.patch) |
+| [`MOJOLEARN_IDN_OPT_CLIP_BATCHED_OFF`](#mojolearn_idn_opt_clip_batched_off) | optimizer clip (training/opt_gate.mojo) | removed (old path beside the default; V2) | 2026-11-15 | [MOJOLEARN_IDN_OPT_CLIP_BATCHED_OFF.patch](../experiments/removed/MOJOLEARN_IDN_OPT_CLIP_BATCHED_OFF.patch) |
+| [`MOJOLEARN_IDN_OPT_GATE_SCAN_OFF`](#mojolearn_idn_opt_gate_scan_off) | optimizer gate scan (training/opt_gate.mojo) | removed (old path beside the default; V2) | 2026-11-15 | [MOJOLEARN_IDN_OPT_GATE_SCAN_OFF.patch](../experiments/removed/MOJOLEARN_IDN_OPT_GATE_SCAN_OFF.patch) |
+| [`MOJOLEARN_IDN_OPT_SGD_ONE_LAUNCH_OFF`](#mojolearn_idn_opt_sgd_one_launch_off) | optimizer SGD launch (training/opt_gate.mojo) | removed (old path beside the default; V2) | 2026-11-15 | [MOJOLEARN_IDN_OPT_SGD_ONE_LAUNCH_OFF.patch](../experiments/removed/MOJOLEARN_IDN_OPT_SGD_ONE_LAUNCH_OFF.patch) |
+| [`MOJOLEARN_IDN_ROPE`](#mojolearn_idn_rope) | RoPE (training/neural_identical_experiments.mojo, transformer/experiments/attention_schedules.mojo) | removed (opt-in arm, no A/B recorded or record read; V2) | 2026-11-15 | [MOJOLEARN_IDN_ROPE.patch](../experiments/removed/MOJOLEARN_IDN_ROPE.patch) |
+| [`MOJOLEARN_IDN_SAMBA_ATTN_RECOMPUTE_OFF`](#mojolearn_idn_samba_attn_recompute_off) | Samba train step attention (training/neural_identical_experiments.mojo) | removed (old path beside the default; V2) | 2026-11-15 | [MOJOLEARN_IDN_SAMBA_ATTN_RECOMPUTE_OFF.patch](../experiments/removed/MOJOLEARN_IDN_SAMBA_ATTN_RECOMPUTE_OFF.patch) |
+| [`MOJOLEARN_IDN_SAMBA_DEV_REFUSE_OFF`](#mojolearn_idn_samba_dev_refuse_off) | Samba op refusal (training/samba_ops.mojo) | removed (old path beside the default; V2) | 2026-11-15 | [MOJOLEARN_IDN_SAMBA_DEV_REFUSE_OFF.patch](../experiments/removed/MOJOLEARN_IDN_SAMBA_DEV_REFUSE_OFF.patch) |
+| [`MOJOLEARN_IDN_TRAIN_NO_DECODE_CACHE`](#mojolearn_idn_train_no_decode_cache) | training prefill cache copy (training/neural_identical_experiments.mojo) | removed (opt-in arm, no A/B recorded or record read; V2) | 2026-11-15 | [MOJOLEARN_IDN_TRAIN_NO_DECODE_CACHE.patch](../experiments/removed/MOJOLEARN_IDN_TRAIN_NO_DECODE_CACHE.patch) |
+| [`MOJOLEARN_IDN_TRAIN_SCRATCH`](#mojolearn_idn_train_scratch) | training scratch (training/neural_identical_experiments.mojo, training/neural_ab_lifetime.mojo) | removed (opt-in arm, no A/B recorded or record read; V2) | 2026-11-15 | [MOJOLEARN_IDN_TRAIN_SCRATCH.patch](../experiments/removed/MOJOLEARN_IDN_TRAIN_SCRATCH.patch) |
+| [`MOJOLEARN_IDN_TRAIN_SWIGLU`](#mojolearn_idn_train_swiglu) | training SwiGLU (training/neural_identical_experiments.mojo) | removed (opt-in arm, no A/B recorded or record read; V2) | 2026-11-15 | [MOJOLEARN_IDN_TRAIN_SWIGLU.patch](../experiments/removed/MOJOLEARN_IDN_TRAIN_SWIGLU.patch) |
+| [`MOJOLEARN_NI01_TRAINING_WORKSPACE`](#mojolearn_ni01_training_workspace) | training GEMM workspace (training/neural_gemm_workspace.mojo) | removed (opt-in arm, no A/B recorded or record read; V2) | 2026-11-15 | [MOJOLEARN_NI01_TRAINING_WORKSPACE.patch](../experiments/removed/MOJOLEARN_NI01_TRAINING_WORKSPACE.patch) |
+| [`MOJOLEARN_NN21_SCALE_MASK`](#mojolearn_nn21_scale_mask) | attention score scale + mask (transformer/experiments/attention_schedules.mojo) | removed (opt-in arm, no A/B recorded or record read; V2) | 2026-11-15 | [MOJOLEARN_NN21_SCALE_MASK.patch](../experiments/removed/MOJOLEARN_NN21_SCALE_MASK.patch) |
+| [`MOJOLEARN_NN29_RING_PAIR`](#mojolearn_nn29_ring_pair) | KV ring caches (transformer/experiments/attention_schedules.mojo) | removed (opt-in arm, no A/B recorded or record read; V2) | 2026-11-15 | [MOJOLEARN_NN29_RING_PAIR.patch](../experiments/removed/MOJOLEARN_NN29_RING_PAIR.patch) |
+| [`MOJOLEARN_NN58_ACCUMULATE_STATUS`](#mojolearn_nn58_accumulate_status) | Samba gradient accumulation (training/neural_ab_pointwise.mojo, training/samba_ops.mojo, training/samba_resident.mojo) | removed (opt-in arm, no A/B recorded or record read; V2) | 2026-11-15 | [MOJOLEARN_NN58_ACCUMULATE_STATUS.patch](../experiments/removed/MOJOLEARN_NN58_ACCUMULATE_STATUS.patch) |
+| [`MOJOLEARN_NN59_CONTROL`](#mojolearn_nn59_control) | residual dropout A/B baseline switch (training/residual_dropout_contract.mojo) | removed (opt-in arm, no A/B recorded or record read; V2) | 2026-11-15 | [MOJOLEARN_NN59_CONTROL.patch](../experiments/removed/MOJOLEARN_NN59_CONTROL.patch) |
+| [`MOJOLEARN_NN59_DROPOUT_RESIDUAL`](#mojolearn_nn59_dropout_residual) | residual dropout (training/residual_dropout_contract.mojo, training/neural_ab_pointwise.mojo) | removed (opt-in arm, no A/B recorded or record read; V2) | 2026-11-15 | [MOJOLEARN_NN59_DROPOUT_RESIDUAL.patch](../experiments/removed/MOJOLEARN_NN59_DROPOUT_RESIDUAL.patch) |
+| [`MOJOLEARN_NN63_CANONICAL_SHARD_MERGE`](#mojolearn_nn63_canonical_shard_merge) | Samba gradient accumulation (training/neural_ab_shards.mojo, training/samba_ops.mojo, training/samba_resident.mojo) | removed (opt-in arm, no A/B recorded or record read; V2) | 2026-11-15 | [MOJOLEARN_NN63_CANONICAL_SHARD_MERGE.patch](../experiments/removed/MOJOLEARN_NN63_CANONICAL_SHARD_MERGE.patch) |
+| [`MOJOLEARN_SAMBA_PROGRAM_FORWARD`](#mojolearn_samba_program_forward) | Samba stateless forward route (training/neural_identical_experiments.mojo) | removed (opt-in arm, no A/B recorded or record read; V2) | 2026-11-15 | [MOJOLEARN_SAMBA_PROGRAM_FORWARD.patch](../experiments/removed/MOJOLEARN_SAMBA_PROGRAM_FORWARD.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -15392,3 +15423,332 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2
 - `MOJOLEARN_SEQ_RNN_SCAN_APPLE`: the docstring naming it (sequence/checks/rnn_scan_check.mojo); `9cf14671a2`, recoverable at `9c26def697`; `experiments/removed/MOJOLEARN_SEQ_RNN_SCAN_APPLE.expdel2-28-neural.patch`.
 
 Not deleted: `MOJOLEARN_COLUMN_CPU` (the CPU-column build switch; plan correction). No read in this lane's files, nothing to fold: `MOJOLEARN_IDN_MOE_GROUPED_GEMM_OFF`, `MOJOLEARN_IDN_ROW_COOP_OFF`, `MOJOLEARN_IDN_SEQ_GEMM_TILED_OFF`, `MOJOLEARN_MOE_FAST_MMA_OFF`, `MOJOLEARN_TSA2_VAR_OFF`. The generated host twins (mamba/host/gen/mamba3_siso.mojo, mamba/host/gen/selective_scan_interface.mojo) still carry the deleted Mamba arms until they are regenerated.
+## Experiment deletions V2: lane expdel2-32-neural (2026-11-15)
+
+Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2-32-neural), under AGENTS.md "An unmeasured arm is deleted" (Andrew, 2026-11-15). Each record named below was read first. No bit changes: every deletion removes a non-default arm or a rollback beside the default; the default branch is kept as it was. Names other files import stay as their folded constants. No measured winner was deleted: the resident Samba forward and step, the promoted act_retain arm 2 and the Samba attention recompute stay the defaults. Not deleted: `MOJOLEARN_COLUMN_CPU` (the CPU-column build switch, KEEP). No read in this lane's files: `MOJOLEARN_IDN_NEURAL_CHAINS`, `MOJOLEARN_IDN_TRAIN_DEV_TENSORS_OFF`.
+
+### MOJOLEARN_AFN_SAMBA_ARENA
+
+- Tried: every float scratch of an op as a view of one device arena chunk.
+- Evidence: EXP:653 MERGED-UNMEASURED. Verdict: deleted (V2 rule, unmeasured opt-in arm).
+- Removed: AfnArena and afn_scratch_f32 in training/samba_afn.mojo (the file is reduced to False constants and two refusing entries). Default unchanged: no bits move.
+- Files: training/samba_afn.mojo, training/samba_ops.mojo.
+- Deleted by: lane/expdel2-32-neural `0840b5da59` (2026-11-15); code recoverable at `f6652fc1ac`.
+- Restore: `git apply experiments/removed/MOJOLEARN_AFN_SAMBA_ARENA.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+- Records: refusal in `core/experiment_guards_neural.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-32-neural section).
+
+### MOJOLEARN_AFN_SAMBA_DEVICE_ADMIT
+
+- Tried: the non-finite refusal as one device flag kernel per operand.
+- Evidence: EXP:654 MERGED-UNMEASURED. Verdict: deleted (V2 rule, unmeasured opt-in arm).
+- Removed: AfnAdmit, afn_nonfinite_flag_kernel and the flag buffer in training/samba_afn.mojo. Default unchanged: no bits move.
+- Files: training/samba_afn.mojo, training/samba_ops.mojo.
+- Deleted by: lane/expdel2-32-neural `0840b5da59` (2026-11-15); code recoverable at `f6652fc1ac`.
+- Restore: `git apply experiments/removed/MOJOLEARN_AFN_SAMBA_DEVICE_ADMIT.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+- Records: refusal in `core/experiment_guards_neural.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-32-neural section).
+
+### MOJOLEARN_AFN_SAMBA_EMB_ATOMIC
+
+- Tried: the embedding backward as one f32 atomic scatter.
+- Evidence: EXP:655 MERGED-UNMEASURED. Verdict: deleted (V2 rule, unmeasured opt-in arm).
+- Removed: afn_emb_scatter_kernel, afn_pair_add_kernel, afn_embedding_backward_into in training/samba_afn.mojo. Default unchanged: no bits move.
+- Files: training/samba_afn.mojo, training/samba_ops.mojo.
+- Deleted by: lane/expdel2-32-neural `0840b5da59` (2026-11-15); code recoverable at `f6652fc1ac`.
+- Restore: `git apply experiments/removed/MOJOLEARN_AFN_SAMBA_EMB_ATOMIC.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+- Records: refusal in `core/experiment_guards_neural.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-32-neural section).
+
+### MOJOLEARN_AFN_SAMBA_FUSE
+
+- Tried: fused norm + head + loss + backward tail and fused tied embedding gradient entries.
+- Evidence: EXP:2363 DELETED (superseded). Verdict: deleted (V2 rule, unmeasured opt-in arm).
+- Removed: the fused bodies of afn_tail_train_host and afn_embedding_backward_tied_host (they now refuse), the standalone op bodies and the five AFN_SAMBA_OPS early returns in training/samba_ops.mojo. Default unchanged: no bits move.
+- Files: training/samba_afn.mojo, training/samba_ops.mojo.
+- Deleted by: lane/expdel2-32-neural `0840b5da59` (2026-11-15); code recoverable at `f6652fc1ac`.
+- Restore: `git apply experiments/removed/MOJOLEARN_AFN_SAMBA_FUSE.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+- Records: refusal in `core/experiment_guards_neural.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-32-neural section).
+
+### MOJOLEARN_AFN_SAMBA_HEAD_GEMM
+
+- Tried: the head GEMMs on the FAST matrix-unit kernel.
+- Evidence: EXP:657 MERGED-UNMEASURED. Verdict: deleted (V2 rule, unmeasured opt-in arm).
+- Removed: afn_head_gemm_into, _afn_head_k_split, the head backward helpers and the gemm/afn_apple_fast imports in training/samba_afn.mojo. Default unchanged: no bits move.
+- Files: training/samba_afn.mojo, training/samba_ops.mojo.
+- Deleted by: lane/expdel2-32-neural `0840b5da59` (2026-11-15); code recoverable at `f6652fc1ac`.
+- Restore: `git apply experiments/removed/MOJOLEARN_AFN_SAMBA_HEAD_GEMM.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+- Records: refusal in `core/experiment_guards_neural.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-32-neural section).
+
+### MOJOLEARN_ATTN_ES_TQ16
+
+- Tried: forcing the 16-row tile.
+- Evidence: no record. Verdict: deleted (V2 rule, unmeasured opt-in arm).
+- Removed: the forced-tile expectations in the routing check; the force read in transformer/impl/llama/fused_attention.mojo belongs to its file owner. Default unchanged: no bits move.
+- Files: transformer/checks/attention_zdot_routing_check.mojo.
+- Deleted by: lane/expdel2-32-neural `63390ad9fd` (2026-11-15); code recoverable at `284d3f2314`.
+- Restore: `git apply experiments/removed/MOJOLEARN_ATTN_ES_TQ16.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+- Records: refusal in `core/experiment_guards_neural.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-32-neural section).
+
+### MOJOLEARN_ATTN_ES_TQ8
+
+- Tried: forcing the 8-row tile.
+- Evidence: no record. Verdict: deleted (V2 rule, unmeasured opt-in arm).
+- Removed: the forced-tile expectations in the routing check; the force read in transformer/impl/llama/fused_attention.mojo belongs to its file owner. Default unchanged: no bits move.
+- Files: transformer/checks/attention_zdot_routing_check.mojo.
+- Deleted by: lane/expdel2-32-neural `63390ad9fd` (2026-11-15); code recoverable at `284d3f2314`.
+- Restore: `git apply experiments/removed/MOJOLEARN_ATTN_ES_TQ8.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+- Records: refusal in `core/experiment_guards_neural.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-32-neural section).
+
+### MOJOLEARN_HOST_RMS_FORCE_SERIAL
+
+- Tried: the serial RMS row schedule on the host column.
+- Evidence: no record. Verdict: deleted (V2 rule, unmeasured opt-in arm).
+- Removed: the alias and its early return in _host_rms_tasks. Default unchanged: no bits move.
+- Files: training/host/samba_ops_oracle.mojo.
+- Deleted by: lane/expdel2-32-neural `5b6269eefe` (2026-11-15); code recoverable at `a7c1f95c40`.
+- Restore: `git apply experiments/removed/MOJOLEARN_HOST_RMS_FORCE_SERIAL.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+- Records: refusal in `core/experiment_guards_neural.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-32-neural section).
+
+### MOJOLEARN_IDN_CE_DENOM_ROWFOLD
+
+- Tried: the CE softmax denominator by a row-fold kernel instead of the ones-GEMV.
+- Evidence: no record. Verdict: deleted (V2 rule, unmeasured opt-in arm).
+- Removed: the define read; IDN_CE_DENOM_ROWFOLD = False stays for training/checks/loss.mojo. Default unchanged: no bits move.
+- Files: training/neural_identical_experiments.mojo.
+- Deleted by: lane/expdel2-32-neural `2ea7c618fc` (2026-11-15); code recoverable at `311b50e05c`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_CE_DENOM_ROWFOLD.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+- Records: refusal in `core/experiment_guards_neural.mojo`; entry `ce_denom_rowfold` in `grid_controls/neural-ce-denom.json` moved to `removed`; `docs/apple-fast/EXPERIMENTS.md` row (expdel2-32-neural section).
+
+### MOJOLEARN_IDN_CE_GRAD_FUSED
+
+- Tried: the fused CE weight-gradient kernel.
+- Evidence: no record. Verdict: deleted (V2 rule, unmeasured opt-in arm).
+- Removed: the define read; IDN_CE_GRAD_FUSED = False stays for its importers. Default unchanged: no bits move.
+- Files: training/neural_identical_experiments.mojo.
+- Deleted by: lane/expdel2-32-neural `2ea7c618fc` (2026-11-15); code recoverable at `311b50e05c`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_CE_GRAD_FUSED.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+- Records: refusal in `core/experiment_guards_neural.mojo`; entry `ce_grad_fused` in `grid_controls/neural-seq-train-dedupe.json` moved to `removed`; `docs/apple-fast/EXPERIMENTS.md` row (expdel2-32-neural section).
+
+### MOJOLEARN_IDN_CE_TOKEN_FOLD
+
+- Tried: arm 1, the NN54 128-row leaf tree.
+- Evidence: EXP:2009 DROPPED (noise). Verdict: deleted (V2 rule, unmeasured opt-in arm).
+- Removed: the define read (IDN_CE_TOKEN_FOLD_ARM = 0, NN54_LOSS_PROFILE = False) and the .nn-loss-v2-leaf128 profile tag in training/neural_arithmetic_profile.mojo. Default unchanged: no bits move.
+- Files: training/neural_ab_lifetime.mojo, training/neural_ab_profile_contract.mojo, training/neural_arithmetic_profile.mojo, training/neural_gemm_workspace.mojo.
+- Deleted by: lane/expdel2-32-neural `25599a616f` (2026-11-15); code recoverable at `19d2549589`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_CE_TOKEN_FOLD.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+- Records: refusal in `core/experiment_guards_neural.mojo`; entry `ce_token_fold` in `grid_controls/neural-seq-train-dedupe.json` moved to `removed`; `docs/apple-fast/EXPERIMENTS.md` row (expdel2-32-neural section).
+
+### MOJOLEARN_IDN_CHUNKED_LM_HEAD_V2
+
+- Tried: the chunked LM head for default-constructed configs and Samba callers.
+- Evidence: record read: never measured. Verdict: deleted (V2 rule, unmeasured opt-in arm).
+- Removed: the define reads (IDN_CHUNKED_LM_HEAD_V2 = False; IDN_SAMBA_RESIDENT_STEP = IDENTICAL), operation 28 answers 0 in training/native_primitive_dispatch.mojo. Default unchanged: no bits move.
+- Files: training/native_primitive_dispatch.mojo, training/native_resident_dispatch.mojo, training/neural_identical_experiments.mojo, training/samba_resident.mojo.
+- Deleted by: lane/expdel2-32-neural `2ea7c618fc`, `19d2549589`, `23a68d92ff` (2026-11-15); code recoverable at `311b50e05c`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_CHUNKED_LM_HEAD_V2.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+- Records: refusal in `core/experiment_guards_neural.mojo`; entry `chunked_lm_head_v2` in `grid_controls/neural-seq-train-dedupe.json` moved to `removed`; `docs/apple-fast/EXPERIMENTS.md` row (expdel2-32-neural section).
+
+### MOJOLEARN_IDN_LM_VIEWS
+
+- Tried: arms 1-3, weight views rebound after optimizer swaps.
+- Evidence: no record. Verdict: deleted (V2 rule, unmeasured opt-in arm).
+- Removed: the define read; IDN_LM_VIEWS_ARM = 0 and IDN_LM_PARAM_VIEWS = False stay for importers. Default unchanged: no bits move.
+- Files: training/neural_identical_experiments.mojo.
+- Deleted by: lane/expdel2-32-neural `2ea7c618fc` (2026-11-15); code recoverable at `311b50e05c`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_LM_VIEWS.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+- Records: refusal in `core/experiment_guards_neural.mojo`; entry `lm_views` in `grid_controls/neural-seq-train-dedupe.json` moved to `removed`; `docs/apple-fast/EXPERIMENTS.md` row (expdel2-32-neural section).
+
+### MOJOLEARN_IDN_NORM_FIXED_LANES
+
+- Tried: one fixed 32-lane row fold for the norm statistics.
+- Evidence: EXP:2246 PENDING. Verdict: deleted (V2 rule, unmeasured opt-in arm).
+- Removed: the define read (IDN_NORM_FIXED_LANES = False, NORM_ROW_LANES = 1), the oracle arms in transformer/checks/transformer_oracle.mojo, transformer_backward_oracle.mojo and training/host/samba_ops_oracle.mojo, the S1 arm of attention_schedules.mojo and the .norm-lanes32-v1 profile tag; the nfl_* helpers stay for importers. Default unchanged: no bits move.
+- Files: training/host/samba_ops_oracle.mojo, transformer/checks/transformer_backward_oracle.mojo, transformer/checks/transformer_oracle.mojo, transformer/experiments/attention_schedules.mojo, transformer/experiments/norm_fixed_lanes.mojo, transformer/experiments/profile.mojo.
+- Deleted by: lane/expdel2-32-neural `fce9f4413c`, `f192693134`, `640121d63a` (2026-11-15); code recoverable at `c48e5cad76`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_NORM_FIXED_LANES.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+- Records: refusal in `core/experiment_guards_neural.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-32-neural section).
+
+### MOJOLEARN_IDN_OPT_CLIP_BATCHED_OFF
+
+- Tried: the unbatched clip beside the IDENTICAL default.
+- Evidence: no record. Verdict: deleted (V2 rule, old path; default kept).
+- Removed: the term; OPT_CLIP_BATCHED = IDENTICAL. Default unchanged: no bits move.
+- Files: training/opt_gate.mojo.
+- Deleted by: lane/expdel2-32-neural `284d3f2314` (2026-11-15); code recoverable at `25599a616f`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_OPT_CLIP_BATCHED_OFF.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+- Records: refusal in `core/experiment_guards_neural.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-32-neural section).
+
+### MOJOLEARN_IDN_OPT_GATE_SCAN_OFF
+
+- Tried: no device gate scan on IDENTICAL.
+- Evidence: no record. Verdict: deleted (V2 rule, old path; default kept).
+- Removed: the term; OPT_GATE_SCAN = IDENTICAL. Default unchanged: no bits move.
+- Files: training/opt_gate.mojo.
+- Deleted by: lane/expdel2-32-neural `284d3f2314` (2026-11-15); code recoverable at `25599a616f`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_OPT_GATE_SCAN_OFF.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+- Records: refusal in `core/experiment_guards_neural.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-32-neural section).
+
+### MOJOLEARN_IDN_OPT_SGD_ONE_LAUNCH_OFF
+
+- Tried: several SGD launches beside the one-launch default.
+- Evidence: no record. Verdict: deleted (V2 rule, old path; default kept).
+- Removed: the term; OPT_SGD_ONE_LAUNCH = IDENTICAL. Default unchanged: no bits move.
+- Files: training/opt_gate.mojo.
+- Deleted by: lane/expdel2-32-neural `284d3f2314` (2026-11-15); code recoverable at `25599a616f`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_OPT_SGD_ONE_LAUNCH_OFF.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+- Records: refusal in `core/experiment_guards_neural.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-32-neural section).
+
+### MOJOLEARN_IDN_ROPE
+
+- Tried: arm 1 (NN27 Q/K pair launch) and arm 2 (NI23 rotated K cache).
+- Evidence: no record. Verdict: deleted (V2 rule, unmeasured opt-in arm).
+- Removed: the define reads; IDN_ROPE_CACHE and NN27_QK_ROPE_PAIR = False stay for importers. Default unchanged: no bits move.
+- Files: training/neural_identical_experiments.mojo, transformer/experiments/attention_schedules.mojo.
+- Deleted by: lane/expdel2-32-neural `2ea7c618fc`, `640121d63a` (2026-11-15); code recoverable at `311b50e05c`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_ROPE.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+- Records: refusal in `core/experiment_guards_neural.mojo`; entry `rope` in `grid_controls/neural-gemm-attn-dedupe.json` moved to `removed`; `docs/apple-fast/EXPERIMENTS.md` row (expdel2-32-neural section).
+
+### MOJOLEARN_IDN_SAMBA_ATTN_RECOMPUTE_OFF
+
+- Tried: the stash profile on the Samba step.
+- Evidence: EXP:1757 PROMOTED (recompute is the Samba default). Verdict: deleted (V2 rule, old path; default kept).
+- Removed: the term; IDN_SAMBA_ATTN_RECOMPUTE = IDENTICAL. Default unchanged: no bits move.
+- Files: training/neural_identical_experiments.mojo.
+- Deleted by: lane/expdel2-32-neural `2ea7c618fc` (2026-11-15); code recoverable at `311b50e05c`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_SAMBA_ATTN_RECOMPUTE_OFF.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+- Records: refusal in `core/experiment_guards_neural.mojo`; entry `samba_attn_recompute` in `grid_controls/samba-resident.json` moved to `removed`; `docs/apple-fast/EXPERIMENTS.md` row (expdel2-32-neural section).
+
+### MOJOLEARN_IDN_SAMBA_DEV_REFUSE_OFF
+
+- Tried: the host walk instead of the device non-finite scan.
+- Evidence: no record. Verdict: deleted (V2 rule, old path; default kept).
+- Removed: the term; IDN_SAMBA_DEV_REFUSE = IDENTICAL. Default unchanged: no bits move.
+- Files: training/samba_ops.mojo.
+- Deleted by: lane/expdel2-32-neural `a7c1f95c40` (2026-11-15); code recoverable at `0840b5da59`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_SAMBA_DEV_REFUSE_OFF.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+- Records: refusal in `core/experiment_guards_neural.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-32-neural section).
+
+### MOJOLEARN_IDN_TRAIN_NO_DECODE_CACHE
+
+- Tried: omitting the persistent decode-cache copy in training prefill.
+- Evidence: no record. Verdict: deleted (V2 rule, unmeasured opt-in arm).
+- Removed: the define read; IDN_TRAIN_NO_DECODE_CACHE = False stays for importers. Default unchanged: no bits move.
+- Files: training/neural_identical_experiments.mojo.
+- Deleted by: lane/expdel2-32-neural `2ea7c618fc` (2026-11-15); code recoverable at `311b50e05c`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_TRAIN_NO_DECODE_CACHE.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+- Records: refusal in `core/experiment_guards_neural.mojo`; entry `train_no_decode_cache` in `grid_controls/neural-gemm-attn-dedupe.json` moved to `removed`; `docs/apple-fast/EXPERIMENTS.md` row (expdel2-32-neural section).
+
+### MOJOLEARN_IDN_TRAIN_SCRATCH
+
+- Tried: arms 1-3: shared dA/dW scratch and the NN62 lifetime arena.
+- Evidence: no record. Verdict: deleted (V2 rule, unmeasured opt-in arm).
+- Removed: the define reads; IDN_TRAIN_SCRATCH_ARM = 0, IDN_TRAIN_BACKWARD_SCRATCH and NN62_LIFETIME_ARENA = False stay for importers. Default unchanged: no bits move.
+- Files: training/neural_ab_lifetime.mojo, training/neural_ab_profile_contract.mojo, training/neural_arithmetic_profile.mojo, training/neural_gemm_workspace.mojo, training/neural_identical_experiments.mojo.
+- Deleted by: lane/expdel2-32-neural `2ea7c618fc`, `25599a616f` (2026-11-15); code recoverable at `311b50e05c`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_TRAIN_SCRATCH.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+- Records: refusal in `core/experiment_guards_neural.mojo`; entry `train_scratch` in `grid_controls/neural-seq-train-dedupe.json` moved to `removed`; `docs/apple-fast/EXPERIMENTS.md` row (expdel2-32-neural section).
+
+### MOJOLEARN_IDN_TRAIN_SWIGLU
+
+- Tried: one training SwiGLU launch keeping silu_out and gated.
+- Evidence: no record. Verdict: deleted (V2 rule, unmeasured opt-in arm).
+- Removed: the define read; IDN_TRAIN_SWIGLU = False stays for importers. Default unchanged: no bits move.
+- Files: training/neural_identical_experiments.mojo.
+- Deleted by: lane/expdel2-32-neural `2ea7c618fc` (2026-11-15); code recoverable at `311b50e05c`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_TRAIN_SWIGLU.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+- Records: refusal in `core/experiment_guards_neural.mojo`; entry `train_swiglu` in `grid_controls/neural-gemm-attn-dedupe.json` moved to `removed`; `docs/apple-fast/EXPERIMENTS.md` row (expdel2-32-neural section).
+
+### MOJOLEARN_NI01_TRAINING_WORKSPACE
+
+- Tried: bounded retained GEMM scratch per context for training tensors.
+- Evidence: no record. Verdict: deleted (V2 rule, unmeasured opt-in arm).
+- Removed: the define read; IDN_TRAINING_GEMM_WORKSPACE = False stays for training/dev_tensors.mojo. Default unchanged: no bits move.
+- Files: training/neural_ab_lifetime.mojo, training/neural_ab_profile_contract.mojo, training/neural_arithmetic_profile.mojo, training/neural_gemm_workspace.mojo.
+- Deleted by: lane/expdel2-32-neural `25599a616f` (2026-11-15); code recoverable at `19d2549589`.
+- Restore: `git apply experiments/removed/MOJOLEARN_NI01_TRAINING_WORKSPACE.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+- Records: refusal in `core/experiment_guards_neural.mojo`; entry `gemm_training_workspace` in `grid_controls/neural-gemm-attn-dedupe.json` moved to `removed`; `docs/apple-fast/EXPERIMENTS.md` row (expdel2-32-neural section).
+
+### MOJOLEARN_NN21_SCALE_MASK
+
+- Tried: one eager scale + mask launch.
+- Evidence: no record. Verdict: deleted (V2 rule, unmeasured opt-in arm).
+- Removed: the define read; NN21_SCALE_MASK = False stays for importers. Default unchanged: no bits move.
+- Files: transformer/experiments/attention_schedules.mojo.
+- Deleted by: lane/expdel2-32-neural `640121d63a` (2026-11-15); code recoverable at `326b0d6e3d`.
+- Restore: `git apply experiments/removed/MOJOLEARN_NN21_SCALE_MASK.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+- Records: refusal in `core/experiment_guards_neural.mojo`; entry `attn_scale_mask` in `grid_controls/neural-gemm-attn-dedupe.json` moved to `removed`; `docs/apple-fast/EXPERIMENTS.md` row (expdel2-32-neural section).
+
+### MOJOLEARN_NN29_RING_PAIR
+
+- Tried: both ring caches written in one traversal.
+- Evidence: no record. Verdict: deleted (V2 rule, unmeasured opt-in arm).
+- Removed: the define read; NN29_RING_PAIR = False stays for importers. Default unchanged: no bits move.
+- Files: transformer/experiments/attention_schedules.mojo.
+- Deleted by: lane/expdel2-32-neural `640121d63a` (2026-11-15); code recoverable at `326b0d6e3d`.
+- Restore: `git apply experiments/removed/MOJOLEARN_NN29_RING_PAIR.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+- Records: refusal in `core/experiment_guards_neural.mojo`; entry `nn29_ring_pair` in `grid_controls/neural-seq-train-dedupe.json` moved to `removed`; `docs/apple-fast/EXPERIMENTS.md` row (expdel2-32-neural section).
+
+### MOJOLEARN_NN58_ACCUMULATE_STATUS
+
+- Tried: an integer first-non-finite status beside the accumulation tree.
+- Evidence: no record. Verdict: deleted (V2 rule, unmeasured opt-in arm).
+- Removed: NN58_ACCUMULATE_STATUS = False; nn_accumulate_status_kernel/_into, samba_tree_status_kernel, the status buffers, scans and readbacks in samba_ops.mojo, samba_resident.mojo and training/host/samba_ops_oracle.mojo. Default unchanged: no bits move.
+- Files: training/host/samba_ops_oracle.mojo, training/neural_ab_pointwise.mojo, training/residual_dropout_contract.mojo, training/samba_ops.mojo, training/samba_resident.mojo.
+- Deleted by: lane/expdel2-32-neural `f75eb67b37`, `e4e5ad1f37`, `5f27699bee` (2026-11-15); code recoverable at `5b6269eefe`.
+- Restore: `git apply experiments/removed/MOJOLEARN_NN58_ACCUMULATE_STATUS.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+- Records: refusal in `core/experiment_guards_neural.mojo`; entry `nn58_accumulate_status` in `grid_controls/neural-seq-train-dedupe.json` moved to `removed`; `docs/apple-fast/EXPERIMENTS.md` row (expdel2-32-neural section).
+
+### MOJOLEARN_NN59_CONTROL
+
+- Tried: the B-arm control that disabled NN59 in a define-on build.
+- Evidence: no record. Verdict: deleted (V2 rule, unmeasured opt-in arm).
+- Removed: its term in NN59_DROPOUT_RESIDUAL (now False). Default unchanged: no bits move.
+- Files: training/neural_ab_pointwise.mojo, training/residual_dropout_contract.mojo.
+- Deleted by: lane/expdel2-32-neural `e4e5ad1f37` (2026-11-15); code recoverable at `f75eb67b37`.
+- Restore: `git apply experiments/removed/MOJOLEARN_NN59_CONTROL.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+- Records: refusal in `core/experiment_guards_neural.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-32-neural section).
+
+### MOJOLEARN_NN59_DROPOUT_RESIDUAL
+
+- Tried: the fused residual-dropout forward and backward kernels.
+- Evidence: no record. Verdict: deleted (V2 rule, unmeasured opt-in arm).
+- Removed: NN59_DROPOUT_RESIDUAL = False; nn_dropout_residual_kernel and _backward_kernel; nn_dropout_residual_into refuses (training/residual_dropout.mojo keeps its baseline). Default unchanged: no bits move.
+- Files: training/neural_ab_pointwise.mojo, training/residual_dropout_contract.mojo.
+- Deleted by: lane/expdel2-32-neural `e4e5ad1f37` (2026-11-15); code recoverable at `f75eb67b37`.
+- Restore: `git apply experiments/removed/MOJOLEARN_NN59_DROPOUT_RESIDUAL.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+- Records: refusal in `core/experiment_guards_neural.mojo`; entry `nn59_dropout_residual` in `grid_controls/neural-seq-train-dedupe.json` moved to `removed`; `docs/apple-fast/EXPERIMENTS.md` row (expdel2-32-neural section).
+
+### MOJOLEARN_NN63_CANONICAL_SHARD_MERGE
+
+- Tried: canonical leaf reassembly and merge after shard transport.
+- Evidence: no record. Verdict: deleted (V2 rule, unmeasured opt-in arm).
+- Removed: training/neural_ab_shards.mojo reduced to NN63_CANONICAL_SHARD_MERGE = False; the merge branches and samba_leaf_ids_kernel in samba_ops.mojo and samba_resident.mojo. Default unchanged: no bits move.
+- Files: training/neural_ab_shards.mojo, training/samba_ops.mojo, training/samba_resident.mojo.
+- Deleted by: lane/expdel2-32-neural `311b50e05c` (2026-11-15); code recoverable at `5f27699bee`.
+- Restore: `git apply experiments/removed/MOJOLEARN_NN63_CANONICAL_SHARD_MERGE.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+- Records: refusal in `core/experiment_guards_neural.mojo`; entry `nn63_shard_merge` in `grid_controls/neural-seq-train-dedupe.json` moved to `removed`; `docs/apple-fast/EXPERIMENTS.md` row (expdel2-32-neural section).
+
+### MOJOLEARN_SAMBA_PROGRAM_FORWARD
+
+- Tried: SambaStackProgram for the stateless forward.
+- Evidence: EXP:2399 PENDING (B arm of the owed samba-forward A/B; the measured resident forward is the default). Verdict: deleted (V2 rule, unmeasured opt-in arm).
+- Removed: the define read; IDN_SAMBA_PROGRAM_FORWARD = False stays for bindings/samba_inference_native_door.mojo. Default unchanged: no bits move.
+- Files: training/native_primitive_dispatch.mojo, training/native_resident_dispatch.mojo, training/neural_identical_experiments.mojo.
+- Deleted by: lane/expdel2-32-neural `2ea7c618fc`, `19d2549589` (2026-11-15); code recoverable at `311b50e05c`.
+- Restore: `git apply experiments/removed/MOJOLEARN_SAMBA_PROGRAM_FORWARD.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+- Records: refusal in `core/experiment_guards_neural.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-32-neural section).
+
+### Non-owner sites of lane expdel2-32-neural
+
+Inline TOMBSTONE markers only; the owner lane of each define writes its section, refusal and records.
+
+- `MOJOLEARN_AFN_SAMBA_ALL`: the umbrella term of the AFN_SAMBA_* aliases in training/samba_afn.mojo (AFN_SAMBA_ALL = False); `0840b5da59`, recoverable at `f6652fc1ac`; `experiments/removed/MOJOLEARN_AFN_SAMBA_ALL.expdel2-32-neural.patch`.
+- `MOJOLEARN_AFN_EPI_ALL`: its term in AFN_SAMBA_HEAD_GEMM (training/samba_afn.mojo); `0840b5da59`, recoverable at `f6652fc1ac`; `experiments/removed/MOJOLEARN_AFN_EPI_ALL.expdel2-32-neural.patch`.
+- `MOJOLEARN_IDN_ALL_OFF`: the umbrella term in training/samba_ops.mojo, samba_ops_oracle.mojo, neural_ab_pointwise.mojo, neural_ab_shards.mojo, residual_dropout_contract.mojo, neural_identical_experiments.mojo, neural_ab_profile_contract.mojo, neural_ab_lifetime.mojo, neural_gemm_workspace.mojo, neural_arithmetic_profile.mojo, opt_gate.mojo and transformer/experiments (norm_fixed_lanes, norm_profile_contract, attention_schedules, checkpoint_contract); `a7c1f95c40`, `f75eb67b37`, `e4e5ad1f37`, `311b50e05c`, `2ea7c618fc`, `25599a616f`, `284d3f2314`, `fce9f4413c`, `326b0d6e3d`, `640121d63a`, `48f0295387`, recoverable at `0840b5da59`; `experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-32-neural.patch`.
+- `MOJOLEARN_IDN_NORM`: arms 1-4 folded to 0 in transformer/experiments/norm_profile_contract.mojo (NN24_NORM_LANES8 = False, NN24_LANES = 1), attention_schedules.mojo (NN25 = False) and neural_identical_experiments.mojo (IDN_RMS_ROW_BLOCK = False); the NN24 oracle arms and profile tags go; `2ea7c618fc`, `25599a616f`, `326b0d6e3d`, `640121d63a`, recoverable at `311b50e05c`; `experiments/removed/MOJOLEARN_IDN_NORM.expdel2-32-neural.patch`.
+- `MOJOLEARN_IDN_ATTN_STASH`: the forced-arm expectations in transformer/checks/attention_v1_memory_profile_check.mojo; `c48e5cad76`, recoverable at `63390ad9fd`; `experiments/removed/MOJOLEARN_IDN_ATTN_STASH.expdel2-32-neural.patch`.
+- `MOJOLEARN_IDN_ACT_RETAIN`: folded to the promoted arm 2 in transformer/experiments/checkpoint_contract.mojo (NN32_RETAIN_FORWARD = False); `48f0295387`, recoverable at `640121d63a`; `experiments/removed/MOJOLEARN_IDN_ACT_RETAIN.expdel2-32-neural.patch`.
+- `MOJOLEARN_IDN_ACT_RETAIN_OFF`: its term in IDN_ACT_RETAIN_ARM (transformer/experiments/checkpoint_contract.mojo); `48f0295387`, recoverable at `640121d63a`; `experiments/removed/MOJOLEARN_IDN_ACT_RETAIN_OFF.expdel2-32-neural.patch`.
+- `MOJOLEARN_IDN_M2_GRAD_FOLD`: the profile tags in training/neural_arithmetic_profile.mojo; `25599a616f`, recoverable at `19d2549589`; `experiments/removed/MOJOLEARN_IDN_M2_GRAD_FOLD.expdel2-32-neural.patch`.
+- `MOJOLEARN_IDN_SEQ_WGRAD`: the profile tags in training/neural_arithmetic_profile.mojo; `25599a616f`, recoverable at `19d2549589`; `experiments/removed/MOJOLEARN_IDN_SEQ_WGRAD.expdel2-32-neural.patch`.
+- `MOJOLEARN_IDN_SEQ_WGRAD_BLOCKED_OFF`: the guard around the IDN_SEQ_WGRAD profile tags in training/neural_arithmetic_profile.mojo; `25599a616f`, recoverable at `19d2549589`; `experiments/removed/MOJOLEARN_IDN_SEQ_WGRAD_BLOCKED_OFF.expdel2-32-neural.patch`.
+- `MOJOLEARN_OPT_TRUST_INPUTS`: its term in OPT_GATE_SCAN (training/opt_gate.mojo); `284d3f2314`, recoverable at `25599a616f`; `experiments/removed/MOJOLEARN_OPT_TRUST_INPUTS.expdel2-32-neural.patch`.

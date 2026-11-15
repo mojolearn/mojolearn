@@ -102,8 +102,6 @@ from training.estimator import (
     identical_ce_loss_resident,
     identical_optimizer_step_resident_io,
 )
-from training.neural_ab_pointwise import NN58_ACCUMULATE_STATUS
-from training.neural_ab_shards import NN63_CANONICAL_SHARD_MERGE, nn_shard_merge_into
 from training.neural_identical_experiments import IDN_SAMBA_RESIDENT_STEP, IDN_SAMBA_ATTN_RECOMPUTE
 from training.samba_ops import (
     SAMBA_TPB,
@@ -111,9 +109,7 @@ from training.samba_ops import (
     _samba_accumulate_core,
     samba_accumulate_host,
     samba_validate_accumulation,
-    samba_leaf_ids_kernel,
     samba_tree_level_kernel,
-    samba_tree_status_kernel,
 )
 from transformer.block_options import BlockOptions
 from autograd.kernels.transformer import LlamaBackwardStages
@@ -326,44 +322,17 @@ def _pair_add_device(
     TWO pieces, which is what `SambaStack.loss_and_grads` asks of
     `accumulate_grads([d_emb, dw_head], tokens=None)` for the tied embedding
     gradient. Launch for launch `training/samba_ops.mojo::samba_accumulate_buffer`
-    at `a == 2` (one level, `pairs == 1`), including its NN63 and NN58 arms,
+    at `a == 2` (one level, `pairs == 1`),
     with the result left on the device instead of copied to a host pointer."""
-    comptime if NN63_CANONICAL_SHARD_MERGE:
-        var ids = ctx.enqueue_create_buffer[DType.int32](2)
-        ctx.enqueue_function[samba_leaf_ids_kernel](
-            ids.unsafe_ptr(), Int32(2),
-            grid_dim=(_grid(2), 1, 1), block_dim=(SAMBA_TPB, 1, 1),
-        )
-        var first = ctx.enqueue_create_buffer[DType.float32](2 * n)
-        var second = ctx.enqueue_create_buffer[DType.float32](n)
-        nn_shard_merge_into(ctx, dst, src, ids, first, second, 2, n)
-        comptime if NN58_ACCUMULATE_STATUS:
-            var hit = device_first_nonfinite(ctx, dst, n)
-            if hit >= 0:
-                raise Error("mojolearn samba ops: nonfinite accumulated gradient at " + String(hit))
-        _ = ids^
-        _ = first^
-        _ = second^
-        return
-    comptime if NN58_ACCUMULATE_STATUS:
-        var status = ctx.enqueue_create_buffer[DType.int32](1)
-        status.enqueue_fill(Int32(n))
-        ctx.enqueue_function[samba_tree_status_kernel](
-            dst.unsafe_ptr(), src.unsafe_ptr(), status.unsafe_ptr(), Int32(n), Int32(1),
-            grid_dim=(_grid(n), 1, 1), block_dim=(SAMBA_TPB, 1, 1),
-        )
-        var host_status = ctx.enqueue_create_host_buffer[DType.int32](1)
-        ctx.enqueue_copy(dst_ptr=host_status.unsafe_ptr(), src_buf=status)
-        ctx.synchronize()
-        if host_status[0] < Int32(n):
-            raise Error("mojolearn samba ops: nonfinite accumulated gradient at " + String(host_status[0]))
-        _ = status^
-        _ = host_status^
-    else:
-        ctx.enqueue_function[samba_tree_level_kernel](
-            dst.unsafe_ptr(), src.unsafe_ptr(), Int32(n), Int32(1),
-            grid_dim=(_grid(n), 1, 1), block_dim=(SAMBA_TPB, 1, 1),
-        )
+    # TOMBSTONE: MOJOLEARN_NN63_CANONICAL_SHARD_MERGE (opt-in canonical shard merge, no A/B recorded) and its MOJOLEARN_IDN_ALL_OFF term deleted 2026-11-15 by lane/expdel2-32-neural; code recoverable at 5f27699bee.
+    # Restore: git apply experiments/removed/MOJOLEARN_NN63_CANONICAL_SHARD_MERGE.patch
+
+    # TOMBSTONE: MOJOLEARN_NN58_ACCUMULATE_STATUS (opt-in tree status kernel, no A/B recorded) deleted 2026-11-15 by lane/expdel2-32-neural; code recoverable at e4e5ad1f37.
+    # Restore: git apply experiments/removed/MOJOLEARN_NN58_ACCUMULATE_STATUS.patch
+    ctx.enqueue_function[samba_tree_level_kernel](
+        dst.unsafe_ptr(), src.unsafe_ptr(), Int32(n), Int32(1),
+        grid_dim=(_grid(n), 1, 1), block_dim=(SAMBA_TPB, 1, 1),
+    )
 
 
 struct SambaResidentSession(Movable, Writable):
@@ -1025,7 +994,7 @@ def samba_resident_forward(
     forward span includes that download, as for lm-forward). Returns the
     session's registry upload count (`s.param_uploads`), its report."""
     comptime if not IDN_SAMBA_RESIDENT_STEP:
-        raise Error("mojolearn samba resident: built with MOJOLEARN_IDN_SAMBA_RESIDENT_STEP_OFF or MOJOLEARN_IDN_CHUNKED_LM_HEAD_V2")
+        raise Error("mojolearn samba resident: the resident step is IDENTICAL only")
     _ensure_shape(s, b, l)
     var m = b * l
     # lane fix-samba-weight-upload (2026-11-13): 0.8.55's forward (restored
@@ -1116,7 +1085,7 @@ def samba_resident_train_step(
     `param_ptr`, the loss to `loss_ptr`, the flags to `init_ptr` and the
     clip info to `info_ptr`. Returns `count`."""
     comptime if not IDN_SAMBA_RESIDENT_STEP:
-        raise Error("mojolearn samba resident: built with MOJOLEARN_IDN_SAMBA_RESIDENT_STEP_OFF or MOJOLEARN_IDN_CHUNKED_LM_HEAD_V2")
+        raise Error("mojolearn samba resident: the resident step is IDENTICAL only")
     if b < 1 or l < 1:
         raise Error("mojolearn samba resident: B and L must be positive")
     var m = b * l
@@ -1246,7 +1215,7 @@ def samba_resident_accumulated_step(
     The same kernels in the same order as the per-microbatch walk, so the
     same bits. Returns `total_count`."""
     comptime if not IDN_SAMBA_RESIDENT_STEP:
-        raise Error("mojolearn samba resident: built with MOJOLEARN_IDN_SAMBA_RESIDENT_STEP_OFF or MOJOLEARN_IDN_CHUNKED_LM_HEAD_V2")
+        raise Error("mojolearn samba resident: the resident step is IDENTICAL only")
     if b < 1 or l < 1 or a < 2 or b % a != 0:
         raise Error("Samba: batch rows must be divisible by power-of-two accumulation_steps")
     if n_tensors + 1 != len(s.offsets):

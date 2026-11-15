@@ -1,6 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
 """NN31/NN32 native tape selection; scheduling never changes the arithmetic."""
-from std.sys.compile import is_defined, get_defined_int
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 
 # L11 (2026-10-07): activation retention is ONE switch with arms,
@@ -17,13 +16,11 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 # so it holds for any shape that fits (no shape or dataset key). Measured alone;
 # it now combines with the promoted resident Samba step and m3 angle carry
 # cache, and the post-merge race measures the combination.
-comptime IDN_ACT_RETAIN_ARM = 0 if is_defined["MOJOLEARN_IDN_ACT_RETAIN_OFF"]() else get_defined_int["MOJOLEARN_IDN_ACT_RETAIN", 2]()
-comptime NN32_RETAIN_FORWARD = (GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and IDN_ACT_RETAIN_ARM == 1
-    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]())
-comptime NN31_BOUNDED_CHECKPOINTS = (GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and IDN_ACT_RETAIN_ARM == 2
-    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]())
+# TOMBSTONE: MOJOLEARN_IDN_ACT_RETAIN arms 1 and 3 (opt-in, record read: EXP:2365 superseded), MOJOLEARN_IDN_ACT_RETAIN_OFF (replay rollback beside the promoted arm 2) and the MOJOLEARN_IDN_ALL_OFF terms (owner another lane) deleted here 2026-11-15 by lane/expdel2-32-neural; code recoverable at 640121d63a.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ACT_RETAIN.expdel2-32-neural.patch
+comptime IDN_ACT_RETAIN_ARM = 2
+comptime NN32_RETAIN_FORWARD = False
+comptime NN31_BOUNDED_CHECKPOINTS = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 
 
 def attention_checkpoint_retain(bytes: Int, budget: Int, replay_ops: Int,
@@ -38,6 +35,4 @@ def attention_checkpoint_retain(bytes: Int, budget: Int, replay_ops: Int,
         return False
     comptime if NN31_BOUNDED_CHECKPOINTS:
         return minimum_ops_per_byte <= 0 or replay_ops // bytes >= minimum_ops_per_byte
-    comptime if NN32_RETAIN_FORWARD:
-        return True
     return False

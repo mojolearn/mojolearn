@@ -102,10 +102,10 @@ torch, on the `mamba/corpus/` pattern, so that the tolerance instrument is
 not our own code twice.
 """
 
-from transformer.experiments.norm_profile_contract import (
-    NN24_NORM_LANES8, NN24_LANES, _sum, _square, norm_profile_dot,
-)
-from transformer.experiments.norm_fixed_lanes import IDN_NORM_FIXED_LANES, nfl_dot, nfl_square, nfl_sum
+# TOMBSTONE: MOJOLEARN_IDN_NORM (arms 1 and 4, the NN24 eight-lane fold; owner another lane) oracle arms deleted here 2026-11-15 by lane/expdel2-32-neural; code recoverable at f192693134.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_NORM.expdel2-32-neural.patch
+# TOMBSTONE: MOJOLEARN_IDN_NORM_FIXED_LANES (opt-in fixed 32-lane norm fold, EXP:2246 pending, never measured) oracle arms deleted 2026-11-15 by lane/expdel2-32-neural; code recoverable at fce9f4413c.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_NORM_FIXED_LANES.patch
 from core.host_lanes import all_finite
 from std.math import max, min
 # idea 10 (lane/attn-fold, 2026-10-28): the v2 key-axis fold, default OFF.
@@ -1201,13 +1201,6 @@ def rms_norm_into(
             for j in range(dm):
                 var xj = ftz(src[t * dm + j])
                 acc = ftz(identical_mul_add(xj, xj, acc))
-            comptime if NN24_NORM_LANES8:
-                var xp = rebind[MutPointer[Float32, MutAnyOrigin]](src.unsafe_ptr())
-                acc = norm_profile_dot[NN24_LANES](xp, xp, t * dm, t * dm, dm)
-            # MOJOLEARN_IDN_NORM_FIXED_LANES: the fixed 32-lane fold (norm_fixed_lanes.mojo)
-            comptime if IDN_NORM_FIXED_LANES:
-                var xq = rebind[MutPointer[Float32, MutAnyOrigin]](src.unsafe_ptr())
-                acc = nfl_dot(xq, xq, t * dm, t * dm, dm)
             sp.unsafe_store(t, acc)
             var mean = ftz(identical_div(acc, Float32(dm)))
             var rstd = ftz(identical_rsqrt(ftz(mean + RMS_EPS)))
@@ -1286,19 +1279,11 @@ def norm_into(
                 var acc = Float32(0.0)
                 for j in range(dm):
                     acc = ftz(ftz(acc) + ftz(src[t * dm + j]))
-                comptime if NN24_NORM_LANES8:
-                    acc = _sum[NN24_LANES](rebind[MutPointer[Float32, MutAnyOrigin]](src.unsafe_ptr()), t * dm, dm)
-                comptime if IDN_NORM_FIXED_LANES:
-                    acc = nfl_sum(rebind[MutPointer[Float32, MutAnyOrigin]](src.unsafe_ptr()), t * dm, dm)
                 var mean = ftz(identical_div(acc, Float32(dm)))
                 var acc2 = Float32(0.0)
                 for j in range(dm):
                     var dev = ftz(ftz(src[t * dm + j]) - mean)
                     acc2 = ftz(identical_mul_add(dev, dev, acc2))
-                comptime if NN24_NORM_LANES8:
-                    acc2 = _square[NN24_LANES](rebind[MutPointer[Float32, MutAnyOrigin]](src.unsafe_ptr()), t * dm, dm, mean)
-                comptime if IDN_NORM_FIXED_LANES:
-                    acc2 = nfl_square(rebind[MutPointer[Float32, MutAnyOrigin]](src.unsafe_ptr()), t * dm, dm, mean)
                 sp.unsafe_store(t, acc2)
                 var variance = ftz(identical_div(acc2, Float32(dm)))
                 var rstd = ftz(identical_rsqrt(ftz(variance + eps)))
@@ -1326,13 +1311,6 @@ def norm_into(
             for j in range(dm):
                 var xj = ftz(src[t * dm + j])
                 acc = ftz(identical_mul_add(xj, xj, acc))
-            comptime if NN24_NORM_LANES8:
-                var xp = rebind[MutPointer[Float32, MutAnyOrigin]](src.unsafe_ptr())
-                acc = norm_profile_dot[NN24_LANES](xp, xp, t * dm, t * dm, dm)
-            # MOJOLEARN_IDN_NORM_FIXED_LANES: the fixed 32-lane fold (norm_fixed_lanes.mojo)
-            comptime if IDN_NORM_FIXED_LANES:
-                var xq = rebind[MutPointer[Float32, MutAnyOrigin]](src.unsafe_ptr())
-                acc = nfl_dot(xq, xq, t * dm, t * dm, dm)
             sp.unsafe_store(t, acc)
             var mean = ftz(identical_div(acc, Float32(dm)))
             var rstd = ftz(identical_rsqrt(ftz(mean + eps)))
