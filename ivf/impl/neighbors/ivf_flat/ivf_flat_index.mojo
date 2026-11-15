@@ -99,13 +99,11 @@ comptime IVF_DEFAULT_N_PROBES = 20
 #: can pick different rows on two hosts. `kmeans_trainset_fraction` stays 1.0 at
 #: the entries (its refusal is unchanged); the rule below is the build's own.
 #: Every row is still assigned to the trained centroids and laid into the lists.
-#: -D MOJOLEARN_IVF_TRAINSET_STRIDE_OFF trains on every row again.
 # TOMBSTONE: MOJOLEARN_IVF_FAST_STRIDED_COARSE (DROPPED-noise: M4 IVFSQIndex 500k x 128 3276 -> 3260 ms, recall@8 0.8194 -> 0.8183) deleted 2026-10-15 by 1a76955b5; code recoverable at 1a76955b5^.
 # Restore: git apply experiments/removed/MOJOLEARN_IVF_FAST_STRIDED_COARSE.patch
-comptime IVF_TRAINSET_STRIDE = (
-    not (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU)
-    and not is_defined["MOJOLEARN_IVF_TRAINSET_STRIDE_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_IVF_TRAINSET_STRIDE_OFF (old every-row trainset; new default by plan gaps-2026-10-08, no two-vendor A/B in the record: NVIDIA and AMD A/B owed) deleted 2026-11-15 by lane/expdel2-12-cluster; code recoverable at 4615a42f93.
+# Restore: git apply experiments/removed/MOJOLEARN_IVF_TRAINSET_STRIDE_OFF.patch; record in docs/TOMBSTONES.md.
+comptime IVF_TRAINSET_STRIDE = not (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU)
 #: lane fg-ivf (read_ivf.md idea B2), DEFAULT ON outside FAST
 #: (`-D MOJOLEARN_IVF_IDN_RECLUSTER_CAP_OFF` restores KMeansParams.default()'s
 #: 300): the coarse quantizer's k-means|| recluster (the fit of the

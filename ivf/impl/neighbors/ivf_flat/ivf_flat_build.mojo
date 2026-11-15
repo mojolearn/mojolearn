@@ -12,7 +12,7 @@ THE REFERENCE'S THREE STEPS AND THIS IMPLEMENTATION'S
 
 | reference | line | here |
 |---|---|---|
-| train the quantizer on a strided subsample | `:414-437` | the strided subsample in exact integers (`IVF_TRAINSET_STRIDE`, `ivf_trainset_stride`, lane gap-ivf 2026-10-08; the whole dataset under `-D MOJOLEARN_IVF_TRAINSET_STRIDE_OFF`, DEVIATION 1781) through the implemented k-means |
+| train the quantizer on a strided subsample | `:414-437` | the strided subsample in exact integers (`IVF_TRAINSET_STRIDE`, `ivf_trainset_stride`, lane gap-ivf 2026-10-08, DEVIATION 1781) through the implemented k-means |
 | `kmeans::predict` the labels, in batches | `:222-224` | `cluster/impl/kmeans.mojo::predict`, one call |
 | `build_index_kernel` scatters into the lists | `:317-325` | `ivf/checks/list_layout.mojo::build_list_layout` (DEVIATIONS 1782/1783) |
 
