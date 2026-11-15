@@ -291,10 +291,11 @@ comptime GBDT_ORD_TREE_BUFS = not is_defined["MOJOLEARN_GBDT_ORD_TREE_BUFS_OFF"]
 #: oracle factory reads the host leaf sizes). `-D
 #: MOJOLEARN_IDN_ORD_ONE_STEP_DEVICE_OFF` (or the master `-D
 #: MOJOLEARN_IDN_ALL_OFF`) restores the host walker.
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (DELETE-OLD-PATH, EXP:2438 master old-path switch already deleted, rule e; non-owner fold) deleted 2026-11-15 by lane/expdel2-44-trees; code recoverable at 931e7ca76a.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-44-trees.patch; record in docs/TOMBSTONES.md.
 comptime IDN_ORD_ONE_STEP_DEVICE = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     and not is_defined["MOJOLEARN_IDN_ORD_ONE_STEP_DEVICE_OFF"]()
-    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 )
 
 #: Lane ml-gbdt T5 (roadmap T5; IDENTICAL, every vendor; default ON): the
@@ -317,7 +318,6 @@ comptime IDN_ORD_ONE_STEP_DEVICE = (
 comptime IDN_ORD_STD_SCALE_DEVICE = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     and not is_defined["MOJOLEARN_IDN_ORD_STD_SCALE_DEVICE_OFF"]()
-    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 )
 
 

@@ -268,11 +268,12 @@ def add_non_symmetric_tree_to_cursor(
 #: on any column and the host column is untouched.
 #: `-D MOJOLEARN_IDN_GBDT_NS_PREDICT_PACKED_OFF` (or the master
 #: `-D MOJOLEARN_IDN_ALL_OFF`) restores the per-tree loop.
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (DELETE-OLD-PATH, EXP:2438 master old-path switch already deleted, rule e; non-owner fold) deleted 2026-11-15 by lane/expdel2-44-trees; code recoverable at 931e7ca76a.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-44-trees.patch; record in docs/TOMBSTONES.md.
 comptime IDN_NS_PREDICT_PACKED = C50_GB_PACKED or (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     and not (
         is_defined["MOJOLEARN_IDN_GBDT_NS_PREDICT_PACKED_OFF"]()
-        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
     )
 )
 
@@ -559,8 +560,8 @@ def add_non_symmetric_trees_packed(
 #: adds in the same order, so no bit moves on any column and the host
 #: column is untouched. The refusals are `add_non_symmetric_trees_packed`'s,
 #: sentence for sentence, made at the same first predict.
-#: `-D MOJOLEARN_IDN_GBDT_PREBINNED_INFER_OLD` (or the master
-#: `-D MOJOLEARN_IDN_ALL_OFF`) restores the per-call pack: the B arm of the
+#: `-D MOJOLEARN_IDN_GBDT_PREBINNED_INFER_OLD` restores the per-call pack:
+#: the B arm of the
 #: owed A/B (bench/results/paper_compare/owed-pre0867.json row
 #: `fix-gbdt-prebinned-infer`; RUN OWED). The bit vector and C50 arms keep the
 #: per-call pack (they replace the apply this caches).
@@ -571,7 +572,6 @@ comptime IDN_NS_RESIDENT_PACK = (
     and not GBDT_NS_BITVEC
     and not (
         is_defined["MOJOLEARN_IDN_GBDT_PREBINNED_INFER_OLD"]()
-        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
     )
 )
 

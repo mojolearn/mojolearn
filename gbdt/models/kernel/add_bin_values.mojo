@@ -44,11 +44,12 @@ from core.apple_fast_tree_experiments import AFT_P05
 #: float32 adds per row, so no bit moves and the host column is untouched.
 #: `-D MOJOLEARN_IDN_GBDT_PREDICT_FOUR_OFF` (or `-D MOJOLEARN_IDN_ALL_OFF`)
 #: restores one launch per tree.
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (DELETE-OLD-PATH, EXP:2438 master old-path switch already deleted, rule e; non-owner fold) deleted 2026-11-15 by lane/expdel2-44-trees; code recoverable at 931e7ca76a.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-44-trees.patch; record in docs/TOMBSTONES.md.
 comptime IDN_PREDICT_FOUR = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     and not (
         is_defined["MOJOLEARN_IDN_GBDT_PREDICT_FOUR_OFF"]()
-        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
     )
 )
 
@@ -63,7 +64,6 @@ comptime IDN_PREDICT_FOUR = (
 comptime IDN_APPLY_WIDE = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     and is_defined["MOJOLEARN_IDN_GBDT_APPLY_WIDE"]()
-    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 )
 
 #: trees per launch of the wide arm: bounded so one launch stays short (macOS
