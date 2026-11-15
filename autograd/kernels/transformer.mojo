@@ -250,9 +250,9 @@ def _fill_ones[wait: Bool = True](
 # TOMBSTONE: MOJOLEARN_IDN_BWD_ENTRY_ALIAS_OFF (old path, no A/B recorded) deleted 2026-11-15 by
 # lane/expdel2-24-neural; code recoverable at 3d189418c5.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_BWD_ENTRY_ALIAS_OFF.patch
-comptime IDN_BWD_ENTRY_ALIAS = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
-    is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch) term removed here 2026-11-15 by lane/expdel2-24-neural;
+# code recoverable at 0bbf0a6c7e. Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-24-neural.patch
+comptime IDN_BWD_ENTRY_ALIAS = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 """lane/nr-attn (2026-10-04), roadmap C9, default ON under IDENTICAL: the
 layer backward's entry copy of `d_out` into `in_d_residual2` (stage 0, an
 identity) runs only on a traced or materialized call; the production path
@@ -3115,7 +3115,8 @@ def _bwd_rms_norm_kernels[which: Int](
         var use_fused = False
         comptime if BWD_NORM_FUSED_TRIAL:
             use_fused = True  # explicit experiment really forces the row owner
-        elif not is_defined["MOJOLEARN_IDN_ALL_OFF"]():
+        else:
+            # MOJOLEARN_IDN_ALL_OFF's term removed 2026-11-15 (lane/expdel2-24-neural, see the TOMBSTONE above).
             var units = attn_device_units(ctx)
             use_fused = units > 0 and dot_blocks >= 2 * units
         if use_fused:

@@ -41,7 +41,6 @@
 # autograd/ops.mojo _ld_right). Every function a kernel reaches is
 # @always_inline.
 from std.math import nan
-from std.sys.compile import is_defined
 from sequence.ops import Args, FP, ld, st, add, sub, mul
 from sequence.fold32 import FOLD_L, tree32
 from checks.numerics import (
@@ -51,10 +50,9 @@ from checks.numerics import (
 # TOMBSTONE: MOJOLEARN_IDN_ROW_COOP_OFF (old path, no A/B recorded) deleted 2026-11-15 by
 # lane/expdel2-24-neural; code recoverable at 5d81d356e0. ROW_COOP stays the IDENTICAL-mode alias.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_ROW_COOP_OFF.patch
-comptime ROW_COOP = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch) term removed here 2026-11-15 by lane/expdel2-24-neural;
+# code recoverable at 0bbf0a6c7e. Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-24-neural.patch
+comptime ROW_COOP = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 # TOMBSTONE: MOJOLEARN_IDN_AUC_BLOCK_SORT_OFF (old path, no A/B recorded) deleted 2026-11-15 by
 # lane/expdel2-24-neural; code recoverable at fe0b691d9b. The block sort is the only route (autograd/metrics.mojo).
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_AUC_BLOCK_SORT_OFF.patch
