@@ -547,30 +547,6 @@
    ],
    "note": "bits_change not re-assessed by L11 (unchanged switch)"
   },
-  "nn35_conv_pair": {
-   "define": "MOJOLEARN_NN35_CONV_PAIR",
-   "kind": "switch",
-   "arms": {
-    "off": [],
-    "on": [
-     "MOJOLEARN_NN35_CONV_PAIR=1"
-    ]
-   },
-   "default": "off",
-   "source": [
-    "mamba/impl/modules/mamba2.mojo:570"
-   ],
-   "binding": "_mojolearn_mamba",
-   "bits_change": false,
-   "status": "kept",
-   "entries": [
-    "NN35",
-    "NI37"
-   ],
-   "board": "mamba1/2-forward, samba-*",
-   "tags": [],
-   "note": "bits_change not re-assessed by L11 (unchanged switch)"
-  },
   "nn37_triangle_tasks": {
    "define": "MOJOLEARN_NN37_TRIANGLE_TASKS",
    "kind": "switch",
@@ -645,30 +621,6 @@
     "memory"
    ],
    "note": "bits_change not re-assessed by L11 (unchanged switch)"
-  },
-  "m3_yintra_tile": {
-   "define": "MOJOLEARN_IDN_M3_YINTRA_RESOURCE_TILE",
-   "kind": "switch",
-   "arms": {
-    "off": [],
-    "on": [
-     "MOJOLEARN_IDN_M3_YINTRA_RESOURCE_TILE=1"
-    ]
-   },
-   "default": "off",
-   "source": [
-    "mamba/impl/ops/mamba3_siso.mojo:2331"
-   ],
-   "binding": "_mojolearn_mamba",
-   "bits_change": false,
-   "status": "kept",
-   "entries": [
-    "NI42"
-   ],
-   "board": "mamba3-forward, samba-*",
-   "tags": [],
-   "note": "bits_change not re-assessed by L11 (unchanged switch)",
-   "reach_note": "Declared for samba-forward and samba-train-step by lane/grid-prune 2026-10-07: samba layers are mamba3/attention (python/mojolearn/_samba_impl.py:55) and run mamba3_siso.mojo, where m3_angle_parallel is already declared for samba."
   },
   "m3_decode_window": {
    "define": "MOJOLEARN_IDN_M3_DECODE_WINDOW_REUSE",
@@ -1270,42 +1222,6 @@
    ],
    "note": "bits_change not re-assessed by L11 (unchanged switch)"
   },
-  "m1_scan": {
-   "define": "MOJOLEARN_IDN_M1_SCAN",
-   "kind": "arms",
-   "arms": {
-    "off": [
-     "MOJOLEARN_IDN_M1_SCAN=0"
-    ],
-    "persistent": [],
-    "state_window": [
-     "MOJOLEARN_IDN_M1_SCAN=2"
-    ]
-   },
-   "default": "persistent",
-   "source": [
-    "mamba/impl/ops/selective_scan_interface.mojo:252",
-    "mamba/impl/ops/m1_persistent_scan.mojo:58"
-   ],
-   "binding": "_mojolearn_mamba",
-   "bits_change": false,
-   "status": "promoted:g50ebe26a5 (lane/grid-act-16, 2026-10-11)",
-   "merged_from": [
-    "m1_persistent_scan",
-    "nn34_affine_prefix",
-    "m1_state_window",
-    "MOJOLEARN_NN34_AFFINE_PREFIX",
-    "MOJOLEARN_IDN_M1_STATE_WINDOW",
-    "MOJOLEARN_IDN_M1_PERSISTENT_SCAN",
-    "NN34",
-    "NI38"
-   ],
-   "board": "mamba1-forward",
-   "tags": [
-    "bit_version"
-   ],
-   "note": "Arm 1 affine_prefix (NN34) deleted 2026-10-11 (lane/owed-decide, avg 2.30x slower). Alternative Mamba-1 scans, one arm per build (lane/grid-prune 2026-10-07 merge): affine_prefix is the NN34 bit-version scan profile (bits change, host column with it); state_window (NI38) and persistent (L13) keep the shipped bits. Every cross of the three old defines was refused (comptime assert) or inert. Arm order puts persistent first: it is the representative arm the planner pairs with the m1_persistent_scan_ch/_tokens children."
-  },
   "ni14_col2im": {
    "define": "MOJOLEARN_NI14_COL2IM",
    "kind": "arms",
@@ -1372,7 +1288,6 @@
     "m2_cs_pt",
     "m2_retain_gl",
     "nn37_triangle_tasks",
-    "nn35_conv_pair",
     "nn40_owned_weights",
     "nn40_ws_headroom"
    ],
@@ -1388,10 +1303,8 @@
    "binding": "_mojolearn_mamba",
    "route": "forward: modeling_mamba -> selective_scan_interface (neural_scan_profile)",
    "controls": [
-    "nn35_conv_pair",
     "nn40_owned_weights",
-    "nn40_ws_headroom",
-    "m1_scan"
+    "nn40_ws_headroom"
    ],
    "interaction_groups": []
   },
@@ -1399,7 +1312,6 @@
    "binding": "_mojolearn_mamba",
    "route": "forward: mamba3_siso (Y_intra tiles)",
    "controls": [
-    "m3_yintra_tile",
     "nn40_owned_weights",
     "nn40_ws_headroom"
    ],
@@ -1617,6 +1529,21 @@
    "define": "MOJOLEARN_TRAIN_LIVE_STATUS",
    "control": "train_live_status",
    "reason": "DELETED 2026-11-15 (lane/expdel2-07-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md; recoverable at c38a3b0613; patch experiments/removed/MOJOLEARN_TRAIN_LIVE_STATUS.patch): unmeasured opt-in arm. no record: no A/B was recorded for the opt-in arm (plan rule a; AGENTS.md \"An unmeasured arm is deleted\", Andrew 2026-11-15). Refused in core/experiment_guards_neural.mojo; docs/TOMBSTONES.md."
+  },
+  {
+   "define": "MOJOLEARN_NN35_CONV_PAIR",
+   "control": "nn35_conv_pair",
+   "reason": "DELETED 2026-11-15 (lane/expdel2-26-neural; recoverable at 5fc464dce4; see docs/TOMBSTONES.md section expdel2-26-neural): unmeasured arm deleted under AGENTS.md 'An unmeasured arm is deleted'; default kept, no bits move"
+  },
+  {
+   "define": "MOJOLEARN_IDN_M3_YINTRA_RESOURCE_TILE",
+   "control": "m3_yintra_tile",
+   "reason": "DELETED 2026-11-15 (lane/expdel2-26-neural; recoverable at 5fc464dce4; see docs/TOMBSTONES.md section expdel2-26-neural): unmeasured arm deleted under AGENTS.md 'An unmeasured arm is deleted'; default kept, no bits move"
+  },
+  {
+   "define": "MOJOLEARN_IDN_M1_SCAN",
+   "control": "m1_scan",
+   "reason": "DELETED 2026-11-15 (lane/expdel2-26-neural; recoverable at 5fc464dce4; see docs/TOMBSTONES.md section expdel2-26-neural): unmeasured arm deleted under AGENTS.md 'An unmeasured arm is deleted'; default kept, no bits move"
   }
  ],
  "notes": {
