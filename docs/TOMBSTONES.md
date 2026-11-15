@@ -2176,6 +2176,7 @@ Deletions reversed by new evidence. The code is back on main; the section and th
 | [`MOJOLEARN_AUTOGRAD_OPTIM`](#mojolearn_autograd_optim) | Neural (MLP trainer executor optimizer) | 2026-11-15 (`92d4b79ec8`) | 2026-11-15 (lane/expdel2-restore-owed) | opt-in B arm, default unchanged, A/B owed at the wave sha | [MOJOLEARN_AUTOGRAD_OPTIM.2026-11-15.patch](../experiments/removed/MOJOLEARN_AUTOGRAD_OPTIM.2026-11-15.patch) + [.expdel2-30-neural.patch](../experiments/removed/MOJOLEARN_AUTOGRAD_OPTIM.expdel2-30-neural.patch) |
 | [`MOJOLEARN_IDN_SEQ_TILED_PREDICT`](#mojolearn_idn_seq_tiled_predict) | Neural (autograd model_predict chunk, autograd/model.mojo) | 2026-11-15 (`d19ca4f0c2`) | 2026-11-15 (lane/restore-run-arms-neural) | opt-in arm (RUN #4), default unchanged, NVIDIA L40S A/B owed at the wave sha; no bit change (same per-row chains; the split-K decision is checked unchanged) | [MOJOLEARN_IDN_SEQ_TILED_PREDICT.patch](../experiments/removed/MOJOLEARN_IDN_SEQ_TILED_PREDICT.patch) |
 | [`MOJOLEARN_IDN_GEMM_INT_SLICES`](#mojolearn_idn_gemm_int_slices-unmeasured-arm-deleted-2026-11-15) | Linalg GEMM research profile fp32.v2-int (gemm/host_entry.mojo device hook, gemm/host/linalg_native.mojo host column) | 2026-11-15 (`41a649b03c`) | 2026-11-15 (lane/restore-run-arms-neural) | opt-in arm (RUN #2), default unchanged, NVIDIA L40S A/B owed at the wave sha; B changes bits and precision on every column (device and host hooks restored together) | [MOJOLEARN_IDN_GEMM_INT_SLICES.patch](../experiments/removed/MOJOLEARN_IDN_GEMM_INT_SLICES.patch) |
+| [`MOJOLEARN_IDN_SSD_OCCUPANCY`](#mojolearn_idn_ssd_occupancy) | Mamba-2 SSD S10/S12/S18 kernels (mamba/impl/modules/ssd_minimal.mojo; host column keeps the cell kernels) | 2026-11-15 (`44ec9b2ec9`) | 2026-11-15 (lane/restore-run-arms-neural) | opt-in arm (RUN #5), default unchanged, NVIDIA L40S A/B owed at the wave sha; no bit change (same per-cell chains; host column keeps the cell kernels) | [MOJOLEARN_IDN_SSD_OCCUPANCY.patch](../experiments/removed/MOJOLEARN_IDN_SSD_OCCUPANCY.patch) |
 
 ## Trees
 
@@ -15980,6 +15981,7 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2
 - Records: refusal in `core/experiment_guards_neural.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-27-neural section).
 
 - Sweep (lane/expdel2-sweep, 2026-11-15): mamba/impl/modules/ssd_minimal.mojo IDN_SSD_OCCUPANCY and NN36_SHARED_DECAY (False, no reader; no generator substitution any more per orchestrator) removed; regenerating changes mamba/host/gen/ssd_minimal.mojo (lines ~705, ~897); no bits change (98cd3eeb58).
+Restored 2026-11-15 (lane/restore-run-arms-neural): RUN #5 of docs/plans/DELETED_ARMS_WORTH_RUNNING_2026-11-15.md, opt-in arm, default unchanged; see Restored table.
 
 ### MOJOLEARN_MAMBA3_LEGACY_CALLER_TRANSFER
 

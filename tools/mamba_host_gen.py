@@ -148,6 +148,13 @@ SUBSTITUTIONS = (
     # ssd_minimal.mojo since their defines were deleted (expdel2-tooling): the
     # source already takes the host arm, so their substitutions are gone.
     # IDN_M1_STATE_WINDOW and its window arm were deleted by expdel2-28 (2026-11-15).
+    # lane nv-occupancy (2026-10-28): MOJOLEARN_IDN_SSD_OCCUPANCY's coalesced
+    # and shared-tile S10/S12/S18 arms are device-only; the host column keeps
+    # the cell kernels (the same chains, the same bits). Restored 2026-11-15
+    # with the arm (lane restore-run-arms-neural).
+    ("mamba/impl/modules/ssd_minimal.mojo",
+     r"comptime IDN_SSD_OCCUPANCY = \([\s\S]*?\n\)",
+     "comptime IDN_SSD_OCCUPANCY = False"),
     ("mamba/impl/ops/mamba3_siso.mojo",
      r"lib_smem_page_fits_for\[TARGET_COLUMN, \d+\]\(\)", "False"),
     ("autograd/kernels/mamba3.mojo",

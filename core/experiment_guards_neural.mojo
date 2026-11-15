@@ -690,8 +690,7 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_IDN_MAMBA_ARENA_OFF"](), "removed 2026-11-15 (lane/expdel2-27-neural): IDN_MAMBA_ARENA_OFF (unmeasured old path beside the IDENTICAL arena default) is gone; the default stays; code recoverable at e437e599e6; restore: experiments/removed/MOJOLEARN_IDN_MAMBA_ARENA_OFF.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_MAMBA_GEMM_WS_OFF.patch
     comptime assert not is_defined["MOJOLEARN_IDN_MAMBA_GEMM_WS_OFF"](), "removed 2026-11-15 (lane/expdel2-27-neural): IDN_MAMBA_GEMM_WS_OFF (unmeasured old path beside the retained GEMM workspace default) is gone; the default stays; code recoverable at 23341493ec; restore: experiments/removed/MOJOLEARN_IDN_MAMBA_GEMM_WS_OFF.patch"
-    # Restore: git apply experiments/removed/MOJOLEARN_IDN_SSD_OCCUPANCY.patch
-    comptime assert not is_defined["MOJOLEARN_IDN_SSD_OCCUPANCY"](), "removed 2026-11-15 (lane/expdel2-27-neural): IDN_SSD_OCCUPANCY (unmeasured opt-in arm, A/B never run: coalesced / shared-tile SSD kernels) is gone; the default stays; code recoverable at 44ec9b2ec9; restore: experiments/removed/MOJOLEARN_IDN_SSD_OCCUPANCY.patch"
+    # MOJOLEARN_IDN_SSD_OCCUPANCY: refusal removed 2026-11-15 (restored; RUN #5 of docs/plans/DELETED_ARMS_WORTH_RUNNING_2026-11-15.md, see docs/TOMBSTONES.md Restored table)
     # Restore: git apply experiments/removed/MOJOLEARN_MAMBA3_LEGACY_CALLER_TRANSFER.patch
     comptime assert not is_defined["MOJOLEARN_MAMBA3_LEGACY_CALLER_TRANSFER"](), "removed 2026-11-15 (lane/expdel2-27-neural): MAMBA3_LEGACY_CALLER_TRANSFER (unmeasured old path: host-buffer staging of Mamba-3 transfers) is gone; the default stays; code recoverable at d57cf5cdab; restore: experiments/removed/MOJOLEARN_MAMBA3_LEGACY_CALLER_TRANSFER.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_MAMBA3_LEGACY_DIRECT_TRANSFER.patch

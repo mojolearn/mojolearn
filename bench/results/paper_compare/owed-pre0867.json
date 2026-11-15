@@ -216,6 +216,10 @@
   "gemm-int-slices-on": {
    "define": "MOJOLEARN_IDN_GEMM_INT_SLICES",
    "status": "define in code (gemm/int_slices.mojo IDN_GEMM_INT_SLICES, restored 2026-11-15 by lane restore-run-arms-neural): B = fp32 GEMM as four int8 planes on the tuned IMMA kernel plus the one-rounding epilogue (research profile fp32.v2-int) for k <= 65536, device and host column; A = fp32.v1"
+  },
+  "ssd-occupancy-on": {
+   "define": "MOJOLEARN_IDN_SSD_OCCUPANCY",
+   "status": "define in code (mamba/impl/modules/ssd_minimal.mojo IDN_SSD_OCCUPANCY, restored 2026-11-15 by lane restore-run-arms-neural): B = coalesced S10 discretize (one thread per (b, t, h, p)), 16 x 16 shared-tile S12 G = C.B, S18/S19 Y_off row tiles; A = the cell kernels"
   }
  },
  "rows": [
@@ -1360,6 +1364,21 @@
     "gemm-int-slices-on"
    ],
    "decides": "NVIDIA L40S only (the NVIDIA-only campaign): B changes bits and precision on every column; promote only if gemm is faster than A and the max relative error against an fp64 reference is no worse than A's (read the quality, it is not a gate on the time); then change every vendor column and the host column together; otherwise delete the arm with a tombstone"
+  },
+  {
+   "id": "ssd-occupancy",
+   "source": "restore-run-arms-neural (2026-11-15; RUN #5 of docs/plans/DELETED_ARMS_WORTH_RUNNING_2026-11-15.md: mamba2-forward 6.5 ms NV L40S [0.8.55 5.6], mamba-ssm 2.8)",
+   "kind": "ab",
+   "lane": [
+    "mamba2-forward",
+    "mamba2-infer"
+   ],
+   "dataset": "*",
+   "rows": "full",
+   "b_arms": [
+    "ssd-occupancy-on"
+   ],
+   "decides": "NVIDIA L40S only (the NVIDIA-only campaign): promote B (with a _OFF define) when mamba2-forward and mamba2-infer are faster than A and the output digests match A (same chains: no bit change expected; a digest change is a bug in the arm, not a new reference); otherwise delete the arm with a tombstone"
   }
  ]
 }
