@@ -369,13 +369,6 @@ def m3_s16_qk_arm() -> Int:
     kernel; the half-page arms fit (M3 Ultra: 2.5x the naive run;
     `regsh` is the A/B). The build constant M3_S16_QK_ARM."""
     return M3_S16_QK_ARM
-    if a == "regs2h":
-        return 5
-    if a == "regsh":
-        return 6
-    comptime if TARGET_COLUMN == COLUMN_AMD or TARGET_COLUMN == COLUMN_APPLE:
-        return 5
-    return 2
 
 
 #: The staged q/k arms (shared, regs, regs2) claim 33 to 36 KB of threadgroup
