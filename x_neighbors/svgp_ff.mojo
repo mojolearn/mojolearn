@@ -491,7 +491,7 @@ comptime SVGP_TREE = 256
 # TOMBSTONE: MOJOLEARN_PURITY_5_OFF (old path, no A/B row; the ascending chains) deleted 2026-11-15 by lane/expdel2-10-cluster; code recoverable at d45ed8fcae.
 # Restore: git apply experiments/removed/MOJOLEARN_PURITY_5_OFF.patch; record in docs/TOMBSTONES.md.
 #: Kept as a name for x_neighbors/iter_device.mojo; the tree is the only fold.
-comptime SVGP_TREE_ON = True
+# (Sweep 2026-11-15: comptime SVGP_TREE_ON removed; its reader in x_neighbors/iter_device.mojo folded.)
 #: one slot: y'y (hi, lo), b'x (hi, lo), the trace (hi, lo), log det S, log det Kuu'
 comptime SV8 = SIMD[DType.float32, 8]
 
