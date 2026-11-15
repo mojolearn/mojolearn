@@ -6,12 +6,8 @@ _ESTIMATOR_ENTRIES = ("logistic_native_api_v1",)
 _X_TREES_ENTRIES = ("label_weights_native_api_v1",)
 
 
-def _refusal(error):
-    # glue: a refusal recorded at import as "<Class>: <message>"
-    for base in (ImportError, AttributeError, TypeError, RuntimeError, ValueError):  # glue: the fixed refusal classes
-        if isinstance(error, base):
-            return f"{base.__name__}: {error}"
-    return f"RuntimeError: {error}"
+# One refusal spelling for the import-time bridges (lane py-dedupe, 2026-11-15).
+from ._native_labels_bridge import _refusal  # noqa: E402
 
 
 def connect():
