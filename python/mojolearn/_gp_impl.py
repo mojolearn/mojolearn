@@ -72,7 +72,7 @@ exposure is a correctness claim, not a
 speed claim.
 """
 
-from . import _backend, _native_archive_bridge, _native_family_bridge
+from . import _native_archive_bridge, _native_family_bridge
 
 #: `gaussian_process/gp_optim_items.mojo`'s stop words (GP_STOP_*).
 _OPT_STOPS = ("running", "pgtol", "no-descent", "line-search", "ftol", "max-iter", "nonfinite-start")
@@ -621,26 +621,6 @@ class GaussianProcessRegressor(NumericModeMixin):
 
     # -- the binding, and the tier it really is -----------------------------
 
-    def _extension(self):
-        """The `_mojolearn_gp` binding for THIS estimator's tier, with the
-        binary's own compile-time answer cross-checked against it --
-        `_arima_impl.py`'s pattern, for its reason: a wrong-arm measurement
-        that is correctly labelled by accident is the failure the
-        three-tier design exists to prevent."""
-        mod = self._bind()
-        want = getattr(self, "numeric_mode", None) or _backend.default_mode()
-        fn = getattr(mod, "gp_numeric_mode", None)
-        if fn is not None:
-            got = int(fn())
-            if got != _MODE_CODE.get(want):
-                raise RuntimeError(
-                    "mojolearn GaussianProcessRegressor: numeric_mode="
-                    f"{want!r} was requested but {mod.__name__} reports "
-                    f"compile-time mode code {got}; the binary and the "
-                    "directory it sits in disagree, rebuild it with "
-                    "bash bindings/build_gp.sh"
-                )
-        return mod
 
     # -- fit ----------------------------------------------------------------
 

@@ -155,7 +155,7 @@ def main(out=sys.stdout):
     # -- PROVENANCE: which binary answers, and the tier it reports --------
     arm = "PROVENANCE"
     gp = GaussianProcessRegressor(kernel=RBF(1.0), alpha=2.0 ** -20)
-    rep.check(arm, gp._extension() is not None, "the _mojolearn_gp binding loads")
+    rep.check(arm, gp._bind() is not None, "the _mojolearn_gp binding loads")
     rep.check(arm, gp.numeric_mode_used() == mode,
               "the binding's tier is the requested tier",
               "%r vs %r" % (gp.numeric_mode_used(), mode))

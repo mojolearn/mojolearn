@@ -36,7 +36,7 @@ transforms from a saved model on a CPU without a GPU.
 # `1 / n_features`, one Python division, correctly rounded on every host.
 # No speed claim: the lane has no published number and this door adds none.
 
-from . import _backend, _native_archive_bridge, _native_family_bridge
+from . import _native_archive_bridge, _native_family_bridge
 from ._mode import NumericModeMixin
 from ._native_robust_bridge import native_method
 from ._mode import RegressorScoreMixin
@@ -101,23 +101,6 @@ _native_family_bridge.tables(family_km_kernels=dict(_KERNELS), family_km_mode_co
 class _KernelMethodBase(NumericModeMixin):
     _BINDING = "_mojolearn_kernel_methods"
     _WHERE = "kernel method"
-
-    def _extension(self):
-        """The binding for THIS estimator's tier, with the binary's own
-        compile-time answer cross-checked against it (the GP's pattern)."""
-        mod = self._bind()
-        want = getattr(self, "numeric_mode", None) or _backend.default_mode()
-        fn = getattr(mod, "kernel_methods_numeric_mode", None)
-        if fn is not None:
-            got = int(fn())
-            if got != _MODE_CODE.get(want):
-                raise RuntimeError(
-                    f"mojolearn {self._WHERE}: numeric_mode={want!r} was requested "
-                    f"but {mod.__name__} reports compile-time mode code {got}; "
-                    "the binary and the directory it sits in disagree, rebuild "
-                    "it with bash bindings/build_kernel_methods.sh"
-                )
-        return mod
 
 
 # Maintainer notes: `alpha` IS the Cholesky ridge (DEVIATION 1660); a kernel
@@ -323,7 +306,6 @@ class KernelRidge(RegressorScoreMixin, _KernelMethodBase):
         return _ARCHIVE(cls, "host_archive_load", (path,), _ARCHIVE_CONTEXT)
 
 
-
 # Maintainer notes: `random_state` seeds `km_basis_indices`, the device
 # permutation. `normalization_` is NOT bitwise symmetric (DEVIATION 1674);
 # transform uses its transpose, scikit-learn's arm. `eigenvalues_` are clipped
@@ -491,7 +473,6 @@ class Nystroem(_KernelMethodBase):
         return _ARCHIVE(cls, "host_archive_load", (path,), _ARCHIVE_CONTEXT)
 
 
-
 # Maintainer notes: gamma <= 0 is refused on the Mojo host. gamma='scale' uses
 # the EXACT variance of X's float32 cells, the reciprocal rounded once
 # (`_scale_gamma.scale_gamma`). `sigma_` and `scale_` are computed once on the
@@ -642,7 +623,6 @@ class RBFSampler(_KernelMethodBase):
             again), ready to transform, with the saved numeric mode.
         """
         return _ARCHIVE(cls, "host_archive_load", (path,), _ARCHIVE_CONTEXT)
-
 
 
 _bridge = _native_archive_bridge

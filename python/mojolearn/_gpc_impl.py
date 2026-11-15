@@ -73,7 +73,7 @@ returns `HostGaussianProcessClassifier`, bound to the host binding on any
 box.
 """
 
-from . import _backend, _native_archive_bridge, _native_family_bridge
+from . import _native_archive_bridge, _native_family_bridge
 import numbers
 
 from ._gp_impl import _KERNEL_NODES, _MODE_CODE, Kernel
@@ -95,10 +95,6 @@ _ARCHIVE, _ARCHIVE_CONTEXT = _native_archive_bridge.connect()
 # the base binding, whose label entries encode and decode the classes.
 _NATIVE, _NATIVE_CONTEXT = _native_family_bridge.connect()
 _native_family_bridge.connect_bindings("_mojolearn_gp", "_mojolearn")
-
-
-
-
 
 
 class _SavedKernel(Kernel):
@@ -266,21 +262,6 @@ class GaussianProcessClassifier(NumericModeMixin):
 
     # -- the binding ----------------------------------------------------------
 
-    def _extension(self):
-        """`_mojolearn_gp` (or the host binding) with its compile-time tier
-        cross-checked against the requested one, `_gp_impl.py`'s rule."""
-        mod = self._bind()
-        want = getattr(self, "numeric_mode", None) or _backend.default_mode()
-        fn = getattr(mod, "gp_numeric_mode", None)
-        if fn is not None:
-            got = int(fn())
-            if got != _MODE_CODE.get(want):
-                raise RuntimeError(
-                    f"{_NAME}: numeric_mode={want!r} was requested but "
-                    f"{mod.__name__} reports compile-time mode code {got}; "
-                    "rebuild it with bash bindings/build_gp.sh"
-                )
-        return mod
 
     # -- fit ------------------------------------------------------------------
 
@@ -306,9 +287,7 @@ class GaussianProcessClassifier(NumericModeMixin):
         return _NATIVE(self, "family_gp_gpc_fit", (None, None, X, y), _NATIVE_CONTEXT)
 
 
-
     # -- prediction -------------------------------------------------------------
-
 
 
     # Reference: sklearn `_gpc.py:410-441`, binary only as `_gpc.py:873-878`.
