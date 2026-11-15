@@ -127,10 +127,7 @@ comptime IDN_CHUNKED_LM_HEAD_V2 = False
 # samba-forward NV 12.0 -> 5.3 / AMD 8.8 -> 5.8 ms, samba-train-step NV 96.0 -> 39.2 / AMD 147.2 -> 114.2 ms, hashes
 # equal) deleted 2026-11-15 by lane/expdel-04-neural; code recoverable at 5bfce25001.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_SAMBA_RESIDENT_STEP_OFF.patch
-comptime IDN_SAMBA_RESIDENT_STEP = (
-    _ENABLED
-    and not is_defined["MOJOLEARN_IDN_CHUNKED_LM_HEAD_V2"]()
-)
+comptime IDN_SAMBA_RESIDENT_STEP = _ENABLED
 # Samba stateless forward route (lane restore-samba-resident-forward,
 # 2026-11-13). Default: the resident forward (`samba_resident_forward`,
 # descriptor op 16), the measured winner: IDN_SAMBA_RESIDENT_STEP PROMOTED
@@ -166,4 +163,4 @@ comptime IDN_SAMBA_PROGRAM_FORWARD = is_defined["MOJOLEARN_SAMBA_PROGRAM_FORWARD
 # the Samba step too.
 # TOMBSTONE: MOJOLEARN_IDN_SAMBA_ATTN_RECOMPUTE_OFF (old path: the stash on the Samba step beside the promoted recompute default, EXP:1757) deleted 2026-11-15 by lane/expdel2-32-neural; code recoverable at 311b50e05c.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_SAMBA_ATTN_RECOMPUTE_OFF.patch
-comptime IDN_SAMBA_ATTN_RECOMPUTE = _ENABLED and not is_defined["MOJOLEARN_IDN_SAMBA_ATTN_RECOMPUTE_OFF"]()
+comptime IDN_SAMBA_ATTN_RECOMPUTE = _ENABLED
