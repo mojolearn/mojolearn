@@ -11,14 +11,12 @@
 """The ann family's FAST-on-Apple defaults (lane/apple-fast-ann, 2026-10-02).
 
 Each switch is `True` only in a FAST build on the Apple column
-(`ANN_FAST_APPLE`; the CAGRA seed floor in every mode since 2026-10-15,
-see there) unless its `-D MOJOLEARN_<NAME>_OFF` build define is
-given; an IDENTICAL build compiles each to `False`, so the old path is the
-only path there and its bits never move. No switch is an environment read
-(a `getenv` would be a host step on a fit or search path). The old
-`-D MOJOLEARN_<NAME>=1` opt-in defines are harmless no-ops now.
+(`ANN_FAST_APPLE`; the CAGRA seed and iteration floors of
+`x_ann/cagra_core.mojo::cg_search_budget` apply in every mode since
+2026-10-15, see there); an IDENTICAL build compiles each to `False`, so the
+old path is the only path there and its bits never move. No switch is an
+environment read (a `getenv` would be a host step on a fit or search path).
 (The file keeps its first name, fast_env, so imports still resolve.)"""
-from std.sys.compile import is_defined
 from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 
@@ -125,9 +123,9 @@ comptime _CAGRA_SEEDS4 = _CAGRA_LOWD_SEEDS4
 #: (quality-vs-opponent-20261015). Only the walk's budget moves, not its
 #: order, so identical stays the same bits on every column; the bits of
 #: identical CAGRA search change from the last version. The 4x seed work
-#: (SEEDS4) stays FAST + Apple. `-D MOJOLEARN_CAGRA_FAST_ITERS_OFF` (A arm)
-#: restores cuVS's iteration default in every mode.
+#: (SEEDS4) stays FAST + Apple.
 # TOMBSTONE: MOJOLEARN_CAGRA_FAST_SEEDS_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-13-cluster; code recoverable at b978a9b483.
 # Restore: git apply experiments/removed/MOJOLEARN_CAGRA_FAST_SEEDS_OFF.patch; record in docs/TOMBSTONES.md.
 comptime CAGRA_FAST_SEED_WORK = 4 * 262144 if _CAGRA_SEEDS4 else 262144
-comptime CAGRA_FAST_ITERS = not is_defined["MOJOLEARN_CAGRA_FAST_ITERS_OFF"]()
+# TOMBSTONE: MOJOLEARN_CAGRA_FAST_ITERS_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-13-cluster; code recoverable at e5aba92ace.
+# Restore: git apply experiments/removed/MOJOLEARN_CAGRA_FAST_ITERS_OFF.patch; record in docs/TOMBSTONES.md.
