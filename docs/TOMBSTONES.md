@@ -971,6 +971,36 @@ in the tables after the sections.
 | [`MOJOLEARN_IDN_ROW_COOP_OFF`](#mojolearn_idn_row_coop_off) | Neural (autograd softmax-family rows) | removed (old path, no A/B recorded) | 2026-11-15 | [MOJOLEARN_IDN_ROW_COOP_OFF.patch](../experiments/removed/MOJOLEARN_IDN_ROW_COOP_OFF.patch) |
 | [`MOJOLEARN_IDN_SEQ_TILED_PREDICT`](#mojolearn_idn_seq_tiled_predict) | Neural (autograd model_predict chunk) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_IDN_SEQ_TILED_PREDICT.patch](../experiments/removed/MOJOLEARN_IDN_SEQ_TILED_PREDICT.patch) |
 | [`MOJOLEARN_SMALL_MLP_GENERIC_OPS`](#mojolearn_small_mlp_generic_ops) | Neural (small MLP program capture) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_SMALL_MLP_GENERIC_OPS.patch](../experiments/removed/MOJOLEARN_SMALL_MLP_GENERIC_OPS.patch) |
+| [`MOJOLEARN_AFN_LM_ALL`](#mojolearn_afn_lm_all) | Neural (Apple FAST byte LM, all arms) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_AFN_LM_ALL.patch](../experiments/removed/MOJOLEARN_AFN_LM_ALL.patch) |
+| [`MOJOLEARN_AFN_LM_NOSYNC`](#mojolearn_afn_lm_nosync) | Neural (Apple FAST byte LM one-wait step) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_AFN_LM_NOSYNC.patch](../experiments/removed/MOJOLEARN_AFN_LM_NOSYNC.patch) |
+| [`MOJOLEARN_AFN26_LM_NOSYNC`](#mojolearn_afn26_lm_nosync) | Neural (Apple FAST byte LM one-wait step, AFN26 alias) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_AFN26_LM_NOSYNC.patch](../experiments/removed/MOJOLEARN_AFN26_LM_NOSYNC.patch) |
+| [`MOJOLEARN_AFN_LM_BWD_FUSE`](#mojolearn_afn_lm_bwd_fuse) | Neural (Apple FAST byte LM block backward fusion) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_AFN_LM_BWD_FUSE.patch](../experiments/removed/MOJOLEARN_AFN_LM_BWD_FUSE.patch) |
+| [`MOJOLEARN_AFN26_LM_BWD_FUSE`](#mojolearn_afn26_lm_bwd_fuse) | Neural (Apple FAST byte LM block backward fusion, AFN26 alias) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_AFN26_LM_BWD_FUSE.patch](../experiments/removed/MOJOLEARN_AFN26_LM_BWD_FUSE.patch) |
+| [`MOJOLEARN_AFN_LM_PARAM_VIEWS`](#mojolearn_afn_lm_param_views) | Neural (Apple FAST byte LM block weight views) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_AFN_LM_PARAM_VIEWS.patch](../experiments/removed/MOJOLEARN_AFN_LM_PARAM_VIEWS.patch) |
+| [`MOJOLEARN_AFN26_LM_PARAM_VIEWS`](#mojolearn_afn26_lm_param_views) | Neural (Apple FAST byte LM block weight views, AFN26 alias) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_AFN26_LM_PARAM_VIEWS.patch](../experiments/removed/MOJOLEARN_AFN26_LM_PARAM_VIEWS.patch) |
+| [`MOJOLEARN_AFN_LM_HEAD_FUSE`](#mojolearn_afn_lm_head_fuse) | Neural (Apple FAST byte LM fused CE head) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_AFN_LM_HEAD_FUSE.patch](../experiments/removed/MOJOLEARN_AFN_LM_HEAD_FUSE.patch) |
+| [`MOJOLEARN_AFN26_LM_HEAD_FUSE`](#mojolearn_afn26_lm_head_fuse) | Neural (Apple FAST byte LM fused CE head, AFN26 alias) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_AFN26_LM_HEAD_FUSE.patch](../experiments/removed/MOJOLEARN_AFN26_LM_HEAD_FUSE.patch) |
+| [`MOJOLEARN_AFN26_LM_CE_BLOCK128`](#mojolearn_afn26_lm_ce_block128) | Neural (Apple FAST fused CE block size) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_AFN26_LM_CE_BLOCK128.patch](../experiments/removed/MOJOLEARN_AFN26_LM_CE_BLOCK128.patch) |
+| [`MOJOLEARN_AFN26_LM_CE_BLOCK512`](#mojolearn_afn26_lm_ce_block512) | Neural (Apple FAST fused CE block size) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_AFN26_LM_CE_BLOCK512.patch](../experiments/removed/MOJOLEARN_AFN26_LM_CE_BLOCK512.patch) |
+| [`MOJOLEARN_AFN_LM_BWD_NOSYNC_OFF`](#mojolearn_afn_lm_bwd_nosync_off) | Neural (Apple FAST block backward norm waits) | removed (old path, no A/B recorded) | 2026-11-15 | [MOJOLEARN_AFN_LM_BWD_NOSYNC_OFF.patch](../experiments/removed/MOJOLEARN_AFN_LM_BWD_NOSYNC_OFF.patch) |
+| [`MOJOLEARN_BYTE_LM_CE_UNALIASED`](#mojolearn_byte_lm_ce_unaliased) | Neural (byte LM CE buffers) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_BYTE_LM_CE_UNALIASED.patch](../experiments/removed/MOJOLEARN_BYTE_LM_CE_UNALIASED.patch) |
+| [`MOJOLEARN_BYTE_LM_STICKY_EAGER`](#mojolearn_byte_lm_sticky_eager) | Neural (byte LM attention eager fallback) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_BYTE_LM_STICKY_EAGER.patch](../experiments/removed/MOJOLEARN_BYTE_LM_STICKY_EAGER.patch) |
+| [`MOJOLEARN_BYTE_LM_RELEASE_EAGER`](#mojolearn_byte_lm_release_eager) | Neural (byte LM eager scratch release) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_BYTE_LM_RELEASE_EAGER.patch](../experiments/removed/MOJOLEARN_BYTE_LM_RELEASE_EAGER.patch) |
+| [`MOJOLEARN_BYTE_LM_RETAIN_EAGER`](#mojolearn_byte_lm_retain_eager) | Neural (byte LM eager scratch release) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_BYTE_LM_RETAIN_EAGER.patch](../experiments/removed/MOJOLEARN_BYTE_LM_RETAIN_EAGER.patch) |
+| [`MOJOLEARN_BYTE_LM_COPY_EMB_HEAD`](#mojolearn_byte_lm_copy_emb_head) | Neural (byte LM embedding / head weights) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_BYTE_LM_COPY_EMB_HEAD.patch](../experiments/removed/MOJOLEARN_BYTE_LM_COPY_EMB_HEAD.patch) |
+| [`MOJOLEARN_BYTE_LM_PROGRAM_STEP`](#mojolearn_byte_lm_program_step) | Neural (byte LM training step) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_BYTE_LM_PROGRAM_STEP.patch](../experiments/removed/MOJOLEARN_BYTE_LM_PROGRAM_STEP.patch) |
+| [`MOJOLEARN_IDN_NORM`](#mojolearn_idn_norm) | Neural (host byte LM legacy norm block) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_IDN_NORM.patch](../experiments/removed/MOJOLEARN_IDN_NORM.patch) |
+| [`MOJOLEARN_NN53_HEAD_CHUNK512`](#mojolearn_nn53_head_chunk512) | Neural (chunked LM head panel width) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_NN53_HEAD_CHUNK512.patch](../experiments/removed/MOJOLEARN_NN53_HEAD_CHUNK512.patch) |
+| [`MOJOLEARN_NN53_HEAD_CHUNK2048`](#mojolearn_nn53_head_chunk2048) | Neural (chunked LM head panel width) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_NN53_HEAD_CHUNK2048.patch](../experiments/removed/MOJOLEARN_NN53_HEAD_CHUNK2048.patch) |
+| [`MOJOLEARN_IDN_TRAIN_DEV_TENSORS_OFF`](#mojolearn_idn_train_dev_tensors_off) | Neural (training device tensors) | removed (old path, no A/B recorded) | 2026-11-15 | [MOJOLEARN_IDN_TRAIN_DEV_TENSORS_OFF.patch](../experiments/removed/MOJOLEARN_IDN_TRAIN_DEV_TENSORS_OFF.patch) |
+| [`MOJOLEARN_IDN_OPT_SCRATCH_POOL_OFF`](#mojolearn_idn_opt_scratch_pool_off) | Neural (optimizer scratch pool) | removed (old path, no A/B recorded) | 2026-11-15 | [MOJOLEARN_IDN_OPT_SCRATCH_POOL_OFF.patch](../experiments/removed/MOJOLEARN_IDN_OPT_SCRATCH_POOL_OFF.patch) |
+| [`MOJOLEARN_IDN_MAXIMIZE_DEV_OFF`](#mojolearn_idn_maximize_dev_off) | Neural (optimizer maximize on device) | removed (old path, no A/B recorded) | 2026-11-15 | [MOJOLEARN_IDN_MAXIMIZE_DEV_OFF.patch](../experiments/removed/MOJOLEARN_IDN_MAXIMIZE_DEV_OFF.patch) |
+| [`MOJOLEARN_IDN_OPT_PARAMS_RESIDENT_OFF`](#mojolearn_idn_opt_params_resident_off) | Neural (optimizer resident params entries) | removed (old path, no A/B recorded) | 2026-11-15 | [MOJOLEARN_IDN_OPT_PARAMS_RESIDENT_OFF.patch](../experiments/removed/MOJOLEARN_IDN_OPT_PARAMS_RESIDENT_OFF.patch) |
+| [`MOJOLEARN_IDN_CE_PIPE_UP_OFF`](#mojolearn_idn_ce_pipe_up_off) | Neural (CE logits upload pipeline) | removed (old path, no A/B recorded) | 2026-11-15 | [MOJOLEARN_IDN_CE_PIPE_UP_OFF.patch](../experiments/removed/MOJOLEARN_IDN_CE_PIPE_UP_OFF.patch) |
+| [`MOJOLEARN_TRAIN_OPT_FAST_PIPE_DOWN_OFF`](#mojolearn_train_opt_fast_pipe_down_off) | Neural (Apple FAST optimizer download pipeline) | removed (old path, no A/B recorded) | 2026-11-15 | [MOJOLEARN_TRAIN_OPT_FAST_PIPE_DOWN_OFF.patch](../experiments/removed/MOJOLEARN_TRAIN_OPT_FAST_PIPE_DOWN_OFF.patch) |
+| [`MOJOLEARN_BYTE_LM_VSUM_HD_GENERIC_OFF`](#mojolearn_byte_lm_vsum_hd_generic_off) | Neural (host byte LM attention value sum) | removed (old path, no A/B recorded) | 2026-11-15 | [MOJOLEARN_BYTE_LM_VSUM_HD_GENERIC_OFF.patch](../experiments/removed/MOJOLEARN_BYTE_LM_VSUM_HD_GENERIC_OFF.patch) |
+| [`MOJOLEARN_BYTE_LM_HOST_LEGACY_GEMM`](#mojolearn_byte_lm_host_legacy_gemm) | Neural (host byte LM weight GEMMs) | removed (old path, no A/B recorded) | 2026-11-15 | [MOJOLEARN_BYTE_LM_HOST_LEGACY_GEMM.patch](../experiments/removed/MOJOLEARN_BYTE_LM_HOST_LEGACY_GEMM.patch) |
+| [`MOJOLEARN_OPT_TRUST_INPUTS`](#mojolearn_opt_trust_inputs) | Neural (optimizer input refusal scans) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_OPT_TRUST_INPUTS.patch](../experiments/removed/MOJOLEARN_OPT_TRUST_INPUTS.patch) |
 
 | [`MOJOLEARN_AFN26_LOSS_BLOCK128`](#mojolearn_afn26_loss_block128) | Neural (Apple FAST cross-entropy block width) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_AFN26_LOSS_BLOCK128.patch](../experiments/removed/MOJOLEARN_AFN26_LOSS_BLOCK128.patch) |
 | [`MOJOLEARN_AFN26_LOSS_BLOCK512`](#mojolearn_afn26_loss_block512) | Neural (Apple FAST cross-entropy block width) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_AFN26_LOSS_BLOCK512.patch](../experiments/removed/MOJOLEARN_AFN26_LOSS_BLOCK512.patch) |
@@ -15752,3 +15782,322 @@ Inline TOMBSTONE markers only; the owner lane of each define writes its section,
 - `MOJOLEARN_IDN_SEQ_WGRAD`: the profile tags in training/neural_arithmetic_profile.mojo; `25599a616f`, recoverable at `19d2549589`; `experiments/removed/MOJOLEARN_IDN_SEQ_WGRAD.expdel2-32-neural.patch`.
 - `MOJOLEARN_IDN_SEQ_WGRAD_BLOCKED_OFF`: the guard around the IDN_SEQ_WGRAD profile tags in training/neural_arithmetic_profile.mojo; `25599a616f`, recoverable at `19d2549589`; `experiments/removed/MOJOLEARN_IDN_SEQ_WGRAD_BLOCKED_OFF.expdel2-32-neural.patch`.
 - `MOJOLEARN_OPT_TRUST_INPUTS`: its term in OPT_GATE_SCAN (training/opt_gate.mojo); `284d3f2314`, recoverable at `25599a616f`; `experiments/removed/MOJOLEARN_OPT_TRUST_INPUTS.expdel2-32-neural.patch`.
+## Experiment deletions: lane expdel2-31-neural (2026-11-15)
+
+Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2-31-neural), under AGENTS.md "An unmeasured arm is deleted" (Andrew, 2026-11-15). Each record named below was read first. No bit changes: every deletion removes a non-default arm or a rollback beside the default, and the default branch is kept as it was.
+
+### MOJOLEARN_AFN_LM_ALL
+
+- Tried: every AFN_LM arm at once (NOSYNC, BWD_FUSE, PARAM_VIEWS, HEAD_FUSE).
+- Evidence: EXP:621 MERGED-UNMEASURED (rule f). Verdict: deleted (V2 rule, unmeasured).
+- Removed: the define table entries, the NOSYNC status kernel (afn_step_status_kernel, afn_step_finish, afn_status_view, afn_reset, afn_reset_kernel and the AFN_ST_* cells), the HEAD_FUSE row kernel afn_ce_fused with AFN_LM_CE_TPB, and the AFN_LM_PARAM_VIEWS term of BYTE_LM_BLOCK_VIEWS in training/byte_lm.mojo; nothing launched them any more. Default unchanged: no bits move.
+- Files: training/byte_lm_afn.mojo, training/byte_lm.mojo.
+- Deleted by: lane/expdel2-31-neural `578fb1af7e` (2026-11-15); code recoverable at `f6652fc1ac`.
+- Restore: `git apply experiments/removed/MOJOLEARN_AFN_LM_ALL.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+- Records: refusal in `core/experiment_guards_neural.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-31-neural section).
+
+### MOJOLEARN_AFN_LM_NOSYNC
+
+- Tried: one host wait per train step with one device status kernel.
+- Evidence: EXP:2340 DELETED, their step deleted (rule e). Verdict: deleted (V2 rule, unmeasured).
+- Removed: the define table entries, the NOSYNC status kernel (afn_step_status_kernel, afn_step_finish, afn_status_view, afn_reset, afn_reset_kernel and the AFN_ST_* cells), the HEAD_FUSE row kernel afn_ce_fused with AFN_LM_CE_TPB, and the AFN_LM_PARAM_VIEWS term of BYTE_LM_BLOCK_VIEWS in training/byte_lm.mojo; nothing launched them any more. Default unchanged: no bits move.
+- Files: training/byte_lm_afn.mojo, training/byte_lm.mojo.
+- Deleted by: lane/expdel2-31-neural `578fb1af7e` (2026-11-15); code recoverable at `f6652fc1ac`.
+- Restore: `git apply experiments/removed/MOJOLEARN_AFN_LM_NOSYNC.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+- Records: refusal in `core/experiment_guards_neural.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-31-neural section).
+
+### MOJOLEARN_AFN26_LM_NOSYNC
+
+- Tried: the AFN26 alias of AFN_LM_NOSYNC.
+- Evidence: no record (rule a). Verdict: deleted (V2 rule, unmeasured).
+- Removed: the define table entries, the NOSYNC status kernel (afn_step_status_kernel, afn_step_finish, afn_status_view, afn_reset, afn_reset_kernel and the AFN_ST_* cells), the HEAD_FUSE row kernel afn_ce_fused with AFN_LM_CE_TPB, and the AFN_LM_PARAM_VIEWS term of BYTE_LM_BLOCK_VIEWS in training/byte_lm.mojo; nothing launched them any more. Default unchanged: no bits move.
+- Files: training/byte_lm_afn.mojo, training/byte_lm.mojo.
+- Deleted by: lane/expdel2-31-neural `578fb1af7e` (2026-11-15); code recoverable at `f6652fc1ac`.
+- Restore: `git apply experiments/removed/MOJOLEARN_AFN26_LM_NOSYNC.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+- Records: refusal in `core/experiment_guards_neural.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-31-neural section).
+
+### MOJOLEARN_AFN_LM_BWD_FUSE
+
+- Tried: IDENTICAL's fused Apple block-backward routes on FAST.
+- Evidence: EXP:623 MERGED-UNMEASURED (rule f); source F08/fused M3 single-shape B/A 0.9494 trajectory, "tentative; retain OFF". Verdict: deleted (V2 rule, unmeasured).
+- Removed: the define table entries, the NOSYNC status kernel (afn_step_status_kernel, afn_step_finish, afn_status_view, afn_reset, afn_reset_kernel and the AFN_ST_* cells), the HEAD_FUSE row kernel afn_ce_fused with AFN_LM_CE_TPB, and the AFN_LM_PARAM_VIEWS term of BYTE_LM_BLOCK_VIEWS in training/byte_lm.mojo; nothing launched them any more; its consumer in autograd/kernels/transformer.mojo was already folded by lane expdel2-24-neural. Default unchanged: no bits move.
+- Files: training/byte_lm_afn.mojo, training/byte_lm.mojo.
+- Deleted by: lane/expdel2-31-neural `578fb1af7e` (2026-11-15); code recoverable at `f6652fc1ac`.
+- Restore: `git apply experiments/removed/MOJOLEARN_AFN_LM_BWD_FUSE.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+- Records: refusal in `core/experiment_guards_neural.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-31-neural section).
+
+### MOJOLEARN_AFN26_LM_BWD_FUSE
+
+- Tried: the AFN26 alias of AFN_LM_BWD_FUSE.
+- Evidence: no record (rule a). Verdict: deleted (V2 rule, unmeasured).
+- Removed: the define table entries, the NOSYNC status kernel (afn_step_status_kernel, afn_step_finish, afn_status_view, afn_reset, afn_reset_kernel and the AFN_ST_* cells), the HEAD_FUSE row kernel afn_ce_fused with AFN_LM_CE_TPB, and the AFN_LM_PARAM_VIEWS term of BYTE_LM_BLOCK_VIEWS in training/byte_lm.mojo; nothing launched them any more. Default unchanged: no bits move.
+- Files: training/byte_lm_afn.mojo, training/byte_lm.mojo.
+- Deleted by: lane/expdel2-31-neural `578fb1af7e` (2026-11-15); code recoverable at `f6652fc1ac`.
+- Restore: `git apply experiments/removed/MOJOLEARN_AFN26_LM_BWD_FUSE.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+- Records: refusal in `core/experiment_guards_neural.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-31-neural section).
+
+### MOJOLEARN_AFN_LM_PARAM_VIEWS
+
+- Tried: every block weight and gradient a view of the flat param / grad.
+- Evidence: EXP:628 MERGED-UNMEASURED (rule f); source F08/views M3 mixed (trajectory 0.9765, first step 1.0455), "retain OFF". Verdict: deleted (V2 rule, unmeasured).
+- Removed: the define table entries, the NOSYNC status kernel (afn_step_status_kernel, afn_step_finish, afn_status_view, afn_reset, afn_reset_kernel and the AFN_ST_* cells), the HEAD_FUSE row kernel afn_ce_fused with AFN_LM_CE_TPB, and the AFN_LM_PARAM_VIEWS term of BYTE_LM_BLOCK_VIEWS in training/byte_lm.mojo; nothing launched them any more. Default unchanged: no bits move.
+- Files: training/byte_lm_afn.mojo, training/byte_lm.mojo.
+- Deleted by: lane/expdel2-31-neural `578fb1af7e` (2026-11-15); code recoverable at `f6652fc1ac`.
+- Restore: `git apply experiments/removed/MOJOLEARN_AFN_LM_PARAM_VIEWS.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+- Records: refusal in `core/experiment_guards_neural.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-31-neural section).
+
+### MOJOLEARN_AFN26_LM_PARAM_VIEWS
+
+- Tried: the AFN26 alias of AFN_LM_PARAM_VIEWS.
+- Evidence: no record (rule a). Verdict: deleted (V2 rule, unmeasured).
+- Removed: the define table entries, the NOSYNC status kernel (afn_step_status_kernel, afn_step_finish, afn_status_view, afn_reset, afn_reset_kernel and the AFN_ST_* cells), the HEAD_FUSE row kernel afn_ce_fused with AFN_LM_CE_TPB, and the AFN_LM_PARAM_VIEWS term of BYTE_LM_BLOCK_VIEWS in training/byte_lm.mojo; nothing launched them any more. Default unchanged: no bits move.
+- Files: training/byte_lm_afn.mojo, training/byte_lm.mojo.
+- Deleted by: lane/expdel2-31-neural `578fb1af7e` (2026-11-15); code recoverable at `f6652fc1ac`.
+- Restore: `git apply experiments/removed/MOJOLEARN_AFN26_LM_PARAM_VIEWS.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+- Records: refusal in `core/experiment_guards_neural.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-31-neural section).
+
+### MOJOLEARN_AFN_LM_HEAD_FUSE
+
+- Tried: softmax, CE, mean loss and logits gradient in one row kernel.
+- Evidence: EXP:2340 DELETED, their step deleted (rule e). Verdict: deleted (V2 rule, unmeasured).
+- Removed: the define table entries, the NOSYNC status kernel (afn_step_status_kernel, afn_step_finish, afn_status_view, afn_reset, afn_reset_kernel and the AFN_ST_* cells), the HEAD_FUSE row kernel afn_ce_fused with AFN_LM_CE_TPB, and the AFN_LM_PARAM_VIEWS term of BYTE_LM_BLOCK_VIEWS in training/byte_lm.mojo; nothing launched them any more. Default unchanged: no bits move.
+- Files: training/byte_lm_afn.mojo, training/byte_lm.mojo.
+- Deleted by: lane/expdel2-31-neural `578fb1af7e` (2026-11-15); code recoverable at `f6652fc1ac`.
+- Restore: `git apply experiments/removed/MOJOLEARN_AFN_LM_HEAD_FUSE.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+- Records: refusal in `core/experiment_guards_neural.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-31-neural section).
+
+### MOJOLEARN_AFN26_LM_HEAD_FUSE
+
+- Tried: the AFN26 alias of AFN_LM_HEAD_FUSE.
+- Evidence: no record (rule a). Verdict: deleted (V2 rule, unmeasured).
+- Removed: the define table entries, the NOSYNC status kernel (afn_step_status_kernel, afn_step_finish, afn_status_view, afn_reset, afn_reset_kernel and the AFN_ST_* cells), the HEAD_FUSE row kernel afn_ce_fused with AFN_LM_CE_TPB, and the AFN_LM_PARAM_VIEWS term of BYTE_LM_BLOCK_VIEWS in training/byte_lm.mojo; nothing launched them any more. Default unchanged: no bits move.
+- Files: training/byte_lm_afn.mojo, training/byte_lm.mojo.
+- Deleted by: lane/expdel2-31-neural `578fb1af7e` (2026-11-15); code recoverable at `f6652fc1ac`.
+- Restore: `git apply experiments/removed/MOJOLEARN_AFN26_LM_HEAD_FUSE.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+- Records: refusal in `core/experiment_guards_neural.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-31-neural section).
+
+### MOJOLEARN_AFN26_LM_CE_BLOCK128
+
+- Tried: 128-thread blocks for the fused CE row kernel.
+- Evidence: no record (rule a). Verdict: deleted (V2 rule, unmeasured).
+- Removed: the define table entries, the NOSYNC status kernel (afn_step_status_kernel, afn_step_finish, afn_status_view, afn_reset, afn_reset_kernel and the AFN_ST_* cells), the HEAD_FUSE row kernel afn_ce_fused with AFN_LM_CE_TPB, and the AFN_LM_PARAM_VIEWS term of BYTE_LM_BLOCK_VIEWS in training/byte_lm.mojo; nothing launched them any more. Default unchanged: no bits move.
+- Files: training/byte_lm_afn.mojo, training/byte_lm.mojo.
+- Deleted by: lane/expdel2-31-neural `578fb1af7e` (2026-11-15); code recoverable at `f6652fc1ac`.
+- Restore: `git apply experiments/removed/MOJOLEARN_AFN26_LM_CE_BLOCK128.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+- Records: refusal in `core/experiment_guards_neural.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-31-neural section).
+
+### MOJOLEARN_AFN26_LM_CE_BLOCK512
+
+- Tried: 512-thread blocks for the fused CE row kernel.
+- Evidence: no record (rule a). Verdict: deleted (V2 rule, unmeasured).
+- Removed: the define table entries, the NOSYNC status kernel (afn_step_status_kernel, afn_step_finish, afn_status_view, afn_reset, afn_reset_kernel and the AFN_ST_* cells), the HEAD_FUSE row kernel afn_ce_fused with AFN_LM_CE_TPB, and the AFN_LM_PARAM_VIEWS term of BYTE_LM_BLOCK_VIEWS in training/byte_lm.mojo; nothing launched them any more. Default unchanged: no bits move.
+- Files: training/byte_lm_afn.mojo, training/byte_lm.mojo.
+- Deleted by: lane/expdel2-31-neural `578fb1af7e` (2026-11-15); code recoverable at `f6652fc1ac`.
+- Restore: `git apply experiments/removed/MOJOLEARN_AFN26_LM_CE_BLOCK512.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+- Records: refusal in `core/experiment_guards_neural.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-31-neural section).
+
+### MOJOLEARN_AFN_LM_BWD_NOSYNC_OFF
+
+- Tried: the rollback to the three host waits per RMSNorm stage.
+- Evidence: EXP:625 MERGED-UNMEASURED (rule f); the arm it rolls back is the promoted F08/default M3 winner. Verdict: deleted (V2 rule, unmeasured).
+- Removed: the _OFF term; AFN_LM_BWD_NOSYNC = BYTE_LM_FAST_APPLE stays for autograd/kernels/transformer.mojo. Default unchanged: no bits move.
+- Files: training/byte_lm_afn.mojo, training/byte_lm.mojo.
+- Deleted by: lane/expdel2-31-neural `578fb1af7e` (2026-11-15); code recoverable at `f6652fc1ac`.
+- Restore: `git apply experiments/removed/MOJOLEARN_AFN_LM_BWD_NOSYNC_OFF.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+- Records: refusal in `core/experiment_guards_neural.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-31-neural section).
+
+### MOJOLEARN_BYTE_LM_CE_UNALIASED
+
+- Tried: five separate [M, V] cross-entropy buffers instead of aliased views.
+- Evidence: no record (rule a). Verdict: deleted (V2 rule, unmeasured).
+- Removed: the alias and its two branches in ByteBuffers; byte_lm_ce_aliased() stays and returns True for the binding. Default unchanged: no bits move.
+- Files: training/byte_lm.mojo.
+- Deleted by: lane/expdel2-31-neural `d879623fb2` (2026-11-15); code recoverable at `578fb1af7e`.
+- Restore: `git apply experiments/removed/MOJOLEARN_BYTE_LM_CE_UNALIASED.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+- Records: refusal in `core/experiment_guards_neural.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-31-neural section).
+
+### MOJOLEARN_BYTE_LM_STICKY_EAGER
+
+- Tried: prefer eager attention for a layer after a fused-corner refusal.
+- Evidence: no record (rule a). Verdict: deleted (V2 rule, unmeasured).
+- Removed: the alias and its per-layer latch; the eager record keeps its layout with 0. Default unchanged: no bits move.
+- Files: training/byte_lm.mojo.
+- Deleted by: lane/expdel2-31-neural `9cc10dddc6` (2026-11-15); code recoverable at `d879623fb2`.
+- Restore: `git apply experiments/removed/MOJOLEARN_BYTE_LM_STICKY_EAGER.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+- Records: refusal in `core/experiment_guards_neural.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-31-neural section).
+
+### MOJOLEARN_BYTE_LM_RELEASE_EAGER
+
+- Tried: release eager attention scratch on every column.
+- Evidence: no record (rule a). Verdict: deleted (V2 rule, unmeasured).
+- Removed: the define term; BYTE_LM_RELEASE_EAGER = byte_lm_release_eager_for[TARGET_COLUMN](). Default unchanged: no bits move.
+- Files: training/byte_lm.mojo.
+- Deleted by: lane/expdel2-31-neural `9cc10dddc6` (2026-11-15); code recoverable at `d879623fb2`.
+- Restore: `git apply experiments/removed/MOJOLEARN_BYTE_LM_RELEASE_EAGER.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+- Records: refusal in `core/experiment_guards_neural.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-31-neural section).
+
+### MOJOLEARN_BYTE_LM_RETAIN_EAGER
+
+- Tried: force-retain eager attention scratch.
+- Evidence: no record (rule a). Verdict: deleted (V2 rule, unmeasured).
+- Removed: the define term (see BYTE_LM_RELEASE_EAGER). Default unchanged: no bits move.
+- Files: training/byte_lm.mojo.
+- Deleted by: lane/expdel2-31-neural `9cc10dddc6` (2026-11-15); code recoverable at `d879623fb2`.
+- Restore: `git apply experiments/removed/MOJOLEARN_BYTE_LM_RETAIN_EAGER.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+- Records: refusal in `core/experiment_guards_neural.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-31-neural section).
+
+### MOJOLEARN_BYTE_LM_COPY_EMB_HEAD
+
+- Tried: revert to copies of the embedding and head weights.
+- Evidence: no record (rule a). Verdict: deleted (V2 rule, unmeasured).
+- Removed: the define term of BYTE_LM_EMB_HEAD_VIEWS. Default unchanged: no bits move.
+- Files: training/byte_lm.mojo.
+- Deleted by: lane/expdel2-31-neural `f0bffede56` (2026-11-15); code recoverable at `9cc10dddc6`.
+- Restore: `git apply experiments/removed/MOJOLEARN_BYTE_LM_COPY_EMB_HEAD.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+- Records: refusal in `core/experiment_guards_neural.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-31-neural section).
+
+### MOJOLEARN_BYTE_LM_PROGRAM_STEP
+
+- Tried: the trainer's captured program (lane x7) for every step, gradient, update and evaluation on every column.
+- Evidence: EXP:2342 RESTORED hand step as default; A/B owed, never run (rule a). The program step measured 48.9 / 50.5 ms against 35.5 / 43.9 for the hand step. Verdict: deleted (V2 rule, unmeasured).
+- Removed: the program-step section of training/byte_lm.mojo (_byte_program_ready/_store/_steps/_gradient/_update/_eval), the ByteTrainer program fields, the host session program fields and _ready, byte_host_eval_optimizer, and every comptime arm; training/byte_lm_program.mojo and byte_lm_host_program.mojo stay (other importers). Default unchanged: no bits move.
+- Files: training/byte_lm.mojo, training/byte_lm_config.mojo, training/byte_lm_host.mojo, training/byte_lm_host_execution.mojo, training/byte_lm_host_session.mojo.
+- Deleted by: lane/expdel2-31-neural `f105b7dcfb` (2026-11-15); code recoverable at `f0bffede56`.
+- Restore: `git apply experiments/removed/MOJOLEARN_BYTE_LM_PROGRAM_STEP.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+- Records: refusal in `core/experiment_guards_neural.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-31-neural section).
+
+### MOJOLEARN_IDN_NORM
+
+- Tried: arms 1 and 4 route the threaded host logits / next bytes through the legacy packed host block.
+- Evidence: no record (rule a). Verdict: deleted (V2 rule, unmeasured).
+- Removed: both comptime arms in byte_host_logits_threaded and byte_host_next_threaded (with the MOJOLEARN_IDN_ALL_OFF term). Default unchanged: no bits move.
+- Files: training/byte_lm_host.mojo.
+- Deleted by: lane/expdel2-31-neural `cba6209bbd` (2026-11-15); code recoverable at `dc698300f4`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_NORM.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+- Records: refusal in `core/experiment_guards_neural.mojo`; grid control moved to `removed` in experiments/six_lane_integration/grid_controls/neural-gemm-attn-dedupe.json (norm); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-31-neural section).
+
+### MOJOLEARN_NN53_HEAD_CHUNK512
+
+- Tried: 512-wide vocabulary panels for the chunked head.
+- Evidence: no record (rule a). Verdict: deleted (V2 rule, unmeasured).
+- Removed: the define term; NN53_CHUNK512 = False stays for training/chunked_lm_head_v2.mojo, LM_HEAD_V2_CHUNK = 1024. Default unchanged: no bits move.
+- Files: training/chunked_lm_head_profile.mojo.
+- Deleted by: lane/expdel2-31-neural `89a7547f4e` (2026-11-15); code recoverable at `cba6209bbd`.
+- Restore: `git apply experiments/removed/MOJOLEARN_NN53_HEAD_CHUNK512.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+- Records: refusal in `core/experiment_guards_neural.mojo`; grid control moved to `removed` in experiments/six_lane_integration/grid_controls/neural-seq-train-dedupe.json (nn53_head_chunk); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-31-neural section).
+
+### MOJOLEARN_NN53_HEAD_CHUNK2048
+
+- Tried: 2048-wide vocabulary panels for the chunked head.
+- Evidence: no record (rule a). Verdict: deleted (V2 rule, unmeasured).
+- Removed: the define term; NN53_CHUNK2048 = False stays, LM_HEAD_V2_CHUNK = 1024. Default unchanged: no bits move.
+- Files: training/chunked_lm_head_profile.mojo.
+- Deleted by: lane/expdel2-31-neural `89a7547f4e` (2026-11-15); code recoverable at `cba6209bbd`.
+- Restore: `git apply experiments/removed/MOJOLEARN_NN53_HEAD_CHUNK2048.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+- Records: refusal in `core/experiment_guards_neural.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-31-neural section).
+
+### MOJOLEARN_IDN_TRAIN_DEV_TENSORS_OFF
+
+- Tried: leave the device-tensor training entries unregistered.
+- Evidence: no record (rule b). Verdict: deleted (V2 rule, unmeasured).
+- Removed: the define term; IDN_TRAIN_DEV_TENSORS = IDENTICAL and not the CPU column. Default unchanged: no bits move.
+- Files: training/dev_tensors.mojo.
+- Deleted by: lane/expdel2-31-neural `e7b9a56a35` (2026-11-15); code recoverable at `89a7547f4e`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_TRAIN_DEV_TENSORS_OFF.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+- Records: refusal in `core/experiment_guards_neural.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-31-neural section).
+
+### MOJOLEARN_IDN_OPT_SCRATCH_POOL_OFF
+
+- Tried: fresh per-call optimizer scratch instead of the pool.
+- Evidence: EXP:1878 DELETED (noise) (rule e). Verdict: deleted (V2 rule, unmeasured).
+- Removed: the define term; IDN_OPT_SCRATCH_POOL = IDENTICAL and not the CPU column. Default unchanged: no bits move.
+- Files: training/estimator.mojo.
+- Deleted by: lane/expdel2-31-neural `68a9b6cf9e` (2026-11-15); code recoverable at `51b81017d7`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_OPT_SCRATCH_POOL_OFF.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+- Records: refusal in `core/experiment_guards_neural.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-31-neural section).
+
+### MOJOLEARN_IDN_MAXIMIZE_DEV_OFF
+
+- Tried: maximize=True negated on the host.
+- Evidence: no record (rule b). Verdict: deleted (V2 rule, unmeasured).
+- Removed: the define term; IDN_MAXIMIZE_DEV = IDENTICAL and not the CPU column. Default unchanged: no bits move.
+- Files: training/estimator.mojo.
+- Deleted by: lane/expdel2-31-neural `68a9b6cf9e` (2026-11-15); code recoverable at `51b81017d7`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_MAXIMIZE_DEV_OFF.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+- Records: refusal in `core/experiment_guards_neural.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-31-neural section).
+
+### MOJOLEARN_IDN_OPT_PARAMS_RESIDENT_OFF
+
+- Tried: hide the device-handle optimizer entries.
+- Evidence: no record (rule b). Verdict: deleted (V2 rule, unmeasured).
+- Removed: the define term; IDN_OPT_PARAMS_RESIDENT = IDENTICAL and not the CPU column. Default unchanged: no bits move.
+- Files: training/estimator.mojo.
+- Deleted by: lane/expdel2-31-neural `68a9b6cf9e` (2026-11-15); code recoverable at `51b81017d7`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_OPT_PARAMS_RESIDENT_OFF.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+- Records: refusal in `core/experiment_guards_neural.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-31-neural section).
+
+### MOJOLEARN_IDN_CE_PIPE_UP_OFF
+
+- Tried: the raw logits copy instead of the pinned two-half stage.
+- Evidence: no record (rule b). Verdict: deleted (V2 rule, unmeasured).
+- Removed: the define term; IDN_CE_PIPE_UP = IDENTICAL. Default unchanged: no bits move.
+- Files: training/estimator.mojo.
+- Deleted by: lane/expdel2-31-neural `68a9b6cf9e` (2026-11-15); code recoverable at `51b81017d7`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_CE_PIPE_UP_OFF.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+- Records: refusal in `core/experiment_guards_neural.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-31-neural section).
+
+### MOJOLEARN_TRAIN_OPT_FAST_PIPE_DOWN_OFF
+
+- Tried: the rollback of the pipelined optimizer download.
+- Evidence: EXP:2429 DELETED 2026-11-15 (NEUTRAL) (rule e); the default it rolls back is the measured M3 KEEP. Verdict: deleted (V2 rule, unmeasured).
+- Removed: the define term; TRAIN_OPT_PIPE_DOWN = AFN_APPLE_FAST. Default unchanged: no bits move.
+- Files: training/estimator.mojo.
+- Deleted by: lane/expdel2-31-neural `68a9b6cf9e` (2026-11-15); code recoverable at `51b81017d7`.
+- Restore: `git apply experiments/removed/MOJOLEARN_TRAIN_OPT_FAST_PIPE_DOWN_OFF.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+- Records: refusal in `core/experiment_guards_neural.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-31-neural section).
+
+### MOJOLEARN_BYTE_LM_VSUM_HD_GENERIC_OFF
+
+- Tried: the head-dim 64 / 2W / W special cases and the per-key accumulate loop.
+- Evidence: no record (rule b). Verdict: deleted (V2 rule, unmeasured).
+- Removed: the alias (with its MOJOLEARN_IDN_ALL_OFF term) and the special-case branches; the generic panel sum is the only route. Default unchanged: no bits move.
+- Files: training/byte_lm_host_kernels.mojo.
+- Deleted by: lane/expdel2-31-neural `fb518878c4` (2026-11-15); code recoverable at `68a9b6cf9e`.
+- Restore: `git apply experiments/removed/MOJOLEARN_BYTE_LM_VSUM_HD_GENERIC_OFF.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+- Records: refusal in `core/experiment_guards_neural.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-31-neural section).
+
+### MOJOLEARN_BYTE_LM_HOST_LEGACY_GEMM
+
+- Tried: the legacy host GEMM in any build.
+- Evidence: no record (rule b). Verdict: deleted (V2 rule, unmeasured).
+- Removed: the define term of BYTE_HOST_GHR; the legacy kernel stays for the sabotage controls. Default unchanged: no bits move.
+- Files: training/byte_lm_host_kernels.mojo.
+- Deleted by: lane/expdel2-31-neural `3393bec2de` (2026-11-15); code recoverable at `fb518878c4`.
+- Restore: `git apply experiments/removed/MOJOLEARN_BYTE_LM_HOST_LEGACY_GEMM.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+- Records: refusal in `core/experiment_guards_neural.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-31-neural section).
+
+### MOJOLEARN_OPT_TRUST_INPUTS
+
+- Tried: skip the device refusal scans ("no refusal" downgrade).
+- Evidence: no record (rule a). Verdict: deleted (V2 rule, unmeasured).
+- Removed: both comptime returns in training/checks/optimizer.mojo; training/opt_gate.mojo (another lane) still names it. Default unchanged: no bits move.
+- Files: training/checks/optimizer.mojo.
+- Deleted by: lane/expdel2-31-neural `c7d0cfb249` (2026-11-15); code recoverable at `943c1ff5fe`.
+- Restore: `git apply experiments/removed/MOJOLEARN_OPT_TRUST_INPUTS.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+- Records: refusal in `core/experiment_guards_neural.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-31-neural section).
+
+### Non-owner sites in this lane
+
+Inline TOMBSTONE markers only; the owner lane of each define writes its section, refusal and records.
+
+- `MOJOLEARN_IDN_ALL_OFF`: the umbrella term removed from NN60_EMB_HEAD_VIEWS, NN60_BLOCK_VIEWS and the live-status rule (training/byte_lm.mojo), the IDN_NORM rule (byte_lm_host.mojo), NN53 (chunked_lm_head_profile.mojo), IDN_TRAIN_DEV_TENSORS (dev_tensors.mojo), five estimator aliases (estimator.mojo), BYTE_LM_VSUM_HD_GENERIC_OFF (byte_lm_host_kernels.mojo); `dc698300f4, cba6209bbd, 89a7547f4e, e7b9a56a35, 68a9b6cf9e, fb518878c4`, recoverable at `8b520bf1c1`; `experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-31-neural.patch`.
+- `MOJOLEARN_IDN_TRAIN_NO_DECODE_CACHE`: folded to False: retain_kv_cache=True in training/byte_lm.mojo and training/byte_lm_layer_pool.mojo; `8b520bf1c1`, recoverable at `f105b7dcfb`; `experiments/removed/MOJOLEARN_IDN_TRAIN_NO_DECODE_CACHE.expdel2-31-neural.patch`.
+- `MOJOLEARN_IDN_TRAIN_SCRATCH`: NN62_LIFETIME_ARENA and IDN_TRAIN_BACKWARD_SCRATCH folded to False with ByteBuffers.neural_scratch (training/byte_lm.mojo, training/dev_tensors.mojo); `51b81017d7`, recoverable at `e7b9a56a35`; `experiments/removed/MOJOLEARN_IDN_TRAIN_SCRATCH.expdel2-31-neural.patch`.
+- `MOJOLEARN_IDN_NORM_FIXED_LANES`: folded to False in the host RMSNorm S1 fold (training/byte_lm_host_kernels.mojo); `6ce75b82de`, recoverable at `3393bec2de`; `experiments/removed/MOJOLEARN_IDN_NORM_FIXED_LANES.expdel2-31-neural.patch`.
+- `MOJOLEARN_IDN_NEURAL_NN16`: NN16 folded (already False): the cleared head scratch stays (training/byte_lm_logits.mojo); `54a61f60dc`, recoverable at `6ce75b82de`; `experiments/removed/MOJOLEARN_IDN_NEURAL_NN16.expdel2-31-neural.patch`.
+- `MOJOLEARN_IDN_NEURAL_GEMM_CONTROL`: the control term beside NN16 removed (training/byte_lm_logits.mojo); `54a61f60dc`, recoverable at `6ce75b82de`; `experiments/removed/MOJOLEARN_IDN_NEURAL_GEMM_CONTROL.expdel2-31-neural.patch`.
+- `MOJOLEARN_BYTE_LM_GENERIC_OPS`: folded to False: the program captures OPS_LM_EMBEDDING (training/byte_lm_program.mojo); `3fba220d74`, recoverable at `54a61f60dc`; `experiments/removed/MOJOLEARN_BYTE_LM_GENERIC_OPS.expdel2-31-neural.patch`.
+- `MOJOLEARN_IDN_CHUNKED_LM_HEAD_V2`: folded to False: ByteConfig default and host primitive op 28 (training/byte_lm_config.mojo, training/host/native_primitive_dispatch.mojo); `ddb49ec46d`, recoverable at `3fba220d74`; `experiments/removed/MOJOLEARN_IDN_CHUNKED_LM_HEAD_V2.expdel2-31-neural.patch`.
+- `MOJOLEARN_IDN_CE_DENOM_ROWFOLD`: folded to False with ce_denom_rowfold_kernel, CE_DENOM_ROWFOLD_KS and _ce_denom_rowfold_into (training/checks/loss.mojo); `943c1ff5fe`, recoverable at `ddb49ec46d`; `experiments/removed/MOJOLEARN_IDN_CE_DENOM_ROWFOLD.expdel2-31-neural.patch`.
+
+Not deleted, contrary to the plan: `MOJOLEARN_COLUMN_CPU` (the CPU-column build switch, KEEP; coordinator correction 2026-11-15); `MOJOLEARN_TRAIN_LIVE_STATUS` (training/byte_lm.mojo live-status rule: its source comment records the opt-in arm measured faster on the L40S, live/base 0.960, and near-neutral 0.993 on the MI325X; a measured winner is never deleted on reasoning; only the MOJOLEARN_IDN_ALL_OFF term beside it was removed). No edit needed in this lane's files (the alias stays an expression owned elsewhere): `MOJOLEARN_ATTN_EXACT_TAIL_GUARD`, `MOJOLEARN_ATTN_KV_CORNER_GUARD`, `MOJOLEARN_ATTN_LEGACY_CORNER`, `MOJOLEARN_ATTN_REPAIR_MASKED_TAIL` (training/byte_lm.mojo reads ATTN_EXACT_TAIL_GUARD and ATTN_REPAIR_MASKED_TAIL from transformer/impl/llama/fused_attention.mojo, where they keep their per-column rule).

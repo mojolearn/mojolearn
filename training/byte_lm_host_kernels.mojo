@@ -107,7 +107,9 @@ from transformer.checks.transformer_fixture import (
     unmasked_fill,
 )
 from transformer.checks.transformer_oracle import RopeTable, refuse_nonfinite
-from transformer.experiments.norm_fixed_lanes import IDN_NORM_FIXED_LANES, nfl_dot
+# TOMBSTONE: MOJOLEARN_IDN_NORM_FIXED_LANES (opt-in arm, EXP:2246 PENDING, never run; owner elsewhere) folded to False
+# 2026-11-15 by lane/expdel2-31-neural (the serial S1 fold stays); code recoverable at 3393bec2de.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_NORM_FIXED_LANES.expdel2-31-neural.patch
 # TOMBSTONE: MOJOLEARN_IDN_ATTN_SOFTMAX=2 (slower) deleted 2026-10-10 by c1bf9d832; code recoverable at ca25d9321.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_ATTN_SOFTMAX-arm2.patch
 
@@ -122,12 +124,11 @@ comptime VALUE_SUM_64 = 64 // HOST_FW
 #: in registers, then single vectors, then scalar tail lanes. Each output is
 #: still one chain over the keys ascending from `+0.0` by the same fma and
 #: flush, so every head size keeps its bits (the host column needs no
-#: change). `-D MOJOLEARN_BYTE_LM_VSUM_HD_GENERIC_OFF=1` restores the
-#: special cases.
-#: lane/review-fixes: off under MOJOLEARN_IDN_ALL_OFF too (the wave's OFF arm).
-comptime BYTE_LM_VSUM_HD_GENERIC_OFF = is_defined["MOJOLEARN_BYTE_LM_VSUM_HD_GENERIC_OFF"]() or is_defined[
-    "MOJOLEARN_IDN_ALL_OFF"
-]()
+#: change).
+# TOMBSTONE: MOJOLEARN_BYTE_LM_VSUM_HD_GENERIC_OFF (old path: the head-dim 64 / 2W / W special cases and the
+# per-key accumulate loop, no A/B recorded) deleted 2026-11-15 by lane/expdel2-31-neural with the
+# MOJOLEARN_IDN_ALL_OFF term beside it; code recoverable at 68a9b6cf9e.
+# Restore: git apply experiments/removed/MOJOLEARN_BYTE_LM_VSUM_HD_GENERIC_OFF.patch
 comptime U32V = SIMD[DType.uint32, HOST_FW]
 #: SIMD accumulators `gemm_nt_rows` advances together per p step at one leaf
 #: (spelled out as eight locals there). A schedule knob: every lane still runs
@@ -142,13 +143,15 @@ comptime GEMM_CHAINS = 8
 #: of that kernel. Same bits as `gemm_nt_rows`, which rebuilt the leaf
 #: partials through a scratch round trip at every step for k above the
 #: leaf. The sabotage builds keep the legacy kernel (its reversed fold is
-#: DEVIATION 2612's control); `-D MOJOLEARN_BYTE_LM_HOST_LEGACY_GEMM=1`
-#: restores it in any build.
+#: DEVIATION 2612's control) and so do changed neural profiles.
+# TOMBSTONE: MOJOLEARN_BYTE_LM_HOST_LEGACY_GEMM (old path: the legacy host GEMM in any build, no A/B recorded)
+# deleted 2026-11-15 by lane/expdel2-31-neural; the legacy kernel stays for the sabotage controls; code recoverable
+# at fb518878c4.
+# Restore: git apply experiments/removed/MOJOLEARN_BYTE_LM_HOST_LEGACY_GEMM.patch
 comptime BYTE_HOST_GHR = (
     not NEURAL_PROFILE_CHANGED
     and not is_defined["MOJOLEARN_BYTE_LM_HOST_SABOTAGE"]()
     and not GEMM_ORACLE_HOST_SABOTAGE
-    and not is_defined["MOJOLEARN_BYTE_LM_HOST_LEGACY_GEMM"]()
 )
 
 
@@ -538,15 +541,9 @@ def rms_norm_fast(x: List[Float32], wnorm_flushed: List[Float32], m: Int, dm: In
     for t in range(m):
         var base = t * dm
         var acc = Float32(0.0)
-        comptime if IDN_NORM_FIXED_LANES:
-            # MOJOLEARN_IDN_NORM_FIXED_LANES: S1 as the fixed 32-lane fold,
-            # the device cells' and the oracle's bits
-            var xr = rebind[MutPointer[Float32, MutAnyOrigin]](xp)
-            acc = nfl_dot(xr, xr, base, base, dm)
-        else:
-            for j in range(dm):
-                var xj = ftz(xp.unsafe_load(base + j))
-                acc = ftz(identical_mul_add(xj, xj, acc))
+        for j in range(dm):
+            var xj = ftz(xp.unsafe_load(base + j))
+            acc = ftz(identical_mul_add(xj, xj, acc))
         var mean = ftz(identical_div(acc, Float32(dm)))
         var rstd = ftz(identical_rsqrt(ftz(mean + RMS_EPS)))
         var rv = F32V(rstd)
@@ -808,80 +805,31 @@ def _value_sum_head(aweights: List[Float32], vpack: List[Float32], l: Int, s: In
             for dv2 in range(hd):
                 ctxp.unsafe_store(cbase + dv2, attn_v2_context_cell(awa, wrow, vpa, 0, hd, dv2, 0, count - 1))
             continue
-        comptime if not BYTE_LM_VSUM_HD_GENERIC_OFF:
-            var dv0 = 0
-            while dv0 + VALUE_SUM_64 * HOST_FW <= hbody:
-                var pacc = Array[F32V, VALUE_SUM_64](fill=F32V(0.0))
-                for j in range(count):
-                    var wp = F32V(awp.unsafe_load(wrow + j))
-                    var vrowp = j * hd + dv0
-                    comptime for v in range(VALUE_SUM_64):
-                        pacc[v] = ftz_lanes(identical_mul_add_simd[HOST_FW](
-                            wp, vp.unsafe_load[width=HOST_FW](vrowp + v * HOST_FW), pacc[v]))
-                comptime for v in range(VALUE_SUM_64):
-                    ctxp.unsafe_store[width=HOST_FW](cbase + dv0 + v * HOST_FW, pacc[v])
-                dv0 += VALUE_SUM_64 * HOST_FW
-            while dv0 < hbody:
-                var a_v = F32V(0.0)
-                for j in range(count):
-                    a_v = ftz_lanes(identical_mul_add_simd[HOST_FW](
-                        F32V(awp.unsafe_load(wrow + j)), vp.unsafe_load[width=HOST_FW](j * hd + dv0), a_v))
-                ctxp.unsafe_store[width=HOST_FW](cbase + dv0, a_v)
-                dv0 += HOST_FW
-            while dv0 < hd:
-                var a_s = Float32(0.0)
-                for j in range(count):
-                    a_s = ftz(identical_mul_add(awp.unsafe_load(wrow + j), vp.unsafe_load(j * hd + dv0), a_s))
-                ctxp.unsafe_store(cbase + dv0, a_s)
-                dv0 += 1
-            continue
-        if hd == 64:
-            var accs = Array[F32V, VALUE_SUM_64](fill=F32V(0.0))
+        var dv0 = 0
+        while dv0 + VALUE_SUM_64 * HOST_FW <= hbody:
+            var pacc = Array[F32V, VALUE_SUM_64](fill=F32V(0.0))
             for j in range(count):
-                var w64 = F32V(awp.unsafe_load(wrow + j))
-                var vrow64 = j * hd
+                var wp = F32V(awp.unsafe_load(wrow + j))
+                var vrowp = j * hd + dv0
                 comptime for v in range(VALUE_SUM_64):
-                    accs[v] = ftz_lanes(identical_mul_add_simd[HOST_FW](
-                        w64, vp.unsafe_load[width=HOST_FW](vrow64 + v * HOST_FW), accs[v]))
+                    pacc[v] = ftz_lanes(identical_mul_add_simd[HOST_FW](
+                        wp, vp.unsafe_load[width=HOST_FW](vrowp + v * HOST_FW), pacc[v]))
             comptime for v in range(VALUE_SUM_64):
-                ctxp.unsafe_store[width=HOST_FW](cbase + v * HOST_FW, accs[v])
-            continue
-        if hd == 2 * HOST_FW:
-            var a0 = F32V(0.0)
-            var a1 = F32V(0.0)
+                ctxp.unsafe_store[width=HOST_FW](cbase + dv0 + v * HOST_FW, pacc[v])
+            dv0 += VALUE_SUM_64 * HOST_FW
+        while dv0 < hbody:
+            var a_v = F32V(0.0)
             for j in range(count):
-                var wv2 = F32V(awp.unsafe_load(wrow + j))
-                var vrow2 = j * hd
-                a0 = ftz_lanes(identical_mul_add_simd[HOST_FW](wv2, vp.unsafe_load[width=HOST_FW](vrow2), a0))
-                a1 = ftz_lanes(identical_mul_add_simd[HOST_FW](wv2, vp.unsafe_load[width=HOST_FW](vrow2 + HOST_FW), a1))
-            ctxp.unsafe_store[width=HOST_FW](cbase, a0)
-            ctxp.unsafe_store[width=HOST_FW](cbase + HOST_FW, a1)
-            continue
-        if hd == HOST_FW:
-            var a_one = F32V(0.0)
+                a_v = ftz_lanes(identical_mul_add_simd[HOST_FW](
+                    F32V(awp.unsafe_load(wrow + j)), vp.unsafe_load[width=HOST_FW](j * hd + dv0), a_v))
+            ctxp.unsafe_store[width=HOST_FW](cbase + dv0, a_v)
+            dv0 += HOST_FW
+        while dv0 < hd:
+            var a_s = Float32(0.0)
             for j in range(count):
-                a_one = ftz_lanes(identical_mul_add_simd[HOST_FW](
-                    F32V(awp.unsafe_load(wrow + j)), vp.unsafe_load[width=HOST_FW](j * hd), a_one))
-            ctxp.unsafe_store[width=HOST_FW](cbase, a_one)
-            continue
-        for j in range(count):
-            var wj = awp.unsafe_load(wrow + j)
-            var wv = F32V(wj)
-            var vrow = j * hd
-            var dv = 0
-            while dv < hbody:
-                var acc = ctxp.unsafe_load[width=HOST_FW](cbase + dv)
-                ctxp.unsafe_store[width=HOST_FW](
-                    cbase + dv,
-                    ftz_lanes(identical_mul_add_simd[HOST_FW](wv, vp.unsafe_load[width=HOST_FW](vrow + dv), acc)),
-                )
-                dv += HOST_FW
-            while dv < hd:
-                ctxp.unsafe_store(
-                    cbase + dv,
-                    ftz(identical_mul_add(wj, vp.unsafe_load(vrow + dv), ctxp.unsafe_load(cbase + dv))),
-                )
-                dv += 1
+                a_s = ftz(identical_mul_add(awp.unsafe_load(wrow + j), vp.unsafe_load(j * hd + dv0), a_s))
+            ctxp.unsafe_store(cbase + dv0, a_s)
+            dv0 += 1
 
 
 @no_inline

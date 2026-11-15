@@ -19,9 +19,8 @@ the row losses and the loss scalar.
 Each form runs the host entry's own calls in the host entry's order on the
 same values (the certified GEMM, `identical_ce_loss_resident`), with the
 non-finite refusals as device scans: no bit moves. IDENTICAL, GPU columns;
-`-D MOJOLEARN_IDN_TRAIN_DEV_TENSORS_OFF` (or MOJOLEARN_IDN_ALL_OFF) leaves
-the entries unregistered and the Python functions then refuse a device
-array by name."""
+the CPU column leaves the entries unregistered and the Python functions
+then refuse a device array by name."""
 from std.sys.compile import is_defined
 from max.gpu.host import DeviceBuffer, DeviceContext
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
@@ -37,16 +36,20 @@ from gemm.neural_dispatch import identical_gemm_into, identical_gemm_workspace_m
 from gemm.experiments.neural_plans import NN12
 from gemm.contract import OP_NN, OP_NT, OP_TN
 from training.estimator import identical_ce_loss_dev
-from training.neural_identical_experiments import IDN_TRAIN_BACKWARD_SCRATCH
+# TOMBSTONE: MOJOLEARN_IDN_TRAIN_SCRATCH arms 1/3 (IDN_TRAIN_BACKWARD_SCRATCH, shared dA/dW scratch; opt-in, no A/B
+# recorded; owner elsewhere) folded to False 2026-11-15 by lane/expdel2-31-neural; code recoverable at e7b9a56a35.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_TRAIN_SCRATCH.expdel2-31-neural.patch
 from training.neural_gemm_workspace import (
     IDN_TRAINING_GEMM_WORKSPACE, training_gemm_cached_into, training_gemm_cached_close,
 )
 from core.shared_slot import SharedSlot
 
+# TOMBSTONE: MOJOLEARN_IDN_TRAIN_DEV_TENSORS_OFF (old path, no A/B recorded) and the MOJOLEARN_IDN_ALL_OFF term
+# (old path; owner elsewhere) deleted 2026-11-15 by lane/expdel2-31-neural; code recoverable at 89a7547f4e.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_TRAIN_DEV_TENSORS_OFF.patch
 comptime IDN_TRAIN_DEV_TENSORS = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     and not is_defined["MOJOLEARN_COLUMN_CPU"]()
-    and not (is_defined["MOJOLEARN_IDN_TRAIN_DEV_TENSORS_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
 )
 
 comptime _FP = MutPointer[Float32, MutUntrackedOrigin]
@@ -218,14 +221,8 @@ def train_linear_backward_dev(
     else:
         var na = identical_gemm_backward_a_workspace_max_floats(OP_NT, m, n, k)
         var nb = identical_gemm_backward_b_workspace_max_floats(OP_NT, m, n, k)
-        var ws_a = ctx.enqueue_create_buffer[DType.float32](max(na, nb) if IDN_TRAIN_BACKWARD_SCRATCH else na)
-        var ws_b: DeviceBuffer[DType.float32]
-        comptime if IDN_TRAIN_BACKWARD_SCRATCH:
-            # NI36: both GEMMs enqueue onto this SAME in-order context and the
-            # final wait precedes release; dA/dW themselves remain distinct.
-            ws_b = ws_a.create_sub_buffer[DType.float32](0, nb)
-        else:
-            ws_b = ctx.enqueue_create_buffer[DType.float32](nb)
+        var ws_a = ctx.enqueue_create_buffer[DType.float32](na)
+        var ws_b = ctx.enqueue_create_buffer[DType.float32](nb)
         identical_gemm_backward_a_into(ctx, da, dc, w, ws_a, m, n, k, OP_NT)
         identical_gemm_backward_b_into(ctx, dw, dc, a, ws_b, m, n, k, OP_NT)
         ctx.synchronize()

@@ -39,48 +39,6 @@
       ],
       "note": "Scope arm: neural128/neural256 switch the neural callers to the NN03 profile body. The all256 contract-leaf arm (every GEMM, classical too) is split out as gemm_contract_leaf. Leaf 64 deleted (I04 loser). Bit version: ID check per arm. grid ge123e6f9 (lane grid-act-5, 2026-10-08): neural128 SPLIT, mlp-train-step FASTER NV 2.0->1.7 / AMD 3.5->3.1 ms (0.886x) but lm-forward 7.2x, lm-train-step 13.6x, mamba1/2/3-forward 3.0/3.8/5.2x, samba-train-step 1.73x, transformer-forward 7.6x SLOWER, same bits; the MLP step now takes leaf128 by default (mlp_gemm_leaf128), the build-wide default stays off. The arms stay for the grid; with neural128|neural256 the MLP follows the build-wide arm."
     },
-    "norm": {
-      "define": "MOJOLEARN_IDN_NORM",
-      "kind": "arms",
-      "arms": {
-        "off": [],
-        "lanes8": [
-          "MOJOLEARN_IDN_NORM=1"
-        ],
-        "split_scale": [
-          "MOJOLEARN_IDN_NORM=2"
-        ],
-        "row_block": [
-          "MOJOLEARN_IDN_NORM=3"
-        ]
-      },
-      "default": "off",
-      "source": [
-        "transformer/experiments/norm_profile_contract.mojo:14",
-        "transformer/experiments/attention_schedules.mojo:25",
-        "training/neural_identical_experiments.mojo:28",
-        "transformer/impl/llama/modeling_llama.mojo:2193"
-      ],
-      "binding": [
-        "_mojolearn_transformer",
-        "_mojolearn_byte_lm",
-        "_mojolearn_training"
-      ],
-      "bits_change": true,
-      "status": "rewritten",
-      "merged_from": [
-        "I.N.NN24",
-        "I.N.NN25",
-        "I.N.NI25"
-      ],
-      "note": "lanes8 arms change bits (host oracle and every device column); split_scale and row_block are schedules over the v1 fold (no bit change). row_block does not implement lanes8, hence no lanes8_row_block arm.",
-      "phase2_combinations": {
-        "lanes8_split_scale": [
-          "MOJOLEARN_IDN_NORM=4"
-        ],
-        "reason": "pre-built combination of lanes8 and split_scale; phase 2 only if both win"
-      }
-    },
     "gemm_global_workspace": {
       "define": "MOJOLEARN_NI01_GEMM_GEOMETRIC_WORKSPACE",
       "kind": "switch",
@@ -656,6 +614,11 @@
       "define": "MOJOLEARN_NI01_TRAINING_WORKSPACE",
       "control": "gemm_training_workspace",
       "reason": "DELETED 2026-11-15 (lane/expdel2-32-neural, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md; recoverable at 19d2549589; patch experiments/removed/MOJOLEARN_NI01_TRAINING_WORKSPACE.patch): unmeasured arm or old path deleted under AGENTS.md \"An unmeasured arm is deleted\"; default kept, no bits move. Refused in core/experiment_guards_neural.mojo; docs/TOMBSTONES.md."
+    },
+    {
+      "define": "MOJOLEARN_IDN_NORM",
+      "control": "norm",
+      "reason": "DELETED 2026-11-15 (lane/expdel2-31-neural, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md; recoverable at dc698300f4; patch experiments/removed/MOJOLEARN_IDN_NORM.patch) (every arm 1-4): opt-in arm, no A/B recorded. Deleted under AGENTS.md \"An unmeasured arm is deleted\" (Andrew, 2026-11-15). Refused in core/experiment_guards_neural.mojo; docs/TOMBSTONES.md."
     }
   ],
   "catalog_note": "experiments/six_lane_integration/catalog.json and build_plan.json still name the retired defines; they must be regenerated from these controls (tools/six_lane_ab.py now refuses retired defines). lane/neural-small 2026-10-07: neural:mamba-forward replaced by neural:mamba1/2/3-forward (neural-small.json); gemm_leaf all256 split to gemm_contract_leaf."
