@@ -963,6 +963,16 @@ def _sibling(name):
     return mod
 
 
+_ROUTE_MODULE = []
+
+
+def _route_suffix(route):
+    """` route=<word>` from tools/classical_route.py (loaded once per process)."""
+    if not _ROUTE_MODULE:
+        _ROUTE_MODULE.append(_sibling("classical_route"))
+    return _ROUTE_MODULE[0].route_suffix(route)
+
+
 #: the block arrays each lane's scorer reads (quality() and infer_quality() below)
 SCORER_ARRAYS = {"kmeans": ("X",), "pca": ("X",), "ols": ("Xq", "yq"), "knn": ("index", "queries"),
                  "hdbscan": ("X",), "svc": ("Xq", "yq")}
@@ -2739,6 +2749,10 @@ def worker(args):
                 upload_sep = None
                 if (runner.info or {}).get("library") == "mojolearn":
                     upload_sep = _ours_upload_probe(runner)
+                # the route the scored call took, read after every clock of
+                # the round (tools/classical_route.py; None for opponents)
+                from classical_route import classical_route
+                route = classical_route(runner)
             except Exception as exc:  # noqa: BLE001
                 import traceback
                 traceback.print_exc()
@@ -2746,7 +2760,7 @@ def worker(args):
                 return 1
             say({"event": "round", "round": r, "ms": ms, "digest": digest, "mem": m, "state_receipt": state_receipt,
                  "scored_calls": calls_rec,
-                 "upload_separate": upload_sep,
+                 "upload_separate": upload_sep, "classical_route": route,
                  "operation": {"ms": operation_ms, "preparation_ms": preparation_ms,
                                "scope": "prepare-fit-consume" if whole_requested else "call-consume",
                                "dataset_load_included": False,
@@ -2781,13 +2795,15 @@ def worker(args):
                 m = mem.stop()
                 if digest is None:
                     digest = _digest(inf.outputs())
+                from classical_route import classical_route
+                infer_route = classical_route(runner)   # after the clock (tools/classical_route.py)
             except Exception as exc:  # noqa: BLE001
                 import traceback
                 traceback.print_exc()
                 say({"event": "infer_error", "stage": "infer %d" % r, "error": repr(exc)})
                 continue
             say({"event": "infer", "round": r, "ms": ms, "digest": digest, "scored_calls": infer_calls_rec,
-                 "call": inf.desc, "info": inf.info, "mem": m})
+                 "call": inf.desc, "info": inf.info, "mem": m, "classical_route": infer_route})
         elif parts[0] == "infer_save":
             try:
                 path = parts[1]
@@ -3280,9 +3296,12 @@ def infer_phase(args, lane, ds, arms, workers, result):
                 if msg.get("scored_calls") is not None:   # SMALL ROWS (2026-11-15)
                     rec.setdefault("scored_calls", []).append(dict(msg["scored_calls"], round=r))
             rec["digests"].append(msg["digest"])
-            print("CTD-INFER-ROUND lane=%s dataset=%s arm=%s round=%d ms=%.3f digest=%s%s"
+            if msg.get("classical_route") is not None:   # the route beside the time, read outside the clock
+                rec.setdefault("classical_routes", []).append(dict(msg["classical_route"], round=r))
+            print("CTD-INFER-ROUND lane=%s dataset=%s arm=%s round=%d ms=%.3f digest=%s%s%s"
                   % (lane, ds, arm, r, msg["ms"], msg["digest"],
-                     _small_rows().line_suffix(msg.get("scored_calls"))), flush=True)
+                     _small_rows().line_suffix(msg.get("scored_calls")),
+                     _route_suffix(msg.get("classical_route"))), flush=True)
             time.sleep(args.pause)
     return infer
 
@@ -3434,10 +3453,13 @@ def race(args):
             if msg.get("upload_separate") is not None:
                 result["arms"][arm].setdefault("upload_separate", []).append(
                     dict(msg["upload_separate"], round=r, warmup=r == 0))
+            if msg.get("classical_route") is not None:   # the route beside the time, read outside the clock
+                result["arms"][arm].setdefault("classical_routes", []).append(dict(msg["classical_route"], round=r))
             result["arms"][arm]["mem"].append(msg.get("mem"))
-            print("CTD-ROUND lane=%s dataset=%s arm=%s round=%d ms=%.3f digest=%s%s"
+            print("CTD-ROUND lane=%s dataset=%s arm=%s round=%d ms=%.3f digest=%s%s%s"
                   % (lane, ds, arm, r, msg["ms"], msg["digest"],
-                     _small_rows().line_suffix(msg.get("scored_calls"))), flush=True)
+                     _small_rows().line_suffix(msg.get("scored_calls")),
+                     _route_suffix(msg.get("classical_route"))), flush=True)
             time.sleep(args.pause)
     infer = None
     if getattr(args, "infer", False) and lane in INFER_LANES:
