@@ -1390,15 +1390,15 @@ def host_weight_cdf(weights: List[Float32], n_rows: Int) raises -> List[Float64]
     return cdf^
 
 
-comptime RF_ORACLE_WBOOT_INT = True
-"""fam2-forests `IDN_RF_WEIGHTED_BOOTSTRAP_DEVICE`: the weighted bootstrap
-in exact integers, the host column of
-`ensemble/weighted_bootstrap_device.mojo` (quantum, UInt64 CDF, PCG bounded
-draw, upper_bound). cpu3-trees (2026-10-04): the device form is the only
-weighted route in IDENTICAL and FAST alike (its host Float64 arm and the
-`_OFF` define are gone), so the host column draws the integer stream in
-every mode too; the Float64 `weight_cdf` arm below is no longer reached
-for a weighted bootstrap."""
+# (Sweep 2026-11-15: the always-True RF_ORACLE_WBOOT_INT constant was folded into its two readers.)
+# fam2-forests `IDN_RF_WEIGHTED_BOOTSTRAP_DEVICE`: the weighted bootstrap
+# in exact integers, the host column of
+# `ensemble/weighted_bootstrap_device.mojo` (quantum, UInt64 CDF, PCG bounded
+# draw, upper_bound). cpu3-trees (2026-10-04): the device form is the only
+# weighted route in IDENTICAL and FAST alike (its host Float64 arm and the
+# `_OFF` define are gone), so the host column draws the integer stream in
+# every mode too; the Float64 `weight_cdf` arm below is no longer reached
+# for a weighted bootstrap.
 
 
 def host_weight_quantum(bits: UInt32, max_bits: UInt32) -> UInt64:
@@ -1455,33 +1455,32 @@ def host_sampled_rows(
 ) raises -> List[Int32]:
     """`RowSampler._sample_rows`, `randomforest.mojo:2093-2206`: the two
     unweighted arms and the weighted bootstrap (`weight_cdf` non-empty;
-    under `RF_ORACLE_WBOOT_INT` the integer `weight_qcdf` decides)."""
+    the integer `weight_qcdf` decides when it is non-empty)."""
     var rows = List[Int32](capacity=n_sampled)
-    comptime if RF_ORACLE_WBOOT_INT:
-        if bootstrap and len(weight_qcdf) > 0:
-            # `weighted_bootstrap_rows_kernel`: seed = the tree's hashed
-            # 32-bit seed, subsequence = the sample index, Lemire's bounded
-            # draw over [0, total), then upper_bound.
-            var total = weight_qcdf[n_rows - 1]
-            var qseed = UInt64(Int(host_seed_tree(seed, tree_id)) & 0xFFFFFFFF)
-            for i in range(n_sampled):
-                var qsub = UInt64(i)
-                comptime if RF_ORACLE_HOST_SABOTAGE:
-                    qsub = qsub + UInt64(1)
-                var qgen = host_pcg_init(qseed, qsub, UInt64(0))
-                var u = host_pcg_uniform_u64(qgen, UInt64(0), total)
-                var qlo = 0
-                var qhi = n_rows
-                while qlo < qhi:
-                    var qmid = (qlo + qhi) // 2
-                    if weight_qcdf[qmid] <= u:
-                        qlo = qmid + 1
-                    else:
-                        qhi = qmid
-                if qlo > n_rows - 1:
-                    qlo = n_rows - 1
-                rows.append(Int32(qlo))
-            return rows^
+    if bootstrap and len(weight_qcdf) > 0:
+        # `weighted_bootstrap_rows_kernel`: seed = the tree's hashed
+        # 32-bit seed, subsequence = the sample index, Lemire's bounded
+        # draw over [0, total), then upper_bound.
+        var total = weight_qcdf[n_rows - 1]
+        var qseed = UInt64(Int(host_seed_tree(seed, tree_id)) & 0xFFFFFFFF)
+        for i in range(n_sampled):
+            var qsub = UInt64(i)
+            comptime if RF_ORACLE_HOST_SABOTAGE:
+                qsub = qsub + UInt64(1)
+            var qgen = host_pcg_init(qseed, qsub, UInt64(0))
+            var u = host_pcg_uniform_u64(qgen, UInt64(0), total)
+            var qlo = 0
+            var qhi = n_rows
+            while qlo < qhi:
+                var qmid = (qlo + qhi) // 2
+                if weight_qcdf[qmid] <= u:
+                    qlo = qmid + 1
+                else:
+                    qhi = qmid
+            if qlo > n_rows - 1:
+                qlo = n_rows - 1
+            rows.append(Int32(qlo))
+        return rows^
     if bootstrap and len(weight_cdf) > 0:
         # `:2098-2135`: `uniform_double_host` over `[0, weight_sum)` at stride
         # 110592 (`core/philox.mojo:357-379`, one generator per subsequence),
@@ -1806,9 +1805,8 @@ def rf_host_fit(
     if len(weights) > 0:
         # Their two refusals by value (`prepare_weights`), both arms.
         weight_cdf = host_weight_cdf(weights, n_rows)
-        comptime if RF_ORACLE_WBOOT_INT:
-            if p.bootstrap:
-                weight_qcdf = host_weight_qcdf(weights, n_rows)
+        if p.bootstrap:
+            weight_qcdf = host_weight_qcdf(weights, n_rows)
     if weighted_obj:
         # `bindings/_mojolearn_rf.mojo` (cpu3-bindings): the total in the
         # blocked binary64 order the device scan uses
