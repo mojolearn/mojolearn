@@ -37,6 +37,9 @@ gradient. The op keys on nothing but its operands' shapes; the small MLP
 program (autograd/small_mlp_program.mojo) is its one capturer, chosen by
 MODEL KIND, never by a dimension.
 
+A/B: `-D MOJOLEARN_SMALL_MLP_GENERIC_OPS` makes the program capture the
+generic transpose + OPS_LINEAR ops instead (lane x2's form), for the box
+comparison mlp-train-step / mlp-predict.
 """
 from max.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext

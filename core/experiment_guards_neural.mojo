@@ -595,8 +595,7 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_IDN_ROW_COOP_OFF"](), "removed 2026-11-15 (lane/expdel2-24-neural): IDN_ROW_COOP_OFF (old path, Neural (autograd softmax-family rows); no A/B recorded) is gone; the default is kept; code recoverable at 5d81d356e0; restore: experiments/removed/MOJOLEARN_IDN_ROW_COOP_OFF.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_SEQ_TILED_PREDICT.patch
     comptime assert not is_defined["MOJOLEARN_IDN_SEQ_TILED_PREDICT"](), "removed 2026-11-15 (lane/expdel2-24-neural): IDN_SEQ_TILED_PREDICT (opt-in arm, Neural (autograd model_predict chunk); no A/B recorded) is gone; the default path is the only one; code recoverable at d19ca4f0c2; restore: experiments/removed/MOJOLEARN_IDN_SEQ_TILED_PREDICT.patch"
-    # Restore: git apply experiments/removed/MOJOLEARN_SMALL_MLP_GENERIC_OPS.patch
-    comptime assert not is_defined["MOJOLEARN_SMALL_MLP_GENERIC_OPS"](), "removed 2026-11-15 (lane/expdel2-24-neural): SMALL_MLP_GENERIC_OPS (opt-in arm, Neural (small MLP program capture); no A/B recorded) is gone; the default path is the only one; code recoverable at 1acdb0bcd1; restore: experiments/removed/MOJOLEARN_SMALL_MLP_GENERIC_OPS.patch"
+    # MOJOLEARN_SMALL_MLP_GENERIC_OPS: refusal removed 2026-11-15 (restored; owed B arm, see docs/TOMBSTONES.md Restored table)
     # ---- end lane expdel2-24-neural
     # Lane expdel2-30-neural (2026-11-15): unmeasured arms and superseded old paths deleted, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (docs/TOMBSTONES.md).
     # Restore: git apply experiments/removed/MOJOLEARN_AFN26_LOSS_BLOCK128.patch
