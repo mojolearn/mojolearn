@@ -112,7 +112,6 @@ from max.gpu.sync import barrier
 # them because `checks/numerics.mojo`'s own two-arm functions put their
 # stdlib import at FUNCTION scope after the comptime branch, and an import
 # INSIDE a comptime-if body is a spelling nothing in this tree has compiled.
-from training.neural_ab_profiles import NN54_LOSS_PROFILE, nn_reduce_pointer_into, nn_reduce_scratch_floats
 from checks.numerics import (
     GLOBAL_NUMERIC_MODE,
     NUMERIC_IDENTICAL,
@@ -1119,8 +1118,6 @@ def identical_ce_workspace_max_floats(
         var wb = identical_gemm_workspace_max_floats(1, 1, n_rows)
         if wb > w:
             w = wb
-    comptime if NN54_LOSS_PROFILE:
-        w = max(w, 2 * nn_reduce_scratch_floats[128](n_rows))
     # TOMBSTONE: MOJOLEARN_IDN_CE_TOKEN_FOLD=2 (noise) deleted 2026-10-10 by 3034789a2; code recoverable at ca25d9321.
     if w < 1:
         return 1
@@ -1491,11 +1488,8 @@ def identical_ce_forward_into(
 
     # ---- L12. ROUTED. The ones vector is the LEFT operand here, which is
     # `identical_gemm_backward_bias_into`'s own shape at `n == 1`.
-    comptime if NN54_LOSS_PROFILE:
-        nn_reduce_pointer_into[128, False](ctx, total.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), row.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), ws.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), n_rows)
-    else:
-        # TOMBSTONE: MOJOLEARN_IDN_CE_TOKEN_FOLD=2 (noise) deleted 2026-10-10 by 3034789a2; code recoverable at ca25d9321.
-        identical_gemm_into(ctx, total, ones, row, ws, 1, 1, n_rows, OP_NN)
+    # TOMBSTONE: MOJOLEARN_IDN_CE_TOKEN_FOLD=2 (noise) deleted 2026-10-10 by 3034789a2; code recoverable at ca25d9321.
+    identical_gemm_into(ctx, total, ones, row, ws, 1, 1, n_rows, OP_NN)
 
     # ---- L13. The divisor's ONE producer.
     var divisor = ce_divisor(cfg.reduction, count, cfg.num_items)
