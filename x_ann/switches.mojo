@@ -60,7 +60,8 @@ comptime ANN3_COARSE_SEED = True
 #: The per-row statements and their order do not depend on it: no bit moves.
 # TOMBSTONE: MOJOLEARN_ANN3_TSNE_RB32 (unmeasured opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-14-cluster; code recoverable at 0c729eaf23.
 # Restore: git apply experiments/removed/MOJOLEARN_ANN3_TSNE_RB32.patch; record in docs/TOMBSTONES.md.
-comptime ANN3_TSNE_RB64 = is_defined["MOJOLEARN_ANN3_TSNE_RB64"]()
+# TOMBSTONE: MOJOLEARN_ANN3_TSNE_RB64 (unmeasured opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-14-cluster; code recoverable at e114af5d32.
+# Restore: git apply experiments/removed/MOJOLEARN_ANN3_TSNE_RB64.patch; record in docs/TOMBSTONES.md.
 
 #: The IVF-PQ and IVF-SQ builds download their code arrays (n x pq_dim and
 #: n x dim int32) straight into the caller's arrays, instead of a host
