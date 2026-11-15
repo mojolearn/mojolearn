@@ -2153,6 +2153,7 @@ Deletions reversed by new evidence. The code is back on main; the section and th
 | [`MOJOLEARN_IDN_TSQR_TREE_PAR_OFF`](#mojolearn_idn_tsqr_tree_par_off) | Decomposition (TSQR tree combine, IDENTICAL) | 2026-11-15 (`77c81ac782`) | 2026-11-15 (lane/expdel2-restore-owed) | opt-in B arm, default unchanged, A/B owed at the wave sha | [MOJOLEARN_IDN_TSQR_TREE_PAR_OFF.patch](../experiments/removed/MOJOLEARN_IDN_TSQR_TREE_PAR_OFF.patch) |
 | [`MOJOLEARN_MAMBA3_FORWARD_ZERO_FILL`](#mojolearn_mamba3_forward_zero_fill) | Neural (Mamba-3 outputs) | 2026-11-15 (`1c0608ab17`) | 2026-11-15 (lane/expdel2-restore-owed) | opt-in B arm, default unchanged, A/B owed at the wave sha | [MOJOLEARN_MAMBA3_FORWARD_ZERO_FILL.patch](../experiments/removed/MOJOLEARN_MAMBA3_FORWARD_ZERO_FILL.patch) |
 | [`MOJOLEARN_MAMBA_CALL_PROGRAM`](#mojolearn_mamba_call_program) | Neural (per-call Mamba door x in place) | 2026-11-15 (`449d72a027`) | 2026-11-15 (lane/expdel2-restore-owed) | opt-in B arm, default unchanged, A/B owed at the wave sha | [MOJOLEARN_MAMBA_CALL_PROGRAM.patch](../experiments/removed/MOJOLEARN_MAMBA_CALL_PROGRAM.patch) |
+| [`MOJOLEARN_PROGRAM_RUN_ENTRY`](#mojolearn_program_run_entry) | Autograd (Program.run door) | 2026-11-15 (`8fe6eaaa01`) | 2026-11-15 (lane/expdel2-restore-owed) | opt-in B arm, default unchanged, A/B owed at the wave sha | [MOJOLEARN_PROGRAM_RUN_ENTRY.patch](../experiments/removed/MOJOLEARN_PROGRAM_RUN_ENTRY.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -10461,6 +10462,7 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2
 - Files: providers/python/autograd_program_pyapi_door.mojo, providers/python/autograd_program_public_request_pyapi_pack.mojo.
 - Deleted by: lane/expdel2-08-base `8fe6eaaa01` (2026-11-15); code recoverable at `a435c824c4`.
 - Restore: `git apply experiments/removed/MOJOLEARN_PROGRAM_RUN_ENTRY.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+Restored 2026-11-15 (lane/expdel2-restore-owed): owed B arm, deletion premature; see Restored table.
 
 ### MOJOLEARN_SESSION_CALL_DESCRIPTOR
 

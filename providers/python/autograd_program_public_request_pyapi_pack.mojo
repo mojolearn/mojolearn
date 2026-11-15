@@ -12,7 +12,7 @@ from providers.python.autograd_program_owner_pyapi_door import program_owner_fie
 from providers.python.autograd_session_public_request_pyapi_pack import ops_session_public_call_py
 from providers.python.autograd_session_frontend_pyapi_door import ops_session_fields
 from providers.python.autograd_program_arrays_pyapi_door import program_numeric_scalar, program_builtin_types
-from providers.python.autograd_program_pyapi_door import _program_run_fixed
+from providers.python.autograd_program_pyapi_door import _program_run_fixed, PROGRAM_RUN_ENTRY
 from providers.python.neural_descriptor_pyapi_door import NativeDescriptorResource
 from providers.python.autograd_program_run_route_pyapi_door import program_run_route, program_run_route_record
 from autograd.ops_api import ops_session_registry_token
@@ -35,9 +35,13 @@ from autograd.ops_api import ops_session_registry_token
 # this registry image and executor kind, and its handle equal to `_id`.
 # Anything else (a flag set, a closed session, a freed program, a session
 # of another image) returns 0 here and takes the full route, which keeps
-# every refusal and its message.
+# every refusal and its message. B arm: -D MOJOLEARN_PROGRAM_RUN_ENTRY
+# (owed row restore-executor-program-run) runs the full route onto
+# program_execute_run, as before the restore lane. Same replay, same
+# kernels: no bit change.
 # TOMBSTONE: MOJOLEARN_PROGRAM_RUN_ENTRY (unmeasured B arm: the former program_execute_run chain; EXP:2394 RESTORED the run_program route as default) deleted 2026-11-15 by lane/expdel2-08-base; code recoverable at a435c824c4.
 # Restore: git apply experiments/removed/MOJOLEARN_PROGRAM_RUN_ENTRY.patch; record in docs/TOMBSTONES.md.
+# RESTORED 2026-11-15 by lane/expdel2-restore-owed: owed B arm (owed-pre0867.json), under four weeks old; the deletion was premature.
 # Hot-path audit 2026-11-13 (BLOCK pack:47): the exact-type checks below
 # compare against type objects the caller already holds (`tuple_type` is the
 # class of the exact `args` tuple, `int_type` the class of the exact `_id`
@@ -81,36 +85,38 @@ def ops_program_public_call_py[E: Exec & Movable & Deinitable, KIND: Int](
     var tuple_type = types[].tuple_type
     if py_type(operation) is not types[].str_type or py_type(args) is not tuple_type:
         raise Error("TypeError: Program requires an exact operation string and argument tuple")
-    # Lane fix-program-run-per-call (2026-11-14): a run the full checks
-    # below already admitted for this Program and Session, with neither
-    # owner's dictionary nor class changed since, goes straight to the
-    # fixed route (autograd_program_run_route_pyapi_door.mojo). Profile
-    # r5 program-run: program_owner_fields 22% + ops_session_fields of
-    # the in-package samples were these per-run Python reads.
-    if len(args) == 4 and String(py=operation) == "run":
-        # The exact args tuple keeps its item alive: a borrowed read.
-        var inputs = PythonObject(from_borrowed=cpython_table()[].PyTuple_GetItem(args._obj_ptr, 0))
-        if py_type(inputs) is tuple_type:
-            var kept = program_run_route[KIND](owner, args)
-            if kept.sid != 0:
-                var answer = _program_run_fixed[E, KIND](kept.sid, kept.pid, kept.sid, inputs)
-                _ = owner  # the Program (and through it the Session) stays pinned through the run
-                return answer
+    comptime if not PROGRAM_RUN_ENTRY:
+        # Lane fix-program-run-per-call (2026-11-14): a run the full checks
+        # below already admitted for this Program and Session, with neither
+        # owner's dictionary nor class changed since, goes straight to the
+        # fixed route (autograd_program_run_route_pyapi_door.mojo). Profile
+        # r5 program-run: program_owner_fields 22% + ops_session_fields of
+        # the in-package samples were these per-run Python reads.
+        if len(args) == 4 and String(py=operation) == "run":
+            # The exact args tuple keeps its item alive: a borrowed read.
+            var inputs = PythonObject(from_borrowed=cpython_table()[].PyTuple_GetItem(args._obj_ptr, 0))
+            if py_type(inputs) is tuple_type:
+                var kept = program_run_route[KIND](owner, args)
+                if kept.sid != 0:
+                    var answer = _program_run_fixed[E, KIND](kept.sid, kept.pid, kept.sid, inputs)
+                    _ = owner  # the Program (and through it the Session) stays pinned through the run
+                    return answer
     var fields = program_owner_fields(owner)
     var pid = fields["_id"]
     var int_type = types[].int_type
     if pid is not None and py_type(pid) is not int_type:
         raise Error("TypeError: Program handle requires an exact native integer")
-    if pid is not None and len(args) == 4 and String(py=operation) == "run":
-        var program_id = Int(py=pid)
-        var session = fields["_s"]
-        var sid = _fixed_run_session[KIND](session, args, tuple_type, int_type)
-        if sid != 0 and program_id >= 1:
-            program_run_route_record[KIND](owner, fields, session, sid, program_id)
-            var answer = _program_run_fixed[E, KIND](sid, program_id, sid, args[0])
-            _ = session  # the Session owner stays pinned through the run
-            _ = fields
-            return answer
+    comptime if not PROGRAM_RUN_ENTRY:
+        if pid is not None and len(args) == 4 and String(py=operation) == "run":
+            var program_id = Int(py=pid)
+            var session = fields["_s"]
+            var sid = _fixed_run_session[KIND](session, args, tuple_type, int_type)
+            if sid != 0 and program_id >= 1:
+                program_run_route_record[KIND](owner, fields, session, sid, program_id)
+                var answer = _program_run_fixed[E, KIND](sid, program_id, sid, args[0])
+                _ = session  # the Session owner stays pinned through the run
+                _ = fields
+                return answer
     # Do not copy unrelated user fields: destroying a snapshot after execution
     # must not release application finalizers that another thread removed.
     var snapshot = Python.dict()
