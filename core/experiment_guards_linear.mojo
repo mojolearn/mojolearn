@@ -102,6 +102,8 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_SGD_PERC_AVG"](), "removed 2026-11-15 (lane/expdel-03-linear): SGD_PERC_AVG (minibatch Perceptron epoch-end averaging) is gone; it lost on quality (rab5-perc perceptron taxi accuracy 0.76219 -> 0.74097); the last iterate is the only form; code recoverable at 8b2e35c54e"
     # Restore: git apply experiments/removed/MOJOLEARN_SGDOC_FAST_TAIL_OFF.patch
     comptime assert not is_defined["MOJOLEARN_SGDOC_FAST_TAIL_OFF"](), "removed 2026-11-15 (lane/expdel-03-linear): SGDOC_FAST_TAIL_OFF (FAST+Apple rollback to the full SGDOneClassSVM per-sample run) is gone; the tail replay is the FAST+Apple path (taxi 42142.4 -> 153.7 ms, istella 75533.9 -> 407.0 ms, w2-sgdoc-q PASS); code recoverable at 43214c2e1e"
+    # Restore: git apply experiments/removed/MOJOLEARN_HUBER_FAST_BLOCK512_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_HUBER_FAST_BLOCK512_OFF"](), "removed 2026-11-15 (lane/expdel-03-linear): HUBER_FAST_BLOCK512_OFF (FAST+Apple rollback to FOLD_BLOCK partials in the device L-BFGS Huber fit) is gone; 512-row partials are the only form (huber taxi 192.0 -> 161.6 ms, r2 equal, rab19-huber512); code recoverable at 246a53ea57"
     return True
 
 

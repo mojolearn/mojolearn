@@ -657,6 +657,7 @@ in the tables after the sections.
 | [`MOJOLEARN_X_LINEAR_RIDGE_FAST_GRAM_OFF`](#mojolearn_x_linear_ridge_fast_gram_off-old-path-deleted-2026-11-15) | Linear (RidgeClassifier / RidgeCV grid Gram moments, FAST Apple) | removed (old path; FAST+Apple default KEPT, gram-ridgeclf-taxi) | 2026-11-15 | [MOJOLEARN_X_LINEAR_RIDGE_FAST_GRAM_OFF.patch](../experiments/removed/MOJOLEARN_X_LINEAR_RIDGE_FAST_GRAM_OFF.patch) |
 | [`MOJOLEARN_SGD_PERC_AVG`](#mojolearn_sgd_perc_avg-loser-deleted-2026-11-15) | Linear (minibatch Perceptron epoch-end averaging, FAST) | removed (loser; REVERTED rab5-perc, accuracy worse) | 2026-11-15 | [MOJOLEARN_SGD_PERC_AVG.patch](../experiments/removed/MOJOLEARN_SGD_PERC_AVG.patch) |
 | [`MOJOLEARN_SGDOC_FAST_TAIL_OFF`](#mojolearn_sgdoc_fast_tail_off-old-path-deleted-2026-11-15) | Linear (SGDOneClassSVM tail replay, FAST Apple) | removed (old path; FAST+Apple DEFAULT, w2-sgdoc-q PASS) | 2026-11-15 | [MOJOLEARN_SGDOC_FAST_TAIL_OFF.patch](../experiments/removed/MOJOLEARN_SGDOC_FAST_TAIL_OFF.patch) |
+| [`MOJOLEARN_HUBER_FAST_BLOCK512_OFF`](#mojolearn_huber_fast_block512_off-old-path-deleted-2026-11-15) | Linear (HuberRegressor fast-fit 512-row partials, FAST Apple) | removed (old path; FAST+Apple default KEEP, rab19-huber512) | 2026-11-15 | [MOJOLEARN_HUBER_FAST_BLOCK512_OFF.patch](../experiments/removed/MOJOLEARN_HUBER_FAST_BLOCK512_OFF.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -6382,4 +6383,12 @@ bits change on any vendor or the host column, no board row needs re-timing.
 - **Verdict**: DEFAULT (FAST+Apple) (EXPERIMENTS.md `SGDOC_FAST_TAIL`, w2-sgdoc-q quality PASS, w2-sgdoc-tail-taxi / -istella): M3 one run per arm, taxi 42142.4 -> 153.7 ms, istella 75533.9 -> 407.0 ms. No bit change on any column.
 - **Deleted by**: lane/expdel-03-linear (expdel-03-linear, docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md); code recoverable at `43214c2e1e`.
 - **Restore**: `git apply experiments/removed/MOJOLEARN_SGDOC_FAST_TAIL_OFF.patch`, then delete the `MOJOLEARN_SGDOC_FAST_TAIL_OFF` refusal in `core/experiment_guards_linear.mojo`.
+- **Records**: refusal in `core/experiment_guards_linear.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel-03-linear section).
+
+## MOJOLEARN_HUBER_FAST_BLOCK512_OFF: old path deleted (2026-11-15)
+
+- **What it was**: the FAST+Apple rollback of the device L-BFGS Huber fit's partials (x_linear/huber_fast.mojo) from 512-row blocks to FOLD_BLOCK rows. The `HUBER_FAST_BLOCK512` alias and the FOLD_BLOCK arm of `HF_FOLD` are gone (the fast fit runs only under HUBER_DEVICE_LBFGS, where the alias was always true without the define); the now-unused FOLD_BLOCK import went with them. The grid Huber fit of every other build is untouched.
+- **Verdict**: KEEP, FAST+Apple default (EXPERIMENTS.md `HUBER_FAST_BLOCK512`, rab19-huber512): M3 one run per arm, huber taxi 192.0 -> 161.6 ms, r2 equal 0.900215. No bit change on any column.
+- **Deleted by**: lane/expdel-03-linear (expdel-03-linear, docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md); code recoverable at `246a53ea57`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_HUBER_FAST_BLOCK512_OFF.patch`, then delete the `MOJOLEARN_HUBER_FAST_BLOCK512_OFF` refusal in `core/experiment_guards_linear.mojo`.
 - **Records**: refusal in `core/experiment_guards_linear.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel-03-linear section).
