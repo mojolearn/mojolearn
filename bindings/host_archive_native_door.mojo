@@ -2499,6 +2499,12 @@ def host_archive_public_forest(cls: PythonObject, arrays: PythonObject, fmt: Str
     for i in range(5):  # small-loop(model_names): the five model array names
         py_setattr(fields[model_names[i]], "_readonly", PythonObject(True))
     py_setitem(fields, "_resident_holder", Python.dict())
+    # The former Python `_mode._loader` wrapper's mark (lane py-mode-wrappers,
+    # 2026-11-15): a loaded forest is fitted. RF/ET register their archive
+    # under the base class name, so `host_archive_load`'s registered-name mark
+    # does not reach RandomForest*/ExtraTrees*; without it every predict on a
+    # loaded forest would scan the instance dictionary for a fitted attribute.
+    py_setitem(fields, "_mojolearn_fitted", PythonObject(True))
     return model
 
 
