@@ -187,7 +187,8 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
 # `add_bin_model_value_kernel` launch first, so the cursor is never
 # observed stale.
 #
-# OFF BY DEFAULT. Arm B builds with `-D MOJOLEARN_2030_FUSED_EST_MOVE=1`.
+# Off by default except under Apple FAST. The force define
+# MOJOLEARN_2030_FUSED_EST_MOVE was deleted 2026-11-15 (docs/TOMBSTONES.md).
 # `-D MOJOLEARN_2030_NO_FUSED_EST_MOVE=1` takes precedence for baseline A/B.
 # Kernel equivalence is checked by checks/gbdt_fused_move_check.mojo.
 # Native fit A/B: checks/gbdt_fused_fit_check.mojo (baseline versus define).
@@ -203,16 +204,15 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
 # The T27 alias (MOJOLEARN_TREES_T27) was deleted by lane/grid-prune
 # (2026-10-07): it only aliased MOJOLEARN_2030_FUSED_EST_MOVE, and the board
 # walks call _launch_shift_abmv directly, never move_to.
+# TOMBSTONE: MOJOLEARN_2030_FUSED_EST_MOVE (DELETE-ARM, EXP:1611 DROP_REDUNDANT force knob, rule e) deleted 2026-11-15 by lane/expdel2-44-trees; code recoverable at 5b86e54145.
+# Restore: git apply experiments/removed/MOJOLEARN_2030_FUSED_EST_MOVE.patch; record in docs/TOMBSTONES.md.
 comptime FUSED_EST_MOVE_2030 = (
-    is_defined["MOJOLEARN_2030_FUSED_EST_MOVE"]()
-    or (
-        # APPLE FAST default: M4 taxi 1M symmetric 0.962 alone (hash
-        # unchanged); the owed gates (check-fit-pointwise,
-        # check-logloss-train, check-ordered-boosting, gbdt_fused_move_check,
-        # gbdt_fused_fit_check) run on the M4 with the define.
-        TARGET_COLUMN == COLUMN_APPLE
-        and GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    )
+    # APPLE FAST default: M4 taxi 1M symmetric 0.962 alone (hash
+    # unchanged); the owed gates (check-fit-pointwise,
+    # check-logloss-train, check-ordered-boosting, gbdt_fused_move_check,
+    # gbdt_fused_fit_check) run on the M4 with the define.
+    TARGET_COLUMN == COLUMN_APPLE
+    and GLOBAL_NUMERIC_MODE == NUMERIC_FAST
 ) and not is_defined["MOJOLEARN_2030_NO_FUSED_EST_MOVE"]()
 
 
