@@ -59,6 +59,8 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_C58_SERIES4"](), "removed 2026-11-15 (lane/expdel2-07-base): C58_SERIES4 (Time series (Holt-Winters four series per thread, IDENTICAL)) was unmeasured opt-in arm; the opt-in arm is gone and the default path is unchanged; code recoverable at 236e97faa2; see docs/TOMBSTONES.md"
     # Restore: git apply experiments/removed/MOJOLEARN_C59_TRIAL_STATE.patch
     comptime assert not is_defined["MOJOLEARN_C59_TRIAL_STATE"](), "removed 2026-11-15 (lane/expdel2-07-base): C59_TRIAL_STATE (Time series (ARIMA trial state reuse, IDENTICAL)) was unmeasured opt-in arm; the opt-in arm is gone and the default path is unchanged; code recoverable at 7935a1db35; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_C60_LAG4.patch
+    comptime assert not is_defined["MOJOLEARN_C60_LAG4"](), "removed 2026-11-15 (lane/expdel2-07-base): C60_LAG4 (Time series (shared detrended observations across lag tasks, IDENTICAL)) was unmeasured opt-in arm; the opt-in arm is gone and the default path is unchanged; code recoverable at ad78b8054f; see docs/TOMBSTONES.md"
     return True
 
 

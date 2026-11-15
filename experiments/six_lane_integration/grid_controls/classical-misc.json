@@ -23,25 +23,6 @@
    "status": "kept",
    "note": "256-lane fixed halving tree, two streams per barrier; StandardScaler mean pass only (finite input)."
   },
-  "c60_lag4": {
-   "define": "MOJOLEARN_C60_LAG4",
-   "kind": "switch",
-   "arms": {
-    "off": [],
-    "on": [
-     "MOJOLEARN_C60_LAG4"
-    ]
-   },
-   "default": "off",
-   "source": [
-    "tsa/impl/timeSeries/stationarity.mojo:233",
-    "tsa/impl/select_d_fast.mojo:202"
-   ],
-   "binding": "_mojolearn_tsa",
-   "bits_change": false,
-   "status": "kept",
-   "note": "4 adjacent cells per thread, ascending per-cell sums; autoarima d=0 round only (max_d=1)."
-  },
   "c61_same_component_skip": {
    "define": "MOJOLEARN_C62_SAME_COMPONENT_SKIP",
    "kind": "switch",
@@ -268,7 +249,6 @@
    "binding": "_mojolearn_tsa (select_d) + _mojolearn_arima (fits)",
    "route": "select_d -> select_d_host -> auto_arima.mojo:74 -> select_d_fast (C60_LAG4, stationarity.mojo:233); order search -> fast_order_search (search reuse) ; per-order ARIMA.fit (C59)",
    "controls": [
-    "c60_lag4",
     "arima_search_reuse"
    ],
    "interaction_groups": [
@@ -426,6 +406,11 @@
    "define": "MOJOLEARN_C59_TRIAL_STATE",
    "control": "c59_trial_state",
    "reason": "DELETED 2026-11-15 (lane/expdel2-07-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md; recoverable at 7935a1db35; patch experiments/removed/MOJOLEARN_C59_TRIAL_STATE.patch): unmeasured opt-in arm. no record: no A/B was recorded for the opt-in arm (plan rule a; AGENTS.md \"An unmeasured arm is deleted\", Andrew 2026-11-15). Refused in core/experiment_guards_series.mojo; docs/TOMBSTONES.md."
+  },
+  {
+   "define": "MOJOLEARN_C60_LAG4",
+   "control": "c60_lag4",
+   "reason": "DELETED 2026-11-15 (lane/expdel2-07-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md; recoverable at ad78b8054f; patch experiments/removed/MOJOLEARN_C60_LAG4.patch): unmeasured opt-in arm. no record: no A/B was recorded for the opt-in arm (plan rule a; AGENTS.md \"An unmeasured arm is deleted\", Andrew 2026-11-15). Refused in core/experiment_guards_series.mojo; docs/TOMBSTONES.md."
   }
  ],
  "owed_removal_ab": [
