@@ -49,7 +49,7 @@ def linear_fit_host_v1(operation: Int, aa: Int, na: Int, pp: Int, np: Int,
                         value = host_linear_gram_fit(a[0], a[1], p[0], p[1], Float32(f[0]), p[2] != 0,
                             f32_ptr(a[2]), f32_ptr(a[3]), f64_ptr(a[4]))
                 else:
-                    raise Error("linear_gram_fit: this build lacks the route (FAST, or -D MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE_OFF)")
+                    raise Error("linear_gram_fit: this build lacks the route (FAST)")
             elif operation == LF_RIDGE_RESIDENT or operation == LF_OLS_RESIDENT:
                 raise Error("linear fit: the host column has no FAST resident route")
         MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=result)[] = value

@@ -62,7 +62,7 @@ def linear_fit_device_v1(operation: Int, aa: Int, na: Int, pp: Int, np: Int,
                             f32_ptr(a[3]), f64_ptr(a[4]), p[0], p[1], Float32(f[0]), p[2] != 0)
                         ctx.synchronize()
                 else:
-                    raise Error("linear_gram_fit: this build lacks the route (FAST, or -D MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE_OFF)")
+                    raise Error("linear_gram_fit: this build lacks the route (FAST)")
             elif operation == LF_RIDGE_RESIDENT:
                 comptime if RIDGE_FAST_RESIDENT:
                     if p[0] <= 0 or p[1] <= 0:
@@ -71,7 +71,7 @@ def linear_fit_device_v1(operation: Int, aa: Int, na: Int, pp: Int, np: Int,
                         f32_ptr(a[3]), f64_ptr(a[4]), p[0], p[1], Float32(f[0]), p[2] != 0)
                     ctx.synchronize()
                 else:
-                    raise Error("ridge_fit_resident: only the FAST Apple build without -D MOJOLEARN_RIDGE_RESIDENT_OFF has this route")
+                    raise Error("ridge_fit_resident: only the FAST Apple build has this route")
             elif operation == LF_OLS_RESIDENT:
                 comptime if OLS_FAST_NORMAL_EQ:
                     if p[0] <= 0 or p[1] <= 0:
