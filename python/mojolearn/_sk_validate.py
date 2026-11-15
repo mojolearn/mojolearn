@@ -444,7 +444,7 @@ def _array_like(obj):
     """An `__array__`-only object (scikit-learn's _NotAnArray, a pandas object:
     no buffer, not a sequence) as the array it exports, else `obj` itself, so
     X, y and sample_weight take the same paths as their arrays. Glue: one
-    conversion call, no per-element work (the rule `_buffer._materialize`
+    conversion call, no per-element work (the rule the native admission
     applies to X)."""
     if (obj is None or isinstance(obj, (list, tuple, str, bytes))
             or not callable(getattr(obj, "__array__", None))):

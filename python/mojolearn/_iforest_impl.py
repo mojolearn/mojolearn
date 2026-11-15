@@ -30,7 +30,7 @@ Two more things the lane says about itself and this class inherits:
 INPUTS AND OUTPUTS ARE NOT NumPy (DEVIATION 2344). `X` is anything the
 buffer protocol exposes -- an ndarray, an `array.array`, a
 `mojolearn.Array` -- or a nested list, converted once by
-`_buffer.as_f32_c` (zero-copy for float32 C-order). `score_samples` and
+the native input admission (zero-copy for float32 C-order). `score_samples` and
 `decision_function` return a float32 `mojolearn.Array`, `predict` an int32
 one; `numpy.asarray(result)` is a zero-copy view for a caller who has
 NumPy. Nothing in this module imports NumPy.

@@ -49,7 +49,7 @@ forest is reproducible from its seed ON ONE GPU MODEL; cuML itself does not
 reproduce across GPU models below `n_sampled_rows > 4 * SM * 256`.
 
 X IS COPIED TWICE PER FIT (the host to column-major float32 through
-`_buffer.as_f32_colmajor`, zero-copy for a float32 F-order input, then
+the native input admission, zero-copy for a float32 F-order input, then
 across the boundary); on large matrices that is the dominant cost of the
 CALL.
 

@@ -4,7 +4,7 @@
 `Ridge(solver='eig')` and `LogisticRegression(solver='qn')`.
 
 NUMPY-FREE SINCE DEVIATION 2360 (branch numpy-free-0.7). Inputs cross the
-boundary through `_buffer.as_f32_c` and friends, outputs are `_array.Array`,
+boundary through the native input admission, outputs are `_array.Array`,
 and the centering of an intercept fit -- the column sums, the subtraction
 and the sqrt-weight rescale -- runs in the estimators binding
 (`lm_col_sums`, `lm_center`, `lm_scale_rows`; on the device on a GPU

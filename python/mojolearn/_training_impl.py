@@ -371,7 +371,7 @@ class _Optimizer(NumericModeMixin):
         """
         return _OPT_NATIVE("state", self, (_STATE_DICT,), None, _OPT_CONTEXT)
 
-    # DEVIATION 2404: arrays go through _buffer.as_f32_c / as_i32_c and are copied (the NumPy spelling
+    # DEVIATION 2404: arrays go through the native admission and are copied (the NumPy spelling
     # aliased a caller's float32 C-order array).
     def load_state_dict(self, state):
         """Restore the optimizer state saved by `state_dict`.
