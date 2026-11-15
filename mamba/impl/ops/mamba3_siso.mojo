@@ -2110,7 +2110,9 @@ def m3_siso_forward(
             use_yintra_tile = True
         elif is_defined["MOJOLEARN_MAMBA3_TILED_YINTRA"]():
             use_yintra_tile = True
-        elif TARGET_COLUMN == COLUMN_NVIDIA and not is_defined["MOJOLEARN_MAMBA3_LEGACY_YINTRA"]():
+        # TOMBSTONE: MOJOLEARN_MAMBA3_LEGACY_YINTRA (unmeasured old path: no y-intra tile on NVIDIA; non-owner sites) deleted 2026-11-15 by lane/expdel2-28-neural; code recoverable at 3b67ed3496.
+        # Restore: git apply experiments/removed/MOJOLEARN_MAMBA3_LEGACY_YINTRA.expdel2-28-neural.patch; record in docs/TOMBSTONES.md.
+        elif TARGET_COLUMN == COLUMN_NVIDIA:
             use_yintra_tile = b * nc * nh >= 128
     if use_yintra_tile:
         ctx.enqueue_function[m3_yintra_tiled_kernel](
