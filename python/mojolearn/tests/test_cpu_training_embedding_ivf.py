@@ -293,7 +293,9 @@ def test_adapter_is_an_import_time_connection_only():
     # GPU trainer never imports the CPU trainer adapter (`_backend.binding`
     # serves the CPU binding on a CPU-only install)
     assert "_byte_lm_trainer_host" not in "".join(re.findall(r"^\s*(?:from|import) .*$", impl, re.M))
-    assert "vendors = ('cpu',) if _backend._CPU_ONLY is not None" in impl
+    # The source-text check of the vendor-set spelling is deleted: 67e52e0bc3 made _load
+    # one native call (the set is now passed as `byte_lm_vendors=`). The CPU-only route
+    # is exercised by test_byte_lm_trainer_runs_on_the_host_when_built below.
     src = _read(host_surface.binding_source("byte_lm"))
     assert "from gemm.host.identical_gemm import GEMM_ORACLE_HOST_SABOTAGE" in src
     assert "or ANY_BWD_SABOTAGE or GEMM_ORACLE_HOST_SABOTAGE)" in src
