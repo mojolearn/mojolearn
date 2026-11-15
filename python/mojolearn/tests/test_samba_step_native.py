@@ -49,10 +49,14 @@ def _reference_step(model, inputs, targets, *, device_parameters=False):
     (["mamba3", "attention"], 32, 0.125, 1, False, (2, 3)),
     (["attention"], 8, 0.125, 2, True, (4, 64)),
 ])
-@pytest.mark.parametrize("resident", [False, True])
+# The resident optimizer is a build constant (lane envgate-train-seq-mamba,
+# 2026-11-15: training/optimizer_public_common.mojo OPTIMIZER_RESIDENT; the
+# MOJOLEARN_OPTIMIZER_RESIDENT environment arm is gone). The per-call
+# (non-resident) side of these tests needs its own
+# `-D MOJOLEARN_OPTIMIZER_RESIDENT_OFF` build (owed-pre0867.json
+# "optimizer-resident-off"); the default build runs the resident side here.
 def test_native_standard_step_matches_independent_training_recipe(
-        monkeypatch, layers, dm, dropout, accumulation, tied, shape, resident):
-    monkeypatch.setenv("MOJOLEARN_OPTIMIZER_RESIDENT", "1" if resident else "0")
+        monkeypatch, layers, dm, dropout, accumulation, tied, shape):
     config = SambaConfig(19, dm, layers, n_heads=2, n_kv_heads=1,
                          intermediate=48 if dm == 32 else 11,
                          tie_embeddings=tied, dropout=dropout)
@@ -130,9 +134,8 @@ def _owner_models():
                        max_norm=0.3, weight_decay=0.02) for _ in range(2)]
 
 
-@pytest.mark.parametrize("resident", [False, True])
-def test_native_step_preserves_rebound_optimizer_parameter_owners(monkeypatch, resident):
-    monkeypatch.setenv("MOJOLEARN_OPTIMIZER_RESIDENT", "1" if resident else "0")
+# Default build: the resident side (see the note above the standard-step test).
+def test_native_step_preserves_rebound_optimizer_parameter_owners(monkeypatch):
     expected, actual = _owner_models()
     for model in (expected, actual):
         # These are separate writable buffers. The model still reads its

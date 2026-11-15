@@ -12,7 +12,7 @@ from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.native_error_class import error_without_class
 from std.math import isfinite
 from std.memory import unsafe_memcpy
-from std.os import getenv
+from training.optimizer_device_plan import optimizer_device_setting
 from bindings.generation_buffers_door import GENERATION_BOUNDARY, generation_array, generation_copy, py_ints
 from bindings.py_balanced import py_call, py_get, py_setitem, py_type
 from bindings.py_cpython_table import cpython_table
@@ -386,7 +386,9 @@ def neural_ordered_sum(parts: PythonObject) raises -> PythonObject:
 
 def neural_cooperative_admit() raises:
     var b = PARALLEL_MLP_BOUNDARY.get_or_create_ptr()
-    var words = getenv("MOJOLEARN_OPTIMIZER_DEVICE_COUNT", "1")
+    # MOJOLEARN_OPTIMIZER_DEVICE_COUNT, read once per process
+    # (training/optimizer_device_plan.mojo); was an environment read per call.
+    var words = optimizer_device_setting()
     if words == "1":
         return
     # Any other value keeps the int() parse (and its refusal) of before.

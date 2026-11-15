@@ -15,7 +15,7 @@ from core.native_descriptor_abi import PRIMITIVE_ABI_NAME
 from providers.python.neural_descriptor_pyapi_door import neural_descriptor_cached
 from std.memory import unsafe_memcpy
 from bindings.py_balanced import py_call, py_contains, py_get, py_setattr, py_setitem, py_type
-from std.os import getenv
+from sequence.lr_table import LR_TABLE_ON
 from std.python._cpython import GILReleased
 from core.entry_table import EntryRef, entry_ref_call
 from core.samba_entry_table import (
@@ -169,7 +169,9 @@ def samba_schedule_from_state(config: PythonObject, context: PythonObject) raise
     py_setattr(result, "total_steps", PythonObject(None) if config["total_steps"] is None else py_call(bi.int, config["total_steps"]))
     var warmup = Int(py=result.warmup_steps)
     var tail = warmup + 1 if result.total_steps is None else max(Int(py=result.total_steps), warmup + 1)
-    py_setattr(result, "_fast", PythonObject(getenv("MOJOLEARN_LR_TABLE", "1") != "0" and getenv("MOJOLEARN_LR_EXACT_ONLY", "0") != "1"))
+    # The schedule table switch is the build constant LR_TABLE_ON (was two
+    # environment reads per schedule load; lane envgate-train-seq-mamba).
+    py_setattr(result, "_fast", PythonObject(LR_TABLE_ON))
     py_setattr(result, "_tail_t", PythonObject(tail))
     py_setattr(result, "_tail_v", samba_schedule_rate(config, tail, context))
     py_setattr(result, "_tb", PythonObject(-1))

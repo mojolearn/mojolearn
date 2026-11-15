@@ -20,15 +20,16 @@ host surfaces:
   * A STAGED UPLOAD (same stage, the other direction), off by default on
     Apple where a raw host-pointer upload is already 1.6-2.4 ms per 64 MB.
 
-A/B (runtime, one build serves both arms):
-  MOJOLEARN_GEMM_POOL=0        fresh buffers every call (the old path)
-  MOJOLEARN_GEMM_STAGE_DOWN=0|1   staged download off/on (default on)
-  MOJOLEARN_GEMM_STAGE_UP=0|1     staged upload off/on (default: on except Apple)
+A/B (build arms; run-time environment reads per matmul until 2026-11-15):
+  -D MOJOLEARN_GEMM_POOL_OFF          fresh buffers every call (the old path)
+  -D MOJOLEARN_GEMM_STAGE_DOWN_OFF    raw download (default staged)
+  -D MOJOLEARN_GEMM_STAGE_UP_OFF      raw upload (default staged except Apple)
+  -D MOJOLEARN_GEMM_STAGE_UP          staged upload on Apple too
 """
 
 from std.atomic import Atomic, Ordering
 from std.memory import unsafe_memcpy
-from std.os import getenv
+from std.sys import is_defined
 
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 
@@ -76,27 +77,31 @@ struct _GemmPool(Defaultable, Movable):
 comptime GEMM_POOL = SharedSlot[_GemmPool, "MojolearnGemmHostPoolV1"]
 
 
-def _env_flag(name: StringLiteral, default: Bool) -> Bool:
-    var v = String(getenv(name))
-    if v == "0":
-        return False
-    if v == "1":
-        return True
-    return default
+# Transport switches (lane envgate-train-seq-mamba, 2026-11-15): build
+# constants holding today's defaults; before, each was an environment read per
+# matmul (`_env_flag`, now deleted). ROUTE-DEFAULT-SUSPECT, no A/B on record:
+# B arms RUN OWED in bench/results/paper_compare/owed-pre0867.json
+# ("gemm-pool-off", "gemm-stage-down-off", "gemm-stage-up-off").
+comptime GEMM_POOL_ON = not is_defined["MOJOLEARN_GEMM_POOL_OFF"]()
+comptime GEMM_STAGE_DOWN_ON = not is_defined["MOJOLEARN_GEMM_STAGE_DOWN_OFF"]()
+comptime GEMM_STAGE_UP_ON = (
+    TARGET_COLUMN != COLUMN_APPLE or is_defined["MOJOLEARN_GEMM_STAGE_UP"]()
+) and not is_defined["MOJOLEARN_GEMM_STAGE_UP_OFF"]()
 
 
+@always_inline
 def gemm_pool_on() -> Bool:
-    return _env_flag("MOJOLEARN_GEMM_POOL", True)
+    return GEMM_POOL_ON
 
 
+@always_inline
 def gemm_stage_down_on() -> Bool:
-    return _env_flag("MOJOLEARN_GEMM_STAGE_DOWN", True)
+    return GEMM_STAGE_DOWN_ON
 
 
+@always_inline
 def gemm_stage_up_on() -> Bool:
-    comptime if TARGET_COLUMN == COLUMN_APPLE:
-        return _env_flag("MOJOLEARN_GEMM_STAGE_UP", False)
-    return _env_flag("MOJOLEARN_GEMM_STAGE_UP", True)
+    return GEMM_STAGE_UP_ON
 
 
 struct GemmHostLease(Movable):

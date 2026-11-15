@@ -23,7 +23,7 @@ The update itself is the existing native step (training/estimator.mojo,
 training/optimizer_multi_gpu.mojo, the host oracle): nothing here does
 arithmetic on parameter or gradient values."""
 from std.memory import unsafe_memcpy, unsafe_memset_zero
-from std.os import getenv
+from std.sys import is_defined
 
 from core.device_plan import DevicePlan
 
@@ -287,23 +287,41 @@ def registry_offsets(nbytes: List[Int], offsets: I32P) raises -> Int:
     return at
 
 
-def resident_wanted_by_env(plan: DevicePlan) -> Bool:
-    """`MOJOLEARN_OPTIMIZER_RESIDENT=0` keeps the optimizer state off the
-    device (the per-call step; the A/B's before arm), and so does a
-    multi-device optimizer count (that route lives in the per-call step).
-    The count is the binding entry's plan: its setting is the raw
+# Optimizer state routes (lane envgate-train-seq-mamba, 2026-11-15): build
+# constants holding today's defaults; every reader (this file,
+# sequence/opt_public_device.mojo, bindings/samba_step_native_door.mojo,
+# bindings/sequence_optimizer_native_door.mojo,
+# bindings/samba_construct_native_pack.mojo) imports them from here. Before,
+# each was an environment read per optimizer construction or step.
+# ROUTE-DEFAULT-SUSPECT, no A/B on record: B arms RUN OWED in
+# bench/results/paper_compare/owed-pre0867.json ("optimizer-resident-off",
+# "opt-lazy-moments-off").
+#: resident optimizer state on the device; `-D MOJOLEARN_OPTIMIZER_RESIDENT_OFF`
+#: keeps the per-call step (the A/B's before arm)
+comptime OPTIMIZER_RESIDENT = not is_defined["MOJOLEARN_OPTIMIZER_RESIDENT_OFF"]()
+#: lazy Adam moments (allocated on first use, lane gap-train-utils);
+#: `-D MOJOLEARN_OPT_LAZY_MOMENTS_OFF` allocates the host state with the
+#: optimizer and uploads it on the first step
+comptime OPT_LAZY_MOMENTS = not is_defined["MOJOLEARN_OPT_LAZY_MOMENTS_OFF"]()
+
+
+def resident_wanted_by_build(plan: DevicePlan) -> Bool:
+    """The build constant OPTIMIZER_RESIDENT, and a single-device optimizer
+    plan (a multi-device count lives in the per-call step). The count is
+    the binding entry's plan: its setting is the raw
     MOJOLEARN_OPTIMIZER_DEVICE_COUNT value (default "1"), tested exactly as
     before."""
-    if String(getenv("MOJOLEARN_OPTIMIZER_RESIDENT", "1")) == "0":
+    comptime if not OPTIMIZER_RESIDENT:
         return False
     if plan.setting != "1":
         return False
     return True
 
 
+@always_inline
 def eager_moments() -> Bool:
-    """MOJOLEARN_OPT_LAZY_MOMENTS=0: the optimizer's host state is allocated
-    with the optimizer and uploaded on the first step (the lazy
+    """`-D MOJOLEARN_OPT_LAZY_MOMENTS_OFF`: the optimizer's host state is
+    allocated with the optimizer and uploaded on the first step (the lazy
     allocation's A/B, lane gap-train-utils); otherwise it is allocated on
     first use."""
-    return String(getenv("MOJOLEARN_OPT_LAZY_MOMENTS")) == "0"
+    return not OPT_LAZY_MOMENTS

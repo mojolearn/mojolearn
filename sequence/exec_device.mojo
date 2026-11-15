@@ -4,7 +4,7 @@
 over `sequence/ops.mojo::apply`, the body `HostExec` loops over on the CPU."""
 from std.memory import bitcast
 from max.gpu import block_dim, block_idx, thread_idx
-from std.os import getenv
+from std.sys import is_defined
 from std.memory import unsafe_memcpy
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from sequence.moe_tiled import MOE_TPB, moe_combine_kernel, moe_hidden_tiled_kernel, moe_out_tiled_kernel
@@ -254,15 +254,30 @@ def _fhi(w: Int64) -> Float32:
 
 
 
+# Sequence executor routes (lane envgate-train-seq-mamba, 2026-11-15): build
+# constants holding today's defaults (on). Before, each was an environment
+# read per launch (MOE_TILED, VAR_BLOCK) or per executor construction (POOL).
+# ROUTE-DEFAULT-SUSPECT, no A/B on record: B arms RUN OWED in
+# bench/results/paper_compare/owed-pre0867.json ("seq-moe-tiled-off",
+# "seq-var-block-off", "seq-pool-off").
+#: the tiled MoE kernel; `-D MOJOLEARN_SEQ_MOE_TILED_OFF` keeps the untiled one
+comptime SEQ_MOE_TILED = not is_defined["MOJOLEARN_SEQ_MOE_TILED_OFF"]()
+#: VAR's Cholesky solve and forecast on one threadgroup
+#: (sequence/vecar_block.mojo, lane gap-prep2); `-D MOJOLEARN_SEQ_VAR_BLOCK_OFF`
+#: keeps the one-thread ops (the A/B arm)
+comptime SEQ_VAR_BLOCK = not is_defined["MOJOLEARN_SEQ_VAR_BLOCK_OFF"]()
+#: the executor's device buffer pool; `-D MOJOLEARN_SEQ_POOL_OFF` allocates fresh
+comptime SEQ_POOL = not is_defined["MOJOLEARN_SEQ_POOL_OFF"]()
+
+
+@always_inline
 def _moe_tiled_on() -> Bool:
-    return String(getenv("MOJOLEARN_SEQ_MOE_TILED")) != "0"
+    return SEQ_MOE_TILED
 
 
+@always_inline
 def _var_block_on() -> Bool:
-    """VAR's Cholesky solve and forecast on one threadgroup
-    (sequence/vecar_block.mojo, lane gap-prep2); MOJOLEARN_SEQ_VAR_BLOCK=0
-    keeps the one-thread ops (the A/B arm)."""
-    return String(getenv("MOJOLEARN_SEQ_VAR_BLOCK")) != "0"
+    return SEQ_VAR_BLOCK
 
 
 def seq_kernel[OP: Int](
@@ -404,8 +419,9 @@ comptime _POOL_NAME = "MojolearnXSequencePoolIdenticalV1" if GLOBAL_NUMERIC_MODE
 comptime X_SEQUENCE_POOL = SharedSlot[_SeqPool, _POOL_NAME]
 
 
+@always_inline
 def seq_pool_on() -> Bool:
-    return String(getenv("MOJOLEARN_SEQ_POOL")) != "0"
+    return SEQ_POOL
 
 
 def _pool_trim(ctx: DeviceContext, pool: UnsafePointer[_SeqPool, MutUntrackedOrigin], need: Int) raises:

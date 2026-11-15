@@ -65,7 +65,7 @@ come back, and a hit is spelled with `ce_refuse_targets`'s own message.
 
 from std.atomic import Atomic
 from max.gpu import block_dim, block_idx, thread_idx
-from std.os import getenv
+from std.sys import is_defined
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 
 from core.device_scan import device_classify_nonfinite, device_first_nonfinite
@@ -149,6 +149,11 @@ from transformer.impl.llama.modeling_llama import (
     llama_decoder_layer_forward,
     llama_rms_norm,
 )
+# `-D MOJOLEARN_MAMBA_TIMING`: the Mamba timing ticks (DIAGNOSTIC). Was an
+# environment read per call of the launch helpers below until 2026-11-15
+# (lane envgate-train-seq-mamba); the default build passes a constant False.
+comptime _MAMBA_TIMING = is_defined["MOJOLEARN_MAMBA_TIMING"]()
+
 
 
 #: The layer kinds, as `python/mojolearn/_samba_impl.py` codes them for
@@ -791,7 +796,7 @@ def _backward_tape(
     var n_layers = s.n_layers()
     _bind_attention_grad_views(s)
     _ensure_m3_dx(s, m)
-    var ton = String(getenv("MOJOLEARN_MAMBA_TIMING")) != ""
+    var ton = _MAMBA_TIMING
     # ---- every activation gradient's storage: gin[i] = d loss / d acts[i]
     # (the gradient the consumer of acts[i] writes); gin[n_layers] = dh, the final
     # norm's dx as in the hand path

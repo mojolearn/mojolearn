@@ -1,7 +1,11 @@
 # SPDX-License-Identifier: Apache-2.0
 # Whole sequence-optimizer operations. All data preparation, owner routing,
 # schedule evaluation and state/output handling execute natively here.
-from std.os import getenv
+from std.sys import is_defined
+# The same build define as training/optimizer_public_common.mojo
+# OPTIMIZER_RESIDENT (kept local so this unit does not import the training
+# package); B arm -D MOJOLEARN_OPTIMIZER_RESIDENT_OFF.
+comptime OPTIMIZER_RESIDENT = not is_defined["MOJOLEARN_OPTIMIZER_RESIDENT_OFF"]()
 from std.python import Python, PythonObject
 from bindings.optimizer_container_boundary_unpack import OptimizerInputOwners
 from bindings.py_balanced import py_call, py_type, py_fields, py_get, py_setitem
@@ -301,8 +305,8 @@ def seq_construct(owner: PythonObject, values: PythonObject, mode: PythonObject,
             for suffix in ["_resident_open", "_resident_step", "_resident_step_dev"]:  # driver-loop: over required resident optimizer entries
                 if py_get(selected, PythonObject(prefix + suffix)) is None:
                     raise Error("RuntimeError: this binding does not support resident optimizer parameters")
-            if getenv("MOJOLEARN_OPTIMIZER_RESIDENT", "1") == "0":
-                raise Error("RuntimeError: device params require MOJOLEARN_OPTIMIZER_RESIDENT=1")
+            comptime if not OPTIMIZER_RESIDENT:
+                raise Error("RuntimeError: device params need the resident optimizer (this build has -D MOJOLEARN_OPTIMIZER_RESIDENT_OFF)")
         py_setitem(fields, "params", params)
         py_setitem(fields, "numeric_mode", mode)
         py_setitem(fields, "_dev_b", selected["module"] if device else PythonObject(None))

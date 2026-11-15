@@ -14,7 +14,11 @@ are uploaded into temporary resident tensors and freed after the step.
 Every step is the existing entry of sequence/opt_resident.mojo or
 sequence/ops_impl.mojo on the same values in the same order: no bit
 moves. No Python here."""
-from std.os import getenv
+from std.sys import is_defined
+# The same build define as training/optimizer_public_common.mojo
+# OPTIMIZER_RESIDENT (kept local so this unit does not import the training
+# package); B arm -D MOJOLEARN_OPTIMIZER_RESIDENT_OFF.
+comptime OPTIMIZER_RESIDENT = not is_defined["MOJOLEARN_OPTIMIZER_RESIDENT_OFF"]()
 
 from sequence.exec_device import DeviceExec
 from sequence.opt_public import (
@@ -58,10 +62,12 @@ from sequence.opt_resident import (
 from sequence.seq_tensor import seq_tensor_alloc, seq_tensor_free, seq_tensor_upload
 
 
+@always_inline
 def _resident_env() -> Bool:
-    """`MOJOLEARN_OPTIMIZER_RESIDENT=0` keeps the per-call entries (the
-    before arm of the resident A/B)."""
-    return getenv("MOJOLEARN_OPTIMIZER_RESIDENT", "1") != "0"
+    """The build constant OPTIMIZER_RESIDENT (`-D MOJOLEARN_OPTIMIZER_RESIDENT_OFF`
+    keeps the per-call entries, the before arm of the resident A/B); was an
+    environment read per step."""
+    return OPTIMIZER_RESIDENT
 
 
 def _handles_ptr(addr: Int) raises -> IP64:

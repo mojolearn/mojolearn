@@ -6,7 +6,11 @@ from bindings.native_loaded_module_door import native_loaded_module
 from core.samba_construct_native_impl import samba_fill_ones
 from std.math import sqrt
 from std.memory import unsafe_memcpy
-from std.os import getenv
+from std.sys import is_defined
+# The same build define as training/optimizer_public_common.mojo
+# OPT_LAZY_MOMENTS (kept local: this unit does not import the training
+# package); B arm -D MOJOLEARN_OPT_LAZY_MOMENTS_OFF.
+comptime OPT_LAZY_MOMENTS = not is_defined["MOJOLEARN_OPT_LAZY_MOMENTS_OFF"]()
 from bindings.generation_buffers_door import generation_initialize_binding, generation_array
 from bindings.generator_state_native_unpack import generator_fields
 from bindings.generator_state_native_pack import generator_init, generator_validate, generator_next
@@ -168,7 +172,7 @@ def samba_construct(model: PythonObject, args: PythonObject, context: PythonObje
     var optimizer = py_call(bi.object.__new__, context["optimizer_class"])
     var opt = samba_fields(optimizer)
     py_setitem(opt, "_resident_wanted", PythonObject(None))
-    var lazy = getenv("MOJOLEARN_OPT_LAZY_MOMENTS", "1") != "0"
+    var lazy = OPT_LAZY_MOMENTS  # build constant (was an environment read per construction)
     var owner = optimizer_owner_new(optimizer, 2, lazy)
     var publication = OptimizerOwnerLease(optimizer, owner)
     py_setitem(opt, "_native_optimizer_owner", owner)

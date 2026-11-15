@@ -260,6 +260,66 @@
   "classical-native-dispatch": {
    "define": "MOJOLEARN_CLASSICAL_NATIVE_DISPATCH",
    "status": "define in code (providers/python/classical_native_dispatch.mojo CLASSICAL_NATIVE_DISPATCH, read by bindings/svc_kernel_native_door.mojo _svc_provider, providers/python/x_neighbors_descriptor_pyapi_door.mojo xn_admit, providers/python/estimator_binding_pyapi_door.mojo estimator_checked_mode): B = SVC/SVR through the svm_binary_api_v1 descriptor table (no CPython entry call per pair/fold/epilogue, but no device-resident predict and no device-X fit), x_neighbors modules admitted natively, no SVM mode readback (the former MOJOLEARN_CLASSICAL_NATIVE_DISPATCH=1, never timed); A = by-name entries with the resident fitted state and device X (the former default \"0\", what every board row ran). Same numerical owners and words: digests must not move."
+  },
+  "download-stage-off": {
+   "define": "MOJOLEARN_DOWNLOAD_STAGE_OFF",
+   "status": "define in code (core/staged_download.mojo DOWNLOAD_STAGE_OFF (read by download_staged)): B = the raw host-pointer copy at every size (the former MOJOLEARN_DOWNLOAD_STAGE=0); A = the pinned two-stage pipeline from DOWNLOAD_STAGE_MIN floats (the former default). A transport/route choice: digests must not move."
+  },
+  "gemm-pool-off": {
+   "define": "MOJOLEARN_GEMM_POOL_OFF",
+   "status": "define in code (gemm/host_transport.mojo GEMM_POOL_ON): B = fresh device buffers every matmul call (the former MOJOLEARN_GEMM_POOL=0); A = pooled grow-only device buffers per role (the former default). A transport/route choice: digests must not move."
+  },
+  "gemm-stage-down-off": {
+   "define": "MOJOLEARN_GEMM_STAGE_DOWN_OFF",
+   "status": "define in code (gemm/host_transport.mojo GEMM_STAGE_DOWN_ON): B = raw device-to-host-pointer download (the former MOJOLEARN_GEMM_STAGE_DOWN=0); A = staged (pinned, double-buffered) download (the former default). A transport/route choice: digests must not move."
+  },
+  "gemm-stage-up-off": {
+   "define": "MOJOLEARN_GEMM_STAGE_UP_OFF",
+   "status": "define in code (gemm/host_transport.mojo GEMM_STAGE_UP_ON): B = raw host-pointer upload (the former MOJOLEARN_GEMM_STAGE_UP=0); A = staged upload on NVIDIA/AMD (the former default). A transport/route choice: digests must not move."
+  },
+  "lr-table-off": {
+   "define": "MOJOLEARN_LR_TABLE_OFF",
+   "status": "define in code (sequence/lr_table.mojo LR_TABLE_ON (read by lr_table_on and bindings/samba_state_native_door.mojo); -D MOJOLEARN_LR_EXACT_ONLY is the same arm): B = every step on the exact route (the former MOJOLEARN_LR_TABLE=0 or MOJOLEARN_LR_EXACT_ONLY=1); the answers are the same; A = the LR schedule table (the former default). A transport/route choice: digests must not move."
+  },
+  "mamba3-retain-stages-off": {
+   "define": "MOJOLEARN_MAMBA3_RETAIN_STAGES_OFF",
+   "status": "define in code (mamba/impl/mamba_shell_impl.mojo MAMBA3_RETAIN_STAGES): B = stages dropped at the end of every forward; the backward recomputes it (the former =0); A = the forward's stages stay on the device for the backward (the former default). A transport/route choice: digests must not move."
+  },
+  "mamba3-retain-weights-off": {
+   "define": "MOJOLEARN_MAMBA3_RETAIN_WEIGHTS_OFF",
+   "status": "define in code (mamba/impl/mamba_shell_impl.mojo MAMBA3_RETAIN_WEIGHTS): B = the per-call weight upload (the former =0); A = the session keeps its weights resident (byte compare; the former default). A transport/route choice: digests must not move."
+  },
+  "mamba3-s16-qk-regs2h": {
+   "define": "MOJOLEARN_MAMBA3_S16_QK_ARM_REGS2H",
+   "status": "define in code (autograd/kernels/mamba3.mojo and mamba/host/gen/mamba3_backward.mojo M3_S16_QK_ARM): B = regs2h on NVIDIA (the AMD and Apple default); same bits on every arm; A = the S16 q/k arm regs on NVIDIA (the former default). A transport/route choice: digests must not move."
+  },
+  "optimizer-resident-off": {
+   "define": "MOJOLEARN_OPTIMIZER_RESIDENT_OFF",
+   "status": "define in code (training/optimizer_public_common.mojo OPTIMIZER_RESIDENT (the same define in sequence/opt_public_device.mojo, bindings/sequence_optimizer_native_door.mojo; imported by bindings/samba_step_native_door.mojo)): B = the per-call optimizer step (the former MOJOLEARN_OPTIMIZER_RESIDENT=0); A = resident optimizer state on the device (the former default). A transport/route choice: digests must not move."
+  },
+  "opt-lazy-moments-off": {
+   "define": "MOJOLEARN_OPT_LAZY_MOMENTS_OFF",
+   "status": "define in code (training/optimizer_public_common.mojo OPT_LAZY_MOMENTS (eager_moments; the same define in bindings/samba_construct_native_pack.mojo)): B = moments allocated with the optimizer and uploaded on the first step (the former =0); A = Adam moments allocated on first use (the former default). A transport/route choice: digests must not move."
+  },
+  "opt-scan-fused-off": {
+   "define": "MOJOLEARN_OPT_SCAN_FUSED_OFF",
+   "status": "define in code (training/opt_gate.mojo OPT_SCAN_FUSED (read by opt_gate_wanted)): B = main's separate scans (the former =0); A = the fused refusal scan in the gated optimizer step (the former default). A transport/route choice: digests must not move."
+  },
+  "seq-moe-tiled-off": {
+   "define": "MOJOLEARN_SEQ_MOE_TILED_OFF",
+   "status": "define in code (sequence/exec_device.mojo SEQ_MOE_TILED): B = the untiled MoE kernel (the former =0); A = the tiled MoE kernel (the former default). A transport/route choice: digests must not move."
+  },
+  "seq-var-block-off": {
+   "define": "MOJOLEARN_SEQ_VAR_BLOCK_OFF",
+   "status": "define in code (sequence/exec_device.mojo SEQ_VAR_BLOCK): B = the one-thread ops (the former =0); A = VAR's Cholesky solve and forecast on one threadgroup (the former default). A transport/route choice: digests must not move."
+  },
+  "seq-pool-off": {
+   "define": "MOJOLEARN_SEQ_POOL_OFF",
+   "status": "define in code (sequence/exec_device.mojo SEQ_POOL (seq_pool_on)): B = fresh buffers per executor (the former =0); A = the sequence executor's device buffer pool (the former default). A transport/route choice: digests must not move."
+  },
+  "clip-packed": {
+   "define": "MOJOLEARN_CLIP_PACKED",
+   "status": "define in code (training/optimizer_public.mojo CLIP_PACKED (public_clip)): B = gather into one packed buffer, clip, scatter (the former MOJOLEARN_CLIP_PACKED=1); same device buffer, offsets and clip; A = grad-norm clip in place from each tensor's own memory (the former default). A transport/route choice: digests must not move."
   }
  },
  "rows": [
@@ -1756,6 +1816,258 @@
     "classical-native-dispatch"
    ],
    "decides": "keep the by-name/resident route (A) unless the descriptor arm (B) is at least as fast on fit and infer at equal quality; digests must not move; read each arm's classical_route (tools/classical_route.py: svc_dispatch 'by-name' on A, 'descriptor' on B) to prove which arm ran"
+  },
+  {
+   "id": "download-stage-off-envgate",
+   "source": "lane envgate-train-seq-mamba (2026-11-15, docs/plans/ENV_GATES_2026-11-15.md ROUTE-DEFAULT-SUSPECT): the run-time MOJOLEARN_DOWNLOAD_STAGE read became the build constant DOWNLOAD_STAGE_OFF with today's default; the other side was never timed on NVIDIA/AMD (numbers on record are Apple only; L40S read raw faster for OPT_STAGE)",
+   "kind": "ab",
+   "lane": [
+    "ops-session-step",
+    "samba-train-step",
+    "mlp-train-step",
+    "sequential-fit",
+    "lm-train-step",
+    "program-run",
+    "lm-forward"
+   ],
+   "dataset": "*",
+   "rows": "full",
+   "vendor": "nvidia",
+   "b_arms": [
+    "download-stage-off"
+   ],
+   "decides": "keep A (the pinned two-stage pipeline from DOWNLOAD_STAGE_MIN floats (the former default)) unless B is at least as fast at equal quality; then B becomes the default with a _OFF define; digests must not move"
+  },
+  {
+   "id": "gemm-pool-off-envgate",
+   "source": "lane envgate-train-seq-mamba (2026-11-15, docs/plans/ENV_GATES_2026-11-15.md ROUTE-DEFAULT-SUSPECT): the run-time MOJOLEARN_GEMM_POOL read became the build constant GEMM_POOL_ON with today's default; the other side was never timed on NVIDIA/AMD (no A/B on record)",
+   "kind": "ab",
+   "lane": [
+    "gemm",
+    "gemm-bf16",
+    "gemm-int8"
+   ],
+   "dataset": "*",
+   "rows": "full",
+   "vendor": "nvidia",
+   "b_arms": [
+    "gemm-pool-off"
+   ],
+   "decides": "keep A (pooled grow-only device buffers per role (the former default)) unless B is at least as fast at equal quality; then B becomes the default with a _OFF define; digests must not move"
+  },
+  {
+   "id": "gemm-stage-down-off-envgate",
+   "source": "lane envgate-train-seq-mamba (2026-11-15, docs/plans/ENV_GATES_2026-11-15.md ROUTE-DEFAULT-SUSPECT): the run-time MOJOLEARN_GEMM_STAGE_DOWN read became the build constant GEMM_STAGE_DOWN_ON with today's default; the other side was never timed on NVIDIA/AMD (no A/B on record; L40S read raw faster for OPT_STAGE)",
+   "kind": "ab",
+   "lane": [
+    "gemm",
+    "gemm-bf16",
+    "gemm-int8"
+   ],
+   "dataset": "*",
+   "rows": "full",
+   "vendor": "nvidia",
+   "b_arms": [
+    "gemm-stage-down-off"
+   ],
+   "decides": "keep A (staged (pinned, double-buffered) download (the former default)) unless B is at least as fast at equal quality; then B becomes the default with a _OFF define; digests must not move"
+  },
+  {
+   "id": "gemm-stage-up-off-envgate",
+   "source": "lane envgate-train-seq-mamba (2026-11-15, docs/plans/ENV_GATES_2026-11-15.md ROUTE-DEFAULT-SUSPECT): the run-time MOJOLEARN_GEMM_STAGE_UP read became the build constant GEMM_STAGE_UP_ON with today's default; the other side was never timed on NVIDIA/AMD (no A/B on record)",
+   "kind": "ab",
+   "lane": [
+    "gemm",
+    "gemm-bf16",
+    "gemm-int8"
+   ],
+   "dataset": "*",
+   "rows": "full",
+   "vendor": "nvidia",
+   "b_arms": [
+    "gemm-stage-up-off"
+   ],
+   "decides": "keep A (staged upload on NVIDIA/AMD (the former default)) unless B is at least as fast at equal quality; then B becomes the default with a _OFF define; digests must not move"
+  },
+  {
+   "id": "lr-table-off-envgate",
+   "source": "lane envgate-train-seq-mamba (2026-11-15, docs/plans/ENV_GATES_2026-11-15.md ROUTE-DEFAULT-SUSPECT): the run-time MOJOLEARN_LR_TABLE / MOJOLEARN_LR_EXACT_ONLY read became the build constant LR_TABLE_ON with today's default; the other side was never timed on NVIDIA/AMD (no A/B on record)",
+   "kind": "ab",
+   "lane": [
+    "samba-train-step",
+    "mlp-train-step",
+    "sequential-fit",
+    "lm-train-step"
+   ],
+   "dataset": "*",
+   "rows": "full",
+   "vendor": "nvidia",
+   "b_arms": [
+    "lr-table-off"
+   ],
+   "decides": "keep A (the LR schedule table (the former default)) unless B is at least as fast at equal quality; then B becomes the default with a _OFF define; digests must not move"
+  },
+  {
+   "id": "mamba3-retain-stages-off-envgate",
+   "source": "lane envgate-train-seq-mamba (2026-11-15, docs/plans/ENV_GATES_2026-11-15.md ROUTE-DEFAULT-SUSPECT): the run-time MOJOLEARN_MAMBA3_RETAIN_STAGES read became the build constant MAMBA3_RETAIN_STAGES with today's default; the other side was never timed on NVIDIA/AMD (no A/B on record)",
+   "kind": "ab",
+   "lane": [
+    "mamba3-forward",
+    "mamba3-decode",
+    "samba-train-step"
+   ],
+   "dataset": "*",
+   "rows": "full",
+   "vendor": "nvidia",
+   "b_arms": [
+    "mamba3-retain-stages-off"
+   ],
+   "decides": "keep A (the forward's stages stay on the device for the backward (the former default)) unless B is at least as fast at equal quality; then B becomes the default with a _OFF define; digests must not move"
+  },
+  {
+   "id": "mamba3-retain-weights-off-envgate",
+   "source": "lane envgate-train-seq-mamba (2026-11-15, docs/plans/ENV_GATES_2026-11-15.md ROUTE-DEFAULT-SUSPECT): the run-time MOJOLEARN_MAMBA3_RETAIN_WEIGHTS read became the build constant MAMBA3_RETAIN_WEIGHTS with today's default; the other side was never timed on NVIDIA/AMD (no A/B on record)",
+   "kind": "ab",
+   "lane": [
+    "samba-decode",
+    "samba-forward",
+    "samba-train-step",
+    "mamba3-forward",
+    "mamba3-decode"
+   ],
+   "dataset": "*",
+   "rows": "full",
+   "vendor": "nvidia",
+   "b_arms": [
+    "mamba3-retain-weights-off"
+   ],
+   "decides": "keep A (the session keeps its weights resident (byte compare; the former default)) unless B is at least as fast at equal quality; then B becomes the default with a _OFF define; digests must not move"
+  },
+  {
+   "id": "mamba3-s16-qk-regs2h-envgate",
+   "source": "lane envgate-train-seq-mamba (2026-11-15, docs/plans/ENV_GATES_2026-11-15.md ROUTE-DEFAULT-SUSPECT): the run-time MOJOLEARN_MAMBA3_S16_QK_ARM read became the build constant M3_S16_QK_ARM with today's default; the other side was never timed on NVIDIA/AMD (the NVIDIA default regs was read on the L4 against regs2 only; AMD read regs2h 4.5 ms vs regs 18.6)",
+   "kind": "ab",
+   "lane": "samba-train-step",
+   "dataset": "*",
+   "rows": "full",
+   "vendor": "nvidia",
+   "b_arms": [
+    "mamba3-s16-qk-regs2h"
+   ],
+   "decides": "keep A (the S16 q/k arm regs on NVIDIA (the former default)) unless B is at least as fast at equal quality; then B becomes the default with a _OFF define; digests must not move"
+  },
+  {
+   "id": "optimizer-resident-off-envgate",
+   "source": "lane envgate-train-seq-mamba (2026-11-15, docs/plans/ENV_GATES_2026-11-15.md ROUTE-DEFAULT-SUSPECT): the run-time MOJOLEARN_OPTIMIZER_RESIDENT read became the build constant OPTIMIZER_RESIDENT with today's default; the other side was never timed on NVIDIA/AMD (samba-train-step 1.15x vs 0.8.55; tools/neural_experiments.py has the opt_host arm, no result on record)",
+   "kind": "ab",
+   "lane": [
+    "ops-session-step",
+    "samba-train-step",
+    "mlp-train-step",
+    "sequential-fit",
+    "lm-train-step"
+   ],
+   "dataset": "*",
+   "rows": "full",
+   "vendor": "nvidia",
+   "b_arms": [
+    "optimizer-resident-off"
+   ],
+   "decides": "keep A (resident optimizer state on the device (the former default)) unless B is at least as fast at equal quality; then B becomes the default with a _OFF define; digests must not move"
+  },
+  {
+   "id": "opt-lazy-moments-off-envgate",
+   "source": "lane envgate-train-seq-mamba (2026-11-15, docs/plans/ENV_GATES_2026-11-15.md ROUTE-DEFAULT-SUSPECT): the run-time MOJOLEARN_OPT_LAZY_MOMENTS read became the build constant OPT_LAZY_MOMENTS with today's default; the other side was never timed on NVIDIA/AMD (no A/B on record)",
+   "kind": "ab",
+   "lane": [
+    "lm-train-step",
+    "samba-train-step",
+    "mlp-train-step",
+    "sequential-fit"
+   ],
+   "dataset": "*",
+   "rows": "full",
+   "vendor": "nvidia",
+   "b_arms": [
+    "opt-lazy-moments-off"
+   ],
+   "decides": "keep A (Adam moments allocated on first use (the former default)) unless B is at least as fast at equal quality; then B becomes the default with a _OFF define; digests must not move"
+  },
+  {
+   "id": "opt-scan-fused-off-envgate",
+   "source": "lane envgate-train-seq-mamba (2026-11-15, docs/plans/ENV_GATES_2026-11-15.md ROUTE-DEFAULT-SUSPECT): the run-time MOJOLEARN_OPT_SCAN_FUSED read became the build constant OPT_SCAN_FUSED with today's default; the other side was never timed on NVIDIA/AMD (no A/B on record)",
+   "kind": "ab",
+   "lane": [
+    "samba-train-step",
+    "mlp-train-step",
+    "sequential-fit",
+    "lm-train-step"
+   ],
+   "dataset": "*",
+   "rows": "full",
+   "vendor": "nvidia",
+   "b_arms": [
+    "opt-scan-fused-off"
+   ],
+   "decides": "keep A (the fused refusal scan in the gated optimizer step (the former default)) unless B is at least as fast at equal quality; then B becomes the default with a _OFF define; digests must not move"
+  },
+  {
+   "id": "seq-moe-tiled-off-envgate",
+   "source": "lane envgate-train-seq-mamba (2026-11-15, docs/plans/ENV_GATES_2026-11-15.md ROUTE-DEFAULT-SUSPECT): the run-time MOJOLEARN_SEQ_MOE_TILED read became the build constant SEQ_MOE_TILED with today's default; the other side was never timed on NVIDIA/AMD (no A/B on record; MoE is not on the board)",
+   "kind": "ab",
+   "lane": "moe",
+   "dataset": "*",
+   "rows": "full",
+   "vendor": "nvidia",
+   "b_arms": [
+    "seq-moe-tiled-off"
+   ],
+   "decides": "keep A (the tiled MoE kernel (the former default)) unless B is at least as fast at equal quality; then B becomes the default with a _OFF define; digests must not move"
+  },
+  {
+   "id": "seq-var-block-off-envgate",
+   "source": "lane envgate-train-seq-mamba (2026-11-15, docs/plans/ENV_GATES_2026-11-15.md ROUTE-DEFAULT-SUSPECT): the run-time MOJOLEARN_SEQ_VAR_BLOCK read became the build constant SEQ_VAR_BLOCK with today's default; the other side was never timed on NVIDIA/AMD (no A/B on record)",
+   "kind": "ab",
+   "lane": [
+    "sequential-fit",
+    "sequential-predict"
+   ],
+   "dataset": "*",
+   "rows": "full",
+   "vendor": "nvidia",
+   "b_arms": [
+    "seq-var-block-off"
+   ],
+   "decides": "keep A (VAR's Cholesky solve and forecast on one threadgroup (the former default)) unless B is at least as fast at equal quality; then B becomes the default with a _OFF define; digests must not move"
+  },
+  {
+   "id": "seq-pool-off-envgate",
+   "source": "lane envgate-train-seq-mamba (2026-11-15, docs/plans/ENV_GATES_2026-11-15.md ROUTE-DEFAULT-SUSPECT): the run-time MOJOLEARN_SEQ_POOL read became the build constant SEQ_POOL with today's default; the other side was never timed on NVIDIA/AMD (no A/B on record)",
+   "kind": "ab",
+   "lane": [
+    "sequential-predict",
+    "sequential-fit"
+   ],
+   "dataset": "*",
+   "rows": "full",
+   "vendor": "nvidia",
+   "b_arms": [
+    "seq-pool-off"
+   ],
+   "decides": "keep A (the sequence executor's device buffer pool (the former default)) unless B is at least as fast at equal quality; then B becomes the default with a _OFF define; digests must not move"
+  },
+  {
+   "id": "clip-packed-envgate",
+   "source": "lane envgate-train-seq-mamba (2026-11-15, docs/plans/ENV_GATES_2026-11-15.md ROUTE-DEFAULT-SUSPECT): the run-time MOJOLEARN_CLIP_PACKED read became the build constant CLIP_PACKED with today's default; the other side was never timed on NVIDIA/AMD (no A/B on record)",
+   "kind": "ab",
+   "lane": "lm-train-step",
+   "dataset": "*",
+   "rows": "full",
+   "vendor": "nvidia",
+   "b_arms": [
+    "clip-packed"
+   ],
+   "decides": "keep A (grad-norm clip in place from each tensor's own memory (the former default)) unless B is at least as fast at equal quality; then B becomes the default with a _OFF define; digests must not move"
   }
  ]
 }

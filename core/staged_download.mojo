@@ -14,7 +14,8 @@ still resolves. The stage pool keeps its `_Global` slot name, so the
 process still holds ONE pool per numeric tier. Copies only: no bit moves.
 """
 from std.memory import bitcast, unsafe_memcpy
-from std.os import getenv
+from std.sys import is_defined
+from std.sys.defines import get_defined_int
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from core.step_phase import (
@@ -154,35 +155,42 @@ def _stage_enqueue(
 
 
 comptime DOWNLOAD_STAGE_MIN = 1 << 20
-comptime DOWNLOAD_CHUNK_FLOATS = 1 << 21
+#: floats per pipeline chunk (2M, 8 MiB); `-D MOJOLEARN_DOWNLOAD_CHUNK=<n>`
+#: (floats, at least 64K) for the sweep. A size choice for any buffer, not a
+#: board shape.
+comptime DOWNLOAD_CHUNK_FLOATS = get_defined_int["MOJOLEARN_DOWNLOAD_CHUNK", 1 << 21]()
 comptime DOWNLOAD_STAGE_KEEP = 2
 
+# Download route (lane envgate-train-seq-mamba, 2026-11-15). Before, every
+# download read MOJOLEARN_DOWNLOAD_STAGE ("0" raw, "1" force the stage) and
+# MOJOLEARN_DOWNLOAD_CHUNK from the environment, per call. Now both are build
+# constants holding today's default (staged from DOWNLOAD_STAGE_MIN floats on
+# every column, lane neural-pass49 2026-10-01; the Apple column since lane
+# neural-pass43). ROUTE-DEFAULT-SUSPECT: the numbers on record are Apple only.
+# B arm `-D MOJOLEARN_DOWNLOAD_STAGE_OFF` (the raw host-pointer copy at every
+# size; RUN OWED, bench/results/paper_compare/owed-pre0867.json
+# "download-stage-off"); `-D MOJOLEARN_DOWNLOAD_STAGE` forces the stage below
+# the minimum. A transport choice: no bit moves.
+comptime DOWNLOAD_STAGE_OFF = is_defined["MOJOLEARN_DOWNLOAD_STAGE_OFF"]()
+comptime DOWNLOAD_STAGE_FORCE = is_defined["MOJOLEARN_DOWNLOAD_STAGE"]()
 
+
+@always_inline
 def download_staged(n: Int) -> Bool:
     """Whether `download_f32_into` goes through the pinned stage pipeline:
-    from DOWNLOAD_STAGE_MIN floats on every column (lane neural-pass49,
-    2026-10-01; the Apple column since lane neural-pass43). The raw
-    host-pointer copy is `MOJOLEARN_DOWNLOAD_STAGE=0`; `=1` forces the
-    stage below the minimum. A transport choice: no bit moves."""
-    var v = String(getenv("MOJOLEARN_DOWNLOAD_STAGE"))
-    if v == "0":
+    from DOWNLOAD_STAGE_MIN floats unless a -D arm says otherwise."""
+    comptime if DOWNLOAD_STAGE_OFF:
         return False
-    if v == "1":
+    elif DOWNLOAD_STAGE_FORCE:
         return True
-    return n >= DOWNLOAD_STAGE_MIN
+    else:
+        return n >= DOWNLOAD_STAGE_MIN
 
 
+@always_inline
 def download_chunk_floats() -> Int:
-    """Floats per pipeline chunk: DOWNLOAD_CHUNK_FLOATS (2M, 8 MiB), or
-    `MOJOLEARN_DOWNLOAD_CHUNK` (floats, at least 64K) for the sweep."""
-    var v = String(getenv("MOJOLEARN_DOWNLOAD_CHUNK"))
-    if v != "":
-        try:
-            var c = Int(v)
-            if c >= (1 << 16):
-                return c
-        except:
-            pass
+    """Floats per pipeline chunk: the build constant DOWNLOAD_CHUNK_FLOATS."""
+    comptime assert DOWNLOAD_CHUNK_FLOATS >= (1 << 16), "MOJOLEARN_DOWNLOAD_CHUNK must be >= 65536"
     return DOWNLOAD_CHUNK_FLOATS
 
 

@@ -2,7 +2,8 @@
 # Shared native linalg transport. Extracted numerical bodies keep their original
 # launch, synchronization and release order; both ABI doors call these owners.
 from core.hostptr import f32_ptr, f64_ptr, i8_ptr, i32_ptr, read_f32, u16_ptr
-from std.os import abort, getenv
+from std.os import abort
+from std.sys import is_defined
 from std.time import perf_counter_ns
 
 from checks.vendor import COMPILED_VENDOR
@@ -149,14 +150,21 @@ def _lowbit_run(
     ctx.synchronize()
     _ = work^
 
-def _lowbit_tick(ctx: DeviceContext, on: Bool, mut t: Int, name: String) raises:
-    """MOJOLEARN_LOWBIT_TIMING: synchronize, print `timing int8.<name> <ms>
-    ms`, advance `t`. A no-op when off."""
-    if not on:
+#: `-D MOJOLEARN_LOWBIT_TIMING`: per-phase timing lines for gemm_int8. Before
+#: 2026-11-15 an environment read per gemm_int8 call; now a build define, so
+#: the default build carries no read, no synchronize and no print.
+comptime LOWBIT_TIMING = is_defined["MOJOLEARN_LOWBIT_TIMING"]()
+
+
+@always_inline
+def _lowbit_tick(ctx: DeviceContext, mut t: Int, name: StaticString) raises:
+    """-D MOJOLEARN_LOWBIT_TIMING: synchronize, print `timing int8.<name> <ms>
+    ms`, advance `t`. Compiled out when the define is absent."""
+    comptime if not LOWBIT_TIMING:
         return
     ctx.synchronize()
     var now = Int(perf_counter_ns())
-    print("timing int8." + name + " " + String(Float64(now - t) / 1000000.0) + " ms")
+    print(String("timing int8.") + String(name) + " " + String(Float64(now - t) / 1000000.0) + " ms")
     t = now
 
 def gemm_native(
@@ -268,17 +276,16 @@ def gemm_int8_native(
     _refuse_lowbit_shape(m, n, k, OP_NT, String("gemm_int8"))
     if k > INT8_MAX_K:
         raise Error("gemm_int8: k must be at most " + String(INT8_MAX_K) + " (contract L-7), got " + String(k))
-    # lane/neural-net-experiment (2026-09-30): MOJOLEARN_LOWBIT_TIMING=1
+    # lane/neural-net-experiment (2026-09-30): -D MOJOLEARN_LOWBIT_TIMING
     # prints one line per phase of this call (`timing int8.<phase> <ms>
     # ms`), a synchronize around each, so the board's gemm-int8 cell can be
     # read as context + uploads + kernel + download + drains. Measurement
     # only: the phases and their order are unchanged when it is off.
-    var ton = String(getenv("MOJOLEARN_LOWBIT_TIMING")) != ""
     var tk = Int(perf_counter_ns())
     var ctx = process_ctx[_DEVCTX_SLOT]()
-    _lowbit_tick(ctx, ton, tk, "context")
+    _lowbit_tick(ctx, tk, "context")
     # Pooled buffers (gemm/host_transport.mojo GemmHostLease, as the f32 and
-    # bf16 surfaces; MOJOLEARN_GEMM_POOL=0 gives fresh ones) and the staged
+    # bf16 surfaces; -D MOJOLEARN_GEMM_POOL_OFF gives fresh ones) and the staged
     # download, whose own wait retires the kernel: the bare synchronize()
     # between the kernel and the download read nothing and is gone (audit
     # row 26, lane a3). Copies and waits only; the same kernel.
@@ -292,11 +299,11 @@ def gemm_int8_native(
     ctx.enqueue_copy(dst_buf=dea, src_ptr=i32_ptr(ea_address))
     ctx.enqueue_copy(dst_buf=deb, src_ptr=i32_ptr(eb_address))
     var dc = lease.f32(ctx, ROLE_C, m * n)
-    _lowbit_tick(ctx, ton, tk, "uploads_and_alloc")
+    _lowbit_tick(ctx, tk, "uploads_and_alloc")
     identical_gemm_int8_into(ctx, dc, dqa, dea, dqb, deb, m, n, k)
-    _lowbit_tick(ctx, ton, tk, "kernel")
+    _lowbit_tick(ctx, tk, "kernel")
     gemm_down_f32(ctx, lease, dc, f32_ptr(c_address), m * n)
-    _lowbit_tick(ctx, ton, tk, "download")
+    _lowbit_tick(ctx, tk, "download")
     lease.release()
     _ = dqa^
     _ = dea^
@@ -310,7 +317,7 @@ def gemm_int8_native(
     # 2520's mechanism; the native backtrace of the `transformer-bf16w`
     # hang blames exactly this library). Host-side drain, no arithmetic.
     ctx.synchronize()
-    _lowbit_tick(ctx, ton, tk, "free_and_drain")
+    _lowbit_tick(ctx, tk, "free_and_drain")
     return m * n
 
 def quantize_int8_native(

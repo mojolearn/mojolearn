@@ -95,8 +95,8 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from std.memory import unsafe_memcpy
 from max.gpu import block_dim, block_idx, thread_idx
 from training.maximize import maximize_negate
-from std.os import getenv
 from std.sys.compile import is_defined
+from std.sys.defines import get_defined_int
 from checks.kernel_matrix import COLUMN_AMD, COLUMN_APPLE, COLUMN_NVIDIA, TARGET_COLUMN
 from std.time import perf_counter_ns
 
@@ -434,32 +434,48 @@ def _scratch(ctx: DeviceContext, slot: Int, n: Int) raises -> DeviceBuffer[DType
         return ctx.enqueue_create_buffer[DType.float32](n)
 
 
+# Optimizer transport switches (lane envgate-train-seq-mamba, 2026-11-15).
+# Before, each was an environment read + string compare per optimizer step (and clip):
+# MOJOLEARN_OPT_POOL / MOJOLEARN_OPT_STAGE / MOJOLEARN_OPT_PIPE forced either
+# side at run time, MOJOLEARN_OPT_PIPE_FLOATS set the chunk. Now each is a
+# build constant holding the same per-column default (ROUTE-OK,
+# docs/plans/ENV_GATES_2026-11-15.md); the other side is a -D arm:
+#   -D MOJOLEARN_OPT_POOL / -D MOJOLEARN_OPT_POOL_OFF    force pooled buffers on / off
+#   -D MOJOLEARN_OPT_STAGE / -D MOJOLEARN_OPT_STAGE_OFF  force the staged download on / off
+#   -D MOJOLEARN_OPT_PIPE / -D MOJOLEARN_OPT_PIPE_OFF    force the pipelined transport on / off
+#   -D MOJOLEARN_OPT_PIPE_FLOATS=<n>                     pipeline chunk in floats (n >= 1024)
+# Transport choices only: no bit moves on either side.
+
+#: pooled per-handle parameter/gradient device buffers (lane neural-pass34):
+#: the Apple column by default, a fresh pair per step elsewhere. On the L40S
+#: the pooled pair read Adam's step 21 -> 25-31 ms (sgd/adamw even) while the
+#: M3 Ultra's gain came from the pool and the staged download together.
+comptime OPT_POOL_BUFFERS = (
+    TARGET_COLUMN == COLUMN_APPLE or is_defined["MOJOLEARN_OPT_POOL"]()
+) and not is_defined["MOJOLEARN_OPT_POOL_OFF"]()
+
+#: staged (pinned) download of the resident step (lane neural-pass26): the
+#: Apple column by default, the raw copy elsewhere. On the M3 Ultra the staged
+#: download is the lever (sgd/adam/adamw 348-363 ms raw -> 111-112 ms staged),
+#: on the L40S the raw path is faster (staged read 20-25% slower), on the
+#: MI325X they are even.
+comptime OPT_DOWNLOAD_STAGED = (
+    TARGET_COLUMN == COLUMN_APPLE or is_defined["MOJOLEARN_OPT_STAGE"]()
+) and not is_defined["MOJOLEARN_OPT_STAGE_OFF"]()
+
+
+@always_inline
 def opt_pool_buffers() -> Bool:
     """Whether the resident step keeps per-handle parameter/gradient device
-    buffers (lane neural-pass34): the Apple column by default, a fresh pair
-    per step elsewhere; MOJOLEARN_OPT_POOL=0/1 forces either. On the L40S
-    the pooled pair read Adam's step 21 -> 25-31 ms (sgd/adamw even) while
-    the M3 Ultra's gain came from the pool and the staged download together.
-    A transport choice: no bit moves."""
-    var v = String(getenv("MOJOLEARN_OPT_POOL"))
-    comptime if TARGET_COLUMN == COLUMN_APPLE:
-        return v != "0"
-    return v == "1"
+    buffers: the build constant OPT_POOL_BUFFERS."""
+    return OPT_POOL_BUFFERS
 
 
+@always_inline
 def opt_download_staged() -> Bool:
-    """Whether the resident step downloads through its pinned stage (lane
-    neural-pass26): the Apple column by default, the raw copy elsewhere;
-    MOJOLEARN_OPT_STAGE=0/1 forces either. Measured on the boxes with the
-    pooled buffers in place: on the M3 Ultra the staged download is the
-    lever (the sgd/adam/adamw cells 348-363 ms raw -> 111-112 ms staged;
-    the raw device-to-host-pointer download is slow there), on the L40S the
-    raw path is faster (the staged one read 20-25% slower) and on the
-    MI325X they are even. A transport choice: no bit moves."""
-    var v = String(getenv("MOJOLEARN_OPT_STAGE"))
-    comptime if TARGET_COLUMN == COLUMN_APPLE:
-        return v != "0"
-    return v == "1"
+    """Whether the resident step downloads through its pinned stage: the
+    build constant OPT_DOWNLOAD_STAGED."""
+    return OPT_DOWNLOAD_STAGED
 
 
 def _parallel_copy_out(dst: MutPointer[Float32, MutUntrackedOrigin], src: MutPointer[Float32, MutUntrackedOrigin], n: Int):
@@ -491,9 +507,10 @@ def _parallel_copy_out(dst: MutPointer[Float32, MutUntrackedOrigin], src: MutPoi
 # chunk i - 1 out of the other. One in-order context, so every ordering below
 # is a `ctx.synchronize()`; nothing computes here and no bit moves.
 #
-# `MOJOLEARN_OPT_PIPE=0/1` forces the route off/on (the A/B; default on for
-# the NVIDIA and AMD columns, off elsewhere), and
-# `MOJOLEARN_OPT_PIPE_FLOATS` sets the chunk (default 2^21 floats, 8 MB).
+# `-D MOJOLEARN_OPT_PIPE_OFF` / `-D MOJOLEARN_OPT_PIPE` force the route
+# off/on (the A/B; default on for the NVIDIA and AMD columns, off elsewhere),
+# and `-D MOJOLEARN_OPT_PIPE_FLOATS=<n>` sets the chunk (default 2^21 floats,
+# 8 MB). Both were run-time environment reads per step until 2026-11-15.
 #
 # A stage half is free when the transfer that used it last has been waited
 # for: every entry here begins with a wait (a previous call's last upload DMA
@@ -505,29 +522,28 @@ def _parallel_copy_out(dst: MutPointer[Float32, MutUntrackedOrigin], src: MutPoi
 
 comptime _FP = MutPointer[Float32, MutUntrackedOrigin]
 
-#: the default chunk, floats (8 MB): eight chunks for a 64 MB tensor
-comptime OPT_PIPE_FLOATS = 1 << 21
+#: the chunk, floats (default 8 MB: eight chunks for a 64 MB tensor); a size
+#: choice for any tensor, not keyed on a board shape
+comptime OPT_PIPE_FLOATS = get_defined_int["MOJOLEARN_OPT_PIPE_FLOATS", 1 << 21]()
+
+#: the pipelined transport: on for the NVIDIA and AMD columns, off elsewhere
+comptime OPT_PIPE_ON = (
+    TARGET_COLUMN == COLUMN_NVIDIA or TARGET_COLUMN == COLUMN_AMD
+    or is_defined["MOJOLEARN_OPT_PIPE"]()
+) and not is_defined["MOJOLEARN_OPT_PIPE_OFF"]()
 
 
+@always_inline
 def opt_pipe_on() -> Bool:
     """Whether the optimizer step and the clip move their buffers through
-    the pipelined stage (MOJOLEARN_OPT_PIPE forces either)."""
-    var v = String(getenv("MOJOLEARN_OPT_PIPE"))
-    comptime if TARGET_COLUMN == COLUMN_NVIDIA or TARGET_COLUMN == COLUMN_AMD:
-        return v != "0"
-    return v == "1"
+    the pipelined stage: the build constant OPT_PIPE_ON."""
+    return OPT_PIPE_ON
 
 
+@always_inline
 def opt_pipe_floats() -> Int:
-    var v = String(getenv("MOJOLEARN_OPT_PIPE_FLOATS"))
-    if v == "":
-        return OPT_PIPE_FLOATS
-    try:
-        var n = Int(v)
-        if n >= 1024:
-            return n
-    except:
-        pass
+    """The pipeline chunk in floats: the build constant OPT_PIPE_FLOATS."""
+    comptime assert OPT_PIPE_FLOATS >= 1024, "MOJOLEARN_OPT_PIPE_FLOATS must be >= 1024"
     return OPT_PIPE_FLOATS
 
 

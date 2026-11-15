@@ -27,7 +27,7 @@ had: the resident step, the resident step with its transfers named (the
 device-parameter step and the device sign flip), or the per-call step. The
 same kernels on the same buffers in the same order: the same bits."""
 from std.memory import unsafe_memcpy
-from std.os import getenv
+from std.sys import is_defined
 
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 
@@ -48,7 +48,7 @@ from training.estimator import (
 from training.optimizer_multi_gpu import parallel_optimizer_step_host
 from training.optimizer_public_common import (
     F32P, I32P, Flat, GRADS_DEVICE, GRADS_HOST, GRADS_RESIDENT, OptHyper, PublicStep, PublicStepOut,
-    gather, registry_check, resident_wanted_by_env, scatter, sizes_check, stack_microbatches, step_lr,
+    gather, registry_check, resident_wanted_by_build, scatter, sizes_check, stack_microbatches, step_lr,
 )
 from core.shared_slot import SharedSlot
 
@@ -383,12 +383,12 @@ def resident_copy_dev(ctx: DeviceContext, handle: Int, which: Int, th: Int, off:
 def _open_slot(ctx: DeviceContext, plan: DevicePlan, req: PublicStep) raises -> Int:
     """The optimizer's slot, opened on its first use: on the device unless
     the optimizer was built with `resident=False` or the environment keeps
-    the state off the device (`resident_wanted_by_env`). A state the caller
+    the state off the device (`resident_wanted_by_build`). A state the caller
     has touched (a `load_state_dict`, an assignment, a read) is uploaded;
     an untouched one is the slot's own zeros."""
     if req.handle >= 0:
         return opt_pool_handle(req.handle, 0)
-    var device = req.resident_wanted != 0 and resident_wanted_by_env(plan)
+    var device = req.resident_wanted != 0 and resident_wanted_by_build(plan)
     var h = resident_open(ctx, req.n_total, not device)
     if not req.pristine and req.m_addr != 0 and req.v_addr != 0:
         _ = resident_upload(ctx, h, req.m_addr, req.v_addr, req.n_total)
@@ -625,7 +625,7 @@ def public_io(
         if req.handle >= 0:
             h = opt_pool_handle(req.handle, 0)
             available = _on_device(h)
-        elif req.resident_wanted != 0 and resident_wanted_by_env(plan):
+        elif req.resident_wanted != 0 and resident_wanted_by_build(plan):
             h = _open_slot(ctx, plan, req)
         else:
             available = False
@@ -665,11 +665,20 @@ def public_io(
     return (h, req.n_total)
 
 
+
+# Grad-norm clip (lane envgate-train-seq-mamba, 2026-11-15): clip in place
+# from the tensors' own memory is the default; `-D MOJOLEARN_CLIP_PACKED`
+# gathers and packs them (the A/B; same device buffer, offsets and clip, so
+# the same bits). Before, an environment read per clip call.
+# ROUTE-DEFAULT-SUSPECT, no A/B on record: B arm RUN OWED in
+# bench/results/paper_compare/owed-pre0867.json ("clip-packed").
+comptime CLIP_PACKED = is_defined["MOJOLEARN_CLIP_PACKED"]()
+
 def public_clip(ctx: DeviceContext, plan: DevicePlan, addrs: List[Int], nbytes: List[Int], max_norm: Float32) raises -> Tuple[Float32, Float32]:
     """`clip_grad_norm_`: the two-level global L2 norm of the tensors and the
     in-place scale (optimizer contract section 3). Several tensors go to the
     device straight from their own memory (`identical_clip_grad_norm_addrs`)
-    unless MOJOLEARN_CLIP_PACKED=1 or several optimizer devices ask for the
+    unless the build has `-D MOJOLEARN_CLIP_PACKED` or several optimizer devices ask for the
     packed buffer (the A/B; the same device buffer, offsets and clip, so
     the same bits). Returns (pre-clip total norm, clamped coefficient)."""
     var j = len(addrs)
@@ -684,8 +693,7 @@ def public_clip(ctx: DeviceContext, plan: DevicePlan, addrs: List[Int], nbytes: 
     # Several tensors, not packed, one optimizer device: clip straight from
     # the tensors' own memory. (Was named `multi` for "several tensors"; the
     # device test is the old `== "1"` on the plan's raw setting.)
-    var single_unpacked = (j > 1 and String(getenv("MOJOLEARN_CLIP_PACKED")) != "1"
-                           and _single_device(plan))
+    var single_unpacked = (j > 1 and not CLIP_PACKED and _single_device(plan))
     if single_unpacked:
         _ = identical_clip_grad_norm_addrs_host(ctx, addrs, op, fp, j, max_norm)
     else:
