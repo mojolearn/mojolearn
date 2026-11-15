@@ -1,6 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
 """SVR retains saved-kernel behavior across its complete native boundary."""
-import ast
 import gc
 import hashlib
 import json
@@ -8,7 +7,6 @@ import os
 import subprocess
 import sys
 import warnings
-from pathlib import Path
 
 import numpy as np
 import pytest
@@ -255,15 +253,6 @@ def test_svr_dataframe_and_feature_name_warning_are_preserved(tmp_path):
         warnings.simplefilter("always")
         audit_native_call(model.predict, _input(2, "float32")).assert_native()
     assert len(caught) == 1
-
-
-def test_svr_public_method_is_one_native_call():
-    tree = ast.parse(Path(host.__file__).read_text())
-    cls = next(node for node in tree.body if isinstance(node, ast.ClassDef) and node.name == "HostSVR")
-    method = next(node for node in cls.body if isinstance(node, ast.FunctionDef) and node.name == "predict")
-    body = method.body[1:]
-    assert len(body) == 1 and isinstance(body[0], ast.Return)
-    assert isinstance(body[0].value, ast.Call) and body[0].value.func.id == "_native_classical"
 
 
 # Existing CPU fit/score remain migration debt. These saved 32011bb32

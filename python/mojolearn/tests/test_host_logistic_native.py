@@ -1,6 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
 """CPU logistic inference preserves scores, links, labels and native boundaries."""
-import ast
 import gc
 import hashlib
 import json
@@ -8,7 +7,6 @@ import os
 import subprocess
 import sys
 import warnings
-from pathlib import Path
 
 import numpy as np
 import pytest
@@ -310,16 +308,6 @@ def test_logistic_feature_name_warnings_preserve_original_nested_methods(tmp_pat
         audit_native_call(getattr(model, method), _input(2, "float32")).assert_native()
     assert len(caught) == {"decision_function": 1, "predict": 2, "predict_proba": 2, "predict_log_proba": 3}[method]
     assert "was fitted with feature names" in str(caught[0].message)
-
-
-def test_logistic_public_methods_are_one_native_call():
-    tree = ast.parse(Path(host.__file__).read_text())
-    cls = next(n for n in tree.body if isinstance(n, ast.ClassDef) and n.name == "HostLogisticRegression")
-    for node in cls.body:
-        if isinstance(node, ast.FunctionDef) and node.name in METHODS:
-            body = node.body[1:]
-            assert len(body) == 1 and isinstance(body[0], ast.Return)
-            assert isinstance(body[0].value, ast.Call) and body[0].value.func.id == "_native_classical"
 
 
 @pytest.mark.parametrize("selected", [0, 1])

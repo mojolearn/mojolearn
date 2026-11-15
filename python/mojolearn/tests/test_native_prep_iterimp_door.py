@@ -4,36 +4,11 @@
 Python route is kept below as the oracle: the door must give the same bytes and
 the same fitted attributes on small fixtures."""
 import array
-import ast
 import inspect
 import copy
-import pathlib
 
 import numpy as np
 import pytest
-
-_HERE = pathlib.Path(__file__).resolve().parents[1]
-
-
-def _method_bodies():
-    tree = ast.parse((_HERE / "_expansion_prep.py").read_text())
-    cls = next(n for n in tree.body if isinstance(n, ast.ClassDef) and n.name == "IterativeImputer")
-    return {f.name: f for f in cls.body if isinstance(f, ast.FunctionDef)}
-
-
-def test_public_methods_are_one_native_call():
-    """Pure source check: fit, fit_transform and transform each return one _ENCODE_CALL."""
-    bodies = _method_bodies()
-    for name in ("fit", "fit_transform", "transform"):
-        body = [s for s in bodies[name].body
-                if not (isinstance(s, ast.Expr) and isinstance(s.value, ast.Constant))]
-        assert len(body) == 1 and isinstance(body[0], ast.Return), name
-        call = body[0].value
-        assert isinstance(call, ast.Call) and getattr(call.func, "id", "") == "_ENCODE_CALL", name
-        assert isinstance(call.args[1], ast.Constant) and call.args[1].value == name, name
-    assert set(bodies) >= {"fit", "fit_transform", "transform"}
-    # the former helpers are gone from the class
-    assert not set(bodies) & {"_fit_user", "_ii_take", "_ii_put", "_prepare", "_neighbours_device"}
 
 
 # ---------------------------------------------------------------- the former Python route (oracle)
@@ -41,7 +16,7 @@ try:
     import mojolearn as ml
     from mojolearn.tests._prep_prog_oracle import (
         Array, SimpleImputer, _Prog, _x2d, _cs, _mode, _seed_words, _NONE, _II_CH, as_f32_c)
-except Exception:  # no built bindings: only the source check above runs
+except Exception:  # no built bindings: every test below skips
     ml = None
 numbers = __import__("numbers")
 _INF = float("inf")

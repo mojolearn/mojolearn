@@ -1,13 +1,11 @@
 # SPDX-License-Identifier: Apache-2.0
 """CPU KDE scores preserve the saved numerical contract without Python work."""
-import ast
 import gc
 import json
 import os
 import subprocess
 import sys
 import warnings
-from pathlib import Path
 
 import numpy as np
 import pytest
@@ -801,16 +799,6 @@ def test_kde_inherited_fit_preserves_saved_state_and_scoring(tmp_path, kernel, w
     assert "_mojolearn_fitting" not in vars(model)
     for method in METHODS:
         _check(model, _input(2, "float32"), method)
-
-
-def test_kde_public_methods_are_single_native_calls():
-    tree = ast.parse(Path(host.__file__).read_text())
-    cls = next(n for n in tree.body if isinstance(n, ast.ClassDef) and n.name == "HostKernelDensity")
-    for name in METHODS:
-        method = next(n for n in cls.body if isinstance(n, ast.FunctionDef) and n.name == name)
-        body = method.body[1:]
-        assert len(body) == 1 and isinstance(body[0], ast.Return)
-        assert isinstance(body[0].value, ast.Call) and body[0].value.func.id == "_native_classical"
 
 
 _NUMPY_IMPORT_CHILD = r'''

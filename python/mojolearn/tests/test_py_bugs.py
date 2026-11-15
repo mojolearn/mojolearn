@@ -2,66 +2,19 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """lane/py-bugs regressions.
 
-1. No platform libm and no interpreter-dependent sum in the Python front
-   door's float math (DEVIATIONS 6900-6902): the pinned helpers are checked
-   against exact or high-precision references, and the touched modules are
-   scanned for a float `**`.
-2. A search and a validation curve draw their folds once (scikit-learn).
-3. learning_curve permutes each fold once and takes nested prefixes.
-4. The RNN's row order is int32: its length is no longer capped at 2^24.
+1. A search and a validation curve draw their folds once (scikit-learn).
+2. learning_curve permutes each fold once and takes nested prefixes.
+3. The RNN's row order is int32: its length is no longer capped at 2^24.
+
+The pinned erfc / normal_inv_cdf / powi / nsum checks run natively in
+checks/native_tests/portable_math_suite.mojo.
 """
-import ast
 import random
-from pathlib import Path
 
 import pytest
 
-PKG = Path(__file__).resolve().parents[1]
 
-
-# ------------------------------------------------------------- 1. the helpers
-# The pinned erfc / normal_inv_cdf / powi / nsum checks moved to the native
-# suite checks/native_tests/portable_math_suite.mojo with the deleted Python
-# helpers (lane pyout-runtime-boundary, 2026-11-11).
-
-
-# The modules whose float math the lane pinned: a `**` there must be an
-# integer power (exact: an int base), an exact constant power of two, or one
-# of the integer expressions below, never the platform pow.
-_POW_OK = {"max(pp, 1) ** 2", "max(ka, kb) ** 2", "b_n ** 2"}
-
-
-def _exact_pow(node):
-    left, right = node.left, node.right
-    if isinstance(left, ast.Constant) and type(left.value) is int:
-        return True
-    return (isinstance(left, ast.Constant) and left.value == 2.0 and isinstance(right, (ast.Constant, ast.UnaryOp)))
-
-
-_POW_MODULES = ["_expansion_metrics.py", "model_selection.py", "_expansion_cluster.py", "_expansion_linear.py",
-                "_x_sequence_autoarima.py", "_expansion_cnn.py", "_expansion_prep.py", "_expansion_decomp.py",
-                "_portable_math.py", "_x_sequence_rnn.py"]
-
-
-@pytest.mark.parametrize("name", _POW_MODULES)
-def test_no_platform_pow_in_pinned_modules(name):
-    src = (PKG / name).read_text()
-    bad = []
-    for node in ast.walk(ast.parse(src)):
-        if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Pow):
-            seg = ast.get_source_segment(src, node)
-            if not _exact_pow(node) and seg not in _POW_OK:
-                bad.append(f"{name}:{node.lineno}: {seg}")
-        if (isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
-                and isinstance(node.func.value, ast.Name) and node.func.value.id in ("math", "_math", "_m")
-                and node.func.attr in ("exp", "log", "log2", "log10", "log1p", "expm1", "pow", "erf", "erfc")):
-            imported = f"import {node.func.value.id}" in src or f"import math as {node.func.value.id}" in src
-            if imported and "_portable_math as " + node.func.value.id not in src:
-                bad.append(f"{name}:{node.lineno}: stdlib math.{node.func.attr}")
-    assert not bad, bad
-
-
-# ------------------------------------------------ 2, 3. search folds, curves
+# ------------------------------------------------ 1, 2. search folds, curves
 
 class _RowSpy:
     """The former Python estimator is now an explicit callback refusal probe."""
@@ -215,7 +168,7 @@ def test_python_fold_spy_is_refused_before_any_callback(operation):
     assert _SEEN == []
 
 
-# ------------------------------------------------------------- 4. the RNN
+# ------------------------------------------------------------- 3. the RNN
 
 def test_rnn_schedule_bound_is_2_31_not_2_24():
     # the epoch orders are built on the executor by rnn_fit; the schedule

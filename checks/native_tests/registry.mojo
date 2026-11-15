@@ -30,6 +30,7 @@ from checks.native_tests.cnn_blocks import register as register_cnn_blocks
 from checks.native_tests.cnn_conv import register as register_cnn_conv
 from checks.native_tests.cnn_pool import register as register_cnn_pool
 from checks.native_tests.cnn_trainer import register as register_cnn_trainer
+from checks.native_tests.core_all_finite import register as register_core_all_finite
 from checks.native_tests.core_chunked_lm_head_denormals import register as register_core_chunked_lm_head_denormals
 from checks.native_tests.core_convert import register as register_core_convert
 from checks.native_tests.core_helpers import register as register_core_helpers
@@ -76,6 +77,7 @@ from checks.native_tests.kde_native import register as register_kde_native
 from checks.native_tests.kde_ownership import register as register_kde_ownership
 from checks.native_tests.kernel_methods_cells import register as register_kernel_methods_cells
 from checks.native_tests.kernel_methods_krr_options import register as register_kernel_methods_krr_options
+from checks.native_tests.kernel_methods_poly_degree import register as register_kernel_methods_poly_degree
 from checks.native_tests.kmeans_native import register as register_kmeans_native
 from checks.native_tests.kmeans_variants_native import register as register_kmeans_variants_native
 from checks.native_tests.kpca_native import register as register_kpca_native
@@ -142,6 +144,7 @@ from checks.native_tests.sequence_rnn import register as register_sequence_rnn
 from checks.native_tests.sequence_samba_surface import register as register_sequence_samba_surface
 from checks.native_tests.sequence_stl import register as register_sequence_stl
 from checks.native_tests.sequence_theta import register as register_sequence_theta
+from checks.native_tests.sequence_theta_variants import register as register_sequence_theta_variants
 from checks.native_tests.sequence_var import register as register_sequence_var
 from checks.native_tests.solver_estimators_ops import register as register_solver_estimators_ops
 from checks.native_tests.solver_qn_objectives import register as register_solver_qn_objectives
@@ -164,6 +167,7 @@ from checks.native_tests.training_moe_backward_ownership import register as regi
 from checks.native_tests.training_neural_inference import register as register_training_neural_inference
 from checks.native_tests.training_neural_rng_slices import register as register_training_neural_rng_slices
 from checks.native_tests.training_primitives import register as register_training_primitives
+from checks.native_tests.training_residual_dropout_mask import register as register_training_residual_dropout_mask
 from checks.native_tests.training_small_mlp import register as register_training_small_mlp
 from checks.native_tests.transformer_block_session import register as register_transformer_block_session
 from checks.native_tests.transformer_decode_door import register as register_transformer_decode_door
@@ -202,6 +206,7 @@ def all_checks() -> List[Check]:
     checks.append(register_cnn_conv())
     checks.append(register_cnn_pool())
     checks.append(register_cnn_trainer())
+    checks.append(register_core_all_finite())
     checks.append(register_core_chunked_lm_head_denormals())
     checks.append(register_core_convert())
     checks.append(register_core_helpers())
@@ -248,6 +253,7 @@ def all_checks() -> List[Check]:
     checks.append(register_kde_ownership())
     checks.append(register_kernel_methods_cells())
     checks.append(register_kernel_methods_krr_options())
+    checks.append(register_kernel_methods_poly_degree())
     checks.append(register_kmeans_native())
     checks.append(register_kmeans_variants_native())
     checks.append(register_kpca_native())
@@ -314,6 +320,7 @@ def all_checks() -> List[Check]:
     checks.append(register_sequence_samba_surface())
     checks.append(register_sequence_stl())
     checks.append(register_sequence_theta())
+    checks.append(register_sequence_theta_variants())
     checks.append(register_sequence_var())
     checks.append(register_solver_estimators_ops())
     checks.append(register_solver_qn_objectives())
@@ -336,6 +343,7 @@ def all_checks() -> List[Check]:
     checks.append(register_training_neural_inference())
     checks.append(register_training_neural_rng_slices())
     checks.append(register_training_primitives())
+    checks.append(register_training_residual_dropout_mask())
     checks.append(register_training_small_mlp())
     checks.append(register_transformer_block_session())
     checks.append(register_transformer_decode_door())

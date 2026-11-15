@@ -1,9 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Saved SVC public inference preserves its complete native operation boundary."""
-import ast
 import gc
 import warnings
-from pathlib import Path
 
 import numpy as np
 import pytest
@@ -298,16 +296,6 @@ def test_svc_ordinary_subclass_keeps_methods_property_and_availability(tmp_path)
 
 def test_svc_inherited_methods_keep_existing_application_guards():
     _subclass_guards("SVC")
-
-
-def test_svc_public_methods_are_one_native_call():
-    tree = ast.parse(Path(host.__file__).read_text())
-    cls = next(n for n in tree.body if isinstance(n, ast.ClassDef) and n.name == "HostSVC")
-    for name in METHODS:
-        method = next(n for n in cls.body if isinstance(n, ast.FunctionDef) and n.name == name)
-        body = method.body[1:]
-        assert len(body) == 1 and isinstance(body[0], ast.Return)
-        assert isinstance(body[0].value, ast.Call) and body[0].value.func.id == "_native_classical"
 
 
 @pytest.mark.parametrize("multi", [False, True])

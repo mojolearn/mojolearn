@@ -9,9 +9,8 @@ a plain program:
 
     cd python && python3 -m mojolearn.tests.test_numpy_free_core
 
-Nothing in this file touches a GPU binding: `all_finite` falls back to its
-host path when the base extension is not built, and that path is the one
-gated.
+The native finiteness verdicts behind `_buffer.all_finite` are
+checks/native_tests/core_all_finite.mojo; only its Python refusals are here.
 """
 
 import array
@@ -467,20 +466,11 @@ def test_array_surface():
         pass
 
 
-def test_all_finite_host_path():
-    ok = Array.from_list([1.0, 1e-45, -0.0, 3.4e38], "<f4")
-    assert _buffer.all_finite(ok)
-    assert _buffer.all_finite(ok.astype("<f8"))
+def test_all_finite_python_boundary():
+    # The native verdicts on finite, NaN/Inf and overflowing-sum vectors are
+    # checks/native_tests/core_all_finite.mojo; the empty shortcut and the
+    # dtype refusal are this wrapper's own.
     assert _buffer.all_finite(_buffer.empty((0,), "<f4"))
-    for bad in (float("nan"), float("inf"), float("-inf")):
-        arr = Array.from_list([1.0, bad, 2.0], "<f4")
-        assert not _buffer.all_finite(arr), bad
-        assert not _buffer.all_finite(arr.astype("<f8")), bad
-    # all finite but the sum overflows: the confirmation loop must answer
-    huge = Array.from_list([1.7e308, 1.7e308, -1.7e308], "<f8")
-    assert _buffer.all_finite(huge)
-    both = Array.from_list([float("inf"), float("-inf")], "<f8")
-    assert not _buffer.all_finite(both)
     try:
         _buffer.all_finite(Array.from_list([1], "<i4"))
         raise AssertionError("int arrays are refused")
