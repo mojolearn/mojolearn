@@ -42,7 +42,6 @@ from sequence.ops import (
     OP_MLP_L2FOLD,
     OP_MLP_ROWPART,
     OP_MLP_PERM,
-    OP_MLP_EPOCH_LOSS,
     OP_MLP_LB_PART,
     OP_MLP_LB_FOLD,
     OP_MLP_LB_EPOCH_PART,
@@ -142,7 +141,7 @@ from sequence.mlp import (
     op_sumsq,
 )
 from autograd.kernels.mlp import op_divs
-from sequence.mlp import op_mlp_epoch_loss, op_mlp_l2fold, op_mlp_l2part, op_mlp_perm, op_mlp_rowpart
+from sequence.mlp import op_mlp_l2fold, op_mlp_l2part, op_mlp_perm, op_mlp_rowpart
 from autograd.kernels.linear import op_agk_gemm_epi, op_colsum_div
 from sequence.mlp import op_mlp_lb_epoch_fold, op_mlp_lb_epoch_part, op_mlp_lb_fold, op_mlp_lb_part
 from sequence.stl import op_stl
@@ -628,8 +627,6 @@ def apply[OP: Int](t: Int, a: Args):
         op_mlp_rowpart(t, a)
     elif OP == OP_MLP_PERM:
         op_mlp_perm(t, a)
-    elif OP == OP_MLP_EPOCH_LOSS:
-        op_mlp_epoch_loss(t, a)
     elif OP == OP_MLP_LB_PART:
         op_mlp_lb_part(t, a)
     elif OP == OP_MLP_LB_FOLD:

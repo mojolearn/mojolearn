@@ -223,7 +223,7 @@ comptime OP_MLP_L2PART = 90
 comptime OP_MLP_L2FOLD = 91
 comptime OP_MLP_ROWPART = 92
 comptime OP_MLP_PERM = 93
-comptime OP_MLP_EPOCH_LOSS = 94
+# (Sweep 2026-11-15: OP_MLP_EPOCH_LOSS (94) removed: no caller emits it since lane/expdel2-29-neural.)
 # lane ag-pass3-lossblock (2026-10-19), sequence/mlp.mojo MLP_LOSSBLOCK: the
 # MLP fit's per-batch loss block (seed, row-loss and L2 block partials in one
 # launch, one fold) and the blocked epoch loss; a range of its own (1600..),
