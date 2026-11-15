@@ -105,8 +105,10 @@ comptime LFS_SMEM_FIXED = LFS_DPB * (3 * LFS_K_CAP * 4 + (LFS_TPD + 1) * 4 + 2 *
 #: resident per core, 416) is `-D MOJOLEARN_LDA_V_CAP_HALF_PAGE`; either
 #: side's rollback (`MOJOLEARN_LEGACY_NARROW_LDA_FUSED_V` or
 #: `MOJOLEARN_LDA_V_CAP_RULE_OFF`) restores 320.
+# TOMBSTONE: MOJOLEARN_LEGACY_NARROW_LDA_FUSED_V (old path: the taxi-tuned 320 cap and one kernel at it; EXP:1343 ACCEPT on FAST + Apple, the one vendor FAST runs on, so no other vendor is owed) deleted 2026-11-15 by lane/expdel2-17-decomposition; code recoverable at 6bed172f77.
+# Restore: git apply experiments/removed/MOJOLEARN_LEGACY_NARROW_LDA_FUSED_V.patch; record in docs/TOMBSTONES.md.
 comptime LFS_V_CAP = 320 if (
-    is_defined["MOJOLEARN_LEGACY_NARROW_LDA_FUSED_V"]() or is_defined["MOJOLEARN_LDA_V_CAP_RULE_OFF"]()
+    is_defined["MOJOLEARN_LDA_V_CAP_RULE_OFF"]()
 ) else (
     lfs_v_cap_rule() if is_defined["MOJOLEARN_LDA_V_CAP_HALF_PAGE"]()
     else (LFS_SMEM_BYTES - LFS_SMEM_FIXED) // (LFS_DPB * 8) // 32 * 32
@@ -326,21 +328,18 @@ def launch_lda_fused_ss(
 ) raises:
     """The two launches: part holds groups * k * v floats of scratch. The
     fused kernel is the smallest occupancy tier whose row holds v."""
-    comptime if is_defined["MOJOLEARN_LEGACY_NARROW_LDA_FUSED_V"]():
-        _launch_fused[LFS_V_CAP](ctx, x, ew, d, e, part, n, k, v, prior, max_iter, tol, groups)
+    if v <= _lfs_tier_v(8):
+        _launch_fused[_lfs_tier_v(8)](ctx, x, ew, d, e, part, n, k, v, prior, max_iter, tol, groups)
+    elif v <= _lfs_tier_v(6):
+        _launch_fused[_lfs_tier_v(6)](ctx, x, ew, d, e, part, n, k, v, prior, max_iter, tol, groups)
+    elif v <= _lfs_tier_v(4):
+        _launch_fused[_lfs_tier_v(4)](ctx, x, ew, d, e, part, n, k, v, prior, max_iter, tol, groups)
+    elif v <= _lfs_tier_v(3):
+        _launch_fused[_lfs_tier_v(3)](ctx, x, ew, d, e, part, n, k, v, prior, max_iter, tol, groups)
+    elif v <= _lfs_tier_v(2):
+        _launch_fused[_lfs_tier_v(2)](ctx, x, ew, d, e, part, n, k, v, prior, max_iter, tol, groups)
     else:
-        if v <= _lfs_tier_v(8):
-            _launch_fused[_lfs_tier_v(8)](ctx, x, ew, d, e, part, n, k, v, prior, max_iter, tol, groups)
-        elif v <= _lfs_tier_v(6):
-            _launch_fused[_lfs_tier_v(6)](ctx, x, ew, d, e, part, n, k, v, prior, max_iter, tol, groups)
-        elif v <= _lfs_tier_v(4):
-            _launch_fused[_lfs_tier_v(4)](ctx, x, ew, d, e, part, n, k, v, prior, max_iter, tol, groups)
-        elif v <= _lfs_tier_v(3):
-            _launch_fused[_lfs_tier_v(3)](ctx, x, ew, d, e, part, n, k, v, prior, max_iter, tol, groups)
-        elif v <= _lfs_tier_v(2):
-            _launch_fused[_lfs_tier_v(2)](ctx, x, ew, d, e, part, n, k, v, prior, max_iter, tol, groups)
-        else:
-            _launch_fused[LFS_V_CAP](ctx, x, ew, d, e, part, n, k, v, prior, max_iter, tol, groups)
+        _launch_fused[LFS_V_CAP](ctx, x, ew, d, e, part, n, k, v, prior, max_iter, tol, groups)
     ctx.enqueue_function[lda_ss_fold_kernel](
         part, ew, ss, Int32(k * v), Int32(groups), grid_dim=_blocks(k * v), block_dim=TPB,
     )
