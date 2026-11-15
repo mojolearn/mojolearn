@@ -9,7 +9,7 @@
 # (the fast tier's directory), which tools/afc_ab_def.sh swaps per arm as binding `tokenizer_fast`.
 #
 #   MOJOLEARN_NUMERIC_MODE=fast bash bindings/build_tokenizer_fast.sh
-#   MOJOLEARN_MOJO_BUILD_FLAGS="-D MOJOLEARN_BPE_TRAIN_DEVICE"   the experiment defines (docs/apple-fast/ab/bpe.md)
+#   MOJOLEARN_MOJO_BUILD_FLAGS="-D MOJOLEARN_<DEFINE>"          experiment defines (the BPE ones were deleted 2026-11-15)
 #   MOJOLEARN_COMPILE_JOBS                                      compile jobs; unset: bindings/compile_jobs.sh
 #   MOJOLEARN_SKIP_BUILD_GATE                                   accepted (there is no gate)
 # Every define is default off; a build with none compiles no kernel and the Python door keeps

@@ -152,11 +152,8 @@ fi
 # build allocates two extra buffers of N floats on every step. It is a gate
 # build's flag, not a wheel's.
 #
-# DO NOT ADD -D MOJOLEARN_OPT_TRUST_INPUTS EITHER. It removes the
-# device-side non-finite refusal that DEVIATION 1496 added after clause (f)
-# MEASURED a NaN planted in a parameter reaching `param.out`. It is a
-# deliberate downgrade of the profile, it is named so it shows up in a
-# banner, and a wheel is not where a caller opts into it.
+# (The OPT_TRUST_INPUTS downgrade, which removed DEVIATION 1496's device-side
+# non-finite refusal, was deleted 2026-11-15; the refusal always runs.)
 
 tmpdir=$(mktemp -d "${TMPDIR:-/tmp}/mojolearn-training.XXXXXX")
 trap 'rm -rf "$tmpdir"' EXIT INT TERM
