@@ -5,29 +5,6 @@
  "head": "a5101cb29",
  "head_note": "lane fg-linear (flagship gaps, 2026-10-09): code only, nothing compiled, run or queued by the lane. Read file docs/plans/flagship-gaps-20261009/read_linear.md.",
  "controls": {
-  "jacobi_round_robin": {
-   "define": "MOJOLEARN_IDN_JACOBI_ROUND_ROBIN_OFF",
-   "kind": "switch",
-   "arms": {
-    "on": [],
-    "off": [
-     "MOJOLEARN_IDN_JACOBI_ROUND_ROBIN_OFF"
-    ]
-   },
-   "default": "on",
-   "source": [
-    "experiments/classical_identical_ideas/fg_linear_controls.mojo:IDN_JACOBI_ROUND_ROBIN",
-    "glm/impl/linalg/detail/svd.mojo:163",
-    "glm/impl/linalg/detail/lstsq.mojo:465",
-    "glm/impl/linalg/detail/lstsq_min_norm.mojo:271",
-    "decomposition/host/jacobi_select_host.mojo:host_symmetric_eigh",
-    "glm/host/glm_oracle.mojo:224,304"
-   ],
-   "binding": "_mojolearn_estimators (host twin _mojolearn_estimators_host)",
-   "bits_change": true,
-   "status": "promoted 2026-10-09 (lane/postmerge-act-5; fg2 board-bridge A/B on main 0a7b206f1, one run per arm (nv2 L40S v1021-v1050, amd MI325X a1161-a1190; ratio = arm / fg2.default-linear)): IDENTICAL default; the old on-define is refused in core/six_lane_experiment_guards.mojo",
-   "notes": "L1. The linear models' small symmetric eigensolver (Ridge svdEig, OLS lstsqEig, min-norm Gram) by the round-robin two-sided Jacobi (PCA's _eig_rr_device, called not edited; host_eigh_rr on the host column) instead of the one-block cyclic jacobi_eigh_kernel. Bits change (rotation order, convergence test, budget 60); device and host columns together. PCA-only sites untouched (fg-pca's MOJOLEARN_IDN_PCA_RR_* are separate). Does NOT reach OLS's TSQR fallback: x_decomp svd of R is already round-robin on main (x_decomp/device.mojo:3609). PROMOTED: ridge istella NV 0.25x / AMD 0.14x (avg 0.20x; hash ff4ab841 -> cce6558a on both vendors, r2 0.328682 -> 0.328636), ridge taxi NV 0.99x / AMD 1.15x (avg 1.07x, vendor split: AMD taxi slower; hash 520d0ae1 unchanged), ols istella 1.00x / 0.99x, taxi 0.99x / 1.02x. The off arm restores the one-block cyclic Jacobi."
-  },
   "gram_ff_fallback": {
    "define": "MOJOLEARN_IDN_GRAM_FF_FALLBACK_OFF",
    "kind": "switch",
@@ -75,25 +52,17 @@
   "classical:ols": {
    "binding": "_mojolearn_estimators (host column _mojolearn_estimators_host)",
    "route": "fit: LinearRegression.fit -> linear_gram_fit (linear_pinned_upload on the X/y upload; status 0 ends) -> else _ols_tsqr_centered (x_decomp, untouched); jacobi_round_robin reaches only the lstsqEig route (ols_fit_host), not the TSQR fallback",
-   "controls": [
-    "jacobi_round_robin"
-   ],
+   "controls": [],
    "interaction_groups": []
   },
   "more:ridge": {
    "binding": "_mojolearn_estimators (host column _mojolearn_estimators_host)",
    "route": "fit: Ridge.fit -> linear_gram_fit (linear_pinned_upload) -> gate reject -> [gram_ff_fallback: _gs_ff_fit] -> [ridge_resident: _gs_ridge_resident_fallback -> ridge_eig_scratch_traced -> svd_eig_scratch_traced (jacobi_round_robin)] -> else status 1 -> Python glue + ridge_fit_host (linear_pinned_upload, jacobi_round_robin)",
    "controls": [
-    "jacobi_round_robin",
     "gram_ff_fallback",
     "gff_gram_tiled"
    ],
-   "interaction_groups": [
-    [
-     "gram_ff_fallback",
-     "jacobi_round_robin"
-    ]
-   ],
+   "interaction_groups": [],
    "note": "all four act only through classical-structural's linear_gram_solve (on by default); ridge_resident / gram_ff_fallback / jacobi_round_robin matter only where the fp32 gate rejects (istella), linear_pinned_upload on both datasets"
   },
   "more:lasso": {
@@ -148,6 +117,11 @@
    "define": "MOJOLEARN_IDN_RIDGE_RESIDENT_OFF",
    "control": "ridge_resident",
    "reason": "DELETED 2026-11-15 (lane/expdel2-05-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md): old path of the CONFIRMED default (fg2: _OFF ridge istella NV 2.22x / AMD 1.28x slower). Code recoverable at fe4ab80cd9."
+  },
+  {
+   "define": "MOJOLEARN_IDN_JACOBI_ROUND_ROBIN_OFF",
+   "control": "jacobi_round_robin",
+   "reason": "DELETED 2026-11-15 (lane/expdel2-05-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md): old path of the PROMOTED default (fg2: ridge istella NV 0.25x / AMD 0.14x). Code recoverable at 8ee233b8d9."
   }
  ]
 }

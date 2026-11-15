@@ -720,6 +720,7 @@ in the tables after the sections.
 | [`MOJOLEARN_IVF_DIRECT_DISTANCE_OFF`](#mojolearn_ivf_direct_distance_off-old-path-deleted-2026-11-15) | Neighbors (IVF-Flat direct distances, IDENTICAL) | removed (old path; IDENTICAL default PROMOTED ge123e6f9, _OFF loses recall g50ebe26a5) | 2026-11-15 | [MOJOLEARN_IVF_DIRECT_DISTANCE_OFF.patch](../experiments/removed/MOJOLEARN_IVF_DIRECT_DISTANCE_OFF.patch) |
 | [`MOJOLEARN_C62_SAME_COMPONENT_SKIP`](#mojolearn_c62_same_component_skip-unmeasured-arm-deleted-2026-11-15) | Classical IDENTICAL graph / cluster candidate (hdbscan) | removed (unmeasured opt-in arm; EXPERIMENTS.md OPEN, never measured) | 2026-11-15 | [MOJOLEARN_C62_SAME_COMPONENT_SKIP.patch](../experiments/removed/MOJOLEARN_C62_SAME_COMPONENT_SKIP.patch) |
 | [`MOJOLEARN_IDN_RIDGE_RESIDENT_OFF`](#mojolearn_idn_ridge_resident_off-old-path-deleted-2026-11-15) | Linear (Ridge resident eig fallback at the Gram gate, IDENTICAL) | removed (old path; IDENTICAL default CONFIRMED fg2, _OFF ridge istella NV 2.22x / AMD 1.28x slower) | 2026-11-15 | [MOJOLEARN_IDN_RIDGE_RESIDENT_OFF.patch](../experiments/removed/MOJOLEARN_IDN_RIDGE_RESIDENT_OFF.patch) |
+| [`MOJOLEARN_IDN_JACOBI_ROUND_ROBIN_OFF`](#mojolearn_idn_jacobi_round_robin_off-old-path-deleted-2026-11-15) | Linear / Decomposition (round-robin Jacobi of the linear models' eig routes, IDENTICAL) | removed (old path; IDENTICAL default PROMOTED fg2, ridge istella NV 0.25x / AMD 0.14x) | 2026-11-15 | [MOJOLEARN_IDN_JACOBI_ROUND_ROBIN_OFF.patch](../experiments/removed/MOJOLEARN_IDN_JACOBI_ROUND_ROBIN_OFF.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -6956,3 +6957,11 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2
 - **Deleted by**: lane/expdel2-05-base (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `fe4ab80cd9`.
 - **Restore**: `git apply experiments/removed/MOJOLEARN_IDN_RIDGE_RESIDENT_OFF.patch`, then delete the `MOJOLEARN_IDN_RIDGE_RESIDENT_OFF` refusal in `core/experiment_guards_linear.mojo`.
 - **Records**: refusal in `core/experiment_guards_linear.mojo`; `experiments/six_lane_integration/grid_controls/fg-linear.json` control `ridge_resident` moved to `removed` (the generated grid/grid-plan.json and grid/GRID.md still list it until the next grid regeneration); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-05-base section).
+
+### MOJOLEARN_IDN_JACOBI_ROUND_ROBIN_OFF: old path deleted (2026-11-15)
+
+- **What it was**: The rollback of `IDN_JACOBI_ROUND_ROBIN` (L1, lane fg-linear) to the one-block cyclic Jacobi in Ridge svdEig, OLS lstsqEig and the minimum-norm Gram. `IDN_JACOBI_ROUND_ROBIN` is now `_FGL_IDN` (read by glm/impl/linalg/detail/{svd,lstsq,lstsq_min_norm}.mojo, glm/host/glm_oracle.mojo, decomposition/host/jacobi_select_host.mojo).
+- **Verdict**: PROMOTED 2026-10-09 (lane/postmerge-act-5, fg2 nv2 v1021-v1050 / MI325X a1161-a1190, one run per arm): ridge istella NV 0.25x / AMD 0.14x (avg 0.20x, same new hash on both vendors), ridge taxi NV 0.99x / AMD 1.15x (vendor split), ols 0.99-1.02x. No bit change on any column (the default is unchanged).
+- **Deleted by**: lane/expdel2-05-base (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `8ee233b8d9`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_IDN_JACOBI_ROUND_ROBIN_OFF.patch`, then delete the `MOJOLEARN_IDN_JACOBI_ROUND_ROBIN_OFF` refusal in `core/experiment_guards_decomposition.mojo`.
+- **Records**: refusal in `core/experiment_guards_decomposition.mojo`; `experiments/six_lane_integration/grid_controls/fg-linear.json` control `jacobi_round_robin` moved to `removed` (the generated grid/grid-plan.json and grid/GRID.md still list it until the next grid regeneration); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-05-base section).
