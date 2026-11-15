@@ -176,7 +176,9 @@ comptime LG_LEVEL_ROUNDS = False
 # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
 # CTR_SORTFREE_SUMS (gbdt-categorical, gbdt-ordered non-symmetric leaves):
 # per-(permutation, leaf) sums without the per-permutation radix sort.
-comptime CTR_SORTFREE_SUMS = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_TREES_CTR_SORTFREE_SUMS"]()
+# TOMBSTONE: MOJOLEARN_TREES_CTR_SORTFREE_SUMS (DELETE-ARM, opt-in, no A/B recorded, rule a) deleted 2026-11-15 by lane/expdel2-45-trees; code recoverable at a3d500c032.
+# Restore: git apply experiments/removed/MOJOLEARN_TREES_CTR_SORTFREE_SUMS.patch
+comptime CTR_SORTFREE_SUMS = False
 
 # ======== lane fg-gbdt-ordered (2026-10-09): the Ordered fold-arm overhead ========
 # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
