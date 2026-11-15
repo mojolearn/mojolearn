@@ -228,12 +228,9 @@ comptime KNN_PHASE_TIMERS = is_defined["MOJOLEARN_KNN_PHASE_TIMERS"]()
 #: lane/apple-identical-neural (2026-09-27): Apple IDENTICAL's expanded-L2
 #: distance tile on the simdgroup matrix unit, same bits as the register
 #: tile (`neighbors/checks/apple_mma_distance.mojo`).
-#: `-D MOJOLEARN_KNN_APPLE_MMA_OFF` keeps the register tile.
-comptime KNN_APPLE_MMA_DIST = (
-    APPLE_MMA
-    and GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not is_defined["MOJOLEARN_KNN_APPLE_MMA_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_KNN_APPLE_MMA_OFF (old register-tile path beside the Apple default, no A/B row) deleted 2026-11-15 by lane/expdel2-12-cluster; code recoverable at 5d1ec60884.
+# Restore: git apply experiments/removed/MOJOLEARN_KNN_APPLE_MMA_OFF.patch; record in docs/TOMBSTONES.md.
+comptime KNN_APPLE_MMA_DIST = APPLE_MMA and GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 
 
 #: lane/neighbors-apple (2026-09-28): Apple IDENTICAL expanded-L2 k-NN
