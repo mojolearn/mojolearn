@@ -1,0 +1,27 @@
+diff --git a/x_decomp/resident.mojo b/x_decomp/resident.mojo
+index 7e3823aeef..509c7d76ca 100644
+--- a/x_decomp/resident.mojo
++++ b/x_decomp/resident.mojo
+@@ -939,7 +939,8 @@ def dev_eigh_to_run(ia: Int, iw: Int, iv: Int, n: Int, uplo: Int) raises -> Int:
+ #       first read, not in fit (the fit then ends with no synchronize).
+ # The matrix (and so every output word) is main's under every switch.
+ # DEVSCAN is the FAST + Apple default since the M3 A/B (n=1, quality
+-# identical): gaussian-rp istella 54.3 -> 15.9 ms, taxi 4.7 -> 3.9 ms. NOSCAN and LAZY
++# identical): gaussian-rp istella 54.3 -> 15.9 ms, taxi 4.7 -> 3.9 ms;
++# -D MOJOLEARN_XD_FAST_CLS2_GRP_DEVSCAN_OFF turns it off. NOSCAN and LAZY
+ # stay opt-in (they move the NaN/inf refusal from fit to transform; pending
+ # Andrew's decision); NOSCAN, when defined, replaces the device scan.
+ #: M3 A/B 2026-10-04 (afc_ab_def, full board size, 1 run per arm, main a16fada80), gaussian-rp taxi,
+@@ -959,10 +960,9 @@ comptime GRP_CLS2_NOSCAN = False
+ # TOMBSTONE: MOJOLEARN_IDN_GATES_OFF (old path; EXP:2479 DELETED) deleted 2026-11-15 by lane/expdel2-18-decomposition (non-owner; owner expdel2-16-decomposition); code recoverable at 17dc13843a.
+ # Restore: git apply experiments/removed/MOJOLEARN_IDN_GATES_OFF.expdel2-18-decomposition.patch; record in docs/TOMBSTONES.md.
+ comptime _CLS2_IDN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+-# TOMBSTONE: MOJOLEARN_XD_FAST_CLS2_GRP_DEVSCAN_OFF (old path beside the FAST + Apple default, EXP:467 KEEP) deleted 2026-11-15 by lane/expdel2-18-decomposition; code recoverable at 772bf55066.
+-# Restore: git apply experiments/removed/MOJOLEARN_XD_FAST_CLS2_GRP_DEVSCAN_OFF.patch; record in docs/TOMBSTONES.md.
+ comptime GRP_CLS2_DEVSCAN = (
+-    _CLS2_FAST_APPLE or _CLS2_IDN
++    (_CLS2_FAST_APPLE or _CLS2_IDN)
++    and not is_defined["MOJOLEARN_XD_FAST_CLS2_GRP_DEVSCAN_OFF"]()
+ )
+ # TOMBSTONE: MOJOLEARN_XD_FAST_CLS2_GRP_LAZY (unmeasured Apple FAST opt-in arm) deleted 2026-11-15 by lane/expdel2-18-decomposition; code recoverable at 17fa14cc92.
+ # Restore: git apply experiments/removed/MOJOLEARN_XD_FAST_CLS2_GRP_LAZY.patch; record in docs/TOMBSTONES.md.

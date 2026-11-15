@@ -1,0 +1,24 @@
+diff --git a/x_decomp/tsqr_device.mojo b/x_decomp/tsqr_device.mojo
+index ff0b233b3d..b46e123d96 100644
+--- a/x_decomp/tsqr_device.mojo
++++ b/x_decomp/tsqr_device.mojo
+@@ -102,7 +102,7 @@ comptime TS_SMEM_TREE_BYTES = 4 * (TS_MAX_N + TS_TPB)
+ # independent (each reads the panel's reflectors and T, and reads and writes
+ # only its own columns), so no bit moves.
+ #
+-# TS_NORM_FUSED (IDENTICAL; FAST keeps the separate norm pass): the
++# TS_NORM_FUSED (-D MOJOLEARN_IDN_TSQR_NORM_OFF restores the old form): the
+ # norm chain of panel column j + 1 is accumulated by the threads that update
+ # that column in step j (chain g walks the same rows in the same order and
+ # squares the very words it stores), so the separate norm pass (TS_P live
+@@ -146,9 +146,7 @@ comptime TS_GRID_UPDATE = _TS_IDN
+ # 1.108/1.102/1.096, NVIDIA L40S 1.035/1.032/1.032 (all rollback LOSS).
+ # Fused norm chains and grid remain ON. Full-estimator qualification remains
+ # separate; these are factor/apply helper timings, not a dataset board run.
+-# TOMBSTONE: MOJOLEARN_IDN_TSQR_NORM_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-18-decomposition; code recoverable at 09d9ea4aba.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_TSQR_NORM_OFF.patch; record in docs/TOMBSTONES.md.
+-comptime TS_NORM_FUSED = _TS_IDN or (_TS_FAST_APPLE and is_defined["MOJOLEARN_DECOMP_FAST_TSQR_NORM"]())
++comptime TS_NORM_FUSED = (_TS_IDN and not is_defined["MOJOLEARN_IDN_TSQR_NORM_OFF"]()) or (_TS_FAST_APPLE and is_defined["MOJOLEARN_DECOMP_FAST_TSQR_NORM"]())
+ # I22 STRIP-only LOSS/neutral, same freeze/cases/protocol: candidate/incumbent
+ # AMD 1.100/1.097/1.001, NVIDIA L40S 1.082/1.075/1.000. The explicit
+ # ts_leaf_update_kernel[2] groups two trailing chunks; width18 has only one
