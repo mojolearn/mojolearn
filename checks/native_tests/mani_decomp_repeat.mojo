@@ -41,18 +41,55 @@ ordered reads of one fitted model; kernels keep their own parallelism.
 """
 from std.math import cos, isfinite, log, sqrt
 from std.memory import bitcast, unsafe_memcpy
-from core.entry_table import EntryRef, entry_ref_call, entry_ref_word
+from core.entry_table import EntryRef, entry_ref_call, entry_ref_unresolved, entry_ref_word
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from x_decomp.descriptor_schema import XD_OPERATION_COUNT, XD_CAPABILITIES, XD_DEV_FREE
 from x_decomp.descriptor_host import x_decomp_host_v1
 from x_decomp.descriptor_device import x_decomp_device_v1
 from bindings.mani_kit_run import MRun, MImage, MFitted, MK_F32P
-from bindings.manifold_storage_native_unpack import ManifoldMatrix
 from bindings.mani_decomp_run import (
     MANI_METRIC_EUCLIDEAN, IsoPlan, IsoState, LlePlan,
     cmds_core, iso_fit_run, iso_transform_run, lle_fit_run, lle_transform_run,
 )
 from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require
+
+# The fitted owner, as bindings/manifold_storage_native_unpack.mojo
+# `ManifoldMatrix` holds it (that module's file name marks it a boundary
+# module, which a check may not import): host words and/or a pool id, the
+# image key and dispatch of that id, the side the fit left it on; the pool id
+# goes back through its own image's dispatch when the owner dies.
+struct ManifoldMatrix(Movable):
+    var rows: Int
+    var cols: Int
+    var words: List[Float32]
+    var has_words: Bool
+    var device: Int
+    var device_key: Int
+    var device_entry: EntryRef
+    var on_device: Bool
+
+    def __init__(out self, rows: Int, cols: Int):
+        self.rows = rows
+        self.cols = cols
+        self.words = List[Float32]()
+        self.has_words = False
+        self.device = -1
+        self.device_key = 0
+        self.device_entry = entry_ref_unresolved()
+        self.on_device = False
+
+    def words_address(self) -> Int:
+        if not self.has_words:
+            return 0
+        return Int(self.words.unsafe_ptr())
+
+    def __deinit__(deinit self):
+        if self.device >= 0:
+            try:
+                _ = entry_ref_call(self.device_entry, XD_DEV_FREE, List[Int](), [self.device], List[Float64]())
+            except:
+                pass
+
 
 comptime MANI_REPEAT_FIXTURES = 6
 comptime MANI_CONCURRENT = 6
