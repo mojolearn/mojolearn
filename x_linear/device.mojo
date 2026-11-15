@@ -40,7 +40,7 @@ from x_linear.sgd import (
     L_HINGE, LR_INVSCALING, P_NONE, P_EN,
 )
 from checks.numerics import identical_pow
-from experiments.classical_identical_ideas.linear_controls import C13_FOLD_STATS, C19_SGD_CHUNK, C16_GLM_FUSED, RIDGECV_FF_BLOCKED
+from experiments.classical_identical_ideas.linear_controls import C13_FOLD_STATS, C19_SGD_CHUNK, RIDGECV_FF_BLOCKED
 from x_linear.ridge_ff_blocks import (
     RFF_TPB, rff_blocks, rff_stats, rff_mcols, rff_part_words, rff_mean_part_kernel, rff_mean_fold_kernel, rff_untrusted_kernel,
     rff_cell_part_kernel, rff_cell_fold_kernel, rff_kf_solve_kernel, rff_solve_kernel,
@@ -73,7 +73,7 @@ from x_linear.ridgecv import kf_start, kf_end, kf_mean, kf_cross, kf_solve, kf_p
 from x_linear.ridge import ridge_ff_unit, ridge_ff_units, ridge_ff_solve
 from x_linear.tops import t_fold_fa_staged, t_fold_fa_blocked, fold_parts, fold_blocks, FOLD_BLOCK
 from x_linear.glm import (
-    _unit, _unit_all, _glm_deriv_row, _glm_cell, _glm_slot_count, _glm_slot_cell, GLM_LINK_LOG, GLM_STALL_ITERS,
+    _unit, _glm_deriv_row, _glm_cell, _glm_slot_count, _glm_slot_cell, GLM_LINK_LOG, GLM_STALL_ITERS,
     glm_g_item, glm_h_item, glm_fwd_col, glm_back_col, glm_slope_part, glm_slope_blocks,
     _glm_cell_part, _glm_cell_store, glm_den, glm_start, glm_start_of,
 )
@@ -3484,18 +3484,9 @@ def glm_obj_map_kernel(x: FP, y: FP, n: Int32, d: Int32, fi: Int32, power: Float
         var e = fa(row_dot(x, i, dd, theta, 0), b)
         st(eta, i, e)
         var l = Float32(0)
-        comptime if C16_GLM_FUSED:
-            var values = _unit_all(power, Int(link), ld(y, i), e)
-            l = values[0]
-            var gi = values[1]
-            var hi = fmax(Float32(0), values[2])
-            if sw != 0:
-                gi = fm(ld(y, nn + i), gi)
-                hi = fm(ld(y, nn + i), hi)
-            st(gr, i, gi)
-            st(hr, i, hi)
-        else:
-            l = _unit(power, Int(link), ld(y, i), e, 0)
+        # TOMBSTONE: MOJOLEARN_CLASSICAL_C16_GLM_FUSED (unmeasured opt-in arm; non-owner sites) deleted 2026-11-15 by lane/expdel2-21-linear; code recoverable at ff5b5b6e52.
+        # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C16_GLM_FUSED.expdel2-21-linear.patch; record in docs/TOMBSTONES.md.
+        l = _unit(power, Int(link), ld(y, i), e, 0)
         if sw != 0:
             l = fm(ld(y, nn + i), l)
         st(lt, i, l)
@@ -3859,18 +3850,17 @@ def _glm_fit_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[Int
     var f = _glm_grid_objective(ctx, FP(unsafe_from_address=Int(dres.unsafe_ptr())), FP(unsafe_from_address=Int(dx.unsafe_ptr())), FP(unsafe_from_address=Int(dy.unsafe_ptr())), FP(unsafe_from_address=Int(deta.unsafe_ptr())), FP(unsafe_from_address=Int(dlt.unsafe_ptr())), FP(unsafe_from_address=Int(dtw.unsafe_ptr())), FP(unsafe_from_address=Int(dfparts.unsafe_ptr())), FP(unsafe_from_address=Int(dsc.unsafe_ptr())), dsc, hscp, n, d, fi, power, link, sw, alpha, rows_grid, wit, FP(unsafe_from_address=Int(dgr.unsafe_ptr())), FP(unsafe_from_address=Int(dhr.unsafe_ptr())))
     var stall = 0
     for it in range(max_iter):
-        comptime if not C16_GLM_FUSED:
-            var tries1 = 0
-            while True:
-                var nonce = wit.begin()
-                ctx.enqueue_function[glm_deriv_kernel](dy.unsafe_ptr(), Int32(n), power, Int32(link), Int32(sw), deta.unsafe_ptr(),
-                                                       dgr.unsafe_ptr(), dhr.unsafe_ptr(), wit.p(), Int32(0), nonce,
-                                                       grid_dim=rows_grid, block_dim=XG_TPB)
-                if wit.ok(ctx, rows_grid, "GLM derivatives"):
-                    break
-                tries1 += 1
-                if tries1 >= WITNESS_TRIES:
-                    wit.fail()
+        var tries1 = 0
+        while True:
+            var nonce = wit.begin()
+            ctx.enqueue_function[glm_deriv_kernel](dy.unsafe_ptr(), Int32(n), power, Int32(link), Int32(sw), deta.unsafe_ptr(),
+                                                   dgr.unsafe_ptr(), dhr.unsafe_ptr(), wit.p(), Int32(0), nonce,
+                                                   grid_dim=rows_grid, block_dim=XG_TPB)
+            if wit.ok(ctx, rows_grid, "GLM derivatives"):
+                break
+            tries1 += 1
+            if tries1 >= WITNESS_TRIES:
+                wit.fail()
         var b0 = 0
         while b0 < nb:
             var bc = min(blocks_slice, nb - b0)
