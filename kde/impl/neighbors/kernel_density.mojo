@@ -2732,10 +2732,9 @@ comptime KDE2_DIMTILE_ANY_D = _KDE2_FAST_APPLE and is_defined["MOJOLEARN_KDE_DIM
 #: kde istella (d = 220) 137.2 -> 69.2 ms, mean_log_likelihood -222.27058 both;
 #: taxi (d = 11) 9.0 -> 17.8 ms (the old gate kept main's fused pass). Quality
 #: (tools/batchv_quality.sh, M2): score_samples within 9e-8 of the output scale.
-#: -D MOJOLEARN_KDE_DIMTILE_OFF: main's passes at every d.
-comptime KDE2_DIMTILE = KDE2_DIMTILE_ANY_D or (
-    _KDE2_FAST_APPLE and not is_defined["MOJOLEARN_KDE_DIMTILE_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_KDE_DIMTILE_OFF (old path, EXP:343 DROP; the FAST + Apple tile pass is the default) deleted 2026-11-15 by lane/expdel2-19-kernel; code recoverable at 82d4e4de40.
+# Restore: git apply experiments/removed/MOJOLEARN_KDE_DIMTILE_OFF.patch; record in docs/TOMBSTONES.md.
+comptime KDE2_DIMTILE = KDE2_DIMTILE_ANY_D or _KDE2_FAST_APPLE
 # TOMBSTONE: MOJOLEARN_LEGACY_NARROW_KDE_DIMTILE (old benchmark-tuned n_features > 32 gate, no A/B recorded) deleted 2026-11-15 by lane/expdel2-19-kernel; code recoverable at 531563873b.
 # Restore: git apply experiments/removed/MOJOLEARN_LEGACY_NARROW_KDE_DIMTILE.patch; record in docs/TOMBSTONES.md.
 
