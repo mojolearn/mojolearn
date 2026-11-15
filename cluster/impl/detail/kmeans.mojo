@@ -235,6 +235,12 @@ def kmeans_shift_threshold(tol: Float64) -> Float32:
     return t
 
 
+#: k-means stage timer: `-D MOJOLEARN_KMEANS_STAGES` builds synchronize and
+#: print each stage; default builds compile it out. Before (lane
+#: envgate-classical-deviceplan, docs/plans/ENV_GATES_2026-11-15.md): a
+#: getenv per fit and per scalable k-means++ init.
+comptime KMEANS_STAGES_ON = is_defined["MOJOLEARN_KMEANS_STAGES"]()
+
 #: The reach control for 3080: the row-block arm with the first row of every
 #: block dropped. NEVER a shipping define.
 comptime KMEANS_BLOCK_ACC_SABOTAGE = is_defined[
@@ -285,7 +291,7 @@ struct FitResult(Copyable, ImplicitlyCopyable, Movable):
 
 
 def _km_stage(ctx: DeviceContext, on: Bool, mut t: Int, name: String) raises:
-    """MOJOLEARN_KMEANS_STAGES=1 (a diagnostic, lane cluster-apple2): drain
+    """`-D MOJOLEARN_KMEANS_STAGES` (a diagnostic, lane cluster-apple2): drain
     and print the wall time since the last stage. Off, it does nothing, so
     the default program is unchanged."""
     if not on:
@@ -1048,7 +1054,7 @@ def init_scalable_kmeans_plus_plus(
 
     var k = params.n_clusters
     var d = n_features
-    var km_on = getenv("MOJOLEARN_KMEANS_STAGES") == "1"
+    var km_on = KMEANS_STAGES_ON
     var km_t = Int(perf_counter_ns())
 
     # <<< Step-1 >>> (`:585-609`): one uniform point, flagged so no round
@@ -1826,7 +1832,7 @@ def kmeans_fit_main_traced(
     if params.init == INIT_ARRAY:
         n_init = 1
 
-    var km_on = getenv("MOJOLEARN_KMEANS_STAGES") == "1" and not tag_prefix.endswith("init.par.")
+    var km_on = KMEANS_STAGES_ON and not tag_prefix.endswith("init.par.")
     var km_t = Int(perf_counter_ns())
     _km_stage(ctx, km_on, km_t, "fit.setup")
     for _seed_iter in range(n_init):
