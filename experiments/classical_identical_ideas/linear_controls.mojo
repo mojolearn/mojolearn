@@ -291,7 +291,7 @@ comptime C25_PROJECTION_REUSE = CLASSICAL_IDN
 # (Sweep 2026-11-15: comptime C27_FA_COMPONENTS removed; nothing read it.)
 # TOMBSTONE: MOJOLEARN_CLASSICAL_C27_NORM_VECTOR (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-06-base; code recoverable at 5bdab7e3c8.
 # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C27_NORM_VECTOR.patch; record in docs/TOMBSTONES.md.
-comptime C27_NORM_VECTOR = False
+# (Sweep 2026-11-15: comptime C27_NORM_VECTOR removed; nothing read it.)
 # TOMBSTONE: MOJOLEARN_CLASSICAL_C13_LOGCV_WEIGHTS (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-06-base; code recoverable at 337c096a5b.
 # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C13_LOGCV_WEIGHTS.patch; record in docs/TOMBSTONES.md.
 comptime C13_LOGCV_WEIGHTS = False
