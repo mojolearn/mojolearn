@@ -76,7 +76,9 @@ comptime C07_RADIX_ROWS = 2048
 #   C08_ONEHOT_FT:    OneHotEncoder.fit_transform only (the board times fit, transform).
 #   C08_ORDINAL_FT:   OrdinalEncoder.fit_transform only (the board times fit, transform).
 comptime C08_TARGET_CODES = CLASSICAL_IDENTICAL and is_defined["MOJOLEARN_CLASSICAL_C08_TARGET_CODES"]()
-comptime C08_ONEHOT_FT = CLASSICAL_IDENTICAL and is_defined["MOJOLEARN_CLASSICAL_C08_ONEHOT_FT"]()
+# TOMBSTONE: MOJOLEARN_CLASSICAL_C08_ONEHOT_FT (no A/B recorded for the opt-in arm) deleted 2026-11-15 by lane/expdel2-07-base; code recoverable at d42f92b40b.
+# Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C08_ONEHOT_FT.patch
+comptime C08_ONEHOT_FT = False
 comptime C08_ORDINAL_FT = CLASSICAL_IDENTICAL and is_defined["MOJOLEARN_CLASSICAL_C08_ORDINAL_FT"]()
 #: derived, not a define: some route compiles the `unique_inverse` op
 comptime C08_DICTIONARY = C08_TARGET_CODES or C08_ONEHOT_FT or C08_ORDINAL_FT
