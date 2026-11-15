@@ -418,8 +418,7 @@ def _check_configuration() -> Bool:
     # MOJOLEARN_MAMBA_CALL_PROGRAM: refusal removed 2026-11-15 (restored; owed B arm, see docs/TOMBSTONES.md Restored table)
     # Restore: git apply experiments/removed/MOJOLEARN_NN50_OWNED_RUNS.patch
     comptime assert not is_defined["MOJOLEARN_NN50_OWNED_RUNS"](), "removed 2026-11-15 (lane/expdel2-23-neural): NN50_OWNED_RUNS (arm) is gone; the default path is the only one; code at 4f9d2d5288; restore: experiments/removed/MOJOLEARN_NN50_OWNED_RUNS.patch"
-    # Restore: git apply experiments/removed/MOJOLEARN_TRANSFORMER_GENERIC_PREFILL.patch
-    comptime assert not is_defined["MOJOLEARN_TRANSFORMER_GENERIC_PREFILL"](), "removed 2026-11-15 (lane/expdel2-23-neural): TRANSFORMER_GENERIC_PREFILL (arm) is gone; the default path is the only one; code at 29b23a6003; restore: experiments/removed/MOJOLEARN_TRANSFORMER_GENERIC_PREFILL.patch"
+    # MOJOLEARN_TRANSFORMER_GENERIC_PREFILL: refusal removed 2026-11-15 (restored; owed B arm, see docs/TOMBSTONES.md Restored table)
     # Lane expdel2-26-neural (2026-11-15): unmeasured arms and superseded old paths deleted, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (docs/TOMBSTONES.md).
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_M1_SCAN.patch
     comptime assert not is_defined["MOJOLEARN_IDN_M1_SCAN"](), "removed 2026-11-15 (lane/expdel2-26-neural): IDN_M1_SCAN (unmeasured opt-in arms) is gone; the default is kept; code at 5fc464dce4; restore: experiments/removed/MOJOLEARN_IDN_M1_SCAN.patch"
