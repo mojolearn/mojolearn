@@ -146,7 +146,7 @@ def agk_colsum_args(a: Args) -> Args:
 #     launches above 64 terms (1 at most 64), backward 2 -> 1. The terms are
 #     ftz(loss_term(ld p, ld y)), the word a stored term reads back as; the
 #     VJP's upstream factor mul(ld(g, 0), factor) is REDUCE_VJP's stored
-#     word, kept in a register. -D MOJOLEARN_AUTOGRAD_LOSS_REDUCED_OFF.
+#     word, kept in a register. The only route (MOJOLEARN_AUTOGRAD_LOSS_REDUCED_OFF deleted, TOMBSTONE below).
 #   AUTOGRAD_TRANSPOSE_VIEW (F(2)): tape.transpose records the node without
 #     its copy; matmul reads the parent's buffer through GEMM strides (the
 #     same words in the same k order); any other reader materializes the
@@ -278,9 +278,9 @@ comptime AXIS_COLS = 1
 # _ag_reduce_fold_v1; code recoverable at 01ab3e0d37. AUTOGRAD_FOLD_V2 stays as the constant other files import.
 # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_FOLD_V2_OFF.patch
 comptime AUTOGRAD_FOLD_V2 = True
-# AUTOGRAD_LOSS_REDUCED (lane ag-pass6-fold, described with the tape flags
-# above) needs v2's leaf (ag_part_finish).
-comptime AUTOGRAD_LOSS_REDUCED = not is_defined["MOJOLEARN_AUTOGRAD_LOSS_REDUCED_OFF"]()
+# TOMBSTONE: MOJOLEARN_AUTOGRAD_LOSS_REDUCED_OFF (old path, no A/B recorded) deleted 2026-11-15 by
+# lane/expdel2-24-neural with the AUTOGRAD_LOSS_REDUCED alias; code recoverable at 56d165c105.
+# Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_LOSS_REDUCED_OFF.patch
 # v2's leaf block length and tree fan-in. A fixed 64 (v1's smallest block):
 # from size reasoning, not a shape: long enough that a leaf thread's chain
 # amortises its launch slot, short enough that 8-wide load groups cover a

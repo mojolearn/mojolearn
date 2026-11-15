@@ -23,7 +23,7 @@ from autograd.ops import (
     REDUCE, SOFTMAX, LOG_SOFTMAX, MATMUL, LINEAR, CUSTOM, AXIS_ALL, AXIS_ROWS, AXIS_COLS,
     ag_fold_block, unary_vjp_reads_input, unary_vjp_reads_output, LOSS_ELEM, LOSS_CE, LOSS_SCE,
     OP_AGK_BIN_VJP_PART, OP_AGK_GEMM_EPI,
-    LOSS_REDUCED, AUTOGRAD_LOSS_REDUCED,
+    LOSS_REDUCED,
 )
 from autograd.loss_ops import (
     OP_LS_ELEM_FWD, OP_LS_ELEM_VJP, OP_LS_CE_FWD, OP_LS_CE_VJP, LS_MSE, LS_MAE, LS_HUBER,
