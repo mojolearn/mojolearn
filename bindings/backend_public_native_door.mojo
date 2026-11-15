@@ -236,6 +236,8 @@ def _binding_row(path: String, loaded: Bool, identity: PythonObject, vendor: Pyt
     py_setitem(row, PythonObject("identity"), identity)
     py_setitem(row, PythonObject("vendor"), vendor)
     py_setitem(row, PythonObject("mode"), mode)
+    py_setitem(row, PythonObject("compiled_mode"), PythonObject(None))
+    py_setitem(row, PythonObject("sabotage"), PythonObject(None))
     return row
 
 
@@ -246,6 +248,8 @@ def _binding_row_unresolved() raises -> PythonObject:
     py_setitem(row, PythonObject("identity"), PythonObject(None))
     py_setitem(row, PythonObject("vendor"), PythonObject(None))
     py_setitem(row, PythonObject("mode"), PythonObject(None))
+    py_setitem(row, PythonObject("compiled_mode"), PythonObject(None))
+    py_setitem(row, PythonObject("sabotage"), PythonObject(None))
     return row
 
 
@@ -284,21 +288,39 @@ def _bindings(fields: PythonObject, context: PythonObject) raises -> PythonObjec
             py_setitem(rows, keys[i], _binding_row_unresolved())
             continue
         var file_path = String(file)
-        var fn_name: String
+        # The binding's own read-backs: `<suffix>_vendor()` and
+        # `<suffix>_numeric_mode()` (`mojolearn_vendor` on `_mojolearn`).
+        var suffix: String
         if last == "_mojolearn":
-            fn_name = "mojolearn_vendor"
+            suffix = "mojolearn"
         else:
-            fn_name = String(py_call(text_type.removeprefix, PythonObject(last), PythonObject("_mojolearn_"))) + "_vendor"
+            suffix = String(py_call(text_type.removeprefix, PythonObject(last), PythonObject("_mojolearn_")))
         var vendor = PythonObject(None)
-        var fn = py_get(namespace, PythonObject(fn_name))
+        var fn = py_get(namespace, PythonObject(suffix + "_vendor"))
         if fn is not None and py_type(fn) is context["native_function_type"]:
             var read = _read(fn, context, True)
             if read is not None:
                 vendor = _text(read, "compiled vendor")
+        var compiled = PythonObject(None)
+        var mode_fn = py_get(namespace, PythonObject(suffix + "_numeric_mode"))
+        if mode_fn is not None and py_type(mode_fn) is context["native_function_type"]:
+            var code = _read(mode_fn, context, True)
+            if code is not None:
+                compiled = py_get(context["mode_codes"], code, PythonObject("unknown"))
         var tier = PythonObject(None)
         if len(parts) == 4 and String(parts[1]) == "_sets":
             tier = PythonObject(String(parts[2]))
-        py_setitem(rows, keys[i], _binding_row(file_path, True, _identity(hashes, file_path), vendor, tier))
+        # A sabotage build says so through `<suffix>_sabotage()` (host bindings).
+        var sabotage = PythonObject(None)
+        var sabotage_fn = py_get(namespace, PythonObject(suffix + "_sabotage"))
+        if sabotage_fn is not None and py_type(sabotage_fn) is context["native_function_type"]:
+            var said = _read(sabotage_fn, context, True)
+            if said is not None:
+                sabotage = PythonObject(True) if Bool(py=said) else PythonObject(False)
+        var row = _binding_row(file_path, True, _identity(hashes, file_path), vendor, tier)
+        py_setitem(row, PythonObject("compiled_mode"), compiled)
+        py_setitem(row, PythonObject("sabotage"), sabotage)
+        py_setitem(rows, keys[i], row)
     # Members of a loaded tier that have not loaded yet (their file is known).
     var sets = fields["_SETS"]
     var tiers = py_call(context["list_type"], sets)

@@ -61,8 +61,17 @@ def neural_checks(recorder,public,methods):
                 before=m(x);after=restored(x)
                 assert encode(before)==encode(after)
                 return after
-            enabled=getattr(m._extension(),'mamba3_owned_weights_enabled',lambda:False)()
+            # Public probe (lane verify-runtime-report): the compiled switch is
+            # read through install_owned_weights itself, which refuses by name
+            # ('owned') when the binding was built without owned weights.
+            try:
+                m.install_owned_weights();enabled=True
+            except RuntimeError as error:
+                if 'owned' not in str(error).lower():raise
+                enabled=False
             if not enabled:
+                if method=='install_owned_weights':
+                    return {'availability':'compiled owned weights disabled','numerical_execution':False}
                 if method=='release_owned_weights':
                     m.release_owned_weights();return m(x)
                 if method=='session_info':
@@ -73,7 +82,6 @@ def neural_checks(recorder,public,methods):
                     return {'availability':'compiled owned weights disabled','numerical_execution':False}
                 raise AssertionError('disabled owned-weight capability was admitted')
             try:
-                m.install_owned_weights()
                 before=m(x)
                 if method=='export_owned_weights':return m.export_owned_weights()
                 if method=='release_owned_weights':

@@ -99,9 +99,9 @@ def check(public, method):
         obj=cls(**{k:values[k] for k in inspect.signature(cls).parameters})
         return {k:getattr(obj,k) for k in inspect.signature(cls).parameters if hasattr(obj,k)}
     if name=='set_numeric_mode':
-        before=ml._backend.default_mode()
+        before=ml.runtime_report()['default_mode']
         try:
-            result=cls('identical');assert ml._backend.default_mode()=='identical'
+            result=cls('identical');assert ml.runtime_report()['default_mode']=='identical'
             try:cls('deterministic')
             except ValueError:pass
             else:raise AssertionError('retired mode must be refused')

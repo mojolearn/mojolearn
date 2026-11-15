@@ -11,7 +11,7 @@ import re
 import tempfile
 from pathlib import Path
 
-from . import _backend, _causal_lm_fixtures as fixtures
+from . import _causal_lm_fixtures as fixtures, numeric_mode, runtime_report
 from . import _verify_native_runtime
 
 PROFILE = "native-generation-v1"
@@ -40,13 +40,20 @@ def _case(path, family, profile, device):
     cfg, tensors = fixtures.family_fixture(family, False)
     fixtures._write_checkpoint(path, cfg, tensors)
     model = CausalLM.load(path, device=device, numeric_profile=profile)
-    binding = model._blocks[0]._extension()
-    prefix = "neural_host" if device == "cpu" else ("transformer" if family == "llama" else "mamba")
-    vendor = str(getattr(binding, prefix + "_vendor")())
-    mode = int(getattr(binding, prefix + "_numeric_mode")())
+    ids = np.array([[1, 3, 5], [2, 4, 6]], dtype="i4")
+    # One unaudited forward loads the block binding (the audited calls below
+    # must not include a first load); then the binding that ran is read back
+    # from mojolearn.runtime_report(): its own compiled vendor and mode.
+    model.forward(ids)
+    name = "_mojolearn_neural_host" if device == "cpu" else ("_mojolearn_transformer" if family == "llama" else "_mojolearn_mamba")
+    if device == "cpu":
+        row = runtime_report()["bindings"].get("mojolearn._host." + name)
+    else:
+        row = _verify_native_runtime.loaded_binding(name, "identical")
+    vendor = str(row["vendor"]) if row is not None else None
+    mode = 1 if row is not None and row.get("compiled_mode") == "identical" else 0
     if mode != 1 or (device == "cpu" and vendor != "cpu") or (device == "gpu" and vendor not in {"metal", "cuda", "hip"}):
         raise ValueError(f"requested {device}/identical but native entry reports {vendor}/{mode}")
-    ids = np.array([[1, 3, 5], [2, 4, 6]], dtype="i4")
     audits = []
 
     def native(name, operation, *args, **kwargs):
@@ -89,7 +96,7 @@ def _case(path, family, profile, device):
 
 
 def capture(device="cpu", progress=None):
-    if _backend.numeric_mode() != "identical":
+    if numeric_mode() != "identical":
         raise ValueError("generation verification requires identical mode")
     result = dict(profile=PROFILE, source_sha256=_source(), device=device,
                   platform=platform.platform(), status="INCOMPLETE", cases=[],
@@ -104,9 +111,8 @@ def capture(device="cpu", progress=None):
         result["status"] = "CAPTURED_UNQUALIFIED" if all(all(c["checks"].values()) for c in result["cases"]) else "FAILED"
         # Binary identity is retained separately: architecture-specific bytes
         # naturally differ. Source/recipes and outputs decide comparability.
-        from .tokenizer import _binding
-        runtime = _binding()
-        result["generation_binary"] = dict(path=runtime.__file__, sha256=hashlib.sha256(Path(runtime.__file__).read_bytes()).hexdigest())
+        runtime = runtime_report()["bindings"]["mojolearn._host._mojolearn_tokenizer_host"]
+        result["generation_binary"] = dict(path=runtime["path"], sha256=runtime["identity"])
     except BaseException as exc:
         result["status"] = "FAILED"
         result["error"] = repr(exc)
