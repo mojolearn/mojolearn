@@ -4,17 +4,17 @@ import os
 import numpy as np
 import pytest
 from mojolearn.tests.test_generation_native import load_fixture
+from mojolearn.tests._build_arms import default_build_only
 
-pytestmark = pytest.mark.skipif(
-    os.environ.get("MOJOLEARN_GENERATION_DEVICE") != "gpu",
-    reason="explicit installed GPU profile contract run required",
-)
-
-
-@pytest.fixture(autouse=True)
-def resident_route(monkeypatch):
-    monkeypatch.setenv("MOJOLEARN_CAUSAL_LM_RESIDENT_FORWARD", "1")
-    monkeypatch.delenv("MOJOLEARN_TRANSFORMER_LEGACY_SETUP", raising=False)
+pytestmark = [
+    pytest.mark.skipif(
+        os.environ.get("MOJOLEARN_GENERATION_DEVICE") != "gpu",
+        reason="explicit installed GPU profile contract run required",
+    ),
+    # The resident route is the build default since lane envgate-neural-lm
+    # (2026-11-15); the former autouse fixture set it in the environment.
+    default_build_only("MOJOLEARN_CAUSAL_LM_RESIDENT_FORWARD_OFF", "MOJOLEARN_TRANSFORMER_LEGACY_SETUP"),
+]
 
 
 def test_default_profile_publishes_with_resident_state(tmp_path):
