@@ -694,6 +694,7 @@ Deletions reversed by new evidence. The code is back on main; the section and th
 | [`MOJOLEARN_XN_FAST_ACHI2_DEVSCAN_OFF`](#mojolearn_xn_fast_achi2_devscan_off-old-path-deleted-2026-11-15) | Neighbors (AdditiveChi2Sampler fit negative check, FAST Apple) | removed (old path; FAST+Apple DEFAULT, w2-w3kf-xn-q PASS) | 2026-11-15 | [MOJOLEARN_XN_FAST_ACHI2_DEVSCAN_OFF.patch](../experiments/removed/MOJOLEARN_XN_FAST_ACHI2_DEVSCAN_OFF.patch) |
 | [`MOJOLEARN_XN_FAST_SCHI2_MOJO_MT_OFF`](#mojolearn_xn_fast_schi2_mojo_mt_off-old-path-deleted-2026-11-15) | Neighbors (SkewedChi2Sampler fit draws, FAST Apple) | removed (old path; FAST+Apple DEFAULT, w2-kfeat-xn-q-r1 PASS) | 2026-11-15 | [MOJOLEARN_XN_FAST_SCHI2_MOJO_MT_OFF.patch](../experiments/removed/MOJOLEARN_XN_FAST_SCHI2_MOJO_MT_OFF.patch) |
 | [`MOJOLEARN_XN_FAST_SCHI2_LAZYW_OFF`](#mojolearn_xn_fast_schi2_lazyw_off-old-path-deleted-2026-11-15) | Neighbors (SkewedChi2Sampler lazy weights, FAST Apple) | removed (old path; FAST+Apple DEFAULT, w2-w3kf-xn-q PASS) | 2026-11-15 | [MOJOLEARN_XN_FAST_SCHI2_LAZYW_OFF.patch](../experiments/removed/MOJOLEARN_XN_FAST_SCHI2_LAZYW_OFF.patch) |
+| [`MOJOLEARN_XN_FAST_CLS2_OCSVM_RES_OFF`](#mojolearn_xn_fast_cls2_ocsvm_res_off-old-path-deleted-2026-11-15) | Neighbors (OneClassSVM resident Gram, FAST Apple) | removed (old path; FAST+Apple default KEPT 417ba1ded) | 2026-11-15 | [MOJOLEARN_XN_FAST_CLS2_OCSVM_RES_OFF.patch](../experiments/removed/MOJOLEARN_XN_FAST_CLS2_OCSVM_RES_OFF.patch) |
 
 ## Trees
 
@@ -6027,3 +6028,11 @@ replacement computes the same values in the same order (see the bit notes below)
 - **Deleted by**: lane/expdel-01-cluster (expdel-01-cluster, docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md); code recoverable at `4cb9cbfa18`.
 - **Restore**: `git apply experiments/removed/MOJOLEARN_XN_FAST_SCHI2_LAZYW_OFF.patch`, then delete the `MOJOLEARN_XN_FAST_SCHI2_LAZYW_OFF` refusal in `core/experiment_guards_base.mojo`.
 - **Records**: refusal in `core/experiment_guards_base.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel-01-cluster section).
+
+## MOJOLEARN_XN_FAST_CLS2_OCSVM_RES_OFF: old path deleted (2026-11-15)
+
+- **What it was**: the FAST+Apple rollback of OneClassSVM.fit from the device-resident Gram (`x_neighbors/ocsvm_dev.mojo` OCSVM_CLS2_RES, `op_ocsvm_x`; read by `x_neighbors/ocsvm_resident_native_device.mojo`, `x_neighbors/native_descriptor_device.mojo`, `bindings/_mojolearn_x_neighbors.mojo`) to the 400 MB Gram download and re-upload. Only the define read is deleted (and the refusal text naming it); the non-resident path stays for builds without OCSVM_CLS2_RES / OCSVM_IDN_RES. The sibling rollbacks `_2L_OFF` and `_CHUNK256_OFF` are not part of this deletion (CHUNK256_OFF is KEEP-OPEN in the plan).
+- **Verdict**: KEEP / KEPT 417ba1ded (EXPERIMENTS.md `XN_FAST_CLS2_OCSVM_RES`, gapcls2-res-ocsvm-taxi): M3 n=1, ocsvm taxi -77% alone (RES+2L+CHUNK256 375.7 -> 65.0 ms), quality identical. No bit change on any column.
+- **Deleted by**: lane/expdel-01-cluster (expdel-01-cluster, docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md); code recoverable at `976cce176d`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_XN_FAST_CLS2_OCSVM_RES_OFF.patch`, then delete the `MOJOLEARN_XN_FAST_CLS2_OCSVM_RES_OFF` refusal in `core/experiment_guards_cluster.mojo`.
+- **Records**: refusal in `core/experiment_guards_cluster.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel-01-cluster section).
