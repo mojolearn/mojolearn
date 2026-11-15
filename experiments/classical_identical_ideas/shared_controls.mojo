@@ -34,7 +34,7 @@ comptime C02_STATS_PAIR = CLASSICAL_IDENTICAL and is_defined["MOJOLEARN_CLASSICA
 # not transform. Bit 2 (value 4) of `x_prep_classical_shared`.
 # TOMBSTONE: MOJOLEARN_CLASSICAL_C04_LDA (no A/B recorded for the opt-in arm) deleted 2026-11-15 by lane/expdel2-07-base; code recoverable at 1c0b13a0e4.
 # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C04_LDA.patch
-comptime C04_LDA = False
+# (Sweep 2026-11-15: comptime C04_LDA removed; nothing read it.)
 # TOMBSTONE: MOJOLEARN_CLASSICAL_C05_PHASE_SCRATCH (no A/B recorded for the opt-in arm) deleted 2026-11-15 by lane/expdel2-07-base; code recoverable at 1ebc49831d.
 # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C05_PHASE_SCRATCH.patch
 comptime C05_PHASE_SCRATCH = False
