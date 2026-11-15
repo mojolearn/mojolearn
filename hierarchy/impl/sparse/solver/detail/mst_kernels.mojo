@@ -26,7 +26,8 @@ in threadgroup memory (`:76-85`). Under a total order the minimum is the
 same whatever the lane count or fold shape, so this kernel is launched at
 their 32 on every vendor and no `kernel_matrix` row is needed for it.
 """
-from experiments.classical_identical_ideas.graph_controls import C34_PARALLEL_EDGES
+# TOMBSTONE: MOJOLEARN_C34_PARALLEL_EDGES (its alias use here: 128 scan lanes per row; owner lane expdel2-05-base) deleted 2026-11-15 by lane/expdel2-11-cluster; code recoverable at f06f6569b3.
+# Restore: git apply experiments/removed/MOJOLEARN_C34_PARALLEL_EDGES.expdel2-11-cluster.patch.
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 
@@ -104,7 +105,7 @@ comptime IDN_MST_PAR_COMPACT = _IDN_MST_ON
 #: `kernel_min_edge_per_vertex`: a power of two, 32..1024. The row minimum
 #: under a total order is the same at any lane count, so this is scheduling
 #: only. Time `-D MOJOLEARN_IDN_MST_SCAN_LANES=64|128|256` against 32.
-comptime IDN_MST_SCAN_LANES = 128 if C34_PARALLEL_EDGES else (
+comptime IDN_MST_SCAN_LANES = (
     get_defined_int["MOJOLEARN_IDN_MST_SCAN_LANES", 32]()
     if _IDN_MST_ON
     else 32
