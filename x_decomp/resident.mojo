@@ -728,7 +728,9 @@ def dev_qr_r_run(ia: Int, pr: F32Ptr, m: Int, n: Int, consume: Bool) raises -> I
 #: the entry out and Python keeps the host-address calls.
 # TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-18-decomposition (non-owner; owner expdel2-37-series); code recoverable at 7fa6378a2a.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-18-decomposition.patch; record in docs/TOMBSTONES.md.
-comptime IDN_CODE_RESIDENT = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_IDN_CODE_RESIDENT_OFF"]()
+# TOMBSTONE: MOJOLEARN_IDN_CODE_RESIDENT_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-18-decomposition; code recoverable at bf0328cef9.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_CODE_RESIDENT_OFF.patch; record in docs/TOMBSTONES.md.
+comptime IDN_CODE_RESIDENT = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 
 
 def dev_code_rows_run(
