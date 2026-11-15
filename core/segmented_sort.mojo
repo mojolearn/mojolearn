@@ -101,18 +101,15 @@ comptime SORT_BLOCK = 512
 #: segment's block totals runs as one 256-thread block per segment
 #: (`seg_scan_block_sums_block_kernel`) instead of one thread per segment.
 #: Int32 sums of the same values in a different association: the same
-#: offsets bit for bit. `-D MOJOLEARN_SEG_SUMS_SERIAL` keeps the one-thread
-#: scan (the A/B arm); IDENTICAL compiles the old path.
+#: offsets bit for bit. IDENTICAL compiles the one-thread scan.
 #: Default since the M3 A/B (b272364e4, n=2, identical output hashes): RF
 #: istella 13,583 -> 10,116 ms (-25.5%), taxi neutral. GBDT's own copy
 #: (gbdt/gpu_util/kernel/segmented_sort.mojo) keeps the one-thread scan: its
 #: opt-in block arm MOJOLEARN_GBDT_SEG_SUMS_BLOCK was DROPPED-noise
 #: (lane/apple-fast-rfet-scan @ 500168cfe).
-comptime SEG_SUMS_BLOCK_SCAN = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and TARGET_HAS_APPLE_GPU
-    and not is_defined["MOJOLEARN_SEG_SUMS_SERIAL"]()
-)
+# TOMBSTONE: MOJOLEARN_SEG_SUMS_SERIAL (opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-04-base; code recoverable at 28ac8cfd29.
+# Restore: git apply experiments/removed/MOJOLEARN_SEG_SUMS_SERIAL.patch; record in docs/TOMBSTONES.md.
+comptime SEG_SUMS_BLOCK_SCAN = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
 comptime SEG_SUMS_TPB = 256
 
 #: `8 * sizeof(T)` for `T = float`, i.e. their `end_bit`
