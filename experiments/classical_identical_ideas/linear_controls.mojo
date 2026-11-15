@@ -166,7 +166,7 @@ comptime LINEAR_GRAM_SOLVE = CLASSICAL_IDN
 comptime C16_GLM_FUSED = False
 # TOMBSTONE: MOJOLEARN_CLASSICAL_C17_OVR (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-06-base; code recoverable at 8c1b568a83.
 # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C17_OVR.patch; record in docs/TOMBSTONES.md.
-comptime C17_OVR = False
+# (Sweep 2026-11-15: comptime C17_OVR removed; nothing read it.)
 # TOMBSTONE: MOJOLEARN_CLASSICAL_C17_LS_TRIALS (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-06-base; code recoverable at 10e3cad6a6.
 # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C17_LS_TRIALS.patch; record in docs/TOMBSTONES.md.
 comptime C17_LS_TRIALS = False
