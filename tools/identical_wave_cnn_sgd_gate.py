@@ -33,7 +33,7 @@ def main():
     parser.add_argument('--sha', required=True)
     parser.add_argument('--harness-sha', help='Optional exact commit supplying this harness, separately from numerical source')
     parser.add_argument('--vendor', required=True, choices=('cuda', 'hip', 'metal', 'cpu'))
-    parser.add_argument('--arm', required=True, choices=('on', 'off'))
+    parser.add_argument('--arm', required=True, choices=('on',))
     parser.add_argument('--size', choices=('small', 'medium'), default='small')
     parser.add_argument('--suite', required=True, choices=('cnn-training', 'sgd'))
     parser.add_argument('--out', required=True, type=Path)

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Immutable SHA, fresh source ON/OFF builds; no wheels or opponent execution.
+"""Immutable SHA, fresh source ON build (the OFF arm, IDN_ALL_OFF, was deleted 2026-11-15); no wheels or opponent execution.
 
 Plan schema is documented in identical_wave_plan.json. Run prepare, quality,
 identity, then timing against ONE output directory. A failed/missing gate blocks
@@ -94,7 +94,6 @@ def main():
     p.add_argument('--cross-vendor-proof',type=Path,help='PASS proof from identical_wave_compare.py; required for timing')
     p.add_argument('--semaphore',type=Path,default=Path('/root/mojolearn-evidence/compile_slot.sh'))
     p.add_argument('--reuse-native-on',type=Path,action='append',default=[],help='Completed audited ON native receipt to import into fresh source')
-    p.add_argument('--reuse-native-off',type=Path,action='append',default=[],help='Completed audited OFF native receipt to import into fresh source')
     p.add_argument('--worker',type=Path,help='Pinned repaired identity/timing worker (recorded by hash); default is the frozen source tools/identical_wave_worker.py')
     p.add_argument('--tag',default='',help='identity/timing only: write <phase>-<tag>.json and <arm>/<phase>-<tag>/ so a rerun never overwrites earlier evidence')
     p.add_argument('--cases',default='',help='identity/timing only: comma-separated lane--dataset subset (reruns of failed cases, or timing only proven cases)')
@@ -113,11 +112,11 @@ def main():
     if not re.fullmatch('[0-9a-f]{40}',a.sha): p.error('full immutable 40-character SHA required')
     a.repo=a.repo.resolve(); a.out=a.out.resolve(); a.python=a.python.resolve(); a.data=a.data.resolve()
     plan=json.loads(a.plan.read_text()); plan_hash=hashlib.sha256(a.plan.read_bytes()).hexdigest()
-    if a.phase != 'prepare' and (a.reuse_native_on or a.reuse_native_off):
+    if a.phase != 'prepare' and a.reuse_native_on:
         p.error('native reuse is a prepare-only operation')
-    reuse={'on':[], 'off':[]}
+    reuse={'on':[]}
     if a.phase=='prepare':
-        for arm,receipts in (('on',a.reuse_native_on),('off',a.reuse_native_off)):
+        for arm,receipts in (('on',a.reuse_native_on),):
             supplied=set()
             for receipt in receipts:
                 try:
@@ -164,8 +163,8 @@ def main():
         prepared=json.loads(prep.read_text())
         if prepared.get('status')!='PASS' or prepared.get('identity')!=identity:
             p.error('successful prepare receipt for this identity required')
-        # Check BOTH arms before any phase executes, including unexpected .so files.
-        for arm in ('on','off'):
+        # Check the arm before any phase executes, including unexpected .so files.
+        for arm in ('on',):
             source=a.out/arm/'source'
             if subprocess.check_output(['git','-C',str(source),'rev-parse','HEAD'],text=True).strip()!=a.sha:
                 p.error('source HEAD changed')
@@ -216,12 +215,11 @@ def main():
     if a.case_timeout: report['case_timeout_override']=a.case_timeout
     if a.phase=='identity' and (a.out/(stem+'.json')).exists(): p.error('identity receipt exists; use a fresh --tag')
     write(a.out/(stem+'.json'),report)
-    for arm in ('on','off'):
+    for arm in ('on',):
         source=a.out/arm/'source'; folder=a.out/arm/stem
         env=dict(envbase,PYTHONPATH=str(source/'python'))
-        flags='-D MOJOLEARN_IDN_ALL_OFF=1' if arm=='off' else ''
+        flags=''
         env['MOJOLEARN_MOJO_BUILD_FLAGS']=flags
-        if arm=='off': env['MOJOLEARN_IDN_ALL_OFF']='1'
         steps=ProgressSteps(lambda:write(a.out/(stem+'.json'),report)); report['arms'][arm]=steps
         if a.phase=='prepare':
             if source.exists(): p.error('fresh source directory required; existing '+str(source))
@@ -265,14 +263,13 @@ def main():
         else:
             if a.phase=='quality':
                 for gate in plan['quality_gates']:
-                    if arm not in gate.get('arms',['on','off']):
+                    if arm not in gate.get('arms',['on']):
                         steps.append({'id':gate['id'],'status':'NOT_APPLICABLE','reason':'Gate plan explicitly excludes this arm'}); continue
                     if not gate.get('path'):
                         steps.append({'id':gate['id'],'status':'OWED','reason':gate['owed']}); continue
                     path=source/gate['path']; log=folder/(gate['id']+'.log')
                     if gate['kind']=='mojo':
                         cmd=['bash',str(a.semaphore),'pixi','run','mojo','run','-j','1','--target-accelerator',arch,'-D','MOJOLEARN_NUMERIC_IDENTICAL=1','-D','MOJOLEARN_COLUMN_'+a.vendor.upper(),'-I','.']
-                        if arm=='off': cmd+=['-D','MOJOLEARN_IDN_ALL_OFF=1']
                         for define in gate.get('defines',[]): cmd+=['-D',define]
                         cmd+=[str(path)]
                     else:

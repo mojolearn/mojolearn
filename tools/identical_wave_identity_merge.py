@@ -39,7 +39,7 @@ def main():
         reruns.append(doc)
         merged['merged_from']['reruns'].append({'path': str(path), 'sha256': digest(path), 'cases': doc.get('cases'),
                                                 'worker': doc.get('worker')})
-    for arm in ('on', 'off'):
+    for arm in ('on',):
         steps = base['arms'][arm]
         cases = {}
         for step in steps:

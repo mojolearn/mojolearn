@@ -26,7 +26,7 @@ def compare(paths, required):
         expected = EXPECTED[core['suite']]
         if core['suite'] == 'sgd' and core['fixture_profile'] == 'medium':
             expected = expected | {'sgd-ovr-sgd-largebatch'}
-        if not re.fullmatch('[0-9a-f]{40}', core['sha']) or core['arm'] not in ('on', 'off'):
+        if not re.fullmatch('[0-9a-f]{40}', core['sha']) or core['arm'] != 'on':
             raise ValueError('invalid source or arm identity')
         if not re.fullmatch('[0-9a-f]{64}', core['harness_sha256']):
             raise ValueError('invalid fixture harness identity')
