@@ -1,6 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 """Host-only shape and registry for the configured decoder language model."""
-from training.neural_identical_experiments import IDN_CHUNKED_LM_HEAD_V2
+# TOMBSTONE: MOJOLEARN_IDN_CHUNKED_LM_HEAD_V2 (default-construct the chunked head, opt-in arm superseded; owner
+# elsewhere) folded to False 2026-11-15 by lane/expdel2-31-neural; code recoverable at 3fba220d74.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_CHUNKED_LM_HEAD_V2.expdel2-31-neural.patch
 from gemm.contract import CONTRACT_K_LEAF_MIN
 
 from training.neural_arithmetic_profile import neural_arithmetic_suffix
@@ -57,7 +59,7 @@ struct ByteConfig(Copyable, Movable):
                  d_model: Int = 32, n_heads: Int = 4, n_kv: Int = 2,
                  head_dim: Int = 8, intermediate: Int = 64,
                  n_layers: Int = 2, vocab_size: Int = 256,
-                 chunked_lm_head_v2: Bool = IDN_CHUNKED_LM_HEAD_V2):
+                 chunked_lm_head_v2: Bool = False):
         self.batch = batch
         self.length = length
         self.d_model = d_model
