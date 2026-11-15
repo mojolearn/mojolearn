@@ -543,12 +543,10 @@ def qn_fit_host(
 #: whole design and a host-built 0/1 target). `qn_fit_ovr_host` uploads X and
 #: the int32 class codes once, builds every 0/1 target on the device and
 #: hands each class's solver a device copy of X. Same fits, same bits.
-#: `-D MOJOLEARN_QN_OVR_ONE_UPLOAD_OFF` (or the master
-#: `MOJOLEARN_IDN_ALL_OFF`) leaves the entry unregistered and the Python
-#: layer keeps one `qn_fit` call per class.
-comptime QN_OVR_ONE_UPLOAD = not (
-    is_defined["MOJOLEARN_QN_OVR_ONE_UPLOAD_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_QN_OVR_ONE_UPLOAD_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-20-linear; the MOJOLEARN_IDN_ALL_OFF term goes with it here; code recoverable at 021105e119.
+# Restore: git apply experiments/removed/MOJOLEARN_QN_OVR_ONE_UPLOAD_OFF.patch; record in docs/TOMBSTONES.md.
+# QN_OVR_ONE_UPLOAD stays as the constant its importers read.
+comptime QN_OVR_ONE_UPLOAD = True
 
 
 def _ovr_target_kernel(
