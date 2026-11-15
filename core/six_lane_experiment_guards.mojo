@@ -86,6 +86,8 @@ def _check_configuration() -> Bool:
     # Lane i17-decide-nbr-lin-prep (2026-10-11), removed: A/B on main b2657cc89, one run per arm, NV L40S nv2 / AMD MI325X (docs/TOMBSTONES.md,
     # docs/apple-fast/EXPERIMENTS.md, experiments/removed/*.patch).
     comptime assert not is_defined["MOJOLEARN_IDN_GEMM_NV_MICROTILE"](), "removed 2026-10-11 (lane/i17-decide-nbr-lin-prep, c38d7bc89): IDN_GEMM_NV_MICROTILE (NVIDIA packed GEMM at K window 32) was SLOWER: neural:gemm gaussian NV 48.5 -> 55.9 ms (1.15x, v0050); code at c38d7bc89^, patch experiments/removed/MOJOLEARN_IDN_GEMM_NV_MICROTILE.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C06_NORM_ROWS.patch
+    comptime assert not is_defined["MOJOLEARN_CLASSICAL_C06_NORM_ROWS"](), "removed 2026-11-15 (lane/expdel2-07-base): CLASSICAL_C06_NORM_ROWS (Row norms (rows per norm block 2/4 for KNN / KDE / KMeans, IDENTICAL)) was opt-in arm; EXP:1519 RESTRUCTURED, A/B owed and never run; the opt-in arm is gone and the default path is unchanged; code recoverable at 526172a06e; see docs/TOMBSTONES.md"
     return True
 
 comptime SIX_LANE_CONFIGURATION_OK = _check_configuration()

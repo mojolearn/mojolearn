@@ -119,39 +119,6 @@
    "bits_change": true,
    "status": "promoted:ge123e6f9",
    "note": "ivf identical_ivf_scan, ivf_balanced_tasks, ivf_flat_search tile, ivf_host twin Default ON in IDENTICAL; `_OFF` is the norm-expansion distance. Grid run ge123e6f9 (NVIDIA L40S + AMD MI325X, full board data, one scored run per arm); PROMOTED to the IDENTICAL default by lane/grid-flips-1 2026-10-08 (Andrew 13:00Z); numbers at the declaration and in docs/apple-fast/EXPERIMENTS.md."
-  },
-  "c06_norms": {
-   "define": "MOJOLEARN_CLASSICAL_C06_NORM_ROWS / MOJOLEARN_CLASSICAL_C06_SMALL_D_THREAD",
-   "kind": "arms",
-   "arms": {
-    "off": [],
-    "rows2": [
-     "MOJOLEARN_CLASSICAL_C06_NORM_ROWS=2"
-    ],
-    "rows4": [
-     "MOJOLEARN_CLASSICAL_C06_NORM_ROWS=4"
-    ],
-    "small_d": [
-     "MOJOLEARN_CLASSICAL_C06_SMALL_D_THREAD"
-    ]
-   },
-   "default": "off",
-   "source": [
-    "experiments/classical_identical_ideas/shared_controls.mojo:21",
-    "core/row_norms.mojo:228",
-    "experiments/classical_identical_ideas/shared_controls.mojo:28",
-    "core/row_norms.mojo:139,220"
-   ],
-   "binding": "_mojolearn",
-   "bits_change": true,
-   "status": "merged",
-   "merged_from": [
-    "c06_norm_rows",
-    "c06_small_d_thread",
-    "MOJOLEARN_CLASSICAL_C06_NORM_ROWS",
-    "MOJOLEARN_CLASSICAL_C06_SMALL_D_THREAD"
-   ],
-   "note": "One control, one arm per run: small_d returns before norm_rows when d<=32 (row_norms.mojo:220-232), so every cross of the two old controls equals a single on each workload. The two defines are refused together in core/six_lane_experiment_guards.mojo. Not on classical:kmeans (X norms once per fit, kmeans.mojo:1590-1594)."
   }
  },
  "algorithms": {
@@ -202,17 +169,14 @@
   "classical:knn": {
    "binding": "_mojolearn",
    "route": "knn_brute_force (pinned tile / stream top-k) ; host twin knn_host_predict",
-   "controls": [
-    "c06_norms"
-   ],
+   "controls": [],
    "interaction_groups": []
   },
   "classical:kde": {
    "binding": "_mojolearn_estimators (host twin _mojolearn_estimators_host)",
    "route": "density.py:844 -> _mojolearn_estimators kde_score_samples(_resident) -> kernel_density + kde/impl/distance",
    "controls": [
-    "kde_direct",
-    "c06_norms"
+    "kde_direct"
    ],
    "interaction_groups": [],
    "notes": "Only c06_norms=rows2 c06_norms=rows4 reach this lane."
@@ -301,6 +265,11 @@
    "define": "MOJOLEARN_DBSCAN_DIRECT_DISTANCE",
    "control": "dbscan_direct",
    "reason": "DELETE-noise (dbscan taxi 0.99x/1.00x, main ef1e7e9f9), lane/grid-act-16"
+  },
+  {
+   "define": "MOJOLEARN_CLASSICAL_C06_NORM_ROWS",
+   "control": "c06_norms",
+   "reason": "DELETED 2026-11-15 (lane/expdel2-07-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md; recoverable at 526172a06e; patch experiments/removed/MOJOLEARN_CLASSICAL_C06_NORM_ROWS.patch): opt-in arm; EXP:1519 RESTRUCTURED, A/B owed and never run. EXP:1519 RESTRUCTURED (ROWS2/ROWS4 into `C06_NORM_ROWS=2|4`), A/B owed and never run. Deleted under AGENTS.md \"An unmeasured arm is deleted\" (Andrew, 2026-11-15). Refused in core/six_lane_experiment_guards.mojo; docs/TOMBSTONES.md."
   }
  ]
 }
