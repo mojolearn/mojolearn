@@ -47,29 +47,6 @@
    ],
    "prune_note": "target = blocks-per-SM x SMs: BPSM=4 alone == SM=64 and SM64+BPSM4 == SM128 (merged, lane/grid-prune 2026-10-07). Arms: 64 (2x pinned), device (2 per SM, the CatBoost formula), device_bpsm4 (4 per SM, define value 1). 128 dropped: within 10% of device on NV (142 SMs). Not on gbdt-ordered (no replication_int32_for caller on the ordered route)."
   },
-  "IF_BUILD_TPB": {
-   "define": "MOJOLEARN_TREES_IF_BUILD_TPB",
-   "kind": "int_sweep",
-   "arms": {
-    "128": [],
-    "256": [
-     "MOJOLEARN_TREES_IF_BUILD_TPB=256"
-    ],
-    "512": [
-     "MOJOLEARN_TREES_IF_BUILD_TPB=512"
-    ]
-   },
-   "default": "128",
-   "source": [
-    "isolation_forest/impl/isolation_tree_builder.mojo:196",
-    "isolation_forest/impl/isolation_tree_builder.mojo:469",
-    "isolation_forest/impl/isolation_forest.mojo:1107"
-   ],
-   "binding": "_mojolearn_svm",
-   "bits_change": false,
-   "status": "new",
-   "note": "threads per tree block of build_isolation_trees_global_kernel; min/max ties to lower position and integer scans make the tree width-independent; 512 widens shared scratch to 43 KB; host unchanged"
-  },
   "GBDT_APPLY_WIDE": {
    "define": "MOJOLEARN_IDN_GBDT_APPLY_WIDE",
    "kind": "switch",
@@ -327,6 +304,11 @@
    "define": "MOJOLEARN_TREES_PREDICT_ROW_OUTPUTS",
    "control": "PREDICT_ROW_OUTPUTS",
    "reason": "DELETED 2026-11-15 (lane/expdel2-03-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md): no record: no A/B recorded for the opt-in arm (V2 rule a); under \"An unmeasured arm is deleted\" the arm goes, the default stays (no bit change); code at 432acbb3df; patch experiments/removed/MOJOLEARN_TREES_PREDICT_ROW_OUTPUTS.patch."
+  },
+  {
+   "define": "MOJOLEARN_TREES_IF_BUILD_TPB",
+   "control": "IF_BUILD_TPB",
+   "reason": "DELETED 2026-11-15 (lane/expdel2-46-trees, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md; AGENTS.md 'An unmeasured arm is deleted'): no A/B recorded for the opt-in int sweep (rule a). No bit change; define refused in core/experiment_guards_trees.mojo; code recoverable at 2e3951cb68."
   }
  ]
 }

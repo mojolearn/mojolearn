@@ -2396,6 +2396,8 @@ Files: `isolation_forest/impl/isolation_tree_builder.mojo`, `xtrees/agnostic_dev
 
 Owned here (patch, TOMBSTONES.md section, refusal, grid and EXPERIMENTS.md records): `AFCL_T10`, `AFCL_T11`, `AFT_F10`, `AFT_F11`, `AFT_F12`, `AGN_IDN_SYN_POOL_OFF`, `DART_DEVICE_OFF`, `IDN_DART_DEVICE_OFF`, `IDN_PSHAP_RESIDENT_OFF`, `IDN_SHAP_DEVICE_MODEL_OFF`, `IF_DIAG_ENTRY_RETURN`, `IF_DIAG_GATHER_ONLY`, `IF_DIAG_NO_RECORD`, `IF_DIAG_NO_REJECT`, `IF_ROWMAJOR_OFF`, `PSHAP_DELTA_OFF`, `SHAP_FAST_ROW_PAIR`, `SHAP_PERM_CACHE_OFF`, `SHAP_TREE_TAB_OFF`, `TREESHAP_ACC_SHARED`, `TREESHAP_FAST_TABLE_OFF`, `TREES_C47_IF_LIVE_TASKS`, `TREES_C48_IF_PARTITION`, `TREES_IF_BUILD_TPB`, `TREES_PLATT_ONE_READ_OFF`, `TREES_T40_ROWMAJOR`, `TREES_T41_TREE_BATCH`, `TREES_T42_CORRECTION_CACHE`, `TREES_T45_LINEAR_UNWIND`
 
+Lane result (lane/expdel2-46-trees, 2026-11-15): 32 defines folded (29 owned with records, 3 non-owner: IDN_ALL_OFF, IDN_GATES_OFF, TREES_T30_ADABOOST); COLUMN_CPU kept (correction). No KEEPs beyond it: no define here is a check arm, a sabotage control or a measured-winning off arm, and no default-launched kernel was removed.
+
 ### expdel2-47-promote (8 defines, 1 code files)
 
 | define | decision | rule | sites | lines | evidence / why |

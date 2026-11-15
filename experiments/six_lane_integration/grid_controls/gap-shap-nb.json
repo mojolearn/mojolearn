@@ -3,28 +3,7 @@
  "lane": "gap-shap-nb",
  "branch": "lane/gap-shap-nb",
  "head": "ccde2b940",
- "controls": {
-  "TREESHAP_ACC_SHARED": {
-   "define": "MOJOLEARN_TREESHAP_ACC_SHARED",
-   "kind": "switch",
-   "arms": {
-    "off": [],
-    "on": [
-     "MOJOLEARN_TREESHAP_ACC_SHARED"
-    ]
-   },
-   "default": "off",
-   "source": [
-    "xtrees/shap_device.mojo:119",
-    "xtrees/shap_device.mojo:269",
-    "xtrees/shap_tab.mojo:161"
-   ],
-   "binding": "_mojolearn_x_trees",
-   "bits_change": false,
-   "status": "new",
-   "note": "tab_row_kernel[TABLE_ACC] accumulator in a TABLE_ACC x QUERY_TPB threadgroup tile (one column per thread, 32 KiB per 128-lane block) instead of a dynamically indexed per-thread InlineArray[Float32, 64]; same cells, same adds, same order. Off on Apple (Metal 32 KiB threadgroup limit). A/B on NVIDIA + AMD: tree-shap taxi, istella and one non-board forest."
-  }
- },
+ "controls": {},
  "algorithms": {
   "algos:tree-shap": {
    "binding": "_mojolearn_x_trees",
@@ -39,5 +18,11 @@
    ]
   }
  },
- "removed": []
+ "removed": [
+  {
+   "define": "MOJOLEARN_TREESHAP_ACC_SHARED",
+   "control": "TREESHAP_ACC_SHARED",
+   "reason": "DELETED 2026-11-15 (lane/expdel2-46-trees, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md; AGENTS.md 'An unmeasured arm is deleted'): no A/B recorded for the opt-in arm (rule a). No bit change; define refused in core/experiment_guards_trees.mojo; code recoverable at 70f8ff00b2."
+  }
+ ]
 }

@@ -296,95 +296,6 @@
    "grid": "exclude",
    "prune_note": "one-block score grid needs <=256 cells; unreachable at 254 borders x >1 feature"
   },
-  "T40": {
-   "define": "MOJOLEARN_TREES_T40_ROWMAJOR",
-   "kind": "switch",
-   "arms": {
-    "off": [],
-    "on": [
-     "MOJOLEARN_TREES_T40_ROWMAJOR"
-    ]
-   },
-   "default": "off",
-   "source": [
-    "isolation_forest/impl/isolation_tree_builder.mojo:159"
-   ],
-   "binding": "_mojolearn_svm",
-   "bits_change": false,
-   "status": "kept"
-  },
-  "T41": {
-   "define": "MOJOLEARN_TREES_T41_TREE_BATCH",
-   "kind": "switch",
-   "arms": {
-    "off": [],
-    "on": [
-     "MOJOLEARN_TREES_T41_TREE_BATCH"
-    ]
-   },
-   "default": "off",
-   "source": [
-    "isolation_forest/impl/isolation_tree_builder.mojo:160"
-   ],
-   "binding": "_mojolearn_svm",
-   "bits_change": false,
-   "status": "kept",
-   "grid": "exclude",
-   "prune_note": "DROP_REDUNDANT: batch_trees = n_trees at board shape (isolation_forest.mojo:1028-1033); memory rule, never faster here"
-  },
-  "T42": {
-   "define": "MOJOLEARN_TREES_T42_CORRECTION_CACHE",
-   "kind": "switch",
-   "arms": {
-    "off": [],
-    "on": [
-     "MOJOLEARN_TREES_T42_CORRECTION_CACHE"
-    ]
-   },
-   "default": "off",
-   "source": [
-    "isolation_forest/impl/isolation_tree_builder.mojo:161"
-   ],
-   "binding": "_mojolearn_svm",
-   "bits_change": false,
-   "status": "kept",
-   "grid": "exclude",
-   "prune_note": "DROP_REDUNDANT: c(n) cache read only at leaf creation (isolation_tree_builder.mojo:264-268), below any A/A floor"
-  },
-  "C47_IF": {
-   "define": "MOJOLEARN_TREES_C47_IF_LIVE_TASKS",
-   "kind": "switch",
-   "arms": {
-    "off": [],
-    "on": [
-     "MOJOLEARN_TREES_C47_IF_LIVE_TASKS"
-    ]
-   },
-   "default": "off",
-   "source": [
-    "isolation_forest/impl/isolation_tree_builder.mojo:162"
-   ],
-   "binding": "_mojolearn_svm",
-   "bits_change": false,
-   "status": "kept"
-  },
-  "C48_IF": {
-   "define": "MOJOLEARN_TREES_C48_IF_PARTITION",
-   "kind": "switch",
-   "arms": {
-    "off": [],
-    "on": [
-     "MOJOLEARN_TREES_C48_IF_PARTITION"
-    ]
-   },
-   "default": "off",
-   "source": [
-    "isolation_forest/impl/isolation_tree_builder.mojo:163"
-   ],
-   "binding": "_mojolearn_svm",
-   "bits_change": false,
-   "status": "kept"
-  },
   "C50_IF": {
    "define": "MOJOLEARN_TREES_C50_IF_PACKED",
    "kind": "switch",
@@ -419,24 +330,6 @@
    "bits_change": false,
    "status": "kept",
    "note": "contamination variant only"
-  },
-  "T45": {
-   "define": "MOJOLEARN_TREES_T45_LINEAR_UNWIND",
-   "kind": "switch",
-   "arms": {
-    "off": [],
-    "on": [
-     "MOJOLEARN_TREES_T45_LINEAR_UNWIND"
-    ]
-   },
-   "default": "off",
-   "source": [
-    "xtrees/shap.mojo:85"
-   ],
-   "binding": "_mojolearn_x_trees,_mojolearn_trees",
-   "bits_change": false,
-   "status": "kept",
-   "note": "shap:* variants only"
   }
  },
  "algorithms": {
@@ -884,6 +777,36 @@
    "define": "MOJOLEARN_TREES_C48",
    "control": "C48",
    "reason": "DELETED 2026-11-15 (lane/expdel2-39-trees, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md): no record: no A/B recorded for the opt-in arm (V2 rule a). Under \"An unmeasured arm is deleted\" the arm goes, the default stays (no bit change); code at faf4eceab2^; patch experiments/removed/MOJOLEARN_TREES_C48.patch."
+  },
+  {
+   "define": "MOJOLEARN_TREES_T40_ROWMAJOR",
+   "control": "T40",
+   "reason": "DELETED 2026-11-15 (lane/expdel2-46-trees, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md; AGENTS.md 'An unmeasured arm is deleted'): no A/B recorded for the opt-in arm (rule a). No bit change; define refused in core/experiment_guards_trees.mojo; code recoverable at 931e7ca76a."
+  },
+  {
+   "define": "MOJOLEARN_TREES_T41_TREE_BATCH",
+   "control": "T41",
+   "reason": "DELETED 2026-11-15 (lane/expdel2-46-trees, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md; AGENTS.md 'An unmeasured arm is deleted'): no A/B recorded for the opt-in arm (rule a). No bit change; define refused in core/experiment_guards_trees.mojo; code recoverable at aa61101d80."
+  },
+  {
+   "define": "MOJOLEARN_TREES_T42_CORRECTION_CACHE",
+   "control": "T42",
+   "reason": "DELETED 2026-11-15 (lane/expdel2-46-trees, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md; AGENTS.md 'An unmeasured arm is deleted'): no A/B recorded for the opt-in arm (rule a). No bit change; define refused in core/experiment_guards_trees.mojo; code recoverable at d30e6f5678."
+  },
+  {
+   "define": "MOJOLEARN_TREES_C47_IF_LIVE_TASKS",
+   "control": "C47_IF",
+   "reason": "DELETED 2026-11-15 (lane/expdel2-46-trees, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md; AGENTS.md 'An unmeasured arm is deleted'): no A/B recorded for the opt-in arm (rule a). No bit change; define refused in core/experiment_guards_trees.mojo; code recoverable at 77a0ad6f45."
+  },
+  {
+   "define": "MOJOLEARN_TREES_C48_IF_PARTITION",
+   "control": "C48_IF",
+   "reason": "DELETED 2026-11-15 (lane/expdel2-46-trees, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md; AGENTS.md 'An unmeasured arm is deleted'): no A/B recorded for the opt-in arm (rule a). No bit change; define refused in core/experiment_guards_trees.mojo; code recoverable at dc94980d4a."
+  },
+  {
+   "define": "MOJOLEARN_TREES_T45_LINEAR_UNWIND",
+   "control": "T45",
+   "reason": "DELETED 2026-11-15 (lane/expdel2-46-trees, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md; AGENTS.md 'An unmeasured arm is deleted'): no A/B recorded for the opt-in arm (rule a). No bit change; define refused in core/experiment_guards_trees.mojo; code recoverable at f2de2ddf8b."
   }
  ],
  "stage0_build": {

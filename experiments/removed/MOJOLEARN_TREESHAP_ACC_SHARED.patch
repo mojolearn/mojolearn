@@ -1,0 +1,95 @@
+diff --git a/xtrees/shap_device.mojo b/xtrees/shap_device.mojo
+index cd18577135..c087c0fd8e 100644
+--- a/xtrees/shap_device.mojo
++++ b/xtrees/shap_device.mojo
+@@ -26,7 +26,7 @@ from xtrees.shap import (
+     shap_parent_unit, shap_depth_unit, shap_cover_unit, shap_slot_unit, shap_ev_part_unit, shap_ev_fold_unit,
+     shap_tree_unit, shap_fold_unit, shap_table_unit, shap_table_row_unit,
+ )
+-from xtrees.shap_tab import U64P, shap_tab_rank_unit, shap_tab_need_unit, shap_tab_row_unit
++from xtrees.shap_tab import U64P, shap_tab_rank_unit, shap_tab_need_unit, shap_tab_row_unit, shap_tab_row_unit_sh
+ from core.apple_fast_tree_experiments import (
+     AFT_P07, AFT_P08, AFT_P09, AFT_SHAP_FOLD_ITEMS,
+ )
+@@ -106,8 +106,16 @@ def shap_pair_count() raises -> Int:
+     return SHAP_PAIR_STATE.get_or_create_ptr()[].calls
+ 
+ comptime TABLE_ACC = 64
+-# TOMBSTONE: MOJOLEARN_TREESHAP_ACC_SHARED (opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-46-trees; code recoverable at 70f8ff00b2.
+-# Restore: git apply experiments/removed/MOJOLEARN_TREESHAP_ACC_SHARED.patch; record in docs/TOMBSTONES.md.
++#: lane gap-shap-nb (2026-10-08), EXPERIMENT, default OFF: -D
++#: MOJOLEARN_TREESHAP_ACC_SHARED puts `tab_row_kernel[TABLE_ACC]`'s
++#: accumulator in a TABLE_ACC x QUERY_TPB threadgroup tile (32 KiB at 128
++#: lanes, one column per thread) instead of the dynamically indexed
++#: per-thread InlineArray (`shap_tab_row_unit_sh`). Same adds, same order,
++#: same bits on every vendor. Trades local-memory traffic for occupancy (32
++#: KiB per block); A/B it on NVIDIA and AMD (tree-shap taxi and istella plus
++#: a non-board forest) before it becomes a default. Off on Apple: Metal's
++#: threadgroup limit is 32 KiB, the whole tile.
++comptime SHAP_ACC_SHARED = is_defined["MOJOLEARN_TREESHAP_ACC_SHARED"]() and not TARGET_HAS_APPLE_GPU
+ 
+ 
+ struct _ShapContext(Defaultable, Movable):
+@@ -257,23 +265,46 @@ def tab_row_kernel[ACC: Int](units: Int32, rows: Int32, d: Int32, k: Int32, slot
+                              slot: I32P, leaf_mf: I32P, leaf_n: I32P, table: F32P, dead: I32P, nint: I32P,
+                              needl: U64P, needr: U64P, x: F32P, r0: Int32, buf: F32P, meta: I32P):
+     var group = _uid()
+-    comptime if SHAP_ROW_TILE > 1:
+-        var pairs = (Int(rows) + SHAP_ROW_TILE - 1) // SHAP_ROW_TILE
+-        var tree = group // pairs
+-        var row = (group % pairs) * SHAP_ROW_TILE
+-        if tree < Int(units) // Int(rows):
+-            for offset in range(SHAP_ROW_TILE):
+-                if row + offset < Int(rows):
+-                    var u = tree * Int(rows) + row + offset
+-                    shap_tab_row_unit[ACC](u, Int(rows), Int(d), Int(k), Int(slots), Int(m), Int(nm), offsets, colid, quesval,
+-                                           left, leaves, parent, slot, leaf_mf, leaf_n, table, dead, nint, needl, needr,
+-                                           x.unsafe_offset(Int(r0) * Int(d)), buf, meta)
++    comptime if SHAP_ACC_SHARED and ACC > 0:
++        # one tile column per thread; the block's QUERY_TPB lanes
++        var sh = stack_allocation[ACC * QUERY_TPB, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
++        var lane = Int(thread_idx.x)
++        comptime if SHAP_ROW_TILE > 1:
++            var pairs = (Int(rows) + SHAP_ROW_TILE - 1) // SHAP_ROW_TILE
++            var tree = group // pairs
++            var row = (group % pairs) * SHAP_ROW_TILE
++            if tree < Int(units) // Int(rows):
++                for offset in range(SHAP_ROW_TILE):
++                    if row + offset < Int(rows):
++                        var u = tree * Int(rows) + row + offset
++                        shap_tab_row_unit_sh[ACC](u, Int(rows), Int(d), Int(k), Int(slots), Int(m), Int(nm), offsets,
++                                                  colid, quesval, left, leaves, parent, slot, leaf_mf, leaf_n, table,
++                                                  dead, nint, needl, needr, x.unsafe_offset(Int(r0) * Int(d)), buf,
++                                                  meta, sh, lane, QUERY_TPB)
++        else:
++            if group < Int(units):
++                shap_tab_row_unit_sh[ACC](group, Int(rows), Int(d), Int(k), Int(slots), Int(m), Int(nm), offsets,
++                                          colid, quesval, left, leaves, parent, slot, leaf_mf, leaf_n, table, dead,
++                                          nint, needl, needr, x.unsafe_offset(Int(r0) * Int(d)), buf, meta, sh, lane,
++                                          QUERY_TPB)
+     else:
+-        var u = _uid()
+-        if u < Int(units):
+-            shap_tab_row_unit[ACC](u, Int(rows), Int(d), Int(k), Int(slots), Int(m), Int(nm), offsets, colid, quesval,
+-                                   left, leaves, parent, slot, leaf_mf, leaf_n, table, dead, nint, needl, needr,
+-                                   x.unsafe_offset(Int(r0) * Int(d)), buf, meta)
++        comptime if SHAP_ROW_TILE > 1:
++            var pairs = (Int(rows) + SHAP_ROW_TILE - 1) // SHAP_ROW_TILE
++            var tree = group // pairs
++            var row = (group % pairs) * SHAP_ROW_TILE
++            if tree < Int(units) // Int(rows):
++                for offset in range(SHAP_ROW_TILE):
++                    if row + offset < Int(rows):
++                        var u = tree * Int(rows) + row + offset
++                        shap_tab_row_unit[ACC](u, Int(rows), Int(d), Int(k), Int(slots), Int(m), Int(nm), offsets, colid, quesval,
++                                               left, leaves, parent, slot, leaf_mf, leaf_n, table, dead, nint, needl, needr,
++                                               x.unsafe_offset(Int(r0) * Int(d)), buf, meta)
++        else:
++            var u = _uid()
++            if u < Int(units):
++                shap_tab_row_unit[ACC](u, Int(rows), Int(d), Int(k), Int(slots), Int(m), Int(nm), offsets, colid, quesval,
++                                       left, leaves, parent, slot, leaf_mf, leaf_n, table, dead, nint, needl, needr,
++                                       x.unsafe_offset(Int(r0) * Int(d)), buf, meta)
+ 
+ 
+ def fold_kernel(units: Int32, r0: Int32, rows: Int32, n_trees: Int32, d: Int32, k: Int32, slots: Int32, slot: I32P,
