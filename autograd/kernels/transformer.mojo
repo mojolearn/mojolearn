@@ -23,9 +23,12 @@ from core.device_arena import arena_active, arena_take
 # here 2026-11-15 by lane/expdel2-24-neural; code recoverable at c15b52cbb4.
 # Restore: git apply experiments/removed/MOJOLEARN_AFN_LM_BWD_FUSE.expdel2-24-neural.patch
 from training.byte_lm_afn import AFN_LM_BWD_NOSYNC
-# TOMBSTONE: MOJOLEARN_AFN_LM_WGRAD_SPLIT, MOJOLEARN_AFN_LM_BWD_NORM1_RESID, MOJOLEARN_AFN_LMGRAD_ALL and their AFN26
-# aliases (Apple FAST block-backward arms, never measured) deleted 2026-11-15 by lane/expdel2-24-neural with
-# autograd/kernels/transformer_afn.mojo; code recoverable at d2c4643c6b.
+# TOMBSTONE: MOJOLEARN_AFN_LMGRAD_ALL, MOJOLEARN_AFN_LM_WGRAD_SPLIT, MOJOLEARN_AFN_LM_BWD_EPILOGUE and
+# MOJOLEARN_AFN_LM_BWD_NORM1_RESID (Apple FAST block-backward arms, never measured) deleted 2026-11-15 by
+# lane/expdel2-24-neural with autograd/kernels/transformer_afn.mojo; code recoverable at d2c4643c6b.
+# TOMBSTONE: MOJOLEARN_AFN26_LM_WGRAD_SPLIT, MOJOLEARN_AFN26_LM_BWD_EPILOGUE, MOJOLEARN_AFN26_LM_BWD_NORM1_RESID,
+# MOJOLEARN_AFN26_LM_WGRAD_CAP8 and MOJOLEARN_AFN26_LM_WGRAD_MIN128 (their AFN26 aliases and split-K knobs) deleted
+# with them; code recoverable at d2c4643c6b.
 # Restore: git apply experiments/removed/MOJOLEARN_AFN_LMGRAD_ALL.patch
 from core.step_phase import (
     StepPhaseClock,
