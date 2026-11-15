@@ -738,7 +738,15 @@ def _ridge_fast_gram() -> Bool:
 # batches without a sync and reads two stop words.
 # TOMBSTONE: MOJOLEARN_AFCL_L14 (never-run Apple FAST programme card) deleted 2026-11-15 by lane/expdel2-21-linear; code recoverable at 190fb2a092.
 # Restore: git apply experiments/removed/MOJOLEARN_AFCL_L14.patch; record in docs/TOMBSTONES.md.
-comptime SGD_ROW_TPB = XG_TPB
+# RESTORED 2026-11-15 (lane/restore-apple-fast-neural): opt-in arm back, default off, Apple fast only (Andrew: a paused programme's arms are kept).
+# AFCL-L14: NEVER RUN — PENDING MEASUREMENT. Uncompiled/unverified, OFF.
+# Four SIMD groups per independent row-prediction block expose twice as
+# many schedulable blocks as the 256-thread baseline. Training examples,
+# minibatches, seeded order, gradient folds and update/stopping policy do
+# not change. Witness capacities/offsets use the same row-grid helper.
+comptime AFCL_L14 = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
+                    and is_defined["MOJOLEARN_AFCL_L14"]())
+comptime SGD_ROW_TPB = 128 if AFCL_L14 else XG_TPB
 
 
 @always_inline

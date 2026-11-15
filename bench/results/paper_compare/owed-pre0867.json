@@ -248,6 +248,10 @@
   "norm-fixed-lanes-on": {
    "define": "MOJOLEARN_IDN_NORM_FIXED_LANES",
    "status": "define in code (transformer/experiments/norm_fixed_lanes.mojo IDN_NORM_FIXED_LANES, restored 2026-11-15 by lane restore-run-arms-neural): B = RMSNorm / LayerNorm statistics and the norm-backward dot as one 32-lane cell per row (shuffle tree, chain depth d -> d/32 + 5) on every column; A = the one-thread serial row chain"
+  },
+  "lg-block-scratch-fill": {
+   "define": "MOJOLEARN_TREES_BLOCK_SCRATCH_FILL_OFF",
+   "status": "define in code (gbdt/methods/greedy_subsets_searcher/greedy_search_helper.mojo BLOCK_SCRATCH_FILL_OFF, launch_histograms_for_blocks): B = the whole-buffer zero of block_hist (pool slots x stat_count x widest block folds) at every non-fixed-point block of every histogram build; A = the zero of the block's own span max_leaves x stat_count x total_folds"
   }
  },
  "rows": [
@@ -1519,6 +1523,49 @@
     "norm-fixed-lanes-on"
    ],
    "decides": "NVIDIA L40S only (the NVIDIA-only campaign): B changes bits on every column (fold order); promote it (with a _OFF define) when the three rows are faster than A with quality (loss / perplexity) not worse; then the release's one verification records every vendor column and the host column on the new fold; otherwise delete the arm with a tombstone. Time it alone and with attn-fold-v2-on only if both win alone"
+  },
+  {
+   "id": "lg-block-scratch-fill",
+   "source": "lane fix-lossguide-fit (2026-11-15): the histogram scratch zero shrinks from the pool's widest-block span to each block's own span; lossguide istella 898,292 ms vs catboost-gpu 30,510 (pool part fixed by 46b31585c6)",
+   "kind": "ab",
+   "lane": [
+    "gbdt-lossguide",
+    "gbdt-depthwise",
+    "gbdt-symmetric"
+   ],
+   "dataset": "*",
+   "rows": "full",
+   "vendor": "nvidia",
+   "b_arms": [
+    "lg-block-scratch-fill"
+   ],
+   "decides": "A stays the default only if not slower than B on gbdt-lossguide fit (istella, taxi, ours and ours-gain0) and gbdt-depthwise/symmetric fit on NVIDIA L40S; digests must not move (every cell a kernel reads holds the same zero)"
+  },
+  {
+   "id": "lg-block-scratch-fill-year",
+   "source": "lane fix-lossguide-fit (2026-11-15): non-board dataset, 90 features: a width between the board's 16 and 220",
+   "kind": "ab",
+   "lane": "gbdt-lossguide",
+   "dataset": "year",
+   "rows": "full",
+   "vendor": "nvidia",
+   "b_arms": [
+    "lg-block-scratch-fill"
+   ],
+   "decides": "same verdict as lg-block-scratch-fill on a shape no board row has; digests must not move"
+  },
+  {
+   "id": "lg-block-scratch-fill-covtype",
+   "source": "lane fix-lossguide-fit (2026-11-15): non-board dataset, 54 features: a neighbouring width",
+   "kind": "ab",
+   "lane": "gbdt-lossguide",
+   "dataset": "covtype",
+   "rows": "full",
+   "vendor": "nvidia",
+   "b_arms": [
+    "lg-block-scratch-fill"
+   ],
+   "decides": "same verdict as lg-block-scratch-fill on a shape no board row has; digests must not move"
   }
  ]
 }

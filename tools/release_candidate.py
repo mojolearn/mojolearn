@@ -190,6 +190,8 @@ def parse(argv):
                     "checkout's branch; it must hold this checkout's HEAD)")
     ap.add_argument("--work-root", default=str(CANDIDATE_ROOT), help="default ~/mojolearn-evidence/release-candidates")
     ap.add_argument("--dry-run", action="store_true", help="print the Release plan of the five steps; run nothing")
+    ap.add_argument("--no-verify-smoke", action="store_true", help="do not start .github/workflows/verify-smoke.yml "
+                    "on the packed core wheel (an A set starts it by default; it reports and gates nothing)")
     return ap.parse_args(argv)
 
 
@@ -308,6 +310,18 @@ def main(argv=None, release=None):
                manifests=manifests, refs_before=before, refs_after=after, made=release.now())
     release.write_json(final / "candidate.json", doc)
     print(f"measurement build: {final}/candidate.json")
+    if not defines and not a.no_verify_smoke:
+        # THE VERIFY SMOKE (.github/workflows/verify-smoke.yml): does verify still run and do the Python boundaries
+        # still work, from this build's core wheel, on a free GitHub runner. Started here because this is where the
+        # wheel exists (release-linux-build.yml uploads no wheel). One per commit: a B set shares its A set's source.
+        # It reports and gates nothing, so a failure to start it is printed and the build still succeeds.
+        try:
+            sys.path.insert(0, str(ROOT / "tools" / "ops"))
+            import verify_smoke_dispatch
+            verify_smoke_dispatch.dispatch(final, a.ref or cand.get("tooling_ref") or "", a.commit)
+        except (Exception, SystemExit) as exc:
+            print(f"VERIFY-SMOKE not started ({exc}); by hand: python3 tools/ops/verify_smoke_dispatch.py "
+                  f"--wheel-dir {final} --ref <pushed branch holding verify-smoke.yml>")
     for vendor in vendors:
         if defines:
             # a B set rides with its A set's stage line (measure_candidate reads this version from candidate.json)

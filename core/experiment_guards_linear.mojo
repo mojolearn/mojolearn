@@ -173,8 +173,7 @@ def _check_configuration() -> Bool:
     # Restore: git apply experiments/removed/MOJOLEARN_CHOL_HOST_SCALAR.patch
     comptime assert not is_defined["MOJOLEARN_CHOL_HOST_SCALAR"](), "removed 2026-11-15 (lane/expdel2-16-decomposition): CHOL_HOST_SCALAR (unmeasured opt-in before arm) is gone; the default is kept; code at 61bd06b986; restore: experiments/removed/MOJOLEARN_CHOL_HOST_SCALAR.patch"
     # Lane expdel2-20-linear (2026-11-15): unmeasured arms deleted, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (docs/TOMBSTONES.md).
-    # Restore: git apply experiments/removed/MOJOLEARN_AFCL_L05.patch
-    comptime assert not is_defined["MOJOLEARN_AFCL_L05"](), "removed 2026-11-15 (lane/expdel2-20-linear): AFCL_L05 (never-run Apple FAST programme card) is gone; the default is kept; code at 1f4bbd3047; restore: experiments/removed/MOJOLEARN_AFCL_L05.patch"
+    # MOJOLEARN_AFCL_L05: refusal removed 2026-11-15 (restored; Apple fast opt-in arm, default off, lane/restore-apple-fast-neural; see docs/TOMBSTONES.md Restored table)
     # Restore: git apply experiments/removed/MOJOLEARN_CD_FAST_GRAM_OFF.patch
     comptime assert not is_defined["MOJOLEARN_CD_FAST_GRAM_OFF"](), "removed 2026-11-15 (lane/expdel2-20-linear): CD_FAST_GRAM_OFF (old path, no A/B recorded) is gone; the default is kept; code at d75e2fbb7a; restore: experiments/removed/MOJOLEARN_CD_FAST_GRAM_OFF.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_CD_FUSED_OFF.patch
@@ -293,16 +292,11 @@ def _check_configuration() -> Bool:
     # Restore: git apply experiments/removed/MOJOLEARN_X_PREP_POOL_ARENA_OFF.patch
     comptime assert not is_defined["MOJOLEARN_X_PREP_POOL_ARENA_OFF"](), "removed 2026-11-15 (lane/expdel2-22-linear): X_PREP_POOL_ARENA_OFF (old path) is gone; the default is kept; code at cc8e7c0dfd; restore: experiments/removed/MOJOLEARN_X_PREP_POOL_ARENA_OFF.patch"
     # Lane expdel2-21-linear (2026-11-15): unmeasured arms and superseded old paths deleted, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (docs/TOMBSTONES.md).
-    # Restore: git apply experiments/removed/MOJOLEARN_AFCL_L01.patch
-    comptime assert not is_defined["MOJOLEARN_AFCL_L01"](), "removed 2026-11-15 (lane/expdel2-21-linear): AFCL_L01 (never-run Apple FAST programme card) is gone; the default is kept; code at a6680ec95a; restore: experiments/removed/MOJOLEARN_AFCL_L01.patch"
-    # Restore: git apply experiments/removed/MOJOLEARN_AFCL_L02.patch
-    comptime assert not is_defined["MOJOLEARN_AFCL_L02"](), "removed 2026-11-15 (lane/expdel2-21-linear): AFCL_L02 (never-run Apple FAST programme card) is gone; the default is kept; code at 35e386db98; restore: experiments/removed/MOJOLEARN_AFCL_L02.patch"
-    # Restore: git apply experiments/removed/MOJOLEARN_AFCL_L03.patch
-    comptime assert not is_defined["MOJOLEARN_AFCL_L03"](), "removed 2026-11-15 (lane/expdel2-21-linear): AFCL_L03 (never-run Apple FAST programme card) is gone; the default is kept; code at d8fe5831ff; restore: experiments/removed/MOJOLEARN_AFCL_L03.patch"
-    # Restore: git apply experiments/removed/MOJOLEARN_AFCL_L04.patch
-    comptime assert not is_defined["MOJOLEARN_AFCL_L04"](), "removed 2026-11-15 (lane/expdel2-21-linear): AFCL_L04 (never-run Apple FAST programme card) is gone; the default is kept; code at 91fed31806; restore: experiments/removed/MOJOLEARN_AFCL_L04.patch"
-    # Restore: git apply experiments/removed/MOJOLEARN_AFCL_L14.patch
-    comptime assert not is_defined["MOJOLEARN_AFCL_L14"](), "removed 2026-11-15 (lane/expdel2-21-linear): AFCL_L14 (never-run Apple FAST programme card) is gone; the default is kept; code at 190fb2a092; restore: experiments/removed/MOJOLEARN_AFCL_L14.patch"
+    # MOJOLEARN_AFCL_L01: refusal removed 2026-11-15 (restored; Apple fast opt-in arm, default off, lane/restore-apple-fast-neural; see docs/TOMBSTONES.md Restored table)
+    # MOJOLEARN_AFCL_L02: refusal removed 2026-11-15 (restored; Apple fast opt-in arm, default off, lane/restore-apple-fast-neural; see docs/TOMBSTONES.md Restored table)
+    # MOJOLEARN_AFCL_L03: refusal removed 2026-11-15 (restored; Apple fast opt-in arm, default off, lane/restore-apple-fast-neural; see docs/TOMBSTONES.md Restored table)
+    # MOJOLEARN_AFCL_L04: refusal removed 2026-11-15 (restored; Apple fast opt-in arm, default off, lane/restore-apple-fast-neural; see docs/TOMBSTONES.md Restored table)
+    # MOJOLEARN_AFCL_L14: refusal removed 2026-11-15 (restored; Apple fast opt-in arm, default off, lane/restore-apple-fast-neural; see docs/TOMBSTONES.md Restored table)
     # Restore: git apply experiments/removed/MOJOLEARN_ARD_SIGMA_QOLD.patch
     comptime assert not is_defined["MOJOLEARN_ARD_SIGMA_QOLD"](), "removed 2026-11-15 (lane/expdel2-21-linear): ARD_SIGMA_QOLD (unmeasured old path) is gone; the default is kept; code at 085dcde095; restore: experiments/removed/MOJOLEARN_ARD_SIGMA_QOLD.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_BAYES_GRID_GUARD_OFF.patch

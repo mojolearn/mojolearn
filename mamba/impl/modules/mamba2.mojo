@@ -115,6 +115,12 @@ from mamba.impl.modules.afn_refusal import AfnRefusalBatch
 # TOMBSTONE: MOJOLEARN_AFN_MAMBA_PROJ_EPILOGUE (with _SPLITK and AFN_EPI_ALL: neural MERGED-UNMEASURED FAST+Apple matrix-unit
 # in_proj/out_proj route; AFN_MAMBA_PROJ_ROUTE folded False) deleted 2026-11-15 by lane/expdel2-27-neural; code recoverable at 21b1e860c2.
 # Restore: git apply experiments/removed/MOJOLEARN_AFN_MAMBA_PROJ_EPILOGUE.patch
+# RESTORED 2026-11-15 (lane/restore-apple-fast-neural): opt-in arm back, default off, Apple fast only (Andrew: a paused programme's arms are kept).
+from mamba.impl.modules.afn_proj_gemm import (
+    AFN_MAMBA_PROJ_ROUTE,
+    afn_proj_gemm_into,
+    afn_proj_gemm_resid_into,
+)
 from mamba.impl.modeling.modeling_mamba import (
     mamba_a_from_a_log_kernel,
     mamba_download,
@@ -496,7 +502,8 @@ struct Mamba2DeviceStages(Movable):
             seeded by a whole copy of x.
         KEPT: the twelve SSD working and chunk buffers (ssd_forward takes
         trace.enabled and skips trace-only intermediates when it is off, and
-        chunk-shaped buffers are padded to nc * Q >= T)."""
+        chunk-shaped buffers are padded to nc * Q >= T), and out_proj under
+        AFN_MAMBA_PROJ_ROUTE (the fused launch never writes it)."""
         self.xd_work.enqueue_fill(Float32(0.0))
         self.da_work.enqueue_fill(Float32(0.0))
         self.dacs.enqueue_fill(Float32(0.0))
@@ -509,6 +516,8 @@ struct Mamba2DeviceStages(Movable):
         self.yoff_work.enqueue_fill(Float32(0.0))
         self.y_work.enqueue_fill(Float32(0.0))
         self.h_last.enqueue_fill(Float32(0.0))
+        comptime if AFN_MAMBA_PROJ_ROUTE:
+            self.out_proj.enqueue_fill(Float32(0.0))
 
     def __init__(
         out self,
@@ -1211,9 +1220,19 @@ def mamba2_block_forward(
     )
 
     # ---- S4: in_proj (mamba2.py:211), gemm v1 OP_NT, k = d_model.
-    mamba_proj_gemm(
-        ctx, stages.in_proj, stages.norm_out, w.w_in, m, dip, dm, OP_NT
-    )
+    #      lane w2-epi (MOJOLEARN_AFN_MAMBA_PROJ_EPILOGUE / _SPLITK): the
+    #      FAST matrix-unit kernel, main's GEMM if it declines.
+    comptime if AFN_MAMBA_PROJ_ROUTE:
+        if not afn_proj_gemm_into(
+            ctx, stages.in_proj, stages.norm_out, w.w_in, m, dip, dm, OP_NT
+        ):
+            mamba_proj_gemm(
+                ctx, stages.in_proj, stages.norm_out, w.w_in, m, dip, dm, OP_NT
+            )
+    else:
+        mamba_proj_gemm(
+            ctx, stages.in_proj, stages.norm_out, w.w_in, m, dip, dm, OP_NT
+        )
     trace.record_device[DType.float32](
         ctx, prefix + ".in_proj.out", stages.in_proj, m * dip
     )
@@ -1554,20 +1573,43 @@ def mamba2_block_forward(
 
     # ---- S4: out_proj (mamba2.py:275), gemm v1 OP_NT, k = d_inner.
     # ---- S22: residual (HF :630), the REUSED Mamba-1 kernel.
-    mamba_proj_gemm(
-        ctx, stages.out_proj, stages.gnorm_out, w.w_out, m, dm, di, OP_NT
-    )
-    trace.record_device[DType.float32](
-        ctx, prefix + ".out_proj.out", stages.out_proj, m * dm
-    )
-    ctx.enqueue_function[residual_add_kernel](
-        stages.residual_out.unsafe_ptr(),
-        x.unsafe_ptr(),
-        stages.out_proj.unsafe_ptr(),
-        Int32(m * dm),
-        grid_dim=(_grid(m * dm), 1, 1),
-        block_dim=(MAMBA2_TPB, 1, 1),
-    )
+    #      lane w2-epi (MOJOLEARN_AFN_MAMBA_PROJ_EPILOGUE / _SPLITK): an
+    #      untraced call runs both as ONE matrix-unit launch seeded with `x`
+    #      (`residual_out = x + gnorm_out . w_out^T`; the out_proj stage is
+    #      not written); a traced call, or a declined shape, runs main's two.
+    comptime if AFN_MAMBA_PROJ_ROUTE:
+        if trace.enabled or not afn_proj_gemm_resid_into(
+            ctx, stages.residual_out, x, stages.gnorm_out, w.w_out, m, dm, di, OP_NT
+        ):
+            mamba_proj_gemm(
+                ctx, stages.out_proj, stages.gnorm_out, w.w_out, m, dm, di, OP_NT
+            )
+            trace.record_device[DType.float32](
+                ctx, prefix + ".out_proj.out", stages.out_proj, m * dm
+            )
+            ctx.enqueue_function[residual_add_kernel](
+                stages.residual_out.unsafe_ptr(),
+                x.unsafe_ptr(),
+                stages.out_proj.unsafe_ptr(),
+                Int32(m * dm),
+                grid_dim=(_grid(m * dm), 1, 1),
+                block_dim=(MAMBA2_TPB, 1, 1),
+            )
+    else:
+        mamba_proj_gemm(
+            ctx, stages.out_proj, stages.gnorm_out, w.w_out, m, dm, di, OP_NT
+        )
+        trace.record_device[DType.float32](
+            ctx, prefix + ".out_proj.out", stages.out_proj, m * dm
+        )
+        ctx.enqueue_function[residual_add_kernel](
+            stages.residual_out.unsafe_ptr(),
+            x.unsafe_ptr(),
+            stages.out_proj.unsafe_ptr(),
+            Int32(m * dm),
+            grid_dim=(_grid(m * dm), 1, 1),
+            block_dim=(MAMBA2_TPB, 1, 1),
+        )
     _m2_stage_sync(ctx, trace)
     comptime if IDN_MAMBA_GEMM_WS:
         # lane fam-lm: the projection GEMMs no longer wait (idn_gemm_ws.mojo),

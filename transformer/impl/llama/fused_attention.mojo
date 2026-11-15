@@ -98,7 +98,7 @@ from std.memory import bitcast, stack_allocation
 from std.os import getenv
 from std.sys import llvm_intrinsic
 from std.sys._assembly import inlined_assembly
-from std.sys.compile import is_defined
+from std.sys.compile import is_defined, get_defined_int
 from std.sys.info import is_amd_gpu
 from std.time import perf_counter_ns
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
@@ -1511,6 +1511,30 @@ default before the estash flip (its backward is the shipped
 # Restore: git apply experiments/removed/MOJOLEARN_ATTN_APPLE_ERECOMP.patch
 # (Sweep 2026-11-15: ATTN_APPLE_ESTASH_RECOMPUTE = False, attention_estash_recompute_granted and
 # fused_backward_launch_erecomp_report removed with the dead arm in autograd/kernels/transformer.mojo.)
+# RESTORED 2026-11-15 (lane/restore-apple-fast-neural): opt-in arm back, default off, Apple fast only (Andrew: a paused programme's arms are kept).
+comptime ATTN_APPLE_ESTASH_RECOMPUTE = (
+    ATTN_APPLE_ESTASH_GATED and is_defined["MOJOLEARN_ATTN_APPLE_ERECOMP"]()
+)
+"""lane/neural-apple2 (2026-09-28): an Apple process DENIED the estash word
+(its kept stashes do not fit) recomputes ONE layer's exp stash in the
+backward instead of running the round 3 zdot: the estash forward's own
+instantiation (`fused_forward_launch_estash_ran` under the column default,
+writing `e`, the row maxima and the denominators into per-call scratch) and
+then the estash backward over it, exactly the granted path's two launches
+with the forward repeated. Same kernels, same inputs, so the same `e` bits
+the granted process keeps, and the granted backward's bits, which equal the
+round 3 backward's (every final witness equal across the words). Memory: one
+layer's `[B, n_heads, L, S]` stash on top of the y/dy pair the round 3
+backward already allocates, granted by `attention_estash_memory_grant` under
+the same 35% rule. A recompute forward that raises the corner flag falls
+back to the round 3 backward, unchanged.
+
+OPT-IN ONLY (`-D MOJOLEARN_ATTN_APPLE_ERECOMP`). Measured on the M3 Ultra at the
+T3 shard (B4 L2048 d768 12L V50257, estash forced denied, steward job
+1790603073363, 5 steps each): round 3 backward 3.537 s a step, recompute
+3.619 s, the granted estash word 2.923 s; final witness and loss digests
+equal in all three. The recompute forward costs more than the round 3 zdot
+saves, so a denied process keeps the round 3 backward."""
 
 # TOMBSTONE: MOJOLEARN_ATTN_APPLE_ESTASH_FORCE_DENY (unmeasured Apple opt-in arm) deleted 2026-11-15 by lane/expdel2-34-neural; code recoverable at 9125339d58.
 # Restore: git apply experiments/removed/MOJOLEARN_ATTN_APPLE_ESTASH_FORCE_DENY.patch
@@ -1521,15 +1545,19 @@ struct _AttnEstashGate(Defaultable, Movable):
     var denied: Bool
     var need: Int
     var free: Int
+    var recompute: Bool
+    var recompute_denied: Bool
 
     def __init__(out self):
         self.granted = False
         self.denied = False
         self.need = 0
         self.free = 0
+        self.recompute = False
+        self.recompute_denied = False
 
 
-comptime _ATTN_ESTASH_GATE = SharedSlot[_AttnEstashGate, "MojolearnAttnEstashGateV3"]
+comptime _ATTN_ESTASH_GATE = SharedSlot[_AttnEstashGate, "MojolearnAttnEstashGateV2"]
 
 
 def attention_estash_granted() -> Bool:
@@ -1580,7 +1608,29 @@ def attention_estash_memory_grant(
         g[].granted = True
     else:
         g[].denied = True
+        # lane/neural-apple2: one layer's recomputed stash beside the y/dy
+        # pair (ATTN_APPLE_ESTASH_RECOMPUTE), under the same rule; a refusal
+        # is sticky like the grant's.
+        comptime if ATTN_APPLE_ESTASH_RECOMPUTE:
+            var need_r = 3 * 4 * b * nh * l * s + step_transient_bytes
+            if need_r * 100 <= free * 35:
+                g[].recompute = True
+            else:
+                g[].recompute_denied = True
     return g[].granted and not g[].denied
+
+
+def attention_estash_recompute_granted() -> Bool:
+    """Whether this process's denied backward recomputes one layer's exp
+    stash (ATTN_APPLE_ESTASH_RECOMPUTE): the estash word was refused, the
+    recompute was granted and never refused. False on every other build."""
+    comptime if not ATTN_APPLE_ESTASH_RECOMPUTE:
+        return False
+    try:
+        var g = _ATTN_ESTASH_GATE.get_or_create_ptr()
+        return g[].denied and g[].recompute and not g[].recompute_denied
+    except:
+        return False
 
 
 # TOMBSTONE: byte_lm_context_keeper_active, byte_lm_attention_estash_gate (dead native entries: diagnostic read-backs, no package or gate reader) deleted 2026-10-26 by 9d5242f68; code recoverable at a88745022.
@@ -5452,7 +5502,9 @@ def fused_bwd_zdot_stash_pf_kernel[HD: Int, TQ: Int, SABN: Bool](
         # readers passed the barrier above. Synchronization only.
         # TOMBSTONE: MOJOLEARN_ATTN_ZDOT_STASH_FOLD_BARRIER (unmeasured Apple opt-in arm) deleted 2026-11-15 by lane/expdel2-34-neural; code recoverable at 1a7b79977c.
         # Restore: git apply experiments/removed/MOJOLEARN_ATTN_ZDOT_STASH_FOLD_BARRIER.patch
-        comptime if TARGET_COLUMN != COLUMN_APPLE:
+        # RESTORED 2026-11-15 (lane/restore-apple-fast-neural): opt-in arm back, default off, Apple fast only (Andrew: a paused programme's arms are kept).
+        # `-D MOJOLEARN_ATTN_ZDOT_STASH_FOLD_BARRIER` restores it.
+        comptime if TARGET_COLUMN != COLUMN_APPLE or is_defined["MOJOLEARN_ATTN_ZDOT_STASH_FOLD_BARRIER"]():
             barrier()
     if valid and lane == 0:
         var zf = ftz(z)
@@ -5944,13 +5996,189 @@ def fused_bwd_dkdv_tiled_pf_kernel[HD: Int](
     key_lo_in: Int32,
     window_in: Int32,
 ):
-    """The preflushed dk/dv folds: the tiled body."""
-    _dkdv_tiled_pf_simt[HD](dk, dv, corner, y_st, ds_st, q_rope, dctx, b_in, l_in,
-        nh_in, nkv_in, s_in, pos0_in, key_lo_in, window_in)
+    """The preflushed dk/dv folds: on Apple IDENTICAL the matrix-unit body
+    (DK AND DV ON APPLE'S MATRIX UNIT), everywhere else the tiled body."""
+    comptime if ATTN_BWD_DKDV_AMMA and HD == 64:
+        _dkdv_tiled_pf_amma[HD](dk, dv, corner, y_st, ds_st, q_rope, dctx, b_in, l_in,
+            nh_in, nkv_in, s_in, pos0_in, key_lo_in, window_in)
+    else:
+        _dkdv_tiled_pf_simt[HD](dk, dv, corner, y_st, ds_st, q_rope, dctx, b_in, l_in,
+            nh_in, nkv_in, s_in, pos0_in, key_lo_in, window_in)
+
+
+# ===========================================================================
+# DK AND DV ON APPLE'S MATRIX UNIT (lane/apple-identical-neural, 2026-09-26;
+# `ATTN_BWD_APPLE_MMA`). `fused_bwd_dkdv_tiled_pf_kernel`'s two folds are one
+# chain per (key j, column d) from +0.0 over the kv group's heads ascending
+# and the queries t ascending that see key j: dk += dcell[t][j] * q[t][d],
+# dv += y[t][j] * dctx[t][d], stepped by `_step_preflushed`, which on Apple
+# the matrix chain reproduces bit for bit (THE FORWARD ON APPLE'S MATRIX
+# UNIT). Per 8-query piece of an 8 x 8 output fragment the matrix step runs
+# when all 8 keys see all 8 queries; otherwise the scalar chain over exactly
+# the visible queries (the causal edge). Staging, the -0.0 corner OR and the
+# stores are the original's. HD 64, BJ 64, TT 16.
+# ===========================================================================
+#: Trial only (`-D MOJOLEARN_ATTN_DKDV_AMMA`): bit-identical, but on the M4 at
+#: 12 layers x 1 x 2048 no measurable gain (dk/dv 261 / 251 ms against 266 ms
+#: per step, per-kernel timers). The Apple backward is bound by its
+#: [B, nh, L, S] stash traffic, not by these products.
+comptime ATTN_BWD_DKDV_AMMA = (
+    ATTN_BWD_APPLE_MMA and is_defined["MOJOLEARN_ATTN_DKDV_AMMA"]()
+)
 
 
 # TOMBSTONE: MOJOLEARN_ATTN_DKDV_AMMA (Apple trial arm: dk/dv on the matrix unit, M4 no measurable gain) deleted 2026-11-15 by lane/expdel2-34-neural; code recoverable at eaa875c1b1.
 # Restore: git apply experiments/removed/MOJOLEARN_ATTN_DKDV_AMMA.patch
+# RESTORED 2026-11-15 (lane/restore-apple-fast-neural): opt-in arm back, default off, Apple fast only (Andrew: a paused programme's arms are kept).
+@always_inline
+def _dkdv_tiled_pf_amma[HD: Int](
+    dk: MutPointer[Float32, MutAnyOrigin],
+    dv: MutPointer[Float32, MutAnyOrigin],
+    corner: MutPointer[Float32, MutAnyOrigin],
+    y_st: MutPointer[Float32, MutAnyOrigin],
+    ds_st: MutPointer[Float32, MutAnyOrigin],
+    q_rope: MutPointer[Float32, MutAnyOrigin],
+    dctx: MutPointer[Float32, MutAnyOrigin],
+    b_in: Int32, l_in: Int32, nh_in: Int32, nkv_in: Int32, s_in: Int32,
+    pos0_in: Int32, key_lo_in: Int32, window_in: Int32,
+):
+    comptime BJ = 64
+    comptime TT = TILED_TT
+    comptime NSG = FUSED_THREADS // 32
+    comptime TST = TT + 4
+    comptime NFJ = BJ // 8
+    comptime NFD = HD // 8
+    comptime FPS = (NFJ * NFD) // NSG
+    comptime assert FPS * NSG == NFJ * NFD and TT % 8 == 0, "amma dkdv: whole fragments"
+    var qT = stack_allocation[HD * TST, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var dT = stack_allocation[HD * TST, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var ys = stack_allocation[TT * BJ, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var dss = stack_allocation[TT * BJ, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var b = Int(b_in)
+    var l = Int(l_in)
+    var nh = Int(nh_in)
+    var nkv = Int(nkv_in)
+    var s = Int(s_in)
+    var pos0 = Int(pos0_in)
+    var key_lo = Int(key_lo_in)
+    var window = Int(window_in)
+    var n_rep = nh // nkv
+    var njb = (s + BJ - 1) // BJ
+    var raw = Int(block_idx.x)
+    var jb = raw % njb
+    var rest = raw // njb
+    var kvh = rest % nkv
+    var bb = rest // nkv
+    if bb >= b:
+        return
+    var tid = Int(thread_idx.x)
+    var sg = tid // 32
+    var lane = tid % 32
+    var qd = lane // 4
+    var frow = (qd & 4) + ((lane // 2) % 4)
+    var fcol = (qd & 2) * 2 + (lane % 2) * 2
+    var j0 = jb * BJ
+    var j1 = min(j0 + BJ - 1, s - 1)
+    var q0 = _key_query_range(j0, pos0, key_lo, window, l)
+    var q1 = _key_query_range(j1, pos0, key_lo, window, l)
+    var tb_lo = q0[0] // TT
+    var tb_hi = q1[1] // TT
+    if q1[1] < q0[0]:
+        tb_hi = tb_lo - 1
+    var kvbase = (bb * nkv + kvh) * s * HD
+    var dka = Array[_AMMA_M64, FPS](fill=_AMMA_M64(0))
+    var dva = Array[_AMMA_M64, FPS](fill=_AMMA_M64(0))
+    var hit = False
+    for hh in range(n_rep):
+        var h = kvh * n_rep + hh
+        var hbase = (bb * nh + h) * l
+        for tb in range(tb_lo, tb_hi + 1):
+            var tq0 = tb * TT
+            for i in range(tid, TT * HD, FUSED_THREADS):
+                var r = i // HD
+                var c = i % HD
+                var t = tq0 + r
+                var qv = Float32(0.0)
+                var dcv = Float32(0.0)
+                if t < l:
+                    var off = (bb * l + t) * nh * HD + h * HD + c
+                    qv = ftz(q_rope.unsafe_load(off))
+                    dcv = ftz(dctx.unsafe_load(off))
+                qT[c * TST + r] = qv
+                dT[c * TST + r] = dcv
+            for i in range(tid, TT * BJ, FUSED_THREADS):
+                var r = i // BJ
+                var c = i % BJ
+                var t = tq0 + r
+                var jc = j0 + c
+                var yv = Float32(0.0)
+                var dsv = Float32(0.0)
+                if t < l and jc < s:
+                    var cr = _key_query_range(jc, pos0, key_lo, window, l)
+                    if t >= cr[0] and t <= cr[1]:
+                        var cell = (hbase + t) * s + jc
+                        yv = y_st.unsafe_load(cell)
+                        dsv = ds_st.unsafe_load(cell)
+                ys[i] = yv
+                dss[i] = dsv
+            barrier()
+            comptime for q in range(FPS):
+                var g = sg * FPS + q
+                var fj = g // NFD
+                var fd = g % NFD
+                var jf0 = j0 + fj * 8
+                var jf1 = min(jf0 + 7, s - 1)
+                comptime for k8 in range(TT // 8):
+                    var tp = tq0 + k8 * 8
+                    var full = False
+                    if jf0 < s:
+                        var rf = _key_query_range(jf0, pos0, key_lo, window, l)
+                        var rl = _key_query_range(jf1, pos0, key_lo, window, l)
+                        full = (jf1 == jf0 + 7 and rf[0] <= tp and rl[0] <= tp
+                                and rf[1] >= tp + 7 and rl[1] >= tp + 7)
+                    if full:
+                        # A[r = key][c = query] = cell[t][j] at [t * BJ + j].
+                        var ad = _amma_load_t(dss + (k8 * 8) * BJ + fj * 8, BJ)
+                        var ay = _amma_load_t(ys + (k8 * 8) * BJ + fj * 8, BJ)
+                        # B[r = query][c = column] = x[t][d] at [d * TST + t].
+                        var bq = _amma_load_t(qT + (fd * 8) * TST + k8 * 8, TST)
+                        var bd = _amma_load_t(dT + (fd * 8) * TST + k8 * 8, TST)
+                        dka[q] = _amma_mma(ad, bq, dka[q])
+                        dva[q] = _amma_mma(ay, bd, dva[q])
+                        comptime if is_defined["MOJOLEARN_ATTN_SABOTAGE_AMMA"]():
+                            dva[q] = dva[q] * Float32(1.0000001)
+                    else:
+                        var jc = j0 + fj * 8 + frow
+                        if jc < s:
+                            var cr = _key_query_range(jc, pos0, key_lo, window, l)
+                            comptime for e in range(2):
+                                var d = fd * 8 + fcol + e
+                                for tk in range(8):
+                                    var t = tp + tk
+                                    if t < l and t >= cr[0] and t <= cr[1]:
+                                        var tl = k8 * 8 + tk
+                                        var jl = fj * 8 + frow
+                                        dka[q][e] = _step_preflushed(dss[tl * BJ + jl], qT[d * TST + tl], dka[q][e])
+                                        dva[q][e] = _step_preflushed(ys[tl * BJ + jl], dT[d * TST + tl], dva[q][e])
+            barrier()
+        comptime for q in range(FPS):
+            comptime for e in range(2):
+                if bitcast[DType.uint32](dka[q][e]) == NEG_ZERO_BITS:
+                    hit = True
+                if bitcast[DType.uint32](dva[q][e]) == NEG_ZERO_BITS:
+                    hit = True
+    comptime for q in range(FPS):
+        var g = sg * FPS + q
+        var fj = g // NFD
+        var fd = g % NFD
+        var jc = j0 + fj * 8 + frow
+        if jc < s:
+            if hit:
+                corner.unsafe_store(0, Float32(1.0))
+            comptime for e in range(2):
+                var d = fd * 8 + fcol + e
+                dk.unsafe_store(kvbase + jc * HD + d, dka[q][e])
+                dv.unsafe_store(kvbase + jc * HD + d, dva[q][e])
 
 
 @always_inline
@@ -6181,12 +6409,13 @@ def fused_bwd_dkdv_r2_kernel[HD: Int, BJ: Int, SAB: Bool, SWZ: Bool = False](
     #: lane/neural-pass58 head 3 (2026-10-01): the transposed staging is
     #: OFF on the Apple column (M3 Ultra: dkdv 2.75 -> 3.73 ms a layer with
     #: it, every other tick flat), which keeps main's `[tk][col]` tiles and
-    #: scalar chain reads there.
+    #: scalar chain reads there; `-D MOJOLEARN_ATTN_DKDV_T4=1` forces it on Apple.
     # TOMBSTONE: MOJOLEARN_ATTN_DKDV_T4 (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-34-neural; code recoverable at 15a3f2210e.
     # Restore: git apply experiments/removed/MOJOLEARN_ATTN_DKDV_T4.patch
+    # RESTORED 2026-11-15 (lane/restore-apple-fast-neural): opt-in arm back, default off, Apple fast only (Andrew: a paused programme's arms are kept).
     # TOMBSTONE: MOJOLEARN_ATTN_DKDV_NO_T4 (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-34-neural; code recoverable at 6ea086845c.
     # Restore: git apply experiments/removed/MOJOLEARN_ATTN_DKDV_NO_T4.patch
-    comptime T4 = TARGET_COLUMN != COLUMN_APPLE
+    comptime T4 = TARGET_COLUMN != COLUMN_APPLE or is_defined["MOJOLEARN_ATTN_DKDV_T4"]()
     comptime TSTR = TT + 4
     comptime QN = HD * TSTR if T4 else TT * HD
     comptime YN = BJ * TSTR if T4 else TT * BJ
@@ -8308,7 +8537,8 @@ def _launch_bwd_shipped[HD: Int](
 
 # ===========================================================================
 # THE FORWARD ON APPLE'S MATRIX UNIT (lane/apple-identical-neural, 2026-09-26;
-# Apple IDENTICAL only, `ATTN_FWD_APPLE_MMA`).
+# Apple IDENTICAL only, `ATTN_FWD_APPLE_MMA`; `-D MOJOLEARN_ATTN_NO_APPLE_MMA`
+# reverts).
 #
 # `fused_attn_forward_r2_kernel[64, 32, QRES, True, False]` spends its time in
 # two chains: pass 1's scores, `dot = _step_preflushed(q[p], k[p], dot)` over
@@ -8336,7 +8566,11 @@ def _launch_bwd_shipped[HD: Int](
 # ===========================================================================
 # TOMBSTONE: MOJOLEARN_ATTN_NO_APPLE_MMA (unmeasured Apple opt-in arm) deleted 2026-11-15 by lane/expdel2-34-neural; code recoverable at 0236b48e2f.
 # Restore: git apply experiments/removed/MOJOLEARN_ATTN_NO_APPLE_MMA.patch
-comptime ATTN_FWD_APPLE_MMA = APPLE_MMA
+# RESTORED 2026-11-15 (lane/restore-apple-fast-neural): opt-in arm back, default off, Apple fast only (Andrew: a paused programme's arms are kept).
+comptime ATTN_FWD_APPLE_MMA = (
+    APPLE_MMA
+    and not is_defined["MOJOLEARN_ATTN_NO_APPLE_MMA"]()
+)
 
 #: Apple's `_step_preflushed` is `ftz(identical_mul_add(a, b, acc))`, and the
 #: M4's FMA never returns a subnormal word: over 9 operand kinds x 4.19M
@@ -8346,9 +8580,12 @@ comptime ATTN_FWD_APPLE_MMA = APPLE_MMA
 #: (gemm/checks/apple_simdgroup_probe.mojo, kinds 7 and 8). So the flush is the
 #: identity on every step and the matrix chain IS the attention chain with no
 #: admission. (The GEMM's Apple step is the REPAIRED `rtf_mul_add`, which is
-#: why the GEMM keeps its window admission.)
 # TOMBSTONE: MOJOLEARN_ATTN_AMMA_ADMIT (unmeasured check arm: the window admission test inside the Apple matrix-unit kernels) deleted 2026-11-15 by lane/expdel2-34-neural; code recoverable at fdabb0186d.
 # Restore: git apply experiments/removed/MOJOLEARN_ATTN_AMMA_ADMIT.patch
+# RESTORED 2026-11-15 (lane/restore-apple-fast-neural): opt-in arm back, default off, Apple fast only (Andrew: a paused programme's arms are kept).
+#: why the GEMM keeps its window admission.) `-D MOJOLEARN_ATTN_AMMA_ADMIT`
+#: restores the admission test as a check arm.
+comptime ATTN_AMMA_ADMIT = is_defined["MOJOLEARN_ATTN_AMMA_ADMIT"]()
 
 
 def fused_attn_forward_r2_amma_kernel[HD: Int, TQ: Int, QRES: Bool, PF: Bool, SABN: Bool, SWZ: Bool = False](
@@ -8425,9 +8662,10 @@ def fused_attn_forward_r2_amma_kernel[HD: Int, TQ: Int, QRES: Bool, PF: Bool, SA
     # lane/neural-pass46 (2026-10-01): the stagings read four words a
     # thread (one vector load each) and the admission exponent machinery
     # (the per-word exponent minima, the warp butterflies, the `emin` page)
-    # is gone; the kernel admits every window (see the note above
-    # `fused_attn_forward_r2_amma_kernel`) and did that work
+    # is compiled only under ATTN_AMMA_ADMIT, the check arm; the shipped
+    # kernel admits every window (see ATTN_AMMA_ADMIT) and did that work
     # for nothing on every key block. Same words, same chains.
+    var eq = UInt32(0xFF)
     for i in range(tid, (TQ * HD) // 4, FUSED_THREADS):
         var i4 = i * 4
         var r = i4 // HD
@@ -8440,10 +8678,21 @@ def fused_attn_forward_r2_amma_kernel[HD: Int, TQ: Int, QRES: Bool, PF: Bool, SA
         qT[(p + 1) * QST + r] = f4[1]
         qT[(p + 2) * QST + r] = f4[2]
         qT[(p + 3) * QST + r] = f4[3]
+        comptime if ATTN_AMMA_ADMIT:
+            eq = min(eq, _admit_exp_min[4](f4))
+    var bq = UInt32(0xFF)
+    comptime if ATTN_AMMA_ADMIT:
+        eq = _admit_warp_min(eq)
+        if lane == 0:
+            emin[sg] = eq
+        barrier()
+        comptime for w in range(NSG):
+            bq = min(bq, emin[w])
     barrier()
 
     # Pass 1: scores.
     for kb in range(kb_lo, kb_hi + 1):
+        var ek = UInt32(0xFF)
         for i in range(tid, (BK * HD) // 4, FUSED_THREADS):
             var i4 = i * 4
             var r = i4 // HD
@@ -8457,8 +8706,19 @@ def fused_attn_forward_r2_amma_kernel[HD: Int, TQ: Int, QRES: Bool, PF: Bool, SA
             kv[r * KST + p + 1] = f4[1]
             kv[r * KST + p + 2] = f4[2]
             kv[r * KST + p + 3] = f4[3]
+            comptime if ATTN_AMMA_ADMIT:
+                ek = min(ek, _admit_exp_min[4](f4))
+        comptime if ATTN_AMMA_ADMIT:
+            ek = _admit_warp_min(ek)
+            if lane == 0:
+                emin[sg] = ek
         barrier()
         var adm = True
+        comptime if ATTN_AMMA_ADMIT:
+            var bk = UInt32(0xFF)
+            comptime for w in range(NSG):
+                bk = min(bk, emin[w])
+            adm = (bq + bk) >= UInt32(GEMM_ADMIT_EXP_SUM)
         comptime for q in range(SPS):
             var f = sg * SPS + q
             var fr = f // NFK
@@ -8497,10 +8757,15 @@ def fused_attn_forward_r2_amma_kernel[HD: Int, TQ: Int, QRES: Bool, PF: Bool, SA
         # the admission read) all passed the barrier above; its matrix step
         # rewrites `tile` only after its staging barrier, which every thread
         # reaches after its row phase. One barrier after the loop guards the
-        # row-maximum store into `tile` below. Synchronization only.
     # TOMBSTONE: MOJOLEARN_ATTN_FWD_AMMA_P1_BARRIER (unmeasured Apple opt-in arm) deleted 2026-11-15 by lane/expdel2-34-neural; code recoverable at fb85c5f1db.
     # Restore: git apply experiments/removed/MOJOLEARN_ATTN_FWD_AMMA_P1_BARRIER.patch
-    barrier()
+    # RESTORED 2026-11-15 (lane/restore-apple-fast-neural): opt-in arm back, default off, Apple fast only (Andrew: a paused programme's arms are kept).
+        # row-maximum store into `tile` below. Synchronization only;
+        # `-D MOJOLEARN_ATTN_FWD_AMMA_P1_BARRIER` restores the per-block barrier.
+        comptime if is_defined["MOJOLEARN_ATTN_FWD_AMMA_P1_BARRIER"]():
+            barrier()
+    comptime if not is_defined["MOJOLEARN_ATTN_FWD_AMMA_P1_BARRIER"]():
+        barrier()
     comptime for u in range(RPT):
         tile.unsafe_store((tr + u * 16) * 16 + tc, mpart[u])
     barrier()
@@ -8524,11 +8789,16 @@ def fused_attn_forward_r2_amma_kernel[HD: Int, TQ: Int, QRES: Bool, PF: Bool, SA
     # before it reached block kb + 1's barrier. Synchronization only.
     # TOMBSTONE: MOJOLEARN_ATTN_FWD_AMMA_P2_BARRIER (unmeasured Apple opt-in arm) deleted 2026-11-15 by lane/expdel2-34-neural; code recoverable at 43593b02ee.
     # Restore: git apply experiments/removed/MOJOLEARN_ATTN_FWD_AMMA_P2_BARRIER.patch
-    comptime assert BK * WST >= TQ * 33, "amma forward: pass 2's second page must hold TQ x 33"
+    # RESTORED 2026-11-15 (lane/restore-apple-fast-neural): opt-in arm back, default off, Apple fast only (Andrew: a paused programme's arms are kept).
+    # `-D MOJOLEARN_ATTN_FWD_AMMA_P2_BARRIER` restores the single page and the
+    # barrier.
+    comptime P2_ONE_PAGE = is_defined["MOJOLEARN_ATTN_FWD_AMMA_P2_BARRIER"]()
+    comptime assert P2_ONE_PAGE or BK * WST >= TQ * 33, "amma forward: pass 2's second page must hold TQ x 33"
     for kb in range(kb_lo, kb_hi + 1):
         var pg = tile
-        if ((kb - kb_lo) & 1) == 1:
-            pg = wT
+        comptime if not P2_ONE_PAGE:
+            if ((kb - kb_lo) & 1) == 1:
+                pg = wT
         comptime for u in range(RPT):
             var r = tr + u * 16
             var t = t0 + r
@@ -8549,6 +8819,8 @@ def fused_attn_forward_r2_amma_kernel[HD: Int, TQ: Int, QRES: Bool, PF: Bool, SA
                 var j = kb * BK + jj
                 if j >= rr[0] and j <= rr[1]:
                     dacc = ftz(ftz(dacc) + ftz(pg.unsafe_load(tid * 33 + jj)))
+        comptime if P2_ONE_PAGE:
+            barrier()
     if tid < TQ and t0 + tid < l:
         stats.unsafe_store(TQ + tid, ftz(dacc))
         denom.unsafe_store((bb * nh + h) * l + t0 + tid, ftz(dacc))
@@ -8559,7 +8831,9 @@ def fused_attn_forward_r2_amma_kernel[HD: Int, TQ: Int, QRES: Bool, PF: Bool, SA
 
     # Pass 3: the context chain.
     var cacc = Array[_AMMA_M64, CPS](fill=_AMMA_M64(0))
+    var exact_ok = True  # every earlier block of this chain admitted
     for kb in range(kb_lo, kb_hi + 1):
+        var ev = UInt32(0xFF)
         for i in range(tid, (BK * HD) // 4, FUSED_THREADS):
             var i4 = i * 4
             var jj = i4 // HD
@@ -8573,6 +8847,9 @@ def fused_attn_forward_r2_amma_kernel[HD: Int, TQ: Int, QRES: Bool, PF: Bool, SA
             kv[(c + 1) * VST + jj] = f4[1]
             kv[(c + 2) * VST + jj] = f4[2]
             kv[(c + 3) * VST + jj] = f4[3]
+            comptime if ATTN_AMMA_ADMIT:
+                ev = min(ev, _admit_exp_min[4](f4))
+        var ew = UInt32(0xFF)
         comptime for u in range(RPT):
             var r = tr + u * 16
             var t = t0 + r
@@ -8585,9 +8862,26 @@ def fused_attn_forward_r2_amma_kernel[HD: Int, TQ: Int, QRES: Bool, PF: Bool, SA
                     var cell = _estash_cell(bb, h, t, j, l, nh, s, pos0, key_lo, window)
                     var e = sstash.unsafe_load(cell)
                     w = ftz(identical_div(ftz(e), ftz(stats.unsafe_load(TQ + r))))
+                    comptime if ATTN_AMMA_ADMIT:
+                        ew = min(ew, _admit_exp_min[1](SIMD[DType.float32, 1](w)))
                 wT[jj * WST + r] = w
+        comptime if ATTN_AMMA_ADMIT:
+            ev = _admit_warp_min(ev)
+            ew = _admit_warp_min(ew)
+            if lane == 0:
+                emin[sg] = ev
+                emin[NSG + sg] = ew
         barrier()
         var adm = True
+        comptime if ATTN_AMMA_ADMIT:
+            var bv = UInt32(0xFF)
+            var bw = UInt32(0xFF)
+            comptime for w in range(NSG):
+                bv = min(bv, emin[w])
+                bw = min(bw, emin[NSG + w])
+            adm = exact_ok and (bv + bw) >= UInt32(GEMM_ADMIT_EXP_SUM)
+            if not adm:
+                exact_ok = False
         comptime for q in range(CPS):
             var g = sg * CPS + q
             var fr = g // NFC
@@ -8755,9 +9049,7 @@ def fused_bwd_zdot_estash_amma_kernel[HD: Int, SWZ: Bool = False](
         var bv = UInt32(0xFF)
         comptime for w in range(NSG):
             bv = min(bv, emin[w])
-        # The admission minima above are no longer read (the check arm is
-        # deleted); the kernel admits every window, as it did by default.
-        var adm = True
+        var adm = (bd + bv) >= UInt32(GEMM_ADMIT_EXP_SUM) or not ATTN_AMMA_ADMIT
         comptime for q in range(SPS):
             var f = sg * SPS + q
             var fr = f // NFK
@@ -8816,9 +9108,13 @@ def fused_bwd_zdot_estash_amma_kernel[HD: Int, SWZ: Bool = False](
         # reaches only once its fold is done. The next staging writes `vb`
         # and `emin`, which the fold never reads and whose last readers
         # passed the barrier above. So warps 1-7 stage the next key block
-        # while warp 0 folds. Synchronization only: no operand or order moves.
         # TOMBSTONE: MOJOLEARN_ATTN_ZDOT_AMMA_FOLD_BARRIER (unmeasured Apple opt-in arm) deleted 2026-11-15 by lane/expdel2-34-neural; code recoverable at 1de034c06f.
         # Restore: git apply experiments/removed/MOJOLEARN_ATTN_ZDOT_AMMA_FOLD_BARRIER.patch
+        # RESTORED 2026-11-15 (lane/restore-apple-fast-neural): opt-in arm back, default off, Apple fast only (Andrew: a paused programme's arms are kept).
+        # while warp 0 folds. `-D MOJOLEARN_ATTN_ZDOT_AMMA_FOLD_BARRIER`
+        # restores the barrier. Synchronization only: no operand or order moves.
+        comptime if is_defined["MOJOLEARN_ATTN_ZDOT_AMMA_FOLD_BARRIER"]():
+            barrier()
     if tid < TQ and t0 + tid < l:
         var t = t0 + tid
         var rr = _row_range(t, pos0, key_lo, window, s)
@@ -8842,6 +9138,181 @@ def fused_bwd_zdot_estash_amma_kernel[HD: Int, SWZ: Bool = False](
 
 # TOMBSTONE: MOJOLEARN_ATTN_STASH_ZDOT_AMMA (Apple trial arm: the stash zdot on the matrix unit, M4 measured slower) deleted 2026-11-15 by lane/expdel2-34-neural; code recoverable at f5c6ca76e4.
 # Restore: git apply experiments/removed/MOJOLEARN_ATTN_STASH_ZDOT_AMMA.patch
+# RESTORED 2026-11-15 (lane/restore-apple-fast-neural): opt-in arm back, default off, Apple fast only (Andrew: a paused programme's arms are kept).
+# ===========================================================================
+# THE STASH ZDOT ON APPLE'S MATRIX UNIT (lane/apple-identical-neural,
+# 2026-09-26; `ATTN_BWD_APPLE_MMA`). `fused_bwd_zdot_stash_pf_kernel` with 16
+# query rows and 32 keys per block (ownership only) and BOTH of its per-cell
+# chains on the matrix unit: the score dot q . k and the dy dot dctx . v,
+# each over p = 0 .. 63 from +0.0 with `_step_preflushed`, which on Apple the
+# matrix chain reproduces bit for bit (THE FORWARD ON APPLE'S MATRIX UNIT).
+# The score -> exp -> y lines, the two stashes, the serial z fold and the
+# -0.0 corner are the original's. HD 64, the clean instantiation only.
+# ===========================================================================
+#: Trial only (`-D MOJOLEARN_ATTN_STASH_ZDOT_AMMA`): bit-identical, but on the
+#: M4 at 12 layers x 1 x 2048 it measured SLOWER than the SIMT kernel it
+#: replaces (2119 ms against 1808-1860 ms of zdot per step, per-kernel
+#: timers): that kernel's time is not in its dot products.
+comptime ATTN_BWD_STASH_ZDOT_AMMA = (
+    ATTN_BWD_APPLE_MMA and is_defined["MOJOLEARN_ATTN_STASH_ZDOT_AMMA"]()
+)
+
+
+def fused_bwd_zdot_stash_amma_kernel[HD: Int](
+    zdot: MutPointer[Float32, MutAnyOrigin],
+    corner: MutPointer[Float32, MutAnyOrigin],
+    y_st: MutPointer[Float32, MutAnyOrigin],
+    dy_st: MutPointer[Float32, MutAnyOrigin],
+    q_rope: MutPointer[Float32, MutAnyOrigin],
+    dctx: MutPointer[Float32, MutAnyOrigin],
+    k_cache: MutPointer[Float32, MutAnyOrigin],
+    v_cache: MutPointer[Float32, MutAnyOrigin],
+    amax: MutPointer[Float32, MutAnyOrigin],
+    denom: MutPointer[Float32, MutAnyOrigin],
+    b_in: Int32,
+    l_in: Int32,
+    nh_in: Int32,
+    nkv_in: Int32,
+    s_in: Int32,
+    pos0_in: Int32,
+    key_lo_in: Int32,
+    window_in: Int32,
+    scale_in: Float32,
+):
+    """See THE STASH ZDOT ON APPLE'S MATRIX UNIT."""
+    comptime assert HD == 64, "amma stash zdot: HD 64"
+    comptime TQ = 16
+    comptime BK = 32
+    comptime NSG = FUSED_THREADS // 32
+    comptime RST = TQ + 4
+    comptime KST = HD + 4
+    comptime NFK = BK // 8
+    comptime assert (TQ // 8) * NFK == NSG, "amma stash zdot: one fragment per simdgroup"
+    var qT = stack_allocation[HD * RST, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var dT = stack_allocation[HD * RST, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var kv = stack_allocation[BK * KST, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var ts = stack_allocation[TQ * 33, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var tdy = stack_allocation[TQ * 33, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var mrow = stack_allocation[TQ, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var drow = stack_allocation[TQ, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var b = Int(b_in)
+    var l = Int(l_in)
+    var nh = Int(nh_in)
+    var nkv = Int(nkv_in)
+    var s = Int(s_in)
+    var pos0 = Int(pos0_in)
+    var key_lo = Int(key_lo_in)
+    var window = Int(window_in)
+    var n_rep = nh // nkv
+    var ntb = (l + TQ - 1) // TQ
+    var raw = Int(block_idx.x)
+    var tb = raw % ntb
+    var rest = raw // ntb
+    var h = rest % nh
+    var bb = rest // nh
+    if bb >= b:
+        return
+    var kvh = h // n_rep
+    var tid = Int(thread_idx.x)
+    var sg = tid // 32
+    var lane = tid % 32
+    var qd = lane // 4
+    var frow = (qd & 4) + ((lane // 2) % 4)
+    var fcol = (qd & 2) * 2 + (lane % 2) * 2
+    var fr = sg // NFK
+    var fk = sg % NFK
+    var t0 = tb * TQ
+    var t1 = min(t0 + TQ - 1, l - 1)
+    var r0 = _row_range(t0, pos0, key_lo, window, s)
+    var r1 = _row_range(t1, pos0, key_lo, window, s)
+    var key_tiles = nn18_key_tile_bounds(r0[0],r1[1],s,BK)
+    var kb_lo = key_tiles[0]
+    var kb_hi = key_tiles[1]
+    var kvbase = (bb * nkv + kvh) * s * HD
+    for i in range(tid, TQ * HD, FUSED_THREADS):
+        var r = i // HD
+        var p = i % HD
+        var tt = min(t0 + r, l - 1)
+        var rb = (bb * l + tt) * nh * HD + h * HD + p
+        qT[p * RST + r] = ftz(q_rope.unsafe_load(rb))
+        dT[p * RST + r] = ftz(dctx.unsafe_load(rb))
+    if tid < TQ:
+        var tt = min(t0 + tid, l - 1)
+        var row = (bb * nh + h) * l + tt
+        mrow[tid] = ftz(amax.unsafe_load(row))
+        drow[tid] = ftz(denom.unsafe_load(row))
+    var z = Float32(0.0)
+    for kb in range(kb_lo, kb_hi + 1):
+        for i in range(tid, BK * HD, FUSED_THREADS):
+            var r = i // HD
+            var p = i % HD
+            var j = kb * BK + r
+            var x = Float32(0.0)
+            if j < s:
+                x = ftz(k_cache.unsafe_load(kvbase + j * HD + p))
+            kv[r * KST + p] = x
+        barrier()
+        var acc = _AMMA_M64(0)
+        comptime for p8 in range(HD // 8):
+            var af = _amma_load_t(qT + (8 * p8) * RST + fr * 8, RST)
+            var bf = _amma_load_t(kv + (fk * 8) * KST + 8 * p8, KST)
+            acc = _amma_mma(af, bf, acc)
+        comptime for e in range(2):
+            ts[(fr * 8 + frow) * 33 + fk * 8 + fcol + e] = acc[e]
+        barrier()
+        for i in range(tid, BK * HD, FUSED_THREADS):
+            var r = i // HD
+            var p = i % HD
+            var j = kb * BK + r
+            var x = Float32(0.0)
+            if j < s:
+                x = ftz(v_cache.unsafe_load(kvbase + j * HD + p))
+            kv[r * KST + p] = x
+        barrier()
+        var accd = _AMMA_M64(0)
+        comptime for p8 in range(HD // 8):
+            var af = _amma_load_t(dT + (8 * p8) * RST + fr * 8, RST)
+            var bf = _amma_load_t(kv + (fk * 8) * KST + 8 * p8, KST)
+            accd = _amma_mma(af, bf, accd)
+        comptime for e in range(2):
+            comptime if is_defined["MOJOLEARN_ATTN_SABOTAGE_AMMA"]():
+                tdy[(fr * 8 + frow) * 33 + fk * 8 + fcol + e] = accd[e] * Float32(1.0000001)
+            else:
+                tdy[(fr * 8 + frow) * 33 + fk * 8 + fcol + e] = accd[e]
+        barrier()
+        for i in range(tid, TQ * BK, FUSED_THREADS):
+            var r = i // BK
+            var jj = i % BK
+            var t = t0 + r
+            var j = kb * BK + jj
+            if t < l:
+                var rr = _row_range(t, pos0, key_lo, window, s)
+                if j >= rr[0] and j <= rr[1]:
+                    var stbase = ((bb * nh + h) * l + t) * s
+                    var sc = _pmul(ts[r * 33 + jj], scale_in)
+                    var masked = ftz(sc + Float32(0.0))
+                    var e = ftz(identical_exp(ftz(ftz(masked) - mrow[r])))
+                    var yv = ftz(identical_div(ftz(e), drow[r]))
+                    ts[r * 33 + jj] = yv
+                    y_st.unsafe_store(stbase + j, yv)
+                    var dyv = ftz(tdy[r * 33 + jj])
+                    tdy[r * 33 + jj] = dyv
+                    dy_st.unsafe_store(stbase + j, dyv)
+        barrier()
+        if tid < TQ and t0 + tid < l:
+            var rr = _row_range(t0 + tid, pos0, key_lo, window, s)
+            for jj in range(BK):
+                var j = kb * BK + jj
+                if j >= rr[0] and j <= rr[1]:
+                    z = _step_preflushed(tdy[tid * 33 + jj], ts[tid * 33 + jj], z)
+        barrier()
+    if tid < TQ and t0 + tid < l:
+        var rr = _row_range(t0 + tid, pos0, key_lo, window, s)
+        var row = (bb * nh + h) * l + t0 + tid
+        var zf = ftz(z)
+        if bitcast[DType.uint32](zf) == NEG_ZERO_BITS and rr[1] < s - 1:
+            corner.unsafe_store(0, Float32(1.0))
+        zdot.unsafe_store(row, zf)
 
 
 # TOMBSTONE: MOJOLEARN_IDN_ATTN_SCRATCH_CACHE_OFF (unmeasured old path) deleted 2026-11-15 by lane/expdel2-34-neural; code recoverable at 5f78ca38ed.
@@ -9100,16 +9571,28 @@ def _launch_bwd_stash_tiled_pf[HD: Int, ZSAB: Bool](
     # stays.
     _attn_tick(ctx, on, tk, "bwd_scratch_alloc")
     step_count_launch()
-    comptime zk = fused_bwd_zdot_stash_pf_kernel[HD, TQ, ZSAB]
-    ctx.enqueue_function[zk](
-        zdot.unsafe_ptr(), corner.unsafe_ptr(), y_st.unsafe_ptr(),
-        dy_st.unsafe_ptr(), q_rope.unsafe_ptr(), dctx.unsafe_ptr(),
-        k_cache.unsafe_ptr(), v_cache.unsafe_ptr(), amax.unsafe_ptr(),
-        denom.unsafe_ptr(), Int32(b), Int32(l), Int32(nh), Int32(nkv),
-        Int32(s), Int32(pos0), Int32(key_lo), Int32(window), scale,
-        grid_dim=(b * nh * ((l + TQ - 1) // TQ), 1, 1),
-        block_dim=(FUSED_THREADS, 1, 1),
-    )
+    comptime if ATTN_BWD_STASH_ZDOT_AMMA and HD == 64 and not ZSAB:
+        comptime zka = fused_bwd_zdot_stash_amma_kernel[HD]
+        ctx.enqueue_function[zka](
+            zdot.unsafe_ptr(), corner.unsafe_ptr(), y_st.unsafe_ptr(),
+            dy_st.unsafe_ptr(), q_rope.unsafe_ptr(), dctx.unsafe_ptr(),
+            k_cache.unsafe_ptr(), v_cache.unsafe_ptr(), amax.unsafe_ptr(),
+            denom.unsafe_ptr(), Int32(b), Int32(l), Int32(nh), Int32(nkv),
+            Int32(s), Int32(pos0), Int32(key_lo), Int32(window), scale,
+            grid_dim=(b * nh * ((l + 15) // 16), 1, 1),
+            block_dim=(FUSED_THREADS, 1, 1),
+        )
+    else:
+        comptime zk = fused_bwd_zdot_stash_pf_kernel[HD, TQ, ZSAB]
+        ctx.enqueue_function[zk](
+            zdot.unsafe_ptr(), corner.unsafe_ptr(), y_st.unsafe_ptr(),
+            dy_st.unsafe_ptr(), q_rope.unsafe_ptr(), dctx.unsafe_ptr(),
+            k_cache.unsafe_ptr(), v_cache.unsafe_ptr(), amax.unsafe_ptr(),
+            denom.unsafe_ptr(), Int32(b), Int32(l), Int32(nh), Int32(nkv),
+            Int32(s), Int32(pos0), Int32(key_lo), Int32(window), scale,
+            grid_dim=(b * nh * ((l + TQ - 1) // TQ), 1, 1),
+            block_dim=(FUSED_THREADS, 1, 1),
+        )
     _attn_tick(ctx, on, tk, "bwd_zdot_stash_pf")
     var kv_blocks = b * nkv * ((s + 63) // 64)
     step_count_launch()
@@ -9260,16 +9743,28 @@ def _launch_bwd_stash_zdq_pf[HD: Int](
                     " compiled on a -D MOJOLEARN_ATTN_ARM_TRIAL=1 build only"
                 )
         else:
-            comptime zkc = fused_bwd_zdot_stash_pf_kernel[HD, TQ, False]
-            step_count_launch()
-            ctx.enqueue_function[zkc](
-                zdot.unsafe_ptr(), corner.unsafe_ptr(), y_st.unsafe_ptr(),
-                dy_st.unsafe_ptr(), q_rope.unsafe_ptr(), dctx.unsafe_ptr(),
-                k_cache.unsafe_ptr(), v_cache.unsafe_ptr(), amax.unsafe_ptr(),
-                denom.unsafe_ptr(), Int32(b), Int32(l), Int32(nh), Int32(nkv),
-                Int32(s), Int32(pos0), Int32(key_lo), Int32(window), scale,
-                grid_dim=(z_blocks, 1, 1), block_dim=(FUSED_THREADS, 1, 1),
-            )
+            comptime if ATTN_BWD_STASH_ZDOT_AMMA and HD == 64:
+                comptime zka = fused_bwd_zdot_stash_amma_kernel[HD]
+                step_count_launch()
+                ctx.enqueue_function[zka](
+                    zdot.unsafe_ptr(), corner.unsafe_ptr(), y_st.unsafe_ptr(),
+                    dy_st.unsafe_ptr(), q_rope.unsafe_ptr(), dctx.unsafe_ptr(),
+                    k_cache.unsafe_ptr(), v_cache.unsafe_ptr(), amax.unsafe_ptr(),
+                    denom.unsafe_ptr(), Int32(b), Int32(l), Int32(nh), Int32(nkv),
+                    Int32(s), Int32(pos0), Int32(key_lo), Int32(window), scale,
+                    grid_dim=(b * nh * ((l + 15) // 16), 1, 1), block_dim=(FUSED_THREADS, 1, 1),
+                )
+            else:
+                comptime zkc = fused_bwd_zdot_stash_pf_kernel[HD, TQ, False]
+                step_count_launch()
+                ctx.enqueue_function[zkc](
+                    zdot.unsafe_ptr(), corner.unsafe_ptr(), y_st.unsafe_ptr(),
+                    dy_st.unsafe_ptr(), q_rope.unsafe_ptr(), dctx.unsafe_ptr(),
+                    k_cache.unsafe_ptr(), v_cache.unsafe_ptr(), amax.unsafe_ptr(),
+                    denom.unsafe_ptr(), Int32(b), Int32(l), Int32(nh), Int32(nkv),
+                    Int32(s), Int32(pos0), Int32(key_lo), Int32(window), scale,
+                    grid_dim=(z_blocks, 1, 1), block_dim=(FUSED_THREADS, 1, 1),
+                )
     step_count_sync()
     ctx.synchronize()
     if zsched == ATTN_ARM_BWD_ZLAG:
@@ -10741,6 +11236,83 @@ def fused_backward_launch_estash_report(
 # RESTORED 2026-11-15 by lane/restore-run-arms-neural: RUN #3 of docs/plans/DELETED_ARMS_WORTH_RUNNING_2026-11-15.md
 # brings the fused v2 fold back (reverse of a803ea45ba, the ATTN_FOLD_V2 parts only; the estash recompute stub that
 # commit's context carried stays deleted).
+def fused_backward_launch_erecomp_report(
+    ctx: DeviceContext,
+    mut zdot: DeviceBuffer[DType.float32],
+    mut dq: DeviceBuffer[DType.float32],
+    mut dk: DeviceBuffer[DType.float32],
+    mut dv: DeviceBuffer[DType.float32],
+    mut q_rope: DeviceBuffer[DType.float32],
+    mut dctx: DeviceBuffer[DType.float32],
+    mut k_cache: DeviceBuffer[DType.float32],
+    mut v_cache: DeviceBuffer[DType.float32],
+    mut amax: DeviceBuffer[DType.float32],
+    mut denom: DeviceBuffer[DType.float32],
+    b: Int,
+    l: Int,
+    nh: Int,
+    nkv: Int,
+    hd: Int,
+    s: Int,
+    pos0: Int,
+    key_lo: Int,
+    window: Int,
+    scale: Float32,
+    mut repaired: Int,
+) raises -> Int:
+    """ATTN_APPLE_ESTASH_RECOMPUTE's backward (lane/neural-apple2): the
+    column default's estash forward into per-call scratch (`e`, row maxima,
+    denominators, context), then the column default's estash backward over
+    that `e` and those denominators. When the default word does not run the
+    estash backward at this head_dim, or the recompute forward does not end
+    FUSED_RAN (a regime refusal or the corner flag), the plain launcher runs,
+    exactly the denied process's old path. `amax` and `denom` (the caller's
+    forward row scalars) are read only by that fallback."""
+    repaired = 0
+    comptime if ATTN_APPLE_ESTASH_RECOMPUTE:
+        var arm = ATTN_ARM_DEFAULT
+        if hd == ATTN_STASH_HD and fused_attention_arm_estash_runs(arm):
+            var cells = b * nh * l * s
+            var rows = b * nh * l
+            step_count_device_alloc()
+            var kept = ctx.enqueue_create_buffer[DType.float32](cells)
+            step_count_device_alloc()
+            var ctx_s = ctx.enqueue_create_buffer[DType.float32](b * l * nh * hd)
+            step_count_device_alloc()
+            var amax_s = ctx.enqueue_create_buffer[DType.float32](rows)
+            step_count_device_alloc()
+            var denom_s = ctx.enqueue_create_buffer[DType.float32](rows)
+            var fran = 0
+            var kept_cells = 0
+            var fs = fused_forward_launch_estash_ran(
+                ctx, ctx_s, amax_s, denom_s, q_rope, k_cache, v_cache, kept,
+                b, l, nh, nkv, hd, s, pos0, key_lo, window, scale, arm, fran,
+                kept_cells,
+            )
+            if fs == FUSED_RAN and kept_cells == cells:
+                var bran = 0
+                var st = fused_backward_launch_estash_report(
+                    ctx, zdot, dq, dk, dv, q_rope, dctx, k_cache, v_cache,
+                    amax_s, denom_s, kept, kept_cells, b, l, nh, nkv, hd, s,
+                    pos0, key_lo, window, scale, arm, bran, repaired,
+                )
+                # The estash backward waits before it returns; the scratch
+                # is released after it.
+                _ = kept^
+                _ = ctx_s^
+                _ = amax_s^
+                _ = denom_s^
+                return st
+            step_count_sync()
+            ctx.synchronize()
+            _ = kept^
+            _ = ctx_s^
+            _ = amax_s^
+            _ = denom_s^
+    return fused_backward_launch(
+        ctx, zdot, dq, dk, dv, q_rope, dctx, k_cache, v_cache, amax, denom,
+        b, l, nh, nkv, hd, s, pos0, key_lo, window, scale,
+    )
 
 
 # ===========================================================================
