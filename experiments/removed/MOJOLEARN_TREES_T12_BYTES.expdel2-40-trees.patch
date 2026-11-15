@@ -1,0 +1,620 @@
+diff --git a/extratrees/impl/decisiontree/batched_levelalgo/builder.mojo b/extratrees/impl/decisiontree/batched_levelalgo/builder.mojo
+index a2fd7e45d7..90abf5a982 100644
+--- a/extratrees/impl/decisiontree/batched_levelalgo/builder.mojo
++++ b/extratrees/impl/decisiontree/batched_levelalgo/builder.mojo
+@@ -5,9 +5,7 @@
+ from std.collections import Array
+ from core.tree_math import tree_log
+ from ensemble.tree_moments import balanced_mse_gain, et_leaf_moment_host
+-# TOMBSTONE: MOJOLEARN_TREES_T11_LEVELS, MOJOLEARN_TREES_T14_EXACT, MOJOLEARN_TREES_T12_BYTES, MOJOLEARN_TREES_T13_BYTES (T11/T14_EXACT folded to their constants here; T12/T13 byte budgets read their default constants) deleted 2026-11-15 by lane/expdel2-40-trees; code recoverable at 6641db4b18.
+-# Restore: git apply experiments/removed/MOJOLEARN_TREES_T11_LEVELS.expdel2-40-trees.patch; experiments/removed/MOJOLEARN_TREES_T14_EXACT.expdel2-40-trees.patch; experiments/removed/MOJOLEARN_TREES_T12_BYTES.expdel2-40-trees.patch; experiments/removed/MOJOLEARN_TREES_T13_BYTES.expdel2-40-trees.patch
+-from ensemble.tree_identical_ideas import T02, T04, T05, T06, T07, T12, T12_BYTES, T13, T13_BYTES, T14, C48
++from ensemble.tree_identical_ideas import T02, T04, T05, T06, T07, T11, T11_LEVELS, T12, T12_BYTES, T13, T13_BYTES, T14, T14_EXACT, C48
+ from std.memory import bitcast, unsafe_memcpy
+ 
+ from ensemble.instruments import StageTimes
+@@ -1331,7 +1329,7 @@ def _exact_candidate(
+         metric = gain_per_split(
+             left_p, total_p, 0, g_ncls, g_len, g_left, g_msl
+         )
+-        comptime if T14:
++        comptime if T14 and not T14_EXACT:
+             if not is_classification and criterion == CRITERION_MSE and not weighted_reg:
+                 metric = max(Float32(0),ftz(Float32(2)*balanced_mse_gain(Float32(cell.n_total),Float32(cell.n_left),Float32(acc_total[0]),Float32(acc_left[0]))))
+         num = cell.gini_num
+@@ -1444,7 +1442,7 @@ def set_leaf_predictions_exact_host(
+         if not tree.sparsetree[node_id].IsLeaf():
+             continue
+         var rng = node_instances[node_id]
+-        comptime if T14:
++        comptime if T14 and not T14_EXACT:
+             if not is_classification and row_w_addr == 0:
+                 tree.vector_leaf[node_id*k] = et_leaf_moment_host(dataset.row_ids,labels_q,Int(rng.begin),Int(rng.count),inv_scale)
+                 continue
+@@ -2072,7 +2070,7 @@ def _score_to_candidate_body[WEIGHTED: Bool, WEIGHTED_REG: Bool = False](
+                     g_left,
+                     g_msl,
+                 )
+-                comptime if T14 and not WEIGHTED_REG:
++                comptime if T14 and not T14_EXACT and not WEIGHTED_REG:
+                     if criterion_in == CRITERION_MSE:
+                         cand_metric[unsafe_offset=idx] = max(Float32(0),ftz(Float32(2)*balanced_mse_gain(
+                             Float32(in_n_total[unsafe_offset=idx]),Float32(in_n_left[unsafe_offset=idx]),
+@@ -2427,7 +2425,7 @@ def small_node_raw_split_kernel[CLASSIFICATION: Bool](
+         gain = gain_per_split(histogram.unsafe_address_space_cast[AddressSpace.GENERIC]().unsafe_origin_cast[MutAnyOrigin](),
+             histogram.unsafe_offset(32).unsafe_address_space_cast[AddressSpace.GENERIC]().unsafe_origin_cast[MutAnyOrigin](),
+             0,Int(n_acc),Int32(length),left_count,min_samples_leaf)
+-        comptime if T14 and not CLASSIFICATION:
++        comptime if T14 and not T14_EXACT and not CLASSIFICATION:
+             if criterion == CRITERION_MSE:
+                 gain = max(Float32(0),ftz(Float32(2)*balanced_mse_gain(
+                     Float32(length),Float32(left_count),
+@@ -2591,7 +2589,7 @@ def transpose_to_row_major_kernel(
+ #: split the rows the same way (code(x) <= c  <=>  x <= q[c]). Measured on
+ #: the M4 at 1M rows: istellareg 86 -> 67 s, year 23.2 -> 18.0 s, RMSE equal
+ #: to float X (8-bit codes from 1024 sampled rows, or thresholds drawn in
+-#: code space, both moved RMSE).
++#: code space, both moved RMSE). `-D MOJOLEARN_ET_BINNED_OFF` keeps float X.
+ #: The IDENTICAL arm of this search (`MOJOLEARN_IDN_ET_BINNED_U16`, fam2-forests
+ #: 2026-10-04) was a measured loser (2026-10-05 full-harness A/B: NVIDIA 1.064x,
+ #: AMD 1.025x slower, RMSE worse on Istella and Year; evidence
+@@ -2601,15 +2599,16 @@ def transpose_to_row_major_kernel(
+ comptime ET_BINNED_REG = (
+     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+     and TARGET_HAS_APPLE_GPU
++    and not is_defined["MOJOLEARN_ET_BINNED_OFF"]()
+ )
+-# TOMBSTONE: MOJOLEARN_ET_BINNED_OFF (old path of the FAST Apple binned default, no A/B recorded) deleted 2026-11-15 by lane/expdel2-40-trees; code recoverable at 6641db4b18.
+-# Restore: git apply experiments/removed/MOJOLEARN_ET_BINNED_OFF.patch
+ comptime ET_BINS = ET_QSTRIDE
+ comptime ET_CODE = DType.uint16
+-#: FAST + Apple: binning applies at every width (the n_cols >= 64 gate was
+-#: removed as benchmark-tuned on 2026-10-04).
+-# TOMBSTONE: MOJOLEARN_LEGACY_NARROW_ET_BINNED (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-40-trees; code recoverable at 6641db4b18.
+-# Restore: git apply experiments/removed/MOJOLEARN_LEGACY_NARROW_ET_BINNED.patch
++#: FAST + Apple: LEGACY, default OFF: binning was taken only at n_cols >= 64, chosen
++#: between taxi (16 columns, slower) and istella (220, faster). Removed as
++#: benchmark-tuned on 2026-10-04: binning now applies at every width;
++#: UNMEASURED.
++comptime ET_BINNED_LEGACY_NARROW = is_defined["MOJOLEARN_LEGACY_NARROW_ET_BINNED"]()
++comptime ET_BINNED_MIN_COLS = 64 if ET_BINNED_LEGACY_NARROW else 1
+ comptime ET_CODE_TILE = 8
+ """Features per block for the code passes (M4 istellareg: 4 -> 53 s, 8 -> 49 s, 16 -> 67 s, 32 -> 79 s)."""
+ 
+@@ -3035,8 +3034,8 @@ struct DeviceDataset(Movable):
+ 
+     def search_data_ptr(mut self) -> MutPointer[Float32, MutAnyOrigin]:
+         """The matrix the range and score passes read."""
+-        # TOMBSTONE: MOJOLEARN_ET_ROW_MAJOR (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-40-trees; code recoverable at 6641db4b18.
+-        # Restore: git apply experiments/removed/MOJOLEARN_ET_ROW_MAJOR.patch
++        comptime if ET_ROW_MAJOR:
++            return self.d_data_rm.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+         return self.d_data.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+ 
+ 
+@@ -3788,7 +3787,9 @@ DEVIATION 203's partition assumes that tiling: two copies that drifted would
+ put a block's rows somewhere its scatter does not write.
+ 
+ The value comes from `_device_tpb()`: 128 (cuML's `TPB_DEFAULT`) unless a
+-64-lane wavefront, where it is 512 (DEVIATION 1943).
++measurement arm overrides it with `-D MOJOLEARN_ET_TPB_512=1`
++(tools/et_profile_leg.sh builds those arms
++side by side with the default on a rented box).
+ """
+ 
+ 
+@@ -3841,15 +3842,30 @@ def _device_tpb() -> Int:
+     must alternate arms inside one window, not assume independence.
+     ==================================================================
+     """
+-    # TOMBSTONE: MOJOLEARN_AFT_F06, MOJOLEARN_ET_TPB_1024, MOJOLEARN_ET_TPB_512, MOJOLEARN_ET_TPB_128 (unmeasured opt-in arms; the width arms above are history) deleted 2026-11-15 by lane/expdel2-40-trees; code recoverable at 6641db4b18.
+-    # Restore: git apply experiments/removed/MOJOLEARN_AFT_F06.patch; experiments/removed/MOJOLEARN_ET_TPB_1024.patch; experiments/removed/MOJOLEARN_ET_TPB_512.patch; experiments/removed/MOJOLEARN_ET_TPB_128.patch
++    # AFT F06: two 32-lane SIMD groups per block reduces the live score
++    # reduction footprint. Keep range/partition work-map geometry coupled
++    # through DEVICE_TPB, as the stable scatter consumes that same map.
++    # This is a new 64-thread arm, not the rejected Apple 256-thread retry
++    # recorded above. experiments/apple_fast_trees/IDEAS.md; no quality or
++    # speed evidence; opt-in and uncompiled/unverified/unmeasured.
++    if (
++        GLOBAL_NUMERIC_MODE == NUMERIC_FAST
++        and TARGET_HAS_APPLE_GPU
++        and is_defined["MOJOLEARN_AFT_F06"]()
++    ):
++        return 64
++    if is_defined["MOJOLEARN_ET_TPB_1024"]():
++        return 1024
++    if is_defined["MOJOLEARN_ET_TPB_512"]():
++        return 512
++    if is_defined["MOJOLEARN_ET_TPB_128"]():
++        return 128
+     return 128 if WARP_SIZE <= 32 else 512
+ 
+ comptime DEVICE_MAX_ACC = _device_max_acc()
+ """Widest per-cell class accumulator the score kernel's shared memory admits
+ (DEVIATION 172). One definition, for the same reason DEVICE_TPB is one.
+-32; `-D MOJOLEARN_ET_MAX_ACC_32` keeps the fixed full-width score kernel (the
+-reference arm of extratrees/tools/check_accumulator_dispatch.sh). Normal classification
++32 unless a DEVIATION 2021 measurement arm narrows it. Normal classification
+ fits dispatch to 4/8/16/32-wide score kernels without narrowing this limit."""
+ 
+ 
+@@ -3902,8 +3918,12 @@ def _device_max_acc() -> Int:
+     Search tiling and block-size tuning remain independent opt-in arms.
+     ==================================================================
+     """
+-    # TOMBSTONE: MOJOLEARN_ET_MAX_ACC_4, MOJOLEARN_ET_MAX_ACC_8, MOJOLEARN_ET_MAX_ACC_16 (unmeasured opt-in arms; the paragraph above is history) deleted 2026-11-15 by lane/expdel2-40-trees; code recoverable at 6641db4b18.
+-    # Restore: git apply experiments/removed/MOJOLEARN_ET_MAX_ACC_4.patch; experiments/removed/MOJOLEARN_ET_MAX_ACC_8.patch; experiments/removed/MOJOLEARN_ET_MAX_ACC_16.patch
++    if is_defined["MOJOLEARN_ET_MAX_ACC_4"]():
++        return 4
++    if is_defined["MOJOLEARN_ET_MAX_ACC_8"]():
++        return 8
++    if is_defined["MOJOLEARN_ET_MAX_ACC_16"]():
++        return 16
+     return 32
+ 
+ comptime FOREST_SAB_NONE = Int32(0)
+@@ -3916,26 +3936,30 @@ comptime FOREST_SAB_SHARED_ROW_BASE = Int32(2)
+ 0, so their partitions overwrite each other. The forest must move -- this is
+ the gate watching that the slot offsets are what isolate the trees."""
+ 
+-# TOMBSTONE: MOJOLEARN_ET_ROW_MAJOR (unmeasured opt-in arm: the swapped (feature-major) search grid) deleted 2026-11-15 by lane/expdel2-40-trees; code recoverable at 6641db4b18.
+-# Restore: git apply experiments/removed/MOJOLEARN_ET_ROW_MAJOR.patch
++comptime ET_ROW_MAJOR = (
++    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
++    and is_defined["MOJOLEARN_ET_ROW_MAJOR"]()
++)
+ 
+-# TOMBSTONE: MOJOLEARN_ET_TILED_SEARCH_OFF (old path of the measured Apple default, no A/B recorded for the old path) deleted 2026-11-15 by lane/expdel2-40-trees; code recoverable at 6641db4b18.
+-# Restore: git apply experiments/removed/MOJOLEARN_ET_TILED_SEARCH_OFF.patch
+-comptime ET_TILED_SEARCH_APPLE_DEFAULT = TARGET_HAS_APPLE_GPU
++comptime ET_TILED_SEARCH_APPLE_DEFAULT = (
++    TARGET_HAS_APPLE_GPU
++    and not is_defined["MOJOLEARN_ET_TILED_SEARCH_OFF"]()
++)
+ """Apple FAST default for the two tiled search kernels below. Apple M4, 1M
+ rows, 100 trees, alternating processes, model hashes unchanged: taxireg
+ (k = 16 of 16) 20.7 -> 6.4 s (0.310), Istella-S regression (k = 220 of 220)
+ 182.6 -> 87.6 s (0.480); classification (k = 4 of 16, 15 of 220) takes the
+-original kernels through `ensure_row_major`'s `2k >= n` gate, 0.991 both."""
++original kernels through `ensure_row_major`'s `2k >= n` gate, 0.991 both.
++`-D MOJOLEARN_ET_TILED_SEARCH_OFF` turns both off on Apple."""
+ 
+ comptime ET_TILED_SEARCH_APPLE_IDENTICAL = (
+     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+     and ET_TILED_SEARCH_APPLE_DEFAULT
++    and not (
++        is_defined["MOJOLEARN_ET_TILED_SEARCH_IDENTICAL_OFF"]()
++        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
++    )
+ )
+-# TOMBSTONE: MOJOLEARN_ET_TILED_SEARCH_IDENTICAL_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-40-trees; code recoverable at 6641db4b18.
+-# Restore: git apply experiments/removed/MOJOLEARN_ET_TILED_SEARCH_IDENTICAL_OFF.patch
+-# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old-path umbrella term folded to False here) deleted 2026-11-15 by lane/expdel2-40-trees; code recoverable at 6641db4b18.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-40-trees.patch
+ """Apple IDENTICAL (trees-apple2, 2026-09-28): the two tiled search kernels
+ under IDENTICAL too, bit-inert by construction. The range kernel folds in
+ range_key space under IDENTICAL (the one-feature kernel's IDENTICAL arm),
+@@ -3943,37 +3967,47 @@ so the same min, max and NaN count; the regression score kernel publishes
+ the same integer counts and label sums (integers, any order). Same
+ `2k >= n_cols` gate (`ensure_row_major`), so only fits that sample at least
+ half the features (the regressors at max_features 1.0) take them. Never
+-binned codes: `ET_BINNED_REG` stays FAST."""
++binned codes: `ET_BINNED_REG` stays FAST. `-D
++MOJOLEARN_ET_TILED_SEARCH_IDENTICAL_OFF` keeps the one-feature kernels."""
+ 
+ comptime IDN_ET_TILED_SEARCH = (
+     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+     and not TARGET_HAS_APPLE_GPU
++    and not (
++        is_defined["MOJOLEARN_IDN_ET_TILED_SEARCH_OFF"]()
++        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
++    )
+ )
+-# TOMBSTONE: MOJOLEARN_IDN_ET_TILED_SEARCH_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-40-trees; code recoverable at 6641db4b18.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_ET_TILED_SEARCH_OFF.patch
+-# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old-path umbrella term folded to False here) deleted 2026-11-15 by lane/expdel2-40-trees; code recoverable at 6641db4b18.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-40-trees.patch
+ """fam-forests (2026-10-04), IDENTICAL on NVIDIA and AMD: the two tiled
+ search kernels Apple IDENTICAL already takes (`ET_TILED_SEARCH_APPLE_IDENTICAL`
+ above, the same bit-inert argument: a key-space range fold, integer counts
+ and label sums). A fit that samples at least half its features (the
+ regressors at max_features 1.0) reads each row id and quantized label once
+ per `ET_FEATURE_TILE` features from a row-major X instead of once per
+-feature from a column gather. The host column is untouched (same cells)."""
++feature from a column gather. The host column is untouched (same cells).
++`-D MOJOLEARN_IDN_ET_TILED_SEARCH_OFF` keeps the one-feature kernels."""
+ 
+-# TOMBSTONE: MOJOLEARN_ET_RANGE_TILED (unmeasured opt-in arm (force-on off Apple); the tiled range kernel stays the Apple and IDENTICAL default) deleted 2026-11-15 by lane/expdel2-40-trees; code recoverable at 6641db4b18.
+-# Restore: git apply experiments/removed/MOJOLEARN_ET_RANGE_TILED.patch
+ comptime ET_RANGE_TILED = (
+     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+-    and ET_TILED_SEARCH_APPLE_DEFAULT
++    and (
++        is_defined["MOJOLEARN_ET_RANGE_TILED"]()
++        or ET_TILED_SEARCH_APPLE_DEFAULT
++    )
+ ) or ET_TILED_SEARCH_APPLE_IDENTICAL or IDN_ET_TILED_SEARCH
+ """FAST experiment: the range pass reads a row-major X with up to
+ `ET_FEATURE_TILE` sampled features per block
+ (`node_feature_range_tiled_kernel`)."""
+ 
+-# TOMBSTONE: MOJOLEARN_AFCL_T09 (never-run Apple FAST programme card) deleted 2026-11-15 by lane/expdel2-40-trees; code recoverable at 6641db4b18.
+-# Restore: git apply experiments/removed/MOJOLEARN_AFCL_T09.patch
+-comptime ET_FEATURE_TILE = 16
++# AFCL-T09: eight sampled features per task halves the private range/score
++# tile footprint and admits more independent tasks on Apple. Every selected
++# feature keeps its RNG identity and full row set; this changes no threshold.
++# NEVER RUN — PENDING MEASUREMENT; uncompiled/unverified; default OFF.
++comptime AFCL_T09 = (
++    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
++    and TARGET_HAS_APPLE_GPU
++    and is_defined["MOJOLEARN_AFCL_T09"]()
++)
++comptime ET_FEATURE_TILE = 8 if AFCL_T09 else 16
+ 
+ comptime ET_SPLIT_REDUCE_ONE_BLOCK = GLOBAL_NUMERIC_MODE != NUMERIC_FAST
+ # T07: 128 lanes, all candidate columns in strided lanes; existing exact
+@@ -3991,24 +4025,26 @@ order (exact key, then DEVIATION 463's keyed tie), so one block's grid-stride
+ fold picks the node's split that any arrival order of a correct merge picks:
+ the same bits on every other column. FAST keeps `ceildiv(k, TPB)` blocks."""
+ 
+-# TOMBSTONE: MOJOLEARN_ET_SCORE_TILED (unmeasured opt-in arm (force-on off Apple); the tiled score kernel stays the Apple and IDENTICAL default) deleted 2026-11-15 by lane/expdel2-40-trees; code recoverable at 6641db4b18.
+-# Restore: git apply experiments/removed/MOJOLEARN_ET_SCORE_TILED.patch
+ comptime ET_SCORE_TILED = (
+     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+-    and ET_TILED_SEARCH_APPLE_DEFAULT
++    and (
++        is_defined["MOJOLEARN_ET_SCORE_TILED"]()
++        or ET_TILED_SEARCH_APPLE_DEFAULT
++    )
+ ) or ET_TILED_SEARCH_APPLE_IDENTICAL or IDN_ET_TILED_SEARCH
+ """FAST experiment: the REGRESSION score pass reads a row-major X with up to
+ `ET_FEATURE_TILE` sampled features per block
+ (`node_feature_score_reg_tiled_kernel`)."""
+ 
+-comptime ET_RM_DATA = ET_RANGE_TILED or ET_SCORE_TILED
++comptime ET_RM_DATA = ET_ROW_MAJOR or ET_RANGE_TILED or ET_SCORE_TILED
+ """FAST experiment: a row-major copy of X feeds the range and score passes,
+ whose grids put the feature slot on the fast axis so the blocks reading
+ one row chunk's features run together and share its cache lines."""
+ 
+-# TOMBSTONE: MOJOLEARN_ET_RM_NARROW, MOJOLEARN_ET_RM_NARROW_OFF (unmeasured opt-in arm and its old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-40-trees; code recoverable at 6641db4b18.
+-# Restore: git apply experiments/removed/MOJOLEARN_ET_RM_NARROW.patch; experiments/removed/MOJOLEARN_ET_RM_NARROW_OFF.patch
+-comptime ET_RM_NARROW = TARGET_HAS_APPLE_GPU
++comptime ET_RM_NARROW = is_defined["MOJOLEARN_ET_RM_NARROW"]() or (
++    TARGET_HAS_APPLE_GPU
++    and not is_defined["MOJOLEARN_ET_RM_NARROW_OFF"]()
++)
+ """Apple, both modes (trees-apple2, 2026-09-28): `ensure_row_major` also
+ builds the row-major copy when one row's floats fit a 64-byte line
+ (`n_cols <= 16`) and the fit samples at least a quarter of the features,
+@@ -4016,13 +4052,16 @@ so a classifier sampling k = 4 of 16 (taxi) takes the tiled range kernel.
+ The range kernel's cells are the same min/max/NaN counts either way.
+ M4 IDENTICAL (steward 1790610860810, always-on arm): ExtraTreesClassifier
+ taxi 3904 -> 3745 ms, same hash; RandomTreesEmbedding (k = 1) 469 -> 1086
+-ms, hence the quarter gate."""
++ms, hence the quarter gate. `-D MOJOLEARN_ET_RM_NARROW_OFF` turns it off."""
+ 
+-# TOMBSTONE: MOJOLEARN_ET_RM_LINE_HW_OFF (old path (the 64-byte line), no A/B recorded) deleted 2026-11-15 by lane/expdel2-40-trees; code recoverable at 6641db4b18.
+-# Restore: git apply experiments/removed/MOJOLEARN_ET_RM_LINE_HW_OFF.patch
+-# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old-path umbrella term folded to False here) deleted 2026-11-15 by lane/expdel2-40-trees; code recoverable at 6641db4b18.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-40-trees.patch
+-comptime ET_RM_LINE_BYTES = 128
++comptime ET_RM_LINE_BYTES = (
++    64
++    if (
++        is_defined["MOJOLEARN_ET_RM_LINE_HW_OFF"]()
++        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
++    )
++    else 128
++)
+ """lane/no-dim-idn (2026-10-04): the line `ET_RM_NARROW` compares a row
+ against. It was a literal 64 bytes, i.e. `n_cols <= 16`, exactly the board's
+ taxi width. It is now the cache line of the targets this arm runs on: 128
+@@ -4031,32 +4070,48 @@ a row of up to 32 float32 columns is one line fetch however many of its
+ features are sampled, and the quarter gate (`4k >= n_cols`, from the
+ RandomTreesEmbedding k = 1 slowdown) still bounds the wasted bytes per line
+ at three quarters at any width. Bit-inert: the range cells are the same
+-either way."""
+-# TOMBSTONE: MOJOLEARN_LEGACY_NARROW_ET_RM (old path, A/B owed but never run (EXP:1330)) deleted 2026-11-15 by lane/expdel2-40-trees; code recoverable at 6641db4b18.
+-# Restore: git apply experiments/removed/MOJOLEARN_LEGACY_NARROW_ET_RM.patch
+-comptime ET_RM_NARROW_GENERAL = GLOBAL_NUMERIC_MODE == NUMERIC_FAST
++either way. `-D MOJOLEARN_ET_RM_LINE_HW_OFF` (and `MOJOLEARN_IDN_ALL_OFF`)
++restore 64 (A/B arm B)."""
++comptime ET_RM_NARROW_GENERAL = (
++    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
++    and not is_defined["MOJOLEARN_LEGACY_NARROW_ET_RM"]()
++)
+ """lane apple-fast-no-narrow-2 (2026-10-04): FAST drops the quarter gate
+-(see `ensure_row_major`); IDENTICAL keeps it, over main's ET_RM_LINE_BYTES line."""
++(see `ensure_row_major`); IDENTICAL keeps it, over main's ET_RM_LINE_BYTES line. `-D
++MOJOLEARN_LEGACY_NARROW_ET_RM` restores the quarter gate in FAST."""
+ 
+ 
+ @always_inline
+ def search_grid(row_blocks: Int, k: Int) -> Tuple[Int, Int, Int]:
+-    """The range/score grid: (row blocks, features)."""
+-    # TOMBSTONE: MOJOLEARN_ET_ROW_MAJOR (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-40-trees; code recoverable at 6641db4b18.
+-    # Restore: git apply experiments/removed/MOJOLEARN_ET_ROW_MAJOR.patch
++    """The range/score grid: (row blocks, features), swapped under
++    ET_ROW_MAJOR."""
++    comptime if ET_ROW_MAJOR:
++        return (k, row_blocks, 1)
+     return (row_blocks, k, 1)
+ 
+ 
+-# TOMBSTONE: MOJOLEARN_AFT_F07 (never-run Apple FAST programme card) deleted 2026-11-15 by lane/expdel2-40-trees; code recoverable at 6641db4b18.
+-# Restore: git apply experiments/removed/MOJOLEARN_AFT_F07.patch
+-# TOMBSTONE: MOJOLEARN_ET_PART_ROWS, MOJOLEARN_ET_PART_ROWS_OFF (force-on knob off Apple and the old path of the Apple FAST default (promoted on Apple M3 Ultra only, aft-ab-etpr; NVIDIA/AMD FAST A/B owed, FAST is Apple only)) deleted 2026-11-15 by lane/expdel2-40-trees; code recoverable at 6641db4b18.
+-# Restore: git apply experiments/removed/MOJOLEARN_ET_PART_ROWS.patch; experiments/removed/MOJOLEARN_ET_PART_ROWS_OFF.patch
+-# TOMBSTONE: MOJOLEARN_IDN_ET_PART_ROWS_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-40-trees; code recoverable at 6641db4b18.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_ET_PART_ROWS_OFF.patch
+-# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old-path umbrella term folded to False here) deleted 2026-11-15 by lane/expdel2-40-trees; code recoverable at 6641db4b18.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-40-trees.patch
+-comptime PART_ROWS_PER_THREAD = SEARCH_ROWS_PER_THREAD if (
+-    (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU)
++# AFT F07: double the partition's rows/lane relative to the search work
++# budget. At the shipped Apple geometry this is 4096 rows/block, reducing
++# count/scan/scatter workgroup count without changing stable row order.
++# The existing separate search/partition workload maps handle unequal tiles.
++# experiments/apple_fast_trees/IDEAS.md; opt-in, no quality/speed evidence.
++comptime AFT_F07 = (
++    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
++    and TARGET_HAS_APPLE_GPU
++    and is_defined["MOJOLEARN_AFT_F07"]()
++)
++comptime PART_ROWS_PER_THREAD = 2 * SEARCH_ROWS_PER_THREAD if AFT_F07 else (
++    SEARCH_ROWS_PER_THREAD
++    if (
++        GLOBAL_NUMERIC_MODE == NUMERIC_FAST
++        and (
++            is_defined["MOJOLEARN_ET_PART_ROWS"]()
++            or (
++                TARGET_HAS_APPLE_GPU
++                and not is_defined["MOJOLEARN_ET_PART_ROWS_OFF"]()
++            )
++        )
++    )
+     or (
+         # fam-forests (2026-10-04), `IDN_ET_PART_ROWS`: IDENTICAL on NVIDIA
+         # and AMD. Those vendors search at 64 rows per thread and partitioned
+@@ -4068,10 +4123,16 @@ comptime PART_ROWS_PER_THREAD = SEARCH_ROWS_PER_THREAD if (
+         # thread keeps its rows in order after the previous thread, blocks
+         # in order), so `row_ids` is the same array as at ROWS == 1: no bit
+         # moves and the host column is untouched.
++        # `-D MOJOLEARN_IDN_ET_PART_ROWS_OFF` restores one row per thread.
+         GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+         and not TARGET_HAS_APPLE_GPU
++        and not (
++            is_defined["MOJOLEARN_IDN_ET_PART_ROWS_OFF"]()
++            or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
++        )
+     )
+-) else 1
++    else 1
++)
+ """FAST: the partition's four kernels fold the search's rows per thread
+ too, on the SAME `TPB * R` workload tile the search staged, so a plain cycle
+ no longer restages `d_wl` and drains before partitioning, and each block
+@@ -4079,19 +4140,20 @@ pays its scans once per `TPB * R` rows instead of per `TPB`. Row order
+ within a side stays stable by block and by thread; nothing downstream
+ reads it (DEVIATION 203). THE FAST APPLE DEFAULT since 2026-10-02 (M3 Ultra
+ board shapes, aft-ab-etpr: taxi 3.87 -> 3.04 s, Istella 4.37 -> 4.14 s, same
+-hashes); Apple M4 1M rows was a wash."""
++hashes); `-D MOJOLEARN_ET_PART_ROWS_OFF` is the A arm. Elsewhere opt-in
++(`-D MOJOLEARN_ET_PART_ROWS=1`); Apple M4 1M rows was a wash."""
+ 
+ comptime ET_PART_FLAGS = (
+     (GLOBAL_NUMERIC_MODE == NUMERIC_FAST or TARGET_HAS_APPLE_GPU)
+     and PART_ROWS_PER_THREAD == 1
++    and not is_defined["MOJOLEARN_ET_PART_FLAGS_OFF"]()
+ )
+-# TOMBSTONE: MOJOLEARN_ET_PART_FLAGS_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-40-trees; code recoverable at 6641db4b18.
+-# Restore: git apply experiments/removed/MOJOLEARN_ET_PART_FLAGS_OFF.patch
+ """FAST, and IDENTICAL on Apple since 2026-09-28 (the same directions, so the
+ same partition: a data movement, bit-inert): the partition's count pass
+ stores each row's direction as one byte
+ (`LevelWorkspace.d_part_flags`) and the scatter pass reads it instead of
+-gathering the split column again. Same directions, same partition."""
++gathering the split column again. Same directions, same partition.
++`-D MOJOLEARN_ET_PART_FLAGS_OFF` restores the second gather."""
+ 
+ comptime ET_STAGE_LIVE_PREFIX = (
+     (
+@@ -4099,20 +4161,24 @@ comptime ET_STAGE_LIVE_PREFIX = (
+         or TARGET_HAS_APPLE_GPU
+         # fam-forests (2026-10-04), `IDN_ET_STAGE_LIVE`: IDENTICAL on NVIDIA
+         # and AMD too. Only the live prefix is ever read, so no bit moves.
+-        or GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
++        # `-D MOJOLEARN_IDN_ET_STAGE_LIVE_OFF` restores full-capacity staging.
++        or (
++            GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
++            and not (
++                is_defined["MOJOLEARN_IDN_ET_STAGE_LIVE_OFF"]()
++                or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
++            )
++        )
+     )
++    and not is_defined["MOJOLEARN_ET_STAGE_FULL_CAPACITY"]()
+ )
+-# TOMBSTONE: MOJOLEARN_IDN_ET_STAGE_LIVE_OFF, MOJOLEARN_ET_STAGE_FULL_CAPACITY (old paths (full-capacity staging), no A/B recorded) deleted 2026-11-15 by lane/expdel2-40-trees; code recoverable at 6641db4b18.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_ET_STAGE_LIVE_OFF.patch; experiments/removed/MOJOLEARN_ET_STAGE_FULL_CAPACITY.patch
+-# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old-path umbrella term folded to False here) deleted 2026-11-15 by lane/expdel2-40-trees; code recoverable at 6641db4b18.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-40-trees.patch
+ """FAST, and IDENTICAL on Apple since 2026-09-28 (only the live prefix is
+ ever read, so moving less is bit-inert): `stage_batch` compares, snapshots
+ and uploads each staging
+ slot's LIVE prefix (the batch's nodes and workload blocks) instead of the
+ workspace's full capacity. At the Apple FAST batch width (32768 nodes, about
+ 40k workload blocks at 1M rows) the full-capacity path moved every slot's
+-whole capacity each batch."""
++whole capacity each batch. `-D MOJOLEARN_ET_STAGE_FULL_CAPACITY` restores it."""
+ 
+ comptime PHASE_SETUP = 0
+ comptime PHASE_STAGE = 1
+@@ -4247,9 +4313,17 @@ def print_stage_times(clock: PhaseClock, what: StringSlice) raises:
+     print("  total ->", Float64(total) / 1e9, "s")
+ 
+ 
+-# TOMBSTONE: MOJOLEARN_AFT_F08 (never-run Apple FAST programme card) deleted 2026-11-15 by lane/expdel2-40-trees; code recoverable at 6641db4b18.
+-# Restore: git apply experiments/removed/MOJOLEARN_AFT_F08.patch
+-comptime FOREST_ROW_SLOT_CAP = 1 << 26
++# AFT F08: permit 1 GiB total for the two Int32 row-slot planes, versus
++# the default 512 MiB. More whole trees then expose independent nodes in
++# one frontier; each tree retains its feature RNG and node growth policy.
++# This is a byte budget, unrelated to any dataset dimension. Other per-tree
++# scratch adds to this budget, so peak memory is a later qualification gate.
++# experiments/apple_fast_trees/IDEAS.md; opt-in, no quality/speed evidence.
++comptime FOREST_ROW_SLOT_CAP = (1 << 27) if (
++    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
++    and TARGET_HAS_APPLE_GPU
++    and is_defined["MOJOLEARN_AFT_F08"]()
++) else (1 << 26)
+ """Ceiling on `in-flight trees * n_rows` row SLOTS one group of the batched
+ forest trainer (DEVIATION 211) may hold: 2^26 slots = 256 MB in `d_row_ids`
+ plus the same again in the partition's alternate buffer. Trees beyond the cap
+@@ -4356,26 +4430,35 @@ def _stage_upload_if_changed[
+                 return
+         var same = True
+         # DEVIATION 2488: full-capacity byte equality, 16 bytes at a time.
+-        # TOMBSTONE: MOJOLEARN_ET_SCALAR_STAGE_COMPARE (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-40-trees; code recoverable at 6641db4b18.
+-        # Restore: git apply experiments/removed/MOJOLEARN_ET_SCALAR_STAGE_COMPARE.expdel2-40-trees.patch
+-        var sb = sp.bitcast[UInt8]()
+-        var hb = hp.bitcast[UInt8]()
+-        var count = n * size_of[Scalar[dt]]()
+-        var i = 0
+-        while i + 16 <= count:
+-            if hb.unsafe_load[width=16](i) != sb.unsafe_load[width=16](i):
+-                same = False
+-                break
+-            i += 16
+-        if same:
+-            while i < count:
+-                if hb.unsafe_load(i) != sb.unsafe_load(i):
++        # The retained scalar build arm isolates this one mechanism in A/B.
++        comptime if is_defined["MOJOLEARN_ET_SCALAR_STAGE_COMPARE"]():
++            for i in range(n):  # small-loop(n: staging slot capacity of launch descriptors): A/B arm compares host staging bytes only
++                if hp.unsafe_load(i) != sp.unsafe_load(i):
+                     same = False
+                     break
+-                i += 1
++        else:
++            var sb = sp.bitcast[UInt8]()
++            var hb = hp.bitcast[UInt8]()
++            var count = n * size_of[Scalar[dt]]()
++            var i = 0
++            while i + 16 <= count:
++                if hb.unsafe_load[width=16](i) != sb.unsafe_load[width=16](i):
++                    same = False
++                    break
++                i += 16
++            if same:
++                while i < count:
++                    if hb.unsafe_load(i) != sb.unsafe_load(i):
++                        same = False
++                        break
++                    i += 1
+         if same:
+             return
+-    unsafe_memcpy(dest=hp, src=sp, count=n)
++    comptime if is_defined["MOJOLEARN_ET_SCALAR_STAGE_COMPARE"]():
++        for i in range(n):
++            hp.unsafe_store(i, sp.unsafe_load(i))
++    else:
++        unsafe_memcpy(dest=hp, src=sp, count=n)
+     ctx.enqueue_copy(dst_buf=dst, src_ptr=src.unsafe_ptr())
+ 
+ 
+@@ -4592,7 +4675,7 @@ def _enqueue_classification_score[MAX_ACC: Int](
+     # class accumulators); the unweighted launches below are unchanged.
+     if dataset.weighted:
+         ctx.enqueue_function[
+-            node_feature_score_weighted_kernel[TPB, MAX_ACC, False]
++            node_feature_score_weighted_kernel[TPB, MAX_ACC, ET_ROW_MAJOR]
+         ](
+             ws.d_nleft.unsafe_ptr(),
+             ws.d_ntotal.unsafe_ptr(),
+@@ -4649,7 +4732,7 @@ def _enqueue_classification_score[MAX_ACC: Int](
+         )
+         return
+     ctx.enqueue_function[
+-        node_feature_score_kernel[TPB, MAX_ACC, True, False]
++        node_feature_score_kernel[TPB, MAX_ACC, True, ET_ROW_MAJOR]
+     ](
+         ws.d_nleft.unsafe_ptr(),
+         ws.d_ntotal.unsafe_ptr(),
+@@ -4734,7 +4817,7 @@ def _enqueue_raw_range[FUSED_SMALL: Bool](
+             block_dim=(TPB,1,1),
+         )
+     else:
+-        ctx.enqueue_function[node_feature_range_kernel[TPB,False,FUSED_SMALL]](
++        ctx.enqueue_function[node_feature_range_kernel[TPB,ET_ROW_MAJOR,FUSED_SMALL]](
+             ws.d_minkey.unsafe_ptr(),ws.d_maxkey.unsafe_ptr(),
+             ws.d_missing.unsafe_ptr(),ws.d_merges.unsafe_ptr(),
+             dataset.search_data_ptr(),d_row_ids.unsafe_ptr(),
+@@ -5093,10 +5176,12 @@ def search_batch_enqueue(
+     # by fused half B above (the survey skips half B and never gets here).
+     # Keep the fixed-width measurement arms, including a 32-wide baseline.
+     # Normal fits retain all 32 supported classes through runtime dispatch.
+-    # TOMBSTONE: MOJOLEARN_ET_MAX_ACC_4, MOJOLEARN_ET_MAX_ACC_8, MOJOLEARN_ET_MAX_ACC_16 (unmeasured opt-in arms) deleted 2026-11-15 by lane/expdel2-40-trees; code recoverable at 6641db4b18.
+-    # Restore: git apply experiments/removed/MOJOLEARN_ET_MAX_ACC_4.patch; experiments/removed/MOJOLEARN_ET_MAX_ACC_8.patch; experiments/removed/MOJOLEARN_ET_MAX_ACC_16.patch
+-    # ET_MAX_ACC_32 kept: the reference arm of check_accumulator_dispatch.sh.
+-    comptime FIXED_ACC = is_defined["MOJOLEARN_ET_MAX_ACC_32"]()
++    comptime FIXED_ACC = (
++        is_defined["MOJOLEARN_ET_MAX_ACC_4"]()
++        or is_defined["MOJOLEARN_ET_MAX_ACC_8"]()
++        or is_defined["MOJOLEARN_ET_MAX_ACC_16"]()
++        or is_defined["MOJOLEARN_ET_MAX_ACC_32"]()
++    )
+     comptime if FIXED_ACC:
+         _enqueue_classification_score[DEVICE_MAX_ACC](
+             ctx, ws, dataset, d_row_ids, n_rows, k, n_classes, seed,
+@@ -5423,13 +5508,15 @@ def search_batch(
+ # (`host_builder.mojo`, `train_tree_exact`) and the checks'.
+ # =============================================================================
+ 
+-# TOMBSTONE: MOJOLEARN_ET_DEVICE_LOOP_K1, MOJOLEARN_ET_DEVICE_LOOP_K2, MOJOLEARN_ET_DEVICE_LOOP_K8 (unmeasured opt-in arms) deleted 2026-11-15 by lane/expdel2-40-trees; code recoverable at 6641db4b18.
+-# Restore: git apply experiments/removed/MOJOLEARN_ET_DEVICE_LOOP_K1.patch; experiments/removed/MOJOLEARN_ET_DEVICE_LOOP_K2.patch; experiments/removed/MOJOLEARN_ET_DEVICE_LOOP_K8.patch
+-# TOMBSTONE: MOJOLEARN_TREES_T11_LEVELS (DROP, EXP:1582; T11 folded to False here) deleted 2026-11-15 by lane/expdel2-40-trees; code recoverable at 6641db4b18.
+-# Restore: git apply experiments/removed/MOJOLEARN_TREES_T11_LEVELS.expdel2-40-trees.patch
+-comptime ET_LOOP_K = 4
++comptime ET_LOOP_K = max(1, T11_LEVELS) if T11 else (
++    1 if is_defined["MOJOLEARN_ET_DEVICE_LOOP_K1"]() else (
++        2 if is_defined["MOJOLEARN_ET_DEVICE_LOOP_K2"]() else (
++            8 if is_defined["MOJOLEARN_ET_DEVICE_LOOP_K8"]() else 4
++        )
++    )
++)
+ """Batches (best-first: cycles) enqueued per header drain. A scheduling
+-parameter: it moves no bit."""
++parameter: it moves no bit. `-D MOJOLEARN_ET_DEVICE_LOOP_K1/_K2/_K8`."""
+ 
+ comptime ETL_SRC_BATCH = 0
+ comptime ETL_SRC_SUB = 1
+@@ -7942,7 +8029,7 @@ def search_batch_regression_enqueue(
+         # cell. Its trainer never bins X, so the raw thresholds stand; the
+         # counts and sums are integers, the same in any kernel's order.
+         ctx.enqueue_function[
+-            node_feature_score_weighted_reg_kernel[TPB, MAX_ACC, False]
++            node_feature_score_weighted_reg_kernel[TPB, MAX_ACC, ET_ROW_MAJOR]
+         ](
+             d_nleft.unsafe_ptr(),
+             d_ntotal.unsafe_ptr(),
+@@ -8028,7 +8115,7 @@ def search_batch_regression_enqueue(
+         )
+     else:
+         ctx.enqueue_function[
+-            node_feature_score_kernel[TPB, MAX_ACC, False, False]
++            node_feature_score_kernel[TPB, MAX_ACC, False, ET_ROW_MAJOR]
+         ](
+             d_nleft.unsafe_ptr(),
+             d_ntotal.unsafe_ptr(),
+@@ -8598,7 +8685,7 @@ def train_forest_regression_device_timed(
+         comptime if ET_RANGE_TILED and ET_SCORE_TILED:
+             # lane sk-final: a weighted fit's score pass reads raw X, so its
+             # ranges must be raw too (no binned codes)
+-            if dataset.has_rm and not dataset.weighted:
++            if dataset.has_rm and Int(dataset.n_cols) >= ET_BINNED_MIN_COLS and not dataset.weighted:
+                 dataset.ensure_binned(ctx)
+         var ws = make_level_workspace(
+             ctx,

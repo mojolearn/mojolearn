@@ -1736,6 +1736,37 @@ in the tables after the sections.
 | [`MOJOLEARN_TREES_T14`](#mojolearn_trees_t14) | Trees (RandomForest MSE moments) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_TREES_T14.patch](../experiments/removed/MOJOLEARN_TREES_T14.patch) |
 | [`MOJOLEARN_TREES_T14_EXACT`](#mojolearn_trees_t14_exact) | Trees (RandomForest MSE moments) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_TREES_T14_EXACT.patch](../experiments/removed/MOJOLEARN_TREES_T14_EXACT.patch) |
 | [`MOJOLEARN_TREES_T15`](#mojolearn_trees_t15) | Trees (RandomForest importance / OOB) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_TREES_T15.patch](../experiments/removed/MOJOLEARN_TREES_T15.patch) |
+| [`MOJOLEARN_AFCL_T09`](#mojolearn_afcl_t09) | Trees (ExtraTrees Apple FAST eight-feature search tile) | removed (never-run Apple FAST programme card) | 2026-11-15 | [MOJOLEARN_AFCL_T09.patch](../experiments/removed/MOJOLEARN_AFCL_T09.patch) |
+| [`MOJOLEARN_AFT_F06`](#mojolearn_aft_f06) | Trees (ExtraTrees Apple FAST 64-thread block) | removed (never-run Apple FAST programme card) | 2026-11-15 | [MOJOLEARN_AFT_F06.patch](../experiments/removed/MOJOLEARN_AFT_F06.patch) |
+| [`MOJOLEARN_AFT_F07`](#mojolearn_aft_f07) | Trees (ExtraTrees Apple FAST partition rows per thread x2) | removed (never-run Apple FAST programme card) | 2026-11-15 | [MOJOLEARN_AFT_F07.patch](../experiments/removed/MOJOLEARN_AFT_F07.patch) |
+| [`MOJOLEARN_AFT_F08`](#mojolearn_aft_f08) | Trees (ExtraTrees Apple FAST 1 GiB forest row-slot cap) | removed (never-run Apple FAST programme card) | 2026-11-15 | [MOJOLEARN_AFT_F08.patch](../experiments/removed/MOJOLEARN_AFT_F08.patch) |
+| [`MOJOLEARN_ET_BINNED_OFF`](#mojolearn_et_binned_off) | Trees (ExtraTrees FAST Apple float X instead of binned codes) | removed (old path, no A/B recorded) | 2026-11-15 | [MOJOLEARN_ET_BINNED_OFF.patch](../experiments/removed/MOJOLEARN_ET_BINNED_OFF.patch) |
+| [`MOJOLEARN_ET_DEVICE_LOOP_K1`](#mojolearn_et_device_loop_k1) | Trees (ExtraTrees batches per header drain = 1) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_ET_DEVICE_LOOP_K1.patch](../experiments/removed/MOJOLEARN_ET_DEVICE_LOOP_K1.patch) |
+| [`MOJOLEARN_ET_DEVICE_LOOP_K2`](#mojolearn_et_device_loop_k2) | Trees (ExtraTrees batches per header drain = 2) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_ET_DEVICE_LOOP_K2.patch](../experiments/removed/MOJOLEARN_ET_DEVICE_LOOP_K2.patch) |
+| [`MOJOLEARN_ET_DEVICE_LOOP_K8`](#mojolearn_et_device_loop_k8) | Trees (ExtraTrees batches per header drain = 8) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_ET_DEVICE_LOOP_K8.patch](../experiments/removed/MOJOLEARN_ET_DEVICE_LOOP_K8.patch) |
+| [`MOJOLEARN_ET_MAX_ACC_16`](#mojolearn_et_max_acc_16) | Trees (ExtraTrees fixed 16-wide score accumulator) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_ET_MAX_ACC_16.patch](../experiments/removed/MOJOLEARN_ET_MAX_ACC_16.patch) |
+| [`MOJOLEARN_ET_MAX_ACC_4`](#mojolearn_et_max_acc_4) | Trees (ExtraTrees fixed 4-wide score accumulator) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_ET_MAX_ACC_4.patch](../experiments/removed/MOJOLEARN_ET_MAX_ACC_4.patch) |
+| [`MOJOLEARN_ET_MAX_ACC_8`](#mojolearn_et_max_acc_8) | Trees (ExtraTrees fixed 8-wide score accumulator) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_ET_MAX_ACC_8.patch](../experiments/removed/MOJOLEARN_ET_MAX_ACC_8.patch) |
+| [`MOJOLEARN_ET_PART_FLAGS_OFF`](#mojolearn_et_part_flags_off) | Trees (ExtraTrees partition second gather) | removed (old path, no A/B recorded) | 2026-11-15 | [MOJOLEARN_ET_PART_FLAGS_OFF.patch](../experiments/removed/MOJOLEARN_ET_PART_FLAGS_OFF.patch) |
+| [`MOJOLEARN_ET_PART_ROWS`](#mojolearn_et_part_rows) | Trees (ExtraTrees FAST partition rows per thread off Apple) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_ET_PART_ROWS.patch](../experiments/removed/MOJOLEARN_ET_PART_ROWS.patch) |
+| [`MOJOLEARN_ET_PART_ROWS_OFF`](#mojolearn_et_part_rows_off) | Trees (ExtraTrees FAST Apple one row per thread partition) | removed (old path, no A/B recorded) | 2026-11-15 | [MOJOLEARN_ET_PART_ROWS_OFF.patch](../experiments/removed/MOJOLEARN_ET_PART_ROWS_OFF.patch) |
+| [`MOJOLEARN_ET_RANGE_TILED`](#mojolearn_et_range_tiled) | Trees (ExtraTrees FAST tiled range pass off Apple) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_ET_RANGE_TILED.patch](../experiments/removed/MOJOLEARN_ET_RANGE_TILED.patch) |
+| [`MOJOLEARN_ET_RM_LINE_HW_OFF`](#mojolearn_et_rm_line_hw_off) | Trees (ExtraTrees row-major 64-byte line) | removed (old path, no A/B recorded) | 2026-11-15 | [MOJOLEARN_ET_RM_LINE_HW_OFF.patch](../experiments/removed/MOJOLEARN_ET_RM_LINE_HW_OFF.patch) |
+| [`MOJOLEARN_ET_RM_NARROW`](#mojolearn_et_rm_narrow) | Trees (ExtraTrees narrow-row row-major copy off Apple) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_ET_RM_NARROW.patch](../experiments/removed/MOJOLEARN_ET_RM_NARROW.patch) |
+| [`MOJOLEARN_ET_RM_NARROW_OFF`](#mojolearn_et_rm_narrow_off) | Trees (ExtraTrees Apple narrow-row row-major copy off) | removed (old path, no A/B recorded) | 2026-11-15 | [MOJOLEARN_ET_RM_NARROW_OFF.patch](../experiments/removed/MOJOLEARN_ET_RM_NARROW_OFF.patch) |
+| [`MOJOLEARN_ET_ROW_MAJOR`](#mojolearn_et_row_major) | Trees (ExtraTrees FAST feature-major search grid) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_ET_ROW_MAJOR.patch](../experiments/removed/MOJOLEARN_ET_ROW_MAJOR.patch) |
+| [`MOJOLEARN_ET_SCORE_TILED`](#mojolearn_et_score_tiled) | Trees (ExtraTrees FAST tiled regression score off Apple) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_ET_SCORE_TILED.patch](../experiments/removed/MOJOLEARN_ET_SCORE_TILED.patch) |
+| [`MOJOLEARN_ET_STAGE_FULL_CAPACITY`](#mojolearn_et_stage_full_capacity) | Trees (ExtraTrees full-capacity batch staging) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_ET_STAGE_FULL_CAPACITY.patch](../experiments/removed/MOJOLEARN_ET_STAGE_FULL_CAPACITY.patch) |
+| [`MOJOLEARN_ET_TILED_SEARCH_IDENTICAL_OFF`](#mojolearn_et_tiled_search_identical_off) | Trees (ExtraTrees Apple IDENTICAL one-feature search kernels) | removed (old path, no A/B recorded) | 2026-11-15 | [MOJOLEARN_ET_TILED_SEARCH_IDENTICAL_OFF.patch](../experiments/removed/MOJOLEARN_ET_TILED_SEARCH_IDENTICAL_OFF.patch) |
+| [`MOJOLEARN_ET_TILED_SEARCH_OFF`](#mojolearn_et_tiled_search_off) | Trees (ExtraTrees Apple one-feature search kernels) | removed (old path, no A/B recorded) | 2026-11-15 | [MOJOLEARN_ET_TILED_SEARCH_OFF.patch](../experiments/removed/MOJOLEARN_ET_TILED_SEARCH_OFF.patch) |
+| [`MOJOLEARN_ET_TPB_1024`](#mojolearn_et_tpb_1024) | Trees (ExtraTrees 1024-thread frontier block) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_ET_TPB_1024.patch](../experiments/removed/MOJOLEARN_ET_TPB_1024.patch) |
+| [`MOJOLEARN_ET_TPB_128`](#mojolearn_et_tpb_128) | Trees (ExtraTrees 128-thread frontier block on 64-lane devices) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_ET_TPB_128.patch](../experiments/removed/MOJOLEARN_ET_TPB_128.patch) |
+| [`MOJOLEARN_ET_TPB_512`](#mojolearn_et_tpb_512) | Trees (ExtraTrees 512-thread frontier block on 32-lane devices) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_ET_TPB_512.patch](../experiments/removed/MOJOLEARN_ET_TPB_512.patch) |
+| [`MOJOLEARN_IDN_ET_PART_ROWS_OFF`](#mojolearn_idn_et_part_rows_off) | Trees (ExtraTrees IDENTICAL NVIDIA/AMD one row per thread partition) | removed (old path, no A/B recorded) | 2026-11-15 | [MOJOLEARN_IDN_ET_PART_ROWS_OFF.patch](../experiments/removed/MOJOLEARN_IDN_ET_PART_ROWS_OFF.patch) |
+| [`MOJOLEARN_IDN_ET_STAGE_LIVE_OFF`](#mojolearn_idn_et_stage_live_off) | Trees (ExtraTrees IDENTICAL full-capacity staging) | removed (old path, no A/B recorded) | 2026-11-15 | [MOJOLEARN_IDN_ET_STAGE_LIVE_OFF.patch](../experiments/removed/MOJOLEARN_IDN_ET_STAGE_LIVE_OFF.patch) |
+| [`MOJOLEARN_IDN_ET_TILED_SEARCH_OFF`](#mojolearn_idn_et_tiled_search_off) | Trees (ExtraTrees IDENTICAL NVIDIA/AMD one-feature search kernels) | removed (old path, no A/B recorded) | 2026-11-15 | [MOJOLEARN_IDN_ET_TILED_SEARCH_OFF.patch](../experiments/removed/MOJOLEARN_IDN_ET_TILED_SEARCH_OFF.patch) |
+| [`MOJOLEARN_LEGACY_NARROW_ET_BINNED`](#mojolearn_legacy_narrow_et_binned) | Trees (ExtraTrees FAST Apple binning only at n_cols >= 64) | removed (old path, no A/B recorded) | 2026-11-15 | [MOJOLEARN_LEGACY_NARROW_ET_BINNED.patch](../experiments/removed/MOJOLEARN_LEGACY_NARROW_ET_BINNED.patch) |
+| [`MOJOLEARN_LEGACY_NARROW_ET_RM`](#mojolearn_legacy_narrow_et_rm) | Trees (ExtraTrees FAST quarter gate for the row-major copy) | removed (old path, no A/B recorded) | 2026-11-15 | [MOJOLEARN_LEGACY_NARROW_ET_RM.patch](../experiments/removed/MOJOLEARN_LEGACY_NARROW_ET_RM.patch) |
 | [GaussianMixture Python entries gmm_fit, gmm_fit_predict and the four scoring entries (native entries)](#dead-native-entries-gaussianmixture-python-entries-2026-11-11) | Mixture (GPU, host and inference-only host bindings) | removed (dead native entries: no live caller) | 2026-11-11 | [dead_entries_gmm_python.patch](../experiments/removed/dead_entries_gmm_python.patch) |
 | [TREES_LEGACY_PYTHON_ENTRIES: 36 rf/et Python fit registrations (rowmajor, weighted, shard and shard-export forms) (native entries)](#dead-native-entries-trees-legacy-python-entries-2026-11-12) | Forests (rf, rf host, trees, trees host bindings) | removed (dead native entries: no live caller) | 2026-11-12 | [TREES_LEGACY_PYTHON_ENTRIES.patch](../experiments/removed/TREES_LEGACY_PYTHON_ENTRIES.patch) |
 | [LABELS_NATIVE_API_V1_V2: the labels_native_api_v1 / v2 provider publications (native entries)](#dead-native-entries-labels-provider-v1-and-v2-2026-11-12) | Labels (base GPU and core host bindings) | removed (dead native entries: no live caller) | 2026-11-12 | [LABELS_NATIVE_API_V1_V2.patch](../experiments/removed/LABELS_NATIVE_API_V1_V2.patch) |
@@ -1868,6 +1899,56 @@ in the tables after the sections.
 | [`MOJOLEARN_TREE_EXACT_SIBLING_HIST`](#mojolearn_tree_exact_sibling_hist) | Trees (I18 retained-count sibling histograms, IDENTICAL) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_TREE_EXACT_SIBLING_HIST.patch](../experiments/removed/MOJOLEARN_TREE_EXACT_SIBLING_HIST.patch) |
 | [`MOJOLEARN_TREE_EXACT_SIBLING_HIST_AUDIT`](#mojolearn_tree_exact_sibling_hist_audit) | Trees (I18 retained-count reuse audit) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_TREE_EXACT_SIBLING_HIST_AUDIT.patch](../experiments/removed/MOJOLEARN_TREE_EXACT_SIBLING_HIST_AUDIT.patch) |
 | [`MOJOLEARN_TREE_EXACT_SIBLING_HIST_BYTES`](#mojolearn_tree_exact_sibling_hist_bytes) | Trees (I18 retained-count byte budget) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_TREE_EXACT_SIBLING_HIST_BYTES.patch](../experiments/removed/MOJOLEARN_TREE_EXACT_SIBLING_HIST_BYTES.patch) |
+
+## Retired by lane debt-block-per-n (2026-10-21)
+
+These are rollback or gate arms, not measured losers: each selected a launch that the `block-per-n` / `one-block-n`
+rules of `tools/hooks/no_host_routes.py` refuse (one block per output walking all n rows). The row-tile-then-fold order
+that replaced them is the shape of `glm/impl/qn/glm_base.mojo::qn_tile_sum_classes`, with the host column in the same
+order. No A/B was run (lanes never measure); the speed check on NVIDIA and AMD is owed with the next freeze. Code
+recoverable at `28b8ed11b` (main before the lane).
+
+### MOJOLEARN_IDN_XTY_TILED_OFF
+
+- Tried: `core/xtdz_coalesced.mojo` `xty_launch` / `column_mean_launch` in the STATS_TPB-chain order (`xty_kernel`,
+  `column_mean_kernel`: one block per column; Apple's row-coalesced `mean_partial_kernel` / `mean_fold_kernel` and
+  `xtdz_coalesced` of the same chains). Also the direct `column_mean_kernel` arm of
+  `decomposition/estimator.mojo::_column_variance` (`MOJOLEARN_IDN_DECOMP_MEAN_LAUNCH_OFF`), Apple FAST's
+  `PCA_FAST_COLMEAN` (rab20-pcacolmean: pca taxi 106.2 -> 85.0 ms vs the one-block kernel) and `TSVD_FAST_COLVAR`
+  (rab15-tsvdcolvar: tsvd taxi 40.9 -> 27.8 ms vs the one-block kernel), and `glm/impl/ridge_multi.mojo`'s Y means.
+- Now: the tile order (`xty_tiled`) in every mode; host column `core/host_tile_fold.mojo` (IDN_XTY_TILED is True).
+- Bits: IDENTICAL defaults unchanged; FAST and the retired arms move to the tile order.
+- Files: core/xtdz_coalesced.mojo, core/host_tile_fold.mojo, decomposition/estimator.mojo, decomposition/mean_switch.mojo,
+  glm/impl/ridge_multi.mojo. Patch: `experiments/removed/MOJOLEARN_IDN_XTY_TILED_OFF.patch` (reverse of lane commit
+  584cd1b8c on the code files).
+
+### MOJOLEARN_QN_TILED_MULTI_OFF
+
+- Tried: `glm/impl/qn/glm_base.mojo::linear_bwd` with `xtdz_multi_kernel` / `xty_kernel` (one block per gradient cell)
+  wherever the tile rule did not apply: `C > 1` gradients of at most 256 cells, gradients whose tile partials passed
+  QNTM_MAX_WS, `-D MOJOLEARN_QN_TILED_MULTI_OFF`, IDENTICAL `C == 1` with QN_TILED off, and FAST off Apple.
+- Now: `qntm_tiled_into` (chunked by the workspace bound, same chains and fold) for every `C > 1` gradient and for
+  IDENTICAL's `C == 1` `linear_bwd`; FAST keeps its Apple forms. Host column `glm/host/qn_oracle.mojo` and the check
+  mirrors move with it.
+- Bits: narrow multinomial gradients (`d * c <= 256`) move to the tile order on NVIDIA, AMD, Apple and the host column
+  together; the QN_TILED-off `C == 1` gradient likewise.
+- Patch: `experiments/removed/MOJOLEARN_QN_TILED_MULTI_OFF.patch` (reverse of lane commit 4b8a8e8f2).
+
+### MOJOLEARN_LOSS_SABOTAGE_REDUCE_SERIAL
+
+- Tried: the loss gate's contract-5.4 sabotage, the batch's n_rows per-row losses folded by `ce_serial_fold_kernel` in
+  ONE thread of one block (`training/checks/loss.mojo`), inert at N <= 128.
+- Now: refused; the batch fold's witnesses are the gemm switches reached through the loss entry points.
+- Bits: none (a gate-only arm).
+- Patch: `experiments/removed/MOJOLEARN_LOSS_SABOTAGE_REDUCE_SERIAL.patch` (reverse of lane commit 8476d0774).
+
+## Restored
+
+Deletions reversed by new evidence. The code is back on main; the section and the patch are kept as the record.
+
+| define | area | deleted | restored | now | patch |
+|---|---|---|---|---|---|
+| [`MOJOLEARN_CLASSICAL_C25_PROJECTION_REUSE`](#mojolearn_classical_c25_projection_reuse) | Decomp | 2026-10-08 (`ab4e8e543`) | 2026-10-10 (lane/c25-restore-promote) | IDENTICAL default; `_OFF` restores the old path | [MOJOLEARN_CLASSICAL_C25_PROJECTION_REUSE.patch](../experiments/removed/MOJOLEARN_CLASSICAL_C25_PROJECTION_REUSE.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -18912,3 +18993,320 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2
 Non-owner sites folded in this lane's files (each owner writes the index row and section): `MOJOLEARN_C58_SERIES4` (owner expdel2-07-base; `experiments/removed/MOJOLEARN_C58_SERIES4.expdel2-37-series.patch`, recoverable at `db4fd5d0c6`), `MOJOLEARN_C59_TRIAL_STATE` (owner expdel2-07-base; `experiments/removed/MOJOLEARN_C59_TRIAL_STATE.expdel2-37-series.patch`, recoverable at `145be10898`), `MOJOLEARN_CLASSICAL_C11_DRAW_GATHER` (owner expdel2-07-base; `experiments/removed/MOJOLEARN_CLASSICAL_C11_DRAW_GATHER.expdel2-37-series.patch`, recoverable at `6b87cc7de9`), `MOJOLEARN_IDN_ARIMA_ORDER_DEVICE_OFF` (owner expdel2-47-promote; `experiments/removed/MOJOLEARN_IDN_ARIMA_ORDER_DEVICE_OFF.expdel2-37-series.patch`, recoverable at `6d8c0423cf`), `MOJOLEARN_IDN_ARIMA_IC_DEVICE_OFF` (owner expdel2-47-promote; `experiments/removed/MOJOLEARN_IDN_ARIMA_IC_DEVICE_OFF.expdel2-37-series.patch`, recoverable at `6d8c0423cf`), `MOJOLEARN_IDN_KPSS_ONE_WAIT_OFF` (owner expdel2-36-neural-series-linear; `experiments/removed/MOJOLEARN_IDN_KPSS_ONE_WAIT_OFF.expdel2-37-series.patch`, recoverable at `7b328fcfd6`).
 
 Kept (not deleted): `MOJOLEARN_METRICS_JOINT_COUNTS` (metrics/impl/classification_joint.mojo:50): its source comment records an AMD MI325X scoped winner (I24, candidate/base 0.858-0.873, f32549d28) with NVIDIA mixed; a default-off arm that won a measurement on one vendor is KEEP under the lane brief. `MOJOLEARN_COLUMN_CPU` was not touched.
+## Experiment deletions: lane expdel2-40-trees (2026-11-15)
+
+Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2-40-trees), under AGENTS.md "An unmeasured arm is deleted" (Andrew, 2026-11-15). Each record named below was read first. No bit changes: every deletion removes a non-default arm or a rollback beside the default, and the default branch is kept as it was. Hand-tuned kernels are untouched: the tiled range/score kernels, the binned search, the dispatched score kernels and the partition kernels all stay; only the switches that forced or bypassed them went.
+
+### MOJOLEARN_AFCL_T09
+
+- Tried: ET_FEATURE_TILE = 8 on Apple FAST (AFCL-T09).
+- Evidence: no record (rule g). Verdict: deleted (V2 rule, never-run Apple FAST programme card).
+- Removed: the define read, folded to its default constant, and the branch only it reached. Default unchanged: no bits move.
+- Files: extratrees/impl/decisiontree/batched_levelalgo/builder.mojo.
+- Deleted by: lane/expdel2-40-trees `e1052abc38` (2026-11-15); code recoverable at `6641db4b18`.
+- Restore: `git apply experiments/removed/MOJOLEARN_AFCL_T09.patch` (the whole reversed file diff of the lane's one code commit), then delete the refusal in `core/experiment_guards_trees.mojo`.
+- Records: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-40-trees section).
+
+### MOJOLEARN_AFT_F06
+
+- Tried: a 64-thread DEVICE_TPB on Apple FAST (AFT F06).
+- Evidence: no record (rule g). Verdict: deleted (V2 rule, never-run Apple FAST programme card).
+- Removed: the define read, folded to its default constant, and the branch only it reached. Default unchanged: no bits move.
+- Files: extratrees/impl/decisiontree/batched_levelalgo/builder.mojo.
+- Deleted by: lane/expdel2-40-trees `e1052abc38` (2026-11-15); code recoverable at `6641db4b18`.
+- Restore: `git apply experiments/removed/MOJOLEARN_AFT_F06.patch` (the whole reversed file diff of the lane's one code commit), then delete the refusal in `core/experiment_guards_trees.mojo`.
+- Records: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-40-trees section).
+
+### MOJOLEARN_AFT_F07
+
+- Tried: PART_ROWS_PER_THREAD = 2 * SEARCH_ROWS_PER_THREAD on Apple FAST (AFT F07).
+- Evidence: no record (rule g). Verdict: deleted (V2 rule, never-run Apple FAST programme card).
+- Removed: the define read, folded to its default constant, and the branch only it reached. Default unchanged: no bits move.
+- Files: extratrees/impl/decisiontree/batched_levelalgo/builder.mojo.
+- Deleted by: lane/expdel2-40-trees `e1052abc38` (2026-11-15); code recoverable at `6641db4b18`.
+- Restore: `git apply experiments/removed/MOJOLEARN_AFT_F07.patch` (the whole reversed file diff of the lane's one code commit), then delete the refusal in `core/experiment_guards_trees.mojo`.
+- Records: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-40-trees section).
+
+### MOJOLEARN_AFT_F08
+
+- Tried: FOREST_ROW_SLOT_CAP = 2^27 on Apple FAST (AFT F08).
+- Evidence: no record (rule g). Verdict: deleted (V2 rule, never-run Apple FAST programme card).
+- Removed: the define read, folded to its default constant, and the branch only it reached. Default unchanged: no bits move.
+- Files: extratrees/impl/decisiontree/batched_levelalgo/builder.mojo.
+- Deleted by: lane/expdel2-40-trees `e1052abc38` (2026-11-15); code recoverable at `6641db4b18`.
+- Restore: `git apply experiments/removed/MOJOLEARN_AFT_F08.patch` (the whole reversed file diff of the lane's one code commit), then delete the refusal in `core/experiment_guards_trees.mojo`.
+- Records: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-40-trees section).
+
+### MOJOLEARN_ET_BINNED_OFF
+
+- Tried: float X search instead of the binned-code default (ET_BINNED_REG).
+- Evidence: no record (rule b). Verdict: deleted (V2 rule, unmeasured old path).
+- Removed: the define read, folded to its default constant, and the branch only it reached. Default unchanged: no bits move.
+- Files: extratrees/impl/decisiontree/batched_levelalgo/builder.mojo.
+- Deleted by: lane/expdel2-40-trees `e1052abc38` (2026-11-15); code recoverable at `6641db4b18`.
+- Restore: `git apply experiments/removed/MOJOLEARN_ET_BINNED_OFF.patch` (the whole reversed file diff of the lane's one code commit), then delete the refusal in `core/experiment_guards_trees.mojo`.
+- Records: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-40-trees section).
+
+### MOJOLEARN_ET_DEVICE_LOOP_K1
+
+- Tried: ET_LOOP_K = 1.
+- Evidence: no record (rule a). Verdict: deleted (V2 rule, unmeasured opt-in arm).
+- Removed: the define read, folded to its default constant, and the branch only it reached. Default unchanged: no bits move.
+- Files: extratrees/impl/decisiontree/batched_levelalgo/builder.mojo.
+- Deleted by: lane/expdel2-40-trees `e1052abc38` (2026-11-15); code recoverable at `6641db4b18`.
+- Restore: `git apply experiments/removed/MOJOLEARN_ET_DEVICE_LOOP_K1.patch` (the whole reversed file diff of the lane's one code commit), then delete the refusal in `core/experiment_guards_trees.mojo`.
+- Records: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-40-trees section).
+
+### MOJOLEARN_ET_DEVICE_LOOP_K2
+
+- Tried: ET_LOOP_K = 2.
+- Evidence: no record (rule a). Verdict: deleted (V2 rule, unmeasured opt-in arm).
+- Removed: the define read, folded to its default constant, and the branch only it reached. Default unchanged: no bits move.
+- Files: extratrees/impl/decisiontree/batched_levelalgo/builder.mojo.
+- Deleted by: lane/expdel2-40-trees `e1052abc38` (2026-11-15); code recoverable at `6641db4b18`.
+- Restore: `git apply experiments/removed/MOJOLEARN_ET_DEVICE_LOOP_K2.patch` (the whole reversed file diff of the lane's one code commit), then delete the refusal in `core/experiment_guards_trees.mojo`.
+- Records: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-40-trees section).
+
+### MOJOLEARN_ET_DEVICE_LOOP_K8
+
+- Tried: ET_LOOP_K = 8.
+- Evidence: no record (rule a). Verdict: deleted (V2 rule, unmeasured opt-in arm).
+- Removed: the define read, folded to its default constant, and the branch only it reached. Default unchanged: no bits move.
+- Files: extratrees/impl/decisiontree/batched_levelalgo/builder.mojo.
+- Deleted by: lane/expdel2-40-trees `e1052abc38` (2026-11-15); code recoverable at `6641db4b18`.
+- Restore: `git apply experiments/removed/MOJOLEARN_ET_DEVICE_LOOP_K8.patch` (the whole reversed file diff of the lane's one code commit), then delete the refusal in `core/experiment_guards_trees.mojo`.
+- Records: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-40-trees section).
+
+### MOJOLEARN_ET_MAX_ACC_16
+
+- Tried: DEVICE_MAX_ACC = 16 and the fixed-width score kernel.
+- Evidence: no record (rule a). Verdict: deleted (V2 rule, unmeasured opt-in arm).
+- Removed: the define read, folded to its default constant, and the branch only it reached. Default unchanged: no bits move.
+- Files: extratrees/impl/decisiontree/batched_levelalgo/builder.mojo.
+- Deleted by: lane/expdel2-40-trees `e1052abc38` (2026-11-15); code recoverable at `6641db4b18`.
+- Restore: `git apply experiments/removed/MOJOLEARN_ET_MAX_ACC_16.patch` (the whole reversed file diff of the lane's one code commit), then delete the refusal in `core/experiment_guards_trees.mojo`.
+- Records: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-40-trees section).
+
+### MOJOLEARN_ET_MAX_ACC_4
+
+- Tried: DEVICE_MAX_ACC = 4 and the fixed-width score kernel.
+- Evidence: no record (rule a). Verdict: deleted (V2 rule, unmeasured opt-in arm).
+- Removed: the define read, folded to its default constant, and the branch only it reached. Default unchanged: no bits move.
+- Files: extratrees/impl/decisiontree/batched_levelalgo/builder.mojo.
+- Deleted by: lane/expdel2-40-trees `e1052abc38` (2026-11-15); code recoverable at `6641db4b18`.
+- Restore: `git apply experiments/removed/MOJOLEARN_ET_MAX_ACC_4.patch` (the whole reversed file diff of the lane's one code commit), then delete the refusal in `core/experiment_guards_trees.mojo`.
+- Records: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-40-trees section).
+
+### MOJOLEARN_ET_MAX_ACC_8
+
+- Tried: DEVICE_MAX_ACC = 8 and the fixed-width score kernel.
+- Evidence: no record (rule a). Verdict: deleted (V2 rule, unmeasured opt-in arm).
+- Removed: the define read, folded to its default constant, and the branch only it reached. Default unchanged: no bits move.
+- Files: extratrees/impl/decisiontree/batched_levelalgo/builder.mojo.
+- Deleted by: lane/expdel2-40-trees `e1052abc38` (2026-11-15); code recoverable at `6641db4b18`.
+- Restore: `git apply experiments/removed/MOJOLEARN_ET_MAX_ACC_8.patch` (the whole reversed file diff of the lane's one code commit), then delete the refusal in `core/experiment_guards_trees.mojo`.
+- Records: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-40-trees section).
+
+### MOJOLEARN_ET_PART_FLAGS_OFF
+
+- Tried: the scatter pass gathering the split column again instead of the direction byte.
+- Evidence: no record (rule b). Verdict: deleted (V2 rule, unmeasured old path).
+- Removed: the define read, folded to its default constant, and the branch only it reached. Default unchanged: no bits move.
+- Files: extratrees/impl/decisiontree/batched_levelalgo/builder.mojo.
+- Deleted by: lane/expdel2-40-trees `e1052abc38` (2026-11-15); code recoverable at `6641db4b18`.
+- Restore: `git apply experiments/removed/MOJOLEARN_ET_PART_FLAGS_OFF.patch` (the whole reversed file diff of the lane's one code commit), then delete the refusal in `core/experiment_guards_trees.mojo`.
+- Records: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-40-trees section).
+
+### MOJOLEARN_ET_PART_ROWS
+
+- Tried: force-on of search-width partition tiles in FAST off Apple (already the FAST Apple default).
+- Evidence: EXP:105 KEPT 269ffa57a (rule e, force-on knob). Verdict: deleted (V2 rule, unmeasured opt-in arm).
+- Removed: the define read, folded to its default constant, and the branch only it reached. Default unchanged: no bits move.
+- Files: extratrees/impl/decisiontree/batched_levelalgo/builder.mojo.
+- Deleted by: lane/expdel2-40-trees `e1052abc38` (2026-11-15); code recoverable at `6641db4b18`.
+- Restore: `git apply experiments/removed/MOJOLEARN_ET_PART_ROWS.patch` (the whole reversed file diff of the lane's one code commit), then delete the refusal in `core/experiment_guards_trees.mojo`.
+- Records: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-40-trees section).
+
+### MOJOLEARN_ET_PART_ROWS_OFF
+
+- Tried: one partition row per thread on Apple FAST (A arm of aft-ab-etpr).
+- Evidence: EXP:105 KEPT 269ffa57a (rule d): promoted on Apple M3 Ultra only; NVIDIA/AMD A/B owed but FAST is Apple only. Verdict: deleted (V2 rule, unmeasured old path).
+- Removed: the define read, folded to its default constant, and the branch only it reached. Default unchanged: no bits move.
+- Files: extratrees/impl/decisiontree/batched_levelalgo/builder.mojo.
+- Deleted by: lane/expdel2-40-trees `e1052abc38` (2026-11-15); code recoverable at `6641db4b18`.
+- Restore: `git apply experiments/removed/MOJOLEARN_ET_PART_ROWS_OFF.patch` (the whole reversed file diff of the lane's one code commit), then delete the refusal in `core/experiment_guards_trees.mojo`.
+- Records: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-40-trees section).
+
+### MOJOLEARN_ET_RANGE_TILED
+
+- Tried: force-on of the tiled range kernel in FAST off Apple (the kernel stays the Apple and IDENTICAL default).
+- Evidence: no record (rule a). Verdict: deleted (V2 rule, unmeasured opt-in arm).
+- Removed: the define read, folded to its default constant, and the branch only it reached. Default unchanged: no bits move.
+- Files: extratrees/impl/decisiontree/batched_levelalgo/builder.mojo.
+- Deleted by: lane/expdel2-40-trees `e1052abc38` (2026-11-15); code recoverable at `6641db4b18`.
+- Restore: `git apply experiments/removed/MOJOLEARN_ET_RANGE_TILED.patch` (the whole reversed file diff of the lane's one code commit), then delete the refusal in `core/experiment_guards_trees.mojo`.
+- Records: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-40-trees section).
+
+### MOJOLEARN_ET_RM_LINE_HW_OFF
+
+- Tried: ET_RM_LINE_BYTES = 64 instead of 128.
+- Evidence: no record (rule b). Verdict: deleted (V2 rule, unmeasured old path).
+- Removed: the define read, folded to its default constant, and the branch only it reached. Default unchanged: no bits move.
+- Files: extratrees/impl/decisiontree/batched_levelalgo/builder.mojo.
+- Deleted by: lane/expdel2-40-trees `e1052abc38` (2026-11-15); code recoverable at `6641db4b18`.
+- Restore: `git apply experiments/removed/MOJOLEARN_ET_RM_LINE_HW_OFF.patch` (the whole reversed file diff of the lane's one code commit), then delete the refusal in `core/experiment_guards_trees.mojo`.
+- Records: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-40-trees section).
+
+### MOJOLEARN_ET_RM_NARROW
+
+- Tried: force-on of the narrow-row row-major gate off Apple.
+- Evidence: no record (rule a). Verdict: deleted (V2 rule, unmeasured opt-in arm).
+- Removed: the define read, folded to its default constant, and the branch only it reached. Default unchanged: no bits move.
+- Files: extratrees/impl/decisiontree/batched_levelalgo/builder.mojo.
+- Deleted by: lane/expdel2-40-trees `e1052abc38` (2026-11-15); code recoverable at `6641db4b18`.
+- Restore: `git apply experiments/removed/MOJOLEARN_ET_RM_NARROW.patch` (the whole reversed file diff of the lane's one code commit), then delete the refusal in `core/experiment_guards_trees.mojo`.
+- Records: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-40-trees section).
+
+### MOJOLEARN_ET_RM_NARROW_OFF
+
+- Tried: turning the Apple narrow-row row-major gate off.
+- Evidence: no record (rule b). Verdict: deleted (V2 rule, unmeasured old path).
+- Removed: the define read, folded to its default constant, and the branch only it reached. Default unchanged: no bits move.
+- Files: extratrees/impl/decisiontree/batched_levelalgo/builder.mojo.
+- Deleted by: lane/expdel2-40-trees `e1052abc38` (2026-11-15); code recoverable at `6641db4b18`.
+- Restore: `git apply experiments/removed/MOJOLEARN_ET_RM_NARROW_OFF.patch` (the whole reversed file diff of the lane's one code commit), then delete the refusal in `core/experiment_guards_trees.mojo`.
+- Records: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-40-trees section).
+
+### MOJOLEARN_ET_ROW_MAJOR
+
+- Tried: a row-major X with the search grid swapped (features on the fast axis).
+- Evidence: no record (rule a). Verdict: deleted (V2 rule, unmeasured opt-in arm).
+- Removed: the define read, folded to its default constant, and the branch only it reached. Default unchanged: no bits move.
+- Files: extratrees/impl/decisiontree/batched_levelalgo/builder.mojo.
+- Deleted by: lane/expdel2-40-trees `e1052abc38` (2026-11-15); code recoverable at `6641db4b18`.
+- Restore: `git apply experiments/removed/MOJOLEARN_ET_ROW_MAJOR.patch` (the whole reversed file diff of the lane's one code commit), then delete the refusal in `core/experiment_guards_trees.mojo`.
+- Records: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-40-trees section).
+
+### MOJOLEARN_ET_SCORE_TILED
+
+- Tried: force-on of the tiled regression score kernel in FAST off Apple (the kernel stays the Apple and IDENTICAL default).
+- Evidence: no record (rule a). Verdict: deleted (V2 rule, unmeasured opt-in arm).
+- Removed: the define read, folded to its default constant, and the branch only it reached. Default unchanged: no bits move.
+- Files: extratrees/impl/decisiontree/batched_levelalgo/builder.mojo.
+- Deleted by: lane/expdel2-40-trees `e1052abc38` (2026-11-15); code recoverable at `6641db4b18`.
+- Restore: `git apply experiments/removed/MOJOLEARN_ET_SCORE_TILED.patch` (the whole reversed file diff of the lane's one code commit), then delete the refusal in `core/experiment_guards_trees.mojo`.
+- Records: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-40-trees section).
+
+### MOJOLEARN_ET_STAGE_FULL_CAPACITY
+
+- Tried: staging every slot's whole capacity instead of the live prefix.
+- Evidence: no record (rule a). Verdict: deleted (V2 rule, unmeasured opt-in arm).
+- Removed: the define read, folded to its default constant, and the branch only it reached. Default unchanged: no bits move.
+- Files: extratrees/impl/decisiontree/batched_levelalgo/builder.mojo.
+- Deleted by: lane/expdel2-40-trees `e1052abc38` (2026-11-15); code recoverable at `6641db4b18`.
+- Restore: `git apply experiments/removed/MOJOLEARN_ET_STAGE_FULL_CAPACITY.patch` (the whole reversed file diff of the lane's one code commit), then delete the refusal in `core/experiment_guards_trees.mojo`.
+- Records: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-40-trees section).
+
+### MOJOLEARN_ET_TILED_SEARCH_IDENTICAL_OFF
+
+- Tried: turning the tiled search kernels off under Apple IDENTICAL.
+- Evidence: no record (rule b). Verdict: deleted (V2 rule, unmeasured old path).
+- Removed: the define read, folded to its default constant, and the branch only it reached. Default unchanged: no bits move.
+- Files: extratrees/impl/decisiontree/batched_levelalgo/builder.mojo.
+- Deleted by: lane/expdel2-40-trees `e1052abc38` (2026-11-15); code recoverable at `6641db4b18`.
+- Restore: `git apply experiments/removed/MOJOLEARN_ET_TILED_SEARCH_IDENTICAL_OFF.patch` (the whole reversed file diff of the lane's one code commit), then delete the refusal in `core/experiment_guards_trees.mojo`.
+- Records: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-40-trees section).
+
+### MOJOLEARN_ET_TILED_SEARCH_OFF
+
+- Tried: turning the tiled search kernels off on Apple.
+- Evidence: no record (rule b). Verdict: deleted (V2 rule, unmeasured old path).
+- Removed: the define read, folded to its default constant, and the branch only it reached. Default unchanged: no bits move.
+- Files: extratrees/impl/decisiontree/batched_levelalgo/builder.mojo.
+- Deleted by: lane/expdel2-40-trees `e1052abc38` (2026-11-15); code recoverable at `6641db4b18`.
+- Restore: `git apply experiments/removed/MOJOLEARN_ET_TILED_SEARCH_OFF.patch` (the whole reversed file diff of the lane's one code commit), then delete the refusal in `core/experiment_guards_trees.mojo`.
+- Records: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-40-trees section).
+
+### MOJOLEARN_ET_TPB_1024
+
+- Tried: DEVICE_TPB = 1024.
+- Evidence: no record (rule a). Verdict: deleted (V2 rule, unmeasured opt-in arm).
+- Removed: the define read, folded to its default constant, and the branch only it reached. Default unchanged: no bits move.
+- Files: extratrees/impl/decisiontree/batched_levelalgo/builder.mojo.
+- Deleted by: lane/expdel2-40-trees `e1052abc38` (2026-11-15); code recoverable at `6641db4b18`.
+- Restore: `git apply experiments/removed/MOJOLEARN_ET_TPB_1024.patch` (the whole reversed file diff of the lane's one code commit), then delete the refusal in `core/experiment_guards_trees.mojo`.
+- Records: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-40-trees section).
+
+### MOJOLEARN_ET_TPB_128
+
+- Tried: DEVICE_TPB = 128.
+- Evidence: no record (rule a). Verdict: deleted (V2 rule, unmeasured opt-in arm).
+- Removed: the define read, folded to its default constant, and the branch only it reached. Default unchanged: no bits move.
+- Files: extratrees/impl/decisiontree/batched_levelalgo/builder.mojo.
+- Deleted by: lane/expdel2-40-trees `e1052abc38` (2026-11-15); code recoverable at `6641db4b18`.
+- Restore: `git apply experiments/removed/MOJOLEARN_ET_TPB_128.patch` (the whole reversed file diff of the lane's one code commit), then delete the refusal in `core/experiment_guards_trees.mojo`.
+- Records: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-40-trees section).
+
+### MOJOLEARN_ET_TPB_512
+
+- Tried: DEVICE_TPB = 512.
+- Evidence: no record (rule a). Verdict: deleted (V2 rule, unmeasured opt-in arm).
+- Removed: the define read, folded to its default constant, and the branch only it reached. Default unchanged: no bits move.
+- Files: extratrees/impl/decisiontree/batched_levelalgo/builder.mojo.
+- Deleted by: lane/expdel2-40-trees `e1052abc38` (2026-11-15); code recoverable at `6641db4b18`.
+- Restore: `git apply experiments/removed/MOJOLEARN_ET_TPB_512.patch` (the whole reversed file diff of the lane's one code commit), then delete the refusal in `core/experiment_guards_trees.mojo`.
+- Records: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-40-trees section).
+
+### MOJOLEARN_IDN_ET_PART_ROWS_OFF
+
+- Tried: one partition row per thread under IDENTICAL on NVIDIA and AMD.
+- Evidence: no record (rule b). Verdict: deleted (V2 rule, unmeasured old path).
+- Removed: the define read, folded to its default constant, and the branch only it reached. Default unchanged: no bits move.
+- Files: extratrees/impl/decisiontree/batched_levelalgo/builder.mojo.
+- Deleted by: lane/expdel2-40-trees `e1052abc38` (2026-11-15); code recoverable at `6641db4b18`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_ET_PART_ROWS_OFF.patch` (the whole reversed file diff of the lane's one code commit), then delete the refusal in `core/experiment_guards_trees.mojo`.
+- Records: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-40-trees section).
+
+### MOJOLEARN_IDN_ET_STAGE_LIVE_OFF
+
+- Tried: full-capacity staging under IDENTICAL on NVIDIA and AMD.
+- Evidence: no record (rule b). Verdict: deleted (V2 rule, unmeasured old path).
+- Removed: the define read, folded to its default constant, and the branch only it reached. Default unchanged: no bits move.
+- Files: extratrees/impl/decisiontree/batched_levelalgo/builder.mojo.
+- Deleted by: lane/expdel2-40-trees `e1052abc38` (2026-11-15); code recoverable at `6641db4b18`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_ET_STAGE_LIVE_OFF.patch` (the whole reversed file diff of the lane's one code commit), then delete the refusal in `core/experiment_guards_trees.mojo`.
+- Records: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-40-trees section).
+
+### MOJOLEARN_IDN_ET_TILED_SEARCH_OFF
+
+- Tried: turning the tiled search kernels off under IDENTICAL on NVIDIA and AMD.
+- Evidence: no record (rule b). Verdict: deleted (V2 rule, unmeasured old path).
+- Removed: the define read, folded to its default constant, and the branch only it reached. Default unchanged: no bits move.
+- Files: extratrees/impl/decisiontree/batched_levelalgo/builder.mojo.
+- Deleted by: lane/expdel2-40-trees `e1052abc38` (2026-11-15); code recoverable at `6641db4b18`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_ET_TILED_SEARCH_OFF.patch` (the whole reversed file diff of the lane's one code commit), then delete the refusal in `core/experiment_guards_trees.mojo`.
+- Records: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-40-trees section).
+
+### MOJOLEARN_LEGACY_NARROW_ET_BINNED
+
+- Tried: the benchmark-tuned n_cols >= 64 binning gate.
+- Evidence: no record (rule b). Verdict: deleted (V2 rule, unmeasured old path).
+- Removed: the define read, folded to its default constant, and the branch only it reached. Default unchanged: no bits move.
+- Files: extratrees/impl/decisiontree/batched_levelalgo/builder.mojo.
+- Deleted by: lane/expdel2-40-trees `e1052abc38` (2026-11-15); code recoverable at `6641db4b18`.
+- Restore: `git apply experiments/removed/MOJOLEARN_LEGACY_NARROW_ET_BINNED.patch` (the whole reversed file diff of the lane's one code commit), then delete the refusal in `core/experiment_guards_trees.mojo`.
+- Records: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-40-trees section).
+
+### MOJOLEARN_LEGACY_NARROW_ET_RM
+
+- Tried: the benchmark-tuned quarter gate in FAST.
+- Evidence: EXP:1330 OWED, never run (rule b). Verdict: deleted (V2 rule, unmeasured old path).
+- Removed: the define read, folded to its default constant, and the branch only it reached. Default unchanged: no bits move.
+- Files: extratrees/impl/decisiontree/batched_levelalgo/builder.mojo.
+- Deleted by: lane/expdel2-40-trees `e1052abc38` (2026-11-15); code recoverable at `6641db4b18`.
+- Restore: `git apply experiments/removed/MOJOLEARN_LEGACY_NARROW_ET_RM.patch` (the whole reversed file diff of the lane's one code commit), then delete the refusal in `core/experiment_guards_trees.mojo`.
+- Records: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-40-trees section).
+
+Non-owner folds in extratrees/impl/decisiontree/batched_levelalgo/builder.mojo (inline TOMBSTONE markers; the owner lanes write the sections): `MOJOLEARN_ET_SCALAR_STAGE_COMPARE` (owner expdel2-01-base), `MOJOLEARN_IDN_ALL_OFF` (umbrella term folded to False at four sites), `MOJOLEARN_TREES_T11_LEVELS`, `MOJOLEARN_TREES_T12_BYTES`, `MOJOLEARN_TREES_T13_BYTES`, `MOJOLEARN_TREES_T14_EXACT` (owner expdel2-39-trees); patches `experiments/removed/MOJOLEARN_<D>.expdel2-40-trees.patch`. `MOJOLEARN_FOREST_DEVICE_FINITE_OFF`: already deleted by expdel2-05-base, nothing left in this file.
+
+Not deleted, contrary to the plan: `MOJOLEARN_IDN_ET_DEVICE_LOOP` (KEEP: the B arm of the owed `et-device-loop-early-exit` A/B, builder.mojo `ET_DEVICE_LOOP`, and the only arm checks/native_tests/et_device_loop_early_exit_gpu.sh builds); `MOJOLEARN_ET_MAX_ACC_32` (KEEP: the reference arm of extratrees/tools/check_accumulator_dispatch.sh, which compares full-forest fingerprints of the dispatched score kernels against the fixed 32-wide kernel).

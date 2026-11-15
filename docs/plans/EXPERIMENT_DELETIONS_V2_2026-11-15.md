@@ -2084,6 +2084,8 @@ Files: `extratrees/impl/decisiontree/batched_levelalgo/builder.mojo`
 
 Owned here (patch, TOMBSTONES.md section, refusal, grid and EXPERIMENTS.md records): `AFCL_T09`, `AFT_F06`, `AFT_F07`, `AFT_F08`, `ET_BINNED_OFF`, `ET_DEVICE_LOOP_K1`, `ET_DEVICE_LOOP_K2`, `ET_DEVICE_LOOP_K8`, `ET_MAX_ACC_16`, `ET_MAX_ACC_32`, `ET_MAX_ACC_4`, `ET_MAX_ACC_8`, `ET_PART_FLAGS_OFF`, `ET_PART_ROWS`, `ET_PART_ROWS_OFF`, `ET_RANGE_TILED`, `ET_RM_LINE_HW_OFF`, `ET_RM_NARROW`, `ET_RM_NARROW_OFF`, `ET_ROW_MAJOR`, `ET_SCORE_TILED`, `ET_STAGE_FULL_CAPACITY`, `ET_TILED_SEARCH_IDENTICAL_OFF`, `ET_TILED_SEARCH_OFF`, `ET_TPB_1024`, `ET_TPB_128`, `ET_TPB_512`, `IDN_ET_DEVICE_LOOP`, `IDN_ET_PART_ROWS_OFF`, `IDN_ET_STAGE_LIVE_OFF`, `IDN_ET_TILED_SEARCH_OFF`, `LEGACY_NARROW_ET_BINNED`, `LEGACY_NARROW_ET_RM`
 
+Lane result (expdel2-40-trees, 2026-11-15): 31 owned defines deleted; 6 non-owner folds (ET_SCALAR_STAGE_COMPARE, IDN_ALL_OFF, TREES_T11_LEVELS/T12_BYTES/T13_BYTES/T14_EXACT); KEEP `IDN_ET_DEVICE_LOOP` (B arm of the owed et-device-loop-early-exit A/B, used by checks/native_tests/et_device_loop_early_exit_gpu.sh) and `ET_MAX_ACC_32` (reference arm of extratrees/tools/check_accumulator_dispatch.sh); `FOREST_DEVICE_FINITE_OFF` already gone (expdel2-05-base).
+
 ### expdel2-41-trees (45 defines, 5 code files)
 
 | define | decision | rule | sites | lines | evidence / why |
