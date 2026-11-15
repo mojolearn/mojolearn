@@ -18,6 +18,7 @@ from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from bindings.py_balanced import py_call
 from bindings.py_cpython_table import cpython_table
+from bindings.native_loaded_module_door import native_interpreter_finalizing
 from bindings.native_resident_capsule_run import _RESIDENT_NAMES, _ResidentWords, _ResidentBytes
 
 
@@ -39,6 +40,12 @@ def _resident_destroy(capsule: PyObjectPtr) abi("C") -> NoneType:
         var free = words[0]
         var handle = words[1]
         words[0] = 0
+        # During interpreter teardown the binding's free entry may read the
+        # loaded modules (fatal once they are cleared); the device pool dies
+        # with the process, so the handle is not freed (and `free` not
+        # released) then.
+        if free != 0 and native_interpreter_finalizing():
+            free = 0
         if free != 0:
             var pending = cpy.PyErr_FetchTriple()
             var argument = cpy.lib.get_function[PyObjectPtr]("PyLong_FromSsize_t")(handle)

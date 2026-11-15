@@ -103,7 +103,7 @@ from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import PythonModuleBuilder, ExceptionType, raise_python_exception
 from bindings.py_cpython_table import cpython_table
-from bindings.native_loaded_module_door import native_loaded_module, shared_dict_watch, shared_dict_epoch
+from bindings.native_loaded_module_door import native_loaded_module, shared_dict_watch, shared_dict_epoch, native_interpreter_finalizing
 from bindings.py_balanced import py_call, py_type, py_fields, _is_exact_dict
 # The dead-key ring lives in a Python-free core module so kernels can poll it;
 # re-exported here for the bindings that import it from this module.
@@ -241,6 +241,14 @@ def _records_finalize_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") ->
     # native_prepared_owner). PyMethod_New binds the entry's integer token;
     # weakref supplies itself as argument two. No Python function runs.
     try:
+        # A model collected during interpreter teardown releases nothing: the
+        # process is ending, and dropping its pins can free owners whose own
+        # release reads the loaded modules, a fatal error once the
+        # interpreter's modules are cleared (test_trees_repeat's child exited
+        # -6, "PyImport_GetModuleDict: interpreter has no modules dictionary",
+        # while garbage-collecting at exit). Same rule as host_archive_finalize.
+        if native_interpreter_finalizing():
+            return PythonObject(None).steal_data()
         ref cpy = Python().cpython()
         var table = cpython_table()
         if table[].PyTuple_Size(args_ptr) != 2:
