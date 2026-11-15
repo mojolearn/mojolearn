@@ -74,8 +74,7 @@ comptime OCSVM_CHUNK = 64
 comptime _OC_FA = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
 # All three are the FAST + Apple default since the M3 A/B (n=1, quality
 # identical): ocsvm taxi 375.7 -> 65.0 ms (RES+2L+CHUNK256; RES alone -77%).
-# -D MOJOLEARN_XN_FAST_CLS2_OCSVM_CHUNK256_OFF turns CHUNK256 off; the old
-# -D names stay harmless. RES and 2L have no rollback:
+# The old -D names stay harmless. None of the three has a rollback:
 # TOMBSTONE: MOJOLEARN_XN_FAST_CLS2_OCSVM_RES_OFF (old path, superseded by the FAST+Apple default) deleted 2026-11-15 by lane/expdel-01-cluster; code recoverable at 976cce176d.
 # Restore: git apply experiments/removed/MOJOLEARN_XN_FAST_CLS2_OCSVM_RES_OFF.patch; record in docs/TOMBSTONES.md.
 comptime OCSVM_CLS2_RES = _OC_FA
@@ -104,7 +103,9 @@ comptime OCSVM_X_ON = OCSVM_CLS2_RES or OCSVM_IDN_RES
 comptime OCSVM_CLS2_2L = _OC_FA or _OC_IDN
 # TOMBSTONE: MOJOLEARN_IDN_OCSVM_CHUNK256 (unmeasured opt-in IDENTICAL arm) deleted 2026-11-15 by lane/expdel2-10-cluster; code recoverable at 9cf7afdb28.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_OCSVM_CHUNK256.patch; record in docs/TOMBSTONES.md.
-comptime OCSVM_CLS2_CHUNK256 = _OC_FA and not is_defined["MOJOLEARN_XN_FAST_CLS2_OCSVM_CHUNK256_OFF"]()
+# TOMBSTONE: MOJOLEARN_XN_FAST_CLS2_OCSVM_CHUNK256_OFF (old path, EXP:358 KEEP FAST+Apple default) deleted 2026-11-15 by lane/expdel2-10-cluster; code recoverable at 0dffcf5903.
+# Restore: git apply experiments/removed/MOJOLEARN_XN_FAST_CLS2_OCSVM_CHUNK256_OFF.patch; record in docs/TOMBSTONES.md.
+comptime OCSVM_CLS2_CHUNK256 = _OC_FA
 comptime OCSVM_CHUNK_RUN = 256 if OCSVM_CLS2_CHUNK256 else OCSVM_CHUNK
 
 comptime S_IT = 0
