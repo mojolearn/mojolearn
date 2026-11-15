@@ -88,6 +88,8 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_SYM_BUF_ARENA"](), "removed 2026-11-15 (lane/expdel-05-trees): MOJOLEARN_SYM_BUF_ARENA, the FAST Apple per-fit buffer pool of the pointwise symmetric arm, was NEUTRAL: rab7-symbufarena 1000-taxi 18897.66 -> 18865.75 ms (-0.2%); F12 M3 B/A 0.93..1.01 mixed; code at 0f457a0c03; see docs/TOMBSTONES.md"
     # Restore: git apply experiments/removed/MOJOLEARN_SYM_MULTI_ALL.patch
     comptime assert not is_defined["MOJOLEARN_SYM_MULTI_ALL"](), "removed 2026-11-15 (lane/expdel-05-trees): MOJOLEARN_SYM_MULTI_ALL, the FAST Apple umbrella of YR_TASK_FUSED (its PL_GROUP_NARROW part is the default on its own), was NEUTRAL: rab4-symmulti yetirank 3390.8 -> 3395.46 ms (+0.1%); code at 16f9e02852; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_YR_TASK_FUSED.patch
+    comptime assert not is_defined["MOJOLEARN_YR_TASK_FUSED"](), "removed 2026-11-15 (lane/expdel-05-trees): MOJOLEARN_YR_TASK_FUSED, the FAST Apple one-launch YetiRank call, was NEUTRAL: rab7-yrtaskfused yetirank 3386.79 -> 3394.43 ms (+0.2%), ndcg10 .680466 -> .680553; code at 41f0634a67; see docs/TOMBSTONES.md"
     return True
 
 

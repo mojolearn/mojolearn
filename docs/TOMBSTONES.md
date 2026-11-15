@@ -636,6 +636,7 @@ in the tables after the sections.
 | [`MOJOLEARN_SYM_ITER_ALL`](#mojolearn_sym_iter_all) | Trees (GBDT, Apple FAST) | NEUTRAL | 2026-11-15 | [MOJOLEARN_SYM_ITER_ALL.patch](../experiments/removed/MOJOLEARN_SYM_ITER_ALL.patch) |
 | [`MOJOLEARN_SYM_BUF_ARENA`](#mojolearn_sym_buf_arena) | Trees (GBDT, Apple FAST) | NEUTRAL | 2026-11-15 | [MOJOLEARN_SYM_BUF_ARENA.patch](../experiments/removed/MOJOLEARN_SYM_BUF_ARENA.patch) |
 | [`MOJOLEARN_SYM_MULTI_ALL`](#mojolearn_sym_multi_all) | Trees (GBDT, Apple FAST) | NEUTRAL | 2026-11-15 | [MOJOLEARN_SYM_MULTI_ALL.patch](../experiments/removed/MOJOLEARN_SYM_MULTI_ALL.patch) |
+| [`MOJOLEARN_YR_TASK_FUSED`](#mojolearn_yr_task_fused) | Trees (GBDT, Apple FAST) | NEUTRAL | 2026-11-15 | [MOJOLEARN_YR_TASK_FUSED.patch](../experiments/removed/MOJOLEARN_YR_TASK_FUSED.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -5999,3 +6000,13 @@ bits change on any vendor or the host column, no board row needs re-timing.
 - Files the patch restores: `gbdt/targets/kernel/yeti_rank.mojo`, `gbdt/targets/kernel/pair_logit_group.mojo`
 - Guard refusal: core/experiment_guards_trees.mojo (lane expdel-05-trees block). No `grid_controls` entry named it.
 - EXPERIMENTS.md rows: 198, 222, 1302; appended row in the "Lane expdel-05-trees" section.
+
+### MOJOLEARN_YR_TASK_FUSED
+
+- Tried: one launch per YetiRank call (`yeti_rank_task_fused_kernel` via `launch_yeti_rank_fused`): the point load, the per-query unit-weight means, the centering, the block kernel's draws / sort / pairs and the row scatter in one task block, the group ids computed once per fit, FAST + Apple only.
+- Verdict: NEUTRAL. rab7-yrtaskfused (M3 Ultra, Verdicts batch 4, 2026-10-05): gbdt-rank-yetirank istella 3386.79 -> 3394.43 ms (+0.2%), ndcg10 .680466 -> .680553; stays off. Deleted with it: `yeti_task_fused_for`, `YETI_TASK_FUSED`, the kernel, its launcher, the per-fit group-id launch in `make_yeti_rank_target_buffers` and the per-task magnitude count in `doc_parallel_boosting.mojo`. Deleted 2026-11-15 by lane/expdel-05-trees (one commit for this define).
+- Recoverable at `41f0634a67`. Patch: `experiments/removed/MOJOLEARN_YR_TASK_FUSED.patch` (the reverse of the deletion commit, code files only; apply in reverse deletion order when restoring several of this lane).
+- Files the patch restores: `gbdt/targets/kernel/yeti_rank.mojo`, `gbdt/methods/doc_parallel_boosting.mojo`
+- Guard refusal: core/experiment_guards_trees.mojo (lane expdel-05-trees block). No `grid_controls` entry named it.
+- EXPERIMENTS.md rows: 204, 228, 1303; appended row in the "Lane expdel-05-trees" section.
+- Note: The unmeasured AFT_N10 card (experiments/apple_fast_trees/N.json) named the task-fused kernel as one of its two sites; its block-kernel site stays, so N10 still has an arm.
