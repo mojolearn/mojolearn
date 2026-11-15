@@ -58,7 +58,8 @@ comptime ANN3_COARSE_SEED = True
 #: default build). At 10,000 rows 128 makes 79 threadgroups, and the M3 Ultra
 #: is only 1.6 times the M4 there (4.3 times at CAGRA's 391 threadgroups).
 #: The per-row statements and their order do not depend on it: no bit moves.
-comptime ANN3_TSNE_RB32 = is_defined["MOJOLEARN_ANN3_TSNE_RB32"]()
+# TOMBSTONE: MOJOLEARN_ANN3_TSNE_RB32 (unmeasured opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-14-cluster; code recoverable at 0c729eaf23.
+# Restore: git apply experiments/removed/MOJOLEARN_ANN3_TSNE_RB32.patch; record in docs/TOMBSTONES.md.
 comptime ANN3_TSNE_RB64 = is_defined["MOJOLEARN_ANN3_TSNE_RB64"]()
 
 #: The IVF-PQ and IVF-SQ builds download their code arrays (n x pq_dim and

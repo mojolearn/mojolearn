@@ -25,7 +25,7 @@ from x_ann.knn_device import knn_enqueue
 from metrics.checks.device_io import upload_f32, upload_i32, download_f32, download_i32
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, ftz, identical_log
 from core.accelerator_target import TARGET_HAS_APPLE_GPU
-from x_ann.switches import ANN3_TSNE_RB32, ANN3_TSNE_RB64, ANN3_TSNE_STEP_ROWS
+from x_ann.switches import ANN3_TSNE_RB64, ANN3_TSNE_STEP_ROWS
 from checks.numerics import identical_div, identical_mul
 from x_ann.tsne_core import ts_q
 from x_ann.tsne_core import (
@@ -53,9 +53,11 @@ def perplexity_kernel(n: Int32, nn_d: F32P, nn: Int32, log_perp: Float32, p: F32
 
 comptime _FAST_APPLE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
 #: rows per threadgroup and staged candidate rows per tile of the repulsion
-#: (lane ann-apple3, OPT-IN trials under FAST on Apple: 32 or 64 rows per
+#: (lane ann-apple3, OPT-IN trial under FAST on Apple: 64 rows per
 #: threadgroup, x_ann/switches.mojo)
-comptime RTB = 32 if (_FAST_APPLE and ANN3_TSNE_RB32) else (64 if (_FAST_APPLE and ANN3_TSNE_RB64) else 128)
+# TOMBSTONE: MOJOLEARN_ANN3_TSNE_RB32 (unmeasured opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-14-cluster; code recoverable at 0c729eaf23.
+# Restore: git apply experiments/removed/MOJOLEARN_ANN3_TSNE_RB32.patch; record in docs/TOMBSTONES.md.
+comptime RTB = 64 if (_FAST_APPLE and ANN3_TSNE_RB64) else 128
 comptime RTJ = 256
 
 
