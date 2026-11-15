@@ -48,6 +48,7 @@ not a property anyone should be relying on for a recorded stage.
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from std.memory import bitcast
+from std.sys.compile import is_defined
 
 # ---------------------------------------------------------------------------
 # Sabotage switchboard (all no-ops unless the define is named on the command
