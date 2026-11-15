@@ -326,7 +326,7 @@ from core.step_glue import (
 from core.identity_trace import IdentityTrace
 from checks.kernel_matrix import COLUMN_APPLE, COLUMN_NVIDIA, TARGET_COLUMN
 from core.device_arena import arena_active, arena_take
-from gemm.neural_dispatch import GemmWorkspace, NEURAL_PAIR_ENABLED
+from gemm.neural_dispatch import GemmWorkspace
 from gemm.experiments.neural_profile import NEURAL_PROFILE_CHANGED
 # lane/lowbit-blocks (2026-09-29): the block's products under
 # `numeric_profile="fixed15_v1"`; absent planes leave every call below as it was.
@@ -5084,18 +5084,11 @@ def llama_mlp_forward(
     var bias_silu_fused = opts.mlp_bias and opts.act_is_silu()
 
     # ---- gate_proj and up_proj. C[M, it] = norm2_out[M, dm] . W[it, dm]^T.
-    var projections_paired = False
-    comptime if NEURAL_PAIR_ENABLED:
-        if gated and not w.int15:
-            stages.gemm_workspace.run_pair(ctx, stages.gate_proj, stages.up_proj,
-                stages.norm2_out, w.w_gate, w.w_up, m, it, dm, _gemm_op_nt())
-            projections_paired = True
     if gated:
-        if not projections_paired:
-            llama_proj(
-                ctx, stages.gemm_workspace, stages.int15, w.int15, LLAMA_PROJ_GATE,
-                stages.gate_proj, stages.norm2_out, w.w_gate, m, it, dm,
-            )
+        llama_proj(
+            ctx, stages.gemm_workspace, stages.int15, w.int15, LLAMA_PROJ_GATE,
+            stages.gate_proj, stages.norm2_out, w.w_gate, m, it, dm,
+        )
         if bias_silu_fused:
             step_count_launch()
             ctx.enqueue_function[bias_silu_kernel](
@@ -5131,11 +5124,10 @@ def llama_mlp_forward(
         var no_gate = List[Float32]()
         trace.record_list_f32(prefix + ".gate_proj.out", no_gate)
     pc.tick(ctx, "fwd.gate_proj", "gateup_fwd")
-    if not projections_paired:
-        llama_proj(
-            ctx, stages.gemm_workspace, stages.int15, w.int15, LLAMA_PROJ_UP,
-            stages.up_proj, stages.norm2_out, w.w_up, m, it, dm,
-        )
+    llama_proj(
+        ctx, stages.gemm_workspace, stages.int15, w.int15, LLAMA_PROJ_UP,
+        stages.up_proj, stages.norm2_out, w.w_up, m, it, dm,
+    )
     if bias_gelu_fused and not gated:
         step_count_launch()
         ctx.enqueue_function[bias_gelu_kernel](

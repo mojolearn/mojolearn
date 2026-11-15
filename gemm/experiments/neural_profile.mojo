@@ -151,29 +151,3 @@ def neural_cell[CHAINS: Int, SLOTS: Int = 16](
     return neural_fold_drain[SLOTS](stack,occupied)
 
 
-def neural_profile_host[MIN_LEAF: Int = 128, CHAINS: Int = 1](
-    c: MutPointer[Float32, MutAnyOrigin], a: MutPointer[Float32, MutAnyOrigin],
-    b: MutPointer[Float32, MutAnyOrigin], m: Int, n: Int, k: Int, op: Int,
-) raises:
-    neural_validate(m,n,k,op)
-    var part = neural_partition[MIN_LEAF](k)
-    var st = neural_strides(op,m,n,k)
-    for row in range(m):
-        for col in range(n):
-            c.unsafe_store(row*n+col,neural_cell[CHAINS](a,b,row,col,k,part[0],part[1],
-                st[0],st[1],st[2],st[3]))
-
-
-def neural_profile_ab_host[LEAF: Int = 128, CHAINS: Int = 1, CANDIDATE: Bool = False](
-    c: MutPointer[Float32, MutAnyOrigin], a: MutPointer[Float32, MutAnyOrigin],
-    b: MutPointer[Float32, MutAnyOrigin], m: Int, n: Int, k: Int, op: Int,
-) raises:
-    comptime L = LEAF if CANDIDATE and NN03 else CONTRACT_K_LEAF_MIN
-    comptime C = CHAINS if CANDIDATE and NN04 else 1
-    neural_profile_host[L,C](c,a,b,m,n,k,op)
-
-
-def neural_profile_label[LEAF: Int = 128, CHAINS: Int = 1, CANDIDATE: Bool = False]() -> String:
-    comptime L = LEAF if CANDIDATE and NN03 else CONTRACT_K_LEAF_MIN
-    comptime C = CHAINS if CANDIDATE and NN04 else 1
-    return "neural.fp32.leaf" + String(L) + ".chains" + String(C) + ".pair-tree.v1"
