@@ -53,23 +53,34 @@ def main():
         words["window%d.forward" % window] = hashlib.sha256(_u32(y).tobytes()).hexdigest()
         for name in sorted(grads):
             words["window%d.grad.%s" % (window, name)] = hashlib.sha256(_u32(grads[name]).tobytes()).hexdigest()
-        # Caller-owned weights remain live; no address-only cache may
-        # hide a mutation after a successful call. Named order beats
-        # a lower offending index in the later weight tensor.
+        # The constructor converts the weights once into arrays the block
+        # owns (bindings/neural_block_admission_door.mojo admit_block_f32),
+        # and every forward hands those to the kernels through the one
+        # weight door (frozen, epoch-keyed, as Mamba). An in-place edit of
+        # the caller's array therefore never reaches the block.
         q = weights["q_proj.weight"].reshape(-1)
-        k = weights["k_proj.weight"].reshape(-1)
-        saved_q, saved_k = q[3], k[0]
-        q[3], k[0] = np.float32(np.nan), np.float32(np.inf)
+        saved_q = q[3]
+        q[3] = np.float32(np.nan)
+        try:
+            same_bits(block.forward(x), y, "caller edit after construction")
+        finally:
+            q[3] = saved_q
+        # New weights go through the public setter; the next forward
+        # refuses the non-finite one, in named order (q_proj before
+        # k_proj, whatever the flat indices).
+        bad = {name: np.array(value, copy=True) for name, value in weights.items()}
+        bad["q_proj.weight"].reshape(-1)[3] = np.float32(np.nan)
+        bad["k_proj.weight"].reshape(-1)[0] = np.float32(np.inf)
         error = ""
         try:
+            block.set_params(weights=bad)
             block.forward(x)
         except Exception as exc:
             error = str(exc)
-        finally:
-            q[3], k[0] = saved_q, saved_k
         assert "NaN in q_proj.weight at flat index 3" in error, error
-        same_bits(block.forward(x), y, "restored mutable weights")
-    print("Transformer hd128 public PASS: both windows, all gradients, split caches, ordered mutable-weight refusal")
+        block.set_params(weights=weights)
+        same_bits(block.forward(x), y, "restored weights")
+    print("Transformer hd128 public PASS: both windows, all gradients, split caches, frozen weights, ordered non-finite refusal")
     return words
 
 

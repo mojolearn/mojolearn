@@ -807,7 +807,13 @@ def _neural_plain(mut mods: NativeModules, owner: NativeBlockExecution, x: Pytho
                 var addresses: List[Int] = [_addr(x, keep)]
                 var weights = fields["_w"]
                 for i in range(len(weights)):  # driver-loop: admit transformer weight slots once
-                    addresses.append(_addr(weights[i], keep))
+                    # The one weight door, as Mamba (core/weight_epoch.mojo): the weight is frozen read-only and
+                    # the epoch bumps on a new or reassigned weight, so the block session's address + epoch key
+                    # (transformer/attn_step_session.mojo refresh_weights) is exact. Before (smoke 2026-11-15):
+                    # `_addr` snapshotted an Array (an in-place edit kept the stale device copy, a NaN weight was
+                    # not refused) and copied a foreign buffer whole on every call (a new address, so a re-upload
+                    # per call).
+                    addresses.append(_weight_addr(weights[i], keep))
                 var params: List[Int] = [b, l, d, Int(py=fields["n_heads"]), Int(py=fields["n_kv_heads"]), Int(py=fields["head_dim"]), Int(py=fields["intermediate"])]
                 if fresh_session:
                     addresses.append(0)
@@ -819,7 +825,7 @@ def _neural_plain(mut mods: NativeModules, owner: NativeBlockExecution, x: Pytho
                 if Bool(py=fields["_extended"]):
                     var optional = fields["_wopt"]
                     for i in range(len(optional)):  # driver-loop: admit optional transformer weight slots once
-                        addresses.append(_addr(optional[i], keep))
+                        addresses.append(_weight_addr(optional[i], keep))  # the one weight door (above)
                     var options = fields["_opts_tail"]
                     for i in range(len(options)):  # driver-loop: over the fixed block-options tail (argument words, not data); small-loop(block options integer span)
                         params.append(Int(py=options[i]))
@@ -1373,8 +1379,10 @@ def _neural_backward_prepared(mut mods: NativeModules, block: PythonObject, inpu
         # frozen read-only, the weight epoch bumped on a new or copied
         # weight), so the cached block program keys them by address + epoch
         # (core/weight_epoch.mojo) and an unchanged weight is NOT re-uploaded
-        # per backward call. The transformer route keeps its own session key.
-        addresses.append(_addr(weights[i], keep) if transformer else _weight_addr(weights[i], keep))
+        # per backward call. The transformer's weights take the same door
+        # (smoke 2026-11-15: its separate `_addr` route snapshotted Arrays
+        # and copied foreign weights per call).
+        addresses.append(_weight_addr(weights[i], keep))
         var shape = List[Int]()
         var weight_shape = weights[i].shape  # read once, not once per axis
         for j in range(len(weight_shape)):  # driver-loop: over tensor shape metadata
