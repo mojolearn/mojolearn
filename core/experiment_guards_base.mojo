@@ -47,6 +47,8 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_AF_FAST_RESIDENT_OFF"](), "removed 2026-11-15 (lane/expdel-06-base-cluster-kernel): AF_FAST_RESIDENT_OFF (FAST+Apple rollback to Adafactor's per-call entry) is gone; the resident second moment is the FAST+Apple path (adafactor 392.8 -> 205.2 ms, digest identical, rab10-afresident); IDENTICAL keeps MOJOLEARN_IDN_AF_RESIDENT_OFF; restore: experiments/removed/MOJOLEARN_AF_FAST_RESIDENT_OFF.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_APPLE_FAST_GEMM_TN_V1_OFF.patch
     comptime assert not is_defined["MOJOLEARN_APPLE_FAST_GEMM_TN_V1_OFF"](), "removed 2026-11-15 (lane/expdel-06-base-cluster-kernel): APPLE_FAST_GEMM_TN_V1_OFF (FAST+Apple rollback of square gemm_tn past split-K to the vendor matmul) is gone; IDENTICAL's gemm_tn_identical_v1 arm is the FAST+Apple path (ols istella 2,219 -> 935 ms, tier-ols-tnv1b); restore: experiments/removed/MOJOLEARN_APPLE_FAST_GEMM_TN_V1_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_KM_FAST_RBF_RESIDENT_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_KM_FAST_RBF_RESIDENT_OFF"](), "removed 2026-11-15 (lane/expdel-06-base-cluster-kernel): KM_FAST_RBF_RESIDENT_OFF (FAST+Apple rollback of RBFSampler fit_transform to main's two binding calls) is gone; the one-call resident fit_transform is the FAST+Apple path (rbf-sampler istella 93.4 -> 76.3 ms, w2-kfeat-rbf-q-r1 PASS); restore: experiments/removed/MOJOLEARN_KM_FAST_RBF_RESIDENT_OFF.patch"
     return True
 
 

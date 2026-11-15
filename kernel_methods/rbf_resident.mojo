@@ -1,8 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """lane apple-fast-w2-kfeat (2026-10-04): RBFSampler.fit_transform in ONE
-binding call, DEFAULT in FAST + Apple (rollback
-`-D MOJOLEARN_KM_FAST_RBF_RESIDENT_OFF`).
+binding call, DEFAULT in FAST + Apple.
 
 Main's fit_transform is two binding calls. `fit` makes two fresh device
 buffers, waits, draws W and b, waits, and downloads each through a fresh
@@ -63,12 +62,13 @@ from core.shared_slot import SharedSlot
 
 # KM_FAST_RBF_RESIDENT, DEFAULT in FAST + Apple (lane/apple-fast-w2-kfeat):
 # M3, one run per arm: rbf-sampler istella 93.4 -> 76.3 ms; w2-kfeat-rbf-q-r1
-# PASS (byte-identical outputs). MOJOLEARN_KM_FAST_RBF_RESIDENT_OFF restores
-# main's two-call fit + transform.
+# PASS (byte-identical outputs). Main's two-call fit + transform stays the
+# path of every other build.
+# TOMBSTONE: MOJOLEARN_KM_FAST_RBF_RESIDENT_OFF (old path, superseded by the FAST+Apple default) deleted 2026-11-15 by lane/expdel-06-base-cluster-kernel; code recoverable at fd51cb8d40.
+# Restore: git apply experiments/removed/MOJOLEARN_KM_FAST_RBF_RESIDENT_OFF.patch; record in docs/TOMBSTONES.md.
 comptime KM_FAST_RBF_RESIDENT = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
     and TARGET_HAS_APPLE_GPU
-    and not is_defined["MOJOLEARN_KM_FAST_RBF_RESIDENT_OFF"]()
     and not is_defined["MOJOLEARN_FAMILY_CTX_PER_CALL"]()  # the pools belong to the one context
 )
 
