@@ -243,7 +243,7 @@ are the same on Metal, PTX and AMDGPU, run to run and vendor to vendor.
 """
 
 from std.collections import Array
-from ensemble.tree_identical_ideas import T06, T14, T14_EXACT
+from ensemble.tree_identical_ideas import T06, T14
 from ensemble.tree_moments import balanced_mse_gain
 from max.gpu import block_dim, thread_idx
 from max.gpu.memory import AddressSpace
@@ -1187,7 +1187,9 @@ struct RegressionObjectiveFunction[
                 self.scales
             ).cast[Self.dtype]()
         )
-        comptime if T14 and not T14_EXACT and Self.dtype == DType.float32:
+        # TOMBSTONE: MOJOLEARN_TREES_T14_EXACT (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-38-trees; code recoverable at 52922acecb.
+        # Restore: git apply experiments/removed/MOJOLEARN_TREES_T14_EXACT.expdel2-38-trees.patch; record in docs/TOMBSTONES.md.
+        comptime if T14 and Self.dtype == DType.float32:
             return balanced_mse_gain(parent_weight.cast[DType.float32](),left_weight.cast[DType.float32](),label_sum.cast[DType.float32](),left_label_sum.cast[DType.float32]()).cast[Self.dtype]()
         # `parent_obj = -label_sum * label_sum * invLen`
         var p1 = _ftz_seam(-label_sum * label_sum)

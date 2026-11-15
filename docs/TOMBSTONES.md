@@ -1811,6 +1811,39 @@ Deletions reversed by new evidence. The code is back on main; the section and th
 | [`MOJOLEARN_AFCL_P11`](#mojolearn_afcl_p11) | Series (Apple FAST card P11 two-chain series sums) | removed (never-run Apple FAST programme card) | 2026-11-15 | [MOJOLEARN_AFCL_P11.patch](../experiments/removed/MOJOLEARN_AFCL_P11.patch) |
 | [`MOJOLEARN_IDN_KPSS_SCAN_OFF`](#mojolearn_idn_kpss_scan_off) | Series (KPSS blocked scan) | removed (old path, no A/B recorded) | 2026-11-15 | [MOJOLEARN_IDN_KPSS_SCAN_OFF.patch](../experiments/removed/MOJOLEARN_IDN_KPSS_SCAN_OFF.patch) |
 | [`MOJOLEARN_TSA_FAST_KPSS_PACK_OFF`](#mojolearn_tsa_fast_kpss_pack_off) | Series (KPSS packed one-launch FAST+Apple) | removed (old path beside a recorded default) | 2026-11-15 | [MOJOLEARN_TSA_FAST_KPSS_PACK_OFF.patch](../experiments/removed/MOJOLEARN_TSA_FAST_KPSS_PACK_OFF.patch) |
+| [`MOJOLEARN_2011_HIST_ITEMS1`](#mojolearn_2011_hist_items1) | Trees (RF histogram items per thread, DEVIATION 2011) | removed (old path beside the default) | 2026-11-15 | [MOJOLEARN_2011_HIST_ITEMS1.patch](../experiments/removed/MOJOLEARN_2011_HIST_ITEMS1.patch) |
+| [`MOJOLEARN_2012_SMEM_COPIES4`](#mojolearn_2012_smem_copies4) | Trees (RF histogram shared-memory copies) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_2012_SMEM_COPIES4.patch](../experiments/removed/MOJOLEARN_2012_SMEM_COPIES4.patch) |
+| [`MOJOLEARN_2502_RETRY_PURE`](#mojolearn_2502_retry_pure) | Trees (RF pure-node retry, DEVIATION 2502) | removed (old path beside the default) | 2026-11-15 | [MOJOLEARN_2502_RETRY_PURE.patch](../experiments/removed/MOJOLEARN_2502_RETRY_PURE.patch) |
+| [`MOJOLEARN_AFT_F01`](#mojolearn_aft_f01) | Trees (RF 32-column pass, FAST+Apple) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_AFT_F01.patch](../experiments/removed/MOJOLEARN_AFT_F01.patch) |
+| [`MOJOLEARN_AFT_F02`](#mojolearn_aft_f02) | Trees (RF eight histogram rows per lane, FAST+Apple) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_AFT_F02.patch](../experiments/removed/MOJOLEARN_AFT_F02.patch) |
+| [`MOJOLEARN_AFT_F03`](#mojolearn_aft_f03) | Trees (RF two split cells per warp block, FAST+Apple) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_AFT_F03.patch](../experiments/removed/MOJOLEARN_AFT_F03.patch) |
+| [`MOJOLEARN_AFT_F04`](#mojolearn_aft_f04) | Trees (RF scan width x2, FAST+Apple) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_AFT_F04.patch](../experiments/removed/MOJOLEARN_AFT_F04.patch) |
+| [`MOJOLEARN_AFT_F05`](#mojolearn_aft_f05) | Trees (RF sampled-order gather four rows per lane, FAST+Apple) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_AFT_F05.patch](../experiments/removed/MOJOLEARN_AFT_F05.patch) |
+| [`MOJOLEARN_IDN_RF_COLS40_OFF`](#mojolearn_idn_rf_cols40_off) | Trees (RF 40 columns per pass, IDENTICAL NVIDIA/AMD) | removed (old path beside the default) | 2026-11-15 | [MOJOLEARN_IDN_RF_COLS40_OFF.patch](../experiments/removed/MOJOLEARN_IDN_RF_COLS40_OFF.patch) |
+| [`MOJOLEARN_IDN_RF_FUSED_PARTITION_OFF`](#mojolearn_idn_rf_fused_partition_off) | Trees (RF partition fused into the split drain, IDENTICAL) | removed (old path beside the default) | 2026-11-15 | [MOJOLEARN_IDN_RF_FUSED_PARTITION_OFF.patch](../experiments/removed/MOJOLEARN_IDN_RF_FUSED_PARTITION_OFF.patch) |
+| [`MOJOLEARN_IDN_RF_HIST_SIMD_AGG_OFF`](#mojolearn_idn_rf_hist_simd_agg_off) | Trees (RF histogram warp aggregation, IDENTICAL NVIDIA/AMD) | removed (old path beside the default) | 2026-11-15 | [MOJOLEARN_IDN_RF_HIST_SIMD_AGG_OFF.patch](../experiments/removed/MOJOLEARN_IDN_RF_HIST_SIMD_AGG_OFF.patch) |
+| [`MOJOLEARN_IDN_RF_HIST_ZERO_OFF`](#mojolearn_idn_rf_hist_zero_off) | Trees (RF histogram zero-after-read, IDENTICAL NVIDIA/AMD) | removed (old path beside the default) | 2026-11-15 | [MOJOLEARN_IDN_RF_HIST_ZERO_OFF.patch](../experiments/removed/MOJOLEARN_IDN_RF_HIST_ZERO_OFF.patch) |
+| [`MOJOLEARN_IDN_RF_QBIN_DEVICE_OFF`](#mojolearn_idn_rf_qbin_device_off) | Trees (RF quantile bin index on device, IDENTICAL) | removed (old path beside the default) | 2026-11-15 | [MOJOLEARN_IDN_RF_QBIN_DEVICE_OFF.patch](../experiments/removed/MOJOLEARN_IDN_RF_QBIN_DEVICE_OFF.patch) |
+| [`MOJOLEARN_IDN_RF_SAMPLE_PER_NODE_OFF`](#mojolearn_idn_rf_sample_per_node_off) | Trees (RF per-node feature sampler, IDENTICAL) | removed (old path beside the default) | 2026-11-15 | [MOJOLEARN_IDN_RF_SAMPLE_PER_NODE_OFF.patch](../experiments/removed/MOJOLEARN_IDN_RF_SAMPLE_PER_NODE_OFF.patch) |
+| [`MOJOLEARN_RF_BINS_COLUMN_MAJOR`](#mojolearn_rf_bins_column_major) | Trees (RF bins row-major on Apple) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_RF_BINS_COLUMN_MAJOR.patch](../experiments/removed/MOJOLEARN_RF_BINS_COLUMN_MAJOR.patch) |
+| [`MOJOLEARN_RF_COLS10`](#mojolearn_rf_cols10) | Trees (RF columns per pass on Apple) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_RF_COLS10.patch](../experiments/removed/MOJOLEARN_RF_COLS10.patch) |
+| [`MOJOLEARN_RF_FAST_HIST_ZERO_OFF`](#mojolearn_rf_fast_hist_zero_off) | Trees (RF histogram zero-after-read, FAST/Apple) | removed (old path beside the default) | 2026-11-15 | [MOJOLEARN_RF_FAST_HIST_ZERO_OFF.patch](../experiments/removed/MOJOLEARN_RF_FAST_HIST_ZERO_OFF.patch) |
+| [`MOJOLEARN_RF_FAST_SAMPLE_PER_COLUMN`](#mojolearn_rf_fast_sample_per_column) | Trees (RF per-node feature sampler, FAST) | removed (old path beside the default) | 2026-11-15 | [MOJOLEARN_RF_FAST_SAMPLE_PER_COLUMN.patch](../experiments/removed/MOJOLEARN_RF_FAST_SAMPLE_PER_COLUMN.patch) |
+| [`MOJOLEARN_RF_FBS_WARP_OFF`](#mojolearn_rf_fbs_warp_off) | Trees (RF SIMD-group split kernel, FAST+Apple) | removed (old path beside the default) | 2026-11-15 | [MOJOLEARN_RF_FBS_WARP_OFF.patch](../experiments/removed/MOJOLEARN_RF_FBS_WARP_OFF.patch) |
+| [`MOJOLEARN_RF_HIST_COLUMNS2`](#mojolearn_rf_hist_columns2) | Trees (RF two-column histogram tiles) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_RF_HIST_COLUMNS2.patch](../experiments/removed/MOJOLEARN_RF_HIST_COLUMNS2.patch) |
+| [`MOJOLEARN_RF_HIST_COLUMNS4`](#mojolearn_rf_hist_columns4) | Trees (RF four-column histogram tiles force-on) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_RF_HIST_COLUMNS4.patch](../experiments/removed/MOJOLEARN_RF_HIST_COLUMNS4.patch) |
+| [`MOJOLEARN_RF_HIST_COLUMNS4_OFF`](#mojolearn_rf_hist_columns4_off) | Trees (RF four-column histogram tiles) | removed (old path beside the default) | 2026-11-15 | [MOJOLEARN_RF_HIST_COLUMNS4_OFF.patch](../experiments/removed/MOJOLEARN_RF_HIST_COLUMNS4_OFF.patch) |
+| [`MOJOLEARN_RF_HIST_COLUMNS8`](#mojolearn_rf_hist_columns8) | Trees (RF eight-column histogram tiles force-on) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_RF_HIST_COLUMNS8.patch](../experiments/removed/MOJOLEARN_RF_HIST_COLUMNS8.patch) |
+| [`MOJOLEARN_RF_HIST_COLUMNS8_OFF`](#mojolearn_rf_hist_columns8_off) | Trees (RF eight-column histogram tiles, FAST+Apple) | removed (old path beside the default) | 2026-11-15 | [MOJOLEARN_RF_HIST_COLUMNS8_OFF.patch](../experiments/removed/MOJOLEARN_RF_HIST_COLUMNS8_OFF.patch) |
+| [`MOJOLEARN_RF_HIST_SIMD_AGG_OFF`](#mojolearn_rf_hist_simd_agg_off) | Trees (RF histogram SIMD aggregation, Apple) | removed (old path beside the default) | 2026-11-15 | [MOJOLEARN_RF_HIST_SIMD_AGG_OFF.patch](../experiments/removed/MOJOLEARN_RF_HIST_SIMD_AGG_OFF.patch) |
+| [`MOJOLEARN_RF_SMALL_NODE_FUSED`](#mojolearn_rf_small_node_fused) | Trees (RF fused small-node split, FAST) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_RF_SMALL_NODE_FUSED.patch](../experiments/removed/MOJOLEARN_RF_SMALL_NODE_FUSED.patch) |
+| [`MOJOLEARN_RF_SPLIT_CANDIDATES`](#mojolearn_rf_split_candidates) | Trees (RF split candidate slots, FAST off Apple) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_RF_SPLIT_CANDIDATES.patch](../experiments/removed/MOJOLEARN_RF_SPLIT_CANDIDATES.patch) |
+| [`MOJOLEARN_RF_SPLIT_CANDIDATES_OFF`](#mojolearn_rf_split_candidates_off) | Trees (RF split candidate slots, FAST+Apple) | removed (old path beside the default) | 2026-11-15 | [MOJOLEARN_RF_SPLIT_CANDIDATES_OFF.patch](../experiments/removed/MOJOLEARN_RF_SPLIT_CANDIDATES_OFF.patch) |
+| [`MOJOLEARN_RF_TRIAL_COLS20`](#mojolearn_rf_trial_cols20) | Trees (RF columns per pass trial arm) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_RF_TRIAL_COLS20.patch](../experiments/removed/MOJOLEARN_RF_TRIAL_COLS20.patch) |
+| [`MOJOLEARN_RF_TRIAL_COLS40`](#mojolearn_rf_trial_cols40) | Trees (RF columns per pass trial arm) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_RF_TRIAL_COLS40.patch](../experiments/removed/MOJOLEARN_RF_TRIAL_COLS40.patch) |
+| [`MOJOLEARN_TREE_EXACT_SIBLING_HIST`](#mojolearn_tree_exact_sibling_hist) | Trees (I18 retained-count sibling histograms, IDENTICAL) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_TREE_EXACT_SIBLING_HIST.patch](../experiments/removed/MOJOLEARN_TREE_EXACT_SIBLING_HIST.patch) |
+| [`MOJOLEARN_TREE_EXACT_SIBLING_HIST_AUDIT`](#mojolearn_tree_exact_sibling_hist_audit) | Trees (I18 retained-count reuse audit) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_TREE_EXACT_SIBLING_HIST_AUDIT.patch](../experiments/removed/MOJOLEARN_TREE_EXACT_SIBLING_HIST_AUDIT.patch) |
+| [`MOJOLEARN_TREE_EXACT_SIBLING_HIST_BYTES`](#mojolearn_tree_exact_sibling_hist_bytes) | Trees (I18 retained-count byte budget) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_TREE_EXACT_SIBLING_HIST_BYTES.patch](../experiments/removed/MOJOLEARN_TREE_EXACT_SIBLING_HIST_BYTES.patch) |
 
 ## Trees
 
@@ -17837,3 +17870,318 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2
 - Records: refusal in `core/experiment_guards_trees.mojo`; grid_controls entry moved to `removed` where one existed; `docs/apple-fast/EXPERIMENTS.md` row (expdel2-39-trees section).
 
 Non-owner folds in this lane's files: `MOJOLEARN_IDN_ALL_OFF` (5e84b9d9b4, f11f6b1142; `experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-39-trees.patch`); `MOJOLEARN_IDN_RF_QBIN_DEVICE_OFF` (5e84b9d9b4; `experiments/removed/MOJOLEARN_IDN_RF_QBIN_DEVICE_OFF.expdel2-39-trees.patch`); `MOJOLEARN_TREE_EXACT_SIBLING_HIST` (12fa4d5474; `experiments/removed/MOJOLEARN_TREE_EXACT_SIBLING_HIST.expdel2-39-trees.patch`); `MOJOLEARN_TREE_EXACT_SIBLING_HIST_AUDIT` (12fa4d5474; `experiments/removed/MOJOLEARN_TREE_EXACT_SIBLING_HIST_AUDIT.expdel2-39-trees.patch`). Not deleted: `MOJOLEARN_COLUMN_CPU` (plan correction), `MOJOLEARN_RF_FUSED_BOOTSTRAP_GATHER_SABOTAGE` and `MOJOLEARN_HOST_SABOTAGE` (sabotage controls).
+## Experiment deletions: lane expdel2-38-trees (2026-11-15)
+
+Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2-38-trees), under AGENTS.md "An unmeasured arm is deleted" (Andrew, 2026-11-15). Each record named below was read first. No bit changes: every deletion removes a non-default arm or a rollback beside the default, and the default path is byte-identical. Hand-tuned kernels are untouched: every kernel the default path launches stays.
+
+### MOJOLEARN_2011_HIST_ITEMS1
+
+- Tried: Trees (RF histogram items per thread, DEVIATION 2011); the rollback to the old path beside the default.
+- Evidence: no record; no A/B recorded for the opt-in arm (rule a); the four-item default was measured faster on the H100 2026-09-10. Verdict: the old path goes; the default stays.
+- Removed: HIST_ITEMS_PER_THREAD = 4; the DEVIATION 1919 one-item span reuse (reuse_phase_span, workload_blocks_for_host) that ran only at one item. Default unchanged: no bits move.
+- Files: ensemble/decisiontree/batched_levelalgo/builder.mojo.
+- Deleted by: lane/expdel2-38-trees `f4ce56514d` (2026-11-15); code recoverable at `52922acecb`.
+- Restore: `git apply experiments/removed/MOJOLEARN_2011_HIST_ITEMS1.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
+
+### MOJOLEARN_2012_SMEM_COPIES4
+
+- Tried: Trees (RF histogram shared-memory copies); the opt-in arm.
+- Evidence: no record; no A/B recorded for the opt-in arm (rule a). Verdict: the opt-in arm goes.
+- Removed: HIST_SMEM_COPIES_DEFAULT = 1; the P > 1 flush stays (checks pin it explicitly, sabotage 4 lives there). Default unchanged: no bits move.
+- Files: ensemble/decisiontree/batched_levelalgo/kernels/builder_kernels_impl.mojo.
+- Deleted by: lane/expdel2-38-trees `47051d6b6e` (2026-11-15); code recoverable at `52922acecb`.
+- Restore: `git apply experiments/removed/MOJOLEARN_2012_SMEM_COPIES4.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
+
+### MOJOLEARN_2502_RETRY_PURE
+
+- Tried: Trees (RF pure-node retry, DEVIATION 2502); the rollback to the old path beside the default.
+- Evidence: no record; no A/B recorded for the opt-in arm (rule a); DEVIATION 2502 (pure node is a leaf) was measured faster with equal logloss on the M4 2026-09-11. Verdict: the old path goes; the default stays.
+- Removed: the retry-pure branches; RETRY_PURE_NODES folded to False at its four uses and the alias removed. Default unchanged: no bits move.
+- Files: ensemble/decisiontree/batched_levelalgo/builder.mojo.
+- Deleted by: lane/expdel2-38-trees `f4ce56514d` (2026-11-15); code recoverable at `52922acecb`.
+- Restore: `git apply experiments/removed/MOJOLEARN_2502_RETRY_PURE.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
+
+### MOJOLEARN_AFT_F01
+
+- Tried: Trees (RF 32-column pass, FAST+Apple); the opt-in arm.
+- Evidence: no record; never-run Apple FAST programme card (rule g). Verdict: the opt-in arm goes.
+- Removed: AFT_F01 and its 32-column N_BLKS_FOR_COLS arm. Default unchanged: no bits move.
+- Files: ensemble/decisiontree/batched_levelalgo/builder.mojo.
+- Deleted by: lane/expdel2-38-trees `f4ce56514d` (2026-11-15); code recoverable at `52922acecb`.
+- Restore: `git apply experiments/removed/MOJOLEARN_AFT_F01.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
+
+### MOJOLEARN_AFT_F02
+
+- Tried: Trees (RF eight histogram rows per lane, FAST+Apple); the opt-in arm.
+- Evidence: no record; never-run Apple FAST programme card (rule g). Verdict: the opt-in arm goes.
+- Removed: AFT_F02 and its eight-item HIST_ITEMS_PER_THREAD arm. Default unchanged: no bits move.
+- Files: ensemble/decisiontree/batched_levelalgo/builder.mojo.
+- Deleted by: lane/expdel2-38-trees `f4ce56514d` (2026-11-15); code recoverable at `52922acecb`.
+- Restore: `git apply experiments/removed/MOJOLEARN_AFT_F02.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
+
+### MOJOLEARN_AFT_F03
+
+- Tried: Trees (RF two split cells per warp block, FAST+Apple); the opt-in arm.
+- Evidence: no record; never-run Apple FAST programme card (rule g). Verdict: the opt-in arm goes.
+- Removed: FBS_WARP_CELLS = 4. Default unchanged: no bits move.
+- Files: ensemble/decisiontree/batched_levelalgo/kernels/builder_kernels_impl.mojo.
+- Deleted by: lane/expdel2-38-trees `47051d6b6e` (2026-11-15); code recoverable at `52922acecb`.
+- Restore: `git apply experiments/removed/MOJOLEARN_AFT_F03.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
+
+### MOJOLEARN_AFT_F04
+
+- Tried: Trees (RF scan width x2, FAST+Apple); the opt-in arm.
+- Evidence: no record; never-run Apple FAST programme card (rule g). Verdict: the opt-in arm goes.
+- Removed: AFT_RF_SCAN_WIDTH_SCALE and its three uses (scan TPB is TPB). Default unchanged: no bits move.
+- Files: ensemble/decisiontree/batched_levelalgo/kernels/builder_kernels_impl.mojo.
+- Deleted by: lane/expdel2-38-trees `47051d6b6e` (2026-11-15); code recoverable at `52922acecb`.
+- Restore: `git apply experiments/removed/MOJOLEARN_AFT_F04.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
+
+### MOJOLEARN_AFT_F05
+
+- Tried: Trees (RF sampled-order gather four rows per lane, FAST+Apple); the opt-in arm.
+- Evidence: no record; never-run Apple FAST programme card (rule g). Verdict: the opt-in arm goes.
+- Removed: AFT_RF_GATHER_ROWS and the per-lane row loop of gather_sampled_order_kernel. Default unchanged: no bits move.
+- Files: ensemble/decisiontree/batched_levelalgo/kernels/builder_kernels_impl.mojo.
+- Deleted by: lane/expdel2-38-trees `47051d6b6e` (2026-11-15); code recoverable at `52922acecb`.
+- Restore: `git apply experiments/removed/MOJOLEARN_AFT_F05.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
+
+### MOJOLEARN_IDN_RF_COLS40_OFF
+
+- Tried: Trees (RF 40 columns per pass, IDENTICAL NVIDIA/AMD); the rollback to the old path beside the default.
+- Evidence: no record; no A/B recorded for the old path (rule b). Verdict: the old path goes; the default stays.
+- Removed: IDN_RF_COLS40 = IDENTICAL and not Apple. Default unchanged: no bits move.
+- Files: ensemble/decisiontree/batched_levelalgo/builder.mojo.
+- Deleted by: lane/expdel2-38-trees `f4ce56514d` (2026-11-15); code recoverable at `52922acecb`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_RF_COLS40_OFF.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
+
+### MOJOLEARN_IDN_RF_FUSED_PARTITION_OFF
+
+- Tried: Trees (RF partition fused into the split drain, IDENTICAL); the rollback to the old path beside the default.
+- Evidence: no record; no A/B recorded for the old path (rule b). Verdict: the old path goes; the default stays.
+- Removed: IDN_RF_FUSED_PARTITION = IDENTICAL. Default unchanged: no bits move.
+- Files: ensemble/decisiontree/batched_levelalgo/builder.mojo.
+- Deleted by: lane/expdel2-38-trees `f4ce56514d` (2026-11-15); code recoverable at `52922acecb`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_RF_FUSED_PARTITION_OFF.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
+
+### MOJOLEARN_IDN_RF_HIST_SIMD_AGG_OFF
+
+- Tried: Trees (RF histogram warp aggregation, IDENTICAL NVIDIA/AMD); the rollback to the old path beside the default.
+- Evidence: no record; no A/B recorded for the old path (rule b). Verdict: the old path goes; the default stays.
+- Removed: IDN_RF_HIST_SIMD_AGG = IDENTICAL and not Apple. Default unchanged: no bits move.
+- Files: ensemble/decisiontree/batched_levelalgo/kernels/builder_kernels_impl.mojo.
+- Deleted by: lane/expdel2-38-trees `47051d6b6e` (2026-11-15); code recoverable at `52922acecb`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_RF_HIST_SIMD_AGG_OFF.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
+
+### MOJOLEARN_IDN_RF_HIST_ZERO_OFF
+
+- Tried: Trees (RF histogram zero-after-read, IDENTICAL NVIDIA/AMD); the rollback to the old path beside the default.
+- Evidence: no record; no A/B recorded for the old path (rule b). Verdict: the old path goes; the default stays.
+- Removed: IDN_RF_HIST_ZERO = IDENTICAL and not Apple. Default unchanged: no bits move.
+- Files: ensemble/decisiontree/batched_levelalgo/kernels/builder_kernels_impl.mojo.
+- Deleted by: lane/expdel2-38-trees `47051d6b6e` (2026-11-15); code recoverable at `52922acecb`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_RF_HIST_ZERO_OFF.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
+
+### MOJOLEARN_IDN_RF_QBIN_DEVICE_OFF
+
+- Tried: Trees (RF quantile bin index on device, IDENTICAL); the rollback to the old path beside the default.
+- Evidence: no record; no A/B recorded for the old path (rule b). Verdict: the old path goes; the default stays.
+- Removed: IDN_RF_QBIN_EXACT; IDN_RF_QBIN_DEVICE = IDENTICAL (ensemble/host/rf_oracle.mojo still reads the define: its lane folds it). Default unchanged: no bits move.
+- Files: ensemble/decisiontree/batched_levelalgo/quantiles.mojo.
+- Deleted by: lane/expdel2-38-trees `d472e0a838` (2026-11-15); code recoverable at `52922acecb`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_RF_QBIN_DEVICE_OFF.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
+
+### MOJOLEARN_IDN_RF_SAMPLE_PER_NODE_OFF
+
+- Tried: Trees (RF per-node feature sampler, IDENTICAL); the rollback to the old path beside the default.
+- Evidence: no record; no A/B recorded for the old path (rule b). Verdict: the old path goes; the default stays.
+- Removed: IDN_RF_SAMPLE_PER_NODE = IDENTICAL. Default unchanged: no bits move.
+- Files: ensemble/decisiontree/batched_levelalgo/kernels/builder_kernels_impl.mojo.
+- Deleted by: lane/expdel2-38-trees `47051d6b6e` (2026-11-15); code recoverable at `52922acecb`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_RF_SAMPLE_PER_NODE_OFF.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
+
+### MOJOLEARN_RF_BINS_COLUMN_MAJOR
+
+- Tried: Trees (RF bins row-major on Apple); the opt-in arm.
+- Evidence: no record; no A/B recorded for the opt-in arm (rule a). Verdict: the opt-in arm goes.
+- Removed: the column-major opt-out of RF_BINS_ROW_MAJOR. Default unchanged: no bits move.
+- Files: ensemble/decisiontree/batched_levelalgo/dataset.mojo.
+- Deleted by: lane/expdel2-38-trees `d472e0a838` (2026-11-15); code recoverable at `52922acecb`.
+- Restore: `git apply experiments/removed/MOJOLEARN_RF_BINS_COLUMN_MAJOR.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
+
+### MOJOLEARN_RF_COLS10
+
+- Tried: Trees (RF columns per pass on Apple); the opt-in arm.
+- Evidence: no record; no A/B recorded for the opt-in arm (rule a). Verdict: the opt-in arm goes.
+- Removed: the 10-column opt-out of N_BLKS_FOR_COLS on Apple. Default unchanged: no bits move.
+- Files: ensemble/decisiontree/batched_levelalgo/builder.mojo.
+- Deleted by: lane/expdel2-38-trees `f4ce56514d` (2026-11-15); code recoverable at `52922acecb`.
+- Restore: `git apply experiments/removed/MOJOLEARN_RF_COLS10.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
+
+### MOJOLEARN_RF_FAST_HIST_ZERO_OFF
+
+- Tried: Trees (RF histogram zero-after-read, FAST/Apple); the rollback to the old path beside the default.
+- Evidence: no record; no A/B recorded for the old path (rule b). Verdict: the old path goes; the default stays.
+- Removed: its term of HIST_ZERO_AFTER_READ_DEFAULT. Default unchanged: no bits move.
+- Files: ensemble/decisiontree/batched_levelalgo/kernels/builder_kernels_impl.mojo.
+- Deleted by: lane/expdel2-38-trees `47051d6b6e` (2026-11-15); code recoverable at `52922acecb`.
+- Restore: `git apply experiments/removed/MOJOLEARN_RF_FAST_HIST_ZERO_OFF.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
+
+### MOJOLEARN_RF_FAST_SAMPLE_PER_COLUMN
+
+- Tried: Trees (RF per-node feature sampler, FAST); the rollback to the old path beside the default.
+- Evidence: no record; no A/B recorded for the old path (rule b). Verdict: the old path goes; the default stays.
+- Removed: its term of SAMPLE_PER_NODE_DEFAULT. Default unchanged: no bits move.
+- Files: ensemble/decisiontree/batched_levelalgo/kernels/builder_kernels_impl.mojo.
+- Deleted by: lane/expdel2-38-trees `47051d6b6e` (2026-11-15); code recoverable at `52922acecb`.
+- Restore: `git apply experiments/removed/MOJOLEARN_RF_FAST_SAMPLE_PER_COLUMN.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
+
+### MOJOLEARN_RF_FBS_WARP_OFF
+
+- Tried: Trees (RF SIMD-group split kernel, FAST+Apple); the rollback to the old path beside the default.
+- Evidence: no record; no A/B recorded for the old path (rule b). Verdict: the old path goes; the default stays.
+- Removed: its term of FBS_WARP_DEFAULT. Default unchanged: no bits move.
+- Files: ensemble/decisiontree/batched_levelalgo/kernels/builder_kernels_impl.mojo.
+- Deleted by: lane/expdel2-38-trees `47051d6b6e` (2026-11-15); code recoverable at `52922acecb`.
+- Restore: `git apply experiments/removed/MOJOLEARN_RF_FBS_WARP_OFF.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
+
+### MOJOLEARN_RF_HIST_COLUMNS2
+
+- Tried: Trees (RF two-column histogram tiles); the opt-in arm.
+- Evidence: no record; no A/B recorded for the opt-in arm (rule a); ensemble/checks/rf_column_tiles_gate.py is the only builder of this arm (an identity gate, not a sabotage control). Verdict: the opt-in arm goes.
+- Removed: its ENABLED term; the bench and fingerprint check prints read False. Default unchanged: no bits move.
+- Files: ensemble/decisiontree/batched_levelalgo/kernels/builder_kernels_impl.mojo, ensemble/bench/rf_bench.mojo, ensemble/checks/rf_column_tiles_fingerprint.mojo.
+- Deleted by: lane/expdel2-38-trees `47051d6b6e, 8ae0ab661a` (2026-11-15); code recoverable at `52922acecb`.
+- Restore: `git apply experiments/removed/MOJOLEARN_RF_HIST_COLUMNS2.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
+
+### MOJOLEARN_RF_HIST_COLUMNS4
+
+- Tried: Trees (RF four-column histogram tiles force-on); the opt-in arm.
+- Evidence: no record; no A/B recorded for the opt-in arm (rule a). Verdict: the opt-in arm goes.
+- Removed: its USE4 term (four-column tiles stay the NVIDIA/Apple/AMD-IDENTICAL default); the bench and fingerprint check prints read False. Default unchanged: no bits move.
+- Files: ensemble/decisiontree/batched_levelalgo/kernels/builder_kernels_impl.mojo, ensemble/bench/rf_bench.mojo, ensemble/checks/rf_column_tiles_fingerprint.mojo.
+- Deleted by: lane/expdel2-38-trees `47051d6b6e, 8ae0ab661a` (2026-11-15); code recoverable at `52922acecb`.
+- Restore: `git apply experiments/removed/MOJOLEARN_RF_HIST_COLUMNS4.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
+
+### MOJOLEARN_RF_HIST_COLUMNS4_OFF
+
+- Tried: Trees (RF four-column histogram tiles); the rollback to the old path beside the default.
+- Evidence: no record; no A/B recorded for the old path (rule b). Verdict: the old path goes; the default stays.
+- Removed: its DEFAULT4 term (DEFAULT4 folded into USE4). Default unchanged: no bits move.
+- Files: ensemble/decisiontree/batched_levelalgo/kernels/builder_kernels_impl.mojo.
+- Deleted by: lane/expdel2-38-trees `47051d6b6e` (2026-11-15); code recoverable at `52922acecb`.
+- Restore: `git apply experiments/removed/MOJOLEARN_RF_HIST_COLUMNS4_OFF.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
+
+### MOJOLEARN_RF_HIST_COLUMNS8
+
+- Tried: Trees (RF eight-column histogram tiles force-on); the opt-in arm.
+- Evidence: EXP:120 KEPT 269ffa57a; force-on knob, the arm is already the FAST Apple default (rule e). Verdict: the opt-in arm goes.
+- Removed: its TILE term; the FAST Apple default 8 stays. Default unchanged: no bits move.
+- Files: ensemble/decisiontree/batched_levelalgo/kernels/builder_kernels_impl.mojo.
+- Deleted by: lane/expdel2-38-trees `47051d6b6e` (2026-11-15); code recoverable at `52922acecb`.
+- Restore: `git apply experiments/removed/MOJOLEARN_RF_HIST_COLUMNS8.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
+
+### MOJOLEARN_RF_HIST_COLUMNS8_OFF
+
+- Tried: Trees (RF eight-column histogram tiles, FAST+Apple); the rollback to the old path beside the default.
+- Evidence: EXP:120 KEPT 269ffa57a on the M3 only; FAST is Apple only, so no NVIDIA/AMD A/B is owed (rule d). Verdict: the old path goes; the default stays.
+- Removed: its TILE term; the FAST Apple default 8 stays. Default unchanged: no bits move.
+- Files: ensemble/decisiontree/batched_levelalgo/kernels/builder_kernels_impl.mojo.
+- Deleted by: lane/expdel2-38-trees `47051d6b6e` (2026-11-15); code recoverable at `52922acecb`.
+- Restore: `git apply experiments/removed/MOJOLEARN_RF_HIST_COLUMNS8_OFF.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
+
+### MOJOLEARN_RF_HIST_SIMD_AGG_OFF
+
+- Tried: Trees (RF histogram SIMD aggregation, Apple); the rollback to the old path beside the default.
+- Evidence: no record; no A/B recorded for the old path (rule b). Verdict: the old path goes; the default stays.
+- Removed: its HIST_SIMD_AGG_DEFAULT term (HIST_SIMD_AGG_DEFAULT = Apple or IDN_RF_HIST_SIMD_AGG). Default unchanged: no bits move.
+- Files: ensemble/decisiontree/batched_levelalgo/kernels/builder_kernels_impl.mojo.
+- Deleted by: lane/expdel2-38-trees `47051d6b6e` (2026-11-15); code recoverable at `52922acecb`.
+- Restore: `git apply experiments/removed/MOJOLEARN_RF_HIST_SIMD_AGG_OFF.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
+
+### MOJOLEARN_RF_SMALL_NODE_FUSED
+
+- Tried: Trees (RF fused small-node split, FAST); the opt-in arm.
+- Evidence: no record; no A/B recorded for the opt-in arm (rule a). Verdict: the opt-in arm goes.
+- Removed: its SMALL_NODE_FUSED_DEFAULT term (= T05). Default unchanged: no bits move.
+- Files: ensemble/decisiontree/batched_levelalgo/kernels/builder_kernels_impl.mojo.
+- Deleted by: lane/expdel2-38-trees `47051d6b6e` (2026-11-15); code recoverable at `52922acecb`.
+- Restore: `git apply experiments/removed/MOJOLEARN_RF_SMALL_NODE_FUSED.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
+
+### MOJOLEARN_RF_SPLIT_CANDIDATES
+
+- Tried: Trees (RF split candidate slots, FAST off Apple); the opt-in arm.
+- Evidence: no record; no A/B recorded for the opt-in arm (rule a). Verdict: the opt-in arm goes.
+- Removed: its HIST_SPLIT_CANDIDATES_DEFAULT term. Default unchanged: no bits move.
+- Files: ensemble/decisiontree/batched_levelalgo/kernels/builder_kernels_impl.mojo.
+- Deleted by: lane/expdel2-38-trees `47051d6b6e` (2026-11-15); code recoverable at `52922acecb`.
+- Restore: `git apply experiments/removed/MOJOLEARN_RF_SPLIT_CANDIDATES.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
+
+### MOJOLEARN_RF_SPLIT_CANDIDATES_OFF
+
+- Tried: Trees (RF split candidate slots, FAST+Apple); the rollback to the old path beside the default.
+- Evidence: no record; no A/B recorded for the old path (rule b). Verdict: the old path goes; the default stays.
+- Removed: its HIST_SPLIT_CANDIDATES_DEFAULT term. Default unchanged: no bits move.
+- Files: ensemble/decisiontree/batched_levelalgo/kernels/builder_kernels_impl.mojo.
+- Deleted by: lane/expdel2-38-trees `47051d6b6e` (2026-11-15); code recoverable at `52922acecb`.
+- Restore: `git apply experiments/removed/MOJOLEARN_RF_SPLIT_CANDIDATES_OFF.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
+
+### MOJOLEARN_RF_TRIAL_COLS20
+
+- Tried: Trees (RF columns per pass trial arm); the opt-in arm.
+- Evidence: no record; no A/B recorded for the opt-in arm (rule a). Verdict: the opt-in arm goes.
+- Removed: its N_BLKS_FOR_COLS trial arm (10 is the fallback). Default unchanged: no bits move.
+- Files: ensemble/decisiontree/batched_levelalgo/builder.mojo.
+- Deleted by: lane/expdel2-38-trees `f4ce56514d` (2026-11-15); code recoverable at `52922acecb`.
+- Restore: `git apply experiments/removed/MOJOLEARN_RF_TRIAL_COLS20.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
+
+### MOJOLEARN_RF_TRIAL_COLS40
+
+- Tried: Trees (RF columns per pass trial arm); the opt-in arm.
+- Evidence: no record; no A/B recorded for the opt-in arm (rule a). Verdict: the opt-in arm goes.
+- Removed: its N_BLKS_FOR_COLS trial arm (10 is the fallback). Default unchanged: no bits move.
+- Files: ensemble/decisiontree/batched_levelalgo/builder.mojo.
+- Deleted by: lane/expdel2-38-trees `f4ce56514d` (2026-11-15); code recoverable at `52922acecb`.
+- Restore: `git apply experiments/removed/MOJOLEARN_RF_TRIAL_COLS40.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
+
+### MOJOLEARN_TREE_EXACT_SIBLING_HIST
+
+- Tried: Trees (I18 retained-count sibling histograms, IDENTICAL); the opt-in arm.
+- Evidence: no record; no A/B recorded for the opt-in arm (rule a); I18 AMD MI325X scoped LOSER 2026-10-06 (builder.mojo comment). Verdict: the opt-in arm goes.
+- Removed: its RETAINED_COUNT_HIST term (= T03; the retained-count path stays for T03). Default unchanged: no bits move.
+- Files: ensemble/decisiontree/batched_levelalgo/builder.mojo.
+- Deleted by: lane/expdel2-38-trees `f4ce56514d` (2026-11-15); code recoverable at `52922acecb`.
+- Restore: `git apply experiments/removed/MOJOLEARN_TREE_EXACT_SIBLING_HIST.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
+
+### MOJOLEARN_TREE_EXACT_SIBLING_HIST_AUDIT
+
+- Tried: Trees (I18 retained-count reuse audit); the opt-in arm.
+- Evidence: no record; no A/B recorded for the opt-in arm (rule a). Verdict: the opt-in arm goes.
+- Removed: the reuse audit counter: _RetainedAudit, its SharedSlot, the reused buffer and kernel argument, publish_audit and its builder call; retained_histogram_reused stays (always 0) for experiments/performance_ideas/I18/forest_check.mojo. Default unchanged: no bits move.
+- Files: ensemble/decisiontree/batched_levelalgo/retained_count_histograms.mojo, ensemble/decisiontree/batched_levelalgo/builder.mojo.
+- Deleted by: lane/expdel2-38-trees `73b25c11e0` (2026-11-15); code recoverable at `52922acecb`.
+- Restore: `git apply experiments/removed/MOJOLEARN_TREE_EXACT_SIBLING_HIST_AUDIT.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
+
+### MOJOLEARN_TREE_EXACT_SIBLING_HIST_BYTES
+
+- Tried: Trees (I18 retained-count byte budget); the opt-in arm.
+- Evidence: no record; no A/B recorded for the opt-in arm (rule a). Verdict: the opt-in arm goes.
+- Removed: RETAINED_COUNT_HIST_BYTES = 8 MiB (its default). Default unchanged: no bits move.
+- Files: ensemble/decisiontree/batched_levelalgo/builder.mojo.
+- Deleted by: lane/expdel2-38-trees `f4ce56514d` (2026-11-15); code recoverable at `52922acecb`.
+- Restore: `git apply experiments/removed/MOJOLEARN_TREE_EXACT_SIBLING_HIST_BYTES.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
+
+### Non-owner sites of lane expdel2-38-trees
+
+Inline TOMBSTONE markers only; the owner lane of each define writes its section, refusal and records.
+
+- `MOJOLEARN_IDN_ALL_OFF`: its term removed from IDN_RF_COLS40, IDN_RF_FUSED_PARTITION (builder.mojo), IDN_RF_SAMPLE_PER_NODE, IDN_RF_HIST_ZERO, IDN_RF_HIST_SIMD_AGG, HIST_SIMD_AGG_DEFAULT, the AMD four-column tile (kernels/builder_kernels_impl.mojo) and IDN_RF_QBIN_EXACT (quantiles.mojo); `f4ce56514d`, `47051d6b6e`, `d472e0a838`, recoverable at `52922acecb`; `experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-38-trees.patch`.
+- `MOJOLEARN_TREES_T11_LEVELS`: the alias use LOOP_K = 4 (builder.mojo; T11 and T11_LEVELS imports go); `f4ce56514d`; `experiments/removed/MOJOLEARN_TREES_T11_LEVELS.expdel2-38-trees.patch`.
+- `MOJOLEARN_TREES_T08_LAYOUT`, `MOJOLEARN_TREES_T08_BITS`: the T08 bin offset is layout 1, 8-bit bins (kernels/builder_kernels_impl.mojo bin_dataset kernel, dataset.mojo bin_of); `47051d6b6e`, `d472e0a838`; `experiments/removed/MOJOLEARN_TREES_T08_LAYOUT.expdel2-38-trees.patch`, `experiments/removed/MOJOLEARN_TREES_T08_BITS.expdel2-38-trees.patch`.
+- `MOJOLEARN_TREES_T14_EXACT`: the moment-path leaf (kernels/builder_kernels_impl.mojo) and the balanced gain under T14 (objectives.mojo) are the only arms; `47051d6b6e`, `8ae0ab661a`; `experiments/removed/MOJOLEARN_TREES_T14_EXACT.expdel2-38-trees.patch`.
+- `MOJOLEARN_TREES_T05_ROW_VISITS`: the T05 comment names no sweep (builder.mojo; the alias stays 32 in its owner's file); `b40f6f6b72`; `experiments/removed/MOJOLEARN_TREES_T05_ROW_VISITS.expdel2-38-trees.patch`.
+- `MOJOLEARN_GBDT_QUANT_DEVICE`: the gbdt_fit_row_major_available_binding docstring (bindings/_mojolearn_gbdt.mojo); the GBDT_QUANT_DEVICE alias stays live through GBDT_INDEX_PACK_DEVICE, so its three uses there stay; `8ae0ab661a`; `experiments/removed/MOJOLEARN_GBDT_QUANT_DEVICE.expdel2-38-trees.patch`.
+
+No edit was needed in this lane's files for `MOJOLEARN_2010_ROWS_SORTED`, `MOJOLEARN_RF_ROWS_SORTED_OFF` (read only in ensemble/randomforest.mojo; ROWS_SORTED_SAMPLE in rf_bench.mojo is a print) or `MOJOLEARN_TREES_T13_BYTES` (int alias, used as a constant).
+
+Not deleted, contrary to the plan: `MOJOLEARN_IDN_RF_DEVICE_LOOP` (the B arm of the owed A/B `restore-rf-device-loop`, RUN OWED on NVIDIA + AMD; builder.mojo says neither arm is deleted until it lands) and `MOJOLEARN_COLUMN_CPU` (the CPU-column build switch; coordinator correction 2026-11-15).

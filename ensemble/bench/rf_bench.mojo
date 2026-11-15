@@ -585,7 +585,11 @@ def main() raises:
             raise Error("tuning task must be clf or reg")
         print("CONFIG", GLOBAL_NUMERIC_MODE, "sorted", ROWS_SORTED_SAMPLE,
               "items", HIST_ITEMS_PER_THREAD, "copies", HIST_SMEM_COPIES_DEFAULT)
-        print("HIST_COLUMNS", 4 if is_defined["MOJOLEARN_RF_HIST_COLUMNS4"]() else (2 if is_defined["MOJOLEARN_RF_HIST_COLUMNS2"]() else 0), "classes", N_CLASSES)
+        # TOMBSTONE: MOJOLEARN_RF_HIST_COLUMNS4 (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-38-trees; code recoverable at 52922acecb.
+        # Restore: git apply experiments/removed/MOJOLEARN_RF_HIST_COLUMNS4.patch; record in docs/TOMBSTONES.md.
+        # TOMBSTONE: MOJOLEARN_RF_HIST_COLUMNS2 (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-38-trees; code recoverable at 52922acecb.
+        # Restore: git apply experiments/removed/MOJOLEARN_RF_HIST_COLUMNS2.patch; record in docs/TOMBSTONES.md.
+        print("HIST_COLUMNS", 0, "classes", N_CLASSES)
         var canary = Canary(ctx)
         # A fresh-process GPU clock ramp can outlive one small fit. Keep
         # every warmup visible; the gate excludes only these explicit tags.

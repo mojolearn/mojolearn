@@ -1,0 +1,17 @@
+diff --git a/ensemble/decisiontree/batched_levelalgo/builder.mojo b/ensemble/decisiontree/batched_levelalgo/builder.mojo
+index 4e2b9a016b..2decd6215e 100644
+--- a/ensemble/decisiontree/batched_levelalgo/builder.mojo
++++ b/ensemble/decisiontree/batched_levelalgo/builder.mojo
+@@ -203,10 +203,8 @@ comptime SMALL_NODE_SLOTS = 2048
+ # find_best_splits and two more launches per column block regardless of R.
+ # At up to T05_ROW_VISITS visits per thread (default 32, i.e. 4096 rows at
+ # TPB 128, the same bound the FAST host-batch arm uses) the walk is shorter
+-# than that fixed overhead; above it the multi-block histogram wins. The
+-# bound is fixed at 32. No data dimension.
+-# TOMBSTONE: MOJOLEARN_TREES_T05_ROW_VISITS (unmeasured int sweep; 32 kept) deleted 2026-11-15 by lane/expdel2-38-trees; code recoverable at 52922acecb.
+-# Restore: git apply experiments/removed/MOJOLEARN_TREES_T05_ROW_VISITS.expdel2-38-trees.patch; record in docs/TOMBSTONES.md.
++# than that fixed overhead; above it the multi-block histogram wins. Int
++# sweep `-D MOJOLEARN_TREES_T05_ROW_VISITS=8|16|32|64`. No data dimension.
+ comptime T05_NODE_ROWS = T05_ROW_VISITS * TPB_DEFAULT
+ """Shared bins `small_node_split_kernel` holds per block."""
+ 
