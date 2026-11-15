@@ -13,7 +13,7 @@ comptime CLASSICAL_IDENTICAL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 # LEAF), 32 on every tier.
 # TOMBSTONE: MOJOLEARN_CLASSICAL_C01_LEAF (DROPPED-slower, EXP:1530; the 64/128 arms never won) deleted 2026-11-15 by lane/expdel2-07-base; code recoverable at 561d08802a.
 # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C01_LEAF.patch
-comptime C01_LEAF_LEGAL = True
+# (Sweep 2026-11-15: comptime C01_LEAF_LEGAL removed; its one reader was an always-true assert in x_metrics/common.mojo, removed.)
 comptime C01_LEAF = 32
 # C01_MEAN: the leaf column-sum mean arm of core/xtdz_coalesced.mojo column_mean_launch, never measured.
 # TOMBSTONE: MOJOLEARN_CLASSICAL_C01_MEAN (no A/B recorded for the opt-in arm) deleted 2026-11-15 by lane/expdel2-07-base; code recoverable at 569d288205.
