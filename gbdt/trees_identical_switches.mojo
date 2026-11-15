@@ -268,4 +268,4 @@ comptime IDN_ORD_CAT_PLANES = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 # sizes from them for the oracle, so they stay.
 # TOMBSTONE: MOJOLEARN_IDN_ORD_INDEX_SHARED (DELETE-ARM, opt-in, no A/B recorded, rule a) deleted 2026-11-15 by lane/expdel2-45-trees; code recoverable at d452e2066a.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_ORD_INDEX_SHARED.patch
-comptime IDN_ORD_INDEX_SHARED = False
+# (Sweep 2026-11-15: IDN_ORD_INDEX_SHARED removed; readers in the structure searcher folded.)
