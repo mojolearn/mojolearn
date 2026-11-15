@@ -1,0 +1,59 @@
+diff --git a/gbdt/methods/greedy_subsets_searcher/greedy_search_helper.mojo b/gbdt/methods/greedy_subsets_searcher/greedy_search_helper.mojo
+index 4ae3c2e5e6..6cffc3cdf0 100644
+--- a/gbdt/methods/greedy_subsets_searcher/greedy_search_helper.mojo
++++ b/gbdt/methods/greedy_subsets_searcher/greedy_search_helper.mojo
+@@ -15,9 +15,7 @@ from core.device_zero import enqueue_fill
+ from max.gpu.host.device_attribute import DeviceAttribute
+ 
+ from checks.fixed_point import choose_scale
+-# TOMBSTONE: MOJOLEARN_TREES_T21_STREAMS (DELETE-ARM, replica stream sweep, no A/B recorded, rule a; non-owner) deleted 2026-11-15 by lane/expdel2-42-trees; code recoverable at efe2e38a94.
+-# Restore: git apply experiments/removed/MOJOLEARN_TREES_T21_STREAMS.expdel2-42-trees.patch; record in docs/TOMBSTONES.md.
+-# The stream count is its default 1 below (one replica stream, the kernels' stream 0).
++from gbdt.trees_identical_switches import T21_STREAMS
+ from gbdt.trees_hist_switches import HIST_SYM_FEATURE_PARALLEL
+ from gbdt.trees_small_switches import HIST_REP_SM, HIST_REP_SM_ON, HIST_REP_BPSM, HIST_REP_DEVICE, HIST_REP_DEVICE_X4
+ from gbdt.methods.greedy_subsets_searcher.kernel.hist_2_one_byte_8bit_wide import (
+@@ -2277,9 +2275,9 @@ def launch_hist2_width_group[bits: Int, preq: Bool, col_map: Bool](
+         var replicas = replication_int32_for(
+             groups, n_live, 1, sm_count, gather=(depth > 0)
+         )
+-        comptime for replica_stream in range(1):
++        comptime for replica_stream in range(T21_STREAMS):
+             if depth == 0:
+-                ctx.enqueue_function[hist2_8bit_kernel[preq, col_map, replica_stream, 1]](
++                ctx.enqueue_function[hist2_8bit_kernel[preq, col_map, replica_stream, T21_STREAMS]](
+                     folds, fold_off, grp_off, grp_sz,
+                     Int32(n_features), cindex.unsafe_ptr(), Int32(line),
+                     Int32(base), stats_ptr, Int32(n_rows),
+@@ -2291,7 +2289,7 @@ def launch_hist2_width_group[bits: Int, preq: Bool, col_map: Bool](
+                 )
+             else:
+                 ctx.enqueue_function[
+-                    hist2_8bit_gather_kernel[False, preq, col_map, replica_stream, 1]
++                    hist2_8bit_gather_kernel[False, preq, col_map, replica_stream, T21_STREAMS]
+                 ](
+                     folds, fold_off, grp_off, grp_sz,
+                     Int32(n_features), cindex.unsafe_ptr(), Int32(line),
+@@ -2513,11 +2511,11 @@ def launch_hist2_8bit[ridx_stats: Bool = False](
+     var replicas = replication_int32_for(
+         blk.replication_groups, n_live, 1, sm_count, gather=(depth > 0)
+     )
+-    comptime for replica_stream in range(1):
++    comptime for replica_stream in range(T21_STREAMS):
+         if depth == 0:
+             # bound explicitly: the kernel carries DEVIATION 2580/2581's comptime
+             # parameters, and an unbound name is a generic enqueue refuses
+-            ctx.enqueue_function[hist2_8bit_kernel[False, False, replica_stream, 1]](
++            ctx.enqueue_function[hist2_8bit_kernel[False, False, replica_stream, T21_STREAMS]](
+                 blk.folds.unsafe_ptr(), blk.fold_off.unsafe_ptr(),
+                 blk.grp_off.unsafe_ptr(), blk.grp_sz.unsafe_ptr(),
+                 Int32(blk.n_features), cindex.unsafe_ptr(), Int32(line),
+@@ -2532,7 +2530,7 @@ def launch_hist2_8bit[ridx_stats: Bool = False](
+             # `ridx_stats` (DEVIATION 1902): the gather arm's stat loads go
+             # through the row index when the ridx-only split route is on.
+             ctx.enqueue_function[
+-                hist2_8bit_gather_kernel[ridx_stats, False, False, replica_stream, 1]
++                hist2_8bit_gather_kernel[ridx_stats, False, False, replica_stream, T21_STREAMS]
+             ](
+                 blk.folds.unsafe_ptr(), blk.fold_off.unsafe_ptr(),
+                 blk.grp_off.unsafe_ptr(), blk.grp_sz.unsafe_ptr(),

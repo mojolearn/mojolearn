@@ -2195,6 +2195,8 @@ Files: `gbdt/ctrs/kernel/ctr_calcers.mojo`, `gbdt/data/pairs.mojo`, `gbdt/estima
 
 Owned here (patch, TOMBSTONES.md section, refusal, grid and EXPERIMENTS.md records): `2031_SYM_RIDX_SPLITS`, `2031_SYM_RIDX_SPLITS_OFF`, `2041_FAST_CHUNKS_PIN`, `2580_LEVEL_QUANT`, `2581_GROUP_WIDTH`, `2581_GROUP_WIDTH_OFF`, `2635_LINEAR_BOUNDS`, `2710_TENSOR_ACC_DEAD`, `AFT_G01`, `AFT_G02`, `AFT_G03`, `AFT_G04`, `AFT_G05`, `AFT_G06`, `AFT_G07`, `AFT_G08`, `AFT_G09`, `AFT_G10`, `AFT_G11`, `AFT_G12`, `GBDT_BT_COLUMN_BLOCKS_OFF`, `GBDT_BT_HW_F64_OFF`, `GBDT_CTR_PERM_BATCH_OFF`, `GBDT_DEVICE_ROUNDS_OFF`, `GBDT_FUSED_LEVEL_OFF`, `GBDT_INDEX_PACK_DEVICE`, `GBDT_PREDICT_PACKED`, `GBDT_QUANT_DEVICE`, `GBDT_RIDX_GATHER_COST`, `IDN_GBDT_CTR_PERM_BATCH_OFF`, `IDN_GBDT_PAIRLOGIT_GROUP_OFF`, `LEGACY_NARROW_SYM_RIDX`
 
+Lane result (expdel2-42-trees, 2026-11-15): 30 of the 32 owned deleted with records; 7 non-owner folds (IDN_ALL_OFF, AFCL_T03, AFCL_T12, AFT_N02, TREES_C45_GBDT, TREES_CTR_SORTFREE_SUMS, TREES_T21_STREAMS). KEPT: `134_CONTROL` (positive control), `2710_TENSOR_ACC_DEAD` (negative control of tools/feature_freq_identity_leg.sh), `GBDT_NS_PREDICT_BITVEC` (arms of tools/gbdt_ns_bitvec_check.sh), `GBDT_DEVICE_ROUNDS_OFF` (B arm owed on NVIDIA + AMD). No edit needed here: TREES_HIST_REP_SM, TREES_HIST_REP_SM_OFF, TREES_ORD_STD_GRIDFOLD_OFF.
+
 ### expdel2-43-trees (43 defines, 11 code files)
 
 | define | decision | rule | sites | lines | evidence / why |

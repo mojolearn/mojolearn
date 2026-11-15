@@ -1,0 +1,27 @@
+diff --git a/gbdt/methods/doc_parallel_boosting.mojo b/gbdt/methods/doc_parallel_boosting.mojo
+index baba95f7f4..169f2cd433 100644
+--- a/gbdt/methods/doc_parallel_boosting.mojo
++++ b/gbdt/methods/doc_parallel_boosting.mojo
+@@ -240,8 +240,9 @@ from gbdt.overfitting_detector.od_device import (
+ )
+ 
+ #: lane/apple-fast-trees-depthwise (2026-10-02, family `trees-ctr`),
+-#: FAST + Apple DEFAULT ON (2026-10-02; the `_OFF` rollback was deleted
+-#: 2026-11-15, the old `-D MOJOLEARN_GBDT_CTR_PERM_BATCH=1` is harmless). M3 A/B tdw-cat-permbatch-tc (gbdt-categorical taxicat, n=2):
++#: FAST + Apple DEFAULT ON (2026-10-02); `-D MOJOLEARN_GBDT_CTR_PERM_BATCH_OFF=1`
++#: restores the serial loop (the old `-D MOJOLEARN_GBDT_CTR_PERM_BATCH=1` is
++#: now harmless). M3 A/B tdw-cat-permbatch-tc (gbdt-categorical taxicat, n=2):
+ #: 36,772 -> 35,780 ms (-2.7%, both B runs below both A), auc .6309 -> .6311.
+ #: CAUSE: with CTR-bearing categorical features the fit keeps
+ #: `permutation_count` (4) column sets, and the non-symmetric per-tree loop
+@@ -276,9 +277,8 @@ comptime IDN_CTR_PERM_BATCH = (
+ comptime CTR_PERM_BATCH = (
+     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+     and TARGET_HAS_APPLE_GPU
++    and not is_defined["MOJOLEARN_GBDT_CTR_PERM_BATCH_OFF"]()
+ ) or IDN_CTR_PERM_BATCH
+-# TOMBSTONE: MOJOLEARN_GBDT_CTR_PERM_BATCH_OFF (DELETE-OLD-PATH, rule d: promoted on Apple M3 FAST only (EXP:108 KEPT 57ddea946); NVIDIA/AMD A/B owed if FAST ever reopens there) deleted 2026-11-15 by lane/expdel2-42-trees; code recoverable at 9adf63d224.
+-# Restore: git apply experiments/removed/MOJOLEARN_GBDT_CTR_PERM_BATCH_OFF.patch; record in docs/TOMBSTONES.md.
+ # TOMBSTONE: MOJOLEARN_IDN_CTR_PERM_GRID (noise) deleted 2026-10-11 by d092b6e2d; code recoverable at d092b6e2d^.
+ # Restore: git apply experiments/removed/MOJOLEARN_IDN_CTR_PERM_GRID.patch
+ from gbdt.gpu_util.kernel.fill import launch_make_sequence
