@@ -169,7 +169,7 @@ comptime C16_GLM_FUSED = False
 # (Sweep 2026-11-15: comptime C17_OVR removed; nothing read it.)
 # TOMBSTONE: MOJOLEARN_CLASSICAL_C17_LS_TRIALS (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-06-base; code recoverable at 10e3cad6a6.
 # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C17_LS_TRIALS.patch; record in docs/TOMBSTONES.md.
-comptime C17_LS_TRIALS = False
+# (Sweep 2026-11-15: comptime C17_LS_TRIALS removed; nothing read it.)
 # T.C18.residual-only, measured source 6fe3cfce38fd: remain opt-in/off, pending
 # qualification. Full LassoCV Taxi/Istella, ElasticNetCV Taxi/Istella ratios
 # (candidate/baseline): NVIDIA sm90 1.0088/1.0061/0.9697/1.0067;
