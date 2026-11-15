@@ -4,45 +4,38 @@
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu import block_dim, block_idx, thread_idx
 from std.memory import stack_allocation
-from std.sys.compile import is_defined
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch) term deleted 2026-11-15 by lane/expdel2-23-neural (non-owner, owner expdel2-37-series); code recoverable at 62f98b1ca0.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-23-neural.patch; record in docs/TOMBSTONES.md.
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from std.os import getenv
 from std.time import perf_counter_ns
-from core.accelerator_target import TARGET_HAS_APPLE_GPU
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from checks.kernel_matrix import COLUMN_AMD, COLUMN_APPLE, TARGET_COLUMN, lib_smem_page_fits_for
 
 from checks.numerics import ftz, identical_div, identical_exp, identical_mul_add, identical_rsqrt, identical_sigmoid, identical_silu, identical_tanh, portable_cosf, portable_sinf, identical_mul
 from mamba.checks.mamba3_fixture import M3_A_FLOOR, M3_D_STATE, M3_HEADDIM, M3_NUM_ROPE_ANGLES, M3_PI, M3_RMS_EPS, Mamba3Dims
 comptime M3_BWD_TPB = 128
-#: lane mamba-folds (2026-10-28): MOJOLEARN_IDN_MAMBA_BWD_FOLDS, the block-norm
-#: backward's row dot as lanes then a fixed tree (mamba_bwd_folds.mojo).
-from autograd.kernels.mamba_bwd_folds import (
-    IDN_MAMBA_BWD_FOLDS,
-    mamba_bwd_fold_dot_offset,
-    mamba_bwd_fold_floats,
-    mamba_bwd_fold_grid,
-    mamba_bwd_rowdot_lane_kernel,
-    mamba_bwd_rowdot_tree_kernel,
-    MAMBA_BWD_FOLD_TPB,
-)
-comptime M3_S16_V_SHARED = not is_defined["MOJOLEARN_MAMBA3_S16_V_NAIVE"]()
+# TOMBSTONE: MOJOLEARN_IDN_MAMBA_BWD_FOLDS (unmeasured opt-in arm, EXP:2271 PENDING) deleted 2026-11-15 by lane/expdel2-23-neural; code recoverable at 786965c6c8.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_MAMBA_BWD_FOLDS.patch; record in docs/TOMBSTONES.md.
+comptime M3_S16_V_SHARED = True
 """lane/neural-apple2 (2026-09-28): the S16 d_v half runs one block per
 (row, head) with the q . k dot of each later row computed ONCE into shared
 memory (`mamba3_s16_v_shared_kernel`) instead of once per value column p (64
 times), and the d_q / d_k half alone in `mamba3_s16_qk_backward_kernel`. Every
 dot keeps its operands and its n-ascending order, every d_v chain its
 operands and its i-ascending order: the naive kernel's bits.
-`-D MOJOLEARN_MAMBA3_S16_V_NAIVE` runs the naive kernel (the host restatement
-always does)."""
-comptime M3_S17_TAIL_SHARED = not is_defined["MOJOLEARN_MAMBA3_S17_TAIL_NAIVE"]()
+The host restatement runs the naive kernel."""
+# TOMBSTONE: MOJOLEARN_MAMBA3_S16_V_NAIVE (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-23-neural; code recoverable at b720d9dbfb.
+# Restore: git apply experiments/removed/MOJOLEARN_MAMBA3_S16_V_NAIVE.patch; record in docs/TOMBSTONES.md.
+comptime M3_S17_TAIL_SHARED = True
 """lane/neural-apple2 (2026-09-28): the S17 operands kernel's chunk-end
 `add` chain (qs x 64 x 128 + 64 x 128 serial steps on ONE thread per chunk
 and head, every operand a global load) runs in `mamba3_s17_tail_shared_kernel`:
 the block stages the operands, thread 0 folds them in the same order.
-`-D MOJOLEARN_MAMBA3_S17_TAIL_NAIVE` reverts (the host restatement always
-does)."""
+The host restatement runs the naive chain."""
+# TOMBSTONE: MOJOLEARN_MAMBA3_S17_TAIL_NAIVE (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-23-neural; code recoverable at ccf74402cb.
+# Restore: git apply experiments/removed/MOJOLEARN_MAMBA3_S17_TAIL_NAIVE.patch; record in docs/TOMBSTONES.md.
 
 
 def _grid(n: Int) -> Int:
@@ -286,9 +279,10 @@ def mamba3_s16_qkv_backward_kernel(
 #: each of them 64 times, once per p, from the same two operands: the
 #: same float); the two chains then run in the naive order (p outer, j /
 #: i inner) over staged values. SAME BITS: every fma has the same three
-#: operands in the same order. MOJOLEARN_MAMBA3_S16_QK_NAIVE=1 (a build
-#: define) keeps the naive kernel for the A/B and the digest gate.
-comptime M3_S16_QK_SHARED = not is_defined["MOJOLEARN_MAMBA3_S16_QK_NAIVE"]()
+#: operands in the same order. The host restatement runs the naive kernel.
+# TOMBSTONE: MOJOLEARN_MAMBA3_S16_QK_NAIVE (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-23-neural; code recoverable at 388a1c5306.
+# Restore: git apply experiments/removed/MOJOLEARN_MAMBA3_S16_QK_NAIVE.patch; record in docs/TOMBSTONES.md.
+comptime M3_S16_QK_SHARED = True
 comptime M3_S16_QK_MAXQ = 64
 
 
@@ -1183,79 +1177,15 @@ def mamba3_backward_join_current_into(
     ctx.enqueue_function[mamba3_beta_join_kernel](out_gamma.unsafe_ptr(),out_dt.unsafe_ptr(),out_trap.unsafe_ptr(),qk_gamma.unsafe_ptr(),scale_gamma.unsafe_ptr(),qk_dt.unsafe_ptr(),qk_trap.unsafe_ptr(),d_beta.unsafe_ptr(),dt.unsafe_ptr(),sigma.unsafe_ptr(),Int32(b),Int32(l),Int32(dims.nheads),grid_dim=(_grid(hs),1,1),block_dim=(M3_BWD_TPB,1,1))
 
 
-def mamba3_theta_reverse_kernel(
-    d_rate: MutPointer[Float32, MutAnyOrigin], d_theta: MutPointer[Float32, MutAnyOrigin],
-    dt: MutPointer[Float32, MutAnyOrigin], b_in:Int32,l_in:Int32,nh_in:Int32,
-):
-    var b=Int(b_in);var l=Int(l_in);var nh=Int(nh_in)
-    var cell=Int(block_idx.x)*Int(block_dim.x)+Int(thread_idx.x)
-    if cell>=b*nh*M3_NUM_ROPE_ANGLES:return
-    var r=cell%M3_NUM_ROPE_ANGLES;var bh=cell//M3_NUM_ROPE_ANGLES
-    var h=bh%nh;var bb=bh//nh;var carry=Float32(0.0)
-    for rev in range(l):
-        var t=l-1-rev;var rowh=(bb*l+t)*nh+h
-        carry=ftz(carry+ftz(d_theta.unsafe_load(rowh*M3_NUM_ROPE_ANGLES+r)))
-        d_rate.unsafe_store(rowh*M3_NUM_ROPE_ANGLES+r,ftz(identical_mul(carry,ftz(dt.unsafe_load(rowh)))))
-
-
-#: lane/neural-net-experiment (2026-09-30, the S16 pass): the angle stage's
-#: d_dt half. `mamba3_angle_reduce_kernel`'s second half is one thread per
-#: (token, head) folding, for each of the 32 angles, the suffix of d_theta
-#: from its token to the end of the sequence -- 8k dependent adds a thread
-#: at L = 512, each a device load 768 bytes from the last (a new line each),
-#: on 6,144 threads: the L40S priced the stage at 2.0 ms (5% of the pass).
-#: The folds are pinned (each token's suffix ascending from its own index,
-#: so no prefix is shared between tokens) and stay exactly as they are;
-#: what moves is WHERE a value waits: one block per (batch, head) stages
-#: each angle's whole column of d_theta once (L words), and each thread
-#: folds its token's suffixes from threadgroup memory. SAME BITS.
-#: Columns up to M3_ANGLE_DT_MAXL words take it; longer sequences keep the
-#: old kernel. MOJOLEARN_MAMBA3_ANGLE_DT_NAIVE=1 (a build define) keeps
-#: the old kernel for the A/B.
-comptime M3_ANGLE_DT_SHARED = not is_defined["MOJOLEARN_MAMBA3_ANGLE_DT_NAIVE"]()
+# TOMBSTONE: MOJOLEARN_IDN_M3_ANGLE_DT_SUFFIX_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-23-neural; code recoverable at 0b1aca903d.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_M3_ANGLE_DT_SUFFIX_OFF.patch; record in docs/TOMBSTONES.md.
+# The old angle path (mamba3_theta_reverse_kernel, the d_dt shared-column
+# kernel and its M3_ANGLE_DT_SHARED gate) went with it; M3_ANGLE_DT_MAXL and
+# M3_ANGLE_DT_TPB stay for the Apple FAST chunk arm below.
+# TOMBSTONE: MOJOLEARN_MAMBA3_ANGLE_DT_NAIVE (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-23-neural; code recoverable at c48e90d779.
+# Restore: git apply experiments/removed/MOJOLEARN_MAMBA3_ANGLE_DT_NAIVE.patch; record in docs/TOMBSTONES.md.
 comptime M3_ANGLE_DT_MAXL = 4096
 comptime M3_ANGLE_DT_TPB = 256
-
-
-def mamba3_angle_dt_shared_kernel(
-    d_dt: MutPointer[Float32, MutAnyOrigin], d_theta: MutPointer[Float32, MutAnyOrigin],
-    angle_raw: MutPointer[Float32, MutAnyOrigin],
-    b_in:Int32,l_in:Int32,nh_in:Int32,dip_in:Int32,col_angle_in:Int32,
-):
-    """`mamba3_angle_reduce_kernel`'s d_dt half over a staged column: block
-    (batch, head), thread `tid` the tokens `tid, tid + TPB, ...`; for each
-    angle r the column d_theta[:, h, r] is staged, then each token folds
-    its suffix ascending from itself, as the naive kernel does."""
-    var b=Int(b_in);var l=Int(l_in);var nh=Int(nh_in);var dip=Int(dip_in);var ca=Int(col_angle_in)
-    var col=stack_allocation[M3_ANGLE_DT_MAXL,Scalar[DType.float32],address_space=AddressSpace.SHARED]()
-    var blk=Int(block_idx.x);var tid=Int(thread_idx.x)
-    if blk>=b*nh:return
-    var h=blk%nh;var bb=blk//nh
-    # every token's running accdt, over the angles in order
-    var acc=stack_allocation[16,Scalar[DType.float32]]()
-    var slots=(l+M3_ANGLE_DT_TPB-1)//M3_ANGLE_DT_TPB
-    for sl in range(16):
-        acc[sl]=Float32(0.0)
-    for r in range(M3_NUM_ROPE_ANGLES):
-        var u=tid
-        while u<l:
-            col[u]=ftz(d_theta.unsafe_load(((bb*l+u)*nh+h)*M3_NUM_ROPE_ANGLES+r))
-            u+=M3_ANGLE_DT_TPB
-        barrier()
-        for sl in range(slots):
-            var li=tid+sl*M3_ANGLE_DT_TPB
-            if li<l:
-                var token=bb*l+li
-                var raw=ftz(angle_raw.unsafe_load(token*dip+ca+r));var rate=ftz(identical_mul(ftz(identical_tanh(raw)),M3_PI))
-                var carry=Float32(0.0)
-                for uu in range(li,l):
-                    carry=ftz(carry+col[uu])
-                acc[sl]=ftz(identical_mul_add(carry,rate,acc[sl]))
-        barrier()
-    for sl in range(slots):
-        var li=tid+sl*M3_ANGLE_DT_TPB
-        if li<l:
-            d_dt.unsafe_store((bb*l+li)*nh+h,acc[sl])
 
 
 def mamba3_angle_reduce_kernel(
@@ -1287,8 +1217,7 @@ def mamba3_angle_reduce_kernel(
 
 # ---------------------------------------------------------------------------
 # lane nr-mamba (2026-10-04, roadmap B3 as the review corrected it)
-# IDN_M3_ANGLE_DT_SUFFIX (default ON; `-D MOJOLEARN_IDN_M3_ANGLE_DT_SUFFIX_OFF`
-# or `-D MOJOLEARN_IDN_ALL_OFF` restores main). Every numeric mode on every
+# IDN_M3_ANGLE_DT_SUFFIX (the only path since 2026-11-15). Every numeric mode on every
 # column but the Apple FAST chunk arm (AFN_M3_BWD_CHUNK keeps its own).
 #
 # Main folded, for each (token, head, angle), the suffix d_theta[li..L-1]
@@ -1311,10 +1240,6 @@ def mamba3_angle_reduce_kernel(
 # backward checks generated from it; both prefill-backward call sites and the
 # tail dump pass the chunk-sum scratch.
 # ---------------------------------------------------------------------------
-comptime IDN_M3_ANGLE_DT_SUFFIX = (
-    not is_defined["MOJOLEARN_IDN_M3_ANGLE_DT_SUFFIX_OFF"]()
-    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
 comptime M3_ANGLE_SUFFIX_CHUNK = 64
 # NI43: linear-work scheduling of the existing versioned suffix.
 # Each chain folds chunk totals descending exactly once, storing the exclusive
@@ -1326,15 +1251,11 @@ comptime M3_ANGLE_SUFFIX_CHUNK = 64
 # both vendors, so no bit moves. Each chain does linear work in its chunk count
 # instead of re-summing every later chunk, so the win grows with sequence
 # length. Measured alone; it now combines with the promoted resident Samba step
-# and act_retain=2, and the post-merge race measures the combination. Default
-# on in IDENTICAL; -D MOJOLEARN_IDN_M3_ANGLE_CARRY_CACHE_OFF restores the
-# per-chunk suffix re-walk.
-comptime IDN_M3_ANGLE_CARRY_CACHE = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and IDN_M3_ANGLE_DT_SUFFIX
-    and not is_defined["MOJOLEARN_IDN_M3_ANGLE_CARRY_CACHE_OFF"]()
-    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
+# and act_retain=2, and the post-merge race measures the combination. On in
+# IDENTICAL; FAST keeps the per-chunk suffix re-walk.
+# TOMBSTONE: MOJOLEARN_IDN_M3_ANGLE_CARRY_CACHE_OFF (old path; EXP:1755 PROMOTED) deleted 2026-11-15 by lane/expdel2-23-neural; code recoverable at 41312ea653.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_M3_ANGLE_CARRY_CACHE_OFF.patch; record in docs/TOMBSTONES.md.
+comptime IDN_M3_ANGLE_CARRY_CACHE = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 
 
 def mamba3_angle_suffix_sums_cells(b: Int, l: Int, nh: Int) -> Int:
@@ -1449,30 +1370,18 @@ def mamba3_backward_angle_into(
     mut d_theta:DeviceBuffer[DType.float32],mut dt:DeviceBuffer[DType.float32],mut in_proj:DeviceBuffer[DType.float32],b:Int,l:Int,dims:Mamba3Dims,
     mut sums:DeviceBuffer[DType.float32],
 ) raises:
-    """`sums` holds `mamba3_angle_suffix_sums_cells(b, l, nh)` floats (read
-    only under IDN_M3_ANGLE_DT_SUFFIX)."""
-    comptime if IDN_M3_ANGLE_DT_SUFFIX:
-        var nk=(l+M3_ANGLE_SUFFIX_CHUNK-1)//M3_ANGLE_SUFFIX_CHUNK
-        var work=b*dims.nheads*M3_NUM_ROPE_ANGLES*nk
-        ctx.enqueue_function[mamba3_angle_chunk_sum_kernel](sums.unsafe_ptr(),d_theta.unsafe_ptr(),Int32(b),Int32(l),Int32(dims.nheads),grid_dim=(_grid(work),1,1),block_dim=(M3_BWD_TPB,1,1))
-        comptime if IDN_M3_ANGLE_CARRY_CACHE:
-            var chains=b*dims.nheads*M3_NUM_ROPE_ANGLES
-            ctx.enqueue_function[nn38_angle_chunk_seeds_kernel](sums.unsafe_ptr(),Int32(chains),Int32(nk),grid_dim=(_grid(chains),1,1),block_dim=(M3_BWD_TPB,1,1))
-        ctx.enqueue_function[mamba3_angle_suffix_kernel](d_rate.unsafe_ptr(),d_theta.unsafe_ptr(),sums.unsafe_ptr(),Int32(b),Int32(l),Int32(dims.nheads),grid_dim=(_grid(work),1,1),block_dim=(M3_BWD_TPB,1,1))
-        var m=b*l
-        ctx.enqueue_function[mamba3_angle_suffix_dt_kernel](d_dt.unsafe_ptr(),d_rate.unsafe_ptr(),in_proj.unsafe_ptr(),dt.unsafe_ptr(),Int32(m),Int32(dims.nheads),Int32(dims.d_in_proj()),Int32(dims.col_angle()),grid_dim=(_grid(m*dims.nheads),1,1),block_dim=(M3_BWD_TPB,1,1))
-        # d_angle half only (do_dt = 0): it reads the finished d_rate.
-        ctx.enqueue_function[mamba3_angle_reduce_kernel](d_angle.unsafe_ptr(),d_dt.unsafe_ptr(),d_rate.unsafe_ptr(),d_theta.unsafe_ptr(),in_proj.unsafe_ptr(),dt.unsafe_ptr(),Int32(b),Int32(l),Int32(dims.nheads),Int32(dims.d_in_proj()),Int32(dims.col_angle()),Int32(0),grid_dim=(_grid(m*M3_NUM_ROPE_ANGLES),1,1),block_dim=(M3_BWD_TPB,1,1))
-        return
-    var chains=b*dims.nheads*M3_NUM_ROPE_ANGLES
-    ctx.enqueue_function[mamba3_theta_reverse_kernel](d_rate.unsafe_ptr(),d_theta.unsafe_ptr(),dt.unsafe_ptr(),Int32(b),Int32(l),Int32(dims.nheads),grid_dim=(_grid(chains),1,1),block_dim=(M3_BWD_TPB,1,1))
-    var m=b*l;var cells=m*M3_NUM_ROPE_ANGLES if m*M3_NUM_ROPE_ANGLES>m*dims.nheads else m*dims.nheads
-    var dt_shared=False
-    comptime if M3_ANGLE_DT_SHARED:
-        dt_shared=l<=M3_ANGLE_DT_MAXL and (l+M3_ANGLE_DT_TPB-1)//M3_ANGLE_DT_TPB<=16
-    ctx.enqueue_function[mamba3_angle_reduce_kernel](d_angle.unsafe_ptr(),d_dt.unsafe_ptr(),d_rate.unsafe_ptr(),d_theta.unsafe_ptr(),in_proj.unsafe_ptr(),dt.unsafe_ptr(),Int32(b),Int32(l),Int32(dims.nheads),Int32(dims.d_in_proj()),Int32(dims.col_angle()),Int32(0 if dt_shared else 1),grid_dim=(_grid(cells),1,1),block_dim=(M3_BWD_TPB,1,1))
-    if dt_shared:
-        ctx.enqueue_function[mamba3_angle_dt_shared_kernel](d_dt.unsafe_ptr(),d_theta.unsafe_ptr(),in_proj.unsafe_ptr(),Int32(b),Int32(l),Int32(dims.nheads),Int32(dims.d_in_proj()),Int32(dims.col_angle()),grid_dim=(b*dims.nheads,1,1),block_dim=(M3_ANGLE_DT_TPB,1,1))
+    """`sums` holds `mamba3_angle_suffix_sums_cells(b, l, nh)` floats."""
+    var nk=(l+M3_ANGLE_SUFFIX_CHUNK-1)//M3_ANGLE_SUFFIX_CHUNK
+    var work=b*dims.nheads*M3_NUM_ROPE_ANGLES*nk
+    ctx.enqueue_function[mamba3_angle_chunk_sum_kernel](sums.unsafe_ptr(),d_theta.unsafe_ptr(),Int32(b),Int32(l),Int32(dims.nheads),grid_dim=(_grid(work),1,1),block_dim=(M3_BWD_TPB,1,1))
+    comptime if IDN_M3_ANGLE_CARRY_CACHE:
+        var chains=b*dims.nheads*M3_NUM_ROPE_ANGLES
+        ctx.enqueue_function[nn38_angle_chunk_seeds_kernel](sums.unsafe_ptr(),Int32(chains),Int32(nk),grid_dim=(_grid(chains),1,1),block_dim=(M3_BWD_TPB,1,1))
+    ctx.enqueue_function[mamba3_angle_suffix_kernel](d_rate.unsafe_ptr(),d_theta.unsafe_ptr(),sums.unsafe_ptr(),Int32(b),Int32(l),Int32(dims.nheads),grid_dim=(_grid(work),1,1),block_dim=(M3_BWD_TPB,1,1))
+    var m=b*l
+    ctx.enqueue_function[mamba3_angle_suffix_dt_kernel](d_dt.unsafe_ptr(),d_rate.unsafe_ptr(),in_proj.unsafe_ptr(),dt.unsafe_ptr(),Int32(m),Int32(dims.nheads),Int32(dims.d_in_proj()),Int32(dims.col_angle()),grid_dim=(_grid(m*dims.nheads),1,1),block_dim=(M3_BWD_TPB,1,1))
+    # d_angle half only (do_dt = 0): it reads the finished d_rate.
+    ctx.enqueue_function[mamba3_angle_reduce_kernel](d_angle.unsafe_ptr(),d_dt.unsafe_ptr(),d_rate.unsafe_ptr(),d_theta.unsafe_ptr(),in_proj.unsafe_ptr(),dt.unsafe_ptr(),Int32(b),Int32(l),Int32(dims.nheads),Int32(dims.d_in_proj()),Int32(dims.col_angle()),Int32(0),grid_dim=(_grid(m*M3_NUM_ROPE_ANGLES),1,1),block_dim=(M3_BWD_TPB,1,1))
 
 
 # ===========================================================================
@@ -1494,13 +1403,14 @@ def mamba3_backward_angle_into(
 # Every line is inside the AFN_M3_BWD_CHUNK guard; IDENTICAL and the other
 # vendors compile the kernels above unchanged.
 # ===========================================================================
-comptime AFN_M3_APPLE_FAST = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU and not is_defined["MOJOLEARN_COLUMN_CPU"]()
-)
-comptime AFN_M3_BWD_CHUNK = AFN_M3_APPLE_FAST and (
-    is_defined["MOJOLEARN_AFN_MAMBA3_BWD_CHUNK"]()
-    or is_defined["MOJOLEARN_AFN_SAMBA_ALL"]()
-)
+# TOMBSTONE: MOJOLEARN_AFN_MAMBA3_BWD_CHUNK (MERGED-UNMEASURED opt-in arm) deleted 2026-11-15 by lane/expdel2-23-neural; code recoverable at 4f8466c7ca.
+# Restore: git apply experiments/removed/MOJOLEARN_AFN_MAMBA3_BWD_CHUNK.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_AFN_SAMBA_ALL (MERGED-UNMEASURED opt-in umbrella) read deleted 2026-11-15 by lane/expdel2-23-neural; code recoverable at 4f8466c7ca.
+# Restore: git apply experiments/removed/MOJOLEARN_AFN_SAMBA_ALL.patch; record in docs/TOMBSTONES.md.
+# AFN_M3_BWD_CHUNK stays False for autograd/rules_mamba3.mojo and
+# mamba/host/mamba3_prefill_chain.mojo (other lanes' files), whose chunk
+# branches keep the kernels below; they go together after the wave.
+comptime AFN_M3_BWD_CHUNK = False
 comptime AFN_M3_SCAN_CHUNK = 64
 
 
@@ -1970,49 +1880,6 @@ def mamba3_block_norm_backward_kernel(
         )))
 
 
-def mamba3_block_norm_backward_cell_kernel(
-    dx: MutPointer[Float32, MutAnyOrigin],
-    dw_rows: MutPointer[Float32, MutAnyOrigin],
-    dy: MutPointer[Float32, MutAnyOrigin],
-    x: MutPointer[Float32, MutAnyOrigin],
-    sumsq: MutPointer[Float32, MutAnyOrigin],
-    weight: MutPointer[Float32, MutAnyOrigin],
-    fold: MutPointer[Float32, MutAnyOrigin],
-    dot_off_in: Int32,
-    m_in: Int32,
-    width_in: Int32,
-):
-    """MOJOLEARN_IDN_MAMBA_BWD_FOLDS: `mamba3_block_norm_backward_kernel`'s
-    per-cell half, one thread per cell, reading the lane + tree row dot from
-    `fold[dot_off + row]`. `rstd` and `correction` are the v1 expressions on
-    the same operands; the cell arithmetic is v1's line for line."""
-    var m = Int(m_in)
-    var width = Int(width_in)
-    var cell = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
-    if cell >= m * width:
-        return
-    var row = cell // width
-    var col = cell - row * width
-    var rstd = ftz(identical_rsqrt(ftz(
-        ftz(identical_div(sumsq.unsafe_load(row), Float32(width)))
-        + M3_RMS_EPS
-    )))
-    var dot = fold.unsafe_load(Int(dot_off_in) + row)
-    var correction = ftz(identical_mul(
-        ftz(identical_mul(rstd, rstd)),
-        ftz(identical_div(dot, Float32(width))),
-    ))
-    var xv = ftz(x.unsafe_load(cell))
-    var dyv = ftz(dy.unsafe_load(cell))
-    var weighted = ftz(identical_mul(dyv, ftz(weight.unsafe_load(col))))
-    dx.unsafe_store(cell, ftz(identical_mul(
-        rstd, ftz(weighted - ftz(identical_mul(xv, correction)))
-    )))
-    dw_rows.unsafe_store(cell, ftz(identical_mul(
-        dyv, ftz(identical_mul(xv, rstd))
-    )))
-
-
 def mamba3_residual_join_kernel(
     dx: MutPointer[Float32, MutAnyOrigin],
     residual_cotangent: MutPointer[Float32, MutAnyOrigin],
@@ -2038,39 +1905,12 @@ def mamba3_backward_block_norm_into(
     m: Int,
     dims: Mamba3Dims,
 ) raises:
-    comptime if IDN_MAMBA_BWD_FOLDS:
-        # v2: lanes, tree, cells. The scratch is this call's own, so it waits
-        # once before the scratch goes out of scope (every caller closes its
-        # walk with a synchronize right after this stage and its reduce).
-        var fold = ctx.enqueue_create_buffer[DType.float32](mamba_bwd_fold_floats(m))
-        var off = mamba_bwd_fold_dot_offset(m)
-        ctx.enqueue_function[mamba_bwd_rowdot_lane_kernel](
-            fold.unsafe_ptr(), dy.unsafe_ptr(), weight.unsafe_ptr(), x.unsafe_ptr(),
-            Int32(m), Int32(dims.d_model),
-            grid_dim=(mamba_bwd_fold_grid(off), 1, 1),
-            block_dim=(MAMBA_BWD_FOLD_TPB, 1, 1),
-        )
-        ctx.enqueue_function[mamba_bwd_rowdot_tree_kernel](
-            fold.unsafe_ptr(), Int32(m), Int32(off),
-            grid_dim=(mamba_bwd_fold_grid(m), 1, 1),
-            block_dim=(MAMBA_BWD_FOLD_TPB, 1, 1),
-        )
-        ctx.enqueue_function[mamba3_block_norm_backward_cell_kernel](
-            dx.unsafe_ptr(), dw_rows.unsafe_ptr(), dy.unsafe_ptr(), x.unsafe_ptr(),
-            sumsq.unsafe_ptr(), weight.unsafe_ptr(), fold.unsafe_ptr(),
-            Int32(off), Int32(m), Int32(dims.d_model),
-            grid_dim=(mamba_bwd_fold_grid(m * dims.d_model), 1, 1),
-            block_dim=(MAMBA_BWD_FOLD_TPB, 1, 1),
-        )
-        ctx.synchronize()
-        _ = fold^
-    else:
-        ctx.enqueue_function[mamba3_block_norm_backward_kernel](
-            dx.unsafe_ptr(), dw_rows.unsafe_ptr(), dy.unsafe_ptr(), x.unsafe_ptr(),
-            sumsq.unsafe_ptr(), weight.unsafe_ptr(), Int32(m),
-            Int32(dims.d_model), grid_dim=(_grid(m), 1, 1),
-            block_dim=(M3_BWD_TPB, 1, 1),
-        )
+    ctx.enqueue_function[mamba3_block_norm_backward_kernel](
+        dx.unsafe_ptr(), dw_rows.unsafe_ptr(), dy.unsafe_ptr(), x.unsafe_ptr(),
+        sumsq.unsafe_ptr(), weight.unsafe_ptr(), Int32(m),
+        Int32(dims.d_model), grid_dim=(_grid(m), 1, 1),
+        block_dim=(M3_BWD_TPB, 1, 1),
+    )
     ctx.enqueue_function[mamba3_residual_join_kernel](
         dx.unsafe_ptr(), residual_cotangent.unsafe_ptr(),
         Int32(m * dims.d_model),
@@ -2189,10 +2029,10 @@ def mamba3_s17_operands_kernel(
 #: read straight from device memory (coalesced across n). SAME BITS:
 #: every chain is the naive kernel's chain with the same operands in the
 #: same order; the row scalars are the same folds in the same order. The
-#: chunk-end `add` chain stays in `mamba3_s17_tail_shared_kernel` (the
-#: default); a build with MOJOLEARN_MAMBA3_S17_TAIL_NAIVE keeps the naive
-#: operands kernel too. MOJOLEARN_MAMBA3_S17_OPERANDS_NAIVE=1 (a build
-#: define) keeps the naive kernel for the A/B and the digest gate.
+#: chunk-end `add` chain stays in `mamba3_s17_tail_shared_kernel`.
+#: The host restatement runs the naive operands kernel.
+# TOMBSTONE: MOJOLEARN_MAMBA3_S17_OPERANDS_NAIVE (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-23-neural; code recoverable at 60e95e5888.
+# Restore: git apply experiments/removed/MOJOLEARN_MAMBA3_S17_OPERANDS_NAIVE.patch; record in docs/TOMBSTONES.md.
 comptime M3_S17_CARRY_STRIDE = M3_D_STATE + 1
 #: The operands kernel's threadgroup page: the carried [p][n] tile at its
 #: padded stride, the row's dy, v and d_v over p, and q, k and d_q over n
@@ -2204,8 +2044,7 @@ comptime M3_S17_OPERANDS_BYTES = (
     M3_HEADDIM * M3_S17_CARRY_STRIDE + 3 * M3_HEADDIM + 3 * M3_D_STATE
 ) * 4
 comptime M3_S17_OPERANDS_SHARED = (
-    not is_defined["MOJOLEARN_MAMBA3_S17_OPERANDS_NAIVE"]()
-    and M3_S17_TAIL_SHARED
+    M3_S17_TAIL_SHARED
     and lib_smem_page_fits_for[TARGET_COLUMN, M3_S17_OPERANDS_BYTES]()
 )
 
@@ -2288,15 +2127,13 @@ def mamba3_s17_operands_shared_kernel(
 #: (p ascending, the one chain), and pass C's thread p walks its own row,
 #: which sits whole in one half; pass A and the row scalars are the shared
 #: kernel's. SAME BITS. Taken at comptime where the full page does not fit
-#: and the half page (18,816 bytes) does; the same env define as the shared
-#: kernel keeps the naive kernel for the A/B.
+#: and the half page (18,816 bytes) does.
 comptime M3_S17_PH = M3_HEADDIM // 2
 comptime M3_S17_OPERANDS_HALF_BYTES = (
     M3_S17_PH * M3_S17_CARRY_STRIDE + 3 * M3_HEADDIM + 3 * M3_D_STATE
 ) * 4
 comptime M3_S17_OPERANDS_HALF = (
-    not is_defined["MOJOLEARN_MAMBA3_S17_OPERANDS_NAIVE"]()
-    and M3_S17_TAIL_SHARED
+    M3_S17_TAIL_SHARED
     and not M3_S17_OPERANDS_SHARED
     and lib_smem_page_fits_for[TARGET_COLUMN, M3_S17_OPERANDS_HALF_BYTES]()
 )
@@ -2457,8 +2294,7 @@ def mamba3_s17_tail_shared_kernel(
 #:      thread 0's registers. MEASURED SLOWER on the L4 (8.46 against 7.27
 #:      ms at the board shape, the same bits).
 #: PIPE is the default (promoted below). It does not run under
-#: MOJOLEARN_IDN_ALL_OFF, under MOJOLEARN_MAMBA3_S17_TAIL_NAIVE (the shared
-#: tail must be the active arm), or where the page does not fit the column;
+#: a column whose page does not fit;
 #: then the shared kernel runs. The page is the shared kernel's (two
 #: M3_S17_TP x M3_D_STATE float tiles) on both arms.
 comptime M3_S17_TAIL_PAGE_BYTES = 2 * M3_S17_TP * M3_D_STATE * 4
@@ -2470,10 +2306,10 @@ comptime M3_S17_TAIL_PIPE = (
     and M3_S17_TAIL_ALT_FITS
     # PROMOTED 2026-10-11 (grid g50ebe26a5, arm m3_s17_tail=pipe vs today's defaults, one run per arm): samba-train-step bytes
     # NV L40S 40.105 -> 41.582 ms (v1372), AMD MI325X 117.272 -> 68.559 ms (a1540); avg ratio 0.779 (vendor split: NV 1.04x);
-    # hash 16f6e13b on both vendors. Default ON; -D MOJOLEARN_IDN_M3_S17_TAIL_PIPE_OFF restores the shared tail.
-    and not is_defined["MOJOLEARN_IDN_M3_S17_TAIL_PIPE_OFF"]()
-    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+    # hash 16f6e13b on both vendors.
 )
+# TOMBSTONE: MOJOLEARN_IDN_M3_S17_TAIL_PIPE_OFF (old path; EXP:2014 PROMOTED) deleted 2026-11-15 by lane/expdel2-23-neural; code recoverable at 1629ea8265.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_M3_S17_TAIL_PIPE_OFF.patch; record in docs/TOMBSTONES.md.
 comptime M3_S17_PIPE_GROUP = 16
 # TOMBSTONE: MOJOLEARN_IDN_M3_S17_TAIL_DBUF (mamba3_s17_tail_dbuf_kernel + M3_S17_DB_TP; LOSER avg 1.33x samba-train-step) deleted 2026-10-11 by b9e2282b2; code recoverable at b9e2282b2^.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_M3_S17_TAIL_DBUF.patch

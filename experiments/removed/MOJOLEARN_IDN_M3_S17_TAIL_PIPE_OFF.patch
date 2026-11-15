@@ -1,0 +1,26 @@
+diff --git a/autograd/kernels/mamba3.mojo b/autograd/kernels/mamba3.mojo
+index cbf344cd0f..5122e7954d 100644
+--- a/autograd/kernels/mamba3.mojo
++++ b/autograd/kernels/mamba3.mojo
+@@ -2376,7 +2376,7 @@ def mamba3_s17_tail_shared_kernel(
+ #:      thread 0's registers. MEASURED SLOWER on the L4 (8.46 against 7.27
+ #:      ms at the board shape, the same bits).
+ #: PIPE is the default (promoted below). It does not run under
+-#: a column whose page does not fit;
++#: MOJOLEARN_IDN_M3_S17_TAIL_PIPE_OFF, or where the page does not fit the column;
+ #: then the shared kernel runs. The page is the shared kernel's (two
+ #: M3_S17_TP x M3_D_STATE float tiles) on both arms.
+ comptime M3_S17_TAIL_PAGE_BYTES = 2 * M3_S17_TP * M3_D_STATE * 4
+@@ -2388,10 +2388,9 @@ comptime M3_S17_TAIL_PIPE = (
+     and M3_S17_TAIL_ALT_FITS
+     # PROMOTED 2026-10-11 (grid g50ebe26a5, arm m3_s17_tail=pipe vs today's defaults, one run per arm): samba-train-step bytes
+     # NV L40S 40.105 -> 41.582 ms (v1372), AMD MI325X 117.272 -> 68.559 ms (a1540); avg ratio 0.779 (vendor split: NV 1.04x);
+-    # hash 16f6e13b on both vendors.
++    # hash 16f6e13b on both vendors. Default ON; -D MOJOLEARN_IDN_M3_S17_TAIL_PIPE_OFF restores the shared tail.
++    and not is_defined["MOJOLEARN_IDN_M3_S17_TAIL_PIPE_OFF"]()
+ )
+-# TOMBSTONE: MOJOLEARN_IDN_M3_S17_TAIL_PIPE_OFF (old path; EXP:2014 PROMOTED) deleted 2026-11-15 by lane/expdel2-23-neural; code recoverable at 1629ea8265.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_M3_S17_TAIL_PIPE_OFF.patch; record in docs/TOMBSTONES.md.
+ comptime M3_S17_PIPE_GROUP = 16
+ # TOMBSTONE: MOJOLEARN_IDN_M3_S17_TAIL_DBUF (mamba3_s17_tail_dbuf_kernel + M3_S17_DB_TP; LOSER avg 1.33x samba-train-step) deleted 2026-10-11 by b9e2282b2; code recoverable at b9e2282b2^.
+ # Restore: git apply experiments/removed/MOJOLEARN_IDN_M3_S17_TAIL_DBUF.patch

@@ -45,14 +45,9 @@ The host column runs the same blocks through the x_cnn host twins
 (autograd/cnn_block_host.mojo, reached through `Exec.cnn_op_host`, so no
 GPU module imports host threads); those split their element and GEMM work
 across cores.
-
-A/B: `-D MOJOLEARN_CNN_GENERIC_OPS` captures tonight's generic chain
-(OPS_CONV2D, OPS_RELU, OPS_MAXPOOL2D, OPS_TRANSPOSE + OPS_LINEAR) instead;
-RUN OWED on NVIDIA and AMD (board rows algos/cnn-clf fit and predict).
 """
-from std.sys.compile import is_defined
 from sequence.ops import FP
-from x_cnn.ops import FP as XFP, IP as XIP, NN14_BOUNDED_IM2COL, neural_tape_budget_bytes
+from x_cnn.ops import FP as XFP, IP as XIP, neural_tape_budget_bytes
 from x_cnn.shape_words import (
     conv_params, pool_params, CP_N, CP_C, CP_OC, CP_KH, CP_KW, CP_OH, CP_OW, PP_OH, PP_OW,
 )
@@ -66,9 +61,11 @@ comptime OPS_CNN_LINEAR = 91
 comptime CNN_CONV_BLOCK_TAG = 117
 comptime CNN_LINEAR_TAG = 118
 
-#: Default: the CNN program captures the tuned ops. The define is the B arm
-#: (tonight's generic tape chain) of the A/B.
-comptime CNN_FUSED_OPS = not is_defined["MOJOLEARN_CNN_GENERIC_OPS"]()
+#: The CNN program captures the tuned ops.
+# TOMBSTONE: MOJOLEARN_CNN_GENERIC_OPS (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-23-neural; code recoverable at aefeacb577.
+# Restore: git apply experiments/removed/MOJOLEARN_CNN_GENERIC_OPS.patch; record in docs/TOMBSTONES.md.
+# CNN_FUSED_OPS stays a constant for sequence/model_device_dispatch.mojo and sequence/cnn_classifier_program.mojo.
+comptime CNN_FUSED_OPS = True
 
 #: Host-arm operation words (`Exec.cnn_op_host`).
 comptime CNN_HOST_BLOCK_FORWARD = 0
@@ -113,11 +110,12 @@ def cnn_block_out_dims(cprm: List[Int32], pprm: List[Int32], pool: Bool) -> Tupl
 
 
 def cnn_block_saved_sizes(cprm: List[Int32]) -> Tuple[Int, Int]:
-    """Words of the saved im2col matrix (one word under the bounded im2col,
-    whose tiles the entries keep in their own workspace) and conv output."""
+    """Words of the saved im2col matrix and conv output."""
     var ckk = Int(cprm[CP_C]) * Int(cprm[CP_KH]) * Int(cprm[CP_KW])
     var rows = Int(cprm[CP_N]) * Int(cprm[CP_OH]) * Int(cprm[CP_OW])
-    var cols = 1 if NN14_BOUNDED_IM2COL else rows * ckk
+    # TOMBSTONE: MOJOLEARN_NN14_BOUNDED_IM2COL (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-23-neural (non-owner); code recoverable at f839bce651.
+    # Restore: git apply experiments/removed/MOJOLEARN_NN14_BOUNDED_IM2COL.expdel2-23-neural.patch; record in docs/TOMBSTONES.md.
+    var cols = rows * ckk
     return (cols, rows * Int(cprm[CP_OC]))
 
 

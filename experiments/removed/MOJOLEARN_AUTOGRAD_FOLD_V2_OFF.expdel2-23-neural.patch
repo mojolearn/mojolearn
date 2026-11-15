@@ -1,0 +1,165 @@
+diff --git a/autograd/checks/fold_cases.mojo b/autograd/checks/fold_cases.mojo
+index 0b1c0caae5..2c0822f412 100644
+--- a/autograd/checks/fold_cases.mojo
++++ b/autograd/checks/fold_cases.mojo
+@@ -11,14 +11,14 @@
+ # repeated term fails) and "round" (fractions on a 2^-23 grid: within a
+ # worst-case rounding bound, digests printed). Every FOLD line carries a
+ # digest of the output bits: HostExec, Metal, NVIDIA and AMD print the same
+-# lines (diff the cpu and gpu outputs).
+-# TOMBSTONE: MOJOLEARN_AUTOGRAD_FOLD_V2_OFF (old path, no A/B recorded) uses deleted 2026-11-15 by lane/expdel2-23-neural (non-owner); code recoverable at afaee1c189.
+-# Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_FOLD_V2_OFF.expdel2-23-neural.patch; record in docs/TOMBSTONES.md.
++# lines (diff the cpu and gpu outputs), and fold v2 against
++# -D MOJOLEARN_AUTOGRAD_FOLD_V2_OFF moves only the "round" digests of folds
++# over more than 4096 terms.
+ from std.memory import bitcast
+ from autograd import Tape, Tensor
+ from sequence.exec_trait import Exec
+ from sequence.ops import FP, mul
+-from autograd.ops import AXIS_ALL, AXIS_ROWS, AXIS_COLS
++from autograd.ops import AXIS_ALL, AXIS_ROWS, AXIS_COLS, AUTOGRAD_FOLD_V2
+ from autograd.fold import blocked_fold, fold_partials, fold_extent, fold_outputs
+ 
+ 
+@@ -129,7 +129,7 @@ def _vjp[E: Exec](
+ 
+ 
+ def run_fold_cases[E: Exec](mut ex: E) raises:
+-    print("FOLD geometry", String("v2"))
++    print("FOLD geometry", String("v2") if AUTOGRAD_FOLD_V2 else String("v1"))
+     var shapes = List[List[Int]]()
+     shapes.append([512, 1])
+     shapes.append([512, 256])
+diff --git a/autograd/fold.mojo b/autograd/fold.mojo
+index f888fe6c63..4bd076029c 100644
+--- a/autograd/fold.mojo
++++ b/autograd/fold.mojo
+@@ -5,13 +5,11 @@
+ # same arguments, hence the same bits on every executor.
+ from sequence.exec_trait import Exec
+ from sequence.ops import FP, Args, dummy_ptr
+-from autograd.ops import OP_AG_REDUCE_PART, OP_AG_REDUCE_FOLD, AXIS_ALL, AXIS_ROWS
+-from autograd.ops import OP_AGF_LEVEL, AG_FOLD_LEAF
++from autograd.ops import OP_AG_REDUCE_PART, OP_AG_REDUCE_FOLD, AXIS_ALL, AXIS_ROWS, ag_fold_block
++from autograd.ops import OP_AGF_LEVEL, AUTOGRAD_FOLD_V2, AG_FOLD_LEAF
+ from autograd.fold_ops import OP_AGS_LOSS_PART
+ 
+-# TOMBSTONE: MOJOLEARN_AUTOGRAD_FOLD_V2_OFF (old path, no A/B recorded) uses deleted 2026-11-15 by lane/expdel2-23-neural (non-owner, owner of the read autograd/ops.mojo); code recoverable at afaee1c189.
+-# Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_FOLD_V2_OFF.expdel2-23-neural.patch; record in docs/TOMBSTONES.md.
+-# Lane ag-pass3-fold (2026-10-19): the
++# Lane ag-pass3-fold (2026-10-19): under AUTOGRAD_FOLD_V2 (the default) the
+ # fold is a tree of fixed 64-term blocks (autograd/ops.mojo, "THE BLOCKED
+ # FOLD", geometry before and after): OP_AG_REDUCE_PART (or a first launch
+ # of the caller's that writes leaf partials, OP_AGK_BIN_VJP_PART), then
+@@ -48,18 +46,27 @@ def fold_partials_bound(max_extent: Int) -> Int:
+     R = ag_fold_block is non-decreasing in n, so R(max_extent) blocks always
+     suffice (the block count itself is not monotone in n). v2: the leaf
+     length is a constant, so ceil(max_extent / 64) blocks."""
+-    return max((max_extent + AG_FOLD_LEAF - 1) // AG_FOLD_LEAF, 1)
++    comptime if AUTOGRAD_FOLD_V2:
++        return max((max_extent + AG_FOLD_LEAF - 1) // AG_FOLD_LEAF, 1)
++    else:
++        return ag_fold_block(max(max_extent, 1))
+ 
+ 
+ def fold_block(rows: Int, cols: Int, axis: Int) -> Int:
+     """The block length of a fold of a rows x cols source over `axis`."""
+-    return AG_FOLD_LEAF
++    comptime if AUTOGRAD_FOLD_V2:
++        return AG_FOLD_LEAF
++    else:
++        return ag_fold_block(fold_extent(rows, cols, axis))
+ 
+ 
+ def fold_single_launch(rows: Int, cols: Int, axis: Int) -> Bool:
+     """True when the fold is one leaf block an output (v2), so its first
+     launch can write the finished outputs (no partials, no second launch)."""
+-    return fold_extent(rows, cols, axis) <= AG_FOLD_LEAF
++    comptime if AUTOGRAD_FOLD_V2:
++        return fold_extent(rows, cols, axis) <= AG_FOLD_LEAF
++    else:
++        return False
+ 
+ 
+ def blocked_fold_finish[E: Exec](
+@@ -88,25 +95,26 @@ def blocked_fold_finish[E: Exec](
+     if divide:
+         f.i4 = 1
+     f.f0 = factor
+-    var outputs = fold_outputs(rows, cols, axis)
+-    var live = (fold_extent(rows, cols, axis) + AG_FOLD_LEAF - 1) // AG_FOLD_LEAF
+-    var stride = 1
+-    # driver-loop: over fold tree levels (ceil(log64(extent)) - 1 of them)
+-    while live > AG_FOLD_LEAF:
+-        var g = Args()
+-        g.p0 = partials
+-        g.i0 = axis
+-        g.i1 = rows
+-        g.i2 = cols
+-        g.i3 = AG_FOLD_LEAF
+-        g.i5 = stride
+-        g.i6 = live
+-        var groups = (live + AG_FOLD_LEAF - 1) // AG_FOLD_LEAF
+-        ex.launch[OP_AGF_LEVEL](g, groups * outputs)
+-        live = groups
+-        stride *= AG_FOLD_LEAF
+-    f.i5 = stride
+-    f.i6 = live
++    comptime if AUTOGRAD_FOLD_V2:
++        var outputs = fold_outputs(rows, cols, axis)
++        var live = (fold_extent(rows, cols, axis) + AG_FOLD_LEAF - 1) // AG_FOLD_LEAF
++        var stride = 1
++        # driver-loop: over fold tree levels (ceil(log64(extent)) - 1 of them)
++        while live > AG_FOLD_LEAF:
++            var g = Args()
++            g.p0 = partials
++            g.i0 = axis
++            g.i1 = rows
++            g.i2 = cols
++            g.i3 = AG_FOLD_LEAF
++            g.i5 = stride
++            g.i6 = live
++            var groups = (live + AG_FOLD_LEAF - 1) // AG_FOLD_LEAF
++            ex.launch[OP_AGF_LEVEL](g, groups * outputs)
++            live = groups
++            stride *= AG_FOLD_LEAF
++        f.i5 = stride
++        f.i6 = live
+     ex.launch[OP_AG_REDUCE_FOLD](f, fold_outputs(rows, cols, axis))
+ 
+ 
+@@ -177,6 +185,10 @@ def loss_fold[E: Exec](
+     a.i3 = block
+     a.i6 = kind
+     a.f2 = delta
++    comptime if not AUTOGRAD_FOLD_V2:
++        # v1's block rule has no one-launch form and its leaf is not
++        # ag_part_finish's: the terms are stored, then folded (v1's words)
++        raise Error("autograd: loss_fold needs the v2 fold (MOJOLEARN_AUTOGRAD_FOLD_V2_OFF builds take loss_terms)")
+     if fold_single_launch(rows, cols, AXIS_ALL):
+         a.p2 = dst
+         a.i4 = 1
+diff --git a/autograd/fold_kernels.mojo b/autograd/fold_kernels.mojo
+index d27e074b07..c6d83fbfd5 100644
+--- a/autograd/fold_kernels.mojo
++++ b/autograd/fold_kernels.mojo
+@@ -51,7 +51,7 @@ from sequence.ops import Args, FP, ld, st, add
+ from autograd.ops import (
+     OP_AG_FIRST, OP_AG_LAST, OP_AG_REDUCE_PART, OP_AG_TRANSPOSE, OP_AG_BIN_FWD, OP_AG_BIN_VJP,
+     OP_AG_UNARY_FWD, OP_AG_UNARY_VJP, OP_AG_REDUCE_VJP, OP_AG_ACCUMULATE, OP_AGK_BIN_VJP_PART,
+-    AXIS_ROWS, AG_FOLD_LEAF, AG_VEC, ag_leaf_span, ag_part_finish, _bin_vjp_at,
++    AXIS_ROWS, AG_FOLD_LEAF, AG_VEC, AUTOGRAD_FOLD_V2, ag_leaf_span, ag_part_finish, _bin_vjp_at,
+     apply_autograd, apply_autograd_vec4,
+ )
+ from autograd.data_ops import (
+@@ -63,9 +63,7 @@ from autograd.fold_ops import OP_AGS_LOSS_PART, ags_loss_term
+ # Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-23-neural.patch; record in docs/TOMBSTONES.md.
+ # TOMBSTONE: MOJOLEARN_IDN_FOLD_STAGED_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-23-neural; code recoverable at 479d223bd3.
+ # Restore: git apply experiments/removed/MOJOLEARN_IDN_FOLD_STAGED_OFF.patch; record in docs/TOMBSTONES.md.
+-# TOMBSTONE: MOJOLEARN_AUTOGRAD_FOLD_V2_OFF (old path, no A/B recorded) use deleted 2026-11-15 by lane/expdel2-23-neural (non-owner); code recoverable at afaee1c189.
+-# Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_FOLD_V2_OFF.expdel2-23-neural.patch; record in docs/TOMBSTONES.md.
+-comptime AG_FOLD_STAGED = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
++comptime AG_FOLD_STAGED = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and AUTOGRAD_FOLD_V2
+ # TOMBSTONE: MOJOLEARN_IDN_ELEM_VEC4_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-23-neural; code recoverable at b57fa1c4dd.
+ # Restore: git apply experiments/removed/MOJOLEARN_IDN_ELEM_VEC4_OFF.patch; record in docs/TOMBSTONES.md.
+ comptime AG_ELEM_VEC4 = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL

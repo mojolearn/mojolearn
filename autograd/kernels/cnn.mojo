@@ -29,11 +29,9 @@ from gemm.checks.gemm_identical import (
 )
 from gemm.contract import OP_NN, OP_TN
 from x_cnn.neural_col2im import NI14_TILED_COL2IM, neural_col2im_tiled
+# TOMBSTONE: MOJOLEARN_NN14_BOUNDED_IM2COL (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-23-neural (non-owner); code recoverable at f839bce651.
+# Restore: git apply experiments/removed/MOJOLEARN_NN14_BOUNDED_IM2COL.expdel2-23-neural.patch; record in docs/TOMBSTONES.md.
 from x_cnn.ops import (
-    NN14_BOUNDED_IM2COL,
-    nn14_conv_rows,
-    nn14_wgrad_at,
-    nn14_input_grad_at,
     FP,
     IP,
     CP_N,
@@ -420,7 +418,7 @@ def conv2d_backward_m(a: List[Int], dev: Int, prm: List[Int32]) raises:
     var dw = m_in(ctx, 1, a[1], OC * ckk, isdev(dev, 1))
     var ddout = m_in(ctx, 2, a[2], rows * OC, isdev(dev, 2))
     var dp = put_prm(ctx, 3, prm)
-    var cols = ws(ctx, 4, 1 if (NN14_BOUNDED_IM2COL or NI12_IMPLICIT_CONV) else rows * ckk)
+    var cols = ws(ctx, 4, 1 if NI12_IMPLICIT_CONV else rows * ckk)
     var g = ws(ctx, 5, rows * OC)
     var ones = ones_buf(ctx, 6, rows)
     var gw = m_out(ctx, 7, a[4], OC * ckk, isdev(dev, 4))
@@ -429,9 +427,9 @@ def conv2d_backward_m(a: List[Int], dev: Int, prm: List[Int32]) raises:
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_CNN_DX_IMPLICIT.patch
     # TOMBSTONE: MOJOLEARN_IDN_CNN_WGRAD_LEAF1024 (noise 0.972) deleted 2026-10-11 by 499997a56; code recoverable at 499997a56^.
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_CNN_WGRAD_LEAF1024.patch (the same patch: x_cnn/cnn_dx_wgrad.mojo held both)
-    var dcols = ws(ctx, 9, 1 if NN14_BOUNDED_IM2COL else rows * ckk)
+    var dcols = ws(ctx, 9, rows * ckk)
     var gx = m_out(ctx, 10, a[3], nx, isdev(dev, 3))
-    comptime if not NN14_BOUNDED_IM2COL and not NI12_IMPLICIT_CONV:
+    comptime if not NI12_IMPLICIT_CONV:
         _im2col(ctx, dxin, cols, dp, rows, ckk, C)
     comptime if TILED_LAYOUT:
         var tg = _tiled_grid(N, rows // N, OC)
@@ -445,20 +443,15 @@ def conv2d_backward_m(a: List[Int], dev: Int, prm: List[Int32]) raises:
         launch[fill_one_at](ctx, fp(ones), fp(ones), fp(ones), fp(ones), ip(dp), ip(dp), rows)
     # DEVIATION 5701: the weight gradient's reduction over the N*OH*OW rows is
     # the pinned GEMM's (leaves + balanced fold), never an atomic accumulation.
-    comptime if NN14_BOUNDED_IM2COL:
-        launch[nn14_wgrad_at](ctx, fp(dxin), fp(g), fp(gw), fp(gw), ip(dp), ip(dp), OC * ckk)
-    elif NI12_IMPLICIT_CONV:
+    comptime if NI12_IMPLICIT_CONV:
         # lane gap-gemm-layers: the cols operand gathered from x, the same
         # leaf partials and fold launches as the GEMM's split plan
         _implicit_wgrad(ctx, gw, g, dxin, dp, 18, rows, OC, ckk)
     else:
         device_gemm(ctx, gw, g, cols, OC, ckk, rows, OP_TN)
     bias_grad_gemm(ctx, gb, g, ones, OC, rows)
-    comptime if NN14_BOUNDED_IM2COL:
-        launch[nn14_input_grad_at](ctx, fp(g), fp(dw), fp(gx), fp(gx), ip(dp), ip(dp), nx)
-    else:
-        device_gemm(ctx, dcols, g, dw, rows, ckk, OC, OP_NN)
-        _col2im(ctx, dcols, gx, dp, nx)
+    device_gemm(ctx, dcols, g, dw, rows, ckk, OC, OP_NN)
+    _col2im(ctx, dcols, gx, dp, nx)
     m_fetch(ctx, gx, a[3], nx, isdev(dev, 3))
     m_fetch(ctx, gw, a[4], OC * ckk, isdev(dev, 4))
     m_fetch(ctx, gb, a[5], OC, isdev(dev, 5))
@@ -558,9 +551,9 @@ def conv_block_backward_into[resident: Bool = False](
     var dbias = put[resident](ctx, 2, bias, OC)
     var dgo = put[resident](ctx, 3, g, no)
     var dp = put_prm(ctx, 5, cprm)
-    var saved = resident and save_y != 0 and (NN14_BOUNDED_IM2COL or save_cols != 0)
-    var tile_rows = nn14_conv_rows(rows, ckk, OC) if NN14_BOUNDED_IM2COL else rows
-    var cols = view(ctx, FP(unsafe_from_address=save_cols), rows * ckk) if saved and not NN14_BOUNDED_IM2COL else ws(ctx, 7, 1 if NI12_IMPLICIT_CONV else tile_rows * ckk)
+    var saved = resident and save_y != 0 and save_cols != 0
+    var tile_rows = rows
+    var cols = view(ctx, FP(unsafe_from_address=save_cols), rows * ckk) if saved else ws(ctx, 7, 1 if NI12_IMPLICIT_CONV else tile_rows * ckk)
     var y2 = ws(ctx, 8, 1 if NI12_IMPLICIT_CONV else tile_rows * OC)
     var yconv = view(ctx, FP(unsafe_from_address=save_y), ny) if saved else ws(ctx, 9, ny)
     var gy = ws(ctx, 11, ny)
@@ -600,9 +593,7 @@ def conv_block_backward_into[resident: Bool = False](
     comptime if not ONES_CACHE and not NI15_BIAS_NO_ONES:
         launch[fill_one_at](ctx, fp(ones), fp(ones), fp(ones), fp(ones), ip(dp), ip(dp), rows)
     # DEVIATION 5701: the pinned GEMM's fold over the rows, never an atomic.
-    comptime if NN14_BOUNDED_IM2COL:
-        launch[nn14_wgrad_at](ctx, fp(dx), fp(grow), fp(gw), fp(gw), ip(dp), ip(dp), OC * ckk)
-    elif NI12_IMPLICIT_CONV:
+    comptime if NI12_IMPLICIT_CONV:
         # lane gap-gemm-layers: cols never materialized (the forward wrote
         # none); the same words as the GEMM on the saved cols
         _implicit_wgrad(ctx, gw, grow, dx, dp, 18, rows, OC, ckk)
@@ -614,13 +605,10 @@ def conv_block_backward_into[resident: Bool = False](
         # Restore: git apply experiments/removed/MOJOLEARN_IDN_CNN_DX_IMPLICIT.patch
         # TOMBSTONE: MOJOLEARN_IDN_CNN_WGRAD_LEAF1024 (noise 0.972) deleted 2026-10-11 by 499997a56; code recoverable at 499997a56^.
         # Restore: git apply experiments/removed/MOJOLEARN_IDN_CNN_WGRAD_LEAF1024.patch (the same patch: x_cnn/cnn_dx_wgrad.mojo held both)
-        var dcols = ws(ctx, 16, 1 if NN14_BOUNDED_IM2COL else rows * ckk)
+        var dcols = ws(ctx, 16, rows * ckk)
         var gx = outb[resident](ctx, 17, gx_out, nx)
-        comptime if NN14_BOUNDED_IM2COL:
-            launch[nn14_input_grad_at](ctx, fp(grow), fp(dw), fp(gx), fp(gx), ip(dp), ip(dp), nx)
-        else:
-            device_gemm(ctx, dcols, grow, dw, rows, ckk, OC, OP_NN)
-            _col2im(ctx, dcols, gx, dp, nx)
+        device_gemm(ctx, dcols, grow, dw, rows, ckk, OC, OP_NN)
+        _col2im(ctx, dcols, gx, dp, nx)
         fetch[resident](ctx, gx, gx_out, nx)
         _ = dcols^
         _ = gx^

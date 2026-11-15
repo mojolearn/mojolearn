@@ -3,31 +3,17 @@
  "lane": "mamba-folds",
  "branch": "lane/mamba-folds",
  "head": "db803a1337",
- "controls": {
-  "mamba_bwd_folds": {
-   "define": "MOJOLEARN_IDN_MAMBA_BWD_FOLDS",
-   "kind": "switch",
-   "arms": {
-    "off": [],
-    "on": [
-     "MOJOLEARN_IDN_MAMBA_BWD_FOLDS=1"
-    ]
-   },
-   "default": "off",
-   "source": [
-    "autograd/kernels/mamba_bwd_folds.mojo"
-   ],
-   "binding": "_mojolearn_training",
-   "bits_change": true,
-   "status": "new",
-   "notes": "Mamba-2/3 norm-backward row dot as 32 strided lanes + the forward S1 pairwise tree, then one thread per cell; A/B owed on samba-train-step (lane mamba-folds)"
-  }
- },
+ "controls": {},
  "removed": [
   {
    "define": "MOJOLEARN_IDN_MAMBA1_CHUNKED_SCAN",
    "control": "mamba1_chunked_scan",
    "reason": "REJECTED 2026-10-28: breaks decode==prefill at 64-token chunk boundaries; never on main, recoverable at lane/mamba-folds@db803a1337; define refused in mamba/impl/ops/selective_scan_interface.mojo (selective_scan_fn); docs/TOMBSTONES.md"
+  },
+  {
+   "define": "MOJOLEARN_IDN_MAMBA_BWD_FOLDS",
+   "control": "mamba_bwd_folds",
+   "reason": "DELETED 2026-11-15 (lane/expdel2-23-neural, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md; recoverable at 786965c6c8; patch experiments/removed/MOJOLEARN_IDN_MAMBA_BWD_FOLDS.patch): unmeasured opt-in arm; EXP:2271 PENDING; the default is kept, no bit change. Refused in core/experiment_guards_neural.mojo; docs/TOMBSTONES.md."
   }
  ]
 }

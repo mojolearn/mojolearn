@@ -1,0 +1,23 @@
+diff --git a/autograd/embedding_ops.mojo b/autograd/embedding_ops.mojo
+index f1f1104cff..58bbbb4bb5 100644
+--- a/autograd/embedding_ops.mojo
++++ b/autograd/embedding_ops.mojo
+@@ -40,6 +40,7 @@
+ # search, levels of EMB_CHECK_BLOCK, then one two-word read-back), as
+ # emb_refuse_device_ids does by reading the ids back to the host.
+ from std.memory import bitcast
++from std.sys.defines import get_defined_int
+ from sequence.exec_trait import Exec
+ from sequence.ops import FP, Args
+ from checks.numerics import ftz
+@@ -68,9 +69,7 @@ comptime EMBEDDING = 36
+ comptime AG_EMB_PLAN_SCAN = 0
+ comptime AG_EMB_PLAN_SORT = 1
+ comptime AG_EMB_PLAN_AUTO = 2
+-# TOMBSTONE: MOJOLEARN_EMB_AUTO_SORT_MIN_CELLS (unmeasured override knob) deleted 2026-11-15 by lane/expdel2-23-neural; code recoverable at 2da7f516d6.
+-# Restore: git apply experiments/removed/MOJOLEARN_EMB_AUTO_SORT_MIN_CELLS.patch; record in docs/TOMBSTONES.md.
+-comptime EMB_AUTO_SORT_MIN_CELLS = 1 << 26
++comptime EMB_AUTO_SORT_MIN_CELLS = get_defined_int["MOJOLEARN_EMB_AUTO_SORT_MIN_CELLS", 1 << 26]()
+ 
+ # Ids a first-bad search element walks: a fixed block, so the levels are a
+ # function of the id count alone (256: one level covers 256 ids, two cover

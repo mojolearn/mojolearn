@@ -1,0 +1,152 @@
+diff --git a/autograd/block_step_ops.mojo b/autograd/block_step_ops.mojo
+index 46d513e29e..77231d0ef6 100644
+--- a/autograd/block_step_ops.mojo
++++ b/autograd/block_step_ops.mojo
+@@ -191,10 +191,16 @@ comptime _M12_HOLD = _MAMBA_X_IN_PLACE
+ #: same switch also decides the stateless forward's door
+ #: (bindings/causal_lm_public_door.mojo `causal_mamba_stateless_run`: one
+ #: direct call from the neural door with a held table entry).
+-# TOMBSTONE: MOJOLEARN_IDN_MAMBA12_FORWARD_DOOR_OLD (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-23-neural; code recoverable at ddf9b022e1.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_MAMBA12_FORWARD_DOOR_OLD.patch; record in docs/TOMBSTONES.md.
+-# _M12_HELD_ARENA stays a name for mamba/impl/mamba_block_program.mojo.
+-comptime _M12_HELD_ARENA = _M12_HOLD
++#: `-D MOJOLEARN_IDN_MAMBA12_FORWARD_DOOR_OLD` keeps lane
++#: fix-mamba12-forward-exec's form (B arm of the owed A/B,
++#: bench/results/paper_compare/owed-pre0867.json row fix-mamba-forward-doors):
++#: separately allocated stages (Mamba-1: one wait when built), one fill per
++#: stage on reuse, the word upload and write on every fresh call, and the
++#: neural door -> causal layer door -> table chain. L40S candidate
++#: ba08dac006 vs 0.8.55: mamba1-forward 3.83 vs 3.43 ms, mamba2-forward
++#: 6.31 vs 5.57 ms (before that lane).
++comptime IDN_MAMBA12_FORWARD_DOOR_OLD = is_defined["MOJOLEARN_IDN_MAMBA12_FORWARD_DOOR_OLD"]()
++comptime _M12_HELD_ARENA = _M12_HOLD and not IDN_MAMBA12_FORWARD_DOOR_OLD
+ 
+ 
+ def m2_report_floats(b: Int, dm: Int) raises -> Int:
+@@ -456,7 +462,7 @@ struct _M1Block(Movable):
+     #: with the constructor's zeros (`_m1_held_take`), and their float count
+     var held: Optional[MambaDeviceStages]
+     var held_n: Int
+-    #: lane fix-mamba-forward-doors: the one
++    #: lane fix-mamba-forward-doors (IDN_MAMBA12_FORWARD_DOOR_OLD off): the one
+     #: arena `held`'s stages are views of (re-zeroed with one fill)
+     var held_arena: Optional[MambaArena]
+     #: lane x56d: the last RECORDED run (`mamba_step_train_run`): its token
+@@ -792,7 +798,7 @@ struct BlockStepScratch(Movable):
+     #: (`held`) for the next run of the same shape. Set by the per-call
+     #: block programs (mamba/impl/mamba_block_program.mojo).
+     var keep_stages: Bool
+-    #: lane fix-mamba-forward-doors: the
++    #: lane fix-mamba-forward-doors (IDN_MAMBA12_FORWARD_DOOR_OLD off): the
+     #: current run is a fresh (discard-state) per-call forward whose caller
+     #: rewrites the carried words before any reader (`zero_state` /
+     #: `load_state`, mamba/impl/mamba_block_program.mojo), so a held
+@@ -1037,31 +1043,37 @@ def _m1_held_take(ctx: DeviceContext, mut sc: BlockStepScratch, e: Int, b: Int,
+     with the constructor's zeros in stream order (no allocation, no wait),
+     else a new set (a held set of another shape is parked, not freed, while
+     the stream may still read it). Lane fix-mamba-forward-doors
+-    (header): the set is views of one held
++    (IDN_MAMBA12_FORWARD_DOOR_OLD off, header): the set is views of one held
+     arena, built with one allocation and one fill and re-zeroed with one
+     fill (0.8.55's `_mamba1_run_arena`)."""
+     if sc.m1[e].held:
+         var prev = sc.m1[e].held.take()
+         sc.m1[e].held_n = 0
+         if prev.b == b and prev.l == l:
+-            if sc.m1[e].held_arena:
+-                # ONE fill: every stage view's zeros (the arena's own
+-                # constructor fill), in stream order, no wait
+-                sc.m1[e].held_arena.value().base.enqueue_fill(Float32(0.0))
++            comptime if _M12_HELD_ARENA:
++                if sc.m1[e].held_arena:
++                    # ONE fill: every stage view's zeros (the arena's own
++                    # constructor fill), in stream order, no wait
++                    sc.m1[e].held_arena.value().base.enqueue_fill(Float32(0.0))
++                else:
++                    prev.rezero()
+             else:
+                 prev.rezero()
+             return prev^
+         sc.make_room(ctx)
+         sc.parked_m1.append(prev^)
+-    # a previous set's arena (another shape, or a run that failed between
+-    # take and hold) is parked, not freed, while the stream may read it
+-    if sc.m1[e].held_arena:
+-        sc.make_room(ctx)
+-        sc.parked_arena.append(sc.m1[e].held_arena.take())
+-    var arena = MambaArena(ctx, MambaArena.total(_m1_stage_sizes(b, l, dims), MAMBA_GUARD), MAMBA_GUARD)
+-    var fresh = MambaDeviceStages(ctx, b, l, dims, arena)
+-    sc.m1[e].held_arena = arena^
+-    return fresh^
++    comptime if _M12_HELD_ARENA:
++        # a previous set's arena (another shape, or a run that failed between
++        # take and hold) is parked, not freed, while the stream may read it
++        if sc.m1[e].held_arena:
++            sc.make_room(ctx)
++            sc.parked_arena.append(sc.m1[e].held_arena.take())
++        var arena = MambaArena(ctx, MambaArena.total(_m1_stage_sizes(b, l, dims), MAMBA_GUARD), MAMBA_GUARD)
++        var fresh = MambaDeviceStages(ctx, b, l, dims, arena)
++        sc.m1[e].held_arena = arena^
++        return fresh^
++    else:
++        return MambaDeviceStages(ctx, b, l, dims)
+ 
+ 
+ def _m2_held_take(ctx: DeviceContext, mut sc: BlockStepScratch, e: Int, b: Int, l: Int, q0: Int,
+@@ -1073,22 +1085,28 @@ def _m2_held_take(ctx: DeviceContext, mut sc: BlockStepScratch, e: Int, b: Int,
+         sc.m2[e].held_n = 0
+         sc.m2[e].h_in_held = False
+         if prev.b == b and prev.l == l and prev.q0 == q0:
+-            if sc.m2[e].held_arena:
+-                # ONE fill for the 28 stage views (fix-mamba-forward-doors)
+-                sc.m2[e].held_arena.value().base.enqueue_fill(Float32(0.0))
++            comptime if _M12_HELD_ARENA:
++                if sc.m2[e].held_arena:
++                    # ONE fill for the 28 stage views (fix-mamba-forward-doors)
++                    sc.m2[e].held_arena.value().base.enqueue_fill(Float32(0.0))
++                else:
++                    prev.rezero()
+             else:
+                 prev.rezero()
+             return prev^
+         sc.make_room(ctx)
+         sc.parked_m2.append(prev^)
+-    # lane fix-mamba-forward-doors: one arena (0.8.55's `_mamba2_run_arena`)
+-    if sc.m2[e].held_arena:
+-        sc.make_room(ctx)
+-        sc.parked_arena.append(sc.m2[e].held_arena.take())
+-    var arena = MambaArena(ctx, MambaArena.total(_m2_stage_sizes(b, l, q0, dims), MAMBA_GUARD), MAMBA_GUARD)
+-    var fresh = Mamba2DeviceStages(ctx, b, l, q0, dims, arena)
+-    sc.m2[e].held_arena = arena^
+-    return fresh^
++    comptime if _M12_HELD_ARENA:
++        # lane fix-mamba-forward-doors: one arena (0.8.55's `_mamba2_run_arena`)
++        if sc.m2[e].held_arena:
++            sc.make_room(ctx)
++            sc.parked_arena.append(sc.m2[e].held_arena.take())
++        var arena = MambaArena(ctx, MambaArena.total(_m2_stage_sizes(b, l, q0, dims), MAMBA_GUARD), MAMBA_GUARD)
++        var fresh = Mamba2DeviceStages(ctx, b, l, q0, dims, arena)
++        sc.m2[e].held_arena = arena^
++        return fresh^
++    else:
++        return Mamba2DeviceStages(ctx, b, l, q0, dims)
+ 
+ 
+ def _run_m1(mut ex: DeviceExec, mut sc: BlockStepScratch, bufs: List[FP], counts: List[Int], ints: List[Int],
+@@ -1174,9 +1192,13 @@ def _run_m2(mut ex: DeviceExec, mut sc: BlockStepScratch, bufs: List[FP], counts
+             ref hb = sc.m2[e]
+             mamba2_block_forward(ctx, held, hb.st, hb.w, x, b, l, fs[0], fs[1], trace, String("ops.step"))
+             _block_out(ctx, ex, y_out, y_host, held.residual_out, n)
+-            # lane fix-mamba-forward-doors: a fresh per-call forward's
+-            # caller rewrites the word before any reader (`skip_words`)
+-            if not skip_words:
++            comptime if _M12_HELD_ARENA:
++                # lane fix-mamba-forward-doors: a fresh per-call forward's
++                # caller rewrites the word before any reader (`skip_words`)
++                if not skip_words:
++                    var held_words: List[Int] = [hb.st.buf_len]
++                    _write_words(ex, bufs[3], held_words)
++            else:
+                 var held_words: List[Int] = [hb.st.buf_len]
+                 _write_words(ex, bufs[3], held_words)
+             hb.held_n = _sum_floats(_m2_stage_sizes(b, l, q0, dims))
