@@ -115,8 +115,10 @@ def agk_colsum_args(a: Args) -> Args:
 # ag_fold_block(rows) = 64 rows is one block: the fold is then the column
 # sum's chain term for term and keeps the one launch, so its bits are the
 # old bits; longer batches get new bits on every column and the host
-# together. -D MOJOLEARN_AUTOGRAD_PASS2_FOLD_OFF restores the column sum.
-comptime AUTOGRAD_PASS2_FOLD = not is_defined["MOJOLEARN_AUTOGRAD_PASS2_FOLD_OFF"]()
+# together.
+# TOMBSTONE: MOJOLEARN_AUTOGRAD_PASS2_FOLD_OFF (the column-sum old path, no A/B recorded) deleted 2026-11-15 by
+# lane/expdel2-24-neural with the AUTOGRAD_PASS2_FOLD alias; code recoverable at 094332d07e.
+# Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_PASS2_FOLD_OFF.patch
 
 # BIT VERSION (lane ag-pass3-impl, 2026-10-19, default on; PASS3_IDEAS idea
 # 2): a fused linear node with a bias, a divisor and both a weight and a bias

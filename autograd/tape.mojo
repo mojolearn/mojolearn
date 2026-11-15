@@ -22,7 +22,7 @@ from autograd.ops import (
     DIVIDE, RELU, SIGMOID, TANH, EXP, LOG, SQRT, SCALE, TRANSPOSE, RESHAPE,
     REDUCE, SOFTMAX, LOG_SOFTMAX, MATMUL, LINEAR, CUSTOM, AXIS_ALL, AXIS_ROWS, AXIS_COLS,
     ag_fold_block, unary_vjp_reads_input, unary_vjp_reads_output, LOSS_ELEM, LOSS_CE, LOSS_SCE,
-    OP_AGK_BIN_VJP_PART, OP_AGK_GEMM_EPI, AUTOGRAD_PASS2_FOLD, AUTOGRAD_PASS3_DB,
+    OP_AGK_BIN_VJP_PART, OP_AGK_GEMM_EPI, AUTOGRAD_PASS3_DB,
     LOSS_REDUCED, AUTOGRAD_LOSS_REDUCED, AUTOGRAD_TRANSPOSE_VIEW, AUTOGRAD_CURVE_WORD,
 )
 from autograd.loss_ops import (
@@ -2348,13 +2348,11 @@ struct Tape(Movable):
             if fuse_db:
                 return  # written by edge 1's launch
             # db = column sum of dz over the rows (/ divisor)
-            var blocked = False
-            comptime if AUTOGRAD_PASS2_FOLD:
-                # More rows than one fold block: the blocked fold (chains of
-                # ag_fold_block(rows), parallel over blocks x columns), not
-                # one serial chain over every row a column. One block is the
-                # column sum's chain, so the one-launch column sum stays.
-                blocked = rows > ag_fold_block(rows)
+            # More rows than one fold block: the blocked fold (chains of
+            # ag_fold_block(rows), parallel over blocks x columns), not
+            # one serial chain over every row a column. One block is the
+            # column sum's chain, so the one-launch column sum stays.
+            var blocked = rows > ag_fold_block(rows)
             if blocked:
                 var partials = self._alloc(ex, fold_partials(rows, fo, AXIS_ROWS))
                 blocked_fold(ex, dst, dz, rows, fo, AXIS_ROWS, divisor if divisor > 0 else Float32(1),
