@@ -227,7 +227,9 @@ comptime MI_REG_SORTED = _MI_FA
 #: scores bit-identical (tools/miv_quality.sh, M2). -D MOJOLEARN_MI_CLF_RANKMAJOR_OFF: main's layout.
 # TOMBSTONE: MOJOLEARN_MI_CLF_RANKMAJOR (force-on knob; the arm is the FAST+Apple default through its _OFF switch, EXP:374) deleted 2026-11-15 by lane/expdel2-22-linear; code recoverable at 8b76065907.
 # Restore: git apply experiments/removed/MOJOLEARN_MI_CLF_RANKMAJOR.patch
-comptime MI_CLF_RANKMAJOR = _MI_FA and not is_defined["MOJOLEARN_MI_CLF_RANKMAJOR_OFF"]()
+# TOMBSTONE: MOJOLEARN_MI_CLF_RANKMAJOR_OFF (old path; promoted on FAST+Apple only (EXP:374, M3); the other vendors' A/B is owed and moot (FAST is Apple only)) deleted 2026-11-15 by lane/expdel2-22-linear; code recoverable at 31dc3269c3.
+# Restore: git apply experiments/removed/MOJOLEARN_MI_CLF_RANKMAJOR_OFF.patch
+comptime MI_CLF_RANKMAJOR = _MI_FA
 comptime OP_MI_CC = 68
 
 #: op 69 (`mi_cd`) runs as the sorted neighbour search of x_prep/dmi.mojo
