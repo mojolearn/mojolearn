@@ -2130,6 +2130,7 @@ recoverable at `28b8ed11b` (main before the lane).
 - Bits: none (a gate-only arm).
 - Patch: `experiments/removed/MOJOLEARN_LOSS_SABOTAGE_REDUCE_SERIAL.patch` (reverse of lane commit 8476d0774).
 
+
 ## Restored
 
 Deletions reversed by new evidence. The code is back on main; the section and the patch are kept as the record.
@@ -2173,106 +2174,6 @@ Deletions reversed by new evidence. The code is back on main; the section and th
 | [`MOJOLEARN_IDN_MCD_CHOL`](#mojolearn_idn_mcd_chol-unmeasured-arm-deleted-2026-11-15) | MinCovDet / EllipticEnvelope IDENTICAL (x_decomp/mcd.mojo, x_decomp/kit_device.mojo) | 2026-11-15 (`c387c0b2c1`) | 2026-11-15 (lane/expdel2-restore-owed) | opt-in B arm, default unchanged, A/B owed at the wave sha | [MOJOLEARN_IDN_MCD_CHOL.patch](../experiments/removed/MOJOLEARN_IDN_MCD_CHOL.patch) |
 | [`MOJOLEARN_BYTE_LM_PROGRAM_STEP`](#mojolearn_byte_lm_program_step) | Neural (byte LM training step) | 2026-11-15 (`f105b7dcfb`) | 2026-11-15 (lane/expdel2-restore-owed) | opt-in B arm, default unchanged, A/B owed at the wave sha | [MOJOLEARN_BYTE_LM_PROGRAM_STEP.patch](../experiments/removed/MOJOLEARN_BYTE_LM_PROGRAM_STEP.patch) |
 | [`MOJOLEARN_AUTOGRAD_OPTIM`](#mojolearn_autograd_optim) | Neural (MLP trainer executor optimizer) | 2026-11-15 (`92d4b79ec8`) | 2026-11-15 (lane/expdel2-restore-owed) | opt-in B arm, default unchanged, A/B owed at the wave sha | [MOJOLEARN_AUTOGRAD_OPTIM.2026-11-15.patch](../experiments/removed/MOJOLEARN_AUTOGRAD_OPTIM.2026-11-15.patch) + [.expdel2-30-neural.patch](../experiments/removed/MOJOLEARN_AUTOGRAD_OPTIM.expdel2-30-neural.patch) |
-
-## Retired by lane debt-block-per-n (2026-10-21)
-
-These are rollback or gate arms, not measured losers: each selected a launch that the `block-per-n` / `one-block-n`
-rules of `tools/hooks/no_host_routes.py` refuse (one block per output walking all n rows). The row-tile-then-fold order
-that replaced them is the shape of `glm/impl/qn/glm_base.mojo::qn_tile_sum_classes`, with the host column in the same
-order. No A/B was run (lanes never measure); the speed check on NVIDIA and AMD is owed with the next freeze. Code
-recoverable at `28b8ed11b` (main before the lane).
-
-### MOJOLEARN_IDN_XTY_TILED_OFF
-
-- Tried: `core/xtdz_coalesced.mojo` `xty_launch` / `column_mean_launch` in the STATS_TPB-chain order (`xty_kernel`,
-  `column_mean_kernel`: one block per column; Apple's row-coalesced `mean_partial_kernel` / `mean_fold_kernel` and
-  `xtdz_coalesced` of the same chains). Also the direct `column_mean_kernel` arm of
-  `decomposition/estimator.mojo::_column_variance` (`MOJOLEARN_IDN_DECOMP_MEAN_LAUNCH_OFF`), Apple FAST's
-  `PCA_FAST_COLMEAN` (rab20-pcacolmean: pca taxi 106.2 -> 85.0 ms vs the one-block kernel) and `TSVD_FAST_COLVAR`
-  (rab15-tsvdcolvar: tsvd taxi 40.9 -> 27.8 ms vs the one-block kernel), and `glm/impl/ridge_multi.mojo`'s Y means.
-- Now: the tile order (`xty_tiled`) in every mode; host column `core/host_tile_fold.mojo` (IDN_XTY_TILED is True).
-- Bits: IDENTICAL defaults unchanged; FAST and the retired arms move to the tile order.
-- Files: core/xtdz_coalesced.mojo, core/host_tile_fold.mojo, decomposition/estimator.mojo, decomposition/mean_switch.mojo,
-  glm/impl/ridge_multi.mojo. Patch: `experiments/removed/MOJOLEARN_IDN_XTY_TILED_OFF.patch` (reverse of lane commit
-  584cd1b8c on the code files).
-
-### MOJOLEARN_QN_TILED_MULTI_OFF
-
-- Tried: `glm/impl/qn/glm_base.mojo::linear_bwd` with `xtdz_multi_kernel` / `xty_kernel` (one block per gradient cell)
-  wherever the tile rule did not apply: `C > 1` gradients of at most 256 cells, gradients whose tile partials passed
-  QNTM_MAX_WS, `-D MOJOLEARN_QN_TILED_MULTI_OFF`, IDENTICAL `C == 1` with QN_TILED off, and FAST off Apple.
-- Now: `qntm_tiled_into` (chunked by the workspace bound, same chains and fold) for every `C > 1` gradient and for
-  IDENTICAL's `C == 1` `linear_bwd`; FAST keeps its Apple forms. Host column `glm/host/qn_oracle.mojo` and the check
-  mirrors move with it.
-- Bits: narrow multinomial gradients (`d * c <= 256`) move to the tile order on NVIDIA, AMD, Apple and the host column
-  together; the QN_TILED-off `C == 1` gradient likewise.
-- Patch: `experiments/removed/MOJOLEARN_QN_TILED_MULTI_OFF.patch` (reverse of lane commit 4b8a8e8f2).
-
-### MOJOLEARN_LOSS_SABOTAGE_REDUCE_SERIAL
-
-- Tried: the loss gate's contract-5.4 sabotage, the batch's n_rows per-row losses folded by `ce_serial_fold_kernel` in
-  ONE thread of one block (`training/checks/loss.mojo`), inert at N <= 128.
-- Now: refused; the batch fold's witnesses are the gemm switches reached through the loss entry points.
-- Bits: none (a gate-only arm).
-- Patch: `experiments/removed/MOJOLEARN_LOSS_SABOTAGE_REDUCE_SERIAL.patch` (reverse of lane commit 8476d0774).
-
-## Restored
-
-Deletions reversed by new evidence. The code is back on main; the section and the patch are kept as the record.
-
-| define | area | deleted | restored | now | patch |
-|---|---|---|---|---|---|
-| [`MOJOLEARN_CLASSICAL_C25_PROJECTION_REUSE`](#mojolearn_classical_c25_projection_reuse) | Decomp | 2026-10-08 (`ab4e8e543`) | 2026-10-10 (lane/c25-restore-promote) | IDENTICAL default; `_OFF` restores the old path | [MOJOLEARN_CLASSICAL_C25_PROJECTION_REUSE.patch](../experiments/removed/MOJOLEARN_CLASSICAL_C25_PROJECTION_REUSE.patch) |
-
-## Retired by lane debt-block-per-n (2026-10-21)
-
-These are rollback or gate arms, not measured losers: each selected a launch that the `block-per-n` / `one-block-n`
-rules of `tools/hooks/no_host_routes.py` refuse (one block per output walking all n rows). The row-tile-then-fold order
-that replaced them is the shape of `glm/impl/qn/glm_base.mojo::qn_tile_sum_classes`, with the host column in the same
-order. No A/B was run (lanes never measure); the speed check on NVIDIA and AMD is owed with the next freeze. Code
-recoverable at `28b8ed11b` (main before the lane).
-
-### MOJOLEARN_IDN_XTY_TILED_OFF
-
-- Tried: `core/xtdz_coalesced.mojo` `xty_launch` / `column_mean_launch` in the STATS_TPB-chain order (`xty_kernel`,
-  `column_mean_kernel`: one block per column; Apple's row-coalesced `mean_partial_kernel` / `mean_fold_kernel` and
-  `xtdz_coalesced` of the same chains). Also the direct `column_mean_kernel` arm of
-  `decomposition/estimator.mojo::_column_variance` (`MOJOLEARN_IDN_DECOMP_MEAN_LAUNCH_OFF`), Apple FAST's
-  `PCA_FAST_COLMEAN` (rab20-pcacolmean: pca taxi 106.2 -> 85.0 ms vs the one-block kernel) and `TSVD_FAST_COLVAR`
-  (rab15-tsvdcolvar: tsvd taxi 40.9 -> 27.8 ms vs the one-block kernel), and `glm/impl/ridge_multi.mojo`'s Y means.
-- Now: the tile order (`xty_tiled`) in every mode; host column `core/host_tile_fold.mojo` (IDN_XTY_TILED is True).
-- Bits: IDENTICAL defaults unchanged; FAST and the retired arms move to the tile order.
-- Files: core/xtdz_coalesced.mojo, core/host_tile_fold.mojo, decomposition/estimator.mojo, decomposition/mean_switch.mojo,
-  glm/impl/ridge_multi.mojo. Patch: `experiments/removed/MOJOLEARN_IDN_XTY_TILED_OFF.patch` (reverse of lane commit
-  584cd1b8c on the code files).
-
-### MOJOLEARN_QN_TILED_MULTI_OFF
-
-- Tried: `glm/impl/qn/glm_base.mojo::linear_bwd` with `xtdz_multi_kernel` / `xty_kernel` (one block per gradient cell)
-  wherever the tile rule did not apply: `C > 1` gradients of at most 256 cells, gradients whose tile partials passed
-  QNTM_MAX_WS, `-D MOJOLEARN_QN_TILED_MULTI_OFF`, IDENTICAL `C == 1` with QN_TILED off, and FAST off Apple.
-- Now: `qntm_tiled_into` (chunked by the workspace bound, same chains and fold) for every `C > 1` gradient and for
-  IDENTICAL's `C == 1` `linear_bwd`; FAST keeps its Apple forms. Host column `glm/host/qn_oracle.mojo` and the check
-  mirrors move with it.
-- Bits: narrow multinomial gradients (`d * c <= 256`) move to the tile order on NVIDIA, AMD, Apple and the host column
-  together; the QN_TILED-off `C == 1` gradient likewise.
-- Patch: `experiments/removed/MOJOLEARN_QN_TILED_MULTI_OFF.patch` (reverse of lane commit 4b8a8e8f2).
-
-### MOJOLEARN_LOSS_SABOTAGE_REDUCE_SERIAL
-
-- Tried: the loss gate's contract-5.4 sabotage, the batch's n_rows per-row losses folded by `ce_serial_fold_kernel` in
-  ONE thread of one block (`training/checks/loss.mojo`), inert at N <= 128.
-- Now: refused; the batch fold's witnesses are the gemm switches reached through the loss entry points.
-- Bits: none (a gate-only arm).
-- Patch: `experiments/removed/MOJOLEARN_LOSS_SABOTAGE_REDUCE_SERIAL.patch` (reverse of lane commit 8476d0774).
-
-## Restored
-
-Deletions reversed by new evidence. The code is back on main; the section and the patch are kept as the record.
-
-| define | area | deleted | restored | now | patch |
-|---|---|---|---|---|---|
-| [`MOJOLEARN_CLASSICAL_C25_PROJECTION_REUSE`](#mojolearn_classical_c25_projection_reuse) | Decomp | 2026-10-08 (`ab4e8e543`) | 2026-10-10 (lane/c25-restore-promote) | IDENTICAL default; `_OFF` restores the old path | [MOJOLEARN_CLASSICAL_C25_PROJECTION_REUSE.patch](../experiments/removed/MOJOLEARN_CLASSICAL_C25_PROJECTION_REUSE.patch) |
 
 ## Trees
 
