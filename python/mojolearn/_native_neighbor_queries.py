@@ -29,7 +29,14 @@ def _capture(binding, name, symbols):
     # binding records it at PyInit. The captured route carries it too, or every
     # resident/device query through a route refused "publishes no native
     # neighbors table" (lane lazy-import-fix).
-    key = vars(binding).get("neighbors_native_key") if type(binding) is ModuleType else None
+    # On a CPU-only install `binding` is the `_HostBinding` facade, not an
+    # exact module: read the key through it (it forwards to the host module
+    # that published it), or every CPU k-NN/radius query refused (smoke-triage
+    # 2026-11-15: lanes knn*, radius*, x-neighbors-metrics; 8 test files).
+    try:
+        key = getattr(binding, "neighbors_native_key")
+    except (ImportError, AttributeError):
+        key = None
     if type(key) is tuple:
         result.neighbors_native_key = key
     _BINDING_ALIASES[id(binding)] = (binding, result)
