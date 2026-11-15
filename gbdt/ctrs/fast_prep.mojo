@@ -56,7 +56,6 @@ quality remain unverified.
 from std.atomic import Atomic, Ordering
 from max.gpu import block_dim, block_idx, grid_dim, thread_idx
 from std.memory import unsafe_memcpy
-from std.sys.compile import is_defined
 from gbdt.trees_identical_switches import T28, T28_SORT, T28_PREFIX
 from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
@@ -159,9 +158,9 @@ comptime CTR_INDEX_FUSED = _SYM_CTR_FAST_APPLE
 #: lane/apple-fast-sym-ctr@39c3c9daf; SYM_CTR_ALL rc=1 at 13547eaf1 (two
 #: fast_prep read_column errors, fixed at 4e08a1922), no passing build yet,
 #: never timed.
-comptime CTR_ONEHOT_DEVICE = _SYM_CTR_FAST_APPLE and (
-    is_defined["MOJOLEARN_CTR_ONEHOT_DEVICE"]() or SYM_CTR_ALL
-)
+# TOMBSTONE: MOJOLEARN_CTR_ONEHOT_DEVICE (DELETE-EXPERIMENT, EXP:1303 NEUTRAL force knob, rule g) deleted 2026-11-15 by lane/expdel2-41-trees; code recoverable at 3fb3500522.
+# Restore: git apply experiments/removed/MOJOLEARN_CTR_ONEHOT_DEVICE.patch; record in docs/TOMBSTONES.md.
+comptime CTR_ONEHOT_DEVICE = _SYM_CTR_FAST_APPLE
 
 #: the permutation-DEPENDENT half runs through `CtrPrepFast` under any of
 #: these three; `CTR_PREP_SHARED` alone decides whether the context lives
