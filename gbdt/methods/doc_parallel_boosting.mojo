@@ -137,7 +137,6 @@ from gbdt.methods.leaves_estimation.leaves_estimation import (
     weight_keep_mask_kernel,
 )
 from gbdt.methods.leaves_estimation.device_walker import (
-    GBDT_WALK_DEV_STEP,
     WALK_FOLD_BLOCK,
     WalkBuffers,
     count_nonzero_u32_kernel,
@@ -2537,16 +2536,13 @@ def _estimate_prepare(
     if finished:
         _walk_finish(pending)
         return pending^
-    comptime if GBDT_WALK_DEV_STEP:
-        # the walk's first `iterations` evaluations, enqueued at the device's
-        # step (device_walker.mojo GBDT_WALK_DEV_STEP); the caller's next
-        # drain settles all of them (`estimate_advance`, phase 3)
-        device_walk_enqueue_speculative(
-            ctx, pending.oracle, pending.walk, iterations
-        )
-        pending.phase = 3
-        return pending^
-    _ = _walk_line_search_or_finish(pending)
+    # the walk's first `iterations` evaluations, enqueued at the device's
+    # step (the device step is the only form since GBDT_WALK_DEV_STEP_OFF was
+    # deleted); the caller's next drain settles all of them (`estimate_advance`, phase 3)
+    device_walk_enqueue_speculative(
+        ctx, pending.oracle, pending.walk, iterations
+    )
+    pending.phase = 3
     return pending^
 
 

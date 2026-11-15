@@ -108,7 +108,7 @@ comptime WALK_BLOCK = 256
 #: per-tree cost of Logloss's 10 Newton iterations on small data.
 # TOMBSTONE: MOJOLEARN_GBDT_WALK_DEV_STEP_OFF (DELETE-OLD-PATH, EXP:2147 the default is the recorded bit-neutral kept path, rule e) deleted 2026-11-15 by lane/expdel2-44-trees; code recoverable at a303565f2a.
 # Restore: git apply experiments/removed/MOJOLEARN_GBDT_WALK_DEV_STEP_OFF.patch; record in docs/TOMBSTONES.md.
-comptime GBDT_WALK_DEV_STEP = True
+# (Sweep 2026-11-15: the always-True GBDT_WALK_DEV_STEP was folded into its one reader.)
 #: the double 1.0's bits, and one exponent step (a power of two halved)
 comptime WALK_STEP_ONE = UInt64(0x3FF0000000000000)
 comptime WALK_STEP_EXP1 = UInt64(0x0010000000000000)
