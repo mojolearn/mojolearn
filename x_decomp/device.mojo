@@ -126,7 +126,6 @@ from x_decomp.exec_trait import Exec
 from x_decomp.jacobi2 import dev_barrier
 from x_decomp.qr_bounded import QRB_CELLS, qr_factor_bounded
 from x_decomp.rr import RR_EIGH_SWEEPS, RR_OFF_TPB, rr_converged, rr_fro_kept
-from x_decomp.rr_block import IDN_EIGH_BLOCK, rb_use
 # TOMBSTONE: MOJOLEARN_IDN_EIGH_BLOCK_ON (quarantined: observed convergence failure) device arm deleted 2026-11-09 by
 # lane n9-decomp-eigh-families (`DevExec._eigh_block_on`, x_decomp/rr_block_device.mojo); the op refuses the define.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_EIGH_SMALL.patch
@@ -2865,14 +2864,9 @@ struct DevExec(Exec):
         XD_EIGH_ONE_BLOCK_N the one-launch batched kernel with a batch of
         one (`_eigh_batch_on`, one sync), above it the per-round multi-block
         launches (`_eigh_par_dev`). An unconverged solve raises."""
-        comptime if IDN_EIGH_BLOCK:
-            # the quarantined block Jacobi (MOJOLEARN_IDN_EIGH_BLOCK_ON, DROPPED:
-            # observed convergence failure) has no device arm; refuse it by name
-            if rb_use(n):
-                raise Error(
-                    "eigh: MOJOLEARN_IDN_EIGH_BLOCK_ON is a quarantined candidate with no device arm;"
-                    " build without it"
-                )
+        # TOMBSTONE: MOJOLEARN_IDN_EIGH_BLOCK_ON (unmeasured opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-16-decomposition; code recoverable at c41dc34810.
+        # Restore: git apply experiments/removed/MOJOLEARN_IDN_EIGH_BLOCK_ON.patch; record in docs/TOMBSTONES.md.
+        # (the define is refused at build time in core/experiment_guards_decomposition.mojo)
         if n <= XD_EIGH_ONE_BLOCK_N:
             DevExec._eigh_batch_on(ctx, da, 1, n, dw, dv)
             return

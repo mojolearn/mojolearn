@@ -28,7 +28,6 @@ from decomposition.host.pca_oracle import host_sign_flip
 from x_decomp.cells import F32Ptr
 from x_decomp.eigh_tridiag_cells import EIGH_TD_IDN, TD_MIN_N
 from x_decomp.eigh_tridiag_host import host_eigh_td, host_td_solve
-from x_decomp.rr_block import IDN_EIGH_BLOCK, rb_use
 from x_decomp.rr_solve import host_eigh_rr_sorted
 
 
@@ -84,12 +83,8 @@ def eigh_op_sym_host(a: F32Ptr, w: F32Ptr, v: F32Ptr, n: Int) raises -> Int:
     is this after its triangle mirror."""
     if n < 1:
         raise Error("eigh_op_sym_host: n must be positive, got " + String(n))
-    comptime if IDN_EIGH_BLOCK:
-        if rb_use(n):
-            raise Error(
-                "eigh_op_sym: MOJOLEARN_IDN_EIGH_BLOCK_ON is a quarantined candidate with no device op;"
-                " build without it"
-            )
+    # TOMBSTONE: MOJOLEARN_IDN_EIGH_BLOCK_ON (unmeasured opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-16-decomposition; code recoverable at c41dc34810.
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_EIGH_BLOCK_ON.patch; record in docs/TOMBSTONES.md.
     comptime if EIGH_TD_IDN:
         if n >= TD_MIN_N:
             var work = List[Float32](capacity=n * n)
