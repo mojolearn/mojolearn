@@ -1,0 +1,19 @@
+diff --git a/transformer/impl/llama/fused_attention.mojo b/transformer/impl/llama/fused_attention.mojo
+index fb8666c4eb..c32f45f902 100644
+--- a/transformer/impl/llama/fused_attention.mojo
++++ b/transformer/impl/llama/fused_attention.mojo
+@@ -5712,10 +5712,10 @@ def _mfma16_step(a: Float32, b: Float32, acc: SIMD[DType.float32, 16]) -> SIMD[D
+ #: two instructions a step instead of the bit tests. Every other operand
+ #: these kernels read is a flushed value already (the staging flushes, the
+ #: chain outputs, the exp and div results), so the mode moves no other
+-#: bit.
+-# TOMBSTONE: MOJOLEARN_ATTN_NO_MODE_FLUSH (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-34-neural; code recoverable at 4eb171e657.
+-# Restore: git apply experiments/removed/MOJOLEARN_ATTN_NO_MODE_FLUSH.patch
+-comptime ATTN_AMD_MODE_FLUSH = TARGET_COLUMN == COLUMN_AMD
++#: bit. `-D MOJOLEARN_ATTN_NO_MODE_FLUSH=1` restores the software seams.
++comptime ATTN_AMD_MODE_FLUSH = (
++    TARGET_COLUMN == COLUMN_AMD and not is_defined["MOJOLEARN_ATTN_NO_MODE_FLUSH"]()
++)
+ 
+ 
+ @always_inline

@@ -1,0 +1,26 @@
+diff --git a/transformer/impl/llama/fused_attention.mojo b/transformer/impl/llama/fused_attention.mojo
+index 2ea6f7addf..5b291c82a5 100644
+--- a/transformer/impl/llama/fused_attention.mojo
++++ b/transformer/impl/llama/fused_attention.mojo
+@@ -646,14 +646,17 @@ instantiations stay trial-only)."""
+ comptime ATTN_STASH_HD = 64
+ """The only head dim the candidate arms instantiate (the target shape)."""
+ 
+-# TOMBSTONE: MOJOLEARN_ATTN_FWD_TQ16 (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-34-neural; code recoverable at 9a253b44b2.
+-# Restore: git apply experiments/removed/MOJOLEARN_ATTN_FWD_TQ16.patch
+-comptime ATTN_FWD_TQ = 32
++comptime ATTN_FWD_TQ = 16 if is_defined["MOJOLEARN_ATTN_FWD_TQ16"]() else 32
+ """Query rows per block of the second-round forward kernels (lane
+-neural-pass46, 2026-10-01)."""
++neural-pass46, 2026-10-01): 32 as shipped; `-D MOJOLEARN_ATTN_FWD_TQ16=1`
++instantiates them at 16 rows, which halves a block's threadgroup page
++(the Apple matrix-unit copy: 27.6 KB -> 19 KB) and doubles the blocks, for
++the Apple column where a 256-thread block with a 27.6 KB page sits alone on
++a core. The chains per row are the same; only which block owns a row moves."""
+ 
+ comptime ATTN_FWD_TQ_RULE = (
+     is_defined["MOJOLEARN_ATTN_FWD_TQ_RULE"]()
++    and not is_defined["MOJOLEARN_ATTN_FWD_TQ16"]()
+     and not is_defined["MOJOLEARN_ATTN_TILE_RULE_OFF"]()
+     and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+     and lib_smem_page_fits_for[TARGET_COLUMN, _fwd_r2_page_bytes(16, True)]()
