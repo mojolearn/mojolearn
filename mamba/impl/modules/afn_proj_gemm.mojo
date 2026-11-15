@@ -44,13 +44,6 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 
 from checks.kernel_matrix import COLUMN_APPLE, TARGET_COLUMN
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
-from gemm.afn_apple_fast import (
-    AFN_EPI_NONE,
-    _afn_launch_tile,
-    _afn_strides,
-    afn_gemm_tile,
-)
-from gemm.contract import OP_NN, OP_NT, OP_TN
 
 
 # ===========================================================================
@@ -78,12 +71,7 @@ comptime AFN_MAMBA_PROJ_ROUTE = AFN_MAMBA_PROJ_EPILOGUE
 
 def afn_w2epi_switches() -> String:
     """The w2-epi switches this build has on, for a probe or a log line."""
-    var s = String("")
-    comptime if AFN_MAMBA_PROJ_EPILOGUE:
-        s += "MAMBA_PROJ_EPILOGUE "
-    if s == "":
-        return String("none")
-    return s
+    return String("none")
 
 
 # ===========================================================================
