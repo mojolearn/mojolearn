@@ -89,7 +89,9 @@ comptime PT_COLBATCH = _FAST_APPLE and PT_SCORE
 #: -D MOJOLEARN_SI_ONEPASS_OFF: main's two-pass col_stats.
 # TOMBSTONE: MOJOLEARN_SI_ONEPASS (force-on knob; the one-pass col_stats is the FAST+Apple default, EXP:1888) deleted 2026-11-15 by lane/expdel2-22-linear; code recoverable at 11e4797706.
 # Restore: git apply experiments/removed/MOJOLEARN_SI_ONEPASS.patch
-comptime SI_ONEPASS = _FAST_APPLE and not is_defined["MOJOLEARN_SI_ONEPASS_OFF"]()
+# TOMBSTONE: MOJOLEARN_SI_ONEPASS_OFF (old path; the one-pass col_stats is the FAST+Apple default, EXP:1888) deleted 2026-11-15 by lane/expdel2-22-linear; code recoverable at 8193833d2e.
+# Restore: git apply experiments/removed/MOJOLEARN_SI_ONEPASS_OFF.patch
+comptime SI_ONEPASS = _FAST_APPLE
 #: the bits `x_prep_ptimpute_flags` exports (registered only when nonzero):
 #: the Python layer shrinks the buffers the device no longer touches by them
 #: (bit 2 was PT_SPEC, bit 4 PT_FUSED_TRANSFORM and bit 16 PT_FOLD_NOX, all deleted 2026-10-09)
