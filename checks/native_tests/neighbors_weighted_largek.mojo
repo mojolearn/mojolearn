@@ -89,7 +89,10 @@ def case_exact_matches(ctx: DeviceContext) raises:
     require(proba[0] == 0.5 and proba[1] == 0.5, "exact matches: predict_proba is [[0.5, 0.5]]")
     # Two outputs and signed targets: the distant value contributes exactly
     # zero, rather than a small inverse-distance weight.
-    var targets: List[Float32] = [2.0, -8.0, 6.0, 4.0, 100.0, 100.0]
+    # The Python test's y [[2, -8], [6, 4], [100, 100]] as the entry takes it: n_outputs contiguous columns
+    # of n_index (neighbors/estimator.mojo knn_regressor_predict, policy 6). The row-major words read as
+    # columns [2, -8, 6] and [4, 100, 100] and gave [-3, 52] for the two exact matches.
+    var targets: List[Float32] = [2.0, 6.0, 100.0, -8.0, 4.0, 100.0]
     var got = List[Float32](length=2, fill=-9.0)
     var again = List[Float32](length=2, fill=-9.0)
     regress(ctx, x, targets, 2, q, 3, got)
