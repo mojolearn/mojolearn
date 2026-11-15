@@ -310,32 +310,6 @@
    "status": "kept",
    "note": "NN16 is only read with neural_gemm_schedule on (stream arms, neural_streaming.mojo:33,216); standalone it reaches the lm-forward head workspace clear (byte_lm_logits.mojo:169)."
   },
-  "attn_head_share": {
-   "define": "MOJOLEARN_IDN_ATTN_HEAD_SHARE",
-   "kind": "int_sweep",
-   "arms": {
-    "off": [],
-    "4": [
-     "MOJOLEARN_IDN_ATTN_HEAD_SHARE=4",
-     "MOJOLEARN_ATTN_ARM_TRIAL=1"
-    ]
-   },
-   "default": "off",
-   "source": [
-    "transformer/impl/llama/fused_attention.mojo:9401"
-   ],
-   "binding": [
-    "_mojolearn_transformer",
-    "_mojolearn_byte_lm"
-   ],
-   "bits_change": false,
-   "status": "rewritten",
-   "merged_from": [
-    "I.N.NN17",
-    "I.N.NI19"
-   ],
-   "note": "Only in _launch_fwd_r2 (ATTN_ARM_TRIAL builds) and only for (n_heads/n_kv)%4==0. Board shapes have n_kv==n_heads: never engages on the board; needs a GQA workload. Two-head arm deleted (I06 loser)."
-  },
   "attn_scale_mask": {
    "define": "MOJOLEARN_NN21_SCALE_MASK",
    "kind": "switch",
@@ -1038,6 +1012,11 @@
    "define": "MOJOLEARN_IDN_ATTN_STASH",
    "control": "attn_stash",
    "reason": "DELETED 2026-11-15 (lane/expdel2-07-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md; recoverable at dc10f7b50f; patch experiments/removed/MOJOLEARN_IDN_ATTN_STASH.patch): opt-in arms; EXP:1757 split the Samba winner into its own define, lm-train-step 1.24x slower. EXP:1757 (ge123e6f9; samba nv v0280, amd a0681; lm nv v0349, amd a0814): recompute won on Samba only and became `MOJOLEARN_IDN_SAMBA_ATTN_RECOMPUTE_OFF`'s default; on lm-train-step it was 1.24x slower; the packed and alias_y arms have no A/B. The arm switch is deleted (plan rule e). Refused in core/experiment_guards_neural.mojo; docs/TOMBSTONES.md."
+  },
+  {
+   "define": "MOJOLEARN_IDN_ATTN_HEAD_SHARE",
+   "control": "attn_head_share",
+   "reason": "DELETED 2026-11-15 (lane/expdel2-07-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md; recoverable at 7605a821c7; patch experiments/removed/MOJOLEARN_IDN_ATTN_HEAD_SHARE.patch): opt-in arm; EXP:1483 DROP for the two-head form, four-head arm never A/B'd. EXP:1483 (overnight-ab-20261006 I06): the two-head form was slower on both vendors (MI325X 1.21x, L40S 1.11-1.15x) and was deleted; the surviving `=4` arm never ran an A/B. Deleted under AGENTS.md \"An unmeasured arm is deleted\" (Andrew, 2026-11-15). Refused in core/experiment_guards_neural.mojo; docs/TOMBSTONES.md."
   }
  ],
  "catalog_note": "experiments/six_lane_integration/catalog.json and build_plan.json still name the retired defines; they must be regenerated from these controls (tools/six_lane_ab.py now refuses retired defines). lane/neural-small 2026-10-07: neural:mamba-forward replaced by neural:mamba1/2/3-forward (neural-small.json); gemm_leaf all256 split to gemm_contract_leaf."

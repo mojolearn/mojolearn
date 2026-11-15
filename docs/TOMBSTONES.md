@@ -758,6 +758,7 @@ in the tables after the sections.
 | [`MOJOLEARN_IDN_GPC_OVR_OFF`](#mojolearn_idn_gpc_ovr_off-old-path-deleted-2026-11-15) | Kernel / GP (GaussianProcessClassifier one-vs-rest rollback to per-class binding calls, IDENTICAL old path) | removed (old path, no A/B recorded; the batched one-vs-rest default kept) | 2026-11-15 | [MOJOLEARN_IDN_GPC_OVR_OFF.patch](../experiments/removed/MOJOLEARN_IDN_GPC_OVR_OFF.patch) |
 | [`MOJOLEARN_IDN_GPR_PTR_OFF`](#mojolearn_idn_gpr_ptr_off-old-path-deleted-2026-11-15) | Kernel / GP (GaussianProcessRegressor rollback to host-list gpr_fit / gpr_predict, IDENTICAL old path) | removed (old path, no A/B recorded; the resident pointer default kept) | 2026-11-15 | [MOJOLEARN_IDN_GPR_PTR_OFF.patch](../experiments/removed/MOJOLEARN_IDN_GPR_PTR_OFF.patch) |
 | [`MOJOLEARN_IDN_ATTN_STASH`](#mojolearn_idn_attn_stash-arm-deleted-2026-11-15) | Neural (fused attention exp-stash memory profile arms 1 recompute / 2 packed / 3 alias_y, IDENTICAL) | removed (opt-in arms; EXP:1757 split the Samba winner into its own define, lm-train-step 1.24x slower) | 2026-11-15 | [MOJOLEARN_IDN_ATTN_STASH.patch](../experiments/removed/MOJOLEARN_IDN_ATTN_STASH.patch) |
+| [`MOJOLEARN_IDN_ATTN_HEAD_SHARE`](#mojolearn_idn_attn_head_share-arm-deleted-2026-11-15) | Neural (attention forward: one K/V page for four query heads, IDENTICAL) | removed (opt-in arm; EXP:1483 DROP for the two-head form, four-head arm never A/B'd) | 2026-11-15 | [MOJOLEARN_IDN_ATTN_HEAD_SHARE.patch](../experiments/removed/MOJOLEARN_IDN_ATTN_HEAD_SHARE.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -7347,3 +7348,11 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md (section expdel-02-
 - **Deleted by**: lane/expdel2-07-base (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `dc10f7b50f`.
 - **Restore**: `git apply experiments/removed/MOJOLEARN_IDN_ATTN_STASH.patch`, then delete the `MOJOLEARN_IDN_ATTN_STASH` refusal in `core/experiment_guards_neural.mojo`.
 - **Records**: refusal in `core/experiment_guards_neural.mojo`; `neural-gemm-attn-dedupe.json` control `attn_stash`: `removed` entry added (control removed from `controls` and from its algorithms); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-07-base section).
+
+## MOJOLEARN_IDN_ATTN_HEAD_SHARE: arm deleted (2026-11-15)
+
+- **What it was**: `-D MOJOLEARN_IDN_ATTN_HEAD_SHARE=4` (`ATTN_HEAD_SHARE` in `transformer/impl/llama/fused_attention.mojo`, another lane's file): one K/V page staged for four query heads. This lane removed its read in the timing driver `experiments/performance_ideas/attention_time.mojo`.
+- **Verdict**: EXP:1483 (overnight-ab-20261006 I06): the two-head form was slower on both vendors (MI325X 1.21x, L40S 1.11-1.15x) and was deleted; the surviving `=4` arm never ran an A/B. Deleted under AGENTS.md "An unmeasured arm is deleted" (Andrew, 2026-11-15). No bit change on any column.
+- **Deleted by**: lane/expdel2-07-base (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `7605a821c7`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_IDN_ATTN_HEAD_SHARE.patch`, then delete the `MOJOLEARN_IDN_ATTN_HEAD_SHARE` refusal in `core/experiment_guards_neural.mojo`.
+- **Records**: refusal in `core/experiment_guards_neural.mojo`; `neural-gemm-attn-dedupe.json` control `attn_head_share`: `removed` entry added (control removed from `controls` and from its algorithms); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-07-base section).
