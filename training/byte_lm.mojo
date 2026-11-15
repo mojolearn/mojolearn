@@ -78,7 +78,10 @@ from embedding.checks.embedding_identical import (
 )
 from autograd.kernels.embedding import emb_run_scratch_ints
 from autograd.kernels.embedding_runs import NN50_OWNED_RUNS, OwnedEmbeddingRuns
-from training.neural_ab_lifetime import NN62_LIFETIME_ARENA, NeuralLifetimeArena, NeuralLiveRange
+# TOMBSTONE: MOJOLEARN_IDN_TRAIN_SCRATCH arms 2/3 (NN62_LIFETIME_ARENA, the shared CE / optimizer lifetime arena;
+# opt-in, no A/B recorded; owner elsewhere) folded to False 2026-11-15 by lane/expdel2-31-neural with the
+# neural_scratch field; code recoverable at e7b9a56a35.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_TRAIN_SCRATCH.expdel2-31-neural.patch
 from embedding.checks.embedding_oracle import EmbConfig
 from autograd.kernels.embedding_sort import PLAN_SCAN, PLAN_SORT
 from training.checks.loss import (
@@ -510,7 +513,6 @@ def _byte_validate_allocations(config: ByteConfig) raises:
 
 struct ByteBuffers(Movable):
     """Configured buffers; flat arrays are authoritative, weights are copies."""
-    var neural_scratch: List[NeuralLifetimeArena]
     var config: ByteConfig
     var n_total: Int
     var optimizer_first: Int
@@ -628,23 +630,9 @@ struct ByteBuffers(Movable):
         self.norms = _zeros(ctx, config.n_tensors())
         self.total_cell = _zeros(ctx, 1)
         self.out2 = _zeros(ctx, 2)
-        self.neural_scratch = List[NeuralLifetimeArena]()
         var opt_cells = identical_optimizer_workspace_floats(self.offsets)
         var ce_cells = 1 if config.chunked_lm_head_v2 else identical_ce_workspace_max_floats(M, V, REDUCTION_MEAN)
-        comptime if NN62_LIFETIME_ARENA:
-            # CE workspace is dead when forward enqueues its final fold (phase
-            # 0); clipping starts after all backward work (phase 2). Neither is
-            # retained for replay. Both use the same ordered context, and every
-            # scratch read follows its producer. The owner retains the slab
-            # across forward, backward, update and rollback; no async alias
-            # crosses contexts. Fresh steps repeat this fixed phase order.
-            var ranges = List[NeuralLiveRange]()
-            ranges.append(NeuralLiveRange(ce_cells, 0, 0))
-            ranges.append(NeuralLiveRange(opt_cells, 2, 2))
-            self.neural_scratch.append(NeuralLifetimeArena(ctx, ranges, 4 * max(ce_cells, opt_cells)))
-            self.opt_ws = self.neural_scratch[0].view(1, 2)
-        else:
-            self.opt_ws = _zeros(ctx, opt_cells)
+        self.opt_ws = _zeros(ctx, opt_cells)
         self.sab_partials = _zeros(ctx, SAB_CHUNKS)
 
         # Views of the flat parameters (`_bind_emb_head`), not copies.
@@ -727,10 +715,7 @@ struct ByteBuffers(Movable):
             self.ce_weights = self.ce_expo.create_sub_buffer[DType.float32](0, M * V)
             self.ce_dlogits = self.ce_expo.create_sub_buffer[DType.float32](0, M * V)
         self.ce_ones = _ones(ctx, 1 if config.chunked_lm_head_v2 else identical_ce_ones_floats(M, V))
-        comptime if NN62_LIFETIME_ARENA:
-            self.ce_ws = self.neural_scratch[0].view(0, 0)
-        else:
-            self.ce_ws = _zeros(ctx, ce_cells)
+        self.ce_ws = _zeros(ctx, ce_cells)
 
         var head_scratch = (chunked_lm_head_v2_gemm_workspace_floats(M,V,DM) if config.chunked_lm_head_v2
             else identical_gemm_workspace_max_floats(M,V,DM))
