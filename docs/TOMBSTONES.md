@@ -659,6 +659,7 @@ in the tables after the sections.
 | [`MOJOLEARN_KM_FAST_RBF_RESIDENT_OFF`](#mojolearn_km_fast_rbf_resident_off-old-path-deleted-2026-11-15) | Kernel (RBFSampler fit_transform in one binding call, FAST Apple) | removed (old path; FAST+Apple DEFAULT, w2-kfeat-rbf-q-r1 PASS) | 2026-11-15 | [MOJOLEARN_KM_FAST_RBF_RESIDENT_OFF.patch](../experiments/removed/MOJOLEARN_KM_FAST_RBF_RESIDENT_OFF.patch) |
 | [`MOJOLEARN_KNN_FAST_MMA_K64_OFF`](#mojolearn_knn_fast_mma_k64_off-old-path-deleted-2026-11-15) | Neighbors (k-NN matrix-unit kernels at k <= 64, FAST Apple) | removed (old path; FAST+Apple default KEPT 857fd5804, core-knn-k64-istella) | 2026-11-15 | [MOJOLEARN_KNN_FAST_MMA_K64_OFF.patch](../experiments/removed/MOJOLEARN_KNN_FAST_MMA_K64_OFF.patch) |
 | [`MOJOLEARN_KNN_FAST_REFINE`](#mojolearn_knn_fast_refine-loser-deleted-2026-11-15) | Neighbors (k-NN pool + exact re-rank, FAST opt-in) | NEUTRAL (REVERTED: no gain, rab5-knnref) | 2026-11-15 | [MOJOLEARN_KNN_FAST_REFINE.patch](../experiments/removed/MOJOLEARN_KNN_FAST_REFINE.patch) |
+| [`MOJOLEARN_X_PREP_FAST_UNIQUE_OFF`](#mojolearn_x_prep_fast_unique_off-old-path-deleted-2026-11-15) | Preprocessing (encoders' category fit, FAST Apple) | removed (old path; FAST+Apple default KEPT f419ea9f1, prep-onehot-uniq-taxi) | 2026-11-15 | [MOJOLEARN_X_PREP_FAST_UNIQUE_OFF.patch](../experiments/removed/MOJOLEARN_X_PREP_FAST_UNIQUE_OFF.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -6401,3 +6402,11 @@ bits change on any vendor or the host column, no board row needs re-timing.
 - **Deleted by**: lane/expdel-06-base-cluster-kernel (expdel-06-base-cluster-kernel, docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md); code recoverable at `1fadfcc7b3`.
 - **Restore**: `git apply experiments/removed/MOJOLEARN_KNN_FAST_REFINE.patch`, then delete the `MOJOLEARN_KNN_FAST_REFINE` refusal in `core/experiment_guards_cluster.mojo`.
 - **Records**: refusal in `core/experiment_guards_cluster.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel-06-base-cluster-kernel section).
+
+## MOJOLEARN_X_PREP_FAST_UNIQUE_OFF: old path deleted (2026-11-15)
+
+- **What it was**: the FAST+Apple rollback of the encoders' category fit from the chunked per-column run scan (`x_prep_fast_unique`: uniq_count / uniq_scan / uniq_write) to the one-thread-per-column `unique_cols` (`bindings/_mojolearn_x_prep.mojo` X_PREP_FAST_UNIQUE). Only the define read is deleted: `unique_cols` stays the path of every other build; the Python probe is unchanged.
+- **Verdict**: KEPT f419ea9f1, FAST+Apple default (EXPERIMENTS.md `X_PREP_FAST_UNIQUE`, prep-onehot-uniq-taxi / prep-ordinal-uniq-taxi): M3, onehot taxi 69.7 -> 30.4 ms, ordinal taxi 67.2 -> 25.3 ms, output digests identical. No bit change on any column.
+- **Deleted by**: lane/expdel-06-base-cluster-kernel (expdel-06-base-cluster-kernel, docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md); code recoverable at `c370817612`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_X_PREP_FAST_UNIQUE_OFF.patch`, then delete the `MOJOLEARN_X_PREP_FAST_UNIQUE_OFF` refusal in `core/experiment_guards_base.mojo`.
+- **Records**: refusal in `core/experiment_guards_base.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel-06-base-cluster-kernel section).
