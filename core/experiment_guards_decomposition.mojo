@@ -121,6 +121,8 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_CLASSICAL_C24_TREE4"](), "removed 2026-11-15 (lane/expdel2-06-base): CLASSICAL_C24_TREE4 (Decomposition (TSQR / sliced-QR four-way merge tree, IDENTICAL)) was measured arm not promoted; the opt-in arm is gone and the default path is unchanged; code recoverable at ba795517d7; see docs/TOMBSTONES.md"
     # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C24_ROWS2048_OFF.patch
     comptime assert not is_defined["MOJOLEARN_CLASSICAL_C24_ROWS2048_OFF"](), "removed 2026-11-15 (lane/expdel2-06-base): CLASSICAL_C24_ROWS2048_OFF (Decomposition (TSQR 4096-row leaves, IDENTICAL old path)) was old path, superseded by the measured IDENTICAL default; the measured IDENTICAL default is the only path; code recoverable at b4348c8a12; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C26_PRODUCTS.patch
+    comptime assert not is_defined["MOJOLEARN_CLASSICAL_C26_PRODUCTS"](), "removed 2026-11-15 (lane/expdel2-06-base): CLASSICAL_C26_PRODUCTS (Decomposition (NMF fixed H products reuse, IDENTICAL)) was unmeasured opt-in arm; the opt-in arm is gone and the default path is unchanged; code recoverable at 5f3b85c06c; see docs/TOMBSTONES.md"
     return True
 
 

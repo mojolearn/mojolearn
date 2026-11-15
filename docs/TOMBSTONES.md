@@ -714,6 +714,7 @@ in the tables after the sections.
 | [`MOJOLEARN_CLASSICAL_C24_TREE4`](#mojolearn_classical_c24_tree4-unmeasured-arm-deleted-2026-11-15) | Decomposition (TSQR / sliced-QR four-way merge tree, IDENTICAL) | removed (opt-in arm; measured arm not promoted) | 2026-11-15 | [MOJOLEARN_CLASSICAL_C24_TREE4.patch](../experiments/removed/MOJOLEARN_CLASSICAL_C24_TREE4.patch) |
 | [`MOJOLEARN_CLASSICAL_C24_ROWS2048_OFF`](#mojolearn_classical_c24_rows2048_off-old-path-deleted-2026-11-15) | Decomposition (TSQR 4096-row leaves, IDENTICAL old path) | removed (old path; IDENTICAL default kept) | 2026-11-15 | [MOJOLEARN_CLASSICAL_C24_ROWS2048_OFF.patch](../experiments/removed/MOJOLEARN_CLASSICAL_C24_ROWS2048_OFF.patch) |
 | [`MOJOLEARN_CLASSICAL_C25_PROJECTION_REUSE_OFF`](#mojolearn_classical_c25_projection_reuse_off-old-path-deleted-2026-11-15) | Kernel (RBFSampler projection old path, IDENTICAL old path) | removed (old path; IDENTICAL default kept) | 2026-11-15 | [MOJOLEARN_CLASSICAL_C25_PROJECTION_REUSE_OFF.patch](../experiments/removed/MOJOLEARN_CLASSICAL_C25_PROJECTION_REUSE_OFF.patch) |
+| [`MOJOLEARN_CLASSICAL_C26_PRODUCTS`](#mojolearn_classical_c26_products-unmeasured-arm-deleted-2026-11-15) | Decomposition (NMF fixed H products reuse, IDENTICAL) | removed (opt-in arm; unmeasured opt-in arm) | 2026-11-15 | [MOJOLEARN_CLASSICAL_C26_PRODUCTS.patch](../experiments/removed/MOJOLEARN_CLASSICAL_C26_PRODUCTS.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -6898,3 +6899,11 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md (section expdel-02-
 - **Deleted by**: lane/expdel2-06-base (expdel2-06-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `935328056e`.
 - **Restore**: `git apply experiments/removed/MOJOLEARN_CLASSICAL_C25_PROJECTION_REUSE_OFF.patch`, then delete the `MOJOLEARN_CLASSICAL_C25_PROJECTION_REUSE_OFF` refusal in `core/experiment_guards_kernel.mojo`.
 - **Records**: refusal in `core/experiment_guards_kernel.mojo`; `classical-decomp.json` control `C25_PROJECTION_REUSE`: `removed` entry added (control removed from `controls` and from its algorithms); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-06-base section).
+
+## MOJOLEARN_CLASSICAL_C26_PRODUCTS: unmeasured arm deleted (2026-11-15)
+
+- **What it was**: the opt-in arm in which NMF reused the fixed H products for transform / immutable-H MU beta2 and CD updates (x_decomp/nmf.mojo, nmf_dev.mojo). `experiments/classical_identical_ideas/linear_controls.mojo` now defines `C26_PRODUCTS` as the constant of the kept default, so the importers in other lanes compile before and after; the integrator folds their dead branches.
+- **Verdict**: no record: no A/B was recorded for the opt-in arm (plan rule a; AGENTS.md "An unmeasured arm is deleted", Andrew 2026-11-15). No bit change on any vendor or the host column: the default arm is untouched.
+- **Deleted by**: lane/expdel2-06-base (expdel2-06-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `5f3b85c06c`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_CLASSICAL_C26_PRODUCTS.patch`, then delete the `MOJOLEARN_CLASSICAL_C26_PRODUCTS` refusal in `core/experiment_guards_decomposition.mojo`.
+- **Records**: refusal in `core/experiment_guards_decomposition.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-06-base section).
