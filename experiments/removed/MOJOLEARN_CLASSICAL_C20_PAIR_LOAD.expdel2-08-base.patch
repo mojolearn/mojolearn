@@ -1,0 +1,91 @@
+diff --git a/svm/impl/kernelcache.mojo b/svm/impl/kernelcache.mojo
+index d6940a0407..507b28db92 100644
+--- a/svm/impl/kernelcache.mojo
++++ b/svm/impl/kernelcache.mojo
+@@ -35,6 +35,8 @@ because it is symmetric -- and the full tile is `[nnz x batch]` with
+ `[batch x nnz]` column-major tile read the other way.
+ """
+ 
++from experiments.classical_identical_ideas.linear_controls import C20_PAIR_LOAD
++from svm.impl.classical_kernel_device import classical_gather_rows_norms_kernel
+ from max.gpu import block_dim, block_idx, thread_idx
+ from checks.numerics import ftz
+ from max.gpu.host import DeviceBuffer, DeviceContext
+@@ -316,21 +318,26 @@ struct KernelCache(Movable):
+         # C20_ROW_CACHE (a host loop of 3 launches per working-set row, one of
+         # them 1x1) was deleted 2026-10-07: forbidden serial shape, incumbent
+         # parallel. Recoverable at origin/integration/switches-20261007 608a7cf4a.
+-        # TOMBSTONE: MOJOLEARN_CLASSICAL_C20_PAIR_LOAD (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-08-base; code recoverable at 62fba45282.
+-        # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C20_PAIR_LOAD.expdel2-08-base.patch; record in docs/TOMBSTONES.md.
+-        # extractRows(matrix, x_ws_dense, ws_idx_mod, n_ws)
+-        ctx.enqueue_function[gather_rows_kernel](
+-            self.x_ws_dense.unsafe_ptr(), x.unsafe_ptr(),
+-            self.ws_idx_mod.unsafe_ptr(), Int32(n_ws), Int32(self.n_cols),
+-            grid_dim=_grid(n_ws * self.n_cols), block_dim=SEL_TPB,
+-        )
+-        if self.kp.kernel == KERNEL_RBF:
+-            # selectValueSubset(matrix_l2_ws, matrix_l2, ws_idx_mod, n_ws)
+-            ctx.enqueue_function[gather_f32_kernel](
+-                self.matrix_l2_ws.unsafe_ptr(), self.matrix_l2.unsafe_ptr(),
+-                self.ws_idx_mod.unsafe_ptr(), Int32(n_ws),
+-                grid_dim=_grid(n_ws), block_dim=SEL_TPB,
++        comptime if C20_PAIR_LOAD:
++            ctx.enqueue_function[classical_gather_rows_norms_kernel](
++                self.x_ws_dense.unsafe_ptr(), self.matrix_l2_ws.unsafe_ptr(), x.unsafe_ptr(), self.matrix_l2.unsafe_ptr(),
++                self.ws_idx_mod.unsafe_ptr(), Int32(n_ws), Int32(self.n_cols), Int32(self.kp.kernel == KERNEL_RBF),
++                grid_dim=_grid(n_ws * self.n_cols), block_dim=SEL_TPB,
+             )
++        else:
++            # extractRows(matrix, x_ws_dense, ws_idx_mod, n_ws)
++            ctx.enqueue_function[gather_rows_kernel](
++                self.x_ws_dense.unsafe_ptr(), x.unsafe_ptr(),
++                self.ws_idx_mod.unsafe_ptr(), Int32(n_ws), Int32(self.n_cols),
++                grid_dim=_grid(n_ws * self.n_cols), block_dim=SEL_TPB,
++            )
++            if self.kp.kernel == KERNEL_RBF:
++                # selectValueSubset(matrix_l2_ws, matrix_l2, ws_idx_mod, n_ws)
++                ctx.enqueue_function[gather_f32_kernel](
++                    self.matrix_l2_ws.unsafe_ptr(), self.matrix_l2.unsafe_ptr(),
++                    self.ws_idx_mod.unsafe_ptr(), Int32(n_ws),
++                    grid_dim=_grid(n_ws), block_dim=SEL_TPB,
++                )
+         if self.kp.kernel == KERNEL_PRECOMPUTED:
+             # X IS the n x n kernel matrix: the gathered rows' ws columns.
+             ctx.enqueue_function[gather_cols_kernel](
+@@ -374,19 +381,24 @@ struct KernelCache(Movable):
+         var n_cached = 0
+         var n_uncached = nnz_da - n_cached
+         if n_uncached > 0:
+-            # TOMBSTONE: MOJOLEARN_CLASSICAL_C20_PAIR_LOAD (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-08-base; code recoverable at 62fba45282.
+-            # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C20_PAIR_LOAD.expdel2-08-base.patch; record in docs/TOMBSTONES.md.
+-            ctx.enqueue_function[gather_rows_kernel](
+-                self.x_ws_dense.unsafe_ptr(), x.unsafe_ptr(),
+-                nz_da_idx.unsafe_ptr(), Int32(n_uncached), Int32(self.n_cols),
+-                grid_dim=_grid(n_uncached * self.n_cols), block_dim=SEL_TPB,
+-            )
+-            if self.kp.kernel == KERNEL_RBF:
+-                ctx.enqueue_function[gather_f32_kernel](
+-                    self.matrix_l2_ws.unsafe_ptr(), self.matrix_l2.unsafe_ptr(),
+-                    nz_da_idx.unsafe_ptr(), Int32(n_uncached),
+-                    grid_dim=_grid(n_uncached), block_dim=SEL_TPB,
++            comptime if C20_PAIR_LOAD:
++                ctx.enqueue_function[classical_gather_rows_norms_kernel](
++                    self.x_ws_dense.unsafe_ptr(), self.matrix_l2_ws.unsafe_ptr(), x.unsafe_ptr(), self.matrix_l2.unsafe_ptr(),
++                    nz_da_idx.unsafe_ptr(), Int32(n_uncached), Int32(self.n_cols), Int32(self.kp.kernel == KERNEL_RBF),
++                    grid_dim=_grid(n_uncached * self.n_cols), block_dim=SEL_TPB,
++                )
++            else:
++                ctx.enqueue_function[gather_rows_kernel](
++                    self.x_ws_dense.unsafe_ptr(), x.unsafe_ptr(),
++                    nz_da_idx.unsafe_ptr(), Int32(n_uncached), Int32(self.n_cols),
++                    grid_dim=_grid(n_uncached * self.n_cols), block_dim=SEL_TPB,
+                 )
++                if self.kp.kernel == KERNEL_RBF:
++                    ctx.enqueue_function[gather_f32_kernel](
++                        self.matrix_l2_ws.unsafe_ptr(), self.matrix_l2.unsafe_ptr(),
++                        nz_da_idx.unsafe_ptr(), Int32(n_uncached),
++                        grid_dim=_grid(n_uncached), block_dim=SEL_TPB,
++                    )
+         self.cache_state = CACHE_BATCHING_INITIALIZED
+         return BatchDescriptor(-1, 0, 0, nnz_da, n_cached)
+ 

@@ -1,0 +1,36 @@
+diff --git a/neighbors/impl/ball_cover/registers.mojo b/neighbors/impl/ball_cover/registers.mojo
+index c3202b7f35..73b0307089 100644
+--- a/neighbors/impl/ball_cover/registers.mojo
++++ b/neighbors/impl/ball_cover/registers.mojo
+@@ -910,8 +910,9 @@ def rbc_eps_pass_fill(
+ # fg-tsne-dbscan D1 / D2 (IDENTICAL, NVIDIA and AMD, lane fg-tsne-dbscan
+ # 2026-10-09). PROMOTED TOGETHER to the IDENTICAL DEFAULT 2026-10-10
+ # (lane/postmerge-act-7); D2's `_OFF` rollback (fill by recompute) was
+-# deleted 2026-11-15 (see the TOMBSTONE below), and so was D1's (the
+-# warp-per-query count and fill); the old on-defines are refused in
++# deleted 2026-11-15 (see the TOMBSTONE below), `-D
++# MOJOLEARN_IDN_DBSCAN_EPS_TILE_OFF` restores today's warp-per-query count and
++# fill (and with it turns D2 off); the old on-defines are refused in
+ # core/six_lane_experiment_guards.mojo. fg2 board-bridge A/B on main
+ # 0a7b206f1, one run per arm (nv2 L40S default v1023, EPS_TILE v1042, EPS_TILE
+ # + ADJ_BITMAP v1043; MI325X a1163 / a1182 / a1183; ratio = arm / fg2 default
+@@ -921,7 +922,7 @@ def rbc_eps_pass_fill(
+ # timed out (board-bridge timeout) in every arm and in the default on both
+ # vendors: no taxi number.
+ #
+-# D1 (MOJOLEARN_IDN_DBSCAN_EPS_TILE, the IDENTICAL NVIDIA/AMD default): THE EPS COUNT AND FILL AS A
++# D1 (MOJOLEARN_IDN_DBSCAN_EPS_TILE, now default; _OFF restores): THE EPS COUNT AND FILL AS A
+ # REGISTER-TILED BLOCK. `block_rbc_kernel_eps_csr_pass` walks one query per
+ # warp and one candidate per lane, each lane reading its candidate's whole
+ # row from device memory (rows `n_cols * 4` bytes apart, so the warp's loads
+@@ -976,9 +977,8 @@ comptime IDN_DBSCAN_EPS_TILE = (
+     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+     and (TARGET_COLUMN == COLUMN_NVIDIA or TARGET_COLUMN == COLUMN_AMD)
+     and not KNN_DIRECT_DISTANCE
++    and not is_defined["MOJOLEARN_IDN_DBSCAN_EPS_TILE_OFF"]()
+ )
+-# TOMBSTONE: MOJOLEARN_IDN_DBSCAN_EPS_TILE_OFF (old path of the PROMOTED IDENTICAL default, EXP:1971) deleted 2026-11-15 by lane/expdel2-08-base; code recoverable at 4225a08bd5.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_DBSCAN_EPS_TILE_OFF.patch; record in docs/TOMBSTONES.md.
+ # TOMBSTONE: MOJOLEARN_IDN_DBSCAN_ADJ_BITMAP_OFF (old path of the PROMOTED IDENTICAL default, EXP:1971) deleted 2026-11-15 by lane/expdel2-08-base; code recoverable at 6c9e7778e6.
+ # Restore: git apply experiments/removed/MOJOLEARN_IDN_DBSCAN_ADJ_BITMAP_OFF.patch; record in docs/TOMBSTONES.md.
+ comptime IDN_DBSCAN_ADJ_BITMAP = IDN_DBSCAN_EPS_TILE

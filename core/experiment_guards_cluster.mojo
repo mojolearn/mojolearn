@@ -175,6 +175,11 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_IVF_DIRECT_DISTANCE_OFF"](), "removed 2026-11-15 (lane/expdel2-05-base): IVF_DIRECT_DISTANCE_OFF (rollback of the IVF scan to the distance expansion) is gone; the direct distances are the IDENTICAL path"
     # Restore: git apply experiments/removed/MOJOLEARN_C62_SAME_COMPONENT_SKIP.patch
     comptime assert not is_defined["MOJOLEARN_C62_SAME_COMPONENT_SKIP"](), "removed 2026-11-15 (lane/expdel2-05-base): C62_SAME_COMPONENT_SKIP (opt-in HDBSCAN same-component tile skip, never measured) is gone; the incumbent tiled search is the only one"
+    # Lane expdel2-08-base (2026-11-15): unmeasured arms and superseded old paths deleted, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (docs/TOMBSTONES.md).
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_DBSCAN_ADJ_BITMAP_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_DBSCAN_ADJ_BITMAP_OFF"](), "removed 2026-11-15 (lane/expdel2-08-base): IDN_DBSCAN_ADJ_BITMAP_OFF (old path of the PROMOTED IDENTICAL default) is gone; the default is kept; code at 6c9e7778e6; restore: experiments/removed/MOJOLEARN_IDN_DBSCAN_ADJ_BITMAP_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_DBSCAN_EPS_TILE_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_DBSCAN_EPS_TILE_OFF"](), "removed 2026-11-15 (lane/expdel2-08-base): IDN_DBSCAN_EPS_TILE_OFF (old path of the PROMOTED IDENTICAL default) is gone; the default is kept; code at 4225a08bd5; restore: experiments/removed/MOJOLEARN_IDN_DBSCAN_EPS_TILE_OFF.patch"
     return True
 
 

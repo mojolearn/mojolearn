@@ -100,6 +100,13 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_IDN_IF_RESIDENT_OFF"](), "removed 2026-11-15 (lane/expdel2-01-base): MOJOLEARN_IDN_IF_RESIDENT_OFF (rollback of IsolationForest to a refit of the whole forest inside every scoring call) is gone, no A/B was ever recorded for it; the resident forest that fit built is the path on every tier; restore: experiments/removed/MOJOLEARN_IDN_IF_RESIDENT_OFF.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_FOREST_DEVICE_FINITE_OFF.patch
     comptime assert not is_defined["MOJOLEARN_FOREST_DEVICE_FINITE_OFF"](), "removed 2026-11-15 (lane/expdel2-05-base): FOREST_DEVICE_FINITE_OFF (FAST+Apple rollback of the forest fits to the host finite scans) is gone; the device scan is the FAST+Apple path"
+    # Lane expdel2-08-base (2026-11-15): unmeasured arms and superseded old paths deleted, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (docs/TOMBSTONES.md).
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_TREE_SHAPE_NATIVE_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_TREE_SHAPE_NATIVE_OFF"](), "removed 2026-11-15 (lane/expdel2-08-base): IDN_TREE_SHAPE_NATIVE_OFF (unmeasured old path) is gone; the default is kept; code at 3f0e029eb4; restore: experiments/removed/MOJOLEARN_IDN_TREE_SHAPE_NATIVE_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_TE_NATIVE_SPLITS_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_TE_NATIVE_SPLITS_OFF"](), "removed 2026-11-15 (lane/expdel2-08-base): TE_NATIVE_SPLITS_OFF (old path of the FAST Apple default) is gone; the default is kept; code at 6037d8cab6; restore: experiments/removed/MOJOLEARN_TE_NATIVE_SPLITS_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_TE_ADA_SESSION_SHARE_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_TE_ADA_SESSION_SHARE_OFF"](), "removed 2026-11-15 (lane/expdel2-08-base): TE_ADA_SESSION_SHARE_OFF (old path of the FAST Apple default) is gone; the default is kept; code at 1eebdbdc8f; restore: experiments/removed/MOJOLEARN_TE_ADA_SESSION_SHARE_OFF.patch"
     return True
 
 

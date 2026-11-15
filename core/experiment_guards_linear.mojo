@@ -158,6 +158,9 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_IDN_GRAM_FF_FALLBACK_OFF"](), "removed 2026-11-15 (lane/expdel2-05-base): IDN_GRAM_FF_FALLBACK_OFF (rollback of the Ridge float-float Gram second chance to the direct eig route) is gone; the float-float fallback is the IDENTICAL path"
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_GFF_GRAM_TILED_OFF.patch
     comptime assert not is_defined["MOJOLEARN_IDN_GFF_GRAM_TILED_OFF"](), "removed 2026-11-15 (lane/expdel2-05-base): IDN_GFF_GRAM_TILED_OFF (rollback of the float-float leaf Gram to the per-cell gff_leaf_kernel) is gone; the register-tiled leaf Gram is the IDENTICAL path"
+    # Lane expdel2-08-base (2026-11-15): unmeasured arms and superseded old paths deleted, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (docs/TOMBSTONES.md).
+    # Restore: git apply experiments/removed/MOJOLEARN_MULTIOUT_RIDGE_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_MULTIOUT_RIDGE_OFF"](), "removed 2026-11-15 (lane/expdel2-08-base): MULTIOUT_RIDGE_OFF (old path of the FAST Apple default) is gone; the default is kept; code at 7866bd9303; restore: experiments/removed/MOJOLEARN_MULTIOUT_RIDGE_OFF.patch"
     return True
 
 
