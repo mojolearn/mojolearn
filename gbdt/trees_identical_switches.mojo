@@ -110,7 +110,7 @@ comptime T30 = False
 # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
 # TOMBSTONE: MOJOLEARN_TREES_T23 (DELETE-ARM, opt-in, no A/B recorded, rule a) deleted 2026-11-15 by lane/expdel2-45-trees; code recoverable at 35309dcb55.
 # Restore: git apply experiments/removed/MOJOLEARN_TREES_T23.patch
-comptime T23 = False
+# (Sweep 2026-11-15: T23 removed; reader folded, _one_step_prepare_kernel removed.)
 
 # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
 # TOMBSTONE: MOJOLEARN_TREES_T24 (DELETE-ARM, opt-in, no A/B recorded, rule a) deleted 2026-11-15 by lane/expdel2-45-trees; code recoverable at fca63c0b28.
