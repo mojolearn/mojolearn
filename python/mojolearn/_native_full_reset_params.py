@@ -244,15 +244,9 @@ class NativeFullResetParams:
 
 def collect():
     """Refresh `_CLASSES` with the classes of the loaded families."""
-    # glue: fixed class inventory of the families imported so far
     global _CLASSES
-    import sys
-    found = []
-    for name, source in _CLASS_SOURCES.items():  # glue: fixed vetted class table
-        module = sys.modules.get(__package__ + '.' + source)
-        if module is not None:
-            found.append(getattr(module, name))
-    _CLASSES = tuple(found)
+    from ._native_declared_constructors import loaded_classes
+    _CLASSES = loaded_classes(_CLASS_SOURCES)
 
 
 def _install(classes):
