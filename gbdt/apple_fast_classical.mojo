@@ -49,8 +49,9 @@ comptime AFCL_RESOLVE_RECORDS = 1
 
 # AFCL-T06: halve hardware-derived leaf-statistic partial counts to reduce
 # scratch/fold traffic; accumulation order may move bits, not solver effort.
-# NEVER RUN — PENDING MEASUREMENT; uncompiled/unverified; default OFF.
-comptime AFCL_T06 = AFCL_APPLE_FAST and is_defined["MOJOLEARN_AFCL_T06"]()
+# TOMBSTONE: MOJOLEARN_AFCL_T06 (DELETE-EXPERIMENT, never-run Apple FAST programme card, rule g) deleted 2026-11-15 by lane/expdel2-41-trees; code recoverable at bc67334f43.
+# Restore: git apply experiments/removed/MOJOLEARN_AFCL_T06.patch; record in docs/TOMBSTONES.md.
+comptime AFCL_T06 = False
 
 # AFCL-T07: four SIMD groups per resident prediction block rather than
 # eight; rows remain independent and each row visits trees in order.
