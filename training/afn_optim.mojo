@@ -12,8 +12,6 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 from core.step_phase import step_count_device_alloc
-from training.checks.loss_contract import CeConfig
-from training.checks.optimizer_contract import OptimizerConfig, StepScalars
 from core.shared_slot import SharedSlot
 
 
@@ -58,11 +56,9 @@ comptime AFN_APPLE_FAST = (
 # Restore: git apply experiments/removed/MOJOLEARN_AFN26_LOSS_BLOCK128.patch
 # TOMBSTONE: MOJOLEARN_AFN26_LOSS_BLOCK512 (unmeasured opt-in block width) deleted 2026-11-15 by lane/expdel2-30-neural; code recoverable at e39daf79ad.
 # Restore: git apply experiments/removed/MOJOLEARN_AFN26_LOSS_BLOCK512.patch
-#: The candidates' aliases, False on every build (imported by
-#: training/estimator.mojo and training/checks/optimizer.mojo).
-comptime AFN_OPT_CLIP_FUSE = False
-comptime AFN_LOSS_FUSED = False
-comptime AFN_OPT_ANY = False
+# (Sweep 2026-11-15: AFN_OPT_CLIP_FUSE, AFN_LOSS_FUSED, AFN_OPT_ANY (False) and the always-refusing
+# afn_optimizer_step / afn_ce_loss_resident removed with their readers' dead arms in training/estimator.mojo and
+# training/checks/optimizer.mojo.)
 
 
 # ===========================================================================
@@ -152,34 +148,3 @@ def afn_scratch_view(
 # the pooled loss scratch; code recoverable at b639a2bd2. Restore: git apply experiments/removed/MOJOLEARN_AFN_OPT_RESIDENT_STATE.patch
 
 
-def afn_optimizer_step(
-    ctx: DeviceContext,
-    mut param: DeviceBuffer[DType.float32],
-    mut grad: DeviceBuffer[DType.float32],
-    mut m_state: DeviceBuffer[DType.float32],
-    mut v_state: DeviceBuffer[DType.float32],
-    mut out2: DeviceBuffer[DType.float32],
-    mut buf_initialized: List[Bool],
-    offsets: List[Int],
-    cfg: OptimizerConfig,
-    sc: StepScalars,
-) raises:
-    """Removed (AFN_OPT_ANY is False on every build): refuses."""
-    raise Error("afn_optimizer_step: the Apple FAST optimizer candidates were removed")
-
-
-def afn_ce_loss_resident(
-    ctx: DeviceContext,
-    loss_ptr: MutPointer[Float32, MutUntrackedOrigin],
-    row_ptr: MutPointer[Float32, MutUntrackedOrigin],
-    mut dlogits: DeviceBuffer[DType.float32],
-    mut logits: DeviceBuffer[DType.float32],
-    mut targets: DeviceBuffer[DType.int32],
-    n_rows: Int,
-    count: Int,
-    reduction: Int,
-    want_grad: Int,
-    cfg: CeConfig,
-) raises:
-    """Removed (AFN_LOSS_FUSED is False on every build): refuses."""
-    raise Error("afn_ce_loss_resident: the Apple FAST fused cross-entropy was removed")
