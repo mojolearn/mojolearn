@@ -151,7 +151,8 @@ def test_no_vocabulary_is_tracked_or_shipped():
     assert not (ROOT / "tokenizer" / "data").exists()
     assert not (ROOT / "tokenizer" / "checks" / "fixtures").exists()
     assert "tokenizer/impl/unicode_table_generated.mojo" in _read(".gitignore")
-    assert "sh tokenizer/tools/gen_unicode_table.sh" in _read("bindings/build_host_family.sh")
+    # The build-script spelling check is deleted: 2cc0cbf88f replaced the host build's
+    # `sh tokenizer/tools/gen_unicode_table.sh` with `tools/generated_sources.py prepare`.
     pin = _read("tokenizer/impl/unicode_class.mojo")
     assert re.search(r'^comptime UNICODE_TABLE_SHA256_PINNED = "[0-9a-f]{64}"$', pin, re.M)
 

@@ -46,7 +46,6 @@ REUSED_HOST_MODULES = (
     "gbdt/methods/greedy_subsets_searcher/split_properties_helper.mojo",
     "gbdt/host/gbdt_oracle.mojo",
 )
-REFUSAL = "no CPU implementation of _mojolearn_gbdt.gbdt_fit for "
 
 
 def _read(rel):
@@ -78,21 +77,9 @@ def test_oracles_import_no_gpu_module():
     for rel in (DRIVER, LOSSGUIDE):
         text = _read(rel)
         assert not GPU_IMPORTS.search(text), f"{rel} imports a GPU module"
-    imports = sorted(set(re.findall(r"^from\s+([\w.]+)\s+import", _read(DRIVER), re.M)))
-    assert imports == [
-        "checks.fixed_point", "checks.numerics", "gbdt.data.permutation",
-        "gbdt.gpu_data.compressed_index_builder", "gbdt.gpu_data.feature_blocks",
-        "gbdt.gpu_data.grid_policy", "gbdt.gpu_util.kernel.random_gen",
-        "gbdt.host.gbdt_oracle", "gbdt.host.gbdt_oracle_losses",
-        "gbdt.host.gbdt_oracle_lossguide",
-        "gbdt.methods.greedy_subsets_searcher.split_properties_helper",
-        "gbdt.methods.leaves_estimation.tree_t26_units", "gbdt.trees_identical_switches",
-        "std.math", "std.memory",
-    ], imports
-    # the two added modules are the shared IDENTICAL leaf units and the
-    # comptime switch table; both stay CPU-safe
-    for rel in ("gbdt/methods/leaves_estimation/tree_t26_units.mojo", "gbdt/trees_identical_switches.mojo"):
-        assert not GPU_IMPORTS.search(_read(rel)), f"{rel} imports a GPU module"
+    # The driver's exact import allowlist is deleted: 524140f57d (sweep trees) deleted T26,
+    # gbdt/methods/leaves_estimation/tree_t26_units.mojo and the driver's imports of it and of
+    # gbdt.trees_identical_switches. No public-API form; Mojo check: none.
     lg_imports = sorted(set(re.findall(r"^from\s+([\w.]+)\s+import", _read(LOSSGUIDE), re.M)))
     assert lg_imports == ["checks.numerics", "gbdt.host.gbdt_oracle"], lg_imports
     for rel in REUSED_HOST_MODULES:
@@ -120,22 +107,12 @@ def test_driver_spells_the_bit_carrying_constructs():
     assert "var plane0 = r.weighted_scale" in lg, "the NewtonL2 plane 0"
 
 
-def test_binding_dispatches_and_refuses_by_name():
-    src = _read(host_surface.binding_source("gbdt"))
-    # the call carries the row weights since the class-weight CPU column
-    # (lane/fix-cpu-column2)
-    assert re.search(r"gbdt_host_fit_non_symmetric\(\s*x, y, n_rows, n_features, tp, ns_start, row_weights\s*\)", src)
-    assert "gbdt_host_ns_model_text(ns_model)" in src
-    for what in ('"min_split_gain="', '"min_child_hessian="', '"min_data_in_leaf="',
-                 "under Lossguide (only NewtonL2 and NewtonCosine)", "(only Cosine)"):
-        assert what in src, f"no by-name refusal for {what}"
-    assert f'"{REFUSAL}"' in src
-    # the model-text parser and the predict walk live in the host entries the
-    # binding imports (gbdt/host/gbdt_host_entries_impl.mojo)
-    impl = _read("gbdt/host/gbdt_host_entries_impl.mojo")
-    assert 'kind == String("ntree")' in impl and 'kind == String("node")' in impl
-    assert "n_trees, 1, non_symmetric," in impl, "the predict walk takes the model's shape"
-    assert "_ = node_left^" in impl and "_ = node_right^" in impl, "keep-alives past the walk"
+# test_binding_dispatches_and_refuses_by_name deleted: a source-text check of
+# bindings/_mojolearn_gbdt_host.mojo. 285ac89b42 moved the host binding's RUN (the
+# non-symmetric dispatch and its by-name refusals) into gbdt/mojolearn_gbdt_host_run.mojo.
+# Depthwise/Lossguide host fits and refusals run natively:
+# checks/native_tests/gbdt_public_fits.mojo (`_refuses`, "a Lossguide Cosine fit");
+# the public save/load round trip stays below.
 
 
 def test_sabotage_reaches_both_policies():

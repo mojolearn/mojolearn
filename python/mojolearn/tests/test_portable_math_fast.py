@@ -10,7 +10,6 @@ and the bit test otherwise. This file holds each fast path to its
 definition: the same float bits, or the same exception type and message.
 No binding is needed.
 """
-import os
 import random
 import struct
 import fractions
@@ -56,8 +55,12 @@ def _fsum_exact(values):
     if positive_inf or negative_inf:
         return math.inf if positive_inf else -math.inf
     # one nearest/even rounding of total * 2**-1074 (Fraction -> float is
-    # correctly rounded)
-    return float(fractions.Fraction(total, 1 << 1074))
+    # correctly rounded); an out-of-range exact sum is fsum's OverflowError with
+    # the message the product raises since 67665e8906 ("math range error")
+    try:
+        return float(fractions.Fraction(total, 1 << 1074))
+    except OverflowError:
+        raise OverflowError("math range error") from None
 
 
 def _bits(x):
@@ -107,10 +110,9 @@ def test_fsum_fast_path_is_the_exact_sum():
         assert _outcome(pm.fsum, tuple(values)) == ref, values[:6]
 
 
-def test_fsum_reference_arm_is_the_exact_sum(monkeypatch):
-    monkeypatch.setenv("MOJOLEARN_HOTPATH", "python")
-    for values in _cases()[:400]:
-        assert _outcome(pm.fsum, values) == _outcome(_fsum_exact, values)
+# test_fsum_reference_arm_is_the_exact_sum deleted: 275426287e deleted the
+# MOJOLEARN_HOTPATH=python reference arm; fsum has one (native) path, held to the
+# exact sum by test_fsum_fast_path_is_the_exact_sum above.
 
 
 def _slow(kind, x):
@@ -139,15 +141,5 @@ def test_predicates_fast_path_is_the_bit_test():
 
 if __name__ == "__main__":
     test_fsum_fast_path_is_the_exact_sum()
-    old = os.environ.get("MOJOLEARN_HOTPATH")
-    os.environ["MOJOLEARN_HOTPATH"] = "python"
-    try:
-        for v in _cases()[:400]:
-            assert _outcome(pm.fsum, v) == _outcome(_fsum_exact, v)
-    finally:
-        if old is None:
-            del os.environ["MOJOLEARN_HOTPATH"]
-        else:
-            os.environ["MOJOLEARN_HOTPATH"] = old
     test_predicates_fast_path_is_the_bit_test()
     print("test_portable_math_fast: PASS")

@@ -9,9 +9,7 @@ boosting training as having no CPU path; the binding registers the GPU
 binding's fit, predict, model-dim and sigmoid names and leaves the
 multi-dimensional predict and the adapters' binary transforms absent so
 they refuse by name (the ordered and FeatureFreq fits are registered since
-lane/cpu-training-gbdt-ordered, test_cpu_training_gbdt_ordered.py); every parameter
-refusal inside `gbdt_fit` carries the sentence the CPU identity gate's
-column check keys on; the oracle imports no GPU module, and the gbdt host
+lane/cpu-training-gbdt-ordered, test_cpu_training_gbdt_ordered.py); the oracle imports no GPU module, and the gbdt host
 modules it reuses import none either; the oracle spells the device
 constructs a bit claim rests on (the pinned 32, the dithered quantizer, the
 row-count scale limit, the half-byte block partial flush, the Newton epsilon,
@@ -49,7 +47,6 @@ REUSED_HOST_MODULES = (
     "gbdt/gpu_data/gpu_structures.mojo",
     "gbdt/options/data_processing_options.mojo",
 )
-REFUSAL = "no CPU implementation of _mojolearn_gbdt.gbdt_fit for "
 
 
 def _read(rel):
@@ -83,23 +80,10 @@ def test_binding_registers_the_gpu_names():
         assert f'("{absent}")' not in src, f"{absent} must stay absent so it refuses by name"
 
 
-def test_every_fit_refusal_names_the_missing_cpu_implementation():
-    src = _read(host_surface.binding_source("gbdt"))
-    assert f'"{REFUSAL}"' in src
-    for what in ("loss='", "grow_policy code", "use_pointwise_searcher=True",
-                 "score_function code", "leaf_estimation_method code",
-                 "bootstrap_type='", '"sample_weight"', '"class_weights outside',
-                 '"cat_features or one_hot_features outside SymmetricTree with Logloss"', '"eval_set outside SymmetricTree with Logloss',
-                 "random_strength=", "boost_from_average=True",
-                 "feature_fraction=", "an X carrying NaN"):
-        assert f"_refuse(" in src and what in src, f"no by-name refusal for {what}"
-    # The oracle is split by grow policy since 8b0ab3f6f (gbdt_oracle.mojo,
-    # _onehot, _depthwise, _pointwise, _ordered); the binary-policy refusal
-    # lives in the policies' files, so every oracle file is read.
-    oracle = "".join(_read(str(p.relative_to(ROOT))) for p in sorted((ROOT / "gbdt" / "host").glob("gbdt_oracle*.mojo")))
-    assert "no CPU implementation of _mojolearn_gbdt.gbdt_fit for a" in oracle, (
-        "the binary-policy refusal must carry the gate's sentence"
-    )
+# test_every_fit_refusal_names_the_missing_cpu_implementation deleted: a source-text
+# check of bindings/_mojolearn_gbdt_host.mojo. 285ac89b42 moved the host binding's RUN
+# (every `_refuse(...)` by-name refusal) into gbdt/mojolearn_gbdt_host_run.mojo. The
+# refusals are exercised natively: checks/native_tests/gbdt_public_fits.mojo `_refuses`.
 
 
 def test_nan_modes_and_adapters_are_declared():
@@ -113,20 +97,10 @@ def test_nan_modes_and_adapters_are_declared():
         assert lane in host_surface.covered_lanes(), lane
     for cls in ("GradientBoostingClassifier", "GradientBoostingRegressor"):
         assert cls in fam["classes"], cls
-    # The transforms' typed bodies moved to gbdt/host/gbdt_host_entries_impl.mojo
-    # (lane thin-trees-metrics, 2026-10-21); the shell is the Python door.
-    src = _read(host_surface.binding_source("gbdt")) + _read("gbdt/host/gbdt_host_entries_impl.mojo")
-    assert "var positive = ftz(identical_sigmoid(ftz(margin)))" in src, "the probability body"
-    assert "Scalar[dtype](ftz(Float32(1) - positive))" in src, "the flushed complement"
-    assert "(bits & UInt32(0x80000000)) == 0 and (bits & UInt32(0x7fffffff)) != 0" in src, (
-        "the class code is strict raw > 0 read from the bits"
-    )
-    assert '"binary prediction: finite Float32 margins required"' in src
-    assert "if is_rmse or grow_code != 0 or is_pointwise or is_multi or len(flags) != 0:" in src, "NaN refused outside the measured fit"
-    kernel = _read("gbdt/binary_prediction.mojo")
-    assert "var positive = ftz(identical_sigmoid(ftz(margin)))" in kernel, (
-        "the device kernel moved; the host restatement must move with it"
-    )
+    # The source-text checks of the binary transforms and the NaN refusal are deleted:
+    # 285ac89b42 moved the host binding's RUN into gbdt/mojolearn_gbdt_host_run.mojo.
+    # The NaN refusal runs natively: checks/native_tests/gbdt_public_fits.mojo `_refuses`
+    # ("an RMSE fit on an X carrying NaN").
     assert "either NaN mode and the classifier and regressor adapters" in fam["display"], fam["display"]
 
 

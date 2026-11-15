@@ -291,20 +291,24 @@ def _reduction_inputs():
 
 @pytest.mark.parametrize("what", ["min", "max", "sum", "argmax"])
 def test_reductions_match_python(what):
+    # Since b58b2109ce the native Array reductions call reduce_stat through the native
+    # base table (base_reduce_stat), not the Python-visible helper the spy wraps, so no
+    # helper call is pinned; each answer is still held to the Python reference.
     for raw in _reduction_inputs():
         a = _arr(raw.copy())
-        # every non-empty block, the integer sum too (lane apple-fast-py2mojo-core)
-        native = a.size >= 1
-        _same(lambda: getattr(a, what)(), ("reduce_stat",) if native else (),
+        _same(lambda: getattr(a, what)(), (),
               group="reduce", ref_fn=lambda: getattr(_array_reference._ArrayReference, what)(a))
     f = _arr(np.asfortranarray(_RNG.standard_normal((400, 5)).astype(np.float32)))
-    _same(lambda: f.argmax(), ("reduce_stat",), group="reduce", ref_fn=lambda: _array_reference._ArrayReference.argmax(f))
+    _same(lambda: f.argmax(), (), group="reduce", ref_fn=lambda: _array_reference._ArrayReference.argmax(f))
 
 
 # --------------------------------------------------------------- equality
 
 
 def test_equality_matches_python():
+    # Since b58b2109ce the native Array equality calls equal_elements through the
+    # native base table (base_equal_elements), not the Python-visible helper the spy
+    # wraps, so no helper call is pinned; each answer is held to the Python reference.
     for dt in _NP.values():
         x = _RNG.integers(0, 3, 5000).astype(dt)
         y = _RNG.integers(0, 3, 5000).astype(dt)
@@ -314,9 +318,9 @@ def test_equality_matches_python():
             x[1::13] = -0.0
             y[1::13] = 0.0
         a, b = _arr(x), _arr(y)
-        _same(lambda: a == b, ("equal_elements",), group="equal", ref_fn=lambda: _array_reference._ArrayReference.__eq__(a, b))
-        _same(lambda: a != b, ("equal_elements",), group="equal", ref_fn=lambda: _array_reference._ArrayReference.__ne__(a, b))
-        _same(lambda: a == a, ("equal_elements",), group="equal", ref_fn=lambda: _array_reference._ArrayReference.__eq__(a, a))
+        _same(lambda: a == b, (), group="equal", ref_fn=lambda: _array_reference._ArrayReference.__eq__(a, b))
+        _same(lambda: a != b, (), group="equal", ref_fn=lambda: _array_reference._ArrayReference.__ne__(a, b))
+        _same(lambda: a == a, (), group="equal", ref_fn=lambda: _array_reference._ArrayReference.__eq__(a, a))
         _same(lambda: a[:100] == b[:100], (), group="equal",
               ref_fn=lambda: _array_reference._ArrayReference.__eq__(_array_reference._ArrayReference.__getitem__(a, slice(None, 100)),
                                         _array_reference._ArrayReference.__getitem__(b, slice(None, 100))))
@@ -328,7 +332,7 @@ def test_equality_matches_python():
           ref_fn=lambda: _array_reference._ArrayReference.__eq__(a, _array_reference._ArrayReference.__getitem__(b, slice(None, 4999))))  # the shape refusal
     f = _arr(np.asfortranarray(_RNG.integers(0, 3, (300, 9)).astype(np.int32)))
     c = _arr(np.ascontiguousarray(_RNG.integers(0, 3, (300, 9)).astype(np.int32)))
-    _same(lambda: f == c, ("equal_elements",), group="equal", ref_fn=lambda: _array_reference._ArrayReference.__eq__(f, c))
+    _same(lambda: f == c, (), group="equal", ref_fn=lambda: _array_reference._ArrayReference.__eq__(f, c))
 
 
 # --------------------------------------------------------------- indexing
@@ -509,7 +513,10 @@ def _pinned(module, name, fn, answers=True, ref_fn=None):
 
 def _flatten_oracle(y):
     """The former Python `_labels.flatten_labels` (deleted by lane
-    p2-labels-lists-arrays), the reference of the native flatten."""
+    p2-labels-lists-arrays), the reference of the native flatten. Since
+    8e021e439d the native walk admits each label as it flattens, so a None
+    label is refused there with the label input step's ValueError (the
+    product's `labels_refusal`, bindings/label_admission_native_unpack.mojo)."""
     from itertools import chain
     if hasattr(y, "tolist") and not isinstance(y, (list, tuple)):
         y = y.tolist()
@@ -518,6 +525,8 @@ def _flatten_oracle(y):
     items = [y]
     while any(isinstance(item, (list, tuple)) for item in items):
         items = list(chain.from_iterable(item if isinstance(item, (list, tuple)) else (item,) for item in items))
+    if any(item is None for item in items):
+        raise ValueError("mojolearn: label None is neither a number nor a str")
     return items
 
 

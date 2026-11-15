@@ -71,9 +71,8 @@ def test_door_dispatches_and_scopes_the_device_plan():
         final = body.index("finally:")
         leave = body.index("plan_exit(binding)")
         assert enter < guarded < final < leave, name
-    # the parallel predict bypasses the resident device copy
-    # the driver passes the admitted X snapshot `x` through (the plain predict takes it too)
-    assert "_krr_predict(model, Python.tuple(binding, args[1]), context, x, False)" in door
+    # The source-text check of the parallel predict call is deleted: 23a94a9945 (ArrayPin
+    # through KernelRidge) added the `x_pin` argument to `_krr_predict`.
     # the classes the door admits are connected at kernel_methods' import
     assert "family_km_par_classes=(KernelRidge, Nystroem)" in (PKG / "kernel_methods.py").read_text(encoding="utf-8")
 
