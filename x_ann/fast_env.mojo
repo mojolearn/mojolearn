@@ -66,11 +66,12 @@ comptime FAST_IVFPQ_DEVICE_CODEBOOKS = ANN_FAST_APPLE
 #:         expanded form cancels in float32, misordering close neighbors.
 #: FAST+Apple default since the M3 A/B (one run per arm): CAGRA istella
 #: 21,210 -> 1,254 ms, recall .9838 -> .9972 (IVFG+EXACTD+SEEDS+ITERS).
-#: `-D MOJOLEARN_CAGRA_FAST_IVFG_OFF` restores the exact graph;
-#: `-D MOJOLEARN_CAGRA_FAST_IVFG_EXACTD_OFF` the expanded-form tile.
+#: `-D MOJOLEARN_CAGRA_FAST_IVFG_OFF` restores the exact graph. EXACTD is
+#: the only IVFG graph tile (`cg_ivfg_kernel`).
+# TOMBSTONE: MOJOLEARN_CAGRA_FAST_IVFG_EXACTD_OFF (old path, superseded by the FAST+Apple default) deleted 2026-11-15 by lane/expdel-01-cluster; code recoverable at 71c8454b4f.
+# Restore: git apply experiments/removed/MOJOLEARN_CAGRA_FAST_IVFG_EXACTD_OFF.patch; record in docs/TOMBSTONES.md.
 comptime CAGRA_FAST_IVFG = ANN_FAST_APPLE and not is_defined["MOJOLEARN_CAGRA_FAST_IVFG_OFF"]()
 comptime CAGRA_FAST_IVFG_PROBES = 16
-comptime CAGRA_FAST_IVFG_EXACTD = CAGRA_FAST_IVFG and not is_defined["MOJOLEARN_CAGRA_FAST_IVFG_EXACTD_OFF"]()
 
 #: lane/apple-fast-w2-cagra (2026-10-04): IVFG (with EXACTD) for rows of 64
 #: features or fewer too. Cause: CAGRA taxi (400,000 x 11) still builds the

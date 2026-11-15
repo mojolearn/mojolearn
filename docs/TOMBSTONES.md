@@ -682,6 +682,7 @@ Deletions reversed by new evidence. The code is back on main; the section and th
 | [LABELS_NATIVE_API_V1_V2: the labels_native_api_v1 / v2 provider publications (native entries)](#dead-native-entries-labels-provider-v1-and-v2-2026-11-12) | Labels (base GPU and core host bindings) | removed (dead native entries: no live caller) | 2026-11-12 | [LABELS_NATIVE_API_V1_V2.patch](../experiments/removed/LABELS_NATIVE_API_V1_V2.patch) |
 | [`MOJOLEARN_ANN_FAST_KNN_BIGD_OFF`](#mojolearn_ann_fast_knn_bigd_off-old-path-deleted-2026-11-15) | ANN (k-NN graph for CAGRA build / t-SNE, FAST Apple) | removed (old path; FAST+Apple default KEPT 8d43ec357) | 2026-11-15 | [MOJOLEARN_ANN_FAST_KNN_BIGD_OFF.patch](../experiments/removed/MOJOLEARN_ANN_FAST_KNN_BIGD_OFF.patch) |
 | [`MOJOLEARN_IVFPQ_FAST_DEVICE_CODEBOOKS_OFF`](#mojolearn_ivfpq_fast_device_codebooks_off-old-path-deleted-2026-11-15) | ANN (IVF-PQ build codebooks, FAST Apple) | removed (old path; FAST+Apple default KEPT 8d43ec357) | 2026-11-15 | [MOJOLEARN_IVFPQ_FAST_DEVICE_CODEBOOKS_OFF.patch](../experiments/removed/MOJOLEARN_IVFPQ_FAST_DEVICE_CODEBOOKS_OFF.patch) |
+| [`MOJOLEARN_CAGRA_FAST_IVFG_EXACTD_OFF`](#mojolearn_cagra_fast_ivfg_exactd_off-old-path-deleted-2026-11-15) | ANN (CAGRA IVFG graph tile, FAST Apple) | removed (old path; FAST+Apple default KEPT 3852df59b) | 2026-11-15 | [MOJOLEARN_CAGRA_FAST_IVFG_EXACTD_OFF.patch](../experiments/removed/MOJOLEARN_CAGRA_FAST_IVFG_EXACTD_OFF.patch) |
 
 ## Trees
 
@@ -5918,4 +5919,12 @@ replacement computes the same values in the same order (see the bit notes below)
 - **Verdict**: the device codebooks won (EXPERIMENTS.md `IVFPQ_FAST_DEVICE_CODEBOOKS`, KEPT 8d43ec357): M3 istella IVF-PQ 6,049 -> 2,503 ms, IVF-refine 6,032 -> 2,507, IVF-filter 6,050 -> 2,517, recall up. No bit change on any column.
 - **Deleted by**: lane/expdel-01-cluster (expdel-01-cluster, docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md); code recoverable at `577b878c96`.
 - **Restore**: `git apply experiments/removed/MOJOLEARN_IVFPQ_FAST_DEVICE_CODEBOOKS_OFF.patch`, then delete the `MOJOLEARN_IVFPQ_FAST_DEVICE_CODEBOOKS_OFF` refusal in `core/experiment_guards_cluster.mojo`.
+- **Records**: refusal in `core/experiment_guards_cluster.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel-01-cluster section).
+
+## MOJOLEARN_CAGRA_FAST_IVFG_EXACTD_OFF: old path deleted (2026-11-15)
+
+- **What it was**: the FAST+Apple rollback of the CAGRA IVFG graph tile to the expanded form norms - 2 dot (`x_ann/fast_env.mojo` CAGRA_FAST_IVFG_EXACTD). Deleted with it: the `EXACTD` parameter of `cg_ivfg_kernel` / `cg_ivfg_enqueue` (`x_ann/cagra_fast_knn.mojo`; the kernel always takes the difference-form tile), the kernel's `xn` argument and the `xsn` row-norm buffer plus its `_norms` launch, which only the expanded form read. `_dt_tile`'s expanded form stays (`cg_dot_knn_kernel` uses it for the Lloyd and probe k-NN).
+- **Verdict**: EXACTD won as part of the IVFG + EXACTD + SEEDS + ITERS bundle (EXPERIMENTS.md, KEPT 3852df59b): M3 one run per arm, CAGRA istella 21,239 -> 1,254.3 ms, recall .9838 -> .9972; the expanded form alone lost recall (.9595 at 16 probes, .9597 at 32: float32 cancellation on Istella's wide-range features). FAST Apple only; no bit change on any column (the default always took EXACTD).
+- **Deleted by**: lane/expdel-01-cluster (expdel-01-cluster, docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md); code recoverable at `71c8454b4f`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_CAGRA_FAST_IVFG_EXACTD_OFF.patch`, then delete the `MOJOLEARN_CAGRA_FAST_IVFG_EXACTD_OFF` refusal in `core/experiment_guards_cluster.mojo`.
 - **Records**: refusal in `core/experiment_guards_cluster.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel-01-cluster section).
