@@ -25,7 +25,6 @@ from std.math import fma  # only a sabotage arm (seam 5709) spells the fused for
 from std.memory import bitcast
 from std.sys.compile import is_defined
 from core.philox import philox4x32_10
-from checks.rtf_seam import rtf_mul_add
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL, ftz, identical_div, identical_mul, identical_exp, identical_log, identical_rsqrt, identical_sqrt
 from gemm.contract import GEMM_NUMERICAL_PROFILE
 # Launch-word layouts and shape rules (re-exported; see x_cnn/shape_words.mojo).
