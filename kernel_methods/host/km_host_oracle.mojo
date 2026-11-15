@@ -212,10 +212,11 @@ def kmh_validate_kernel(
 #: fam2-kernel-gp (2026-10-04): the host column of
 #: `kernel_methods/checks/kernel_matrix.mojo::KM_IDN_RBF_CELL` (a candidate
 #: arm, OFF by default), the same defines and the same feature bound.
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch, no A/B recorded beside the defaults) deleted 2026-11-15 by lane/expdel2-19-kernel (non-owner; owner expdel2-37-series) in this file; code recoverable at d55d80a7d4.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-19-kernel.patch; record in docs/TOMBSTONES.md.
 comptime KMH_RBF_CELL = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     and is_defined["MOJOLEARN_IDN_KM_RBF_CELL"]()
-    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 )
 comptime KMH_RBF_CELL_MAX_D = 16 if is_defined["MOJOLEARN_IDN_KM_RBF_CELL_D16"]() else 64
 
@@ -223,7 +224,7 @@ comptime KMH_RBF_CELL_MAX_D = 16 if is_defined["MOJOLEARN_IDN_KM_RBF_CELL_D16"](
 #: `kernel_methods/checks/kernel_matrix.mojo::KM_IDN_DOT_CELL` (ON by
 #: default), the same defines and the same feature bound.
 comptime KMH_DOT_CELL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
-    is_defined["MOJOLEARN_IDN_KM_DOT_CELL_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+    is_defined["MOJOLEARN_IDN_KM_DOT_CELL_OFF"]()
 )
 comptime KMH_DOT_CELL_MAX_D = 16 if is_defined["MOJOLEARN_IDN_KM_DOT_CELL_D16"]() else 64
 
@@ -571,14 +572,14 @@ struct KmhNystroem(Movable):
 #: fam-kernel-gp (2026-10-04): the host column of
 #: `kernel_methods/estimator.mojo::NYS_IDN_RR_EIGH`, the same two defines.
 comptime KMH_NYS_RR = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
-    is_defined["MOJOLEARN_IDN_NYS_RR_EIGH_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+    is_defined["MOJOLEARN_IDN_NYS_RR_EIGH_OFF"]()
 )
 
 #: fam-kernel-gp (2026-10-04): the host column of
 #: `kernel_methods/estimator.mojo::RBF_IDN_FUSED`, the same two defines and
 #: the same feature bound (`kernel_methods/rbf_fused.mojo::RBF_FUSED_MAX_D`).
 comptime KMH_RBF_FUSED = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
-    is_defined["MOJOLEARN_IDN_RBF_FUSED_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+    is_defined["MOJOLEARN_IDN_RBF_FUSED_OFF"]()
 )
 comptime KMH_RBF_FUSED_MAX_D = 64
 

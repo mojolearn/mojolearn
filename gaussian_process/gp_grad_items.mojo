@@ -29,8 +29,10 @@ comptime _P = MutPointer[Float32, MutAnyOrigin]
 #: change together. Shorter chains: the rounding error bound only shrinks.
 #: CANDIDATE ARM (default OFF): `-D MOJOLEARN_IDN_GP_GRAD_ROWS4` takes 4-row
 #: blocks instead of 1, for the orchestrator to time against the default.
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch, no A/B recorded beside the defaults) deleted 2026-11-15 by lane/expdel2-19-kernel (non-owner; owner expdel2-37-series) in this file; code recoverable at d55d80a7d4.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-19-kernel.patch; record in docs/TOMBSTONES.md.
 comptime GP_IDN_GRAD_ROWFOLD = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
-    is_defined["MOJOLEARN_IDN_GP_GRAD_ROWFOLD_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+    is_defined["MOJOLEARN_IDN_GP_GRAD_ROWFOLD_OFF"]()
 )
 comptime _GP_GRAD_ROWS_ON = 4 if is_defined["MOJOLEARN_IDN_GP_GRAD_ROWS4"]() else 1
 comptime GP_GRAD_ROWS = _GP_GRAD_ROWS_ON if GP_IDN_GRAD_ROWFOLD else 16

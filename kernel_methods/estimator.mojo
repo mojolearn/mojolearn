@@ -191,8 +191,10 @@ comptime RBF_FUSED = (
 #: GEMM profile's): NVIDIA, AMD and Apple run the same kernel and the host
 #: column runs the same chain. A chain of at most 64 fused multiply-adds is
 #: as accurate as the GEMM's fold at that length.
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch, no A/B recorded beside the defaults) deleted 2026-11-15 by lane/expdel2-19-kernel (non-owner; owner expdel2-37-series) in this file; code recoverable at d55d80a7d4.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-19-kernel.patch; record in docs/TOMBSTONES.md.
 comptime RBF_IDN_FUSED = _CTX_MODE == _CTX_IDENTICAL and not (
-    is_defined["MOJOLEARN_IDN_RBF_FUSED_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+    is_defined["MOJOLEARN_IDN_RBF_FUSED_OFF"]()
 )
 
 
@@ -280,7 +282,7 @@ def _upload(
 #: transforms' X is the one large operand (n_rows x n_features), and it
 #: crossed host memory three times on one thread before the first launch.
 comptime KM_IDN_PTR_IN = _CTX_MODE == _CTX_IDENTICAL and not (
-    is_defined["MOJOLEARN_IDN_KM_PTR_IN_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+    is_defined["MOJOLEARN_IDN_KM_PTR_IN_OFF"]()
 )
 # TOMBSTONE: MOJOLEARN_KM_FAST_PTR_IN_OFF (old path, superseded by the FAST+Apple default) deleted 2026-11-15 by lane/expdel-06-base-cluster-kernel; code recoverable at 484c3ee4ab.
 # Restore: git apply experiments/removed/MOJOLEARN_KM_FAST_PTR_IN_OFF.patch; record in docs/TOMBSTONES.md.
@@ -291,7 +293,7 @@ comptime KM_FAST_PTR_IN = KM_IDN_PTR_IN or (_CTX_MODE == _NUMERIC_FAST and TARGE
 #: `_download` fills a list of the final length 8 floats a step instead of n
 #: appends into a growing one. The same words: no bit moves.
 comptime KM_IDN_BULK_DOWNLOAD = _CTX_MODE == _CTX_IDENTICAL and not (
-    is_defined["MOJOLEARN_IDN_KM_BULK_DOWNLOAD_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+    is_defined["MOJOLEARN_IDN_KM_BULK_DOWNLOAD_OFF"]()
 )
 
 
@@ -456,7 +458,6 @@ def krr_scale_rows(v: List[Float32], sw: List[Float32], n: Int, t: Int) -> List[
 #: IDENTICAL builds only.
 comptime KRR_IDN_DEV_SCALE = not (
     is_defined["MOJOLEARN_IDN_KRR_DEV_SCALE_OFF"]()
-    or (_CTX_MODE == _CTX_IDENTICAL and is_defined["MOJOLEARN_IDN_ALL_OFF"]())
 )
 
 #: fam2-kernel-gp (2026-10-04), IDENTICAL, ON by default
@@ -476,7 +477,6 @@ comptime KRR_IDN_DEV_SCALE = not (
 #: default scheduling as the list route: FAST bits do not move either.
 comptime KRR_IDN_PTR_IN = not (
     is_defined["MOJOLEARN_IDN_KRR_PTR_IN_OFF"]()
-    or (_CTX_MODE == _CTX_IDENTICAL and is_defined["MOJOLEARN_IDN_ALL_OFF"]())
 )
 
 #: SCHEDULING: one thread per target cell.
@@ -1452,7 +1452,7 @@ def _nystroem_rr_eigh(
 #: host_eigh_rr`, the same rounds, test and sweep budget (RR_EIGH_SWEEPS).
 #: Not converged in the budget raises on every column, as the cyclic one does.
 comptime NYS_IDN_RR_EIGH = _CTX_MODE == _CTX_IDENTICAL and not (
-    is_defined["MOJOLEARN_IDN_NYS_RR_EIGH_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+    is_defined["MOJOLEARN_IDN_NYS_RR_EIGH_OFF"]()
 )
 #: Rounds between waits on Apple (x_decomp/device.mojo `PJ_SYNC_ROUNDS`).
 comptime NYS_IDN_RR_SYNC_ROUNDS = 512
@@ -1915,7 +1915,7 @@ def _nystroem_device_eigh(
 #: column (`km_host_oracle.mojo`) is unchanged. A sabotage arm keeps the
 #: host epilogue (its arms live there).
 comptime NYS_IDN_DEV_ORDER = _CTX_MODE == _CTX_IDENTICAL and not (
-    is_defined["MOJOLEARN_IDN_NYS_DEV_ORDER_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+    is_defined["MOJOLEARN_IDN_NYS_DEV_ORDER_OFF"]()
 )
 comptime NYS_ORDER_TPB = 256
 
@@ -2063,7 +2063,7 @@ def nystroem_fit_host(
 #: (`read_f32`), a serial host finiteness walk over n x d and a host gather.
 #: The same component words reach the same kernels: no bit moves.
 comptime NYS_IDN_FIT_PTR_IN = _CTX_MODE == _CTX_IDENTICAL and not (
-    is_defined["MOJOLEARN_IDN_NYS_FIT_PTR_IN_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+    is_defined["MOJOLEARN_IDN_NYS_FIT_PTR_IN_OFF"]()
 )
 
 #: fam2-kernel-gp (2026-10-04), IDENTICAL, ON by default
@@ -2075,7 +2075,7 @@ comptime NYS_IDN_FIT_PTR_IN = _CTX_MODE == _CTX_IDENTICAL and not (
 #: order: the same rows in the same order, no bit moves. Applies on the
 #: pointer route (NYS_IDN_FIT_PTR_IN), where X is resident.
 comptime NYS_IDN_DEV_BASIS = _CTX_MODE == _CTX_IDENTICAL and not (
-    is_defined["MOJOLEARN_IDN_NYS_DEV_BASIS_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+    is_defined["MOJOLEARN_IDN_NYS_DEV_BASIS_OFF"]()
 )
 
 

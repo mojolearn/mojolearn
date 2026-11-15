@@ -535,8 +535,10 @@ def _upload(
 #: fills a list of the final length 8 floats a step. The fit reads the n x n
 #: factor back through it (GPR and GPC), which was n^2 appends into a growing
 #: list on one host thread. The same words: no bit moves.
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch, no A/B recorded beside the defaults) deleted 2026-11-15 by lane/expdel2-19-kernel (non-owner; owner expdel2-37-series) in this file; code recoverable at d55d80a7d4.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-19-kernel.patch; record in docs/TOMBSTONES.md.
 comptime GP_IDN_BULK_DOWNLOAD = _CTX_MODE == _CTX_IDENTICAL and not (
-    is_defined["MOJOLEARN_IDN_GP_BULK_DOWNLOAD_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+    is_defined["MOJOLEARN_IDN_GP_BULK_DOWNLOAD_OFF"]()
 )
 
 #: fam-kernel-gp (2026-10-04), IDENTICAL, ON by default
@@ -545,7 +547,7 @@ comptime GP_IDN_BULK_DOWNLOAD = _CTX_MODE == _CTX_IDENTICAL and not (
 #: `return_std` asks for the variance; the mean reads K_trans and the dual
 #: alone. No kernel reads the factor on the mean-only path: no bit moves.
 comptime GP_IDN_PREDICT_LAZY_L = _CTX_MODE == _CTX_IDENTICAL and not (
-    is_defined["MOJOLEARN_IDN_GP_PREDICT_LAZY_L_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+    is_defined["MOJOLEARN_IDN_GP_PREDICT_LAZY_L_OFF"]()
 )
 
 

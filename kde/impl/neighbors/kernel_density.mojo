@@ -2157,7 +2157,7 @@ def kde_score_samples_tiled_identical(
     # layout-aware), so a q_tpb / chunk_rows_in schedule or the layout
     # never moves a bit and the pass agrees with the entry and the host.
     # `chunk_rows_in` stays the max-pass grid only. With
-    # MOJOLEARN_IDN_KDE_CHUNK_LSE_OFF (or MOJOLEARN_IDN_ALL_OFF) the serial
+    # MOJOLEARN_IDN_KDE_CHUNK_LSE_OFF the serial
     # fold below runs, the staged pass's and the host's serial fold.
     if kde_chunk_lse_metric_applies(metric):
         var lse_rows = kde_chunk_rows_for(n_train)
@@ -2607,7 +2607,7 @@ def kde_score_samples_fused_identical(
     # serial per-query chain, and the entry's, the staged pass's and the
     # host column's bits. `k_cells` / `sum_tpb` / `chunk_rows_in` schedule
     # only the serial-fold arm and are validated above either way. With
-    # MOJOLEARN_IDN_KDE_CHUNK_LSE_OFF (or MOJOLEARN_IDN_ALL_OFF) the fused
+    # MOJOLEARN_IDN_KDE_CHUNK_LSE_OFF the fused
     # serial fold below runs.
     if kde_chunk_lse_metric_applies(metric):
         kde_score_samples_chunk_lse_identical(
@@ -3459,11 +3459,13 @@ def kde2_score_samples_fast_apple(
 # lane/review-fixes), so a trace recording never changes the bits. The
 # explicit tiled matrix pass folds its matrix in the same chunks and the
 # opt-in fused pass (`fused_only`) takes this chunked pass (box-run-2-kde),
-# so every route gives one set of bits. `-D MOJOLEARN_IDN_KDE_CHUNK_LSE_OFF` (or MOJOLEARN_IDN_ALL_OFF)
+# so every route gives one set of bits. `-D MOJOLEARN_IDN_KDE_CHUNK_LSE_OFF`
 # restores the tiled matrix pass and the host's serial row fold.
 # ===========================================================================
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch, no A/B recorded beside the defaults) deleted 2026-11-15 by lane/expdel2-19-kernel (non-owner; owner expdel2-37-series) in this file; code recoverable at d55d80a7d4.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-19-kernel.patch; record in docs/TOMBSTONES.md.
 comptime KDE_IDN_CHUNK_LSE = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
-    is_defined["MOJOLEARN_IDN_KDE_CHUNK_LSE_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+    is_defined["MOJOLEARN_IDN_KDE_CHUNK_LSE_OFF"]()
 )
 
 

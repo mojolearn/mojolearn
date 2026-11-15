@@ -4,8 +4,8 @@
 predictive variance, `sum_i v[i][t]^2` over the training axis, shared by
 the device kernels and every host column.
 
-IDENTICAL, ON by default (`-D MOJOLEARN_IDN_GP_VAR_SEG_OFF` or
-`MOJOLEARN_IDN_ALL_OFF` restores the one-thread serial chain on every
+IDENTICAL, ON by default (`-D MOJOLEARN_IDN_GP_VAR_SEG_OFF` restores
+ the one-thread serial chain on every
 column). The training axis is cut into GP_VAR_SEGS contiguous segments of
 `ceil(n_train / GP_VAR_SEGS)` rows; each segment is one ascending chain
 `acc = ftz(identical_mul_add(vv, vv, acc))` from +0.0, and the eight partials
@@ -36,8 +36,10 @@ from checks.numerics import (
     identical_mul_add,
 )
 
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch, no A/B recorded beside the defaults) deleted 2026-11-15 by lane/expdel2-19-kernel (non-owner; owner expdel2-37-series) in this file; code recoverable at d55d80a7d4.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-19-kernel.patch; record in docs/TOMBSTONES.md.
 comptime GP_IDN_VAR_SEG = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
-    is_defined["MOJOLEARN_IDN_GP_VAR_SEG_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+    is_defined["MOJOLEARN_IDN_GP_VAR_SEG_OFF"]()
 )
 comptime GP_VAR_SEGS = 8
 comptime GP_VAR_PTS = 32

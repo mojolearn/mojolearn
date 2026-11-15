@@ -457,7 +457,7 @@ def laplacian_epilogue_kernel(
 #: fam2-kernel-gp (2026-10-04), IDENTICAL, CANDIDATE ARM, OFF by default
 #: (`-D MOJOLEARN_IDN_KM_RBF_CELL` turns it on in the device binding AND in
 #: the host column, `km_host_oracle.mojo::KMH_RBF_CELL` reads the same
-#: defines; `MOJOLEARN_IDN_ALL_OFF` turns it off): the RBF kernel matrix at
+#: defines): the RBF kernel matrix at
 #: k <= KM_RBF_CELL_MAX_D features is ONE launch, one thread per cell, the
 #: squared distance as one chain over the features ascending of
 #: `(x - y)^2` (`identical_mul_add`) and the exponential in the same thread,
@@ -470,10 +470,11 @@ def laplacian_epilogue_kernel(
 #: computes the upper triangle and mirrors it. `-D
 #: MOJOLEARN_IDN_KM_RBF_CELL_D16` lowers the feature bound to 16 on both
 #: columns, for timing the crossover against the GEMM.
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch, no A/B recorded beside the defaults) deleted 2026-11-15 by lane/expdel2-19-kernel (non-owner; owner expdel2-37-series) in this file; code recoverable at d55d80a7d4.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-19-kernel.patch; record in docs/TOMBSTONES.md.
 comptime KM_IDN_RBF_CELL = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     and is_defined["MOJOLEARN_IDN_KM_RBF_CELL"]()
-    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 )
 comptime KM_RBF_CELL_MAX_D = 16 if is_defined["MOJOLEARN_IDN_KM_RBF_CELL_D16"]() else 64
 
@@ -514,7 +515,7 @@ def km_rbf_cell_kernel(
 
 
 #: fix-kg1-kernel (2026-10-04, audit B11), IDENTICAL, ON by default
-#: (`-D MOJOLEARN_IDN_KM_DOT_CELL_OFF` or `MOJOLEARN_IDN_ALL_OFF` restores the
+#: (`-D MOJOLEARN_IDN_KM_DOT_CELL_OFF` restores the
 #: GEMM + epilogue route; `km_host_oracle.mojo::KMH_DOT_CELL` and
 #: `km_oracle.mojo` read the same defines): the POLYNOMIAL and SIGMOID kernel
 #: matrices at k <= KM_DOT_CELL_MAX_D features are ONE launch, one thread per
@@ -528,7 +529,7 @@ def km_rbf_cell_kernel(
 #: upper triangle and mirrors it. `-D MOJOLEARN_IDN_KM_DOT_CELL_D16` lowers
 #: the bound to 16 on every column, for timing the crossover.
 comptime KM_IDN_DOT_CELL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
-    is_defined["MOJOLEARN_IDN_KM_DOT_CELL_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+    is_defined["MOJOLEARN_IDN_KM_DOT_CELL_OFF"]()
 )
 comptime KM_DOT_CELL_MAX_D = 16 if is_defined["MOJOLEARN_IDN_KM_DOT_CELL_D16"]() else 64
 
@@ -584,7 +585,7 @@ def km_dot_cell_kernel(
 
 
 #: fix-kg1-kernel (2026-10-04, audit B12), IDENTICAL, ON by default
-#: (`-D MOJOLEARN_IDN_KM_LAP_CELL_OFF` or `MOJOLEARN_IDN_ALL_OFF` restores the
+#: (`-D MOJOLEARN_IDN_KM_LAP_CELL_OFF` restores the
 #: two launches): the Laplacian kernel matrix (KernelRidge fit/predict,
 #: Nystroem basis and transform cross kernel) as ONE launch, the L1 chain of
 #: `kde pairwise_unexpanded_kernel` (`l1_core`, ascending) and the line of
@@ -594,7 +595,7 @@ def km_dot_cell_kernel(
 #: abs(x - y) is the same word as abs(y - x), so a self-kernel computes the
 #: upper triangle and mirrors it.
 comptime KM_IDN_LAP_CELL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
-    is_defined["MOJOLEARN_IDN_KM_LAP_CELL_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+    is_defined["MOJOLEARN_IDN_KM_LAP_CELL_OFF"]()
 )
 
 
