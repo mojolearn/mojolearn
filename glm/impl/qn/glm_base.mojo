@@ -473,15 +473,12 @@ def qn_block_fold_kernel(
 # pinned halving tree. The epilogues (cuBLAS's alpha/beta, the bias
 # `sum * (1 / N)`, the loss store) are unchanged. The words differ from the
 # 256-chain order and are the same on NVIDIA, AMD, Apple and the host column
-# (`glm/host/qn_oracle.mojo::host_qnt_*`). `-D MOJOLEARN_QN_TILED_OFF=1`
-# restores the 256-chain kernels (the A/B define; pass it to the host build
-# too).
+# (`glm/host/qn_oracle.mojo::host_qnt_*`).
 # ---------------------------------------------------------------------------
 
-comptime QN_TILED = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not is_defined["MOJOLEARN_QN_TILED_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_QN_TILED_OFF (old path; EXP:2203 record read, the default is the kept path) deleted 2026-11-15 by lane/expdel2-20-linear; code recoverable at da95043b31.
+# Restore: git apply experiments/removed/MOJOLEARN_QN_TILED_OFF.patch; record in docs/TOMBSTONES.md.
+comptime QN_TILED = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 comptime QNT_ROWS = 256
 comptime QNT_TPB = 256
 

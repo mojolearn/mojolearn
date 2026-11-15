@@ -121,7 +121,7 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 from core.column_stats import STATS_TPB
 from core.identity_trace import IdentityTrace, first_divergence
 from glm.impl.qn.glm_base import GLMDims, GLMWithData
-from glm.host.qn_oracle import HOST_QN_TILED, host_qnt_sum, host_qnt_xty
+from glm.host.qn_oracle import host_qnt_sum, host_qnt_xty
 from glm.impl.qn.qn import qn_decision_function, qn_fit_x
 from glm.impl.qn.qn_util import OPT_MAX_ITERS_REACHED, OPT_SUCCESS
 from glm.impl.linear_model.qn import (
@@ -483,22 +483,9 @@ def check_logistic_refuses_by_name() raises:
 
 def _host_halving_sum(terms: List[Float32], n: Int) -> Float32:
     # QN_TILED (lane/gap-linear-nv): the evaluation's sums are tiled
-    comptime if HOST_QN_TILED:
-        return host_qnt_sum(terms, n)
-    var red = List[Float32]()
-    for t in range(STATS_TPB):
-        var acc = Float32(0.0)
-        var i = t
-        while i < n:
-            acc = ftz(acc + terms[i])
-            i += STATS_TPB
-        red.append(acc)
-    var step = STATS_TPB // 2
-    while step > 0:
-        for t in range(step):
-            red[t] = red[t] + red[t + step]
-        step //= 2
-    return ftz(red[0])
+    # TOMBSTONE: MOJOLEARN_QN_TILED_OFF (old path; EXP:2203 record read) deleted 2026-11-15 by lane/expdel2-20-linear; code recoverable at da95043b31.
+    # Restore: git apply experiments/removed/MOJOLEARN_QN_TILED_OFF.patch; record in docs/TOMBSTONES.md.
+    return host_qnt_sum(terms, n)
 
 
 def _host_halving_xty(x: List[Float32], y: List[Float32], n: Int, d: Int, col: Int) -> Float32:
