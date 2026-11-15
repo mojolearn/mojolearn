@@ -61,7 +61,7 @@ comptime _ENABLED = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 # chain spelling the row fold does not reproduce.
 # TOMBSTONE: MOJOLEARN_IDN_CE_DENOM_ROWFOLD (opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-32-neural; code recoverable at 311b50e05c.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_CE_DENOM_ROWFOLD.patch
-comptime IDN_CE_DENOM_ROWFOLD = False
+# (Sweep 2026-11-15: the unread IDN_CE_DENOM_ROWFOLD = False removed.)
 # NI36 narrow sub-arm: dA and dW GEMMs run serially on the same queue, so
 # their disjoint scratch lifetimes can share one allocation. No tape alias.
 # L11 (2026-10-07): NI36 (now only this scratch sharing; its tape half is
