@@ -74,6 +74,7 @@ from std.math import isfinite
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from checks.numerics import ftz
+from gbdt.apple_fast_tree_experiments import AFT_N07, AFT_N08
 from checks.soft_f64 import SF64_ZERO, sf64_add, sf64_from_f32
 from std.memory import bitcast, stack_allocation
 from max.gpu.memory import AddressSpace
@@ -97,8 +98,11 @@ from gbdt.targets.kernel.pair_logit_group import (
 
 # TOMBSTONE: MOJOLEARN_AFT_N07 (DELETE-EXPERIMENT, never-run Apple FAST programme card, rule g; non-owner fold) deleted 2026-11-15 by lane/expdel2-44-trees; code recoverable at 373b9aa16d.
 # Restore: git apply experiments/removed/MOJOLEARN_AFT_N07.expdel2-44-trees.patch; record in docs/TOMBSTONES.md.
-#: the explicit-pair route's block (buffer sizing and function-value reductions)
-comptime AFT_PAIR_BLOCK = MSE_BLOCK_SIZE
+# RESTORED 2026-11-15 by lane/restore-apple-fast-trees: opt-in arm back as it was, default off, Apple fast only; default path unchanged.
+# N07 explicit-pair route: four simdgroups per block reduce physical
+# occupancy cost. Buffer sizing and function-value reductions use this
+# exact width. No performance/quality evidence; default OFF.
+comptime AFT_PAIR_BLOCK = 128 if AFT_N07 else MSE_BLOCK_SIZE
 
 
 def pair_blocks(n_pairs: Int) -> Int:
@@ -592,15 +596,21 @@ def pair_logit_row_kernel[estimation: Bool, second_order: Bool](
         var end = Int(ep_offsets.unsafe_load(i + 1))
         # TOMBSTONE: MOJOLEARN_AFT_N08 (DELETE-EXPERIMENT, never-run Apple FAST programme card, rule g; non-owner fold) deleted 2026-11-15 by lane/expdel2-44-trees; code recoverable at 208c366f20.
         # Restore: git apply experiments/removed/MOJOLEARN_AFT_N08.expdel2-44-trees.patch; record in docs/TOMBSTONES.md.
+        # RESTORED 2026-11-15 by lane/restore-apple-fast-trees: opt-in arm back as it was, default off, Apple fast only; default path unchanged.
+        # N08 preserves ascending endpoint order, while making two
+        # independent code/direction/scale loads available per loop. No
+        # performance or quality evidence; the odd final endpoint is kept.
         while k < end:
-            var code = ep_codes.unsafe_load(k)
-            var p = Int(code >> UInt32(1))
-            if (code & UInt32(1)) != UInt32(0):
-                acc_der = acc_der + (-pair_dir.unsafe_load(p))
-            else:
-                acc_der = acc_der + pair_dir.unsafe_load(p)
-            acc_der2 = acc_der2 + pair_scale.unsafe_load(p)
-            k += 1
+            comptime for endpoint_lane in range(2 if AFT_N08 else 1):
+                if k < end:
+                    var code = ep_codes.unsafe_load(k)
+                    var p = Int(code >> UInt32(1))
+                    if (code & UInt32(1)) != UInt32(0):
+                        acc_der = acc_der + (-pair_dir.unsafe_load(p))
+                    else:
+                        acc_der = acc_der + pair_dir.unsafe_load(p)
+                    acc_der2 = acc_der2 + pair_scale.unsafe_load(p)
+                    k += 1
         weight = row_weights.unsafe_load(i)
     var der = ftz(acc_der)
     var der2 = ftz(acc_der2)

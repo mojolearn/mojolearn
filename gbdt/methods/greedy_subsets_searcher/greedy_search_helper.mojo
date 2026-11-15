@@ -186,6 +186,7 @@ from gbdt.methods.greedy_subsets_searcher.kernel.split_points_ridx import (
     launch_reorder_index_only,
 )
 from checks.numerics import PIN_DETERMINISM
+from gbdt.apple_fast_tree_experiments import AFT_N02
 from checks.numerics import NUMERIC_IDENTICAL
 from gbdt.methods.greedy_subsets_searcher.kernel.hist_one_byte import (
     BUILD_MODE as HIST_BUILD_MODE,
@@ -3208,6 +3209,15 @@ def launch_histograms_for_blocks[
         )
         # TOMBSTONE: MOJOLEARN_AFT_N02 (DELETE-EXPERIMENT, never-run Apple FAST programme card, rule g; non-owner) deleted 2026-11-15 by lane/expdel2-42-trees; code recoverable at d3416dee9e.
         # Restore: git apply experiments/removed/MOJOLEARN_AFT_N02.expdel2-42-trees.patch; record in docs/TOMBSTONES.md.
+        # RESTORED 2026-11-15 by lane/restore-apple-fast-trees: opt-in arm back as it was, default off, Apple fast only; default path unchanged.
+        # N02 caller is guarded Apple FAST, non-symmetric only. Halve the
+        # occupancy-derived replicas to reduce duplicated partial histograms
+        # and their fold traffic; every replica keeps its complete row stride.
+        # This can lose parallelism on narrow/deep work. No timing/quality
+        # evidence. Scratch needs cannot exceed the baseline allocation.
+        comptime if AFT_N02:
+            if nonsymmetric_work:
+                replicas = max(1, (replicas + 1) // 2)
         if replicas_override > 0:
             replicas = replicas_override
 

@@ -49,6 +49,7 @@ from checks.kernel_matrix import (
 )
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
 from core.accelerator_target import TARGET_HAS_APPLE_GPU
+from gbdt.apple_fast_tree_experiments import AFT_N02
 
 #: THE ONE TRUTH the driver keys its dispatch on. Comptime, so the
 #: IDENTICAL build folds every consumer away and executes the pre-round
@@ -155,6 +156,15 @@ def qh_replicas(
         rep = work_cap
     # TOMBSTONE: MOJOLEARN_AFT_N02 (DELETE-EXPERIMENT, never-run Apple FAST programme card, rule g; non-owner fold to False) deleted 2026-11-15 by lane/expdel2-43-trees; code recoverable at 2184373a86.
     # Restore: git apply experiments/removed/MOJOLEARN_AFT_N02.expdel2-43-trees.patch; record in docs/TOMBSTONES.md.
+    # RESTORED 2026-11-15 by lane/restore-apple-fast-trees: opt-in arm back as it was, default off, Apple fast only; default path unchanged.
+    # N02 also reaches the Apple-default quantized histogram family, not
+    # only the generic fallback. Halve the occupancy/work-derived replicas
+    # to trade independent row walkers for fewer partial histograms and
+    # less fixed-point atomic contention. Every row remains in the stride;
+    # this changes no feature/bin precision or active-leaf membership.
+    # Source only, default OFF; no performance or quality evidence.
+    comptime if AFT_N02:
+        rep = max(1, (rep + 1) // 2)
     return rep
 
 

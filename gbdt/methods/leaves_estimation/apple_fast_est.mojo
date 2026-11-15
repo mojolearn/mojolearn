@@ -50,6 +50,8 @@ from std.sys.compile import is_defined
 from core.accelerator_target import TARGET_HAS_APPLE_GPU
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, identical_mul_add
+from gbdt.apple_fast_classical import AFCL_T06
+from gbdt.gpu_data.apple_fast_trees_experiments import AFT_G07
 from core.identity_trace import IdentityTrace
 from gbdt.gpu_util.kernel.transform import (
     launch_gather_planes_with_mask_f32,
@@ -141,7 +143,13 @@ comptime EST_APPLE_ANY = (
 #: one block, one thread per leaf (looping past 256 leaves)
 # TOMBSTONE: MOJOLEARN_AFT_G07 (DELETE-EXPERIMENT, never-run Apple FAST programme card, rule g; non-owner fold) deleted 2026-11-15 by lane/expdel2-44-trees; code recoverable at 9f30a1ac0e.
 # Restore: git apply experiments/removed/MOJOLEARN_AFT_G07.expdel2-44-trees.patch; record in docs/TOMBSTONES.md.
-comptime EST_WALK_BLOCK = 256
+# RESTORED 2026-11-15 by lane/restore-apple-fast-trees: opt-in arm back as it was, default off, Apple fast only; default path unchanged.
+# G07: four Apple SIMD groups rather than eight reduce objective partials
+# and traverse every leaf. Shared partition-statistics/fused block contracts
+# remain untouched. Uncompiled/unverified/unmeasured; changed FAST rounding
+# can affect a line-search acceptance boundary, so weighted/multi-iteration
+# quality remains required before any decision.
+comptime EST_WALK_BLOCK = 128 if AFT_G07 else 256
 #: the walker's never-accepted cap, `iteration < 100` (`descent_helpers.cpp:179`)
 comptime EST_WALK_TRY_CAP = 100
 #: their `1e-20f` (`descent_helpers.cpp:87`), the f32 literal
@@ -154,6 +162,11 @@ comptime EST_MIN_LEAF_WEIGHT = Float32(1e-20)
 def _afcl_leaf_stats_sm(sm: Int) -> Int:
     # TOMBSTONE: MOJOLEARN_AFCL_T06 (DELETE-EXPERIMENT, never-run Apple FAST classical card, rule g; non-owner fold) deleted 2026-11-15 by lane/expdel2-44-trees; code recoverable at 7a4e69bdca.
     # Restore: git apply experiments/removed/MOJOLEARN_AFCL_T06.expdel2-44-trees.patch; record in docs/TOMBSTONES.md.
+    # RESTORED 2026-11-15 by lane/restore-apple-fast-trees: opt-in arm back as it was, default off, Apple fast only; default path unchanged.
+    # Scheduling proxy only: halve the partial-grid budget, not the device's
+    # reported hardware. Allocation and both statistic launchers use this.
+    comptime if AFCL_T06:
+        return max(1, (sm + 1) // 2)
     return sm
 
 

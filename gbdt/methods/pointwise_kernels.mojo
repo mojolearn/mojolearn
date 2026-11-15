@@ -186,6 +186,7 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 from std.os import getenv
 from std.memory import bitcast
 from max.gpu import block_dim, block_idx, grid_dim, thread_idx
+from gbdt.gpu_data.apple_fast_trees_experiments import AFT_G01, AFT_G02
 
 from gbdt.gpu_data.grid_policy import (
     POLICY_BINARY,
@@ -193,6 +194,8 @@ from gbdt.gpu_data.grid_policy import (
     POLICY_ONE_BYTE,
 )
 from gbdt.methods.kernel.split_properties_helpers import (
+    AFT_SCAN_LANES,
+    aft_cooperative_scan_kernel,
     PW_PRIVATE_DOC_SLOTS,
     PointwisePartOffsetsHelper,
     estimate_block_per_feature_multiplier,
@@ -327,6 +330,24 @@ def pw_block_multiplier(
         return pinned
     # TOMBSTONE: MOJOLEARN_AFT_G02 (DELETE-EXPERIMENT, never-run Apple FAST programme card, rule g; non-owner fold) deleted 2026-11-15 by lane/expdel2-44-trees; code recoverable at 27d9c12e7b.
     # Restore: git apply experiments/removed/MOJOLEARN_AFT_G02.expdel2-44-trees.patch; record in docs/TOMBSTONES.md.
+    # RESTORED 2026-11-15 by lane/restore-apple-fast-trees: opt-in arm back as it was, default off, Apple fast only; default path unchanged.
+    comptime if AFT_G02:
+        # G02: an occupancy/row-budget alternative, not the rejected fixed
+        # SYM_HIST_MULT retry. Aim for three blocks per compute unit but
+        # stop before a prospective partition chunk has less than four
+        # histogram-block row strides. This prices leaf/fold fragmentation
+        # as well as features and hardware. All rows remain in the kernel's
+        # original multiplier ladder. Uncompiled/unverified/unmeasured.
+        var partitions = max(ny * nz, 1)
+        var resident_groups = max(nx * partitions, 1)
+        var multiplier = 1
+        while (
+            resident_groups * multiplier < max(sm_count, 1) * 3
+            and multiplier < PW_MAX_MULTIPLIER
+            and size // (partitions * multiplier * 2) >= 4 * PW_HIST2_BLOCK
+        ):
+            multiplier *= 2
+        return multiplier
     # TOMBSTONE: MOJOLEARN_SYM_HIST_MULT (DROPPED-noise: symhist-hist-mult istella/taxi noise, old base) deleted 2026-10-09 on
     # lane/owed-deletions-D1 (2x the SM count's worth of histogram blocks); code recoverable at b639a2bd2.
     # Restore: git apply experiments/removed/MOJOLEARN_SYM_HIST_MULT.patch; record in docs/TOMBSTONES.md.
@@ -777,6 +798,16 @@ def scan_pointwise_histograms[
 
     # TOMBSTONE: MOJOLEARN_AFT_G01 (DELETE-EXPERIMENT, never-run Apple FAST programme card, rule g; non-owner fold) deleted 2026-11-15 by lane/expdel2-44-trees; code recoverable at 491a18b9bb.
     # Restore: git apply experiments/removed/MOJOLEARN_AFT_G01.expdel2-44-trees.patch; record in docs/TOMBSTONES.md.
+    # RESTORED 2026-11-15 by lane/restore-apple-fast-trees: opt-in arm back as it was, default off, Apple fast only; default path unchanged.
+    comptime if AFT_G01:
+        ctx.enqueue_function[aft_cooperative_scan_kernel](
+            feature_first_fold_index, feature_folds, feature_one_hot,
+            Int32(hist_line_size), Int32(hist_count), Int32(fold_count),
+            bin_sums.unsafe_offset(scan_offset),
+            grid_dim=(feature_count, ny, nz),
+            block_dim=(AFT_SCAN_LANES, 1, 1),
+        )
+        return
     ctx.enqueue_function[scan_pointwise_histograms_kernel](
         feature_first_fold_index,
         feature_folds,
