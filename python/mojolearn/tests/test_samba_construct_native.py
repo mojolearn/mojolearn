@@ -18,10 +18,15 @@ from mojolearn.tests.test_causal_model_native_loading import _poison
     (["attention"], 16, 13, False),
     (["mamba3", "attention"], 32, 48, False),
 ])
-@pytest.mark.parametrize("lazy", [True, False])
+# Lazy Adam moments are a build constant (lane envgate-train-seq-mamba,
+# 2026-11-15: bindings/samba_construct_native_pack.mojo OPT_LAZY_MOMENTS; the
+# MOJOLEARN_OPT_LAZY_MOMENTS environment arm is gone). The default build runs
+# the lazy side; the eager side (lazy=False) needs its own
+# `-D MOJOLEARN_OPT_LAZY_MOMENTS_OFF` build (owed-pre0867.json
+# "opt-lazy-moments-off").
 def test_native_constructor_preserves_seeded_initialization_and_views(
-        monkeypatch, layers, dm, intermediate, tied, lazy):
-    monkeypatch.setenv("MOJOLEARN_OPT_LAZY_MOMENTS", "1" if lazy else "0")
+        monkeypatch, layers, dm, intermediate, tied):
+    lazy = True
     config = SambaConfig(19, dm, layers, n_heads=2, n_kv_heads=1,
                          intermediate=intermediate, tie_embeddings=tied)
     reference_generator = training.Generator(0xFEDCBA9876543210)
