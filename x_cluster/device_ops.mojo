@@ -596,7 +596,7 @@ def _ap_r_kernel(s: FPtr, a: FPtr, r: FPtr, n: Int32, damping: Float32):
     _ap_r_body(s, a, r, n, damping)
 
 
-# Lane cluster-apple3, FAST, OPT-IN `-D MOJOLEARN_AP_EXACT=1`: `_ap_r_kernel`
+# Lane cluster-apple3: `_ap_r_kernel`
 # with the row's max and second max taken in ONE walk of the row. The keys
 # are distinct integers (the column is their low word), so the two largest
 # of a row are the same two whatever the fold's shape: the same picks, the
@@ -612,10 +612,10 @@ comptime IDN_AP_R_TOP2 = (
         or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
     )
 )
-comptime AP_R_TOP2 = (
-    (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and is_defined["MOJOLEARN_AP_EXACT"]())
-    or IDN_AP_R_TOP2
-)
+# TOMBSTONE: MOJOLEARN_AP_EXACT (SUPERSEDED) deleted 2026-11-15 by lane/expdel-01-cluster; code recoverable at 854fde92db.
+# Restore: git apply experiments/removed/MOJOLEARN_AP_EXACT.patch; record in docs/TOMBSTONES.md.
+# (its FAST opt-in arm of AP_R_TOP2; FAST keeps the two walks)
+comptime AP_R_TOP2 = IDN_AP_R_TOP2
 
 
 @always_inline

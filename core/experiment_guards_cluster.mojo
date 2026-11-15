@@ -98,6 +98,8 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_CAGRA_FAST_IVFG_LOWD_SEEDS4_OFF"](), "removed 2026-11-15 (lane/expdel-01-cluster): CAGRA_FAST_IVFG_LOWD_SEEDS4_OFF (FAST+Apple rollback to the exact low-d graph and 1x seeds) is gone; IVFG at every width with 4x seeds is the FAST+Apple path (cagra taxi build 2,879.2 -> 714.9 ms, recall@10 B >= A); restore: experiments/removed/MOJOLEARN_CAGRA_FAST_IVFG_LOWD_SEEDS4_OFF.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_CAGRA_FAST_IVFG_OFF.patch
     comptime assert not is_defined["MOJOLEARN_CAGRA_FAST_IVFG_OFF"](), "removed 2026-11-15 (lane/expdel-01-cluster): CAGRA_FAST_IVFG_OFF (FAST+Apple rollback to the exact CAGRA build graph) is gone; IVFG is the FAST+Apple build graph (cagra istella 21,239 -> 1,254.3 ms, recall .9972, KEPT 3852df59b); restore: experiments/removed/MOJOLEARN_CAGRA_FAST_IVFG_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_AP_EXACT.patch
+    comptime assert not is_defined["MOJOLEARN_AP_EXACT"](), "removed 2026-11-15 (lane/expdel-01-cluster): AP_EXACT (FAST opt-in AffinityPropagation steps: radix median, device diagonals, early equality scan, FAST top-2 R walk) was SUPERSEDED: every build takes the steps; the FAST top-2 arm is gone; restore: experiments/removed/MOJOLEARN_AP_EXACT.patch"
     return True
 
 
