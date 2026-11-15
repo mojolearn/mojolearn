@@ -201,7 +201,6 @@ from mamba.checks.mamba_fixture import (
 #: lane afn-mamba (2026-10-03): Apple FAST experiment switches. Every use
 #: below is a `comptime if` whose other arm is main's spelling unchanged.
 from mamba.impl.modules.afn_defines import (
-    AFN_MAMBA1_FUSE_IN,
     AFN_MAMBA_ARENA,
     AFN_MAMBA_DEVICE_REFUSAL,
     IDN_MAMBA_ALLOC_NOWAIT,
@@ -215,7 +214,6 @@ from mamba.checks.mamba_rms_fold import (
     mamba_rms_tree,
 )
 from mamba.impl.modules.afn_refusal import AfnRefusalBatch
-from mamba.impl.modeling.afn_mamba1_fused import afn_m1_conv_token, afn_m1_split_a
 #: lane w2-epi (2026-10-03): in_proj/out_proj on the FAST matrix-unit kernel,
 #: the residual folded into out_proj. Every use is a `comptime if` whose
 #: other arm is main's spelling unchanged.
@@ -401,7 +399,8 @@ comptime BLOCK_ANY_SABOTAGE = (
 # 12.860 ms, AMD MI325X 9.934 -> 9.922 ms, avg 1.52x) deleted 2026-10-11 by lane/grid-act-16; code recoverable at b056f35e0.
 # Only the IDENTICAL arm (NI46) is gone: the fused kernels stay for the Apple FAST AFN_MAMBA1_FUSE_IN route.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_MAMBA1_ELEMENTWISE_FUSED.patch; record in docs/TOMBSTONES.md.
-comptime MAMBA1_ELEMENTWISE_FUSED = AFN_MAMBA1_FUSE_IN
+# TOMBSTONE: MOJOLEARN_AFN_MAMBA1_FUSE_IN (neural MERGED-UNMEASURED FAST+Apple arm: the fused conv/split launches) deleted 2026-11-15 by lane/expdel2-27-neural; code recoverable at 3ae6bf9245.
+# Restore: git apply experiments/removed/MOJOLEARN_AFN_MAMBA1_FUSE_IN.patch
 
 
 def mamba_block_sabotage_name() -> String:
@@ -1859,53 +1858,33 @@ def mamba_mixer_forward(
     )
 
     # ---- A = -exp(A_log) (:373). S15.
-    #      lane afn-mamba (MOJOLEARN_AFN_MAMBA1_FUSE_IN): computed in the
-    #      split launch below instead (same arithmetic, one launch fewer);
-    #      `A.out` is then recorded there.
-    comptime if not MAMBA1_ELEMENTWISE_FUSED:
-        ctx.enqueue_function[mamba_a_from_a_log_kernel](
-            stages.a_out.unsafe_ptr(),
-            w.a_log.unsafe_ptr(),
-            Int32(di * D_STATE),
-            grid_dim=(_grid(di * D_STATE), 1, 1),
-            block_dim=(MAMBA_TPB, 1, 1),
-        )
-        _m1_stage_sync(ctx, trace)
-        trace.record_device[DType.float32](
-            ctx, prefix + ".A.out", stages.a_out, di * D_STATE
-        )
+    ctx.enqueue_function[mamba_a_from_a_log_kernel](
+        stages.a_out.unsafe_ptr(),
+        w.a_log.unsafe_ptr(),
+        Int32(di * D_STATE),
+        grid_dim=(_grid(di * D_STATE), 1, 1),
+        block_dim=(MAMBA_TPB, 1, 1),
+    )
+    _m1_stage_sync(ctx, trace)
+    trace.record_device[DType.float32](
+        ctx, prefix + ".A.out", stages.a_out, di * D_STATE
+    )
 
     # ---- chunk(2, dim=1) (:396): DEVIATION 730, a column offset, no copy.
     # ---- causal_conv1d_fn (:410-416) + the window update (:415). S13.
-    comptime if MAMBA1_ELEMENTWISE_FUSED:
-        # ONE token-parallel launch: conv + SiLU + the window update.
-        afn_m1_conv_token(
-            ctx,
-            stages.conv_out,
-            stages.silu_out,
-            stages.conv_win,
-            stages.in_proj,
-            w.conv_w,
-            w.conv_b,
-            state.conv_win,
-            b,
-            l,
-            di,
-        )
-    else:
-        causal_conv1d_fn(
-            ctx,
-            stages.conv_out,
-            stages.silu_out,
-            stages.conv_win,
-            stages.in_proj,
-            w.conv_w,
-            w.conv_b,
-            state.conv_win,
-            b,
-            l,
-            di,
-        )
+    causal_conv1d_fn(
+        ctx,
+        stages.conv_out,
+        stages.silu_out,
+        stages.conv_win,
+        stages.in_proj,
+        w.conv_w,
+        w.conv_b,
+        state.conv_win,
+        b,
+        l,
+        di,
+    )
     _m1_stage_sync(ctx, trace)
     trace.record_device[DType.float32](
         ctx, prefix + ".conv.out", stages.conv_out, m * di
@@ -1932,38 +1911,18 @@ def mamba_mixer_forward(
     )
 
     # ---- torch.split (:437-441). DEVIATION 728: materialized. Copies.
-    comptime if MAMBA1_ELEMENTWISE_FUSED:
-        # ONE launch: the split per element and A = -exp(A_log) (S15).
-        afn_m1_split_a(
-            ctx,
-            stages.dt_low,
-            stages.b_mat,
-            stages.c_mat,
-            stages.x_proj,
-            stages.a_out,
-            w.a_log,
-            m,
-            r,
-            xr,
-            di,
-        )
-        _m1_stage_sync(ctx, trace)
-        trace.record_device[DType.float32](
-            ctx, prefix + ".A.out", stages.a_out, di * D_STATE
-        )
-    else:
-        ctx.enqueue_function[split_x_proj_kernel](
-            stages.dt_low.unsafe_ptr(),
-            stages.b_mat.unsafe_ptr(),
-            stages.c_mat.unsafe_ptr(),
-            stages.x_proj.unsafe_ptr(),
-            Int32(m),
-            Int32(r),
-            Int32(xr),
-            grid_dim=(_grid(m), 1, 1),
-            block_dim=(MAMBA_TPB, 1, 1),
-        )
-        _m1_stage_sync(ctx, trace)
+    ctx.enqueue_function[split_x_proj_kernel](
+        stages.dt_low.unsafe_ptr(),
+        stages.b_mat.unsafe_ptr(),
+        stages.c_mat.unsafe_ptr(),
+        stages.x_proj.unsafe_ptr(),
+        Int32(m),
+        Int32(r),
+        Int32(xr),
+        grid_dim=(_grid(m), 1, 1),
+        block_dim=(MAMBA_TPB, 1, 1),
+    )
+    _m1_stage_sync(ctx, trace)
 
     # ---- dt_proj (:443), WITHOUT the bias: their line is
     #      `self.dt_proj.weight @ time_step.transpose(1, 2)`, the weight
