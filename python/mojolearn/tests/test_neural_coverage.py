@@ -171,7 +171,8 @@ def test_causal_lm_counts_refuse_str_and_bool(tmp_path):
 
 
 def test_mamba2_step_refuses_poisoned_arguments_by_name():
-    from mojolearn.tests.test_mamba23_decode_sessions import _mamba2_block, _tokens
+    # The fixtures left test_mamba23_decode_sessions.py in 3fe4f407d6.
+    from mojolearn.tests.test_decode_n_tokens import _mamba2_block, _tokens
     block, dm = _mamba2_block()
     state = block.allocate_state(2)
     token = _tokens(2, 1, dm)
