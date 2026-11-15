@@ -242,10 +242,12 @@ comptime C24_PANEL8 = False
 #   randomized-svd (rsvd_tsqr_ortho route) cells were not measured.
 #   Measured with LINEAR_GRAM_SOLVE off; with it on, OLS reaches TSQR only
 #   when the Gram is not trusted.
-# `-D MOJOLEARN_CLASSICAL_C24_ROWS2048_OFF` restores 4096-row leaves (the
-# grid's "rows4096" arm). PANEL8 and TREE4 stay independent opt-in arms. The
+# The `_ROWS2048_OFF` rollback to 4096-row leaves (the grid's "rows4096" arm)
+# and the PANEL8 / TREE4 opt-in arms were deleted 2026-11-15. The
 # old opt-in define is refused in core/six_lane_experiment_guards.mojo.
-comptime C24_ROWS2048 = CLASSICAL_IDN and not is_defined["MOJOLEARN_CLASSICAL_C24_ROWS2048_OFF"]()
+# TOMBSTONE: MOJOLEARN_CLASSICAL_C24_ROWS2048_OFF (old path, superseded by the measured IDENTICAL default) deleted 2026-11-15 by lane/expdel2-06-base; code recoverable at b4348c8a12.
+# Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C24_ROWS2048_OFF.patch; record in docs/TOMBSTONES.md.
+comptime C24_ROWS2048 = CLASSICAL_IDN
 # TOMBSTONE: MOJOLEARN_CLASSICAL_C24_TREE4 (measured arm not promoted) deleted 2026-11-15 by lane/expdel2-06-base; code recoverable at ba795517d7.
 # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C24_TREE4.patch; record in docs/TOMBSTONES.md.
 comptime C24_TREE4 = False

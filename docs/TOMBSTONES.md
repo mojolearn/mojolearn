@@ -712,6 +712,7 @@ in the tables after the sections.
 | [`MOJOLEARN_CLASSICAL_C23_MCD`](#mojolearn_classical_c23_mcd-unmeasured-arm-deleted-2026-11-15) | Decomposition (MinCovDet centered Gram row-parallel, IDENTICAL) | removed (opt-in arm; unmeasured opt-in arm) | 2026-11-15 | [MOJOLEARN_CLASSICAL_C23_MCD.patch](../experiments/removed/MOJOLEARN_CLASSICAL_C23_MCD.patch) |
 | [`MOJOLEARN_CLASSICAL_C24_PANEL8`](#mojolearn_classical_c24_panel8-unmeasured-arm-deleted-2026-11-15) | Decomposition (TSQR eight-column panels, IDENTICAL) | removed (opt-in arm; measured arm not promoted) | 2026-11-15 | [MOJOLEARN_CLASSICAL_C24_PANEL8.patch](../experiments/removed/MOJOLEARN_CLASSICAL_C24_PANEL8.patch) |
 | [`MOJOLEARN_CLASSICAL_C24_TREE4`](#mojolearn_classical_c24_tree4-unmeasured-arm-deleted-2026-11-15) | Decomposition (TSQR / sliced-QR four-way merge tree, IDENTICAL) | removed (opt-in arm; measured arm not promoted) | 2026-11-15 | [MOJOLEARN_CLASSICAL_C24_TREE4.patch](../experiments/removed/MOJOLEARN_CLASSICAL_C24_TREE4.patch) |
+| [`MOJOLEARN_CLASSICAL_C24_ROWS2048_OFF`](#mojolearn_classical_c24_rows2048_off-old-path-deleted-2026-11-15) | Decomposition (TSQR 4096-row leaves, IDENTICAL old path) | removed (old path; IDENTICAL default kept) | 2026-11-15 | [MOJOLEARN_CLASSICAL_C24_ROWS2048_OFF.patch](../experiments/removed/MOJOLEARN_CLASSICAL_C24_ROWS2048_OFF.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -6880,3 +6881,11 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md (section expdel-02-
 - **Deleted by**: lane/expdel2-06-base (expdel2-06-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `ba795517d7`.
 - **Restore**: `git apply experiments/removed/MOJOLEARN_CLASSICAL_C24_TREE4.patch`, then delete the `MOJOLEARN_CLASSICAL_C24_TREE4` refusal in `core/experiment_guards_decomposition.mojo`.
 - **Records**: refusal in `core/experiment_guards_decomposition.mojo`; `classical-decomp.json` control `C24_TSQR`: `removed` entry added; `docs/apple-fast/EXPERIMENTS.md` row (expdel2-06-base section).
+
+## MOJOLEARN_CLASSICAL_C24_ROWS2048_OFF: old path deleted (2026-11-15)
+
+- **What it was**: the rollback of the promoted 2048-row TSQR leaves to 4096-row leaves (the grid's rows4096 arm; x_decomp/tsqr_core.mojo TS_ROWS). `experiments/classical_identical_ideas/linear_controls.mojo` now defines `C24_ROWS2048` as the constant of the kept default, so the importers in other lanes compile before and after; the integrator folds their dead branches.
+- **Verdict**: EXP:1638 PROMOTED (grid ge123e6f9, lane/grid-flips-1): OLS taxi NV 34.0 -> 21.5 ms (0.632), AMD 14.5 -> 13.8 (0.953); istella NV 816.2 -> 733.8 (0.899), AMD 468.9 -> 432.2 (0.922); GM 0.84x, quality SAME, NV == AMD hashes; the default is the recorded winner. No bit change on any vendor or the host column: the default arm is untouched.
+- **Deleted by**: lane/expdel2-06-base (expdel2-06-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `b4348c8a12`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_CLASSICAL_C24_ROWS2048_OFF.patch`, then delete the `MOJOLEARN_CLASSICAL_C24_ROWS2048_OFF` refusal in `core/experiment_guards_decomposition.mojo`.
+- **Records**: refusal in `core/experiment_guards_decomposition.mojo`; `classical-decomp.json` control `C24_TSQR`: `removed` entry added (control removed from `controls` and from its algorithms); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-06-base section).
