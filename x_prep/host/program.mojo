@@ -13,7 +13,6 @@ before the next stage. Which thread runs a unit never changes what the unit
 computes, so the bits are the serial walk's at every task count
 (MOJOLEARN_CPU_THREADS = 1, 3 or the default; `core/host_predict_threads.mojo`
 holds the one count policy). THIS IS NOT A NUMERIC ROW."""
-from experiments.classical_identical_ideas.shared_controls import C08_GROUPED_OUTPUT
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 
@@ -215,9 +214,8 @@ def run_program_host_ptr(f: FP, arena_len: Int, qbase: IP, stages: Int) raises:
     for s in range(stages):
         var op = Int(qbase.unsafe_load(s * STAGE_INTS))
         var total = Int(qbase.unsafe_load(s * STAGE_INTS + 1))
-        comptime if C08_GROUPED_OUTPUT:
-            if op == 9:
-                total = (total+3)//4
+        # TOMBSTONE: MOJOLEARN_CLASSICAL_C08_GROUPED_OUTPUT (no A/B recorded for the opt-in arm) deleted 2026-11-15 by lane/expdel2-22-linear; code recoverable at 5b9c50922b.
+        # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C08_GROUPED_OUTPUT.expdel2-22-linear.patch
         var q = qbase + (s * STAGE_INTS + 2)
         comptime for k in range(N_OPS):
             if op == k:

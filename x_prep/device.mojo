@@ -1,7 +1,9 @@
 """The prep lane's device runner: the arena goes up once, every stage of the
 program is one launch of one thread per unit on the same stream (so stage s
 sees every write of stage s-1), and the arena comes back once."""
-from experiments.classical_identical_ideas.shared_controls import C07_RADIX_ROWS, C08_GROUPED_OUTPUT, C08_DICTIONARY, C08_UNIQUE_SCAN
+# TOMBSTONE: MOJOLEARN_CLASSICAL_C08_GROUPED_OUTPUT (no A/B recorded for the opt-in arm) deleted 2026-11-15 by lane/expdel2-22-linear; code recoverable at 5b9c50922b.
+# Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C08_GROUPED_OUTPUT.expdel2-22-linear.patch
+from experiments.classical_identical_ideas.shared_controls import C07_RADIX_ROWS, C08_DICTIONARY, C08_UNIQUE_SCAN
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 
@@ -801,9 +803,8 @@ def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int, 
                     grid_dim=(total + BLOCK - 1) // BLOCK, block_dim=BLOCK,
                 )
                 continue
-        comptime if C08_GROUPED_OUTPUT:
-            if op == 9:
-                total = (total+3)//4
+# TOMBSTONE: MOJOLEARN_CLASSICAL_C08_GROUPED_OUTPUT (no A/B recorded for the opt-in arm) deleted 2026-11-15 by lane/expdel2-22-linear; code recoverable at 5b9c50922b.
+# Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C08_GROUPED_OUTPUT.expdel2-22-linear.patch
         comptime for k in range(N_OPS):
             if op == k:
                 ctx.enqueue_function[prep_kernel[k]](
