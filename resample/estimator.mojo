@@ -2516,7 +2516,7 @@ def resample_gather_gpu[REPLACE: Bool = True](
 #: rows, bit-identical outputs.
 # TOMBSTONE: MOJOLEARN_RESAMPLE_FAST_GATHER_NARROW, MOJOLEARN_RESAMPLE_GATHER_NARROW_BYTES (opt-in FAST arm and its width knob, EXP:1404 READY-AB, no A/B recorded) deleted 2026-11-15 by lane/expdel2-37-series; code recoverable at 6b87cc7de9.
 # Restore: git apply experiments/removed/MOJOLEARN_RESAMPLE_FAST_GATHER_NARROW.patch and experiments/removed/MOJOLEARN_RESAMPLE_GATHER_NARROW_BYTES.patch; record in docs/TOMBSTONES.md.
-comptime RESAMPLE_FAST_GATHER_NARROW = False
+# (Sweep 2026-11-15: comptime RESAMPLE_FAST_GATHER_NARROW removed; always False, nothing read it.)
 comptime GATHER_NARROW_MAX_BYTES = 128
 
 
