@@ -952,8 +952,8 @@ def knn_sq_tiled_kernel(
 # order to the item's strict-< insertion. The same values in the same order,
 # so the same lists. The one-thread-per-row kernel this replaces for d above
 # KNN_TILE_MAX_D read every y row from device memory in every thread
-# (LabelPropagation on istella, 220 features: 23 s at 20,000 rows on the M4).
-# `-D MOJOLEARN_XN_KNN_ROWWISE=1` restores it.
+# (LabelPropagation on istella, 220 features: 23 s at 20,000 rows on the M4);
+# it stays only where the tile's threadgroup page does not fit.
 comptime KNN2_TX = 64
 comptime KNN2_TY = 64
 comptime KNN2_FC = 16
