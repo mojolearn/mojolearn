@@ -87,6 +87,12 @@ jobs:
           mkdir -p "$RUNNER_TEMP/wheels"
           curl -fsSL --retry 5 "$WHEEL_URL" -o "$RUNNER_TEMP/wheels/$WHEEL_NAME"
           echo "$WHEEL_SHA256  $RUNNER_TEMP/wheels/$WHEEL_NAME" | sha256sum -c -
+      # gdb for crash traces: a unit that dies by a signal is rerun under gdb (bt + thread apply all bt 12) into
+      # smoke-out/crashes/<unit>.txt. Fail soft: without gdb the smoke still runs and keeps the faulthandler trace.
+      - name: Install gdb (crash traces)
+        run: |
+          sudo apt-get update -q >/dev/null && sudo apt-get install -y -q --no-install-recommends gdb >/dev/null \
+            && gdb --version | head -n 1 || echo "gdb not installed: crash traces carry faulthandler output only"
       - name: The smoke (every step runs; SUMMARY.txt has each rc)
         env:
           SOURCE_COMMIT: ${{ inputs.ref }}

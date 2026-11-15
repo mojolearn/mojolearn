@@ -7,6 +7,7 @@ import pytest
 import mojolearn as ml
 
 
+@pytest.mark.needs_gpu
 @pytest.mark.parametrize('name', ['DecisionTreeClassifier', 'DecisionTreeRegressor'])
 @pytest.mark.parametrize('mode', [None, 'identical'])
 def test_decision_tree_accepts_documented_mode_and_reads_it_back(name, mode):
@@ -16,6 +17,7 @@ def test_decision_tree_accepts_documented_mode_and_reads_it_back(name, mode):
     assert model.vendor_used() in ('metal', 'cuda', 'hip')
 
 
+@pytest.mark.needs_gpu
 def test_svc_measurement_probe_uses_the_class_native_binding():
     sys.path.insert(0, str(Path(__file__).resolve().parents[3] / 'tools'))
     import classical_two_datasets as C

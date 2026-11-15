@@ -20,7 +20,10 @@ def _fast_tier():
         from mojolearn import _backend, _merged
     except Exception as error:  # the import failure is the reason
         return f"mojolearn did not import: {type(error).__name__}: {error}"
-    directory = _backend.tier_dir("fast")
+    try:
+        directory = _backend.tier_dir("fast")
+    except ImportError as error:  # a CPU-only install has no GPU tier layout at all: the refusal is the reason
+        return f"no numeric_mode='fast' tier on this install: {type(error).__name__}: {error}"
     names = os.listdir(directory) if os.path.isdir(directory) else []
     if any(name.startswith("_mojolearn") and name.endswith((".so", ".dylib", ".pyd")) for name in names):
         return None
@@ -59,9 +62,22 @@ def _installed_package():
             "(pip install -e python) to run this test")
 
 
+@functools.lru_cache(maxsize=None)
+def _gpu():
+    try:
+        import mojolearn
+        vendor = mojolearn.vendor()
+    except Exception as error:  # the import or read-back failure is the reason
+        return f"could not read the vendor: {type(error).__name__}: {error}"
+    if vendor in ("metal", "cuda", "hip"):
+        return None
+    return f"no GPU binary set on this install (vendor() is {vendor!r}); the test reads a GPU vendor"
+
+
 ENVIRONMENT = {
     "needs_fast_tier": _fast_tier,
     "needs_identity_harness": _identity_harness,
     "needs_numpy_free_python": _numpy_free_python,
     "needs_installed_package": _installed_package,
+    "needs_gpu": _gpu,
 }

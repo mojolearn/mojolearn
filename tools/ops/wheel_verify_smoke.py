@@ -11,19 +11,35 @@ nothing across vendors, records nothing and never replaces the release's one ver
     wheel_verify_smoke.py step    --out DIR --name N -- CMD  one command, logged, its rc in SUMMARY.txt
 
 PARALLEL PLAN (AGENTS.md "parallelize tests and experiments by default"): every pool's units are independent
-processes run across all cores. Workers = min(cores this process may use, MemAvailable / memory per worker). The
-memory per worker is the peak RSS measured per unit (os.wait4) in an earlier run's results.tsv when --memory-from
-names one, else MEM_PER_WORKER_MB until measured; every results.tsv carries each unit's peak, and SUMMARY.txt the
-pool's maximum, so the next run plans from a measurement. Units that must not share the machine (tests marked
-`serial`, python/pytest.ini) run afterwards one at a time.
+processes run across all cores (one worker per core this process may use). The plan input is an earlier run's
+<pool>/results.tsv: --memory-from names one, else the committed baseline tools/ops/wheel_verify_smoke_plan/<pool>.tsv
+(the first smoke, wheel 91d5fdea4e, 4-core runner). Units start LONGEST FIRST by their measured seconds (units the
+plan does not know start first, since their length is unknown), so the long tail starts at once and the short units
+fill the other workers around it. A unit starts only when its measured peak RSS (x1.25; MEM_PER_WORKER_MB when not
+measured) fits in MemAvailable minus the reservations of the running units, so one heavy unit never caps the worker
+count of the whole pool. The planned busy workers (sum of seconds / longest-first makespan) is printed beside the
+measured one in SUMMARY.txt. Units that must not share the machine (tests marked `serial`, python/pytest.ini) run
+afterwards one at a time.
 
 Each pool writes <out>/<pool>/results.tsv (unit, rc, status, seconds, peak_rss_mb), one log per unit under
 <out>/<pool>/logs/, FAILED.txt listing the failed units, and appends one line to <out>/SUMMARY.txt. A pool exits 1
 when any unit failed; it never stops early.
+
+ENVIRONMENT, NOT FAILURES: a test file whose every collected test was skipped (pytest -rs lists each reason:
+pytest.importorskip for an absent optional dependency, a needs_* marker of python/pytest.ini such as needs_gpu)
+gets status `env`; SUMMARY.txt lists it with its reasons, and <pool>/ENV.txt lists every file with any skipped test
+and the reasons, so no skip passes silently. A file with any failure stays failed.
+
+CRASH TRACES: a unit that exits by a signal (rc < 0, or a shell/exit form 128+n or 256-n of SIGSEGV, SIGABRT,
+SIGBUS, SIGILL, SIGFPE) is run once more under `python -X faulthandler` and, when gdb is on PATH, once under
+`gdb -batch -ex run -ex bt -ex 'thread apply all bt 12'`. Both outputs go to <out>/crashes/<unit>.txt and SUMMARY.txt
+gets one line per crash with its top native frame (gdb) and top Python frame (faulthandler). The reruns are
+diagnostics only: the unit's status stays `crash`.
 """
 import argparse
 import os
 import re
+import shutil
 import signal
 import subprocess
 import sys
@@ -35,10 +51,20 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "tools"))
 
-#: memory per worker until a run has measured it (MB): the planning default, replaced by --memory-from
+#: memory reserved for a unit the plan input has not measured (MB)
 MEM_PER_WORKER_MB = 2048
+#: margin on a measured peak RSS when reserving memory for a unit
+MEM_MARGIN = 1.25
+#: the committed plan inputs (one results.tsv per pool, from the first smoke); --memory-from overrides
+PLAN_DIR = Path(__file__).resolve().parent / "wheel_verify_smoke_plan"
 #: pytest: no test collected. A test file whose tests are all deselected is not a failure.
 PYTEST_NO_TESTS = 5
+#: fatal signals whose exit means a native crash, in the three forms a unit reports them: -n (killed by the
+#: signal), 128+n (a shell's form) and 256-n (exit(-n) truncated to a byte, e.g. 245 for SIGSEGV)
+_FATAL = (signal.SIGSEGV, signal.SIGABRT, signal.SIGBUS, signal.SIGILL, signal.SIGFPE)
+CRASH_RC = frozenset([-int(s) for s in _FATAL] + [128 + int(s) for s in _FATAL] + [256 - int(s) for s in _FATAL])
+#: crash reruns are diagnostics: capped so a rerun that hangs under the debugger cannot hold the job
+CRASH_RERUN_TIMEOUT = 600.0
 
 #: ENVIRONMENT, not a fault (smoke-triage 2026-11-15): public modules that cannot import on this CPU-only Linux
 #: install by design, each with the EXACT refusal its log must carry. A unit is marked `env` (listed in SUMMARY.txt,
@@ -73,25 +99,104 @@ def mem_available_mb():
     return None
 
 
-def measured_mb(tsv):
-    """The largest peak_rss_mb of an earlier results.tsv, or None."""
+def load_plan(tsv):
+    """{unit: (seconds, peak_rss_mb or None)} from an earlier results.tsv; {} when absent or unreadable."""
+    plan = {}
     try:
-        rows = [line.split("\t") for line in Path(tsv).read_text().splitlines()[1:]]
-        peaks = [float(r[4]) for r in rows if len(r) >= 5 and r[4] not in ("", "-")]
-        return max(peaks) if peaks else None
-    except (OSError, ValueError):
-        return None
+        for line in Path(tsv).read_text().splitlines()[1:]:
+            r = line.split("\t")
+            if len(r) < 5:
+                continue
+            try:
+                seconds = float(r[3])
+            except ValueError:
+                continue
+            plan[r[0]] = (seconds, None if r[4] in ("", "-") else float(r[4]))
+    except OSError:
+        return {}
+    return plan
 
 
-def plan_workers(args):
-    per = measured_mb(args.memory_from) if args.memory_from else None
-    source = f"measured {args.memory_from}" if per else "default until measured"
-    per = max(64.0, (per or float(MEM_PER_WORKER_MB)) * (1.25 if args.memory_from else 1.0))
+def plan_source(args, name):
+    if args.memory_from:
+        return args.memory_from
+    default = PLAN_DIR / f"{name}.tsv"
+    return str(default) if default.is_file() else ""
+
+
+def reserve_mb(plan, unit):
+    peak = plan.get(unit, (None, None))[1]
+    return max(64.0, peak * MEM_MARGIN) if peak else float(MEM_PER_WORKER_MB)
+
+
+def longest_first(units, plan):
+    """Units the plan knows, by measured seconds descending; unknown units first (their length is unknown)."""
+    unknown = [u for u in units if u[0] not in plan]
+    known = sorted((u for u in units if u[0] in plan), key=lambda u: -plan[u[0]][0])
+    return unknown + known
+
+
+def planned_busy(units, plan, workers):
+    """(makespan seconds, busy workers) of the longest-first list schedule, from the plan's seconds (units the plan
+    does not know count at the median); memory is left out, so this is the plan's upper bound."""
+    known = sorted(s for s, _ in plan.values()) or [1.0]
+    median = known[len(known) // 2]
+    loads = [0.0] * max(1, workers)
+    total = 0.0
+    for uname, _ in longest_first(list(units), plan):
+        s = plan.get(uname, (median, None))[0]
+        total += s
+        i = loads.index(min(loads))
+        loads[i] += s
+    makespan = max(loads) if loads else 0.0
+    return makespan, (total / makespan if makespan > 0 else 0.0)
+
+
+class MemoryGate:
+    """Admits a unit when its reservation fits in what is free. A unit larger than the whole budget runs only
+    when nothing else runs. budget None (no /proc/meminfo) admits everything."""
+
+    def __init__(self, budget):
+        self.budget = budget
+        self.used = 0.0
+        self.running = 0
+        self.cond = threading.Condition()
+
+    def fits(self, mb):
+        return self.budget is None or self.used + mb <= self.budget or self.running == 0
+
+    def take(self, queue, plan):
+        """Pop and reserve the first queued unit that fits; None when the queue is empty."""
+        with self.cond:
+            while True:
+                if not queue:
+                    return None
+                for i, unit in enumerate(queue):
+                    mb = reserve_mb(plan, unit[0])
+                    if self.fits(mb):
+                        del queue[i]
+                        self.used += mb
+                        self.running += 1
+                        return unit, mb
+                self.cond.wait()
+
+    def give(self, mb):
+        with self.cond:
+            self.used -= mb
+            self.running -= 1
+            self.cond.notify_all()
+
+
+def plan_workers(args, name, units):
+    source = plan_source(args, name)
+    plan = load_plan(source) if source else {}
     avail = mem_available_mb()
-    by_mem = max(1, int(avail // per)) if avail else cores()
-    workers = args.jobs or max(1, min(cores(), by_mem))
-    note = f"workers={workers} cores={cores()} mem_available_mb={avail} mb_per_worker={per:.0f} ({source})"
-    return workers, note
+    workers = args.jobs or cores()
+    makespan, busy = planned_busy(units, plan, workers)
+    note = (f"workers={workers} cores={cores()} mem_available_mb={avail} "
+            f"plan={source or 'none'} ({sum(1 for u, _ in units if u in plan)}/{len(units)} units measured) "
+            f"planned_busy_workers={busy:.1f} planned_seconds={makespan:.0f}")
+    return workers, plan, avail, note
 
 
 def run_unit(argv, log, cwd, env, timeout):
@@ -128,38 +233,156 @@ def run_unit(argv, log, cwd, env, timeout):
     return rc, None, seconds, peak
 
 
-def run_pool(name, units, args, cwd, env, timeout, ok_codes=(0,), serial=(), environment=None):
+def safe_name(unit):
+    return re.sub(r"[^A-Za-z0-9_.-]", "_", unit)
+
+
+_SKIP_LINE = re.compile(r"^SKIPPED \[(\d+)\] [^\n]*?: (.*)$", re.M)
+_PASSED = re.compile(r"\b(\d+) passed\b")
+
+
+def skipped_reasons(text):
+    """(skipped count, {reason: count}) from pytest's -rs short summary, and whether any test passed."""
+    reasons = {}
+    for count, reason in _SKIP_LINE.findall(text):
+        reasons[reason.strip()] = reasons.get(reason.strip(), 0) + int(count)
+    return sum(reasons.values()), reasons, bool(_PASSED.search(text))
+
+
+def with_faulthandler(argv):
+    """argv with -X faulthandler after the interpreter (units run `python -I ...`, which ignores
+    PYTHONFAULTHANDLER); None when argv[0] is not a Python interpreter."""
+    if not argv or not os.path.basename(argv[0]).startswith("python"):
+        return None
+    return [argv[0], "-X", "faulthandler"] + list(argv[1:])
+
+
+_GDB_STOP = re.compile(r"received signal (SIG\w+)")
+_GDB_FRAME = re.compile(r"^#(\d+)\s+(.*)$", re.M)
+#: frames of the signal delivery itself, skipped to name the frame that faulted or aborted
+_GDB_PLUMBING = re.compile(r"libc\.so|__pthread_kill|\braise\b|\babort\b|__GI_|Py_FatalError|fatal_error|"
+                           r"faulthandler|_Py_DumpTraceback|libpthread")
+_PY_FATAL = re.compile(r"^(Fatal Python error: .*)$", re.M)
+_PY_FRAME = re.compile(r'^\s+File "([^"]+)", line (\d+) in (\S+)', re.M)
+
+
+def top_frames(fault_text, gdb_text):
+    """One line: the top native frame (gdb) and the top Python frame (faulthandler)."""
+    parts = []
+    if gdb_text is not None:
+        stop = _GDB_STOP.search(gdb_text)
+        if not stop:
+            parts.append("gdb: did not reproduce (no signal under gdb)")
+        else:
+            frames = _GDB_FRAME.findall(gdb_text[stop.end():])
+            pick = next(((n, f) for n, f in frames if not _GDB_PLUMBING.search(f)), frames[0] if frames else None)
+            parts.append(f"gdb {stop.group(1)} #{pick[0]} {pick[1][:200]}" if pick else f"gdb {stop.group(1)} no frames")
+    fatal = _PY_FATAL.search(fault_text or "")
+    if fatal:
+        frame = _PY_FRAME.search(fault_text[fatal.end():])
+        parts.append(f"{fatal.group(1)[:120]}" + (f" at {frame.group(1)}:{frame.group(2)} in {frame.group(3)}"
+                                                  if frame else ""))
+    elif fault_text is not None:
+        parts.append("faulthandler: no fatal error reported on the rerun")
+    return " | ".join(parts) or "no trace captured"
+
+
+def crash_trace(uname, argv, out, cwd, env):
+    """Rerun a crashed unit under faulthandler and (when present) gdb; write <out>/crashes/<unit>.txt; return the
+    one-line top-frame summary."""
+    crashes = Path(out) / "crashes"
+    crashes.mkdir(parents=True, exist_ok=True)
+    safe = safe_name(uname)
+    timeout = CRASH_RERUN_TIMEOUT
+    fault_text = gdb_text = None
+    sections = []
+    fh_argv = with_faulthandler(argv)
+    if fh_argv is not None:
+        log = crashes / f"{safe}.faulthandler.log"
+        rc, _, _, _ = run_unit(fh_argv, log, cwd, env, timeout)
+        fault_text = log.read_text(errors="replace")
+        sections.append(f"===== rerun under faulthandler: rc={rc}\n{fault_text}")
+        log.unlink()
+    gdb = shutil.which("gdb")
+    if gdb:
+        log = crashes / f"{safe}.gdb.log"
+        gdb_argv = [gdb, "-q", "-nx", "-batch", "-ex", "set pagination off", "-ex", "set confirm off",
+                    "-ex", "handle SIGPIPE SIGUSR1 SIGUSR2 nostop noprint pass",
+                    "-ex", "run", "-ex", "bt", "-ex", "thread apply all bt 12", "--args"] + list(argv)
+        rc, _, _, _ = run_unit(gdb_argv, log, cwd, env, timeout)
+        gdb_text = log.read_text(errors="replace")
+        sections.append(f"===== rerun under gdb: rc={rc}\n{gdb_text}")
+        log.unlink()
+    else:
+        sections.append("===== gdb: not on PATH; no native backtrace\n")
+    top = top_frames(fault_text, gdb_text)
+    (crashes / f"{safe}.txt").write_text(f"unit {uname}\nargv {' '.join(argv)}\ntop {top}\n\n" + "\n".join(sections))
+    return top
+
+
+def run_pool(name, units, args, cwd, env, timeout, ok_codes=(0,), serial=(), environment=None, skips=False):
     """units: [(unit name, argv)]. Runs the parallel units across the planned workers, then `serial` ones alone.
-    environment: {unit: (regex, reason)}; a failing unit whose log matches its regex is status `env`, not failed."""
-    environment = environment or {}
+    environment: {unit: (regex, reason)}; a failing unit whose log matches its regex is status `env`, not failed.
+    skips: the units are pytest files run with -rs; a passing file whose every test was skipped is `env`."""
+    environment = dict(environment or {})
     out = Path(args.out) / name
     logs = out / "logs"
     logs.mkdir(parents=True, exist_ok=True)
-    workers, note = plan_workers(args)
+    workers, plan, avail, note = plan_workers(args, name, list(units))
     print(f"{name}: {len(units)} unit(s), {len(serial)} serial; {note}", flush=True)
     results = {}
+    skipped = {}
+    argv_of = dict(list(units) + list(serial))
 
     def one(unit):
         uname, argv = unit
-        safe = re.sub(r"[^A-Za-z0-9_.-]", "_", uname)
+        safe = safe_name(uname)
         rc, status, seconds, peak = run_unit(argv, logs / f"{safe}.log", cwd, env, timeout)
         status = status or ("timeout" if rc == 124 else "ok" if rc in ok_codes else
-                            "crash" if rc < 0 else "failed")
+                            "crash" if rc < 0 or rc in CRASH_RC else "failed")
         expected = environment.get(uname)
         if status != "ok" and expected is not None:
             text = (logs / f"{safe}.log").read_text(errors="replace")
             if re.search(expected[0], text):
                 status = "env"
+        if skips and status == "ok":
+            count, reasons, passed = skipped_reasons((logs / f"{safe}.log").read_text(errors="replace"))
+            if count:
+                skipped[uname] = (count, reasons, passed)
+                if not passed:
+                    status = "env"
+                    environment[uname] = (None, "; ".join(sorted(reasons))[:300])
         results[uname] = (rc, status, seconds, peak, f"logs/{safe}.log")
         if status != "ok":
             print(f"  {status.upper()} {uname} rc={rc} ({seconds:.0f}s)", flush=True)
+
+    queue = longest_first(list(units), plan)
+    gate = MemoryGate(avail * 0.9 if avail else None)   # 10% headroom for the controller and page cache
+
+    def worker():
+        while True:
+            taken = gate.take(queue, plan)
+            if taken is None:
+                return
+            unit, mb = taken
+            try:
+                one(unit)
+            finally:
+                gate.give(mb)
     started = time.time()
     with ThreadPoolExecutor(max_workers=workers) as pool:
-        list(pool.map(one, units))
+        for f in [pool.submit(worker) for _ in range(workers)]:
+            f.result()
     for unit in serial:
         one(unit)
     wall = time.time() - started
     order = [u for u, _ in list(units) + list(serial)]
+    crashed = [u for u in order if results[u][1] == "crash"]
+    tops = {}
+    if crashed:
+        with ThreadPoolExecutor(max_workers=max(1, min(workers, len(crashed)))) as pool:
+            for u, top in zip(crashed, pool.map(lambda u: crash_trace(u, argv_of[u], args.out, cwd, env), crashed)):
+                tops[u] = top
     with open(out / "results.tsv", "w") as fh:
         fh.write("unit\trc\tstatus\tseconds\tpeak_rss_mb\tlog\n")
         for u in order:
@@ -182,6 +405,17 @@ def run_pool(name, units, args, cwd, env, timeout, ok_codes=(0,), serial=(), env
     if marked:
         summary(args.out, f"  {name} environment (not failures): "
                 + ", ".join(f"{u} ({environment[u][1]})" for u in marked))
+    if skipped:
+        (out / "ENV.txt").write_text("unit\tskipped\tany_passed\treasons\n" + "".join(
+            f"{u}\t{skipped[u][0]}\t{int(skipped[u][2])}\t"
+            + " | ".join(f"{n}x {r}" for r, n in sorted(skipped[u][1].items())) + "\n"
+            for u in order if u in skipped))
+        partial = [u for u in order if u in skipped and skipped[u][2]]
+        if partial:
+            summary(args.out, f"  {name} files with some tests skipped by environment: {len(partial)} "
+                    f"({sum(skipped[u][0] for u in partial)} tests; reasons in {name}/ENV.txt)")
+    for u in crashed:
+        summary(args.out, f"  {name} crash {u} rc={results[u][0]}: {tops[u]} (crashes/{safe_name(u)}.txt)")
     if failed:
         summary(args.out, f"  {name} failed: " + ", ".join(failed[:200])
                 + (f" ... (+{len(failed) - 200}, see {name}/FAILED.txt)" if len(failed) > 200 else ""))
@@ -255,7 +489,8 @@ def cmd_lanes(args):
 
 def cmd_tests(args):
     """(d) the pytest files of the tests root against the INSTALLED runtime (run_python_tests.INSTALLED_BOOTSTRAP),
-    one process per file. Tests that need a GPU skip themselves on this CPU-only install."""
+    one process per file. Tests that need a GPU or an optional dependency skip themselves on this CPU-only
+    install, with the reason (-rs); a file of skips only is listed as `env`, never as passed."""
     from python_test_inventory import inventory
     from run_python_tests import INSTALLED_BOOTSTRAP, serial_files
     root = Path(args.tests_root).resolve()
@@ -264,13 +499,62 @@ def cmd_tests(args):
     cwd = empty_dir(args.out, "tests")
 
     def argv(path, marker=None):
-        return ([args.python, "-I", "-c", INSTALLED_BOOTSTRAP, str(root), "-q", "-rfE", "--import-mode=importlib",
+        return ([args.python, "-I", "-c", INSTALLED_BOOTSTRAP, str(root), "-q", "-rfEs", "--import-mode=importlib",
                  "-p", "no:cacheprovider"] + (["-m", marker] if marker else []) + [str(path)])
     # a file with `serial` tests: its other tests in the parallel pass, the serial ones alone afterwards
     par = [(f.name, argv(f, "not serial" if f in serial else None)) for f in files]
     ser = [(f.name + "::serial", argv(f, "serial")) for f in files if f in serial]
     env = child_env({"MOJOLEARN_TEST_DURATIONS_DIR": str(Path(args.out).resolve() / "tests" / "durations")})
-    return run_pool("tests", par, args, cwd, env, args.timeout, ok_codes=(0, PYTEST_NO_TESTS), serial=ser)
+    par = split_long_files(par, {f.name: f for f in files if f not in serial}, args, argv, cwd, env)
+    return run_pool("tests", par, args, cwd, env, args.timeout, ok_codes=(0, PYTEST_NO_TESTS), serial=ser,
+                    skips=True)
+
+
+def split_long_files(par, splittable, args, argv, cwd, env):
+    """A file longer than an even share of the pool (sum of planned seconds / workers) would hold one worker after
+    the others drain, so it runs as one unit per test (`file.py::test[id]`, collected with --collect-only), which
+    spreads it across the workers. Its plan time is the file's row, or the sum of its per-test rows when an earlier
+    run split it. A collection that fails or finds fewer than two tests keeps the file as one unit. Files with
+    `serial` tests are never split (their serial part already runs alone)."""
+    source = plan_source(args, "tests")
+    plan = load_plan(source) if source else {}
+    if not plan:
+        return par
+
+    def planned(name):
+        if name in plan:
+            return plan[name][0]
+        return sum(s for u, (s, _) in plan.items() if u.startswith(name + "::")) or None
+    total = sum(planned(n) or 0.0 for n, _ in par)
+    share = total / max(1, args.jobs or cores())
+    long_names = [n for n, _ in par if n in splittable and (planned(n) or 0.0) > share]
+    if not long_names:
+        return par
+
+    def collect(name):
+        path = splittable[name]
+        try:
+            p = subprocess.run(argv(path)[:-1] + ["--collect-only", "-q", str(path)], capture_output=True,
+                               text=True, cwd=cwd, env=env, timeout=600)
+        except (OSError, subprocess.SubprocessError):
+            return name, []
+        ids = [line.split("::", 1)[1] for line in p.stdout.splitlines() if "::" in line and line.strip()
+               and not line.startswith(" ")]
+        return name, (ids if p.returncode == 0 and len(ids) >= 2 else [])
+    with ThreadPoolExecutor(max_workers=max(1, min(len(long_names), args.jobs or cores()))) as pool:
+        nodes = dict(pool.map(collect, long_names))
+    out = []
+    for name, unit_argv in par:
+        ids = nodes.get(name)
+        if not ids:
+            out.append((name, unit_argv))
+            continue
+        path = splittable[name]
+        out.extend((f"{name}::{nid}", argv(f"{path}::{nid}")) for nid in ids)
+    split = [n for n in long_names if nodes.get(n)]
+    print(f"tests: split into one unit per test (longer than the {share:.0f}s even share): "
+          + (", ".join(f"{n} ({len(nodes[n])})" for n in split) or "none"), flush=True)
+    return out
 
 
 def cmd_step(args):
@@ -279,6 +563,9 @@ def cmd_step(args):
     cwd = args.cwd or empty_dir(args.out, args.name)
     rc, _, seconds, peak = run_unit(argv, Path(args.out) / f"{args.name}.log", cwd, child_env(), args.timeout)
     summary(args.out, f"{args.name} rc={rc} seconds={seconds:.0f} peak_rss_mb={peak:.0f} log={args.name}.log")
+    if rc in CRASH_RC:
+        top = crash_trace(args.name, argv, args.out, cwd, child_env())
+        summary(args.out, f"  {args.name} crash rc={rc}: {top} (crashes/{safe_name(args.name)}.txt)")
     print(f"{args.name} rc={rc}", flush=True)
     return rc
 
@@ -299,8 +586,8 @@ def main(argv=None):
             continue
         p.add_argument("--python", required=True, help="the venv's python, holding the installed wheel")
         p.add_argument("--jobs", type=int, default=0, help="workers (default: planned from cores and memory)")
-        p.add_argument("--memory-from", default="", help="an earlier run's <pool>/results.tsv: plan memory from "
-                       "its measured peak per unit")
+        p.add_argument("--memory-from", default="", help="an earlier run's <pool>/results.tsv: the plan input "
+                       "(seconds and peak RSS per unit); default tools/ops/wheel_verify_smoke_plan/<pool>.tsv")
         if name == "lanes":
             p.add_argument("--commit", default="", help="MOJOLEARN_COMMIT for the harness's provenance")
         if name == "tests":
