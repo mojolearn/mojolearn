@@ -750,6 +750,7 @@ in the tables after the sections.
 | [`MOJOLEARN_C53_CENTER4`](#mojolearn_c53_center4-unmeasured-arm-deleted-2026-11-15) | Mixture (GMM / BGMM centered-component staging, IDENTICAL) | removed (unmeasured opt-in arm) | 2026-11-15 | [MOJOLEARN_C53_CENTER4.patch](../experiments/removed/MOJOLEARN_C53_CENTER4.patch) |
 | [`MOJOLEARN_C54_PREDICT_TILES`](#mojolearn_c54_predict_tiles-unmeasured-arm-deleted-2026-11-15) | Kernel / GP (four kernel columns share one scaled query load, IDENTICAL) | removed (unmeasured opt-in arm) | 2026-11-15 | [MOJOLEARN_C54_PREDICT_TILES.patch](../experiments/removed/MOJOLEARN_C54_PREDICT_TILES.patch) |
 | [`MOJOLEARN_CLASSICAL_C56_QDA_PROJECT`](#mojolearn_classical_c56_qda_project-unmeasured-arm-deleted-2026-11-15) | Naive Bayes / DA (QDA W projection columns per pass 2/4/8, IDENTICAL) | removed (unmeasured opt-in arm) | 2026-11-15 | [MOJOLEARN_CLASSICAL_C56_QDA_PROJECT.patch](../experiments/removed/MOJOLEARN_CLASSICAL_C56_QDA_PROJECT.patch) |
+| [`MOJOLEARN_C57_CANDIDATE_STATE`](#mojolearn_c57_candidate_state-unmeasured-arm-deleted-2026-11-15) | Decomposition (MinCovDet candidate mean retained for its covariance, IDENTICAL) | removed (unmeasured opt-in arm) | 2026-11-15 | [MOJOLEARN_C57_CANDIDATE_STATE.patch](../experiments/removed/MOJOLEARN_C57_CANDIDATE_STATE.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -7275,3 +7276,11 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md (section expdel-02-
 - **Deleted by**: lane/expdel2-07-base (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `fe708dfe4a`.
 - **Restore**: `git apply experiments/removed/MOJOLEARN_CLASSICAL_C56_QDA_PROJECT.patch`, then delete the `MOJOLEARN_CLASSICAL_C56_QDA_PROJECT` refusal in `core/experiment_guards_base.mojo`.
 - **Records**: refusal in `core/experiment_guards_base.mojo`; `classical-nbda.json` control `c56_qda_project`: `removed` entry added (control removed from `controls` and from its algorithms); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-07-base section).
+
+## MOJOLEARN_C57_CANDIDATE_STATE: unmeasured arm deleted (2026-11-15)
+
+- **What it was**: the opt-in arm behind `C57_CANDIDATE_STATE` in `experiments/classical_identical_ideas/stats_controls.mojo`; the alias stays as the folded constant so importers in other lanes compile, and each importer's lane deletes its branch.
+- **Verdict**: no record: no A/B was recorded for the opt-in arm (plan rule a; AGENTS.md "An unmeasured arm is deleted", Andrew 2026-11-15). No bit change on any column.
+- **Deleted by**: lane/expdel2-07-base (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `5bb9e1659f`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_C57_CANDIDATE_STATE.patch`, then delete the `MOJOLEARN_C57_CANDIDATE_STATE` refusal in `core/experiment_guards_decomposition.mojo`.
+- **Records**: refusal in `core/experiment_guards_decomposition.mojo`; no `grid_controls` entry named it; `docs/apple-fast/EXPERIMENTS.md` row (expdel2-07-base section).
