@@ -220,6 +220,10 @@
   "ssd-occupancy-on": {
    "define": "MOJOLEARN_IDN_SSD_OCCUPANCY",
    "status": "define in code (mamba/impl/modules/ssd_minimal.mojo IDN_SSD_OCCUPANCY, restored 2026-11-15 by lane restore-run-arms-neural): B = coalesced S10 discretize (one thread per (b, t, h, p)), 16 x 16 shared-tile S12 G = C.B, S18/S19 Y_off row tiles; A = the cell kernels"
+  },
+  "attn-fold-v2-on": {
+   "define": "MOJOLEARN_IDN_ATTN_FOLD_V2",
+   "status": "define in code (transformer/impl/llama/attn_fold_v2.mojo ATTN_FOLD_V2, restored 2026-11-15 by lane restore-run-arms-neural): B = the attention key axis folded in 128-key leaves plus the GEMM contract's carry tree, fused forward split into row-tile x leaf blocks (hd64/hd128), eager v2 kernels otherwise, host oracle and byte-LM host kernels on the same fold; A = v1's serial chains"
   }
  },
  "rows": [
@@ -1379,6 +1383,22 @@
     "ssd-occupancy-on"
    ],
    "decides": "NVIDIA L40S only (the NVIDIA-only campaign): promote B (with a _OFF define) when mamba2-forward and mamba2-infer are faster than A and the output digests match A (same chains: no bit change expected; a digest change is a bug in the arm, not a new reference); otherwise delete the arm with a tombstone"
+  },
+  {
+   "id": "attn-fold-v2",
+   "source": "restore-run-arms-neural (2026-11-15; RUN #3 of docs/plans/DELETED_ARMS_WORTH_RUNNING_2026-11-15.md: transformer-forward 6.1 ms NV L40S (torch 2.4); lm-forward 58.6 [0.8.55 44.9] (torch 31.1); lm-train-step 36.0 (torch 10.8))",
+   "kind": "ab",
+   "lane": [
+    "transformer-forward",
+    "lm-forward",
+    "lm-train-step"
+   ],
+   "dataset": "*",
+   "rows": "full",
+   "b_arms": [
+    "attn-fold-v2-on"
+   ],
+   "decides": "NVIDIA L40S only (the NVIDIA-only campaign): B changes bits on every column (fold order); promote it (with a _OFF define) when the three rows are faster than A with quality (loss / perplexity) not worse; then the release's one verification records every vendor column and the host column on the new fold; otherwise delete the arm with a tombstone"
   }
  ]
 }

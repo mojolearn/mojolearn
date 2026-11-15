@@ -970,8 +970,7 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_AFN26_CNN_COLS_ONCE"](), "removed 2026-11-15 (lane/expdel2-33-neural): AFN26_CNN_COLS_ONCE (unmeasured opt-in arm) is gone; the default is kept; code at c3d1c7865f; restore: experiments/removed/MOJOLEARN_AFN26_CNN_COLS_ONCE.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_BN_FOLD_BLOCK_OFF.patch
     comptime assert not is_defined["MOJOLEARN_BN_FOLD_BLOCK_OFF"](), "removed 2026-11-15 (lane/expdel2-33-neural): BN_FOLD_BLOCK_OFF (unmeasured old path) is gone; the default is kept; code at c3d1c7865f; restore: experiments/removed/MOJOLEARN_BN_FOLD_BLOCK_OFF.patch"
-    # Restore: git apply experiments/removed/MOJOLEARN_IDN_ATTN_FOLD_V2.patch
-    comptime assert not is_defined["MOJOLEARN_IDN_ATTN_FOLD_V2"](), "removed 2026-11-15 (lane/expdel2-33-neural): IDN_ATTN_FOLD_V2 (unmeasured opt-in arm) is gone; the default is kept; code at c3d1c7865f; restore: experiments/removed/MOJOLEARN_IDN_ATTN_FOLD_V2.patch"
+    # MOJOLEARN_IDN_ATTN_FOLD_V2: refusal removed 2026-11-15 (restored; RUN #3 of docs/plans/DELETED_ARMS_WORTH_RUNNING_2026-11-15.md, see docs/TOMBSTONES.md Restored table)
     # Restore: git apply experiments/removed/MOJOLEARN_DISABLE_RESIDUAL2_NEXT_NORM.patch
     comptime assert not is_defined["MOJOLEARN_DISABLE_RESIDUAL2_NEXT_NORM"](), "removed 2026-11-15 (lane/expdel2-33-neural): DISABLE_RESIDUAL2_NEXT_NORM (unmeasured opt-in arm) is gone; the default is kept; code at c3d1c7865f; restore: experiments/removed/MOJOLEARN_DISABLE_RESIDUAL2_NEXT_NORM.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_FUSE_RESIDUAL1_NORM2.patch

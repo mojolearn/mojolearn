@@ -2177,6 +2177,7 @@ Deletions reversed by new evidence. The code is back on main; the section and th
 | [`MOJOLEARN_IDN_SEQ_TILED_PREDICT`](#mojolearn_idn_seq_tiled_predict) | Neural (autograd model_predict chunk, autograd/model.mojo) | 2026-11-15 (`d19ca4f0c2`) | 2026-11-15 (lane/restore-run-arms-neural) | opt-in arm (RUN #4), default unchanged, NVIDIA L40S A/B owed at the wave sha; no bit change (same per-row chains; the split-K decision is checked unchanged) | [MOJOLEARN_IDN_SEQ_TILED_PREDICT.patch](../experiments/removed/MOJOLEARN_IDN_SEQ_TILED_PREDICT.patch) |
 | [`MOJOLEARN_IDN_GEMM_INT_SLICES`](#mojolearn_idn_gemm_int_slices-unmeasured-arm-deleted-2026-11-15) | Linalg GEMM research profile fp32.v2-int (gemm/host_entry.mojo device hook, gemm/host/linalg_native.mojo host column) | 2026-11-15 (`41a649b03c`) | 2026-11-15 (lane/restore-run-arms-neural) | opt-in arm (RUN #2), default unchanged, NVIDIA L40S A/B owed at the wave sha; B changes bits and precision on every column (device and host hooks restored together) | [MOJOLEARN_IDN_GEMM_INT_SLICES.patch](../experiments/removed/MOJOLEARN_IDN_GEMM_INT_SLICES.patch) |
 | [`MOJOLEARN_IDN_SSD_OCCUPANCY`](#mojolearn_idn_ssd_occupancy) | Mamba-2 SSD S10/S12/S18 kernels (mamba/impl/modules/ssd_minimal.mojo; host column keeps the cell kernels) | 2026-11-15 (`44ec9b2ec9`) | 2026-11-15 (lane/restore-run-arms-neural) | opt-in arm (RUN #5), default unchanged, NVIDIA L40S A/B owed at the wave sha; no bit change (same per-cell chains; host column keeps the cell kernels) | [MOJOLEARN_IDN_SSD_OCCUPANCY.patch](../experiments/removed/MOJOLEARN_IDN_SSD_OCCUPANCY.patch) |
+| [`MOJOLEARN_IDN_ATTN_FOLD_V2`](#mojolearn_idn_attn_fold_v2) | Attention key-axis fold v2 (transformer/impl/llama/attn_fold_v2.mojo, modeling_llama.mojo eager kernels, fused_attention.mojo fused kernels, training/byte_lm_host_kernels.mojo host column) | 2026-11-15 (`c3d1c7865f`) | 2026-11-15 (lane/restore-run-arms-neural) | opt-in arm (RUN #3), default unchanged, NVIDIA L40S A/B owed at the wave sha; B changes bits on every column (fold order; device, fused, host oracle and byte-LM host kernels restored together) | [MOJOLEARN_IDN_ATTN_FOLD_V2.patch](../experiments/removed/MOJOLEARN_IDN_ATTN_FOLD_V2.patch) |
 
 ## Trees
 
@@ -17505,6 +17506,7 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2
 - Records: refusal in `core/experiment_guards_neural.mojo`; no grid_controls entry; `docs/apple-fast/EXPERIMENTS.md` row (expdel2-33-neural section).
 
 - Sweep (lane/expdel2-sweep, 2026-11-15): transformer/impl/llama/fused_attention.mojo: four ATTN_FOLD_V2 arms folded, fused_attn_v2_leaf_kernel, fused_attn_v2_combine_kernel, _launch_fwd_v2, _attn_v2_rows removed; training/byte_lm_host_kernels.mojo v2 denominator and context arms folded; transformer/impl/llama/attn_fold_v2.mojo stays (transformer/checks/transformer_oracle.mojo imports it); no bits change (a803ea45ba).
+Restored 2026-11-15 (lane/restore-run-arms-neural): RUN #3 of docs/plans/DELETED_ARMS_WORTH_RUNNING_2026-11-15.md, opt-in arm, default unchanged; see Restored table.
 
 ### MOJOLEARN_DISABLE_RESIDUAL2_NEXT_NORM
 
