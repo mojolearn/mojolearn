@@ -199,6 +199,17 @@ cleanup may remove, move out of the wheel, weaken or break any part of it. Verif
 not product execution ("No Python in the runtime"), so its Python is never a violation of that rule. A change that
 touches anything verify imports says so in its report and states how verify was exercised afterwards.
 
+**Verify follows the product; it never steers it (Andrew, 2026-11-15).** The product is decided by the best
+performance at equal quality, with the same bits across vendors. What is protected is that verify WORKS and can still
+fail: it runs from the built wheel, covers every lane, and catches a real difference. Its current internals,
+fixtures, references, tools and the product paths it happens to call are not protected from change. When a product
+change makes any of them stale (a faster default, a removed path or switch, changed bits, a renamed entry), the same
+change updates verify to test the new product, and says so. Never keep a slower path, a duplicate, an environment
+switch, an old route or old bits because verify or a verify tool uses them, and never shape a fix around what verify
+currently does. "Protected" forbids leaving verify broken, weakened or unable to fail; it does not make verify a
+reason to hold the product back. The verify smoke (`tools/ops/wheel_verify_smoke.sh`) is how a change shows verify
+still works.
+
 ### No refactor adds cost on a hot path (Andrew, 2026-11-11)
 
 A change that removes a Python crossing, a copy, a lookup or a layer is judged on the whole path it touches, never
