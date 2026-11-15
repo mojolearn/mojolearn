@@ -4,28 +4,6 @@
  "branch": "lane/classical-encoders",
  "head": "c1ebc6314",
  "controls": {
-  "c07_radix_rows": {
-   "define": "MOJOLEARN_CLASSICAL_C07_RADIX_ROWS",
-   "kind": "int_sweep",
-   "arms": {
-    "2048": [],
-    "1024": [
-     "MOJOLEARN_CLASSICAL_C07_RADIX_ROWS=1024"
-    ],
-    "4096": [
-     "MOJOLEARN_CLASSICAL_C07_RADIX_ROWS=4096"
-    ]
-   },
-   "default": "2048",
-   "source": [
-    "experiments/classical_identical_ideas/shared_controls.mojo:28",
-    "x_prep/device.mojo:382"
-   ],
-   "binding": "_mojolearn_x_prep",
-   "bits_change": false,
-   "status": "split_from:MOJOLEARN_CLASSICAL_C07_KEYS1024+MOJOLEARN_CLASSICAL_C07_KEYS4096",
-   "notes": "keys one (column, chunk) radix task counts and scatters; same words for every arm"
-  },
   "c08_unique_scan": {
    "define": "MOJOLEARN_CLASSICAL_C08_UNIQUE_SCAN_OFF",
    "kind": "switch",
@@ -131,7 +109,6 @@
    "binding": "_mojolearn_x_prep",
    "route": "fit: TargetEncoder._run -> (C08_TARGET_CODES) _fit_categories_with_codes: sort_cols[skipped on device] + unique_inverse[ddict] | (off) _fit_categories: sort_cols[radix] + unique_cols[C08_UNIQUE_SCAN] then _codes lookup; then fold target stats; transform: _codes + encode",
    "controls": [
-    "c07_radix_rows",
     "c08_unique_scan",
     "c08_target_codes"
    ],
@@ -151,7 +128,6 @@
    "binding": "_mojolearn_x_prep",
    "route": "fit: _fit_categories: sort_cols[radix] + unique_cols[C08_UNIQUE_SCAN]; transform: codes + onehot op 9[C08_GROUPED_OUTPUT]",
    "controls": [
-    "c07_radix_rows",
     "c08_unique_scan",
     "c08_grouped_output"
    ],
@@ -166,7 +142,6 @@
    "binding": "_mojolearn_x_prep",
    "route": "fit: _fit_categories: sort_cols[radix] + unique_cols[C08_UNIQUE_SCAN]; transform: codes lookup",
    "controls": [
-    "c07_radix_rows",
     "c08_unique_scan"
    ],
    "interaction_groups": [
@@ -179,9 +154,7 @@
   "expanded:quantile-transformer": {
    "binding": "_mojolearn_x_prep",
    "route": "fit: sort_cols[radix] (python/mojolearn/_expansion_prep.py:3706) + quantiles; transform: interpolation",
-   "controls": [
-    "c07_radix_rows"
-   ],
+   "controls": [],
    "interaction_groups": [
     [
      "c07_radix_bits",
@@ -192,9 +165,7 @@
   "expanded:kbins": {
    "binding": "_mojolearn_x_prep",
    "route": "fit (strategy=quantile): sort_cols[radix] (python/mojolearn/_expansion_prep.py:2214) + edges; transform: bin lookup",
-   "controls": [
-    "c07_radix_rows"
-   ],
+   "controls": [],
    "interaction_groups": [
     [
      "c07_radix_bits",
@@ -235,6 +206,11 @@
    "define": "MOJOLEARN_CLASSICAL_C07_RADIX_BITS",
    "control": "c07_radix_bits",
    "reason": "DELETED 2026-11-15 (lane/expdel2-07-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md; recoverable at f93f4dcaa3; patch experiments/removed/MOJOLEARN_CLASSICAL_C07_RADIX_BITS.patch): unmeasured opt-in arm. no record: no A/B was recorded for the opt-in arm (plan rule a; AGENTS.md \"An unmeasured arm is deleted\", Andrew 2026-11-15). Refused in core/experiment_guards_base.mojo; docs/TOMBSTONES.md."
+  },
+  {
+   "define": "MOJOLEARN_CLASSICAL_C07_RADIX_ROWS",
+   "control": "c07_radix_rows",
+   "reason": "DELETED 2026-11-15 (lane/expdel2-07-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md; recoverable at 4a858a0088; patch experiments/removed/MOJOLEARN_CLASSICAL_C07_RADIX_ROWS.patch): unmeasured opt-in arm. no record: no A/B was recorded for the opt-in arm (plan rule a; AGENTS.md \"An unmeasured arm is deleted\", Andrew 2026-11-15). Refused in core/experiment_guards_base.mojo; docs/TOMBSTONES.md."
   }
  ]
 }
