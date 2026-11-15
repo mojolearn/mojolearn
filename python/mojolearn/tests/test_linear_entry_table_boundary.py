@@ -11,12 +11,18 @@ from mojolearn import LinearRegression, Ridge
 from mojolearn._native_classical_bridge import connect
 
 
+def _fit_operation(cls):
+    # The classical entry names its fit per estimator (bindings/classical_native_pack.mojo);
+    # it never had a generic "fit" operation.
+    return "ridge_fit" if cls is Ridge else "ols_fit"
+
+
 def setup_case(cls):
     entry, context = connect(Ridge, LinearRegression)
     x = np.array([[0, 1], [1, 0], [1, 2], [2, -1], [3, 2]], dtype="f4")
     y = np.array([1, 2, 4, 3, 8], dtype="f4")
     model = cls()
-    entry(model, "fit", (x, y, None), context)
+    entry(model, _fit_operation(cls), (x, y, None), context)
     mode = context["backend_fields"]["_DEFAULT_MODE"]
     return entry, context, context["classical_bindings"][mode], model, x, y
 
@@ -78,7 +84,7 @@ def test_weighted_connection_refuses_estimator_owner(monkeypatch):
     entry, context, entries, _, x, y = setup_case(Ridge)
     monkeypatch.setitem(entries, "_native_weighted_connection", entries["_native_entry_connection"])
     with pytest.raises(TypeError, match="connection family differs"):
-        entry(Ridge(), "fit", (x, y, np.ones(len(x), dtype="f4")), context)
+        entry(Ridge(), "ridge_fit", (x, y, np.ones(len(x), dtype="f4")), context)
 
 
 @pytest.mark.parametrize("cls", [Ridge, LinearRegression])
@@ -129,7 +135,7 @@ def test_imported_connection_ignores_legacy_capsule_factories(cls, monkeypatch):
         function = getattr(_backend.binding(image, mode), factory)
         monkeypatch.setattr(function.__self__, factory, forbidden)
     model = cls()
-    entry(model, "fit", (x, y, None), context)
+    entry(model, _fit_operation(cls), (x, y, None), context)
     prediction = entry(model, "predict_public", (x,), context)
     score = entry(model, "score", (x, y), context)
     assert prediction.shape == (len(x),)
@@ -140,16 +146,17 @@ def test_imported_connection_ignores_legacy_capsule_factories(cls, monkeypatch):
 
 @pytest.mark.parametrize("cls", [Ridge, LinearRegression])
 def test_handle_refresh_preserves_public_coefficient_replacement(cls):
-    entry, context, _, model, x, _ = setup_case(cls)
+    x = np.array([[0, 1], [1, 0], [1, 2], [2, -1], [3, 2]], dtype="f4")
+    y = np.array([1, 2, 4, 3, 8], dtype="f4")
+    model = cls().fit(x, y)
     model.coef_ = np.array([2, -3], dtype="f4")
     model.intercept_ = 0.5
     expected = (x @ model.coef_ + np.float32(0.5)).astype("f8")
-    actual = entry(model, "predict_public", (x,), context)
-    np.testing.assert_allclose(actual, expected, rtol=1e-6, atol=1e-6)
+    np.testing.assert_allclose(np.asarray(model.predict(x)), expected, rtol=1e-6, atol=1e-6)
+    # An in-place edit of the replaced coefficient owner reaches the next predict.
     model.coef_[0] = 4
     expected = (x @ model.coef_ + np.float32(0.5)).astype("f8")
-    actual = entry(model, "predict_public", (x,), context)
-    np.testing.assert_allclose(actual, expected, rtol=1e-6, atol=1e-6)
+    np.testing.assert_allclose(np.asarray(model.predict(x)), expected, rtol=1e-6, atol=1e-6)
 
 
 @pytest.mark.parametrize("position", ["mode", "vendor"])
