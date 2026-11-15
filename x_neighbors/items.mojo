@@ -35,7 +35,6 @@ from checks.numerics import (
 )
 
 from std.memory import bitcast
-from std.sys.compile import is_defined
 from std.sys.info import is_gpu
 
 comptime FP = MutPointer[Float32, MutAnyOrigin]

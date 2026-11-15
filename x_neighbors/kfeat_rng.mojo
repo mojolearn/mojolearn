@@ -39,7 +39,7 @@ Nothing here imports a GPU module, so the CPU-only host binding compiles it
 `kfeat_dev.mojo`).
 """
 
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_mul
+from checks.numerics import ftz, identical_mul
 from x_neighbors.items import FP, IP, skew_weights_item
 
 # lane cpu3-python (2026-10-04): FAST takes the counter

@@ -19,10 +19,8 @@ at a tolerance, never bit for bit (NOT_IMPLEMENTED.tsv)."""
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 
 from std.memory import bitcast
-from std.sys.compile import is_defined
 
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, ftz, identical_div, identical_mul, identical_mul64
-from checks.numerics import NUMERIC_IDENTICAL
+from checks.numerics import ftz, identical_div, identical_mul, identical_mul64
 from x_cluster.bodies import SPLITMIX_GAMMA, SplitMix64, splitmix_at
 from x_cluster.common import gather_rows, greedy_kmeans_pp, nearest_all, sum_f64, weighted_draw
 from x_cluster.post_bodies import FM_VAL, FOLD_CHUNK

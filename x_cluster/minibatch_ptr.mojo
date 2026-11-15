@@ -21,12 +21,10 @@ samples and the picked init centers are gathered from the resident X on
 the device (`_gather_slot`, `_kpp_indices_slot`; lane cpu3-core). Everything
 else is `minibatch_fit`'s FAST path word for word (the same seeded draws in
 the same order, `ops.minibatch_fast` for the steps, `nearest_all` for the
-labels), so a fit returns what the copying path returns. Unit weights and
-tol <= 0 only (the board's shape; the device steps take nothing else):
-anything else returns False and the binding takes the copying path.
+labels), so a fit returns what the copying path returns. Unit weights only
+(weights return False and the binding takes the copying path).
 IDENTICAL compiles none of this.
 """
-from std.sys.compile import is_defined
 from max.gpu.host import DeviceBuffer
 from core.accelerator_target import TARGET_HAS_APPLE_GPU
 

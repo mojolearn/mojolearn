@@ -39,7 +39,6 @@ differ from the step loop's. IDENTICAL compiles none of this.
 """
 from max.gpu import block_idx, thread_idx
 from std.memory import stack_allocation
-from std.sys.compile import is_defined
 from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace
@@ -497,8 +496,7 @@ def minibatch_fast_steps(
     squared center shift (`_mbf_shift_kernel`, after the reassignment, as the
     loop measures it) and the convergence check stops at the first step past
     0 whose shift is `<= tol`, before the no-improvement count, as the loop
-    does. `-D MOJOLEARN_X_CLUSTER_FAST_MINIBATCH_GENERAL_OFF=1` restores the
-    unit / tol <= 0 gate in the drivers."""
+    does."""
     comptime if MINIBATCH_FAST_DEV:
         if k * d > MBF_MAX_KD or k > MBF_MAX_K or batch > MBF_MAX_BATCH or batch < 1 or n_steps < 1 or k < 1:
             return False

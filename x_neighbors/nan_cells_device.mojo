@@ -32,7 +32,6 @@ from core.device_fold import device_sum_i32
 from core.device_pool import pool_give, pool_take
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
 from core.accelerator_target import TARGET_HAS_APPLE_GPU
-from std.sys.compile import is_defined
 
 
 comptime NC_TPB = 256

@@ -17,7 +17,6 @@ from std.memory import stack_allocation
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 
-
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_sqrt
 from x_cluster.bodies import FPtr, IPtr
 from x_cluster.post_bodies import (
