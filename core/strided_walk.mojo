@@ -25,7 +25,6 @@ construction, and the identity hashes in `bench/apple_identical_steps_main
 
 WHERE. Apple, IDENTICAL only, like every other Apple-scheduling choice: the
 NVIDIA, AMD and CPU columns compile the unchanged loop.
-`-D MOJOLEARN_APPLE_STEP_UNROLL_OFF` restores the plain loop on Apple.
 """
 
 from std.sys.compile import is_defined
@@ -46,10 +45,9 @@ from checks.numerics import (
 #: column: LinearSVC's gradient, Ridge's U^T b, lstsq) and the one-load-at-a-
 #: time single-block loss sums. Only which thread runs a chain and when its
 #: loads issue move; the adds and the fold are the same, so no bit moves.
-comptime APPLE_IDENTICAL_STEP_UNROLL = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not is_defined["MOJOLEARN_APPLE_STEP_UNROLL_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_APPLE_STEP_UNROLL_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-04-base; code recoverable at 853900db5b.
+# Restore: git apply experiments/removed/MOJOLEARN_APPLE_STEP_UNROLL_OFF.patch; record in docs/TOMBSTONES.md.
+comptime APPLE_IDENTICAL_STEP_UNROLL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 
 #: FAST on Apple (lane/linear-apple2): the same unrolled walks. A walk's
 #: adds are the plain loop's, in its order (only the loads move ahead), so
