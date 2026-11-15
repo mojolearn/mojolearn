@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """lane/apple-fast-w4-eigh (2026-10-04): FAST + Apple eigh by Householder
 tridiagonalization, double-float bisection and twisted-factorization vectors,
-FAST + Apple; rollback -D MOJOLEARN_EIGH_FAST_TRIDIAG_PANELS_OFF.
+FAST + Apple.
 
 Why: main's eigh on the board (n = 4096) is the round-robin Jacobi. Every
 round of every sweep reads and writes the whole matrix (4095 rounds a sweep,
