@@ -29,9 +29,10 @@ comptime ANN_FAST_APPLE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APP
 #: 64 features: candidate rows staged in threadgroup memory a feature chunk
 #: at a time (`knn_tiled_bigd_kernel`) instead of the untiled cell.
 #: FAST+Apple default since the M3 A/B (n=1): CAGRA istella 173,188 ->
-#: 21,240 ms, recall .9838 unchanged. `-D MOJOLEARN_ANN_FAST_KNN_BIGD_OFF`
-#: restores the untiled cell.
-comptime FAST_KNN_BIGD = ANN_FAST_APPLE and not is_defined["MOJOLEARN_ANN_FAST_KNN_BIGD_OFF"]()
+#: 21,240 ms, recall .9838 unchanged. The untiled cell stays the IDENTICAL path.
+# TOMBSTONE: MOJOLEARN_ANN_FAST_KNN_BIGD_OFF (old path, superseded by the FAST+Apple default) deleted 2026-11-15 by lane/expdel-01-cluster; code recoverable at 54b6a264fc.
+# Restore: git apply experiments/removed/MOJOLEARN_ANN_FAST_KNN_BIGD_OFF.patch; record in docs/TOMBSTONES.md.
+comptime FAST_KNN_BIGD = ANN_FAST_APPLE
 
 #: IVF-PQ build: every subspace codebook trained by one batched Lloyd loop
 #: on the device (`x_ann/pq_kmeans_device.mojo`) over the residuals already

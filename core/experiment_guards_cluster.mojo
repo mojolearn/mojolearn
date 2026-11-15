@@ -87,6 +87,9 @@ def _check_configuration() -> Bool:
     # TOMBSTONE: MOJOLEARN_IVF_BALANCED_TASKS (loser) deleted 2026-11-09 by lane/m1-followups-misc; code recoverable at 5b5490960d.
     # Restore: git apply experiments/removed/MOJOLEARN_IVF_BALANCED_TASKS.patch
     comptime assert not is_defined["MOJOLEARN_IVF_BALANCED_TASKS"](), "removed 2026-11-09 (lane/m1-followups-misc): MOJOLEARN_IVF_BALANCED_TASKS, the IDENTICAL IVF search through ivf_balanced_scan's bounded list tasks, measured slower on NVIDIA L40S (1.20x-4.17x) and AMD MI325X (3.25x-16.5x) in I16; code at 5b5490960d; see docs/TOMBSTONES.md"
+    # Lane expdel-01-cluster (2026-11-15): owed deletions of docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md (docs/TOMBSTONES.md).
+    # Restore: git apply experiments/removed/MOJOLEARN_ANN_FAST_KNN_BIGD_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_ANN_FAST_KNN_BIGD_OFF"](), "removed 2026-11-15 (lane/expdel-01-cluster): ANN_FAST_KNN_BIGD_OFF (FAST+Apple rollback to the untiled k-NN cell for d > 64) is gone; the tiled bigd kernel is the FAST+Apple path (CAGRA istella 173,188 -> 21,240 ms, KEPT 8d43ec357); restore: experiments/removed/MOJOLEARN_ANN_FAST_KNN_BIGD_OFF.patch"
     return True
 
 

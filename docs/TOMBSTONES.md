@@ -680,6 +680,7 @@ Deletions reversed by new evidence. The code is back on main; the section and th
 | [GaussianMixture Python entries gmm_fit, gmm_fit_predict and the four scoring entries (native entries)](#dead-native-entries-gaussianmixture-python-entries-2026-11-11) | Mixture (GPU, host and inference-only host bindings) | removed (dead native entries: no live caller) | 2026-11-11 | [dead_entries_gmm_python.patch](../experiments/removed/dead_entries_gmm_python.patch) |
 | [TREES_LEGACY_PYTHON_ENTRIES: 36 rf/et Python fit registrations (rowmajor, weighted, shard and shard-export forms) (native entries)](#dead-native-entries-trees-legacy-python-entries-2026-11-12) | Forests (rf, rf host, trees, trees host bindings) | removed (dead native entries: no live caller) | 2026-11-12 | [TREES_LEGACY_PYTHON_ENTRIES.patch](../experiments/removed/TREES_LEGACY_PYTHON_ENTRIES.patch) |
 | [LABELS_NATIVE_API_V1_V2: the labels_native_api_v1 / v2 provider publications (native entries)](#dead-native-entries-labels-provider-v1-and-v2-2026-11-12) | Labels (base GPU and core host bindings) | removed (dead native entries: no live caller) | 2026-11-12 | [LABELS_NATIVE_API_V1_V2.patch](../experiments/removed/LABELS_NATIVE_API_V1_V2.patch) |
+| [`MOJOLEARN_ANN_FAST_KNN_BIGD_OFF`](#mojolearn_ann_fast_knn_bigd_off-old-path-deleted-2026-11-15) | ANN (k-NN graph for CAGRA build / t-SNE, FAST Apple) | removed (old path; FAST+Apple default KEPT 8d43ec357) | 2026-11-15 | [MOJOLEARN_ANN_FAST_KNN_BIGD_OFF.patch](../experiments/removed/MOJOLEARN_ANN_FAST_KNN_BIGD_OFF.patch) |
 
 ## Trees
 
@@ -5901,3 +5902,11 @@ replacement computes the same values in the same order (see the bit notes below)
 - **Restore**: `git apply experiments/removed/LABELS_NATIVE_API_V1_V2.patch` (the two binding files), then re-add
   `labels_native_api_v2` to the core host export list in `python/mojolearn/host_surface.py`.
 - **Guard / records**: no `-D` define was removed, so no guard refusal and no `grid_controls` entry moves.
+
+## MOJOLEARN_ANN_FAST_KNN_BIGD_OFF: old path deleted (2026-11-15)
+
+- **What it was**: the FAST+Apple rollback to the untiled k-NN cell for rows wider than 64 features (`x_ann/fast_env.mojo` FAST_KNN_BIGD, read in `x_ann/knn_device.mojo` `knn_enqueue`). Only the define read is deleted: the untiled cell is the IDENTICAL path and stays.
+- **Verdict**: the tiled arm won (EXPERIMENTS.md `ANN_FAST_KNN_BIGD`, KEPT 8d43ec357): M3 one run per arm, CAGRA istella 173,188 -> 21,240 ms, recall .9838 unchanged (FAST Apple; no NVIDIA/AMD vote in `fast`). No bit change on any column.
+- **Deleted by**: lane/expdel-01-cluster (expdel-01-cluster, docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md); code recoverable at `54b6a264fc`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_ANN_FAST_KNN_BIGD_OFF.patch`, then delete the `MOJOLEARN_ANN_FAST_KNN_BIGD_OFF` refusal in `core/experiment_guards_cluster.mojo`.
+- **Records**: refusal in `core/experiment_guards_cluster.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel-01-cluster section).
