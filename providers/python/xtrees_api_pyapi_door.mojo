@@ -932,11 +932,8 @@ def leaf_numbering_binding(left: PythonObject, node_col: PythonObject, params: P
 #: lane fam2-forests (2026-10-04): `get_depth` / `get_n_leaves` walk the tree's
 #: nodes in this binding (xtrees/ops.mojo `tree_shape`) instead of a Python
 #: loop over `tolist()` rows. Integers; every build and both tiers.
-#: `-D MOJOLEARN_IDN_ALL_OFF` leaves the entry unregistered and the Python
-#: walk runs.
 # TOMBSTONE: MOJOLEARN_IDN_TREE_SHAPE_NATIVE_OFF (unmeasured old path: the Python tree walk) deleted 2026-11-15 by lane/expdel2-08-base; code recoverable at 3f0e029eb4.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_TREE_SHAPE_NATIVE_OFF.patch; record in docs/TOMBSTONES.md.
-comptime XTREES_TREE_SHAPE_NATIVE = not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 
 
 def tree_shape_binding(left: PythonObject, res: PythonObject, params: PythonObject) raises -> PythonObject:
@@ -1498,8 +1495,9 @@ def register(mut m: PythonModuleBuilder) raises:
     m.def_function[positive_codes_binding]("x_trees_positive_codes")
     m.def_function[spread_leaves_binding]("x_trees_spread_leaves")
     m.def_function[leaf_numbering_binding]("x_trees_leaf_numbering")
-    comptime if XTREES_TREE_SHAPE_NATIVE:
-        m.def_function[tree_shape_binding]("x_trees_tree_shape")
+    # TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old path, umbrella) deleted 2026-11-15 by lane/expdel2-37-series; this read folded by lane/expdel2-sweep.
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-sweep.patch; record in docs/TOMBSTONES.md.
+    m.def_function[tree_shape_binding]("x_trees_tree_shape")
     m.def_function[block_mean_binding]("x_trees_block_mean")
     m.def_function[kshap_schedule_binding]("x_trees_kshap_schedule")
     m.def_function[normalized_weights_binding]("x_trees_normalized_weights")
