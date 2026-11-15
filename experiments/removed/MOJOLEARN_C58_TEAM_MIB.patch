@@ -1,0 +1,24 @@
+diff --git b/experiments/classical_identical_ideas/stats_controls.mojo a/experiments/classical_identical_ideas/stats_controls.mojo
+index 8780a45c82..24fbd03096 100644
+--- b/experiments/classical_identical_ideas/stats_controls.mojo
++++ a/experiments/classical_identical_ideas/stats_controls.mojo
+@@ -4,7 +4,7 @@ NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED 
+ A enables one named candidate; B omits it, preserving all incumbent switches.
+ These controls must never select a FAST or neural runtime path.
+ """
+-from std.sys.compile import is_defined
++from std.sys.compile import is_defined, get_defined_int
+ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+ 
+ comptime CLASSICAL_IDENTICAL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+@@ -52,9 +52,7 @@ comptime C58_SERIES4 = False
+ # C58 team state budget in MiB: integer sweep -D MOJOLEARN_C58_TEAM_MIB=64|256
+ # (was the boolean MOJOLEARN_C58_TEAM64); absent = 256 = incumbent. A memory
+ # budget only: it sets series per launch slice, never per-series arithmetic.
+-# TOMBSTONE: MOJOLEARN_C58_TEAM_MIB (no A/B recorded for the opt-in arm) deleted 2026-11-15 by lane/expdel2-07-base; code recoverable at d6045cbd0a.
+-# Restore: git apply experiments/removed/MOJOLEARN_C58_TEAM_MIB.patch
+-comptime C58_TEAM_MIB = 256
++comptime C58_TEAM_MIB = get_defined_int["MOJOLEARN_C58_TEAM_MIB", 256]() if CLASSICAL_IDENTICAL else 256
+ comptime C59_TRIAL_STATE = CLASSICAL_IDENTICAL and is_defined["MOJOLEARN_C59_TRIAL_STATE"]()
+ # C60: shared detrended observations across independent lag tasks.
+ comptime C60_LAG4 = CLASSICAL_IDENTICAL and is_defined["MOJOLEARN_C60_LAG4"]()

@@ -338,6 +338,8 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_TRANSFORMER_FRESH_PREFILL"](), "removed 2026-11-15 (lane/expdel2-01-base): MOJOLEARN_TRANSFORMER_FRESH_PREFILL (the opt-in export of the per-call transformer_forward_fresh entry off NVIDIA) is gone, no A/B was ever recorded for that arm; the entry is exported on the NVIDIA IDENTICAL build only; restore: experiments/removed/MOJOLEARN_TRANSFORMER_FRESH_PREFILL.expdel2-01-base.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_TRANSFORMER_LEGACY_FRESH_PREFILL.patch
     comptime assert not is_defined["MOJOLEARN_TRANSFORMER_LEGACY_FRESH_PREFILL"](), "removed 2026-11-15 (lane/expdel2-01-base): MOJOLEARN_TRANSFORMER_LEGACY_FRESH_PREFILL (the NVIDIA opt-out of the per-call transformer_forward_fresh export) is gone; NVIDIA IDENTICAL builds always export it (NVIDIA's full public A/B gate admitted it); restore: experiments/removed/MOJOLEARN_TRANSFORMER_LEGACY_FRESH_PREFILL.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_C58_TEAM_MIB.patch
+    comptime assert not is_defined["MOJOLEARN_C58_TEAM_MIB"](), "removed 2026-11-15 (lane/expdel2-07-base): C58_TEAM_MIB (Sequence (classical series team state budget 64 MiB, IDENTICAL)) was unmeasured opt-in arm; the opt-in arm is gone and the default path is unchanged; code recoverable at d6045cbd0a; see docs/TOMBSTONES.md"
     return True
 
 
