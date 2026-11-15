@@ -64,7 +64,9 @@ comptime T13_BYTES = get_defined_int["MOJOLEARN_TREES_T13_BYTES", 16*1024*1024](
 # Folded constants kept for importers in other lanes' files.
 comptime T14 = False
 comptime T14_EXACT = False
-comptime T15 = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_TREES_T15"]()
+# TOMBSTONE: MOJOLEARN_TREES_T15 (unmeasured arm) deleted 2026-11-15 by expdel2-39-trees; code recoverable at the deletion commit^.
+# Restore: git apply experiments/removed/MOJOLEARN_TREES_T15.patch
+comptime T15 = False
 comptime C48 = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_TREES_C48"]()
 
 @always_inline
