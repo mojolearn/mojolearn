@@ -402,7 +402,8 @@ comptime KMEANS_FAST_PP_NOSYNC = (
         or TARGET_COLUMN == COLUMN_NVIDIA
         or TARGET_COLUMN == COLUMN_AMD
     )
-    and not is_defined["MOJOLEARN_KMEANS_FAST_PP_NOSYNC_OFF"]()
+    # TOMBSTONE: MOJOLEARN_KMEANS_FAST_PP_NOSYNC_OFF (old path, EXP:1517 default kept) deleted 2026-11-15 by lane/expdel2-10-cluster; code recoverable at af1f49acbe.
+    # Restore: git apply experiments/removed/MOJOLEARN_KMEANS_FAST_PP_NOSYNC_OFF.patch; record in docs/TOMBSTONES.md.
 )
 """FAST on Apple: the greedy k-means++ loop draws every pick's uniforms up
 front and chooses the best candidate on the device, so the `k - 1` picks
