@@ -7,7 +7,22 @@ independent test oracle for their one-call native doors
 from mojolearn._buffer import addr, addr_ro, as_f32_c, as_f32_dense_c, as_i64_c, empty
 from mojolearn._labels import decode_labels, encode_labels
 from mojolearn._array import Array
-from mojolearn._buffer import shape_of as _shape_of, view
+from mojolearn._buffer import view
+
+
+def _shape_of(obj):
+    """Frozen copy of the former `_buffer.shape_of` (deleted from the package
+    2026-11-15 by lane py-buffer: no product caller)."""
+    shape = getattr(obj, "shape", None)
+    if shape is not None:
+        return tuple(shape)
+    if isinstance(obj, (list, tuple)):
+        if obj and isinstance(obj[0], (list, tuple)):
+            return (len(obj), len(obj[0]))
+        return (len(obj),)
+    if hasattr(obj, "__len__"):
+        return (len(obj),)
+    return ()
 from mojolearn.neighbors import _XN
 
 

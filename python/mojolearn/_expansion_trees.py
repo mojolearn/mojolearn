@@ -29,7 +29,6 @@ import weakref
 
 from . import _mojolearn_rf, _mojolearn_x_trees  # noqa: F401  the bindings this door resolves; name NO other (lane_select counts > 3 as a registry)
 from ._array import Array
-from ._buffer import addr, addr_ro, as_f32_c, empty, frombytes, full, zeros
 from ._mode import NumericModeMixin, available_if
 from ._class_weights import _trees_x_bind  # noqa: F401  re-exported: callers import it from this door
 from ._mode import ClassifierScoreMixin, RegressorScoreMixin
@@ -459,44 +458,9 @@ class _TreesEnsembleBase(NumericModeMixin):
     """The lane's binding (`_bind()`) and its row/column helpers."""
     _BINDING = "_mojolearn_x_trees"
 
-    def _indices(self, n_pool, n_draw, replace, seed, stream):
-        """`n_draw` indices of [0, n_pool): with replacement in draw order;
-        without, the drawn SET in ascending index order (xtrees/ops.mojo
-        `sample_indices`' random-key selection)."""
-        out = empty((n_draw,), "<i4")
-        self._bind().x_trees_sample_indices(addr(out, name="indices"),
-                                            [int(n_pool), int(n_draw), 1 if replace else 0, int(seed), int(stream)])
-        return out
-
-    def _gather(self, Xa, rows, cols):
-        n_src, d_src = Xa.shape
-        out = empty((len(rows), len(cols)), "<f4")
-        self._bind().x_trees_gather_f32(addr_ro(Xa, name="X"), addr_ro(rows, name="rows"), addr_ro(cols, name="cols"),
-                                        addr(out, name="gathered"), [n_src, d_src, len(rows), len(cols)])
-        return out
-
-    def _gather_codes(self, codes, rows):
-        out = empty((len(rows),), "<i4")
-        self._bind().x_trees_gather_i32(addr_ro(codes, name="codes"), addr_ro(rows, name="rows"),
-                                        addr(out, name="gathered"), [len(codes), len(rows)])
-        return out
-
-    def _gather_vec(self, v, rows):
-        """A float32 vector gathered at rows (as an n x 1 matrix)."""
-        col = Array.from_list([0], "<i4")
-        return self._gather(v.reshape((len(v), 1)), rows, col).reshape((len(rows),))
-
-    def _acc_cols(self, acc, x, cols, n, k, weight=1.0):
-        xa, _ = as_f32_c(x, ndim=2, name="sub-estimator output")
-        self._bind().x_trees_accumulate_cols(addr(acc, name="acc"), addr_ro(xa, name="x"),
-                                             addr_ro(cols, name="cols"), [n, k, len(cols), float(weight)])
-
-    def _acc(self, acc, x, n, weight=1.0):
-        xa, _ = as_f32_c(x, ndim=1, name="sub-estimator output")
-        self._bind().x_trees_accumulate(addr(acc, name="acc"), addr_ro(xa, name="x"), [n, float(weight)])
-
-    def _scale(self, acc, divisor):
-        self._bind().x_trees_scale(addr(acc, name="acc"), [len(acc), float(divisor)])
+    # TOMBSTONE: _indices / _gather / _gather_codes / _gather_vec / _acc_cols / _acc / _scale (no
+    # caller: bindings/trees_public_boost_door.mojo owns the bagging and boosting gathers) deleted
+    # 2026-11-15 by lane py-buffer; code recoverable at 8579360a2e.
 
 
 # ------------------------------------------------------------------ Bagging

@@ -271,7 +271,6 @@ def test_public_rms_uses_no_python_preparation_or_loader(monkeypatch):
     def forbidden(*args, **kwargs):
         raise AssertionError("Python RMS helper entered")
     monkeypatch.setattr(T, "_load", forbidden)
-    monkeypatch.setattr(T, "_c32", forbidden)
     result = audit_native_call(T.rms_norm_backward, gradient, x, weight, 1e-5, numeric_mode="identical").assert_native()
     assert_outputs(result, expected)
 

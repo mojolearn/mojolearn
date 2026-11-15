@@ -186,7 +186,7 @@ def test_public_linear_uses_no_python_preparation_or_binding_helpers(monkeypatch
     expected = kernel_oracle("linear_backward", a, weight, gradient, "identical")
     def forbidden(*args, **kwargs):
         raise AssertionError("Python linear preparation helper entered")
-    for name in ("_load", "_c32"):
+    for name in ("_load",):
         monkeypatch.setattr(T, name, forbidden)
     actual = audit_native_call(T.linear_backward, gradient, a, weight, numeric_mode="identical").assert_native()
     assert_outputs(actual, expected)

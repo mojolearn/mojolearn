@@ -111,10 +111,7 @@ from ._arrays import _addr, _addr_ro
 
 from . import _backend
 from ._array import Array
-from ._buffer import as_f32_c, as_i32_c, memory_at
-from ._bufcheck import (
-    is_integer, is_native_f32, probe,
-)
+from ._bufcheck import probe
 from ._mode import NumericModeMixin
 
 
@@ -1244,11 +1241,8 @@ class Generator(object):
 # ===================================================================
 
 
-def _c32(a, name, where):
-    pb = probe(a)
-    if not is_native_f32(pb.format):
-        raise TypeError('mojolearn.%s: %s must be float32' % (where, name))
-    return as_f32_c(a, ndim=None, name=name)[0]
+# TOMBSTONE: _training_impl._c32 (no product caller: the public ops admit their float32 inputs
+# natively) deleted 2026-11-15 by lane py-buffer; code recoverable at 8579360a2e.
 
 
 # The gather of embedding/checks/embedding_identical.mojo.

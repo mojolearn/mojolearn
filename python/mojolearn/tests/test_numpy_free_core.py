@@ -25,7 +25,7 @@ import zipfile
 import numpy as np
 from numpy.lib import format as npy_format
 
-from mojolearn import _arrays, _buffer, _serialize
+from mojolearn import _buffer, _serialize
 from mojolearn._array import Array
 
 
@@ -205,8 +205,9 @@ def test_colmajor_matches_asfortranarray():
         # an F-order float32 input is a zero-copy borrow
         got, copied = _buffer.as_f32_colmajor(want, name="X")
         assert not copied and _buffer.addr_ro(got, name="X") == want.ctypes.data
-        # the shim's flat is the column-major flat over the same buffer
-        a, flat, copied = _arrays.as_f32_colmajor(x, "X")
+        # the Array's flat is the column-major flat over the same buffer
+        a, copied = _buffer.as_f32_colmajor(x, name="X")
+        flat = a._flat()
         assert flat.shape == (rows * cols,)
         assert _buffer.addr_ro(flat, name="f") == _buffer.addr_ro(a, name="a")
         for f_ in range(cols):
@@ -458,10 +459,10 @@ def test_getbuffer_paths():
         raise AssertionError("a read-only buffer must be refused")
     except ValueError as e:
         assert "read-only" in str(e)
-    # the shim keeps the old message word for word
+    # the old message word for word (the `_arrays` shim is deleted)
     try:
-        _arrays._addr(raw)
-        raise AssertionError("shim must refuse read-only")
+        _buffer.addr(raw, name="output buffer")
+        raise AssertionError("a read-only output buffer must be refused")
     except ValueError as e:
         assert str(e) == "mojolearn: output buffer is read-only, refusing to write to it"
     # bytearray: writable
@@ -526,8 +527,8 @@ def test_getbuffer_paths():
     got, copied = _buffer.as_f32_c([[1, 2], [3, 4]], ndim=2, name="X")
     assert copied and got.tolist() == [[1.0, 2.0], [3.0, 4.0]]
     # ndim and emptiness keep the old messages, positional shim included
-    for call, msg in ((lambda: _arrays.as_f32_c(np.zeros(3, np.float32), "X"), "X must be 2-D, got 1-D shape (3,)"),
-                      (lambda: _arrays.as_f32_c(np.zeros((0, 3), np.float32), "X"), "X is empty, shape (0, 3)"),
+    for call, msg in ((lambda: _buffer.as_f32_c(np.zeros(3, np.float32), ndim=2, name="X"), "X must be 2-D, got 1-D shape (3,)"),
+                      (lambda: _buffer.as_f32_c(np.zeros((0, 3), np.float32), ndim=2, name="X"), "X is empty, shape (0, 3)"),
                       (lambda: _buffer.as_f32_c([1.0], ndim=2, name="y"), "y must be 2-D, got 1-D shape (1,)"),
                       (lambda: _buffer.as_f64_c(np.zeros((2, 2)), ndim=1, name="y"), "y must be 1-D, got 2-D shape (2, 2)")):
         try:
