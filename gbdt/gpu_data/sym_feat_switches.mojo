@@ -60,9 +60,9 @@ comptime GBDT_QUANT_DEVICE = SYM_FEAT_FAST_APPLE and (
 #: recovery 2026-10-04 (lane/apple-fast-rec-sym): source
 #: lane/apple-fast-sym-feat@bca0e3a48; never built (compile owed at the
 #: source), never timed.
-comptime GBDT_PREDICT_PACKED = SYM_FEAT_FAST_APPLE and (
-    is_defined["MOJOLEARN_GBDT_PREDICT_PACKED"]()
-)
+# TOMBSTONE: MOJOLEARN_GBDT_PREDICT_PACKED (DELETE-EXPERIMENT, EXP:171 NEUTRAL; prerequisite of a never-run Apple FAST card, rule g) deleted 2026-11-15 by lane/expdel2-42-trees; code recoverable at da9c45fa84.
+# Restore: git apply experiments/removed/MOJOLEARN_GBDT_PREDICT_PACKED.patch; record in docs/TOMBSTONES.md.
+comptime GBDT_PREDICT_PACKED = False
 # TOMBSTONE: MOJOLEARN_GBDT_BOOT_DEVICE (NEUTRAL: rab7-gbdtbootdevice istella -0.2%; its device seed fill is every
 # tier's default since cpu2-l6-bindings, so the switch read nothing) deleted 2026-11-15 by lane/expdel-05-trees; code
 # recoverable at 2f51f8b97d.
