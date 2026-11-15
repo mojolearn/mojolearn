@@ -203,7 +203,7 @@ comptime C19_SGD_CHUNK = 2048
 # (Sweep 2026-11-15: comptime C21_EXTREMA removed; nothing read it.)
 # TOMBSTONE: MOJOLEARN_CLASSICAL_C22_TRIANGLE (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-06-base; code recoverable at 45379ff055.
 # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C22_TRIANGLE.patch; record in docs/TOMBSTONES.md.
-comptime C22_TRIANGLE = False
+# (Sweep 2026-11-15: comptime C22_TRIANGLE removed; nothing read it.)
 # lane classical-decomp (2026-10-07): the old C23_CENTERED_PANELS define is
 # split per algorithm family. Its PCA use (the ONE_PASS arm of
 # MOJOLEARN_CLASSICAL_PCA_COV, =23) was deleted 2026-10-08 (below); its MCD use is C23_MCD. Both run
