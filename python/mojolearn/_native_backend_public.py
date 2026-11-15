@@ -31,6 +31,33 @@ def vendor():
     return _NATIVE("vendor", (), _CONTEXT)
 
 
+def runtime_report():
+    """What this process is running, as a plain dictionary.
+
+    Returns a new ``dict`` on every call: the package ``version``; the
+    ``vendor`` (``'cuda'``, ``'hip'``, ``'metal'`` or ``'cpu'``); the loaded
+    ``numeric_mode`` and the process ``default_mode``; ``code_mode``, the mode
+    the loaded gbdt binary says it was compiled as; ``cpu_only``;
+    ``gpu_arch`` and ``gpu_arch_how``; ``host_dir`` and the
+    ``host_families_built`` there; ``bindings``, every native binding module
+    of the package keyed by module name, each with its ``path``, ``loaded``,
+    ``identity`` (the SHA-256 of the file), ``vendor`` and ``mode``;
+    ``fallbacks``; and the ``harness_source``, ``source_commit``,
+    ``checkout_root`` and ``package_dir`` the verification commands use.
+
+    The report only reads: it loads no binding and changes nothing. A binding
+    appears once something has loaded it or its tier.
+
+    Example::
+
+        >>> import mojolearn
+        >>> report = mojolearn.runtime_report()
+        >>> report["vendor"] in ("cuda", "hip", "metal", "cpu")
+        True
+    """
+    return _NATIVE("runtime_report", (), _CONTEXT)
+
+
 def _native_entry(module, name):
     # glue: resolve optional compiled metadata entries at connection only
     from types import BuiltinFunctionType
@@ -89,6 +116,30 @@ def refresh():
                     selected_mode=_native_entry(_backend.canonical_loaded("_mojolearn_gbdt"), "gbdt_numeric_mode"))
 
 
+def _report_context(package):
+    # glue: import-only connection of what runtime_report() reads: the live
+    # module table, C posix entries, the merged-index cache, the frozen
+    # fallback names, the package directory and its parents. Nothing here
+    # runs per call; runtime_report() itself is one native call.
+    import posix
+    import sys
+    import types
+    from . import _merged, _runtime_fallbacks
+    import os
+    package_dir = os.path.dirname(os.path.abspath(package.__file__))
+    parents, base = [], package_dir
+    for _ in range(6):  # glue: the checkout-root candidates, walked as _identity._checkout_root walked them
+        parent = base.rsplit("/", 1)[0] or "/"
+        if parent == base or parent == "/":
+            break
+        parents.append(parent)
+        base = parent
+    return dict(version=package.__version__, package_dir=package_dir, package_parents=tuple(parents),
+                fallbacks=tuple(_runtime_fallbacks.FALLBACKS), modules=sys.modules,
+                module_type=types.ModuleType, list_type=list, listdir=posix.listdir, getcwd=posix.getcwd,
+                merged_cache=_merged._INDEX_CACHE, merged_index_name=_merged.INDEX_NAME)
+
+
 def connect(package):
     # glue: discovery/imports finish before public operations are installed;
     # native execution retains entries and never invokes the Python loader.
@@ -105,7 +156,9 @@ def connect(package):
                     selected_mode=_native_entry(_backend.canonical_loaded("_mojolearn_gbdt"), "gbdt_numeric_mode"),
                     mode_codes=dict(_backend._CODE_MODE),
                     native_function_type=BuiltinFunctionType,
-                    readback_skip_errors=(ImportError, AttributeError))
+                    readback_skip_errors=(ImportError, AttributeError),
+                    **_report_context(package))
+    package.runtime_report = runtime_report
     for name in ("gpu_arch", "gpu_arch_how", "numeric_mode", "vendor", "set_default_mode"):  # glue: install one-call public metadata wrappers after provider setup
         fn = globals()[name]
         fn.__doc__ = getattr(_backend, name).__doc__

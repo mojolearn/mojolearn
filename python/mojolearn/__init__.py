@@ -443,6 +443,7 @@ __all__ = [
     "vendor",
     "gpu_arch",
     "gpu_arch_how",
+    "runtime_report",
 ]
 
 __all__.extend(name for name, where in _LAZY_NAMES.items()  # glue: the doors' names, in door order
@@ -523,7 +524,7 @@ import sys as _backend_public_sys
 _connect_backend_public(_backend_public_sys.modules[__name__])
 del _connect_backend_public, _backend_public_sys
 # The same one-call native functions connect() installed, named statically.
-from ._native_backend_public import (gpu_arch, gpu_arch_how, numeric_mode, vendor,
+from ._native_backend_public import (gpu_arch, gpu_arch_how, numeric_mode, runtime_report, vendor,
                                      set_default_mode as set_numeric_mode)
 # Profile defaults are already shared with the native providers. Bind the
 # compiled profile operations after the backend metadata connection; the
