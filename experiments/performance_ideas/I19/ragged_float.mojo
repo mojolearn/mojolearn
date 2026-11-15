@@ -81,6 +81,8 @@ def enqueue_ragged_float_sort(ctx: DeviceContext,mut src: DeviceBuffer[DType.flo
     # This bounded component win does not qualify larger workloads or promotion.
     # Evidence: overnight-ab-20261006/amd/normalized-measurements.json, I19;
     # raw attempts: amd/live/repairs. Default radix admission remains OFF.
+    # TOMBSTONE: MOJOLEARN_IDN_RADIX_TILE128 (no A/B recorded for the opt-in arm) deleted 2026-11-15 by lane/expdel2-07-base; code recoverable at 51ec4db2c0.
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_RADIX_TILE128.patch
     comptime if not is_defined["MOJOLEARN_IDN_RAGGED_FLOAT_RADIX"]():
         if largest>4096:
             raise Error("ragged float sort: rank control restricted to bounded small rows")
@@ -94,11 +96,7 @@ def enqueue_ragged_float_sort(ctx: DeviceContext,mut src: DeviceBuffer[DType.flo
             ctx.enqueue_function[_keys](src.unsafe_ptr(),keys.unsafe_ptr(),positions.unsafe_ptr(),base,n,Int32(1 if categories else 0),grid_dim=((Int(n)+127)//128,1,1),block_dim=(128,1,1))
             # NEVER RUN — PENDING MEASUREMENT
             comptime if is_defined["MOJOLEARN_IDN_RAGGED_RADIX_NIBBLE"]():
-                # NEVER RUN — PENDING MEASUREMENT
-                comptime if is_defined["MOJOLEARN_IDN_RADIX_TILE128"]():
-                    stable_nibble_pairs_u32[128](ctx,Int(n),32,keys,positions,temp_keys,temp_positions,counts,bsum)
-                else:
-                    stable_nibble_pairs_u32[256](ctx,Int(n),32,keys,positions,temp_keys,temp_positions,counts,bsum)
+                stable_nibble_pairs_u32[256](ctx,Int(n),32,keys,positions,temp_keys,temp_positions,counts,bsum)
             else:
                 stable_radix_sort_pairs_u32(ctx,Int(n),32,keys,positions,temp_keys,temp_positions,counts,bsum)
             ctx.enqueue_function[_words](keys.unsafe_ptr(),positions.unsafe_ptr(),dst.unsafe_ptr(),permutation.unsafe_ptr(),base,n,grid_dim=((Int(n)+127)//128,1,1),block_dim=(128,1,1))
