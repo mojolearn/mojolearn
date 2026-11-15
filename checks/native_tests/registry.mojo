@@ -147,6 +147,7 @@ from checks.native_tests.svc_probability import register as register_svc_probabi
 from checks.native_tests.svr_native import register as register_svr_native
 from checks.native_tests.theta_state import register as register_theta_state
 from checks.native_tests.training_chunked_lm_head_door import register as register_training_chunked_lm_head_door
+from checks.native_tests.training_moe_backward_ownership import register as register_training_moe_backward_ownership
 from checks.native_tests.training_neural_rng_slices import register as register_training_neural_rng_slices
 from checks.native_tests.training_primitives import register as register_training_primitives
 from checks.native_tests.training_small_mlp import register as register_training_small_mlp
@@ -304,6 +305,7 @@ def all_checks() -> List[Check]:
     checks.append(register_svr_native())
     checks.append(register_theta_state())
     checks.append(register_training_chunked_lm_head_door())
+    checks.append(register_training_moe_backward_ownership())
     checks.append(register_training_neural_rng_slices())
     checks.append(register_training_primitives())
     checks.append(register_training_small_mlp())
