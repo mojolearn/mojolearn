@@ -1068,8 +1068,10 @@ def ridge_fit_resident_binding(
     (glm/estimator.mojo `ridge_fit_resident_host`). params: n_rows,
     n_features, alpha, center (0/1). With center, mu (float32 [n_features])
     and ymean (float64 [1]) are written. Returns 0."""
+    # TOMBSTONE: MOJOLEARN_RIDGE_RESIDENT_OFF (old path of the FAST Apple resident Ridge fit, EXP:247 KEPT; NVIDIA/AMD never owed: FAST is Apple only) deleted 2026-11-15 by lane/expdel2-01-base; code recoverable at 76bf633f92.
+    # Restore: git apply experiments/removed/MOJOLEARN_RIDGE_RESIDENT_OFF.expdel2-01-base.patch
     comptime if not RIDGE_FAST_RESIDENT:
-        raise Error("ridge_fit_resident: only the FAST Apple build without -D MOJOLEARN_RIDGE_RESIDENT_OFF has this route")
+        raise Error("ridge_fit_resident: only the FAST Apple build has this route")
     if len(params) != 4:
         raise Error("ridge_fit_resident: params must contain n_rows, n_features, alpha, center")
     var xp = _f32_ptr(Int(py=x_addr))
