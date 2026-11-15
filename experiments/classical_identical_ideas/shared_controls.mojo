@@ -104,7 +104,7 @@ comptime C08_UNIQUE_SCAN = CLASSICAL_IDENTICAL
 # (Sweep 2026-11-15: comptime C09_REG_BUNDLE removed; nothing read it.)
 # TOMBSTONE: MOJOLEARN_CLASSICAL_C10_RANK_REUSE (no A/B recorded for the opt-in arm) deleted 2026-11-15 by lane/expdel2-07-base; code recoverable at cf7f3199b2.
 # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C10_RANK_REUSE.patch
-comptime C10_RANK_REUSE = False
+# (Sweep 2026-11-15: comptime C10_RANK_REUSE removed; nothing read it.)
 # TOMBSTONE: MOJOLEARN_CLASSICAL_C11_DRAW_GATHER (no A/B recorded for the opt-in arm) deleted 2026-11-15 by lane/expdel2-07-base; code recoverable at bfc7696dd0.
 # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C11_DRAW_GATHER.patch
 comptime C11_DRAW_GATHER = False
