@@ -208,65 +208,66 @@ def _plan(mut mods: NativeModules, model: PythonObject, state: PythonObject, con
         raise Error("TypeError: native binary metadata requires its import-connected class binding; Python binding overrides are not accepted")
     var ancestry = py_call(b.type.__dict__["__mro__"].__get__, cls)
     var plans = context["plans"]
-    # Row N219 (ne1-e-admitted-call): the ancestry walk below reads only class
-    # rows, which the type watchers of native_class_admission report on any
-    # change of the class or an ancestor. While the class is unchanged, reuse
-    # the admitted (plan, binding, bind, row); the plan lookups up to the
-    # selected row and the binding/bind comparison are repeated, so a plan
-    # connected later for a nearer row or a changed plan is still seen, as in
-    # public_attributes_native._plan_reused. Python 3.10/3.11 always walk.
+    # The binding word and the `_bind` protocol of every package class are
+    # resolved ONCE, at import (python/mojolearn/_native_mode_metadata.py
+    # connect_classes stores them in the class's plan). A call no longer reads
+    # `_BINDING` / `_bind` from the connected ancestry rows (lane py-tail-2,
+    # 2026-11-15; before: two class-dictionary probes per ancestry row on every
+    # uncached walk and two plan-dict reads plus a string compare on every
+    # cached call). Only the rows NEARER than the connected one (an application
+    # subclass, never connected at import) are read, so a Python override of
+    # the binding there is still refused.
+    # Row N219 (ne1-e-admitted-call): while the class is unchanged (type
+    # watchers, native_class_admission), reuse the admitted (plan, row); the
+    # plan lookups up to the selected row are repeated, so a plan connected
+    # later for a nearer row or a changed plan is still seen. Python 3.10/3.11
+    # always walk.
     var record = class_record(mods, _MODE_PLAN_SLOT, cls)
-    if record is not None and record[4] is plans:
-        var row = Int(py=record[3])
+    if record is not None and record[2] is plans:
+        var row = Int(py=record[1])
         if row >= 0 and row < len(ancestry) and py_get(plans, ancestry[row]) is record[0]:
             var nearer = False
             for i in range(row):  # driver-loop: over nearer ancestry rows without a connected plan
                 if py_get(plans, ancestry[i]) is not None:
                     nearer = True
                     break
-            var reused = record[0]
-            # Same condition form as the full check below.
-            if nearer or record[1] != reused["binding"] or record[2] is not reused["bind"]:
-                record = PythonObject(None)
-            else:
+            if not nearer:
+                var reused = record[0]
                 return reused
     # Optional, not a PythonObject read and reassigned in a loop (modular/modular#7546 pattern; runtime-fix-save-forest sweep).
-    var found_binding = Optional[PythonObject]()
-    var found_bind = Optional[PythonObject]()
     var found_plan = Optional[PythonObject]()
     var plan_row = -1
     for i in range(len(ancestry)):  # driver-loop: over class ancestry to resolve the native route
         if py_type(ancestry[i]) is not b.type:
             raise Error("TypeError: native metadata refuses Python metaclass protocols")
-        var fields = _class_fields(mods, ancestry[i])
-        if not found_binding and py_contains(fields, "_BINDING"):
-            var candidate = fields["_BINDING"]
-            if candidate is not None:
-                found_binding = candidate
-        if not found_bind and py_contains(fields, "_bind"):
-            var candidate = fields["_bind"]
-            if candidate is not None:
-                found_bind = candidate
-        if not found_plan:
-            var candidate = py_get(plans, ancestry[i])
-            if candidate is not None:
-                found_plan = candidate
-                plan_row = i
+        var candidate = py_get(plans, ancestry[i])
+        if candidate is not None:
+            found_plan = candidate
+            plan_row = i
+            break
     if not found_plan:
         raise Error("RuntimeError: this estimator's native binary metadata route was not connected")
     var plan = found_plan.value()
-    var binding = PythonObject(None)
-    if found_binding:
-        binding = found_binding.value()
-    var bind = PythonObject(None)
-    if found_bind:
-        bind = found_bind.value()
-    if py_type(binding) is not b.str or binding != plan["binding"] or bind is not plan["bind"]:
-        raise Error("TypeError: estimator binding metadata changed after native connection")
+    for i in range(plan_row + 1, len(ancestry)):  # driver-loop: over the remaining ancestry rows (metaclass refusal only)
+        if py_type(ancestry[i]) is not b.type:
+            raise Error("TypeError: native metadata refuses Python metaclass protocols")
+    for i in range(plan_row):  # driver-loop: over the unconnected (application subclass) rows nearer than the plan
+        var fields = _class_fields(mods, ancestry[i])
+        if py_contains(fields, "_BINDING"):
+            var binding = fields["_BINDING"]
+            if binding is not None:
+                if py_type(binding) is not b.str:
+                    raise Error("TypeError: estimator binding metadata changed after native connection")
+                if Bool(py=binding != plan["binding"]):
+                    raise Error("TypeError: estimator binding metadata changed after native connection")
+        if py_contains(fields, "_bind"):
+            var bind = fields["_bind"]
+            if bind is not None and bind is not plan["bind"]:
+                raise Error("TypeError: estimator binding metadata changed after native connection")
     if class_watch_ready():
-        # The payload holds the admitted plan, its binding word and bind
-        # function, the row and the plans mapping; never the class itself.
-        class_admit(mods, _MODE_PLAN_SLOT, cls, Python.tuple(plan, binding, bind, PythonObject(plan_row), plans))
+        # The payload holds the admitted plan, the row and the plans mapping;
+        # never the class itself.
+        class_admit(mods, _MODE_PLAN_SLOT, cls, Python.tuple(plan, PythonObject(plan_row), plans))
     return plan
 
 
