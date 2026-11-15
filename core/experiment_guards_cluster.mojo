@@ -120,6 +120,8 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_SVGP_FAST_RBFTILE_OFF"](), "removed 2026-11-15 (lane/expdel-01-cluster): SVGP_FAST_RBFTILE_OFF (FAST+Apple rollback to the per-cell SVGP scaled rbf) is gone; the tiled launch is the FAST+Apple path (istella 336.3 -> 299.1 ms, w2-svgp-rbftile-q PASS); restore: experiments/removed/MOJOLEARN_SVGP_FAST_RBFTILE_OFF.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_SVGP_FAST_BLKCHOL_OFF.patch
     comptime assert not is_defined["MOJOLEARN_SVGP_FAST_BLKCHOL_OFF"](), "removed 2026-11-15 (lane/expdel-01-cluster): SVGP_FAST_BLKCHOL_OFF (FAST+Apple rollback to the one-column-per-launch SVGP Cholesky) is gone; the panel factor is the FAST+Apple path (taxi 287.0 -> 212.5 ms, w2-svgp-blkchol-q PASS); restore: experiments/removed/MOJOLEARN_SVGP_FAST_BLKCHOL_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_SVGP_FAST_SYMTILE_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_SVGP_FAST_SYMTILE_OFF"](), "removed 2026-11-15 (lane/expdel-01-cluster): SVGP_FAST_SYMTILE_OFF (rollback to the full m x m SVGP B accumulation) is gone; the upper-tile B is the path wherever _SVGP_GATE_ON is (taxi 611 -> 463 ms, r2/rmse identical); IDENTICAL keeps MOJOLEARN_IDN_GATES_OFF; restore: experiments/removed/MOJOLEARN_SVGP_FAST_SYMTILE_OFF.patch"
     return True
 
 
