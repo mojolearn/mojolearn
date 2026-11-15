@@ -132,13 +132,10 @@ from gbdt.models.kernel.resident_ctr import (
 from gbdt.models.tensor_ctr_apply import TTensorCtrApplyTable
 from gbdt.apple_fast_classical import AFCL_PREDICT_BLOCK
 from gbdt.models.kernel.add_bin_values import (
-    IDN_APPLY_WIDE,
     PRED_ALL_CHUNK_LEVELS,
     compute_bins_and_add_all_kernel,
     compute_bins_and_add_four_kernel,
     compute_bins_and_add_kernel,
-    launch_oblivious_apply_wide,
-    uniform_positive_depth,
 )
 from gbdt.gpu_data.sym_feat_switches import GBDT_PREDICT_PACKED
 from gbdt.models.model_text import load_model_text
@@ -728,23 +725,8 @@ struct ResidentGbdtModel(Movable):
                 lvl += depth
                 leaf += (1 << depth) * self.approx_dim
             return
-        comptime if IDN_APPLY_WIDE:
-            # lane/fam2-gbdt F4 (candidate arm): one depth across the
-            # ensemble -> `APPLY_WIDE_TREES` trees per launch, same adds
-            var tree_depths = List[Int](capacity=self.tm.model.size())
-            for tw in range(self.tm.model.size()):  # small-loop(self.tm.model.size: trees): collects the per-tree depths, model metadata
-                tree_depths.append(
-                    self.tm.model.weak_models[tw].structure.get_depth()
-                )
-            var uniform = uniform_positive_depth(tree_depths)
-            if uniform > 0:
-                launch_oblivious_apply_wide(
-                    ctx, self.d_cindex.value(), self.d_off, self.d_shift,
-                    self.d_mask, self.d_bin, self.d_eq, self.d_vals,
-                    uniform, self.tm.model.size(), n_rows,
-                    self.d_cursor.value(), self.approx_dim,
-                )
-                return
+        # TOMBSTONE: MOJOLEARN_IDN_GBDT_APPLY_WIDE (DELETE-ARM, opt-in candidate arm, no A/B recorded, rule a) deleted 2026-11-15 by lane/expdel2-44-trees; code recoverable at d0c26dae37.
+        # Restore: git apply experiments/removed/MOJOLEARN_IDN_GBDT_APPLY_WIDE.patch; record in docs/TOMBSTONES.md.
         var t = 0
         while t < self.tm.model.size():
             var count = min(4, self.tm.model.size() - t)
