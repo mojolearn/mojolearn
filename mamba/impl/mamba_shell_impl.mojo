@@ -529,22 +529,7 @@ def _mamba3_run_owned(mut s: Mamba3PrefillSession, a: List[Int], b: Int, l: Int,
     (stable while it is installed, so the cached program keeps it on the
     device and never compares a changed byte). `a` is the 25-slot list; its
     nine weight slots are not read."""
-    comptime if not NN40_OWNED_WEIGHTS:
-        raise Error("mamba3 owned weights: NN40 arm is disabled")
-    if not s.owned_weights or not s.w or s.dm != dm:
-        raise Error("mamba3 owned weights: install a matching snapshot first")
-    var lens = _m3_weight_lens(Mamba3Dims.of(dm))
-    var weights = List[Int](capacity=9)
-    var off = 0
-    for i in range(9):  # small-loop(the nine Mamba-3 weight pieces of the snapshot copy)
-        weights.append(Int(s.w_host.unsafe_ptr()) + 4 * off)
-        off += lens[i]
-    var state = List[Int](capacity=10)
-    for i in range(10):  # small-loop(the ten Mamba-3 state addresses)
-        state.append(a[10 + i])
-    var words = mamba_block_call(OPS_M3_STEP, weights, state, [q0, pend], a[0], a[20],
-                                 [a[21], a[22], a[23], a[24]], b, l, dm, List[Float32](), False)
-    return words[0]
+    raise Error("mamba3 owned weights: NN40 arm is disabled")
 
 
 # ===========================================================================
@@ -569,7 +554,10 @@ def _mamba3_run_owned(mut s: Mamba3PrefillSession, a: List[Int], b: Int, l: Int,
 # NN40 explicit owned snapshots, not pointer identity or caller promises.
 # A snapshot is copied into session-owned device storage by install/update;
 # owned forward/backward never read the original external weight addresses.
-comptime NN40_OWNED_WEIGHTS = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_NN40_OWNED_WEIGHTS"]() and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+# TOMBSTONE: MOJOLEARN_NN40_OWNED_WEIGHTS (unmeasured opt-in arm: owned weight snapshots of the Mamba-3 prefill session) deleted 2026-11-15 by lane/expdel2-27-neural; code recoverable at 8584e42dde.
+# Restore: git apply experiments/removed/MOJOLEARN_NN40_OWNED_WEIGHTS.patch
+# The name stays False for its importers (bindings, mamba/native_block_dispatch.mojo).
+comptime NN40_OWNED_WEIGHTS = False
 
 struct Mamba3PrefillSession(Movable, Writable):
     var ctx: Optional[DeviceContext]
@@ -733,13 +721,7 @@ def _m3_prefill_weights(mut s: Mamba3PrefillSession, a: List[Int], dims: Mamba3D
     """Leave `s.w` holding this call's weights: reused, recopied, or freshly
     uploaded (see the section header)."""
     if use_owned:
-        comptime if NN40_OWNED_WEIGHTS:
-            if not s.owned_weights or not s.w or s.dm != dims.d_model:
-                raise Error("mamba3 owned weights: install a matching snapshot first")
-            s.weight_reuses += 1
-            return
-        else:
-            raise Error("mamba3 owned weights: NN40 arm is disabled")
+        raise Error("mamba3 owned weights: NN40 arm is disabled")
     # Normal APIs continue inspecting the weights passed on THIS call.
     # They relinquish the explicit snapshot route instead of silently
     # ignoring changed external buffers supplied through the ordinary API.
