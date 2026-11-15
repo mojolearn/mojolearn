@@ -205,8 +205,9 @@ def _ts_z(
 #: the lane partials meet in threadgroup memory and the row's owner adds
 #: them in ascending s from +0, each add flushed: the same lanes, the same
 #: order, the same bits as `repulse_tiled_kernel`. Launch shape only.
-#: -D MOJOLEARN_IDN_TSNE_LANES_SPLIT_OFF restores the one-thread rows.
-comptime TS_LANES_SPLIT = TS_LANE_FOLD and not is_defined["MOJOLEARN_IDN_TSNE_LANES_SPLIT_OFF"]()
+# TOMBSTONE: MOJOLEARN_IDN_TSNE_LANES_SPLIT_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-14-cluster; code recoverable at e516269a44.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_TSNE_LANES_SPLIT_OFF.patch; record in docs/TOMBSTONES.md.
+comptime TS_LANES_SPLIT = TS_LANE_FOLD
 comptime RLQ = 4
 comptime RLS = TS_LANES // RLQ
 comptime RLB = 32
