@@ -9,7 +9,6 @@ namespace.
 """
 import ctypes
 import struct
-from . import _portable_math as math
 import numbers
 from ._array import Array
 from ._buffer import empty, zeros, full

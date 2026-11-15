@@ -15,10 +15,8 @@ first imported, after the package, so both may rely on every module existing:
                                its `_HostBound`; never import it at module level
 """
 
-from . import _portable_math as math
 
 from . import _backend, _buffer
-from . import _portable_math as _pm
 from ._array import Array
 from ._mode import NumericModeMixin
 from . import _native_family_bridge
