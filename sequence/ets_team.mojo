@@ -47,12 +47,13 @@ from sequence.ops import FP, Args, add, fma3, ld, mul, st, sub
 #: the switch: FAST on Apple, default ON since the M3 A/B (damped-ets
 #: taxi-hourly, lane/apple-fast-ets e3369d119, n=1: 611.9 -> 48.0 ms,
 #: forecast_rmse 96.69 -> 96.68; docs/apple-fast/ab/ets.md).
-#: -D MOJOLEARN_ETS_TEAM_OFF turns it off; the old -D MOJOLEARN_ETS_TEAM is
-#: harmless. IDENTICAL and every other vendor compile op_ets unchanged.
+#: The old -D MOJOLEARN_ETS_TEAM is harmless. IDENTICAL and every other
+#: vendor compile op_ets unchanged.
+# TOMBSTONE: MOJOLEARN_ETS_TEAM_OFF (old path of the FAST Apple default, EXP:535 KEPT aec9f8c33; promoted on Apple (M3) only, FAST is Apple only so no other-vendor A/B is owed) deleted 2026-11-15 by lane/expdel2-28-neural; code recoverable at 8d47995bad.
+# Restore: git apply experiments/removed/MOJOLEARN_ETS_TEAM_OFF.patch; record in docs/TOMBSTONES.md.
 comptime ETS_TEAM = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
     and TARGET_HAS_APPLE_GPU
-    and not is_defined["MOJOLEARN_ETS_TEAM_OFF"]()
 )
 
 #: lane ets-team-idn (2026-10-11, idea E2). PROMOTED to the IDENTICAL default
