@@ -71,8 +71,14 @@ def test_the_cpu_route_is_the_shipped_binding(monkeypatch):
         _backend.load_host_module("_mojolearn_linalg_host")
     except ImportError as exc:
         pytest.skip(f"the linalg host binding is not built here: {exc}")
+    installed_cpu_only = _backend._CPU_ONLY
     monkeypatch.setattr(_backend, "_CPU_ONLY", "test CPU")
     assert Cholesky()._door()[1] == "linalg_numeric_mode"
+    if installed_cpu_only is not None:
+        # A CPU-only install connects no GPU gp mode set at import, so the
+        # GPU half is a question only a GPU install can answer (the native
+        # door refuses "requires its import-connected mode set" here).
+        return
     monkeypatch.setattr(_backend, "_CPU_ONLY", None)
     assert Cholesky()._door()[1] == "gp_numeric_mode"
 

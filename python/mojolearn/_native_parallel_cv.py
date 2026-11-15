@@ -38,8 +38,7 @@ def connect(context, package):
         if not boosting:
             raise ImportError('the boosting family is not loaded')
         binding = _backend.binding('_mojolearn_gbdt', 'identical')
-        if type(binding) is _backend._HostBinding:
-            binding = _backend.load_host_module(binding._HostBinding__basename)  # import-time: import-only native owner connection
+        binding = _backend.exact_host_module(binding)  # import-time: the CPU-only facade resolved to its compiled host module once
         if type(binding) is ModuleType:
             filename = binding.__file__
             binding_vendor = binding.gbdt_vendor

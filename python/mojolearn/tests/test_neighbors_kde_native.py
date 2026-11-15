@@ -8,7 +8,7 @@ import numpy as np
 import pytest
 
 from mojolearn import Array, KernelDensity
-from mojolearn import density
+from mojolearn import _backend, density
 from mojolearn._verify_native_runtime import audit_native_call
 from mojolearn.tests import _legacy_neighbors_kde as legacy
 
@@ -186,7 +186,9 @@ def test_score_refusals_equal_former_path():
 def test_fit_and_score_doors_run_no_python():
     x, q = _rows(), _rows(n=6, seed=8)
     model = KernelDensity(bandwidth=0.5)
-    binding = model._bind("_mojolearn_estimators")
+    # The exact compiled module the product connects at import, not the
+    # CPU-only `_HostBinding` facade, which native provider admission refuses.
+    binding = _backend.exact_host_module(model._bind("_mojolearn_estimators"))
     door = density._NATIVE
     assert audit_native_call(door, model, "family_xn_kde_fit", (binding, x, None),
                              density._NATIVE_CONTEXT).assert_native() is model

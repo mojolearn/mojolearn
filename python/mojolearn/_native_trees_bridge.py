@@ -55,11 +55,7 @@ def _entries(module):
     # glue: retain the binding's compiled entry points once at connection
     from types import BuiltinFunctionType, ModuleType
     from . import _backend
-    if type(module) is _backend._HostBinding:
-        # A CPU-only install: the family's compiled host binding stands
-        # behind the proxy; its entries are read once here, not through the
-        # proxy's Python lookup at call time.
-        module = _backend.load_host_module(module._HostBinding__basename)  # import-time: a CPU-only install connects its compiled host binding once
+    module = _backend.exact_host_module(module)  # import-time: the CPU-only facade resolved to its compiled host module once
     if type(module) is not ModuleType:
         # A missing tier or a refusing stub: touching it states the reason.
         try:
