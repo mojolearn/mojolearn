@@ -43,7 +43,9 @@ comptime T18 = False
 # T20 removed 2026-10-07: it set the same DEFER_HIST_COPY_1903 constant as T19_DEFER.
 
 # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
-comptime T21 = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_TREES_T21"]()
+# TOMBSTONE: MOJOLEARN_TREES_T21 (DELETE-ARM, opt-in, no A/B recorded, rule a) deleted 2026-11-15 by lane/expdel2-45-trees; code recoverable at 80865e2e25.
+# Restore: git apply experiments/removed/MOJOLEARN_TREES_T21.patch
+comptime T21 = False
 
 # T21 stream count is a scheduling arm, never an accumulator-width change:
 # one int sweep `-D MOJOLEARN_TREES_T21_STREAMS=1|2|4` (absent = 1, the
