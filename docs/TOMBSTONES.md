@@ -2149,6 +2149,7 @@ Deletions reversed by new evidence. The code is back on main; the section and th
 | [`MOJOLEARN_IDN_MAMBA12_FORWARD_DOOR_OLD`](#mojolearn_idn_mamba12_forward_door_old) | Neural (Mamba-1/2 held stage arena and door) | 2026-11-15 (`29b23a6003`) | 2026-11-15 (lane/expdel2-restore-owed) | opt-in B arm, default unchanged, A/B owed at the wave sha | [MOJOLEARN_IDN_MAMBA12_FORWARD_DOOR_OLD.patch](../experiments/removed/MOJOLEARN_IDN_MAMBA12_FORWARD_DOOR_OLD.patch) |
 | [`MOJOLEARN_IDN_MAMBA3_FORWARD_DOOR_OLD`](#mojolearn_idn_mamba3_forward_door_old-old-path-deleted-2026-11-15) | Mamba-3 prefill forward door (IDENTICAL) | 2026-11-15 (`39aa5d2695`) | 2026-11-15 (lane/expdel2-restore-owed) | opt-in B arm, default unchanged, A/B owed at the wave sha | [MOJOLEARN_IDN_MAMBA3_FORWARD_DOOR_OLD.patch](../experiments/removed/MOJOLEARN_IDN_MAMBA3_FORWARD_DOOR_OLD.patch) |
 | [`MOJOLEARN_IDN_MAMBA_BACKWARD_GENERIC`](#mojolearn_idn_mamba_backward_generic) | Neural (Mamba-1/2 block step backward) | 2026-11-15 (`e9b44b3e5b`) | 2026-11-15 (lane/expdel2-restore-owed) | opt-in B arm, default unchanged, A/B owed at the wave sha | [MOJOLEARN_IDN_MAMBA_BACKWARD_GENERIC.patch](../experiments/removed/MOJOLEARN_IDN_MAMBA_BACKWARD_GENERIC.patch) |
+| [`MOJOLEARN_IDN_OLS_PREDICT_TILED`](#mojolearn_idn_ols_predict_tiled-opt-in-arm-deleted-2026-11-15) | OLS predict gemv (IDENTICAL) | 2026-11-15 (`1900f1d297`) | 2026-11-15 (lane/expdel2-restore-owed) | opt-in B arm, default unchanged, A/B owed at the wave sha | [MOJOLEARN_IDN_OLS_PREDICT_TILED.patch](../experiments/removed/MOJOLEARN_IDN_OLS_PREDICT_TILED.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -9412,6 +9413,7 @@ Restored 2026-11-15 (lane/expdel2-restore-owed): owed B arm, deletion premature;
 - **Deleted by**: lane/expdel2-04-base (expdel2-04-base); code recoverable at `1900f1d297`.
 - **Restore**: `git apply experiments/removed/MOJOLEARN_IDN_OLS_PREDICT_TILED.patch`, then delete the `MOJOLEARN_IDN_OLS_PREDICT_TILED` refusal in `core/six_lane_experiment_guards.mojo`.
 - **Records**: refusal in `core/six_lane_experiment_guards.mojo`; no `grid_controls` entry (none names it as a control); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-04-base section).
+Restored 2026-11-15 (lane/expdel2-restore-owed): owed B arm, deletion premature; see Restored table.
 
 ## MOJOLEARN_IDN_QUERY_X_HELD_OFF: old path deleted (2026-11-15)
 
