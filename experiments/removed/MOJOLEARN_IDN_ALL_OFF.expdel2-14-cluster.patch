@@ -1,0 +1,227 @@
+diff --git a/x_ann/switches.mojo b/x_ann/switches.mojo
+index 01863242bb..a7caaf4109 100644
+--- a/x_ann/switches.mojo
++++ b/x_ann/switches.mojo
+@@ -12,6 +12,7 @@ the line below that names it.
+ Build an arm with `MOJOLEARN_MOJO_BUILD_FLAGS="-D <name>"` (every
+ bindings/build_*.sh passes it to `mojo build`); tools/ann_apple2_ab.sh takes
+ `<commit>+<name>[+<name>...]` as an arm."""
++from std.sys.compile import is_defined
+ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
+ 
+ #: IVF build host passes: list layout by memcpy and without the permuted
+@@ -167,9 +168,10 @@ comptime IDN_PQ_DEVICE_CODEBOOKS = GLOBAL_NUMERIC_MODE != NUMERIC_FAST
+ #: MOJOLEARN_IDN_PQ_TRAINSET_STRIDED_OFF restored the old path.
+ # TOMBSTONE: MOJOLEARN_IDN_PQ_TRAINSET_STRIDED_OFF (old path; EXP:2065 KEEP, promoted 2026-10-11 NV+AMD) deleted 2026-11-15 by lane/expdel2-14-cluster; code recoverable at 532b33e7ba.
+ # Restore: git apply experiments/removed/MOJOLEARN_IDN_PQ_TRAINSET_STRIDED_OFF.patch; record in docs/TOMBSTONES.md.
+-# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-14-cluster (non-owner; owner expdel2-37-series); code recoverable at 5648a4a2e2.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-14-cluster.patch; record in docs/TOMBSTONES.md.
+-comptime IDN_PQ_TRAINSET_STRIDED = GLOBAL_NUMERIC_MODE != NUMERIC_FAST
++comptime IDN_PQ_TRAINSET_STRIDED = (
++    GLOBAL_NUMERIC_MODE != NUMERIC_FAST
++    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
++)
+ comptime IDN_PQ_TRAIN_ROWS_PER_CODE = 256
+ 
+ #: lane fg-ivf (read_ivf.md idea A3), DEFAULT ON outside FAST
+diff --git a/x_ann/tsne_core.mojo b/x_ann/tsne_core.mojo
+index a7f3fc4eb4..e5945c1a26 100644
+--- a/x_ann/tsne_core.mojo
++++ b/x_ann/tsne_core.mojo
+@@ -38,6 +38,7 @@ from checks.numerics import (
+ comptime F32P = MutPointer[Float32, MutAnyOrigin]
+ comptime I32P = MutPointer[Int32, MutAnyOrigin]
+ 
++from std.sys.compile import is_defined
+ 
+ #: lane/fam-neighbors (2026-10-04), IDENTICAL on every vendor and the host
+ #: column: THE REPULSION FOLDS IN TS_LANES LANES. Row i's three sums (z,
+@@ -54,12 +55,11 @@ comptime I32P = MutPointer[Int32, MutAnyOrigin]
+ #: (`x_ann/host/tsne_host.mojo` `_repulse_lane`). Sixty-four shorter chains
+ #: per sum, so the rounding error is no larger than the single chain's.
+ #: Bits change (the embedding and kl_divergence_) on all four columns
+-#: together. `ts_repulse_cell` below keeps the single chain (FAST).
++#: together. `ts_repulse_cell` below keeps the single chain (FAST and the
++#: _OFF arm). -D MOJOLEARN_IDN_ALL_OFF restores the single chain everywhere.
+ # TOMBSTONE: MOJOLEARN_IDN_TSNE_LANE_FOLD_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-14-cluster; code recoverable at 43f806d837.
+ # Restore: git apply experiments/removed/MOJOLEARN_IDN_TSNE_LANE_FOLD_OFF.patch; record in docs/TOMBSTONES.md.
+-# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-14-cluster (non-owner; owner expdel2-37-series); code recoverable at 5648a4a2e2.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-14-cluster.patch; record in docs/TOMBSTONES.md.
+-comptime TS_LANE_FOLD = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
++comptime TS_LANE_FOLD = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+ comptime TS_LANES = 64
+ 
+ 
+diff --git a/x_ann/tsne_device.mojo b/x_ann/tsne_device.mojo
+index 23b3a485c4..c3b654c2e8 100644
+--- a/x_ann/tsne_device.mojo
++++ b/x_ann/tsne_device.mojo
+@@ -10,6 +10,7 @@ from std.time import perf_counter_ns
+ from max.gpu.memory import AddressSpace
+ from max.gpu.sync import barrier
+ from max.gpu.host import DeviceBuffer, DeviceContext
++from std.sys.compile import is_defined
+ from std.atomic import Atomic, Ordering, fence
+ from max.gpu import grid_dim
+ from checks.kernel_matrix import TARGET_COLUMN, COLUMN_NVIDIA, COLUMN_AMD
+@@ -478,11 +479,10 @@ def repulse_split_kernel(n: Int32, y: F32P, row_z: F32P, rep: F32P, z_out: F32P,
+ #: (the average of the two vendors decides). Trustworthiness@15 equal and
+ #: digests identical in every arm on both vendors (istella ce69cdffd6f889b6,
+ #: taxi cee32a8a52defb1c): no bit change.
++#: -D MOJOLEARN_IDN_ALL_OFF restores the split kernel.
+ # TOMBSTONE: MOJOLEARN_IDN_TSNE_REP_TILE_OFF (old path; EXP:1823 PROMOTED the rep tile, NV+AMD average) deleted 2026-11-15 by lane/expdel2-14-cluster; code recoverable at 98ec52101e.
+ # Restore: git apply experiments/removed/MOJOLEARN_IDN_TSNE_REP_TILE_OFF.patch; record in docs/TOMBSTONES.md.
+-# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-14-cluster (non-owner; owner expdel2-37-series); code recoverable at 5648a4a2e2.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-14-cluster.patch; record in docs/TOMBSTONES.md.
+-comptime IDN_TSNE_REP_TILE = TS_SPLIT and TS_LANE_FOLD
++comptime IDN_TSNE_REP_TILE = TS_SPLIT and TS_LANE_FOLD and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+ #: threads per row, lanes per thread, rows per block, candidates per tile
+ comptime RT2_LQ = 16
+ comptime RT2_U = TS_LANES // RT2_LQ
+diff --git a/x_cluster/bisect.mojo b/x_cluster/bisect.mojo
+index 990d2170aa..11cb520406 100644
+--- a/x_cluster/bisect.mojo
++++ b/x_cluster/bisect.mojo
+@@ -17,6 +17,7 @@ depth-first order are the labels; `predict` descends the tree on the device
+ # SPDX-License-Identifier: Apache-2.0
+ # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
+ 
++from std.sys.compile import is_defined
+ 
+ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz
+ from cluster.impl.kmeans_params import INIT_KMEANS_PLUS_PLUS, INIT_RANDOM
+@@ -37,12 +38,13 @@ from x_cluster.post_bodies import FM_PROD, FM_VAL
+ # they were Float64 chains (the same on the device and the host column; a
+ # split pick moves only where two leaf scores agreed to a double's last
+ # bits). Labels and centers are untouched unless a pick moves.
+-# FAST keeps the readbacks.
++# The master `-D MOJOLEARN_IDN_ALL_OFF` restores the readbacks; the define
++# must reach the host-column build too.
+ # TOMBSTONE: MOJOLEARN_IDN_BISECT_DEVICE_SCORES_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-14-cluster; code recoverable at d70760e0e8.
+ # Restore: git apply experiments/removed/MOJOLEARN_IDN_BISECT_DEVICE_SCORES_OFF.patch; record in docs/TOMBSTONES.md.
+-# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-14-cluster (non-owner; owner expdel2-37-series); code recoverable at 5648a4a2e2.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-14-cluster.patch; record in docs/TOMBSTONES.md.
+-comptime IDN_BISECT_DEVICE_SCORES = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
++comptime IDN_BISECT_DEVICE_SCORES = (
++    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
++)
+ 
+ # lane fix-c1-cluster (2026-10-04), IDENTICAL, default ON, BOTH COLUMNS (this
+ # is the one driver): the column means and the centered matrix on the device.
+@@ -55,12 +57,13 @@ comptime IDN_BISECT_DEVICE_SCORES = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+ # once for `ops.kmeans`. BITS: each mean is the float-float fold's quotient
+ # where it was a Float64 ascending chain, so a centered word, and anything
+ # downstream, can move in the last place; the device and the host column
+-# move together. FAST keeps the host centering.
++# move together. The master `-D MOJOLEARN_IDN_ALL_OFF` restores the host
++# centering; the define must reach the host-column build too.
+ # TOMBSTONE: MOJOLEARN_IDN_BISECT_DEVICE_CENTER_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-14-cluster; code recoverable at 9510cb8ef2.
+ # Restore: git apply experiments/removed/MOJOLEARN_IDN_BISECT_DEVICE_CENTER_OFF.patch; record in docs/TOMBSTONES.md.
+-# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-14-cluster (non-owner; owner expdel2-37-series); code recoverable at 5648a4a2e2.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-14-cluster.patch; record in docs/TOMBSTONES.md.
+-comptime IDN_BISECT_DEVICE_CENTER = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
++comptime IDN_BISECT_DEVICE_CENTER = (
++    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
++)
+ 
+ 
+ struct BisectTree(Movable):
+diff --git a/x_cluster/bodies.mojo b/x_cluster/bodies.mojo
+index ea17323f76..4ab806bd22 100644
+--- a/x_cluster/bodies.mojo
++++ b/x_cluster/bodies.mojo
+@@ -21,6 +21,7 @@ from std.memory import bitcast
+ 
+ from std.bit import count_leading_zeros
+ 
++from std.sys.compile import is_defined
+ 
+ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_cos, identical_div, identical_exp, identical_log, identical_mul, identical_pow, identical_sqrt
+ from mixture.nk_order import gmm_nk_fold_levels
+@@ -119,13 +120,12 @@ def kth_smallest_row(m: FPtr, n_cols: Int, k: Int, dst: FPtr, row: Int):
+ # add. The count is an integer. Bits move from the one-chain fold on every
+ # vendor and the host together (old bits do not matter); a blocked float sum
+ # is at least as accurate as the n-long chain. Scratch is 2 * ns * d words
+-# (meanshift_fit sizes it with MSI_SCRATCH_PER_SEED). FAST keeps the
+-# one-chain fold and the one-block-per-seed team kernel.
++# (meanshift_fit sizes it with MSI_SCRATCH_PER_SEED). `-D
++# MOJOLEARN_IDN_ALL_OFF` restores the one-chain fold and the
++# one-block-per-seed team kernel.
+ # TOMBSTONE: MOJOLEARN_IDN_MEANSHIFT_GRID_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-14-cluster; code recoverable at 2d6b343a06.
+ # Restore: git apply experiments/removed/MOJOLEARN_IDN_MEANSHIFT_GRID_OFF.patch; record in docs/TOMBSTONES.md.
+-# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-14-cluster (non-owner; owner expdel2-37-series); code recoverable at 5648a4a2e2.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-14-cluster.patch; record in docs/TOMBSTONES.md.
+-comptime IDN_MEANSHIFT_GRID = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
++comptime IDN_MEANSHIFT_GRID = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+ comptime MSI_T = 256
+ """Rows per chunk of the K6 blocked fold (fixed: the bits depend on it)."""
+ comptime MSI_SCRATCH_PER_SEED = 2 if IDN_MEANSHIFT_GRID else 1
+@@ -549,12 +549,13 @@ def nk_cell(resp: FPtr, n: Int, kc: Int, dst: FPtr, k: Int):
+ # `_nk_kernel` kept kc threads walking all n rows. BITS MOVE, on every
+ # column together: the device (`DeviceOps._moments_gemm`), the host column
+ # (`HostOps.moments`) and the check oracle (`checks/oracles.oracle_moments`)
+-# read this one constant. FAST keeps the chain.
++# read this one constant. The master `-D MOJOLEARN_IDN_ALL_OFF` restores the
++# chain; the define must reach the host-column build.
+ # TOMBSTONE: MOJOLEARN_IDN_BGMM_NK_LEVELS_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-14-cluster; code recoverable at ffaddee80d.
+ # Restore: git apply experiments/removed/MOJOLEARN_IDN_BGMM_NK_LEVELS_OFF.patch; record in docs/TOMBSTONES.md.
+-# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-14-cluster (non-owner; owner expdel2-37-series); code recoverable at 5648a4a2e2.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-14-cluster.patch; record in docs/TOMBSTONES.md.
+-comptime IDN_BGMM_NK_LEVELS = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
++comptime IDN_BGMM_NK_LEVELS = (
++    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
++)
+ 
+ 
+ def nk_levels_cell(resp: FPtr, n: Int, kc: Int, dst: FPtr, k: Int):
+diff --git a/x_cluster/device_ops.mojo b/x_cluster/device_ops.mojo
+index 530ce26af4..b07065bdf3 100644
+--- a/x_cluster/device_ops.mojo
++++ b/x_cluster/device_ops.mojo
+@@ -14,6 +14,7 @@ from x_cluster.spectral_df64_device import cluster_qr_df64_device, discretize_df
+ from std.atomic import Atomic
+ from max.gpu import block_dim, block_idx, grid_dim, thread_idx
+ from std.os import getenv
++from std.sys.compile import is_defined
+ from std.time import perf_counter_ns
+ from std.memory import bitcast, stack_allocation
+ from max.gpu.host import DeviceBuffer, DeviceContext
+@@ -526,9 +527,9 @@ def _ap_r_kernel(s: FPtr, a: FPtr, r: FPtr, n: Int32, damping: Float32):
+ # R is the same words.
+ # TOMBSTONE: MOJOLEARN_IDN_AP_R_TOP2_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-14-cluster; code recoverable at ee14292c4b.
+ # Restore: git apply experiments/removed/MOJOLEARN_IDN_AP_R_TOP2_OFF.patch; record in docs/TOMBSTONES.md.
+-# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-14-cluster (non-owner; owner expdel2-37-series); code recoverable at 5648a4a2e2.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-14-cluster.patch; record in docs/TOMBSTONES.md.
+-comptime IDN_AP_R_TOP2 = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
++comptime IDN_AP_R_TOP2 = (
++    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
++)
+ # TOMBSTONE: MOJOLEARN_AP_EXACT (SUPERSEDED) deleted 2026-11-15 by lane/expdel-01-cluster; code recoverable at 854fde92db.
+ # Restore: git apply experiments/removed/MOJOLEARN_AP_EXACT.patch; record in docs/TOMBSTONES.md.
+ # (its FAST opt-in arm of AP_R_TOP2; FAST keeps the two walks)
+@@ -594,9 +595,9 @@ def _ap_r_top2_kernel(s: FPtr, a: FPtr, r: FPtr, n: Int32, damping: Float32):
+ # drain). The chunk is 8 iterations.
+ # TOMBSTONE: MOJOLEARN_IDN_AP_DEVICE_CONV_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-14-cluster; code recoverable at 5955a4cfd7.
+ # Restore: git apply experiments/removed/MOJOLEARN_IDN_AP_DEVICE_CONV_OFF.patch; record in docs/TOMBSTONES.md.
+-# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-14-cluster (non-owner; owner expdel2-37-series); code recoverable at 5648a4a2e2.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-14-cluster.patch; record in docs/TOMBSTONES.md.
+-comptime IDN_AP_DEVICE_CONV = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
++comptime IDN_AP_DEVICE_CONV = (
++    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
++)
+ # TOMBSTONE: MOJOLEARN_IDN_AP_CONV_CHUNK4 (unmeasured opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-14-cluster; code recoverable at 923cd01f55.
+ # Restore: git apply experiments/removed/MOJOLEARN_IDN_AP_CONV_CHUNK4.patch; record in docs/TOMBSTONES.md.
+ # TOMBSTONE: MOJOLEARN_IDN_AP_CONV_CHUNK16 (unmeasured opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-14-cluster; code recoverable at cd7a7a0890.
+@@ -1446,9 +1447,9 @@ def _agg_rescan_kernel(dm: FPtr, live: IPtr, nn: IPtr, md: FPtr, n: Int32, st: I
+ # Scheduling only, no bit moves. FAST keeps the per-call buffers and the drain.
+ # TOMBSTONE: MOJOLEARN_IDN_BGMM_MOMENTS_POOL_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-14-cluster; code recoverable at 0fd51e8785.
+ # Restore: git apply experiments/removed/MOJOLEARN_IDN_BGMM_MOMENTS_POOL_OFF.patch; record in docs/TOMBSTONES.md.
+-# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-14-cluster (non-owner; owner expdel2-37-series); code recoverable at 5648a4a2e2.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-14-cluster.patch; record in docs/TOMBSTONES.md.
+-comptime IDN_BGMM_MOMENTS_POOL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
++comptime IDN_BGMM_MOMENTS_POOL = (
++    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
++)
+ 
+ 
+ struct _ClusterContext(Defaultable, Movable):

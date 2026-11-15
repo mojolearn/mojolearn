@@ -1,0 +1,24 @@
+diff --git a/x_cluster/device_ops.mojo b/x_cluster/device_ops.mojo
+index f8d26a1a16..b14eae97aa 100644
+--- a/x_cluster/device_ops.mojo
++++ b/x_cluster/device_ops.mojo
+@@ -595,7 +595,7 @@ def _ap_r_top2_kernel(s: FPtr, a: FPtr, r: FPtr, n: Int32, damping: Float32):
+ # left at its break and st[1] is the iteration it broke at (`n_iter_` the
+ # same). The exemplar flags and the window share one launch (three launches
+ # and one 1-thread decision per iteration for four launches, a memset and a
+-# drain). The chunk is 8 iterations.
++# drain). CANDIDATE ARM for the chunk (default 8): `..._CHUNK32=1`.
+ # TOMBSTONE: MOJOLEARN_IDN_AP_DEVICE_CONV_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-14-cluster; code recoverable at 5955a4cfd7.
+ # Restore: git apply experiments/removed/MOJOLEARN_IDN_AP_DEVICE_CONV_OFF.patch; record in docs/TOMBSTONES.md.
+ comptime IDN_AP_DEVICE_CONV = (
+@@ -605,9 +605,7 @@ comptime IDN_AP_DEVICE_CONV = (
+ # Restore: git apply experiments/removed/MOJOLEARN_IDN_AP_CONV_CHUNK4.patch; record in docs/TOMBSTONES.md.
+ # TOMBSTONE: MOJOLEARN_IDN_AP_CONV_CHUNK16 (unmeasured opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-14-cluster; code recoverable at cd7a7a0890.
+ # Restore: git apply experiments/removed/MOJOLEARN_IDN_AP_CONV_CHUNK16.patch; record in docs/TOMBSTONES.md.
+-# TOMBSTONE: MOJOLEARN_IDN_AP_CONV_CHUNK32 (unmeasured opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-14-cluster; code recoverable at 5ef4295634.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_AP_CONV_CHUNK32.patch; record in docs/TOMBSTONES.md.
+-comptime AP_CONV_CHUNK = 8
++comptime AP_CONV_CHUNK = 32 if is_defined["MOJOLEARN_IDN_AP_CONV_CHUNK32"]() else 8
+ 
+ 
+ def _ap_r_gated_kernel(s: FPtr, a: FPtr, r: FPtr, n: Int32, damping: Float32, st: IPtr):

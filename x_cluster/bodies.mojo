@@ -21,7 +21,6 @@ from std.memory import bitcast
 
 from std.bit import count_leading_zeros
 
-from std.sys.compile import is_defined
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_cos, identical_div, identical_exp, identical_log, identical_mul, identical_pow, identical_sqrt
 from mixture.nk_order import gmm_nk_fold_levels
@@ -120,12 +119,13 @@ def kth_smallest_row(m: FPtr, n_cols: Int, k: Int, dst: FPtr, row: Int):
 # add. The count is an integer. Bits move from the one-chain fold on every
 # vendor and the host together (old bits do not matter); a blocked float sum
 # is at least as accurate as the n-long chain. Scratch is 2 * ns * d words
-# (meanshift_fit sizes it with MSI_SCRATCH_PER_SEED). `-D
-# MOJOLEARN_IDN_MEANSHIFT_GRID_OFF` (or MOJOLEARN_IDN_ALL_OFF) restores the
+# (meanshift_fit sizes it with MSI_SCRATCH_PER_SEED). FAST keeps the
 # one-chain fold and the one-block-per-seed team kernel.
-comptime IDN_MEANSHIFT_GRID = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
-    is_defined["MOJOLEARN_IDN_MEANSHIFT_GRID_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_IDN_MEANSHIFT_GRID_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-14-cluster; code recoverable at 2d6b343a06.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_MEANSHIFT_GRID_OFF.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-14-cluster (non-owner; owner expdel2-37-series); code recoverable at 5648a4a2e2.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-14-cluster.patch; record in docs/TOMBSTONES.md.
+comptime IDN_MEANSHIFT_GRID = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 comptime MSI_T = 256
 """Rows per chunk of the K6 blocked fold (fixed: the bits depend on it)."""
 comptime MSI_SCRATCH_PER_SEED = 2 if IDN_MEANSHIFT_GRID else 1
@@ -549,15 +549,12 @@ def nk_cell(resp: FPtr, n: Int, kc: Int, dst: FPtr, k: Int):
 # `_nk_kernel` kept kc threads walking all n rows. BITS MOVE, on every
 # column together: the device (`DeviceOps._moments_gemm`), the host column
 # (`HostOps.moments`) and the check oracle (`checks/oracles.oracle_moments`)
-# read this one constant. `-D MOJOLEARN_IDN_BGMM_NK_LEVELS_OFF=1` (or the
-# master) restores the chain; the define must reach the host-column build.
-comptime IDN_BGMM_NK_LEVELS = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not (
-        is_defined["MOJOLEARN_IDN_BGMM_NK_LEVELS_OFF"]()
-        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-    )
-)
+# read this one constant. FAST keeps the chain.
+# TOMBSTONE: MOJOLEARN_IDN_BGMM_NK_LEVELS_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-14-cluster; code recoverable at ffaddee80d.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_BGMM_NK_LEVELS_OFF.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-14-cluster (non-owner; owner expdel2-37-series); code recoverable at 5648a4a2e2.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-14-cluster.patch; record in docs/TOMBSTONES.md.
+comptime IDN_BGMM_NK_LEVELS = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 
 
 def nk_levels_cell(resp: FPtr, n: Int, kc: Int, dst: FPtr, k: Int):

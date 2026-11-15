@@ -1,7 +1,6 @@
 """Helpers every cluster-lane driver shares (lane/algos-cluster), compiled
 from this one source into both bindings; the n-sized work goes through
 `ClusterOps`."""
-from experiments.classical_identical_ideas.graph_controls import XCLUSTER_KPP_DISTINCT
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 
@@ -96,10 +95,9 @@ def greedy_kmeans_pp_indices[O: ClusterOps](
             vs.append(rng.unit() * pot)
         ops.kpp_search(closest, ws, m, vs, ids)
         ops.gather_rows(xs, d, ids, n_trials, cslot)
-        comptime if XCLUSTER_KPP_DISTINCT:
-            ops.kpp_distinct(cslot,ids,n_trials,xs,m,d,dc_s)
-        else:
-            ops.sqdist(cslot, n_trials, xs, m, d, dc_s)
+        # TOMBSTONE: MOJOLEARN_XCLUSTER_KPP_DISTINCT (dropped, EXP:1517) deleted 2026-11-15 by lane/expdel2-14-cluster (non-owner; owner expdel2-05-base); code recoverable at 8abbc66aef.
+        # Restore: git apply experiments/removed/MOJOLEARN_XCLUSTER_KPP_DISTINCT.expdel2-14-cluster.patch; record in docs/TOMBSTONES.md.
+        ops.sqdist(cslot, n_trials, xs, m, d, dc_s)
         var pots = ops.kpp_pots(dc_s, closest, ws, n_trials, m)
         var best = 0
         for t in range(1, n_trials):

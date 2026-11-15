@@ -25,26 +25,6 @@
       "bits_change": false,
       "status": "promoted 2026-10-09 (lane/postmerge-act-4; post-merge A/B nv n0608 -> v0979..v0981, amd a1067 -> a1104..a1106): IDENTICAL default; the old on-define is refused in core/six_lane_experiment_guards.mojo",
       "note": "T1. IDENTICAL, NVIDIA+AMD. Block-wide mark/rank/merge top-k per 64x64 distance tile instead of the serial owner insertion; every d takes the 64x64 tile. Same (dist, idx) lists for finite/inf distances. Also the CAGRA build's exact graph. PROMOTED: both on istella NV 0.86x / AMD 0.62x (avg 0.74x), taxi NV 1.17x / AMD 0.55x (avg 0.86x; vendor split, NV taxi slower). Digests unchanged. The off arm (MOJOLEARN_IDN_TSNE_KNN_TILE_SELECT_OFF) restores the serial owner insertion."
-    },
-    "tsne_rep_tile": {
-      "define": "MOJOLEARN_IDN_TSNE_REP_TILE_OFF",
-      "kind": "switch",
-      "arms": {
-        "on": [],
-        "off": [
-          "MOJOLEARN_IDN_TSNE_REP_TILE_OFF"
-        ]
-      },
-      "default": "on",
-      "source": [
-        "x_ann/tsne_device.mojo:480"
-      ],
-      "binding": [
-        "_mojolearn_x_ann"
-      ],
-      "bits_change": false,
-      "status": "promoted 2026-10-09 (lane/postmerge-act-4; post-merge A/B nv n0608 -> v0979..v0981, amd a1067 -> a1104..a1106): IDENTICAL default; the old on-define is refused in core/six_lane_experiment_guards.mojo",
-      "note": "T2. IDENTICAL, NVIDIA+AMD, needs TS_SPLIT and TS_LANE_FOLD. 256-candidate tiles, one row per thread (16 threads x 4 lanes a row), same 64-lane fold order, same Z tree. Bits none. PROMOTED: both on istella NV 0.86x / AMD 0.62x (avg 0.74x), taxi NV 1.17x / AMD 0.55x (avg 0.86x; vendor split, NV taxi slower). Digests unchanged. The off arm (MOJOLEARN_IDN_TSNE_REP_TILE_OFF) restores the split repulsion kernel."
     }
   },
   "algorithms": {
@@ -52,15 +32,11 @@
       "binding": "_mojolearn_x_ann",
       "route": "_expansion_ann.py TSNE.fit -> x_ann_tsne_fit -> tsne_device.tsne_fit_device -> knn_enqueue (T1) -> perplexity -> symmetrize -> _ts_iter/_enq_repulse_split (T2)",
       "controls": [
-        "tsne_knn_tile_select",
-        "tsne_rep_tile"
+        "tsne_knn_tile_select"
       ],
       "interaction_groups": [
         [
           "tsne_knn_tile_select"
-        ],
-        [
-          "tsne_rep_tile"
         ]
       ]
     },
@@ -118,6 +94,11 @@
       "define": "MOJOLEARN_IDN_HDB_OUT_MEMCPY_OFF",
       "control": "hdb_out_memcpy_off",
       "reason": "DELETED 2026-11-15 (lane/expdel2-11-cluster, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md): old path beside the default (V2); the default arm is the only one. Code recoverable at 89d0ad23b5."
+    },
+    {
+      "define": "MOJOLEARN_IDN_TSNE_REP_TILE_OFF",
+      "control": "tsne_rep_tile",
+      "reason": "DELETED 2026-11-15 (lane/expdel2-14-cluster, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md; recoverable at 98ec52101e; patch experiments/removed/MOJOLEARN_IDN_TSNE_REP_TILE_OFF.patch): old path beside the default; the default is kept, no bit change. Refused in core/experiment_guards_cluster.mojo; docs/TOMBSTONES.md."
     }
   ]
 }

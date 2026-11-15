@@ -1,0 +1,25 @@
+diff --git a/x_cluster/bisect.mojo b/x_cluster/bisect.mojo
+index 24bcaba331..aa4eb66380 100644
+--- a/x_cluster/bisect.mojo
++++ b/x_cluster/bisect.mojo
+@@ -58,12 +58,15 @@ comptime IDN_BISECT_DEVICE_SCORES = (
+ # once for `ops.kmeans`. BITS: each mean is the float-float fold's quotient
+ # where it was a Float64 ascending chain, so a centered word, and anything
+ # downstream, can move in the last place; the device and the host column
+-# move together. The master `-D MOJOLEARN_IDN_ALL_OFF` restores the host
+-# centering; the define must reach the host-column build too.
+-# TOMBSTONE: MOJOLEARN_IDN_BISECT_DEVICE_CENTER_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-14-cluster; code recoverable at 9510cb8ef2.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_BISECT_DEVICE_CENTER_OFF.patch; record in docs/TOMBSTONES.md.
++# move together. `-D MOJOLEARN_IDN_BISECT_DEVICE_CENTER_OFF=1` (or the
++# master) restores the host centering; the define must reach the host-column
++# build too.
+ comptime IDN_BISECT_DEVICE_CENTER = (
+-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
++    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
++    and not (
++        is_defined["MOJOLEARN_IDN_BISECT_DEVICE_CENTER_OFF"]()
++        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
++    )
+ )
+ 
+ 

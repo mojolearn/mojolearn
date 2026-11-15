@@ -6,18 +6,14 @@ from experiments.classical_identical_ideas.stats_controls import C53_BGMM_STATS
 from mixture.checks.mstep import center_pair_kernel
 from core.em_loop_chunk import em_loop_check_every
 from x_cluster.spectral_df64_device import cluster_qr_df64_device, discretize_df64_device
-from experiments.classical_identical_ideas.graph_controls import XCLUSTER_ROW_ASSIGN, XCLUSTER_ROW_ASSIGN_ROWS
-#: Rows per thread of `_xc_nearest_group` (MOJOLEARN_XCLUSTER_ROW_ASSIGN=2|4).
-comptime XC_ASSIGN_ROWS = XCLUSTER_ROW_ASSIGN_ROWS if XCLUSTER_ROW_ASSIGN_ROWS > 0 else 2
-from experiments.classical_identical_ideas.graph_controls import C42_ACTIVE_TRIANGLE
-from core.fast_radix_sort import frs_exclusive_scan, frs_scan_blocks
+# TOMBSTONE: MOJOLEARN_XCLUSTER_ROW_ASSIGN (unmeasured opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-14-cluster (non-owner; owner expdel2-05-base); code recoverable at 456dbd4bca.
+# Restore: git apply experiments/removed/MOJOLEARN_XCLUSTER_ROW_ASSIGN.expdel2-14-cluster.patch; record in docs/TOMBSTONES.md.
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 
 from std.atomic import Atomic
 from max.gpu import block_dim, block_idx, grid_dim, thread_idx
 from std.os import getenv
-from std.sys.compile import is_defined
 from std.time import perf_counter_ns
 from std.memory import bitcast, stack_allocation
 from max.gpu.host import DeviceBuffer, DeviceContext
@@ -443,84 +439,8 @@ def _meanshift_team_kernel(
         iters[s] = state[1]
 
 
-# FAST ONLY (lane cluster-apple3), d <= MSB_MAX_D, OPT-IN
-# `-D MOJOLEARN_MEANSHIFT_BLOCK=1`: one BLOCK per seed. `_meanshift_kernel`
-# walks all n rows of every shift on one thread per seed, so a fit with a few
-# hundred seeds keeps a few blocks busy. Here the block's threads each fold
-# their stride of the rows and the partial sums fold in threadgroup memory.
-# The addends, the quotient and the stop test are `bodies.meanshift_seed`'s;
-# the order of the sum is not (bits move; the paired quality check).
-comptime MEANSHIFT_BLOCK = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and is_defined["MOJOLEARN_MEANSHIFT_BLOCK"]()
-comptime MSB_TPB = 256
-comptime MSB_MAX_D = 16
-comptime MSB_W = MSB_MAX_D + 1  # the feature sums, then the count
-
-
-def _meanshift_block_kernel(
-    x: FPtr, n: Int32, d: Int32, bw: Float32, stop: Float32, max_iter: Int32,
-    centers: FPtr, intensity: IPtr, iters: IPtr,
-):
-    var s = Int(block_idx.x)
-    var tid = Int(thread_idx.x)
-    var N = Int(n)
-    var D = Int(d)
-    var red = stack_allocation[MSB_TPB * MSB_W, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
-    # the seed's center lives in threadgroup memory between the shifts (a
-    # barrier orders threadgroup memory; on Apple it does not order the device's)
-    var cen = stack_allocation[MSB_MAX_D, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
-    var state = stack_allocation[3, Scalar[DType.int32], address_space = AddressSpace.SHARED]()
-    if tid < D:
-        cen[tid] = centers[s * D + tid]
-    if tid == 0:
-        state[0] = Int32(0)  # 1: the seed is done
-        state[1] = Int32(0)  # completed shifts
-        state[2] = Int32(0)  # rows within the bandwidth at the last shift
-    barrier()
-    var o = tid * MSB_W
-    while True:
-        for f in range(D + 1):
-            red[o + f] = Float32(0)
-        for p in range(tid, N, MSB_TPB):
-            var acc = Float32(0)
-            for f in range(D):
-                var t = ftz(ftz(cen[f]) - ftz(x[p * D + f]))
-                acc = ftz(acc + ftz(identical_mul(t, t)))
-            if identical_sqrt(acc) <= bw:
-                for f in range(D):
-                    red[o + f] = ftz(red[o + f] + ftz(x[p * D + f]))
-                red[o + D] = red[o + D] + Float32(1)
-        barrier()
-        var off = MSB_TPB // 2
-        while off > 0:
-            if tid < off:
-                for f in range(D + 1):
-                    red[o + f] = ftz(red[o + f] + red[(tid + off) * MSB_W + f])
-            barrier()
-            off //= 2
-        if tid == 0:
-            var cnt = red[D]
-            state[2] = Int32(Int(cnt))
-            if cnt == Float32(0):
-                state[0] = Int32(1)
-            else:
-                var shift2 = Float32(0)
-                for f in range(D):
-                    var m = ftz(identical_div(red[f], cnt))
-                    var t = ftz(m - cen[f])
-                    shift2 = ftz(shift2 + ftz(identical_mul(t, t)))
-                    cen[f] = m
-                if identical_sqrt(shift2) <= stop or state[1] == max_iter:
-                    state[0] = Int32(1)
-                else:
-                    state[1] = state[1] + Int32(1)
-        barrier()
-        if state[0] != Int32(0):
-            break
-    if tid < D:
-        centers[s * D + tid] = cen[tid]
-    if tid == 0:
-        intensity[s] = state[2]
-        iters[s] = state[1]
+# TOMBSTONE: MOJOLEARN_MEANSHIFT_BLOCK (unmeasured opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-14-cluster; code recoverable at 7807488033.
+# Restore: git apply experiments/removed/MOJOLEARN_MEANSHIFT_BLOCK.patch; record in docs/TOMBSTONES.md.
 
 
 comptime AP_TPB = 256
@@ -603,15 +523,12 @@ def _ap_r_kernel(s: FPtr, a: FPtr, r: FPtr, n: Int32, damping: Float32):
 # same R, one read of A + S less per iteration.
 # fam-cluster (2026-10-04): IDENTICAL takes it by default. Integer keys, the
 # same two largest, so `first`, `second` and `arg` are `_ap_r_kernel`'s and
-# R is the same words. `-D MOJOLEARN_IDN_AP_R_TOP2_OFF=1` restores the two
-# walks.
-comptime IDN_AP_R_TOP2 = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not (
-        is_defined["MOJOLEARN_IDN_AP_R_TOP2_OFF"]()
-        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-    )
-)
+# R is the same words.
+# TOMBSTONE: MOJOLEARN_IDN_AP_R_TOP2_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-14-cluster; code recoverable at ee14292c4b.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_AP_R_TOP2_OFF.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-14-cluster (non-owner; owner expdel2-37-series); code recoverable at 5648a4a2e2.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-14-cluster.patch; record in docs/TOMBSTONES.md.
+comptime IDN_AP_R_TOP2 = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 # TOMBSTONE: MOJOLEARN_AP_EXACT (SUPERSEDED) deleted 2026-11-15 by lane/expdel-01-cluster; code recoverable at 854fde92db.
 # Restore: git apply experiments/removed/MOJOLEARN_AP_EXACT.patch; record in docs/TOMBSTONES.md.
 # (its FAST opt-in arm of AP_R_TOP2; FAST keeps the two walks)
@@ -674,23 +591,19 @@ def _ap_r_top2_kernel(s: FPtr, a: FPtr, r: FPtr, n: Int32, damping: Float32):
 # left at its break and st[1] is the iteration it broke at (`n_iter_` the
 # same). The exemplar flags and the window share one launch (three launches
 # and one 1-thread decision per iteration for four launches, a memset and a
-# drain). `-D MOJOLEARN_IDN_AP_DEVICE_CONV_OFF=1` restores the per-iteration
-# read. CANDIDATE ARMS for the chunk (default 8):
-# `-D MOJOLEARN_IDN_AP_CONV_CHUNK4=1`, `..._CHUNK16=1`, `..._CHUNK32=1`.
-comptime IDN_AP_DEVICE_CONV = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not (
-        is_defined["MOJOLEARN_IDN_AP_DEVICE_CONV_OFF"]()
-        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-    )
-)
-comptime AP_CONV_CHUNK = (
-    4 if is_defined["MOJOLEARN_IDN_AP_CONV_CHUNK4"]()
-    else (
-        16 if is_defined["MOJOLEARN_IDN_AP_CONV_CHUNK16"]()
-        else (32 if is_defined["MOJOLEARN_IDN_AP_CONV_CHUNK32"]() else 8)
-    )
-)
+# drain). The chunk is 8 iterations.
+# TOMBSTONE: MOJOLEARN_IDN_AP_DEVICE_CONV_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-14-cluster; code recoverable at 5955a4cfd7.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_AP_DEVICE_CONV_OFF.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-14-cluster (non-owner; owner expdel2-37-series); code recoverable at 5648a4a2e2.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-14-cluster.patch; record in docs/TOMBSTONES.md.
+comptime IDN_AP_DEVICE_CONV = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+# TOMBSTONE: MOJOLEARN_IDN_AP_CONV_CHUNK4 (unmeasured opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-14-cluster; code recoverable at 923cd01f55.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_AP_CONV_CHUNK4.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_IDN_AP_CONV_CHUNK16 (unmeasured opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-14-cluster; code recoverable at cd7a7a0890.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_AP_CONV_CHUNK16.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_IDN_AP_CONV_CHUNK32 (unmeasured opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-14-cluster; code recoverable at 5ef4295634.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_AP_CONV_CHUNK32.patch; record in docs/TOMBSTONES.md.
+comptime AP_CONV_CHUNK = 8
 
 
 def _ap_r_gated_kernel(s: FPtr, a: FPtr, r: FPtr, n: Int32, damping: Float32, st: IPtr):
@@ -1025,96 +938,8 @@ def _dot_groups_kernel(a: FPtr, b: FPtr, n: Int32, g: Int32, parts: FPtr):
     parts[q] = acc
 
 
-# FAST ONLY (lane cluster-apple3), d <= MOMS_MAX_D, OPT-IN
-# `-D MOJOLEARN_MOMENTS_ROWS=1`: the moments with every ROW read once per
-# component. Thread (k, g) owns MOMS_ROWS consecutive rows and folds all of
-# its chains over them (the means' d + 1, then the covariance's upper
-# triangle) in its own slice of threadgroup memory; a second kernel adds the
-# threads' partials. `_momf_partial_kernel` read every row once per CHAIN.
-# The same addends and finals as 5110/5121, another order: bits move.
-comptime MOMS = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and is_defined["MOJOLEARN_MOMENTS_ROWS"]()
-comptime MOMS_MAX_D = 8
-comptime MOMS_ROWS = 64
-comptime MOMS_TPB = 128
-comptime MOMS_W = MOMS_MAX_D * (MOMS_MAX_D + 1) // 2  # chains a thread holds at most
-
-
-def _moms_part_kernel(
-    resp: FPtr, x: FPtr, n: Int32, d: Int32, kc: Int32, means: FPtr, part: FPtr, n_groups: Int32, cov_pass: Int32,
-):
-    var tid = Int(thread_idx.x)
-    var t = Int(block_idx.x) * MOMS_TPB + tid
-    var N = Int(n)
-    var D = Int(d)
-    var K = Int(kc)
-    var G = Int(n_groups)
-    var acc = stack_allocation[MOMS_TPB * MOMS_W, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
-    if t >= K * G:
-        return
-    var k = t // G
-    var g = t - k * G
-    var r0 = g * MOMS_ROWS
-    var r1 = r0 + MOMS_ROWS
-    if r1 > N:
-        r1 = N
-    var o = tid * MOMS_W
-    var nch = D + 1 if cov_pass == Int32(0) else (D * (D + 1)) // 2
-    for c in range(nch):
-        acc[o + c] = Float32(0)
-    if cov_pass == Int32(0):
-        for i in range(r0, r1):
-            var r = resp[i * K + k]
-            for a in range(D):
-                acc[o + a] = acc[o + a] + xk_term(r, x[i * D + a])
-            acc[o + D] = acc[o + D] + r
-    else:
-        for i in range(r0, r1):
-            var r = resp[i * K + k]
-            var c = 0
-            for a in range(D):
-                var xa = x[i * D + a]
-                var ma = means[k * D + a]
-                for b in range(a, D):
-                    acc[o + c] = acc[o + c] + cov_term(r, xa, x[i * D + b], ma, means[k * D + b])
-                    c += 1
-    for c in range(nch):
-        part[(k * G + g) * MOMS_W + c] = acc[o + c]
-
-
-def _moms_final_kernel(
-    part: FPtr, n_groups: Int32, d: Int32, kc: Int32, reg: Float32, nk: FPtr, means: FPtr, cov: FPtr, cov_pass: Int32,
-):
-    var t = _tid()
-    var D = Int(d)
-    var K = Int(kc)
-    var G = Int(n_groups)
-    var nout = D + 1 if cov_pass == Int32(0) else D * D
-    if t >= K * nout:
-        return
-    var k = t // nout
-    var c = t - k * nout
-    if cov_pass == Int32(0):
-        var acc = Float32(0)
-        var nkacc = Float32(0)
-        for g in range(G):
-            acc = acc + part[(k * G + g) * MOMS_W + c]
-            nkacc = nkacc + part[(k * G + g) * MOMS_W + D]
-        var nkv = nk_final(nkacc)
-        if c == D:
-            nk[k] = nkv
-        else:
-            means[k * D + c] = mean_final(acc, nkv)
-    else:
-        var a = c // D
-        var b = c - a * D
-        var lo = a if a < b else b
-        var hi = b if a < b else a
-        # the upper triangle's chain of (lo, hi), rows of the triangle ascending
-        var q = lo * D - (lo * (lo - 1)) // 2 + (hi - lo)
-        var acc = Float32(0)
-        for g in range(G):
-            acc = acc + part[(k * G + g) * MOMS_W + q]
-        cov[k * D * D + c] = cov_final(acc, nk[k], reg, a == b)
+# TOMBSTONE: MOJOLEARN_MOMENTS_ROWS (unmeasured opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-14-cluster; code recoverable at 0625274b10.
+# Restore: git apply experiments/removed/MOJOLEARN_MOMENTS_ROWS.patch; record in docs/TOMBSTONES.md.
 
 
 def _pdist_kernel(a: FPtr, na: Int32, b: FPtr, nb: Int32, d: Int32, metric: Int32, p: Float32, dst: FPtr):
@@ -1241,19 +1066,22 @@ def _apf_update_kernel(r: FPtr, a: FPtr, colsum: FPtr, n: Int32, n_tiles: Int32,
 # Lane cluster2 (lane/apple-fast-cluster2, 2026-10-02), FAST + Apple only.
 #: BGMM_FAST_MOMENTS_GEMM is the FAST + Apple default since 2026-10-05 (Andrew's call): M3 A/B rab21-bgmmgemm
 #: (afc_ab_def, full board size, 1 run per arm) bayesian-gmm istella 51968.5 -> 19600.4 ms (-62.3%), mean_log_likelihood
-#: 175.576 -> 175.322 (-0.14%, accepted); taxi 478.5 -> 479.2 ms, identical. `-D MOJOLEARN_BGMM_FAST_MOMENTS_GEMM_OFF` turns it off.
+#: 175.576 -> 175.322 (-0.14%, accepted); taxi 478.5 -> 479.2 ms, identical.
 # OPTICS_FAST_DEVICE_ORDER is the default (below).
 comptime XC2_FAST = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_COLUMN == COLUMN_APPLE
-comptime BGMM_FAST_MOMENTS_GEMM = XC2_FAST and not is_defined["MOJOLEARN_BGMM_FAST_MOMENTS_GEMM_OFF"]()
-comptime OPTICS_FAST_DEVICE_ORDER = XC2_FAST and not is_defined["MOJOLEARN_OPTICS_FAST_DEVICE_ORDER_OFF"]()
+# TOMBSTONE: MOJOLEARN_BGMM_FAST_MOMENTS_GEMM_OFF (old path beside the FAST + Apple default (EXP:500 HOLD-quality); no A/B recorded for the old path) deleted 2026-11-15 by lane/expdel2-14-cluster; code recoverable at 82c9546196.
+# Restore: git apply experiments/removed/MOJOLEARN_BGMM_FAST_MOMENTS_GEMM_OFF.patch; record in docs/TOMBSTONES.md.
+comptime BGMM_FAST_MOMENTS_GEMM = XC2_FAST
+# TOMBSTONE: MOJOLEARN_OPTICS_FAST_DEVICE_ORDER_OFF (old path beside the FAST + Apple default (M3 A/B optics istella 432.7 -> 260.7 ms)) deleted 2026-11-15 by lane/expdel2-14-cluster; code recoverable at ad83b86093.
+# Restore: git apply experiments/removed/MOJOLEARN_OPTICS_FAST_DEVICE_ORDER_OFF.patch; record in docs/TOMBSTONES.md.
+comptime OPTICS_FAST_DEVICE_ORDER = XC2_FAST
 
 
 # TOMBSTONE: MOJOLEARN_AFFINITY_FAST_LOOP (DROPPED-noise) deleted 2026-10-02 by c5d0ef805; code recoverable at c5d0ef805^.
 # Restore: git apply experiments/removed/MOJOLEARN_AFFINITY_FAST_LOOP.patch; record in docs/TOMBSTONES.md.
 # Lane cluster2 (lane/apple-fast-cluster2, 2026-10-02), FAST + Apple only,
 # OPTICS_FAST_DEVICE_ORDER (DEFAULT ON since the M3 A/B: optics istella
-# 432.7 -> 260.7 ms, n=1, quality identical; off with
-# `-D MOJOLEARN_OPTICS_FAST_DEVICE_ORDER_OFF`; asked by x_cluster/optics.mojo): sklearn's
+# 432.7 -> 260.7 ms, n=1, quality identical; asked by x_cluster/optics.mojo): sklearn's
 # `compute_optics_graph` ordering loop on the device. The n steps stay serial
 # by construction (each pick depends on the last relaxation); every step is
 # ONE grid launch of ceil(n / OPT_ORD_PER) blocks, block b owning the rows
@@ -1433,50 +1261,8 @@ def _agg_block_min(red: UnsafePointer[UInt64, MutUntrackedOrigin, address_space=
     return r
 
 
-@always_inline
-def _c42_slot(i: Int,j: Int,n: Int) -> Int:
-    comptime if C42_ACTIVE_TRIANGLE:
-        var lo=min(i,j)
-        var hi=max(i,j)
-        return lo*n-lo*(lo-1)//2+(hi-lo)
-    return i*n+j
-
-
-def _c42_pack(source: FPtr,dst: FPtr,n: Int32):
-    var i=_tid()
-    if i<Int(n):
-        for j in range(i,Int(n)):
-            dst[_c42_slot(i,j,Int(n))]=source[i*Int(n)+j]
-
-
-def _c42_live_flags(live: IPtr,flag: IPtr,scan: IPtr,n: Int32):
-    # The live rows, ascending, are compacted by an exclusive scan of these
-    # flags (`frs_exclusive_scan`, every block) and `_c42_emit`: the same
-    # stable logical row order the one-thread walk gave, exact integers.
-    var row=Int(block_idx.x)*TPB+Int(thread_idx.x)
-    if row<Int(n):
-        var f=Int32(1) if live[row]!=0 else Int32(0)
-        flag[row]=f
-        scan[row]=f
-
-
-def _c42_emit(flag: IPtr,scan: IPtr,active: IPtr,n: Int32):
-    var row=Int(block_idx.x)*TPB+Int(thread_idx.x)
-    if row<Int(n) and flag[row]!=0:
-        active[Int(scan[row])]=Int32(row)
-
-
-def _c42_argmin(md: FPtr,nn: IPtr,active: IPtr,count: Int32,part: MutPointer[UInt64,MutAnyOrigin]):
-    var red=stack_allocation[AGG_TPB,UInt64,address_space=AddressSpace.SHARED]()
-    var mine=AGG_NONE
-    var start=Int(block_idx.x)*AGG_PER
-    for task in range(start+Int(thread_idx.x),min(start+AGG_PER,Int(count)),AGG_TPB):
-        var row=Int(active[task])
-        if nn[row]>=0:
-            mine=min(mine,_agg_key(md[row],row))
-    var best=_agg_block_min(red,mine)
-    if thread_idx.x==0:
-        part[Int(block_idx.x)]=best
+# TOMBSTONE: MOJOLEARN_C42_ACTIVE_TRIANGLE (unmeasured opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-14-cluster (non-owner; owner expdel2-05-base); code recoverable at d73c9660dc.
+# Restore: git apply experiments/removed/MOJOLEARN_C42_ACTIVE_TRIANGLE.expdel2-14-cluster.patch; record in docs/TOMBSTONES.md.
 
 
 def _agg_init_kernel(live: IPtr, nn: IPtr, md: FPtr, sz: FPtr, node: IPtr, lst: IPtr, st: IPtr, n: Int32):
@@ -1556,7 +1342,7 @@ def _agg_lw_kernel(
         return
     var a = Int(UInt32(r & UInt64(0xFFFFFFFF)))
     var b = Int(nn[a])
-    var dab = dm[_c42_slot(a,b,N)]
+    var dab = dm[a * N + b]
     var na = sz[a]
     var nbs = sz[b]
     if k == 0:
@@ -1574,10 +1360,9 @@ def _agg_lw_kernel(
         ha = adj[a * N + k] != 0
         hb = adj[b * N + k] != 0
     if Int(linkage) == LINK_WARD or ha or hb:
-        var v = lance_williams(Int(linkage), dm[_c42_slot(a,k,N)], dm[_c42_slot(b,k,N)], dab, na, nbs, sz[k], ha, hb)
-        dm[_c42_slot(a,k,N)] = v
-        comptime if not C42_ACTIVE_TRIANGLE:
-            dm[_c42_slot(k,a,N)] = v
+        var v = lance_williams(Int(linkage), dm[a * N + k], dm[b * N + k], dab, na, nbs, sz[k], ha, hb)
+        dm[a * N + k] = v
+        dm[k * N + a] = v
     if con != 0 and (ha or hb):
         adj[a * N + k] = 1
         adj[k * N + a] = 1
@@ -1616,7 +1401,7 @@ def _agg_flag_kernel(
         if q == a or q == b:
             go = True
         elif i < a and (con == 0 or adj[i * N + a] != 0):
-            var v = dm[_c42_slot(i,a,N)]
+            var v = dm[i * N + a]
             if q < 0 or v < md[i] or (v == md[i] and a < q):
                 nn[i] = Int32(a)
                 md[i] = v
@@ -1639,7 +1424,7 @@ def _agg_rescan_kernel(dm: FPtr, live: IPtr, nn: IPtr, md: FPtr, n: Int32, st: I
         var mine = AGG_NONE
         for j in range(i + 1 + Int(thread_idx.x), N, AGG_TPB):
             if live[j] != 0 and (con == 0 or adj[i * N + j] != 0):
-                mine = min(mine, _agg_key(dm[_c42_slot(i,j,N)], j))
+                mine = min(mine, _agg_key(dm[i * N + j], j))
         var r = _agg_block_min(red, mine)
         if thread_idx.x == 0:
             if r == AGG_NONE:
@@ -1648,7 +1433,7 @@ def _agg_rescan_kernel(dm: FPtr, live: IPtr, nn: IPtr, md: FPtr, n: Int32, st: I
             else:
                 var j = Int(UInt32(r & UInt64(0xFFFFFFFF)))
                 nn[i] = Int32(j)
-                md[i] = dm[_c42_slot(i,j,N)]
+                md[i] = dm[i * N + j]
         e += Int(grid_dim.x)
 
 
@@ -1658,15 +1443,12 @@ def _agg_rescan_kernel(dm: FPtr, live: IPtr, nn: IPtr, md: FPtr, n: Int32, st: I
 # n x d) and DRAINED the stream before returning so they could die. The
 # buffers now live in the ops object and the call returns with its work
 # enqueued: one allocation per fit, one drain less per EM iteration.
-# Scheduling only, no bit moves. `-D MOJOLEARN_IDN_BGMM_MOMENTS_POOL_OFF=1`
-# restores the per-call buffers and the drain.
-comptime IDN_BGMM_MOMENTS_POOL = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not (
-        is_defined["MOJOLEARN_IDN_BGMM_MOMENTS_POOL_OFF"]()
-        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-    )
-)
+# Scheduling only, no bit moves. FAST keeps the per-call buffers and the drain.
+# TOMBSTONE: MOJOLEARN_IDN_BGMM_MOMENTS_POOL_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-14-cluster; code recoverable at 0fd51e8785.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_BGMM_MOMENTS_POOL_OFF.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-14-cluster (non-owner; owner expdel2-37-series); code recoverable at 5648a4a2e2.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-14-cluster.patch; record in docs/TOMBSTONES.md.
+comptime IDN_BGMM_MOMENTS_POOL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 
 
 struct _ClusterContext(Defaultable, Movable):
@@ -1951,10 +1733,6 @@ struct DeviceOps(ClusterOps):
 
     def nearest(mut self, a: Int, na: Int, b: Int, nb: Int, d: Int, labels: Int, dist: Int) raises:
         self._ph0()
-        comptime if XCLUSTER_ROW_ASSIGN:
-            self.ctx.enqueue_function[_xc_nearest_group](self._fp(a),Int32(na),self._fp(b),Int32(nb),Int32(d),self._ip(labels),self._fp(dist),grid_dim=_grid((na+XC_ASSIGN_ROWS-1)//XC_ASSIGN_ROWS),block_dim=TPB)
-            self._ph1("nearest")
-            return
         self.ctx.enqueue_function[_nearest_kernel](
             self._fp(a), Int32(na), self._fp(b), Int32(nb), Int32(d), self._ip(labels), self._fp(dist),
             grid_dim=_grid(na), block_dim=TPB,
@@ -2012,15 +1790,6 @@ struct DeviceOps(ClusterOps):
                 self.ctx, self._fp(x), n, d, bw, stop, max_iter, self._fp(centers), ns,
                 self._ip(intensity), self._ip(iters),
             ):
-                self._ph1("meanshift")
-                return
-        comptime if MEANSHIFT_BLOCK:
-            if d <= MSB_MAX_D and ns > 0:
-                self.ctx.enqueue_function[_meanshift_block_kernel](
-                    self._fp(x), Int32(n), Int32(d), bw, stop, Int32(max_iter),
-                    self._fp(centers), self._ip(intensity), self._ip(iters),
-                    grid_dim=ns, block_dim=MSB_TPB,
-                )
                 self._ph1("meanshift")
                 return
         comptime if MEANSHIFT_TEAM:
@@ -2223,26 +1992,6 @@ struct DeviceOps(ClusterOps):
         comptime if BGMM_FAST_MOMENTS_GEMM:
             if d > MOM_MAX_D:
                 self._moments_gemm(resp, x, n, d, kc, reg, nk, means, cov)
-                self._ph1("moments")
-                return
-        comptime if MOMS:
-            if d <= MOMS_MAX_D and n > 0:
-                var G = (n + MOMS_ROWS - 1) // MOMS_ROWS
-                var need = kc * G * MOMS_W
-                if need > self.mpart_n:
-                    self.mpart = self.ctx.enqueue_create_buffer[DType.float32](need)
-                    self.mpart_n = need
-                var pp = self.mpart.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
-                for cp in range(2):
-                    var nout = d + 1 if cp == 0 else d * d
-                    self.ctx.enqueue_function[_moms_part_kernel](
-                        self._fp(resp), self._fp(x), Int32(n), Int32(d), Int32(kc), self._fp(means), pp,
-                        Int32(G), Int32(cp), grid_dim=(kc * G + MOMS_TPB - 1) // MOMS_TPB, block_dim=MOMS_TPB,
-                    )
-                    self.ctx.enqueue_function[_moms_final_kernel](
-                        pp, Int32(G), Int32(d), Int32(kc), reg, self._fp(nk), self._fp(means), self._fp(cov),
-                        Int32(cp), grid_dim=_grid(kc * nout), block_dim=TPB,
-                    )
                 self._ph1("moments")
                 return
         comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
@@ -2608,16 +2357,6 @@ struct DeviceOps(ClusterOps):
         var p_dv = dv.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
         var p_part = part.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
         var p_dm = self._fp(dm)
-        var packed = ctx.enqueue_create_buffer[DType.float32](n*(n+1)//2 if C42_ACTIVE_TRIANGLE else 1)
-        var active = ctx.enqueue_create_buffer[DType.int32](n if C42_ACTIVE_TRIANGLE else 1)
-        var live_flag = ctx.enqueue_create_buffer[DType.int32](n if C42_ACTIVE_TRIANGLE else 1)
-        var live_scan = ctx.enqueue_create_buffer[DType.int32](n if C42_ACTIVE_TRIANGLE else 1)
-        var live_bsum = ctx.enqueue_create_buffer[DType.int32](frs_scan_blocks(n) if C42_ACTIVE_TRIANGLE else 1)
-        comptime if C42_ACTIVE_TRIANGLE:
-            ctx.enqueue_function[_c42_pack](p_dm,packed.unsafe_ptr(),Int32(n),grid_dim=_grid(n),block_dim=TPB)
-            ctx.synchronize()
-            self.shrink(dm)
-            p_dm=packed.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
         var con = Int32(1) if adj >= 0 else Int32(0)
         var p_adj = self._ip(adj) if adj >= 0 else p_lst
         var rb = n if n < AGG_RESCAN_BLOCKS else AGG_RESCAN_BLOCKS
@@ -2629,19 +2368,11 @@ struct DeviceOps(ClusterOps):
             p_dm, p_live, p_nn, p_md, Int32(n), p_st, p_lst, p_adj, con, grid_dim=rb, block_dim=AGG_TPB,
         )
         for step in range(n_merges):
-            var partial_count=nb
-            comptime if C42_ACTIVE_TRIANGLE:
-                partial_count=(n-step+AGG_PER-1)//AGG_PER
-                ctx.enqueue_function[_c42_live_flags](p_live,live_flag.unsafe_ptr(),live_scan.unsafe_ptr(),Int32(n),grid_dim=_grid(n),block_dim=TPB)
-                frs_exclusive_scan(ctx,live_scan,n,live_bsum)
-                ctx.enqueue_function[_c42_emit](live_flag.unsafe_ptr(),live_scan.unsafe_ptr(),active.unsafe_ptr(),Int32(n),grid_dim=_grid(n),block_dim=TPB)
-                ctx.enqueue_function[_c42_argmin](p_md,p_nn,active.unsafe_ptr(),Int32(n-step),p_part,grid_dim=partial_count,block_dim=AGG_TPB)
-            else:
-                ctx.enqueue_function[_agg_argmin_part_kernel](
-                    p_md,p_nn,p_live,Int32(n),p_part,p_st,grid_dim=nb,block_dim=AGG_TPB,
-                )
+            ctx.enqueue_function[_agg_argmin_part_kernel](
+                p_md,p_nn,p_live,Int32(n),p_part,p_st,grid_dim=nb,block_dim=AGG_TPB,
+            )
             ctx.enqueue_function[_agg_lw_kernel](
-                p_part, Int32(partial_count), p_dm, p_nn, p_live, p_sz, Int32(n), Int32(linkage), p_st, p_stf, p_adj, con,
+                p_part, Int32(nb), p_dm, p_nn, p_live, p_sz, Int32(n), Int32(linkage), p_st, p_stf, p_adj, con,
                 grid_dim=_grid(n), block_dim=TPB,
             )
             ctx.enqueue_function[_agg_flag_kernel](
@@ -2742,11 +2473,6 @@ struct DeviceOps(ClusterOps):
 
     def mb_assign(mut self, src: Int, d: Int, idx: Int, m: Int, c: Int, k: Int, labels: Int, dist: Int, dst: Int) raises:
         self._ph0()
-        comptime if XCLUSTER_ROW_ASSIGN:
-            self.gather_rows(src,d,idx,m,dst)
-            self.nearest(dst,m,c,k,d,labels,dist)
-            self._ph1("mb_assign")
-            return
         self.ctx.enqueue_function[_mb_assign_kernel](
             self._fp(src), Int32(d), self._ip(idx), Int32(m), self._fp(c), Int32(k), self._ip(labels),
             self._fp(dist), self._fp(dst), grid_dim=_grid(m), block_dim=TPB,
@@ -3676,26 +3402,3 @@ def _c38_distinct_kernel[COPY: Bool](c: FPtr,ids: IPtr,nt: Int32,x: FPtr,n: Int3
     else:
         if first==trial:
             output[cell]=sq_dist_rows(c,trial,x,row,Int(d))
-
-
-def _xc_nearest_group(a: FPtr,na: Int32,c: FPtr,k: Int32,d: Int32,labels: IPtr,dist: FPtr):
-    comptime assert XC_ASSIGN_ROWS == 2 or XC_ASSIGN_ROWS == 4, "MOJOLEARN_XCLUSTER_ROW_ASSIGN takes 2 or 4"
-    var first=_tid()*XC_ASSIGN_ROWS
-    var best=Array[Float32,XC_ASSIGN_ROWS](fill=Float32(0))
-    var ids=Array[Int32,XC_ASSIGN_ROWS](fill=Int32(0))
-    for center in range(Int(k)):
-        var acc=Array[Float32,XC_ASSIGN_ROWS](fill=Float32(0))
-        for f in range(Int(d)):
-            var cv=ftz(c[center*Int(d)+f])
-            comptime for r in range(XC_ASSIGN_ROWS):
-                if first+r<Int(na):
-                    var delta=ftz(ftz(a[(first+r)*Int(d)+f])-cv)
-                    acc[r]=ftz(acc[r]+ftz(identical_mul(delta,delta)))
-        comptime for r in range(XC_ASSIGN_ROWS):
-            if center==0 or acc[r]<best[r]:
-                best[r]=acc[r]
-                ids[r]=Int32(center)
-    comptime for r in range(XC_ASSIGN_ROWS):
-        if first+r<Int(na):
-            labels[first+r]=ids[r]
-            dist[first+r]=best[r]

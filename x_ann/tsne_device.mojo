@@ -10,7 +10,6 @@ from std.time import perf_counter_ns
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from max.gpu.host import DeviceBuffer, DeviceContext
-from std.sys.compile import is_defined
 from std.atomic import Atomic, Ordering, fence
 from max.gpu import grid_dim
 from checks.kernel_matrix import TARGET_COLUMN, COLUMN_NVIDIA, COLUMN_AMD
@@ -23,9 +22,7 @@ from x_ann.stage_timer import AnnStages
 from x_ann.knn_device import knn_enqueue
 
 from metrics.checks.device_io import upload_f32, upload_i32, download_f32, download_i32
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, ftz, identical_log
-from core.accelerator_target import TARGET_HAS_APPLE_GPU
-from x_ann.switches import ANN3_TSNE_RB32, ANN3_TSNE_RB64, ANN3_TSNE_STEP_ROWS
+from checks.numerics import ftz, identical_log
 from checks.numerics import identical_div, identical_mul
 from x_ann.tsne_core import ts_q
 from x_ann.tsne_core import (
@@ -51,11 +48,12 @@ def perplexity_kernel(n: Int32, nn_d: F32P, nn: Int32, log_perp: Float32, p: F32
         ts_perplexity_cell(i, nn_d, Int(nn), log_perp, p)
 
 
-comptime _FAST_APPLE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
 #: rows per threadgroup and staged candidate rows per tile of the repulsion
-#: (lane ann-apple3, OPT-IN trials under FAST on Apple: 32 or 64 rows per
-#: threadgroup, x_ann/switches.mojo)
-comptime RTB = 32 if (_FAST_APPLE and ANN3_TSNE_RB32) else (64 if (_FAST_APPLE and ANN3_TSNE_RB64) else 128)
+# TOMBSTONE: MOJOLEARN_ANN3_TSNE_RB32 (unmeasured opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-14-cluster; code recoverable at 0c729eaf23.
+# Restore: git apply experiments/removed/MOJOLEARN_ANN3_TSNE_RB32.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_ANN3_TSNE_RB64 (unmeasured opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-14-cluster; code recoverable at e114af5d32.
+# Restore: git apply experiments/removed/MOJOLEARN_ANN3_TSNE_RB64.patch; record in docs/TOMBSTONES.md.
+comptime RTB = 128
 comptime RTJ = 256
 
 
@@ -148,7 +146,8 @@ def repulse_tiled_kernel(n: Int32, y: F32P, row_z: F32P, rep: F32P):
 # Restore: git apply experiments/removed/MOJOLEARN_TSNE_FAST_SPLIT.patch; record in docs/TOMBSTONES.md.
 
 
-comptime TS_STEP_ROWS = _FAST_APPLE and ANN3_TSNE_STEP_ROWS
+# TOMBSTONE: MOJOLEARN_ANN3_TSNE_STEP_ROWS (unmeasured opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-14-cluster; code recoverable at bf400e5cfd.
+# Restore: git apply experiments/removed/MOJOLEARN_ANN3_TSNE_STEP_ROWS.patch; record in docs/TOMBSTONES.md.
 
 
 def z_level_kernel(ln: Int32, src: F32P, dst: F32P):
@@ -205,8 +204,9 @@ def _ts_z(
 #: the lane partials meet in threadgroup memory and the row's owner adds
 #: them in ascending s from +0, each add flushed: the same lanes, the same
 #: order, the same bits as `repulse_tiled_kernel`. Launch shape only.
-#: -D MOJOLEARN_IDN_TSNE_LANES_SPLIT_OFF restores the one-thread rows.
-comptime TS_LANES_SPLIT = TS_LANE_FOLD and not is_defined["MOJOLEARN_IDN_TSNE_LANES_SPLIT_OFF"]()
+# TOMBSTONE: MOJOLEARN_IDN_TSNE_LANES_SPLIT_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-14-cluster; code recoverable at e516269a44.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_TSNE_LANES_SPLIT_OFF.patch; record in docs/TOMBSTONES.md.
+comptime TS_LANES_SPLIT = TS_LANE_FOLD
 comptime RLQ = 4
 comptime RLS = TS_LANES // RLQ
 comptime RLB = 32
@@ -296,12 +296,10 @@ def _enq_repulse(
 # in parallel inside the same kernel (each block's rows, then the parts in
 # the block that finishes last), so no one-block launch remains. Both
 # coordinates' steps run in one thread (`step_rows_kernel`, the cell's
-# statements in the cell's order). -D MOJOLEARN_TSNE_SPLIT_OFF=1 restores
-# main's three kernels.
-comptime TS_SPLIT = (
-    (TARGET_COLUMN == COLUMN_NVIDIA or TARGET_COLUMN == COLUMN_AMD)
-    and not is_defined["MOJOLEARN_TSNE_SPLIT_OFF"]()
-)
+# statements in the cell's order).
+# TOMBSTONE: MOJOLEARN_TSNE_SPLIT_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-14-cluster; code recoverable at 691ab5ae34.
+# Restore: git apply experiments/removed/MOJOLEARN_TSNE_SPLIT_OFF.patch; record in docs/TOMBSTONES.md.
+comptime TS_SPLIT = TARGET_COLUMN == COLUMN_NVIDIA or TARGET_COLUMN == COLUMN_AMD
 comptime RS_ROWS = 32
 comptime RS_TJ = 64
 comptime RS_TPB = 256
@@ -480,15 +478,11 @@ def repulse_split_kernel(n: Int32, y: F32P, row_z: F32P, rep: F32P, z_out: F32P,
 #: (the average of the two vendors decides). Trustworthiness@15 equal and
 #: digests identical in every arm on both vendors (istella ce69cdffd6f889b6,
 #: taxi cee32a8a52defb1c): no bit change.
-#: -D MOJOLEARN_IDN_TSNE_REP_TILE_OFF (or MOJOLEARN_IDN_ALL_OFF) restores the split kernel.
-comptime IDN_TSNE_REP_TILE = (
-    TS_SPLIT
-    and TS_LANE_FOLD
-    and not (
-        is_defined["MOJOLEARN_IDN_TSNE_REP_TILE_OFF"]()
-        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-    )
-)
+# TOMBSTONE: MOJOLEARN_IDN_TSNE_REP_TILE_OFF (old path; EXP:1823 PROMOTED the rep tile, NV+AMD average) deleted 2026-11-15 by lane/expdel2-14-cluster; code recoverable at 98ec52101e.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_TSNE_REP_TILE_OFF.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-14-cluster (non-owner; owner expdel2-37-series); code recoverable at 5648a4a2e2.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-14-cluster.patch; record in docs/TOMBSTONES.md.
+comptime IDN_TSNE_REP_TILE = TS_SPLIT and TS_LANE_FOLD
 #: threads per row, lanes per thread, rows per block, candidates per tile
 comptime RT2_LQ = 16
 comptime RT2_U = TS_LANES // RT2_LQ
@@ -740,18 +734,11 @@ def _ts_iter(
         return
     _enq_repulse(ctx, n, ycur, drz, drep)
     _ts_z(ctx, n, drz, dz, dzs)
-    comptime if TS_STEP_ROWS:
-        ctx.enqueue_function[step_rows_kernel](
-            Int32(n), ycur.unsafe_ptr(), ynext.unsafe_ptr(), dptr.unsafe_ptr(), dind.unsafe_ptr(),
-            dval.unsafe_ptr(), drep.unsafe_ptr(), dz.unsafe_ptr(), dupd.unsafe_ptr(), dgain.unsafe_ptr(), ex,
-            mom, lr, grid_dim=_grid(n), block_dim=TPB,
-        )
-    else:
-        ctx.enqueue_function[step_kernel](
-            Int32(2 * n), ycur.unsafe_ptr(), ynext.unsafe_ptr(), dptr.unsafe_ptr(), dind.unsafe_ptr(),
-            dval.unsafe_ptr(), drep.unsafe_ptr(), dz.unsafe_ptr(), dupd.unsafe_ptr(), dgain.unsafe_ptr(), ex,
-            mom, lr, grid_dim=_grid(2 * n), block_dim=TPB,
-        )
+    ctx.enqueue_function[step_kernel](
+        Int32(2 * n), ycur.unsafe_ptr(), ynext.unsafe_ptr(), dptr.unsafe_ptr(), dind.unsafe_ptr(),
+        dval.unsafe_ptr(), drep.unsafe_ptr(), dz.unsafe_ptr(), dupd.unsafe_ptr(), dgain.unsafe_ptr(), ex,
+        mom, lr, grid_dim=_grid(2 * n), block_dim=TPB,
+    )
 
 
 def _ts_iter_timed(
@@ -789,18 +776,11 @@ def _ts_iter_timed(
     _ts_z(ctx, n, drz, dz, dzs)
     ctx.synchronize()
     var t2 = Int(perf_counter_ns())
-    comptime if TS_STEP_ROWS:
-        ctx.enqueue_function[step_rows_kernel](
-            Int32(n), ycur.unsafe_ptr(), ynext.unsafe_ptr(), dptr.unsafe_ptr(), dind.unsafe_ptr(),
-            dval.unsafe_ptr(), drep.unsafe_ptr(), dz.unsafe_ptr(), dupd.unsafe_ptr(), dgain.unsafe_ptr(), ex,
-            mom, lr, grid_dim=_grid(n), block_dim=TPB,
-        )
-    else:
-        ctx.enqueue_function[step_kernel](
-            Int32(2 * n), ycur.unsafe_ptr(), ynext.unsafe_ptr(), dptr.unsafe_ptr(), dind.unsafe_ptr(),
-            dval.unsafe_ptr(), drep.unsafe_ptr(), dz.unsafe_ptr(), dupd.unsafe_ptr(), dgain.unsafe_ptr(), ex,
-            mom, lr, grid_dim=_grid(2 * n), block_dim=TPB,
-        )
+    ctx.enqueue_function[step_kernel](
+        Int32(2 * n), ycur.unsafe_ptr(), ynext.unsafe_ptr(), dptr.unsafe_ptr(), dind.unsafe_ptr(),
+        dval.unsafe_ptr(), drep.unsafe_ptr(), dz.unsafe_ptr(), dupd.unsafe_ptr(), dgain.unsafe_ptr(), ex,
+        mom, lr, grid_dim=_grid(2 * n), block_dim=TPB,
+    )
     ctx.synchronize()
     var t3 = Int(perf_counter_ns())
     t_rep += t1 - t0

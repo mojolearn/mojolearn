@@ -1,0 +1,24 @@
+diff --git a/x_cluster/device_ops.mojo b/x_cluster/device_ops.mojo
+index 50fb8ced41..d9c25a7784 100644
+--- a/x_cluster/device_ops.mojo
++++ b/x_cluster/device_ops.mojo
+@@ -1076,16 +1076,15 @@ comptime XC2_FAST = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_COLUMN == COL
+ # TOMBSTONE: MOJOLEARN_BGMM_FAST_MOMENTS_GEMM_OFF (old path beside the FAST + Apple default (EXP:500 HOLD-quality); no A/B recorded for the old path) deleted 2026-11-15 by lane/expdel2-14-cluster; code recoverable at 82c9546196.
+ # Restore: git apply experiments/removed/MOJOLEARN_BGMM_FAST_MOMENTS_GEMM_OFF.patch; record in docs/TOMBSTONES.md.
+ comptime BGMM_FAST_MOMENTS_GEMM = XC2_FAST
+-# TOMBSTONE: MOJOLEARN_OPTICS_FAST_DEVICE_ORDER_OFF (old path beside the FAST + Apple default (M3 A/B optics istella 432.7 -> 260.7 ms)) deleted 2026-11-15 by lane/expdel2-14-cluster; code recoverable at ad83b86093.
+-# Restore: git apply experiments/removed/MOJOLEARN_OPTICS_FAST_DEVICE_ORDER_OFF.patch; record in docs/TOMBSTONES.md.
+-comptime OPTICS_FAST_DEVICE_ORDER = XC2_FAST
++comptime OPTICS_FAST_DEVICE_ORDER = XC2_FAST and not is_defined["MOJOLEARN_OPTICS_FAST_DEVICE_ORDER_OFF"]()
+ 
+ 
+ # TOMBSTONE: MOJOLEARN_AFFINITY_FAST_LOOP (DROPPED-noise) deleted 2026-10-02 by c5d0ef805; code recoverable at c5d0ef805^.
+ # Restore: git apply experiments/removed/MOJOLEARN_AFFINITY_FAST_LOOP.patch; record in docs/TOMBSTONES.md.
+ # Lane cluster2 (lane/apple-fast-cluster2, 2026-10-02), FAST + Apple only,
+ # OPTICS_FAST_DEVICE_ORDER (DEFAULT ON since the M3 A/B: optics istella
+-# 432.7 -> 260.7 ms, n=1, quality identical; asked by x_cluster/optics.mojo): sklearn's
++# 432.7 -> 260.7 ms, n=1, quality identical; off with
++# `-D MOJOLEARN_OPTICS_FAST_DEVICE_ORDER_OFF`; asked by x_cluster/optics.mojo): sklearn's
+ # `compute_optics_graph` ordering loop on the device. The n steps stay serial
+ # by construction (each pick depends on the last relaxation); every step is
+ # ONE grid launch of ceil(n / OPT_ORD_PER) blocks, block b owning the rows

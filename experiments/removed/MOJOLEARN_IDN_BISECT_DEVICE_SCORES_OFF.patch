@@ -1,0 +1,24 @@
+diff --git a/x_cluster/bisect.mojo b/x_cluster/bisect.mojo
+index aa4eb66380..d9c196003b 100644
+--- a/x_cluster/bisect.mojo
++++ b/x_cluster/bisect.mojo
+@@ -39,12 +39,14 @@ from x_cluster.post_bodies import FM_PROD, FM_VAL
+ # they were Float64 chains (the same on the device and the host column; a
+ # split pick moves only where two leaf scores agreed to a double's last
+ # bits). Labels and centers are untouched unless a pick moves.
+-# The master `-D MOJOLEARN_IDN_ALL_OFF` restores the readbacks; the define
+-# must reach the host-column build too.
+-# TOMBSTONE: MOJOLEARN_IDN_BISECT_DEVICE_SCORES_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-14-cluster; code recoverable at d70760e0e8.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_BISECT_DEVICE_SCORES_OFF.patch; record in docs/TOMBSTONES.md.
++# `-D MOJOLEARN_IDN_BISECT_DEVICE_SCORES_OFF=1` (or the master) restores the
++# readbacks; the define must reach the host-column build too.
+ comptime IDN_BISECT_DEVICE_SCORES = (
+-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
++    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
++    and not (
++        is_defined["MOJOLEARN_IDN_BISECT_DEVICE_SCORES_OFF"]()
++        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
++    )
+ )
+ 
+ # lane fix-c1-cluster (2026-10-04), IDENTICAL, default ON, BOTH COLUMNS (this
