@@ -2084,6 +2084,15 @@ def _fit(parts, est=None, probe="n/a:function", model_na=None):
     return f
 
 
+def _labels_and_proba(m, X):
+    """The two public classifier views, `predict` and `predict_proba`, in
+    that order. Two public calls (two forest traversals) where the harness
+    used the estimators' private one-traversal `_predict_with_proba`: verify
+    asks what a user can ask, and the labels are the same bytes (`predict`
+    is the first-max decode of `predict_proba`)."""
+    return m.predict(X), m.predict_proba(X)
+
+
 # ---------------------------------------------------------------- lanes
 # One per PUBLIC estimator, plus linalg and metrics. Each returns a hash of
 # the things a user would read back, plus the fitted estimator and what to
@@ -2094,9 +2103,9 @@ def _fit(parts, est=None, probe="n/a:function", model_na=None):
 @lane("rf-clf")
 def _(ml, X, yc, yr, Xh=None):
     m = ml.RandomForestClassifier(n_estimators=16, max_depth=8, random_state=7).fit(X, yc)
-    predict, proba = m._predict_with_proba(X)
+    predict, proba = _labels_and_proba(m, X)
     return _fit(dict(predict=_h(predict), proba=_h(proba)),
-                m, lambda e: e._predict_with_proba(Xh))
+                m, lambda e: _labels_and_proba(e, Xh))
 
 
 @lane("rf-reg")
@@ -2111,9 +2120,9 @@ def _(ml, X, yc, yr, Xh=None):
     # a float64 Fortran-order copy takes the column-major fit entry (et_classifier_fit_export)
     mf = ml.ExtraTreesClassifier(n_estimators=4, max_depth=8, random_state=7).fit(
         np.asfortranarray(X[:2000], dtype=np.float64), yc[:2000])
-    predict, proba = m._predict_with_proba(X)
+    predict, proba = _labels_and_proba(m, X)
     return _fit(dict(predict=_h(predict), proba=_h(proba), colmajor=_h(mf.predict_proba(X))),
-                m, lambda e: e._predict_with_proba(Xh))
+                m, lambda e: _labels_and_proba(e, Xh))
 
 
 @lane("et-reg")
@@ -2131,9 +2140,9 @@ def _(ml, X, yc, yr, Xh=None):
     sk-kernels): fixed-point row weights in the class tallies."""
     w = _hw((X.shape[0],), "et-clf-weighted:sample_weight", 0.5, 1.5)
     m = ml.ExtraTreesClassifier(n_estimators=16, max_depth=8, random_state=7).fit(X, yc, sample_weight=w)
-    predict, proba = m._predict_with_proba(X)
+    predict, proba = _labels_and_proba(m, X)
     return _fit(dict(predict=_h(predict), proba=_h(proba)),
-                m, lambda e: e._predict_with_proba(Xh))
+                m, lambda e: _labels_and_proba(e, Xh))
 
 
 @lane("et-reg-weighted")
@@ -3967,13 +3976,22 @@ def _lowbit_operands(A):
 # host fallback until pyglue-sweep (2026-10-03) made the conversion Mojo only;
 # the oracle stays here, in the harness, so `lowbit-conversions` still checks
 # the compiled seam against an independent construction and never NumPy.
+# Infinity and its test without a math module (the wheel's audit refuses
+# platform math, and the product's `_portable_math` is not the harness's to
+# import): `x == x and x - x != 0.0` is true exactly for an infinity.
+_LB_INF = float("inf")
+
+
+def _lb_isinf(v):
+    return v == v and v - v != 0.0
+
+
 def _lbpy_f32(v):
-    from mojolearn import _portable_math as math  # portable (the wheel refuses platform math)
     import struct
     try:
         return struct.unpack("<f", struct.pack("<f", v))[0]
     except OverflowError:
-        return math.inf if v > 0 else -math.inf
+        return _LB_INF if v > 0 else -_LB_INF
 
 
 def _lbpy_ftz_bits(x):
@@ -3983,16 +4001,15 @@ def _lbpy_ftz_bits(x):
 
 
 def _lbpy_ftz(v):
-    from mojolearn import _portable_math as math  # portable (the wheel refuses platform math)
-    if v != 0.0 and abs(v) < 1.1754943508222875e-38 and not math.isinf(v) and v == v:
-        return math.copysign(0.0, v)
+    # v is a nonzero subnormal here, so its sign is `v < 0`
+    if v != 0.0 and abs(v) < 1.1754943508222875e-38 and not _lb_isinf(v) and v == v:
+        return -0.0 if v < 0.0 else 0.0
     return v
 
 
 def _lbpy_pow2_f32(e):
-    from mojolearn import _portable_math as math  # portable (the wheel refuses platform math)
     if e > 127:
-        return math.inf
+        return _LB_INF
     if e < -126:
         return 0.0
     # Exact powers of two from Python ints (2**-126 is a normal double, so the
@@ -4022,7 +4039,6 @@ def _lbpy_from_bf16(bits):
 
 def _lbpy_quantize_int8(a):
     """`quantize_rows_int8` (DEVIATIONS 2902, 2903, 2905)."""
-    from mojolearn import _portable_math as math  # portable (the wheel refuses platform math)
     import struct
     a = np.ascontiguousarray(a, dtype=np.float32)
     rows, cols = a.shape
@@ -4040,7 +4056,7 @@ def _lbpy_quantize_int8(a):
         if best == 0.0 or best != best:
             e = 0
         else:
-            bits = struct.unpack("<I", struct.pack("<f", best))[0] if not math.isinf(best) else 0x7F800000
+            bits = struct.unpack("<I", struct.pack("<f", best))[0] if not _lb_isinf(best) else 0x7F800000
             e = (((bits >> 23) & 0xFF) - 127) - 6
         exps[r] = e
         scale = _lbpy_pow2_f32(-e)
@@ -4051,7 +4067,7 @@ def _lbpy_quantize_int8(a):
             s = _lbpy_ftz(_lbpy_f32(x * scale))
             if s != s:
                 continue
-            if math.isinf(s):
+            if _lb_isinf(s):
                 rr = 127.0 if s > 0 else -127.0
             else:
                 rr = float(round(s))
