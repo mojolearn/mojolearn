@@ -711,6 +711,7 @@ in the tables after the sections.
 | [`MOJOLEARN_CLASSICAL_C22_TRIANGLE`](#mojolearn_classical_c22_triangle-unmeasured-arm-deleted-2026-11-15) | Kernel (SMO square tile upper triangle mirrored, IDENTICAL) | removed (opt-in arm; unmeasured opt-in arm) | 2026-11-15 | [MOJOLEARN_CLASSICAL_C22_TRIANGLE.patch](../experiments/removed/MOJOLEARN_CLASSICAL_C22_TRIANGLE.patch) |
 | [`MOJOLEARN_CLASSICAL_C23_MCD`](#mojolearn_classical_c23_mcd-unmeasured-arm-deleted-2026-11-15) | Decomposition (MinCovDet centered Gram row-parallel, IDENTICAL) | removed (opt-in arm; unmeasured opt-in arm) | 2026-11-15 | [MOJOLEARN_CLASSICAL_C23_MCD.patch](../experiments/removed/MOJOLEARN_CLASSICAL_C23_MCD.patch) |
 | [`MOJOLEARN_CLASSICAL_C24_PANEL8`](#mojolearn_classical_c24_panel8-unmeasured-arm-deleted-2026-11-15) | Decomposition (TSQR eight-column panels, IDENTICAL) | removed (opt-in arm; measured arm not promoted) | 2026-11-15 | [MOJOLEARN_CLASSICAL_C24_PANEL8.patch](../experiments/removed/MOJOLEARN_CLASSICAL_C24_PANEL8.patch) |
+| [`MOJOLEARN_CLASSICAL_C24_TREE4`](#mojolearn_classical_c24_tree4-unmeasured-arm-deleted-2026-11-15) | Decomposition (TSQR / sliced-QR four-way merge tree, IDENTICAL) | removed (opt-in arm; measured arm not promoted) | 2026-11-15 | [MOJOLEARN_CLASSICAL_C24_TREE4.patch](../experiments/removed/MOJOLEARN_CLASSICAL_C24_TREE4.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -6870,4 +6871,12 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md (section expdel-02-
 - **Verdict**: grid classical-decomp.json C24_TSQR (ge123e6f9) promoted the rows2048 arm; panel8 was a measured arm that was not promoted (plan rule e). No bit change on any vendor or the host column: the default arm is untouched.
 - **Deleted by**: lane/expdel2-06-base (expdel2-06-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `2d9d6f1bd4`.
 - **Restore**: `git apply experiments/removed/MOJOLEARN_CLASSICAL_C24_PANEL8.patch`, then delete the `MOJOLEARN_CLASSICAL_C24_PANEL8` refusal in `core/experiment_guards_decomposition.mojo`.
+- **Records**: refusal in `core/experiment_guards_decomposition.mojo`; `classical-decomp.json` control `C24_TSQR`: `removed` entry added; `docs/apple-fast/EXPERIMENTS.md` row (expdel2-06-base section).
+
+## MOJOLEARN_CLASSICAL_C24_TREE4: unmeasured arm deleted (2026-11-15)
+
+- **What it was**: the opt-in arm in which a four-way TSQR and sliced-QR merge tree, ascending factor children and reverse Q application (x_decomp/tsqr_core.mojo, x_decomp/qr_sliced.mojo). `experiments/classical_identical_ideas/linear_controls.mojo` now defines `C24_TREE4` as the constant of the kept default, so the importers in other lanes compile before and after; the integrator folds their dead branches.
+- **Verdict**: grid classical-decomp.json C24_TSQR (ge123e6f9) promoted the rows2048 arm; tree4 was a measured arm that was not promoted (plan rule e). No bit change on any vendor or the host column: the default arm is untouched.
+- **Deleted by**: lane/expdel2-06-base (expdel2-06-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `ba795517d7`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_CLASSICAL_C24_TREE4.patch`, then delete the `MOJOLEARN_CLASSICAL_C24_TREE4` refusal in `core/experiment_guards_decomposition.mojo`.
 - **Records**: refusal in `core/experiment_guards_decomposition.mojo`; `classical-decomp.json` control `C24_TSQR`: `removed` entry added; `docs/apple-fast/EXPERIMENTS.md` row (expdel2-06-base section).

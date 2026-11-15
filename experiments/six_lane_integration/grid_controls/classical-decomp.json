@@ -265,6 +265,11 @@
    "define": "MOJOLEARN_CLASSICAL_C24_PANEL8",
    "control": "C24_TSQR",
    "reason": "DELETED 2026-11-15 (lane/expdel2-06-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md; recoverable at 2d9d6f1bd4; patch experiments/removed/MOJOLEARN_CLASSICAL_C24_PANEL8.patch): measured arm not promoted. grid classical-decomp.json C24_TSQR (ge123e6f9) promoted the rows2048 arm; panel8 was a measured arm that was not promoted (plan rule e). Refused in core/experiment_guards_decomposition.mojo; docs/TOMBSTONES.md."
+  },
+  {
+   "define": "MOJOLEARN_CLASSICAL_C24_TREE4",
+   "control": "C24_TSQR",
+   "reason": "DELETED 2026-11-15 (lane/expdel2-06-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md; recoverable at ba795517d7; patch experiments/removed/MOJOLEARN_CLASSICAL_C24_TREE4.patch): measured arm not promoted. grid classical-decomp.json C24_TSQR (ge123e6f9) promoted the rows2048 arm; tree4 was a measured arm that was not promoted (plan rule e). Refused in core/experiment_guards_decomposition.mojo; docs/TOMBSTONES.md."
   }
  ],
  "notes": [

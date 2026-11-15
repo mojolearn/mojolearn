@@ -246,7 +246,9 @@ comptime C24_PANEL8 = False
 # grid's "rows4096" arm). PANEL8 and TREE4 stay independent opt-in arms. The
 # old opt-in define is refused in core/six_lane_experiment_guards.mojo.
 comptime C24_ROWS2048 = CLASSICAL_IDN and not is_defined["MOJOLEARN_CLASSICAL_C24_ROWS2048_OFF"]()
-comptime C24_TREE4 = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_C24_TREE4"]()
+# TOMBSTONE: MOJOLEARN_CLASSICAL_C24_TREE4 (measured arm not promoted) deleted 2026-11-15 by lane/expdel2-06-base; code recoverable at ba795517d7.
+# Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C24_TREE4.patch; record in docs/TOMBSTONES.md.
+comptime C24_TREE4 = False
 # C25_PROJECTION_REUSE (IDENTICAL default since 2026-10-10): RBFSampler's projection
 # runs as classical_projection_kernel (kernel_methods/rbf_fused.mojo), four rows per
 # thread reusing each projection weight, the GEMM-v1 leaf/tree fold, for every d.

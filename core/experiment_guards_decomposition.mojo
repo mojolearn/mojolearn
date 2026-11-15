@@ -117,6 +117,8 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_CLASSICAL_C23_MCD"](), "removed 2026-11-15 (lane/expdel2-06-base): CLASSICAL_C23_MCD (Decomposition (MinCovDet centered Gram row-parallel, IDENTICAL)) was unmeasured opt-in arm; the opt-in arm is gone and the default path is unchanged; code recoverable at 4ab2967a7e; see docs/TOMBSTONES.md"
     # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C24_PANEL8.patch
     comptime assert not is_defined["MOJOLEARN_CLASSICAL_C24_PANEL8"](), "removed 2026-11-15 (lane/expdel2-06-base): CLASSICAL_C24_PANEL8 (Decomposition (TSQR eight-column panels, IDENTICAL)) was measured arm not promoted; the opt-in arm is gone and the default path is unchanged; code recoverable at 2d9d6f1bd4; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C24_TREE4.patch
+    comptime assert not is_defined["MOJOLEARN_CLASSICAL_C24_TREE4"](), "removed 2026-11-15 (lane/expdel2-06-base): CLASSICAL_C24_TREE4 (Decomposition (TSQR / sliced-QR four-way merge tree, IDENTICAL)) was measured arm not promoted; the opt-in arm is gone and the default path is unchanged; code recoverable at ba795517d7; see docs/TOMBSTONES.md"
     return True
 
 
