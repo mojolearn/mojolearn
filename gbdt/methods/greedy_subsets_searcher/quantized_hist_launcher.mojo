@@ -66,14 +66,16 @@ comptime QUANTIZED_HIST_LIVE = greedy_quantized_hist_for[
 #: and Lossguide). Default since the M3 A/B (lane/apple-fast-dwgap
 #: 23cbc3195, n=2, both SEP): depthwise taxi 13,744 -> 12,930 ms (-5.9%),
 #: auc .6325 -> .6324; istella 17,297 -> 16,975 ms (-1.9%), auc .9832 same.
-#: Off: `-D MOJOLEARN_GBDT_DW_MODE_SKIP_OFF`. The old opt-in define
+#: The old opt-in define
 #: `-D MOJOLEARN_GBDT_DW_MODE_SKIP` is harmless (no longer read).
 comptime QH_MODE_SKIP = (
     QUANTIZED_HIST_LIVE
     and GLOBAL_NUMERIC_MODE == NUMERIC_FAST
     and TARGET_HAS_APPLE_GPU
-    and not is_defined["MOJOLEARN_GBDT_DW_MODE_SKIP_OFF"]()
 )
+# TOMBSTONE: MOJOLEARN_GBDT_DW_MODE_SKIP_OFF (DELETE-OLD-PATH, EXP:112 KEPT 7736fa5b8 on Apple M3; one-vendor promotion, rule d) deleted 2026-11-15 by lane/expdel2-43-trees; code recoverable at 2c8d6bbc8e.
+# Restore: git apply experiments/removed/MOJOLEARN_GBDT_DW_MODE_SKIP_OFF.patch; record in docs/TOMBSTONES.md.
+
 
 
 def quantized_hist_shape_ok(
