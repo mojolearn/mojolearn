@@ -410,7 +410,7 @@ comptime SUMSQ_STAGE = 64
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_GEMM_STAGE64.patch
 # TOMBSTONE: MOJOLEARN_IDN_GEMM_STAGE_OFF (force-off of the deleted arm, EXP:2164 PENDING) deleted 2026-11-15 by lane/expdel2-29-neural; code recoverable at 6a66db5157.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_GEMM_STAGE_OFF.patch
-comptime GEMM_STAGE_V2 = False
+# (Sweep 2026-11-15: the unread GEMM_STAGE_V2 = False constant removed.)
 comptime GEMM_STAGE = 16
 #: lane ag-pass5-recurrent (2026-10-19, orchestrator p6-01 AMD bisect): the
 #: recurrent trainers ran 2.7x slower on the AMD MI325X after GEMM_STAGE_V2
