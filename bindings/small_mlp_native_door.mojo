@@ -17,7 +17,6 @@ Python descriptors. Shared exact input admission precedes native buffer reads;
 balanced call helpers retain original owners without leaking references.
 """
 from std.math import isfinite
-from std.sys import is_defined
 from std.memory import unsafe_memcpy
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
@@ -66,10 +65,6 @@ from core.neural_entry_table import NeuralEntryKey, neural_entry_vendor, neural_
 from bindings.sha256_door import sha256_hexdigest
 
 # The program's STEP modes (autograd/small_mlp_program.mojo).
-#: A/B arm (default off): `predict_sessions` packs the sessions into ONE
-#: forward of the trainer's program (lane m2-neural-leftovers) instead of the
-#: restored default, the training binding's `mlp_sessions`. RUN OWED.
-comptime _MLP_SESSIONS_PACKED = is_defined["MOJOLEARN_MLP_SESSIONS_PACKED"]()
 comptime _FORWARD = 0
 comptime _GRADS = 1
 comptime _TRAIN = 2
@@ -918,10 +913,9 @@ def _predict_sessions(handle: Int, inputs: PythonObject) raises -> PythonObject:
     # 0ce88411d3: the training binding's `mlp_sessions` (one forward per
     # session, training/neural_session_mlp.mojo); lane m2-neural-leftovers
     # had replaced it with one packed forward of the trainer's program with
-    # no measurement against it. A/B: -D MOJOLEARN_MLP_SESSIONS_PACKED.
-    # RUN OWED: mlp-infer sessions on NVIDIA and AMD.
-    comptime if _MLP_SESSIONS_PACKED:
-        return _predict_sessions_packed(handle, inputs)
+    # no measurement against it.
+    # TOMBSTONE: MOJOLEARN_MLP_SESSIONS_PACKED (opt-in arm, RUN OWED, no A/B recorded) deleted 2026-11-15 by lane/expdel2-02-base; code recoverable at 1c0608ab17.
+    # Restore: git apply experiments/removed/MOJOLEARN_MLP_SESSIONS_PACKED.patch; record in docs/TOMBSTONES.md.
     var b = SMALL_MLP_BOUNDARY.get_or_create_ptr()
     var bi = b[].bi
     var entries = _mode_entries()
@@ -966,44 +960,6 @@ def _predict_sessions(handle: Int, inputs: PythonObject) raises -> PythonObject:
     if wrote != Int(py=out.size):
         raise Error("RuntimeError: MLP sessions returned an invalid output count")
     return out
-
-
-def _predict_sessions_packed(handle: Int, inputs: PythonObject) raises -> PythonObject:
-    """Logits of several independent batches with the current model,
-    concatenated in the order given: the sessions' rows packed in order and
-    run as ONE forward of the trainer's program (each row's logits depend
-    only on that row and the weights). The A/B arm
-    -D MOJOLEARN_MLP_SESSIONS_PACKED (lane m2-neural-leftovers)."""
-    var entries = _mode_entries()
-    var index = mlp_store_index(handle)
-    var listed = _items(inputs, -1, "mojolearn.mlp_inference_sessions: inputs must be a list of arrays")
-    if len(listed) == 0:
-        raise Error("MLP sessions require at least one (rows, width) input")
-    # One pass: each session's shape checked (metadata, never row values)
-    # and its rows copied into one Mojo-owned row-major buffer, in order.
-    var x = List[Float32]()
-    var total = 0
-    for i in range(len(listed)):  # driver-loop: over the caller's session batches
-        var value = listed[i]
-        var view = _view(value, "mojolearn.mlp_inference_sessions: session input must be float32")
-        if _base_format(view) != "f" or Int(py=view.itemsize) != 4:
-            raise Error("TypeError: mojolearn.mlp_inference_sessions: session input must be float32")
-        var shape = _shape(value, view)
-        if len(shape) != 2 or Int(py=shape[1]) != 8 or Int(py=shape[0]) < 0:
-            raise Error("MLP sessions require at least one (rows, width) input")
-        var n = Int(py=shape[0])
-        if n > 2147483647 // 8 - total:
-            raise Error("neural MLP sessions: activation exceeds index range")
-        if n > 0:
-            x.resize((total + n) * 8, Float32(0))
-            _words_from_view(value, view, shape, [n, 8], "session input", Int(x.unsafe_ptr()) + 4 * total * 8)
-            _ = value  # keep the Python object alive through the native call above
-        total += n
-    if total == 0:
-        return generation_array([0, 3])
-    mlp_require_finite(Int(x.unsafe_ptr()), total * 8, "session input")
-    var zeros = List[Int32](length=total, fill=Int32(0))
-    return _program_steps(index, entries, x, zeros, total, 1, _FORWARD, False)[1]
 
 
 def small_mlp_grads_open(state: PythonObject, mode: String) raises -> Int:
