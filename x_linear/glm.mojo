@@ -19,7 +19,6 @@ from x_linear.ops import (
     FP, IP, fa, fs, fm, fd, fmad, fexp, flog, fabs, fmax, ld, st, ldi, i2f,
     fill, copy, row_dot, cholesky, chol_solve, mean_of, axpy_acc, seq_rows, row_dots,
 )
-from experiments.classical_identical_ideas.linear_controls import C16_GLM_FUSED
 from std.sys.info import is_gpu
 from max.gpu import WARP_SIZE
 from std.sys.compile import is_defined

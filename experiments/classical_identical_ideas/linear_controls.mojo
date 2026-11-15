@@ -163,7 +163,7 @@ comptime ENETCV_SCORE_BLOCKS = 1024 if CLASSICAL_IDN else 0
 comptime LINEAR_GRAM_SOLVE = CLASSICAL_IDN
 # TOMBSTONE: MOJOLEARN_CLASSICAL_C16_GLM_FUSED (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-06-base; code recoverable at 2a301a3aa3.
 # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C16_GLM_FUSED.patch; record in docs/TOMBSTONES.md.
-comptime C16_GLM_FUSED = False
+# (Sweep 2026-11-15: comptime C16_GLM_FUSED removed; nothing read it.)
 # TOMBSTONE: MOJOLEARN_CLASSICAL_C17_OVR (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-06-base; code recoverable at 8c1b568a83.
 # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C17_OVR.patch; record in docs/TOMBSTONES.md.
 # (Sweep 2026-11-15: comptime C17_OVR removed; nothing read it.)
