@@ -30,7 +30,6 @@ coordinates: alpha, beta, phi, l0, b0); a seasonal model keeps op_ets
 size."""
 from max.gpu.primitives.warp import shuffle_idx
 from std.memory import bitcast
-from std.sys.compile import is_defined
 
 from sequence.coop_lane import coop_src
 from sequence.ets import SEAS_N, ets_init_state, ets_lik

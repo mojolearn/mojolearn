@@ -139,7 +139,7 @@ the caller keeps it alive past `ctx.synchronize()`.
 
 from max.gpu import block_dim, block_idx, thread_idx
 from std.math import exp2
-from std.sys.compile import is_defined, get_defined_int
+from std.sys.compile import is_defined
 
 from max.gpu.host import DeviceBuffer, DeviceContext
 

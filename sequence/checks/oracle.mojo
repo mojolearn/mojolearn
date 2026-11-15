@@ -67,7 +67,6 @@ from checks.numerics import (
 )
 from checks.fixture_rng import splitmix64_next
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
-from std.sys.compile import is_defined, get_defined_int
 
 
 @always_inline

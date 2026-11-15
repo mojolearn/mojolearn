@@ -14,7 +14,6 @@ reference's |b - a| >= 1e-12 is below float32 resolution near alpha, so the
 float32 loop ends at the fc == fd exit or the cap)."""
 from sequence.ops import FP, Args, add, fma3, ld, mul, st, sub
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL, ftz, identical_div, identical_sqrt
-from std.sys.compile import is_defined
 from core.accelerator_target import TARGET_HAS_APPLE_GPU
 
 #: lane/apple-fast-seq (2026-10-02). `op_croston` compacts the positive

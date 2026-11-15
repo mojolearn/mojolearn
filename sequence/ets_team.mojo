@@ -35,7 +35,6 @@ FAST on Apple by default, and the IDENTICAL default (`IDN_ETS_TEAM`)
 host column by `ets_team_replay`).
 
 The multiplicative-error and the seasonal models keep `op_ets`."""
-from std.sys.compile import is_defined
 from core.accelerator_target import TARGET_HAS_APPLE_GPU
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL

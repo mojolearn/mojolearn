@@ -68,7 +68,6 @@ from autograd.program_runtime import train_program_control, parameter_buffers, r
 from autograd.program_inference_metadata import PreparedInferenceReplay
 from autograd.ops_api import _SLOT_BITS, _SLOT_MASK
 from sequence.exec_device import DeviceExec
-from std.sys.compile import is_defined
 from autograd.tape import Tape
 from autograd.cast_ops import upload_cast
 from autograd.cnn_block_op import OPS_CNN_CONV_BLOCK, OPS_CNN_LINEAR, CNN_FUSED_OPS

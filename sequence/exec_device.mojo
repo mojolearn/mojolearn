@@ -32,8 +32,6 @@ from sequence.moe_grouped_fold import MOE_GROUPED_GEMM
 from sequence.moe_grouped import moe_grouped_offsets, moe_grouped_workspace, moe_grouped_hidden, moe_grouped_out
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
-from std.sys.compile import is_defined
-from std.sys.defines import get_defined_int
 
 from sequence.exec_trait import Exec
 from sequence.execution_profile import ExecutionProfile
