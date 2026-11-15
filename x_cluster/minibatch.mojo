@@ -30,15 +30,8 @@ from x_cluster.minibatch_fast import MINIBATCH_FAST_DEV
 from x_cluster.ops import ClusterOps
 
 
-# Lane cluster-apple3, FAST only, OPT-IN while unproven
-# (`-D MOJOLEARN_MINIBATCH_ONE_PASS=1`): `update_center_dense` for every
-# center in ONE walk of the batch. Each center still gets `c * w`, then its
-# rows in batch order, then `w += wsum` and the scale, so every center's
-# chain of operations is the per-center loop's and no bit moves; the batch is
-# walked twice, not 2 k times.
-comptime MINIBATCH_ONE_PASS = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and is_defined["MOJOLEARN_MINIBATCH_ONE_PASS"]()
-)
+# TOMBSTONE: MOJOLEARN_MINIBATCH_ONE_PASS (unmeasured opt-in arm, FAST: every center updated in one batch walk) deleted 2026-11-15 by lane/expdel2-15-cluster; code recoverable at 4f3953bdbe.
+# Restore: git apply experiments/removed/MOJOLEARN_MINIBATCH_ONE_PASS.patch; record in docs/TOMBSTONES.md.
 
 
 # fam2-cluster (2026-10-04): THE STEP LOOP IN GROUPS of MB_GROUP steps
@@ -619,36 +612,9 @@ def minibatch_step[O: ClusterOps](
     var batch_inertia = sum_f64(bd, batch)
     # update_center_dense, per center
     c_new = c.copy()
-    var one_pass = False
-    comptime if MINIBATCH_ONE_PASS:
-        one_pass = True
-        for t in range(batch):
-            if Int(bl[t]) < 0 or Int(bl[t]) >= k:
-                one_pass = False
-    if one_pass:
-        var ws = List[Float32](length=k, fill=Float32(0))
-        for t in range(batch):
-            var j = Int(bl[t])
-            ws[j] = ftz(ws[j] + (bw[t] if bweighted else Float32(1)))
-        for j in range(k):
-            if ws[j] > Float32(0):
-                for f in range(d):
-                    c_new[j * d + f] = ftz(identical_mul(c[j * d + f], w[j]))
-        for t in range(batch):
-            var j = Int(bl[t])
-            if ws[j] > Float32(0):
-                for f in range(d):
-                    if bweighted:
-                        c_new[j * d + f] = ftz(c_new[j * d + f] + ftz(identical_mul(ftz(bx[t * d + f]), bw[t])))
-                    else:
-                        c_new[j * d + f] = ftz(c_new[j * d + f] + ftz(bx[t * d + f]))
-        for j in range(k):
-            if ws[j] > Float32(0):
-                w[j] = ftz(w[j] + ws[j])
-                var alpha = ftz(identical_div(Float32(1), w[j]))
-                for f in range(d):
-                    c_new[j * d + f] = ftz(identical_mul(c_new[j * d + f], alpha))
-    for j in range(0 if not one_pass else k, k):
+    # TOMBSTONE: MOJOLEARN_MINIBATCH_ONE_PASS (unmeasured opt-in arm, FAST: every center updated in one batch walk) deleted 2026-11-15 by lane/expdel2-15-cluster; code recoverable at 4f3953bdbe.
+    # Restore: git apply experiments/removed/MOJOLEARN_MINIBATCH_ONE_PASS.patch; record in docs/TOMBSTONES.md.
+    for j in range(k):
         var wsum = Float32(0)
         for t in range(batch):
             if Int(bl[t]) == j:
