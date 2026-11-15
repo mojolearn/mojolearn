@@ -8,11 +8,10 @@ from shared memory. It trades halo traffic/barriers for coalesced reads.
 """
 from max.gpu import block_idx, thread_idx
 from std.memory import stack_allocation
-from std.sys.compile import is_defined, get_defined_int
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from max.gpu.host import DeviceBuffer, DeviceContext
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz
+from checks.numerics import ftz
 from x_cnn.ops import (
     FP, IP, CP_C, CP_H, CP_W, CP_KH, CP_KW, CP_OH, CP_OW,
     CP_SH, CP_SW, CP_PH, CP_PW, CP_DH, CP_DW, CP_REV,
@@ -24,14 +23,17 @@ from x_cnn.ops import (
 # kernel). It replaced MOJOLEARN_NI14_BOUNDED_COL2IM and
 # MOJOLEARN_NI14_TILED_COL2IM (tiled won when both were set, so their cross was
 # inert); both old defines are refused in core/six_lane_experiment_guards.mojo.
-comptime NI14_COL2IM = get_defined_int["MOJOLEARN_NI14_COL2IM", 0]()
+# TOMBSTONE: MOJOLEARN_NI14_COL2IM (DELETE-ARM, unmeasured opt-in, rule a) deleted 2026-11-15 by lane/expdel2-35-neural; code recoverable at 145be10898.
+# Restore: git apply experiments/removed/MOJOLEARN_NI14_COL2IM.patch
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (DELETE-OLD-PATH, EXP:2438 umbrella old path, rule e) deleted 2026-11-15 by lane/expdel2-35-neural; code recoverable at 145be10898.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-35-neural.patch
+# NI14_COL2IM is the default arm 0 and NI14_TILED_COL2IM False; the kernel below
+# stays only while autograd/kernels/cnn.mojo still imports it (integrator: delete
+# this file once that import is gone).
+comptime NI14_COL2IM = 0
 comptime NI14_COL2IM_BOUNDED = 1
 comptime NI14_COL2IM_TILED = 2
-comptime NI14_TILED_COL2IM = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and NI14_COL2IM == NI14_COL2IM_TILED
-    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
+comptime NI14_TILED_COL2IM = False
 # 32 output pixels per block; 8 contiguous tap words per staged source
 # position. At most 64 positions * 8 words = 2 KiB shared memory. The
 # launch uses 256 threads to load a page in at most two passes. These are

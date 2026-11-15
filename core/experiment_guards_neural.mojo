@@ -1045,6 +1045,68 @@ def _check_configuration() -> Bool:
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_GCN_LOOPS_DEV_OFF.patch
     comptime assert not is_defined["MOJOLEARN_IDN_GCN_LOOPS_DEV_OFF"](), "removed 2026-11-15 (lane/expdel2-36-neural-series-linear): IDN_GCN_LOOPS_DEV_OFF (old path, no A/B recorded, Neural (GCN self loops on the device)) is gone; the default path is the only one; code recoverable at 145be10898; restore: experiments/removed/MOJOLEARN_IDN_GCN_LOOPS_DEV_OFF.patch"
     # ---- end lane expdel2-36-neural-series-linear
+    # Lane expdel2-35-neural (2026-11-15): unmeasured arms and old paths deleted under "An unmeasured arm is deleted" (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md, docs/TOMBSTONES.md).
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_ADAPT_M_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_ADAPT_M_OFF"](), "removed 2026-11-15 (lane/expdel2-35-neural): IDN_ADAPT_M_OFF (old path, Neural (x_cnn adaptive pooling device entries); no A/B recorded) is gone; the default path is the only one; code recoverable at 145be10898; restore: experiments/removed/MOJOLEARN_IDN_ADAPT_M_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_GRAPH_M_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_GRAPH_M_OFF"](), "removed 2026-11-15 (lane/expdel2-35-neural): IDN_GRAPH_M_OFF (old path, Neural (x_cnn SAGE / L2 / gcn_norm device entries); no A/B recorded) is gone; the default path is the only one; code recoverable at 145be10898; restore: experiments/removed/MOJOLEARN_IDN_GRAPH_M_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_PAD_M_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_PAD_M_OFF"](), "removed 2026-11-15 (lane/expdel2-35-neural): IDN_PAD_M_OFF (old path, Neural (x_cnn padded convolution residency); no A/B recorded) is gone; the default path is the only one; code recoverable at 145be10898; restore: experiments/removed/MOJOLEARN_IDN_PAD_M_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_GROUP_M_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_GROUP_M_OFF"](), "removed 2026-11-15 (lane/expdel2-35-neural): IDN_GROUP_M_OFF (old path, Neural (x_cnn grouped convolution residency); no A/B recorded) is gone; the default path is the only one; code recoverable at 145be10898; restore: experiments/removed/MOJOLEARN_IDN_GROUP_M_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_LAYER_DEV_IO_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_LAYER_DEV_IO_OFF"](), "removed 2026-11-15 (lane/expdel2-35-neural): IDN_LAYER_DEV_IO_OFF (old path, Neural (x_cnn BatchNorm/Dropout2d/ReLU resident IO); no A/B recorded) is gone; the default path is the only one; code recoverable at 145be10898; restore: experiments/removed/MOJOLEARN_IDN_LAYER_DEV_IO_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_PIN_WEIGHTS_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_PIN_WEIGHTS_OFF"](), "removed 2026-11-15 (lane/expdel2-35-neural): IDN_PIN_WEIGHTS_OFF (old path, Neural (x_cnn pinned layer weights); no A/B recorded) is gone; the default path is the only one; code recoverable at 145be10898; restore: experiments/removed/MOJOLEARN_IDN_PIN_WEIGHTS_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_CNN_RESIDENT_GRADS_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_CNN_RESIDENT_GRADS_OFF"](), "removed 2026-11-15 (lane/expdel2-35-neural): IDN_CNN_RESIDENT_GRADS_OFF (old path, Neural (x_cnn resident CNN grads glue); no A/B recorded) is gone; the default path is the only one; code recoverable at 145be10898; restore: experiments/removed/MOJOLEARN_IDN_CNN_RESIDENT_GRADS_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_DIRECT_CONV_NVAMD_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_DIRECT_CONV_NVAMD_OFF"](), "removed 2026-11-15 (lane/expdel2-35-neural): IDN_DIRECT_CONV_NVAMD_OFF (old path, Neural (x_cnn direct first-layer conv on NVIDIA/AMD); no A/B recorded) is gone; the default path is the only one; code recoverable at 145be10898; restore: experiments/removed/MOJOLEARN_IDN_DIRECT_CONV_NVAMD_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_XCNN_BIAS_FOLD_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_XCNN_BIAS_FOLD_OFF"](), "removed 2026-11-15 (lane/expdel2-35-neural): IDN_XCNN_BIAS_FOLD_OFF (old path, Neural (x_cnn bias gradient column fold); no A/B recorded) is gone; the default path is the only one; code recoverable at 145be10898; restore: experiments/removed/MOJOLEARN_IDN_XCNN_BIAS_FOLD_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_NI11_DIRECT_CONV_TAPS64.patch
+    comptime assert not is_defined["MOJOLEARN_NI11_DIRECT_CONV_TAPS64"](), "removed 2026-11-15 (lane/expdel2-35-neural): NI11_DIRECT_CONV_TAPS64 (opt-in arm, Neural (x_cnn direct conv register taps); no A/B recorded) is gone; the default path is the only one; code recoverable at 145be10898; restore: experiments/removed/MOJOLEARN_NI11_DIRECT_CONV_TAPS64.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_NI14_COL2IM.patch
+    comptime assert not is_defined["MOJOLEARN_NI14_COL2IM"](), "removed 2026-11-15 (lane/expdel2-35-neural): NI14_COL2IM (opt-in arm, Neural (x_cnn col2im seam arms); no A/B recorded) is gone; the default path is the only one; code recoverable at 145be10898; restore: experiments/removed/MOJOLEARN_NI14_COL2IM.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_NI15_BIAS_NO_ONES.patch
+    comptime assert not is_defined["MOJOLEARN_NI15_BIAS_NO_ONES"](), "removed 2026-11-15 (lane/expdel2-35-neural): NI15_BIAS_NO_ONES (opt-in arm, Neural (x_cnn bias gradient without ones); no A/B recorded) is gone; the default path is the only one; code recoverable at 145be10898; restore: experiments/removed/MOJOLEARN_NI15_BIAS_NO_ONES.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_NI55_GRAPH_FEATURE4.patch
+    comptime assert not is_defined["MOJOLEARN_NI55_GRAPH_FEATURE4"](), "removed 2026-11-15 (lane/expdel2-35-neural): NI55_GRAPH_FEATURE4 (opt-in arm, Neural (GCN spmm four-feature tile); no A/B recorded) is gone; the default path is the only one; code recoverable at 145be10898; restore: experiments/removed/MOJOLEARN_NI55_GRAPH_FEATURE4.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_NI57_GRAPH_TREE64.patch
+    comptime assert not is_defined["MOJOLEARN_NI57_GRAPH_TREE64"](), "removed 2026-11-15 (lane/expdel2-35-neural): NI57_GRAPH_TREE64 (opt-in arm, Neural (graph edge 64-leaf tree fold); no A/B recorded) is gone; the default path is the only one; code recoverable at 145be10898; restore: experiments/removed/MOJOLEARN_NI57_GRAPH_TREE64.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_NI58_SAGE_FEATURE4.patch
+    comptime assert not is_defined["MOJOLEARN_NI58_SAGE_FEATURE4"](), "removed 2026-11-15 (lane/expdel2-35-neural): NI58_SAGE_FEATURE4 (opt-in arm, Neural (SAGE max four-feature tile); no A/B recorded) is gone; the default path is the only one; code recoverable at 145be10898; restore: experiments/removed/MOJOLEARN_NI58_SAGE_FEATURE4.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_NI59_DROPOUT_CHANNEL.patch
+    comptime assert not is_defined["MOJOLEARN_NI59_DROPOUT_CHANNEL"](), "removed 2026-11-15 (lane/expdel2-35-neural): NI59_DROPOUT_CHANNEL (opt-in arm, Neural (Dropout2d one block per channel); no A/B recorded) is gone; the default path is the only one; code recoverable at 145be10898; restore: experiments/removed/MOJOLEARN_NI59_DROPOUT_CHANNEL.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_NI60_DROPOUT_APPLY4.patch
+    comptime assert not is_defined["MOJOLEARN_NI60_DROPOUT_APPLY4"](), "removed 2026-11-15 (lane/expdel2-35-neural): NI60_DROPOUT_APPLY4 (opt-in arm, Neural (Dropout2d four-wide apply); no A/B recorded) is gone; the default path is the only one; code recoverable at 145be10898; restore: experiments/removed/MOJOLEARN_NI60_DROPOUT_APPLY4.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_NN48_CSR_TILES.patch
+    comptime assert not is_defined["MOJOLEARN_NN48_CSR_TILES"](), "removed 2026-11-15 (lane/expdel2-35-neural): NN48_CSR_TILES (opt-in arm, Neural (GCN spmm CSR tiles); no A/B recorded) is gone; the default path is the only one; code recoverable at 145be10898; restore: experiments/removed/MOJOLEARN_NN48_CSR_TILES.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_XCNN_NO_BN_BLOCK.patch
+    comptime assert not is_defined["MOJOLEARN_XCNN_NO_BN_BLOCK"](), "removed 2026-11-15 (lane/expdel2-35-neural): XCNN_NO_BN_BLOCK (opt-in arm, Neural (x_cnn BatchNorm block statistics, before arm); no A/B recorded) is gone; the default path is the only one; code recoverable at 145be10898; restore: experiments/removed/MOJOLEARN_XCNN_NO_BN_BLOCK.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_XCNN_NO_DIRECT_CONV.patch
+    comptime assert not is_defined["MOJOLEARN_XCNN_NO_DIRECT_CONV"](), "removed 2026-11-15 (lane/expdel2-35-neural): XCNN_NO_DIRECT_CONV (opt-in arm, Neural (x_cnn direct first-layer conv, before arm); no A/B recorded) is gone; the default path is the only one; code recoverable at 145be10898; restore: experiments/removed/MOJOLEARN_XCNN_NO_DIRECT_CONV.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_XCNN_NO_FAST_TUNE.patch
+    comptime assert not is_defined["MOJOLEARN_XCNN_NO_FAST_TUNE"](), "removed 2026-11-15 (lane/expdel2-35-neural): XCNN_NO_FAST_TUNE (opt-in arm, Neural (x_cnn Apple FAST plan timing, before arm); no A/B recorded) is gone; the default path is the only one; code recoverable at 145be10898; restore: experiments/removed/MOJOLEARN_XCNN_NO_FAST_TUNE.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_XCNN_NO_IM2COL_TAPS.patch
+    comptime assert not is_defined["MOJOLEARN_XCNN_NO_IM2COL_TAPS"](), "removed 2026-11-15 (lane/expdel2-35-neural): XCNN_NO_IM2COL_TAPS (opt-in arm, Neural (x_cnn im2col per (row, channel), before arm); no A/B recorded) is gone; the default path is the only one; code recoverable at 145be10898; restore: experiments/removed/MOJOLEARN_XCNN_NO_IM2COL_TAPS.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_XCNN_NO_MMA_SPLIT.patch
+    comptime assert not is_defined["MOJOLEARN_XCNN_NO_MMA_SPLIT"](), "removed 2026-11-15 (lane/expdel2-35-neural): XCNN_NO_MMA_SPLIT (opt-in arm, Neural (x_cnn Apple MMA split plans, before arm); no A/B recorded) is gone; the default path is the only one; code recoverable at 145be10898; restore: experiments/removed/MOJOLEARN_XCNN_NO_MMA_SPLIT.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_XCNN_NO_NT_TUNE.patch
+    comptime assert not is_defined["MOJOLEARN_XCNN_NO_NT_TUNE"](), "removed 2026-11-15 (lane/expdel2-35-neural): XCNN_NO_NT_TUNE (opt-in arm, Neural (x_cnn Apple IDENTICAL NT plan timing, before arm); no A/B recorded) is gone; the default path is the only one; code recoverable at 145be10898; restore: experiments/removed/MOJOLEARN_XCNN_NO_NT_TUNE.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_XCNN_NO_RES_POOL.patch
+    comptime assert not is_defined["MOJOLEARN_XCNN_NO_RES_POOL"](), "removed 2026-11-15 (lane/expdel2-35-neural): XCNN_NO_RES_POOL (opt-in arm, Neural (x_cnn resident reuse pool, before arm); no A/B recorded) is gone; the default path is the only one; code recoverable at 145be10898; restore: experiments/removed/MOJOLEARN_XCNN_NO_RES_POOL.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_XCNN_NO_TILED_LAYOUT.patch
+    comptime assert not is_defined["MOJOLEARN_XCNN_NO_TILED_LAYOUT"](), "removed 2026-11-15 (lane/expdel2-35-neural): XCNN_NO_TILED_LAYOUT (opt-in arm, Neural (x_cnn tiled NCHW layout, before arm); no A/B recorded) is gone; the default path is the only one; code recoverable at 145be10898; restore: experiments/removed/MOJOLEARN_XCNN_NO_TILED_LAYOUT.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_XCNN_ONES_CACHE_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_XCNN_ONES_CACHE_OFF"](), "removed 2026-11-15 (lane/expdel2-35-neural): XCNN_ONES_CACHE_OFF (old path, Neural (x_cnn resident ones vector); no A/B recorded) is gone; the default path is the only one; code recoverable at 145be10898; restore: experiments/removed/MOJOLEARN_XCNN_ONES_CACHE_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_XCNN_RES_FREE_ASYNC_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_XCNN_RES_FREE_ASYNC_OFF"](), "removed 2026-11-15 (lane/expdel2-35-neural): XCNN_RES_FREE_ASYNC_OFF (old path, Neural (x_cnn res_free queue wait); no A/B recorded) is gone; the default path is the only one; code recoverable at 145be10898; restore: experiments/removed/MOJOLEARN_XCNN_RES_FREE_ASYNC_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_XCNN_RES_NEW_NOZERO_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_XCNN_RES_NEW_NOZERO_OFF"](), "removed 2026-11-15 (lane/expdel2-35-neural): XCNN_RES_NEW_NOZERO_OFF (old path, Neural (x_cnn unfilled resident outputs); no A/B recorded) is gone; the default path is the only one; code recoverable at 145be10898; restore: experiments/removed/MOJOLEARN_XCNN_RES_NEW_NOZERO_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_XCNN_TILED_ROWS.patch
+    comptime assert not is_defined["MOJOLEARN_XCNN_TILED_ROWS"](), "removed 2026-11-15 (lane/expdel2-35-neural): XCNN_TILED_ROWS (opt-in arm, Neural (x_cnn pooled backward rows tiled); no A/B recorded) is gone; the default path is the only one; code recoverable at 145be10898; restore: experiments/removed/MOJOLEARN_XCNN_TILED_ROWS.patch"
+    # ---- end lane expdel2-35-neural
     return True
 
 
