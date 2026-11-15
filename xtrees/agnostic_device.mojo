@@ -44,7 +44,7 @@ comptime _AGN_FAST_APPLE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_AP
 # Restore: git apply experiments/removed/MOJOLEARN_KSHAP_FAST_BATCH_OFF.patch
 comptime KSHAP_FAST_BATCH = _AGN_FAST_APPLE
 #: lane idn-shap-pca (2026-10-04), the IDENTICAL default on NVIDIA, AMD and
-#: Apple (-D MOJOLEARN_AGN_IDN_SYN_POOL_OFF restores the per-chunk buffers):
+#: Apple:
 #: MOJOLEARN_AGN_IDN_SYN_POOL  the explainers' synthetic matrix is built in
 #:   the one pooled device buffer (no 100-400 MB device allocation per
 #:   chunk; Permutation SHAP on a 220-feature table is one chunk a row) and
@@ -52,13 +52,14 @@ comptime KSHAP_FAST_BATCH = _AGN_FAST_APPLE
 #:   per chunk), the FAST + Apple MOJOLEARN_KSHAP_FAST_BATCH buffer handling.
 #:   Bit-inert: the same units write the same words to the same offsets; the
 #:   host column builds the matrix in the caller's buffer either way.
-comptime AGN_IDN_SYN_POOL = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (is_defined["MOJOLEARN_AGN_IDN_SYN_POOL_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
-)
+# TOMBSTONE: MOJOLEARN_AGN_IDN_SYN_POOL_OFF (old path; AGN_IDN_SYN_POOL default kept, no A/B recorded for the old path) deleted 2026-11-15 by lane/expdel2-46-trees; code recoverable at f0bdc4bfd9.
+# Restore: git apply experiments/removed/MOJOLEARN_AGN_IDN_SYN_POOL_OFF.patch; record in docs/TOMBSTONES.md.
+comptime AGN_IDN_SYN_POOL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 comptime _AGN_SYN_POOL = KSHAP_FAST_BATCH or AGN_IDN_SYN_POOL
 #: lane fam2-forests (2026-10-04), the IDENTICAL default on NVIDIA, AMD and
-#: Apple (-D MOJOLEARN_IDN_SHAP_DEVICE_MODEL_OFF restores the model callback;
-#: also off under MOJOLEARN_IDN_ALL_OFF):
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old-path master switch; owner lane expdel2-37-series, EXP:2438 DELETED) deleted 2026-11-15 by lane/expdel2-46-trees; code recoverable at ef6b727b53.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-46-trees.patch; record in docs/TOMBSTONES.md.
+#: Apple:
 #: MOJOLEARN_IDN_SHAP_DEVICE_MODEL  Kernel and Permutation SHAP over one of
 #:   this library's flat forests (RandomForest*, ExtraTrees*, DecisionTree*
 #:   predicting through the strict increasing-tree kernel) evaluate the
@@ -72,10 +73,9 @@ comptime _AGN_SYN_POOL = KSHAP_FAST_BATCH or AGN_IDN_SYN_POOL
 #:   Bit-inert: `agn_model_unit` is the forest's IDENTICAL predict
 #:   arithmetic over the same compared values. The host column and every
 #:   other model keep the callback.
-comptime AGN_IDN_DEVICE_MODEL = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not (is_defined["MOJOLEARN_IDN_SHAP_DEVICE_MODEL_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
-)
+# TOMBSTONE: MOJOLEARN_IDN_SHAP_DEVICE_MODEL_OFF (old path; AGN_IDN_DEVICE_MODEL default kept, no A/B recorded for the old path) deleted 2026-11-15 by lane/expdel2-46-trees; code recoverable at c41fff16e3.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_SHAP_DEVICE_MODEL_OFF.patch; record in docs/TOMBSTONES.md.
+comptime AGN_IDN_DEVICE_MODEL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 # TOMBSTONE: MOJOLEARN_KSHAP_FAST_DEVICE_MODEL (never measured, deleted) deleted 2026-11-09 by e2adeea367; code
 # recoverable at f59d913b0b. Same commit: its twin MOJOLEARN_PSHAP_FAST_DEVICE_MODEL (bits 1024 / 2048).
 # Restore: git apply experiments/removed/MOJOLEARN_KSHAP_FAST_DEVICE_MODEL.patch
@@ -100,20 +100,21 @@ comptime AGN_IDN_DEVICE_MODEL = (
 #: PROMOTED to the IDENTICAL default 2026-10-11 (lane/w2-decide-algos, same-box A/B on main c8ef6c66d,
 #: one run per arm, NV L40S / AMD MI325X, digests NV==AMD): permutation-shap istella 0.097 (NV 3873 ->
 #: 258 ms), taxi 0.022 (NV 66 -> 0.68 ms; AMD 0.128/0.033); kernel-shap 1.02 untouched; same bits; runs
-#: v0109/a1691 vs A v0108/a1690. -D MOJOLEARN_IDN_PSHAP_RESIDENT_OFF restores the old path.
-comptime PSHAP_IDN_RESIDENT = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_IDN_PSHAP_RESIDENT_OFF"]()
-)
-#: Default FAST + Apple; MOJOLEARN_PSHAP_DELTA_OFF restores full synthesis.
+#: v0109/a1691 vs A v0108/a1690.
+# TOMBSTONE: MOJOLEARN_IDN_PSHAP_RESIDENT_OFF (old path; PSHAP_IDN_RESIDENT default kept, EXP:2051 KEEP (promoted 2026-10-11, NV 0.097 / AMD 0.128)) deleted 2026-11-15 by lane/expdel2-46-trees; code recoverable at 5002a250c9.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_PSHAP_RESIDENT_OFF.patch; record in docs/TOMBSTONES.md.
+comptime PSHAP_IDN_RESIDENT = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+#: Default FAST + Apple.
 #: M3 w2-pdelta-pshap-istella: 28,222.8 -> 14,788.6 ms (-47.6%).
 #: w2-pdelta-quality: linear/tanh/two-output phi byte-identical, identical
 #: additivity errors; model rows 2,713,500 -> 2,215,900. Measured source
 #: 20bbdc37256bd00ef09fc97970f79f6967fa4f2a, no arithmetic changes here.
 #: Device counts/compaction/mapping, same background mean/marginal order;
 #: callback retains the existing chunked, row-independent model contract.
-comptime PSHAP_DELTA = _AGN_FAST_APPLE and not is_defined["MOJOLEARN_PSHAP_DELTA_OFF"]()
-#: SHAP_PERM_CACHE (FAST + Apple DEFAULT, on top of PSHAP_DELTA; rollback
-#: `-D MOJOLEARN_SHAP_PERM_CACHE_OFF`). M3 afc_ab_def, full board size, 1 run
+# TOMBSTONE: MOJOLEARN_PSHAP_DELTA_OFF (old path; PSHAP_DELTA FAST+Apple default kept (M3 28,222.8 -> 14,788.6 ms), EXP:1595 OPEN) deleted 2026-11-15 by lane/expdel2-46-trees; code recoverable at 7f82ef0243.
+# Restore: git apply experiments/removed/MOJOLEARN_PSHAP_DELTA_OFF.patch; record in docs/TOMBSTONES.md.
+comptime PSHAP_DELTA = _AGN_FAST_APPLE
+#: SHAP_PERM_CACHE (FAST + Apple DEFAULT, on top of PSHAP_DELTA). M3 afc_ab_def, full board size, 1 run
 #: per arm, 2026-10-04 (ab1 d51f4b4bf): permutation-shap taxi 102.77 -> 85.42
 #: ms, istella 15229.5 -> 14991.0 ms; rel_error_vs_exact identical.
 #: `pshap_dsynth` keeps its
@@ -133,7 +134,9 @@ comptime PSHAP_DELTA = _AGN_FAST_APPLE and not is_defined["MOJOLEARN_PSHAP_DELTA
 #: (and pooled the synthetic buffer under KSHAP_FAST_BATCH), so the same
 #: idea, caching the per-chunk device state, is re-aimed at the work
 #: PSHAP_DELTA still does twice per chunk.
-comptime SHAP_PERM_CACHE = PSHAP_DELTA and not is_defined["MOJOLEARN_SHAP_PERM_CACHE_OFF"]()
+# TOMBSTONE: MOJOLEARN_SHAP_PERM_CACHE_OFF (old path; SHAP_PERM_CACHE FAST+Apple default kept, EXP:1403 READY-AB) deleted 2026-11-15 by lane/expdel2-46-trees; code recoverable at 7669424c25.
+# Restore: git apply experiments/removed/MOJOLEARN_SHAP_PERM_CACHE_OFF.patch; record in docs/TOMBSTONES.md.
+comptime SHAP_PERM_CACHE = PSHAP_DELTA
 #: TOMBSTONE: MOJOLEARN_KSHAP_FAST_OVERLAP (DROPPED-noise: kernel-shap istella neutral, verdicts batch 6) deleted 2026-10-09
 #: on lane/owed-deletions-D1 (next chunk's synthetic rows + download overlapped with the model); code recoverable at b639a2bd2.
 #: Restore: git apply experiments/removed/MOJOLEARN_KSHAP_FAST_OVERLAP.patch; record in docs/TOMBSTONES.md.

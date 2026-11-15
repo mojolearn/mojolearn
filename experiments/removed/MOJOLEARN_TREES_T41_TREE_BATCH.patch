@@ -1,0 +1,15 @@
+diff --git a/isolation_forest/impl/isolation_tree_builder.mojo b/isolation_forest/impl/isolation_tree_builder.mojo
+index f025cf7dbd..36534ef3f1 100644
+--- a/isolation_forest/impl/isolation_tree_builder.mojo
++++ b/isolation_forest/impl/isolation_tree_builder.mojo
+@@ -159,9 +159,7 @@ from checks.numerics import (
+ # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
+ # TOMBSTONE: MOJOLEARN_TREES_T40_ROWMAJOR (opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-46-trees; code recoverable at 931e7ca76a.
+ # Restore: git apply experiments/removed/MOJOLEARN_TREES_T40_ROWMAJOR.patch; record in docs/TOMBSTONES.md.
+-# TOMBSTONE: MOJOLEARN_TREES_T41_TREE_BATCH (opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-46-trees; code recoverable at aa61101d80.
+-# Restore: git apply experiments/removed/MOJOLEARN_TREES_T41_TREE_BATCH.patch; record in docs/TOMBSTONES.md.
+-comptime IF_T41_TREE_BATCH = False
++comptime IF_T41_TREE_BATCH = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_TREES_T41_TREE_BATCH"]()
+ comptime IF_T42_CORRECTION_CACHE = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_TREES_T42_CORRECTION_CACHE"]()
+ comptime IF_C47_LIVE_TASKS = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_TREES_C47_IF_LIVE_TASKS"]()
+ comptime IF_C48_FUSED_PARTITION = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_TREES_C48_IF_PARTITION"]()

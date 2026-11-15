@@ -1978,6 +1978,35 @@ in the tables after the sections.
 | [`MOJOLEARN_ORD_HIST_FOLD_SKIP`](#mojolearn_ord_hist_fold_skip) | GBDT (ordered small-fold histogram kernel) | removed (opt-in arm, grid fg-gbdt-ordered.json pending, rule a) | 2026-11-15 | [MOJOLEARN_ORD_HIST_FOLD_SKIP.patch](../experiments/removed/MOJOLEARN_ORD_HIST_FOLD_SKIP.patch) |
 | [`MOJOLEARN_ORD_HIST_FOLD_SKIP_DOCS`](#mojolearn_ord_hist_fold_skip_docs) | GBDT (ordered small-fold document budget sweep) | removed (opt-in arm, grid fg-gbdt-ordered.json pending, rule a) | 2026-11-15 | [MOJOLEARN_ORD_HIST_FOLD_SKIP_DOCS.patch](../experiments/removed/MOJOLEARN_ORD_HIST_FOLD_SKIP_DOCS.patch) |
 | [`MOJOLEARN_IDN_ORD_INDEX_SHARED`](#mojolearn_idn_ord_index_shared) | GBDT (ordered shared permutation index) | removed (opt-in arm, grid fg-gbdt-ordered.json pending, rule a) | 2026-11-15 | [MOJOLEARN_IDN_ORD_INDEX_SHARED.patch](../experiments/removed/MOJOLEARN_IDN_ORD_INDEX_SHARED.patch) |
+| [`MOJOLEARN_TREES_T40_ROWMAJOR`](#mojolearn_trees_t40_rowmajor) | Trees (IsolationForest IDENTICAL row-major upload) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_TREES_T40_ROWMAJOR.patch](../experiments/removed/MOJOLEARN_TREES_T40_ROWMAJOR.patch) |
+| [`MOJOLEARN_TREES_T41_TREE_BATCH`](#mojolearn_trees_t41_tree_batch) | Trees (IsolationForest tree batching) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_TREES_T41_TREE_BATCH.patch](../experiments/removed/MOJOLEARN_TREES_T41_TREE_BATCH.patch) |
+| [`MOJOLEARN_TREES_T42_CORRECTION_CACHE`](#mojolearn_trees_t42_correction_cache) | Trees (IsolationForest c(n) correction table) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_TREES_T42_CORRECTION_CACHE.patch](../experiments/removed/MOJOLEARN_TREES_T42_CORRECTION_CACHE.patch) |
+| [`MOJOLEARN_TREES_C47_IF_LIVE_TASKS`](#mojolearn_trees_c47_if_live_tasks) | Trees (IsolationForest live min/max reduction lanes) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_TREES_C47_IF_LIVE_TASKS.patch](../experiments/removed/MOJOLEARN_TREES_C47_IF_LIVE_TASKS.patch) |
+| [`MOJOLEARN_TREES_C48_IF_PARTITION`](#mojolearn_trees_c48_if_partition) | Trees (IsolationForest fused stable partition) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_TREES_C48_IF_PARTITION.patch](../experiments/removed/MOJOLEARN_TREES_C48_IF_PARTITION.patch) |
+| [`MOJOLEARN_IF_ROWMAJOR_OFF`](#mojolearn_if_rowmajor_off) | Trees (IsolationForest FAST+Apple row-major upload rollback) | removed (old path) | 2026-11-15 | [MOJOLEARN_IF_ROWMAJOR_OFF.patch](../experiments/removed/MOJOLEARN_IF_ROWMAJOR_OFF.patch) |
+| [`MOJOLEARN_TREES_IF_BUILD_TPB`](#mojolearn_trees_if_build_tpb) | Trees (IsolationForest build block width sweep) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_TREES_IF_BUILD_TPB.patch](../experiments/removed/MOJOLEARN_TREES_IF_BUILD_TPB.patch) |
+| [`MOJOLEARN_AFT_F10`](#mojolearn_aft_f10) | Trees (IsolationForest Apple FAST 64-lane build block) | removed (never-run card, no A/B recorded) | 2026-11-15 | [MOJOLEARN_AFT_F10.patch](../experiments/removed/MOJOLEARN_AFT_F10.patch) |
+| [`MOJOLEARN_AFCL_T10`](#mojolearn_afcl_t10) | Trees (IsolationForest Apple FAST 128-lane path block) | removed (never-run card, no A/B recorded) | 2026-11-15 | [MOJOLEARN_AFCL_T10.patch](../experiments/removed/MOJOLEARN_AFCL_T10.patch) |
+| [`MOJOLEARN_AFT_F12`](#mojolearn_aft_f12) | Trees (IsolationForest Apple FAST tiled gather) | removed (never-run card, no A/B recorded) | 2026-11-15 | [MOJOLEARN_AFT_F12.patch](../experiments/removed/MOJOLEARN_AFT_F12.patch) |
+| [`MOJOLEARN_AFT_F11`](#mojolearn_aft_f11) | Trees (IsolationForest Apple FAST two rows per lane) | removed (never-run card, no A/B recorded) | 2026-11-15 | [MOJOLEARN_AFT_F11.patch](../experiments/removed/MOJOLEARN_AFT_F11.patch) |
+| [`MOJOLEARN_IF_DIAG_ENTRY_RETURN`](#mojolearn_if_diag_entry_return) | Trees (IsolationForest hang-bisect truncation, entry return) | removed (diagnostic arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_IF_DIAG_ENTRY_RETURN.patch](../experiments/removed/MOJOLEARN_IF_DIAG_ENTRY_RETURN.patch) |
+| [`MOJOLEARN_IF_DIAG_GATHER_ONLY`](#mojolearn_if_diag_gather_only) | Trees (IsolationForest hang-bisect truncation, gather only) | removed (diagnostic arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_IF_DIAG_GATHER_ONLY.patch](../experiments/removed/MOJOLEARN_IF_DIAG_GATHER_ONLY.patch) |
+| [`MOJOLEARN_IF_DIAG_NO_REJECT`](#mojolearn_if_diag_no_reject) | Trees (IsolationForest hang-bisect truncation, no rejection loop) | removed (diagnostic arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_IF_DIAG_NO_REJECT.patch](../experiments/removed/MOJOLEARN_IF_DIAG_NO_REJECT.patch) |
+| [`MOJOLEARN_IF_DIAG_NO_RECORD`](#mojolearn_if_diag_no_record) | Trees (IsolationForest hang-bisect truncation, no decision record) | removed (diagnostic arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_IF_DIAG_NO_RECORD.patch](../experiments/removed/MOJOLEARN_IF_DIAG_NO_RECORD.patch) |
+| [`MOJOLEARN_TREESHAP_FAST_TABLE_OFF`](#mojolearn_treeshap_fast_table_off) | Trees (TreeSHAP leaf table rollback) | removed (old path) | 2026-11-15 | [MOJOLEARN_TREESHAP_FAST_TABLE_OFF.patch](../experiments/removed/MOJOLEARN_TREESHAP_FAST_TABLE_OFF.patch) |
+| [`MOJOLEARN_SHAP_TREE_TAB_OFF`](#mojolearn_shap_tree_tab_off) | Trees (TreeSHAP decision-word row unit rollback) | removed (old path) | 2026-11-15 | [MOJOLEARN_SHAP_TREE_TAB_OFF.patch](../experiments/removed/MOJOLEARN_SHAP_TREE_TAB_OFF.patch) |
+| [`MOJOLEARN_AFCL_T11`](#mojolearn_afcl_t11) | Trees (TreeSHAP Apple FAST 64-lane query block) | removed (never-run card, no A/B recorded) | 2026-11-15 | [MOJOLEARN_AFCL_T11.patch](../experiments/removed/MOJOLEARN_AFCL_T11.patch) |
+| [`MOJOLEARN_SHAP_FAST_ROW_PAIR`](#mojolearn_shap_fast_row_pair) | Trees (TreeSHAP Apple FAST row pairs) | removed (opt-in arm) | 2026-11-15 | [MOJOLEARN_SHAP_FAST_ROW_PAIR.patch](../experiments/removed/MOJOLEARN_SHAP_FAST_ROW_PAIR.patch) |
+| [`MOJOLEARN_TREESHAP_ACC_SHARED`](#mojolearn_treeshap_acc_shared) | Trees (TreeSHAP shared-tile accumulator) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_TREESHAP_ACC_SHARED.patch](../experiments/removed/MOJOLEARN_TREESHAP_ACC_SHARED.patch) |
+| [`MOJOLEARN_TREES_T45_LINEAR_UNWIND`](#mojolearn_trees_t45_linear_unwind) | Trees (TreeSHAP linear path unwind) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_TREES_T45_LINEAR_UNWIND.patch](../experiments/removed/MOJOLEARN_TREES_T45_LINEAR_UNWIND.patch) |
+| [`MOJOLEARN_TREES_PLATT_ONE_READ_OFF`](#mojolearn_trees_platt_one_read_off) | Trees (calibrated Platt one-read rollback) | removed (old path, no A/B recorded) | 2026-11-15 | [MOJOLEARN_TREES_PLATT_ONE_READ_OFF.patch](../experiments/removed/MOJOLEARN_TREES_PLATT_ONE_READ_OFF.patch) |
+| [`MOJOLEARN_AGN_IDN_SYN_POOL_OFF`](#mojolearn_agn_idn_syn_pool_off) | Trees (Kernel/Permutation SHAP pooled synthetic buffer rollback) | removed (old path, no A/B recorded) | 2026-11-15 | [MOJOLEARN_AGN_IDN_SYN_POOL_OFF.patch](../experiments/removed/MOJOLEARN_AGN_IDN_SYN_POOL_OFF.patch) |
+| [`MOJOLEARN_IDN_SHAP_DEVICE_MODEL_OFF`](#mojolearn_idn_shap_device_model_off) | Trees (Kernel/Permutation SHAP device model rollback) | removed (old path, no A/B recorded) | 2026-11-15 | [MOJOLEARN_IDN_SHAP_DEVICE_MODEL_OFF.patch](../experiments/removed/MOJOLEARN_IDN_SHAP_DEVICE_MODEL_OFF.patch) |
+| [`MOJOLEARN_IDN_PSHAP_RESIDENT_OFF`](#mojolearn_idn_pshap_resident_off) | Trees (Permutation SHAP resident linear path rollback) | removed (old path) | 2026-11-15 | [MOJOLEARN_IDN_PSHAP_RESIDENT_OFF.patch](../experiments/removed/MOJOLEARN_IDN_PSHAP_RESIDENT_OFF.patch) |
+| [`MOJOLEARN_PSHAP_DELTA_OFF`](#mojolearn_pshap_delta_off) | Trees (Permutation SHAP delta synthesis rollback) | removed (old path, no A/B recorded) | 2026-11-15 | [MOJOLEARN_PSHAP_DELTA_OFF.patch](../experiments/removed/MOJOLEARN_PSHAP_DELTA_OFF.patch) |
+| [`MOJOLEARN_SHAP_PERM_CACHE_OFF`](#mojolearn_shap_perm_cache_off) | Trees (Permutation SHAP per-chunk cache rollback) | removed (old path, no A/B recorded) | 2026-11-15 | [MOJOLEARN_SHAP_PERM_CACHE_OFF.patch](../experiments/removed/MOJOLEARN_SHAP_PERM_CACHE_OFF.patch) |
+| [`MOJOLEARN_DART_DEVICE_OFF`](#mojolearn_dart_device_off) | Trees (DART FAST device round rollback) | removed (old path) | 2026-11-15 | [MOJOLEARN_DART_DEVICE_OFF.patch](../experiments/removed/MOJOLEARN_DART_DEVICE_OFF.patch) |
+| [`MOJOLEARN_IDN_DART_DEVICE_OFF`](#mojolearn_idn_dart_device_off) | Trees (DART IDENTICAL device round rollback) | removed (old path, no A/B recorded) | 2026-11-15 | [MOJOLEARN_IDN_DART_DEVICE_OFF.patch](../experiments/removed/MOJOLEARN_IDN_DART_DEVICE_OFF.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -20246,3 +20275,296 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2
 - Deleted by: lane/expdel2-45-trees `7757f3a275` (2026-11-15); code recoverable at `d452e2066a`.
 - Restore: `git apply experiments/removed/MOJOLEARN_IDN_ORD_INDEX_SHARED.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
 - Records: refusal in `core/experiment_guards_trees.mojo`; grid entries moved to `removed` in `fg-gbdt-ordered.json` (IDN_ORD_INDEX_SHARED); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-45-trees section).
+## Experiment deletions: lane expdel2-46-trees (2026-11-15)
+
+Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2-46-trees), under AGENTS.md "An unmeasured arm is deleted" (Andrew, 2026-11-15). Each record named below was read first. No bit changes: every deletion removes a non-default arm, a never-run card or a rollback beside the default, and the default branch is kept as it was. No hand-tuned kernel the default launches was removed. Aliases that files of other lanes import keep their names as the folded constants (IF_T41_TREE_BATCH, IF_T42_CORRECTION_CACHE, IF_WORK_PLANES, IF_BUILD_TPB, IF_PATH_TPB, AFT_IF_PATH_ROWS, IF_FAST_ROWMAJOR; if_correction_table_kernel and shap_pair_count stay as functions). Non-owner folds in this lane's files: `MOJOLEARN_IDN_ALL_OFF`, `MOJOLEARN_IDN_GATES_OFF`, `MOJOLEARN_TREES_T30_ADABOOST` (patches `*.expdel2-46-trees.patch`). `MOJOLEARN_COLUMN_CPU` is the CPU-column build switch and was not touched.
+
+### MOJOLEARN_TREES_T40_ROWMAJOR
+
+- Tried: Trees (IsolationForest IDENTICAL row-major upload).
+- Evidence: no A/B recorded for the opt-in arm (rule a). Verdict: deleted (V2 rule, DELETE-ARM).
+- Removed: the IDENTICAL arm of IF_FAST_ROWMAJOR. Default unchanged: no bits move.
+- Files: isolation_forest/impl/isolation_tree_builder.mojo.
+- Deleted by: lane/expdel2-46-trees `aa61101d80` (2026-11-15); code recoverable at `931e7ca76a`.
+- Restore: `git apply experiments/removed/MOJOLEARN_TREES_T40_ROWMAJOR.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
+- Records: refusal in `core/experiment_guards_trees.mojo`; `grid_controls/trees-cleanup.json` control `T40` moved to `removed`; `docs/apple-fast/EXPERIMENTS.md` row (expdel2-46-trees section).
+
+### MOJOLEARN_TREES_T41_TREE_BATCH
+
+- Tried: Trees (IsolationForest tree batching).
+- Evidence: no A/B recorded for the opt-in arm (rule a). Verdict: deleted (V2 rule, DELETE-ARM).
+- Removed: the switch; IF_T41_TREE_BATCH stays as False for isolation_forest.mojo. Default unchanged: no bits move.
+- Files: isolation_forest/impl/isolation_tree_builder.mojo.
+- Deleted by: lane/expdel2-46-trees `d30e6f5678` (2026-11-15); code recoverable at `aa61101d80`.
+- Restore: `git apply experiments/removed/MOJOLEARN_TREES_T41_TREE_BATCH.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
+- Records: refusal in `core/experiment_guards_trees.mojo`; `grid_controls/trees-cleanup.json` control `T41` moved to `removed`; `docs/apple-fast/EXPERIMENTS.md` row (expdel2-46-trees section).
+
+### MOJOLEARN_TREES_T42_CORRECTION_CACHE
+
+- Tried: Trees (IsolationForest c(n) correction table).
+- Evidence: no A/B recorded for the opt-in arm (rule a). Verdict: deleted (V2 rule, DELETE-ARM).
+- Removed: cached_c_n; compute_c_n is called as by default; IF_T42_CORRECTION_CACHE stays as False and if_correction_table_kernel stays for isolation_forest.mojo. Default unchanged: no bits move.
+- Files: isolation_forest/impl/isolation_tree_builder.mojo.
+- Deleted by: lane/expdel2-46-trees `77a0ad6f45` (2026-11-15); code recoverable at `d30e6f5678`.
+- Restore: `git apply experiments/removed/MOJOLEARN_TREES_T42_CORRECTION_CACHE.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
+- Records: refusal in `core/experiment_guards_trees.mojo`; `grid_controls/trees-cleanup.json` control `T42` moved to `removed`; `docs/apple-fast/EXPERIMENTS.md` row (expdel2-46-trees section).
+
+### MOJOLEARN_TREES_C47_IF_LIVE_TASKS
+
+- Tried: Trees (IsolationForest live min/max reduction lanes).
+- Evidence: no A/B recorded for the opt-in arm (rule a). Verdict: deleted (V2 rule, DELETE-ARM).
+- Removed: the active-thread narrowing in _block_minmax. Default unchanged: no bits move.
+- Files: isolation_forest/impl/isolation_tree_builder.mojo.
+- Deleted by: lane/expdel2-46-trees `dc94980d4a` (2026-11-15); code recoverable at `77a0ad6f45`.
+- Restore: `git apply experiments/removed/MOJOLEARN_TREES_C47_IF_LIVE_TASKS.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
+- Records: refusal in `core/experiment_guards_trees.mojo`; `grid_controls/trees-cleanup.json` control `C47_IF` moved to `removed`; `docs/apple-fast/EXPERIMENTS.md` row (expdel2-46-trees section).
+
+### MOJOLEARN_TREES_C48_IF_PARTITION
+
+- Tried: Trees (IsolationForest fused stable partition).
+- Evidence: no A/B recorded for the opt-in arm (rule a). Verdict: deleted (V2 rule, DELETE-ARM).
+- Removed: the fused partition branch of _block_stable_partition; IF_WORK_PLANES stays 2. Default unchanged: no bits move.
+- Files: isolation_forest/impl/isolation_tree_builder.mojo.
+- Deleted by: lane/expdel2-46-trees `b35af0836a` (2026-11-15); code recoverable at `dc94980d4a`.
+- Restore: `git apply experiments/removed/MOJOLEARN_TREES_C48_IF_PARTITION.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
+- Records: refusal in `core/experiment_guards_trees.mojo`; `grid_controls/trees-cleanup.json` control `C48_IF` moved to `removed`; `docs/apple-fast/EXPERIMENTS.md` row (expdel2-46-trees section).
+
+### MOJOLEARN_IF_ROWMAJOR_OFF
+
+- Tried: Trees (IsolationForest FAST+Apple row-major upload rollback).
+- Evidence: EXP:115 KEPT 269ffa57a, the FAST+Apple default (rule d: FAST is Apple only, so no NVIDIA/AMD arm is owed). Verdict: deleted (V2 rule, DELETE-OLD-PATH).
+- Removed: the rollback term of IF_FAST_ROWMAJOR. Default unchanged: no bits move.
+- Files: isolation_forest/impl/isolation_tree_builder.mojo.
+- Deleted by: lane/expdel2-46-trees `2e3951cb68` (2026-11-15); code recoverable at `b35af0836a`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IF_ROWMAJOR_OFF.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
+- Records: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-46-trees section).
+
+### MOJOLEARN_TREES_IF_BUILD_TPB
+
+- Tried: Trees (IsolationForest build block width sweep).
+- Evidence: no A/B recorded for the opt-in int sweep (rule a). Verdict: deleted (V2 rule, DELETE-ARM).
+- Removed: IF_BUILD_TPB_SWEEP and its legal-set assert; IF_BUILD_TPB stays 128, IF_BUILD_TPB_MAX 256. Default unchanged: no bits move.
+- Files: isolation_forest/impl/isolation_tree_builder.mojo.
+- Deleted by: lane/expdel2-46-trees `e0359716d7` (2026-11-15); code recoverable at `2e3951cb68`.
+- Restore: `git apply experiments/removed/MOJOLEARN_TREES_IF_BUILD_TPB.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
+- Records: refusal in `core/experiment_guards_trees.mojo`; `grid_controls/trees-small.json` control `IF_BUILD_TPB` moved to `removed`; `docs/apple-fast/EXPERIMENTS.md` row (expdel2-46-trees section).
+
+### MOJOLEARN_AFT_F10
+
+- Tried: Trees (IsolationForest Apple FAST 64-lane build block).
+- Evidence: never-run Apple FAST programme card (rule g). Verdict: deleted (V2 rule, DELETE-EXPERIMENT).
+- Removed: the F10 width; IF_BUILD_TPB = 128. Default unchanged: no bits move.
+- Files: isolation_forest/impl/isolation_tree_builder.mojo.
+- Deleted by: lane/expdel2-46-trees `72e0724726` (2026-11-15); code recoverable at `e0359716d7`.
+- Restore: `git apply experiments/removed/MOJOLEARN_AFT_F10.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
+- Records: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-46-trees section).
+
+### MOJOLEARN_AFCL_T10
+
+- Tried: Trees (IsolationForest Apple FAST 128-lane path block).
+- Evidence: never-run Apple FAST programme card (rule g). Verdict: deleted (V2 rule, DELETE-EXPERIMENT).
+- Removed: AFCL_T10; IF_PATH_TPB = 256. Default unchanged: no bits move.
+- Files: isolation_forest/impl/isolation_tree_builder.mojo.
+- Deleted by: lane/expdel2-46-trees `dd8de6f332` (2026-11-15); code recoverable at `72e0724726`.
+- Restore: `git apply experiments/removed/MOJOLEARN_AFCL_T10.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
+- Records: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-46-trees section).
+
+### MOJOLEARN_AFT_F12
+
+- Tried: Trees (IsolationForest Apple FAST tiled gather).
+- Evidence: never-run Apple FAST programme card (rule g). Verdict: deleted (V2 rule, DELETE-EXPERIMENT).
+- Removed: AFT_IF_GATHER_TILE and its tiled gather. Default unchanged: no bits move.
+- Files: isolation_forest/impl/isolation_tree_builder.mojo.
+- Deleted by: lane/expdel2-46-trees `f53beacaab` (2026-11-15); code recoverable at `dd8de6f332`.
+- Restore: `git apply experiments/removed/MOJOLEARN_AFT_F12.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
+- Records: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-46-trees section).
+
+### MOJOLEARN_AFT_F11
+
+- Tried: Trees (IsolationForest Apple FAST two rows per lane).
+- Evidence: never-run Apple FAST programme card (rule g). Verdict: deleted (V2 rule, DELETE-EXPERIMENT).
+- Removed: the F11 width; AFT_IF_PATH_ROWS stays 1 for isolation_forest.mojo. Default unchanged: no bits move.
+- Files: isolation_forest/impl/isolation_tree_builder.mojo.
+- Deleted by: lane/expdel2-46-trees `4a6591cfdc` (2026-11-15); code recoverable at `f53beacaab`.
+- Restore: `git apply experiments/removed/MOJOLEARN_AFT_F11.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
+- Records: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-46-trees section).
+
+### MOJOLEARN_IF_DIAG_ENTRY_RETURN
+
+- Tried: Trees (IsolationForest hang-bisect truncation, entry return).
+- Evidence: no A/B recorded (rule a); a 2026-08 RTX 4090 hang bisect guard that no script builds today. Verdict: deleted (V2 rule, DELETE-ARM).
+- Removed: DIAG_ENTRY_RETURN and its early return. Default unchanged: no bits move.
+- Files: isolation_forest/impl/isolation_tree_builder.mojo.
+- Deleted by: lane/expdel2-46-trees `690463fbcf` (2026-11-15); code recoverable at `4a6591cfdc`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IF_DIAG_ENTRY_RETURN.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
+- Records: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-46-trees section).
+
+### MOJOLEARN_IF_DIAG_GATHER_ONLY
+
+- Tried: Trees (IsolationForest hang-bisect truncation, gather only).
+- Evidence: no A/B recorded (rule a); a 2026-08 RTX 4090 hang bisect guard that no script builds today. Verdict: deleted (V2 rule, DELETE-ARM).
+- Removed: DIAG_GATHER_ONLY and its early return. Default unchanged: no bits move.
+- Files: isolation_forest/impl/isolation_tree_builder.mojo.
+- Deleted by: lane/expdel2-46-trees `e1bb1a873e` (2026-11-15); code recoverable at `690463fbcf`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IF_DIAG_GATHER_ONLY.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
+- Records: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-46-trees section).
+
+### MOJOLEARN_IF_DIAG_NO_REJECT
+
+- Tried: Trees (IsolationForest hang-bisect truncation, no rejection loop).
+- Evidence: no A/B recorded (rule a); a 2026-08 RTX 4090 hang bisect guard that no script builds today. Verdict: deleted (V2 rule, DELETE-ARM).
+- Removed: DIAG_NO_REJECT and its modulo shortcut. Default unchanged: no bits move.
+- Files: isolation_forest/impl/isolation_tree_builder.mojo.
+- Deleted by: lane/expdel2-46-trees `5c5dda5130` (2026-11-15); code recoverable at `e1bb1a873e`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IF_DIAG_NO_REJECT.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
+- Records: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-46-trees section).
+
+### MOJOLEARN_IF_DIAG_NO_RECORD
+
+- Tried: Trees (IsolationForest hang-bisect truncation, no decision record).
+- Evidence: no A/B recorded (rule a); a 2026-08 RTX 4090 hang bisect guard that no script builds today. Verdict: deleted (V2 rule, DELETE-ARM).
+- Removed: DIAG_NO_RECORD and its early return. Default unchanged: no bits move.
+- Files: isolation_forest/impl/isolation_tree_builder.mojo.
+- Deleted by: lane/expdel2-46-trees `ef6b727b53` (2026-11-15); code recoverable at `5c5dda5130`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IF_DIAG_NO_RECORD.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
+- Records: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-46-trees section).
+
+### MOJOLEARN_TREESHAP_FAST_TABLE_OFF
+
+- Tried: Trees (TreeSHAP leaf table rollback).
+- Evidence: EXP:186 KEPT/DEFAULT (rule e). Verdict: deleted (V2 rule, DELETE-OLD-PATH).
+- Removed: the rollback term of SHAP_TABLE. Default unchanged: no bits move.
+- Files: xtrees/shap_device.mojo.
+- Deleted by: lane/expdel2-46-trees `24292c45c2` (2026-11-15); code recoverable at `7d6b2a07e7`.
+- Restore: `git apply experiments/removed/MOJOLEARN_TREESHAP_FAST_TABLE_OFF.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
+- Records: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-46-trees section).
+
+### MOJOLEARN_SHAP_TREE_TAB_OFF
+
+- Tried: Trees (TreeSHAP decision-word row unit rollback).
+- Evidence: EXP:1271 ACCEPT/DEFAULT on M3 (FAST+Apple, istella 24.75 -> 19.57 ms); promoted on one vendor, the NVIDIA/AMD IDENTICAL A/B is owed (rule d). Verdict: deleted (V2 rule, DELETE-OLD-PATH).
+- Removed: the rollback term of SHAP_TREE_TAB. Default unchanged: no bits move.
+- Files: xtrees/shap_device.mojo.
+- Deleted by: lane/expdel2-46-trees `40d673a2f6` (2026-11-15); code recoverable at `24292c45c2`.
+- Restore: `git apply experiments/removed/MOJOLEARN_SHAP_TREE_TAB_OFF.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
+- Records: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-46-trees section).
+
+### MOJOLEARN_AFCL_T11
+
+- Tried: Trees (TreeSHAP Apple FAST 64-lane query block).
+- Evidence: never-run Apple FAST programme card (rule g). Verdict: deleted (V2 rule, DELETE-EXPERIMENT).
+- Removed: AFCL_T11; QUERY_TPB = TPB. Default unchanged: no bits move.
+- Files: xtrees/shap_device.mojo.
+- Deleted by: lane/expdel2-46-trees `a57eda3a34` (2026-11-15); code recoverable at `40d673a2f6`.
+- Restore: `git apply experiments/removed/MOJOLEARN_AFCL_T11.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
+- Records: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-46-trees section).
+
+### MOJOLEARN_SHAP_FAST_ROW_PAIR
+
+- Tried: Trees (TreeSHAP Apple FAST row pairs).
+- Evidence: F13 SHAP M3 2026-10-06 measured slower (B/A 1.07-1.74), kept OFF; no default A/B (rule a). Verdict: deleted (V2 rule, DELETE-ARM).
+- Removed: the pair tile and its audit increment; shap_pair_count stays (always 0) for bindings/_mojolearn_x_trees.mojo. Default unchanged: no bits move.
+- Files: xtrees/shap_device.mojo.
+- Deleted by: lane/expdel2-46-trees `70f8ff00b2` (2026-11-15); code recoverable at `a57eda3a34`.
+- Restore: `git apply experiments/removed/MOJOLEARN_SHAP_FAST_ROW_PAIR.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
+- Records: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-46-trees section).
+
+### MOJOLEARN_TREESHAP_ACC_SHARED
+
+- Tried: Trees (TreeSHAP shared-tile accumulator).
+- Evidence: no A/B recorded for the opt-in arm (rule a). Verdict: deleted (V2 rule, DELETE-ARM).
+- Removed: SHAP_ACC_SHARED and the shap_tab_row_unit_sh branch of tab_row_kernel (shap_tab_row_unit_sh itself is in xtrees/shap_tab.mojo, not this lane). Default unchanged: no bits move.
+- Files: xtrees/shap_device.mojo.
+- Deleted by: lane/expdel2-46-trees `f2de2ddf8b` (2026-11-15); code recoverable at `70f8ff00b2`.
+- Restore: `git apply experiments/removed/MOJOLEARN_TREESHAP_ACC_SHARED.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
+- Records: refusal in `core/experiment_guards_trees.mojo`; `grid_controls/gap-shap-nb.json` control `TREESHAP_ACC_SHARED` moved to `removed`; `docs/apple-fast/EXPERIMENTS.md` row (expdel2-46-trees section).
+
+### MOJOLEARN_TREES_T45_LINEAR_UNWIND
+
+- Tried: Trees (TreeSHAP linear path unwind).
+- Evidence: no A/B recorded for the opt-in arm (rule a). Verdict: deleted (V2 rule, DELETE-ARM).
+- Removed: SHAP_T45_LINEAR_UNWIND and its unwound-sum body. Default unchanged: no bits move.
+- Files: xtrees/shap.mojo.
+- Deleted by: lane/expdel2-46-trees `397bc56996` (2026-11-15); code recoverable at `f2de2ddf8b`.
+- Restore: `git apply experiments/removed/MOJOLEARN_TREES_T45_LINEAR_UNWIND.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
+- Records: refusal in `core/experiment_guards_trees.mojo`; `grid_controls/trees-cleanup.json` control `T45` moved to `removed`; `docs/apple-fast/EXPERIMENTS.md` row (expdel2-46-trees section).
+
+### MOJOLEARN_TREES_PLATT_ONE_READ_OFF
+
+- Tried: Trees (calibrated Platt one-read rollback).
+- Evidence: EXP:229 PENDING: no A/B recorded for the old path (rule b). Verdict: deleted (V2 rule, DELETE-OLD-PATH).
+- Removed: PLATT_ONE_READ and the refold-every-grad branch. Default unchanged: no bits move.
+- Files: xtrees/ops_device_boost.mojo.
+- Deleted by: lane/expdel2-46-trees `f0bdc4bfd9` (2026-11-15); code recoverable at `397bc56996`.
+- Restore: `git apply experiments/removed/MOJOLEARN_TREES_PLATT_ONE_READ_OFF.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
+- Records: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-46-trees section).
+
+### MOJOLEARN_AGN_IDN_SYN_POOL_OFF
+
+- Tried: Trees (Kernel/Permutation SHAP pooled synthetic buffer rollback).
+- Evidence: no A/B recorded for the old path (rule b). Verdict: deleted (V2 rule, DELETE-OLD-PATH).
+- Removed: the rollback term of AGN_IDN_SYN_POOL. Default unchanged: no bits move.
+- Files: xtrees/agnostic_device.mojo.
+- Deleted by: lane/expdel2-46-trees `c41fff16e3` (2026-11-15); code recoverable at `f0bdc4bfd9`.
+- Restore: `git apply experiments/removed/MOJOLEARN_AGN_IDN_SYN_POOL_OFF.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
+- Records: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-46-trees section).
+
+### MOJOLEARN_IDN_SHAP_DEVICE_MODEL_OFF
+
+- Tried: Trees (Kernel/Permutation SHAP device model rollback).
+- Evidence: no A/B recorded for the old path (rule b). Verdict: deleted (V2 rule, DELETE-OLD-PATH).
+- Removed: the rollback term of AGN_IDN_DEVICE_MODEL. Default unchanged: no bits move.
+- Files: xtrees/agnostic_device.mojo.
+- Deleted by: lane/expdel2-46-trees `5002a250c9` (2026-11-15); code recoverable at `c41fff16e3`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_SHAP_DEVICE_MODEL_OFF.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
+- Records: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-46-trees section).
+
+### MOJOLEARN_IDN_PSHAP_RESIDENT_OFF
+
+- Tried: Trees (Permutation SHAP resident linear path rollback).
+- Evidence: EXP:2051 KEEP, promoted 2026-10-11 (NV 0.097, AMD 0.128) (rule e). Verdict: deleted (V2 rule, DELETE-OLD-PATH).
+- Removed: the rollback term of PSHAP_IDN_RESIDENT. Default unchanged: no bits move.
+- Files: xtrees/agnostic_device.mojo.
+- Deleted by: lane/expdel2-46-trees `7f82ef0243` (2026-11-15); code recoverable at `5002a250c9`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_PSHAP_RESIDENT_OFF.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
+- Records: refusal in `core/experiment_guards_trees.mojo`; `grid_controls/neighbors-small-ports.json` control `IDN_PSHAP_RESIDENT` moved to `removed`; `docs/apple-fast/EXPERIMENTS.md` row (expdel2-46-trees section).
+
+### MOJOLEARN_PSHAP_DELTA_OFF
+
+- Tried: Trees (Permutation SHAP delta synthesis rollback).
+- Evidence: EXP:1595 OPEN: no A/B recorded for the old path (rule b); the default is the M3 -47.6% FAST+Apple one. Verdict: deleted (V2 rule, DELETE-OLD-PATH).
+- Removed: the rollback term of PSHAP_DELTA. Default unchanged: no bits move.
+- Files: xtrees/agnostic_device.mojo.
+- Deleted by: lane/expdel2-46-trees `7669424c25` (2026-11-15); code recoverable at `7f82ef0243`.
+- Restore: `git apply experiments/removed/MOJOLEARN_PSHAP_DELTA_OFF.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
+- Records: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-46-trees section).
+
+### MOJOLEARN_SHAP_PERM_CACHE_OFF
+
+- Tried: Trees (Permutation SHAP per-chunk cache rollback).
+- Evidence: EXP:1403 READY-AB: no A/B recorded for the old path (rule b). Verdict: deleted (V2 rule, DELETE-OLD-PATH).
+- Removed: the rollback term of SHAP_PERM_CACHE. Default unchanged: no bits move.
+- Files: xtrees/agnostic_device.mojo.
+- Deleted by: lane/expdel2-46-trees `9a82517370` (2026-11-15); code recoverable at `7669424c25`.
+- Restore: `git apply experiments/removed/MOJOLEARN_SHAP_PERM_CACHE_OFF.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
+- Records: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-46-trees section).
+
+### MOJOLEARN_DART_DEVICE_OFF
+
+- Tried: Trees (DART FAST device round rollback).
+- Evidence: EXP:104 KEPT 741a5495d on M3 (dart -46%); promoted on one vendor, the NVIDIA/AMD FAST A/B is owed (rule d). Verdict: deleted (V2 rule, DELETE-OLD-PATH).
+- Removed: the rollback term of DART_DEVICE. Default unchanged: no bits move.
+- Files: xtrees/dart_device.mojo.
+- Deleted by: lane/expdel2-46-trees `4a48287b38` (2026-11-15); code recoverable at `9a82517370`.
+- Restore: `git apply experiments/removed/MOJOLEARN_DART_DEVICE_OFF.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
+- Records: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-46-trees section).
+
+### MOJOLEARN_IDN_DART_DEVICE_OFF
+
+- Tried: Trees (DART IDENTICAL device round rollback).
+- Evidence: no A/B recorded for the old path (rule b). Verdict: deleted (V2 rule, DELETE-OLD-PATH).
+- Removed: the rollback term of IDN_DART_DEVICE. Default unchanged: no bits move.
+- Files: xtrees/dart_units.mojo, xtrees/dart_device.mojo.
+- Deleted by: lane/expdel2-46-trees `ec57bb3501` (2026-11-15); code recoverable at `4a48287b38`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_DART_DEVICE_OFF.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
+- Records: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-46-trees section).
