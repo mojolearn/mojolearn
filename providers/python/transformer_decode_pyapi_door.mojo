@@ -89,10 +89,16 @@ comptime TRANSFORMER_DECODE_PER_TOKEN_DOOR = is_defined["MOJOLEARN_TRANSFORMER_D
 #: content check, the per-token NativeModules, the address re-snapshots of x
 #: and y and the state-word re-stamp are not run per token; the owner and
 #: configuration checks still run at sync / load / close / repr, and a
-#: replaced `_state` takes the full path (refused).
+#: replaced `_state` takes the full path (refused). B
+#: (`-D MOJOLEARN_TRANSFORMER_DECODE_PER_TOKEN_ADMISSION`): the per-token
+#: admission of lanes N177 / fix-transformer-decode-door (owner record,
+#: generation words, tail content, a new NativeModules per token). Same native
+#: call on the same AttnStepArm in both arms: no output bit moves on any vendor.
 #: Board on record NV L40S 1105 ms (0.8.55) -> 1406 (candidate 4c2340386abc).
 # TOMBSTONE: MOJOLEARN_TRANSFORMER_DECODE_PER_TOKEN_ADMISSION (unmeasured B arm, EXP:2406 PENDING: the per-token admission of lanes N177 / fix-transformer-decode-door) deleted 2026-11-15 by lane/expdel2-08-base; code recoverable at c33bc3f5d0.
 # Restore: git apply experiments/removed/MOJOLEARN_TRANSFORMER_DECODE_PER_TOKEN_ADMISSION.patch; record in docs/TOMBSTONES.md.
+# RESTORED 2026-11-15 by lane/expdel2-restore-owed: owed B arm (owed-pre0867.json), under four weeks old; the deletion was premature.
+comptime TRANSFORMER_DECODE_PER_TOKEN_ADMISSION = is_defined["MOJOLEARN_TRANSFORMER_DECODE_PER_TOKEN_ADMISSION"]()
 
 
 struct TransformerDecodeHandle(Movable, Writable):
@@ -656,7 +662,7 @@ def _transformer_decode_unchanged(hobj: PythonObject) raises -> Bool:
 
 
 def _transformer_decode_admitted(session: PythonObject) raises -> PythonObject:
-    # The session's
+    # Default arm (TRANSFORMER_DECODE_PER_TOKEN_ADMISSION off): the session's
     # handle when a step may skip the per-token admission, else None (the
     # full path below runs and raises what it raised before). Two words
     # decide it: the handle holds its registry session (word and lease taken
@@ -830,7 +836,7 @@ def transformer_decode_run(session: PythonObject, input: PythonObject, step: Boo
 def transformer_decode_run(session: PythonObject, input: PythonObject, step: Bool, decode: Bool, context: PythonObject) raises -> PythonObject:
     # `decode` (D2): x is (B, N, d_model) and the N tokens run as N steps in
     # one call; `step` is the one-token case, neither is a forward of L tokens.
-    comptime if not TRANSFORMER_DECODE_PER_TOKEN_DOOR:
+    comptime if not TRANSFORMER_DECODE_PER_TOKEN_ADMISSION and not TRANSFORMER_DECODE_PER_TOKEN_DOOR:
         var admitted = _transformer_decode_admitted(session)
         if admitted is not None:
             return _transformer_decode_run_admitted(admitted, input, step, decode, context)
