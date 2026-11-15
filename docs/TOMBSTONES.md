@@ -2169,6 +2169,7 @@ Deletions reversed by new evidence. The code is back on main; the section and th
 | [`MOJOLEARN_IDN_IF_FIT_OWN_X`](#mojolearn_idn_if_fit_own_x) | Trees (IsolationForest) | 2026-11-15 (`cfce0d30ce`) | 2026-11-15 (lane/expdel2-restore-owed) | opt-in B arm, default unchanged, A/B owed at the wave sha | [MOJOLEARN_IDN_IF_FIT_OWN_X.patch](../experiments/removed/MOJOLEARN_IDN_IF_FIT_OWN_X.patch) |
 | [`MOJOLEARN_CNN_GENERIC_OPS`](#mojolearn_cnn_generic_ops) | Neural (CNN program tuned ops) | 2026-11-15 (`f839bce651`) | 2026-11-15 (lane/expdel2-restore-owed) | opt-in B arm, default unchanged, A/B owed at the wave sha | [MOJOLEARN_CNN_GENERIC_OPS.patch](../experiments/removed/MOJOLEARN_CNN_GENERIC_OPS.patch) |
 | [`MOJOLEARN_SAMBA_PROGRAM_FORWARD`](#mojolearn_samba_program_forward) | Samba stateless forward route (training/neural_identical_experiments.mojo) | 2026-11-15 (`2ea7c618fc`) | 2026-11-15 (lane/expdel2-restore-owed) | opt-in B arm, default unchanged, A/B owed at the wave sha | [MOJOLEARN_SAMBA_PROGRAM_FORWARD.patch](../experiments/removed/MOJOLEARN_SAMBA_PROGRAM_FORWARD.patch) |
+| [`MOJOLEARN_XD_FAST_SVD_ONE_BLOCK`](#mojolearn_xd_fast_svd_one_block) | Decomposition (dense SVD route) | 2026-11-15 (`f899386021`) | 2026-11-15 (lane/expdel2-restore-owed) | opt-in B arm, default unchanged, A/B owed at the wave sha | [MOJOLEARN_XD_FAST_SVD_ONE_BLOCK.patch](../experiments/removed/MOJOLEARN_XD_FAST_SVD_ONE_BLOCK.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -11933,6 +11934,7 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2
 - Restore: `git apply experiments/removed/MOJOLEARN_XD_FAST_SVD_ONE_BLOCK.patch`, then delete the refusal in `core/experiment_guards_decomposition.mojo`.
 
 - Sweep (lane/expdel2-sweep, 2026-11-15): x_decomp/device.mojo comptime XD_FAST_SVD_ONE_BLOCK and the unlaunched launch_classical_code_rows, classical_code_bucket_kernel, classical_code_rows_kernel removed; x_decomp/kit_device.mojo DKit.svd branch folded, the one-block route after it, dk_eig_sticky_kernel and DKit's svd_word / svd_host_word / svd_pending (their init fill, sync copy and check) removed, imports svd_op_tall, X_DECOMP_SVD_SWEEPS dropped; no bits change (7c6df8f9f7).
+Restored 2026-11-15 (lane/expdel2-restore-owed): owed B arm, deletion premature; see Restored table.
 
 ### MOJOLEARN_DECOMP_FAST_GEMM_MMA_OFF
 

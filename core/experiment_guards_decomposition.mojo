@@ -150,8 +150,7 @@ def _check_configuration() -> Bool:
     # Lane expdel2-16-decomposition (2026-11-15): unmeasured arms and superseded old paths deleted, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (docs/TOMBSTONES.md).
     # Restore: git apply experiments/removed/MOJOLEARN_AFCL_L10.patch
     comptime assert not is_defined["MOJOLEARN_AFCL_L10"](), "removed 2026-11-15 (lane/expdel2-16-decomposition): AFCL_L10 (never-run Apple FAST programme card) is gone; the default is kept; code at 6837570bd9; restore: experiments/removed/MOJOLEARN_AFCL_L10.patch"
-    # Restore: git apply experiments/removed/MOJOLEARN_XD_FAST_SVD_ONE_BLOCK.patch
-    comptime assert not is_defined["MOJOLEARN_XD_FAST_SVD_ONE_BLOCK"](), "removed 2026-11-15 (lane/expdel2-16-decomposition): XD_FAST_SVD_ONE_BLOCK (unmeasured opt-in arm) is gone; the default is kept; code at 0564fdef0e; restore: experiments/removed/MOJOLEARN_XD_FAST_SVD_ONE_BLOCK.patch"
+    # MOJOLEARN_XD_FAST_SVD_ONE_BLOCK: refusal removed 2026-11-15 (restored; owed B arm, see docs/TOMBSTONES.md Restored table)
     # Restore: git apply experiments/removed/MOJOLEARN_DECOMP_FAST_GEMM_MMA_OFF.patch
     comptime assert not is_defined["MOJOLEARN_DECOMP_FAST_GEMM_MMA_OFF"](), "removed 2026-11-15 (lane/expdel2-16-decomposition): DECOMP_FAST_GEMM_MMA_OFF (old path of the FAST Apple default) is gone; the default is kept; code at f899386021; restore: experiments/removed/MOJOLEARN_DECOMP_FAST_GEMM_MMA_OFF.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_XD_SWEEP_OFF.patch
