@@ -879,8 +879,9 @@ comptime KNN_TILE_MAX_D = 64
 #: 2-D kernel a thread skips a feature chunk once all 16 of its pairs are
 #: out (the rows' k-th distances are published in threadgroup memory per y
 #: tile); in the row kernel the check runs every 8 features.
-#: Both off under MOJOLEARN_IDN_ALL_OFF.
-comptime _XN_KNN_IDN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch, EXP:2438 DELETED; non-owner sites) deleted 2026-11-15 by lane/expdel2-15-cluster; code recoverable at 6837570bd9.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-15-cluster.patch; record in docs/TOMBSTONES.md.
+comptime _XN_KNN_IDN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 comptime XN_KNN_LEAN = _XN_KNN_IDN and not is_defined["MOJOLEARN_IDN_XN_KNN_LEAN_OFF"]()
 comptime XN_KNN_PRUNE = _XN_KNN_IDN and not is_defined["MOJOLEARN_IDN_XN_KNN_PRUNE_OFF"]()
 
@@ -1998,10 +1999,10 @@ comptime SVGP_FAST_RBFTILE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_
 #: tiled launch. Each cell is `kernel_item`'s K_RBF chain (`_sub`, the pinned
 #: `identical_mul_add`, features ascending from +0 over exactly d) and
 #: `unary_item`'s identity step, so the words are the per-cell kernel's.
-#: `-D MOJOLEARN_IDN_SVGP_RBFTILE_OFF` (or MOJOLEARN_IDN_ALL_OFF) restores it.
-comptime IDN_SVGP_RBFTILE = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
-    is_defined["MOJOLEARN_IDN_SVGP_RBFTILE_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
+#: `-D MOJOLEARN_IDN_SVGP_RBFTILE_OFF` restores it.
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch, EXP:2438 DELETED; non-owner sites) deleted 2026-11-15 by lane/expdel2-15-cluster; code recoverable at 6837570bd9.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-15-cluster.patch; record in docs/TOMBSTONES.md.
+comptime IDN_SVGP_RBFTILE = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_IDN_SVGP_RBFTILE_OFF"]()
 comptime SVGP_RBFTILE = SVGP_FAST_RBFTILE or IDN_SVGP_RBFTILE
 comptime SVGP_RBF_T = 64
 comptime SVGP_RBF_TP = SVGP_RBF_T + 1
@@ -2168,8 +2169,10 @@ def svgp_b32_select_kernel(flag: FP, b32: FP, bh: FP, bl: FP, mm_: Int64):
 #: default on every vendor (two_prod commutes bit for bit and every entry
 #: keeps its p-ascending fold; the four solves are the column item's own);
 #: -D MOJOLEARN_IDN_GATES_OFF restores the old IDENTICAL form.
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch, EXP:2438 DELETED; non-owner sites) deleted 2026-11-15 by lane/expdel2-15-cluster; code recoverable at 6837570bd9.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-15-cluster.patch; record in docs/TOMBSTONES.md.
 comptime _SVGP_GATE_ON = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU) or (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (is_defined["MOJOLEARN_IDN_GATES_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_IDN_GATES_OFF"]()
 )
 # TOMBSTONE: MOJOLEARN_SVGP_FAST_SYMTILE_OFF (old path, superseded by the FAST+Apple default) deleted 2026-11-15 by lane/expdel-01-cluster; code recoverable at 614ccc0790.
 # Restore: git apply experiments/removed/MOJOLEARN_SVGP_FAST_SYMTILE_OFF.patch; record in docs/TOMBSTONES.md.
@@ -2322,11 +2325,11 @@ comptime SVGP_FAST_BLKCHOL = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_
 #: panel factor. Its chains are `_chol_col`'s through the shared ff helpers
 #: (x_linear/ff.mojo: two_prod and ff_mul on the pinned `fmad`), k ascending,
 #: so no contraction choice can move a word: the factor of the one-column
-#: launches bit for bit. `-D MOJOLEARN_IDN_SVGP_BLKCHOL_OFF` (or
-#: MOJOLEARN_IDN_ALL_OFF) restores one column per launch.
-comptime IDN_SVGP_BLKCHOL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
-    is_defined["MOJOLEARN_IDN_SVGP_BLKCHOL_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
+#: launches bit for bit. `-D MOJOLEARN_IDN_SVGP_BLKCHOL_OFF` restores one
+#: column per launch.
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch, EXP:2438 DELETED; non-owner sites) deleted 2026-11-15 by lane/expdel2-15-cluster; code recoverable at 6837570bd9.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-15-cluster.patch; record in docs/TOMBSTONES.md.
+comptime IDN_SVGP_BLKCHOL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_IDN_SVGP_BLKCHOL_OFF"]()
 comptime SVGP_BLKCHOL = SVGP_FAST_BLKCHOL or IDN_SVGP_BLKCHOL
 #: panel width (columns per launch)
 comptime SVGP_CHOL_PB = 16

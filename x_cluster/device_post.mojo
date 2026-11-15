@@ -367,12 +367,11 @@ def optics_step_kernel(
 #: and the set each step scans are the two kernels' own, so the picks, the
 #: reachabilities and the predecessors are the same words.
 #: `-D MOJOLEARN_IDN_OPTICS_FUSED_STEP_OFF=1` restores the two launches.
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch, EXP:2438 DELETED; non-owner sites) deleted 2026-11-15 by lane/expdel2-15-cluster; code recoverable at 6837570bd9.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-15-cluster.patch; record in docs/TOMBSTONES.md.
 comptime IDN_OPTICS_FUSED_STEP = C41_FUSED_MINIMA or (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not (
-        is_defined["MOJOLEARN_IDN_OPTICS_FUSED_STEP_OFF"]()
-        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-    )
+    and not is_defined["MOJOLEARN_IDN_OPTICS_FUSED_STEP_OFF"]()
 )
 
 

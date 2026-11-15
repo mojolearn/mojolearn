@@ -52,11 +52,10 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 #: (x_neighbors/iter_device.mojo `nc_means_part_kernel` ...) with the pinned
 #: arithmetic. Bits change (centroids, the pooled std, the dataset centroid)
 #: when n > XN_NC_CHUNK_ROWS, on all four columns together.
-#: -D MOJOLEARN_IDN_NC_CHUNKED_OFF (or MOJOLEARN_IDN_ALL_OFF) restores the
-#: whole-column chains.
-comptime XN_NC_IDN_CHUNKED = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
-    is_defined["MOJOLEARN_IDN_NC_CHUNKED_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
+#: -D MOJOLEARN_IDN_NC_CHUNKED_OFF restores the whole-column chains.
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch, EXP:2438 DELETED; non-owner sites) deleted 2026-11-15 by lane/expdel2-15-cluster; code recoverable at 6837570bd9.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-15-cluster.patch; record in docs/TOMBSTONES.md.
+comptime XN_NC_IDN_CHUNKED = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_IDN_NC_CHUNKED_OFF"]()
 comptime XN_NC_CHUNK_ROWS = 16384
 
 
