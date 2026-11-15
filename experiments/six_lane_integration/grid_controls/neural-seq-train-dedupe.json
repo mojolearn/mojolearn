@@ -317,100 +317,6 @@
         "off_board"
       ]
     },
-    "ce_token_fold": {
-      "define": "MOJOLEARN_IDN_CE_TOKEN_FOLD",
-      "kind": "arms",
-      "arms": {
-        "0": [],
-        "1": [
-          "MOJOLEARN_IDN_CE_TOKEN_FOLD=1"
-        ]
-      },
-      "default": "0",
-      "source": [
-        "training/neural_ab_profile_contract.mojo:11",
-        "training/checks/loss.mojo:1725",
-        "training/byte_lm_host_kernels.mojo:1080"
-      ],
-      "binding": "_mojolearn_byte_lm",
-      "bits_change": true,
-      "status": "rewritten",
-      "entries": [
-        "NN54"
-      ],
-      "board": "lm-train-step",
-      "tags": [
-        "bit_version"
-      ],
-      "arm_names": {
-        "0": "gemm_ones_fold",
-        "1": "nn54_leaf128_tree"
-      },
-      "note": "Review said host-only; wrong: identical_ce_forward_into (GPU) already implements both arms, host column matches (byte_lm_host_kernels.mojo:1080-1084). Arm 2 (ni35_token_tree256_v2, MOJOLEARN_IDN_CE_TOKEN_FOLD=2) deleted 2026-10-10 by lane grid-act-15 (noise); =2 refused; see removed."
-    },
-    "ce_grad_fused": {
-      "define": "MOJOLEARN_IDN_CE_GRAD_FUSED",
-      "kind": "switch",
-      "arms": {
-        "off": [],
-        "on": [
-          "MOJOLEARN_IDN_CE_GRAD_FUSED=1"
-        ]
-      },
-      "default": "off",
-      "source": [
-        "training/neural_identical_experiments.mojo:44",
-        "training/checks/loss.mojo:1794"
-      ],
-      "binding": "_mojolearn_byte_lm",
-      "bits_change": false,
-      "status": "split_from:NN52+NI33",
-      "entries": [
-        "NN52",
-        "NI33"
-      ],
-      "board": "lm-train-step",
-      "tags": [],
-      "note": "Review said dead; wrong: training/checks/loss.mojo identical_ce_backward_into is the shipped CE backward (byte_lm.mojo:78, :1707). NN52 and NI33 launched the same fused kernel."
-    },
-    "lm_views": {
-      "define": "MOJOLEARN_IDN_LM_VIEWS",
-      "kind": "arms",
-      "arms": {
-        "0": [],
-        "1": [
-          "MOJOLEARN_IDN_LM_VIEWS=1"
-        ],
-        "2": [
-          "MOJOLEARN_IDN_LM_VIEWS=2"
-        ],
-        "3": [
-          "MOJOLEARN_IDN_LM_VIEWS=3"
-        ]
-      },
-      "default": "0",
-      "source": [
-        "training/neural_identical_experiments.mojo:32",
-        "training/byte_lm.mojo:826"
-      ],
-      "binding": "_mojolearn_byte_lm",
-      "bits_change": false,
-      "status": "rewritten",
-      "entries": [
-        "NN60",
-        "NI27"
-      ],
-      "board": "lm-train-step",
-      "tags": [
-        "memory"
-      ],
-      "arm_names": {
-        "0": "copies",
-        "1": "nn60_block",
-        "2": "nn60_emb_head",
-        "3": "ni27_all_incl_layer_pool"
-      }
-    },
     "act_retain": {
       "define": "MOJOLEARN_IDN_ACT_RETAIN,MOJOLEARN_IDN_ACT_RETAIN_OFF",
       "kind": "arms",
@@ -454,71 +360,6 @@
         "3": "ni48_samba_owned_tapes"
       },
       "note": "PROMOTED 2026-10-08 (lane grid-act-4, grid ge123e6f9, one run per arm): arm 2 (NN31 bounded checkpoints), replay -> arm 2 ms samba-train-step NV 96.0->77.6, AMD 147.2->144.3 (0.890x combined); output hashes equal to the incumbent on both vendors (no bits). Measured alone; it now combines with the promoted samba_resident_step and m3_angle_carry_cache, and the post-merge race measures the combination. Default 2 in IDENTICAL; arm 0 (replay) = MOJOLEARN_IDN_ACT_RETAIN_OFF; arms 1 and 3 stay (3 is HOLD_BROKEN in the grid, kept as an arm); explicit =0 and =N with _OFF are refused. NI36's tape half was NI48's define; NI36 now means only the scratch arm of train_scratch."
-    },
-    "train_scratch": {
-      "define": "MOJOLEARN_IDN_TRAIN_SCRATCH",
-      "kind": "arms",
-      "arms": {
-        "0": [],
-        "1": [
-          "MOJOLEARN_IDN_TRAIN_SCRATCH=1"
-        ],
-        "2": [
-          "MOJOLEARN_IDN_TRAIN_SCRATCH=2"
-        ],
-        "3": [
-          "MOJOLEARN_IDN_TRAIN_SCRATCH=3"
-        ]
-      },
-      "default": "0",
-      "source": [
-        "training/neural_identical_experiments.mojo:51",
-        "training/dev_tensors.mojo:221",
-        "training/neural_ab_lifetime.mojo:15",
-        "training/byte_lm.mojo:586"
-      ],
-      "binding": "_mojolearn_training (arm 1) / _mojolearn_byte_lm (arm 2)",
-      "bits_change": false,
-      "status": "rewritten",
-      "entries": [
-        "NI36",
-        "NN62"
-      ],
-      "board": "samba-train-step, mlp-train-step (arm 1); lm-train-step (arm 2)",
-      "tags": [
-        "memory"
-      ],
-      "arm_names": {
-        "0": "separate",
-        "1": "ni36_shared_dA_dW",
-        "2": "nn62_lifetime_arena",
-        "3": "both"
-      }
-    },
-    "nn29_ring_pair": {
-      "define": "MOJOLEARN_NN29_RING_PAIR",
-      "kind": "switch",
-      "arms": {
-        "off": [],
-        "on": [
-          "MOJOLEARN_NN29_RING_PAIR=1"
-        ]
-      },
-      "default": "off",
-      "source": [
-        "transformer/experiments/attention_schedules.mojo:24"
-      ],
-      "binding": "_mojolearn_transformer",
-      "bits_change": false,
-      "status": "kept",
-      "entries": [
-        "NN29"
-      ],
-      "board": "off-board (decode ring; decode lanes are CPU)",
-      "tags": [
-        "off_board"
-      ],
-      "note": "bits_change not re-assessed by L11 (unchanged switch)"
     },
     "nn37_triangle_tasks": {
       "define": "MOJOLEARN_NN37_TRIANGLE_TASKS",
@@ -748,32 +589,6 @@
       ],
       "note": "bits_change not re-assessed by L11 (unchanged switch)"
     },
-    "chunked_lm_head_v2": {
-      "define": "MOJOLEARN_IDN_CHUNKED_LM_HEAD_V2",
-      "kind": "switch",
-      "arms": {
-        "off": [],
-        "on": [
-          "MOJOLEARN_IDN_CHUNKED_LM_HEAD_V2=1"
-        ]
-      },
-      "default": "off",
-      "source": [
-        "training/neural_identical_experiments.mojo:59"
-      ],
-      "binding": "_mojolearn_training",
-      "bits_change": false,
-      "status": "kept",
-      "entries": [
-        "NI34"
-      ],
-      "board": "off-board (opt-in config)",
-      "tags": [
-        "off_board",
-        "opt_in"
-      ],
-      "note": "bits_change not re-assessed by L11 (unchanged switch)"
-    },
     "nn57_norm_profile": {
       "define": "MOJOLEARN_NN57_NORM_PROFILE",
       "kind": "switch",
@@ -794,82 +609,6 @@
         "NN57"
       ],
       "board": "off-board (multi-GPU clip only)",
-      "tags": [
-        "off_board",
-        "multi_gpu"
-      ],
-      "note": "bits_change not re-assessed by L11 (unchanged switch)"
-    },
-    "nn58_accumulate_status": {
-      "define": "MOJOLEARN_NN58_ACCUMULATE_STATUS",
-      "kind": "switch",
-      "arms": {
-        "off": [],
-        "on": [
-          "MOJOLEARN_NN58_ACCUMULATE_STATUS=1"
-        ]
-      },
-      "default": "off",
-      "source": [
-        "training/neural_ab_pointwise.mojo:18"
-      ],
-      "binding": "_mojolearn_training",
-      "bits_change": false,
-      "status": "kept",
-      "entries": [
-        "NN58"
-      ],
-      "board": "samba-train-step",
-      "tags": [
-        "peripheral"
-      ],
-      "note": "bits_change not re-assessed by L11 (unchanged switch)"
-    },
-    "nn59_dropout_residual": {
-      "define": "MOJOLEARN_NN59_DROPOUT_RESIDUAL",
-      "kind": "switch",
-      "arms": {
-        "off": [],
-        "on": [
-          "MOJOLEARN_NN59_DROPOUT_RESIDUAL=1"
-        ]
-      },
-      "default": "off",
-      "source": [
-        "training/residual_dropout_contract.mojo:15"
-      ],
-      "binding": "_mojolearn_training",
-      "bits_change": false,
-      "status": "kept",
-      "entries": [
-        "NN59"
-      ],
-      "board": "mlp-train-step only with dropout",
-      "tags": [],
-      "note": "bits_change not re-assessed by L11 (unchanged switch)",
-      "grid": "exclude",
-      "prune_note": "DEFER: UNREACHED: board MLP has no dropout (bench_board_neural.py:351 MLP_DIMS)"
-    },
-    "nn63_shard_merge": {
-      "define": "MOJOLEARN_NN63_CANONICAL_SHARD_MERGE",
-      "kind": "switch",
-      "arms": {
-        "off": [],
-        "on": [
-          "MOJOLEARN_NN63_CANONICAL_SHARD_MERGE=1"
-        ]
-      },
-      "default": "off",
-      "source": [
-        "training/neural_ab_shards.mojo:18"
-      ],
-      "binding": "_mojolearn_training",
-      "bits_change": false,
-      "status": "kept",
-      "entries": [
-        "NN63"
-      ],
-      "board": "off-board (multi-GPU only)",
       "tags": [
         "off_board",
         "multi_gpu"
@@ -1185,12 +924,7 @@
     "neural:lm-train-step": {
       "binding": "_mojolearn_byte_lm",
       "route": "fit step: training/byte_lm.mojo train step -> embedding (embedding/checks/embedding_identical) -> blocks -> identical_ce_forward_into/backward_into (training/checks/loss.mojo) -> optimizer (_byte_neural_group_update | identical_optimizer_step)",
-      "controls": [
-        "ce_token_fold",
-        "ce_grad_fused",
-        "lm_views",
-        "train_scratch"
-      ],
+      "controls": [],
       "interaction_groups": [
         [
           "ce_token_fold",
@@ -1245,8 +979,6 @@
       "route": "Python calls mamba3 prefill fwd/bwd (mamba3_backward angle suffix), transformer fwd/bwd (neural_attention_owner tape / forward tape), training samba_ops",
       "controls": [
         "act_retain",
-        "train_scratch",
-        "nn58_accumulate_status",
         "m2_yoff_exp",
         "m2_yd_rows",
         "m2_cs_pt",
@@ -1268,10 +1000,7 @@
     "neural:mlp-train-step": {
       "binding": "_mojolearn_training",
       "route": "train_linear_backward_dev (training/dev_tensors.mojo)",
-      "controls": [
-        "train_scratch",
-        "nn59_dropout_residual"
-      ],
+      "controls": [],
       "interaction_groups": []
     }
   },
@@ -1481,6 +1210,51 @@
       "define": "MOJOLEARN_IDN_M1_SCAN",
       "control": "m1_scan",
       "reason": "DELETED 2026-11-15 (lane/expdel2-26-neural; recoverable at 5fc464dce4; see docs/TOMBSTONES.md section expdel2-26-neural): unmeasured arm deleted under AGENTS.md 'An unmeasured arm is deleted'; default kept, no bits move"
+    },
+    {
+      "define": "MOJOLEARN_IDN_CE_TOKEN_FOLD",
+      "control": "ce_token_fold",
+      "reason": "DELETED 2026-11-15 (lane/expdel2-32-neural, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md; recoverable at 19d2549589; patch experiments/removed/MOJOLEARN_IDN_CE_TOKEN_FOLD.patch): unmeasured arm or old path deleted under AGENTS.md \"An unmeasured arm is deleted\"; default kept, no bits move. Refused in core/experiment_guards_neural.mojo; docs/TOMBSTONES.md."
+    },
+    {
+      "define": "MOJOLEARN_IDN_CE_GRAD_FUSED",
+      "control": "ce_grad_fused",
+      "reason": "DELETED 2026-11-15 (lane/expdel2-32-neural, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md; recoverable at 311b50e05c; patch experiments/removed/MOJOLEARN_IDN_CE_GRAD_FUSED.patch): unmeasured arm or old path deleted under AGENTS.md \"An unmeasured arm is deleted\"; default kept, no bits move. Refused in core/experiment_guards_neural.mojo; docs/TOMBSTONES.md."
+    },
+    {
+      "define": "MOJOLEARN_IDN_LM_VIEWS",
+      "control": "lm_views",
+      "reason": "DELETED 2026-11-15 (lane/expdel2-32-neural, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md; recoverable at 311b50e05c; patch experiments/removed/MOJOLEARN_IDN_LM_VIEWS.patch): unmeasured arm or old path deleted under AGENTS.md \"An unmeasured arm is deleted\"; default kept, no bits move. Refused in core/experiment_guards_neural.mojo; docs/TOMBSTONES.md."
+    },
+    {
+      "define": "MOJOLEARN_IDN_TRAIN_SCRATCH",
+      "control": "train_scratch",
+      "reason": "DELETED 2026-11-15 (lane/expdel2-32-neural, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md; recoverable at 311b50e05c; patch experiments/removed/MOJOLEARN_IDN_TRAIN_SCRATCH.patch): unmeasured arm or old path deleted under AGENTS.md \"An unmeasured arm is deleted\"; default kept, no bits move. Refused in core/experiment_guards_neural.mojo; docs/TOMBSTONES.md."
+    },
+    {
+      "define": "MOJOLEARN_NN29_RING_PAIR",
+      "control": "nn29_ring_pair",
+      "reason": "DELETED 2026-11-15 (lane/expdel2-32-neural, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md; recoverable at 326b0d6e3d; patch experiments/removed/MOJOLEARN_NN29_RING_PAIR.patch): unmeasured arm or old path deleted under AGENTS.md \"An unmeasured arm is deleted\"; default kept, no bits move. Refused in core/experiment_guards_neural.mojo; docs/TOMBSTONES.md."
+    },
+    {
+      "define": "MOJOLEARN_IDN_CHUNKED_LM_HEAD_V2",
+      "control": "chunked_lm_head_v2",
+      "reason": "DELETED 2026-11-15 (lane/expdel2-32-neural, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md; recoverable at 311b50e05c; patch experiments/removed/MOJOLEARN_IDN_CHUNKED_LM_HEAD_V2.patch): unmeasured arm or old path deleted under AGENTS.md \"An unmeasured arm is deleted\"; default kept, no bits move. Refused in core/experiment_guards_neural.mojo; docs/TOMBSTONES.md."
+    },
+    {
+      "define": "MOJOLEARN_NN58_ACCUMULATE_STATUS",
+      "control": "nn58_accumulate_status",
+      "reason": "DELETED 2026-11-15 (lane/expdel2-32-neural, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md; recoverable at 5b6269eefe; patch experiments/removed/MOJOLEARN_NN58_ACCUMULATE_STATUS.patch): unmeasured arm or old path deleted under AGENTS.md \"An unmeasured arm is deleted\"; default kept, no bits move. Refused in core/experiment_guards_neural.mojo; docs/TOMBSTONES.md."
+    },
+    {
+      "define": "MOJOLEARN_NN59_DROPOUT_RESIDUAL",
+      "control": "nn59_dropout_residual",
+      "reason": "DELETED 2026-11-15 (lane/expdel2-32-neural, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md; recoverable at f75eb67b37; patch experiments/removed/MOJOLEARN_NN59_DROPOUT_RESIDUAL.patch): unmeasured arm or old path deleted under AGENTS.md \"An unmeasured arm is deleted\"; default kept, no bits move. Refused in core/experiment_guards_neural.mojo; docs/TOMBSTONES.md."
+    },
+    {
+      "define": "MOJOLEARN_NN63_CANONICAL_SHARD_MERGE",
+      "control": "nn63_shard_merge",
+      "reason": "DELETED 2026-11-15 (lane/expdel2-32-neural, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md; recoverable at 5f27699bee; patch experiments/removed/MOJOLEARN_NN63_CANONICAL_SHARD_MERGE.patch): unmeasured arm or old path deleted under AGENTS.md \"An unmeasured arm is deleted\"; default kept, no bits move. Refused in core/experiment_guards_neural.mojo; docs/TOMBSTONES.md."
     }
   ],
   "notes": {
