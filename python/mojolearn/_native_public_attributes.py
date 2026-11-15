@@ -51,8 +51,8 @@ def _prep_availability(package, missing):
     import sys
     result = {}
     for module_name, base_name, predicates in (  # glue: two fixed import-time class families
-            ('_expansion_prep', '_PrepBase', ('_PrepBase', '_Classifier')),
-            ('_expansion_decomp', '_Base', ('_Base', 'MinCovDet', 'AlternatingLeastSquares'))):
+            ('_expansion_prep', '_PrepBase', ('_Classifier',)),
+            ('_expansion_decomp', '_Base', ('MinCovDet', 'AlternatingLeastSquares'))):
         module = sys.modules.get(package.__name__ + '.' + module_name)
         if type(module) is not ModuleType:
             continue
