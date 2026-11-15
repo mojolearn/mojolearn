@@ -657,6 +657,7 @@ in the tables after the sections.
 | [`MOJOLEARN_KM_FAST_RBF_PIPE_OFF`](#mojolearn_km_fast_rbf_pipe_off-old-path-deleted-2026-11-15) | Kernel (RBFSampler fit_transform row-block pipeline, FAST Apple) | removed (old path; FAST+Apple default KEEP, rab12-rbfpipe) | 2026-11-15 | [MOJOLEARN_KM_FAST_RBF_PIPE_OFF.patch](../experiments/removed/MOJOLEARN_KM_FAST_RBF_PIPE_OFF.patch) |
 | [`MOJOLEARN_KM_FAST_RBF_STAGED_OFF`](#mojolearn_km_fast_rbf_staged_off-old-path-deleted-2026-11-15) | Kernel (RBFSampler projection download, FAST Apple) | removed (old path; FAST+Apple DEFAULT, w2-w3kf-rbf-q PASS) | 2026-11-15 | [MOJOLEARN_KM_FAST_RBF_STAGED_OFF.patch](../experiments/removed/MOJOLEARN_KM_FAST_RBF_STAGED_OFF.patch) |
 | [`MOJOLEARN_KM_FAST_RBF_RESIDENT_OFF`](#mojolearn_km_fast_rbf_resident_off-old-path-deleted-2026-11-15) | Kernel (RBFSampler fit_transform in one binding call, FAST Apple) | removed (old path; FAST+Apple DEFAULT, w2-kfeat-rbf-q-r1 PASS) | 2026-11-15 | [MOJOLEARN_KM_FAST_RBF_RESIDENT_OFF.patch](../experiments/removed/MOJOLEARN_KM_FAST_RBF_RESIDENT_OFF.patch) |
+| [`MOJOLEARN_KNN_FAST_MMA_K64_OFF`](#mojolearn_knn_fast_mma_k64_off-old-path-deleted-2026-11-15) | Neighbors (k-NN matrix-unit kernels at k <= 64, FAST Apple) | removed (old path; FAST+Apple default KEPT 857fd5804, core-knn-k64-istella) | 2026-11-15 | [MOJOLEARN_KNN_FAST_MMA_K64_OFF.patch](../experiments/removed/MOJOLEARN_KNN_FAST_MMA_K64_OFF.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -6383,3 +6384,11 @@ bits change on any vendor or the host column, no board row needs re-timing.
 - **Deleted by**: lane/expdel-06-base-cluster-kernel (expdel-06-base-cluster-kernel, docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md); code recoverable at `fd51cb8d40`.
 - **Restore**: `git apply experiments/removed/MOJOLEARN_KM_FAST_RBF_RESIDENT_OFF.patch`, then delete the `MOJOLEARN_KM_FAST_RBF_RESIDENT_OFF` refusal in `core/experiment_guards_base.mojo`.
 - **Records**: refusal in `core/experiment_guards_base.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel-06-base-cluster-kernel section).
+
+## MOJOLEARN_KNN_FAST_MMA_K64_OFF: old path deleted (2026-11-15)
+
+- **What it was**: the FAST+Apple rollback of the matrix-unit k-NN kernels' K = 64 instantiation to the generic tiled arm (`knn_brute_force.mojo::brute_force_knn_impl`) for 32 < k <= 64 (`neighbors/impl/detail/fast_mma_knn.mojo`). Only the define read is deleted: the generic arm stays the path of every other build and of k > 64.
+- **Verdict**: KEPT 857fd5804, FAST+Apple default (EXPERIMENTS.md `KNN_FAST_MMA_K64`, core-knn-k64-istella): M3, knn istella 1,581 -> 352 ms (-78%), recall same. No bit change on any column.
+- **Deleted by**: lane/expdel-06-base-cluster-kernel (expdel-06-base-cluster-kernel, docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md); code recoverable at `66ff49e5d5`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_KNN_FAST_MMA_K64_OFF.patch`, then delete the `MOJOLEARN_KNN_FAST_MMA_K64_OFF` refusal in `core/experiment_guards_cluster.mojo`.
+- **Records**: refusal in `core/experiment_guards_cluster.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel-06-base-cluster-kernel section).
