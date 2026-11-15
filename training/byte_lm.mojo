@@ -48,9 +48,10 @@ from training.neural_identical_experiments import (
     IDN_LM_PARAM_VIEWS, IDN_TRAIN_NO_DECODE_CACHE, IDN_LM_VIEWS_ARM,
 )
 from checks.vendor import COMPILED_VENDOR
-from training.byte_lm_afn import (
-    AFN_LM_PARAM_VIEWS, BYTE_LM_FAST_APPLE, afn_upload_ids,
-)
+# TOMBSTONE: MOJOLEARN_AFN_LM_PARAM_VIEWS / MOJOLEARN_AFN26_LM_PARAM_VIEWS (Apple FAST opt-in, never promoted) folded to False
+# 2026-11-15 by lane/expdel2-31-neural; code recoverable at f6652fc1ac.
+# Restore: git apply experiments/removed/MOJOLEARN_AFN_LM_PARAM_VIEWS.patch
+from training.byte_lm_afn import BYTE_LM_FAST_APPLE, afn_upload_ids
 from training.checkpoint import Checkpoint
 from training.byte_lm_config import ByteConfig, BYTE_LM_PROGRAM_STEP
 from training.checks.train_loop import (
@@ -888,7 +889,7 @@ comptime NN60_BLOCK_VIEWS = (
     and IDN_LM_VIEWS_ARM == 1
     and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 )
-comptime BYTE_LM_BLOCK_VIEWS = AFN_LM_PARAM_VIEWS or NN60_BLOCK_VIEWS or IDN_LM_PARAM_VIEWS
+comptime BYTE_LM_BLOCK_VIEWS = NN60_BLOCK_VIEWS or IDN_LM_PARAM_VIEWS
 comptime BYTE_LM_EMB_HEAD_VIEWS = (
     (TARGET_COLUMN == COLUMN_APPLE or NN60_EMB_HEAD_VIEWS or IDN_LM_PARAM_VIEWS)
     and not is_defined["MOJOLEARN_BYTE_LM_COPY_EMB_HEAD"]()
