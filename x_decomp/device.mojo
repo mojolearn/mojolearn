@@ -3543,6 +3543,9 @@ struct DevExec(Exec):
         var per = k * k + 3 * k
         # TOMBSTONE: MOJOLEARN_DECOMP_FAST_OMP_BLOCK (unmeasured Apple FAST opt-in arm, EXP:449 verdict owed) deleted 2026-11-15 by lane/expdel2-16-decomposition; code recoverable at 6aa22d61f9.
         # Restore: git apply experiments/removed/MOJOLEARN_DECOMP_FAST_OMP_BLOCK.expdel2-16-decomposition.patch; record in docs/TOMBSTONES.md.
+        # TOMBSTONE: MOJOLEARN_DECOMP_FAST_OMP_BLOCK (opt-in arm: one OMP block per row; EXP:449 OPEN, no A/B recorded) deleted 2026-11-15 by lane/expdel2-17-decomposition; code recoverable at 0d75c7cca2.
+        # Restore: git apply experiments/removed/MOJOLEARN_DECOMP_FAST_OMP_BLOCK.patch; record in docs/TOMBSTONES.md.
+        # (Sweep 2026-11-15: x_decomp/omp_block.mojo (DECOMP_FAST_OMP_BLOCK, omp_block_fits, omp_block_kernel), with no importer left, deleted; restore it from 7c6df8f9f7 with the patch.)
         var dg = _up(ctx, g, k * k)
         var dq = _up(ctx, q, n * k)
         var dw = ctx.enqueue_create_buffer[DType.float32](n * k if n * k > 0 else 1)
