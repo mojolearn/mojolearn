@@ -56,7 +56,7 @@ def _poison(patch):
         patch.setattr(_backend, name, _forbidden)
     for name in ("quantize_int8", "dequantize_int8", "quantize_int15", "to_bf16", "from_bf16"):
         patch.setattr(_linalg_impl, name, _forbidden)
-    for name in ("empty", "as_f32_c", "addr", "addr_ro", "all_finite"):
+    for name in ("empty", "addr", "addr_ro", "all_finite"):
         patch.setattr(_buffer, name, _forbidden)
     patch.setattr(json, "loads", _forbidden)
     patch.setattr(np, "empty", _forbidden)

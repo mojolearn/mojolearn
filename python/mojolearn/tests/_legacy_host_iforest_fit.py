@@ -2,7 +2,8 @@
 """Frozen 32011bb32 CPU IsolationForest fit and validation test oracle."""
 import numbers
 from mojolearn import _sk_validate
-from mojolearn._buffer import as_f32_c, all_finite
+from mojolearn._buffer import all_finite
+from mojolearn.tests._typed_input import as_f32_c
 from mojolearn._labels import is_bool
 from mojolearn.tests._legacy_host_inference import iforest
 

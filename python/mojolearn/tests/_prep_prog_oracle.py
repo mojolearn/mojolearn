@@ -21,7 +21,7 @@ import os
 from mojolearn import _arena_io
 from mojolearn import _expansion_prep as _ep
 from mojolearn._array import Array
-from mojolearn._buffer import as_f32_c
+from mojolearn.tests._typed_input import as_f32_c
 from mojolearn._expansion_prep import (
     _OPS, _PROG_CALL, _PROG_CONTEXT, _Scratch, _XB, _blocked,
     _mode, _optional_prep_entry, _prep_binding)
@@ -679,7 +679,8 @@ def _label_buffer(y):
     MOJOLEARN_XPREP_LABELS switch)."""
     if isinstance(y, (list, tuple, str, bytes)):
         return None
-    from ._buffer import Buf, _has_buffer, _materialize, _raw_store_type, typestr_of
+    from mojolearn._buffer import Buf, typestr_of
+    from mojolearn.tests._typed_input import has_buffer as _has_buffer, materialize as _materialize, raw_store_type as _raw_store_type
     if not isinstance(y, Array):
         if not _has_buffer(y):
             return None

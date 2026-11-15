@@ -4,7 +4,8 @@ connected_components and SVGP.fit/predict/score, used only as an independent
 test oracle for their one-call native doors (lane native-neighbors-20261024)."""
 import struct
 
-from mojolearn._buffer import addr, addr_ro, as_f32_c, empty, zeros
+from mojolearn._buffer import addr, addr_ro, empty, zeros
+from mojolearn.tests._typed_input import as_f32_c
 from mojolearn._lazy_out import _empty_out
 from mojolearn._expansion_neighbors import (
     _XNeighbors, _f32, _f32_1d, _i32, _f32_scalar, _p2m_relabel, _OLD_ITEMS, _U_IDENTITY,

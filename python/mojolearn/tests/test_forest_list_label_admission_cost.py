@@ -13,7 +13,7 @@ import numpy as np
 import pytest
 
 import mojolearn as ml
-from mojolearn._buffer import as_f32_c
+from mojolearn.tests._typed_input import as_f32_c
 from mojolearn._labels import flatten_labels
 
 

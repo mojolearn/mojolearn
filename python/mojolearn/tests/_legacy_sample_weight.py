@@ -21,7 +21,8 @@ input is not copied). A caller that writes into the weights must pass
 `copy=True`, so the caller's array is never changed.
 """
 
-from mojolearn._buffer import as_f32_c, as_f64_c, full
+from mojolearn._buffer import full
+from mojolearn.tests._typed_input import as_f32_c, as_f64_c
 from mojolearn._labels import prepare_targets
 
 

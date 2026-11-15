@@ -18,7 +18,7 @@ from mojolearn._verify_native_runtime import audit_native_call
 def _c32(a, name, where):
     """Frozen copy of the former `_training_impl._c32` (deleted from the
     package 2026-11-15 by lane py-buffer): a float32 input as a float32 Array."""
-    from mojolearn._buffer import as_f32_c
+    from mojolearn.tests._typed_input import as_f32_c
     from mojolearn._bufcheck import is_native_f32, probe
     if not is_native_f32(probe(a).format):
         raise TypeError('mojolearn.%s: %s must be float32' % (where, name))

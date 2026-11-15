@@ -85,7 +85,7 @@ def test_fit_predict_score_and_checkpoint_are_native(cls, layout, monkeypatch, t
         x, y = wide_x[::-1, ::2], wide_y[-2::-2]
         assert not x.flags.c_contiguous and not y.flags.c_contiguous
     from mojolearn import _backend, _buffer, _mode, _serialize
-    for owner, name in ((_backend, "binding"), (_buffer, "as_f32_c"), (_mode, "_public_result"),
+    for owner, name in ((_backend, "binding"), (_mode, "_public_result"),
                         (_mode, "_ndarray"), (_serialize, "write_npz"), (_serialize, "read_npz")):
         monkeypatch.setattr(owner, name, forbidden)
     model = clean(cls, numeric_mode="identical")

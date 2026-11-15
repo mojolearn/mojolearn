@@ -372,60 +372,13 @@ _LISTS = [
 def test_list_input_matches_the_recursive_flatten(index):
     value = _LISTS[index]
     _same(lambda: _array._flatten(value), (), group="lists")
-    for convert in (_buffer.as_f32_c, _buffer.as_i64_c, _buffer.as_f64_c):
-        for ndim in (1, 2, None):
-            _same(lambda: convert(value, ndim=ndim, name="X"), (), group="lists")
     _same(lambda: Array.from_list(value, "<f8"), (), group="lists",
           ref_fn=lambda: _array_reference._ArrayReference.from_list(Array, value, "<f8"))
 
 
-def test_big_list_input():
-    rows = _RNG.standard_normal((3000, 7)).tolist()
-    _same(lambda: _buffer.as_f32_c(rows, ndim=2, name="X"), (), group="lists")
-    ints = _RNG.integers(-9, 9, 5000).tolist()
-    _same(lambda: _buffer.as_f32_c(ints, ndim=1, name="y"), ("cast_elements",), group="lists")
-    _same(lambda: _buffer.as_i32_c(ints, ndim=1, name="y"), ("cast_elements",), group="lists")
-
-
-# ----------------------------------------------------------- buffer input
-
-
-def _awkward_buffers():
-    base = _RNG.standard_normal((600, 8))
-    ints = _RNG.integers(-1000, 1000, (600, 8))
-    out = []
-    for dt in (np.float32, np.float64, np.int32, np.int64, np.uint32, np.uint8, np.int16,
-               np.uint16, np.int8, np.uint64, np.float16, bool):
-        block = (ints if np.issubdtype(dt, np.integer) else base)
-        block = np.abs(block).astype(dt) if dt in (np.uint32, np.uint8, np.uint16, np.uint64, bool) \
-            else block.astype(dt)
-        out += [block, block[::2], block[:, ::3], block[::-1], block.T, np.asfortranarray(block),
-                block[:, 0], block[::5, 1]]
-        ro = block.copy()
-        ro.setflags(write=False)
-        out += [ro, ro[::2]]
-        if dt not in (bool, np.uint8, np.int8):
-            out += [block.astype(block.dtype.newbyteorder(">")),
-                    block.astype(block.dtype.newbyteorder(">"))[::2]]
-    snan = np.full(2000, 0x7FA00001, np.uint32).view(np.float32)
-    out += [snan[::2], snan.reshape(1000, 2)[:, 0]]
-    return out
-
-
-def test_buffer_input_matches():
-    for block in _awkward_buffers():
-        for convert in (_buffer.as_f32_c, _buffer.as_f64_c, _buffer.as_i64_c, _buffer.as_i32_c):
-            _same(lambda: convert(block, ndim=None, name="X"), (), group="buffers")
-        if block.ndim == 2:
-            _same(lambda: _buffer.as_f32_colmajor(block, name="X"), (), group="buffers")
-
-
-def test_a_strided_float32_view_takes_the_helper():
-    block = _RNG.standard_normal((4000, 6)).astype(np.float32)
-    _same(lambda: _buffer.as_f32_c(block[::2], ndim=2, name="X"), ("cast_elements",),
-          group="buffers")
-    ints = _RNG.integers(0, 9, (4000, 6)).astype(np.int32)
-    _same(lambda: _buffer.as_f32_c(ints, ndim=2, name="X"), ("cast_elements",), group="buffers")
+# TOMBSTONE: test_big_list_input, _awkward_buffers, test_buffer_input_matches and
+# test_a_strided_float32_view_takes_the_helper (they ran the deleted `_buffer.as_*_c` converters; the
+# "buffers" group went with them) deleted 2026-11-15 by lane py-tail-2; code recoverable at 1a9d8c01bd.
 
 
 # ------------------------------------------------------------------ labels
@@ -722,9 +675,6 @@ def test_block_copy_is_pinned():
     _pinned(_array_reference, "_block_store", lambda: _array_reference._ArrayReference.__getitem__(a, slice(5, 650)), answers=True)
     _pinned(_array_reference, "_block_store", lambda: _array_reference._ArrayReference.__getitem__(a, slice(5, 650, 2)), answers=False)
     _pinned(_array_reference, "_block_store", lambda: _array_reference._ArrayReference.__getitem__(a, slice(5, 20)), answers=False)  # a short run
-    block = _RNG.integers(0, 99, (4000, 3)).astype(np.int64)
-    _pinned(_buffer, "_same_dtype_store", lambda: _buffer.as_i64_c(block[::2], ndim=2, name="X"),
-            answers=True)
 
 
 def test_sabotage_build_diverges():
@@ -736,6 +686,6 @@ def test_sabotage_build_diverges():
         return
     # The "folds" and "indices" groups went with the Python fold/index routes
     # that py-msel-prep-cnn deleted (bfd3f40b9d); no test records them now.
-    groups = {"astype", "getitem", "reduce", "equal", "lists", "buffers", "labels"}
+    groups = {"astype", "getitem", "reduce", "equal", "lists", "labels"}
     missing = groups - set(_DIVERGED)
     assert not missing, f"no divergence seen under sabotage in: {sorted(missing)}"

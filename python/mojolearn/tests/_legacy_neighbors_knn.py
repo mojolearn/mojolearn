@@ -4,7 +4,8 @@ classifier/regressor fit, predict, predict_proba and score, used only as an
 independent test oracle for their one-call native doors
 (bindings/neighbors_knn_native_door.mojo). Each function takes the estimator as
 `self` and runs the former statements in the former order."""
-from mojolearn._buffer import addr, addr_ro, as_f32_c, as_f32_dense_c, as_i64_c, empty
+from mojolearn._buffer import addr, addr_ro, empty
+from mojolearn.tests._typed_input import as_f32_c, as_f32_dense_c, as_i64_c
 from mojolearn._labels import decode_labels, encode_labels
 from mojolearn._array import Array
 from mojolearn._buffer import view
@@ -240,7 +241,8 @@ def whole_float_labels(y):
     the package 2026-11-14 by lane py-admission): True when `y` is a float
     buffer whose every value is a finite whole number."""
     from mojolearn._sk_validate import describe
-    from mojolearn._buffer import _materialize, _native, addr_ro, all_finite
+    from mojolearn._buffer import _native, addr_ro, all_finite
+    from mojolearn.tests._typed_input import materialize as _materialize
     from mojolearn._array import _NATIVE_CODE, _REDUCE_INTEGRAL
     from mojolearn._labels import unique_inverse
     info = describe(y)

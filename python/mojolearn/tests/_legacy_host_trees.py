@@ -10,7 +10,8 @@ import struct
 import weakref
 from mojolearn import _serialize
 from mojolearn._array import Array
-from mojolearn._buffer import addr, addr_ro, as_f32_c, empty, frombytes
+from mojolearn._buffer import addr, addr_ro, empty, frombytes
+from mojolearn.tests._typed_input import as_f32_c
 from mojolearn._labels import argmax_rows, decode_labels
 from mojolearn._forest_host import _load, _ESTIMATORS, _ENGINES, _MODEL_ARRAYS, _GROVES_FAMILY, binary_path
 from mojolearn._gbdt_host import (_TEXT_NAME, _TEXT_VERSION, _NAN_CODES, _PROBA_LOSSES,

@@ -4,7 +4,8 @@
 Product execution never imports this module. Existing native numerical kernels
 remain the independent reference while the surrounding operation is migrated.
 """
-from mojolearn._buffer import as_f32_colmajor, as_f32_c, empty, addr, addr_ro, all_finite
+from mojolearn._buffer import empty, addr, addr_ro, all_finite
+from mojolearn.tests._typed_input import as_f32_colmajor, as_f32_c
 from mojolearn.cluster import _METRIC_NAMES
 from mojolearn._array import Array
 
@@ -39,7 +40,7 @@ def decode_labels(classes, codes):
 def kde_fit(model, X, y=None, sample_weight=None):
     """Frozen 32011bb32 public CPU fit, including outer validation/state."""
     from mojolearn import _sk_validate
-    from mojolearn._buffer import as_f32_dense_c
+    from mojolearn.tests._typed_input import as_f32_dense_c
     from mojolearn.tests._legacy_sample_weight import check_sample_weight
     state = vars(model)
     check = None
@@ -84,7 +85,7 @@ def kde_fit(model, X, y=None, sample_weight=None):
 
 def kde(model, X, total=False):
     """Frozen 32011bb32 CPU KDE preparation and fixed-order total."""
-    from mojolearn._buffer import as_f32_dense_c
+    from mojolearn.tests._typed_input import as_f32_dense_c
     x, _ = as_f32_dense_c(X, ndim=2, name="X")
     if x.shape[1] != model.n_features_in_:
         raise ValueError("KDE query width differs from fit")
@@ -141,7 +142,7 @@ def public_cd_predict(model, X):
 
 def kernel_model(model, X, name, public=True):
     """Frozen 32011bb32 dense/sparse preparation and kernel entry contract."""
-    from mojolearn._buffer import as_f32_dense_c
+    from mojolearn.tests._typed_input import as_f32_dense_c
     import numpy as np
     x, _ = as_f32_dense_c(X, ndim=2, name="X")
     m, d = x.shape
@@ -284,7 +285,7 @@ def logistic(model, X, method):
 
 def svr(model, X):
     """Frozen 32011bb32 SVR's complete input/kernel/gather call layout."""
-    from mojolearn._buffer import as_f32_dense_c
+    from mojolearn.tests._typed_input import as_f32_dense_c
     from mojolearn._svm_impl import _SVR_KERNELS
     from mojolearn.tests._svm_reference import _precomputed_columns
     binding = model._bind("_mojolearn_svm")
@@ -322,7 +323,7 @@ def svr_coefficients(model):
 def svc(model, X, method):
     """Frozen 32011bb32 SVC binary/pair ordering and epilogue contract."""
     import array
-    from mojolearn._buffer import as_f32_dense_c
+    from mojolearn.tests._typed_input import as_f32_dense_c
     from mojolearn._labels import argmax_rows
     from mojolearn._array import Array
 
@@ -451,7 +452,8 @@ def _decode_labels_native(classes, codes, kind):
     `argmax_rows` returns) and the classes are all int or all float. The
     dtype of the answer is the one `decode_labels` documents; a class that
     does not fit int64 leaves the Python arm to raise and fall back."""
-    from mojolearn._buffer import _native, _output_store
+    from mojolearn._buffer import _native
+    from mojolearn.tests._typed_input import output_store as _output_store
 
     if kind not in ("int", "float") or not isinstance(codes, Array):
         return None
