@@ -84,11 +84,16 @@ def test_cross_val_predict_matches_per_fold_fits():
     np.testing.assert_allclose(got, ref, rtol=1e-5, atol=1e-5)
 
 
-def test_cross_val_predict_refuses_parallel_jobs():
-    X = np.zeros((12, 2), np.float32)
+def test_cross_val_predict_parallel_jobs_match_serial():
+    # n_jobs bounds the concurrent fits and never changes the result
+    # (public contract since 9030624670; it used to be refused).
+    rng = np.random.default_rng(3)
+    X = rng.standard_normal((12, 2)).astype(np.float32)
     y = np.arange(12, dtype=np.float32)
-    with pytest.raises(NotImplementedError):
-        cross_val_predict(ml.Ridge(), X, y, cv=3, n_jobs=2)
+    serial = np.asarray(cross_val_predict(ml.Ridge(), X, y, cv=3, n_jobs=1))
+    parallel = np.asarray(cross_val_predict(ml.Ridge(), X, y, cv=3, n_jobs=2))
+    assert parallel.shape == (12,)
+    assert parallel.tobytes() == serial.tobytes()
 
 
 def test_permutation_test_score_counts_its_permutations():
