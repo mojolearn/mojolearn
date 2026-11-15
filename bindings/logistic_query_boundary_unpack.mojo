@@ -49,7 +49,10 @@ def _logistic_width_builtin(value: PythonObject, context: PythonObject) raises -
     # Only exact builtin scalar classes reach their C conversion slots.
     var cls = py_type(value)
     if cls is py_type(PythonObject(0)) or cls is py_type(PythonObject(True)):
-        var overflow = Array[Int32, 1](fill=0)
+        # Native List storage, not Array (smoke-triage C01 pattern, reproduced on the Mac
+        # in an optimized Mojo 1.2 build): an Array whose address goes to a callee as an
+        # Int reads back its fill words afterwards (PyDict_Next looked empty).
+        var overflow = List[Int32](length=1, fill=0)
         var number = cpython_table()[].PyLong_AsLongLongAndOverflow(value._obj_ptr, Int(overflow.unsafe_ptr()))
         if cpython_table()[].PyErr_Occurred():
             var failure = stash_python_error()
