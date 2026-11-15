@@ -83,8 +83,9 @@ _ARCHIVE, _ARCHIVE_CONTEXT = _native_archive_bridge.connect()
 class _ClassicalLinear:
     """The public methods LinearRegression and Ridge share: each is one call
     into the classical native owner (bindings/classical_native_pack.mojo).
-    No class hook; it comes first in both classes' bases, so these methods win
-    over NumericModeMixin's as the classes' own did."""
+    Each owner binds these functions into its own namespace (`name = Holder.name`)
+    instead of inheriting them: the native integrity checks walk every class's
+    ancestry on each call, so an extra base would add work to every call."""
 
     def predict(self, X):
         """Predict with the fitted model.
@@ -240,7 +241,7 @@ class _ClassicalLinear:
 #   finding). cuML's sums accumulate in float32, so coef_ can differ from cuML's
 #   in the last bits on ill-conditioned data.
 # - Honored/refused rows were measured by tools/e2u_matrix_fit.py.
-class LinearRegression(_ClassicalLinear, NumericModeMixin):
+class LinearRegression(NumericModeMixin):
     """Ordinary least squares linear regression.
 
     Fits ``y ~ X @ coef_ + intercept_`` by minimizing the sum of squared
@@ -295,6 +296,15 @@ class LinearRegression(_ClassicalLinear, NumericModeMixin):
     >>> model = mojolearn.LinearRegression().fit(X, y)
     >>> pred = model.predict(X)
     """
+    predict = _ClassicalLinear.predict
+    score = _ClassicalLinear.score
+    get_params = _ClassicalLinear.get_params
+    set_params = _ClassicalLinear.set_params
+    _get_param_names = vars(_ClassicalLinear)["_get_param_names"]
+    __sklearn_is_fitted__ = _ClassicalLinear.__sklearn_is_fitted__
+    __sklearn_tags__ = _ClassicalLinear.__sklearn_tags__
+    vendor_used = _ClassicalLinear.vendor_used
+    numeric_mode_used = _ClassicalLinear.numeric_mode_used
 
     #: scikit-learn's estimator kind: `cross_val_score` stratifies a
     #: classifier's default folds, as scikit-learn's does.
@@ -407,7 +417,7 @@ class LinearRegression(_ClassicalLinear, NumericModeMixin):
 #                  column): `fit` sends both to the x_linear ridge kernel
 #                  (x_linear/ridge.mojo, weighted means + Cholesky; lane sk-edges)
 #   y 2-D          refused, one target only
-class Ridge(_ClassicalLinear, NumericModeMixin):
+class Ridge(NumericModeMixin):
     """Linear least squares with l2 regularization.
 
     Minimizes ``||y - X w||^2 + alpha * ||w||^2``, the same objective and
@@ -465,6 +475,15 @@ class Ridge(_ClassicalLinear, NumericModeMixin):
     >>> model = mojolearn.Ridge(alpha=0.5).fit(X, y)
     >>> pred = model.predict(X)
     """
+    predict = _ClassicalLinear.predict
+    score = _ClassicalLinear.score
+    get_params = _ClassicalLinear.get_params
+    set_params = _ClassicalLinear.set_params
+    _get_param_names = vars(_ClassicalLinear)["_get_param_names"]
+    __sklearn_is_fitted__ = _ClassicalLinear.__sklearn_is_fitted__
+    __sklearn_tags__ = _ClassicalLinear.__sklearn_tags__
+    vendor_used = _ClassicalLinear.vendor_used
+    numeric_mode_used = _ClassicalLinear.numeric_mode_used
 
     #: scikit-learn's estimator kind: `cross_val_score` stratifies a
     #: classifier's default folds, as scikit-learn's does.

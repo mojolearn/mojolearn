@@ -276,7 +276,7 @@ _native_archive_bridge.register(_RandomForestBase, _MODEL_FORMATS, _SAVE_SCHEMA)
 # substituted 16 until 2026-09-01 (DEVIATION 409, closed by aligning).
 # `max_leaf_nodes` is refused by name (DEVIATION 408, see _MAX_LEAF_NODES_WHY).
 @forest_estimator("classifier")
-class RandomForestClassifier(ForestClassifierPredict, _RandomForestBase):
+class RandomForestClassifier(_RandomForestBase):
     """Random forest classifier with cuML's defaults.
 
     An ensemble of bootstrapped decision trees whose split thresholds are
@@ -386,6 +386,7 @@ class RandomForestClassifier(ForestClassifierPredict, _RandomForestBase):
     >>> model = mojolearn.RandomForestClassifier(n_estimators=50).fit(X, y)
     >>> proba = model.predict_proba(X)
     """
+    predict = ForestClassifierPredict.predict
 
     def __init__(
         self,

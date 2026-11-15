@@ -100,7 +100,10 @@ _DT_DEPTH = None
 
 
 class _TreeSave:
-    """The single trees' `save` (one native call), shared by both."""
+    """The single trees' `save` (one native call), shared by both.
+    Each owner binds these functions into its own namespace (`name = Holder.name`)
+    instead of inheriting them: the native integrity checks walk every class's
+    ancestry on each call, so an extra base would add work to every call."""
 
     def save(self, path):
         """Save the fitted tree to ``path``.
@@ -114,7 +117,7 @@ class _TreeSave:
 # sample_weight goes through the weighted RF fit entry (the weighted
 # objective; its CPU restatement is ensemble/host/rf_oracle.mojo).
 @forest_estimator("classifier")
-class DecisionTreeClassifier(_TreeSave, RandomForestClassifier):
+class DecisionTreeClassifier(RandomForestClassifier):
     """A single classification tree (CART).
 
     Follows scikit-learn's ``DecisionTreeClassifier``: one tree grown on every
@@ -194,6 +197,7 @@ class DecisionTreeClassifier(_TreeSave, RandomForestClassifier):
     >>> model = mojolearn.DecisionTreeClassifier(max_depth=4).fit(X, y)
     >>> proba = model.predict_proba(X)
     """
+    save = _TreeSave.save
 
     def __init__(
         self,
@@ -262,7 +266,7 @@ class DecisionTreeClassifier(_TreeSave, RandomForestClassifier):
 # sample_weight goes through the weighted regressor entry
 # (rf_regressor_fit_weighted). n_bins=None resolves at fit through `_dt_tier_bins`.
 @forest_estimator("regressor")
-class DecisionTreeRegressor(_TreeSave, RandomForestRegressor):
+class DecisionTreeRegressor(RandomForestRegressor):
     """A single regression tree (CART).
 
     Follows scikit-learn's ``DecisionTreeRegressor``: one tree grown on every
@@ -338,6 +342,7 @@ class DecisionTreeRegressor(_TreeSave, RandomForestRegressor):
     >>> model = mojolearn.DecisionTreeRegressor(max_depth=6).fit(X, y)
     >>> pred = model.predict(X)
     """
+    save = _TreeSave.save
 
     def __init__(
         self,
@@ -540,7 +545,10 @@ class _BaggingBase(_TreesEnsembleBase):
 
 class _BoostClassifierScore:
     """The bagged and boosted classifiers' `score`: one native call (the native
-    predict and the native accuracy)."""
+    predict and the native accuracy).
+    Each owner binds these functions into its own namespace (`name = Holder.name`)
+    instead of inheriting them: the native integrity checks walk every class's
+    ancestry on each call, so an extra base would add work to every call."""
 
     def score(self, X, y, sample_weight=None):
         """Mean accuracy of ``predict(X)`` against ``y``.
@@ -565,7 +573,10 @@ class _BoostClassifierScore:
 
 class _BoostRegressorScore:
     """The bagged and boosted regressors' `score`: one native call (the native
-    predict and the native R^2)."""
+    predict and the native R^2).
+    Each owner binds these functions into its own namespace (`name = Holder.name`)
+    instead of inheriting them: the native integrity checks walk every class's
+    ancestry on each call, so an extra base would add work to every call."""
 
     def score(self, X, y, sample_weight=None):
         """Coefficient of determination R^2 of ``predict(X)`` against ``y``.
@@ -587,7 +598,7 @@ class _BoostRegressorScore:
         return _TREES(self, _OP.trees_public_boost_score, (X, y, sample_weight), _TREES_CONTEXT)
 
 
-class BaggingClassifier(_BoostClassifierScore, ClassifierScoreMixin, _BaggingBase):
+class BaggingClassifier(ClassifierScoreMixin, _BaggingBase):
     """A bagging ensemble of classifiers.
 
     Follows scikit-learn's ``BaggingClassifier``: each member is fitted on a
@@ -664,6 +675,7 @@ class BaggingClassifier(_BoostClassifierScore, ClassifierScoreMixin, _BaggingBas
     >>> model = mojolearn.BaggingClassifier(n_estimators=20, random_state=0).fit(X, y)
     >>> proba = model.predict_proba(X)
     """
+    score = _BoostClassifierScore.score
     _estimator_type = "classifier"
     #: the native lifecycle owner (trees_public_boost_*) tracks fits and validates inputs;
     #: no Python fit-tracking or output wrappers are installed
@@ -707,7 +719,7 @@ class BaggingClassifier(_BoostClassifierScore, ClassifierScoreMixin, _BaggingBas
         """Predict the class with the highest mean probability."""
         return _TREES(self, _OP.trees_public_boost_predict, (X,), _TREES_CONTEXT)
 
-class BaggingRegressor(_BoostRegressorScore, RegressorScoreMixin, _BaggingBase):
+class BaggingRegressor(RegressorScoreMixin, _BaggingBase):
     """A bagging ensemble of regressors.
 
     Follows scikit-learn's ``BaggingRegressor``: each member is fitted on a
@@ -777,6 +789,7 @@ class BaggingRegressor(_BoostRegressorScore, RegressorScoreMixin, _BaggingBase):
     >>> model = mojolearn.BaggingRegressor(n_estimators=20, random_state=0).fit(X, y)
     >>> pred = model.predict(X)
     """
+    score = _BoostRegressorScore.score
     _estimator_type = "regressor"
     #: the native lifecycle owner (trees_public_boost_*) tracks fits and validates inputs;
     #: no Python fit-tracking or output wrappers are installed
@@ -830,7 +843,7 @@ class _AdaBoostBase(_TreesEnsembleBase):
         self.learning_rate = learning_rate
         self.random_state = random_state
 
-class AdaBoostClassifier(_BoostClassifierScore, ClassifierScoreMixin, _AdaBoostBase):
+class AdaBoostClassifier(ClassifierScoreMixin, _AdaBoostBase):
     """An AdaBoost classifier (SAMME).
 
     Follows scikit-learn's ``AdaBoostClassifier`` with the SAMME algorithm:
@@ -887,6 +900,7 @@ class AdaBoostClassifier(_BoostClassifierScore, ClassifierScoreMixin, _AdaBoostB
     >>> model = mojolearn.AdaBoostClassifier(n_estimators=50).fit(X, y)
     >>> proba = model.predict_proba(X)
     """
+    score = _BoostClassifierScore.score
     _estimator_type = "classifier"
     #: the native lifecycle owner (trees_public_boost_*) tracks fits and validates inputs;
     #: no Python fit-tracking or output wrappers are installed
@@ -943,7 +957,7 @@ class AdaBoostClassifier(_BoostClassifierScore, ClassifierScoreMixin, _AdaBoostB
         """Predict the class with the highest weighted vote."""
         return _TREES(self, _OP.trees_public_boost_predict, (X,), _TREES_CONTEXT)
 
-class AdaBoostRegressor(_BoostRegressorScore, RegressorScoreMixin, _AdaBoostBase):
+class AdaBoostRegressor(RegressorScoreMixin, _AdaBoostBase):
     """An AdaBoost regressor (AdaBoost.R2).
 
     Follows scikit-learn's ``AdaBoostRegressor``: each member is fitted on a
@@ -996,6 +1010,7 @@ class AdaBoostRegressor(_BoostRegressorScore, RegressorScoreMixin, _AdaBoostBase
     >>> model = mojolearn.AdaBoostRegressor(n_estimators=50, random_state=0).fit(X, y)
     >>> pred = model.predict(X)
     """
+    score = _BoostRegressorScore.score
     _estimator_type = "regressor"
     #: the native lifecycle owner (trees_public_boost_*) tracks fits and validates inputs;
     #: no Python fit-tracking or output wrappers are installed
@@ -1069,7 +1084,7 @@ class _DARTBase(_TreesEnsembleBase):
     # one gathered sum per row (the docstring of dart_device.mojo).
     _DART_VALUES_CAP = 1 << 26
 
-class DARTRegressor(_BoostRegressorScore, RegressorScoreMixin, _DARTBase):
+class DARTRegressor(RegressorScoreMixin, _DARTBase):
     """Gradient boosting with DART dropout, squared-error loss.
 
     Follows LightGBM's ``boosting="dart"`` with the L2 objective: in each
@@ -1153,6 +1168,7 @@ class DARTRegressor(_BoostRegressorScore, RegressorScoreMixin, _DARTBase):
     >>> model = mojolearn.DARTRegressor(n_estimators=50).fit(X, y)
     >>> pred = model.predict(X)
     """
+    score = _BoostRegressorScore.score
     _estimator_type = "regressor"
     #: the native lifecycle owner (trees_public_boost_*) tracks fits and validates inputs;
     #: no Python fit-tracking or output wrappers are installed
@@ -1185,7 +1201,7 @@ class DARTRegressor(_BoostRegressorScore, RegressorScoreMixin, _DARTBase):
         """Raw boosted score of each row, float64."""
         return _TREES(self, _OP.trees_public_boost_predict, (X,), _TREES_CONTEXT)
 
-class DARTClassifier(_BoostClassifierScore, ClassifierScoreMixin, _DARTBase):
+class DARTClassifier(ClassifierScoreMixin, _DARTBase):
     """Gradient boosting with DART dropout, classification.
 
     Follows LightGBM's ``boosting="dart"``: binary log loss for two classes,
@@ -1272,6 +1288,7 @@ class DARTClassifier(_BoostClassifierScore, ClassifierScoreMixin, _DARTBase):
     >>> model = mojolearn.DARTClassifier(n_estimators=50).fit(X, y)
     >>> proba = model.predict_proba(X)
     """
+    score = _BoostClassifierScore.score
     _estimator_type = "classifier"
     #: the native lifecycle owner (trees_public_boost_*) tracks fits and validates inputs;
     #: no Python fit-tracking or output wrappers are installed

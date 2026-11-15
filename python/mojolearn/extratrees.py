@@ -184,7 +184,7 @@ _native_archive_bridge.register(_ExtraTreesBase, _MODEL_FORMATS, (
 # Maintainer note (moved from the docstring): `predict_proba` is
 # `forest_vote`'s average of per-tree leaf distributions (cuML
 # `randomforest.cuh:229-242`); `predict` is its argmax through `classes_`.
-class ExtraTreesClassifier(ForestClassifierPredict, _ExtraTreesBase):
+class ExtraTreesClassifier(_ExtraTreesBase):
     """Extra-trees classifier with scikit-learn's defaults.
 
     Extremely randomized trees: each split draws one random threshold per
@@ -277,6 +277,7 @@ class ExtraTreesClassifier(ForestClassifierPredict, _ExtraTreesBase):
     >>> model = mojolearn.ExtraTreesClassifier(n_estimators=50).fit(X, y)
     >>> proba = model.predict_proba(X)
     """
+    predict = ForestClassifierPredict.predict
 
     def __init__(
         self,

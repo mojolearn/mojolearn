@@ -217,7 +217,9 @@ class ForestArchive:
 
 class ForestClassifierPredict:
     """The forest classifiers' `predict` (RandomForestClassifier,
-    ExtraTreesClassifier): one native call. First in their bases."""
+    ExtraTreesClassifier): one native call, bound into each class's own
+    namespace (`predict = ForestClassifierPredict.predict`), not inherited: the
+    native integrity checks walk every class's ancestry on each call."""
 
     def predict(self, X):
         """Predicted class labels: the argmax of `predict_proba`, first
