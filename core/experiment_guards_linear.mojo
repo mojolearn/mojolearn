@@ -158,6 +158,12 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_IDN_GRAM_FF_FALLBACK_OFF"](), "removed 2026-11-15 (lane/expdel2-05-base): IDN_GRAM_FF_FALLBACK_OFF (rollback of the Ridge float-float Gram second chance to the direct eig route) is gone; the float-float fallback is the IDENTICAL path"
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_GFF_GRAM_TILED_OFF.patch
     comptime assert not is_defined["MOJOLEARN_IDN_GFF_GRAM_TILED_OFF"](), "removed 2026-11-15 (lane/expdel2-05-base): IDN_GFF_GRAM_TILED_OFF (rollback of the float-float leaf Gram to the per-cell gff_leaf_kernel) is gone; the register-tiled leaf Gram is the IDENTICAL path"
+    # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C08_UNIQUE_SCAN_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_CLASSICAL_C08_UNIQUE_SCAN_OFF"](), "removed 2026-11-15 (lane/expdel2-07-base): CLASSICAL_C08_UNIQUE_SCAN_OFF (Prep (unique_cols one-thread-per-column walk, IDENTICAL old path)) was old path, superseded by the measured IDENTICAL default; the default is the only path; code recoverable at 9b76c98115; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C02_LINEAR_PAIR.patch
+    comptime assert not is_defined["MOJOLEARN_CLASSICAL_C02_LINEAR_PAIR"](), "removed 2026-11-15 (lane/expdel2-07-base): CLASSICAL_C02_LINEAR_PAIR (Linear (OLS / Ridge independent C02 linear sums, IDENTICAL)) was unmeasured opt-in arm; the opt-in arm is gone and the default path is unchanged; code recoverable at c95b22c391; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C05_OLS_PHASE.patch
+    comptime assert not is_defined["MOJOLEARN_CLASSICAL_C05_OLS_PHASE"](), "removed 2026-11-15 (lane/expdel2-07-base): CLASSICAL_C05_OLS_PHASE (Linear (invocation-owned OLS covariance / inverse phase storage, IDENTICAL)) was unmeasured opt-in arm; the opt-in arm is gone and the default path is unchanged; code recoverable at eb67cbe21f; see docs/TOMBSTONES.md"
     return True
 
 

@@ -23,167 +23,6 @@
       "status": "kept",
       "note": "256-lane fixed halving tree, two streams per barrier; StandardScaler mean pass only (finite input)."
     },
-    "c02_linear_pair": {
-      "define": "MOJOLEARN_CLASSICAL_C02_LINEAR_PAIR",
-      "kind": "switch",
-      "arms": {
-        "off": [],
-        "on": [
-          "MOJOLEARN_CLASSICAL_C02_LINEAR_PAIR"
-        ]
-      },
-      "default": "off",
-      "source": [
-        "glm/impl/center_device.mojo:302"
-      ],
-      "binding": "_mojolearn_estimators,_mojolearn_x_decomp",
-      "bits_change": true,
-      "status": "kept",
-      "note": "row-block x column exact integer accumulation + incumbent cs_fold_kernel; bits_change assumed until the ID check."
-    },
-    "c05_phase_scratch": {
-      "define": "MOJOLEARN_CLASSICAL_C05_PHASE_SCRATCH",
-      "kind": "switch",
-      "arms": {
-        "off": [],
-        "on": [
-          "MOJOLEARN_CLASSICAL_C05_PHASE_SCRATCH"
-        ]
-      },
-      "default": "off",
-      "source": [
-        "x_metrics/plan.mojo:359",
-        "x_metrics/plan.mojo:570"
-      ],
-      "binding": "_mojolearn_x_metrics",
-      "bits_change": false,
-      "status": "kept",
-      "note": "host arena offset planning only. Board @report workloads currently raise in the adapter (metric_workloads.py:58, report settings pending) before any report: NOT MEASURABLE until that is fixed."
-    },
-    "c05_ols_phase": {
-      "define": "MOJOLEARN_CLASSICAL_C05_OLS_PHASE",
-      "kind": "switch",
-      "arms": {
-        "off": [],
-        "on": [
-          "MOJOLEARN_CLASSICAL_C05_OLS_PHASE"
-        ]
-      },
-      "default": "off",
-      "source": [
-        "glm/estimator.mojo:119",
-        "glm/estimator.mojo:208",
-        "glm/estimator.mojo:340"
-      ],
-      "binding": "_mojolearn_estimators",
-      "bits_change": false,
-      "status": "kept",
-      "grid": "exclude",
-      "note": "UNREACHED: classical:ols takes the TSQR route (x_decomp/api.mojo:585 IDN_OLS_ONE_ENTRY) and never calls ols_fit; :208 is FAST-Apple only, :340 weighted only."
-    },
-    "c52_pair_rows": {
-      "define": "MOJOLEARN_C52_PAIR_ROWS",
-      "kind": "arms",
-      "arms": {
-        "off": [],
-        "128": [
-          "MOJOLEARN_C52_PAIR_ROWS=128"
-        ],
-        "512": [
-          "MOJOLEARN_C52_PAIR_ROWS=512"
-        ]
-      },
-      "default": "off",
-      "source": [
-        "experiments/classical_identical_ideas/stats_controls.mojo:16",
-        "kde/impl/neighbors/kernel_density.mojo:3548",
-        "kde/impl/neighbors/kernel_density.mojo:3699",
-        "kde/impl/neighbors/kernel_density.mojo:3792",
-        "kde/host/kde_oracle.mojo:295"
-      ],
-      "binding": "_mojolearn_estimators (+ _mojolearn_estimators_host: build the host column with the same define)",
-      "bits_change": true,
-      "status": "split_from:C52_PAIR_128+C52_PAIR_512",
-      "note": "leaf 256 -> 128|512 and pair_parts combine tree; host oracle follows the same define."
-    },
-    "c58_series4": {
-      "define": "MOJOLEARN_C58_SERIES4",
-      "kind": "switch",
-      "arms": {
-        "off": [],
-        "on": [
-          "MOJOLEARN_C58_SERIES4"
-        ]
-      },
-      "default": "off",
-      "source": [
-        "holtwinters/impl/internal/hw_estimate.mojo:703",
-        "holtwinters/impl/internal/hw_estimate_launch.mojo:126"
-      ],
-      "binding": "_mojolearn_tsa",
-      "bits_change": false,
-      "status": "kept",
-      "grid": "exclude",
-      "note": "UNREACHED on the board: serial estimate arm only (frequency + 5 > HW_EST_BLOCK=64); board ets uses seasonal_periods=24."
-    },
-    "c58_team_mib": {
-      "define": "MOJOLEARN_C58_TEAM_MIB",
-      "kind": "int_sweep",
-      "arms": {
-        "256": [],
-        "64": [
-          "MOJOLEARN_C58_TEAM_MIB=64"
-        ]
-      },
-      "default": "256",
-      "source": [
-        "experiments/classical_identical_ideas/stats_controls.mojo:34",
-        "sequence/fit_team_py.mojo:54"
-      ],
-      "binding": "_mojolearn_x_sequence",
-      "bits_change": false,
-      "status": "split_from:C58_TEAM64",
-      "grid": "exclude",
-      "note": "memory budget; at board size (64 series, prophet ~13.6 MB, garch ~6.8 MB) G=64 either way: no-op."
-    },
-    "c59_trial_state": {
-      "define": "MOJOLEARN_C59_TRIAL_STATE",
-      "kind": "switch",
-      "arms": {
-        "off": [],
-        "on": [
-          "MOJOLEARN_C59_TRIAL_STATE"
-        ]
-      },
-      "default": "off",
-      "source": [
-        "arima/impl/batched_kalman.mojo:673",
-        "arima/impl/fast_eval_ws.mojo:343"
-      ],
-      "binding": "_mojolearn_arima",
-      "bits_change": false,
-      "status": "kept",
-      "note": "one observation copy instead of N+1; indexing only."
-    },
-    "c60_lag4": {
-      "define": "MOJOLEARN_C60_LAG4",
-      "kind": "switch",
-      "arms": {
-        "off": [],
-        "on": [
-          "MOJOLEARN_C60_LAG4"
-        ]
-      },
-      "default": "off",
-      "source": [
-        "tsa/impl/timeSeries/stationarity.mojo:233",
-        "tsa/impl/select_d_fast.mojo:202"
-      ],
-      "binding": "_mojolearn_tsa",
-      "bits_change": false,
-      "status": "kept",
-      "note": "4 adjacent cells per thread, ascending per-cell sums; autoarima d=0 round only (max_d=1)."
-    },
     "arima_search_reuse": {
       "define": "MOJOLEARN_ARIMA_FAST_SEARCH_REUSE",
       "kind": "switch",
@@ -216,17 +55,13 @@
     "classical:ols": {
       "binding": "_mojolearn_x_decomp",
       "route": "fit: LinearRegression.fit (linear_model.py:694) -> _ols_tsqr_centered -> x_decomp_ols_tsqr_r -> ols_tsqr_factor (x_decomp/device.mojo:4133: X and y up once, col_sums_pair_buf, col_means_buf, ts_pack_center_device, ts_factor_device) -> _tsqr_lstsq_core(Ra=...) small-R SVD",
-      "controls": [
-        "c02_linear_pair"
-      ],
+      "controls": [],
       "interaction_groups": []
     },
     "more:ridge": {
       "binding": "_mojolearn_estimators",
       "route": "fit: Ridge.fit -> _classical_xy_means -> lm_col_sums_pair -> col_sums_pair_device",
-      "controls": [
-        "c02_linear_pair"
-      ],
+      "controls": [],
       "interaction_groups": []
     },
     "expanded:lu-solve": {
@@ -327,9 +162,7 @@
     "classical:kde": {
       "binding": "_mojolearn_estimators",
       "route": "score_samples: kde_score_samples_binding -> kernel_density.mojo:4029 chunk-LSE pass -> kde_chunk_rows_for (:3548) -> reduce kernels (:3699, :3792)",
-      "controls": [
-        "c52_pair_rows"
-      ],
+      "controls": [],
       "interaction_groups": []
     },
     "more:ets": {
@@ -377,33 +210,25 @@
     "expanded:garch": {
       "binding": "_mojolearn_x_sequence",
       "route": "fit: garch_binding/prophet -> fit_team_py _group -> launch_team -> team_kernel",
-      "controls": [
-        "c58_team_mib"
-      ],
+      "controls": [],
       "interaction_groups": []
     },
     "expanded:prophet": {
       "binding": "_mojolearn_x_sequence",
       "route": "fit: garch_binding/prophet -> fit_team_py _group -> launch_team -> team_kernel",
-      "controls": [
-        "c58_team_mib"
-      ],
+      "controls": [],
       "interaction_groups": []
     },
     "more:arima": {
       "binding": "_mojolearn_arima",
       "route": "fit: ARIMA.fit -> arima/estimator.mojo:511 batched_fit_x -> batched_fit.mojo:498 -> FastEvalWS loop kernel (batched_kalman.mojo:673)",
-      "controls": [
-        "c59_trial_state"
-      ],
+      "controls": [],
       "interaction_groups": []
     },
     "expanded:autoarima": {
       "binding": "_mojolearn_tsa (select_d) + _mojolearn_arima (fits)",
       "route": "select_d -> select_d_host -> auto_arima.mojo:74 -> select_d_fast (C60_LAG4, stationarity.mojo:233); order search -> fast_order_search (search reuse) ; per-order ARIMA.fit (C59)",
       "controls": [
-        "c60_lag4",
-        "c59_trial_state",
         "arima_search_reuse"
       ],
       "interaction_groups": [
@@ -524,6 +349,46 @@
       "define": "MOJOLEARN_C62_SAME_COMPONENT_SKIP",
       "control": "c61_same_component_skip",
       "reason": "DELETED 2026-11-15 (lane/expdel2-05-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md): unmeasured opt-in arm (V2 rule a). Code recoverable at 774f01dc6b."
+    },
+    {
+      "define": "MOJOLEARN_CLASSICAL_C05_PHASE_SCRATCH",
+      "control": "c05_phase_scratch",
+      "reason": "DELETED 2026-11-15 (lane/expdel2-07-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md; recoverable at 1ebc49831d; patch experiments/removed/MOJOLEARN_CLASSICAL_C05_PHASE_SCRATCH.patch): unmeasured opt-in arm. no record: no A/B was recorded for the opt-in arm (plan rule a; AGENTS.md \"An unmeasured arm is deleted\", Andrew 2026-11-15). Refused in core/experiment_guards_base.mojo; docs/TOMBSTONES.md."
+    },
+    {
+      "define": "MOJOLEARN_CLASSICAL_C02_LINEAR_PAIR",
+      "control": "c02_linear_pair",
+      "reason": "DELETED 2026-11-15 (lane/expdel2-07-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md; recoverable at c95b22c391; patch experiments/removed/MOJOLEARN_CLASSICAL_C02_LINEAR_PAIR.patch): unmeasured opt-in arm. no record: no A/B was recorded for the opt-in arm (plan rule a; AGENTS.md \"An unmeasured arm is deleted\", Andrew 2026-11-15). Refused in core/experiment_guards_linear.mojo; docs/TOMBSTONES.md."
+    },
+    {
+      "define": "MOJOLEARN_CLASSICAL_C05_OLS_PHASE",
+      "control": "c05_ols_phase",
+      "reason": "DELETED 2026-11-15 (lane/expdel2-07-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md; recoverable at eb67cbe21f; patch experiments/removed/MOJOLEARN_CLASSICAL_C05_OLS_PHASE.patch): unmeasured opt-in arm. no record: no A/B was recorded for the opt-in arm (plan rule a; AGENTS.md \"An unmeasured arm is deleted\", Andrew 2026-11-15). Refused in core/experiment_guards_linear.mojo; docs/TOMBSTONES.md."
+    },
+    {
+      "define": "MOJOLEARN_C52_PAIR_ROWS",
+      "control": "c52_pair_rows",
+      "reason": "DELETED 2026-11-15 (lane/expdel2-07-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md; recoverable at dd94b7ad88; patch experiments/removed/MOJOLEARN_C52_PAIR_ROWS.patch): unmeasured opt-in arm. no record: no A/B was recorded for the opt-in arm (plan rule a; AGENTS.md \"An unmeasured arm is deleted\", Andrew 2026-11-15). Refused in core/experiment_guards_kernel.mojo; docs/TOMBSTONES.md."
+    },
+    {
+      "define": "MOJOLEARN_C58_SERIES4",
+      "control": "c58_series4",
+      "reason": "DELETED 2026-11-15 (lane/expdel2-07-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md; recoverable at 236e97faa2; patch experiments/removed/MOJOLEARN_C58_SERIES4.patch): unmeasured opt-in arm. no record: no A/B was recorded for the opt-in arm (plan rule a; AGENTS.md \"An unmeasured arm is deleted\", Andrew 2026-11-15). Refused in core/experiment_guards_series.mojo; docs/TOMBSTONES.md."
+    },
+    {
+      "define": "MOJOLEARN_C58_TEAM_MIB",
+      "control": "c58_team_mib",
+      "reason": "DELETED 2026-11-15 (lane/expdel2-07-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md; recoverable at d6045cbd0a; patch experiments/removed/MOJOLEARN_C58_TEAM_MIB.patch): unmeasured opt-in arm. no record: no A/B was recorded for the opt-in arm (plan rule a; AGENTS.md \"An unmeasured arm is deleted\", Andrew 2026-11-15). Refused in core/experiment_guards_neural.mojo; docs/TOMBSTONES.md."
+    },
+    {
+      "define": "MOJOLEARN_C59_TRIAL_STATE",
+      "control": "c59_trial_state",
+      "reason": "DELETED 2026-11-15 (lane/expdel2-07-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md; recoverable at 7935a1db35; patch experiments/removed/MOJOLEARN_C59_TRIAL_STATE.patch): unmeasured opt-in arm. no record: no A/B was recorded for the opt-in arm (plan rule a; AGENTS.md \"An unmeasured arm is deleted\", Andrew 2026-11-15). Refused in core/experiment_guards_series.mojo; docs/TOMBSTONES.md."
+    },
+    {
+      "define": "MOJOLEARN_C60_LAG4",
+      "control": "c60_lag4",
+      "reason": "DELETED 2026-11-15 (lane/expdel2-07-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md; recoverable at ad78b8054f; patch experiments/removed/MOJOLEARN_C60_LAG4.patch): unmeasured opt-in arm. no record: no A/B was recorded for the opt-in arm (plan rule a; AGENTS.md \"An unmeasured arm is deleted\", Andrew 2026-11-15). Refused in core/experiment_guards_series.mojo; docs/TOMBSTONES.md."
     }
   ],
   "owed_removal_ab": [

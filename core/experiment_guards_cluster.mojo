@@ -175,6 +175,8 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_IVF_DIRECT_DISTANCE_OFF"](), "removed 2026-11-15 (lane/expdel2-05-base): IVF_DIRECT_DISTANCE_OFF (rollback of the IVF scan to the distance expansion) is gone; the direct distances are the IDENTICAL path"
     # Restore: git apply experiments/removed/MOJOLEARN_C62_SAME_COMPONENT_SKIP.patch
     comptime assert not is_defined["MOJOLEARN_C62_SAME_COMPONENT_SKIP"](), "removed 2026-11-15 (lane/expdel2-05-base): C62_SAME_COMPONENT_SKIP (opt-in HDBSCAN same-component tile skip, never measured) is gone; the incumbent tiled search is the only one"
+    # Restore: git apply experiments/removed/MOJOLEARN_C53_CENTER4.patch
+    comptime assert not is_defined["MOJOLEARN_C53_CENTER4"](), "removed 2026-11-15 (lane/expdel2-07-base): C53_CENTER4 (Mixture (GMM / BGMM centered-component staging, IDENTICAL)) was unmeasured opt-in arm; the opt-in arm is gone and the default path is unchanged; code recoverable at f76fba175b; see docs/TOMBSTONES.md"
     return True
 
 

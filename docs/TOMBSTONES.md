@@ -835,6 +835,46 @@ in the tables after the sections.
 | [`MOJOLEARN_AFT_P10`](#mojolearn_aft_p10-never-run-card-deleted-2026-11-15) | Apple FAST trees programme (P) | removed (never-run card; default kept) | 2026-11-15 | [MOJOLEARN_AFT_P10.patch](../experiments/removed/MOJOLEARN_AFT_P10.patch) |
 | [`MOJOLEARN_AFT_P11`](#mojolearn_aft_p11-never-run-card-deleted-2026-11-15) | Apple FAST trees programme (P) | removed (never-run card; default kept) | 2026-11-15 | [MOJOLEARN_AFT_P11.patch](../experiments/removed/MOJOLEARN_AFT_P11.patch) |
 | [`MOJOLEARN_AFT_P12`](#mojolearn_aft_p12-never-run-card-deleted-2026-11-15) | Apple FAST trees programme (P) | removed (never-run card; default kept) | 2026-11-15 | [MOJOLEARN_AFT_P12.patch](../experiments/removed/MOJOLEARN_AFT_P12.patch) |
+| [`MOJOLEARN_CLASSICAL_C01_LEAF`](#mojolearn_classical_c01_leaf-arm-deleted-2026-11-15) | Metrics (regression-metrics PairSum leaf length sweep 32/64/128, IDENTICAL) | removed (opt-in arm; EXP:1530 DROPPED-slower record, no winning arm) | 2026-11-15 | [MOJOLEARN_CLASSICAL_C01_LEAF.patch](../experiments/removed/MOJOLEARN_CLASSICAL_C01_LEAF.patch) |
+| [`MOJOLEARN_CLASSICAL_C01_MEAN`](#mojolearn_classical_c01_mean-unmeasured-arm-deleted-2026-11-15) | Decomposition (PCA / TSVD column mean as leaf column sums + binary-counter fold, IDENTICAL) | removed (opt-in arm; EXP:1530 names it as the replacement, no A/B of its own) | 2026-11-15 | [MOJOLEARN_CLASSICAL_C01_MEAN.patch](../experiments/removed/MOJOLEARN_CLASSICAL_C01_MEAN.patch) |
+| [`MOJOLEARN_CLASSICAL_C03_FINITE_EXTREMA`](#mojolearn_classical_c03_finite_extrema-unmeasured-arm-deleted-2026-11-15) | Preprocessing (MinMaxScaler finite extrema, IDENTICAL) | removed (unmeasured opt-in arm) | 2026-11-15 | [MOJOLEARN_CLASSICAL_C03_FINITE_EXTREMA.patch](../experiments/removed/MOJOLEARN_CLASSICAL_C03_FINITE_EXTREMA.patch) |
+| [`MOJOLEARN_CLASSICAL_C04_LDA`](#mojolearn_classical_c04_lda-unmeasured-arm-deleted-2026-11-15) | Prep (LDA transform centered_matmul, IDENTICAL) | removed (opt-in arm; EXP:1532 DROPPED-serial record for its PCA half, no A/B for the LDA arm) | 2026-11-15 | [MOJOLEARN_CLASSICAL_C04_LDA.patch](../experiments/removed/MOJOLEARN_CLASSICAL_C04_LDA.patch) |
+| [`MOJOLEARN_CLASSICAL_C05_PHASE_SCRATCH`](#mojolearn_classical_c05_phase_scratch-unmeasured-arm-deleted-2026-11-15) | Metrics (x_metrics plan phase scratch, IDENTICAL) | removed (unmeasured opt-in arm) | 2026-11-15 | [MOJOLEARN_CLASSICAL_C05_PHASE_SCRATCH.patch](../experiments/removed/MOJOLEARN_CLASSICAL_C05_PHASE_SCRATCH.patch) |
+| [`MOJOLEARN_CLASSICAL_C06_NORM_ROWS`](#mojolearn_classical_c06_norm_rows-unmeasured-arm-deleted-2026-11-15) | Row norms (rows per norm block 2/4 for KNN / KDE / KMeans, IDENTICAL) | removed (opt-in arm; EXP:1519 RESTRUCTURED, A/B owed and never run) | 2026-11-15 | [MOJOLEARN_CLASSICAL_C06_NORM_ROWS.patch](../experiments/removed/MOJOLEARN_CLASSICAL_C06_NORM_ROWS.patch) |
+| [`MOJOLEARN_CLASSICAL_C06_SMALL_D_THREAD`](#mojolearn_classical_c06_small_d_thread-unmeasured-arm-deleted-2026-11-15) | Row norms (one thread per row at d <= 32, IDENTICAL) | removed (opt-in arm; EXP:1519 A/B owed and never run) | 2026-11-15 | [MOJOLEARN_CLASSICAL_C06_SMALL_D_THREAD.patch](../experiments/removed/MOJOLEARN_CLASSICAL_C06_SMALL_D_THREAD.patch) |
+| [`MOJOLEARN_CLASSICAL_C07_RADIX_BITS`](#mojolearn_classical_c07_radix_bits-unmeasured-arm-deleted-2026-11-15) | Prep (device radix sort digit bits 4/6, IDENTICAL) | removed (unmeasured opt-in arm) | 2026-11-15 | [MOJOLEARN_CLASSICAL_C07_RADIX_BITS.patch](../experiments/removed/MOJOLEARN_CLASSICAL_C07_RADIX_BITS.patch) |
+| [`MOJOLEARN_CLASSICAL_C07_RADIX_ROWS`](#mojolearn_classical_c07_radix_rows-unmeasured-arm-deleted-2026-11-15) | Prep (device radix sort keys per task 1024/4096, IDENTICAL) | removed (unmeasured opt-in arm) | 2026-11-15 | [MOJOLEARN_CLASSICAL_C07_RADIX_ROWS.patch](../experiments/removed/MOJOLEARN_CLASSICAL_C07_RADIX_ROWS.patch) |
+| [`MOJOLEARN_CLASSICAL_C08_ONEHOT_FT`](#mojolearn_classical_c08_onehot_ft-unmeasured-arm-deleted-2026-11-15) | Prep (OneHotEncoder.fit_transform dictionary + codes in one program, IDENTICAL) | removed (unmeasured opt-in arm) | 2026-11-15 | [MOJOLEARN_CLASSICAL_C08_ONEHOT_FT.patch](../experiments/removed/MOJOLEARN_CLASSICAL_C08_ONEHOT_FT.patch) |
+| [`MOJOLEARN_CLASSICAL_C08_ORDINAL_FT`](#mojolearn_classical_c08_ordinal_ft-unmeasured-arm-deleted-2026-11-15) | Prep (OrdinalEncoder.fit_transform dictionary + codes in one program, IDENTICAL) | removed (unmeasured opt-in arm) | 2026-11-15 | [MOJOLEARN_CLASSICAL_C08_ORDINAL_FT.patch](../experiments/removed/MOJOLEARN_CLASSICAL_C08_ORDINAL_FT.patch) |
+| [`MOJOLEARN_CLASSICAL_C08_UNIQUE_SCAN_OFF`](#mojolearn_classical_c08_unique_scan_off-old-path-deleted-2026-11-15) | Prep (unique_cols one-thread-per-column walk, IDENTICAL old path) | removed (old path, superseded by the measured IDENTICAL default) | 2026-11-15 | [MOJOLEARN_CLASSICAL_C08_UNIQUE_SCAN_OFF.patch](../experiments/removed/MOJOLEARN_CLASSICAL_C08_UNIQUE_SCAN_OFF.patch) |
+| [`MOJOLEARN_CLASSICAL_C09_REG_BUNDLE`](#mojolearn_classical_c09_reg_bundle-unmeasured-arm-deleted-2026-11-15) | Metrics (regression metric bundle, IDENTICAL) | removed (unmeasured opt-in arm) | 2026-11-15 | [MOJOLEARN_CLASSICAL_C09_REG_BUNDLE.patch](../experiments/removed/MOJOLEARN_CLASSICAL_C09_REG_BUNDLE.patch) |
+| [`MOJOLEARN_CLASSICAL_C10_RANK_REUSE`](#mojolearn_classical_c10_rank_reuse-unmeasured-arm-deleted-2026-11-15) | Metrics (rank reuse across metrics, IDENTICAL) | removed (unmeasured opt-in arm) | 2026-11-15 | [MOJOLEARN_CLASSICAL_C10_RANK_REUSE.patch](../experiments/removed/MOJOLEARN_CLASSICAL_C10_RANK_REUSE.patch) |
+| [`MOJOLEARN_CLASSICAL_C11_DRAW_GATHER`](#mojolearn_classical_c11_draw_gather-unmeasured-arm-deleted-2026-11-15) | Resample (bootstrap draw gather, IDENTICAL) | removed (unmeasured opt-in arm) | 2026-11-15 | [MOJOLEARN_CLASSICAL_C11_DRAW_GATHER.patch](../experiments/removed/MOJOLEARN_CLASSICAL_C11_DRAW_GATHER.patch) |
+| [`MOJOLEARN_CLASSICAL_C12_SPARSE_COUNTS`](#mojolearn_classical_c12_sparse_counts-unmeasured-arm-deleted-2026-11-15) | Metrics (sparse confusion counts, IDENTICAL) | removed (unmeasured opt-in arm) | 2026-11-15 | [MOJOLEARN_CLASSICAL_C12_SPARSE_COUNTS.patch](../experiments/removed/MOJOLEARN_CLASSICAL_C12_SPARSE_COUNTS.patch) |
+| [`MOJOLEARN_CLASSICAL_C08_GROUPED_OUTPUT`](#mojolearn_classical_c08_grouped_output-unmeasured-arm-deleted-2026-11-15) | Prep (grouped one-hot emission, IDENTICAL) | removed (unmeasured opt-in arm) | 2026-11-15 | [MOJOLEARN_CLASSICAL_C08_GROUPED_OUTPUT.patch](../experiments/removed/MOJOLEARN_CLASSICAL_C08_GROUPED_OUTPUT.patch) |
+| [`MOJOLEARN_CLASSICAL_C02_LINEAR_PAIR`](#mojolearn_classical_c02_linear_pair-unmeasured-arm-deleted-2026-11-15) | Linear (OLS / Ridge independent C02 linear sums, IDENTICAL) | removed (unmeasured opt-in arm) | 2026-11-15 | [MOJOLEARN_CLASSICAL_C02_LINEAR_PAIR.patch](../experiments/removed/MOJOLEARN_CLASSICAL_C02_LINEAR_PAIR.patch) |
+| [`MOJOLEARN_CLASSICAL_C56_LDA_INPUT`](#mojolearn_classical_c56_lda_input-unmeasured-arm-deleted-2026-11-15) | Prep (LDA input reuse, IDENTICAL) | removed (unmeasured opt-in arm) | 2026-11-15 | [MOJOLEARN_CLASSICAL_C56_LDA_INPUT.patch](../experiments/removed/MOJOLEARN_CLASSICAL_C56_LDA_INPUT.patch) |
+| [`MOJOLEARN_CLASSICAL_C05_OLS_PHASE`](#mojolearn_classical_c05_ols_phase-unmeasured-arm-deleted-2026-11-15) | Linear (invocation-owned OLS covariance / inverse phase storage, IDENTICAL) | removed (unmeasured opt-in arm) | 2026-11-15 | [MOJOLEARN_CLASSICAL_C05_OLS_PHASE.patch](../experiments/removed/MOJOLEARN_CLASSICAL_C05_OLS_PHASE.patch) |
+| [`MOJOLEARN_C52_PAIR_ROWS`](#mojolearn_c52_pair_rows-unmeasured-arm-deleted-2026-11-15) | Kernel density (KDE pair-combine route with fixed 128/512 leaf, IDENTICAL) | removed (unmeasured opt-in arm) | 2026-11-15 | [MOJOLEARN_C52_PAIR_ROWS.patch](../experiments/removed/MOJOLEARN_C52_PAIR_ROWS.patch) |
+| [`MOJOLEARN_C53_CENTER4`](#mojolearn_c53_center4-unmeasured-arm-deleted-2026-11-15) | Mixture (GMM / BGMM centered-component staging, IDENTICAL) | removed (unmeasured opt-in arm) | 2026-11-15 | [MOJOLEARN_C53_CENTER4.patch](../experiments/removed/MOJOLEARN_C53_CENTER4.patch) |
+| [`MOJOLEARN_C54_PREDICT_TILES`](#mojolearn_c54_predict_tiles-unmeasured-arm-deleted-2026-11-15) | Kernel / GP (four kernel columns share one scaled query load, IDENTICAL) | removed (unmeasured opt-in arm) | 2026-11-15 | [MOJOLEARN_C54_PREDICT_TILES.patch](../experiments/removed/MOJOLEARN_C54_PREDICT_TILES.patch) |
+| [`MOJOLEARN_CLASSICAL_C56_QDA_PROJECT`](#mojolearn_classical_c56_qda_project-unmeasured-arm-deleted-2026-11-15) | Naive Bayes / DA (QDA W projection columns per pass 2/4/8, IDENTICAL) | removed (unmeasured opt-in arm) | 2026-11-15 | [MOJOLEARN_CLASSICAL_C56_QDA_PROJECT.patch](../experiments/removed/MOJOLEARN_CLASSICAL_C56_QDA_PROJECT.patch) |
+| [`MOJOLEARN_C57_CANDIDATE_STATE`](#mojolearn_c57_candidate_state-unmeasured-arm-deleted-2026-11-15) | Decomposition (MinCovDet candidate mean retained for its covariance, IDENTICAL) | removed (unmeasured opt-in arm) | 2026-11-15 | [MOJOLEARN_C57_CANDIDATE_STATE.patch](../experiments/removed/MOJOLEARN_C57_CANDIDATE_STATE.patch) |
+| [`MOJOLEARN_C58_SERIES4`](#mojolearn_c58_series4-unmeasured-arm-deleted-2026-11-15) | Time series (Holt-Winters four series per thread, IDENTICAL) | removed (unmeasured opt-in arm) | 2026-11-15 | [MOJOLEARN_C58_SERIES4.patch](../experiments/removed/MOJOLEARN_C58_SERIES4.patch) |
+| [`MOJOLEARN_C58_TEAM_MIB`](#mojolearn_c58_team_mib-unmeasured-arm-deleted-2026-11-15) | Sequence (classical series team state budget 64 MiB, IDENTICAL) | removed (unmeasured opt-in arm) | 2026-11-15 | [MOJOLEARN_C58_TEAM_MIB.patch](../experiments/removed/MOJOLEARN_C58_TEAM_MIB.patch) |
+| [`MOJOLEARN_C59_TRIAL_STATE`](#mojolearn_c59_trial_state-unmeasured-arm-deleted-2026-11-15) | Time series (ARIMA trial state reuse, IDENTICAL) | removed (unmeasured opt-in arm) | 2026-11-15 | [MOJOLEARN_C59_TRIAL_STATE.patch](../experiments/removed/MOJOLEARN_C59_TRIAL_STATE.patch) |
+| [`MOJOLEARN_C60_LAG4`](#mojolearn_c60_lag4-unmeasured-arm-deleted-2026-11-15) | Time series (shared detrended observations across lag tasks, IDENTICAL) | removed (unmeasured opt-in arm) | 2026-11-15 | [MOJOLEARN_C60_LAG4.patch](../experiments/removed/MOJOLEARN_C60_LAG4.patch) |
+| [`MOJOLEARN_IDN_GPC_OVR_OFF`](#mojolearn_idn_gpc_ovr_off-old-path-deleted-2026-11-15) | Kernel / GP (GaussianProcessClassifier one-vs-rest rollback to per-class binding calls, IDENTICAL old path) | removed (old path, no A/B recorded; the batched one-vs-rest default kept) | 2026-11-15 | [MOJOLEARN_IDN_GPC_OVR_OFF.patch](../experiments/removed/MOJOLEARN_IDN_GPC_OVR_OFF.patch) |
+| [`MOJOLEARN_IDN_GPR_PTR_OFF`](#mojolearn_idn_gpr_ptr_off-old-path-deleted-2026-11-15) | Kernel / GP (GaussianProcessRegressor rollback to host-list gpr_fit / gpr_predict, IDENTICAL old path) | removed (old path, no A/B recorded; the resident pointer default kept) | 2026-11-15 | [MOJOLEARN_IDN_GPR_PTR_OFF.patch](../experiments/removed/MOJOLEARN_IDN_GPR_PTR_OFF.patch) |
+| [`MOJOLEARN_IDN_ATTN_STASH`](#mojolearn_idn_attn_stash-arm-deleted-2026-11-15) | Neural (fused attention exp-stash memory profile arms 1 recompute / 2 packed / 3 alias_y, IDENTICAL) | removed (opt-in arms; EXP:1757 split the Samba winner into its own define, lm-train-step 1.24x slower) | 2026-11-15 | [MOJOLEARN_IDN_ATTN_STASH.patch](../experiments/removed/MOJOLEARN_IDN_ATTN_STASH.patch) |
+| [`MOJOLEARN_IDN_ATTN_HEAD_SHARE`](#mojolearn_idn_attn_head_share-arm-deleted-2026-11-15) | Neural (attention forward: one K/V page for four query heads, IDENTICAL) | removed (opt-in arm; EXP:1483 DROP for the two-head form, four-head arm never A/B'd) | 2026-11-15 | [MOJOLEARN_IDN_ATTN_HEAD_SHARE.patch](../experiments/removed/MOJOLEARN_IDN_ATTN_HEAD_SHARE.patch) |
+| [`MOJOLEARN_MEASURE_I06_GQA`](#mojolearn_measure_i06_gqa-unmeasured-arm-deleted-2026-11-15) | Neural (I06 forward GQA reuse timing arm of the attention driver) | removed (unmeasured opt-in arm) | 2026-11-15 | [MOJOLEARN_MEASURE_I06_GQA.patch](../experiments/removed/MOJOLEARN_MEASURE_I06_GQA.patch) |
+| [`MOJOLEARN_MEASURE_I07_LIFETIME`](#mojolearn_measure_i07_lifetime-unmeasured-arm-deleted-2026-11-15) | Neural (I07 retained-estash lifetime timing arm of the attention driver) | removed (unmeasured opt-in arm) | 2026-11-15 | [MOJOLEARN_MEASURE_I07_LIFETIME.patch](../experiments/removed/MOJOLEARN_MEASURE_I07_LIFETIME.patch) |
+| [`MOJOLEARN_TRAIN_LIVE_STATUS`](#mojolearn_train_live_status-unmeasured-arm-deleted-2026-11-15) | Neural (byte LM train step live-status candidate, I10) | removed (unmeasured opt-in arm) | 2026-11-15 | [MOJOLEARN_TRAIN_LIVE_STATUS.patch](../experiments/removed/MOJOLEARN_TRAIN_LIVE_STATUS.patch) |
+| [`MOJOLEARN_IDN_TSQR_REUSE`](#mojolearn_idn_tsqr_reuse-unmeasured-arm-deleted-2026-11-15) | Decomposition (TSQR immutable-factor reuse across RHS calls, I22) | removed (opt-in arm; component screening only (I22 source5b), never a full-operation A/B) | 2026-11-15 | [MOJOLEARN_IDN_TSQR_REUSE.patch](../experiments/removed/MOJOLEARN_IDN_TSQR_REUSE.patch) |
+| [`MOJOLEARN_IDN_RADIX_TILE128`](#mojolearn_idn_radix_tile128-unmeasured-arm-deleted-2026-11-15) | Prep (stable nibble radix pairs with 128-thread tiles, I19) | removed (unmeasured opt-in arm) | 2026-11-15 | [MOJOLEARN_IDN_RADIX_TILE128.patch](../experiments/removed/MOJOLEARN_IDN_RADIX_TILE128.patch) |
+| [`MOJOLEARN_IDN_RAGGED_RADIX_NIBBLE`](#mojolearn_idn_ragged_radix_nibble-unmeasured-arm-deleted-2026-11-15) | Prep (four-bit nibble stable radix pairs for ragged sorts, I19) | removed (unmeasured opt-in arm) | 2026-11-15 | [MOJOLEARN_IDN_RAGGED_RADIX_NIBBLE.patch](../experiments/removed/MOJOLEARN_IDN_RAGGED_RADIX_NIBBLE.patch) |
+| [`MOJOLEARN_IDN_RAGGED_FLOAT_RADIX`](#mojolearn_idn_ragged_float_radix-unmeasured-arm-deleted-2026-11-15) | Prep (I19 ragged float-word sort by stable radix instead of the bounded rank control) | removed (opt-in arm; AMD-only component screening, never an NVIDIA + AMD full-operation A/B) | 2026-11-15 | [MOJOLEARN_IDN_RAGGED_FLOAT_RADIX.patch](../experiments/removed/MOJOLEARN_IDN_RAGGED_FLOAT_RADIX.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -8079,3 +8119,323 @@ Not deleted, contrary to the plan: `MOJOLEARN_COLUMN_CPU` (the CPU-column build 
 ## Experiment deletions: lane expdel2-04-base, non-owner sites (2026-11-15)
 
 The lane folded these defines (or their aliases) in its own files; each owner lane writes the index row and section. Inline markers and per-lane patches: `MOJOLEARN_CLASSICAL_C06_NORM_ROWS` (`experiments/removed/MOJOLEARN_CLASSICAL_C06_NORM_ROWS.expdel2-04-base.patch`, owner expdel2-07-base, recoverable at `80cae4b607`), `MOJOLEARN_CLASSICAL_C06_SMALL_D_THREAD` (`experiments/removed/MOJOLEARN_CLASSICAL_C06_SMALL_D_THREAD.expdel2-04-base.patch`, owner expdel2-07-base, recoverable at `20f2cfb2d5`), `MOJOLEARN_ENTRY_TABLE_HEAP_OUTPUT` (`experiments/removed/MOJOLEARN_ENTRY_TABLE_HEAP_OUTPUT.expdel2-04-base.patch`, owner expdel2-03-base, recoverable at `f6ce043de1`), `MOJOLEARN_IDN_ALL_OFF` (`experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-04-base.patch`, owner expdel2-37-series, recoverable at `7d3bf6d8e8`), `MOJOLEARN_IDN_HPDEV_FOLDS_OFF` (`experiments/removed/MOJOLEARN_IDN_HPDEV_FOLDS_OFF.expdel2-04-base.patch`, owner expdel2-03-base, recoverable at `8adf7b05f6`), `MOJOLEARN_KDE_FAST_IMMUTABLE_FIT` (`experiments/removed/MOJOLEARN_KDE_FAST_IMMUTABLE_FIT.expdel2-04-base.patch`, owner expdel2-19-kernel, recoverable at `6b64b91b3f`), `MOJOLEARN_TREES_C50_GB_PACKED` (`experiments/removed/MOJOLEARN_TREES_C50_GB_PACKED.expdel2-04-base.patch`, owner expdel2-03-base, recoverable at `4f4b2b1ba8`), `MOJOLEARN_TREES_T34_CHUNK_FOLD` (`experiments/removed/MOJOLEARN_TREES_T34_CHUNK_FOLD.expdel2-04-base.patch`, owner expdel2-03-base, recoverable at `08081353e1`), `MOJOLEARN_TREES_T37_WORKSPACE` (`experiments/removed/MOJOLEARN_TREES_T37_WORKSPACE.expdel2-04-base.patch`, owner expdel2-03-base, recoverable at `9d8b51b0a6`), `MOJOLEARN_TREES_T38_FUSED_LABELS` (`experiments/removed/MOJOLEARN_TREES_T38_FUSED_LABELS.expdel2-04-base.patch`, owner expdel2-03-base, recoverable at `1caa34cfb3`). No bit changes.
+
+## MOJOLEARN_CLASSICAL_C01_LEAF: arm deleted (2026-11-15)
+
+- **What it was**: the opt-in arm behind `C01_LEAF` in `experiments/classical_identical_ideas/shared_controls.mojo`; the alias stays as the folded constant so importers in other lanes compile, and each importer's lane deletes its branch.
+- **Verdict**: EXP:1530 (`CLASSICAL_C01_LEAF64` / `_LEAF128`, six-lane all-on 20261006): DROPPED-slower; the =64/=128 sweep that replaced them has no A/B. Deleted under AGENTS.md "An unmeasured arm is deleted" (Andrew, 2026-11-15). No bit change on any column.
+- **Deleted by**: lane/expdel2-07-base (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `561d08802a`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_CLASSICAL_C01_LEAF.patch`, then delete the `MOJOLEARN_CLASSICAL_C01_LEAF` refusal in `core/experiment_guards_base.mojo`.
+- **Records**: refusal in `core/experiment_guards_base.mojo`; `classical-decomp.json` control `C01_LEAF`: `removed` entry added (control removed from `controls` and from its algorithms); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-07-base section).
+
+## MOJOLEARN_CLASSICAL_C01_MEAN: unmeasured arm deleted (2026-11-15)
+
+- **What it was**: the opt-in arm behind `C01_MEAN` in `experiments/classical_identical_ideas/shared_controls.mojo`; the alias stays as the folded constant so importers in other lanes compile, and each importer's lane deletes its branch.
+- **Verdict**: EXP:1530 names it as the replacement of the dropped C01_LEAF64/128 mean kernel; no A/B of its own was ever recorded. Deleted under AGENTS.md "An unmeasured arm is deleted" (Andrew, 2026-11-15). No bit change on any column.
+- **Deleted by**: lane/expdel2-07-base (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `569d288205`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_CLASSICAL_C01_MEAN.patch`, then delete the `MOJOLEARN_CLASSICAL_C01_MEAN` refusal in `core/experiment_guards_decomposition.mojo`.
+- **Records**: refusal in `core/experiment_guards_decomposition.mojo`; `classical-decomp.json` control `C01_MEAN`: `removed` entry added (control removed from `controls` and from its algorithms); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-07-base section).
+
+## MOJOLEARN_CLASSICAL_C03_FINITE_EXTREMA: unmeasured arm deleted (2026-11-15)
+
+- **What it was**: the opt-in arm behind `C03_FINITE_EXTREMA` in `experiments/classical_identical_ideas/shared_controls.mojo`; the alias stays as the folded constant so importers in other lanes compile, and each importer's lane deletes its branch.
+- **Verdict**: no record: no A/B was recorded for the opt-in arm (plan rule a; AGENTS.md "An unmeasured arm is deleted", Andrew 2026-11-15). No bit change on any column.
+- **Deleted by**: lane/expdel2-07-base (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `cf8de5ae6c`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_CLASSICAL_C03_FINITE_EXTREMA.patch`, then delete the `MOJOLEARN_CLASSICAL_C03_FINITE_EXTREMA` refusal in `core/experiment_guards_base.mojo`.
+- **Records**: refusal in `core/experiment_guards_base.mojo`; no `grid_controls` entry named it; `docs/apple-fast/EXPERIMENTS.md` row (expdel2-07-base section).
+
+## MOJOLEARN_CLASSICAL_C04_LDA: unmeasured arm deleted (2026-11-15)
+
+- **What it was**: the opt-in arm behind `C04_LDA` in `experiments/classical_identical_ideas/shared_controls.mojo`; the alias stays as the folded constant so importers in other lanes compile, and each importer's lane deletes its branch.
+- **Verdict**: EXP:1532 (`CLASSICAL_C04_LOAD_CENTER`, PCA): DROPPED-serial; the LDA half renamed `C04_LDA` never ran an A/B. Deleted under AGENTS.md "An unmeasured arm is deleted" (Andrew, 2026-11-15). No bit change on any column.
+- **Deleted by**: lane/expdel2-07-base (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `1c0b13a0e4`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_CLASSICAL_C04_LDA.patch`, then delete the `MOJOLEARN_CLASSICAL_C04_LDA` refusal in `core/experiment_guards_base.mojo`.
+- **Records**: refusal in `core/experiment_guards_base.mojo`; `classical-decomp.json` control `C04_LDA`: `removed` entry added (control removed from `controls` and from its algorithms); `classical-nbda.json` control `c04_lda`: `removed` entry added (control removed from `controls` and from its algorithms); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-07-base section).
+
+## MOJOLEARN_CLASSICAL_C05_PHASE_SCRATCH: unmeasured arm deleted (2026-11-15)
+
+- **What it was**: the opt-in arm behind `C05_PHASE_SCRATCH` in `experiments/classical_identical_ideas/shared_controls.mojo`; the alias stays as the folded constant so importers in other lanes compile, and each importer's lane deletes its branch.
+- **Verdict**: no record: no A/B was recorded for the opt-in arm (plan rule a; AGENTS.md "An unmeasured arm is deleted", Andrew 2026-11-15). No bit change on any column.
+- **Deleted by**: lane/expdel2-07-base (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `1ebc49831d`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_CLASSICAL_C05_PHASE_SCRATCH.patch`, then delete the `MOJOLEARN_CLASSICAL_C05_PHASE_SCRATCH` refusal in `core/experiment_guards_base.mojo`.
+- **Records**: refusal in `core/experiment_guards_base.mojo`; `classical-misc.json` control `c05_phase_scratch`: `removed` entry added (control removed from `controls` and from its algorithms); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-07-base section).
+
+## MOJOLEARN_CLASSICAL_C06_NORM_ROWS: unmeasured arm deleted (2026-11-15)
+
+- **What it was**: the opt-in arm behind `C06_NORM_ROWS` in `experiments/classical_identical_ideas/shared_controls.mojo`; the alias stays as the folded constant so importers in other lanes compile, and each importer's lane deletes its branch.
+- **Verdict**: EXP:1519 RESTRUCTURED (ROWS2/ROWS4 into `C06_NORM_ROWS=2|4`), A/B owed and never run. Deleted under AGENTS.md "An unmeasured arm is deleted" (Andrew, 2026-11-15). No bit change on any column.
+- **Deleted by**: lane/expdel2-07-base (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `526172a06e`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_CLASSICAL_C06_NORM_ROWS.patch`, then delete the `MOJOLEARN_CLASSICAL_C06_NORM_ROWS` refusal in `core/six_lane_experiment_guards.mojo`.
+- **Records**: refusal in `core/six_lane_experiment_guards.mojo`; `classical-kmeans.json` control `c06_norms`: `removed` entry added (control removed from `controls` and from its algorithms); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-07-base section).
+
+## MOJOLEARN_CLASSICAL_C06_SMALL_D_THREAD: unmeasured arm deleted (2026-11-15)
+
+- **What it was**: the opt-in arm behind `C06_SMALL_D_THREAD` in `experiments/classical_identical_ideas/shared_controls.mojo`; the alias stays as the folded constant so importers in other lanes compile, and each importer's lane deletes its branch.
+- **Verdict**: EXP:1519 introduced it with the A/B owed; it never ran. Deleted under AGENTS.md "An unmeasured arm is deleted" (Andrew, 2026-11-15). No bit change on any column.
+- **Deleted by**: lane/expdel2-07-base (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `6a40fe1b92`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_CLASSICAL_C06_SMALL_D_THREAD.patch`, then delete the `MOJOLEARN_CLASSICAL_C06_SMALL_D_THREAD` refusal in `core/six_lane_experiment_guards.mojo`.
+- **Records**: refusal in `core/six_lane_experiment_guards.mojo`; `classical-kmeans.json` control `c06_norms`: `removed` entry added; `docs/apple-fast/EXPERIMENTS.md` row (expdel2-07-base section).
+
+## MOJOLEARN_CLASSICAL_C07_RADIX_BITS: unmeasured arm deleted (2026-11-15)
+
+- **What it was**: the opt-in arm behind `C07_RADIX_BITS` in `experiments/classical_identical_ideas/shared_controls.mojo`; the alias stays as the folded constant so importers in other lanes compile, and each importer's lane deletes its branch.
+- **Verdict**: no record: no A/B was recorded for the opt-in arm (plan rule a; AGENTS.md "An unmeasured arm is deleted", Andrew 2026-11-15). No bit change on any column.
+- **Deleted by**: lane/expdel2-07-base (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `f93f4dcaa3`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_CLASSICAL_C07_RADIX_BITS.patch`, then delete the `MOJOLEARN_CLASSICAL_C07_RADIX_BITS` refusal in `core/experiment_guards_base.mojo`.
+- **Records**: refusal in `core/experiment_guards_base.mojo`; `classical-encoders.json` control `c07_radix_bits`: `removed` entry added (control removed from `controls` and from its algorithms); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-07-base section).
+
+## MOJOLEARN_CLASSICAL_C07_RADIX_ROWS: unmeasured arm deleted (2026-11-15)
+
+- **What it was**: the opt-in arm behind `C07_RADIX_ROWS` in `experiments/classical_identical_ideas/shared_controls.mojo`; the alias stays as the folded constant so importers in other lanes compile, and each importer's lane deletes its branch.
+- **Verdict**: no record: no A/B was recorded for the opt-in arm (plan rule a; AGENTS.md "An unmeasured arm is deleted", Andrew 2026-11-15). No bit change on any column.
+- **Deleted by**: lane/expdel2-07-base (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `4a858a0088`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_CLASSICAL_C07_RADIX_ROWS.patch`, then delete the `MOJOLEARN_CLASSICAL_C07_RADIX_ROWS` refusal in `core/experiment_guards_base.mojo`.
+- **Records**: refusal in `core/experiment_guards_base.mojo`; `classical-encoders.json` control `c07_radix_rows`: `removed` entry added (control removed from `controls` and from its algorithms); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-07-base section).
+
+## MOJOLEARN_CLASSICAL_C08_ONEHOT_FT: unmeasured arm deleted (2026-11-15)
+
+- **What it was**: the opt-in arm behind `C08_ONEHOT_FT` in `experiments/classical_identical_ideas/shared_controls.mojo`; the alias stays as the folded constant so importers in other lanes compile, and each importer's lane deletes its branch.
+- **Verdict**: no record: no A/B was recorded for the opt-in arm (plan rule a; AGENTS.md "An unmeasured arm is deleted", Andrew 2026-11-15). No bit change on any column.
+- **Deleted by**: lane/expdel2-07-base (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `d42f92b40b`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_CLASSICAL_C08_ONEHOT_FT.patch`, then delete the `MOJOLEARN_CLASSICAL_C08_ONEHOT_FT` refusal in `core/experiment_guards_base.mojo`.
+- **Records**: refusal in `core/experiment_guards_base.mojo`; `classical-encoders.json` control `c08_onehot_ft`: `removed` entry added (control removed from `controls` and from its algorithms); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-07-base section).
+
+## MOJOLEARN_CLASSICAL_C08_ORDINAL_FT: unmeasured arm deleted (2026-11-15)
+
+- **What it was**: the opt-in arm behind `C08_ORDINAL_FT` in `experiments/classical_identical_ideas/shared_controls.mojo`; the alias stays as the folded constant so importers in other lanes compile, and each importer's lane deletes its branch.
+- **Verdict**: no record: no A/B was recorded for the opt-in arm (plan rule a; AGENTS.md "An unmeasured arm is deleted", Andrew 2026-11-15). No bit change on any column.
+- **Deleted by**: lane/expdel2-07-base (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `535c024b7f`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_CLASSICAL_C08_ORDINAL_FT.patch`, then delete the `MOJOLEARN_CLASSICAL_C08_ORDINAL_FT` refusal in `core/experiment_guards_base.mojo`.
+- **Records**: refusal in `core/experiment_guards_base.mojo`; `classical-encoders.json` control `c08_ordinal_ft`: `removed` entry added (control removed from `controls` and from its algorithms); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-07-base section).
+
+## MOJOLEARN_CLASSICAL_C08_UNIQUE_SCAN_OFF: old path deleted (2026-11-15)
+
+- **What it was**: the `_OFF` rollback of `C08_UNIQUE_SCAN` (`shared_controls.mojo`) to the one-thread-per-column `unique_cols` walk under IDENTICAL. `C08_UNIQUE_SCAN` is now `CLASSICAL_IDENTICAL`; the walk stays the FAST path in the importers.
+- **Verdict**: EXP:1740 PROMOTED (IDENTICAL default, grid ge123e6f9, nv n0063, amd a0059): the run scan 0.525x combined over onehot / ordinal / target-encoder on istella and taxi, digests equal; the `_OFF` rollback is the losing old path. No bit change on any column.
+- **Deleted by**: lane/expdel2-07-base (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `9b76c98115`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_CLASSICAL_C08_UNIQUE_SCAN_OFF.patch`, then delete the `MOJOLEARN_CLASSICAL_C08_UNIQUE_SCAN_OFF` refusal in `core/experiment_guards_linear.mojo`.
+- **Records**: refusal in `core/experiment_guards_linear.mojo`; `classical-encoders.json` control `c08_unique_scan`: `removed` entry added (control removed from `controls` and from its algorithms); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-07-base section).
+
+## MOJOLEARN_CLASSICAL_C09_REG_BUNDLE: unmeasured arm deleted (2026-11-15)
+
+- **What it was**: the opt-in arm behind `C09_REG_BUNDLE` in `experiments/classical_identical_ideas/shared_controls.mojo`; the alias stays as the folded constant so importers in other lanes compile, and each importer's lane deletes its branch.
+- **Verdict**: no record: no A/B was recorded for the opt-in arm (plan rule a; AGENTS.md "An unmeasured arm is deleted", Andrew 2026-11-15). No bit change on any column.
+- **Deleted by**: lane/expdel2-07-base (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `eb41a7f7fc`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_CLASSICAL_C09_REG_BUNDLE.patch`, then delete the `MOJOLEARN_CLASSICAL_C09_REG_BUNDLE` refusal in `core/experiment_guards_base.mojo`.
+- **Records**: refusal in `core/experiment_guards_base.mojo`; no `grid_controls` entry named it; `docs/apple-fast/EXPERIMENTS.md` row (expdel2-07-base section).
+
+## MOJOLEARN_CLASSICAL_C10_RANK_REUSE: unmeasured arm deleted (2026-11-15)
+
+- **What it was**: the opt-in arm behind `C10_RANK_REUSE` in `experiments/classical_identical_ideas/shared_controls.mojo`; the alias stays as the folded constant so importers in other lanes compile, and each importer's lane deletes its branch.
+- **Verdict**: no record: no A/B was recorded for the opt-in arm (plan rule a; AGENTS.md "An unmeasured arm is deleted", Andrew 2026-11-15). No bit change on any column.
+- **Deleted by**: lane/expdel2-07-base (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `cf7f3199b2`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_CLASSICAL_C10_RANK_REUSE.patch`, then delete the `MOJOLEARN_CLASSICAL_C10_RANK_REUSE` refusal in `core/experiment_guards_base.mojo`.
+- **Records**: refusal in `core/experiment_guards_base.mojo`; no `grid_controls` entry named it; `docs/apple-fast/EXPERIMENTS.md` row (expdel2-07-base section).
+
+## MOJOLEARN_CLASSICAL_C11_DRAW_GATHER: unmeasured arm deleted (2026-11-15)
+
+- **What it was**: the opt-in arm behind `C11_DRAW_GATHER` in `experiments/classical_identical_ideas/shared_controls.mojo`; the alias stays as the folded constant so importers in other lanes compile, and each importer's lane deletes its branch.
+- **Verdict**: no record: no A/B was recorded for the opt-in arm (plan rule a; AGENTS.md "An unmeasured arm is deleted", Andrew 2026-11-15). No bit change on any column.
+- **Deleted by**: lane/expdel2-07-base (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `bfc7696dd0`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_CLASSICAL_C11_DRAW_GATHER.patch`, then delete the `MOJOLEARN_CLASSICAL_C11_DRAW_GATHER` refusal in `core/experiment_guards_series.mojo`.
+- **Records**: refusal in `core/experiment_guards_series.mojo`; no `grid_controls` entry named it; `docs/apple-fast/EXPERIMENTS.md` row (expdel2-07-base section).
+
+## MOJOLEARN_CLASSICAL_C12_SPARSE_COUNTS: unmeasured arm deleted (2026-11-15)
+
+- **What it was**: the opt-in arm behind `C12_SPARSE_COUNTS` in `experiments/classical_identical_ideas/shared_controls.mojo`; the alias stays as the folded constant so importers in other lanes compile, and each importer's lane deletes its branch.
+- **Verdict**: no record: no A/B was recorded for the opt-in arm (plan rule a; AGENTS.md "An unmeasured arm is deleted", Andrew 2026-11-15). No bit change on any column.
+- **Deleted by**: lane/expdel2-07-base (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `9f2212b4b1`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_CLASSICAL_C12_SPARSE_COUNTS.patch`, then delete the `MOJOLEARN_CLASSICAL_C12_SPARSE_COUNTS` refusal in `core/experiment_guards_base.mojo`.
+- **Records**: refusal in `core/experiment_guards_base.mojo`; no `grid_controls` entry named it; `docs/apple-fast/EXPERIMENTS.md` row (expdel2-07-base section).
+
+## MOJOLEARN_CLASSICAL_C08_GROUPED_OUTPUT: unmeasured arm deleted (2026-11-15)
+
+- **What it was**: the opt-in arm behind `C08_GROUPED_OUTPUT` in `experiments/classical_identical_ideas/shared_controls.mojo`; the alias stays as the folded constant so importers in other lanes compile, and each importer's lane deletes its branch.
+- **Verdict**: no record: no A/B was recorded for the opt-in arm (plan rule a; AGENTS.md "An unmeasured arm is deleted", Andrew 2026-11-15). No bit change on any column.
+- **Deleted by**: lane/expdel2-07-base (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `9a0b339815`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_CLASSICAL_C08_GROUPED_OUTPUT.patch`, then delete the `MOJOLEARN_CLASSICAL_C08_GROUPED_OUTPUT` refusal in `core/experiment_guards_base.mojo`.
+- **Records**: refusal in `core/experiment_guards_base.mojo`; `classical-encoders.json` control `c08_grouped_output`: `removed` entry added (control removed from `controls` and from its algorithms); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-07-base section).
+
+## MOJOLEARN_CLASSICAL_C02_LINEAR_PAIR: unmeasured arm deleted (2026-11-15)
+
+- **What it was**: the opt-in arm behind `C02_LINEAR_PAIR` in `experiments/classical_identical_ideas/shared_controls.mojo`; the alias stays as the folded constant so importers in other lanes compile, and each importer's lane deletes its branch.
+- **Verdict**: no record: no A/B was recorded for the opt-in arm (plan rule a; AGENTS.md "An unmeasured arm is deleted", Andrew 2026-11-15). No bit change on any column.
+- **Deleted by**: lane/expdel2-07-base (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `c95b22c391`. Non-owner read sites: lane expdel2-01-base (`experiments/removed/MOJOLEARN_CLASSICAL_C02_LINEAR_PAIR.expdel2-01-base.patch`).
+- **Restore**: `git apply experiments/removed/MOJOLEARN_CLASSICAL_C02_LINEAR_PAIR.patch`, then delete the `MOJOLEARN_CLASSICAL_C02_LINEAR_PAIR` refusal in `core/experiment_guards_linear.mojo`.
+- **Records**: refusal in `core/experiment_guards_linear.mojo`; `classical-misc.json` control `c02_linear_pair`: `removed` entry added (control removed from `controls` and from its algorithms); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-07-base section).
+
+## MOJOLEARN_CLASSICAL_C56_LDA_INPUT: unmeasured arm deleted (2026-11-15)
+
+- **What it was**: the opt-in arm behind `C56_LDA_INPUT` in `experiments/classical_identical_ideas/shared_controls.mojo`; the alias stays as the folded constant so importers in other lanes compile, and each importer's lane deletes its branch.
+- **Verdict**: no record: no A/B was recorded for the opt-in arm (plan rule a; AGENTS.md "An unmeasured arm is deleted", Andrew 2026-11-15). No bit change on any column.
+- **Deleted by**: lane/expdel2-07-base (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `e96891c8e7`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_CLASSICAL_C56_LDA_INPUT.patch`, then delete the `MOJOLEARN_CLASSICAL_C56_LDA_INPUT` refusal in `core/experiment_guards_base.mojo`.
+- **Records**: refusal in `core/experiment_guards_base.mojo`; `classical-nbda.json` control `c56_lda_input`: `removed` entry added (control removed from `controls` and from its algorithms); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-07-base section).
+
+## MOJOLEARN_CLASSICAL_C05_OLS_PHASE: unmeasured arm deleted (2026-11-15)
+
+- **What it was**: the opt-in arm behind `C05_OLS_PHASE` in `experiments/classical_identical_ideas/shared_controls.mojo`; the alias stays as the folded constant so importers in other lanes compile, and each importer's lane deletes its branch.
+- **Verdict**: no record: no A/B was recorded for the opt-in arm (plan rule a; AGENTS.md "An unmeasured arm is deleted", Andrew 2026-11-15). No bit change on any column.
+- **Deleted by**: lane/expdel2-07-base (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `eb67cbe21f`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_CLASSICAL_C05_OLS_PHASE.patch`, then delete the `MOJOLEARN_CLASSICAL_C05_OLS_PHASE` refusal in `core/experiment_guards_linear.mojo`.
+- **Records**: refusal in `core/experiment_guards_linear.mojo`; `classical-misc.json` control `c05_ols_phase`: `removed` entry added (control removed from `controls` and from its algorithms); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-07-base section).
+
+## MOJOLEARN_C52_PAIR_ROWS: unmeasured arm deleted (2026-11-15)
+
+- **What it was**: the opt-in arm behind `C52_PAIR` in `experiments/classical_identical_ideas/stats_controls.mojo`; the alias stays as the folded constant so importers in other lanes compile, and each importer's lane deletes its branch.
+- **Verdict**: no record: no A/B was recorded for the opt-in arm (plan rule a; AGENTS.md "An unmeasured arm is deleted", Andrew 2026-11-15). No bit change on any column.
+- **Deleted by**: lane/expdel2-07-base (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `dd94b7ad88`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_C52_PAIR_ROWS.patch`, then delete the `MOJOLEARN_C52_PAIR_ROWS` refusal in `core/experiment_guards_kernel.mojo`.
+- **Records**: refusal in `core/experiment_guards_kernel.mojo`; `classical-misc.json` control `c52_pair_rows`: `removed` entry added (control removed from `controls` and from its algorithms); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-07-base section).
+
+## MOJOLEARN_C53_CENTER4: unmeasured arm deleted (2026-11-15)
+
+- **What it was**: the opt-in arm behind `C53_CENTER4` in `experiments/classical_identical_ideas/stats_controls.mojo`; the alias stays as the folded constant so importers in other lanes compile, and each importer's lane deletes its branch.
+- **Verdict**: no record: no A/B was recorded for the opt-in arm (plan rule a; AGENTS.md "An unmeasured arm is deleted", Andrew 2026-11-15). No bit change on any column.
+- **Deleted by**: lane/expdel2-07-base (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `f76fba175b`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_C53_CENTER4.patch`, then delete the `MOJOLEARN_C53_CENTER4` refusal in `core/experiment_guards_cluster.mojo`.
+- **Records**: refusal in `core/experiment_guards_cluster.mojo`; no `grid_controls` entry named it; `docs/apple-fast/EXPERIMENTS.md` row (expdel2-07-base section).
+
+## MOJOLEARN_C54_PREDICT_TILES: unmeasured arm deleted (2026-11-15)
+
+- **What it was**: the opt-in arm behind `C54_PREDICT_TILES` in `experiments/classical_identical_ideas/stats_controls.mojo`; the alias stays as the folded constant so importers in other lanes compile, and each importer's lane deletes its branch.
+- **Verdict**: no record: no A/B was recorded for the opt-in arm (plan rule a; AGENTS.md "An unmeasured arm is deleted", Andrew 2026-11-15). No bit change on any column.
+- **Deleted by**: lane/expdel2-07-base (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `843366c4fd`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_C54_PREDICT_TILES.patch`, then delete the `MOJOLEARN_C54_PREDICT_TILES` refusal in `core/experiment_guards_kernel.mojo`.
+- **Records**: refusal in `core/experiment_guards_kernel.mojo`; no `grid_controls` entry named it; `docs/apple-fast/EXPERIMENTS.md` row (expdel2-07-base section).
+
+## MOJOLEARN_CLASSICAL_C56_QDA_PROJECT: unmeasured arm deleted (2026-11-15)
+
+- **What it was**: the opt-in arm behind `C56_QDA_PROJECT` in `experiments/classical_identical_ideas/stats_controls.mojo`; the alias stays as the folded constant so importers in other lanes compile, and each importer's lane deletes its branch.
+- **Verdict**: no record: no A/B was recorded for the opt-in arm (plan rule a; AGENTS.md "An unmeasured arm is deleted", Andrew 2026-11-15). No bit change on any column.
+- **Deleted by**: lane/expdel2-07-base (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `fe708dfe4a`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_CLASSICAL_C56_QDA_PROJECT.patch`, then delete the `MOJOLEARN_CLASSICAL_C56_QDA_PROJECT` refusal in `core/experiment_guards_base.mojo`.
+- **Records**: refusal in `core/experiment_guards_base.mojo`; `classical-nbda.json` control `c56_qda_project`: `removed` entry added (control removed from `controls` and from its algorithms); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-07-base section).
+
+## MOJOLEARN_C57_CANDIDATE_STATE: unmeasured arm deleted (2026-11-15)
+
+- **What it was**: the opt-in arm behind `C57_CANDIDATE_STATE` in `experiments/classical_identical_ideas/stats_controls.mojo`; the alias stays as the folded constant so importers in other lanes compile, and each importer's lane deletes its branch.
+- **Verdict**: no record: no A/B was recorded for the opt-in arm (plan rule a; AGENTS.md "An unmeasured arm is deleted", Andrew 2026-11-15). No bit change on any column.
+- **Deleted by**: lane/expdel2-07-base (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `5bb9e1659f`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_C57_CANDIDATE_STATE.patch`, then delete the `MOJOLEARN_C57_CANDIDATE_STATE` refusal in `core/experiment_guards_decomposition.mojo`.
+- **Records**: refusal in `core/experiment_guards_decomposition.mojo`; no `grid_controls` entry named it; `docs/apple-fast/EXPERIMENTS.md` row (expdel2-07-base section).
+
+## MOJOLEARN_C58_SERIES4: unmeasured arm deleted (2026-11-15)
+
+- **What it was**: the opt-in arm behind `C58_SERIES4` in `experiments/classical_identical_ideas/stats_controls.mojo`; the alias stays as the folded constant so importers in other lanes compile, and each importer's lane deletes its branch.
+- **Verdict**: no record: no A/B was recorded for the opt-in arm (plan rule a; AGENTS.md "An unmeasured arm is deleted", Andrew 2026-11-15). No bit change on any column.
+- **Deleted by**: lane/expdel2-07-base (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `236e97faa2`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_C58_SERIES4.patch`, then delete the `MOJOLEARN_C58_SERIES4` refusal in `core/experiment_guards_series.mojo`.
+- **Records**: refusal in `core/experiment_guards_series.mojo`; `classical-misc.json` control `c58_series4`: `removed` entry added (control removed from `controls` and from its algorithms); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-07-base section).
+
+## MOJOLEARN_C58_TEAM_MIB: unmeasured arm deleted (2026-11-15)
+
+- **What it was**: the opt-in arm behind `C58_TEAM_MIB` in `experiments/classical_identical_ideas/stats_controls.mojo`; the alias stays as the folded constant so importers in other lanes compile, and each importer's lane deletes its branch.
+- **Verdict**: no record: no A/B was recorded for the opt-in arm (plan rule a; AGENTS.md "An unmeasured arm is deleted", Andrew 2026-11-15). No bit change on any column.
+- **Deleted by**: lane/expdel2-07-base (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `d6045cbd0a`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_C58_TEAM_MIB.patch`, then delete the `MOJOLEARN_C58_TEAM_MIB` refusal in `core/experiment_guards_neural.mojo`.
+- **Records**: refusal in `core/experiment_guards_neural.mojo`; `classical-misc.json` control `c58_team_mib`: `removed` entry added (control removed from `controls` and from its algorithms); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-07-base section).
+
+## MOJOLEARN_C59_TRIAL_STATE: unmeasured arm deleted (2026-11-15)
+
+- **What it was**: the opt-in arm behind `C59_TRIAL_STATE` in `experiments/classical_identical_ideas/stats_controls.mojo`; the alias stays as the folded constant so importers in other lanes compile, and each importer's lane deletes its branch.
+- **Verdict**: no record: no A/B was recorded for the opt-in arm (plan rule a; AGENTS.md "An unmeasured arm is deleted", Andrew 2026-11-15). No bit change on any column.
+- **Deleted by**: lane/expdel2-07-base (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `7935a1db35`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_C59_TRIAL_STATE.patch`, then delete the `MOJOLEARN_C59_TRIAL_STATE` refusal in `core/experiment_guards_series.mojo`.
+- **Records**: refusal in `core/experiment_guards_series.mojo`; `classical-misc.json` control `c59_trial_state`: `removed` entry added (control removed from `controls` and from its algorithms); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-07-base section).
+
+## MOJOLEARN_C60_LAG4: unmeasured arm deleted (2026-11-15)
+
+- **What it was**: the opt-in arm behind `C60_LAG4` in `experiments/classical_identical_ideas/stats_controls.mojo`; the alias stays as the folded constant so importers in other lanes compile, and each importer's lane deletes its branch.
+- **Verdict**: no record: no A/B was recorded for the opt-in arm (plan rule a; AGENTS.md "An unmeasured arm is deleted", Andrew 2026-11-15). No bit change on any column.
+- **Deleted by**: lane/expdel2-07-base (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `ad78b8054f`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_C60_LAG4.patch`, then delete the `MOJOLEARN_C60_LAG4` refusal in `core/experiment_guards_series.mojo`.
+- **Records**: refusal in `core/experiment_guards_series.mojo`; `classical-misc.json` control `c60_lag4`: `removed` entry added (control removed from `controls` and from its algorithms); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-07-base section).
+
+## MOJOLEARN_IDN_GPC_OVR_OFF: old path deleted (2026-11-15)
+
+- **What it was**: the `_OFF` rollback of `GPC_IDN_OVR` (`gaussian_process/gpc_ovr.mojo`): `gp_idn_caps` answered 0 and the Python glue took the per-class binding calls. `GPC_IDN_OVR` stays as a constant; `MOJOLEARN_IDN_ALL_OFF` (same wave, non-owner fold in this lane) was the other way to reach it.
+- **Verdict**: no A/B recorded for the old path (plan rule b); deleted under AGENTS.md "An unmeasured arm is deleted" (Andrew, 2026-11-15). The batched one-vs-rest default is untouched. No bit change on any column.
+- **Deleted by**: lane/expdel2-07-base (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `abe1b14d9d`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_IDN_GPC_OVR_OFF.patch`, then delete the `MOJOLEARN_IDN_GPC_OVR_OFF` refusal in `core/experiment_guards_kernel.mojo`.
+- **Records**: refusal in `core/experiment_guards_kernel.mojo`; no `grid_controls` entry named it; `docs/apple-fast/EXPERIMENTS.md` row (expdel2-07-base section).
+
+## MOJOLEARN_IDN_GPR_PTR_OFF: old path deleted (2026-11-15)
+
+- **What it was**: the `_OFF` rollback of `GPR_IDN_PTR` (`gaussian_process/gpr_resident.mojo`): bit 1 of `gp_idn_caps` cleared and the Python glue called `gpr_fit` / `gpr_predict` with host lists, host walks and per-scalar waits. `GPR_IDN_PTR` stays as a constant.
+- **Verdict**: no A/B recorded for the old path (plan rule b); deleted under AGENTS.md "An unmeasured arm is deleted" (Andrew, 2026-11-15). The resident pointer default is untouched. No bit change on any column.
+- **Deleted by**: lane/expdel2-07-base (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `b2a4adf292`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_IDN_GPR_PTR_OFF.patch`, then delete the `MOJOLEARN_IDN_GPR_PTR_OFF` refusal in `core/experiment_guards_kernel.mojo`.
+- **Records**: refusal in `core/experiment_guards_kernel.mojo`; no `grid_controls` entry named it; `docs/apple-fast/EXPERIMENTS.md` row (expdel2-07-base section).
+
+## MOJOLEARN_IDN_ATTN_STASH: arm deleted (2026-11-15)
+
+- **What it was**: `-D MOJOLEARN_IDN_ATTN_STASH=1|2|3`, the fused-attention exp-stash memory profiles (recompute, packed, alias_y; `ATTN_STASH_ARM` in `transformer/impl/llama/fused_attention.mojo`, another lane's file). This lane removed the read in the I07 timing driver `experiments/performance_ideas/attention_time.mojo`; the build scripts that pass it (`bindings/build_transformer.sh`, `bindings/build_byte_lm.sh`, `tools/*estash*`) are the tooling lane's.
+- **Verdict**: EXP:1757 (ge123e6f9; samba nv v0280, amd a0681; lm nv v0349, amd a0814): recompute won on Samba only and became `MOJOLEARN_IDN_SAMBA_ATTN_RECOMPUTE_OFF`'s default; on lm-train-step it was 1.24x slower; the packed and alias_y arms have no A/B. The arm switch is deleted (plan rule e). No bit change on any column.
+- **Deleted by**: lane/expdel2-07-base (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `dc10f7b50f`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_IDN_ATTN_STASH.patch`, then delete the `MOJOLEARN_IDN_ATTN_STASH` refusal in `core/experiment_guards_neural.mojo`.
+- **Records**: refusal in `core/experiment_guards_neural.mojo`; `neural-gemm-attn-dedupe.json` control `attn_stash`: `removed` entry added (control removed from `controls` and from its algorithms); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-07-base section).
+
+## MOJOLEARN_IDN_ATTN_HEAD_SHARE: arm deleted (2026-11-15)
+
+- **What it was**: `-D MOJOLEARN_IDN_ATTN_HEAD_SHARE=4` (`ATTN_HEAD_SHARE` in `transformer/impl/llama/fused_attention.mojo`, another lane's file): one K/V page staged for four query heads. This lane removed its read in the timing driver `experiments/performance_ideas/attention_time.mojo`.
+- **Verdict**: EXP:1483 (overnight-ab-20261006 I06): the two-head form was slower on both vendors (MI325X 1.21x, L40S 1.11-1.15x) and was deleted; the surviving `=4` arm never ran an A/B. Deleted under AGENTS.md "An unmeasured arm is deleted" (Andrew, 2026-11-15). No bit change on any column.
+- **Deleted by**: lane/expdel2-07-base (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `7605a821c7`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_IDN_ATTN_HEAD_SHARE.patch`, then delete the `MOJOLEARN_IDN_ATTN_HEAD_SHARE` refusal in `core/experiment_guards_neural.mojo`.
+- **Records**: refusal in `core/experiment_guards_neural.mojo`; `neural-gemm-attn-dedupe.json` control `attn_head_share`: `removed` entry added (control removed from `controls` and from its algorithms); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-07-base section).
+
+## MOJOLEARN_MEASURE_I06_GQA: unmeasured arm deleted (2026-11-15)
+
+- **What it was**: the I06 arm of the timing driver `experiments/performance_ideas/attention_time.mojo` (forward GQA reuse with the backward kvgrid schedule fixed).
+- **Verdict**: no record: no A/B was recorded for the opt-in arm (plan rule a; AGENTS.md "An unmeasured arm is deleted", Andrew 2026-11-15). No bit change on any column.
+- **Deleted by**: lane/expdel2-07-base (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `dbdaaf2c5e`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_MEASURE_I06_GQA.patch`, then delete the `MOJOLEARN_MEASURE_I06_GQA` refusal in `core/experiment_guards_neural.mojo`.
+- **Records**: refusal in `core/experiment_guards_neural.mojo`; no `grid_controls` entry named it; `docs/apple-fast/EXPERIMENTS.md` row (expdel2-07-base section).
+
+## MOJOLEARN_MEASURE_I07_LIFETIME: unmeasured arm deleted (2026-11-15)
+
+- **What it was**: the I07 arm of the timing driver `experiments/performance_ideas/attention_time.mojo` (retained-estash lifetime word and its kept-cells admission check).
+- **Verdict**: no record: no A/B was recorded for the opt-in arm (plan rule a; AGENTS.md "An unmeasured arm is deleted", Andrew 2026-11-15). No bit change on any column.
+- **Deleted by**: lane/expdel2-07-base (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `6ada715def`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_MEASURE_I07_LIFETIME.patch`, then delete the `MOJOLEARN_MEASURE_I07_LIFETIME` refusal in `core/experiment_guards_neural.mojo`.
+- **Records**: refusal in `core/experiment_guards_neural.mojo`; no `grid_controls` entry named it; `docs/apple-fast/EXPERIMENTS.md` row (expdel2-07-base section).
+
+## MOJOLEARN_TRAIN_LIVE_STATUS: unmeasured arm deleted (2026-11-15)
+
+- **What it was**: the I10 live-status candidate as read by `experiments/performance_ideas/I10/check.mojo` (the noshadow arm expected two full live-status steps); the check now expects the default's zero.
+- **Verdict**: no record: no A/B was recorded for the opt-in arm (plan rule a; AGENTS.md "An unmeasured arm is deleted", Andrew 2026-11-15). No bit change on any column.
+- **Deleted by**: lane/expdel2-07-base (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `c38a3b0613`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_TRAIN_LIVE_STATUS.patch`, then delete the `MOJOLEARN_TRAIN_LIVE_STATUS` refusal in `core/experiment_guards_neural.mojo`.
+- **Records**: refusal in `core/experiment_guards_neural.mojo`; `neural-seq-train-dedupe.json` control `train_live_status`: `removed` entry added (control removed from `controls` and from its algorithms); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-07-base section).
+
+## MOJOLEARN_IDN_TSQR_REUSE: unmeasured arm deleted (2026-11-15)
+
+- **What it was**: the I22 immutable TSQR factor reuse across repeated RHS calls, as read by `experiments/performance_ideas/I22/reuse_check.mojo` and `I22/time.mojo`; both now factor once per RHS call (the default).
+- **Verdict**: I22 source5b recorded a component win only; no full-operation NVIDIA + AMD A/B was ever recorded (plan rule a). Deleted under AGENTS.md "An unmeasured arm is deleted" (Andrew, 2026-11-15). No bit change on any column.
+- **Deleted by**: lane/expdel2-07-base (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `c336036020`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_IDN_TSQR_REUSE.patch`, then delete the `MOJOLEARN_IDN_TSQR_REUSE` refusal in `core/experiment_guards_decomposition.mojo`.
+- **Records**: refusal in `core/experiment_guards_decomposition.mojo`; no `grid_controls` entry named it; `docs/apple-fast/EXPERIMENTS.md` row (expdel2-07-base section).
+
+## MOJOLEARN_IDN_RADIX_TILE128: unmeasured arm deleted (2026-11-15)
+
+- **What it was**: the 128-thread tile of `stable_nibble_pairs_u32` under the I19 nibble radix arm in `experiments/performance_ideas/I19/ragged_float.mojo` and `I19/check.mojo`.
+- **Verdict**: no record: no A/B was recorded for the opt-in arm (plan rule a; AGENTS.md "An unmeasured arm is deleted", Andrew 2026-11-15). No bit change on any column.
+- **Deleted by**: lane/expdel2-07-base (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `51ec4db2c0`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_IDN_RADIX_TILE128.patch`, then delete the `MOJOLEARN_IDN_RADIX_TILE128` refusal in `core/experiment_guards_base.mojo`.
+- **Records**: refusal in `core/experiment_guards_base.mojo`; no `grid_controls` entry named it; `docs/apple-fast/EXPERIMENTS.md` row (expdel2-07-base section).
+
+## MOJOLEARN_IDN_RAGGED_RADIX_NIBBLE: unmeasured arm deleted (2026-11-15)
+
+- **What it was**: the nibble-digit `stable_nibble_pairs_u32` arm of the I19 ragged radix sort in `experiments/performance_ideas/I19/ragged_float.mojo` and `I19/check.mojo`; both use `stable_radix_sort_pairs_u32`.
+- **Verdict**: no record: no A/B was recorded for the opt-in arm (plan rule a; AGENTS.md "An unmeasured arm is deleted", Andrew 2026-11-15). No bit change on any column.
+- **Deleted by**: lane/expdel2-07-base (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `36a2cc0af1`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_IDN_RAGGED_RADIX_NIBBLE.patch`, then delete the `MOJOLEARN_IDN_RAGGED_RADIX_NIBBLE` refusal in `core/experiment_guards_base.mojo`.
+- **Records**: refusal in `core/experiment_guards_base.mojo`; no `grid_controls` entry named it; `docs/apple-fast/EXPERIMENTS.md` row (expdel2-07-base section).
+
+## MOJOLEARN_IDN_RAGGED_FLOAT_RADIX: unmeasured arm deleted (2026-11-15)
+
+- **What it was**: the stable-radix route of `enqueue_ragged_float_sort` (`experiments/performance_ideas/I19/ragged_float.mojo`: the `_keys` / `_words` kernels around `stable_radix_sort_pairs_u32`) and its lifting of the 4096-per-segment bound; the bounded rank control is the only route.
+- **Verdict**: I19 recorded an AMD MI325X scoped component win (radix/rank 0.683/0.465/0.356 at totals 65537/98305/131071, overnight-ab-20261006) that its own note says does not qualify promotion; no NVIDIA run and no full-operation A/B exist. Deleted under AGENTS.md "An unmeasured arm is deleted" (Andrew, 2026-11-15). No bit change on any column.
+- **Deleted by**: lane/expdel2-07-base (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `6e8a669206`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_IDN_RAGGED_FLOAT_RADIX.patch`, then delete the `MOJOLEARN_IDN_RAGGED_FLOAT_RADIX` refusal in `core/experiment_guards_base.mojo`.
+- **Records**: refusal in `core/experiment_guards_base.mojo`; no `grid_controls` entry named it; `docs/apple-fast/EXPERIMENTS.md` row (expdel2-07-base section).

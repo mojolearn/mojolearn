@@ -346,6 +346,18 @@ def _check_configuration() -> Bool:
     # Restore: git apply experiments/removed/MOJOLEARN_STEP_GLUE_TRIAL.patch
     comptime assert not is_defined["MOJOLEARN_STEP_GLUE_TRIAL"](), "removed 2026-11-15 (lane/expdel2-04-base): STEP_GLUE_TRIAL (opt-in arm, Byte LM step glue (trial build); no A/B recorded for the opt-in arm (rule a, 'NEVER RUN, PENDING MEASUREMENT')) is gone; the default stays; code recoverable at 6027e14ec1; restore: experiments/removed/MOJOLEARN_STEP_GLUE_TRIAL.patch"
     # ---- end lane expdel2-04-base
+    # Restore: git apply experiments/removed/MOJOLEARN_C58_TEAM_MIB.patch
+    comptime assert not is_defined["MOJOLEARN_C58_TEAM_MIB"](), "removed 2026-11-15 (lane/expdel2-07-base): C58_TEAM_MIB (Sequence (classical series team state budget 64 MiB, IDENTICAL)) was unmeasured opt-in arm; the opt-in arm is gone and the default path is unchanged; code recoverable at d6045cbd0a; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_ATTN_STASH.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_ATTN_STASH"](), "removed 2026-11-15 (lane/expdel2-07-base): IDN_ATTN_STASH (Neural (fused attention exp-stash memory profile arms 1 recompute / 2 packed / 3 alias_y, IDENTICAL)) was opt-in arms; EXP:1757 split the Samba winner into its own define, lm-train-step 1.24x slower; the opt-in arm is gone and the default path is unchanged; code recoverable at dc10f7b50f; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_ATTN_HEAD_SHARE.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_ATTN_HEAD_SHARE"](), "removed 2026-11-15 (lane/expdel2-07-base): IDN_ATTN_HEAD_SHARE (Neural (attention forward: one K/V page for four query heads, IDENTICAL)) was opt-in arm; EXP:1483 DROP for the two-head form, four-head arm never A/B'd; the opt-in arm is gone and the default path is unchanged; code recoverable at 7605a821c7; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_MEASURE_I06_GQA.patch
+    comptime assert not is_defined["MOJOLEARN_MEASURE_I06_GQA"](), "removed 2026-11-15 (lane/expdel2-07-base): MEASURE_I06_GQA (Neural (I06 forward GQA reuse timing arm of the attention driver)) was unmeasured opt-in arm; the opt-in arm is gone and the default path is unchanged; code recoverable at dbdaaf2c5e; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_MEASURE_I07_LIFETIME.patch
+    comptime assert not is_defined["MOJOLEARN_MEASURE_I07_LIFETIME"](), "removed 2026-11-15 (lane/expdel2-07-base): MEASURE_I07_LIFETIME (Neural (I07 retained-estash lifetime timing arm of the attention driver)) was unmeasured opt-in arm; the opt-in arm is gone and the default path is unchanged; code recoverable at 6ada715def; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_TRAIN_LIVE_STATUS.patch
+    comptime assert not is_defined["MOJOLEARN_TRAIN_LIVE_STATUS"](), "removed 2026-11-15 (lane/expdel2-07-base): TRAIN_LIVE_STATUS (Neural (byte LM train step live-status candidate, I10)) was unmeasured opt-in arm; the opt-in arm is gone and the default path is unchanged; code recoverable at c38a3b0613; see docs/TOMBSTONES.md"
     return True
 
 

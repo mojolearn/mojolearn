@@ -32,15 +32,10 @@ host column (`gaussian_process/host/gpc_*.mojo`) is untouched.
 `1 - p` is `sf64_sub(1, p)`, the correctly rounded binary64 subtraction
 Python's float gives.
 
-Switches (IDENTICAL only, ON by default, all off under
-`MOJOLEARN_IDN_ALL_OFF`):
-  `-D MOJOLEARN_IDN_GPC_OVR_OFF`            `gp_idn_caps` answers 0 and the
-                                            Python glue takes the per-class
-                                            binding calls
+IDENTICAL only, always on: the per-class binding calls are not a route.
 """
 
 from std.atomic import Atomic
-from std.sys.compile import is_defined
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from checks.numerics import GLOBAL_NUMERIC_MODE as _CTX_MODE, NUMERIC_IDENTICAL as _CTX_IDENTICAL
@@ -83,11 +78,12 @@ from gemm.checks.gemm_identical import (
 from gemm.contract import OP_TN
 from max.gpu import block_idx, thread_idx
 
-#: fam2-kernel-gp (2026-10-04), IDENTICAL, ON by default
-#: (`-D MOJOLEARN_IDN_GPC_OVR_OFF` restores the per-class binding calls).
-comptime GPC_IDN_OVR = _CTX_MODE == _CTX_IDENTICAL and not (
-    is_defined["MOJOLEARN_IDN_GPC_OVR_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
+#: fam2-kernel-gp (2026-10-04), IDENTICAL, always on.
+# TOMBSTONE: MOJOLEARN_IDN_GPC_OVR_OFF (no A/B recorded for the old path) deleted 2026-11-15 by lane/expdel2-07-base; code recoverable at abe1b14d9d.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_GPC_OVR_OFF.patch
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old path umbrella; the resident defaults kept, EXP:2438) deleted 2026-11-15 by lane/expdel2-07-base; code recoverable at 508bbde394.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-07-base.patch
+comptime GPC_IDN_OVR = _CTX_MODE == _CTX_IDENTICAL
 
 # TOMBSTONE: MOJOLEARN_IDN_GPC_NEWTON_LOGDET_OFF (superseded by the device Newton loop) deleted 2026-11-09 by lane/n8-gp-krr-smo; code recoverable at f59d913b0b.
 # Restore: git apply experiments/removed/N8_GPC_NEWTON_ONE_LOOP.patch
