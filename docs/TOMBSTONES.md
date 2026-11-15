@@ -2142,6 +2142,7 @@ Deletions reversed by new evidence. The code is back on main; the section and th
 | [`MOJOLEARN_BYTE_LM_LOGITS_ZERO_FILL`](#mojolearn_byte_lm_logits_zero_fill) | Neural (byte LM trainer) | 2026-11-15 (`650388311e`) | 2026-11-15 (lane/expdel2-restore-owed) | opt-in B arm, default unchanged, A/B owed at the wave sha | [MOJOLEARN_BYTE_LM_LOGITS_ZERO_FILL.patch](../experiments/removed/MOJOLEARN_BYTE_LM_LOGITS_ZERO_FILL.patch) |
 | [`MOJOLEARN_CNN_PREDICT_PROGRAM_COPY`](#mojolearn_cnn_predict_program_copy) | Neural (CNNClassifier predict call shape) | 2026-11-15 (`27a9cc7339`) | 2026-11-15 (lane/expdel2-restore-owed) | opt-in B arm, default unchanged, A/B owed at the wave sha | [MOJOLEARN_CNN_PREDICT_PROGRAM_COPY.patch](../experiments/removed/MOJOLEARN_CNN_PREDICT_PROGRAM_COPY.patch) |
 | [`MOJOLEARN_IDN_CHOL_OPS_FIT`](#mojolearn_idn_chol_ops_fit) | Kernel / GP / mixture (Cholesky fits on the executor ops) | 2026-11-15 (`70d6bad292`) | 2026-11-15 (lane/expdel2-restore-owed) | opt-in B arm, default unchanged, A/B owed at the wave sha | [MOJOLEARN_IDN_CHOL_OPS_FIT.patch](../experiments/removed/MOJOLEARN_IDN_CHOL_OPS_FIT.patch) |
+| [`MOJOLEARN_IDN_GMM_FUSED_CHOL_OFF`](#mojolearn_idn_gmm_fused_chol_off-old-path-deleted-2026-11-15) | GaussianMixture Cholesky order (IDENTICAL) | 2026-11-15 (`d14a8860af`) | 2026-11-15 (lane/expdel2-restore-owed) | opt-in B arm, default unchanged, A/B owed at the wave sha | [MOJOLEARN_IDN_GMM_FUSED_CHOL_OFF.patch](../experiments/removed/MOJOLEARN_IDN_GMM_FUSED_CHOL_OFF.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -10903,6 +10904,7 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2
 - **Deleted by**: lane/expdel2-12-cluster (expdel2-12-cluster, commit `d14a8860af`); code recoverable at `fe73c6b687`.
 - **Restore**: `git apply experiments/removed/MOJOLEARN_IDN_GMM_FUSED_CHOL_OFF.patch`, then delete the `MOJOLEARN_IDN_GMM_FUSED_CHOL_OFF` refusal in `core/experiment_guards_cluster.mojo`.
 - **Records**: refusal in `core/experiment_guards_cluster.mojo`; no `grid_controls` entry (none names it as a control); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-12-cluster section).
+Restored 2026-11-15 (lane/expdel2-restore-owed): owed B arm, deletion premature; see Restored table.
 
 ## MOJOLEARN_IDN_GMM_NK_LEVELS_OFF: old path deleted (2026-11-15)
 

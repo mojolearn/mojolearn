@@ -356,8 +356,7 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_AFCL_G09"](), "removed 2026-11-15 (lane/expdel2-12-cluster): AFCL_G09 (never-run card, IVF-Flat batched scan (FAST Apple)) is gone; the default stays; code recoverable at 06b0e453ba; restore: experiments/removed/MOJOLEARN_AFCL_G09.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_GMM_INIT_FILL.patch
     comptime assert not is_defined["MOJOLEARN_GMM_INIT_FILL"](), "removed 2026-11-15 (lane/expdel2-12-cluster): GMM_INIT_FILL (opt-in arm, GaussianMixture initial responsibilities (host)) is gone; the default stays; code recoverable at 1feb1c083e; restore: experiments/removed/MOJOLEARN_GMM_INIT_FILL.patch"
-    # Restore: git apply experiments/removed/MOJOLEARN_IDN_GMM_FUSED_CHOL_OFF.patch
-    comptime assert not is_defined["MOJOLEARN_IDN_GMM_FUSED_CHOL_OFF"](), "removed 2026-11-15 (lane/expdel2-12-cluster): IDN_GMM_FUSED_CHOL_OFF (old path, GaussianMixture Cholesky order (IDENTICAL)) is gone; the default stays; code recoverable at fe73c6b687; restore: experiments/removed/MOJOLEARN_IDN_GMM_FUSED_CHOL_OFF.patch"
+    # MOJOLEARN_IDN_GMM_FUSED_CHOL_OFF: refusal removed 2026-11-15 (restored; owed B arm, see docs/TOMBSTONES.md Restored table)
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_GMM_NK_LEVELS_OFF.patch
     comptime assert not is_defined["MOJOLEARN_IDN_GMM_NK_LEVELS_OFF"](), "removed 2026-11-15 (lane/expdel2-12-cluster): IDN_GMM_NK_LEVELS_OFF (old path, GaussianMixture Nk sums (IDENTICAL)) is gone; the default stays; code recoverable at d14a8860af; restore: experiments/removed/MOJOLEARN_IDN_GMM_NK_LEVELS_OFF.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_IVF_DEVICE_FINITE_OFF.patch
