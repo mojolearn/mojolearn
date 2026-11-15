@@ -50,10 +50,9 @@ the mutual-reachability transform's one pass over the m * m cells and read
 back together, instead of two more m * m passes with two waits each. Same
 counts, same refusals, the distance refusal first."""
 
-comptime IDN_HDB_SOFT_LEAN = (
-    # I14 current experiment: NEVER RUN — PENDING MEASUREMENT; existing defaults preserved.
-    _IDN_HDB_ON and not is_defined["MOJOLEARN_IDN_HDB_SOFT_LEAN_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_IDN_HDB_SOFT_LEAN_OFF (old path: soft clustering downloads every intermediate; no A/B recorded) deleted 2026-11-15 by lane/expdel2-11-cluster; code recoverable at 9f04fe0661.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_HDB_SOFT_LEAN_OFF.patch; record in docs/TOMBSTONES.md.
+comptime IDN_HDB_SOFT_LEAN = _IDN_HDB_ON
 """Soft clustering: the four intermediates are downloaded only when a trace
 is being written (they are read by nothing else), and the five kernels run
 with one wait at the end instead of one each."""
