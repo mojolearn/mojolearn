@@ -138,6 +138,8 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_CLASSICAL_C17_OVR"](), "removed 2026-11-15 (lane/expdel2-06-base): CLASSICAL_C17_OVR (Linear (SGD one-vs-rest in waves of four, IDENTICAL)) was unmeasured opt-in arm; the opt-in arm is gone and the default path is unchanged; code recoverable at 8c1b568a83; see docs/TOMBSTONES.md"
     # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C18_RESIDUAL_NEXT.patch
     comptime assert not is_defined["MOJOLEARN_CLASSICAL_C18_RESIDUAL_NEXT"](), "removed 2026-11-15 (lane/expdel2-06-base): CLASSICAL_C18_RESIDUAL_NEXT (Linear (CD next-coordinate residual forwarding, IDENTICAL)) was unqualified opt-in arm, neutral; the opt-in arm is gone and the default path is unchanged; code recoverable at 7ca2a3400c; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C19_SGD_CHUNK.patch
+    comptime assert not is_defined["MOJOLEARN_CLASSICAL_C19_SGD_CHUNK"](), "removed 2026-11-15 (lane/expdel2-06-base): CLASSICAL_C19_SGD_CHUNK (Linear (SGD ordered samples per launch sweep, IDENTICAL)) was unmeasured opt-in arm; the opt-in arm is gone and the default path is unchanged; code recoverable at 6690c70fa8; see docs/TOMBSTONES.md"
     return True
 
 

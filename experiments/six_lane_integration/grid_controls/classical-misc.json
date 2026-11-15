@@ -81,29 +81,6 @@
       "grid": "exclude",
       "note": "UNREACHED: classical:ols takes the TSQR route (x_decomp/api.mojo:585 IDN_OLS_ONE_ENTRY) and never calls ols_fit; :208 is FAST-Apple only, :340 weighted only."
     },
-    "c19_sgd_chunk": {
-      "define": "MOJOLEARN_CLASSICAL_C19_SGD_CHUNK",
-      "kind": "int_sweep",
-      "arms": {
-        "2048": [],
-        "128": [
-          "MOJOLEARN_CLASSICAL_C19_SGD_CHUNK=128"
-        ],
-        "32": [
-          "MOJOLEARN_CLASSICAL_C19_SGD_CHUNK=32"
-        ]
-      },
-      "default": "2048",
-      "source": [
-        "experiments/classical_identical_ideas/linear_controls.mojo:43",
-        "x_linear/device.mojo:1934"
-      ],
-      "binding": "_mojolearn_x_linear",
-      "bits_change": false,
-      "status": "split_from:C19_ORDERED_128+C19_ORDERED_32",
-      "grid": "exclude",
-      "note": "UNREACHED on the board: every SGD-family estimator defaults to the minibatch route (_sgd_mb_grid): SGDClassifier/Regressor batch 4096, Perceptron/PA 256, SGDOneClassSVM 4096 in IDENTICAL. SGD_PS_CHUNK only affects batch_size=0 fits. Compiled (rc=0) at 79aa4a19c for sm_89 OFF and =32 before the no-compile rule."
-    },
     "c20_pair_load": {
       "define": "MOJOLEARN_CLASSICAL_C20_PAIR_LOAD",
       "kind": "switch",
@@ -612,6 +589,11 @@
       "define": "MOJOLEARN_CLASSICAL_C17_OVR",
       "control": "c17_ovr",
       "reason": "DELETED 2026-11-15 (lane/expdel2-06-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md; recoverable at 8c1b568a83; patch experiments/removed/MOJOLEARN_CLASSICAL_C17_OVR.patch): unmeasured opt-in arm. no record: no A/B was recorded for the opt-in arm (plan rule a; AGENTS.md \"An unmeasured arm is deleted\", Andrew 2026-11-15). Refused in core/experiment_guards_linear.mojo; docs/TOMBSTONES.md."
+    },
+    {
+      "define": "MOJOLEARN_CLASSICAL_C19_SGD_CHUNK",
+      "control": "c19_sgd_chunk",
+      "reason": "DELETED 2026-11-15 (lane/expdel2-06-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md; recoverable at 6690c70fa8; patch experiments/removed/MOJOLEARN_CLASSICAL_C19_SGD_CHUNK.patch): unmeasured opt-in arm. no record: no A/B was recorded for the opt-in arm (plan rule a; AGENTS.md \"An unmeasured arm is deleted\", Andrew 2026-11-15); 2048 (the incumbent) is the only chunk now. Refused in core/experiment_guards_linear.mojo; docs/TOMBSTONES.md."
     }
   ],
   "owed_removal_ab": [
