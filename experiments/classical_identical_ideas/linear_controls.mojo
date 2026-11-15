@@ -197,7 +197,7 @@ comptime C19_SGD_CHUNK = 2048
 # C20_ROW_CACHE deleted 2026-10-07 (serial per-row host loop); refused in core/six_lane_experiment_guards.mojo.
 # TOMBSTONE: MOJOLEARN_CLASSICAL_C20_PAIR_LOAD (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-06-base; code recoverable at 911bf993d5.
 # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C20_PAIR_LOAD.patch; record in docs/TOMBSTONES.md.
-comptime C20_PAIR_LOAD = False
+# (Sweep 2026-11-15: comptime C20_PAIR_LOAD removed; nothing read it.)
 # TOMBSTONE: MOJOLEARN_CLASSICAL_C21_EXTREMA (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-06-base; code recoverable at 9aca9aa819.
 # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C21_EXTREMA.patch; record in docs/TOMBSTONES.md.
 comptime C21_EXTREMA = False
