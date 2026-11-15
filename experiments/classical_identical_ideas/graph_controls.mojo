@@ -81,7 +81,9 @@ comptime C32_EMIT_FUSION = False
 # TOMBSTONE: MOJOLEARN_C33_FROZEN_CHUNKS (superseded / unmeasured arm) deleted 2026-11-15 by lane/expdel2-05-base; code recoverable at b41ab5891f.
 # Restore: git apply experiments/removed/MOJOLEARN_C33_FROZEN_CHUNKS.patch; record in docs/TOMBSTONES.md.
 comptime C33_FROZEN_CHUNKS = False
-comptime C33_CHUNK = 4 if is_defined["MOJOLEARN_C33_CHUNK_4"]() else 16
+# TOMBSTONE: MOJOLEARN_C33_CHUNK_4 (unmeasured arm) deleted 2026-11-15 by lane/expdel2-05-base; code recoverable at 77dc9e2f62.
+# Restore: git apply experiments/removed/MOJOLEARN_C33_CHUNK_4.patch; record in docs/TOMBSTONES.md.
+comptime C33_CHUNK = 16
 comptime C34_PARALLEL_EDGES = GRAPH_IDENTICAL and is_defined["MOJOLEARN_C34_PARALLEL_EDGES"]()
 comptime C35_PACKED_LISTS = GRAPH_IDENTICAL and is_defined["MOJOLEARN_C35_PACKED_LISTS"]()
 comptime C35_TASK_ROWS = 128 if is_defined["MOJOLEARN_C35_ROWS_128"]() else 256

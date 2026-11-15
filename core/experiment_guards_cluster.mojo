@@ -143,6 +143,8 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_C32_EMIT_FUSION"](), "removed 2026-11-15 (lane/expdel2-05-base): C32_EMIT_FUSION (opt-in IDENTICAL arm, never measured) is gone; the incumbent path is the only one"
     # Restore: git apply experiments/removed/MOJOLEARN_C33_FROZEN_CHUNKS.patch
     comptime assert not is_defined["MOJOLEARN_C33_FROZEN_CHUNKS"](), "removed 2026-11-15 (lane/expdel2-05-base): C33_FROZEN_CHUNKS (opt-in IDENTICAL arm, never measured) is gone; the incumbent path is the only one"
+    # Restore: git apply experiments/removed/MOJOLEARN_C33_CHUNK_4.patch
+    comptime assert not is_defined["MOJOLEARN_C33_CHUNK_4"](), "removed 2026-11-15 (lane/expdel2-05-base): C33_CHUNK_4 (opt-in IDENTICAL arm, never measured) is gone; the incumbent path is the only one"
     return True
 
 

@@ -702,6 +702,7 @@ in the tables after the sections.
 | [`MOJOLEARN_C32_COUNT_FUSION`](#mojolearn_c32_count_fusion-unmeasured-arm-deleted-2026-11-15) | Classical IDENTICAL graph / cluster candidate (ball-cover kNN) | removed (unmeasured opt-in arm; plan V2 rule a) | 2026-11-15 | [MOJOLEARN_C32_COUNT_FUSION.patch](../experiments/removed/MOJOLEARN_C32_COUNT_FUSION.patch) |
 | [`MOJOLEARN_C32_EMIT_FUSION`](#mojolearn_c32_emit_fusion-unmeasured-arm-deleted-2026-11-15) | Classical IDENTICAL graph / cluster candidate (ball-cover kNN) | removed (unmeasured opt-in arm; plan V2 rule a) | 2026-11-15 | [MOJOLEARN_C32_EMIT_FUSION.patch](../experiments/removed/MOJOLEARN_C32_EMIT_FUSION.patch) |
 | [`MOJOLEARN_C33_FROZEN_CHUNKS`](#mojolearn_c33_frozen_chunks-unmeasured-arm-deleted-2026-11-15) | Classical IDENTICAL graph / cluster candidate (dbscan, label-propagation) | removed (unmeasured opt-in arm; plan V2 rule a) | 2026-11-15 | [MOJOLEARN_C33_FROZEN_CHUNKS.patch](../experiments/removed/MOJOLEARN_C33_FROZEN_CHUNKS.patch) |
+| [`MOJOLEARN_C33_CHUNK_4`](#mojolearn_c33_chunk_4-unmeasured-arm-deleted-2026-11-15) | Classical IDENTICAL graph / cluster candidate (dbscan, label-propagation) | removed (unmeasured opt-in arm; plan V2 rule a) | 2026-11-15 | [MOJOLEARN_C33_CHUNK_4.patch](../experiments/removed/MOJOLEARN_C33_CHUNK_4.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -6793,4 +6794,12 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2
 - **Verdict**: EXPERIMENTS.md row "C33_FROZEN_CHUNKS (label propagation use)": DELETED (superseded) for label propagation, no A/B for the DBSCAN / LPK_BATCH use; deleted under "An unmeasured arm is deleted" (Andrew, 2026-11-15). The default build never set it, so no bit changes on any column.
 - **Deleted by**: lane/expdel2-05-base (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `b41ab5891f`.
 - **Restore**: `git apply experiments/removed/MOJOLEARN_C33_FROZEN_CHUNKS.patch`, then delete the `MOJOLEARN_C33_FROZEN_CHUNKS` refusal in `core/experiment_guards_cluster.mojo`.
+- **Records**: refusal in `core/experiment_guards_cluster.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-05-base section).
+
+### MOJOLEARN_C33_CHUNK_4: unmeasured arm deleted (2026-11-15)
+
+- **What it was**: Knob of the C33 frozen-chunk arm: 4 iterations a chunk instead of 16. The alias `C33_CHUNK` in `experiments/classical_identical_ideas/graph_controls.mojo` stays as the constant `16` so its readers (dbscan/impl/sparse/detail/csr.mojo, x_neighbors/iter_device.mojo) compile unchanged until their lanes fold it.
+- **Verdict**: no record (no A/B recorded for the opt-in arm); deleted under "An unmeasured arm is deleted" (Andrew, 2026-11-15). The default build never set it, so no bit changes on any column.
+- **Deleted by**: lane/expdel2-05-base (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `77dc9e2f62`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_C33_CHUNK_4.patch`, then delete the `MOJOLEARN_C33_CHUNK_4` refusal in `core/experiment_guards_cluster.mojo`.
 - **Records**: refusal in `core/experiment_guards_cluster.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-05-base section).
