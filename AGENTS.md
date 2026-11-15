@@ -8,8 +8,11 @@ imports it and adds only what is specific to Claude sessions.
   campaigns are kept verbatim in [docs/rules/RULES_HISTORY.md](docs/rules/RULES_HISTORY.md); it is history, not rules.
   How this file was consolidated: [docs/rules/RULES_CONSOLIDATION_2026-11-09.md](docs/rules/RULES_CONSOLIDATION_2026-11-09.md).
 
-The file is in seven parts: hard rules; the product (what Mojolearn is and never trades away); measurement; releases;
-how we work (lanes, compiles, boxes, logs, experiments); Mojo rules; public docs.
+The file is in eight parts: hard rules; the product (what Mojolearn is and never trades away); measurement; releases;
+how we work (lanes, compiles, boxes, logs, experiments); Mojo rules; public docs; and, last, TEMPORARY DIRECTIONS.
+Parts 1 to 7 are standing rules. Part 8 holds what Andrew has ordered for now only: read it first, because while a
+direction there is live it overrides the standing rule it names, and it is deleted (moved to RULES_HISTORY) when
+Andrew ends it. Nothing temporary is ever written into parts 1 to 7.
 
 ## 1. Hard rules (Andrew)
 
@@ -328,32 +331,6 @@ above or below a board row (rows, features, classes, k, vocabulary), or a board 
 stated in a comment. Removing such a rule may change bits: change all columns together. Each removal gets an A/B
 with the old rule as the B arm, timed on neighboring shapes and one non-board dataset.
 
-### The pre-0.8.67 measurement campaign is NVIDIA only, small board first (Andrew, 2026-11-14)
-
-- Until Andrew says otherwise, measurement builds are timed on the NVIDIA L40S only: no MI300X leg, no AMD rent, no
-  Apple timing, no verify at the end of a measurement. The cross-vendor verification happens once, at the release.
-- While this campaign runs it overrides every "NVIDIA and AMD" in the measurement and release rules (restated
-  2026-11-15: "forget about AMD for now"): a switch is decided, a measured winner is replaced, a fix wave is measured
-  and an owed A/B arm is timed on the NVIDIA L40S alone. No AMD box is rented and no AMD build is waited on. The
-  two-vendor average, the AMD and Apple timing columns and the vendor-split flag return when Andrew reopens them.
-  Bits across vendors are unaffected: the release's one verification still covers every vendor.
-- Order: fix everything known (every regression row, every audit finding, every leftover a lane reported) -> one
-  GitHub build -> the PAPER board (the 108 recipes of the 0.8.55 comparison) against 0.8.55 and the last release ->
-  read every flag -> for each regressed row look back through 0.8.55, the earlier releases and every stored
-  measurement run (best-ever table, boards in `bench/results/` and R2) at what the BEST run of that row was doing,
-  and restore that behaviour or beat it -> fix wave -> one build -> measure again. Repeat until every paper row is
-  at least as fast as 0.8.55 with quality equal.
-- Only then the FULL board, NVIDIA only, against best-ever; then the same fix loop on its regressions. The full board
-  times one prior on the same box, 0.8.55 (Andrew, 2026-11-15); the last release is timed only on the paper rows.
-- ONE integration branch for the whole campaign (Andrew, 2026-11-14: "everything, everything, everything"): every fix
-  lane, every audit fix and every leftover is merged into the same integration branch (`preinteg/wave2-20261113` until
-  it lands), which is the only branch compiled. main receives that branch whole, never a piece of it; no lane and no
-  tooling fix merges to main on its own. Fix as we go: a defect found while a build or a measurement runs gets its
-  lane at once on the integration branch, and no measurement is repeated for it alone.
-- Carefully, never narrowly: quality is never traded for speed (both arms' quality beside every time; a quality drop
-  is a regression), no rule may key on a benchmark shape or dataset ("No dimension targeting"), and no row is
-  "fixed" by measuring it on a smaller case. Not piecemeal: one wave fixes everything the last measurement showed.
-
 ## 4. Releases
 
 ### Fix everything before a release (Andrew, 2026-11-08)
@@ -376,8 +353,7 @@ with the old rule as the B arm, timed on neighboring shapes and one non-board da
   known without the measurement. A fix that lands within the hour after a measurement starts is evidence the
   list was not read.
 - Work moves in waves: fix wave (every lane the findings call for, at once) -> one integration branch -> one
-  GitHub build -> one measurement (NVIDIA and AMD together; NVIDIA only during the pre-0.8.67 campaign, see
-  "3. Measurement") -> read every flag -> the next fix wave. Never a
+  GitHub build -> one measurement on NVIDIA and AMD together -> read every flag -> the next fix wave. Never a
   box run for one lane, one row or one family; never a second measurement of the same sha for rows that a later
   sha changes. Between waves the boxes come down.
 - The only measurement that may run with known fixes outstanding is a discovery screen whose purpose is to find
@@ -629,3 +605,36 @@ them for you.
 - The 162M two-route model is research and marketing material; it never appears in docs-site or the library docs.
 - We are alpha: no enterprise-grade checks. The docs, mojolearn.org and the measurements are generated from the
   latest origin/main by one publish command, run only when Andrew says so. Old URLs may break; no redirects.
+
+## 8. Temporary directions (for now only; each ends when Andrew says)
+
+Each entry says what it overrides and is removed whole when it ends. The standing rules in parts 1 to 7 are not edited
+to match a temporary direction, and no agent treats one as permanent or extends it to other work.
+
+### TEMPORARY: measure on NVIDIA only, small board first (Andrew, 2026-11-14; restated 2026-11-15)
+
+Ends when Andrew says. It is not the product direction: AMD and Apple remain in the contract and return to measurement.
+
+- Until Andrew says otherwise, measurement builds are timed on the NVIDIA L40S only: no MI300X leg, no AMD rent, no
+  Apple timing, no verify at the end of a measurement. The cross-vendor verification happens once, at the release.
+- While this campaign runs it overrides every "NVIDIA and AMD" in the measurement and release rules (restated
+  2026-11-15: "forget about AMD for now"): a switch is decided, a measured winner is replaced, a fix wave is measured
+  and an owed A/B arm is timed on the NVIDIA L40S alone. No AMD box is rented and no AMD build is waited on. The
+  two-vendor average, the AMD and Apple timing columns and the vendor-split flag return when Andrew reopens them.
+  Bits across vendors are unaffected: the release's one verification still covers every vendor.
+- Order: fix everything known (every regression row, every audit finding, every leftover a lane reported) -> one
+  GitHub build -> the PAPER board (the 108 recipes of the 0.8.55 comparison) against 0.8.55 and the last release ->
+  read every flag -> for each regressed row look back through 0.8.55, the earlier releases and every stored
+  measurement run (best-ever table, boards in `bench/results/` and R2) at what the BEST run of that row was doing,
+  and restore that behaviour or beat it -> fix wave -> one build -> measure again. Repeat until every paper row is
+  at least as fast as 0.8.55 with quality equal.
+- Only then the FULL board, NVIDIA only, against best-ever; then the same fix loop on its regressions. The full board
+  times one prior on the same box, 0.8.55 (Andrew, 2026-11-15); the last release is timed only on the paper rows.
+- ONE integration branch for the whole campaign (Andrew, 2026-11-14: "everything, everything, everything"): every fix
+  lane, every audit fix and every leftover is merged into the same integration branch (`preinteg/wave2-20261113` until
+  it lands), which is the only branch compiled. main receives that branch whole, never a piece of it; no lane and no
+  tooling fix merges to main on its own. Fix as we go: a defect found while a build or a measurement runs gets its
+  lane at once on the integration branch, and no measurement is repeated for it alone.
+- Carefully, never narrowly: quality is never traded for speed (both arms' quality beside every time; a quality drop
+  is a regression), no rule may key on a benchmark shape or dataset ("No dimension targeting"), and no row is
+  "fixed" by measuring it on a smaller case. Not piecemeal: one wave fixes everything the last measurement showed.
