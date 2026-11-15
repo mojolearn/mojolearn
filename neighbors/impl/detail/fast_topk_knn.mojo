@@ -82,7 +82,9 @@ def _worse(da: Float32, ia: UInt32, db: Float32, ib: UInt32) -> Bool:
 # do not time identical routes or invent reach from the compile define alone.
 # Evidence: experiments/performance_ideas/measurements/full_ab_20261006/
 # f14-full-dispatch-blockers.json. No dispatch/default change from this audit.
-comptime FKT_QPT = 4 if (FAST_TOPK_KNN_ENABLED and is_defined["MOJOLEARN_KNN_FAST_QUERY_GROUP4"]()) else 2
+# TOMBSTONE: MOJOLEARN_KNN_FAST_QUERY_GROUP4 (opt-in arm, unmeasured: F14 route never reached) deleted 2026-11-15 by lane/expdel2-12-cluster; code recoverable at 9c8a5bb983.
+# Restore: git apply experiments/removed/MOJOLEARN_KNN_FAST_QUERY_GROUP4.patch; record in docs/TOMBSTONES.md.
+comptime FKT_QPT = 2
 """Queries per thread: each loaded index row is reused across them."""
 
 
