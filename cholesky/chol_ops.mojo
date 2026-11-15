@@ -110,8 +110,9 @@ comptime CHOL_OP_GATED = Int32(-1)
 #: chol-ops-fit in bench/results/paper_compare/owed-pre0867.json.
 # TOMBSTONE: MOJOLEARN_IDN_CHOL_OPS_FIT (opt-in B arm, EXP:581 RUN OWED; AMD 1.14-1.25x slower 2026-11-13) deleted 2026-11-15 by lane/expdel2-16-decomposition; code recoverable at 860e94a3f4.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_CHOL_OPS_FIT.patch; record in docs/TOMBSTONES.md.
-#: Every fit keeps the measured 0.8.66 route.
-# (Sweep 2026-11-15: comptime CHOL_OPS_FIT removed with its readers in gaussian_process/ and mixture/checks/mstep.mojo.)
+#: Every fit keeps the measured 0.8.66 route; the name stays False for the
+#: importers in other lanes' files until they fold it.
+comptime CHOL_OPS_FIT = False
 
 comptime _F32 = MutPointer[Float32, MutAnyOrigin]
 
