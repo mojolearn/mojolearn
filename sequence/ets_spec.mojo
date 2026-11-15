@@ -4,7 +4,7 @@
 candidates evaluated side by side: the IDENTICAL twin of theta_spec's
 `nm_spec` (lane seq-nm-spec 2026-10-11, idea E1): IDENTICAL default since
 2026-10-11 (lane/w2-decide-neural, damped-ets 0.141 NV / 0.126 AMD, same
-bits); -D MOJOLEARN_IDN_NM_SPEC_OFF restores op_ets. ETS(A, A|Ad, N) goes to
+bits). ETS(A, A|Ad, N) goes to
 IDN_ETS_TEAM first (bindings/_mojolearn_x_sequence.mojo ets_binding).
 
 Structural reason: `op_ets` (sequence/ets.mojo) runs one thread per series
@@ -37,9 +37,10 @@ from sequence.ets import SEAS_N, ets_init_state, ets_lik
 from sequence.ops import FP, Args, add, fma3, ld, mul, st, sub
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_div, identical_pow, identical_sqrt
 
+# TOMBSTONE: MOJOLEARN_IDN_NM_SPEC_OFF (old path beside the IDENTICAL ETS Nelder-Mead spec default, EXP:2086 KEEP) deleted 2026-11-15 by lane/expdel2-28-neural; code recoverable at 33ca37483e.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_NM_SPEC_OFF.patch; record in docs/TOMBSTONES.md.
 comptime ETS_SPEC = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not is_defined["MOJOLEARN_IDN_NM_SPEC_OFF"]()
     and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 )
 
