@@ -69,9 +69,9 @@ def test_gpu_layer_session_uses_native_vectors():
     assert "py_ints(" not in branch
     assert "py_call(" not in branch
     assert 'not py_contains(e, "resident") or not _resident_norm_ok(model)' in public
-    # No-final-norm admission is a separately compiled opt-in capability.
-    # Its helper preserves the default refusal while supporting that flag.
+    # The no-final-norm opt-in (-D MOJOLEARN_IDN_LM_RESIDENT_GENERATE) was deleted
+    # 2026-11-15: the helper keeps the default refusal only.
     norm = public.split("def _resident_norm_ok(", 1)[1].split("\ndef ", 1)[0]
-    assert "comptime if _LM_RESIDENT_GENERATE:" in norm
+    assert "comptime if" not in norm
     assert "return model._norm is not None" in norm
-    assert 'comptime _LM_RESIDENT_GENERATE = is_defined["MOJOLEARN_IDN_LM_RESIDENT_GENERATE"]()' in public
+    assert "comptime _LM_RESIDENT_GENERATE" not in public

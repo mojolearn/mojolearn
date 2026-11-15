@@ -370,10 +370,10 @@ class Evidence(unittest.TestCase):
         self.assertIn("actual fitted estimator settings changed after preflight",cell["measurement"]["missing"])
 
     def test_runtime_flags_are_retained_without_credentials_or_receipt_paths(self):
-        got=E.runtime_environment(dict(MOJOLEARN_IDN_ALL_OFF="1", CUBLAS_WORKSPACE_CONFIG=":4096:8",
+        got=E.runtime_environment(dict(MOJOLEARN_XCNN_DEVICE_IO_OFF="1", CUBLAS_WORKSPACE_CONFIG=":4096:8",
             MOJOLEARN_R2_CREDS="private", MODULAR_AUTH_TOKEN="secret", MOJOLEARN_BOARD_SESSION="run",
             MOJOLEARN_MEASUREMENT_RECEIPTS="changing-directory", UNRELATED="value"))
-        self.assertEqual(got,dict(MOJOLEARN_IDN_ALL_OFF="1",CUBLAS_WORKSPACE_CONFIG=":4096:8"))
+        self.assertEqual(got,dict(MOJOLEARN_XCNN_DEVICE_IO_OFF="1",CUBLAS_WORKSPACE_CONFIG=":4096:8"))
 
     def test_main_board_retains_exact_worker_cell_evidence(self):
         M=load("main_board_ingest")

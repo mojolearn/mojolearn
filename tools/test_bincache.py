@@ -107,7 +107,7 @@ class KeyTests(unittest.TestCase):
         moved = {
             "image": fields(self.repo, image="do:188571990"),
             "mode": fields(self.repo, {"MOJOLEARN_NUMERIC_MODE": "fast"}),
-            "define": fields(self.repo, {"MOJOLEARN_BUILD_EXTRA_DEFINES": "-D MOJOLEARN_2560_MEMSET_FILL=1"}),
+            "define": fields(self.repo, {"MOJOLEARN_BUILD_EXTRA_DEFINES": "-D MOJOLEARN_2550_HOST_COPY=1"}),
             "trial": fields(self.repo, {"MOJOLEARN_GEMM_ARM_TRIAL": "kpack_hg"}),
             "gpu archs": fields(self.repo, {"MOJOLEARN_GPU_ARCHS": "sm_90a"}),
             "column": fields(self.repo, {"MOJOLEARN_TARGET_COLUMN": "cpu"}),

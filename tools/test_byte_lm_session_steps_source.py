@@ -22,8 +22,8 @@ def test_train_steps_has_one_native_frontdoor():
 def test_both_columns_take_n_steps_through_operation_1():
     # lane x7-byte-lm-on-executor: operation 12 is gone on both columns;
     # operation 1 takes the step count (p[14]). The device runs the steps as
-    # k restored hand steps in one native call (default since 2026-11-13) or,
-    # under -D MOJOLEARN_BYTE_LM_PROGRAM_STEP, as ONE Program.fit.
+    # k restored hand steps in one native call (the program-step B arm was
+    # deleted 2026-11-15, docs/TOMBSTONES.md).
     device = _read('training/byte_lm_native_dispatch.mojo')
     assert 'BYTE_LM_NATIVE_OPERATION_COUNT = 13' in device
     assert 'byte_owner_step(owner[], addresses, completed, cfg, shape, action == 1, max(1, p[14]))' in device
@@ -41,14 +41,10 @@ def test_both_columns_take_n_steps_through_operation_1():
     assert 'byte_train_steps_resident(' in run
     lm = _read('training/byte_lm.mojo')
     steps = lm.split('def byte_train_steps_resident(')[1].split('def byte_rollback(')[0]
-    assert 'comptime if BYTE_LM_PROGRAM_STEP:' in steps and '_byte_program_steps(' in steps
-    # the hand arm: one hand step per batch, the call's entry state restored on a refusal
+    assert 'BYTE_LM_PROGRAM_STEP' not in steps and 'def _byte_program_steps(' not in lm
+    # one hand step per batch, the call's entry state restored on a refusal
     assert 'byte_train_step_resident(' in steps and '# driver-loop: over the call\'s training steps' in steps
     assert 'trainer.completed_steps = call_step' in steps
-    program_steps = lm.split('def _byte_program_steps(')[1].split('def _byte_program_gradient(')[0]
-    assert 'byte_program_fit(' in program_steps
-    program = _read('training/byte_lm_program.mojo')
-    assert 'train_program_control(' in program
 
 
 def test_binding_admits_once_and_runs_every_step_in_one_call():
@@ -107,27 +103,22 @@ def test_pool_and_offload_exports_write_into_the_caller():
         assert 'def export_into(' in _read(name)
 
 
-def test_cpu_column_follows_the_gpu_columns_step_switch():
-    # lane restore-byte-lm-host-step (2026-11-13): one switch for every
-    # column, defined once in the host-safe config module.
-    config = _read('training/byte_lm_config.mojo')
-    assert 'comptime BYTE_LM_PROGRAM_STEP = is_defined["MOJOLEARN_BYTE_LM_PROGRAM_STEP"]()' in config
-    lm = _read('training/byte_lm.mojo')
-    assert 'comptime BYTE_LM_PROGRAM_STEP =' not in lm
-    assert 'from training.byte_lm_config import ByteConfig, BYTE_LM_PROGRAM_STEP' in lm
-    # the stateless step and loss: composed by default, the host program as the B arm
+def test_cpu_column_takes_the_composed_step_like_the_gpu_columns():
+    # lane restore-byte-lm-host-step (2026-11-13) made one step switch for every
+    # column; its B arm (-D MOJOLEARN_BYTE_LM_PROGRAM_STEP, the host program)
+    # was deleted 2026-11-15, so every column runs the composed step.
+    for name in ('training/byte_lm_config.mojo', 'training/byte_lm.mojo',
+                 'training/byte_lm_host_execution.mojo', 'training/byte_lm_host_session.mojo'):
+        assert 'comptime BYTE_LM_PROGRAM_STEP' not in _read(name), name
     execution = _read('training/byte_lm_host_execution.mojo')
     train = execution.split('def byte_host_train_native(')[1].split('def byte_host_loss_native(')[0]
-    assert train.index('comptime if not BYTE_LM_PROGRAM_STEP:') < train.index('byte_host_train_step(')
-    assert train.index('byte_host_train_step(') < train.index('byte_program_fit(')
+    assert 'byte_host_train_step(' in train and 'byte_program_fit(' not in train
     loss = execution.split('def byte_host_loss_native(')[1]
-    assert loss.index('comptime if not BYTE_LM_PROGRAM_STEP:') < loss.index('byte_host_loss(')
-    assert loss.index('byte_host_loss(') < loss.index('byte_program_eval(')
+    assert 'byte_host_loss(' in loss and 'byte_program_eval(' not in loss
     # the session: k composed steps on the call's own lists, committed together
     session = _read('training/byte_lm_host_session.mojo')
     fit = session.split('def _fit(')[1].split('def step(')[0]
-    assert 'comptime if BYTE_LM_PROGRAM_STEP:' in fit and 'byte_program_fit(' in fit
-    assert 'byte_host_train_native(' in fit
+    assert 'byte_host_train_native(' in fit and 'byte_program_fit(' not in fit
     assert "# driver-loop: over the call's training steps (one composed host step each)" in fit
     assert fit.index('host_state_validate(') < fit.index('self.p = p^')
     evaluate = session.split('def evaluate(')[1].split('def rollback(')[0]

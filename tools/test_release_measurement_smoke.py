@@ -257,10 +257,10 @@ def test_each_batch_is_the_boards_own_smoke_with_our_arm_only(tmp_path):
 
 def test_box_knobs_never_reach_the_measured_process(tmp_path, monkeypatch):
     monkeypatch.setenv("MOJOLEARN_VENDOR", "cpu")
-    monkeypatch.setenv("MOJOLEARN_IDN_ALL_OFF", "1")
+    monkeypatch.setenv("MOJOLEARN_XCNN_DEVICE_IO_OFF", "1")
     args = type("A", (), dict(work=str(tmp_path), data_root="/d"))
     env = MS.batch_env(args)
-    assert "MOJOLEARN_VENDOR" not in env and "MOJOLEARN_IDN_ALL_OFF" not in env
+    assert "MOJOLEARN_VENDOR" not in env and "MOJOLEARN_XCNN_DEVICE_IO_OFF" not in env
 
 
 # ------------------------------------------------------------------ data

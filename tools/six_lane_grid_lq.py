@@ -135,23 +135,8 @@ def binding_builds(bindings):
 # mlp-train-step race with "numeric_mode='identical' needs .../_mojolearn_linalg.so, which is not built".
 NEURAL_RUNTIME_BINDINGS = {'mlp-train-step': ('_mojolearn_training', '_mojolearn_linalg')}
 
-# Runtime environment a define set needs: a binary built with an experimental numerical profile refuses to load
-# unless the process names that exact profile (python/mojolearn/_linalg_impl.py _EXPECTED_PROFILE_ENV; the profile
-# name is gemm/contract.mojo GEMM_NUMERICAL_PROFILE). Grid ge123e6f9 refused the MOJOLEARN_IDN_GEMM_LEAF=3 (all256)
-# gemm cells by that check. B lines (no defines) never get these.
-DEFINE_ENVS = {'MOJOLEARN_IDN_GEMM_LEAF=3': ('MOJOLEARN_EXPERIMENT_GEMM_PROFILE', 'mojolearn.identical.gemm.fp32.ni08-leaf256')}
-
-
-def define_envs(defines):
-    """[(name, value)] runtime environment the define list needs (DEFINE_ENVS), in define order."""
-    if 'MOJOLEARN_IDN_ALL_OFF' in {d.split('=', 1)[0] for d in defines or []}:
-        return []  # gemm/contract.mojo: _NEURAL_GEMM_PROFILE_ARM is off under IDN_ALL_OFF, the binary stays v1
-    out = []
-    for d in defines or []:
-        kv = DEFINE_ENVS.get(d)
-        if kv and kv not in out:
-            out.append(kv)
-    return out
+# (DEFINE_ENVS / define_envs, the runtime profile the all256 GEMM leaf binary needed, are gone: its define
+# MOJOLEARN_IDN_GEMM_LEAF was deleted 2026-11-15, docs/TOMBSTONES.md.)
 
 
 def workload_selected(wid, only_workloads):
@@ -416,7 +401,7 @@ def render(plan_dir, vendor, branch='main', b_repeats=1, only_lanes=None, phase=
             if not cells:
                 continue
             tag = '%s.%s%s' % (run_id, job['pack'], '' if kind == 'race' else '.bb')
-            envs = [(TAG_ENV, tag), (DEFINES_ENV, ','.join(job['defines']))] + define_envs(job['defines'])
+            envs = [(TAG_ENV, tag), (DEFINES_ENV, ','.join(job['defines']))]
             emit('A', tag, kind, cells, envs, sorted(job['bindings']),
                  pack=job['pack'], defines=job['defines'], regime=regime,
                  configurations=sorted({c['configuration'] for c in cells}))

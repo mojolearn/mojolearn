@@ -37,4 +37,5 @@ def test_default_recipe_does_not_require_owned_snapshot_or_dropout_abi():
     import bench_board_neural as board
     assert board.SAMBA_DROPOUT == 0.0
     src = text('mamba/impl/mamba_shell_impl.mojo')
-    assert 'is_defined["MOJOLEARN_NN40_OWNED_WEIGHTS"]()' in src.split('comptime NN40_OWNED_WEIGHTS =')[1].split('\n')[0]
+    # MOJOLEARN_NN40_OWNED_WEIGHTS was deleted 2026-11-15: the owned snapshot is off in every build.
+    assert src.split('comptime NN40_OWNED_WEIGHTS =')[1].split('\n')[0].strip() == 'False'

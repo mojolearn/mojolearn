@@ -29,9 +29,8 @@ def test_xseq_numeric_calls_share_existing_provider_and_engine_table():
 
 def test_native_outputs_preserve_helper_route_switches_and_nan_rule():
     source = (ROOT / 'sequence/model_outputs_device.mojo').read_text()
-    for name in ('MOJOLEARN_IDN_ALL_OFF', 'MOJOLEARN_IDN_HPDEV_REDUCE_OFF',
-                 'MOJOLEARN_IDN_HPDEV_ELEM_OFF', 'MOJOLEARN_IDN_HPDEV_INIT_OFF',
-                 'HOTPATH_SABOTAGE', 'HPD_MAX_N', 'LRD_MAX_N'):
+    # IDN_ALL_OFF and the IDN_HPDEV_*_OFF old paths were deleted 2026-11-15 (docs/TOMBSTONES.md).
+    for name in ('HOTPATH_SABOTAGE', 'HPD_MAX_N', 'LRD_MAX_N'):
         assert name in source
     assert 'source[0] == source[0]' in source
     assert 'return model_output_fallback(op, r)' in source
