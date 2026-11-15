@@ -69,7 +69,8 @@ comptime DEVICE_LEAF_PARTITION = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 2026-09-11 (DigitalOcean MI325X, taxi and Istella-S on one box, combined
 over depthwise and lossguide: FLIP geomean=0.898 cells=4 quality=ok);
 Its rollback `MOJOLEARN_2551_DEVICE_PARTITION_OFF` was deleted 2026-11-15.
-FAST stays OPT-IN (`-D MOJOLEARN_2551_DEVICE_PARTITION=1`): its verdict
+FAST stays on the host partition (its force define
+`MOJOLEARN_2551_DEVICE_PARTITION` was deleted 2026-11-15): its verdict
 read NO FLIP on a taxi quality flag that is FAST's own round-to-round fit
 variation, left to the maintainer. `partition_from_bins` below
 (DEVIATION 90) reads every row's leaf back to the host, counting-sorts
