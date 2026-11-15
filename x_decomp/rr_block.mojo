@@ -59,7 +59,6 @@ the rotation solver runs at every size.
 
 CANDIDATE ARMS (default off, each moves the words on all four columns):
   -D MOJOLEARN_IDN_EIGH_BLOCK_B8      RB_B = 8  (pivots 16 x 16)
-  -D MOJOLEARN_IDN_EIGH_BLOCK_B32     RB_B = 32 (pivots 64 x 64)
   -D MOJOLEARN_IDN_EIGH_BLOCK_MIN128  the block form from n = 128 (default 512)
 """
 from std.sys.compile import is_defined
@@ -76,9 +75,10 @@ from x_decomp.rr import pj_first, pj_second
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_EIGH_BLOCK_ON.expdel2-18-decomposition.patch; record in docs/TOMBSTONES.md.
 comptime IDN_EIGH_BLOCK = False
 
-comptime _RB_B_WIDE = 32 if is_defined["MOJOLEARN_IDN_EIGH_BLOCK_B32"]() else 16
+# TOMBSTONE: MOJOLEARN_IDN_EIGH_BLOCK_B32 (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-18-decomposition; code recoverable at 27a4e29363.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_EIGH_BLOCK_B32.patch; record in docs/TOMBSTONES.md.
 #: columns a block
-comptime RB_B = 8 if is_defined["MOJOLEARN_IDN_EIGH_BLOCK_B8"]() else _RB_B_WIDE
+comptime RB_B = 8 if is_defined["MOJOLEARN_IDN_EIGH_BLOCK_B8"]() else 16
 #: order of a pivot problem
 comptime RB_W = 2 * RB_B
 #: the block form's least n
