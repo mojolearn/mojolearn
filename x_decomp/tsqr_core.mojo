@@ -72,7 +72,8 @@ comptime TS_MAX_N = 512
 # only; a FAST build keeps the per-panel forms. Both switches change bits, on
 # every vendor and in the host replay together.
 #
-# TS_WY_PAIR (the per-panel update stays for FAST): two consecutive panels (2 TS_NB reflectors, TS_W2 wide) share ONE
+# TS_WY_PAIR (`-D MOJOLEARN_IDN_TSQR_WY_PAIR_OFF` restores the per-panel
+# update): two consecutive panels (2 TS_NB reflectors, TS_W2 wide) share ONE
 # blocked update of the trailing columns and ONE pass of Q C. Panel a is
 # factored, its block reflector is applied to panel b's columns only (the
 # words panel b saw before), panel b is factored, and the pair's compact WY
@@ -112,7 +113,8 @@ comptime TS_MAX_N = 512
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-18-decomposition.patch; record in docs/TOMBSTONES.md.
 # TOMBSTONE: MOJOLEARN_IDN_TSQR_WY_PAIR_OFF (old path, EXP:479 run owed, no A/B recorded) deleted 2026-11-15 by lane/expdel2-18-decomposition; code recoverable at 094d2402ca.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_TSQR_WY_PAIR_OFF.patch; record in docs/TOMBSTONES.md.
-comptime TS_WY_PAIR = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+# RESTORED 2026-11-15 by lane/expdel2-restore-owed: owed B arm (owed-pre0867.json), under four weeks old; the deletion was premature.
+comptime TS_WY_PAIR = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_IDN_TSQR_WY_PAIR_OFF"]()
 # TOMBSTONE: MOJOLEARN_IDN_TSQR_TREE_PAR_OFF (old path, EXP:479 run owed, no A/B recorded) deleted 2026-11-15 by lane/expdel2-18-decomposition; code recoverable at bc3f9433a3.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_TSQR_TREE_PAR_OFF.patch; record in docs/TOMBSTONES.md.
 # RESTORED 2026-11-15 by lane/expdel2-restore-owed: owed B arm (owed-pre0867.json), under four weeks old; the deletion was premature.

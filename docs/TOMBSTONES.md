@@ -2163,6 +2163,7 @@ Deletions reversed by new evidence. The code is back on main; the section and th
 | [`MOJOLEARN_IDN_MAMBA12_FORWARD_COPIES_OLD`](#mojolearn_idn_mamba12_forward_copies_old) | Neural (Mamba-1/2 per-call forward plumbing) | 2026-11-15 (`ddf9b022e1`) | 2026-11-15 (lane/expdel2-restore-owed) | opt-in B arm, default unchanged, A/B owed at the wave sha | [MOJOLEARN_IDN_MAMBA12_FORWARD_COPIES_OLD.patch](../experiments/removed/MOJOLEARN_IDN_MAMBA12_FORWARD_COPIES_OLD.patch) |
 | [`MOJOLEARN_TRANSFORMER_DECODE_PER_TOKEN_ADMISSION`](#mojolearn_transformer_decode_per_token_admission) | Neural (TransformerDecodeSession step) | 2026-11-15 (`b891c32944`) | 2026-11-15 (lane/expdel2-restore-owed) | opt-in B arm, default unchanged, A/B owed at the wave sha | [MOJOLEARN_TRANSFORMER_DECODE_PER_TOKEN_ADMISSION.patch](../experiments/removed/MOJOLEARN_TRANSFORMER_DECODE_PER_TOKEN_ADMISSION.patch) |
 | [`MOJOLEARN_IDN_MLP_GEMM_LEAF128_OFF`](#mojolearn_idn_mlp_gemm_leaf128_off) | Neural (small MLP step GEMMs) | 2026-11-15 (`1acdb0bcd1`) | 2026-11-15 (lane/expdel2-restore-owed) | opt-in B arm, default unchanged, A/B owed at the wave sha | [MOJOLEARN_IDN_MLP_GEMM_LEAF128_OFF.patch](../experiments/removed/MOJOLEARN_IDN_MLP_GEMM_LEAF128_OFF.patch) |
+| [`MOJOLEARN_IDN_TSQR_WY_PAIR_OFF`](#mojolearn_idn_tsqr_wy_pair_off) | Decomposition (TSQR panel-pair WY update, IDENTICAL) | 2026-11-15 (`bc3f9433a3`) | 2026-11-15 (lane/expdel2-restore-owed) | opt-in B arm, default unchanged, A/B owed at the wave sha | [MOJOLEARN_IDN_TSQR_WY_PAIR_OFF.patch](../experiments/removed/MOJOLEARN_IDN_TSQR_WY_PAIR_OFF.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -12638,6 +12639,7 @@ Restored 2026-11-15 (lane/expdel2-restore-owed): owed B arm, deletion premature;
 - Deleted by: lane/expdel2-18-decomposition `bc3f9433a3` (2026-11-15); code recoverable at `094d2402ca`.
 - Restore: `git apply experiments/removed/MOJOLEARN_IDN_TSQR_WY_PAIR_OFF.patch`, then delete the refusal in `core/experiment_guards_decomposition.mojo`.
 - Records: refusal in `core/experiment_guards_decomposition.mojo`; `grid_controls/gap-tsqr.json` control `tsqr_wy_pair` moved to `removed`; `docs/apple-fast/EXPERIMENTS.md` row (expdel2-18-decomposition section).
+Restored 2026-11-15 (lane/expdel2-restore-owed): owed B arm, deletion premature; see Restored table.
 
 ### MOJOLEARN_LU_FAST_RESIDENT_OFF
 
