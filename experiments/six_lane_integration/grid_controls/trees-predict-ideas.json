@@ -3,28 +3,7 @@
   "lane": "trees-predict-ideas",
   "branch": "lane/trees-predict-ideas",
   "head": "fd48fd1cf",
-  "controls": {
-    "gbdt_ns_predict_bitvec": {
-      "define": "MOJOLEARN_GBDT_NS_PREDICT_BITVEC",
-      "kind": "switch",
-      "arms": {
-        "off": [],
-        "on": [
-          "MOJOLEARN_GBDT_NS_PREDICT_BITVEC"
-        ]
-      },
-      "default": "off",
-      "source": [
-        "gbdt/models/ns_bitvector_predict.mojo:52",
-        "gbdt/models/add_non_symmetric_tree_doc_parallel.mojo:420",
-        "gbdt/methods/doc_parallel_boosting.mojo:4606"
-      ],
-      "binding": "_mojolearn_gbdt",
-      "bits_change": false,
-      "status": "new",
-      "note": "QuickScorer bitvector apply for Depthwise/Lossguide predict: one kernel per bounded tree chunk over rows, nodes in cindex-word order, masks built on device; same per-row float32 tree-order adds as the incumbent. Trees past 512 leaves (8 mask words) or mixed approx dims take the incumbent packed apply. Compile-time refusal when both it and C50_GB_PACKED are defined: grid them as one 3-way choice {none, C50_GB, BITVEC} on the non-symmetric predict path."
-    }
-  },
+  "controls": {},
   "algorithms": {
     "trees:gbdt-depthwise": {
       "binding": "_mojolearn_gbdt",
@@ -78,5 +57,11 @@
       ]
     }
   },
-  "removed": []
+  "removed": [
+    {
+      "define": "MOJOLEARN_GBDT_NS_PREDICT_BITVEC",
+      "control": "gbdt_ns_predict_bitvec",
+      "reason": "DELETED 2026-11-15 (lane/expdel2-44-trees, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md): no A/B recorded; the source said not tested on a device, identity not verified, not measured (rule a); under \"An unmeasured arm is deleted\" the arm goes, the default stays (no bit change); patch experiments/removed/MOJOLEARN_GBDT_NS_PREDICT_BITVEC.patch."
+    }
+  ]
 }

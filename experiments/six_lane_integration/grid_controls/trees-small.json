@@ -69,25 +69,6 @@
    "bits_change": false,
    "status": "new",
    "note": "threads per tree block of build_isolation_trees_global_kernel; min/max ties to lower position and integer scans make the tree width-independent; 512 widens shared scratch to 43 KB; host unchanged"
-  },
-  "GBDT_APPLY_WIDE": {
-   "define": "MOJOLEARN_IDN_GBDT_APPLY_WIDE",
-   "kind": "switch",
-   "arms": {
-    "off": [],
-    "on": [
-     "MOJOLEARN_IDN_GBDT_APPLY_WIDE"
-    ]
-   },
-   "default": "off",
-   "source": [
-    "gbdt/models/kernel/add_bin_values.mojo:63",
-    "gbdt/resident_model.mojo:708"
-   ],
-   "binding": "_mojolearn_gbdt",
-   "bits_change": false,
-   "status": "kept",
-   "note": "pre-existing fam2-gbdt F4 candidate (64 same-depth oblivious trees per launch, register sum in tree order), registered for the grid by lane trees-small; reaches oblivious-tree predict only (mixed-depth ensembles keep the four-tree grouping)"
   }
  },
  "algorithms": {
@@ -327,6 +308,11 @@
    "define": "MOJOLEARN_TREES_PREDICT_ROW_OUTPUTS",
    "control": "PREDICT_ROW_OUTPUTS",
    "reason": "DELETED 2026-11-15 (lane/expdel2-03-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md): no record: no A/B recorded for the opt-in arm (V2 rule a); under \"An unmeasured arm is deleted\" the arm goes, the default stays (no bit change); code at 432acbb3df; patch experiments/removed/MOJOLEARN_TREES_PREDICT_ROW_OUTPUTS.patch."
+  },
+  {
+   "define": "MOJOLEARN_IDN_GBDT_APPLY_WIDE",
+   "control": "GBDT_APPLY_WIDE",
+   "reason": "DELETED 2026-11-15 (lane/expdel2-44-trees, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md): no A/B recorded for the candidate arm (rule a); under \"An unmeasured arm is deleted\" the arm goes, the default stays (no bit change); patch experiments/removed/MOJOLEARN_IDN_GBDT_APPLY_WIDE.patch."
   }
  ]
 }

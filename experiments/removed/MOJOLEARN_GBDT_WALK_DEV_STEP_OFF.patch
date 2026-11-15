@@ -1,0 +1,84 @@
+diff --git a/gbdt/methods/leaves_estimation/device_walker.mojo b/gbdt/methods/leaves_estimation/device_walker.mojo
+index 6f899b6a39..9ec2e07eae 100644
+--- a/gbdt/methods/leaves_estimation/device_walker.mojo
++++ b/gbdt/methods/leaves_estimation/device_walker.mojo
+@@ -108,9 +108,8 @@ comptime WALK_BLOCK = 256
+ #: host loop as before (one drain per evaluation, up to 100). On Metal a
+ #: drain is a fixed cost per evaluation of every leaf-estimation task, the
+ #: per-tree cost of Logloss's 10 Newton iterations on small data.
+-# TOMBSTONE: MOJOLEARN_GBDT_WALK_DEV_STEP_OFF (DELETE-OLD-PATH, EXP:2147 the default is the recorded bit-neutral kept path, rule e) deleted 2026-11-15 by lane/expdel2-44-trees; code recoverable at a303565f2a.
+-# Restore: git apply experiments/removed/MOJOLEARN_GBDT_WALK_DEV_STEP_OFF.patch; record in docs/TOMBSTONES.md.
+-comptime GBDT_WALK_DEV_STEP = True
++#: `-D MOJOLEARN_GBDT_WALK_DEV_STEP_OFF` restores the drain per evaluation.
++comptime GBDT_WALK_DEV_STEP = not is_defined["MOJOLEARN_GBDT_WALK_DEV_STEP_OFF"]()
+ #: the double 1.0's bits, and one exponent step (a power of two halved)
+ comptime WALK_STEP_ONE = UInt64(0x3FF0000000000000)
+ comptime WALK_STEP_EXP1 = UInt64(0x0010000000000000)
+@@ -835,7 +834,7 @@ def device_walk_enqueue_bounded(
+     """The walk of tree op TREE_OP_LEAF_ESTIMATE, ENQUEUED, nothing read
+     back: `device_walk_begin`, then (more than one iteration) the first
+     `iterations` line-search evaluations at the control word's steps (the
+-    GBDT_WALK_DEV_STEP form: the host walker
++    GBDT_WALK_DEV_STEP form, whatever that define says: the host walker
+     always runs them, so their steps and their accept/stop decisions are
+     the device's), then `walk_tail_status_kernel`. When an evaluation was
+     taken the walk is over (`iteration == iterations` and updated, the
+@@ -880,23 +879,43 @@ def device_walk_estimate(
+     `MakeEstimationResult` is the identity), enqueued."""
+     if device_walk_begin(ctx, oracle, w, iterations):
+         return
+-    # the first `iterations` evaluations behind one drain (see
+-    # GBDT_WALK_DEV_STEP); the host loop below takes over only when
+-    # none of them was taken: then `iteration == iterations`, not
+-    # updated, and the step is 2^-iterations
+-    device_walk_enqueue_speculative(ctx, oracle, w, iterations)
+-    ctx.synchronize()
+-    if device_walk_ctl_updated(w):
+-        return
+-    var tail_step = device_walk_ctl_step(w)
+-    var tail_it = iterations
+-    while tail_it < 100:
+-        device_walk_enqueue_line_search(ctx, oracle, w, tail_step)
++    comptime if GBDT_WALK_DEV_STEP:
++        # the first `iterations` evaluations behind one drain (see
++        # GBDT_WALK_DEV_STEP); the host loop below takes over only when
++        # none of them was taken: then `iteration == iterations`, not
++        # updated, and the step is 2^-iterations
++        device_walk_enqueue_speculative(ctx, oracle, w, iterations)
+         ctx.synchronize()
+-        tail_it += 1
+-        if device_walk_flag(w):
++        if device_walk_ctl_updated(w):
+             return
+-        tail_step /= 2
++        var tail_step = device_walk_ctl_step(w)
++        var tail_it = iterations
++        while tail_it < 100:
++            device_walk_enqueue_line_search(ctx, oracle, w, tail_step)
++            ctx.synchronize()
++            tail_it += 1
++            if device_walk_flag(w):
++                return
++            tail_step /= 2
++        return
++    var updated = False
++    var iteration = 0
++    while iteration < iterations:
++        var step = Float64(1.0)
++        var accepted = False
++        while iteration < iterations or ((not updated) and iteration < 100):
++            device_walk_enqueue_line_search(ctx, oracle, w, step)
++            # the walk's control flow: one word
++            ctx.synchronize()
++            if device_walk_flag(w):
++                iteration += 1
++                updated = True
++                accepted = True
++                break
++            iteration += 1
++            step /= 2
++        if not accepted:
++            break
+ 
+ 
+ def enqueue_zero_average(

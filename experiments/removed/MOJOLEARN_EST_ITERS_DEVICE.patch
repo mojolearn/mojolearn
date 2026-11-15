@@ -1,0 +1,26 @@
+diff --git a/gbdt/methods/leaves_estimation/apple_fast_est.mojo b/gbdt/methods/leaves_estimation/apple_fast_est.mojo
+index b5bb699684..928f407c2f 100644
+--- a/gbdt/methods/leaves_estimation/apple_fast_est.mojo
++++ b/gbdt/methods/leaves_estimation/apple_fast_est.mojo
+@@ -19,7 +19,7 @@ family and the ranking targets keep main's path.
+                               `d_est` upload.
+   MOJOLEARN_EST_REUSE_PART    (deleted 2026-10-09, DROPPED-BUG; see
+                               docs/TOMBSTONES.md)
+-  EST_ITERS_DEVICE            `leaf_estimation_iterations > 1`: the whole
++  MOJOLEARN_EST_ITERS_DEVICE  `leaf_estimation_iterations > 1`: the whole
+                               Newton walk (AnyImprovement line search) runs
+                               on the device, one `est_walk_kernel` launch per
+                               evaluation deciding accept / halve / stop; one
+@@ -127,9 +127,9 @@ comptime EST_STATS_FUSED = _APPLE_FAST and (
+ #: recovery 2026-10-04 (lane/apple-fast-rec-sym): source
+ #: lane/apple-fast-sym-est@c8518eb52; never built (its slot was killed
+ #: unstarted), never timed. (no EXPERIMENTS row at the source; added here)
+-# TOMBSTONE: MOJOLEARN_EST_ITERS_DEVICE (DELETE-EXPERIMENT, EXP:1303 NEUTRAL force knob under the SYM_EST_ALL default, rule g) deleted 2026-11-15 by lane/expdel2-44-trees; code recoverable at 886f01f544.
+-# Restore: git apply experiments/removed/MOJOLEARN_EST_ITERS_DEVICE.patch; record in docs/TOMBSTONES.md.
+-comptime EST_ITERS_DEVICE = EST_ALL
++comptime EST_ITERS_DEVICE = _APPLE_FAST and (
++    is_defined["MOJOLEARN_EST_ITERS_DEVICE"]() or EST_ALL
++)
+ # TOMBSTONE: MOJOLEARN_EST_REUSE_PART (DROPPED-BUG: istella auc .980 -> .930, logloss .186 -> 2.15) deleted 2026-10-09 on
+ # lane/owed-deletions-D1 (row-order evaluation over the searcher's partition); code recoverable at b639a2bd2.
+ # Restore: git apply experiments/removed/MOJOLEARN_EST_REUSE_PART.patch; record in docs/TOMBSTONES.md.
