@@ -208,6 +208,26 @@
   "ni12-implicit-conv-off": {
    "define": "MOJOLEARN_NI12_IMPLICIT_CONV_OFF",
    "status": "define in code (x_cnn/device.mojo NI12_IMPLICIT_CONV): B = the materialized cols on every layer (direct conv / im2col + GEMM; the g50ebe26a5 cnn-clf winner)"
+  },
+  "hist-packed-gh": {
+   "define": "MOJOLEARN_TREES_HIST_PACKED_GH",
+   "status": "define in code (gbdt/trees_hist_switches.mojo HIST_PACKED_GH, gbdt/methods/greedy_subsets_searcher/kernel/hist_2_one_byte_8bit.mojo H8_PACKED): B = grad+hess of a cell in one Int64 shared atomic (NVIDIA/AMD); A = two Int32 atomics"
+  },
+  "hist-warp-agg": {
+   "define": "MOJOLEARN_TREES_HIST_WARP_AGG",
+   "status": "define in code (gbdt/trees_hist_switches.mojo HIST_WARP_AGG, gbdt/methods/greedy_subsets_searcher/kernel/hist_2_one_byte_8bit.mojo H8_WAVE_AGG / h8_add_point_wave): B = when a whole wave holds the same bin, one shuffle-tree sum and one atomic per stat (NVIDIA/AMD); A = one atomic per lane"
+  },
+  "lg-level-rounds": {
+   "define": "MOJOLEARN_TREES_LG_LEVEL_ROUNDS",
+   "status": "define in code (gbdt/trees_identical_switches.mojo LG_LEVEL_ROUNDS, greedy_search_helper_depthwise.mojo lg_level_rounds): B = when max_leaves >= 2**max_depth (a parameter test), one exact lossguide round splits a whole depth level; A = LG_EXACT_BATCH_WIDTH (32) leaves a round"
+  },
+  "gbdt-id-defer-copy": {
+   "define": "MOJOLEARN_GBDT_ID_DEFER_COPY",
+   "status": "define in code (greedy_search_helper_depthwise.mojo DEFER_HIST_COPY_1903): B = NVIDIA/AMD IDENTICAL take Apple IDENTICAL's deferred parent-histogram copy and dirty-slot zero pass; A = split-time copy and full zero pass"
+  },
+  "c48-if-partition": {
+   "define": "MOJOLEARN_TREES_C48_IF_PARTITION",
+   "status": "define in code (isolation_forest/impl/isolation_tree_builder.mojo IF_C48_FUSED_PARTITION, IF_WORK_PLANES 3): B = node split as one fused stable partition (flag and block scan once, destinations stored, one scatter; no atomics); A = the two-pass stable partition"
   }
  },
  "rows": [
@@ -1324,6 +1344,86 @@
     "ni12-implicit-conv-off"
    ],
    "decides": "NI12_FILL_MIN = 32 (half the 64-wide tile) holds on non-board widths: the candidate must be at least as fast as the faster B arm at every width on the NVIDIA L40S; a loss where a layer turned implicit (OC 32 / 48) raises the threshold, a loss where it stayed materialized (OC 16 / 24) lowers it, with the reason beside NI12_FILL_RULE"
+  },
+  {
+   "id": "rr-hist-packed-gh",
+   "source": "restore-run-arms-trees (2026-11-15; RUN #10 of docs/plans/DELETED_ARMS_WORTH_RUNNING_2026-11-15.md; lane trees-hist-ideas 2026-10-07, never timed)",
+   "kind": "ab",
+   "lane": [
+    "gbdt-depthwise",
+    "gbdt-lossguide",
+    "gbdt-multiclass",
+    "gbdt-rank-pairlogit",
+    "gbdt-symmetric"
+   ],
+   "dataset": "*",
+   "rows": "full",
+   "vendor": "nvidia",
+   "b_arms": [
+    "hist-packed-gh"
+   ],
+   "decides": "B is promoted only when it is faster on the boosted fit rows (gbdt-depthwise, gbdt-lossguide, gbdt-multiclass, gbdt-rank-pairlogit, gbdt-symmetric fit, istella and taxi) on NVIDIA L40S; digests must not move (exact integer pair: same cells)"
+  },
+  {
+   "id": "rr-hist-warp-agg",
+   "source": "restore-run-arms-trees (2026-11-15; RUN #9 of docs/plans/DELETED_ARMS_WORTH_RUNNING_2026-11-15.md; lane trees-hist-ideas 2026-10-07, never timed)",
+   "kind": "ab",
+   "lane": [
+    "gbdt-depthwise",
+    "gbdt-lossguide",
+    "gbdt-multiclass",
+    "gbdt-rank-pairlogit",
+    "gbdt-symmetric"
+   ],
+   "dataset": "*",
+   "rows": "full",
+   "vendor": "nvidia",
+   "b_arms": [
+    "hist-warp-agg"
+   ],
+   "decides": "B is promoted only when it is faster on the boosted fit rows (gbdt-depthwise, gbdt-lossguide, gbdt-multiclass, gbdt-rank-pairlogit, gbdt-symmetric fit, istella and taxi) on NVIDIA L40S; digests must not move (integer adds: same cells); time it also crossed with hist-packed-gh (both defines) as one more B set when the box has room"
+  },
+  {
+   "id": "rr-lg-level-rounds",
+   "source": "restore-run-arms-trees (2026-11-15; RUN #1 of docs/plans/DELETED_ARMS_WORTH_RUNNING_2026-11-15.md; lane S3, never timed; lossguide istella 898,292 ms vs catboost 30,510)",
+   "kind": "ab",
+   "lane": "gbdt-lossguide",
+   "dataset": "*",
+   "rows": "full",
+   "vendor": "nvidia",
+   "b_arms": [
+    "lg-level-rounds"
+   ],
+   "decides": "B is promoted only when gbdt-lossguide fit (istella, taxi, taxi gain0) is faster on NVIDIA L40S, and a non-board lossguide fit with max_leaves < 2**max_depth (the arm does not engage) does not slow down; digests must not move (best-first replay keeps the same tree)"
+  },
+  {
+   "id": "rr-gbdt-id-defer-copy",
+   "source": "restore-run-arms-trees (2026-11-15; RUN #8 of docs/plans/DELETED_ARMS_WORTH_RUNNING_2026-11-15.md; lane gap-trees-nv, EXP:1503 KEPT as switch, never timed on NVIDIA/AMD)",
+   "kind": "ab",
+   "lane": [
+    "gbdt-depthwise",
+    "gbdt-lossguide"
+   ],
+   "dataset": "*",
+   "rows": "full",
+   "vendor": "nvidia",
+   "b_arms": [
+    "gbdt-id-defer-copy"
+   ],
+   "decides": "B is promoted only when gbdt-depthwise fit (istella, istella prebinned, taxi prebinned) and gbdt-lossguide fit are faster on NVIDIA L40S; digests must not move (schedule only: every slot holds the same bytes at every read; Apple IDENTICAL ships this schedule)"
+  },
+  {
+   "id": "rr-c48-if-partition",
+   "source": "restore-run-arms-trees (2026-11-15; RUN #7 of docs/plans/DELETED_ARMS_WORTH_RUNNING_2026-11-15.md; iforest fit istella 305.8 [197.2 at 0.8.55], taxi 202.8 [149.1]; never timed)",
+   "kind": "ab",
+   "lane": "iforest",
+   "dataset": "*",
+   "rows": "full",
+   "vendor": "nvidia",
+   "b_arms": [
+    "c48-if-partition"
+   ],
+   "decides": "B is promoted only when iforest fit (istella, taxi) is faster on NVIDIA L40S; digests must not move (stable order kept on both sides)"
   }
  ]
 }

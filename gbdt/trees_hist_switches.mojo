@@ -29,6 +29,8 @@ comptime _IDN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 # TOMBSTONE: MOJOLEARN_TREES_HIST_PACKED_GH (DELETE-ARM, opt-in, no A/B recorded, rule a) deleted 2026-11-15 by lane/expdel2-45-trees; code recoverable at e312bd1c25.
 # Restore: git apply experiments/removed/MOJOLEARN_TREES_HIST_PACKED_GH.patch
 # (Sweep 2026-11-15: the unread HIST_PACKED_GH constant was removed.)
+# RESTORED 2026-11-15 by lane/restore-run-arms-trees: RUN #10 of docs/plans/DELETED_ARMS_WORTH_RUNNING_2026-11-15.md (opt-in, default off; A/B owed on NVIDIA L40S).
+comptime HIST_PACKED_GH = _IDN and is_defined["MOJOLEARN_TREES_HIST_PACKED_GH"]()
 
 # Idea 2: wave-aggregated atomics. When every lane of a hardware wave holds
 # the same (feature, bin) cell, the wave sums its addends with one shuffle
@@ -36,6 +38,8 @@ comptime _IDN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 # TOMBSTONE: MOJOLEARN_TREES_HIST_WARP_AGG (DELETE-ARM, opt-in, no A/B recorded, rule a) deleted 2026-11-15 by lane/expdel2-45-trees; code recoverable at 1082bcb01c.
 # Restore: git apply experiments/removed/MOJOLEARN_TREES_HIST_WARP_AGG.patch
 # (Sweep 2026-11-15: the unread HIST_WARP_AGG constant was removed.)
+# RESTORED 2026-11-15 by lane/restore-run-arms-trees: RUN #9 of docs/plans/DELETED_ARMS_WORTH_RUNNING_2026-11-15.md (opt-in, default off; A/B owed on NVIDIA L40S).
+comptime HIST_WARP_AGG = _IDN and is_defined["MOJOLEARN_TREES_HIST_WARP_AGG"]()
 
 # Tried 2026-10-08 (MOJOLEARN_TREES_HIST_MULTISTAT = 4 | 8, run ge123e6f9): MultiClass one-byte histograms, one cindex
 # walk per 4 or 8 stat planes (launch_hist2_8bit_wide[NS, 1]); NV/AMD gbdt-multiclass istella 1.04x/1.41x (4), 0.99x/1.31x (8),

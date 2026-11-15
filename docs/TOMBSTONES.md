@@ -2174,6 +2174,11 @@ Deletions reversed by new evidence. The code is back on main; the section and th
 | [`MOJOLEARN_IDN_MCD_CHOL`](#mojolearn_idn_mcd_chol-unmeasured-arm-deleted-2026-11-15) | MinCovDet / EllipticEnvelope IDENTICAL (x_decomp/mcd.mojo, x_decomp/kit_device.mojo) | 2026-11-15 (`c387c0b2c1`) | 2026-11-15 (lane/expdel2-restore-owed) | opt-in B arm, default unchanged, A/B owed at the wave sha | [MOJOLEARN_IDN_MCD_CHOL.patch](../experiments/removed/MOJOLEARN_IDN_MCD_CHOL.patch) |
 | [`MOJOLEARN_BYTE_LM_PROGRAM_STEP`](#mojolearn_byte_lm_program_step) | Neural (byte LM training step) | 2026-11-15 (`f105b7dcfb`) | 2026-11-15 (lane/expdel2-restore-owed) | opt-in B arm, default unchanged, A/B owed at the wave sha | [MOJOLEARN_BYTE_LM_PROGRAM_STEP.patch](../experiments/removed/MOJOLEARN_BYTE_LM_PROGRAM_STEP.patch) |
 | [`MOJOLEARN_AUTOGRAD_OPTIM`](#mojolearn_autograd_optim) | Neural (MLP trainer executor optimizer) | 2026-11-15 (`92d4b79ec8`) | 2026-11-15 (lane/expdel2-restore-owed) | opt-in B arm, default unchanged, A/B owed at the wave sha | [MOJOLEARN_AUTOGRAD_OPTIM.2026-11-15.patch](../experiments/removed/MOJOLEARN_AUTOGRAD_OPTIM.2026-11-15.patch) + [.expdel2-30-neural.patch](../experiments/removed/MOJOLEARN_AUTOGRAD_OPTIM.expdel2-30-neural.patch) |
+| [`MOJOLEARN_TREES_HIST_PACKED_GH`](#mojolearn_trees_hist_packed_gh) | GBDT (64-bit packed grad/hess histogram atomic, IDENTICAL, NVIDIA/AMD) | 2026-11-15 (`1082bcb01c`) | 2026-11-15 (lane/restore-run-arms-trees) | opt-in RUN arm (docs/plans/DELETED_ARMS_WORTH_RUNNING_2026-11-15.md), default unchanged, A/B owed on NVIDIA L40S | [MOJOLEARN_TREES_HIST_PACKED_GH.patch](../experiments/removed/MOJOLEARN_TREES_HIST_PACKED_GH.patch) |
+| [`MOJOLEARN_TREES_HIST_WARP_AGG`](#mojolearn_trees_hist_warp_agg) | GBDT (wave-aggregated one-byte histogram atomics, IDENTICAL, NVIDIA/AMD) | 2026-11-15 (`70fbbc4c47`) | 2026-11-15 (lane/restore-run-arms-trees) | opt-in RUN arm (docs/plans/DELETED_ARMS_WORTH_RUNNING_2026-11-15.md), default unchanged, A/B owed on NVIDIA L40S | [MOJOLEARN_TREES_HIST_WARP_AGG.patch](../experiments/removed/MOJOLEARN_TREES_HIST_WARP_AGG.patch) |
+| [`MOJOLEARN_TREES_LG_LEVEL_ROUNDS`](#mojolearn_trees_lg_level_rounds) | GBDT (lossguide one exact round per depth level, IDENTICAL) | 2026-11-15 (`a3d500c032`) | 2026-11-15 (lane/restore-run-arms-trees) | opt-in RUN arm (docs/plans/DELETED_ARMS_WORTH_RUNNING_2026-11-15.md), default unchanged, A/B owed on NVIDIA L40S | [MOJOLEARN_TREES_LG_LEVEL_ROUNDS.patch](../experiments/removed/MOJOLEARN_TREES_LG_LEVEL_ROUNDS.patch) |
+| [`MOJOLEARN_GBDT_ID_DEFER_COPY`](#mojolearn_gbdt_id_defer_copy) | Trees (GBDT depthwise/lossguide, NVIDIA/AMD IDENTICAL deferred histogram copy) | 2026-11-15 (`7be6f0b80e`) | 2026-11-15 (lane/restore-run-arms-trees) | opt-in RUN arm (docs/plans/DELETED_ARMS_WORTH_RUNNING_2026-11-15.md), default unchanged, A/B owed on NVIDIA L40S | [MOJOLEARN_GBDT_ID_DEFER_COPY.patch](../experiments/removed/MOJOLEARN_GBDT_ID_DEFER_COPY.patch) |
+| [`MOJOLEARN_TREES_C48_IF_PARTITION`](#mojolearn_trees_c48_if_partition) | Trees (IsolationForest fused stable partition, IDENTICAL) | 2026-11-15 (`b35af0836a`) | 2026-11-15 (lane/restore-run-arms-trees) | opt-in RUN arm (docs/plans/DELETED_ARMS_WORTH_RUNNING_2026-11-15.md), default unchanged, A/B owed on NVIDIA L40S | [MOJOLEARN_TREES_C48_IF_PARTITION.patch](../experiments/removed/MOJOLEARN_TREES_C48_IF_PARTITION.patch) |
 
 ## Trees
 
@@ -20356,6 +20361,7 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2
 - Records: refusal in `core/experiment_guards_trees.mojo`; grid entries moved to `removed` in `trees-hist-ideas.json` (hist_packed_gh); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-45-trees section).
 
 - Sweep (lane/expdel2-sweep, 2026-11-15): gbdt/trees_hist_switches.mojo: the unread HIST_PACKED_GH and HIST_WARP_AGG constants removed; no bits change (ce43384a98).
+Restored 2026-11-15 (lane/restore-run-arms-trees): RUN arm of docs/plans/DELETED_ARMS_WORTH_RUNNING_2026-11-15.md, opt-in, default unchanged; see Restored table.
 
 ### MOJOLEARN_TREES_HIST_WARP_AGG
 
@@ -20366,6 +20372,7 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2
 - Deleted by: lane/expdel2-45-trees `70fbbc4c47` (2026-11-15); code recoverable at `1082bcb01c`.
 - Restore: `git apply experiments/removed/MOJOLEARN_TREES_HIST_WARP_AGG.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
 - Records: refusal in `core/experiment_guards_trees.mojo`; grid entries moved to `removed` in `trees-hist-ideas.json` (hist_warp_agg); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-45-trees section).
+Restored 2026-11-15 (lane/restore-run-arms-trees): RUN arm of docs/plans/DELETED_ARMS_WORTH_RUNNING_2026-11-15.md, opt-in, default unchanged; see Restored table.
 
 ### MOJOLEARN_TREES_HIST_REP_SM_OFF
 
@@ -20596,6 +20603,7 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2
 - Deleted by: lane/expdel2-45-trees `a3d500c032` (2026-11-15); code recoverable at `ce4ab6287e`.
 - Restore: `git apply experiments/removed/MOJOLEARN_TREES_LG_LEVEL_ROUNDS.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
 - Records: refusal in `core/experiment_guards_trees.mojo`; grid entries moved to `removed` in `trees-structural.json` (LG_LEVEL_ROUNDS); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-45-trees section).
+Restored 2026-11-15 (lane/restore-run-arms-trees): RUN arm of docs/plans/DELETED_ARMS_WORTH_RUNNING_2026-11-15.md, opt-in, default unchanged; see Restored table.
 
 ### MOJOLEARN_TREES_CTR_SORTFREE_SUMS
 
@@ -20715,6 +20723,7 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2
 - Deleted by: lane/expdel2-46-trees `b35af0836a` (2026-11-15); code recoverable at `dc94980d4a`.
 - Restore: `git apply experiments/removed/MOJOLEARN_TREES_C48_IF_PARTITION.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
 - Records: refusal in `core/experiment_guards_trees.mojo`; `grid_controls/trees-cleanup.json` control `C48_IF` moved to `removed`; `docs/apple-fast/EXPERIMENTS.md` row (expdel2-46-trees section).
+Restored 2026-11-15 (lane/restore-run-arms-trees): RUN arm of docs/plans/DELETED_ARMS_WORTH_RUNNING_2026-11-15.md, opt-in, default unchanged; see Restored table.
 
 ### MOJOLEARN_IF_ROWMAJOR_OFF
 
@@ -21008,6 +21017,7 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2
 - Deleted by: lane/expdel2-43-trees `7be6f0b80e` (2026-11-15); code recoverable at `8c20167f4f`.
 - Restore: `git apply experiments/removed/MOJOLEARN_GBDT_ID_DEFER_COPY.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
 - Records: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-43-trees section).
+Restored 2026-11-15 (lane/restore-run-arms-trees): RUN arm of docs/plans/DELETED_ARMS_WORTH_RUNNING_2026-11-15.md, opt-in, default unchanged; see Restored table.
 
 ### MOJOLEARN_GBDT_LG_BATCH
 
