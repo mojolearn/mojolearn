@@ -65,7 +65,6 @@ comptime LFS_K_CAP = LFS_TPD
 #: LFS_TPD whose page fits LFS_PAGE_BUDGET = half of Apple's 32 KB, so two
 #: blocks stay resident per core as they did at 320 (12.4 KB). That gives 416
 #: words (15.4 KB). Any v past it keeps main's chain (a capacity limit).
-#: `-D MOJOLEARN_LDA_V_CAP_RULE_OFF=1` restores 320.
 comptime LFS_APPLE_TG_BYTES = 32768
 comptime LFS_PAGE_BUDGET = LFS_APPLE_TG_BYTES // 2
 
@@ -107,9 +106,9 @@ comptime LFS_SMEM_FIXED = LFS_DPB * (3 * LFS_K_CAP * 4 + (LFS_TPD + 1) * 4 + 2 *
 #: `MOJOLEARN_LDA_V_CAP_RULE_OFF`) restores 320.
 # TOMBSTONE: MOJOLEARN_LEGACY_NARROW_LDA_FUSED_V (old path: the taxi-tuned 320 cap and one kernel at it; EXP:1343 ACCEPT on FAST + Apple, the one vendor FAST runs on, so no other vendor is owed) deleted 2026-11-15 by lane/expdel2-17-decomposition; code recoverable at 6bed172f77.
 # Restore: git apply experiments/removed/MOJOLEARN_LEGACY_NARROW_LDA_FUSED_V.patch; record in docs/TOMBSTONES.md.
-comptime LFS_V_CAP = 320 if (
-    is_defined["MOJOLEARN_LDA_V_CAP_RULE_OFF"]()
-) else (
+# TOMBSTONE: MOJOLEARN_LDA_V_CAP_RULE_OFF (old path: the taxi-tuned 320 cap, no A/B recorded) deleted 2026-11-15 by lane/expdel2-17-decomposition; code recoverable at 9507b8ad74.
+# Restore: git apply experiments/removed/MOJOLEARN_LDA_V_CAP_RULE_OFF.patch; record in docs/TOMBSTONES.md.
+comptime LFS_V_CAP = (
     lfs_v_cap_rule() if is_defined["MOJOLEARN_LDA_V_CAP_HALF_PAGE"]()
     else (LFS_SMEM_BYTES - LFS_SMEM_FIXED) // (LFS_DPB * 8) // 32 * 32
 )
