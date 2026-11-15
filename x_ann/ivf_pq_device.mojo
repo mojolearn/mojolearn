@@ -12,7 +12,6 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 from x_ann.device_ctx import x_ann_ctx
 from x_ann.stage_timer import AnnStages
 from x_ann.switches import (
-    ANN3_DIRECT_OUT,
     ANN3_HOST_PASSES,
     ANN3_ROW_THREADS,
     IDN_PQ_DEVICE_CODEBOOKS,
@@ -474,14 +473,7 @@ def _ivf_pq_build_impl[resident: Bool](
         swap(out_dev.dcenters, dc)
         st.host("encode_resident")
     else:
-        var direct = False
-        comptime if ANN3_DIRECT_OUT:
-            direct = codes_addr != 0
-        if direct:
-            ctx.enqueue_copy(dst_ptr=I32P(unsafe_from_address=codes_addr), src_buf=dcodes)
-            ctx.synchronize()
-        else:
-            codes = download_i32(ctx, dcodes, n * pq_dim)
+        codes = download_i32(ctx, dcodes, n * pq_dim)
         st.host("encode")
     _ = dcodes^
     _ = dcb^
@@ -725,15 +717,7 @@ def ivf_sq_build_device(
     ctx.synchronize()
     vmin = download_f32(ctx, dvmin, dim)
     delta = download_f32(ctx, ddelta, dim)
-    var direct = False
-    comptime if ANN3_DIRECT_OUT:
-        direct = codes_addr != 0
-    if direct:
-        codes = List[Int32]()
-        ctx.enqueue_copy(dst_ptr=I32P(unsafe_from_address=codes_addr), src_buf=dcodes)
-        ctx.synchronize()
-    else:
-        codes = download_i32(ctx, dcodes, n * dim)
+    codes = download_i32(ctx, dcodes, n * dim)
     st.host("encode")
     _ = dcodes^
     _ = ddelta^

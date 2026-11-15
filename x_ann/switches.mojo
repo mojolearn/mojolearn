@@ -67,7 +67,7 @@ comptime ANN3_HOST_PASSES = True
 #: buffer, then a list, then the caller's array. Plain copies: no bit moves.
 # TOMBSTONE: MOJOLEARN_ANN3_DIRECT_OUT (unmeasured opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-14-cluster; code recoverable at 09d08d6e01.
 # Restore: git apply experiments/removed/MOJOLEARN_ANN3_DIRECT_OUT.patch; record in docs/TOMBSTONES.md.
-comptime ANN3_DIRECT_OUT = False
+# (Sweep 2026-11-15: comptime ANN3_DIRECT_OUT removed; its two readers in x_ann/ivf_pq_device.mojo folded.)
 
 #: The coarse quantizer's FAST training sample is gathered row by row with
 #: memcpy into a list made by length (one append per float otherwise).
