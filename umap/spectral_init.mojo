@@ -25,8 +25,9 @@ comptime UMAP_INIT_TOL_FAST = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
     and TARGET_HAS_APPLE_GPU
     and is_defined["MOJOLEARN_UMAP_INIT_TOL"]()
-    and not is_defined["MOJOLEARN_UMAP_INIT_TOL_OFF"]()
 )
+# TOMBSTONE: MOJOLEARN_UMAP_INIT_TOL_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-13-cluster; code recoverable at 976872a147.
+# Restore: git apply experiments/removed/MOJOLEARN_UMAP_INIT_TOL_OFF.patch; record in docs/TOMBSTONES.md.
 """FAST on Apple: the spectral INITIALIZATION solves to 1e-3 instead of
 cuVS's 1e-5; the layout is only a starting point the optimizer then moves.
 At 1e-4 (umap-learn's `eigsh` tolerance) taxi 100k took 37 Lanczos restarts,
