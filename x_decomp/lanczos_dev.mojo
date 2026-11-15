@@ -47,7 +47,7 @@ from max.gpu.host import DeviceBuffer
 #: The scalar steps moved to the cells' flush-to-zero arithmetic (alpha's
 #: halves add in float32, beta through the correctly rounded sqrt, 1 / beta
 #: through the correctly rounded division): FAST Apple's words change.
-comptime KPCA_FAST_LANCZOS_DEV = True
+# (Sweep 2026-11-15: comptime KPCA_FAST_LANCZOS_DEV removed; always True, nothing read it.)
 
 
 def lz_sub_kernel(w: F32Ptr, t: F32Ptr, ab: F32Ptr, c: F32Ptr, j: Int32, add: Int32, n: Int32):

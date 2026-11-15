@@ -38,7 +38,6 @@ from x_neighbors.ocsvm_dev import OCSVM_CLS2_RES
 from providers.python.x_neighbors_dev_pyapi_door import ocsvm_resident_binding
 from x_neighbors.ocsvm_dev import OCSVM_IDN_RES
 from providers.python.x_neighbors_dev_pyapi_door import ocsvm_alpha_init_binding
-from x_neighbors.ocsvm_init import XN_OCSVM_DEV_INIT
 from providers.python.x_neighbors_dev_pyapi_door import unit_ff_binding
 from providers.python.x_neighbors_dev_pyapi_door import ocsvm_labels_binding, nc_labels_binding, nc_proba_binding, lp_dense_proba_binding
 from x_neighbors.kfeat_dev import XN_FAST_SCHI2_LAZYW, XN_KFEAT_ANY
@@ -1246,8 +1245,7 @@ def build__mojolearn_x_neighbors() -> PythonObject:
         # vendor, and libsvm's alpha start on the device
         comptime if OCSVM_IDN_RES:
             m.def_function[ocsvm_resident_binding]("x_neighbors_ocsvm_resident_idn")
-        comptime if XN_OCSVM_DEV_INIT:
-            m.def_function[ocsvm_alpha_init_binding]("x_neighbors_ocsvm_alpha_init")
+        m.def_function[ocsvm_alpha_init_binding]("x_neighbors_ocsvm_alpha_init")
         # lane/fam2-neighbors: PageRank's caller vectors normalized by the op
         # TOMBSTONE: MOJOLEARN_IDN_XN_UNIT_DEV_OFF (old path, no A/B row) deleted 2026-11-15 by lane/expdel2-10-cluster; code recoverable at 7107e38be7.
         # Restore: git apply experiments/removed/MOJOLEARN_IDN_XN_UNIT_DEV_OFF.patch; record in docs/TOMBSTONES.md.

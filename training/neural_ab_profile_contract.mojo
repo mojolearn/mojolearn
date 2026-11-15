@@ -14,8 +14,8 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identic
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_CE_TOKEN_FOLD.patch
 # TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old-path umbrella term; owner another lane) deleted 2026-11-15 by lane/expdel2-32-neural; code recoverable at 19d2549589.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-32-neural.patch
-comptime IDN_CE_TOKEN_FOLD_ARM = 0
-comptime NN54_LOSS_PROFILE = False
+# (Sweep 2026-11-15: IDN_CE_TOKEN_FOLD_ARM = 0, NN54_LOSS_PROFILE = False and the checked nn_reduce_host removed with
+# their readers' dead arms in training/byte_lm_host_kernels.mojo, training/checks/loss.mojo, training/checks/loss_oracle.mojo.)
 comptime NN57_NORM_PROFILE = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     and is_defined["MOJOLEARN_NN57_NORM_PROFILE"]()
@@ -39,19 +39,6 @@ def nn_reduce_leaf[LEAF: Int, SQUARE: Bool](x: _FP, n: Int, leaf: Int) -> Float3
 @always_inline
 def nn_reduce_pair(left: Float32, right: Float32) -> Float32:
     return ftz(ftz(left) + ftz(right))
-
-
-def nn_reduce_host[LEAF: Int, SQUARE: Bool](x: _FP, n: Int) raises -> Float32:
-    """The same leaf/pair functions on the host; a version oracle, not a test."""
-    comptime if SQUARE:
-        comptime if not NN57_NORM_PROFILE:
-            raise Error("NN57 norm profile is not enabled")
-    else:
-        comptime if not NN54_LOSS_PROFILE:
-            raise Error("NN54 loss profile is not enabled")
-    if n < 0 or n > 2147483647:
-        raise Error("neural reduction count exceeds native index range")
-    return nn_reduce_host_admitted[LEAF, SQUARE](x, n)
 
 
 def nn_reduce_host_admitted[LEAF: Int, SQUARE: Bool](x: _FP, n: Int) -> Float32:

@@ -166,23 +166,6 @@ from core.accelerator_target import TARGET_HAS_APPLE_GPU
 #: way. The CTR columns themselves stay ON THE DEVICE through the border
 #: build and the compressed-index build (`train`'s column loop).
 
-#: lane/apple-fast-sym-feat (2026-10-03): the switches live in
-#: `gbdt/gpu_data/sym_feat_switches.mojo` (FAST + Apple only, default OFF).
-from gbdt.gpu_data.sym_feat_switches import (
-    GBDT_INDEX_PACK_DEVICE,
-    GBDT_QUANT_DEVICE,
-)
-from gbdt.gpu_data.kernel.binarize import (
-    PACK_BLOCK,
-    PACK_BORDER_CAP,
-    PACK_DOCS,
-    PACK_MAX_ENTRIES,
-    TR_MAX_GRID_Y,
-    TR_ROWS_PER_PASS,
-    TR_TILE,
-    pack_cindex_words_kernel,
-    transpose_rows_to_columns_kernel,
-)
 from gbdt.gpu_util.kernel.bootstrap import (
     BOOTSTRAP_KERNEL_BAYESIAN,
     BOOTSTRAP_KERNEL_BERNOULLI,
@@ -489,260 +472,9 @@ def _resolve_column_ptrs(
     return column_ptrs.copy()
 
 
-#: lane/apple-fast-sym-feat: the border slab stride of the device-resident
-#: quantizer (count + up to 287 borders; a 255-border grid with both NaN
-#: sentinels is 257), and the launch shape of its per-feature fallback.
-comptime _QD_SLAB = 288
-comptime _QD_SUB_BLOCK = 256
-comptime _QD_SUB_MAX_BLOCKS = 4096
-
-
-@fieldwise_init
-struct _QdPackTable(Movable):
-    """`pack_cindex_words_kernel`'s host-built tables (lane af-sym-feat):
-    one entry per device-resident bordered feature, grouped by index word."""
-    var word_start: List[UInt32]
-    var col: List[UInt32]
-    var shift: List[UInt32]
-    var mask: List[UInt32]
-    var slab: List[UInt32]
-    var sub: List[Float32]
-    var fits: Bool
-
-
-def _qd_pack_word_table(
-    lay: CompressedIndexLayout,
-    dev_col_of: List[Int],
-    borders: List[List[Float32]],
-    nan_treatment: List[Int],
-) raises -> _QdPackTable:
-    """Group the device-resident bordered features by their compressed-index
-    word, in word order. `fits` is the shared-page gate of
-    `pack_cindex_words_kernel`: at most `PACK_MAX_ENTRIES` features and
-    `PACK_BORDER_CAP` border values per word; a layout that exceeds either
-    takes the per-feature launches instead."""
-    var n_features = len(borders)
-    var n_words = lay.columns
-    var per_word = List[List[Int]]()
-    # driver-loop: over the packed words
-    for _ in range(n_words):
-        per_word.append(List[Int]())
-    # driver-loop: over the features
-    for f in range(n_features):
-        if len(borders[f]) == 0 or dev_col_of[f] < 0:
-            continue
-        per_word[Int(lay.features[f].offset)].append(f)
-    var t = _QdPackTable(
-        List[UInt32](), List[UInt32](), List[UInt32](), List[UInt32](),
-        List[UInt32](), List[Float32](), True,
-    )
-    t.word_start.append(UInt32(0))
-    # driver-loop: over the packed words
-    for w in range(n_words):
-        var total = 0
-        if len(per_word[w]) > PACK_MAX_ENTRIES:
-            t.fits = False
-        # driver-loop: over the features of one packed word
-        for k in range(len(per_word[w])):
-            var f = per_word[w][k]
-            ref cf = lay.features[f]
-            total += len(borders[f])
-            var treat = NAN_TREATMENT_AS_IS
-            if len(nan_treatment) == n_features:
-                treat = nan_treatment[f]
-            t.col.append(UInt32(dev_col_of[f]))
-            t.shift.append(cf.shift)
-            t.mask.append(cf.mask)
-            t.slab.append(UInt32(f * _QD_SLAB))
-            # a NaN substitute means "leave NaN alone" (bin 0, as AS_IS)
-            t.sub.append(
-                nan_substitution(treat) if treat != NAN_TREATMENT_AS_IS
-                else bitcast[DType.float32](UInt32(0x7FC00000))
-            )
-        if total > PACK_BORDER_CAP:
-            t.fits = False
-        t.word_start.append(UInt32(len(t.col)))
-    return t^
-
-
-def _cindex_from_device_columns(
-    ctx: DeviceContext,
-    dev: MutPointer[Float32, MutAnyOrigin],
-    dev_col_of: List[Int],
-    n_rows: Int,
-    borders: List[List[Float32]],
-    nan_treatment: List[Int],
-    lay: CompressedIndexLayout,
-    mut cindex: DeviceBuffer[DType.uint32],
-) raises:
-    """lane/apple-fast-sym-feat (`GBDT_QUANT_DEVICE`): binarize every
-    device-resident float column from the device copy. ONE upload carries
-    every feature's border slab (`_QD_SLAB` floats a feature, the count
-    first, the layout `binarize_float_feature_kernel` reads); a column whose
-    NaN treatment substitutes does so in place on the device copy (the
-    border build has already read it); then either ONE
-    `pack_cindex_words_kernel` launch over every word
-    (`GBDT_INDEX_PACK_DEVICE`, when the word table fits its shared page) or
-    one `binarize_float_feature_kernel` launch per feature reading the
-    device column and its slab. No pinned memcpy, no per-feature upload, no
-    ring drain; the caller drains once. Same kernels and arithmetic as the
-    staged path, so the words are the same."""
-    var n_features = len(borders)
-    var h_slab = ctx.enqueue_create_host_buffer[DType.float32](
-        max(1, n_features * _QD_SLAB)
-    )
-    var hs = h_slab.unsafe_ptr()
-    # driver-loop: over the features (border slabs)
-    for f in range(n_features):
-        if dev_col_of[f] < 0:
-            continue
-        if len(borders[f]) >= _QD_SLAB:
-            raise Error(
-                "feature " + String(f) + " has " + String(len(borders[f]))
-                + " borders; the device quantizer's slab holds "
-                + String(_QD_SLAB - 1)
-            )
-        hs.unsafe_store(f * _QD_SLAB, Float32(len(borders[f])))
-        for b in range(len(borders[f])):
-            hs.unsafe_store(f * _QD_SLAB + 1 + b, borders[f][b])
-    var d_slab = ctx.enqueue_create_buffer[DType.float32](
-        max(1, n_features * _QD_SLAB)
-    )
-    ctx.enqueue_copy(dst_buf=d_slab, src_ptr=hs)
-    for f in range(n_features):
-        if len(borders[f]) == 0 or dev_col_of[f] < 0:
-            continue
-        var treat = NAN_TREATMENT_AS_IS
-        if len(nan_treatment) == n_features:
-            treat = nan_treatment[f]
-        if treat != NAN_TREATMENT_AS_IS:
-            ctx.enqueue_function[nan_substitute_kernel](
-                dev + dev_col_of[f] * n_rows, Int32(n_rows),
-                nan_substitution(treat),
-                grid_dim=min(
-                    (n_rows + _QD_SUB_BLOCK - 1) // _QD_SUB_BLOCK,
-                    _QD_SUB_MAX_BLOCKS,
-                ),
-                block_dim=_QD_SUB_BLOCK,
-            )
-    var packed = False
-    comptime if GBDT_INDEX_PACK_DEVICE:
-        var tab = _qd_pack_word_table(lay, dev_col_of, borders, nan_treatment)
-        if tab.fits and lay.columns > 0 and len(tab.col) > 0:
-            var ne = len(tab.col)
-            var nw = lay.columns
-            var h_ws = ctx.enqueue_create_host_buffer[DType.uint32](nw + 1)
-            var h_meta = ctx.enqueue_create_host_buffer[DType.uint32](4 * ne)
-            var h_sub = ctx.enqueue_create_host_buffer[DType.float32](ne)
-            for w in range(nw + 1):
-                h_ws.unsafe_ptr().unsafe_store(w, tab.word_start[w])
-            for e in range(ne):
-                h_meta.unsafe_ptr().unsafe_store(e, tab.col[e])
-                h_meta.unsafe_ptr().unsafe_store(ne + e, tab.shift[e])
-                h_meta.unsafe_ptr().unsafe_store(2 * ne + e, tab.mask[e])
-                h_meta.unsafe_ptr().unsafe_store(3 * ne + e, tab.slab[e])
-                h_sub.unsafe_ptr().unsafe_store(e, tab.sub[e])
-            var d_ws = ctx.enqueue_create_buffer[DType.uint32](nw + 1)
-            var d_meta = ctx.enqueue_create_buffer[DType.uint32](4 * ne)
-            var d_sub = ctx.enqueue_create_buffer[DType.float32](ne)
-            ctx.enqueue_copy(dst_buf=d_ws, src_ptr=h_ws.unsafe_ptr())
-            ctx.enqueue_copy(dst_buf=d_meta, src_ptr=h_meta.unsafe_ptr())
-            ctx.enqueue_copy(dst_buf=d_sub, src_ptr=h_sub.unsafe_ptr())
-            comptime PACK_ROWS = PACK_BLOCK * PACK_DOCS
-            # one table buffer, four views: an untracked origin so the
-            # views are not seen as aliasing mutable arguments
-            var pm = d_meta.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
-            ctx.enqueue_function[pack_cindex_words_kernel](
-                dev, Int32(n_rows),
-                d_ws.unsafe_ptr(),
-                pm,
-                pm + ne,
-                pm + 2 * ne,
-                pm + 3 * ne,
-                d_sub.unsafe_ptr(),
-                d_slab.unsafe_ptr(),
-                cindex.unsafe_ptr(),
-                grid_dim=((n_rows + PACK_ROWS - 1) // PACK_ROWS, nw, 1),
-                block_dim=(PACK_BLOCK, 1, 1),
-            )
-            # the tables and their staging outlive the launch: the caller
-            # drains before anything reads `cindex`
-            ctx.synchronize()
-            _ = h_ws^
-            _ = h_meta^
-            _ = h_sub^
-            _ = d_ws^
-            _ = d_meta^
-            _ = d_sub^
-            packed = True
-    if not packed:
-        comptime BIN_GRID = BINARIZE_BLOCK_SIZE * BINARIZE_DOCS_PER_THREAD
-        for f in range(n_features):
-            if len(borders[f]) == 0 or dev_col_of[f] < 0:
-                continue
-            ref cf = lay.features[f]
-            ctx.enqueue_function[binarize_float_feature_kernel](
-                Int32(Int(cf.offset) * n_rows), cf.mask, cf.shift,
-                dev + dev_col_of[f] * n_rows, Int32(n_rows),
-                d_slab.unsafe_ptr() + f * _QD_SLAB, cindex.unsafe_ptr(),
-                grid_dim=(n_rows + BIN_GRID - 1) // BIN_GRID,
-                block_dim=(BINARIZE_BLOCK_SIZE, 1, 1),
-            )
-        ctx.synchronize()
-    _ = h_slab^
-    _ = d_slab^
-
-
-def _qd_upload_float_columns(
-    ctx: DeviceContext,
-    column_ptrs: List[MutPointer[Float32, MutUntrackedOrigin]],
-    dev_col_of: List[Int],
-    n_float: Int,
-    n_rows: Int,
-    n_features: Int,
-    x_row_major: Bool,
-    x_src: MutPointer[Float32, MutUntrackedOrigin],
-) raises -> DeviceBuffer[DType.float32]:
-    """lane/apple-fast-sym-feat (`GBDT_QUANT_DEVICE`): the float columns
-    resident on the device, column-major in `dev_col_of` order, uploaded
-    ONCE. A column-major caller's columns go up straight from its pointers
-    (no pinned memcpy, as `device_float_borders` already did per chunk); a
-    row-major caller's rows go up as handed over and
-    `transpose_rows_to_columns_kernel` lays them out (every column is then
-    a raw float column, `train` has refused anything else)."""
-    var mat = ctx.enqueue_create_buffer[DType.float32](
-        max(1, n_float * n_rows)
-    )
-    if n_float == 0:
-        return mat^
-    if x_row_major:
-        var raw = ctx.enqueue_create_buffer[DType.float32](n_rows * n_features)
-        ctx.enqueue_copy(
-            dst_buf=raw,
-            src_ptr=rebind[UnsafePointer[Float32, MutAnyOrigin]](x_src),
-        )
-        var gy = min((n_rows + TR_TILE - 1) // TR_TILE, TR_MAX_GRID_Y)
-        ctx.enqueue_function[transpose_rows_to_columns_kernel](
-            mat.unsafe_ptr(), raw.unsafe_ptr(), Int32(n_rows), Int32(n_features),
-            grid_dim=((n_features + TR_TILE - 1) // TR_TILE, gy, 1),
-            block_dim=(TR_TILE, TR_ROWS_PER_PASS, 1),
-        )
-        # the raw rows are read by the transpose only; drain before they go
-        ctx.synchronize()
-        _ = raw^
-        return mat^
-    for c in range(len(column_ptrs)):
-        var k = dev_col_of[c]
-        if k < 0:
-            continue
-        var view = mat.create_sub_buffer[DType.float32](k * n_rows, n_rows)
-        ctx.enqueue_copy(
-            dst_buf=view,
-            src_ptr=rebind[UnsafePointer[Float32, MutAnyOrigin]](
-                column_ptrs[c]
-            ),
-        )
-    return mat^
+# (Sweep 2026-11-15: the GBDT_QUANT_DEVICE / GBDT_INDEX_PACK_DEVICE helpers _QD_SLAB, _QD_SUB_BLOCK,
+# _QD_SUB_MAX_BLOCKS, _QdPackTable, _qd_pack_word_table, _cindex_from_device_columns and
+# _qd_upload_float_columns, reached only under the folded switches, were removed.)
 
 
 def _build_cindex_from_columns(
@@ -793,26 +525,8 @@ def _build_cindex_from_columns(
     )
     enqueue_fill(ctx, cindex, UInt32(0))
 
-    # lane/apple-fast-sym-feat: the device-resident float columns are
-    # binarized straight from the device (one slab upload, no pinned
-    # memcpy, no per-feature upload, no ring drain); the staging ring below
-    # then serves only the columns that have no device copy (CTR, one-hot).
-    var dev_done = False
-    comptime if GBDT_QUANT_DEVICE:
-        if dev_cols.__bool__() and len(dev_col_of) == n_features:
-            _cindex_from_device_columns(
-                ctx, dev_cols.value(), dev_col_of, n_rows, borders,
-                nan_treatment, lay, cindex,
-            )
-            dev_done = True
-            var all_dev = True
-            # driver-loop: over the features
-            for f in range(n_features):
-                if len(borders[f]) != 0 and dev_col_of[f] < 0:
-                    all_dev = False
-            if all_dev:
-                ctx.synchronize()
-                return cindex^
+    # (Sweep 2026-11-15: the folded GBDT_QUANT_DEVICE device-column binarize branch was removed here;
+    # `dev_cols` / `dev_col_of` are unread and always empty.)
 
     comptime _CINDEX_SLOTS = 8
     var xdevs = List[DeviceBuffer[DType.float32]]()
@@ -830,9 +544,6 @@ def _build_cindex_from_columns(
     for f in range(n_features):
         if len(borders[f]) == 0:
             continue
-        comptime if GBDT_QUANT_DEVICE:
-            if dev_done and dev_col_of[f] >= 0:
-                continue
         ref cf = lay.features[f]
         var treat = NAN_TREATMENT_AS_IS
         if len(nan_treatment) == n_features:
@@ -2484,38 +2195,15 @@ def train(
 
     host_times.stop_host("train_pre_quantize", t_phase)
     t_phase = host_times.start()
-    # lane/apple-fast-sym-feat (`GBDT_QUANT_DEVICE`): the float columns
-    # resident on the device, uploaded once here and read by the border
-    # build and the index build below; freed after the index build.
-    var qd_mat: Optional[DeviceBuffer[DType.float32]] = None
+    # (Sweep 2026-11-15: GBDT_QUANT_DEVICE's resident float columns were removed; `qd_cols` and
+    # `qd_col_of` stay empty and the row-major fit is refused.)
     var qd_cols: Optional[MutPointer[Float32, MutAnyOrigin]] = None
     var qd_col_of = List[Int]()
-    comptime if GBDT_QUANT_DEVICE:
-        var qd_n_float = 0
-        # driver-loop: over the columns
-        for c in range(n_columns):
-            if not column_one_hot[c] and column_ctr_grid[c] < 0:
-                qd_col_of.append(qd_n_float)
-                qd_n_float += 1
-            else:
-                qd_col_of.append(-1)
-        if x_row_major and qd_n_float != n_columns:
-            raise Error(
-                "gbdt_fit_rowmajor: a row-major fit takes raw float columns"
-                " only (no categorical, one-hot or CTR columns)"
-            )
-        var mat = _qd_upload_float_columns(
-            ctx, column_ptrs, qd_col_of, qd_n_float, n_rows, n_features,
-            x_row_major, x_src,
+    if x_row_major:
+        raise Error(
+            "gbdt_fit_rowmajor is served only by the FAST Apple device"
+            " quantizer (-D MOJOLEARN_GBDT_QUANT_DEVICE)"
         )
-        qd_cols = Optional(mat.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]())
-        qd_mat = Optional(mat^)
-    else:
-        if x_row_major:
-            raise Error(
-                "gbdt_fit_rowmajor is served only by the FAST Apple device"
-                " quantizer (-D MOJOLEARN_GBDT_QUANT_DEVICE)"
-            )
     # lane/apple-fast-sym-ctr: the grids the fast walk already built, by
     # column (empty unless a SYM_CTR define is on)
     var symctr_pre_has = List[Bool]()
@@ -2633,7 +2321,6 @@ def train(
     _ = len(column_ptrs)
     # lane/apple-fast-sym-feat: the index builders drained before returning,
     # so the resident float matrix can go now
-    _ = qd_mat^
     _ = qd_cols^
     host_times.stop_host("train_cindex_build", t_phase)
     t_phase = host_times.start()

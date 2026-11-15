@@ -166,8 +166,6 @@ into. It is called out because the kernel ACCUMULATES into `vd` and produces
 garbage without it -- the old unfused kernel ASSIGNED, so this is a new
 precondition, not an inherited one.
 """
-from core.classical_distance import direct_distance_step
-from experiments.classical_identical_ideas.graph_controls import DBSCAN_DIRECT_DISTANCE
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 
@@ -303,8 +301,6 @@ def _eps_acc[
     comptime if metric == DBSCAN_METRIC_L1:
         return ftz_simd[w](acc + abs(diff))
     else:
-        comptime if DBSCAN_DIRECT_DISTANCE:
-            return direct_distance_step[w](acc,SIMD[DType.float32,w](xv),regy)
         return ftz_simd[w](identical_mul_add_simd[w](diff, diff, acc))
 
 

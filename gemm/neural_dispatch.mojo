@@ -13,28 +13,32 @@ from checks.kernel_matrix import TARGET_COLUMN,COLUMN_NVIDIA
 from checks.numerics import ftz
 from checks.rtf_seam import rtf_mul_add
 from core.step_phase import step_count_device_alloc,step_count_sync
-from gemm.contract import OP_NN,OP_NT,OP_TN
 from gemm.checks.gemm_identical import (
     identical_gemm_into as _incumbent_into,
     identical_gemm as _incumbent_gemm,
     identical_gemm_workspace_max_floats as _incumbent_workspace,
-    identical_gemm_with_plan,identical_gemm_workspace_floats,
-    GEMM_ARM_KPACK,PLAN_FLAT,ANY_SABOTAGE,
+    # re-exported: training/checks/loss_check.mojo, training/byte_lm.mojo and the training checks import these from here
+    identical_gemm_with_plan,PLAN_FLAT,ANY_SABOTAGE,
 )
 from gemm.experiments.neural_profile import (
-    NEURAL_EXPERIMENTS_ALLOWED,NEURAL_PROFILE_CHANGED,NEURAL_LEAF,NEURAL_CHAINS,
-    neural_partition,neural_strides,neural_validate,
-    neural_merge_chains,neural_fold_push,neural_fold_drain,
+    NEURAL_PROFILE_CHANGED,NEURAL_LEAF,NEURAL_CHAINS,neural_validate,
 )
-from gemm.experiments.neural_streaming import (
-    NN02,NN11,NN16,neural_streaming_ab,neural_streaming_floats,neural_fold_capacity_ab,
-)
-from gemm.experiments.neural_tiled import NN09,NN15,neural_tiled_ab
-from gemm.experiments.neural_plans import NN01,NN10,NN12,neural_schedule_ab,neural_cost_plan
-from gemm.experiments.neural_grouped import NN07,_neural_operand_pack_kernel
-from gemm.experiments.neural_switches import (
-    ROLE_PROJECTION,ROLE_HEAD,ROLE_WGRAD,ROLE_ALL,NEURAL_GEMM_ROLES,
-)
+from gemm.experiments.neural_switches import ROLE_PROJECTION,ROLE_HEAD,ROLE_WGRAD
+# (Sweep 2026-11-15: with MOJOLEARN_IDN_NEURAL_GEMM_SCHEDULE (lane/expdel2-25-neural) and the NN07/NN12/NN16 arms deleted,
+# NN01, NN02, NN07, NN09, NN10, NN11, NN12, NN15 and NN16 were all False. Removed with them: gemm/experiments/
+# neural_streaming.mojo, neural_tiled.mojo, neural_plans.mojo, neural_grouped.mojo; here NEURAL_PAIR_ENABLED,
+# NEURAL_WORKSPACE_REUSE_ENABLED, the schedule constants, _scheduled/_unscheduled workspace sizing,
+# _profile_or_cost_into, _selected_cost_plan, the scheduled routes of identical_gemm_into, the NN07 operand pack
+# of identical_gemm_pair_into (then the pair entry itself, whose last caller was NEURAL_PAIR_ENABLED's) and the NN12
+# retained-plan path and plan fields of GemmWorkspace. Markers moved from the four deleted files:)
+# TOMBSTONE: MOJOLEARN_IDN_NEURAL_NN16 (opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-25-neural; code recoverable at 1362c86435.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_NEURAL_NN16.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_IDN_NEURAL_GEMM_SCHEDULE=8 (slower) deleted 2026-10-07 by 225398f14; code recoverable at 225398f14^.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_NEURAL_GEMM_SCHEDULE-arm8.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_IDN_NEURAL_NN12 (opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-25-neural; code recoverable at a9cf951197.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_NEURAL_NN12.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_IDN_NEURAL_NN07 (opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-25-neural; code recoverable at dd47bfb212.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_NEURAL_NN07.patch; record in docs/TOMBSTONES.md.
 # TOMBSTONE: MOJOLEARN_IDN_NEURAL_GEMM_OZAKI_SLICES (NN-OZ int8 Ozaki-split neural GEMM; DELETE-slower: grid g50ebe26a5, slices 4/5
 # on 10 neural workloads, e.g. lm-train-step NV L40S 35.3 -> 3172.6 / 3709.4 ms, AMD MI325X 42.7 -> 334.3 / 407.5 ms; cnn-clf avg
 # 25.9x / 30.1x; mlp-train-step 1.20x / 1.22x, the closest) deleted 2026-10-11 by lane/grid-act-16; code recoverable at 7aa609453.
@@ -42,10 +46,7 @@ from gemm.experiments.neural_switches import (
 
 # NN05 (the fused pair kernel arm) deleted 2026-10-08 (lane grid-act-4, grid
 # ge123e6f9, 2.2-3.9x slower); see the tombstone at _neural_pair_kernel's old site.
-comptime NEURAL_PAIR_ENABLED = NN07
-comptime NEURAL_GEMM_EXPERIMENT_ENABLED = (
-    NEURAL_PROFILE_CHANGED or NN01 or NN02 or NN09 or NN10 or NN11 or NN12 or NN15 or NN16
-)
+comptime NEURAL_GEMM_EXPERIMENT_ENABLED = NEURAL_PROFILE_CHANGED
 # TOMBSTONE: MOJOLEARN_IDN_NEURAL_STREAM_GROUP (DELETE-ARM, unmeasured opt-in, rule a) deleted 2026-11-15 by lane/expdel2-26-neural; code recoverable at 5fc464dce4.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_NEURAL_STREAM_GROUP.patch
 # TOMBSTONE: MOJOLEARN_IDN_NEURAL_STAGE_DEPTH (DELETE-ARM, unmeasured opt-in, rule a) deleted 2026-11-15 by lane/expdel2-26-neural; code recoverable at 5fc464dce4.
@@ -66,27 +67,6 @@ comptime NEURAL_GEMM_EXPERIMENT_ENABLED = (
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_NEURAL_PAIR_CONTROL.patch
 # TOMBSTONE: MOJOLEARN_IDN_NEURAL_FOLD_SHARED (DELETE-ARM, unmeasured opt-in, rule a) deleted 2026-11-15 by lane/expdel2-26-neural; code recoverable at 5fc464dce4.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_NEURAL_FOLD_SHARED.patch
-comptime _STREAM_GROUP = 8
-comptime _DEPTH = 2
-comptime _PAD = 0
-comptime _SWIZZLE = False
-comptime _ARM = GEMM_ARM_KPACK
-comptime _FILL_BLOCKS = 1
-comptime _RETAINED = 16777216
-# Resource budget, not a matrix-size route fit: 64 MiB retained per owned
-# workspace, with exact-shaped temporary allocation above that memory budget.
-comptime NEURAL_WORKSPACE_REUSE_ENABLED = NN12
-comptime _STREAM = NN02
-comptime _STAGING = NN09 or NN15
-# NN11 has two real placements: global fold slots inside NN02, or a
-# standalone register/shared fold kernel. Other schedule families do not
-# implement its storage arm; reject those combinations instead of masking it.
-comptime _ROUTES = Int(NN01)+Int(NN10)+Int(_STREAM)+Int(_STAGING)+Int(NN11 and not _STREAM)
-# One arm of MOJOLEARN_IDN_NEURAL_GEMM_SCHEDULE is selected. Products whose
-# caller role is outside MOJOLEARN_IDN_NEURAL_GEMM_SCHEDULE_ROLES keep the
-# unscheduled route (selected profile, else the incumbent) in the same build.
-comptime _SCHEDULED = _ROUTES > 0
-comptime _ROLE_SPLIT = _SCHEDULED and NEURAL_GEMM_ROLES != ROLE_ALL
 
 
 def _overlaps(mut a: DeviceBuffer[DType.float32],na: Int,
@@ -98,28 +78,9 @@ def _overlaps(mut a: DeviceBuffer[DType.float32],na: Int,
     return ap<bp+4*nb and bp<ap+4*na
 
 
-def _unscheduled_workspace_max_floats(m: Int,n: Int,k: Int) -> Int:
-    comptime if NEURAL_PROFILE_CHANGED:
-        return 1
-    return _incumbent_workspace(m,n,k)
-
-
 def identical_gemm_workspace_max_floats(m: Int,n: Int,k: Int) -> Int:
-    """Covers every route the build can take for (m, n, k): with a role mask,
-    one workspace serves both the scheduled and the unscheduled roles."""
-    var count = _scheduled_workspace_max_floats(m,n,k)
-    comptime if _ROLE_SPLIT:
-        count = max(count,_unscheduled_workspace_max_floats(m,n,k))
-    return count
-
-
-def _scheduled_workspace_max_floats(m: Int,n: Int,k: Int) -> Int:
-    comptime if _STREAM:
-        var leaves = neural_partition[NEURAL_LEAF](k)[1]
-        comptime if NN02:
-            return neural_streaming_floats[_STREAM_GROUP,True](k,m*n)
-        return max(1,m*n*leaves)
-    comptime if NEURAL_PROFILE_CHANGED or _STAGING or NN11:
+    """Covers the route the build takes for (m, n, k)."""
+    comptime if NEURAL_PROFILE_CHANGED:
         return 1
     return _incumbent_workspace(m,n,k)
 
@@ -137,44 +98,13 @@ def _admit_product(mut c: DeviceBuffer[DType.float32],
         raise Error("neural GEMM output/workspace must not overlap inputs or each other")
 
 
-def _profile_or_cost_into(ctx: DeviceContext,mut c: DeviceBuffer[DType.float32],
-    mut a: DeviceBuffer[DType.float32],mut b: DeviceBuffer[DType.float32],
-    mut ws: DeviceBuffer[DType.float32],m: Int,n: Int,k: Int,op: Int,plan: Int) raises:
-    comptime if NEURAL_PROFILE_CHANGED:
-        # New-profile cost arm compares actual shared-tile reuse with scalar
-        # loads. Existing v1 native geometries cannot define a different sum.
-        if plan == PLAN_FLAT:
-            neural_profile_device[NEURAL_LEAF,NEURAL_CHAINS](ctx,c,a,b,m,n,k,op)
-        else:
-            neural_tiled_ab[False](ctx,c,a,b,m,n,k,op)
-    else:
-        identical_gemm_with_plan(ctx,c,a,b,ws,m,n,k,op,plan)
-
-
-def _selected_cost_plan(m: Int,n: Int,k: Int) raises -> Int:
-    comptime if not NEURAL_PROFILE_CHANGED:
-        return neural_cost_plan(m,n,k,_FILL_BLOCKS)
-    if m<=0 or n<=0:
-        return PLAN_FLAT
-    # The changed-profile candidate currently has a real 8x16 shared tile,
-    # not the incumbent 32/64/128 bodies. Price precisely the available tile
-    # instead of borrowing the old body's more favorable reuse estimate.
-    var blocks = (m*n+127)//128
-    var flat = Float64(2)*Float64(m*n)*Float64(max(k,1))*Float64(max(_FILL_BLOCKS,blocks))/Float64(blocks)
-    var tiles = ((m+7)//8)*((n+15)//16)
-    var staged = Float64(tiles*24+tiles*128-m*n)*Float64(max(k,1))*Float64(max(_FILL_BLOCKS,tiles))/Float64(tiles)
-    # Any non-FLAT tag selects the explicit selected-profile 8x16 launcher.
-    return 1 if staged<flat else PLAN_FLAT
-
-
 def identical_gemm_into[allow_vendor: Bool = True,ROLE: Int = ROLE_PROJECTION](
     ctx: DeviceContext,mut c: DeviceBuffer[DType.float32],
     mut a: DeviceBuffer[DType.float32],mut b: DeviceBuffer[DType.float32],
     mut ws: DeviceBuffer[DType.float32],m: Int,n: Int,k: Int,op: Int,
 ) raises:
-    """ROLE is the caller class (ROLE_PROJECTION, ROLE_HEAD, ROLE_WGRAD) that
-    MOJOLEARN_IDN_NEURAL_GEMM_SCHEDULE_ROLES selects on; it never changes the
-    route of a build without a schedule arm."""
+    """ROLE is the caller class (ROLE_PROJECTION, ROLE_HEAD, ROLE_WGRAD); it
+    never changes the route."""
     comptime assert ROLE == ROLE_PROJECTION or ROLE == ROLE_HEAD or ROLE == ROLE_WGRAD, "neural GEMM role"
     comptime if not NEURAL_GEMM_EXPERIMENT_ENABLED:
         _incumbent_into[allow_vendor](ctx,c,a,b,ws,m,n,k,op)
@@ -186,27 +116,7 @@ def identical_gemm_into[allow_vendor: Bool = True,ROLE: Int = ROLE_PROJECTION](
     # on 10 neural workloads, e.g. lm-train-step NV L40S 35.3 -> 3172.6 / 3709.4 ms, AMD MI325X 42.7 -> 334.3 / 407.5 ms; cnn-clf avg
     # 25.9x / 30.1x; mlp-train-step 1.20x / 1.22x, the closest) deleted 2026-10-11 by lane/grid-act-16; code recoverable at 7aa609453.
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_NEURAL_GEMM_OZAKI_SLICES.patch; record in docs/TOMBSTONES.md.
-    comptime if _SCHEDULED and not ((NEURAL_GEMM_ROLES & ROLE) != 0):
-        comptime if NEURAL_PROFILE_CHANGED:
-            neural_profile_device[NEURAL_LEAF,NEURAL_CHAINS](ctx,c,a,b,m,n,k,op)
-        else:
-            _incumbent_into[allow_vendor](ctx,c,a,b,ws,m,n,k,op)
-        return
-    comptime if NN01:
-        _ = neural_schedule_ab[True](ctx,c,a,b,ws,m,n,k,op,_ARM)
-    elif _STREAM:
-        neural_streaming_ab[True,_STREAM_GROUP,True,True](ctx,c,a,b,ws,m,n,k,op)
-    elif _STAGING:
-        neural_tiled_ab[True,_DEPTH,_PAD,_SWIZZLE,NN15](ctx,c,a,b,m,n,k,op)
-    elif NN10:
-        var plan = _selected_cost_plan(m,n,k)
-        _profile_or_cost_into(ctx,c,a,b,ws,m,n,k,op,plan)
-    elif NN11:
-        neural_fold_capacity_ab[True,False](ctx,c,a,b,m,n,k,op)
-    elif NEURAL_PROFILE_CHANGED:
-        neural_profile_device[NEURAL_LEAF,NEURAL_CHAINS](ctx,c,a,b,m,n,k,op)
-    else:
-        _incumbent_into[allow_vendor](ctx,c,a,b,ws,m,n,k,op)
+    neural_profile_device[NEURAL_LEAF,NEURAL_CHAINS](ctx,c,a,b,m,n,k,op)
 
 
 # TOMBSTONE: neural_model_leaf_into (its one caller, the deleted small MLP step's MLP_GEMM_LEAF128 dispatch, plan row X2) deleted 2026-11-09 by lane/x2-small-mlp-on-executor; code recoverable at f59d913b0b.
@@ -264,71 +174,15 @@ def identical_gemm[allow_vendor: Bool = True,ROLE: Int = ROLE_PROJECTION](
 # main 4e3da4282.
 
 
-def identical_gemm_pair_workspace_max_floats(m: Int,n: Int,k: Int) -> Int:
-    var count = identical_gemm_workspace_max_floats(m,n,k)
-    comptime if NN07:
-        count += m*k
-    return max(1,count)
-
-
-def identical_gemm_pair_into(ctx: DeviceContext,
-    mut c1: DeviceBuffer[DType.float32],mut c2: DeviceBuffer[DType.float32],
-    mut a: DeviceBuffer[DType.float32],mut b1: DeviceBuffer[DType.float32],
-    mut b2: DeviceBuffer[DType.float32],mut ws: DeviceBuffer[DType.float32],
-    m: Int,n: Int,k: Int,op: Int) raises:
-    neural_validate(m,n,k,op)
-    if len(c1)<m*n or len(c2)<m*n or len(a)<m*k or len(b1)<n*k or len(b2)<n*k:
-        raise Error("neural pair operand storage too short")
-    if len(ws)<identical_gemm_pair_workspace_max_floats(m,n,k):
-        raise Error("neural pair workspace too short")
-    if m==0 or n==0:
-        return
-    if (_overlaps(c1,m*n,c2,m*n) or _overlaps(c1,m*n,a,m*k)
-        or _overlaps(c2,m*n,a,m*k) or _overlaps(c1,m*n,b1,n*k)
-        or _overlaps(c1,m*n,b2,n*k) or _overlaps(c2,m*n,b1,n*k)
-        or _overlaps(c2,m*n,b2,n*k) or _overlaps(ws,len(ws),a,m*k)
-        or _overlaps(ws,len(ws),b1,n*k) or _overlaps(ws,len(ws),b2,n*k)
-        or _overlaps(ws,len(ws),c1,m*n) or _overlaps(ws,len(ws),c2,m*n)):
-        raise Error("neural pair outputs/workspace must be disjoint from live operands")
-    var actual_op = op
-    var input = DeviceBuffer[DType.float32](ctx,a.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),len(a),owning=False)
-    var scratch_offset = 0
-    var st = neural_strides(op,m,n,k)
-    comptime if NN07:
-        if k>0:
-            input = DeviceBuffer[DType.float32](ctx,ws.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),m*k,owning=False)
-            ctx.enqueue_function[_neural_operand_pack_kernel](input,a,Int32(m),Int32(k),Int32(st[0]),Int32(st[1]),
-                grid_dim=((m*k+127)//128,1,1),block_dim=(128,1,1))
-            scratch_offset = m*k
-            if op==OP_TN:
-                actual_op = OP_NN
-    var scratch = DeviceBuffer[DType.float32](ctx,(ws.unsafe_ptr()+scratch_offset).unsafe_origin_cast[MutAnyOrigin](),
-        len(ws)-scratch_offset,owning=False)
-    # NN05's fused pair kernel arm (deleted 2026-10-08, see the tombstone above)
-    # ran here; both projections are the identical GEMM.
-    identical_gemm_into(ctx,c1,input,b1,scratch,m,n,k,actual_op)
-    identical_gemm_into(ctx,c2,input,b2,scratch,m,n,k,actual_op)
-    _ = input^
-    _ = scratch^
-
-
 # TOMBSTONE: MOJOLEARN_IDN_GEMM_FILL_SPLITK (noise/loser: mamba2 NV 1.248, transformer NV 1.39) deleted 2026-10-11 by 026a811d5; code recoverable at 026a811d5^.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_GEMM_FILL_SPLITK.patch
 struct GemmWorkspace(Movable):
     """One in-order model context; no mutable global plan or operand cache."""
     var buffer: DeviceBuffer[DType.float32]
-    var last_m: Int
-    var last_n: Int
-    var last_k: Int
-    var cached_plan: Int
 
     def __init__(out self,ctx: DeviceContext) raises:
         step_count_device_alloc()
         self.buffer = ctx.enqueue_create_buffer[DType.float32](1)
-        self.last_m = -1
-        self.last_n = -1
-        self.last_k = -1
-        self.cached_plan = PLAN_FLAT
 
     def _ensure(mut self,ctx: DeviceContext,required: Int) raises:
         if required>len(self.buffer):
@@ -343,45 +197,9 @@ struct GemmWorkspace(Movable):
         comptime if NEURAL_GEMM_EXPERIMENT_ENABLED:
             neural_validate(m,n,k,op)
         var required = identical_gemm_workspace_max_floats(m,n,k)
-        comptime if NN12:
-            if required>_RETAINED:
-                identical_gemm[allow_vendor,ROLE](ctx,c,a,b,m,n,k,op)
-                return
         self._ensure(ctx,required)
-        comptime if NN12 and NN10 and ((NEURAL_GEMM_ROLES & ROLE) != 0):
-            _admit_product(c,a,b,self.buffer,m,n,k,op)
-            if m==0 or n==0:
-                return
-            if self.last_m!=m or self.last_n!=n or self.last_k!=k:
-                self.cached_plan = _selected_cost_plan(m,n,k)
-                self.last_m = m
-                self.last_n = n
-                self.last_k = k
-            _profile_or_cost_into(ctx,c,a,b,self.buffer,m,n,k,op,self.cached_plan)
-        else:
-            identical_gemm_into[allow_vendor,ROLE](ctx,c,a,b,self.buffer,m,n,k,op)
-
-    def run_pair(mut self,ctx: DeviceContext,mut c1: DeviceBuffer[DType.float32],
-        mut c2: DeviceBuffer[DType.float32],mut a: DeviceBuffer[DType.float32],
-        mut b1: DeviceBuffer[DType.float32],mut b2: DeviceBuffer[DType.float32],
-        m: Int,n: Int,k: Int,op: Int) raises:
-        neural_validate(m,n,k,op)
-        var required = identical_gemm_pair_workspace_max_floats(m,n,k)
-        comptime if NN12:
-            if required>_RETAINED:
-                var temporary = ctx.enqueue_create_buffer[DType.float32](required)
-                try:
-                    identical_gemm_pair_into(ctx,c1,c2,a,b1,b2,temporary,m,n,k,op)
-                except error:
-                    ctx.synchronize()
-                    raise error
-                ctx.synchronize()
-                _ = temporary^
-                return
-        self._ensure(ctx,required)
-        identical_gemm_pair_into(ctx,c1,c2,a,b1,b2,self.buffer,m,n,k,op)
+        identical_gemm_into[allow_vendor,ROLE](ctx,c,a,b,self.buffer,m,n,k,op)
 
     def close(mut self,ctx: DeviceContext) raises:
         ctx.synchronize()
         self.buffer = ctx.enqueue_create_buffer[DType.float32](1)
-        self.last_m = -1

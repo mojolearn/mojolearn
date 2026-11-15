@@ -83,7 +83,7 @@ from isolation_forest.impl.isolation_tree_builder import (
     IF_RNG_STATE_WORDS,
     IF_SCRATCH_WORDS_PER_NODE,
     IF_STACK_WORDS,
-    IF_FAST_ROWMAJOR, IF_T41_TREE_BATCH, IF_T42_CORRECTION_CACHE, IF_WORK_PLANES, if_correction_table_kernel,
+    IF_FAST_ROWMAJOR, IF_WORK_PLANES,
     build_isolation_trees_global_kernel,
     if_finite_scan_kernel,
     if_finite_scan_ftz_kernel,
@@ -111,18 +111,8 @@ from metrics.checks.device_io import upload_i32
 
 # TOMBSTONE: MOJOLEARN_TREES_C50_IF_PACKED (DELETE-ARM, opt-in, no A/B recorded, rule a) deleted 2026-11-15 by lane/expdel2-45-trees; code recoverable at 931e7ca76a.
 # Restore: git apply experiments/removed/MOJOLEARN_TREES_C50_IF_PACKED.patch
-# The alias stays False for its importers (forest_io, multi_gpu); `if_packed_paths_kernel` went with the arm.
-comptime IF_C50_PACKED = False
-
-
-def if_pack_nodes_kernel(feature: MutPointer[Int32, MutAnyOrigin], threshold: MutPointer[Float32, MutAnyOrigin],
-    left: MutPointer[Int32, MutAnyOrigin], right: MutPointer[Int32, MutAnyOrigin], packed: MutPointer[Int32, MutAnyOrigin], nodes: Int32):
-    var i = Int(block_idx.x)*Int(block_dim.x)+Int(thread_idx.x)
-    if i < Int(nodes):
-        packed.unsafe_store(4*i, feature.unsafe_load(i))
-        packed.unsafe_store(4*i+1, bitcast[DType.int32](threshold.unsafe_load(i)))
-        packed.unsafe_store(4*i+2, left.unsafe_load(i))
-        packed.unsafe_store(4*i+3, right.unsafe_load(i))
+# (Sweep 2026-11-15: IF_C50_PACKED, if_pack_nodes_kernel and IsolationForestModel.packed_nodes, reached only
+# under the folded arm, were removed; `if_packed_paths_kernel` went with the arm.)
 
 
 # ---------------------------------------------------------------------------
@@ -225,7 +215,6 @@ struct IsolationForestModel(Movable):
     var global_tree_max_depth: DeviceBuffer[DType.int32]
     var tree_n_nodes_host: List[Int32]
     var tree_max_depth_host: List[Int32]
-    var packed_nodes: Optional[DeviceBuffer[DType.int32]]
     var fitted: Bool
     var shards: List[IFModelShard]
 
@@ -247,7 +236,6 @@ struct IsolationForestModel(Movable):
         self.global_tree_max_depth = ctx.enqueue_create_buffer[DType.int32](1)
         self.tree_n_nodes_host = List[Int32]()
         self.tree_max_depth_host = List[Int32]()
-        self.packed_nodes = Optional[DeviceBuffer[DType.int32]]()
         self.fitted = False
         self.shards = List[IFModelShard]()
         ctx.synchronize()
@@ -1070,14 +1058,9 @@ struct IsolationForest(Movable):
         # Keep diagnostics' full-tree archive when explicitly requested.
         var scratch_stride = model.max_nodes_per_tree*IF_SCRATCH_WORDS_PER_NODE+IF_RNG_STATE_WORDS
         var batch_trees = n_trees
-        comptime if IF_T41_TREE_BATCH:
-            if not trace.enabled:
-                var live_bytes = 4*n_sampled_rows*n_sampled_features + 8*n_sampled_rows + 4*IF_WORK_PLANES*n_sampled_rows + 4*scratch_stride
-                batch_trees = max(1, min(n_trees, (128*1024*1024)//max(1, live_bytes)))
-        var corrections = ctx.enqueue_create_buffer[DType.float32](n_sampled_rows+1 if IF_T42_CORRECTION_CACHE else 1)
-        comptime if IF_T42_CORRECTION_CACHE:
-            ctx.enqueue_function[if_correction_table_kernel](corrections.unsafe_ptr(), Int32(n_sampled_rows+1),
-                grid_dim=(n_sampled_rows+256)//256, block_dim=256)
+        # (Sweep 2026-11-15: the folded IF_T41_TREE_BATCH cap and IF_T42_CORRECTION_CACHE table were removed;
+        # `corrections` is the one-word placeholder the build kernel takes.)
+        var corrections = ctx.enqueue_create_buffer[DType.float32](1)
         var subsample_buffer = _poisoned_f32(
             ctx, batch_trees * n_sampled_rows * n_sampled_features, pad, poison
         )

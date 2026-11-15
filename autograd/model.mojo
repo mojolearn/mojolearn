@@ -59,10 +59,9 @@ comptime HAS_DROPOUT = True
 # Bits: the fused path is a bit version of its own (its GEMM epilogue and
 # column-sum bias gradient sum in a different order than the composed ops);
 # TOMBSTONE: MOJOLEARN_AUTOGRAD_MODEL_UNFUSED (the composed nodes, opt-in check arm, no A/B recorded) deleted
-# 2026-11-15 by lane/expdel2-24-neural; code recoverable at 5cc4c35385. MODEL_UNFUSED = False stays for
-# autograd/checks/pass1_cases.mojo.
+# 2026-11-15 by lane/expdel2-24-neural; code recoverable at 5cc4c35385.
 # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_MODEL_UNFUSED.patch
-comptime MODEL_UNFUSED = False
+# (Sweep 2026-11-15: the MODEL_UNFUSED = False constant removed; nothing read it.)
 
 # TOMBSTONE: MOJOLEARN_IDN_SEQ_TILED_PREDICT (whole-set predict chunk, opt-in arm, A/B never run) deleted 2026-11-15
 # by lane/expdel2-24-neural with PREDICT_WHOLE_SET_BYTES and _predict_split_same; code recoverable at d19ca4f0c2.

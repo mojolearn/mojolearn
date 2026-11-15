@@ -42,8 +42,7 @@ comptime MOE_GROUP_TPB = 256
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_MOE_STABLE_PACK.patch
 # TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old path umbrella; EXP:2438 DELETED) read deleted here 2026-11-15 by lane/expdel2-29-neural; code recoverable at d1f44888a3.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-29-neural.patch
-# Kept False for sequence/exec_device.mojo (another lane's file), which still names the stable kernel below.
-comptime MOE_STABLE_PACK = False
+# (Sweep 2026-11-15: MOE_STABLE_PACK = False and moe_group_stable_all_kernel removed with the two arms in sequence/exec_device.mojo.)
 
 
 def moe_group_blocks(n_pairs: Int, n_experts: Int, n_tiles: Int) -> Int:
@@ -96,14 +95,3 @@ def moe_group_scatter_all_kernel(sel: FP, cnt: FP, poff: FP, order: FP, n_pairs:
         order.unsafe_store(Int(poff.unsafe_load(e)) + Int(slot), Float32(i))
 
 
-def moe_group_stable_all_kernel(sel: FP, poff: FP, order: FP, n_pairs: Int32, n_experts: Int32):
-    """One expert per task. Integer membership only; pair outputs and
-    weighted combine remain in their original token/pick positions."""
-    var e = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
-    if e >= Int(n_experts):
-        return
-    var dst = Int(poff.unsafe_load(e))
-    for pair in range(Int(n_pairs)):
-        if Int(sel.unsafe_load(pair)) == e:
-            order.unsafe_store(dst, Float32(pair))
-            dst += 1

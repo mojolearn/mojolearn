@@ -51,11 +51,11 @@ from core.fast_radix_sort import fast_radix_sort_pairs_u32, frs_counts_len
 from x_cnn.ops import (
     FP, IP, ElemFn, CP_N, CP_C, CP_H, CP_W, CP_OC, CP_KH, CP_KW, CP_OH, CP_OW,
     CP_SH, CP_SW, CP_PH, CP_PW, CP_DH, CP_DW,
-    im2col_val, im2col_taps_at, dout_rows_at, col2im_at, col2im_bounded_at, fill_one_at,
+    im2col_val, im2col_taps_at, dout_rows_at, col2im_at, fill_one_at,
     PP_N, PP_C, PP_H, PP_W, PP_OH, PP_OW,
     maxpool_fwd_at, maxpool_bwd_at, avgpool_fwd_at, avgpool_bwd_at, relu_maxpool_fwd_at, pool_relu_rows_bwd_at,
     conv_out_val, pool_relu_row_val, bn_mean_row, BN_MEAN, BN_VAR, BN_INVSTD, BN_SUMG, BN_SUMGX,
-    relu_fwd_at, relu_bwd_at, relu_val, conv_relu_out_at, relu_rows_bwd_at, add_at, bias_rows_at, linear_bias_val, softmax_xent_row_at, seq_mean, sgd_at,
+    relu_fwd_at, relu_bwd_at, relu_val, conv_relu_out_at, add_at, bias_rows_at, linear_bias_val, softmax_xent_row_at, seq_mean, sgd_at,
     bn_stats_at, bn_eval_stats_at, bn_apply_at, bn_running_at, bn_bwd_red_at, bn_bwd_dx_at, bn_bwd_eval_dx_at,
     dropout2d_at, mul_at, spmm_at, gcn_deg_at, gcn_norm_at,
     BN_FOLD_BLOCK, bn_fold_blocks, bn_blk_sum_at, bn_blk_mean_at, bn_blk_sq_at, bn_blk_var_at,
@@ -99,11 +99,10 @@ comptime _NI_CNN_ENABLED = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 comptime NI12_IMPLICIT_CONV = _NI_CNN_ENABLED and not is_defined["MOJOLEARN_NI12_IMPLICIT_CONV_OFF"]()
 # TOMBSTONE: MOJOLEARN_NI14_COL2IM (DELETE-ARM, unmeasured opt-in, rule a) deleted 2026-11-15 by lane/expdel2-35-neural; code recoverable at 145be10898.
 # Restore: git apply experiments/removed/MOJOLEARN_NI14_COL2IM.patch
-comptime NI14_BOUNDED_COL2IM = False
+# (Sweep 2026-11-15: NI14_BOUNDED_COL2IM = False removed with its reader in autograd/kernels/cnn.mojo.)
 # TOMBSTONE: MOJOLEARN_NI15_BIAS_NO_ONES (DELETE-ARM, unmeasured opt-in, rule a) deleted 2026-11-15 by lane/expdel2-35-neural; code recoverable at 145be10898.
 # Restore: git apply experiments/removed/MOJOLEARN_NI15_BIAS_NO_ONES.patch
-comptime NI15_BIAS_NO_ONES = False
-comptime NI16_CONV_RELU_FUSED = False  # arm 2 of the deleted MOJOLEARN_IDN_CNN_CONV_RELU
+# (Sweep 2026-11-15: NI15_BIAS_NO_ONES and NI16_CONV_RELU_FUSED (False) removed with their readers in autograd/kernels/cnn.mojo.)
 # TOMBSTONE: MOJOLEARN_NI18_FUSED_EPOCH_GATHER (removed with its route, the classifier device epoch) deleted 2026-11-09 by lane/x8-cnn-on-executor; code recoverable at f59d913b0b.
 # Restore: git apply experiments/removed/X8_CNN_HAND_EPOCH.patch
 # TOMBSTONE: MOJOLEARN_IDN_CNN_BN_FUSE (DROPPED-noise) deleted 2026-10-10 by lane/postmerge-act-6; code recoverable at 9f83ea479.
@@ -209,7 +208,7 @@ def launch[f: ElemFn](ctx: DeviceContext, a: FP, b: FP, c: FP, d: FP, q: IP, p: 
 # assumed).
 # TOMBSTONE: MOJOLEARN_XCNN_NO_TILED_LAYOUT (DELETE-ARM, unmeasured opt-in, rule a) deleted 2026-11-15 by lane/expdel2-35-neural; code recoverable at 145be10898.
 # Restore: git apply experiments/removed/MOJOLEARN_XCNN_NO_TILED_LAYOUT.patch
-comptime TILED_LAYOUT = True
+# (Sweep 2026-11-15: TILED_LAYOUT = True removed; its one reader in autograd/kernels/cnn.mojo takes the tiled launch.)
 #: The pooled backward's rows tiled (`rows_bwd_tiled_kernel`) measured
 #: SLOWER on the M4 Pro (block 1 1.44 -> 1.73 ms, block 2 0.75 -> 0.96:
 #: each thread runs four max-pool gathers in series).

@@ -372,7 +372,7 @@ struct LcvObjective(LbObjective):
     var cnt: Int
 
     def __init__(out self, mut ctx: DeviceContext, x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, kp: Int,
-                 fi: Bool, sw: Bool, nf: Int) raises:
+                 fi: Bool, sw: Bool) raises:
         var p = kp * (d + 1)
         self.x = ctx.enqueue_create_buffer[DType.float32](max(n_x, 1))
         self.y = ctx.enqueue_create_buffer[DType.float32](max(n_y, 1))
@@ -515,7 +515,7 @@ def logcv_fit_grid(
     var tol = fp[0]
     var p = kp * (d + 1)
     var c = ctx.copy()
-    var obj = LcvObjective(c, x, n_x, y, n_y, n, d, kp, fi, sw, nf)
+    var obj = LcvObjective(c, x, n_x, y, n_y, n, d, kp, fi, sw)
     comptime if XLIN_IDN_DEV_FINITE:
         xlin_finite_device(c, obj.x, n_x, y, n_y)
     var wcap = max(lbd_witness_words(obj.blocks_at(n), p), 2 * _blocks(n) + _blocks(fold_blocks(n)) + 2)

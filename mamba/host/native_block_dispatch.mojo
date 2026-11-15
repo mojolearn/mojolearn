@@ -6,7 +6,7 @@ from core.native_descriptor_abi import NativeDescriptorCall, NativeDescriptorErr
 from core.native_descriptor_call import native_descriptor_words, native_descriptor_report
 from mamba.host.mamba_host_shell_impl import (
     _mamba1_run, _mamba2_run, _mamba1_backward_run, _mamba2_backward_run, _mamba3_backward_run, _mamba3_run,
-    M3OwnedHostSession, NN40_OWNED_WEIGHTS, _m3_owned_install_run,
+    M3OwnedHostSession,
     _m3_owned_forward_run, _m3_owned_backward_run, _m3_owned_state_run,
     _m3_owned_export_run, _nn40_host_require,
 )
@@ -14,7 +14,7 @@ from core.shared_slot import SharedSlot
 from core.state_registry import StateRegistry
 from core.neural_entry_table import (
     NEURAL_MAMBA_OPERATIONS, NEURAL_MAMBA3_SESSION_CREATE, NEURAL_MAMBA3_SESSION_INFO,
-    NEURAL_MAMBA3_SESSION_CAPS, NEURAL_MAMBA3_SESSION_CLOSE, MAMBA3_CAP_OWNED_WEIGHTS,
+    NEURAL_MAMBA3_SESSION_CAPS, NEURAL_MAMBA3_SESSION_CLOSE,
 )
 from core.mamba3_prefill_session import mamba3_prefill_session_word, mamba3_prefill_session_of
 
@@ -29,8 +29,6 @@ comptime HOST_PREFILL_SESSIONS = StateRegistry[M3OwnedHostSession,
 def mamba3_host_prefill_caps() -> Int:
     """The host image's capability bits: no non-owned session prefill, every
     report materialized; the owned snapshot where NN40 is compiled."""
-    comptime if NN40_OWNED_WEIGHTS:
-        return MAMBA3_CAP_OWNED_WEIGHTS
     return 0
 
 
@@ -93,12 +91,8 @@ def _m3_host_session_operation(op: Int, session: Int, a: List[Int], words: List[
         if address == 0:
             raise Error("mamba3 owned host: null buffer address")
     if op == 15:
-        comptime if not NN40_OWNED_WEIGHTS:
-            raise Error("mamba3 owned host: NN40 arm disabled")
-        var weights: List[Int] = [0]
-        weights.extend(a.copy())
-        _m3_owned_install_run(owner[], weights, p[0])
-        return owner[].generation
+        # (Sweep 2026-11-15: NN40_OWNED_WEIGHTS is False on every build; the install path is gone.)
+        raise Error("mamba3 owned host: NN40 arm disabled")
     if op == 17:
         if not owner[].weights:
             raise Error("mamba3 owned export: no snapshot")

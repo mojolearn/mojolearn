@@ -19,8 +19,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identic
 
 # TOMBSTONE: MOJOLEARN_IDN_AF_COL_CHUNK_FOLD (unmeasured opt-in arm: NI54 64-row leaf column fold for Adafactor) deleted 2026-11-15 by lane/expdel2-28-neural; code recoverable at ab421749bb.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_AF_COL_CHUNK_FOLD.patch; record in docs/TOMBSTONES.md.
-#: the NI54 leaf width (sequence/adafactor_candidates.mojo imports it).
-comptime AF_COL_LEAF = 64
+# (Sweep 2026-11-15: AF_COL_LEAF and sequence/adafactor_candidates.mojo (af_col_chunk_kernel, no launcher) removed.)
 
 
 @always_inline

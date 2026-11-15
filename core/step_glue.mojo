@@ -59,9 +59,7 @@ from checks.kernel_matrix import (
 
 # TOMBSTONE: MOJOLEARN_STEP_GLUE_TRIAL (opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-04-base; code recoverable at 6027e14ec1.
 # Restore: git apply experiments/removed/MOJOLEARN_STEP_GLUE_TRIAL.patch; record in docs/TOMBSTONES.md.
-# The name stays (training/byte_lm.mojo, autograd/kernels/transformer.mojo,
-# transformer/impl/llama/modeling_llama.mojo import it) as the folded constant.
-comptime STEP_GLUE_TRIAL = False
+# (Sweep 2026-11-15: the STEP_GLUE_TRIAL = False constant removed; its five readers now test the shipped predicate alone.)
 
 comptime STEP_GLUE_SHIPPED = 0
 comptime STEP_GLUE_OPTSKIP = 1

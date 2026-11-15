@@ -157,14 +157,6 @@ from checks.numerics import (
     identical_rsqrt,
     identical_sqrt,
 )
-# lane afn-optim (2026-10-03): the Apple FAST candidates. Every alias is
-# False unless the build is FAST on an Apple host AND names a
-# MOJOLEARN_AFN_* define, so IDENTICAL compiles this file's code unchanged.
-from training.afn_optim import (
-    AFN_OPT_ANY,
-    AFN_OPT_CLIP_FUSE,
-    afn_optimizer_step,
-)
 # lane nr-small D4/D12 (IDENTICAL): the gated refusal scan, the SGD
 # one-launch table and the batched clip in the step.
 from training.opt_gate import (
@@ -1812,33 +1804,6 @@ def identical_optimizer_step(
     # Sabotage and recording builds take main's path below.
     # TOMBSTONE: MOJOLEARN_AFN_OPT_FUSE_SCAN (DROPPED-noise, rab19 adam within +-2%) deleted 2026-10-09 on
     # lane/owed-deletions-D2; code recoverable at b639a2bd2. Restore: git apply experiments/removed/MOJOLEARN_AFN_OPT_FUSE_SCAN.patch
-    comptime if AFN_OPT_ANY and not ANY_SABOTAGE and not OPT_RECORD_INTERMEDIATES:
-        opt_refuse_device_inputs(
-            ctx, param, grad, m_state, v_state, offsets, cfg
-        )
-        var afn_j = len(offsets) - 1
-        if afn_j <= 0:
-            return
-        if offsets[afn_j] <= 0:
-            return
-        comptime if not AFN_OPT_CLIP_FUSE:
-            if cfg.max_norm > Float32(0.0):
-                _ = identical_clip_grad_norm(
-                    ctx, grad, sumsq, norms, total_cell, out2, ws,
-                    sab_partials, offsets, cfg.max_norm,
-                )
-        afn_optimizer_step(
-            ctx, param, grad, m_state, v_state, out2, buf_initialized,
-            offsets, cfg, device_step_scalars(cfg, t),
-        )
-        _ = denom_out
-        _ = q_out
-        _ = sumsq
-        _ = norms
-        _ = total_cell
-        _ = ws
-        _ = sab_partials
-        return
     var ton = _step_timing_on()
     var tk = Int(perf_counter_ns())
     # MOJOLEARN_IDN_OPT_GATE_SCAN (lane nr-small D4, training/opt_gate.mojo):

@@ -284,7 +284,7 @@ from gbdt.methods.greedy_subsets_searcher.kernel.fused_level import (
 # ====================================================================
 # TOMBSTONE: MOJOLEARN_GBDT_FUSED_LEVEL_OFF (DELETE-OLD-PATH, unfused level schedule, no A/B recorded, rule b) deleted 2026-11-15 by lane/expdel2-42-trees; code recoverable at 413f6bdc16.
 # Restore: git apply experiments/removed/MOJOLEARN_GBDT_FUSED_LEVEL_OFF.patch; record in docs/TOMBSTONES.md.
-comptime SYM_FUSED_LEVEL = True
+# (Sweep 2026-11-15: the unread always-True SYM_FUSED_LEVEL alias was removed.)
 # per-fusion switches, for bisecting one fused kernel
 comptime SYM_FUSED_SCAN = not is_defined["MOJOLEARN_GBDT_FUSED_SCAN_OFF"]()
 comptime SYM_FUSED_SPLIT = not is_defined["MOJOLEARN_GBDT_FUSED_SPLIT_OFF"]()

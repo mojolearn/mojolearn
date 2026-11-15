@@ -270,16 +270,27 @@ transcendentals and division below are OURS.
 from transformer.experiments.norm_profile import (
     NN24_NORM_LANES8, NN24_LANES, _sum, _square, norm_profile_dot,
 )
-from transformer.experiments.norm_fixed_lanes import (
-    IDN_NORM_FIXED_LANES, NFL_LANES, nfl_cell, nfl_cell_dot, nfl_cell_total, nfl_dot,
-    nfl_square, nfl_sum, norm_row_threads,
-)
-from transformer.experiments.attention_schedules import (
-    NN25_RMS_SPLIT_SCALE, NN29_RING_PAIR,
-    rms_sumsq_kernel, rms_parallel_scale_kernel, training_swiglu_kernel,
-    kv_ring_pair_kernel, NN27_QK_ROPE_PAIR, qk_rope_pair_kernel,
-    NN21_SCALE_MASK, score_scale_mask_kernel,
-)
+from transformer.experiments.norm_fixed_lanes import norm_row_threads
+# Markers moved from the deleted transformer/experiments/attention_schedules.mojo (sweep 2026-11-15):
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old-path umbrella term; owner another lane) deleted 2026-11-15 by lane/expdel2-32-neural; code recoverable at 326b0d6e3d.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-32-neural.patch
+# TOMBSTONE: MOJOLEARN_NN22_EAGER_DKDV_PAIR (unmeasured) deleted 2026-10-07 by a1488ca2d; code recoverable at a1488ca2d^.
+# Restore: git apply experiments/removed/MOJOLEARN_NN22_EAGER_DKDV_PAIR.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_IDN_NORM (arms 2 and 4, NN25; owner another lane) deleted 2026-11-15 by lane/expdel2-32-neural; code recoverable at 326b0d6e3d.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_NORM.expdel2-32-neural.patch
+# TOMBSTONE: MOJOLEARN_NN29_RING_PAIR (opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-32-neural; code recoverable at 326b0d6e3d.
+# Restore: git apply experiments/removed/MOJOLEARN_NN29_RING_PAIR.patch
+# TOMBSTONE: MOJOLEARN_IDN_NORM_FIXED_LANES (the fixed 32-lane S1 arm, EXP:2246 pending) deleted 2026-11-15 by lane/expdel2-32-neural; code recoverable at 326b0d6e3d.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_NORM_FIXED_LANES.patch
+# TOMBSTONE: MOJOLEARN_IDN_ROPE (arm 1, NN27, opt-in, no A/B recorded) deleted 2026-11-15 by lane/expdel2-32-neural; code recoverable at 326b0d6e3d.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ROPE.patch
+# TOMBSTONE: MOJOLEARN_NN21_SCALE_MASK (opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-32-neural; code recoverable at 326b0d6e3d.
+# Restore: git apply experiments/removed/MOJOLEARN_NN21_SCALE_MASK.patch
+# TOMBSTONE: MOJOLEARN_NN23_ROWDOT_DS (unmeasured) deleted 2026-10-07 by a1488ca2d; code recoverable at a1488ca2d^.
+# Restore: git apply experiments/removed/MOJOLEARN_NN23_ROWDOT_DS.patch; record in docs/TOMBSTONES.md.
+# (Sweep 2026-11-15: transformer/experiments/attention_schedules.mojo deleted with its last importer's dead arms: NN25_RMS_SPLIT_SCALE,
+# NN29_RING_PAIR, NN27_QK_ROPE_PAIR, NN21_SCALE_MASK and rms_sumsq_kernel, rms_parallel_scale_kernel, kv_ring_pair_kernel,
+# qk_rope_pair_kernel, score_scale_mask_kernel.)
 from max.gpu import block_dim, block_idx, thread_idx
 from std.memory import bitcast, unsafe_memcpy, stack_allocation
 from std.os import getenv
@@ -289,10 +300,6 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from gemm.experiments.neural_tiled_v2 import NI07_GROUPED_PROJECTIONS, neural_projection_triplet
-from training.neural_identical_experiments import (
-    IDN_RMS_ROW_BLOCK, IDN_TRAIN_SWIGLU, IDN_ROPE_CACHE,
-    IDN_TRAIN_NO_DECODE_CACHE,
-)
 # DEVIATION 2630: the step phase timers and counters (core/step_phase.mojo;
 # compiled only under -D MOJOLEARN_STEP_PHASE_TIMERS=1).
 from core.step_phase import (
@@ -311,7 +318,6 @@ from core.step_phase import (
 # token (`STEP_GLUE_SHIPPED_ROWS`, NVIDIA only).
 from core.step_glue import (
     STEP_GLUE_SHIPPED_ROWS,
-    STEP_GLUE_TRIAL,
     step_glue_arm_from_env,
     step_glue_blocks,
     step_glue_rows_of,
@@ -320,7 +326,7 @@ from core.step_glue import (
 from core.identity_trace import IdentityTrace
 from checks.kernel_matrix import COLUMN_APPLE, COLUMN_NVIDIA, TARGET_COLUMN
 from core.device_arena import arena_active, arena_take
-from gemm.neural_dispatch import GemmWorkspace, NEURAL_PAIR_ENABLED
+from gemm.neural_dispatch import GemmWorkspace
 from gemm.experiments.neural_profile import NEURAL_PROFILE_CHANGED
 # lane/lowbit-blocks (2026-09-29): the block's products under
 # `numeric_profile="fixed15_v1"`; absent planes leave every call below as it was.
@@ -361,11 +367,9 @@ from mamba.impl.modeling.modeling_mamba import (
 
 from transformer.impl.llama.fused_attention import (
     ATTN_ARM_TRIAL,
-    ATTN_STICKY,
     ATTN_SHIPPED_BWD_ESTASH,
     AttnFwdScan,
     FUSED_RAN,
-    FUSED_SKIPPED_STICKY,
     IDN_DECODE_RESIDENT_IO,
     IDN_TRAIN_ONE_WAIT,
     LlamaDeferredChecks,
@@ -1992,39 +1996,6 @@ def ensure_attention_stage_capacity(
 # ===========================================================================
 
 
-@always_inline
-def _nfl_rms_norm_cell(
-    sumsq: MutPointer[Float32, MutAnyOrigin],
-    out_buf: MutPointer[Float32, MutAnyOrigin],
-    x: MutPointer[Float32, MutAnyOrigin],
-    weight: MutPointer[Float32, MutAnyOrigin],
-    m: Int,
-    dm: Int,
-    eps_in: Float32,
-):
-    """S1-S4 of one row on a 32-lane cell (MOJOLEARN_IDN_NORM_FIXED_LANES).
-    S1 is `nfl_cell_dot(x, x)`, the fixed 32-lane fold every column runs;
-    every lane holds the same total, so the S2 scalars are the same bits on
-    every lane; S3/S4 are elementwise products (lane c owns c, c + 32, ...)."""
-    var cell = nfl_cell(m)
-    if not cell[2]:
-        return
-    var t = cell[0]
-    var lane = cell[1]
-    var acc = nfl_cell_dot(x, x, t * dm, t * dm, dm, lane)
-    if lane == 0:
-        sumsq.unsafe_store(t, acc)
-    var mean = ftz(identical_div(acc, Float32(dm)))
-    var rstd = ftz(identical_rsqrt(ftz(mean + eps_in)))
-    var j = lane
-    while j < dm:  # device-loop: this lane's elements of one row
-        var inner = ftz(identical_mul(ftz(x.unsafe_load(t * dm + j)), rstd))
-        out_buf.unsafe_store(
-            t * dm + j, ftz(identical_mul(ftz(weight.unsafe_load(j)), inner))
-        )
-        j += NFL_LANES
-
-
 def llama_rms_norm_kernel(
     sumsq: MutPointer[Float32, MutAnyOrigin],
     out_buf: MutPointer[Float32, MutAnyOrigin],
@@ -2042,12 +2013,6 @@ def llama_rms_norm_kernel(
     (launched with `norm_row_threads(m)` threads); S1 is the fixed 32-lane
     fold (transformer/experiments/norm_fixed_lanes.mojo), S2-S4 unchanged
     and computed per element by the lane that owns it."""
-    comptime if IDN_NORM_FIXED_LANES:
-        comptime assert not (SAB_S1_FOLD_DESCENDING or SAB_BATCHINV_NORM_CHUNK_FROM_M or NN24_NORM_LANES8), (
-            "MOJOLEARN_IDN_NORM_FIXED_LANES replaces S1's fold; it does not combine with S1 sabotage or MOJOLEARN_IDN_NORM=1/4"
-        )
-        _nfl_rms_norm_cell(sumsq, out_buf, x, weight, Int(m_in), Int(dm_in), eps_in)
-        return
     var m = Int(m_in)
     var dm = Int(dm_in)
     var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
@@ -2112,43 +2077,6 @@ def llama_rms_norm_kernel(
         )
 
 
-def llama_rms_norm_row_block_kernel(
-    sumsq: MutPointer[Float32, MutAnyOrigin],
-    out_buf: MutPointer[Float32, MutAnyOrigin],
-    x: MutPointer[Float32, MutAnyOrigin],
-    weight: MutPointer[Float32, MutAnyOrigin],
-    dm_in: Int32,
-    eps_in: Float32,
-):
-    """NI25 S arm: one block per row; original serial S1, parallel S3/S4.
-
-    Lane zero alone owns the original ascending FMA chain. A shared scalar
-    broadcasts the same rounded rstd to all output lanes, so the physical
-    thread count is never a numerical reduction parameter. No shape cutoff.
-    """
-    var t = Int(block_idx.x)
-    var lane = Int(thread_idx.x)
-    var dm = Int(dm_in)
-    var shared = stack_allocation[1, Float32, address_space=AddressSpace.SHARED]()
-    if lane == 0:
-        var acc = Float32(0.0)
-        comptime if IDN_NORM_FIXED_LANES:
-            # the fixed 32-lane fold, one thread (same bits as the cell)
-            acc = nfl_dot(x, x, t * dm, t * dm, dm)
-        else:
-            for j in range(dm):
-                var xj = ftz(x.unsafe_load(t * dm + j))
-                acc = ftz(identical_mul_add(xj, xj, acc))
-        sumsq.unsafe_store(t, acc)
-        var mean = ftz(identical_div(acc, Float32(dm)))
-        shared.unsafe_store(0, ftz(identical_rsqrt(ftz(mean + eps_in))))
-    barrier()
-    var rstd = shared.unsafe_load(0)
-    for j in range(lane, dm, Int(block_dim.x)):
-        var inner = ftz(identical_mul(ftz(x.unsafe_load(t * dm + j)), rstd))
-        out_buf.unsafe_store(t * dm + j, ftz(identical_mul(ftz(weight.unsafe_load(j)), inner)))
-
-
 def residual_rms_norm_kernel(
     residual: MutPointer[Float32, MutAnyOrigin],
     sumsq: MutPointer[Float32, MutAnyOrigin],
@@ -2172,36 +2100,6 @@ def residual_rms_norm_kernel(
     S22 add unchanged), then the shuffle tree; each lane later rereads only
     the residual cells it wrote itself.
     """
-    comptime if IDN_NORM_FIXED_LANES:
-        comptime assert not NN24_NORM_LANES8, "MOJOLEARN_IDN_NORM_FIXED_LANES does not combine with MOJOLEARN_IDN_NORM=1/4"
-        var cell = nfl_cell(Int(m_in))
-        if not cell[2]:
-            return
-        var ct = cell[0]
-        var lane = cell[1]
-        var cdm = Int(dm_in)
-        var cacc = Float32(0.0)
-        var cj = lane
-        while cj < cdm:  # device-loop: this lane's slot of one row
-            var ci = ct * cdm + cj
-            var cr = ftz(ftz(a.unsafe_load(ci)) + ftz(b.unsafe_load(ci)))
-            residual.unsafe_store(ci, cr)
-            cacc = ftz(identical_mul_add(cr, cr, cacc))
-            cj += NFL_LANES
-        cacc = nfl_cell_total(cacc)
-        if lane == 0:
-            sumsq.unsafe_store(ct, cacc)
-        var cmean = ftz(identical_div(cacc, Float32(cdm)))
-        var crstd = ftz(identical_rsqrt(ftz(cmean + eps_in)))
-        cj = lane
-        while cj < cdm:  # device-loop: this lane's elements of one row
-            var ci2 = ct * cdm + cj
-            var cinner = ftz(identical_mul(ftz(residual.unsafe_load(ci2)), crstd))
-            out_buf.unsafe_store(
-                ci2, ftz(identical_mul(ftz(weight.unsafe_load(cj)), cinner))
-            )
-            cj += NFL_LANES
-        return
     var m = Int(m_in)
     var dm = Int(dm_in)
     var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
@@ -2276,30 +2174,6 @@ def llama_rms_norm(
     `llama_rms_norm_kernel` is deleted. This launcher exists so that the
     swap touches one function and no call site.
     """
-    # NN25 keeps the exact S1 fold; cell work is a second flat launch.
-    # OFF by default. No width threshold: this arm measures the actual
-    # extra launch/repeated-rsqrt cost across neighboring model widths.
-    comptime if NN25_RMS_SPLIT_SCALE and not SAB_S1_FOLD_DESCENDING and not SAB_BATCHINV_NORM_CHUNK_FROM_M:
-        step_count_launch()
-        ctx.enqueue_function[rms_sumsq_kernel](
-            sumsq.unsafe_ptr(), x.unsafe_ptr(), Int32(m), Int32(d_model),
-            grid_dim=(_grid(m), 1, 1), block_dim=(LLAMA_TPB, 1, 1),
-        )
-        step_count_launch()
-        ctx.enqueue_function[rms_parallel_scale_kernel](
-            out_buf.unsafe_ptr(), sumsq.unsafe_ptr(), x.unsafe_ptr(),
-            weight.unsafe_ptr(), Int32(m), Int32(d_model), eps,
-            grid_dim=(_grid(m * d_model), 1, 1), block_dim=(LLAMA_TPB, 1, 1),
-        )
-        return
-    comptime if IDN_RMS_ROW_BLOCK and not BLOCK_ANY_SABOTAGE:
-        step_count_launch()
-        ctx.enqueue_function[llama_rms_norm_row_block_kernel](
-            sumsq.unsafe_ptr(), out_buf.unsafe_ptr(), x.unsafe_ptr(),
-            weight.unsafe_ptr(), Int32(d_model), eps,
-            grid_dim=(m, 1, 1), block_dim=(LLAMA_TPB, 1, 1),
-        )
-        return
     # DEVIATION 2645:
     # a trial build under an arm carrying `rows16`, `rows8` or `rows4` launches
     # the same kernel at that many threads per block. The kernel owns one
@@ -2314,7 +2188,7 @@ def llama_rms_norm(
     # block) cannot hold a cell and is not offered under the define.
     var norm_blocks = _grid(norm_row_threads(m))
     var norm_threads = LLAMA_TPB
-    comptime if (STEP_GLUE_TRIAL or STEP_GLUE_SHIPPED_ROWS) and not IDN_NORM_FIXED_LANES:
+    comptime if STEP_GLUE_SHIPPED_ROWS:
         var glue_rows = step_glue_rows_of(step_glue_arm_from_env())
         if glue_rows > 0:
             norm_blocks = step_glue_blocks(m, glue_rows)
@@ -2373,22 +2247,15 @@ def llama_norm_variant_kernel(
         return
     if kind == NORM_LAYERNORM:
         var acc = Float32(0.0)
-        comptime if IDN_NORM_FIXED_LANES:
-            # one thread, the fixed 32-lane fold (norm_fixed_lanes.mojo)
-            acc = nfl_sum(x, t * dm, dm)
-        else:
-            for j in range(dm):
-                acc = ftz(ftz(acc) + ftz(x.unsafe_load(t * dm + j)))
+        for j in range(dm):
+            acc = ftz(ftz(acc) + ftz(x.unsafe_load(t * dm + j)))
         comptime if NN24_NORM_LANES8:
             acc = _sum[NN24_LANES](x, t * dm, dm)
         var mean = ftz(identical_div(acc, Float32(dm)))
         var acc2 = Float32(0.0)
-        comptime if IDN_NORM_FIXED_LANES:
-            acc2 = nfl_square(x, t * dm, dm, mean)
-        else:
-            for j in range(dm):
-                var dev = ftz(ftz(x.unsafe_load(t * dm + j)) - mean)
-                acc2 = ftz(identical_mul_add(dev, dev, acc2))
+        for j in range(dm):
+            var dev = ftz(ftz(x.unsafe_load(t * dm + j)) - mean)
+            acc2 = ftz(identical_mul_add(dev, dev, acc2))
         comptime if NN24_NORM_LANES8:
             acc2 = _square[NN24_LANES](x, t * dm, dm, mean)
         sumsq.unsafe_store(t, acc2)
@@ -2403,12 +2270,9 @@ def llama_norm_variant_kernel(
             out_buf.unsafe_store(t * dm + j, y)
         return
     var acc = Float32(0.0)
-    comptime if IDN_NORM_FIXED_LANES:
-        acc = nfl_dot(x, x, t * dm, t * dm, dm)
-    else:
-        for j in range(dm):
-            var xj = ftz(x.unsafe_load(t * dm + j))
-            acc = ftz(identical_mul_add(xj, xj, acc))
+    for j in range(dm):
+        var xj = ftz(x.unsafe_load(t * dm + j))
+        acc = ftz(identical_mul_add(xj, xj, acc))
     comptime if NN24_NORM_LANES8:
         acc = norm_profile_dot[NN24_LANES](x, x, t * dm, t * dm, dm)
     sumsq.unsafe_store(t, acc)
@@ -2906,51 +2770,6 @@ def apply_rotary_pos_emb(
 # COPIES, NOT A SEAM (contract section 4's preamble names the KV cache
 # append explicitly). DEVIATION 1022: out of place, at the NEW stride.
 # ===========================================================================
-
-
-def rotary_k_prefill_cache_kernel(
-    k_rope: MutPointer[Float32, MutAnyOrigin],
-    k_cache: MutPointer[Float32, MutAnyOrigin],
-    v_cache: MutPointer[Float32, MutAnyOrigin],
-    k_proj: MutPointer[Float32, MutAnyOrigin],
-    v_proj: MutPointer[Float32, MutAnyOrigin],
-    cos_tab: MutPointer[Float32, MutAnyOrigin],
-    sin_tab: MutPointer[Float32, MutAnyOrigin],
-    b_in: Int32, l_in: Int32, nkv_in: Int32, hd_in: Int32, rd_in: Int32,
-):
-    """NI23: full-prefill K RoPE plus the K/V attention-layout stores.
-
-    Only cache-empty, absolute-position-zero calls enter. One cell computes
-    apply_rotary_pos_emb_kernel's clean S9/S10 spelling, saves its original
-    token-major tape value, and writes the same value to the packed K layout.
-    V is a raw copy, matching kv_append2_kernel (no newly introduced FTZ).
-    """
-    var l = Int(l_in)
-    var nkv = Int(nkv_in)
-    var hd = Int(hd_in)
-    var rd = Int(rd_in)
-    var half = rd // 2
-    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
-    if i >= Int(b_in) * l * nkv * hd:
-        return
-    var d = i % hd
-    var kvh = (i // hd) % nkv
-    var tok = i // (nkv * hd)
-    var t = tok % l
-    var bb = tok // l
-    var rotated = ftz(k_proj.unsafe_load(i))
-    if d < rd:
-        var f = d if d < half else d - half
-        var c = ftz(cos_tab.unsafe_load(t * half + f))
-        var s = ftz(sin_tab.unsafe_load(t * half + f))
-        var rh = -ftz(k_proj.unsafe_load(i + half)) if d < half else ftz(k_proj.unsafe_load(i - half))
-        var a = ftz(identical_mul(rotated, c))
-        var bterm = ftz(identical_mul(rh, s))
-        rotated = ftz(ftz(a) + ftz(bterm))
-    k_rope.unsafe_store(i, rotated)
-    var dst = ((bb * nkv + kvh) * l + t) * hd + d
-    k_cache.unsafe_store(dst, rotated)
-    v_cache.unsafe_store(dst, v_proj.unsafe_load(i))
 
 
 def kv_append_kernel(
@@ -4348,15 +4167,8 @@ def eager_attention_forward(
     # whole branch reduces to the code that was here before, so the identity
     # card is untouched by this commit and the measured path is the one that
     # was measured.
-    if (choice != ATTN_PATH_EAGER and stages.attn_fused_off
-            and ATTN_STICKY and not need_eager):
-        status = FUSED_SKIPPED_STICKY
-        if not need_eager:
-            attention_eager_core(
-                ctx, stages, b, l, s, pos0, key_lo, window, dims, plant_at,
-                plant_idx, plant_bits, trace, prefix, softcap,
-            )
-    elif choice != ATTN_PATH_EAGER:
+    # (Sweep 2026-11-15: the ATTN_STICKY latch arm (False on every build) removed.)
+    if choice != ATTN_PATH_EAGER:
         attention_fwd_scan_clear()
         # IDN_DECODE_RESIDENT_IO: the owner's deferred window (0: none, the
         # launchers read their checks on the host as today).
@@ -4597,26 +4409,14 @@ def attention_eager_core(
         ctx.synchronize()
 
     # ---- S12 (:204's `* scaling`), applied to the FINISHED dot.
-    var scale_mask_fused = False
-    comptime if NN21_SCALE_MASK and not BLOCK_ANY_SABOTAGE:
-        scale_mask_fused = softcap == Float32(0.0) and plant_at == PLANT_AT_NONE
-    if scale_mask_fused:
-        step_count_launch()
-        ctx.enqueue_function[score_scale_mask_kernel](
-            stages.scores.unsafe_ptr(), stages.masked.unsafe_ptr(),
-            Int32(cells), Int32(l), Int32(s), Int32(pos0), Int32(key_lo),
-            Int32(window), scale, bitcast[DType.float32](UInt32(MASK_FILL_BITS)),
-            grid_dim=(_grid(cells), 1, 1), block_dim=(LLAMA_TPB, 1, 1),
-        )
-    else:
-        step_count_launch()
-        ctx.enqueue_function[attn_scale_kernel](
-            stages.scores.unsafe_ptr(),
-            Int32(cells),
-            scale,
-            grid_dim=(_grid(cells), 1, 1),
-            block_dim=(LLAMA_TPB, 1, 1),
-        )
+    step_count_launch()
+    ctx.enqueue_function[attn_scale_kernel](
+        stages.scores.unsafe_ptr(),
+        Int32(cells),
+        scale,
+        grid_dim=(_grid(cells), 1, 1),
+        block_dim=(LLAMA_TPB, 1, 1),
+    )
     if fence:
         step_count_sync()
         ctx.synchronize()
@@ -4864,7 +4664,6 @@ def llama_attention_forward(
     mut trace: IdentityTrace,
     prefix: String,
     materialize: Bool,
-    retain_kv_cache: Bool = True,
 ) raises:
     """`LlamaAttention.forward(hidden_states, position_embeddings,
     attention_mask, past_key_values)` (:243-281), eager path, inference
@@ -4897,14 +4696,6 @@ def llama_attention_forward(
     layer normalizes first and this reads `stages.norm1_out`, rather than
     taking a tensor argument.
     """
-    var commit_cache = True
-    comptime if IDN_TRAIN_NO_DECODE_CACHE:
-        if not retain_kv_cache:
-            # Explicit training-only capability, never inferred from size.
-            # Stages retain the exact packed K/V consumed by backward.
-            if pos0 != 0 or kv.s != 0:
-                raise Error("no-decode-cache: training prefill requires an empty cache")
-            commit_cache = False
     var dims = stages.dims.copy()
     var dm = dims.d_model
     var qw = dims.q_width()
@@ -4914,9 +4705,6 @@ def llama_attention_forward(
     var m = b * l
     var s_old = kv.s
     var window = kv.window
-    if not retain_kv_cache:
-        if not (IDN_TRAIN_NO_DECODE_CACHE) or s_old != 0 or pos0 != 0 or window != 0:
-            raise Error("llama: no-decode-cache requires the NI24 IDENTICAL arm and an empty full-prefill cache")
     var key_lo = llama_key_lo(s_old, window)
     var s = llama_key_span(s_old, l, window)
     var ton = timing_on()
@@ -5050,49 +4838,23 @@ def llama_attention_forward(
 
     # ---- apply_rotary_pos_emb (:257). S9 and S10, q then k. V IS NOT
     #      ROTATED (:257 takes q and k only).
-    var rope_cache_fused = False
-    comptime if NN27_QK_ROPE_PAIR and not SAB_S07_ROPE_RELATIVE_POSITION and not SAB_S09_ROPE_HALVES_SWAPPED and not SAB_S10_ROPE_FUSED:
-        step_count_launch()
-        ctx.enqueue_function[qk_rope_pair_kernel](
-            stages.q_rope.unsafe_ptr(), stages.k_rope.unsafe_ptr(),
-            stages.q_proj.unsafe_ptr(), stages.k_proj.unsafe_ptr(),
-            rope.cos.unsafe_ptr(), rope.sin.unsafe_ptr(),
-            Int32(m), Int32(l), Int32(dims.n_heads), Int32(nkv),
-            Int32(hd), Int32(pos0), Int32(rope.rope_dim),
-            grid_dim=(_grid(m * qw), 1, 1), block_dim=(LLAMA_TPB, 1, 1),
-        )
-
-    else:
-        apply_rotary_pos_emb(
-            ctx,
-            stages.q_rope,
-            stages.q_proj,
-            rope.cos,
-            rope.sin,
-            m,
-            l,
-            dims.n_heads,
-            hd,
-            pos0,
-            rope.rope_dim,
-        )
-        comptime if IDN_ROPE_CACHE and not BLOCK_ANY_SABOTAGE:
-            # Cache semantics, not a benchmark size: no previous keys and no ring.
-            rope_cache_fused = s_old == 0 and pos0 == 0 and window == 0
-        if rope_cache_fused:
-            step_count_launch()
-            ctx.enqueue_function[rotary_k_prefill_cache_kernel](
-                stages.k_rope.unsafe_ptr(), stages.k_cache.unsafe_ptr(),
-                stages.v_cache.unsafe_ptr(), stages.k_proj.unsafe_ptr(),
-                stages.v_proj.unsafe_ptr(), rope.cos.unsafe_ptr(), rope.sin.unsafe_ptr(),
-                Int32(b), Int32(l), Int32(nkv), Int32(hd), Int32(rope.rope_dim),
-                grid_dim=(_grid(m * kw), 1, 1), block_dim=(LLAMA_TPB, 1, 1),
-            )
-        else:
-            apply_rotary_pos_emb(
-                ctx, stages.k_rope, stages.k_proj, rope.cos, rope.sin,
-                m, l, nkv, hd, pos0, rope.rope_dim,
-            )
+    apply_rotary_pos_emb(
+        ctx,
+        stages.q_rope,
+        stages.q_proj,
+        rope.cos,
+        rope.sin,
+        m,
+        l,
+        dims.n_heads,
+        hd,
+        pos0,
+        rope.rope_dim,
+    )
+    apply_rotary_pos_emb(
+        ctx, stages.k_rope, stages.k_proj, rope.cos, rope.sin,
+        m, l, nkv, hd, pos0, rope.rope_dim,
+    )
     # DEVIATION 2721 (lane/wait-removal): WAIT REMOVED here. The next
     # statement is a trace record. `IdentityTrace.record_device` returns
     # at once when tracing is off; when it is on it enqueues its OWN copy
@@ -5112,9 +4874,7 @@ def llama_attention_forward(
     #      SPAN this call reads (absolute `[key_lo, pos0 + l)`), gathered
     #      from the ring plus this call's tokens; the ring itself is then
     #      updated in place. The recorded `kv.k_cache` stage is that span.
-    if rope_cache_fused:
-        pass  # NI23 wrote both packed attention stages with K RoPE above.
-    elif window == 0:
+    if window == 0:
         step_count_launch()
         ctx.enqueue_function[kv_append2_kernel](
             stages.k_cache.unsafe_ptr(),
@@ -5180,61 +4940,49 @@ def llama_attention_forward(
     # computed. DEVIATION 1022 is why the two buffers are distinct; the rest
     # of THIS call reads `stages.k_cache` and `stages.v_cache`, which hold
     # the same bits.
-    if commit_cache:
-        if window == 0:
-            step_count_d2d()
-            ctx.enqueue_copy(dst_buf=kv.k, src_buf=stages.k_cache)
-            step_count_d2d()
-            ctx.enqueue_copy(dst_buf=kv.v, src_buf=stages.v_cache)
-        else:
-            comptime if NN29_RING_PAIR:
-                step_count_launch()
-                ctx.enqueue_function[kv_ring_pair_kernel](
-                    kv.k.unsafe_ptr(), kv.v.unsafe_ptr(),
-                    stages.k_rope.unsafe_ptr(), stages.v_proj.unsafe_ptr(),
-                    Int32(b), Int32(l), Int32(nkv), Int32(hd),
-                    Int32(kv.cap), Int32(s_old),
-                    grid_dim=(_grid(b * nkv * kv.cap * hd), 1, 1),
-                    block_dim=(LLAMA_TPB, 1, 1),
-                )
-            else:
-                # The ring takes this call's tokens AFTER the gather above read it.
-                step_count_launch()
-                ctx.enqueue_function[kv_ring_write_kernel](
-                    kv.k.unsafe_ptr(),
-                    stages.k_rope.unsafe_ptr(),
-                    Int32(b),
-                    Int32(l),
-                    Int32(nkv),
-                    Int32(hd),
-                    Int32(kv.cap),
-                    Int32(s_old),
-                    grid_dim=(_grid(b * nkv * kv.cap * hd), 1, 1),
-                    block_dim=(LLAMA_TPB, 1, 1),
-                )
-                step_count_launch()
-                ctx.enqueue_function[kv_ring_write_kernel](
-                    kv.v.unsafe_ptr(),
-                    stages.v_proj.unsafe_ptr(),
-                    Int32(b),
-                    Int32(l),
-                    Int32(nkv),
-                    Int32(hd),
-                    Int32(kv.cap),
-                    Int32(s_old),
-                    grid_dim=(_grid(b * nkv * kv.cap * hd), 1, 1),
-                    block_dim=(LLAMA_TPB, 1, 1),
-                )
-        # IDN_ATTN_CACHE_NOWAIT (lane/nr-attn, from lane/neural-pass67
-        # 087231ba3): the hard wait after the cache update ordered nothing.
-        # Every consumer of the cache stages (and of `kv.k`/`kv.v`) is a launch
-        # or copy on the same in-order context, and the host reads none of them
-        # before its own later wait (the fused forward's regime scan or flag
-        # read, or the next call's). No buffer local to this call is freed here.
-        comptime if not IDN_ATTN_CACHE_NOWAIT:
-            step_count_sync()
-            ctx.synchronize()
-        kv.s = s_old + l
+    if window == 0:
+        step_count_d2d()
+        ctx.enqueue_copy(dst_buf=kv.k, src_buf=stages.k_cache)
+        step_count_d2d()
+        ctx.enqueue_copy(dst_buf=kv.v, src_buf=stages.v_cache)
+    else:
+        # The ring takes this call's tokens AFTER the gather above read it.
+        step_count_launch()
+        ctx.enqueue_function[kv_ring_write_kernel](
+            kv.k.unsafe_ptr(),
+            stages.k_rope.unsafe_ptr(),
+            Int32(b),
+            Int32(l),
+            Int32(nkv),
+            Int32(hd),
+            Int32(kv.cap),
+            Int32(s_old),
+            grid_dim=(_grid(b * nkv * kv.cap * hd), 1, 1),
+            block_dim=(LLAMA_TPB, 1, 1),
+        )
+        step_count_launch()
+        ctx.enqueue_function[kv_ring_write_kernel](
+            kv.v.unsafe_ptr(),
+            stages.v_proj.unsafe_ptr(),
+            Int32(b),
+            Int32(l),
+            Int32(nkv),
+            Int32(hd),
+            Int32(kv.cap),
+            Int32(s_old),
+            grid_dim=(_grid(b * nkv * kv.cap * hd), 1, 1),
+            block_dim=(LLAMA_TPB, 1, 1),
+        )
+    # IDN_ATTN_CACHE_NOWAIT (lane/nr-attn, from lane/neural-pass67
+    # 087231ba3): the hard wait after the cache update ordered nothing.
+    # Every consumer of the cache stages (and of `kv.k`/`kv.v`) is a launch
+    # or copy on the same in-order context, and the host reads none of them
+    # before its own later wait (the fused forward's regime scan or flag
+    # read, or the next call's). No buffer local to this call is freed here.
+    comptime if not IDN_ATTN_CACHE_NOWAIT:
+        step_count_sync()
+        ctx.synchronize()
+    kv.s = s_old + l
     timing_tick(ctx, ton, tk, "attn.rope_and_cache")
 
     # ---- the attention interface (:264-277). Eager or fused, ONE set of
@@ -5327,18 +5075,11 @@ def llama_mlp_forward(
     var bias_silu_fused = opts.mlp_bias and opts.act_is_silu()
 
     # ---- gate_proj and up_proj. C[M, it] = norm2_out[M, dm] . W[it, dm]^T.
-    var projections_paired = False
-    comptime if NEURAL_PAIR_ENABLED:
-        if gated and not w.int15:
-            stages.gemm_workspace.run_pair(ctx, stages.gate_proj, stages.up_proj,
-                stages.norm2_out, w.w_gate, w.w_up, m, it, dm, _gemm_op_nt())
-            projections_paired = True
     if gated:
-        if not projections_paired:
-            llama_proj(
-                ctx, stages.gemm_workspace, stages.int15, w.int15, LLAMA_PROJ_GATE,
-                stages.gate_proj, stages.norm2_out, w.w_gate, m, it, dm,
-            )
+        llama_proj(
+            ctx, stages.gemm_workspace, stages.int15, w.int15, LLAMA_PROJ_GATE,
+            stages.gate_proj, stages.norm2_out, w.w_gate, m, it, dm,
+        )
         if bias_silu_fused:
             step_count_launch()
             ctx.enqueue_function[bias_silu_kernel](
@@ -5374,11 +5115,10 @@ def llama_mlp_forward(
         var no_gate = List[Float32]()
         trace.record_list_f32(prefix + ".gate_proj.out", no_gate)
     pc.tick(ctx, "fwd.gate_proj", "gateup_fwd")
-    if not projections_paired:
-        llama_proj(
-            ctx, stages.gemm_workspace, stages.int15, w.int15, LLAMA_PROJ_UP,
-            stages.up_proj, stages.norm2_out, w.w_up, m, it, dm,
-        )
+    llama_proj(
+        ctx, stages.gemm_workspace, stages.int15, w.int15, LLAMA_PROJ_UP,
+        stages.up_proj, stages.norm2_out, w.w_up, m, it, dm,
+    )
     if bias_gelu_fused and not gated:
         step_count_launch()
         ctx.enqueue_function[bias_gelu_kernel](
@@ -5413,19 +5153,7 @@ def llama_mlp_forward(
         swiglu_fused = (forward_only and gated and opts.act_is_silu()
                         and not bias_silu_fused and not bias_gelu_fused
                         and not trace.enabled and swiglu_fused_enabled())
-    var training_swiglu = False
-    comptime if IDN_TRAIN_SWIGLU and not BLOCK_ANY_SABOTAGE:
-        training_swiglu = (not forward_only and gated and opts.act_is_silu()
-                           and not bias_silu_fused and not bias_gelu_fused)
-    if training_swiglu:
-        step_count_launch()
-        ctx.enqueue_function[training_swiglu_kernel](
-            stages.silu_out.unsafe_ptr(), stages.gated.unsafe_ptr(),
-            stages.gate_proj.unsafe_ptr(), stages.up_proj.unsafe_ptr(),
-            Int32(m * it), grid_dim=(_grid(m * it), 1, 1),
-            block_dim=(LLAMA_TPB, 1, 1),
-        )
-    elif swiglu_fused:
+    if swiglu_fused:
         step_count_launch()
         ctx.enqueue_function[swiglu_fused_kernel](
             stages.gated.unsafe_ptr(),
@@ -5477,11 +5205,7 @@ def llama_mlp_forward(
     pc.tick(ctx, "fwd.silu")
 
     # ---- the gate product (:175). S21. Absent under an ungated MLP.
-    if training_swiglu:
-        trace.record_device[DType.float32](
-            ctx, prefix + ".mlp.gated", stages.gated, m * it
-        )
-    if swiglu_fused or training_swiglu:
+    if swiglu_fused:
         pass  # the selected fused kernel already wrote S21
     elif gated:
         step_count_launch()
@@ -5571,7 +5295,6 @@ def llama_decoder_layer_forward_planted(
     next_norm_weight: Optional[MutPointer[Float32, MutAnyOrigin]] = None,
     next_norm_eps: Optional[Float32] = None,
     forward_only: Bool = False,
-    retain_kv_cache: Bool = True,
 ) raises:
     """`LlamaDecoderLayer.forward(hidden_states, ...)` (:295-324).
 
@@ -5787,7 +5510,6 @@ def llama_decoder_layer_forward_planted(
         trace,
         prefix,
         materialize,
-        retain_kv_cache=retain_kv_cache,
     )
     timing_tick(ctx, ton, tk, "block.attention_total")
     pc.mark(ctx)
@@ -5917,19 +5639,12 @@ def llama_decoder_layer_forward(
     next_norm_weight: Optional[MutPointer[Float32, MutAnyOrigin]] = None,
     next_norm_eps: Optional[Float32] = None,
     forward_only: Bool = False,
-    retain_kv_cache: Bool = True,
 ) raises:
     """THE ORDINARY ENTRY POINT. One block call with NO score plant.
 
     `forward_only` (lane/neural-net-experiment): the caller promises no
     backward reads this call's stages, which admits the forward-only
     fusions (`swiglu_fused_kernel` under `MOJOLEARN_SWIGLU_FUSED=1`).
-
-    `retain_kv_cache=False` is the NI24 owned-training-prefill protocol:
-    admitted only by its IDENTICAL opt-in, with an empty non-window cache
-    at position zero. Per-layer attention stages survive for backward;
-    persistent cache buffers and kv.s stay unchanged. Such a call cannot
-    be used as the prefix of a later decode operation.
 
     Every argument is a scalar or a buffer or one of this file's own
     structs; nothing from `transformer/checks/` crosses this boundary,
@@ -5960,5 +5675,4 @@ def llama_decoder_layer_forward(
         next_norm_weight=next_norm_weight,
         next_norm_eps=next_norm_eps,
         forward_only=forward_only,
-        retain_kv_cache=retain_kv_cache,
     )

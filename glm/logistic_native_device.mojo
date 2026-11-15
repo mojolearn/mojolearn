@@ -13,8 +13,11 @@ from core.shared_slot import SharedSlot
 from core.estimators_impl import qn_link_from_device, qn_sigmoid_device, qn_softmax_device
 from core.py2mojo_rows import ROWS_LOG, rows_call, rows_device
 from glm.estimator import (
-    qn_fit_host, qn_decision_function_device, qn_decision_function_host,
-    qn_predict_binary_host, qn_predict_multiclass_host, QN_DEV_ARGMAX,
+    qn_fit_host,
+    qn_decision_function_device,
+    qn_decision_function_host,
+    qn_predict_binary_host,
+    qn_predict_multiclass_host,
 )
 
 comptime _CONTEXT = "MojolearnEstimatorsContextIdenticalV3" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnEstimatorsContextFastV3"
@@ -31,7 +34,7 @@ struct QnDeviceKernels(QnNativeKernels):
 
     @staticmethod
     def multiclass() -> Bool:
-        return Bool(QN_DEV_ARGMAX)
+        return True
 
     @staticmethod
     def fit(r: QnFitRequest) raises -> Int:
@@ -71,12 +74,9 @@ struct QnDeviceKernels(QnNativeKernels):
             var dst = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=r.dst)
             qn_predict_binary_host(ctx, xp, wp, dst, r.rows, r.features, r.intercept, r.status)
         elif operation == QN_NATIVE_MULTICLASS:
-            comptime if QN_DEV_ARGMAX:
-                var dst = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=r.dst)
-                qn_predict_multiclass_host(ctx, xp, wp, dst, r.rows,
-                    r.features, r.intercept, r.targets, r.status)
-            else:
-                raise Error("logistic native ABI: multiclass prediction is not enabled")
+            var dst = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=r.dst)
+            qn_predict_multiclass_host(ctx, xp, wp, dst, r.rows,
+                r.features, r.intercept, r.targets, r.status)
         else:
             raise Error("logistic native ABI: invalid query operation")
         ctx.synchronize()

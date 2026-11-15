@@ -128,7 +128,7 @@ from gemm.contract import OP_NT
 # 2026-11-15 by lane/expdel2-24-neural; code recoverable at 2266129859. AUTOGRAD_REFUSE_DEFER = True stays for
 # autograd/rules_samba.mojo and training/samba_resident.mojo; traced and materialized calls keep the synchronous scan.
 # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_REFUSE_DEFER_OFF.patch
-comptime AUTOGRAD_REFUSE_DEFER = True
+# (Sweep 2026-11-15: the AUTOGRAD_REFUSE_DEFER = True constant removed; its two readers folded to the deferred scan.)
 
 from transformer.impl.llama.modeling_llama import (
     LlamaDeviceStages,

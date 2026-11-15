@@ -620,7 +620,9 @@ def means_divide_kernel(
 # (losses), same cases/protocol; see estimator.mojo. Both existing defaults
 # remain ON. Full-board qualification remains separate from these fits.
 # Evidence: experiments/performance_ideas/measurements/20261006/index.json.
-comptime GMM_CENTER_PAIR = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_IDN_GMM_CENTER_PAIR"]() and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old path, umbrella) deleted 2026-11-15 by lane/expdel2-37-series; this read folded by lane/expdel2-sweep.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-sweep.patch; record in docs/TOMBSTONES.md.
+comptime GMM_CENTER_PAIR = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_IDN_GMM_CENTER_PAIR"]()
 comptime GMM_CENTER_PAIR_MAX_CELLS = 1 << 20  # four Float32 planes <=16 MiB
 # TOMBSTONE: MOJOLEARN_C53_CENTER4 (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-08-base; code recoverable at 07692a4f78.
 # Restore: git apply experiments/removed/MOJOLEARN_C53_CENTER4.expdel2-08-base.patch; record in docs/TOMBSTONES.md.

@@ -46,10 +46,9 @@ One departure of theirs is copied even though it looks like a bug guard:
 The tile is indexed with `IndexT`, so the tile itself, not the dataset, is
 what must fit the index type.
 """
-from experiments.classical_identical_ideas.graph_controls import (
-    KMEANS_ROW_ASSIGN, KMEANS_ROW_ASSIGN_MAX_KD,
-)
-from cluster.impl.detail.classical_assignment import ASSIGN_ROWS, classical_assign_kernel, classical_assign_gated_kernel
+# TOMBSTONE: MOJOLEARN_KMEANS_ROW_ASSIGN (unmeasured opt-in arm, owner expdel2-05-base; non-owner site) deleted 2026-11-15 by lane/expdel2-10-cluster; code recoverable at 8929636547.
+# Restore: git apply experiments/removed/MOJOLEARN_KMEANS_ROW_ASSIGN.expdel2-10-cluster.patch; record in docs/TOMBSTONES.md.
+# (Sweep 2026-11-15: always-False kmeans_row_assign_takes, its two launch branches and cluster/impl/detail/classical_assignment.mojo removed.)
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 
@@ -133,19 +132,6 @@ from core.shared_slot import SharedSlot
 
 
 
-def kmeans_row_assign_takes(n_clusters: Int, n_features: Int) -> Bool:
-    """KMEANS_ASSIGN (graph_controls.mojo): the row-register kernel takes this
-    assignment. The expanded row arms do only while the per-thread chain
-    `k * d` is at most `KMEANS_ROW_ASSIGN_MAX_KD` (cost rule, see there); past
-    it the tiled kernel keeps the launch. Either kernel gives the expanded
-    arms the same bits."""
-    comptime if not KMEANS_ROW_ASSIGN:
-        return False
-    # Tried 2026-10-08 (MOJOLEARN_KMEANS_DIRECT_DISTANCE, arm direct4 of kmeans_assign, run ge123e6f9): (x-c)^2 distances in
-    # place of the expansion; NV/AMD kmeans istella 12.7x/6.2x, taxi 1.78x/1.96x SLOWER; inertia SAME -> deleted (both direct
-    # arms). Recoverable at main 42d1e42c6; row in docs/apple-fast/EXPERIMENTS.md.
-    return n_clusters * n_features <= KMEANS_ROW_ASSIGN_MAX_KD
-
 def compute_centroid_norms(
     ctx: DeviceContext,
     mut centroids: DeviceBuffer[DType.float32],
@@ -198,13 +184,6 @@ def _launch_fused[
     call feeds the occupancy query -- theirs passes the double-buffered
     `P::SmemSize` because that is what their kernel allocates.
     """
-    if kmeans_row_assign_takes(n_clusters, n_features):
-        ctx.enqueue_function[classical_assign_kernel](
-            out_key.unsafe_ptr(), out_value.unsafe_ptr(), x.unsafe_ptr(), centroids.unsafe_ptr(),
-            x_norm.unsafe_ptr(), centroid_norm.unsafe_ptr(), Int32(n_samples), Int32(n_clusters), Int32(n_features), is_sqrt,
-            grid_dim=((n_samples + 128 * ASSIGN_ROWS - 1) // (128 * ASSIGN_ROWS),1,1), block_dim=(128,1,1),
-        )
-        return
     var device_count = assignment_device_count(dplan)
     if device_count > 1:
         assignment_parallel[veclen, kblk, tr, tc](ctx, out_key, out_value,
@@ -392,13 +371,6 @@ def _launch_fused_gated[
     """`_launch_fused` on one device with the kernel gated on `gate[0]`
     (fam2-cluster, `IDN_KMEANS_DEVICE_CONV`). The caller has already ruled
     out the multi-device split (`assignment_device_count(dplan) == 1`)."""
-    if kmeans_row_assign_takes(n_clusters, n_features):
-        ctx.enqueue_function[classical_assign_gated_kernel](
-            gate.unsafe_ptr(), out_key.unsafe_ptr(), out_value.unsafe_ptr(), x.unsafe_ptr(), centroids.unsafe_ptr(),
-            x_norm.unsafe_ptr(), centroid_norm.unsafe_ptr(), Int32(n_samples), Int32(n_clusters), Int32(n_features), is_sqrt,
-            grid_dim=((n_samples + 128 * ASSIGN_ROWS - 1) // (128 * ASSIGN_ROWS),1,1), block_dim=(128,1,1),
-        )
-        return
     comptime nthreads = tr * tc
     comptime mblk = 4 * tr
     comptime nblk = 4 * tc

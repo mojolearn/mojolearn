@@ -15,13 +15,12 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
 from checks.kernel_matrix import TARGET_COLUMN, COLUMN_APPLE, COLUMN_NVIDIA, COLUMN_AMD
 from max.gpu.host import DeviceContext, DeviceBuffer
 from core.forest_inference import (
-    _forest_shape_checks, forest_pack_device, forest_validate_device, launch_forest_inference, launch_forest_argmax, FOREST_PACKED_NODES,
+    _forest_shape_checks, forest_pack_device, launch_forest_inference, launch_forest_argmax, FOREST_PACKED_NODES,
     device_all_finite,
 )
 from core.forest_inference_pool import PooledForest, forest_device_count
 from core.neural_context import process_ctx
 from core.admitted_finite_status import enqueue_finite_status
-from core.forest_experiments import T36_FINITE_STAGE
 # TOMBSTONE: MOJOLEARN_TREES_T34_CHUNK_FOLD (opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-04-base; code recoverable at 08081353e1.
 # Restore: git apply experiments/removed/MOJOLEARN_TREES_T34_CHUNK_FOLD.expdel2-04-base.patch; record in docs/TOMBSTONES.md.
 # TOMBSTONE: MOJOLEARN_TREES_T38_FUSED_LABELS (opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-04-base; code recoverable at 1caa34cfb3.
@@ -161,10 +160,9 @@ struct ForestIOWorkspace(Defaultable, Movable):
             self.input_len = n
         try:
             ctx.enqueue_copy(dst_buf=self.input.value().create_sub_buffer[DType.float32](0, n), src_ptr=x)
-            comptime if not T36_FINITE_STAGE:
-                if not device_all_finite(ctx, self.input.value(), n):
-                    ctx.synchronize()
-                    return False
+            if not device_all_finite(ctx, self.input.value(), n):
+                ctx.synchronize()
+                return False
             ctx.synchronize()
         except e:
             ctx.synchronize()
@@ -268,12 +266,8 @@ struct ResidentForest(Movable):
         self.left = Optional[DeviceBuffer[DType.int32]]()
         self.leaves = Optional[DeviceBuffer[DType.float32]]()
         var device_count = forest_device_count()
-        comptime if T36_FINITE_STAGE:
-            if device_count != 1:
-                raise Error("selected TREES inference experiment requires one device; pooled integration remains pending")
-        comptime if FOREST_PACKED_NODES:
-            if len(columns) > 2147483647 // 4:
-                raise Error("packed forest node word count exceeds Int32")
+        if len(columns) > 2147483647 // 4:
+            raise Error("packed forest node word count exceeds Int32")
         # A sharded pool combines per-device tree partitions and therefore
         # cannot express one global increasing-tree fold.  The experimental
         # ordered arm stays on one device so its arithmetic graph is exact.
@@ -299,28 +293,13 @@ struct ResidentForest(Movable):
         try:
             self.offsets = self.ctx.value().enqueue_create_buffer[DType.int32](len(offsets))
             self.ctx.value().enqueue_copy(dst_buf=self.offsets.value(), src_ptr=offsets.unsafe_ptr())
-            comptime if FOREST_PACKED_NODES:
-                forest_pack_device(
-                    self.ctx.value(), offsets, columns, thresholds, left, leaves,
-                    features, outputs, self.columns, self.leaves,
-                )
-                # Unused ABI operands; avoid retaining original SoA buffers.
-                self.thresholds = self.ctx.value().enqueue_create_buffer[DType.float32](1)
-                self.left = self.ctx.value().enqueue_create_buffer[DType.int32](1)
-            else:
-                self.columns = self.ctx.value().enqueue_create_buffer[DType.int32](len(columns))
-                self.thresholds = self.ctx.value().enqueue_create_buffer[DType.float32](len(thresholds))
-                self.left = self.ctx.value().enqueue_create_buffer[DType.int32](len(left))
-                self.leaves = self.ctx.value().enqueue_create_buffer[DType.float32](len(leaves))
-                self.ctx.value().enqueue_copy(dst_buf=self.columns.value(), src_ptr=columns.unsafe_ptr())
-                self.ctx.value().enqueue_copy(dst_buf=self.thresholds.value(), src_ptr=thresholds.unsafe_ptr())
-                self.ctx.value().enqueue_copy(dst_buf=self.left.value(), src_ptr=left.unsafe_ptr())
-                self.ctx.value().enqueue_copy(dst_buf=self.leaves.value(), src_ptr=leaves.unsafe_ptr())
-                forest_validate_device(
-                    self.ctx.value(), self.offsets.value(), self.columns.value(),
-                    self.thresholds.value(), self.left.value(), self.leaves.value(),
-                    self.trees, len(columns), features, outputs,
-                )
+            forest_pack_device(
+                self.ctx.value(), offsets, columns, thresholds, left, leaves,
+                features, outputs, self.columns, self.leaves,
+            )
+            # Unused ABI operands; avoid retaining original SoA buffers.
+            self.thresholds = self.ctx.value().enqueue_create_buffer[DType.float32](1)
+            self.left = self.ctx.value().enqueue_create_buffer[DType.int32](1)
             self.ctx.value().synchronize()
             _ = len(offsets)
             _ = len(columns)
@@ -405,7 +384,7 @@ struct ResidentForest(Movable):
         var result = List[Float32](length=rows * outputs, fill=Float32(0.0))
         try:
             self.ctx.value().enqueue_copy(dst_buf=dx, src_ptr=x.unsafe_ptr())
-            if not T36_FINITE_STAGE and not device_all_finite(self.ctx.value(), dx, rows * features):
+            if not device_all_finite(self.ctx.value(), dx, rows * features):
                 raise Error("resident forest requires finite Float32 values")
             if self.ordered:
                 launch_forest_inference[RF_INPUT, False, FOREST_PACKED_NODES](
@@ -518,7 +497,7 @@ struct ResidentForest(Movable):
         `dx` already holds these rows, scanned finite (the staged input)."""
         if not uploaded:
             self.ctx.value().enqueue_copy(dst_buf=dx.create_sub_buffer[DType.float32](0, rows*features), src_ptr=x)
-            if not T36_FINITE_STAGE and not device_all_finite(self.ctx.value(), dx, rows * features):
+            if not device_all_finite(self.ctx.value(), dx, rows * features):
                 raise Error("resident forest requires finite Float32 values")
         if self.ordered:
             launch_forest_inference[RF_INPUT, False, FOREST_PACKED_NODES](
@@ -622,7 +601,7 @@ def _predict_into_buffers[RF_INPUT: Bool](ctx: DeviceContext,
     # own drain (`device_all_finite`) is gone. The public doors defer their
     # host scan of a borrowed X to this test (trees_public_forest
     # `_public_deferred`). Numerics: none (a predicate on bits).
-    var scan_input = not uploaded and not T36_FINITE_STAGE
+    var scan_input = not uploaded
     # Lane forests-regression (2026-11-14): word 0 is the input's status,
     # word 1 the output's. The output test was `device_all_finite(ctx, dout,
     # ...)` after the synchronize below: its own flag buffer, pinned host

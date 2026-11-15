@@ -19,23 +19,23 @@ comptime _ENABLED = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 # Arm 2 of the ONE RoPE switch MOJOLEARN_IDN_ROPE (arm 1 is NN27).
 # TOMBSTONE: MOJOLEARN_IDN_ROPE (arms 1 and 2, opt-in, no A/B recorded) deleted 2026-11-15 by lane/expdel2-32-neural; code recoverable at 311b50e05c.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_ROPE.patch
-comptime IDN_ROPE_CACHE = False
+# (Sweep 2026-11-15: IDN_ROPE_CACHE = False removed with its reader and rotary_k_prefill_cache_kernel.)
 # NI24 (+ NN28, merged 2026-10-07; NN28 was the same capability on fewer
 # callers): only owned training-prefill callers may omit the persistent cache
 # copy. One switch for byte_lm, its layer pool and modeling_llama.
 # TOMBSTONE: MOJOLEARN_IDN_TRAIN_NO_DECODE_CACHE (opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-32-neural; code recoverable at 311b50e05c.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_TRAIN_NO_DECODE_CACHE.patch
-comptime IDN_TRAIN_NO_DECODE_CACHE = False
+# (Sweep 2026-11-15: IDN_TRAIN_NO_DECODE_CACHE = False removed with its readers and the retain_kv_cache parameter.)
 # NI25 S sub-arm: serial original statistics, cooperative output scaling.
 # Arm 3 of the ONE norm switch MOJOLEARN_IDN_NORM (norm_profile_contract.mojo).
 # TOMBSTONE: MOJOLEARN_IDN_NORM (arm 3, opt-in, no A/B recorded; owner another lane) deleted 2026-11-15 by lane/expdel2-32-neural; code recoverable at 311b50e05c.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_NORM.expdel2-32-neural.patch
-comptime IDN_RMS_ROW_BLOCK = False
+# (Sweep 2026-11-15: IDN_RMS_ROW_BLOCK = False removed with its reader and llama_rms_norm_row_block_kernel.)
 # NI26 (+ NN26, merged 2026-10-07; both enabled the same training_swiglu
 # launch): preserve both silu_out and gated for tracing and backward.
 # TOMBSTONE: MOJOLEARN_IDN_TRAIN_SWIGLU (opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-32-neural; code recoverable at 311b50e05c.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_TRAIN_SWIGLU.patch
-comptime IDN_TRAIN_SWIGLU = False
+# (Sweep 2026-11-15: IDN_TRAIN_SWIGLU = False removed with its reader and training_swiglu_kernel.)
 # NI27: views are rebound to the current owned arena after optimizer swaps.
 # L11 (2026-10-07): NN60 and NI27 are arms of ONE switch,
 # -D MOJOLEARN_IDN_LM_VIEWS=0|1|2|3: 1 = block weight views (NN60 block),
@@ -43,8 +43,7 @@ comptime IDN_TRAIN_SWIGLU = False
 # (NI27). Aliases only; no arithmetic changes.
 # TOMBSTONE: MOJOLEARN_IDN_LM_VIEWS (arms 1-3, opt-in, no A/B recorded) deleted 2026-11-15 by lane/expdel2-32-neural; code recoverable at 311b50e05c.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_LM_VIEWS.patch
-comptime IDN_LM_VIEWS_ARM = 0
-comptime IDN_LM_PARAM_VIEWS = False
+# (Sweep 2026-11-15: IDN_LM_VIEWS_ARM = 0 and IDN_LM_PARAM_VIEWS = False removed with their readers' dead arms.)
 # TOMBSTONE: MOJOLEARN_IDN_PARAM_GRAD_VIEWS deleted 2026-11-09 by lane x7b-step-ops-host-arm (its train step went with lane x7); refused in core/experiment_guards_neural.mojo.
 # TOMBSTONE: MOJOLEARN_IDN_LM_RESIDENT_TOKENS (NI32 / NN51 arms) deleted 2026-11-09 by lane x7b-step-ops-host-arm (no reader since lane x7); refused in core/experiment_guards_neural.mojo.
 # NI33: keep the original per-cell divides and the same ignored-row stores.
@@ -52,7 +51,7 @@ comptime IDN_LM_PARAM_VIEWS = False
 # in identical_ce_backward_into; one switch (L11, 2026-10-07).
 # TOMBSTONE: MOJOLEARN_IDN_CE_GRAD_FUSED (opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-32-neural; code recoverable at 311b50e05c.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_CE_GRAD_FUSED.patch
-comptime IDN_CE_GRAD_FUSED = False
+# (Sweep 2026-11-15: IDN_CE_GRAD_FUSED = False removed with its last (unused) import in training/checks/loss.mojo.)
 # R6 (lane/neural-ce-denom, 2026-10-07): the CE softmax denominator (loss L4,
 # and L9 under smoothing) computed by one block per row that walks the GEMM
 # contract's own leaf chains and fold tree (training/checks/loss.mojo
@@ -62,7 +61,7 @@ comptime IDN_CE_GRAD_FUSED = False
 # chain spelling the row fold does not reproduce.
 # TOMBSTONE: MOJOLEARN_IDN_CE_DENOM_ROWFOLD (opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-32-neural; code recoverable at 311b50e05c.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_CE_DENOM_ROWFOLD.patch
-comptime IDN_CE_DENOM_ROWFOLD = False
+# (Sweep 2026-11-15: the unread IDN_CE_DENOM_ROWFOLD = False removed.)
 # NI36 narrow sub-arm: dA and dW GEMMs run serially on the same queue, so
 # their disjoint scratch lifetimes can share one allocation. No tape alias.
 # L11 (2026-10-07): NI36 (now only this scratch sharing; its tape half is
@@ -71,8 +70,19 @@ comptime IDN_CE_DENOM_ROWFOLD = False
 # 2 = NN62 byte-LM lifetime arena (training/neural_ab_lifetime.mojo), 3 = both.
 # TOMBSTONE: MOJOLEARN_IDN_TRAIN_SCRATCH (arms 1-3, opt-in, no A/B recorded) deleted 2026-11-15 by lane/expdel2-32-neural; code recoverable at 311b50e05c.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_TRAIN_SCRATCH.patch
-comptime IDN_TRAIN_SCRATCH_ARM = 0
-comptime IDN_TRAIN_BACKWARD_SCRATCH = False
+# Markers moved from the deleted training/neural_ab_lifetime.mojo (sweep 2026-11-15):
+# TOMBSTONE: MOJOLEARN_IDN_TRAIN_SCRATCH (arms 2 and 3, opt-in, no A/B recorded) deleted 2026-11-15 by lane/expdel2-32-neural; code recoverable at 19d2549589.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_TRAIN_SCRATCH.patch
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old-path umbrella term; owner another lane) deleted 2026-11-15 by lane/expdel2-32-neural; code recoverable at 19d2549589.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-32-neural.patch
+# TOMBSTONE: MOJOLEARN_NN64_SESSION_PACK (removed: its only caller, the mlp_sessions entry, is deleted; the inference sessions run packed as one forward of the SmallMLPTrainer program) and nn_session_move_kernel / nn_session_move_into (no caller) deleted 2026-11-09 by lane/m2-neural-leftovers; code recoverable at 0ce88411d3.
+# Restore: git apply experiments/removed/M2_SMALL_MLP_PRIMITIVES.patch
+# (Sweep 2026-11-15: IDN_TRAIN_SCRATCH_ARM = 0 and IDN_TRAIN_BACKWARD_SCRATCH = False removed (no reader), and
+# training/neural_ab_lifetime.mojo deleted: NN62_LIFETIME_ARENA, NeuralLiveRange and the always-refusing
+# NeuralLifetimeArena had no importer.)
+# Marker moved from the deleted training/neural_ab_shards.mojo (sweep 2026-11-15; NN63_CANONICAL_SHARD_MERGE = False had no importer):
+# TOMBSTONE: MOJOLEARN_NN63_CANONICAL_SHARD_MERGE (opt-in canonical shard merge, no A/B recorded) and its MOJOLEARN_IDN_ALL_OFF term deleted 2026-11-15 by lane/expdel2-32-neural; code recoverable at 5f27699bee.
+# Restore: git apply experiments/removed/MOJOLEARN_NN63_CANONICAL_SHARD_MERGE.patch
 # TOMBSTONE: MOJOLEARN_IDN_CE_TOKEN_FOLD=2 (noise) deleted 2026-10-10 by 3034789a2; code recoverable at ca25d9321.
 # (NI35 256-token tree v2; bytes lm-forward NV/AMD 0.99x/1.01x, lm-train-step 1.01x/1.00x, nv2 v1229/v1231/v1232, amd a1555/a1556/a1557)
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_CE_TOKEN_FOLD-arm2.patch

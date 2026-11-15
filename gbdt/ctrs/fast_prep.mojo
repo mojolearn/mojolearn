@@ -56,7 +56,6 @@ quality remain unverified.
 from std.atomic import Atomic, Ordering
 from max.gpu import block_dim, block_idx, grid_dim, thread_idx
 from std.memory import unsafe_memcpy
-from gbdt.trees_identical_switches import T28
 from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 
@@ -137,7 +136,7 @@ comptime SYM_CTR_ALL = True
 # Restore: git apply experiments/removed/MOJOLEARN_CTR_PREP_SHARED.patch; record in docs/TOMBSTONES.md.
 # TOMBSTONE: MOJOLEARN_TREES_T28_PREFIX (DELETE-ARM, opt-in, no A/B recorded, rule a; non-owner fold to False) deleted 2026-11-15 by lane/expdel2-41-trees; code recoverable at 865bea9957.
 # Restore: git apply experiments/removed/MOJOLEARN_TREES_T28_PREFIX.expdel2-41-trees.patch; record in docs/TOMBSTONES.md.
-comptime CTR_PREP_SHARED = T28 or _SYM_CTR_FAST_APPLE
+comptime CTR_PREP_SHARED = _SYM_CTR_FAST_APPLE
 #: recovery 2026-10-04 (lane/apple-fast-rec-sym): source
 #: lane/apple-fast-sym-ctr@39c3c9daf; SYM_CTR_ALL rc=1 at 13547eaf1 (two
 #: fast_prep read_column errors, fixed at 4e08a1922), no passing build yet,

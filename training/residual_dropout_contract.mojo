@@ -11,7 +11,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE,NUMERIC_IDENTICAL,ftz,identical_
 
 # TOMBSTONE: MOJOLEARN_NN59_DROPOUT_RESIDUAL (opt-in fused residual-dropout schedule, no A/B recorded), its A/B baseline switch MOJOLEARN_NN59_CONTROL and the MOJOLEARN_IDN_ALL_OFF term deleted 2026-11-15 by lane/expdel2-32-neural; code recoverable at f75eb67b37.
 # Restore: git apply experiments/removed/MOJOLEARN_NN59_DROPOUT_RESIDUAL.patch
-comptime NN59_DROPOUT_RESIDUAL = False
+# (Sweep 2026-11-15: NN59_DROPOUT_RESIDUAL = False and nn_dropout_residual_cell removed with their readers' dead arms.)
 
 
 @always_inline
@@ -64,7 +64,3 @@ def nn_dropout_cell(value: Float32,p: Float32,scale: Float32,
     return Float32(0)
 
 
-@always_inline
-def nn_dropout_residual_cell(value: Float32,residual: Float32,p: Float32,scale: Float32,
-    seed_lo: UInt32,seed_hi: UInt32,stream: UInt32,index: Int) -> Float32:
-    return ftz(ftz(residual)+ftz(nn_dropout_cell(value,p,scale,seed_lo,seed_hi,stream,index)))

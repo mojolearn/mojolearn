@@ -162,195 +162,8 @@ comptime SEQ_GEMM_TILED = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not TARGE
 
 
 @always_inline
-def seq_gemm_tiled_on(M: Int, N: Int) -> Bool:
-    return M >= GT_MIN_EDGE and N >= GT_MIN_EDGE
-
-
-@always_inline
 def seq_gemm_tiled_blocks(M: Int, N: Int) -> Int:
     return ((M + GT_M - 1) // GT_M) * ((N + GT_N - 1) // GT_N)
-
-
-def seq_gemm_tiled_kernel(
-    pa: FP, pb: FP, pc: FP,
-    m_rows: Int32, n_cols: Int32, k_len: Int32,
-    sam: Int32, sak: Int32, sbk: Int32, sbn: Int32,
-    accumulate: Int32, ldc: Int32,
-):
-    """C[m, n] (row stride ldc) = (accumulate ? C[m, n] : 0) + sum_k A(m, k) B(k, n),
-    A(m, k) = pa[m sam + k sak], B(k, n) = pb[k sbk + n sbn]; op_gemm's
-    i0..i8 in that order. One block per GT_M x GT_N tile of C."""
-    comptime assert GT_PAGE_BYTES <= 32768, "seq_gemm_tiled: the slab page must fit every column"
-    var M = Int(m_rows)
-    var N = Int(n_cols)
-    var K = Int(k_len)
-    var SAM = Int(sam)
-    var SAK = Int(sak)
-    var SBK = Int(sbk)
-    var SBN = Int(sbn)
-    # GT_V2: load each slab along its operand's unit stride (same words)
-    var a_rows_fast = SAM == 1 and SAK != 1
-    var b_terms_fast = SBK == 1 and SBN != 1
-    var ntn = (N + GT_N - 1) // GT_N
-    var b = Int(block_idx.x)
-    var tm = b // ntn
-    var tn = b - tm * ntn
-    var m0 = tm * GT_M
-    var n0 = tn * GT_N
-    var tid = Int(thread_idx.x)
-    var r = tid // GT_N
-    var c = tid - r * GT_N
-    var m = m0 + r
-    var n = n0 + c
-    var live = m < M and n < N
-    var ci = m * Int(ldc) + n
-    var acc = Float32(0.0)
-    if live and accumulate != 0:
-        acc = ld(pc, ci)
-    var a_s = stack_allocation[GT_M * GT_AS, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
-    var b_s = stack_allocation[GT_K * GT_BS, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
-    var k0 = 0
-    while k0 < K:
-        var cnt = min(GT_K, K - k0)
-        # the A slab: GT_M rows of cnt terms (a_s[row * GT_AS + kk])
-        var q = tid
-        while q < GT_M * GT_K:
-            var row: Int
-            var kk: Int
-            if a_rows_fast:
-                kk = q // GT_M
-                row = q - kk * GT_M
-            else:
-                row = q // GT_K
-                kk = q - row * GT_K
-            var v = Float32(0.0)
-            if kk < cnt and m0 + row < M:
-                v = ld(pa, (m0 + row) * SAM + (k0 + kk) * SAK)
-            a_s[row * GT_AS + kk] = v
-            q += GT_TPB
-        # the B slab: cnt terms of GT_N columns (b_s[kk * GT_BS + col])
-        q = tid
-        while q < GT_K * GT_N:
-            var kk: Int
-            var col: Int
-            if b_terms_fast:
-                col = q // GT_K
-                kk = q - col * GT_K
-            else:
-                kk = q // GT_N
-                col = q - kk * GT_N
-            var v = Float32(0.0)
-            if kk < cnt and n0 + col < N:
-                v = ld(pb, (k0 + kk) * SBK + (n0 + col) * SBN)
-            b_s[kk * GT_BS + col] = v
-            q += GT_TPB
-        barrier()
-        if live:
-            for i in range(cnt):
-                acc = fma3(a_s[r * GT_AS + i], b_s[i * GT_BS + c], acc)
-        barrier()
-        k0 += GT_K
-    if live:
-        st(pc, ci, acc)
-
-
-def seq_gemm_epi_tiled_kernel(
-    pa: FP, pb: FP, pc: FP, p3: FP, p4: FP,
-    m_rows: Int32, n_cols: Int32, k_len: Int32,
-    sam: Int32, sak: Int32, sbk: Int32, sbn: Int32,
-    epi: Int32, epi_arg: Int32, colsum: Int32, f0: Float32, f1: Float32,
-):
-    """OP_GEMM_EPI on the tile (lane ag-pass2-kernels, the tape's
-    OP_AGK_GEMM_EPI): seq_gemm_tiled_kernel's chain into a dense C (row
-    stride N, no accumulate), with op_gemm_epi's follower applied to the
-    accumulator before the one store (sequence/mlp.mojo gemm_epi_value: i9 =
-    epi, i10 = epi_arg, f0, f1, p3), indexed by the cell's dense index as
-    op_gemm_epi indexes it by its thread. The same words as op_gemm_epi.
-    colsum != 0 (i11, lane ag-pass3-impl): also p4[n] = div(sum_k B(k, n), f1),
-    k ascending from +0.0, OP_COLSUM_DIV's word (B dense: sbk = N, sbn = 1)."""
-    comptime assert GT_PAGE_BYTES <= 32768, "seq_gemm_tiled: the slab page must fit every column"
-    var M = Int(m_rows)
-    var N = Int(n_cols)
-    var K = Int(k_len)
-    var SAM = Int(sam)
-    var SAK = Int(sak)
-    var SBK = Int(sbk)
-    var SBN = Int(sbn)
-    var a_rows_fast = SAM == 1 and SAK != 1
-    var b_terms_fast = SBK == 1 and SBN != 1
-    var ntn = (N + GT_N - 1) // GT_N
-    var b = Int(block_idx.x)
-    var tm = b // ntn
-    var tn = b - tm * ntn
-    var m0 = tm * GT_M
-    var n0 = tn * GT_N
-    var tid = Int(thread_idx.x)
-    var r = tid // GT_N
-    var c = tid - r * GT_N
-    var m = m0 + r
-    var n = n0 + c
-    var live = m < M and n < N
-    var ci = m * N + n
-    var acc = Float32(0.0)
-    # the column sums: the first tile row's threads, one column each, so
-    # every column is summed by exactly one thread (op_colsum's chain)
-    var cs_on = colsum != 0 and tm == 0 and r == 0 and n < N
-    var cs = Float32(0.0)
-    var a_s = stack_allocation[GT_M * GT_AS, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
-    var b_s = stack_allocation[GT_K * GT_BS, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
-    var k0 = 0
-    while k0 < K:
-        var cnt = min(GT_K, K - k0)
-        var q = tid
-        while q < GT_M * GT_K:
-            var row: Int
-            var kk: Int
-            if a_rows_fast:
-                kk = q // GT_M
-                row = q - kk * GT_M
-            else:
-                row = q // GT_K
-                kk = q - row * GT_K
-            var v = Float32(0.0)
-            if kk < cnt and m0 + row < M:
-                v = ld(pa, (m0 + row) * SAM + (k0 + kk) * SAK)
-            a_s[row * GT_AS + kk] = v
-            q += GT_TPB
-        q = tid
-        while q < GT_K * GT_N:
-            var kk: Int
-            var col: Int
-            if b_terms_fast:
-                col = q // GT_K
-                kk = q - col * GT_K
-            else:
-                kk = q // GT_N
-                col = q - kk * GT_N
-            var v = Float32(0.0)
-            if kk < cnt and n0 + col < N:
-                v = ld(pb, (k0 + kk) * SBK + (n0 + col) * SBN)
-            b_s[kk * GT_BS + col] = v
-            q += GT_TPB
-        barrier()
-        if live:
-            for i in range(cnt):
-                acc = fma3(a_s[r * GT_AS + i], b_s[i * GT_BS + c], acc)
-        if cs_on:
-            # op_colsum: acc = add(acc, ld(X, r * i2 + c)), r ascending; the
-            # staged word is that ld's word
-            for i in range(cnt):
-                cs = add(cs, b_s[i * GT_BS + c])
-        barrier()
-        k0 += GT_K
-    if live:
-        # the follower applied to the accumulator, one store (lane
-        # ag-pass3-impl; it used to store, build an Args record and reload
-        # the word through gemm_epi_tail: the same words, a second pass)
-        st(pc, ci, gemm_epi_value(acc, ci, n, Int(epi), Int(epi_arg), p3, f0, f1))
-    if cs_on:
-        # op_divs on op_colsum's stored word: div(ld(st(cs)), f0) = div(cs, f1)
-        # (cs is already flushed by add)
-        st(p4, n, div(cs, f1))
 
 
 # ---------------------------------------------------------------- shape-aware routes (lane ag-pass4-gemm)
@@ -370,7 +183,8 @@ def seq_gemm_epi_tiled_kernel(
 # TOMBSTONE: MOJOLEARN_AUTOGRAD_GEMM_DISPATCH_V1 (old path, the pass-3 routes; EXP:2160 PENDING) deleted 2026-11-15 by lane/expdel2-29-neural; code recoverable at 8747cf5fa2.
 # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_GEMM_DISPATCH_V1.patch
 # Kept False for sequence/exec_device.mojo (another lane's file).
-comptime GEMM_DISPATCH_V1 = False
+# (Sweep 2026-11-15: GEMM_DISPATCH_V1 = False, seq_gemm_micro_on, seq_gemm_tiled_on, seq_gemm_tiled_kernel and
+# seq_gemm_epi_tiled_kernel removed with the pass-3 routes of sequence/exec_device.mojo.)
 #: lane ag-pass5-gemm (PASS5_IDEAS idea 1 Part A, default on): in
 #: seq_gemm_tile_kernel each thread first loads ALL its slab words of an
 #: operand into registers (a comptime-sized batch, ceil(TM TK / GT_TPB) A
@@ -436,11 +250,6 @@ comptime GR_TILE16 = 5
 # seq_gemm_micro_kernel stays: the forced route GR_MICRO (gemm_launch_route, the GEMM check) still launches it.
 
 
-@always_inline
-def seq_gemm_micro_on(M: Int, N: Int) -> Bool:
-    """GR_TILE never runs the micro-tile (its opt-in arm is deleted); kept
-    for sequence/exec_device.mojo."""
-    return False
 comptime GM_M = 64
 comptime GM_N = 64
 comptime GM_K = 32
@@ -547,8 +356,6 @@ def seq_gemm_tile_blocks(route: Int, M: Int, N: Int) -> Int:
     if route == GR_THIN_M:
         return M * ((N + GT_THIN - 1) // GT_THIN)
     if route == GR_MICRO:
-        return ((M + GM_M - 1) // GM_M) * ((N + GM_N - 1) // GM_N)
-    if route == GR_TILE and seq_gemm_micro_on(M, N):
         return ((M + GM_M - 1) // GM_M) * ((N + GM_N - 1) // GM_N)
     # GR_TILE below the micro edge, GR_TILE16
     return seq_gemm_tiled_blocks(M, N)
@@ -1000,6 +807,4 @@ def seq_gemm_profile_route[OP: Int](a: Args, coop_on: Bool, coop_i11: Bool) -> I
         # gemm_launch_route: a tile on an epilogue opcode needs a dense C
         if route != GR_CELL and not (a.i7 == 0 and a.i8 == a.i1):
             return GR_CELL
-    if route == GR_TILE and seq_gemm_micro_on(a.i0, a.i1):
-        return GR_MICRO
     return route

@@ -7,10 +7,8 @@ uses one threshold drawn from the node-local feature range, following sklearn's
 RandomSplitter, instead of cuML's quantile histogram (DEVIATION 137).
 """
 
-from ensemble.tree_identical_ideas import T14
 # TOMBSTONE: MOJOLEARN_TREES_T14_EXACT (DELETE-ARM, opt-in, no A/B recorded, rule a; non-owner fold to False) deleted 2026-11-15 by lane/expdel2-41-trees; code recoverable at c3a84428df.
 # Restore: git apply experiments/removed/MOJOLEARN_TREES_T14_EXACT.expdel2-41-trees.patch; record in docs/TOMBSTONES.md.
-from ensemble.tree_moments import moment_pair, moment_finish, et_leaf_moment_host
 from checks.soft_f64 import sf64_from_f32
 from std.sys.compile import is_defined
 from core.accelerator_target import TARGET_HAS_AMD_GPU, TARGET_HAS_APPLE_GPU, TARGET_HAS_NVIDIA_GPU
@@ -2967,10 +2965,6 @@ def leaf_values_host(
             continue
         var begin = Int(instance_ranges[unsafe_offset=node_id].begin)
         var count = Int(instance_ranges[unsafe_offset=node_id].count)
-        comptime if T14:
-            if not is_classification:
-                out[node_id*num_outputs] = et_leaf_moment_host(row_ids,labels_q,begin,count,inv_scale)
-                continue
         var acc = List[Int32](length=num_outputs, fill=Int32(0))
         var seen = 0
         for i in range(begin, begin + count):
@@ -3049,40 +3043,6 @@ def _leaf_body[
     var begin = Int(instance_ranges[unsafe_offset=node_id].begin)
     var count = Int(instance_ranges[unsafe_offset=node_id].count)
 
-    comptime if T14 and not CLASSIFICATION and not WEIGHTED:
-        # V1: exact row-ID keyed partials, shared portable binary64 pair tree.
-        # Same logical 128 slots as host regardless of TPB/warp width.
-        # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
-        var partials = stack_allocation[128,Int32,address_space=AddressSpace.SHARED]()
-        var moments = stack_allocation[128,UInt64,address_space=AddressSpace.SHARED]()
-        var lane = tid
-        while lane < 128:
-            partials[unsafe_offset=lane] = Int32(0)
-            lane += TPB
-        barrier()
-        var pos = begin+tid
-        while pos < begin+count:
-            var row = Int(row_ids[unsafe_offset=pos])
-            _ = Atomic.fetch_add(partials.unsafe_offset(row%128),labels_q[unsafe_offset=row])
-            pos += TPB
-        barrier()
-        lane = tid
-        while lane < 128:
-            moments[unsafe_offset=lane] = sf64_from_f32(ftz(Float32(partials[unsafe_offset=lane])*inv_scale))
-            lane += TPB
-        barrier()
-        var distance = 64
-        while distance > 0:
-            lane = tid
-            while lane < distance:
-                moments[unsafe_offset=lane] = moment_pair(moments[unsafe_offset=lane],moments[unsafe_offset=lane+distance])
-                lane += TPB
-            barrier()
-            distance //= 2
-        if tid == 0:
-            out_leaves[unsafe_offset=node_id*k] = moment_finish(moments[unsafe_offset=0],Float32(count))
-            out_visit[unsafe_offset=node_id] = LEAF_VISIT_PUBLISHED
-        return
 
     var priv = stack_allocation[MAX_OUT, Scalar[DType.int32]]()
     for c in range(MAX_OUT):

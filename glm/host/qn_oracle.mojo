@@ -153,7 +153,7 @@ comptime QN_ORACLE_HOST_SABOTAGE = is_defined["MOJOLEARN_HOST_SABOTAGE"]()
 #: sum, bias mean and `X^T dZ` in the row-tile order every GPU runs.
 # TOMBSTONE: MOJOLEARN_QN_TILED_OFF (old path; EXP:2203 record read) deleted 2026-11-15 by lane/expdel2-20-linear; code recoverable at da95043b31.
 # Restore: git apply experiments/removed/MOJOLEARN_QN_TILED_OFF.patch; record in docs/TOMBSTONES.md.
-comptime HOST_QN_TILED = True
+# (Sweep 2026-11-15: comptime HOST_QN_TILED removed; always True, nothing read it.)
 comptime HOST_QNT_ROWS = 256
 
 
