@@ -11,14 +11,11 @@ ascending, `w = fma(alpha_i, alpha_j, -Kinv[i, j])`, `acc = fma(w,
 dK_p[j, i], acc)`, seeded +0.0, every value through `ftz`); the block
 partials are then added ascending (`ftz(acc + part)`) and scaled by 0.5
 (`identical_mul`). The same words on every column."""
-from std.sys.compile import is_defined
-
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_mul, identical_mul_add
 
 comptime _P = MutPointer[Float32, MutAnyOrigin]
 
-#: fam2-kernel-gp (2026-10-04), IDENTICAL, ON by default
-#: (`-D MOJOLEARN_IDN_GP_GRAD_ROWFOLD_OFF` restores 16-row blocks): one
+#: fam2-kernel-gp (2026-10-04), IDENTICAL, ON by default (FAST keeps 16-row blocks): one
 #: thread per (parameter, ROW) instead of one per (parameter, 16 rows). A
 #: thread's chain was 16 n fused multiply-adds and a parameter had only n / 16
 #: threads (125 at n = 2000), every optimizer evaluation; now n threads of n
@@ -27,12 +24,14 @@ comptime _P = MutPointer[Float32, MutAnyOrigin]
 #: kernels and the host column (`host/gp_theta.mojo`) both read
 #: `GP_GRAD_ROWS` from this file, so NVIDIA, AMD, Apple and the host column
 #: change together. Shorter chains: the rounding error bound only shrinks.
-#: CANDIDATE ARM (default OFF): `-D MOJOLEARN_IDN_GP_GRAD_ROWS4` takes 4-row
-#: blocks instead of 1, for the orchestrator to time against the default.
-comptime GP_IDN_GRAD_ROWFOLD = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
-    is_defined["MOJOLEARN_IDN_GP_GRAD_ROWFOLD_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
-comptime _GP_GRAD_ROWS_ON = 4 if is_defined["MOJOLEARN_IDN_GP_GRAD_ROWS4"]() else 1
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch, no A/B recorded beside the defaults) deleted 2026-11-15 by lane/expdel2-19-kernel (non-owner; owner expdel2-37-series) in this file; code recoverable at d55d80a7d4.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-19-kernel.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_IDN_GP_GRAD_ROWFOLD_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-19-kernel; code recoverable at e53df78bab.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_GP_GRAD_ROWFOLD_OFF.patch; record in docs/TOMBSTONES.md.
+comptime GP_IDN_GRAD_ROWFOLD = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+# TOMBSTONE: MOJOLEARN_IDN_GP_GRAD_ROWS4 (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-19-kernel; code recoverable at 0deab16a32.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_GP_GRAD_ROWS4.patch; record in docs/TOMBSTONES.md.
+comptime _GP_GRAD_ROWS_ON = 1
 comptime GP_GRAD_ROWS = _GP_GRAD_ROWS_ON if GP_IDN_GRAD_ROWFOLD else 16
 
 

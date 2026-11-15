@@ -454,69 +454,20 @@ def laplacian_epilogue_kernel(
     inout_k.unsafe_store(tid, ftz(identical_exp(ftz(identical_mul(gain, d)))))
 
 
-#: fam2-kernel-gp (2026-10-04), IDENTICAL, CANDIDATE ARM, OFF by default
-#: (`-D MOJOLEARN_IDN_KM_RBF_CELL` turns it on in the device binding AND in
-#: the host column, `km_host_oracle.mojo::KMH_RBF_CELL` reads the same
-#: defines; `MOJOLEARN_IDN_ALL_OFF` turns it off): the RBF kernel matrix at
-#: k <= KM_RBF_CELL_MAX_D features is ONE launch, one thread per cell, the
-#: squared distance as one chain over the features ascending of
-#: `(x - y)^2` (`identical_mul_add`) and the exponential in the same thread,
-#: in place of two row-norm launches, the GEMM over k and the expansion
-#: epilogue `|x|^2 + |y|^2 - 2 x.y`. BITS CHANGE (a direct distance, not the
-#: expansion): NVIDIA, AMD and Apple run this kernel and the host column
-#: runs the same line. The direct form has no cancellation (K(x, x) is
-#: exactly 1 and no distance is negative) and is bitwise symmetric, so a
-#: self-kernel (`self_kernel=True`: KernelRidge fit, Nystroem's basis kernel)
-#: computes the upper triangle and mirrors it. `-D
-#: MOJOLEARN_IDN_KM_RBF_CELL_D16` lowers the feature bound to 16 on both
-#: columns, for timing the crossover against the GEMM.
-comptime KM_IDN_RBF_CELL = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and is_defined["MOJOLEARN_IDN_KM_RBF_CELL"]()
-    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
-comptime KM_RBF_CELL_MAX_D = 16 if is_defined["MOJOLEARN_IDN_KM_RBF_CELL_D16"]() else 64
-
-
-def km_rbf_cell_kernel(
-    output: MutPointer[Float32, MutAnyOrigin],
-    a: MutPointer[Float32, MutAnyOrigin],
-    b: MutPointer[Float32, MutAnyOrigin],
-    m_in: Int32,
-    n_in: Int32,
-    k_in: Int32,
-    neg_gamma: Float32,
-    sym_in: Int32,
-):
-    """KM_IDN_RBF_CELL: cell (i, j) = exp(-gamma sum_c (a_ic - b_jc)^2), the
-    sum one chain over c ascending. `sym_in` != 0 (a IS b, m == n): threads
-    below the diagonal return and each thread at or above it writes its
-    cell and the mirrored one (the chain reads (x - y)^2, which is the same
-    word for (y - x)^2, so the mirror is the cell's own bits)."""
-    var m = Int(m_in)
-    var n = Int(n_in)
-    var k = Int(k_in)
-    var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
-    if t >= m * n:
-        return
-    var i = t // n
-    var j = t - i * n
-    if sym_in != Int32(0) and j < i:
-        return
-    var acc = Float32(0.0)
-    for c in range(k):
-        var d = ftz(ftz(a.unsafe_load(i * k + c)) - ftz(b.unsafe_load(j * k + c)))
-        acc = ftz(identical_mul_add(d, d, acc))
-    var v = ftz(identical_exp(ftz(identical_mul(neg_gamma, acc))))
-    output.unsafe_store(t, v)
-    if sym_in != Int32(0) and j != i:
-        output.unsafe_store(j * n + i, v)
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch, no A/B recorded beside the defaults) deleted 2026-11-15 by lane/expdel2-19-kernel (non-owner; owner expdel2-37-series) in this file; code recoverable at d55d80a7d4.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-19-kernel.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_IDN_KM_RBF_CELL_D16 (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-19-kernel; code recoverable at 0e42489093.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_KM_RBF_CELL_D16.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_IDN_KM_RBF_CELL (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-19-kernel; code recoverable at 0ade8f67d9.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_KM_RBF_CELL.patch; record in docs/TOMBSTONES.md.
+# KM_IDN_RBF_CELL and KM_RBF_CELL_MAX_D stay as constants: kernel_methods/checks/km_oracle.mojo imports them.
+comptime KM_IDN_RBF_CELL = False
+comptime KM_RBF_CELL_MAX_D = 64
 
 
 #: fix-kg1-kernel (2026-10-04, audit B11), IDENTICAL, ON by default
-#: (`-D MOJOLEARN_IDN_KM_DOT_CELL_OFF` or `MOJOLEARN_IDN_ALL_OFF` restores the
-#: GEMM + epilogue route; `km_host_oracle.mojo::KMH_DOT_CELL` and
-#: `km_oracle.mojo` read the same defines): the POLYNOMIAL and SIGMOID kernel
+#: (FAST keeps the GEMM + epilogue route; `km_host_oracle.mojo::KMH_DOT_CELL`
+#: and `km_oracle.mojo` follow the same gate): the POLYNOMIAL and SIGMOID kernel
 #: matrices at k <= KM_DOT_CELL_MAX_D features are ONE launch, one thread per
 #: cell, the dot as one chain over the features ascending
 #: (`identical_mul_add(a, b, acc)`) and the epilogue line of
@@ -525,12 +476,13 @@ def km_rbf_cell_kernel(
 #: BITS CHANGE (the chain, not the GEMM profile's fold): NVIDIA, AMD and Apple
 #: run this kernel and the host column runs the same line. The chain reads
 #: a_ic * b_jc, the same word as b_jc * a_ic, so a self-kernel computes the
-#: upper triangle and mirrors it. `-D MOJOLEARN_IDN_KM_DOT_CELL_D16` lowers
-#: the bound to 16 on every column, for timing the crossover.
-comptime KM_IDN_DOT_CELL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
-    is_defined["MOJOLEARN_IDN_KM_DOT_CELL_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
-comptime KM_DOT_CELL_MAX_D = 16 if is_defined["MOJOLEARN_IDN_KM_DOT_CELL_D16"]() else 64
+#: upper triangle and mirrors it.
+# TOMBSTONE: MOJOLEARN_IDN_KM_DOT_CELL_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-19-kernel; code recoverable at 16e283c44f.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_KM_DOT_CELL_OFF.patch; record in docs/TOMBSTONES.md.
+comptime KM_IDN_DOT_CELL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+# TOMBSTONE: MOJOLEARN_IDN_KM_DOT_CELL_D16 (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-19-kernel; code recoverable at b1d14459cf.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_KM_DOT_CELL_D16.patch; record in docs/TOMBSTONES.md.
+comptime KM_DOT_CELL_MAX_D = 64
 
 
 def km_dot_cell_kernel(
@@ -584,7 +536,7 @@ def km_dot_cell_kernel(
 
 
 #: fix-kg1-kernel (2026-10-04, audit B12), IDENTICAL, ON by default
-#: (`-D MOJOLEARN_IDN_KM_LAP_CELL_OFF` or `MOJOLEARN_IDN_ALL_OFF` restores the
+#: (`-D MOJOLEARN_IDN_KM_LAP_CELL_OFF` restores the
 #: two launches): the Laplacian kernel matrix (KernelRidge fit/predict,
 #: Nystroem basis and transform cross kernel) as ONE launch, the L1 chain of
 #: `kde pairwise_unexpanded_kernel` (`l1_core`, ascending) and the line of
@@ -594,7 +546,7 @@ def km_dot_cell_kernel(
 #: abs(x - y) is the same word as abs(y - x), so a self-kernel computes the
 #: upper triangle and mirrors it.
 comptime KM_IDN_LAP_CELL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
-    is_defined["MOJOLEARN_IDN_KM_LAP_CELL_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+    is_defined["MOJOLEARN_IDN_KM_LAP_CELL_OFF"]()
 )
 
 
@@ -926,18 +878,6 @@ def km_kernel_matrix(
     # anyway: it is one pass over the data against an O(m n k) contraction,
     # and a buffer that is sometimes written is a buffer whose card stage
     # sometimes means something.
-    comptime if KM_IDN_RBF_CELL:
-        if kp.kernel == KM_KERNEL_RBF and not via_copy and k <= KM_RBF_CELL_MAX_D:
-            ctx.enqueue_memset(norm_a, Float32(0.0))
-            ctx.enqueue_memset(norm_b, Float32(0.0))
-            ctx.enqueue_function[km_rbf_cell_kernel](
-                out.unsafe_ptr(), a.unsafe_ptr(), b.unsafe_ptr(),
-                Int32(m), Int32(n), Int32(k), -Float32(kp.gamma),
-                Int32(1) if (self_kernel and m == n) else Int32(0),
-                grid_dim=(grid_all, 1, 1),
-                block_dim=(elem_tpb, 1, 1),
-            )
-            return
 
     comptime if KM_IDN_DOT_CELL:
         if (

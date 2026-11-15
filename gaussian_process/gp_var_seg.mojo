@@ -4,9 +4,7 @@
 predictive variance, `sum_i v[i][t]^2` over the training axis, shared by
 the device kernels and every host column.
 
-IDENTICAL, ON by default (`-D MOJOLEARN_IDN_GP_VAR_SEG_OFF` or
-`MOJOLEARN_IDN_ALL_OFF` restores the one-thread serial chain on every
-column). The training axis is cut into GP_VAR_SEGS contiguous segments of
+IDENTICAL, ON by default (FAST keeps the one-thread serial chain). The training axis is cut into GP_VAR_SEGS contiguous segments of
 `ceil(n_train / GP_VAR_SEGS)` rows; each segment is one ascending chain
 `acc = ftz(identical_mul_add(vv, vv, acc))` from +0.0, and the eight partials
 are added in the FIXED tree `((p0+p1)+(p2+p3))+((p4+p5)+(p6+p7))`, each add
@@ -27,8 +25,6 @@ Shared memory: GP_VAR_PTS * GP_VAR_SEGS floats = 1 KiB, a static page far
 below every vendor's per-block limit (the fits gate is the comptime assert
 in the kernels).
 """
-from std.sys.compile import is_defined
-
 from checks.numerics import (
     GLOBAL_NUMERIC_MODE,
     NUMERIC_IDENTICAL,
@@ -36,9 +32,11 @@ from checks.numerics import (
     identical_mul_add,
 )
 
-comptime GP_IDN_VAR_SEG = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
-    is_defined["MOJOLEARN_IDN_GP_VAR_SEG_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch, no A/B recorded beside the defaults) deleted 2026-11-15 by lane/expdel2-19-kernel (non-owner; owner expdel2-37-series) in this file; code recoverable at d55d80a7d4.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-19-kernel.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_IDN_GP_VAR_SEG_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-19-kernel; code recoverable at 87c68144e3.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_GP_VAR_SEG_OFF.patch; record in docs/TOMBSTONES.md.
+comptime GP_IDN_VAR_SEG = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 comptime GP_VAR_SEGS = 8
 comptime GP_VAR_PTS = 32
 comptime GP_VAR_SMEM_FLOATS = GP_VAR_SEGS * GP_VAR_PTS

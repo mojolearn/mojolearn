@@ -88,7 +88,6 @@ from std.memory import bitcast
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from checks.numerics import GLOBAL_NUMERIC_MODE as _CTX_MODE, NUMERIC_IDENTICAL as _CTX_IDENTICAL
 from core.neural_context import neural_ctx
-from std.sys.compile import is_defined
 # ONE PROCESS-LIFETIME DeviceContext per binding and tier (CURRENT DIRECTIVES;
 # lane/neighbors-apple 2026-09-28): a new context per entry is a new Metal
 # queue and a pipeline load per call. Same kernels, same launches, same order
@@ -98,11 +97,10 @@ from std.sys.compile import is_defined
 comptime _FAMILY_CTX = "MojolearnGpContextIdenticalV3" if _CTX_MODE == _CTX_IDENTICAL else "MojolearnGpContextOtherV3"
 
 
+# TOMBSTONE: MOJOLEARN_FAMILY_CTX_PER_CALL (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-19-kernel; code recoverable at 26b4b3147a.
+# Restore: git apply experiments/removed/MOJOLEARN_FAMILY_CTX_PER_CALL.patch; record in docs/TOMBSTONES.md.
 def _family_ctx() raises -> DeviceContext:
-    """The binding's process-lifetime context; `-D MOJOLEARN_FAMILY_CTX_PER_CALL`
-    restores a new context per entry (the A/B arm)."""
-    comptime if is_defined["MOJOLEARN_FAMILY_CTX_PER_CALL"]():
-        return DeviceContext()
+    """The binding's process-lifetime context."""
     return neural_ctx[_FAMILY_CTX]()
 
 from cholesky.estimator import (
@@ -530,23 +528,23 @@ def _upload(
     return buf^
 
 
-#: fam-kernel-gp (2026-10-04), IDENTICAL, ON by default
-#: (`-D MOJOLEARN_IDN_GP_BULK_DOWNLOAD_OFF` restores the appends): `_download`
+#: fam-kernel-gp (2026-10-04), IDENTICAL, ON by default: `_download`
 #: fills a list of the final length 8 floats a step. The fit reads the n x n
 #: factor back through it (GPR and GPC), which was n^2 appends into a growing
 #: list on one host thread. The same words: no bit moves.
-comptime GP_IDN_BULK_DOWNLOAD = _CTX_MODE == _CTX_IDENTICAL and not (
-    is_defined["MOJOLEARN_IDN_GP_BULK_DOWNLOAD_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch, no A/B recorded beside the defaults) deleted 2026-11-15 by lane/expdel2-19-kernel (non-owner; owner expdel2-37-series) in this file; code recoverable at d55d80a7d4.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-19-kernel.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_IDN_GP_BULK_DOWNLOAD_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-19-kernel; code recoverable at 2fd4a6c6c1.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_GP_BULK_DOWNLOAD_OFF.patch; record in docs/TOMBSTONES.md.
+comptime GP_IDN_BULK_DOWNLOAD = _CTX_MODE == _CTX_IDENTICAL
 
-#: fam-kernel-gp (2026-10-04), IDENTICAL, ON by default
-#: (`-D MOJOLEARN_IDN_GP_PREDICT_LAZY_L_OFF` restores the upload):
+#: fam-kernel-gp (2026-10-04), IDENTICAL, ON by default:
 #: `gpr_predict_host` uploads the n_train x n_train factor only when
 #: `return_std` asks for the variance; the mean reads K_trans and the dual
 #: alone. No kernel reads the factor on the mean-only path: no bit moves.
-comptime GP_IDN_PREDICT_LAZY_L = _CTX_MODE == _CTX_IDENTICAL and not (
-    is_defined["MOJOLEARN_IDN_GP_PREDICT_LAZY_L_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_IDN_GP_PREDICT_LAZY_L_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-19-kernel; code recoverable at 6969d83ccb.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_GP_PREDICT_LAZY_L_OFF.patch; record in docs/TOMBSTONES.md.
+comptime GP_IDN_PREDICT_LAZY_L = _CTX_MODE == _CTX_IDENTICAL
 
 
 def _download(
@@ -572,17 +570,8 @@ def _download(
             pi += 1
         _ = h^
         return packed^
-    comptime if is_defined["MOJOLEARN_GP_BULK_DOWNLOAD"]():
-        # lane neighbors-apple3, OPT-IN: one vector copy into a list of the
-        # final length, not n appends into a growing one. A copy.
-        var bulk = List[Float32](length=n, fill=Float32(0.0))
-        copy_f32(
-            rebind[MutPointer[Float32, MutUntrackedOrigin]](h.unsafe_ptr()),
-            MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(bulk.unsafe_ptr())),
-            n,
-        )
-        _ = h^
-        return bulk^
+    # TOMBSTONE: MOJOLEARN_GP_BULK_DOWNLOAD (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-19-kernel; code recoverable at 476e96f77a.
+    # Restore: git apply experiments/removed/MOJOLEARN_GP_BULK_DOWNLOAD.patch; record in docs/TOMBSTONES.md.
     var out = List[Float32]()
     for i in range(n):
         out.append(h.unsafe_ptr().unsafe_load(i))

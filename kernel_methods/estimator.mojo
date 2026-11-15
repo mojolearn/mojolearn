@@ -52,7 +52,6 @@ from checks.numerics import GLOBAL_NUMERIC_MODE as _CTX_MODE, NUMERIC_IDENTICAL 
 from core.neural_context import neural_ctx
 from std.time import perf_counter_ns
 from std.os import getenv
-from std.sys.compile import is_defined
 from std.memory import bitcast
 # ONE PROCESS-LIFETIME DeviceContext per binding and tier (CURRENT DIRECTIVES;
 # lane/neighbors-apple 2026-09-28): a new context per entry is a new Metal
@@ -63,11 +62,10 @@ from std.memory import bitcast
 comptime _FAMILY_CTX = "MojolearnKernelMethodsContextIdenticalV3" if _CTX_MODE == _CTX_IDENTICAL else "MojolearnKernelMethodsContextOtherV3"
 
 
+# TOMBSTONE: MOJOLEARN_FAMILY_CTX_PER_CALL (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-19-kernel; code recoverable at 26b4b3147a.
+# Restore: git apply experiments/removed/MOJOLEARN_FAMILY_CTX_PER_CALL.patch; record in docs/TOMBSTONES.md.
 def _family_ctx() raises -> DeviceContext:
-    """The binding's process-lifetime context; `-D MOJOLEARN_FAMILY_CTX_PER_CALL`
-    restores a new context per entry (the A/B arm)."""
-    comptime if is_defined["MOJOLEARN_FAMILY_CTX_PER_CALL"]():
-        return DeviceContext()
+    """The binding's process-lifetime context."""
     return neural_ctx[_FAMILY_CTX]()
 
 from cholesky.checks.potrf import (
@@ -163,24 +161,13 @@ from x_decomp.jacobi_par import (
 #: The opt-in host Jacobi for Nystroem's eigenproblem (`-D MOJOLEARN_NYS_HOST_EIGH`)
 #: was removed (hr-optin-flags): the eigendecomposition runs on the device.
 
-#: lane neighbors-apple3 (2026-09-28), FAST on Apple, OPT-IN until its A/B
-#: and quality check pass (`-D MOJOLEARN_RBF_FUSED`): RBFSampler.transform
-#: as ONE kernel per cell, the projection (features ascending), the offset,
-#: the cosine and the scale, when X has at most RBF_FUSED_MAX_D features.
-#: The projection is 8 products a cell at the board's shape; forming it as
-#: a matrix product first writes and reads the n x n_components matrix once
-#: more (gemm 93 ms + epilogue 92 ms of the transform at 1M x 500, M4 Pro).
-comptime RBF_FUSED = (
-    _CTX_MODE == _NUMERIC_FAST
-    and TARGET_HAS_APPLE_GPU
-    and is_defined["MOJOLEARN_RBF_FUSED"]()
-)
+# TOMBSTONE: MOJOLEARN_RBF_FUSED (unmeasured Apple FAST opt-in arm) deleted 2026-11-15 by lane/expdel2-19-kernel; code recoverable at eb41bfa927.
+# Restore: git apply experiments/removed/MOJOLEARN_RBF_FUSED.patch; record in docs/TOMBSTONES.md.
 
 
-#: fam-kernel-gp (2026-10-04), IDENTICAL, ON by default
-#: (`-D MOJOLEARN_IDN_RBF_FUSED_OFF` restores the GEMM on the device AND in
-#: the host column, `km_host_oracle.mojo::KMH_RBF_FUSED` reads the same
-#: define): RBFSampler.transform at n_features <= RBF_FUSED_MAX_D computes
+#: fam-kernel-gp (2026-10-04), IDENTICAL, ON by default (FAST keeps the GEMM;
+#: the host column, `km_host_oracle.mojo::KMH_RBF_FUSED`, follows the same
+#: gate): RBFSampler.transform at n_features <= RBF_FUSED_MAX_D computes
 #: the projection as ONE chain per cell over the features ascending
 #: (`identical_mul_add`, rounded each step) and, when no trace and no
 #: sabotage arm needs the projection as its own stage, the offset, cosine
@@ -191,9 +178,11 @@ comptime RBF_FUSED = (
 #: GEMM profile's): NVIDIA, AMD and Apple run the same kernel and the host
 #: column runs the same chain. A chain of at most 64 fused multiply-adds is
 #: as accurate as the GEMM's fold at that length.
-comptime RBF_IDN_FUSED = _CTX_MODE == _CTX_IDENTICAL and not (
-    is_defined["MOJOLEARN_IDN_RBF_FUSED_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch, no A/B recorded beside the defaults) deleted 2026-11-15 by lane/expdel2-19-kernel (non-owner; owner expdel2-37-series) in this file; code recoverable at d55d80a7d4.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-19-kernel.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_IDN_RBF_FUSED_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-19-kernel; code recoverable at f2f200fc1b.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_RBF_FUSED_OFF.patch; record in docs/TOMBSTONES.md.
+comptime RBF_IDN_FUSED = _CTX_MODE == _CTX_IDENTICAL
 
 
 def _rbf_idn_fused_launch(
@@ -275,24 +264,22 @@ def _upload(
 #: same kernels: bit-inert; the same refusal text.
 #:
 #: fam-kernel-gp (2026-10-04): IDENTICAL takes the same route on every
-#: vendor, ON by default (`KM_IDN_PTR_IN`; `-D MOJOLEARN_IDN_KM_PTR_IN_OFF`
-#: restores the owned host copy, the host walk and the staged upload). The
+#: vendor, ON by default (`KM_IDN_PTR_IN`). The
 #: transforms' X is the one large operand (n_rows x n_features), and it
 #: crossed host memory three times on one thread before the first launch.
-comptime KM_IDN_PTR_IN = _CTX_MODE == _CTX_IDENTICAL and not (
-    is_defined["MOJOLEARN_IDN_KM_PTR_IN_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_IDN_KM_PTR_IN_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-19-kernel; code recoverable at d6e7cef9f2.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_KM_PTR_IN_OFF.patch; record in docs/TOMBSTONES.md.
+comptime KM_IDN_PTR_IN = _CTX_MODE == _CTX_IDENTICAL
 # TOMBSTONE: MOJOLEARN_KM_FAST_PTR_IN_OFF (old path, superseded by the FAST+Apple default) deleted 2026-11-15 by lane/expdel-06-base-cluster-kernel; code recoverable at 484c3ee4ab.
 # Restore: git apply experiments/removed/MOJOLEARN_KM_FAST_PTR_IN_OFF.patch; record in docs/TOMBSTONES.md.
 comptime KM_FAST_PTR_IN = KM_IDN_PTR_IN or (_CTX_MODE == _NUMERIC_FAST and TARGET_HAS_APPLE_GPU)
 
 #: fam-kernel-gp (2026-10-04), IDENTICAL, ON by default
-#: (`-D MOJOLEARN_IDN_KM_BULK_DOWNLOAD_OFF` restores the appends):
-#: `_download` fills a list of the final length 8 floats a step instead of n
+#: (FAST keeps the appends): `_download` fills a list of the final length 8 floats a step instead of n
 #: appends into a growing one. The same words: no bit moves.
-comptime KM_IDN_BULK_DOWNLOAD = _CTX_MODE == _CTX_IDENTICAL and not (
-    is_defined["MOJOLEARN_IDN_KM_BULK_DOWNLOAD_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_IDN_KM_BULK_DOWNLOAD_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-19-kernel; code recoverable at 1a2458c687.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_KM_BULK_DOWNLOAD_OFF.patch; record in docs/TOMBSTONES.md.
+comptime KM_IDN_BULK_DOWNLOAD = _CTX_MODE == _CTX_IDENTICAL
 
 
 def _upload_checked(ctx: DeviceContext, xaddr: Int, n_rows: Int, n_cols: Int, what: String) raises -> DeviceBuffer[
@@ -432,36 +419,20 @@ def krr_weight_kernel(
     k_io.unsafe_store(idx, ftz(ftz(k_io.unsafe_load(idx)) * w))
 
 
-def krr_scale_rows(v: List[Float32], sw: List[Float32], n: Int, t: Int) -> List[Float32]:
-    """`y * sw[:, None]` and `dual_coef *= sw[:, None]`, on the host, one
-    rounding per cell: `ftz(ftz(v) * ftz(s_i))` (`kmh_scale_rows` is the
-    same line)."""
-    var out = List[Float32](capacity=n * t)
-    for i in range(n):
-        var si = ftz(sw[i])
-        for c in range(t):
-            out.append(ftz(ftz(v[i * t + c]) * si))
-    return out^
-
-
 #: fam2-kernel-gp (2026-10-04), IDENTICAL, ON by default
-#: (`-D MOJOLEARN_IDN_KRR_DEV_SCALE_OFF` restores the host loops): the
+#: (the host loops are gone): the
 #: weighted fit's `y * sw[:, None]` and `dual_coef *= sw[:, None]` run as one
 #: launch each on the resident buffers (`krr_scale_rows_kernel`, one thread
 #: per cell, `krr_scale_rows`'s line) instead of two host loops over n x t
 #: cells around the device solve. One multiplication per cell rounded once
 #: either way: no bit moves, and `kmh_scale_rows` stays the host column.
 #: cpu2-l6-bindings: ON on EVERY tier (FAST included); the host loops were
-#: CPU work on a GPU route. `MOJOLEARN_IDN_ALL_OFF` still turns it off on
-#: IDENTICAL builds only.
-comptime KRR_IDN_DEV_SCALE = not (
-    is_defined["MOJOLEARN_IDN_KRR_DEV_SCALE_OFF"]()
-    or (_CTX_MODE == _CTX_IDENTICAL and is_defined["MOJOLEARN_IDN_ALL_OFF"]())
-)
+#: CPU work on a GPU route.
+# TOMBSTONE: MOJOLEARN_IDN_KRR_DEV_SCALE_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-19-kernel; code recoverable at 0765c7997d.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_KRR_DEV_SCALE_OFF.patch; record in docs/TOMBSTONES.md.
+comptime KRR_IDN_DEV_SCALE = True
 
-#: fam2-kernel-gp (2026-10-04), IDENTICAL, ON by default
-#: (`-D MOJOLEARN_IDN_KRR_PTR_IN_OFF` unregisters the pointer bindings, so
-#: `kernel_methods.py` takes the list route again): KernelRidge fit and
+#: fam2-kernel-gp (2026-10-04), IDENTICAL, ON by default: KernelRidge fit and
 #: predict read X, y, X_fit and the dual from the caller's memory straight
 #: to the device, X and y are scanned for NaN / infinity there
 #: (`_upload_checked`) and the result is copied into the caller's output,
@@ -474,10 +445,10 @@ comptime KRR_IDN_DEV_SCALE = not (
 #: tier and vendor (FAST included), so no fast build stages X, y or the
 #: sample-weight factors through host lists. Same kernels at the same
 #: default scheduling as the list route: FAST bits do not move either.
-comptime KRR_IDN_PTR_IN = not (
-    is_defined["MOJOLEARN_IDN_KRR_PTR_IN_OFF"]()
-    or (_CTX_MODE == _CTX_IDENTICAL and is_defined["MOJOLEARN_IDN_ALL_OFF"]())
-)
+# TOMBSTONE: MOJOLEARN_IDN_KRR_PTR_IN_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-19-kernel; code recoverable at 25dea25b3b.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_KRR_PTR_IN_OFF.patch; record in docs/TOMBSTONES.md.
+# KRR_IDN_PTR_IN stays as a constant: kernel_methods/native_descriptor_dispatch.mojo reads it.
+comptime KRR_IDN_PTR_IN = True
 
 #: SCHEDULING: one thread per target cell.
 comptime KRR_SCALE_TPB = 256
@@ -709,8 +680,8 @@ def kernel_ridge_fit_host(
     # DEVIATION 2487: self-kernel operands share one uploaded allocation.
     var xa = _upload(ctx, x)
     # KRR_IDN_DEV_SCALE: the weighted targets are scaled where they lie.
-    var dev_scale = weighted and KRR_IDN_DEV_SCALE
-    var dy = _upload(ctx, krr_scale_rows(y, sw, n_samples, n_targets)) if (weighted and not dev_scale) else _upload(ctx, y)
+    var dev_scale = weighted
+    var dy = _upload(ctx, y)
     var dsw = _upload(ctx, sw) if dev_scale else ctx.enqueue_create_buffer[DType.float32](1)
     if dev_scale:
         _krr_scale_rows_dev(ctx, dy, dsw, n_samples, n_targets)
@@ -787,8 +758,6 @@ def kernel_ridge_fit_host(
     if dev_scale:
         _krr_scale_rows_dev(ctx, dy, dsw, n_samples, n_targets)
     var dual = _download(ctx, dy, n_samples * n_targets)
-    if weighted and not dev_scale:
-        dual = krr_scale_rows(dual, sw, n_samples, n_targets)
     _ = dsw^
     _ = xa^
     _ = dy^
@@ -952,22 +921,8 @@ def kernel_ridge_fit_ptr_into[out_origin: MutOrigin, //](
         dsw = ctx.enqueue_create_buffer[DType.float32](1)
     _krr_validate_alpha(alpha)
 
-    # lane/review-fixes: the pointer route honors KRR_IDN_DEV_SCALE's _OFF
-    # arm too (the host loop on the downloaded y, the list route's old form).
-    # cpu2-l6-bindings: that arm needs the factors on the host; with
-    # `waddr` they were formed on the device, so it downloads them.
-    var sw_h = List[Float32]()
-    comptime if not KRR_IDN_DEV_SCALE:
-        if waddr != 0:
-            sw_h = _download(ctx, dsw, n_samples)
-        else:
-            sw_h = sw.copy()
-    comptime if KRR_IDN_DEV_SCALE:
-        if weighted:
-            _krr_scale_rows_dev(ctx, dy, dsw, n_samples, n_targets)
-    else:
-        if weighted:
-            dy = _upload(ctx, krr_scale_rows(_download(ctx, dy, n_samples * n_targets), sw_h, n_samples, n_targets))
+    if weighted:
+        _krr_scale_rows_dev(ctx, dy, dsw, n_samples, n_targets)
     trace.record_device(ctx, "krr.input", qx.x, n_samples * n_features)
 
     var dk = ctx.enqueue_create_buffer[DType.float32](n_samples * n_samples)
@@ -1041,17 +996,9 @@ def kernel_ridge_fit_ptr_into[out_origin: MutOrigin, //](
         add_ridge_diag(ctx, dk, n_samples, alpha, KRR_RIDGE_TPB, KMSAB_NONE)
         kernel_ridge_factor_solve_enqueue(ctx, dk, dy, dinfo, n_samples, n_targets)
     ctx.enqueue_copy(dst_ptr=hinfo.unsafe_ptr(), src_buf=dinfo)
-    comptime if KRR_IDN_DEV_SCALE:
-        if weighted:
-            _krr_scale_rows_dev(ctx, dy, dsw, n_samples, n_targets)
-        _download_into(ctx, dy, dual_out, n_samples * n_targets)
-    else:
-        if weighted:
-            var dual = krr_scale_rows(_download(ctx, dy, n_samples * n_targets), sw_h, n_samples, n_targets)
-            for i in range(n_samples * n_targets):
-                dual_out.unsafe_store(i, dual[i])
-        else:
-            _download_into(ctx, dy, dual_out, n_samples * n_targets)
+    if weighted:
+        _krr_scale_rows_dev(ctx, dy, dsw, n_samples, n_targets)
+    _download_into(ctx, dy, dual_out, n_samples * n_targets)
     if xfit_addr != 0:
         # A fold's X_fit_: the device copy of the gathered rows, home once.
         ctx.enqueue_copy(dst_ptr=MutPointer[Float32, MutAnyOrigin](unsafe_from_address=xfit_addr), src_buf=qx.x)
@@ -1438,9 +1385,8 @@ def _nystroem_rr_eigh(
 
 
 #: fam-kernel-gp (2026-10-04), IDENTICAL, ON by default
-#: (`-D MOJOLEARN_IDN_NYS_RR_EIGH_OFF` restores the cyclic one-block solver
-#: on the device AND in the host column, `km_host_oracle.mojo::KMH_NYS_RR`
-#: reads the same define): Nystroem's q x q eigendecomposition is the
+#: (FAST keeps the cyclic one-block solver; the host column,
+#: `km_host_oracle.mojo::KMH_NYS_RR`, follows the same gate): Nystroem's q x q eigendecomposition is the
 #: two-sided Jacobi in the round-robin ordering (x_decomp's `eigh` order:
 #: `eigh_par_cs_kernel` + `eigh_par_update_kernel` per round, the q / 2
 #: disjoint rotations of a round across the grid, the convergence test
@@ -1451,9 +1397,9 @@ def _nystroem_rr_eigh(
 #: run these same kernels and the host column runs `x_decomp/rr.mojo::
 #: host_eigh_rr`, the same rounds, test and sweep budget (RR_EIGH_SWEEPS).
 #: Not converged in the budget raises on every column, as the cyclic one does.
-comptime NYS_IDN_RR_EIGH = _CTX_MODE == _CTX_IDENTICAL and not (
-    is_defined["MOJOLEARN_IDN_NYS_RR_EIGH_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_IDN_NYS_RR_EIGH_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-19-kernel; code recoverable at 0e594fa5e2.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_NYS_RR_EIGH_OFF.patch; record in docs/TOMBSTONES.md.
+comptime NYS_IDN_RR_EIGH = _CTX_MODE == _CTX_IDENTICAL
 #: Rounds between waits on Apple (x_decomp/device.mojo `PJ_SYNC_ROUNDS`).
 comptime NYS_IDN_RR_SYNC_ROUNDS = 512
 
@@ -1592,225 +1538,10 @@ def _nystroem_rr_eigh_idn(
     return executed
 
 
-#: fam2-kernel-gp (2026-10-04), IDENTICAL, CANDIDATE ARM, OFF by default
-#: (`-D MOJOLEARN_IDN_NYS_RR_DEV_STOP` turns it on; `MOJOLEARN_IDN_ALL_OFF`
-#: turns it off): the round-robin eigh's convergence test is DECIDED on the
-#: device. A one-thread gate kernel reads the folded sums after every test
-#: and keeps the solve's state in five device words (done, the entry and
-#: current Frobenius sums, the last off-diagonal sum, the sweeps run); the
-#: rotation and update kernels of every later round return at once when the
-#: state says done. The host reads the state once every NYS_RR_STOP_BATCH
-#: sweeps instead of three words and a wait before every sweep. The
-#: rotations that run are the default arm's, in its order: no bit moves and
-#: the host column is unchanged. The cost is the empty launches of up to
-#: NYS_RR_STOP_BATCH - 1 sweeps after convergence, which is why this is an
-#: arm to time (`-D MOJOLEARN_IDN_NYS_RR_DEV_STOP_B4`: batches of 4, not 2).
-comptime NYS_IDN_RR_DEV_STOP = (
-    NYS_IDN_RR_EIGH
-    and is_defined["MOJOLEARN_IDN_NYS_RR_DEV_STOP"]()
-)
-comptime NYS_RR_STOP_BATCH = 4 if is_defined["MOJOLEARN_IDN_NYS_RR_DEV_STOP_B4"]() else 2
-#: `nys_rr_gate_kernel`'s state words.
-comptime NYS_RR_ST_DONE = 0
-comptime NYS_RR_ST_FRO_IN = 1
-comptime NYS_RR_ST_FRO_NOW = 2
-comptime NYS_RR_ST_OFF = 3
-comptime NYS_RR_ST_SWEEPS = 4
-comptime NYS_RR_ST_WORDS = 5
-
-
-def nys_rr_gate_kernel(res: F32Ptr, st: F32Ptr, tol: Float32, last_in: Int32):
-    """One thread: `_nystroem_rr_eigh_idn`'s host statements after a test.
-    st[DONE]: 0 running, 1 converged, 2 the budget ran out, 3 a block of the
-    test did not run. Does nothing once the solve is done."""
-    if Int(block_idx.x) != 0 or Int(thread_idx.x) != 0:
-        return
-    if st.unsafe_load(NYS_RR_ST_DONE) != Float32(0.0):
-        return
-    var off = res.unsafe_load(0)
-    var dg = res.unsafe_load(1)
-    if not (res.unsafe_load(2) >= Float32(0.0)):
-        st.unsafe_store(NYS_RR_ST_DONE, Float32(3.0))
-        return
-    st.unsafe_store(NYS_RR_ST_OFF, off)
-    var fro = ftz(off + dg)
-    st.unsafe_store(NYS_RR_ST_FRO_NOW, fro)
-    if st.unsafe_load(NYS_RR_ST_FRO_IN) < Float32(0.0):
-        st.unsafe_store(NYS_RR_ST_FRO_IN, fro)
-    if rr_converged(off, dg, tol):
-        st.unsafe_store(NYS_RR_ST_DONE, Float32(1.0))
-        return
-    if last_in != Int32(0):
-        st.unsafe_store(NYS_RR_ST_DONE, Float32(2.0))
-        return
-    st.unsafe_store(NYS_RR_ST_SWEEPS, st.unsafe_load(NYS_RR_ST_SWEEPS) + Float32(1.0))
-
-
-def nys_rr_cs_gated_kernel(a: F32Ptr, cs: F32Ptr, st: F32Ptr, n_in: Int32, m_in: Int32, round_in: Int32):
-    """`eigh_par_cs_kernel` while the solve is running (st[DONE] == 0)."""
-    if st.unsafe_load(NYS_RR_ST_DONE) != Float32(0.0):
-        return
-    var m = Int(m_in)
-    var b = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
-    if b < m // 2:
-        var got = rr_cs(a, Int(n_in), m, Int(round_in), b)
-        cs.unsafe_store(2 * b, got[0])
-        cs.unsafe_store(2 * b + 1, got[1])
-
-
-def nys_rr_update_gated_kernel(
-    a: F32Ptr, v: F32Ptr, cs: F32Ptr, st: F32Ptr, n_in: Int32, m_in: Int32, round_in: Int32
-):
-    """`eigh_par_update_kernel` while the solve is running (st[DONE] == 0)."""
-    if st.unsafe_load(NYS_RR_ST_DONE) != Float32(0.0):
-        return
-    var n = Int(n_in)
-    var m = Int(m_in)
-    var h = m // 2
-    var r = Int(round_in)
-    var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
-    if t < h * h:
-        var i = t // h
-        var j = t - i * h
-        if i <= j:
-            rr_block(a, cs, n, m, r, i, j)
-    elif t < h * h + n * h:
-        var u = t - h * h
-        var k = u // h
-        rr_vrow(v, cs, n, m, r, k, u - k * h)
-
-
-def _nystroem_rr_eigh_idn_devstop(
-    ctx: DeviceContext,
-    mut dk: DeviceBuffer[DType.float32],
-    mut dvec: DeviceBuffer[DType.float32],
-    q: Int,
-    sabotage: Int,
-    mut eig_diag: List[Float32],
-    mut vecs: List[Float32],
-    want_host: Bool = True,
-) raises -> Int:
-    """NYS_IDN_RR_DEV_STOP: `_nystroem_rr_eigh_idn` with the stop decided on
-    the device (see the define's comment). The same outputs."""
-    var n = q
-    var even_q = n + (n % 2)
-    var h = even_q // 2
-    var dcs = ctx.enqueue_create_buffer[DType.float32](2 * h)
-    var doff = ctx.enqueue_create_buffer[DType.float32](3 * n)
-    var hoff = ctx.enqueue_create_host_buffer[DType.float32](3 * n)
-    var nb_off = max((n + RR_OFF_TPB - 1) // RR_OFF_TPB, 1)
-    var dpart = ctx.enqueue_create_buffer[DType.float32](3 * nb_off)
-    var dres = ctx.enqueue_create_buffer[DType.float32](3)
-    var dst = ctx.enqueue_create_buffer[DType.float32](NYS_RR_ST_WORDS)
-    var hst = ctx.enqueue_create_host_buffer[DType.float32](NYS_RR_ST_WORDS)
-    # done = 0, fro_in = -1 (unset), fro_now, off, sweeps = 0
-    hst.unsafe_ptr().unsafe_store(NYS_RR_ST_DONE, Float32(0.0))
-    hst.unsafe_ptr().unsafe_store(NYS_RR_ST_FRO_IN, Float32(-1.0))
-    hst.unsafe_ptr().unsafe_store(NYS_RR_ST_FRO_NOW, Float32(0.0))
-    hst.unsafe_ptr().unsafe_store(NYS_RR_ST_OFF, Float32(0.0))
-    hst.unsafe_ptr().unsafe_store(NYS_RR_ST_SWEEPS, Float32(0.0))
-    ctx.enqueue_copy(dst_buf=dst, src_ptr=hst.unsafe_ptr())
-    ctx.enqueue_function[pj_identity_kernel](
-        dvec.unsafe_ptr(), Int32(n), grid_dim=_pj_blocks(n * n), block_dim=PJ_TPB
-    )
-    # the power-of-two range scale (x_decomp/eigh_scale.mojo), as
-    # `_nystroem_rr_eigh_idn`
-    var dfac = enqueue_es_scale(ctx, F32Ptr(unsafe_from_address=Int(dk.unsafe_ptr())), 1, n)
-    ctx.synchronize()
-    var tol = Float32(JACOBI_TOL)
-    var done = Float32(0.0)
-    for sweep in range(RR_EIGH_SWEEPS + 1):
-        enqueue_fill(ctx, dpart, Float32(-1.0))
-        enqueue_fill(ctx, dres, Float32(-1.0))
-        ctx.enqueue_function[eigh_par_off_part_kernel](
-            dk.unsafe_ptr(), doff.unsafe_ptr(), dpart.unsafe_ptr(), Int32(n), grid_dim=nb_off, block_dim=RR_OFF_TPB
-        )
-        ctx.enqueue_function[eigh_par_off_fold_kernel](
-            dpart.unsafe_ptr(), dres.unsafe_ptr(), Int32(nb_off), grid_dim=1, block_dim=RR_OFF_TPB
-        )
-        ctx.enqueue_function[nys_rr_gate_kernel](
-            dres.unsafe_ptr(), dst.unsafe_ptr(), tol, Int32(1) if sweep == RR_EIGH_SWEEPS else Int32(0),
-            grid_dim=1, block_dim=1,
-        )
-        if sweep % NYS_RR_STOP_BATCH == NYS_RR_STOP_BATCH - 1 or sweep == RR_EIGH_SWEEPS:
-            ctx.enqueue_copy(dst_ptr=hst.unsafe_ptr(), src_buf=dst)
-            ctx.synchronize()
-            done = hst.unsafe_ptr().unsafe_load(NYS_RR_ST_DONE)
-            if done != Float32(0.0):
-                break
-        if sweep == RR_EIGH_SWEEPS:
-            break
-        for rd in range(even_q - 1):
-            ctx.enqueue_function[nys_rr_cs_gated_kernel](
-                dk.unsafe_ptr(), dcs.unsafe_ptr(), dst.unsafe_ptr(), Int32(n), Int32(even_q), Int32(rd),
-                grid_dim=_pj_blocks(h), block_dim=PJ_TPB,
-            )
-            ctx.enqueue_function[nys_rr_update_gated_kernel](
-                dk.unsafe_ptr(), dvec.unsafe_ptr(), dcs.unsafe_ptr(), dst.unsafe_ptr(),
-                Int32(n), Int32(even_q), Int32(rd),
-                grid_dim=_pj_blocks(h * h + n * h), block_dim=PJ_TPB,
-            )
-            comptime if TARGET_HAS_APPLE_GPU:
-                if rd % NYS_IDN_RR_SYNC_ROUNDS == NYS_IDN_RR_SYNC_ROUNDS - 1:
-                    ctx.synchronize()
-    var fro_in = hst.unsafe_ptr().unsafe_load(NYS_RR_ST_FRO_IN)
-    var fro_now = hst.unsafe_ptr().unsafe_load(NYS_RR_ST_FRO_NOW)
-    var off_last = hst.unsafe_ptr().unsafe_load(NYS_RR_ST_OFF)
-    var executed = Int(hst.unsafe_ptr().unsafe_load(NYS_RR_ST_SWEEPS))
-    if done == Float32(3.0):
-        raise Error(
-            "nystroem_fit_host: a block of the round-robin Jacobi's convergence test did not"
-            " run (its mark is still -1): a launch failure, not a convergence failure"
-        )
-    var converged = done == Float32(1.0)
-    # J^T A J keeps ||A||_F: a solve that moved it is not an answer
-    if converged and not rr_fro_kept(fro_in, fro_now):
-        converged = False
-    if not converged:
-        raise Error(
-            "nystroem_fit_host: the device Jacobi did not converge in "
-            + String(RR_EIGH_SWEEPS)
-            + " sweeps at n_components = "
-            + String(q)
-            + "; the off-diagonal mass is still "
-            + String(off_last)
-            + " of "
-            + String(fro_now)
-            + " against a tolerance of "
-            + String(JACOBI_TOL)
-            + ". An unconverged eigendecomposition returned as if it were"
-            " one is a wrong answer with no error"
-        )
-    if sabotage != KMSAB_NO_SIGN_FLIP:
-        ctx.enqueue_function[sign_flip_kernel](
-            dvec.unsafe_ptr(),
-            Int32(n),
-            grid_dim=(n, 1, 1),
-            block_dim=(SIGNFLIP_TPB, 1, 1),
-        )
-    enqueue_es_unscale(ctx, F32Ptr(unsafe_from_address=Int(doff.unsafe_ptr())) + 2 * n, dfac, 1, n)
-    enqueue_es_unscale_diag(ctx, F32Ptr(unsafe_from_address=Int(dk.unsafe_ptr())), dfac, n)
-    if want_host:
-        # the last test's kernel left the diagonal of the converged A in
-        # doff[2 n, 3 n)
-        ctx.enqueue_copy(dst_ptr=hoff.unsafe_ptr(), src_buf=doff)
-        ctx.synchronize()
-        var got = _download(ctx, dvec, n * n)
-        for c in range(n):
-            eig_diag.append(hoff.unsafe_ptr().unsafe_load(2 * n + c))
-        for i in range(n * n):
-            vecs.append(got[i])
-    else:
-        ctx.synchronize()
-    _ = dfac^
-    _ = dcs^
-    _ = doff^
-    _ = hoff^
-    _ = dpart^
-    _ = dres^
-    _ = dst^
-    _ = hst^
-    return executed
+# TOMBSTONE: MOJOLEARN_IDN_NYS_RR_DEV_STOP_B4 (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-19-kernel; code recoverable at c8712ad631.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_NYS_RR_DEV_STOP_B4.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_IDN_NYS_RR_DEV_STOP (unmeasured opt-in arm; with it nys_rr_gate_kernel, the two gated kernels, _nystroem_rr_eigh_idn_devstop and NYS_RR_STOP_BATCH) deleted 2026-11-15 by lane/expdel2-19-kernel; code recoverable at 27b1a08df9.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_NYS_RR_DEV_STOP.patch; record in docs/TOMBSTONES.md.
 
 
 def _nystroem_device_eigh(
@@ -1835,10 +1566,6 @@ def _nystroem_device_eigh(
             if got >= 0:
                 trace.record_device(ctx, "nys.eigenvectors_flipped", dvec, q * q)
                 return got
-    comptime if NYS_IDN_RR_DEV_STOP:
-        var ran_ds = _nystroem_rr_eigh_idn_devstop(ctx, dk, dvec, q, sabotage, eig_diag, vecs, want_host)
-        trace.record_device(ctx, "nys.eigenvectors_flipped", dvec, q * q)
-        return ran_ds
     comptime if NYS_IDN_RR_EIGH:
         var ran = _nystroem_rr_eigh_idn(ctx, dk, dvec, q, sabotage, eig_diag, vecs, want_host)
         trace.record_device(ctx, "nys.eigenvectors_flipped", dvec, q * q)
@@ -1900,7 +1627,7 @@ def _nystroem_device_eigh(
 
 
 #: fam2-kernel-gp (2026-10-04), IDENTICAL, ON by default
-#: (`-D MOJOLEARN_IDN_NYS_DEV_ORDER_OFF` restores the host epilogue): after
+#: (FAST keeps the host epilogue): after
 #: the eigendecomposition the fit ordered the q eigenpairs with a host
 #: selection sort (q^2 compares on one thread), clipped and square-rooted
 #: them on the host, permuted the q x q eigenvectors on the host and
@@ -1914,9 +1641,9 @@ def _nystroem_device_eigh(
 #: clip, square root and negation per value: no bit moves, and the host
 #: column (`km_host_oracle.mojo`) is unchanged. A sabotage arm keeps the
 #: host epilogue (its arms live there).
-comptime NYS_IDN_DEV_ORDER = _CTX_MODE == _CTX_IDENTICAL and not (
-    is_defined["MOJOLEARN_IDN_NYS_DEV_ORDER_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_IDN_NYS_DEV_ORDER_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-19-kernel; code recoverable at a1459da190.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_NYS_DEV_ORDER_OFF.patch; record in docs/TOMBSTONES.md.
+comptime NYS_IDN_DEV_ORDER = _CTX_MODE == _CTX_IDENTICAL
 comptime NYS_ORDER_TPB = 256
 
 
@@ -2055,28 +1782,26 @@ def nystroem_fit_host(
 
 
 #: fam2-kernel-gp (2026-10-04), IDENTICAL, ON by default
-#: (`-D MOJOLEARN_IDN_NYS_FIT_PTR_IN_OFF` unregisters the pointer binding, so
-#: `kernel_methods.py` takes the list route again): Nystroem fit reads X
+#: (FAST keeps the list route): Nystroem fit reads X
 #: from the caller's memory straight to the device, scans it for NaN /
 #: infinity there (`_upload_checked`) and gathers the basis rows there
 #: (`km_gather_rows_kernel`), instead of an owned host copy of X
 #: (`read_f32`), a serial host finiteness walk over n x d and a host gather.
 #: The same component words reach the same kernels: no bit moves.
-comptime NYS_IDN_FIT_PTR_IN = _CTX_MODE == _CTX_IDENTICAL and not (
-    is_defined["MOJOLEARN_IDN_NYS_FIT_PTR_IN_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_IDN_NYS_FIT_PTR_IN_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-19-kernel; code recoverable at 1c49bdcfcc.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_NYS_FIT_PTR_IN_OFF.patch; record in docs/TOMBSTONES.md.
+comptime NYS_IDN_FIT_PTR_IN = _CTX_MODE == _CTX_IDENTICAL
 
 #: fam2-kernel-gp (2026-10-04), IDENTICAL, ON by default
-#: (`-D MOJOLEARN_IDN_NYS_DEV_BASIS_OFF` restores the host draw and radix
-#: sort): the pointer fit draws the basis rows on the device
+#: (FAST keeps the host draw and radix sort): the pointer fit draws the basis rows on the device
 #: (`km_basis_indices_device`: every row's key drawn there, the rows under a
 #: threshold compacted and ranked there) instead of n_samples host draws and
 #: a host radix sort inside the device fit. Integer only, the same total
 #: order: the same rows in the same order, no bit moves. Applies on the
 #: pointer route (NYS_IDN_FIT_PTR_IN), where X is resident.
-comptime NYS_IDN_DEV_BASIS = _CTX_MODE == _CTX_IDENTICAL and not (
-    is_defined["MOJOLEARN_IDN_NYS_DEV_BASIS_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_IDN_NYS_DEV_BASIS_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-19-kernel; code recoverable at 91606051a7.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_NYS_DEV_BASIS_OFF.patch; record in docs/TOMBSTONES.md.
+comptime NYS_IDN_DEV_BASIS = _CTX_MODE == _CTX_IDENTICAL
 
 
 def nystroem_fit_ptr(
@@ -2802,7 +2527,7 @@ def rbf_sampler_transform_host(
     # transform in that launch when no stage needs the projection alone)
     var chain = False
     var whole = False
-    # C25_PROJECTION_REUSE (IDENTICAL default, _OFF restores the old route): the
+    # C25_PROJECTION_REUSE (the IDENTICAL default): the
     # projection for every d through classical_projection_kernel. Restored 2026-10-10
     # from the tombstone patch after grid pass 2 (vendor geo-mean 0.903x, worst 0.983x).
     comptime if RBF_IDN_FUSED or C25_PROJECTION_REUSE:
@@ -2893,19 +2618,10 @@ def _rbf_transform_dev[out_origin: MutOrigin, //](
     ctx.synchronize()
     var t1 = Int(perf_counter_ns())
     var fused = False
-    comptime if RBF_FUSED:
-        fused = d <= RBF_FUSED_MAX_D and sabotage == KMSAB_NONE and n_rows * dd > 0
-        if fused:
-            ctx.enqueue_function[rbf_fused_transform_kernel](
-                dp.unsafe_ptr(), dx.unsafe_ptr(), dw.unsafe_ptr(), db.unsafe_ptr(),
-                Int32(n_rows), Int32(d), Int32(dd), model.scale,
-                grid_dim=((n_rows * dd + RBF_FUSED_TPB - 1) // RBF_FUSED_TPB, 1, 1),
-                block_dim=(RBF_FUSED_TPB, 1, 1),
-            )
     # RBF_IDN_FUSED: the projection as the per-cell chain (and the whole
     # transform in that launch when no stage needs the projection alone)
     var chain = False
-    # C25_PROJECTION_REUSE (IDENTICAL default, _OFF restores the old route): the
+    # C25_PROJECTION_REUSE (the IDENTICAL default): the
     # projection for every d through classical_projection_kernel. Restored 2026-10-10
     # from the tombstone patch after grid pass 2 (vendor geo-mean 0.903x, worst 0.983x).
     comptime if RBF_IDN_FUSED or C25_PROJECTION_REUSE:

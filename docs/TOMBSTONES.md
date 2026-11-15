@@ -741,6 +741,39 @@ in the tables after the sections.
 | [`MOJOLEARN_XD_FAST_CLS2_GRP_LAZY`](#mojolearn_xd_fast_cls2_grp_lazy) | Decomposition (random projection components_ download, FAST+Apple) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_XD_FAST_CLS2_GRP_LAZY.patch](../experiments/removed/MOJOLEARN_XD_FAST_CLS2_GRP_LAZY.patch) |
 | [`MOJOLEARN_XD_FAST_CLS2_GRP_NOSCAN`](#mojolearn_xd_fast_cls2_grp_noscan) | Decomposition (random projection fit refusal, FAST+Apple) | removed (opt-in arm; EXP:466 PARKED) | 2026-11-15 | [MOJOLEARN_XD_FAST_CLS2_GRP_NOSCAN.patch](../experiments/removed/MOJOLEARN_XD_FAST_CLS2_GRP_NOSCAN.patch) |
 | [`MOJOLEARN_XD_FAST_SRP_STRAT_OFF`](#mojolearn_xd_fast_srp_strat_off) | Decomposition (SparseRandomProjection pattern, FAST+Apple) | removed (old path, no A/B recorded beside the FAST+Apple default) | 2026-11-15 | [MOJOLEARN_XD_FAST_SRP_STRAT_OFF.patch](../experiments/removed/MOJOLEARN_XD_FAST_SRP_STRAT_OFF.patch) |
+| [`MOJOLEARN_AFCL_L11`](#mojolearn_afcl_l11) | Kernel / GP (FAST Apple predictive-variance groups) | removed (never-run programme card) | 2026-11-15 | [MOJOLEARN_AFCL_L11.patch](../experiments/removed/MOJOLEARN_AFCL_L11.patch) |
+| [`MOJOLEARN_AFCL_G13`](#mojolearn_afcl_g13) | Kernel density (FAST Apple kde2 tile query ownership) | removed (never-run programme card) | 2026-11-15 | [MOJOLEARN_AFCL_G13.patch](../experiments/removed/MOJOLEARN_AFCL_G13.patch) |
+| [`MOJOLEARN_FAMILY_CTX_PER_CALL`](#mojolearn_family_ctx_per_call) | Kernel / GP / SVM (device context per entry) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_FAMILY_CTX_PER_CALL.patch](../experiments/removed/MOJOLEARN_FAMILY_CTX_PER_CALL.patch) |
+| [`MOJOLEARN_GP_BULK_DOWNLOAD`](#mojolearn_gp_bulk_download) | Kernel / GP (download into a list) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_GP_BULK_DOWNLOAD.patch](../experiments/removed/MOJOLEARN_GP_BULK_DOWNLOAD.patch) |
+| [`MOJOLEARN_IDN_GP_BULK_DOWNLOAD_OFF`](#mojolearn_idn_gp_bulk_download_off) | Kernel / GP (IDENTICAL factor download) | removed (old path, no A/B recorded) | 2026-11-15 | [MOJOLEARN_IDN_GP_BULK_DOWNLOAD_OFF.patch](../experiments/removed/MOJOLEARN_IDN_GP_BULK_DOWNLOAD_OFF.patch) |
+| [`MOJOLEARN_IDN_GP_PREDICT_LAZY_L_OFF`](#mojolearn_idn_gp_predict_lazy_l_off) | Kernel / GP (IDENTICAL GPR predict factor upload) | removed (old path, no A/B recorded) | 2026-11-15 | [MOJOLEARN_IDN_GP_PREDICT_LAZY_L_OFF.patch](../experiments/removed/MOJOLEARN_IDN_GP_PREDICT_LAZY_L_OFF.patch) |
+| [`MOJOLEARN_IDN_GP_GRAD_ROWS4`](#mojolearn_idn_gp_grad_rows4) | Kernel / GP (IDENTICAL LML gradient row blocks) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_IDN_GP_GRAD_ROWS4.patch](../experiments/removed/MOJOLEARN_IDN_GP_GRAD_ROWS4.patch) |
+| [`MOJOLEARN_IDN_GP_GRAD_ROWFOLD_OFF`](#mojolearn_idn_gp_grad_rowfold_off) | Kernel / GP (IDENTICAL LML gradient row blocks) | removed (old path, no A/B recorded) | 2026-11-15 | [MOJOLEARN_IDN_GP_GRAD_ROWFOLD_OFF.patch](../experiments/removed/MOJOLEARN_IDN_GP_GRAD_ROWFOLD_OFF.patch) |
+| [`MOJOLEARN_IDN_GP_VAR_SEG_OFF`](#mojolearn_idn_gp_var_seg_off) | Kernel / GP (IDENTICAL predictive variance fold) | removed (old path, no A/B recorded) | 2026-11-15 | [MOJOLEARN_IDN_GP_VAR_SEG_OFF.patch](../experiments/removed/MOJOLEARN_IDN_GP_VAR_SEG_OFF.patch) |
+| [`MOJOLEARN_KDE_FAST_DIRECT_PREP_OFF`](#mojolearn_kde_fast_direct_prep_off) | Kernel density (FAST+Apple resident fit preparation) | removed (old path, no A/B recorded) | 2026-11-15 | [MOJOLEARN_KDE_FAST_DIRECT_PREP_OFF.patch](../experiments/removed/MOJOLEARN_KDE_FAST_DIRECT_PREP_OFF.patch) |
+| [`MOJOLEARN_IDN_KDE_PARTIAL_POOL`](#mojolearn_idn_kde_partial_pool) | Kernel density (IDENTICAL retained chunk scratch, I20) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_IDN_KDE_PARTIAL_POOL.patch](../experiments/removed/MOJOLEARN_IDN_KDE_PARTIAL_POOL.patch) |
+| [`MOJOLEARN_KDE_BLOCK_SUM_OFF`](#mojolearn_kde_block_sum_off) | Kernel density (IDENTICAL log-sum-exp) | removed (old path, no A/B recorded) | 2026-11-15 | [MOJOLEARN_KDE_BLOCK_SUM_OFF.patch](../experiments/removed/MOJOLEARN_KDE_BLOCK_SUM_OFF.patch) |
+| [`MOJOLEARN_LEGACY_NARROW_KDE_DIMTILE`](#mojolearn_legacy_narrow_kde_dimtile) | Kernel density (FAST+Apple kde2 tile pass gate) | removed (old path, no A/B recorded) | 2026-11-15 | [MOJOLEARN_LEGACY_NARROW_KDE_DIMTILE.patch](../experiments/removed/MOJOLEARN_LEGACY_NARROW_KDE_DIMTILE.patch) |
+| [`MOJOLEARN_KDE_DIMTILE_OFF`](#mojolearn_kde_dimtile_off) | Kernel density (FAST+Apple kde2 tile pass) | removed (old path, no A/B recorded) | 2026-11-15 | [MOJOLEARN_KDE_DIMTILE_OFF.patch](../experiments/removed/MOJOLEARN_KDE_DIMTILE_OFF.patch) |
+| [`MOJOLEARN_IDN_KDE_QTILE_FORCE`](#mojolearn_idn_kde_qtile_force) | Kernel density (IDENTICAL query-tile pass) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_IDN_KDE_QTILE_FORCE.patch](../experiments/removed/MOJOLEARN_IDN_KDE_QTILE_FORCE.patch) |
+| [`MOJOLEARN_IDN_KDE_QTILE_OFF`](#mojolearn_idn_kde_qtile_off) | Kernel density (IDENTICAL query-tile pass) | removed (old path, no A/B recorded) | 2026-11-15 | [MOJOLEARN_IDN_KDE_QTILE_OFF.patch](../experiments/removed/MOJOLEARN_IDN_KDE_QTILE_OFF.patch) |
+| [`MOJOLEARN_IDN_KDE_CHUNK_LSE_OFF`](#mojolearn_idn_kde_chunk_lse_off) | Kernel density (IDENTICAL chunked log-sum-exp) | removed (old path, no A/B recorded) | 2026-11-15 | [MOJOLEARN_IDN_KDE_CHUNK_LSE_OFF.patch](../experiments/removed/MOJOLEARN_IDN_KDE_CHUNK_LSE_OFF.patch) |
+| [`MOJOLEARN_IDN_KM_RBF_CELL_D16`](#mojolearn_idn_km_rbf_cell_d16) | Kernel methods (IDENTICAL RBF cell bound) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_IDN_KM_RBF_CELL_D16.patch](../experiments/removed/MOJOLEARN_IDN_KM_RBF_CELL_D16.patch) |
+| [`MOJOLEARN_IDN_KM_DOT_CELL_D16`](#mojolearn_idn_km_dot_cell_d16) | Kernel methods (IDENTICAL dot cell bound) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_IDN_KM_DOT_CELL_D16.patch](../experiments/removed/MOJOLEARN_IDN_KM_DOT_CELL_D16.patch) |
+| [`MOJOLEARN_IDN_KM_RBF_CELL`](#mojolearn_idn_km_rbf_cell) | Kernel methods (IDENTICAL RBF kernel matrix) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_IDN_KM_RBF_CELL.patch](../experiments/removed/MOJOLEARN_IDN_KM_RBF_CELL.patch) |
+| [`MOJOLEARN_IDN_KM_DOT_CELL_OFF`](#mojolearn_idn_km_dot_cell_off) | Kernel methods (IDENTICAL dot kernel matrix) | removed (old path, no A/B recorded) | 2026-11-15 | [MOJOLEARN_IDN_KM_DOT_CELL_OFF.patch](../experiments/removed/MOJOLEARN_IDN_KM_DOT_CELL_OFF.patch) |
+| [`MOJOLEARN_RBF_FUSED`](#mojolearn_rbf_fused) | Kernel methods (FAST Apple RBFSampler transform) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_RBF_FUSED.patch](../experiments/removed/MOJOLEARN_RBF_FUSED.patch) |
+| [`MOJOLEARN_IDN_RBF_FUSED_OFF`](#mojolearn_idn_rbf_fused_off) | Kernel methods (IDENTICAL RBFSampler projection) | removed (old path, no A/B recorded) | 2026-11-15 | [MOJOLEARN_IDN_RBF_FUSED_OFF.patch](../experiments/removed/MOJOLEARN_IDN_RBF_FUSED_OFF.patch) |
+| [`MOJOLEARN_IDN_NYS_RR_EIGH_OFF`](#mojolearn_idn_nys_rr_eigh_off) | Kernel methods (IDENTICAL Nystroem eigh) | removed (old path, no A/B recorded) | 2026-11-15 | [MOJOLEARN_IDN_NYS_RR_EIGH_OFF.patch](../experiments/removed/MOJOLEARN_IDN_NYS_RR_EIGH_OFF.patch) |
+| [`MOJOLEARN_IDN_KRR_DEV_SCALE_OFF`](#mojolearn_idn_krr_dev_scale_off) | Kernel methods (KernelRidge sample-weight scaling) | removed (old path, no A/B recorded) | 2026-11-15 | [MOJOLEARN_IDN_KRR_DEV_SCALE_OFF.patch](../experiments/removed/MOJOLEARN_IDN_KRR_DEV_SCALE_OFF.patch) |
+| [`MOJOLEARN_IDN_KRR_PTR_IN_OFF`](#mojolearn_idn_krr_ptr_in_off) | Kernel methods (KernelRidge pointer bindings) | removed (old path, no A/B recorded) | 2026-11-15 | [MOJOLEARN_IDN_KRR_PTR_IN_OFF.patch](../experiments/removed/MOJOLEARN_IDN_KRR_PTR_IN_OFF.patch) |
+| [`MOJOLEARN_IDN_KM_BULK_DOWNLOAD_OFF`](#mojolearn_idn_km_bulk_download_off) | Kernel methods (IDENTICAL download into a list) | removed (old path, no A/B recorded) | 2026-11-15 | [MOJOLEARN_IDN_KM_BULK_DOWNLOAD_OFF.patch](../experiments/removed/MOJOLEARN_IDN_KM_BULK_DOWNLOAD_OFF.patch) |
+| [`MOJOLEARN_IDN_KM_PTR_IN_OFF`](#mojolearn_idn_km_ptr_in_off) | Kernel methods (IDENTICAL transforms X input) | removed (old path, no A/B recorded) | 2026-11-15 | [MOJOLEARN_IDN_KM_PTR_IN_OFF.patch](../experiments/removed/MOJOLEARN_IDN_KM_PTR_IN_OFF.patch) |
+| [`MOJOLEARN_IDN_NYS_RR_DEV_STOP_B4`](#mojolearn_idn_nys_rr_dev_stop_b4) | Kernel methods (IDENTICAL Nystroem eigh stop batch) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_IDN_NYS_RR_DEV_STOP_B4.patch](../experiments/removed/MOJOLEARN_IDN_NYS_RR_DEV_STOP_B4.patch) |
+| [`MOJOLEARN_IDN_NYS_RR_DEV_STOP`](#mojolearn_idn_nys_rr_dev_stop) | Kernel methods (IDENTICAL Nystroem eigh convergence) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_IDN_NYS_RR_DEV_STOP.patch](../experiments/removed/MOJOLEARN_IDN_NYS_RR_DEV_STOP.patch) |
+| [`MOJOLEARN_IDN_NYS_DEV_ORDER_OFF`](#mojolearn_idn_nys_dev_order_off) | Kernel methods (IDENTICAL Nystroem eigen ordering) | removed (old path, no A/B recorded) | 2026-11-15 | [MOJOLEARN_IDN_NYS_DEV_ORDER_OFF.patch](../experiments/removed/MOJOLEARN_IDN_NYS_DEV_ORDER_OFF.patch) |
+| [`MOJOLEARN_IDN_NYS_FIT_PTR_IN_OFF`](#mojolearn_idn_nys_fit_ptr_in_off) | Kernel methods (IDENTICAL Nystroem fit X input) | removed (old path, no A/B recorded) | 2026-11-15 | [MOJOLEARN_IDN_NYS_FIT_PTR_IN_OFF.patch](../experiments/removed/MOJOLEARN_IDN_NYS_FIT_PTR_IN_OFF.patch) |
+| [`MOJOLEARN_IDN_NYS_DEV_BASIS_OFF`](#mojolearn_idn_nys_dev_basis_off) | Kernel methods (IDENTICAL Nystroem basis draw) | removed (old path, no A/B recorded) | 2026-11-15 | [MOJOLEARN_IDN_NYS_DEV_BASIS_OFF.patch](../experiments/removed/MOJOLEARN_IDN_NYS_DEV_BASIS_OFF.patch) |
 
 | [`MOJOLEARN_IDN_EIGH_SMALL_OFF`](#n9-every-dense-eigh-on-the-executor-ops-2026-11-09) | Decomposition (dense eigh, IDENTICAL) | removed (superseded: the one-launch Jacobi is the op's only route below TD_MIN_N) | 2026-11-09 | [MOJOLEARN_IDN_EIGH_SMALL.patch](../experiments/removed/MOJOLEARN_IDN_EIGH_SMALL.patch) |
 | [`MOJOLEARN_IDN_EIGH_SMALL_N64`](#n9-every-dense-eigh-on-the-executor-ops-2026-11-09) | Decomposition (dense eigh, IDENTICAL candidate arm) | removed (superseded: no small-n cut left) | 2026-11-09 | [MOJOLEARN_IDN_EIGH_SMALL.patch](../experiments/removed/MOJOLEARN_IDN_EIGH_SMALL.patch) |
@@ -11514,3 +11547,346 @@ Inline TOMBSTONE markers only; the owner lane of each define writes its section,
 - `MOJOLEARN_IDN_EIGH_BLOCK_ON` (owner expdel2-16-decomposition): IDN_EIGH_BLOCK stays as the constant False for its importers (x_decomp/device.mojo, eigh_ops_host.mojo, kit_device.mojo); the block solver bodies they guard are the owner's; `27a4e29363`, recoverable at `9ee63b6d65`; `experiments/removed/MOJOLEARN_IDN_EIGH_BLOCK_ON.expdel2-18-decomposition.patch`.
 
 Not deleted, contrary to the plan: `MOJOLEARN_COLUMN_CPU` (the CPU-column build switch, KEEP; coordinator correction 2026-11-15). `MOJOLEARN_LU_QOLD` and `MOJOLEARN_TSVD_QOLD` (owner expdel2-17-decomposition) have no read in this lane's files (they reach x_decomp/s_linalg_fast.mojo and x_decomp/tsvd_descriptor_boundary_run.mojo only through the LU_QFIX / TSVD_QFIX aliases, which the owner keeps as constants); x_decomp/tsqr_multi_gpu.mojo reads only `MOJOLEARN_QR_PARALLEL_SABOTAGE` (a sabotage control, KEEP). Nothing changed in those two files.
+## Experiment deletions: lane expdel2-19-kernel (2026-11-15)
+
+Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2-19-kernel), under AGENTS.md "An unmeasured arm is deleted" (Andrew, 2026-11-15). Each record named below was read first. No bit changes: every deletion removes a non-default arm or a rollback beside the default, and the default branch is kept byte for byte. Where the folded alias is still a mode expression (IDENTICAL-only, FAST + Apple), the other mode's branch is live code and stays.
+
+### MOJOLEARN_AFCL_L11
+
+- Tried: four 128-thread SIMD groups per query tile instead of eight (AFCL-L11).
+- Evidence: never-run Apple FAST programme card (NEVER RUN, uncompiled); no EXPERIMENTS.md row. Verdict: never-run programme card deleted (V2 rule).
+- Removed: AFCL_L11 = False and AFCL_GP_VAR_TPB = 256 stay as constants for gaussian_process/checks/kernels.mojo and gpc_device_var.mojo; the unused imports. Default unchanged: no bits move.
+- Files: gaussian_process/afcl_prediction.mojo.
+- Deleted by: lane/expdel2-19-kernel `d55d80a7d4` (2026-11-15); code recoverable at `7fa6378a2a`.
+- Restore: `git apply experiments/removed/MOJOLEARN_AFCL_L11.patch`, then delete the refusal in `core/experiment_guards_kernel.mojo`.
+- Records: refusal in `core/experiment_guards_kernel.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-19-kernel section).
+
+### MOJOLEARN_AFCL_G13
+
+- Tried: half the queries per thread in the kde2 tile pass (KDE2_QM 2 instead of 4).
+- Evidence: never-run Apple FAST programme card (NEVER RUN, uncompiled); no EXPERIMENTS.md row. Verdict: never-run programme card deleted (V2 rule).
+- Removed: the AFCL_G13 constant; KDE2_QM = 4. Default unchanged: no bits move.
+- Files: kde/impl/neighbors/kernel_density.mojo.
+- Deleted by: lane/expdel2-19-kernel `0ba472a9c7` (2026-11-15); code recoverable at `ab962d7d76`.
+- Restore: `git apply experiments/removed/MOJOLEARN_AFCL_G13.patch`, then delete the refusal in `core/experiment_guards_kernel.mojo`.
+- Records: refusal in `core/experiment_guards_kernel.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-19-kernel section).
+
+### MOJOLEARN_FAMILY_CTX_PER_CALL
+
+- Tried: a new DeviceContext per entry instead of the process-lifetime family context (the A/B arm).
+- Evidence: no EXPERIMENTS.md row, grid control or source A/B. Verdict: unmeasured opt-in arm deleted (V2 rule).
+- Removed: the per-call branch of _family_ctx in four modules and its term in KM_FAST_RBF_RESIDENT; unused is_defined imports. Default unchanged: no bits move.
+- Files: gaussian_process/classifier.mojo, gaussian_process/estimator.mojo, kernel_methods/estimator.mojo, kernel_methods/rbf_resident.mojo, svm/estimator.mojo.
+- Deleted by: lane/expdel2-19-kernel `476e96f77a` (2026-11-15); code recoverable at `26b4b3147a`.
+- Restore: `git apply experiments/removed/MOJOLEARN_FAMILY_CTX_PER_CALL.patch`, then delete the refusal in `core/experiment_guards_kernel.mojo`.
+- Records: refusal in `core/experiment_guards_kernel.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-19-kernel section).
+
+### MOJOLEARN_GP_BULK_DOWNLOAD
+
+- Tried: one copy_f32 into a list of the final length in _download (FAST).
+- Evidence: no A/B recorded. Verdict: unmeasured opt-in arm deleted (V2 rule).
+- Removed: the opt-in block in gaussian_process/estimator.mojo::_download. Default unchanged: no bits move.
+- Files: gaussian_process/estimator.mojo.
+- Deleted by: lane/expdel2-19-kernel `2fd4a6c6c1` (2026-11-15); code recoverable at `476e96f77a`.
+- Restore: `git apply experiments/removed/MOJOLEARN_GP_BULK_DOWNLOAD.patch`, then delete the refusal in `core/experiment_guards_kernel.mojo`.
+- Records: refusal in `core/experiment_guards_kernel.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-19-kernel section).
+
+### MOJOLEARN_IDN_GP_BULK_DOWNLOAD_OFF
+
+- Tried: old path: n appends into a growing list.
+- Evidence: no A/B recorded for the old path. Verdict: old path; default kept deleted (V2 rule).
+- Removed: the define term; GP_IDN_BULK_DOWNLOAD = IDENTICAL (FAST keeps the appends). Default unchanged: no bits move.
+- Files: gaussian_process/estimator.mojo.
+- Deleted by: lane/expdel2-19-kernel `6969d83ccb` (2026-11-15); code recoverable at `2fd4a6c6c1`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_GP_BULK_DOWNLOAD_OFF.patch`, then delete the refusal in `core/experiment_guards_kernel.mojo`.
+- Records: refusal in `core/experiment_guards_kernel.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-19-kernel section).
+
+### MOJOLEARN_IDN_GP_PREDICT_LAZY_L_OFF
+
+- Tried: old path: upload the factor on mean-only predicts.
+- Evidence: no A/B recorded for the old path. Verdict: old path; default kept deleted (V2 rule).
+- Removed: the define term; GP_IDN_PREDICT_LAZY_L = IDENTICAL. Default unchanged: no bits move.
+- Files: gaussian_process/estimator.mojo.
+- Deleted by: lane/expdel2-19-kernel `56a50bfa08` (2026-11-15); code recoverable at `6969d83ccb`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_GP_PREDICT_LAZY_L_OFF.patch`, then delete the refusal in `core/experiment_guards_kernel.mojo`.
+- Records: refusal in `core/experiment_guards_kernel.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-19-kernel section).
+
+### MOJOLEARN_IDN_GP_GRAD_ROWS4
+
+- Tried: 4-row gradient blocks instead of 1.
+- Evidence: no A/B recorded. Verdict: unmeasured opt-in arm deleted (V2 rule).
+- Removed: _GP_GRAD_ROWS_ON = 1. Default unchanged: no bits move.
+- Files: gaussian_process/gp_grad_items.mojo.
+- Deleted by: lane/expdel2-19-kernel `e53df78bab` (2026-11-15); code recoverable at `0deab16a32`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_GP_GRAD_ROWS4.patch`, then delete the refusal in `core/experiment_guards_kernel.mojo`.
+- Records: refusal in `core/experiment_guards_kernel.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-19-kernel section).
+
+### MOJOLEARN_IDN_GP_GRAD_ROWFOLD_OFF
+
+- Tried: old path: 16-row blocks.
+- Evidence: no A/B recorded for the old path. Verdict: old path; default kept deleted (V2 rule).
+- Removed: the define term; GP_IDN_GRAD_ROWFOLD = IDENTICAL (FAST keeps 16-row blocks); unused is_defined import. Default unchanged: no bits move.
+- Files: gaussian_process/gp_grad_items.mojo.
+- Deleted by: lane/expdel2-19-kernel `87c68144e3` (2026-11-15); code recoverable at `e53df78bab`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_GP_GRAD_ROWFOLD_OFF.patch`, then delete the refusal in `core/experiment_guards_kernel.mojo`.
+- Records: refusal in `core/experiment_guards_kernel.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-19-kernel section).
+
+### MOJOLEARN_IDN_GP_VAR_SEG_OFF
+
+- Tried: old path: one-thread serial chain per test point.
+- Evidence: no A/B recorded for the old path. Verdict: old path; default kept deleted (V2 rule).
+- Removed: the define term; GP_IDN_VAR_SEG = IDENTICAL; unused is_defined import. Default unchanged: no bits move.
+- Files: gaussian_process/gp_var_seg.mojo.
+- Deleted by: lane/expdel2-19-kernel `9b758c74c1` (2026-11-15); code recoverable at `87c68144e3`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_GP_VAR_SEG_OFF.patch`, then delete the refusal in `core/experiment_guards_kernel.mojo`.
+- Records: refusal in `core/experiment_guards_kernel.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-19-kernel section).
+
+### MOJOLEARN_KDE_FAST_DIRECT_PREP_OFF
+
+- Tried: old path: staged host preparation of the fit upload.
+- Evidence: M3 2026-10-06 F18 (source comment): direct prep cold B/A 0.6349/0.9221/0.8119, the promoted default; no A/B recorded for the old path. Verdict: old path; default kept deleted (V2 rule).
+- Removed: the define term; KDE_FAST_DIRECT_PREP = FAST and Apple. Default unchanged: no bits move.
+- Files: kde/resident_fit.mojo.
+- Deleted by: lane/expdel2-19-kernel `3af082d6f4` (2026-11-15); code recoverable at `9b758c74c1`.
+- Restore: `git apply experiments/removed/MOJOLEARN_KDE_FAST_DIRECT_PREP_OFF.patch`, then delete the refusal in `core/experiment_guards_kernel.mojo`.
+- Records: refusal in `core/experiment_guards_kernel.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-19-kernel section).
+
+### MOJOLEARN_IDN_KDE_PARTIAL_POOL
+
+- Tried: a retained partial-plane pool per resident KDE fit (I20).
+- Evidence: I20 L40S 1.007x/1.008x inconclusive, MI325X 1.392/1.160/1.070 loser, one wide case 0.934 (source comment): mixed, never promoted. Verdict: unmeasured opt-in arm deleted (V2 rule).
+- Removed: KDE_CHUNK_POOL_ON = False stays for the I20 check; the fit-time pool, the drain and the pooled score branches in kde/resident_fit.mojo, and the pool-on branches of the two checks. The workspace module and kde_score_samples_chunk_lse_reused stay (experiments/performance_ideas/I20/check.mojo imports them). Default unchanged: no bits move.
+- Files: checks/native_tests/kde_ownership.mojo, kde/checks/reused_workspace_check.mojo, kde/impl/chunk_workspace.mojo, kde/resident_fit.mojo.
+- Deleted by: lane/expdel2-19-kernel `8b543e49e0` (2026-11-15); code recoverable at `3af082d6f4`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_KDE_PARTIAL_POOL.patch`, then delete the refusal in `core/experiment_guards_kernel.mojo`.
+- Records: refusal in `core/experiment_guards_kernel.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-19-kernel section).
+
+### MOJOLEARN_KDE_BLOCK_SUM_OFF
+
+- Tried: old path: the terms kernel then the serial-sum kernel.
+- Evidence: no A/B recorded for the old path. Verdict: old path; default kept deleted (V2 rule).
+- Removed: KDE_BLOCK_SUM = True; the two-kernel launch branch. The two kernels stay (kde_stage_profile and kde_dist_attribution launch them). Default unchanged: no bits move.
+- Files: kde/impl/neighbors/kernel_density.mojo.
+- Deleted by: lane/expdel2-19-kernel `531563873b` (2026-11-15); code recoverable at `8b543e49e0`.
+- Restore: `git apply experiments/removed/MOJOLEARN_KDE_BLOCK_SUM_OFF.patch`, then delete the refusal in `core/experiment_guards_kernel.mojo`.
+- Records: refusal in `core/experiment_guards_kernel.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-19-kernel section).
+
+### MOJOLEARN_LEGACY_NARROW_KDE_DIMTILE
+
+- Tried: old path: the benchmark-tuned n_features > 32 gate.
+- Evidence: no A/B recorded (removed as dimension-targeted 2026-10-04, UNMEASURED). Verdict: old path; default kept deleted (V2 rule).
+- Removed: KDE2_DIMTILE_LEGACY_NARROW, KDE2_DIMTILE_MIN_D and the gate term. Default unchanged: no bits move.
+- Files: kde/impl/neighbors/kernel_density.mojo.
+- Deleted by: lane/expdel2-19-kernel `82d4e4de40` (2026-11-15); code recoverable at `531563873b`.
+- Restore: `git apply experiments/removed/MOJOLEARN_LEGACY_NARROW_KDE_DIMTILE.patch`, then delete the refusal in `core/experiment_guards_kernel.mojo`.
+- Records: refusal in `core/experiment_guards_kernel.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-19-kernel section).
+
+### MOJOLEARN_KDE_DIMTILE_OFF
+
+- Tried: old path: main's passes at every d on FAST + Apple.
+- Evidence: EXP:343 DROP; the tile pass is the default (M3 istella 137.2 -> 69.2 ms). Verdict: old path; default kept deleted (V2 rule).
+- Removed: the define term; KDE2_DIMTILE = KDE2_DIMTILE_ANY_D or FAST + Apple. Default unchanged: no bits move.
+- Files: kde/impl/neighbors/kernel_density.mojo.
+- Deleted by: lane/expdel2-19-kernel `ab962d7d76` (2026-11-15); code recoverable at `82d4e4de40`.
+- Restore: `git apply experiments/removed/MOJOLEARN_KDE_DIMTILE_OFF.patch`, then delete the refusal in `core/experiment_guards_kernel.mojo`.
+- Records: refusal in `core/experiment_guards_kernel.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-19-kernel section).
+
+### MOJOLEARN_IDN_KDE_QTILE_FORCE
+
+- Tried: the query-tile pass at every width (the promoted every-d form).
+- Evidence: EXP:2398 PENDING; the A/B was owed, never run. Verdict: unmeasured opt-in arm deleted (V2 rule).
+- Removed: KDE_IDN_QTILE_FORCE and its branch in kde_qtile_applies; the cost rule stays. Default unchanged: no bits move.
+- Files: kde/impl/neighbors/kernel_density.mojo.
+- Deleted by: lane/expdel2-19-kernel `4bf6c39024` (2026-11-15); code recoverable at `0ba472a9c7`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_KDE_QTILE_FORCE.patch`, then delete the refusal in `core/experiment_guards_kernel.mojo`.
+- Records: refusal in `core/experiment_guards_kernel.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-19-kernel section).
+
+### MOJOLEARN_IDN_KDE_QTILE_OFF
+
+- Tried: old path: kde_chunk_lse_kernel at every width.
+- Evidence: EXP:2059 KEEP by average (kde taxi 0.343, istella 1.239); the 2026-11-13 cost rule keeps the old body where it wins. Verdict: old path; default kept deleted (V2 rule).
+- Removed: the define term; KDE_IDN_QTILE = KDE_IDN_CHUNK_LSE. Default unchanged: no bits move.
+- Files: kde/impl/neighbors/kernel_density.mojo.
+- Deleted by: lane/expdel2-19-kernel `9dcc758292` (2026-11-15); code recoverable at `4bf6c39024`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_KDE_QTILE_OFF.patch`, then delete the refusal in `core/experiment_guards_kernel.mojo`.
+- Records: refusal in `core/experiment_guards_kernel.mojo`; grid_controls/kde-qtile.json entry moved to `removed`; `docs/apple-fast/EXPERIMENTS.md` row (expdel2-19-kernel section).
+
+### MOJOLEARN_IDN_KDE_CHUNK_LSE_OFF
+
+- Tried: old path: the tiled matrix pass and the host's serial row fold.
+- Evidence: no A/B recorded for the old path. Verdict: old path; default kept deleted (V2 rule).
+- Removed: the define term; KDE_IDN_CHUNK_LSE = IDENTICAL (FAST keeps the tiled pass). Default unchanged: no bits move.
+- Files: kde/impl/neighbors/kernel_density.mojo.
+- Deleted by: lane/expdel2-19-kernel `c48de5dbfd` (2026-11-15); code recoverable at `9dcc758292`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_KDE_CHUNK_LSE_OFF.patch`, then delete the refusal in `core/experiment_guards_kernel.mojo`.
+- Records: refusal in `core/experiment_guards_kernel.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-19-kernel section).
+
+### MOJOLEARN_IDN_KM_RBF_CELL_D16
+
+- Tried: the RBF cell bound at 16 features.
+- Evidence: no A/B recorded. Verdict: unmeasured opt-in arm deleted (V2 rule).
+- Removed: KM_RBF_CELL_MAX_D / KMH_RBF_CELL_MAX_D = 64. Default unchanged: no bits move.
+- Files: kernel_methods/checks/kernel_matrix.mojo, kernel_methods/host/km_host_oracle.mojo.
+- Deleted by: lane/expdel2-19-kernel `b1d14459cf` (2026-11-15); code recoverable at `0e42489093`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_KM_RBF_CELL_D16.patch`, then delete the refusal in `core/experiment_guards_kernel.mojo`.
+- Records: refusal in `core/experiment_guards_kernel.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-19-kernel section).
+
+### MOJOLEARN_IDN_KM_DOT_CELL_D16
+
+- Tried: the polynomial / sigmoid cell bound at 16 features.
+- Evidence: no A/B recorded. Verdict: unmeasured opt-in arm deleted (V2 rule).
+- Removed: KM_DOT_CELL_MAX_D / KMH_DOT_CELL_MAX_D = 64. Default unchanged: no bits move.
+- Files: kernel_methods/checks/kernel_matrix.mojo, kernel_methods/host/km_host_oracle.mojo.
+- Deleted by: lane/expdel2-19-kernel `0ade8f67d9` (2026-11-15); code recoverable at `b1d14459cf`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_KM_DOT_CELL_D16.patch`, then delete the refusal in `core/experiment_guards_kernel.mojo`.
+- Records: refusal in `core/experiment_guards_kernel.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-19-kernel section).
+
+### MOJOLEARN_IDN_KM_RBF_CELL
+
+- Tried: the RBF kernel matrix as one direct-distance launch at k <= 64.
+- Evidence: no A/B recorded (CANDIDATE ARM, OFF by default). Verdict: unmeasured opt-in arm deleted (V2 rule).
+- Removed: km_rbf_cell_kernel and its launch; KMH_RBF_CELL, KMH_RBF_CELL_MAX_D and the host cell branch; KM_IDN_RBF_CELL = False and KM_RBF_CELL_MAX_D = 64 stay for kernel_methods/checks/km_oracle.mojo. Default unchanged: no bits move.
+- Files: kernel_methods/checks/kernel_matrix.mojo, kernel_methods/host/km_host_oracle.mojo.
+- Deleted by: lane/expdel2-19-kernel `16e283c44f` (2026-11-15); code recoverable at `0ade8f67d9`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_KM_RBF_CELL.patch`, then delete the refusal in `core/experiment_guards_kernel.mojo`.
+- Records: refusal in `core/experiment_guards_kernel.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-19-kernel section).
+
+### MOJOLEARN_IDN_KM_DOT_CELL_OFF
+
+- Tried: old path: GEMM + epilogue for polynomial / sigmoid.
+- Evidence: no A/B recorded for the old path. Verdict: old path; default kept deleted (V2 rule).
+- Removed: the define term; KM_IDN_DOT_CELL / KMH_DOT_CELL = IDENTICAL. Default unchanged: no bits move.
+- Files: kernel_methods/checks/kernel_matrix.mojo, kernel_methods/host/km_host_oracle.mojo.
+- Deleted by: lane/expdel2-19-kernel `eb41bfa927` (2026-11-15); code recoverable at `16e283c44f`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_KM_DOT_CELL_OFF.patch`, then delete the refusal in `core/experiment_guards_kernel.mojo`.
+- Records: refusal in `core/experiment_guards_kernel.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-19-kernel section).
+
+### MOJOLEARN_RBF_FUSED
+
+- Tried: RBFSampler.transform as one kernel per cell on FAST + Apple.
+- Evidence: no A/B recorded (OPT-IN until its A/B). Verdict: unmeasured opt-in arm deleted (V2 rule).
+- Removed: RBF_FUSED and its transform branch; rbf_fused_transform_kernel stays for the IDENTICAL launch. Default unchanged: no bits move.
+- Files: kernel_methods/estimator.mojo.
+- Deleted by: lane/expdel2-19-kernel `f2f200fc1b` (2026-11-15); code recoverable at `eb41bfa927`.
+- Restore: `git apply experiments/removed/MOJOLEARN_RBF_FUSED.patch`, then delete the refusal in `core/experiment_guards_kernel.mojo`.
+- Records: refusal in `core/experiment_guards_kernel.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-19-kernel section).
+
+### MOJOLEARN_IDN_RBF_FUSED_OFF
+
+- Tried: old path: the GEMM projection.
+- Evidence: no A/B recorded for the old path. Verdict: old path; default kept deleted (V2 rule).
+- Removed: the define term; RBF_IDN_FUSED / KMH_RBF_FUSED = IDENTICAL. Default unchanged: no bits move.
+- Files: kernel_methods/estimator.mojo, kernel_methods/host/km_host_oracle.mojo.
+- Deleted by: lane/expdel2-19-kernel `0e594fa5e2` (2026-11-15); code recoverable at `f2f200fc1b`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_RBF_FUSED_OFF.patch`, then delete the refusal in `core/experiment_guards_kernel.mojo`.
+- Records: refusal in `core/experiment_guards_kernel.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-19-kernel section).
+
+### MOJOLEARN_IDN_NYS_RR_EIGH_OFF
+
+- Tried: old path: the cyclic one-block Jacobi.
+- Evidence: no A/B recorded for the old path. Verdict: old path; default kept deleted (V2 rule).
+- Removed: the define term; NYS_IDN_RR_EIGH / KMH_NYS_RR = IDENTICAL. Default unchanged: no bits move.
+- Files: kernel_methods/estimator.mojo, kernel_methods/host/km_host_oracle.mojo.
+- Deleted by: lane/expdel2-19-kernel `0765c7997d` (2026-11-15); code recoverable at `0e594fa5e2`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_NYS_RR_EIGH_OFF.patch`, then delete the refusal in `core/experiment_guards_kernel.mojo`.
+- Records: refusal in `core/experiment_guards_kernel.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-19-kernel section).
+
+### MOJOLEARN_IDN_KRR_DEV_SCALE_OFF
+
+- Tried: old path: host loops scaling y and the dual.
+- Evidence: no A/B recorded for the old path. Verdict: old path; default kept deleted (V2 rule).
+- Removed: KRR_IDN_DEV_SCALE = True; the host-loop branches, sw_h and krr_scale_rows. Default unchanged: no bits move.
+- Files: kernel_methods/estimator.mojo.
+- Deleted by: lane/expdel2-19-kernel `25dea25b3b` (2026-11-15); code recoverable at `0765c7997d`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_KRR_DEV_SCALE_OFF.patch`, then delete the refusal in `core/experiment_guards_kernel.mojo`.
+- Records: refusal in `core/experiment_guards_kernel.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-19-kernel section).
+
+### MOJOLEARN_IDN_KRR_PTR_IN_OFF
+
+- Tried: old path: the list route (pointer bindings unregistered).
+- Evidence: no A/B recorded for the old path. Verdict: old path; default kept deleted (V2 rule).
+- Removed: KRR_IDN_PTR_IN = True stays for native_descriptor_dispatch; the bindings register unconditionally. Default unchanged: no bits move.
+- Files: bindings/_mojolearn_kernel_methods.mojo, kernel_methods/estimator.mojo.
+- Deleted by: lane/expdel2-19-kernel `1a2458c687` (2026-11-15); code recoverable at `25dea25b3b`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_KRR_PTR_IN_OFF.patch`, then delete the refusal in `core/experiment_guards_kernel.mojo`.
+- Records: refusal in `core/experiment_guards_kernel.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-19-kernel section).
+
+### MOJOLEARN_IDN_KM_BULK_DOWNLOAD_OFF
+
+- Tried: old path: n appends into a growing list.
+- Evidence: no A/B recorded for the old path. Verdict: old path; default kept deleted (V2 rule).
+- Removed: the define term; KM_IDN_BULK_DOWNLOAD = IDENTICAL. Default unchanged: no bits move.
+- Files: kernel_methods/estimator.mojo.
+- Deleted by: lane/expdel2-19-kernel `d6e7cef9f2` (2026-11-15); code recoverable at `1a2458c687`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_KM_BULK_DOWNLOAD_OFF.patch`, then delete the refusal in `core/experiment_guards_kernel.mojo`.
+- Records: refusal in `core/experiment_guards_kernel.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-19-kernel section).
+
+### MOJOLEARN_IDN_KM_PTR_IN_OFF
+
+- Tried: old path: owned host copy, host walk and staged upload.
+- Evidence: no A/B recorded for the old path. Verdict: old path; default kept deleted (V2 rule).
+- Removed: the define term; KM_IDN_PTR_IN = IDENTICAL. Default unchanged: no bits move.
+- Files: kernel_methods/estimator.mojo.
+- Deleted by: lane/expdel2-19-kernel `c8712ad631` (2026-11-15); code recoverable at `d6e7cef9f2`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_KM_PTR_IN_OFF.patch`, then delete the refusal in `core/experiment_guards_kernel.mojo`.
+- Records: refusal in `core/experiment_guards_kernel.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-19-kernel section).
+
+### MOJOLEARN_IDN_NYS_RR_DEV_STOP_B4
+
+- Tried: device-decided stop checked every 4 sweeps instead of 2.
+- Evidence: no A/B recorded. Verdict: unmeasured opt-in arm deleted (V2 rule).
+- Removed: NYS_RR_STOP_BATCH = 2 (then deleted with IDN_NYS_RR_DEV_STOP). Default unchanged: no bits move.
+- Files: kernel_methods/estimator.mojo.
+- Deleted by: lane/expdel2-19-kernel `27b1a08df9` (2026-11-15); code recoverable at `c8712ad631`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_NYS_RR_DEV_STOP_B4.patch`, then delete the refusal in `core/experiment_guards_kernel.mojo`.
+- Records: refusal in `core/experiment_guards_kernel.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-19-kernel section).
+
+### MOJOLEARN_IDN_NYS_RR_DEV_STOP
+
+- Tried: the round-robin eigh convergence decided on the device.
+- Evidence: no A/B recorded (CANDIDATE ARM, OFF by default). Verdict: unmeasured opt-in arm deleted (V2 rule).
+- Removed: nys_rr_gate_kernel, nys_rr_cs_gated_kernel, nys_rr_update_gated_kernel, _nystroem_rr_eigh_idn_devstop, the state words, NYS_RR_STOP_BATCH and the dispatch branch. Default unchanged: no bits move.
+- Files: kernel_methods/estimator.mojo.
+- Deleted by: lane/expdel2-19-kernel `a1459da190` (2026-11-15); code recoverable at `27b1a08df9`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_NYS_RR_DEV_STOP.patch`, then delete the refusal in `core/experiment_guards_kernel.mojo`.
+- Records: refusal in `core/experiment_guards_kernel.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-19-kernel section).
+
+### MOJOLEARN_IDN_NYS_DEV_ORDER_OFF
+
+- Tried: old path: the host selection-sort epilogue.
+- Evidence: no A/B recorded for the old path. Verdict: old path; default kept deleted (V2 rule).
+- Removed: the define term; NYS_IDN_DEV_ORDER = IDENTICAL. Default unchanged: no bits move.
+- Files: kernel_methods/estimator.mojo.
+- Deleted by: lane/expdel2-19-kernel `1c49bdcfcc` (2026-11-15); code recoverable at `a1459da190`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_NYS_DEV_ORDER_OFF.patch`, then delete the refusal in `core/experiment_guards_kernel.mojo`.
+- Records: refusal in `core/experiment_guards_kernel.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-19-kernel section).
+
+### MOJOLEARN_IDN_NYS_FIT_PTR_IN_OFF
+
+- Tried: old path: the list route.
+- Evidence: no A/B recorded for the old path. Verdict: old path; default kept deleted (V2 rule).
+- Removed: the define term; NYS_IDN_FIT_PTR_IN = IDENTICAL. Default unchanged: no bits move.
+- Files: kernel_methods/estimator.mojo.
+- Deleted by: lane/expdel2-19-kernel `91606051a7` (2026-11-15); code recoverable at `1c49bdcfcc`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_NYS_FIT_PTR_IN_OFF.patch`, then delete the refusal in `core/experiment_guards_kernel.mojo`.
+- Records: refusal in `core/experiment_guards_kernel.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-19-kernel section).
+
+### MOJOLEARN_IDN_NYS_DEV_BASIS_OFF
+
+- Tried: old path: host draw and radix sort.
+- Evidence: no A/B recorded for the old path. Verdict: old path; default kept deleted (V2 rule).
+- Removed: the define term; NYS_IDN_DEV_BASIS = IDENTICAL. Default unchanged: no bits move.
+- Files: kernel_methods/estimator.mojo.
+- Deleted by: lane/expdel2-19-kernel `05a538b409` (2026-11-15); code recoverable at `91606051a7`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_NYS_DEV_BASIS_OFF.patch`, then delete the refusal in `core/experiment_guards_kernel.mojo`.
+- Records: refusal in `core/experiment_guards_kernel.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-19-kernel section).
+
+### Non-owner sites of lane expdel2-19-kernel
+
+Inline TOMBSTONE markers only; the owner lane of each define writes its section, refusal and records.
+
+- `MOJOLEARN_IDN_ALL_OFF` (owner expdel2-37-series): the umbrella term removed from GP_IDN_BULK_DOWNLOAD, GP_IDN_PREDICT_LAZY_L (gaussian_process/estimator.mojo), GP_IDN_GRAD_ROWFOLD (gp_grad_items.mojo), GP_IDN_VAR_SEG (gp_var_seg.mojo), KDE_IDN_CHUNK_LSE (kde/impl/neighbors/kernel_density.mojo), KM_IDN_RBF_CELL, KM_IDN_DOT_CELL, KM_IDN_LAP_CELL (kernel_methods/checks/kernel_matrix.mojo), KMH_RBF_CELL, KMH_DOT_CELL, KMH_NYS_RR, KMH_RBF_FUSED (km_host_oracle.mojo), RBF_IDN_FUSED, KM_IDN_PTR_IN, KM_IDN_BULK_DOWNLOAD, KRR_IDN_DEV_SCALE, KRR_IDN_PTR_IN, NYS_IDN_RR_EIGH, NYS_IDN_DEV_ORDER, NYS_IDN_FIT_PTR_IN, NYS_IDN_DEV_BASIS (kernel_methods/estimator.mojo); `26b4b3147a`, recoverable at `d55d80a7d4`; `experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-19-kernel.patch`.
+- `MOJOLEARN_C52_PAIR_ROWS` (owner expdel2-07-base): the six C52_PAIR branches and the C52_ROWS chunk choice in kde/impl/neighbors/kernel_density.mojo and kde/host/kde_oracle.mojo; kde/pair_lse.mojo, read only by them, deleted; `8ea09dd4a4`, recoverable at `c48de5dbfd`; `experiments/removed/MOJOLEARN_C52_PAIR_ROWS.expdel2-19-kernel.patch`.
+- `MOJOLEARN_KDE_DIRECT_DISTANCE` (owner expdel2-05-base): kde_direct_distance_kernel and the direct-distance branches in kde/impl/distance/distance.mojo, kde/impl/neighbors/kernel_density.mojo and kde/host/kde_oracle.mojo; the tile kernel takes [False]; `0e42489093`, recoverable at `8ea09dd4a4`; `experiments/removed/MOJOLEARN_KDE_DIRECT_DISTANCE.expdel2-19-kernel.patch`.
+
+Not deleted, contrary to the plan: `MOJOLEARN_COLUMN_CPU` (the CPU-column build switch, KEEP; coordinator correction 2026-11-15); `MOJOLEARN_KDE_FAST_IMMUTABLE_FIT` (kde/resident_fit.mojo: its source comment records the opt-in arm measured faster on M3, cold 0.7578/0.9473/0.6224, repeated 0.4999/0.9233/0.7824, kept off for an ownership-semantics change; a measured winner is never deleted on reasoning, so it stays for the orchestrator to decide). `MOJOLEARN_CLASSICAL_C25_PROJECTION_REUSE_OFF`: nothing to fold here (expdel2-06-base folded C25_PROJECTION_REUSE in linear_controls.mojo); two comments in kernel_methods/estimator.mojo no longer name the _OFF.

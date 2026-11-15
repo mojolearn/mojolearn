@@ -1,0 +1,51 @@
+diff --git a/kernel_methods/estimator.mojo b/kernel_methods/estimator.mojo
+index 23c257e94f..d730e04863 100644
+--- a/kernel_methods/estimator.mojo
++++ b/kernel_methods/estimator.mojo
+@@ -166,9 +166,10 @@ from x_decomp.jacobi_par import (
+ # Restore: git apply experiments/removed/MOJOLEARN_RBF_FUSED.patch; record in docs/TOMBSTONES.md.
+ 
+ 
+-#: fam-kernel-gp (2026-10-04), IDENTICAL, ON by default (FAST keeps the GEMM;
+-#: the host column, `km_host_oracle.mojo::KMH_RBF_FUSED`, follows the same
+-#: gate): RBFSampler.transform at n_features <= RBF_FUSED_MAX_D computes
++#: fam-kernel-gp (2026-10-04), IDENTICAL, ON by default
++#: (`-D MOJOLEARN_IDN_RBF_FUSED_OFF` restores the GEMM on the device AND in
++#: the host column, `km_host_oracle.mojo::KMH_RBF_FUSED` reads the same
++#: define): RBFSampler.transform at n_features <= RBF_FUSED_MAX_D computes
+ #: the projection as ONE chain per cell over the features ascending
+ #: (`identical_mul_add`, rounded each step) and, when no trace and no
+ #: sabotage arm needs the projection as its own stage, the offset, cosine
+@@ -181,9 +182,9 @@ from x_decomp.jacobi_par import (
+ #: as accurate as the GEMM's fold at that length.
+ # TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch, no A/B recorded beside the defaults) deleted 2026-11-15 by lane/expdel2-19-kernel (non-owner; owner expdel2-37-series) in this file; code recoverable at d55d80a7d4.
+ # Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-19-kernel.patch; record in docs/TOMBSTONES.md.
+-# TOMBSTONE: MOJOLEARN_IDN_RBF_FUSED_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-19-kernel; code recoverable at f2f200fc1b.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_RBF_FUSED_OFF.patch; record in docs/TOMBSTONES.md.
+-comptime RBF_IDN_FUSED = _CTX_MODE == _CTX_IDENTICAL
++comptime RBF_IDN_FUSED = _CTX_MODE == _CTX_IDENTICAL and not (
++    is_defined["MOJOLEARN_IDN_RBF_FUSED_OFF"]()
++)
+ 
+ 
+ def _rbf_idn_fused_launch(
+diff --git a/kernel_methods/host/km_host_oracle.mojo b/kernel_methods/host/km_host_oracle.mojo
+index cae18d1bcd..dc90c52493 100644
+--- a/kernel_methods/host/km_host_oracle.mojo
++++ b/kernel_methods/host/km_host_oracle.mojo
+@@ -544,11 +544,11 @@ comptime KMH_NYS_RR = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
+ )
+ 
+ #: fam-kernel-gp (2026-10-04): the host column of
+-#: `kernel_methods/estimator.mojo::RBF_IDN_FUSED`, the same gate and
++#: `kernel_methods/estimator.mojo::RBF_IDN_FUSED`, the same two defines and
+ #: the same feature bound (`kernel_methods/rbf_fused.mojo::RBF_FUSED_MAX_D`).
+-# TOMBSTONE: MOJOLEARN_IDN_RBF_FUSED_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-19-kernel; code recoverable at f2f200fc1b.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_RBF_FUSED_OFF.patch; record in docs/TOMBSTONES.md.
+-comptime KMH_RBF_FUSED = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
++comptime KMH_RBF_FUSED = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
++    is_defined["MOJOLEARN_IDN_RBF_FUSED_OFF"]()
++)
+ comptime KMH_RBF_FUSED_MAX_D = 64
+ 
+ 

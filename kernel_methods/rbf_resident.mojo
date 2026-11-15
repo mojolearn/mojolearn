@@ -28,7 +28,6 @@ the same order on the same words: every output bit is main's. A NaN or
 infinity in X raises main's transform message after that wait (the outputs
 are then never handed out).
 """
-from std.sys.compile import is_defined
 from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
@@ -66,11 +65,9 @@ from core.shared_slot import SharedSlot
 # path of every other build.
 # TOMBSTONE: MOJOLEARN_KM_FAST_RBF_RESIDENT_OFF (old path, superseded by the FAST+Apple default) deleted 2026-11-15 by lane/expdel-06-base-cluster-kernel; code recoverable at fd51cb8d40.
 # Restore: git apply experiments/removed/MOJOLEARN_KM_FAST_RBF_RESIDENT_OFF.patch; record in docs/TOMBSTONES.md.
-comptime KM_FAST_RBF_RESIDENT = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and TARGET_HAS_APPLE_GPU
-    and not is_defined["MOJOLEARN_FAMILY_CTX_PER_CALL"]()  # the pools belong to the one context
-)
+# TOMBSTONE: MOJOLEARN_FAMILY_CTX_PER_CALL (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-19-kernel; code recoverable at 26b4b3147a.
+# Restore: git apply experiments/removed/MOJOLEARN_FAMILY_CTX_PER_CALL.patch; record in docs/TOMBSTONES.md.
+comptime KM_FAST_RBF_RESIDENT = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
 
 
 # KM_FAST_RBF_STAGED, FAST+Apple DEFAULT (wherever KM_FAST_RBF_RESIDENT is).
