@@ -3,37 +3,12 @@
  "lane": "classical-cv-folds",
  "branch": "lane/classical-cv-folds",
  "head": "f010fea8907e",
- "controls": {
-  "ridgecv_ff_blocked": {
-   "define": "MOJOLEARN_CLASSICAL_RIDGECV_FF_BLOCKED",
-   "kind": "switch",
-   "arms": {
-    "off": [],
-    "on": [
-     "MOJOLEARN_CLASSICAL_RIDGECV_FF_BLOCKED"
-    ]
-   },
-   "default": "off",
-   "source": [
-    "experiments/classical_identical_ideas/linear_controls.mojo:61",
-    "x_linear/ridge_ff_blocks.mojo",
-    "x_linear/device.mojo:3715",
-    "x_linear/device.mojo:3887",
-    "x_linear/ridgecv.mojo:275",
-    "x_linear/ridge.mojo:349"
-   ],
-   "binding": "_mojolearn_x_linear (device grid) + _mojolearn_x_linear_host (host column)",
-   "bits_change": true,
-   "status": "new",
-   "note": "RidgeCV's float-float fallback (the only route when the float32 Gram cannot be factored): every float-float statistic becomes FOLD_BLOCK-row block partials (one thread per (statistic, block), the rw_gram_parts_kernel shape) folded blocks ascending, and the float-float Cholesky of each untrusted alpha runs on one block team (t_cholesky split, every entry its own chain) in one launch per fold instead of grid 1 / block 1 per alpha. The Ridge refit (_ridge_ff_grid) takes the same blocked statistics and team solve. Host column (ridgecv.mojo _kf_ff_stats_host, ridge.mojo _ridge_ff_host) folds the same blocks. Bits change (block fold order); NV and AMD must match per arm. Cost reasoning: same work, n/FOLD_BLOCK times the threads in flight; no shape rule. NOT COMPILED (lanes never compile), NOT MEASURED."
-  }
- },
+ "controls": {},
  "algorithms": {
   "expanded:ridge-cv": {
    "binding": "_mojolearn_x_linear",
    "route": "fit: _expansion_linear.py RidgeCV -> x_linear_fit ALGO_RIDGE_KFOLD -> device.mojo _ridge_kfold_grid: unit A (C13 fold cache or kf_means/kf_cells, kf_solve_kernel with trust flags), unit B (float-float stats + solve for untrusted alphas [ridgecv_ff_blocked], kf_pred, kf_ysum/kf_sq/kf_score); then Ridge refit ALGO_RIDGE -> ridge_fit_grid, _ridge_ff_grid when untrusted [ridgecv_ff_blocked; c14_group_rhs in t_ridge_solve_best]",
    "controls": [
-    "ridgecv_ff_blocked",
     "c14_group_rhs"
    ],
    "interaction_groups": [
@@ -90,6 +65,11 @@
    "define": "MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS_OFF",
    "control": "enetcv_score_blocks",
    "reason": "DELETED 2026-11-15 (lane/expdel2-06-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md; recoverable at 6ac3a7434d; patch experiments/removed/MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS_OFF.patch): old path, superseded by the measured IDENTICAL default. EXP:2068 KEEP (promoted IDENTICAL default 1024): average B/A 0.935, quality identical, NV digest == AMD digest; the default is the recorded winner. Refused in core/experiment_guards_linear.mojo; docs/TOMBSTONES.md."
+  },
+  {
+   "define": "MOJOLEARN_CLASSICAL_RIDGECV_FF_BLOCKED",
+   "control": "ridgecv_ff_blocked",
+   "reason": "DELETED 2026-11-15 (lane/expdel2-06-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md; recoverable at 49c61a4093; patch experiments/removed/MOJOLEARN_CLASSICAL_RIDGECV_FF_BLOCKED.patch): unmeasured opt-in arm. no record: no A/B was recorded for the opt-in arm (plan rule a; AGENTS.md \"An unmeasured arm is deleted\", Andrew 2026-11-15). Refused in core/experiment_guards_linear.mojo; docs/TOMBSTONES.md."
   }
  ]
 }
