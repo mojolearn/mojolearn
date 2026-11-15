@@ -40,7 +40,6 @@ from max.gpu import block_dim, block_idx, grid_dim, thread_idx
 from std.memory import bitcast, stack_allocation
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
-from gbdt.gpu_data.apple_fast_trees_experiments import AFT_G06
 
 
 #: `binarize.cu:26`.
@@ -205,8 +204,10 @@ def binarize_float_feature_kernel(
 # G06: retain 2048 rows per block but halve threads and double independent
 # rows per worker, amortizing the shared word/border table over more work
 # per lane. This deliberately trades registers for occupancy; no evidence.
-comptime PACK_BLOCK = 128 if AFT_G06 else 256
-comptime PACK_DOCS = 16 if AFT_G06 else 8
+# TOMBSTONE: MOJOLEARN_AFT_G06 (DELETE-EXPERIMENT, never-run Apple FAST programme card, rule g) deleted 2026-11-15 by lane/expdel2-42-trees; code recoverable at eedd37dfb4.
+# Restore: git apply experiments/removed/MOJOLEARN_AFT_G06.patch; record in docs/TOMBSTONES.md.
+comptime PACK_BLOCK = 256
+comptime PACK_DOCS = 8
 #: the most features one compressed-index word holds (the binary policy's
 #: `features_per_int`), and the shared slab for the word's border values:
 #: 32 x 1 (binary), 8 x 15 (half-byte) or 4 x 255 (one-byte) at most, so
