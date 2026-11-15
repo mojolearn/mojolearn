@@ -16,6 +16,14 @@ from sequence.exec import HostExec
 from sequence.exec_device import DeviceExec
 from sequence.fit_team_impl import prophet_fit_team_impl
 from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require
+from checks.numerics import GLOBAL_NUMERIC_MODE
+from core.entry_table import EntryRef, entry_ref_word
+from core.xseq_entry_table import XS_OP_COUNT
+from sequence.xseq_glue_host import x_sequence_glue_host_v1
+from sequence.xseq_prophet_run import (
+    PROPHET_AUTO_AUTO, ProphetAuto, ProphetFitInput, ProphetSeason, ProphetTimes, prophet_run_fit_plan,
+    prophet_run_prepare_fit,
+)
 
 
 comptime PROPHET_STATE_FIXTURES = 6
@@ -317,14 +325,79 @@ def fixture(fixture_id: Int) raises:
     _ = state
 
 
+def same_prefix(actual: List[Float32], expected: ProphetWords, label: String) raises:
+    """The first `expected.count` words of a plan buffer, raw, against a guarded buffer."""
+    expected.guards()
+    require(len(actual) >= expected.count, label + ": extent differs")
+    var failures = List[Int](length=expected.count, fill=0)
+    var fp = failures.unsafe_ptr()
+    var ap = Pointer[Float32, ImmUntrackedOrigin](unsafe_from_address=Int(actual.unsafe_ptr()))
+    var ep = Pointer[Float32, ImmUntrackedOrigin](unsafe_from_address=expected.address())
+    def cell(index: Int) {imm fp, imm ap, imm ep}:
+        if bitcast[DType.uint32](ap[index]) != bitcast[DType.uint32](ep[index]):
+            fp.unsafe_store(index, 1)
+    host_parallelize(cell, expected.count)
+    var failed = 0
+    for value in failures:
+        failed += value
+    require(failed == 0, label + ": " + String(failed) + " raw words differ")
+    _ = actual
+    _ = expected
+
+
+def typed_entry_fit() raises:
+    """The door's typed fit entry (sequence/xseq_prophet_run.mojo `prophet_run_prepare_fit` then
+    `prophet_run_fit_plan`) through the host image's glue entry, word for word against fixture 0's
+    direct feature, changepoint and fit calls on the same inputs and host executor: weekly order 3 is
+    the automatic seasonality of 120 daily points, 25 changepoints over floor(120 * 0.8) = 96 points,
+    prior scale 10 for its 6 Fourier parameters, no holidays."""
+    var ex = HostExec()
+    var state = ProphetState(0)
+    var inputs = ProphetFitInputs()
+    prepare_fit(ex, inputs, state)
+    var addresses = inputs.addresses(state)
+    var ip = state.ints(120)
+    ip.append(2000)
+    var fp: List[Float64] = [0.05]
+    require(prophet_fit_impl(ex, addresses, ip, fp) == 1, "Prophet full default fit count")
+    var entry = EntryRef(x_sequence_glue_host_v1, entry_ref_word(Int(GLOBAL_NUMERIC_MODE), 0, XS_OP_COUNT))
+    var fit_input = ProphetFitInput(ProphetTimes(inputs.days.address(), 120, False), False, 1, 120, True,
+        List[ProphetSeason](), ProphetAuto(PROPHET_AUTO_AUTO, 0), ProphetAuto(PROPHET_AUTO_AUTO, 0),
+        ProphetAuto(PROPHET_AUTO_AUTO, 0), 10.0, False, ProphetTimes(0, 0, False), 0.8, 25)
+    var plan = prophet_run_prepare_fit(entry, fit_input)
+    require(len(plan.seasons) == 1 and plan.n_added == 1 and plan.seasons[0].name == "weekly"
+            and plan.seasons[0].fourier_order == 3, "Prophet typed entry: automatic seasonalities")
+    require(plan.s == 25 and plan.start == 0 and plan.t_scale == 119, "Prophet typed entry: plan words")
+    same_prefix(plan.t_scaled, inputs.scaled, "Prophet typed entry scaled times")
+    same_prefix(plan.phases, inputs.phases, "Prophet typed entry phases")
+    same_prefix(plan.changepoints, state.changepoints, "Prophet typed entry changepoints")
+    var params = ProphetWords(state.params.count)
+    var info = ProphetWords(state.info.count)
+    prophet_run_fit_plan(entry, plan, inputs.y.address(), 1, inputs.holidays.address(), 0, 10.0, params.address(),
+                         info.address(), False, 2000, 0.05)
+    same_words(params, state.params.words, "Prophet typed entry fitted parameters")
+    same_words(info, state.info.words, "Prophet typed entry fitted statistics")
+    inputs.guards()
+    state.guards()
+    _ = inputs
+    _ = state
+    _ = plan
+    _ = params
+    _ = info
+
+
 def _run_cpu(mut report: Report) raises:
-    var cases = report.cases(PROPHET_STATE_FIXTURES)
+    # The fixtures, then one case for the typed fit entry (index PROPHET_STATE_FIXTURES).
+    var cases = report.cases(PROPHET_STATE_FIXTURES + 1)
     def task(fixture_id: Int) {imm cases}:
         try:
-            fixture(fixture_id)
+            if fixture_id == PROPHET_STATE_FIXTURES:
+                typed_entry_fit()
+            else:
+                fixture(fixture_id)
         except error:
             cases.fail(fixture_id, error)
-    report.parallel(task, PROPHET_STATE_FIXTURES)
+    report.parallel(task, PROPHET_STATE_FIXTURES + 1)
 
 
 # ---- The device column (was prophet_state_gpu_suite.mojo) ----
