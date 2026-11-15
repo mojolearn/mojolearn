@@ -80,7 +80,8 @@ comptime _OPT_IDN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 # Restore: git apply experiments/removed/MOJOLEARN_OPT_ZERO_OPEN_OFF.patch
 # TOMBSTONE: MOJOLEARN_IDN_OPT_ZERO_OPEN_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-30-neural; code recoverable at e39daf79ad.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_OPT_ZERO_OPEN_OFF.patch
-# IDN_ALL_OFF reads folded here as well (non-owner; its records are its owner lane's).
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch, EXP:2438) read folded here (non-owner) 2026-11-15 by lane/expdel2-30-neural; code recoverable at e39daf79ad.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-30-neural.patch
 comptime OPT_PIPE_DOWN = _OPT_APPLE_FAST or _OPT_IDN
 comptime OPT_ZERO_OPEN = _OPT_APPLE_FAST or _OPT_IDN
 #: the pipelined download's chunk, floats (8 MB), a transfer granularity.

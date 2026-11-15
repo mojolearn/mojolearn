@@ -62,7 +62,8 @@ comptime THETA_REG_FAST = (
 # theta 0.62x, dynamic-optimized-theta 0.71x-0.78x, digests NV == AMD) deleted 2026-11-15 by lane/expdel-04-neural;
 # code recoverable at 38664dbf45.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_SEQ_REG_OFF.patch
-# IDN_ALL_OFF read folded here as well (non-owner; its records are its owner lane's).
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch, EXP:2438) read folded here (non-owner) 2026-11-15 by lane/expdel2-30-neural; code recoverable at e39daf79ad.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-30-neural.patch
 comptime THETA_REG = THETA_REG_FAST or GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 
 #: lane apple-fast-regress (2026-10-03; docs/apple-fast/notes/regress-oct3.md).

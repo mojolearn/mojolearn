@@ -125,7 +125,8 @@ comptime SCAN_MAX_GATES = 1
 # Restore: git apply experiments/removed/MOJOLEARN_SEQ_RNN_SCAN.patch
 # TOMBSTONE: MOJOLEARN_SEQ_RNN_SCAN_OFF (force-chain A/B arm; EXP:2166, the gate-count rule stays) deleted 2026-11-15 by lane/expdel2-30-neural; code recoverable at e39daf79ad.
 # Restore: git apply experiments/removed/MOJOLEARN_SEQ_RNN_SCAN_OFF.patch
-# IDN_ALL_OFF read folded here as well (non-owner; its records are its owner lane's).
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch, EXP:2438) read folded here (non-owner) 2026-11-15 by lane/expdel2-30-neural; code recoverable at e39daf79ad.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-30-neural.patch
 comptime SEQ_RNN_SCAN_IDN = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     and SEQ_RNN_SCAN_ON_THIS_TARGET

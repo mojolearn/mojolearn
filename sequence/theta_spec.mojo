@@ -65,7 +65,8 @@ comptime THETA_SPEC_FAST = THETA_REG_FAST
 #: ~1.5-2 evaluations per iteration to 1, shrinks from 2 + k to 1).
 # TOMBSTONE: MOJOLEARN_IDN_NM_SPEC_OFF (old path; EXP:2086 KEEP, the IDENTICAL default) deleted 2026-11-15 by lane/expdel2-30-neural; code recoverable at e39daf79ad.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_NM_SPEC_OFF.expdel2-30-neural.patch
-# IDN_ALL_OFF read folded here as well (non-owner; its records are its owner lane's).
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch, EXP:2438) read folded here (non-owner) 2026-11-15 by lane/expdel2-30-neural; code recoverable at e39daf79ad.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-30-neural.patch
 comptime THETA_SPEC_IDN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 comptime THETA_SPEC = THETA_SPEC_FAST or THETA_SPEC_IDN
 

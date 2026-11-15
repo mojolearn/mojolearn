@@ -80,7 +80,8 @@ from autograd.loss_ops import LS_MSE, LS_CROSS_ENTROPY
 #: the same blocks. One block (K <= WGRAD_MIN_BLOCK) is the old chain.
 # TOMBSTONE: MOJOLEARN_IDN_SEQ_WGRAD_BLOCKED_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-30-neural; code recoverable at e39daf79ad.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_SEQ_WGRAD_BLOCKED_OFF.expdel2-30-neural.patch
-# IDN_ALL_OFF reads folded here as well (non-owner; its records are its owner lane's).
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch, EXP:2438) read folded here (non-owner) 2026-11-15 by lane/expdel2-30-neural; code recoverable at e39daf79ad.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-30-neural.patch
 comptime SEQ_WGRAD_BLOCKED = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 # NN43 fp32 fixed-leaf-v2: K is partitioned at absolute multiples of 128;
 # each leaf starts at +0, uses the incumbent pinned ascending FMA chain,

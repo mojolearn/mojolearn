@@ -42,7 +42,8 @@ comptime MEM = 5
 #: deleted 2026-11-15).
 # TOMBSTONE: MOJOLEARN_IDN_PROPHET_COOP_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-30-neural; code recoverable at e39daf79ad.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_PROPHET_COOP_OFF.patch
-# IDN_ALL_OFF read folded here as well (non-owner; its records are its owner lane's).
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch, EXP:2438) read folded here (non-owner) 2026-11-15 by lane/expdel2-30-neural; code recoverable at e39daf79ad.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-30-neural.patch
 comptime PROPHET_COOP_IDN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 #: the cooperative block's threads and simdgroup width, restated for the
 #: host replay; prophet_coop.mojo's PROPHET_COOP_TPB and PW are these
