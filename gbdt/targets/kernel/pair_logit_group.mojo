@@ -56,7 +56,6 @@ list is not a function of the grades.
 """
 
 from max.gpu import block_dim, block_idx, grid_dim, thread_idx
-from gbdt.apple_fast_tree_experiments import AFT_N07, AFT_N08
 from std.math import isfinite
 from std.memory import stack_allocation
 from std.sys import is_defined
@@ -161,11 +160,9 @@ def pl_group_narrow_for[column: Int]() -> Bool:
 comptime PL_GROUP_NARROW = pl_group_narrow_for[TARGET_COLUMN]()
 #: the group kernel's block: 128 under `PL_GROUP_NARROW`, else `PLG_THREADS`
 #: (`MSE_BLOCK_SIZE`, 256)
-# N07: two simdgroups per query block trade more serial query tiles for
-# smaller register/shared reservations. Every document and unlike-grade pair
-# remains present; queries wider than the block keep the complete tile loop.
-# New64-lane arm, not the historical256-vs128 experiment. No evidence.
-comptime PLG_LAUNCH_THREADS = 64 if AFT_N07 else (128 if PL_GROUP_NARROW else MSE_BLOCK_SIZE)
+# TOMBSTONE: MOJOLEARN_AFT_N07 (DELETE-EXPERIMENT, never-run Apple FAST programme card, rule g; non-owner fold) deleted 2026-11-15 by lane/expdel2-44-trees; code recoverable at 373b9aa16d.
+# Restore: git apply experiments/removed/MOJOLEARN_AFT_N07.expdel2-44-trees.patch; record in docs/TOMBSTONES.md.
+comptime PLG_LAUNCH_THREADS = 128 if PL_GROUP_NARROW else MSE_BLOCK_SIZE
 
 #: threads per group block, one document per thread per chunk; the value
 #: and magnitude partials use `pinned_block_sum` at this width
