@@ -775,6 +775,7 @@ Deletions reversed by new evidence. The code is back on main; the section and th
 | [`MOJOLEARN_DT_BINS_QOLD`](#mojolearn_dt_bins_qold-old-path-deleted-2026-11-15) | Trees (DecisionTreeRegressor default n_bins, FAST) | removed (old path; FAST default 256 bins QUALITY-FIX KEPT, rab5-dtbins) | 2026-11-15 | [MOJOLEARN_DT_BINS_QOLD.patch](../experiments/removed/MOJOLEARN_DT_BINS_QOLD.patch) |
 | [`MOJOLEARN_IDN_IF_RESIDENT_OFF`](#mojolearn_idn_if_resident_off-old-path-deleted-2026-11-15) | Trees (IsolationForest resident forest between binding calls) | removed (old path, no A/B recorded; resident default kept) | 2026-11-15 | [MOJOLEARN_IDN_IF_RESIDENT_OFF.patch](../experiments/removed/MOJOLEARN_IDN_IF_RESIDENT_OFF.patch) |
 | [`MOJOLEARN_MAMBA3_LEGACY_FRESH_PREFILL`](#mojolearn_mamba3_legacy_fresh_prefill-old-path-deleted-2026-11-15) | Neural (Mamba-3 fresh prefill entries, GPU binding) | removed (old path, no A/B recorded; fresh prefill default kept) | 2026-11-15 | [MOJOLEARN_MAMBA3_LEGACY_FRESH_PREFILL.patch](../experiments/removed/MOJOLEARN_MAMBA3_LEGACY_FRESH_PREFILL.patch) |
+| [`MOJOLEARN_TRANSFORMER_FRESH_PREFILL`](#mojolearn_transformer_fresh_prefill-unmeasured-arm-deleted-2026-11-15) | Neural (TransformerBlock per-call fresh prefill export, off NVIDIA) | removed (unmeasured opt-in arm; EXP:2376 PENDING) | 2026-11-15 | [MOJOLEARN_TRANSFORMER_FRESH_PREFILL.expdel2-01-base.patch](../experiments/removed/MOJOLEARN_TRANSFORMER_FRESH_PREFILL.expdel2-01-base.patch) |
 
 ## Trees
 
@@ -6789,4 +6790,12 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md (section expdel-02-
 - **Verdict**: no A/B recorded for the old path (plan rule b); deleted under AGENTS.md "An unmeasured arm is deleted" (Andrew, 2026-11-15). The default registration is untouched. No bit change on any column.
 - **Deleted by**: lane/expdel2-01-base (expdel2-01-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `7d80876e08`.
 - **Restore**: `git apply experiments/removed/MOJOLEARN_MAMBA3_LEGACY_FRESH_PREFILL.patch`, then delete the `MOJOLEARN_MAMBA3_LEGACY_FRESH_PREFILL` refusal in `core/experiment_guards_neural.mojo`.
+- **Records**: refusal in `core/experiment_guards_neural.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-01-base section).
+
+## MOJOLEARN_TRANSFORMER_FRESH_PREFILL: unmeasured arm deleted (2026-11-15)
+
+- **What it was**: the opt-in that registered `transformer_forward_fresh` (the per-call fresh prefill restored 2026-11-09 by lane r1-restore-measured-winners) on Apple and AMD IDENTICAL builds, where the block session prefill is the default. The NVIDIA IDENTICAL export, admitted by NVIDIA's full public A/B gate, is untouched. The 2026-11-09 tombstone of this define (`experiments/removed/MOJOLEARN_TRANSFORMER_FRESH_PREFILL.patch`, section "transformer on the attention step op") is a different, earlier deletion that was reversed; it is not touched.
+- **Verdict**: no A/B recorded for the opt-in arm (plan rule a; EXPERIMENTS.md 2376 PENDING); deleted under AGENTS.md "An unmeasured arm is deleted" (Andrew, 2026-11-15). The default export rule is untouched. No bit change on any column.
+- **Deleted by**: lane/expdel2-01-base (expdel2-01-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `191ceb5942`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_TRANSFORMER_FRESH_PREFILL.expdel2-01-base.patch`, then delete the `MOJOLEARN_TRANSFORMER_FRESH_PREFILL` refusal in `core/experiment_guards_neural.mojo`.
 - **Records**: refusal in `core/experiment_guards_neural.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-01-base section).
