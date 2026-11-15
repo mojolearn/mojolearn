@@ -2333,11 +2333,12 @@ comptime SVGP_FAST_BLKCHOL = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_
 #: panel factor. Its chains are `_chol_col`'s through the shared ff helpers
 #: (x_linear/ff.mojo: two_prod and ff_mul on the pinned `fmad`), k ascending,
 #: so no contraction choice can move a word: the factor of the one-column
-#: launches bit for bit. `-D MOJOLEARN_IDN_SVGP_BLKCHOL_OFF` restores one
-#: column per launch.
+#: launches bit for bit.
+# TOMBSTONE: MOJOLEARN_IDN_SVGP_BLKCHOL_OFF (old path: the IDENTICAL one-column-per-launch SVGP Cholesky; no A/B row) deleted 2026-11-15 by lane/expdel2-15-cluster; code recoverable at e68da202a3.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_SVGP_BLKCHOL_OFF.patch; record in docs/TOMBSTONES.md.
 # TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch, EXP:2438 DELETED; non-owner sites) deleted 2026-11-15 by lane/expdel2-15-cluster; code recoverable at 6837570bd9.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-15-cluster.patch; record in docs/TOMBSTONES.md.
-comptime IDN_SVGP_BLKCHOL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_IDN_SVGP_BLKCHOL_OFF"]()
+comptime IDN_SVGP_BLKCHOL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 comptime SVGP_BLKCHOL = SVGP_FAST_BLKCHOL or IDN_SVGP_BLKCHOL
 #: panel width (columns per launch)
 comptime SVGP_CHOL_PB = 16
