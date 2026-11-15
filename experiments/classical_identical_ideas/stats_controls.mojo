@@ -35,7 +35,7 @@ comptime C53_BGMM_STATS = CLASSICAL_IDENTICAL and is_defined["MOJOLEARN_C53_BGMM
 # keeps ascending c and the norm keeps ascending r: same words as off.
 # TOMBSTONE: MOJOLEARN_CLASSICAL_C56_QDA_PROJECT (no A/B recorded for the opt-in arm) deleted 2026-11-15 by lane/expdel2-07-base; code recoverable at fe708dfe4a.
 # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C56_QDA_PROJECT.patch
-comptime C56_QDA_PROJECT = 0
+# (Sweep 2026-11-15: comptime C56_QDA_PROJECT removed; nothing read it.)
 # C57: retain each robust candidate's mean for its covariance computation.
 # TOMBSTONE: MOJOLEARN_C57_CANDIDATE_STATE (no A/B recorded for the opt-in arm) deleted 2026-11-15 by lane/expdel2-07-base; code recoverable at 5bb9e1659f.
 # Restore: git apply experiments/removed/MOJOLEARN_C57_CANDIDATE_STATE.patch
