@@ -5,10 +5,9 @@
 The existing device state machine is unchanged. Launching and polling are
 separate methods so a group can evaluate multiple orders together before
 ONE synchronization. The single-order entrypoint shares the validated refactor. Apple FAST
-defaults to it; MOJOLEARN_ARIMA_ORDER_BATCH_OFF restores the original path.
+defaults to it.
 """
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
-from std.sys.compile import is_defined
 from arima.impl.batched_kalman import KALMAN_FAST_EVAL_WS, KALMAN_LL_ONLY
 from arima.impl.fast_eval_ws import FastEvalWS
 from arima.impl.fast_lbfgs_async import (
@@ -28,8 +27,7 @@ from glm.impl.qn.qn_util import LBFGSParam
 # Digests/RMSE unchanged; FULL_PASS 44 paired 512/2048-observation fitted,
 # order, likelihood and forecast arrays exact. Accepted fused tail in both.
 # Taxi's existing opponent-quality hold remains (RMSE74.659 vs68.21).
-# Default only within existing FAST+Apple guards; named OFF restores the
-# pre-batching GPU optimizer/search while leaving fused eval tail enabled.
+# Default only within existing FAST+Apple guards.
 # See docs/apple-fast/ab/arima-orders-default.md and EXPERIMENTS.md.
 # IDENTICAL ON EVERY VENDOR since lane/fam-timeseries (2026-10-04), with
 # IDN_ARIMA_EVAL_WS and IDN_ARIMA_LLONLY (`batched_kalman.mojo`): AutoARIMA's
@@ -39,16 +37,9 @@ from glm.impl.qn.qn_util import LBFGSParam
 # Every order keeps its own parameters, Jones transform and L-BFGS state and
 # every member is its own filter thread, so each order's fitted point and
 # re-evaluated log-likelihood are the single-order fit's.
-# -D MOJOLEARN_IDN_ARIMA_ORDER_BATCH_OFF=1 restores the per-order fits under
-# IDENTICAL; MOJOLEARN_IDN_ALL_OFF turns the workspace, and so this, off.
-comptime ARIMA_ORDER_BATCH = (
-    KALMAN_FAST_EVAL_WS and KALMAN_LL_ONLY
-    and not is_defined["MOJOLEARN_ARIMA_ORDER_BATCH_OFF"]()
-    and not (
-        GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-        and is_defined["MOJOLEARN_IDN_ARIMA_ORDER_BATCH_OFF"]()
-    )
-)
+# TOMBSTONE: MOJOLEARN_ARIMA_ORDER_BATCH_OFF (old path; promoted on Apple only, NVIDIA/AMD A/B owed) and MOJOLEARN_IDN_ARIMA_ORDER_BATCH_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-37-series; code recoverable at e4949779dc.
+# Restore: git apply experiments/removed/MOJOLEARN_ARIMA_ORDER_BATCH_OFF.patch and experiments/removed/MOJOLEARN_IDN_ARIMA_ORDER_BATCH_OFF.patch; record in docs/TOMBSTONES.md.
+comptime ARIMA_ORDER_BATCH = KALMAN_FAST_EVAL_WS and KALMAN_LL_ONLY
 
 
 struct OrderOptimizer(Movable):

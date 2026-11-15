@@ -1031,6 +1031,43 @@ in the tables after the sections.
 | [`MOJOLEARN_XCNN_RES_FREE_ASYNC_OFF`](#mojolearn_xcnn_res_free_async_off) | Neural (x_cnn res_free queue wait) | removed (old path, no A/B recorded) | 2026-11-15 | [MOJOLEARN_XCNN_RES_FREE_ASYNC_OFF.patch](../experiments/removed/MOJOLEARN_XCNN_RES_FREE_ASYNC_OFF.patch) |
 | [`MOJOLEARN_XCNN_RES_NEW_NOZERO_OFF`](#mojolearn_xcnn_res_new_nozero_off) | Neural (x_cnn unfilled resident outputs) | removed (old path, no A/B recorded) | 2026-11-15 | [MOJOLEARN_XCNN_RES_NEW_NOZERO_OFF.patch](../experiments/removed/MOJOLEARN_XCNN_RES_NEW_NOZERO_OFF.patch) |
 | [`MOJOLEARN_XCNN_TILED_ROWS`](#mojolearn_xcnn_tiled_rows) | Neural (x_cnn pooled backward rows tiled) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_XCNN_TILED_ROWS.patch](../experiments/removed/MOJOLEARN_XCNN_TILED_ROWS.patch) |
+| [`MOJOLEARN_AFCL_P10`](#mojolearn_afcl_p10-expdel2-37-series) | Time series (resample tiled gather width) | removed (never-run Apple FAST card) | 2026-11-15 | [MOJOLEARN_AFCL_P10.patch](../experiments/removed/MOJOLEARN_AFCL_P10.patch) |
+| [`MOJOLEARN_AFCL_P12`](#mojolearn_afcl_p12-expdel2-37-series) | Time series (ARIMA Kalman block width) | removed (never-run Apple FAST card) | 2026-11-15 | [MOJOLEARN_AFCL_P12.patch](../experiments/removed/MOJOLEARN_AFCL_P12.patch) |
+| [`MOJOLEARN_AFCL_P14`](#mojolearn_afcl_p14-expdel2-37-series) | Time series (Holt-Winters optimizer block width) | removed (never-run Apple FAST card) | 2026-11-15 | [MOJOLEARN_AFCL_P14.patch](../experiments/removed/MOJOLEARN_AFCL_P14.patch) |
+| [`MOJOLEARN_ARIMA_ASYNC_ALL`](#mojolearn_arima_async_all-expdel2-37-series) | Time series (ARIMA per-series L-BFGS on every route) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_ARIMA_ASYNC_ALL.patch](../experiments/removed/MOJOLEARN_ARIMA_ASYNC_ALL.patch) |
+| [`MOJOLEARN_ARIMA_FAST_BATCH_GRAD_OFF`](#mojolearn_arima_fast_batch_grad_off-expdel2-37-series) | Time series (ARIMA stacked gradient, Apple FAST) | removed (old path, no A/B recorded) | 2026-11-15 | [MOJOLEARN_ARIMA_FAST_BATCH_GRAD_OFF.patch](../experiments/removed/MOJOLEARN_ARIMA_FAST_BATCH_GRAD_OFF.patch) |
+| [`MOJOLEARN_ARIMA_FAST_CONST_BOTH`](#mojolearn_arima_fast_const_both-expdel2-37-series) | Time series (AutoARIMA with/without constant grid) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_ARIMA_FAST_CONST_BOTH.patch](../experiments/removed/MOJOLEARN_ARIMA_FAST_CONST_BOTH.patch) |
+| [`MOJOLEARN_ARIMA_FAST_KPSS_D`](#mojolearn_arima_fast_kpss_d-expdel2-37-series) | Time series (AutoARIMA statsforecast ndiffs d) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_ARIMA_FAST_KPSS_D.patch](../experiments/removed/MOJOLEARN_ARIMA_FAST_KPSS_D.patch) |
+| [`MOJOLEARN_ARIMA_FUSED_EVAL_TAIL_OFF`](#mojolearn_arima_fused_eval_tail_off-expdel2-37-series) | Time series (ARIMA fused evaluation tail) | removed (old path; promoted on Apple only, NVIDIA/AMD A/B owed) | 2026-11-15 | [MOJOLEARN_ARIMA_FUSED_EVAL_TAIL_OFF.patch](../experiments/removed/MOJOLEARN_ARIMA_FUSED_EVAL_TAIL_OFF.patch) |
+| [`MOJOLEARN_ARIMA_ID_BATCH_GRAD_OFF`](#mojolearn_arima_id_batch_grad_off-expdel2-37-series) | Time series (ARIMA stacked gradient, Apple IDENTICAL) | removed (old path, no A/B recorded) | 2026-11-15 | [MOJOLEARN_ARIMA_ID_BATCH_GRAD_OFF.patch](../experiments/removed/MOJOLEARN_ARIMA_ID_BATCH_GRAD_OFF.patch) |
+| [`MOJOLEARN_ARIMA_ORDER_BATCH_OFF`](#mojolearn_arima_order_batch_off-expdel2-37-series) | Time series (AutoARIMA grouped order fits) | removed (old path; promoted on Apple only, NVIDIA/AMD A/B owed) | 2026-11-15 | [MOJOLEARN_ARIMA_ORDER_BATCH_OFF.patch](../experiments/removed/MOJOLEARN_ARIMA_ORDER_BATCH_OFF.patch) |
+| [`MOJOLEARN_HW_EST_BLOCK64`](#mojolearn_hw_est_block64-expdel2-37-series) | Time series (Holt-Winters estimate block, Apple FAST) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_HW_EST_BLOCK64.patch](../experiments/removed/MOJOLEARN_HW_EST_BLOCK64.patch) |
+| [`MOJOLEARN_IDN_ALL_OFF`](#mojolearn_idn_all_off-expdel2-37-series) | Every family (umbrella: every IDENTICAL switch off) | removed (old path, no A/B recorded) | 2026-11-15 | [MOJOLEARN_IDN_ALL_OFF.patch](../experiments/removed/MOJOLEARN_IDN_ALL_OFF.patch) |
+| [`MOJOLEARN_IDN_ARIMA_EVAL_WS_EXOG_OFF`](#mojolearn_idn_arima_eval_ws_exog_off-expdel2-37-series) | Time series (ARIMA held workspace for exog fits) | removed (old path, no A/B recorded) | 2026-11-15 | [MOJOLEARN_IDN_ARIMA_EVAL_WS_EXOG_OFF.patch](../experiments/removed/MOJOLEARN_IDN_ARIMA_EVAL_WS_EXOG_OFF.patch) |
+| [`MOJOLEARN_IDN_ARIMA_EVAL_WS_OFF`](#mojolearn_idn_arima_eval_ws_off-expdel2-37-series) | Time series (ARIMA held evaluation workspace, IDENTICAL) | removed (old path, no A/B recorded) | 2026-11-15 | [MOJOLEARN_IDN_ARIMA_EVAL_WS_OFF.patch](../experiments/removed/MOJOLEARN_IDN_ARIMA_EVAL_WS_OFF.patch) |
+| [`MOJOLEARN_IDN_ARIMA_FUSED_TAIL_OFF`](#mojolearn_idn_arima_fused_tail_off-expdel2-37-series) | Time series (ARIMA fused evaluation tail, IDENTICAL) | removed (old path, no A/B recorded) | 2026-11-15 | [MOJOLEARN_IDN_ARIMA_FUSED_TAIL_OFF.patch](../experiments/removed/MOJOLEARN_IDN_ARIMA_FUSED_TAIL_OFF.patch) |
+| [`MOJOLEARN_IDN_ARIMA_LLONLY_OFF`](#mojolearn_idn_arima_llonly_off-expdel2-37-series) | Time series (ARIMA log-likelihood-only filter, IDENTICAL) | removed (old path, no A/B recorded) | 2026-11-15 | [MOJOLEARN_IDN_ARIMA_LLONLY_OFF.patch](../experiments/removed/MOJOLEARN_IDN_ARIMA_LLONLY_OFF.patch) |
+| [`MOJOLEARN_IDN_ARIMA_ORDER_BATCH_OFF`](#mojolearn_idn_arima_order_batch_off-expdel2-37-series) | Time series (AutoARIMA grouped order fits, IDENTICAL) | removed (old path, no A/B recorded) | 2026-11-15 | [MOJOLEARN_IDN_ARIMA_ORDER_BATCH_OFF.patch](../experiments/removed/MOJOLEARN_IDN_ARIMA_ORDER_BATCH_OFF.patch) |
+| [`MOJOLEARN_IDN_BOOT_SELECT_OFF`](#mojolearn_idn_boot_select_off-expdel2-37-series) | Time series (resample bootstrap order statistic) | removed (old path, no A/B recorded) | 2026-11-15 | [MOJOLEARN_IDN_BOOT_SELECT_OFF.patch](../experiments/removed/MOJOLEARN_IDN_BOOT_SELECT_OFF.patch) |
+| [`MOJOLEARN_IDN_GEMM_LEAF`](#mojolearn_idn_gemm_leaf-expdel2-37-series) | Neural (build-wide GEMM leaf arms 1-3) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_IDN_GEMM_LEAF.patch](../experiments/removed/MOJOLEARN_IDN_GEMM_LEAF.patch) |
+| [`MOJOLEARN_IDN_KALMAN_RD_OFF`](#mojolearn_idn_kalman_rd_off-expdel2-37-series) | Time series (Kalman per-rd kernel, IDENTICAL) | removed (old path, no A/B recorded) | 2026-11-15 | [MOJOLEARN_IDN_KALMAN_RD_OFF.patch](../experiments/removed/MOJOLEARN_IDN_KALMAN_RD_OFF.patch) |
+| [`MOJOLEARN_IDN_METRIC_EPI_OFF`](#mojolearn_idn_metric_epi_off-expdel2-37-series) | Metrics (soft-f64 device epilogues, IDENTICAL) | removed (old path, no A/B recorded) | 2026-11-15 | [MOJOLEARN_IDN_METRIC_EPI_OFF.patch](../experiments/removed/MOJOLEARN_IDN_METRIC_EPI_OFF.patch) |
+| [`MOJOLEARN_IDN_SIL_NO_WAIT_OFF`](#mojolearn_idn_sil_no_wait_off-expdel2-37-series) | Metrics (silhouette waits, IDENTICAL) | removed (old path, no A/B recorded) | 2026-11-15 | [MOJOLEARN_IDN_SIL_NO_WAIT_OFF.patch](../experiments/removed/MOJOLEARN_IDN_SIL_NO_WAIT_OFF.patch) |
+| [`MOJOLEARN_IDN_TRUST_DEV_OFF`](#mojolearn_idn_trust_dev_off-expdel2-37-series) | Metrics (trustworthiness device indices, IDENTICAL) | removed (old path, no A/B recorded) | 2026-11-15 | [MOJOLEARN_IDN_TRUST_DEV_OFF.patch](../experiments/removed/MOJOLEARN_IDN_TRUST_DEV_OFF.patch) |
+| [`MOJOLEARN_IDN_TRUST_NO_STAGE_OFF`](#mojolearn_idn_trust_no_stage_off-expdel2-37-series) | Metrics (trustworthiness staging copy, IDENTICAL) | removed (old path, no A/B recorded) | 2026-11-15 | [MOJOLEARN_IDN_TRUST_NO_STAGE_OFF.patch](../experiments/removed/MOJOLEARN_IDN_TRUST_NO_STAGE_OFF.patch) |
+| [`MOJOLEARN_IDN_X0_PAR_LS`](#mojolearn_idn_x0_par_ls-expdel2-37-series) | Time series (ARIMA start-point parallel least squares) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_IDN_X0_PAR_LS.patch](../experiments/removed/MOJOLEARN_IDN_X0_PAR_LS.patch) |
+| [`MOJOLEARN_IDN_X0_PAR_LS_MIN256`](#mojolearn_idn_x0_par_ls_min256-expdel2-37-series) | Time series (ARIMA parallel LS threshold) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_IDN_X0_PAR_LS_MIN256.patch](../experiments/removed/MOJOLEARN_IDN_X0_PAR_LS_MIN256.patch) |
+| [`MOJOLEARN_KALMAN_FAST_RD_OFF`](#mojolearn_kalman_fast_rd_off-expdel2-37-series) | Time series (Kalman per-rd kernel) | removed (old path, no A/B recorded) | 2026-11-15 | [MOJOLEARN_KALMAN_FAST_RD_OFF.patch](../experiments/removed/MOJOLEARN_KALMAN_FAST_RD_OFF.patch) |
+| [`MOJOLEARN_KALMAN_TIME_SCAN`](#mojolearn_kalman_time_scan-expdel2-37-series) | Time series (Kalman steady-state chunked scan, Apple FAST) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_KALMAN_TIME_SCAN.patch](../experiments/removed/MOJOLEARN_KALMAN_TIME_SCAN.patch) |
+| [`MOJOLEARN_KALMAN_TIME_SCAN_OFF`](#mojolearn_kalman_time_scan_off-expdel2-37-series) | Time series (Kalman chunked scan off switch) | removed (old path, no A/B recorded) | 2026-11-15 | [MOJOLEARN_KALMAN_TIME_SCAN_OFF.patch](../experiments/removed/MOJOLEARN_KALMAN_TIME_SCAN_OFF.patch) |
+| [`MOJOLEARN_PERM_COUNT_RANK`](#mojolearn_perm_count_rank-expdel2-37-series) | Time series (resample permutation counting rank) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_PERM_COUNT_RANK.patch](../experiments/removed/MOJOLEARN_PERM_COUNT_RANK.patch) |
+| [`MOJOLEARN_RESAMPLE_FAST_DEVICE_PERMUTE`](#mojolearn_resample_fast_device_permute-expdel2-37-series) | Time series (resample device permutation, Apple FAST) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_RESAMPLE_FAST_DEVICE_PERMUTE.patch](../experiments/removed/MOJOLEARN_RESAMPLE_FAST_DEVICE_PERMUTE.patch) |
+| [`MOJOLEARN_RESAMPLE_FAST_GATHER_NARROW`](#mojolearn_resample_fast_gather_narrow-expdel2-37-series) | Time series (resample narrow-row device gather, Apple FAST) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_RESAMPLE_FAST_GATHER_NARROW.patch](../experiments/removed/MOJOLEARN_RESAMPLE_FAST_GATHER_NARROW.patch) |
+| [`MOJOLEARN_RESAMPLE_FAST_GATHER_OFF`](#mojolearn_resample_fast_gather_off-expdel2-37-series) | Time series (resample device gather, Apple FAST) | removed (old path, no A/B recorded) | 2026-11-15 | [MOJOLEARN_RESAMPLE_FAST_GATHER_OFF.patch](../experiments/removed/MOJOLEARN_RESAMPLE_FAST_GATHER_OFF.patch) |
+| [`MOJOLEARN_RESAMPLE_FAST_TILED_GATHER_OFF`](#mojolearn_resample_fast_tiled_gather_off-expdel2-37-series) | Time series (resample tiled gather, Apple FAST) | removed (old path, no A/B recorded) | 2026-11-15 | [MOJOLEARN_RESAMPLE_FAST_TILED_GATHER_OFF.patch](../experiments/removed/MOJOLEARN_RESAMPLE_FAST_TILED_GATHER_OFF.patch) |
+| [`MOJOLEARN_RESAMPLE_FAST_WAIT_PAIR_OFF`](#mojolearn_resample_fast_wait_pair_off-expdel2-37-series) | Time series (resample paired transfers, Apple FAST) | removed (old path, no A/B recorded) | 2026-11-15 | [MOJOLEARN_RESAMPLE_FAST_WAIT_PAIR_OFF.patch](../experiments/removed/MOJOLEARN_RESAMPLE_FAST_WAIT_PAIR_OFF.patch) |
+| [`MOJOLEARN_RESAMPLE_GATHER_NARROW_BYTES`](#mojolearn_resample_gather_narrow_bytes-expdel2-37-series) | Time series (resample narrow gather width knob) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_RESAMPLE_GATHER_NARROW_BYTES.patch](../experiments/removed/MOJOLEARN_RESAMPLE_GATHER_NARROW_BYTES.patch) |
+| [`MOJOLEARN_X0_FAST_LS_OFF`](#mojolearn_x0_fast_ls_off-expdel2-37-series) | Time series (ARIMA start-point LS, Apple FAST) | removed (old path, no A/B recorded) | 2026-11-15 | [MOJOLEARN_X0_FAST_LS_OFF.patch](../experiments/removed/MOJOLEARN_X0_FAST_LS_OFF.patch) |
 
 | [`MOJOLEARN_AFN26_LOSS_BLOCK128`](#mojolearn_afn26_loss_block128) | Neural (Apple FAST cross-entropy block width) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_AFN26_LOSS_BLOCK128.patch](../experiments/removed/MOJOLEARN_AFN26_LOSS_BLOCK128.patch) |
 | [`MOJOLEARN_AFN26_LOSS_BLOCK512`](#mojolearn_afn26_loss_block512) | Neural (Apple FAST cross-entropy block width) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_AFN26_LOSS_BLOCK512.patch](../experiments/removed/MOJOLEARN_AFN26_LOSS_BLOCK512.patch) |
@@ -18569,3 +18606,309 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2
 - `MOJOLEARN_IDN_ATTN_STASH` (owner expdel2-07-base): arms 1 recompute, 2 packed, 3 forced alias_y: ATTN_STASH_ARM, ATTN_V1_PACKED_ESTASH, `_visible_prefix`, `_visible_ramp_sum`, the PACKED parameter of `_estash_cell`; ATTN_V1_RECOMPUTE_BACKWARD stays False for its importers (transformer/impl/llama/fused_attention.mojo); `85e5bc6d2e`, recoverable at `453bfc437c`; `experiments/removed/MOJOLEARN_IDN_ATTN_STASH.expdel2-34-neural.patch`.
 
 Not deleted: `MOJOLEARN_ATTN_ARM_TRIAL` (KEEP, reported): it is the only build switch that compiles the attention sabotage instantiations (ATTN_ARM_SABOTAGE, _NEW, _KV) that transformer/checks/transformer_attention_arms_check.mojo and bench/attention_step_price_main.mojo exercise. `MOJOLEARN_COLUMN_CPU` (plan correction).
+## Experiment deletions: lane expdel2-37-series (2026-11-15)
+
+Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2-37-series), under AGENTS.md "An unmeasured arm is deleted" (Andrew, 2026-11-15). Each record named below was read first. No bit changes: every deletion removes a non-default arm or a rollback beside the default, and the default branch is kept as it was.
+
+### MOJOLEARN_AFCL_P10 (expdel2-37-series)
+
+- What it was: never-run Apple FAST programme card: 16-column gather tiles; GATHER_COLS stays 32.
+- Family: Time series (resample tiled gather width).
+- Evidence read: no record (rule g).
+- Deleted by: `b318452d7a` on lane/expdel2-37-series; recoverable at `72ae22cf1f`.
+- Patch: `experiments/removed/MOJOLEARN_AFCL_P10.patch`. Refusal: `core/experiment_guards_series.mojo`.
+
+### MOJOLEARN_AFCL_P12 (expdel2-37-series)
+
+- What it was: never-run Apple FAST programme card: 64-thread Kalman blocks; KALMAN_TPB stays 32.
+- Family: Time series (ARIMA Kalman block width).
+- Evidence read: no record (rule g).
+- Deleted by: `96d454df19` on lane/expdel2-37-series; recoverable at `145be10898`.
+- Patch: `experiments/removed/MOJOLEARN_AFCL_P12.patch`. Refusal: `core/experiment_guards_series.mojo`.
+
+### MOJOLEARN_AFCL_P14 (expdel2-37-series)
+
+- What it was: never-run Apple FAST programme card: 64-wide optimizer blocks; HW_OPTIM_TPB stays 128.
+- Family: Time series (Holt-Winters optimizer block width).
+- Evidence read: no record (rule g).
+- Deleted by: `db4fd5d0c6`, `d8a165cb14` on lane/expdel2-37-series; recoverable at `82df561cdb`.
+- Patch: `experiments/removed/MOJOLEARN_AFCL_P14.patch`. Refusal: `core/experiment_guards_series.mojo`.
+
+### MOJOLEARN_ARIMA_ASYNC_ALL (expdel2-37-series)
+
+- What it was: opt-in A/B arm (RUN OWED, never run): the per-series solver on routes without the held workspace.
+- Family: Time series (ARIMA per-series L-BFGS on every route).
+- Evidence read: EXP:2379, lane/r2-restore-unmeasured-defaults @ 1155f6ab56: no A/B recorded (rule a).
+- Deleted by: `e4949779dc` on lane/expdel2-37-series; recoverable at `b3b95c7aa8`.
+- Patch: `experiments/removed/MOJOLEARN_ARIMA_ASYNC_ALL.patch`. Refusal: `core/experiment_guards_series.mojo`.
+
+### MOJOLEARN_ARIMA_FAST_BATCH_GRAD_OFF (expdel2-37-series)
+
+- What it was: old path: N + 1 sequential filter passes beside the Apple FAST stacked-gradient default.
+- Family: Time series (ARIMA stacked gradient, Apple FAST).
+- Evidence read: no record (rule b).
+- Deleted by: `b3b95c7aa8` on lane/expdel2-37-series; recoverable at `b22c6673d4`.
+- Patch: `experiments/removed/MOJOLEARN_ARIMA_FAST_BATCH_GRAD_OFF.patch`. Refusal: `core/experiment_guards_series.mojo`.
+
+### MOJOLEARN_ARIMA_FAST_CONST_BOTH (expdel2-37-series)
+
+- What it was: opt-in FAST arm, READY-AB, merged unmeasured.
+- Family: Time series (AutoARIMA with/without constant grid).
+- Evidence read: EXP:555 READY-AB, merged unmeasured (rule a).
+- Deleted by: `2044a9635d`, `713890f21c` on lane/expdel2-37-series; recoverable at `f1218d6715`.
+- Patch: `experiments/removed/MOJOLEARN_ARIMA_FAST_CONST_BOTH.patch`. Refusal: `core/experiment_guards_series.mojo`.
+
+### MOJOLEARN_ARIMA_FAST_KPSS_D (expdel2-37-series)
+
+- What it was: opt-in FAST arm, READY-AB, merged unmeasured; ndiffs_kpss_kernel and its KPSS helpers go, ndiffs_kpss refuses.
+- Family: Time series (AutoARIMA statsforecast ndiffs d).
+- Evidence read: EXP:557 READY-AB, merged unmeasured (rule a).
+- Deleted by: `0289fce146`, `713890f21c` on lane/expdel2-37-series; recoverable at `2044a9635d`.
+- Patch: `experiments/removed/MOJOLEARN_ARIMA_FAST_KPSS_D.patch`. Refusal: `core/experiment_guards_series.mojo`.
+
+### MOJOLEARN_ARIMA_FUSED_EVAL_TAIL_OFF (expdel2-37-series)
+
+- What it was: old path: the separate tail launches; promoted on Apple M3 only, NVIDIA/AMD A/B owed (rule d).
+- Family: Time series (ARIMA fused evaluation tail).
+- Evidence read: EXP:746 KEEP: default/OFF promotion 311d5233e (M3 only) (rule d).
+- Deleted by: `b22c6673d4` on lane/expdel2-37-series; recoverable at `96d454df19`.
+- Patch: `experiments/removed/MOJOLEARN_ARIMA_FUSED_EVAL_TAIL_OFF.patch`. Refusal: `core/experiment_guards_series.mojo`.
+- Promoted on Apple only; NVIDIA/AMD A/B owed (rule d).
+
+### MOJOLEARN_ARIMA_ID_BATCH_GRAD_OFF (expdel2-37-series)
+
+- What it was: old path: sequential gradient passes under Apple IDENTICAL.
+- Family: Time series (ARIMA stacked gradient, Apple IDENTICAL).
+- Evidence read: no record (rule b).
+- Deleted by: `b3b95c7aa8` on lane/expdel2-37-series; recoverable at `b22c6673d4`.
+- Patch: `experiments/removed/MOJOLEARN_ARIMA_ID_BATCH_GRAD_OFF.patch`. Refusal: `core/experiment_guards_series.mojo`.
+
+### MOJOLEARN_ARIMA_ORDER_BATCH_OFF (expdel2-37-series)
+
+- What it was: old path: per-order fits; promoted on Apple only, NVIDIA/AMD A/B owed (rule d).
+- Family: Time series (AutoARIMA grouped order fits).
+- Evidence read: EXP:850 KEEP, default merged on main dc2285bc0 (Apple) (rule d).
+- Deleted by: `6d8c0423cf`, `f1218d6715` on lane/expdel2-37-series; recoverable at `e4949779dc`.
+- Patch: `experiments/removed/MOJOLEARN_ARIMA_ORDER_BATCH_OFF.patch`. Refusal: `core/experiment_guards_series.mojo`.
+- Promoted on Apple only; NVIDIA/AMD A/B owed (rule d).
+
+### MOJOLEARN_HW_EST_BLOCK64 (expdel2-37-series)
+
+- What it was: opt-in arm keeping the 64-wide block on Apple FAST.
+- Family: Time series (Holt-Winters estimate block, Apple FAST).
+- Evidence read: no record (rule a).
+- Deleted by: `db4fd5d0c6`, `d8a165cb14` on lane/expdel2-37-series; recoverable at `82df561cdb`.
+- Patch: `experiments/removed/MOJOLEARN_HW_EST_BLOCK64.patch`. Refusal: `core/experiment_guards_series.mojo`.
+
+### MOJOLEARN_IDN_ALL_OFF (expdel2-37-series)
+
+- What it was: umbrella old-path switch: every IDENTICAL default off at once; its terms are removed from every lane's files (each lane's <DEFINE>.<lane>.patch); this lane removes the terms in arima, metrics, resample and gemm/contract.
+- Family: Every family (umbrella: every IDENTICAL switch off).
+- Evidence read: EXP:2438 DELETED 2026-11-15 (old path switch; resident default kept) (rule e).
+- Deleted by: `96d454df19`, `f1218d6715`, `8c2c6d7d01`, `2c25872643`, `089c025a19`, `e780161ad2`, `7b328fcfd6`, `6b87cc7de9` on lane/expdel2-37-series; recoverable at `145be10898`.
+- Patch: `experiments/removed/MOJOLEARN_IDN_ALL_OFF.patch`. Refusal: `core/experiment_guards_series.mojo`.
+- Other lanes removed its terms in their own files (their sections name `experiments/removed/MOJOLEARN_IDN_ALL_OFF.<lane>.patch`). Left at this lane's head: the read in `arima/impl/fast_order_search.mojo` (lane expdel2-47-promote) and the env-form and build-flag uses in `python/mojolearn/` and `tools/identical_wave_*.py` (the tooling lane).
+
+### MOJOLEARN_IDN_ARIMA_EVAL_WS_EXOG_OFF (expdel2-37-series)
+
+- What it was: old path: sequential evaluation for exog fits.
+- Family: Time series (ARIMA held workspace for exog fits).
+- Evidence read: no record (rule b).
+- Deleted by: `96d454df19` on lane/expdel2-37-series; recoverable at `145be10898`.
+- Patch: `experiments/removed/MOJOLEARN_IDN_ARIMA_EVAL_WS_EXOG_OFF.patch`. Refusal: `core/experiment_guards_series.mojo`.
+
+### MOJOLEARN_IDN_ARIMA_EVAL_WS_OFF (expdel2-37-series)
+
+- What it was: old path: per-evaluation workspaces and waits.
+- Family: Time series (ARIMA held evaluation workspace, IDENTICAL).
+- Evidence read: no record (rule b).
+- Deleted by: `96d454df19`, `f1218d6715` on lane/expdel2-37-series; recoverable at `145be10898`.
+- Patch: `experiments/removed/MOJOLEARN_IDN_ARIMA_EVAL_WS_OFF.patch`. Refusal: `core/experiment_guards_series.mojo`.
+
+### MOJOLEARN_IDN_ARIMA_FUSED_TAIL_OFF (expdel2-37-series)
+
+- What it was: old path: the separate tail launches under IDENTICAL.
+- Family: Time series (ARIMA fused evaluation tail, IDENTICAL).
+- Evidence read: no record (rule b).
+- Deleted by: `b22c6673d4` on lane/expdel2-37-series; recoverable at `96d454df19`.
+- Patch: `experiments/removed/MOJOLEARN_IDN_ARIMA_FUSED_TAIL_OFF.patch`. Refusal: `core/experiment_guards_series.mojo`.
+
+### MOJOLEARN_IDN_ARIMA_LLONLY_OFF (expdel2-37-series)
+
+- What it was: old path: the storing filter inside the fit.
+- Family: Time series (ARIMA log-likelihood-only filter, IDENTICAL).
+- Evidence read: no record (rule b).
+- Deleted by: `96d454df19`, `f1218d6715` on lane/expdel2-37-series; recoverable at `145be10898`.
+- Patch: `experiments/removed/MOJOLEARN_IDN_ARIMA_LLONLY_OFF.patch`. Refusal: `core/experiment_guards_series.mojo`.
+
+### MOJOLEARN_IDN_ARIMA_ORDER_BATCH_OFF (expdel2-37-series)
+
+- What it was: old path: per-order fits under IDENTICAL.
+- Family: Time series (AutoARIMA grouped order fits, IDENTICAL).
+- Evidence read: no record (rule b).
+- Deleted by: `6d8c0423cf`, `f1218d6715` on lane/expdel2-37-series; recoverable at `e4949779dc`.
+- Patch: `experiments/removed/MOJOLEARN_IDN_ARIMA_ORDER_BATCH_OFF.patch`. Refusal: `core/experiment_guards_series.mojo`.
+
+### MOJOLEARN_IDN_BOOT_SELECT_OFF (expdel2-37-series)
+
+- What it was: old path: materialize + sort.
+- Family: Time series (resample bootstrap order statistic).
+- Evidence read: no record (rule b).
+- Deleted by: `7b328fcfd6` on lane/expdel2-37-series; recoverable at `e780161ad2`.
+- Patch: `experiments/removed/MOJOLEARN_IDN_BOOT_SELECT_OFF.patch`. Refusal: `core/experiment_guards_series.mojo`.
+
+### MOJOLEARN_IDN_GEMM_LEAF (expdel2-37-series)
+
+- What it was: opt-in build-wide leaf arms (neural128, neural256, all256); GEMM_LEAF_ARM = 0 stays for gemm/experiments/neural_profile.mojo.
+- Family: Neural (build-wide GEMM leaf arms 1-3).
+- Evidence read: EXP:1766: arm 1 a SPLIT (mlp-train-step faster, every other model slower); the MLP win is kept by SMALL_MLP_GEMM_LEAF128 (autograd/small_mlp_op.mojo), not by this define; arms 2-3 never measured (rule e).
+- Deleted by: `6b87cc7de9` on lane/expdel2-37-series; recoverable at `27caa1d5fe`.
+- Patch: `experiments/removed/MOJOLEARN_IDN_GEMM_LEAF.patch`. Refusal: `core/experiment_guards_neural.mojo`.
+
+### MOJOLEARN_IDN_KALMAN_RD_OFF (expdel2-37-series)
+
+- What it was: old path: runtime-rd Kalman kernel under IDENTICAL.
+- Family: Time series (Kalman per-rd kernel, IDENTICAL).
+- Evidence read: no record (rule b).
+- Deleted by: `96d454df19` on lane/expdel2-37-series; recoverable at `145be10898`.
+- Patch: `experiments/removed/MOJOLEARN_IDN_KALMAN_RD_OFF.patch`. Refusal: `core/experiment_guards_series.mojo`.
+
+### MOJOLEARN_IDN_METRIC_EPI_OFF (expdel2-37-series)
+
+- What it was: old path: the host Float32 / Float64 epilogues.
+- Family: Metrics (soft-f64 device epilogues, IDENTICAL).
+- Evidence read: no record (rule b).
+- Deleted by: `089c025a19` on lane/expdel2-37-series; recoverable at `2c25872643`.
+- Patch: `experiments/removed/MOJOLEARN_IDN_METRIC_EPI_OFF.patch`. Refusal: `core/experiment_guards_cluster.mojo`.
+
+### MOJOLEARN_IDN_SIL_NO_WAIT_OFF (expdel2-37-series)
+
+- What it was: old path: two extra host waits.
+- Family: Metrics (silhouette waits, IDENTICAL).
+- Evidence read: no record (rule b).
+- Deleted by: `2c25872643` on lane/expdel2-37-series; recoverable at `d8a165cb14`.
+- Patch: `experiments/removed/MOJOLEARN_IDN_SIL_NO_WAIT_OFF.patch`. Refusal: `core/experiment_guards_cluster.mojo`.
+
+### MOJOLEARN_IDN_TRUST_DEV_OFF (expdel2-37-series)
+
+- What it was: old path: host round trip of the k-NN indices.
+- Family: Metrics (trustworthiness device indices, IDENTICAL).
+- Evidence read: no record (rule b).
+- Deleted by: `e780161ad2` on lane/expdel2-37-series; recoverable at `089c025a19`.
+- Patch: `experiments/removed/MOJOLEARN_IDN_TRUST_DEV_OFF.patch`. Refusal: `core/experiment_guards_cluster.mojo`.
+
+### MOJOLEARN_IDN_TRUST_NO_STAGE_OFF (expdel2-37-series)
+
+- What it was: old path: the pinned host staging copy.
+- Family: Metrics (trustworthiness staging copy, IDENTICAL).
+- Evidence read: no record (rule b).
+- Deleted by: `e780161ad2` on lane/expdel2-37-series; recoverable at `089c025a19`.
+- Patch: `experiments/removed/MOJOLEARN_IDN_TRUST_NO_STAGE_OFF.patch`. Refusal: `core/experiment_guards_cluster.mojo`.
+
+### MOJOLEARN_IDN_X0_PAR_LS (expdel2-37-series)
+
+- What it was: opt-in IDENTICAL arm: one block per series Givens LS; X0_IDN_PAR_LS stays False for arima/host/arima_oracle.mojo.
+- Family: Time series (ARIMA start-point parallel least squares).
+- Evidence read: no record (rule a).
+- Deleted by: `8c2c6d7d01`, `82df561cdb` on lane/expdel2-37-series; recoverable at `713890f21c`.
+- Patch: `experiments/removed/MOJOLEARN_IDN_X0_PAR_LS.patch`. Refusal: `core/experiment_guards_series.mojo`.
+
+### MOJOLEARN_IDN_X0_PAR_LS_MIN256 (expdel2-37-series)
+
+- What it was: opt-in threshold arm (256 instead of 2048).
+- Family: Time series (ARIMA parallel LS threshold).
+- Evidence read: no record (rule a).
+- Deleted by: `8c2c6d7d01` on lane/expdel2-37-series; recoverable at `713890f21c`.
+- Patch: `experiments/removed/MOJOLEARN_IDN_X0_PAR_LS_MIN256.patch`. Refusal: `core/experiment_guards_series.mojo`.
+
+### MOJOLEARN_KALMAN_FAST_RD_OFF (expdel2-37-series)
+
+- What it was: old path: runtime-rd Kalman kernel.
+- Family: Time series (Kalman per-rd kernel).
+- Evidence read: no record (rule b).
+- Deleted by: `96d454df19` on lane/expdel2-37-series; recoverable at `145be10898`.
+- Patch: `experiments/removed/MOJOLEARN_KALMAN_FAST_RD_OFF.patch`. Refusal: `core/experiment_guards_series.mojo`.
+
+### MOJOLEARN_KALMAN_TIME_SCAN (expdel2-37-series)
+
+- What it was: opt-in FAST arm (lower log-likelihood in the 2026-09-26 paired check); arima/impl/fast_kalman_scan.mojo, launched only by it, goes.
+- Family: Time series (Kalman steady-state chunked scan, Apple FAST).
+- Evidence read: no record (rule a).
+- Deleted by: `96d454df19` on lane/expdel2-37-series; recoverable at `145be10898`.
+- Patch: `experiments/removed/MOJOLEARN_KALMAN_TIME_SCAN.patch`. Refusal: `core/experiment_guards_series.mojo`.
+
+### MOJOLEARN_KALMAN_TIME_SCAN_OFF (expdel2-37-series)
+
+- What it was: old path switch of an arm that was never on.
+- Family: Time series (Kalman chunked scan off switch).
+- Evidence read: no record (rule b).
+- Deleted by: `96d454df19` on lane/expdel2-37-series; recoverable at `145be10898`.
+- Patch: `experiments/removed/MOJOLEARN_KALMAN_TIME_SCAN_OFF.patch`. Refusal: `core/experiment_guards_series.mojo`.
+
+### MOJOLEARN_PERM_COUNT_RANK (expdel2-37-series)
+
+- What it was: opt-in B arm keeping the counting-rank kernel up to PERM_MAX_POOLED (the kernel stays for the force_count check arm).
+- Family: Time series (resample permutation counting rank).
+- Evidence read: no record (rule a).
+- Deleted by: `72ae22cf1f` on lane/expdel2-37-series; recoverable at `6b87cc7de9`.
+- Patch: `experiments/removed/MOJOLEARN_PERM_COUNT_RANK.patch`. Refusal: `core/experiment_guards_series.mojo`.
+
+### MOJOLEARN_RESAMPLE_FAST_DEVICE_PERMUTE (expdel2-37-series)
+
+- What it was: opt-in FAST arm; F19 M3 permutation B/A 2.0031/2.1569/1.0847, kept OFF.
+- Family: Time series (resample device permutation, Apple FAST).
+- Evidence read: no record (rule a).
+- Deleted by: `72ae22cf1f` on lane/expdel2-37-series; recoverable at `6b87cc7de9`.
+- Patch: `experiments/removed/MOJOLEARN_RESAMPLE_FAST_DEVICE_PERMUTE.patch`. Refusal: `core/experiment_guards_series.mojo`.
+
+### MOJOLEARN_RESAMPLE_FAST_GATHER_NARROW (expdel2-37-series)
+
+- What it was: opt-in FAST arm, READY-AB; resample_gather_narrow returns -1 for its binding.
+- Family: Time series (resample narrow-row device gather, Apple FAST).
+- Evidence read: EXP:1404 READY-AB (rule a).
+- Deleted by: `72ae22cf1f` on lane/expdel2-37-series; recoverable at `6b87cc7de9`.
+- Patch: `experiments/removed/MOJOLEARN_RESAMPLE_FAST_GATHER_NARROW.patch`. Refusal: `core/experiment_guards_series.mojo`.
+
+### MOJOLEARN_RESAMPLE_FAST_GATHER_OFF (expdel2-37-series)
+
+- What it was: old path: host gather beside the Apple FAST device gather default.
+- Family: Time series (resample device gather, Apple FAST).
+- Evidence read: EXP:1131 reconciled 2026-10-05 (rule e).
+- Deleted by: `72ae22cf1f` on lane/expdel2-37-series; recoverable at `6b87cc7de9`.
+- Patch: `experiments/removed/MOJOLEARN_RESAMPLE_FAST_GATHER_OFF.patch`. Refusal: `core/experiment_guards_series.mojo`.
+
+### MOJOLEARN_RESAMPLE_FAST_TILED_GATHER_OFF (expdel2-37-series)
+
+- What it was: old path: untiled gather kernel.
+- Family: Time series (resample tiled gather, Apple FAST).
+- Evidence read: no record (rule b).
+- Deleted by: `72ae22cf1f` on lane/expdel2-37-series; recoverable at `6b87cc7de9`.
+- Patch: `experiments/removed/MOJOLEARN_RESAMPLE_FAST_TILED_GATHER_OFF.patch`. Refusal: `core/experiment_guards_series.mojo`.
+
+### MOJOLEARN_RESAMPLE_FAST_WAIT_PAIR_OFF (expdel2-37-series)
+
+- What it was: old path: unpaired waits.
+- Family: Time series (resample paired transfers, Apple FAST).
+- Evidence read: no record (rule b).
+- Deleted by: `72ae22cf1f` on lane/expdel2-37-series; recoverable at `6b87cc7de9`.
+- Patch: `experiments/removed/MOJOLEARN_RESAMPLE_FAST_WAIT_PAIR_OFF.patch`. Refusal: `core/experiment_guards_series.mojo`.
+
+### MOJOLEARN_RESAMPLE_GATHER_NARROW_BYTES (expdel2-37-series)
+
+- What it was: opt-in int knob of the narrow gather; GATHER_NARROW_MAX_BYTES stays 128 for its binding.
+- Family: Time series (resample narrow gather width knob).
+- Evidence read: EXP:1404 READY-AB (rule a).
+- Deleted by: `72ae22cf1f` on lane/expdel2-37-series; recoverable at `6b87cc7de9`.
+- Patch: `experiments/removed/MOJOLEARN_RESAMPLE_GATHER_NARROW_BYTES.patch`. Refusal: `core/experiment_guards_series.mojo`.
+
+### MOJOLEARN_X0_FAST_LS_OFF (expdel2-37-series)
+
+- What it was: old path: one thread per series LS beside the Apple FAST default.
+- Family: Time series (ARIMA start-point LS, Apple FAST).
+- Evidence read: no record (rule b).
+- Deleted by: `82df561cdb` on lane/expdel2-37-series; recoverable at `8c2c6d7d01`.
+- Patch: `experiments/removed/MOJOLEARN_X0_FAST_LS_OFF.patch`. Refusal: `core/experiment_guards_series.mojo`.
+
+Non-owner sites folded in this lane's files (each owner writes the index row and section): `MOJOLEARN_C58_SERIES4` (owner expdel2-07-base; `experiments/removed/MOJOLEARN_C58_SERIES4.expdel2-37-series.patch`, recoverable at `db4fd5d0c6`), `MOJOLEARN_C59_TRIAL_STATE` (owner expdel2-07-base; `experiments/removed/MOJOLEARN_C59_TRIAL_STATE.expdel2-37-series.patch`, recoverable at `145be10898`), `MOJOLEARN_CLASSICAL_C11_DRAW_GATHER` (owner expdel2-07-base; `experiments/removed/MOJOLEARN_CLASSICAL_C11_DRAW_GATHER.expdel2-37-series.patch`, recoverable at `6b87cc7de9`), `MOJOLEARN_IDN_ARIMA_ORDER_DEVICE_OFF` (owner expdel2-47-promote; `experiments/removed/MOJOLEARN_IDN_ARIMA_ORDER_DEVICE_OFF.expdel2-37-series.patch`, recoverable at `6d8c0423cf`), `MOJOLEARN_IDN_ARIMA_IC_DEVICE_OFF` (owner expdel2-47-promote; `experiments/removed/MOJOLEARN_IDN_ARIMA_IC_DEVICE_OFF.expdel2-37-series.patch`, recoverable at `6d8c0423cf`), `MOJOLEARN_IDN_KPSS_ONE_WAIT_OFF` (owner expdel2-36-neural-series-linear; `experiments/removed/MOJOLEARN_IDN_KPSS_ONE_WAIT_OFF.expdel2-37-series.patch`, recoverable at `7b328fcfd6`).
+
+Kept (not deleted): `MOJOLEARN_METRICS_JOINT_COUNTS` (metrics/impl/classification_joint.mojo:50): its source comment records an AMD MI325X scoped winner (I24, candidate/base 0.858-0.873, f32549d28) with NVIDIA mixed; a default-off arm that won a measurement on one vendor is KEEP under the lane brief. `MOJOLEARN_COLUMN_CPU` was not touched.

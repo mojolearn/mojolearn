@@ -236,9 +236,10 @@ def arima_order_search_fit_binding(y_addr: PythonObject, out_addr: PythonObject,
 def arima_fast_search_mode_binding() raises -> PythonObject:
     """lane/apple-fast-arima-sf: `fast_search_mode` (bits 0..2, the
     deleted MOJOLEARN_ARIMA_FAST_CSS_SEARCH / _STEPWISE and their grouped
-    final fit, are always 0; bit 3
-    MOJOLEARN_ARIMA_FAST_CONST_BOTH, bit 4 MOJOLEARN_ARIMA_FAST_ROOT_CHECK,
-    bit 5 MOJOLEARN_ARIMA_FAST_KPSS_D); 0 with an identity trace on."""
+    final fit, are always 0; bit 3 (the removed
+    MOJOLEARN_ARIMA_FAST_CONST_BOTH) is always 0, bit 4
+    MOJOLEARN_ARIMA_FAST_ROOT_CHECK, bit 5 (the removed
+    MOJOLEARN_ARIMA_FAST_KPSS_D) is always 0); 0 with an identity trace on."""
     var trace = IdentityTrace()
     if trace.enabled:
         return PythonObject(0)
@@ -247,10 +248,10 @@ def arima_fast_search_mode_binding() raises -> PythonObject:
 
 def arima_ndiffs_kpss_binding(y_addr: PythonObject, out_addr: PythonObject,
                                config: PythonObject) raises -> PythonObject:
-    """lane/apple-fast-arima-quality, MOJOLEARN_ARIMA_FAST_KPSS_D:
-    `ndiffs_kpss`, statsforecast's `ndiffs` d per series (int32 into
-    `out_addr`); `y_addr` (batch, nobs) float32 rows, `config` [batch, nobs,
-    d_max]. Returns `batch`."""
+    """lane/apple-fast-arima-quality: `ndiffs_kpss`, which refuses in every
+    build since MOJOLEARN_ARIMA_FAST_KPSS_D was removed (2026-11-15,
+    lane/expdel2-37-series); `fast_search_mode` bit 5 is always 0, so the
+    glue never calls it."""
     if len(config) != 3:
         raise Error("arima_ndiffs_kpss: expected [batch,nobs,d_max]")
     var bs = Int(py=config[0])

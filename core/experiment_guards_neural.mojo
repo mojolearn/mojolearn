@@ -1182,6 +1182,10 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_IDN_ATTN_TILE_ORDER"](), "removed 2026-11-15 (lane/expdel2-34-neural): IDN_ATTN_TILE_ORDER (unmeasured grid arms) is gone; the default is kept; code at 85e5bc6d2e; restore: experiments/removed/MOJOLEARN_IDN_ATTN_TILE_ORDER.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_NN18_DENSE_TILE_CONTROL.patch
     comptime assert not is_defined["MOJOLEARN_NN18_DENSE_TILE_CONTROL"](), "removed 2026-11-15 (lane/expdel2-34-neural): NN18_DENSE_TILE_CONTROL (unmeasured opt-in arm) is gone; the default is kept; code at 3e8269e098; restore: experiments/removed/MOJOLEARN_NN18_DENSE_TILE_CONTROL.patch"
+    # Lane expdel2-37-series (2026-11-15): unmeasured arms and old paths deleted under "An unmeasured arm is deleted" (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md, docs/TOMBSTONES.md).
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_GEMM_LEAF.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_GEMM_LEAF"](), "removed 2026-11-15 (lane/expdel2-37-series): IDN_GEMM_LEAF (opt-in arm, Neural (build-wide GEMM leaf arms 1-3); no A/B recorded) is gone; the default path is the only one; code recoverable at 27caa1d5fe; restore: experiments/removed/MOJOLEARN_IDN_GEMM_LEAF.patch"
+    # ---- end lane expdel2-37-series
     return True
 
 

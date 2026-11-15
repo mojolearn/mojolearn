@@ -613,6 +613,16 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_X_CLUSTER_FAST_MINIBATCH_GENERAL_OFF"](), "removed 2026-11-15 (lane/expdel2-15-cluster): X_CLUSTER_FAST_MINIBATCH_GENERAL_OFF (old path: Restored the unit-weight, tol <= 0 gate in front of the FAST Apple device steps) is gone; see docs/TOMBSTONES.md"
     # Restore: git apply experiments/removed/MOJOLEARN_X_CLUSTER_FAST_W2_MBK_SUMCMP_OFF.patch
     comptime assert not is_defined["MOJOLEARN_X_CLUSTER_FAST_W2_MBK_SUMCMP_OFF"](), "removed 2026-11-15 (lane/expdel2-15-cluster): X_CLUSTER_FAST_W2_MBK_SUMCMP_OFF (old path: Rollback of the compacted center sum to the full 256-row chunk walk per feature (`_mbf_sum_kernel`)) is gone; see docs/TOMBSTONES.md"
+    # Lane expdel2-37-series (2026-11-15): unmeasured arms and old paths deleted under "An unmeasured arm is deleted" (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md, docs/TOMBSTONES.md).
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_METRIC_EPI_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_METRIC_EPI_OFF"](), "removed 2026-11-15 (lane/expdel2-37-series): IDN_METRIC_EPI_OFF (old path, Metrics (soft-f64 device epilogues, IDENTICAL); no A/B recorded) is gone; the default is kept; code recoverable at 2c25872643; restore: experiments/removed/MOJOLEARN_IDN_METRIC_EPI_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_SIL_NO_WAIT_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_SIL_NO_WAIT_OFF"](), "removed 2026-11-15 (lane/expdel2-37-series): IDN_SIL_NO_WAIT_OFF (old path, Metrics (silhouette waits, IDENTICAL); no A/B recorded) is gone; the default is kept; code recoverable at d8a165cb14; restore: experiments/removed/MOJOLEARN_IDN_SIL_NO_WAIT_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_TRUST_DEV_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_TRUST_DEV_OFF"](), "removed 2026-11-15 (lane/expdel2-37-series): IDN_TRUST_DEV_OFF (old path, Metrics (trustworthiness device indices, IDENTICAL); no A/B recorded) is gone; the default is kept; code recoverable at 089c025a19; restore: experiments/removed/MOJOLEARN_IDN_TRUST_DEV_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_TRUST_NO_STAGE_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_TRUST_NO_STAGE_OFF"](), "removed 2026-11-15 (lane/expdel2-37-series): IDN_TRUST_NO_STAGE_OFF (old path, Metrics (trustworthiness staging copy, IDENTICAL); no A/B recorded) is gone; the default is kept; code recoverable at 089c025a19; restore: experiments/removed/MOJOLEARN_IDN_TRUST_NO_STAGE_OFF.patch"
+    # ---- end lane expdel2-37-series
     return True
 
 

@@ -1,0 +1,45 @@
+diff --git a/gemm/contract.mojo b/gemm/contract.mojo
+index 03749b3d75..fbade35856 100644
+--- a/gemm/contract.mojo
++++ b/gemm/contract.mojo
+@@ -17,7 +17,7 @@ cannot drift (cpu-gpu-cleanup lane n-gemm, 2026-10-02: moved out of
+ """
+ 
+ from std.memory import bitcast
+-from std.sys.compile import is_defined
++from std.sys.compile import is_defined, get_defined_int
+ from core.package_profile import identical_mode_enabled
+ 
+ 
+@@ -104,10 +104,10 @@ def gemm_oracle_sabotage_value_flip(v: Float32) -> Float32:
+ #: real k-parallelism and large enough that the fold stays short. It is a
+ #: PROFILE constant, so changing it changes the answer's bits and is a
+ #: contract revision, not a tuning knob.
+-# ONE leaf switch, formerly `-D MOJOLEARN_IDN_GEMM_LEAF=<arm>` (lane
++# ONE leaf switch, `-D MOJOLEARN_IDN_GEMM_LEAF=<arm>` (lane
+ # neural-gemm-attn-dedupe, 2026-10-07; formerly NN03's IDN_NEURAL_NN03 +
+-# IDN_NEURAL_LEAF and NI08's NI08_GEMM_LEAF_256): leaf128 contract,
+-# incumbent GEMM bodies everywhere. The removed arms were:
++# IDN_NEURAL_LEAF and NI08's NI08_GEMM_LEAF_256). Absent: leaf128 contract,
++# incumbent GEMM bodies everywhere. Arms:
+ #   1  neural128  neural callers take the NN03 neural profile body at leaf 128;
+ #                 every other GEMM keeps the contract below
+ #   2  neural256  the same at leaf 256
+@@ -122,12 +122,14 @@ def gemm_oracle_sabotage_value_flip(v: Float32) -> Float32:
+ #   (overnight-ab-20261006/amd/normalized-measurements.json, I04);
+ #   L40S leaf64 0.304/0.281 ms vs leaf128 0.280/0.255 ms at the same shapes
+ #   (overnight-ab-20261006/nvidia/default-repair-normalized-measurements.json).
+-# TOMBSTONE: MOJOLEARN_IDN_GEMM_LEAF, MOJOLEARN_IDN_ALL_OFF (build-wide leaf arms: EXP:1766 SPLIT, the mlp-train-step win kept by SMALL_MLP_GEMM_LEAF128 in autograd/small_mlp_op.mojo, every other model slower; umbrella old path EXP:2438) deleted 2026-11-15 by lane/expdel2-37-series; code recoverable at 27caa1d5fe.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_GEMM_LEAF.patch and experiments/removed/MOJOLEARN_IDN_ALL_OFF.patch; record in docs/TOMBSTONES.md.
++comptime _NEURAL_GEMM_PROFILE_ARM = (
++    identical_mode_enabled()
++    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
++)
+ comptime GEMM_LEAF_ARM_NEURAL128 = 1
+ comptime GEMM_LEAF_ARM_NEURAL256 = 2
+ comptime GEMM_LEAF_ARM_ALL256 = 3
+-comptime GEMM_LEAF_ARM = 0
++comptime GEMM_LEAF_ARM = get_defined_int["MOJOLEARN_IDN_GEMM_LEAF", 0]() if _NEURAL_GEMM_PROFILE_ARM else 0
+ comptime _NEURAL_GEMM_LEAF256 = GEMM_LEAF_ARM == GEMM_LEAF_ARM_ALL256
+ comptime CONTRACT_K_LEAF_MIN = 256 if _NEURAL_GEMM_LEAF256 else 128
+ comptime GEMM_NUMERICAL_PROFILE = (

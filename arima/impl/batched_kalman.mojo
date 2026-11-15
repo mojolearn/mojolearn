@@ -132,8 +132,6 @@ the branch is written and unreached, and an unreached branch is an unchecked
 one (CONTRIBUTING.md (Non-default paths)).
 """
 
-from experiments.classical_identical_ideas.stats_controls import C59_TRIAL_STATE
-from arima.impl.fast_kalman_scan import fast_kalman_scan
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu import block_dim, block_idx, thread_idx
 from std.memory import bitcast
@@ -150,7 +148,6 @@ from arima.impl.timeSeries.arima_helpers import (
 )
 from arima.impl.tsa.arima_common import ARIMAOrder, ARIMAParams
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL, ftz, identical_log, identical_mul_add
-from std.sys.compile import is_defined
 from core.accelerator_target import TARGET_HAS_APPLE_GPU
 
 
@@ -158,12 +155,9 @@ comptime RD_MAX = 8
 comptime RD2_MAX = RD_MAX * RD_MAX
 comptime LOG_2PI = Float32(1.8378770664093453)
 comptime KAPPA = Float32(1e6)
-# AFCL-P12: NEVER RUN — PENDING MEASUREMENT. Uncompiled/unverified.
-# Two SIMD groups per block amortize scheduling for independent series; each
-# lane retains the full Kalman recurrence and its state. Register pressure can
-# outweigh the benefit. Explicit caller overrides of kalman_tpb still win.
-comptime AFCL_P12 = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU and is_defined["MOJOLEARN_AFCL_P12"]()
-comptime KALMAN_TPB = 64 if AFCL_P12 else 32
+# TOMBSTONE: MOJOLEARN_AFCL_P12 (never-run Apple FAST programme card: 64-thread Kalman blocks) deleted 2026-11-15 by lane/expdel2-37-series; code recoverable at 145be10898.
+# Restore: git apply experiments/removed/MOJOLEARN_AFCL_P12.patch; record in docs/TOMBSTONES.md.
+comptime KALMAN_TPB = 32
 comptime INIT_TPB = 128
 
 
@@ -171,30 +165,24 @@ comptime INIT_TPB = 128
 #: 2026-09-26, parameter hashes equal): the Kalman loop kernel is
 #: instantiated at the state dimension (rd = 1..4) so its loops unroll and the per-series state stays
 #: in registers instead of runtime-indexed RD_MAX arrays -- the same
-#: operations in the same order. `-D MOJOLEARN_KALMAN_FAST_RD_OFF` keeps the
-#: runtime-rd kernel.
+#: operations in the same order.
+# TOMBSTONE: MOJOLEARN_KALMAN_FAST_RD_OFF, MOJOLEARN_IDN_KALMAN_RD_OFF, MOJOLEARN_IDN_ARIMA_LLONLY_OFF, MOJOLEARN_IDN_ARIMA_EVAL_WS_OFF, MOJOLEARN_IDN_ARIMA_EVAL_WS_EXOG_OFF (old paths, no A/B recorded) and MOJOLEARN_IDN_ALL_OFF (umbrella old path, EXP:2438) deleted 2026-11-15 by lane/expdel2-37-series; code recoverable at 145be10898.
+# Restore: git apply experiments/removed/<DEFINE>.patch for each; record in docs/TOMBSTONES.md.
 #: lane/fam-timeseries (2026-10-04), IDENTICAL on EVERY vendor: the four
 #: ARIMA fit schedules below were FAST + Apple (or Apple) only. Each is a
 #: schedule over per-series threads whose arithmetic is the serial form's
 #: (their own banners say why), so the bits are the ones NVIDIA, AMD, Apple
 #: and the host column (`arima/host/arima_oracle.mojo`) already agree on.
-#: Each has its own `_OFF`; `MOJOLEARN_IDN_ALL_OFF` turns all of them off.
 #: None of them changes a FAST build.
 comptime _KALMAN_IDN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 #: the loop kernel instantiated at the state dimension on NVIDIA and AMD too
-comptime IDN_KALMAN_RD = _KALMAN_IDN and not (
-    is_defined["MOJOLEARN_IDN_KALMAN_RD_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
+comptime IDN_KALMAN_RD = _KALMAN_IDN
 #: the fit's evaluations on the loop kernel without its three per-step stores
-comptime IDN_ARIMA_LLONLY = _KALMAN_IDN and not (
-    is_defined["MOJOLEARN_IDN_ARIMA_LLONLY_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
+comptime IDN_ARIMA_LLONLY = _KALMAN_IDN
 #: the fit's stacked evaluation on buffers held for the whole solve, with no
 #: wait per evaluation (the sequential form is N + 1 filter passes, each
 #: allocating a workspace and waiting)
-comptime IDN_ARIMA_EVAL_WS = _KALMAN_IDN and not (
-    is_defined["MOJOLEARN_IDN_ARIMA_EVAL_WS_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
+comptime IDN_ARIMA_EVAL_WS = _KALMAN_IDN
 #: lane/fam2-timeseries (2026-10-04), IDENTICAL on every vendor: a fit WITH
 #: exogenous regressors takes the held stacked evaluation too (it kept the
 #: sequential N + 1 filter passes, each allocating a workspace and waiting).
@@ -203,9 +191,7 @@ comptime IDN_ARIMA_EVAL_WS = _KALMAN_IDN and not (
 #: (`fast_eval_ws.mojo::ew_obs_intercept_kernel`, one thread per cell), and
 #: the loop kernel reads it exactly as the sequential pass does, so the
 #: log-likelihood and gradient bits are unchanged.
-#: `-D MOJOLEARN_IDN_ARIMA_EVAL_WS_EXOG_OFF=1` restores the sequential form
-#: for exog fits; `MOJOLEARN_IDN_ALL_OFF` turns the workspace, and so this, off.
-comptime ARIMA_EVAL_WS_EXOG = IDN_ARIMA_EVAL_WS and not is_defined["MOJOLEARN_IDN_ARIMA_EVAL_WS_EXOG_OFF"]()
+comptime ARIMA_EVAL_WS_EXOG = IDN_ARIMA_EVAL_WS
 #: IDENTICAL only: the held stacked workspace is taken when its (N + 1) x
 #: batch x n_obs cells stay under this bound (four such float32 arrays live
 #: at once); larger fits keep the sequential evaluation, same bits.
@@ -219,26 +205,10 @@ comptime KALMAN_FAST_RD = (
         )
         or IDN_KALMAN_RD
     )
-    and not is_defined["MOJOLEARN_KALMAN_FAST_RD_OFF"]()
 )
 
-comptime KALMAN_TIME_SCAN = (
-    KALMAN_FAST_RD and GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and is_defined["MOJOLEARN_KALMAN_TIME_SCAN"]()
-    and not is_defined["MOJOLEARN_KALMAN_TIME_SCAN_OFF"]()
-)
-"""FAST on Apple: once `P` has converged the filter is a constant linear
-recursion, solved in chunks in parallel (`fast_kalman_scan.mojo`).
-
-OFF BY DEFAULT since 2026-09-26 (lane/apple-identical-neural): a paired
-check against the serial filter, three orders x five seeds at 20,000 points,
-found the fitted log-likelihood LOWER in every group (mean -0.035 / -0.038 /
--0.122, worst -0.371) and the parameter error vs the generating values
-slightly higher for (1,0,1) and (2,0,1); below the 4096-observation
-threshold the fits are identical. FAST may move bits but not quality, so
-the serial filter is the FAST default; `-D MOJOLEARN_KALMAN_TIME_SCAN=1` is
-the trial arm (20,000-point fits ~0.46 -> ~0.14 s on the M4)."""
-comptime KALMAN_TIME_SCAN_MIN_OBS = 4096
+# TOMBSTONE: MOJOLEARN_KALMAN_TIME_SCAN (opt-in FAST arm, no A/B recorded; lower log-likelihood in the 2026-09-26 paired check) and MOJOLEARN_KALMAN_TIME_SCAN_OFF (old path) deleted 2026-11-15 by lane/expdel2-37-series with arima/impl/fast_kalman_scan.mojo; code recoverable at 145be10898.
+# Restore: git apply experiments/removed/MOJOLEARN_KALMAN_TIME_SCAN.patch; record in docs/TOMBSTONES.md.
 
 # TOMBSTONE: MOJOLEARN_ARIMA_FAST_P_FIX (DROPPED-slower) deleted 2026-10-03 by dd47c5df0; code recoverable at dd47c5df0^.
 # Restore: git apply experiments/removed/MOJOLEARN_ARIMA_FAST_P_FIX.patch; record in docs/TOMBSTONES.md.
@@ -259,7 +229,7 @@ comptime KALMAN_TIME_SCAN_MIN_OBS = 4096
 #: (-21.8%). The old `-D MOJOLEARN_ARIMA_FAST_LLONLY=1` /
 #: `-D MOJOLEARN_ARIMA_FAST_EVAL_WS=1` stay harmless.
 #: IDENTICAL on every vendor since lane/fam-timeseries (IDN_ARIMA_LLONLY
-#: above; `-D MOJOLEARN_IDN_ARIMA_LLONLY_OFF=1`).
+#: above).
 # TOMBSTONE: MOJOLEARN_ARIMA_FAST_LLONLY_OFF (old path, superseded by the FAST+Apple default) deleted 2026-11-15 by lane/expdel-02-decomposition-series; code recoverable at a656258c20.
 # Restore: git apply experiments/removed/MOJOLEARN_ARIMA_FAST_LLONLY_OFF.patch; record in docs/TOMBSTONES.md.
 comptime KALMAN_LL_ONLY = (
@@ -278,7 +248,7 @@ comptime KALMAN_LL_ONLY = (
 #: (-21.8%). The old `-D MOJOLEARN_ARIMA_FAST_LLONLY=1` /
 #: `-D MOJOLEARN_ARIMA_FAST_EVAL_WS=1` stay harmless.
 #: IDENTICAL on every vendor since lane/fam-timeseries (IDN_ARIMA_EVAL_WS
-#: above; `-D MOJOLEARN_IDN_ARIMA_EVAL_WS_OFF=1`).
+#: above).
 # TOMBSTONE: MOJOLEARN_ARIMA_FAST_EVAL_WS_OFF (old path, superseded by the FAST+Apple default) deleted 2026-11-15 by lane/expdel-02-decomposition-series; code recoverable at 33f865ad21.
 # Restore: git apply experiments/removed/MOJOLEARN_ARIMA_FAST_EVAL_WS_OFF.patch; record in docs/TOMBSTONES.md.
 comptime KALMAN_FAST_EVAL_WS = (
@@ -662,13 +632,9 @@ def batched_kalman_loop_kernel[
     var n_obs_ll = 0
     var info = Int32(0)
     var b_ys = bid * nobs
-    # C59 immutable observations can be shared by independent parameter trials.
-    # Output/innovation offsets still use the full logical trial ID.
-    # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
+    # TOMBSTONE: MOJOLEARN_C59_TRIAL_STATE (opt-in arm, no A/B recorded; non-owner site, owner expdel2-07-base) folded to False 2026-11-15 by lane/expdel2-37-series; code recoverable at 145be10898.
+    # Restore: git apply experiments/removed/MOJOLEARN_C59_TRIAL_STATE.expdel2-37-series.patch; record in docs/TOMBSTONES.md.
     var y_base = b_ys
-    comptime if C59_TRIAL_STATE:
-        if observation_batch_in > 0:
-            y_base = (bid % Int(observation_batch_in))*nobs
     var mu = ftz(d_mu.unsafe_load(bid)) if intercept_in != 0 else Float32(0.0)
 
     for it in range(nobs):
@@ -1079,15 +1045,6 @@ def batched_kalman_filter_x(
         if kl_done:
             pass
         elif rd == 1:
-            comptime if KALMAN_TIME_SCAN:
-                if nobs >= KALMAN_TIME_SCAN_MIN_OBS:
-                    fast_kalman_scan[1](
-                        ctx, d_ys, ws.T, ws.Z, ws.RQR, ws.P, ws.alpha, params.mu,
-                        ws.pred, ws.vs, ws.Fs, ws.loglike, ws.fc, ws.info_loop,
-                        ws.obs, ws.obs_fut, nobs, batch_size, order.k, n_diff,
-                        fc_steps, has_exog,
-                    )
-                    kl_done = True
             if not kl_done:
                 ctx.enqueue_function[batched_kalman_loop_kernel[1]](
                     d_ys.unsafe_ptr(), ws.T.unsafe_ptr(), ws.Z.unsafe_ptr(), ws.RQR.unsafe_ptr(),
@@ -1102,15 +1059,6 @@ def batched_kalman_filter_x(
                 )
             kl_done = True
         elif rd == 2:
-            comptime if KALMAN_TIME_SCAN:
-                if nobs >= KALMAN_TIME_SCAN_MIN_OBS:
-                    fast_kalman_scan[2](
-                        ctx, d_ys, ws.T, ws.Z, ws.RQR, ws.P, ws.alpha, params.mu,
-                        ws.pred, ws.vs, ws.Fs, ws.loglike, ws.fc, ws.info_loop,
-                        ws.obs, ws.obs_fut, nobs, batch_size, order.k, n_diff,
-                        fc_steps, has_exog,
-                    )
-                    kl_done = True
             if not kl_done:
                 ctx.enqueue_function[batched_kalman_loop_kernel[2]](
                     d_ys.unsafe_ptr(), ws.T.unsafe_ptr(), ws.Z.unsafe_ptr(), ws.RQR.unsafe_ptr(),
@@ -1125,15 +1073,6 @@ def batched_kalman_filter_x(
                 )
             kl_done = True
         elif rd == 3:
-            comptime if KALMAN_TIME_SCAN:
-                if nobs >= KALMAN_TIME_SCAN_MIN_OBS:
-                    fast_kalman_scan[3](
-                        ctx, d_ys, ws.T, ws.Z, ws.RQR, ws.P, ws.alpha, params.mu,
-                        ws.pred, ws.vs, ws.Fs, ws.loglike, ws.fc, ws.info_loop,
-                        ws.obs, ws.obs_fut, nobs, batch_size, order.k, n_diff,
-                        fc_steps, has_exog,
-                    )
-                    kl_done = True
             if not kl_done:
                 ctx.enqueue_function[batched_kalman_loop_kernel[3]](
                     d_ys.unsafe_ptr(), ws.T.unsafe_ptr(), ws.Z.unsafe_ptr(), ws.RQR.unsafe_ptr(),
@@ -1148,15 +1087,6 @@ def batched_kalman_filter_x(
                 )
             kl_done = True
         elif rd == 4:
-            comptime if KALMAN_TIME_SCAN:
-                if nobs >= KALMAN_TIME_SCAN_MIN_OBS:
-                    fast_kalman_scan[4](
-                        ctx, d_ys, ws.T, ws.Z, ws.RQR, ws.P, ws.alpha, params.mu,
-                        ws.pred, ws.vs, ws.Fs, ws.loglike, ws.fc, ws.info_loop,
-                        ws.obs, ws.obs_fut, nobs, batch_size, order.k, n_diff,
-                        fc_steps, has_exog,
-                    )
-                    kl_done = True
             if not kl_done:
                 ctx.enqueue_function[batched_kalman_loop_kernel[4]](
                     d_ys.unsafe_ptr(), ws.T.unsafe_ptr(), ws.Z.unsafe_ptr(), ws.RQR.unsafe_ptr(),
@@ -1211,8 +1141,7 @@ def _launch_loop_ll_only(
         return
     var grid = _grid(batch_size, kalman_tpb)
     # FAST: the per-rd instantiation always (unchanged). IDENTICAL: only
-    # with KALMAN_FAST_RD, so `-D MOJOLEARN_IDN_KALMAN_RD_OFF=1` is a clean
-    # A/B of the specialization (same operations in the same order).
+    # with KALMAN_FAST_RD (same operations in the same order).
     var spec = True
     comptime if _KALMAN_IDN and not KALMAN_FAST_RD:
         spec = False
