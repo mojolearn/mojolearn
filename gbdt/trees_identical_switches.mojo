@@ -223,10 +223,9 @@ comptime ORD_SKIP_UNSEARCHED_PERM = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 # per tree, independent of shape; the derivative traffic is the same 2n rows.
 # BITS: none (every position runs the same per-row statement on the same
 # operands; the fold bins are the same integers). Host column untouched.
-comptime IDN_ORD_CAT_PLANES = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not is_defined["MOJOLEARN_IDN_ORD_CAT_PLANES_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_IDN_ORD_CAT_PLANES_OFF (DELETE-OLD-PATH, no A/B recorded for the old path, rule b) deleted 2026-11-15 by lane/expdel2-45-trees; code recoverable at c435213440.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ORD_CAT_PLANES_OFF.patch
+comptime IDN_ORD_CAT_PLANES = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 # TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (DELETE-OLD-PATH, rule e, EXP:2438; non-owner fold to False) deleted 2026-11-15 by lane/expdel2-45-trees; code recoverable at 882d15f175.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-45-trees.patch; record in docs/TOMBSTONES.md.
 
