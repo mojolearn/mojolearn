@@ -361,8 +361,7 @@ def _check_configuration() -> Bool:
     # MOJOLEARN_SESSION_CALL_DESCRIPTOR: refusal removed 2026-11-15 (restored; owed B arm, see docs/TOMBSTONES.md Restored table)
     # Restore: git apply experiments/removed/MOJOLEARN_TRANSFORMER_DECODE_PER_TOKEN_ADMISSION.patch
     comptime assert not is_defined["MOJOLEARN_TRANSFORMER_DECODE_PER_TOKEN_ADMISSION"](), "removed 2026-11-15 (lane/expdel2-08-base): TRANSFORMER_DECODE_PER_TOKEN_ADMISSION (unmeasured B arm) is gone; the default is kept; code at c33bc3f5d0; restore: experiments/removed/MOJOLEARN_TRANSFORMER_DECODE_PER_TOKEN_ADMISSION.patch"
-    # Restore: git apply experiments/removed/MOJOLEARN_TRANSFORMER_DECODE_PER_TOKEN_DOOR.patch
-    comptime assert not is_defined["MOJOLEARN_TRANSFORMER_DECODE_PER_TOKEN_DOOR"](), "removed 2026-11-15 (lane/expdel2-08-base): TRANSFORMER_DECODE_PER_TOKEN_DOOR (unmeasured B arm) is gone; the default is kept; code at b891c32944; restore: experiments/removed/MOJOLEARN_TRANSFORMER_DECODE_PER_TOKEN_DOOR.patch"
+    # MOJOLEARN_TRANSFORMER_DECODE_PER_TOKEN_DOOR: refusal removed 2026-11-15 (restored; owed B arm, see docs/TOMBSTONES.md Restored table)
     # Lane expdel2-23-neural (2026-11-15): unmeasured arms and old paths deleted, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (docs/TOMBSTONES.md).
     # Restore: git apply experiments/removed/MOJOLEARN_AFN_MAMBA3_BWD_ARENA.patch
     comptime assert not is_defined["MOJOLEARN_AFN_MAMBA3_BWD_ARENA"](), "removed 2026-11-15 (lane/expdel2-23-neural): AFN_MAMBA3_BWD_ARENA (arm) is gone; the default path is the only one; code at cca09a09f6; restore: experiments/removed/MOJOLEARN_AFN_MAMBA3_BWD_ARENA.patch"
