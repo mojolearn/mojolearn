@@ -64,6 +64,11 @@ $PY tools/ops/native_checks_report.py list --column gpu --filter "$FILTER" > "$R
 n=$(grep -c . "$RES/planned.txt")
 [ "$n" -gt 0 ] || { say "no check matches $FILTER"; exit 2; }
 
+# The gitignored generated modules the checks import (archive Unicode table, tokenizer table), as the binding
+# builds write them (bindings/merged_build.sh).
+$PY tools/generated_sources.py prepare --repo "$PWD" < /dev/null > "$RES/logs/generated-sources.log" 2>&1 \
+    || { say "generated sources failed (logs/generated-sources.log)"; exit 2; }
+
 # The one compile: every registered device-column check in one binary.
 mkdir -p "$RES/bin"
 say "building run_gpu ($n checks planned)"

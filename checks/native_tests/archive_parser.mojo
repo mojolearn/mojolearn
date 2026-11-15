@@ -10,6 +10,7 @@ from core.native_archive_npy import native_npy_layout, native_npy_text_source
 from core.native_archive_unicode import archive_decode_utf8, archive_decode_utf32, archive_decode_literal, archive_text_equal
 from core.native_archive_zip import native_zip_directory, native_zip_payload
 from checks.native_tests.archive_parser_vectors import archive_zip_fixture
+from checks.native_tests.runner import Check, Column, Report
 
 
 def _require(ok: Bool, message: String) raises:
@@ -184,7 +185,7 @@ def _zip(unit: Int) raises:
     _ = bytes
 
 
-def main() raises:
+def run_checks() raises:
     comptime FIXTURES = 94
     var failed = List[Int](length=FIXTURES, fill=0)
     var failures_ptr = failed.unsafe_ptr()
@@ -209,3 +210,17 @@ def main() raises:
         failures += value
     _require(failures == 0, "archive parsers failed " + String(failures) + " of " + String(FIXTURES) + " fixtures")
     print("PASS archive_parser:", FIXTURES, "native fixtures, parallel")
+
+
+# The one runner (runner.mojo): the fixtures run across host cores inside
+# run_checks, which raises after printing each failed fixture; the check counts
+# as one case. Host column only: archive reading and writing is host work.
+def run_cases(column: Column, mut report: Report):
+    try:
+        run_checks()
+    except error:
+        report.abort(error)
+
+
+def register() -> Check:
+    return Check("archive_parser", cpu=True, gpu=False, serial="", run=run_cases)

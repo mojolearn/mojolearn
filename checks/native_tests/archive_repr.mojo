@@ -2,6 +2,7 @@
 """Typed archive error-name graphs: display, aliases, cycles and first failure."""
 from core.host_parallel import host_parallelize
 from core.native_archive_repr import NativeArchiveReprNode, archive_repr_format
+from checks.native_tests.runner import Check, Column, Report
 
 
 def _require(ok: Bool, message: String) raises:
@@ -169,7 +170,7 @@ def _invalid(unit: Int) raises:
     _require(refused, "invalid native graph must refuse")
 
 
-def main() raises:
+def run_checks() raises:
     comptime FIXTURES = 34
     var failed = List[Int](length=FIXTURES, fill=0)
     var failures_ptr = failed.unsafe_ptr()
@@ -200,3 +201,17 @@ def main() raises:
         failures += value
     _require(failures == 0, "archive representation failed " + String(failures) + " of " + String(FIXTURES) + " fixtures")
     print("PASS archive_repr:", FIXTURES, "native fixtures, parallel")
+
+
+# The one runner (runner.mojo): the fixtures run across host cores inside
+# run_checks, which raises after printing each failed fixture; the check counts
+# as one case. Host column only: archive reading and writing is host work.
+def run_cases(column: Column, mut report: Report):
+    try:
+        run_checks()
+    except error:
+        report.abort(error)
+
+
+def register() -> Check:
+    return Check("archive_repr", cpu=True, gpu=False, serial="", run=run_cases)

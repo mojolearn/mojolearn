@@ -109,9 +109,17 @@ jobs:
           [ "$(uname -m)" = x86_64 ] || target=""
           pixi run mojo --version > out/compiler-version.log 2>&1
           start=$(date +%s)
-          pixi run mojo build $defines $target -I . -o "bin/run_$IN_COLUMN" "checks/native_tests/run_$IN_COLUMN.mojo" \
-            > "out/logs/build-$IN_COLUMN.log" 2>&1
+          # The gitignored generated modules (the archive Unicode table the archive_* checks import, the tokenizer
+          # table), written exactly as the binding builds write them (bindings/merged_build.sh).
+          python3 tools/generated_sources.py prepare --repo "$PWD" < /dev/null > "out/logs/generated-sources.log" 2>&1
           rc=$?
+          if [ "$rc" = 0 ]; then
+            pixi run mojo build $defines $target -I . -o "bin/run_$IN_COLUMN" "checks/native_tests/run_$IN_COLUMN.mojo" \
+              > "out/logs/build-$IN_COLUMN.log" 2>&1
+            rc=$?
+          else
+            cp "out/logs/generated-sources.log" "out/logs/build-$IN_COLUMN.log"
+          fi
           python3 tools/ops/native_checks_report.py result "build-$IN_COLUMN" --log "out/logs/build-$IN_COLUMN.log" \
             --rc "$rc" --seconds "$(( $(date +%s) - start ))" --out-dir out/results
           echo "build rc=$rc"

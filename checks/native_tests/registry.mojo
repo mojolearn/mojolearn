@@ -15,6 +15,18 @@ from checks.native_tests.ann_cagra_filtered import register as register_ann_cagr
 from checks.native_tests.ann_ivf_surface import register as register_ann_ivf_surface
 from checks.native_tests.ann_ivfpq_host_filter import register as register_ann_ivfpq_host_filter
 from checks.native_tests.ann_ops import register as register_ann_ops
+from checks.native_tests.archive_cholesky import register as register_archive_cholesky
+from checks.native_tests.archive_codec import register as register_archive_codec
+from checks.native_tests.archive_linear import register as register_archive_linear
+from checks.native_tests.archive_minmax import register as register_archive_minmax
+from checks.native_tests.archive_parser import register as register_archive_parser
+from checks.native_tests.archive_path import register as register_archive_path
+from checks.native_tests.archive_reader import register as register_archive_reader
+from checks.native_tests.archive_repr import register as register_archive_repr
+from checks.native_tests.archive_standard import register as register_archive_standard
+from checks.native_tests.archive_text_cells import register as register_archive_text_cells
+from checks.native_tests.archive_unicode_names import register as register_archive_unicode_names
+from checks.native_tests.archive_writer import register as register_archive_writer
 from checks.native_tests.arima_state import register as register_arima_state
 from checks.native_tests.bf16_conversion import register as register_bf16_conversion
 from checks.native_tests.bf16_linalg import register as register_bf16_linalg
@@ -93,9 +105,9 @@ from checks.native_tests.logistic_numeric import register as register_logistic_n
 from checks.native_tests.lowbit_weights import register as register_lowbit_weights
 from checks.native_tests.mamba12_forward_exec import register as register_mamba12_forward_exec
 from checks.native_tests.mamba3_output_coverage import register as register_mamba3_output_coverage
-from checks.native_tests.mamba_decode_sessions import register as register_mamba_decode_sessions
 from checks.native_tests.mamba3_prefill_session import register as register_mamba3_prefill_session
 from checks.native_tests.mamba3_prefix_step import register as register_mamba3_prefix_step
+from checks.native_tests.mamba_decode_sessions import register as register_mamba_decode_sessions
 from checks.native_tests.mani_decomp_repeat import register as register_mani_decomp_repeat
 from checks.native_tests.metrics_selection_host_p2 import register as register_metrics_selection_host_p2
 from checks.native_tests.metrics_smallfam_public import register as register_metrics_smallfam_public
@@ -135,6 +147,7 @@ from checks.native_tests.rankn_math import register as register_rankn_math
 from checks.native_tests.rankn_views import register as register_rankn_views
 from checks.native_tests.resample_cross_vendor_fold import register as register_resample_cross_vendor_fold
 from checks.native_tests.resample_cv_row_order import register as register_resample_cv_row_order
+from checks.native_tests.runner import Check
 from checks.native_tests.sequence_croston import register as register_sequence_croston
 from checks.native_tests.sequence_garch import register as register_sequence_garch
 from checks.native_tests.sequence_moe import register as register_sequence_moe
@@ -180,7 +193,6 @@ from checks.native_tests.tsvd_fit import register as register_tsvd_fit
 from checks.native_tests.tsvd_native import register as register_tsvd_native
 from checks.native_tests.umap_ops import register as register_umap_ops
 from checks.native_tests.x_linear_ops import register as register_x_linear_ops
-from checks.native_tests.runner import Check
 
 
 def all_checks() -> List[Check]:
@@ -191,6 +203,18 @@ def all_checks() -> List[Check]:
     checks.append(register_ann_ivf_surface())
     checks.append(register_ann_ivfpq_host_filter())
     checks.append(register_ann_ops())
+    checks.append(register_archive_cholesky())
+    checks.append(register_archive_codec())
+    checks.append(register_archive_linear())
+    checks.append(register_archive_minmax())
+    checks.append(register_archive_parser())
+    checks.append(register_archive_path())
+    checks.append(register_archive_reader())
+    checks.append(register_archive_repr())
+    checks.append(register_archive_standard())
+    checks.append(register_archive_text_cells())
+    checks.append(register_archive_unicode_names())
+    checks.append(register_archive_writer())
     checks.append(register_arima_state())
     checks.append(register_bf16_conversion())
     checks.append(register_bf16_linalg())
@@ -269,9 +293,9 @@ def all_checks() -> List[Check]:
     checks.append(register_lowbit_weights())
     checks.append(register_mamba12_forward_exec())
     checks.append(register_mamba3_output_coverage())
-    checks.append(register_mamba_decode_sessions())
     checks.append(register_mamba3_prefill_session())
     checks.append(register_mamba3_prefix_step())
+    checks.append(register_mamba_decode_sessions())
     checks.append(register_mani_decomp_repeat())
     checks.append(register_metrics_selection_host_p2())
     checks.append(register_metrics_smallfam_public())

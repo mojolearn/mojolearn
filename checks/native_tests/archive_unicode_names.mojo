@@ -8,6 +8,7 @@ Independent fixtures run in the native host pool; this is not model identity.
 from core.host_parallel import host_parallelize
 from core.native_archive_span import ArchiveSpan
 from core.native_archive_unicode_names import archive_unicode_name, archive_unicode_digit
+from checks.native_tests.runner import Check, Column, Report
 
 
 def _require(ok: Bool, message: String) raises:
@@ -89,7 +90,7 @@ def _refusal(unit: Int) raises:
     _require(failed, "unsupported Unicode interpreter profile must refuse")
 
 
-def main() raises:
+def run_checks() raises:
     comptime FIXTURES = 48
     var failed = List[Int](length=FIXTURES, fill=0)
     var flags = failed.unsafe_ptr()
@@ -110,3 +111,17 @@ def main() raises:
         failures += flag
     _require(failures == 0, "archive Unicode failed " + String(failures) + " fixtures")
     print("PASS archive_unicode_names:", FIXTURES, "native fixtures, parallel")
+
+
+# The one runner (runner.mojo): the fixtures run across host cores inside
+# run_checks, which raises after printing each failed fixture; the check counts
+# as one case. Host column only: archive reading and writing is host work.
+def run_cases(column: Column, mut report: Report):
+    try:
+        run_checks()
+    except error:
+        report.abort(error)
+
+
+def register() -> Check:
+    return Check("archive_unicode_names", cpu=True, gpu=False, serial="", run=run_cases)
