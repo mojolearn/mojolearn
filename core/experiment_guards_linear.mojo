@@ -90,6 +90,8 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_ARD_FAST_CLS1_BATCH_OFF"](), "removed 2026-11-15 (lane/expdel-03-linear): ARD_FAST_CLS1_BATCH_OFF (FAST+Apple rollback to one ARD witness check per iteration) is gone; the batched check is the FAST+Apple path (ard taxi 14.4 -> 8.3 ms with the bundle, KEPT 9decae29f); code recoverable at d30f8b724f"
     # Restore: git apply experiments/removed/MOJOLEARN_BAYES_FAST_CLS1_PARTS_OFF.patch
     comptime assert not is_defined["MOJOLEARN_BAYES_FAST_CLS1_PARTS_OFF"](), "removed 2026-11-15 (lane/expdel-03-linear): BAYES_FAST_CLS1_PARTS_OFF (FAST+Apple rollback to the one-thread BayesianRidge partials) is gone; the block partials are the FAST+Apple path (bayesian-ridge taxi -3%, KEPT 9decae29f); code recoverable at 3cadf0f84b"
+    # Restore: git apply experiments/removed/MOJOLEARN_BAYES_FAST_CLS1_BATCH_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_BAYES_FAST_CLS1_BATCH_OFF"](), "removed 2026-11-15 (lane/expdel-03-linear): BAYES_FAST_CLS1_BATCH_OFF (FAST+Apple rollback to two synchronizations per BayesianRidge iteration) is gone; the batched loop is the FAST+Apple path (bayesian-ridge taxi 102 -> 15.3 ms with the bundle, KEPT 9decae29f); code recoverable at 9a688a11e2"
     return True
 
 
