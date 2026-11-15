@@ -40,7 +40,9 @@ comptime AFT_G04 = False
 comptime AFT_G05 = False
 # G06: 128-thread compressed-word packing with sixteen rows per lane.
 # No performance/quality evidence; same 2048 rows/block and bit layout.
-comptime AFT_G06 = AFT_G_APPLE_FAST and is_defined["MOJOLEARN_AFT_G06"]()
+# TOMBSTONE: MOJOLEARN_AFT_G06 (DELETE-EXPERIMENT, never-run Apple FAST programme card, rule g) deleted 2026-11-15 by lane/expdel2-42-trees; code recoverable at adccdfe434.
+# Restore: git apply experiments/removed/MOJOLEARN_AFT_G06.patch; record in docs/TOMBSTONES.md.
+comptime AFT_G06 = False
 # G07: 128-thread Apple leaf walker objective reduction and direction traversal.
 # No performance/quality evidence; leave shared/fused statistics contracts intact.
 comptime AFT_G07 = AFT_G_APPLE_FAST and is_defined["MOJOLEARN_AFT_G07"]()
