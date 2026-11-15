@@ -14,7 +14,9 @@ import numpy as np
 import pytest
 
 from mojolearn import _classical_host as host
-from mojolearn._labels import ClassLabels, label_kind
+from mojolearn._labels import ClassLabels
+# c88a3d366e deleted _labels.label_kind (no product caller); the oracle copy lives in the tests.
+from mojolearn.tests._former_prep_labels import label_kind
 from mojolearn._verify_native_runtime import audit_native_call
 from mojolearn.tests import _legacy_host_inference as legacy
 from mojolearn.tests.test_host_archive_native import _archive, _state

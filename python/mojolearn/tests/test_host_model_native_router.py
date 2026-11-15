@@ -73,6 +73,9 @@ def test_public_router_fixture_matrix_covers_every_registered_archive_entry():
     covered = {(fmt, name) for name, (fmt, _) in CASES.items()}
     covered.update({("mojolearn-linear-1", "LinearRegression"), ("mojolearn-linear-1", "Ridge"),
                     ("mojolearn-scaler-1", "StandardScaler"), ("mojolearn-arima-2", "ARIMA")})
+    # 9b2c7b2324 registered the saved-forest format; its public round trip is
+    # test_iforest_save_forest.py::test_host_column_loads_scores_and_resaves_a_saved_forest.
+    covered.add(("mojolearn-iforest-2", "IsolationForest"))
     covered.update((fmt + suffix, name) for fmt, family in forest._FORMATS.items()
                    for name, info in forest._ESTIMATORS.items() if family == info[0]
                    for suffix in ("", forest._GROVES_SUFFIX))
