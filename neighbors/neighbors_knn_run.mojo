@@ -335,10 +335,14 @@ def knn_check_int32_labels(low: Int, high: Int) raises:
         raise Error("mojolearn: y does not fit int32")
 
 
+#: wave2-knn-0844-gap (2026-11-13): B arm of the owed A/B. Defined, the
+#: classifier fit widens int32 labels to int64, reads their minimum and maximum
+#: (two device reductions: two uploads of the label words, two launches, two
+#: synchronisations) and narrows them back, as every release since 0.8.44 did.
 # TOMBSTONE: MOJOLEARN_IDN_KNN_I32_LABEL_RANGE_OLD (old int64 widen-and-range path, EXP:2412 PENDING, never run) deleted 2026-11-15 by lane/expdel2-12-cluster; code recoverable at b5975648b6.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_KNN_I32_LABEL_RANGE_OLD.patch; record in docs/TOMBSTONES.md.
-# The alias stays False for its importers (checks/native_tests/neighbors_knn_run_suite.mojo).
-comptime KNN_I32_LABEL_RANGE_OLD = False
+# RESTORED 2026-11-15 by lane/expdel2-restore-owed: owed B arm (owed-pre0867.json), under four weeks old; the deletion was premature.
+comptime KNN_I32_LABEL_RANGE_OLD = is_defined["MOJOLEARN_IDN_KNN_I32_LABEL_RANGE_OLD"]()
 
 
 def knn_labels_already_int32(typestr: String) -> Bool:
@@ -348,6 +352,8 @@ def knn_labels_already_int32(typestr: String) -> Bool:
     the same words (the widen-then-narrow round trip is the identity on them),
     so the bits do not change. Every other dtype keeps the widening and the
     range check."""
+    comptime if KNN_I32_LABEL_RANGE_OLD:
+        return False
     return typestr == "<i4"
 
 

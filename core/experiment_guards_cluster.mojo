@@ -389,8 +389,7 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_IDN_KNN_DIRECT_RELABEL_OFF"](), "removed 2026-11-15 (lane/expdel2-12-cluster): IDN_KNN_DIRECT_RELABEL_OFF (old path, kNN classifier vote relabel (IDENTICAL)) is gone; the default stays; code recoverable at 33130c2d0a; restore: experiments/removed/MOJOLEARN_IDN_KNN_DIRECT_RELABEL_OFF.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_KNN_DEVICE_WEIGHTS_OFF.patch
     comptime assert not is_defined["MOJOLEARN_IDN_KNN_DEVICE_WEIGHTS_OFF"](), "removed 2026-11-15 (lane/expdel2-12-cluster): IDN_KNN_DEVICE_WEIGHTS_OFF (old path, kNN distance weights (IDENTICAL)) is gone; the default stays; code recoverable at bb292f4946; restore: experiments/removed/MOJOLEARN_IDN_KNN_DEVICE_WEIGHTS_OFF.patch"
-    # Restore: git apply experiments/removed/MOJOLEARN_IDN_KNN_I32_LABEL_RANGE_OLD.patch
-    comptime assert not is_defined["MOJOLEARN_IDN_KNN_I32_LABEL_RANGE_OLD"](), "removed 2026-11-15 (lane/expdel2-12-cluster): IDN_KNN_I32_LABEL_RANGE_OLD (old path, k-NN classifier fit int32 labels) is gone; the default stays; code recoverable at b5975648b6; restore: experiments/removed/MOJOLEARN_IDN_KNN_I32_LABEL_RANGE_OLD.patch"
+    # MOJOLEARN_IDN_KNN_I32_LABEL_RANGE_OLD: refusal removed 2026-11-15 (restored; owed B arm, see docs/TOMBSTONES.md Restored table)
     # MOJOLEARN_IDN_KNN_DOOR_FIT_XN_EAGER: refusal removed 2026-11-15 (restored; owed B arm, see docs/TOMBSTONES.md Restored table)
     # Restore: git apply experiments/removed/MOJOLEARN_KNN_LEGACY_QUERY_TILE.patch
     comptime assert not is_defined["MOJOLEARN_KNN_LEGACY_QUERY_TILE"](), "removed 2026-11-15 (lane/expdel2-12-cluster): KNN_LEGACY_QUERY_TILE (old path, kNN query tile (IDENTICAL)) is gone; the default stays; code recoverable at 31c68bae2d; restore: experiments/removed/MOJOLEARN_KNN_LEGACY_QUERY_TILE.patch"

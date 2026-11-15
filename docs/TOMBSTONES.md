@@ -2145,6 +2145,7 @@ Deletions reversed by new evidence. The code is back on main; the section and th
 | [`MOJOLEARN_IDN_GMM_FUSED_CHOL_OFF`](#mojolearn_idn_gmm_fused_chol_off-old-path-deleted-2026-11-15) | GaussianMixture Cholesky order (IDENTICAL) | 2026-11-15 (`d14a8860af`) | 2026-11-15 (lane/expdel2-restore-owed) | opt-in B arm, default unchanged, A/B owed at the wave sha | [MOJOLEARN_IDN_GMM_FUSED_CHOL_OFF.patch](../experiments/removed/MOJOLEARN_IDN_GMM_FUSED_CHOL_OFF.patch) |
 | [`MOJOLEARN_IDN_KDE_QTILE_FORCE`](#mojolearn_idn_kde_qtile_force) | Kernel density (IDENTICAL query-tile pass) | 2026-11-15 (`4bf6c39024`) | 2026-11-15 (lane/expdel2-restore-owed) | opt-in B arm, default unchanged, A/B owed at the wave sha | [MOJOLEARN_IDN_KDE_QTILE_FORCE.patch](../experiments/removed/MOJOLEARN_IDN_KDE_QTILE_FORCE.patch) |
 | [`MOJOLEARN_IDN_KNN_DOOR_FIT_XN_EAGER`](#mojolearn_idn_knn_door_fit_xn_eager-opt-in-arm-deleted-2026-11-15) | k-NN fit door (x_neighbors admission) | 2026-11-15 (`31c68bae2d`) | 2026-11-15 (lane/expdel2-restore-owed) | opt-in B arm, default unchanged, A/B owed at the wave sha | [MOJOLEARN_IDN_KNN_DOOR_FIT_XN_EAGER.patch](../experiments/removed/MOJOLEARN_IDN_KNN_DOOR_FIT_XN_EAGER.patch) |
+| [`MOJOLEARN_IDN_KNN_I32_LABEL_RANGE_OLD`](#mojolearn_idn_knn_i32_label_range_old-old-path-deleted-2026-11-15) | k-NN classifier fit int32 labels | 2026-11-15 (`10c4fb4ffc`) | 2026-11-15 (lane/expdel2-restore-owed) | opt-in B arm, default unchanged, A/B owed at the wave sha | [MOJOLEARN_IDN_KNN_I32_LABEL_RANGE_OLD.patch](../experiments/removed/MOJOLEARN_IDN_KNN_I32_LABEL_RANGE_OLD.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -11043,6 +11044,7 @@ Restored 2026-11-15 (lane/expdel2-restore-owed): owed B arm, deletion premature;
 - **Deleted by**: lane/expdel2-12-cluster (expdel2-12-cluster, commit `10c4fb4ffc`); code recoverable at `b5975648b6`.
 - **Restore**: `git apply experiments/removed/MOJOLEARN_IDN_KNN_I32_LABEL_RANGE_OLD.patch`, then delete the `MOJOLEARN_IDN_KNN_I32_LABEL_RANGE_OLD` refusal in `core/experiment_guards_cluster.mojo`.
 - **Records**: refusal in `core/experiment_guards_cluster.mojo`; no `grid_controls` entry (none names it as a control); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-12-cluster section).
+Restored 2026-11-15 (lane/expdel2-restore-owed): owed B arm, deletion premature; see Restored table.
 
 ## MOJOLEARN_IDN_KNN_DOOR_FIT_XN_EAGER: opt-in arm deleted (2026-11-15)
 
