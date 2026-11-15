@@ -11,7 +11,6 @@ a mechanism was written there first (lane af-hdbscan2), the IDENTICAL
 switch below ORs into the same `comptime if`.
 """
 
-from std.sys.compile import is_defined
 from std.sys.defines import get_defined_int
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
