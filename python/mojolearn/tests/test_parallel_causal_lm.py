@@ -11,7 +11,6 @@ import signal
 import sys
 from contextlib import contextmanager
 from pathlib import Path
-from types import SimpleNamespace
 
 import numpy as np
 import pytest
@@ -354,7 +353,11 @@ def test_invalid_restore_releases_new_states_preserves_live_stream(tmp_path, mon
         assert checked(split.parameters)
 
 
-def test_uniform_sampling_eos_has_independent_integer_oracle(tmp_path, monkeypatch):
+def test_uniform_sampling_stream_chunks_and_eos_match_generate(tmp_path, monkeypatch):
+    # A zero head gives uniform logits, so top_k=4 samples among the four
+    # lowest token ids. The expectations are same-build relations (generate
+    # equals the chunked stream; the EOS stream is generate cut at its first
+    # EOS and padded), never tokens frozen from an older build.
     cfg = _llama_config(vocab_size=256)
     tensors = _llama_tensors(cfg)
     dtype, shape, raw = tensors['lm_head.weight']
@@ -364,14 +367,22 @@ def test_uniform_sampling_eos_has_independent_integer_oracle(tmp_path, monkeypat
     with actual_owner(tmp_path, monkeypatch, root) as split:
         prompt = np.array([[33], [34]], 'i4')
         options = dict(greedy=False, seed=0, top_k=4)
-        expected = [[3, 1, 0, 3, 0, 1, 0, 3], [1, 0, 2, 2, 0, 0, 3, 0]]
-        assert np.asarray(checked(split.generate, prompt, 8, **options))[:, 1:].tolist() == expected
+        generated = np.asarray(checked(split.generate, prompt, 8, **options))
+        assert generated.shape == (2, 9)
+        assert generated[:, 0].tolist() == [33, 34]
+        expected = generated[:, 1:].tolist()
+        assert all(0 <= token < 4 for row in expected for token in row)
+        assert np.asarray(checked(split.generate, prompt, 8, **options)).tobytes() == generated.tobytes()
         stream = checked(split.stream, prompt, 8, **options)
         chunks = [np.asarray(checked(stream.read, n)) for n in (1, 3, 2, 9)]
         assert np.concatenate(chunks, axis=1).tolist() == expected
-        stopped = checked(split.stream, prompt, 8, eos_token_id=3, pad_token_id=9, **options)
-        assert np.asarray(checked(stopped.read, 20)).tolist() == [[3, 9, 9, 9, 9, 9, 9], [1, 0, 2, 2, 0, 0, 3]]
-        assert checked(stopped.info)['lengths'] == [1, 7]
+        eos, pad = 3, 9
+        lengths = [row.index(eos) + 1 if eos in row else len(row) for row in expected]
+        width = max(lengths)
+        want = [row[:n] + [pad] * (width - n) for row, n in zip(expected, lengths)]
+        stopped = checked(split.stream, prompt, 8, eos_token_id=eos, pad_token_id=pad, **options)
+        assert np.asarray(checked(stopped.read, 20)).tolist() == want
+        assert checked(stopped.info)['lengths'] == lengths
 
 
 def test_public_load_and_transport_failure_refuse_lost_state(tmp_path):

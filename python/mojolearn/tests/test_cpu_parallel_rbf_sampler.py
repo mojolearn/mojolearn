@@ -3,7 +3,7 @@
 import numpy as np
 import pytest
 
-from mojolearn import RBFSampler, _backend, host_surface
+from mojolearn import RBFSampler, _backend
 from mojolearn._cpu_reference import reference_training
 from mojolearn._native_parallel_shard import _native_parallel_shard
 from mojolearn.parallel_classical import transform_rbf_sampler
