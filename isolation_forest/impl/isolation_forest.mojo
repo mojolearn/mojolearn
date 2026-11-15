@@ -589,11 +589,12 @@ comptime IDN_IF_RESIDENT = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 #: cell under the GIL: three serial host passes over n values per scoring
 #: call. The kernels do one exact float32 negation (and one float32
 #: subtraction, the operation the host loop did), so no bit moves.
-#: Applies inside the resident entry only. `-D
-#: MOJOLEARN_IDN_IF_EPILOGUE_DEVICE_OFF` restores the host epilogue.
+#: Applies inside the resident entry only.
 # TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (DELETE-OLD-PATH, rule e, EXP:2438; non-owner fold to False) deleted 2026-11-15 by lane/expdel2-45-trees; code recoverable at 882d15f175.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-45-trees.patch; record in docs/TOMBSTONES.md.
-comptime IDN_IF_EPILOGUE_DEVICE = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_IDN_IF_EPILOGUE_DEVICE_OFF"]()
+# TOMBSTONE: MOJOLEARN_IDN_IF_EPILOGUE_DEVICE_OFF (DELETE-OLD-PATH, no A/B recorded, rule b) deleted 2026-11-15 by lane/expdel2-45-trees; code recoverable at 0454762fc4.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_IF_EPILOGUE_DEVICE_OFF.patch
+comptime IDN_IF_EPILOGUE_DEVICE = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 
 
 def _upload_colmajor_as_rowmajor_device(
