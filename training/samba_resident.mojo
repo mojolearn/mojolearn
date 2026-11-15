@@ -114,10 +114,7 @@ from training.samba_ops import (
 from transformer.block_options import BlockOptions
 from autograd.kernels.transformer import LlamaBackwardStages
 from transformer.checks.transformer_fixture import RMS_EPS
-from autograd.rules_transformer import (
-    AUTOGRAD_REFUSE_DEFER,
-    llama_decoder_layer_record,
-)
+from autograd.rules_transformer import llama_decoder_layer_record
 from autograd.tape import Tape, Tensor
 from autograd.refuse_scan import DeferredNonfiniteScan
 from autograd.rules_mamba3 import M3BlockRef, M3StagesRef, M3WeightsRef, Mamba3TapeBlock, mamba3_block_record
@@ -904,41 +901,30 @@ def _backward_tape(
 
     # ---- one backward, then the tied pair add (embedding first, as the hand
     # path's `accumulate_grads([d_emb, dw_head], tokens=None)`)
-    comptime if AUTOGRAD_REFUSE_DEFER:
-        # A NaN reaching a later rule may make it raise first; the refusal
-        # is the error the hand path gives, so it is checked first.
-        var raised = False
-        var msg = String()
-        try:
-            tape.backward_with_rules(ex, loss, seed, rules)
-        except e:
-            raised = True
-            msg = String(e)
-        if not raised:
-            tape.release(ex)
-        for i in range(len(scans)):  # driver-loop: over attention layers (one scan each)
-            scans[i].enqueue_readback(s.ctx)
-        # Drain the queue before the Mamba-3 blocks and the views go.
-        ex.sync()
-        for i in range(len(scans)):  # driver-loop: over attention layers (one scan each)
-            var bad = scans[i].result_after_sync()
-            if bad >= 0:
-                raise Error(
-                    String("llama backward: NaN or infinity in d_residual2 at flat index ") + String(bad)
-                    + " REFUSED"
-                )
-        if raised:
-            raise Error(msg)
-    else:
-        try:
-            tape.backward_with_rules(ex, loss, seed, rules)
-        except e:
-            # a Mamba-3 block's scratch may still be read by queued launches
-            ex.sync()
-            raise e
+    # A NaN reaching a later rule may make it raise first; the refusal
+    # is the error the hand path gives, so it is checked first.
+    var raised = False
+    var msg = String()
+    try:
+        tape.backward_with_rules(ex, loss, seed, rules)
+    except e:
+        raised = True
+        msg = String(e)
+    if not raised:
         tape.release(ex)
-        # Drain the queue before the Mamba-3 blocks and the views go.
-        ex.sync()
+    for i in range(len(scans)):  # driver-loop: over attention layers (one scan each)
+        scans[i].enqueue_readback(s.ctx)
+    # Drain the queue before the Mamba-3 blocks and the views go.
+    ex.sync()
+    for i in range(len(scans)):  # driver-loop: over attention layers (one scan each)
+        var bad = scans[i].result_after_sync()
+        if bad >= 0:
+            raise Error(
+                String("llama backward: NaN or infinity in d_residual2 at flat index ") + String(bad)
+                + " REFUSED"
+            )
+    if raised:
+        raise Error(msg)
     if s.tie:
         var gemb = s.grad_view(0)
         _pair_add_device(s.ctx, gemb, s.pair, v * dm)
