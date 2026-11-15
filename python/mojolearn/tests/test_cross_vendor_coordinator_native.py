@@ -107,6 +107,12 @@ def test_native_ready_signal_and_repeated_custom_exception_preserve_ownership():
     audit_native_call(owner.ready.set).assert_native()
     assert audit_native_call(owner.ready.wait, 0).assert_native()
     audit_native_call(owner.ready.clear).assert_native()
+    # The first refusal may retain the exception class once in its native slot (one reference for the
+    # process, smoke 9685746f95: 10 == 9 after eight refusals); the count is taken after it.
+    try:
+        owner._refuse('independent ownership check')
+    except cv.CrossVendorMismatch:
+        pass
     gc.collect()
     references = sys.getrefcount(cv.CrossVendorMismatch)
     # A lost or extra reference per refusal moves the count by one each time;
