@@ -1,0 +1,23 @@
+diff --git a/mamba/impl/modules/afn_defines.mojo b/mamba/impl/modules/afn_defines.mojo
+index 559c055085..23ec05afee 100644
+--- a/mamba/impl/modules/afn_defines.mojo
++++ b/mamba/impl/modules/afn_defines.mojo
+@@ -170,13 +170,13 @@ comptime AFN_MAMBA_ARENA = IDN_MAMBA_ARENA
+ #: route rather than kept behind an _OFF define). The download-and-walk
+ #: form (`_refuse_nonfinite_named_host`) is reached only by a host-column
+ #: build (`MOJOLEARN_COLUMN_CPU`). The names, their order and the messages
+-#: are unchanged; `MOJOLEARN_IDN_MAMBA_DEVICE_REFUSAL_OFF` no longer changes
+-#: this switch.
++#: are unchanged; `MOJOLEARN_IDN_MAMBA_DEVICE_REFUSAL_OFF` and
++#: `MOJOLEARN_AFN_MAMBA_DEVICE_REFUSAL` no longer change this switch.
+ # M06: not tested in this campaign. Device refusal is already mandatory;
+ # AFN26_MAMBA_REFUSAL_VEC4 below compares two device implementations.
+-# TOMBSTONE: MOJOLEARN_AFN_MAMBA_DEVICE_REFUSAL (neural MERGED-UNMEASURED FAST+Apple opt-in arm: the device refusal is already mandatory on every device column) deleted 2026-11-15 by lane/expdel2-27-neural; code recoverable at 6e1e884501.
+-# Restore: git apply experiments/removed/MOJOLEARN_AFN_MAMBA_DEVICE_REFUSAL.patch
+-comptime AFN_MAMBA_DEVICE_REFUSAL = not is_defined["MOJOLEARN_COLUMN_CPU"]() or IDN_MAMBA_DEVICE_REFUSAL
++comptime AFN_MAMBA_DEVICE_REFUSAL = not is_defined["MOJOLEARN_COLUMN_CPU"]() or AFN_MAMBA_ALL or (
++    AFN_APPLE_FAST and is_defined["MOJOLEARN_AFN_MAMBA_DEVICE_REFUSAL"]()
++) or IDN_MAMBA_DEVICE_REFUSAL
+ 
+ 
+ # 2026-10-06 source-only campaign: every AFN26 switch is OFF by default and

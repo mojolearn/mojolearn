@@ -1,0 +1,24 @@
+diff --git a/mamba/impl/modules/ssd_minimal.mojo b/mamba/impl/modules/ssd_minimal.mojo
+index f53e6d0472..eb8f03b0d4 100644
+--- a/mamba/impl/modules/ssd_minimal.mojo
++++ b/mamba/impl/modules/ssd_minimal.mojo
+@@ -111,7 +111,8 @@ comptime SAB_FOLD_SERIAL_ZERO_SEED = is_defined[
+ ]()
+ 
+ #: lane nr-mamba (2026-10-04, roadmap B9) IDN_M2_CB_LOWER (IDENTICAL, default
+-#: ON; `-D MOJOLEARN_IDN_ALL_OFF` restores main): S12's G = C.B folds only j <= i and writes an explicit
++#: ON; `-D MOJOLEARN_IDN_M2_CB_LOWER_OFF` or `-D MOJOLEARN_IDN_ALL_OFF`
++#: restores main): S12's G = C.B folds only j <= i and writes an explicit
+ #: +0.0 above the diagonal (never leaves the cell unwritten: cb.G is a
+ #: recorded, arena-allocated stage). Every reader (S13's M = G o L, the
+ #: backward's ydiag and cb gradients) reads j <= i only, so no output bit
+@@ -120,8 +121,7 @@ comptime SAB_FOLD_SERIAL_ZERO_SEED = is_defined[
+ comptime IDN_M2_CB_LOWER = (
+     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+     # I08 current experiment: NEVER RUN — PENDING MEASUREMENT; existing defaults preserved.
+-    # TOMBSTONE: MOJOLEARN_IDN_M2_CB_LOWER_OFF (unmeasured old path beside the lower-triangle default) deleted 2026-11-15 by lane/expdel2-27-neural (non-owner); code recoverable at d9f1a09f89.
+-    # Restore: git apply experiments/removed/MOJOLEARN_IDN_M2_CB_LOWER_OFF.expdel2-27-neural.patch
++    and not is_defined["MOJOLEARN_IDN_M2_CB_LOWER_OFF"]()
+     and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+ )
+ comptime SSD_ANY_SABOTAGE = (
