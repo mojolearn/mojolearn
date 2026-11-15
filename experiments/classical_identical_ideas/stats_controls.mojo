@@ -61,6 +61,6 @@ comptime C58_TEAM_MIB = 256
 # C60: shared detrended observations across independent lag tasks.
 # TOMBSTONE: MOJOLEARN_C60_LAG4 (no A/B recorded for the opt-in arm) deleted 2026-11-15 by lane/expdel2-07-base; code recoverable at ad78b8054f.
 # Restore: git apply experiments/removed/MOJOLEARN_C60_LAG4.patch
-comptime C60_LAG4 = False
+# (Sweep 2026-11-15: comptime C60_LAG4 removed; nothing read it.)
 # C60_DIFF_REUSE removed 2026-10-07 (lane classical-misc): dead code. It fired only
 # for d_ == 2, but select_d loops d_ in range(d_max) with d_max <= 2 - D, so d_ <= 1.
