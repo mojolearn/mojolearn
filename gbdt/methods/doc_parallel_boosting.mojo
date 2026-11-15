@@ -9,10 +9,8 @@ from core.device_zero import enqueue_fill
 from max.gpu.host.device_attribute import DeviceAttribute
 from std.math import isfinite
 from std.sys.compile import is_defined
-from gbdt.trees_identical_switches import T26
 # TOMBSTONE: MOJOLEARN_TREES_CTR_SORTFREE_SUMS (DELETE-ARM, IDENTICAL sort-free CTR leaf sums, no A/B recorded, rule a; non-owner) deleted 2026-11-15 by lane/expdel2-42-trees; code recoverable at 8cc12e71fe.
 # Restore: git apply experiments/removed/MOJOLEARN_TREES_CTR_SORTFREE_SUMS.expdel2-42-trees.patch; record in docs/TOMBSTONES.md.
-from gbdt.methods.leaves_estimation.tree_t26_device import t26_estimate_apply
 from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from gbdt.methods.kernel_add_model_value import (
     add_model_value_gated_kernel,
@@ -5001,24 +4999,8 @@ def fit_with_test(
             )
             loop_times.stop_host("iter_tree_search", t_search)
             var n_bins = tree.bin_count()
-            # T26 V1: only a same-version host/device supported contract.
-            # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
-            var t26_done = False
-            comptime if T26:
-                if (objective == OBJECTIVE_RMSE and not has_weights and perm_count == 1
-                    and approx_dim == 1 and leaf_estimation_method == LEAF_ESTIMATION_NEWTON
-                    and leaf_estimation_iterations == 1):
-                    var direct_bins = ctx.enqueue_create_buffer[DType.uint32](n_rows)
-                    compute_non_symmetric_bins_for_model(
-                        ctx, layout_for_test, tree.model_structure, lc, n_rows, direct_bins,
-                    )
-                    leaf_values = t26_estimate_apply(
-                        ctx, direct_bins, targets, cursors[0], n_rows, n_bins,
-                        l2_leaf_reg, learning_rate,
-                    )
-                    t26_done = True
-                    _ = direct_bins^
-            if device_leaf_partition and not t26_done:
+            # (Sweep 2026-11-15: the folded T26 bounded-leaf branch was removed here.)
+            if device_leaf_partition:
                 # DEVIATION 2551: the pool of one, keyed on the row count,
                 # with a leaf capacity of the policy's own bound
                 if (
@@ -5037,7 +5019,7 @@ def fit_with_test(
             var perm_batched = False
             comptime if CTR_PERM_BATCH:
                 if (
-                    not t26_done and perm_count > 1
+                    perm_count > 1
                     and device_leaf_partition
                     and approx_dim == 1
                     and estimate_can_batch(
@@ -5140,7 +5122,7 @@ def fit_with_test(
                     _ = parts^  # past the drain (step-33 race class)
                     _ = pend^  # past the drain (step-33 race class)
                     loop_times.stop_host("iter_estimate_apply", t_est_b)
-            for p in range(0 if (perm_batched or t26_done) else perm_count):
+            for p in range(0 if perm_batched else perm_count):
                 var pv = List[Float32]()
                 var t_bins = loop_times.start()
                 var part: LeafPartition
