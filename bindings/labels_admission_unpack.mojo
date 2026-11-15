@@ -28,6 +28,14 @@
 #   labels_class_index_op(classes, key)
 #                     `_labels.ClassLabels.__getitem__` with an integer array
 #                     key: its refusals, the widening and the decode
+#   admission_describe_op(obj)
+#                     `_sk_validate.describe`: (container, shape, kind) codes
+#                     read from the input's own export (lane py-buffer)
+#   admission_x_op(X, est, word)
+#                     `_sk_validate._check_X` whole: the description, the
+#                     sparse refusal, and admission_check_x_op below
+#   admission_y_op(y, est, flags, x_rows)
+#                     `_sk_validate._check_y` for a y that is not None
 #   admission_check_x_op(X, est, shape, complex, scan)
 #                     `_sk_validate._check_X`'s refusals (complex, rank,
 #                     empty) and its finiteness scan, scikit-learn's wording
