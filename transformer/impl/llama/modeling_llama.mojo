@@ -291,7 +291,6 @@ from max.gpu.sync import barrier
 from gemm.experiments.neural_tiled_v2 import NI07_GROUPED_PROJECTIONS, neural_projection_triplet
 from training.neural_identical_experiments import (
     IDN_TRAIN_SWIGLU,
-    IDN_TRAIN_NO_DECODE_CACHE,
 )
 # DEVIATION 2630: the step phase timers and counters (core/step_phase.mojo;
 # compiled only under -D MOJOLEARN_STEP_PHASE_TIMERS=1).
@@ -4774,7 +4773,6 @@ def llama_attention_forward(
     mut trace: IdentityTrace,
     prefix: String,
     materialize: Bool,
-    retain_kv_cache: Bool = True,
 ) raises:
     """`LlamaAttention.forward(hidden_states, position_embeddings,
     attention_mask, past_key_values)` (:243-281), eager path, inference
@@ -4807,14 +4805,6 @@ def llama_attention_forward(
     layer normalizes first and this reads `stages.norm1_out`, rather than
     taking a tensor argument.
     """
-    var commit_cache = True
-    comptime if IDN_TRAIN_NO_DECODE_CACHE:
-        if not retain_kv_cache:
-            # Explicit training-only capability, never inferred from size.
-            # Stages retain the exact packed K/V consumed by backward.
-            if pos0 != 0 or kv.s != 0:
-                raise Error("no-decode-cache: training prefill requires an empty cache")
-            commit_cache = False
     var dims = stages.dims.copy()
     var dm = dims.d_model
     var qw = dims.q_width()
@@ -4824,9 +4814,6 @@ def llama_attention_forward(
     var m = b * l
     var s_old = kv.s
     var window = kv.window
-    if not retain_kv_cache:
-        if not (IDN_TRAIN_NO_DECODE_CACHE) or s_old != 0 or pos0 != 0 or window != 0:
-            raise Error("llama: no-decode-cache requires the NI24 IDENTICAL arm and an empty full-prefill cache")
     var key_lo = llama_key_lo(s_old, window)
     var s = llama_key_span(s_old, l, window)
     var ton = timing_on()
@@ -5074,61 +5061,60 @@ def llama_attention_forward(
     # computed. DEVIATION 1022 is why the two buffers are distinct; the rest
     # of THIS call reads `stages.k_cache` and `stages.v_cache`, which hold
     # the same bits.
-    if commit_cache:
-        if window == 0:
-            step_count_d2d()
-            ctx.enqueue_copy(dst_buf=kv.k, src_buf=stages.k_cache)
-            step_count_d2d()
-            ctx.enqueue_copy(dst_buf=kv.v, src_buf=stages.v_cache)
+    if window == 0:
+        step_count_d2d()
+        ctx.enqueue_copy(dst_buf=kv.k, src_buf=stages.k_cache)
+        step_count_d2d()
+        ctx.enqueue_copy(dst_buf=kv.v, src_buf=stages.v_cache)
+    else:
+        comptime if NN29_RING_PAIR:
+            step_count_launch()
+            ctx.enqueue_function[kv_ring_pair_kernel](
+                kv.k.unsafe_ptr(), kv.v.unsafe_ptr(),
+                stages.k_rope.unsafe_ptr(), stages.v_proj.unsafe_ptr(),
+                Int32(b), Int32(l), Int32(nkv), Int32(hd),
+                Int32(kv.cap), Int32(s_old),
+                grid_dim=(_grid(b * nkv * kv.cap * hd), 1, 1),
+                block_dim=(LLAMA_TPB, 1, 1),
+            )
         else:
-            comptime if NN29_RING_PAIR:
-                step_count_launch()
-                ctx.enqueue_function[kv_ring_pair_kernel](
-                    kv.k.unsafe_ptr(), kv.v.unsafe_ptr(),
-                    stages.k_rope.unsafe_ptr(), stages.v_proj.unsafe_ptr(),
-                    Int32(b), Int32(l), Int32(nkv), Int32(hd),
-                    Int32(kv.cap), Int32(s_old),
-                    grid_dim=(_grid(b * nkv * kv.cap * hd), 1, 1),
-                    block_dim=(LLAMA_TPB, 1, 1),
-                )
-            else:
-                # The ring takes this call's tokens AFTER the gather above read it.
-                step_count_launch()
-                ctx.enqueue_function[kv_ring_write_kernel](
-                    kv.k.unsafe_ptr(),
-                    stages.k_rope.unsafe_ptr(),
-                    Int32(b),
-                    Int32(l),
-                    Int32(nkv),
-                    Int32(hd),
-                    Int32(kv.cap),
-                    Int32(s_old),
-                    grid_dim=(_grid(b * nkv * kv.cap * hd), 1, 1),
-                    block_dim=(LLAMA_TPB, 1, 1),
-                )
-                step_count_launch()
-                ctx.enqueue_function[kv_ring_write_kernel](
-                    kv.v.unsafe_ptr(),
-                    stages.v_proj.unsafe_ptr(),
-                    Int32(b),
-                    Int32(l),
-                    Int32(nkv),
-                    Int32(hd),
-                    Int32(kv.cap),
-                    Int32(s_old),
-                    grid_dim=(_grid(b * nkv * kv.cap * hd), 1, 1),
-                    block_dim=(LLAMA_TPB, 1, 1),
-                )
-        # IDN_ATTN_CACHE_NOWAIT (lane/nr-attn, from lane/neural-pass67
-        # 087231ba3): the hard wait after the cache update ordered nothing.
-        # Every consumer of the cache stages (and of `kv.k`/`kv.v`) is a launch
-        # or copy on the same in-order context, and the host reads none of them
-        # before its own later wait (the fused forward's regime scan or flag
-        # read, or the next call's). No buffer local to this call is freed here.
-        comptime if not IDN_ATTN_CACHE_NOWAIT:
-            step_count_sync()
-            ctx.synchronize()
-        kv.s = s_old + l
+            # The ring takes this call's tokens AFTER the gather above read it.
+            step_count_launch()
+            ctx.enqueue_function[kv_ring_write_kernel](
+                kv.k.unsafe_ptr(),
+                stages.k_rope.unsafe_ptr(),
+                Int32(b),
+                Int32(l),
+                Int32(nkv),
+                Int32(hd),
+                Int32(kv.cap),
+                Int32(s_old),
+                grid_dim=(_grid(b * nkv * kv.cap * hd), 1, 1),
+                block_dim=(LLAMA_TPB, 1, 1),
+            )
+            step_count_launch()
+            ctx.enqueue_function[kv_ring_write_kernel](
+                kv.v.unsafe_ptr(),
+                stages.v_proj.unsafe_ptr(),
+                Int32(b),
+                Int32(l),
+                Int32(nkv),
+                Int32(hd),
+                Int32(kv.cap),
+                Int32(s_old),
+                grid_dim=(_grid(b * nkv * kv.cap * hd), 1, 1),
+                block_dim=(LLAMA_TPB, 1, 1),
+            )
+    # IDN_ATTN_CACHE_NOWAIT (lane/nr-attn, from lane/neural-pass67
+    # 087231ba3): the hard wait after the cache update ordered nothing.
+    # Every consumer of the cache stages (and of `kv.k`/`kv.v`) is a launch
+    # or copy on the same in-order context, and the host reads none of them
+    # before its own later wait (the fused forward's regime scan or flag
+    # read, or the next call's). No buffer local to this call is freed here.
+    comptime if not IDN_ATTN_CACHE_NOWAIT:
+        step_count_sync()
+        ctx.synchronize()
+    kv.s = s_old + l
     timing_tick(ctx, ton, tk, "attn.rope_and_cache")
 
     # ---- the attention interface (:264-277). Eager or fused, ONE set of
@@ -5465,7 +5451,6 @@ def llama_decoder_layer_forward_planted(
     next_norm_weight: Optional[MutPointer[Float32, MutAnyOrigin]] = None,
     next_norm_eps: Optional[Float32] = None,
     forward_only: Bool = False,
-    retain_kv_cache: Bool = True,
 ) raises:
     """`LlamaDecoderLayer.forward(hidden_states, ...)` (:295-324).
 
@@ -5681,7 +5666,6 @@ def llama_decoder_layer_forward_planted(
         trace,
         prefix,
         materialize,
-        retain_kv_cache=retain_kv_cache,
     )
     timing_tick(ctx, ton, tk, "block.attention_total")
     pc.mark(ctx)
@@ -5811,19 +5795,12 @@ def llama_decoder_layer_forward(
     next_norm_weight: Optional[MutPointer[Float32, MutAnyOrigin]] = None,
     next_norm_eps: Optional[Float32] = None,
     forward_only: Bool = False,
-    retain_kv_cache: Bool = True,
 ) raises:
     """THE ORDINARY ENTRY POINT. One block call with NO score plant.
 
     `forward_only` (lane/neural-net-experiment): the caller promises no
     backward reads this call's stages, which admits the forward-only
     fusions (`swiglu_fused_kernel` under `MOJOLEARN_SWIGLU_FUSED=1`).
-
-    `retain_kv_cache=False` is the NI24 owned-training-prefill protocol:
-    admitted only by its IDENTICAL opt-in, with an empty non-window cache
-    at position zero. Per-layer attention stages survive for backward;
-    persistent cache buffers and kv.s stay unchanged. Such a call cannot
-    be used as the prefix of a later decode operation.
 
     Every argument is a scalar or a buffer or one of this file's own
     structs; nothing from `transformer/checks/` crosses this boundary,
@@ -5854,5 +5831,4 @@ def llama_decoder_layer_forward(
         next_norm_weight=next_norm_weight,
         next_norm_eps=next_norm_eps,
         forward_only=forward_only,
-        retain_kv_cache=retain_kv_cache,
     )

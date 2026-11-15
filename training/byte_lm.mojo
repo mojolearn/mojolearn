@@ -1538,12 +1538,11 @@ def _byte_forward_loss(ctx: DeviceContext, mut tr: ByteTrainer,
                     next_norm_sumsq=Optional(tr.forward[layer].norm1_sumsq.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()),
                     next_norm_out=Optional(tr.forward[layer].norm1_out.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()),
                     next_norm_weight=Optional(tr.weights[layer + 1].norm1_w.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()),
-                    next_norm_eps=Optional(tr.weights[layer + 1].eps),
-                    retain_kv_cache=True)
+                    next_norm_eps=Optional(tr.weights[layer + 1].eps))
             else:
                 llama_decoder_layer_forward(ctx, stages, tr.prefill_cache, tr.rope, tr.weights[layer],
                     tr.buffers.x, config.batch, config.length, 0, trace, prefix,
-                    norm1_ready=norm1_ready, retain_kv_cache=True)
+                    norm1_ready=norm1_ready)
         else:
             if fuse_next:
                 llama_decoder_layer_forward(ctx, stages, tr.prefill_cache, tr.rope, tr.weights[layer],
@@ -1552,12 +1551,11 @@ def _byte_forward_loss(ctx: DeviceContext, mut tr: ByteTrainer,
                     next_norm_sumsq=Optional(tr.forward[layer].norm1_sumsq.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()),
                     next_norm_out=Optional(tr.forward[layer].norm1_out.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()),
                     next_norm_weight=Optional(tr.weights[layer + 1].norm1_w.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()),
-                    next_norm_eps=Optional(tr.weights[layer + 1].eps),
-                    retain_kv_cache=True)
+                    next_norm_eps=Optional(tr.weights[layer + 1].eps))
             else:
                 llama_decoder_layer_forward(ctx, stages, tr.prefill_cache, tr.rope, tr.weights[layer],
                     tr.forward[layer - 1].residual2, config.batch, config.length, 0, trace, prefix,
-                    norm1_ready=norm1_ready, retain_kv_cache=True)
+                    norm1_ready=norm1_ready)
         if _byte_layer_sync():
             step_count_sync()
             ctx.synchronize()

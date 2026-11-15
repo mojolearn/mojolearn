@@ -25,7 +25,7 @@ comptime _ENABLED = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 # copy. One switch for byte_lm, its layer pool and modeling_llama.
 # TOMBSTONE: MOJOLEARN_IDN_TRAIN_NO_DECODE_CACHE (opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-32-neural; code recoverable at 311b50e05c.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_TRAIN_NO_DECODE_CACHE.patch
-comptime IDN_TRAIN_NO_DECODE_CACHE = False
+# (Sweep 2026-11-15: IDN_TRAIN_NO_DECODE_CACHE = False removed with its readers and the retain_kv_cache parameter.)
 # NI25 S sub-arm: serial original statistics, cooperative output scaling.
 # Arm 3 of the ONE norm switch MOJOLEARN_IDN_NORM (norm_profile_contract.mojo).
 # TOMBSTONE: MOJOLEARN_IDN_NORM (arm 3, opt-in, no A/B recorded; owner another lane) deleted 2026-11-15 by lane/expdel2-32-neural; code recoverable at 311b50e05c.

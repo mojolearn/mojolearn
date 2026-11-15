@@ -191,8 +191,7 @@ struct ByteLayerPool(Movable):
                 llama_decoder_layer_forward(self.contexts[owner], layer.forward,
                     self.caches[owner], self.ropes[owner], layer.weights, layer.input,
                     self.config.batch, self.config.length, 0, trace,
-                    String("byte.block")+String(i)+".forward",
-                    retain_kv_cache=True)
+                    String("byte.block")+String(i)+".forward")
                 self.contexts[owner].synchronize()
                 if i < len(self.layers):
                     layer.forward.residual2.enqueue_copy_to(self.layers[i].input)
