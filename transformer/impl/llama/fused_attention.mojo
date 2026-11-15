@@ -185,8 +185,10 @@ from core.shared_slot import SharedSlot
 # ===========================================================================
 
 # The matrix enables measured columns. Explicit old arms preserve reproducibility.
+# TOMBSTONE: MOJOLEARN_ATTN_REPAIR_MASKED_TAIL (unmeasured force-on arm) deleted 2026-11-15 by lane/expdel2-34-neural; code recoverable at c3d1c7865f.
+# Restore: git apply experiments/removed/MOJOLEARN_ATTN_REPAIR_MASKED_TAIL.patch
 comptime ATTN_REPAIR_MASKED_TAIL = (
-    is_defined["MOJOLEARN_ATTN_REPAIR_MASKED_TAIL"]() or attn_masked_tail_replay_for[TARGET_COLUMN]()
+    attn_masked_tail_replay_for[TARGET_COLUMN]()
 ) and not is_defined["MOJOLEARN_ATTN_LEGACY_CORNER"]()
 comptime ATTN_REPAIR_SAB_Z = is_defined["MOJOLEARN_ATTN_REPAIR_SAB_Z"]()
 comptime ATTN_REPAIR_SAB_DQ = is_defined["MOJOLEARN_ATTN_REPAIR_SAB_DQ"]()
