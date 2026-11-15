@@ -78,7 +78,7 @@ comptime C07_RADIX_ROWS = 2048
 comptime C08_TARGET_CODES = CLASSICAL_IDENTICAL and is_defined["MOJOLEARN_CLASSICAL_C08_TARGET_CODES"]()
 # TOMBSTONE: MOJOLEARN_CLASSICAL_C08_ONEHOT_FT (no A/B recorded for the opt-in arm) deleted 2026-11-15 by lane/expdel2-07-base; code recoverable at d42f92b40b.
 # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C08_ONEHOT_FT.patch
-comptime C08_ONEHOT_FT = False
+# (Sweep 2026-11-15: comptime C08_ONEHOT_FT removed; nothing read it.)
 # TOMBSTONE: MOJOLEARN_CLASSICAL_C08_ORDINAL_FT (no A/B recorded for the opt-in arm) deleted 2026-11-15 by lane/expdel2-07-base; code recoverable at 535c024b7f.
 # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C08_ORDINAL_FT.patch
 comptime C08_ORDINAL_FT = False
