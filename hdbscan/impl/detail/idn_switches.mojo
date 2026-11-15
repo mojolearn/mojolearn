@@ -57,11 +57,9 @@ comptime IDN_HDB_SOFT_LEAN = _IDN_HDB_ON
 is being written (they are read by nothing else), and the five kernels run
 with one wait at the end instead of one each."""
 
-comptime IDN_HDB_PREDICT_DEVICE_CAST = (
-    _IDN_HDB_ON
-    # I14 current experiment: NEVER RUN — PENDING MEASUREMENT; existing defaults preserved.
-    and not is_defined["MOJOLEARN_IDN_HDB_PREDICT_DEVICE_CAST_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_IDN_HDB_PREDICT_DEVICE_CAST_OFF (old path: host narrowing loop over nq * k indices; no A/B recorded) deleted 2026-11-15 by lane/expdel2-11-cluster; code recoverable at 675c1e06ae.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_HDB_PREDICT_DEVICE_CAST_OFF.patch; record in docs/TOMBSTONES.md.
+comptime IDN_HDB_PREDICT_DEVICE_CAST = _IDN_HDB_ON
 """approximate_predict: the k-NN's UInt32 indices are narrowed to Int32 by
 the fit's device kernel instead of a host loop over nq * k cells."""
 
