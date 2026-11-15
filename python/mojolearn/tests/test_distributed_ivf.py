@@ -61,12 +61,13 @@ def test_disjoint_storage_matches_the_plain_index(identical, count, metric):
         model.search(x[:2])
 
 
-def test_failure_closes_stored_workers(identical, monkeypatch):
+def test_failure_closes_stored_workers(identical, monkeypatch, request):
     index, x = fitted('sqeuclidean')
     devices = _devices(2)
     model = pi.DistributedIVFIndex.from_index(index, devices=devices)
-    monkeypatch.setenv('MOJOLEARN_PAR_TRANSPORT_FAULT', 'drop_result')
-    monkeypatch.setenv('MOJOLEARN_HOST_ALLOW_SABOTAGE', '1')
+    # the transport negative control, armed natively (`shard_faults_arm`)
+    _native_parallel_shard('faults_arm', ('drop_result',))
+    request.addfinalizer(lambda: _native_parallel_shard('faults_arm', ('',)))
     _native_parallel_shard('faults_take', ())
     with pytest.raises(ValueError, match='incomplete'):
         model.search(x[:3])

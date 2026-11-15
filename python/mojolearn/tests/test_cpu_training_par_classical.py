@@ -306,11 +306,13 @@ def test_par_driver_sabotage_switch_is_off_by_default_and_inert_at_one_device():
     (`index % len(devices)`) instead. On the CPU route a device index is one
     worker process, so the two-device case runs here as two processes.
     """
-    import os
     source = _read("bindings/parallel_shard_common_run.mojo")
     shift = source[source.index("def shard_read_shift("):source.index("def shard_faults_take(")]
     assert "if first < 1 or n_devices < 2 or index % n_devices == 0:" in shift
-    assert '"MOJOLEARN_PAR_DRIVER_SABOTAGE"' in shift and '"MOJOLEARN_HOST_ALLOW_SABOTAGE"' in shift
+    # the switch: both variables, read once per process, or the native arm
+    assert "_driver_sabotage()" in shift and "getenv" not in shift
+    switch = source[source.index("def _driver_sabotage("):source.index("def shard_fault_mark(")]
+    assert '"MOJOLEARN_PAR_DRIVER_SABOTAGE")) == "1"' in switch and '"MOJOLEARN_HOST_ALLOW_SABOTAGE")) == "1"' in switch
     if not _cpu_only_with("_mojolearn_preprocessing_host"):
         return
     import numpy as np
@@ -322,24 +324,17 @@ def test_par_driver_sabotage_switch_is_off_by_default_and_inert_at_one_device():
         return np.asarray(fit_scaler(mojolearn.StandardScaler(), X, devices=devices,
                                      columns_per_shard=4).mean_).tobytes()
 
-    saved = {k: os.environ.get(k) for k in
-             ("MOJOLEARN_PAR_DRIVER_SABOTAGE", "MOJOLEARN_HOST_ALLOW_SABOTAGE")}
+    # The environment is read once per process (tools/identity_break.py sets
+    # both variables for the process it starts); inside this process the
+    # native arm sets the same switch.
+    from mojolearn._native_parallel_shard import _native_parallel_shard
     try:
-        for k in saved:
-            os.environ.pop(k, None)
         assert mean((0, 1)) == plain, "off by default"
-        os.environ["MOJOLEARN_PAR_DRIVER_SABOTAGE"] = "1"
-        assert mean((0, 1)) == plain, "one variable is not enough"
-        os.environ["MOJOLEARN_HOST_ALLOW_SABOTAGE"] = "1"
+        _native_parallel_shard("sabotage_arm", (True,))
         assert mean((0,)) == plain, "THE CONTROL: the arm must be inert at one device, at every shard count"
         assert mean((0, 1)) != plain, "the arm must fire on every shard whose worker rank is above 0"
     finally:
-        for k, v in saved.items():
-            if v is None:
-                os.environ.pop(k, None)
-            else:
-                os.environ[k] = v
-
+        _native_parallel_shard("sabotage_arm", (False,))
 
 if __name__ == "__main__":
     names = [n for n in sorted(globals()) if n.startswith("test_")]

@@ -51,16 +51,17 @@ def test_cpu_rbf_shards_preserve_exact_rows_and_fitted_state(shard_rows, monkeyp
     assert np.asarray(model.random_offset_).tobytes() == offsets
 
 
-def test_cpu_rbf_reordered_worker_rows_are_detectable(monkeypatch):
+def test_cpu_rbf_reordered_worker_rows_are_detectable(monkeypatch, request):
     _require_cpu()
     X = np.random.default_rng(77).standard_normal((15, 7)).astype(np.float32)
     with reference_training():
         model = RBFSampler(n_components=13, random_state=11).fit(X)
     expected = np.asarray(model.transform(X))
     # the transport negative control (bindings/parallel_shard_common_door.mojo
-    # `shard_map`): the first numerical batch comes back reversed, once
-    monkeypatch.setenv("MOJOLEARN_PAR_TRANSPORT_FAULT", "reverse_results")
-    monkeypatch.setenv("MOJOLEARN_HOST_ALLOW_SABOTAGE", "1")
+    # `shard_map`): the first numerical batch comes back reversed, once; armed
+    # through the native switch (`shard_faults_arm`), not the environment
+    _native_parallel_shard("faults_arm", ("reverse_results",))
+    request.addfinalizer(lambda: _native_parallel_shard("faults_arm", ("",)))
     _native_parallel_shard("faults_take", ())
     broken = transform_rbf_sampler(model, X, devices=(0,), rows_per_shard=5)
     assert _native_parallel_shard("faults_take", ()) == 1

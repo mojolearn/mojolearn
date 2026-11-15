@@ -67,18 +67,15 @@ def transport_fault(fault, control):
     from ._native_parallel_shard import _native_parallel_shard
     if fault not in ('drop_result', 'reverse_results'):
         raise ValueError('unknown transport fault')
-    saved = {key: os.environ.get(key) for key in ('MOJOLEARN_PAR_TRANSPORT_FAULT', 'MOJOLEARN_HOST_ALLOW_SABOTAGE')}
+    # The native switch (bindings/parallel_shard_common_run.mojo
+    # `shard_faults_arm`), not the environment: the shard driver no longer
+    # reads MOJOLEARN_PAR_TRANSPORT_FAULT per batch.
     _native_parallel_shard('faults_take', ())
-    os.environ['MOJOLEARN_PAR_TRANSPORT_FAULT'] = fault
-    os.environ['MOJOLEARN_HOST_ALLOW_SABOTAGE'] = '1'
+    _native_parallel_shard('faults_arm', (fault,))
     try:
         yield
     finally:
-        for key, value in saved.items():  # glue: restores two environment variables
-            if value is None:
-                os.environ.pop(key, None)
-            else:
-                os.environ[key] = value
+        _native_parallel_shard('faults_arm', ('',))
         control['triggered'] = _native_parallel_shard('faults_take', ()) > 0
 
 
