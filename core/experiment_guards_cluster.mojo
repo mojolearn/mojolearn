@@ -110,6 +110,8 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_X_CLUSTER_FAST_MINIBATCH_OFF"](), "removed 2026-11-15 (lane/expdel-01-cluster): X_CLUSTER_FAST_MINIBATCH_OFF (FAST+Apple rollback to the per-step MiniBatchKMeans loop) is gone; the device-resident steps are the FAST+Apple path (istella 388 -> 352 ms, KEPT 4b1311c12); restore: experiments/removed/MOJOLEARN_X_CLUSTER_FAST_MINIBATCH_OFF.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_X_CLUSTER_FAST_MEANSHIFT_OFF.patch
     comptime assert not is_defined["MOJOLEARN_X_CLUSTER_FAST_MEANSHIFT_OFF"](), "removed 2026-11-15 (lane/expdel-01-cluster): X_CLUSTER_FAST_MEANSHIFT_OFF (FAST+Apple rollback to the one-block-per-seed MeanShift team kernel) is gone; the shift grid is the FAST+Apple path (istella 52.1 -> 34.9 ms, same clusters, KEPT 4b1311c12); restore: experiments/removed/MOJOLEARN_X_CLUSTER_FAST_MEANSHIFT_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_XN_FAST_ACHI2_DEVSCAN_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_XN_FAST_ACHI2_DEVSCAN_OFF"](), "removed 2026-11-15 (lane/expdel-01-cluster): XN_FAST_ACHI2_DEVSCAN_OFF (FAST+Apple rollback to the host X.min() negative check of AdditiveChi2Sampler.fit) is gone; the size-gated device scan is the FAST+Apple path (istella 11.2 -> 4.4 ms, w2-w3kf-xn-q PASS); restore: experiments/removed/MOJOLEARN_XN_FAST_ACHI2_DEVSCAN_OFF.patch"
     return True
 
 

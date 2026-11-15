@@ -691,6 +691,7 @@ Deletions reversed by new evidence. The code is back on main; the section and th
 | [`MOJOLEARN_X_CLUSTER_FAST_CLS3_MBK_ROWGRP_OFF`](#mojolearn_x_cluster_fast_cls3_mbk_rowgrp_off-old-path-deleted-2026-11-15) | Cluster (MiniBatchKMeans batch assignment, FAST Apple) | removed (old path; FAST+Apple default KEPT) | 2026-11-15 | [MOJOLEARN_X_CLUSTER_FAST_CLS3_MBK_ROWGRP_OFF.patch](../experiments/removed/MOJOLEARN_X_CLUSTER_FAST_CLS3_MBK_ROWGRP_OFF.patch) |
 | [`MOJOLEARN_X_CLUSTER_FAST_MINIBATCH_OFF`](#mojolearn_x_cluster_fast_minibatch_off-old-path-deleted-2026-11-15) | Cluster (MiniBatchKMeans resident steps, FAST Apple) | removed (old path; FAST+Apple default KEPT 4b1311c12) | 2026-11-15 | [MOJOLEARN_X_CLUSTER_FAST_MINIBATCH_OFF.patch](../experiments/removed/MOJOLEARN_X_CLUSTER_FAST_MINIBATCH_OFF.patch) |
 | [`MOJOLEARN_X_CLUSTER_FAST_MEANSHIFT_OFF`](#mojolearn_x_cluster_fast_meanshift_off-old-path-deleted-2026-11-15) | Cluster (MeanShift shift grid, FAST Apple) | removed (old path; FAST+Apple default KEPT 4b1311c12) | 2026-11-15 | [MOJOLEARN_X_CLUSTER_FAST_MEANSHIFT_OFF.patch](../experiments/removed/MOJOLEARN_X_CLUSTER_FAST_MEANSHIFT_OFF.patch) |
+| [`MOJOLEARN_XN_FAST_ACHI2_DEVSCAN_OFF`](#mojolearn_xn_fast_achi2_devscan_off-old-path-deleted-2026-11-15) | Neighbors (AdditiveChi2Sampler fit negative check, FAST Apple) | removed (old path; FAST+Apple DEFAULT, w2-w3kf-xn-q PASS) | 2026-11-15 | [MOJOLEARN_XN_FAST_ACHI2_DEVSCAN_OFF.patch](../experiments/removed/MOJOLEARN_XN_FAST_ACHI2_DEVSCAN_OFF.patch) |
 
 ## Trees
 
@@ -5999,4 +6000,12 @@ replacement computes the same values in the same order (see the bit notes below)
 - **Verdict**: KEPT 4b1311c12 (EXPERIMENTS.md `X_CLUSTER_FAST_MEANSHIFT`, cluster-ms-istella): M3, meanshift istella 52.1 -> 34.9 ms (-33%), same clusters. No bit change on any column.
 - **Deleted by**: lane/expdel-01-cluster (expdel-01-cluster, docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md); code recoverable at `2255b408f8`.
 - **Restore**: `git apply experiments/removed/MOJOLEARN_X_CLUSTER_FAST_MEANSHIFT_OFF.patch`, then delete the `MOJOLEARN_X_CLUSTER_FAST_MEANSHIFT_OFF` refusal in `core/experiment_guards_cluster.mojo`.
+- **Records**: refusal in `core/experiment_guards_cluster.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel-01-cluster section).
+
+## MOJOLEARN_XN_FAST_ACHI2_DEVSCAN_OFF: old path deleted (2026-11-15)
+
+- **What it was**: the FAST+Apple rollback of AdditiveChi2Sampler.fit's negative check from the size-gated device scan (`x_neighbors/kfeat_dev.mojo` XN_FAST_ACHI2_DEVSCAN, bit 1 of `kfeat_flags`) to the host `X.min()`. Only the define read is deleted: below `XN_ACHI2_DEVSCAN_MIN` and on every other build the host check stays.
+- **Verdict**: DEFAULT (FAST+Apple) per EXPERIMENTS.md `XN_FAST_ACHI2_DEVSCAN + size gate`: M3 one run per arm (ea6b2035e) istella 11.2 -> 4.4 ms, taxi 0.9 -> 1.1 ms (below the gate, host path: noise); w2-w3kf-xn-q PASS. No bit change on any column.
+- **Deleted by**: lane/expdel-01-cluster (expdel-01-cluster, docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md); code recoverable at `327ba1435e`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_XN_FAST_ACHI2_DEVSCAN_OFF.patch`, then delete the `MOJOLEARN_XN_FAST_ACHI2_DEVSCAN_OFF` refusal in `core/experiment_guards_cluster.mojo`.
 - **Records**: refusal in `core/experiment_guards_cluster.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel-01-cluster section).
