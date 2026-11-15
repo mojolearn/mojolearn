@@ -500,6 +500,8 @@ with the old rule as the B arm, timed on neighboring shapes and one non-board da
 - A filtered excerpt or a few passing lines never proves the whole run passed: keep the original exit status,
   expected coverage, failures and skipped or incomplete work, and expand the relevant block when needed.
 - Never read a whole subagent transcript or a `tasks/*.output` file; ask for a concise status or read the artifact.
+- Pipe command output through `head`, `tail` or `grep` to reduce the result size (Andrew, 2026-11-15). Never `cat` a
+  large file into context; read a bounded range instead (the Read tool with offset and limit, or `sed -n a,bp`).
 - Put long results in a file under `~/mojolearn-evidence/` and report the path plus a few lines. Keep a routine
   diagnostic reply to about 2,000 tokens.
 
