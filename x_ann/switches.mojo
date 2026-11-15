@@ -34,7 +34,7 @@ comptime ANN3_HOST_PASSES = True
 #: 0.0155, refine 0.0315 -> 0.0295; IVF-Flat first search 0.047 -> 0.042.
 # TOMBSTONE: MOJOLEARN_ANN3_PREPARE_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-14-cluster; code recoverable at c089be9c4a.
 # Restore: git apply experiments/removed/MOJOLEARN_ANN3_PREPARE_OFF.patch; record in docs/TOMBSTONES.md.
-comptime ANN3_PREPARE = True
+# (Sweep 2026-11-15: comptime ANN3_PREPARE removed; always True, nothing read it.)
 
 #: FAST on Apple: the IVF-PQ subspace codebooks are seeded by this family's
 #: host k-means++ (x_ann/kpp_seed.mojo) and handed to cluster/'s k-means as
