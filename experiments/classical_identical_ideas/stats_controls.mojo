@@ -20,7 +20,7 @@ comptime C52_ROWS = 128
 # C53: independent GMM/BGMM centered-component staging arms.
 # TOMBSTONE: MOJOLEARN_C53_CENTER4 (no A/B recorded for the opt-in arm) deleted 2026-11-15 by lane/expdel2-07-base; code recoverable at f76fba175b.
 # Restore: git apply experiments/removed/MOJOLEARN_C53_CENTER4.patch
-comptime C53_CENTER4 = False
+# (Sweep 2026-11-15: comptime C53_CENTER4 removed; nothing read it.)
 comptime C53_BGMM_STATS = CLASSICAL_IDENTICAL and is_defined["MOJOLEARN_C53_BGMM_STATS"]()
 # C54: reuse within kernel construction; fitted factors remain caller-owned.
 # TOMBSTONE: MOJOLEARN_C54_PREDICT_TILES (no A/B recorded for the opt-in arm) deleted 2026-11-15 by lane/expdel2-07-base; code recoverable at 843366c4fd.
