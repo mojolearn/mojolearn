@@ -106,11 +106,11 @@ def _codes_below(p: List[Float32], count: Int, what: String) raises:
         require(c >= 0 and c < Float32(count) and Float32(Int(c)) == c, what + ": " + String(c) + " is not a class code")
 
 
-def _two_layer(width: Int, code: Int, out: Int) -> SeqModel:
+def _two_layer(width: Int, code: Int, n_out: Int) -> SeqModel:
     var m = SeqModel()
     m.linear(width)
     m.act(code)
-    m.linear(out)
+    m.linear(n_out)
     return m^
 
 
