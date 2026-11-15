@@ -90,7 +90,7 @@ comptime ENETCV_FB_CHUNKS = 64
 # that, with each block's threads reading the same row tile. No shape rule.
 # TOMBSTONE: MOJOLEARN_CLASSICAL_RIDGECV_FF_BLOCKED (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-06-base; code recoverable at 49c61a4093.
 # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_RIDGECV_FF_BLOCKED.patch; record in docs/TOMBSTONES.md.
-comptime RIDGECV_FF_BLOCKED = False
+# (Sweep 2026-11-15: comptime RIDGECV_FF_BLOCKED removed; nothing read it.)
 # lane/classical-cv-folds (2026-10-07); PROMOTED to the IDENTICAL default
 # 2026-10-08 (lane/grid-act-2, grid run ge123e6f9: NVIDIA L40S sm_89 + AMD
 # MI325X gfx942, full board data, one run per arm; r2 and rmse identical A vs
