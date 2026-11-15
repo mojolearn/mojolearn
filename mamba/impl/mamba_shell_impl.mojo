@@ -10,7 +10,7 @@ touches Python: every entry takes buffer addresses, Ints and typed sessions.
 from core.hostptr import f32_ptr, read_f32, copy_f32
 from std.memory import bitcast, unsafe_memcpy
 from std.time import perf_counter_ns
-from std.sys.compile import is_defined, get_defined_int
+from std.sys.compile import is_defined
 from mamba.impl.ops.mamba3_siso import m3_phase_tick
 from std.os import abort, getenv
 
@@ -48,7 +48,7 @@ from mamba.impl.modeling.modeling_mamba import (
 from mamba.impl.modules.mamba_simple import mamba_step
 from mamba.impl.mamba_block_program import MambaBlockProgram, mamba_block_call, mamba_block_backward_call_abi
 from autograd.block_step_ops import OPS_M1_STEP, OPS_M2_STEP, OPS_M3_STEP
-#: lane afn-mamba (2026-10-03): MOJOLEARN_AFN_MAMBA_ARENA / IDN_MAMBA_ARENA make
+#: lane afn-mamba (2026-10-03): IDN_MAMBA_ARENA (AFN_MAMBA_ARENA is its alias) makes
 #: the block structs views of one arena; the per-call `_mamba{1,2,3}_run_arena`
 #: bodies that used it here are gone with the per-call bodies (lane x5: the
 #: block step op builds its structs over the program's tensors the same way).
@@ -80,7 +80,6 @@ from mamba.checks.mamba3_fixture import (
     M3_HEADDIM,
     M3_NUM_ROPE_ANGLES,
     Mamba3Dims,
-    Mamba3Weights,
 )
 from mamba.impl.modules.mamba3 import (
     BLOCK3_ANY_SABOTAGE,
