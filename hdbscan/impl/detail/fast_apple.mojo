@@ -45,20 +45,10 @@ main batchv-hdb-smr-istella: hdbscan istella 44,879 -> 3,800 ms, n_clusters
 # Tried: the d <= 64 arm's Boruvka rounds driven on the device (fast_mr_mst_device.mojo); hdbscan taxi 434 -> 432.6 ms (-0.3%, noise).
 # Restore: git apply experiments/removed/MOJOLEARN_HDB_DEV_BORUVKA.patch; record in docs/TOMBSTONES.md.
 
-# INCONCLUSIVE-speed, M3 batchv-hdb-onesync-taxi / -istella vs main:
-# 424.7 -> 425.5 / 3809 -> 3829 ms, clusters identical (SMR on both).
-# Old-base -5% did not carry; dropped for no demonstrated main gain.
-# See docs/apple-fast/EXPERIMENTS.md (HDB_ONE_SYNC).
-# F15/hdbscan-downloads M3 2026-10-06: same three public fits as linkage;
-# cold B/A0.9506,0.9225,0.8915, repeated0.8997,0.9363,0.8688;
-# task quality equal. One scored sample. Promising independently, retain
-# OFF pending combined timing with promoted linkage (no combination artifact
-# is present). Caller/build evidence: results/F15/hdbscan-downloads under
-# the retained root above. Historical full-dataset inconclusive result stays.
-comptime HDB_ONE_SYNC = HDB_FAST_APPLE and (
-    is_defined["MOJOLEARN_HDB_ONE_SYNC"]()
-)
-"""The extract's and the runner's output downloads under one wait each."""
+# TOMBSTONE: MOJOLEARN_HDB_ONE_SYNC (FAST Apple opt-in: output downloads under one wait; EXP:1914 inconclusive full-data, owed row withdrawn) deleted 2026-11-15 by lane/expdel2-11-cluster; code recoverable at 0aed7700fc.
+# Restore: git apply experiments/removed/MOJOLEARN_HDB_ONE_SYNC.patch; record in docs/TOMBSTONES.md.
+# Tried: M3 batchv-hdb-onesync taxi / istella 424.7 -> 425.5 / 3809 -> 3829 ms (inconclusive); F15/hdbscan-downloads cold B/A 0.89..0.95, one sample, never timed with the promoted linkage.
+# The same staged route stays the IDENTICAL default (idn_switches.IDN_HDB_ONE_SYNC).
 
 # F15/hdbscan-linkage M3 2026-10-06: promote FAST Apple device linkage.
 # Full public cold/repeated fits at509x7,997x13,1031x67 (3/4/5 separated
@@ -68,7 +58,6 @@ comptime HDB_ONE_SYNC = HDB_FAST_APPLE and (
 # dataset claim. Caller67d0efb29; unchanged reused build/hash provenance:
 # ~/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F15/
 # hdbscan-linkage. No identity/compile rerun. OFF is the baseline/rollback.
-# ONE_SYNC remains off: individual wins do not establish a combined win.
 comptime HDB_LINKAGE_DEVICE = HDB_FAST_APPLE and (
     not is_defined["MOJOLEARN_HDB_LINKAGE_DEVICE_OFF"]()
 )

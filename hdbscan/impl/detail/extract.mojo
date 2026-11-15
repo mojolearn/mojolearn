@@ -58,7 +58,7 @@ from hdbscan.impl.detail.stabilities import (
     compute_stabilities,
     get_stability_scores_device,
 )
-from hdbscan.impl.detail.fast_apple import HDB_ONE_SYNC, HDB_SELECT_DEVICE
+from hdbscan.impl.detail.fast_apple import HDB_SELECT_DEVICE
 from hdbscan.impl.detail.idn_switches import (
     IDN_HDB_ONE_SYNC,
     IDN_HDB_SELECT_ONE_READ,
@@ -852,10 +852,11 @@ def extract_clusters(
     var h_inv: List[Int32]
     var h_probs: List[Float32]
     var n_outliers: Int
-    # lane af-hdbscan2 (FAST on Apple, -D MOJOLEARN_HDB_ONE_SYNC): the seven
-    # downloads and the scalar staged, ONE wait, then taken; main's route
-    # below waits eight times.
-    comptime if HDB_ONE_SYNC or IDN_HDB_ONE_SYNC:
+    # IDENTICAL (IDN_HDB_ONE_SYNC): the seven downloads and the scalar
+    # staged, ONE wait, then taken; the route below waits eight times.
+    # TOMBSTONE: MOJOLEARN_HDB_ONE_SYNC (its FAST Apple term here) deleted 2026-11-15 by lane/expdel2-11-cluster; code recoverable at 0aed7700fc.
+    # Restore: git apply experiments/removed/MOJOLEARN_HDB_ONE_SYNC.patch; record in docs/TOMBSTONES.md.
+    comptime if IDN_HDB_ONE_SYNC:
         var s_raw = td_stage_i32(ctx, raw)
         var s_final = td_stage_i32(ctx, final)
         var s_isc = td_stage_i32(ctx, is_cluster)

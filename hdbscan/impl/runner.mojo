@@ -59,7 +59,6 @@ from hdbscan.impl.detail.condense import (
     download_condensed,
 )
 from hdbscan.impl.detail.extract import ExtractOutput, extract_clusters
-from hdbscan.impl.detail.fast_apple import HDB_ONE_SYNC
 from hdbscan.impl.detail.idn_switches import IDN_HDB_ONE_SYNC
 from hdbscan.impl.detail.tree_device import (
     td_stage_f32,
@@ -352,12 +351,12 @@ def fit_hdbscan(
     # The outputs, downloaded once.
     var tree: CondensedHierarchy
     var h_core: List[Float32]
-    # lane af-hdbscan2 (FAST on Apple, -D MOJOLEARN_HDB_ONE_SYNC): the tree's
-    # four arrays and the core distances staged, ONE wait; main's route
+    # IDENTICAL on every vendor (IDN_HDB_ONE_SYNC): the tree's four arrays
+    # and the core distances staged, ONE wait; the other route
     # (`download_condensed` + `_download_f32`) waits six times.
-    # fam2-cluster: the same route under IDENTICAL on every vendor
-    # (IDN_HDB_ONE_SYNC).
-    comptime if HDB_ONE_SYNC or IDN_HDB_ONE_SYNC:
+    # TOMBSTONE: MOJOLEARN_HDB_ONE_SYNC (its FAST Apple term here) deleted 2026-11-15 by lane/expdel2-11-cluster; code recoverable at 0aed7700fc.
+    # Restore: git apply experiments/removed/MOJOLEARN_HDB_ONE_SYNC.patch; record in docs/TOMBSTONES.md.
+    comptime if IDN_HDB_ONE_SYNC:
         var s_par = td_stage_i32(ctx, dtree.parents)
         var s_chi = td_stage_i32(ctx, dtree.children)
         var s_lam = td_stage_f32(ctx, dtree.lambdas)
