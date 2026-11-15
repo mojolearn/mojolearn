@@ -3,7 +3,8 @@
 (lane native-neighbors-20261024, base b32103c00), used only as an independent test
 oracle for the one-call native doors (bindings/neighbors_ann_native_door.mojo)."""
 from mojolearn import _backend
-from mojolearn._buffer import addr, addr_ro, as_f32_c, empty
+from mojolearn._buffer import addr, addr_ro, empty
+from mojolearn.tests._typed_input import as_f32_c
 from mojolearn._ivf_impl import _METRICS, _MODE_CODE, METRIC_L2_EXPANDED, METRIC_L2_SQRT_EXPANDED
 from mojolearn._expansion_ann import _ann_int
 

@@ -45,10 +45,8 @@ def _seen(counts, weighted):
 
 
 class _ScalerProtocol(PublicOutputsMixin):
-
-
-    def fit_transform(self, X, y=None, **fit_params):
-        return self.fit(X, y, **fit_params).transform(X)
+    # The base `fit_transform` composition is deleted (lane py-tail-2, 2026-11-15): MinMaxScaler
+    # and StandardScaler (and their host twins) define their own.
 
     def get_params(self, deep=True):
         return {name: getattr(self, name) for name in self._parameters}  # glue: collects the estimator parameters

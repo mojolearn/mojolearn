@@ -550,13 +550,12 @@ class RegressorScoreMixin:
         float
             R^2, averaged uniformly over outputs; 1.0 is a perfect fit.
         """
-        # R^2 is the metrics binding's pinned-sum r2_score, in float32.
-        from ._buffer import as_f32_c
-        from ._metrics_impl import r2_score
-        truth, _ = as_f32_c(y, ndim=None, name="y")
-        pred, _ = as_f32_c(self.predict(X), ndim=None, name="prediction")
-        return r2_score(truth, pred, sample_weight=sample_weight,
-                        numeric_mode=getattr(self, "numeric_mode", None))
+        # One native call: the metrics owner admits y and the prediction as
+        # float32 and runs the pinned-sum r2_score, weights included
+        # (bindings/mcls_cluster_door.mojo, family_mcls_regressor_score).
+        from ._metrics_impl import _regressor_score
+        return _regressor_score(y, self.predict(X), sample_weight,
+                                getattr(self, "numeric_mode", None))
 
 
 class ParamsMixin(SklearnTagsMixin):

@@ -43,7 +43,7 @@ from collections import namedtuple
 
 from . import _backend
 from ._array import Array
-from ._buffer import addr, addr_ro, as_f32_c, empty  # noqa: F401 (kept for importers)
+from ._buffer import addr, addr_ro, empty  # noqa: F401 (kept for importers)
 
 _MODE_CODE = {"fast": 0, "identical": 1}
 

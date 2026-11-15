@@ -18,7 +18,8 @@ import ctypes
 
 from mojolearn import _buffer as _buffers
 from mojolearn._arrays import _addr, _addr_ro
-from mojolearn._buffer import addr, addr_ro, as_f32_c, empty
+from mojolearn._buffer import addr, addr_ro, empty
+from mojolearn.tests._typed_input import as_f32_c
 from mojolearn._bufcheck import dtype_name, is_native_f32, probe
 from mojolearn._mamba_impl import (
     Mamba1Block, Mamba2Block, Mamba3Block,

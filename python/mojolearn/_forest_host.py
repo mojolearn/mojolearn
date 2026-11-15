@@ -43,7 +43,7 @@ import weakref
 
 from . import _backend
 from ._array import Array
-from ._buffer import addr, addr_ro, as_f32_c, empty
+from ._buffer import addr, addr_ro, empty
 
 _EXTENSION = '_mojolearn_forest_host'
 _MODULE_NAME = 'mojolearn._host.' + _EXTENSION

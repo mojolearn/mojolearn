@@ -159,6 +159,7 @@ def _operation_names(mut names: List[String]):
     names.append("family_mcls_r2")
     names.append("family_mcls_rand")
     names.append("family_mcls_regression_error")
+    names.append("family_mcls_regressor_score")
     names.append("family_mcls_roc_auc")
     names.append("family_mcls_silhouette_samples")
     names.append("family_mcls_silhouette_score")

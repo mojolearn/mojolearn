@@ -81,7 +81,7 @@ def test_gpu_and_reference_bindings_register_build_and_search():
 
 
 def _fake_index(n=12, dim=3, n_lists=3):
-    from mojolearn._buffer import as_f32_c, as_i32_c
+    from mojolearn.tests._typed_input import as_f32_c, as_i32_c
     rng = np.random.default_rng(0)
     m = IVFIndex(n_lists=n_lists, n_probes=2, n_neighbors=4, metric="euclidean", random_state=5)
     m.numeric_mode = "identical"
@@ -157,7 +157,7 @@ def test_the_search_binding_refuses_a_broken_index():
     q = np.zeros((2, 3), np.float32)
     d, i = h.search(q)
     assert d.shape == (2, 4) and i.shape == (2, 4)
-    from mojolearn._buffer import as_i32_c
+    from mojolearn.tests._typed_input import as_i32_c
     h.list_indices_ = as_i32_c(np.array([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 11, 10], np.int32), ndim=1, name="i")[0]
     with pytest.raises(Exception, match="ascending"):
         h.search(q)

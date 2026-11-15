@@ -52,11 +52,10 @@ def test_native_public_prediction_widens_after_kernel_and_preserves_score_bits(c
     def forbidden(*args, **kwargs):
         raise AssertionError("Python output conversion reached")
 
-    from mojolearn import _mode, _buffer
+    from mojolearn import _mode
     with monkeypatch.context() as patch:
         patch.setattr(_mode, "_public_result", forbidden)
         patch.setattr(_mode, "_ndarray", forbidden)
-        patch.setattr(_buffer, "as_f32_c", forbidden)
         patch.setattr(np, "asarray", forbidden)
         actual = clean(audit_native_call(native_predict_public, model, query))
         internal = clean(audit_native_call(native_predict_internal, model, query))

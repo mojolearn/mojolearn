@@ -201,13 +201,6 @@ def _(n, r):
     return (lambda: Array.from_list([[1.0 - v, v] for v in p.tolist()], "<f8")), 10.0
 
 
-@cell("embedding ids int64 -> int32 (as_i32_c)")
-def _(n, r):
-    from mojolearn._buffer import as_i32_c
-    ids = r.integers(0, 50000, n)
-    return lambda: as_i32_c(ids, ndim=None, name="ids")
-
-
 @cell("extratrees predict_proba vote.astype('<f8') [n,3]")
 def _(n, r):
     v = arr(r.random((n, 3), dtype=np.float32))

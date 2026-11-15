@@ -70,7 +70,7 @@ from cuML's gain as `(node_rows / tree_rows) * gain`, which is sklearn's
 Both are gated by `extratrees/checks/bestfirst_check.mojo`.
 
 X IS COPIED TWICE PER FIT: once on the host to column-major float32 (the
-builder's layout, the same as cuML's; `_buffer.as_f32_colmajor`, zero-copy for a
+builder's layout, the same as cuML's; the native input admission, zero-copy for a
 float32 F-order input) and once across the boundary into Mojo. On large
 matrices that is the dominant cost of the CALL and is named here so nobody
 times it as the fit.

@@ -1,14 +1,16 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""scikit-learn's input and target validation, once, around every estimator.
+"""scikit-learn's input and target validation for application subclasses.
 
-`_mode.install_fit_tracking` wraps every estimator's `fit`, `partial_fit`,
-`fit_predict` and `fit_transform`, and its `predict`, `transform`,
-`decision_function`, `predict_proba`, `predict_log_proba`, `score` and
-`score_samples`. The wrappers call `before_fit` / `before_call` here on the
-outermost call (never on a call a fit makes on its own instance), so every
-estimator refuses what scikit-learn's `validate_data` refuses, with
-scikit-learn's wording, without a copy of the check in each estimator:
+A package class admits and refuses its inputs natively inside its one-call
+public methods. `_mode.install_fit_tracking` runs only for a class written
+outside the package (an application subclass): it wraps that class's `fit`,
+`partial_fit`, `fit_predict` and `fit_transform`, and its `predict`,
+`transform`, `decision_function`, `predict_proba`, `predict_log_proba`,
+`score` and `score_samples`. Those wrappers call `before_fit` /
+`before_call` here on the outermost call (never on a call a fit makes on its
+own instance), so such a class refuses what scikit-learn's `validate_data`
+refuses, with scikit-learn's wording:
 
 - sparse X when the estimator's `input_tags.sparse` is False
   ("Sparse data was passed for X, but dense data is required ...");
@@ -167,7 +169,7 @@ def input_tag_overrides(cls):
     return {}
 
 
-#: class -> (its __mro__ tuple, the fit word, the call word, has a NaN hook):
+#: class -> (its __mro__ tuple, the fit word, the call word, its NaN rule):
 #: the ADMISSION_OP_X words of `cls`, from tags that are class constants, read
 #: once per class (lane py-buffer). Before, each validated call read up to
 #: three input tags, the NaN hook and the scan sets.
@@ -191,8 +193,7 @@ def _x_words(cls):
     nan_ok = _input_tag(cls, "allow_nan", False)
     fit_scan = not nan_ok and bool(names & _SCANS_X_HERE or names & _SCANS_X_AT_FIT)
     call_scan = fit_scan or (not nan_ok and bool(names & _SCANS_X_AFTER_FIT))
-    hook = getattr(cls, "_mojolearn_allows_nan", None) is not None
-    words = (mro, base | (_X_SCAN if fit_scan else 0), base | (_X_SCAN if call_scan else 0), hook)
+    words = (mro, base | (_X_SCAN if fit_scan else 0), base | (_X_SCAN if call_scan else 0), _nan_rule(cls))
     try:
         _X_WORDS_CACHE[cls] = words
     except TypeError:
@@ -207,12 +208,25 @@ def _input_tag(cls, name, default):
     return input_tag_overrides(cls).get(name, default)
 
 
-def _allows_nan_now(est):
-    """An estimator whose NaN handling is a parameter (SplineTransformer's
-    handle_missing='zeros') says so through `_mojolearn_allows_nan()`; the
-    class tag alone cannot."""
-    hook = getattr(est, "_mojolearn_allows_nan", None)
-    return bool(hook()) if hook is not None else False
+def _nan_rule(cls):
+    """How an estimator whose NaN handling is a parameter says so, resolved
+    once per class (`_x_words`): None, a (parameter, value) pair from the
+    class constant `_mojolearn_nan_parameter` (SplineTransformer's
+    handle_missing='zeros': answered from the parameter, no hook call), or
+    True for an application class's own `_mojolearn_allows_nan()` (called)."""
+    if getattr(cls, "_mojolearn_allows_nan", None) is not None:
+        return True
+    rule = getattr(cls, "_mojolearn_nan_parameter", None)
+    return tuple(rule) if rule is not None else None
+
+
+def _allows_nan_now(est, rule):
+    """`rule` from `_nan_rule`: the class tag alone cannot say whether this
+    instance takes NaN."""
+    if rule is True:
+        hook = getattr(est, "_mojolearn_allows_nan", None)
+        return bool(hook()) if hook is not None else False
+    return getattr(est, rule[0], None) == rule[1]
 
 
 def _target_tag(cls, name, default, est=None):
@@ -350,7 +364,7 @@ def _check_X(est, X, fitting=True):
     cls = type(est)
     words = _x_words(cls)
     word = words[1] if fitting else words[2]
-    if words[3] and word & _X_SCAN and _allows_nan_now(est):
+    if words[3] is not None and word & _X_SCAN and _allows_nan_now(est, words[3]):
         word &= ~_X_SCAN
     entry, context = _admission()
     return entry(_OP_X, (X, cls.__name__, word), context)
@@ -444,7 +458,7 @@ def _array_like(obj):
     """An `__array__`-only object (scikit-learn's _NotAnArray, a pandas object:
     no buffer, not a sequence) as the array it exports, else `obj` itself, so
     X, y and sample_weight take the same paths as their arrays. Glue: one
-    conversion call, no per-element work (the rule `_buffer._materialize`
+    conversion call, no per-element work (the rule the native admission
     applies to X)."""
     if (obj is None or isinstance(obj, (list, tuple, str, bytes))
             or not callable(getattr(obj, "__array__", None))):

@@ -78,7 +78,7 @@ def test_the_cpu_route_is_the_shipped_binding(monkeypatch):
 
 
 def _fitted_without_binary(n=4, info=0):
-    from mojolearn._buffer import as_f32_c
+    from mojolearn.tests._typed_input import as_f32_c
     c = Cholesky(jitter=0.0)
     c.numeric_mode = "identical"
     c.n_, c.info_, c.nb_ = n, info, 32

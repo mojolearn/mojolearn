@@ -79,7 +79,6 @@ def test_no_runtime_buffer_or_binding_loader(monkeypatch):
         calls.append('Python preparation')
         raise AssertionError('Python input helper or binding loader reached')
 
-    monkeypatch.setattr(_buffer, '_materialize', forbidden)
     monkeypatch.setattr(_buffer, '_native', forbidden)
     monkeypatch.setattr(_backend, 'binding', forbidden)
     monkeypatch.setattr(_backend, 'load_host_module', forbidden)

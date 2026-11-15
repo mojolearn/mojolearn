@@ -24,6 +24,8 @@ from mojolearn._array import (
 import struct
 import sys
 
+from mojolearn.tests import _typed_input
+
 
 # The Python definitions of the shape, stride and layout helpers whose product
 # copies moved to bindings/array_native_door.mojo (lane pyout-runtime-boundary,
@@ -232,8 +234,7 @@ def _native_astype(self, dtype):
     fn = _helper("cast_elements", self.size)
     if fn is None:
         return None
-    from mojolearn import _buffer
-    store = _buffer._output_store(_CODE[dtype], self.size)
+    store = _typed_input.output_store(_CODE[dtype], self.size)
     if int(fn(self._addr, sc, store.buffer_info()[0], dc, self.size)):
         return None
     return Array._owned(store, self.shape, dtype, self.order)
@@ -587,7 +588,7 @@ class _ArrayReference:
                 _strided_copy(a._addr, store.buffer_info()[0], a.itemsize, out_shape,
                               sel_strides, _c_strides(out_shape, 1), base_off, 0)
                 if a.dtype == "<f4":
-                    # The contiguous block above (`_buffer._same_dtype_store`)
+                    # The contiguous block above (`_typed_input.same_dtype_store`)
                     # quiets a float32 signaling NaN, as the item setter does;
                     # a strided selection gets the same in-place
                     # `cast_elements` float32 -> float32 so a copy's bits do
@@ -797,10 +798,9 @@ def _block_store(a, offset, length):
     `offset`, equal byte for byte to the per-run `array.array(code,
     <memoryview slice>)` copies it replaces, or None when that needs the
     helper and the helper is absent. One memcpy instead of one Python object
-    per element (0.2 ns against 22); see `_buffer._same_dtype_store` for the
+    per element (0.2 ns against 22); see `_typed_input.same_dtype_store` for the
     one float32 subtlety."""
     if length < _NATIVE_MIN:
         return None  # a short run: the per-element copy is as fast as the detour
-    from mojolearn import _buffer
     raw = a._mv[offset:offset + length].cast("B")
-    return _buffer._same_dtype_store(raw, a.dtype)
+    return _typed_input.same_dtype_store(raw, a.dtype)

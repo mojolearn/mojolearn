@@ -41,7 +41,7 @@ and `'Lossguide'` grow CatBoost's NON-SYMMETRIC trees (on the surface since
 tree scikit-learn grows -- same shape, CatBoost's score and estimator.
 
 X IS ROW-MAJOR HERE AND COLUMN-MAJOR INSIDE. `fit` materializes Fortran
-order ONCE, straight from the caller's buffer (`_buffer.as_f32_colmajor`,
+order ONCE, straight from the caller's buffer (the native input admission,
 DEVIATION 1887). On a 800,000 x 100 C-order matrix that is a 320 MB copy,
 and it is reported rather than hidden -- pass `X` already float32 and in
 Fortran order and it is a zero-copy borrow, a promise this docstring made
@@ -51,7 +51,7 @@ C order and once back).
 INPUTS AND OUTPUTS ARE NOT NumPy (DEVIATION 2330). `X`, `y`,
 `sample_weight` and the eval pair are anything the buffer protocol
 exposes -- an ndarray, an `array.array`, a `mojolearn.Array` -- or a
-nested list; `_buffer.as_f32_colmajor` / `as_f32_c` do the one
+nested list; the native input admission does the one
 conversion. Every array this module RETURNS (`predict`, `predict_proba`,
 `predict_classes`, `loss_curve_`, `test_loss_curve_`,
 `get_tree_leaf_counts`, `get_leaf_values`) is a `mojolearn.Array`, not an

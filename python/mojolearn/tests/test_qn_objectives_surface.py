@@ -136,7 +136,7 @@ def test_binding_refuses_a_mismatched_loss_by_name():
     X, yc, yr = _data(n=32)
     est = QNRegressor()
     from mojolearn.linear_model import _qn_fit_one_target
-    from mojolearn._buffer import as_f32_c
+    from mojolearn.tests._typed_input import as_f32_c
     x, _ = as_f32_c(X, ndim=2, name="X")
     t, _ = as_f32_c(yr, ndim=1, name="y")
     with pytest.raises(Exception, match="n_classes == 1"):

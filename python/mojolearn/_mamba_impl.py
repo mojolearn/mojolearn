@@ -46,7 +46,7 @@ implementations' reduced-precision runs are a MIXTURE of cast boundaries
 that is not this profile (a certified bf16 profile is SHIP LATER under
 its own version name; `archive/evidence/mamba/FEATURE_PARITY.md` section 7's paragraph),
 and float64 because a silent downcast would make the bits that ran bits
-you did not make. This DIFFERS from the classical estimators' `as_f32_c`
+you did not make. This DIFFERS from the classical estimators' float32
 convenience conversion, deliberately: those surfaces summarize data,
 this one certifies bits. Non-finite VALUES are not judged here -- they
 are refused BY NAME and by flat index on the device path

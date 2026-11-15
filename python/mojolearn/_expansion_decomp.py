@@ -88,23 +88,9 @@ class _Base(SklearnTagsMixin):
         """
         return _DECLARED_PARAMS_SET(self, params, _DECLARED_PARAMS_CONTEXT)
 
-    # Only a class with a `transform` has `fit_transform` (scikit-learn's
-    # TransformerMixin): a classifier or detector on this base has neither.
-    @available_if(lambda self: hasattr(self, "transform"))
-    def fit_transform(self, X, y=None):
-        """Fit to X, then return ``transform(X)``.
-
-        Parameters
-        ----------
-        X : array-like of shape (n_samples, n_features)
-            Training data.
-        y : ignored
-
-        Returns
-        -------
-        ndarray of shape (n_samples, n_components), float32
-        """
-        return self.fit(X, y).transform(X)
+    # The base `fit_transform` composition is deleted (lane py-tail-2, 2026-11-15): every package
+    # class on this base with a `transform` defines its own (one native call); the private
+    # intermediate `_SparseCoding` is never instantiated.
 
     def _check(self, attr="components_"):
         if not hasattr(self, attr):

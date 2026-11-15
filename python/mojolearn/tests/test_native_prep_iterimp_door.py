@@ -120,7 +120,7 @@ def _pred_f64(v):
     """A user estimator's predictions as a float64 Array holding the values
     `_as_list` reads (`float(x)` per element): a float32 or float64 vector
     widened natively (exact), anything else through `_as_list`."""
-    from mojolearn._buffer import _materialize, _has_buffer, as_f64_c
+    from mojolearn.tests._typed_input import materialize as _materialize, has_buffer as _has_buffer, as_f64_c
     if isinstance(v, Array) or (not isinstance(v, (list, tuple)) and _has_buffer(v)):
         a, _ = _materialize(v, "predict")
         if a.ndim == 1 and a.dtype in ("<f4", "<f8") and a.size:

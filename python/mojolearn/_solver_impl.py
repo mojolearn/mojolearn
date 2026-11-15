@@ -110,7 +110,7 @@ _ARCHIVE, _ARCHIVE_CONTEXT = _native_archive_bridge.connect()
 #                  and in predict
 #   sparse X       cdFit is dense only (elastic_net.py:265-269)
 # THE DESIGN MATRIX IS COPIED AT MOST ONCE (DEVIATION 2367): cdFit wants cuML's F
-# order and `_buffer.as_f32_colmajor` converts dtype and layout in one pass; a
+# order and the native input admission converts dtype and layout in one pass; a
 # float32 C-order design crosses as is and the device transposes it
 # (lane/gap-nv-classical2). `input_copied_` and `fortran_copied_` report the same
 # flag.

@@ -152,10 +152,9 @@ def test_exact_input_preparation_and_consumed_output_bypass_python_helpers(monke
     def forbidden(*args, **kwargs):
         raise AssertionError("Python PCA helper reached")
 
-    from mojolearn import _backend, _buffer, decomposition
+    from mojolearn import _backend, decomposition
     with monkeypatch.context() as patch:
         patch.setattr(_backend, "binding", forbidden)
-        patch.setattr(_buffer, "as_f32_c", forbidden)
         # decomposition no longer imports the Python helper (one native call)
         patch.setattr(decomposition, "as_f32_c", forbidden, raising=False)
         patch.setattr(np, "empty", forbidden)

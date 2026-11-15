@@ -97,9 +97,8 @@ def test_ridge_native_owner_input_preparation_and_poisoned_python_helpers(monkey
     def forbidden(*args, **kwargs):
         raise AssertionError("Python preparation callback reached")
 
-    from mojolearn import _backend, _buffer
+    from mojolearn import _backend
     monkeypatch.setattr(_backend, "binding", forbidden)
-    monkeypatch.setattr(_buffer, "as_f32_c", forbidden)
     monkeypatch.setattr(np, "empty", forbidden)
     clean(audit_native_call(native_fit, out, x, y))
     got = clean(audit_native_call(native_predict, out, x))

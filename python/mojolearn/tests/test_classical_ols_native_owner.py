@@ -131,10 +131,9 @@ def test_ols_native_prepares_native_buffers_without_python_drivers(monkeypatch, 
         raise AssertionError("Python classical driver reached")
 
     # The Python decomp kit (`_expansion_decomp._Kit` / `_M`) is deleted; nothing of it is left to forbid.
-    from mojolearn import _backend, _buffer
+    from mojolearn import _backend
     with monkeypatch.context() as patch:
         patch.setattr(_backend, "binding", forbidden)
-        patch.setattr(_buffer, "as_f32_c", forbidden)
         patch.setattr(np, "empty", forbidden)
         clean(audit_native_call(native_fit, native, x, y))
         got = clean(audit_native_call(native_predict, native, x))

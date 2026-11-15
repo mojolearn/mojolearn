@@ -11,7 +11,8 @@ import numbers
 
 from mojolearn._array import Array
 from mojolearn.tests._array_reference import _native_reduce
-from mojolearn._buffer import as_f32_c, full
+from mojolearn._buffer import full
+from mojolearn.tests._typed_input import as_f32_c
 from mojolearn import _labels
 from mojolearn._labels import flatten_labels, sorted_classes, is_bool
 from mojolearn.tests._prep_prog_oracle import (
@@ -142,7 +143,7 @@ def _multilabel_buffer(y, shape):
     if "bool" in str(getattr(y, "dtype", "")):
         raise ValueError("mojolearn: Multioutput target data is not supported with label binarization")
     from mojolearn._array import _NATIVE_CODE, _REDUCE_INTEGRAL
-    from mojolearn._buffer import as_f64_c
+    from mojolearn.tests._typed_input import as_f64_c
     Y, _ = as_f64_c(y, ndim=2, name="y")
     refuse = ValueError("mojolearn: Multioutput target data is not supported with label binarization")
     if not int(_native_reduce(Y, _REDUCE_INTEGRAL)):

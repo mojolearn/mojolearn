@@ -16,7 +16,8 @@ from sklearn.model_selection import train_test_split  # noqa: E402
 from sklearn.metrics import accuracy_score, r2_score  # noqa: E402
 
 import mojolearn as ml  # noqa: E402
-from mojolearn._buffer import addr, addr_ro, as_i32_c, empty, memory_at  # noqa: E402
+from mojolearn._buffer import addr, addr_ro, empty, memory_at  # noqa: E402
+from mojolearn.tests._typed_input import as_i32_c
 
 
 def _clf(n_classes=3, seed=0):
@@ -249,7 +250,7 @@ def test_stacking_folds_match_sklearn():
     host twin on a CPU-only install) are sklearn's unshuffled folds."""
     from sklearn.model_selection import StratifiedKFold, KFold
     from mojolearn._expansion_trees import _trees_x_bind
-    from mojolearn._buffer import as_i32_c
+    from mojolearn.tests._typed_input import as_i32_c
 
     class _Est:
         def _bind(self):

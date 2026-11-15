@@ -36,33 +36,6 @@ def _assert_same_bytes(got, want, what):
     assert bytes(got) == bytes(want), what
 
 
-def _f32_boundary_block(rng, n):
-    """float64 values that stress a float64 -> float32 cast: random
-    doubles across the float32 range, exact float32 midpoints (ties, which
-    round-to-nearest-EVEN decides), the midpoints nudged by one float64
-    ulp either way, subnormal float32 values and their halves, the largest
-    finite float32 and just above it (overflow to inf), NaN with a payload,
-    both infinities and both zeros."""
-    out = []
-    out.append(rng.standard_normal(n) * np.exp(rng.uniform(-40, 40, n)))
-    f32 = rng.standard_normal(n).astype(np.float32)
-    nxt = np.nextafter(f32, np.float32(np.inf)).astype(np.float64)
-    mid = (f32.astype(np.float64) + nxt) / 2.0            # exact ties
-    out.append(mid)
-    out.append(np.nextafter(mid, np.inf))                   # just above
-    out.append(np.nextafter(mid, -np.inf))                  # just below
-    sub = rng.integers(1, 1 << 23, n).astype(np.uint32).view(np.float32).astype(np.float64)
-    out.append(sub)                                        # subnormals
-    out.append(sub / 2.0)                                  # sub-subnormal ties
-    out.append(sub * 1.5)
-    big = np.float64(np.finfo(np.float32).max)
-    out.append(np.array([big, np.nextafter(big, np.inf), big * 1.0000001, -big * 2,
-                         np.float64(np.finfo(np.float32).tiny) / 3, 0.0, -0.0,
-                         np.inf, -np.inf, np.nan, -np.nan,
-                         np.array([0x7FF4_0000_DEAD_BEEF], np.uint64).view(np.float64)[0]]))
-    return np.concatenate(out)
-
-
 # --------------------------------------------------------------- zero-copy
 
 
@@ -104,8 +77,8 @@ def test_array_interface_is_zero_copy():
     assert a[1, 1] == 7.5, "a write through the NumPy view lands in the Array"
     assert a.tolist() == [[0.0, 0.0], [0.0, 7.5], [0.0, 0.0]]
     # F-order block: NumPy views it with its real strides, still no copy
-    f, copied = _buffer.as_f32_colmajor([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]], name="X")
-    assert copied and f.order == "F"
+    f = Array.from_list([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]], "<f4")._as_order("F")
+    assert f.order == "F"
     vf = np.asarray(f)
     assert vf.flags["F_CONTIGUOUS"] and not vf.flags["C_CONTIGUOUS"]
     assert vf.__array_interface__["data"][0] == f.__array_interface__["data"][0]
@@ -136,104 +109,10 @@ def test_from_buffer_is_a_view_over_numpy():
         assert "contiguous" in str(e)
 
 
-# ------------------------------------------------------ f64 -> f32 casting
-
-
-def test_f64_to_f32_matches_numpy_bit_for_bit():
-    rng = np.random.default_rng(2300)
-    x = _f32_boundary_block(rng, 4096)
-    x = x[: x.size - x.size % 16]
-    assert x.size > 20000
-    with np.errstate(over="ignore", invalid="ignore"):  # inf/nan are the point
-        want = x.astype(np.float32)
-    for shape in ((x.size,), (x.size // 8, 8), (-1, 16)):
-        src = x.reshape(shape)
-        got, copied = _buffer.as_f32_c(src, ndim=src.ndim, name="X")
-        assert copied and got.dtype == "<f4" and got.shape == src.shape
-        _assert_same_bytes(got.tobytes(), want.reshape(shape).tobytes(),
-                           f"f64->f32 cast, shape {src.shape}")
-    # a Python list goes through the same double, so the same single rounding
-    got, _ = _buffer.as_f32_c(x[:1000].tolist(), ndim=1, name="X")
-    _assert_same_bytes(got.tobytes(), want[:1000].tobytes(), "list -> f32")
-    # Array.astype is the same cast
-    a64 = Array.from_buffer(x)
-    _assert_same_bytes(a64.astype("<f4").tobytes(), want.tobytes(), "Array.astype")
-    # widening back is exact
-    _assert_same_bytes(Array.from_buffer(want).astype("<f8").tobytes(),
-                       want.astype(np.float64).tobytes(), "f32->f64 widening")
-
-
-def test_int_to_f32_matches_numpy():
-    rng = np.random.default_rng(2301)
-    i32 = rng.integers(-(1 << 31), 1 << 31, 5000, dtype=np.int32)
-    got, _ = _buffer.as_f32_c(i32, ndim=1, name="y")
-    _assert_same_bytes(got.tobytes(), i32.astype(np.float32).tobytes(), "i32->f32")
-    i64 = rng.integers(-(1 << 53), 1 << 53, 5000, dtype=np.int64)
-    got, _ = _buffer.as_f32_c(i64, ndim=1, name="y")
-    _assert_same_bytes(got.tobytes(), i64.astype(np.float32).tobytes(), "i64->f32 within 2**53")
-    got, _ = _buffer.as_f64_c(i64, ndim=1, name="y")
-    _assert_same_bytes(got.tobytes(), i64.astype(np.float64).tobytes(), "i64->f64")
-    got, _ = _buffer.as_i32_c([1, 2, 3], ndim=1, name="y")
-    assert got.dtype == "<i4" and got.tolist() == [1, 2, 3]
-    got, _ = _buffer.as_i64_c(i32, ndim=1, name="y")
-    _assert_same_bytes(got.tobytes(), i32.astype(np.int64).tobytes(), "i32->i64")
-    # float labels -> int truncate toward zero as NumPy does
-    f = np.array([1.9, -1.9, 0.0, 2.0], np.float32)
-    got, _ = _buffer.as_i32_c(f, ndim=1, name="y")
-    assert got.tolist() == f.astype(np.int32).tolist()
-
-
-def test_colmajor_matches_asfortranarray():
-    rng = np.random.default_rng(2302)
-    for rows, cols in ((7, 3), (1, 5), (64, 1), (33, 17), (2, 2)):
-        x = _f32_boundary_block(rng, 128)[: rows * cols].reshape(rows, cols)
-        want = np.asfortranarray(x, dtype=np.float32)
-        for src, label in ((x, "C f64"), (np.asfortranarray(x), "F f64"),
-                           (x.astype(np.float32), "C f32"),
-                           (x[:, ::-1][:, ::-1], "view f64"),
-                           (x.tolist(), "list")):
-            got, copied = _buffer.as_f32_colmajor(src, name="X")
-            # a float32 block that is already F-contiguous (which a (1, n)
-            # or (n, 1) C-order block also is) is borrowed, not copied
-            expect_copy = not (isinstance(src, np.ndarray) and src.dtype == np.float32
-                               and src.flags["F_CONTIGUOUS"])
-            assert copied == expect_copy, (label, rows, cols)
-            assert got.order == "F" and got.shape == (rows, cols)
-            _assert_same_bytes(got.tobytes(), want.tobytes(order="F"),
-                               f"colmajor bytes, {label}, {rows}x{cols}")
-            assert np.array_equal(np.asarray(got), want, equal_nan=True), label
-        # an F-order float32 input is a zero-copy borrow
-        got, copied = _buffer.as_f32_colmajor(want, name="X")
-        assert not copied and _buffer.addr_ro(got, name="X") == want.ctypes.data
-        # the Array's flat is the column-major flat over the same buffer
-        a, copied = _buffer.as_f32_colmajor(x, name="X")
-        flat = a._flat()
-        assert flat.shape == (rows * cols,)
-        assert _buffer.addr_ro(flat, name="f") == _buffer.addr_ro(a, name="a")
-        for f_ in range(cols):
-            for r in range(rows):
-                assert flat[f_ * rows + r] == a[r, f_]
-
-
-def test_c_order_from_any_layout_matches_ascontiguousarray():
-    rng = np.random.default_rng(2303)
-    x = rng.standard_normal((9, 5))
-    cases = {
-        "F f64": np.asfortranarray(x),
-        "strided f64": np.ascontiguousarray(np.repeat(x, 2, axis=1))[:, ::2],
-        "reversed rows": x[::-1],
-        "F f32": np.asfortranarray(x, dtype=np.float32),
-        "C f32": x.astype(np.float32),
-    }
-    for label, src in cases.items():
-        want = np.ascontiguousarray(src, dtype=np.float32)
-        got, copied = _buffer.as_f32_c(src, ndim=2, name="X")
-        assert got.order == "C" and got.shape == (9, 5)
-        _assert_same_bytes(got.tobytes(), want.tobytes(), label)
-        assert copied == (label != "C f32"), label
-    a3 = rng.standard_normal((2, 3, 4))
-    got, _ = _buffer.as_f32_c(np.asfortranarray(a3), ndim=3, name="X")
-    _assert_same_bytes(got.tobytes(), a3.astype(np.float32).tobytes(), "3-D F -> C")
+# TOMBSTONE: test_f64_to_f32_matches_numpy_bit_for_bit, test_int_to_f32_matches_numpy,
+# test_colmajor_matches_asfortranarray, test_c_order_from_any_layout_matches_ascontiguousarray (they tested
+# the deleted `_buffer.as_*_c` converters; casts are native, checks/native_tests/core_convert.mojo) deleted
+# 2026-11-15 by lane py-tail-2; code recoverable at 1a9d8c01bd.
 
 
 # ------------------------------------------------------------- NPY codec
@@ -475,32 +354,21 @@ def test_getbuffer_paths():
     with _buffer.view(aa) as b:
         assert b.format == "f" and b.itemsize == 4 and b.shape == (4,)
         assert b.addr == aa.buffer_info()[0]
-    got, copied = _buffer.as_f32_c(aa, ndim=1, name="v")
-    assert not copied and _buffer.addr_ro(got, name="v") == aa.buffer_info()[0]
-    got, copied = _buffer.as_f32_c(array.array("d", [1.5, 2.5]), ndim=1, name="v")
-    assert copied and got.tolist() == [1.5, 2.5]
     # memoryview, including a strided one
     mv = memoryview(aa)
     with _buffer.view(mv) as b:
         assert b.addr == aa.buffer_info()[0] and b.c_contiguous
-    got, copied = _buffer.as_f32_c(mv[::2], ndim=1, name="v")
-    assert copied and got.tolist() == [1.0, 3.0]
     # numpy: C, F, non-contiguous (copied), read-only
     x = np.arange(6, dtype=np.float32).reshape(2, 3)
     with _buffer.view(x) as b:
         assert b.c_contiguous and not b.f_contiguous and b.strides == (12, 4)
-    got, copied = _buffer.as_f32_c(x, ndim=2, name="X")
-    assert not copied and _buffer.addr_ro(got, name="X") == x.ctypes.data
+    assert _buffer.addr_ro(x, name="X") == x.ctypes.data
     xf = np.asfortranarray(x)
     with _buffer.view(xf) as b:
         assert b.f_contiguous and not b.c_contiguous and b.strides == (4, 8)
-    got, copied = _buffer.as_f32_c(xf, ndim=2, name="X")
-    assert copied and got.tolist() == x.tolist()
     xs = x[:, ::2]
     with _buffer.view(xs) as b:
         assert not b.c_contiguous and not b.f_contiguous
-    got, copied = _buffer.as_f32_c(xs, ndim=2, name="X")
-    assert copied and got.tolist() == xs.tolist()
     ro = np.zeros(3, np.float32)
     ro.flags.writeable = False
     assert _buffer.addr_ro(ro, name="X") == ro.ctypes.data
@@ -523,20 +391,6 @@ def test_getbuffer_paths():
             raise AssertionError(f"{bad!r} must be refused")
         except TypeError as e:
             assert str(e) == "mojolearn: X does not support the buffer protocol"
-    # a list is converted, not refused, by the converters
-    got, copied = _buffer.as_f32_c([[1, 2], [3, 4]], ndim=2, name="X")
-    assert copied and got.tolist() == [[1.0, 2.0], [3.0, 4.0]]
-    # ndim and emptiness keep the old messages, positional shim included
-    for call, msg in ((lambda: _buffer.as_f32_c(np.zeros(3, np.float32), ndim=2, name="X"), "X must be 2-D, got 1-D shape (3,)"),
-                      (lambda: _buffer.as_f32_c(np.zeros((0, 3), np.float32), ndim=2, name="X"), "X is empty, shape (0, 3)"),
-                      (lambda: _buffer.as_f32_c([1.0], ndim=2, name="y"), "y must be 2-D, got 1-D shape (1,)"),
-                      (lambda: _buffer.as_f64_c(np.zeros((2, 2)), ndim=1, name="y"), "y must be 1-D, got 2-D shape (2, 2)")):
-        try:
-            call()
-            raise AssertionError(msg)
-        except ValueError as e:
-            # the old message leads; scikit-learn's wording may follow it
-            assert str(e).startswith("mojolearn: " + msg), str(e)
 
 
 # ---------------------------------------------------------------- Array API
@@ -577,7 +431,7 @@ def test_array_surface():
     assert np.asarray(f).dtype == np.float16 and np.asarray(f).tolist() == [1.0, -2.0, 0.5]
     # argmax: first max wins; reductions on an F-order block walk the C view
     assert Array.from_list([1.0, 3.0, 3.0, 2.0], "<f4").argmax() == 1
-    fo, _ = _buffer.as_f32_colmajor([[1.0, 9.0], [9.0, 2.0]], name="X")
+    fo = Array.from_list([[1.0, 9.0], [9.0, 2.0]], "<f4")._as_order("F")
     assert fo.argmax() == 1 and fo[1, 0] == 9.0 and fo.reshape(-1).tolist() == [1.0, 9.0, 9.0, 2.0]
     assert fo.tobytes() == struct.pack("<4f", 1.0, 9.0, 9.0, 2.0)
     # memoryview on 3.12+ (a pure-Python class cannot export earlier)

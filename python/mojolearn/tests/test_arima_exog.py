@@ -287,7 +287,7 @@ def test_save_load_round_trip_over_every_input_kind_the_verify_lanes_pass():
 
 def test_save_accepts_a_fitted_array_in_the_native_output_store():
     """`Array.astype` (and the label encoders and float64 to float32
-    converters) return Arrays over `_buffer._output_store`, a ctypes array
+    converters) return Arrays over a raw ctypes output store, a ctypes array
     class; the 0.8.55 ARIMA kept `llf_ = stats[:batch].astype("<f8")`, and
     `save` refused it ("Sequential requires a memoryview over a native buffer
     owner", AMD verify of 7c6e0dade). A fitted field held in that store saves
@@ -305,10 +305,10 @@ def test_save_accepts_a_fitted_array_in_the_native_output_store():
     m = mojolearn.ARIMA(order=(1, 0, 0)).fit(series)
     # a fitted field held in a native output store (ctypes.Array), built
     # directly: astype only returns one above the cast helper's size cut
-    from mojolearn import _buffer
     from mojolearn._array import Array
+    from mojolearn.tests._typed_input import output_store
     src = np.ascontiguousarray(np.asarray(m.llf_), dtype="<f8")
-    store = _buffer._output_store("d", src.size)
+    store = output_store("d", src.size)
     ctypes.memmove(store, src.ctypes.data, src.nbytes)
     held = Array._owned(store, src.shape, "<f8", "C")
     assert isinstance(held._store, ctypes.Array)
