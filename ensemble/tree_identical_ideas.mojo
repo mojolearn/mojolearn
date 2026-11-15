@@ -31,7 +31,9 @@ comptime T04 = False
 # Restore: git apply experiments/removed/MOJOLEARN_TREES_T05.patch
 comptime T05 = False
 # RF T05 per-node bound in row visits per thread (see builder.mojo T05_NODE_ROWS).
-comptime T05_ROW_VISITS = get_defined_int["MOJOLEARN_TREES_T05_ROW_VISITS", 32]()
+# TOMBSTONE: MOJOLEARN_TREES_T05_ROW_VISITS (unmeasured arm) deleted 2026-11-15 by expdel2-39-trees; code recoverable at the deletion commit^.
+# Restore: git apply experiments/removed/MOJOLEARN_TREES_T05_ROW_VISITS.patch
+comptime T05_ROW_VISITS = 32
 comptime T06 = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_TREES_T06"]()
 comptime T07 = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_TREES_T07"]()
 # TOMBSTONE: MOJOLEARN_TREES_T08 (unmeasured arm) deleted 2026-11-15 by expdel2-39-trees; code recoverable at the deletion commit^.
