@@ -109,6 +109,8 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_PCA_FAST_GRAM_MMA_OFF"](), "removed 2026-11-15 (lane/expdel-02-decomposition-series): PCA_FAST_GRAM_MMA_OFF (FAST+Apple rollback to gemm_tn_identical_v1 plus the restore pass for d > 128) is gone; the matrix-unit split Gram is the FAST+Apple path (pca istella 606 -> 490 ms; explained_variance_ rel diff 3.4e-06); restore: experiments/removed/MOJOLEARN_PCA_FAST_GRAM_MMA_OFF.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_TSVD_FAST_POOL_OFF.patch
     comptime assert not is_defined["MOJOLEARN_TSVD_FAST_POOL_OFF"](), "removed 2026-11-15 (lane/expdel-02-decomposition-series): TSVD_FAST_POOL_OFF (FAST+Apple rollback to a fresh n x d device allocation per TruncatedSVD fit / transform) is gone; the pooled copy of X is the FAST+Apple path (tsvd istella 995.9 -> 921.0 ms, taxi 40.4 -> 32.3 ms, quality equal); restore: experiments/removed/MOJOLEARN_TSVD_FAST_POOL_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_XD_FAST_GRP_FUSED_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_XD_FAST_GRP_FUSED_OFF"](), "removed 2026-11-15 (lane/expdel-02-decomposition-series): XD_FAST_GRP_FUSED_OFF (FAST+Apple rollback to the two-wait DEVSCAN random projection fit with separate rand and scale launches) is gone; the one-call one-synchronize fit is the FAST+Apple path (gaussian-rp taxi 3.4 -> 2.1 ms, sparse-rp taxi -10.7%, istella -8.5%, distortion identical); restore: experiments/removed/MOJOLEARN_XD_FAST_GRP_FUSED_OFF.patch"
     return True
 
 

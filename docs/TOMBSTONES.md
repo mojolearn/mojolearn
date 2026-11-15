@@ -664,6 +664,7 @@ in the tables after the sections.
 | [`MOJOLEARN_IPCA_FAST_DEV_OFF`](#mojolearn_ipca_fast_dev_off-old-path-deleted-2026-11-15) | Decomp (IncrementalPCA batch stack, FAST Apple) | removed (old path; FAST+Apple default KEPT, gl2k-ipca-dev) | 2026-11-15 | [MOJOLEARN_IPCA_FAST_DEV_OFF.patch](../experiments/removed/MOJOLEARN_IPCA_FAST_DEV_OFF.patch) |
 | [`MOJOLEARN_PCA_FAST_GRAM_MMA_OFF`](#mojolearn_pca_fast_gram_mma_off-old-path-deleted-2026-11-15) | Decomp (PCA covariance Gram past the split-K capacity, FAST Apple) | removed (old path; FAST+Apple default KEPT, gl2p-pca-grammma) | 2026-11-15 | [MOJOLEARN_PCA_FAST_GRAM_MMA_OFF.patch](../experiments/removed/MOJOLEARN_PCA_FAST_GRAM_MMA_OFF.patch) |
 | [`MOJOLEARN_TSVD_FAST_POOL_OFF`](#mojolearn_tsvd_fast_pool_off-old-path-deleted-2026-11-15) | Decomp (TruncatedSVD explained variance / transform copy of X, FAST Apple) | removed (old path; FAST+Apple default KEEP, rab15-tsvdpool) | 2026-11-15 | [MOJOLEARN_TSVD_FAST_POOL_OFF.patch](../experiments/removed/MOJOLEARN_TSVD_FAST_POOL_OFF.patch) |
+| [`MOJOLEARN_XD_FAST_GRP_FUSED_OFF`](#mojolearn_xd_fast_grp_fused_off-old-path-deleted-2026-11-15) | Decomp (Gaussian / sparse random projection fit, FAST Apple) | removed (old path; FAST+Apple default KEPT, kap2-grp-fused) | 2026-11-15 | [MOJOLEARN_XD_FAST_GRP_FUSED_OFF.patch](../experiments/removed/MOJOLEARN_XD_FAST_GRP_FUSED_OFF.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -6449,4 +6450,12 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md (section expdel-02-
 - **Verdict**: KEEP, FAST+Apple default (EXPERIMENTS.md `TSVD_FAST_POOL`, rab15-tsvdpool, M3 afc_ab_def, full board, one run per arm, 2026-10-05): tsvd istella 995.9 -> 921.0 ms, taxi 40.4 -> 32.3 ms, quality equal. No bit change on any column.
 - **Deleted by**: lane/expdel-02-decomposition-series (docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md); code recoverable at `8d1352d8a6`.
 - **Restore**: `git apply experiments/removed/MOJOLEARN_TSVD_FAST_POOL_OFF.patch`, then delete the `MOJOLEARN_TSVD_FAST_POOL_OFF` refusal in `core/experiment_guards_decomposition.mojo`.
+- **Records**: refusal in `core/experiment_guards_decomposition.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel-02-decomposition-series section).
+
+### MOJOLEARN_XD_FAST_GRP_FUSED_OFF: old path deleted (2026-11-15)
+
+- **What it was**: the FAST+Apple rollback of `GRP_FAST_FUSED` (`x_decomp/resident.mojo`, bit 8 of `x_decomp_grp_cls2`; taken by `x_decomp/decomp_owner_dev.mojo` and the resident pyapi pack / unpack, and the base of `GRP_FAST_SRP_STRAT`): with `-D MOJOLEARN_XD_FAST_GRP_FUSED_OFF` the fit waited twice and launched rand and scale separately. Deleted: the define read; `GRP_FAST_FUSED` is `_CLS2_FAST_APPLE and GRP_CLS2_DEVSCAN`. The DEVSCAN fit stays (NOSCAN builds, IDENTICAL, every other vendor).
+- **Verdict**: KEPT, FAST+Apple default (EXPERIMENTS.md `XD_FAST_GRP_FUSED`, kap2-grp-fused-{taxi,istella}, kap2-srp-fused-{taxi,istella}): M3 one run per arm, gaussian-rp taxi 3.4 -> 2.1 ms, istella -4.6%; sparse-rp taxi -10.7%, istella -8.5%; distortion identical. No bit change on any column.
+- **Deleted by**: lane/expdel-02-decomposition-series (docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md); code recoverable at `436f8d47d1`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_XD_FAST_GRP_FUSED_OFF.patch`, then delete the `MOJOLEARN_XD_FAST_GRP_FUSED_OFF` refusal in `core/experiment_guards_decomposition.mojo`.
 - **Records**: refusal in `core/experiment_guards_decomposition.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel-02-decomposition-series section).
