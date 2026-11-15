@@ -211,14 +211,13 @@ comptime RESAMPLE_MAP_TPB = 256
 #: Known: never compiled, never measured; main's select already runs the
 #: board's 20,000 + 20,000 (no refusal to lift), so this is an A/B of two
 #: selects. 16 KB + 64 B threadgroup memory per block (Apple: 32 KB).
-#: FAST + Apple DEFAULT (rollback -D MOJOLEARN_RESAMPLE_FAST_PERM_SELECT_OFF).
+#: FAST + Apple DEFAULT.
 #: M3 afc_ab_def, full board size, 1 run per arm, 2026-10-04 (ab1 d51f4b4bf):
 #: permutation-test taxi 55.41 -> 35.49 ms, istella 55.28 -> 35.28 ms;
 #: pvalue identical.
-comptime RESAMPLE_FAST_PERM_SELECT = (
-    RESAMPLE_FAST_APPLE
-    and not is_defined["MOJOLEARN_RESAMPLE_FAST_PERM_SELECT_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_RESAMPLE_FAST_PERM_SELECT_OFF (old path, superseded by the FAST+Apple default) deleted 2026-11-15 by lane/expdel-02-decomposition-series; code recoverable at 1b6a31e9a1.
+# Restore: git apply experiments/removed/MOJOLEARN_RESAMPLE_FAST_PERM_SELECT_OFF.patch; record in docs/TOMBSTONES.md.
+comptime RESAMPLE_FAST_PERM_SELECT = RESAMPLE_FAST_APPLE
 
 #: `-D MOJOLEARN_CV_FAST_SLICE` (python/mojolearn/model_selection.py
 #: cross_val_score): when every fold is KFold(shuffle=False)-shaped, each
@@ -236,11 +235,10 @@ comptime RESAMPLE_FAST_PERM_SELECT = (
 #: OUTCOME (M3 afc_ab_def, full board size, 1 run per arm, 2026-10-04, tag
 #: rab1d-cvslice): cross-val-score taxi 157.93 -> 126.18 ms (-20.1%), istella
 #: 3114.45 -> 2920.08 ms (-6.2%); mean_r2 and output digest identical. KEEP:
-#: the FAST + Apple default since then; rollback -D MOJOLEARN_CV_FAST_SLICE_OFF
-#: (the old -D name is harmless).
-comptime CV_FAST_SLICE = (
-    RESAMPLE_FAST_APPLE and not is_defined["MOJOLEARN_CV_FAST_SLICE_OFF"]()
-)
+#: the FAST + Apple default since then (the old -D name is harmless).
+# TOMBSTONE: MOJOLEARN_CV_FAST_SLICE_OFF (old path, superseded by the FAST+Apple default) deleted 2026-11-15 by lane/expdel-02-decomposition-series; code recoverable at 289e8ff918.
+# Restore: git apply experiments/removed/MOJOLEARN_CV_FAST_SLICE_OFF.patch; record in docs/TOMBSTONES.md.
+comptime CV_FAST_SLICE = RESAMPLE_FAST_APPLE
 
 #: `-D MOJOLEARN_CV_FAST_TRUST_FOLDS` (model_selection.py _prepare_folds):
 #: the native default folds (`fold_ids` + `select_fold_i64`, a partition by
@@ -251,12 +249,10 @@ comptime CV_FAST_SLICE = (
 #: OUTCOME (M3 afc_ab_def, full board size, 1 run per arm, 2026-10-04, tag
 #: rab1d-cvtrust): cross-val-score taxi 161.86 -> 142.47 ms (-12.0%), istella
 #: 3099.08 -> 3089.22 ms (-0.3%); mean_r2 and output digest identical. KEEP:
-#: the FAST + Apple default since then; rollback
-#: -D MOJOLEARN_CV_FAST_TRUST_FOLDS_OFF (the old -D name is harmless).
-comptime CV_FAST_TRUST_FOLDS = (
-    RESAMPLE_FAST_APPLE
-    and not is_defined["MOJOLEARN_CV_FAST_TRUST_FOLDS_OFF"]()
-)
+#: the FAST + Apple default since then (the old -D name is harmless).
+# TOMBSTONE: MOJOLEARN_CV_FAST_TRUST_FOLDS_OFF (old path, superseded by the FAST+Apple default) deleted 2026-11-15 by lane/expdel-02-decomposition-series; code recoverable at 8258512ade.
+# Restore: git apply experiments/removed/MOJOLEARN_CV_FAST_TRUST_FOLDS_OFF.patch; record in docs/TOMBSTONES.md.
+comptime CV_FAST_TRUST_FOLDS = RESAMPLE_FAST_APPLE
 
 
 def resample_fast_defines() -> Int:
@@ -1848,7 +1844,7 @@ def permutation_test_host_into(
     ctx.synchronize()
     var dplan = _resample_plan(plan)
     var owners = resample_device_count(dplan)
-    # RESAMPLE_FAST_PERM_SELECT (FAST + Apple default; _OFF rolls back): the
+    # RESAMPLE_FAST_PERM_SELECT (FAST + Apple default): the
     # null by fast_apple.mojo's 4-bit radix select (no atomics, FAST's fold);
     # the same permutation. Mean and diff_means; anything else: main's launch.
     # (Owners > 1 is IDENTICAL only, resample/multi_gpu.mojo::resample_device_count.)
@@ -2196,10 +2192,11 @@ def mc_closed_form_for[
 # Array (1,000,000 rows at the board). On FAST + Apple the device rows go
 # straight into the caller's int32 buffer in one copy. The same integers.
 # Default since the M3 A/B gmp-rs-idx-* (resample taxi 71.7 -> 62.8 ms,
-# istella -1.8%, max_mean_shift the same); -D
-# MOJOLEARN_RESAMPLE_FAST_IDX_DIRECT_OFF restores the List route.
-comptime RESAMPLE_IDX_DIRECT = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
-                                and not is_defined["MOJOLEARN_RESAMPLE_FAST_IDX_DIRECT_OFF"]())
+# istella -1.8%, max_mean_shift the same). Every tier now takes the direct
+# copy (bindings/_mojolearn_resample.mojo); the switch and its List-route
+# B arm are gone.
+# TOMBSTONE: MOJOLEARN_RESAMPLE_FAST_IDX_DIRECT_OFF (old path, superseded by the FAST+Apple default) deleted 2026-11-15 by lane/expdel-02-decomposition-series; code recoverable at 080e0e6f72.
+# Restore: git apply experiments/removed/MOJOLEARN_RESAMPLE_FAST_IDX_DIRECT_OFF.patch; record in docs/TOMBSTONES.md.
 
 
 def resample_indices_replace_into(

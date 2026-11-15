@@ -259,12 +259,12 @@ def build__mojolearn_x_decomp() -> PythonObject:
         comptime if LU_QFIX:
             m.def_function[lu_resid_py]("x_decomp_lu_resid")
         # lane/apple-fast-s-linalg (x_decomp/s_linalg_fast.mojo): bit 2 DECOMP_FAST_ORTH_WS,
-        # bit 4 LU_FAST_RESIDENT (FAST + Apple defaults, _OFF rollbacks); bit 1
+        # bit 4 LU_FAST_RESIDENT (FAST + Apple defaults; LU_FAST_RESIDENT keeps an _OFF rollback); bit 1
         # RSVD_FAST_DEVSCAN and its x_decomp_dev_upload_scan were deleted 2026-11-08
         m.def_function[s_flags_py]("x_decomp_s_flags")
         comptime if DECOMP_FAST_ORTH_WS:
             m.def_function[dev_orth_ws_py]("x_decomp_dev_orth_ws")
-        # LU_FAST_RESIDENT (FAST + Apple) or IDN_LU_RESIDENT_PAIR (IDENTICAL default, rollback _OFF)
+        # LU_FAST_RESIDENT (FAST + Apple) or IDN_LU_RESIDENT_PAIR (IDENTICAL default; IDN_ALL_OFF reverts)
         # TOMBSTONE: MOJOLEARN_LLE_FAST_DEV_LU (its x_decomp_dev_lu_aux registration) deleted 2026-11-08 by ed9ba6e7a1; code recoverable at 41ffcec665.
         # Restore: git apply experiments/removed/MOJOLEARN_LLE_FAST_DEV_LU.patch
         m.def_function[dev_colsum_py]("x_decomp_dev_colsum")

@@ -1,0 +1,20 @@
+diff --git b/resample/estimator.mojo a/resample/estimator.mojo
+index 08617b1f2a..0ff0bba2a4 100644
+--- b/resample/estimator.mojo
++++ a/resample/estimator.mojo
+@@ -235,10 +235,11 @@ comptime RESAMPLE_FAST_PERM_SELECT = RESAMPLE_FAST_APPLE
+ #: OUTCOME (M3 afc_ab_def, full board size, 1 run per arm, 2026-10-04, tag
+ #: rab1d-cvslice): cross-val-score taxi 157.93 -> 126.18 ms (-20.1%), istella
+ #: 3114.45 -> 2920.08 ms (-6.2%); mean_r2 and output digest identical. KEEP:
+-#: the FAST + Apple default since then (the old -D name is harmless).
+-# TOMBSTONE: MOJOLEARN_CV_FAST_SLICE_OFF (old path, superseded by the FAST+Apple default) deleted 2026-11-15 by lane/expdel-02-decomposition-series; code recoverable at 289e8ff918.
+-# Restore: git apply experiments/removed/MOJOLEARN_CV_FAST_SLICE_OFF.patch; record in docs/TOMBSTONES.md.
+-comptime CV_FAST_SLICE = RESAMPLE_FAST_APPLE
++#: the FAST + Apple default since then; rollback -D MOJOLEARN_CV_FAST_SLICE_OFF
++#: (the old -D name is harmless).
++comptime CV_FAST_SLICE = (
++    RESAMPLE_FAST_APPLE and not is_defined["MOJOLEARN_CV_FAST_SLICE_OFF"]()
++)
+ 
+ #: `-D MOJOLEARN_CV_FAST_TRUST_FOLDS` (model_selection.py _prepare_folds):
+ #: the native default folds (`fold_ids` + `select_fold_i64`, a partition by

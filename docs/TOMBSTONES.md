@@ -662,6 +662,23 @@ in the tables after the sections.
 | [`MOJOLEARN_X_PREP_FAST_UNIQUE_OFF`](#mojolearn_x_prep_fast_unique_off-old-path-deleted-2026-11-15) | Preprocessing (encoders' category fit, FAST Apple) | removed (old path; FAST+Apple default KEPT f419ea9f1, prep-onehot-uniq-taxi) | 2026-11-15 | [MOJOLEARN_X_PREP_FAST_UNIQUE_OFF.patch](../experiments/removed/MOJOLEARN_X_PREP_FAST_UNIQUE_OFF.patch) |
 | [`MOJOLEARN_SPLINE_FAST_FUSED_OFF`](#mojolearn_spline_fast_fused_off-old-path-deleted-2026-11-15) | Preprocessing (SplineTransformer fused fit / fit_transform, FAST Apple) | removed (old path; FAST+Apple default KEPT, kap2-spl-fused) | 2026-11-15 | [MOJOLEARN_SPLINE_FAST_FUSED_OFF.patch](../experiments/removed/MOJOLEARN_SPLINE_FAST_FUSED_OFF.patch) |
 | [`MOJOLEARN_XN_FAST_NAN_COLMISS_ONLY_OFF`](#mojolearn_xn_fast_nan_colmiss_only_off-old-path-deleted-2026-11-15) | Neighbors (KNNImputer fit NaN column counts, FAST Apple) | removed (old path; FAST+Apple default KEPT with TIE_MEAN, gmp-imp-taxi) | 2026-11-15 | [MOJOLEARN_XN_FAST_NAN_COLMISS_ONLY_OFF.patch](../experiments/removed/MOJOLEARN_XN_FAST_NAN_COLMISS_ONLY_OFF.patch) |
+| [`MOJOLEARN_ARIMA_FAST_LLONLY_OFF`](#mojolearn_arima_fast_llonly_off-old-path-deleted-2026-11-15) | Time series (AutoARIMA Kalman loop, FAST Apple) | removed (old path; FAST+Apple default KEPT 6c54b7e87) | 2026-11-15 | [MOJOLEARN_ARIMA_FAST_LLONLY_OFF.patch](../experiments/removed/MOJOLEARN_ARIMA_FAST_LLONLY_OFF.patch) |
+| [`MOJOLEARN_ARIMA_FAST_EVAL_WS_OFF`](#mojolearn_arima_fast_eval_ws_off-old-path-deleted-2026-11-15) | Time series (AutoARIMA fit evaluation workspace, FAST Apple) | removed (old path; FAST+Apple default KEPT 6c54b7e87) | 2026-11-15 | [MOJOLEARN_ARIMA_FAST_EVAL_WS_OFF.patch](../experiments/removed/MOJOLEARN_ARIMA_FAST_EVAL_WS_OFF.patch) |
+| [`MOJOLEARN_RESAMPLE_FAST_IDX_DIRECT_OFF`](#mojolearn_resample_fast_idx_direct_off-old-path-deleted-2026-11-15) | Resample (resample(replace=True) row indices, FAST Apple) | removed (old path; FAST+Apple default KEPT, gmp-rs-idx) | 2026-11-15 | [MOJOLEARN_RESAMPLE_FAST_IDX_DIRECT_OFF.patch](../experiments/removed/MOJOLEARN_RESAMPLE_FAST_IDX_DIRECT_OFF.patch) |
+| [`MOJOLEARN_RESAMPLE_FAST_PERM_SELECT_OFF`](#mojolearn_resample_fast_perm_select_off-old-path-deleted-2026-11-15) | Resample (permutation_test null select, FAST Apple) | removed (old path; FAST+Apple default KEEP, ab1 d51f4b4bf) | 2026-11-15 | [MOJOLEARN_RESAMPLE_FAST_PERM_SELECT_OFF.patch](../experiments/removed/MOJOLEARN_RESAMPLE_FAST_PERM_SELECT_OFF.patch) |
+| [`MOJOLEARN_CV_FAST_SLICE_OFF`](#mojolearn_cv_fast_slice_off-old-path-deleted-2026-11-15) | Model selection (cross_val_score fold rows, FAST Apple) | removed (old path; FAST+Apple default ACCEPT, rab1d-cvslice) | 2026-11-15 | [MOJOLEARN_CV_FAST_SLICE_OFF.patch](../experiments/removed/MOJOLEARN_CV_FAST_SLICE_OFF.patch) |
+| [`MOJOLEARN_CV_FAST_TRUST_FOLDS_OFF`](#mojolearn_cv_fast_trust_folds_off-old-path-deleted-2026-11-15) | Model selection (cross_val_score fold checks, FAST Apple) | removed (old path; FAST+Apple default ACCEPT, rab1d-cvtrust) | 2026-11-15 | [MOJOLEARN_CV_FAST_TRUST_FOLDS_OFF.patch](../experiments/removed/MOJOLEARN_CV_FAST_TRUST_FOLDS_OFF.patch) |
+| [`MOJOLEARN_TSA_FAST_SELD_FUSED_OFF`](#mojolearn_tsa_fast_seld_fused_off-old-path-deleted-2026-11-15) | Time series (select_d KPSS rounds, FAST Apple) | removed (old path; FAST+Apple default KEPT 6c0ba4379) | 2026-11-15 | [MOJOLEARN_TSA_FAST_SELD_FUSED_OFF.patch](../experiments/removed/MOJOLEARN_TSA_FAST_SELD_FUSED_OFF.patch) |
+| [`MOJOLEARN_DECOMP_FAST_DICT_DEV_OFF`](#mojolearn_decomp_fast_dict_dev_off-old-path-deleted-2026-11-15) | Decomp (MiniBatchDictionaryLearning atom update, FAST) | removed (old path; FAST+Apple default KEPT, clus3-mbdl-dictdev) | 2026-11-15 | [MOJOLEARN_DECOMP_FAST_DICT_DEV_OFF.patch](../experiments/removed/MOJOLEARN_DECOMP_FAST_DICT_DEV_OFF.patch) |
+| [`MOJOLEARN_DECOMP_FAST_LASSO_GRP_OFF`](#mojolearn_decomp_fast_lasso_grp_off-old-path-deleted-2026-11-15) | Decomp (MiniBatchDictionaryLearning Lasso CD rows, FAST Apple) | removed (old path; FAST+Apple default KEPT, clus3-mbdl-lassogrp) | 2026-11-15 | [MOJOLEARN_DECOMP_FAST_LASSO_GRP_OFF.patch](../experiments/removed/MOJOLEARN_DECOMP_FAST_LASSO_GRP_OFF.patch) |
+| [`MOJOLEARN_DECOMP_FAST_ORTH_WS_OFF`](#mojolearn_decomp_fast_orth_ws_off-old-path-deleted-2026-11-15) | Decomp (Kit.orth on the device: randomized SVD / PCA / TruncatedSVD / FastICA, FAST Apple) | removed (old path; FAST+Apple default KEEP, rab15-rsvdbundle) | 2026-11-15 | [MOJOLEARN_DECOMP_FAST_ORTH_WS_OFF.patch](../experiments/removed/MOJOLEARN_DECOMP_FAST_ORTH_WS_OFF.patch) |
+| [`MOJOLEARN_IDN_LU_RESIDENT_PAIR_OFF`](#mojolearn_idn_lu_resident_pair_off-old-path-deleted-2026-11-15) | Decomp (lu_factor / lu_solve resident pair, IDENTICAL) | removed (old path; IDENTICAL default PROMOTED, NV 0.45x / AMD 0.56x) | 2026-11-15 | [MOJOLEARN_IDN_LU_RESIDENT_PAIR_OFF.patch](../experiments/removed/MOJOLEARN_IDN_LU_RESIDENT_PAIR_OFF.patch) |
+| [`MOJOLEARN_FA_FAST_QRR_OFF`](#mojolearn_fa_fast_qrr_off-old-path-deleted-2026-11-15) | Decomp (FactorAnalysis DevExec.qr_r upload, FAST Apple) | removed (old path; FAST+Apple default ACCEPT, afc_ab_def) | 2026-11-15 | [MOJOLEARN_FA_FAST_QRR_OFF.patch](../experiments/removed/MOJOLEARN_FA_FAST_QRR_OFF.patch) |
+| [`MOJOLEARN_FA_TRANSFORM_FUSED`](#mojolearn_fa_transform_fused-loser-deleted-2026-11-15) | Decomp (FactorAnalysis.transform, FAST Apple opt-in) | NEUTRAL (rab7-fatransform istella +2.0%) | 2026-11-15 | [MOJOLEARN_FA_TRANSFORM_FUSED.patch](../experiments/removed/MOJOLEARN_FA_TRANSFORM_FUSED.patch) |
+| [`MOJOLEARN_IPCA_FAST_DEV_OFF`](#mojolearn_ipca_fast_dev_off-old-path-deleted-2026-11-15) | Decomp (IncrementalPCA batch stack, FAST Apple) | removed (old path; FAST+Apple default KEPT, gl2k-ipca-dev) | 2026-11-15 | [MOJOLEARN_IPCA_FAST_DEV_OFF.patch](../experiments/removed/MOJOLEARN_IPCA_FAST_DEV_OFF.patch) |
+| [`MOJOLEARN_PCA_FAST_GRAM_MMA_OFF`](#mojolearn_pca_fast_gram_mma_off-old-path-deleted-2026-11-15) | Decomp (PCA covariance Gram past the split-K capacity, FAST Apple) | removed (old path; FAST+Apple default KEPT, gl2p-pca-grammma) | 2026-11-15 | [MOJOLEARN_PCA_FAST_GRAM_MMA_OFF.patch](../experiments/removed/MOJOLEARN_PCA_FAST_GRAM_MMA_OFF.patch) |
+| [`MOJOLEARN_TSVD_FAST_POOL_OFF`](#mojolearn_tsvd_fast_pool_off-old-path-deleted-2026-11-15) | Decomp (TruncatedSVD explained variance / transform copy of X, FAST Apple) | removed (old path; FAST+Apple default KEEP, rab15-tsvdpool) | 2026-11-15 | [MOJOLEARN_TSVD_FAST_POOL_OFF.patch](../experiments/removed/MOJOLEARN_TSVD_FAST_POOL_OFF.patch) |
+| [`MOJOLEARN_XD_FAST_GRP_FUSED_OFF`](#mojolearn_xd_fast_grp_fused_off-old-path-deleted-2026-11-15) | Decomp (Gaussian / sparse random projection fit, FAST Apple) | removed (old path; FAST+Apple default KEPT, kap2-grp-fused) | 2026-11-15 | [MOJOLEARN_XD_FAST_GRP_FUSED_OFF.patch](../experiments/removed/MOJOLEARN_XD_FAST_GRP_FUSED_OFF.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -6428,3 +6445,142 @@ bits change on any vendor or the host column, no board row needs re-timing.
 - **Deleted by**: lane/expdel-06-base-cluster-kernel (expdel-06-base-cluster-kernel, docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md); code recoverable at `51fa31eeda`.
 - **Restore**: `git apply experiments/removed/MOJOLEARN_XN_FAST_NAN_COLMISS_ONLY_OFF.patch`, then delete the `MOJOLEARN_XN_FAST_NAN_COLMISS_ONLY_OFF` refusal in `core/experiment_guards_cluster.mojo`.
 - **Records**: refusal in `core/experiment_guards_cluster.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel-06-base-cluster-kernel section).
+## Experiment deletions: lane expdel-02-decomposition-series (2026-11-15)
+
+Deletions from docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md (section expdel-02-decomposition-series); each evidence row was read before the deletion. No bit changes: every deletion removes a non-default arm.
+
+### MOJOLEARN_ARIMA_FAST_LLONLY_OFF: old path deleted (2026-11-15)
+
+- **What it was**: the FAST+Apple rollback of `KALMAN_LL_ONLY` (`arima/impl/batched_kalman.mojo`): with `-D MOJOLEARN_ARIMA_FAST_LLONLY_OFF` the fit's evaluations instantiated `batched_kalman_loop_kernel` with `LL_ONLY = False`, storing pred / vs / Fs at every step that nobody reads. Deleted: the define read; `KALMAN_LL_ONLY` is FAST and Apple, or IDN_ARIMA_LLONLY, as before.
+- **Verdict**: KEPT 6c54b7e87 (EXPERIMENTS.md `ARIMA_FAST_LLONLY`, tsa-llonly-autoarima): M3 one run per arm, autoarima taxi-hourly 50,459 -> 47,023 ms (-6.8%), forecast rmse identical. No bit change on any column.
+- **Deleted by**: lane/expdel-02-decomposition-series (docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md); code recoverable at `a656258c20`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_ARIMA_FAST_LLONLY_OFF.patch`, then delete the `MOJOLEARN_ARIMA_FAST_LLONLY_OFF` refusal in `core/experiment_guards_series.mojo`.
+- **Records**: refusal in `core/experiment_guards_series.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel-02-decomposition-series section).
+
+### MOJOLEARN_ARIMA_FAST_EVAL_WS_OFF: old path deleted (2026-11-15)
+
+- **What it was**: the FAST+Apple rollback of `KALMAN_FAST_EVAL_WS` (`arima/impl/batched_kalman.mojo`, used by `batched_fit.mojo`, `fast_eval_ws.mojo`, `fast_order_state.mojo`): with `-D MOJOLEARN_ARIMA_FAST_EVAL_WS_OFF` the fit's stacked evaluation allocated its device buffers and copied the series at every candidate point. Deleted: the define read; `KALMAN_FAST_EVAL_WS` is FAST and Apple, or IDN_ARIMA_EVAL_WS, as before (the sequential evaluation stays for every other build).
+- **Verdict**: KEPT 6c54b7e87 (EXPERIMENTS.md `ARIMA_FAST_EVAL_WS + ARIMA_FAST_LLONLY`, tsa-both-autoarima): M3 one run per arm, autoarima taxi-hourly 50,500 -> 39,504 ms (-21.8%) for both, EVAL_WS alone 50,299 -> 42,921 ms (code comment of the same A/B), forecast rmse 74.66 identical. No bit change on any column.
+- **Deleted by**: lane/expdel-02-decomposition-series (docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md); code recoverable at `33f865ad21`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_ARIMA_FAST_EVAL_WS_OFF.patch`, then delete the `MOJOLEARN_ARIMA_FAST_EVAL_WS_OFF` refusal in `core/experiment_guards_series.mojo`.
+- **Records**: refusal in `core/experiment_guards_series.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel-02-decomposition-series section).
+
+### MOJOLEARN_RESAMPLE_FAST_IDX_DIRECT_OFF: old path deleted (2026-11-15)
+
+- **What it was**: the FAST+Apple rollback of `RESAMPLE_IDX_DIRECT` (`resample/estimator.mojo`): with `-D MOJOLEARN_RESAMPLE_FAST_IDX_DIRECT_OFF` `resample_indices_binding` (`bindings/_mojolearn_resample.mojo`) took the List route (`resample_indices_host` then `resample_store_indices`). Every other tier already wrote the caller's buffer (`_IDX_INTO`). Deleted: the define read, `RESAMPLE_IDX_DIRECT`, `_IDX_INTO`, the binding's List route and its `resample_store_indices` import. `resample_indices_host` stays (native checks and the host column use it).
+- **Verdict**: KEPT, FAST+Apple default (EXPERIMENTS.md `RESAMPLE_FAST_IDX_DIRECT`, gmp-rs-idx-taxi / gmp-rs-idx-istella): M3, resample taxi 71.7 -> 62.8 ms (-12.4%), istella -1.8%, max_mean_shift the same, same integers. No bit change on any column.
+- **Deleted by**: lane/expdel-02-decomposition-series (docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md); code recoverable at `080e0e6f72`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_RESAMPLE_FAST_IDX_DIRECT_OFF.patch`, then delete the `MOJOLEARN_RESAMPLE_FAST_IDX_DIRECT_OFF` refusal in `core/experiment_guards_series.mojo`.
+- **Records**: refusal in `core/experiment_guards_series.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel-02-decomposition-series section).
+
+### MOJOLEARN_RESAMPLE_FAST_PERM_SELECT_OFF: old path deleted (2026-11-15)
+
+- **What it was**: the FAST+Apple rollback of `RESAMPLE_FAST_PERM_SELECT` (`resample/estimator.mojo`, `permutation_test_host`): with `-D MOJOLEARN_RESAMPLE_FAST_PERM_SELECT_OFF` the mean / diff_means null went through `perm_null_dispatch` (main's `perm_select_stat_kernel`) instead of `perm_select_fast`. Deleted: the define read; `RESAMPLE_FAST_PERM_SELECT` is `RESAMPLE_FAST_APPLE`. `perm_null_dispatch` stays (every other statistic and every other build).
+- **Verdict**: KEEP, FAST+Apple default (EXPERIMENTS.md `RESAMPLE_FAST_PERM_SELECT`, M3 afc_ab_def, full board, one run per arm, 2026-10-04, ab1 d51f4b4bf): permutation-test taxi 55.41 -> 35.49 ms, istella 55.28 -> 35.28 ms, pvalue identical. No bit change on any column.
+- **Deleted by**: lane/expdel-02-decomposition-series (docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md); code recoverable at `1b6a31e9a1`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_RESAMPLE_FAST_PERM_SELECT_OFF.patch`, then delete the `MOJOLEARN_RESAMPLE_FAST_PERM_SELECT_OFF` refusal in `core/experiment_guards_series.mojo`.
+- **Records**: refusal in `core/experiment_guards_series.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel-02-decomposition-series section).
+
+### MOJOLEARN_CV_FAST_SLICE_OFF: old path deleted (2026-11-15)
+
+- **What it was**: the FAST+Apple rollback of `CV_FAST_SLICE` (`resample/estimator.mojo`, bit 32 of `resample_fast_defines`; its Python reader in `model_selection.py` was deleted earlier, so the bit is published but read by nothing today): with `-D MOJOLEARN_CV_FAST_SLICE_OFF` the bit was 0 and each default fold gathered its rows. Deleted: the define read; `CV_FAST_SLICE` is `RESAMPLE_FAST_APPLE`, so the mask is unchanged in every default build.
+- **Verdict**: ACCEPT/DEFAULT, FAST+Apple default (EXPERIMENTS.md `CV_FAST_SLICE`, rab1d-cvslice): M3 one run per arm, cross-val-score taxi 157.93 -> 126.18 ms (-20.1%), istella 3114.45 -> 2920.08 ms (-6.2%), mean_r2 and digest identical. No bit change on any column.
+- **Deleted by**: lane/expdel-02-decomposition-series (docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md); code recoverable at `289e8ff918`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_CV_FAST_SLICE_OFF.patch`, then delete the `MOJOLEARN_CV_FAST_SLICE_OFF` refusal in `core/experiment_guards_series.mojo`.
+- **Records**: refusal in `core/experiment_guards_series.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel-02-decomposition-series section).
+
+### MOJOLEARN_CV_FAST_TRUST_FOLDS_OFF: old path deleted (2026-11-15)
+
+- **What it was**: the FAST+Apple rollback of `CV_FAST_TRUST_FOLDS` (`resample/estimator.mojo`, bit 64 of `resample_fast_defines`; its reader `_prepare_folds` was deleted earlier, so the bit is published but read by nothing today): with `-D MOJOLEARN_CV_FAST_TRUST_FOLDS_OFF` the bit was 0 and the native default folds went through `_indices` and `_overlap`. Deleted: the define read; `CV_FAST_TRUST_FOLDS` is `RESAMPLE_FAST_APPLE`, so the mask is unchanged in every default build.
+- **Verdict**: ACCEPT/DEFAULT, FAST+Apple default (EXPERIMENTS.md `CV_FAST_TRUST_FOLDS`, rab1d-cvtrust): M3 one run per arm, cross-val-score taxi 161.86 -> 142.47 ms (-12.0%), istella 3099.08 -> 3089.22 ms (-0.3%), mean_r2 and digest identical. No bit change on any column.
+- **Deleted by**: lane/expdel-02-decomposition-series (docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md); code recoverable at `8258512ade`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_CV_FAST_TRUST_FOLDS_OFF.patch`, then delete the `MOJOLEARN_CV_FAST_TRUST_FOLDS_OFF` refusal in `core/experiment_guards_series.mojo`.
+- **Records**: refusal in `core/experiment_guards_series.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel-02-decomposition-series section).
+
+### MOJOLEARN_TSA_FAST_SELD_FUSED_OFF: old path deleted (2026-11-15)
+
+- **What it was**: the FAST+Apple rollback of `TSA_SELD_FUSED` (`tsa/impl/timeSeries/kpss_fused.mojo`, taken in `tsa/estimator.mojo` select_d): with `-D MOJOLEARN_TSA_FAST_SELD_FUSED_OFF` every select_d took the eight-launch round path. Deleted: the define read; `TSA_SELD_FUSED` is FAST and Apple. The round path stays (seasonal differencing, d_max past 2, long series, every other build).
+- **Verdict**: KEPT 6c0ba4379 (EXPERIMENTS.md `TSA_FAST_SELD_FUSED`, gaptsa-seldfused-selectd-taxi-hourly / -synthetic): M3 one run per arm, select-d taxi-hourly 8.5 -> 2.0 ms (-76%), synthetic 8.0 -> 2.2 ms (-73%), quality identical. No bit change on any column.
+- **Deleted by**: lane/expdel-02-decomposition-series (docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md); code recoverable at `60cbec7970`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_TSA_FAST_SELD_FUSED_OFF.patch`, then delete the `MOJOLEARN_TSA_FAST_SELD_FUSED_OFF` refusal in `core/experiment_guards_series.mojo`.
+- **Records**: refusal in `core/experiment_guards_series.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel-02-decomposition-series section).
+
+### MOJOLEARN_DECOMP_FAST_DICT_DEV_OFF: old path deleted (2026-11-15)
+
+- **What it was**: the FAST rollback of `DECOMP_FAST_DICT_DEV` (`x_decomp/dict_fast.mojo`, taken by `x_decomp/kit_device.mojo` `dict_fused`): with `-D MOJOLEARN_DECOMP_FAST_DICT_DEV_OFF` a FAST build compiled no `dict_update_dev` and `_update_dict` ran the kit's atom loop. Deleted: the define read (and the now-unused `is_defined` import); `DECOMP_FAST_DICT_DEV` is FAST mode. IDENTICAL keeps the kit loop as before.
+- **Verdict**: KEPT, FAST+Apple default (EXPERIMENTS.md `DECOMP_FAST_DICT_DEV`, clus3-mbdl-dictdev-istella): M3 one run per arm, mb-dict-learning istella 6,832 -> 5,193 ms (-24%), sparsity .08636 and reconstruction error .6483 identical. No bit change on any column.
+- **Deleted by**: lane/expdel-02-decomposition-series (docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md); code recoverable at `539ab9e04b`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_DECOMP_FAST_DICT_DEV_OFF.patch`, then delete the `MOJOLEARN_DECOMP_FAST_DICT_DEV_OFF` refusal in `core/experiment_guards_decomposition.mojo`.
+- **Records**: refusal in `core/experiment_guards_decomposition.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel-02-decomposition-series section).
+
+### MOJOLEARN_DECOMP_FAST_LASSO_GRP_OFF: old path deleted (2026-11-15)
+
+- **What it was**: the FAST+Apple rollback of `DECOMP_FAST_LASSO_GRP` (`x_decomp/lasso_grp.mojo`, taken by `x_decomp/device.mojo` `DevExec.lasso_rows`): with `-D MOJOLEARN_DECOMP_FAST_LASSO_GRP_OFF` every k took `lasso_rows_kernel`. Deleted: the define read (and the now-unused `is_defined` import); `DECOMP_FAST_LASSO_GRP` is FAST and Apple. `lasso_rows_kernel` stays (k > 64 and every other build).
+- **Verdict**: KEPT, FAST+Apple default (EXPERIMENTS.md `DECOMP_FAST_LASSO_GRP`, clus3-mbdl-lassogrp-istella): M3 one run per arm, mb-dict-learning istella 6,827 -> 3,185 ms (-53%), sparsity .08636 and reconstruction error .6483 identical. No bit change on any column.
+- **Deleted by**: lane/expdel-02-decomposition-series (docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md); code recoverable at `08bb175b23`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_DECOMP_FAST_LASSO_GRP_OFF.patch`, then delete the `MOJOLEARN_DECOMP_FAST_LASSO_GRP_OFF` refusal in `core/experiment_guards_decomposition.mojo`.
+- **Records**: refusal in `core/experiment_guards_decomposition.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel-02-decomposition-series section).
+
+### MOJOLEARN_DECOMP_FAST_ORTH_WS_OFF: old path deleted (2026-11-15)
+
+- **What it was**: the FAST+Apple rollback of `DECOMP_FAST_ORTH_WS` (`x_decomp/s_linalg_fast.mojo`, `s_flags` bit 2; taken by `bindings/_mojolearn_x_decomp.mojo` (registers `x_decomp_dev_orth_ws`) and `x_decomp/pca_randomized_dev.mojo`): with `-D MOJOLEARN_DECOMP_FAST_ORTH_WS_OFF` every device `Kit.orth` allocated dq / dw / TSQR scratch fresh. Deleted: the define read; `DECOMP_FAST_ORTH_WS` is `XD_FAST_APPLE`. `dev_orth_run` stays (every other build).
+- **Verdict**: KEEP, FAST+Apple default (EXPERIMENTS.md `RSVD_FAST_DEVSCAN + DECOMP_FAST_ORTH_WS`, rab15-rsvdbundle, M3 afc_ab_def, full board, one run per arm): randomized-svd istella 490.1 -> 435.1 ms, taxi 200.5 -> 189.8 ms, error equal to 1e-14 (bundle with RSVD_FAST_DEVSCAN, which keeps its own `_OFF`). No bit change on any column.
+- **Deleted by**: lane/expdel-02-decomposition-series (docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md); code recoverable at `de1175eb70`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_DECOMP_FAST_ORTH_WS_OFF.patch`, then delete the `MOJOLEARN_DECOMP_FAST_ORTH_WS_OFF` refusal in `core/experiment_guards_decomposition.mojo`.
+- **Records**: refusal in `core/experiment_guards_decomposition.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel-02-decomposition-series section).
+
+### MOJOLEARN_IDN_LU_RESIDENT_PAIR_OFF: old path deleted (2026-11-15)
+
+- **What it was**: the IDENTICAL rollback of `IDN_LU_RESIDENT_PAIR` (`x_decomp/s_linalg_fast.mojo`, `s_flags` bit 8, `LU_RESIDENT_ENTRIES`): with `-D MOJOLEARN_IDN_LU_RESIDENT_PAIR_OFF` the binding registered no `x_decomp_dev_lu_factor` / `_dev_lu_solve` and `lu_factor` took `_M.from_input` + `Kit.lu`. Deleted: the define read; `IDN_LU_RESIDENT_PAIR` is IDENTICAL unless `MOJOLEARN_IDN_ALL_OFF`, so the host-staged route stays reachable only through that global switch.
+- **Verdict**: PROMOTED 2026-10-11 (grid_controls/lu-resident-pair.json, lane/i17-decide-linalg-seq, A/B main@b2657cc89, one run per arm, digests NV == AMD on both arms): lu-factor synthetic NV L40S 822.7 -> 369.0 ms (0.45x, v0032/v0033), AMD MI325X 568.0 -> 315.4 ms (0.56x, a1615/a1616), average 0.50x; lu-solve 1.07x / 1.00x (noise); quality equal. No bit change on any column.
+- **Deleted by**: lane/expdel-02-decomposition-series (docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md); code recoverable at `63d9ceea61`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_IDN_LU_RESIDENT_PAIR_OFF.patch`, then delete the `MOJOLEARN_IDN_LU_RESIDENT_PAIR_OFF` refusal in `core/experiment_guards_decomposition.mojo`.
+- **Records**: refusal in `core/experiment_guards_decomposition.mojo`; `experiments/six_lane_integration/grid_controls/lu-resident-pair.json` control `lu_resident_pair` moved to `removed` (the generated grid/grid-plan.json and grid/GRID.md still list it until the next grid regeneration); `docs/apple-fast/EXPERIMENTS.md` row (expdel-02-decomposition-series section).
+
+### MOJOLEARN_FA_FAST_QRR_OFF: old path deleted (2026-11-15)
+
+- **What it was**: the FAST+Apple rollback of `FA_FAST_QRR` (`x_decomp/device.mojo`): its host List staging was already removed when the direct upload became `DevExec.qr_r`'s only route (merge 2026-10-05, lane cpu3-core), so `FA_FAST_QRR` was read by nothing and `-D MOJOLEARN_FA_FAST_QRR_OFF` did nothing. Deleted: the define read and the `FA_FAST_QRR` constant.
+- **Verdict**: ACCEPT/DEFAULT, FAST+Apple default (EXPERIMENTS.md `FA_FAST_QRR`, afc_ab_def, M3 full board, one run per arm, 2026-10-04): factor-analysis istella 10391.5 -> 10254.8 ms, digest identical. No bit change on any column.
+- **Deleted by**: lane/expdel-02-decomposition-series (docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md); code recoverable at `e0d53def90`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_FA_FAST_QRR_OFF.patch`, then delete the `MOJOLEARN_FA_FAST_QRR_OFF` refusal in `core/experiment_guards_decomposition.mojo`.
+- **Records**: refusal in `core/experiment_guards_decomposition.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel-02-decomposition-series section).
+
+### MOJOLEARN_FA_TRANSFORM_FUSED: loser deleted (2026-11-15)
+
+- **What it was**: the FAST+Apple opt-in `FA_TRANSFORM_FUSED` (`x_decomp/fa_fast.mojo`): FactorAnalysis.transform as one launch over rows (`fa_transform_kernel`, P = (W / psi)^T cov_z and the mean in threadgroup memory, one row per thread) in place of the kit's sub and two GEMMs. Deleted: the define read, `FA_TRANSFORM_FUSED`, `fa_transform_kernel`, `fa_transform_run`, the `FA_TR_*` page limits, `fa_flags` bit 4, the `fa_transform` method of the `DecompDev` trait and of `DevDecomp` / `HostDecomp`, and the fused branch (with `_FA_TR_MAXK` / `_FA_TR_FLOATS`) of `x_decomp/fa_owner.mojo`'s transform. The default kit transform runs the same operations in the same order.
+- **Verdict**: NEUTRAL (EXPERIMENTS.md `FA_TRANSFORM_FUSED`, reconciled 2026-10-05, Verdicts batch 4): rab7-fatransform M3 one run per arm, factor-analysis istella 10313.84 -> 10524.26 ms (+2.0%), taxi +0.3%, quality identical; stayed off. No bit change on any column.
+- **Deleted by**: lane/expdel-02-decomposition-series (docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md); code recoverable at `7e904cf531`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_FA_TRANSFORM_FUSED.patch`, then delete the `MOJOLEARN_FA_TRANSFORM_FUSED` refusal in `core/experiment_guards_decomposition.mojo`.
+- **Records**: refusal in `core/experiment_guards_decomposition.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel-02-decomposition-series section).
+
+### MOJOLEARN_IPCA_FAST_DEV_OFF: old path deleted (2026-11-15)
+
+- **What it was**: the FAST+Apple rollback of `IPCA_FAST_DEV` (`x_decomp/lanczos_dev.mojo`), a constant with no kernel of its own that the old Python `IncrementalPCA.fit` read to stack each batch on the device; that reader is gone (IncrementalPCA is one call into the compiled owner), so the constant and `-D MOJOLEARN_IPCA_FAST_DEV_OFF` did nothing. Deleted: the define read, `IPCA_FAST_DEV` and the four imports only it used.
+- **Verdict**: KEPT, FAST+Apple default (EXPERIMENTS.md `IPCA_FAST_DEV`, gl2k-ipca-dev-taxi): M3 one run per arm, incremental-pca taxi 159 -> 136 ms (-14.5%), output digest bit-identical. No bit change on any column.
+- **Deleted by**: lane/expdel-02-decomposition-series (docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md); code recoverable at `91dc329408`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_IPCA_FAST_DEV_OFF.patch`, then delete the `MOJOLEARN_IPCA_FAST_DEV_OFF` refusal in `core/experiment_guards_decomposition.mojo`.
+- **Records**: refusal in `core/experiment_guards_decomposition.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel-02-decomposition-series section).
+
+### MOJOLEARN_PCA_FAST_GRAM_MMA_OFF: old path deleted (2026-11-15)
+
+- **What it was**: the FAST+Apple rollback of `PCA_FAST_GRAM_MMA` (`decomposition/impl/linalg/detail/pca.mojo`; also the base of `PCA_FAST_POOL` / `TSVD_FAST_POOL` in `decomposition/estimator.mojo`): with `-D MOJOLEARN_PCA_FAST_GRAM_MMA_OFF` the FAST covariance past the split-K Gram's capacity ran the IDENTICAL one-chain-per-cell Gram and a second centering pass. Deleted: the define read; `PCA_FAST_GRAM_MMA` is `AFN_GEMM_APPLE`. The IDENTICAL Gram stays for every other build.
+- **Verdict**: KEPT, FAST+Apple default (EXPERIMENTS.md `PCA_FAST_GRAM_MMA`, gl2p-pca-grammma-istella-r, quality gl2p-pca-quality on the M2): M3 one run per arm, pca istella 606 -> 490 ms (-19%); explained_variance_ relative difference 3.4e-06, subspace angle 1.8e-06 rad (FAST, nondeterministic atomic sum). No bit change on any column.
+- **Deleted by**: lane/expdel-02-decomposition-series (docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md); code recoverable at `d6f96dfe59`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_PCA_FAST_GRAM_MMA_OFF.patch`, then delete the `MOJOLEARN_PCA_FAST_GRAM_MMA_OFF` refusal in `core/experiment_guards_decomposition.mojo`.
+- **Records**: refusal in `core/experiment_guards_decomposition.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel-02-decomposition-series section).
+
+### MOJOLEARN_TSVD_FAST_POOL_OFF: old path deleted (2026-11-15)
+
+- **What it was**: the FAST+Apple rollback of `TSVD_FAST_POOL` (`decomposition/estimator.mojo`, `tsvd_explained_host` and `tsvd_transform_host`): with `-D MOJOLEARN_TSVD_FAST_POOL_OFF` each call allocated its n x d device copy of X fresh instead of taking it from `_PCA_POOL`. Deleted: the define read; `TSVD_FAST_POOL` is `PCA_FAST_GRAM_MMA`. The fresh-allocation arms stay for every other build.
+- **Verdict**: KEEP, FAST+Apple default (EXPERIMENTS.md `TSVD_FAST_POOL`, rab15-tsvdpool, M3 afc_ab_def, full board, one run per arm, 2026-10-05): tsvd istella 995.9 -> 921.0 ms, taxi 40.4 -> 32.3 ms, quality equal. No bit change on any column.
+- **Deleted by**: lane/expdel-02-decomposition-series (docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md); code recoverable at `8d1352d8a6`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_TSVD_FAST_POOL_OFF.patch`, then delete the `MOJOLEARN_TSVD_FAST_POOL_OFF` refusal in `core/experiment_guards_decomposition.mojo`.
+- **Records**: refusal in `core/experiment_guards_decomposition.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel-02-decomposition-series section).
+
+### MOJOLEARN_XD_FAST_GRP_FUSED_OFF: old path deleted (2026-11-15)
+
+- **What it was**: the FAST+Apple rollback of `GRP_FAST_FUSED` (`x_decomp/resident.mojo`, bit 8 of `x_decomp_grp_cls2`; taken by `x_decomp/decomp_owner_dev.mojo` and the resident pyapi pack / unpack, and the base of `GRP_FAST_SRP_STRAT`): with `-D MOJOLEARN_XD_FAST_GRP_FUSED_OFF` the fit waited twice and launched rand and scale separately. Deleted: the define read; `GRP_FAST_FUSED` is `_CLS2_FAST_APPLE and GRP_CLS2_DEVSCAN`. The DEVSCAN fit stays (NOSCAN builds, IDENTICAL, every other vendor).
+- **Verdict**: KEPT, FAST+Apple default (EXPERIMENTS.md `XD_FAST_GRP_FUSED`, kap2-grp-fused-{taxi,istella}, kap2-srp-fused-{taxi,istella}): M3 one run per arm, gaussian-rp taxi 3.4 -> 2.1 ms, istella -4.6%; sparse-rp taxi -10.7%, istella -8.5%; distortion identical. No bit change on any column.
+- **Deleted by**: lane/expdel-02-decomposition-series (docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md); code recoverable at `436f8d47d1`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_XD_FAST_GRP_FUSED_OFF.patch`, then delete the `MOJOLEARN_XD_FAST_GRP_FUSED_OFF` refusal in `core/experiment_guards_decomposition.mojo`.
+- **Records**: refusal in `core/experiment_guards_decomposition.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel-02-decomposition-series section).

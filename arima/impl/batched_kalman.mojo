@@ -257,16 +257,13 @@ comptime KALMAN_TIME_SCAN_MIN_OBS = 4096
 #: taxi-hourly n=1, forecast_rmse 74.66 identical in every arm): LLONLY
 #: 50,459 -> 47,023 ms, EVAL_WS 50,299 -> 42,921 ms, both 50,500 -> 39,504 ms
 #: (-21.8%). The old `-D MOJOLEARN_ARIMA_FAST_LLONLY=1` /
-#: `-D MOJOLEARN_ARIMA_FAST_EVAL_WS=1` stay harmless; `-D <NAME>_OFF=1` turns
-#: each off.
+#: `-D MOJOLEARN_ARIMA_FAST_EVAL_WS=1` stay harmless.
 #: IDENTICAL on every vendor since lane/fam-timeseries (IDN_ARIMA_LLONLY
 #: above; `-D MOJOLEARN_IDN_ARIMA_LLONLY_OFF=1`).
+# TOMBSTONE: MOJOLEARN_ARIMA_FAST_LLONLY_OFF (old path, superseded by the FAST+Apple default) deleted 2026-11-15 by lane/expdel-02-decomposition-series; code recoverable at a656258c20.
+# Restore: git apply experiments/removed/MOJOLEARN_ARIMA_FAST_LLONLY_OFF.patch; record in docs/TOMBSTONES.md.
 comptime KALMAN_LL_ONLY = (
-    (
-        GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-        and TARGET_HAS_APPLE_GPU
-        and not is_defined["MOJOLEARN_ARIMA_FAST_LLONLY_OFF"]()
-    )
+    (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU)
     or IDN_ARIMA_LLONLY
 )
 
@@ -279,16 +276,13 @@ comptime KALMAN_LL_ONLY = (
 #: taxi-hourly n=1, forecast_rmse 74.66 identical in every arm): LLONLY
 #: 50,459 -> 47,023 ms, EVAL_WS 50,299 -> 42,921 ms, both 50,500 -> 39,504 ms
 #: (-21.8%). The old `-D MOJOLEARN_ARIMA_FAST_LLONLY=1` /
-#: `-D MOJOLEARN_ARIMA_FAST_EVAL_WS=1` stay harmless; `-D <NAME>_OFF=1` turns
-#: each off.
+#: `-D MOJOLEARN_ARIMA_FAST_EVAL_WS=1` stay harmless.
 #: IDENTICAL on every vendor since lane/fam-timeseries (IDN_ARIMA_EVAL_WS
 #: above; `-D MOJOLEARN_IDN_ARIMA_EVAL_WS_OFF=1`).
+# TOMBSTONE: MOJOLEARN_ARIMA_FAST_EVAL_WS_OFF (old path, superseded by the FAST+Apple default) deleted 2026-11-15 by lane/expdel-02-decomposition-series; code recoverable at 33f865ad21.
+# Restore: git apply experiments/removed/MOJOLEARN_ARIMA_FAST_EVAL_WS_OFF.patch; record in docs/TOMBSTONES.md.
 comptime KALMAN_FAST_EVAL_WS = (
-    (
-        GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-        and TARGET_HAS_APPLE_GPU
-        and not is_defined["MOJOLEARN_ARIMA_FAST_EVAL_WS_OFF"]()
-    )
+    (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU)
     or IDN_ARIMA_EVAL_WS
 )
 

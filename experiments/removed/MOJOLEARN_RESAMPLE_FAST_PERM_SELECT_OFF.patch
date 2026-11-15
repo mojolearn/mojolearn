@@ -1,0 +1,45 @@
+diff --git b/resample/estimator.mojo a/resample/estimator.mojo
+index 0ff0bba2a4..7e251731b9 100644
+--- b/resample/estimator.mojo
++++ a/resample/estimator.mojo
+@@ -211,13 +211,14 @@ comptime RESAMPLE_MAP_TPB = 256
+ #: Known: never compiled, never measured; main's select already runs the
+ #: board's 20,000 + 20,000 (no refusal to lift), so this is an A/B of two
+ #: selects. 16 KB + 64 B threadgroup memory per block (Apple: 32 KB).
+-#: FAST + Apple DEFAULT.
++#: FAST + Apple DEFAULT (rollback -D MOJOLEARN_RESAMPLE_FAST_PERM_SELECT_OFF).
+ #: M3 afc_ab_def, full board size, 1 run per arm, 2026-10-04 (ab1 d51f4b4bf):
+ #: permutation-test taxi 55.41 -> 35.49 ms, istella 55.28 -> 35.28 ms;
+ #: pvalue identical.
+-# TOMBSTONE: MOJOLEARN_RESAMPLE_FAST_PERM_SELECT_OFF (old path, superseded by the FAST+Apple default) deleted 2026-11-15 by lane/expdel-02-decomposition-series; code recoverable at 1b6a31e9a1.
+-# Restore: git apply experiments/removed/MOJOLEARN_RESAMPLE_FAST_PERM_SELECT_OFF.patch; record in docs/TOMBSTONES.md.
+-comptime RESAMPLE_FAST_PERM_SELECT = RESAMPLE_FAST_APPLE
++comptime RESAMPLE_FAST_PERM_SELECT = (
++    RESAMPLE_FAST_APPLE
++    and not is_defined["MOJOLEARN_RESAMPLE_FAST_PERM_SELECT_OFF"]()
++)
+ 
+ #: `-D MOJOLEARN_CV_FAST_SLICE` (python/mojolearn/model_selection.py
+ #: cross_val_score): when every fold is KFold(shuffle=False)-shaped, each
+@@ -1847,7 +1848,7 @@ def permutation_test_host_into(
+     ctx.synchronize()
+     var dplan = _resample_plan(plan)
+     var owners = resample_device_count(dplan)
+-    # RESAMPLE_FAST_PERM_SELECT (FAST + Apple default): the
++    # RESAMPLE_FAST_PERM_SELECT (FAST + Apple default; _OFF rolls back): the
+     # null by fast_apple.mojo's 4-bit radix select (no atomics, FAST's fold);
+     # the same permutation. Mean and diff_means; anything else: main's launch.
+     # (Owners > 1 is IDENTICAL only, resample/multi_gpu.mojo::resample_device_count.)
+diff --git b/resample/fast_apple.mojo a/resample/fast_apple.mojo
+index 5a9b214277..1567d3129f 100644
+--- b/resample/fast_apple.mojo
++++ a/resample/fast_apple.mojo
+@@ -13,7 +13,7 @@ Three kernels, all one launch, all parallel, no host step:
+     deleted 2026-10-09: DROPPED-slower; docs/TOMBSTONES.md.)
+   * (`bootstrap_mean_fast_kernel`, -D MOJOLEARN_RESAMPLE_FAST_ONE_FOLD, was
+     deleted 2026-10-09: DROPPED-slower; docs/TOMBSTONES.md.)
+-  * `perm_select_fast_kernel` (RESAMPLE_FAST_PERM_SELECT, the FAST + Apple default): the
++  * `perm_select_fast_kernel` (RESAMPLE_FAST_PERM_SELECT, default; _OFF): the
+     permutation null by a 4-bit radix select (16 counters per thread in a
+     SIMD register, block totals through threadgroup memory, no atomics, keys
+     recomputed from Philox) instead of main's `perm_select_stat_kernel` (8

@@ -13,7 +13,7 @@ Three kernels, all one launch, all parallel, no host step:
     deleted 2026-10-09: DROPPED-slower; docs/TOMBSTONES.md.)
   * (`bootstrap_mean_fast_kernel`, -D MOJOLEARN_RESAMPLE_FAST_ONE_FOLD, was
     deleted 2026-10-09: DROPPED-slower; docs/TOMBSTONES.md.)
-  * `perm_select_fast_kernel` (RESAMPLE_FAST_PERM_SELECT, default; _OFF): the
+  * `perm_select_fast_kernel` (RESAMPLE_FAST_PERM_SELECT, the FAST + Apple default): the
     permutation null by a 4-bit radix select (16 counters per thread in a
     SIMD register, block totals through threadgroup memory, no atomics, keys
     recomputed from Philox) instead of main's `perm_select_stat_kernel` (8
