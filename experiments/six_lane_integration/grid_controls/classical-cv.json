@@ -102,6 +102,11 @@
    "define": "MOJOLEARN_CLASSICAL_C18_RESIDUAL_NEXT",
    "control": "c18_residual_next",
    "reason": "DELETED 2026-11-15 (lane/expdel2-06-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md; recoverable at 7ca2a3400c; patch experiments/removed/MOJOLEARN_CLASSICAL_C18_RESIDUAL_NEXT.patch): unqualified opt-in arm, neutral. T.C18.residual-only (source 6fe3cfce38fd) read mixed / neutral, NV 1.009/1.006/0.970/1.007, AMD 1.004/1.034/0.946/0.974 (lasso-cv taxi/istella, enet-cv taxi/istella), quality equal; never qualified or promoted, so the opt-in arm goes (plan rule a). Refused in core/experiment_guards_linear.mojo; docs/TOMBSTONES.md."
+  },
+  {
+   "define": "MOJOLEARN_CLASSICAL_ENETCV_FOLD_BLOCKS",
+   "control": "enetcv_fold_blocks",
+   "reason": "DELETED 2026-11-15 (lane/expdel2-06-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md; recoverable at 4eb80b4abf; patch experiments/removed/MOJOLEARN_CLASSICAL_ENETCV_FOLD_BLOCKS.patch): losing arms =16|32. EXP:1992 PROMOTED the 64 arm (IDENTICAL default, grid g50ebe26a5): 64 won three of four cells and the geo-mean (0.565 vs 0.582 for 16 and 0.604 for 32); the 16 / 32 arms lost, so only 64 stays. Refused in core/experiment_guards_linear.mojo; docs/TOMBSTONES.md."
   }
  ],
  "cv_local_profiles": {
