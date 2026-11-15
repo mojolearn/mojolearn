@@ -41,7 +41,8 @@ from gbdt.grid_creator.gls_borders import (
 )
 
 
-comptime GBDT_BT_COLUMN_BLOCKS = not is_defined["MOJOLEARN_GBDT_BT_COLUMN_BLOCKS_OFF"]()
+# TOMBSTONE: MOJOLEARN_GBDT_BT_COLUMN_BLOCKS_OFF (DELETE-OLD-PATH, packed 64-column border-type launch, EXP:2273 CANDIDATE, no A/B recorded for the old path, rule b) deleted 2026-11-15 by lane/expdel2-42-trees; code recoverable at 4d1a3fc5f3.
+# Restore: git apply experiments/removed/MOJOLEARN_GBDT_BT_COLUMN_BLOCKS_OFF.patch; record in docs/TOMBSTONES.md.
 
 
 def _blocks(n: Int) -> Int:
@@ -165,20 +166,16 @@ def device_float_borders(
     while base < n_float:
         var width = min(chunk, n_float - base)
         # Lane perf-trees-misc (2026-11-05): one column per block for the six
-        # border types (`GBDT_BT_COLUMN_BLOCKS`). Each column's search is a
+        # border types. Each column's search is a
         # serial, data-dependent walk (the exact DP's pointer loops, the
         # greedy heap); 64 columns packed into one block shared one
         # multiprocessor and their warps diverged on every branch, so a
         # chunk of up to 64 columns ran on one SM at a fraction of one
         # thread's speed. One block per column spreads the columns over
         # every multiprocessor, none diverging. The same kernel and the same
-        # per-column arithmetic: no bit change. `-D
-        # MOJOLEARN_GBDT_BT_COLUMN_BLOCKS_OFF` restores the packed launch.
-        var bt_grid = max(1, (width + 63) // 64)
-        var bt_block = 64
-        comptime if GBDT_BT_COLUMN_BLOCKS:
-            bt_grid = width
-            bt_block = 1
+        # per-column arithmetic: no bit change.
+        var bt_grid = width
+        var bt_block = 1
         var cols_ptr = d_cols.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
         if use_dev:
             cols_ptr = dev_cols.value() + base * n_rows
