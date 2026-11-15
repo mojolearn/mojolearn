@@ -1037,6 +1037,8 @@ def _m3_export_weights_run(mut s: Mamba3PrefillSession, a: List[Int], dm: Int, d
 # compilation, identity, quality or end-to-end measurements have been run.
 # TOMBSTONE: MOJOLEARN_IDN_ACT_RETAIN (the =3 NI48 owned forward tape arm beside the default 2, EXP:2365 superseded) deleted 2026-11-15 by lane/expdel2-27-neural; code recoverable at 2c7917382c.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_ACT_RETAIN.patch
+# TOMBSTONE: MOJOLEARN_IDN_ACT_RETAIN_OFF (old path beside the retained-activation default, EXP:2365) deleted 2026-11-15 by lane/expdel2-27-neural; code recoverable at 85d71d91bc.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ACT_RETAIN_OFF.patch
 # The name stays False for its importers (bindings, mamba/native_tape_dispatch.mojo).
 comptime IDN_SAMBA_M3_FORWARD_TAPE = False
 
