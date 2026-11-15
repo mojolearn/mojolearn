@@ -45,7 +45,9 @@ comptime AFT_G05 = False
 comptime AFT_G06 = False
 # G07: 128-thread Apple leaf walker objective reduction and direction traversal.
 # No performance/quality evidence; leave shared/fused statistics contracts intact.
-comptime AFT_G07 = AFT_G_APPLE_FAST and is_defined["MOJOLEARN_AFT_G07"]()
+# TOMBSTONE: MOJOLEARN_AFT_G07 (DELETE-EXPERIMENT, never-run Apple FAST programme card, rule g) deleted 2026-11-15 by lane/expdel2-42-trees; code recoverable at 5f0ca355ea.
+# Restore: git apply experiments/removed/MOJOLEARN_AFT_G07.patch; record in docs/TOMBSTONES.md.
+comptime AFT_G07 = False
 # G08: four independent cursor rows per leaf-update loop iteration.
 # No performance/quality evidence; same leaves, learning rate and row coverage.
 comptime AFT_G08 = AFT_G_APPLE_FAST and is_defined["MOJOLEARN_AFT_G08"]()
