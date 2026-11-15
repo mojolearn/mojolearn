@@ -59,17 +59,8 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 
 comptime _FAST_APPLE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
 
-#: MOJOLEARN_ARIMA_FAST_CONST_BOTH (default off, READY-AB). Every order of
-#: the AutoARIMA grid fitted with and without the constant (mean for d + D ==
-#: 0, drift for d + D == 1; none for d + D == 2) in the same batched search
-#: call, statsforecast `search_arima`'s K loop; picked by the board's ic.
-#: Works with SEARCH_REUSE. (ARIMA_FAST_STEPWISE and ARIMA_FAST_CSS_SEARCH,
-#: which it also fed, were deleted 2026-10-09: docs/TOMBSTONES.md.)
-#: UNMEASURED as of 2026-10-05, merged on compile by Andrew's decision. A/B:
-#: lane autoarima, taxi-hourly + synthetic, forecast_rmse must not go up.
-comptime ARIMA_FAST_CONST_BOTH = (
-    _FAST_APPLE and ARIMA_ORDER_BATCH and is_defined["MOJOLEARN_ARIMA_FAST_CONST_BOTH"]()
-)
+# TOMBSTONE: MOJOLEARN_ARIMA_FAST_CONST_BOTH (opt-in FAST arm, READY-AB, merged unmeasured, no A/B recorded) deleted 2026-11-15 by lane/expdel2-37-series; code recoverable at f1218d6715.
+# Restore: git apply experiments/removed/MOJOLEARN_ARIMA_FAST_CONST_BOTH.patch; record in docs/TOMBSTONES.md.
 #: MOJOLEARN_ARIMA_FAST_ROOT_CHECK (default off, READY-AB). After each
 #: candidate's fit in the device search (grouped exact), a candidate whose AR or MA polynomial
 #: has a root of modulus < 1.01 gets log-likelihood -inf (ic +inf), as
@@ -92,8 +83,6 @@ def quality_mode() -> Int:
     """This build's quality switches for the Python glue (bits 3..5 of
     `fast_search_mode`): bit 3 CONST_BOTH, bit 4 ROOT_CHECK, bit 5 KPSS_D."""
     var mode = 0
-    comptime if ARIMA_FAST_CONST_BOTH:
-        mode |= 8
     comptime if ARIMA_FAST_ROOT_CHECK:
         mode |= 16
     comptime if ARIMA_FAST_KPSS_D:
