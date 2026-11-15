@@ -2172,6 +2172,7 @@ Deletions reversed by new evidence. The code is back on main; the section and th
 | [`MOJOLEARN_XD_FAST_SVD_ONE_BLOCK`](#mojolearn_xd_fast_svd_one_block) | Decomposition (dense SVD route) | 2026-11-15 (`f899386021`) | 2026-11-15 (lane/expdel2-restore-owed) | opt-in B arm, default unchanged, A/B owed at the wave sha | [MOJOLEARN_XD_FAST_SVD_ONE_BLOCK.patch](../experiments/removed/MOJOLEARN_XD_FAST_SVD_ONE_BLOCK.patch) |
 | [`MOJOLEARN_IDN_MCD_CHOL`](#mojolearn_idn_mcd_chol-unmeasured-arm-deleted-2026-11-15) | MinCovDet / EllipticEnvelope IDENTICAL (x_decomp/mcd.mojo, x_decomp/kit_device.mojo) | 2026-11-15 (`c387c0b2c1`) | 2026-11-15 (lane/expdel2-restore-owed) | opt-in B arm, default unchanged, A/B owed at the wave sha | [MOJOLEARN_IDN_MCD_CHOL.patch](../experiments/removed/MOJOLEARN_IDN_MCD_CHOL.patch) |
 | [`MOJOLEARN_BYTE_LM_PROGRAM_STEP`](#mojolearn_byte_lm_program_step) | Neural (byte LM training step) | 2026-11-15 (`f105b7dcfb`) | 2026-11-15 (lane/expdel2-restore-owed) | opt-in B arm, default unchanged, A/B owed at the wave sha | [MOJOLEARN_BYTE_LM_PROGRAM_STEP.patch](../experiments/removed/MOJOLEARN_BYTE_LM_PROGRAM_STEP.patch) |
+| [`MOJOLEARN_AUTOGRAD_OPTIM`](#mojolearn_autograd_optim) | Neural (MLP trainer executor optimizer) | 2026-11-15 (`92d4b79ec8`) | 2026-11-15 (lane/expdel2-restore-owed) | opt-in B arm, default unchanged, A/B owed at the wave sha | [MOJOLEARN_AUTOGRAD_OPTIM.2026-11-15.patch](../experiments/removed/MOJOLEARN_AUTOGRAD_OPTIM.2026-11-15.patch) + [.expdel2-30-neural.patch](../experiments/removed/MOJOLEARN_AUTOGRAD_OPTIM.expdel2-30-neural.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -17028,6 +17029,7 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2
 - Files: sequence/mlp_fit.mojo.
 - Deleted by: lane/expdel2-29-neural `92d4b79ec8` (2026-11-15); code recoverable at `ff6c789744`.
 - Restore: `git apply experiments/removed/MOJOLEARN_AUTOGRAD_OPTIM.2026-11-15.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+Restored 2026-11-15 (lane/expdel2-restore-owed): owed B arm, deletion premature; see Restored table.
 
 ### MOJOLEARN_GARCH_COOP_OFF
 

@@ -857,8 +857,7 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_AUTOGRAD_GEMM_DISPATCH_V1"](), "removed 2026-11-15 (lane/expdel2-29-neural): AUTOGRAD_GEMM_DISPATCH_V1 (old path) is gone; the default is kept; code at 8747cf5fa2; restore: experiments/removed/MOJOLEARN_AUTOGRAD_GEMM_DISPATCH_V1.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_MLP_UNFUSED.patch
     comptime assert not is_defined["MOJOLEARN_AUTOGRAD_MLP_UNFUSED"](), "removed 2026-11-15 (lane/expdel2-29-neural): AUTOGRAD_MLP_UNFUSED (arm) is gone; the default path is the only one; code at a03ced9b31; restore: experiments/removed/MOJOLEARN_AUTOGRAD_MLP_UNFUSED.patch"
-    # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_OPTIM.2026-11-15.patch
-    comptime assert not is_defined["MOJOLEARN_AUTOGRAD_OPTIM"](), "removed 2026-11-15 (lane/expdel2-29-neural): AUTOGRAD_OPTIM (arm) is gone; the default path is the only one; code at ff6c789744; restore: experiments/removed/MOJOLEARN_AUTOGRAD_OPTIM.2026-11-15.patch"
+    # MOJOLEARN_AUTOGRAD_OPTIM: refusal removed 2026-11-15 (restored; owed B arm, see docs/TOMBSTONES.md Restored table)
     # Restore: git apply experiments/removed/MOJOLEARN_GARCH_COOP_OFF.patch
     comptime assert not is_defined["MOJOLEARN_GARCH_COOP_OFF"](), "removed 2026-11-15 (lane/expdel2-29-neural): GARCH_COOP_OFF (old path) is gone; the default is kept; code at 92fec7163d; restore: experiments/removed/MOJOLEARN_GARCH_COOP_OFF.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_GARCH_COOP_OFF.patch
