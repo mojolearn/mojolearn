@@ -88,7 +88,6 @@ from std.memory import bitcast
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from checks.numerics import GLOBAL_NUMERIC_MODE as _CTX_MODE, NUMERIC_IDENTICAL as _CTX_IDENTICAL
 from core.neural_context import neural_ctx
-from std.sys.compile import is_defined
 # ONE PROCESS-LIFETIME DeviceContext per binding and tier (CURRENT DIRECTIVES;
 # lane/neighbors-apple 2026-09-28): a new context per entry is a new Metal
 # queue and a pipeline load per call. Same kernels, same launches, same order
