@@ -253,44 +253,23 @@ def _forward[E: Exec & Movable & Deinitable](
     ReLU + max pool kernels and pinned GEMM plan) and the head is
     OPS_CNN_LINEAR (its pinned NT GEMM over the (k, flat) weight as stored),
     autograd/cnn_block_op.mojo."""
-    # TOMBSTONE: MOJOLEARN_CNN_GENERIC_OPS (unmeasured opt-in arm, EXP:2374 PENDING: lane x8's generic tape chain; non-owner sites) deleted 2026-11-15 by lane/expdel2-28-neural; code recoverable at 27a9cc7339.
-    # Restore: git apply experiments/removed/MOJOLEARN_CNN_GENERIC_OPS.expdel2-28-neural.patch; record in docs/TOMBSTONES.md.
     var none = List[Float32]()
     var h = x
     var nb = g.blocks()
-    comptime if CNN_FUSED_OPS:
-        # RESTORED 2026-11-09 (lane r1-restore-measured-winners): the X8
-        # TOMBSTONE above deleted these kernels' epoch drivers; the kernels
-        # return here as ops of the one program, the drivers stay deleted.
-        for j in range(nb):  # driver-loop: over conv blocks (model structure)
-            var bs: List[Int] = [h, params[2 * j], params[2 * j + 1]]
-            var block_ints: List[Int] = [g.ks // 2, 1 if g.pool[j] else 0, g.ps]
-            h = s.op(OPS_CNN_CONV_BLOCK, bs, block_ints, none)
-        var ffs: List[Int] = [h]
-        var fl_ints: List[Int] = [1, 1, -1]
-        h = s.op(OPS_RESHAPE_N, ffs, fl_ints, none)
-        var hls: List[Int] = [h, params[2 * nb], params[2 * nb + 1]]
-        return s.op(OPS_CNN_LINEAR, hls, List[Int](), none)
+    # TOMBSTONE: MOJOLEARN_CNN_GENERIC_OPS (unmeasured opt-in arm, EXP:2374 PENDING: lane x8's generic tape chain; non-owner sites) deleted 2026-11-15 by lane/expdel2-28-neural; code recoverable at c599b986ce.
+    # Restore: git apply experiments/removed/MOJOLEARN_CNN_GENERIC_OPS.expdel2-28-neural.patch; record in docs/TOMBSTONES.md.
+    # RESTORED 2026-11-09 (lane r1-restore-measured-winners): the X8
+    # TOMBSTONE above deleted these kernels' epoch drivers; the kernels
+    # return here as ops of the one program, the drivers stay deleted.
     for j in range(nb):  # driver-loop: over conv blocks (model structure)
-        var hs: List[Int] = [h, params[2 * j], params[2 * j + 1]]
-        var conv_ints: List[Int] = [1, g.ks // 2]
-        h = s.op(OPS_CONV2D, hs, conv_ints, none)
-        var rs: List[Int] = [h]
-        h = s.op(OPS_RELU, rs, List[Int](), none)
-        if g.pool[j]:
-            var ps: List[Int] = [h]
-            var pool_ints: List[Int] = [g.ps, g.ps]
-            h = s.op(OPS_MAXPOOL2D, ps, pool_ints, none)
-    var fs: List[Int] = [h]
-    var flat_ints: List[Int] = [1, 1, -1]
-    h = s.op(OPS_RESHAPE_N, fs, flat_ints, none)
-    # OPS_LINEAR takes the (inputs, outputs) weight; the head keeps torch's
-    # (outputs, inputs) layout, so its parameter downloads as it uploaded.
-    var ts: List[Int] = [params[2 * nb]]
-    var wt = s.op(OPS_TRANSPOSE, ts, List[Int](), none)
-    var ls: List[Int] = [h, wt, params[2 * nb + 1]]
-    var act: List[Int] = [0]
-    return s.op(OPS_LINEAR, ls, act, none)
+        var bs: List[Int] = [h, params[2 * j], params[2 * j + 1]]
+        var block_ints: List[Int] = [g.ks // 2, 1 if g.pool[j] else 0, g.ps]
+        h = s.op(OPS_CNN_CONV_BLOCK, bs, block_ints, none)
+    var ffs: List[Int] = [h]
+    var fl_ints: List[Int] = [1, 1, -1]
+    h = s.op(OPS_RESHAPE_N, ffs, fl_ints, none)
+    var hls: List[Int] = [h, params[2 * nb], params[2 * nb + 1]]
+    return s.op(OPS_CNN_LINEAR, hls, List[Int](), none)
 
 
 def _download_params[E: Exec & Movable & Deinitable](
