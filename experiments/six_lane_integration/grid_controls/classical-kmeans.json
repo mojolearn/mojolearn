@@ -270,6 +270,11 @@
    "define": "MOJOLEARN_CLASSICAL_C06_NORM_ROWS",
    "control": "c06_norms",
    "reason": "DELETED 2026-11-15 (lane/expdel2-07-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md; recoverable at 526172a06e; patch experiments/removed/MOJOLEARN_CLASSICAL_C06_NORM_ROWS.patch): opt-in arm; EXP:1519 RESTRUCTURED, A/B owed and never run. EXP:1519 RESTRUCTURED (ROWS2/ROWS4 into `C06_NORM_ROWS=2|4`), A/B owed and never run. Deleted under AGENTS.md \"An unmeasured arm is deleted\" (Andrew, 2026-11-15). Refused in core/six_lane_experiment_guards.mojo; docs/TOMBSTONES.md."
+  },
+  {
+   "define": "MOJOLEARN_CLASSICAL_C06_SMALL_D_THREAD",
+   "control": "c06_norms",
+   "reason": "DELETED 2026-11-15 (lane/expdel2-07-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md; recoverable at 6a40fe1b92; patch experiments/removed/MOJOLEARN_CLASSICAL_C06_SMALL_D_THREAD.patch): opt-in arm; EXP:1519 A/B owed and never run. EXP:1519 introduced it with the A/B owed; it never ran. Deleted under AGENTS.md \"An unmeasured arm is deleted\" (Andrew, 2026-11-15). Refused in core/six_lane_experiment_guards.mojo; docs/TOMBSTONES.md."
   }
  ]
 }
