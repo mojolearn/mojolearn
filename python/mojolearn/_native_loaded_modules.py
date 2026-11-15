@@ -111,6 +111,16 @@ connect_module('warnings', warnings, ())  # warning filters are mutable native c
 # instead of importing the module on every fit_transform.
 connect_module('numbers', numbers, ('Integral', 'Real'))  # Real: user-object kinds (bindings/user_objects_native_door.mojo)
 
+#: The isinstance targets the native owners' contexts carry for "a real number" and "an integer"
+#: (trees_real_type, labels_integral_type, integral_type, ...). isinstance(v, REAL_TYPES) is exactly
+#: isinstance(v, numbers.Real) (int and float are Real), but an exact int or float matches a leading
+#: concrete class by CPython's type test and never enters ABCMeta.__instancecheck__, which is Python
+#: (abc.py) and ran once or twice per admitted setting (census py-census-30, 2026-11-15: 14 public
+#: members, e.g. GradientBoosting() ran 5 ABC frames per call). A NumPy scalar or another registered
+#: number still reaches the ABC, as before; bool is a subclass of int and matches without it.
+REAL_TYPES = (int, float, numbers.Real)
+INTEGRAL_TYPES = (int, numbers.Integral)
+
 
 # glue: exact standard path identities, connected before any product operation.
 # Python 3.13's split pathlib adds two named stdlib bases; other supported

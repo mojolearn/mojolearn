@@ -103,8 +103,19 @@ def svc_truthy(value: PythonObject) raises -> Bool:
 
 
 def svc_base(name: String, context: PythonObject) raises -> PythonObject:
-    """The base binding's host helper `name` (`_buffer._native(name)`)."""
-    return family_call(context["family_svc_native"], PythonObject(name))
+    """The base binding's host helper `name` (`_buffer._native(name)`).
+
+    Read from `_buffer._NATIVE`, the resolver's own once-per-process cache,
+    with one dict lookup; only the first use of a name in a process calls the
+    Python resolver (which fills that cache). Before (census py-census-30,
+    2026-11-15) every svc_base call entered `_buffer._native`, a Python
+    frame per decode / threshold / argmax / class-ratio step of every SVC
+    fit and predict."""
+    var key = PythonObject(name)
+    var fn = py_get(context["family_svc_native_cache"], key)
+    if fn is not None:
+        return fn
+    return family_call(context["family_svc_native"], key)
 
 
 def svc_mode(fields: PythonObject) raises -> PythonObject:

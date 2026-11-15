@@ -23,7 +23,6 @@ Behavior to know:
   so a given ``random_state`` gives a reproducible split, but not the same
   rows scikit-learn would pick for that seed.
 """
-import numbers
 from . import _arena_io
 from ._array import Array
 from ._mode import _PARAMS_METADATA, _PARAMS_METADATA_CONTEXT
@@ -1836,12 +1835,11 @@ _connect_arena_rows()
 
 # The compiled family owner (bindings/model_selection_native_door.mojo), connected
 # once at import, with the fixed tables it reads: the scorer table, the
-# scorer class `make_scorer` fills, and numbers.Real for the score check.
+# scorer class `make_scorer` fills (family_msel_real/_integral removed 2026-11-15: no reader).
 from . import _native_family_bridge  # noqa: E402
 from . import _native_model_selection_bridge  # noqa: E402
 _NATIVE, _NATIVE_CONTEXT = _native_model_selection_bridge.connect()
-_native_family_bridge.tables(family_msel_scorers=_scorer_table(), family_msel_scorer_class=_Scorer,
-                             family_msel_real=numbers.Real)
+_native_family_bridge.tables(family_msel_scorers=_scorer_table(), family_msel_scorer_class=_Scorer)
 # glue: the fixed tables of the native splitters, cross-validation and
 # search (bindings/msel_*.mojo), connected once: the model_selection
 # classes the owner builds and dispatches on, the base binding helper
@@ -1862,7 +1860,7 @@ _native_family_bridge.tables(
         ParameterGrid=ParameterGrid, ParameterSampler=ParameterSampler, GridSearchCV=GridSearchCV,
         RandomizedSearchCV=RandomizedSearchCV, Array=Array),
     family_msel_miss=object(),
-    family_msel_integral=numbers.Integral, family_msel_codes=dict(_MSEL_CODE),
+    family_msel_codes=dict(_MSEL_CODE),
     family_msel_native_code=dict(_ARRAY_CODE), family_msel_reduce_integral=_REDUCE_INTEGRAL,
     family_msel_native_encode=frozenset(_NATIVE_ENCODE),
     family_msel_resident_class=_Resident, family_msel_resident_call=_RESIDENT_CALL,

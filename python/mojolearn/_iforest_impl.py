@@ -36,10 +36,10 @@ one; `numpy.asarray(result)` is a zero-copy view for a caller who has
 NumPy. Nothing in this module imports NumPy.
 """
 
-import numbers
 
 from . import _native_archive_bridge, _native_trees_bridge
 from ._mode import NumericModeMixin
+from ._native_loaded_modules import INTEGRAL_TYPES
 
 
 #: The first model file format (the neighbors and density inference lane,
@@ -283,5 +283,5 @@ _native_archive_bridge.register(IsolationForest, (_IFOREST_FORMAT_FOREST, _IFORE
                     ("int", "n_features_in_"), ("int", "max_samples_"))),
     ("f8", "reals", (("float", "_max_samples_frac"), ("float", "_max_features_frac"),
                      ("float", "_contamination"), ("float", "offset_"))),
-), trees_integral_type=numbers.Integral, trees_missing=object(), iforest_trees_context=_TREES_CONTEXT)
+), trees_integral_type=INTEGRAL_TYPES, trees_missing=object(), iforest_trees_context=_TREES_CONTEXT)
 _native_trees_bridge.register(IsolationForest, "iforest")
