@@ -46,25 +46,6 @@
    "status": "split_from:MOJOLEARN_CLASSICAL_C08_DICTIONARY",
    "notes": "TargetEncoder fit builds categories + fit codes in one program; the device unique_inverse is rewritten as index radix sort + run boundaries + chunk offsets + inverse scatter (no binary search); the redundant sort_cols feeding it is skipped on device"
   },
-  "c08_ordinal_ft": {
-   "define": "MOJOLEARN_CLASSICAL_C08_ORDINAL_FT",
-   "kind": "switch",
-   "arms": {
-    "off": [],
-    "on": [
-     "MOJOLEARN_CLASSICAL_C08_ORDINAL_FT"
-    ]
-   },
-   "default": "off",
-   "source": [
-    "experiments/classical_identical_ideas/shared_controls.mojo:39",
-    "python/mojolearn/_expansion_prep.py:1312"
-   ],
-   "binding": "_mojolearn_x_prep",
-   "bits_change": false,
-   "status": "split_from:MOJOLEARN_CLASSICAL_C08_DICTIONARY",
-   "notes": "OrdinalEncoder.fit_transform only; NOT reached by the board (it times fit then transform)"
-  },
   "c08_grouped_output": {
    "define": "MOJOLEARN_CLASSICAL_C08_GROUPED_OUTPUT",
    "kind": "switch",
@@ -197,6 +178,11 @@
    "define": "MOJOLEARN_CLASSICAL_C08_ONEHOT_FT",
    "control": "c08_onehot_ft",
    "reason": "DELETED 2026-11-15 (lane/expdel2-07-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md; recoverable at d42f92b40b; patch experiments/removed/MOJOLEARN_CLASSICAL_C08_ONEHOT_FT.patch): unmeasured opt-in arm. no record: no A/B was recorded for the opt-in arm (plan rule a; AGENTS.md \"An unmeasured arm is deleted\", Andrew 2026-11-15). Refused in core/experiment_guards_base.mojo; docs/TOMBSTONES.md."
+  },
+  {
+   "define": "MOJOLEARN_CLASSICAL_C08_ORDINAL_FT",
+   "control": "c08_ordinal_ft",
+   "reason": "DELETED 2026-11-15 (lane/expdel2-07-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md; recoverable at 535c024b7f; patch experiments/removed/MOJOLEARN_CLASSICAL_C08_ORDINAL_FT.patch): unmeasured opt-in arm. no record: no A/B was recorded for the opt-in arm (plan rule a; AGENTS.md \"An unmeasured arm is deleted\", Andrew 2026-11-15). Refused in core/experiment_guards_base.mojo; docs/TOMBSTONES.md."
   }
  ]
 }

@@ -67,6 +67,8 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_CLASSICAL_C07_RADIX_ROWS"](), "removed 2026-11-15 (lane/expdel2-07-base): CLASSICAL_C07_RADIX_ROWS (Prep (device radix sort keys per task 1024/4096, IDENTICAL)) was unmeasured opt-in arm; the opt-in arm is gone and the default path is unchanged; code recoverable at 4a858a0088; see docs/TOMBSTONES.md"
     # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C08_ONEHOT_FT.patch
     comptime assert not is_defined["MOJOLEARN_CLASSICAL_C08_ONEHOT_FT"](), "removed 2026-11-15 (lane/expdel2-07-base): CLASSICAL_C08_ONEHOT_FT (Prep (OneHotEncoder.fit_transform dictionary + codes in one program, IDENTICAL)) was unmeasured opt-in arm; the opt-in arm is gone and the default path is unchanged; code recoverable at d42f92b40b; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C08_ORDINAL_FT.patch
+    comptime assert not is_defined["MOJOLEARN_CLASSICAL_C08_ORDINAL_FT"](), "removed 2026-11-15 (lane/expdel2-07-base): CLASSICAL_C08_ORDINAL_FT (Prep (OrdinalEncoder.fit_transform dictionary + codes in one program, IDENTICAL)) was unmeasured opt-in arm; the opt-in arm is gone and the default path is unchanged; code recoverable at 535c024b7f; see docs/TOMBSTONES.md"
     return True
 
 
