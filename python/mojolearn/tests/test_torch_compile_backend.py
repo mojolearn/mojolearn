@@ -1,6 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
 """Artifact-only Torch front-end: real native execution and callback refusals."""
-from pathlib import Path
 import numpy as np
 import pytest
 
@@ -77,5 +76,8 @@ def test_retired_backend_refuses_without_inspecting_or_executing_model():
 
 
 def test_torchdynamo_is_not_registered_by_packaging():
-    root = Path(__file__).resolve().parents[3]
-    assert "torch_dynamo_backends" not in (root / "python/pyproject.toml").read_text()
+    # The installed distribution's entry points, not the pyproject text: torch
+    # must find no Mojolearn backend in the group it scans.
+    from importlib.metadata import entry_points
+    found = [ep for ep in entry_points(group="torch_dynamo_backends") if "mojolearn" in ep.value]
+    assert found == []

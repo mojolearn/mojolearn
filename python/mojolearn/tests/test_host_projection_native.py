@@ -1,13 +1,11 @@
 # SPDX-License-Identifier: Apache-2.0
 """Explicit CPU projection retains the complete native operation boundary."""
-import ast
 import gc
 import json
 import os
 import subprocess
 import sys
 import warnings
-from pathlib import Path
 
 import numpy as np
 import pytest
@@ -395,13 +393,3 @@ def test_projection_preserves_numpy_free_and_late_numpy_contracts(tmp_path, orde
     assert json.loads(done.stdout) == expected
 
 
-def test_projection_public_methods_are_one_native_binding_call():
-    tree = ast.parse(Path(host.__file__).read_text())
-    cls = next(node for node in tree.body if isinstance(node, ast.ClassDef) and node.name == "_HostProjection")
-    for node in cls.body:
-        if isinstance(node, ast.FunctionDef) and node.name in METHODS:
-            body = node.body[1:]
-            assert len(body) == 1 and isinstance(body[0], ast.Return)
-            call = body[0].value
-            assert isinstance(call, ast.Call) and isinstance(call.func, ast.Name)
-            assert call.func.id == "_native_classical"

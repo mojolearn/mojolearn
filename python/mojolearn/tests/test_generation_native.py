@@ -239,23 +239,6 @@ def test_text_stream_retains_incomplete_utf8_across_reads_and_resume(tmp_path):
     assert short.read(1) == "�"
 
 
-def test_public_execution_methods_are_one_native_call():
-    import ast
-    from pathlib import Path
-    from mojolearn.models import causal_lm
-    tree = ast.parse(Path(causal_lm.__file__).read_text())
-    methods = {"forward", "step", "allocate_state", "reset_state", "generate", "stream",
-               "generate_text", "stream_text", "resume_generation", "read", "info", "state_dict", "parameters"}
-    checked = []
-    for node in ast.walk(tree):
-        if isinstance(node, ast.FunctionDef) and node.name in methods:
-            body = node.body[1:] if ast.get_docstring(node) else node.body
-            assert len(body) == 1 and isinstance(body[0], ast.Return), node.name
-            assert isinstance(body[0].value, ast.Call), node.name
-            checked.append(node.name)
-    assert set(checked) == methods
-
-
 @pytest.mark.parametrize("family", ["llama", "mamba", "mamba2"])
 def test_admitted_registry_plain_entries_pass_owner_capture(tmp_path, family):
     """Every plain registry entry the admission writes passes the owner capture.

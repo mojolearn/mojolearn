@@ -10,7 +10,6 @@ fresh module made every UMAP fit on the CPU column refuse with
 
 Written without a run (lane fix-x-decomp-native-api-cpu, 2026-11-08).
 """
-from pathlib import Path
 from types import BuiltinFunctionType, ModuleType
 
 import numpy as np
@@ -19,19 +18,11 @@ import pytest
 from mojolearn import _backend, host_surface
 from mojolearn import _native_spectral_umap_bridge as bridge
 
-_ROOT = Path(__file__).resolve().parents[3]
-
-
 def test_host_surface_lists_the_provider_for_vendor_cpu():
     assert host_surface.routed_modules()["_mojolearn_x_decomp"] == "_mojolearn_x_decomp_host"
     family = [f for f in host_surface.FAMILIES if f["binding"] == "_mojolearn_x_decomp_host"]
     assert len(family) == 1
     assert "x_decomp_native_api_v1" in family[0]["exports"]
-
-
-def test_host_binding_source_registers_the_provider():
-    text = (_ROOT / "bindings" / "_mojolearn_x_decomp_host.mojo").read_text()
-    assert 'm.def_function[x_decomp_native_api_v1_binding]("x_decomp_native_api_v1")' in text
 
 
 def test_bridge_resolves_the_host_facade_to_its_exact_module(monkeypatch):

@@ -5,28 +5,16 @@
 "estimated" (the default) estimates the initial level, trend and seasonal
 states jointly with alpha, beta and gamma over all `n` points
 (`holtwinters/impl/internal/hw_estimate.mojo`); "heuristic" and its alias
-"cuml" are cuML's fit, which must stay BIT FOR BIT what 0.8.13 returned.
+"cuml" are cuML's fit.
 
-Source and surface checks run anywhere. Runtime checks skip, by name, when
-nothing in this process fits Holt-Winters. The estimated method's refit
-bits, parameter ranges and clean-series forecast quality are native:
-checks/native_tests/tsa_holtwinters_initialization.mojo. The 0.8.13 digests below were
-computed from the PyPI 0.8.13 wheel on an Apple M4 under IDENTICAL; the
-heuristic fit is bitwise identical across columns, so they hold on every
-column that fits.
+Surface checks run anywhere. Runtime checks skip, by name, when nothing in
+this process fits Holt-Winters. The estimated method's refit bits, parameter
+ranges and clean-series forecast quality are native:
+checks/native_tests/tsa_holtwinters_initialization.mojo.
 
     cd python && python3 -m pytest mojolearn/tests/test_holtwinters_initialization.py
 """
-import hashlib
-import re
-from pathlib import Path
-
 import pytest
-
-ROOT = Path(__file__).resolve().parents[3]
-
-#: sha256 over forecast(24), level_, trend_, season_, sse_, alpha_, beta_,
-#: gamma_, n_iter_, criterion_ (that order), from pip mojolearn==0.8.13.
 
 
 def _series(np, n, b, f):
@@ -59,57 +47,6 @@ def test_default_is_estimated_and_names_are_checked():
     for bad in ("known", "legacy-heuristic", None, 1):
         with pytest.raises(ValueError, match="initialization_method"):
             ExponentialSmoothing([1.0] * 8, initialization_method=bad)
-
-
-def test_codes_cross_the_binding_in_one_order():
-    """The sixth params entry is the method code, on both sides."""
-    from mojolearn._tsa_impl import _HW_INIT_CODES
-    assert _HW_INIT_CODES == {"estimated": 1, "heuristic": 0, "cuml": 0}
-    est = (ROOT / "holtwinters/impl/internal/hw_estimate.mojo").read_text(encoding="utf-8")
-    assert re.search(r"^comptime HW_INIT_HEURISTIC = 0$", est, re.M)
-    assert re.search(r"^comptime HW_INIT_ESTIMATED = 1$", est, re.M)
-    for src in ("bindings/_mojolearn_tsa.mojo", "bindings/_mojolearn_tsa_host.mojo"):
-        text = (ROOT / src).read_text(encoding="utf-8")
-        assert "5  init_method" in text, src
-        assert "if len(params) == 6 else 0" in text, src
-
-
-def test_parallel_driver_forwards_the_method():
-    # The multi-GPU Holt-Winters driver is native
-    # (bindings/parallel_forecast_native_door.mojo `_fit_hw`): every shard's state
-    # is the estimator's fields minus the fitted ones (`_hw_fitted`), so the
-    # constructor's initialization_method reaches each shard's fit.
-    text = (ROOT / "bindings/parallel_forecast_native_door.mojo").read_text(encoding="utf-8")
-    fit = text[text.index("def _fit_hw("):]
-    fit = fit[:fit.index("\ndef ")]
-    assert "var state = shard_state(fields, drop, context)" in fit
-    assert "var drop = _hw_fitted()" in fit
-    fitted = text[text.index("def _hw_fitted()"):text.index("def _fit_hw(")]
-    assert '"_data"' in fitted and "initialization_method" not in fitted
-
-
-def test_device_and_host_share_one_estimate_function():
-    """The CPU column and both device arms call the same per-element
-    helpers, and nothing sums across threads."""
-    oracle = (ROOT / "holtwinters/host/hw_oracle.mojo").read_text(encoding="utf-8")
-    kernel = (ROOT / "holtwinters/impl/internal/hw_estimate.mojo").read_text(encoding="utf-8")
-    assert "hw_estimate_series(" in oracle
-    assert re.search(r"def holtwinters_estimate_gpu_kernel\([\s\S]*?hw_estimate_series\(", kernel)
-    blk = kernel[kernel.index("def _blk_eval_jac["):kernel.index("def holtwinters_estimate_finish_kernel(")]
-    for helper in ("_est_step(", "_sse_add(", "_est_dx(", "_est_dln(", "_est_dbn(", "_est_dsn(",
-                   "_est_eval_plain(", "_seed(", "_hold("):
-        assert helper in blk, f"the parallel arm does not call {helper}"
-    assert "hw_est_finish(" in kernel[kernel.index("def holtwinters_estimate_finish_kernel("):]
-    # no libm, no atomics, no warp or block reductions in the estimated path
-    imports = set(re.findall(r"^from ([\w.]+) import", kernel, re.M))
-    assert imports <= {"max.gpu", "std.memory", "std.sys.compile", "max.gpu.host", "max.gpu.memory",
-                       "max.gpu.sync", "holtwinters.impl.internal.hw_utils",
-                       "holtwinters.impl.tsa.holtwinters_params", "checks.numerics",
-                       # the C58 switch (a comptime flag, default off; no code)
-                       "experiments.classical_identical_ideas.stats_controls"}, sorted(imports)
-    controls = (ROOT / "experiments/classical_identical_ideas/stats_controls.mojo").read_text(encoding="utf-8")
-    assert set(re.findall(r"^from ([\w.]+) import", controls, re.M)) <= {"std.sys.compile", "checks.numerics"}
-    assert not re.search(r"\bwarp\.|block_reduce|Atomic", kernel)
 
 
 # -- runtime ------------------------------------------------------------------

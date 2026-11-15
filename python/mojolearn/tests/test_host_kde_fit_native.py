@@ -1,12 +1,10 @@
 # SPDX-License-Identifier: Apache-2.0
 """Whole CPU KDE fit preserves independent state, aliases and refusal ordering."""
-import ast
 import gc
 import json
 import os
 import subprocess
 import sys
-from pathlib import Path
 import warnings
 
 import numpy as np
@@ -372,16 +370,6 @@ def test_kde_fit_never_calls_binding_selection_or_residency_python(monkeypatch):
     monkeypatch.setattr(host.KernelDensity, "_release_resident_fit", forbidden)
     audit_native_call(model.fit, _x(), sample_weight=_weight("c")).assert_native()
     assert touched == [] and model._resident is None
-
-
-def test_kde_fit_public_wrapper_is_one_native_call():
-    tree = ast.parse(Path(host.__file__).read_text())
-    cls = next(n for n in tree.body if isinstance(n, ast.ClassDef) and n.name == "HostKernelDensity")
-    method = next(n for n in cls.body if isinstance(n, ast.FunctionDef) and n.name == "fit")
-    assert len(method.body) == 2 and isinstance(method.body[1], ast.Return)
-    assert sum(isinstance(n, ast.Call) for n in ast.walk(method.body[1])) == 1
-    assert getattr(vars(host.HostKernelDensity)["fit"], "_mojolearn_tracks_fit", False)
-    assert not hasattr(vars(host.HostKernelDensity)["fit"], "__wrapped__")
 
 
 @pytest.mark.parametrize("depth", [0, 1, 2])

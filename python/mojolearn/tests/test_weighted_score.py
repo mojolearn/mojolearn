@@ -3,45 +3,18 @@
 """Weighted accuracy and R2 and the estimators' score(sample_weight)
 (lane/cpu-training-small-gaps, 2026-09-15).
 
-Source and refusal checks always run. The definitions are scikit-learn's in
-Float32 on the pinned-sum path; their comparison with the Float64 definition
-(to a Float32 tolerance, not bitwise) is native:
-checks/native_tests/metrics_weighted_score_{cpu,gpu}.mojo.
+Refusal checks always run. The definitions are scikit-learn's in Float32 on
+the pinned-sum path; their comparison with the Float64 definition (to a
+Float32 tolerance, not bitwise) is native:
+checks/native_tests/metrics_weighted_score_{cpu,gpu}.mojo. The forests'
+weighted score is test_forest_protocol.py; the gradient-boosting adapters'
+is below and needs a built trees binding.
 """
-
-from pathlib import Path
 
 import numpy as np
 import pytest
 
-from mojolearn import host_surface, metrics
-
-ROOT = Path(__file__).resolve().parents[3]
-
-
-def test_manifest_and_bindings_carry_the_weighted_arms():
-    fam = next(f for f in host_surface.FAMILIES if f["family"] == "metrics")
-    for name in ("accuracy_score_weighted", "r2_score_weighted"):
-        assert name in fam["exports"]
-        for rel in ("bindings/_mojolearn_metrics.mojo", "bindings/_mojolearn_metrics_host.mojo"):
-            assert f'("{name}")' in (ROOT / rel).read_text(), (rel, name)
-    assert "gbdt-adapter-score-weighted" in host_surface.family("gbdt")["training_lanes"]
-    assert "rf-score-weighted" in host_surface.family("rf")["training_lanes"]
-
-
-def test_the_refusals_are_gone_from_the_scores():
-    for rel in ("python/mojolearn/_gbdt_adapters.py", "python/mojolearn/_forest_protocol.py"):
-        text = (ROOT / rel).read_text()
-        assert "support sample_weight" not in text, rel
-        # the weights reach the one native score call (X, y, sample_weight)
-        assert "(X, y, sample_weight)" in text, rel
-
-
-def test_the_host_oracle_folds_through_the_sabotaged_tree():
-    oracle = (ROOT / "metrics/host/metrics_oracle.mojo").read_text()
-    for fn in ("host_weighted_accuracy", "host_weighted_r2"):
-        body = oracle.split(f"def {fn}(", 1)[1].split("\ndef ", 1)[0]
-        assert "host_tree_sum(" in body, fn
+from mojolearn import metrics
 
 
 @pytest.mark.parametrize("weights, match", [
@@ -64,3 +37,22 @@ def test_normalize_false_sums_correct_sample_weights():
     true, pred, weights = [0, 1, 1], [0, 1, 0], [0.5, 2.0, 4.0]
     assert metrics.accuracy_score(true, pred, normalize=False, sample_weight=weights) == 2.5
     assert metrics.accuracy_score(true, true, normalize=False, sample_weight=weights) == 6.5
+
+
+def test_gradient_boosting_adapters_score_takes_sample_weight():
+    # score(X, y, sample_weight) is scikit-learn's weighted metric of predict.
+    import mojolearn
+    rng = np.random.default_rng(3)
+    X = rng.standard_normal((64, 3)).astype(np.float32)
+    yc = (X[:, 0] > 0).astype(np.int64)
+    yr = (X[:, 0] + 2.0 * X[:, 1]).astype(np.float32)
+    w = rng.uniform(0.25, 2.0, 64).astype(np.float32)
+    try:
+        clf = mojolearn.GradientBoostingClassifier(n_estimators=3, max_depth=2, learning_rate=0.3).fit(X, yc)
+        reg = mojolearn.GradientBoostingRegressor(n_estimators=3, max_depth=2, learning_rate=0.3).fit(X, yr)
+    except (ImportError, NotImplementedError, RuntimeError) as exc:
+        pytest.skip(f"no trees binding fits gradient boosting here: {type(exc).__name__}: {exc}")
+    expected = metrics.accuracy_score(yc, clf.predict(X), sample_weight=w)
+    assert clf.score(X, yc, sample_weight=w) == pytest.approx(expected, rel=1e-6, abs=1e-6)
+    expected = metrics.r2_score(yr, np.asarray(reg.predict(X), dtype=np.float32), sample_weight=w)
+    assert reg.score(X, yr, sample_weight=w) == pytest.approx(expected, rel=1e-6, abs=1e-6)

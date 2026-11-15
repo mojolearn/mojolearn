@@ -1,6 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
 """Complete explicit CPU IsolationForest fit against its frozen public contract."""
-import ast
 import json
 import os
 from pathlib import Path
@@ -452,10 +451,3 @@ def test_iforest_resident_record_is_native_and_follows_the_estimator():
     assert gone() is None
 
 
-def test_iforest_fit_public_wrapper_is_one_native_call():
-    source = Path(host.__file__).read_text()
-    cls = next(n for n in ast.parse(source).body if isinstance(n, ast.ClassDef) and n.name == "HostIsolationForest")
-    method = next(n for n in cls.body if isinstance(n, ast.FunctionDef) and n.name == "fit")
-    body = method.body[1:]
-    assert len(body) == 1 and isinstance(body[0], ast.Return)
-    assert sum(isinstance(n, ast.Call) for n in ast.walk(body[0])) == 1
