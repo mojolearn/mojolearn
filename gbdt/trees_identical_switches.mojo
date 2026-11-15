@@ -76,7 +76,7 @@ comptime T25 = False
 # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
 # TOMBSTONE: MOJOLEARN_TREES_T28 (DELETE-ARM, opt-in, no A/B recorded, rule a) deleted 2026-11-15 by lane/expdel2-45-trees; code recoverable at 5c0baaca38.
 # Restore: git apply experiments/removed/MOJOLEARN_TREES_T28.patch
-comptime T28 = False
+# (Sweep 2026-11-15: T28 removed; CTR_PREP_SHARED in gbdt/ctrs/fast_prep.mojo is the FAST Apple default alone.)
 
 # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
 # TOMBSTONE: MOJOLEARN_TREES_T29 (DELETE-ARM, rule e, EXP:1869: opt-in, never measured against the default) deleted 2026-11-15 by lane/expdel2-45-trees; code recoverable at a6ac1678d7.
