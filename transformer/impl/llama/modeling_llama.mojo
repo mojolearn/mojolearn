@@ -4453,21 +4453,20 @@ def attention_eager_core(
     )
 
     # ---- S13 (:206). An ADD, of -FLT_MAX or of +0.0. Not a select.
-    if not scale_mask_fused:
-        step_count_launch()
-        ctx.enqueue_function[attn_mask_kernel](
-            stages.masked.unsafe_ptr(),
-            stages.scores.unsafe_ptr(),
-            Int32(b),
-            Int32(nh),
-            Int32(l),
-            Int32(s),
-            Int32(pos0),
-            Int32(key_lo),
-            Int32(window),
-            grid_dim=(_grid(cells), 1, 1),
-            block_dim=(LLAMA_TPB, 1, 1),
-        )
+    step_count_launch()
+    ctx.enqueue_function[attn_mask_kernel](
+        stages.masked.unsafe_ptr(),
+        stages.scores.unsafe_ptr(),
+        Int32(b),
+        Int32(nh),
+        Int32(l),
+        Int32(s),
+        Int32(pos0),
+        Int32(key_lo),
+        Int32(window),
+        grid_dim=(_grid(cells), 1, 1),
+        block_dim=(LLAMA_TPB, 1, 1),
+    )
     if fence:
         step_count_sync()
         ctx.synchronize()
