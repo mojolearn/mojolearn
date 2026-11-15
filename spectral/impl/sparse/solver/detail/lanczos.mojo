@@ -849,9 +849,10 @@ def fl_clamp_normalize_kernel(
 #: FAST on Apple: rows averaging at least `FL_SPMV_WARP_MIN` entries (the
 #: kNN graph at its default k = n / 10 holds ~2k per row) are contracted by
 #: one simdgroup per row, 32 lanes striding the row and a simd sum, instead
-#: of one thread walking the row alone. `-D MOJOLEARN_SPMV_WARP_OFF` keeps
-#: the per-row thread.
-comptime SPMV_WARP = LANCZOS_FAST and not is_defined["MOJOLEARN_SPMV_WARP_OFF"]()
+#: of one thread walking the row alone.
+# TOMBSTONE: MOJOLEARN_SPMV_WARP_OFF (old path, no A/B recorded beside the Apple fast default) deleted 2026-11-15 by lane/expdel2-13-cluster; code recoverable at 07958a8a2f.
+# Restore: git apply experiments/removed/MOJOLEARN_SPMV_WARP_OFF.patch; record in docs/TOMBSTONES.md.
+comptime SPMV_WARP = LANCZOS_FAST
 comptime FL_SPMV_WARP_MIN = 64
 # AFCL-G11: NEVER RUN — PENDING MEASUREMENT; uncompiled and unverified.
 # Four complete SIMD groups schedule CSR rows independently in smaller
