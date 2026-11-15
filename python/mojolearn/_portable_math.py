@@ -19,6 +19,12 @@ from pathlib import Path
 import struct
 import sys
 
+# Callers (lane py-tail, 2026-11-15): no product module calls a function
+# here. The refusals below serve the tests' oracles and the verify fixture
+# `_causal_lm_fixtures` (ceil); the import-time callers are
+# `_native_samba_bridge` (the `_load()` sqrt ABI) and `_native_x_linear_bridge`
+# (`_POW_CONTEXT`). The product's scalar math runs in its native entries
+# (bindings/array_helpers_pack.mojo, normal_dist_helpers_pack.mojo, ...).
 inf = float("inf")
 nan = float("nan")
 pi = float.fromhex("0x1.921fb54442d18p+1")
