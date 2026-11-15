@@ -87,14 +87,15 @@ comptime CAGRA_FAST_IVFG_PROBES = 16
 #: moves the search, infer_ms, not the build), DEFAULT in FAST + Apple:
 #: M3, one run per arm, taxi build 2,879.2 -> 714.9 ms (faiss-cpu 1,015.6);
 #: w2-cagra-lowds4-q PASS (recall@10 B >= A on taxi and istella).
-#: `-D MOJOLEARN_CAGRA_FAST_IVFG_LOWD_SEEDS4_OFF` restores the exact low-d
-#: graph and the 1x seeds. Plain LOWD without SEEDS4 failed recall (taxi
+#: The IVFG graph is taken at every width wherever IVFG is (the exact low-d
+#: graph stays the path outside FAST+Apple). Plain LOWD without SEEDS4 failed recall (taxi
 #: .997925 -> .997125, w2-cagra-lowd-q); its opt-in define is deleted.
 # TOMBSTONE: MOJOLEARN_CAGRA_FAST_IVFG_LOWD (DROPPED-quality) deleted 2026-10-09 by lane/owed-deletions-D3; code recoverable at b639a2bd2.
 # Tried: the low-d IVFG graph WITHOUT SEEDS4 (opt-in with LOWD_SEEDS4_OFF); taxi recall@10 .997925 -> .997125. The low-d graph stays as part of the LOWD_SEEDS4 default.
 # Restore: git apply experiments/removed/MOJOLEARN_CAGRA_FAST_IVFG_LOWD.patch; record in docs/TOMBSTONES.md.
-comptime _CAGRA_LOWD_SEEDS4 = CAGRA_FAST_IVFG and not is_defined["MOJOLEARN_CAGRA_FAST_IVFG_LOWD_SEEDS4_OFF"]()
-comptime CAGRA_FAST_IVFG_LOWD = _CAGRA_LOWD_SEEDS4
+# TOMBSTONE: MOJOLEARN_CAGRA_FAST_IVFG_LOWD_SEEDS4_OFF (old path, superseded by the FAST+Apple default) deleted 2026-11-15 by lane/expdel-01-cluster; code recoverable at b26ab50a56.
+# Restore: git apply experiments/removed/MOJOLEARN_CAGRA_FAST_IVFG_LOWD_SEEDS4_OFF.patch; record in docs/TOMBSTONES.md.
+comptime _CAGRA_LOWD_SEEDS4 = CAGRA_FAST_IVFG
 
 #: lane/apple-fast-gap-cagra (2026-10-03), the CAGRA SEARCH (taxi recall .48
 #: vs faiss .93): taxi's 11 features are integer codes (zone ids 1..265,

@@ -16,7 +16,7 @@ from max.gpu.host import DeviceContext
 from x_ann.device_ctx import x_ann_ctx
 from x_ann.stage_timer import AnnStages
 from x_ann.knn_device import knn_enqueue
-from x_ann.fast_env import CAGRA_FAST_IVFG, CAGRA_FAST_IVFG_PROBES, CAGRA_FAST_IVFG_LOWD
+from x_ann.fast_env import CAGRA_FAST_IVFG, CAGRA_FAST_IVFG_PROBES
 from x_ann.cagra_fast_knn import cg_ivfg_enqueue
 from max.gpu.host import DeviceBuffer
 
@@ -512,15 +512,15 @@ def cagra_knn_enqueue(
     (x_ann/fast_env.mojo, x_ann/cagra_fast_knn.mojo): IVFG, the
     approximate graph, which refuses (returns False) back to the exact
     graph when n is small or a probe pool is too small; otherwise
-    `knn_enqueue`. lane/apple-fast-w2-cagra (CAGRA_FAST_IVFG_LOWD, default
-    with SEEDS4; rollback MOJOLEARN_CAGRA_FAST_IVFG_LOWD_SEEDS4_OFF):
-    IVFG for rows of 64 features or fewer as well (CAGRA taxi, d = 11)."""
+    `knn_enqueue`. lane/apple-fast-w2-cagra (LOWD_SEEDS4, default with
+    SEEDS4): IVFG for rows of 64 features or fewer as well (CAGRA taxi, d = 11)."""
     comptime if CAGRA_FAST_IVFG:
-        if d > 64 or CAGRA_FAST_IVFG_LOWD:
-            # TOMBSTONE: MOJOLEARN_CAGRA_FAST_IVFG_EXACTD_OFF (old path) deleted 2026-11-15 by lane/expdel-01-cluster; code recoverable at 71c8454b4f.
-            # Restore: git apply experiments/removed/MOJOLEARN_CAGRA_FAST_IVFG_EXACTD_OFF.patch; record in docs/TOMBSTONES.md.
-            if cg_ivfg_enqueue[CAGRA_FAST_IVFG_PROBES](ctx, dx, n, d, kdeg, dnd, dni):
-                return
+        # TOMBSTONE: MOJOLEARN_CAGRA_FAST_IVFG_LOWD_SEEDS4_OFF (old path: the exact graph for d <= 64) deleted 2026-11-15 by lane/expdel-01-cluster; code recoverable at b26ab50a56.
+        # Restore: git apply experiments/removed/MOJOLEARN_CAGRA_FAST_IVFG_LOWD_SEEDS4_OFF.patch; record in docs/TOMBSTONES.md.
+        # TOMBSTONE: MOJOLEARN_CAGRA_FAST_IVFG_EXACTD_OFF (old path) deleted 2026-11-15 by lane/expdel-01-cluster; code recoverable at 71c8454b4f.
+        # Restore: git apply experiments/removed/MOJOLEARN_CAGRA_FAST_IVFG_EXACTD_OFF.patch; record in docs/TOMBSTONES.md.
+        if cg_ivfg_enqueue[CAGRA_FAST_IVFG_PROBES](ctx, dx, n, d, kdeg, dnd, dni):
+            return
     knn_enqueue(ctx, dx, n, d, kdeg, dnd, dni)
 
 
