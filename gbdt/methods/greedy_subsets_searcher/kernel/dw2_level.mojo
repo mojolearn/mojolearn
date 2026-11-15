@@ -357,18 +357,17 @@ def dw2_copy_back_kernel[GUARD: Bool = False](
     # TOMBSTONE: MOJOLEARN_AFT_N06 (DELETE-EXPERIMENT, never-run Apple FAST programme card, rule g; non-owner fold to False) deleted 2026-11-15 by lane/expdel2-43-trees; code recoverable at 42ccfefe05.
     # Restore: git apply experiments/removed/MOJOLEARN_AFT_N06.expdel2-43-trees.patch; record in docs/TOMBSTONES.md.
     while gi < n_groups:
-        if gi < n_groups:
-            var g = a0 + gi * DW2_PART_VEC
-            if g >= offset and g + DW2_PART_VEC <= end:
-                row_index.unsafe_store[width=4, alignment=16](
-                    g, temp_index.unsafe_load[width=4, alignment=16](g)
-                )
-            else:
-                comptime for e in range(4):
-                    var j = g + e
-                    if j >= offset and j < end:
-                        row_index.unsafe_store(j, temp_index.unsafe_load(j))
-            gi += stride
+        var g = a0 + gi * DW2_PART_VEC
+        if g >= offset and g + DW2_PART_VEC <= end:
+            row_index.unsafe_store[width=4, alignment=16](
+                g, temp_index.unsafe_load[width=4, alignment=16](g)
+            )
+        else:
+            comptime for e in range(4):
+                var j = g + e
+                if j >= offset and j < end:
+                    row_index.unsafe_store(j, temp_index.unsafe_load(j))
+        gi += stride
 
 
 
