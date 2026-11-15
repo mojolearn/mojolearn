@@ -31,7 +31,6 @@ Seams (DEVIATION numbers, lane cnn 5700-5799):
 """
 from std.math import fma
 from std.memory import bitcast
-from std.sys.compile import is_defined
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_div, identical_mul, identical_exp, identical_log, identical_rsqrt, identical_sqrt
 from core.philox import philox4x32_10
 from gemm.contract import OP_TN
@@ -110,7 +109,9 @@ def o_conv_dw(
 #: BN_FOLD_BLOCK; lane idn-loss-norm-folds).
 # TOMBSTONE: MOJOLEARN_BN_FOLD_BLOCK_OFF (DELETE-OLD-PATH: no A/B recorded for the old path) deleted 2026-11-15 by lane/expdel2-33-neural; code recoverable at c3d1c7865f.
 # Restore: git apply experiments/removed/MOJOLEARN_BN_FOLD_BLOCK_OFF.patch
-comptime O_BN_FOLD_BLOCK = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch, EXP:2438 DELETED; non-owner sites) deleted 2026-11-15 by lane/expdel2-33-neural; code recoverable at c3d1c7865f.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-33-neural.patch; record in docs/TOMBSTONES.md.
+comptime O_BN_FOLD_BLOCK = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 
 
 def _o_blocked_sum(v: List[Float32]) -> Float32:
