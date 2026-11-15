@@ -32,7 +32,6 @@ the layout requires a new V suffix. Publication and lookup are small
 metadata operations with no independent numerical work to split.
 """
 from core.entry_table import EntryRef, entry_ref_call, entry_ref_word, entry_table_publish, entry_table_read
-from std.sys import is_defined
 from std.sys.info import size_of
 from core.native_call_output import NativeCallOutput
 from core.native_descriptor_abi import NativeDescriptorCall
@@ -223,17 +222,12 @@ def byte_lm_sessions_run(entry: NativeDescriptorCall, session: Int, a: List[Int]
         addresses.append(a[i])
     var ints = Int(p.unsafe_ptr()) + 3 * size_of[Int]()
     var result = 0
-    comptime if is_defined["MOJOLEARN_ENTRY_TABLE_HEAP_OUTPUT"]():
-        var held = List[NativeCallOutput]()
-        held.append(NativeCallOutput())
-        result = native_descriptor_call_spans(entry, p[2], Int(addresses.unsafe_ptr()), len(addresses),
-            ints, len(p) - 3, Int(f.unsafe_ptr()), len(f), held[0])
-        _ = held
-    else:
-        var output = NativeCallOutput()
-        result = native_descriptor_call_spans(entry, p[2], Int(addresses.unsafe_ptr()), len(addresses),
-            ints, len(p) - 3, Int(f.unsafe_ptr()), len(f), output)
-        _ = output
+    # TOMBSTONE: MOJOLEARN_ENTRY_TABLE_HEAP_OUTPUT (opt-in former heap-held NativeCallOutput; no A/B recorded) deleted 2026-11-15 by lane/expdel2-03-base; code recoverable at d5699d97e3.
+    # Restore: git apply experiments/removed/MOJOLEARN_ENTRY_TABLE_HEAP_OUTPUT.patch; record in docs/TOMBSTONES.md.
+    var output = NativeCallOutput()
+    result = native_descriptor_call_spans(entry, p[2], Int(addresses.unsafe_ptr()), len(addresses),
+        ints, len(p) - 3, Int(f.unsafe_ptr()), len(f), output)
+    _ = output
     # Raw span addresses do not themselves retain their List owners.
     _ = addresses
     _ = p
