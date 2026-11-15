@@ -11,6 +11,7 @@ one binary per compile-time route define (their own pixi tasks).
 """
 from checks.native_tests.adafactor import register as register_adafactor
 from checks.native_tests.agglo_native import register as register_agglo_native
+from checks.native_tests.ann_cagra_filtered import register as register_ann_cagra_filtered
 from checks.native_tests.ann_ivf_surface import register as register_ann_ivf_surface
 from checks.native_tests.ann_ops import register as register_ann_ops
 from checks.native_tests.arima_state import register as register_arima_state
@@ -168,6 +169,7 @@ def all_checks() -> List[Check]:
     var checks = List[Check]()
     checks.append(register_adafactor())
     checks.append(register_agglo_native())
+    checks.append(register_ann_cagra_filtered())
     checks.append(register_ann_ivf_surface())
     checks.append(register_ann_ops())
     checks.append(register_arima_state())
