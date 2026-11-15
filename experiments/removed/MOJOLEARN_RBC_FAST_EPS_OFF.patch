@@ -1,0 +1,34 @@
+diff --git a/neighbors/impl/ball_cover/fast_rbc_eps.mojo b/neighbors/impl/ball_cover/fast_rbc_eps.mojo
+index c61fd2a936..3371bd10de 100644
+--- a/neighbors/impl/ball_cover/fast_rbc_eps.mojo
++++ b/neighbors/impl/ball_cover/fast_rbc_eps.mojo
+@@ -11,7 +11,7 @@ THE SAME BITS. Every distance is `eps_dist_sq`'s sequence (ascending
+ dimension, `diff = a - b`, `sum = fma(diff, diff, sum)`), every bound the
+ same expression, so counts and columns equal the reference kernel's.
+ 
+-Gate: `FAST_RBC_EPS` (FAST or IDENTICAL, Apple),
++Gate: `FAST_RBC_EPS` (FAST, Apple, not `-D MOJOLEARN_RBC_FAST_EPS_OFF`),
+ Euclidean only, `n_cols <= FAST_RBC_MAX_D`.
+ """
+ 
+@@ -19,6 +19,7 @@ from std.bit import count_trailing_zeros, pop_count
+ from max.gpu import block_idx, thread_idx
+ from max.gpu.primitives.warp import lane_id, shuffle_idx, vote
+ from max.gpu.primitives.warp import sum as warp_sum
++from std.sys.compile import is_defined
+ from core.accelerator_target import TARGET_HAS_APPLE_GPU
+ from max.gpu.host import DeviceBuffer, DeviceContext
+ 
+@@ -32,11 +33,10 @@ from checks.numerics import (
+ )
+ from neighbors.impl.ball_cover.common import RBC_FLT_MAX
+ 
+-# TOMBSTONE: MOJOLEARN_RBC_FAST_EPS_OFF (old path beside the Apple default, no A/B row) deleted 2026-11-15 by lane/expdel2-12-cluster; code recoverable at afb468bfd6.
+-# Restore: git apply experiments/removed/MOJOLEARN_RBC_FAST_EPS_OFF.patch; record in docs/TOMBSTONES.md.
+ comptime FAST_RBC_EPS = (
+     (GLOBAL_NUMERIC_MODE == NUMERIC_FAST or GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL)
+     and TARGET_HAS_APPLE_GPU
++    and not is_defined["MOJOLEARN_RBC_FAST_EPS_OFF"]()
+ )
+ comptime FAST_RBC_MAX_D = 32
+ comptime FR_LANES = 32

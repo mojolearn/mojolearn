@@ -524,24 +524,13 @@
       "define": "MOJOLEARN_C62_SAME_COMPONENT_SKIP",
       "control": "c61_same_component_skip",
       "reason": "DELETED 2026-11-15 (lane/expdel2-05-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md): unmeasured opt-in arm (V2 rule a). Code recoverable at 774f01dc6b."
-    }
-  ],
-  "owed_removal_ab": [
+    },
     {
       "define": "MOJOLEARN_LEGACY_SHAPE_KNN_BOARD",
-      "source": "neighbors/impl/detail/knn_brute_force.mojo:198",
-      "A": "default build (size rule knn_large_request(n_index, n_queries): n_queries>=1024 and n_index*n_queries>=2^28)",
-      "B": [
-        "MOJOLEARN_LEGACY_SHAPE_KNN_BOARD"
-      ],
-      "effect": "gates only NVIDIA vector index loads (:1003) and Apple preflight metadata (:1014), both bit-neutral; no effect on AMD. classical:knn (k=64, sqrt metric) flips: A vector on, B off. knn-clf/reg (uniform weights, unrooted) unaffected.",
-      "vendors": [
-        "nvidia"
-      ],
-      "shapes": "neighbors of 400000x4000x32: n_index {300000, 400000, 500000}, n_queries {3000, 4000, 5000}, d {32, 64}, k {10, 15, 64}, metric euclidean (sqrt), plus one non-board dataset (e.g. a 1M x 16 random index)",
-      "status": "RUN OWED (not expressible as one lq RACE line: needs a committed neighbor-shape script); delete the define after it lands"
+      "reason": "DELETED 2026-11-15 (lane/expdel2-12-cluster, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md): its owed removal A/B (owed_removal_ab) never ran; the size rule is the one rule; under \"An unmeasured arm is deleted\" the arm goes, the default stays (no bit change); code at 147979bdbf; patch experiments/removed/MOJOLEARN_LEGACY_SHAPE_KNN_BOARD.patch."
     }
   ],
+  "owed_removal_ab": [],
   "ideas": [
     {
       "workload": "classical:svc",

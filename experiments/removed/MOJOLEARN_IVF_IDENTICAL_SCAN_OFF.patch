@@ -1,0 +1,28 @@
+diff --git a/ivf/impl/neighbors/ivf_flat/ivf_flat_search.mojo b/ivf/impl/neighbors/ivf_flat/ivf_flat_search.mojo
+index 0c7f922177..b2c5e6b3c4 100644
+--- a/ivf/impl/neighbors/ivf_flat/ivf_flat_search.mojo
++++ b/ivf/impl/neighbors/ivf_flat/ivf_flat_search.mojo
+@@ -185,9 +185,10 @@ width reaches no fold and no accumulator; `check_launch_invariance` moves
+ it anyway, because "reaches no fold" is an argument and the check is a
+ measurement."""
+ 
+-# TOMBSTONE: MOJOLEARN_IVF_IDENTICAL_SCAN_OFF (old per-query path under IDENTICAL, no A/B row) deleted 2026-11-15 by lane/expdel2-12-cluster; code recoverable at c4611d659f.
+-# Restore: git apply experiments/removed/MOJOLEARN_IVF_IDENTICAL_SCAN_OFF.patch; record in docs/TOMBSTONES.md.
+-comptime IVF_IDENTICAL_SCAN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
++comptime IVF_IDENTICAL_SCAN = (
++    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
++    and not is_defined["MOJOLEARN_IVF_IDENTICAL_SCAN_OFF"]()
++)
+ # TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch, EXP:2438 DELETED) folded here 2026-11-15 by lane/expdel2-12-cluster; code recoverable at f81bc0a348.
+ # Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-12-cluster.patch; record in docs/TOMBSTONES.md.
+ # TOMBSTONE: MOJOLEARN_IVF_IDENTICAL_ANY_DIM_OFF (old path, no A/B row) deleted 2026-11-15 by lane/expdel2-12-cluster; code recoverable at 8c3413769b.
+@@ -209,7 +210,8 @@ comptime IVF_IDENTICAL_SCAN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+ # running this kernel (bench_board 0.8.25). The kernel is written on
+ # WARP_SIZE (its launch below and its lane merge follow it), and its
+ # arithmetic is the pinned path's term for term; the identity gate on each
+-# vendor is the check, as it was on Apple.
++# vendor is the check, as it was on Apple. `MOJOLEARN_IVF_IDENTICAL_SCAN_OFF`
++# restores the per-query path.
+ #
+ # IDENTICAL on Apple (lane/apple-identical-neural, 2026-09-26): steps 3-5
+ # for every query in one launch (`identical_ivf_scan.mojo`), the pinned

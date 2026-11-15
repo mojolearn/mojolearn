@@ -3,47 +3,12 @@
  "lane": "fg-knn-nb",
  "branch": "lane/fg-knn-nb",
  "head": "3b59db56a",
- "controls": {
-  "knn_scratch_pool_off": {
-   "define": "MOJOLEARN_KNN_SCRATCH_POOL_OFF",
-   "kind": "switch",
-   "arms": {
-    "off": [],
-    "on": [
-     "MOJOLEARN_KNN_SCRATCH_POOL_OFF"
-    ]
-   },
-   "default": "off",
-   "source": [
-    "neighbors/impl/detail/knn_brute_force.mojo:KNN_SCRATCH_POOL",
-    "neighbors/estimator.mojo:_knn_search_on_device_index"
-   ],
-   "binding": [
-    "_mojolearn",
-    "_mojolearn_estimators",
-    "_mojolearn_hdbscan",
-    "_mojolearn_metrics",
-    "_mojolearn_x_ann",
-    "_mojolearn_ivf",
-    "_mojolearn_x_cluster",
-    "_mojolearn_estimators_host",
-    "_mojolearn_hdbscan_host",
-    "_mojolearn_metrics_host",
-    "_mojolearn_x_ann_host",
-    "_mojolearn_x_cluster_host"
-   ],
-   "bits_change": false,
-   "status": "default K4; confirmed:postmerge-20261010 (lane/postmerge-act-6; fg2 board-bridge A/B on main 0a7b206f1, one run per arm (nv2 L40S v1021-v1050, amd MI325X a1161-a1190; ratio = arm / fg2 default)): the scratch pool stays the default",
-   "note": "Rollback arm: per-call allocation of queries, norms, dist_tile, radix pairs, outputs and pinned readback on every resident search. Default: exact-length views of the handle's high-water pool. CONFIRMED 2026-10-10: the _OFF arm is slower, knn istella NV 1.02x / AMD 1.02x, taxi NV 1.05x / AMD 1.06x; recall and hashes unchanged."
-  }
- },
+ "controls": {},
  "algorithms": {
   "classical:knn": {
    "binding": "_mojolearn",
    "route": "neighbors.py kneighbors -> knn_search_resident -> _knn_search_on_device_index (K4 pool) -> brute_force_knn_impl -> tiled_brute_force_knn (resident cache) -> smem/register distance tile + bound-compact | small-k | radix | block top-k + partial merges",
-   "controls": [
-    "knn_scratch_pool_off"
-   ],
+   "controls": [],
    "interaction_groups": [],
    "notes": "Diagnostic first: one AMD build with -D MOJOLEARN_KNN_PHASE_TIMERS (existing, vendor-neutral) splits transpose/distance/select/merge/upload. K1 (legacy-schedule arm), K2, K3 and K5 were removed 2026-10-10 (lane postmerge-act-6): AMD takes the NVIDIA schedule."
   },
@@ -95,6 +60,11 @@
    "define": "MOJOLEARN_XPREP_ARENA_POOL_OFF",
    "control": "xprep_arena_pool_off",
    "reason": "DELETED 2026-11-15 (lane/expdel2-03-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md): EXP:1787 CONFIRMED (the pool is the kept default); under \"An unmeasured arm is deleted\" the arm goes, the default stays (no bit change); code at 9907fddc3f; patch experiments/removed/MOJOLEARN_XPREP_ARENA_POOL_OFF.patch."
+  },
+  {
+   "define": "MOJOLEARN_KNN_SCRATCH_POOL_OFF",
+   "control": "knn_scratch_pool_off",
+   "reason": "DELETED 2026-11-15 (lane/expdel2-12-cluster, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md): CONFIRMED by the fg2 A/B (the pool is the kept default; the _OFF arm was slower on both vendors); under \"An unmeasured arm is deleted\" the arm goes, the default stays (no bit change); code at 465cb20ca0; patch experiments/removed/MOJOLEARN_KNN_SCRATCH_POOL_OFF.patch."
   }
  ]
 }

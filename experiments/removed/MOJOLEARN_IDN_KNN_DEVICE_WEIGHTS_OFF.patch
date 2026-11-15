@@ -1,0 +1,29 @@
+diff --git a/neighbors/impl/selection/knn.mojo b/neighbors/impl/selection/knn.mojo
+index 6a63b6dc81..be370636a9 100644
+--- a/neighbors/impl/selection/knn.mojo
++++ b/neighbors/impl/selection/knn.mojo
+@@ -77,6 +77,7 @@ from max.gpu.host import DeviceBuffer, DeviceContext
+ 
+ from core.identity_trace import IdentityTrace
+ from checks.numerics import ftz
++from std.sys.compile import is_defined
+ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+ from neighbors.impl.label.classlabels import make_monotonic, map_label_kernel, LABEL_TPB
+ from neighbors.impl.selection.distance_weights import (
+@@ -109,11 +110,13 @@ comptime KNN_IDN_DIRECT_RELABEL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+ #: it. No bit moves; the host column keeps `host_distance_weights`.
+ #: cpu3-neighbors (2026-10-04): the kernel is now the only GPU route, in
+ #: every mode and when traced (the trace records the device weights); the
+-#: host loop and this define's off arm are gone from the vote.
++#: host loop and this define's off arm are gone from the vote. The constant
++#: stays for callers that still read it.
+ # TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch, EXP:2438 DELETED) folded here 2026-11-15 by lane/expdel2-12-cluster; code recoverable at f81bc0a348.
+ # Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-12-cluster.patch; record in docs/TOMBSTONES.md.
+-# TOMBSTONE: MOJOLEARN_IDN_KNN_DEVICE_WEIGHTS_OFF (old path already gone; the constant had no reader) deleted 2026-11-15 by lane/expdel2-12-cluster; code recoverable at bb292f4946.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_KNN_DEVICE_WEIGHTS_OFF.patch; record in docs/TOMBSTONES.md.
++comptime KNN_IDN_DEVICE_WEIGHTS = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
++    is_defined["MOJOLEARN_IDN_KNN_DEVICE_WEIGHTS_OFF"]()
++)
+ 
+ comptime KNN_TPB_X = 32
+ """`template <int TPB_X = 32>` on all three launchers. A scheduling number;
