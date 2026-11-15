@@ -1321,10 +1321,11 @@ def fused_attention_kv_keys(arm: Int) -> Int:
     return 0
 
 
-comptime ATTN_ES_FORCE_TQ16 = is_defined["MOJOLEARN_ATTN_ES_TQ16"]()
+# TOMBSTONE: MOJOLEARN_ATTN_ES_TQ16 (unmeasured forced-tile arm) deleted 2026-11-15 by lane/expdel2-34-neural (non-owner, owner expdel2-32-neural); code recoverable at 1c0a228611.
+# Restore: git apply experiments/removed/MOJOLEARN_ATTN_ES_TQ16.expdel2-34-neural.patch; record in docs/TOMBSTONES.md.
 comptime ATTN_ES_FORCE_TQ8 = is_defined["MOJOLEARN_ATTN_ES_TQ8"]()
 comptime ATTN_ES_TQ = (
-    16 if ATTN_ES_FORCE_TQ16 or (
+    16 if (
         TARGET_COLUMN == COLUMN_NVIDIA and not ATTN_ES_FORCE_TQ8
     ) else 8
 )
@@ -1342,12 +1343,7 @@ def attention_estash_zdot_tq(l: Int, window: Int) -> Int:
     retain 8x32.  ``window`` is deliberately not a dispatch input yet: the
     qualification has only one windowed point, already covered by L>=1536.
     """
-    comptime assert not (ATTN_ES_FORCE_TQ16 and ATTN_ES_FORCE_TQ8), (
-        "MOJOLEARN_ATTN_ES_TQ16 and MOJOLEARN_ATTN_ES_TQ8 are mutually exclusive"
-    )
-    comptime if ATTN_ES_FORCE_TQ16:
-        return 16
-    elif ATTN_ES_FORCE_TQ8:
+    comptime if ATTN_ES_FORCE_TQ8:
         return 8
     elif TARGET_COLUMN == COLUMN_NVIDIA:
         return 16
