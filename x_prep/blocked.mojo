@@ -40,9 +40,9 @@ comptime XB = 2048
 #: ascending from zero), so the words are csb_part's.
 # TOMBSTONE: MOJOLEARN_IDN_NB_ONEPASS_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-09-base; code recoverable at 2909d00ab4.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_NB_ONEPASS_OFF.patch; record in docs/TOMBSTONES.md.
-comptime IDN_NB_ONEPASS = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-09-base (non-owner; owner expdel2-37-series); code recoverable at df8ecc7030.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-09-base.patch; record in docs/TOMBSTONES.md.
+comptime IDN_NB_ONEPASS = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 #: classes csb1_part keeps in registers (more: the partial table itself)
 comptime CSB1_REG = 8
 
@@ -60,7 +60,7 @@ comptime CSB1_REG = 8
 #: -D MOJOLEARN_IDN_STATS_BLOCKED_OFF restores the serial stages.
 comptime IDN_STATS_BLOCKED = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not (is_defined["MOJOLEARN_IDN_STATS_BLOCKED_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
+    and not is_defined["MOJOLEARN_IDN_STATS_BLOCKED_OFF"]()
 )
 
 #: lane fam-prep-metrics (2026-10-04), IDENTICAL on every vendor and the host
@@ -72,7 +72,7 @@ comptime IDN_STATS_BLOCKED = (
 #: no bit moves against the blocked order.
 # TOMBSTONE: MOJOLEARN_IDN_CLASS_ONEPASS_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-09-base; code recoverable at a7d5d989b5.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_CLASS_ONEPASS_OFF.patch; record in docs/TOMBSTONES.md.
-comptime IDN_CLASS_ONEPASS = IDN_NB_ONEPASS and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+comptime IDN_CLASS_ONEPASS = IDN_NB_ONEPASS
 
 
 @always_inline
@@ -680,10 +680,7 @@ def cat_hfold_unit(t: Int, f: FP, q: IP):
 #: stored order (a duplicate column sums, -0.0 becomes +0.0, NaN stays).
 # TOMBSTONE: MOJOLEARN_IDN_NB_CSR_DENSE_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-09-base; code recoverable at 93d56e9d87.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_NB_CSR_DENSE_OFF.patch; record in docs/TOMBSTONES.md.
-comptime IDN_NB_CSR_DENSE = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
+comptime IDN_NB_CSR_DENSE = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 
 
 def csr_dense_unit(t: Int, f: FP, q: IP):

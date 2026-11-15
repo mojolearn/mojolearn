@@ -32,7 +32,6 @@ dense fit within float32 (the atomic fold order is new).
 from std.atomic import Atomic
 from max.gpu import block_dim, block_idx, thread_idx
 from std.memory import stack_allocation
-from std.sys.compile import is_defined
 from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
@@ -68,7 +67,9 @@ comptime NB_TEXT_CSR = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_
 #: the same column-order flag.
 # TOMBSTONE: MOJOLEARN_IDN_NB_CSR_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-09-base; code recoverable at 2aca6c096a.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_NB_CSR_OFF.patch; record in docs/TOMBSTONES.md.
-comptime IDN_NB_CSR = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-09-base (non-owner; owner expdel2-37-series); code recoverable at df8ecc7030.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-09-base.patch; record in docs/TOMBSTONES.md.
+comptime IDN_NB_CSR = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 #: out_flag levels of the IDENTICAL entries (the largest raised wins: a
 #: negative value is refused whatever else the input holds, as the dense fit)
 comptime CSR_FLAG_FALLBACK = 1

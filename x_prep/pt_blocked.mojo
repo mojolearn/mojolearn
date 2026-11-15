@@ -37,7 +37,6 @@ one-pass tiles FAST tried (x_prep/fastpt.mojo).
 The switch is bit 8 of `x_prep_idn_fam`; python/mojolearn/_expansion_prep.py
 stages these ops only when it is set.
 """
-from std.sys.compile import is_defined
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from x_prep.common import FP, IP, p, ld, raw, sti, ldi, is_nan
 from x_prep.prims import add, sub, mul, div, logf
@@ -46,10 +45,9 @@ from x_prep.blocked import _span
 
 # TOMBSTONE: MOJOLEARN_IDN_PT_BLOCKED_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-09-base; code recoverable at b358d19039.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_PT_BLOCKED_OFF.patch; record in docs/TOMBSTONES.md.
-comptime IDN_PT_BLOCKED = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-09-base (non-owner; owner expdel2-37-series); code recoverable at df8ecc7030.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-09-base.patch; record in docs/TOMBSTONES.md.
+comptime IDN_PT_BLOCKED = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 
 
 @always_inline

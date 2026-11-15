@@ -33,12 +33,10 @@ the old chain. Products are rounded before their add (`mul`, DEVIATION 5401)
 as before. All four columns run these units.
 
 SWITCHES (IDENTICAL only):
-  IDN_GRAM_BLOCKED, ON by default; MOJOLEARN_IDN_ALL_OFF restores
-      matmul / qda_cov.
+  IDN_GRAM_BLOCKED, always on.
   rows per block: XB = 2048 (a different block length is a different order).
 The Python layer reads them from `x_prep_idn_fam2` and stages accordingly.
 """
-from std.sys.compile import is_defined
 from checks.numerics import ftz, GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from x_prep.common import FP, IP, p, ld, st, raw, RUN, run_block
 from x_prep.prims import add, sub, mul, div, mm_step
@@ -46,10 +44,9 @@ from x_prep.blocked import XB
 
 # TOMBSTONE: MOJOLEARN_IDN_GRAM_BLOCKED_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-09-base; code recoverable at 2b7e58bca5.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_GRAM_BLOCKED_OFF.patch; record in docs/TOMBSTONES.md.
-comptime IDN_GRAM_BLOCKED = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-09-base (non-owner; owner expdel2-37-series); code recoverable at df8ecc7030.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-09-base.patch; record in docs/TOMBSTONES.md.
+comptime IDN_GRAM_BLOCKED = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 # TOMBSTONE: MOJOLEARN_IDN_GRAM_ROWTILE (opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-09-base; code recoverable at eb6ccbf3bc.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_GRAM_ROWTILE.patch; record in docs/TOMBSTONES.md.
 # The alias stays False for x_prep/fam2.mojo (its importer, in no V2 lane); the integrator drops it with gb_part_row_unit.
