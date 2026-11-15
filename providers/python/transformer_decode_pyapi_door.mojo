@@ -10,7 +10,7 @@ from std.os import getenv
 from std.memory import unsafe_memcpy
 from bindings.native_error_class import error_without_class
 from bindings.py_balanced import py_call, py_get, py_setitem, py_type, py_contains, py_fields
-from bindings.generation_buffers_door import generation_initialize_binding, generation_array, generation_address, py_ints
+from bindings.generation_buffers_door import generation_initialize_binding, generation_array, generation_array_unfilled, generation_address, py_ints
 from bindings.causal_lm_construct_door import _model_shape
 from std.sys.compile import is_defined
 from bindings.native_loaded_module_door import NativeModules
@@ -690,16 +690,72 @@ def _transformer_decode_run_admitted(hobj: PythonObject, input: PythonObject, st
     # one wait. Nothing else per token.
     var h = hobj.downcast_value_ptr[TransformerDecodeHandle]()
     var width = h[].width
-    var rows = h[].batch
     var batch = 0
     var length = 0
     # A kept map never outlives a GIL window: cleared before this admission.
     h[].mods.released()
+    # lane flag-neural-small-rows (2026-11-15): a caller's C-contiguous
+    # float32 export (the board's numpy token, 2048 calls per round) is read
+    # by address under one buffer pin, as 0.8.55's step read `addr_ro(x)`:
+    # no read-only Array view per token (`_block_view`: an object, a
+    # memoryview, two casts, two tuples and fourteen slot writes). Any other
+    # input (an Array, another layout, a refused dtype or shape) takes the
+    # full admission below, which raises exactly what it raised before.
+    if py_type(input) is not context["array_class"]:
+        admit_native_buffer_exporter(input)
+        var pin = AdmittedBorrowedBuffer(input)
+        if _transformer_decode_pin_rows(pin, width, step, batch, length):
+            var y = _transformer_decode_run_rows(hobj, pin.layout.value().address, batch, length, step, decode)
+            _ = pin^
+            _ = hobj
+            return y
+        _ = pin^
+        batch = 0
+        length = 0
     var x = _neural_input_rows(h[].mods, input, width, step, context, batch, length)
-    if batch != rows:
+    var y = _transformer_decode_run_rows(hobj, Int(py=x._addr), batch, length, step, decode)
+    _ = x^
+    _ = hobj
+    return y
+
+
+def _transformer_decode_pin_rows(pin: AdmittedBorrowedBuffer, width: Int, step: Bool, mut batch: Int,
+                                 mut length: Int) raises -> Bool:
+    # Whether a pinned export is read in place: float32 words, C-contiguous,
+    # four-byte aligned, non-empty, and (B, width) for a step or (B, L, width)
+    # with B, L >= 1 (L == 1 for a step); `batch` and `length` receive B and L.
+    # False sends the input to the full admission (its refusals and copies).
+    if pin.format != "f" and pin.format != "<f" and pin.format != "=f" and pin.format != "@f":
+        return False
+    ref layout = pin.layout.value()
+    if layout.itemsize != 4 or layout.count <= 0 or layout.address % 4 != 0 or not layout.contiguous():
+        return False
+    var rank = len(layout.shape)
+    if step and rank == 2 and layout.shape[0] >= 1 and layout.shape[1] == width:
+        batch = layout.shape[0]
+        length = 1
+        return True
+    if rank != 3 or layout.shape[0] < 1 or layout.shape[1] < 1 or layout.shape[2] != width:
+        return False
+    if step and layout.shape[1] != 1:
+        return False
+    batch = layout.shape[0]
+    length = layout.shape[1]
+    return True
+
+
+def _transformer_decode_run_rows(hobj: PythonObject, px: Int, batch: Int, length: Int, step: Bool,
+                                 decode: Bool) raises -> PythonObject:
+    # The admitted run on x's words at `px` (the caller keeps them alive past
+    # this call): one y Array, cached_tokens read from and written to the
+    # state's fields, one native call on the pinned session.
+    var h = hobj.downcast_value_ptr[TransformerDecodeHandle]()
+    var width = h[].width
+    if batch != h[].batch:
         raise Error("TransformerDecodeSession: input rows differ from the state")
-    var y = generation_array([batch, length, width])
-    var px = Int(py=x._addr)
+    # Unfilled: the native step / decode / forward downloads all B * L *
+    # d_model output words into y before anything reads it.
+    var y = generation_array_unfilled([batch, length, width])
     var py = Int(py=y._addr)
     h = hobj.downcast_value_ptr[TransformerDecodeHandle]()
     var live = h[].live_state
@@ -715,7 +771,6 @@ def _transformer_decode_run_admitted(hobj: PythonObject, input: PythonObject, st
     var kind = CAUSAL_DECODE_PINNED_RUN if decode else (CAUSAL_DECODE_PINNED_STEP if step else CAUSAL_DECODE_PINNED_FORWARD)
     cached = _transformer_decode_native_run(entry, kind, px, py, pin, length, cached)
     py_setitem(live, "cached_tokens", PythonObject(cached))
-    _ = x^
     _ = word_class^
     _ = word^
     _ = hobj
