@@ -203,12 +203,10 @@ def knn_tiled_bigd_kernel(n: Int32, x: F32P, d: Int32, nn: Int32, nn_d: F32P, nn
 # `ts_ftz_nonneg(fma(diff, diff, acc))`, diff = ftz(ftz(x_i) - ftz(x_j)),
 # c ascending over exactly d; then row i's owner offers the tile's
 # candidates in ascending j through the same `ts_knn_beats` /
-# `ts_knn_offer`. The same bits. -D MOJOLEARN_KNN_WIDE_OFF=1 restores the
-# cell kernel.
-comptime KNN_WIDE = (
-    (TARGET_COLUMN == COLUMN_NVIDIA or TARGET_COLUMN == COLUMN_AMD)
-    and not is_defined["MOJOLEARN_KNN_WIDE_OFF"]()
-)
+# `ts_knn_offer`. The same bits.
+# TOMBSTONE: MOJOLEARN_KNN_WIDE_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-13-cluster; code recoverable at 7778cba4e1.
+# Restore: git apply experiments/removed/MOJOLEARN_KNN_WIDE_OFF.patch; record in docs/TOMBSTONES.md.
+comptime KNN_WIDE = TARGET_COLUMN == COLUMN_NVIDIA or TARGET_COLUMN == COLUMN_AMD
 comptime KW_TI = 64
 comptime KW_TJ = 64
 comptime KW_KC = 16
