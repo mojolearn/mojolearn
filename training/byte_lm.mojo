@@ -1800,11 +1800,21 @@ def _byte_layer_sync() -> Bool:
     on the Apple column (lane/neural-pass43, 2026-10-01: a Metal wait with
     a readback costs about 0.2 ms on the M4 and more on the M3 Ultra;
     `MOJOLEARN_BYTE_LM_LAYER_SYNC=1` restores them); the step's `step.*`
-    timing ticks read the same either way."""
-    var v = String(getenv("MOJOLEARN_BYTE_LM_LAYER_SYNC"))
-    comptime if TARGET_COLUMN == COLUMN_APPLE:
-        return v == "1"
-    return v != "0"
+    timing ticks read the same either way.
+
+    A build constant since lane envgate-neural-lm (2026-11-15): it was a
+    getenv per layer per step. Column defaults unchanged; B arms
+    `-D MOJOLEARN_BYTE_LM_LAYER_SYNC_OFF` on NVIDIA and AMD (RUN OWED,
+    bench/results/paper_compare/owed-pre0867.json "byte-lm-layer-sync-off";
+    docs/apple-fast/EXPERIMENTS.md) and `-D MOJOLEARN_BYTE_LM_LAYER_SYNC` on
+    Apple."""
+    return BYTE_LM_LAYER_SYNC
+
+
+comptime BYTE_LM_LAYER_SYNC = is_defined["MOJOLEARN_BYTE_LM_LAYER_SYNC"]() or (
+    TARGET_COLUMN != COLUMN_APPLE and not is_defined["MOJOLEARN_BYTE_LM_LAYER_SYNC_OFF"]()
+)
+"""See `_byte_layer_sync`: on for NVIDIA and AMD, off on Apple."""
 
 
 def _byte_release_forward_scratch(ctx: DeviceContext,

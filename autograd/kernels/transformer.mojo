@@ -70,7 +70,6 @@ from gemm.neural_backward import (
     gemm_backward_b_call,
 )
 from gemm.neural_dispatch import GemmWorkspace, identical_gemm
-from std.os import getenv
 from gemm.contract import OP_NN, OP_NT, OP_TN
 from checks.numerics import (
     identical_mul,
@@ -3259,11 +3258,18 @@ def bwd_rms_norm[which: Int](
     _bwd_rms_norm_dw_tick[which](ctx, pc)
 
 
+comptime TRANSFORMER_NORM_DW_OWN_WS = is_defined["MOJOLEARN_TRANSFORMER_NORM_DW_OWN_WS"]()
+"""`-D MOJOLEARN_TRANSFORMER_NORM_DW_OWN_WS` restores `identical_gemm` (its
+own workspace, two waits) for the norm weight gradients: the B arm against
+the routed form below, the default (unchanged). It was a getenv per backward
+layer until lane envgate-neural-lm (2026-11-15). RUN OWED on NVIDIA
+(bench/results/paper_compare/owed-pre0867.json "transformer-norm-dw-own-ws";
+docs/apple-fast/EXPERIMENTS.md)."""
+
+
 def _norm_dw_own_workspace() -> Bool:
-    """MOJOLEARN_TRANSFORMER_NORM_DW_OWN_WS=1 restores `identical_gemm`
-    (its own workspace, two waits) for the norm weight gradients: the A/B
-    against the routed form below."""
-    return String(getenv("MOJOLEARN_TRANSFORMER_NORM_DW_OWN_WS")) == "1"
+    """See TRANSFORMER_NORM_DW_OWN_WS: a build constant."""
+    return TRANSFORMER_NORM_DW_OWN_WS
 
 
 def bwd_rms_norm_routed[which: Int](

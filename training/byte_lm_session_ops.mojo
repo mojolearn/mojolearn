@@ -17,7 +17,7 @@ arithmetic is added: every number comes from the session's `ByteTrainer`
 
 No Python here.
 """
-from std.os import getenv
+from std.sys.compile import is_defined
 from std.time import perf_counter_ns
 from max.gpu.host import DeviceContext, HostBuffer
 from core.hostptr import f32_ptr, i32_ptr, copy_f32
@@ -40,6 +40,15 @@ from training.byte_lm_binding_impl import (
     _read_flags, _read_ids, _write_flags, _write_loss, _nonfinite,
     _require_open, _mark_if_lost, _admit_session_scalars, _stage_download,
 )
+
+# Lane envgate-neural-lm (2026-11-15): both were a getenv per session open /
+# step / export call; build constants with today's defaults. KEEP_CONTEXT is
+# ROUTE-DEFAULT-SUSPECT, default off: B arm -D MOJOLEARN_BYTE_LM_KEEP_CONTEXT
+# (RUN OWED, bench/results/paper_compare/owed-pre0867.json
+# "byte-lm-keep-context"; docs/apple-fast/EXPERIMENTS.md).
+comptime _TRANSFORMER_TIMING = is_defined["MOJOLEARN_TRANSFORMER_TIMING"]()
+comptime BYTE_LM_KEEP_CONTEXT = is_defined["MOJOLEARN_BYTE_LM_KEEP_CONTEXT"]()
+
 
 # One process-lifetime DeviceContext per binding and tier (core/neural_context.mojo).
 comptime BYTE_LM_NEURAL_CTX = "MojolearnNeuralByteLMContextIdenticalV3" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnNeuralByteLMContextFastV3"
@@ -69,8 +78,8 @@ def byte_session_open(mut session: ByteLMSession, addr: List[Int], completed: In
         raise Error("byte LM: session is busy")
     if Bool(owner[].trainer) or Bool(owner[].ctx):
         raise Error("byte LM: session is already open; close it first")
-    var ton = String(getenv("MOJOLEARN_TRANSFORMER_TIMING")) != ""
-    var keep_context = String(getenv("MOJOLEARN_BYTE_LM_KEEP_CONTEXT")) == "1"
+    var ton = _TRANSFORMER_TIMING
+    var keep_context = BYTE_LM_KEEP_CONTEXT
     var tk = Int(perf_counter_ns())
     # No GPU work before all borrowed inputs become validated owned host lists.
     var initial_p = _read_f32(addr[0], n)
@@ -115,7 +124,7 @@ def byte_session_step_run(mut session: ByteLMSession, ids: List[Int32], flags: L
     marks the session unusable."""
     var owner = MutPointer(to=session).unsafe_origin_cast[MutAnyOrigin]()
     var n_tensors = cfg_shape.n_tensors()
-    var ton = String(getenv("MOJOLEARN_TRANSFORMER_TIMING")) != ""
+    var ton = _TRANSFORMER_TIMING
     var tk = Int(perf_counter_ns())
     var loss = Float32(0)
     var result_step = completed
@@ -240,7 +249,7 @@ def byte_session_export_state(mut session: ByteLMSession, addr: List[Int],
     _require_open(owner[])
     if owner[].trainer.value().config.profile() != cfg_shape.profile():
         raise Error("byte LM: resident model shape mismatch")
-    var ton = String(getenv("MOJOLEARN_TRANSFORMER_TIMING")) != ""
+    var ton = _TRANSFORMER_TIMING
     var tk = Int(perf_counter_ns())
     ref ctx = owner[].ctx.value()
     var hp = ctx.enqueue_create_host_buffer[DType.float32](n)
@@ -295,7 +304,7 @@ def byte_session_export_gradients(mut session: ByteLMSession, out_addr: Int,
     var grad_step = owner[].trainer.value().grad_step
     if grad_step < 0 or grad_step != owner[].trainer.value().completed_steps:
         raise Error("byte LM: no gradient to export; complete a step first")
-    var ton = String(getenv("MOJOLEARN_TRANSFORMER_TIMING")) != ""
+    var ton = _TRANSFORMER_TIMING
     var tk = Int(perf_counter_ns())
     ref ctx = owner[].ctx.value()
     var hg = ctx.enqueue_create_host_buffer[DType.float32](n)

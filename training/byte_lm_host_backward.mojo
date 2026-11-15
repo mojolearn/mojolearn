@@ -51,9 +51,9 @@ thread's floating-point environment (`core/host_parallel.mojo`, DEVIATION
 5900). So the block oracles' per-row stages, the loss's rows
 (`training/loss_host_rows.mojo`) and the optimizer's elements
 (`training/optimizer_host_rows.mojo`) run over host tasks. The loss and the
-optimizer keep the serial oracle calls one environment value away
-(`MOJOLEARN_BYTE_LM_HOST_STEP_ROWS=0`); `tools/byte_lm_host_step_check.py`
-compares the two, every byte of every step, and
+optimizer keep the serial oracle calls one build define away
+(`-D MOJOLEARN_BYTE_LM_HOST_STEP_ROWS_OFF`); `tools/byte_lm_host_step_check.py`
+compares the two builds, every byte of every step, and
 `tools/byte_lm_cpu_train_gate.py cpu` compares either against the recorded
 three-vendor bytes. Nothing lets a thread accumulate as it finishes.
 
@@ -77,7 +77,7 @@ twice. A pass here is a statement at the shape it ran at.
 """
 
 from std.memory import unsafe_memcpy
-from std.os import getenv
+from std.sys.compile import is_defined
 
 from core.host_lanes import host_f32_uninit
 from gemm.contract import OP_NT
@@ -115,11 +115,17 @@ from transformer.checks.transformer_backward_oracle import (
 )
 
 
+comptime BYTE_LM_HOST_STEP_ROWS = not is_defined["MOJOLEARN_BYTE_LM_HOST_STEP_ROWS_OFF"]()
+"""True unless `-D MOJOLEARN_BYTE_LM_HOST_STEP_ROWS_OFF`: the loss's rows and
+the optimizer's elements over host tasks (module note); the define restores
+the serial oracle calls for both, which is what the check tool compares
+against (a second build since lane envgate-neural-lm, 2026-11-15; it was
+`MOJOLEARN_BYTE_LM_HOST_STEP_ROWS=0`, a getenv per host step)."""
+
+
 def byte_host_step_rows() -> Bool:
-    """True unless MOJOLEARN_BYTE_LM_HOST_STEP_ROWS=0: the loss's rows and the
-    optimizer's elements over host tasks (module note); 0 restores the serial
-    oracle calls for both, which is what the check tool compares against."""
-    return String(getenv("MOJOLEARN_BYTE_LM_HOST_STEP_ROWS")) != "0"
+    """See BYTE_LM_HOST_STEP_ROWS: a build constant."""
+    return BYTE_LM_HOST_STEP_ROWS
 
 
 # `byte_host_adamw` lives in training/byte_lm_host_execution.mojo since lane

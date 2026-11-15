@@ -50,7 +50,6 @@ loss comparison fails under it too (lane m2-neural-leftovers, 2026-11-09).
 """
 
 from std.math import max, min
-from std.os import getenv
 from std.sys.compile import is_defined
 from std.sys.info import num_physical_cores, simd_width_of
 
@@ -297,12 +296,21 @@ def byte_host_worker_count(threads: Int) raises -> Int:
 # (packing the head's keys and values itself) and the rest of the block for
 # those tokens (o_proj, residual, norm2, gate, up, SiLU, down, residual).
 # The head GEMM splits its token rows the same way. Taken when the batch
-# is smaller than the worker count, unless MOJOLEARN_BYTE_LM_HOST_TOKEN_SPLIT=0.
+# is smaller than the worker count, unless -D MOJOLEARN_BYTE_LM_HOST_TOKEN_SPLIT_OFF.
 # ===========================================================================
 
 
+comptime BYTE_LM_HOST_TOKEN_SPLIT = not is_defined["MOJOLEARN_BYTE_LM_HOST_TOKEN_SPLIT_OFF"]()
+"""The token split above, on by default (unchanged). A build constant since
+lane envgate-neural-lm (2026-11-15): it was a getenv per host forward call
+(`MOJOLEARN_BYTE_LM_HOST_TOKEN_SPLIT=0` turned it off). B arm `-D
+MOJOLEARN_BYTE_LM_HOST_TOKEN_SPLIT_OFF` (RUN OWED, CPU host binding, no board
+row: bench/results/paper_compare/owed-pre0867.json
+"byte-lm-host-token-split-off"; docs/apple-fast/EXPERIMENTS.md)."""
+
+
 def byte_host_token_split_enabled() -> Bool:
-    return String(getenv("MOJOLEARN_BYTE_LM_HOST_TOKEN_SPLIT")) != "0"
+    return BYTE_LM_HOST_TOKEN_SPLIT
 
 
 def _chunks(n: Int, workers: Int) -> Int:
