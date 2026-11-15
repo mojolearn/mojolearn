@@ -30,7 +30,7 @@ from gemm.afn_apple_fast import (
 # try_scoped_gemm arms here. Restore: git apply experiments/removed/MOJOLEARN_SCOPED_GEMM_AUDIT.patch
 from decomposition.linalg_public_device import device_qr_r
 from decomposition.linalg_types import _validate_shape
-from experiments.classical_identical_ideas.linear_controls import C14_GROUP_RHS, C28_BUCKET_SOLVES
+from experiments.classical_identical_ideas.linear_controls import C28_BUCKET_SOLVES
 from x_decomp.classical_device import contrast_kernel
 from core.blocked_moments import bm_centered_gram_panels
 from core.blocked_moments_ops import C23_MCD_LEAF_ROWS
@@ -59,7 +59,7 @@ from x_decomp.cells import (
     lu_aux_clamp,
     lu_aux_join,
     lu_aux_val,
-    trs_block_col, trs_block_group,
+    trs_block_col,
     trs_coef,
     trs_divides,
     trs_feed_cell,
@@ -1963,10 +1963,8 @@ def trs_block_kernel(lu: F32Ptr, b: F32Ptr, n: Int32, nrhs: Int32, tri: Int32, l
         trs_block_col(lu, b, Int(n), Int(nrhs), Int(tri), Int(lo), Int(hi), c)
 
 
-def trs_group_kernel(lu: F32Ptr, b: F32Ptr, n: Int32, nrhs: Int32, tri: Int32, lo: Int32, hi: Int32):
-    var c = (Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)) * 4
-    if c < Int(nrhs):
-        trs_block_group(lu, b, Int(n), Int(nrhs), Int(tri), Int(lo), Int(hi), c, min(c + 4, Int(nrhs)))
+# TOMBSTONE: MOJOLEARN_CLASSICAL_C14_GROUP_RHS (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-16-decomposition; code recoverable at 8d5d392bf1.
+# Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C14_GROUP_RHS.expdel2-16-decomposition.patch; record in docs/TOMBSTONES.md.
 
 
 def trs_diag_kernel(lu: F32Ptr, b: F32Ptr, n: Int32, nrhs: Int32, tri: Int32, lo: Int32, hi: Int32):
@@ -2050,12 +2048,9 @@ def launch_trs_tri(ctx: DeviceContext, lu: F32Ptr, b: F32Ptr, n: Int, nrhs: Int,
         var bq = q if (tri == 0 or tri == 2) else nblk - 1 - q
         var lo = bq * TRS_BLOCK
         var hi = min(n, lo + TRS_BLOCK)
-        comptime if C14_GROUP_RHS:
-            ctx.enqueue_function[trs_group_kernel](
-                lu, b, Int32(n), Int32(nrhs), Int32(tri), Int32(lo), Int32(hi),
-                grid_dim=_blocks((nrhs + 3) // 4), block_dim=TPB,
-            )
-        elif TRS_DIAG_FITS:
+        # TOMBSTONE: MOJOLEARN_CLASSICAL_C14_GROUP_RHS (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-16-decomposition; code recoverable at 8d5d392bf1.
+        # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C14_GROUP_RHS.expdel2-16-decomposition.patch; record in docs/TOMBSTONES.md.
+        comptime if TRS_DIAG_FITS:
             ctx.enqueue_function[trs_diag_kernel](
                 lu, b, Int32(n), Int32(nrhs), Int32(tri), Int32(lo), Int32(hi),
                 grid_dim=(nrhs + TRS_DIAG_COLS - 1) // TRS_DIAG_COLS, block_dim=TRS_DIAG_TPB,
