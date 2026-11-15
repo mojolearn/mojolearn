@@ -79,7 +79,7 @@ comptime KMEANS_ROW_ASSIGN_MAX_KD = 512
 # (Sweep 2026-11-15: comptime C32_EMIT_FUSION removed; nothing read it.)
 # TOMBSTONE: MOJOLEARN_C33_FROZEN_CHUNKS (superseded / unmeasured arm) deleted 2026-11-15 by lane/expdel2-05-base; code recoverable at b41ab5891f.
 # Restore: git apply experiments/removed/MOJOLEARN_C33_FROZEN_CHUNKS.patch; record in docs/TOMBSTONES.md.
-comptime C33_FROZEN_CHUNKS = False
+# (Sweep 2026-11-15: comptime C33_FROZEN_CHUNKS removed; nothing read it.)
 # TOMBSTONE: MOJOLEARN_C33_CHUNK_4 (unmeasured arm) deleted 2026-11-15 by lane/expdel2-05-base; code recoverable at 77dc9e2f62.
 # Restore: git apply experiments/removed/MOJOLEARN_C33_CHUNK_4.patch; record in docs/TOMBSTONES.md.
 comptime C33_CHUNK = 16
