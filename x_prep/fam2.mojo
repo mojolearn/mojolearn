@@ -56,7 +56,11 @@ from x_prep.py2mojo import splitmix_at
 from x_prep.blocked import XB
 from x_prep.cpu2_prep import C2_FIRST, C2_N, run_c2_unit
 from x_prep.gram_blocked import (
-    IDN_GRAM_BLOCKED, IDN_GRAM_ROWTILE, gb_part_unit, gb_part_row_unit, gb_fold_unit, qcb_part_unit, qcb_fold_unit,
+    IDN_GRAM_BLOCKED,
+    gb_part_unit,
+    gb_fold_unit,
+    qcb_part_unit,
+    qcb_fold_unit,
 )
 
 # Lane cpu2-l3-prep (2026-10-04): these five were IDENTICAL-only with an `_OFF` arm
@@ -328,9 +332,6 @@ def run_f2_unit[OP: Int](t: Int, f: FP, q: IP):
             qcb_part_unit(t, f, q)
         comptime if OP == F2_BASE + 10:
             qcb_fold_unit(t, f, q)
-    comptime if IDN_GRAM_ROWTILE:
-        comptime if OP == F2_BASE + 7:
-            gb_part_row_unit(t, f, q)
     comptime if IDN_LABEL_INV:
         comptime if OP == F2_BASE + 11:
             f2_code_gather_unit(t, f, q)
