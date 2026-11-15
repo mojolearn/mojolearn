@@ -74,12 +74,14 @@ from gbdt.ctrs.index_wrapper import (
 )
 
 
-from gbdt.gpu_data.apple_fast_trees_experiments import AFT_G09, AFT_G10
+from gbdt.gpu_data.apple_fast_trees_experiments import AFT_G10
 
 # G09: eight numerator rows amortize target predicate/segment-sign setup;
 # the exact scan and prefix exclusion run unchanged. No performance/quality
 # evidence. Keep the separate frequency kernel's four-row tile unchanged.
-comptime AFT_CTR_TARGET_DOCS = 8 if AFT_G09 else 4
+# TOMBSTONE: MOJOLEARN_AFT_G09 (DELETE-EXPERIMENT, never-run Apple FAST programme card, rule g) deleted 2026-11-15 by lane/expdel2-42-trees; code recoverable at 85224dc690.
+# Restore: git apply experiments/removed/MOJOLEARN_AFT_G09.patch; record in docs/TOMBSTONES.md.
+comptime AFT_CTR_TARGET_DOCS = 4
 # G10: four coalesced independent lookups per lane amortize prior/map setup.
 # Uncompiled/unverified/unmeasured; no category/prefix approximation.
 comptime AFT_CTR_LOOKUP_DOCS = 4 if AFT_G10 else 1
