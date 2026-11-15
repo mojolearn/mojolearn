@@ -1,0 +1,34 @@
+diff --git b/bindings/_mojolearn_rf.mojo a/bindings/_mojolearn_rf.mojo
+index acf3c294fc..de49bb1802 100644
+--- b/bindings/_mojolearn_rf.mojo
++++ a/bindings/_mojolearn_rf.mojo
+@@ -68,6 +68,7 @@ from core.forest_inference_model import (
+ )
+ from checks.vendor import COMPILED_VENDOR
+ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
++from std.sys.compile import is_defined
+ 
+ 
+ from ensemble.instruments import StageTimes
+@@ -796,10 +797,8 @@ def rf_device_finite_scan_binding() raises -> PythonObject:
+     return PythonObject(1 if FOREST_DEVICE_FINITE else 0)
+ 
+ 
+-#: QUALITY FIX (lane apple-fast-q-reg, 2026-10-04), FAST on every vendor.
+-# TOMBSTONE: MOJOLEARN_DT_BINS_QOLD (old path; the 256-bin FAST default is the recorded winner) deleted 2026-11-15 by lane/expdel2-01-base; code recoverable at b81caf7773.
+-# Restore: git apply experiments/removed/MOJOLEARN_DT_BINS_QOLD.patch
+-#: Audit (M3 0.8.34, taxi):
++#: QUALITY FIX (lane apple-fast-q-reg, 2026-10-04), FAST on every vendor;
++#: `-D MOJOLEARN_DT_BINS_QOLD` restores 128. Audit (M3 0.8.34, taxi):
+ #: decision-tree-reg r2 0.8626 vs scikit-learn 0.8915, bagging-reg 0.9188 vs
+ #: 0.9388, voting-reg 0.9192 vs 0.9246, stacking-reg 0.9197 vs 0.9325 (all
+ #: four fit DecisionTreeRegressor members; IDENTICAL has the same numbers, so
+@@ -812,7 +811,7 @@ def rf_device_finite_scan_binding() raises -> PythonObject:
+ #: ms (+1.1%); bagging-reg r2 0.9170 -> 0.9233 at 202.06 -> 187.32 ms (-7.3%);
+ #: voting/stacking/adaboost-reg errored in both arms (not measured). KEEP.
+ comptime RF_DT_DEFAULT_BINS = (
+-    256 if GLOBAL_NUMERIC_MODE == NUMERIC_FAST else 128
++    256 if GLOBAL_NUMERIC_MODE == NUMERIC_FAST and not is_defined["MOJOLEARN_DT_BINS_QOLD"]() else 128
+ )
+ 
+ 

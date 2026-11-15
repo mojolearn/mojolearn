@@ -772,6 +772,7 @@ Deletions reversed by new evidence. The code is back on main; the section and th
 | [`MOJOLEARN_SVGP_FAST_COLSPLIT_OFF`](#mojolearn_svgp_fast_colsplit_off-old-path-deleted-2026-11-15) | Neighbors (SVGP column phase solves, FAST Apple + IDENTICAL) | removed (old path; FAST+Apple default KEPT; IDENTICAL keeps MOJOLEARN_IDN_GATES_OFF) | 2026-11-15 | [MOJOLEARN_SVGP_FAST_COLSPLIT_OFF.patch](../experiments/removed/MOJOLEARN_SVGP_FAST_COLSPLIT_OFF.patch) |
 | [`MOJOLEARN_SVGP_FAST_BSPLIT_OFF`](#mojolearn_svgp_fast_bsplit_off-old-path-deleted-2026-11-15) | Neighbors (SVGP B and b row-slice partials, FAST Apple) | removed (old path; FAST+Apple default KEEP, rab19-svgpbsplit) | 2026-11-15 | [MOJOLEARN_SVGP_FAST_BSPLIT_OFF.patch](../experiments/removed/MOJOLEARN_SVGP_FAST_BSPLIT_OFF.patch) |
 | [`MOJOLEARN_ET_SCALAR_STAGE_COMPARE`](#mojolearn_et_scalar_stage_compare-unmeasured-arm-deleted-2026-11-15) | Trees (ExtraTrees batched level builder staging copy) | removed (unmeasured opt-in arm; AGENTS.md 2026-11-15) | 2026-11-15 | [MOJOLEARN_ET_SCALAR_STAGE_COMPARE.patch](../experiments/removed/MOJOLEARN_ET_SCALAR_STAGE_COMPARE.patch) |
+| [`MOJOLEARN_DT_BINS_QOLD`](#mojolearn_dt_bins_qold-old-path-deleted-2026-11-15) | Trees (DecisionTreeRegressor default n_bins, FAST) | removed (old path; FAST default 256 bins QUALITY-FIX KEPT, rab5-dtbins) | 2026-11-15 | [MOJOLEARN_DT_BINS_QOLD.patch](../experiments/removed/MOJOLEARN_DT_BINS_QOLD.patch) |
 
 ## Trees
 
@@ -6762,4 +6763,12 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md (section expdel-02-
 - **Verdict**: no A/B recorded for the opt-in arm (plan rule a); deleted under AGENTS.md "An unmeasured arm is deleted" (Andrew, 2026-11-15). The default (vector byte copies) is untouched. No bit change on any column.
 - **Deleted by**: lane/expdel2-01-base (expdel2-01-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `337c096a5b`.
 - **Restore**: `git apply experiments/removed/MOJOLEARN_ET_SCALAR_STAGE_COMPARE.patch`, then delete the `MOJOLEARN_ET_SCALAR_STAGE_COMPARE` refusal in `core/experiment_guards_trees.mojo`.
+- **Records**: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-01-base section).
+
+## MOJOLEARN_DT_BINS_QOLD: old path deleted (2026-11-15)
+
+- **What it was**: the rollback of `RF_DT_DEFAULT_BINS` (`bindings/_mojolearn_rf.mojo`, the quantile bin count a DecisionTreeRegressor fits with at n_bins=None) from 256 to 128 under FAST. Only the define read is deleted: FAST keeps 256, IDENTICAL keeps 128.
+- **Verdict**: QUALITY-FIX KEPT, FAST default (EXPERIMENTS.md `RF_DT_DEFAULT_BINS` row, rab5-dtbins, M3 one run per arm, taxi): decision-tree-reg r2 0.8626 -> 0.8792 at 52.79 -> 53.38 ms, bagging-reg r2 0.9170 -> 0.9233 at 202.06 -> 187.32 ms. No bit change on any column.
+- **Deleted by**: lane/expdel2-01-base (expdel2-01-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `b81caf7773`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_DT_BINS_QOLD.patch`, then delete the `MOJOLEARN_DT_BINS_QOLD` refusal in `core/experiment_guards_trees.mojo`.
 - **Records**: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-01-base section).

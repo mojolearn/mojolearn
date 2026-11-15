@@ -2547,3 +2547,4 @@ sections and patches). No bits change: each deleted arm was off by default.
 | define | algorithm / dataset | branch@sha | A/B tag | before -> after | verdict | reason |
 |---|---|---|---|---|---|---|
 | `MOJOLEARN_ET_SCALAR_STAGE_COMPARE` | extra-trees (staging copy) | lane/expdel2-01-base (recoverable at 337c096a5b) | - | - | DELETED 2026-11-15 (unmeasured arm) | unmeasured opt-in arm; `trees_stage_copy_policy` now always answers vector_bytes; patch experiments/removed/MOJOLEARN_ET_SCALAR_STAGE_COMPARE.patch; no bit change |
+| `MOJOLEARN_DT_BINS_QOLD` | decision-tree-reg, bagging-reg / taxi (FAST) | lane/expdel2-01-base (recoverable at b81caf7773) | rab5-dtbins | dt 52.79 -> 53.38, bagging 202.06 -> 187.32 | DELETED 2026-11-15 (old path) | old path of the QUALITY-FIX KEPT 256-bin FAST default; define read removed; patch experiments/removed/MOJOLEARN_DT_BINS_QOLD.patch; no bit change |

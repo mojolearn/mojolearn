@@ -94,6 +94,8 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_KSHAP_FAST_BATCH_OFF"](), "removed 2026-11-15 (lane/expdel-05-trees): MOJOLEARN_KSHAP_FAST_BATCH_OFF, the FAST Apple rollback of the batched kernel / permutation SHAP buffers, is removed: KSHAP_FAST_BATCH was KEPT (kap2-kshap-batch-istella 27,011 -> 15,325 ms, kap2-pshap-batch-istella 34,198 -> 28,236 ms, M3); every FAST Apple build batches; code at 073a9cc375; see docs/TOMBSTONES.md"
     # Restore: git apply experiments/removed/MOJOLEARN_ET_SCALAR_STAGE_COMPARE.patch
     comptime assert not is_defined["MOJOLEARN_ET_SCALAR_STAGE_COMPARE"](), "removed 2026-11-15 (lane/expdel2-01-base): MOJOLEARN_ET_SCALAR_STAGE_COMPARE (the ExtraTrees scalar staging-copy reference arm) is gone, no A/B was ever recorded; the vector byte copies are the only path; restore: experiments/removed/MOJOLEARN_ET_SCALAR_STAGE_COMPARE.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_DT_BINS_QOLD.patch
+    comptime assert not is_defined["MOJOLEARN_DT_BINS_QOLD"](), "removed 2026-11-15 (lane/expdel2-01-base): MOJOLEARN_DT_BINS_QOLD (rollback of the FAST DecisionTreeRegressor default to 128 quantile bins) is gone; RF_DT_DEFAULT_BINS is 256 under FAST, 128 otherwise (rab5-dtbins); restore: experiments/removed/MOJOLEARN_DT_BINS_QOLD.patch"
     return True
 
 
