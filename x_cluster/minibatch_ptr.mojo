@@ -85,11 +85,10 @@ comptime MBK_NONFINITE_MSG = "mojolearn: X contains NaN or infinity"
 #: and scan, ~150-200 ms); the device step loop (D7b) is a separate step.
 #: PROMOTED to the IDENTICAL default 2026-10-11 (lane/w2-decide-algos, same-box A/B on main c8ef6c66d,
 #: one run per arm, NV L40S / AMD MI325X, digests NV==AMD): minibatch-kmeans istella 0.309 (NV 0.195,
-#: AMD 0.423), taxi 0.555 (NV 0.421, AMD 0.690); same bits; runs v0107/a1689 vs A v0106/a1688. -D
-#: MOJOLEARN_IDN_MBK_RESIDENT_OFF restores the old path.
-comptime MBK_IDN_RESIDENT = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_IDN_MBK_RESIDENT_OFF"]()
-)
+#: AMD 0.423), taxi 0.555 (NV 0.421, AMD 0.690); same bits; runs v0107/a1689 vs A v0106/a1688.
+# TOMBSTONE: MOJOLEARN_IDN_MBK_RESIDENT_OFF (old path: the IDENTICAL copying MiniBatchKMeans fit; EXP:2050 KEEP, promoted 2026-10-11 on NVIDIA and AMD) deleted 2026-11-15 by lane/expdel2-15-cluster; code recoverable at ddca540bed.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_MBK_RESIDENT_OFF.patch; record in docs/TOMBSTONES.md.
+comptime MBK_IDN_RESIDENT = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 #: the binding scans X on the device (Python skips its host scan)
 comptime MBK_DEVSCAN_ANY = MBK_FAST_DEVSCAN or MBK_IDN_RESIDENT
 
