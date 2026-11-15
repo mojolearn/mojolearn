@@ -21,7 +21,7 @@ from training.optimizer_public_common import OptHyper
 from bindings.native_loaded_module_door import native_loaded_module, NativeModules
 from bindings.p3_samba_caps_door import samba_caps, SAMBA_CAP_RESIDENT_ABI, SAMBA_CAP_RESIDENT_ON, SAMBA_CAP_ACCUMULATED, SAMBA_CAP_CHUNKED
 from std.memory import unsafe_memcpy
-from std.os import getenv
+from training.optimizer_public_common import OPTIMIZER_RESIDENT
 from bindings.generation_buffers_door import generation_initialize_binding, generation_array
 from bindings.generator_state_native_pack import generator_next
 from bindings.samba_state_native_door import samba_fields, samba_entries, samba_schedule_snapshot, samba_schedule_rate, samba_moment_view, samba_entry_key, samba_primitive
@@ -62,7 +62,8 @@ def _samba_open_optimizer(opt: PythonObject, mut record: OptimizerOwner, entries
     if opt["_resident_wanted"] is PythonObject(False):
         return
     var driver = optimizer_driver(provider)
-    var enabled = not driver.host and getenv("MOJOLEARN_OPTIMIZER_RESIDENT", "1") != "0" and device_plan.setting == "1"
+    # OPTIMIZER_RESIDENT: build constant (was an environment read per open).
+    var enabled = not driver.host and OPTIMIZER_RESIDENT and device_plan.setting == "1"
     if not enabled:
         py_setitem(opt, "_resident_wanted", False)
         return
