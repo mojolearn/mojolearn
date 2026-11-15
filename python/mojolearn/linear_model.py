@@ -18,9 +18,8 @@ import numbers
 from . import _portable_math as math
 
 from . import _backend, _mojolearn_estimators
-from ._array import Array
 from ._buffer import (
-    addr, addr_ro, view, zeros,
+    addr, addr_ro, zeros,
 )
 from . import _native_archive_bridge, _native_classical_bridge
 from ._mode import NumericModeMixin, sklearn_tags as _sklearn_tags
@@ -48,62 +47,10 @@ _ARCHIVE, _ARCHIVE_CONTEXT = _native_archive_bridge.connect()
 # ---------------------------------------------------------------------------
 
 
-# `_shape_of` is the conversion layer's `shape_of` (lane migrate-shared-labels):
-# reading an argument's shape is argument checking, the shell's job.
-from ._buffer import shape_of as _shape_of  # noqa: E402
-
-
-# The `classes_` ORDER RULE and the label <-> code maps live in
-# `_labels.py` (DEVIATION 2340): `sorted_classes`, `decode_labels`. Every
-# classifier in the package orders `classes_` through that one spelling;
-# DEVIATION 2364 is this file's adoption of it (a Python list, int64 /
-# float64 Arrays out of `predict` for int / float labels, a list otherwise).
-
-
-def _flatten(obj):
-    """Every leaf of a nested list/tuple (or anything with `tolist()`) as
-    one flat Python list; a scalar is a one-element list."""
-    # read once natively (bindings/user_objects_native_door.mojo flatten)
-    from . import _user_objects
-    return _user_objects.call("flatten", obj)
-
-
-#: struct-format codes of the integer buffer types.
-_INT_FORMATS = frozenset("bBhHiIlLqQnN")
-
-
-def _buffer_format(obj):
-    """The struct format code of a buffer-protocol object, byte-order prefix
-    stripped; None when `obj` exports no buffer (a list, a scalar)."""
-    if isinstance(obj, Array):
-        return {"<f4": "f", "<f8": "d", "<i4": "i", "<i8": "q", "<u4": "I",
-                "<u1": "B", "<f2": "e"}.get(obj.dtype)
-    try:
-        with view(obj) as buf:
-            return buf.format.lstrip("<>=@!|")
-    except TypeError:
-        return None
-
-
-def _is_integer_labels(y):
-    """`np.issubdtype(y.dtype, np.integer)`: True for a buffer whose format
-    is an integer code (bools are NOT integers here, as in NumPy), or a
-    list/tuple whose every leaf is a Python int (bools excluded)."""
-    fmt = _buffer_format(y)
-    if fmt is not None:
-        return fmt in _INT_FORMATS
-    from . import _user_objects
-    leaves = _flatten(y)
-    return bool(leaves) and _user_objects.kinds(leaves)[_user_objects.KIND_EXACT_INT] == len(leaves)
-
-
-def _dtype_name(y):
-    """What to print for `y`'s dtype in a refusal: the buffer format code
-    when it has one, the Python type name otherwise."""
-    fmt = _buffer_format(y)
-    if fmt is not None:
-        return f"buffer format {fmt!r}"
-    return f"type {type(y).__name__}"
+# TOMBSTONE: linear_model `_shape_of` re-export, `_flatten`, `_INT_FORMATS`, `_buffer_format`, `_is_integer_labels`
+# and `_dtype_name` (no product caller: neighbors.py imported them unused since lane py-neighbors; their last caller,
+# the frozen oracle tests/_legacy_neighbors_knn.py, carries its own copies) deleted 2026-11-15 by lane py-dedupe;
+# code recoverable at 6906a59111.
 
 
 # TOMBSTONE: `_r2_sums` (the Python `_Reg` / `_r2_sums_of` R^2 program; no product caller, its native owners

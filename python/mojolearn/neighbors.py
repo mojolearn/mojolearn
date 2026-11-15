@@ -18,7 +18,6 @@ from . import _mojolearn, _native_archive_bridge, _native_family_bridge
 from ._mode import NumericModeMixin
 from ._native_neighbor_queries import native_method as _native_query_method
 from ._mode import ClassifierScoreMixin, RegressorScoreMixin
-from .linear_model import _dtype_name, _is_integer_labels, _shape_of
 
 #: the x_neighbors binding, which holds the p2m_* ops the data loops below
 #: run through (lane apple-fast-py2mojo-neighbors)

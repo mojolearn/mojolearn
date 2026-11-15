@@ -6,8 +6,41 @@ independent test oracle for their one-call native doors
 `self` and runs the former statements in the former order."""
 from mojolearn._buffer import addr, addr_ro, as_f32_c, as_f32_dense_c, as_i64_c, empty
 from mojolearn._labels import decode_labels, encode_labels
-from mojolearn.linear_model import _dtype_name, _is_integer_labels, _shape_of
+from mojolearn._array import Array
+from mojolearn._buffer import shape_of as _shape_of, view
 from mojolearn.neighbors import _XN
+
+
+# Frozen copies of the former linear_model label helpers (deleted from the
+# product by lane py-dedupe, 2026-11-15: this oracle was their last caller).
+_INT_FORMATS = frozenset("bBhHiIlLqQnN")
+
+
+def _buffer_format(obj):
+    if isinstance(obj, Array):
+        return {"<f4": "f", "<f8": "d", "<i4": "i", "<i8": "q", "<u4": "I",
+                "<u1": "B", "<f2": "e"}.get(obj.dtype)
+    try:
+        with view(obj) as buf:
+            return buf.format.lstrip("<>=@!|")
+    except TypeError:
+        return None
+
+
+def _is_integer_labels(y):
+    fmt = _buffer_format(y)
+    if fmt is not None:
+        return fmt in _INT_FORMATS
+    from mojolearn import _user_objects
+    leaves = _user_objects.call("flatten", y)
+    return bool(leaves) and _user_objects.kinds(leaves)[_user_objects.KIND_EXACT_INT] == len(leaves)
+
+
+def _dtype_name(y):
+    fmt = _buffer_format(y)
+    if fmt is not None:
+        return f"buffer format {fmt!r}"
+    return f"type {type(y).__name__}"
 
 
 # Frozen copies of the former Python metric and weights resolution
