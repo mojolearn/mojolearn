@@ -8821,10 +8821,9 @@ def fused_bwd_zdot_estash_amma_kernel[HD: Int, SWZ: Bool = False](
         # reaches only once its fold is done. The next staging writes `vb`
         # and `emin`, which the fold never reads and whose last readers
         # passed the barrier above. So warps 1-7 stage the next key block
-        # while warp 0 folds. `-D MOJOLEARN_ATTN_ZDOT_AMMA_FOLD_BARRIER`
-        # restores the barrier. Synchronization only: no operand or order moves.
-        comptime if is_defined["MOJOLEARN_ATTN_ZDOT_AMMA_FOLD_BARRIER"]():
-            barrier()
+        # while warp 0 folds. Synchronization only: no operand or order moves.
+        # TOMBSTONE: MOJOLEARN_ATTN_ZDOT_AMMA_FOLD_BARRIER (unmeasured Apple opt-in arm) deleted 2026-11-15 by lane/expdel2-34-neural; code recoverable at 1de034c06f.
+        # Restore: git apply experiments/removed/MOJOLEARN_ATTN_ZDOT_AMMA_FOLD_BARRIER.patch
     if tid < TQ and t0 + tid < l:
         var t = t0 + tid
         var rr = _row_range(t, pos0, key_lo, window, s)
