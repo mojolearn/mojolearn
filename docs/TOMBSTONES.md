@@ -650,6 +650,7 @@ in the tables after the sections.
 | [`MOJOLEARN_KSHAP_FAST_BATCH_OFF`](#mojolearn_kshap_fast_batch_off) | Trees (GBDT, Apple FAST) | removed (old path; KSHAP_FAST_BATCH KEPT) | 2026-11-15 | [MOJOLEARN_KSHAP_FAST_BATCH_OFF.patch](../experiments/removed/MOJOLEARN_KSHAP_FAST_BATCH_OFF.patch) |
 | [`MOJOLEARN_ARD_FAST_CLS1_PARTS_OFF`](#mojolearn_ard_fast_cls1_parts_off-old-path-deleted-2026-11-15) | Linear (ARD row-block partials, FAST Apple) | removed (old path; FAST+Apple default KEPT, gapcls1-ardparts-taxi) | 2026-11-15 | [MOJOLEARN_ARD_FAST_CLS1_PARTS_OFF.patch](../experiments/removed/MOJOLEARN_ARD_FAST_CLS1_PARTS_OFF.patch) |
 | [`MOJOLEARN_ARD_FAST_CLS1_BATCH_OFF`](#mojolearn_ard_fast_cls1_batch_off-old-path-deleted-2026-11-15) | Linear (ARD batched witness checks, FAST Apple) | removed (old path; FAST+Apple default KEPT, gapcls1-ardall-taxi) | 2026-11-15 | [MOJOLEARN_ARD_FAST_CLS1_BATCH_OFF.patch](../experiments/removed/MOJOLEARN_ARD_FAST_CLS1_BATCH_OFF.patch) |
+| [`MOJOLEARN_BAYES_FAST_CLS1_PARTS_OFF`](#mojolearn_bayes_fast_cls1_parts_off-old-path-deleted-2026-11-15) | Linear (BayesianRidge row-block partials, FAST Apple) | removed (old path; FAST+Apple default KEPT, gapcls1-brparts-taxi) | 2026-11-15 | [MOJOLEARN_BAYES_FAST_CLS1_PARTS_OFF.patch](../experiments/removed/MOJOLEARN_BAYES_FAST_CLS1_PARTS_OFF.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -6319,4 +6320,12 @@ bits change on any vendor or the host column, no board row needs re-timing.
 - **Verdict**: KEPT 9decae29f (EXPERIMENTS.md `ARD_FAST_CLS1_BATCH + ARD_FAST_CLS1_PARTS + ARD_FAST_CLS1_STATS`, gapcls1-ardall-taxi): M3 one run per arm, ard taxi 14.4 -> 8.3 ms with the three switches, board FAST value equals the B arm (8.3). Measured as the bundle; no own row for BATCH alone. No bit change on any column.
 - **Deleted by**: lane/expdel-03-linear (expdel-03-linear, docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md); code recoverable at `d30f8b724f`.
 - **Restore**: `git apply experiments/removed/MOJOLEARN_ARD_FAST_CLS1_BATCH_OFF.patch`, then delete the `MOJOLEARN_ARD_FAST_CLS1_BATCH_OFF` refusal in `core/experiment_guards_linear.mojo`.
+- **Records**: refusal in `core/experiment_guards_linear.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel-03-linear section).
+
+## MOJOLEARN_BAYES_FAST_CLS1_PARTS_OFF: old path deleted (2026-11-15)
+
+- **What it was**: the FAST+Apple rollback of BayesianRidge's target sum, target variance and squared-residual partials from a whole block per row block (`c1_*_parts_kernel`) to one thread walking FOLD_BLOCK rows. Only the `and not is_defined` term of `BAYES_CLS1_PARTS` (x_linear/cls1_fast.mojo) is gone; the one-thread partials stay the path of every non-FAST-Apple build (x_linear/device.mojo).
+- **Verdict**: KEPT 9decae29f (EXPERIMENTS.md `BAYES_FAST_CLS1_PARTS`, gapcls1-brparts-taxi): M3 one run per arm, bayesian-ridge taxi -3% alone (102 -> 15.3 ms with the three BAYES switches), board FAST value equals the B arm. No bit change on any column.
+- **Deleted by**: lane/expdel-03-linear (expdel-03-linear, docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md); code recoverable at `3cadf0f84b`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_BAYES_FAST_CLS1_PARTS_OFF.patch`, then delete the `MOJOLEARN_BAYES_FAST_CLS1_PARTS_OFF` refusal in `core/experiment_guards_linear.mojo`.
 - **Records**: refusal in `core/experiment_guards_linear.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel-03-linear section).
