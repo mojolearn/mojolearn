@@ -42,6 +42,7 @@ generic transpose + OPS_LINEAR ops instead (lane x2's form), for the box
 comparison mlp-train-step / mlp-predict.
 """
 from max.gpu import block_dim, block_idx, thread_idx
+from std.sys.compile import is_defined
 from max.gpu.host import DeviceBuffer, DeviceContext
 from sequence.ops import FP
 from sequence.exec_device import DeviceExec
@@ -78,7 +79,8 @@ comptime SMALL_MLP_TAG = 116
 # vendors (no bits change: at leaf 128 the profile's partition is the
 # contract's, contract_leaf_size). So the choice is keyed on the MODEL KIND
 # (this op's GEMMs are the small MLP's and nobody else's), never on a
-# dimension. Any build-wide neural GEMM arm (gemm_leaf=neural128|neural256,
+# dimension. -D MOJOLEARN_IDN_MLP_GEMM_LEAF128_OFF restores the incumbent
+# dispatch here. Any build-wide neural GEMM arm (gemm_leaf=neural128|neural256,
 # a schedule, chains, Ozaki) routes the op through identical_gemm_into like
 # every other caller, so the grid's gemm_leaf arms keep their meaning.
 # (Comment and condition carried from training/mlp_ops.mojo MLP_GEMM_LEAF128
@@ -87,9 +89,11 @@ comptime SMALL_MLP_TAG = 116
 # the rollback itself) deleted 2026-11-15 by lane/expdel2-24-neural; code recoverable at 530116e4ff. The leaf-128 profile
 # body (the measured winner) is untouched.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_MLP_GEMM_LEAF128_OFF.patch
+# RESTORED 2026-11-15 by lane/expdel2-restore-owed: owed B arm (owed-pre0867.json), under four weeks old; the deletion was premature.
 comptime SMALL_MLP_GEMM_LEAF128 = (
     NEURAL_EXPERIMENTS_ALLOWED
     and not NEURAL_GEMM_EXPERIMENT_ENABLED
+    and not is_defined["MOJOLEARN_IDN_MLP_GEMM_LEAF128_OFF"]()
 )
 
 comptime _P = MutPointer[Float32, MutAnyOrigin]

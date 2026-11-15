@@ -584,8 +584,7 @@ def _check_configuration() -> Bool:
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_BWD_ENTRY_ALIAS_OFF.patch
     comptime assert not is_defined["MOJOLEARN_IDN_BWD_ENTRY_ALIAS_OFF"](), "removed 2026-11-15 (lane/expdel2-24-neural): IDN_BWD_ENTRY_ALIAS_OFF (old path, Neural (decoder-layer backward entry copy); no A/B recorded) is gone; the default is kept; code recoverable at 3d189418c5; restore: experiments/removed/MOJOLEARN_IDN_BWD_ENTRY_ALIAS_OFF.patch"
     # MOJOLEARN_IDN_MAMBA_BACKWARD_GENERIC: refusal removed 2026-11-15 (restored; owed B arm, see docs/TOMBSTONES.md Restored table)
-    # Restore: git apply experiments/removed/MOJOLEARN_IDN_MLP_GEMM_LEAF128_OFF.patch
-    comptime assert not is_defined["MOJOLEARN_IDN_MLP_GEMM_LEAF128_OFF"](), "removed 2026-11-15 (lane/expdel2-24-neural): IDN_MLP_GEMM_LEAF128_OFF (old path, Neural (small MLP step GEMMs); no A/B recorded) is gone; the default is kept; code recoverable at 530116e4ff; restore: experiments/removed/MOJOLEARN_IDN_MLP_GEMM_LEAF128_OFF.patch"
+    # MOJOLEARN_IDN_MLP_GEMM_LEAF128_OFF: refusal removed 2026-11-15 (restored; owed B arm, see docs/TOMBSTONES.md Restored table)
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_ROW_COOP_OFF.patch
     comptime assert not is_defined["MOJOLEARN_IDN_ROW_COOP_OFF"](), "removed 2026-11-15 (lane/expdel2-24-neural): IDN_ROW_COOP_OFF (old path, Neural (autograd softmax-family rows); no A/B recorded) is gone; the default is kept; code recoverable at 5d81d356e0; restore: experiments/removed/MOJOLEARN_IDN_ROW_COOP_OFF.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_SEQ_TILED_PREDICT.patch

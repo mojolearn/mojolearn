@@ -167,6 +167,31 @@
         "ab": "B arm = legacy rule on, A arm = main; time neighboring shapes and one non-board dataset; delete the code once recorded",
         "reason": "exact k==768 AMD short-k rule (dimension targeting)"
       }
+    },
+    "mlp_gemm_leaf128": {
+      "define": "MOJOLEARN_IDN_MLP_GEMM_LEAF128_OFF",
+      "kind": "switch",
+      "arms": {
+        "on": [],
+        "off": [
+          "MOJOLEARN_IDN_MLP_GEMM_LEAF128_OFF"
+        ]
+      },
+      "default": "on",
+      "source": [
+        "autograd/small_mlp_op.mojo",
+        "autograd/small_mlp_host.mojo",
+        "gemm/neural_dispatch.mojo"
+      ],
+      "binding": [
+        "_mojolearn_x_sequence",
+        "_mojolearn_x_sequence_host"
+      ],
+      "bits_change": false,
+      "status": "promoted:ge123e6f9 (split from gemm_leaf=neural128); restored 2026-11-09 (lane r1-restore-measured-winners): the op small_mlp (autograd/small_mlp_op.mojo) takes neural_model_leaf_into[128] again, -D MOJOLEARN_IDN_MLP_GEMM_LEAF128_OFF its incumbent arm",
+      "board": "mlp-train-step",
+      "tags": [],
+      "note": "lane grid-act-5 (2026-10-08): the MLP training step's GEMMs (training/mlp_ops.mojo _gemm) take the NN03 neural profile body at leaf 128 (gemm.neural_dispatch.neural_model_leaf_into), keyed on the model kind, never a dimension; grid ge123e6f9 mlp-train-step NV 2.0->1.7 / AMD 3.5->3.1 ms (0.886x), hashes equal to the incumbent on both vendors. Off arm = the incumbent dispatch. Inert (the build-wide dispatch decides) under any neural GEMM experiment arm; _OFF with gemm_leaf=neural128|neural256 is refused by the guard."
     }
   },
   "algorithms": {
@@ -189,6 +214,15 @@
         ]
       ],
       "note": "Only gemm_contract_leaf=all256 and neural_gemm_schedule=stream_all reach this lane (plus neural-small.json controls)."
+    },
+    "neural:mlp-train-step": {
+      "binding": "_mojolearn_training",
+      "route": "training binding -> training.mlp_ops _gemm (forward/dInput ROLE_PROJECTION, dW ROLE_WGRAD) -> neural_dispatch.neural_model_leaf_into[128] (mlp_gemm_leaf128 default) | identical_gemm_into (_OFF or any neural GEMM arm)",
+      "controls": [
+        "mlp_gemm_leaf128"
+      ],
+      "interaction_groups": [],
+      "notes": "Only neural_gemm_schedule=stream neural_gemm_schedule=pages neural_gemm_schedule=fold_exact neural_gemm_schedule=threadmap train_scratch=1 reach this lane."
     }
   },
   "removed": [
@@ -408,11 +442,6 @@
       "define": "MOJOLEARN_NI07_GROUPED_PROJECTIONS",
       "control": "grouped_projections_v2",
       "reason": "DELETED 2026-11-15 (lane/expdel2-25-neural; recoverable at e862759b5c; patch experiments/removed/MOJOLEARN_NI07_GROUPED_PROJECTIONS.patch): no record: no A/B recorded for the opt-in arm (plan rule a); V2"
-    },
-    {
-      "define": "MOJOLEARN_IDN_MLP_GEMM_LEAF128_OFF",
-      "control": "mlp_gemm_leaf128",
-      "reason": "DELETED 2026-11-15 (lane/expdel2-24-neural, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md; recoverable at 530116e4ff; patch experiments/removed/MOJOLEARN_IDN_MLP_GEMM_LEAF128_OFF.patch): the rollback to the incumbent dispatch beside the measured leaf-128 default (EXP:2373 KEPT); no bit change. Refused in core/experiment_guards_neural.mojo; docs/TOMBSTONES.md."
     },
     {
       "define": "MOJOLEARN_NN21_SCALE_MASK",

@@ -2162,6 +2162,7 @@ Deletions reversed by new evidence. The code is back on main; the section and th
 | [`MOJOLEARN_TRAIN_LIVE_STATUS`](#mojolearn_train_live_status-unmeasured-arm-deleted-2026-11-15) | Neural (byte LM train step live-status candidate, I10) | 2026-11-15 (`c38a3b0613`) | 2026-11-15 (lane/expdel2-restore-owed) | opt-in B arm, default unchanged, A/B owed at the wave sha (I10 L40S scoped win live/base 0.960 in training/byte_lm.mojo) | [MOJOLEARN_TRAIN_LIVE_STATUS.patch](../experiments/removed/MOJOLEARN_TRAIN_LIVE_STATUS.patch) |
 | [`MOJOLEARN_IDN_MAMBA12_FORWARD_COPIES_OLD`](#mojolearn_idn_mamba12_forward_copies_old) | Neural (Mamba-1/2 per-call forward plumbing) | 2026-11-15 (`ddf9b022e1`) | 2026-11-15 (lane/expdel2-restore-owed) | opt-in B arm, default unchanged, A/B owed at the wave sha | [MOJOLEARN_IDN_MAMBA12_FORWARD_COPIES_OLD.patch](../experiments/removed/MOJOLEARN_IDN_MAMBA12_FORWARD_COPIES_OLD.patch) |
 | [`MOJOLEARN_TRANSFORMER_DECODE_PER_TOKEN_ADMISSION`](#mojolearn_transformer_decode_per_token_admission) | Neural (TransformerDecodeSession step) | 2026-11-15 (`b891c32944`) | 2026-11-15 (lane/expdel2-restore-owed) | opt-in B arm, default unchanged, A/B owed at the wave sha | [MOJOLEARN_TRANSFORMER_DECODE_PER_TOKEN_ADMISSION.patch](../experiments/removed/MOJOLEARN_TRANSFORMER_DECODE_PER_TOKEN_ADMISSION.patch) |
+| [`MOJOLEARN_IDN_MLP_GEMM_LEAF128_OFF`](#mojolearn_idn_mlp_gemm_leaf128_off) | Neural (small MLP step GEMMs) | 2026-11-15 (`1acdb0bcd1`) | 2026-11-15 (lane/expdel2-restore-owed) | opt-in B arm, default unchanged, A/B owed at the wave sha | [MOJOLEARN_IDN_MLP_GEMM_LEAF128_OFF.patch](../experiments/removed/MOJOLEARN_IDN_MLP_GEMM_LEAF128_OFF.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -15478,6 +15479,7 @@ Restored 2026-11-15 (lane/expdel2-restore-owed): owed B arm, deletion premature;
 - Deleted by: lane/expdel2-24-neural `1acdb0bcd1` (2026-11-15); code recoverable at `530116e4ff`.
 - Restore: `git apply experiments/removed/MOJOLEARN_IDN_MLP_GEMM_LEAF128_OFF.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
 - Records: refusal in `core/experiment_guards_neural.mojo`; entry `mlp_gemm_leaf128` in `grid_controls/neural-gemm-attn-dedupe.json` moved to `removed`; `docs/apple-fast/EXPERIMENTS.md` row (expdel2-24-neural section).
+Restored 2026-11-15 (lane/expdel2-restore-owed): owed B arm, deletion premature; see Restored table.
 
 ### MOJOLEARN_IDN_ROW_COOP_OFF
 
