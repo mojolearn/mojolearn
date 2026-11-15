@@ -310,12 +310,9 @@ comptime IDN_ORD_ONE_STEP_DEVICE = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 #: in `d_ss` and the snap (`enqueue_snap_plane_dev`), the histogram kernels
 #: (`compute_hist2_dev`) and the score kernels (`find_optimal_split_dev`)
 #: read them as device words; only a traced run reads them back.
-#: `-D MOJOLEARN_IDN_ORD_STD_SCALE_DEVICE_OFF` (or the master `-D
-#: MOJOLEARN_IDN_ALL_OFF`) restores the host arithmetic.
-comptime IDN_ORD_STD_SCALE_DEVICE = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not is_defined["MOJOLEARN_IDN_ORD_STD_SCALE_DEVICE_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_IDN_ORD_STD_SCALE_DEVICE_OFF (DELETE-OLD-PATH, no A/B recorded for the old path, rule b) deleted 2026-11-15 by lane/expdel2-44-trees; code recoverable at fce840609d.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ORD_STD_SCALE_DEVICE_OFF.patch; record in docs/TOMBSTONES.md.
+comptime IDN_ORD_STD_SCALE_DEVICE = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 
 
 def _ord_std_scale_kernel(
