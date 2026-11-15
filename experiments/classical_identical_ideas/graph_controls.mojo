@@ -137,7 +137,7 @@ comptime XCLUSTER_ROW_ASSIGN_ROWS = 0
 # (Sweep 2026-11-15: comptime C43_RESIDENT_NORMALIZATION removed; nothing read it.)
 # TOMBSTONE: MOJOLEARN_C44_SAMPLING_DESCRIPTORS (unmeasured arm) deleted 2026-11-15 by lane/expdel2-05-base; code recoverable at 4fdc7dda1a.
 # Restore: git apply experiments/removed/MOJOLEARN_C44_SAMPLING_DESCRIPTORS.patch; record in docs/TOMBSTONES.md.
-comptime C44_SAMPLING_DESCRIPTORS = False
+# (Sweep 2026-11-15: comptime C44_SAMPLING_DESCRIPTORS removed; nothing read it.)
 # C61 (lane classical-misc, 2026-10-07): HDBSCAN sparse mutual-reachability
 # Boruvka search, tiled kernel (NVIDIA/AMD default): skip a j tile whose points
 # all lie in the block's single component. Those cells are excluded anyway, so
