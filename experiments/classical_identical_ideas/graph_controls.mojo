@@ -134,7 +134,7 @@ comptime XCLUSTER_ROW_ASSIGN_ROWS = 0
 # (Sweep 2026-11-15: comptime C42_ACTIVE_TRIANGLE removed; nothing read it.)
 # TOMBSTONE: MOJOLEARN_C43_RESIDENT_NORMALIZATION (unmeasured arm) deleted 2026-11-15 by lane/expdel2-05-base; code recoverable at a4aa6b55b6.
 # Restore: git apply experiments/removed/MOJOLEARN_C43_RESIDENT_NORMALIZATION.patch; record in docs/TOMBSTONES.md.
-comptime C43_RESIDENT_NORMALIZATION = False
+# (Sweep 2026-11-15: comptime C43_RESIDENT_NORMALIZATION removed; nothing read it.)
 # TOMBSTONE: MOJOLEARN_C44_SAMPLING_DESCRIPTORS (unmeasured arm) deleted 2026-11-15 by lane/expdel2-05-base; code recoverable at 4fdc7dda1a.
 # Restore: git apply experiments/removed/MOJOLEARN_C44_SAMPLING_DESCRIPTORS.patch; record in docs/TOMBSTONES.md.
 comptime C44_SAMPLING_DESCRIPTORS = False
