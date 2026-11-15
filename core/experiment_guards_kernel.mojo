@@ -87,8 +87,7 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_LEGACY_NARROW_KDE_DIMTILE"](), "removed 2026-11-15 (lane/expdel2-19-kernel): LEGACY_NARROW_KDE_DIMTILE (old path) is gone; the default is kept; code at 531563873b; restore: experiments/removed/MOJOLEARN_LEGACY_NARROW_KDE_DIMTILE.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_KDE_DIMTILE_OFF.patch
     comptime assert not is_defined["MOJOLEARN_KDE_DIMTILE_OFF"](), "removed 2026-11-15 (lane/expdel2-19-kernel): KDE_DIMTILE_OFF (old path) is gone; the default is kept; code at 82d4e4de40; restore: experiments/removed/MOJOLEARN_KDE_DIMTILE_OFF.patch"
-    # Restore: git apply experiments/removed/MOJOLEARN_IDN_KDE_QTILE_FORCE.patch
-    comptime assert not is_defined["MOJOLEARN_IDN_KDE_QTILE_FORCE"](), "removed 2026-11-15 (lane/expdel2-19-kernel): IDN_KDE_QTILE_FORCE (opt-in arm) is gone; the default path is the only one; code at 0ba472a9c7; restore: experiments/removed/MOJOLEARN_IDN_KDE_QTILE_FORCE.patch"
+    # MOJOLEARN_IDN_KDE_QTILE_FORCE: refusal removed 2026-11-15 (restored; owed B arm, see docs/TOMBSTONES.md Restored table)
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_KDE_QTILE_OFF.patch
     comptime assert not is_defined["MOJOLEARN_IDN_KDE_QTILE_OFF"](), "removed 2026-11-15 (lane/expdel2-19-kernel): IDN_KDE_QTILE_OFF (old path) is gone; the default is kept; code at 4bf6c39024; restore: experiments/removed/MOJOLEARN_IDN_KDE_QTILE_OFF.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_KDE_CHUNK_LSE_OFF.patch
