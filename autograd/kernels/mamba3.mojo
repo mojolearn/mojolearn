@@ -28,15 +28,16 @@ from autograd.kernels.mamba_bwd_folds import (
     mamba_bwd_rowdot_tree_kernel,
     MAMBA_BWD_FOLD_TPB,
 )
-comptime M3_S16_V_SHARED = not is_defined["MOJOLEARN_MAMBA3_S16_V_NAIVE"]()
+comptime M3_S16_V_SHARED = True
 """lane/neural-apple2 (2026-09-28): the S16 d_v half runs one block per
 (row, head) with the q . k dot of each later row computed ONCE into shared
 memory (`mamba3_s16_v_shared_kernel`) instead of once per value column p (64
 times), and the d_q / d_k half alone in `mamba3_s16_qk_backward_kernel`. Every
 dot keeps its operands and its n-ascending order, every d_v chain its
 operands and its i-ascending order: the naive kernel's bits.
-`-D MOJOLEARN_MAMBA3_S16_V_NAIVE` runs the naive kernel (the host restatement
-always does)."""
+The host restatement runs the naive kernel."""
+# TOMBSTONE: MOJOLEARN_MAMBA3_S16_V_NAIVE (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-23-neural; code recoverable at b720d9dbfb.
+# Restore: git apply experiments/removed/MOJOLEARN_MAMBA3_S16_V_NAIVE.patch; record in docs/TOMBSTONES.md.
 comptime M3_S17_TAIL_SHARED = not is_defined["MOJOLEARN_MAMBA3_S17_TAIL_NAIVE"]()
 """lane/neural-apple2 (2026-09-28): the S17 operands kernel's chunk-end
 `add` chain (qs x 64 x 128 + 64 x 128 serial steps on ONE thread per chunk
