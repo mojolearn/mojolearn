@@ -124,7 +124,9 @@ comptime T23 = False
 comptime T24 = False
 
 # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
-comptime T26 = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_TREES_T26"]()
+# TOMBSTONE: MOJOLEARN_TREES_T26 (DELETE-ARM, opt-in, no A/B recorded, rule a) deleted 2026-11-15 by lane/expdel2-45-trees; code recoverable at 0242b4a432.
+# Restore: git apply experiments/removed/MOJOLEARN_TREES_T26.patch
+comptime T26 = False
 # TOMBSTONE: MOJOLEARN_TREES_T29_YETI (dead code) deleted 2026-10-07 by d631a057c; code recoverable at d631a057c^.
 # Restore: git apply experiments/removed/MOJOLEARN_TREES_T29_YETI.patch; record in docs/TOMBSTONES.md.
 
