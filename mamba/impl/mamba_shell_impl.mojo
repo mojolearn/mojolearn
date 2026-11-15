@@ -142,12 +142,14 @@ def _m3_upload_addr[wait: Bool = True](ctx: DeviceContext, addr: Int, n: Int) ra
         var dev = mamba_device_alloc(ctx, count)
         # DeviceContext accepts ordinary host pointers; the Python frame
         # retains each NumPy array until the synchronized copy completes.
-        comptime if not is_defined["MOJOLEARN_MAMBA3_LEGACY_CALLER_TRANSFER"]():
-            if n > 0:
-                mamba_copy_in(ctx, dev, src, count)
-                comptime if wait:
-                    ctx.synchronize()
-                return dev^
+        # TOMBSTONE: MOJOLEARN_MAMBA3_LEGACY_CALLER_TRANSFER (unmeasured old path: staging through a host buffer instead of the caller's array) deleted 2026-11-15 by lane/expdel2-27-neural; code recoverable at d57cf5cdab.
+        # Restore: git apply experiments/removed/MOJOLEARN_MAMBA3_LEGACY_CALLER_TRANSFER.patch
+        if n > 0:
+            mamba_copy_in(ctx, dev, src, count)
+            comptime if wait:
+                ctx.synchronize()
+            return dev^
+        # n == 0: one +0.0 word staged through a host buffer.
         var host = ctx.enqueue_create_host_buffer[DType.float32](count)
         ctx.synchronize()
         if n > 0:
@@ -168,26 +170,15 @@ def _m3_download_addr[wait: Bool = True](ctx: DeviceContext, mut buf: DeviceBuff
         _m3_write_f32(addr, m3_download(ctx, buf, n))
     else:
         var dst = _f32_ptr(addr)
-        comptime if not is_defined["MOJOLEARN_MAMBA3_LEGACY_CALLER_TRANSFER"]():
-            if n == len(buf):
-                ctx.enqueue_copy(dst_ptr=dst, src_buf=buf)
-            else:
-                var direct_view = buf.create_sub_buffer[DType.float32](0, n)
-                ctx.enqueue_copy(dst_ptr=dst, src_buf=direct_view)
-            comptime if wait:
-                ctx.synchronize()
-            return
-        var host = ctx.enqueue_create_host_buffer[DType.float32](n)
-        ctx.synchronize()
+        # TOMBSTONE: MOJOLEARN_MAMBA3_LEGACY_CALLER_TRANSFER (unmeasured old path: staging through a host buffer instead of the caller's array) deleted 2026-11-15 by lane/expdel2-27-neural; code recoverable at d57cf5cdab.
+        # Restore: git apply experiments/removed/MOJOLEARN_MAMBA3_LEGACY_CALLER_TRANSFER.patch
         if n == len(buf):
-            ctx.enqueue_copy(dst_ptr=host.unsafe_ptr(), src_buf=buf)
+            ctx.enqueue_copy(dst_ptr=dst, src_buf=buf)
         else:
-            var view = buf.create_sub_buffer[DType.float32](0, n)
-            ctx.enqueue_copy(dst_ptr=host.unsafe_ptr(), src_buf=view)
-        ctx.synchronize()
-        if n > 0:
-            unsafe_memcpy(dest=dst, src=host.unsafe_ptr(), count=n)
-        _ = host^
+            var direct_view = buf.create_sub_buffer[DType.float32](0, n)
+            ctx.enqueue_copy(dst_ptr=dst, src_buf=direct_view)
+        comptime if wait:
+            ctx.synchronize()
 
 
 
