@@ -514,7 +514,6 @@ from decomposition.mean_switch import IDN_DECOMP_MEAN_LAUNCH
 
 from core.host_tile_fold import IDN_XTY_TILED, XTY_TILE_ROWS, xty_tiles
 from core.xtdz_coalesced import XTY_TILE_TPB, xty_tile_fold_kernel
-from experiments.classical_identical_ideas.shared_controls import C01_MEAN
 from checks.numerics import identical_mul_add
 
 #: T2, lane fg-pca (2026-10-09), MOJOLEARN_IDN_COLVAR_FUSED: the IDENTICAL
@@ -537,11 +536,12 @@ from checks.numerics import identical_mul_add
 #: -2 read/write passes over the matrix (-4 n*c words) at any shape. Bits:
 #: none (the same words into the same fold); the host column is unchanged.
 #: Taken only where the mean pass is `xty_tiled` (every mode since lane
-#: debt-block-per-n, 2026-10-21; not under the C01_MEAN arm).
+#: debt-block-per-n, 2026-10-21).
+# TOMBSTONE: MOJOLEARN_CLASSICAL_C01_MEAN (DROPPED-slower, EXP C01_MEAN row) deleted 2026-11-15 by lane/expdel2-05-base; code recoverable at eeba85eb55.
+# Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C01_MEAN.expdel2-05-base.patch; record in docs/TOMBSTONES.md.
 comptime IDN_COLVAR_FUSED = (
     IDN_XTY_TILED
     and IDN_DECOMP_MEAN_LAUNCH
-    and not C01_MEAN
     and not is_defined["MOJOLEARN_IDN_COLVAR_FUSED_OFF"]()
 )
 
