@@ -4,39 +4,6 @@
   "branch": "lane/neural-seq-train-dedupe",
   "head": "b81169c61",
   "controls": {
-    "cnn_conv_relu": {
-      "define": "MOJOLEARN_IDN_CNN_CONV_RELU",
-      "kind": "arms",
-      "arms": {
-        "0": [],
-        "1": [
-          "MOJOLEARN_IDN_CNN_CONV_RELU=1"
-        ],
-        "2": [
-          "MOJOLEARN_IDN_CNN_CONV_RELU=2"
-        ]
-      },
-      "default": "0",
-      "source": [
-        "x_cnn/ops.mojo:40",
-        "x_cnn/device.mojo:86"
-      ],
-      "binding": "_mojolearn_x_cnn",
-      "bits_change": false,
-      "status": "kept",
-      "entries": [
-        "NN45",
-        "NI16"
-      ],
-      "board": "neural:cnn-clf (board lane cnn-clf; fit route x_cnn_fit_epoch_d)",
-      "arm_names": {
-        "0": "separate",
-        "1": "nn45_fwd_fused",
-        "2": "ni16_fwd_bwd_fused"
-      },
-      "note": "MOJOLEARN_XCNN_NO_DIRECT_CONV (x_cnn/device.mojo:321) is the pre-existing before-arm that exposes the fused path when direct conv would bypass it.",
-      "reach": "neural:cnn-clf, NOT reached at the board config (both arms live in the no-pool branch, x_cnn/device.mojo:2919/2999; both board blocks pool)"
-    },
     "seq_lstm_scan": {
       "define": "MOJOLEARN_IDN_SEQ_LSTM_SCAN",
       "kind": "switch",
@@ -63,56 +30,6 @@
         "blocked_quality"
       ],
       "note": "Same kernel as SEQ_FAST_LSTM_SCAN, DROPPED-quality on M3 (rab10: lstm-clf acc 0.96->0.50). Owes a repair before any grid run. NI49 row-serial arm deleted. The FAST define MOJOLEARN_SEQ_FAST_LSTM_SCAN (and _SCAN_WIDE) was deleted 2026-10-09 (lane/owed-deletions-D2); this IDENTICAL control keeps the kernels."
-    },
-    "nn46_gather_bounds": {
-      "define": "MOJOLEARN_NN46_GATHER_BOUNDS",
-      "kind": "switch",
-      "arms": {
-        "off": [],
-        "on": [
-          "MOJOLEARN_NN46_GATHER_BOUNDS=1"
-        ]
-      },
-      "default": "off",
-      "source": [
-        "x_cnn/ops.mojo:42"
-      ],
-      "binding": "_mojolearn_x_cnn",
-      "bits_change": false,
-      "status": "kept",
-      "entries": [
-        "NN46",
-        "NI14"
-      ],
-      "board": "neural:cnn-clf (board lane cnn-clf; fit route x_cnn_fit_epoch_d)",
-      "note": "bits_change not re-assessed by L11 (unchanged switch)",
-      "reach": "neural:cnn-clf: x_cnn/ops.mojo:554 maxpool_bwd_val (every block) and :296 col2im_at (block 2, no NI14 arm)"
-    },
-    "nn47_apply_running": {
-      "define": "MOJOLEARN_NN47_APPLY_RUNNING",
-      "kind": "switch",
-      "arms": {
-        "off": [],
-        "on": [
-          "MOJOLEARN_NN47_APPLY_RUNNING=1"
-        ]
-      },
-      "default": "off",
-      "source": [
-        "x_cnn/ops.mojo:43"
-      ],
-      "binding": "_mojolearn_x_cnn",
-      "bits_change": false,
-      "status": "kept",
-      "entries": [
-        "NN47",
-        "NI17"
-      ],
-      "board": "off-board (x_cnn)",
-      "tags": [
-        "off_board"
-      ],
-      "note": "bits_change not re-assessed by L11 (unchanged switch)"
     },
     "nn48_csr_tiles": {
       "define": "MOJOLEARN_NN48_CSR_TILES",
@@ -192,29 +109,6 @@
       ],
       "note": "bits_change not re-assessed by L11 (unchanged switch)"
     },
-    "ni10_cnn_tape": {
-      "define": "MOJOLEARN_NI10_BUDGETED_CNN_TAPE",
-      "kind": "switch",
-      "arms": {
-        "off": [],
-        "on": [
-          "MOJOLEARN_NI10_BUDGETED_CNN_TAPE=1"
-        ]
-      },
-      "default": "off",
-      "source": [
-        "x_cnn/ops.mojo:59"
-      ],
-      "binding": "_mojolearn_x_cnn",
-      "bits_change": false,
-      "status": "kept",
-      "entries": [
-        "NI10"
-      ],
-      "board": "neural:cnn-clf (board lane cnn-clf; fit route x_cnn_fit_epoch_d)",
-      "note": "bits_change not re-assessed by L11 (unchanged switch)",
-      "reach": "neural:cnn-clf, NOT reached at the board shape (tape ~11 MB under the 64 MiB budget; read only via x_cnn_neural_tape_budget_bytes)"
-    },
     "ni11_direct_taps64": {
       "define": "MOJOLEARN_NI11_DIRECT_CONV_TAPS64",
       "kind": "switch",
@@ -286,31 +180,6 @@
       "exclusive_with": [
         "MOJOLEARN_IDN_NEURAL_GEMM_OZAKI_SLICES"
       ]
-    },
-    "ni17_balanced_norm": {
-      "define": "MOJOLEARN_NI17_BALANCED_NORM",
-      "kind": "switch",
-      "arms": {
-        "off": [],
-        "on": [
-          "MOJOLEARN_NI17_BALANCED_NORM=1"
-        ]
-      },
-      "default": "off",
-      "source": [
-        "x_cnn/ops.mojo:1048"
-      ],
-      "binding": "_mojolearn_x_cnn",
-      "bits_change": false,
-      "status": "kept",
-      "entries": [
-        "NI17"
-      ],
-      "board": "off-board (x_cnn)",
-      "tags": [
-        "off_board"
-      ],
-      "note": "bits_change not re-assessed by L11 (unchanged switch)"
     },
     "ni52_mlp_epoch_order": {
       "define": "MOJOLEARN_IDN_MLP_DEVICE_EPOCH_ORDER",
@@ -856,6 +725,31 @@
       "define": "MOJOLEARN_NN42_INPUT_BIAS_FUSED",
       "control": "nn42_input_bias",
       "reason": "DELETED 2026-11-15 (lane/expdel2-29-neural, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md; recoverable at c906dcaf57; patch experiments/removed/MOJOLEARN_NN42_INPUT_BIAS_FUSED.patch): unmeasured opt-in arm; no record; no A/B recorded for the opt-in arm (rule a); the default is kept, no bit change. Refused in core/experiment_guards_neural.mojo; docs/TOMBSTONES.md."
+    },
+    {
+      "define": "MOJOLEARN_IDN_CNN_CONV_RELU",
+      "control": "cnn_conv_relu",
+      "reason": "DELETED 2026-11-15 (lane/expdel2-36-neural-series-linear, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md; recoverable at 145be10898; patch experiments/removed/MOJOLEARN_IDN_CNN_CONV_RELU.patch): opt-in arm, no A/B recorded. Deleted under AGENTS.md \"An unmeasured arm is deleted\" (Andrew, 2026-11-15). Refused in core/experiment_guards_neural.mojo; docs/TOMBSTONES.md."
+    },
+    {
+      "define": "MOJOLEARN_NN46_GATHER_BOUNDS",
+      "control": "nn46_gather_bounds",
+      "reason": "DELETED 2026-11-15 (lane/expdel2-36-neural-series-linear, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md; recoverable at 145be10898; patch experiments/removed/MOJOLEARN_NN46_GATHER_BOUNDS.patch): opt-in arm, no A/B recorded. Deleted under AGENTS.md \"An unmeasured arm is deleted\" (Andrew, 2026-11-15). Refused in core/experiment_guards_neural.mojo; docs/TOMBSTONES.md."
+    },
+    {
+      "define": "MOJOLEARN_NN47_APPLY_RUNNING",
+      "control": "nn47_apply_running",
+      "reason": "DELETED 2026-11-15 (lane/expdel2-36-neural-series-linear, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md; recoverable at 145be10898; patch experiments/removed/MOJOLEARN_NN47_APPLY_RUNNING.patch): opt-in arm, no A/B recorded. Deleted under AGENTS.md \"An unmeasured arm is deleted\" (Andrew, 2026-11-15). Refused in core/experiment_guards_neural.mojo; docs/TOMBSTONES.md."
+    },
+    {
+      "define": "MOJOLEARN_NI10_BUDGETED_CNN_TAPE",
+      "control": "ni10_cnn_tape",
+      "reason": "DELETED 2026-11-15 (lane/expdel2-36-neural-series-linear, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md; recoverable at 145be10898; patch experiments/removed/MOJOLEARN_NI10_BUDGETED_CNN_TAPE.patch) (and MOJOLEARN_NI10_RECOMPUTE_CNN_TAPE, the same control's other arm; patch experiments/removed/MOJOLEARN_NI10_RECOMPUTE_CNN_TAPE.patch): opt-in arm, no A/B recorded. Deleted under AGENTS.md \"An unmeasured arm is deleted\" (Andrew, 2026-11-15). Refused in core/experiment_guards_neural.mojo; docs/TOMBSTONES.md."
+    },
+    {
+      "define": "MOJOLEARN_NI17_BALANCED_NORM",
+      "control": "ni17_balanced_norm",
+      "reason": "DELETED 2026-11-15 (lane/expdel2-36-neural-series-linear, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md; recoverable at 145be10898; patch experiments/removed/MOJOLEARN_NI17_BALANCED_NORM.patch): opt-in arm, no A/B recorded. Deleted under AGENTS.md \"An unmeasured arm is deleted\" (Andrew, 2026-11-15). Refused in core/experiment_guards_neural.mojo; docs/TOMBSTONES.md."
     }
   ],
   "notes": {

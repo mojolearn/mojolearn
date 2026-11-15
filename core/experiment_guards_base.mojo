@@ -176,6 +176,24 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_X_PREP_FAST_CLS2_PACK_OFF"](), "removed 2026-11-15 (lane/expdel2-21-linear): X_PREP_FAST_CLS2_PACK_OFF (old path of the FAST Apple default) is gone; the default is kept; code at 7cab9d3674; restore: experiments/removed/MOJOLEARN_X_PREP_FAST_CLS2_PACK_OFF.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_X_PREP_FAST_CLS2_PRESENT_OFF.patch
     comptime assert not is_defined["MOJOLEARN_X_PREP_FAST_CLS2_PRESENT_OFF"](), "removed 2026-11-15 (lane/expdel2-21-linear): X_PREP_FAST_CLS2_PRESENT_OFF (old path of the FAST Apple default) is gone; the default is kept; code at f70ab5bcc0; restore: experiments/removed/MOJOLEARN_X_PREP_FAST_CLS2_PRESENT_OFF.patch"
+    # Lane expdel2-36-neural-series-linear (2026-11-15): unmeasured arms and old paths deleted under "An unmeasured arm is deleted" (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md, docs/TOMBSTONES.md).
+    # Restore: git apply experiments/removed/MOJOLEARN_PREP3_MAXABS_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_PREP3_MAXABS_OFF"](), "removed 2026-11-15 (lane/expdel2-36-neural-series-linear): PREP3_MAXABS_OFF (old path, promoted on Apple only; NVIDIA/AMD A/B owed, Preprocessing (MaxAbsScaler direct fit)) is gone; the default path is the only one; code recoverable at 145be10898; restore: experiments/removed/MOJOLEARN_PREP3_MAXABS_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_PREP3_MAXABS_POOL_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_PREP3_MAXABS_POOL_OFF"](), "removed 2026-11-15 (lane/expdel2-36-neural-series-linear): PREP3_MAXABS_POOL_OFF (old path beside a recorded default, Preprocessing (MaxAbsScaler device pool)) is gone; the default path is the only one; code recoverable at 145be10898; restore: experiments/removed/MOJOLEARN_PREP3_MAXABS_POOL_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_PT_SCORE_STABLE_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_PT_SCORE_STABLE_OFF"](), "removed 2026-11-15 (lane/expdel2-36-neural-series-linear): PT_SCORE_STABLE_OFF (old path beside a recorded default, Preprocessing (PowerTransformer stable score)) is gone; the default path is the only one; code recoverable at 145be10898; restore: experiments/removed/MOJOLEARN_PT_SCORE_STABLE_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_RAGGED_RADIX_SELECT.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_RAGGED_RADIX_SELECT"](), "removed 2026-11-15 (lane/expdel2-36-neural-series-linear): IDN_RAGGED_RADIX_SELECT (opt-in arm, no A/B recorded, Preprocessing (ragged order statistics radix select)) is gone; the default path is the only one; code recoverable at 145be10898; restore: experiments/removed/MOJOLEARN_IDN_RAGGED_RADIX_SELECT.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_SELECT_FREG_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_SELECT_FREG_OFF"](), "removed 2026-11-15 (lane/expdel2-36-neural-series-linear): SELECT_FREG_OFF (old path, promoted on Apple only; NVIDIA/AMD A/B owed, Feature selection (f_regression fused)) is gone; the default path is the only one; code recoverable at 145be10898; restore: experiments/removed/MOJOLEARN_SELECT_FREG_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_SELECT_FCLS_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_SELECT_FCLS_OFF"](), "removed 2026-11-15 (lane/expdel2-36-neural-series-linear): SELECT_FCLS_OFF (old path, promoted on Apple only; NVIDIA/AMD A/B owed, Feature selection (f_classif fused)) is gone; the default path is the only one; code recoverable at 145be10898; restore: experiments/removed/MOJOLEARN_SELECT_FCLS_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_AFCL_P07.patch
+    comptime assert not is_defined["MOJOLEARN_AFCL_P07"](), "removed 2026-11-15 (lane/expdel2-36-neural-series-linear): AFCL_P07 (never-run Apple FAST programme card, Feature selection (Apple FAST card P07 rows per thread)) is gone; the default path is the only one; code recoverable at 145be10898; restore: experiments/removed/MOJOLEARN_AFCL_P07.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_AFCL_P08.patch
+    comptime assert not is_defined["MOJOLEARN_AFCL_P08"](), "removed 2026-11-15 (lane/expdel2-36-neural-series-linear): AFCL_P08 (never-run Apple FAST programme card, Metrics (Apple FAST card P08 two-chain average)) is gone; the default path is the only one; code recoverable at 145be10898; restore: experiments/removed/MOJOLEARN_AFCL_P08.patch"
+    # ---- end lane expdel2-36-neural-series-linear
     return True
 
 
