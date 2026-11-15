@@ -15,7 +15,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from mamba.host.gen.modeling_mamba import mamba_zeros
 
 # TOMBSTONE: MOJOLEARN_AFN_MAMBA3_BWD_ARENA (DELETE-ARM, neural MERGED-UNMEASURED opt-in) deleted 2026-11-15 by lane/expdel2-26-neural; code recoverable at 5fc464dce4.
-# Restore: git apply experiments/removed/MOJOLEARN_AFN_MAMBA3_BWD_ARENA.patch
+# Restore: git apply experiments/removed/MOJOLEARN_AFN_MAMBA3_BWD_ARENA.expdel2-26-neural.patch
 # TOMBSTONE: MOJOLEARN_AFN_SAMBA_ALL (DELETE-ARM, neural MERGED-UNMEASURED opt-in) deleted here 2026-11-15 by lane/expdel2-26-neural; code recoverable at 5fc464dce4.
 # Restore: git apply experiments/removed/MOJOLEARN_AFN_SAMBA_ALL.expdel2-26-neural.patch
 # TOMBSTONE: MOJOLEARN_IDN_M3_BWD_SKIP_DEAD_OFF (DELETE-OLD-PATH, no A/B for the old path) deleted 2026-11-15 by lane/expdel2-26-neural; code recoverable at 5fc464dce4.
