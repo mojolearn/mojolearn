@@ -117,10 +117,11 @@ from ivf.impl.neighbors.ivf_flat.ivf_finite_device import (
 #: restatement (ivf/host/ivf_host.mojo), so this makes the device build's
 #: scale the host column's by construction; the scale is snapped to a power
 #: of two, so it moves only when the two sums straddle a snap boundary.
-#: -D MOJOLEARN_IDN_IVF_DEVICE_SCALE_OFF (or MOJOLEARN_IDN_ALL_OFF) restores
-#: the host walk.
+#: -D MOJOLEARN_IDN_IVF_DEVICE_SCALE_OFF restores the host walk.
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch, EXP:2438 DELETED) folded here 2026-11-15 by lane/expdel2-12-cluster; code recoverable at f81bc0a348.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-12-cluster.patch; record in docs/TOMBSTONES.md.
 comptime IVF_IDN_DEVICE_SCALE = GLOBAL_NUMERIC_MODE == _IVF_NUMERIC_IDENTICAL and not (
-    is_defined["MOJOLEARN_IDN_IVF_DEVICE_SCALE_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+    is_defined["MOJOLEARN_IDN_IVF_DEVICE_SCALE_OFF"]()
 )
 from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from std.memory import unsafe_memcpy

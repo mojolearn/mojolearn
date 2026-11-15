@@ -24,7 +24,7 @@ an output: on a hit the caller re-runs the host walk ONLY to raise the same
 message (the failure path), so the refusal text is unchanged.
 
 IDENTICAL only; FAST keeps the host walk. `-D MOJOLEARN_IDN_IVF_DEVICE_FINITE_OFF`
-(or `MOJOLEARN_IDN_ALL_OFF`) restores the host walk before the upload. No bit
+restores the host walk before the upload. No bit
 of any output moves either way (a scan only refuses).
 """
 
@@ -41,8 +41,10 @@ from ivf.impl.neighbors.ivf_flat.ivf_flat_index import (
     ivf_validate_data,
 )
 
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch, EXP:2438 DELETED) folded here 2026-11-15 by lane/expdel2-12-cluster; code recoverable at f81bc0a348.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-12-cluster.patch; record in docs/TOMBSTONES.md.
 comptime IVF_IDN_DEVICE_FINITE = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
-    is_defined["MOJOLEARN_IDN_IVF_DEVICE_FINITE_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+    is_defined["MOJOLEARN_IDN_IVF_DEVICE_FINITE_OFF"]()
 )
 """Default ON in IDENTICAL; see the module docstring."""
 

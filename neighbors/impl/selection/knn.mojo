@@ -94,10 +94,11 @@ from neighbors.impl.selection.distance_weights import (
 #: copies, a host round trip of the set, five drains) and a subtract-one
 #: pass, on every predict. Integer only; the tally reads the same column
 #: indices, so no output bit moves and the host column is untouched.
-#: -D MOJOLEARN_IDN_KNN_DIRECT_RELABEL_OFF (or MOJOLEARN_IDN_ALL_OFF)
-#: restores the old sequence.
+#: -D MOJOLEARN_IDN_KNN_DIRECT_RELABEL_OFF restores the old sequence.
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch, EXP:2438 DELETED) folded here 2026-11-15 by lane/expdel2-12-cluster; code recoverable at f81bc0a348.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-12-cluster.patch; record in docs/TOMBSTONES.md.
 comptime KNN_IDN_DIRECT_RELABEL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
-    is_defined["MOJOLEARN_IDN_KNN_DIRECT_RELABEL_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+    is_defined["MOJOLEARN_IDN_KNN_DIRECT_RELABEL_OFF"]()
 )
 
 #: lane/fam2-neighbors (2026-10-04), IDENTICAL on every vendor, default ON:
@@ -111,8 +112,10 @@ comptime KNN_IDN_DIRECT_RELABEL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and n
 #: every mode and when traced (the trace records the device weights); the
 #: host loop and this define's off arm are gone from the vote. The constant
 #: stays for callers that still read it.
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch, EXP:2438 DELETED) folded here 2026-11-15 by lane/expdel2-12-cluster; code recoverable at f81bc0a348.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-12-cluster.patch; record in docs/TOMBSTONES.md.
 comptime KNN_IDN_DEVICE_WEIGHTS = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
-    is_defined["MOJOLEARN_IDN_KNN_DEVICE_WEIGHTS_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+    is_defined["MOJOLEARN_IDN_KNN_DEVICE_WEIGHTS_OFF"]()
 )
 
 comptime KNN_TPB_X = 32

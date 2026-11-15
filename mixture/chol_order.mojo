@@ -40,9 +40,8 @@ this version, on all four columns together. The unblocked factor with a
 fused multiply-add per term is at least as accurate as the blocked one.
 
 `-D MOJOLEARN_IDN_GMM_FUSED_CHOL_OFF=1` restores the per-component chain on
-the device AND in the host columns (they read this same constant), as does
-the master `-D MOJOLEARN_IDN_ALL_OFF=1`. The define must reach the
-host-column build as well as the device build.
+the device AND in the host columns (they read this same constant). The
+define must reach the host-column build as well as the device build.
 """
 
 from std.sys.compile import is_defined
@@ -81,11 +80,10 @@ comptime GMM_IDN_CHOL_MAX_D = GMM_IDN_CHOL_TPB
 # Retain both existing ON defaults and the full-board limitation.
 comptime IDN_GMM_FUSED_CHOL = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not (
-        is_defined["MOJOLEARN_IDN_GMM_FUSED_CHOL_OFF"]()
-        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-    )
+    and not is_defined["MOJOLEARN_IDN_GMM_FUSED_CHOL_OFF"]()
 )
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch, EXP:2438 DELETED) folded here 2026-11-15 by lane/expdel2-12-cluster; code recoverable at f81bc0a348.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-12-cluster.patch; record in docs/TOMBSTONES.md.
 
 
 def gmm_idn_chol_applies(d: Int) -> Bool:

@@ -196,8 +196,9 @@ comptime IVF_IDENTICAL_SCAN = (
 comptime IVF_IDENTICAL_SCAN_ANY_DIM = (
     IVF_IDENTICAL_SCAN
     and not is_defined["MOJOLEARN_IVF_IDENTICAL_ANY_DIM_OFF"]()
-    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 )
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch, EXP:2438 DELETED) folded here 2026-11-15 by lane/expdel2-12-cluster; code recoverable at f81bc0a348.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-12-cluster.patch; record in docs/TOMBSTONES.md.
 """lane/no-dim-idn (2026-10-04): the IDENTICAL batched scans take every
 dimension. The old `dim <= 256` gate was the size of the shared query stage
 (IIVF_MAX_DIM), and it sat just above the board's widest row (istella, 220);
@@ -206,8 +207,8 @@ kernels now read a query wider than the stage straight from global memory,
 value for value (`ftz` of the same element, the same ascending
 `identical_mul_add` chain), so the distances, the top-k and the bits are the
 per-query path's (`ivf_query_device.mojo`, the same chain) and the host
-column's. `-D MOJOLEARN_IVF_IDENTICAL_ANY_DIM_OFF` (and
-`MOJOLEARN_IDN_ALL_OFF`) restore the cap (A/B arm B). The FAST kernel keeps
+column's. `-D MOJOLEARN_IVF_IDENTICAL_ANY_DIM_OFF` restores the cap
+(A/B arm B). The FAST kernel keeps
 FIVF_MAX_DIM (FAST is out of this lane's scope)."""
 # lane/neural-net-experiment (2026-09-30, the classical pass): EVERY
 # vendor, not Apple alone. The Apple gate left NVIDIA and AMD on the host
@@ -228,10 +229,12 @@ FIVF_MAX_DIM (FAST is out of this lane's scope)."""
 #: the L2SqrtExpanded root over the n_queries x k selected distances runs in
 #: a kernel before the download (`ivf_sqrt_kernel`, `postprocess_distances`'
 #: statement per cell: the same words). Before, the host walked the
-#: downloaded list. -D MOJOLEARN_IDN_IVF_DEVICE_SQRT_OFF (or
-#: MOJOLEARN_IDN_ALL_OFF) restores the host walk.
+#: downloaded list. -D MOJOLEARN_IDN_IVF_DEVICE_SQRT_OFF restores the host
+#: walk.
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch, EXP:2438 DELETED) folded here 2026-11-15 by lane/expdel2-12-cluster; code recoverable at f81bc0a348.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-12-cluster.patch; record in docs/TOMBSTONES.md.
 comptime IVF_IDN_DEVICE_SQRT = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
-    is_defined["MOJOLEARN_IDN_IVF_DEVICE_SQRT_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+    is_defined["MOJOLEARN_IDN_IVF_DEVICE_SQRT_OFF"]()
 )
 
 
