@@ -479,72 +479,12 @@ def m3_angle_kernel(gid_: Int,
 
 # TOMBSTONE: MOJOLEARN_IDN_M3_ANGLE_PARALLEL (unmeasured opt-in arm: the exact-integer parallel S10 angle chain; non-owner sites) deleted 2026-11-15 by lane/expdel2-28-neural; code recoverable at 42ef6d7c75.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_M3_ANGLE_PARALLEL.expdel2-28-neural.patch; record in docs/TOMBSTONES.md.
-#: False: the exact-integer chain is deleted. The alias and the count helpers
-#: below stay for mamba/impl/modules/mamba3.mojo, which imports them.
-comptime M3_ANGLE_PARALLEL = False
-#: The block-size timing arms went with it (M3_ANGLE_Q_BLOCK is gone):
 # TOMBSTONE: MOJOLEARN_IDN_M3_ANGLE_BLOCK_32 (unmeasured timing arm of the M3_ANGLE_PARALLEL candidate; non-owner sites) deleted 2026-11-15 by lane/expdel2-28-neural; code recoverable at 1ec110c4c3.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_M3_ANGLE_BLOCK_32.expdel2-28-neural.patch; record in docs/TOMBSTONES.md.
 # TOMBSTONE: MOJOLEARN_IDN_M3_ANGLE_BLOCK_128 (unmeasured timing arm of the M3_ANGLE_PARALLEL candidate; non-owner sites) deleted 2026-11-15 by lane/expdel2-28-neural; code recoverable at 9129bd2aa9.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_M3_ANGLE_BLOCK_128.expdel2-28-neural.patch; record in docs/TOMBSTONES.md.
-
-comptime M3_ANGLE_Q_MASK = 8388607  # 2**23 - 1
-comptime M3_ANGLE_Q_SCALE = Float32(8388608.0)  # 2**23
-comptime M3_ANGLE_Q_INV_SCALE = Float32(1.1920928955078125e-07)  # 2**-23
-comptime M3_ANGLE_INV_TWO_PI = Float32(0.15915494309189535)
-
-
-@always_inline
-def m3_angle_q_to_theta(u: Int) -> Float32:
-    """The float angle of count `u` (0 <= u < 2**23): `u * 2**-23` is exact,
-    then ONE pinned product with the pinned 2pi."""
-    return ftz(identical_mul(Float32(u) * M3_ANGLE_Q_INV_SCALE, M3_TWO_PI))
-
-
-@always_inline
-def m3_angle_q_round(x: Float32) -> Int:
-    """`x` in turns to the nearest count mod 2**23. `x - floor(x)` is in
-    [0, 1]; times 2**23 is exact; below 2**23 a float32 has a spacing of at
-    most 0.5, so the `+ 0.5` is exact too (and equal to its fused form) and
-    the floor makes an integer. A non-finite `x` (refused upstream) gives 0
-    on every column instead of an undefined conversion."""
-    from std.math import floor
-
-    var f = x - floor(x)
-    if not (f >= Float32(0.0) and f <= Float32(1.0)):
-        return 0
-    return Int(floor(f * M3_ANGLE_Q_SCALE + Float32(0.5))) & M3_ANGLE_Q_MASK
-
-
-@always_inline
-def m3_angle_q_from_inc(inc: Float32) -> Int:
-    return m3_angle_q_round(identical_mul(ftz(inc), M3_ANGLE_INV_TWO_PI))
-
-
-@always_inline
-def m3_angle_q_from_state(theta: Float32) -> Int:
-    """The count whose image is `theta`: the rounded estimate is within 2
-    of it (three roundings of 6e-8 relative on a count below 2**23), and the
-    image is one-to-one, so the first candidate whose image equals `theta`
-    by value is the count. No candidate matching (a state that is not an
-    image) keeps the rounded estimate."""
-    var th = ftz(theta)
-    var u0 = m3_angle_q_round(identical_mul(th, M3_ANGLE_INV_TWO_PI))
-    if m3_angle_q_to_theta(u0) == th:
-        return u0
-    var c = (u0 + 1) & M3_ANGLE_Q_MASK
-    if m3_angle_q_to_theta(c) == th:
-        return c
-    c = (u0 + M3_ANGLE_Q_MASK) & M3_ANGLE_Q_MASK  # u0 - 1
-    if m3_angle_q_to_theta(c) == th:
-        return c
-    c = (u0 + 2) & M3_ANGLE_Q_MASK
-    if m3_angle_q_to_theta(c) == th:
-        return c
-    c = (u0 + M3_ANGLE_Q_MASK - 1) & M3_ANGLE_Q_MASK  # u0 - 2
-    if m3_angle_q_to_theta(c) == th:
-        return c
-    return u0
+# (Sweep 2026-11-15: M3_ANGLE_PARALLEL = False, the M3_ANGLE_Q_* / M3_ANGLE_INV_TWO_PI constants and the
+# m3_angle_q_to_theta / _round / _from_inc / _from_state helpers removed with the folded arm of mamba/impl/modules/mamba3.mojo.)
 
 
 # TOMBSTONE: MOJOLEARN_IDN_M3_ANGLE_PARALLEL (unmeasured opt-in arm: the exact-integer parallel S10 angle chain; non-owner sites) deleted 2026-11-15 by lane/expdel2-28-neural; code recoverable at 42ef6d7c75.

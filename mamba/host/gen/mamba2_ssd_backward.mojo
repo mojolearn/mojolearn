@@ -42,6 +42,9 @@ from mamba.host.gen.modeling_mamba import mamba_scratch
 
 # TOMBSTONE: MOJOLEARN_IDN_M2_GRAD_FOLD (unmeasured opt-in arms 1 and 2) uses deleted 2026-11-15 by lane/expdel2-23-neural (non-owner, the read is mamba/impl/ops/neural_gradient_profile.mojo); code recoverable at d788d4c3f4.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_M2_GRAD_FOLD.expdel2-23-neural.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_IDN_M2_GRAD_FOLD (unmeasured opt-in arms 1 (NN39 tile tree) and 2 (NI44 128-row leaves) of the Mamba-2 gradient fold) deleted 2026-11-15 by lane/expdel2-28-neural; code recoverable at 92dbaa2ecb.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_M2_GRAD_FOLD.patch; record in docs/TOMBSTONES.md.
+# (Sweep 2026-11-15: mamba/impl/ops/neural_gradient_profile.mojo deleted: IDN_M2_GRAD_FOLD_ARM, NN39_M2_GRAD_TREE and nn39_gradient_tree had no importer.)
 
 comptime M2_SSD_BWD_TPB = 128
 

@@ -701,10 +701,7 @@ comptime M2_CS_IC = 32
 # TOMBSTONE: MOJOLEARN_IDN_SSD_OCCUPANCY (unmeasured opt-in arm, A/B never run: coalesced S10, shared-tile S12 and S18/S19
 # kernels) deleted 2026-11-15 by lane/expdel2-27-neural; code recoverable at 44ec9b2ec9.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_SSD_OCCUPANCY.patch
-# The constant stays only for tools/mamba_host_gen.py's substitution (tooling lane drops it).
-comptime IDN_SSD_OCCUPANCY = (
-    False
-)
+# (Sweep 2026-11-15: the unread IDN_SSD_OCCUPANCY = False constant removed.)
 
 
 # I08 AMD MI325X NEUTRAL/MIXED (2026-10-06, sourcecbcc8dcd3303):
@@ -895,8 +892,7 @@ def m2_statepass_kernel(gid_: Int,
 # TOMBSTONE: MOJOLEARN_IDN_M2_YOFF_EXP (unmeasured opt-in arms 1 = NN36 block-shared exp, 2 = NI39 global exp cache)
 # deleted 2026-11-15 by lane/expdel2-27-neural; code recoverable at 4e23c6d887.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_M2_YOFF_EXP.patch
-# The constant stays only for tools/mamba_host_gen.py's substitution (tooling lane drops it).
-comptime NN36_SHARED_DECAY = False
+# (Sweep 2026-11-15: the unread NN36_SHARED_DECAY = False constant removed.)
 
 
 def m2_yoff_y_kernel(gid_: Int,
