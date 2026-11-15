@@ -224,6 +224,10 @@
   "gbdt-id-defer-copy": {
    "define": "MOJOLEARN_GBDT_ID_DEFER_COPY",
    "status": "define in code (greedy_search_helper_depthwise.mojo DEFER_HIST_COPY_1903): B = NVIDIA/AMD IDENTICAL take Apple IDENTICAL's deferred parent-histogram copy and dirty-slot zero pass; A = split-time copy and full zero pass"
+  },
+  "c48-if-partition": {
+   "define": "MOJOLEARN_TREES_C48_IF_PARTITION",
+   "status": "define in code (isolation_forest/impl/isolation_tree_builder.mojo IF_C48_FUSED_PARTITION, IF_WORK_PLANES 3): B = node split as one fused stable partition (flag and block scan once, destinations stored, one scatter; no atomics); A = the two-pass stable partition"
   }
  },
  "rows": [
@@ -1407,6 +1411,19 @@
     "gbdt-id-defer-copy"
    ],
    "decides": "B is promoted only when gbdt-depthwise fit (istella, istella prebinned, taxi prebinned) and gbdt-lossguide fit are faster on NVIDIA L40S; digests must not move (schedule only: every slot holds the same bytes at every read; Apple IDENTICAL ships this schedule)"
+  },
+  {
+   "id": "rr-c48-if-partition",
+   "source": "restore-run-arms-trees (2026-11-15; RUN #7 of docs/plans/DELETED_ARMS_WORTH_RUNNING_2026-11-15.md; iforest fit istella 305.8 [197.2 at 0.8.55], taxi 202.8 [149.1]; never timed)",
+   "kind": "ab",
+   "lane": "iforest",
+   "dataset": "*",
+   "rows": "full",
+   "vendor": "nvidia",
+   "b_arms": [
+    "c48-if-partition"
+   ],
+   "decides": "B is promoted only when iforest fit (istella, taxi) is faster on NVIDIA L40S; digests must not move (stable order kept on both sides)"
   }
  ]
 }
