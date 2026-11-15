@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Random Forest decision-tree builder and device training pipeline, aligned with the pinned cuML batched-level algorithm."""
 
-from ensemble.tree_identical_ideas import T07, T13, T13_BYTES
+from ensemble.tree_identical_ideas import T13, T13_BYTES
 from max.gpu import WARP_SIZE
 from std.sys.compile import is_defined
 from std.math import ceildiv
@@ -48,7 +48,6 @@ from ensemble.decisiontree.batched_levelalgo.kernels.builder_kernels_impl import
     HIST_ZERO_AFTER_READ_DEFAULT,
     HIST_SPLIT_CANDIDATES_DEFAULT,
     merge_split_candidates_kernel,
-    merge_split_candidates_parallel_kernel,
     launch_gather_sampled_order_kernel,
     launch_leaf_kernel,
     launch_node_split_kernel,
@@ -2387,21 +2386,11 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
         instr.times.stop_host("host_best_launch", t_h)
 
     def _merge_candidates(mut self, ctx: DeviceContext, n: Int, columns: Int) raises:
-        # T07: per-column candidates are distinct feature IDs. Their existing
-        # comparator is a total order across columns; no same-feature plateau
-        # is split between lanes. The canonical within-feature scan is retained.
-        comptime if T07:
-            ctx.enqueue_function[merge_split_candidates_parallel_kernel[Self.O.DataT]](
-                self._splits_ptr().unsafe_origin_cast[MutAnyOrigin](),
-                self.split_cand.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]().unsafe_bitcast[Split[Self.O.DataT]](),
-                Int32(n), Int32(columns), grid_dim=n, block_dim=128,
-            )
-        else:
-            ctx.enqueue_function[merge_split_candidates_kernel[Self.O.DataT]](
-                self._splits_ptr().unsafe_origin_cast[MutAnyOrigin](),
-                self.split_cand.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]().unsafe_bitcast[Split[Self.O.DataT]](),
-                Int32(n), Int32(columns), grid_dim=ceildiv(n,128), block_dim=128,
-            )
+        ctx.enqueue_function[merge_split_candidates_kernel[Self.O.DataT]](
+            self._splits_ptr().unsafe_origin_cast[MutAnyOrigin](),
+            self.split_cand.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]().unsafe_bitcast[Split[Self.O.DataT]](),
+            Int32(n), Int32(columns), grid_dim=ceildiv(n,128), block_dim=128,
+        )
 
     def enqueue_best_splits(
         mut self,

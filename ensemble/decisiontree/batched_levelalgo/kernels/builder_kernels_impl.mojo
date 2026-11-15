@@ -380,7 +380,7 @@ which already priced the width for the reduction this scratch feeds.
 
 from ensemble.tree_moments import moment_pair, moment_finish
 from checks.soft_f64 import sf64_from_f32
-from ensemble.tree_identical_ideas import T07, T08, T14, C48
+from ensemble.tree_identical_ideas import T08, T14, C48
 from max.gpu import (
     WARP_SIZE,
     block_dim,
@@ -3696,49 +3696,7 @@ def merge_split_candidates_kernel[
         splits[unsafe_offset=nid] = reg.copy()
 
 
-def merge_split_candidates_parallel_kernel[dtype: DType](
-    splits: MutPointer[Split[dtype], MutAnyOrigin],
-    cand: MutPointer[Split[dtype], MutAnyOrigin],
-    n_nodes: Int32, n_cand: Int32,
-):
-    """T07/C45: logical 128-lane binary tree over distinct-feature winners.
-
-    NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
-    Invalid/NaN scores never enter: Gain admits only gain > its finite gate.
-    Within-feature plateau merging still uses the incumbent kernel/scan order.
-    """
-    var nid = Int(block_idx.x)
-    var lane = Int(thread_idx.x)
-    if nid >= Int(n_nodes):
-        return
-    var page = stack_allocation[128, Split[dtype], address_space=AddressSpace.SHARED]()
-    var mine = Split[dtype]()
-    var y = lane
-    while y < Int(n_cand):
-        var c = cand[unsafe_offset=nid*Int(n_cand)+y]
-        if c.IsValid() and mine.update(c.quesval,c.colid,c.best_metric_val,c.global_nLeft,c.split_start,c.split_end):
-            mine.pure = c.pure
-        y += 128
-    page[unsafe_offset=lane] = mine
-    barrier()
-    var step = 64
-    while step > 0:
-        if lane < step:
-            var c = page[unsafe_offset=lane+step]
-            var best = page[unsafe_offset=lane]
-            if c.IsValid() and best.update(c.quesval,c.colid,c.best_metric_val,c.global_nLeft,c.split_start,c.split_end):
-                best.pure = c.pure
-            page[unsafe_offset=lane] = best
-        barrier()
-        step //= 2
-    if lane == 0:
-        var best = splits[unsafe_offset=nid]
-        var c = page[unsafe_offset=0]
-        if c.IsValid() and best.update(c.quesval,c.colid,c.best_metric_val,c.global_nLeft,c.split_start,c.split_end):
-            best.pure = c.pure
-            splits[unsafe_offset=nid] = best
-
-
+# (Sweep 2026-11-15: merge_split_candidates_parallel_kernel, launched only under the folded T07, removed.)
 # (Sweep 2026-11-15: clear_live_histogram_bins_kernel, launched only under the folded T04, removed.)
 
 
