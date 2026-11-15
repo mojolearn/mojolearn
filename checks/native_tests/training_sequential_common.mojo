@@ -30,7 +30,7 @@ from autograd.model import (
 )
 from autograd.model_execution import model_fit_native, model_float_words
 from autograd.model_checkpoint import model_save_checkpoint, model_load_checkpoint, model_checkpoint_info
-from core.cast_in import CastIn
+from core.cast_in import CAST_KIND_SIGNED, CastIn
 from sequence.exec_trait import Exec
 from sequence.ops import FP, OPT_SGD, OPT_ADAM, OPT_ADAMW
 
@@ -261,9 +261,13 @@ struct SeqModel(Movable):
             Int(self.v.unsafe_ptr()), Int(self.state.unsafe_ptr()),
             Int(previous.unsafe_ptr()) if resume and len(previous) > 0 else 0,
         ]
-        var sources: List[CastIn] = [
-            CastIn.f32_c(Int(x.unsafe_ptr()), rows, features), CastIn.f32_c(Int(y.unsafe_ptr()), rows, y_cols),
-        ]
+        # the class codes are C-contiguous int32 (model_fit admits them by dtype and
+        # shape, autograd/model.mojo "the class codes must be N C-contiguous int32");
+        # the float32 words only carry their bits
+        var y_src = CastIn.f32_c(Int(y.unsafe_ptr()), rows, y_cols)
+        if target == TARGET_CODES or target == TARGET_CODE_VALUES:
+            y_src = CastIn(Int(y.unsafe_ptr()), CAST_KIND_SIGNED, 4, rows, y_cols, y_cols * 4, 4)
+        var sources: List[CastIn] = [CastIn.f32_c(Int(x.unsafe_ptr()), rows, features), y_src]
         if validated != 0:
             self.validation_curve = List[Float32](length=epochs, fill=Float32(-1))
             self.validation_info = List[Int64](length=2, fill=Int64(0))
