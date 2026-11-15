@@ -994,7 +994,7 @@ def samba_resident_forward(
     forward span includes that download, as for lm-forward). Returns the
     session's registry upload count (`s.param_uploads`), its report."""
     comptime if not IDN_SAMBA_RESIDENT_STEP:
-        raise Error("mojolearn samba resident: built with MOJOLEARN_IDN_SAMBA_RESIDENT_STEP_OFF or MOJOLEARN_IDN_CHUNKED_LM_HEAD_V2")
+        raise Error("mojolearn samba resident: the resident step is IDENTICAL only")
     _ensure_shape(s, b, l)
     var m = b * l
     # lane fix-samba-weight-upload (2026-11-13): 0.8.55's forward (restored
@@ -1085,7 +1085,7 @@ def samba_resident_train_step(
     `param_ptr`, the loss to `loss_ptr`, the flags to `init_ptr` and the
     clip info to `info_ptr`. Returns `count`."""
     comptime if not IDN_SAMBA_RESIDENT_STEP:
-        raise Error("mojolearn samba resident: built with MOJOLEARN_IDN_SAMBA_RESIDENT_STEP_OFF or MOJOLEARN_IDN_CHUNKED_LM_HEAD_V2")
+        raise Error("mojolearn samba resident: the resident step is IDENTICAL only")
     if b < 1 or l < 1:
         raise Error("mojolearn samba resident: B and L must be positive")
     var m = b * l
@@ -1215,7 +1215,7 @@ def samba_resident_accumulated_step(
     The same kernels in the same order as the per-microbatch walk, so the
     same bits. Returns `total_count`."""
     comptime if not IDN_SAMBA_RESIDENT_STEP:
-        raise Error("mojolearn samba resident: built with MOJOLEARN_IDN_SAMBA_RESIDENT_STEP_OFF or MOJOLEARN_IDN_CHUNKED_LM_HEAD_V2")
+        raise Error("mojolearn samba resident: the resident step is IDENTICAL only")
     if b < 1 or l < 1 or a < 2 or b % a != 0:
         raise Error("Samba: batch rows must be divisible by power-of-two accumulation_steps")
     if n_tensors + 1 != len(s.offsets):
