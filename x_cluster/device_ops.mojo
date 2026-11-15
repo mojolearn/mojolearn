@@ -595,15 +595,12 @@ def _ap_r_top2_kernel(s: FPtr, a: FPtr, r: FPtr, n: Int32, damping: Float32):
 # left at its break and st[1] is the iteration it broke at (`n_iter_` the
 # same). The exemplar flags and the window share one launch (three launches
 # and one 1-thread decision per iteration for four launches, a memset and a
-# drain). `-D MOJOLEARN_IDN_AP_DEVICE_CONV_OFF=1` restores the per-iteration
-# read. CANDIDATE ARMS for the chunk (default 8):
+# drain). CANDIDATE ARMS for the chunk (default 8):
 # `-D MOJOLEARN_IDN_AP_CONV_CHUNK4=1`, `..._CHUNK16=1`, `..._CHUNK32=1`.
+# TOMBSTONE: MOJOLEARN_IDN_AP_DEVICE_CONV_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-14-cluster; code recoverable at 5955a4cfd7.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_AP_DEVICE_CONV_OFF.patch; record in docs/TOMBSTONES.md.
 comptime IDN_AP_DEVICE_CONV = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not (
-        is_defined["MOJOLEARN_IDN_AP_DEVICE_CONV_OFF"]()
-        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-    )
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 )
 comptime AP_CONV_CHUNK = (
     4 if is_defined["MOJOLEARN_IDN_AP_CONV_CHUNK4"]()
