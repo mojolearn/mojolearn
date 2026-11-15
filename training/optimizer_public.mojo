@@ -27,7 +27,7 @@ had: the resident step, the resident step with its transfers named (the
 device-parameter step and the device sign flip), or the per-call step. The
 same kernels on the same buffers in the same order: the same bits."""
 from std.memory import unsafe_memcpy
-from std.os import getenv
+from std.sys import is_defined
 
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 
@@ -665,11 +665,20 @@ def public_io(
     return (h, req.n_total)
 
 
+
+# Grad-norm clip (lane envgate-train-seq-mamba, 2026-11-15): clip in place
+# from the tensors' own memory is the default; `-D MOJOLEARN_CLIP_PACKED`
+# gathers and packs them (the A/B; same device buffer, offsets and clip, so
+# the same bits). Before, an environment read per clip call.
+# ROUTE-DEFAULT-SUSPECT, no A/B on record: B arm RUN OWED in
+# bench/results/paper_compare/owed-pre0867.json ("clip-packed").
+comptime CLIP_PACKED = is_defined["MOJOLEARN_CLIP_PACKED"]()
+
 def public_clip(ctx: DeviceContext, plan: DevicePlan, addrs: List[Int], nbytes: List[Int], max_norm: Float32) raises -> Tuple[Float32, Float32]:
     """`clip_grad_norm_`: the two-level global L2 norm of the tensors and the
     in-place scale (optimizer contract section 3). Several tensors go to the
     device straight from their own memory (`identical_clip_grad_norm_addrs`)
-    unless MOJOLEARN_CLIP_PACKED=1 or several optimizer devices ask for the
+    unless the build has `-D MOJOLEARN_CLIP_PACKED` or several optimizer devices ask for the
     packed buffer (the A/B; the same device buffer, offsets and clip, so
     the same bits). Returns (pre-clip total norm, clamped coefficient)."""
     var j = len(addrs)
@@ -684,8 +693,7 @@ def public_clip(ctx: DeviceContext, plan: DevicePlan, addrs: List[Int], nbytes: 
     # Several tensors, not packed, one optimizer device: clip straight from
     # the tensors' own memory. (Was named `multi` for "several tensors"; the
     # device test is the old `== "1"` on the plan's raw setting.)
-    var single_unpacked = (j > 1 and String(getenv("MOJOLEARN_CLIP_PACKED")) != "1"
-                           and _single_device(plan))
+    var single_unpacked = (j > 1 and not CLIP_PACKED and _single_device(plan))
     if single_unpacked:
         _ = identical_clip_grad_norm_addrs_host(ctx, addrs, op, fp, j, max_norm)
     else:
