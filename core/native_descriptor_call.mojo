@@ -1,6 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
 # Native-only invocation; Python ownership belongs in providers/python.
-from std.sys import is_defined
 from core.native_string import unsafe_string_from_utf8_cstr
 from core.native_descriptor_abi import NativeDescriptorCall, NativeDescriptorError
 from core.native_call_output import NativeCallOutput, NativeCallWorkspaceLease
@@ -19,34 +18,20 @@ def native_descriptor_call(
 ) raises -> Int:
     # Lane entry-table-zero-alloc (2026-11-11): the output words live on this
     # frame and reach the foreign call through the out-of-line span call's
-    # `mut` reference, so no per-call heap List. The former one-element heap
-    # List (Mojo 1.0.0/Apple root reproduction: inline integer-address outputs
-    # did not survive the ABI roundtrip) stays behind the opt-in define
-    # MOJOLEARN_ENTRY_TABLE_HEAP_OUTPUT until the stack form runs on Apple.
-    comptime if is_defined["MOJOLEARN_ENTRY_TABLE_HEAP_OUTPUT"]():
-        var held = List[NativeCallOutput]()
-        held.append(NativeCallOutput())
-        try:
-            return native_descriptor_call_spans(entry, operation,
-                Int(addresses.unsafe_ptr()), len(addresses), Int(ints.unsafe_ptr()), len(ints),
-                Int(floats.unsafe_ptr()), len(floats), held[0])
-        finally:
-            _ = addresses
-            _ = ints
-            _ = floats
-            _ = held
-    else:
-        var output = NativeCallOutput()
-        try:
-            return native_descriptor_call_spans(entry, operation,
-                Int(addresses.unsafe_ptr()), len(addresses), Int(ints.unsafe_ptr()), len(ints),
-                Int(floats.unsafe_ptr()), len(floats), output)
-        finally:
-            # Raw span addresses do not themselves retain their List owners.
-            _ = addresses
-            _ = ints
-            _ = floats
-            _ = output
+    # `mut` reference, so no per-call heap List.
+    # TOMBSTONE: MOJOLEARN_ENTRY_TABLE_HEAP_OUTPUT (opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-04-base; code recoverable at f6ce043de1.
+    # Restore: git apply experiments/removed/MOJOLEARN_ENTRY_TABLE_HEAP_OUTPUT.expdel2-04-base.patch; record in docs/TOMBSTONES.md.
+    var output = NativeCallOutput()
+    try:
+        return native_descriptor_call_spans(entry, operation,
+            Int(addresses.unsafe_ptr()), len(addresses), Int(ints.unsafe_ptr()), len(ints),
+            Int(floats.unsafe_ptr()), len(floats), output)
+    finally:
+        # Raw span addresses do not themselves retain their List owners.
+        _ = addresses
+        _ = ints
+        _ = floats
+        _ = output
 
 
 @no_inline
