@@ -21,10 +21,9 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-11-cluster.patch.
 comptime _IDN_HDB_ON = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 
-comptime IDN_HDB_ONE_SYNC = (
-    # I14 current experiment: NEVER RUN — PENDING MEASUREMENT; existing defaults preserved.
-    _IDN_HDB_ON and not is_defined["MOJOLEARN_IDN_HDB_ONE_SYNC_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_IDN_HDB_ONE_SYNC_OFF (old path: one wait per output download; EXP:1914 owed row withdrawn) deleted 2026-11-15 by lane/expdel2-11-cluster; code recoverable at 3513712600.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_HDB_ONE_SYNC_OFF.patch; record in docs/TOMBSTONES.md.
+comptime IDN_HDB_ONE_SYNC = _IDN_HDB_ON
 """The extract's eight output downloads and the runner's six under one wait
 each (`td_stage_*` / `td_take_*`, af-hdbscan2's HDB_ONE_SYNC route)."""
 
