@@ -628,70 +628,10 @@ def m2_conv_kernel(gid_: Int,
         )
 
 
-# NN35: two adjacent tokens share their convolution input window and
-# weights. Two is a fixed reuse tile, independent of datasets/dimensions;
-# it saves D_CONV-1 loads per pair without changing either tap chain.
-# OFF, uncompiled/unmeasured; host keeps the identical per-cell expression.
-comptime NN35_CONV_PAIR = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and is_defined["MOJOLEARN_NN35_CONV_PAIR"]()
-    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
-
-
-def nn35_m2_pair_kernel(gid_: Int,
-    conv_out: MutPointer[Float32, MutAnyOrigin],
-    silu_out: MutPointer[Float32, MutAnyOrigin],
-    in_proj: MutPointer[Float32, MutAnyOrigin],
-    conv_w: MutPointer[Float32, MutAnyOrigin],
-    conv_b: MutPointer[Float32, MutAnyOrigin],
-    win: MutPointer[Float32, MutAnyOrigin],
-    b_in: Int32, l_in: Int32, di_in: Int32,
-    cd_in: Int32,
-    dip_in: Int32,
-):
-    var b = Int(b_in)
-    var l = Int(l_in)
-    var di = Int(di_in)
-    var cd = Int(cd_in)
-    var dip = Int(dip_in)
-    var nt = (l + 1) // 2
-    var cell = gid_
-    if cell >= b * nt * cd:
-        return
-    var d = cell % cd
-    var ti = cell // cd
-    var bb = ti // nt
-    var li = (ti % nt) * 2
-    var inputs = stack_allocation[M2_D_CONV + 1, Float32]()
-    var weights = stack_allocation[M2_D_CONV, Float32]()
-    var valid = min(2, l - li)
-    # Only valid outputs' taps are loaded; no read past the odd tail.
-    for k in range(M2_D_CONV + valid - 1):
-        var pos = li - (M2_D_CONV - 1) + k
-        var v: Float32
-        if pos >= 0:
-            v = in_proj.unsafe_load((bb * l + pos) * (dip) + di + d)
-        else:
-            v = win.unsafe_load((bb * cd + d) * M2_D_CONV + M2_D_CONV + pos)
-        inputs[k] = ftz(v)
-    for k in range(M2_D_CONV):
-        weights[k] = ftz(conv_w.unsafe_load(d * M2_D_CONV + k))
-    var bias = ftz(conv_b.unsafe_load(d))
-    for j in range(valid):
-        var acc = bias
-        comptime if SAB_S6_BIAS_LAST:
-            acc = Float32(0.0)
-        for kk in range(M2_D_CONV):
-            var k = kk
-            comptime if SAB_S6_TAPS_REVERSED:
-                k = M2_D_CONV - 1 - kk
-            acc = ftz(identical_mul_add(weights[k], inputs[j + k], acc))
-        comptime if SAB_S6_BIAS_LAST:
-            acc = ftz(acc + bias)
-        var out_i = (bb * l + li + j) * cd + d
-        conv_out.unsafe_store(out_i, acc)
-        silu_out.unsafe_store(out_i, ftz(identical_silu(acc)))
+# TOMBSTONE: MOJOLEARN_NN35_CONV_PAIR (DELETE-ARM, uncompiled/unmeasured opt-in) deleted 2026-11-15 by lane/expdel2-26-neural; code recoverable at 5fc464dce4.
+# Restore: git apply experiments/removed/MOJOLEARN_NN35_CONV_PAIR.patch
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (DELETE-OLD-PATH) deleted here 2026-11-15 by lane/expdel2-26-neural; code recoverable at 5fc464dce4.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-26-neural.patch
 
 
 def m2_conv_cell_kernel(gid_: Int,
@@ -1310,22 +1250,7 @@ def mamba2_block_forward(
     )
 
     # ---- S6/S7: conv + SiLU over xBC; window updated out of place.
-    comptime if NN35_CONV_PAIR:
-        var _l2_a0 = stages.conv_out.unsafe_ptr()
-        var _l2_a1 = stages.silu_out.unsafe_ptr()
-        var _l2_a2 = stages.in_proj.unsafe_ptr()
-        var _l2_a3 = w.conv_w.unsafe_ptr()
-        var _l2_a4 = w.conv_b.unsafe_ptr()
-        var _l2_a5 = state.conv_win.unsafe_ptr()
-        var _l2_a6 = Int32(b)
-        var _l2_a7 = Int32(l)
-        var _l2_a8 = Int32(di)
-        var _l2_a9 = Int32(cd)
-        var _l2_a10 = Int32(dip)
-        def _launch_2(gid_: Int) {imm _l2_a0, imm _l2_a1, imm _l2_a2, imm _l2_a3, imm _l2_a4, imm _l2_a5, imm _l2_a6, imm _l2_a7, imm _l2_a8, imm _l2_a9, imm _l2_a10}:
-            nn35_m2_pair_kernel(gid_, _l2_a0, _l2_a1, _l2_a2, _l2_a3, _l2_a4, _l2_a5, _l2_a6, _l2_a7, _l2_a8, _l2_a9, _l2_a10)
-        host_launch(_launch_2, launch_count((_grid(b * ((l + 1) // 2) * cd), 1, 1), (MAMBA2_TPB, 1, 1)), 0)
-    elif IDN_MAMBA_CONV_CELL:
+    comptime if IDN_MAMBA_CONV_CELL:
         var _l3_a0 = stages.conv_out.unsafe_ptr()
         var _l3_a1 = stages.silu_out.unsafe_ptr()
         var _l3_a2 = stages.in_proj.unsafe_ptr()

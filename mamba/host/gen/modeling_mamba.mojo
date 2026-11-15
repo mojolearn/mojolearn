@@ -1239,66 +1239,10 @@ def causal_conv1d_fn_kernel(gid_: Int,
         silu_out.unsafe_store((bb * l + li) * di + d, ftz(identical_silu(acc)))
 
 
-# NN35: two adjacent tokens share their convolution input window and
-# weights. Two is a fixed reuse tile, independent of datasets/dimensions;
-# it saves D_CONV-1 loads per pair without changing either tap chain.
-# OFF, uncompiled/unmeasured; host keeps the identical per-cell expression.
-comptime NN35_CONV_PAIR = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and is_defined["MOJOLEARN_NN35_CONV_PAIR"]()
-    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
-
-
-def nn35_causal_pair_kernel(gid_: Int,
-    conv_out: MutPointer[Float32, MutAnyOrigin],
-    silu_out: MutPointer[Float32, MutAnyOrigin],
-    in_proj: MutPointer[Float32, MutAnyOrigin],
-    conv_w: MutPointer[Float32, MutAnyOrigin],
-    conv_b: MutPointer[Float32, MutAnyOrigin],
-    win: MutPointer[Float32, MutAnyOrigin],
-    b_in: Int32, l_in: Int32, di_in: Int32,
-):
-    var b = Int(b_in)
-    var l = Int(l_in)
-    var di = Int(di_in)
-    var nt = (l + 1) // 2
-    var cell = gid_
-    if cell >= b * nt * di:
-        return
-    var d = cell % di
-    var ti = cell // di
-    var bb = ti // nt
-    var li = (ti % nt) * 2
-    var inputs = stack_allocation[D_CONV + 1, Float32]()
-    var weights = stack_allocation[D_CONV, Float32]()
-    var valid = min(2, l - li)
-    # Only valid outputs' taps are loaded; no read past the odd tail.
-    for k in range(D_CONV + valid - 1):
-        var pos = li - (D_CONV - 1) + k
-        var v: Float32
-        if pos >= 0:
-            v = in_proj.unsafe_load((bb * l + pos) * (2 * di) + d)
-        else:
-            v = win.unsafe_load((bb * di + d) * D_CONV + D_CONV + pos)
-        inputs[k] = ftz(v)
-    for k in range(D_CONV):
-        weights[k] = ftz(conv_w.unsafe_load(d * D_CONV + k))
-    var bias = ftz(conv_b.unsafe_load(d))
-    for j in range(valid):
-        var acc = bias
-        comptime if SAB_S13_BIAS_LAST:
-            acc = Float32(0.0)
-        for kk in range(D_CONV):
-            var k = kk
-            comptime if SAB_S13_TAPS_REVERSED:
-                k = D_CONV - 1 - kk
-            acc = ftz(identical_mul_add(weights[k], inputs[j + k], acc))
-        comptime if SAB_S13_BIAS_LAST:
-            acc = ftz(acc + bias)
-        var out_i = (bb * l + li + j) * di + d
-        conv_out.unsafe_store(out_i, acc)
-        silu_out.unsafe_store(out_i, ftz(identical_silu(acc)))
+# TOMBSTONE: MOJOLEARN_NN35_CONV_PAIR (DELETE-ARM, uncompiled/unmeasured opt-in) deleted 2026-11-15 by lane/expdel2-26-neural; code recoverable at 5fc464dce4.
+# Restore: git apply experiments/removed/MOJOLEARN_NN35_CONV_PAIR.patch
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (DELETE-OLD-PATH) deleted here 2026-11-15 by lane/expdel2-26-neural; code recoverable at 5fc464dce4.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-26-neural.patch
 
 
 def causal_conv1d_cell_kernel(gid_: Int,
@@ -1400,20 +1344,7 @@ def causal_conv1d_fn(
     """`causal_conv1d_fn(hidden_states, weight, bias, activation="silu")`
     (:81-100) plus the cache's window update (`update_conv_state`, MM:415).
     ASYNCHRONOUS."""
-    comptime if NN35_CONV_PAIR:
-        var _l5_a0 = conv_out.unsafe_ptr()
-        var _l5_a1 = silu_out.unsafe_ptr()
-        var _l5_a2 = in_proj.unsafe_ptr()
-        var _l5_a3 = conv_w.unsafe_ptr()
-        var _l5_a4 = conv_b.unsafe_ptr()
-        var _l5_a5 = old_win.unsafe_ptr()
-        var _l5_a6 = Int32(b)
-        var _l5_a7 = Int32(l)
-        var _l5_a8 = Int32(d_inner)
-        def _launch_5(gid_: Int) {imm _l5_a0, imm _l5_a1, imm _l5_a2, imm _l5_a3, imm _l5_a4, imm _l5_a5, imm _l5_a6, imm _l5_a7, imm _l5_a8}:
-            nn35_causal_pair_kernel(gid_, _l5_a0, _l5_a1, _l5_a2, _l5_a3, _l5_a4, _l5_a5, _l5_a6, _l5_a7, _l5_a8)
-        host_launch(_launch_5, launch_count((_grid(b * ((l + 1) // 2) * d_inner), 1, 1), (MAMBA_TPB, 1, 1)), 0)
-    elif IDN_MAMBA_CONV_CELL:
+    comptime if IDN_MAMBA_CONV_CELL:
         var _l6_a0 = conv_out.unsafe_ptr()
         var _l6_a1 = silu_out.unsafe_ptr()
         var _l6_a2 = in_proj.unsafe_ptr()
