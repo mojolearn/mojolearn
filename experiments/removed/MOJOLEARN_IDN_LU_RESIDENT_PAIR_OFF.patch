@@ -1,0 +1,43 @@
+diff --git b/bindings/_mojolearn_x_decomp.mojo a/bindings/_mojolearn_x_decomp.mojo
+index 8f6863b00f..689bb43721 100644
+--- b/bindings/_mojolearn_x_decomp.mojo
++++ a/bindings/_mojolearn_x_decomp.mojo
+@@ -264,7 +264,7 @@ def build__mojolearn_x_decomp() -> PythonObject:
+         m.def_function[s_flags_py]("x_decomp_s_flags")
+         comptime if DECOMP_FAST_ORTH_WS:
+             m.def_function[dev_orth_ws_py]("x_decomp_dev_orth_ws")
+-        # LU_FAST_RESIDENT (FAST + Apple) or IDN_LU_RESIDENT_PAIR (IDENTICAL default; IDN_ALL_OFF reverts)
++        # LU_FAST_RESIDENT (FAST + Apple) or IDN_LU_RESIDENT_PAIR (IDENTICAL default, rollback _OFF)
+         # TOMBSTONE: MOJOLEARN_LLE_FAST_DEV_LU (its x_decomp_dev_lu_aux registration) deleted 2026-11-08 by ed9ba6e7a1; code recoverable at 41ffcec665.
+         # Restore: git apply experiments/removed/MOJOLEARN_LLE_FAST_DEV_LU.patch
+         m.def_function[dev_colsum_py]("x_decomp_dev_colsum")
+diff --git b/x_decomp/s_linalg_fast.mojo a/x_decomp/s_linalg_fast.mojo
+index 9f2929bc9e..7b3123c621 100644
+--- b/x_decomp/s_linalg_fast.mojo
++++ a/x_decomp/s_linalg_fast.mojo
+@@ -8,9 +8,9 @@ verdicts batch 6 (2026-10-05), each with an _OFF rollback:
+   bit 1  RSVD_FAST_DEVSCAN   (`-D MOJOLEARN_RSVD_FAST_DEVSCAN_OFF`; deleted 2026-11-08, restored 2026-11-09)
+   bit 2  DECOMP_FAST_ORTH_WS (its _OFF rollback deleted 2026-11-15, docs/TOMBSTONES.md)
+   bit 4  LU_FAST_RESIDENT    (`-D MOJOLEARN_LU_FAST_RESIDENT_OFF`)
+-  bit 8  IDN_LU_RESIDENT_PAIR (IDENTICAL default since 2026-10-11; its _OFF rollback deleted 2026-11-15, docs/TOMBSTONES.md)
++  bit 8  IDN_LU_RESIDENT_PAIR (IDENTICAL default since 2026-10-11, `-D MOJOLEARN_IDN_LU_RESIDENT_PAIR_OFF`)
+ 
+-IDENTICAL compiles only IDN_LU_RESIDENT_PAIR's entries (unless -D MOJOLEARN_IDN_ALL_OFF).
++IDENTICAL compiles only IDN_LU_RESIDENT_PAIR's entries (unless its _OFF define).
+ """
+ from max.gpu import block_dim, block_idx, thread_idx
+ from std.sys.compile import is_defined
+@@ -122,11 +122,10 @@ comptime LU_FAST_RESIDENT = XD_FAST_APPLE and LU_QFIX and not is_defined["MOJOLE
+ #: equal: lu-factor synthetic NV 822.7 -> 369.0 ms (0.45x), AMD 568.0 ->
+ #: 315.4 ms (0.56x), avg 0.50x; lu-solve NV 353.0 -> 378.7 (1.07x), AMD
+ #: 317.0 -> 317.3 (1.00x), avg 1.04x (noise). Rollback:
+-#: -D MOJOLEARN_IDN_ALL_OFF only.
+-# TOMBSTONE: MOJOLEARN_IDN_LU_RESIDENT_PAIR_OFF (old path, superseded by the FAST+Apple default) deleted 2026-11-15 by lane/expdel-02-decomposition-series; code recoverable at 63d9ceea61.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_LU_RESIDENT_PAIR_OFF.patch; record in docs/TOMBSTONES.md.
++#: -D MOJOLEARN_IDN_LU_RESIDENT_PAIR_OFF (or MOJOLEARN_IDN_ALL_OFF).
+ comptime IDN_LU_RESIDENT_PAIR = (
+     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
++    and not is_defined["MOJOLEARN_IDN_LU_RESIDENT_PAIR_OFF"]()
+     and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+ )
+ #: Whether the binding registers `x_decomp_dev_lu_factor` / `_dev_lu_solve`.
