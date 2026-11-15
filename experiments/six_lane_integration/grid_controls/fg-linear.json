@@ -5,28 +5,6 @@
  "head": "a5101cb29",
  "head_note": "lane fg-linear (flagship gaps, 2026-10-09): code only, nothing compiled, run or queued by the lane. Read file docs/plans/flagship-gaps-20261009/read_linear.md.",
  "controls": {
-  "gram_ff_fallback": {
-   "define": "MOJOLEARN_IDN_GRAM_FF_FALLBACK_OFF",
-   "kind": "switch",
-   "arms": {
-    "on": [],
-    "off": [
-     "MOJOLEARN_IDN_GRAM_FF_FALLBACK_OFF"
-    ]
-   },
-   "default": "on",
-   "source": [
-    "experiments/classical_identical_ideas/fg_linear_controls.mojo:IDN_GRAM_FF_FALLBACK",
-    "glm/impl/gram_ff_cells.mojo:1",
-    "glm/impl/gram_solve.mojo:_gs_ff_fit",
-    "glm/impl/gram_solve.mojo:572",
-    "glm/host/gram_solve_host.mojo:_host_gff_fit"
-   ],
-   "binding": "_mojolearn_estimators (host twin _mojolearn_estimators_host)",
-   "bits_change": true,
-   "status": "promoted 2026-10-09 (lane/postmerge-act-5; fg2 board-bridge A/B on main 0a7b206f1, one run per arm (nv2 L40S v1021-v1050, amd MI325X a1161-a1190; ratio = arm / fg2.default-linear)): IDENTICAL default; the old on-define is refused in core/six_lane_experiment_guards.mojo",
-   "notes": "L3. When the fp32 Gram gate rejects a Ridge fit (alpha > 0): float-float centered Gram + cross (64 row leaves folded ascending, means split from the binary64 means by soft-f64), the same power-of-two equilibration, float-float Cholesky (one launch a column, rows in parallel) under a 2^-24 gate, float-float triangular solves, coef rounded once. Gate fails -> the ridge_resident / status-1 fallback. OLS untouched. Bits change for the fits it takes; host column runs the same cells. Quality gate owed: r2 on istella vs the eig route and vs cuML. PROMOTED: ridge istella NV 0.96x / AMD 0.51x (avg 0.74x; hash ff4ab841 -> 5a348e50 on both vendors, r2 0.328682 -> 0.328674), ridge taxi NV 0.91x / AMD 0.99x (hash unchanged), ols istella 1.00x / 1.00x, taxi 0.98x / 1.03x. Measured alone, never with jacobi_round_robin: both-on timing owed. The off arm restores the direct eig-route fallback."
-  },
   "gff_gram_tiled": {
    "define": "MOJOLEARN_IDN_GFF_GRAM_TILED_OFF",
    "kind": "switch",
@@ -59,7 +37,6 @@
    "binding": "_mojolearn_estimators (host column _mojolearn_estimators_host)",
    "route": "fit: Ridge.fit -> linear_gram_fit (linear_pinned_upload) -> gate reject -> [gram_ff_fallback: _gs_ff_fit] -> [ridge_resident: _gs_ridge_resident_fallback -> ridge_eig_scratch_traced -> svd_eig_scratch_traced (jacobi_round_robin)] -> else status 1 -> Python glue + ridge_fit_host (linear_pinned_upload, jacobi_round_robin)",
    "controls": [
-    "gram_ff_fallback",
     "gff_gram_tiled"
    ],
    "interaction_groups": [],
@@ -122,6 +99,11 @@
    "define": "MOJOLEARN_IDN_JACOBI_ROUND_ROBIN_OFF",
    "control": "jacobi_round_robin",
    "reason": "DELETED 2026-11-15 (lane/expdel2-05-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md): old path of the PROMOTED default (fg2: ridge istella NV 0.25x / AMD 0.14x). Code recoverable at 8ee233b8d9."
+  },
+  {
+   "define": "MOJOLEARN_IDN_GRAM_FF_FALLBACK_OFF",
+   "control": "gram_ff_fallback",
+   "reason": "DELETED 2026-11-15 (lane/expdel2-05-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md): old path of the PROMOTED default (fg2: ridge istella NV 0.96x / AMD 0.51x). Code recoverable at 438e34e369."
   }
  ]
 }

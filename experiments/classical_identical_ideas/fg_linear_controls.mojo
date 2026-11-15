@@ -75,8 +75,8 @@ comptime IDN_RIDGE_RESIDENT = LINEAR_GRAM_SOLVE
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_JACOBI_ROUND_ROBIN_OFF.patch; record in docs/TOMBSTONES.md.
 comptime IDN_JACOBI_ROUND_ROBIN = _FGL_IDN
 
-# L3 (DEFAULT ON since 2026-10-09, lane/postmerge-act-5; -D
-# MOJOLEARN_IDN_GRAM_FF_FALLBACK_OFF restores the direct eig-route fallback;
+# L3 (DEFAULT ON since 2026-10-09, lane/postmerge-act-5; the -D
+# MOJOLEARN_IDN_GRAM_FF_FALLBACK_OFF rollback is deleted;
 # the old on-define is refused in core/six_lane_experiment_guards.mojo).
 # Post-merge A/B on main 0a7b206f1, one run per arm (nv2 L40S v1021-v1050,
 # MI325X a1161-a1190; ratio = arm / fg2.default-linear): ridge istella NV
@@ -99,7 +99,9 @@ comptime IDN_JACOBI_ROUND_ROBIN = _FGL_IDN
 # When the float-float gate fails too, the L2 / status-1 fallback runs.
 # BITS CHANGE for the fits it takes (normal equations instead of eig); the
 # host column (glm/host/gram_solve_host.mojo) runs the same cells.
-comptime IDN_GRAM_FF_FALLBACK = LINEAR_GRAM_SOLVE and not is_defined["MOJOLEARN_IDN_GRAM_FF_FALLBACK_OFF"]()
+# TOMBSTONE: MOJOLEARN_IDN_GRAM_FF_FALLBACK_OFF (old path of the PROMOTED default) deleted 2026-11-15 by lane/expdel2-05-base; code recoverable at 438e34e369.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_GRAM_FF_FALLBACK_OFF.patch; record in docs/TOMBSTONES.md.
+comptime IDN_GRAM_FF_FALLBACK = LINEAR_GRAM_SOLVE
 
 # C1 (lane ridge-ff-tiled, 2026-10-11). PROMOTED to the IDENTICAL default 2026-10-11
 # (lane w2-decide-linalg; same box, main c8ef6c66d, one run per arm, NV==AMD digests):
