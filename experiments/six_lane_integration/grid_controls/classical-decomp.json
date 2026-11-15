@@ -62,29 +62,6 @@
    "binding": "_mojolearn_x_prep",
    "bits_change": true,
    "status": "split_from:C04_LOAD_CENTER (renamed, behavior unchanged; lane L4 owns LDA logic)"
-  },
-  "C25_PROJECTION_REUSE": {
-   "define": "MOJOLEARN_CLASSICAL_C25_PROJECTION_REUSE_OFF",
-   "kind": "switch",
-   "arms": {
-    "on": [],
-    "off": [
-     "MOJOLEARN_CLASSICAL_C25_PROJECTION_REUSE_OFF"
-    ]
-   },
-   "default": "on",
-   "source": [
-    "experiments/classical_identical_ideas/linear_controls.mojo:213",
-    "kernel_methods/estimator.mojo:212",
-    "kernel_methods/estimator.mojo:2646",
-    "kernel_methods/estimator.mojo:2749",
-    "kernel_methods/rbf_fused.mojo:76",
-    "core/six_lane_experiment_guards.mojo:182"
-   ],
-   "binding": "_mojolearn_kernel_methods",
-   "bits_change": false,
-   "status": "promoted 2026-10-10 (lane/c25-restore-promote; restored from the tombstone patch after grid pass 2 ge123e6f9r2): IDENTICAL default; the old on-define is refused in core/six_lane_experiment_guards.mojo",
-   "note": "Deleted 2026-10-08 (lane grid-losers-1, ab4e8e543) as noise on pass 1 alone (NV 1.00-1.04x / AMD 0.88-0.98x). Grid pass 2 (NVIDIA) with pass 1, vendor-averaged scored ms on/off: nystroem istella 0.890x, taxi 0.937x; rbf-sampler istella 0.891x, taxi 0.895x; 8 vendor cells, geo-mean 0.903x, worst 0.983x, kernel_rel_error SAME -> PROMOTE (~/mojolearn-evidence/grid-lq/decisions_act_0600_c25.json). _OFF restores the d <= 64 chain (RBF_IDN_FUSED) and the identical GEMM above it. Bits expected unchanged: one leaf (the same ascending chain) at d <= CONTRACT_K_LEAF_MIN, the GEMM-v1 leaves and balanced tree above it. Reach: RBFSampler.transform only (rbf_sampler_transform_host, _rbf_transform_dev); Nystroem's transform does not call _rbf_idn_fused_launch."
   }
  },
  "algorithms": {
@@ -184,9 +161,7 @@
   "more:rbf-sampler": {
    "binding": "_mojolearn_kernel_methods",
    "route": "kernel_methods/estimator.mojo:212 [C25]",
-   "controls": [
-    "C25_PROJECTION_REUSE"
-   ],
+   "controls": [],
    "interaction_groups": []
   }
  },
@@ -243,6 +218,11 @@
    "define": "MOJOLEARN_CLASSICAL_C24_ROWS2048_OFF",
    "control": "C24_TSQR",
    "reason": "DELETED 2026-11-15 (lane/expdel2-06-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md; recoverable at b4348c8a12; patch experiments/removed/MOJOLEARN_CLASSICAL_C24_ROWS2048_OFF.patch): old path, superseded by the measured IDENTICAL default. EXP:1638 PROMOTED (grid ge123e6f9, lane/grid-flips-1): OLS taxi NV 34.0 -> 21.5 ms (0.632), AMD 14.5 -> 13.8 (0.953); istella NV 816.2 -> 733.8 (0.899), AMD 468.9 -> 432.2 (0.922); GM 0.84x, quality SAME, NV == AMD hashes; the default is the recorded winner. Refused in core/experiment_guards_decomposition.mojo; docs/TOMBSTONES.md."
+  },
+  {
+   "define": "MOJOLEARN_CLASSICAL_C25_PROJECTION_REUSE_OFF",
+   "control": "C25_PROJECTION_REUSE",
+   "reason": "DELETED 2026-11-15 (lane/expdel2-06-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md; recoverable at 935328056e; patch experiments/removed/MOJOLEARN_CLASSICAL_C25_PROJECTION_REUSE_OFF.patch): old path, superseded by the measured IDENTICAL default. EXP:1984 PROMOTED (restored; IDENTICAL default; grid ge123e6f9 + ge123e6f9r2): geo-mean 0.903x over 8 vendor cells, worst 0.983x, kernel_rel_error SAME; the default is the recorded winner. Refused in core/experiment_guards_kernel.mojo; docs/TOMBSTONES.md."
   }
  ],
  "notes": [

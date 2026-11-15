@@ -259,10 +259,12 @@ comptime C24_TREE4 = False
 #  geo-mean 0.903x, worst 0.983x (consistent small win), kernel_rel_error SAME -> PROMOTE
 #  (~/mojolearn-evidence/grid-lq/decisions_act_0600_c25.json). Deleted 2026-10-08 (ab4e8e543) on pass-1 data
 #  alone as noise; restored 2026-10-10 from the tombstone patch after grid pass 2.
-# `-D MOJOLEARN_CLASSICAL_C25_PROJECTION_REUSE_OFF` restores the old path (the d <= 64
-# chain under RBF_IDN_FUSED, the identical GEMM above it). The old opt-in define is
+# The `_OFF` rollback to the old path (the d <= 64 chain under RBF_IDN_FUSED, the
+# identical GEMM above it) was deleted 2026-11-15. The old opt-in define is
 # refused in core/six_lane_experiment_guards.mojo.
-comptime C25_PROJECTION_REUSE = CLASSICAL_IDN and not is_defined["MOJOLEARN_CLASSICAL_C25_PROJECTION_REUSE_OFF"]()
+# TOMBSTONE: MOJOLEARN_CLASSICAL_C25_PROJECTION_REUSE_OFF (old path, superseded by the measured IDENTICAL default) deleted 2026-11-15 by lane/expdel2-06-base; code recoverable at 935328056e.
+# Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C25_PROJECTION_REUSE_OFF.patch; record in docs/TOMBSTONES.md.
+comptime C25_PROJECTION_REUSE = CLASSICAL_IDN
 comptime C26_PRODUCTS = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_C26_PRODUCTS"]()
 comptime C26_UPDATE_FUSED = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_C26_UPDATE_FUSED"]()
 comptime C27_COMPONENTS = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_C27_COMPONENTS"]()
