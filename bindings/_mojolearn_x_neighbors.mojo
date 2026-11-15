@@ -38,7 +38,7 @@ from x_neighbors.ocsvm_dev import OCSVM_CLS2_RES
 from providers.python.x_neighbors_dev_pyapi_door import ocsvm_resident_binding
 from x_neighbors.ocsvm_dev import OCSVM_IDN_RES
 from providers.python.x_neighbors_dev_pyapi_door import ocsvm_alpha_init_binding
-from x_neighbors.ocsvm_init import XN_OCSVM_DEV_INIT, XN_UNIT_DEV
+from x_neighbors.ocsvm_init import XN_OCSVM_DEV_INIT
 from providers.python.x_neighbors_dev_pyapi_door import unit_ff_binding
 from providers.python.x_neighbors_dev_pyapi_door import ocsvm_labels_binding, nc_labels_binding, nc_proba_binding, lp_dense_proba_binding
 from x_neighbors.kfeat_dev import XN_FAST_SCHI2_LAZYW, XN_KFEAT_ANY
@@ -1248,8 +1248,9 @@ def build__mojolearn_x_neighbors() -> PythonObject:
         comptime if XN_OCSVM_DEV_INIT:
             m.def_function[ocsvm_alpha_init_binding]("x_neighbors_ocsvm_alpha_init")
         # lane/fam2-neighbors: PageRank's caller vectors normalized by the op
-        comptime if XN_UNIT_DEV:
-            m.def_function[unit_ff_binding]("x_neighbors_unit_ff")
+        # TOMBSTONE: MOJOLEARN_IDN_XN_UNIT_DEV_OFF (old path, no A/B row) deleted 2026-11-15 by lane/expdel2-10-cluster; code recoverable at 7107e38be7.
+        # Restore: git apply experiments/removed/MOJOLEARN_IDN_XN_UNIT_DEV_OFF.patch; record in docs/TOMBSTONES.md.
+        m.def_function[unit_ff_binding]("x_neighbors_unit_ff")
         # lane ne3-g-svc-gp-neighbors (N369): OneClassSVM.predict in one session
         m.def_function[ocsvm_labels_binding]("x_neighbors_ocsvm_labels")
         # lane ne3-g-svc-gp-neighbors (N327): NearestCentroid predict / proba in one session
