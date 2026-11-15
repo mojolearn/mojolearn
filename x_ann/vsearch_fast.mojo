@@ -19,7 +19,6 @@ no-op alias (every switch it bundled is a default now; IVF_REFINE_TEAM
 measured neutral and was deleted 2026-10-09). The mechanism of each is docs/apple-fast/ab/vsearch.md; the profile
 they answer is docs/apple-fast/notes/vsearch.md; the record is
 docs/apple-fast/EXPERIMENTS.md."""
-from std.sys.compile import is_defined
 from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 
@@ -65,8 +64,7 @@ comptime PQ_SCAN_FUSED = VSEARCH_FAST_APPLE
 # Tried: ivf refine with one threadgroup per query and the dataset uploaded from the caller's array (refine_team_kernel, refine_device_team); ivf-refine taxi 1,208.3 -> 1,201.8 ms (-0.5%, noise).
 # Restore: git apply experiments/removed/MOJOLEARN_IVF_REFINE_TEAM.patch; record in docs/TOMBSTONES.md.
 
-#: lane fg-ivf (read_ivf.md idea A4), DEFAULT ON outside FAST
-#: (`-D MOJOLEARN_IDN_PQ_LUT_TILED_OFF` restores `pq_score_kernel`):
+#: lane fg-ivf (read_ivf.md idea A4), DEFAULT ON outside FAST:
 #: `pq_score_tiled_kernel` (`PQ_LUT_TILED` above) is the IDENTICAL IVF-PQ
 #: score on every vendor. Cost: when pq_dim x n_codes exceeds LUT_MAX the
 #: untiled kernel evaluates every (candidate, subspace) entry from device
@@ -79,7 +77,9 @@ comptime PQ_SCAN_FUSED = VSEARCH_FAST_APPLE
 #: `ts_ftz_nonneg(total + v)` over j ascending carried between tiles in the
 #: candidate buffer (an exact store). Check: ID line, NV digest == AMD
 #: digest == the _OFF arm's.
-comptime IDN_PQ_LUT_TILED = GLOBAL_NUMERIC_MODE != NUMERIC_FAST and not is_defined["MOJOLEARN_IDN_PQ_LUT_TILED_OFF"]()
+# TOMBSTONE: MOJOLEARN_IDN_PQ_LUT_TILED_OFF (old path, no A/B recorded beside the default; the grid's post-merge check found the _OFF arm neutral) deleted 2026-11-15 by lane/expdel2-14-cluster; code recoverable at aa63f5d1c7.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_PQ_LUT_TILED_OFF.patch; record in docs/TOMBSTONES.md.
+comptime IDN_PQ_LUT_TILED = GLOBAL_NUMERIC_MODE != NUMERIC_FAST
 
 #: TOMBSTONE (lane postmerge-act-3, 2026-10-09): `IDN_PQ_SCAN_FUSED` (fg-ivf A5, -D MOJOLEARN_IDN_PQ_SCAN_FUSED,
 #: pq_scan_fused_kernel in IDENTICAL) removed: slower, ivf-pq istella NV 1.80x / AMD 1.00x, taxi NV 1.77x / AMD 1.00x,
