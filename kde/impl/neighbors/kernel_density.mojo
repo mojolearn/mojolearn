@@ -105,10 +105,10 @@ from std.math import log, pi, sqrt
 from std.memory import bitcast
 from core.accelerator_target import TARGET_HAS_APPLE_GPU
 
-from experiments.classical_identical_ideas.stats_controls import C52_PAIR, C52_ROWS
+# TOMBSTONE: MOJOLEARN_C52_PAIR_ROWS (unmeasured opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-19-kernel (non-owner; owner expdel2-07-base); code recoverable at c48de5dbfd.
+# Restore: git apply experiments/removed/MOJOLEARN_C52_PAIR_ROWS.expdel2-19-kernel.patch; record in docs/TOMBSTONES.md.
 from experiments.classical_identical_ideas.graph_controls import KDE_DIRECT_DISTANCE
 from core.classical_distance import direct_distance_step
-from kde.pair_lse import pair_parts, pair_row
 from max.gpu import block_dim, block_idx, thread_idx
 from std.memory import stack_allocation
 from std.sys.compile import is_defined
@@ -914,11 +914,6 @@ def logsumexp_kernel(
     if i >= n_query:
         return
     var base = i * n_train
-    comptime if C52_PAIR:
-        var answer = pair_row(logk + base, n_train, kde_chunk_rows_for(n_train))
-        rowmax[i] = answer[0]
-        lse[i] = answer[1]
-        return
     var max_exp = logk.unsafe_load(base)
     for j in range(1, n_train):
         var v = logk.unsafe_load(base + j)
@@ -2108,7 +2103,7 @@ def kde_score_samples_tiled_identical(
         raise Error("kde: q_tpb must not exceed the tile (" + String(KDE_TILED_TILE_FLOATS) + ")")
     validate_metric_arg(metric, Float32(2.0))
     # Grid y stays inside every vendor's 65,535 limit.
-    var chunk_rows = C52_ROWS if C52_PAIR else chunk_rows_in
+    var chunk_rows = chunk_rows_in
     var min_rows = (n_train + 32767) // 32768
     if chunk_rows < min_rows:
         chunk_rows = min_rows
@@ -3442,9 +3437,9 @@ def kde_chunk_rows_for(n_train: Int, chunk_rows_in: Int = KDE_TILED_CHUNK_ROWS) 
     """The train chunk length of the tiled grid: `chunk_rows_in`, raised so
     grid y stays inside every vendor's limit. The device drivers and the
     host column's chunked fold share this one definition."""
-    # C52's leaf profile is shared with the host. Grow only for the portable
-    # grid-y limit, a function of total rows independent of the device vendor.
-    var chunk_rows = C52_ROWS if C52_PAIR else chunk_rows_in
+    # Grow only for the portable grid-y limit, a function of total rows
+    # independent of the device vendor.
+    var chunk_rows = chunk_rows_in
     var min_rows = (n_train + 32767) // 32768
     if chunk_rows < min_rows:
         chunk_rows = min_rows
@@ -3454,7 +3449,7 @@ def kde_chunk_rows_for(n_train: Int, chunk_rows_in: Int = KDE_TILED_CHUNK_ROWS) 
 def kde_chunk_lse_metric_applies(metric: Int) -> Bool:
     """The metrics whose IDENTICAL scores take the chunked fold (the tiled
     pass's three); the host column asks the same question."""
-    comptime if KDE_IDN_CHUNK_LSE or C52_PAIR:
+    comptime if KDE_IDN_CHUNK_LSE:
         return (
             metric == DIST_L2_SQRT_UNEXPANDED
             or metric == DIST_L1
@@ -3843,10 +3838,6 @@ def kde_chunk_lse_reduce_kernel(
         return
     var n_chunks = Int(n_chunks_in)
     var base = i * n_chunks
-    comptime if C52_PAIR:
-        var answer = pair_parts(part_max, part_sum, base, n_chunks)
-        lse[i] = answer[1]
-        return
     var neg_inf = bitcast[DType.float32](UInt32(0xFF800000))
     var mx = part_max.unsafe_load(base)
     for b in range(1, n_chunks):
@@ -3936,11 +3927,6 @@ def kde_chunk_lse_reduce_rowmax_kernel(
         return
     var n_chunks = Int(n_chunks_in)
     var base = i * n_chunks
-    comptime if C52_PAIR:
-        var answer = pair_parts(part_max, part_sum, base, n_chunks)
-        rowmax[i] = answer[0]
-        lse[i] = answer[1]
-        return
     var neg_inf = bitcast[DType.float32](UInt32(0xFF800000))
     var mx = part_max.unsafe_load(base)
     for b in range(1, n_chunks):
@@ -4210,7 +4196,7 @@ def kde_score_samples_device(
         else:
             # lane/fam-neighbors: the chunked log-sum-exp is the IDENTICAL
             # default (KDE_IDN_CHUNK_LSE above); FAST takes the tiled pass.
-            comptime if KDE_IDN_CHUNK_LSE or C52_PAIR:
+            comptime if KDE_IDN_CHUNK_LSE:
                 kde_score_samples_chunk_lse_identical(
                     ctx, train, query, weights, has_weights, sum_weights,
                     n_train, n_query, n_features, bandwidth, kernel, metric, scores,

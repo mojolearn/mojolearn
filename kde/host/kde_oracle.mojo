@@ -41,10 +41,10 @@ FAST that kernel is `block.sum` (the library's shape) and the sqeuclidean
 comparison is a REPORT.
 """
 
-from experiments.classical_identical_ideas.stats_controls import C52_PAIR
+# TOMBSTONE: MOJOLEARN_C52_PAIR_ROWS (unmeasured opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-19-kernel (non-owner; owner expdel2-07-base); code recoverable at c48de5dbfd.
+# Restore: git apply experiments/removed/MOJOLEARN_C52_PAIR_ROWS.expdel2-19-kernel.patch; record in docs/TOMBSTONES.md.
 from experiments.classical_identical_ideas.graph_controls import KDE_DIRECT_DISTANCE
 from core.classical_distance import direct_squared_distance, direct_distance_step
-from kde.pair_lse import pair_row
 from std.math import cos, exp, lgamma, log, pi, sqrt
 from std.memory import bitcast
 from std.sys.compile import is_defined
@@ -298,8 +298,6 @@ def oracle_logsumexp_row(
     Row 39: strict `>` from `j = 0`, the lower index wins a tie of `-0.0`
     and `+0.0` (the device's rule, `logsumexp_kernel`). DEVIATION 603: a
     row of all `-inf` is `-inf`, not `exp(NaN)`."""
-    comptime if C52_PAIR:
-        return pair_row((host_list_ptr(logk) + base).unsafe_origin_cast[MutAnyOrigin](), n_train, kde_chunk_rows_for(n_train))
     var max_exp = logk[base]
     for j in range(1, n_train):
         if logk[base + j] > max_exp:
@@ -548,10 +546,6 @@ def _kde_log_kernel_v(x: KdeV, h: Float32, kernel: Int) -> KdeV:
 
 def _kde_lse_row(row: HostF32Ptr, n_train: Int) -> Tuple[Float32, Float32]:
     """`oracle_logsumexp_row` over one row buffer (see the block engine)."""
-    comptime if C52_PAIR:
-        # pair_row reads the caller-owned buffer through its shared raw ABI.
-        var raw = MutPointer[Float32, MutAnyOrigin](unsafe_from_address=Int(row))
-        return pair_row(raw, n_train, kde_chunk_rows_for(n_train))
     var max_exp = row.unsafe_load(0)
     for j in range(1, n_train):
         var v = row.unsafe_load(j)
@@ -590,9 +584,6 @@ def _kde_lse_row_chunked(row: HostF32Ptr, n_train: Int) -> Tuple[Float32, Float3
     of `kde_chunk_rows_for(n_train)` cells, ascending, the pair (m, s) with
     the rescale on a new strict max; then the chunk maxima's max and the
     chunk sums scaled to it, chunks ascending. Returns `(rowmax, lse)`."""
-    comptime if C52_PAIR:
-        var raw = MutPointer[Float32, MutAnyOrigin](unsafe_from_address=Int(row))
-        return pair_row(raw, n_train, kde_chunk_rows_for(n_train))
     var neg_inf = bitcast[DType.float32](UInt32(0xFF800000))
     var chunk_rows = kde_chunk_rows_for(n_train)
     var n_chunks = (n_train + chunk_rows - 1) // chunk_rows
