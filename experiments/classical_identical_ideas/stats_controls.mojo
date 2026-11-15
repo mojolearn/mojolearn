@@ -39,7 +39,7 @@ comptime C56_QDA_PROJECT = 0
 # C57: retain each robust candidate's mean for its covariance computation.
 # TOMBSTONE: MOJOLEARN_C57_CANDIDATE_STATE (no A/B recorded for the opt-in arm) deleted 2026-11-15 by lane/expdel2-07-base; code recoverable at 5bb9e1659f.
 # Restore: git apply experiments/removed/MOJOLEARN_C57_CANDIDATE_STATE.patch
-comptime C57_CANDIDATE_STATE = False
+# (Sweep 2026-11-15: comptime C57_CANDIDATE_STATE removed; nothing read it.)
 # C58/59: only independent classical series/trials, no neural sequence callers.
 # TOMBSTONE: MOJOLEARN_C58_SHARED_PREP (slower) deleted 2026-10-08 by 3978db7ce; code recoverable at 3978db7ce^.
 # Restore: git apply experiments/removed/MOJOLEARN_C58_SHARED_PREP.patch; record in docs/TOMBSTONES.md.
