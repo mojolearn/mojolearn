@@ -11,8 +11,8 @@
 """The ann family's FAST-on-Apple defaults (lane/apple-fast-ann, 2026-10-02).
 
 Each switch is `True` only in a FAST build on the Apple column
-(`ANN_FAST_APPLE`; CAGRA_FAST_SEEDS and CAGRA_FAST_ITERS in every mode since
-2026-10-15, see there) unless its `-D MOJOLEARN_<NAME>_OFF` build define is
+(`ANN_FAST_APPLE`; the CAGRA seed floor in every mode since 2026-10-15,
+see there) unless its `-D MOJOLEARN_<NAME>_OFF` build define is
 given; an IDENTICAL build compiles each to `False`, so the old path is the
 only path there and its bits never move. No switch is an environment read
 (a `getenv` would be a host step on a fit or search path). The old
@@ -109,7 +109,7 @@ comptime _CAGRA_LOWD_SEEDS4 = CAGRA_FAST_IVFG
 #: log_{deg/2}(n) iterations (cuVS's auto rule adds the log term; 2x lets
 #: the walk converge). FAST+Apple default since the M3 A/B (one run per
 #: arm): taxi recall .4838 -> .9979 (SEEDS+ITERS), build 2,859 -> 2,900 ms
-#: (noise). `-D MOJOLEARN_CAGRA_FAST_SEEDS_OFF` / `_ITERS_OFF` turn each off.
+#: (noise).
 #: SEEDS4: four times the seed work (taxi .9997); on by default with
 #: LOWD_SEEDS4 above.
 # TOMBSTONE: MOJOLEARN_CAGRA_FAST_SEEDS4 (DROPPED-semantics) deleted 2026-10-09 by lane/owed-deletions-D3; code recoverable at b639a2bd2.
@@ -125,8 +125,9 @@ comptime _CAGRA_SEEDS4 = _CAGRA_LOWD_SEEDS4
 #: (quality-vs-opponent-20261015). Only the walk's budget moves, not its
 #: order, so identical stays the same bits on every column; the bits of
 #: identical CAGRA search change from the last version. The 4x seed work
-#: (SEEDS4) stays FAST + Apple. `-D MOJOLEARN_CAGRA_FAST_SEEDS_OFF` /
-#: `_ITERS_OFF` (A arms) restore cuVS's defaults in every mode.
-comptime CAGRA_FAST_SEEDS = (not is_defined["MOJOLEARN_CAGRA_FAST_SEEDS_OFF"]()) or _CAGRA_SEEDS4
+#: (SEEDS4) stays FAST + Apple. `-D MOJOLEARN_CAGRA_FAST_ITERS_OFF` (A arm)
+#: restores cuVS's iteration default in every mode.
+# TOMBSTONE: MOJOLEARN_CAGRA_FAST_SEEDS_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-13-cluster; code recoverable at b978a9b483.
+# Restore: git apply experiments/removed/MOJOLEARN_CAGRA_FAST_SEEDS_OFF.patch; record in docs/TOMBSTONES.md.
 comptime CAGRA_FAST_SEED_WORK = 4 * 262144 if _CAGRA_SEEDS4 else 262144
 comptime CAGRA_FAST_ITERS = not is_defined["MOJOLEARN_CAGRA_FAST_ITERS_OFF"]()
