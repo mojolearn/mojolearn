@@ -1,10 +1,10 @@
 """lane/apple-fast-sym-feat (2026-10-03): the A/B switches of the symmetric
 feature set outside histograms and leaf estimation (quantization, index
-build, held-out arm, predict, bootstrap seeds). Every switch is compiled
+build, held-out arm, predict). Every switch is compiled
 ONLY under `GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()`
 and is OFF by default, so IDENTICAL (and FAST on any other vendor) compiles
 main's code unchanged. One module so `train.mojo`, `gls_borders_device.mojo`,
-`doc_parallel_boosting.mojo`, `resident_model.mojo` and `bootstrap.mojo`
+`doc_parallel_boosting.mojo` and `resident_model.mojo`
 read the same flags without importing each other."""
 from std.sys.compile import is_defined
 from core.accelerator_target import TARGET_HAS_APPLE_GPU
@@ -78,13 +78,7 @@ comptime GBDT_EVAL_FUSED = SYM_FEAT_FAST_APPLE and (
 comptime GBDT_PREDICT_PACKED = SYM_FEAT_FAST_APPLE and (
     is_defined["MOJOLEARN_GBDT_PREDICT_PACKED"]()
 )
-#: `-D MOJOLEARN_GBDT_BOOT_DEVICE`: the 65,536 bootstrap seeds are filled
-#: by one launch (`bootstrap_seed_fill_kernel`, splitmix64 of
-#: `base + (i + 1) * golden`, the host loop's exact values) instead of a
-#: host loop, a pinned upload and a drain.
-#: recovery 2026-10-04 (lane/apple-fast-rec-sym): source
-#: lane/apple-fast-sym-feat@bca0e3a48; never built (compile owed at the
-#: source), never timed.
-comptime GBDT_BOOT_DEVICE = SYM_FEAT_FAST_APPLE and (
-    is_defined["MOJOLEARN_GBDT_BOOT_DEVICE"]()
-)
+# TOMBSTONE: MOJOLEARN_GBDT_BOOT_DEVICE (NEUTRAL: rab7-gbdtbootdevice istella -0.2%; its device seed fill is every
+# tier's default since cpu2-l6-bindings, so the switch read nothing) deleted 2026-11-15 by lane/expdel-05-trees; code
+# recoverable at 2f51f8b97d.
+# Restore: git apply experiments/removed/MOJOLEARN_GBDT_BOOT_DEVICE.patch

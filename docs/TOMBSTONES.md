@@ -628,6 +628,7 @@ in the tables after the sections.
 | [`P1_NATIVE_SKLEARN_TAGS` (`bindings/classical_tags.mojo`, `bindings/scaler_tags_native.mojo` and their tag operations)](#lane-p1-python-callbacks-removed-from-native-operations-2026-11-09) | sklearn tags (linear models, scalers) | removed (Python code on a product path; native or a refusal instead; not an experiment) | 2026-11-09 | [P1_NATIVE_SKLEARN_TAGS.patch](../experiments/removed/P1_NATIVE_SKLEARN_TAGS.patch) |
 | [`P1_DEAD_PY_CURVE_DRIVERS` (unreachable Python drivers (`_FoldCurve`, `_curves`, `roc_auc_options`, ... 91 defs))](#lane-p1-python-callbacks-removed-from-native-operations-2026-11-09) | Metrics, decomp, prep, linear model (Python) | removed (Python code on a product path; native or a refusal instead; not an experiment) | 2026-11-09 | [P1_DEAD_PY_CURVE_DRIVERS.patch](../experiments/removed/P1_DEAD_PY_CURVE_DRIVERS.patch) |
 | [`MOJOLEARN_SYM_FEAT_ALL`](#mojolearn_sym_feat_all) | Trees (GBDT, Apple FAST) | NEUTRAL | 2026-11-15 | [MOJOLEARN_SYM_FEAT_ALL.patch](../experiments/removed/MOJOLEARN_SYM_FEAT_ALL.patch) |
+| [`MOJOLEARN_GBDT_BOOT_DEVICE`](#mojolearn_gbdt_boot_device) | Trees (GBDT, Apple FAST) | NEUTRAL | 2026-11-15 | [MOJOLEARN_GBDT_BOOT_DEVICE.patch](../experiments/removed/MOJOLEARN_GBDT_BOOT_DEVICE.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -5918,3 +5919,12 @@ bits change on any vendor or the host column, no board row needs re-timing.
 - Guard refusal: core/experiment_guards_trees.mojo (lane expdel-05-trees block). No `grid_controls` entry named it.
 - EXPERIMENTS.md rows: 192, 216, 1300; appended row in the "Lane expdel-05-trees" section.
 - Note: Only the umbrella went: GBDT_INDEX_PACK_DEVICE, GBDT_QUANT_DEVICE and GBDT_PREDICT_PACKED keep their own defines (prerequisites of the unmeasured AFT_G06 / AFT_P05 cards; KEEP-OPEN in the plan).
+
+### MOJOLEARN_GBDT_BOOT_DEVICE
+
+- Tried: the 65,536 bootstrap seeds filled by one device launch (`bootstrap_seed_fill_kernel`) instead of a host loop, a pinned upload and a drain, FAST + Apple only.
+- Verdict: NEUTRAL. rab7-gbdtbootdevice (M3 Ultra, Verdicts batch 4, 2026-10-05): gbdt-symmetric istella 14724.09 -> 14693.21 ms (-0.2%); stays off. The device seed fill itself became every tier's default on 2026-10-04 (cpu2-l6-bindings, `create_bootstrap_seeds`), so the switch had no branch left: only the comptime and its import were deleted. Deleted 2026-11-15 by lane/expdel-05-trees (one commit for this define).
+- Recoverable at `2f51f8b97d`. Patch: `experiments/removed/MOJOLEARN_GBDT_BOOT_DEVICE.patch` (the reverse of the deletion commit, code files only; apply in reverse deletion order when restoring several of this lane).
+- Files the patch restores: `gbdt/gpu_data/sym_feat_switches.mojo`, `gbdt/gpu_util/kernel/bootstrap.mojo`
+- Guard refusal: core/experiment_guards_trees.mojo (lane expdel-05-trees block). No `grid_controls` entry named it.
+- EXPERIMENTS.md rows: 167, 1303; appended row in the "Lane expdel-05-trees" section.
