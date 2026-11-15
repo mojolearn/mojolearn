@@ -1024,15 +1024,12 @@ def smr_edge_rank_kernel(
 #: fast_radix_sort.mojo`) instead of `smr_edge_rank_kernel`'s all-pairs
 #: count, which is m^2 triple compares (10^12 at a million points). The
 #: triples are distinct, so the stable lexicographic order IS the rank the
-#: count produces: same permutation, same MST arrays.
-#: `-D MOJOLEARN_IDN_SMR_RADIX_RANK_OFF=1` restores the count.
-comptime IDN_SMR_RADIX_RANK = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not (
-        is_defined["MOJOLEARN_IDN_SMR_RADIX_RANK_OFF"]()
-        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-    )
-)
+#: count produces: same permutation, same MST arrays. FAST keeps the count.
+# TOMBSTONE: MOJOLEARN_IDN_SMR_RADIX_RANK_OFF (old path: the all-pairs rank count under IDENTICAL; no A/B recorded) deleted 2026-11-15 by lane/expdel2-11-cluster; code recoverable at a5d64c0368.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_SMR_RADIX_RANK_OFF.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (its term here, the same old path) deleted 2026-11-15 by lane/expdel2-11-cluster; code recoverable at a5d64c0368.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-11-cluster.patch.
+comptime IDN_SMR_RADIX_RANK = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 comptime _U32P = MutPointer[UInt32, MutAnyOrigin]
 
 
