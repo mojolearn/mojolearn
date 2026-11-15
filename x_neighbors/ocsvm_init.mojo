@@ -115,11 +115,11 @@ def oci_nu_lo(nu: Float64) -> Float32:
 #: vs the binary64 one), device and host column together.
 #: Lane py-runtime-b: FAST registers it too (the Python walk is deleted:
 #: no Python compute in the runtime). In IDENTICAL, -D
-#: MOJOLEARN_IDN_XN_UNIT_DEV_OFF (or MOJOLEARN_IDN_ALL_OFF) leaves the binding
+#: MOJOLEARN_IDN_XN_UNIT_DEV_OFF leaves the binding
 #: function unregistered and PageRank refuses a caller vector.
-comptime XN_UNIT_DEV = GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL or not (
-    is_defined["MOJOLEARN_IDN_XN_UNIT_DEV_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch, EXP:2438 DELETED; non-owner sites) deleted 2026-11-15 by lane/expdel2-10-cluster; code recoverable at 75ea427c34.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-10-cluster.patch; record in docs/TOMBSTONES.md.
+comptime XN_UNIT_DEV = GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL or not is_defined["MOJOLEARN_IDN_XN_UNIT_DEV_OFF"]()
 
 
 @always_inline

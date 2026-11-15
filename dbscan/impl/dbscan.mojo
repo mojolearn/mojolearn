@@ -70,21 +70,19 @@ from dbscan.impl.neighbors.epsilon_neighborhood import DBSCAN_METRIC_L2
 #: fam2-cluster (2026-10-04): the core mask of `prediction_data=True` goes
 #: straight into the caller's array (see `IDN_DBSCAN_DIRECT_OUT` in
 #: `dbscan/estimator.mojo`; the same `_OFF` define restores the staged copy).
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch, EXP:2438 DELETED; non-owner sites) deleted 2026-11-15 by lane/expdel2-10-cluster; code recoverable at 75ea427c34.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-10-cluster.patch; record in docs/TOMBSTONES.md.
 comptime IDN_DBSCAN_DIRECT_CORE_OUT = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not (
-        is_defined["MOJOLEARN_IDN_DBSCAN_DIRECT_OUT_OFF"]()
-        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-    )
+    and not is_defined["MOJOLEARN_IDN_DBSCAN_DIRECT_OUT_OFF"]()
 )
 
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch, EXP:2438 DELETED; non-owner sites) deleted 2026-11-15 by lane/expdel2-10-cluster; code recoverable at 75ea427c34.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-10-cluster.patch; record in docs/TOMBSTONES.md.
 comptime IDN_DBSCAN_RBC_ONE_BATCH = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     and (TARGET_COLUMN == COLUMN_NVIDIA or TARGET_COLUMN == COLUMN_AMD)
-    and not (
-        is_defined["MOJOLEARN_IDN_DBSCAN_RBC_ONE_BATCH_OFF"]()
-        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-    )
+    and not is_defined["MOJOLEARN_IDN_DBSCAN_RBC_ONE_BATCH_OFF"]()
 )
 
 

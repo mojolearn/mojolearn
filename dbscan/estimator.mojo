@@ -142,12 +142,11 @@ from core.accelerator_target import TARGET_HAS_APPLE_GPU
 #: A row it must refuse is reported through one Int32 cell and refused by
 #: name with the host function's sentence (without the squared norm value).
 #: `-D MOJOLEARN_IDN_DBSCAN_COSINE_DEVICE_OFF=1` restores the host scaling.
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch, EXP:2438 DELETED; non-owner sites) deleted 2026-11-15 by lane/expdel2-10-cluster; code recoverable at 75ea427c34.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-10-cluster.patch; record in docs/TOMBSTONES.md.
 comptime IDN_DBSCAN_COSINE_DEVICE = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not (
-        is_defined["MOJOLEARN_IDN_DBSCAN_COSINE_DEVICE_OFF"]()
-        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-    )
+    and not is_defined["MOJOLEARN_IDN_DBSCAN_COSINE_DEVICE_OFF"]()
 )
 
 #: fam2-cluster (2026-10-04), IDENTICAL, every column: the labels (and the
@@ -155,12 +154,11 @@ comptime IDN_DBSCAN_COSINE_DEVICE = (
 #: caller's arrays, without a host staging buffer and a per-element host
 #: copy loop. Same bytes. `-D MOJOLEARN_IDN_DBSCAN_DIRECT_OUT_OFF=1`
 #: restores the staged copy.
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch, EXP:2438 DELETED; non-owner sites) deleted 2026-11-15 by lane/expdel2-10-cluster; code recoverable at 75ea427c34.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-10-cluster.patch; record in docs/TOMBSTONES.md.
 comptime IDN_DBSCAN_DIRECT_OUT = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not (
-        is_defined["MOJOLEARN_IDN_DBSCAN_DIRECT_OUT_OFF"]()
-        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-    )
+    and not is_defined["MOJOLEARN_IDN_DBSCAN_DIRECT_OUT_OFF"]()
 # MEASURED M3 FAST; broader workload evidence remains separate.
 # F15/dbscan-outputs M3 2026-10-06: 6 scored caller times; B/A
 # 0.9371..1.7658 (mixed/regressing); FAST candidate remains OFF.

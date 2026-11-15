@@ -6,7 +6,7 @@ A/B one run per arm, main@b2657cc89, algos svgp (runs v0035/v0036, a1618/a1619):
   istella NV L40S 344.4 -> 206.5 ms (0.60), AMD MI325X 1091.7 -> 620.7 ms (0.57)
   taxi    NV L40S 337.0 -> 334.6 ms (0.99), AMD MI325X 1086.9 -> 716.6 ms (0.66)
   digests NV == AMD on both arms; r2 equal (istella -0.10601568648, taxi -0.19498).
-`-D MOJOLEARN_IDN_SVGP_B_FP32_GATED_OFF` (or MOJOLEARN_IDN_ALL_OFF) restores the
+`-D MOJOLEARN_IDN_SVGP_B_FP32_GATED_OFF` restores the
 float-float B everywhere. FAST builds never take it (IDENTICAL-only, so the
 SVGP_FAST_BSPLIT assert in iter_device.mojo cannot fire there).
 
@@ -47,10 +47,11 @@ from checks.numerics import ftz, identical_div, identical_mul_add, GLOBAL_NUMERI
 from x_decomp.cells import chol_diag, div0, sqrt0
 from glm.impl.gram_solve_cells import gs_pivot_trusted
 
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch, EXP:2438 DELETED; non-owner sites) deleted 2026-11-15 by lane/expdel2-10-cluster; code recoverable at 75ea427c34.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-10-cluster.patch; record in docs/TOMBSTONES.md.
 comptime IDN_SVGP_B_FP32_GATED = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     and not is_defined["MOJOLEARN_IDN_SVGP_B_FP32_GATED_OFF"]()
-    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 )
 
 

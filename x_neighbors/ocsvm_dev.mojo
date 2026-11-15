@@ -90,8 +90,9 @@ comptime OCSVM_CLS2_RES = _OC_FA
 #   MOJOLEARN_IDN_OCSVM_CHUNK256 (CANDIDATE, default OFF; -D
 #     MOJOLEARN_IDN_OCSVM_CHUNK256 turns it on): 256 iterations between two
 #     reads of the stop flag, not 64.
-# All off under MOJOLEARN_IDN_ALL_OFF.
-comptime _OC_IDN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch, EXP:2438 DELETED; non-owner sites) deleted 2026-11-15 by lane/expdel2-10-cluster; code recoverable at 75ea427c34.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-10-cluster.patch; record in docs/TOMBSTONES.md.
+comptime _OC_IDN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 comptime OCSVM_IDN_RES = _OC_IDN and not is_defined["MOJOLEARN_IDN_OCSVM_RES_OFF"]()
 comptime OCSVM_X_ON = OCSVM_CLS2_RES or OCSVM_IDN_RES
 comptime OCSVM_CLS2_2L = (_OC_FA and not is_defined["MOJOLEARN_XN_FAST_CLS2_OCSVM_2L_OFF"]()) or (

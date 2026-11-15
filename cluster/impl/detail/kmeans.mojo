@@ -157,13 +157,12 @@ from cluster.impl.kmeans_params import (
 #: totals by the associativity argument in `reduce_by_key.mojo`, so no bit
 #: moves. `-D MOJOLEARN_IDN_KMEANS_BLOCK_ACC_AMD_OFF=1` restores the atomic
 #: reductions on AMD.
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch, EXP:2438 DELETED; non-owner sites) deleted 2026-11-15 by lane/expdel2-10-cluster; code recoverable at 75ea427c34.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-10-cluster.patch; record in docs/TOMBSTONES.md.
 comptime IDN_KMEANS_BLOCK_ACC_AMD = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     and TARGET_COLUMN == COLUMN_AMD
-    and not (
-        is_defined["MOJOLEARN_IDN_KMEANS_BLOCK_ACC_AMD_OFF"]()
-        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-    )
+    and not is_defined["MOJOLEARN_IDN_KMEANS_BLOCK_ACC_AMD_OFF"]()
 )
 comptime KMEANS_BLOCK_ACC = (
     not is_defined["MOJOLEARN_KMEANS_BLOCK_ACC_OFF"]()
@@ -178,13 +177,12 @@ comptime KMEANS_BLOCK_ACC = (
 #: buffer zeroed by two extra launches per Lloyd iteration. `0 + total` is
 #: `total` in Int32, so no bit moves. `-D MOJOLEARN_IDN_KMEANS_FOLD_STORE_OFF=1`
 #: restores the two zero launches and the adding fold.
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch, EXP:2438 DELETED; non-owner sites) deleted 2026-11-15 by lane/expdel2-10-cluster; code recoverable at 75ea427c34.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-10-cluster.patch; record in docs/TOMBSTONES.md.
 comptime IDN_KMEANS_FOLD_STORE = (
     KMEANS_BLOCK_ACC
     and GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not (
-        is_defined["MOJOLEARN_IDN_KMEANS_FOLD_STORE_OFF"]()
-        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-    )
+    and not is_defined["MOJOLEARN_IDN_KMEANS_FOLD_STORE_OFF"]()
 )
 #: fam2-cluster (2026-10-04), IDENTICAL, with the row-block accumulator: THE
 #: STOPPING RULE ON THE DEVICE. The Lloyd loop no longer drains once per
@@ -203,13 +201,12 @@ comptime IDN_KMEANS_FOLD_STORE = (
 #: recording, and when the assignment is split across devices.
 #: `-D MOJOLEARN_IDN_KMEANS_DEVICE_CONV_OFF=1` restores the per-iteration
 #: drain everywhere.
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch, EXP:2438 DELETED; non-owner sites) deleted 2026-11-15 by lane/expdel2-10-cluster; code recoverable at 75ea427c34.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-10-cluster.patch; record in docs/TOMBSTONES.md.
 comptime IDN_KMEANS_DEVICE_CONV = (
     KMEANS_BLOCK_ACC
     and GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not (
-        is_defined["MOJOLEARN_IDN_KMEANS_DEVICE_CONV_OFF"]()
-        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-    )
+    and not is_defined["MOJOLEARN_IDN_KMEANS_DEVICE_CONV_OFF"]()
 )
 #: Iterations enqueued per flag read: ONE int sweep define (lane
 #: classical-fixes, 2026-10-07), `-D MOJOLEARN_IDN_KMEANS_CONV_CHUNK=1|2|4|16|32`,
@@ -887,14 +884,15 @@ def _assign_to_candidates(
 #: index), so no bit moves; the eight rounds plus step 7 stop paying
 #: `n * |C so far| * d` each. `-D MOJOLEARN_IDN_KMEANS_INCR_INIT_OFF=1`
 #: reassigns in full there.
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch, EXP:2438 DELETED; non-owner sites) deleted 2026-11-15 by lane/expdel2-10-cluster; code recoverable at 75ea427c34.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-10-cluster.patch; record in docs/TOMBSTONES.md.
 comptime IDN_KMEANS_INCR_INIT = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     and (TARGET_COLUMN == COLUMN_NVIDIA or TARGET_COLUMN == COLUMN_AMD)
-    and not (
-        is_defined["MOJOLEARN_IDN_KMEANS_INCR_INIT_OFF"]()
-        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-    )
+    and not is_defined["MOJOLEARN_IDN_KMEANS_INCR_INIT_OFF"]()
 )
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch, EXP:2438 DELETED; non-owner sites) deleted 2026-11-15 by lane/expdel2-10-cluster; code recoverable at 75ea427c34.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-10-cluster.patch; record in docs/TOMBSTONES.md.
 comptime KMEANS_FAST_INCR_INIT = IDN_KMEANS_INCR_INIT or (
     TARGET_HAS_APPLE_GPU and (
         (
@@ -903,10 +901,7 @@ comptime KMEANS_FAST_INCR_INIT = IDN_KMEANS_INCR_INIT or (
         )
         or (
             GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-            and not (
-                is_defined["MOJOLEARN_KMEANS_ID_INCR_INIT_OFF"]()
-                or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-            )
+            and not is_defined["MOJOLEARN_KMEANS_ID_INCR_INIT_OFF"]()
         )
     )
 )
@@ -918,12 +913,11 @@ comptime KMEANS_FAST_INCR_INIT = IDN_KMEANS_INCR_INIT or (
 #: (one of the round's drains; the selected COUNT still comes back, because
 #: it sizes the next allocation). Same Float32 psi, so the same flags.
 #: `-D MOJOLEARN_IDN_KMEANS_INIT_PSI_DEVICE_OFF=1` restores the readback.
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch, EXP:2438 DELETED; non-owner sites) deleted 2026-11-15 by lane/expdel2-10-cluster; code recoverable at 75ea427c34.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-10-cluster.patch; record in docs/TOMBSTONES.md.
 comptime IDN_KMEANS_INIT_PSI_DEVICE = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not (
-        is_defined["MOJOLEARN_IDN_KMEANS_INIT_PSI_DEVICE_OFF"]()
-        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-    )
+    and not is_defined["MOJOLEARN_IDN_KMEANS_INIT_PSI_DEVICE_OFF"]()
 )
 
 

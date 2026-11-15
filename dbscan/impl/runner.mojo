@@ -223,13 +223,12 @@ from neighbors.impl.ball_cover.registers import (
 #: the counts too (it was Apple only), so a fit the edge cap splits into
 #: several batches does not re-run the count pass in loop 2. Same counts, so
 #: the same CSR. `-D MOJOLEARN_IDN_DBSCAN_KEEP_COUNTS_OFF=1` re-counts there.
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch, EXP:2438 DELETED; non-owner sites) deleted 2026-11-15 by lane/expdel2-10-cluster; code recoverable at 75ea427c34.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-10-cluster.patch; record in docs/TOMBSTONES.md.
 comptime IDN_DBSCAN_KEEP_COUNTS = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     and not TARGET_HAS_APPLE_GPU
-    and not (
-        is_defined["MOJOLEARN_IDN_DBSCAN_KEEP_COUNTS_OFF"]()
-        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-    )
+    and not is_defined["MOJOLEARN_IDN_DBSCAN_KEEP_COUNTS_OFF"]()
 )
 comptime DBSCAN_RBC_KEEP_COUNTS = (
     (
@@ -249,12 +248,11 @@ comptime DBSCAN_RBC_KEEP_COUNTS = (
 #: unconditionally. Three drains and one launch per batch; no value any
 #: kernel reads changes. `-D MOJOLEARN_IDN_DBSCAN_RBC_DEAD_READS_OFF=1`
 #: restores them.
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch, EXP:2438 DELETED; non-owner sites) deleted 2026-11-15 by lane/expdel2-10-cluster; code recoverable at 75ea427c34.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-10-cluster.patch; record in docs/TOMBSTONES.md.
 comptime IDN_DBSCAN_RBC_DEAD_READS = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not (
-        is_defined["MOJOLEARN_IDN_DBSCAN_RBC_DEAD_READS_OFF"]()
-        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-    )
+    and not is_defined["MOJOLEARN_IDN_DBSCAN_RBC_DEAD_READS_OFF"]()
 )
 
 #: fam2-cluster (2026-10-04), IDENTICAL, every column: the border pass
@@ -265,12 +263,11 @@ comptime IDN_DBSCAN_RBC_DEAD_READS = (
 #: the same batches take the pass.
 #: cpu3-neighbors (2026-10-04): the device decision is now the only route in
 #: every mode; the host walk and this define's off arm are gone from the fit.
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch, EXP:2438 DELETED; non-owner sites) deleted 2026-11-15 by lane/expdel2-10-cluster; code recoverable at 75ea427c34.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-10-cluster.patch; record in docs/TOMBSTONES.md.
 comptime IDN_DBSCAN_BORDER_NEEDS_DEVICE = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not (
-        is_defined["MOJOLEARN_IDN_DBSCAN_BORDER_NEEDS_DEVICE_OFF"]()
-        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-    )
+    and not is_defined["MOJOLEARN_IDN_DBSCAN_BORDER_NEEDS_DEVICE_OFF"]()
 )
 
 comptime EPS_NN_BRUTE_FORCE = 0
