@@ -637,6 +637,7 @@ in the tables after the sections.
 | [`MOJOLEARN_SYM_BUF_ARENA`](#mojolearn_sym_buf_arena) | Trees (GBDT, Apple FAST) | NEUTRAL | 2026-11-15 | [MOJOLEARN_SYM_BUF_ARENA.patch](../experiments/removed/MOJOLEARN_SYM_BUF_ARENA.patch) |
 | [`MOJOLEARN_SYM_MULTI_ALL`](#mojolearn_sym_multi_all) | Trees (GBDT, Apple FAST) | NEUTRAL | 2026-11-15 | [MOJOLEARN_SYM_MULTI_ALL.patch](../experiments/removed/MOJOLEARN_SYM_MULTI_ALL.patch) |
 | [`MOJOLEARN_YR_TASK_FUSED`](#mojolearn_yr_task_fused) | Trees (GBDT, Apple FAST) | NEUTRAL | 2026-11-15 | [MOJOLEARN_YR_TASK_FUSED.patch](../experiments/removed/MOJOLEARN_YR_TASK_FUSED.patch) |
+| [`MOJOLEARN_KSHAP_FAST_BATCH_OFF`](#mojolearn_kshap_fast_batch_off) | Trees (GBDT, Apple FAST) | removed (old path; KSHAP_FAST_BATCH KEPT) | 2026-11-15 | [MOJOLEARN_KSHAP_FAST_BATCH_OFF.patch](../experiments/removed/MOJOLEARN_KSHAP_FAST_BATCH_OFF.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -6010,3 +6011,12 @@ bits change on any vendor or the host column, no board row needs re-timing.
 - Guard refusal: core/experiment_guards_trees.mojo (lane expdel-05-trees block). No `grid_controls` entry named it.
 - EXPERIMENTS.md rows: 204, 228, 1303; appended row in the "Lane expdel-05-trees" section.
 - Note: The unmeasured AFT_N10 card (experiments/apple_fast_trees/N.json) named the task-fused kernel as one of its two sites; its block-kernel site stays, so N10 still has an arm.
+
+### MOJOLEARN_KSHAP_FAST_BATCH_OFF
+
+- Tried: the FAST + Apple rollback of KSHAP_FAST_BATCH (the explainers' synthetic matrix in one pooled device buffer, a reused host buffer, KernelExplainer's solve once over many rows): it sent a FAST + Apple build back to the per-chunk path.
+- Verdict: removed (old path; KSHAP_FAST_BATCH KEPT). KSHAP_FAST_BATCH KEPT on the M3 Ultra: kap2-kshap-batch-istella kernel-shap istella 27,011 -> 15,325 ms (-43.3%), rel_error_vs_exact 4.378e-09 both arms; kap2-pshap-batch-istella permutation-shap istella 34,198 -> 28,236 ms, rel error identical. Apple FAST only, so the M3 A/B is the whole record (no NVIDIA / AMD arm). Only the define read went: the per-chunk path is the path of every IDENTICAL and non-Apple build and stays. Deleted 2026-11-15 by lane/expdel-05-trees (one commit for this define).
+- Recoverable at `073a9cc375`. Patch: `experiments/removed/MOJOLEARN_KSHAP_FAST_BATCH_OFF.patch` (the reverse of the deletion commit, code files only; apply in reverse deletion order when restoring several of this lane).
+- Files the patch restores: `xtrees/agnostic_device.mojo`
+- Guard refusal: core/experiment_guards_trees.mojo (lane expdel-05-trees block). No `grid_controls` entry named it.
+- EXPERIMENTS.md rows: 691, 692; appended row in the "Lane expdel-05-trees" section.

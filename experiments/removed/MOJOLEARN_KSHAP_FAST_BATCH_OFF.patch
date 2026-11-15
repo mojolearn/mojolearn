@@ -1,0 +1,29 @@
+diff --git b/xtrees/agnostic_device.mojo a/xtrees/agnostic_device.mojo
+index d1c7e89212..fa0ce1773d 100644
+--- b/xtrees/agnostic_device.mojo
++++ a/xtrees/agnostic_device.mojo
+@@ -26,8 +26,9 @@ from std.memory import bitcast
+ from core.shared_slot import SharedSlot
+ 
+ comptime AGN_TPB = 128
+-#: lane apple-fast-gap-kapprox2 (2026-10-03), the FAST + Apple path
+-#: (IDENTICAL and the other columns take the per-chunk path):
++#: lane apple-fast-gap-kapprox2 (2026-10-03), the FAST + Apple default
++#: (IDENTICAL and the other columns are unchanged; -D
++#: MOJOLEARN_KSHAP_FAST_BATCH_OFF restores the per-chunk path):
+ #: MOJOLEARN_KSHAP_FAST_BATCH  the explainers' synthetic matrix lives in one
+ #:   pooled device buffer (no per-chunk 100-400 MB allocation), the Python
+ #:   glue reuses one host buffer for it across chunks (no fresh pages per
+@@ -38,11 +39,7 @@ comptime AGN_TPB = 128
+ #:   kap2-kshap-batch-istella: kernel-shap istella 27,011 -> 15,325 ms
+ #:   (-43.3%), rel_error_vs_exact 4.378e-09 both arms.
+ comptime _AGN_FAST_APPLE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
+-# TOMBSTONE: MOJOLEARN_KSHAP_FAST_BATCH_OFF (old path; KSHAP_FAST_BATCH KEPT: kap2-kshap-batch-istella 27,011 -> 15,325 ms,
+-# kap2-pshap-batch-istella 34,198 -> 28,236 ms, M3) deleted 2026-11-15 by lane/expdel-05-trees; code recoverable at
+-# 073a9cc375. The per-chunk path stays: it is every other build's path.
+-# Restore: git apply experiments/removed/MOJOLEARN_KSHAP_FAST_BATCH_OFF.patch
+-comptime KSHAP_FAST_BATCH = _AGN_FAST_APPLE
++comptime KSHAP_FAST_BATCH = _AGN_FAST_APPLE and not is_defined["MOJOLEARN_KSHAP_FAST_BATCH_OFF"]()
+ #: lane idn-shap-pca (2026-10-04), the IDENTICAL default on NVIDIA, AMD and
+ #: Apple (-D MOJOLEARN_AGN_IDN_SYN_POOL_OFF restores the per-chunk buffers):
+ #: MOJOLEARN_AGN_IDN_SYN_POOL  the explainers' synthetic matrix is built in

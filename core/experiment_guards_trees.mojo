@@ -90,6 +90,8 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_SYM_MULTI_ALL"](), "removed 2026-11-15 (lane/expdel-05-trees): MOJOLEARN_SYM_MULTI_ALL, the FAST Apple umbrella of YR_TASK_FUSED (its PL_GROUP_NARROW part is the default on its own), was NEUTRAL: rab4-symmulti yetirank 3390.8 -> 3395.46 ms (+0.1%); code at 16f9e02852; see docs/TOMBSTONES.md"
     # Restore: git apply experiments/removed/MOJOLEARN_YR_TASK_FUSED.patch
     comptime assert not is_defined["MOJOLEARN_YR_TASK_FUSED"](), "removed 2026-11-15 (lane/expdel-05-trees): MOJOLEARN_YR_TASK_FUSED, the FAST Apple one-launch YetiRank call, was NEUTRAL: rab7-yrtaskfused yetirank 3386.79 -> 3394.43 ms (+0.2%), ndcg10 .680466 -> .680553; code at 41f0634a67; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_KSHAP_FAST_BATCH_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_KSHAP_FAST_BATCH_OFF"](), "removed 2026-11-15 (lane/expdel-05-trees): MOJOLEARN_KSHAP_FAST_BATCH_OFF, the FAST Apple rollback of the batched kernel / permutation SHAP buffers, is removed: KSHAP_FAST_BATCH was KEPT (kap2-kshap-batch-istella 27,011 -> 15,325 ms, kap2-pshap-batch-istella 34,198 -> 28,236 ms, M3); every FAST Apple build batches; code at 073a9cc375; see docs/TOMBSTONES.md"
     return True
 
 
