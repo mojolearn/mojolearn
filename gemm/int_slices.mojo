@@ -89,12 +89,10 @@ from gemm.int_slices_seams import (
 #: The sabotage arm (see the module docstring).
 comptime INT_SLICES_SABOTAGE = is_defined["MOJOLEARN_INT_SLICES_SABOTAGE"]()
 
-#: Forces the FLAT plan on a column that has the unit, so one box can compare
-#: UNIT against FLAT (the gate's plan-agreement arm).
-comptime INT_SLICES_FORCE_FLAT = is_defined["MOJOLEARN_INT_SLICES_FORCE_FLAT"]()
-
+# TOMBSTONE: MOJOLEARN_INT_SLICES_FORCE_FLAT (force the FLAT plan on a unit column; opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-25-neural; code recoverable at e62e7376e0.
+# Restore: git apply experiments/removed/MOJOLEARN_INT_SLICES_FORCE_FLAT.patch; record in docs/TOMBSTONES.md.
 #: Whether this build has the integer matrix unit plan.
-comptime INT_SLICES_UNIT = lib_int8_matrix_unit_for[TARGET_COLUMN]() and not INT_SLICES_FORCE_FLAT
+comptime INT_SLICES_UNIT = lib_int8_matrix_unit_for[TARGET_COLUMN]()
 
 #: Threads of the quantizer's and the cell kernels' blocks. SCHEDULING.
 comptime INT_SLICES_TPB = 256
