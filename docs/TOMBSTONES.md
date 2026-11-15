@@ -2148,6 +2148,7 @@ Deletions reversed by new evidence. The code is back on main; the section and th
 | [`MOJOLEARN_IDN_KNN_I32_LABEL_RANGE_OLD`](#mojolearn_idn_knn_i32_label_range_old-old-path-deleted-2026-11-15) | k-NN classifier fit int32 labels | 2026-11-15 (`10c4fb4ffc`) | 2026-11-15 (lane/expdel2-restore-owed) | opt-in B arm, default unchanged, A/B owed at the wave sha | [MOJOLEARN_IDN_KNN_I32_LABEL_RANGE_OLD.patch](../experiments/removed/MOJOLEARN_IDN_KNN_I32_LABEL_RANGE_OLD.patch) |
 | [`MOJOLEARN_IDN_MAMBA12_FORWARD_DOOR_OLD`](#mojolearn_idn_mamba12_forward_door_old) | Neural (Mamba-1/2 held stage arena and door) | 2026-11-15 (`29b23a6003`) | 2026-11-15 (lane/expdel2-restore-owed) | opt-in B arm, default unchanged, A/B owed at the wave sha | [MOJOLEARN_IDN_MAMBA12_FORWARD_DOOR_OLD.patch](../experiments/removed/MOJOLEARN_IDN_MAMBA12_FORWARD_DOOR_OLD.patch) |
 | [`MOJOLEARN_IDN_MAMBA3_FORWARD_DOOR_OLD`](#mojolearn_idn_mamba3_forward_door_old-old-path-deleted-2026-11-15) | Mamba-3 prefill forward door (IDENTICAL) | 2026-11-15 (`39aa5d2695`) | 2026-11-15 (lane/expdel2-restore-owed) | opt-in B arm, default unchanged, A/B owed at the wave sha | [MOJOLEARN_IDN_MAMBA3_FORWARD_DOOR_OLD.patch](../experiments/removed/MOJOLEARN_IDN_MAMBA3_FORWARD_DOOR_OLD.patch) |
+| [`MOJOLEARN_IDN_MAMBA_BACKWARD_GENERIC`](#mojolearn_idn_mamba_backward_generic) | Neural (Mamba-1/2 block step backward) | 2026-11-15 (`e9b44b3e5b`) | 2026-11-15 (lane/expdel2-restore-owed) | opt-in B arm, default unchanged, A/B owed at the wave sha | [MOJOLEARN_IDN_MAMBA_BACKWARD_GENERIC.patch](../experiments/removed/MOJOLEARN_IDN_MAMBA_BACKWARD_GENERIC.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -15441,6 +15442,7 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2
 - Deleted by: lane/expdel2-24-neural `e9b44b3e5b` (2026-11-15); code recoverable at `f97dc11e84`.
 - Restore: `git apply experiments/removed/MOJOLEARN_IDN_MAMBA_BACKWARD_GENERIC.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
 - Records: refusal in `core/experiment_guards_neural.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-24-neural section).
+Restored 2026-11-15 (lane/expdel2-restore-owed): owed B arm, deletion premature; see Restored table.
 
 ### MOJOLEARN_IDN_MLP_GEMM_LEAF128_OFF
 
