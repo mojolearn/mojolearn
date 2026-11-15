@@ -37,7 +37,7 @@ comptime C02_STATS_PAIR = CLASSICAL_IDENTICAL and is_defined["MOJOLEARN_CLASSICA
 # (Sweep 2026-11-15: comptime C04_LDA removed; nothing read it.)
 # TOMBSTONE: MOJOLEARN_CLASSICAL_C05_PHASE_SCRATCH (no A/B recorded for the opt-in arm) deleted 2026-11-15 by lane/expdel2-07-base; code recoverable at 1ebc49831d.
 # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C05_PHASE_SCRATCH.patch
-comptime C05_PHASE_SCRATCH = False
+# (Sweep 2026-11-15: comptime C05_PHASE_SCRATCH removed; nothing read it.)
 # C06 (lane classical-kmeans, 2026-10-07): ONE control with arms, replacing
 # ROWS2/ROWS4 (two defines where ROWS4 silently won). Rows per norm block,
 # legal set 2|4; absent = the incumbent one-row block.
