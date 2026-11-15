@@ -15,7 +15,9 @@ comptime AFT_G_APPLE_FAST = (
 
 # G01: one uniform-barrier block per feature scans 128-bin tiles.
 # No performance/quality evidence; FAST prefix sums may change rounding.
-comptime AFT_G01 = AFT_G_APPLE_FAST and is_defined["MOJOLEARN_AFT_G01"]()
+# TOMBSTONE: MOJOLEARN_AFT_G01 (DELETE-EXPERIMENT, never-run Apple FAST programme card, rule g) deleted 2026-11-15 by lane/expdel2-42-trees; code recoverable at 55d610dfe9.
+# Restore: git apply experiments/removed/MOJOLEARN_AFT_G01.patch; record in docs/TOMBSTONES.md.
+comptime AFT_G01 = False
 # G02: occupancy and per-partition row budget choose document replication.
 # No performance/quality evidence; retain every row and the multiplier cap.
 comptime AFT_G02 = AFT_G_APPLE_FAST and is_defined["MOJOLEARN_AFT_G02"]()
