@@ -26,13 +26,8 @@ from x_metrics.contingency import (
     OP_MI_CELL, OP_EMI_CELL, CT_CH, CT_IREC, FF_REC, FF_ENT, FF_MI, FF_SUM,
 )
 
-from std.sys.compile import is_defined
-from core.accelerator_target import TARGET_HAS_APPLE_GPU
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
-
-# AFCL-P09: NEVER RUN — PENDING MEASUREMENT. Uncompiled/unverified.
-# The planner and its emitted chunk parameters use the same selected width.
-comptime AFCL_P09 = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU and is_defined["MOJOLEARN_AFCL_P09"]()
+# TOMBSTONE: MOJOLEARN_AFCL_P09 (never-run Apple FAST programme card) deleted 2026-11-15 by lane/expdel2-09-base; code recoverable at 74cbc6951a.
+# Restore: git apply experiments/removed/MOJOLEARN_AFCL_P09.patch; record in docs/TOMBSTONES.md.
 
 comptime OP_GROUP_SORT = 0
 comptime OP_GROUP_SUM = 1
@@ -107,10 +102,7 @@ comptime CF_CHUNK = 1024
 #: rows per chunk of the K-fold row partition
 comptime FR_CHUNK = 1024
 #: rows per chunk of the unweighted curve counts
-# AFCL-P09: NEVER RUN — PENDING MEASUREMENT. Uncompiled/unverified.
-# Halving the prefix chunk doubles independent chunks while retaining every
-# score threshold and tie group. Weighted scans change association, not rows.
-comptime CURVE_CHUNK = 512 if AFCL_P09 else 1024
+comptime CURVE_CHUNK = 1024
 #: the unweighted CDF is Float32(i + 1) only while it stays exact
 comptime IOTA_EXACT = 1 << 24
 #: ops 55 (cls_epi) .. 62 (cl_epi): the metric tails and scans (x_metrics/cls_epi.mojo,
