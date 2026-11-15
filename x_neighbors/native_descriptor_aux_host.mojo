@@ -27,8 +27,8 @@ def xn_aux_execute(op: Int, a: List[Int], p: List[Int], f: List[Float64]) raises
     if op == 3:
         return xn_aux_capabilities()
     if op == 4:
-        comptime if not XN_IDN_SKETCH_CTR:
-            raise Error("AttributeError: x_neighbors_kfeat_pcs_draw_idn is not exported by this binding")
+        # TOMBSTONE: MOJOLEARN_IDN_XN_SKETCH_CTR_OFF (old path: the MT19937 sketch draws in IDENTICAL; no A/B row) deleted 2026-11-15 by lane/expdel2-15-cluster; code recoverable at 3ce1491344.
+        # Restore: git apply experiments/removed/MOJOLEARN_IDN_XN_SKETCH_CTR_OFF.patch; record in docs/TOMBSTONES.md.
         var seed = UInt32(p[0] & 0xFFFFFFFF)
         var nc = p[1]
         var total = p[2]

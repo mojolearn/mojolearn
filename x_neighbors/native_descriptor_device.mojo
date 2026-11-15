@@ -16,7 +16,6 @@ from x_neighbors.ocsvm_dev import OCSVM_CLS2_RES
 from x_neighbors.ocsvm_dev import OCSVM_IDN_RES
 from x_neighbors.ocsvm_init import XN_OCSVM_DEV_INIT, XN_UNIT_DEV
 from x_neighbors.kfeat_dev import XN_FAST_SCHI2_LAZYW, XN_KFEAT_ANY
-from x_neighbors.kfeat_rng import XN_IDN_SKETCH_CTR
 
 
 def _a(v: List[Int], k: Int) raises -> Int:

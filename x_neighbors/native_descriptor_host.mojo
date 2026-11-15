@@ -13,7 +13,6 @@ from x_neighbors.iter_host import op_nc_stats, op_lp_knn_graph, op_lp_knn_produc
 from x_neighbors.ocsvm_host import op_ocsvm
 from x_neighbors.ocsvm_init import XN_OCSVM_DEV_INIT, XN_UNIT_DEV
 from x_neighbors.graph_host import op_louvain, op_pr_csr, op_louvain_csr
-from x_neighbors.kfeat_rng import XN_IDN_SKETCH_CTR
 
 
 def _a(v: List[Int], k: Int) raises -> Int:
