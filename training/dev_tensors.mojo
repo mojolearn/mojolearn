@@ -19,9 +19,8 @@ the row losses and the loss scalar.
 Each form runs the host entry's own calls in the host entry's order on the
 same values (the certified GEMM, `identical_ce_loss_resident`), with the
 non-finite refusals as device scans: no bit moves. IDENTICAL, GPU columns;
-`-D MOJOLEARN_IDN_TRAIN_DEV_TENSORS_OFF` (or MOJOLEARN_IDN_ALL_OFF) leaves
-the entries unregistered and the Python functions then refuse a device
-array by name."""
+the CPU column leaves the entries unregistered and the Python functions
+then refuse a device array by name."""
 from std.sys.compile import is_defined
 from max.gpu.host import DeviceBuffer, DeviceContext
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
@@ -43,10 +42,12 @@ from training.neural_gemm_workspace import (
 )
 from core.shared_slot import SharedSlot
 
+# TOMBSTONE: MOJOLEARN_IDN_TRAIN_DEV_TENSORS_OFF (old path, no A/B recorded) and the MOJOLEARN_IDN_ALL_OFF term
+# (old path; owner elsewhere) deleted 2026-11-15 by lane/expdel2-31-neural; code recoverable at 89a7547f4e.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_TRAIN_DEV_TENSORS_OFF.patch
 comptime IDN_TRAIN_DEV_TENSORS = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     and not is_defined["MOJOLEARN_COLUMN_CPU"]()
-    and not (is_defined["MOJOLEARN_IDN_TRAIN_DEV_TENSORS_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
 )
 
 comptime _FP = MutPointer[Float32, MutUntrackedOrigin]
