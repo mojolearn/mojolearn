@@ -1,0 +1,22 @@
+diff --git a/spectral/impl/sparse/solver/detail/lanczos.mojo b/spectral/impl/sparse/solver/detail/lanczos.mojo
+index 2ae65649b2..c2423572da 100644
+--- a/spectral/impl/sparse/solver/detail/lanczos.mojo
++++ b/spectral/impl/sparse/solver/detail/lanczos.mojo
+@@ -672,10 +672,13 @@ def _norm2(
+ #: end), the dots and the norm are block-partial reductions, and the
+ #: re-orthogonalization is two fused kernels -- no host round trip per step,
+ #: where the pinned step drains about six times. Same recurrence, clamps and
+-#: normalization; FAST arithmetic.
+-# TOMBSTONE: MOJOLEARN_LANCZOS_FAST_OFF (old path, no A/B recorded beside the Apple fast default) deleted 2026-11-15 by lane/expdel2-13-cluster; code recoverable at 06b1ed7060.
+-# Restore: git apply experiments/removed/MOJOLEARN_LANCZOS_FAST_OFF.patch; record in docs/TOMBSTONES.md.
+-comptime LANCZOS_FAST = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
++#: normalization; FAST arithmetic. `-D MOJOLEARN_LANCZOS_FAST_OFF` keeps the
++#: pinned step.
++comptime LANCZOS_FAST = (
++    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
++    and TARGET_HAS_APPLE_GPU
++    and not is_defined["MOJOLEARN_LANCZOS_FAST_OFF"]()
++)
+ comptime FL_TPB = 256
+ comptime FL_G = 256
+ 

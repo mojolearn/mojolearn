@@ -5,27 +5,6 @@
  "head": "566f78ab1",
  "head_note": "code only, uncompiled (lanes never compile); T3 (FFT), D3 (denseball) skipped this round; H4 already on main as IDN_DENDRO_UNION",
  "controls": {
-  "tsne_knn_tile_select": {
-   "define": "MOJOLEARN_IDN_TSNE_KNN_TILE_SELECT_OFF",
-   "kind": "switch",
-   "arms": {
-    "on": [],
-    "off": [
-     "MOJOLEARN_IDN_TSNE_KNN_TILE_SELECT_OFF"
-    ]
-   },
-   "default": "on",
-   "source": [
-    "x_ann/knn_device.mojo:354",
-    "x_ann/knn_device.mojo:knn_enqueue"
-   ],
-   "binding": [
-    "_mojolearn_x_ann"
-   ],
-   "bits_change": false,
-   "status": "promoted 2026-10-09 (lane/postmerge-act-4; post-merge A/B nv n0608 -> v0979..v0981, amd a1067 -> a1104..a1106): IDENTICAL default; the old on-define is refused in core/six_lane_experiment_guards.mojo",
-   "note": "T1. IDENTICAL, NVIDIA+AMD. Block-wide mark/rank/merge top-k per 64x64 distance tile instead of the serial owner insertion; every d takes the 64x64 tile. Same (dist, idx) lists for finite/inf distances. Also the CAGRA build's exact graph. PROMOTED: both on istella NV 0.86x / AMD 0.62x (avg 0.74x), taxi NV 1.17x / AMD 0.55x (avg 0.86x; vendor split, NV taxi slower). Digests unchanged. The off arm (MOJOLEARN_IDN_TSNE_KNN_TILE_SELECT_OFF) restores the serial owner insertion."
-  },
   "tsne_rep_tile": {
    "define": "MOJOLEARN_IDN_TSNE_REP_TILE_OFF",
    "kind": "switch",
@@ -160,13 +139,9 @@
    "binding": "_mojolearn_x_ann",
    "route": "_expansion_ann.py TSNE.fit -> x_ann_tsne_fit -> tsne_device.tsne_fit_device -> knn_enqueue (T1) -> perplexity -> symmetrize -> _ts_iter/_enq_repulse_split (T2)",
    "controls": [
-    "tsne_knn_tile_select",
     "tsne_rep_tile"
    ],
    "interaction_groups": [
-    [
-     "tsne_knn_tile_select"
-    ],
     [
      "tsne_rep_tile"
     ]
@@ -175,14 +150,8 @@
   "algos:cagra": {
    "binding": "_mojolearn_x_ann",
    "route": "cagra_device.cagra_knn_enqueue -> knn_enqueue (T1)",
-   "controls": [
-    "tsne_knn_tile_select"
-   ],
-   "interaction_groups": [
-    [
-     "tsne_knn_tile_select"
-    ]
-   ]
+   "controls": [],
+   "interaction_groups": []
   },
   "classical:dbscan": {
    "binding": "_mojolearn_estimators (host twin _mojolearn_estimators_host)",
@@ -227,6 +196,11 @@
    "define": "MOJOLEARN_IDN_DBSCAN_CC_HOOK",
    "control": "dbscan_cc_hook",
    "reason": "DELETED 2026-10-10 (lane postmerge-act-7): fg2 board-bridge A/B on main 0a7b206f1, one run per arm (nv2 L40S default v1023 -> v1045, amd MI325X a1163 -> a1185; ratio = arm / fg2.default-ivf-cluster): dbscan istella NV 1.00x / AMD 0.96x: noise; hash 7494ce8e unchanged; taxi timed out in every arm and the default. D5 weak_cc hook and compress (dbscan/impl/sparse/detail/csr.mojo IDN_DBSCAN_CC_HOOK, _cc_find, _cc_union, weak_cc_hook_kernel, weak_cc_compress_kernel, weak_cc_border_kernel, _weak_cc_hook) deleted; define refused in core/six_lane_experiment_guards.mojo; code recoverable at main ca8ea1f8d (experiments/removed/MOJOLEARN_IDN_DBSCAN_CC_HOOK.patch)."
+  },
+  {
+   "define": "MOJOLEARN_IDN_TSNE_KNN_TILE_SELECT_OFF",
+   "control": "tsne_knn_tile_select",
+   "reason": "DELETED 2026-11-15 (lane/expdel2-13-cluster, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md; recoverable at 7e06e9c43e; patch experiments/removed/MOJOLEARN_IDN_TSNE_KNN_TILE_SELECT_OFF.patch): old path of the promoted IDENTICAL default (EXP:1822 PROMOTED, post-merge A/B nv n0608 -> v0979..v0981, amd a1067 -> a1104..a1106). Refused in core/experiment_guards_cluster.mojo; docs/TOMBSTONES.md."
   }
  ]
 }
