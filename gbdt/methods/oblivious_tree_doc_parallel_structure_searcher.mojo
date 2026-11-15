@@ -139,7 +139,6 @@ from gbdt.trees_identical_switches import (
     T22,
     IDN_ORD_CAT_PLANES,
     IDN_ORD_INDEX_SHARED,
-    ORD_HIST_FOLD_SKIP,
 )
 from gbdt.methods.kernel.pointwise_scores import (
     SCORE_FUNCTION_COSINE,
@@ -903,10 +902,6 @@ def fit_oblivious_tree_structure_traced(
     # bin p, the fold bits); the fixed 8-bit histogram routes its small
     # leading ones to the small-fold kernel. Empty = no skip.
     var fold_part_sizes = List[Int]()
-    comptime if ORD_HIST_FOLD_SKIP:
-        if fold_count > 1 and len(fold_layout.parts) == fold_count:
-            for p in range(fold_count):  # small-loop(fold_count: fold partitions, 2F): host sizes of the fold plan
-                fold_part_sizes.append(Int(fold_layout.parts[p].size))
 
     for depth in range(max_depth):
         # their `Gather(groupedByBinObservations, observations,
