@@ -101,7 +101,8 @@ comptime ANN3_SCAN_SELECT = False
 #: coordinate otherwise, each forming q again). The same statements per
 #: coordinate; FAST pins no contraction, so the digest decides whether a bit
 #: moved.
-comptime ANN3_TSNE_STEP_ROWS = is_defined["MOJOLEARN_ANN3_TSNE_STEP_ROWS"]()
+# TOMBSTONE: MOJOLEARN_ANN3_TSNE_STEP_ROWS (unmeasured opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-14-cluster; code recoverable at bf400e5cfd.
+# Restore: git apply experiments/removed/MOJOLEARN_ANN3_TSNE_STEP_ROWS.patch; record in docs/TOMBSTONES.md.
 
 #: FAST on Apple: the CAGRA search runs one threadgroup of 32 threads per
 #: query (one thread per query otherwise, 16 threadgroups for 1000 queries):
