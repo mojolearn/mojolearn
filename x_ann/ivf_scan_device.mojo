@@ -1032,7 +1032,9 @@ def ivf_scan_search[KIND: Int](
             # lane af-vsearch, FAST on Apple, DEFAULT since 2026-10-04: the fused scan
             # (`PQ_SCAN_FUSED`) or the tiled-table score (`PQ_LUT_TILED`)
             # lane fg-ivf A4: the tiled score is IDENTICAL's default too
-            # (`IDN_PQ_LUT_TILED`; `-D MOJOLEARN_IDN_PQ_LUT_TILED_OFF` rolls back)
+            # (`IDN_PQ_LUT_TILED`)
+            # TOMBSTONE: MOJOLEARN_IDN_PQ_LUT_TILED_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-13-cluster (non-owner; owner expdel2-14-cluster); code recoverable at 474a188ef2.
+            # Restore: git apply experiments/removed/MOJOLEARN_IDN_PQ_LUT_TILED_OFF.expdel2-13-cluster.patch; record in docs/TOMBSTONES.md.
             var tiled = False
             comptime if PQ_LUT_TILED or IDN_PQ_LUT_TILED:
                 tiled = (not fused) and pq_dim * pq_len <= SCORE_DIM_MAX and n_codes <= LUT_MAX
