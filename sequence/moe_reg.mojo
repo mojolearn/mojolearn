@@ -37,7 +37,6 @@ from std.atomic import Atomic
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 
-from std.sys.compile import is_defined
 from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL, ftz, identical_div, identical_exp, identical_silu
 from sequence.ops import FP, add, fma3, ld, mul, st, sub
@@ -45,23 +44,24 @@ from sequence.ops import FP, add, fma3, ld, mul, st, sub
 # FAST + Apple default since the M3 A/B (lane/apple-fast-moespeed 2813b2dff,
 # n=1, synthetic, output digest identical): REGTILE 789 -> 72.7 ms;
 # REGTILE+DEVGROUP 73.4 -> 71.9 ms, and DEVGROUP drops the host sync/sort
-# round trip. MOJOLEARN_MOE_REGTILE_OFF turns both off (DEVGROUP needs
-# REGTILE); MOJOLEARN_MOE_DEVGROUP_OFF turns DEVGROUP alone off. The old
+# round trip. DEVGROUP needs REGTILE. The old
 # -D MOJOLEARN_MOE_REGTILE / MOJOLEARN_MOE_DEVGROUP names are harmless.
 # lane/idn-gates (2026-10-04): REGTILE (and DEVGROUP with it) is also the
 # IDENTICAL default on every vendor: every cell's chain is the item's (the
 # same flushed operands, ascending, through the same fma3 from +0.0) and the
 # route tail is the item's statements on the stored logits.
-# -D MOJOLEARN_IDN_GATES_OFF (or MOJOLEARN_MOE_REGTILE_OFF) restores
-# sequence/moe_tiled.mojo in IDENTICAL.
-comptime MOE_REGTILE = (
-    (
-        (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU)
-        or (GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (is_defined["MOJOLEARN_IDN_GATES_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()))
-    )
-    and not is_defined["MOJOLEARN_MOE_REGTILE_OFF"]()
-)
-comptime MOE_DEVGROUP = MOE_REGTILE and not is_defined["MOJOLEARN_MOE_DEVGROUP_OFF"]()
+# TOMBSTONE: MOJOLEARN_IDN_GATES_OFF (old path; EXP:2479 DELETED) read deleted here 2026-11-15 by lane/expdel2-29-neural; code recoverable at 3dfeb158c0.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_GATES_OFF.expdel2-29-neural.patch
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old path umbrella; EXP:2438 DELETED) read deleted here 2026-11-15 by lane/expdel2-29-neural; code recoverable at 3dfeb158c0.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-29-neural.patch
+# TOMBSTONE: MOJOLEARN_MOE_REGTILE_OFF (old path; EXP:588 KEPT 499e1b72c, promoted on the M3 (FAST) only; the IDENTICAL
+# NVIDIA/AMD A/B of REGTILE against moe_tiled is owed) deleted 2026-11-15 by lane/expdel2-29-neural; code recoverable at 253d6543b0.
+# Restore: git apply experiments/removed/MOJOLEARN_MOE_REGTILE_OFF.patch
+comptime MOE_REGTILE = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU) or GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+# TOMBSTONE: MOJOLEARN_MOE_DEVGROUP_OFF (old path; EXP:587 KEPT 499e1b72c, promoted on the M3 (FAST) only; the IDENTICAL
+# NVIDIA/AMD A/B is owed) deleted 2026-11-15 by lane/expdel2-29-neural; code recoverable at 2ca18f9b39.
+# Restore: git apply experiments/removed/MOJOLEARN_MOE_DEVGROUP_OFF.patch
+comptime MOE_DEVGROUP = MOE_REGTILE
 
 #: pairs per block, outputs per block, reduction slab, threads per block
 comptime RM = 64

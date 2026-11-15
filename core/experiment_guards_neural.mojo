@@ -871,6 +871,85 @@ def _check_configuration() -> Bool:
     # Restore: git apply experiments/removed/MOJOLEARN_OPT_TRUST_INPUTS.patch
     comptime assert not is_defined["MOJOLEARN_OPT_TRUST_INPUTS"](), "removed 2026-11-15 (lane/expdel2-31-neural): OPT_TRUST_INPUTS (opt-in arm, Neural (optimizer input refusal scans); no A/B recorded) is gone; the default path is the only one; code recoverable at 943c1ff5fe; restore: experiments/removed/MOJOLEARN_OPT_TRUST_INPUTS.patch"
     # ---- end lane expdel2-31-neural
+    # Lane expdel2-29-neural (2026-11-15): unmeasured arms and old paths deleted, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (docs/TOMBSTONES.md).
+    # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_GEMM_DISPATCH_V1.patch
+    comptime assert not is_defined["MOJOLEARN_AUTOGRAD_GEMM_DISPATCH_V1"](), "removed 2026-11-15 (lane/expdel2-29-neural): AUTOGRAD_GEMM_DISPATCH_V1 (old path) is gone; the default is kept; code at 8747cf5fa2; restore: experiments/removed/MOJOLEARN_AUTOGRAD_GEMM_DISPATCH_V1.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_MLP_UNFUSED.patch
+    comptime assert not is_defined["MOJOLEARN_AUTOGRAD_MLP_UNFUSED"](), "removed 2026-11-15 (lane/expdel2-29-neural): AUTOGRAD_MLP_UNFUSED (arm) is gone; the default path is the only one; code at a03ced9b31; restore: experiments/removed/MOJOLEARN_AUTOGRAD_MLP_UNFUSED.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_OPTIM.2026-11-15.patch
+    comptime assert not is_defined["MOJOLEARN_AUTOGRAD_OPTIM"](), "removed 2026-11-15 (lane/expdel2-29-neural): AUTOGRAD_OPTIM (arm) is gone; the default path is the only one; code at ff6c789744; restore: experiments/removed/MOJOLEARN_AUTOGRAD_OPTIM.2026-11-15.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_GARCH_COOP_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_GARCH_COOP_OFF"](), "removed 2026-11-15 (lane/expdel2-29-neural): GARCH_COOP_OFF (old path) is gone; the default is kept; code at 92fec7163d; restore: experiments/removed/MOJOLEARN_GARCH_COOP_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_GARCH_COOP_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_GARCH_COOP_OFF"](), "removed 2026-11-15 (lane/expdel2-29-neural): IDN_GARCH_COOP_OFF (old path) is gone; the default is kept; code at 02b0c1f6db; restore: experiments/removed/MOJOLEARN_IDN_GARCH_COOP_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_GARCH_FOLD32_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_GARCH_FOLD32_OFF"](), "removed 2026-11-15 (lane/expdel2-29-neural): IDN_GARCH_FOLD32_OFF (old path) is gone; the default is kept; code at 869fa6e1fb; restore: experiments/removed/MOJOLEARN_IDN_GARCH_FOLD32_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_GARCH_LEAD_REG_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_GARCH_LEAD_REG_OFF"](), "removed 2026-11-15 (lane/expdel2-29-neural): IDN_GARCH_LEAD_REG_OFF (old path) is gone; the default is kept; code at 476f794798; restore: experiments/removed/MOJOLEARN_IDN_GARCH_LEAD_REG_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_GEMM_ROUTE_P6_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_GEMM_ROUTE_P6_OFF"](), "removed 2026-11-15 (lane/expdel2-29-neural): IDN_GEMM_ROUTE_P6_OFF (old path) is gone; the default is kept; code at a9e416c657; restore: experiments/removed/MOJOLEARN_IDN_GEMM_ROUTE_P6_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_GEMM_SPLITK_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_GEMM_SPLITK_OFF"](), "removed 2026-11-15 (lane/expdel2-29-neural): IDN_GEMM_SPLITK_OFF (old path) is gone; the default is kept; code at 6817978647; restore: experiments/removed/MOJOLEARN_IDN_GEMM_SPLITK_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_GEMM_STAGE64.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_GEMM_STAGE64"](), "removed 2026-11-15 (lane/expdel2-29-neural): IDN_GEMM_STAGE64 (arm) is gone; the default path is the only one; code at 6a66db5157; restore: experiments/removed/MOJOLEARN_IDN_GEMM_STAGE64.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_GEMM_STAGE_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_GEMM_STAGE_OFF"](), "removed 2026-11-15 (lane/expdel2-29-neural): IDN_GEMM_STAGE_OFF (old path) is gone; the default is kept; code at 6a66db5157; restore: experiments/removed/MOJOLEARN_IDN_GEMM_STAGE_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_LN_ONE_PASS_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_LN_ONE_PASS_OFF"](), "removed 2026-11-15 (lane/expdel2-29-neural): IDN_LN_ONE_PASS_OFF (old path) is gone; the default is kept; code at f12b3def4e; restore: experiments/removed/MOJOLEARN_IDN_LN_ONE_PASS_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_MLP_BLOCKED_FOLDS_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_MLP_BLOCKED_FOLDS_OFF"](), "removed 2026-11-15 (lane/expdel2-29-neural): IDN_MLP_BLOCKED_FOLDS_OFF (old path) is gone; the default is kept; code at 92d4b79ec8; restore: experiments/removed/MOJOLEARN_IDN_MLP_BLOCKED_FOLDS_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_MLP_EPOCH_DEV_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_MLP_EPOCH_DEV_OFF"](), "removed 2026-11-15 (lane/expdel2-29-neural): IDN_MLP_EPOCH_DEV_OFF (old path) is gone; the default is kept; code at 0064646ba8; restore: experiments/removed/MOJOLEARN_IDN_MLP_EPOCH_DEV_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_MOE_GROUPED_GEMM_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_MOE_GROUPED_GEMM_OFF"](), "removed 2026-11-15 (lane/expdel2-29-neural): IDN_MOE_GROUPED_GEMM_OFF (old path) is gone; the default is kept; code at 072f2eee14; restore: experiments/removed/MOJOLEARN_IDN_MOE_GROUPED_GEMM_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_MOE_STABLE_PACK.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_MOE_STABLE_PACK"](), "removed 2026-11-15 (lane/expdel2-29-neural): IDN_MOE_STABLE_PACK (arm) is gone; the default path is the only one; code at d1f44888a3; restore: experiments/removed/MOJOLEARN_IDN_MOE_STABLE_PACK.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_SEQ_GEMM_MICRO.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_SEQ_GEMM_MICRO"](), "removed 2026-11-15 (lane/expdel2-29-neural): IDN_SEQ_GEMM_MICRO (arm) is gone; the default path is the only one; code at 84eb54a8c8; restore: experiments/removed/MOJOLEARN_IDN_SEQ_GEMM_MICRO.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_SEQ_GEMM_MICRO_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_SEQ_GEMM_MICRO_OFF"](), "removed 2026-11-15 (lane/expdel2-29-neural): IDN_SEQ_GEMM_MICRO_OFF (old path) is gone; the default is kept; code at 84eb54a8c8; restore: experiments/removed/MOJOLEARN_IDN_SEQ_GEMM_MICRO_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_SEQ_GEMM_TILED_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_SEQ_GEMM_TILED_OFF"](), "removed 2026-11-15 (lane/expdel2-29-neural): IDN_SEQ_GEMM_TILED_OFF (old path) is gone; the default is kept; code at 4f0461d50d; restore: experiments/removed/MOJOLEARN_IDN_SEQ_GEMM_TILED_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_SEQ_GEMM_TILED_V2_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_SEQ_GEMM_TILED_V2_OFF"](), "removed 2026-11-15 (lane/expdel2-29-neural): IDN_SEQ_GEMM_TILED_V2_OFF (old path) is gone; the default is kept; code at 27a4108c9f; restore: experiments/removed/MOJOLEARN_IDN_SEQ_GEMM_TILED_V2_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_SEQ_GEMM_TILED_V3_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_SEQ_GEMM_TILED_V3_OFF"](), "removed 2026-11-15 (lane/expdel2-29-neural): IDN_SEQ_GEMM_TILED_V3_OFF (old path) is gone; the default is kept; code at fcf169192e; restore: experiments/removed/MOJOLEARN_IDN_SEQ_GEMM_TILED_V3_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_SEQ_LN_LEAF.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_SEQ_LN_LEAF"](), "removed 2026-11-15 (lane/expdel2-29-neural): IDN_SEQ_LN_LEAF (arm) is gone; the default path is the only one; code at 07dabb1b82; restore: experiments/removed/MOJOLEARN_IDN_SEQ_LN_LEAF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_SEQ_SOFTMAX_ONE_EXP_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_SEQ_SOFTMAX_ONE_EXP_OFF"](), "removed 2026-11-15 (lane/expdel2-29-neural): IDN_SEQ_SOFTMAX_ONE_EXP_OFF (old path) is gone; the default is kept; code at 38b93382d0; restore: experiments/removed/MOJOLEARN_IDN_SEQ_SOFTMAX_ONE_EXP_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_LN_FAST_BLOCK_FOLD.patch
+    comptime assert not is_defined["MOJOLEARN_LN_FAST_BLOCK_FOLD"](), "removed 2026-11-15 (lane/expdel2-29-neural): LN_FAST_BLOCK_FOLD (arm) is gone; the default path is the only one; code at 52392b3b15; restore: experiments/removed/MOJOLEARN_LN_FAST_BLOCK_FOLD.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_LN_FOLD_BLOCK_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_LN_FOLD_BLOCK_OFF"](), "removed 2026-11-15 (lane/expdel2-29-neural): LN_FOLD_BLOCK_OFF (old path) is gone; the default is kept; code at 8e9b1a9eb5; restore: experiments/removed/MOJOLEARN_LN_FOLD_BLOCK_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_MLP_LOSSBLOCK_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_MLP_LOSSBLOCK_OFF"](), "removed 2026-11-15 (lane/expdel2-29-neural): MLP_LOSSBLOCK_OFF (old path) is gone; the default is kept; code at e06ff6f0f3; restore: experiments/removed/MOJOLEARN_MLP_LOSSBLOCK_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_MLP_LOSSBLOCK_ROWS_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_MLP_LOSSBLOCK_ROWS_OFF"](), "removed 2026-11-15 (lane/expdel2-29-neural): MLP_LOSSBLOCK_ROWS_OFF (old path) is gone; the default is kept; code at 6ed945170f; restore: experiments/removed/MOJOLEARN_MLP_LOSSBLOCK_ROWS_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_MOE_DEVGROUP_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_MOE_DEVGROUP_OFF"](), "removed 2026-11-15 (lane/expdel2-29-neural): MOE_DEVGROUP_OFF (old path) is gone; the default is kept; code at 2ca18f9b39; restore: experiments/removed/MOJOLEARN_MOE_DEVGROUP_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_MOE_FAST_MMA_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_MOE_FAST_MMA_OFF"](), "removed 2026-11-15 (lane/expdel2-29-neural): MOE_FAST_MMA_OFF (old path) is gone; the default is kept; code at 1e5b507b04; restore: experiments/removed/MOJOLEARN_MOE_FAST_MMA_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_MOE_REGTILE_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_MOE_REGTILE_OFF"](), "removed 2026-11-15 (lane/expdel2-29-neural): MOE_REGTILE_OFF (old path) is gone; the default is kept; code at 253d6543b0; restore: experiments/removed/MOJOLEARN_MOE_REGTILE_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_NN42_INPUT_BIAS_FUSED.patch
+    comptime assert not is_defined["MOJOLEARN_NN42_INPUT_BIAS_FUSED"](), "removed 2026-11-15 (lane/expdel2-29-neural): NN42_INPUT_BIAS_FUSED (arm) is gone; the default path is the only one; code at c906dcaf57; restore: experiments/removed/MOJOLEARN_NN42_INPUT_BIAS_FUSED.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_NN44_EXPERT_BISECT.patch
+    comptime assert not is_defined["MOJOLEARN_NN44_EXPERT_BISECT"](), "removed 2026-11-15 (lane/expdel2-29-neural): NN44_EXPERT_BISECT (arm) is gone; the default path is the only one; code at 5a1c6385fe; restore: experiments/removed/MOJOLEARN_NN44_EXPERT_BISECT.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_SEQ_FAST_FMA_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_SEQ_FAST_FMA_OFF"](), "removed 2026-11-15 (lane/expdel2-29-neural): SEQ_FAST_FMA_OFF (old path) is gone; the default is kept; code at 2f67dc66d0; restore: experiments/removed/MOJOLEARN_SEQ_FAST_FMA_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_SEQ_FAST_VAR_ONECOPY_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_SEQ_FAST_VAR_ONECOPY_OFF"](), "removed 2026-11-15 (lane/expdel2-29-neural): SEQ_FAST_VAR_ONECOPY_OFF (old path) is gone; the default is kept; code at c860d9566d; restore: experiments/removed/MOJOLEARN_SEQ_FAST_VAR_ONECOPY_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_SEQ_GARCH_GRID_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_SEQ_GARCH_GRID_OFF"](), "removed 2026-11-15 (lane/expdel2-29-neural): SEQ_GARCH_GRID_OFF (old path) is gone; the default is kept; code at bc254a427e; restore: experiments/removed/MOJOLEARN_SEQ_GARCH_GRID_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_SEQ_GARCH_REG_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_SEQ_GARCH_REG_OFF"](), "removed 2026-11-15 (lane/expdel2-29-neural): SEQ_GARCH_REG_OFF (old path) is gone; the default is kept; code at 7a79b3b608; restore: experiments/removed/MOJOLEARN_SEQ_GARCH_REG_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_SEQ_REC_STAGE64.patch
+    comptime assert not is_defined["MOJOLEARN_SEQ_REC_STAGE64"](), "removed 2026-11-15 (lane/expdel2-29-neural): SEQ_REC_STAGE64 (arm) is gone; the default path is the only one; code at d5aeff2e08; restore: experiments/removed/MOJOLEARN_SEQ_REC_STAGE64.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_TSA2_STL_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_TSA2_STL_OFF"](), "removed 2026-11-15 (lane/expdel2-29-neural): TSA2_STL_OFF (old path) is gone; the default is kept; code at eb3180868d; restore: experiments/removed/MOJOLEARN_TSA2_STL_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_TSA2_VAR_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_TSA2_VAR_OFF"](), "removed 2026-11-15 (lane/expdel2-29-neural): TSA2_VAR_OFF (old path) is gone; the default is kept; code at b23d7039b8; restore: experiments/removed/MOJOLEARN_TSA2_VAR_OFF.patch"
     return True
 
 

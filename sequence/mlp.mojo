@@ -34,7 +34,6 @@ from std.sys.compile import is_defined
 #:   block sums ascending (`op_mlp_rowpart`, `op_mlp_bloss`). A layer of at
 #:   most AF_NORM_BLOCK weights and a batch of at most MLP_ROW_BLOCK rows is
 #:   one block: the old chain, the old bits; larger ones get new bits.
-#:   -D MOJOLEARN_IDN_MLP_BLOCKED_FOLDS_OFF.
 #: MLP_EPOCH_DEV (roadmap D13): the epoch order is `op_mlp_perm` on the
 #:   executor (the x_cnn Feistel permutation, integers only) instead of a
 #:   host Fisher-Yates walk and an N-word upload per epoch, and the epoch
@@ -42,28 +41,37 @@ from std.sys.compile import is_defined
 #:   rows, ascending fmas, divided by N) instead of a float64 fold on the
 #:   host of every batch loss; one word comes back per epoch for the
 #:   stopping rule. New shuffle order and new curve bits on every column.
-#:   -D MOJOLEARN_IDN_MLP_EPOCH_DEV_OFF.
-#: Both also turn off under MOJOLEARN_IDN_ALL_OFF.
-comptime _MLP_IDN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-comptime MLP_BLOCKED_FOLDS = _MLP_IDN and not is_defined["MOJOLEARN_IDN_MLP_BLOCKED_FOLDS_OFF"]()
-comptime MLP_EPOCH_DEV = _MLP_IDN and not is_defined["MOJOLEARN_IDN_MLP_EPOCH_DEV_OFF"]()
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old path umbrella; EXP:2438 DELETED) read deleted here 2026-11-15 by lane/expdel2-29-neural; code recoverable at 92d4b79ec8.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-29-neural.patch
+comptime _MLP_IDN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+# TOMBSTONE: MOJOLEARN_IDN_MLP_BLOCKED_FOLDS_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-29-neural; code recoverable at 92d4b79ec8.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_MLP_BLOCKED_FOLDS_OFF.patch
+comptime MLP_BLOCKED_FOLDS = _MLP_IDN
+# TOMBSTONE: MOJOLEARN_IDN_MLP_EPOCH_DEV_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-29-neural; code recoverable at 0064646ba8.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_MLP_EPOCH_DEV_OFF.patch
+comptime MLP_EPOCH_DEV = _MLP_IDN
 #: MLP_LOSSBLOCK (lane ag-pass3-lossblock, 2026-10-19; the loss-section
 #:   comment block below): the per-batch seed, row-loss and L2 sums in two
 #:   launches with the tape's fold rule, and the epoch loss as a blocked fold.
 #:   Default on wherever MLP_BLOCKED_FOLDS is; bit version mlp-lossblock-1
-#:   (new reported-loss bits). -D MOJOLEARN_MLP_LOSSBLOCK_OFF restores the
-#:   MLP_BLOCKED_FOLDS kernels (op_mlp_rowloss, op_mlp_l2part, op_mlp_l2fold,
-#:   op_mlp_rowpart, op_mlp_bloss, op_mlp_epoch_loss) for the A/B.
-comptime MLP_LOSSBLOCK = MLP_BLOCKED_FOLDS and not is_defined["MOJOLEARN_MLP_LOSSBLOCK_OFF"]()
+#:   (new reported-loss bits).
+# TOMBSTONE: MOJOLEARN_MLP_LOSSBLOCK_OFF (old path; EXP:2159 PENDING) deleted 2026-11-15 by lane/expdel2-29-neural; code recoverable at e06ff6f0f3.
+# Restore: git apply experiments/removed/MOJOLEARN_MLP_LOSSBLOCK_OFF.patch
+# The trainer no longer launches the MLP_BLOCKED_FOLDS-only loss kernels (op_mlp_l2part / l2fold via _l2_blocked,
+# op_mlp_rowpart, OP_MLP_EPOCH_LOSS); they stay registered (sequence/dispatch.mojo, another lane's file) and
+# autograd/checks/lossblock_cases.mojo still runs _l2_blocked and op_mlp_rowpart as its reference.
+comptime MLP_LOSSBLOCK = MLP_BLOCKED_FOLDS
 #: MLP_LB_ROWS (lane ag-pass5-loss, 2026-10-19; PASS5_IDEAS idea 2): the
 #:   loss block's row losses one thread per row (B threads in op_mlp_lb_part,
 #:   each storing its row's loss term) and the row-block sums by many threads
 #:   in the fold launch, in place of ceil(B / R) part threads that each chained
 #:   R rows of software logs. Same bits by construction (the loss-section
-#:   comment block below says why). Default on wherever MLP_LOSSBLOCK is;
-#:   -D MOJOLEARN_MLP_LOSSBLOCK_ROWS_OFF restores the pass-3 row-block threads
-#:   for the A/B.
-comptime MLP_LB_ROWS = MLP_LOSSBLOCK and not is_defined["MOJOLEARN_MLP_LOSSBLOCK_ROWS_OFF"]()
+#:   comment block below says why). Default on wherever MLP_LOSSBLOCK is.
+# TOMBSTONE: MOJOLEARN_MLP_LOSSBLOCK_ROWS_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-29-neural; code recoverable at 6ed945170f.
+# Restore: git apply experiments/removed/MOJOLEARN_MLP_LOSSBLOCK_ROWS_OFF.patch
+# The pass-3 row-block body stays as mlp_loss_block[False] (sequence/mlp_fit.mojo), which
+# autograd/checks/lossblock_cases.mojo runs beside the default as its same-words reference.
+comptime MLP_LB_ROWS = MLP_LOSSBLOCK
 # NI52 scheduling-only subarm: leave the exact epoch Feistel mapping intact,
 # but construct even the no-shuffle identity order on the selected executor.
 # Avoid the otherwise unused host N-row permutation initialization. Default
@@ -130,7 +138,7 @@ def op_act_bwd(t: Int, a: Args):
 #: MI325X, HIGGS 1M x 28, (256,) b512, 1954 batches, MOJOLEARN_AG_PROFILE=2:
 #: codes 26/28/90/91/92 are ~360 ms of a 1218 ms profiled tape step.
 #:
-#: Before (MLP_BLOCKED_FOLDS, -D MOJOLEARN_MLP_LOSSBLOCK_OFF keeps it), per
+#: Before (MLP_BLOCKED_FOLDS, the deleted MOJOLEARN_MLP_LOSSBLOCK_OFF arm), per
 #: batch, L <= 4 layers: 5 launches (L > 4: 2 L + 3).
 #:   OP_MLP_ROWLOSS (26)  B threads; chain O loss terms a row.
 #:   OP_MLP_L2PART  (90)  one thread per AF_NORM_BLOCK = 4096 weights; chain
@@ -177,7 +185,7 @@ def op_act_bwd(t: Int, a: Args):
 #:   once-an-epoch norm would report a different number. The curve feeds
 #:   tol / n_iter_no_change every epoch, so the term is always consumed; it
 #:   is made cheap instead (2 launches, short chains, many threads).
-#: MLP_LB_ROWS (the default; -D MOJOLEARN_MLP_LOSSBLOCK_ROWS_OFF keeps the
+#: MLP_LB_ROWS (the default; mlp_loss_block[False] keeps the
 #: layout above), per batch, L <= 4 layers: 3 launches (L > 4: 2 ceil(L / 4)
 #: + 1). The pass-3 part launch's critical path was one row-block thread's
 #: chain of R(B) rows of O loss terms, two software logs a term under

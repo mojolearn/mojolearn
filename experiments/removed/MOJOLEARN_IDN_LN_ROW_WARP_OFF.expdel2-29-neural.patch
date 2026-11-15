@@ -1,0 +1,29 @@
+diff --git a/sequence/layernorm.mojo b/sequence/layernorm.mojo
+index a52e2112b6..f6dab65601 100644
+--- a/sequence/layernorm.mojo
++++ b/sequence/layernorm.mojo
+@@ -15,7 +15,8 @@ from sequence.fold32 import FOLD_L, tree32
+ from max.gpu.primitives.warp import shuffle_xor
+ 
+ #: lane layernorm-idn N3 (2026-10-09), MOJOLEARN_IDN_LN_ROW_WARP, IDENTICAL,
+-#: the DEFAULT since 2026-10-10 (lane/postmerge-act-6; the old on-define
++#: the DEFAULT since 2026-10-10 (lane/postmerge-act-6; `-D
++#: MOJOLEARN_IDN_LN_ROW_WARP_OFF` restores the one-chain row; the old on-define
+ #: is refused in core/six_lane_experiment_guards.mojo). Post-merge A/B, one run
+ #: per arm (nv2 L40S v1056 -> v1057 on main 9f83ea479, MI325X a1156 -> a1157 on
+ #: main 0a7b206f1): layernorm NV 1.394 -> 1.071 ms (0.77x) / AMD 1.446 -> 1.143
+@@ -44,9 +45,11 @@ from max.gpu.primitives.warp import shuffle_xor
+ #: the tree shape does not depend on the row width; a wider row only gives
+ #: each lane more sequential terms (D/32), still bandwidth-paced.
+ #: dweight / dbias column folds are untouched (LN_FOLD_BLOCK above).
+-# TOMBSTONE: MOJOLEARN_IDN_LN_ROW_WARP_OFF (old path; EXP:1945 PROMOTED, the row warp is the IDENTICAL default) deleted 2026-11-15 by lane/expdel2-29-neural; code recoverable at b395beef95.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_LN_ROW_WARP_OFF.patch
+-comptime LN_ROW_WARP = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
++comptime LN_ROW_WARP = (
++    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
++    and not is_defined["MOJOLEARN_IDN_LN_ROW_WARP_OFF"]()
++    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
++)
+ #: logical lanes of the row fold (the tree has log2(LN_RW_LANES) = 5 levels)
+ comptime LN_RW_LANES = FOLD_L
+ 

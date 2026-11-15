@@ -13,7 +13,7 @@
 # cells, 256 threads loading, 256-term slabs; split-K and the coop cells are
 # never taken here (coop: M N <= 1024 and K >= 32768 only).
 #
-# BEFORE (V1, -D MOJOLEARN_AUTOGRAD_GEMM_DISPATCH_V1): tile iff M >= 8 and N >= 8
+# BEFORE (V1, the deleted MOJOLEARN_AUTOGRAD_GEMM_DISPATCH_V1): tile iff M >= 8 and N >= 8
 # (seq_gemm_tiled_on), the same rule for OP_GEMM (1) and OP_AGK_GEMM_EPI
 # (1401); OP_GEMM_EPI (60, hand) never tiled.
 #  shape                      | OP_GEMM 1 (composed tape)      | 1401 (fused tape)               | 60 (hand)
@@ -97,7 +97,7 @@ every thread then folds ITS cell's chain over the slab:
 which is `gemm_dot`'s chain term for term (same flushed operands, same fused
 step, same order), so the stored word is the one-thread op's word on every
 column and on the host. Only the loads are shared; no fold order changes.
-The page is GT_PAGE_BYTES (16.6 KB with GT_V2, 4 KB without), under every
+The page is GT_PAGE_BYTES (16.6 KB), under every
 column's threadgroup limit (the fits gate is the comptime assert below).
 
 GT_V2 (lane ag-pass3-impl, 2026-10-19, default on; PASS3_IDEAS idea 6):
@@ -117,7 +117,6 @@ consecutive pieces; padding terms k >= K are never folded, i < cnt). The
 load mapping and the padding only decide which thread fetches a word and
 where it sits in threadgroup memory, never the word (each is ld(), flushed,
 as gemm_dot reads it) or the position it is folded at.
--D MOJOLEARN_IDN_SEQ_GEMM_TILED_V2_OFF restores GT_K = 32 and the old mapping.
 
 The epilogue kernel can also fold the column sums of B (lane ag-pass3-impl,
 PASS3_IDEAS idea 2): `colsum != 0` makes the first tile row's 16 threads add
@@ -125,14 +124,11 @@ each staged B word of their column, k ascending from +0.0, and store
 div(sum, f1) into p4[n]: `op_colsum` then `op_divs` (OP_COLSUM_DIV) word for
 word, so the fused linear node's bias gradient rides in its dW launch.
 
-IDENTICAL, NVIDIA and AMD (Apple keeps its measured paths).
--D MOJOLEARN_IDN_SEQ_GEMM_TILED_OFF (or MOJOLEARN_IDN_ALL_OFF) restores the
-one-thread launch."""
+IDENTICAL, NVIDIA and AMD (Apple keeps its measured paths)."""
 from max.gpu import block_idx, thread_idx
 from std.memory import stack_allocation
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
-from std.sys.compile import is_defined
 from core.accelerator_target import TARGET_HAS_APPLE_GPU
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_sigmoid, identical_tanh
@@ -142,15 +138,16 @@ from sequence.mlp import div, gemm_epi_value, act_bwd_value, EPI_BIAS_ACT, EPI_L
 from sequence.mlp import ACT_LOGISTIC, ACT_TANH
 from sequence.gemm_split import SK_MAX_S, gemm_split_block, gemm_split_lanes, gemm_split_on, gemm_split_partial, gemm_split_shape
 
-comptime GT_V2 = not (
-    is_defined["MOJOLEARN_IDN_SEQ_GEMM_TILED_V2_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_IDN_SEQ_GEMM_TILED_V2_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-29-neural; code recoverable at 27a4108c9f.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_SEQ_GEMM_TILED_V2_OFF.patch
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old path umbrella; EXP:2438 DELETED) reads deleted here 2026-11-15 by lane/expdel2-29-neural; code recoverable at 27a4108c9f.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-29-neural.patch
 comptime GT_M = 16
 comptime GT_N = 16
-comptime GT_K = 128 if GT_V2 else 32
-#: slab row strides in threadgroup memory (one padding word a row under GT_V2)
-comptime GT_AS = (GT_K + 1) if GT_V2 else GT_K
-comptime GT_BS = (GT_N + 1) if GT_V2 else GT_N
+comptime GT_K = 128
+#: slab row strides in threadgroup memory (one padding word a row, GT_V2)
+comptime GT_AS = GT_K + 1
+comptime GT_BS = GT_N + 1
 comptime GT_TPB = GT_M * GT_N
 #: threadgroup bytes of the two slabs (the smallest column limit is 32 KB)
 comptime GT_PAGE_BYTES = (GT_M * GT_AS + GT_K * GT_BS) * 4
@@ -159,11 +156,9 @@ comptime GT_PAGE_BYTES = (GT_M * GT_AS + GT_K * GT_BS) * 4
 #: not keyed to any data shape)
 comptime GT_MIN_EDGE = 8
 
-comptime SEQ_GEMM_TILED = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not TARGET_HAS_APPLE_GPU
-    and not (is_defined["MOJOLEARN_IDN_SEQ_GEMM_TILED_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
-)
+# TOMBSTONE: MOJOLEARN_IDN_SEQ_GEMM_TILED_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-29-neural; code recoverable at 4f0461d50d.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_SEQ_GEMM_TILED_OFF.patch
+comptime SEQ_GEMM_TILED = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not TARGET_HAS_APPLE_GPU
 
 
 @always_inline
@@ -194,8 +189,8 @@ def seq_gemm_tiled_kernel(
     var SBK = Int(sbk)
     var SBN = Int(sbn)
     # GT_V2: load each slab along its operand's unit stride (same words)
-    var a_rows_fast = GT_V2 and SAM == 1 and SAK != 1
-    var b_terms_fast = GT_V2 and SBK == 1 and SBN != 1
+    var a_rows_fast = SAM == 1 and SAK != 1
+    var b_terms_fast = SBK == 1 and SBN != 1
     var ntn = (N + GT_N - 1) // GT_N
     var b = Int(block_idx.x)
     var tm = b // ntn
@@ -281,8 +276,8 @@ def seq_gemm_epi_tiled_kernel(
     var SAK = Int(sak)
     var SBK = Int(sbk)
     var SBN = Int(sbn)
-    var a_rows_fast = GT_V2 and SAM == 1 and SAK != 1
-    var b_terms_fast = GT_V2 and SBK == 1 and SBN != 1
+    var a_rows_fast = SAM == 1 and SAK != 1
+    var b_terms_fast = SBK == 1 and SBN != 1
     var ntn = (N + GT_N - 1) // GT_N
     var b = Int(block_idx.x)
     var tm = b // ntn
@@ -372,11 +367,10 @@ def seq_gemm_epi_tiled_kernel(
 #    flight), so a K-long chain costs K / 256 global round trips instead of
 #    K / 16 + K mod 16. The chain itself (K dependent fmas) is the floor on
 #    every route.
-# -D MOJOLEARN_AUTOGRAD_GEMM_DISPATCH_V1 restores the pass-3 routes (tile iff
-# both edges >= 8 for OP_GEMM and OP_AGK_GEMM_EPI, OP_GEMM_EPI never tiled,
-# the old kernels with full-slab staging): the A/B arm. Bits are the same on
-# both arms.
-comptime GEMM_DISPATCH_V1 = is_defined["MOJOLEARN_AUTOGRAD_GEMM_DISPATCH_V1"]()
+# TOMBSTONE: MOJOLEARN_AUTOGRAD_GEMM_DISPATCH_V1 (old path, the pass-3 routes; EXP:2160 PENDING) deleted 2026-11-15 by lane/expdel2-29-neural; code recoverable at 8747cf5fa2.
+# Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_GEMM_DISPATCH_V1.patch
+# Kept False for sequence/exec_device.mojo (another lane's file).
+comptime GEMM_DISPATCH_V1 = False
 #: lane ag-pass5-gemm (PASS5_IDEAS idea 1 Part A, default on): in
 #: seq_gemm_tile_kernel each thread first loads ALL its slab words of an
 #: operand into registers (a comptime-sized batch, ceil(TM TK / GT_TPB) A
@@ -390,11 +384,8 @@ comptime GEMM_DISPATCH_V1 = is_defined["MOJOLEARN_AUTOGRAD_GEMM_DISPATCH_V1"]()
 #: same slot, and the fold is the same chain, acc = fma3(A(m, k), B(k, n),
 #: acc), k ascending from the same initial word; the column sums the same
 #: add chain over the same staged words. Only when a load is issued moves.
-#: -D MOJOLEARN_IDN_SEQ_GEMM_TILED_V3_OFF (or MOJOLEARN_IDN_ALL_OFF) keeps the
-#: pass-4 loops (the A/B arm).
-comptime GT_V3 = not (
-    is_defined["MOJOLEARN_IDN_SEQ_GEMM_TILED_V3_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_IDN_SEQ_GEMM_TILED_V3_OFF (old path, the pass-4 slab loops; EXP:2163 PENDING) deleted 2026-11-15 by lane/expdel2-29-neural; code recoverable at fcf169192e.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_SEQ_GEMM_TILED_V3_OFF.patch
 comptime GT_FOLD_STAGE = 16
 comptime GT_MIN_K = 4
 #: the thin tile: GT_THIN cells along the long edge, GT_THIN_K-term slabs
@@ -436,24 +427,20 @@ comptime GR_TILE16 = 5
 # 16 x 16 tile (the HIGGS MLP's dW1, M 28, stays on it; its Z1, 512 x 256
 # over K 28, moves to the micro-tile with the same words).
 # Slab page (64 x 33 + 32 x 65) x 4 B = 16.8 KB (< the 32 KB limit).
-# -D MOJOLEARN_IDN_SEQ_GEMM_MICRO_OFF (or MOJOLEARN_IDN_ALL_OFF): the 16 x 16
-# tile for every product with both edges >= 8 (arm A).
 # DEFAULT OFF since 2026-10-19 (orchestrator): the 64x64 micro-tile lost on both vendors on the HIGGS MLP, one run per arm
-# (NVIDIA L40S 0.1735 -> 0.1954 s with it, AMD MI325X 0.336 -> 0.362; average 1.11x), same bits (8f410a4ae2d620af). Its target
-# shapes (square products with edges >= 64 at the opbench sizes) were never timed with it on; -D MOJOLEARN_IDN_SEQ_GEMM_MICRO
-# opts in for that A/B. MOJOLEARN_IDN_SEQ_GEMM_MICRO_OFF / IDN_ALL_OFF still force it off.
-comptime GT_MICRO = is_defined["MOJOLEARN_IDN_SEQ_GEMM_MICRO"]() and not (
-    is_defined["MOJOLEARN_IDN_SEQ_GEMM_MICRO_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
-comptime GT_MICRO_EDGE = 64
+# (NVIDIA L40S 0.1735 -> 0.1954 s with it, AMD MI325X 0.336 -> 0.362; average 1.11x), same bits (8f410a4ae2d620af).
+# TOMBSTONE: MOJOLEARN_IDN_SEQ_GEMM_MICRO (opt-in arm, no A/B on its target shapes) deleted 2026-11-15 by lane/expdel2-29-neural; code recoverable at 84eb54a8c8.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_SEQ_GEMM_MICRO.patch
+# TOMBSTONE: MOJOLEARN_IDN_SEQ_GEMM_MICRO_OFF (force-off of the deleted arm; EXP:2179 PENDING) deleted 2026-11-15 by lane/expdel2-29-neural; code recoverable at 84eb54a8c8.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_SEQ_GEMM_MICRO_OFF.patch
+# seq_gemm_micro_kernel stays: the forced route GR_MICRO (gemm_launch_route, the GEMM check) still launches it.
 
 
 @always_inline
 def seq_gemm_micro_on(M: Int, N: Int) -> Bool:
-    """GR_TILE runs the micro-tile (both edges >= GT_MICRO_EDGE)."""
-    comptime if not GT_MICRO:
-        return False
-    return M >= GT_MICRO_EDGE and N >= GT_MICRO_EDGE
+    """GR_TILE never runs the micro-tile (its opt-in arm is deleted); kept
+    for sequence/exec_device.mojo."""
+    return False
 comptime GM_M = 64
 comptime GM_N = 64
 comptime GM_K = 32
@@ -479,12 +466,9 @@ comptime GM_UNROLL = 4
 # bias + logistic and bias + tanh epilogues get their own comptime kinds
 # (GK_BIAS_LOGISTIC, GK_BIAS_TANH: act_value's branch alone, no runtime
 # activation switch; opbench NV bias_sigmoid 512x64->64 16.8 us vs
-# bias_tanh 9.2). -D MOJOLEARN_IDN_GEMM_ROUTE_P6_OFF (or
-# MOJOLEARN_IDN_ALL_OFF): pass 5's rule (thin only for fused launches) and
-# kinds (sigmoid / tanh through GK_BIAS_ACT), arm A.
-comptime GEMM_ROUTE_P6 = not (
-    is_defined["MOJOLEARN_IDN_GEMM_ROUTE_P6_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
+# bias_tanh 9.2).
+# TOMBSTONE: MOJOLEARN_IDN_GEMM_ROUTE_P6_OFF (old path, pass 5's thin-only-when-fused rule; EXP:2181 PENDING) deleted 2026-11-15 by lane/expdel2-29-neural; code recoverable at a9e416c657.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_GEMM_ROUTE_P6_OFF.patch
 comptime GT_THIN_CELLS = 1 << 15
 
 #: the epilogue kinds of seq_gemm_tile_kernel (comptime, so each kernel
@@ -509,8 +493,6 @@ def seq_gemm_route(M: Int, N: Int, K: Int, fused: Bool) -> Int:
     """The kernel for an M x N x K product (GR_*), from the cost rule above.
     `fused`: the launch carries work beyond the product (an epilogue, or the
     column sums of B), see the thin-tile rule below."""
-    comptime if GEMM_DISPATCH_V1:
-        return GR_TILE if seq_gemm_tiled_on(M, N) else GR_CELL
     if K < GT_MIN_K:
         return GR_CELL
     # lane ag-pass6-gemm: a product the split-K rule selects is never one
@@ -524,31 +506,11 @@ def seq_gemm_route(M: Int, N: Int, K: Int, fused: Bool) -> Int:
         return GR_TILE
     if M >= GT_MIN_EDGE and N >= GT_MIN_EDGE:
         return GR_TILE
-    comptime if GEMM_ROUTE_P6:
-        # the interim rule (pass 6, above): the cell count decides
-        if M * N >= GT_THIN_CELLS:
-            return GR_CELL
-        if N <= M:
-            return GR_THIN_N
-        return GR_THIN_M
-    # THIN EDGE (AMD MI325X phase 5, one run per arm, same bits on both
-    # routes: the plain OP_GEMM 327 -> 375 ms for 9770 launches with the
-    # thin tile on its N = 1 products, while the hand's OP_GEMM_EPI and the
-    # tape's 1401 with the same thin tile went 0.972 -> 0.458 s and
-    # 0.737 -> 0.480 s). Cost: on a thin edge each output word has K terms
-    # and no reuse, so the 16 x 1 tile loads the same 2K words per output as
-    # one thread a cell, only staged; it buys fewer load rounds (K / 256
-    # instead of K / 16) at the price of two barriers a slab with 240 of
-    # 256 threads idle in the fold. For a bare product the one-thread cells
-    # (M N threads, GEMM_STAGE loads in flight each) hide those rounds
-    # themselves, so they are the cheaper route. The tile pays only when the
-    # launch also carries fused work: the column sums (off the tile, a
-    # second launch: one thread a column over all K rows) and the epilogue
-    # (the one-thread epilogue body is the runtime EPI x activation switch;
-    # the tile's is compiled for its kind alone).
-    if not fused:
+    # the interim rule (pass 6, above): the cell count decides; `fused`
+    # no longer moves the route (pass 5's thin-only-when-fused rule is
+    # deleted)
+    if M * N >= GT_THIN_CELLS:
         return GR_CELL
-    # the thin tile runs along the long edge
     if N <= M:
         return GR_THIN_N
     return GR_THIN_M
@@ -566,11 +528,10 @@ def seq_gemm_epi_kind(epi: Int, act: Int) -> Int:
             return GK_BIAS
         if act == ACT_RELU:
             return GK_BIAS_RELU
-        comptime if GEMM_ROUTE_P6:
-            if act == ACT_LOGISTIC:
-                return GK_BIAS_LOGISTIC
-            if act == ACT_TANH:
-                return GK_BIAS_TANH
+        if act == ACT_LOGISTIC:
+            return GK_BIAS_LOGISTIC
+        if act == ACT_TANH:
+            return GK_BIAS_TANH
         return GK_BIAS_ACT
     if epi == EPI_L2GRAD:
         return GK_L2GRAD
@@ -682,52 +643,14 @@ def seq_gemm_tile_kernel[TM: Int, TN: Int, TK: Int, EK: Int](
     var k0 = 0
     while k0 < K:
         var cnt = min(TK, K - k0)
-        comptime if GT_V3:
-            # register-staged slabs: every load of this thread's words is
-            # issued before the first store (slot q = tid + j GT_TPB; the
-            # same index math, the same guards, the same words and slots)
-            var av = Array[Float32, NA](fill=Float32(0.0))
-            var aslot = Array[Int32, NA](fill=Int32(-1))
-            comptime for j in range(NA):
-                var q = tid + j * GT_TPB
-                if q < TM * cnt:
-                    var row: Int
-                    var kk: Int
-                    if a_rows_fast:
-                        kk = q // TM
-                        row = q - kk * TM
-                    else:
-                        row = q // cnt
-                        kk = q - row * cnt
-                    aslot[j] = Int32(row * AS + kk)
-                    if m0 + row < M:
-                        av[j] = ld(pa, (m0 + row) * SAM + (k0 + kk) * SAK)
-            var bv = Array[Float32, NB](fill=Float32(0.0))
-            var bslot = Array[Int32, NB](fill=Int32(-1))
-            comptime for j in range(NB):
-                var q = tid + j * GT_TPB
-                if q < cnt * TN:
-                    var kk: Int
-                    var col: Int
-                    if b_terms_fast:
-                        col = q // cnt
-                        kk = q - col * cnt
-                    else:
-                        kk = q // TN
-                        col = q - kk * TN
-                    bslot[j] = Int32(kk * BS + col)
-                    if n0 + col < N:
-                        bv[j] = ld(pb, (k0 + kk) * SBK + (n0 + col) * SBN)
-            comptime for j in range(NA):
-                if aslot[j] >= 0:
-                    a_s[Int(aslot[j])] = av[j]
-            comptime for j in range(NB):
-                if bslot[j] >= 0:
-                    b_s[Int(bslot[j])] = bv[j]
-        else:
-            # the A slab: TM rows of cnt terms (a_s[row * AS + kk])
-            var q = tid
-            while q < TM * cnt:
+        # register-staged slabs: every load of this thread's words is
+        # issued before the first store (slot q = tid + j GT_TPB; the
+        # same index math, the same guards, the same words and slots)
+        var av = Array[Float32, NA](fill=Float32(0.0))
+        var aslot = Array[Int32, NA](fill=Int32(-1))
+        comptime for j in range(NA):
+            var q = tid + j * GT_TPB
+            if q < TM * cnt:
                 var row: Int
                 var kk: Int
                 if a_rows_fast:
@@ -736,14 +659,14 @@ def seq_gemm_tile_kernel[TM: Int, TN: Int, TK: Int, EK: Int](
                 else:
                     row = q // cnt
                     kk = q - row * cnt
-                var v = Float32(0.0)
+                aslot[j] = Int32(row * AS + kk)
                 if m0 + row < M:
-                    v = ld(pa, (m0 + row) * SAM + (k0 + kk) * SAK)
-                a_s[row * AS + kk] = v
-                q += GT_TPB
-            # the B slab: cnt terms of TN columns (b_s[kk * BS + col])
-            q = tid
-            while q < cnt * TN:
+                    av[j] = ld(pa, (m0 + row) * SAM + (k0 + kk) * SAK)
+        var bv = Array[Float32, NB](fill=Float32(0.0))
+        var bslot = Array[Int32, NB](fill=Int32(-1))
+        comptime for j in range(NB):
+            var q = tid + j * GT_TPB
+            if q < cnt * TN:
                 var kk: Int
                 var col: Int
                 if b_terms_fast:
@@ -752,45 +675,40 @@ def seq_gemm_tile_kernel[TM: Int, TN: Int, TK: Int, EK: Int](
                 else:
                     kk = q // TN
                     col = q - kk * TN
-                var v = Float32(0.0)
+                bslot[j] = Int32(kk * BS + col)
                 if n0 + col < N:
-                    v = ld(pb, (k0 + kk) * SBK + (n0 + col) * SBN)
-                b_s[kk * BS + col] = v
-                q += GT_TPB
+                    bv[j] = ld(pb, (k0 + kk) * SBK + (n0 + col) * SBN)
+        comptime for j in range(NA):
+            if aslot[j] >= 0:
+                a_s[Int(aslot[j])] = av[j]
+        comptime for j in range(NB):
+            if bslot[j] >= 0:
+                b_s[Int(bslot[j])] = bv[j]
         barrier()
-        comptime if GT_V3:
-            # the staged fold: GT_FOLD_STAGE slab words into registers, then
-            # their fmas in order; cs_on implies live (tile row 0 of tile
-            # row 0 is row 0 < M, and cs_on tests n < N), so the column sum
-            # chain reads the same staged B words, i ascending
-            if live:
-                var i = 0
-                while i + GT_FOLD_STAGE <= cnt:
-                    var fa = SIMD[DType.float32, GT_FOLD_STAGE]()
-                    var fb = SIMD[DType.float32, GT_FOLD_STAGE]()
+        # the staged fold: GT_FOLD_STAGE slab words into registers, then
+        # their fmas in order; cs_on implies live (tile row 0 of tile
+        # row 0 is row 0 < M, and cs_on tests n < N), so the column sum
+        # chain reads the same staged B words, i ascending
+        if live:
+            var i = 0
+            while i + GT_FOLD_STAGE <= cnt:
+                var fa = SIMD[DType.float32, GT_FOLD_STAGE]()
+                var fb = SIMD[DType.float32, GT_FOLD_STAGE]()
+                comptime for j in range(GT_FOLD_STAGE):
+                    fa[j] = a_s[r * AS + i + j]
+                    fb[j] = b_s[(i + j) * BS + c]
+                comptime for j in range(GT_FOLD_STAGE):
+                    acc = fma3(fa[j], fb[j], acc)
+                if cs_on:
                     comptime for j in range(GT_FOLD_STAGE):
-                        fa[j] = a_s[r * AS + i + j]
-                        fb[j] = b_s[(i + j) * BS + c]
-                    comptime for j in range(GT_FOLD_STAGE):
-                        acc = fma3(fa[j], fb[j], acc)
-                    if cs_on:
-                        comptime for j in range(GT_FOLD_STAGE):
-                            cs = add(cs, fb[j])
-                    i += GT_FOLD_STAGE
-                while i < cnt:
-                    var wb = b_s[i * BS + c]
-                    acc = fma3(a_s[r * AS + i], wb, acc)
-                    if cs_on:
-                        cs = add(cs, wb)
-                    i += 1
-        else:
-            if live:
-                for i in range(cnt):
-                    acc = fma3(a_s[r * AS + i], b_s[i * BS + c], acc)
-            if cs_on:
-                # op_colsum: acc = add(acc, ld(X, r * i2 + c)), r ascending
-                for i in range(cnt):
-                    cs = add(cs, b_s[i * BS + c])
+                        cs = add(cs, fb[j])
+                i += GT_FOLD_STAGE
+            while i < cnt:
+                var wb = b_s[i * BS + c]
+                acc = fma3(a_s[r * AS + i], wb, acc)
+                if cs_on:
+                    cs = add(cs, wb)
+                i += 1
         barrier()
         k0 += TK
     if live:
@@ -1072,15 +990,6 @@ def seq_gemm_profile_route[OP: Int](a: Args, coop_on: Bool, coop_i11: Bool) -> I
             return GR_PROF_COOP
     comptime if not SEQ_GEMM_TILED:
         return GR_CELL
-    comptime if GEMM_DISPATCH_V1:
-        comptime if OP == OP_GEMM:
-            return GR_PROF_V1_TILE if seq_gemm_tiled_on(a.i0, a.i1) else GR_CELL
-        elif OP == OP_AGK_GEMM_EPI:
-            if seq_gemm_tiled_on(a.i0, a.i1) and a.i7 == 0 and a.i8 == a.i1:
-                return GR_PROF_V1_TILE
-            return GR_CELL
-        else:
-            return GR_CELL
     var fused = False
     comptime if OP != OP_GEMM:
         fused = seq_gemm_epi_kind(a.i9, a.i10) != GK_PLAIN

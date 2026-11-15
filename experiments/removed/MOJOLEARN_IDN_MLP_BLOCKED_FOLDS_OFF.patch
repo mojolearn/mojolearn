@@ -1,0 +1,28 @@
+diff --git a/sequence/mlp.mojo b/sequence/mlp.mojo
+index d8ef84da9e..46512cdda0 100644
+--- a/sequence/mlp.mojo
++++ b/sequence/mlp.mojo
+@@ -34,6 +34,7 @@ from std.sys.compile import is_defined
+ #:   block sums ascending (`op_mlp_rowpart`, `op_mlp_bloss`). A layer of at
+ #:   most AF_NORM_BLOCK weights and a batch of at most MLP_ROW_BLOCK rows is
+ #:   one block: the old chain, the old bits; larger ones get new bits.
++#:   -D MOJOLEARN_IDN_MLP_BLOCKED_FOLDS_OFF.
+ #: MLP_EPOCH_DEV (roadmap D13): the epoch order is `op_mlp_perm` on the
+ #:   executor (the x_cnn Feistel permutation, integers only) instead of a
+ #:   host Fisher-Yates walk and an N-word upload per epoch, and the epoch
+@@ -42,12 +43,9 @@ from std.sys.compile import is_defined
+ #:   host of every batch loss; one word comes back per epoch for the
+ #:   stopping rule. New shuffle order and new curve bits on every column.
+ #:   -D MOJOLEARN_IDN_MLP_EPOCH_DEV_OFF.
+-# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old path umbrella; EXP:2438 DELETED) read deleted here 2026-11-15 by lane/expdel2-29-neural; code recoverable at 92d4b79ec8.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-29-neural.patch
+-comptime _MLP_IDN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+-# TOMBSTONE: MOJOLEARN_IDN_MLP_BLOCKED_FOLDS_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-29-neural; code recoverable at 92d4b79ec8.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_MLP_BLOCKED_FOLDS_OFF.patch
+-comptime MLP_BLOCKED_FOLDS = _MLP_IDN
++#: Both also turn off under MOJOLEARN_IDN_ALL_OFF.
++comptime _MLP_IDN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
++comptime MLP_BLOCKED_FOLDS = _MLP_IDN and not is_defined["MOJOLEARN_IDN_MLP_BLOCKED_FOLDS_OFF"]()
+ comptime MLP_EPOCH_DEV = _MLP_IDN and not is_defined["MOJOLEARN_IDN_MLP_EPOCH_DEV_OFF"]()
+ #: MLP_LOSSBLOCK (lane ag-pass3-lossblock, 2026-10-19; the loss-section
+ #:   comment block below): the per-batch seed, row-loss and L2 sums in two

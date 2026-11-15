@@ -1654,6 +1654,45 @@ Deletions reversed by new evidence. The code is back on main; the section and th
 | [`MOJOLEARN_MAMBA3_LEGACY_FRESH_PREFILL`](#mojolearn_mamba3_legacy_fresh_prefill-old-path-deleted-2026-11-15) | Neural (Mamba-3 fresh prefill entries, GPU binding) | removed (old path, no A/B recorded; fresh prefill default kept) | 2026-11-15 | [MOJOLEARN_MAMBA3_LEGACY_FRESH_PREFILL.patch](../experiments/removed/MOJOLEARN_MAMBA3_LEGACY_FRESH_PREFILL.patch) |
 | [`MOJOLEARN_TRANSFORMER_FRESH_PREFILL`](#mojolearn_transformer_fresh_prefill-unmeasured-arm-deleted-2026-11-15) | Neural (TransformerBlock per-call fresh prefill export, off NVIDIA) | removed (unmeasured opt-in arm; EXP:2376 PENDING) | 2026-11-15 | [MOJOLEARN_TRANSFORMER_FRESH_PREFILL.expdel2-01-base.patch](../experiments/removed/MOJOLEARN_TRANSFORMER_FRESH_PREFILL.expdel2-01-base.patch) |
 | [`MOJOLEARN_TRANSFORMER_LEGACY_FRESH_PREFILL`](#mojolearn_transformer_legacy_fresh_prefill-old-path-deleted-2026-11-15) | Neural (TransformerBlock per-call fresh prefill export, NVIDIA) | removed (old path; NVIDIA export is the kept path, EXP:2355) | 2026-11-15 | [MOJOLEARN_TRANSFORMER_LEGACY_FRESH_PREFILL.patch](../experiments/removed/MOJOLEARN_TRANSFORMER_LEGACY_FRESH_PREFILL.patch) |
+| [`MOJOLEARN_AUTOGRAD_GEMM_DISPATCH_V1`](#mojolearn_autograd_gemm_dispatch_v1) | Neural (sequence GEMM dispatch pass-3 routes) | removed (old path beside the default) | 2026-11-15 | [MOJOLEARN_AUTOGRAD_GEMM_DISPATCH_V1.patch](../experiments/removed/MOJOLEARN_AUTOGRAD_GEMM_DISPATCH_V1.patch) |
+| [`MOJOLEARN_AUTOGRAD_MLP_UNFUSED`](#mojolearn_autograd_mlp_unfused) | Neural (MLP trainer composed tape graph) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_AUTOGRAD_MLP_UNFUSED.patch](../experiments/removed/MOJOLEARN_AUTOGRAD_MLP_UNFUSED.patch) |
+| [`MOJOLEARN_AUTOGRAD_OPTIM`](#mojolearn_autograd_optim) | Neural (MLP trainer executor optimizer) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_AUTOGRAD_OPTIM.2026-11-15.patch](../experiments/removed/MOJOLEARN_AUTOGRAD_OPTIM.2026-11-15.patch) |
+| [`MOJOLEARN_GARCH_COOP_OFF`](#mojolearn_garch_coop_off) | Series (GARCH chunked likelihood, FAST+Apple) | removed (old path beside the default) | 2026-11-15 | [MOJOLEARN_GARCH_COOP_OFF.patch](../experiments/removed/MOJOLEARN_GARCH_COOP_OFF.patch) |
+| [`MOJOLEARN_IDN_GARCH_COOP_OFF`](#mojolearn_idn_garch_coop_off) | Series (GARCH chunked likelihood, IDENTICAL) | removed (old path beside the default) | 2026-11-15 | [MOJOLEARN_IDN_GARCH_COOP_OFF.patch](../experiments/removed/MOJOLEARN_IDN_GARCH_COOP_OFF.patch) |
+| [`MOJOLEARN_IDN_GARCH_FOLD32_OFF`](#mojolearn_idn_garch_fold32_off) | Series (GARCH log-likelihood fold32, IDENTICAL) | removed (old path beside the default) | 2026-11-15 | [MOJOLEARN_IDN_GARCH_FOLD32_OFF.patch](../experiments/removed/MOJOLEARN_IDN_GARCH_FOLD32_OFF.patch) |
+| [`MOJOLEARN_IDN_GARCH_LEAD_REG_OFF`](#mojolearn_idn_garch_lead_reg_off) | Series (GARCH lead recursion in registers, IDENTICAL) | removed (old path beside the default) | 2026-11-15 | [MOJOLEARN_IDN_GARCH_LEAD_REG_OFF.patch](../experiments/removed/MOJOLEARN_IDN_GARCH_LEAD_REG_OFF.patch) |
+| [`MOJOLEARN_IDN_GEMM_ROUTE_P6_OFF`](#mojolearn_idn_gemm_route_p6_off) | Neural (sequence GEMM pass-6 route rule) | removed (old path beside the default) | 2026-11-15 | [MOJOLEARN_IDN_GEMM_ROUTE_P6_OFF.patch](../experiments/removed/MOJOLEARN_IDN_GEMM_ROUTE_P6_OFF.patch) |
+| [`MOJOLEARN_IDN_GEMM_SPLITK_OFF`](#mojolearn_idn_gemm_splitk_off) | Neural (sequence GEMM split-K order, IDENTICAL) | removed (old path beside the default) | 2026-11-15 | [MOJOLEARN_IDN_GEMM_SPLITK_OFF.patch](../experiments/removed/MOJOLEARN_IDN_GEMM_SPLITK_OFF.patch) |
+| [`MOJOLEARN_IDN_GEMM_STAGE64`](#mojolearn_idn_gemm_stage64) | Neural (gemm_dot 64-wide staging) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_IDN_GEMM_STAGE64.patch](../experiments/removed/MOJOLEARN_IDN_GEMM_STAGE64.patch) |
+| [`MOJOLEARN_IDN_GEMM_STAGE_OFF`](#mojolearn_idn_gemm_stage_off) | Neural (gemm_dot 64-wide staging force-off) | removed (old path beside the default) | 2026-11-15 | [MOJOLEARN_IDN_GEMM_STAGE_OFF.patch](../experiments/removed/MOJOLEARN_IDN_GEMM_STAGE_OFF.patch) |
+| [`MOJOLEARN_IDN_LN_ONE_PASS_OFF`](#mojolearn_idn_ln_one_pass_off) | Neural (LayerNorm warp cell one pass, IDENTICAL) | removed (old path beside the default) | 2026-11-15 | [MOJOLEARN_IDN_LN_ONE_PASS_OFF.patch](../experiments/removed/MOJOLEARN_IDN_LN_ONE_PASS_OFF.patch) |
+| [`MOJOLEARN_IDN_MLP_BLOCKED_FOLDS_OFF`](#mojolearn_idn_mlp_blocked_folds_off) | Neural (MLP trainer blocked folds, IDENTICAL) | removed (old path beside the default) | 2026-11-15 | [MOJOLEARN_IDN_MLP_BLOCKED_FOLDS_OFF.patch](../experiments/removed/MOJOLEARN_IDN_MLP_BLOCKED_FOLDS_OFF.patch) |
+| [`MOJOLEARN_IDN_MLP_EPOCH_DEV_OFF`](#mojolearn_idn_mlp_epoch_dev_off) | Neural (MLP trainer epoch order and loss on the executor, IDENTICAL) | removed (old path beside the default) | 2026-11-15 | [MOJOLEARN_IDN_MLP_EPOCH_DEV_OFF.patch](../experiments/removed/MOJOLEARN_IDN_MLP_EPOCH_DEV_OFF.patch) |
+| [`MOJOLEARN_IDN_MOE_GROUPED_GEMM_OFF`](#mojolearn_idn_moe_grouped_gemm_off) | Neural (MoE expert products on the identical GEMM) | removed (old path beside the default) | 2026-11-15 | [MOJOLEARN_IDN_MOE_GROUPED_GEMM_OFF.patch](../experiments/removed/MOJOLEARN_IDN_MOE_GROUPED_GEMM_OFF.patch) |
+| [`MOJOLEARN_IDN_MOE_STABLE_PACK`](#mojolearn_idn_moe_stable_pack) | Neural (MoE stable pair packing, IDENTICAL) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_IDN_MOE_STABLE_PACK.patch](../experiments/removed/MOJOLEARN_IDN_MOE_STABLE_PACK.patch) |
+| [`MOJOLEARN_IDN_SEQ_GEMM_MICRO`](#mojolearn_idn_seq_gemm_micro) | Neural (sequence GEMM 64 x 64 micro-tile) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_IDN_SEQ_GEMM_MICRO.patch](../experiments/removed/MOJOLEARN_IDN_SEQ_GEMM_MICRO.patch) |
+| [`MOJOLEARN_IDN_SEQ_GEMM_MICRO_OFF`](#mojolearn_idn_seq_gemm_micro_off) | Neural (sequence GEMM micro-tile force-off) | removed (old path beside the default) | 2026-11-15 | [MOJOLEARN_IDN_SEQ_GEMM_MICRO_OFF.patch](../experiments/removed/MOJOLEARN_IDN_SEQ_GEMM_MICRO_OFF.patch) |
+| [`MOJOLEARN_IDN_SEQ_GEMM_TILED_OFF`](#mojolearn_idn_seq_gemm_tiled_off) | Neural (sequence GEMM tiled launch, IDENTICAL) | removed (old path beside the default) | 2026-11-15 | [MOJOLEARN_IDN_SEQ_GEMM_TILED_OFF.patch](../experiments/removed/MOJOLEARN_IDN_SEQ_GEMM_TILED_OFF.patch) |
+| [`MOJOLEARN_IDN_SEQ_GEMM_TILED_V2_OFF`](#mojolearn_idn_seq_gemm_tiled_v2_off) | Neural (sequence GEMM tile GT_K 128 and unit-stride slab loads) | removed (old path beside the default) | 2026-11-15 | [MOJOLEARN_IDN_SEQ_GEMM_TILED_V2_OFF.patch](../experiments/removed/MOJOLEARN_IDN_SEQ_GEMM_TILED_V2_OFF.patch) |
+| [`MOJOLEARN_IDN_SEQ_GEMM_TILED_V3_OFF`](#mojolearn_idn_seq_gemm_tiled_v3_off) | Neural (sequence GEMM tile register-staged slabs) | removed (old path beside the default) | 2026-11-15 | [MOJOLEARN_IDN_SEQ_GEMM_TILED_V3_OFF.patch](../experiments/removed/MOJOLEARN_IDN_SEQ_GEMM_TILED_V3_OFF.patch) |
+| [`MOJOLEARN_IDN_SEQ_LN_LEAF`](#mojolearn_idn_seq_ln_leaf) | Neural (LayerNorm blocked fold leaf 32) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_IDN_SEQ_LN_LEAF.patch](../experiments/removed/MOJOLEARN_IDN_SEQ_LN_LEAF.patch) |
+| [`MOJOLEARN_IDN_SEQ_SOFTMAX_ONE_EXP_OFF`](#mojolearn_idn_seq_softmax_one_exp_off) | Neural (sequence softmax / cross-entropy one exp) | removed (old path beside the default) | 2026-11-15 | [MOJOLEARN_IDN_SEQ_SOFTMAX_ONE_EXP_OFF.patch](../experiments/removed/MOJOLEARN_IDN_SEQ_SOFTMAX_ONE_EXP_OFF.patch) |
+| [`MOJOLEARN_LN_FAST_BLOCK_FOLD`](#mojolearn_ln_fast_block_fold) | Neural (LayerNorm blocked column folds, FAST+Apple) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_LN_FAST_BLOCK_FOLD.patch](../experiments/removed/MOJOLEARN_LN_FAST_BLOCK_FOLD.patch) |
+| [`MOJOLEARN_LN_FOLD_BLOCK_OFF`](#mojolearn_ln_fold_block_off) | Neural (LayerNorm blocked column folds, IDENTICAL) | removed (old path beside the default) | 2026-11-15 | [MOJOLEARN_LN_FOLD_BLOCK_OFF.patch](../experiments/removed/MOJOLEARN_LN_FOLD_BLOCK_OFF.patch) |
+| [`MOJOLEARN_MLP_LOSSBLOCK_OFF`](#mojolearn_mlp_lossblock_off) | Neural (MLP trainer loss block) | removed (old path beside the default) | 2026-11-15 | [MOJOLEARN_MLP_LOSSBLOCK_OFF.patch](../experiments/removed/MOJOLEARN_MLP_LOSSBLOCK_OFF.patch) |
+| [`MOJOLEARN_MLP_LOSSBLOCK_ROWS_OFF`](#mojolearn_mlp_lossblock_rows_off) | Neural (MLP loss block row threads) | removed (old path beside the default) | 2026-11-15 | [MOJOLEARN_MLP_LOSSBLOCK_ROWS_OFF.patch](../experiments/removed/MOJOLEARN_MLP_LOSSBLOCK_ROWS_OFF.patch) |
+| [`MOJOLEARN_MOE_DEVGROUP_OFF`](#mojolearn_moe_devgroup_off) | Neural (MoE device grouping) | removed (old path beside the default) | 2026-11-15 | [MOJOLEARN_MOE_DEVGROUP_OFF.patch](../experiments/removed/MOJOLEARN_MOE_DEVGROUP_OFF.patch) |
+| [`MOJOLEARN_MOE_FAST_MMA_OFF`](#mojolearn_moe_fast_mma_off) | Neural (MoE simdgroup MMA, FAST+Apple) | removed (old path beside the default) | 2026-11-15 | [MOJOLEARN_MOE_FAST_MMA_OFF.patch](../experiments/removed/MOJOLEARN_MOE_FAST_MMA_OFF.patch) |
+| [`MOJOLEARN_MOE_REGTILE_OFF`](#mojolearn_moe_regtile_off) | Neural (MoE register tiles) | removed (old path beside the default) | 2026-11-15 | [MOJOLEARN_MOE_REGTILE_OFF.patch](../experiments/removed/MOJOLEARN_MOE_REGTILE_OFF.patch) |
+| [`MOJOLEARN_NN42_INPUT_BIAS_FUSED`](#mojolearn_nn42_input_bias_fused) | Neural (recurrent input projection bias in the cell) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_NN42_INPUT_BIAS_FUSED.patch](../experiments/removed/MOJOLEARN_NN42_INPUT_BIAS_FUSED.patch) |
+| [`MOJOLEARN_NN44_EXPERT_BISECT`](#mojolearn_nn44_expert_bisect) | Neural (MoE tiled block expert search) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_NN44_EXPERT_BISECT.patch](../experiments/removed/MOJOLEARN_NN44_EXPERT_BISECT.patch) |
+| [`MOJOLEARN_SEQ_FAST_FMA_OFF`](#mojolearn_seq_fast_fma_off) | Series (sequence fma3 fused under FAST+Apple) | removed (old path beside the default) | 2026-11-15 | [MOJOLEARN_SEQ_FAST_FMA_OFF.patch](../experiments/removed/MOJOLEARN_SEQ_FAST_FMA_OFF.patch) |
+| [`MOJOLEARN_SEQ_FAST_VAR_ONECOPY_OFF`](#mojolearn_seq_fast_var_onecopy_off) | Series (VAR fit one copy, FAST+Apple) | removed (old path beside the default) | 2026-11-15 | [MOJOLEARN_SEQ_FAST_VAR_ONECOPY_OFF.patch](../experiments/removed/MOJOLEARN_SEQ_FAST_VAR_ONECOPY_OFF.patch) |
+| [`MOJOLEARN_SEQ_GARCH_GRID_OFF`](#mojolearn_seq_garch_grid_off) | Series (GARCH start grid, FAST+Apple) | removed (old path beside the default) | 2026-11-15 | [MOJOLEARN_SEQ_GARCH_GRID_OFF.patch](../experiments/removed/MOJOLEARN_SEQ_GARCH_GRID_OFF.patch) |
+| [`MOJOLEARN_SEQ_GARCH_REG_OFF`](#mojolearn_seq_garch_reg_off) | Series (GARCH recursion in registers, FAST+Apple) | removed (old path beside the default) | 2026-11-15 | [MOJOLEARN_SEQ_GARCH_REG_OFF.patch](../experiments/removed/MOJOLEARN_SEQ_GARCH_REG_OFF.patch) |
+| [`MOJOLEARN_SEQ_REC_STAGE64`](#mojolearn_seq_rec_stage64) | Neural (recurrent cells 64-wide gemm_dot staging) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_SEQ_REC_STAGE64.patch](../experiments/removed/MOJOLEARN_SEQ_REC_STAGE64.patch) |
+| [`MOJOLEARN_TSA2_STL_OFF`](#mojolearn_tsa2_stl_off) | Series (STL LOESS grid, FAST+Apple) | removed (old path beside the default) | 2026-11-15 | [MOJOLEARN_TSA2_STL_OFF.patch](../experiments/removed/MOJOLEARN_TSA2_STL_OFF.patch) |
+| [`MOJOLEARN_TSA2_VAR_OFF`](#mojolearn_tsa2_var_off) | Series (VAR queued fit, FAST+Apple) | removed (old path beside the default) | 2026-11-15 | [MOJOLEARN_TSA2_VAR_OFF.patch](../experiments/removed/MOJOLEARN_TSA2_VAR_OFF.patch) |
 
 ## Trees
 
@@ -16101,3 +16140,370 @@ Inline TOMBSTONE markers only; the owner lane of each define writes its section,
 - `MOJOLEARN_IDN_CE_DENOM_ROWFOLD`: folded to False with ce_denom_rowfold_kernel, CE_DENOM_ROWFOLD_KS and _ce_denom_rowfold_into (training/checks/loss.mojo); `943c1ff5fe`, recoverable at `ddb49ec46d`; `experiments/removed/MOJOLEARN_IDN_CE_DENOM_ROWFOLD.expdel2-31-neural.patch`.
 
 Not deleted, contrary to the plan: `MOJOLEARN_COLUMN_CPU` (the CPU-column build switch, KEEP; coordinator correction 2026-11-15); `MOJOLEARN_TRAIN_LIVE_STATUS` (training/byte_lm.mojo live-status rule: its source comment records the opt-in arm measured faster on the L40S, live/base 0.960, and near-neutral 0.993 on the MI325X; a measured winner is never deleted on reasoning; only the MOJOLEARN_IDN_ALL_OFF term beside it was removed). No edit needed in this lane's files (the alias stays an expression owned elsewhere): `MOJOLEARN_ATTN_EXACT_TAIL_GUARD`, `MOJOLEARN_ATTN_KV_CORNER_GUARD`, `MOJOLEARN_ATTN_LEGACY_CORNER`, `MOJOLEARN_ATTN_REPAIR_MASKED_TAIL` (training/byte_lm.mojo reads ATTN_EXACT_TAIL_GUARD and ATTN_REPAIR_MASKED_TAIL from transformer/impl/llama/fused_attention.mojo, where they keep their per-column rule).
+
+## Experiment deletions: lane expdel2-29-neural (2026-11-15)
+
+Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2-29-neural), under AGENTS.md "An unmeasured arm is deleted" (Andrew, 2026-11-15). Each record named below was read first. No bit changes: every deletion removes a non-default arm or a rollback beside the default, and the default branch is kept byte for byte. Where an alias other lanes import stays, it is the folded constant.
+
+### MOJOLEARN_AUTOGRAD_GEMM_DISPATCH_V1
+
+- Tried: Neural (sequence GEMM dispatch pass-3 routes); the rollback to the old path beside the default.
+- Evidence: EXP:2160 PENDING; no A/B recorded for the old path (rule b). Verdict: the old path goes; the default stays.
+- Removed: the V1 branches of seq_gemm_route and the profile route (sequence/gemm_tiled.mojo); GEMM_DISPATCH_V1 stays False for sequence/exec_device.mojo. Default unchanged: no bits move.
+- Files: sequence/gemm_tiled.mojo.
+- Deleted by: lane/expdel2-29-neural `fcf169192e` (2026-11-15); code recoverable at `8747cf5fa2`.
+- Restore: `git apply experiments/removed/MOJOLEARN_AUTOGRAD_GEMM_DISPATCH_V1.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+
+### MOJOLEARN_AUTOGRAD_MLP_UNFUSED
+
+- Tried: Neural (MLP trainer composed tape graph); the opt-in arm.
+- Evidence: no record; no A/B recorded for the opt-in arm (rule a). Verdict: the opt-in arm goes.
+- Removed: the composed matmul + add + activation graph of mlp_forward_autograd / mlp_backward_autograd, its L2GRAD + DIVS export, MLP_COMPOSED_OPT_FUSE (the AUTOGRAD_OPT_FUSE read), mlp_grad_finish and the finish word (sequence/mlp_fit.mojo). Default unchanged: no bits move.
+- Files: sequence/mlp_fit.mojo.
+- Deleted by: lane/expdel2-29-neural `ff6c789744` (2026-11-15); code recoverable at `a03ced9b31`.
+- Restore: `git apply experiments/removed/MOJOLEARN_AUTOGRAD_MLP_UNFUSED.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+
+### MOJOLEARN_AUTOGRAD_OPTIM
+
+- Tried: Neural (MLP trainer executor optimizer); the opt-in arm.
+- Evidence: EXP:2380 lane/r2-restore-unmeasured-defaults @ e048e42e81 restored the hand OP_OPT update as the default; no A/B recorded for the opt-in arm (rule a). Verdict: the opt-in arm goes.
+- Removed: the executor optimizer arm of mlp_fit (OptimizerState, step_lr, opt_cfg, the state release) in sequence/mlp_fit.mojo; the hand OP_OPT launch is the only update. sequence/recurrent.mojo keeps its own read (another lane's file). Default unchanged: no bits move.
+- Files: sequence/mlp_fit.mojo.
+- Deleted by: lane/expdel2-29-neural `92d4b79ec8` (2026-11-15); code recoverable at `ff6c789744`.
+- Restore: `git apply experiments/removed/MOJOLEARN_AUTOGRAD_OPTIM.2026-11-15.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+
+### MOJOLEARN_GARCH_COOP_OFF
+
+- Tried: Series (GARCH chunked likelihood, FAST+Apple); the rollback to the old path beside the default.
+- Evidence: EXP:564 SUPERSEDED; record read: the chunked likelihood is the kept path (rule e). Verdict: the old path goes; the default stays.
+- Removed: the _OFF term of GARCH_COOP (sequence/fit_team.mojo). Default unchanged: no bits move.
+- Files: sequence/fit_team.mojo.
+- Deleted by: lane/expdel2-29-neural `476f794798` (2026-11-15); code recoverable at `92fec7163d`.
+- Restore: `git apply experiments/removed/MOJOLEARN_GARCH_COOP_OFF.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+
+### MOJOLEARN_IDN_GARCH_COOP_OFF
+
+- Tried: Series (GARCH chunked likelihood, IDENTICAL); the rollback to the old path beside the default.
+- Evidence: no record; no A/B recorded for the old path (rule b). Verdict: the old path goes; the default stays.
+- Removed: the _OFF term of GARCH_COOP_IDN (sequence/garch.mojo). Default unchanged: no bits move.
+- Files: sequence/garch.mojo.
+- Deleted by: lane/expdel2-29-neural `92fec7163d` (2026-11-15); code recoverable at `02b0c1f6db`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_GARCH_COOP_OFF.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+
+### MOJOLEARN_IDN_GARCH_FOLD32_OFF
+
+- Tried: Series (GARCH log-likelihood fold32, IDENTICAL); the rollback to the old path beside the default.
+- Evidence: no record; no A/B recorded for the old path (rule b). Verdict: the old path goes; the default stays.
+- Removed: the _OFF term of GARCH_FOLD32 (sequence/garch.mojo). Default unchanged: no bits move.
+- Files: sequence/garch.mojo.
+- Deleted by: lane/expdel2-29-neural `02b0c1f6db` (2026-11-15); code recoverable at `869fa6e1fb`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_GARCH_FOLD32_OFF.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+
+### MOJOLEARN_IDN_GARCH_LEAD_REG_OFF
+
+- Tried: Series (GARCH lead recursion in registers, IDENTICAL); the rollback to the old path beside the default.
+- Evidence: no record; no A/B recorded for the old path (rule b). Verdict: the old path goes; the default stays.
+- Removed: the _OFF term of GARCH_LEAD_REG (sequence/fit_team.mojo). Default unchanged: no bits move.
+- Files: sequence/fit_team.mojo.
+- Deleted by: lane/expdel2-29-neural `6817978647` (2026-11-15); code recoverable at `476f794798`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_GARCH_LEAD_REG_OFF.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+
+### MOJOLEARN_IDN_GEMM_ROUTE_P6_OFF
+
+- Tried: Neural (sequence GEMM pass-6 route rule); the rollback to the old path beside the default.
+- Evidence: EXP:2181 PENDING; no A/B recorded for the old path (rule b). Verdict: the old path goes; the default stays.
+- Removed: GEMM_ROUTE_P6 and pass 5's thin-only-when-fused tail of seq_gemm_route; the logistic / tanh epilogue kinds are unconditional (sequence/gemm_tiled.mojo). Default unchanged: no bits move.
+- Files: sequence/gemm_tiled.mojo.
+- Deleted by: lane/expdel2-29-neural `8747cf5fa2` (2026-11-15); code recoverable at `a9e416c657`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_GEMM_ROUTE_P6_OFF.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+
+### MOJOLEARN_IDN_GEMM_SPLITK_OFF
+
+- Tried: Neural (sequence GEMM split-K order, IDENTICAL); the rollback to the old path beside the default.
+- Evidence: EXP:2180 PENDING (BIT VERSION); no A/B recorded for the old path (rule b). Verdict: the old path goes; the default stays.
+- Removed: the _OFF term of GEMM_SPLITK (sequence/gemm_split.mojo). Default unchanged: no bits move.
+- Files: sequence/gemm_split.mojo.
+- Deleted by: lane/expdel2-29-neural `27a4108c9f` (2026-11-15); code recoverable at `6817978647`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_GEMM_SPLITK_OFF.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+
+### MOJOLEARN_IDN_GEMM_STAGE64
+
+- Tried: Neural (gemm_dot 64-wide staging); the opt-in arm.
+- Evidence: source comment: default OFF since 2026-10-19, AMD MI325X loser (HIGGS MLP 30% slower, recurrent cells 2.7x), NVIDIA never measured (rule e). Verdict: the opt-in arm goes.
+- Removed: GEMM_STAGE_V2 is False (sequence/ops.mojo); gemm_dot's 64-wide branch went with SEQ_REC_STAGE64. Default unchanged: no bits move.
+- Files: sequence/ops.mojo.
+- Deleted by: lane/expdel2-29-neural `d5aeff2e08`, `7a79b3b608` (2026-11-15); code recoverable at `6a66db5157`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_GEMM_STAGE64.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+
+### MOJOLEARN_IDN_GEMM_STAGE_OFF
+
+- Tried: Neural (gemm_dot 64-wide staging force-off); the rollback to the old path beside the default.
+- Evidence: EXP:2164 PENDING; the force-off of the deleted IDN_GEMM_STAGE64 arm (rule b). Verdict: the old path goes; the default stays.
+- Removed: the _OFF term of GEMM_STAGE_V2 (sequence/ops.mojo), same commit as IDN_GEMM_STAGE64. Default unchanged: no bits move.
+- Files: sequence/ops.mojo.
+- Deleted by: lane/expdel2-29-neural `d5aeff2e08` (2026-11-15); code recoverable at `6a66db5157`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_GEMM_STAGE_OFF.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+
+### MOJOLEARN_IDN_LN_ONE_PASS_OFF
+
+- Tried: Neural (LayerNorm warp cell one pass, IDENTICAL); the rollback to the old path beside the default.
+- Evidence: EXP:2170 PENDING; no A/B recorded for the old path (rule b). Verdict: the old path goes; the default stays.
+- Removed: the _OFF term of LN_ONE_PASS (sequence/layernorm.mojo). Default unchanged: no bits move.
+- Files: sequence/layernorm.mojo.
+- Deleted by: lane/expdel2-29-neural `a03ced9b31` (2026-11-15); code recoverable at `f12b3def4e`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_LN_ONE_PASS_OFF.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+
+### MOJOLEARN_IDN_MLP_BLOCKED_FOLDS_OFF
+
+- Tried: Neural (MLP trainer blocked folds, IDENTICAL); the rollback to the old path beside the default.
+- Evidence: no record; no A/B recorded for the old path (rule b). Verdict: the old path goes; the default stays.
+- Removed: the _OFF term of MLP_BLOCKED_FOLDS (sequence/mlp.mojo). Default unchanged: no bits move.
+- Files: sequence/mlp.mojo.
+- Deleted by: lane/expdel2-29-neural `0064646ba8` (2026-11-15); code recoverable at `92d4b79ec8`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_MLP_BLOCKED_FOLDS_OFF.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+
+### MOJOLEARN_IDN_MLP_EPOCH_DEV_OFF
+
+- Tried: Neural (MLP trainer epoch order and loss on the executor, IDENTICAL); the rollback to the old path beside the default.
+- Evidence: no record; no A/B recorded for the old path (rule b). Verdict: the old path goes; the default stays.
+- Removed: the _OFF term of MLP_EPOCH_DEV (sequence/mlp.mojo). Default unchanged: no bits move.
+- Files: sequence/mlp.mojo.
+- Deleted by: lane/expdel2-29-neural `e06ff6f0f3` (2026-11-15); code recoverable at `0064646ba8`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_MLP_EPOCH_DEV_OFF.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+
+### MOJOLEARN_IDN_MOE_GROUPED_GEMM_OFF
+
+- Tried: Neural (MoE expert products on the identical GEMM); the rollback to the old path beside the default.
+- Evidence: EXP:1944 PROMOTED (IDENTICAL default); record read: the default is the recorded winner (rule e). Verdict: the old path goes; the default stays.
+- Removed: the _OFF term of MOE_GROUPED_GEMM (sequence/moe_grouped_fold.mojo). Default unchanged: no bits move.
+- Files: sequence/moe_grouped_fold.mojo.
+- Deleted by: lane/expdel2-29-neural `3dfeb158c0` (2026-11-15); code recoverable at `072f2eee14`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_MOE_GROUPED_GEMM_OFF.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+
+### MOJOLEARN_IDN_MOE_STABLE_PACK
+
+- Tried: Neural (MoE stable pair packing, IDENTICAL); the opt-in arm.
+- Evidence: no record; no A/B recorded for the opt-in arm (rule a). Verdict: the opt-in arm goes.
+- Removed: MOE_STABLE_PACK is False for sequence/exec_device.mojo (sequence/moe_group.mojo); moe_group_stable_all_kernel stays until exec_device drops its branch. Default unchanged: no bits move.
+- Files: sequence/moe_group.mojo.
+- Deleted by: lane/expdel2-29-neural `072f2eee14` (2026-11-15); code recoverable at `d1f44888a3`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_MOE_STABLE_PACK.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+
+### MOJOLEARN_IDN_SEQ_GEMM_MICRO
+
+- Tried: Neural (sequence GEMM 64 x 64 micro-tile); the opt-in arm.
+- Evidence: source comment: default OFF since 2026-10-19 (HIGGS MLP loser on both vendors, avg 1.11x); its target shapes never timed (rule a). Verdict: the opt-in arm goes.
+- Removed: GT_MICRO and GT_MICRO_EDGE; seq_gemm_micro_on returns False for sequence/exec_device.mojo; seq_gemm_micro_kernel stays for the forced GR_MICRO route (sequence/gemm_tiled.mojo). Default unchanged: no bits move.
+- Files: sequence/gemm_tiled.mojo.
+- Deleted by: lane/expdel2-29-neural `07dabb1b82` (2026-11-15); code recoverable at `84eb54a8c8`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_SEQ_GEMM_MICRO.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+
+### MOJOLEARN_IDN_SEQ_GEMM_MICRO_OFF
+
+- Tried: Neural (sequence GEMM micro-tile force-off); the rollback to the old path beside the default.
+- Evidence: EXP:2179 PENDING; the force-off of the deleted IDN_SEQ_GEMM_MICRO arm (rule b). Verdict: the old path goes; the default stays.
+- Removed: the _OFF term of GT_MICRO (sequence/gemm_tiled.mojo), same commit as IDN_SEQ_GEMM_MICRO. Default unchanged: no bits move.
+- Files: sequence/gemm_tiled.mojo.
+- Deleted by: lane/expdel2-29-neural `07dabb1b82` (2026-11-15); code recoverable at `84eb54a8c8`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_SEQ_GEMM_MICRO_OFF.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+
+### MOJOLEARN_IDN_SEQ_GEMM_TILED_OFF
+
+- Tried: Neural (sequence GEMM tiled launch, IDENTICAL); the rollback to the old path beside the default.
+- Evidence: no record; no A/B recorded for the old path (rule b). Verdict: the old path goes; the default stays.
+- Removed: the _OFF term of SEQ_GEMM_TILED (sequence/gemm_tiled.mojo). Default unchanged: no bits move.
+- Files: sequence/gemm_tiled.mojo.
+- Deleted by: lane/expdel2-29-neural `a9e416c657` (2026-11-15); code recoverable at `4f0461d50d`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_SEQ_GEMM_TILED_OFF.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+
+### MOJOLEARN_IDN_SEQ_GEMM_TILED_V2_OFF
+
+- Tried: Neural (sequence GEMM tile GT_K 128 and unit-stride slab loads); the rollback to the old path beside the default.
+- Evidence: no record; no A/B recorded for the old path (rule b). Verdict: the old path goes; the default stays.
+- Removed: GT_V2: GT_K 32, the unpadded strides and the old slab mapping (sequence/gemm_tiled.mojo). Default unchanged: no bits move.
+- Files: sequence/gemm_tiled.mojo.
+- Deleted by: lane/expdel2-29-neural `4f0461d50d` (2026-11-15); code recoverable at `27a4108c9f`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_SEQ_GEMM_TILED_V2_OFF.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+
+### MOJOLEARN_IDN_SEQ_GEMM_TILED_V3_OFF
+
+- Tried: Neural (sequence GEMM tile register-staged slabs); the rollback to the old path beside the default.
+- Evidence: EXP:2163 PENDING; no A/B recorded for the old path (rule b). Verdict: the old path goes; the default stays.
+- Removed: GT_V3 and the pass-4 slab loops and fold of seq_gemm_tile_kernel (sequence/gemm_tiled.mojo). Default unchanged: no bits move.
+- Files: sequence/gemm_tiled.mojo.
+- Deleted by: lane/expdel2-29-neural `84eb54a8c8` (2026-11-15); code recoverable at `fcf169192e`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_SEQ_GEMM_TILED_V3_OFF.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+
+### MOJOLEARN_IDN_SEQ_LN_LEAF
+
+- Tried: Neural (LayerNorm blocked fold leaf 32); the opt-in arm.
+- Evidence: no record; validation never run (rule a). Verdict: the opt-in arm goes.
+- Removed: the leaf-32 branch of ln_fold_rows and the get_defined_int import (sequence/layernorm.mojo); the legal-set assert in core/experiment_guards_neural.mojo stays (append only) and the new refusal stands beside it. Default unchanged: no bits move.
+- Files: sequence/layernorm.mojo.
+- Deleted by: lane/expdel2-29-neural `52392b3b15` (2026-11-15); code recoverable at `07dabb1b82`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_SEQ_LN_LEAF.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+
+### MOJOLEARN_IDN_SEQ_SOFTMAX_ONE_EXP_OFF
+
+- Tried: Neural (sequence softmax / cross-entropy one exp); the rollback to the old path beside the default.
+- Evidence: no record; no A/B recorded for the old path (rule b). Verdict: the old path goes; the default stays.
+- Removed: SEQ_SOFTMAX_ONE_EXP and the two-exp bodies of the softmax and cross-entropy rows (sequence/ops.mojo). Default unchanged: no bits move.
+- Files: sequence/ops.mojo.
+- Deleted by: lane/expdel2-29-neural `b23d7039b8` (2026-11-15); code recoverable at `38b93382d0`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_SEQ_SOFTMAX_ONE_EXP_OFF.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+
+### MOJOLEARN_LN_FAST_BLOCK_FOLD
+
+- Tried: Neural (LayerNorm blocked column folds, FAST+Apple); the opt-in arm.
+- Evidence: source comment F20 (M3 2026-10-06): mixed / regression, stays OFF; no promotion (rule a). Verdict: the opt-in arm goes.
+- Removed: the FAST+Apple term of LN_FOLD_BLOCK (sequence/layernorm.mojo). Default unchanged: no bits move.
+- Files: sequence/layernorm.mojo.
+- Deleted by: lane/expdel2-29-neural `8e9b1a9eb5` (2026-11-15); code recoverable at `52392b3b15`.
+- Restore: `git apply experiments/removed/MOJOLEARN_LN_FAST_BLOCK_FOLD.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+
+### MOJOLEARN_LN_FOLD_BLOCK_OFF
+
+- Tried: Neural (LayerNorm blocked column folds, IDENTICAL); the rollback to the old path beside the default.
+- Evidence: no record; no A/B recorded for the old path (rule b). Verdict: the old path goes; the default stays.
+- Removed: the _OFF term of LN_FOLD_BLOCK (sequence/layernorm.mojo). Default unchanged: no bits move.
+- Files: sequence/layernorm.mojo.
+- Deleted by: lane/expdel2-29-neural `b395beef95` (2026-11-15); code recoverable at `8e9b1a9eb5`.
+- Restore: `git apply experiments/removed/MOJOLEARN_LN_FOLD_BLOCK_OFF.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+
+### MOJOLEARN_MLP_LOSSBLOCK_OFF
+
+- Tried: Neural (MLP trainer loss block); the rollback to the old path beside the default.
+- Evidence: EXP:2159 PENDING; no A/B recorded for the old path (rule b). Verdict: the old path goes; the default stays.
+- Removed: the trainer's blocked-folds-without-loss-block branches: l2parts / rowparts, the _l2_blocked call, OP_MLP_ROWPART and OP_MLP_EPOCH_LOSS launches (sequence/mlp_fit.mojo); the kernels stay registered in sequence/dispatch.mojo and autograd/checks/lossblock_cases.mojo keeps _l2_blocked as its reference. Default unchanged: no bits move.
+- Files: sequence/mlp.mojo, sequence/mlp_fit.mojo.
+- Deleted by: lane/expdel2-29-neural `6ed945170f`, `5a1c6385fe` (2026-11-15); code recoverable at `e06ff6f0f3`.
+- Restore: `git apply experiments/removed/MOJOLEARN_MLP_LOSSBLOCK_OFF.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+
+### MOJOLEARN_MLP_LOSSBLOCK_ROWS_OFF
+
+- Tried: Neural (MLP loss block row threads); the rollback to the old path beside the default.
+- Evidence: no record; no A/B recorded for the old path (rule b). Verdict: the old path goes; the default stays.
+- Removed: the _OFF term of MLP_LB_ROWS (sequence/mlp.mojo); mlp_loss_block[False] stays as autograd/checks/lossblock_cases.mojo's reference. Default unchanged: no bits move.
+- Files: sequence/mlp.mojo, sequence/mlp_fit.mojo.
+- Deleted by: lane/expdel2-29-neural `7a938a579f` (2026-11-15); code recoverable at `6ed945170f`.
+- Restore: `git apply experiments/removed/MOJOLEARN_MLP_LOSSBLOCK_ROWS_OFF.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+
+### MOJOLEARN_MOE_DEVGROUP_OFF
+
+- Tried: Neural (MoE device grouping); the rollback to the old path beside the default.
+- Evidence: EXP:587 KEPT 499e1b72c: promoted on the M3 (FAST+Apple) only; the IDENTICAL NVIDIA/AMD A/B is owed (rule d). Verdict: the old path goes; the default stays.
+- Removed: the _OFF term of MOE_DEVGROUP (sequence/moe_reg.mojo). Default unchanged: no bits move.
+- Files: sequence/moe_reg.mojo.
+- Deleted by: lane/expdel2-29-neural `1e5b507b04` (2026-11-15); code recoverable at `2ca18f9b39`.
+- Restore: `git apply experiments/removed/MOJOLEARN_MOE_DEVGROUP_OFF.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+
+### MOJOLEARN_MOE_FAST_MMA_OFF
+
+- Tried: Neural (MoE simdgroup MMA, FAST+Apple); the rollback to the old path beside the default.
+- Evidence: EXP:1956 record read: MOE_FAST_MMA is the M3 default, the bundle deleted (rule e). Verdict: the old path goes; the default stays.
+- Removed: the _OFF term of MOE_MMA (sequence/moe_mma.mojo). Default unchanged: no bits move.
+- Files: sequence/moe_mma.mojo.
+- Deleted by: lane/expdel2-29-neural `cdff18f6c8` (2026-11-15); code recoverable at `1e5b507b04`.
+- Restore: `git apply experiments/removed/MOJOLEARN_MOE_FAST_MMA_OFF.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+
+### MOJOLEARN_MOE_REGTILE_OFF
+
+- Tried: Neural (MoE register tiles); the rollback to the old path beside the default.
+- Evidence: EXP:588 KEPT 499e1b72c: promoted on the M3 (FAST+Apple) only; the IDENTICAL NVIDIA/AMD A/B against moe_tiled is owed (rule d). Verdict: the old path goes; the default stays.
+- Removed: the _OFF term of MOE_REGTILE (sequence/moe_reg.mojo). Default unchanged: no bits move.
+- Files: sequence/moe_reg.mojo.
+- Deleted by: lane/expdel2-29-neural `2ca18f9b39` (2026-11-15); code recoverable at `253d6543b0`.
+- Restore: `git apply experiments/removed/MOJOLEARN_MOE_REGTILE_OFF.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+
+### MOJOLEARN_NN42_INPUT_BIAS_FUSED
+
+- Tried: Neural (recurrent input projection bias in the cell); the opt-in arm.
+- Evidence: no record; no A/B recorded for the opt-in arm (rule a). Verdict: the opt-in arm goes.
+- Removed: the bias store of op_cell_fwd_h (sequence/ops.mojo); NN42_INPUT_BIAS_FUSED stays False for autograd/rules_recurrent.mojo. Default unchanged: no bits move.
+- Files: sequence/ops.mojo.
+- Deleted by: lane/expdel2-29-neural `2f67dc66d0` (2026-11-15); code recoverable at `c906dcaf57`.
+- Restore: `git apply experiments/removed/MOJOLEARN_NN42_INPUT_BIAS_FUSED.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+
+### MOJOLEARN_NN44_EXPERT_BISECT
+
+- Tried: Neural (MoE tiled block expert search); the opt-in arm.
+- Evidence: no record; no A/B recorded for the opt-in arm (rule a). Verdict: the opt-in arm goes.
+- Removed: the bisection branch of _block_expert (sequence/moe_tiled.mojo). Default unchanged: no bits move.
+- Files: sequence/moe_tiled.mojo.
+- Deleted by: lane/expdel2-29-neural `d1f44888a3` (2026-11-15); code recoverable at `5a1c6385fe`.
+- Restore: `git apply experiments/removed/MOJOLEARN_NN44_EXPERT_BISECT.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+
+### MOJOLEARN_SEQ_FAST_FMA_OFF
+
+- Tried: Series (sequence fma3 fused under FAST+Apple); the rollback to the old path beside the default.
+- Evidence: EXP:542 KEPT f6a9e7c04 (M3); FAST is Apple only, no NVIDIA/AMD A/B owed (rule e). Verdict: the old path goes; the default stays.
+- Removed: the _OFF term of SEQ_FAST_FMA (sequence/ops.mojo). Default unchanged: no bits move.
+- Files: sequence/ops.mojo.
+- Deleted by: lane/expdel2-29-neural `38b93382d0` (2026-11-15); code recoverable at `2f67dc66d0`.
+- Restore: `git apply experiments/removed/MOJOLEARN_SEQ_FAST_FMA_OFF.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+
+### MOJOLEARN_SEQ_FAST_VAR_ONECOPY_OFF
+
+- Tried: Series (VAR fit one copy, FAST+Apple); the rollback to the old path beside the default.
+- Evidence: EXP:558 DROPPED-noise record; the one copy is the kept path (rule e). Verdict: the old path goes; the default stays.
+- Removed: the _OFF term of SEQ_FAST_VAR_ONECOPY (sequence/ops.mojo). Default unchanged: no bits move.
+- Files: sequence/ops.mojo.
+- Deleted by: lane/expdel2-29-neural `6a66db5157` (2026-11-15); code recoverable at `c860d9566d`.
+- Restore: `git apply experiments/removed/MOJOLEARN_SEQ_FAST_VAR_ONECOPY_OFF.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+
+### MOJOLEARN_SEQ_GARCH_GRID_OFF
+
+- Tried: Series (GARCH start grid, FAST+Apple); the rollback to the old path beside the default.
+- Evidence: EXP:546 KEPT 2dcdd949f: promoted on the M3 only; FAST is Apple only, so no NVIDIA/AMD A/B is owed (rule d). Verdict: the old path goes; the default stays.
+- Removed: the _OFF term of GARCH_GRID (sequence/garch.mojo). Default unchanged: no bits move.
+- Files: sequence/garch.mojo.
+- Deleted by: lane/expdel2-29-neural `869fa6e1fb` (2026-11-15); code recoverable at `bc254a427e`.
+- Restore: `git apply experiments/removed/MOJOLEARN_SEQ_GARCH_GRID_OFF.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+
+### MOJOLEARN_SEQ_GARCH_REG_OFF
+
+- Tried: Series (GARCH recursion in registers, FAST+Apple); the rollback to the old path beside the default.
+- Evidence: EXP:547 KEPT 2dcdd949f: promoted on the M3 only; FAST is Apple only, so no NVIDIA/AMD A/B is owed (rule d). Verdict: the old path goes; the default stays.
+- Removed: the _OFF term of GARCH_REG (sequence/garch.mojo). Default unchanged: no bits move.
+- Files: sequence/garch.mojo.
+- Deleted by: lane/expdel2-29-neural `bc254a427e` (2026-11-15); code recoverable at `7a79b3b608`.
+- Restore: `git apply experiments/removed/MOJOLEARN_SEQ_GARCH_REG_OFF.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+
+### MOJOLEARN_SEQ_REC_STAGE64
+
+- Tried: Neural (recurrent cells 64-wide gemm_dot staging); the opt-in arm.
+- Evidence: no record; no A/B recorded for the opt-in arm (rule a). Verdict: the opt-in arm goes.
+- Removed: SEQ_REC_GEMM_STAGE_V2, GEMM_STAGE_V2_WIDE and gemm_dot's wide branch and parameter (sequence/ops.mojo). Default unchanged: no bits move.
+- Files: sequence/ops.mojo.
+- Deleted by: lane/expdel2-29-neural `7a79b3b608` (2026-11-15); code recoverable at `d5aeff2e08`.
+- Restore: `git apply experiments/removed/MOJOLEARN_SEQ_REC_STAGE64.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+
+### MOJOLEARN_TSA2_STL_OFF
+
+- Tried: Series (STL LOESS grid, FAST+Apple); the rollback to the old path beside the default.
+- Evidence: EXP:549 KEPT 550806bc0: promoted on the M3 only; FAST is Apple only, so no NVIDIA/AMD A/B is owed (rule d). Verdict: the old path goes; the default stays.
+- Removed: the _OFF term of TSA2_STL (sequence/ops.mojo). Default unchanged: no bits move.
+- Files: sequence/ops.mojo.
+- Deleted by: lane/expdel2-29-neural `c860d9566d` (2026-11-15); code recoverable at `eb3180868d`.
+- Restore: `git apply experiments/removed/MOJOLEARN_TSA2_STL_OFF.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+
+### MOJOLEARN_TSA2_VAR_OFF
+
+- Tried: Series (VAR queued fit, FAST+Apple); the rollback to the old path beside the default.
+- Evidence: EXP:550 KEPT 550806bc0: promoted on the M3 only; FAST is Apple only, so no NVIDIA/AMD A/B is owed (rule d). Verdict: the old path goes; the default stays.
+- Removed: the _OFF term of TSA2_VAR (sequence/ops.mojo). Default unchanged: no bits move.
+- Files: sequence/ops.mojo.
+- Deleted by: lane/expdel2-29-neural `eb3180868d` (2026-11-15); code recoverable at `b23d7039b8`.
+- Restore: `git apply experiments/removed/MOJOLEARN_TSA2_VAR_OFF.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+
+### Non-owner sites of lane expdel2-29-neural
+
+Inline TOMBSTONE markers only; the owner lane of each define writes its section, refusal and records.
+
+- `MOJOLEARN_IDN_ALL_OFF` (owner expdel2-37-series): the umbrella term removed from NN42_INPUT_BIAS_FUSED, SEQ_SOFTMAX_ONE_EXP, GEMM_STAGE_V2 (sequence/ops.mojo), GARCH_FOLD32, GARCH_COOP_IDN (sequence/garch.mojo), GARCH_LEAD_REG (sequence/fit_team.mojo), GEMM_SPLITK (sequence/gemm_split.mojo), GT_V2, SEQ_GEMM_TILED, GEMM_ROUTE_P6, GT_V3, GT_MICRO (sequence/gemm_tiled.mojo), LN_ROW_WARP, LN_FOLD_BLOCK, ln_fold_rows (sequence/layernorm.mojo), _MLP_IDN (sequence/mlp.mojo), NN44_EXPERT_BISECT (sequence/moe_tiled.mojo), MOE_STABLE_PACK (sequence/moe_group.mojo), MOE_GROUPED_GEMM (sequence/moe_grouped_fold.mojo), MOE_REGTILE (sequence/moe_reg.mojo); `2f67dc66d0`, `b23d7039b8`, `d5aeff2e08`, `02b0c1f6db`, `92fec7163d`, `6817978647`, `27a4108c9f`, `4f0461d50d`, `a9e416c657`, `8747cf5fa2`, `84eb54a8c8`, `07dabb1b82`, `52392b3b15`, `b395beef95`, `f12b3def4e`, `0064646ba8`, `d1f44888a3`, `072f2eee14`, `3dfeb158c0`, `253d6543b0`, recoverable at `c906dcaf57`; `experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-29-neural.patch`.
+- `MOJOLEARN_IDN_GATES_OFF` (owner expdel2-16-decomposition): its term removed from MOE_REGTILE (sequence/moe_reg.mojo); `253d6543b0`, recoverable at `3dfeb158c0`; `experiments/removed/MOJOLEARN_IDN_GATES_OFF.expdel2-29-neural.patch`.
+- `MOJOLEARN_IDN_LN_ROW_WARP_OFF` (owner expdel2-28-neural): LN_ROW_WARP = IDENTICAL (sequence/layernorm.mojo); EXP:1945 PROMOTED; `f12b3def4e`, recoverable at `b395beef95`; `experiments/removed/MOJOLEARN_IDN_LN_ROW_WARP_OFF.expdel2-29-neural.patch`.
+- `MOJOLEARN_AUTOGRAD_OPT_FUSE_OFF` (owner expdel2-24-neural): this file's only use, MLP_COMPOSED_OPT_FUSE, went with AUTOGRAD_MLP_UNFUSED (sequence/mlp_fit.mojo); autograd/optim.mojo keeps its read; `ff6c789744`, recoverable at `a03ced9b31`; `experiments/removed/MOJOLEARN_AUTOGRAD_OPT_FUSE_OFF.expdel2-29-neural.patch`.
+- `MOJOLEARN_CNN_GENERIC_OPS` (owner expdel2-23-neural): the docstring note and the CNN_FUSED_OPS branch of _cnn_exec (CNN_FUSED_OPS is True since the owner's deletion) (sequence/model_device_dispatch.mojo); `a45b7ce969`, recoverable at `cdff18f6c8`; `experiments/removed/MOJOLEARN_CNN_GENERIC_OPS.expdel2-29-neural.patch`.
+
+No edit was needed in this lane's files for `MOJOLEARN_AUTOGRAD_GATHER_EPOCH_OFF` (no read in them; owner expdel2-23-neural deleted it).

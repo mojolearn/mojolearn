@@ -37,7 +37,6 @@ Slicing: the optimizers stop at an iteration boundary (`nm_steps`,
 `lbfgs_steps` with a budget) and keep their state in each thread's private
 row, so a resumed fit runs the same iterations as one call."""
 from std.memory import bitcast
-from std.sys.compile import is_defined
 from std.sys.info import is_amd_gpu, is_apple_gpu, is_nvidia_gpu
 from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from x_linear.team import team_barrier
@@ -128,18 +127,14 @@ comptime GT_DONE = 6
 #: Default on FAST + Apple since the M3 A/B (lane/apple-fast-garchspeed
 #: 5bc97d9d7, n=1): garch synthetic 383 -> 15.1 ms, taxi-hourly 582 -> 31.0
 #: ms; mean_llf -1938.2249 -> -1938.2239 and -1132.955 -> -1131.911 (equal
-#: or better). -D MOJOLEARN_GARCH_COOP_OFF restores the lead's recursion;
-#: the old -D MOJOLEARN_GARCH_COOP is harmless.
+#: or better). The old -D MOJOLEARN_GARCH_COOP is harmless.
 #: IDENTICAL (lane fix-t1-seq): GARCH_COOP_IDN (sequence/garch.mojo) turns
 #: the same chunked likelihood on for NVIDIA, AMD and Apple, and the host
 #: column replays it (garch.mojo garch_nll_chunks, GARCH_CHUNKS =
-#: SEQ_TEAM_TPB chunks); -D MOJOLEARN_IDN_GARCH_COOP_OFF restores the lead's
-#: recursion there. FAST off Apple is unchanged.
-comptime GARCH_COOP = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and TARGET_HAS_APPLE_GPU
-    and not is_defined["MOJOLEARN_GARCH_COOP_OFF"]()
-) or GARCH_COOP_IDN
+#: SEQ_TEAM_TPB chunks). FAST off Apple is unchanged.
+# TOMBSTONE: MOJOLEARN_GARCH_COOP_OFF (old path; EXP:564 SUPERSEDED, the chunked likelihood is the kept path) deleted 2026-11-15 by lane/expdel2-29-neural; code recoverable at 92fec7163d.
+# Restore: git apply experiments/removed/MOJOLEARN_GARCH_COOP_OFF.patch
+comptime GARCH_COOP = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU) or GARCH_COOP_IDN
 
 
 def garch_team_priv(h: Int, m: Int) -> Int:
@@ -171,11 +166,11 @@ def garch_team_shared(n: Int) -> Int:
 #: (`_garch_sigma2_reg`, sequence/garch.mojo `_garch_step_reg`'s statements,
 #: which are garch_sigma2's for these orders) instead of reading both back
 #: from device memory each step; sigma2 is still stored. Bits unchanged.
-#: -D MOJOLEARN_IDN_GARCH_LEAD_REG_OFF (or MOJOLEARN_IDN_ALL_OFF) restores
-#: garch_sigma2 on the lead.
-comptime GARCH_LEAD_REG = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
-    is_defined["MOJOLEARN_IDN_GARCH_LEAD_REG_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_IDN_GARCH_LEAD_REG_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-29-neural; code recoverable at 476f794798.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_GARCH_LEAD_REG_OFF.patch
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old path umbrella; EXP:2438 DELETED) read deleted here 2026-11-15 by lane/expdel2-29-neural; code recoverable at 476f794798.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-29-neural.patch
+comptime GARCH_LEAD_REG = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 
 
 @always_inline
