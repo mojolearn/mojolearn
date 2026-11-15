@@ -81,6 +81,7 @@ from bindings.native_loaded_module_door import native_loaded_module
 from bindings.optimizer_public_words_unpack import stash_python_error
 from providers.python.borrowed_buffer_pyapi_unpack import NATIVE_NDARRAY_EXPORTER
 from core.shared_slot import SharedSlot
+from bindings.classical_pandas_door import native_pandas_exact
 from bindings.label_input_sources_unpack import (
     labels_list_scalar_kind, LABELS_LIST_INT, LABELS_LIST_FLOAT, LABELS_LIST_BOOL,
 )
@@ -293,11 +294,56 @@ def labels_encode_numeric_op(y: PythonObject, context: PythonObject) raises -> P
     var bool_source = False
     var view = _numeric_label_view(y, context, bool_source)
     if not view:
-        return PythonObject(None)
+        # int8 / int16 / uint16 / float16 storage has no encoder arm: widen it
+        # once to int64 / float64 (exact), as unique_inverse does, instead of
+        # declining it to the label input step (smoke 2026-11-15,
+        # test_labels_native "int16 widened"; py-admission 98ed066523 widened
+        # every NumPy integer width on the other label doors only).
+        view = _la_widened_label_vector(y, context)
+        bool_source = False
+        if not view:
+            return PythonObject(None)
     var encoded = _native_labels(view.value(), bool_source, context)
     var result = Python.tuple(encoded.classes, encoded.codes)
     _ = view^
     return result
+
+
+def _la_widened_label_vector(y: PythonObject, context: PythonObject) raises -> Optional[PythonObject]:
+    """A fresh int64 / float64 vector holding the exact values of a
+    non-empty int8 / int16 / uint16 / float16 label vector (a buffer or an
+    Array, read in C order), or None for anything else (lists, pandas, bool,
+    a matrix, uint64 whose values may not fit int64: the label input step
+    reads those as before). One allocation, element ranges across cores."""
+    var b = labels_builtins()
+    var cls = py_type(y)
+    if cls is b.list or cls is b.tuple or cls is b.str or cls is b.bytes or native_pandas_exact(y):
+        return None
+    var view = PythonObject(None)
+    var typestr = String("")
+    try:
+        view = admit_c_view(y, "y", context, True)
+        typestr = admitted_dtype(view, context)
+    except:
+        return None
+    if typestr != "<i1" and typestr != "<i2" and typestr != "<u2" and typestr != "<f2":
+        return None
+    var n = Int(py=view.size)
+    var big = 0
+    for k in range(Int(py=view.ndim)):  # driver-loop: over array rank metadata
+        if Int(py=view.shape[k]) > big:
+            big = Int(py=view.shape[k])
+    if n == 0 or n != big:
+        return None
+    var target = String("<f8") if typestr == "<f2" else String("<i8")
+    var wide = admitted_vector(n, target, context)
+    var address = Int(py=classical_address(view))
+    if target == "<i8":
+        _la_widen_ints(address, typestr, labels_address(wide), n)
+    else:
+        labels_cast(address, typestr, labels_address(wide), target, n, context)
+    _ = view
+    return wide
 
 
 def labels_unique_inverse_op(y: PythonObject, context: PythonObject) raises -> PythonObject:
