@@ -106,10 +106,12 @@ comptime SEQ_COOP = TARGET_HAS_APPLE_GPU or SEQ_COOP_NVAMD
 #: MOJOLEARN_IDN_ALL_OFF) restores one thread per row.
 #: nr-small D11: Adafactor's row factor (op_af_row) and row-var mean
 #: (op_af_rmean, one thread) on a simdgroup, the same chains; IDENTICAL.
-#: -D MOJOLEARN_IDN_SEQ_AF_COOP_OFF (or MOJOLEARN_IDN_ALL_OFF).
+#: Off under MOJOLEARN_IDN_ALL_OFF.
+# TOMBSTONE: MOJOLEARN_IDN_SEQ_AF_COOP_OFF (unmeasured old path: one-thread Adafactor row factor in IDENTICAL) deleted 2026-11-15 by lane/expdel2-28-neural; code recoverable at 2794197ed7.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_SEQ_AF_COOP_OFF.patch; record in docs/TOMBSTONES.md.
 comptime SEQ_AF_COOP = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not (is_defined["MOJOLEARN_IDN_SEQ_AF_COOP_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
+    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 )
 comptime SEQ_LN_COOP = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
