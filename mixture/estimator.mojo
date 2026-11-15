@@ -83,7 +83,6 @@ from cluster.impl.kmeans_params import (
 )
 from core.identity_trace import IdentityTrace
 from std.os import getenv
-from std.sys.compile import is_defined
 from std.time import perf_counter_ns
 from core.philox import philox4x32_10
 from mixture.checks.estep import (
@@ -641,11 +640,8 @@ def _upload_log_weights(
 # ===========================================================================
 
 
-# Lane cluster-apple3, OPT-IN while unproven (`-D MOJOLEARN_GMM_INIT_FILL=1`):
-# the one-hot start and its logs written by fills and the two constants taken
-# once, the same value in every cell as the per-cell appends and logs. Host
-# code, every mode and column.
-comptime GMM_INIT_FILL = is_defined["MOJOLEARN_GMM_INIT_FILL"]()
+# TOMBSTONE: MOJOLEARN_GMM_INIT_FILL (opt-in arm, no A/B row) deleted 2026-11-15 by lane/expdel2-12-cluster; code recoverable at 1feb1c083e.
+# Restore: git apply experiments/removed/MOJOLEARN_GMM_INIT_FILL.patch; record in docs/TOMBSTONES.md.
 
 
 def gmm_initial_resp_host(
@@ -743,19 +739,10 @@ def gmm_initial_resp_host(
             oversampling_factor=GMM_KMEANS_OVERSAMPLING,
         )
         _ = res
-        comptime if GMM_INIT_FILL:
-            # the one-hot rows: a zero fill and one store per row (the same
-            # n x K values as n x K appends)
-            resp = List[Float32](length=n_samples * ncomp, fill=Float32(0.0))
-            for i in range(n_samples):
-                var lab = Int(hl.unsafe_ptr().unsafe_load(i))
-                if lab >= 0 and lab < ncomp:
-                    resp[i * ncomp + lab] = Float32(1.0)
-        else:
-            for i in range(n_samples):
-                var lab = Int(hl.unsafe_ptr().unsafe_load(i))
-                for k in range(ncomp):
-                    resp.append(Float32(1.0) if k == lab else Float32(0.0))
+        for i in range(n_samples):
+            var lab = Int(hl.unsafe_ptr().unsafe_load(i))
+            for k in range(ncomp):
+                resp.append(Float32(1.0) if k == lab else Float32(0.0))
         _ = hx^
         _ = hc^
         _ = hl^
