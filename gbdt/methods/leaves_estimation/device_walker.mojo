@@ -57,7 +57,6 @@ from max.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
-from std.sys.compile import is_defined
 
 from checks.soft_f64 import (
     SF64_ZERO,

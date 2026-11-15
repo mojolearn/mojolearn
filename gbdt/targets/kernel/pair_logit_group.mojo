@@ -58,7 +58,6 @@ list is not a function of the grades.
 from max.gpu import block_dim, block_idx, grid_dim, thread_idx
 from std.math import isfinite
 from std.memory import stack_allocation
-from std.sys import is_defined
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier

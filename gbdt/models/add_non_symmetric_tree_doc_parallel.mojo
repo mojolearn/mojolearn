@@ -39,7 +39,6 @@ boosting loop that check does not run. DEVIATION 259.
 
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from std.sys.compile import is_defined
-from max.gpu import block_idx, block_dim, thread_idx
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from gbdt.gpu_data.compressed_index_builder import CompressedIndexLayout

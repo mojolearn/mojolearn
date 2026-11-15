@@ -41,7 +41,6 @@ The bundle's four pieces, all on together when `ord_all_on`:
         readbacks per permutation skipped under the batched estimation.
 """
 
-from std.sys.compile import is_defined
 from gbdt.trees_identical_switches import T22
 from core.accelerator_target import TARGET_HAS_APPLE_GPU
 
