@@ -86,6 +86,7 @@ from checks.native_tests.logistic_numeric import register as register_logistic_n
 from checks.native_tests.lowbit_weights import register as register_lowbit_weights
 from checks.native_tests.mamba12_forward_exec import register as register_mamba12_forward_exec
 from checks.native_tests.mamba3_output_coverage import register as register_mamba3_output_coverage
+from checks.native_tests.mamba_decode_sessions import register as register_mamba_decode_sessions
 from checks.native_tests.mamba3_prefill_session import register as register_mamba3_prefill_session
 from checks.native_tests.mamba3_prefix_step import register as register_mamba3_prefix_step
 from checks.native_tests.metrics_selection_host_p2 import register as register_metrics_selection_host_p2
@@ -245,6 +246,7 @@ def all_checks() -> List[Check]:
     checks.append(register_lowbit_weights())
     checks.append(register_mamba12_forward_exec())
     checks.append(register_mamba3_output_coverage())
+    checks.append(register_mamba_decode_sessions())
     checks.append(register_mamba3_prefill_session())
     checks.append(register_mamba3_prefix_step())
     checks.append(register_metrics_selection_host_p2())
