@@ -56,8 +56,7 @@ comptime AFN_MAMBA_ALL = False
 #: Apple alike; never the host column). Both switches are plumbing: the
 #: kernels, their launch geometry and every fold are main's, so no bit moves.
 #:
-#: IDN_MAMBA_ARENA (default ON; `-D MOJOLEARN_IDN_MAMBA_ARENA_OFF` or
-#: `-D MOJOLEARN_IDN_ALL_OFF` restores main): the arena form below under
+#: IDN_MAMBA_ARENA (default ON; `-D MOJOLEARN_IDN_ALL_OFF` restores main): the arena form below under
 #: IDENTICAL. A Mamba-1/2/3 block call's weights, state, stages and x are
 #: views of ONE allocation filled once, the caller's arrays are copied in
 #: with no per-buffer wait, the per-stage waits are kept only on a traced
@@ -108,7 +107,9 @@ comptime IDN_MAMBA3_REPORTS_ON_REQUEST = _IDN_MAMBA_DEVICE and not is_defined[
 comptime IDN_M3_SESSION_STAGE_REUSE = _IDN_MAMBA_DEVICE and not is_defined[
     "MOJOLEARN_IDN_M3_SESSION_STAGE_REUSE_OFF"
 ]()
-comptime IDN_MAMBA_ARENA = _IDN_MAMBA_DEVICE and not is_defined["MOJOLEARN_IDN_MAMBA_ARENA_OFF"]()
+# TOMBSTONE: MOJOLEARN_IDN_MAMBA_ARENA_OFF (unmeasured old path beside the IDENTICAL arena default) deleted 2026-11-15 by lane/expdel2-27-neural; code recoverable at e437e599e6.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_MAMBA_ARENA_OFF.patch
+comptime IDN_MAMBA_ARENA = _IDN_MAMBA_DEVICE
 comptime IDN_MAMBA_DEVICE_REFUSAL = _IDN_MAMBA_DEVICE and not is_defined[
     "MOJOLEARN_IDN_MAMBA_DEVICE_REFUSAL_OFF"
 ]()
