@@ -367,6 +367,61 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_TRANSFORMER_DECODE_PER_TOKEN_ADMISSION"](), "removed 2026-11-15 (lane/expdel2-08-base): TRANSFORMER_DECODE_PER_TOKEN_ADMISSION (unmeasured B arm) is gone; the default is kept; code at c33bc3f5d0; restore: experiments/removed/MOJOLEARN_TRANSFORMER_DECODE_PER_TOKEN_ADMISSION.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_TRANSFORMER_DECODE_PER_TOKEN_DOOR.patch
     comptime assert not is_defined["MOJOLEARN_TRANSFORMER_DECODE_PER_TOKEN_DOOR"](), "removed 2026-11-15 (lane/expdel2-08-base): TRANSFORMER_DECODE_PER_TOKEN_DOOR (unmeasured B arm) is gone; the default is kept; code at b891c32944; restore: experiments/removed/MOJOLEARN_TRANSFORMER_DECODE_PER_TOKEN_DOOR.patch"
+    # Lane expdel2-26-neural (2026-11-15): unmeasured arms and superseded old paths deleted, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (docs/TOMBSTONES.md).
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_M1_SCAN.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_M1_SCAN"](), "removed 2026-11-15 (lane/expdel2-26-neural): IDN_M1_SCAN (unmeasured opt-in arms) is gone; the default is kept; code at 5fc464dce4; restore: experiments/removed/MOJOLEARN_IDN_M1_SCAN.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_M2_CB_LOWER_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_M2_CB_LOWER_OFF"](), "removed 2026-11-15 (lane/expdel2-26-neural): IDN_M2_CB_LOWER_OFF (unmeasured old path) is gone; the default is kept; code at 5fc464dce4; restore: experiments/removed/MOJOLEARN_IDN_M2_CB_LOWER_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_M3_ANGLE_BLOCK_128.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_M3_ANGLE_BLOCK_128"](), "removed 2026-11-15 (lane/expdel2-26-neural): IDN_M3_ANGLE_BLOCK_128 (unmeasured opt-in arm) is gone; the default is kept; code at 5fc464dce4; restore: experiments/removed/MOJOLEARN_IDN_M3_ANGLE_BLOCK_128.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_M3_ANGLE_BLOCK_32.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_M3_ANGLE_BLOCK_32"](), "removed 2026-11-15 (lane/expdel2-26-neural): IDN_M3_ANGLE_BLOCK_32 (unmeasured opt-in arm) is gone; the default is kept; code at 5fc464dce4; restore: experiments/removed/MOJOLEARN_IDN_M3_ANGLE_BLOCK_32.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_M3_ANGLE_PARALLEL.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_M3_ANGLE_PARALLEL"](), "removed 2026-11-15 (lane/expdel2-26-neural): IDN_M3_ANGLE_PARALLEL (unmeasured opt-in arm) is gone; the default is kept; code at 5fc464dce4; restore: experiments/removed/MOJOLEARN_IDN_M3_ANGLE_PARALLEL.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_M3_YINTRA_RESOURCE_TILE.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_M3_YINTRA_RESOURCE_TILE"](), "removed 2026-11-15 (lane/expdel2-26-neural): IDN_M3_YINTRA_RESOURCE_TILE (unmeasured opt-in arm) is gone; the default is kept; code at 5fc464dce4; restore: experiments/removed/MOJOLEARN_IDN_M3_YINTRA_RESOURCE_TILE.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_NEURAL_FILL_BLOCKS.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_NEURAL_FILL_BLOCKS"](), "removed 2026-11-15 (lane/expdel2-26-neural): IDN_NEURAL_FILL_BLOCKS (unmeasured opt-in knob) is gone; the default is kept; code at 5fc464dce4; restore: experiments/removed/MOJOLEARN_IDN_NEURAL_FILL_BLOCKS.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_NEURAL_FOLD_SHARED.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_NEURAL_FOLD_SHARED"](), "removed 2026-11-15 (lane/expdel2-26-neural): IDN_NEURAL_FOLD_SHARED (unmeasured opt-in arm) is gone; the default is kept; code at 5fc464dce4; restore: experiments/removed/MOJOLEARN_IDN_NEURAL_FOLD_SHARED.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_NEURAL_GEMM_ARM.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_NEURAL_GEMM_ARM"](), "removed 2026-11-15 (lane/expdel2-26-neural): IDN_NEURAL_GEMM_ARM (unmeasured opt-in knob) is gone; the default is kept; code at 5fc464dce4; restore: experiments/removed/MOJOLEARN_IDN_NEURAL_GEMM_ARM.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_NEURAL_GEMM_CONTROL.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_NEURAL_GEMM_CONTROL"](), "removed 2026-11-15 (lane/expdel2-26-neural): IDN_NEURAL_GEMM_CONTROL (unmeasured opt-in arm) is gone; the default is kept; code at 5fc464dce4; restore: experiments/removed/MOJOLEARN_IDN_NEURAL_GEMM_CONTROL.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_NEURAL_PAIR_CONTROL.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_NEURAL_PAIR_CONTROL"](), "removed 2026-11-15 (lane/expdel2-26-neural): IDN_NEURAL_PAIR_CONTROL (unmeasured opt-in arm) is gone; the default is kept; code at 5fc464dce4; restore: experiments/removed/MOJOLEARN_IDN_NEURAL_PAIR_CONTROL.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_NEURAL_RETAINED_FLOATS.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_NEURAL_RETAINED_FLOATS"](), "removed 2026-11-15 (lane/expdel2-26-neural): IDN_NEURAL_RETAINED_FLOATS (unmeasured opt-in knob) is gone; the default is kept; code at 5fc464dce4; restore: experiments/removed/MOJOLEARN_IDN_NEURAL_RETAINED_FLOATS.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_NEURAL_STAGE_DEPTH.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_NEURAL_STAGE_DEPTH"](), "removed 2026-11-15 (lane/expdel2-26-neural): IDN_NEURAL_STAGE_DEPTH (unmeasured opt-in knob) is gone; the default is kept; code at 5fc464dce4; restore: experiments/removed/MOJOLEARN_IDN_NEURAL_STAGE_DEPTH.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_NEURAL_STAGE_PAD.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_NEURAL_STAGE_PAD"](), "removed 2026-11-15 (lane/expdel2-26-neural): IDN_NEURAL_STAGE_PAD (unmeasured opt-in knob) is gone; the default is kept; code at 5fc464dce4; restore: experiments/removed/MOJOLEARN_IDN_NEURAL_STAGE_PAD.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_NEURAL_STAGE_SWIZZLE.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_NEURAL_STAGE_SWIZZLE"](), "removed 2026-11-15 (lane/expdel2-26-neural): IDN_NEURAL_STAGE_SWIZZLE (unmeasured opt-in arm) is gone; the default is kept; code at 5fc464dce4; restore: experiments/removed/MOJOLEARN_IDN_NEURAL_STAGE_SWIZZLE.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_NEURAL_STREAM_GROUP.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_NEURAL_STREAM_GROUP"](), "removed 2026-11-15 (lane/expdel2-26-neural): IDN_NEURAL_STREAM_GROUP (unmeasured opt-in knob) is gone; the default is kept; code at 5fc464dce4; restore: experiments/removed/MOJOLEARN_IDN_NEURAL_STREAM_GROUP.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_MAMBA3_BALANCED_INCREMENT_TILE.patch
+    comptime assert not is_defined["MOJOLEARN_MAMBA3_BALANCED_INCREMENT_TILE"](), "removed 2026-11-15 (lane/expdel2-26-neural): MAMBA3_BALANCED_INCREMENT_TILE (unmeasured opt-in arm) is gone; the default is kept; code at 5fc464dce4; restore: experiments/removed/MOJOLEARN_MAMBA3_BALANCED_INCREMENT_TILE.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_MAMBA3_LEGACY_ANGLE_INCREMENT.patch
+    comptime assert not is_defined["MOJOLEARN_MAMBA3_LEGACY_ANGLE_INCREMENT"](), "removed 2026-11-15 (lane/expdel2-26-neural): MAMBA3_LEGACY_ANGLE_INCREMENT (unmeasured old path) is gone; the default is kept; code at 5fc464dce4; restore: experiments/removed/MOJOLEARN_MAMBA3_LEGACY_ANGLE_INCREMENT.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_MAMBA3_LEGACY_INCREMENT_TILE.patch
+    comptime assert not is_defined["MOJOLEARN_MAMBA3_LEGACY_INCREMENT_TILE"](), "removed 2026-11-15 (lane/expdel2-26-neural): MAMBA3_LEGACY_INCREMENT_TILE (unmeasured old path) is gone; the default is kept; code at 5fc464dce4; restore: experiments/removed/MOJOLEARN_MAMBA3_LEGACY_INCREMENT_TILE.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_MAMBA3_LEGACY_INCREMENT_V.patch
+    comptime assert not is_defined["MOJOLEARN_MAMBA3_LEGACY_INCREMENT_V"](), "removed 2026-11-15 (lane/expdel2-26-neural): MAMBA3_LEGACY_INCREMENT_V (unmeasured old path) is gone; the default is kept; code at 5fc464dce4; restore: experiments/removed/MOJOLEARN_MAMBA3_LEGACY_INCREMENT_V.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_MAMBA3_LEGACY_QKS.patch
+    comptime assert not is_defined["MOJOLEARN_MAMBA3_LEGACY_QKS"](), "removed 2026-11-15 (lane/expdel2-26-neural): MAMBA3_LEGACY_QKS (unmeasured old path) is gone; the default is kept; code at 5fc464dce4; restore: experiments/removed/MOJOLEARN_MAMBA3_LEGACY_QKS.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_MAMBA3_LEGACY_STATEPASS.patch
+    comptime assert not is_defined["MOJOLEARN_MAMBA3_LEGACY_STATEPASS"](), "removed 2026-11-15 (lane/expdel2-26-neural): MAMBA3_LEGACY_STATEPASS (unmeasured old path) is gone; the default is kept; code at 5fc464dce4; restore: experiments/removed/MOJOLEARN_MAMBA3_LEGACY_STATEPASS.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_MAMBA3_LEGACY_YINTRA.patch
+    comptime assert not is_defined["MOJOLEARN_MAMBA3_LEGACY_YINTRA"](), "removed 2026-11-15 (lane/expdel2-26-neural): MAMBA3_LEGACY_YINTRA (unmeasured old path) is gone; the default is kept; code at 5fc464dce4; restore: experiments/removed/MOJOLEARN_MAMBA3_LEGACY_YINTRA.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_MAMBA3_LEGACY_YSTATE.patch
+    comptime assert not is_defined["MOJOLEARN_MAMBA3_LEGACY_YSTATE"](), "removed 2026-11-15 (lane/expdel2-26-neural): MAMBA3_LEGACY_YSTATE (unmeasured old path) is gone; the default is kept; code at 5fc464dce4; restore: experiments/removed/MOJOLEARN_MAMBA3_LEGACY_YSTATE.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_MAMBA3_TILED_INCREMENT.patch
+    comptime assert not is_defined["MOJOLEARN_MAMBA3_TILED_INCREMENT"](), "removed 2026-11-15 (lane/expdel2-26-neural): MAMBA3_TILED_INCREMENT (unmeasured opt-in arm) is gone; the default is kept; code at 5fc464dce4; restore: experiments/removed/MOJOLEARN_MAMBA3_TILED_INCREMENT.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_MAMBA3_TILED_YINTRA.patch
+    comptime assert not is_defined["MOJOLEARN_MAMBA3_TILED_YINTRA"](), "removed 2026-11-15 (lane/expdel2-26-neural): MAMBA3_TILED_YINTRA (unmeasured opt-in arm) is gone; the default is kept; code at 5fc464dce4; restore: experiments/removed/MOJOLEARN_MAMBA3_TILED_YINTRA.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_NN35_CONV_PAIR.patch
+    comptime assert not is_defined["MOJOLEARN_NN35_CONV_PAIR"](), "removed 2026-11-15 (lane/expdel2-26-neural): NN35_CONV_PAIR (unmeasured opt-in arm) is gone; the default is kept; code at 5fc464dce4; restore: experiments/removed/MOJOLEARN_NN35_CONV_PAIR.patch"
     return True
 
 
