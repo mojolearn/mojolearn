@@ -2549,3 +2549,4 @@ sections and patches). No bits change: each deleted arm was off by default.
 | `MOJOLEARN_C31_DEVICE_BUCKETS` | ball-cover kNN | lane/expdel2-05-base (recoverable at 337c096a5b) | - | - | DELETED 2026-11-15 (unmeasured arm) | never measured; alias held as the constant `False` |
 | `MOJOLEARN_C32_COUNT_FUSION` | ball-cover kNN | lane/expdel2-05-base (recoverable at 0445dd8786) | - | - | DELETED 2026-11-15 (unmeasured arm) | never measured; alias held as the constant `False` |
 | `MOJOLEARN_C32_EMIT_FUSION` | ball-cover kNN | lane/expdel2-05-base (recoverable at 330982c9db) | - | - | DELETED 2026-11-15 (unmeasured arm) | never measured; alias held as the constant `False` |
+| `MOJOLEARN_C33_FROZEN_CHUNKS` | dbscan, label-propagation | lane/expdel2-05-base (recoverable at b41ab5891f) | - | - | DELETED 2026-11-15 (unmeasured arm) | never measured; alias held as the constant `False` |

@@ -1,0 +1,15 @@
+diff --git a/experiments/classical_identical_ideas/graph_controls.mojo b/experiments/classical_identical_ideas/graph_controls.mojo
+index 0cdf912ff0..8ebd865b22 100644
+--- a/experiments/classical_identical_ideas/graph_controls.mojo
++++ b/experiments/classical_identical_ideas/graph_controls.mojo
+@@ -78,9 +78,7 @@ comptime C32_COUNT_FUSION = False
+ # TOMBSTONE: MOJOLEARN_C32_EMIT_FUSION (unmeasured arm) deleted 2026-11-15 by lane/expdel2-05-base; code recoverable at 330982c9db.
+ # Restore: git apply experiments/removed/MOJOLEARN_C32_EMIT_FUSION.patch; record in docs/TOMBSTONES.md.
+ comptime C32_EMIT_FUSION = False
+-# TOMBSTONE: MOJOLEARN_C33_FROZEN_CHUNKS (superseded / unmeasured arm) deleted 2026-11-15 by lane/expdel2-05-base; code recoverable at b41ab5891f.
+-# Restore: git apply experiments/removed/MOJOLEARN_C33_FROZEN_CHUNKS.patch; record in docs/TOMBSTONES.md.
+-comptime C33_FROZEN_CHUNKS = False
++comptime C33_FROZEN_CHUNKS = GRAPH_IDENTICAL and is_defined["MOJOLEARN_C33_FROZEN_CHUNKS"]()
+ comptime C33_CHUNK = 4 if is_defined["MOJOLEARN_C33_CHUNK_4"]() else 16
+ comptime C34_PARALLEL_EDGES = GRAPH_IDENTICAL and is_defined["MOJOLEARN_C34_PARALLEL_EDGES"]()
+ comptime C35_PACKED_LISTS = GRAPH_IDENTICAL and is_defined["MOJOLEARN_C35_PACKED_LISTS"]()
