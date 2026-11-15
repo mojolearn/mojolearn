@@ -282,7 +282,6 @@ from max.gpu.sync import barrier
 
 from checks.numerics import (
     GLOBAL_NUMERIC_MODE,
-    NUMERIC_FAST,
     NUMERIC_IDENTICAL,
     ftz,
 )
