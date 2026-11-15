@@ -157,16 +157,14 @@ def glm_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: 
             # block's 90 cells: 107 ms a Newton step on the M4's GPU). The
             # slots are [Hessian rows j < d][pad][gradient][pad][Hessian row
             # d]; a slot maps to its cell and runs that cell's chain: the
-            # same words. `-D MOJOLEARN_GLM_CELLS_MIXED=1` restores cell order.
+            # same words.
+            # TOMBSTONE: MOJOLEARN_GLM_CELLS_MIXED (unmeasured opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-21-linear; code recoverable at a602b53e45.
+            # Restore: git apply experiments/removed/MOJOLEARN_GLM_CELLS_MIXED.patch; record in docs/TOMBSTONES.md.
             var slots = _glm_slot_count(d, m)
-            comptime if is_defined["MOJOLEARN_GLM_CELLS_MIXED"]():
-                slots = cells
             for sl in range(t.tid, slots, t.nt):
-                var c = sl
-                comptime if not is_defined["MOJOLEARN_GLM_CELLS_MIXED"]():
-                    c = _glm_slot_cell(sl, d, m)
-                    if c < 0:
-                        continue
+                var c = _glm_slot_cell(sl, d, m)
+                if c < 0:
+                    continue
                 _glm_cell(c, x, gr, hr, n, d, m, g, h)
             t.sync()
         else:
