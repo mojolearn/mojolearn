@@ -49,7 +49,8 @@ def test_import_works_with_numpy_blocked_and_sequence_names_stay_lazy():
     out = _child(_BLOCK_NUMPY + r'''
 import mojolearn
 from mojolearn._native_full_reset_params import _CONTEXT, _DEFERRED_MODULES
-assert _CONTEXT['ready']
+# connect() (ready=True) runs at the first family load (_families.py:266), not at `import mojolearn`, since
+# families import on first touch (b6aa87e41d); a deferred module loaded before it waits in pending_classes.
 assert 'numpy' not in sys.modules
 for module, names in _DEFERRED_MODULES.items():
     assert 'mojolearn.' + module not in sys.modules, module
