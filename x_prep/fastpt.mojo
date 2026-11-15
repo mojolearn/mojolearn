@@ -2,8 +2,8 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Lane af-ptimpute (2026-10-03): PowerTransformer's evaluation and the
 `col_stats` stage as ROW-TILED grids. FAST + Apple only, each switch behind its
-own define (default off except SI_ONEPASS, a FAST + Apple default with
-_OFF since lane/apple-fast-batchv; docs/apple-fast/ab/ptimpute.md):
+own switch (SI_ONEPASS is the FAST + Apple default since lane/apple-fast-batchv;
+its defines were deleted 2026-11-15; docs/apple-fast/ab/ptimpute.md):
 
   (-D MOJOLEARN_PT_FOLD_NOX, pt_fold_fast_kernel reading X only at K = 0,
    was deleted 2026-10-09: DROP; see the TOMBSTONE below.)
@@ -15,7 +15,7 @@ _OFF since lane/apple-fast-batchv; docs/apple-fast/ab/ptimpute.md):
    deleted 2026-10-09: DROP; see the TOMBSTONE at the guards below.)
   (-D MOJOLEARN_PT_FUSED_TRANSFORM, the standardize tail fused into
    `cs_tile_kernel`, was deleted 2026-10-09: DROP; see the TOMBSTONE below.)
-  -D MOJOLEARN_SI_ONEPASS         every col_stats stage as `cs_tile_kernel` +
+  SI_ONEPASS                      every col_stats stage as `cs_tile_kernel` +
                                   `cs_tile_finish_kernel`: one coalesced pass
                                   instead of two strided ones.
   (-D MOJOLEARN_PTIMPUTE_ALL, all of the above, was deleted 2026-10-09:
@@ -35,7 +35,6 @@ call to this file (x_prep/device.mojo gates every launch).
 """
 from max.gpu import block_idx, thread_idx
 from std.memory import stack_allocation
-from std.sys.compile import is_defined
 from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from max.gpu.host import DeviceContext
 from max.gpu.memory import AddressSpace
@@ -47,11 +46,8 @@ from x_prep.transform import PT_STATE, pt_finish, power_log, power_from_log
 from x_prep.pt_score import SCORE_WORDS, score_tile, score_finish
 from x_prep.pt_center import PT_SCORE_STABLE
 
-# AFCL-P01: NEVER RUN — PENDING MEASUREMENT. Uncompiled/unverified.
-# Separate even/odd Welford chains hide their division dependencies; Chan
-# combines their centered moments. All observations and NaN handling remain.
-# This covers the current SI_ONEPASS path as well as fused-transform callers.
-comptime AFCL_P01 = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU and is_defined["MOJOLEARN_AFCL_P01"]()
+# TOMBSTONE: MOJOLEARN_AFCL_P01 (never-run Apple FAST programme card) deleted 2026-11-15 by lane/expdel2-22-linear; code recoverable at 9995c7281f.
+# Restore: git apply experiments/removed/MOJOLEARN_AFCL_P01.patch
 
 comptime _FAST_APPLE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
 # HOLD-quality, 2026-10-04, gap26-pt-score-quality, source bc112b172:
@@ -63,7 +59,9 @@ comptime _FAST_APPLE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_
 # itself has std0/NaN normality. Cols0-5 improve; no isolated fix accepted.
 # See docs/apple-fast/PT_SCORE.md; diagnostics preserve all thresholds.
 # Explicitly disables speculation, whose objective tree is incompatible.
-comptime PT_SCORE = _FAST_APPLE and (is_defined["MOJOLEARN_PT_SCORE"]() or PT_SCORE_STABLE)
+# TOMBSTONE: MOJOLEARN_PT_SCORE (DROP quality, EXP:2280; the stable score is the FAST+Apple default through PT_SCORE_STABLE) deleted 2026-11-15 by lane/expdel2-22-linear; code recoverable at 1de4f202c5.
+# Restore: git apply experiments/removed/MOJOLEARN_PT_SCORE.patch
+comptime PT_SCORE = _FAST_APPLE and PT_SCORE_STABLE
 # TOMBSTONE: MOJOLEARN_PTIMPUTE_ALL (DROP quality: M3 batchv-pt-all-istella 2,258 -> 512 ms, but M2 lambda max relative
 # shift 9.5e-3, sklearn-f64 lambda error 5.7e-3 -> 6.3e-3 fails the 1e-4 gate) deleted 2026-10-09 on lane/owed-deletions-D2:
 # the bundle alias; code recoverable at b639a2bd2. Restore: git apply experiments/removed/MOJOLEARN_PTIMPUTE_ALL.patch
@@ -87,9 +85,11 @@ comptime PT_COLBATCH = _FAST_APPLE and PT_SCORE
 #: SI_ONEPASS: FAST + Apple DEFAULT since lane/apple-fast-batchv (2026-10-03), M3 A/B vs main:
 #: simple-imputer istella 303.7 -> 273.7 ms, taxi 26.4 -> 21.0 ms; quality (tools/batchv_quality.sh,
 #: M2): median statistics exact, mean statistics within 1.2e-7 absolute (one float32 ulp).
-#: -D MOJOLEARN_SI_ONEPASS_OFF: main's two-pass col_stats.
-comptime SI_ONEPASS = _FAST_APPLE and (is_defined["MOJOLEARN_SI_ONEPASS"]()
-                                       or not is_defined["MOJOLEARN_SI_ONEPASS_OFF"]())
+# TOMBSTONE: MOJOLEARN_SI_ONEPASS (force-on knob; the one-pass col_stats is the FAST+Apple default, EXP:1888) deleted 2026-11-15 by lane/expdel2-22-linear; code recoverable at 11e4797706.
+# Restore: git apply experiments/removed/MOJOLEARN_SI_ONEPASS.patch
+# TOMBSTONE: MOJOLEARN_SI_ONEPASS_OFF (old path; the one-pass col_stats is the FAST+Apple default, EXP:1888) deleted 2026-11-15 by lane/expdel2-22-linear; code recoverable at 8193833d2e.
+# Restore: git apply experiments/removed/MOJOLEARN_SI_ONEPASS_OFF.patch
+comptime SI_ONEPASS = _FAST_APPLE
 #: the bits `x_prep_ptimpute_flags` exports (registered only when nonzero):
 #: the Python layer shrinks the buffers the device no longer touches by them
 #: (bit 2 was PT_SPEC, bit 4 PT_FUSED_TRANSFORM and bit 16 PT_FOLD_NOX, all deleted 2026-10-09)
@@ -118,17 +118,15 @@ comptime OP_PT_FOLD = 106
 #: lane apple-fast-no-narrow-2 (2026-10-04): the cut was d >= 64, measured
 #: at the two board widths only (11 and 220); removed as benchmark-tuned,
 #: replacement UNMEASURED. The rule is now the block's SIMD-group count: a
+# TOMBSTONE: MOJOLEARN_LEGACY_NARROW_FASTPT_ROWS (old path, EXP:1333 OWED, no A/B recorded) deleted 2026-11-15 by lane/expdel2-22-linear; code recoverable at b4c2d444d0.
+# Restore: git apply experiments/removed/MOJOLEARN_LEGACY_NARROW_FASTPT_ROWS.patch
 #: block of ONE SIMD group (d <= 32, `tile_tpb`) takes 64-row chunks, 4x the
 #: blocks, so each core still holds several SIMD groups; a block of two or
-#: more SIMD groups takes 256-row chunks. `-D
-#: MOJOLEARN_LEGACY_NARROW_FASTPT_ROWS` restores the d >= 64 cut.
-comptime LEGACY_NARROW_FASTPT_ROWS = is_defined["MOJOLEARN_LEGACY_NARROW_FASTPT_ROWS"]()
+#: more SIMD groups takes 256-row chunks.
 
 
 @always_inline
 def tile_rows(d: Int) -> Int:
-    comptime if LEGACY_NARROW_FASTPT_ROWS:
-        return ROWS_WIDE if d >= 64 else ROWS_NARROW
     return ROWS_WIDE if tile_tpb(d) > 32 else ROWS_NARROW
 
 
@@ -316,9 +314,6 @@ def cs_tile_kernel(f: FP, pp: FP, X: Int32, n: Int32, d: Int32, rows: Int32, tpb
     var cnt = Float32(0)
     var mean = Float32(0)
     var m2 = Float32(0)
-    var cnt_odd = Float32(0)
-    var mean_odd = Float32(0)
-    var m2_odd = Float32(0)
     var lo = inf
     var hi = -inf
     var ma = Float32(0)
@@ -328,27 +323,15 @@ def cs_tile_kernel(f: FP, pp: FP, X: Int32, n: Int32, d: Int32, rows: Int32, tpb
         if is_nan(x):
             continue
         var v = x
-        comptime if AFCL_P01:
-            if (i - row0) % 2 == 0:
-                cnt += Float32(1)
-                var delta = v - mean
-                mean += delta / cnt
-                m2 += delta * (v - mean)
-            else:
-                cnt_odd += Float32(1)
-                var delta = v - mean_odd
-                mean_odd += delta / cnt_odd
-                m2_odd += delta * (v - mean_odd)
-        else:
-            cnt += Float32(1)
-            var delta = v - mean
-            mean += delta / cnt
-            m2 += delta * (v - mean)
+        # TOMBSTONE: MOJOLEARN_AFCL_P01 (never-run Apple FAST programme card) deleted 2026-11-15 by lane/expdel2-22-linear; code recoverable at 9995c7281f.
+        # Restore: git apply experiments/removed/MOJOLEARN_AFCL_P01.patch
+        cnt += Float32(1)
+        var delta = v - mean
+        mean += delta / cnt
+        m2 += delta * (v - mean)
         lo = min(lo, v)
         hi = max(hi, v)
         ma = max(ma, abs(v))
-    comptime if AFCL_P01:
-        _chan(cnt, mean, m2, cnt_odd, mean_odd, m2_odd)
     var o = (chunk * dd + c) * 6
     pp[o] = cnt
     pp[o + 1] = mean

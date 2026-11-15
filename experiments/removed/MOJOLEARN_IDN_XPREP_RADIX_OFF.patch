@@ -1,0 +1,17 @@
+diff --git a/x_prep/dradix.mojo b/x_prep/dradix.mojo
+index 73012f60a7..260078d52f 100644
+--- a/x_prep/dradix.mojo
++++ b/x_prep/dradix.mojo
+@@ -38,9 +38,9 @@ from x_prep.common import FP, canon
+ 
+ comptime RUP = MutPointer[UInt32, MutAnyOrigin]
+ #: K1 (IDENTICAL, every vendor): the radix sort of sort_cols, same words as the bitonic sort
+-# TOMBSTONE: MOJOLEARN_IDN_XPREP_RADIX_OFF (old path, no A/B recorded beside the IDENTICAL default) deleted 2026-11-15 by lane/expdel2-22-linear; code recoverable at 60adf729d6.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_XPREP_RADIX_OFF.patch
+-comptime IDN_XPREP_RADIX = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
++comptime IDN_XPREP_RADIX = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
++    is_defined["MOJOLEARN_IDN_XPREP_RADIX_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
++)
+ #: FAST on Apple, IDENTICAL everywhere unless IDN_XPREP_RADIX is off
+ comptime RADIX_SORT = (GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL and TARGET_HAS_APPLE_GPU) or IDN_XPREP_RADIX
+ # C07 (IDENTICAL int sweep MOJOLEARN_CLASSICAL_C07_RADIX_BITS = 4|6|8, default 8):

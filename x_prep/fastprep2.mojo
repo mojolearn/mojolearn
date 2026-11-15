@@ -48,7 +48,6 @@ from std.atomic import Atomic
 from max.gpu import block_idx, block_dim, thread_idx
 from std.memory import bitcast, stack_allocation
 from std.os import getenv
-from std.sys.compile import is_defined
 from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace
@@ -117,15 +116,12 @@ comptime PREP2_FAST = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_G
 # TOMBSTONE: MOJOLEARN_X_PREP_FAST_TE_ENC_OFF (old path, superseded by the measured FAST+Apple default) deleted 2026-11-15 by lane/expdel-03-linear; code recoverable at 3827e5294b.
 # Restore: git apply experiments/removed/MOJOLEARN_X_PREP_FAST_TE_ENC_OFF.patch; record in docs/TOMBSTONES.md.
 comptime TGR = 256
-# AFCL-P05/P06: NEVER RUN — PENDING MEASUREMENT. Uncompiled/unverified.
-# P05 uses four Apple SIMD groups per category/fold rather than eight to
-# reduce shared scratch and barriers at the cost of longer lane sums.
-# P06 doubles convergence-reduction lanes to shorten each lane's row walk;
-# it keeps the existing runtime II_CONV prerequisite equal in both arms.
-comptime AFCL_P05 = PREP2_FAST and is_defined["MOJOLEARN_AFCL_P05"]()
-comptime AFCL_P06 = PREP2_FAST and is_defined["MOJOLEARN_AFCL_P06"]()
-comptime TE_TGR = 128 if AFCL_P05 else TGR
-comptime II_CONV_TGR = 512 if AFCL_P06 else TGR
+# TOMBSTONE: MOJOLEARN_AFCL_P05 (never-run Apple FAST programme card) deleted 2026-11-15 by lane/expdel2-22-linear; code recoverable at 1d5f37812c.
+# Restore: git apply experiments/removed/MOJOLEARN_AFCL_P05.patch
+# TOMBSTONE: MOJOLEARN_AFCL_P06 (never-run Apple FAST programme card) deleted 2026-11-15 by lane/expdel2-22-linear; code recoverable at a1ed29218e.
+# Restore: git apply experiments/removed/MOJOLEARN_AFCL_P06.patch
+comptime TE_TGR = TGR
+comptime II_CONV_TGR = TGR
 comptime OP_QUANTILE = 2
 comptime OP_TE_GLOBAL = 20
 comptime OP_TE_ENC = 21

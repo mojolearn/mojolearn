@@ -32,10 +32,8 @@ or when the matrix is smaller than IDN_RR_MIN_N (a shape-only rule, the same
 on every column): below it the fixed launch budget of the round-robin costs
 more than the one-thread solve.
 
--D MOJOLEARN_IDN_RR_EIGH_OFF restores `eigh_unit` everywhere.
 No accelerator import: the CPU-only host binding compiles this file.
 """
-from std.sys.compile import is_defined
 from checks.numerics import ftz, GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from decomposition.checks.jacobi_eigh_device import JACOBI_TOL
 from decomposition.spectrum_order_device import spectrum_rank_desc
@@ -45,25 +43,23 @@ from x_decomp.rr import rr_cs, rr_block, rr_vrow, rr_off_fold, rr_converged
 from x_prep.common import FP, IP, p
 from x_prep.eigh import eigh_unit
 
-comptime IDN_RR_EIGH = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not (is_defined["MOJOLEARN_IDN_RR_EIGH_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
-)
+# TOMBSTONE: MOJOLEARN_IDN_RR_EIGH_OFF (old path, no A/B recorded beside the IDENTICAL default) deleted 2026-11-15 by lane/expdel2-22-linear; code recoverable at 43f37f93b7.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_RR_EIGH_OFF.patch
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old path umbrella; EXP:2438 deleted, the resident defaults kept) deleted 2026-11-15 by lane/expdel2-22-linear; code recoverable at 51e7b6d7ec.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-22-linear.patch
+comptime IDN_RR_EIGH = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 #: the smallest matrix the round-robin takes under IDN_RR_EIGH (shape only).
-#: Lane fam2-prep-metrics: CANDIDATE ARMS for the threshold, each default OFF
-#: (the default stays 24): -D MOJOLEARN_IDN_RR_MIN_8, _16, _48 or _96 builds
-#: the device and the host column with that threshold (the first defined of
-#: 8, 16, 48, 96 wins), so they can be timed against each other on LDA / QDA.
 #: Below the threshold the cyclic one-thread unit runs; both are Jacobi to the
-#: same tolerance, so an arm moves eigenvalues within float32 round-off only
-#: for the sizes whose route it changes, on all four columns together.
-comptime IDN_RR_MIN_N = (
-    8 if is_defined["MOJOLEARN_IDN_RR_MIN_8"]() else (
-        16 if is_defined["MOJOLEARN_IDN_RR_MIN_16"]() else (
-            48 if is_defined["MOJOLEARN_IDN_RR_MIN_48"]() else (96 if is_defined["MOJOLEARN_IDN_RR_MIN_96"]() else 24)
-        )
-    )
-)
+#: same tolerance (the unmeasured threshold arms were deleted 2026-11-15).
+# TOMBSTONE: MOJOLEARN_IDN_RR_MIN_8 (no A/B recorded for the opt-in arm) deleted 2026-11-15 by lane/expdel2-22-linear; code recoverable at e71d35eb21.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_RR_MIN_8.patch
+# TOMBSTONE: MOJOLEARN_IDN_RR_MIN_16 (no A/B recorded for the opt-in arm) deleted 2026-11-15 by lane/expdel2-22-linear; code recoverable at 52d1c6b87e.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_RR_MIN_16.patch
+# TOMBSTONE: MOJOLEARN_IDN_RR_MIN_48 (no A/B recorded for the opt-in arm) deleted 2026-11-15 by lane/expdel2-22-linear; code recoverable at 9086d9b3d1.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_RR_MIN_48.patch
+# TOMBSTONE: MOJOLEARN_IDN_RR_MIN_96 (no A/B recorded for the opt-in arm) deleted 2026-11-15 by lane/expdel2-22-linear; code recoverable at 688ea8608f.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_RR_MIN_96.patch
+comptime IDN_RR_MIN_N = 24
 #: x_prep/rr_eigh.mojo RRE_SWEEPS: the sweep budget (the device enqueues it whole)
 comptime IDN_RR_SWEEPS = 32
 #: x_prep/device.mojo EIGH_CYCLIC_Q

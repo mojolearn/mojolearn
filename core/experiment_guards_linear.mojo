@@ -229,6 +229,81 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_RIDGE_NO_U_OFF"](), "removed 2026-11-15 (lane/expdel2-20-linear): RIDGE_NO_U_OFF (old path of a one-vendor promotion) is gone; the default is kept; code at 620c4ce37c; restore: experiments/removed/MOJOLEARN_RIDGE_NO_U_OFF.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_RIDGE_RESIDENT_OFF.patch
     comptime assert not is_defined["MOJOLEARN_RIDGE_RESIDENT_OFF"](), "removed 2026-11-15 (lane/expdel2-20-linear): RIDGE_RESIDENT_OFF (old path of a one-vendor promotion) is gone; the default is kept; code at 3fcdcb78f6; restore: experiments/removed/MOJOLEARN_RIDGE_RESIDENT_OFF.patch"
+    # Lane expdel2-22-linear (2026-11-15): unmeasured arms and superseded old paths deleted, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (docs/TOMBSTONES.md).
+    # Restore: git apply experiments/removed/MOJOLEARN_AFCL_P01.patch
+    comptime assert not is_defined["MOJOLEARN_AFCL_P01"](), "removed 2026-11-15 (lane/expdel2-22-linear): AFCL_P01 (never-run Apple FAST programme card) is gone; the default path is the only one; code at 9995c7281f; restore: experiments/removed/MOJOLEARN_AFCL_P01.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_AFCL_P02.patch
+    comptime assert not is_defined["MOJOLEARN_AFCL_P02"](), "removed 2026-11-15 (lane/expdel2-22-linear): AFCL_P02 (never-run Apple FAST programme card) is gone; the default path is the only one; code at d837f02ccf; restore: experiments/removed/MOJOLEARN_AFCL_P02.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_AFCL_P03.patch
+    comptime assert not is_defined["MOJOLEARN_AFCL_P03"](), "removed 2026-11-15 (lane/expdel2-22-linear): AFCL_P03 (never-run Apple FAST programme card) is gone; the default path is the only one; code at 5f02f5b9e3; restore: experiments/removed/MOJOLEARN_AFCL_P03.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_AFCL_P05.patch
+    comptime assert not is_defined["MOJOLEARN_AFCL_P05"](), "removed 2026-11-15 (lane/expdel2-22-linear): AFCL_P05 (never-run Apple FAST programme card) is gone; the default path is the only one; code at 1d5f37812c; restore: experiments/removed/MOJOLEARN_AFCL_P05.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_AFCL_P06.patch
+    comptime assert not is_defined["MOJOLEARN_AFCL_P06"](), "removed 2026-11-15 (lane/expdel2-22-linear): AFCL_P06 (never-run Apple FAST programme card) is gone; the default path is the only one; code at a1ed29218e; restore: experiments/removed/MOJOLEARN_AFCL_P06.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_AFCL_P13.patch
+    comptime assert not is_defined["MOJOLEARN_AFCL_P13"](), "removed 2026-11-15 (lane/expdel2-22-linear): AFCL_P13 (never-run Apple FAST programme card) is gone; the default path is the only one; code at 16da6ce3e2; restore: experiments/removed/MOJOLEARN_AFCL_P13.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_TE_BLOCKED_FOLD.patch
+    comptime assert not is_defined["MOJOLEARN_CLASSICAL_TE_BLOCKED_FOLD"](), "removed 2026-11-15 (lane/expdel2-22-linear): CLASSICAL_TE_BLOCKED_FOLD (opt-in arm) is gone; the default path is the only one; code at 74754fe939; restore: experiments/removed/MOJOLEARN_CLASSICAL_TE_BLOCKED_FOLD.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_DRADIX_RANGE_PASSES_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_DRADIX_RANGE_PASSES_OFF"](), "removed 2026-11-15 (lane/expdel2-22-linear): IDN_DRADIX_RANGE_PASSES_OFF (old path) is gone; the default is kept; code at 26ab6baddf; restore: experiments/removed/MOJOLEARN_IDN_DRADIX_RANGE_PASSES_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_II_CONV_TREE_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_II_CONV_TREE_OFF"](), "removed 2026-11-15 (lane/expdel2-22-linear): IDN_II_CONV_TREE_OFF (old path) is gone; the default is kept; code at ef6c79d70a; restore: experiments/removed/MOJOLEARN_IDN_II_CONV_TREE_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_II_GRAM_TILE_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_II_GRAM_TILE_OFF"](), "removed 2026-11-15 (lane/expdel2-22-linear): IDN_II_GRAM_TILE_OFF (old path) is gone; the default is kept; code at 079ed8c3e7; restore: experiments/removed/MOJOLEARN_IDN_II_GRAM_TILE_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_LABEL_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_LABEL_OFF"](), "removed 2026-11-15 (lane/expdel2-22-linear): IDN_LABEL_OFF (old path) is gone; the default is kept; code at 886a739db7; restore: experiments/removed/MOJOLEARN_IDN_LABEL_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_NB_CAT_ATOMIC_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_NB_CAT_ATOMIC_OFF"](), "removed 2026-11-15 (lane/expdel2-22-linear): IDN_NB_CAT_ATOMIC_OFF (old path) is gone; the default is kept; code at 7cf272e256; restore: experiments/removed/MOJOLEARN_IDN_NB_CAT_ATOMIC_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_RR_EIGH_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_RR_EIGH_OFF"](), "removed 2026-11-15 (lane/expdel2-22-linear): IDN_RR_EIGH_OFF (old path) is gone; the default is kept; code at 43f37f93b7; restore: experiments/removed/MOJOLEARN_IDN_RR_EIGH_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_RR_MIN_16.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_RR_MIN_16"](), "removed 2026-11-15 (lane/expdel2-22-linear): IDN_RR_MIN_16 (opt-in arm) is gone; the default path is the only one; code at 52d1c6b87e; restore: experiments/removed/MOJOLEARN_IDN_RR_MIN_16.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_RR_MIN_48.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_RR_MIN_48"](), "removed 2026-11-15 (lane/expdel2-22-linear): IDN_RR_MIN_48 (opt-in arm) is gone; the default path is the only one; code at 9086d9b3d1; restore: experiments/removed/MOJOLEARN_IDN_RR_MIN_48.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_RR_MIN_8.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_RR_MIN_8"](), "removed 2026-11-15 (lane/expdel2-22-linear): IDN_RR_MIN_8 (opt-in arm) is gone; the default path is the only one; code at e71d35eb21; restore: experiments/removed/MOJOLEARN_IDN_RR_MIN_8.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_RR_MIN_96.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_RR_MIN_96"](), "removed 2026-11-15 (lane/expdel2-22-linear): IDN_RR_MIN_96 (opt-in arm) is gone; the default path is the only one; code at 688ea8608f; restore: experiments/removed/MOJOLEARN_IDN_RR_MIN_96.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_TE_ENC_TREE_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_TE_ENC_TREE_OFF"](), "removed 2026-11-15 (lane/expdel2-22-linear): IDN_TE_ENC_TREE_OFF (old path) is gone; the default is kept; code at 955fcda5ec; restore: experiments/removed/MOJOLEARN_IDN_TE_ENC_TREE_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_TE_GLOBAL_TREE_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_TE_GLOBAL_TREE_OFF"](), "removed 2026-11-15 (lane/expdel2-22-linear): IDN_TE_GLOBAL_TREE_OFF (old path) is gone; the default is kept; code at 44b08dfc1e; restore: experiments/removed/MOJOLEARN_IDN_TE_GLOBAL_TREE_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_XPREP_RADIX_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_XPREP_RADIX_OFF"](), "removed 2026-11-15 (lane/expdel2-22-linear): IDN_XPREP_RADIX_OFF (old path) is gone; the default is kept; code at 60adf729d6; restore: experiments/removed/MOJOLEARN_IDN_XPREP_RADIX_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_LABEL_DIRECT_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_LABEL_DIRECT_OFF"](), "removed 2026-11-15 (lane/expdel2-22-linear): LABEL_DIRECT_OFF (old path) is gone; the default is kept; code at 2ec4e389be; restore: experiments/removed/MOJOLEARN_LABEL_DIRECT_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_LDAQDA_DEC_TILE_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_LDAQDA_DEC_TILE_OFF"](), "removed 2026-11-15 (lane/expdel2-22-linear): LDAQDA_DEC_TILE_OFF (old path) is gone; the default is kept; code at d64015f87d; restore: experiments/removed/MOJOLEARN_LDAQDA_DEC_TILE_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_LDAQDA_PAR_STAGES_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_LDAQDA_PAR_STAGES_OFF"](), "removed 2026-11-15 (lane/expdel2-22-linear): LDAQDA_PAR_STAGES_OFF (old path) is gone; the default is kept; code at 7decc17403; restore: experiments/removed/MOJOLEARN_LDAQDA_PAR_STAGES_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_LDAQDA_RR_EIGH_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_LDAQDA_RR_EIGH_OFF"](), "removed 2026-11-15 (lane/expdel2-22-linear): LDAQDA_RR_EIGH_OFF (old path) is gone; the default is kept; code at fc4f469cc4; restore: experiments/removed/MOJOLEARN_LDAQDA_RR_EIGH_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_LEGACY_NARROW_FASTPT_ROWS.patch
+    comptime assert not is_defined["MOJOLEARN_LEGACY_NARROW_FASTPT_ROWS"](), "removed 2026-11-15 (lane/expdel2-22-linear): LEGACY_NARROW_FASTPT_ROWS (old path) is gone; the default is kept; code at b4c2d444d0; restore: experiments/removed/MOJOLEARN_LEGACY_NARROW_FASTPT_ROWS.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_MI_CLF_RANKMAJOR.patch
+    comptime assert not is_defined["MOJOLEARN_MI_CLF_RANKMAJOR"](), "removed 2026-11-15 (lane/expdel2-22-linear): MI_CLF_RANKMAJOR (opt-in arm) is gone; the default path is the only one; code at 8b76065907; restore: experiments/removed/MOJOLEARN_MI_CLF_RANKMAJOR.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_MI_CLF_RANKMAJOR_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_MI_CLF_RANKMAJOR_OFF"](), "removed 2026-11-15 (lane/expdel2-22-linear): MI_CLF_RANKMAJOR_OFF (old path) is gone; the default is kept; code at 31dc3269c3; restore: experiments/removed/MOJOLEARN_MI_CLF_RANKMAJOR_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_MI_REG_RANKMAJOR.patch
+    comptime assert not is_defined["MOJOLEARN_MI_REG_RANKMAJOR"](), "removed 2026-11-15 (lane/expdel2-22-linear): MI_REG_RANKMAJOR (opt-in arm) is gone; the default path is the only one; code at 6a50f39dd3; restore: experiments/removed/MOJOLEARN_MI_REG_RANKMAJOR.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_MI_REG_SORTCOUNT.patch
+    comptime assert not is_defined["MOJOLEARN_MI_REG_SORTCOUNT"](), "removed 2026-11-15 (lane/expdel2-22-linear): MI_REG_SORTCOUNT (opt-in arm) is gone; the default path is the only one; code at 699627ef7b; restore: experiments/removed/MOJOLEARN_MI_REG_SORTCOUNT.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_MI_REG_TIES.patch
+    comptime assert not is_defined["MOJOLEARN_MI_REG_TIES"](), "removed 2026-11-15 (lane/expdel2-22-linear): MI_REG_TIES (opt-in arm) is gone; the default path is the only one; code at 293c8f301c; restore: experiments/removed/MOJOLEARN_MI_REG_TIES.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_MI_REG_TIES_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_MI_REG_TIES_OFF"](), "removed 2026-11-15 (lane/expdel2-22-linear): MI_REG_TIES_OFF (old path) is gone; the default is kept; code at 8bf90f94c1; restore: experiments/removed/MOJOLEARN_MI_REG_TIES_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_NB_CAT_ATOMIC.patch
+    comptime assert not is_defined["MOJOLEARN_NB_CAT_ATOMIC"](), "removed 2026-11-15 (lane/expdel2-22-linear): NB_CAT_ATOMIC (opt-in arm) is gone; the default path is the only one; code at 4a5487a7a7; restore: experiments/removed/MOJOLEARN_NB_CAT_ATOMIC.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_PT_SCORE.patch
+    comptime assert not is_defined["MOJOLEARN_PT_SCORE"](), "removed 2026-11-15 (lane/expdel2-22-linear): PT_SCORE (opt-in arm) is gone; the default path is the only one; code at 1de4f202c5; restore: experiments/removed/MOJOLEARN_PT_SCORE.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_SI_ONEPASS.patch
+    comptime assert not is_defined["MOJOLEARN_SI_ONEPASS"](), "removed 2026-11-15 (lane/expdel2-22-linear): SI_ONEPASS (opt-in arm) is gone; the default path is the only one; code at 11e4797706; restore: experiments/removed/MOJOLEARN_SI_ONEPASS.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_SI_ONEPASS_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_SI_ONEPASS_OFF"](), "removed 2026-11-15 (lane/expdel2-22-linear): SI_ONEPASS_OFF (old path) is gone; the default is kept; code at 8193833d2e; restore: experiments/removed/MOJOLEARN_SI_ONEPASS_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_X_PREP_CLASS_COV_GRID_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_X_PREP_CLASS_COV_GRID_OFF"](), "removed 2026-11-15 (lane/expdel2-22-linear): X_PREP_CLASS_COV_GRID_OFF (old path) is gone; the default is kept; code at 518d83d2b0; restore: experiments/removed/MOJOLEARN_X_PREP_CLASS_COV_GRID_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_X_PREP_POOL_ARENA_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_X_PREP_POOL_ARENA_OFF"](), "removed 2026-11-15 (lane/expdel2-22-linear): X_PREP_POOL_ARENA_OFF (old path) is gone; the default is kept; code at cc8e7c0dfd; restore: experiments/removed/MOJOLEARN_X_PREP_POOL_ARENA_OFF.patch"
     return True
 
 

@@ -31,15 +31,12 @@ BITS: a new order for every fold longer than one position (te_global /
 te_enc at more than 1 row of a category or fold; ii_gram at n > IIG_ROWS).
 All four columns run it together.
 
-SWITCHES (IDENTICAL only, ON by default; MOJOLEARN_IDN_ALL_OFF turns all off):
-  -D MOJOLEARN_IDN_TE_GLOBAL_TREE_OFF  te_global's old serial unit
-  -D MOJOLEARN_IDN_TE_ENC_TREE_OFF     te_enc's old serial unit / host pass
-  -D MOJOLEARN_IDN_II_GRAM_TILE_OFF    ii_gram's old serial unit
-  -D MOJOLEARN_IDN_II_CONV_TREE_OFF    ii_conv's one-thread unit on the device
-                                       (no bits: a max is order-free)
+IDENTICAL only, always on (the _OFF rollbacks to the serial units were
+deleted 2026-11-15); ii_conv's tree changes no bits (a max is order-free).
 
-THE BLOCKED ORDER (`BLT`, lane classical-te-gmm 2026-10-07, IDENTICAL,
-default OFF, A/B define -D MOJOLEARN_CLASSICAL_TE_BLOCKED_FOLD): the
+THE BLOCKED ORDER (`BLT`, lane classical-te-gmm 2026-10-07, IDENTICAL; the
+unmeasured A/B arm and its device kernels were deleted 2026-11-15, the host
+spelling below stays in x_prep/target.mojo): the
 positions r are cut into TEB-wide blocks m = r // TEB. Block m's partial
 is the lane tree LT over its positions, lane r mod TREE_W (TEB is a
 multiple of TREE_W, so the lane is the position's, not the block's); the
@@ -73,19 +70,31 @@ vendors and the host column change together: x_prep/target.mojo
 kernels in x_prep/idn_blocked.mojo). It REPLACES the lane-tree order
 above for te_global and te_enc (the two TREE_OFF defines are moot with it).
 """
-from std.sys.compile import is_defined
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from x_prep.prims import add
 
-comptime _IDN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-#: lane classical-te-gmm: te_global / te_enc in the blocked order `BLT` (docstring), default OFF
-comptime IDN_TE_BLOCKED = _IDN and is_defined["MOJOLEARN_CLASSICAL_TE_BLOCKED_FOLD"]()
-comptime IDN_TE_GLOBAL_TREE = _IDN and not is_defined["MOJOLEARN_IDN_TE_GLOBAL_TREE_OFF"]() and not IDN_TE_BLOCKED
-comptime IDN_TE_ENC_TREE = _IDN and not is_defined["MOJOLEARN_IDN_TE_ENC_TREE_OFF"]() and not IDN_TE_BLOCKED
-comptime IDN_II_GRAM_TILE = _IDN and not is_defined["MOJOLEARN_IDN_II_GRAM_TILE_OFF"]()
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old path umbrella; EXP:2438 deleted, the resident defaults kept) deleted 2026-11-15 by lane/expdel2-22-linear; code recoverable at 51e7b6d7ec.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-22-linear.patch
+comptime _IDN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+#: lane classical-te-gmm: te_global / te_enc in the blocked order `BLT` (docstring); the arm is deleted,
+#: the alias stays False for x_prep/target.mojo
+# TOMBSTONE: MOJOLEARN_CLASSICAL_TE_BLOCKED_FOLD (no A/B recorded for the opt-in arm) deleted 2026-11-15 by lane/expdel2-22-linear; code recoverable at 74754fe939.
+# Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_TE_BLOCKED_FOLD.patch
+comptime IDN_TE_BLOCKED = False
+# TOMBSTONE: MOJOLEARN_IDN_TE_GLOBAL_TREE_OFF (old path, no A/B recorded beside the IDENTICAL default) deleted 2026-11-15 by lane/expdel2-22-linear; code recoverable at 44b08dfc1e.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_TE_GLOBAL_TREE_OFF.patch
+comptime IDN_TE_GLOBAL_TREE = _IDN
+# TOMBSTONE: MOJOLEARN_IDN_TE_ENC_TREE_OFF (old path, no A/B recorded beside the IDENTICAL default) deleted 2026-11-15 by lane/expdel2-22-linear; code recoverable at 955fcda5ec.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_TE_ENC_TREE_OFF.patch
+comptime IDN_TE_ENC_TREE = _IDN
+# TOMBSTONE: MOJOLEARN_IDN_II_GRAM_TILE_OFF (old path, no A/B recorded beside the IDENTICAL default) deleted 2026-11-15 by lane/expdel2-22-linear; code recoverable at 079ed8c3e7.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_II_GRAM_TILE_OFF.patch
+comptime IDN_II_GRAM_TILE = _IDN
 #: K14's non-eigh part: ii_conv's max over the row sums by a threadgroup tree
 #: (device only: a max is exact, the unit's word, so the host is unchanged)
-comptime IDN_II_CONV_TREE = _IDN and not is_defined["MOJOLEARN_IDN_II_CONV_TREE_OFF"]()
+# TOMBSTONE: MOJOLEARN_IDN_II_CONV_TREE_OFF (old path, no A/B recorded beside the IDENTICAL default) deleted 2026-11-15 by lane/expdel2-22-linear; code recoverable at ef6c79d70a.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_II_CONV_TREE_OFF.patch
+comptime IDN_II_CONV_TREE = _IDN
 
 #: lanes of the tree (the device threadgroup width); a power of two
 comptime TREE_W = 256

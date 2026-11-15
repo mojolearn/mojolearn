@@ -811,6 +811,43 @@ in the tables after the sections.
 | [`MOJOLEARN_SVM_IDN_NAN_SCAN_ONE_OFF`](#mojolearn_svm_idn_nan_scan_one_off) | Kernel (IDENTICAL SVC NaN scan) | removed (old path, no A/B recorded) | 2026-11-15 | [MOJOLEARN_SVM_IDN_NAN_SCAN_ONE_OFF.patch](../experiments/removed/MOJOLEARN_SVM_IDN_NAN_SCAN_ONE_OFF.patch) |
 | [`MOJOLEARN_SVM_RBF_EPILOGUE_1D`](#mojolearn_svm_rbf_epilogue_1d) | Kernel (Apple IDENTICAL RBF epilogue grid) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_SVM_RBF_EPILOGUE_1D.patch](../experiments/removed/MOJOLEARN_SVM_RBF_EPILOGUE_1D.patch) |
 | [`MOJOLEARN_X_PREP_FAST_FIT_TRANSFORM_FUSED`](#mojolearn_x_prep_fast_fit_transform_fused) | Preprocessing (FAST+Apple StandardScaler fit_transform) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_X_PREP_FAST_FIT_TRANSFORM_FUSED.patch](../experiments/removed/MOJOLEARN_X_PREP_FAST_FIT_TRANSFORM_FUSED.patch) |
+| [`MOJOLEARN_AFCL_P01`](#mojolearn_afcl_p01) | Prep (FAST+Apple col_stats / PowerTransformer stats) | removed (never-run Apple FAST card, no A/B recorded) | 2026-11-15 | [MOJOLEARN_AFCL_P01.patch](../experiments/removed/MOJOLEARN_AFCL_P01.patch) |
+| [`MOJOLEARN_AFCL_P02`](#mojolearn_afcl_p02) | Prep (FAST+Apple MaxAbsScaler direct fit) | removed (never-run Apple FAST card, no A/B recorded) | 2026-11-15 | [MOJOLEARN_AFCL_P02.patch](../experiments/removed/MOJOLEARN_AFCL_P02.patch) |
+| [`MOJOLEARN_AFCL_P03`](#mojolearn_afcl_p03) | Prep (CategoricalNB atomic count table) | removed (never-run Apple FAST card, no A/B recorded) | 2026-11-15 | [MOJOLEARN_AFCL_P03.patch](../experiments/removed/MOJOLEARN_AFCL_P03.patch) |
+| [`MOJOLEARN_AFCL_P05`](#mojolearn_afcl_p05) | Prep (FAST+Apple TargetEncoder te stages) | removed (never-run Apple FAST card, no A/B recorded) | 2026-11-15 | [MOJOLEARN_AFCL_P05.patch](../experiments/removed/MOJOLEARN_AFCL_P05.patch) |
+| [`MOJOLEARN_AFCL_P06`](#mojolearn_afcl_p06) | Prep (FAST+Apple IterativeImputer ii_conv) | removed (never-run Apple FAST card, no A/B recorded) | 2026-11-15 | [MOJOLEARN_AFCL_P06.patch](../experiments/removed/MOJOLEARN_AFCL_P06.patch) |
+| [`MOJOLEARN_AFCL_P13`](#mojolearn_afcl_p13) | Prep (FAST+Apple class stats) | removed (never-run Apple FAST card, no A/B recorded) | 2026-11-15 | [MOJOLEARN_AFCL_P13.patch](../experiments/removed/MOJOLEARN_AFCL_P13.patch) |
+| [`MOJOLEARN_CLASSICAL_TE_BLOCKED_FOLD`](#mojolearn_classical_te_blocked_fold) | Prep (TargetEncoder te_global / te_enc fold order, IDENTICAL) | removed (opt-in arm) | 2026-11-15 | [MOJOLEARN_CLASSICAL_TE_BLOCKED_FOLD.patch](../experiments/removed/MOJOLEARN_CLASSICAL_TE_BLOCKED_FOLD.patch) |
+| [`MOJOLEARN_IDN_DRADIX_RANGE_PASSES_OFF`](#mojolearn_idn_dradix_range_passes_off) | Prep (device radix sort_cols, IDENTICAL) | removed (old path) | 2026-11-15 | [MOJOLEARN_IDN_DRADIX_RANGE_PASSES_OFF.patch](../experiments/removed/MOJOLEARN_IDN_DRADIX_RANGE_PASSES_OFF.patch) |
+| [`MOJOLEARN_IDN_II_CONV_TREE_OFF`](#mojolearn_idn_ii_conv_tree_off) | Prep (IterativeImputer ii_conv, IDENTICAL) | removed (old path, no A/B recorded) | 2026-11-15 | [MOJOLEARN_IDN_II_CONV_TREE_OFF.patch](../experiments/removed/MOJOLEARN_IDN_II_CONV_TREE_OFF.patch) |
+| [`MOJOLEARN_IDN_II_GRAM_TILE_OFF`](#mojolearn_idn_ii_gram_tile_off) | Prep (IterativeImputer ii_gram, IDENTICAL) | removed (old path, no A/B recorded) | 2026-11-15 | [MOJOLEARN_IDN_II_GRAM_TILE_OFF.patch](../experiments/removed/MOJOLEARN_IDN_II_GRAM_TILE_OFF.patch) |
+| [`MOJOLEARN_IDN_LABEL_OFF`](#mojolearn_idn_label_off) | Prep (label binarizers, IDENTICAL) | removed (old path, no A/B recorded) | 2026-11-15 | [MOJOLEARN_IDN_LABEL_OFF.patch](../experiments/removed/MOJOLEARN_IDN_LABEL_OFF.patch) |
+| [`MOJOLEARN_IDN_NB_CAT_ATOMIC_OFF`](#mojolearn_idn_nb_cat_atomic_off) | Prep (CategoricalNB count table, IDENTICAL) | removed (old path, no A/B recorded) | 2026-11-15 | [MOJOLEARN_IDN_NB_CAT_ATOMIC_OFF.patch](../experiments/removed/MOJOLEARN_IDN_NB_CAT_ATOMIC_OFF.patch) |
+| [`MOJOLEARN_IDN_RR_EIGH_OFF`](#mojolearn_idn_rr_eigh_off) | Prep (eigh stage, IDENTICAL) | removed (old path, no A/B recorded) | 2026-11-15 | [MOJOLEARN_IDN_RR_EIGH_OFF.patch](../experiments/removed/MOJOLEARN_IDN_RR_EIGH_OFF.patch) |
+| [`MOJOLEARN_IDN_RR_MIN_16`](#mojolearn_idn_rr_min_16) | Prep (round-robin eigh size threshold, IDENTICAL) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_IDN_RR_MIN_16.patch](../experiments/removed/MOJOLEARN_IDN_RR_MIN_16.patch) |
+| [`MOJOLEARN_IDN_RR_MIN_48`](#mojolearn_idn_rr_min_48) | Prep (round-robin eigh size threshold, IDENTICAL) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_IDN_RR_MIN_48.patch](../experiments/removed/MOJOLEARN_IDN_RR_MIN_48.patch) |
+| [`MOJOLEARN_IDN_RR_MIN_8`](#mojolearn_idn_rr_min_8) | Prep (round-robin eigh size threshold, IDENTICAL) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_IDN_RR_MIN_8.patch](../experiments/removed/MOJOLEARN_IDN_RR_MIN_8.patch) |
+| [`MOJOLEARN_IDN_RR_MIN_96`](#mojolearn_idn_rr_min_96) | Prep (round-robin eigh size threshold, IDENTICAL) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_IDN_RR_MIN_96.patch](../experiments/removed/MOJOLEARN_IDN_RR_MIN_96.patch) |
+| [`MOJOLEARN_IDN_TE_ENC_TREE_OFF`](#mojolearn_idn_te_enc_tree_off) | Prep (TargetEncoder te_enc, IDENTICAL) | removed (old path, no A/B recorded) | 2026-11-15 | [MOJOLEARN_IDN_TE_ENC_TREE_OFF.patch](../experiments/removed/MOJOLEARN_IDN_TE_ENC_TREE_OFF.patch) |
+| [`MOJOLEARN_IDN_TE_GLOBAL_TREE_OFF`](#mojolearn_idn_te_global_tree_off) | Prep (TargetEncoder te_global, IDENTICAL) | removed (old path, no A/B recorded) | 2026-11-15 | [MOJOLEARN_IDN_TE_GLOBAL_TREE_OFF.patch](../experiments/removed/MOJOLEARN_IDN_TE_GLOBAL_TREE_OFF.patch) |
+| [`MOJOLEARN_IDN_XPREP_RADIX_OFF`](#mojolearn_idn_xprep_radix_off) | Prep (device sort_cols, IDENTICAL) | removed (old path, no A/B recorded) | 2026-11-15 | [MOJOLEARN_IDN_XPREP_RADIX_OFF.patch](../experiments/removed/MOJOLEARN_IDN_XPREP_RADIX_OFF.patch) |
+| [`MOJOLEARN_LABEL_DIRECT_OFF`](#mojolearn_label_direct_off) | Prep (label binarizers, FAST+Apple) | removed (old path) | 2026-11-15 | [MOJOLEARN_LABEL_DIRECT_OFF.patch](../experiments/removed/MOJOLEARN_LABEL_DIRECT_OFF.patch) |
+| [`MOJOLEARN_LDAQDA_DEC_TILE_OFF`](#mojolearn_ldaqda_dec_tile_off) | Prep (QDA decision tiles, FAST+Apple) | removed (old path) | 2026-11-15 | [MOJOLEARN_LDAQDA_DEC_TILE_OFF.patch](../experiments/removed/MOJOLEARN_LDAQDA_DEC_TILE_OFF.patch) |
+| [`MOJOLEARN_LDAQDA_PAR_STAGES_OFF`](#mojolearn_ldaqda_par_stages_off) | Prep (LDA / QDA stages, FAST+Apple) | removed (old path) | 2026-11-15 | [MOJOLEARN_LDAQDA_PAR_STAGES_OFF.patch](../experiments/removed/MOJOLEARN_LDAQDA_PAR_STAGES_OFF.patch) |
+| [`MOJOLEARN_LDAQDA_RR_EIGH_OFF`](#mojolearn_ldaqda_rr_eigh_off) | Prep (LDA / QDA eigh stage, FAST+Apple) | removed (old path) | 2026-11-15 | [MOJOLEARN_LDAQDA_RR_EIGH_OFF.patch](../experiments/removed/MOJOLEARN_LDAQDA_RR_EIGH_OFF.patch) |
+| [`MOJOLEARN_LEGACY_NARROW_FASTPT_ROWS`](#mojolearn_legacy_narrow_fastpt_rows) | Prep (FAST+Apple PowerTransformer / imputer tiles) | removed (old path, no A/B recorded) | 2026-11-15 | [MOJOLEARN_LEGACY_NARROW_FASTPT_ROWS.patch](../experiments/removed/MOJOLEARN_LEGACY_NARROW_FASTPT_ROWS.patch) |
+| [`MOJOLEARN_MI_CLF_RANKMAJOR`](#mojolearn_mi_clf_rankmajor) | Prep (mutual_info_classif point kernel, FAST+Apple) | removed (opt-in arm) | 2026-11-15 | [MOJOLEARN_MI_CLF_RANKMAJOR.patch](../experiments/removed/MOJOLEARN_MI_CLF_RANKMAJOR.patch) |
+| [`MOJOLEARN_MI_CLF_RANKMAJOR_OFF`](#mojolearn_mi_clf_rankmajor_off) | Prep (mutual_info_classif point kernel, FAST+Apple) | removed (old path) | 2026-11-15 | [MOJOLEARN_MI_CLF_RANKMAJOR_OFF.patch](../experiments/removed/MOJOLEARN_MI_CLF_RANKMAJOR_OFF.patch) |
+| [`MOJOLEARN_MI_REG_RANKMAJOR`](#mojolearn_mi_reg_rankmajor) | Prep (mutual_info_regression point kernel, FAST+Apple) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_MI_REG_RANKMAJOR.patch](../experiments/removed/MOJOLEARN_MI_REG_RANKMAJOR.patch) |
+| [`MOJOLEARN_MI_REG_SORTCOUNT`](#mojolearn_mi_reg_sortcount) | Prep (mutual_info_regression search, FAST+Apple) | removed (opt-in arm) | 2026-11-15 | [MOJOLEARN_MI_REG_SORTCOUNT.patch](../experiments/removed/MOJOLEARN_MI_REG_SORTCOUNT.patch) |
+| [`MOJOLEARN_MI_REG_TIES`](#mojolearn_mi_reg_ties) | Prep (mutual_info_regression search, FAST+Apple) | removed (opt-in arm) | 2026-11-15 | [MOJOLEARN_MI_REG_TIES.patch](../experiments/removed/MOJOLEARN_MI_REG_TIES.patch) |
+| [`MOJOLEARN_MI_REG_TIES_OFF`](#mojolearn_mi_reg_ties_off) | Prep (mutual_info_regression search, FAST+Apple) | removed (old path) | 2026-11-15 | [MOJOLEARN_MI_REG_TIES_OFF.patch](../experiments/removed/MOJOLEARN_MI_REG_TIES_OFF.patch) |
+| [`MOJOLEARN_NB_CAT_ATOMIC`](#mojolearn_nb_cat_atomic) | Prep (CategoricalNB count table, FAST+Apple) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_NB_CAT_ATOMIC.patch](../experiments/removed/MOJOLEARN_NB_CAT_ATOMIC.patch) |
+| [`MOJOLEARN_PT_SCORE`](#mojolearn_pt_score) | Prep (FAST+Apple PowerTransformer score) | removed (opt-in arm) | 2026-11-15 | [MOJOLEARN_PT_SCORE.patch](../experiments/removed/MOJOLEARN_PT_SCORE.patch) |
+| [`MOJOLEARN_SI_ONEPASS`](#mojolearn_si_onepass) | Prep (FAST+Apple SimpleImputer col_stats) | removed (opt-in arm) | 2026-11-15 | [MOJOLEARN_SI_ONEPASS.patch](../experiments/removed/MOJOLEARN_SI_ONEPASS.patch) |
+| [`MOJOLEARN_SI_ONEPASS_OFF`](#mojolearn_si_onepass_off) | Prep (FAST+Apple SimpleImputer col_stats) | removed (old path) | 2026-11-15 | [MOJOLEARN_SI_ONEPASS_OFF.patch](../experiments/removed/MOJOLEARN_SI_ONEPASS_OFF.patch) |
+| [`MOJOLEARN_X_PREP_CLASS_COV_GRID_OFF`](#mojolearn_x_prep_class_cov_grid_off) | Prep (LDA / QDA Gram and class covariances, FAST+Apple) | removed (old path) | 2026-11-15 | [MOJOLEARN_X_PREP_CLASS_COV_GRID_OFF.patch](../experiments/removed/MOJOLEARN_X_PREP_CLASS_COV_GRID_OFF.patch) |
+| [`MOJOLEARN_X_PREP_POOL_ARENA_OFF`](#mojolearn_x_prep_pool_arena_off) | Prep (x_prep device arena pool, FAST+Apple) | removed (old path) | 2026-11-15 | [MOJOLEARN_X_PREP_POOL_ARENA_OFF.patch](../experiments/removed/MOJOLEARN_X_PREP_POOL_ARENA_OFF.patch) |
 
 | [`MOJOLEARN_IDN_EIGH_SMALL_OFF`](#n9-every-dense-eigh-on-the-executor-ops-2026-11-09) | Decomposition (dense eigh, IDENTICAL) | removed (superseded: the one-launch Jacobi is the op's only route below TD_MIN_N) | 2026-11-09 | [MOJOLEARN_IDN_EIGH_SMALL.patch](../experiments/removed/MOJOLEARN_IDN_EIGH_SMALL.patch) |
 | [`MOJOLEARN_IDN_EIGH_SMALL_N64`](#n9-every-dense-eigh-on-the-executor-ops-2026-11-09) | Decomposition (dense eigh, IDENTICAL candidate arm) | removed (superseded: no small-n cut left) | 2026-11-09 | [MOJOLEARN_IDN_EIGH_SMALL.patch](../experiments/removed/MOJOLEARN_IDN_EIGH_SMALL.patch) |
@@ -12526,3 +12563,385 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2
 The lane folded these defines (or their aliases) in its own files; each owner lane writes the index row and section. Inline markers and per-lane patches: `MOJOLEARN_CLASSICAL_C22_TRIANGLE` (`experiments/removed/MOJOLEARN_CLASSICAL_C22_TRIANGLE.expdel2-20-linear.patch`, owner expdel2-06-base, recoverable at `efe4d2c321`), `MOJOLEARN_CLASSICAL_C05_OLS_PHASE` (`experiments/removed/MOJOLEARN_CLASSICAL_C05_OLS_PHASE.expdel2-20-linear.patch`, owner expdel2-07-base, recoverable at `3c2a7a6d60`), `MOJOLEARN_CLASSICAL_C03_FINITE_EXTREMA` (`experiments/removed/MOJOLEARN_CLASSICAL_C03_FINITE_EXTREMA.expdel2-20-linear.patch`, owner expdel2-07-base, recoverable at `8431777acf`), `MOJOLEARN_CLASSICAL_C17_LS_TRIALS` (`experiments/removed/MOJOLEARN_CLASSICAL_C17_LS_TRIALS.expdel2-20-linear.patch`, owner expdel2-06-base, recoverable at `fb9523bf09`), `MOJOLEARN_IDN_JACOBI_ROUND_ROBIN_OFF` (`experiments/removed/MOJOLEARN_IDN_JACOBI_ROUND_ROBIN_OFF.expdel2-20-linear.patch`, owner expdel2-05-base, recoverable at `9043ca5365`), `MOJOLEARN_IDN_ALL_OFF` (`experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-20-linear.patch`, owner lane named in the plan, recoverable at `72da417819`). `MOJOLEARN_IDN_ALL_OFF`: the umbrella term removed beside CD_IDN_GRAM_OFF, SVM_IDN_FUSED_UPDATE_F_OFF, SVM_IDN_NAN_SCAN_ONE_OFF, IDN_SVC_ONE_BLOCK_OFF, SVM_IDN_FUSED_TILE_OFF, QN_IDN_SLIM_OFF, QN_IDN_FUSED_OFF, QN_OVR_ONE_UPLOAD_OFF and QN_DEV_ARGMAX_OFF (the patch is those commits reversed, newest first). `MOJOLEARN_IDN_JACOBI_ROUND_ROBIN_OFF`: comments only (its alias IDN_JACOBI_ROUND_ROBIN is the IDENTICAL mode term, no branch folds). No bit changes.
 
 Not touched here: `MOJOLEARN_COLUMN_CPU` (the CPU-column build switch; coordinator correction 2026-11-15); `MOJOLEARN_SVM_WS1024` (no read in this lane's files; its read is svm/impl/workingset.mojo).
+
+## Experiment deletions: lane expdel2-22-linear (2026-11-15)
+
+Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2-22-linear), under AGENTS.md "An unmeasured arm is deleted" (Andrew, 2026-11-15). Each record named below was read first. No bit changes: every deletion removes a non-default arm or a rollback beside the default, and the default branch is kept byte for byte. Where the folded alias is still a mode expression (IDENTICAL-only, FAST + Apple), the other mode's branch is live code and stays. A later commit of the lane (`e4ac826d57`) removed now-unused `is_defined` / numeric-mode imports and stale rollback comments; a restore re-adds `from std.sys.compile import is_defined` where the file lacks it.
+
+### MOJOLEARN_AFCL_P01
+
+- Tried: even/odd split Welford chains and sums in cs_tile_kernel and col_stats_fast_kernel.
+- Evidence: no record: a never-run Apple FAST programme card (AFCL). Verdict: deleted unmeasured (rule g).
+- Removed: the card constant and both split-chain branches with their odd accumulators; the default single chains are kept. Default unchanged: no bits move.
+- Files: x_prep/fastpt.mojo, x_prep/fastred.mojo.
+- Deleted by: lane/expdel2-22-linear `16da6ce3e2` (2026-11-15); code recoverable at `9995c7281f`.
+- Restore: `git apply experiments/removed/MOJOLEARN_AFCL_P01.patch`, then delete the refusal in `core/experiment_guards_linear.mojo`.
+- Records: refusal in `core/experiment_guards_linear.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-22-linear section).
+
+### MOJOLEARN_AFCL_P02
+
+- Tried: halved row chunks (512 / 64) in the direct MaxAbs fit.
+- Evidence: no record: a never-run Apple FAST programme card. Verdict: deleted unmeasured (rule g).
+- Removed: the card constant; MA_ROWS = 1024 and MA_ROWS_NARROW = 128 are constants. Default unchanged: no bits move.
+- Files: x_prep/fastmaxabs.mojo.
+- Deleted by: lane/expdel2-22-linear `1d5f37812c` (2026-11-15); code recoverable at `d837f02ccf`.
+- Restore: `git apply experiments/removed/MOJOLEARN_AFCL_P02.patch`, then delete the refusal in `core/experiment_guards_linear.mojo`.
+- Records: refusal in `core/experiment_guards_linear.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-22-linear section).
+
+### MOJOLEARN_AFCL_P03
+
+- Tried: half-width blocks for cat_hist_atomic_kernel.
+- Evidence: no record: a never-run Apple FAST programme card. Verdict: deleted unmeasured (rule g).
+- Removed: the card constant and the half-block launch geometry; the launch keeps BLOCK. Default unchanged: no bits move.
+- Files: x_prep/device.mojo, x_prep/fastnb.mojo.
+- Deleted by: lane/expdel2-22-linear `4a5487a7a7` (2026-11-15); code recoverable at `5f02f5b9e3`.
+- Restore: `git apply experiments/removed/MOJOLEARN_AFCL_P03.patch`, then delete the refusal in `core/experiment_guards_linear.mojo`.
+- Records: refusal in `core/experiment_guards_linear.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-22-linear section).
+
+### MOJOLEARN_AFCL_P05
+
+- Tried: four SIMD groups per category/fold for the te stages.
+- Evidence: no record: a never-run Apple FAST programme card. Verdict: deleted unmeasured (rule g).
+- Removed: the card constant; TE_TGR = TGR. Default unchanged: no bits move.
+- Files: x_prep/fastprep2.mojo.
+- Deleted by: lane/expdel2-22-linear `a1ed29218e` (2026-11-15); code recoverable at `1d5f37812c`.
+- Restore: `git apply experiments/removed/MOJOLEARN_AFCL_P05.patch`, then delete the refusal in `core/experiment_guards_linear.mojo`.
+- Records: refusal in `core/experiment_guards_linear.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-22-linear section).
+
+### MOJOLEARN_AFCL_P06
+
+- Tried: doubled ii_conv reduction lanes.
+- Evidence: no record: a never-run Apple FAST programme card. Verdict: deleted unmeasured (rule g).
+- Removed: the card constant; II_CONV_TGR = TGR. Default unchanged: no bits move.
+- Files: x_prep/fastprep2.mojo.
+- Deleted by: lane/expdel2-22-linear `fc8c992aab` (2026-11-15); code recoverable at `a1ed29218e`.
+- Restore: `git apply experiments/removed/MOJOLEARN_AFCL_P06.patch`, then delete the refusal in `core/experiment_guards_linear.mojo`.
+- Records: refusal in `core/experiment_guards_linear.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-22-linear section).
+
+### MOJOLEARN_AFCL_P13
+
+- Tried: even/odd class-filtered sums in the class-stats kernel.
+- Evidence: no record: a never-run Apple FAST programme card. Verdict: deleted unmeasured (rule g).
+- Removed: the card constant and both split-sum branches with their odd accumulators. Default unchanged: no bits move.
+- Files: x_prep/fastred.mojo.
+- Deleted by: lane/expdel2-22-linear `1de4f202c5` (2026-11-15); code recoverable at `16da6ce3e2`.
+- Restore: `git apply experiments/removed/MOJOLEARN_AFCL_P13.patch`, then delete the refusal in `core/experiment_guards_linear.mojo`.
+- Records: refusal in `core/experiment_guards_linear.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-22-linear section).
+
+### MOJOLEARN_CLASSICAL_TE_BLOCKED_FOLD
+
+- Tried: te_global / te_enc in the blocked order BLT (TEB-position blocks, device part + fold kernels).
+- Evidence: grid_controls classical-te-gmm `te_blocked_fold` status new, never A/B-ed. Verdict: deleted unmeasured (rule a).
+- Removed: x_prep/idn_blocked.mojo (the device kernels and their scratch sizing), the two device dispatch branches and the host column's blocked branches; IDN_TE_BLOCKED stays False for x_prep/target.mojo (its host spelling there is another lane's file). Default unchanged: no bits move.
+- Files: x_prep/idn_fold.mojo, x_prep/device.mojo, x_prep/host/target.mojo, x_prep/idn_blocked.mojo.
+- Deleted by: lane/expdel2-22-linear `44b08dfc1e` (2026-11-15); code recoverable at `74754fe939`.
+- Restore: `git apply experiments/removed/MOJOLEARN_CLASSICAL_TE_BLOCKED_FOLD.patch`, then delete the refusal in `core/experiment_guards_linear.mojo`.
+- Records: refusal in `core/experiment_guards_linear.mojo`; `grid_controls/classical-te-gmm.json` control `te_blocked_fold` moved to `removed`; `docs/apple-fast/EXPERIMENTS.md` row (expdel2-22-linear section).
+
+### MOJOLEARN_IDN_DRADIX_RANGE_PASSES_OFF
+
+- Tried: the rollback to every digit pass of the LSD sort.
+- Evidence: EXP:2060 KEEP: range passes PROMOTED to the IDENTICAL default 2026-10-11 (ordinal NV/AMD 0.744/0.782, onehot 0.816/0.808). Verdict: the old path goes (rule e).
+- Removed: the define read; IDN_DRADIX_RANGE_PASSES = IDENTICAL. Default unchanged: no bits move.
+- Files: x_prep/dradix.mojo.
+- Deleted by: lane/expdel2-22-linear `7cf272e256` (2026-11-15); code recoverable at `26ab6baddf`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_DRADIX_RANGE_PASSES_OFF.patch`, then delete the refusal in `core/experiment_guards_linear.mojo`.
+- Records: refusal in `core/experiment_guards_linear.mojo`; `grid_controls/xprep-one-copy.json` control `idn_dradix_range_passes` moved to `removed`; `docs/apple-fast/EXPERIMENTS.md` row (expdel2-22-linear section).
+
+### MOJOLEARN_IDN_II_CONV_TREE_OFF
+
+- Tried: the rollback to ii_conv's one-thread unit on the device.
+- Evidence: no record: no A/B for the old path. Verdict: deleted unmeasured (rule b).
+- Removed: the define read; IDN_II_CONV_TREE = _IDN. Default unchanged: no bits move.
+- Files: x_prep/idn_fold.mojo.
+- Deleted by: lane/expdel2-22-linear `60adf729d6` (2026-11-15); code recoverable at `ef6c79d70a`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_II_CONV_TREE_OFF.patch`, then delete the refusal in `core/experiment_guards_linear.mojo`.
+- Records: refusal in `core/experiment_guards_linear.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-22-linear section).
+
+### MOJOLEARN_IDN_II_GRAM_TILE_OFF
+
+- Tried: the rollback to ii_gram's serial unit.
+- Evidence: no record: no A/B for the old path. Verdict: deleted unmeasured (rule b).
+- Removed: the define read; IDN_II_GRAM_TILE = _IDN. Default unchanged: no bits move.
+- Files: x_prep/idn_fold.mojo.
+- Deleted by: lane/expdel2-22-linear `ef6c79d70a` (2026-11-15); code recoverable at `079ed8c3e7`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_II_GRAM_TILE_OFF.patch`, then delete the refusal in `core/experiment_guards_linear.mojo`.
+- Records: refusal in `core/experiment_guards_linear.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-22-linear section).
+
+### MOJOLEARN_IDN_LABEL_OFF
+
+- Tried: the rollback to the device sort + per-cell lookup.
+- Evidence: no record: no A/B for the old path. Verdict: deleted unmeasured (rule b).
+- Removed: the define read; IDN_LABEL = IDENTICAL. Default unchanged: no bits move.
+- Files: x_prep/label_fast.mojo.
+- Deleted by: lane/expdel2-22-linear `2ec4e389be` (2026-11-15); code recoverable at `886a739db7`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_LABEL_OFF.patch`, then delete the refusal in `core/experiment_guards_linear.mojo`.
+- Records: refusal in `core/experiment_guards_linear.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-22-linear section).
+
+### MOJOLEARN_IDN_NB_CAT_ATOMIC_OFF
+
+- Tried: the rollback to the unit count path on the device.
+- Evidence: no record: no A/B for the old path. Verdict: deleted unmeasured (rule b).
+- Removed: the define read; IDN_NB_CAT_ATOMIC = IDENTICAL. Default unchanged: no bits move.
+- Files: x_prep/fastnb.mojo.
+- Deleted by: lane/expdel2-22-linear `43f37f93b7` (2026-11-15); code recoverable at `7cf272e256`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_NB_CAT_ATOMIC_OFF.patch`, then delete the refusal in `core/experiment_guards_linear.mojo`.
+- Records: refusal in `core/experiment_guards_linear.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-22-linear section).
+
+### MOJOLEARN_IDN_RR_EIGH_OFF
+
+- Tried: the rollback to eigh_unit everywhere.
+- Evidence: no record: no A/B for the old path. Verdict: deleted unmeasured (rule b).
+- Removed: the define read; IDN_RR_EIGH = IDENTICAL. Default unchanged: no bits move.
+- Files: x_prep/host/rr_eigh_host.mojo.
+- Deleted by: lane/expdel2-22-linear `886a739db7` (2026-11-15); code recoverable at `43f37f93b7`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_RR_EIGH_OFF.patch`, then delete the refusal in `core/experiment_guards_linear.mojo`.
+- Records: refusal in `core/experiment_guards_linear.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-22-linear section).
+
+### MOJOLEARN_IDN_RR_MIN_16
+
+- Tried: threshold 16 for the round-robin eigh.
+- Evidence: no record: candidate arm never timed. Verdict: deleted unmeasured (rule a).
+- Removed: the arm of IDN_RR_MIN_N (now 24). Default unchanged: no bits move.
+- Files: x_prep/host/rr_eigh_host.mojo.
+- Deleted by: lane/expdel2-22-linear `9086d9b3d1` (2026-11-15); code recoverable at `52d1c6b87e`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_RR_MIN_16.patch`, then delete the refusal in `core/experiment_guards_linear.mojo`.
+- Records: refusal in `core/experiment_guards_linear.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-22-linear section).
+
+### MOJOLEARN_IDN_RR_MIN_48
+
+- Tried: threshold 48 for the round-robin eigh.
+- Evidence: no record: candidate arm never timed. Verdict: deleted unmeasured (rule a).
+- Removed: the arm of IDN_RR_MIN_N (now 24). Default unchanged: no bits move.
+- Files: x_prep/host/rr_eigh_host.mojo.
+- Deleted by: lane/expdel2-22-linear `688ea8608f` (2026-11-15); code recoverable at `9086d9b3d1`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_RR_MIN_48.patch`, then delete the refusal in `core/experiment_guards_linear.mojo`.
+- Records: refusal in `core/experiment_guards_linear.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-22-linear section).
+
+### MOJOLEARN_IDN_RR_MIN_8
+
+- Tried: threshold 8 for the round-robin eigh.
+- Evidence: no record: candidate arm never timed. Verdict: deleted unmeasured (rule a).
+- Removed: the arm of IDN_RR_MIN_N (now 24). Default unchanged: no bits move.
+- Files: x_prep/host/rr_eigh_host.mojo.
+- Deleted by: lane/expdel2-22-linear `52d1c6b87e` (2026-11-15); code recoverable at `e71d35eb21`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_RR_MIN_8.patch`, then delete the refusal in `core/experiment_guards_linear.mojo`.
+- Records: refusal in `core/experiment_guards_linear.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-22-linear section).
+
+### MOJOLEARN_IDN_RR_MIN_96
+
+- Tried: threshold 96 for the round-robin eigh.
+- Evidence: no record: candidate arm never timed. Verdict: deleted unmeasured (rule a).
+- Removed: the arm of IDN_RR_MIN_N, now the constant 24. Default unchanged: no bits move.
+- Files: x_prep/host/rr_eigh_host.mojo.
+- Deleted by: lane/expdel2-22-linear `5f02f5b9e3` (2026-11-15); code recoverable at `688ea8608f`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_RR_MIN_96.patch`, then delete the refusal in `core/experiment_guards_linear.mojo`.
+- Records: refusal in `core/experiment_guards_linear.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-22-linear section).
+
+### MOJOLEARN_IDN_TE_ENC_TREE_OFF
+
+- Tried: the rollback to te_enc's serial unit / host pass.
+- Evidence: no record: no A/B for the old path. Verdict: deleted unmeasured (rule b).
+- Removed: the define read; IDN_TE_ENC_TREE = _IDN. Default unchanged: no bits move.
+- Files: x_prep/idn_fold.mojo.
+- Deleted by: lane/expdel2-22-linear `079ed8c3e7` (2026-11-15); code recoverable at `955fcda5ec`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_TE_ENC_TREE_OFF.patch`, then delete the refusal in `core/experiment_guards_linear.mojo`.
+- Records: refusal in `core/experiment_guards_linear.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-22-linear section).
+
+### MOJOLEARN_IDN_TE_GLOBAL_TREE_OFF
+
+- Tried: the rollback to te_global's serial unit.
+- Evidence: no record: no A/B for the old path. Verdict: deleted unmeasured (rule b).
+- Removed: the define read; IDN_TE_GLOBAL_TREE = _IDN. Default unchanged: no bits move.
+- Files: x_prep/idn_fold.mojo.
+- Deleted by: lane/expdel2-22-linear `955fcda5ec` (2026-11-15); code recoverable at `44b08dfc1e`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_TE_GLOBAL_TREE_OFF.patch`, then delete the refusal in `core/experiment_guards_linear.mojo`.
+- Records: refusal in `core/experiment_guards_linear.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-22-linear section).
+
+### MOJOLEARN_IDN_XPREP_RADIX_OFF
+
+- Tried: the rollback to the bitonic sort.
+- Evidence: no record: no A/B for the old path. Verdict: deleted unmeasured (rule b).
+- Removed: the define read; IDN_XPREP_RADIX = IDENTICAL. Default unchanged: no bits move.
+- Files: x_prep/dradix.mojo.
+- Deleted by: lane/expdel2-22-linear `26ab6baddf` (2026-11-15); code recoverable at `60adf729d6`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_XPREP_RADIX_OFF.patch`, then delete the refusal in `core/experiment_guards_linear.mojo`.
+- Records: refusal in `core/experiment_guards_linear.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-22-linear section).
+
+### MOJOLEARN_LABEL_DIRECT_OFF
+
+- Tried: the rollback of the direct label presence/scatter paths.
+- Evidence: EXP:762 KEEP (gap26-label taxi 348.3 -> 327.6 ms, istella 33.2 -> 27.6 ms), default merged on main 1975c2dc5. Verdict: the old path goes (rule e).
+- Removed: the define read; LABEL_DIRECT = FAST and Apple. Default unchanged: no bits move.
+- Files: x_prep/label_fast.mojo.
+- Deleted by: lane/expdel2-22-linear `51e7b6d7ec` (2026-11-15); code recoverable at `2ec4e389be`.
+- Restore: `git apply experiments/removed/MOJOLEARN_LABEL_DIRECT_OFF.patch`, then delete the refusal in `core/experiment_guards_linear.mojo`.
+- Records: refusal in `core/experiment_guards_linear.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-22-linear section).
+
+### MOJOLEARN_LDAQDA_DEC_TILE_OFF
+
+- Tried: the rollback of qda_dec by shared tiles.
+- Evidence: EXP:241 KEPT b2dd5dfe5 (M3 lda-clf 19,696 -> 536 ms, qda 15,794 -> 425 ms with the trio); promoted on Apple only; the NVIDIA / AMD A/B is owed and moot (FAST is Apple only). Verdict: the old path goes (rule d).
+- Removed: the define read; DEC_TILE = FAST and Apple. Default unchanged: no bits move.
+- Files: x_prep/device.mojo.
+- Deleted by: lane/expdel2-22-linear `fc4f469cc4` (2026-11-15); code recoverable at `d64015f87d`.
+- Restore: `git apply experiments/removed/MOJOLEARN_LDAQDA_DEC_TILE_OFF.patch`, then delete the refusal in `core/experiment_guards_linear.mojo`.
+- Records: refusal in `core/experiment_guards_linear.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-22-linear section).
+
+### MOJOLEARN_LDAQDA_PAR_STAGES_OFF
+
+- Tried: the rollback of lda_stage2 / lda_stage3 / qda_prep a thread a cell.
+- Evidence: EXP:242 KEPT b2dd5dfe5 (with the trio, as above); promoted on Apple only; the NVIDIA / AMD A/B is owed and moot. Verdict: the old path goes (rule d).
+- Removed: the define read; PAR_STAGES = FAST and Apple. Default unchanged: no bits move.
+- Files: x_prep/device.mojo.
+- Deleted by: lane/expdel2-22-linear `d64015f87d` (2026-11-15); code recoverable at `7decc17403`.
+- Restore: `git apply experiments/removed/MOJOLEARN_LDAQDA_PAR_STAGES_OFF.patch`, then delete the refusal in `core/experiment_guards_linear.mojo`.
+- Records: refusal in `core/experiment_guards_linear.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-22-linear section).
+
+### MOJOLEARN_LDAQDA_RR_EIGH_OFF
+
+- Tried: the rollback of the round-robin Jacobi eigh stage.
+- Evidence: EXP:243 KEPT b2dd5dfe5 (RR_EIGH alone lda 607 / qda 435 ms); promoted on Apple only; the NVIDIA / AMD A/B is owed and moot. Verdict: the old path goes (rule d).
+- Removed: the define read; RR_EIGH = FAST and Apple. Default unchanged: no bits move.
+- Files: x_prep/device.mojo.
+- Deleted by: lane/expdel2-22-linear `518d83d2b0` (2026-11-15); code recoverable at `fc4f469cc4`.
+- Restore: `git apply experiments/removed/MOJOLEARN_LDAQDA_RR_EIGH_OFF.patch`, then delete the refusal in `core/experiment_guards_linear.mojo`.
+- Records: refusal in `core/experiment_guards_linear.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-22-linear section).
+
+### MOJOLEARN_LEGACY_NARROW_FASTPT_ROWS
+
+- Tried: the d >= 64 row-chunk cut measured at the two board widths only.
+- Evidence: EXP:1333 OWED: no A/B for the old path (removed as benchmark-tuned). Verdict: deleted unmeasured (rule b).
+- Removed: the constant and its branch in tile_rows; the SIMD-group rule stays. Default unchanged: no bits move.
+- Files: x_prep/fastpt.mojo.
+- Deleted by: lane/expdel2-22-linear `d837f02ccf` (2026-11-15); code recoverable at `b4c2d444d0`.
+- Restore: `git apply experiments/removed/MOJOLEARN_LEGACY_NARROW_FASTPT_ROWS.patch`, then delete the refusal in `core/experiment_guards_linear.mojo`.
+- Records: refusal in `core/experiment_guards_linear.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-22-linear section).
+
+### MOJOLEARN_MI_CLF_RANKMAJOR
+
+- Tried: force-on name of the rank-major point kernel.
+- Evidence: EXP:374 KEEP (FAST + Apple default via _OFF; select-mutual-info istella 715.2 -> 645.2 ms). Verdict: force-on knob of the default goes (rule e).
+- Removed: the force-on term; MI_CLF_RANKMAJOR = _MI_FA. Default unchanged: no bits move.
+- Files: x_prep/device.mojo.
+- Deleted by: lane/expdel2-22-linear `31dc3269c3` (2026-11-15); code recoverable at `8b76065907`.
+- Restore: `git apply experiments/removed/MOJOLEARN_MI_CLF_RANKMAJOR.patch`, then delete the refusal in `core/experiment_guards_linear.mojo`.
+- Records: refusal in `core/experiment_guards_linear.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-22-linear section).
+
+### MOJOLEARN_MI_CLF_RANKMAJOR_OFF
+
+- Tried: the rollback to main's layout.
+- Evidence: EXP:374 KEEP on Apple only; the NVIDIA / AMD A/B is owed and moot (FAST is Apple only). Verdict: the old path goes (rule d).
+- Removed: the define read; MI_CLF_RANKMAJOR = _MI_FA. Default unchanged: no bits move.
+- Files: x_prep/device.mojo.
+- Deleted by: lane/expdel2-22-linear `5b9c50922b` (2026-11-15); code recoverable at `31dc3269c3`.
+- Restore: `git apply experiments/removed/MOJOLEARN_MI_CLF_RANKMAJOR_OFF.patch`, then delete the refusal in `core/experiment_guards_linear.mojo`.
+- Records: refusal in `core/experiment_guards_linear.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-22-linear section).
+
+### MOJOLEARN_MI_REG_RANKMAJOR
+
+- Tried: the regression point kernel one thread per (column, sorted rank).
+- Evidence: EXP:377 OPEN: no A/B for the opt-in arm. Verdict: deleted unmeasured (rule a).
+- Removed: the constant; mi_cc_device takes RANKMAJOR = False (its kernel branch in x_prep/dmi_fast.mojo is another lane's file). Default unchanged: no bits move.
+- Files: x_prep/device.mojo.
+- Deleted by: lane/expdel2-22-linear `699627ef7b` (2026-11-15); code recoverable at `6a50f39dd3`.
+- Restore: `git apply experiments/removed/MOJOLEARN_MI_REG_RANKMAJOR.patch`, then delete the refusal in `core/experiment_guards_linear.mojo`.
+- Records: refusal in `core/experiment_guards_linear.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-22-linear section).
+
+### MOJOLEARN_MI_REG_SORTCOUNT
+
+- Tried: force-on name of the sorted Kraskov search.
+- Evidence: EXP:379 KEEP: the sorted search is the FAST + Apple default through MI_REG_TIES. Verdict: force-on knob goes (rule e).
+- Removed: the force-on term; MI_REG_SORTED = _MI_FA. Default unchanged: no bits move.
+- Files: x_prep/device.mojo.
+- Deleted by: lane/expdel2-22-linear `8b76065907` (2026-11-15); code recoverable at `699627ef7b`.
+- Restore: `git apply experiments/removed/MOJOLEARN_MI_REG_SORTCOUNT.patch`, then delete the refusal in `core/experiment_guards_linear.mojo`.
+- Records: refusal in `core/experiment_guards_linear.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-22-linear section).
+
+### MOJOLEARN_MI_REG_TIES
+
+- Tried: force-on name of the tie-aware sorted search.
+- Evidence: EXP:379 KEEP (select-mutual-info-reg istella 46,465 -> 1,340 ms, taxi 2,339 -> 160 ms). Verdict: force-on knob of the default goes (rule e).
+- Removed: the force-on term. Default unchanged: no bits move.
+- Files: x_prep/device.mojo.
+- Deleted by: lane/expdel2-22-linear `8bf90f94c1` (2026-11-15); code recoverable at `293c8f301c`.
+- Restore: `git apply experiments/removed/MOJOLEARN_MI_REG_TIES.patch`, then delete the refusal in `core/experiment_guards_linear.mojo`.
+- Records: refusal in `core/experiment_guards_linear.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-22-linear section).
+
+### MOJOLEARN_MI_REG_TIES_OFF
+
+- Tried: the rollback to main's search.
+- Evidence: EXP:379 KEEP on Apple only; the NVIDIA / AMD A/B is owed and moot (FAST is Apple only). Verdict: the old path goes (rule d).
+- Removed: the define read; MI_REG_TIES = _MI_FA. Default unchanged: no bits move.
+- Files: x_prep/device.mojo.
+- Deleted by: lane/expdel2-22-linear `6a50f39dd3` (2026-11-15); code recoverable at `8bf90f94c1`.
+- Restore: `git apply experiments/removed/MOJOLEARN_MI_REG_TIES_OFF.patch`, then delete the refusal in `core/experiment_guards_linear.mojo`.
+- Records: refusal in `core/experiment_guards_linear.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-22-linear section).
+
+### MOJOLEARN_NB_CAT_ATOMIC
+
+- Tried: the atomic (row, feature) count table in FAST + Apple builds.
+- Evidence: EXP:289 OPEN: no A/B for the opt-in arm. Verdict: deleted unmeasured (rule a).
+- Removed: the FAST + Apple term; NB_CAT_ATOMIC = IDN_NB_CAT_ATOMIC (the IDENTICAL default keeps the kernels). Default unchanged: no bits move.
+- Files: x_prep/fastnb.mojo.
+- Deleted by: lane/expdel2-22-linear `5867d7c11d` (2026-11-15); code recoverable at `4a5487a7a7`.
+- Restore: `git apply experiments/removed/MOJOLEARN_NB_CAT_ATOMIC.patch`, then delete the refusal in `core/experiment_guards_linear.mojo`.
+- Records: refusal in `core/experiment_guards_linear.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-22-linear section).
+
+### MOJOLEARN_PT_SCORE
+
+- Tried: the opt-in name of the score path.
+- Evidence: EXP:2280 DELETED (DROP quality); the stable score stays the default through PT_SCORE_STABLE. Verdict: the opt-in name goes (rule e).
+- Removed: the define term; PT_SCORE = _FAST_APPLE and PT_SCORE_STABLE. Default unchanged: no bits move.
+- Files: x_prep/fastpt.mojo.
+- Deleted by: lane/expdel2-22-linear `11e4797706` (2026-11-15); code recoverable at `1de4f202c5`.
+- Restore: `git apply experiments/removed/MOJOLEARN_PT_SCORE.patch`, then delete the refusal in `core/experiment_guards_linear.mojo`.
+- Records: refusal in `core/experiment_guards_linear.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-22-linear section).
+
+### MOJOLEARN_SI_ONEPASS
+
+- Tried: force-on name of the one-pass col_stats.
+- Evidence: EXP:1888: SI_ONEPASS is the FAST + Apple default (simple-imputer istella 303.7 -> 273.7 ms). Verdict: force-on knob goes (rule e).
+- Removed: the force-on term. Default unchanged: no bits move.
+- Files: x_prep/fastpt.mojo.
+- Deleted by: lane/expdel2-22-linear `8193833d2e` (2026-11-15); code recoverable at `11e4797706`.
+- Restore: `git apply experiments/removed/MOJOLEARN_SI_ONEPASS.patch`, then delete the refusal in `core/experiment_guards_linear.mojo`.
+- Records: refusal in `core/experiment_guards_linear.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-22-linear section).
+
+### MOJOLEARN_SI_ONEPASS_OFF
+
+- Tried: the rollback to main's two-pass col_stats.
+- Evidence: EXP:1888: the one-pass default is the kept path. Verdict: the old path goes (rule e).
+- Removed: the define read; SI_ONEPASS = _FAST_APPLE. Default unchanged: no bits move.
+- Files: x_prep/fastpt.mojo.
+- Deleted by: lane/expdel2-22-linear `b4c2d444d0` (2026-11-15); code recoverable at `8193833d2e`.
+- Restore: `git apply experiments/removed/MOJOLEARN_SI_ONEPASS_OFF.patch`, then delete the refusal in `core/experiment_guards_linear.mojo`.
+- Records: refusal in `core/experiment_guards_linear.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-22-linear section).
+
+### MOJOLEARN_X_PREP_CLASS_COV_GRID_OFF
+
+- Tried: the rollback to the per-cell units.
+- Evidence: EXP:252 KEPT c5e1bbeb6 (qda 16,310 -> 15,811 ms, lda logloss .264 -> .236); promoted on Apple only; the NVIDIA / AMD A/B is owed and moot. Verdict: the old path goes (rule d).
+- Removed: the define term of the FAST + Apple guard. Default unchanged: no bits move.
+- Files: x_prep/device.mojo.
+- Deleted by: lane/expdel2-22-linear `293c8f301c` (2026-11-15); code recoverable at `518d83d2b0`.
+- Restore: `git apply experiments/removed/MOJOLEARN_X_PREP_CLASS_COV_GRID_OFF.patch`, then delete the refusal in `core/experiment_guards_linear.mojo`.
+- Records: refusal in `core/experiment_guards_linear.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-22-linear section).
+
+### MOJOLEARN_X_PREP_POOL_ARENA_OFF
+
+- Tried: the rollback to a fresh device allocation per program.
+- Evidence: EXP:409 DEFAULT (FAST+Apple; label-binarizer taxi 319.9 -> 270.4 ms); promoted on Apple only; the NVIDIA / AMD FAST A/B is owed and moot. Verdict: the old path goes (rule d).
+- Removed: the define term; X_PREP_POOL_ARENA is the mode expression. Default unchanged: no bits move.
+- Files: x_prep/device.mojo.
+- Deleted by: lane/expdel2-22-linear `7decc17403` (2026-11-15); code recoverable at `cc8e7c0dfd`.
+- Restore: `git apply experiments/removed/MOJOLEARN_X_PREP_POOL_ARENA_OFF.patch`, then delete the refusal in `core/experiment_guards_linear.mojo`.
+- Records: refusal in `core/experiment_guards_linear.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-22-linear section).
+
+Non-owner edits in this lane's files (inline TOMBSTONE markers; the owner lane writes the section):
+
+- `MOJOLEARN_IDN_ALL_OFF` (owner expdel2-37-series): the umbrella term of IDN_XPREP_RADIX, IDN_NB_CAT_ATOMIC, IDN_RR_EIGH, IDN_LABEL and idn_fold's _IDN (each now the IDENTICAL-mode constant); x_prep/idn_fold.mojo, x_prep/dradix.mojo, x_prep/fastnb.mojo, x_prep/host/rr_eigh_host.mojo, x_prep/label_fast.mojo; `e71d35eb21`, recoverable at `51e7b6d7ec`; `experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-22-linear.patch`.
+- `MOJOLEARN_XPREP_ARENA_POOL_OFF` (owner expdel2-03-base): the define term of X_PREP_POOL_ARENA_IDN (non-FAST GPU builds keep the pooled arena); x_prep/device.mojo; `cc8e7c0dfd`, recoverable at `5867d7c11d`; `experiments/removed/MOJOLEARN_XPREP_ARENA_POOL_OFF.expdel2-22-linear.patch`.
+- `MOJOLEARN_CLASSICAL_C08_GROUPED_OUTPUT` (owner expdel2-07-base): the dead `comptime if C08_GROUPED_OUTPUT` branches of the device dispatcher and the host program (the alias is False) and their imports; x_prep/device.mojo, x_prep/host/program.mojo; `9995c7281f`, recoverable at `5b9c50922b`; `experiments/removed/MOJOLEARN_CLASSICAL_C08_GROUPED_OUTPUT.expdel2-22-linear.patch`.
+
+No edit needed in this lane's files: `MOJOLEARN_CLASSICAL_C07_RADIX_BITS` and `_RADIX_ROWS` (x_prep imports the constants expdel2-07-base already folded), `MOJOLEARN_CLASSICAL_C08_UNIQUE_SCAN_OFF` (`C08_UNIQUE_SCAN` stays the IDENTICAL-mode alias), `MOJOLEARN_PREP3_MAXABS_OFF` and `MOJOLEARN_PREP3_MAXABS_POOL_OFF` (read in x_prep/prep3.mojo, another lane's file; x_prep/fastmaxabs.mojo only imports the aliases). Not deleted: `MOJOLEARN_COLUMN_CPU` (KEEP by the plan's correction).

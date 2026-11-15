@@ -1,0 +1,15 @@
+diff --git a/x_prep/device.mojo b/x_prep/device.mojo
+index db8db09266..2a588d066a 100644
+--- a/x_prep/device.mojo
++++ b/x_prep/device.mojo
+@@ -216,9 +216,7 @@ comptime _MI_FA = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
+ comptime MI_REG_TIES = _MI_FA
+ # TOMBSTONE: MOJOLEARN_MI_REG_RANKMAJOR (FAST+Apple opt-in arm, EXP:377 OPEN, no A/B recorded) deleted 2026-11-15 by lane/expdel2-22-linear; code recoverable at 6a50f39dd3.
+ # Restore: git apply experiments/removed/MOJOLEARN_MI_REG_RANKMAJOR.patch
+-# TOMBSTONE: MOJOLEARN_MI_REG_SORTCOUNT (force-on knob; the sorted search is the FAST+Apple default through MI_REG_TIES, EXP:379) deleted 2026-11-15 by lane/expdel2-22-linear; code recoverable at 699627ef7b.
+-# Restore: git apply experiments/removed/MOJOLEARN_MI_REG_SORTCOUNT.patch
+-comptime MI_REG_SORTED = _MI_FA
++comptime MI_REG_SORTED = _MI_FA and (MI_REG_TIES or is_defined["MOJOLEARN_MI_REG_SORTCOUNT"]())
+ # TOMBSTONE: MOJOLEARN_MI_FAST_FOLDS (DROP speed + quality: mi-reg-folds-istella-x -0.2%; M2 tie-heavy fixture scores
+ # move up to 3.2% of scale, selected-set symmetric difference 2) deleted 2026-10-09 on lane/owed-deletions-D2: ops 66 / 70
+ # as threadgroup folds; code recoverable at b639a2bd2. Restore: git apply experiments/removed/MOJOLEARN_MI_FAST_FOLDS.patch
