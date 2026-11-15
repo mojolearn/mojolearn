@@ -1,59 +1,23 @@
-# THE ONE DEFINITION OF THE PYTHON BOUNDARY (2026-11-15, lane py-enforce-compile).
-# Read by tools/python_free_dirs.sh (the import grep before every build and push)
-# and, through tools/python_boundary.py, by tools/kernel_closure_check.py (the
-# compile proof). Neither tool carries a second copy of these rules.
+# Binding files that must stay Python-free, read by tools/python_free_dirs.sh.
+# One path or glob per line, relative to the repository root; `*` matches
+# across directories. A listed file that imports Python (`from python ...`,
+# `from std.python ...`, `import python`, a `providers.python` module, or the
+# `PythonObject` type) fails the build and the push. A literal path (no glob)
+# that does not exist fails too, so the list follows renames.
 #
-# Patterns are relative to the repository root. A pattern with a slash matches
-# the whole path, a bare one the file name; `*` matches across directories.
+# The doorsplit lanes add each RUN module here as it moves out of its
+# UNPACK/PACK binding. Every `*_run.mojo` file is checked whether listed or
+# not (the script adds that pattern itself).
 #
-# imports-python: the one regular expression (POSIX ERE) for "this Mojo file
-#   imports Python": `from python ...`, `from std.python ...`, `import python`,
-#   a `providers.python` module, or naming the `PythonObject` type.
-imports-python: ^[[:space:]]*(from|import)[[:space:]]+((std\.)?python|providers\.python)([.[:space:]]|$)|PythonObject
-#
-# tooling: directories that are not product code (tests, benchmarks, parked
-#   experiments). Nothing in them is fenced or compiled by the proof.
-tooling: experiments/
-tooling: bench/
-tooling: tests/
-#
-# boundary-root: the directories where the boundary files live. A boundary:
-#   pattern admits a file only under a boundary root (a `*_door.mojo` in core/
-#   is a kernel file and must not import Python).
-boundary-root: bindings/
-boundary-root: providers/
-#
-# boundary: the files that may import Python: PUBLISH (bindings/_mojolearn*,
-#   bindings/entry/*), the shared CPython primitives (bindings/py_*), UNPACK,
-#   PACK and the door (one public operation's unpack, typed RUN call and pack).
-boundary: bindings/_mojolearn*.mojo
-boundary: bindings/entry/*.mojo
-boundary: bindings/py_*.mojo
-boundary: *_unpack.mojo
-boundary: *_pack.mojo
-boundary: *_door.mojo
-#
-# allow: one file that still violates because its RUN work sits behind a
-#   Python-holding construct that needs a design change. It counts as a
-#   boundary file (anywhere). Each line is dated and names the owner; the list
-#   only shrinks: the owning lane deletes the line when the file is split.
-allow: bindings/spectral_affinity_boundary.mojo  # 2026-11-12 lane entangled-mkit follow-up (to open): SpectralAffinityRoom public_array pin (entangled-mkit follow-up)
-#
-# admit-import: `<importer glob> <imported glob>`: the one boundary import a
-#   non-boundary file may make. A native test suite publishes an image's
-#   entry-table row as that PUBLISH module's init does; never a door, unpack,
-#   pack or py_* module. The compile proof leaves such importers out (they
-#   need the deleted boundary file) and counts them.
-admit-import: checks/native_tests/* bindings/_mojolearn*.mojo
-#
-# Every other non-tooling Mojo file is a kernel (RUN) file: it imports no
-# Python and no boundary module, and tools/kernel_closure_check.py compiles it
-# with every Python import stripped and every boundary file deleted.
-#
-# Unprefixed lines: RUN modules and entry tables that are named explicitly
-# (paths or globs; a literal path that does not exist fails, so the list
-# follows renames). Every `*_run.mojo` is checked whether listed or not.
 # The native entry tables: typed Mojo calls between compiled modules.
 core/*_entry_table*.mojo
 # RUN modules (also built into the script).
 *_run.mojo
+
+# The flipped fence (tools/python_free_dirs.sh third check): inside bindings/ and
+# providers/python/ only bindings/_mojolearn*.mojo, bindings/entry/*.mojo,
+# bindings/py_*.mojo, *_unpack.mojo, *_pack.mojo and *_door.mojo may import Python.
+# An `allow:` line admits one file that still violates because its RUN work sits behind a
+# Python-holding construct that needs a design change. Each line is dated and names the
+# owner; the list only shrinks: the owning lane deletes the line when the file is split.
+allow: bindings/spectral_affinity_boundary.mojo  # 2026-11-12 lane entangled-mkit follow-up (to open): SpectralAffinityRoom public_array pin (entangled-mkit follow-up)

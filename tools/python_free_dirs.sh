@@ -2,27 +2,30 @@
 # SPDX-License-Identifier: Apache-2.0
 # Python-free kernel directories and RUN modules. Exit non-zero, listing the
 # files, when
-#   - a Mojo file outside the tooling: and boundary-root: directories of
-#     tools/python_free_doors.txt imports Python, or
-#   - a file listed in tools/python_free_doors.txt (unprefixed paths or globs;
-#     RUN modules and entry tables, wherever they live, bindings/ included), or
-#     any file matching `*_run.mojo`, imports Python, or
-#   - a Mojo file under a boundary-root: directory imports Python and is not a
-#     boundary file (a boundary: pattern or an allow: line of the same file).
+#   - a Mojo file outside bindings/, providers/, experiments/, bench/ and
+#     tests/ imports Python, or
+#   - a file listed in tools/python_free_doors.txt (paths or globs; RUN modules
+#     and entry tables, wherever they live, bindings/ included), or any file
+#     matching `*_run.mojo`, imports Python, or
+#   - a Mojo file under bindings/ or providers/python/ imports Python and is
+#     not a boundary file: `bindings/_mojolearn*.mojo` and `bindings/entry/*.mojo`
+#     (PUBLISH), `bindings/py_*.mojo` (shared CPython primitives), `*_unpack.mojo`
+#     (UNPACK), `*_pack.mojo` (PACK), `*_door.mojo` (one public operation's
+#     unpack, typed RUN call and pack), or an `allow:` line of
+#     tools/python_free_doors.txt (dated, owner named; it only shrinks).
 #     Everything else there is checked like a kernel directory, or
-#   - a Mojo file that is not a boundary file (outside the tooling:
-#     directories) imports a boundary module (`bindings.<x>` or
-#     `providers.python.<x>` whose file is a boundary file): RUN reaches the
-#     boundary only through typed values and entry tables, never by import, so
-#     no typed file can name a Python-holding struct (every one lives in a
-#     boundary file). One narrow case is admitted: a native test suite under
-#     checks/native_tests/ may import a PUBLISH module (`bindings/_mojolearn*.mojo`)
-#     to publish an image's entry-table row as that module's init does; never a
-#     door, unpack, pack or py_* module.
-# THE ONE DEFINITION: "imports Python" (imports-python:), the tooling and
-# boundary-root directories and the boundary patterns all live in
-# tools/python_free_doors.txt; tools/kernel_closure_check.py reads the same
-# lines (tools/python_boundary.py). This script holds no copy of them.
+#   - a Mojo file that is not a boundary file (outside experiments/, bench/
+#     and tests/) imports a boundary module (`bindings.<x>` or
+#     `providers.python.<x>` whose file matches a boundary pattern or an
+#     `allow:` line): RUN reaches the boundary only through typed values and
+#     entry tables, never by import, so no typed file can name a
+#     Python-holding struct (every one lives in a boundary file). One narrow
+#     case is admitted: a native test suite under checks/native_tests/ may
+#     import a PUBLISH module (`bindings/_mojolearn*.mojo`) to publish an
+#     image's entry-table row as that module's init does; never a door,
+#     unpack, pack or py_* module.
+# "Imports Python" is `from python ...`, `from std.python ...`, `import
+# python`, a `providers.python` module, or naming the `PythonObject` type.
 # A kernel directory whose files import no Python cannot run Python. This is an
 # import grep, not a source-count gate: one match is a failure, and there is no
 # baseline (AGENTS.md "The Python source guards are retired" forbids count
@@ -39,7 +42,9 @@
 #                the repository; the hook runs a temporary copy of the script).
 set -u -o pipefail
 rev=${1:-}
+pattern='^[[:space:]]*(from|import)[[:space:]]+((std\.)?python|providers\.python)([.[:space:]]|$)|PythonObject'
 doors_file=tools/python_free_doors.txt
+kernel_excludes=(bindings providers experiments bench tests)
 
 if [ -z "$rev" ]; then
     cd "$(dirname "$0")/.." || exit 2
@@ -61,37 +66,19 @@ else
     doors_text=$(cat "$doors_file")
 fi
 doors=('*_run.mojo')
-pattern=''
-tooling=()
-roots=()
-boundary_allow=()
+# The boundary files that may import Python inside bindings/ and providers/python/.
+boundary_allow=('bindings/_mojolearn*.mojo' 'bindings/entry/*.mojo' 'bindings/py_*.mojo'
+                '*_unpack.mojo' '*_pack.mojo' '*_door.mojo')
 allowed=()
-admits=()
 while IFS= read -r line; do
-    case "$line" in
-        imports-python:*) pattern=${line#imports-python:}
-                          pattern=$(printf '%s' "$pattern" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
-                          continue ;;
-    esac
     line=${line%%#*}
     line=$(printf '%s' "$line" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
-    [ -n "$line" ] || continue
-    key=${line%%:*}
-    val=${line#*:}; val=${val#"${val%%[![:space:]]*}"}
-    case "$key" in
-        allow) [ -n "$val" ] && allowed+=("$val") ;;
-        boundary) [ -n "$val" ] && boundary_allow+=("$val") ;;
-        boundary-root) val=${val%/}; [ -n "$val" ] && roots+=("$val") ;;
-        tooling) val=${val%/}; [ -n "$val" ] && tooling+=("$val") ;;
-        admit-import) val=$(printf '%s' "$val" | tr -s '[:space:]' ' '); [ -n "$val" ] && admits+=("$val") ;;
-        *) doors+=("$line") ;;
+    case "$line" in
+        allow:*) line=${line#allow:}; line=${line#"${line%%[![:space:]]*}"}
+                 [ -n "$line" ] && allowed+=("$line") ;;
+        *) [ -n "$line" ] && doors+=("$line") ;;
     esac
 done <<< "$doors_text"
-if [ -z "$pattern" ] || [ ${#roots[@]} = 0 ] || [ ${#boundary_allow[@]} = 0 ]; then
-    echo "python_free_dirs: $doors_file lacks its imports-python:, boundary-root: or boundary: lines" >&2
-    exit 2
-fi
-kernel_excludes=(${roots[@]+"${roots[@]}"} ${tooling[@]+"${tooling[@]}"})
 
 # A literal door or allow entry (no glob) that does not exist is a stale list entry.
 missing=()
@@ -155,81 +142,58 @@ else
     for door in "${doors[@]}"; do door_spec+=(":(glob)$door"); done
 fi
 
-# matches <path> <pattern...>: a pattern with a slash matches the whole path,
-# a bare one the file name.
-matches() {
-    local path=$1 a
-    shift
-    for a in "$@"; do
+# is_boundary <path>: the path matches a boundary pattern or an allow: line
+# (a pattern with a slash matches the whole path, a bare one the file name).
+is_boundary() {
+    local a
+    for a in "${boundary_allow[@]}" ${allowed[@]+"${allowed[@]}"}; do
         case "$a" in
-            */*) case "$path" in $a) return 0 ;; esac ;;
-            *) case "${path##*/}" in $a) return 0 ;; esac ;;
+            */*) case "$1" in $a) return 0 ;; esac ;;
+            *) case "${1##*/}" in $a) return 0 ;; esac ;;
         esac
     done
     return 1
 }
 
-# is_boundary <path>: an allow: line, or a boundary: pattern under a
-# boundary-root: directory (tools/python_free_doors.txt).
-is_boundary() {
-    local r
-    [ ${#allowed[@]} -gt 0 ] && matches "$1" "${allowed[@]}" && return 0
-    for r in "${roots[@]}"; do
-        case "$1" in "$r"/*) matches "$1" "${boundary_allow[@]}" && return 0 ;; esac
-    done
-    return 1
-}
-
-# boundary_hits: the Python-importing Mojo files under the boundary-root:
-# directories that match no boundary pattern and no allow: line.
+# boundary_hits: the Python-importing Mojo files under bindings/ and
+# providers/python/ that match no boundary pattern and no allow: line.
 boundary_hits() {
-    local f r
-    local -a spec=()
-    for r in "${roots[@]}"; do
-        if [ $in_git = 1 ]; then spec+=(":(glob)$r/**/*.mojo"); else spec+=(":(glob)$r/*.mojo"); fi
-    done
+    local f
     while IFS= read -r f; do
         [ -n "$f" ] || continue
         is_boundary "$f" || printf '%s\n' "$f"
-    done < <(grep_paths "${spec[@]}")
+    done < <(if [ $in_git = 1 ]; then
+                 grep_paths ':(glob)bindings/**/*.mojo' ':(glob)providers/python/**/*.mojo'
+             else
+                 grep_paths ':(glob)bindings/*.mojo' ':(glob)providers/python/*.mojo'
+             fi)
 }
 
 # import_lines: "<file>:<line>" for every `from|import bindings.<x>` or
-# `providers.python.<x>` line of the Mojo files outside the tooling:
-# directories (one grep over the tree, as grep_paths reads it).
+# `providers.python.<x>` line of the Mojo files outside experiments/, bench/
+# and tests/ (one grep over the tree, as grep_paths reads it).
 import_pattern='^[[:space:]]*(from|import)[[:space:]]+(bindings|providers\.python)\.[A-Za-z0-9_]'
 import_lines() {
-    local out status d
-    local -a excl=() prune=()
-    for d in "${tooling[@]}"; do excl+=(":(exclude)$d/"); prune+=(-path "./$d" -prune -o); done
+    local out status
     if [ $in_git = 1 ]; then
         if [ -n "$rev" ]; then
-            out=$(git grep -E "$import_pattern" "$rev" -- '*.mojo' ${excl[@]+"${excl[@]}"})
+            out=$(git grep -E "$import_pattern" "$rev" -- '*.mojo' \
+                  ':(exclude)experiments/' ':(exclude)bench/' ':(exclude)tests/')
             status=$?
             out=$(printf '%s' "$out" | sed "s#^$rev:##")
         else
-            out=$(git grep -H --untracked -E "$import_pattern" -- '*.mojo' ${excl[@]+"${excl[@]}"})
+            out=$(git grep -H --untracked -E "$import_pattern" -- '*.mojo' \
+                  ':(exclude)experiments/' ':(exclude)bench/' ':(exclude)tests/')
             status=$?
         fi
         [ $status -gt 1 ] && grep_status=$status
     else
-        out=$(find . -path ./.git -prune -o -path ./.pixi -prune -o ${prune[@]+"${prune[@]}"} \
-                   -type f -name '*.mojo' -print0 \
+        out=$(find . -path ./.git -prune -o -path ./.pixi -prune -o -path ./experiments -prune -o \
+                   -path ./bench -prune -o -path ./tests -prune -o -type f -name '*.mojo' -print0 \
               | xargs -0 grep -H -E "$import_pattern" 2>/dev/null | sed 's#^\./##')
     fi
     [ -n "$out" ] && printf '%s\n' "$out"
     return 0
-}
-
-# admitted_import <file> <imported file>: an admit-import: line
-# (`<importer glob> <imported glob>`) admits this boundary import.
-admitted_import() {
-    local entry from to
-    for entry in ${admits[@]+"${admits[@]}"}; do
-        from=${entry%% *}; to=${entry#* }
-        case "$1" in $from) case "$2" in $to) return 0 ;; esac ;; esac
-    done
-    return 1
 }
 
 # import_hits: "<file> imports <module>" for each non-boundary Mojo file that
@@ -248,7 +212,9 @@ import_hits() {
         mod=${mod%%[!A-Za-z0-9_.]*}
         src=${mod//.//}.mojo
         is_boundary "$src" || continue
-        admitted_import "$f" "$src" && continue
+        case "$f" in
+            checks/native_tests/*) case "$src" in bindings/_mojolearn*.mojo) continue ;; esac ;;
+        esac
         printf '%s imports %s\n' "$f" "$mod"
     done < <(import_lines)
 }
@@ -263,8 +229,8 @@ if [ $grep_status -ne 0 ]; then
 fi
 bad=0
 if [ -n "$kernel_hits" ]; then
-    echo "python_free_dirs: these Mojo files outside ${kernel_excludes[*]/%//} import Python;" >&2
-    echo "move their UNPACK/PACK into a boundary file under ${roots[*]/%//} (or the boundary test into tooling):" >&2
+    echo "python_free_dirs: these Mojo files outside bindings/, providers/, experiments/, bench/ and tests/ import Python;" >&2
+    echo "move their UNPACK/PACK into bindings/ (or the boundary test into tests/):" >&2
     printf '  %s\n' $kernel_hits >&2
     bad=1
 fi
@@ -275,8 +241,8 @@ if [ -n "$door_hits" ]; then
     bad=1
 fi
 if [ -n "$bnd_hits" ]; then
-    echo "python_free_dirs: these Mojo files under ${roots[*]/%//} import Python but are not" >&2
-    echo "boundary files (${boundary_allow[*]}, or an allow: line in $doors_file);" >&2
+    echo "python_free_dirs: these Mojo files under bindings/ or providers/python/ import Python but are not" >&2
+    echo "boundary files (_mojolearn*, entry/*, py_*, *_unpack, *_pack, *_door, or an allow: line in $doors_file);" >&2
     echo "move their RUN work to a Python-free module and rename the rest:" >&2
     printf '  %s\n' $bnd_hits >&2
     bad=1
