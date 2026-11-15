@@ -112,7 +112,7 @@ from autograd.kernels.transformer import (
 from autograd.rules_lm import byte_backward_autograd, byte_lm_tape_eligible
 from sequence.ops import FP
 from transformer.impl.llama.fused_attention import (
-    ATTN_BWD_KV_CORNER_GUARD, ATTN_NO_BWD_CORNER, ATTN_STICKY,
+    ATTN_BWD_KV_CORNER_GUARD, ATTN_NO_BWD_CORNER,
 )
 # TOMBSTONE: training/byte_lm_one_wait.mojo (ByteOneWait, the IDN_TRAIN_ONE_WAIT deferred-check scratch) and the trainer's `one_wait` field deleted 2026-11-09 by lane x7b-step-ops-host-arm (no reader since the one-wait step went with lane x7); code recoverable at the deletion commit's parent.
 # Restore: git apply experiments/removed/BYTE_LM_X7_LEFTOVERS.patch
@@ -234,9 +234,8 @@ def byte_lm_attn_sticky_fallback() -> Bool:
     process that loaded the binding. A `.so` digest cannot answer it: the
     define gates a single runtime branch on a comptime constant, so the two
     builds differ by about one byte and are the same size."""
-    comptime if not ATTN_STICKY:
-        return False
-    return True
+    # (Sweep 2026-11-15: ATTN_STICKY is deleted; the latch never runs.)
+    return False
 
 
 def byte_lm_attn_kv_corner_guard() -> Bool:

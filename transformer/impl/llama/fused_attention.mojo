@@ -215,7 +215,7 @@ a launch whose result is then thrown away."""
 
 # TOMBSTONE: MOJOLEARN_ATTN_STICKY (unmeasured opt-in arm; the H100 control recorded a 3.6% regression) deleted 2026-11-15 by lane/expdel2-34-neural; code recoverable at 99987befbf.
 # Restore: git apply experiments/removed/MOJOLEARN_ATTN_STICKY.patch
-comptime ATTN_STICKY = False
+# (Sweep 2026-11-15: ATTN_STICKY = False removed with its readers in modeling_llama, autograd/kernels/transformer, byte_lm.)
 
 comptime FUSED_THREADS = 256
 """Threads per block for the row-tiled kernels: `TQ * head_dim`."""
@@ -1501,8 +1501,8 @@ default before the estash flip (its backward is the shipped
 
 # TOMBSTONE: MOJOLEARN_ATTN_APPLE_ERECOMP (Apple opt-in arm: a denied process recomputes one layer's exp stash; M3 Ultra 3.619 s vs round 3 3.537 s a step, no A/B verdict recorded) deleted 2026-11-15 by lane/expdel2-34-neural; code recoverable at cd9d87915b.
 # Restore: git apply experiments/removed/MOJOLEARN_ATTN_APPLE_ERECOMP.patch
-comptime ATTN_APPLE_ESTASH_RECOMPUTE = False
-"""Always False: a denied Apple process keeps the round 3 backward."""
+# (Sweep 2026-11-15: ATTN_APPLE_ESTASH_RECOMPUTE = False, attention_estash_recompute_granted and
+# fused_backward_launch_erecomp_report removed with the dead arm in autograd/kernels/transformer.mojo.)
 
 # TOMBSTONE: MOJOLEARN_ATTN_APPLE_ESTASH_FORCE_DENY (unmeasured Apple opt-in arm) deleted 2026-11-15 by lane/expdel2-34-neural; code recoverable at 9125339d58.
 # Restore: git apply experiments/removed/MOJOLEARN_ATTN_APPLE_ESTASH_FORCE_DENY.patch
@@ -1573,11 +1573,6 @@ def attention_estash_memory_grant(
     else:
         g[].denied = True
     return g[].granted and not g[].denied
-
-
-def attention_estash_recompute_granted() -> Bool:
-    """Always False: the denied-process recompute arm is deleted."""
-    return False
 
 
 # TOMBSTONE: byte_lm_context_keeper_active, byte_lm_attention_estash_gate (dead native entries: diagnostic read-backs, no package or gate reader) deleted 2026-10-26 by 9d5242f68; code recoverable at a88745022.
@@ -10703,39 +10698,6 @@ def fused_backward_launch_estash_report(
         ctx, zdot, dq, dk, dv, q_rope, dctx, k_cache, v_cache, amax, denom,
         b, l, nh, nkv, hd, s, pos0, key_lo, window, scale, arm, ran, repaired,
         fwd_qmax=fwd_qmax, fwd_kmax=fwd_kmax, fwd_vmax=fwd_vmax,
-    )
-
-
-def fused_backward_launch_erecomp_report(
-    ctx: DeviceContext,
-    mut zdot: DeviceBuffer[DType.float32],
-    mut dq: DeviceBuffer[DType.float32],
-    mut dk: DeviceBuffer[DType.float32],
-    mut dv: DeviceBuffer[DType.float32],
-    mut q_rope: DeviceBuffer[DType.float32],
-    mut dctx: DeviceBuffer[DType.float32],
-    mut k_cache: DeviceBuffer[DType.float32],
-    mut v_cache: DeviceBuffer[DType.float32],
-    mut amax: DeviceBuffer[DType.float32],
-    mut denom: DeviceBuffer[DType.float32],
-    b: Int,
-    l: Int,
-    nh: Int,
-    nkv: Int,
-    hd: Int,
-    s: Int,
-    pos0: Int,
-    key_lo: Int,
-    window: Int,
-    scale: Float32,
-    mut repaired: Int,
-) raises -> Int:
-    """The plain launcher: the denied-process recompute arm is deleted (kept
-    for its importer, which reads it only under ATTN_APPLE_ESTASH_RECOMPUTE)."""
-    repaired = 0
-    return fused_backward_launch(
-        ctx, zdot, dq, dk, dv, q_rope, dctx, k_cache, v_cache, amax, denom,
-        b, l, nh, nkv, hd, s, pos0, key_lo, window, scale,
     )
 
 

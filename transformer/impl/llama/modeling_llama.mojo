@@ -367,11 +367,9 @@ from mamba.impl.modeling.modeling_mamba import (
 
 from transformer.impl.llama.fused_attention import (
     ATTN_ARM_TRIAL,
-    ATTN_STICKY,
     ATTN_SHIPPED_BWD_ESTASH,
     AttnFwdScan,
     FUSED_RAN,
-    FUSED_SKIPPED_STICKY,
     IDN_DECODE_RESIDENT_IO,
     IDN_TRAIN_ONE_WAIT,
     LlamaDeferredChecks,
@@ -4169,15 +4167,8 @@ def eager_attention_forward(
     # whole branch reduces to the code that was here before, so the identity
     # card is untouched by this commit and the measured path is the one that
     # was measured.
-    if (choice != ATTN_PATH_EAGER and stages.attn_fused_off
-            and ATTN_STICKY and not need_eager):
-        status = FUSED_SKIPPED_STICKY
-        if not need_eager:
-            attention_eager_core(
-                ctx, stages, b, l, s, pos0, key_lo, window, dims, plant_at,
-                plant_idx, plant_bits, trace, prefix, softcap,
-            )
-    elif choice != ATTN_PATH_EAGER:
+    # (Sweep 2026-11-15: the ATTN_STICKY latch arm (False on every build) removed.)
+    if choice != ATTN_PATH_EAGER:
         attention_fwd_scan_clear()
         # IDN_DECODE_RESIDENT_IO: the owner's deferred window (0: none, the
         # launchers read their checks on the host as today).
