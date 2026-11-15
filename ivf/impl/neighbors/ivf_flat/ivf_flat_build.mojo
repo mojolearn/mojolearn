@@ -131,11 +131,9 @@ from x_ann.kpp_seed_device import kpp_seed_device
 
 # TOMBSTONE: MOJOLEARN_IVF_FAST_STRIDED_COARSE (DROPPED-noise) deleted 2026-10-15 by 1a76955b5; code recoverable at 1a76955b5^.
 # Restore: git apply experiments/removed/MOJOLEARN_IVF_FAST_STRIDED_COARSE.patch
-comptime IVF_FAST_TRAINSET = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and TARGET_HAS_APPLE_GPU
-    and not is_defined["MOJOLEARN_IVF_FAST_TRAINSET_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_IVF_FAST_TRAINSET_OFF (old path beside the Apple FAST default, no A/B row) deleted 2026-11-15 by lane/expdel2-12-cluster; code recoverable at da99e6f6f6.
+# Restore: git apply experiments/removed/MOJOLEARN_IVF_FAST_TRAINSET_OFF.patch; record in docs/TOMBSTONES.md.
+comptime IVF_FAST_TRAINSET = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
 """FAST on Apple: the coarse quantizer trains on at most
 `IVF_FAST_ROWS_PER_LIST` rows per list, a seeded uniform sample (FAISS's
 rule; cuVS trains on `kmeans_trainset_fraction` of the rows). Every row is
