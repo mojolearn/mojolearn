@@ -13,6 +13,9 @@ layout; FAST arithmetic (a different summation order).
 
 from max.gpu import block_dim, block_idx, thread_idx
 from std.memory import stack_allocation
+from std.sys.compile import is_defined
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
@@ -26,8 +29,15 @@ comptime FX_MAX_C = 64
 
 # TOMBSTONE: MOJOLEARN_AFCL_L05 (never-run Apple FAST programme card) deleted 2026-11-15 by lane/expdel2-20-linear (the halved-rows schedule); code recoverable at 1f4bbd3047.
 # Restore: git apply experiments/removed/MOJOLEARN_AFCL_L05.patch; record in docs/TOMBSTONES.md.
-comptime FX_CHUNK_ROWS = 2048
-comptime FX_BLOCK_LIMIT = 256
+# RESTORED 2026-11-15 (lane/restore-apple-fast-neural): opt-in arm back, default off, Apple fast only (Andrew: a paused programme's arms are kept).
+# AFCL-L05: NEVER RUN — PENDING MEASUREMENT. Uncompiled/unverified, OFF.
+# Halve rows per partial and double the partial limit: more independent
+# groups, with at most twice the existing partial workspace and fold work.
+# Both workspace sizing and launch planning use this one schedule.
+comptime AFCL_L05 = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
+                    and is_defined["MOJOLEARN_AFCL_L05"]())
+comptime FX_CHUNK_ROWS = 1024 if AFCL_L05 else 2048
+comptime FX_BLOCK_LIMIT = 512 if AFCL_L05 else 256
 
 
 #: lane apple-fast-no-narrow-2 (2026-10-04): `d <= FX_MAX_D` (256, which
