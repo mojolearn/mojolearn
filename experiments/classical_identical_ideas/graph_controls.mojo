@@ -146,4 +146,4 @@ comptime XCLUSTER_ROW_ASSIGN_ROWS = 0
 # NOT TESTED — NOT MEASURED. Default OFF.
 # TOMBSTONE: MOJOLEARN_C62_SAME_COMPONENT_SKIP (unmeasured arm) deleted 2026-11-15 by lane/expdel2-05-base; code recoverable at 774f01dc6b.
 # Restore: git apply experiments/removed/MOJOLEARN_C62_SAME_COMPONENT_SKIP.patch; record in docs/TOMBSTONES.md.
-comptime C62_SAME_COMPONENT_SKIP = False
+# (Sweep 2026-11-15: comptime C62_SAME_COMPONENT_SKIP removed; nothing read it.)
