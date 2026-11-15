@@ -24,7 +24,7 @@
 #   32 KB); the pad column keeps the column-wise reads on distinct banks.
 #   AXIS_ROWS keeps seq_kernel: its leaves already run down a column with
 #   neighbouring threads on neighbouring columns (coalesced, 92%).
-#   -D MOJOLEARN_IDN_FOLD_STAGED_OFF (or MOJOLEARN_IDN_ALL_OFF).
+#   -D MOJOLEARN_IDN_FOLD_STAGED_OFF.
 # E FOUR ELEMENTS A THREAD (AG_ELEM_VEC4). The binary, unary, reduce-VJP,
 #   accumulate and dropout bodies on ag_vec4_kernel (autograd/ops.mojo
 #   "FOUR ELEMENTS A THREAD"). Route rule: every pointer slot 16-byte
@@ -61,18 +61,19 @@ from autograd.data_ops import (
 )
 from autograd.fold_ops import OP_AGS_LOSS_PART, ags_loss_term
 
-comptime _IDN_ALL_OFF = is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch) term deleted 2026-11-15 by lane/expdel2-23-neural (non-owner, owner expdel2-37-series); code recoverable at 62f98b1ca0.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-23-neural.patch; record in docs/TOMBSTONES.md.
 comptime AG_FOLD_STAGED = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and AUTOGRAD_FOLD_V2
-    and not (is_defined["MOJOLEARN_IDN_FOLD_STAGED_OFF"]() or _IDN_ALL_OFF)
+    and not (is_defined["MOJOLEARN_IDN_FOLD_STAGED_OFF"]())
 )
 comptime AG_ELEM_VEC4 = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not (is_defined["MOJOLEARN_IDN_ELEM_VEC4_OFF"]() or _IDN_ALL_OFF)
+    and not (is_defined["MOJOLEARN_IDN_ELEM_VEC4_OFF"]())
 )
 comptime AG_TRANSPOSE_TILE = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not (is_defined["MOJOLEARN_IDN_TRANSPOSE_TILE_OFF"]() or _IDN_ALL_OFF)
+    and not (is_defined["MOJOLEARN_IDN_TRANSPOSE_TILE_OFF"]())
 )
 
 # the staged leaves: one leaf a thread, a block of AG_FOLD_LEAF threads

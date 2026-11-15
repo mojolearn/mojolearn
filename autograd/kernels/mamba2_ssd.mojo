@@ -13,6 +13,8 @@ No intra-chunk, B/C, A/dt, or projection gradient is claimed here.
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu import block_dim, block_idx, thread_idx
 from std.sys.compile import is_defined
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch) term deleted 2026-11-15 by lane/expdel2-23-neural (non-owner, owner expdel2-37-series); code recoverable at 62f98b1ca0.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-23-neural.patch; record in docs/TOMBSTONES.md.
 from std.memory import stack_allocation
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
@@ -67,7 +69,6 @@ comptime M2_SSD_BWD_TPB = 128
 comptime IDN_M2_BWD_CELL = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     and not is_defined["MOJOLEARN_IDN_M2_BWD_CELL_OFF"]()
-    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 )
 comptime IDN_M2_BWD_FOLD_TILED = IDN_M2_BWD_CELL and not is_defined[
     "MOJOLEARN_IDN_M2_BWD_FOLD_TILED_OFF"
@@ -80,7 +81,6 @@ comptime IDN_M2_BWD_FOLD_TILED = IDN_M2_BWD_CELL and not is_defined[
 comptime IDN_M2_GRAD_LEAF128 = (
     IDN_M2_BWD_FOLD_TILED
     and IDN_M2_GRAD_FOLD_ARM == 2
-    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 )
 comptime M2_BWD_FOLD_ROWS = 128 if IDN_M2_GRAD_LEAF128 else 256
 

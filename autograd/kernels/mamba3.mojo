@@ -5,6 +5,8 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu import block_dim, block_idx, thread_idx
 from std.memory import stack_allocation
 from std.sys.compile import is_defined
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch) term deleted 2026-11-15 by lane/expdel2-23-neural (non-owner, owner expdel2-37-series); code recoverable at 62f98b1ca0.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-23-neural.patch; record in docs/TOMBSTONES.md.
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from std.os import getenv
@@ -1313,7 +1315,6 @@ def mamba3_angle_reduce_kernel(
 # ---------------------------------------------------------------------------
 comptime IDN_M3_ANGLE_DT_SUFFIX = (
     not is_defined["MOJOLEARN_IDN_M3_ANGLE_DT_SUFFIX_OFF"]()
-    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 )
 comptime M3_ANGLE_SUFFIX_CHUNK = 64
 # NI43: linear-work scheduling of the existing versioned suffix.
@@ -1333,7 +1334,6 @@ comptime IDN_M3_ANGLE_CARRY_CACHE = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     and IDN_M3_ANGLE_DT_SUFFIX
     and not is_defined["MOJOLEARN_IDN_M3_ANGLE_CARRY_CACHE_OFF"]()
-    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 )
 
 
@@ -2472,7 +2472,6 @@ comptime M3_S17_TAIL_PIPE = (
     # NV L40S 40.105 -> 41.582 ms (v1372), AMD MI325X 117.272 -> 68.559 ms (a1540); avg ratio 0.779 (vendor split: NV 1.04x);
     # hash 16f6e13b on both vendors. Default ON; -D MOJOLEARN_IDN_M3_S17_TAIL_PIPE_OFF restores the shared tail.
     and not is_defined["MOJOLEARN_IDN_M3_S17_TAIL_PIPE_OFF"]()
-    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 )
 comptime M3_S17_PIPE_GROUP = 16
 # TOMBSTONE: MOJOLEARN_IDN_M3_S17_TAIL_DBUF (mamba3_s17_tail_dbuf_kernel + M3_S17_DB_TP; LOSER avg 1.33x samba-train-step) deleted 2026-10-11 by b9e2282b2; code recoverable at b9e2282b2^.
