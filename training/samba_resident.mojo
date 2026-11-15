@@ -102,7 +102,6 @@ from training.estimator import (
     identical_ce_loss_resident,
     identical_optimizer_step_resident_io,
 )
-from training.neural_ab_pointwise import NN58_ACCUMULATE_STATUS
 from training.neural_ab_shards import NN63_CANONICAL_SHARD_MERGE, nn_shard_merge_into
 from training.neural_identical_experiments import IDN_SAMBA_RESIDENT_STEP, IDN_SAMBA_ATTN_RECOMPUTE
 from training.samba_ops import (
@@ -113,7 +112,6 @@ from training.samba_ops import (
     samba_validate_accumulation,
     samba_leaf_ids_kernel,
     samba_tree_level_kernel,
-    samba_tree_status_kernel,
 )
 from transformer.block_options import BlockOptions
 from autograd.kernels.transformer import LlamaBackwardStages
@@ -326,7 +324,7 @@ def _pair_add_device(
     TWO pieces, which is what `SambaStack.loss_and_grads` asks of
     `accumulate_grads([d_emb, dw_head], tokens=None)` for the tied embedding
     gradient. Launch for launch `training/samba_ops.mojo::samba_accumulate_buffer`
-    at `a == 2` (one level, `pairs == 1`), including its NN63 and NN58 arms,
+    at `a == 2` (one level, `pairs == 1`), including its NN63 arm,
     with the result left on the device instead of copied to a host pointer."""
     comptime if NN63_CANONICAL_SHARD_MERGE:
         var ids = ctx.enqueue_create_buffer[DType.int32](2)
@@ -337,33 +335,16 @@ def _pair_add_device(
         var first = ctx.enqueue_create_buffer[DType.float32](2 * n)
         var second = ctx.enqueue_create_buffer[DType.float32](n)
         nn_shard_merge_into(ctx, dst, src, ids, first, second, 2, n)
-        comptime if NN58_ACCUMULATE_STATUS:
-            var hit = device_first_nonfinite(ctx, dst, n)
-            if hit >= 0:
-                raise Error("mojolearn samba ops: nonfinite accumulated gradient at " + String(hit))
         _ = ids^
         _ = first^
         _ = second^
         return
-    comptime if NN58_ACCUMULATE_STATUS:
-        var status = ctx.enqueue_create_buffer[DType.int32](1)
-        status.enqueue_fill(Int32(n))
-        ctx.enqueue_function[samba_tree_status_kernel](
-            dst.unsafe_ptr(), src.unsafe_ptr(), status.unsafe_ptr(), Int32(n), Int32(1),
-            grid_dim=(_grid(n), 1, 1), block_dim=(SAMBA_TPB, 1, 1),
-        )
-        var host_status = ctx.enqueue_create_host_buffer[DType.int32](1)
-        ctx.enqueue_copy(dst_ptr=host_status.unsafe_ptr(), src_buf=status)
-        ctx.synchronize()
-        if host_status[0] < Int32(n):
-            raise Error("mojolearn samba ops: nonfinite accumulated gradient at " + String(host_status[0]))
-        _ = status^
-        _ = host_status^
-    else:
-        ctx.enqueue_function[samba_tree_level_kernel](
-            dst.unsafe_ptr(), src.unsafe_ptr(), Int32(n), Int32(1),
-            grid_dim=(_grid(n), 1, 1), block_dim=(SAMBA_TPB, 1, 1),
-        )
+    # TOMBSTONE: MOJOLEARN_NN58_ACCUMULATE_STATUS (opt-in tree status kernel, no A/B recorded) deleted 2026-11-15 by lane/expdel2-32-neural; code recoverable at e4e5ad1f37.
+    # Restore: git apply experiments/removed/MOJOLEARN_NN58_ACCUMULATE_STATUS.patch
+    ctx.enqueue_function[samba_tree_level_kernel](
+        dst.unsafe_ptr(), src.unsafe_ptr(), Int32(n), Int32(1),
+        grid_dim=(_grid(n), 1, 1), block_dim=(SAMBA_TPB, 1, 1),
+    )
 
 
 struct SambaResidentSession(Movable, Writable):

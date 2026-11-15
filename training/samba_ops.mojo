@@ -12,9 +12,6 @@ the contract's own `ftz(ftz(x) + ftz(y))` node over pairs in ascending
 microbatch index. Every buffer lives for one call; no pointer is retained.
 """
 
-from std.atomic import Atomic
-from std.memory import bitcast
-from training.neural_ab_pointwise import NN58_ACCUMULATE_STATUS
 from training.neural_ab_shards import NN63_CANONICAL_SHARD_MERGE, nn_shard_merge_into
 from max.gpu import block_dim, block_idx, thread_idx
 from std.math import isfinite
@@ -509,24 +506,6 @@ def samba_tree_level_kernel(
     dst.unsafe_store(i, ftz(identical_mul_add(Float32(1.0), left, right)))
 
 
-def samba_tree_status_kernel(
-    dst: MutPointer[Float32, MutAnyOrigin], src: MutPointer[Float32, MutAnyOrigin],
-    status: MutPointer[Int32, MutAnyOrigin], n_in: Int32, pairs_in: Int32,
-):
-    """Original FMA tree edge plus integer status; all math seams unchanged."""
-    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
-    var n = Int(n_in)
-    if i < n * Int(pairs_in):
-        var j = i // n
-        var e = i - j * n
-        var left = ftz(src[(2 * j) * n + e])
-        var right = ftz(src[(2 * j + 1) * n + e])
-        var value = ftz(identical_mul_add(Float32(1.0), left, right))
-        dst[i] = value
-        if (bitcast[DType.uint32](value) & UInt32(0x7F800000)) == UInt32(0x7F800000):
-            _ = Atomic[Int32].min(status, Int32(e))
-
-
 def samba_leaf_ids_kernel(ids: MutPointer[Int32, MutAnyOrigin], a: Int32):
     var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     if i < Int(a):
@@ -655,10 +634,6 @@ def _samba_accumulate_core(
             var second = ctx.enqueue_create_buffer[DType.float32](((a + 1) // 2) * n)
             var result = ctx.enqueue_create_buffer[DType.float32](n)
             nn_shard_merge_into(ctx, result, src, ids, first, second, a, n)
-            comptime if NN58_ACCUMULATE_STATUS:
-                var hit = device_first_nonfinite(ctx, result, n)
-                if hit >= 0:
-                    raise Error("mojolearn samba ops: nonfinite accumulated gradient at " + String(hit))
             _accumulate_out(ctx, out_ptr, out_dev, result, n)
             ctx.synchronize()
             _ = ids^
@@ -667,10 +642,8 @@ def _samba_accumulate_core(
             _ = result^
             _ = src^
             return n
-    var live_status = List[DeviceBuffer[DType.int32]]()
-    comptime if NN58_ACCUMULATE_STATUS:
-        live_status.append(ctx.enqueue_create_buffer[DType.int32](1))
-        live_status[0].enqueue_fill(Int32(n))
+    # TOMBSTONE: MOJOLEARN_NN58_ACCUMULATE_STATUS (opt-in tree status kernel and its readback, no A/B recorded) deleted 2026-11-15 by lane/expdel2-32-neural; code recoverable at e4e5ad1f37.
+    # Restore: git apply experiments/removed/MOJOLEARN_NN58_ACCUMULATE_STATUS.patch
     var dst = ctx.enqueue_create_buffer[DType.float32](n * max(1, a // 2))
     if a == 1:
         ctx.enqueue_function[samba_ftz_copy_kernel](
@@ -688,30 +661,17 @@ def _samba_accumulate_core(
     while pieces > 1:
         var pairs = pieces // 2
         if from_src:
-            comptime if NN58_ACCUMULATE_STATUS:
-                ctx.enqueue_function[samba_tree_status_kernel](dst.unsafe_ptr(), src.unsafe_ptr(), live_status[0].unsafe_ptr(), Int32(n), Int32(pairs), grid_dim=(_grid(n * pairs), 1, 1), block_dim=(SAMBA_TPB, 1, 1))
-            else:
-                ctx.enqueue_function[samba_tree_level_kernel](dst.unsafe_ptr(), src.unsafe_ptr(), Int32(n), Int32(pairs), grid_dim=(_grid(n * pairs), 1, 1), block_dim=(SAMBA_TPB, 1, 1))
+            ctx.enqueue_function[samba_tree_level_kernel](dst.unsafe_ptr(), src.unsafe_ptr(), Int32(n), Int32(pairs), grid_dim=(_grid(n * pairs), 1, 1), block_dim=(SAMBA_TPB, 1, 1))
         else:
-            comptime if NN58_ACCUMULATE_STATUS:
-                ctx.enqueue_function[samba_tree_status_kernel](src.unsafe_ptr(), dst.unsafe_ptr(), live_status[0].unsafe_ptr(), Int32(n), Int32(pairs), grid_dim=(_grid(n * pairs), 1, 1), block_dim=(SAMBA_TPB, 1, 1))
-            else:
-                ctx.enqueue_function[samba_tree_level_kernel](src.unsafe_ptr(), dst.unsafe_ptr(), Int32(n), Int32(pairs), grid_dim=(_grid(n * pairs), 1, 1), block_dim=(SAMBA_TPB, 1, 1))
+            ctx.enqueue_function[samba_tree_level_kernel](src.unsafe_ptr(), dst.unsafe_ptr(), Int32(n), Int32(pairs), grid_dim=(_grid(n * pairs), 1, 1), block_dim=(SAMBA_TPB, 1, 1))
         from_src = not from_src
         pieces = pairs
-    comptime if NN58_ACCUMULATE_STATUS:
-        var host_status = ctx.enqueue_create_host_buffer[DType.int32](1)
-        ctx.enqueue_copy(dst_ptr=host_status.unsafe_ptr(), src_buf=live_status[0])
-        ctx.synchronize()
-        if host_status[0] < Int32(n):
-            raise Error("mojolearn samba ops: nonfinite accumulated gradient at " + String(host_status[0]))
     if from_src:
         _accumulate_out(ctx, out_ptr, out_dev, src, n)
         ctx.synchronize()
     else:
         _accumulate_out(ctx, out_ptr, out_dev, dst, n)
         ctx.synchronize()
-    _ = live_status^
     _ = src^
     _ = dst^
     return n
