@@ -7,11 +7,10 @@ do not use vendor-specific reduction collectives or reduced precision.
 """
 from max.gpu import block_idx, thread_idx
 from std.memory import stack_allocation
-from std.sys.compile import is_defined, get_defined_int
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from max.gpu.host import DeviceBuffer, DeviceContext
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz
+from checks.numerics import ftz
 from checks.rtf_seam import rtf_mul_add
 from gemm.contract import OP_NT
 from gemm.checks.gemm_identical import (
@@ -21,7 +20,6 @@ from gemm.checks.gemm_identical import (
 
 # TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (its terms here: every IDENTICAL switch off at once; EXP:2438 old path) deleted 2026-11-15 by lane/expdel2-25-neural; code recoverable at 5cde955daf.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-25-neural.patch.
-comptime _NEURAL_ARMS = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 # TOMBSTONE: MOJOLEARN_NI07_GROUPED_PROJECTIONS (opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-25-neural; code recoverable at e862759b5c.
 # Restore: git apply experiments/removed/MOJOLEARN_NI07_GROUPED_PROJECTIONS.patch; record in docs/TOMBSTONES.md.
 comptime NI07_GROUPED_PROJECTIONS = False

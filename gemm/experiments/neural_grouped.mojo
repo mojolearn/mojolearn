@@ -6,7 +6,6 @@ All numerical work is Mojo; no classical path imports this module. No build
 or verification has been run.
 """
 from gemm.experiments.neural_profile_device import neural_profile_kernel
-from std.sys.compile import is_defined
 from max.gpu import block_idx,block_dim,thread_idx
 from max.gpu.host import DeviceBuffer,DeviceContext
 from checks.numerics import ftz

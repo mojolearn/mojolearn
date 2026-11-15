@@ -9,7 +9,6 @@ win is relabelled as a new full-model result. This source is uncompiled and
 unverified by request. Model ownership is in gemm.neural_dispatch; future
 full-workload recipes and execution evidence remain pending.
 """
-from std.sys.compile import is_defined
 from max.gpu.host import DeviceBuffer,DeviceContext
 from checks.kernel_matrix import TARGET_COLUMN,COLUMN_NVIDIA
 from gemm.contract import CONTRACT_K_LEAF_MIN

@@ -6,7 +6,7 @@ Every profile uses this SAME scalar arithmetic body on host and device. A
 profile may change bits across versions, never between vendors in one run.
 No compilation, identity, quality or timing has been run for this source.
 """
-from std.sys.compile import is_defined, get_defined_int
+
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz
 from checks.rtf_seam import rtf_mul_add
 from gemm.contract import (
