@@ -12,6 +12,12 @@ outputs are byte-identical to the copied path's.
 import os
 
 import numpy as np
+
+# These are public-caller contracts. Public wrappers tell a user call from a library-internal one by the
+# caller's module (providers/python/estimator_lifecycle_pyapi_unpack.mojo:16 estimator_outside): this module
+# lives in mojolearn.tests, so without the marker its calls count as internal and IsolationForest returns its
+# internal float32 scores instead of the public float64 ones (bindings/iforest_public_lifecycle_pack.mojo:190).
+__mojolearn_user_boundary__ = True
 import pytest
 
 os.environ.setdefault("MOJOLEARN_NUMERIC_MODE", "identical")
