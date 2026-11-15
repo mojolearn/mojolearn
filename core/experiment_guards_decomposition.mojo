@@ -90,6 +90,9 @@ def _check_configuration() -> Bool:
     # (Apple FAST work is paused, not deleted; one M3 sample fit B/A 0.95): cholesky/checks/fast_trsm.mojo, default OFF.
     # Lane restore-classical-measured-routes (2026-11-13): MinCovDet's Cholesky C-step is opt-in, so its _OFF is refused.
     comptime assert not is_defined["MOJOLEARN_IDN_MCD_CHOL_OFF"](), "renamed 2026-11-13 (lane restore-classical-measured-routes): the LU + Jacobi pinvh C-step is the IDENTICAL default again (x_decomp/mcd.mojo IDN_MCD_CHOL); the Cholesky C-step is -D MOJOLEARN_IDN_MCD_CHOL (owed row mcd-chol). Drop MOJOLEARN_IDN_MCD_CHOL_OFF from the build"
+    # Lane expdel-02-decomposition-series (2026-11-15): owed deletions of docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md (docs/TOMBSTONES.md).
+    # Restore: git apply experiments/removed/MOJOLEARN_DECOMP_FAST_DICT_DEV_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_DECOMP_FAST_DICT_DEV_OFF"](), "removed 2026-11-15 (lane/expdel-02-decomposition-series): DECOMP_FAST_DICT_DEV_OFF (FAST rollback to the kit's per-atom dictionary loop) is gone; the resident two-launch atom update is the FAST path (mb-dict-learning istella 6,832 -> 5,193 ms, sparsity and reconstruction error identical); restore: experiments/removed/MOJOLEARN_DECOMP_FAST_DICT_DEV_OFF.patch"
     return True
 
 

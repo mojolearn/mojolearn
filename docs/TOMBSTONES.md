@@ -655,6 +655,7 @@ in the tables after the sections.
 | [`MOJOLEARN_CV_FAST_SLICE_OFF`](#mojolearn_cv_fast_slice_off-old-path-deleted-2026-11-15) | Model selection (cross_val_score fold rows, FAST Apple) | removed (old path; FAST+Apple default ACCEPT, rab1d-cvslice) | 2026-11-15 | [MOJOLEARN_CV_FAST_SLICE_OFF.patch](../experiments/removed/MOJOLEARN_CV_FAST_SLICE_OFF.patch) |
 | [`MOJOLEARN_CV_FAST_TRUST_FOLDS_OFF`](#mojolearn_cv_fast_trust_folds_off-old-path-deleted-2026-11-15) | Model selection (cross_val_score fold checks, FAST Apple) | removed (old path; FAST+Apple default ACCEPT, rab1d-cvtrust) | 2026-11-15 | [MOJOLEARN_CV_FAST_TRUST_FOLDS_OFF.patch](../experiments/removed/MOJOLEARN_CV_FAST_TRUST_FOLDS_OFF.patch) |
 | [`MOJOLEARN_TSA_FAST_SELD_FUSED_OFF`](#mojolearn_tsa_fast_seld_fused_off-old-path-deleted-2026-11-15) | Time series (select_d KPSS rounds, FAST Apple) | removed (old path; FAST+Apple default KEPT 6c0ba4379) | 2026-11-15 | [MOJOLEARN_TSA_FAST_SELD_FUSED_OFF.patch](../experiments/removed/MOJOLEARN_TSA_FAST_SELD_FUSED_OFF.patch) |
+| [`MOJOLEARN_DECOMP_FAST_DICT_DEV_OFF`](#mojolearn_decomp_fast_dict_dev_off-old-path-deleted-2026-11-15) | Decomp (MiniBatchDictionaryLearning atom update, FAST) | removed (old path; FAST+Apple default KEPT, clus3-mbdl-dictdev) | 2026-11-15 | [MOJOLEARN_DECOMP_FAST_DICT_DEV_OFF.patch](../experiments/removed/MOJOLEARN_DECOMP_FAST_DICT_DEV_OFF.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -6369,3 +6370,11 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md (section expdel-02-
 - **Deleted by**: lane/expdel-02-decomposition-series (docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md); code recoverable at `60cbec7970`.
 - **Restore**: `git apply experiments/removed/MOJOLEARN_TSA_FAST_SELD_FUSED_OFF.patch`, then delete the `MOJOLEARN_TSA_FAST_SELD_FUSED_OFF` refusal in `core/experiment_guards_series.mojo`.
 - **Records**: refusal in `core/experiment_guards_series.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel-02-decomposition-series section).
+
+### MOJOLEARN_DECOMP_FAST_DICT_DEV_OFF: old path deleted (2026-11-15)
+
+- **What it was**: the FAST rollback of `DECOMP_FAST_DICT_DEV` (`x_decomp/dict_fast.mojo`, taken by `x_decomp/kit_device.mojo` `dict_fused`): with `-D MOJOLEARN_DECOMP_FAST_DICT_DEV_OFF` a FAST build compiled no `dict_update_dev` and `_update_dict` ran the kit's atom loop. Deleted: the define read (and the now-unused `is_defined` import); `DECOMP_FAST_DICT_DEV` is FAST mode. IDENTICAL keeps the kit loop as before.
+- **Verdict**: KEPT, FAST+Apple default (EXPERIMENTS.md `DECOMP_FAST_DICT_DEV`, clus3-mbdl-dictdev-istella): M3 one run per arm, mb-dict-learning istella 6,832 -> 5,193 ms (-24%), sparsity .08636 and reconstruction error .6483 identical. No bit change on any column.
+- **Deleted by**: lane/expdel-02-decomposition-series (docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md); code recoverable at `539ab9e04b`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_DECOMP_FAST_DICT_DEV_OFF.patch`, then delete the `MOJOLEARN_DECOMP_FAST_DICT_DEV_OFF` refusal in `core/experiment_guards_decomposition.mojo`.
+- **Records**: refusal in `core/experiment_guards_decomposition.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel-02-decomposition-series section).
