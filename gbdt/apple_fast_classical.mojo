@@ -29,8 +29,9 @@ comptime AFCL_T02 = False
 
 # AFCL-T03: 512 threads retain room for all 256 borders while reducing
 # the per-feature binarizer's register footprint per threadgroup.
-# NEVER RUN — PENDING MEASUREMENT; uncompiled/unverified; default OFF.
-comptime AFCL_T03 = AFCL_APPLE_FAST and is_defined["MOJOLEARN_AFCL_T03"]()
+# TOMBSTONE: MOJOLEARN_AFCL_T03 (DELETE-EXPERIMENT, never-run Apple FAST programme card, rule g) deleted 2026-11-15 by lane/expdel2-41-trees; code recoverable at 951210db46.
+# Restore: git apply experiments/removed/MOJOLEARN_AFCL_T03.patch; record in docs/TOMBSTONES.md.
+comptime AFCL_T03 = False
 
 # AFCL-T04: four Apple SIMD groups per partition-metadata block instead
 # of eight; all kernels retain their grid stride and visit every row.
