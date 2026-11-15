@@ -17,8 +17,9 @@ comptime AFCL_APPLE_FAST = (
 
 # AFCL-T01: halve rows per quantized-histogram replica to shorten each
 # block's serial row walk; the existing occupancy floor/cap still applies.
-# NEVER RUN — PENDING MEASUREMENT; uncompiled/unverified; default OFF.
-comptime AFCL_T01 = AFCL_APPLE_FAST and is_defined["MOJOLEARN_AFCL_T01"]()
+# TOMBSTONE: MOJOLEARN_AFCL_T01 (DELETE-EXPERIMENT, never-run Apple FAST programme card, rule g) deleted 2026-11-15 by lane/expdel2-41-trees; code recoverable at 382112ba07.
+# Restore: git apply experiments/removed/MOJOLEARN_AFCL_T01.patch; record in docs/TOMBSTONES.md.
+comptime AFCL_T01 = False
 
 # AFCL-T02: eight features use 16 KiB of histogram shared memory instead
 # of Apple's 32 KiB group, trading extra workgroups for resident capacity.
@@ -40,7 +41,7 @@ comptime AFCL_T04 = AFCL_APPLE_FAST and is_defined["MOJOLEARN_AFCL_T04"]()
 # Both arms require MOJOLEARN_SYM_RESOLVE_BLOCK and the fused search path.
 # NEVER RUN — PENDING MEASUREMENT; uncompiled/unverified; default OFF.
 comptime AFCL_T05 = AFCL_APPLE_FAST and is_defined["MOJOLEARN_AFCL_T05"]()
-comptime AFCL_RESOLVE_RECORDS = 4 if AFCL_T05 else 1
+comptime AFCL_RESOLVE_RECORDS = 1
 
 # AFCL-T06: halve hardware-derived leaf-statistic partial counts to reduce
 # scratch/fold traffic; accumulation order may move bits, not solver effort.
@@ -51,7 +52,7 @@ comptime AFCL_T06 = AFCL_APPLE_FAST and is_defined["MOJOLEARN_AFCL_T06"]()
 # eight; rows remain independent and each row visits trees in order.
 # NEVER RUN — PENDING MEASUREMENT; uncompiled/unverified; default OFF.
 comptime AFCL_T07 = AFCL_APPLE_FAST and is_defined["MOJOLEARN_AFCL_T07"]()
-comptime AFCL_PREDICT_BLOCK = 128 if AFCL_T07 else 256
+comptime AFCL_PREDICT_BLOCK = 256
 
 # AFCL-T12: four SIMD groups per CTR elementwise block rather than eight;
 # same sorted categories, prefixes, priors and output destinations.
