@@ -77,9 +77,19 @@ def fd(a: Float32, b: Float32) -> Float32:
 
 @always_inline
 def xmad(a: Float32, b: Float32, c: Float32) -> Float32:
-    """`identical_mul_add`."""
+    """`identical_mul_add`, except FAST in code compiled FOR an Apple GPU
+    with `-D MOJOLEARN_X_LINEAR_FAST_FMA=1` (lane/linear-apple3, WIP,
+    opt-in): ONE fused multiply-add instead of FAST's product and sum. A GPU
+    thread pays per instruction, and the fits' chains are one multiply-add
+    per term. FAST words change (one rounding per term, IDENTICAL's);
+    IDENTICAL takes the first branch of `identical_mul_add` as before."""
+    comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL and is_apple_gpu() and is_defined["MOJOLEARN_X_LINEAR_FAST_FMA"]():
+        from std.math import fma
+
+        return fma(a, b, c)
     # TOMBSTONE: MOJOLEARN_X_LINEAR_FAST_FMA (unmeasured Apple FAST opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-21-linear; code recoverable at f19d6bd79f.
     # Restore: git apply experiments/removed/MOJOLEARN_X_LINEAR_FAST_FMA.patch; record in docs/TOMBSTONES.md.
+    # RESTORED 2026-11-15 by lane/restore-apple-fast-classical: Apple fast is paused, not abandoned (Andrew); opt-in, default off, Apple fast only.
     return identical_mul_add(a, b, c)
 
 

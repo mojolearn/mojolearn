@@ -83,6 +83,7 @@ is the one-shot form, which is what the gates and the card use.
 """
 
 # DEVIATION 2486: bulk host staging; stream/lifetime boundaries unchanged.
+from std.sys.compile import is_defined
 from core.hostptr import copy_f32
 from std.memory import bitcast
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
@@ -570,8 +571,20 @@ def _download(
             pi += 1
         _ = h^
         return packed^
+    comptime if is_defined["MOJOLEARN_GP_BULK_DOWNLOAD"]():
+        # lane neighbors-apple3, OPT-IN: one vector copy into a list of the
+        # final length, not n appends into a growing one. A copy.
+        var bulk = List[Float32](length=n, fill=Float32(0.0))
+        copy_f32(
+            rebind[MutPointer[Float32, MutUntrackedOrigin]](h.unsafe_ptr()),
+            MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(bulk.unsafe_ptr())),
+            n,
+        )
+        _ = h^
+        return bulk^
     # TOMBSTONE: MOJOLEARN_GP_BULK_DOWNLOAD (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-19-kernel; code recoverable at 476e96f77a.
     # Restore: git apply experiments/removed/MOJOLEARN_GP_BULK_DOWNLOAD.patch; record in docs/TOMBSTONES.md.
+    # RESTORED 2026-11-15 by lane/restore-apple-fast-classical: Apple fast is paused, not abandoned (Andrew); opt-in, default off, Apple fast only.
     var out = List[Float32]()
     for i in range(n):
         out.append(h.unsafe_ptr().unsafe_load(i))
