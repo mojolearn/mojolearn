@@ -7,7 +7,7 @@
 
 `ORD_ALL` is compiled only under the FAST tier on an Apple GPU; IDENTICAL
 and non-Apple FAST compile main's statements unchanged.
-`-D MOJOLEARN_ORD_ALL_OFF` compiles it out. Since 2026-10-04 it runs at
+Its rollback MOJOLEARN_ORD_ALL_OFF was deleted 2026-11-15 (docs/TOMBSTONES.md). Since 2026-10-04 it runs at
 every width; the old width gate (more than 32 features) was removed as
 benchmark-tuned (its switch MOJOLEARN_LEGACY_NARROW_ORD_ALL was deleted
 2026-11-15, docs/TOMBSTONES.md).
@@ -56,11 +56,9 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 # reused per-arm hashes/builds: ~/mojolearn-evidence/ab-overnight-20261006/
 # m3/artifacts/results/F12/ordered-storage. Keep existing default ON;
 # these public caller cases do not claim full-dataset/opponent admission.
-comptime ORD_ALL = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and TARGET_HAS_APPLE_GPU
-    and not is_defined["MOJOLEARN_ORD_ALL_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_ORD_ALL_OFF (DELETE-OLD-PATH, EXP:180: the default is the kept path, rule e) deleted 2026-11-15 by lane/expdel2-44-trees; code recoverable at 611ff32f4b.
+# Restore: git apply experiments/removed/MOJOLEARN_ORD_ALL_OFF.patch; record in docs/TOMBSTONES.md.
+comptime ORD_ALL = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
 # TOMBSTONE: MOJOLEARN_LEGACY_NARROW_ORD_ALL (DELETE-OLD-PATH, the benchmark-tuned width gate, no A/B recorded for the old path, rule b) deleted 2026-11-15 by lane/expdel2-44-trees; code recoverable at f8ce124897.
 # Restore: git apply experiments/removed/MOJOLEARN_LEGACY_NARROW_ORD_ALL.patch; record in docs/TOMBSTONES.md.
 
