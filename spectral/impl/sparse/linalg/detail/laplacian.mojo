@@ -88,7 +88,7 @@ comptime LAPLACIAN_TPB = 256
 #: lane cpu2-l9-neighbors (2026-10-04): every mode (FAST too, the same
 #: bits) and no _OFF arm (owner rule: the host preparation is not a GPU
 #: route), so `MOJOLEARN_IDN_SPECTRAL_LAP_DEVICE_OFF` is retired.
-comptime IDN_SPECTRAL_LAP_DEVICE = True
+# (Sweep 2026-11-15: comptime IDN_SPECTRAL_LAP_DEVICE removed; always True, nothing read it.)
 
 
 struct DeviceCoo(Movable):
