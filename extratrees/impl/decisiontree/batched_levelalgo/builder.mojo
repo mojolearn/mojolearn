@@ -2,12 +2,10 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """ExtraTrees host control plane and device drivers for breadth-first and best-first tree growth, implemented from pinned cuML and sklearn implementations."""
 
-from std.collections import Array
-from core.tree_math import tree_log
 from ensemble.tree_moments import balanced_mse_gain, et_leaf_moment_host
 # TOMBSTONE: MOJOLEARN_TREES_T11_LEVELS, MOJOLEARN_TREES_T14_EXACT, MOJOLEARN_TREES_T12_BYTES, MOJOLEARN_TREES_T13_BYTES (T11/T14_EXACT folded to their constants here; T12/T13 byte budgets read their default constants) deleted 2026-11-15 by lane/expdel2-40-trees; code recoverable at 6641db4b18.
 # Restore: git apply experiments/removed/MOJOLEARN_TREES_T11_LEVELS.expdel2-40-trees.patch; experiments/removed/MOJOLEARN_TREES_T14_EXACT.expdel2-40-trees.patch; experiments/removed/MOJOLEARN_TREES_T12_BYTES.expdel2-40-trees.patch; experiments/removed/MOJOLEARN_TREES_T13_BYTES.expdel2-40-trees.patch
-from ensemble.tree_identical_ideas import T06, T07, T12, T12_BYTES, T13, T13_BYTES, T14, C48
+from ensemble.tree_identical_ideas import T07, T12, T12_BYTES, T13, T13_BYTES, T14, C48
 from std.memory import bitcast, unsafe_memcpy
 
 from ensemble.instruments import StageTimes
@@ -1967,30 +1965,6 @@ def _score_to_candidate_body[WEIGHTED: Bool, WEIGHTED_REG: Bool = False](
     )
     var idx = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     var stride = Int(grid_dim.x) * Int(block_dim.x)
-    var parent_terms = Array[Float32,32](fill=Float32(0))
-    comptime if T06 and not WEIGHTED:
-        if entropy and n_classes <= 32:
-            var node = idx
-            var width = Int(columns_per_node)
-            var start = node*width
-            if start >= n_cells:
-                return
-            n_cells = min(n_cells,start+width)
-            idx = start
-            stride = 1
-            for feature in range(start,n_cells):
-                if in_status[unsafe_offset=feature] == SCORE_STATUS_SCORED:
-                    var inv_len = ftz(Float32(1)/Float32(in_n_total[unsafe_offset=feature]))
-                    for c in range(n_classes):
-                        var count = in_acc_total[unsafe_offset=feature*n_classes+c]
-                        if count != 0:
-                            var value = ftz(Float32(count)*inv_len)
-                            var term = ftz(value*tree_log(value))
-                            parent_terms[c] = ftz(term/tree_log(Float32(2)))
-                    break
-    # T06 preserves the same class fold and exact parent statements; only the
-    # per-node transform lifetime changes. Cached terms are never weighted.
-    # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
     while idx < n_cells:
         if in_status[unsafe_offset=idx] == SCORE_STATUS_SCORED:
             cand_quesval[unsafe_offset=idx] = in_threshold[unsafe_offset=idx]
@@ -2019,17 +1993,8 @@ def _score_to_candidate_body[WEIGHTED: Bool, WEIGHTED_REG: Bool = False](
                 g_ncls = 1
             if entropy:
                 # DEVIATION 459: the float gain is the metric AND the key.
-                var g = Float32(0)
-                if T06 and not WEIGHTED and n_classes <= 32:
-                    var objective = EntropyObjectiveFunction[DType.float32](Int32(n_classes),min_samples_leaf)
-                    g = objective.GainPerSplitCached(
-                        in_acc_left.unsafe_offset(idx*n_classes).unsafe_bitcast[CountBin](),
-                        in_acc_total.unsafe_offset(idx*n_classes).unsafe_bitcast[CountBin](),
-                        in_n_total[unsafe_offset=idx],in_n_left[unsafe_offset=idx],parent_terms,
-                    )
-                else:
-                    g = entropy_gain_per_split(in_acc_left,in_acc_total,idx*n_classes,n_classes,
-                        g_len,g_left,g_msl)
+                var g = entropy_gain_per_split(in_acc_left,in_acc_total,idx*n_classes,n_classes,
+                    g_len,g_left,g_msl)
                 cand_metric[unsafe_offset=idx] = g
                 cand_num[unsafe_offset=idx] = float_gain_key(g)
                 cand_den[unsafe_offset=idx] = Int64(1)

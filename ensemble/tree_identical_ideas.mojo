@@ -31,7 +31,7 @@ stays as its default constant so importers fold their dead arms.
 # Restore: git apply experiments/removed/MOJOLEARN_TREES_T05_ROW_VISITS.patch
 # TOMBSTONE: MOJOLEARN_TREES_T06 (unmeasured arm) deleted 2026-11-15 by expdel2-39-trees; code recoverable at the deletion commit^.
 # Restore: git apply experiments/removed/MOJOLEARN_TREES_T06.patch
-comptime T06 = False
+# (Sweep 2026-11-15: T06 removed; cached-entropy readers and helpers folded.)
 # TOMBSTONE: MOJOLEARN_TREES_T07 (unmeasured arm) deleted 2026-11-15 by expdel2-39-trees; code recoverable at the deletion commit^.
 # Restore: git apply experiments/removed/MOJOLEARN_TREES_T07.patch
 comptime T07 = False
