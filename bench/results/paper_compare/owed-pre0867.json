@@ -252,6 +252,10 @@
   "lg-block-scratch-fill": {
    "define": "MOJOLEARN_TREES_BLOCK_SCRATCH_FILL_OFF",
    "status": "define in code (gbdt/methods/greedy_subsets_searcher/greedy_search_helper.mojo BLOCK_SCRATCH_FILL_OFF, launch_histograms_for_blocks): B = the whole-buffer zero of block_hist (pool slots x stat_count x widest block folds) at every non-fixed-point block of every histogram build; A = the zero of the block's own span max_leaves x stat_count x total_folds"
+  },
+  "neural-native-dispatch-off": {
+   "define": "MOJOLEARN_NEURAL_NATIVE_DISPATCH_OFF",
+   "status": "define in code (providers/python/neural_descriptor_pyapi_door.mojo NEURAL_NATIVE_DISPATCH, read by bindings/mamba_public_native_door.mojo, bindings/neural_block_public_door.mojo, bindings/causal_lm_construct_door.mojo, bindings/causal_lm_public_door.mojo, providers/python/transformer_decode_pyapi_door.mojo): B = every neural door finds each compiled entry by name and calls it through CPython per token / layer / call (the former MOJOLEARN_NEURAL_NATIVE_DISPATCH=0 environment default of every door but CausalLM); A = the native descriptor tables connected once at construction (the former =1). Same numerical functions and words: digests must not move."
   }
  },
  "rows": [
@@ -1566,6 +1570,162 @@
     "lg-block-scratch-fill"
    ],
    "decides": "same verdict as lg-block-scratch-fill on a shape no board row has; digests must not move"
+  },
+  {
+   "id": "neural-native-dispatch-off-mamba1-forward",
+   "source": "lane flag-native-dispatch-gate (2026-11-15): the run-time MOJOLEARN_NEURAL_NATIVE_DISPATCH gate (c295db1c56, default \"0\" in every door but CausalLM) became the build constant NEURAL_NATIVE_DISPATCH, default on; same-box pc-fcc934a37cd4-nvidia rows slower than 0.8.55 on these lanes",
+   "kind": "ab",
+   "lane": "mamba1-forward",
+   "dataset": "*",
+   "rows": "full",
+   "vendor": "nvidia",
+   "b_arms": [
+    "neural-native-dispatch-off"
+   ],
+   "decides": "keep native dispatch (A) unless the by-name CPython arm (B) is at least as fast; digests must not move; read each arm's neural_route (tools/bench_board_neural.py: *_provider_cache_connected / native_primitives_connected True on A, False on B) to prove which arm ran"
+  },
+  {
+   "id": "neural-native-dispatch-off-mamba2-forward",
+   "source": "lane flag-native-dispatch-gate (2026-11-15): the run-time MOJOLEARN_NEURAL_NATIVE_DISPATCH gate (c295db1c56, default \"0\" in every door but CausalLM) became the build constant NEURAL_NATIVE_DISPATCH, default on; same-box pc-fcc934a37cd4-nvidia rows slower than 0.8.55 on these lanes",
+   "kind": "ab",
+   "lane": "mamba2-forward",
+   "dataset": "*",
+   "rows": "full",
+   "vendor": "nvidia",
+   "b_arms": [
+    "neural-native-dispatch-off"
+   ],
+   "decides": "keep native dispatch (A) unless the by-name CPython arm (B) is at least as fast; digests must not move; read each arm's neural_route (tools/bench_board_neural.py: *_provider_cache_connected / native_primitives_connected True on A, False on B) to prove which arm ran"
+  },
+  {
+   "id": "neural-native-dispatch-off-mamba3-forward",
+   "source": "lane flag-native-dispatch-gate (2026-11-15): the run-time MOJOLEARN_NEURAL_NATIVE_DISPATCH gate (c295db1c56, default \"0\" in every door but CausalLM) became the build constant NEURAL_NATIVE_DISPATCH, default on; same-box pc-fcc934a37cd4-nvidia rows slower than 0.8.55 on these lanes",
+   "kind": "ab",
+   "lane": "mamba3-forward",
+   "dataset": "*",
+   "rows": "full",
+   "vendor": "nvidia",
+   "b_arms": [
+    "neural-native-dispatch-off"
+   ],
+   "decides": "keep native dispatch (A) unless the by-name CPython arm (B) is at least as fast; digests must not move; read each arm's neural_route (tools/bench_board_neural.py: *_provider_cache_connected / native_primitives_connected True on A, False on B) to prove which arm ran"
+  },
+  {
+   "id": "neural-native-dispatch-off-mamba1-decode",
+   "source": "lane flag-native-dispatch-gate (2026-11-15): the run-time MOJOLEARN_NEURAL_NATIVE_DISPATCH gate (c295db1c56, default \"0\" in every door but CausalLM) became the build constant NEURAL_NATIVE_DISPATCH, default on; same-box pc-fcc934a37cd4-nvidia rows slower than 0.8.55 on these lanes",
+   "kind": "ab",
+   "lane": "mamba1-decode",
+   "dataset": "*",
+   "rows": "full",
+   "vendor": "nvidia",
+   "b_arms": [
+    "neural-native-dispatch-off"
+   ],
+   "decides": "keep native dispatch (A) unless the by-name CPython arm (B) is at least as fast; digests must not move; read each arm's neural_route (tools/bench_board_neural.py: *_provider_cache_connected / native_primitives_connected True on A, False on B) to prove which arm ran"
+  },
+  {
+   "id": "neural-native-dispatch-off-mamba2-decode",
+   "source": "lane flag-native-dispatch-gate (2026-11-15): the run-time MOJOLEARN_NEURAL_NATIVE_DISPATCH gate (c295db1c56, default \"0\" in every door but CausalLM) became the build constant NEURAL_NATIVE_DISPATCH, default on; same-box pc-fcc934a37cd4-nvidia rows slower than 0.8.55 on these lanes",
+   "kind": "ab",
+   "lane": "mamba2-decode",
+   "dataset": "*",
+   "rows": "full",
+   "vendor": "nvidia",
+   "b_arms": [
+    "neural-native-dispatch-off"
+   ],
+   "decides": "keep native dispatch (A) unless the by-name CPython arm (B) is at least as fast; digests must not move; read each arm's neural_route (tools/bench_board_neural.py: *_provider_cache_connected / native_primitives_connected True on A, False on B) to prove which arm ran"
+  },
+  {
+   "id": "neural-native-dispatch-off-mamba3-decode",
+   "source": "lane flag-native-dispatch-gate (2026-11-15): the run-time MOJOLEARN_NEURAL_NATIVE_DISPATCH gate (c295db1c56, default \"0\" in every door but CausalLM) became the build constant NEURAL_NATIVE_DISPATCH, default on; same-box pc-fcc934a37cd4-nvidia rows slower than 0.8.55 on these lanes",
+   "kind": "ab",
+   "lane": "mamba3-decode",
+   "dataset": "*",
+   "rows": "full",
+   "vendor": "nvidia",
+   "b_arms": [
+    "neural-native-dispatch-off"
+   ],
+   "decides": "keep native dispatch (A) unless the by-name CPython arm (B) is at least as fast; digests must not move; read each arm's neural_route (tools/bench_board_neural.py: *_provider_cache_connected / native_primitives_connected True on A, False on B) to prove which arm ran"
+  },
+  {
+   "id": "neural-native-dispatch-off-samba-forward",
+   "source": "lane flag-native-dispatch-gate (2026-11-15): the run-time MOJOLEARN_NEURAL_NATIVE_DISPATCH gate (c295db1c56, default \"0\" in every door but CausalLM) became the build constant NEURAL_NATIVE_DISPATCH, default on; same-box pc-fcc934a37cd4-nvidia rows slower than 0.8.55 on these lanes",
+   "kind": "ab",
+   "lane": "samba-forward",
+   "dataset": "*",
+   "rows": "full",
+   "vendor": "nvidia",
+   "b_arms": [
+    "neural-native-dispatch-off"
+   ],
+   "decides": "keep native dispatch (A) unless the by-name CPython arm (B) is at least as fast; digests must not move; read each arm's neural_route (tools/bench_board_neural.py: *_provider_cache_connected / native_primitives_connected True on A, False on B) to prove which arm ran"
+  },
+  {
+   "id": "neural-native-dispatch-off-samba-train-step",
+   "source": "lane flag-native-dispatch-gate (2026-11-15): the run-time MOJOLEARN_NEURAL_NATIVE_DISPATCH gate (c295db1c56, default \"0\" in every door but CausalLM) became the build constant NEURAL_NATIVE_DISPATCH, default on; same-box pc-fcc934a37cd4-nvidia rows slower than 0.8.55 on these lanes",
+   "kind": "ab",
+   "lane": "samba-train-step",
+   "dataset": "*",
+   "rows": "full",
+   "vendor": "nvidia",
+   "b_arms": [
+    "neural-native-dispatch-off"
+   ],
+   "decides": "keep native dispatch (A) unless the by-name CPython arm (B) is at least as fast; digests must not move; read each arm's neural_route (tools/bench_board_neural.py: *_provider_cache_connected / native_primitives_connected True on A, False on B) to prove which arm ran"
+  },
+  {
+   "id": "neural-native-dispatch-off-samba-decode",
+   "source": "lane flag-native-dispatch-gate (2026-11-15): the run-time MOJOLEARN_NEURAL_NATIVE_DISPATCH gate (c295db1c56, default \"0\" in every door but CausalLM) became the build constant NEURAL_NATIVE_DISPATCH, default on; same-box pc-fcc934a37cd4-nvidia rows slower than 0.8.55 on these lanes",
+   "kind": "ab",
+   "lane": "samba-decode",
+   "dataset": "*",
+   "rows": "full",
+   "vendor": "nvidia",
+   "b_arms": [
+    "neural-native-dispatch-off"
+   ],
+   "decides": "keep native dispatch (A) unless the by-name CPython arm (B) is at least as fast; digests must not move; read each arm's neural_route (tools/bench_board_neural.py: *_provider_cache_connected / native_primitives_connected True on A, False on B) to prove which arm ran"
+  },
+  {
+   "id": "neural-native-dispatch-off-transformer-forward",
+   "source": "lane flag-native-dispatch-gate (2026-11-15): the run-time MOJOLEARN_NEURAL_NATIVE_DISPATCH gate (c295db1c56, default \"0\" in every door but CausalLM) became the build constant NEURAL_NATIVE_DISPATCH, default on; same-box pc-fcc934a37cd4-nvidia rows slower than 0.8.55 on these lanes",
+   "kind": "ab",
+   "lane": "transformer-forward",
+   "dataset": "*",
+   "rows": "full",
+   "vendor": "nvidia",
+   "b_arms": [
+    "neural-native-dispatch-off"
+   ],
+   "decides": "keep native dispatch (A) unless the by-name CPython arm (B) is at least as fast; digests must not move; read each arm's neural_route (tools/bench_board_neural.py: *_provider_cache_connected / native_primitives_connected True on A, False on B) to prove which arm ran"
+  },
+  {
+   "id": "neural-native-dispatch-off-transformer-decode",
+   "source": "lane flag-native-dispatch-gate (2026-11-15): the run-time MOJOLEARN_NEURAL_NATIVE_DISPATCH gate (c295db1c56, default \"0\" in every door but CausalLM) became the build constant NEURAL_NATIVE_DISPATCH, default on; same-box pc-fcc934a37cd4-nvidia rows slower than 0.8.55 on these lanes",
+   "kind": "ab",
+   "lane": "transformer-decode",
+   "dataset": "*",
+   "rows": "full",
+   "vendor": "nvidia",
+   "b_arms": [
+    "neural-native-dispatch-off"
+   ],
+   "decides": "keep native dispatch (A) unless the by-name CPython arm (B) is at least as fast; digests must not move; read each arm's neural_route (tools/bench_board_neural.py: *_provider_cache_connected / native_primitives_connected True on A, False on B) to prove which arm ran"
+  },
+  {
+   "id": "neural-native-dispatch-off-causal-lm-generate",
+   "source": "lane flag-native-dispatch-gate (2026-11-15): the run-time MOJOLEARN_NEURAL_NATIVE_DISPATCH gate (c295db1c56, default \"0\" in every door but CausalLM) became the build constant NEURAL_NATIVE_DISPATCH, default on; same-box pc-fcc934a37cd4-nvidia rows slower than 0.8.55 on these lanes",
+   "kind": "ab",
+   "lane": "causal-lm-generate",
+   "dataset": "*",
+   "rows": "full",
+   "vendor": "nvidia",
+   "b_arms": [
+    "neural-native-dispatch-off"
+   ],
+   "decides": "keep native dispatch (A) unless the by-name CPython arm (B) is at least as fast; digests must not move; read each arm's neural_route (tools/bench_board_neural.py: *_provider_cache_connected / native_primitives_connected True on A, False on B) to prove which arm ran"
   }
  ]
 }
