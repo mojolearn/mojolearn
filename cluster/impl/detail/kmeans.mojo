@@ -170,15 +170,12 @@ comptime KMEANS_BLOCK_ACC = TARGET_COLUMN == COLUMN_NVIDIA or IDN_KMEANS_BLOCK_A
 #: fam-cluster (2026-10-04), IDENTICAL, with the row-block accumulator: the
 #: fold of the block tables STORES each output cell instead of adding into a
 #: buffer zeroed by two extra launches per Lloyd iteration. `0 + total` is
-#: `total` in Int32, so no bit moves. `-D MOJOLEARN_IDN_KMEANS_FOLD_STORE_OFF=1`
-#: restores the two zero launches and the adding fold.
+#: `total` in Int32, so no bit moves.
 # TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch, EXP:2438 DELETED; non-owner sites) deleted 2026-11-15 by lane/expdel2-10-cluster; code recoverable at 75ea427c34.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-10-cluster.patch; record in docs/TOMBSTONES.md.
-comptime IDN_KMEANS_FOLD_STORE = (
-    KMEANS_BLOCK_ACC
-    and GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not is_defined["MOJOLEARN_IDN_KMEANS_FOLD_STORE_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_IDN_KMEANS_FOLD_STORE_OFF (old path, no A/B row) deleted 2026-11-15 by lane/expdel2-10-cluster; code recoverable at dc02ea5629.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_KMEANS_FOLD_STORE_OFF.patch; record in docs/TOMBSTONES.md.
+comptime IDN_KMEANS_FOLD_STORE = KMEANS_BLOCK_ACC and GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 #: fam2-cluster (2026-10-04), IDENTICAL, with the row-block accumulator: THE
 #: STOPPING RULE ON THE DEVICE. The Lloyd loop no longer drains once per
 #: iteration to read the shift scalar. The executor loop's criterion op
