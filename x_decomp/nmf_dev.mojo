@@ -17,13 +17,12 @@ NMF_CD_LOOP_CHUNK. Before, MU read 1-3 error words home per 10 iterations and
 CD 1-2 violation words per iteration."""
 # TOMBSTONE: nmf-mu-cd-host-word-loops (REFACTORED onto autograd/program_loop_device.mojo) deleted 2026-11-09 by lane/n4-mds-labelprop-nmf-loops; code recoverable at f59d913b0b.
 # Restore: git apply -3 experiments/removed/N4_MDS_LABELPROP_NMF_HOST_LOOPS.patch; record in docs/TOMBSTONES.md.
-from experiments.classical_identical_ideas.linear_controls import C26_UPDATE_FUSED
 from max.gpu import block_idx, thread_idx
 from max.gpu.host import DeviceContext
 from autograd.program_loop import LoopTimers
 from autograd.program_loop_device import LoopRegisters, LoopStep, bounded_device_loop, loop_lap
 from core.step_gate import STEP_DONE, STEP_FAIL, STEP_ITER, STEP_STOP_ITER
-from x_decomp.cells import F32Ptr, I32Ptr, OP_CLASSICAL_MU_IS, add
+from x_decomp.cells import F32Ptr, I32Ptr, add
 from x_decomp.device import xd_ctx
 from x_decomp.kit import (
     Mat, OP_ABS, OP_ADD, OP_ADDS, OP_AXPY, OP_DIV, OP_GTS, OP_LOGS, OP_MAXS, OP_MUL, OP_MUZ, OP_RECIP,
@@ -218,16 +217,13 @@ struct _MuStep(LoopStep, Movable):
                 den = self.k.ew1(OP_ADDS, den, self.a.l1w)
             if self.a.l2w > 0:
                 den = self.k.ew2s(OP_AXPY, den, self.W, self.a.l2w)
-            comptime if C26_UPDATE_FUSED:
-                self.k.put_gated(
-                    gate, self.W, self.k.ew3(OP_CLASSICAL_MU_IS if beta == 0.0 else OP_MUZ, self.W, num, den, NMF_F32_EPS)
-                )
-            else:
-                den = self.k.ew3(OP_SELECT, self.k.ew1(OP_ABS, den, 0.0), den, self.eps, 0.0)
-                var delta = self.k.ew2(OP_DIV, num, den)
-                if beta == 0.0:
-                    delta = self.k.ew1(OP_SQRT, delta, 0.0)
-                self.k.put_gated(gate, self.W, self.k.ew2(OP_MUL, self.W, delta))
+            # TOMBSTONE: MOJOLEARN_CLASSICAL_C26_UPDATE_FUSED (its use here: the fused multiplicative update cell) deleted 2026-11-15 by lane/expdel2-17-decomposition (owner lane/expdel2-06-base); code recoverable at 9eacb23639.
+            # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C26_UPDATE_FUSED.expdel2-17-decomposition.patch.
+            den = self.k.ew3(OP_SELECT, self.k.ew1(OP_ABS, den, 0.0), den, self.eps, 0.0)
+            var delta = self.k.ew2(OP_DIV, num, den)
+            if beta == 0.0:
+                delta = self.k.ew1(OP_SQRT, delta, 0.0)
+            self.k.put_gated(gate, self.W, self.k.ew2(OP_MUL, self.W, delta))
             if self.a.update_h:
                 R = _mu_ratio_dev(self.k, self.M, self.W, self.H, beta, P)
                 num = self.k.mm(self.W, R, True, False)
@@ -241,17 +237,11 @@ struct _MuStep(LoopStep, Movable):
                     den = self.k.ew1(OP_ADDS, den, self.a.l1h)
                 if self.a.l2h > 0:
                     den = self.k.ew2s(OP_AXPY, den, self.H, self.a.l2h)
-                comptime if C26_UPDATE_FUSED:
-                    self.k.put_gated(
-                        gate, self.H,
-                        self.k.ew3(OP_CLASSICAL_MU_IS if beta == 0.0 else OP_MUZ, self.H, num, den, NMF_F32_EPS),
-                    )
-                else:
-                    den = self.k.ew3(OP_SELECT, self.k.ew1(OP_ABS, den, 0.0), den, self.eps, 0.0)
-                    var delta = self.k.ew2(OP_DIV, num, den)
-                    if beta == 0.0:
-                        delta = self.k.ew1(OP_SQRT, delta, 0.0)
-                    self.k.put_gated(gate, self.H, self.k.ew2(OP_MUL, self.H, delta))
+                den = self.k.ew3(OP_SELECT, self.k.ew1(OP_ABS, den, 0.0), den, self.eps, 0.0)
+                var delta = self.k.ew2(OP_DIV, num, den)
+                if beta == 0.0:
+                    delta = self.k.ew1(OP_SQRT, delta, 0.0)
+                self.k.put_gated(gate, self.H, self.k.ew2(OP_MUL, self.H, delta))
         loop_lap(ctx, timers, "mu_update")
         if self.a.tol > 0 and it % NMF_MU_CHECK_PERIOD == 0:
             self.criterion(registers, it)

@@ -16,8 +16,7 @@ matrices.
 
 A zero first error (`err0`) made Python's convergence ratio raise
 ZeroDivisionError; the drivers return NMF_ZERO_ERR0 and the caller raises it."""
-from experiments.classical_identical_ideas.linear_controls import C26_UPDATE_FUSED
-from x_decomp.cells import F32Ptr, OP_CLASSICAL_MU_IS, add, div0, mul, sqrt0, sub
+from x_decomp.cells import F32Ptr, add, div0, mul, sqrt0, sub
 from std.math import sqrt
 from x_decomp.exec_trait import Exec
 from x_decomp.kit import (
@@ -182,14 +181,13 @@ def nmf_mu[E: Exec](M: Mat, mut W: Mat, mut H: Mat, a: NmfArgs) raises -> Int:
                 den = k.ew1(OP_ADDS, den, a.l1w)
             if a.l2w > 0:
                 den = k.ew2s(OP_AXPY, den, W, a.l2w)
-            comptime if C26_UPDATE_FUSED:
-                W = k.ew3(OP_CLASSICAL_MU_IS if beta == 0.0 else OP_MUZ, W, num, den, NMF_F32_EPS)
-            else:
-                den = k.ew3(OP_SELECT, k.ew1(OP_ABS, den, 0.0), den, eps, 0.0)
-                var delta = k.ew2(OP_DIV, num, den)
-                if beta == 0.0:
-                    delta = k.ew1(OP_SQRT, delta, 0.0)
-                W = k.ew2(OP_MUL, W, delta)
+            # TOMBSTONE: MOJOLEARN_CLASSICAL_C26_UPDATE_FUSED (its use here: the fused multiplicative update cell) deleted 2026-11-15 by lane/expdel2-17-decomposition (owner lane/expdel2-06-base); code recoverable at 9eacb23639.
+            # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C26_UPDATE_FUSED.expdel2-17-decomposition.patch.
+            den = k.ew3(OP_SELECT, k.ew1(OP_ABS, den, 0.0), den, eps, 0.0)
+            var delta = k.ew2(OP_DIV, num, den)
+            if beta == 0.0:
+                delta = k.ew1(OP_SQRT, delta, 0.0)
+            W = k.ew2(OP_MUL, W, delta)
             if a.update_h:
                 R = _mu_ratio(k, M, W, H, beta, P)
                 num = k.mm(W, R, True, False)
@@ -203,14 +201,11 @@ def nmf_mu[E: Exec](M: Mat, mut W: Mat, mut H: Mat, a: NmfArgs) raises -> Int:
                     den = k.ew1(OP_ADDS, den, a.l1h)
                 if a.l2h > 0:
                     den = k.ew2s(OP_AXPY, den, H, a.l2h)
-                comptime if C26_UPDATE_FUSED:
-                    H = k.ew3(OP_CLASSICAL_MU_IS if beta == 0.0 else OP_MUZ, H, num, den, NMF_F32_EPS)
-                else:
-                    den = k.ew3(OP_SELECT, k.ew1(OP_ABS, den, 0.0), den, eps, 0.0)
-                    var delta = k.ew2(OP_DIV, num, den)
-                    if beta == 0.0:
-                        delta = k.ew1(OP_SQRT, delta, 0.0)
-                    H = k.ew2(OP_MUL, H, delta)
+                den = k.ew3(OP_SELECT, k.ew1(OP_ABS, den, 0.0), den, eps, 0.0)
+                var delta = k.ew2(OP_DIV, num, den)
+                if beta == 0.0:
+                    delta = k.ew1(OP_SQRT, delta, 0.0)
+                H = k.ew2(OP_MUL, H, delta)
         if a.tol > 0 and i % 10 == 0:
             var err = nmf_err(k, M, W, H, beta)
             if err0 == Float32(0):
