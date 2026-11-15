@@ -23,26 +23,6 @@
    "status": "kept",
    "note": "256-lane fixed halving tree, two streams per barrier; StandardScaler mean pass only (finite input)."
   },
-  "c58_series4": {
-   "define": "MOJOLEARN_C58_SERIES4",
-   "kind": "switch",
-   "arms": {
-    "off": [],
-    "on": [
-     "MOJOLEARN_C58_SERIES4"
-    ]
-   },
-   "default": "off",
-   "source": [
-    "holtwinters/impl/internal/hw_estimate.mojo:703",
-    "holtwinters/impl/internal/hw_estimate_launch.mojo:126"
-   ],
-   "binding": "_mojolearn_tsa",
-   "bits_change": false,
-   "status": "kept",
-   "grid": "exclude",
-   "note": "UNREACHED on the board: serial estimate arm only (frequency + 5 > HW_EST_BLOCK=64); board ets uses seasonal_periods=24."
-  },
   "c58_team_mib": {
    "define": "MOJOLEARN_C58_TEAM_MIB",
    "kind": "int_sweep",
@@ -477,6 +457,11 @@
    "define": "MOJOLEARN_C52_PAIR_ROWS",
    "control": "c52_pair_rows",
    "reason": "DELETED 2026-11-15 (lane/expdel2-07-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md; recoverable at dd94b7ad88; patch experiments/removed/MOJOLEARN_C52_PAIR_ROWS.patch): unmeasured opt-in arm. no record: no A/B was recorded for the opt-in arm (plan rule a; AGENTS.md \"An unmeasured arm is deleted\", Andrew 2026-11-15). Refused in core/experiment_guards_kernel.mojo; docs/TOMBSTONES.md."
+  },
+  {
+   "define": "MOJOLEARN_C58_SERIES4",
+   "control": "c58_series4",
+   "reason": "DELETED 2026-11-15 (lane/expdel2-07-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md; recoverable at 236e97faa2; patch experiments/removed/MOJOLEARN_C58_SERIES4.patch): unmeasured opt-in arm. no record: no A/B was recorded for the opt-in arm (plan rule a; AGENTS.md \"An unmeasured arm is deleted\", Andrew 2026-11-15). Refused in core/experiment_guards_series.mojo; docs/TOMBSTONES.md."
   }
  ],
  "owed_removal_ab": [

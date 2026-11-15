@@ -55,6 +55,8 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_TSA_FAST_SELD_FUSED_OFF"](), "removed 2026-11-15 (lane/expdel-02-decomposition-series): TSA_FAST_SELD_FUSED_OFF (FAST+Apple rollback to the per-round select_d launches) is gone; select_d as one launch per batch is the FAST+Apple path (select-d taxi-hourly 8.5 -> 2.0 ms, synthetic 8.0 -> 2.2 ms, KEPT 6c0ba4379); restore: experiments/removed/MOJOLEARN_TSA_FAST_SELD_FUSED_OFF.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C11_DRAW_GATHER.patch
     comptime assert not is_defined["MOJOLEARN_CLASSICAL_C11_DRAW_GATHER"](), "removed 2026-11-15 (lane/expdel2-07-base): CLASSICAL_C11_DRAW_GATHER (Resample (bootstrap draw gather, IDENTICAL)) was unmeasured opt-in arm; the opt-in arm is gone and the default path is unchanged; code recoverable at bfc7696dd0; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_C58_SERIES4.patch
+    comptime assert not is_defined["MOJOLEARN_C58_SERIES4"](), "removed 2026-11-15 (lane/expdel2-07-base): C58_SERIES4 (Time series (Holt-Winters four series per thread, IDENTICAL)) was unmeasured opt-in arm; the opt-in arm is gone and the default path is unchanged; code recoverable at 236e97faa2; see docs/TOMBSTONES.md"
     return True
 
 
