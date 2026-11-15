@@ -57,7 +57,7 @@ from x_neighbors.nan_cells_device import (
 )
 from x_neighbors.graph_dev import pr_iterate_gpu
 from x_neighbors.items import FP, IP, absdiff_sum_item, xn_fold_blocks, _sub, _add, knn_sq_item, knn_impute_finish
-from x_neighbors.items import XN_IMPUTE_TIE_MEAN, knn_impute_tie_mean_item
+from x_neighbors.items import knn_impute_tie_mean_item
 from x_neighbors.items import XN_TREE, xn_tree_slot
 from checks.numerics import identical_mul, identical_div, identical_sqrt
 from std.memory import bitcast as _bc
@@ -1259,13 +1259,14 @@ def op_knn_impute_tiled(
             d_res.unsafe_ptr(), Int64(n), Int64(m), Int64(d), Int64(k), Int64(weights), Int64(nc),
             grid_dim=(nc + IMP_TPB - 1) // IMP_TPB, block_dim=IMP_TPB,
         )
-    comptime if XN_IMPUTE_TIE_MEAN:
-        if weights == 0:
-            ctx.enqueue_function[knn_impute_tie_mean_kernel](
-                d_cells.unsafe_ptr(), d_x.unsafe_ptr(), d_fx.unsafe_ptr(), d_bd.unsafe_ptr(), d_bi.unsafe_ptr(),
-                d_res.unsafe_ptr(), Int64(m), Int64(d), Int64(k), Int64(nc),
-                grid_dim=(nc + IMP_TPB - 1) // IMP_TPB, block_dim=IMP_TPB,
-            )
+    # TOMBSTONE: MOJOLEARN_XN_FAST_IMPUTE_TIE_MEAN_OFF (old path: the lower-index tie rule of KNNImputer; EXP:2125 A/B owed, never run) deleted 2026-11-15 by lane/expdel2-15-cluster; code recoverable at ac1f01c0f3.
+    # Restore: git apply experiments/removed/MOJOLEARN_XN_FAST_IMPUTE_TIE_MEAN_OFF.patch; record in docs/TOMBSTONES.md.
+    if weights == 0:
+        ctx.enqueue_function[knn_impute_tie_mean_kernel](
+            d_cells.unsafe_ptr(), d_x.unsafe_ptr(), d_fx.unsafe_ptr(), d_bd.unsafe_ptr(), d_bi.unsafe_ptr(),
+            d_res.unsafe_ptr(), Int64(m), Int64(d), Int64(k), Int64(nc),
+            grid_dim=(nc + IMP_TPB - 1) // IMP_TPB, block_dim=IMP_TPB,
+        )
     _down(ctx, d_res, res, n * d)
     ctx.synchronize()
     _ = d_cells^
@@ -1277,8 +1278,8 @@ def op_knn_impute_tiled(
     _ = ctx^
 
 
-# KNNImputer's tie mean: the rule, its history and the define are at
-# `XN_IMPUTE_TIE_MEAN` in x_neighbors/items.mojo (every mode and vendor and
+# KNNImputer's tie mean: the rule and its history are at
+# `knn_impute_tie_mean_item` in x_neighbors/items.mojo (every mode and vendor and
 # the host column since lane quality-fix-identical, 2026-10-15). This kernel
 # runs `knn_impute_tie_mean_item`'s statements with the fit rows staged per
 # block (d <= IMP_MAX_D); `knn_impute_tie_mean_cells_kernel` runs the item
@@ -1744,19 +1745,20 @@ def _op_knn_impute_rows(
         Int64(m), Int64(d), Int64(k), Int64(weights),
         grid_dim=(max_rows + IMR_G - 1) // IMR_G, block_dim=IMR_TPB,
     )
-    comptime if XN_IMPUTE_TIE_MEAN:
-        if weights == 0 and d <= IMP_MAX_D:
-            ctx.enqueue_function[knn_impute_tie_mean_kernel](
-                d_cells.unsafe_ptr(), d_x.unsafe_ptr(), d_fx.unsafe_ptr(), d_bd.unsafe_ptr(), d_bi.unsafe_ptr(),
-                d_res.unsafe_ptr(), Int64(m), Int64(d), Int64(k), Int64(nc),
-                grid_dim=(nc + IMP_TPB - 1) // IMP_TPB, block_dim=IMP_TPB,
-            )
-        elif weights == 0:
-            ctx.enqueue_function[knn_impute_tie_mean_cells_kernel](
-                d_cells.unsafe_ptr(), d_x.unsafe_ptr(), d_fx.unsafe_ptr(), d_bd.unsafe_ptr(), d_bi.unsafe_ptr(),
-                d_res.unsafe_ptr(), Int64(m), Int64(d), Int64(k), Int64(nc),
-                grid_dim=(nc + IMP_TPB - 1) // IMP_TPB, block_dim=IMP_TPB,
-            )
+    # TOMBSTONE: MOJOLEARN_XN_FAST_IMPUTE_TIE_MEAN_OFF (old path: the lower-index tie rule of KNNImputer; EXP:2125 A/B owed, never run) deleted 2026-11-15 by lane/expdel2-15-cluster; code recoverable at ac1f01c0f3.
+    # Restore: git apply experiments/removed/MOJOLEARN_XN_FAST_IMPUTE_TIE_MEAN_OFF.patch; record in docs/TOMBSTONES.md.
+    if weights == 0 and d <= IMP_MAX_D:
+        ctx.enqueue_function[knn_impute_tie_mean_kernel](
+            d_cells.unsafe_ptr(), d_x.unsafe_ptr(), d_fx.unsafe_ptr(), d_bd.unsafe_ptr(), d_bi.unsafe_ptr(),
+            d_res.unsafe_ptr(), Int64(m), Int64(d), Int64(k), Int64(nc),
+            grid_dim=(nc + IMP_TPB - 1) // IMP_TPB, block_dim=IMP_TPB,
+        )
+    elif weights == 0:
+        ctx.enqueue_function[knn_impute_tie_mean_cells_kernel](
+            d_cells.unsafe_ptr(), d_x.unsafe_ptr(), d_fx.unsafe_ptr(), d_bd.unsafe_ptr(), d_bi.unsafe_ptr(),
+            d_res.unsafe_ptr(), Int64(m), Int64(d), Int64(k), Int64(nc),
+            grid_dim=(nc + IMP_TPB - 1) // IMP_TPB, block_dim=IMP_TPB,
+        )
     _down(ctx, d_res, res, n * d)
     ctx.synchronize()
     _ = d_cells^

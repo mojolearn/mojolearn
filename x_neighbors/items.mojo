@@ -1309,9 +1309,8 @@ def row_all_zero_item(t: Int, a: IP, res: IP, n: Int, m: Int):
 # `knn_impute_tie_mean_cells_kernel` in iter_device.mojo run these same
 # statements). Distance weights keep the scan's result. Bits change for
 # uniform KNNImputer cells with a tie at D_k, on every column together.
-# -D MOJOLEARN_XN_FAST_IMPUTE_TIE_MEAN_OFF (A arm) restores the lower-index
-# rule in every mode.
-comptime XN_IMPUTE_TIE_MEAN = not is_defined["MOJOLEARN_XN_FAST_IMPUTE_TIE_MEAN_OFF"]()
+# TOMBSTONE: MOJOLEARN_XN_FAST_IMPUTE_TIE_MEAN_OFF (old path: the lower-index tie rule of KNNImputer; EXP:2125 A/B owed, never run) deleted 2026-11-15 by lane/expdel2-15-cluster; code recoverable at ac1f01c0f3.
+# Restore: git apply experiments/removed/MOJOLEARN_XN_FAST_IMPUTE_TIE_MEAN_OFF.patch; record in docs/TOMBSTONES.md.
 
 
 @always_inline
@@ -1455,9 +1454,10 @@ def knn_impute_item(
         bd.unsafe_store(s, dist)
         bi.unsafe_store(s, Int32(j))
     knn_impute_finish(t, fx, bd, bi, res, m, d, k, weights, n_donors)
-    comptime if XN_IMPUTE_TIE_MEAN:
-        if weights == 0:
-            knn_impute_tie_mean_item(t, x, fx, best_d, best_i, res, m, d, k)
+    # TOMBSTONE: MOJOLEARN_XN_FAST_IMPUTE_TIE_MEAN_OFF (old path: the lower-index tie rule of KNNImputer; EXP:2125 A/B owed, never run) deleted 2026-11-15 by lane/expdel2-15-cluster; code recoverable at ac1f01c0f3.
+    # Restore: git apply experiments/removed/MOJOLEARN_XN_FAST_IMPUTE_TIE_MEAN_OFF.patch; record in docs/TOMBSTONES.md.
+    if weights == 0:
+        knn_impute_tie_mean_item(t, x, fx, best_d, best_i, res, m, d, k)
 
 
 def knn_impute_cell_item(
