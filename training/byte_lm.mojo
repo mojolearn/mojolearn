@@ -851,17 +851,18 @@ def _block_offsets(o: List[Int], base: Int) raises -> List[Int]:
 # Rebind from the CURRENT owner each call, including after optimizer swaps.
 # L11 (2026-10-07): NN60's arms are arms 1 and 2 of MOJOLEARN_IDN_LM_VIEWS
 # (training/neural_identical_experiments.mojo).
+# TOMBSTONE: the MOJOLEARN_IDN_ALL_OFF umbrella term (old path; owner elsewhere) removed 2026-11-15 by
+# lane/expdel2-31-neural from NN60_EMB_HEAD_VIEWS, NN60_BLOCK_VIEWS and the live-status rule; code recoverable at 8b520bf1c1.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-31-neural.patch
 comptime NN60_EMB_HEAD_VIEWS = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     and IDN_LM_VIEWS_ARM == 2
-    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 )
 # TOMBSTONE: MOJOLEARN_IDN_LM_RESIDENT_TOKENS (arms 1 NI32, 2 NN51: resident token validation of the hand training step; no reader since lane x7) deleted 2026-11-09 by lane x7b-step-ops-host-arm; code recoverable at the deletion commit's parent.
 # Restore: git apply experiments/removed/BYTE_LM_X7_LEFTOVERS.patch
 comptime NN60_BLOCK_VIEWS = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     and IDN_LM_VIEWS_ARM == 1
-    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 )
 comptime BYTE_LM_BLOCK_VIEWS = NN60_BLOCK_VIEWS or IDN_LM_PARAM_VIEWS
 comptime BYTE_LM_EMB_HEAD_VIEWS = (
@@ -2088,8 +2089,7 @@ def _byte_glue_update(ctx: DeviceContext, mut tr: ByteTrainer, next_step: Int, a
     # Evidence: experiments/performance_ideas/measurements/20261006/index.json,
     # I10 AMD/NVIDIA; retained per-arm binary hashes and raw capture paths.
     comptime if (GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-                and is_defined["MOJOLEARN_TRAIN_LIVE_STATUS"]()
-                and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()):
+                and is_defined["MOJOLEARN_TRAIN_LIVE_STATUS"]()):
         # This mechanism changes scheduling only on the existing admitted
         # OOP Adam path. Fault builds keep the required post-fault scan;
         # the path already refuses fault injection before it changes state.
