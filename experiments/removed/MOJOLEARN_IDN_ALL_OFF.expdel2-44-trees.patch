@@ -1,0 +1,122 @@
+diff --git a/gbdt/methods/leaves_estimation/leaves_estimation.mojo b/gbdt/methods/leaves_estimation/leaves_estimation.mojo
+index b0a74b63c2..541213876a 100644
+--- a/gbdt/methods/leaves_estimation/leaves_estimation.mojo
++++ b/gbdt/methods/leaves_estimation/leaves_estimation.mojo
+@@ -101,12 +101,11 @@ from checks.soft_f64 import (
+ #: weight sums the oracle's constructor already read).
+ #: `-D MOJOLEARN_IDN_GBDT_EST_ONE_STEP_DEVICE_OFF` (or the master
+ #: `-D MOJOLEARN_IDN_ALL_OFF`) restores the host walker.
+-# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (DELETE-OLD-PATH, EXP:2438 master old-path switch already deleted, rule e; non-owner fold) deleted 2026-11-15 by lane/expdel2-44-trees; code recoverable at 931e7ca76a.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-44-trees.patch; record in docs/TOMBSTONES.md.
+ comptime IDN_EST_ONE_STEP_DEVICE = (
+     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+     and not (
+         is_defined["MOJOLEARN_IDN_GBDT_EST_ONE_STEP_DEVICE_OFF"]()
++        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+     )
+ )
+ 
+@@ -139,6 +138,7 @@ comptime IDN_GBDT_MC_ONE_STEP_DEVICE = (
+     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+     and not (
+         is_defined["MOJOLEARN_IDN_GBDT_MC_ONE_STEP_DEVICE_OFF"]()
++        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+     )
+ )
+ 
+@@ -160,6 +160,7 @@ comptime IDN_GBDT_SYM_EST_DEFER_DRAIN = (
+     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+     and not (
+         is_defined["MOJOLEARN_IDN_GBDT_SYM_EST_DEFER_DRAIN_OFF"]()
++        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+     )
+ )
+ 
+diff --git a/gbdt/methods/ordered_boosting.mojo b/gbdt/methods/ordered_boosting.mojo
+index 291d34c36a..6d18c13e04 100644
+--- a/gbdt/methods/ordered_boosting.mojo
++++ b/gbdt/methods/ordered_boosting.mojo
+@@ -291,11 +291,10 @@ comptime GBDT_ORD_TREE_BUFS = not is_defined["MOJOLEARN_GBDT_ORD_TREE_BUFS_OFF"]
+ #: oracle factory reads the host leaf sizes). `-D
+ #: MOJOLEARN_IDN_ORD_ONE_STEP_DEVICE_OFF` (or the master `-D
+ #: MOJOLEARN_IDN_ALL_OFF`) restores the host walker.
+-# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (DELETE-OLD-PATH, EXP:2438 master old-path switch already deleted, rule e; non-owner fold) deleted 2026-11-15 by lane/expdel2-44-trees; code recoverable at 931e7ca76a.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-44-trees.patch; record in docs/TOMBSTONES.md.
+ comptime IDN_ORD_ONE_STEP_DEVICE = (
+     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+     and not is_defined["MOJOLEARN_IDN_ORD_ONE_STEP_DEVICE_OFF"]()
++    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+ )
+ 
+ #: Lane ml-gbdt T5 (roadmap T5; IDENTICAL, every vendor; default ON): the
+@@ -318,6 +317,7 @@ comptime IDN_ORD_ONE_STEP_DEVICE = (
+ comptime IDN_ORD_STD_SCALE_DEVICE = (
+     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+     and not is_defined["MOJOLEARN_IDN_ORD_STD_SCALE_DEVICE_OFF"]()
++    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+ )
+ 
+ 
+diff --git a/gbdt/models/add_non_symmetric_tree_doc_parallel.mojo b/gbdt/models/add_non_symmetric_tree_doc_parallel.mojo
+index 9b0d8506fb..2f432f5028 100644
+--- a/gbdt/models/add_non_symmetric_tree_doc_parallel.mojo
++++ b/gbdt/models/add_non_symmetric_tree_doc_parallel.mojo
+@@ -268,12 +268,11 @@ def add_non_symmetric_tree_to_cursor(
+ #: on any column and the host column is untouched.
+ #: `-D MOJOLEARN_IDN_GBDT_NS_PREDICT_PACKED_OFF` (or the master
+ #: `-D MOJOLEARN_IDN_ALL_OFF`) restores the per-tree loop.
+-# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (DELETE-OLD-PATH, EXP:2438 master old-path switch already deleted, rule e; non-owner fold) deleted 2026-11-15 by lane/expdel2-44-trees; code recoverable at 931e7ca76a.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-44-trees.patch; record in docs/TOMBSTONES.md.
+ comptime IDN_NS_PREDICT_PACKED = C50_GB_PACKED or (
+     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+     and not (
+         is_defined["MOJOLEARN_IDN_GBDT_NS_PREDICT_PACKED_OFF"]()
++        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+     )
+ )
+ 
+@@ -560,8 +559,8 @@ def add_non_symmetric_trees_packed(
+ #: adds in the same order, so no bit moves on any column and the host
+ #: column is untouched. The refusals are `add_non_symmetric_trees_packed`'s,
+ #: sentence for sentence, made at the same first predict.
+-#: `-D MOJOLEARN_IDN_GBDT_PREBINNED_INFER_OLD` restores the per-call pack:
+-#: the B arm of the
++#: `-D MOJOLEARN_IDN_GBDT_PREBINNED_INFER_OLD` (or the master
++#: `-D MOJOLEARN_IDN_ALL_OFF`) restores the per-call pack: the B arm of the
+ #: owed A/B (bench/results/paper_compare/owed-pre0867.json row
+ #: `fix-gbdt-prebinned-infer`; RUN OWED). The bit vector and C50 arms keep the
+ #: per-call pack (they replace the apply this caches).
+@@ -572,6 +571,7 @@ comptime IDN_NS_RESIDENT_PACK = (
+     and not GBDT_NS_BITVEC
+     and not (
+         is_defined["MOJOLEARN_IDN_GBDT_PREBINNED_INFER_OLD"]()
++        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+     )
+ )
+ 
+diff --git a/gbdt/models/kernel/add_bin_values.mojo b/gbdt/models/kernel/add_bin_values.mojo
+index 58f4c819cc..1c9d18ab89 100644
+--- a/gbdt/models/kernel/add_bin_values.mojo
++++ b/gbdt/models/kernel/add_bin_values.mojo
+@@ -44,12 +44,11 @@ from core.apple_fast_tree_experiments import AFT_P05
+ #: float32 adds per row, so no bit moves and the host column is untouched.
+ #: `-D MOJOLEARN_IDN_GBDT_PREDICT_FOUR_OFF` (or `-D MOJOLEARN_IDN_ALL_OFF`)
+ #: restores one launch per tree.
+-# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (DELETE-OLD-PATH, EXP:2438 master old-path switch already deleted, rule e; non-owner fold) deleted 2026-11-15 by lane/expdel2-44-trees; code recoverable at 931e7ca76a.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-44-trees.patch; record in docs/TOMBSTONES.md.
+ comptime IDN_PREDICT_FOUR = (
+     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+     and not (
+         is_defined["MOJOLEARN_IDN_GBDT_PREDICT_FOUR_OFF"]()
++        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+     )
+ )
+ 
+@@ -64,6 +63,7 @@ comptime IDN_PREDICT_FOUR = (
+ comptime IDN_APPLY_WIDE = (
+     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+     and is_defined["MOJOLEARN_IDN_GBDT_APPLY_WIDE"]()
++    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+ )
+ 
+ #: trees per launch of the wide arm: bounded so one launch stays short (macOS

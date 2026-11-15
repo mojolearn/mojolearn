@@ -1,0 +1,22 @@
+diff --git a/gbdt/methods/ordered_boosting.mojo b/gbdt/methods/ordered_boosting.mojo
+index 32bf8ce6c1..7844e1e031 100644
+--- a/gbdt/methods/ordered_boosting.mojo
++++ b/gbdt/methods/ordered_boosting.mojo
+@@ -1903,10 +1903,14 @@ def _ordered_device_leaves(
+ 
+ #: ORDERED_BATCH_EST is the FAST + Apple default since the M3 A/B of
+ #: 2026-10-02 (gbdt-ordered taxi 275.9 -> 264.1 s, auc .6289 -> .6285).
++#: `-D MOJOLEARN_ORDERED_BATCH_EST_OFF` restores the per-task walk;
++#: `-D MOJOLEARN_ORDERED_BATCH_EST` is still accepted and changes nothing.
+ #: IDENTICAL and non-Apple FAST keep the code above (the flag is False).
+-# TOMBSTONE: MOJOLEARN_ORDERED_BATCH_EST_OFF (DELETE-OLD-PATH, EXP:117 KEPT cf45a2732 on the M3 only; FAST is Apple only, so no other vendor is owed; rule d) deleted 2026-11-15 by lane/expdel2-44-trees; code recoverable at accebf0183.
+-# Restore: git apply experiments/removed/MOJOLEARN_ORDERED_BATCH_EST_OFF.patch; record in docs/TOMBSTONES.md.
+-comptime ORDERED_BATCH_EST = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
++comptime ORDERED_BATCH_EST = (
++    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
++    and TARGET_HAS_APPLE_GPU
++    and not is_defined["MOJOLEARN_ORDERED_BATCH_EST_OFF"]()
++)
+ #: BATCH_EST keeps a learn permutation's fold cursors in one buffer
+ comptime ORDERED_CAT_CURSORS = ORDERED_BATCH_EST
+ #: chunks per (task, leaf) run in the batched reduce

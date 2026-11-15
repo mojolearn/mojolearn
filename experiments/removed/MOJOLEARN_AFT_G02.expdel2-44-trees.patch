@@ -1,0 +1,38 @@
+diff --git a/gbdt/methods/pointwise_kernels.mojo b/gbdt/methods/pointwise_kernels.mojo
+index 38d20901a4..c871fde0a9 100644
+--- a/gbdt/methods/pointwise_kernels.mojo
++++ b/gbdt/methods/pointwise_kernels.mojo
+@@ -186,6 +186,7 @@ from max.gpu.host import DeviceBuffer, DeviceContext
+ from std.os import getenv
+ from std.memory import bitcast
+ from max.gpu import block_dim, block_idx, grid_dim, thread_idx
++from gbdt.gpu_data.apple_fast_trees_experiments import AFT_G02
+ 
+ from gbdt.gpu_data.grid_policy import (
+     POLICY_BINARY,
+@@ -333,8 +334,23 @@ def pw_block_multiplier(
+         if pinned > PW_MAX_MULTIPLIER:
+             pinned = PW_MAX_MULTIPLIER
+         return pinned
+-    # TOMBSTONE: MOJOLEARN_AFT_G02 (DELETE-EXPERIMENT, never-run Apple FAST programme card, rule g; non-owner fold) deleted 2026-11-15 by lane/expdel2-44-trees; code recoverable at 27d9c12e7b.
+-    # Restore: git apply experiments/removed/MOJOLEARN_AFT_G02.expdel2-44-trees.patch; record in docs/TOMBSTONES.md.
++    comptime if AFT_G02:
++        # G02: an occupancy/row-budget alternative, not the rejected fixed
++        # SYM_HIST_MULT retry. Aim for three blocks per compute unit but
++        # stop before a prospective partition chunk has less than four
++        # histogram-block row strides. This prices leaf/fold fragmentation
++        # as well as features and hardware. All rows remain in the kernel's
++        # original multiplier ladder. Uncompiled/unverified/unmeasured.
++        var partitions = max(ny * nz, 1)
++        var resident_groups = max(nx * partitions, 1)
++        var multiplier = 1
++        while (
++            resident_groups * multiplier < max(sm_count, 1) * 3
++            and multiplier < PW_MAX_MULTIPLIER
++            and size // (partitions * multiplier * 2) >= 4 * PW_HIST2_BLOCK
++        ):
++            multiplier *= 2
++        return multiplier
+     # TOMBSTONE: MOJOLEARN_SYM_HIST_MULT (DROPPED-noise: symhist-hist-mult istella/taxi noise, old base) deleted 2026-10-09 on
+     # lane/owed-deletions-D1 (2x the SM count's worth of histogram blocks); code recoverable at b639a2bd2.
+     # Restore: git apply experiments/removed/MOJOLEARN_SYM_HIST_MULT.patch; record in docs/TOMBSTONES.md.

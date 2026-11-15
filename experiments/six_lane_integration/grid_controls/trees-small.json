@@ -3,27 +3,7 @@
   "lane": "trees-small",
   "branch": "lane/trees-small",
   "head": "d9532aeb3",
-  "controls": {
-    "GBDT_APPLY_WIDE": {
-      "define": "MOJOLEARN_IDN_GBDT_APPLY_WIDE",
-      "kind": "switch",
-      "arms": {
-        "off": [],
-        "on": [
-          "MOJOLEARN_IDN_GBDT_APPLY_WIDE"
-        ]
-      },
-      "default": "off",
-      "source": [
-        "gbdt/models/kernel/add_bin_values.mojo:63",
-        "gbdt/resident_model.mojo:708"
-      ],
-      "binding": "_mojolearn_gbdt",
-      "bits_change": false,
-      "status": "kept",
-      "note": "pre-existing fam2-gbdt F4 candidate (64 same-depth oblivious trees per launch, register sum in tree order), registered for the grid by lane trees-small; reaches oblivious-tree predict only (mixed-depth ensembles keep the four-tree grouping)"
-    }
-  },
+  "controls": {},
   "algorithms": {
     "trees:gbdt-symmetric": {
       "binding": "_mojolearn_gbdt",
@@ -271,6 +251,11 @@
       "define": "MOJOLEARN_TREES_IF_BUILD_TPB",
       "control": "IF_BUILD_TPB",
       "reason": "DELETED 2026-11-15 (lane/expdel2-46-trees, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md; AGENTS.md 'An unmeasured arm is deleted'): no A/B recorded for the opt-in int sweep (rule a). No bit change; define refused in core/experiment_guards_trees.mojo; code recoverable at 2e3951cb68."
+    },
+    {
+      "define": "MOJOLEARN_IDN_GBDT_APPLY_WIDE",
+      "control": "GBDT_APPLY_WIDE",
+      "reason": "DELETED 2026-11-15 (lane/expdel2-44-trees, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md): no A/B recorded for the candidate arm (rule a); under \"An unmeasured arm is deleted\" the arm goes, the default stays (no bit change); patch experiments/removed/MOJOLEARN_IDN_GBDT_APPLY_WIDE.patch."
     }
   ]
 }

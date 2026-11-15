@@ -7,9 +7,10 @@
 
 `ORD_ALL` is compiled only under the FAST tier on an Apple GPU; IDENTICAL
 and non-Apple FAST compile main's statements unchanged.
-`-D MOJOLEARN_ORD_ALL_OFF` compiles it out. Since 2026-10-04 it runs at
+Its rollback MOJOLEARN_ORD_ALL_OFF was deleted 2026-11-15 (docs/TOMBSTONES.md). Since 2026-10-04 it runs at
 every width; the old width gate (more than 32 features) was removed as
-benchmark-tuned and survives only behind MOJOLEARN_LEGACY_NARROW_ORD_ALL.
+benchmark-tuned (its switch MOJOLEARN_LEGACY_NARROW_ORD_ALL was deleted
+2026-11-15, docs/TOMBSTONES.md).
 
 WHY THE OLD WIDTH GATE EXISTED (M3 A/Bs, one run per arm, 2026-10-03, gbdt-ordered):
     istella (220 features): 75,758 -> 63,554 ms (-16.1%), auc .979518 ->
@@ -40,7 +41,6 @@ The bundle's four pieces, all on together when `ord_all_on`:
         readbacks per permutation skipped under the batched estimation.
 """
 
-from std.sys.compile import is_defined
 from gbdt.trees_identical_switches import T22
 from core.accelerator_target import TARGET_HAS_APPLE_GPU
 
@@ -55,27 +55,17 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 # reused per-arm hashes/builds: ~/mojolearn-evidence/ab-overnight-20261006/
 # m3/artifacts/results/F12/ordered-storage. Keep existing default ON;
 # these public caller cases do not claim full-dataset/opponent admission.
-comptime ORD_ALL = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and TARGET_HAS_APPLE_GPU
-    and not is_defined["MOJOLEARN_ORD_ALL_OFF"]()
-)
-#: LEGACY, default OFF: the old width gate admitted only data with more than
-#: 32 compressed-index features, chosen between taxi (11, auc -0.0003 in one
-#: run) and istella (220). Removed as benchmark-tuned on 2026-10-04; the
-#: bundle now runs at every width; generic 11/17-width M3 caller evidence
-#: is recorded above. Full-dataset taxi quality admission remains separate.
-comptime ORD_ALL_LEGACY_WIDTH = is_defined["MOJOLEARN_LEGACY_NARROW_ORD_ALL"]()
-comptime ORD_ALL_MIN_FEATURES = 32
+# TOMBSTONE: MOJOLEARN_ORD_ALL_OFF (DELETE-OLD-PATH, EXP:180: the default is the kept path, rule e) deleted 2026-11-15 by lane/expdel2-44-trees; code recoverable at 611ff32f4b.
+# Restore: git apply experiments/removed/MOJOLEARN_ORD_ALL_OFF.patch; record in docs/TOMBSTONES.md.
+comptime ORD_ALL = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
+# TOMBSTONE: MOJOLEARN_LEGACY_NARROW_ORD_ALL (DELETE-OLD-PATH, the benchmark-tuned width gate, no A/B recorded for the old path, rule b) deleted 2026-11-15 by lane/expdel2-44-trees; code recoverable at f8ce124897.
+# Restore: git apply experiments/removed/MOJOLEARN_LEGACY_NARROW_ORD_ALL.patch; record in docs/TOMBSTONES.md.
 
 
 def ord_all_on(n_features: Int) -> Bool:
     """True when the bundle is compiled in (any width since 2026-10-04)."""
     comptime if ORD_ALL:
-        comptime if ORD_ALL_LEGACY_WIDTH:
-            return n_features > ORD_ALL_MIN_FEATURES
-        else:
-            return n_features >= 1
+        return n_features >= 1
     else:
         return False
 
@@ -83,17 +73,11 @@ def ord_all_on(n_features: Int) -> Bool:
 # F12 pending device quality/performance. Restore stable document-key dither
 # while retaining coalesced fold-position compressed storage. Existing ORD_ALL
 # promotion is unchanged; IDENTICAL/non-Apple builds cannot admit this candidate.
-comptime ORD_DOC_ID_STORAGE = T22 or (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
-    # MEASURED M3 FAST; broader workload evidence remains separate.
 # F12/ordered-docids M3 2026-10-06: 4 scored caller times; B/A
-# 0.8957..1.0334 (mixed/regressing); FAST candidate remains OFF.
-# Scored FAST quality 2/2 within existing bands; PASS.
-# One warmup/one score; caller67d0efb29; exact cases/builds/hashes:
-# ~/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F12/ordered-docids.
-# Compilation/identity reused. No combined-toggle/full-board claim.
-    and is_defined["MOJOLEARN_ORD_DOC_ID_STORAGE"]()
-)
+# 0.8957..1.0334 (mixed/regressing); FAST candidate remained OFF.
+# TOMBSTONE: MOJOLEARN_ORD_DOC_ID_STORAGE (DELETE-ARM, opt-in arm with no deciding A/B, rule a) deleted 2026-11-15 by lane/expdel2-44-trees; code recoverable at 48af6b7d48.
+# Restore: git apply experiments/removed/MOJOLEARN_ORD_DOC_ID_STORAGE.patch; record in docs/TOMBSTONES.md.
+comptime ORD_DOC_ID_STORAGE = T22
 
 
 from std.atomic import Atomic, Ordering

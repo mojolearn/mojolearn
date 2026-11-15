@@ -56,10 +56,8 @@ list is not a function of the grades.
 """
 
 from max.gpu import block_dim, block_idx, grid_dim, thread_idx
-from gbdt.apple_fast_tree_experiments import AFT_N07, AFT_N08
 from std.math import isfinite
 from std.memory import stack_allocation
-from std.sys import is_defined
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
@@ -85,17 +83,14 @@ def pairlogit_group_fused_for[column: Int]() -> Bool:
     """FAST + Apple default; everything else compiles main's pair-list path.
     Default since the M3 A/B 2026-10-03 (gbdt-rank-pairlogit istellarank,
     n=2, same hash, ndcg10 .71995, map .85455): 4,802 -> 3,760 ms.
-    `-D MOJOLEARN_PAIRLOGIT_GROUP_FUSED_OFF` restores the pair-list path
-    (and turns `PAIRLOGIT_EST_REUSE` off with it); the old
-    `-D MOJOLEARN_PAIRLOGIT_GROUP_FUSED` is accepted and changes nothing.
-    Under IDENTICAL `MOJOLEARN_PAIRLOGIT_GROUP_FUSED_OFF` does NOT turn the
-    group kernel off (the host column restates it under
-    `IDN_PAIRLOGIT_GROUP`): the IDENTICAL before arm is
-    `-D MOJOLEARN_IDN_GBDT_PAIRLOGIT_GROUP_OFF` (or MOJOLEARN_IDN_ALL_OFF),
-    which moves the device and the host column together (lane/review-fixes)."""
-    comptime if not is_defined["MOJOLEARN_PAIRLOGIT_GROUP_FUSED_OFF"]():
-        comptime if column == COLUMN_APPLE and GLOBAL_NUMERIC_MODE == NUMERIC_FAST:
-            return True
+    Under IDENTICAL the group kernel is `IDN_PAIRLOGIT_GROUP`'s (the host
+    column restates it)."""
+    # TOMBSTONE: MOJOLEARN_PAIRLOGIT_GROUP_FUSED_OFF (DELETE-OLD-PATH, EXP:119 KEPT 28adffe85 on the M3 only; FAST is Apple only, so no other vendor is owed; rule d) deleted 2026-11-15 by lane/expdel2-44-trees; code recoverable at a7ec4e7f91.
+    # Restore: git apply experiments/removed/MOJOLEARN_PAIRLOGIT_GROUP_FUSED_OFF.patch; record in docs/TOMBSTONES.md.
+    # TOMBSTONE: MOJOLEARN_IDN_GBDT_PAIRLOGIT_GROUP_OFF (DELETE-OLD-PATH, no A/B recorded for the old path, rule b; this file only named it; non-owner fold) deleted 2026-11-15 by lane/expdel2-44-trees; code recoverable at a7ec4e7f91.
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_GBDT_PAIRLOGIT_GROUP_OFF.expdel2-44-trees.patch; record in docs/TOMBSTONES.md.
+    comptime if column == COLUMN_APPLE and GLOBAL_NUMERIC_MODE == NUMERIC_FAST:
+        return True
     # lane/fam2-gbdt F2: IDENTICAL on every vendor (`IDN_PAIRLOGIT_GROUP`,
     # `gbdt/data/pairs.mojo`); the host column restates this kernel under
     # the same constant. Every product next to an add below is
@@ -112,14 +107,11 @@ def pairlogit_est_reuse_for[column: Int]() -> Bool:
     per-group value partials (scattered to bin order) instead of
     re-enumerating the pairs. Same point, same sample (PairLogit draws
     nothing), so only FAST bits move with the fold. Needs the group kernel
-    (the accumulators are its stores), so `..._GROUP_FUSED_OFF` turns it
-    off too. Default since the M3 A/B 2026-10-03 (same data, same hash):
-    3,765 -> 3,480 ms on top of the group kernel.
-    `-D MOJOLEARN_PAIRLOGIT_EST_REUSE_OFF` turns it off alone; the old
-    `-D MOJOLEARN_PAIRLOGIT_EST_REUSE` is accepted and changes nothing."""
-    comptime if not is_defined["MOJOLEARN_PAIRLOGIT_EST_REUSE_OFF"]():
-        return pairlogit_group_fused_for[column]()
-    return False
+    (the accumulators are its stores). Default since the M3 A/B 2026-10-03
+    (same data, same hash): 3,765 -> 3,480 ms on top of the group kernel."""
+    # TOMBSTONE: MOJOLEARN_PAIRLOGIT_EST_REUSE_OFF (DELETE-OLD-PATH, EXP:118 KEPT 28adffe85 on the M3 only; FAST is Apple only, so no other vendor is owed; rule d) deleted 2026-11-15 by lane/expdel2-44-trees; code recoverable at 6d03f59f60.
+    # Restore: git apply experiments/removed/MOJOLEARN_PAIRLOGIT_EST_REUSE_OFF.patch; record in docs/TOMBSTONES.md.
+    return pairlogit_group_fused_for[column]()
 
 
 comptime PAIRLOGIT_GROUP_FUSED = pairlogit_group_fused_for[TARGET_COLUMN]()
@@ -132,9 +124,7 @@ comptime PAIRLOGIT_EST_REUSE = pairlogit_est_reuse_for[TARGET_COLUMN]()
 
 
 def pl_group_narrow_for[column: Int]() -> Bool:
-    """Lane af-sym-multi, FAST + Apple default since 2026-10-04 (rollback
-    `-D MOJOLEARN_PL_GROUP_NARROW_OFF`; the old `-D MOJOLEARN_PL_GROUP_NARROW`
-    changes nothing): the group kernel runs on
+    """Lane af-sym-multi, FAST + Apple default since 2026-10-04: the group kernel runs on
     128-thread blocks instead of 256. Istella's queries hold ~103 documents,
     so a 256-thread block leaves four of its eight SIMD groups idle through
     every tile loop and barrier; at 128 the idle half is gone and twice the
@@ -143,9 +133,9 @@ def pl_group_narrow_for[column: Int]() -> Bool:
     the 256-thread kernel (the order is the `j` order, not the thread
     count), so the bits do not move; the setup kernel and the reuse scatter
     keep their width."""
-    comptime if not is_defined["MOJOLEARN_PL_GROUP_NARROW_OFF"]():
-        return pairlogit_group_fused_for[column]()
-    return False
+    # TOMBSTONE: MOJOLEARN_PL_GROUP_NARROW_OFF (DELETE-OLD-PATH, EXP:2454 DELETED (NEUTRAL): the default is the kept path, rule e) deleted 2026-11-15 by lane/expdel2-44-trees; code recoverable at 9dc8626747.
+    # Restore: git apply experiments/removed/MOJOLEARN_PL_GROUP_NARROW_OFF.patch; record in docs/TOMBSTONES.md.
+    return pairlogit_group_fused_for[column]()
 
 
 #: recovery 2026-10-04 (lane/apple-fast-rec-sym): source
@@ -156,16 +146,14 @@ def pl_group_narrow_for[column: Int]() -> Bool:
 #: gbdt-rank-pairlogit istella 3095.83 -> 3040.78 ms (-1.8%, tag
 #: rab4-symmulti) and 3095.91 -> 3038.19 ms (-1.9%, tag rab7-plgroupnarrow);
 #: map 0.854545, ndcg10 0.719953 and output digest identical. KEEP: the FAST
-#: + Apple default; rollback -D MOJOLEARN_PL_GROUP_NARROW_OFF. SYM_MULTI_ALL
+#: + Apple default (its rollback was deleted 2026-11-15). SYM_MULTI_ALL
 #: (yetirank +0.1%) stays a NEUTRAL record and no longer selects anything.
 comptime PL_GROUP_NARROW = pl_group_narrow_for[TARGET_COLUMN]()
 #: the group kernel's block: 128 under `PL_GROUP_NARROW`, else `PLG_THREADS`
 #: (`MSE_BLOCK_SIZE`, 256)
-# N07: two simdgroups per query block trade more serial query tiles for
-# smaller register/shared reservations. Every document and unlike-grade pair
-# remains present; queries wider than the block keep the complete tile loop.
-# New64-lane arm, not the historical256-vs128 experiment. No evidence.
-comptime PLG_LAUNCH_THREADS = 64 if AFT_N07 else (128 if PL_GROUP_NARROW else MSE_BLOCK_SIZE)
+# TOMBSTONE: MOJOLEARN_AFT_N07 (DELETE-EXPERIMENT, never-run Apple FAST programme card, rule g; non-owner fold) deleted 2026-11-15 by lane/expdel2-44-trees; code recoverable at 373b9aa16d.
+# Restore: git apply experiments/removed/MOJOLEARN_AFT_N07.expdel2-44-trees.patch; record in docs/TOMBSTONES.md.
+comptime PLG_LAUNCH_THREADS = 128 if PL_GROUP_NARROW else MSE_BLOCK_SIZE
 
 #: threads per group block, one document per thread per chunk; the value
 #: and magnitude partials use `pinned_block_sum` at this width
@@ -336,45 +324,41 @@ def pair_logit_group_kernel[
             if tile_n > threads:
                 tile_n = threads
             if in_range:
-                # N08: unroll two ascending endpoint visits to expose
-                # independent shared loads. Keep addition and pair order;
-                # this is not the rejected each-pair-once route. No evidence.
-                for pair_base in range(0, tile_n, 2 if AFT_N08 else 1):
-                    comptime for pair_lane in range(2 if AFT_N08 else 1):
-                        var k = pair_base + pair_lane
-                        if k < tile_n:
-                            var g_j = sh_grade.unsafe_load(k)
-                            if g_j != g_i:
-                                # `pair_logit.cu:25-40` for the pair (winner, loser)
-                                var winner_side = g_i > g_j
-                                var diff = p_i - sh_point.unsafe_load(k)
-                                if not winner_side:
-                                    diff = sh_point.unsafe_load(k) - p_i
-                                var exp_diff = routed_exp(diff)
-                                var p = Float32(1.0)
+                # TOMBSTONE: MOJOLEARN_AFT_N08 (DELETE-EXPERIMENT, never-run Apple FAST programme card, rule g; non-owner fold) deleted 2026-11-15 by lane/expdel2-44-trees; code recoverable at 99dbe96663.
+                # Restore: git apply experiments/removed/MOJOLEARN_AFT_N08.expdel2-44-trees.patch; record in docs/TOMBSTONES.md.
+                for k in range(tile_n):
+                    var g_j = sh_grade.unsafe_load(k)
+                    if g_j != g_i:
+                        # `pair_logit.cu:25-40` for the pair (winner, loser)
+                        var winner_side = g_i > g_j
+                        var diff = p_i - sh_point.unsafe_load(k)
+                        if not winner_side:
+                            diff = sh_point.unsafe_load(k) - p_i
+                        var exp_diff = routed_exp(diff)
+                        var p = Float32(1.0)
+                        if isfinite(Float32(1.0) + exp_diff):
+                            p = exp_diff / (Float32(1.0) + exp_diff)
+                        p = max(
+                            min(p, Float32(1.0) - Float32(1e-40)),
+                            Float32(1e-40),
+                        )
+                        var direction = Float32(1.0) - p
+                        var scale = ftz(identical_mul(p, Float32(1.0) - p))
+                        var wd = ftz(identical_mul(w, direction))
+                        if winner_side:
+                            acc_der = acc_der + wd
+                            if compute_fv != Int32(0):
+                                var log_exp_val_plus_one = diff
                                 if isfinite(Float32(1.0) + exp_diff):
-                                    p = exp_diff / (Float32(1.0) + exp_diff)
-                                p = max(
-                                    min(p, Float32(1.0) - Float32(1e-40)),
-                                    Float32(1e-40),
+                                    log_exp_val_plus_one = routed_log(
+                                        Float32(1.0) + exp_diff
+                                    )
+                                fv_local = fv_local + identical_mul(
+                                    w, diff - log_exp_val_plus_one
                                 )
-                                var direction = Float32(1.0) - p
-                                var scale = ftz(identical_mul(p, Float32(1.0) - p))
-                                var wd = ftz(identical_mul(w, direction))
-                                if winner_side:
-                                    acc_der = acc_der + wd
-                                    if compute_fv != Int32(0):
-                                        var log_exp_val_plus_one = diff
-                                        if isfinite(Float32(1.0) + exp_diff):
-                                            log_exp_val_plus_one = routed_log(
-                                                Float32(1.0) + exp_diff
-                                            )
-                                        fv_local = fv_local + identical_mul(
-                                            w, diff - log_exp_val_plus_one
-                                        )
-                                else:
-                                    acc_der = acc_der + (-wd)
-                                acc_der2 = acc_der2 + ftz(identical_mul(w, scale))
+                        else:
+                            acc_der = acc_der + (-wd)
+                        acc_der2 = acc_der2 + ftz(identical_mul(w, scale))
         var der = ftz(acc_der)
         var der2 = ftz(acc_der2)
         var weight = Float32(0.0)

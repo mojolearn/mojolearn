@@ -201,7 +201,6 @@ from gbdt.methods.leaves_estimation.doc_parallel_leaves_estimator import (
     compute_bins_for_model,
     LeafPartition,
 )
-from gbdt.methods.kernel.pointwise_split_resolve import PW_FUSED_LEVEL
 from gbdt.methods.ordered_fast_switches import ORD_ALL, ord_all_on
 from gbdt.trees_identical_switches import (
     T24,
@@ -273,8 +272,8 @@ comptime ORDERED_SABOTAGE = is_defined["MOJOLEARN_ORDERED_SABOTAGE"]()
 #: before the next tree's writes (each tree ends on the learn-loss drain).
 #: No bit moves. On Metal each allocation is a fixed host cost per tree and
 #: a live buffer bound to the launches while it lives.
-#: `-D MOJOLEARN_GBDT_ORD_TREE_BUFS_OFF` restores the allocations per tree.
-comptime GBDT_ORD_TREE_BUFS = not is_defined["MOJOLEARN_GBDT_ORD_TREE_BUFS_OFF"]()
+# TOMBSTONE: MOJOLEARN_GBDT_ORD_TREE_BUFS_OFF (DELETE-OLD-PATH, EXP:2148 the default is the recorded bit-neutral kept path, rule e) deleted 2026-11-15 by lane/expdel2-44-trees; code recoverable at 47147e100f.
+# Restore: git apply experiments/removed/MOJOLEARN_GBDT_ORD_TREE_BUFS_OFF.patch; record in docs/TOMBSTONES.md.
 
 #: Lane ml-gbdt T4 (roadmap T4; IDENTICAL, every vendor; default ON): the
 #: batched Ordered estimation tasks (`_ordered_estimate_prepare`) take
@@ -288,14 +287,12 @@ comptime GBDT_ORD_TREE_BUFS = not is_defined["MOJOLEARN_GBDT_ORD_TREE_BUFS_OFF"]
 #: task's leaf upload (the apply reads the device leaves), and the fold
 #: tasks' leaf readbacks; the estimation task's leaves come home on the
 #: learn-loss drain. Bits: none move. The partition settle drain stays (the
-#: oracle factory reads the host leaf sizes). `-D
-#: MOJOLEARN_IDN_ORD_ONE_STEP_DEVICE_OFF` (or the master `-D
-#: MOJOLEARN_IDN_ALL_OFF`) restores the host walker.
-comptime IDN_ORD_ONE_STEP_DEVICE = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not is_defined["MOJOLEARN_IDN_ORD_ONE_STEP_DEVICE_OFF"]()
-    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
+#: oracle factory reads the host leaf sizes).
+# TOMBSTONE: MOJOLEARN_IDN_ORD_ONE_STEP_DEVICE_OFF (DELETE-OLD-PATH, no A/B recorded for the old path, rule b) deleted 2026-11-15 by lane/expdel2-44-trees; code recoverable at 632cd99677.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ORD_ONE_STEP_DEVICE_OFF.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (DELETE-OLD-PATH, EXP:2438 master old-path switch already deleted, rule e; non-owner fold) deleted 2026-11-15 by lane/expdel2-44-trees; code recoverable at 931e7ca76a.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-44-trees.patch; record in docs/TOMBSTONES.md.
+comptime IDN_ORD_ONE_STEP_DEVICE = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 
 #: Lane ml-gbdt T5 (roadmap T5; IDENTICAL, every vendor; default ON): the
 #: tree's score-noise std dev and fixed-point scale are formed ON THE DEVICE
@@ -312,13 +309,9 @@ comptime IDN_ORD_ONE_STEP_DEVICE = (
 #: in `d_ss` and the snap (`enqueue_snap_plane_dev`), the histogram kernels
 #: (`compute_hist2_dev`) and the score kernels (`find_optimal_split_dev`)
 #: read them as device words; only a traced run reads them back.
-#: `-D MOJOLEARN_IDN_ORD_STD_SCALE_DEVICE_OFF` (or the master `-D
-#: MOJOLEARN_IDN_ALL_OFF`) restores the host arithmetic.
-comptime IDN_ORD_STD_SCALE_DEVICE = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not is_defined["MOJOLEARN_IDN_ORD_STD_SCALE_DEVICE_OFF"]()
-    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_IDN_ORD_STD_SCALE_DEVICE_OFF (DELETE-OLD-PATH, no A/B recorded for the old path, rule b) deleted 2026-11-15 by lane/expdel2-44-trees; code recoverable at fce840609d.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ORD_STD_SCALE_DEVICE_OFF.patch; record in docs/TOMBSTONES.md.
+comptime IDN_ORD_STD_SCALE_DEVICE = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 
 
 def _ord_std_scale_kernel(
@@ -1909,29 +1902,19 @@ def _ordered_device_leaves(
 
 #: ORDERED_BATCH_EST is the FAST + Apple default since the M3 A/B of
 #: 2026-10-02 (gbdt-ordered taxi 275.9 -> 264.1 s, auc .6289 -> .6285).
-#: `-D MOJOLEARN_ORDERED_BATCH_EST_OFF` restores the per-task walk;
-#: `-D MOJOLEARN_ORDERED_BATCH_EST` is still accepted and changes nothing.
 #: IDENTICAL and non-Apple FAST keep the code above (the flag is False).
-comptime ORDERED_BATCH_EST = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and TARGET_HAS_APPLE_GPU
-    and not is_defined["MOJOLEARN_ORDERED_BATCH_EST_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_ORDERED_BATCH_EST_OFF (DELETE-OLD-PATH, EXP:117 KEPT cf45a2732 on the M3 only; FAST is Apple only, so no other vendor is owed; rule d) deleted 2026-11-15 by lane/expdel2-44-trees; code recoverable at accebf0183.
+# Restore: git apply experiments/removed/MOJOLEARN_ORDERED_BATCH_EST_OFF.patch; record in docs/TOMBSTONES.md.
+comptime ORDERED_BATCH_EST = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
 #: BATCH_EST keeps a learn permutation's fold cursors in one buffer
 comptime ORDERED_CAT_CURSORS = ORDERED_BATCH_EST
 #: chunks per (task, leaf) run in the batched reduce
 comptime ORDERED_BAT_CHUNKS = 8
 
-from gbdt.gpu_data.apple_fast_trees_experiments import AFT_G11, AFT_G12
-
-# G11: four SIMD groups per prefix-task chunk reduce shared/register demand.
-# Keep every prefix, eight chunks, every weight and RNG mapping unchanged.
-# Uncompiled/unverified/unmeasured; only the FAST sum association changes.
-comptime AFT_ORDERED_REDUCE_BLOCK = 128 if AFT_G11 else ORDERED_BLOCK
-# G12: independent four-row tiles amortize task-bound lookup, retaining the
-# per-row leaf and task. Four bounds-checked coalesced stores need little
-# register state; no dataset/dimension rule. No performance/quality evidence.
-comptime AFT_ORDERED_APPLY_ROWS = 4 if AFT_G12 else 1
+# TOMBSTONE: MOJOLEARN_AFT_G11 (DELETE-EXPERIMENT, never-run Apple FAST programme card, rule g; non-owner fold) deleted 2026-11-15 by lane/expdel2-44-trees; code recoverable at 03c050a585.
+# Restore: git apply experiments/removed/MOJOLEARN_AFT_G11.expdel2-44-trees.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_AFT_G12 (DELETE-EXPERIMENT, never-run Apple FAST programme card, rule g; non-owner fold) deleted 2026-11-15 by lane/expdel2-44-trees; code recoverable at bc9ffa877f.
+# Restore: git apply experiments/removed/MOJOLEARN_AFT_G12.expdel2-44-trees.patch; record in docs/TOMBSTONES.md.
 
 
 def _ord_point[objective: Int](
@@ -2029,9 +2012,9 @@ def _ord_bat_reduce_kernel[objective: Int](
         a1 += d[1]
         a2 += weight
         idx += Int(block_dim.x)
-    var s0 = pinned_block_sum[block_size=AFT_ORDERED_REDUCE_BLOCK](a0)
-    var s1 = pinned_block_sum[block_size=AFT_ORDERED_REDUCE_BLOCK](a1)
-    var s2 = pinned_block_sum[block_size=AFT_ORDERED_REDUCE_BLOCK](a2)
+    var s0 = pinned_block_sum[block_size=ORDERED_BLOCK](a0)
+    var s1 = pinned_block_sum[block_size=ORDERED_BLOCK](a1)
+    var s2 = pinned_block_sum[block_size=ORDERED_BLOCK](a2)
     if Int(thread_idx.x) == 0:
         var at = 3 * (
             ((Int(task_base_in) + tl) * Int(leaf_cap_in) + b) * nc + c
@@ -2094,47 +2077,17 @@ def _ord_bat_apply_kernel(
     """`_ordered_apply_kernel` for every task sharing one cursor buffer:
     position `p` belongs to the task `t` with `off[t] <= p`, at that
     task's permutation position `j = p - off[t]`."""
-    comptime if not AFT_G12:
-        var p = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
-        if p < Int(total_in):
-            var t = _ord_fast_segment(off, Int(n_tasks_in), p)
-            var j = p - Int(off.unsafe_load(t))
-            var row = Int(permutation.unsafe_load(j))
-            var leaf = Int(bins.unsafe_load(row))
-            var at = (Int(task_base_in) + t) * Int(leaf_cap_in) + leaf
-            cursor.unsafe_store(
-                p,
-                identical_mul_add(leaves.unsafe_load(at), rate, cursor.unsafe_load(p)),
-            )
-        return
-    var first = (
-        Int(block_idx.x) * Int(block_dim.x) * AFT_ORDERED_APPLY_ROWS
-        + Int(thread_idx.x)
-    )
-    var total = Int(total_in)
-    var nt = Int(n_tasks_in)
-    var t = -1
-    var lower = 0
-    var upper = 0
-    comptime for lane in range(AFT_ORDERED_APPLY_ROWS):
-        var p = first + lane * Int(block_dim.x)
-        if p < total:
-            # Bounds are cached only while this row is in the same task;
-            # a tile crossing any number of short tasks redoes the search.
-            if t < 0 or p >= upper:
-                t = _ord_fast_segment(off, nt, p)
-                lower = Int(off.unsafe_load(t))
-                upper = total
-                if t + 1 < nt:
-                    upper = Int(off.unsafe_load(t + 1))
-            var j = p - lower
-            var row = Int(permutation.unsafe_load(j))
-            var leaf = Int(bins.unsafe_load(row))
-            var at = (Int(task_base_in) + t) * Int(leaf_cap_in) + leaf
-            cursor.unsafe_store(
-                p,
-                identical_mul_add(leaves.unsafe_load(at), rate, cursor.unsafe_load(p)),
-            )
+    var p = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if p < Int(total_in):
+        var t = _ord_fast_segment(off, Int(n_tasks_in), p)
+        var j = p - Int(off.unsafe_load(t))
+        var row = Int(permutation.unsafe_load(j))
+        var leaf = Int(bins.unsafe_load(row))
+        var at = (Int(task_base_in) + t) * Int(leaf_cap_in) + leaf
+        cursor.unsafe_store(
+            p,
+            identical_mul_add(leaves.unsafe_load(at), rate, cursor.unsafe_load(p)),
+        )
 
 
 def _launch_ord_bat_reduce(
@@ -2167,7 +2120,7 @@ def _launch_ord_bat_reduce(
             Int32(ORDERED_BAT_CHUNKS), Int32(task_base), alpha, border,
             partials.unsafe_ptr(),
             grid_dim=(ORDERED_BAT_CHUNKS, n_tasks * n_leaves, 1),
-            block_dim=(AFT_ORDERED_REDUCE_BLOCK, 1, 1),
+            block_dim=(ORDERED_BLOCK, 1, 1),
         )
 
     if objective == OBJECTIVE_RMSE:
@@ -2378,14 +2331,14 @@ def _ord_fast_estimate_tree(
             fast_leaves[0].unsafe_ptr(), fast_cat[lp].unsafe_ptr(),
             fast_fold_off[0].unsafe_ptr(), Int32(n_folds), Int32(total),
             Int32(lp * n_folds), Int32(leaf_cap), opts.learning_rate,
-            grid_dim=((total + ORDERED_BLOCK * AFT_ORDERED_APPLY_ROWS - 1) // (ORDERED_BLOCK * AFT_ORDERED_APPLY_ROWS), 1, 1), block_dim=(ORDERED_BLOCK, 1, 1),
+            grid_dim=(_grid(total), 1, 1), block_dim=(ORDERED_BLOCK, 1, 1),
         )
     ctx.enqueue_function[_ord_bat_apply_kernel](
         dperms[est_p].unsafe_ptr(), bins.unsafe_ptr(),
         fast_leaves[0].unsafe_ptr(), est_cursor.unsafe_ptr(),
         fast_est_off[0].unsafe_ptr(), Int32(1), Int32(n_rows),
         Int32(est_task), Int32(leaf_cap), opts.learning_rate,
-        grid_dim=((n_rows + ORDERED_BLOCK * AFT_ORDERED_APPLY_ROWS - 1) // (ORDERED_BLOCK * AFT_ORDERED_APPLY_ROWS), 1, 1), block_dim=(ORDERED_BLOCK, 1, 1),
+        grid_dim=(_grid(n_rows), 1, 1), block_dim=(ORDERED_BLOCK, 1, 1),
     )
     # the model's `leaf * learning_rate` rescale on the device, in place, after
     # the apply launches above read the unscaled leaves (lane cpu4-gbdt)
@@ -2586,22 +2539,21 @@ def fit_ordered(
             ctx.enqueue_create_buffer[DType.float32](3 * REDUCE_LANES_BLOCK)
         )
         fast_bins.append(ctx.enqueue_create_buffer[DType.uint32](n_rows))
-    # GBDT_ORD_TREE_BUFS: [sw, sg, noise partials, noise terms, draws,
+    # the per-fit buffers: [sw, sg, noise partials, noise terms, draws,
     # |planes|, magnitudes] and the bins, once per fit (off the wide path)
     var keep_f32 = List[DeviceBuffer[DType.float32]]()
     var keep_bins = List[DeviceBuffer[DType.uint32]]()
-    comptime if GBDT_ORD_TREE_BUFS:
-        if not ord_wide:
-            keep_f32.append(ctx.enqueue_create_buffer[DType.float32](total))
-            keep_f32.append(ctx.enqueue_create_buffer[DType.float32](total))
-            keep_f32.append(
-                ctx.enqueue_create_buffer[DType.float32](3 * REDUCE_LANES_BLOCK)
-            )
-            keep_f32.append(ctx.enqueue_create_buffer[DType.float32](total))
-            keep_f32.append(ctx.enqueue_create_buffer[DType.float32](total))
-            keep_f32.append(ctx.enqueue_create_buffer[DType.float32](2 * total))
-            keep_f32.append(ctx.enqueue_create_buffer[DType.float32](2))
-            keep_bins.append(ctx.enqueue_create_buffer[DType.uint32](n_rows))
+    if not ord_wide:
+        keep_f32.append(ctx.enqueue_create_buffer[DType.float32](total))
+        keep_f32.append(ctx.enqueue_create_buffer[DType.float32](total))
+        keep_f32.append(
+            ctx.enqueue_create_buffer[DType.float32](3 * REDUCE_LANES_BLOCK)
+        )
+        keep_f32.append(ctx.enqueue_create_buffer[DType.float32](total))
+        keep_f32.append(ctx.enqueue_create_buffer[DType.float32](total))
+        keep_f32.append(ctx.enqueue_create_buffer[DType.float32](2 * total))
+        keep_f32.append(ctx.enqueue_create_buffer[DType.float32](2))
+        keep_bins.append(ctx.enqueue_create_buffer[DType.uint32](n_rows))
     var keep_on = len(keep_bins) > 0
     comptime if ORDERED_CAT_CURSORS:
         _ord_fast_init_cursors(
@@ -2986,9 +2938,10 @@ def fit_ordered(
         # unbootstrapped planes and the magnitudes from the bootstrapped
         # ones; both readbacks ride the magnitudes' drain, the host
         # arithmetic on them is the same statements run after it, and every
-        # temporary is held past it. `-D MOJOLEARN_GBDT_FUSED_LEVEL_OFF`
-        # restores the three drains.
-        var defer_drain = PW_FUSED_LEVEL and not fused_sums
+        # temporary is held past it.
+        # TOMBSTONE: MOJOLEARN_GBDT_FUSED_LEVEL_OFF (DELETE-OLD-PATH, no A/B recorded for the old path, rule b; non-owner fold) deleted 2026-11-15 by lane/expdel2-44-trees; code recoverable at 037ec94044.
+        # Restore: git apply experiments/removed/MOJOLEARN_GBDT_FUSED_LEVEL_OFF.expdel2-44-trees.patch; record in docs/TOMBSTONES.md.
+        var defer_drain = not fused_sums
         var held = List[DeviceBuffer[DType.float32]]()
         var held_h = List[HostBuffer[DType.float32]]()
         if fused_sums:
@@ -3444,11 +3397,7 @@ def fit_ordered(
                 est_cursor, opts, est_pools[est_slot], trace,
                 tag + ".estimation", est_times, walker_times,
             )
-            comptime if PW_FUSED_LEVEL:
-                pend_held = pend^
-            else:
-                ctx.synchronize()
-                _ = pend^
+            pend_held = pend^
         for lp in range(0 if batch else learn_count):
             if lp == skip_p:
                 # F: no reader of this permutation's cursors

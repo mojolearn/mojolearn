@@ -19,7 +19,7 @@ family and the ranking targets keep main's path.
                               `d_est` upload.
   MOJOLEARN_EST_REUSE_PART    (deleted 2026-10-09, DROPPED-BUG; see
                               docs/TOMBSTONES.md)
-  MOJOLEARN_EST_ITERS_DEVICE  `leaf_estimation_iterations > 1`: the whole
+  EST_ITERS_DEVICE            `leaf_estimation_iterations > 1`: the whole
                               Newton walk (AnyImprovement line search) runs
                               on the device, one `est_walk_kernel` launch per
                               evaluation deciding accept / halve / stop; one
@@ -29,7 +29,8 @@ family and the ranking targets keep main's path.
   MOJOLEARN_SYM_EST_ALL       EST_STATS_FUSED + EST_ITERS_DEVICE (REUSE_PART
                               and SHRINK_FUSED are recorded DROPs). The FAST
                               + Apple default since 2026-10-04 (rab4-symest);
-                              rollback MOJOLEARN_SYM_EST_ALL_OFF.
+                              its rollback SYM_EST_ALL_OFF was deleted
+                              2026-11-15.
 
 Apple has no f64 on the device, so the device walker computes in f32 what
 the host walker computed in f64 (the Hessian plus lambda, the direction
@@ -49,8 +50,6 @@ from std.sys.compile import is_defined
 from core.accelerator_target import TARGET_HAS_APPLE_GPU
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, identical_mul_add
-from gbdt.apple_fast_classical import AFCL_T06
-from gbdt.gpu_data.apple_fast_trees_experiments import AFT_G07
 from core.identity_trace import IdentityTrace
 from gbdt.gpu_util.kernel.transform import (
     launch_gather_planes_with_mask_f32,
@@ -112,10 +111,11 @@ comptime _APPLE_FAST = (
 #: OUTCOME (M3 afc_ab_def, full board size, 1 run per arm, 2026-10-04, tag
 #: rab4-symest): gbdt-symmetric istella 14721.49 -> 14291.94 ms (-2.9%); auc
 #: 0.980132 -> 0.980155, logloss 0.186584 -> 0.186496 (both better). KEEP:
-#: the FAST + Apple default since then; rollback -D MOJOLEARN_SYM_EST_ALL_OFF
-#: (single defines then select flags again). rab7 per-define row:
+#: the FAST + Apple default since then. rab7 per-define row:
 #: EST_STATS_FUSED -2.5% (covered by this umbrella).
-comptime EST_ALL = _APPLE_FAST and not is_defined["MOJOLEARN_SYM_EST_ALL_OFF"]()
+# TOMBSTONE: MOJOLEARN_SYM_EST_ALL_OFF (DELETE-OLD-PATH, EXP:1275 ACCEPT on the M3 only; FAST is Apple only, so no other vendor is owed; rule d) deleted 2026-11-15 by lane/expdel2-44-trees; code recoverable at ab7c8ba7f3.
+# Restore: git apply experiments/removed/MOJOLEARN_SYM_EST_ALL_OFF.patch; record in docs/TOMBSTONES.md.
+comptime EST_ALL = _APPLE_FAST
 #: recovery 2026-10-04 (lane/apple-fast-rec-sym): source
 #: lane/apple-fast-sym-est@c8518eb52; never built (its slot was killed
 #: unstarted), never timed.
@@ -125,9 +125,9 @@ comptime EST_STATS_FUSED = _APPLE_FAST and (
 #: recovery 2026-10-04 (lane/apple-fast-rec-sym): source
 #: lane/apple-fast-sym-est@c8518eb52; never built (its slot was killed
 #: unstarted), never timed. (no EXPERIMENTS row at the source; added here)
-comptime EST_ITERS_DEVICE = _APPLE_FAST and (
-    is_defined["MOJOLEARN_EST_ITERS_DEVICE"]() or EST_ALL
-)
+# TOMBSTONE: MOJOLEARN_EST_ITERS_DEVICE (DELETE-EXPERIMENT, EXP:1303 NEUTRAL force knob under the SYM_EST_ALL default, rule g) deleted 2026-11-15 by lane/expdel2-44-trees; code recoverable at 886f01f544.
+# Restore: git apply experiments/removed/MOJOLEARN_EST_ITERS_DEVICE.patch; record in docs/TOMBSTONES.md.
+comptime EST_ITERS_DEVICE = EST_ALL
 # TOMBSTONE: MOJOLEARN_EST_REUSE_PART (DROPPED-BUG: istella auc .980 -> .930, logloss .186 -> 2.15) deleted 2026-10-09 on
 # lane/owed-deletions-D1 (row-order evaluation over the searcher's partition); code recoverable at b639a2bd2.
 # Restore: git apply experiments/removed/MOJOLEARN_EST_REUSE_PART.patch; record in docs/TOMBSTONES.md.
@@ -139,12 +139,9 @@ comptime EST_APPLE_ANY = (
 )
 
 #: one block, one thread per leaf (looping past 256 leaves)
-# G07: four Apple SIMD groups rather than eight reduce objective partials
-# and traverse every leaf. Shared partition-statistics/fused block contracts
-# remain untouched. Uncompiled/unverified/unmeasured; changed FAST rounding
-# can affect a line-search acceptance boundary, so weighted/multi-iteration
-# quality remains required before any decision.
-comptime EST_WALK_BLOCK = 128 if AFT_G07 else 256
+# TOMBSTONE: MOJOLEARN_AFT_G07 (DELETE-EXPERIMENT, never-run Apple FAST programme card, rule g; non-owner fold) deleted 2026-11-15 by lane/expdel2-44-trees; code recoverable at 9f30a1ac0e.
+# Restore: git apply experiments/removed/MOJOLEARN_AFT_G07.expdel2-44-trees.patch; record in docs/TOMBSTONES.md.
+comptime EST_WALK_BLOCK = 256
 #: the walker's never-accepted cap, `iteration < 100` (`descent_helpers.cpp:179`)
 comptime EST_WALK_TRY_CAP = 100
 #: their `1e-20f` (`descent_helpers.cpp:87`), the f32 literal
@@ -155,10 +152,8 @@ comptime EST_MIN_LEAF_WEIGHT = Float32(1e-20)
 
 @always_inline
 def _afcl_leaf_stats_sm(sm: Int) -> Int:
-    # Scheduling proxy only: halve the partial-grid budget, not the device's
-    # reported hardware. Allocation and both statistic launchers use this.
-    comptime if AFCL_T06:
-        return max(1, (sm + 1) // 2)
+    # TOMBSTONE: MOJOLEARN_AFCL_T06 (DELETE-EXPERIMENT, never-run Apple FAST classical card, rule g; non-owner fold) deleted 2026-11-15 by lane/expdel2-44-trees; code recoverable at 7a4e69bdca.
+    # Restore: git apply experiments/removed/MOJOLEARN_AFCL_T06.expdel2-44-trees.patch; record in docs/TOMBSTONES.md.
     return sm
 
 

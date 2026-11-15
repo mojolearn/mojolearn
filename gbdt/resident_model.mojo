@@ -87,7 +87,6 @@ built with it.
 """
 from std.memory import unsafe_memcpy
 from std.sys.compile import is_defined
-from core.forest_experiments import C50_GB_PACKED
 
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from core.neural_context import process_ctx
@@ -104,7 +103,6 @@ from checks.numerics import (
     identical_exp64,
 )
 from core.device_zero import enqueue_fill
-from core.apple_fast_tree_experiments import AFT_P05
 from gbdt.data.quantization import NAN_TREATMENT_AS_IS, nan_substitution
 from gbdt.gpu_data.compressed_index_builder import (
     CompressedIndexLayout,
@@ -113,12 +111,7 @@ from gbdt.gpu_data.compressed_index_builder import (
 from gbdt.gpu_data.kernel.binarize import (
     BINARIZE_BLOCK_SIZE,
     BINARIZE_DOCS_PER_THREAD,
-    PACK_BLOCK,
-    PACK_BORDER_CAP,
-    PACK_DOCS,
-    PACK_MAX_ENTRIES,
     binarize_float_feature_kernel,
-    pack_cindex_words_kernel,
 )
 from gbdt.methods.doc_parallel_boosting import model_approx_dim, predict
 from gbdt.models.add_non_symmetric_tree_doc_parallel import (
@@ -134,15 +127,9 @@ from gbdt.models.kernel.resident_ctr import (
 from gbdt.models.tensor_ctr_apply import TTensorCtrApplyTable
 from gbdt.apple_fast_classical import AFCL_PREDICT_BLOCK
 from gbdt.models.kernel.add_bin_values import (
-    IDN_APPLY_WIDE,
-    PRED_ALL_CHUNK_LEVELS,
-    compute_bins_and_add_all_kernel,
     compute_bins_and_add_four_kernel,
     compute_bins_and_add_kernel,
-    launch_oblivious_apply_wide,
-    uniform_positive_depth,
 )
-from gbdt.gpu_data.sym_feat_switches import GBDT_PREDICT_PACKED
 from gbdt.models.model_text import load_model_text
 from gbdt.models.oblivious_model import BIN_SPLIT_TAKE_BIN
 from gbdt.train import TrainedModel, model_input_features
@@ -191,124 +178,8 @@ comptime STAGE_MIN_ROWS_PER_TASK = 4096
 comptime PAIR_SABOTAGE = is_defined["MOJOLEARN_FOREST_HOST_SABOTAGE"]()
 
 
-@fieldwise_init
-struct _PackedPredict(Movable):
-    """lane/apple-fast-sym-feat (`GBDT_PREDICT_PACKED`): one call's packed
-    tables, ONE uint32 host buffer and its device copy, kept alive by the
-    caller until its final drain (no drain of their own).
-
-    Layout: `[pack section][tree section]`. The pack section (absent when
-    `packed` is False) is `pack_cindex_words_kernel`'s word starts (`nw +
-    1`), then per entry the column, shift, mask, slab offset and the NaN
-    substitute's bits (`resident_stage_kernel` has already substituted, so
-    every substitute is a NaN: leave the value alone). The tree section is
-    `compute_bins_and_add_all_kernel`'s depth (`T`), first level (`T + 1`,
-    the last the total), first leaf value (`T`) and the chunk starts
-    (`n_chunks + 1`)."""
-    var h: HostBuffer[DType.uint32]
-    var d: DeviceBuffer[DType.uint32]
-    var packed: Bool
-    var n_entries: Int
-    var n_words: Int
-    var tree_at: Int
-    var n_chunks: Int
-
-
-def _build_packed_predict(
-    ctx: DeviceContext,
-    tm: TrainedModel,
-    layout: CompressedIndexLayout,
-    approx_dim: Int,
-) raises -> _PackedPredict:
-    """Host side of `GBDT_PREDICT_PACKED`: walk the model's columns (not
-    its rows) and trees once, write both tables into one pinned buffer and
-    enqueue ONE upload. The word table's shared-page gate is the training
-    builder's (`PACK_MAX_ENTRIES` features, `PACK_BORDER_CAP` borders a
-    word); a model over it keeps the per-feature binarize launches. Trees
-    are cut into chunks of at most `PRED_ALL_CHUNK_LEVELS` levels, the
-    all-trees kernel's shared page."""
-    var n_columns = len(tm.borders)
-    var nw = layout.columns
-    var per_word = List[List[Int]]()
-    # driver-loop: over the packed words
-    for _ in range(nw):
-        per_word.append(List[Int]())
-    # driver-loop: over the feature columns
-    for f in range(n_columns):
-        if len(tm.borders[f]) == 0:
-            continue
-        per_word[Int(layout.features[f].offset)].append(f)
-    var fits = nw > 0
-    var ne = 0
-    # driver-loop: over the packed words
-    for w in range(nw):
-        var total = 0
-        # driver-loop: over the features of one packed word
-        for k in range(len(per_word[w])):
-            total += len(tm.borders[per_word[w][k]])
-        if len(per_word[w]) > PACK_MAX_ENTRIES or total > PACK_BORDER_CAP:
-            fits = False
-        ne += len(per_word[w])
-    if ne == 0:
-        fits = False
-    var n_trees = tm.model.size()
-    var depths = List[Int]()
-    # driver-loop: over the trees
-    for t in range(n_trees):
-        depths.append(tm.model.weak_models[t].structure.get_depth())
-    var chunk_start = List[Int]()
-    chunk_start.append(0)
-    var run = 0
-    # driver-loop: over the trees
-    for t in range(n_trees):
-        # C50 counts a constant tree as one unit of leaf-load work, ensuring
-        # all-constant ensembles are bounded too. Real level bytes can only
-        # be smaller than this work bound, so the shared page always fits.
-        var work = max(1, depths[t]) if C50_GB_PACKED else depths[t]
-        if run > 0 and run + work > PRED_ALL_CHUNK_LEVELS:
-            chunk_start.append(t)
-            run = 0
-        run += work
-    chunk_start.append(n_trees)
-    var n_chunks = len(chunk_start) - 1
-    var pack_len = (nw + 1 + 5 * ne) if fits else 0
-    var tree_len = 3 * n_trees + 1 + n_chunks + 1
-    var total_len = max(pack_len + tree_len, 1)
-    var h = ctx.enqueue_create_host_buffer[DType.uint32](total_len)
-    var hp = h.unsafe_ptr()
-    if fits:
-        var e = 0
-        # driver-loop: over the packed words
-        for w in range(nw):
-            hp.unsafe_store(w, UInt32(e))
-            # driver-loop: over the features of one packed word
-            for k in range(len(per_word[w])):
-                var f = per_word[w][k]
-                ref cf = layout.features[f]
-                var b = nw + 1
-                hp.unsafe_store(b + e, UInt32(f))
-                hp.unsafe_store(b + ne + e, cf.shift)
-                hp.unsafe_store(b + 2 * ne + e, cf.mask)
-                hp.unsafe_store(b + 3 * ne + e, UInt32(f * BORDER_SLAB))
-                hp.unsafe_store(b + 4 * ne + e, UInt32(0x7FC00000))
-                e += 1
-        hp.unsafe_store(nw, UInt32(e))
-    var at = pack_len
-    var lvl = 0
-    var leaf = 0
-    # driver-loop: over the trees
-    for t in range(n_trees):
-        hp.unsafe_store(at + t, UInt32(depths[t]))
-        hp.unsafe_store(at + n_trees + t, UInt32(lvl))
-        hp.unsafe_store(at + 2 * n_trees + 1 + t, UInt32(leaf))
-        lvl += depths[t]
-        leaf += (1 << depths[t]) * approx_dim
-    hp.unsafe_store(at + 2 * n_trees, UInt32(lvl))
-    for c in range(n_chunks + 1):
-        hp.unsafe_store(at + 3 * n_trees + 1 + c, UInt32(chunk_start[c]))
-    var d = ctx.enqueue_create_buffer[DType.uint32](total_len)
-    ctx.enqueue_copy(dst_buf=d, src_ptr=hp)
-    return _PackedPredict(h^, d^, fits, ne, nw, pack_len, n_chunks)
+# TOMBSTONE: MOJOLEARN_GBDT_PREDICT_PACKED (DELETE-EXPERIMENT, EXP:171 NEUTRAL, held only for a never-run Apple FAST card, rule g; non-owner fold) deleted 2026-11-15 by lane/expdel2-44-trees; code recoverable at c55bcd3b80.
+# Restore: git apply experiments/removed/MOJOLEARN_GBDT_PREDICT_PACKED.expdel2-44-trees.patch; record in docs/TOMBSTONES.md.
 
 
 struct ResidentGbdtModel(Movable):
@@ -708,25 +579,8 @@ struct ResidentGbdtModel(Movable):
         var wide = (n_rows + AFCL_PREDICT_BLOCK - 1) // AFCL_PREDICT_BLOCK
         if wide > 1024:
             wide = 1024
-        comptime if C50_GB_PACKED:
-            # C50 GB: reuse the supported exact packed model metadata, but
-            # launch one bounded mixed-depth tree chunk at a time. The shared
-            # metadata byte capacity defines chunks, never board dimensions.
-            # Each cursor carries precisely the incumbent tree-order additions.
-            # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
-            var pp = _build_packed_predict(ctx, self.tm, self.layout, self.approx_dim)
-            var trees = pp.d.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]() + pp.tree_at
-            var nt = self.tm.model.size()
-            for chunk in range(pp.n_chunks):
-                ctx.enqueue_function[compute_bins_and_add_all_kernel](
-                    self.d_cindex.value().unsafe_ptr(), self.d_off.unsafe_ptr(), self.d_shift.unsafe_ptr(),
-                    self.d_mask.unsafe_ptr(), self.d_bin.unsafe_ptr(), self.d_eq.unsafe_ptr(), trees, trees+nt,
-                    trees+2*nt+1, trees+3*nt+1+chunk, Int32(1), self.d_vals.unsafe_ptr(), Int32(n_rows),
-                    self.d_cursor.value().unsafe_ptr(), Int32(self.approx_dim), Int32(n_rows),
-                    grid_dim=(wide, self.approx_dim, 1), block_dim=(256,1,1))
-            ctx.synchronize()
-            _ = pp^
-            return
+        # TOMBSTONE: MOJOLEARN_TREES_C50_GB_PACKED (DELETE-ARM, opt-in arm, no A/B recorded, rule a; non-owner fold) deleted 2026-11-15 by lane/expdel2-44-trees; code recoverable at 64dbc2ee5f.
+        # Restore: git apply experiments/removed/MOJOLEARN_TREES_C50_GB_PACKED.expdel2-44-trees.patch; record in docs/TOMBSTONES.md.
         var lvl = 0
         var leaf = 0
         comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
@@ -750,23 +604,8 @@ struct ResidentGbdtModel(Movable):
                 lvl += depth
                 leaf += (1 << depth) * self.approx_dim
             return
-        comptime if IDN_APPLY_WIDE:
-            # lane/fam2-gbdt F4 (candidate arm): one depth across the
-            # ensemble -> `APPLY_WIDE_TREES` trees per launch, same adds
-            var tree_depths = List[Int](capacity=self.tm.model.size())
-            for tw in range(self.tm.model.size()):  # small-loop(self.tm.model.size: trees): collects the per-tree depths, model metadata
-                tree_depths.append(
-                    self.tm.model.weak_models[tw].structure.get_depth()
-                )
-            var uniform = uniform_positive_depth(tree_depths)
-            if uniform > 0:
-                launch_oblivious_apply_wide(
-                    ctx, self.d_cindex.value(), self.d_off, self.d_shift,
-                    self.d_mask, self.d_bin, self.d_eq, self.d_vals,
-                    uniform, self.tm.model.size(), n_rows,
-                    self.d_cursor.value(), self.approx_dim,
-                )
-                return
+        # TOMBSTONE: MOJOLEARN_IDN_GBDT_APPLY_WIDE (DELETE-ARM, opt-in candidate arm, no A/B recorded, rule a) deleted 2026-11-15 by lane/expdel2-44-trees; code recoverable at d0c26dae37.
+        # Restore: git apply experiments/removed/MOJOLEARN_IDN_GBDT_APPLY_WIDE.patch; record in docs/TOMBSTONES.md.
         var t = 0
         while t < self.tm.model.size():
             var count = min(4, self.tm.model.size() - t)
@@ -802,53 +641,6 @@ struct ResidentGbdtModel(Movable):
                 + (1 << d3 if count > 3 else 0)
             ) * self.approx_dim
             t += count
-
-    def _apply_all(
-        mut self,
-        n_rows: Int,
-        trees: MutPointer[UInt32, MutAnyOrigin],
-        n_chunks: Int,
-    ) raises:
-        """lane/apple-fast-sym-feat (`GBDT_PREDICT_PACKED`): `_apply`'s
-        oblivious path in ONE `compute_bins_and_add_all_kernel` launch.
-        Same cursor seed, same per-call level offsets (`d_off`), the trees
-        in order with the same float32 adds. `trees` is `_PackedPredict`'s
-        tree section: depth `[0, T)`, first level `[T, 2T]`, first leaf
-        value `[2T + 1, 3T + 1)`, chunk starts after."""
-        ref ctx = self.ctx
-        var n_trees = self.tm.model.size()
-        enqueue_fill(ctx, self.d_cursor.value(), Float32(self.tm.model.bias))
-        var ho = self.h_off.unsafe_ptr()
-        if self.total_levels == 0:
-            ho.unsafe_store(0, UInt32(0))
-        for lvl in range(self.total_levels):
-            ho.unsafe_store(lvl, self.off_base[lvl] * UInt32(n_rows))
-        ctx.enqueue_copy(dst_buf=self.d_off, src_ptr=ho)
-        # P05: two rows per lane, same grid cap, no shape-specific route.
-        var rows_per_block = AFCL_PREDICT_BLOCK * (2 if AFT_P05 else 1)
-        var wide = (n_rows + rows_per_block - 1) // rows_per_block
-        if wide > 1024:
-            wide = 1024
-        ctx.enqueue_function[compute_bins_and_add_all_kernel](
-            self.d_cindex.value().unsafe_ptr(),
-            self.d_off.unsafe_ptr(),
-            self.d_shift.unsafe_ptr(),
-            self.d_mask.unsafe_ptr(),
-            self.d_bin.unsafe_ptr(),
-            self.d_eq.unsafe_ptr(),
-            trees,
-            trees + n_trees,
-            trees + 2 * n_trees + 1,
-            trees + 3 * n_trees + 1,
-            Int32(n_chunks),
-            self.d_vals.unsafe_ptr(),
-            Int32(n_rows),
-            self.d_cursor.value().unsafe_ptr(),
-            Int32(self.approx_dim),
-            Int32(n_rows),
-            grid_dim=(wide, self.approx_dim, 1),
-            block_dim=(AFCL_PREDICT_BLOCK, 1, 1),
-        )
 
     def _predict_device(
         mut self,
@@ -920,64 +712,19 @@ struct ResidentGbdtModel(Movable):
                     grid_dim=blocks, block_dim=STAGE_BLOCK,
                 )
             comptime BIN_GRID = BINARIZE_BLOCK_SIZE * BINARIZE_DOCS_PER_THREAD
-            comptime if GBDT_PREDICT_PACKED:
-                # lane/apple-fast-sym-feat: ONE pack launch quantizes every
-                # word and ONE launch applies every tree; the tables ride
-                # one upload and are held to a single drain after the
-                # launches that read them
-                var pp = _build_packed_predict(
-                    ctx, self.tm, self.layout, self.approx_dim
+            for f in range(n_cols):
+                if len(self.tm.borders[f]) == 0:
+                    continue
+                ref cf = self.layout.features[f]
+                ctx.enqueue_function[binarize_float_feature_kernel](
+                    Int32(Int(cf.offset) * n_rows), cf.mask, cf.shift,
+                    self.d_x.value().unsafe_ptr() + f * n_rows, Int32(n_rows),
+                    self.d_borders.unsafe_ptr() + f * BORDER_SLAB,
+                    self.d_cindex.value().unsafe_ptr(),
+                    grid_dim=(n_rows + BIN_GRID - 1) // BIN_GRID,
+                    block_dim=(BINARIZE_BLOCK_SIZE, 1, 1),
                 )
-                var pd = pp.d.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
-                if pp.packed:
-                    var ne = pp.n_entries
-                    var nw = pp.n_words
-                    var b = nw + 1
-                    comptime PACK_ROWS = PACK_BLOCK * PACK_DOCS
-                    ctx.enqueue_function[pack_cindex_words_kernel](
-                        self.d_x.value().unsafe_ptr(), Int32(n_rows),
-                        pd, pd + b, pd + b + ne, pd + b + 2 * ne,
-                        pd + b + 3 * ne,
-                        (pd + b + 4 * ne).bitcast[Float32](),
-                        self.d_borders.unsafe_ptr(),
-                        self.d_cindex.value().unsafe_ptr(),
-                        grid_dim=((n_rows + PACK_ROWS - 1) // PACK_ROWS, nw, 1),
-                        block_dim=(PACK_BLOCK, 1, 1),
-                    )
-                else:
-                    for f in range(n_cols):
-                        if len(self.tm.borders[f]) == 0:
-                            continue
-                        ref cf = self.layout.features[f]
-                        ctx.enqueue_function[binarize_float_feature_kernel](
-                            Int32(Int(cf.offset) * n_rows), cf.mask, cf.shift,
-                            self.d_x.value().unsafe_ptr() + f * n_rows,
-                            Int32(n_rows),
-                            self.d_borders.unsafe_ptr() + f * BORDER_SLAB,
-                            self.d_cindex.value().unsafe_ptr(),
-                            grid_dim=(n_rows + BIN_GRID - 1) // BIN_GRID,
-                            block_dim=(BINARIZE_BLOCK_SIZE, 1, 1),
-                        )
-                if self.oblivious and self.tm.model.size() > 0:
-                    self._apply_all(n_rows, pd + pp.tree_at, pp.n_chunks)
-                else:
-                    self._apply(n_rows)
-                ctx.synchronize()
-                _ = pp^
-            else:
-                for f in range(n_cols):
-                    if len(self.tm.borders[f]) == 0:
-                        continue
-                    ref cf = self.layout.features[f]
-                    ctx.enqueue_function[binarize_float_feature_kernel](
-                        Int32(Int(cf.offset) * n_rows), cf.mask, cf.shift,
-                        self.d_x.value().unsafe_ptr() + f * n_rows, Int32(n_rows),
-                        self.d_borders.unsafe_ptr() + f * BORDER_SLAB,
-                        self.d_cindex.value().unsafe_ptr(),
-                        grid_dim=(n_rows + BIN_GRID - 1) // BIN_GRID,
-                        block_dim=(BINARIZE_BLOCK_SIZE, 1, 1),
-                    )
-                self._apply(n_rows)
+            self._apply(n_rows)
             var link_blocks = min((n_rows + LINK_BLOCK - 1) // LINK_BLOCK, 65535)
             ctx.enqueue_function[resident_link_kernel](
                 self.d_cursor.value().unsafe_ptr(),

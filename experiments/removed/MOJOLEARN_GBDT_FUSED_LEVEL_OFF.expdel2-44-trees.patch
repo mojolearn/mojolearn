@@ -1,0 +1,39 @@
+diff --git a/gbdt/methods/ordered_boosting.mojo b/gbdt/methods/ordered_boosting.mojo
+index d6d115067a..32bf8ce6c1 100644
+--- a/gbdt/methods/ordered_boosting.mojo
++++ b/gbdt/methods/ordered_boosting.mojo
+@@ -201,6 +201,7 @@ from gbdt.methods.leaves_estimation.doc_parallel_leaves_estimator import (
+     compute_bins_for_model,
+     LeafPartition,
+ )
++from gbdt.methods.kernel.pointwise_split_resolve import PW_FUSED_LEVEL
+ from gbdt.methods.ordered_fast_switches import ORD_ALL, ord_all_on
+ from gbdt.trees_identical_switches import (
+     T24,
+@@ -2938,10 +2939,9 @@ def fit_ordered(
+         # unbootstrapped planes and the magnitudes from the bootstrapped
+         # ones; both readbacks ride the magnitudes' drain, the host
+         # arithmetic on them is the same statements run after it, and every
+-        # temporary is held past it.
+-        # TOMBSTONE: MOJOLEARN_GBDT_FUSED_LEVEL_OFF (DELETE-OLD-PATH, no A/B recorded for the old path, rule b; non-owner fold) deleted 2026-11-15 by lane/expdel2-44-trees; code recoverable at 037ec94044.
+-        # Restore: git apply experiments/removed/MOJOLEARN_GBDT_FUSED_LEVEL_OFF.expdel2-44-trees.patch; record in docs/TOMBSTONES.md.
+-        var defer_drain = not fused_sums
++        # temporary is held past it. `-D MOJOLEARN_GBDT_FUSED_LEVEL_OFF`
++        # restores the three drains.
++        var defer_drain = PW_FUSED_LEVEL and not fused_sums
+         var held = List[DeviceBuffer[DType.float32]]()
+         var held_h = List[HostBuffer[DType.float32]]()
+         if fused_sums:
+@@ -3397,7 +3397,11 @@ def fit_ordered(
+                 est_cursor, opts, est_pools[est_slot], trace,
+                 tag + ".estimation", est_times, walker_times,
+             )
+-            pend_held = pend^
++            comptime if PW_FUSED_LEVEL:
++                pend_held = pend^
++            else:
++                ctx.synchronize()
++                _ = pend^
+         for lp in range(0 if batch else learn_count):
+             if lp == skip_p:
+                 # F: no reader of this permutation's cursors

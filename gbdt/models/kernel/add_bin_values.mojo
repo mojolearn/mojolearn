@@ -32,39 +32,27 @@ from std.memory import stack_allocation
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from max.gpu.host import DeviceBuffer, DeviceContext
-from std.sys.compile import is_defined
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
-from core.apple_fast_tree_experiments import AFT_P05
 
 #: lane/fam2-gbdt F3 (IDENTICAL, every vendor; default ON): the non-resident
 #: `predict` (`gbdt/methods/doc_parallel_boosting.mojo`) launches the
 #: oblivious ensemble four trees per launch (`compute_bins_and_add_four_kernel`,
 #: the resident path's grouping) instead of one launch per tree. Same ordered
 #: float32 adds per row, so no bit moves and the host column is untouched.
-#: `-D MOJOLEARN_IDN_GBDT_PREDICT_FOUR_OFF` (or `-D MOJOLEARN_IDN_ALL_OFF`)
-#: restores one launch per tree.
-comptime IDN_PREDICT_FOUR = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not (
-        is_defined["MOJOLEARN_IDN_GBDT_PREDICT_FOUR_OFF"]()
-        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-    )
-)
+# TOMBSTONE: MOJOLEARN_IDN_GBDT_PREDICT_FOUR_OFF (DELETE-OLD-PATH, no A/B recorded for the old path, rule b) deleted 2026-11-15 by lane/expdel2-44-trees; code recoverable at a8ef992718.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_GBDT_PREDICT_FOUR_OFF.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (DELETE-OLD-PATH, EXP:2438 master old-path switch already deleted, rule e; non-owner fold) deleted 2026-11-15 by lane/expdel2-44-trees; code recoverable at 931e7ca76a.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-44-trees.patch; record in docs/TOMBSTONES.md.
+comptime IDN_PREDICT_FOUR = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 
-#: lane/fam2-gbdt F4 (IDENTICAL; CANDIDATE ARM, default OFF, enable with
-#: `-D MOJOLEARN_IDN_GBDT_APPLY_WIDE`): an ensemble whose trees all share one
-#: positive depth is applied `APPLY_WIDE_TREES` trees per launch
-#: (`compute_bins_and_add_uniform_kernel`), each row carrying its sum in a
-#: register through the trees in tree order: the same ordered float32 adds,
-#: one cursor store per launch instead of one per tree. No bit moves. Time it
-#: against the four-tree grouping (resident predict and `predict`). An
-#: ensemble with mixed depths keeps the four-tree grouping.
-comptime IDN_APPLY_WIDE = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and is_defined["MOJOLEARN_IDN_GBDT_APPLY_WIDE"]()
-    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
+#: lane/fam2-gbdt F4, the wide uniform-depth apply (candidate arm, never
+#: timed). The name stays False for its importers; the integrator deletes it,
+#: `launch_oblivious_apply_wide` and `compute_bins_and_add_uniform_kernel`
+#: once `gbdt/methods/doc_parallel_boosting.mojo` no longer imports them.
+# TOMBSTONE: MOJOLEARN_IDN_GBDT_APPLY_WIDE (DELETE-ARM, opt-in candidate arm, no A/B recorded, rule a) deleted 2026-11-15 by lane/expdel2-44-trees; code recoverable at 805d22d33d.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_GBDT_APPLY_WIDE.patch; record in docs/TOMBSTONES.md.
+comptime IDN_APPLY_WIDE = False
 
 #: trees per launch of the wide arm: bounded so one launch stays short (macOS
 #: cuts a Metal launch that runs for seconds)
@@ -747,156 +735,5 @@ def launch_oblivious_apply_four(
         t += count
 
 
-# ---------------------------------------------------------------------------
-# lane/apple-fast-sym-feat (2026-10-03): referenced ONLY under the FAST +
-# Apple guard `GBDT_PREDICT_PACKED` (`gbdt/resident_model.mojo`); IDENTICAL
-# never instantiates it.
-# ---------------------------------------------------------------------------
-
-#: the most split LEVELS one staged chunk of trees holds: 5 words a level,
-#: 20 KB of threadgroup memory. The host (`ResidentGbdtModel.__init__`)
-#: cuts the ensemble into chunks of consecutive trees under this bound, so
-#: the shared page always fits.
-comptime PRED_ALL_CHUNK_LEVELS = 1024
-
-
-def compute_bins_and_add_all_kernel(
-    compressed_index: MutPointer[UInt32, MutAnyOrigin],
-    feature_offset: MutPointer[UInt32, MutAnyOrigin],
-    feature_shift: MutPointer[UInt32, MutAnyOrigin],
-    feature_mask: MutPointer[UInt32, MutAnyOrigin],
-    split_bin: MutPointer[UInt32, MutAnyOrigin],
-    take_equal: MutPointer[UInt8, MutAnyOrigin],
-    tree_depth: MutPointer[UInt32, MutAnyOrigin],
-    tree_level_start: MutPointer[UInt32, MutAnyOrigin],
-    tree_leaf_start: MutPointer[UInt32, MutAnyOrigin],
-    chunk_tree_start: MutPointer[UInt32, MutAnyOrigin],
-    n_chunks_in: Int32,
-    leaf_values: MutPointer[Float32, MutAnyOrigin],
-    n_rows_in: Int32,
-    cursor: MutPointer[Float32, MutAnyOrigin],
-    dim_count_in: Int32,
-    cursor_stride_in: Int32,
-):
-    """Every oblivious tree of the ensemble in ONE launch, tree order kept.
-
-    `compute_bins_and_add_kernel` per tree, fused: the ensemble is walked
-    in chunks of consecutive trees (`chunk_tree_start[c] .. [c + 1])`,
-    each chunk's level records (offset, shift, mask, bin, take-equal) staged
-    once into threadgroup memory, and every row of the grid-stride adds the
-    chunk's leaf values to its cursor word IN TREE ORDER before the next
-    chunk is staged. The per-tree kernel does `cursor = cursor + leaf` once
-    per tree; this does the same float32 adds in the same order, through a
-    register inside a chunk and the cursor word between chunks, so the
-    cursor leaves bit for bit as it did after the last per-tree launch.
-    `tree_depth[t]`, `tree_level_start[t]` (index of the tree's first
-    level record) and `tree_leaf_start[t]` (index of its first leaf value,
-    bin-major `[leaf * dim + dim]` as the model stores them) describe the
-    trees; `block_idx.y` is the cursor plane as in the per-tree kernel.
-    """
-    var n_rows = Int(n_rows_in)
-    var dim = Int(block_idx.y)
-    var dim_count = Int(dim_count_in)
-    var plane = dim * Int(cursor_stride_in)
-    var n_chunks = Int(n_chunks_in)
-    var meta = stack_allocation[
-        5 * PRED_ALL_CHUNK_LEVELS,
-        Scalar[DType.uint32],
-        address_space = AddressSpace.SHARED,
-    ]()
-    var tid = Int(thread_idx.x)
-    var stride = Int(grid_dim.x) * Int(block_dim.x)
-    for c in range(n_chunks):
-        var t0 = Int(chunk_tree_start.unsafe_load(c))
-        var t1 = Int(chunk_tree_start.unsafe_load(c + 1))
-        var l0 = Int(tree_level_start.unsafe_load(t0))
-        var l1 = Int(tree_level_start.unsafe_load(t1))
-        var n_lv = l1 - l0
-        var j = tid
-        while j < n_lv:
-            meta.unsafe_store(j, feature_offset.unsafe_load(l0 + j))
-            meta.unsafe_store(
-                PRED_ALL_CHUNK_LEVELS + j, feature_shift.unsafe_load(l0 + j)
-            )
-            meta.unsafe_store(
-                2 * PRED_ALL_CHUNK_LEVELS + j, feature_mask.unsafe_load(l0 + j)
-            )
-            meta.unsafe_store(
-                3 * PRED_ALL_CHUNK_LEVELS + j, split_bin.unsafe_load(l0 + j)
-            )
-            meta.unsafe_store(
-                4 * PRED_ALL_CHUNK_LEVELS + j,
-                UInt32(take_equal.unsafe_load(l0 + j)),
-            )
-            j += Int(block_dim.x)
-        barrier()
-        comptime if AFT_P05:
-            # P05: a two-plane row tile shares every tree/split descriptor.
-            # The second plane is guarded; every worker still hits both
-            # shared-page barriers even when its rows are out of range.
-            var i = Int(block_idx.x) * Int(block_dim.x) * 2 + tid
-            while i < n_rows:
-                var i1 = i + Int(block_dim.x)
-                var has_second = i1 < n_rows
-                var acc = cursor.unsafe_load(plane + i)
-                var acc1 = Float32(0)
-                if has_second:
-                    acc1 = cursor.unsafe_load(plane + i1)
-                for t in range(t0, t1):
-                    var depth = Int(tree_depth.unsafe_load(t))
-                    var lb = Int(tree_level_start.unsafe_load(t)) - l0
-                    var leaf_base = Int(tree_leaf_start.unsafe_load(t))
-                    var leaf = 0
-                    var leaf1 = 0
-                    for level in range(depth):
-                        var k = lb + level
-                        var off = Int(meta.unsafe_load(k))
-                        var shift = meta.unsafe_load(PRED_ALL_CHUNK_LEVELS + k)
-                        var mask = meta.unsafe_load(2 * PRED_ALL_CHUNK_LEVELS + k) << shift
-                        var value = meta.unsafe_load(3 * PRED_ALL_CHUNK_LEVELS + k) << shift
-                        var equal = meta.unsafe_load(4 * PRED_ALL_CHUNK_LEVELS + k) != UInt32(0)
-                        var feature_val = compressed_index.unsafe_load(off + i) & mask
-                        var take = feature_val == value if equal else feature_val > value
-                        if take:
-                            leaf += 1 << level
-                        if has_second:
-                            var feature_val1 = compressed_index.unsafe_load(off + i1) & mask
-                            var take1 = feature_val1 == value if equal else feature_val1 > value
-                            if take1:
-                                leaf1 += 1 << level
-                    acc = acc + leaf_values.unsafe_load(leaf_base + leaf * dim_count + dim)
-                    if has_second:
-                        acc1 = acc1 + leaf_values.unsafe_load(leaf_base + leaf1 * dim_count + dim)
-                cursor.unsafe_store(plane + i, acc)
-                if has_second:
-                    cursor.unsafe_store(plane + i1, acc1)
-                i += stride * 2
-        else:
-            var i = Int(block_idx.x) * Int(block_dim.x) + tid
-            while i < n_rows:
-                var acc = cursor.unsafe_load(plane + i)
-                for t in range(t0, t1):
-                    var depth = Int(tree_depth.unsafe_load(t))
-                    var lb = Int(tree_level_start.unsafe_load(t)) - l0
-                    var leaf_base = Int(tree_leaf_start.unsafe_load(t))
-                    var leaf = 0
-                    for level in range(depth):
-                        var k = lb + level
-                        var off = Int(meta.unsafe_load(k))
-                        var shift = meta.unsafe_load(PRED_ALL_CHUNK_LEVELS + k)
-                        var mask = meta.unsafe_load(2 * PRED_ALL_CHUNK_LEVELS + k) << shift
-                        var value = meta.unsafe_load(3 * PRED_ALL_CHUNK_LEVELS + k) << shift
-                        var feature_val = compressed_index.unsafe_load(off + i) & mask
-                        var split: Bool
-                        if meta.unsafe_load(4 * PRED_ALL_CHUNK_LEVELS + k) != UInt32(0):
-                            split = feature_val == value
-                        else:
-                            split = feature_val > value
-                        if split:
-                            leaf += 1 << level
-                    acc = acc + leaf_values.unsafe_load(
-                        leaf_base + leaf * dim_count + dim
-                    )
-                cursor.unsafe_store(plane + i, acc)
-                i += stride
-        barrier()
+# TOMBSTONE: MOJOLEARN_GBDT_PREDICT_PACKED (DELETE-EXPERIMENT, EXP:171 NEUTRAL, held only for a never-run Apple FAST card, rule g; its all-trees kernel compute_bins_and_add_all_kernel went with it; non-owner fold) deleted 2026-11-15 by lane/expdel2-44-trees; code recoverable at c55bcd3b80.
+# Restore: git apply experiments/removed/MOJOLEARN_GBDT_PREDICT_PACKED.expdel2-44-trees.patch; record in docs/TOMBSTONES.md.

@@ -1828,6 +1828,31 @@ in the tables after the sections.
 | [`MOJOLEARN_GBDT_NS_INHERIT_PARTITION_OFF`](#mojolearn_gbdt_ns_inherit_partition_off) | Trees (GBDT non-symmetric, FAST Apple inherited partition) | removed (old path, no A/B recorded) | 2026-11-15 | [MOJOLEARN_GBDT_NS_INHERIT_PARTITION_OFF.patch](../experiments/removed/MOJOLEARN_GBDT_NS_INHERIT_PARTITION_OFF.patch) |
 | [`MOJOLEARN_IDN_GBDT_NS_SCALE_DEVICE_OFF`](#mojolearn_idn_gbdt_ns_scale_device_off) | Trees (GBDT non-symmetric, IDENTICAL device fixed-point scale) | removed (old path, no A/B recorded) | 2026-11-15 | [MOJOLEARN_IDN_GBDT_NS_SCALE_DEVICE_OFF.patch](../experiments/removed/MOJOLEARN_IDN_GBDT_NS_SCALE_DEVICE_OFF.patch) |
 | [`MOJOLEARN_SYM_RESOLVE_BLOCK`](#mojolearn_sym_resolve_block) | Trees (GBDT symmetric, FAST Apple per-threadgroup resolve fold) | removed (never-run card, no A/B recorded) | 2026-11-15 | [MOJOLEARN_SYM_RESOLVE_BLOCK.patch](../experiments/removed/MOJOLEARN_SYM_RESOLVE_BLOCK.patch) |
+| [`MOJOLEARN_2030_FUSED_EST_MOVE`](#mojolearn_2030_fused_est_move) | Trees (GBDT fused estimation move force knob, DEVIATION 2030) | removed (opt-in force knob, EXP:1611 DROP_REDUNDANT) | 2026-11-15 | [MOJOLEARN_2030_FUSED_EST_MOVE.patch](../experiments/removed/MOJOLEARN_2030_FUSED_EST_MOVE.patch) |
+| [`MOJOLEARN_2030_NO_FUSED_EST_MOVE`](#mojolearn_2030_no_fused_est_move) | Trees (GBDT fused estimation move opt-out, DEVIATION 2030) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_2030_NO_FUSED_EST_MOVE.patch](../experiments/removed/MOJOLEARN_2030_NO_FUSED_EST_MOVE.patch) |
+| [`MOJOLEARN_2551_DEVICE_PARTITION`](#mojolearn_2551_device_partition) | Trees (GBDT device leaf partition force for FAST, DEVIATION 2551) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_2551_DEVICE_PARTITION.patch](../experiments/removed/MOJOLEARN_2551_DEVICE_PARTITION.patch) |
+| [`MOJOLEARN_2551_DEVICE_PARTITION_OFF`](#mojolearn_2551_device_partition_off) | Trees (GBDT host leaf partition rollback, DEVIATION 2551) | removed (old path, no A/B recorded) | 2026-11-15 | [MOJOLEARN_2551_DEVICE_PARTITION_OFF.patch](../experiments/removed/MOJOLEARN_2551_DEVICE_PARTITION_OFF.patch) |
+| [`MOJOLEARN_EST_ITERS_DEVICE`](#mojolearn_est_iters_device) | Trees (GBDT Apple FAST device Newton walk force knob) | removed (force knob, EXP:1303 NEUTRAL) | 2026-11-15 | [MOJOLEARN_EST_ITERS_DEVICE.patch](../experiments/removed/MOJOLEARN_EST_ITERS_DEVICE.patch) |
+| [`MOJOLEARN_GBDT_NS_PREDICT_BITVEC`](#mojolearn_gbdt_ns_predict_bitvec) | Trees (GBDT Depthwise/Lossguide bitvector apply) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_GBDT_NS_PREDICT_BITVEC.patch](../experiments/removed/MOJOLEARN_GBDT_NS_PREDICT_BITVEC.patch) |
+| [`MOJOLEARN_GBDT_ORD_TREE_BUFS_OFF`](#mojolearn_gbdt_ord_tree_bufs_off) | Trees (GBDT Ordered per-tree buffer allocation rollback) | removed (old path beside the recorded default) | 2026-11-15 | [MOJOLEARN_GBDT_ORD_TREE_BUFS_OFF.patch](../experiments/removed/MOJOLEARN_GBDT_ORD_TREE_BUFS_OFF.patch) |
+| [`MOJOLEARN_GBDT_WALK_DEV_STEP_OFF`](#mojolearn_gbdt_walk_dev_step_off) | Trees (GBDT device walk step rollback) | removed (old path beside the recorded default) | 2026-11-15 | [MOJOLEARN_GBDT_WALK_DEV_STEP_OFF.patch](../experiments/removed/MOJOLEARN_GBDT_WALK_DEV_STEP_OFF.patch) |
+| [`MOJOLEARN_IDN_GBDT_APPLY_WIDE`](#mojolearn_idn_gbdt_apply_wide) | Trees (GBDT IDENTICAL wide uniform-depth oblivious apply) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_IDN_GBDT_APPLY_WIDE.patch](../experiments/removed/MOJOLEARN_IDN_GBDT_APPLY_WIDE.patch) |
+| [`MOJOLEARN_IDN_GBDT_EST_ONE_STEP_DEVICE_OFF`](#mojolearn_idn_gbdt_est_one_step_device_off) | Trees (GBDT IDENTICAL one-step device estimation rollback) | removed (old path, no A/B recorded) | 2026-11-15 | [MOJOLEARN_IDN_GBDT_EST_ONE_STEP_DEVICE_OFF.patch](../experiments/removed/MOJOLEARN_IDN_GBDT_EST_ONE_STEP_DEVICE_OFF.patch) |
+| [`MOJOLEARN_IDN_GBDT_MC_ONE_STEP_DEVICE_OFF`](#mojolearn_idn_gbdt_mc_one_step_device_off) | Trees (GBDT IDENTICAL MultiClass one-step device solve rollback) | removed (old path, no A/B recorded) | 2026-11-15 | [MOJOLEARN_IDN_GBDT_MC_ONE_STEP_DEVICE_OFF.patch](../experiments/removed/MOJOLEARN_IDN_GBDT_MC_ONE_STEP_DEVICE_OFF.patch) |
+| [`MOJOLEARN_IDN_GBDT_NS_PREDICT_PACKED_OFF`](#mojolearn_idn_gbdt_ns_predict_packed_off) | Trees (GBDT IDENTICAL packed non-symmetric predict rollback) | removed (old path, no A/B recorded) | 2026-11-15 | [MOJOLEARN_IDN_GBDT_NS_PREDICT_PACKED_OFF.patch](../experiments/removed/MOJOLEARN_IDN_GBDT_NS_PREDICT_PACKED_OFF.patch) |
+| [`MOJOLEARN_IDN_GBDT_PREDICT_FOUR_OFF`](#mojolearn_idn_gbdt_predict_four_off) | Trees (GBDT IDENTICAL four-trees-per-launch predict rollback) | removed (old path, no A/B recorded) | 2026-11-15 | [MOJOLEARN_IDN_GBDT_PREDICT_FOUR_OFF.patch](../experiments/removed/MOJOLEARN_IDN_GBDT_PREDICT_FOUR_OFF.patch) |
+| [`MOJOLEARN_IDN_GBDT_SYM_EST_DEFER_DRAIN_OFF`](#mojolearn_idn_gbdt_sym_est_defer_drain_off) | Trees (GBDT IDENTICAL symmetric estimation deferred drain rollback) | removed (old path, no A/B recorded) | 2026-11-15 | [MOJOLEARN_IDN_GBDT_SYM_EST_DEFER_DRAIN_OFF.patch](../experiments/removed/MOJOLEARN_IDN_GBDT_SYM_EST_DEFER_DRAIN_OFF.patch) |
+| [`MOJOLEARN_IDN_ORD_ONE_STEP_DEVICE_OFF`](#mojolearn_idn_ord_one_step_device_off) | Trees (GBDT IDENTICAL Ordered one-step device estimation rollback) | removed (old path, no A/B recorded) | 2026-11-15 | [MOJOLEARN_IDN_ORD_ONE_STEP_DEVICE_OFF.patch](../experiments/removed/MOJOLEARN_IDN_ORD_ONE_STEP_DEVICE_OFF.patch) |
+| [`MOJOLEARN_IDN_ORD_STD_SCALE_DEVICE_OFF`](#mojolearn_idn_ord_std_scale_device_off) | Trees (GBDT IDENTICAL Ordered device std/scale rollback) | removed (old path, no A/B recorded) | 2026-11-15 | [MOJOLEARN_IDN_ORD_STD_SCALE_DEVICE_OFF.patch](../experiments/removed/MOJOLEARN_IDN_ORD_STD_SCALE_DEVICE_OFF.patch) |
+| [`MOJOLEARN_LEGACY_NARROW_ORD_ALL`](#mojolearn_legacy_narrow_ord_all) | Trees (GBDT Ordered FAST bundle legacy width gate) | removed (old path, no A/B recorded) | 2026-11-15 | [MOJOLEARN_LEGACY_NARROW_ORD_ALL.patch](../experiments/removed/MOJOLEARN_LEGACY_NARROW_ORD_ALL.patch) |
+| [`MOJOLEARN_MULTICLASS_HESSIAN_BATCH_OFF`](#mojolearn_multiclass_hessian_batch_off) | Trees (GBDT MultiClass Hessian batch rollback, FAST Apple) | removed (old path beside a one-vendor FAST Apple default) | 2026-11-15 | [MOJOLEARN_MULTICLASS_HESSIAN_BATCH_OFF.patch](../experiments/removed/MOJOLEARN_MULTICLASS_HESSIAN_BATCH_OFF.patch) |
+| [`MOJOLEARN_ORDERED_BATCH_EST_OFF`](#mojolearn_ordered_batch_est_off) | Trees (GBDT Ordered batched estimation rollback, FAST Apple) | removed (old path beside a one-vendor FAST Apple default) | 2026-11-15 | [MOJOLEARN_ORDERED_BATCH_EST_OFF.patch](../experiments/removed/MOJOLEARN_ORDERED_BATCH_EST_OFF.patch) |
+| [`MOJOLEARN_ORD_ALL_OFF`](#mojolearn_ord_all_off) | Trees (GBDT Ordered FAST bundle rollback) | removed (old path beside the recorded default) | 2026-11-15 | [MOJOLEARN_ORD_ALL_OFF.patch](../experiments/removed/MOJOLEARN_ORD_ALL_OFF.patch) |
+| [`MOJOLEARN_ORD_DOC_ID_STORAGE`](#mojolearn_ord_doc_id_storage) | Trees (GBDT Ordered document-key dither storage, FAST Apple) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_ORD_DOC_ID_STORAGE.patch](../experiments/removed/MOJOLEARN_ORD_DOC_ID_STORAGE.patch) |
+| [`MOJOLEARN_PAIRLOGIT_EST_REUSE_OFF`](#mojolearn_pairlogit_est_reuse_off) | Trees (GBDT PairLogit estimation reuse rollback, FAST Apple) | removed (old path beside a one-vendor FAST Apple default) | 2026-11-15 | [MOJOLEARN_PAIRLOGIT_EST_REUSE_OFF.patch](../experiments/removed/MOJOLEARN_PAIRLOGIT_EST_REUSE_OFF.patch) |
+| [`MOJOLEARN_PAIRLOGIT_GROUP_FUSED_OFF`](#mojolearn_pairlogit_group_fused_off) | Trees (GBDT PairLogit group kernel rollback, FAST Apple) | removed (old path beside a one-vendor FAST Apple default) | 2026-11-15 | [MOJOLEARN_PAIRLOGIT_GROUP_FUSED_OFF.patch](../experiments/removed/MOJOLEARN_PAIRLOGIT_GROUP_FUSED_OFF.patch) |
+| [`MOJOLEARN_PL_GROUP_NARROW_OFF`](#mojolearn_pl_group_narrow_off) | Trees (GBDT PairLogit 128-thread group block rollback, FAST Apple) | removed (old path beside the recorded default) | 2026-11-15 | [MOJOLEARN_PL_GROUP_NARROW_OFF.patch](../experiments/removed/MOJOLEARN_PL_GROUP_NARROW_OFF.patch) |
+| [`MOJOLEARN_SYM_EST_ALL_OFF`](#mojolearn_sym_est_all_off) | Trees (GBDT symmetric estimation bundle rollback, FAST Apple) | removed (old path beside a one-vendor FAST Apple default) | 2026-11-15 | [MOJOLEARN_SYM_EST_ALL_OFF.patch](../experiments/removed/MOJOLEARN_SYM_EST_ALL_OFF.patch) |
 | [GaussianMixture Python entries gmm_fit, gmm_fit_predict and the four scoring entries (native entries)](#dead-native-entries-gaussianmixture-python-entries-2026-11-11) | Mixture (GPU, host and inference-only host bindings) | removed (dead native entries: no live caller) | 2026-11-11 | [dead_entries_gmm_python.patch](../experiments/removed/dead_entries_gmm_python.patch) |
 | [TREES_LEGACY_PYTHON_ENTRIES: 36 rf/et Python fit registrations (rowmajor, weighted, shard and shard-export forms) (native entries)](#dead-native-entries-trees-legacy-python-entries-2026-11-12) | Forests (rf, rf host, trees, trees host bindings) | removed (dead native entries: no live caller) | 2026-11-12 | [TREES_LEGACY_PYTHON_ENTRIES.patch](../experiments/removed/TREES_LEGACY_PYTHON_ENTRIES.patch) |
 | [LABELS_NATIVE_API_V1_V2: the labels_native_api_v1 / v2 provider publications (native entries)](#dead-native-entries-labels-provider-v1-and-v2-2026-11-12) | Labels (base GPU and core host bindings) | removed (dead native entries: no live caller) | 2026-11-12 | [LABELS_NATIVE_API_V1_V2.patch](../experiments/removed/LABELS_NATIVE_API_V1_V2.patch) |
@@ -21228,3 +21253,256 @@ Not deleted, contrary to the plan:
 - `MOJOLEARN_2710_TENSOR_ACC_DEAD` (greedy_search_helper.mojo:3818): a negative control that restores the dead-accumulator bug so tools/feature_freq_identity_leg.sh can show the vendor divergence returns (identity_break `gbdt-feature-freq`); kept as a sabotage-class control.
 - `MOJOLEARN_GBDT_NS_PREDICT_BITVEC` (gbdt/models/ns_bitvector_predict.mojo:52, read here at gbdt/methods/doc_parallel_boosting.mojo:5826): tools/gbdt_ns_bitvec_check.sh builds the OFF and ON arms and compares their digests (SAME/DIFFER); kept as a bit-equality check arm.
 - `MOJOLEARN_GBDT_DEVICE_ROUNDS_OFF` (gbdt/methods/doc_parallel_boosting.mojo:2726): the B arm of the on-device rounds A/B, which its source comment records as owed on NVIDIA + AMD (RUN OWED) before the switch goes; kept as an owed-B-arm switch like the restore switches of this wave.
+## Experiment deletions: lane expdel2-44-trees (2026-11-15)
+
+Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2-44-trees), under AGENTS.md "An unmeasured arm is deleted" (Andrew, 2026-11-15). Each record named below was read first. No bit changes: every deletion removes a non-default arm, a force knob or a rollback beside the default, and the default branch is kept as it was. No hand-tuned kernel that a default path launches was touched. Kept, contrary to the plan: `MOJOLEARN_IDN_GBDT_PREBINNED_INFER_OLD` (its B arm is owed, EXP:2417 RUN OWED, owed-pre0867.json `fix-gbdt-prebinned-infer`) and `MOJOLEARN_COLUMN_CPU` (the CPU-column build switch). Non-owner folds in this lane's files carry inline markers and `experiments/removed/<D>.expdel2-44-trees.patch`: IDN_ALL_OFF, AFCL_T04, AFCL_T06, AFT_G01, AFT_G02, AFT_G07, AFT_G11, AFT_G12, AFT_N07, AFT_N08, AFT_N12, AFT_P05, GBDT_FUSED_LEVEL_OFF, GBDT_PREDICT_PACKED, IDN_GBDT_PAIRLOGIT_GROUP_OFF (doc only; its patch shares the PAIRLOGIT_GROUP_FUSED_OFF commit), TREES_C50_GB_PACKED, TREES_CTR_SORTFREE_SUMS.
+
+### MOJOLEARN_2030_FUSED_EST_MOVE
+
+- Tried: Trees (GBDT fused estimation move force knob, DEVIATION 2030).
+- Evidence: EXP:1611 DROP_REDUNDANT: the force knob only re-selected the Apple FAST default elsewhere; no A/B for it on NVIDIA/AMD (rule e). Verdict: deleted (V2 rule, DELETE-ARM).
+- Removed: the force term of FUSED_EST_MOVE_2030; the alias is the Apple FAST expression. Default unchanged: no bits move.
+- Files: gbdt/methods/leaves_estimation/pointwise_oracle.mojo.
+- Deleted by: lane/expdel2-44-trees `3f984813dd` (2026-11-15); code recoverable at `5b86e54145`.
+- Restore: `git apply experiments/removed/MOJOLEARN_2030_FUSED_EST_MOVE.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
+- Records: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-44-trees section).
+
+### MOJOLEARN_2030_NO_FUSED_EST_MOVE
+
+- Tried: Trees (GBDT fused estimation move opt-out, DEVIATION 2030).
+- Evidence: no A/B recorded for the opt-out (rule a); the Apple FAST default (M4 taxi 0.962) is kept. Verdict: deleted (V2 rule, DELETE-ARM).
+- Removed: the opt-out term of FUSED_EST_MOVE_2030. Default unchanged: no bits move.
+- Files: gbdt/methods/leaves_estimation/pointwise_oracle.mojo.
+- Deleted by: lane/expdel2-44-trees `0415c68a0f` (2026-11-15); code recoverable at `3f984813dd`.
+- Restore: `git apply experiments/removed/MOJOLEARN_2030_NO_FUSED_EST_MOVE.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
+- Records: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-44-trees section).
+
+### MOJOLEARN_2551_DEVICE_PARTITION
+
+- Tried: Trees (GBDT device leaf partition force for FAST, DEVIATION 2551).
+- Evidence: no A/B recorded beyond the NO FLIP FAST read in the source (rule a). Verdict: deleted (V2 rule, DELETE-ARM).
+- Removed: the force term of DEVICE_LEAF_PARTITION; FAST keeps the host partition. Default unchanged: no bits move.
+- Files: gbdt/methods/leaves_estimation/doc_parallel_leaves_estimator.mojo.
+- Deleted by: lane/expdel2-44-trees `269778f8c9` (2026-11-15); code recoverable at `f431553766`.
+- Restore: `git apply experiments/removed/MOJOLEARN_2551_DEVICE_PARTITION.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
+- Records: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-44-trees section).
+
+### MOJOLEARN_2551_DEVICE_PARTITION_OFF
+
+- Tried: Trees (GBDT host leaf partition rollback, DEVIATION 2551).
+- Evidence: no A/B recorded for the old path (rule b); the IDENTICAL default came from the 2026-09-11 MI325X flip (geomean 0.898). Verdict: deleted (V2 rule, DELETE-OLD-PATH).
+- Removed: the rollback term; DEVICE_LEAF_PARTITION is the IDENTICAL mode. Default unchanged: no bits move.
+- Files: gbdt/methods/leaves_estimation/doc_parallel_leaves_estimator.mojo.
+- Deleted by: lane/expdel2-44-trees `1b407b6053` (2026-11-15); code recoverable at `269778f8c9`.
+- Restore: `git apply experiments/removed/MOJOLEARN_2551_DEVICE_PARTITION_OFF.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
+- Records: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-44-trees section).
+
+### MOJOLEARN_EST_ITERS_DEVICE
+
+- Tried: Trees (GBDT Apple FAST device Newton walk force knob).
+- Evidence: EXP:1303 RECORD NEUTRAL alone; the walk stays on under the SYM_EST_ALL FAST Apple default (rule g). Verdict: deleted (V2 rule, DELETE-EXPERIMENT).
+- Removed: the force term; EST_ITERS_DEVICE is EST_ALL. Default unchanged: no bits move.
+- Files: gbdt/methods/leaves_estimation/apple_fast_est.mojo.
+- Deleted by: lane/expdel2-44-trees `7a4e69bdca` (2026-11-15); code recoverable at `886f01f544`.
+- Restore: `git apply experiments/removed/MOJOLEARN_EST_ITERS_DEVICE.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
+- Records: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-44-trees section).
+
+### MOJOLEARN_GBDT_NS_PREDICT_BITVEC
+
+- Tried: Trees (GBDT Depthwise/Lossguide bitvector apply).
+- Evidence: no A/B recorded; the source said not tested on a device, identity not verified, not measured (rule a). Verdict: deleted (V2 rule, DELETE-ARM).
+- Removed: the bitvector apply arm and its kernels (gbdt/models/ns_bitvector_predict.mojo keeps GBDT_NS_BITVEC = False for doc_parallel_boosting). Default unchanged: no bits move.
+- Files: gbdt/models/add_non_symmetric_tree_doc_parallel.mojo, gbdt/models/ns_bitvector_predict.mojo.
+- Deleted by: lane/expdel2-44-trees `c48d22c288` (2026-11-15); code recoverable at `4cdd684efa`.
+- Restore: `git apply experiments/removed/MOJOLEARN_GBDT_NS_PREDICT_BITVEC.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
+- Records: refusal in `core/experiment_guards_trees.mojo`; `grid_controls/trees-predict-ideas.json` entry moved to `removed`; `docs/apple-fast/EXPERIMENTS.md` row (expdel2-44-trees section).
+
+### MOJOLEARN_GBDT_ORD_TREE_BUFS_OFF
+
+- Tried: Trees (GBDT Ordered per-tree buffer allocation rollback).
+- Evidence: EXP:2148 DEFAULT (bit-neutral): the per-fit buffers are the recorded default (rule e). Verdict: deleted (V2 rule, DELETE-OLD-PATH).
+- Removed: the comptime gate; the per-fit buffers are unconditional. Default unchanged: no bits move.
+- Files: gbdt/methods/ordered_boosting.mojo.
+- Deleted by: lane/expdel2-44-trees `accebf0183` (2026-11-15); code recoverable at `47147e100f`.
+- Restore: `git apply experiments/removed/MOJOLEARN_GBDT_ORD_TREE_BUFS_OFF.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
+- Records: refusal in `core/experiment_guards_trees.mojo`; `grid_controls/apple-slow-paths.json` entry moved to `removed`; `docs/apple-fast/EXPERIMENTS.md` row (expdel2-44-trees section).
+
+### MOJOLEARN_GBDT_WALK_DEV_STEP_OFF
+
+- Tried: Trees (GBDT device walk step rollback).
+- Evidence: EXP:2147 DEFAULT (bit-neutral): the device-stepped walk is the recorded default (rule e). Verdict: deleted (V2 rule, DELETE-OLD-PATH).
+- Removed: the host-stepped walk loop of device_walk_estimate; GBDT_WALK_DEV_STEP stays True for doc_parallel_boosting. Default unchanged: no bits move.
+- Files: gbdt/methods/leaves_estimation/device_walker.mojo.
+- Deleted by: lane/expdel2-44-trees `491a18b9bb` (2026-11-15); code recoverable at `a303565f2a`.
+- Restore: `git apply experiments/removed/MOJOLEARN_GBDT_WALK_DEV_STEP_OFF.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
+- Records: refusal in `core/experiment_guards_trees.mojo`; `grid_controls/apple-slow-paths.json` entry moved to `removed`; `docs/apple-fast/EXPERIMENTS.md` row (expdel2-44-trees section).
+
+### MOJOLEARN_IDN_GBDT_APPLY_WIDE
+
+- Tried: Trees (GBDT IDENTICAL wide uniform-depth oblivious apply).
+- Evidence: no A/B recorded for the candidate arm (rule a). Verdict: deleted (V2 rule, DELETE-ARM).
+- Removed: the resident predict's wide arm; IDN_APPLY_WIDE is False; launch_oblivious_apply_wide and its kernel stay while doc_parallel_boosting imports them (integrator removes them). Default unchanged: no bits move.
+- Files: gbdt/models/kernel/add_bin_values.mojo, gbdt/resident_model.mojo.
+- Deleted by: lane/expdel2-44-trees `64dbc2ee5f` (2026-11-15); code recoverable at `805d22d33d`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_GBDT_APPLY_WIDE.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
+- Records: refusal in `core/experiment_guards_trees.mojo`; `grid_controls/trees-small.json` entry moved to `removed`; `docs/apple-fast/EXPERIMENTS.md` row (expdel2-44-trees section).
+
+### MOJOLEARN_IDN_GBDT_EST_ONE_STEP_DEVICE_OFF
+
+- Tried: Trees (GBDT IDENTICAL one-step device estimation rollback).
+- Evidence: no A/B recorded for the old path (rule b). Verdict: deleted (V2 rule, DELETE-OLD-PATH).
+- Removed: the rollback term; IDN_EST_ONE_STEP_DEVICE is the IDENTICAL mode. Default unchanged: no bits move.
+- Files: gbdt/methods/leaves_estimation/leaves_estimation.mojo.
+- Deleted by: lane/expdel2-44-trees `764c283909` (2026-11-15); code recoverable at `0ed18e01e0`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_GBDT_EST_ONE_STEP_DEVICE_OFF.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
+- Records: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-44-trees section).
+
+### MOJOLEARN_IDN_GBDT_MC_ONE_STEP_DEVICE_OFF
+
+- Tried: Trees (GBDT IDENTICAL MultiClass one-step device solve rollback).
+- Evidence: no A/B recorded for the old path (rule b). Verdict: deleted (V2 rule, DELETE-OLD-PATH).
+- Removed: the rollback term; IDN_GBDT_MC_ONE_STEP_DEVICE is the IDENTICAL mode. Default unchanged: no bits move.
+- Files: gbdt/methods/leaves_estimation/leaves_estimation.mojo.
+- Deleted by: lane/expdel2-44-trees `71b261799b` (2026-11-15); code recoverable at `764c283909`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_GBDT_MC_ONE_STEP_DEVICE_OFF.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
+- Records: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-44-trees section).
+
+### MOJOLEARN_IDN_GBDT_NS_PREDICT_PACKED_OFF
+
+- Tried: Trees (GBDT IDENTICAL packed non-symmetric predict rollback).
+- Evidence: no A/B recorded for the old path (rule b). Verdict: deleted (V2 rule, DELETE-OLD-PATH).
+- Removed: the rollback term; IDN_NS_PREDICT_PACKED is the IDENTICAL mode. Default unchanged: no bits move.
+- Files: gbdt/models/add_non_symmetric_tree_doc_parallel.mojo.
+- Deleted by: lane/expdel2-44-trees `c9321311bb` (2026-11-15); code recoverable at `c48d22c288`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_GBDT_NS_PREDICT_PACKED_OFF.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
+- Records: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-44-trees section).
+
+### MOJOLEARN_IDN_GBDT_PREDICT_FOUR_OFF
+
+- Tried: Trees (GBDT IDENTICAL four-trees-per-launch predict rollback).
+- Evidence: no A/B recorded for the old path (rule b). Verdict: deleted (V2 rule, DELETE-OLD-PATH).
+- Removed: the rollback term; IDN_PREDICT_FOUR is the IDENTICAL mode. Default unchanged: no bits move.
+- Files: gbdt/models/kernel/add_bin_values.mojo.
+- Deleted by: lane/expdel2-44-trees `805d22d33d` (2026-11-15); code recoverable at `a8ef992718`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_GBDT_PREDICT_FOUR_OFF.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
+- Records: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-44-trees section).
+
+### MOJOLEARN_IDN_GBDT_SYM_EST_DEFER_DRAIN_OFF
+
+- Tried: Trees (GBDT IDENTICAL symmetric estimation deferred drain rollback).
+- Evidence: no A/B recorded for the old path (rule b). Verdict: deleted (V2 rule, DELETE-OLD-PATH).
+- Removed: the rollback term; IDN_GBDT_SYM_EST_DEFER_DRAIN is the IDENTICAL mode. Default unchanged: no bits move.
+- Files: gbdt/methods/leaves_estimation/leaves_estimation.mojo.
+- Deleted by: lane/expdel2-44-trees `632cd99677` (2026-11-15); code recoverable at `71b261799b`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_GBDT_SYM_EST_DEFER_DRAIN_OFF.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
+- Records: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-44-trees section).
+
+### MOJOLEARN_IDN_ORD_ONE_STEP_DEVICE_OFF
+
+- Tried: Trees (GBDT IDENTICAL Ordered one-step device estimation rollback).
+- Evidence: no A/B recorded for the old path (rule b). Verdict: deleted (V2 rule, DELETE-OLD-PATH).
+- Removed: the rollback term; IDN_ORD_ONE_STEP_DEVICE is the IDENTICAL mode. Default unchanged: no bits move.
+- Files: gbdt/methods/ordered_boosting.mojo.
+- Deleted by: lane/expdel2-44-trees `fce840609d` (2026-11-15); code recoverable at `632cd99677`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_ORD_ONE_STEP_DEVICE_OFF.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
+- Records: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-44-trees section).
+
+### MOJOLEARN_IDN_ORD_STD_SCALE_DEVICE_OFF
+
+- Tried: Trees (GBDT IDENTICAL Ordered device std/scale rollback).
+- Evidence: no A/B recorded for the old path (rule b). Verdict: deleted (V2 rule, DELETE-OLD-PATH).
+- Removed: the rollback term; IDN_ORD_STD_SCALE_DEVICE is the IDENTICAL mode (FAST keeps the host arithmetic). Default unchanged: no bits move.
+- Files: gbdt/methods/ordered_boosting.mojo.
+- Deleted by: lane/expdel2-44-trees `03c050a585` (2026-11-15); code recoverable at `fce840609d`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_ORD_STD_SCALE_DEVICE_OFF.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
+- Records: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-44-trees section).
+
+### MOJOLEARN_LEGACY_NARROW_ORD_ALL
+
+- Tried: Trees (GBDT Ordered FAST bundle legacy width gate).
+- Evidence: no A/B recorded for the old path; the gate was removed as benchmark-tuned on 2026-10-04 (rule b). Verdict: deleted (V2 rule, DELETE-OLD-PATH).
+- Removed: ORD_ALL_LEGACY_WIDTH, ORD_ALL_MIN_FEATURES and the narrow branch of ord_all_on. Default unchanged: no bits move.
+- Files: gbdt/methods/ordered_fast_switches.mojo.
+- Deleted by: lane/expdel2-44-trees `611ff32f4b` (2026-11-15); code recoverable at `f8ce124897`.
+- Restore: `git apply experiments/removed/MOJOLEARN_LEGACY_NARROW_ORD_ALL.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
+- Records: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-44-trees section).
+
+### MOJOLEARN_MULTICLASS_HESSIAN_BATCH_OFF
+
+- Tried: Trees (GBDT MultiClass Hessian batch rollback, FAST Apple).
+- Evidence: EXP:116 KEPT 28adffe85 (M3 taximc 18,603 -> 17,857 ms); FAST is Apple only, so no NVIDIA/AMD column is owed (rule d). Verdict: deleted (V2 rule, DELETE-OLD-PATH).
+- Removed: the rollback guard of multiclass_hessian_batch_for. Default unchanged: no bits move.
+- Files: gbdt/methods/leaves_estimation/pointwise_oracle.mojo.
+- Deleted by: lane/expdel2-44-trees `99c7ba636e` (2026-11-15); code recoverable at `0415c68a0f`.
+- Restore: `git apply experiments/removed/MOJOLEARN_MULTICLASS_HESSIAN_BATCH_OFF.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
+- Records: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-44-trees section).
+
+### MOJOLEARN_ORDERED_BATCH_EST_OFF
+
+- Tried: Trees (GBDT Ordered batched estimation rollback, FAST Apple).
+- Evidence: EXP:117 KEPT cf45a2732 (M3 taxi 275.9 -> 264.1 s); FAST is Apple only, so no NVIDIA/AMD column is owed (rule d). Verdict: deleted (V2 rule, DELETE-OLD-PATH).
+- Removed: the rollback term; ORDERED_BATCH_EST is FAST and Apple. Default unchanged: no bits move.
+- Files: gbdt/methods/ordered_boosting.mojo.
+- Deleted by: lane/expdel2-44-trees `037ec94044` (2026-11-15); code recoverable at `accebf0183`.
+- Restore: `git apply experiments/removed/MOJOLEARN_ORDERED_BATCH_EST_OFF.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
+- Records: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-44-trees section).
+
+### MOJOLEARN_ORD_ALL_OFF
+
+- Tried: Trees (GBDT Ordered FAST bundle rollback).
+- Evidence: EXP:180 DROPPED-noise standalone; the bundle is the kept FAST Apple default (F12 M3 B/A 0.78-0.88) (rule e). Verdict: deleted (V2 rule, DELETE-OLD-PATH).
+- Removed: the rollback term; ORD_ALL is FAST and Apple. Default unchanged: no bits move.
+- Files: gbdt/methods/ordered_fast_switches.mojo.
+- Deleted by: lane/expdel2-44-trees `48af6b7d48` (2026-11-15); code recoverable at `611ff32f4b`.
+- Restore: `git apply experiments/removed/MOJOLEARN_ORD_ALL_OFF.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
+- Records: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-44-trees section).
+
+### MOJOLEARN_ORD_DOC_ID_STORAGE
+
+- Tried: Trees (GBDT Ordered document-key dither storage, FAST Apple).
+- Evidence: no deciding A/B: the F12 M3 screen was mixed (B/A 0.8957..1.0334) and the candidate stayed OFF (rule a). Verdict: deleted (V2 rule, DELETE-ARM).
+- Removed: the opt-in term; ORD_DOC_ID_STORAGE is T22 alone. Default unchanged: no bits move.
+- Files: gbdt/methods/ordered_fast_switches.mojo.
+- Deleted by: lane/expdel2-44-trees `5b86e54145` (2026-11-15); code recoverable at `48af6b7d48`.
+- Restore: `git apply experiments/removed/MOJOLEARN_ORD_DOC_ID_STORAGE.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
+- Records: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-44-trees section).
+
+### MOJOLEARN_PAIRLOGIT_EST_REUSE_OFF
+
+- Tried: Trees (GBDT PairLogit estimation reuse rollback, FAST Apple).
+- Evidence: EXP:118 KEPT 28adffe85 (M3 3,765 -> 3,480 ms); FAST is Apple only, so no NVIDIA/AMD column is owed (rule d). Verdict: deleted (V2 rule, DELETE-OLD-PATH).
+- Removed: the rollback guard of pairlogit_est_reuse_for. Default unchanged: no bits move.
+- Files: gbdt/targets/kernel/pair_logit_group.mojo.
+- Deleted by: lane/expdel2-44-trees `9dc8626747` (2026-11-15); code recoverable at `6d03f59f60`.
+- Restore: `git apply experiments/removed/MOJOLEARN_PAIRLOGIT_EST_REUSE_OFF.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
+- Records: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-44-trees section).
+
+### MOJOLEARN_PAIRLOGIT_GROUP_FUSED_OFF
+
+- Tried: Trees (GBDT PairLogit group kernel rollback, FAST Apple).
+- Evidence: EXP:119 KEPT 28adffe85 (M3 4,802 -> 3,760 ms); FAST is Apple only, so no NVIDIA/AMD column is owed (rule d). Verdict: deleted (V2 rule, DELETE-OLD-PATH).
+- Removed: the rollback guard of pairlogit_group_fused_for. Default unchanged: no bits move.
+- Files: gbdt/targets/kernel/pair_logit_group.mojo.
+- Deleted by: lane/expdel2-44-trees `6d03f59f60` (2026-11-15); code recoverable at `a7ec4e7f91`.
+- Restore: `git apply experiments/removed/MOJOLEARN_PAIRLOGIT_GROUP_FUSED_OFF.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
+- Records: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-44-trees section).
+
+### MOJOLEARN_PL_GROUP_NARROW_OFF
+
+- Tried: Trees (GBDT PairLogit 128-thread group block rollback, FAST Apple).
+- Evidence: EXP:2454 DELETED (NEUTRAL); the narrow block is the kept FAST Apple default (rab4/rab7 -1.8%/-1.9%) (rule e). Verdict: deleted (V2 rule, DELETE-OLD-PATH).
+- Removed: the rollback guard of pl_group_narrow_for. Default unchanged: no bits move.
+- Files: gbdt/targets/kernel/pair_logit_group.mojo.
+- Deleted by: lane/expdel2-44-trees `385e4adfcd` (2026-11-15); code recoverable at `9dc8626747`.
+- Restore: `git apply experiments/removed/MOJOLEARN_PL_GROUP_NARROW_OFF.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
+- Records: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-44-trees section).
+
+### MOJOLEARN_SYM_EST_ALL_OFF
+
+- Tried: Trees (GBDT symmetric estimation bundle rollback, FAST Apple).
+- Evidence: EXP:1275 ACCEPT/DEFAULT (M3 rab4-symest istella 14721 -> 14292 ms); FAST is Apple only, so no NVIDIA/AMD column is owed (rule d). Verdict: deleted (V2 rule, DELETE-OLD-PATH).
+- Removed: the rollback term; EST_ALL is _APPLE_FAST. Default unchanged: no bits move.
+- Files: gbdt/methods/leaves_estimation/apple_fast_est.mojo.
+- Deleted by: lane/expdel2-44-trees `886f01f544` (2026-11-15); code recoverable at `ab7c8ba7f3`.
+- Restore: `git apply experiments/removed/MOJOLEARN_SYM_EST_ALL_OFF.patch`, then delete the refusal in `core/experiment_guards_trees.mojo`.
+- Records: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-44-trees section).
