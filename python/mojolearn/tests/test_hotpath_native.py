@@ -31,7 +31,7 @@ import warnings
 import numpy as np
 import pytest
 
-from mojolearn import _array, _buffer, _labels, _metrics_impl as M
+from mojolearn import _array, _buffer, _labels
 from mojolearn.tests import _array_reference
 from mojolearn._array import Array
 
@@ -59,8 +59,6 @@ def _canon(value):
     float bits (so -0.0, 0.0 and NaN payloads are told apart), types."""
     if isinstance(value, Array):
         return ("Array", value.shape, value.dtype, value.order, value.tobytes())
-    if isinstance(value, M._EncodedLabels):
-        return ("list", [_canon(v) for v in value])  # it stands for that list
     if isinstance(value, bool):
         return ("bool", value)
     if isinstance(value, float):
@@ -132,23 +130,11 @@ def _python_arm():
         _buffer._NATIVE_MISSING.add(key)
     for name in _LABEL_SEAMS:
         setattr(_labels, name, lambda *args, **kwargs: None)
-    # A label LIST is mapped by the native user-object reader since lane
-    # purge-user-objects (first-seen classes, then a native gather); the
-    # reference arm keeps the routine it replaced, here in the test.
-    saved_label_map = M._label_map
-
-    def _label_map_oracle(labels, fn):
-        if isinstance(labels, M._EncodedLabels):
-            return saved_label_map(labels, fn)
-        return Array.from_list([fn(v) for v in labels], "<i4")
-
-    M._label_map = _label_map_oracle
     _array_reference._REFERENCE = True
     try:
         yield
     finally:
         _array_reference._REFERENCE = False
-        M._label_map = saved_label_map
         for name, real in saved_seams.items():
             setattr(_labels, name, real)
         _buffer._NATIVE.clear()
@@ -499,104 +485,12 @@ def test_decode_labels_int32_codes(classes):
 
 
 # ----------------------------------------------------------------- metrics
-
-
-def _metric_label_inputs():
-    n = 3000
-    out = {}
-    for dt in (np.int8, np.int16, np.int32, np.int64, np.uint8, np.uint16, np.uint32, np.uint64):
-        lo = -4 if np.issubdtype(dt, np.signedinteger) else 0
-        out[np.dtype(dt).name] = _RNG.integers(lo, 5, n).astype(dt)
-    out["bool"] = _RNG.integers(0, 2, n).astype(bool)
-    out["strided"] = _RNG.integers(0, 5, 2 * n)[::2]
-    out["big endian"] = _RNG.integers(0, 5, n).astype(">i4")
-    out["Array"] = _arr(_RNG.integers(0, 5, n).astype(np.int32))
-    out["float32"] = _RNG.integers(0, 5, n).astype(np.float32)
-    out["list"] = _RNG.integers(0, 5, n).tolist()
-    out["strs"] = [("c%d" % v) for v in _RNG.integers(0, 5, n)]
-    out["column"] = _RNG.integers(0, 5, (n, 1))
-    out["empty"] = np.zeros(0, np.int64)
-    out["short"] = _RNG.integers(0, 5, 100)
-    out["many classes"] = np.arange(n) % 5000
-    out["one class"] = np.full(n, 3)
-    out["binary"] = _RNG.integers(0, 2, n)
-    out["minus one one"] = _RNG.integers(0, 2, n) * 2 - 1
-    out["uint64 huge"] = np.full(n, 2**63 + 5, np.uint64)
-    return out
-
-
-_NATIVE_LABELS = {"int8", "int16", "int32", "int64", "uint8", "uint16", "uint32", "uint64", "bool",
-                  "strided", "big endian", "Array", "one class", "binary", "minus one one"}
-
-
-@pytest.mark.parametrize("name", list(_metric_label_inputs()))
-def test_classification_labels_match(name):
-    y = _metric_label_inputs()[name]
-    # lane migrate-shared-labels: a numeric label vector is encoded by the one
-    # prepare_targets call. Since lane py-admission that call is made inside the
-    # compiled label entry (labels_encode_numeric_op), so no Python-side helper
-    # call is left for the spy to see; the outcome is still compared.
-    ref = _same(lambda: M._classification_encoded(y, "y_true"), (), group="metrics")
-    if name in _NATIVE_LABELS and not _EXPECT_SABOTAGE:
-        assert isinstance(M._classification_encoded(y, "y_true")[0], M._EncodedLabels), name
-        assert ref[0][0] == "ok"
-
-    other = _RNG.integers(-4, 5, 3000)[:len(y)]
-
-    def prepared():
-        true, pred, kind, observed = M._classification_pair(y, other, None)
-        selected = observed[1:] + [99]
-        return (kind, observed, len(true), sorted(M._label_set(true)),
-                M._encode_classification(true, pred, observed),
-                M._encode_classification(true, pred, selected),
-                M._label_map(true, lambda v: int(v == observed[-1])))
-
-    _same(prepared, ("gather_i32",) if name in _NATIVE_LABELS else (), group="metrics")
-
-
-@pytest.mark.parametrize("name", list(_metric_label_inputs()))
-def test_cluster_label_union_matches(name):
-    y = _metric_label_inputs()[name]
-    other = _RNG.integers(-2, 9, 3000)
-    # lane apple-fast-py2mojo-core: the union is ONE `unique_inverse` of the
-    # two arrays laid end to end (no encoder, no gather), and lane
-    # pyglue-sweep removed the Python dict route, so declining the seam
-    # leaves no reference routine. The reference is computed here: NumPy's
-    # sorted union and its inverse, after the same int32 admission.
-    call = lambda: M._prepare_cluster_labels(y, other[:len(y)])
-
-    def reference():
-        yt = M._as_i32_1d(y, "labels_true")
-        yp = M._as_i32_1d(other[:len(y)], "labels_pred")
-        if yt.shape[0] != yp.shape[0]:
-            return call()  # the length refusal, raised by the routine itself
-        both = np.concatenate([np.asarray(yt), np.asarray(yp)]).astype(np.int32)
-        if both.size == 0:
-            return yt, yp, 0, 0, -1
-        classes, codes = np.unique(both, return_inverse=True)
-        codes = codes.astype(np.int32)
-        nt = int(yt.shape[0])
-        return (_arr(np.ascontiguousarray(codes[:nt])), _arr(np.ascontiguousarray(codes[nt:])),
-                nt, 0, int(classes.size) - 1)
-
-    ref = _outcome(reference)
-    new = _outcome(call)
-    if not _EXPECT_SABOTAGE:
-        assert new == ref, f"metrics: new arm {new!r:.300} != reference {ref!r:.300}"
-    _same(lambda: M._as_i32_1d(y, "labels"), (), group="metrics")
-
-
-def test_int32_range_refusal_and_weights():
-    wide = _RNG.integers(0, 5, 3000)
-    wide[11] = 2**31
-    _same(lambda: M._as_i32_1d(wide, "labels"), ("reduce_stat",), group="metrics")
-    for w in (_RNG.random(3000, dtype=np.float32), np.zeros(3000, np.float32),
-              -_RNG.random(3000, dtype=np.float32),
-              np.where(np.arange(3000) == 5, np.nan, 1.0).astype(np.float32),
-              np.where(np.arange(3000) == 5, -0.0, 0.0).astype(np.float32)):
-        # a NaN weight is refused by the finiteness scan before any reduction
-        expect = () if np.isnan(w).any() else ("reduce_stat",)
-        _same(lambda: M._sample_weight_f32(w, 3000, "r2_score"), expect, group="metrics")
+# The metric label and weight seams (`_classification_encoded`, `_EncodedLabels`,
+# `_label_map`, `_prepare_cluster_labels`, `_as_i32_1d`, `_sample_weight_f32`) have
+# no Python route left: their Python copies were deleted (lane py-metrics,
+# 2026-11-15); bindings/mcls_common_unpack.mojo, bindings/mcls_cluster_door.mojo and
+# bindings/metrics_exp_common_unpack.mojo own them, reached through the public
+# metric functions.
 
 
 # --------------------------------------------------------- model_selection
@@ -841,6 +735,6 @@ def test_sabotage_build_diverges():
         assert not _DIVERGED
         return
     groups = {"astype", "getitem", "reduce", "equal", "lists", "buffers", "labels",
-              "metrics", "folds", "indices"}
+              "folds", "indices"}
     missing = groups - set(_DIVERGED)
     assert not missing, f"no divergence seen under sabotage in: {sorted(missing)}"
