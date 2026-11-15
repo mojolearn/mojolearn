@@ -175,6 +175,33 @@ def connect(context, register, registry):
                 methods['predict_proba'] = ('family_xn_knn_clf_predict_proba', (binding('_mojolearn'), arg(0)))
             add(cls, neighbors._NATIVE, neighbors._NATIVE_CONTEXT, methods,
                 initial={'_index': None, '_y_cols': None})
+        # Lane cpu-product-residue (2026-11-15): NearestNeighbors and
+        # RadiusNeighbors were pending migration, so the native clone (CV,
+        # searches, scikit-learn's clone) refused them once the Python
+        # model_selection._clone was deleted. Field-copy constructors.
+        add(neighbors.NearestNeighbors, neighbors._NATIVE, neighbors._NATIVE_CONTEXT, {
+            'fit': ('family_xn_knn_nn_fit', (arg(0), arg(1))),
+        }, initial={'_index': None})
+        add(neighbors.RadiusNeighbors, neighbors._NATIVE, neighbors._NATIVE_CONTEXT, {
+            'fit': ('family_xn_radius_fit', (arg(0), arg(1))),
+        }, initial={'_index': None, '_metric_value': None, '_metric_arg': None})
+    if km is not None:
+        # Nystroem and RBFSampler (pending migration until 2026-11-15, as above).
+        for cls, prefix in ((km.Nystroem, 'nys'), (km.RBFSampler, 'rbf')):  # glue: fixed ABI metadata connected once during package import
+            add(cls, km._NATIVE, km._NATIVE_CONTEXT, {
+                'fit': ('family_km_' + prefix + '_fit', (constant(None), arg(0), arg(1))),
+                'transform': ('family_km_' + prefix + '_transform', (constant(None), arg(0))),
+            })
+    gpc = loaded('_gpc_impl')
+    if gpc is not None:
+        # GaussianProcessClassifier (pending migration until 2026-11-15, as above).
+        native = constant(None)
+        add(gpc.GaussianProcessClassifier, gpc._NATIVE, gpc._NATIVE_CONTEXT, {
+            'fit': ('family_gp_gpc_fit', (native, native, arg(0), arg(1))),
+            'predict': ('family_gp_gpc_predict', (native, native, arg(0))),
+            'predict_proba': ('family_gp_gpc_predict_proba', (native, arg(0))),
+            'score': ('family_gp_gpc_score', (native, native, arg(0), arg(1))),
+        })
 
     # Lane a7d: the clustering, mixture and decomposition families' fixed
     # owner ABIs, so cross_validate / GridSearchCV / RandomizedSearchCV /

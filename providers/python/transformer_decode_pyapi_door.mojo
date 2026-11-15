@@ -150,6 +150,10 @@ struct TransformerDecodeHandle(Movable, Writable):
     # step reads `state.cached_tokens` only when it is an exact int (no
     # conversion hook can run), as the full admission requires.
     var int_class: Int
+    # The host route's own cache position (its session-owned k/v copies):
+    # a state word that differs from it is refused exactly as the GPU
+    # resident session refuses it ("the caller believes cached_tokens = ...").
+    var host_cached: Int
 
     def __init__(out self, binding: PythonObject, block: PythonObject, state: PythonObject):
         self.binding = binding
@@ -177,6 +181,7 @@ struct TransformerDecodeHandle(Movable, Writable):
         self.pin = 0
         self.mods = NativeModules()
         self.int_class = 0
+        self.host_cached = 0
 
     def __deinit__(deinit self):
         # A registry session the Python owner never closed (an open that
@@ -869,6 +874,7 @@ def transformer_decode_init(session: PythonObject, block: PythonObject, state: P
         handle.v_cache = List[Float32](length=pieces[2], fill=0)
         unsafe_memcpy(dest=handle.k_cache.unsafe_ptr(), src=f32_ptr(pieces[0]), count=pieces[2])
         unsafe_memcpy(dest=handle.v_cache.unsafe_ptr(), src=f32_ptr(pieces[1]), count=pieces[2])
+        handle.host_cached = cached
     handle.open = True
     py_setitem(values, "_handle", PythonObject(alloc=handle^))
     py_setitem(slots, "cached_tokens", PythonObject(cached))
@@ -954,6 +960,12 @@ def transformer_decode_run(session: PythonObject, input: PythonObject, step: Boo
         cached = Int(py=py_call(_transformer_decode_kept(h[], _TRANSFORMER_DECODE_STEP if step else _TRANSFORMER_DECODE_FORWARD),
             h[].device, py_ints([px, py]), py_ints(p)))
     else:
+        # Decided 2026-11-15 (orchestrator): a decode session behaves the same
+        # on CPU and GPU. The host cache position is the session's, so a
+        # rewound or advanced state word is refused as the GPU session does.
+        if cached != h[].host_cached:
+            raise Error(String("transformer decode session: the caller believes cached_tokens = ") + String(cached)
+                        + " but the resident cache holds " + String(h[].host_cached))
         var a: List[Int] = [px]
         for i in range(len(h[].weights)):  # driver-loop: native session-owned weight addresses
             a.append(0 if len(h[].weights[i]) == 0 else Int(h[].weights[i].unsafe_ptr()))
@@ -981,6 +993,7 @@ def transformer_decode_run(session: PythonObject, input: PythonObject, step: Boo
                         shortened.append(p[i])
                 p = shortened^
             cached = Int(py=py_call(_transformer_decode_kept(h[], _TRANSFORMER_DECODE_HOST_STEP if step else _TRANSFORMER_DECODE_HOST_FORWARD), py_ints(a), py_ints(p)))
+        hobj.downcast_value_ptr[TransformerDecodeHandle]()[].host_cached = cached
     if kept:
         # The only state word a step changes; the publish of the full path
         # writes arithmetic_profile and _resident_session unchanged.
@@ -1035,9 +1048,11 @@ def transformer_decode_state(session: PythonObject, load: Bool, context: PythonO
         if load:
             unsafe_memcpy(dest=h[].k_cache.unsafe_ptr(), src=f32_ptr(pieces[0]), count=pieces[2])
             unsafe_memcpy(dest=h[].v_cache.unsafe_ptr(), src=f32_ptr(pieces[1]), count=pieces[2])
+            h[].host_cached = cached  # the loaded state's position, as the GPU load takes it
         else:
             unsafe_memcpy(dest=f32_ptr(pieces[0]), src=h[].k_cache.unsafe_ptr(), count=pieces[2])
             unsafe_memcpy(dest=f32_ptr(pieces[1]), src=h[].v_cache.unsafe_ptr(), count=pieces[2])
+            cached = h[].host_cached  # the session's position, as the GPU export returns it
     if not load:
         keys.publish()
         vals.publish()

@@ -34,12 +34,12 @@
 #   admission_x_op(X, est, word)
 #                     `_sk_validate._check_X` whole: the description, the
 #                     sparse refusal, and admission_check_x_op below
-#   admission_y_op(y, est, flags, x_rows)
+#   admission_y_op(y, est, flags, x_rows[, X])
 #                     `_sk_validate._check_y` for a y that is not None
 #   admission_check_x_op(X, est, shape, complex, scan)
 #                     `_sk_validate._check_X`'s refusals (complex, rank,
 #                     empty) and its finiteness scan, scikit-learn's wording
-#   admission_check_y_op(y, est, flags, x_rows, y_rows)
+#   admission_check_y_op(y, est, flags, x_rows, y_rows[, X])
 #                     `_sk_validate._check_y` / `_check_lengths`' refusals
 #                     (y missing, complex, non-finite, continuous labels for
 #                     a classifier, inconsistent lengths)
@@ -81,6 +81,7 @@ from bindings.native_loaded_module_door import native_loaded_module
 from bindings.optimizer_public_words_unpack import stash_python_error
 from providers.python.borrowed_buffer_pyapi_unpack import NATIVE_NDARRAY_EXPORTER
 from core.shared_slot import SharedSlot
+from bindings.classical_pandas_door import native_pandas_exact
 from bindings.label_input_sources_unpack import (
     labels_list_scalar_kind, LABELS_LIST_INT, LABELS_LIST_FLOAT, LABELS_LIST_BOOL,
 )
@@ -293,11 +294,56 @@ def labels_encode_numeric_op(y: PythonObject, context: PythonObject) raises -> P
     var bool_source = False
     var view = _numeric_label_view(y, context, bool_source)
     if not view:
-        return PythonObject(None)
+        # int8 / int16 / uint16 / float16 storage has no encoder arm: widen it
+        # once to int64 / float64 (exact), as unique_inverse does, instead of
+        # declining it to the label input step (smoke 2026-11-15,
+        # test_labels_native "int16 widened"; py-admission 98ed066523 widened
+        # every NumPy integer width on the other label doors only).
+        view = _la_widened_label_vector(y, context)
+        bool_source = False
+        if not view:
+            return PythonObject(None)
     var encoded = _native_labels(view.value(), bool_source, context)
     var result = Python.tuple(encoded.classes, encoded.codes)
     _ = view^
     return result
+
+
+def _la_widened_label_vector(y: PythonObject, context: PythonObject) raises -> Optional[PythonObject]:
+    """A fresh int64 / float64 vector holding the exact values of a
+    non-empty int8 / int16 / uint16 / float16 label vector (a buffer or an
+    Array, read in C order), or None for anything else (lists, pandas, bool,
+    a matrix, uint64 whose values may not fit int64: the label input step
+    reads those as before). One allocation, element ranges across cores."""
+    var b = labels_builtins()
+    var cls = py_type(y)
+    if cls is b.list or cls is b.tuple or cls is b.str or cls is b.bytes or native_pandas_exact(y):
+        return None
+    var view = PythonObject(None)
+    var typestr = String("")
+    try:
+        view = admit_c_view(y, "y", context, True)
+        typestr = admitted_dtype(view, context)
+    except:
+        return None
+    if typestr != "<i1" and typestr != "<i2" and typestr != "<u2" and typestr != "<f2":
+        return None
+    var n = Int(py=view.size)
+    var big = 0
+    for k in range(Int(py=view.ndim)):  # driver-loop: over array rank metadata
+        if Int(py=view.shape[k]) > big:
+            big = Int(py=view.shape[k])
+    if n == 0 or n != big:
+        return None
+    var target = String("<f8") if typestr == "<f2" else String("<i8")
+    var wide = admitted_vector(n, target, context)
+    var address = Int(py=classical_address(view))
+    if target == "<i8":
+        _la_widen_ints(address, typestr, labels_address(wide), n)
+    else:
+        labels_cast(address, typestr, labels_address(wide), target, n, context)
+    _ = view
+    return wide
 
 
 def labels_unique_inverse_op(y: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -581,7 +627,7 @@ def admission_check_x_op(x: PythonObject, est: String, shape: PythonObject, comp
 
 
 def admission_check_y_op(y: PythonObject, est: String, flags: Int, x_rows: Int, y_rows: Int,
-                         context: PythonObject) raises:
+                         x: PythonObject, context: PythonObject) raises:
     """`_sk_validate._check_y` / `_check_lengths`' refusals, in
     scikit-learn's words: a required y that is None, a complex y, NaN or
     infinity in a float y (`ADMISSION_Y_SCAN`), a continuous float y for a
@@ -594,6 +640,21 @@ def admission_check_y_op(y: PythonObject, est: String, flags: Int, x_rows: Int, 
         var view = admit_c_view(y, "y", context)
         var typestr = admitted_dtype(view, context)
         if not _admission_all_finite(view, typestr):
+            # scikit-learn refuses a non-finite X before y. A class whose X
+            # scan runs in its native fit (no _X_SCAN) has not scanned X yet:
+            # scan it here, on this refusal path only (smoke 2026-11-15,
+            # test_linear_regression_fit_refuses_non_finite_x_before_y).
+            var x_bad = False
+            if x is not None:
+                try:
+                    var x_view = admit_c_view(x, "X", context)
+                    var x_type = admitted_dtype(x_view, context)
+                    x_bad = String(x_type[byte=1]) == "f" and not _admission_all_finite(x_view, x_type)
+                    _ = x_view
+                except:
+                    x_bad = False  # X's own admission refuses it at its usual stage
+            if x_bad:
+                raise Error(admitted_finite_wording(est))
             raise Error("Input y contains NaN or infinity (" + est + ").")
         if (flags & ADMISSION_Y_CLASSIFIER) != 0 and not _admission_integral(view, typestr, context):
             raise Error(
@@ -974,7 +1035,8 @@ def admission_x_op(x: PythonObject, est: String, word: Int, context: PythonObjec
     return _admission_info_tuple(info)
 
 
-def admission_y_op(y: PythonObject, est: String, flags: Int, x_rows: Int, context: PythonObject) raises -> PythonObject:
+def admission_y_op(y: PythonObject, est: String, flags: Int, x_rows: Int, x: PythonObject,
+                   context: PythonObject) raises -> PythonObject:
     """ADMISSION_OP_Y, `_sk_validate._check_y` for a y that is not None:
     describe y and make `admission_check_y_op`'s refusals with the scan flag
     the description sets (`flags` carries ADMISSION_Y_CLASSIFIER). Returns
@@ -988,15 +1050,15 @@ def admission_y_op(y: PythonObject, est: String, flags: Int, x_rows: Int, contex
     var rank = len(info.shape)
     var y_rows = Int(py=info.shape[0]) if rank > 0 else -1
     if info.container == ADMISSION_CONTAINER_SPARSE:
-        admission_check_y_op(y, est, 0, x_rows, y_rows, context)
+        admission_check_y_op(y, est, 0, x_rows, y_rows, x, context)
         return PythonObject(None)
     if info.kind == ADMISSION_KIND_COMPLEX:
-        admission_check_y_op(y, est, ADMISSION_Y_COMPLEX, x_rows, y_rows, context)
+        admission_check_y_op(y, est, ADMISSION_Y_COMPLEX, x_rows, y_rows, x, context)
     var words = flags
     if ((info.container == ADMISSION_CONTAINER_BUFFER or info.container == ADMISSION_CONTAINER_LIST)
             and info.kind == ADMISSION_KIND_FLOAT):
         words |= ADMISSION_Y_SCAN
     if rank == 2 and Int(py=info.shape[1]) == 1 and info.container != ADMISSION_CONTAINER_LIST:
         return Python.tuple(words, y_rows)
-    admission_check_y_op(y, est, words, x_rows, y_rows, context)
+    admission_check_y_op(y, est, words, x_rows, y_rows, x, context)
     return PythonObject(None)

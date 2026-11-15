@@ -1,7 +1,9 @@
 # SPDX-License-Identifier: Apache-2.0
 """Canonical import-time connections, with Python image pins only at UNPACK."""
 from std.python import Python, PythonObject
-from std.python.bindings import PythonModuleBuilder, lookup_py_type_object
+from std.python.bindings import PythonModuleBuilder, lookup_py_type_object, ExceptionType, raise_python_exception
+from std.python._cpython import PyObjectPtr
+from bindings.native_error_class import error_without_class
 from bindings.native_loaded_module_door import native_loaded_module
 from bindings.native_owner_registry_unpack import register_native_owner_type
 from bindings.native_owner_registry_pack import borrowed_native_owner
@@ -65,6 +67,22 @@ def register_linear_entry_owner_identity(published: PythonObject) raises:
     # After PythonModuleBuilder.finalize() only: Mojo 1.2 creates the type
     # object in finalize() (bindings/native_owner_registry.mojo).
     register_native_owner_type[LinearEntryOwner](published, linear_entry_owner_pins)
+
+
+def linear_entry_connect_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
+    # `linear_entry_connection_v1(family, mode, vendor, factory)`: a refusal
+    # labelled "TypeError:" is raised as TypeError (def_function raised every
+    # refusal as a plain Exception carrying the label, smoke 2026-11-15
+    # test_linear_entry_table_boundary::test_import_connector_*).
+    try:
+        var args = PythonObject(from_borrowed=args_ptr)
+        if len(args) != 4:
+            raise Error("TypeError: linear_entry_connection_v1 takes family, mode, vendor and factory entries")
+        return linear_entry_connect(args[0], args[1], args[2], args[3]).steal_data()
+    except error:
+        if String(error).startswith("TypeError:"):
+            return raise_python_exception(error_without_class(error, "TypeError"), ExceptionType.TypeError)
+        return raise_python_exception(error, ExceptionType("PyExc_Exception"))
 
 
 def linear_entry_connect(family_source: PythonObject, mode_entry: PythonObject,

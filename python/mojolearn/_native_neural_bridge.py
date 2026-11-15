@@ -66,7 +66,10 @@ def connect_training(backend, vendor, inference_bindings):
         for family, (target, names) in families.items():  # glue: connect native ABI symbols at import
             entries = {}
             try:
-                selected = (backend.binding(target, mode) if route == "cpu" else
+                # `canonical` is compared by identity with a native provider's
+                # owning module (neural_descriptor_matches), so the CPU route
+                # keeps the exact host module, never the `_HostBinding` facade.
+                selected = (backend.exact_host_module(backend.binding(target, mode)) if route == "cpu" else
                             inference_bindings["gpu:" + mode]["mamba1" if family == "mamba" else family])
                 if isinstance(selected, str):
                     connected[family] = selected

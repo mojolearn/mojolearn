@@ -6,6 +6,7 @@ import warnings
 import numpy as np
 import pytest
 
+from mojolearn import _backend
 from mojolearn import _expansion_metrics as expansion
 from mojolearn import _metrics_impl as metrics
 from mojolearn._array import Array
@@ -61,7 +62,7 @@ def test_metric_warning_filters_and_real_exception_category_are_native(operation
     from sklearn.exceptions import UndefinedMetricWarning
 
     if operation == "classification":
-        binding = metrics._get_binding("identical")
+        binding = _backend.exact_host_module(metrics._get_binding("identical"))
         op = "family_mcls_prf"
         arguments = (binding, 0, [0, 0], [0, 0], None, 1, "binary", None, "warn", "identical")
     else:
