@@ -265,13 +265,12 @@ def _upload(
 #: same kernels: bit-inert; the same refusal text.
 #:
 #: fam-kernel-gp (2026-10-04): IDENTICAL takes the same route on every
-#: vendor, ON by default (`KM_IDN_PTR_IN`; `-D MOJOLEARN_IDN_KM_PTR_IN_OFF`
-#: restores the owned host copy, the host walk and the staged upload). The
+#: vendor, ON by default (`KM_IDN_PTR_IN`). The
 #: transforms' X is the one large operand (n_rows x n_features), and it
 #: crossed host memory three times on one thread before the first launch.
-comptime KM_IDN_PTR_IN = _CTX_MODE == _CTX_IDENTICAL and not (
-    is_defined["MOJOLEARN_IDN_KM_PTR_IN_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_IDN_KM_PTR_IN_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-19-kernel; code recoverable at d6e7cef9f2.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_KM_PTR_IN_OFF.patch; record in docs/TOMBSTONES.md.
+comptime KM_IDN_PTR_IN = _CTX_MODE == _CTX_IDENTICAL
 # TOMBSTONE: MOJOLEARN_KM_FAST_PTR_IN_OFF (old path, superseded by the FAST+Apple default) deleted 2026-11-15 by lane/expdel-06-base-cluster-kernel; code recoverable at 484c3ee4ab.
 # Restore: git apply experiments/removed/MOJOLEARN_KM_FAST_PTR_IN_OFF.patch; record in docs/TOMBSTONES.md.
 comptime KM_FAST_PTR_IN = KM_IDN_PTR_IN or (_CTX_MODE == _NUMERIC_FAST and TARGET_HAS_APPLE_GPU)
