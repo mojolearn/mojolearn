@@ -2139,6 +2139,7 @@ Deletions reversed by new evidence. The code is back on main; the section and th
 | [`MOJOLEARN_CLASSICAL_C25_PROJECTION_REUSE`](#mojolearn_classical_c25_projection_reuse) | Decomp | 2026-10-08 (`ab4e8e543`) | 2026-10-10 (lane/c25-restore-promote) | IDENTICAL default; `_OFF` restores the old path | [MOJOLEARN_CLASSICAL_C25_PROJECTION_REUSE.patch](../experiments/removed/MOJOLEARN_CLASSICAL_C25_PROJECTION_REUSE.patch) |
 | [`MOJOLEARN_ARIMA_ASYNC_ALL`](#mojolearn_arima_async_all-expdel2-37-series) | Time series (ARIMA per-series L-BFGS on every route) | 2026-11-15 (`e4949779dc`) | 2026-11-15 (lane/expdel2-restore-owed) | opt-in B arm, default unchanged, A/B owed at the wave sha | [MOJOLEARN_ARIMA_ASYNC_ALL.patch](../experiments/removed/MOJOLEARN_ARIMA_ASYNC_ALL.patch) |
 | [`MOJOLEARN_BYTE_LM_GENERIC_OPS`](#mojolearn_byte_lm_generic_ops) | Neural (byte LM attention step next-norm fusion, Apple) | 2026-11-15 (`3b3c83af90`) | 2026-11-15 (lane/expdel2-restore-owed) | opt-in B arm, default unchanged, A/B owed at the wave sha | [MOJOLEARN_BYTE_LM_GENERIC_OPS.patch](../experiments/removed/MOJOLEARN_BYTE_LM_GENERIC_OPS.patch) |
+| [`MOJOLEARN_BYTE_LM_LOGITS_ZERO_FILL`](#mojolearn_byte_lm_logits_zero_fill) | Neural (byte LM trainer) | 2026-11-15 (`650388311e`) | 2026-11-15 (lane/expdel2-restore-owed) | opt-in B arm, default unchanged, A/B owed at the wave sha | [MOJOLEARN_BYTE_LM_LOGITS_ZERO_FILL.patch](../experiments/removed/MOJOLEARN_BYTE_LM_LOGITS_ZERO_FILL.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -8824,6 +8825,7 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2
 - Files: bindings/byte_lm_trainer_native_door.mojo.
 - Deleted by: lane/expdel2-02-base `650388311e` (2026-11-15); code recoverable at `337c096a5b`.
 - Restore: `git apply experiments/removed/MOJOLEARN_BYTE_LM_LOGITS_ZERO_FILL.patch`, then delete the refusal in `core/experiment_guards_base.mojo`.
+Restored 2026-11-15 (lane/expdel2-restore-owed): owed B arm, deletion premature; see Restored table.
 
 ### MOJOLEARN_DART_ROUND_REF_OFF
 

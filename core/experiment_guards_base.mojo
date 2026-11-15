@@ -54,8 +54,7 @@ def _check_configuration() -> Bool:
     # Restore: git apply experiments/removed/MOJOLEARN_SPLINE_FAST_FUSED_OFF.patch
     comptime assert not is_defined["MOJOLEARN_SPLINE_FAST_FUSED_OFF"](), "removed 2026-11-15 (lane/expdel-06-base-cluster-kernel): SPLINE_FAST_FUSED_OFF (FAST+Apple rollback of SplineTransformer to main's unfused fit and transform) is gone; the fused program is the FAST+Apple path (spline istella 48.1 -> 11.6 ms, taxi 34.2 -> 10.8 ms, kap2-spl-fused); restore: experiments/removed/MOJOLEARN_SPLINE_FAST_FUSED_OFF.patch"
     # Lane expdel2-02-base (2026-11-15): unmeasured arms deleted, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (docs/TOMBSTONES.md).
-    # Restore: git apply experiments/removed/MOJOLEARN_BYTE_LM_LOGITS_ZERO_FILL.patch
-    comptime assert not is_defined["MOJOLEARN_BYTE_LM_LOGITS_ZERO_FILL"](), "removed 2026-11-15 (lane/expdel2-02-base): BYTE_LM_LOGITS_ZERO_FILL (opt-in arm, never measured) is gone; the default is kept; code at 337c096a5b; restore: experiments/removed/MOJOLEARN_BYTE_LM_LOGITS_ZERO_FILL.patch"
+    # MOJOLEARN_BYTE_LM_LOGITS_ZERO_FILL: refusal removed 2026-11-15 (restored; owed B arm, see docs/TOMBSTONES.md Restored table)
     # Restore: git apply experiments/removed/MOJOLEARN_DART_ROUND_REF_OFF.patch
     comptime assert not is_defined["MOJOLEARN_DART_ROUND_REF_OFF"](), "removed 2026-11-15 (lane/expdel2-02-base): DART_ROUND_REF_OFF (old path, never measured) is gone; the default is kept; code at 650388311e; restore: experiments/removed/MOJOLEARN_DART_ROUND_REF_OFF.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_GBDT_STEP_OLD.patch
