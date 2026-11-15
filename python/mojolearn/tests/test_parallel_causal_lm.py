@@ -11,7 +11,6 @@ import signal
 import sys
 from contextlib import contextmanager
 from pathlib import Path
-from types import SimpleNamespace
 
 import numpy as np
 import pytest
