@@ -99,11 +99,8 @@ comptime H8_MIN_DOCS = H8_LANE * H8_UNROLL * H8_LOAD * (H8_BLOCK // H8_LANE)
 
 
 # ======================= lane trees-hist-ideas (2026-10-07) =======================
-# Two default-off IDENTICAL switches on this kernel (`gbdt/trees_hist_switches.mojo`).
-# Neither changes an addend; both change only how many atomics carry it, so the
-# cells keep their bits. Apple (no 64-bit atomics; Metal wave vote unprobed) keeps
-# the incumbent arithmetic under either define: same bits, other code.
-# NOT COMPILED -- NOT TESTED -- IDENTITY NOT VERIFIED -- NOT MEASURED.
+# Its two default-off IDENTICAL switches (packed Int64 atomics, wave-aggregated
+# atomics) were never measured and were deleted 2026-11-15.
 # TOMBSTONE: MOJOLEARN_TREES_HIST_PACKED_GH (DELETE-ARM, opt-in, no A/B recorded, rule a; non-owner fold to False) deleted 2026-11-15 by lane/expdel2-43-trees; code recoverable at 02e2a7dbe7.
 # Restore: git apply experiments/removed/MOJOLEARN_TREES_HIST_PACKED_GH.expdel2-43-trees.patch; record in docs/TOMBSTONES.md.
 # TOMBSTONE: MOJOLEARN_TREES_HIST_WARP_AGG (DELETE-ARM, opt-in, no A/B recorded, rule a; non-owner fold to False) deleted 2026-11-15 by lane/expdel2-43-trees; code recoverable at fdbf0a0b1b.
