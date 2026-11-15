@@ -81,25 +81,6 @@
       "grid": "exclude",
       "note": "UNREACHED: classical:ols takes the TSQR route (x_decomp/api.mojo:585 IDN_OLS_ONE_ENTRY) and never calls ols_fit; :208 is FAST-Apple only, :340 weighted only."
     },
-    "c16_glm_fused": {
-      "define": "MOJOLEARN_CLASSICAL_C16_GLM_FUSED",
-      "kind": "switch",
-      "arms": {
-        "off": [],
-        "on": [
-          "MOJOLEARN_CLASSICAL_C16_GLM_FUSED"
-        ]
-      },
-      "default": "off",
-      "source": [
-        "x_linear/device.mojo:2946",
-        "x_linear/device.mojo:3292"
-      ],
-      "binding": "_mojolearn_x_linear",
-      "bits_change": true,
-      "status": "kept",
-      "note": "removes one launch per GLM iteration; one thread per row."
-    },
     "c17_ls_trials": {
       "define": "MOJOLEARN_CLASSICAL_C17_LS_TRIALS",
       "kind": "switch",
@@ -400,25 +381,19 @@
     "expanded:poisson": {
       "binding": "_mojolearn_x_linear",
       "route": "fit: _GLMBase -> _glm_fit_grid -> glm_obj_map_kernel (x_linear/device.mojo:2946)",
-      "controls": [
-        "c16_glm_fused"
-      ],
+      "controls": [],
       "interaction_groups": []
     },
     "expanded:gamma": {
       "binding": "_mojolearn_x_linear",
       "route": "fit: _GLMBase -> _glm_fit_grid -> glm_obj_map_kernel (x_linear/device.mojo:2946)",
-      "controls": [
-        "c16_glm_fused"
-      ],
+      "controls": [],
       "interaction_groups": []
     },
     "expanded:tweedie": {
       "binding": "_mojolearn_x_linear",
       "route": "fit: _GLMBase -> _glm_fit_grid -> glm_obj_map_kernel (x_linear/device.mojo:2946)",
-      "controls": [
-        "c16_glm_fused"
-      ],
+      "controls": [],
       "interaction_groups": []
     },
     "more:logreg": {
@@ -667,6 +642,11 @@
       "define": "MOJOLEARN_CLASSICAL_C15_FACTOR_SOLVE",
       "control": "c15_factor_solve",
       "reason": "DELETED 2026-11-15 (lane/expdel2-06-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md; recoverable at 72270680f8; patch experiments/removed/MOJOLEARN_CLASSICAL_C15_FACTOR_SOLVE.patch): unmeasured opt-in arm. no record: no A/B was recorded for the opt-in arm (plan rule a; AGENTS.md \"An unmeasured arm is deleted\", Andrew 2026-11-15). Refused in core/experiment_guards_linear.mojo; docs/TOMBSTONES.md."
+    },
+    {
+      "define": "MOJOLEARN_CLASSICAL_C16_GLM_FUSED",
+      "control": "c16_glm_fused",
+      "reason": "DELETED 2026-11-15 (lane/expdel2-06-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md; recoverable at 2a301a3aa3; patch experiments/removed/MOJOLEARN_CLASSICAL_C16_GLM_FUSED.patch): unmeasured opt-in arm. no record: no A/B was recorded for the opt-in arm (plan rule a; AGENTS.md \"An unmeasured arm is deleted\", Andrew 2026-11-15). Refused in core/experiment_guards_linear.mojo; docs/TOMBSTONES.md."
     }
   ],
   "owed_removal_ab": [

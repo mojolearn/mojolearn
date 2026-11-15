@@ -158,7 +158,9 @@ comptime C15_FACTOR_SOLVE = False
 # routes (the grid's "off" arm). The old opt-in define is refused in
 # core/six_lane_experiment_guards.mojo.
 comptime LINEAR_GRAM_SOLVE = CLASSICAL_IDN and not is_defined["MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE_OFF"]()
-comptime C16_GLM_FUSED = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_C16_GLM_FUSED"]()
+# TOMBSTONE: MOJOLEARN_CLASSICAL_C16_GLM_FUSED (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-06-base; code recoverable at 2a301a3aa3.
+# Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C16_GLM_FUSED.patch; record in docs/TOMBSTONES.md.
+comptime C16_GLM_FUSED = False
 comptime C17_OVR = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_C17_OVR"]()
 comptime C17_LS_TRIALS = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_C17_LS_TRIALS"]()
 # T.C18.residual-only, measured source 6fe3cfce38fd: remain opt-in/off, pending

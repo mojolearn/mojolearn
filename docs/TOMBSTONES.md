@@ -701,6 +701,7 @@ in the tables after the sections.
 | [`MOJOLEARN_CLASSICAL_C13_LOGCV_WEIGHTS`](#mojolearn_classical_c13_logcv_weights-unmeasured-arm-deleted-2026-11-15) | Linear (weighted LogisticRegressionCV fold weight sums, IDENTICAL) | removed (opt-in arm; unmeasured opt-in arm) | 2026-11-15 | [MOJOLEARN_CLASSICAL_C13_LOGCV_WEIGHTS.patch](../experiments/removed/MOJOLEARN_CLASSICAL_C13_LOGCV_WEIGHTS.patch) |
 | [`MOJOLEARN_CLASSICAL_C14_GROUP_RHS`](#mojolearn_classical_c14_group_rhs-unmeasured-arm-deleted-2026-11-15) | Linear / decomposition (triangular solves in groups of four RHS, IDENTICAL) | removed (opt-in arm; unmeasured opt-in arm) | 2026-11-15 | [MOJOLEARN_CLASSICAL_C14_GROUP_RHS.patch](../experiments/removed/MOJOLEARN_CLASSICAL_C14_GROUP_RHS.patch) |
 | [`MOJOLEARN_CLASSICAL_C15_FACTOR_SOLVE`](#mojolearn_classical_c15_factor_solve-unmeasured-arm-deleted-2026-11-15) | Linear (ARD posterior mean from the Cholesky factor, IDENTICAL) | removed (opt-in arm; unmeasured opt-in arm) | 2026-11-15 | [MOJOLEARN_CLASSICAL_C15_FACTOR_SOLVE.patch](../experiments/removed/MOJOLEARN_CLASSICAL_C15_FACTOR_SOLVE.patch) |
+| [`MOJOLEARN_CLASSICAL_C16_GLM_FUSED`](#mojolearn_classical_c16_glm_fused-unmeasured-arm-deleted-2026-11-15) | Linear (GLM loss, gradient and Hessian in one pass, IDENTICAL) | removed (opt-in arm; unmeasured opt-in arm) | 2026-11-15 | [MOJOLEARN_CLASSICAL_C16_GLM_FUSED.patch](../experiments/removed/MOJOLEARN_CLASSICAL_C16_GLM_FUSED.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -6781,3 +6782,11 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md (section expdel-02-
 - **Deleted by**: lane/expdel2-06-base (expdel2-06-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `72270680f8`.
 - **Restore**: `git apply experiments/removed/MOJOLEARN_CLASSICAL_C15_FACTOR_SOLVE.patch`, then delete the `MOJOLEARN_CLASSICAL_C15_FACTOR_SOLVE` refusal in `core/experiment_guards_linear.mojo`.
 - **Records**: refusal in `core/experiment_guards_linear.mojo`; `classical-misc.json` control `c15_factor_solve`: `removed` entry added (control removed from `controls` and from its algorithms); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-06-base section).
+
+## MOJOLEARN_CLASSICAL_C16_GLM_FUSED: unmeasured arm deleted (2026-11-15)
+
+- **What it was**: the opt-in arm in which the Poisson / Gamma / Tweedie GLM produced the accepted and trial loss, gradient and Hessian together with shared link terms, one launch fewer per iteration (x_linear/glm.mojo, glm_host.mojo, x_linear/device.mojo). `experiments/classical_identical_ideas/linear_controls.mojo` now defines `C16_GLM_FUSED` as the constant of the kept default, so the importers in other lanes compile before and after; the integrator folds their dead branches.
+- **Verdict**: no record: no A/B was recorded for the opt-in arm (plan rule a; AGENTS.md "An unmeasured arm is deleted", Andrew 2026-11-15). No bit change on any vendor or the host column: the default arm is untouched.
+- **Deleted by**: lane/expdel2-06-base (expdel2-06-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `2a301a3aa3`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_CLASSICAL_C16_GLM_FUSED.patch`, then delete the `MOJOLEARN_CLASSICAL_C16_GLM_FUSED` refusal in `core/experiment_guards_linear.mojo`.
+- **Records**: refusal in `core/experiment_guards_linear.mojo`; `classical-misc.json` control `c16_glm_fused`: `removed` entry added (control removed from `controls` and from its algorithms); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-06-base section).
