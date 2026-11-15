@@ -26,11 +26,9 @@ stays as its default constant so importers fold their dead arms.
 # (Sweep 2026-11-15: T04 removed; readers folded, clear_live_histogram_bins_kernel removed.)
 # TOMBSTONE: MOJOLEARN_TREES_T05 (unmeasured arm) deleted 2026-11-15 by expdel2-39-trees; code recoverable at the deletion commit^.
 # Restore: git apply experiments/removed/MOJOLEARN_TREES_T05.patch
-comptime T05 = False
-# RF T05 per-node bound in row visits per thread (see builder.mojo T05_NODE_ROWS).
+# (Sweep 2026-11-15: T05 and T05_ROW_VISITS removed; RF/ET small-node branches and kernels folded.)
 # TOMBSTONE: MOJOLEARN_TREES_T05_ROW_VISITS (unmeasured arm) deleted 2026-11-15 by expdel2-39-trees; code recoverable at the deletion commit^.
 # Restore: git apply experiments/removed/MOJOLEARN_TREES_T05_ROW_VISITS.patch
-comptime T05_ROW_VISITS = 32
 # TOMBSTONE: MOJOLEARN_TREES_T06 (unmeasured arm) deleted 2026-11-15 by expdel2-39-trees; code recoverable at the deletion commit^.
 # Restore: git apply experiments/removed/MOJOLEARN_TREES_T06.patch
 comptime T06 = False

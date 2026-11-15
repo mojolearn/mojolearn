@@ -380,7 +380,7 @@ which already priced the width for the reduction this scratch feeds.
 
 from ensemble.tree_moments import moment_pair, moment_finish
 from checks.soft_f64 import sf64_from_f32
-from ensemble.tree_identical_ideas import T05, T07, T08, T14, C48
+from ensemble.tree_identical_ideas import T07, T08, T14, C48
 from max.gpu import (
     WARP_SIZE,
     block_dim,
@@ -518,10 +518,7 @@ build default; its forests move run to run and its build gate refuses).
 
 # TOMBSTONE: MOJOLEARN_RF_SMALL_NODE_FUSED (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-38-trees; code recoverable at 52922acecb.
 # Restore: git apply experiments/removed/MOJOLEARN_RF_SMALL_NODE_FUSED.patch; record in docs/TOMBSTONES.md.
-comptime SMALL_NODE_FUSED_DEFAULT = T05
-"""T05: a batch whose every node fits one block's walk runs
-`small_node_split_kernel` (histogram in shared memory + split search in
-one launch) instead of zero + histogram + find_best_splits."""
+# (Sweep 2026-11-15: SMALL_NODE_FUSED_DEFAULT (= the folded T05) removed with its builder branch.)
 
 # TOMBSTONE: MOJOLEARN_RF_SMALL_NODE_1024 (DROPPED-noise) deleted 2026-10-03 by baa477878; code recoverable at baa477878^.
 # Restore: git apply experiments/removed/MOJOLEARN_RF_SMALL_NODE_1024.patch; record in docs/TOMBSTONES.md.
@@ -2495,11 +2492,6 @@ def build_histograms_kernel[
     ref work_item = work_items[unsafe_offset = Int(nid)]
     var range_start = work_item.instances.begin
     var range_len = work_item.instances.count
-    # T05 per-node ownership: nodes of at most `small_rows` rows were built
-    # by `small_node_split_kernel` this round; uniform per block, no barrier yet.
-    comptime if T05:
-        if Int(small_rows) > 0 and Int(range_len) <= Int(small_rows):
-            return
 
     var offset_blockid = Int(workload_info_cta.offset_blockid)
     var num_blocks = Int(workload_info_cta.num_blocks)
@@ -2752,10 +2744,6 @@ def build_histograms_binned_columns_kernel[
     ref workload = workload_info[unsafe_offset=Int(block_idx.x)]
     var nid = Int(workload.nodeid)
     ref item = work_items[unsafe_offset=nid]
-    comptime if T05:
-        # T05 per-node ownership (see build_histograms_kernel).
-        if Int(small_rows) > 0 and Int(item.instances.count) <= Int(small_rows):
-            return
     var classes = Int(objective.NumClasses())
     var feature_stride = Int(max_n_bins) * classes
     var first = Int(block_idx.y) * TILE
@@ -2910,8 +2898,8 @@ def launch_build_histograms_kernel[
 ) raises:
     """`launchBuildHistogramsKernel`, `:396-421`.
 
-    `small_rows` > 0 (T05 only): nodes of at most that many rows are owned by
-    `small_node_split_kernel` this round and every histogram block skips them.
+    `small_rows` is unread since the T05 sweep (2026-11-15); kept in the
+    kernel ABI that ensemble/checks launches directly.
 
     Their `dim3 histogram_grid` arrives as two Ints and their
     `split_smem_config.histogram_dynamic_smem_size` is not a launch
@@ -3272,13 +3260,6 @@ def find_best_splits_kernel[
 
     # `:369`
     var nid = Int32(Int(block_idx.x))
-    # T05 per-node ownership: the fused kernel already published this node's
-    # candidates and purity; its histogram cells were never written.
-    comptime if T05:
-        if Int(small_rows) > 0 and Int(
-            work_items[unsafe_offset = Int(nid)].instances.count
-        ) <= Int(small_rows):
-            return
 
     # `:371-374`
     var col_index = col_start + Int32(Int(block_idx.y))
@@ -3437,143 +3418,8 @@ def find_best_splits_kernel[
                 z += TPB
 
 
-def small_node_split_kernel[
-    O: ObjectiveLike,
-    TPB: Int,
-    SLOTS: Int,
-    sampled_labels: Bool = False,
-    candidates: Bool = False,
-    pinned_reduce: Bool = False,
-](
-    argsp: MutPointer[FindBestSplitsArgs[O], MutAnyOrigin],
-    work_items: MutPointer[NodeWorkItem, MutAnyOrigin],
-    col_start: Int32,
-    column_samples: MutPointer[Int32, MutAnyOrigin],
-    mutex: MutPointer[Int32, MutAnyOrigin],
-    splits: MutPointer[Split[O.DataT], MutAnyOrigin],
-    max_n_bins: Int32,
-    cand: MutPointer[Split[O.DataT], MutAnyOrigin],
-    small_rows: Int32,
-):
-    """FAST (`SMALL_NODE_FUSED_DEFAULT`): `build_histograms_kernel` and
-    `find_best_splits_kernel` for ONE (node, column) in ONE block, for a
-    batch whose every node fits one block's walk. Grid `(n_nodes, columns)`.
-    The histogram lives in shared memory only: the binned inner loop fills
-    it exactly as the histogram kernel's shared arm does (integer / fixed-
-    point bins, so the cells are the same integers in any order), and the
-    tail below is `find_best_splits_kernel`'s body on that copy -- same
-    scans, same `Gain`, same reduction, same publish, same pure mark. No
-    global histogram is written, zeroed or read, and one launch replaces
-    two (three with the zero)."""
-    ref args = argsp[unsafe_offset=0]
-    var dataset = args.dataset.copy()
-    var objective = args.objective.copy()
-    var nid = Int32(Int(block_idx.x))
-    ref work_item = work_items[unsafe_offset = Int(nid)]
-    # T05 per-node dispatch (small_rows > 0): this kernel owns exactly the
-    # nodes of at most `small_rows` rows; larger nodes return here and take
-    # the multi-block histogram + find_best_splits route in the same round.
-    # Uniform per block, before any barrier. 0 keeps the host-batch FAST arm.
-    if Int(small_rows) > 0 and Int(work_item.instances.count) > Int(small_rows):
-        return
-    var range_start = Int(work_item.instances.begin)
-    var end = range_start + Int(work_item.instances.count)
-    var col_index = col_start + Int32(Int(block_idx.y))
-    var col = column_samples[
-        unsafe_offset = Int(nid) * Int(dataset.n_sampled_cols) + Int(col_index)
-    ]
-    var n_bins = args.quantiles.n_bins_array[unsafe_offset = Int(col)]
-    var n_classes = objective.NumClasses()
-    var cells = Int(n_bins) * Int(n_classes)
-    var histogram = stack_allocation[
-        SLOTS, O.BinT, address_space = AddressSpace.SHARED
-    ]()
-    var z = Int(thread_idx.x)
-    while z < cells:
-        histogram[unsafe_offset=z] = O.BinT()
-        z += TPB
-    barrier()
-    _histogram_inner_loop_binned[sampled_labels=sampled_labels](
-        objective,
-        dataset,
-        histogram,
-        col,
-        n_bins,
-        range_start,
-        end,
-        Int(thread_idx.x),
-        TPB,
-    )
-    barrier()
-
-    # Pinned (IDENTICAL): the same width-32 shared-memory reduction as
-    # `find_best_splits_kernel` (DEVIATION 404), so wave64 AMD and warp-32
-    # NVIDIA publish the same winner.
-    comptime assert (not pinned_reduce) or (
-        TPB % PINNED_SPLIT_REDUCE_LANES == 0
-    ), "pinned split reduce needs TPB % 32 == 0 (DEVIATION 404)"
-    comptime N_SPLIT_SCRATCH = TPB if pinned_reduce else ceildiv(TPB, WARP_SIZE)
-    var split_scratch = stack_allocation[
-        N_SPLIT_SCRATCH,
-        Split[O.DataT],
-        address_space = AddressSpace.SHARED,
-    ]()
-    var quantiles_for_split = args.quantiles.quantiles_array.unsafe_offset(
-        Int(max_n_bins) * Int(col)
-    )
-    var scan_histogram = histogram.unsafe_bitcast[ScanBin[O.BinT]]()
-    var global_sample_count = Int64(0)
-    var max_class_count = Int64(0)
-    for c in range(Int(n_classes)):
-        var total = pdf_to_cdf[
-            ScanBin[O.BinT], TPB, address_space = AddressSpace.SHARED
-        ](
-            scan_histogram.unsafe_offset(Int(n_bins) * c)
-            .unsafe_origin_cast[MutAnyOrigin](),
-            n_bins,
-        )
-        var class_count = Int64(Int(total.b.Count()))
-        if class_count > max_class_count:
-            max_class_count = class_count
-        global_sample_count += class_count
-    barrier()
-    var sp = objective.Gain(
-        histogram, quantiles_for_split, col, global_sample_count, n_bins
-    )
-    var node_pure = (
-        n_classes > Int32(1)
-        and global_sample_count > Int64(0)
-        and max_class_count == global_sample_count
-        and objective.PureNodeIsTerminal()
-    )
-    sp.pure = Int32(1) if node_pure else Int32(0)
-    barrier()
-    comptime if candidates and pinned_reduce:
-        sp.eval_best_split_pinned_to_candidate(
-            split_scratch,
-            cand.unsafe_offset(Int(nid)*Int(grid_dim.y)+Int(block_idx.y)),
-            quantiles_for_split, n_bins,
-        )
-    elif candidates:
-        sp.eval_best_split_to_candidate(
-            split_scratch,
-            cand.unsafe_offset(Int(nid)*Int(grid_dim.y)+Int(block_idx.y)),
-            quantiles_for_split, n_bins,
-        )
-    elif pinned_reduce:
-        sp.eval_best_split_pinned(
-            split_scratch, splits.unsafe_offset(Int(nid)),
-            mutex.unsafe_offset(Int(nid)), quantiles_for_split, n_bins,
-        )
-    else:
-        sp.eval_best_split(
-            split_scratch, splits.unsafe_offset(Int(nid)),
-            mutex.unsafe_offset(Int(nid)), quantiles_for_split, n_bins,
-        )
-    if Int(block_idx.y) == 0 and Int(thread_idx.x) == 0:
-        Split[O.DataT].pure_flag_ptr(splits.unsafe_offset(Int(nid)))[
-            unsafe_offset=0
-        ] = sp.pure
+# (Sweep 2026-11-15: small_node_split_kernel, launched only under the folded T05 / the deleted
+# RF_SMALL_NODE_FUSED, removed.)
 
 
 # TOMBSTONE: MOJOLEARN_RF_FBS_WARP_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-38-trees; code recoverable at 52922acecb.
@@ -3751,8 +3597,8 @@ def launch_find_best_splits_kernel[
 ) raises:
     """`launchFindBestSplitsKernel`, `:423-445`.
 
-    `small_rows` > 0 (T05 only) needs `work_items`: blocks of nodes with at
-    most that many rows return at once (the fused kernel owns them).
+    `small_rows` is unread since the T05 sweep (2026-11-15); kept in the
+    kernel ABI that ensemble/checks launches directly.
 
     DEVIATION 1893: `argsp` is the caller's already-uploaded
     `FindBestSplitsArgs` blob (dataset + quantiles + objective), staged

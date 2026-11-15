@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Random Forest decision-tree builder and device training pipeline, aligned with the pinned cuML batched-level algorithm."""
 
-from ensemble.tree_identical_ideas import T05, T05_ROW_VISITS, T07, T13, T13_BYTES
+from ensemble.tree_identical_ideas import T07, T13, T13_BYTES
 from max.gpu import WARP_SIZE
 from std.sys.compile import is_defined
 from std.math import ceildiv
@@ -47,10 +47,6 @@ from ensemble.decisiontree.batched_levelalgo.kernels.builder_kernels_impl import
     launch_find_best_splits_kernel,
     HIST_ZERO_AFTER_READ_DEFAULT,
     HIST_SPLIT_CANDIDATES_DEFAULT,
-    SMALL_NODE_FUSED_DEFAULT,
-    SMALL_NODE_ROWS,
-    SPLIT_REDUCE_PINNED_DEFAULT,
-    small_node_split_kernel,
     merge_split_candidates_kernel,
     merge_split_candidates_parallel_kernel,
     launch_gather_sampled_order_kernel,
@@ -193,20 +189,10 @@ def blk_cols_for(n_sampled_cols: Int) -> Int:
     return min(N_BLKS_FOR_COLS, n)
 
 
-comptime SMALL_NODE_SLOTS = 2048
-# T05 per-node bound (trees-cleanup 2026-10-07). Cost reasoning: the fused
-# block walks its node with TPB_DEFAULT threads, so a node of R rows costs
-# R / TPB serial visits per thread, while the split route pays a zero pass, a
-# global-atomic flush of every (bin, class) cell, a global re-read in
-# find_best_splits and two more launches per column block regardless of R.
-# At up to T05_ROW_VISITS visits per thread (default 32, i.e. 4096 rows at
-# TPB 128, the same bound the FAST host-batch arm uses) the walk is shorter
-# than that fixed overhead; above it the multi-block histogram wins. The
-# bound is fixed at 32. No data dimension.
 # TOMBSTONE: MOJOLEARN_TREES_T05_ROW_VISITS (unmeasured int sweep; 32 kept) deleted 2026-11-15 by lane/expdel2-38-trees; code recoverable at 52922acecb.
 # Restore: git apply experiments/removed/MOJOLEARN_TREES_T05_ROW_VISITS.expdel2-38-trees.patch; record in docs/TOMBSTONES.md.
-comptime T05_NODE_ROWS = T05_ROW_VISITS * TPB_DEFAULT
-"""Shared bins `small_node_split_kernel` holds per block."""
+# (Sweep 2026-11-15: SMALL_NODE_SLOTS, T05_NODE_ROWS and _small_batch_host removed with the folded T05 small-node
+# branches and small_node_split_kernel.)
 
 # `builder.cuh:205` -- "Memory alignment value"
 comptime ALIGN_VALUE = 512
@@ -703,16 +689,6 @@ def update_workload_info_host[
             )
         n_blocks_dimx += n_blocks_per_node
     return n_blocks_dimx
-
-
-def _small_batch_host(work_items: List[NodeWorkItem]) -> Bool:
-    """The host-queue replay's small-node test: every node of the host
-    batch list holds at most `SMALL_NODE_ROWS` rows. The device loop
-    (`dev_n >= 0`) never asks."""
-    for i in range(len(work_items)):
-        if Int(work_items[i].instances.count) > SMALL_NODE_ROWS:
-            return False
-    return True
 
 
 def max_blocks_dimx_for(max_batch_size: Int32, n_sampled_rows: Int) -> Int:
@@ -2275,7 +2251,6 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
         find_argsp: MutPointer[
             FindBestSplitsArgs[Self.O], MutUntrackedOrigin
         ],
-        small_rows: Int = 0,
     ) raises:
         """`Builder::computeSplit`, `:570-626`. The quantiles and the
         objective travel in the staged args blobs -- per tree per width
@@ -2361,7 +2336,6 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
             smem_config,
             hist_argsp,
             n_classes,
-            small_rows,
         )
         instr.times.stop_host("host_hist_launch", t_h)
         # DEVIATION 401 -- the column block's REDUCED histograms, hashed
@@ -2405,7 +2379,7 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
             .unsafe_origin_cast[MutUntrackedOrigin]()
             .unsafe_bitcast[Split[Self.O.DataT]](),
             n_classes,
-            small_rows,
+            0,
             self._work_items_ptr(),
         )
         comptime if HIST_SPLIT_CANDIDATES_DEFAULT:
@@ -2579,84 +2553,13 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
 
         # `:497-500` -- ten columns per launch.
         instr.times.stop_host("host_launch_setup", t_h)
-        var small_batch = False
-        var t05_rows = 0
-        comptime if SMALL_NODE_FUSED_DEFAULT:
-            if (dev_n < 0 or T05) and dataset.has_bins and not instr.trace.enabled and Int(
-                self.params.max_n_bins
-            ) * Int(
-                self.num_outputs
-            ) <= SMALL_NODE_SLOTS:
-                comptime if T05:
-                    # T05: a PER-NODE choice made on the device, so it needs
-                    # no host frontier read and works in the device level
-                    # loop. Each fused block reads its node's row count and
-                    # keeps only nodes of at most T05_NODE_ROWS rows; the
-                    # histogram and find_best_splits blocks skip exactly
-                    # those. Large nodes (million-row roots) keep the
-                    # multi-block replicated histogram.
-                    t05_rows = T05_NODE_ROWS
-                else:
-                    small_batch = _small_batch_host(work_items)
         var c = 0
         while c < n_sampled_cols:
-            comptime if T05:
-                if t05_rows > 0:
-                    var dimy5 = min(N_BLKS_FOR_COLS, n_sampled_cols - c)
-                    log_launch_ctx(ctx, "small_node_split_t05")
-                    # No candidate merge here: `_compute_split` merges every
-                    # node's slots once, after its find_best_splits wrote the
-                    # large nodes' slots for the same column block.
-                    ctx.enqueue_function[
-                        small_node_split_kernel[
-                            Self.O, TPB_DEFAULT, SMALL_NODE_SLOTS,
-                            Self.sampled_labels, HIST_SPLIT_CANDIDATES_DEFAULT,
-                            SPLIT_REDUCE_PINNED_DEFAULT,
-                        ]
-                    ](
-                        find_argsp.unsafe_origin_cast[MutAnyOrigin](),
-                        self._work_items_ptr().unsafe_origin_cast[MutAnyOrigin](),
-                        Int32(c),
-                        self.column_samples.unsafe_ptr()
-                        .unsafe_origin_cast[MutAnyOrigin](),
-                        self.mutex.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
-                        self._splits_ptr().unsafe_origin_cast[MutAnyOrigin](),
-                        Int32(self.params.max_n_bins),
-                        self.split_cand.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]().unsafe_bitcast[Split[Self.O.DataT]](),
-                        Int32(t05_rows),
-                        grid_dim=(n, dimy5),
-                        block_dim=TPB_DEFAULT,
-                    )
-            if small_batch:
-                var dimy = min(N_BLKS_FOR_COLS, n_sampled_cols - c)
-                log_launch_ctx(ctx, "small_node_split")
-                ctx.enqueue_function[
-                    small_node_split_kernel[
-                        Self.O, TPB_DEFAULT, SMALL_NODE_SLOTS,
-                        Self.sampled_labels, HIST_SPLIT_CANDIDATES_DEFAULT,
-                    ]
-                ](
-                    find_argsp.unsafe_origin_cast[MutAnyOrigin](),
-                    self._work_items_ptr().unsafe_origin_cast[MutAnyOrigin](),
-                    Int32(c),
-                    self.column_samples.unsafe_ptr()
-                    .unsafe_origin_cast[MutAnyOrigin](),
-                    self.mutex.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
-                    self._splits_ptr().unsafe_origin_cast[MutAnyOrigin](),
-                    Int32(self.params.max_n_bins),
-                    self.split_cand.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]().unsafe_bitcast[Split[Self.O.DataT]](),
-                    Int32(0),
-                    grid_dim=(n, dimy),
-                    block_dim=TPB_DEFAULT,
-                )
-                comptime if HIST_SPLIT_CANDIDATES_DEFAULT:
-                    self._merge_candidates(ctx, n, dimy)
-            else:
-                self._compute_split(
-                    ctx, dataset, c, n_blocks_dimx, n,
-                    n_sampled_cols, smem_config, instr, tag_prefix,
-                    hist_argsp, find_argsp, t05_rows,
-                )
+            self._compute_split(
+                ctx, dataset, c, n_blocks_dimx, n,
+                n_sampled_cols, smem_config, instr, tag_prefix,
+                hist_argsp, find_argsp,
+            )
             c += N_BLKS_FOR_COLS
         if dev_n >= 0:
             return
