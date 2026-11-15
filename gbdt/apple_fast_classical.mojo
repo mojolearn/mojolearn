@@ -23,8 +23,9 @@ comptime AFCL_T01 = False
 
 # AFCL-T02: eight features use 16 KiB of histogram shared memory instead
 # of Apple's 32 KiB group, trading extra workgroups for resident capacity.
-# NEVER RUN — PENDING MEASUREMENT; uncompiled/unverified; default OFF.
-comptime AFCL_T02 = AFCL_APPLE_FAST and is_defined["MOJOLEARN_AFCL_T02"]()
+# TOMBSTONE: MOJOLEARN_AFCL_T02 (DELETE-EXPERIMENT, never-run Apple FAST programme card, rule g) deleted 2026-11-15 by lane/expdel2-41-trees; code recoverable at 4dcdb311b5.
+# Restore: git apply experiments/removed/MOJOLEARN_AFCL_T02.patch; record in docs/TOMBSTONES.md.
+comptime AFCL_T02 = False
 
 # AFCL-T03: 512 threads retain room for all 256 borders while reducing
 # the per-feature binarizer's register footprint per threadgroup.
