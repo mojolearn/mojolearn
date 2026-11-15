@@ -21,7 +21,7 @@ upload exists) and kernel='precomputed' (its query is the cross-kernel the
 caller gathered, flushed on the host as before): both keep the host-list
 route `svc_predict_host`.
 
-WHAT DOES NOT CHANGE. The decisions are `svc_predict_dev`
+WHAT DOES NOT CHANGE. The decisions are `svc_predict_dev_into`
 (svm/impl/svc_impl.mojo), the launches `svc_predict` runs after its own
 uploads, over the same bytes. The bits are the same.
 
@@ -52,7 +52,8 @@ from core.fitted_resident_store import (
 # TOMBSTONE: check_finite_device on the resident query (the synchronising first-non-finite scan, DEVIATION 636 text) removed 2026-11-09 by lane a7a-device-x-svm-gp-krr: the query's finite word rides back with the decisions (core/device_query_x.mojo). Never reached main: recoverable at 5b5490960d.
 from core.device_query_x import QueryFold, query_context, resident_query_x, resident_query_x_done
 from svm.estimator import _family_ctx, _kernel_params, svc_predict_host, svr_predict_host
-from svm.impl.svc_impl import svc_predict_batch_rows, svc_predict_dev
+from svm.impl.svc_impl import svc_nan_decision_error, svc_predict_batch_rows, svc_predict_dev_into
+from core.query_x_held import QUERY_X_DECISION_SLOT
 from svm.impl.svm_parameter import KERNEL_PRECOMPUTED, SvmModel
 from core.shared_slot import SharedSlot
 
@@ -140,31 +141,37 @@ def _svm_resident_decide(
                                     [sv_addr, dual_addr], [n_support * n_cols, n_support])
     var sv = held.bufs[0].copy()
     var dual = held.bufs[1].copy()
-    var preds = List[Float32]()
+    # flag-svc-infer (2026-11-15): the decisions go straight to `out_addr`
+    # and their NaN test (DEVIATION 637) runs on the device into the query's
+    # third status word, all behind svc_predict_dev_into's one
+    # synchronisation (no pinned download, host List or host row scan, no
+    # second host copy into the output). A flagged query's rows in
+    # `out_addr` are discarded by the door's refusal, as before.
+    var qx_x = qx.x.copy()  # a handle copy: the same device words
+    var status = qx.status_buffer()
+    var nan = False
     try:
-        # svc_predict_dev synchronises before it returns its host list, so
-        # the status words copied after the query are valid below.
-        preds = svc_predict_dev(
-            ctx, model, qx.x, sv, dual, n_rows, n_cols, n_batch, kp, predict_class, card, plan,
+        nan = svc_predict_dev_into(
+            ctx, model, qx_x, sv, dual, n_rows, n_cols, n_batch, kp, predict_class, card, plan,
+            out_addr, status, qx.words_addr(), QUERY_X_DECISION_SLOT, qx.flag_value(),
         )
     except error:
-        # A non-finite query makes a NaN decision (DEVIATION 637's refusal):
-        # the input is at fault, so the door's refusal wins.
         if qx.flagged(ctx):
             var flagged = (qx.finite_word(), qx.range_word())
             resident_query_x_done(store, lease, qx^)
             return flagged
         raise error^
     var words = (qx.finite_word(), qx.range_word())
-    if words[0] == 0 and words[1] == 0:
-        unsafe_memcpy(
-            dest=MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=out_addr),
-            src=preds.unsafe_ptr(),
-            count=n_rows,
-        )
-    _ = preds^
-    # Back to the lease after svc_predict_dev's synchronisation (words read).
+    if nan and words[0] == 0 and words[1] == 0:
+        # A finite query whose decisions overflowed: DEVIATION 637's refusal
+        # (a non-finite query is the input's fault: the door refuses it).
+        var refusal = svc_nan_decision_error(out_addr, n_rows)
+        resident_query_x_done(store, lease, qx^)
+        raise refusal^
+    # Back to the lease after the call's synchronisation (words read).
     resident_query_x_done(store, lease, qx^)
+    _ = qx_x^
+    _ = status^
     _ = sv^
     _ = dual^
     _ = held^
