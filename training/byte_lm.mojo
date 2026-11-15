@@ -34,7 +34,6 @@ from core.step_glue import (
     STEP_GLUE_NOSHADOW,
     STEP_GLUE_OPTSKIP,
     STEP_GLUE_SHIPPED_UPDATE,
-    STEP_GLUE_TRIAL,
     STEP_GLUE_UPDATE_BITS,
     step_glue_arm_from_env,
     step_glue_blocks,
@@ -1811,7 +1810,7 @@ def byte_update_device(ctx: DeviceContext, mut tr: ByteTrainer) raises:
     var live_validated = False
     # TOMBSTONE: MOJOLEARN_IDN_LM_GROUPED_ADAM (NN56 grouped OOP Adam, arm 1; LOSER: lm-train-step bytes NV 35.51 -> 36.18 ms (1.019), AMD 42.76 -> 44.61 ms (1.043), avg 1.03, NV v0067/v0068, AMD r1011.owed.gadam.ab) deleted 2026-10-11 by cdb22ee93; code recoverable at cdb22ee93^.
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_LM_GROUPED_ADAM.patch (training/neural_ab_optimizer.mojo comes back with it); record in docs/TOMBSTONES.md.
-    comptime if STEP_GLUE_TRIAL or STEP_GLUE_SHIPPED_UPDATE:
+    comptime if STEP_GLUE_SHIPPED_UPDATE:
         var glue_arm = step_glue_arm_from_env()
         if (glue_arm & STEP_GLUE_UPDATE_BITS) != 0:
             glue_update = True
@@ -1892,7 +1891,7 @@ def byte_glue_update_launch(
     with per-tensor flags) and clipping (`max_norm > 0`). The byte LM admits
     neither (`byte_validate_optimizer`). Recorded intermediates are refused
     at compile time on the trial build."""
-    comptime if STEP_GLUE_TRIAL or STEP_GLUE_SHIPPED_UPDATE:
+    comptime if STEP_GLUE_SHIPPED_UPDATE:
         comptime assert not OPT_RECORD_INTERMEDIATES, (
             "the step glue update path does not record denom/q; build the"
             " glue trial without MOJOLEARN_OPT_RECORD"
@@ -2027,7 +2026,7 @@ def _byte_glue_update(ctx: DeviceContext, mut tr: ByteTrainer, next_step: Int, a
     The fault-injection build is refused at compile time: its `opt_refuse`
     site writes `m_state` between the shadow copy and the optimizer, which
     is the one write the `optskip` argument excludes (brief section 5.2)."""
-    comptime if STEP_GLUE_TRIAL or STEP_GLUE_SHIPPED_UPDATE:
+    comptime if STEP_GLUE_SHIPPED_UPDATE:
         comptime assert not BYTE_LM_FAULT_INJECT, (
             "the step glue update path and MOJOLEARN_BYTE_LM_FAULT_INJECT are"
             " not combined: the G4 fault sites assume the shipped update order"

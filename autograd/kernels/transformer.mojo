@@ -43,7 +43,6 @@ from autograd.kernels.checks.readback import _download
 # token (`STEP_GLUE_SHIPPED_ROWS`, NVIDIA only).
 from core.step_glue import (
     STEP_GLUE_SHIPPED_ROWS,
-    STEP_GLUE_TRIAL,
     step_glue_arm_from_env,
     step_glue_blocks,
     step_glue_rows_of,
@@ -3021,7 +3020,7 @@ def _bwd_rms_norm_kernels[which: Int](
     # offered under the define.
     var dot_blocks = _grid(norm_row_threads(m))
     var dot_threads = BWD_TPB
-    comptime if (STEP_GLUE_TRIAL or STEP_GLUE_SHIPPED_ROWS):
+    comptime if STEP_GLUE_SHIPPED_ROWS:
         var glue_rows = step_glue_rows_of(step_glue_arm_from_env())
         if glue_rows > 0:
             dot_blocks = step_glue_blocks(m, glue_rows)

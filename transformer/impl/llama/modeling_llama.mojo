@@ -318,7 +318,6 @@ from core.step_phase import (
 # token (`STEP_GLUE_SHIPPED_ROWS`, NVIDIA only).
 from core.step_glue import (
     STEP_GLUE_SHIPPED_ROWS,
-    STEP_GLUE_TRIAL,
     step_glue_arm_from_env,
     step_glue_blocks,
     step_glue_rows_of,
@@ -2191,7 +2190,7 @@ def llama_rms_norm(
     # block) cannot hold a cell and is not offered under the define.
     var norm_blocks = _grid(norm_row_threads(m))
     var norm_threads = LLAMA_TPB
-    comptime if (STEP_GLUE_TRIAL or STEP_GLUE_SHIPPED_ROWS):
+    comptime if STEP_GLUE_SHIPPED_ROWS:
         var glue_rows = step_glue_rows_of(step_glue_arm_from_env())
         if glue_rows > 0:
             norm_blocks = step_glue_blocks(m, glue_rows)
