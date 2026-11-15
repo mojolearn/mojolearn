@@ -270,7 +270,7 @@ comptime C24_ROWS2048 = CLASSICAL_IDN
 comptime C25_PROJECTION_REUSE = CLASSICAL_IDN
 # TOMBSTONE: MOJOLEARN_CLASSICAL_C26_PRODUCTS (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-06-base; code recoverable at 5f3b85c06c.
 # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C26_PRODUCTS.patch; record in docs/TOMBSTONES.md.
-comptime C26_PRODUCTS = False
+# (Sweep 2026-11-15: comptime C26_PRODUCTS removed; nothing read it.)
 # TOMBSTONE: MOJOLEARN_CLASSICAL_C26_UPDATE_FUSED (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-06-base; code recoverable at 749e439c5c.
 # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C26_UPDATE_FUSED.patch; record in docs/TOMBSTONES.md.
 comptime C26_UPDATE_FUSED = False
