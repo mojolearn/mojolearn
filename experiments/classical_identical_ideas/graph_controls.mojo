@@ -59,15 +59,7 @@ comptime IVF_DIRECT_DISTANCE = GRAPH_IDENTICAL
 # row in docs/apple-fast/EXPERIMENTS.md.
 # TOMBSTONE: MOJOLEARN_KMEANS_ROW_ASSIGN (unmeasured arm) deleted 2026-11-15 by lane/expdel2-05-base; code recoverable at b97e8ccd99.
 # Restore: git apply experiments/removed/MOJOLEARN_KMEANS_ROW_ASSIGN.patch; record in docs/TOMBSTONES.md.
-comptime KMEANS_ROW_ASSIGN_ROWS = 0
-comptime KMEANS_ROW_ASSIGN = False
-# Cost rule for the EXPANDED row arms: a thread owns a k*d serial fma chain per
-# row with no register reuse across rows of the tile, while the tiled kernel
-# reuses each staged value 4x4. Past 512 chain terms per row the chain latency
-# dominates, so the tiled kernel keeps those launches. Not a board shape: the
-# bound is a per-thread chain length, a power of two, far from k*d at any
-# board row (88 and 1760).
-comptime KMEANS_ROW_ASSIGN_MAX_KD = 512
+# (Sweep 2026-11-15: comptime KMEANS_ROW_ASSIGN, KMEANS_ROW_ASSIGN_ROWS and KMEANS_ROW_ASSIGN_MAX_KD removed with their reader.)
 # TOMBSTONE: MOJOLEARN_C31_DEVICE_BUCKETS (unmeasured arm) deleted 2026-11-15 by lane/expdel2-05-base; code recoverable at 337c096a5b.
 # Restore: git apply experiments/removed/MOJOLEARN_C31_DEVICE_BUCKETS.patch; record in docs/TOMBSTONES.md.
 # (Sweep 2026-11-15: comptime C31_DEVICE_BUCKETS removed; nothing read it.)
