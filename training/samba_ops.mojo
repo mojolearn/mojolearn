@@ -81,8 +81,8 @@ def _upload_f32(
 #: the optimizer already use): the same refusal, the same message, the same
 #: first index, no host walk. An op with two bad inputs still names the
 #: first one in the old order (the uploads are in the refusals' order).
-#: TOMBSTONE: MOJOLEARN_IDN_SAMBA_DEV_REFUSE_OFF (old path: the host walk on IDENTICAL, no A/B recorded) and the MOJOLEARN_IDN_ALL_OFF term (owner another lane) deleted 2026-11-15 by lane/expdel2-32-neural; code recoverable at 0840b5da59.
-#: Restore: git apply experiments/removed/MOJOLEARN_IDN_SAMBA_DEV_REFUSE_OFF.patch
+# TOMBSTONE: MOJOLEARN_IDN_SAMBA_DEV_REFUSE_OFF (old path: the host walk on IDENTICAL, no A/B recorded) and the MOJOLEARN_IDN_ALL_OFF term (owner another lane) deleted 2026-11-15 by lane/expdel2-32-neural; code recoverable at 0840b5da59.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_SAMBA_DEV_REFUSE_OFF.patch
 comptime IDN_SAMBA_DEV_REFUSE = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 
 
