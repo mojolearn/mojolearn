@@ -148,6 +148,7 @@ from arima.impl.timeSeries.arima_helpers import (
 )
 from arima.impl.tsa.arima_common import ARIMAOrder, ARIMAParams
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL, ftz, identical_log, identical_mul_add
+from std.sys.compile import is_defined
 from core.accelerator_target import TARGET_HAS_APPLE_GPU
 
 
@@ -155,9 +156,15 @@ comptime RD_MAX = 8
 comptime RD2_MAX = RD_MAX * RD_MAX
 comptime LOG_2PI = Float32(1.8378770664093453)
 comptime KAPPA = Float32(1e6)
+# AFCL-P12: NEVER RUN — PENDING MEASUREMENT. Uncompiled/unverified.
+# Two SIMD groups per block amortize scheduling for independent series; each
+# lane retains the full Kalman recurrence and its state. Register pressure can
+# outweigh the benefit. Explicit caller overrides of kalman_tpb still win.
+comptime AFCL_P12 = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU and is_defined["MOJOLEARN_AFCL_P12"]()
+comptime KALMAN_TPB = 64 if AFCL_P12 else 32
 # TOMBSTONE: MOJOLEARN_AFCL_P12 (never-run Apple FAST programme card: 64-thread Kalman blocks) deleted 2026-11-15 by lane/expdel2-37-series; code recoverable at 145be10898.
 # Restore: git apply experiments/removed/MOJOLEARN_AFCL_P12.patch; record in docs/TOMBSTONES.md.
-comptime KALMAN_TPB = 32
+# RESTORED 2026-11-15 by lane/restore-apple-fast-classical: Apple fast is paused, not abandoned (Andrew); opt-in, default off, Apple fast only.
 comptime INIT_TPB = 128
 
 

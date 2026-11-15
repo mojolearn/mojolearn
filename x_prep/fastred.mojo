@@ -11,6 +11,9 @@ fixed tree combines the shares (a pairwise sum, never less accurate than the
 row-order one). The quality rule is checked by bench/x_prep_quality.py
 (paired against scikit-learn, 5 seeds x 2 datasets).
 """
+from std.sys.compile import is_defined
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from max.gpu import block_idx, thread_idx
 from std.memory import stack_allocation
 from max.gpu.memory import AddressSpace
@@ -20,11 +23,22 @@ from x_prep.prims import add, sub, mul, div
 from x_prep.transform import PT_STATE, pt_finish, log1pf
 from x_prep.prims import logf
 
+# AFCL-P01: NEVER RUN — PENDING MEASUREMENT. Uncompiled/unverified.
+# Two independent sums shorten each lane's dependency chain; the same rows,
+# NaN policy and centered second pass remain. Extra registers may cost occupancy.
+comptime AFCL_P01 = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU and is_defined["MOJOLEARN_AFCL_P01"]()
 # TOMBSTONE: MOJOLEARN_AFCL_P01 (never-run Apple FAST programme card) deleted 2026-11-15 by lane/expdel2-22-linear; code recoverable at 9995c7281f.
 # Restore: git apply experiments/removed/MOJOLEARN_AFCL_P01.patch
+# RESTORED 2026-11-15 by lane/restore-apple-fast-classical: Apple fast is paused, not abandoned (Andrew); opt-in, default off, Apple fast only.
 
+# AFCL-P13: NEVER RUN — PENDING MEASUREMENT. Uncompiled/unverified.
+# Independent class-filtered sums shorten arithmetic dependencies while the
+# same label mask/counts and centered-variance pass remain. More registers can
+# cost occupancy; class imbalance does not alter the dispatch.
+comptime AFCL_P13 = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU and is_defined["MOJOLEARN_AFCL_P13"]()
 # TOMBSTONE: MOJOLEARN_AFCL_P13 (never-run Apple FAST programme card) deleted 2026-11-15 by lane/expdel2-22-linear; code recoverable at 16da6ce3e2.
 # Restore: git apply experiments/removed/MOJOLEARN_AFCL_P13.patch
+# RESTORED 2026-11-15 by lane/restore-apple-fast-classical: Apple fast is paused, not abandoned (Andrew); opt-in, default off, Apple fast only.
 
 comptime TGR = 256
 
@@ -45,6 +59,7 @@ def col_stats_fast_kernel(f: FP, X: Int32, n: Int32, d: Int32, O: Int32):
     var inf = Float32(3.4028235e38)
     var cnt = Float32(0)
     var s = Float32(0)
+    var s_odd = Float32(0)
     var lo = inf
     var hi = -inf
     var ma = Float32(0)
@@ -53,12 +68,21 @@ def col_stats_fast_kernel(f: FP, X: Int32, n: Int32, d: Int32, O: Int32):
         if is_nan(v):
             continue
         cnt += 1
+        comptime if AFCL_P01:
+            if (i // TGR) % 2 == 0:
+                s = add(s, v)
+            else:
+                s_odd = add(s_odd, v)
+        else:
+            s = add(s, v)
         # TOMBSTONE: MOJOLEARN_AFCL_P01 (never-run Apple FAST programme card) deleted 2026-11-15 by lane/expdel2-22-linear; code recoverable at 9995c7281f.
         # Restore: git apply experiments/removed/MOJOLEARN_AFCL_P01.patch
-        s = add(s, v)
+        # RESTORED 2026-11-15 by lane/restore-apple-fast-classical: Apple fast is paused, not abandoned (Andrew); opt-in, default off, Apple fast only.
         lo = min(lo, v)
         hi = max(hi, v)
         ma = max(ma, abs(v))
+    comptime if AFCL_P01:
+        s = add(s, s_odd)
     sh_s[tid] = s
     sh_c[tid] = cnt
     sh_lo[tid] = lo
@@ -81,13 +105,22 @@ def col_stats_fast_kernel(f: FP, X: Int32, n: Int32, d: Int32, O: Int32):
         mean = div(sh_s[0], total)
     barrier()
     var ss = Float32(0)
+    var ss_odd = Float32(0)
     if total > 0:
         for i in range(tid, nn, TGR):
             var v = f[Int(X) + i * dd + c]
             if is_nan(v):
                 continue
             var e = sub(v, mean)
-            ss = add(ss, mul(e, e))
+            comptime if AFCL_P01:
+                if (i // TGR) % 2 == 0:
+                    ss = add(ss, mul(e, e))
+                else:
+                    ss_odd = add(ss_odd, mul(e, e))
+            else:
+                ss = add(ss, mul(e, e))
+    comptime if AFCL_P01:
+        ss = add(ss, ss_odd)
     sh_s[tid] = ss
     barrier()
     var w2 = TGR // 2
@@ -203,13 +236,23 @@ def class_stats_fast_kernel(f: FP, q: IP):
     var sh_c = stack_allocation[TGR, Float32, address_space = AddressSpace.SHARED]()
     var cnt = Float32(0)
     var s = Float32(0)
+    var s_odd = Float32(0)
     for i in range(tid, nn, TGR):
         if Int(f[Y + i]) != k:
             continue
+        comptime if AFCL_P13:
+            if (i // TGR) % 2 == 0:
+                s = add(s, f[X + i * dd + c])
+            else:
+                s_odd = add(s_odd, f[X + i * dd + c])
+        else:
+            s = add(s, f[X + i * dd + c])
         # TOMBSTONE: MOJOLEARN_AFCL_P13 (never-run Apple FAST programme card) deleted 2026-11-15 by lane/expdel2-22-linear; code recoverable at 16da6ce3e2.
         # Restore: git apply experiments/removed/MOJOLEARN_AFCL_P13.patch
-        s = add(s, f[X + i * dd + c])
+        # RESTORED 2026-11-15 by lane/restore-apple-fast-classical: Apple fast is paused, not abandoned (Andrew); opt-in, default off, Apple fast only.
         cnt += 1
+    comptime if AFCL_P13:
+        s = add(s, s_odd)
     sh_s[tid] = s
     sh_c[tid] = cnt
     barrier()
@@ -227,12 +270,21 @@ def class_stats_fast_kernel(f: FP, q: IP):
         mean = div(sum_, total)
     barrier()
     var ss = Float32(0)
+    var ss_odd = Float32(0)
     if total > 0 and p(q, 7) >= 0:
         for i in range(tid, nn, TGR):
             if Int(f[Y + i]) != k:
                 continue
             var e = sub(f[X + i * dd + c], mean)
-            ss = add(ss, mul(e, e))
+            comptime if AFCL_P13:
+                if (i // TGR) % 2 == 0:
+                    ss = add(ss, mul(e, e))
+                else:
+                    ss_odd = add(ss_odd, mul(e, e))
+            else:
+                ss = add(ss, mul(e, e))
+    comptime if AFCL_P13:
+        ss = add(ss, ss_odd)
     sh_s[tid] = ss
     barrier()
     var w2 = TGR // 2

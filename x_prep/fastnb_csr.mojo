@@ -29,6 +29,7 @@ The (class, feature) table and the class counts come back to the host
 `class_log_prior`) runs on them unchanged, so feature_log_prob_ matches the
 dense fit within float32 (the atomic fold order is new).
 """
+from std.sys.compile import is_defined
 from std.atomic import Atomic
 from max.gpu import block_dim, block_idx, thread_idx
 from std.memory import stack_allocation
@@ -75,9 +76,14 @@ comptime IDN_NB_CSR = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 comptime CSR_FLAG_FALLBACK = 1
 comptime CSR_FLAG_NEG = 2
 #: Rows per block of the count kernel (its indptr slice in threadgroup memory).
+# AFCL-P04: NEVER RUN — PENDING MEASUREMENT. Uncompiled/unverified.
+# Half the metadata and row-search span per block; every nonzero remains in
+# exactly one row group. More groups can offset skew, but increase scheduling.
+comptime AFCL_P04 = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU and is_defined["MOJOLEARN_AFCL_P04"]()
+comptime CSR_ROWS = 32 if AFCL_P04 else 64
 # TOMBSTONE: MOJOLEARN_AFCL_P04 (never-run Apple FAST programme card) deleted 2026-11-15 by lane/expdel2-09-base; code recoverable at 75ea427c34.
 # Restore: git apply experiments/removed/MOJOLEARN_AFCL_P04.patch; record in docs/TOMBSTONES.md.
-comptime CSR_ROWS = 64
+# RESTORED 2026-11-15 by lane/restore-apple-fast-classical: Apple fast is paused, not abandoned (Andrew); opt-in, default off, Apple fast only.
 comptime CSR_TPB = 256
 
 
