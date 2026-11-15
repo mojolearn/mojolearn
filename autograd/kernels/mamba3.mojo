@@ -1259,13 +1259,11 @@ comptime M3_ANGLE_SUFFIX_CHUNK = 64
 # both vendors, so no bit moves. Each chain does linear work in its chunk count
 # instead of re-summing every later chunk, so the win grows with sequence
 # length. Measured alone; it now combines with the promoted resident Samba step
-# and act_retain=2, and the post-merge race measures the combination. Default
-# on in IDENTICAL; -D MOJOLEARN_IDN_M3_ANGLE_CARRY_CACHE_OFF restores the
-# per-chunk suffix re-walk.
-comptime IDN_M3_ANGLE_CARRY_CACHE = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not is_defined["MOJOLEARN_IDN_M3_ANGLE_CARRY_CACHE_OFF"]()
-)
+# and act_retain=2, and the post-merge race measures the combination. On in
+# IDENTICAL; FAST keeps the per-chunk suffix re-walk.
+# TOMBSTONE: MOJOLEARN_IDN_M3_ANGLE_CARRY_CACHE_OFF (old path; EXP:1755 PROMOTED) deleted 2026-11-15 by lane/expdel2-23-neural; code recoverable at 41312ea653.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_M3_ANGLE_CARRY_CACHE_OFF.patch; record in docs/TOMBSTONES.md.
+comptime IDN_M3_ANGLE_CARRY_CACHE = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 
 
 def mamba3_angle_suffix_sums_cells(b: Int, l: Int, nh: Int) -> Int:
