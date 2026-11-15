@@ -216,9 +216,19 @@ comptime MF_F32_EPS = Float32(1.1920928955078125e-07)
 comptime MF_FLT_MIN = Float32(1.1754943508222875e-38)
 #: Error words: NaN draw/distance, no pinvh, eigensolve budget, Frobenius drift.
 comptime MF_ERR = 4
+# AFCL-L13: NEVER RUN — PENDING MEASUREMENT. Uncompiled/unverified, OFF.
+# Select each trial's complete support with four SIMD groups instead of
+# eight. Private-bin/scan shared storage falls from 17.125 to 8.625 KiB,
+# allowing more independent trials to reside concurrently. All eight radix
+# passes, integer counts and ascending-index tie selection remain intact.
+# This schedules the accepted existing C-step route; it does not revive a
+# rejected covariance/eigensolve arm or reduce trials/C steps.
+comptime AFCL_L13 = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
+                    and is_defined["MOJOLEARN_AFCL_L13"]())
+comptime MF_SELECT_TPB = 128 if AFCL_L13 else MF_TPB
 # TOMBSTONE: MOJOLEARN_AFCL_L13 (never-run Apple FAST programme card: the support selection on four SIMD groups) deleted 2026-11-15 by lane/expdel2-17-decomposition; code recoverable at e11cb757b8.
 # Restore: git apply experiments/removed/MOJOLEARN_AFCL_L13.patch; record in docs/TOMBSTONES.md.
-comptime MF_SELECT_TPB = MF_TPB
+# RESTORED 2026-11-15 by lane/restore-apple-fast-classical: Apple fast is paused, not abandoned (Andrew); opt-in, default off, Apple fast only.
 comptime MF_SH_INT = MF_SELECT_TPB * 16 + 32 + MF_SELECT_TPB
 
 
