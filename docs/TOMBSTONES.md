@@ -648,6 +648,7 @@ in the tables after the sections.
 | [`MOJOLEARN_SYM_MULTI_ALL`](#mojolearn_sym_multi_all) | Trees (GBDT, Apple FAST) | NEUTRAL | 2026-11-15 | [MOJOLEARN_SYM_MULTI_ALL.patch](../experiments/removed/MOJOLEARN_SYM_MULTI_ALL.patch) |
 | [`MOJOLEARN_YR_TASK_FUSED`](#mojolearn_yr_task_fused) | Trees (GBDT, Apple FAST) | NEUTRAL | 2026-11-15 | [MOJOLEARN_YR_TASK_FUSED.patch](../experiments/removed/MOJOLEARN_YR_TASK_FUSED.patch) |
 | [`MOJOLEARN_KSHAP_FAST_BATCH_OFF`](#mojolearn_kshap_fast_batch_off) | Trees (GBDT, Apple FAST) | removed (old path; KSHAP_FAST_BATCH KEPT) | 2026-11-15 | [MOJOLEARN_KSHAP_FAST_BATCH_OFF.patch](../experiments/removed/MOJOLEARN_KSHAP_FAST_BATCH_OFF.patch) |
+| [`MOJOLEARN_AF_FAST_RESIDENT_OFF`](#mojolearn_af_fast_resident_off-old-path-deleted-2026-11-15) | Sequence (Adafactor resident second moment, FAST Apple) | removed (old path; FAST+Apple default KEEP, rab10-afresident) | 2026-11-15 | [MOJOLEARN_AF_FAST_RESIDENT_OFF.patch](../experiments/removed/MOJOLEARN_AF_FAST_RESIDENT_OFF.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -6302,3 +6303,11 @@ bits change on any vendor or the host column, no board row needs re-timing.
 - **Deleted by**: lane/expdel-01-cluster (expdel-01-cluster, docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md); code recoverable at `6d5bdfc57a`.
 - **Restore**: `git apply experiments/removed/MOJOLEARN_SVGP_FAST_BSPLIT_OFF.patch`, then delete the `MOJOLEARN_SVGP_FAST_BSPLIT_OFF` refusal in `core/experiment_guards_cluster.mojo`.
 - **Records**: refusal in `core/experiment_guards_cluster.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel-01-cluster section).
+
+## MOJOLEARN_AF_FAST_RESIDENT_OFF: old path deleted (2026-11-15)
+
+- **What it was**: the FAST+Apple rollback of Adafactor's device-resident second moment (`adafactor_resident_*`, `sequence/opt_resident.mojo` AF_RESIDENT) to the per-call entry that moves P, G and the moment every step. Only the define read is deleted: the per-call entry stays the path of every build where AF_RESIDENT is off (FAST off Apple, IDENTICAL under MOJOLEARN_IDN_AF_RESIDENT_OFF / MOJOLEARN_IDN_ALL_OFF).
+- **Verdict**: KEEP, FAST+Apple default (EXPERIMENTS.md `AF_FAST_RESIDENT`, rab10-afresident): M3 one run per arm, adafactor 392.8 -> 205.2 ms, digest identical A == B. No bit change on any column.
+- **Deleted by**: lane/expdel-06-base-cluster-kernel (expdel-06-base-cluster-kernel, docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md); code recoverable at `a656258c20`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_AF_FAST_RESIDENT_OFF.patch`, then delete the `MOJOLEARN_AF_FAST_RESIDENT_OFF` refusal in `core/experiment_guards_base.mojo`.
+- **Records**: refusal in `core/experiment_guards_base.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel-06-base-cluster-kernel section).

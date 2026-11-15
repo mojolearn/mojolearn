@@ -42,6 +42,9 @@ def _check_configuration() -> Bool:
     # Lane expdel-01-cluster (2026-11-15): owed deletions of docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md (docs/TOMBSTONES.md).
     # Restore: git apply experiments/removed/MOJOLEARN_XN_FAST_SCHI2_LAZYW_OFF.patch
     comptime assert not is_defined["MOJOLEARN_XN_FAST_SCHI2_LAZYW_OFF"](), "removed 2026-11-15 (lane/expdel-01-cluster): XN_FAST_SCHI2_LAZYW_OFF (FAST+Apple rollback to SkewedChi2Sampler's eager weights) is gone; the lazy weights are the FAST+Apple path (taxi 1.8 -> 0.4 ms, istella 2.1 -> 0.9 ms, same words); restore: experiments/removed/MOJOLEARN_XN_FAST_SCHI2_LAZYW_OFF.patch"
+    # Lane expdel-06-base-cluster-kernel (2026-11-15): owed deletions of docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md (docs/TOMBSTONES.md).
+    # Restore: git apply experiments/removed/MOJOLEARN_AF_FAST_RESIDENT_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_AF_FAST_RESIDENT_OFF"](), "removed 2026-11-15 (lane/expdel-06-base-cluster-kernel): AF_FAST_RESIDENT_OFF (FAST+Apple rollback to Adafactor's per-call entry) is gone; the resident second moment is the FAST+Apple path (adafactor 392.8 -> 205.2 ms, digest identical, rab10-afresident); IDENTICAL keeps MOJOLEARN_IDN_AF_RESIDENT_OFF; restore: experiments/removed/MOJOLEARN_AF_FAST_RESIDENT_OFF.patch"
     return True
 
 
