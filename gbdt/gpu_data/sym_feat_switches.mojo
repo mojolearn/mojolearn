@@ -1,6 +1,6 @@
 """lane/apple-fast-sym-feat (2026-10-03): the A/B switches of the symmetric
 feature set outside histograms and leaf estimation (quantization, index
-build, held-out arm, predict). Every switch is compiled
+build, predict). Every switch is compiled
 ONLY under `GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()`
 and is OFF by default, so IDENTICAL (and FAST on any other vendor) compiles
 main's code unchanged. One module so `train.mojo`, `gls_borders_device.mojo`,
@@ -50,17 +50,9 @@ comptime GBDT_QUANT_DEVICE = SYM_FEAT_FAST_APPLE and (
 # TOMBSTONE: MOJOLEARN_GBDT_EVAL_SKIP_EMPTY (NEUTRAL) deleted 2026-11-15 by lane/expdel-05-trees; code recoverable at
 # 8815b00d75.
 # Restore: git apply experiments/removed/MOJOLEARN_GBDT_EVAL_SKIP_EMPTY.patch
-#: `-D MOJOLEARN_GBDT_EVAL_FUSED`: the held-out arm's per-tree apply takes
-#: ONE packed upload (split records and leaf values in one pinned buffer)
-#: instead of six, and when no overfitting detector can stop the fit the
-#: per-tree loss is left on the device (`fv_all[iteration]`) and read back
-#: once after the last tree instead of a readback and a drain per tree.
-#: recovery 2026-10-04 (lane/apple-fast-rec-sym): source
-#: lane/apple-fast-sym-feat@bca0e3a48; never built (compile owed at the
-#: source), never timed.
-comptime GBDT_EVAL_FUSED = SYM_FEAT_FAST_APPLE and (
-    is_defined["MOJOLEARN_GBDT_EVAL_FUSED"]()
-)
+# TOMBSTONE: MOJOLEARN_GBDT_EVAL_FUSED (NEUTRAL: rab7-gbdtevalfused istella -0.3%) deleted 2026-11-15 by
+# lane/expdel-05-trees; code recoverable at 70801eb24c.
+# Restore: git apply experiments/removed/MOJOLEARN_GBDT_EVAL_FUSED.patch
 #: `-D MOJOLEARN_GBDT_PREDICT_PACKED`: the resident predict quantizes with
 #: ONE `pack_cindex_words_kernel` launch (not one per feature) and applies
 #: the whole ensemble with ONE `compute_bins_and_add_all_kernel` launch (not

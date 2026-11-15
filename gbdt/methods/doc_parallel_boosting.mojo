@@ -203,7 +203,6 @@ from checks.kernel_matrix import (
 from gbdt.options.catboost_options import SCORE_FUNCTION_COSINE
 from checks.numerics import PIN_DETERMINISM
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
-from gbdt.gpu_data.sym_feat_switches import GBDT_EVAL_FUSED
 # lane t2-trees-on-executor: the boosting round as one step of the executor's
 # bounded device loop (`SymDeviceRounds`, `fit_sym_rounds_on_device`)
 from autograd.program_loop import LoopTimers
@@ -383,13 +382,9 @@ from gbdt.gpu_data.kernel.query_helper import launch_inverse_permutation
 
 
 
-#: lane/apple-fast-sym-feat (`GBDT_EVAL_FUSED`, FAST + Apple only): the
-#: held-out loss slots kept on the device between readbacks, and the extra
-#: words per level the packed per-tree apply record needs in `h_vals` /
-#: `d_vals`. Outside the switch both are main's sizes (one loss word, no
-#: extra words), so `make_test_arm` allocates exactly what it did.
-comptime _EVAL_FV_SLOTS = 1024 if GBDT_EVAL_FUSED else 1
-comptime _EVAL_PACK_WORDS = 5 if GBDT_EVAL_FUSED else 0
+# TOMBSTONE: MOJOLEARN_GBDT_EVAL_FUSED (NEUTRAL: rab7-gbdtevalfused istella -0.3%) (the deferred held-out loss slots and the packed per-tree apply) deleted 2026-11-15 by
+# lane/expdel-05-trees; code recoverable at 70801eb24c.
+# Restore: git apply experiments/removed/MOJOLEARN_GBDT_EVAL_FUSED.patch
 
 
 @fieldwise_init
@@ -458,14 +453,9 @@ def make_test_arm(
     var max_leaves = 1 << max_depth
     var w = ctx.enqueue_create_buffer[DType.float32](n)
     enqueue_fill(ctx, w, Float32(1.0))
-    # main's sizes; only `GBDT_EVAL_FUSED` (FAST + Apple) widens them
     var fv_n = 1
     var h_fv_n = blocks
     var vals_n = max_leaves * approx_dim
-    comptime if GBDT_EVAL_FUSED:
-        fv_n = _EVAL_FV_SLOTS
-        h_fv_n = max(blocks, _EVAL_FV_SLOTS)
-        vals_n = max_leaves * approx_dim + _EVAL_PACK_WORDS * max_depth
     return TestArm(
         n_rows,
         cindex^, targets^, w^,
@@ -529,71 +519,9 @@ def _apply_last_tree_to_test(
     if depth == 0:
         return
 
-    comptime if GBDT_EVAL_FUSED:
-        # lane/apple-fast-sym-feat: the tree's records and leaf values in
-        # ONE pinned region of `h_vals` -- offsets, shifts, masks, bins
-        # (`depth` words each), the take-equal bytes (`ceil(depth / 4)`
-        # words), then the values -- and ONE upload of the used prefix
-        # instead of six. Same kernel, same records, same adds.
-        var hv = test.h_vals.unsafe_ptr()
-        var hw = hv.bitcast[UInt32]()
-        var eq_words = (depth + 3) // 4
-        var vals_at = 4 * depth + eq_words
-        for k in range(eq_words):
-            hw.unsafe_store(4 * depth + k, UInt32(0))
-        var hb = (hw + 4 * depth).bitcast[UInt8]()
-        # driver-loop: over the tree depth (split records)
-        for level in range(depth):
-            ref pcf = layout.features[
-                Int(weak.structure.splits[level].feature_id)
-            ]
-            hw.unsafe_store(level, pcf.offset * UInt32(n))
-            hw.unsafe_store(depth + level, pcf.shift)
-            hw.unsafe_store(2 * depth + level, pcf.mask)
-            hw.unsafe_store(
-                3 * depth + level,
-                UInt32(Int(weak.structure.splits[level].bin_idx)),
-            )
-            var p_take_bin = (
-                Int(weak.structure.splits[level].split_type)
-                == BIN_SPLIT_TAKE_BIN
-            )
-            hb.unsafe_store(level, UInt8(1) if p_take_bin else UInt8(0))
-        var p_values = (1 << depth) * approx_dim
-        # driver-loop: over the last tree's leaf values (leaves x approx_dim)
-        for i in range(p_values):
-            var v = Float32(0.0)
-            if i < len(weak.leaf_values):
-                v = weak.leaf_values[i]
-            hv.unsafe_store(vals_at + i, v)
-        var used = vals_at + p_values
-        var d_used = test.d_vals.create_sub_buffer[DType.float32](0, used)
-        ctx.enqueue_copy(dst_buf=d_used, src_ptr=hv)
-        # one buffer carries every launch argument: an untracked origin so
-        # the derived pointers are not seen as aliasing mutable arguments
-        var dv = test.d_vals.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
-        var dw = dv.bitcast[UInt32]()
-        var p_wide = (n + 255) // 256
-        if p_wide > 1024:
-            p_wide = 1024
-        ctx.enqueue_function[compute_bins_and_add_kernel](
-            test.cindex.unsafe_ptr(),
-            dw,
-            dw + depth,
-            dw + 2 * depth,
-            dw + 3 * depth,
-            (dw + 4 * depth).bitcast[UInt8](),
-            Int32(depth),
-            dv + vals_at,
-            Int32(n),
-            test.cursor.unsafe_ptr(),
-            Int32(approx_dim),
-            Int32(n),
-            grid_dim=(p_wide, approx_dim, 1),
-            block_dim=(256, 1, 1),
-        )
-        return
-
+    # TOMBSTONE: MOJOLEARN_GBDT_EVAL_FUSED (NEUTRAL) packed one-upload apply deleted 2026-11-15 by lane/expdel-05-trees;
+    # code recoverable at 70801eb24c.
+    # Restore: git apply experiments/removed/MOJOLEARN_GBDT_EVAL_FUSED.patch
     for level in range(depth):  # small-loop(depth: tree levels, at most 16): per-level apply launch arguments
         ref cf = layout.features[
             Int(weak.structure.splits[level].feature_id)
@@ -689,10 +617,9 @@ def _test_loss_enqueue(
     approx_dim: Int,
     slot: Int,
 ) raises:
-    """lane/apple-fast-sym-feat (`GBDT_EVAL_FUSED`, FAST + Apple only):
-    `_test_loss`'s launches with the folded sum left on the device in
-    `test.fv[slot]`; no readback, no drain. `_test_loss_flush` reads the
-    slots back. Same kernels, same fold, so the same loss values."""
+    """`_test_loss`'s launches with the folded sum left on the device in
+    `test.fv[slot]`; no readback, no drain. Same kernels, same fold, so the
+    same loss values."""
     var n = test.n_rows
     var blocks = (n + MSE_BLOCK_SIZE - 1) // MSE_BLOCK_SIZE
     if objective == OBJECTIVE_MULTICLASS:
@@ -744,44 +671,9 @@ def _test_loss_div_kernel(
         )
 
 
-def _test_loss_flush(
-    ctx: DeviceContext,
-    mut test: TestArm,
-    mut test_losses: List[Float64],
-    mut detector: OverfittingDetector,
-    pending: Int,
-) raises:
-    """lane/apple-fast-sym-feat (`GBDT_EVAL_FUSED`): ONE readback and ONE
-    drain for the last `pending` deferred held-out losses (their
-    placeholders are the tail of `test_losses`), then the detector sees
-    them in iteration order, exactly as it would have one per tree. Only
-    used when the detector cannot stop the fit (`is_active()` False), so
-    no stop is ever decided late."""
-    if pending <= 0:
-        return
-    # the losses divided on the device (`_test_loss_div_kernel`), one bulk
-    # copy into their placeholders; the host only feeds the detector
-    var n = test.n_rows
-    var base = len(test_losses) - pending
-    var d_losses = ctx.enqueue_create_buffer[DType.uint64](pending)
-    var h_losses = ctx.enqueue_create_host_buffer[DType.uint64](pending)
-    ctx.enqueue_function[_test_loss_div_kernel](
-        test.fv.unsafe_ptr(), Int32(pending), Int32(n),
-        d_losses.unsafe_ptr(),
-        grid_dim=(pending + 63) // 64, block_dim=64,
-    )
-    ctx.enqueue_copy(dst_ptr=h_losses.unsafe_ptr(), src_buf=d_losses)
-    ctx.synchronize()
-    unsafe_memcpy(
-        dest=(test_losses.unsafe_ptr() + base).bitcast[UInt64](),
-        src=h_losses.unsafe_ptr(),
-        count=pending,
-    )
-    _ = d_losses^  # past the drain
-    _ = h_losses^
-    # driver-loop: over the pending iterations (one held-out loss each)
-    for j in range(pending):
-        detector.add_error(test_losses[base + j])
+# TOMBSTONE: MOJOLEARN_GBDT_EVAL_FUSED (NEUTRAL) `_test_loss_flush` deleted 2026-11-15 by lane/expdel-05-trees; code
+# recoverable at 70801eb24c.
+# Restore: git apply experiments/removed/MOJOLEARN_GBDT_EVAL_FUSED.patch
 
 
 def _heldout_loss_bits_gated_kernel(
@@ -2895,14 +2787,14 @@ def _launch_querywise_pointwise_target(
 # != 0` (the score std dev is a host reduction), an identity trace (per-round
 # host records), a multi-device plan (the shards take the scale as a launch
 # value), Depthwise / Lossguide, and the FAST + Apple build (no leaf-op arm there: its own
-# estimator `apple_fast_est`, the SYM_ITER pool and the fused eval stay).
+# estimator `apple_fast_est` and the SYM_ITER pool stay).
 #
 # A/B: `-D MOJOLEARN_GBDT_DEVICE_ROUNDS_OFF` restores the host loop for these
 # fits until the NVIDIA + AMD board rows are measured (RUN OWED); then the
 # switch goes (the host loop's pointwise arm stays for the refused fits).
 # ===========================================================================
 comptime GBDT_DEVICE_ROUNDS_BUILD = (
-    not (EST_APPLE_ANY or SYM_ITER_ANY or SYM_BUF_ARENA or GBDT_EVAL_FUSED)
+    not (EST_APPLE_ANY or SYM_ITER_ANY or SYM_BUF_ARENA)
     and not is_defined["MOJOLEARN_GBDT_DEVICE_ROUNDS_OFF"]()
 )
 
@@ -5863,63 +5755,25 @@ def fit_with_test(
         # to the held-out cursor. One tree at a time, through the
         # ROW-WISE apply, because the partition-wise one only knows rows
         # the tree was grown on.
-        comptime if GBDT_EVAL_FUSED:
-            # lane/apple-fast-sym-feat: with a detector that cannot stop
-            # the fit, the held-out loss stays on the device and is read
-            # back once per `_EVAL_FV_SLOTS` trees (and after the loop).
-            # The packed apply rewrites `h_vals` each tree without a drain
-            # of its own: the previous tree's upload has completed because
-            # this iteration's leaf values were read back to the host
-            # (a drain) before this tree could be appended to the model.
-            if has_test and not detector.is_active():
-                _apply_last_tree_to_test(
-                    ctx, model, layout_for_test, test.value(), approx_dim,
-                    learning_rate,
-                )
-                var slot = len(test_losses) % _EVAL_FV_SLOTS
-                _test_loss_enqueue(
-                    ctx, test.value(), objective, num_classes, alpha,
-                    logloss_border, approx_dim, slot,
-                )
-                test_losses.append(Float64(0.0))
-                if slot == _EVAL_FV_SLOTS - 1:
-                    _test_loss_flush(
-                        ctx, test.value(), test_losses, detector,
-                        _EVAL_FV_SLOTS,
-                    )
-            elif has_test:
-                _apply_last_tree_to_test(
-                    ctx, model, layout_for_test, test.value(), approx_dim,
-                    learning_rate,
-                )
-                var t_loss = _test_loss(
-                    ctx, test.value(), objective, num_classes, alpha,
-                    logloss_border, approx_dim,
-                )
-                test_losses.append(t_loss)
-                # `DetectOverfitting(testError, detector, ...)`
-                # (`overfitting_detector.h:25-34`)
-                detector.add_error(t_loss)
-                if detector.is_need_stop():
-                    stopped_early = True
-                    break
-        else:
-            if has_test:
-                _apply_last_tree_to_test(
-                    ctx, model, layout_for_test, test.value(), approx_dim,
-                    learning_rate,
-                )
-                var t_loss = _test_loss(
-                    ctx, test.value(), objective, num_classes, alpha,
-                    logloss_border, approx_dim,
-                )
-                test_losses.append(t_loss)
-                # `DetectOverfitting(testError, detector, ...)`
-                # (`overfitting_detector.h:25-34`)
-                detector.add_error(t_loss)
-                if detector.is_need_stop():
-                    stopped_early = True
-                    break
+        # TOMBSTONE: MOJOLEARN_GBDT_EVAL_FUSED (NEUTRAL) deferred held-out loss deleted 2026-11-15 by
+        # lane/expdel-05-trees; code recoverable at 70801eb24c.
+        # Restore: git apply experiments/removed/MOJOLEARN_GBDT_EVAL_FUSED.patch
+        if has_test:
+            _apply_last_tree_to_test(
+                ctx, model, layout_for_test, test.value(), approx_dim,
+                learning_rate,
+            )
+            var t_loss = _test_loss(
+                ctx, test.value(), objective, num_classes, alpha,
+                logloss_border, approx_dim,
+            )
+            test_losses.append(t_loss)
+            # `DetectOverfitting(testError, detector, ...)`
+            # (`overfitting_detector.h:25-34`)
+            detector.add_error(t_loss)
+            if detector.is_need_stop():
+                stopped_early = True
+                break
 
         # the device `functionValue` read alongside this iteration's
         # gradients: the loss AFTER THE PREVIOUS TREE (their accumulation
@@ -5945,12 +5799,6 @@ def fit_with_test(
             ctx, est_ws, model, deferred_splits, has_deferred_tree,
             approx_dim, learning_rate, not_pd_total, trace, stage_times,
         )
-    comptime if GBDT_EVAL_FUSED:
-        if has_test and not detector.is_active():
-            _test_loss_flush(
-                ctx, test.value(), test_losses, detector,
-                len(test_losses) % _EVAL_FV_SLOTS,
-            )
     loop_times.stop_host("fit_total", t_loop)
     loop_times.report()
 

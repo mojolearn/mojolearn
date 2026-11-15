@@ -630,6 +630,7 @@ in the tables after the sections.
 | [`MOJOLEARN_SYM_FEAT_ALL`](#mojolearn_sym_feat_all) | Trees (GBDT, Apple FAST) | NEUTRAL | 2026-11-15 | [MOJOLEARN_SYM_FEAT_ALL.patch](../experiments/removed/MOJOLEARN_SYM_FEAT_ALL.patch) |
 | [`MOJOLEARN_GBDT_BOOT_DEVICE`](#mojolearn_gbdt_boot_device) | Trees (GBDT, Apple FAST) | NEUTRAL | 2026-11-15 | [MOJOLEARN_GBDT_BOOT_DEVICE.patch](../experiments/removed/MOJOLEARN_GBDT_BOOT_DEVICE.patch) |
 | [`MOJOLEARN_GBDT_EVAL_SKIP_EMPTY`](#mojolearn_gbdt_eval_skip_empty) | Trees (GBDT, Apple FAST) | NEUTRAL | 2026-11-15 | [MOJOLEARN_GBDT_EVAL_SKIP_EMPTY.patch](../experiments/removed/MOJOLEARN_GBDT_EVAL_SKIP_EMPTY.patch) |
+| [`MOJOLEARN_GBDT_EVAL_FUSED`](#mojolearn_gbdt_eval_fused) | Trees (GBDT, Apple FAST) | NEUTRAL | 2026-11-15 | [MOJOLEARN_GBDT_EVAL_FUSED.patch](../experiments/removed/MOJOLEARN_GBDT_EVAL_FUSED.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -5938,3 +5939,12 @@ bits change on any vendor or the host column, no board row needs re-timing.
 - Files the patch restores: `gbdt/gpu_data/sym_feat_switches.mojo`, `gbdt/train.mojo`
 - Guard refusal: core/experiment_guards_trees.mojo (lane expdel-05-trees block). No `grid_controls` entry named it.
 - EXPERIMENTS.md rows: 169, 1303; appended row in the "Lane expdel-05-trees" section.
+
+### MOJOLEARN_GBDT_EVAL_FUSED
+
+- Tried: the held-out arm's per-tree apply as ONE packed upload (split records and leaf values in one pinned region of `h_vals`) instead of six, and, with an overfitting detector that cannot stop the fit, the per-tree held-out loss left on the device in 1024 slots and read back once per 1024 trees (`_test_loss_flush`), FAST + Apple only.
+- Verdict: NEUTRAL. rab7-gbdtevalfused (M3 Ultra, Verdicts batch 4, 2026-10-05): gbdt-symmetric istella 14752.15 -> 14703.82 ms (-0.3%); stays off. Deleted with it: `_EVAL_FV_SLOTS`, `_EVAL_PACK_WORDS`, the packed branch of `_apply_last_tree_to_test`, `_test_loss_flush` and the loop's deferred arm; `GBDT_DEVICE_ROUNDS_BUILD` no longer names it. `_test_loss_enqueue` and `_test_loss_div_kernel` stay (the default `_test_loss` and the executor's `tree_op_heldout_loss` use them). Deleted 2026-11-15 by lane/expdel-05-trees (one commit for this define).
+- Recoverable at `70801eb24c`. Patch: `experiments/removed/MOJOLEARN_GBDT_EVAL_FUSED.patch` (the reverse of the deletion commit, code files only; apply in reverse deletion order when restoring several of this lane).
+- Files the patch restores: `gbdt/gpu_data/sym_feat_switches.mojo`, `gbdt/methods/doc_parallel_boosting.mojo`
+- Guard refusal: core/experiment_guards_trees.mojo (lane expdel-05-trees block). No `grid_controls` entry named it.
+- EXPERIMENTS.md rows: 168, 1303; appended row in the "Lane expdel-05-trees" section.
