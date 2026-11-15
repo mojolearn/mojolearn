@@ -61,7 +61,7 @@ comptime ETS_TEAM = (
 #: damped-ets synthetic 0.017, taxi-hourly 0.014 (NV 0.017/0.014, AMD
 #: 0.017/0.014); BITS CHANGE, NV == AMD; forecast_rmse 13.93 -> 13.94
 #: synthetic, 96.69 -> 96.69 taxi-hourly: equal; nv2 v0099, amd a1681).
-#: `-D MOJOLEARN_IDN_ETS_TEAM_OFF` restores op_ets. It runs ETS(A, A|Ad, N) on NVIDIA and AMD (and
+#: It runs ETS(A, A|Ad, N) on NVIDIA and AMD (and
 #: Apple) with the team above, one block of SEQ_TEAM_TPB threads per series,
 #: in place of op_ets's one thread per series. Structural reason: op_ets
 #: walks the whole series serially in one thread per Nelder-Mead evaluation
@@ -79,9 +79,10 @@ comptime ETS_TEAM = (
 #: AMD and the host column together: the host binding replays the same chunk
 #: maps, tree and fold in `ets_team_replay` (sequence/exec.mojo). Every other
 #: ETS model keeps op_ets. MOJOLEARN_IDN_ALL_OFF turns it off.
+# TOMBSTONE: MOJOLEARN_IDN_ETS_TEAM_OFF (old path beside the IDENTICAL ETS team default, EXP:2087 KEEP) deleted 2026-11-15 by lane/expdel2-28-neural; code recoverable at 0fe5074767.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ETS_TEAM_OFF.patch; record in docs/TOMBSTONES.md.
 comptime IDN_ETS_TEAM = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not is_defined["MOJOLEARN_IDN_ETS_TEAM_OFF"]()
     and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 )
 #: IDN_ETS_TEAM's chunk count: the team's threads (the host replay runs

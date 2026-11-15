@@ -313,7 +313,7 @@ def team_kernel[OP: Int](
             garch_team(blk, team, a)
         elif (ETS_TEAM or IDN_ETS_TEAM) and OP == OP_ETS:
             # Apple FAST default (sequence/ets_team.mojo);
-            # IDENTICAL default (off: -D MOJOLEARN_IDN_ETS_TEAM_OFF; the tree prefix)
+            # IDENTICAL default (the tree prefix)
             ets_team(blk, team, a)
         elif PROPHET_COOP:
             # Apple FAST default (off: -D MOJOLEARN_PROPHET_COOP_OFF; sequence/prophet_coop.mojo)
