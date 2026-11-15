@@ -162,7 +162,9 @@ from checks.numerics import (
 # TOMBSTONE: MOJOLEARN_TREES_T41_TREE_BATCH (opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-46-trees; code recoverable at aa61101d80.
 # Restore: git apply experiments/removed/MOJOLEARN_TREES_T41_TREE_BATCH.patch; record in docs/TOMBSTONES.md.
 comptime IF_T41_TREE_BATCH = False
-comptime IF_T42_CORRECTION_CACHE = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_TREES_T42_CORRECTION_CACHE"]()
+# TOMBSTONE: MOJOLEARN_TREES_T42_CORRECTION_CACHE (opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-46-trees; code recoverable at d30e6f5678.
+# Restore: git apply experiments/removed/MOJOLEARN_TREES_T42_CORRECTION_CACHE.patch; record in docs/TOMBSTONES.md.
+comptime IF_T42_CORRECTION_CACHE = False
 comptime IF_C47_LIVE_TASKS = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_TREES_C47_IF_LIVE_TASKS"]()
 comptime IF_C48_FUSED_PARTITION = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_TREES_C48_IF_PARTITION"]()
 comptime IF_WORK_PLANES = 3 if IF_C48_FUSED_PARTITION else 2
@@ -263,13 +265,9 @@ def compute_c_n(n_samples: Int) -> Float32:
     return ftz(identical_mul_add(Float32(2.0), h, -tail))  # the default build's fused op (lane/pinned-mul-contract-free)
 
 
-@always_inline
-def cached_c_n(n: Int, cache: MutPointer[Float32, MutAnyOrigin]) -> Float32:
-    comptime if IF_T42_CORRECTION_CACHE:
-        return cache.unsafe_load(n)
-    return compute_c_n(n)
-
-
+# TOMBSTONE: MOJOLEARN_TREES_T42_CORRECTION_CACHE (opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-46-trees; code recoverable at d30e6f5678.
+# Restore: git apply experiments/removed/MOJOLEARN_TREES_T42_CORRECTION_CACHE.patch; record in docs/TOMBSTONES.md.
+# if_correction_table_kernel stays: isolation_forest/impl/isolation_forest.mojo imports it (integrator removes it with that import).
 def if_correction_table_kernel(cache: MutPointer[Float32, MutAnyOrigin], count: Int32):
     var i = Int(block_idx.x)*Int(block_dim.x)+Int(thread_idx.x)
     if i < Int(count):
@@ -888,7 +886,7 @@ def build_tree_iterative_global(
         if stop_depth or stop_isolated or stop_capacity:
             if tid == 0:
                 var path_length = ftz(
-                    Float32(depth) + cached_c_n(n_node_samples, correction_cache)
+                    Float32(depth) + compute_c_n(n_node_samples)
                 )
                 node_feature.unsafe_store(node_idx, Int32(-1))
                 node_threshold.unsafe_store(node_idx, path_length)
@@ -929,7 +927,7 @@ def build_tree_iterative_global(
         if local_feature < 0:
             if tid == 0:
                 var path_length = ftz(
-                    Float32(depth) + cached_c_n(n_node_samples, correction_cache)
+                    Float32(depth) + compute_c_n(n_node_samples)
                 )
                 node_feature.unsafe_store(node_idx, Int32(-1))
                 node_threshold.unsafe_store(node_idx, path_length)
