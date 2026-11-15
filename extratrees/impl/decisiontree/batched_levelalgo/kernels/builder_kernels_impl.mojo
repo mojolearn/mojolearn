@@ -73,8 +73,8 @@ def _search_rows_per_thread() -> Int:
     # Restore: git apply experiments/removed/MOJOLEARN_ET_SEARCH_RPT_16.patch; record in docs/TOMBSTONES.md.
     # TOMBSTONE: MOJOLEARN_ET_SEARCH_RPT_8 (DELETE-ARM, opt-in force knob, no A/B recorded, rule a) deleted 2026-11-15 by lane/expdel2-41-trees; code recoverable at 58dd5e245b.
     # Restore: git apply experiments/removed/MOJOLEARN_ET_SEARCH_RPT_8.patch; record in docs/TOMBSTONES.md.
-    if is_defined["MOJOLEARN_ET_SEARCH_RPT_4"]():
-        return 4
+    # TOMBSTONE: MOJOLEARN_ET_SEARCH_RPT_4 (DELETE-ARM, opt-in force knob, no A/B recorded, rule a) deleted 2026-11-15 by lane/expdel2-41-trees; code recoverable at 6bf147a71e.
+    # Restore: git apply experiments/removed/MOJOLEARN_ET_SEARCH_RPT_4.patch; record in docs/TOMBSTONES.md.
     if is_defined["MOJOLEARN_ET_SEARCH_RPT_2"]():
         return 2
     if is_defined["MOJOLEARN_ET_SEARCH_RPT_1"]():
