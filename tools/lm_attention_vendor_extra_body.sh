@@ -9,10 +9,11 @@
 #
 # gates     native HD64 repair/preservation gates on the SHIPPED default build
 #           (no REPAIR define: the matrix row itself must turn replay on), the
-#           row-off control and four sabotage/corruption arms that must FAIL by
-#           name, the dk/dv tail-guard gate and its sabotage, the broad fused
-#           gate; then the reduced-shape HD64 training witness (default and
-#           legacy builds) that the Apple column must equal.
+#           four sabotage/corruption arms that must FAIL by name, the dk/dv
+#           tail-guard gate and its sabotage, the broad fused gate; then the
+#           reduced-shape HD64 training witness (default build) that the Apple
+#           column must equal. (The row-off control and the legacy build used
+#           ATTN_LEGACY_CORNER / BYTE_LM_RETAIN_EAGER, deleted 2026-11-15.)
 # identity  tools/identity_break.py on the byte-LM / transformer / Samba lanes,
 #           AFTER (this tree) and BEFORE (a copy with
 #           tools/lm_attention_replay_vendors_before.py apply, i.e. main's
@@ -57,7 +58,6 @@ M=transformer/checks/attention_masked_tail_check.mojo
 T=transformer/checks/attention_tail_guard_check.mojo
 
 gates() {
-    must_fail g_rowoff 'masked-tail repair disabled: INERT' $MR -D MOJOLEARN_ATTN_LEGACY_CORNER=1 $M
     must_fail g_sab_z 'zdot repair differs' $MR -D MOJOLEARN_ATTN_REPAIR_SAB_Z=1 $M
     must_fail g_sab_dq 'dq repair differs' $MR -D MOJOLEARN_ATTN_REPAIR_SAB_DQ=1 $M
     must_fail g_corrupt_z 'zdot preserve differs' $MR -D MOJOLEARN_CHECK_CORRUPT_Z_PRESERVE=1 $M
@@ -71,10 +71,9 @@ gates() {
     run corpus sh tools/fetch_corpus_enwik8.sh --check
     rm -f python/mojolearn/identical/_mojolearn.so python/mojolearn/identical/_mojolearn_byte_lm.so
     run r_build_base env MOJOLEARN_SKIP_BUILD_GATE=1 MOJOLEARN_COMPILE_JOBS=8 sh bindings/build.sh
-    for arm in default legacy; do
+    for arm in default; do  # the legacy arm (ATTN_LEGACY_CORNER, BYTE_LM_RETAIN_EAGER) was deleted 2026-11-15
         rm -f python/mojolearn/identical/_mojolearn_byte_lm.so
         defines=""
-        [ "$arm" != legacy ] || defines="-D MOJOLEARN_ATTN_LEGACY_CORNER=1 -D MOJOLEARN_BYTE_LM_RETAIN_EAGER=1"
         run "r_build_$arm" env MOJOLEARN_BUILD_EXTRA_DEFINES="$defines" MOJOLEARN_COMPILE_JOBS=8 sh bindings/build_byte_lm.sh
         run "r_train_$arm" pixi run python tools/lm_ce_alias_probe.py --out "$OUT/reduced/$arm" \
             --shape 1 256 128 2 2 64 256 2 256 --steps 100 --tail 0 --smi-every 0 --witness-every 25 \

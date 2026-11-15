@@ -29,7 +29,6 @@ build() {  # module tag [flags]
   [ -n "$so" ] && cp $so $N/$2.so && sha256sum $N/$2.so >> $O/bindings.sha256
 }
 OFF="-D MOJOLEARN_FTZ_HW_OFF=1"
-build mamba mamba-anglenaive "-D MOJOLEARN_MAMBA3_ANGLE_DT_NAIVE=1"
 for m in mamba transformer byte_lm; do build $m $m-ftzoff "$OFF"; done
 for m in mamba transformer byte_lm x_decomp x_linear ivf x_neighbors linalg; do build $m $m; done
 cp -r python/mojolearn/*.py $SITE/; find $SITE -name __pycache__ -exec rm -rf {} +
@@ -44,8 +43,8 @@ for arm in regs2 regs shared smem48 naive; do st s16-$arm
   MOJOLEARN_MAMBA3_S16_QK_ARM=$arm timeout 1200 $PY tools/strides_digest.py 2 512 384 > $O/digest-board-$arm.json 2>$O/digest-board-$arm.err; rc digest-board-$arm $?
   MOJOLEARN_MAMBA3_S16_QK_ARM=$arm timeout 1800 $PY tools/strides_digest.py 8 512 768 > $O/digest-default-$arm.json 2>$O/digest-default-$arm.err; rc digest-default-$arm $?
 done
-# 2. angle d_dt naive build, and the flush off (mamba), default arm
-for b in mamba-anglenaive mamba-ftzoff; do inst $b mamba; st $b
+# 2. the flush off (mamba), default arm (the angle d_dt naive arm was deleted 2026-11-15)
+for b in mamba-ftzoff; do inst $b mamba; st $b
   timeout 1200 $PY tools/mamba3_backward_timing.py --batch 2 --length 512 --d-model 384 --calls 4 > $O/m3bwd-board-$b.log 2>&1; rc m3bwd-board-$b $?
   timeout 1200 $PY tools/mamba3_backward_timing.py --batch 8 --length 512 --d-model 768 --calls 3 > $O/m3bwd-default-$b.log 2>&1; rc m3bwd-default-$b $?
   timeout 1200 $PY tools/strides_digest.py 2 512 384 > $O/digest-board-$b.json 2>$O/digest-board-$b.err; rc digest-board-$b $?

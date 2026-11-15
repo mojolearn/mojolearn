@@ -2,7 +2,8 @@
 # Phase mode is diagnostic; price mode disables phase synchronization.
 # MOJOLEARN_KNN_PROBE_MODE=price requires the complete large-target grid.
 # Run only under root's granted build/device slot in an activated Pixi env.
-# Usage: bash tools/knn_residual_phase_probe.sh apple|nvidia /fresh/absolute/output
+# Usage: bash tools/knn_residual_phase_probe.sh apple /fresh/absolute/output
+# (the nvidia column's control MOJOLEARN_KNN_LEGACY_QUERY_TILE was deleted 2026-11-15, docs/TOMBSTONES.md)
 set -euo pipefail
 root=$(cd "$(dirname "$0")/.." && pwd)
 cd "$root"
@@ -22,11 +23,10 @@ case "$mode" in
     ;;
   *) echo 'MOJOLEARN_KNN_PROBE_MODE must be phase or price' >&2; exit 2 ;;
 esac
-column=${1:?apple or nvidia required}
+column=${1:?apple required}
 output=${2:?fresh absolute output directory required}
 case "$column" in
   apple) [[ $(uname -s) == Darwin ]]; control=MOJOLEARN_KNN_IDENTICAL_NO_PREFLIGHT ;;
-  nvidia) [[ $(uname -s) == Linux ]]; control=MOJOLEARN_KNN_LEGACY_QUERY_TILE ;;
   *) exit 2 ;;
 esac
 comparison=${MOJOLEARN_KNN_PROBE_COMPARISON:-legacy}
@@ -44,9 +44,6 @@ esac
 mkdir -p "$output"
 mojo --version > "$output/compiler.txt" 2>&1
 uname -a > "$output/host.txt"
-if [[ "$column" == nvidia ]]; then
-  nvidia-smi --query-gpu=name,uuid,driver_version --format=csv > "$output/gpu.csv"
-fi
 if git rev-parse HEAD > "$output/source.txt" 2>/dev/null; then
   git diff --binary -- neighbors core checks/kernel_matrix.mojo bench/knn_reference_price_main.mojo tools/knn_residual_phase_probe.sh > "$output/working-tree.patch"
 else
