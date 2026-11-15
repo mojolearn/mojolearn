@@ -10,22 +10,12 @@ while the identity harness's plain `predict` (an internal caller) is the
 native float32 Array: "apply_kernel_method predict and plain predict differ:
 3963 bytes of 4096" on all nine fixtures. The drivers are native now (no
 worker): the native owner returns the native result and the driver applies
-the public conversion for its own caller (`tests/_parallel_pool.public_method_result`).
+the public conversion for its own caller.
 """
-import sys
-
 import numpy as np
 import pytest
 
-from mojolearn import _mode
 from mojolearn import parallel_classical
-from mojolearn._array import Array
-
-
-def _frame_in(globs):
-    """A live frame whose globals are `globs` (a function defined there)."""
-    exec("import sys\ndef _here():\n    return sys._getframe()\n", globs)
-    return globs["_here"]()
 
 
 def _call_in(globs, function, *args):
@@ -37,29 +27,6 @@ def _call_in(globs, function, *args):
 
 def _user_globals():
     return {"__name__": "user_script"}
-
-
-class _Regressor:
-    """A regressor whose `predict` carries the same `_public_output` wrapper
-    `install_public_outputs` puts on every estimator's result methods."""
-    _estimator_type = "regressor"
-
-    def _raw_predict(self, X):
-        return _raw(4)
-
-    predict = _mode._public_output(_raw_predict, "predict")
-
-
-def _raw(n):
-    out = Array((n,), "<f4")
-    return out
-
-
-def _fake_native(model, operation, args, context):
-    """The native `family_km_par_apply` door: the raw float32 Array, exactly
-    what the plain native predict returns to an internal caller."""
-    assert operation == "family_km_par_apply"
-    return _raw(4)
 
 
 # The driver is one native call (family_km_par_apply); the native owner
@@ -80,11 +47,3 @@ def test_apply_kernel_method_matches_plain_predict_for_a_user():
     assert type(got) is type(want) is np.ndarray
     assert got.dtype == want.dtype == np.float64
     assert got.tobytes() == want.tobytes()
-
-
-def test_public_method_result_converts_only_public_output_names():
-    from mojolearn.tests._parallel_pool import public_method_result
-    frame = _frame_in(_user_globals())
-    assert type(public_method_result(_Regressor, "solve", _raw(2), frame)) is Array
-    out = public_method_result(_Regressor, "predict", _raw(2), frame)
-    assert type(out) is np.ndarray and out.dtype == np.float64

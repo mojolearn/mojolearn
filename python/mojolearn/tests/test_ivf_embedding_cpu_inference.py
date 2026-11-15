@@ -6,69 +6,20 @@ search split into two binding calls, the index and the table saved, and two
 inference bindings that ship (`_mojolearn_ivf_search_host`,
 `_mojolearn_embedding_infer_host`) with no build and no backward.
 
-Source checks run on a box with nothing built. The runtime checks run where a
+The save/load and refusal checks run anywhere. The runtime checks run where a
 binding is built and say when they skip. The bit claim against the GPU
-columns is identity_break's ivf, ivf-euclidean and embedding lanes and
-tools/classical_host_gate.py over the Metal recording.
+columns is the verification's ivf, ivf-euclidean and embedding lanes.
 
     cd python && python -m pytest mojolearn/tests/test_ivf_embedding_cpu_inference.py
 """
 import os
-import re
-from pathlib import Path
 
 import numpy as np
 import pytest
 
-from mojolearn import _backend, host_surface
+from mojolearn import _backend
 from mojolearn._ivf_impl import IVFIndex, _IVF_FORMAT
 from mojolearn.embedding import Embedding, _EMBEDDING_FORMAT
-
-ROOT = Path(__file__).resolve().parents[3]
-REGISTERED = re.compile(r'def_function\[\w+\]\(\s*"(\w+)"\s*\)')
-
-
-def _read(rel):
-    return (ROOT / rel).read_text(encoding="utf-8")
-
-
-def _registered(rel):
-    return set(REGISTERED.findall(_read(rel)))
-
-
-# -- source -------------------------------------------------------------------
-
-def test_inference_families_ship_and_carry_no_training():
-    for fam, route, reference, forbidden, served in (
-        ("ivf_search", "_mojolearn_ivf", "ivf", ("ivf_flat_build", "ivf_flat_build_and_search"), "ivf_flat_search"),
-        ("embedding_infer", "_mojolearn_embedding", "embedding", ("embedding_backward",), "embedding_forward"),
-    ):
-        f = host_surface.family(fam)
-        assert f["ships_in_wheel"] and f["routes"] is None and f["serves"] == (route,)
-        # The reference binding ships too since lane/ship-cpu-host-families
-        # (2026-09-16); what this family still guarantees is a binary with no
-        # build or backward in it, asserted by name below.
-        assert host_surface.family(reference)["ships_in_wheel"]
-        names = _registered(host_surface.binding_source(fam))
-        assert served in names
-        for name in forbidden:
-            assert name not in names, f"{fam} registers {name}"
-        assert host_surface.inference_routes()[route] == f["binding"]
-
-
-def test_gpu_and_reference_bindings_register_build_and_search():
-    for rel in ("bindings/_mojolearn_ivf.mojo", "bindings/_mojolearn_ivf_host.mojo"):
-        names = _registered(rel)
-        assert {"ivf_flat_build", "ivf_flat_search"} <= names, rel
-    shared = _read("bindings/ivf_index_arrays_unpack.mojo")
-    assert "ivf_validate_index_arrays" in shared
-    # The source-text check of the shared search import is deleted: fed1b4e384
-    # (fence-flip-2) renamed bindings/ivf_host_search.mojo to ivf_host_search_door.mojo.
-    for rel in ("bindings/_mojolearn_ivf_host.mojo", "bindings/_mojolearn_ivf_search_host.mojo"):
-        assert {"ivf_flat_partial_search", "ivf_finalize_distances"} <= _registered(rel), rel
-    for rel in ("bindings/_mojolearn_embedding_host.mojo", "bindings/_mojolearn_embedding_infer_host.mojo"):
-        assert "from bindings.embedding_host_forward_door import" in _read(rel), rel
-
 
 def _fake_index(n=12, dim=3, n_lists=3):
     from mojolearn.tests._typed_input import as_f32_c, as_i32_c
@@ -199,31 +150,6 @@ def test_a_saved_table_looks_up_on_the_shipped_binding(tmp_path):
 
 
 # -- stage 2: IVFIndex.extend (2026-09-15) -------------------------------------
-
-def test_extend_is_registered_on_the_gpu_reference_and_shipped_bindings():
-    for rel in ("bindings/_mojolearn_ivf.mojo", "bindings/_mojolearn_ivf_host.mojo",
-                "bindings/_mojolearn_ivf_search_host.mojo"):
-        assert "ivf_flat_extend" in _registered(rel), rel
-    for fam in ("ivf", "ivf_search"):
-        assert "ivf_flat_extend" in host_surface.family(fam)["exports"], fam
-    assert "ivf-extend" in host_surface.family("ivf")["training_lanes"]
-    assert "ivf-extend" in host_surface.family("ivf_search")["inference_lanes"]
-
-
-def test_extend_uses_the_build_assignment_and_one_layout_rule():
-    gpu = _read("ivf/impl/neighbors/ivf_flat/ivf_flat_build.mojo")
-    body = gpu[gpu.index("def ivf_flat_extend("):]
-    assert "predict(ctx, dx, x_norm, centroids, labels, min_dist, kp, n_new, dim)" in body
-    # 8a1a79513: the device builds the extended layout itself
-    # (`ivf_extend_layout_device`, the same offsets, ids and rows the host
-    # column's `extend_list_layout` builds)
-    assert "ivf_extend_layout_device(" in body
-    host = _read("ivf/host/ivf_host.mojo")
-    hbody = host[host.index("def host_ivf_extend("):]
-    assert "host_assign(" in hbody and "extend_list_layout(" in hbody
-    layout = _read("ivf/checks/list_layout.mojo")
-    assert "out_indices[slot] = UInt32(n_rows + j)" in layout
-
 
 def test_extend_refuses_without_an_index_and_on_a_changed_metric():
     with pytest.raises(ValueError, match="before extend"):

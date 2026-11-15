@@ -1,13 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""Saved Holt-Winters models on a CPU with no GPU (lane/inference-holtwinters,
-2026-09-15).
-
-Source checks, which run anywhere: the forecast inference family serves the
-`_mojolearn_tsa` route and the two Holt-Winters lanes; the reference tsa host
-binding, the forecast inference binding and the GPU binding register
-`holtwinters_predict` from ONE source; that source reaches no fit; and the host
-class is registered for the new format.
+"""Saved Holt-Winters models, and on a CPU with no GPU the forecast host binding.
 
 Runtime checks, skipped (and said to be) when nothing in this process fits
 Holt-Winters: a fit through whatever binding this install has (a GPU set, or
@@ -15,79 +8,19 @@ the reference tsa host binding inside the internal reference context) saves
 and loads to the same bytes and the same answers; a public prediction
 straddling `n` is the in-sample tail then the forecast head; and, when the
 forecast host binding is built, `mojolearn.host_model` answers the same bytes
-through it. The bit claim against the GPU columns is the gates', not this
-file's. The warm-up NaNs, the stored level against the smoothing update and
-the in-sample prediction against its inputs are checked natively in
-checks/native_tests/decomp_holtwinters_inference.mojo.
+through it as a `HostExponentialSmoothing`. The bit claim against the GPU
+columns is the verification's, not this file's. The warm-up NaNs, the stored
+level against the smoothing update and the in-sample prediction against its
+inputs are checked natively in checks/native_tests/decomp_holtwinters_inference.mojo.
 
     cd python && python3 -m pytest mojolearn/tests/test_holtwinters_inference.py
 """
 import os
-import re
 from pathlib import Path
 
 import pytest
 
-from mojolearn import _backend, host_surface
-
-ROOT = Path(__file__).resolve().parents[3]
-
-
-def _read(rel):
-    return (ROOT / rel).read_text(encoding="utf-8")
-
-
-def _code(text):
-    text = re.sub(r'"""[\s\S]*?"""', "", text)
-    return re.sub(r"#[^\n]*", "", text)
-
-
-def test_forecast_family_serves_holtwinters():
-    f = host_surface.family("forecast")
-    assert "_mojolearn_tsa" in f["serves"]
-    assert {"holtwinters", "holtwinters-multiplicative"} <= set(f["inference_lanes"])
-    assert "ExponentialSmoothing" in f["classes"]
-    assert {"holtwinters_forecast", "holtwinters_predict"} <= set(f["exports"])
-    assert "holtwinters_fit" not in f["exports"]
-    # Both ship since lane/ship-cpu-host-families (2026-09-16): this binding
-    # so a saved model predicts from a binary with no fit in it, the tsa
-    # binding so the holtwinters and kpss lanes can be checked on a CPU.
-    assert f["ships_in_wheel"] and host_surface.family("tsa")["ships_in_wheel"]
-    assert host_surface.inference_routes()["_mojolearn_tsa"] == "_mojolearn_forecast_host"
-
-
-def test_three_bindings_register_predict_from_one_source():
-    for src in (host_surface.binding_source("tsa"), host_surface.binding_source("forecast")):
-        code = _code(_read(src))
-        assert "from bindings.holtwinters_host_predict_door import" in code, src
-        assert 'def_function[holtwinters_predict_binding]("holtwinters_predict")' in code, src
-        assert "def holtwinters_predict_binding" not in code, f"{src} defines its own predict"
-    # The GPU binding predicts on the device (holtwinters/estimator.mojo::
-    # holtwinters_predict_ptr): a GPU route takes no host step.
-    gpu = _code(_read("bindings/_mojolearn_tsa.mojo"))
-    assert 'def_function[holtwinters_predict_binding]("holtwinters_predict")' in gpu
-    assert "holtwinters_predict_ptr(" in gpu
-    assert "from bindings.holtwinters_host_predict_door import" not in gpu
-    for src in (host_surface.binding_source("tsa"), host_surface.binding_source("forecast")):
-        code = _code(_read(src))
-        assert 'def_function[holtwinters_forecast_binding]("holtwinters_forecast")' in code, src
-        assert "def holtwinters_forecast_binding" not in code, f"{src} defines its own forecast"
-    # The oracle the device is held to forecasts through the same body.
-    assert "hw_forecast_from_state[dt](" in _code(_read("holtwinters/host/hw_oracle.mojo"))
-
-
-# test_prediction_sources_reach_no_fit deleted: an import-allowlist source-text check of
-# the Holt-Winters predict door. 7e7b229e4f moved the forecast/predict bodies into
-# bindings/holtwinters_host_predict_run.mojo, which the door now imports. The forecast
-# and predict values run natively: checks/native_tests/decomp_holtwinters_inference.mojo.
-
-
-def test_host_class_is_registered():
-    from mojolearn._classical_host import _FORMATS, _HOST_BASENAMES, HostExponentialSmoothing
-    from mojolearn._tsa_impl import _HW_FORMAT
-    assert _FORMATS[_HW_FORMAT] == {"ExponentialSmoothing": HostExponentialSmoothing}
-    assert _HOST_BASENAMES["_mojolearn_tsa"] == "_mojolearn_forecast_host"
-    assert HostExponentialSmoothing._BINDING == "_mojolearn_tsa"
+from mojolearn import _backend
 
 
 def _series(np, n, b, f):

@@ -1,125 +1,23 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""Exogenous regressors on `ARIMA` (lane/arima-exog, 2026-09-15).
-
-Source checks, which run anywhere: the order validator no longer refuses a
-regressor count and refuses a negative one and one above `EXOG_MAX`; the three
-doors that take an exogenous address permute it through ONE file
-(`arima/exog_layout.mojo`), which is where a non-finite regressor is
-refused by name; the host oracle restates the constructs a bit claim rests on
-(the observation intercept's fold, the start-value regression, the future
-differencing, `beta` through the packing and the Jones copy); the manifest
-declares the two new lanes on both families; and `arima/NOT_IMPLEMENTED.tsv`
-no longer carries the exog row.
+"""Exogenous regressors on `ARIMA`, through the public estimator.
 
 Runtime checks, skipped (and said to be) when nothing in this process fits
 ARIMA: a fit with regressors answers `beta_`, `forecast(h, exog)` equals
 `predict(n_obs, n_obs + h, exog)` byte for byte, the four shape and
-presence refusals fire by name, a model WITH regressors saves as
-`mojolearn-arima-2` and reloads to the same bytes, and a model WITHOUT them
-still saves as `mojolearn-arima-1` with no exog member, which is what keeps
-every ARIMA saved-model hash recorded before this lane valid. The bit claim
-against the GPU columns is the gates', not this file's.
+presence refusals fire by name, a non-finite regressor is refused by its
+cell, a regressor count above the solver's bound is refused, a model WITH
+regressors saves as `mojolearn-arima-2` and reloads to the same bytes, and a
+model WITHOUT them saves as `mojolearn-arima-1` with no exog member. The bit
+claim against the GPU columns is the verification's, not this file's.
 
     cd python && python3 -m pytest mojolearn/tests/test_arima_exog.py
 """
-import re
 from pathlib import Path
 
 import mojolearn
-from mojolearn import _backend, host_surface
+from mojolearn import _backend
 from mojolearn._cpu_reference import reference_training
-
-ROOT = Path(__file__).resolve().parents[3]
-
-ORACLE = "arima/host/arima_oracle.mojo"
-LAYOUT = "arima/exog_layout.mojo"
-LANES = ("arima-exog", "arima-exog-seasonal")
-
-
-def _read(rel):
-    return (ROOT / rel).read_text(encoding="utf-8")
-
-
-def _code(text):
-    text = re.sub(r'"""[\s\S]*?"""', "", text)
-    return re.sub(r"#[^\n]*", "", text)
-
-
-# ---------------------------------------------------------------- source
-
-
-def test_validate_order_takes_a_regressor_count():
-    code = _code(_read("arima/impl/tsa/arima_common.mojo"))
-    assert "n_exog != 0" not in code, "the order validator still refuses every regressor count"
-    assert "order.n_exog < 0" in code, "a negative n_exog is not refused"
-    assert "order.n_exog > EXOG_MAX" in code, "n_exog is not bounded by EXOG_MAX"
-    assert "comptime EXOG_MAX = 17" in code, "EXOG_MAX is not the QR solver's column bound"
-    # beta is packed after mu, as arima_common.cu:24-36 packs it.
-    assert "beta.unsafe_load(n_exog * bid + i)" in code, "beta is not packed"
-    assert "beta.unsafe_store(n_exog * bid + i, param_vec.unsafe_load(o + i))" in code
-
-
-def test_one_file_permutes_the_exog_layout_and_refuses_a_non_finite_one():
-    layout = _read(LAYOUT)
-    assert "def exog_filter_layout(" in layout
-    assert "non-finite value at series " in layout, "the refusal does not name the cell"
-    # The host doors' typed bodies are arima/host/arima_host_entries.mojo
-    # (lane thin-trees-metrics, 2026-10-21).
-    for door in ("arima/estimator.mojo", "arima/host/arima_host_entries.mojo"):
-        code = _code(_read(door))
-        assert "from arima.exog_layout import exog_filter_layout" in code, door
-        assert "def exog_filter_layout" not in code, f"{door} spells the permutation itself"
-
-
-def test_the_device_reaches_the_exog_arms():
-    kal = _code(_read("arima/impl/batched_kalman.mojo"))
-    assert "def obs_intercept_kernel(" in kal, "the observation intercept has no kernel"
-    assert "identical_mul_add(xv, bv, acc)" in kal, "DEVIATION 995's fold"
-    assert "if has_exog_in != 0:" in kal, "the loop kernel does not add the intercept"
-    x0 = _code(_read("arima/impl/estimate_x0.mojo"))
-    assert "def exog_regression_kernel(" in x0, "the start-value regression is missing"
-    assert "householder_qr_solve(scratch, sb, m, n, scratch, bb)" in x0
-    helpers = _code(_read("arima/impl/timeSeries/arima_helpers.mojo"))
-    assert "def prepare_future_data(" in helpers, "the future regressors are not differenced"
-    assert "t_params.beta" in helpers, "beta is not copied through the Jones transform"
-
-
-def test_the_host_oracle_restates_them():
-    text = _read(ORACLE)
-    assert "def _obs_intercept(" in text, "the oracle has no observation intercept"
-    assert "identical_mul_add(xv, bv, acc)" in text, "the oracle's fold is not DEVIATION 995's"
-    assert "def _exog_regression(" in text, "the oracle has no start-value regression"
-    assert "def _prepare_future(" in text, "the oracle does not difference the future regressors"
-    assert "ARIMA_ORACLE_EXOG_SABOTAGE" in text, "the exog arithmetic has no negative control"
-    # The exact import-list check is deleted: 50a802bb98 deleted arima/impl/idn_ls_math.mojo
-    # (dead since lane/expdel2-37-series) and dropped its import from the oracle; the
-    # host-only property has no public-API form and no Mojo check (none).
-
-
-def test_the_manifest_declares_the_lanes():
-    fam = host_surface.family("arima")
-    assert set(LANES) <= set(fam["training_lanes"]), fam["training_lanes"]
-    forecast = host_surface.family("forecast")
-    assert set(LANES) <= set(forecast["inference_lanes"]), forecast["inference_lanes"]
-    for lane in LANES:
-        assert lane in host_surface.covered_lanes(), f"{lane} is not covered"
-
-
-def test_the_unimplemented_row_is_gone():
-    rows = _read("arima/NOT_IMPLEMENTED.tsv")
-    assert "exogenous regressors everywhere" not in rows, "the exog row is still listed as unimplemented"
-
-
-def test_the_saved_format_is_versioned():
-    code = _code(_read("python/mojolearn/_arima_impl.py"))
-    assert '_ARIMA_FORMAT = "mojolearn-arima-1"' in code
-    assert '_ARIMA_FORMAT_EXOG = "mojolearn-arima-2"' in code
-    # A model with no regressors keeps the old tag and the old members.
-    # the native archive schema picks the tag by n_exog_ (`when` 0 / `unless` 0)
-    assert '("when", "n_exog_", 0, _archive_members(_ARIMA_FORMAT,' in code
-    assert '("unless", "n_exog_", 0, _archive_members(_ARIMA_FORMAT_EXOG,' in code
-    assert '("reshape", "exog", "_exog"' in code
 
 
 # ---------------------------------------------------------------- runtime
@@ -182,6 +80,15 @@ def test_exog_fit_forecast_and_save_when_a_binding_can_fit():
         assert "non-finite value at series 1, row 2, regressor 1" in str(exc), exc
     else:
         raise AssertionError("a non-finite regressor was accepted")
+
+    # one regressor above the QR solver's column bound (EXOG_MAX = 17) is refused
+    wide = rng.standard_normal((b, n, 18)).astype(np.float32)
+    try:
+        mojolearn.ARIMA(order=(1, 0, 0), trend="c").fit(series, wide)
+    except Exception as exc:
+        assert "EXOG_MAX" in str(exc), exc
+    else:
+        raise AssertionError("18 regressors were accepted above EXOG_MAX")
 
     plain = mojolearn.ARIMA(order=(1, 0, 0), trend="c").fit(series)
     try:

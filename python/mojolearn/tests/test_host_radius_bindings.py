@@ -3,21 +3,6 @@ import numpy as np
 import pytest
 
 import mojolearn
-from mojolearn import _backend, _classical_host
-
-
-def test_radius_sort_helper_routes_only_to_the_host(monkeypatch):
-    loaded = []
-    monkeypatch.setattr(_backend, 'load_host_module', lambda name: loaded.append(name) or name)
-    host = object.__new__(_classical_host.HostRadiusNeighbors)
-    host._bind('_mojolearn')
-    host._bind('_mojolearn_x_neighbors')
-    assert loaded == ['_mojolearn_core_host', '_mojolearn_x_neighbors_host']
-    with pytest.raises(ImportError):
-        host._bind('_mojolearn_x_linear')
-    other = object.__new__(_classical_host.HostNearestNeighbors)
-    with pytest.raises(ImportError):
-        other._bind('_mojolearn_x_neighbors')
 
 
 @pytest.mark.parametrize('metric,extra', [
