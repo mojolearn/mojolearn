@@ -148,7 +148,7 @@ and `_safe_solve`, `:26-44`:
 from max.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
 from std.time import perf_counter_ns
-from std.os import getenv
+from std.sys import is_defined
 
 from cholesky.checks.potrf import (
     chol_default_nb_hint,
@@ -172,6 +172,11 @@ from kernel_methods.checks.km_sabotage import (
     sabotage_ridge_diag_kernel,
 )
 from checks.numerics import ftz
+
+#: Stage timers: `-D MOJOLEARN_STAGE_TIMES` builds print stage walls; default
+#: builds compile them out. Before (lane envgate-classical-deviceplan,
+#: docs/plans/ENV_GATES_2026-11-15.md): a getenv per fit / call.
+comptime STAGE_TIMES_ON = is_defined["MOJOLEARN_STAGE_TIMES"]()
 
 #: SCHEDULING: one thread per diagonal entry.
 comptime KRR_RIDGE_TPB = 256
@@ -313,7 +318,7 @@ def kernel_ridge_solve(
     # `_safe_solve` -> `lapack.posv` -> cusolverDnpotrf. DEVIATION 1660 hands
     # this the `+0.0` jitter: the ridge is already in the matrix.
     # MOJOLEARN_STAGE_TIMES=1: factor and solve walls (drained), timing only.
-    var st_on = getenv("MOJOLEARN_STAGE_TIMES") == "1"
+    var st_on = STAGE_TIMES_ON
     var t0 = Int(perf_counter_ns())
     # TOMBSTONE: MOJOLEARN_IDN_CHOL_OPS_FIT (opt-in B arm, EXP:581 RUN OWED; AMD 1.14-1.25x slower 2026-11-13) deleted 2026-11-15 by lane/expdel2-16-decomposition; code recoverable at 860e94a3f4.
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_CHOL_OPS_FIT.patch; record in docs/TOMBSTONES.md.

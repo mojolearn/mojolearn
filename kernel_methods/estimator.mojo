@@ -52,7 +52,6 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 from checks.numerics import GLOBAL_NUMERIC_MODE as _CTX_MODE, NUMERIC_IDENTICAL as _CTX_IDENTICAL
 from core.neural_context import neural_ctx
 from std.time import perf_counter_ns
-from std.os import getenv
 from std.memory import bitcast
 # ONE PROCESS-LIFETIME DeviceContext per binding and tier (CURRENT DIRECTIVES;
 # lane/neighbors-apple 2026-09-28): a new context per entry is a new Metal
@@ -158,6 +157,11 @@ from x_decomp.jacobi_par import (
     eigh_par_update_kernel,
     pj_identity_kernel,
 )
+
+#: Stage timers: `-D MOJOLEARN_STAGE_TIMES` builds print stage walls; default
+#: builds compile them out. Before (lane envgate-classical-deviceplan,
+#: docs/plans/ENV_GATES_2026-11-15.md): a getenv per fit / call.
+comptime STAGE_TIMES_ON = is_defined["MOJOLEARN_STAGE_TIMES"]()
 
 #: The opt-in host Jacobi for Nystroem's eigenproblem (`-D MOJOLEARN_NYS_HOST_EIGH`)
 #: was removed (hr-optin-flags): the eigendecomposition runs on the device.
@@ -2344,7 +2348,7 @@ def _nystroem_transform_dev[out_origin: MutOrigin, //](
     var q = model.n_components
     var d = model.n_features
     # MOJOLEARN_STAGE_TIMES=1: wall per phase (each phase already drains).
-    var st_on = getenv("MOJOLEARN_STAGE_TIMES") == "1"
+    var st_on = STAGE_TIMES_ON
     var dc = _upload(ctx, model.components)
     var dnorm = _upload(ctx, model.normalization)
     var dk = ctx.enqueue_create_buffer[DType.float32](n_rows * q)
@@ -2622,7 +2626,7 @@ def _rbf_transform_dev[out_origin: MutOrigin, //](
     """The transform from X on the device (`dx`, n_rows x n_features)."""
     var d = model.n_features
     var dd = model.n_components
-    var st_on = getenv("MOJOLEARN_STAGE_TIMES") == "1"
+    var st_on = STAGE_TIMES_ON
     var dw = _upload(ctx, model.random_weights)
     var db = _upload(ctx, model.random_offset)
     var dp = ctx.enqueue_create_buffer[DType.float32](n_rows * dd)

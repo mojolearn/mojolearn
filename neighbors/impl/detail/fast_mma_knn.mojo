@@ -57,6 +57,11 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 from std.os import getenv
 from std.time import perf_counter_ns
 
+#: Stage timers: `-D MOJOLEARN_STAGE_TIMES` builds print stage walls; default
+#: builds compile them out. Before (lane envgate-classical-deviceplan,
+#: docs/plans/ENV_GATES_2026-11-15.md): a getenv per fit / call.
+comptime STAGE_TIMES_ON = is_defined["MOJOLEARN_STAGE_TIMES"]()
+
 # AFCL-G01: NEVER RUN — PENDING MEASUREMENT; uncompiled and unverified.
 # Four complete Apple SIMD groups halve the query rows owned by a block,
 # exposing more independent blocks while retaining each group's matrix and
@@ -697,7 +702,7 @@ def fast_mma_knn(
     var slice_rows = (n_index + slices - 1) // slices
     slice_rows = ((slice_rows + MQ_T - 1) // MQ_T) * MQ_T
     slices = (n_index + slice_rows - 1) // slice_rows
-    var st_on = getenv("MOJOLEARN_STAGE_TIMES") == "1"
+    var st_on = STAGE_TIMES_ON
     var t0 = 0
     if st_on:
         ctx.synchronize()

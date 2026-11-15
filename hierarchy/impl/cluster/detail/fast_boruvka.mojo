@@ -33,9 +33,14 @@ from core.fast_radix_sort import (
     frs_exclusive_scan,
     frs_scan_blocks,
 )
-from std.os import getenv
+from std.sys import is_defined
 from std.time import perf_counter_ns
 from hierarchy.impl.cluster.detail.fast_mma_boruvka import MmaBoruvka
+
+#: Stage timers: `-D MOJOLEARN_STAGE_TIMES` builds print stage walls; default
+#: builds compile them out. Before (lane envgate-classical-deviceplan,
+#: docs/plans/ENV_GATES_2026-11-15.md): a getenv per fit / call.
+comptime STAGE_TIMES_ON = is_defined["MOJOLEARN_STAGE_TIMES"]()
 
 comptime FB_TPB = 128
 comptime FB_TILE = 64
@@ -554,7 +559,7 @@ def fast_euclidean_mst(
     # tightened the component bound.
     # FAST, Apple, n <= 32: the matrix-unit search with the same answer
     # (`fast_mma_boruvka.mojo`); `mb.ok` is False when it declines.
-    var _st_on = getenv("MOJOLEARN_STAGE_TIMES") == "1"
+    var _st_on = STAGE_TIMES_ON
     var mb = MmaBoruvka(ctx, x, m, n, mutual_reach, core_ptr, inv_alpha)
     while n_comp > 1:
         rounds += 1

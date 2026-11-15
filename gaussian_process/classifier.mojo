@@ -37,7 +37,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE as _CTX_MODE, NUMERIC_IDENTICAL 
 from core.neural_context import neural_ctx
 from std.time import perf_counter_ns
 from std.memory import unsafe_memcpy
-from std.os import getenv
+from std.sys import is_defined
 # ONE PROCESS-LIFETIME DeviceContext per binding and tier (CURRENT DIRECTIVES;
 # lane/neighbors-apple 2026-09-28): a new context per entry is a new Metal
 # queue and a pipeline load per call. Same kernels, same launches, same order
@@ -92,6 +92,11 @@ from gemm.checks.gemm_identical import (
     identical_gemm_workspace_max_floats,
 )
 from gemm.contract import OP_TN
+
+#: Stage timers: `-D MOJOLEARN_STAGE_TIMES` builds print stage walls; default
+#: builds compile them out. Before (lane envgate-classical-deviceplan,
+#: docs/plans/ENV_GATES_2026-11-15.md): a getenv per fit / call.
+comptime STAGE_TIMES_ON = is_defined["MOJOLEARN_STAGE_TIMES"]()
 
 
 #: lane/neighbors-apple (2026-09-28): the Laplace Newton loop keeps K, B and
@@ -232,7 +237,7 @@ def _gpc_fit_binary_device(
     fit runs too: a bounded device loop over the executor's Cholesky ops,
     the register block read once per GPC_NEWTON_CHECK iterations). The last
     factor, pi and W_sr are read back once."""
-    var st_on = getenv("MOJOLEARN_STAGE_TIMES") == "1"
+    var st_on = STAGE_TIMES_ON
     var t_k0 = Int(perf_counter_ns())
     var n = n_train
     var ctx = _family_ctx()
@@ -382,7 +387,7 @@ def gpc_predict_binary_host(
     var mean = _download(ctx, dmean, n_star)
     var variance = List[Float32]()
     var proba = List[Float64]()
-    var st_on = getenv("MOJOLEARN_STAGE_TIMES") == "1"
+    var st_on = STAGE_TIMES_ON
     var t_v0 = Int(perf_counter_ns())
     if want_variance:
         var dwv = _upload(ctx, wsr)

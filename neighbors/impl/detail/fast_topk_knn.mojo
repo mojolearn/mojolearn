@@ -33,8 +33,12 @@ from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
-from std.os import getenv
 from std.time import perf_counter_ns
+
+#: Stage timers: `-D MOJOLEARN_STAGE_TIMES` builds print stage walls; default
+#: builds compile them out. Before (lane envgate-classical-deviceplan,
+#: docs/plans/ENV_GATES_2026-11-15.md): a getenv per fit / call.
+comptime STAGE_TIMES_ON = is_defined["MOJOLEARN_STAGE_TIMES"]()
 
 comptime FKT_QB = 256
 # AFCL-G02: NEVER RUN — PENDING MEASUREMENT; uncompiled and unverified.
@@ -255,7 +259,7 @@ def fast_topk_knn(
         slices = 64
     var slice_rows = (n_index + slices - 1) // slices
     slices = (n_index + slice_rows - 1) // slice_rows
-    var st_on = getenv("MOJOLEARN_STAGE_TIMES") == "1"
+    var st_on = STAGE_TIMES_ON
     var t0 = 0
     if st_on:
         ctx.synchronize()

@@ -92,8 +92,13 @@ from hdbscan.impl.cluster.detail.dendrogram_union import build_dendrogram_union
 # Tried: the d <= 64 arm's Boruvka rounds driven on the device (fast_mr_mst_device.mojo); hdbscan taxi 434 -> 432.6 ms (-0.3%, noise).
 # Restore: git apply experiments/removed/MOJOLEARN_HDB_DEV_BORUVKA.patch; record in docs/TOMBSTONES.md.
 from neighbors.checks.pinned_distance_tile import PINNED_TILE_TPB
-from std.os import getenv
+from std.sys import is_defined
 from std.time import perf_counter_ns
+
+#: Stage timers: `-D MOJOLEARN_STAGE_TIMES` builds print stage walls; default
+#: builds compile them out. Before (lane envgate-classical-deviceplan,
+#: docs/plans/ENV_GATES_2026-11-15.md): a getenv per fit / call.
+comptime STAGE_TIMES_ON = is_defined["MOJOLEARN_STAGE_TIMES"]()
 
 
 comptime MR_GRAPH_AUTO = 0
@@ -244,7 +249,7 @@ def build_mr_linkage(
     # Half one: the k-NN and the core distances, which ARE theirs.
     # MOJOLEARN_STAGE_TIMES=1 (a diagnostic, lane cluster-apple3): drain and
     # print the wall time of each part. Off, nothing changes.
-    var st_on = getenv("MOJOLEARN_STAGE_TIMES") == "1"
+    var st_on = STAGE_TIMES_ON
     var st_t = Int(perf_counter_ns())
     # fg-tsne-dbscan H2 (IDN_HDB_MST_SEED_KNN): the k-NN one neighbour wider
     # on the sparse arm, so round 1 can resolve points from their lists
