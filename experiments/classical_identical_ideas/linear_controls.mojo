@@ -195,7 +195,9 @@ comptime C19_SGD_CHUNK = 2048
 # TOMBSTONE: MOJOLEARN_CLASSICAL_C20_PAIR_LOAD (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-06-base; code recoverable at 911bf993d5.
 # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C20_PAIR_LOAD.patch; record in docs/TOMBSTONES.md.
 comptime C20_PAIR_LOAD = False
-comptime C21_EXTREMA = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_C21_EXTREMA"]()
+# TOMBSTONE: MOJOLEARN_CLASSICAL_C21_EXTREMA (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-06-base; code recoverable at 9aca9aa819.
+# Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C21_EXTREMA.patch; record in docs/TOMBSTONES.md.
+comptime C21_EXTREMA = False
 comptime C22_TRIANGLE = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_C22_TRIANGLE"]()
 # lane classical-decomp (2026-10-07): the old C23_CENTERED_PANELS define is
 # split per algorithm family. Its PCA use (the ONE_PASS arm of
