@@ -80,6 +80,24 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_NEURAL_TABLE_ROUTE_OFF"](), "removed 2026-11-15 (lane/expdel2-02-base): NEURAL_TABLE_ROUTE_OFF (old path, never measured) is gone; the default is kept; code at 0ace134aa9; restore: experiments/removed/MOJOLEARN_NEURAL_TABLE_ROUTE_OFF.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_SEQ_MOE_DEVICE_IO_OFF.patch
     comptime assert not is_defined["MOJOLEARN_SEQ_MOE_DEVICE_IO_OFF"](), "removed 2026-11-15 (lane/expdel2-02-base): SEQ_MOE_DEVICE_IO_OFF (old path, never measured) is gone; the default is kept; code at 193542c352; restore: experiments/removed/MOJOLEARN_SEQ_MOE_DEVICE_IO_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_2560_MEMSET_FILL.patch
+    comptime assert not is_defined["MOJOLEARN_2560_MEMSET_FILL"](), "removed 2026-11-15 (lane/expdel2-03-base): 2560_MEMSET_FILL (Device fill (gbdt `enqueue_fill`)) is gone: no record: no A/B recorded for the opt-in arm (V2 rule a); code at 337c096a5b; restore: experiments/removed/MOJOLEARN_2560_MEMSET_FILL.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_FAST_BLOCK_SCAN_SHUFFLE.patch
+    comptime assert not is_defined["MOJOLEARN_FAST_BLOCK_SCAN_SHUFFLE"](), "removed 2026-11-15 (lane/expdel2-03-base): FAST_BLOCK_SCAN_SHUFFLE (Block scan (FAST)) is gone: no record: no A/B recorded for the opt-in arm (V2 rule a); code at a9903cb728; restore: experiments/removed/MOJOLEARN_FAST_BLOCK_SCAN_SHUFFLE.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_MUTEX_SPIN_RELAXED.patch
+    comptime assert not is_defined["MOJOLEARN_MUTEX_SPIN_RELAXED"](), "removed 2026-11-15 (lane/expdel2-03-base): MUTEX_SPIN_RELAXED (Device mutex) is gone: no record: no A/B recorded for the opt-in arm (V2 rule a); code at b616f3bc41; restore: experiments/removed/MOJOLEARN_MUTEX_SPIN_RELAXED.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_RF_MUTEX_CLAIM_STOCK.patch
+    comptime assert not is_defined["MOJOLEARN_RF_MUTEX_CLAIM_STOCK"](), "removed 2026-11-15 (lane/expdel2-03-base): RF_MUTEX_CLAIM_STOCK (Device mutex) is gone: no record: no A/B recorded for the opt-in arm (V2 rule a); code at 34c27fda1e; restore: experiments/removed/MOJOLEARN_RF_MUTEX_CLAIM_STOCK.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_CACHE_CTX_KEY_DEVICE_ID.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_CACHE_CTX_KEY_DEVICE_ID"](), "removed 2026-11-15 (lane/expdel2-03-base): IDN_CACHE_CTX_KEY_DEVICE_ID (Process caches (ctx key)) is gone: no record: no A/B recorded for the opt-in arm (V2 rule a); code at b789195239; restore: experiments/removed/MOJOLEARN_IDN_CACHE_CTX_KEY_DEVICE_ID.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_CACHE_CTX_KEY_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_CACHE_CTX_KEY_OFF"](), "removed 2026-11-15 (lane/expdel2-03-base): IDN_CACHE_CTX_KEY_OFF (Process caches (ctx key)) is gone: no record: no A/B recorded for the old path (V2 rule b); code at afc5c11e5b; restore: experiments/removed/MOJOLEARN_IDN_CACHE_CTX_KEY_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_XPREP_ARENA_POOL_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_XPREP_ARENA_POOL_OFF"](), "removed 2026-11-15 (lane/expdel2-03-base): XPREP_ARENA_POOL_OFF (Device store (slot pool)) is gone: EXP:1787 CONFIRMED (the pool is the kept default); code at 9907fddc3f; restore: experiments/removed/MOJOLEARN_XPREP_ARENA_POOL_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_HPDEV_FOLDS_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_HPDEV_FOLDS_OFF"](), "removed 2026-11-15 (lane/expdel2-03-base): IDN_HPDEV_FOLDS_OFF (Hot-path device folds) is gone: no record: no A/B recorded for the old path (V2 rule b); code at b24fd9c2c3; restore: experiments/removed/MOJOLEARN_IDN_HPDEV_FOLDS_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_ENTRY_TABLE_HEAP_OUTPUT.patch
+    comptime assert not is_defined["MOJOLEARN_ENTRY_TABLE_HEAP_OUTPUT"](), "removed 2026-11-15 (lane/expdel2-03-base): ENTRY_TABLE_HEAP_OUTPUT (Entry table calls) is gone: no record: no A/B recorded for the opt-in arm (V2 rule a); code at d5699d97e3; restore: experiments/removed/MOJOLEARN_ENTRY_TABLE_HEAP_OUTPUT.patch"
     return True
 
 

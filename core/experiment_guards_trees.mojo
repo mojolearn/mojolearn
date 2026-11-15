@@ -100,6 +100,60 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_IDN_IF_RESIDENT_OFF"](), "removed 2026-11-15 (lane/expdel2-01-base): MOJOLEARN_IDN_IF_RESIDENT_OFF (rollback of IsolationForest to a refit of the whole forest inside every scoring call) is gone, no A/B was ever recorded for it; the resident forest that fit built is the path on every tier; restore: experiments/removed/MOJOLEARN_IDN_IF_RESIDENT_OFF.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_FOREST_DEVICE_FINITE_OFF.patch
     comptime assert not is_defined["MOJOLEARN_FOREST_DEVICE_FINITE_OFF"](), "removed 2026-11-15 (lane/expdel2-05-base): FOREST_DEVICE_FINITE_OFF (FAST+Apple rollback of the forest fits to the host finite scans) is gone; the device scan is the FAST+Apple path"
+    # Restore: git apply experiments/removed/MOJOLEARN_AFCL_T08.patch
+    comptime assert not is_defined["MOJOLEARN_AFCL_T08"](), "removed 2026-11-15 (lane/expdel2-03-base): AFCL_T08 (Forest inference (Apple FAST programme)) is gone: never-run Apple FAST programme card, no A/B (V2 rule g); code at 5bc2865240; restore: experiments/removed/MOJOLEARN_AFCL_T08.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_FOREST_SHARED_ROWS.patch
+    comptime assert not is_defined["MOJOLEARN_FOREST_SHARED_ROWS"](), "removed 2026-11-15 (lane/expdel2-03-base): FOREST_SHARED_ROWS (Forest inference) is gone: no record: no A/B recorded for the opt-in arm (V2 rule a); code at a5502e594d; restore: experiments/removed/MOJOLEARN_FOREST_SHARED_ROWS.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_FOREST_FAST_SHARED_ROWS.patch
+    comptime assert not is_defined["MOJOLEARN_FOREST_FAST_SHARED_ROWS"](), "removed 2026-11-15 (lane/expdel2-03-base): FOREST_FAST_SHARED_ROWS (Forest inference (FAST Apple)) is gone: no record: no A/B recorded for the opt-in arm (V2 rule a); code at a5502e594d; restore: experiments/removed/MOJOLEARN_FOREST_FAST_SHARED_ROWS.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_TREES_T32_SHARED_ROWS.patch
+    comptime assert not is_defined["MOJOLEARN_TREES_T32_SHARED_ROWS"](), "removed 2026-11-15 (lane/expdel2-03-base): TREES_T32_SHARED_ROWS (Forest inference (IDENTICAL)) is gone: no record: no A/B recorded for the opt-in arm (V2 rule a); code at a5502e594d; restore: experiments/removed/MOJOLEARN_TREES_T32_SHARED_ROWS.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_FOREST_SEPARATE_NODES.patch
+    comptime assert not is_defined["MOJOLEARN_FOREST_SEPARATE_NODES"](), "removed 2026-11-15 (lane/expdel2-03-base): FOREST_SEPARATE_NODES (Forest inference) is gone: EXP:1504 DROP (defines deleted; the packed layout is the default); code at 77aaad1bcc; restore: experiments/removed/MOJOLEARN_FOREST_SEPARATE_NODES.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_FOREST_SCALAR_GROVES.patch
+    comptime assert not is_defined["MOJOLEARN_FOREST_SCALAR_GROVES"](), "removed 2026-11-15 (lane/expdel2-03-base): FOREST_SCALAR_GROVES (Forest inference) is gone: no record: no A/B recorded for the opt-in arm (V2 rule a); code at b177479fc7; restore: experiments/removed/MOJOLEARN_FOREST_SCALAR_GROVES.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_TREES_PREDICT_ROW_OUTPUTS.patch
+    comptime assert not is_defined["MOJOLEARN_TREES_PREDICT_ROW_OUTPUTS"](), "removed 2026-11-15 (lane/expdel2-03-base): TREES_PREDICT_ROW_OUTPUTS (Forest inference (IDENTICAL)) is gone: no record: no A/B recorded for the opt-in arm (V2 rule a); code at 432acbb3df; restore: experiments/removed/MOJOLEARN_TREES_PREDICT_ROW_OUTPUTS.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_TREES_T34_CHUNK_FOLD.patch
+    comptime assert not is_defined["MOJOLEARN_TREES_T34_CHUNK_FOLD"](), "removed 2026-11-15 (lane/expdel2-03-base): TREES_T34_CHUNK_FOLD (Forest inference (IDENTICAL, fold version)) is gone: no record: no A/B recorded for the opt-in arm (V2 rule a); code at cfad8788a0; restore: experiments/removed/MOJOLEARN_TREES_T34_CHUNK_FOLD.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_TREES_FOREST_ROUTE.patch
+    comptime assert not is_defined["MOJOLEARN_TREES_FOREST_ROUTE"](), "removed 2026-11-15 (lane/expdel2-03-base): TREES_FOREST_ROUTE (Forest inference (IDENTICAL, routes)) is gone: no record: no A/B recorded for the opt-in arm (V2 rule a); code at c44dc3c017; restore: experiments/removed/MOJOLEARN_TREES_FOREST_ROUTE.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_TREES_T33_COST_SCHEDULE.patch
+    comptime assert not is_defined["MOJOLEARN_TREES_T33_COST_SCHEDULE"](), "removed 2026-11-15 (lane/expdel2-03-base): TREES_T33_COST_SCHEDULE (Forest inference (IDENTICAL, schedule)) is gone: no record: no A/B recorded for the opt-in arm (V2 rule a); code at 1cad80e23b; restore: experiments/removed/MOJOLEARN_TREES_T33_COST_SCHEDULE.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_TREES_T39_AUXILIARY_WALK.patch
+    comptime assert not is_defined["MOJOLEARN_TREES_T39_AUXILIARY_WALK"](), "removed 2026-11-15 (lane/expdel2-03-base): TREES_T39_AUXILIARY_WALK (Forest auxiliary outputs (IDENTICAL)) is gone: no record: no A/B recorded for the opt-in arm (V2 rule a); code at 96ee21ad13; restore: experiments/removed/MOJOLEARN_TREES_T39_AUXILIARY_WALK.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_TREES_T44_METADATA_CACHE.patch
+    comptime assert not is_defined["MOJOLEARN_TREES_T44_METADATA_CACHE"](), "removed 2026-11-15 (lane/expdel2-03-base): TREES_T44_METADATA_CACHE (Tree SHAP metadata (IDENTICAL)) is gone: no record: no A/B recorded for the opt-in arm (V2 rule a); code at 3e9cbbd919; restore: experiments/removed/MOJOLEARN_TREES_T44_METADATA_CACHE.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_TREES_T37_WORKSPACE.patch
+    comptime assert not is_defined["MOJOLEARN_TREES_T37_WORKSPACE"](), "removed 2026-11-15 (lane/expdel2-03-base): TREES_T37_WORKSPACE (Forest inference (IDENTICAL, workspace)) is gone: no record: no A/B recorded for the opt-in arm (V2 rule a); code at 07f7a0733b; restore: experiments/removed/MOJOLEARN_TREES_T37_WORKSPACE.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_TREES_T38_FUSED_LABELS.patch
+    comptime assert not is_defined["MOJOLEARN_TREES_T38_FUSED_LABELS"](), "removed 2026-11-15 (lane/expdel2-03-base): TREES_T38_FUSED_LABELS (Forest inference (IDENTICAL, labels)) is gone: no record: no A/B recorded for the opt-in arm (V2 rule a); code at 81c34fb4fb; restore: experiments/removed/MOJOLEARN_TREES_T38_FUSED_LABELS.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_TREES_C50_GB_PACKED.patch
+    comptime assert not is_defined["MOJOLEARN_TREES_C50_GB_PACKED"](), "removed 2026-11-15 (lane/expdel2-03-base): TREES_C50_GB_PACKED (GBDT predict (IDENTICAL, packed nodes)) is gone: no record: no A/B recorded for the opt-in arm (V2 rule a); code at 03a43eb1ec; restore: experiments/removed/MOJOLEARN_TREES_C50_GB_PACKED.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_AFT_P01.patch
+    comptime assert not is_defined["MOJOLEARN_AFT_P01"](), "removed 2026-11-15 (lane/expdel2-03-base): AFT_P01 (Apple FAST trees programme (P)) is gone: never-run Apple FAST programme card, no A/B (V2 rule g); code at 5bc2865240; restore: experiments/removed/MOJOLEARN_AFT_P01.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_AFT_P02.patch
+    comptime assert not is_defined["MOJOLEARN_AFT_P02"](), "removed 2026-11-15 (lane/expdel2-03-base): AFT_P02 (Apple FAST trees programme (P)) is gone: never-run Apple FAST programme card, no A/B (V2 rule g); code at 5bc2865240; restore: experiments/removed/MOJOLEARN_AFT_P02.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_AFT_P03.patch
+    comptime assert not is_defined["MOJOLEARN_AFT_P03"](), "removed 2026-11-15 (lane/expdel2-03-base): AFT_P03 (Apple FAST trees programme (P)) is gone: never-run Apple FAST programme card, no A/B (V2 rule g); code at 5bc2865240; restore: experiments/removed/MOJOLEARN_AFT_P03.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_AFT_P04.patch
+    comptime assert not is_defined["MOJOLEARN_AFT_P04"](), "removed 2026-11-15 (lane/expdel2-03-base): AFT_P04 (Apple FAST trees programme (P)) is gone: never-run Apple FAST programme card, no A/B (V2 rule g); code at 5bc2865240; restore: experiments/removed/MOJOLEARN_AFT_P04.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_AFT_P05.patch
+    comptime assert not is_defined["MOJOLEARN_AFT_P05"](), "removed 2026-11-15 (lane/expdel2-03-base): AFT_P05 (Apple FAST trees programme (P)) is gone: never-run Apple FAST programme card, no A/B (V2 rule g); code at 5bc2865240; restore: experiments/removed/MOJOLEARN_AFT_P05.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_AFT_P06.patch
+    comptime assert not is_defined["MOJOLEARN_AFT_P06"](), "removed 2026-11-15 (lane/expdel2-03-base): AFT_P06 (Apple FAST trees programme (P)) is gone: never-run Apple FAST programme card, no A/B (V2 rule g); code at 5bc2865240; restore: experiments/removed/MOJOLEARN_AFT_P06.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_AFT_P07.patch
+    comptime assert not is_defined["MOJOLEARN_AFT_P07"](), "removed 2026-11-15 (lane/expdel2-03-base): AFT_P07 (Apple FAST trees programme (P)) is gone: never-run Apple FAST programme card, no A/B (V2 rule g); code at 5bc2865240; restore: experiments/removed/MOJOLEARN_AFT_P07.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_AFT_P08.patch
+    comptime assert not is_defined["MOJOLEARN_AFT_P08"](), "removed 2026-11-15 (lane/expdel2-03-base): AFT_P08 (Apple FAST trees programme (P)) is gone: never-run Apple FAST programme card, no A/B (V2 rule g); code at 5bc2865240; restore: experiments/removed/MOJOLEARN_AFT_P08.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_AFT_P09.patch
+    comptime assert not is_defined["MOJOLEARN_AFT_P09"](), "removed 2026-11-15 (lane/expdel2-03-base): AFT_P09 (Apple FAST trees programme (P)) is gone: never-run Apple FAST programme card, no A/B (V2 rule g); code at 5bc2865240; restore: experiments/removed/MOJOLEARN_AFT_P09.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_AFT_P10.patch
+    comptime assert not is_defined["MOJOLEARN_AFT_P10"](), "removed 2026-11-15 (lane/expdel2-03-base): AFT_P10 (Apple FAST trees programme (P)) is gone: never-run Apple FAST programme card, no A/B (V2 rule g); code at 5bc2865240; restore: experiments/removed/MOJOLEARN_AFT_P10.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_AFT_P11.patch
+    comptime assert not is_defined["MOJOLEARN_AFT_P11"](), "removed 2026-11-15 (lane/expdel2-03-base): AFT_P11 (Apple FAST trees programme (P)) is gone: never-run Apple FAST programme card, no A/B (V2 rule g); code at 5bc2865240; restore: experiments/removed/MOJOLEARN_AFT_P11.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_AFT_P12.patch
+    comptime assert not is_defined["MOJOLEARN_AFT_P12"](), "removed 2026-11-15 (lane/expdel2-03-base): AFT_P12 (Apple FAST trees programme (P)) is gone: never-run Apple FAST programme card, no A/B (V2 rule g); code at 5bc2865240; restore: experiments/removed/MOJOLEARN_AFT_P12.patch"
     return True
 
 

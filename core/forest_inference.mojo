@@ -29,32 +29,18 @@ from std.memory import bitcast, stack_allocation
 from max.gpu.host import DeviceContext, DeviceBuffer
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
-from checks.numerics import ftz, identical_div, GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
-from core.accelerator_target import TARGET_HAS_APPLE_GPU
+from checks.numerics import ftz, identical_div, GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from checks.kernel_matrix import TARGET_COLUMN, forest_row_threads_for
-from core.apple_fast_tree_experiments import (
-    AFT_P02, AFT_P03, AFT_GROVE_BLOCK, AFT_GROVES_PER_BLOCK,
-    AFT_ROW_STAGE_BYTES, AFT_ORDERED_ITEMS, AFT_ARGMAX_ROWS,
-)
-from core.forest_experiments import (T32_SHARED_ROWS, T33_COST_SCHEDULE, T34_CHUNK_FOLD, T35_LEAF_REUSE, T36_FINITE_STAGE, T38_FUSED_LABELS, FOREST_CHUNK, forest_chunk_sum, forest_chunk_finish)
+from core.forest_experiments import forest_chunk_finish
 
-# AFCL-T08: two Apple SIMD groups per RF traversal workgroup instead of
-# four. Logical 32-tree groves, tree order and all outputs stay unchanged.
-# Lower per-group register/shared-memory use applies across neighboring
-# row counts; no dataset, feature count or forest shape selects this arm.
-# NEVER RUN — PENDING MEASUREMENT; uncompiled/unverified; default OFF.
-comptime AFCL_T08 = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and TARGET_HAS_APPLE_GPU
-    and is_defined["MOJOLEARN_AFCL_T08"]()
-)
-
-
-@always_inline
-def _afcl_rf_block[RF_INPUT: Bool]() -> Int:
-    comptime if AFCL_T08 and RF_INPUT:
-        return 64
-    return AFT_GROVE_BLOCK
+# TOMBSTONE: MOJOLEARN_AFCL_T08 (never-run Apple FAST card: two SIMD groups per RF traversal workgroup) deleted 2026-11-15 by lane/expdel2-03-base; code recoverable at 5bc2865240.
+# Restore: git apply experiments/removed/MOJOLEARN_AFCL_T08.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_AFT_P01 MOJOLEARN_AFT_P02 MOJOLEARN_AFT_P03 MOJOLEARN_AFT_P04 (never-run Apple FAST trees cards: half-size grove blocks,
+# two ordered items per worker, the 2 KiB row stage, two argmax rows per worker) deleted 2026-11-15 by lane/expdel2-03-base;
+# code recoverable at 5bc2865240.
+# Restore: git apply experiments/removed/MOJOLEARN_AFT_P<nn>.patch; record in docs/TOMBSTONES.md.
+#: Threads per grove traversal block: four logical 32-tree groves.
+comptime FOREST_GROVE_TPB = 128
 
 
 @always_inline
@@ -70,20 +56,13 @@ def finite_key(value: Float32) -> UInt32:
     return ~bits if (bits & UInt32(0x80000000)) != 0 else bits ^ UInt32(0x80000000)
 
 
-#: DEVIATION 2963 (lane/forest-groves-cpu-and-speed, 2026-09-17): two
-#: kernel candidates that keep the 32-group topology, the 16/8/4/2/1 fold and
-#: every FTZ rule and change only how the same bits are fetched.
-#: `MOJOLEARN_FOREST_PACKED_NODES` (the existing packed layout) now reads a
-#: node's four Int32 words with ONE 16-byte load instead of three field
-#: loads; `MOJOLEARN_FOREST_SHARED_ROWS=1` stages a block's four input rows
-#: in shared memory once (when `features <= FOREST_SHARED_ROW_CAPACITY`) and
-#: every lane's feature reads come from that tile. The values compared are
-#: the same words in either case. Both are default off until the pod A/B.
-# F13 M3 2026-10-06 MEASURED shared rows, depths4/11/9skew:
-# cold B/A0.9331/0.9938/0.9510, repeat1.1091/0.9332/0.9786; quality equal.
-# One warmup+score, mixed; FAST opt-in remains OFF. ab-20261006/repairs-54c1f35a5/F13.
-comptime FOREST_SHARED_ROWS = T32_SHARED_ROWS or AFT_P03 or is_defined["MOJOLEARN_FOREST_SHARED_ROWS"]() or (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU and is_defined["MOJOLEARN_FOREST_FAST_SHARED_ROWS"]())
-comptime FOREST_SHARED_ROW_CAPACITY = AFT_ROW_STAGE_BYTES // (4 * AFT_GROVES_PER_BLOCK) if AFT_P03 else 256
+#: DEVIATION 2963 (lane/forest-groves-cpu-and-speed, 2026-09-17): the packed
+#: layout (`FOREST_PACKED_NODES`) reads a node's four Int32 words with ONE
+#: 16-byte load instead of three field loads.
+# TOMBSTONE: MOJOLEARN_FOREST_SHARED_ROWS MOJOLEARN_FOREST_FAST_SHARED_ROWS MOJOLEARN_TREES_T32_SHARED_ROWS (opt-in shared-memory
+# staging of a block's input rows; F13 M3 mixed, never promoted, no A/B record for the switches) deleted 2026-11-15 by
+# lane/expdel2-03-base; code recoverable at a5502e594d.
+# Restore: git apply experiments/removed/MOJOLEARN_FOREST_SHARED_ROWS.patch (the same patch is filed under each of the three names); record in docs/TOMBSTONES.md.
 
 #: DEVIATION 2964 (lane/forest-groves-row-schedule, 2026-09-17): the groves
 #: engine's SCHEDULE, not its graph. The 32-lane kernels give one row 32
@@ -111,17 +90,19 @@ comptime FOREST_ROW_THREADS_MAX_FEATURES = 32
 #: private sums fold in lane order (a left fold) instead of 16/8/4/2/1.
 comptime FOREST_ROW_THREADS_SABOTAGE = is_defined["MOJOLEARN_FOREST_ROW_THREADS_SABOTAGE"]()
 
-#: The resident node layout. Packed is the default since
-#: lane/forest-groves-cpu-and-speed (2026-09-17, an L40S A/B);
-#: `-D MOJOLEARN_FOREST_SEPARATE_NODES=1` selects the separate-arrays layout,
-#: the comparison arm. The old opt-in `MOJOLEARN_FOREST_PACKED_NODES` is
-#: accepted and changes nothing. The layout is a device-side cache of the
-#: same nodes; the archive arrays, the comparison and the fold are the same.
+#: The resident node layout. Packed is the layout since
+#: lane/forest-groves-cpu-and-speed (2026-09-17, an L40S A/B). The old opt-in
+#: `MOJOLEARN_FOREST_PACKED_NODES` is accepted and changes nothing. The layout
+#: is a device-side cache of the same nodes; the archive arrays, the
+#: comparison and the fold are the same.
 # F13 packed-layout M3 2026-10-06 MEASURED on same cases: cold B/A
 # 1.2171/1.1355/1.2153, repeat0.9942/0.9843/0.9526, refit1.0205/1.0163/1.0359.
 # Quality/output survival equal; one warmup+score. Mixed/cold regression:
-# no new promotion; existing cross-mode layout default retained, OFF escape above.
-comptime FOREST_PACKED_NODES = not is_defined["MOJOLEARN_FOREST_SEPARATE_NODES"]()
+# no new promotion; existing cross-mode layout default retained.
+# TOMBSTONE: MOJOLEARN_FOREST_SEPARATE_NODES (the separate-arrays comparison arm; EXP:1504 DROP) deleted 2026-11-15 by lane/expdel2-03-base; code recoverable at 77aaad1bcc.
+# Restore: git apply experiments/removed/MOJOLEARN_FOREST_SEPARATE_NODES.patch; record in docs/TOMBSTONES.md.
+#: Kept as a constant: other modules import it as the PACKED parameter.
+comptime FOREST_PACKED_NODES = True
 
 
 @always_inline
@@ -174,82 +155,16 @@ def forest_ordered_kernel[RF_INPUT: Bool, PACKED: Bool = False](
     var outputs = Int(outputs_in)
     var trees = Int(trees_in)
     var worker = Int(block_idx.x)*Int(block_dim.x)+Int(thread_idx.x)
-    # P02: neighboring lanes keep contiguous items in each tile plane.
-    var item = Int(block_idx.x)*Int(block_dim.x)*AFT_ORDERED_ITEMS+Int(thread_idx.x)
-    comptime if AFT_P02:
-        var item1 = item + Int(block_dim.x)
-        var total0 = Float32(0)
-        var total1 = Float32(0)
-        if item < rows*outputs:
-            for tree in range(trees):
-                var node0 = reached_leaf[RF_INPUT, PACKED](offsets,columns,thresholds,left,x,tree,item//outputs,features)
-                total0 = forest_add(total0,leaves.unsafe_load(node0*outputs+item%outputs))
-                if item1 < rows*outputs:
-                    var node1 = reached_leaf[RF_INPUT, PACKED](offsets,columns,thresholds,left,x,tree,item1//outputs,features)
-                    total1 = forest_add(total1,leaves.unsafe_load(node1*outputs+item1%outputs))
-            output.unsafe_store(item,ftz(identical_div(ftz(total0),Float32(trees))))
-            if item1 < rows*outputs:
-                output.unsafe_store(item1,ftz(identical_div(ftz(total1),Float32(trees))))
-    else:
-        if worker < rows*outputs:
-            var total = Float32(0)
-            for tree in range(trees):
-                var node = reached_leaf[RF_INPUT, PACKED](offsets,columns,thresholds,left,x,tree,worker//outputs,features)
-                total = forest_add(total,leaves.unsafe_load(node*outputs+worker%outputs))
-            output.unsafe_store(worker,ftz(identical_div(ftz(total),Float32(trees))))
-
-
-#: Lane trees-small (2026-10-07): MOJOLEARN_TREES_PREDICT_ROW_OUTPUTS, IDENTICAL
-#: switch, default off. The ordered route (`forest_ordered_kernel`) gives each
-#: (row, output) pair its own thread, so a K-output forest walks every tree K
-#: times per row. This arm gives each ROW one thread: it walks each tree once
-#: and adds the reached leaf's K contiguous values into K register sums, in
-#: chunks of FOREST_ROW_OUTPUTS_CHUNK outputs (so K > chunk walks the forest
-#: ceil(K / chunk) times instead of K). Cost reasoning: node loads drop from
-#: rows * K to rows * ceil(K / chunk) walks, and the extra leaf loads of one
-#: node are contiguous; it holds for any class count >= 2 and any row count.
-#: BITS UNCHANGED: every output's sum is the same `forest_add` chain over trees
-#: 0..trees-1 from +0.0, then the same `identical_div` by the tree count; only
-#: the thread that runs the chain changed. Host column unchanged. Reached only
-#: on FOREST_ROUTE=0 with T34 off and the ordered (GROVE=False) dispatch.
-#: NOT COMPILED -- NOT TESTED -- NOT MEASURED.
-comptime FOREST_PREDICT_ROW_OUTPUTS = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and is_defined["MOJOLEARN_TREES_PREDICT_ROW_OUTPUTS"]()
-)
-#: Register sums per walk: 8 Float32 covers binary and small multiclass in
-#: one walk without spilling at the 128-thread block.
-comptime FOREST_ROW_OUTPUTS_CHUNK = 8
-
-
-def forest_row_outputs_kernel[RF_INPUT: Bool, PACKED: Bool = False](
-    offsets: MutPointer[Int32, MutAnyOrigin], columns: MutPointer[Int32, MutAnyOrigin],
-    thresholds: MutPointer[Float32, MutAnyOrigin], left: MutPointer[Int32, MutAnyOrigin],
-    leaves: MutPointer[Float32, MutAnyOrigin], x: MutPointer[Float32, MutAnyOrigin],
-    output: MutPointer[Float32, MutAnyOrigin], rows_in: Int32, features_in: Int32, outputs_in: Int32, trees_in: Int32,
-):
-    var rows = Int(rows_in)
-    var features = Int(features_in)
-    var outputs = Int(outputs_in)
-    var trees = Int(trees_in)
-    var row = Int(block_idx.x)*Int(block_dim.x)+Int(thread_idx.x)
-    if row >= rows:
-        return
-    var first = 0
-    while first < outputs:
-        var totals = SIMD[DType.float32, FOREST_ROW_OUTPUTS_CHUNK](0)
+    if worker < rows*outputs:
+        var total = Float32(0)
         for tree in range(trees):
-            var node = reached_leaf[RF_INPUT, PACKED](offsets,columns,thresholds,left,x,tree,row,features)
-            comptime for o in range(FOREST_ROW_OUTPUTS_CHUNK):
-                # # sm_120 AOT: no lane write under a per-lane guard (core/gram_splitk.mojo GRAM_STRIDED_ARM; lane sm120-tree-identity).
-                var t = totals[o]
-                if first + o < outputs:
-                    t = forest_add(t, leaves.unsafe_load(node*outputs+first+o))
-                totals[o] = t
-        comptime for o in range(FOREST_ROW_OUTPUTS_CHUNK):
-            if first + o < outputs:
-                output.unsafe_store(row*outputs+first+o, ftz(identical_div(ftz(totals[o]),Float32(trees))))
-        first += FOREST_ROW_OUTPUTS_CHUNK
+            var node = reached_leaf[RF_INPUT, PACKED](offsets,columns,thresholds,left,x,tree,worker//outputs,features)
+            total = forest_add(total,leaves.unsafe_load(node*outputs+worker%outputs))
+        output.unsafe_store(worker,ftz(identical_div(ftz(total),Float32(trees))))
+
+
+# TOMBSTONE: MOJOLEARN_TREES_PREDICT_ROW_OUTPUTS (IDENTICAL opt-in one-thread-per-row ordered kernel, forest_row_outputs_kernel; never compiled or measured) deleted 2026-11-15 by lane/expdel2-03-base; code recoverable at 432acbb3df.
+# Restore: git apply experiments/removed/MOJOLEARN_TREES_PREDICT_ROW_OUTPUTS.patch; record in docs/TOMBSTONES.md.
 
 
 @always_inline
@@ -276,12 +191,9 @@ def forest_argmax_kernel(
     scores: MutPointer[Float32, MutAnyOrigin],
     codes: MutPointer[Int32, MutAnyOrigin], rows_in: Int32, outputs_in: Int32,
 ):
-    # P04: two row planes share a worker; every row still scans all classes.
-    var first = Int(block_idx.x) * Int(block_dim.x) * AFT_ARGMAX_ROWS + Int(thread_idx.x)
-    comptime for tile in range(AFT_ARGMAX_ROWS):
-        var row = first + tile * Int(block_dim.x)
-        if row < Int(rows_in):
-            codes.unsafe_store(row, forest_argmax_row(scores, row, Int(outputs_in)))
+    var row = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if row < Int(rows_in):
+        codes.unsafe_store(row, forest_argmax_row(scores, row, Int(outputs_in)))
 
 
 def launch_forest_argmax(ctx: DeviceContext,
@@ -290,7 +202,7 @@ def launch_forest_argmax(ctx: DeviceContext,
     if rows > 0:
         ctx.enqueue_function[forest_argmax_kernel](
             scores.unsafe_ptr(), codes.unsafe_ptr(), Int32(rows), Int32(outputs),
-            grid_dim=(rows + 128*AFT_ARGMAX_ROWS - 1) // (128*AFT_ARGMAX_ROWS), block_dim=128,
+            grid_dim=(rows + 127) // 128, block_dim=128,
         )
 
 
@@ -300,39 +212,17 @@ def forest_grove32_kernel[RF_INPUT: Bool, PACKED: Bool = False](
     leaves: MutPointer[Float32, MutAnyOrigin], x: MutPointer[Float32, MutAnyOrigin],
     output: MutPointer[Float32, MutAnyOrigin], rows_in: Int32, features_in: Int32, outputs_in: Int32, trees_in: Int32,
 ):
-    comptime traversal_tpb = _afcl_rf_block[RF_INPUT]()
+    comptime traversal_tpb = FOREST_GROVE_TPB
     comptime traversal_rows = traversal_tpb // 32
     var rows = Int(rows_in)
     var features = Int(features_in)
     var outputs = Int(outputs_in)
     var trees = Int(trees_in)
-    # P01: a fixed number of logical 32-lane groves; all threads hit barriers.
     var tid = Int(thread_idx.x)
     var lane = tid%32
     var item = Int(block_idx.x)*traversal_rows+tid//32
     var total = Float32(0)
-    var tiled = False
-    comptime if FOREST_SHARED_ROWS:
-        # DEVIATION 2963: with one output an item is a row, so the block's
-        # four rows tile into shared memory; every thread hits the barrier.
-        var xs = stack_allocation[traversal_rows*FOREST_SHARED_ROW_CAPACITY,Float32,address_space=AddressSpace.SHARED]()
-        if outputs == 1 and features <= FOREST_SHARED_ROW_CAPACITY:
-            tiled = True
-            var row0 = Int(block_idx.x)*traversal_rows
-            var count = traversal_rows*features
-            var i = tid
-            while i < count:
-                var r = row0+i//features
-                xs[unsafe_offset=i] = x.unsafe_load(r*features+i%features) if r < rows else Float32(0)
-                i += traversal_tpb
-            barrier()
-            if item < rows:
-                var tree = lane
-                while tree < trees:
-                    var node = reached_leaf[RF_INPUT, PACKED](offsets,columns,thresholds,left,xs,tree,tid//32,features)
-                    total = forest_add(total,leaves.unsafe_load(node))
-                    tree += 32
-    if not tiled and item < rows*outputs:
+    if item < rows*outputs:
         var tree = lane
         while tree < trees:
             var node = reached_leaf[RF_INPUT, PACKED](offsets,columns,thresholds,left,x,tree,item//outputs,features)
@@ -353,15 +243,16 @@ def forest_grove32_kernel[RF_INPUT: Bool, PACKED: Bool = False](
 
 
 def vector_groves_for(outputs: Int) -> Bool:
-    """Default vector traversal for 2–8 outputs; force-scalar is diagnostic.
+    """Default vector traversal for 2–8 outputs.
 
     Same fixed32 output graph, qualified against scalar on Metal FAST and
     CUDA IDENTICAL large resident fixtures. The public engine stays opt-in.
     MOJOLEARN_FOREST_VECTOR_GROVES is no longer required; old builds passing
     it retain the same route. Outputs1/>8 retain the bounded scalar fallback.
     """
-    return (not is_defined["MOJOLEARN_FOREST_SCALAR_GROVES"]()
-            and outputs >= 2 and outputs <= 8)
+    # TOMBSTONE: MOJOLEARN_FOREST_SCALAR_GROVES (diagnostic force-scalar opt-in; no A/B recorded) deleted 2026-11-15 by lane/expdel2-03-base; code recoverable at b177479fc7.
+    # Restore: git apply experiments/removed/MOJOLEARN_FOREST_SCALAR_GROVES.patch; record in docs/TOMBSTONES.md.
+    return outputs >= 2 and outputs <= 8
 
 
 def forest_vector_grove32_kernel[RF_INPUT: Bool, OUTPUT_CAPACITY: Int, PACKED: Bool = False](
@@ -379,7 +270,7 @@ def forest_vector_grove32_kernel[RF_INPUT: Bool, OUTPUT_CAPACITY: Int, PACKED: B
     bounds register use and shared scratch (at most4KiB). More outputs keep
     the existing scalar-output kernel. No row*tree global scratch is added.
     """
-    comptime traversal_tpb = _afcl_rf_block[RF_INPUT]()
+    comptime traversal_tpb = FOREST_GROVE_TPB
     comptime traversal_rows = traversal_tpb // 32
     var rows = Int(rows_in)
     var features = Int(features_in)
@@ -391,29 +282,7 @@ def forest_vector_grove32_kernel[RF_INPUT: Bool, OUTPUT_CAPACITY: Int, PACKED: B
     var totals = stack_allocation[OUTPUT_CAPACITY,Float32]()
     comptime for c in range(OUTPUT_CAPACITY):
         totals[unsafe_offset=c] = Float32(0)
-    var tiled = False
-    comptime if FOREST_SHARED_ROWS:
-        # DEVIATION 2963: the block's four rows tiled into shared memory.
-        var xs = stack_allocation[traversal_rows*FOREST_SHARED_ROW_CAPACITY,Float32,address_space=AddressSpace.SHARED]()
-        if features <= FOREST_SHARED_ROW_CAPACITY:
-            tiled = True
-            var row0 = Int(block_idx.x)*traversal_rows
-            var count = traversal_rows*features
-            var i = tid
-            while i < count:
-                var r = row0+i//features
-                xs[unsafe_offset=i] = x.unsafe_load(r*features+i%features) if r < rows else Float32(0)
-                i += traversal_tpb
-            barrier()
-            if row < rows:
-                var tree = lane
-                while tree < trees:
-                    var node = reached_leaf[RF_INPUT, PACKED](offsets,columns,thresholds,left,xs,tree,tid//32,features)
-                    comptime for c in range(OUTPUT_CAPACITY):
-                        if c < outputs:
-                            totals[unsafe_offset=c] = forest_add(totals[unsafe_offset=c],leaves.unsafe_load(node*outputs+c))
-                    tree += 32
-    if not tiled and row < rows:
+    if row < rows:
         var tree = lane
         while tree < trees:
             var node = reached_leaf[RF_INPUT, PACKED](offsets,columns,thresholds,left,x,tree,row,features)
@@ -544,48 +413,26 @@ def launch_forest_inference[RF_INPUT: Bool, GROVE: Bool, PACKED: Bool = False](
     through completion and performs required readback/synchronization. No
     allocations or device drains occur here. Empty row batches enqueue nothing.
     """
-    comptime traversal_tpb = _afcl_rf_block[RF_INPUT]()
+    comptime traversal_tpb = FOREST_GROVE_TPB
     if n_rows == 0:
         return
-    # One route per build (core.forest_experiments FOREST_ROUTE).
-    comptime if T35_LEAF_REUSE:
-        _launch_forest_leaf_reuse[RF_INPUT, GROVE, PACKED](ctx, doff, dcol, dthr, dleft, dleaf, dx, dout, n_rows, n_features, n_outputs, trees)
-        return
-    comptime if T34_CHUNK_FOLD:
-        ctx.enqueue_function[forest_chunk_kernel[RF_INPUT, PACKED]](
-            doff.unsafe_ptr(), dcol.unsafe_ptr(), dthr.unsafe_ptr(), dleft.unsafe_ptr(),
-            dleaf.unsafe_ptr(), dx.unsafe_ptr(), dout.unsafe_ptr(), Int32(n_rows), Int32(n_features), Int32(n_outputs), Int32(trees),
-            grid_dim=(n_rows*n_outputs+127)//128, block_dim=128)
-        return
+    # TOMBSTONE: MOJOLEARN_TREES_FOREST_ROUTE (routes 1/2: leaf IDs once, then every output, with or without the fused finiteness check; no A/B recorded) deleted 2026-11-15 by lane/expdel2-03-base; code recoverable at c44dc3c017.
+    # Restore: git apply experiments/removed/MOJOLEARN_TREES_FOREST_ROUTE.patch; record in docs/TOMBSTONES.md.
+    # TOMBSTONE: MOJOLEARN_TREES_T34_CHUNK_FOLD (IDENTICAL opt-in 32-tree chunk fold version, forest_chunk_kernel; no A/B recorded) deleted 2026-11-15 by lane/expdel2-03-base; code recoverable at cfad8788a0.
+    # Restore: git apply experiments/removed/MOJOLEARN_TREES_T34_CHUNK_FOLD.patch; record in docs/TOMBSTONES.md.
     comptime if GROVE:
-        comptime if T33_COST_SCHEDULE:
-            # Compare feature cache lines with live logical tree lanes. All
-            # neighboring shapes use this work/cache estimate, never a board row.
-            var feature_lines = (n_features * 4 + 63) // 64
-            if feature_lines <= max(1, min(trees, 32) // 8):
-                _launch_grove_rows[RF_INPUT, PACKED](ctx, doff, dcol, dthr, dleft, dleaf, dx, dout, n_rows, n_features, n_outputs, trees)
-            else:
-                _launch_grove_lanes[RF_INPUT, PACKED](ctx, doff, dcol, dthr, dleft, dleaf, dx, dout, n_rows, n_features, n_outputs, trees)
-            return
+        # TOMBSTONE: MOJOLEARN_TREES_T33_COST_SCHEDULE (IDENTICAL opt-in rows-vs-lanes choice by cache cost; no A/B recorded) deleted 2026-11-15 by lane/expdel2-03-base; code recoverable at 1cad80e23b.
+        # Restore: git apply experiments/removed/MOJOLEARN_TREES_T33_COST_SCHEDULE.patch; record in docs/TOMBSTONES.md.
         comptime if FOREST_ROW_THREADS:
             if n_features <= FOREST_ROW_THREADS_MAX_FEATURES:
                 _launch_grove_rows[RF_INPUT, PACKED](ctx, doff, dcol, dthr, dleft, dleaf, dx, dout, n_rows, n_features, n_outputs, trees)
                 return
         _launch_grove_lanes[RF_INPUT, PACKED](ctx, doff, dcol, dthr, dleft, dleaf, dx, dout, n_rows, n_features, n_outputs, trees)
     else:
-        comptime if FOREST_PREDICT_ROW_OUTPUTS:
-            # MOJOLEARN_TREES_PREDICT_ROW_OUTPUTS: one thread per row, same
-            # per-output tree-order sums (see `forest_row_outputs_kernel`).
-            ctx.enqueue_function[forest_row_outputs_kernel[RF_INPUT,PACKED]](
-                doff.unsafe_ptr(),dcol.unsafe_ptr(),dthr.unsafe_ptr(),dleft.unsafe_ptr(),
-                dleaf.unsafe_ptr(),dx.unsafe_ptr(),dout.unsafe_ptr(),Int32(n_rows),Int32(n_features),Int32(n_outputs),Int32(trees),
-                grid_dim=(n_rows+127)//128,block_dim=128,
-            )
-            return
         ctx.enqueue_function[forest_ordered_kernel[RF_INPUT,PACKED]](
             doff.unsafe_ptr(),dcol.unsafe_ptr(),dthr.unsafe_ptr(),dleft.unsafe_ptr(),
             dleaf.unsafe_ptr(),dx.unsafe_ptr(),dout.unsafe_ptr(),Int32(n_rows),Int32(n_features),Int32(n_outputs),Int32(trees),
-            grid_dim=(n_rows*n_outputs+128*AFT_ORDERED_ITEMS-1)//(128*AFT_ORDERED_ITEMS),block_dim=128,
+            grid_dim=(n_rows*n_outputs+127)//128,block_dim=128,
         )
 
 
@@ -598,7 +445,7 @@ def _launch_grove_lanes[RF_INPUT: Bool, PACKED: Bool](
     n_outputs: Int, trees: Int,
 ) raises:
     """The 32-thread kernels: a row's lanes across a thread group, the fold in shared memory."""
-    comptime traversal_tpb = _afcl_rf_block[RF_INPUT]()
+    comptime traversal_tpb = FOREST_GROVE_TPB
     comptime traversal_rows = traversal_tpb // 32
     if vector_groves_for(n_outputs):
         if n_outputs <= 2:
@@ -636,7 +483,7 @@ def _launch_grove_rows[RF_INPUT: Bool, PACKED: Bool](
     n_outputs: Int, trees: Int,
 ) raises:
     """DEVIATION 2964: one thread per row (vector leaves) or per item."""
-    comptime traversal_tpb = _afcl_rf_block[RF_INPUT]()
+    comptime traversal_tpb = FOREST_GROVE_TPB
     comptime traversal_rows = traversal_tpb // 32
     if vector_groves_for(n_outputs):
         if n_outputs <= 2:
@@ -1187,7 +1034,7 @@ def forest_predict_gpu[RF_INPUT: Bool, GROVE: Bool](
         raise Error("forest inference prototype requires finite Float32 values")
     return result^
 
-# T34/T35/T38, C50. Default OFF through core.forest_experiments.
+# T38 helpers (fused labels), kept while core/forest_inference_model.mojo imports them. Default OFF through core.forest_experiments.
 # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
 @always_inline
 def forest_prediction_value[RF_INPUT: Bool, GROVE: Bool, PACKED: Bool](  # device-helper: one row's tree fold inside the forest kernels
@@ -1197,18 +1044,7 @@ def forest_prediction_value[RF_INPUT: Bool, GROVE: Bool, PACKED: Bool](  # devic
     row: Int, features: Int, outputs: Int, trees: Int, channel: Int,
 ) -> Float32:
     var total = Float32(0)
-    comptime if T34_CHUNK_FOLD:
-        var chunk = Array[Float32, FOREST_CHUNK](fill=Float32(0))
-        var first = 0
-        while first < trees:
-            for i in range(FOREST_CHUNK):
-                chunk[i] = 0
-                if first + i < trees:
-                    var node = reached_leaf[RF_INPUT, PACKED](offsets, columns, thresholds, left, x, first+i, row, features)
-                    chunk[i] = leaves.unsafe_load(node*outputs+channel)
-            total = forest_add(total, forest_chunk_sum(chunk))
-            first += FOREST_CHUNK
-    elif GROVE:
+    comptime if GROVE:
         var sums = Array[Float32, 32](fill=Float32(0))
         for lane in range(32):
             var tree = lane
@@ -1229,54 +1065,12 @@ def forest_prediction_value[RF_INPUT: Bool, GROVE: Bool, PACKED: Bool](  # devic
     return forest_chunk_finish(total, trees)
 
 
-def forest_chunk_kernel[RF_INPUT: Bool, PACKED: Bool](
-    offsets: MutPointer[Int32, MutAnyOrigin], columns: MutPointer[Int32, MutAnyOrigin],
-    thresholds: MutPointer[Float32, MutAnyOrigin], left: MutPointer[Int32, MutAnyOrigin],
-    leaves: MutPointer[Float32, MutAnyOrigin], x: MutPointer[Float32, MutAnyOrigin],
-    output: MutPointer[Float32, MutAnyOrigin], rows: Int32, features: Int32, outputs: Int32, trees: Int32,
-):
-    var u = Int(block_idx.x)*Int(block_dim.x)+Int(thread_idx.x)
-    if u < Int(rows)*Int(outputs):
-        output.unsafe_store(u, forest_prediction_value[RF_INPUT, False, PACKED](offsets, columns, thresholds, left, leaves, x,
-            u//Int(outputs), Int(features), Int(outputs), Int(trees), u%Int(outputs)))
-
-
-def forest_leaf_ids_kernel[RF_INPUT: Bool, PACKED: Bool](
-    offsets: MutPointer[Int32, MutAnyOrigin], columns: MutPointer[Int32, MutAnyOrigin],
-    thresholds: MutPointer[Float32, MutAnyOrigin], left: MutPointer[Int32, MutAnyOrigin],
-    x: MutPointer[Float32, MutAnyOrigin], ids: MutPointer[Int32, MutAnyOrigin],
-    row_start: Int32, rows: Int32, features: Int32, trees: Int32,
-    bad: MutPointer[Int32, MutAnyOrigin],
-):
-    var u = Int(block_idx.x)*Int(block_dim.x)+Int(thread_idx.x)
-    if u < Int(rows)*Int(trees):
-        comptime if T36_FINITE_STAGE:
-            # The mandatory leaf-ID preparation owns full rows, including every
-            # unused feature. Prediction cannot return until this flag is read.
-            if u%Int(trees) == 0:
-                for c in range(Int(features)):
-                    var value = x.unsafe_load((Int(row_start)+u//Int(trees))*Int(features)+c)
-                    if (bitcast[DType.uint32](value)&UInt32(0x7f800000)) == UInt32(0x7f800000):
-                        _ = Atomic.max(bad, Int32(1))
-        ids.unsafe_store(u, Int32(reached_leaf[RF_INPUT, PACKED](offsets, columns, thresholds, left, x,
-            u%Int(trees), Int(row_start)+u//Int(trees), Int(features))))
-
-
 @always_inline
 def _forest_leaf_value[GROVE: Bool](ids: MutPointer[Int32, MutAnyOrigin], leaves: MutPointer[Float32, MutAnyOrigin],  # device-helper: one row's leaf fold inside the leaf kernels
                                    row: Int, k: Int, nt: Int, channel: Int) -> Float32:
     var total = Float32(0)
     var sums = Array[Float32, 32](fill=Float32(0))
-    comptime if T34_CHUNK_FOLD:
-        var first = 0
-        while first < nt:
-            for i in range(32):
-                sums[i] = 0
-                if first+i < nt:
-                    sums[i] = leaves.unsafe_load(Int(ids.unsafe_load(row*nt+first+i))*k+channel)
-            total = forest_add(total, forest_chunk_sum(sums))
-            first += 32
-    elif GROVE:
+    comptime if GROVE:
         for lane in range(32):
             var t = lane
             while t < nt:
@@ -1292,51 +1086,6 @@ def _forest_leaf_value[GROVE: Bool](ids: MutPointer[Int32, MutAnyOrigin], leaves
         for t in range(nt):
             total = forest_add(total, leaves.unsafe_load(Int(ids.unsafe_load(row*nt+t))*k+channel))
     return forest_chunk_finish(total, nt)
-
-
-def forest_leaf_reduce_kernel[GROVE: Bool](
-    ids: MutPointer[Int32, MutAnyOrigin], leaves: MutPointer[Float32, MutAnyOrigin],
-    output: MutPointer[Float32, MutAnyOrigin], row_start: Int32, rows: Int32, outputs: Int32, trees: Int32,
-):
-    var u = Int(block_idx.x)*Int(block_dim.x)+Int(thread_idx.x)
-    var k = Int(outputs)
-    var nt = Int(trees)
-    if u >= Int(rows)*k:
-        return
-    var row = u//k
-    var channel = u%k
-    output.unsafe_store((Int(row_start)+row)*k+channel, _forest_leaf_value[GROVE](ids, leaves, row, k, nt, channel))
-
-
-def _launch_forest_leaf_reuse[RF_INPUT: Bool, GROVE: Bool, PACKED: Bool](
-    ctx: DeviceContext, mut offsets: DeviceBuffer[DType.int32], mut columns: DeviceBuffer[DType.int32],
-    mut thresholds: DeviceBuffer[DType.float32], mut left: DeviceBuffer[DType.int32],
-    mut leaves: DeviceBuffer[DType.float32], mut x: DeviceBuffer[DType.float32], mut output: DeviceBuffer[DType.float32],
-    rows: Int, features: Int, outputs: Int, trees: Int,
-) raises:
-    # 8 MiB bounded leaf-ID scratch; one complete row is the minimum atomic
-    # unit. No feature or dataset boundary. Every output shares the walk.
-    var capacity = max(1, min(rows, (8*1024*1024)//max(4*trees, 1)))
-    var ids = ctx.enqueue_create_buffer[DType.int32](capacity*trees)
-    var bad = ctx.enqueue_create_buffer[DType.int32](1)
-    ctx.enqueue_memset(bad, Int32(0))
-    var first = 0
-    while first < rows:
-        var count = min(capacity, rows-first)
-        _launch_leaf_ids[RF_INPUT, PACKED](ctx, offsets, columns, thresholds, left, x, ids, bad, first, count, features, trees)
-        ctx.enqueue_function[forest_leaf_reduce_kernel[GROVE]](
-            ids.unsafe_ptr(), leaves.unsafe_ptr(), output.unsafe_ptr(), Int32(first), Int32(count), Int32(outputs), Int32(trees),
-            grid_dim=(count*outputs+127)//128, block_dim=128)
-        first += count
-    # Scratch must remain alive through the last dependent fold.
-    var host_bad = ctx.enqueue_create_host_buffer[DType.int32](1)
-    ctx.enqueue_copy(dst_ptr=host_bad.unsafe_ptr(), src_buf=bad)
-    ctx.synchronize()
-    if host_bad.unsafe_ptr().unsafe_load(0) != 0:
-        raise Error("resident forest requires finite Float32 values")
-    _ = host_bad^
-    _ = bad^
-    _ = ids^
 
 
 def forest_labels_kernel[RF_INPUT: Bool, GROVE: Bool, PACKED: Bool](
@@ -1362,7 +1111,7 @@ def forest_labels_kernel[RF_INPUT: Bool, GROVE: Bool, PACKED: Bool](
             best_value = value
     codes.unsafe_store(row, Int32(best))
 
-# T32×T33×T35×T36: physical schedule of the bounded leaf preparation.
+# The bounded leaf preparation of the fused labels (T38).
 # Arithmetic is solely in the following output fold. Shared tiles carry all
 # feature bits and every required row is checked, including unused columns.
 def forest_leaf_ids_grouped_kernel[RF_INPUT: Bool, PACKED: Bool](
@@ -1376,53 +1125,12 @@ def forest_leaf_ids_grouped_kernel[RF_INPUT: Bool, PACKED: Bool](
     var lane = tid%32
     var first = Int(block_idx.x)*4
     var row = first+group
-    var tiled = False
-    var shared = stack_allocation[4*FOREST_SHARED_ROW_CAPACITY, Float32, address_space=AddressSpace.SHARED]()
-    comptime if FOREST_SHARED_ROWS:
-        if Int(features) <= FOREST_SHARED_ROW_CAPACITY:
-            tiled = True
-            var u = tid
-            while u < 4*Int(features):
-                var r = first+u//Int(features)
-                if r < Int(rows):
-                    shared.unsafe_store(u, x.unsafe_load((Int(row_start)+r)*Int(features)+u%Int(features)))
-                u += 128
-    barrier()
     if row < Int(rows):
-        comptime if T36_FINITE_STAGE:
-            var c = lane
-            while c < Int(features):
-                var value = shared.unsafe_load(group*Int(features)+c) if tiled else x.unsafe_load((Int(row_start)+row)*Int(features)+c)
-                if (bitcast[DType.uint32](value)&UInt32(0x7f800000)) == UInt32(0x7f800000):
-                    _ = Atomic.max(bad, Int32(1))
-                c += 32
         var tree = lane
         while tree < Int(trees):
-            var node = 0
-            if tiled:
-                node = reached_leaf[RF_INPUT, PACKED](offsets, columns, thresholds, left, shared, tree, group, Int(features))
-            else:
-                node = reached_leaf[RF_INPUT, PACKED](offsets, columns, thresholds, left, x, tree, Int(row_start)+row, Int(features))
+            var node = reached_leaf[RF_INPUT, PACKED](offsets, columns, thresholds, left, x, tree, Int(row_start)+row, Int(features))
             ids.unsafe_store(row*Int(trees)+tree, Int32(node))
             tree += 32
-
-
-def forest_leaf_ids_row_kernel[RF_INPUT: Bool, PACKED: Bool](
-    offsets: MutPointer[Int32, MutAnyOrigin], columns: MutPointer[Int32, MutAnyOrigin],
-    thresholds: MutPointer[Float32, MutAnyOrigin], left: MutPointer[Int32, MutAnyOrigin],
-    x: MutPointer[Float32, MutAnyOrigin], ids: MutPointer[Int32, MutAnyOrigin],
-    row_start: Int32, rows: Int32, features: Int32, trees: Int32, bad: MutPointer[Int32, MutAnyOrigin],
-):
-    var row = Int(block_idx.x)*Int(block_dim.x)+Int(thread_idx.x)
-    if row < Int(rows):
-        comptime if T36_FINITE_STAGE:
-            for c in range(Int(features)):
-                var value = x.unsafe_load((Int(row_start)+row)*Int(features)+c)
-                if (bitcast[DType.uint32](value)&UInt32(0x7f800000)) == UInt32(0x7f800000):
-                    _ = Atomic.max(bad, Int32(1))
-        for tree in range(Int(trees)):
-            ids.unsafe_store(row*Int(trees)+tree, Int32(reached_leaf[RF_INPUT, PACKED](offsets, columns, thresholds, left,
-                x, tree, Int(row_start)+row, Int(features))))
 
 
 def _launch_leaf_ids[RF_INPUT: Bool, PACKED: Bool](ctx: DeviceContext,
@@ -1430,12 +1138,6 @@ def _launch_leaf_ids[RF_INPUT: Bool, PACKED: Bool](ctx: DeviceContext,
     mut thresholds: DeviceBuffer[DType.float32], mut left: DeviceBuffer[DType.int32],
     mut x: DeviceBuffer[DType.float32], mut ids: DeviceBuffer[DType.int32], mut bad: DeviceBuffer[DType.int32],
     first: Int, rows: Int, features: Int, trees: Int) raises:
-    comptime if T33_COST_SCHEDULE:
-        if (features*4+63)//64 <= max(1, min(trees, 32)//8):
-            ctx.enqueue_function[forest_leaf_ids_row_kernel[RF_INPUT, PACKED]](
-                offsets.unsafe_ptr(), columns.unsafe_ptr(), thresholds.unsafe_ptr(), left.unsafe_ptr(), x.unsafe_ptr(), ids.unsafe_ptr(),
-                Int32(first), Int32(rows), Int32(features), Int32(trees), bad.unsafe_ptr(), grid_dim=(rows+127)//128, block_dim=128)
-            return
     ctx.enqueue_function[forest_leaf_ids_grouped_kernel[RF_INPUT, PACKED]](
         offsets.unsafe_ptr(), columns.unsafe_ptr(), thresholds.unsafe_ptr(), left.unsafe_ptr(), x.unsafe_ptr(), ids.unsafe_ptr(),
         Int32(first), Int32(rows), Int32(features), Int32(trees), bad.unsafe_ptr(), grid_dim=(rows+3)//4, block_dim=128)

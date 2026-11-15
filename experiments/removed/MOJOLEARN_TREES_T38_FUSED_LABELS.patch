@@ -1,0 +1,16 @@
+diff --git a/core/forest_experiments.mojo b/core/forest_experiments.mojo
+index 1757495402..f605b3dd6c 100644
+--- a/core/forest_experiments.mojo
++++ b/core/forest_experiments.mojo
+@@ -31,10 +31,7 @@ comptime T36_FINITE_STAGE = False
+ # Restore: git apply experiments/removed/MOJOLEARN_TREES_T37_WORKSPACE.patch; record in docs/TOMBSTONES.md.
+ #: Kept as the folded constant: core/forest_inference_model.mojo import it.
+ comptime T37_WORKSPACE = False
+-# TOMBSTONE: MOJOLEARN_TREES_T38_FUSED_LABELS (IDENTICAL opt-in fused prediction labels; this lane also dropped core/forest_inference.mojo's unused import of it; no A/B recorded) deleted 2026-11-15 by lane/expdel2-03-base; code recoverable at 81c34fb4fb.
+-# Restore: git apply experiments/removed/MOJOLEARN_TREES_T38_FUSED_LABELS.patch; record in docs/TOMBSTONES.md.
+-#: Kept as the folded constant: core/forest_inference_model.mojo, core/forest_inference_run.mojo and bindings/forest_inference_binding_door.mojo import it.
+-comptime T38_FUSED_LABELS = False
++comptime T38_FUSED_LABELS = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_TREES_T38_FUSED_LABELS"]()
+ 
+ #: The default fold's finish: the tree-order total divided by the tree count.
+ @always_inline

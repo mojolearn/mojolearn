@@ -769,6 +769,42 @@ in the tables after the sections.
 | [`MOJOLEARN_PCA_FAST_POOL_OFF`](#mojolearn_pca_fast_pool_off-old-path-deleted-2026-11-15) | Decomposition (PCA pooled device copy of X, FAST Apple) | removed (old path; FAST+Apple default, READY-AB with no A/B row (V2 rule b)) | 2026-11-15 | [MOJOLEARN_PCA_FAST_POOL_OFF.patch](../experiments/removed/MOJOLEARN_PCA_FAST_POOL_OFF.patch) |
 | [`MOJOLEARN_SAMBA_WEIGHT_EPOCH_GLOBAL`](#mojolearn_samba_weight_epoch_global-unmeasured-arm-deleted-2026-11-15) | Neural (Samba resident copy keyed by the process weight epoch) | removed (unmeasured B arm; EXPERIMENTS.md PENDING, owed A/B never ran) | 2026-11-15 | [MOJOLEARN_SAMBA_WEIGHT_EPOCH_GLOBAL.patch](../experiments/removed/MOJOLEARN_SAMBA_WEIGHT_EPOCH_GLOBAL.patch) |
 | [`MOJOLEARN_FOREST_DEVICE_FINITE_OFF`](#mojolearn_forest_device_finite_off-old-path-deleted-2026-11-15) | Trees (RandomForest / ExtraTrees device finite scan, FAST Apple) | removed (old path; FAST+Apple default KEPT 69f7a41fd, promoted on Apple M3 only) | 2026-11-15 | [MOJOLEARN_FOREST_DEVICE_FINITE_OFF.patch](../experiments/removed/MOJOLEARN_FOREST_DEVICE_FINITE_OFF.patch) |
+| [`MOJOLEARN_2560_MEMSET_FILL`](#mojolearn_2560_memset_fill-unmeasured-arm-deleted-2026-11-15) | Device fill (gbdt `enqueue_fill`) | removed (unmeasured opt-in arm; default kept) | 2026-11-15 | [MOJOLEARN_2560_MEMSET_FILL.patch](../experiments/removed/MOJOLEARN_2560_MEMSET_FILL.patch) |
+| [`MOJOLEARN_FAST_BLOCK_SCAN_SHUFFLE`](#mojolearn_fast_block_scan_shuffle-unmeasured-arm-deleted-2026-11-15) | Block scan (FAST) | removed (unmeasured opt-in arm; default kept) | 2026-11-15 | [MOJOLEARN_FAST_BLOCK_SCAN_SHUFFLE.patch](../experiments/removed/MOJOLEARN_FAST_BLOCK_SCAN_SHUFFLE.patch) |
+| [`MOJOLEARN_MUTEX_SPIN_RELAXED`](#mojolearn_mutex_spin_relaxed-unmeasured-arm-deleted-2026-11-15) | Device mutex | removed (unmeasured opt-in arm; default kept) | 2026-11-15 | [MOJOLEARN_MUTEX_SPIN_RELAXED.patch](../experiments/removed/MOJOLEARN_MUTEX_SPIN_RELAXED.patch) |
+| [`MOJOLEARN_RF_MUTEX_CLAIM_STOCK`](#mojolearn_rf_mutex_claim_stock-unmeasured-arm-deleted-2026-11-15) | Device mutex | removed (unmeasured opt-in arm; default kept) | 2026-11-15 | [MOJOLEARN_RF_MUTEX_CLAIM_STOCK.patch](../experiments/removed/MOJOLEARN_RF_MUTEX_CLAIM_STOCK.patch) |
+| [`MOJOLEARN_IDN_CACHE_CTX_KEY_DEVICE_ID`](#mojolearn_idn_cache_ctx_key_device_id-unmeasured-arm-deleted-2026-11-15) | Process caches (ctx key) | removed (unmeasured opt-in arm; default kept) | 2026-11-15 | [MOJOLEARN_IDN_CACHE_CTX_KEY_DEVICE_ID.patch](../experiments/removed/MOJOLEARN_IDN_CACHE_CTX_KEY_DEVICE_ID.patch) |
+| [`MOJOLEARN_IDN_CACHE_CTX_KEY_OFF`](#mojolearn_idn_cache_ctx_key_off-unmeasured-old-path-deleted-2026-11-15) | Process caches (ctx key) | removed (unmeasured old path; default kept) | 2026-11-15 | [MOJOLEARN_IDN_CACHE_CTX_KEY_OFF.patch](../experiments/removed/MOJOLEARN_IDN_CACHE_CTX_KEY_OFF.patch) |
+| [`MOJOLEARN_XPREP_ARENA_POOL_OFF`](#mojolearn_xprep_arena_pool_off-unmeasured-old-path-deleted-2026-11-15) | Device store (slot pool) | removed (unmeasured old path; default kept) | 2026-11-15 | [MOJOLEARN_XPREP_ARENA_POOL_OFF.patch](../experiments/removed/MOJOLEARN_XPREP_ARENA_POOL_OFF.patch) |
+| [`MOJOLEARN_IDN_HPDEV_FOLDS_OFF`](#mojolearn_idn_hpdev_folds_off-unmeasured-old-path-deleted-2026-11-15) | Hot-path device folds | removed (unmeasured old path; default kept) | 2026-11-15 | [MOJOLEARN_IDN_HPDEV_FOLDS_OFF.patch](../experiments/removed/MOJOLEARN_IDN_HPDEV_FOLDS_OFF.patch) |
+| [`MOJOLEARN_ENTRY_TABLE_HEAP_OUTPUT`](#mojolearn_entry_table_heap_output-unmeasured-arm-deleted-2026-11-15) | Entry table calls | removed (unmeasured opt-in arm; default kept) | 2026-11-15 | [MOJOLEARN_ENTRY_TABLE_HEAP_OUTPUT.patch](../experiments/removed/MOJOLEARN_ENTRY_TABLE_HEAP_OUTPUT.patch) |
+| [`MOJOLEARN_AFCL_T08`](#mojolearn_afcl_t08-never-run-card-deleted-2026-11-15) | Forest inference (Apple FAST programme) | removed (never-run card; default kept) | 2026-11-15 | [MOJOLEARN_AFCL_T08.patch](../experiments/removed/MOJOLEARN_AFCL_T08.patch) |
+| [`MOJOLEARN_FOREST_SHARED_ROWS`](#mojolearn_forest_shared_rows-unmeasured-arm-deleted-2026-11-15) | Forest inference | removed (unmeasured opt-in arm; default kept) | 2026-11-15 | [MOJOLEARN_FOREST_SHARED_ROWS.patch](../experiments/removed/MOJOLEARN_FOREST_SHARED_ROWS.patch) |
+| [`MOJOLEARN_FOREST_FAST_SHARED_ROWS`](#mojolearn_forest_fast_shared_rows-unmeasured-arm-deleted-2026-11-15) | Forest inference (FAST Apple) | removed (unmeasured opt-in arm; default kept) | 2026-11-15 | [MOJOLEARN_FOREST_FAST_SHARED_ROWS.patch](../experiments/removed/MOJOLEARN_FOREST_FAST_SHARED_ROWS.patch) |
+| [`MOJOLEARN_TREES_T32_SHARED_ROWS`](#mojolearn_trees_t32_shared_rows-unmeasured-arm-deleted-2026-11-15) | Forest inference (IDENTICAL) | removed (unmeasured opt-in arm; default kept) | 2026-11-15 | [MOJOLEARN_TREES_T32_SHARED_ROWS.patch](../experiments/removed/MOJOLEARN_TREES_T32_SHARED_ROWS.patch) |
+| [`MOJOLEARN_FOREST_SEPARATE_NODES`](#mojolearn_forest_separate_nodes-unmeasured-arm-deleted-2026-11-15) | Forest inference | removed (unmeasured opt-in arm; default kept) | 2026-11-15 | [MOJOLEARN_FOREST_SEPARATE_NODES.patch](../experiments/removed/MOJOLEARN_FOREST_SEPARATE_NODES.patch) |
+| [`MOJOLEARN_FOREST_SCALAR_GROVES`](#mojolearn_forest_scalar_groves-unmeasured-arm-deleted-2026-11-15) | Forest inference | removed (unmeasured opt-in arm; default kept) | 2026-11-15 | [MOJOLEARN_FOREST_SCALAR_GROVES.patch](../experiments/removed/MOJOLEARN_FOREST_SCALAR_GROVES.patch) |
+| [`MOJOLEARN_TREES_PREDICT_ROW_OUTPUTS`](#mojolearn_trees_predict_row_outputs-unmeasured-arm-deleted-2026-11-15) | Forest inference (IDENTICAL) | removed (unmeasured opt-in arm; default kept) | 2026-11-15 | [MOJOLEARN_TREES_PREDICT_ROW_OUTPUTS.patch](../experiments/removed/MOJOLEARN_TREES_PREDICT_ROW_OUTPUTS.patch) |
+| [`MOJOLEARN_TREES_T34_CHUNK_FOLD`](#mojolearn_trees_t34_chunk_fold-unmeasured-arm-deleted-2026-11-15) | Forest inference (IDENTICAL, fold version) | removed (unmeasured opt-in arm; default kept) | 2026-11-15 | [MOJOLEARN_TREES_T34_CHUNK_FOLD.patch](../experiments/removed/MOJOLEARN_TREES_T34_CHUNK_FOLD.patch) |
+| [`MOJOLEARN_TREES_FOREST_ROUTE`](#mojolearn_trees_forest_route-unmeasured-arm-deleted-2026-11-15) | Forest inference (IDENTICAL, routes) | removed (unmeasured opt-in arm; default kept) | 2026-11-15 | [MOJOLEARN_TREES_FOREST_ROUTE.patch](../experiments/removed/MOJOLEARN_TREES_FOREST_ROUTE.patch) |
+| [`MOJOLEARN_TREES_T33_COST_SCHEDULE`](#mojolearn_trees_t33_cost_schedule-unmeasured-arm-deleted-2026-11-15) | Forest inference (IDENTICAL, schedule) | removed (unmeasured opt-in arm; default kept) | 2026-11-15 | [MOJOLEARN_TREES_T33_COST_SCHEDULE.patch](../experiments/removed/MOJOLEARN_TREES_T33_COST_SCHEDULE.patch) |
+| [`MOJOLEARN_TREES_T39_AUXILIARY_WALK`](#mojolearn_trees_t39_auxiliary_walk-unmeasured-arm-deleted-2026-11-15) | Forest auxiliary outputs (IDENTICAL) | removed (unmeasured opt-in arm; default kept) | 2026-11-15 | [MOJOLEARN_TREES_T39_AUXILIARY_WALK.patch](../experiments/removed/MOJOLEARN_TREES_T39_AUXILIARY_WALK.patch) |
+| [`MOJOLEARN_TREES_T44_METADATA_CACHE`](#mojolearn_trees_t44_metadata_cache-unmeasured-arm-deleted-2026-11-15) | Tree SHAP metadata (IDENTICAL) | removed (unmeasured opt-in arm; default kept) | 2026-11-15 | [MOJOLEARN_TREES_T44_METADATA_CACHE.patch](../experiments/removed/MOJOLEARN_TREES_T44_METADATA_CACHE.patch) |
+| [`MOJOLEARN_TREES_T37_WORKSPACE`](#mojolearn_trees_t37_workspace-unmeasured-arm-deleted-2026-11-15) | Forest inference (IDENTICAL, workspace) | removed (unmeasured opt-in arm; default kept) | 2026-11-15 | [MOJOLEARN_TREES_T37_WORKSPACE.patch](../experiments/removed/MOJOLEARN_TREES_T37_WORKSPACE.patch) |
+| [`MOJOLEARN_TREES_T38_FUSED_LABELS`](#mojolearn_trees_t38_fused_labels-unmeasured-arm-deleted-2026-11-15) | Forest inference (IDENTICAL, labels) | removed (unmeasured opt-in arm; default kept) | 2026-11-15 | [MOJOLEARN_TREES_T38_FUSED_LABELS.patch](../experiments/removed/MOJOLEARN_TREES_T38_FUSED_LABELS.patch) |
+| [`MOJOLEARN_TREES_C50_GB_PACKED`](#mojolearn_trees_c50_gb_packed-unmeasured-arm-deleted-2026-11-15) | GBDT predict (IDENTICAL, packed nodes) | removed (unmeasured opt-in arm; default kept) | 2026-11-15 | [MOJOLEARN_TREES_C50_GB_PACKED.patch](../experiments/removed/MOJOLEARN_TREES_C50_GB_PACKED.patch) |
+| [`MOJOLEARN_AFT_P01`](#mojolearn_aft_p01-never-run-card-deleted-2026-11-15) | Apple FAST trees programme (P) | removed (never-run card; default kept) | 2026-11-15 | [MOJOLEARN_AFT_P01.patch](../experiments/removed/MOJOLEARN_AFT_P01.patch) |
+| [`MOJOLEARN_AFT_P02`](#mojolearn_aft_p02-never-run-card-deleted-2026-11-15) | Apple FAST trees programme (P) | removed (never-run card; default kept) | 2026-11-15 | [MOJOLEARN_AFT_P02.patch](../experiments/removed/MOJOLEARN_AFT_P02.patch) |
+| [`MOJOLEARN_AFT_P03`](#mojolearn_aft_p03-never-run-card-deleted-2026-11-15) | Apple FAST trees programme (P) | removed (never-run card; default kept) | 2026-11-15 | [MOJOLEARN_AFT_P03.patch](../experiments/removed/MOJOLEARN_AFT_P03.patch) |
+| [`MOJOLEARN_AFT_P04`](#mojolearn_aft_p04-never-run-card-deleted-2026-11-15) | Apple FAST trees programme (P) | removed (never-run card; default kept) | 2026-11-15 | [MOJOLEARN_AFT_P04.patch](../experiments/removed/MOJOLEARN_AFT_P04.patch) |
+| [`MOJOLEARN_AFT_P05`](#mojolearn_aft_p05-never-run-card-deleted-2026-11-15) | Apple FAST trees programme (P) | removed (never-run card; default kept) | 2026-11-15 | [MOJOLEARN_AFT_P05.patch](../experiments/removed/MOJOLEARN_AFT_P05.patch) |
+| [`MOJOLEARN_AFT_P06`](#mojolearn_aft_p06-never-run-card-deleted-2026-11-15) | Apple FAST trees programme (P) | removed (never-run card; default kept) | 2026-11-15 | [MOJOLEARN_AFT_P06.patch](../experiments/removed/MOJOLEARN_AFT_P06.patch) |
+| [`MOJOLEARN_AFT_P07`](#mojolearn_aft_p07-never-run-card-deleted-2026-11-15) | Apple FAST trees programme (P) | removed (never-run card; default kept) | 2026-11-15 | [MOJOLEARN_AFT_P07.patch](../experiments/removed/MOJOLEARN_AFT_P07.patch) |
+| [`MOJOLEARN_AFT_P08`](#mojolearn_aft_p08-never-run-card-deleted-2026-11-15) | Apple FAST trees programme (P) | removed (never-run card; default kept) | 2026-11-15 | [MOJOLEARN_AFT_P08.patch](../experiments/removed/MOJOLEARN_AFT_P08.patch) |
+| [`MOJOLEARN_AFT_P09`](#mojolearn_aft_p09-never-run-card-deleted-2026-11-15) | Apple FAST trees programme (P) | removed (never-run card; default kept) | 2026-11-15 | [MOJOLEARN_AFT_P09.patch](../experiments/removed/MOJOLEARN_AFT_P09.patch) |
+| [`MOJOLEARN_AFT_P10`](#mojolearn_aft_p10-never-run-card-deleted-2026-11-15) | Apple FAST trees programme (P) | removed (never-run card; default kept) | 2026-11-15 | [MOJOLEARN_AFT_P10.patch](../experiments/removed/MOJOLEARN_AFT_P10.patch) |
+| [`MOJOLEARN_AFT_P11`](#mojolearn_aft_p11-never-run-card-deleted-2026-11-15) | Apple FAST trees programme (P) | removed (never-run card; default kept) | 2026-11-15 | [MOJOLEARN_AFT_P11.patch](../experiments/removed/MOJOLEARN_AFT_P11.patch) |
+| [`MOJOLEARN_AFT_P12`](#mojolearn_aft_p12-never-run-card-deleted-2026-11-15) | Apple FAST trees programme (P) | removed (never-run card; default kept) | 2026-11-15 | [MOJOLEARN_AFT_P12.patch](../experiments/removed/MOJOLEARN_AFT_P12.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -7483,3 +7519,290 @@ Inline TOMBSTONE markers only; the owner lane of each define writes its section,
 
 Not deleted, contrary to the plan: `MOJOLEARN_COLUMN_CPU` (the CPU-column build switch, not an experiment; coordinator correction 2026-11-15) and `MOJOLEARN_134_CONTROL` (the DEVIATION 134f greedy positive control, a sabotage arm, which the plan's own KEEP set excludes). The other 21 defines of the section have no read in this lane's files beyond mode-dependent aliases (IDN_LABEL, IDN_NB_*, IDN_*_BLOCKED, IDN_RR_EIGH, AF_RESIDENT, PROBA64, PREP3_MAXABS, CAT_CLS2_*, NB_TEXT_CSR, FUSED_EST_MOVE_2030, IDN_GRAM_ROWS) whose value stays the same expression of the numeric mode, so those reads are unchanged.
 
+## MOJOLEARN_2560_MEMSET_FILL: unmeasured arm deleted (2026-11-15)
+
+- **What it was**: DEVIATION 2560 opt-in: `enqueue_fill` (core/device_zero.mojo) as `ctx.enqueue_memset` instead of the zero / fill kernels, plus the memset arm of core/device_zero_check.mojo. The `pixi run check-device-zero-memset` task (pixi.toml, the tooling lane) now hits the refusal.
+- **Verdict**: no record: no A/B recorded for the opt-in arm (V2 rule a). Deleted under AGENTS.md "An unmeasured arm is deleted" (Andrew, 2026-11-15). The default path is untouched: no bit change on any column.
+- **Deleted by**: lane/expdel2-03-base (expdel2-03-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `337c096a5b`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_2560_MEMSET_FILL.patch`, then delete the `MOJOLEARN_2560_MEMSET_FILL` refusal in `core/experiment_guards_base.mojo`.
+- **Records**: refusal in `core/experiment_guards_base.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-03-base section).
+
+## MOJOLEARN_FAST_BLOCK_SCAN_SHUFFLE: unmeasured arm deleted (2026-11-15)
+
+- **What it was**: FAST opt-in `shuffle_up` warp scan in core/block_scan.mojo `block_inclusive_sum` instead of the shared-memory ladder; never flipped (source comment: Apple M4 RF 1M taxi 1.035, Istella-S 0.974, no record).
+- **Verdict**: no record: no A/B recorded for the opt-in arm (V2 rule a). Deleted under AGENTS.md "An unmeasured arm is deleted" (Andrew, 2026-11-15). The default path is untouched: no bit change on any column.
+- **Deleted by**: lane/expdel2-03-base (expdel2-03-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `a9903cb728`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_FAST_BLOCK_SCAN_SHUFFLE.patch`, then delete the `MOJOLEARN_FAST_BLOCK_SCAN_SHUFFLE` refusal in `core/experiment_guards_base.mojo`.
+- **Records**: refusal in `core/experiment_guards_base.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-03-base section).
+
+## MOJOLEARN_MUTEX_SPIN_RELAXED: unmeasured arm deleted (2026-11-15)
+
+- **What it was**: differential-build instrument in core/device_mutex.mojo `claim_device_mutex`: a relaxed spin load instead of the acquire load.
+- **Verdict**: no record: no A/B recorded for the opt-in arm (V2 rule a). Deleted under AGENTS.md "An unmeasured arm is deleted" (Andrew, 2026-11-15). The default path is untouched: no bit change on any column.
+- **Deleted by**: lane/expdel2-03-base (expdel2-03-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `b616f3bc41`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_MUTEX_SPIN_RELAXED.patch`, then delete the `MOJOLEARN_MUTEX_SPIN_RELAXED` refusal in `core/experiment_guards_base.mojo`.
+- **Records**: refusal in `core/experiment_guards_base.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-03-base section).
+
+## MOJOLEARN_RF_MUTEX_CLAIM_STOCK: unmeasured arm deleted (2026-11-15)
+
+- **What it was**: A/B control in core/device_mutex.mojo `claim_device_mutex`: the pre-repair claim with no consumed acquire load after the claim. tools/device_mutex_ab_leg.sh and tools/mutex_et_knn/*.sh (the tooling lane) still pass it and now hit the refusal.
+- **Verdict**: no record: no A/B recorded for the opt-in arm (V2 rule a). Deleted under AGENTS.md "An unmeasured arm is deleted" (Andrew, 2026-11-15). The default path is untouched: no bit change on any column.
+- **Deleted by**: lane/expdel2-03-base (expdel2-03-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `34c27fda1e`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_RF_MUTEX_CLAIM_STOCK.patch`, then delete the `MOJOLEARN_RF_MUTEX_CLAIM_STOCK` refusal in `core/experiment_guards_base.mojo`.
+- **Records**: refusal in `core/experiment_guards_base.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-03-base section).
+
+## MOJOLEARN_IDN_CACHE_CTX_KEY_DEVICE_ID: unmeasured arm deleted (2026-11-15)
+
+- **What it was**: opt-in in core/ctx_key.mojo `ctx_cache_key`: key a cache by the device id instead of the context handle.
+- **Verdict**: no record: no A/B recorded for the opt-in arm (V2 rule a). Deleted under AGENTS.md "An unmeasured arm is deleted" (Andrew, 2026-11-15). The default path is untouched: no bit change on any column.
+- **Deleted by**: lane/expdel2-03-base (expdel2-03-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `b789195239`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_IDN_CACHE_CTX_KEY_DEVICE_ID.patch`, then delete the `MOJOLEARN_IDN_CACHE_CTX_KEY_DEVICE_ID` refusal in `core/experiment_guards_base.mojo`.
+- **Records**: refusal in `core/experiment_guards_base.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-03-base section).
+
+## MOJOLEARN_IDN_CACHE_CTX_KEY_OFF: unmeasured old path deleted (2026-11-15)
+
+- **What it was**: old path in core/ctx_key.mojo: key 0 for every context (the one-context first-pass caches); `IDN_CACHE_CTX_KEY` and its MOJOLEARN_IDN_ALL_OFF term are gone (that term is filed as experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-03-base.patch).
+- **Verdict**: no record: no A/B recorded for the old path (V2 rule b). Deleted under AGENTS.md "An unmeasured arm is deleted" (Andrew, 2026-11-15). The default path is untouched: no bit change on any column.
+- **Deleted by**: lane/expdel2-03-base (expdel2-03-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `afc5c11e5b`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_IDN_CACHE_CTX_KEY_OFF.patch`, then delete the `MOJOLEARN_IDN_CACHE_CTX_KEY_OFF` refusal in `core/experiment_guards_base.mojo`.
+- **Records**: refusal in `core/experiment_guards_base.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-03-base section).
+
+## MOJOLEARN_XPREP_ARENA_POOL_OFF: unmeasured old path deleted (2026-11-15)
+
+- **What it was**: old path in core/device_store.mojo `STORE_SLOT_POOL`: the free-at-once store. `STORE_SLOT_POOL` is now `GLOBAL_NUMERIC_MODE != NUMERIC_FAST`; the arena read in x_prep/device.mojo is folded by its own lane.
+- **Verdict**: EXP:1787 CONFIRMED (the pool is the kept default). Deleted under AGENTS.md "An unmeasured arm is deleted" (Andrew, 2026-11-15). The default path is untouched: no bit change on any column.
+- **Deleted by**: lane/expdel2-03-base (expdel2-03-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `9907fddc3f`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_XPREP_ARENA_POOL_OFF.patch`, then delete the `MOJOLEARN_XPREP_ARENA_POOL_OFF` refusal in `core/experiment_guards_base.mojo` and move its grid entry back to `controls`.
+- **Records**: refusal in `core/experiment_guards_base.mojo`; `experiments/six_lane_integration/grid_controls/fg-knn-nb.json` (`xprep_arena_pool_off` moved to `removed`); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-03-base section).
+
+## MOJOLEARN_IDN_HPDEV_FOLDS_OFF: unmeasured old path deleted (2026-11-15)
+
+- **What it was**: old path in core/base_helpers_device.mojo `IDN_HPDEV_FOLDS`: the host fold and index helpers. `IDN_HPDEV_FOLDS` is now `LABELS_DEVICE_BASE`; core/msel_helpers_device.mojo is folded by its own lane.
+- **Verdict**: no record: no A/B recorded for the old path (V2 rule b). Deleted under AGENTS.md "An unmeasured arm is deleted" (Andrew, 2026-11-15). The default path is untouched: no bit change on any column.
+- **Deleted by**: lane/expdel2-03-base (expdel2-03-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `b24fd9c2c3`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_IDN_HPDEV_FOLDS_OFF.patch`, then delete the `MOJOLEARN_IDN_HPDEV_FOLDS_OFF` refusal in `core/experiment_guards_base.mojo`.
+- **Records**: refusal in `core/experiment_guards_base.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-03-base section).
+
+## MOJOLEARN_ENTRY_TABLE_HEAP_OUTPUT: unmeasured arm deleted (2026-11-15)
+
+- **What it was**: opt-in former form: the call output held in a heap List instead of on the frame, in core/entry_table.mojo `entry_ref_call` and core/byte_lm_entry_table_sessions.mojo; core/native_descriptor_call.mojo and core/native_descriptor_fixed_call.mojo are folded by their own lane.
+- **Verdict**: no record: no A/B recorded for the opt-in arm (V2 rule a). Deleted under AGENTS.md "An unmeasured arm is deleted" (Andrew, 2026-11-15). The default path is untouched: no bit change on any column.
+- **Deleted by**: lane/expdel2-03-base (expdel2-03-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `d5699d97e3`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_ENTRY_TABLE_HEAP_OUTPUT.patch`, then delete the `MOJOLEARN_ENTRY_TABLE_HEAP_OUTPUT` refusal in `core/experiment_guards_base.mojo`.
+- **Records**: refusal in `core/experiment_guards_base.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-03-base section).
+
+## MOJOLEARN_AFCL_T08: never-run card deleted (2026-11-15)
+
+- **What it was**: AFCL-T08: two Apple SIMD groups per RF traversal workgroup (core/forest_inference.mojo `_afcl_rf_block`), never run. The grove block is the constant `FOREST_GROVE_TPB = 128`.
+- **Verdict**: never-run Apple FAST programme card, no A/B (V2 rule g). Deleted under AGENTS.md "An unmeasured arm is deleted" (Andrew, 2026-11-15). The default path is untouched: no bit change on any column.
+- **Deleted by**: lane/expdel2-03-base (expdel2-03-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `5bc2865240`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_AFCL_T08.patch`, then delete the `MOJOLEARN_AFCL_T08` refusal in `core/experiment_guards_trees.mojo`.
+- **Records**: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-03-base section).
+
+## MOJOLEARN_FOREST_SHARED_ROWS: unmeasured arm deleted (2026-11-15)
+
+- **What it was**: DEVIATION 2963 opt-in: stage a block's input rows in shared memory (`FOREST_SHARED_ROWS`, the grove, vector-grove and leaf-ID kernels of core/forest_inference.mojo). F13 M3 2026-10-06 was mixed and never promoted; no record for the switch. Deleted in one commit with FOREST_FAST_SHARED_ROWS and TREES_T32_SHARED_ROWS (the same patch is filed under the three names).
+- **Verdict**: no record: no A/B recorded for the opt-in arm (V2 rule a). Deleted under AGENTS.md "An unmeasured arm is deleted" (Andrew, 2026-11-15). The default path is untouched: no bit change on any column.
+- **Deleted by**: lane/expdel2-03-base (expdel2-03-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `a5502e594d`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_FOREST_SHARED_ROWS.patch`, then delete the `MOJOLEARN_FOREST_SHARED_ROWS` refusal in `core/experiment_guards_trees.mojo`.
+- **Records**: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-03-base section).
+
+## MOJOLEARN_FOREST_FAST_SHARED_ROWS: unmeasured arm deleted (2026-11-15)
+
+- **What it was**: the FAST Apple spelling of FOREST_SHARED_ROWS (same staging). Deleted in one commit with FOREST_SHARED_ROWS and TREES_T32_SHARED_ROWS.
+- **Verdict**: no record: no A/B recorded for the opt-in arm (V2 rule a). Deleted under AGENTS.md "An unmeasured arm is deleted" (Andrew, 2026-11-15). The default path is untouched: no bit change on any column.
+- **Deleted by**: lane/expdel2-03-base (expdel2-03-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `a5502e594d`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_FOREST_FAST_SHARED_ROWS.patch`, then delete the `MOJOLEARN_FOREST_FAST_SHARED_ROWS` refusal in `core/experiment_guards_trees.mojo`.
+- **Records**: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-03-base section).
+
+## MOJOLEARN_TREES_T32_SHARED_ROWS: unmeasured arm deleted (2026-11-15)
+
+- **What it was**: the IDENTICAL spelling of FOREST_SHARED_ROWS (core/forest_experiments.mojo `T32_SHARED_ROWS`, alias removed). Deleted in one commit with FOREST_SHARED_ROWS and FOREST_FAST_SHARED_ROWS.
+- **Verdict**: no record: no A/B recorded for the opt-in arm (V2 rule a). Deleted under AGENTS.md "An unmeasured arm is deleted" (Andrew, 2026-11-15). The default path is untouched: no bit change on any column.
+- **Deleted by**: lane/expdel2-03-base (expdel2-03-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `a5502e594d`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_TREES_T32_SHARED_ROWS.patch`, then delete the `MOJOLEARN_TREES_T32_SHARED_ROWS` refusal in `core/experiment_guards_trees.mojo` and move its grid entry back to `controls`.
+- **Records**: refusal in `core/experiment_guards_trees.mojo`; `experiments/six_lane_integration/grid_controls/trees-cleanup.json` (`T32` moved to `removed`); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-03-base section).
+
+## MOJOLEARN_FOREST_SEPARATE_NODES: unmeasured arm deleted (2026-11-15)
+
+- **What it was**: the separate-arrays node layout, the comparison arm of the packed default. `FOREST_PACKED_NODES` stays as the constant True (other modules pass it as PACKED).
+- **Verdict**: EXP:1504 DROP (defines deleted; the packed layout is the default). Deleted under AGENTS.md "An unmeasured arm is deleted" (Andrew, 2026-11-15). The default path is untouched: no bit change on any column.
+- **Deleted by**: lane/expdel2-03-base (expdel2-03-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `77aaad1bcc`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_FOREST_SEPARATE_NODES.patch`, then delete the `MOJOLEARN_FOREST_SEPARATE_NODES` refusal in `core/experiment_guards_trees.mojo`.
+- **Records**: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-03-base section).
+
+## MOJOLEARN_FOREST_SCALAR_GROVES: unmeasured arm deleted (2026-11-15)
+
+- **What it was**: diagnostic force-scalar opt-in in core/forest_inference.mojo `vector_groves_for`.
+- **Verdict**: no record: no A/B recorded for the opt-in arm (V2 rule a). Deleted under AGENTS.md "An unmeasured arm is deleted" (Andrew, 2026-11-15). The default path is untouched: no bit change on any column.
+- **Deleted by**: lane/expdel2-03-base (expdel2-03-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `b177479fc7`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_FOREST_SCALAR_GROVES.patch`, then delete the `MOJOLEARN_FOREST_SCALAR_GROVES` refusal in `core/experiment_guards_trees.mojo`.
+- **Records**: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-03-base section).
+
+## MOJOLEARN_TREES_PREDICT_ROW_OUTPUTS: unmeasured arm deleted (2026-11-15)
+
+- **What it was**: IDENTICAL opt-in: one thread per row on the ordered route (`forest_row_outputs_kernel`), never compiled or measured.
+- **Verdict**: no record: no A/B recorded for the opt-in arm (V2 rule a). Deleted under AGENTS.md "An unmeasured arm is deleted" (Andrew, 2026-11-15). The default path is untouched: no bit change on any column.
+- **Deleted by**: lane/expdel2-03-base (expdel2-03-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `432acbb3df`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_TREES_PREDICT_ROW_OUTPUTS.patch`, then delete the `MOJOLEARN_TREES_PREDICT_ROW_OUTPUTS` refusal in `core/experiment_guards_trees.mojo` and move its grid entry back to `controls`.
+- **Records**: refusal in `core/experiment_guards_trees.mojo`; `experiments/six_lane_integration/grid_controls/trees-small.json` (`PREDICT_ROW_OUTPUTS` moved to `removed`); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-03-base section).
+
+## MOJOLEARN_TREES_T34_CHUNK_FOLD: unmeasured arm deleted (2026-11-15)
+
+- **What it was**: IDENTICAL opt-in fold version: 32-tree chunks folded 1/2/4/8/16 (`forest_chunk_kernel`, the T34 branches of `forest_prediction_value`, `_forest_leaf_value`, core/forest_host_groves.mojo and core/forest_host_predict.mojo, and `FOREST_CHUNK`, `chunk_add`, `forest_chunk_sum`). `T34_CHUNK_FOLD` stays as the constant False for core/forest_inference_model.mojo.
+- **Verdict**: no record: no A/B recorded for the opt-in arm (V2 rule a). Deleted under AGENTS.md "An unmeasured arm is deleted" (Andrew, 2026-11-15). The default path is untouched: no bit change on any column.
+- **Deleted by**: lane/expdel2-03-base (expdel2-03-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `cfad8788a0`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_TREES_T34_CHUNK_FOLD.patch`, then delete the `MOJOLEARN_TREES_T34_CHUNK_FOLD` refusal in `core/experiment_guards_trees.mojo` and move its grid entry back to `controls`.
+- **Records**: refusal in `core/experiment_guards_trees.mojo`; `experiments/six_lane_integration/grid_controls/trees-cleanup.json` (`T34` moved to `removed`); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-03-base section).
+
+## MOJOLEARN_TREES_FOREST_ROUTE: unmeasured arm deleted (2026-11-15)
+
+- **What it was**: IDENTICAL int switch, routes 1/2: leaf IDs once then every output folds from them (old T35), and route 2 with the finiteness check fused into the leaf-ID pass (old T36): `_launch_forest_leaf_reuse`, `forest_leaf_reduce_kernel`, `forest_leaf_ids_kernel` and the T36 branches. `T35_LEAF_REUSE` / `T36_FINITE_STAGE` stay as constant False for core/forest_inference_model.mojo; `forest_labels_kernel` / `launch_forest_leaf_labels` stay while it imports them.
+- **Verdict**: no record: no A/B recorded for the opt-in arm (V2 rule a). Deleted under AGENTS.md "An unmeasured arm is deleted" (Andrew, 2026-11-15). The default path is untouched: no bit change on any column.
+- **Deleted by**: lane/expdel2-03-base (expdel2-03-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `c44dc3c017`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_TREES_FOREST_ROUTE.patch`, then delete the `MOJOLEARN_TREES_FOREST_ROUTE` refusal in `core/experiment_guards_trees.mojo` and move its grid entry back to `controls`.
+- **Records**: refusal in `core/experiment_guards_trees.mojo`; `experiments/six_lane_integration/grid_controls/trees-cleanup.json` (`FOREST_ROUTE` moved to `removed`); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-03-base section).
+
+## MOJOLEARN_TREES_T33_COST_SCHEDULE: unmeasured arm deleted (2026-11-15)
+
+- **What it was**: IDENTICAL opt-in rows-vs-lanes choice by cache cost in the grove launch and the leaf-ID launch (`forest_leaf_ids_row_kernel`).
+- **Verdict**: no record: no A/B recorded for the opt-in arm (V2 rule a). Deleted under AGENTS.md "An unmeasured arm is deleted" (Andrew, 2026-11-15). The default path is untouched: no bit change on any column.
+- **Deleted by**: lane/expdel2-03-base (expdel2-03-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `1cad80e23b`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_TREES_T33_COST_SCHEDULE.patch`, then delete the `MOJOLEARN_TREES_T33_COST_SCHEDULE` refusal in `core/experiment_guards_trees.mojo` and move its grid entry back to `controls`.
+- **Records**: refusal in `core/experiment_guards_trees.mojo`; `experiments/six_lane_integration/grid_controls/trees-cleanup.json` (`T33` moved to `removed`); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-03-base section).
+
+## MOJOLEARN_TREES_T39_AUXILIARY_WALK: unmeasured arm deleted (2026-11-15)
+
+- **What it was**: IDENTICAL opt-in in core/forest_auxiliary_units.mojo `forest_auxiliary_row`: one shared walk for every requested auxiliary output instead of the independent incumbent walks.
+- **Verdict**: no record: no A/B recorded for the opt-in arm (V2 rule a). Deleted under AGENTS.md "An unmeasured arm is deleted" (Andrew, 2026-11-15). The default path is untouched: no bit change on any column.
+- **Deleted by**: lane/expdel2-03-base (expdel2-03-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `96ee21ad13`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_TREES_T39_AUXILIARY_WALK.patch`, then delete the `MOJOLEARN_TREES_T39_AUXILIARY_WALK` refusal in `core/experiment_guards_trees.mojo` and move its grid entry back to `controls`.
+- **Records**: refusal in `core/experiment_guards_trees.mojo`; `experiments/six_lane_integration/grid_controls/trees-cleanup.json` (`T39` moved to `removed`); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-03-base section).
+
+## MOJOLEARN_TREES_T44_METADATA_CACHE: unmeasured arm deleted (2026-11-15)
+
+- **What it was**: IDENTICAL opt-in metadata cache; the alias in core/forest_experiments.mojo had no importer and is gone; providers/python/xtrees_api_pyapi_door.mojo `_TREE_SHAP_CACHE` reads the define and is folded by its own lane.
+- **Verdict**: no record: no A/B recorded for the opt-in arm (V2 rule a). Deleted under AGENTS.md "An unmeasured arm is deleted" (Andrew, 2026-11-15). The default path is untouched: no bit change on any column.
+- **Deleted by**: lane/expdel2-03-base (expdel2-03-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `3e9cbbd919`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_TREES_T44_METADATA_CACHE.patch`, then delete the `MOJOLEARN_TREES_T44_METADATA_CACHE` refusal in `core/experiment_guards_trees.mojo` and move its grid entry back to `controls`.
+- **Records**: refusal in `core/experiment_guards_trees.mojo`; `experiments/six_lane_integration/grid_controls/trees-cleanup.json` (`T44` moved to `removed`); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-03-base section).
+
+## MOJOLEARN_TREES_T37_WORKSPACE: unmeasured arm deleted (2026-11-15)
+
+- **What it was**: IDENTICAL opt-in resident prediction workspace; this lane folds the alias in core/forest_experiments.mojo to False; core/forest_inference_model.mojo is folded by its own lane.
+- **Verdict**: no record: no A/B recorded for the opt-in arm (V2 rule a). Deleted under AGENTS.md "An unmeasured arm is deleted" (Andrew, 2026-11-15). The default path is untouched: no bit change on any column.
+- **Deleted by**: lane/expdel2-03-base (expdel2-03-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `07f7a0733b`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_TREES_T37_WORKSPACE.patch`, then delete the `MOJOLEARN_TREES_T37_WORKSPACE` refusal in `core/experiment_guards_trees.mojo` and move its grid entry back to `controls`.
+- **Records**: refusal in `core/experiment_guards_trees.mojo`; `experiments/six_lane_integration/grid_controls/trees-cleanup.json` (`T37` moved to `removed`); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-03-base section).
+
+## MOJOLEARN_TREES_T38_FUSED_LABELS: unmeasured arm deleted (2026-11-15)
+
+- **What it was**: IDENTICAL opt-in fused prediction labels; this lane folds the alias to False and drops core/forest_inference.mojo's unused import; core/forest_inference_model.mojo, core/forest_inference_run.mojo and bindings/forest_inference_binding_door.mojo are folded by their own lanes.
+- **Verdict**: no record: no A/B recorded for the opt-in arm (V2 rule a). Deleted under AGENTS.md "An unmeasured arm is deleted" (Andrew, 2026-11-15). The default path is untouched: no bit change on any column.
+- **Deleted by**: lane/expdel2-03-base (expdel2-03-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `81c34fb4fb`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_TREES_T38_FUSED_LABELS.patch`, then delete the `MOJOLEARN_TREES_T38_FUSED_LABELS` refusal in `core/experiment_guards_trees.mojo` and move its grid entry back to `controls`.
+- **Records**: refusal in `core/experiment_guards_trees.mojo`; `experiments/six_lane_integration/grid_controls/trees-cleanup.json` (`T38` moved to `removed`); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-03-base section).
+
+## MOJOLEARN_TREES_C50_GB_PACKED: unmeasured arm deleted (2026-11-15)
+
+- **What it was**: IDENTICAL opt-in packed GBDT predict nodes; this lane folds the alias in core/forest_experiments.mojo to False; core/gbdt_host_predict.mojo, gbdt/resident_model.mojo and gbdt/models/add_non_symmetric_tree_doc_parallel.mojo are folded by their own lanes.
+- **Verdict**: no record: no A/B recorded for the opt-in arm (V2 rule a). Deleted under AGENTS.md "An unmeasured arm is deleted" (Andrew, 2026-11-15). The default path is untouched: no bit change on any column.
+- **Deleted by**: lane/expdel2-03-base (expdel2-03-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `03a43eb1ec`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_TREES_C50_GB_PACKED.patch`, then delete the `MOJOLEARN_TREES_C50_GB_PACKED` refusal in `core/experiment_guards_trees.mojo` and move its grid entry back to `controls`.
+- **Records**: refusal in `core/experiment_guards_trees.mojo`; `experiments/six_lane_integration/grid_controls/trees-cleanup.json` (`C50_GB` moved to `removed`); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-03-base section).
+
+## MOJOLEARN_AFT_P01: never-run card deleted (2026-11-15)
+
+- **What it was**: card P01 of core/apple_fast_tree_experiments.mojo (experiments/apple_fast_trees/P.json): two rather than four logical 32-tree groves per threadgroup (core/forest_inference.mojo grove block). All twelve cards go in one commit; the file keeps only the constants other lanes import, the integrator deletes it once nothing does.
+- **Verdict**: never-run Apple FAST programme card, no A/B (V2 rule g). Deleted under AGENTS.md "An unmeasured arm is deleted" (Andrew, 2026-11-15). The default path is untouched: no bit change on any column.
+- **Deleted by**: lane/expdel2-03-base (expdel2-03-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `5bc2865240`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_AFT_P01.patch`, then delete the `MOJOLEARN_AFT_P01` refusal in `core/experiment_guards_trees.mojo`.
+- **Records**: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-03-base section).
+
+## MOJOLEARN_AFT_P02: never-run card deleted (2026-11-15)
+
+- **What it was**: card P02 of core/apple_fast_tree_experiments.mojo (experiments/apple_fast_trees/P.json): two ordered row/output items per worker (`forest_ordered_kernel`). All twelve cards go in one commit; the file keeps only the constants other lanes import, the integrator deletes it once nothing does.
+- **Verdict**: never-run Apple FAST programme card, no A/B (V2 rule g). Deleted under AGENTS.md "An unmeasured arm is deleted" (Andrew, 2026-11-15). The default path is untouched: no bit change on any column.
+- **Deleted by**: lane/expdel2-03-base (expdel2-03-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `5bc2865240`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_AFT_P02.patch`, then delete the `MOJOLEARN_AFT_P02` refusal in `core/experiment_guards_trees.mojo`.
+- **Records**: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-03-base section).
+
+## MOJOLEARN_AFT_P03: never-run card deleted (2026-11-15)
+
+- **What it was**: card P03 of core/apple_fast_tree_experiments.mojo (experiments/apple_fast_trees/P.json): a fixed 2 KiB row-staging budget (`FOREST_SHARED_ROW_CAPACITY`). All twelve cards go in one commit; the file keeps only the constants other lanes import, the integrator deletes it once nothing does.
+- **Verdict**: never-run Apple FAST programme card, no A/B (V2 rule g). Deleted under AGENTS.md "An unmeasured arm is deleted" (Andrew, 2026-11-15). The default path is untouched: no bit change on any column.
+- **Deleted by**: lane/expdel2-03-base (expdel2-03-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `5bc2865240`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_AFT_P03.patch`, then delete the `MOJOLEARN_AFT_P03` refusal in `core/experiment_guards_trees.mojo`.
+- **Records**: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-03-base section).
+
+## MOJOLEARN_AFT_P04: never-run card deleted (2026-11-15)
+
+- **What it was**: card P04 of core/apple_fast_tree_experiments.mojo (experiments/apple_fast_trees/P.json): two argmax rows per worker (`forest_argmax_kernel`). All twelve cards go in one commit; the file keeps only the constants other lanes import, the integrator deletes it once nothing does.
+- **Verdict**: never-run Apple FAST programme card, no A/B (V2 rule g). Deleted under AGENTS.md "An unmeasured arm is deleted" (Andrew, 2026-11-15). The default path is untouched: no bit change on any column.
+- **Deleted by**: lane/expdel2-03-base (expdel2-03-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `5bc2865240`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_AFT_P04.patch`, then delete the `MOJOLEARN_AFT_P04` refusal in `core/experiment_guards_trees.mojo`.
+- **Records**: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-03-base section).
+
+## MOJOLEARN_AFT_P05: never-run card deleted (2026-11-15)
+
+- **What it was**: card P05 of core/apple_fast_tree_experiments.mojo (experiments/apple_fast_trees/P.json): two rows reuse each packed split descriptor (gbdt add_bin_values / resident_model, constant kept for their lane). All twelve cards go in one commit; the file keeps only the constants other lanes import, the integrator deletes it once nothing does.
+- **Verdict**: never-run Apple FAST programme card, no A/B (V2 rule g). Deleted under AGENTS.md "An unmeasured arm is deleted" (Andrew, 2026-11-15). The default path is untouched: no bit change on any column.
+- **Deleted by**: lane/expdel2-03-base (expdel2-03-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `5bc2865240`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_AFT_P05.patch`, then delete the `MOJOLEARN_AFT_P05` refusal in `core/experiment_guards_trees.mojo`.
+- **Records**: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-03-base section).
+
+## MOJOLEARN_AFT_P06: never-run card deleted (2026-11-15)
+
+- **What it was**: card P06 of core/apple_fast_tree_experiments.mojo (experiments/apple_fast_trees/P.json): halved link-kernel threads per block (gbdt resident_link, constant kept for its lane). All twelve cards go in one commit; the file keeps only the constants other lanes import, the integrator deletes it once nothing does.
+- **Verdict**: never-run Apple FAST programme card, no A/B (V2 rule g). Deleted under AGENTS.md "An unmeasured arm is deleted" (Andrew, 2026-11-15). The default path is untouched: no bit change on any column.
+- **Deleted by**: lane/expdel2-03-base (expdel2-03-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `5bc2865240`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_AFT_P06.patch`, then delete the `MOJOLEARN_AFT_P06` refusal in `core/experiment_guards_trees.mojo`.
+- **Records**: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-03-base section).
+
+## MOJOLEARN_AFT_P07: never-run card deleted (2026-11-15)
+
+- **What it was**: card P07 of core/apple_fast_tree_experiments.mojo (experiments/apple_fast_trees/P.json): four rows per SHAP tree worker (xtrees/shap_device.mojo, constant kept for its lane). All twelve cards go in one commit; the file keeps only the constants other lanes import, the integrator deletes it once nothing does.
+- **Verdict**: never-run Apple FAST programme card, no A/B (V2 rule g). Deleted under AGENTS.md "An unmeasured arm is deleted" (Andrew, 2026-11-15). The default path is untouched: no bit change on any column.
+- **Deleted by**: lane/expdel2-03-base (expdel2-03-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `5bc2865240`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_AFT_P07.patch`, then delete the `MOJOLEARN_AFT_P07` refusal in `core/experiment_guards_trees.mojo`.
+- **Records**: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-03-base section).
+
+## MOJOLEARN_AFT_P08: never-run card deleted (2026-11-15)
+
+- **What it was**: card P08 of core/apple_fast_tree_experiments.mojo (experiments/apple_fast_trees/P.json): fewer SHAP workers per block (xtrees/shap_device.mojo, constant kept for its lane). All twelve cards go in one commit; the file keeps only the constants other lanes import, the integrator deletes it once nothing does.
+- **Verdict**: never-run Apple FAST programme card, no A/B (V2 rule g). Deleted under AGENTS.md "An unmeasured arm is deleted" (Andrew, 2026-11-15). The default path is untouched: no bit change on any column.
+- **Deleted by**: lane/expdel2-03-base (expdel2-03-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `5bc2865240`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_AFT_P08.patch`, then delete the `MOJOLEARN_AFT_P08` refusal in `core/experiment_guards_trees.mojo`.
+- **Records**: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-03-base section).
+
+## MOJOLEARN_AFT_P09: never-run card deleted (2026-11-15)
+
+- **What it was**: card P09 of core/apple_fast_tree_experiments.mojo (experiments/apple_fast_trees/P.json): halved SHAP contribution scratch (xtrees/shap_device.mojo, constant kept for its lane). All twelve cards go in one commit; the file keeps only the constants other lanes import, the integrator deletes it once nothing does.
+- **Verdict**: never-run Apple FAST programme card, no A/B (V2 rule g). Deleted under AGENTS.md "An unmeasured arm is deleted" (Andrew, 2026-11-15). The default path is untouched: no bit change on any column.
+- **Deleted by**: lane/expdel2-03-base (expdel2-03-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `5bc2865240`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_AFT_P09.patch`, then delete the `MOJOLEARN_AFT_P09` refusal in `core/experiment_guards_trees.mojo`.
+- **Records**: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-03-base section).
+
+## MOJOLEARN_AFT_P10: never-run card deleted (2026-11-15)
+
+- **What it was**: card P10 of core/apple_fast_tree_experiments.mojo (experiments/apple_fast_trees/P.json): two output cells per SHAP fold worker (`AFT_SHAP_FOLD_ITEMS` kept as 1 for its lane). All twelve cards go in one commit; the file keeps only the constants other lanes import, the integrator deletes it once nothing does.
+- **Verdict**: never-run Apple FAST programme card, no A/B (V2 rule g). Deleted under AGENTS.md "An unmeasured arm is deleted" (Andrew, 2026-11-15). The default path is untouched: no bit change on any column.
+- **Deleted by**: lane/expdel2-03-base (expdel2-03-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `5bc2865240`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_AFT_P10.patch`, then delete the `MOJOLEARN_AFT_P10` refusal in `core/experiment_guards_trees.mojo`.
+- **Records**: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-03-base section).
+
+## MOJOLEARN_AFT_P11: never-run card deleted (2026-11-15)
+
+- **What it was**: card P11 of core/apple_fast_tree_experiments.mojo (experiments/apple_fast_trees/P.json): two-row DART residual/predict tiles (`AFT_DART_ROWS` kept as 1 for its lane). All twelve cards go in one commit; the file keeps only the constants other lanes import, the integrator deletes it once nothing does.
+- **Verdict**: never-run Apple FAST programme card, no A/B (V2 rule g). Deleted under AGENTS.md "An unmeasured arm is deleted" (Andrew, 2026-11-15). The default path is untouched: no bit change on any column.
+- **Deleted by**: lane/expdel2-03-base (expdel2-03-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `5bc2865240`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_AFT_P11.patch`, then delete the `MOJOLEARN_AFT_P11` refusal in `core/experiment_guards_trees.mojo`.
+- **Records**: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-03-base section).
+
+## MOJOLEARN_AFT_P12: never-run card deleted (2026-11-15)
+
+- **What it was**: card P12 of core/apple_fast_tree_experiments.mojo (experiments/apple_fast_trees/P.json): two-row DART score-add tiles (`AFT_DART_ADD_ROWS` kept as 1 for its lane). All twelve cards go in one commit; the file keeps only the constants other lanes import, the integrator deletes it once nothing does.
+- **Verdict**: never-run Apple FAST programme card, no A/B (V2 rule g). Deleted under AGENTS.md "An unmeasured arm is deleted" (Andrew, 2026-11-15). The default path is untouched: no bit change on any column.
+- **Deleted by**: lane/expdel2-03-base (expdel2-03-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `5bc2865240`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_AFT_P12.patch`, then delete the `MOJOLEARN_AFT_P12` refusal in `core/experiment_guards_trees.mojo`.
+- **Records**: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-03-base section).

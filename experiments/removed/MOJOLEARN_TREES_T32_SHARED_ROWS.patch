@@ -1,0 +1,156 @@
+diff --git a/core/forest_experiments.mojo b/core/forest_experiments.mojo
+index c208b53fa7..ee1e0540f3 100644
+--- a/core/forest_experiments.mojo
++++ b/core/forest_experiments.mojo
+@@ -12,8 +12,7 @@ from checks.numerics import ftz, identical_div, GLOBAL_NUMERIC_MODE, NUMERIC_IDE
+ # T31_PACKED_A/B removed (trees-cleanup 2026-10-07): packed nodes are already
+ # the default layout (core/forest_inference.mojo FOREST_PACKED_NODES), so A was
+ # a no-op and B duplicated MOJOLEARN_FOREST_SEPARATE_NODES.
+-# TOMBSTONE: MOJOLEARN_TREES_T32_SHARED_ROWS (IDENTICAL opt-in shared-row staging, core/forest_inference.mojo; no A/B recorded) deleted 2026-11-15 by lane/expdel2-03-base; code recoverable at a5502e594d.
+-# Restore: git apply experiments/removed/MOJOLEARN_TREES_T32_SHARED_ROWS.patch; record in docs/TOMBSTONES.md.
++comptime T32_SHARED_ROWS = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_TREES_T32_SHARED_ROWS"]()
+ comptime T33_COST_SCHEDULE = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_TREES_T33_COST_SCHEDULE"]()
+ comptime T34_CHUNK_FOLD = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_TREES_T34_CHUNK_FOLD"]()
+ # Forest prediction ROUTE: one arms switch (trees-cleanup 2026-10-07; replaces
+diff --git a/core/forest_inference.mojo b/core/forest_inference.mojo
+index cf81d5dd78..dbe470d50f 100644
+--- a/core/forest_inference.mojo
++++ b/core/forest_inference.mojo
+@@ -29,9 +29,10 @@ from std.memory import bitcast, stack_allocation
+ from max.gpu.host import DeviceContext, DeviceBuffer
+ from max.gpu.memory import AddressSpace
+ from max.gpu.sync import barrier
+-from checks.numerics import ftz, identical_div, GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
++from checks.numerics import ftz, identical_div, GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
++from core.accelerator_target import TARGET_HAS_APPLE_GPU
+ from checks.kernel_matrix import TARGET_COLUMN, forest_row_threads_for
+-from core.forest_experiments import (T33_COST_SCHEDULE, T34_CHUNK_FOLD, T35_LEAF_REUSE, T36_FINITE_STAGE, T38_FUSED_LABELS, FOREST_CHUNK, forest_chunk_sum, forest_chunk_finish)
++from core.forest_experiments import (T32_SHARED_ROWS, T33_COST_SCHEDULE, T34_CHUNK_FOLD, T35_LEAF_REUSE, T36_FINITE_STAGE, T38_FUSED_LABELS, FOREST_CHUNK, forest_chunk_sum, forest_chunk_finish)
+ 
+ # TOMBSTONE: MOJOLEARN_AFCL_T08 (never-run Apple FAST card: two SIMD groups per RF traversal workgroup) deleted 2026-11-15 by lane/expdel2-03-base; code recoverable at 5bc2865240.
+ # Restore: git apply experiments/removed/MOJOLEARN_AFCL_T08.patch; record in docs/TOMBSTONES.md.
+@@ -56,13 +57,20 @@ def finite_key(value: Float32) -> UInt32:
+     return ~bits if (bits & UInt32(0x80000000)) != 0 else bits ^ UInt32(0x80000000)
+ 
+ 
+-#: DEVIATION 2963 (lane/forest-groves-cpu-and-speed, 2026-09-17): the packed
+-#: layout (`FOREST_PACKED_NODES`) reads a node's four Int32 words with ONE
+-#: 16-byte load instead of three field loads.
+-# TOMBSTONE: MOJOLEARN_FOREST_SHARED_ROWS MOJOLEARN_FOREST_FAST_SHARED_ROWS MOJOLEARN_TREES_T32_SHARED_ROWS (opt-in shared-memory
+-# staging of a block's input rows; F13 M3 mixed, never promoted, no A/B record for the switches) deleted 2026-11-15 by
+-# lane/expdel2-03-base; code recoverable at a5502e594d.
+-# Restore: git apply experiments/removed/MOJOLEARN_FOREST_SHARED_ROWS.patch (the same patch is filed under each of the three names); record in docs/TOMBSTONES.md.
++#: DEVIATION 2963 (lane/forest-groves-cpu-and-speed, 2026-09-17): two
++#: kernel candidates that keep the 32-group topology, the 16/8/4/2/1 fold and
++#: every FTZ rule and change only how the same bits are fetched.
++#: `MOJOLEARN_FOREST_PACKED_NODES` (the existing packed layout) now reads a
++#: node's four Int32 words with ONE 16-byte load instead of three field
++#: loads; `MOJOLEARN_FOREST_SHARED_ROWS=1` stages a block's four input rows
++#: in shared memory once (when `features <= FOREST_SHARED_ROW_CAPACITY`) and
++#: every lane's feature reads come from that tile. The values compared are
++#: the same words in either case. Both are default off until the pod A/B.
++# F13 M3 2026-10-06 MEASURED shared rows, depths4/11/9skew:
++# cold B/A0.9331/0.9938/0.9510, repeat1.1091/0.9332/0.9786; quality equal.
++# One warmup+score, mixed; FAST opt-in remains OFF. ab-20261006/repairs-54c1f35a5/F13.
++comptime FOREST_SHARED_ROWS = T32_SHARED_ROWS or is_defined["MOJOLEARN_FOREST_SHARED_ROWS"]() or (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU and is_defined["MOJOLEARN_FOREST_FAST_SHARED_ROWS"]())
++comptime FOREST_SHARED_ROW_CAPACITY = 256
+ 
+ #: DEVIATION 2964 (lane/forest-groves-row-schedule, 2026-09-17): the groves
+ #: engine's SCHEDULE, not its graph. The 32-lane kernels give one row 32
+@@ -269,7 +277,28 @@ def forest_grove32_kernel[RF_INPUT: Bool, PACKED: Bool = False](
+     var lane = tid%32
+     var item = Int(block_idx.x)*traversal_rows+tid//32
+     var total = Float32(0)
+-    if item < rows*outputs:
++    var tiled = False
++    comptime if FOREST_SHARED_ROWS:
++        # DEVIATION 2963: with one output an item is a row, so the block's
++        # four rows tile into shared memory; every thread hits the barrier.
++        var xs = stack_allocation[traversal_rows*FOREST_SHARED_ROW_CAPACITY,Float32,address_space=AddressSpace.SHARED]()
++        if outputs == 1 and features <= FOREST_SHARED_ROW_CAPACITY:
++            tiled = True
++            var row0 = Int(block_idx.x)*traversal_rows
++            var count = traversal_rows*features
++            var i = tid
++            while i < count:
++                var r = row0+i//features
++                xs[unsafe_offset=i] = x.unsafe_load(r*features+i%features) if r < rows else Float32(0)
++                i += traversal_tpb
++            barrier()
++            if item < rows:
++                var tree = lane
++                while tree < trees:
++                    var node = reached_leaf[RF_INPUT, PACKED](offsets,columns,thresholds,left,xs,tree,tid//32,features)
++                    total = forest_add(total,leaves.unsafe_load(node))
++                    tree += 32
++    if not tiled and item < rows*outputs:
+         var tree = lane
+         while tree < trees:
+             var node = reached_leaf[RF_INPUT, PACKED](offsets,columns,thresholds,left,x,tree,item//outputs,features)
+@@ -328,7 +357,29 @@ def forest_vector_grove32_kernel[RF_INPUT: Bool, OUTPUT_CAPACITY: Int, PACKED: B
+     var totals = stack_allocation[OUTPUT_CAPACITY,Float32]()
+     comptime for c in range(OUTPUT_CAPACITY):
+         totals[unsafe_offset=c] = Float32(0)
+-    if row < rows:
++    var tiled = False
++    comptime if FOREST_SHARED_ROWS:
++        # DEVIATION 2963: the block's four rows tiled into shared memory.
++        var xs = stack_allocation[traversal_rows*FOREST_SHARED_ROW_CAPACITY,Float32,address_space=AddressSpace.SHARED]()
++        if features <= FOREST_SHARED_ROW_CAPACITY:
++            tiled = True
++            var row0 = Int(block_idx.x)*traversal_rows
++            var count = traversal_rows*features
++            var i = tid
++            while i < count:
++                var r = row0+i//features
++                xs[unsafe_offset=i] = x.unsafe_load(r*features+i%features) if r < rows else Float32(0)
++                i += traversal_tpb
++            barrier()
++            if row < rows:
++                var tree = lane
++                while tree < trees:
++                    var node = reached_leaf[RF_INPUT, PACKED](offsets,columns,thresholds,left,xs,tree,tid//32,features)
++                    comptime for c in range(OUTPUT_CAPACITY):
++                        if c < outputs:
++                            totals[unsafe_offset=c] = forest_add(totals[unsafe_offset=c],leaves.unsafe_load(node*outputs+c))
++                    tree += 32
++    if not tiled and row < rows:
+         var tree = lane
+         while tree < trees:
+             var node = reached_leaf[RF_INPUT, PACKED](offsets,columns,thresholds,left,x,tree,row,features)
+@@ -1291,17 +1342,33 @@ def forest_leaf_ids_grouped_kernel[RF_INPUT: Bool, PACKED: Bool](
+     var lane = tid%32
+     var first = Int(block_idx.x)*4
+     var row = first+group
++    var tiled = False
++    var shared = stack_allocation[4*FOREST_SHARED_ROW_CAPACITY, Float32, address_space=AddressSpace.SHARED]()
++    comptime if FOREST_SHARED_ROWS:
++        if Int(features) <= FOREST_SHARED_ROW_CAPACITY:
++            tiled = True
++            var u = tid
++            while u < 4*Int(features):
++                var r = first+u//Int(features)
++                if r < Int(rows):
++                    shared.unsafe_store(u, x.unsafe_load((Int(row_start)+r)*Int(features)+u%Int(features)))
++                u += 128
++    barrier()
+     if row < Int(rows):
+         comptime if T36_FINITE_STAGE:
+             var c = lane
+             while c < Int(features):
+-                var value = x.unsafe_load((Int(row_start)+row)*Int(features)+c)
++                var value = shared.unsafe_load(group*Int(features)+c) if tiled else x.unsafe_load((Int(row_start)+row)*Int(features)+c)
+                 if (bitcast[DType.uint32](value)&UInt32(0x7f800000)) == UInt32(0x7f800000):
+                     _ = Atomic.max(bad, Int32(1))
+                 c += 32
+         var tree = lane
+         while tree < Int(trees):
+-            var node = reached_leaf[RF_INPUT, PACKED](offsets, columns, thresholds, left, x, tree, Int(row_start)+row, Int(features))
++            var node = 0
++            if tiled:
++                node = reached_leaf[RF_INPUT, PACKED](offsets, columns, thresholds, left, shared, tree, group, Int(features))
++            else:
++                node = reached_leaf[RF_INPUT, PACKED](offsets, columns, thresholds, left, x, tree, Int(row_start)+row, Int(features))
+             ids.unsafe_store(row*Int(trees)+tree, Int32(node))
+             tree += 32
+ 

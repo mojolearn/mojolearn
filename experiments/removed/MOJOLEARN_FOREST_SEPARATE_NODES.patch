@@ -1,0 +1,32 @@
+diff --git a/core/forest_inference.mojo b/core/forest_inference.mojo
+index 72cec4a25a..cf81d5dd78 100644
+--- a/core/forest_inference.mojo
++++ b/core/forest_inference.mojo
+@@ -90,19 +90,17 @@ comptime FOREST_ROW_THREADS_MAX_FEATURES = 32
+ #: private sums fold in lane order (a left fold) instead of 16/8/4/2/1.
+ comptime FOREST_ROW_THREADS_SABOTAGE = is_defined["MOJOLEARN_FOREST_ROW_THREADS_SABOTAGE"]()
+ 
+-#: The resident node layout. Packed is the layout since
+-#: lane/forest-groves-cpu-and-speed (2026-09-17, an L40S A/B). The old opt-in
+-#: `MOJOLEARN_FOREST_PACKED_NODES` is accepted and changes nothing. The layout
+-#: is a device-side cache of the same nodes; the archive arrays, the
+-#: comparison and the fold are the same.
++#: The resident node layout. Packed is the default since
++#: lane/forest-groves-cpu-and-speed (2026-09-17, an L40S A/B);
++#: `-D MOJOLEARN_FOREST_SEPARATE_NODES=1` selects the separate-arrays layout,
++#: the comparison arm. The old opt-in `MOJOLEARN_FOREST_PACKED_NODES` is
++#: accepted and changes nothing. The layout is a device-side cache of the
++#: same nodes; the archive arrays, the comparison and the fold are the same.
+ # F13 packed-layout M3 2026-10-06 MEASURED on same cases: cold B/A
+ # 1.2171/1.1355/1.2153, repeat0.9942/0.9843/0.9526, refit1.0205/1.0163/1.0359.
+ # Quality/output survival equal; one warmup+score. Mixed/cold regression:
+-# no new promotion; existing cross-mode layout default retained.
+-# TOMBSTONE: MOJOLEARN_FOREST_SEPARATE_NODES (the separate-arrays comparison arm; EXP:1504 DROP) deleted 2026-11-15 by lane/expdel2-03-base; code recoverable at 77aaad1bcc.
+-# Restore: git apply experiments/removed/MOJOLEARN_FOREST_SEPARATE_NODES.patch; record in docs/TOMBSTONES.md.
+-#: Kept as a constant: other modules import it as the PACKED parameter.
+-comptime FOREST_PACKED_NODES = True
++# no new promotion; existing cross-mode layout default retained, OFF escape above.
++comptime FOREST_PACKED_NODES = not is_defined["MOJOLEARN_FOREST_SEPARATE_NODES"]()
+ 
+ 
+ @always_inline

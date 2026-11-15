@@ -1,65 +1,49 @@
 # SPDX-License-Identifier: Apache-2.0
-"""T31–T39 experiment controls and the T34 cross-column arithmetic contract.
-
-All new switches are default OFF. NOT COMPILED — NOT TESTED — IDENTITY NOT
-VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED. No device-specific arithmetic.
+"""The forest fold finish, and the folded constants of the deleted T31–T44 /
+C50 experiment controls that other modules still import (each card off).
 """
-from std.sys.compile import is_defined, get_defined_int
-from checks.numerics import ftz, identical_div, GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+from checks.numerics import ftz, identical_div
 # TOMBSTONE: MOJOLEARN_TREES_T31_PACKED_A (dead code) deleted 2026-10-07 by bad9c74ce; code recoverable at bad9c74ce^.
 # Restore: git apply experiments/removed/MOJOLEARN_TREES_T31_PACKED_A.patch; record in docs/TOMBSTONES.md.
 
 # T31_PACKED_A/B removed (trees-cleanup 2026-10-07): packed nodes are already
 # the default layout (core/forest_inference.mojo FOREST_PACKED_NODES), so A was
 # a no-op and B duplicated MOJOLEARN_FOREST_SEPARATE_NODES.
-comptime T32_SHARED_ROWS = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_TREES_T32_SHARED_ROWS"]()
-comptime T33_COST_SCHEDULE = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_TREES_T33_COST_SCHEDULE"]()
-comptime T34_CHUNK_FOLD = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_TREES_T34_CHUNK_FOLD"]()
-# Forest prediction ROUTE: one arms switch (trees-cleanup 2026-10-07; replaces
-# T35_LEAF_REUSE / T36_FINITE_STAGE, whose silent precedence over T34 and the
-# grove schedule hid T33). `launch_forest_inference` takes exactly one route:
-#   -D MOJOLEARN_TREES_FOREST_ROUTE=0  (absent) walk-and-fold per row: grove
-#                                      lanes/rows, or the T34 chunk kernel when
-#                                      the T34 fold version is on
-#   -D MOJOLEARN_TREES_FOREST_ROUTE=1  leaf IDs once, then every output folds
-#                                      from them (old T35)
-#   -D MOJOLEARN_TREES_FOREST_ROUTE=2  route 1 with the finiteness check fused
-#                                      into the leaf-ID pass (old T36)
-# Orthogonal controls: T34_CHUNK_FOLD is the fold VERSION (bits) on every
-# route; T33_COST_SCHEDULE picks rows-vs-lanes by cache cost in route 0's grove
-# launch and in routes 1/2's leaf-ID launch. The one empty cell is route 0
-# with T34 on: the chunk kernel has no grove schedule, so T33 is inert there.
-comptime FOREST_ROUTE = get_defined_int["MOJOLEARN_TREES_FOREST_ROUTE", 0]() if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else 0
-comptime T35_LEAF_REUSE = FOREST_ROUTE == 1 or FOREST_ROUTE == 2
-comptime T36_FINITE_STAGE = FOREST_ROUTE == 2
-comptime T37_WORKSPACE = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_TREES_T37_WORKSPACE"]()
-comptime T38_FUSED_LABELS = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_TREES_T38_FUSED_LABELS"]()
+# TOMBSTONE: MOJOLEARN_TREES_T32_SHARED_ROWS (IDENTICAL opt-in shared-row staging, core/forest_inference.mojo; no A/B recorded) deleted 2026-11-15 by lane/expdel2-03-base; code recoverable at a5502e594d.
+# Restore: git apply experiments/removed/MOJOLEARN_TREES_T32_SHARED_ROWS.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_TREES_T33_COST_SCHEDULE (IDENTICAL opt-in cache-cost grove schedule, core/forest_inference.mojo; no A/B recorded) deleted 2026-11-15 by lane/expdel2-03-base; code recoverable at 1cad80e23b.
+# Restore: git apply experiments/removed/MOJOLEARN_TREES_T33_COST_SCHEDULE.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_TREES_T34_CHUNK_FOLD (IDENTICAL opt-in chunk fold version: FOREST_CHUNK, chunk_add, forest_chunk_sum; no A/B recorded) deleted 2026-11-15 by lane/expdel2-03-base; code recoverable at cfad8788a0.
+# Restore: git apply experiments/removed/MOJOLEARN_TREES_T34_CHUNK_FOLD.patch; record in docs/TOMBSTONES.md.
+#: Kept as the folded constant: core/forest_inference_model.mojo imports it.
+comptime T34_CHUNK_FOLD = False
+# TOMBSTONE: MOJOLEARN_TREES_FOREST_ROUTE (forest prediction routes 1/2: leaf IDs once, then every output folds from them, old T35;
+# and route 2 with the finiteness check fused into the leaf-ID pass, old T36; no A/B recorded) deleted 2026-11-15 by
+# lane/expdel2-03-base; code recoverable at c44dc3c017.
+# Restore: git apply experiments/removed/MOJOLEARN_TREES_FOREST_ROUTE.patch; record in docs/TOMBSTONES.md.
+#: Kept as the folded constants: core/forest_inference_model.mojo imports them.
+comptime T35_LEAF_REUSE = False
+comptime T36_FINITE_STAGE = False
+# TOMBSTONE: MOJOLEARN_TREES_T37_WORKSPACE (IDENTICAL opt-in resident prediction workspace, core/forest_inference_model.mojo; no A/B recorded) deleted 2026-11-15 by lane/expdel2-03-base; code recoverable at 07f7a0733b.
+# Restore: git apply experiments/removed/MOJOLEARN_TREES_T37_WORKSPACE.patch; record in docs/TOMBSTONES.md.
+#: Kept as the folded constant: core/forest_inference_model.mojo imports it.
+comptime T37_WORKSPACE = False
+# TOMBSTONE: MOJOLEARN_TREES_T38_FUSED_LABELS (IDENTICAL opt-in fused prediction labels; this lane also dropped core/forest_inference.mojo's unused import of it; no A/B recorded) deleted 2026-11-15 by lane/expdel2-03-base; code recoverable at 81c34fb4fb.
+# Restore: git apply experiments/removed/MOJOLEARN_TREES_T38_FUSED_LABELS.patch; record in docs/TOMBSTONES.md.
+#: Kept as the folded constant: core/forest_inference_model.mojo, core/forest_inference_run.mojo and bindings/forest_inference_binding_door.mojo import it.
+comptime T38_FUSED_LABELS = False
 
-# Fixed logical chunks are the numerical version, not launch or warp widths.
-# Each chunk contains consecutive trees, zero-padded to 32; pair adjacent
-# entries at strides 1,2,4,8,16. Chunk roots fold in increasing chunk order.
-comptime FOREST_CHUNK = 32
-
-@always_inline
-def chunk_add(a: Float32, b: Float32) -> Float32:
-    return ftz(ftz(a) + ftz(b))
-
-@always_inline
-def forest_chunk_sum(mut values: Array[Float32, FOREST_CHUNK]) -> Float32:
-    var stride = 1
-    while stride < FOREST_CHUNK:
-        var i = 0
-        while i < FOREST_CHUNK:
-            values[i] = chunk_add(values[i], values[i + stride])
-            i += 2 * stride
-        stride *= 2
-    return values[0]
-
+#: The default fold's finish: the tree-order total divided by the tree count.
 @always_inline
 def forest_chunk_finish(total: Float32, trees: Int) -> Float32:
     return ftz(identical_div(ftz(total), Float32(trees)))
 
-comptime T44_METADATA_CACHE = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_TREES_T44_METADATA_CACHE"]()
-comptime T39_AUXILIARY_WALK = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_TREES_T39_AUXILIARY_WALK"]()
+# TOMBSTONE: MOJOLEARN_TREES_T44_METADATA_CACHE (IDENTICAL opt-in metadata cache; this alias had no importer, providers/python/xtrees_api_pyapi_door.mojo reads the define in its own lane; no A/B recorded) deleted 2026-11-15 by lane/expdel2-03-base; code recoverable at 3e9cbbd919.
+# Restore: git apply experiments/removed/MOJOLEARN_TREES_T44_METADATA_CACHE.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_TREES_T39_AUXILIARY_WALK (IDENTICAL opt-in shared auxiliary walk, core/forest_auxiliary_units.mojo; no A/B recorded) deleted 2026-11-15 by lane/expdel2-03-base; code recoverable at 96ee21ad13.
+# Restore: git apply experiments/removed/MOJOLEARN_TREES_T39_AUXILIARY_WALK.patch; record in docs/TOMBSTONES.md.
 
-comptime C50_GB_PACKED = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_TREES_C50_GB_PACKED"]()
+# TOMBSTONE: MOJOLEARN_TREES_C50_GB_PACKED (IDENTICAL opt-in packed GBDT predict nodes; no A/B recorded) deleted 2026-11-15 by lane/expdel2-03-base; code recoverable at 03a43eb1ec.
+# Restore: git apply experiments/removed/MOJOLEARN_TREES_C50_GB_PACKED.patch; record in docs/TOMBSTONES.md.
+#: Kept as the folded constant: core/gbdt_host_predict.mojo, gbdt/resident_model.mojo and gbdt/models/add_non_symmetric_tree_doc_parallel.mojo import it.
+comptime C50_GB_PACKED = False

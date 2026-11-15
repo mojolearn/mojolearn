@@ -1,0 +1,45 @@
+diff --git a/core/forest_auxiliary_units.mojo b/core/forest_auxiliary_units.mojo
+index 7976bc86b3..b9ec026074 100644
+--- a/core/forest_auxiliary_units.mojo
++++ b/core/forest_auxiliary_units.mojo
+@@ -1,10 +1,12 @@
+ # SPDX-License-Identifier: Apache-2.0
+-"""Exact auxiliary-output walk, shared by host and every GPU column.
++"""T39 exact auxiliary-output walk, shared by host and every GPU column.
++Default OFF. NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
+ Prefix contract: strict tree-order sum / number of trees in that prefix.
+ Outputs are row-major. A zero output address requests no allocation/write.
+ """
+ from std.memory import bitcast
+ from checks.numerics import ftz, identical_div
++from core.forest_experiments import T39_AUXILIARY_WALK
+ 
+ comptime AuxI32 = MutPointer[Int32, MutAnyOrigin]
+ comptime AuxF32 = MutPointer[Float32, MutAnyOrigin]
+@@ -66,9 +68,10 @@ def _forest_auxiliary_row_shared[RF_INPUT: Bool](offsets: AuxI32, colid: AuxI32,
+ def forest_auxiliary_row[RF_INPUT: Bool](offsets: AuxI32, colid: AuxI32, threshold: AuxF32, left: AuxI32, leaves: AuxF32,
+     x: AuxF32, leaf_out: AuxI32, prefix_out: AuxF32, prediction: AuxF32, totals: AuxF32,
+     row: Int, features: Int, trees: Int, outputs: Int, emit_leaf: Bool, emit_prefix: Bool, emit_prediction: Bool) -> Bool:
+-    # TOMBSTONE: MOJOLEARN_TREES_T39_AUXILIARY_WALK (IDENTICAL opt-in one shared walk for every requested auxiliary output; no A/B recorded) deleted 2026-11-15 by lane/expdel2-03-base; code recoverable at 96ee21ad13.
+-    # Restore: git apply experiments/removed/MOJOLEARN_TREES_T39_AUXILIARY_WALK.patch; record in docs/TOMBSTONES.md.
+-    # Requested output consumers perform independent incumbent ordered walks.
++    comptime if T39_AUXILIARY_WALK:
++        return _forest_auxiliary_row_shared[RF_INPUT](offsets, colid, threshold, left, leaves, x, leaf_out, prefix_out, prediction,
++            totals, row, features, trees, outputs, emit_leaf, emit_prefix, emit_prediction)
++    # B: requested output consumers perform independent incumbent ordered walks.
+     # Prefix p repeats the first p+1 trees. No output-only work is fabricated.
+     if emit_leaf:
+         if not _forest_auxiliary_row_shared[RF_INPUT](offsets, colid, threshold, left, leaves, x, leaf_out, prefix_out, prediction,
+diff --git a/core/forest_experiments.mojo b/core/forest_experiments.mojo
+index 08bc6ef4c1..f09ec10959 100644
+--- a/core/forest_experiments.mojo
++++ b/core/forest_experiments.mojo
+@@ -36,7 +36,6 @@ def forest_chunk_finish(total: Float32, trees: Int) -> Float32:
+     return ftz(identical_div(ftz(total), Float32(trees)))
+ 
+ comptime T44_METADATA_CACHE = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_TREES_T44_METADATA_CACHE"]()
+-# TOMBSTONE: MOJOLEARN_TREES_T39_AUXILIARY_WALK (IDENTICAL opt-in shared auxiliary walk, core/forest_auxiliary_units.mojo; no A/B recorded) deleted 2026-11-15 by lane/expdel2-03-base; code recoverable at 96ee21ad13.
+-# Restore: git apply experiments/removed/MOJOLEARN_TREES_T39_AUXILIARY_WALK.patch; record in docs/TOMBSTONES.md.
++comptime T39_AUXILIARY_WALK = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_TREES_T39_AUXILIARY_WALK"]()
+ 
+ comptime C50_GB_PACKED = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_TREES_C50_GB_PACKED"]()

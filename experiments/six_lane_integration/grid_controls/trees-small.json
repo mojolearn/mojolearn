@@ -47,30 +47,6 @@
    ],
    "prune_note": "target = blocks-per-SM x SMs: BPSM=4 alone == SM=64 and SM64+BPSM4 == SM128 (merged, lane/grid-prune 2026-10-07). Arms: 64 (2x pinned), device (2 per SM, the CatBoost formula), device_bpsm4 (4 per SM, define value 1). 128 dropped: within 10% of device on NV (142 SMs). Not on gbdt-ordered (no replication_int32_for caller on the ordered route)."
   },
-  "PREDICT_ROW_OUTPUTS": {
-   "define": "MOJOLEARN_TREES_PREDICT_ROW_OUTPUTS",
-   "kind": "switch",
-   "arms": {
-    "off": [],
-    "on": [
-     "MOJOLEARN_TREES_PREDICT_ROW_OUTPUTS"
-    ]
-   },
-   "default": "off",
-   "source": [
-    "core/forest_inference.mojo:216",
-    "core/forest_inference.mojo:225",
-    "core/forest_inference.mojo:585"
-   ],
-   "binding": "_mojolearn_rf,_mojolearn_trees",
-   "bits_change": false,
-   "status": "new",
-   "note": "ordered forest predict (FOREST_ROUTE=0, T34 off): one thread per row walks each tree once and keeps up to 8 per-output register sums; same per-output tree-order forest_add chain and identical_div; inert under FOREST_ROUTE=1|2 and T34; host unchanged",
-   "exclusive_with": [
-    "MOJOLEARN_TREES_FOREST_ROUTE",
-    "MOJOLEARN_TREES_T34_CHUNK_FOLD"
-   ]
-  },
   "IF_BUILD_TPB": {
    "define": "MOJOLEARN_TREES_IF_BUILD_TPB",
    "kind": "int_sweep",
@@ -111,10 +87,7 @@
    "binding": "_mojolearn_gbdt",
    "bits_change": false,
    "status": "kept",
-   "note": "pre-existing fam2-gbdt F4 candidate (64 same-depth oblivious trees per launch, register sum in tree order), registered for the grid by lane trees-small; reaches oblivious-tree predict only (mixed-depth ensembles keep the four-tree grouping)",
-   "exclusive_with": [
-    "MOJOLEARN_TREES_C50_GB_PACKED"
-   ]
+   "note": "pre-existing fam2-gbdt F4 candidate (64 same-depth oblivious trees per launch, register sum in tree order), registered for the grid by lane trees-small; reaches oblivious-tree predict only (mixed-depth ensembles keep the four-tree grouping)"
   }
  },
  "algorithms": {
@@ -282,12 +255,9 @@
   "trees:rf": {
    "binding": "_mojolearn_rf",
    "route": "fit: unchanged by this lane; predict_proba: rf_predict_proba_binding -> _rf_predict_ordered -> launch_forest_inference[GROVE=False] -> forest_row_outputs_kernel (on) | forest_ordered_kernel (off)",
-   "controls": [
-    "PREDICT_ROW_OUTPUTS"
-   ],
+   "controls": [],
    "interaction_groups": [
     [
-     "PREDICT_ROW_OUTPUTS",
      "FOREST_ROUTE",
      "T34"
     ]
@@ -296,12 +266,9 @@
   "trees:et": {
    "binding": "_mojolearn_trees",
    "route": "fit: unchanged by this lane; predict_proba: et_predict_binding -> launch_forest_inference[GROVE=False] -> forest_row_outputs_kernel (on) | forest_ordered_kernel (off)",
-   "controls": [
-    "PREDICT_ROW_OUTPUTS"
-   ],
+   "controls": [],
    "interaction_groups": [
     [
-     "PREDICT_ROW_OUTPUTS",
      "FOREST_ROUTE",
      "T34"
     ]
@@ -355,6 +322,11 @@
    "define": "MOJOLEARN_TREES_HIST_REP_BPSM",
    "control": "HIST_REP_BPSM",
    "reason": "MERGED into HIST_REP_SM by lane/grid-prune 2026-10-07 (arm device_bpsm4 = MOJOLEARN_TREES_HIST_REP_SM=1); the define is refused in core/six_lane_experiment_guards.mojo."
+  },
+  {
+   "define": "MOJOLEARN_TREES_PREDICT_ROW_OUTPUTS",
+   "control": "PREDICT_ROW_OUTPUTS",
+   "reason": "DELETED 2026-11-15 (lane/expdel2-03-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md): no record: no A/B recorded for the opt-in arm (V2 rule a); under \"An unmeasured arm is deleted\" the arm goes, the default stays (no bit change); code at 432acbb3df; patch experiments/removed/MOJOLEARN_TREES_PREDICT_ROW_OUTPUTS.patch."
   }
  ]
 }
