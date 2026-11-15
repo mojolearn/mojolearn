@@ -46,18 +46,8 @@ comptime IDN_MAMBA_GEMM_WS = (
 )
 
 
-# NN40 workspace-only sub-arm, OFF/unmeasured. Grow-ahead reserves 25%
-# headroom capped at 16 MiB; this size-independent allocation policy can
-# avoid repeated waits/reallocations across increasing prefill lengths.
-# Context ownership and the pre-replacement wait stay unchanged. It makes
-# NO claim about cached weights, generation invalidation or packed weights.
-comptime NN40_WS_HEADROOM = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_NN40_WS_HEADROOM"]() and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-
-
-def nn40_workspace_capacity(required: Int) -> Int:
-    comptime if NN40_WS_HEADROOM:
-        return required + min(max(required // 4, 1), 1 << 22)
-    return required
+# TOMBSTONE: MOJOLEARN_NN40_WS_HEADROOM (unmeasured opt-in arm: 25% workspace grow-ahead headroom) deleted 2026-11-15 by lane/expdel2-27-neural; code recoverable at 340d379a3c.
+# Restore: git apply experiments/removed/MOJOLEARN_NN40_WS_HEADROOM.patch
 
 
 struct _MambaGemmWs(Defaultable, Movable):
@@ -93,7 +83,7 @@ def mamba_proj_gemm(
         var si = ctx_cache_slot(g[].ids, ctx)
         if si < 0:
             step_count_device_alloc()
-            g[].bufs.append(ctx.enqueue_create_buffer[DType.float32](nn40_workspace_capacity(required)))
+            g[].bufs.append(ctx.enqueue_create_buffer[DType.float32](required))
             g[].ids.append(ctx_cache_key(ctx))
             si = len(g[].ids) - 1
         elif len(g[].bufs[si]) < required:
@@ -101,7 +91,7 @@ def mamba_proj_gemm(
             step_count_sync()
             ctx.synchronize()
             step_count_device_alloc()
-            g[].bufs[si] = ctx.enqueue_create_buffer[DType.float32](nn40_workspace_capacity(required))
+            g[].bufs[si] = ctx.enqueue_create_buffer[DType.float32](required)
         var ws = g[].bufs[si].create_sub_buffer[DType.float32](0, len(g[].bufs[si]))
         identical_gemm_into[False](ctx, c, a, b, ws, m, n, k, op)
     else:
