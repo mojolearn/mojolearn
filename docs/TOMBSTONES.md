@@ -652,6 +652,7 @@ in the tables after the sections.
 | [`MOJOLEARN_ARD_FAST_CLS1_BATCH_OFF`](#mojolearn_ard_fast_cls1_batch_off-old-path-deleted-2026-11-15) | Linear (ARD batched witness checks, FAST Apple) | removed (old path; FAST+Apple default KEPT, gapcls1-ardall-taxi) | 2026-11-15 | [MOJOLEARN_ARD_FAST_CLS1_BATCH_OFF.patch](../experiments/removed/MOJOLEARN_ARD_FAST_CLS1_BATCH_OFF.patch) |
 | [`MOJOLEARN_BAYES_FAST_CLS1_PARTS_OFF`](#mojolearn_bayes_fast_cls1_parts_off-old-path-deleted-2026-11-15) | Linear (BayesianRidge row-block partials, FAST Apple) | removed (old path; FAST+Apple default KEPT, gapcls1-brparts-taxi) | 2026-11-15 | [MOJOLEARN_BAYES_FAST_CLS1_PARTS_OFF.patch](../experiments/removed/MOJOLEARN_BAYES_FAST_CLS1_PARTS_OFF.patch) |
 | [`MOJOLEARN_BAYES_FAST_CLS1_BATCH_OFF`](#mojolearn_bayes_fast_cls1_batch_off-old-path-deleted-2026-11-15) | Linear (BayesianRidge batched guarded iterations, FAST Apple) | removed (old path; FAST+Apple default KEPT, gapcls1-brall-taxi) | 2026-11-15 | [MOJOLEARN_BAYES_FAST_CLS1_BATCH_OFF.patch](../experiments/removed/MOJOLEARN_BAYES_FAST_CLS1_BATCH_OFF.patch) |
+| [`MOJOLEARN_RIDGE_FAST_CLS1_CODES_OFF`](#mojolearn_ridge_fast_cls1_codes_off-old-path-deleted-2026-11-15) | Linear (RidgeClassifier device +-1 targets, FAST Apple) | removed (old path; FAST+Apple default KEPT, gapcls1-rccodes-taxi) | 2026-11-15 | [MOJOLEARN_RIDGE_FAST_CLS1_CODES_OFF.patch](../experiments/removed/MOJOLEARN_RIDGE_FAST_CLS1_CODES_OFF.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -6337,4 +6338,12 @@ bits change on any vendor or the host column, no board row needs re-timing.
 - **Verdict**: KEPT 9decae29f (EXPERIMENTS.md `BAYES_FAST_CLS1_BATCH + BAYES_FAST_CLS1_PARTS + BAYES_FAST_CLS1_STATS`, gapcls1-brall-taxi): M3 one run per arm, bayesian-ridge taxi 102 -> 15.3 ms with the three switches, board FAST value equals the B arm (15.3). Measured as the bundle. No bit change on any column.
 - **Deleted by**: lane/expdel-03-linear (expdel-03-linear, docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md); code recoverable at `9a688a11e2`.
 - **Restore**: `git apply experiments/removed/MOJOLEARN_BAYES_FAST_CLS1_BATCH_OFF.patch`, then delete the `MOJOLEARN_BAYES_FAST_CLS1_BATCH_OFF` refusal in `core/experiment_guards_linear.mojo`.
+- **Records**: refusal in `core/experiment_guards_linear.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel-03-linear section).
+
+## MOJOLEARN_RIDGE_FAST_CLS1_CODES_OFF: old path deleted (2026-11-15)
+
+- **What it was**: the FAST+Apple rollback of RidgeClassifier's +-1 targets from the int32 class codes expanded on the device (`c1_codes_targets_kernel`) to the targets built before the call. Only the `and not is_defined` term of `RIDGE_CLS1_CODES` (x_linear/cls1_fast.mojo) is gone; the old targets stay the path of every non-FAST-Apple build.
+- **Verdict**: KEPT 9decae29f (EXPERIMENTS.md `RIDGE_FAST_CLS1_CODES`, gapcls1-rccodes-taxi): M3 one run per arm, ridge-clf taxi 120 -> 19.0 ms, board FAST value equals the B arm (19). No bit change on any column.
+- **Deleted by**: lane/expdel-03-linear (expdel-03-linear, docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md); code recoverable at `cb5f47564f`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_RIDGE_FAST_CLS1_CODES_OFF.patch`, then delete the `MOJOLEARN_RIDGE_FAST_CLS1_CODES_OFF` refusal in `core/experiment_guards_linear.mojo`.
 - **Records**: refusal in `core/experiment_guards_linear.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel-03-linear section).
