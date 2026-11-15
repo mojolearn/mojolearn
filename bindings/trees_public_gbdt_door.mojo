@@ -20,7 +20,6 @@
 # from the predict entry to the binary output kernel without a Python step.
 from std.python import Python, PythonObject
 from bindings.base_helpers_key_unpack import base_helpers_key
-from bindings.labels_stat_boundary_pack import labels_stat_pack
 from bindings.base_helpers_released_unpack import base_reduce_stat, base_check_indices_i64, base_bincount_i64
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem, py_fields
 from bindings.params_metadata_native_door import _resolved
@@ -574,12 +573,6 @@ def ordered_option_values(settings: PythonObject, context: PythonObject) raises:
                         + ("positive" if positive else "non-negative"))
 
 
-def _reduce(addr: Int, code: Int, n: Int, what: Int, context: PythonObject) raises -> PythonObject:
-    """The core helper `reduce_stat` (0 min, 1 max, 4 integral), through the
-    base helper table; PACK of its answer as the Python number."""
-    return labels_stat_pack(base_reduce_stat(base_helpers_key(context["trees_helpers"]), addr, code, n, what))
-
-
 def _checked_weights(source: PythonObject, n: Int, wrap: Bool, context: PythonObject) raises -> AdmittedX:
     """The OrderedRMSE / FeatureFreq weight checks: one value per row,
     finite, non-negative, a positive sum."""
@@ -592,9 +585,10 @@ def _checked_weights(source: PythonObject, n: Int, wrap: Bool, context: PythonOb
         raise error^
     if w.rows != n:
         raise Error("mojolearn: sample_weight must have one value per row")
-    if not trees_finite_f32(w.address, n) or Bool(py=_reduce(w.address, 0, n, 0, context) < PythonObject(0)):
+    var helpers = base_helpers_key(context["trees_helpers"])
+    if not trees_finite_f32(w.address, n) or base_reduce_stat(helpers, w.address, 0, n, 0).f < 0.0:
         raise Error("mojolearn: sample_weight must be finite and non-negative")
-    if not Bool(py=_reduce(w.address, 0, n, 1, context) > PythonObject(0)):
+    if not base_reduce_stat(helpers, w.address, 0, n, 1).f > 0.0:
         raise Error("mojolearn: sample_weight must have positive sum")
     return w^
 
@@ -727,8 +721,30 @@ def trees_view_i64(source: PythonObject, context: PythonObject) raises -> Python
     return admit_ids(prepared, "permutation", context)
 
 
+def _source_columns(sources: PythonObject) raises -> List[Int]:
+    """UNPACK of `sources`: the named source columns as native ints, read
+    once; every check of them runs on this list."""
+    var cols = List[Int](capacity=len(sources))
+    for i in range(len(sources)):  # driver-loop: over the named source columns, unpacked once
+        cols.append(_int(sources[i]))
+    return cols^
+
+
+def _int_list_text(values: List[Int]) -> String:
+    """`[a, b, ...]`, the refusal's spelling of a typed column list."""
+    var text = String("[")
+    for i in range(len(values)):  # small-loop(the named source columns of one refusal message)
+        if i > 0:
+            text += ", "
+        text += String(values[i])
+    return text + "]"
+
+
 def feature_freq_fit(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
-    """`ExperimentalTwoLevelFeatureFreq.fit(X, y, sample_weight=)`."""
+    """`ExperimentalTwoLevelFeatureFreq.fit(X, y, sample_weight=)`.
+    UNPACK reads X, `sources`, y and sample_weight into native values; every
+    admission check after it runs on those typed values (column numbers,
+    pointers and `HpStat` answers), never on Python objects."""
     var b = trees_builtins()
     var fields = py_fields(model)
     var x = admit_f32(args[0], 2, "X", context, order="F", finite=False)
@@ -736,23 +752,24 @@ def feature_freq_fit(model: PythonObject, args: PythonObject, context: PythonObj
     var d = x.cols
     if n == 0 or d < 2:
         raise Error("mojolearn: experimental FeatureFreq needs rows and columns")
-    var sources = _field(fields, model, "sources")
+    var sources = _source_columns(_field(fields, model, "sources"))
+    var helpers = base_helpers_key(context["trees_helpers"])
     for i in range(len(sources)):  # driver-loop: over the named source columns
-        var f = _int(sources[i])
+        var f = sources[i]
         if f < 0 or f >= d:
-            raise Error("mojolearn: sources " + _repr(sources) + " outside " + String(d) + " features")
+            raise Error("mojolearn: sources " + _int_list_text(sources) + " outside " + String(d) + " features")
     if not trees_finite_f32(x.address, n * d):
         raise Error("mojolearn: experimental FeatureFreq X must be finite")
     _ = x  # keep the Python object alive through the native calls above
     var is_source = List[Bool](length=d, fill=False)
     for i in range(len(sources)):  # driver-loop: over the named source columns, one native stat set each
-        var f = _int(sources[i])
+        var f = sources[i]
         is_source[f] = True
         var col = x.address + 4 * f * n
         _ = x  # keep the Python object alive through the native call above
-        var hi = Float64(py=_reduce(col, 0, n, 1, context))
+        var hi = base_reduce_stat(helpers, col, 0, n, 1).f
         _ = x  # keep the Python object alive through the native call above
-        if not _truthy_int(_reduce(col, 0, n, 4, context)) or Bool(py=_reduce(col, 0, n, 0, context) < PythonObject(0)):
+        if base_reduce_stat(helpers, col, 0, n, 4).i == 0 or base_reduce_stat(helpers, col, 0, n, 0).f < 0.0:
             raise Error("mojolearn: experimental FeatureFreq source columns must "
                         + "contain non-negative integer category codes")
         _ = x  # keep the Python object alive through the native calls above
@@ -764,11 +781,10 @@ def feature_freq_fit(model: PythonObject, args: PythonObject, context: PythonObj
             _ = codes  # keep the Python object alive through the native call above
             _ = x  # keep the Python object alive through the native call above
             var counts = admitted_vector(k, "<i8", context)
-            _ = base_bincount_i64(base_helpers_key(context["trees_helpers"]), trees_address(codes), 3, n, k,
-                                  trees_address(counts), False)
+            _ = base_bincount_i64(helpers, trees_address(codes), 3, n, k, trees_address(counts), False)
             _ = codes  # keep the Python object alive through the native call above
             _ = counts  # keep the Python object alive through the native call above
-            dense = Bool(py=_reduce(trees_address(counts), 3, k, 0, context) > PythonObject(0))
+            dense = base_reduce_stat(helpers, trees_address(counts), 3, k, 0).i > 0
             _ = counts  # keep the Python object alive through the native call above
         if not dense:
             raise Error("mojolearn: every experimental FeatureFreq source must "
@@ -779,7 +795,7 @@ def feature_freq_fit(model: PythonObject, args: PythonObject, context: PythonObj
             continue
         var col = x.address + 4 * f * n
         _ = x  # keep the Python object alive through the native call above
-        if Bool(py=py_call(b.float, _reduce(col, 0, n, 0, context)) == py_call(b.float, _reduce(col, 0, n, 1, context))):
+        if base_reduce_stat(helpers, col, 0, n, 0).f == base_reduce_stat(helpers, col, 0, n, 1).f:
             raise Error("mojolearn: experimental FeatureFreq numeric columns "
                         + "must vary; column " + String(f) + " is constant")
         _ = x  # keep the Python object alive through the native calls above
@@ -801,7 +817,7 @@ def feature_freq_fit(model: PythonObject, args: PythonObject, context: PythonObj
     var sp = MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=trees_address(source_array))
     _ = source_array  # keep the Python object alive through the native call above
     for i in range(k):  # driver-loop: over the named source columns
-        sp[i] = UInt32(_int(sources[i]))
+        sp[i] = UInt32(sources[i])
         _ = source_array  # keep the Python object alive through the native call above
     var table = gbdt_table(fields, context)
     var entry = trees_need(table, "gbdt_fit_two_level_feature_freq",
@@ -822,7 +838,3 @@ def feature_freq_fit(model: PythonObject, args: PythonObject, context: PythonObj
     _ = x  # keep the Python object alive through the native call above
     _fitted_text(fields, model, d, PythonObject(0))
     return model
-
-
-def _truthy_int(value: PythonObject) raises -> Bool:
-    return Int(py=py_call_typed(trees_builtins().int, value)) != 0
