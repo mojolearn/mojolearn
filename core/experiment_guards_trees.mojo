@@ -464,8 +464,7 @@ def _check_configuration() -> Bool:
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_IF_EPILOGUE_DEVICE_OFF.patch
     comptime assert not is_defined["MOJOLEARN_IDN_IF_EPILOGUE_DEVICE_OFF"](), "removed 2026-11-15 (lane/expdel2-45-trees): IDN_IF_EPILOGUE_DEVICE_OFF (old path, IsolationForest (host scoring epilogue rollback); no record, rule b) is gone; the default path is the only one; code recoverable at 0454762fc4; restore: experiments/removed/MOJOLEARN_IDN_IF_EPILOGUE_DEVICE_OFF.patch"
     # MOJOLEARN_TREES_HIST_PACKED_GH: refusal removed 2026-11-15 (restored by lane/restore-run-arms-trees; RUN arm, see docs/TOMBSTONES.md Restored table)
-    # Restore: git apply experiments/removed/MOJOLEARN_TREES_HIST_WARP_AGG.patch
-    comptime assert not is_defined["MOJOLEARN_TREES_HIST_WARP_AGG"](), "removed 2026-11-15 (lane/expdel2-45-trees): TREES_HIST_WARP_AGG (opt-in arm, GBDT (wave-aggregated histogram atomics); no record, rule a) is gone; the default path is the only one; code recoverable at 1082bcb01c; restore: experiments/removed/MOJOLEARN_TREES_HIST_WARP_AGG.patch"
+    # MOJOLEARN_TREES_HIST_WARP_AGG: refusal removed 2026-11-15 (restored by lane/restore-run-arms-trees; RUN arm, see docs/TOMBSTONES.md Restored table)
     # Restore: git apply experiments/removed/MOJOLEARN_TREES_HIST_REP_SM_OFF.patch
     comptime assert not is_defined["MOJOLEARN_TREES_HIST_REP_SM_OFF"](), "removed 2026-11-15 (lane/expdel2-45-trees): TREES_HIST_REP_SM_OFF (old path, GBDT (pinned-32 histogram replicas rollback); EXP:1640 PROMOTED, rule e) is gone; the default path is the only one; code recoverable at 70fbbc4c47; restore: experiments/removed/MOJOLEARN_TREES_HIST_REP_SM_OFF.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_TREES_HIST_REP_SM.patch

@@ -212,6 +212,10 @@
   "hist-packed-gh": {
    "define": "MOJOLEARN_TREES_HIST_PACKED_GH",
    "status": "define in code (gbdt/trees_hist_switches.mojo HIST_PACKED_GH, gbdt/methods/greedy_subsets_searcher/kernel/hist_2_one_byte_8bit.mojo H8_PACKED): B = grad+hess of a cell in one Int64 shared atomic (NVIDIA/AMD); A = two Int32 atomics"
+  },
+  "hist-warp-agg": {
+   "define": "MOJOLEARN_TREES_HIST_WARP_AGG",
+   "status": "define in code (gbdt/trees_hist_switches.mojo HIST_WARP_AGG, gbdt/methods/greedy_subsets_searcher/kernel/hist_2_one_byte_8bit.mojo H8_WAVE_AGG / h8_add_point_wave): B = when a whole wave holds the same bin, one shuffle-tree sum and one atomic per stat (NVIDIA/AMD); A = one atomic per lane"
   }
  },
  "rows": [
@@ -1347,6 +1351,25 @@
     "hist-packed-gh"
    ],
    "decides": "B is promoted only when it is faster on the boosted fit rows (gbdt-depthwise, gbdt-lossguide, gbdt-multiclass, gbdt-rank-pairlogit, gbdt-symmetric fit, istella and taxi) on NVIDIA L40S; digests must not move (exact integer pair: same cells)"
+  },
+  {
+   "id": "rr-hist-warp-agg",
+   "source": "restore-run-arms-trees (2026-11-15; RUN #9 of docs/plans/DELETED_ARMS_WORTH_RUNNING_2026-11-15.md; lane trees-hist-ideas 2026-10-07, never timed)",
+   "kind": "ab",
+   "lane": [
+    "gbdt-depthwise",
+    "gbdt-lossguide",
+    "gbdt-multiclass",
+    "gbdt-rank-pairlogit",
+    "gbdt-symmetric"
+   ],
+   "dataset": "*",
+   "rows": "full",
+   "vendor": "nvidia",
+   "b_arms": [
+    "hist-warp-agg"
+   ],
+   "decides": "B is promoted only when it is faster on the boosted fit rows (gbdt-depthwise, gbdt-lossguide, gbdt-multiclass, gbdt-rank-pairlogit, gbdt-symmetric fit, istella and taxi) on NVIDIA L40S; digests must not move (integer adds: same cells); time it also crossed with hist-packed-gh (both defines) as one more B set when the box has room"
   }
  ]
 }
