@@ -135,11 +135,12 @@ comptime INT32_MAX: Int32 = 2147483647
 # and forest fingerprints remain unchanged.
 comptime LABELS_SAMPLED_ORDER = True
 
-# Optional bootstrap-row sorting preserves the drawn multiset. Stable
+# Bootstrap-row sorting preserves the drawn multiset. Stable
 # partitioning then keeps node ranges ascending. Integer/fixed-point
 # histograms, counts, leaves, and the resulting forest remain identical, but
 # `row_ids` order and its diagnostic trace intentionally differ from the reference.
-# `-D MOJOLEARN_2010_ROWS_SORTED=1` turns it on; off is the shipped default.
+# TOMBSTONE: MOJOLEARN_2010_ROWS_SORTED (unmeasured arm) deleted 2026-11-15 by expdel2-39-trees; code recoverable at the deletion commit^.
+# Restore: git apply experiments/removed/MOJOLEARN_2010_ROWS_SORTED.patch
 #
 # fam2-forests' `MOJOLEARN_IDN_RF_ROWS_SORTED` (sorted bootstrap rows on
 # NVIDIA/AMD, wide data only) was DELETED by lane trees-small (2026-10-07):
@@ -156,8 +157,7 @@ comptime LABELS_SAMPLED_ORDER = True
 # replaces fam2-forests' `IDN_RF_WEIGHT_ROWS_DEVICE`, whose `_OFF` define and
 # host-compacted upload are gone.)
 comptime ROWS_SORTED_SAMPLE = (
-    is_defined["MOJOLEARN_2010_ROWS_SORTED"]()
-    or (
+    (
         TARGET_HAS_APPLE_GPU
         and not is_defined["MOJOLEARN_RF_ROWS_SORTED_OFF"]()
         # lane/review-fixes: the Apple IDENTICAL arm is off under ALL_OFF
@@ -3025,8 +3025,7 @@ def fit_forest_prepared[
         has_sw,
         Int(rf_params.n_trees) if oob_score else 0,
         n_slots=k_streams,
-        sort_rows=is_defined["MOJOLEARN_2010_ROWS_SORTED"]()
-        or n_cols >= ROWS_SORTED_MIN_COLS,
+        sort_rows=n_cols >= ROWS_SORTED_MIN_COLS,
     )
     if has_sw:
         if not weights_on_device and len(sample_weight_host) < n_rows:
