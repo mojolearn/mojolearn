@@ -55,8 +55,6 @@ from ._mlp_impl import _NATIVE as _MLP_NATIVE
 from ._transformer_impl import TransformerBlock
 from ._mamba_impl import Mamba1Block, Mamba2Block, Mamba3Block
 from ._arrays import _addr, _addr_ro
-from ._bufcheck import le_bytes, probe
-from ._buffer import as_i32_c, frombytes
 
 _EXTENSION = "_mojolearn_neural_host"
 
@@ -338,13 +336,6 @@ class SambaInference:
         """An independent copy of every weight, keyed by registry name."""
         return _native_samba_bridge.RUNTIME.samba_native_call(
             "inference_parameters", (self,), _native_samba_bridge.CONTEXT)
-
-    @staticmethod
-    def _ids(x):
-        pb = probe(x)
-        if len(pb.shape) != 2:
-            raise ValueError("mojolearn.SambaInference: inputs must be (B, L) integer ids")
-        return as_i32_c(x, ndim=2, name="inputs")[0]
 
     def forward(self, inputs, state=None, *, lengths=None):
         """Logits for token ids; also available as `logits` and by calling the model.
