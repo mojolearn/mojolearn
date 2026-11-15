@@ -44,8 +44,6 @@ def xn_aux_execute(op: Int, a: List[Int], p: List[Int], f: List[Float64]) raises
                                  IP(unsafe_from_address=a[0]), IP(unsafe_from_address=a[1]))
         return 0
     if op == 0:
-        comptime if not XN_OCSVM_DEV_INIT:
-            raise Error("AttributeError: x_neighbors_ocsvm_alpha_init is not exported by this binding")
         var cv = a[0]
         var alpha = a[1]
         var n = p[0]
