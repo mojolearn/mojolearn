@@ -450,6 +450,23 @@ class MaxAbsScaler(_PrepBase):
 # ---------------------------------------------------------------- encoders
 
 
+class _EncodeFitTransform:
+    """The encoders' and imputer's `fit_transform`: one call into the encode owner.
+    Each owner binds these functions into its own namespace (`name = Holder.name`)
+    instead of inheriting them: the native integrity checks walk every class's
+    ancestry on each call, so an extra base would add work to every call."""
+
+    def fit_transform(self, X, y=None, **fit_params):
+        """Fit to ``X``, then transform ``X``.
+
+        Returns
+        -------
+        array
+            The transformed data.
+        """
+        return _ENCODE_CALL(self, "fit_transform", (X, y, fit_params), _ENCODE_CONTEXT)
+
+
 class OrdinalEncoder(_PrepBase):
     """Encode numeric categorical features as integer codes.
 
@@ -503,6 +520,7 @@ class OrdinalEncoder(_PrepBase):
     >>> X = np.array([[3.0, 10.0], [1.0, 20.0], [3.0, 10.0]], dtype=np.float32)
     >>> mojolearn.OrdinalEncoder().fit_transform(X)
     """
+    fit_transform = _EncodeFitTransform.fit_transform
     # One native call per public method; the native owner runs the whole
     # lifecycle (bindings/public_lifecycle_owner_door.mojo), so no `_mode` wrappers.
     _mojolearn_native_public = True
@@ -523,16 +541,6 @@ class OrdinalEncoder(_PrepBase):
 
     def fit(self, X, y=None):
         return _ENCODE_CALL(self, "fit", (X, y), _ENCODE_CONTEXT)
-
-    def fit_transform(self, X, y=None, **fit_params):
-        """Fit to ``X``, then transform ``X``.
-
-        Returns
-        -------
-        array
-            The transformed data.
-        """
-        return _ENCODE_CALL(self, "fit_transform", (X, y, fit_params), _ENCODE_CONTEXT)
 
     def transform(self, X):
         return _ENCODE_CALL(self, "transform", (X,), _ENCODE_CONTEXT)
@@ -600,6 +608,7 @@ class OneHotEncoder(_PrepBase):
     >>> X = np.array([[0.0, 1.0], [1.0, 1.0], [2.0, 0.0]], dtype=np.float32)
     >>> mojolearn.OneHotEncoder(drop="first").fit_transform(X)
     """
+    fit_transform = _EncodeFitTransform.fit_transform
     # One native call per public method; the native owner runs the whole
     # lifecycle (bindings/public_lifecycle_owner_door.mojo), so no `_mode` wrappers.
     _mojolearn_native_public = True
@@ -621,16 +630,6 @@ class OneHotEncoder(_PrepBase):
 
     def fit(self, X, y=None):
         return _ENCODE_CALL(self, "fit", (X, y), _ENCODE_CONTEXT)
-
-    def fit_transform(self, X, y=None, **fit_params):
-        """Fit to ``X``, then transform ``X``.
-
-        Returns
-        -------
-        array
-            The transformed data.
-        """
-        return _ENCODE_CALL(self, "fit_transform", (X, y, fit_params), _ENCODE_CONTEXT)
 
     def transform(self, X):
         return _ENCODE_CALL(self, "transform", (X,), _ENCODE_CONTEXT)
@@ -786,6 +785,7 @@ class SimpleImputer(_PrepBase):
     >>> X = np.array([[1.0, np.nan], [3.0, 4.0], [np.nan, 8.0]], dtype=np.float32)
     >>> mojolearn.SimpleImputer(strategy="median").fit_transform(X)
     """
+    fit_transform = _EncodeFitTransform.fit_transform
     # One native call per public method; the native owner runs the whole
     # lifecycle (bindings/public_lifecycle_owner_door.mojo), so no `_mode` wrappers.
     _mojolearn_native_public = True
@@ -804,16 +804,6 @@ class SimpleImputer(_PrepBase):
 
     def fit(self, X, y=None):
         return _ENCODE_CALL(self, "fit", (X, y), _ENCODE_CONTEXT)
-
-    def fit_transform(self, X, y=None, **fit_params):
-        """Fit to ``X``, then transform ``X``.
-
-        Returns
-        -------
-        array
-            The transformed data.
-        """
-        return _ENCODE_CALL(self, "fit_transform", (X, y, fit_params), _ENCODE_CONTEXT)
 
     def transform(self, X):
         return _ENCODE_CALL(self, "transform", (X,), _ENCODE_CONTEXT)
@@ -880,6 +870,7 @@ class KBinsDiscretizer(_PrepBase):
     >>> X = np.random.default_rng(0).random((1000, 4), dtype=np.float32)
     >>> Xt = mojolearn.KBinsDiscretizer(n_bins=4, encode="ordinal").fit_transform(X)
     """
+    fit_transform = _EncodeFitTransform.fit_transform
     # One native call per public method; the native owner runs the whole
     # lifecycle (bindings/public_lifecycle_owner_door.mojo), so no `_mode` wrappers.
     _mojolearn_native_public = True
@@ -897,16 +888,6 @@ class KBinsDiscretizer(_PrepBase):
 
     def fit(self, X, y=None, sample_weight=None):
         return _ENCODE_CALL(self, "fit", (X, y, sample_weight), _ENCODE_CONTEXT)
-
-    def fit_transform(self, X, y=None, **fit_params):
-        """Fit to ``X``, then transform ``X``.
-
-        Returns
-        -------
-        array
-            The transformed data.
-        """
-        return _ENCODE_CALL(self, "fit_transform", (X, y, fit_params), _ENCODE_CONTEXT)
 
     def transform(self, X):
         return _ENCODE_CALL(self, "transform", (X,), _ENCODE_CONTEXT)
@@ -1517,6 +1498,23 @@ class QuadraticDiscriminantAnalysis(_Classifier):
         return _CLS_CALL(self, "decision_function", (X,), _CLS_CONTEXT)
 
 
+class _StatelessFitTransform:
+    """The stateless-owner transformers' `fit_transform`: one native call.
+    Each owner binds these functions into its own namespace (`name = Holder.name`)
+    instead of inheriting them: the native integrity checks walk every class's
+    ancestry on each call, so an extra base would add work to every call."""
+
+    def fit_transform(self, X, y=None, **fit_params):
+        """Fit to ``X``, then transform ``X``.
+
+        Returns
+        -------
+        array
+            The transformed data.
+        """
+        return _STATELESS_CALL(self, "fit_transform", (X, y), _STATELESS_CONTEXT)
+
+
 # ---------------------------------------------------------------- additions: transformers
 # Transform is sklearn's two-sided interpolation; 'normal' uses Acklam's
 # inverse normal CDF in float32, clipped at sklearn's +-5.1993.
@@ -1566,6 +1564,7 @@ class QuantileTransformer(_PrepBase):
     >>> X = np.random.default_rng(0).exponential(size=(1000, 4)).astype(np.float32)
     >>> Xt = mojolearn.QuantileTransformer(output_distribution="normal").fit_transform(X)
     """
+    fit_transform = _StatelessFitTransform.fit_transform
     # One native call per public method; the native owner runs the whole
     # lifecycle (bindings/public_lifecycle_owner_door.mojo), so no `_mode` wrappers.
     _mojolearn_native_public = True
@@ -1585,16 +1584,6 @@ class QuantileTransformer(_PrepBase):
 
     def fit(self, X, y=None):
         return _STATELESS_CALL(self, "fit", (X, y), _STATELESS_CONTEXT)
-
-    def fit_transform(self, X, y=None, **fit_params):
-        """Fit to ``X``, then transform ``X``.
-
-        Returns
-        -------
-        array
-            The transformed data.
-        """
-        return _STATELESS_CALL(self, "fit_transform", (X, y), _STATELESS_CONTEXT)
 
     def transform(self, X):
         return _STATELESS_CALL(self, "transform", (X,), _STATELESS_CONTEXT)
@@ -1644,6 +1633,7 @@ class PowerTransformer(_PrepBase):
     >>> X = np.random.default_rng(0).lognormal(size=(1000, 4)).astype(np.float32)
     >>> Xt = mojolearn.PowerTransformer().fit_transform(X)
     """
+    fit_transform = _StatelessFitTransform.fit_transform
     # One native call per public method; the native owner runs the whole
     # lifecycle (bindings/public_lifecycle_owner_door.mojo), so no `_mode` wrappers.
     _mojolearn_native_public = True
@@ -1658,16 +1648,6 @@ class PowerTransformer(_PrepBase):
 
     def fit(self, X, y=None):
         return _STATELESS_CALL(self, "fit", (X, y), _STATELESS_CONTEXT)
-
-    def fit_transform(self, X, y=None, **fit_params):
-        """Fit to ``X``, then transform ``X``.
-
-        Returns
-        -------
-        array
-            The transformed data.
-        """
-        return _STATELESS_CALL(self, "fit_transform", (X, y), _STATELESS_CONTEXT)
 
     def transform(self, X):
         return _STATELESS_CALL(self, "transform", (X,), _STATELESS_CONTEXT)
@@ -1767,6 +1747,7 @@ class PolynomialFeatures(_PrepBase):
     >>> X = np.arange(6, dtype=np.float32).reshape(3, 2)
     >>> mojolearn.PolynomialFeatures(degree=2).fit_transform(X)
     """
+    fit_transform = _StatelessFitTransform.fit_transform
     # One native call per public method; the native owner runs the whole
     # lifecycle (bindings/public_lifecycle_owner_door.mojo), so no `_mode` wrappers.
     _mojolearn_native_public = True
@@ -1783,16 +1764,6 @@ class PolynomialFeatures(_PrepBase):
 
     def transform(self, X):
         return _STATELESS_CALL(self, "transform", (X,), _STATELESS_CONTEXT)
-
-    def fit_transform(self, X, y=None, **fit_params):
-        """Fit to ``X``, then transform ``X``.
-
-        Returns
-        -------
-        array
-            The transformed data.
-        """
-        return _STATELESS_CALL(self, "fit_transform", (X, y), _STATELESS_CONTEXT)
 
 
 class SplineTransformer(_PrepBase):
@@ -1913,6 +1884,7 @@ class Binarizer(_PrepBase):
     >>> X = np.array([[-1.0, 0.5], [2.0, 0.0]], dtype=np.float32)
     >>> mojolearn.Binarizer(threshold=0.25).fit_transform(X)
     """
+    fit_transform = _StatelessFitTransform.fit_transform
     # One native call per public method; the native owner runs the whole
     # lifecycle (bindings/public_lifecycle_owner_door.mojo), so no `_mode` wrappers.
     _mojolearn_native_public = True
@@ -1927,16 +1899,6 @@ class Binarizer(_PrepBase):
 
     def transform(self, X, copy=None):
         return _STATELESS_CALL(self, "transform", (X,), _STATELESS_CONTEXT)
-
-    def fit_transform(self, X, y=None, **fit_params):
-        """Fit to ``X``, then transform ``X``.
-
-        Returns
-        -------
-        array
-            The transformed data.
-        """
-        return _STATELESS_CALL(self, "fit_transform", (X, y), _STATELESS_CONTEXT)
 
 
 # ---------------------------------------------------------------- label transformers

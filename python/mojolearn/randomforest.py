@@ -69,17 +69,15 @@ imports NumPy.
 from . import _mojolearn_rf, _native_archive_bridge, _native_trees_bridge
 from ._labels import argmax_rows, decode_labels
 from ._mode import NumericModeMixin
-from ._forest_protocol import ForestProtocol, forest_estimator
+from ._forest_protocol import ForestArchive, ForestClassifierPredict, ForestProtocol, forest_estimator
 
 #: The npz model-file format tag `save` writes and `load` requires.
 _MODEL_FORMAT = "mojolearn-randomforest-1"
 
-# The compiled saved-model owner, connected once at import: `save` and
-# `load` are one native call each (bindings/archive_schema_native_door.mojo
-# writes the schema registered after `_RandomForestBase`;
-# bindings/host_archive_native_door.mojo `host_archive_public_forest` builds the
-# loaded model).
-_ARCHIVE, _ARCHIVE_CONTEXT = _native_archive_bridge.connect()
+# `save` and `load` are _forest_protocol.ForestArchive's, one native call each
+# (bindings/archive_schema_native_door.mojo writes the schema registered after
+# `_RandomForestBase`; bindings/host_archive_native_door.mojo `host_archive_public_forest`
+# builds the loaded model).
 
 # The compiled tree-ensemble owner, connected once at import: `fit`,
 # `predict` and `predict_proba` are one native call each
@@ -238,26 +236,15 @@ _MAX_LEAF_NODES_WHY = (
 class _RandomForestBase(ForestProtocol, NumericModeMixin):
     #: This family's binding, for `NumericModeMixin._bind`.
     _BINDING = "_mojolearn_rf"
+    save = ForestArchive.save
+    load = vars(ForestArchive)["load"]
 
-    def save(self, path):
-        """Write the fitted forest to `path` as an npz file.
-
-        The file holds the prediction arrays exactly as fitted, with exact
-        dtypes; floats never pass through decimal text. A model saved with the
-        'parallel_groves' inference engine also records its engine and
-        numeric mode. The file bytes depend only on the model, so equal models
-        give equal file hashes on any machine.
-        """
-        return _ARCHIVE(self, "archive_save", (path,), _ARCHIVE_CONTEXT)
-
-    @classmethod
-    def load(cls, path):
-        """Load a forest saved by `save`.
-
-        The loaded model predicts; it does not refit. Loading a file saved by
-        a different estimator class raises `ValueError`.
-        """
-        return _ARCHIVE(cls, "host_archive_load", (path,), _ARCHIVE_CONTEXT)
+    def _fit_with_tree_start(self, X, y, tree_start=None, *, feature_importances=False,
+                             sample_weight=None):
+        """`fit` of the trees from global tree ID `tree_start` on (a shard of
+        a multi-device forest)."""
+        return _TREES(self, "trees_public_forest_fit", (X, y, sample_weight, feature_importances, tree_start),
+                      _TREES_CONTEXT)
 
 
 #: The saved formats `load` reads, and the save schema of every forest
@@ -399,6 +386,7 @@ class RandomForestClassifier(_RandomForestBase):
     >>> model = mojolearn.RandomForestClassifier(n_estimators=50).fit(X, y)
     >>> proba = model.predict_proba(X)
     """
+    predict = ForestClassifierPredict.predict
 
     def __init__(
         self,
@@ -454,13 +442,6 @@ class RandomForestClassifier(_RandomForestBase):
         """
         return _TREES(self, "trees_public_forest_fit", (X, y, sample_weight, feature_importances, None), _TREES_CONTEXT)
 
-    def _fit_with_tree_start(self, X, y, tree_start=None, *, feature_importances=False,
-                             sample_weight=None):
-        """`fit` of the trees from global tree ID `tree_start` on (a shard of
-        a multi-device forest)."""
-        return _TREES(self, "trees_public_forest_fit", (X, y, sample_weight, feature_importances, tree_start),
-                      _TREES_CONTEXT)
-
     def predict_proba(self, X):
         """Class probabilities: the per-class vote fractions over the trees.
 
@@ -482,18 +463,6 @@ class RandomForestClassifier(_RandomForestBase):
         """
         proba = self.predict_proba(X)
         return decode_labels(self.classes_, argmax_rows(proba)), proba
-
-    def predict(self, X):
-        """Predicted class labels: the argmax of `predict_proba`, first
-        maximum winning, mapped through `classes_`.
-
-        Returns
-        -------
-        Array or list of shape (n_samples,)
-            An int64 or float64 `Array` for numeric labels, a Python list for
-            string labels.
-        """
-        return _TREES(self, "trees_public_forest_predict", (X,), _TREES_CONTEXT)
 
 
 # Maintainer notes (moved from the docstring): the regression criteria are
@@ -660,13 +629,6 @@ class RandomForestRegressor(_RandomForestBase):
         self
         """
         return _TREES(self, "trees_public_forest_fit", (X, y, sample_weight, feature_importances, None), _TREES_CONTEXT)
-
-    def _fit_with_tree_start(self, X, y, tree_start=None, *, feature_importances=False,
-                             sample_weight=None):
-        """`fit` of the trees from global tree ID `tree_start` on (a shard of
-        a multi-device forest)."""
-        return _TREES(self, "trees_public_forest_fit", (X, y, sample_weight, feature_importances, tree_start),
-                      _TREES_CONTEXT)
 
     def predict(self, X):
         """Predicted values: the mean of the trees' predictions.

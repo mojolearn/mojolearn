@@ -99,6 +99,21 @@ _DT_DEPTH = None
 # the stored parameters; lane py-trees (2026-11-14) deleted its Python copy.
 
 
+class _TreeSave:
+    """The single trees' `save` (one native call), shared by both.
+    Each owner binds these functions into its own namespace (`name = Holder.name`)
+    instead of inheriting them: the native integrity checks walk every class's
+    ancestry on each call, so an extra base would add work to every call."""
+
+    def save(self, path):
+        """Save the fitted tree to ``path``.
+
+        Raises ``NotImplementedError`` for a tree fitted with
+        ``splitter="random"``.
+        """
+        return _ARCHIVE(self, "archive_save", (path,), _ARCHIVE_CONTEXT)
+
+
 # sample_weight goes through the weighted RF fit entry (the weighted
 # objective; its CPU restatement is ensemble/host/rf_oracle.mojo).
 @forest_estimator("classifier")
@@ -182,6 +197,7 @@ class DecisionTreeClassifier(RandomForestClassifier):
     >>> model = mojolearn.DecisionTreeClassifier(max_depth=4).fit(X, y)
     >>> proba = model.predict_proba(X)
     """
+    save = _TreeSave.save
 
     def __init__(
         self,
@@ -245,14 +261,6 @@ class DecisionTreeClassifier(RandomForestClassifier):
     def predict(self, X):
         """Predict the class label of each row of ``X``."""
         return _TREES(self, _OP.trees_public_forest_predict, (X,), _TREES_CONTEXT)
-
-    def save(self, path):
-        """Save the fitted tree to ``path``.
-
-        Raises ``NotImplementedError`` for a tree fitted with
-        ``splitter="random"``.
-        """
-        return _ARCHIVE(self, "archive_save", (path,), _ARCHIVE_CONTEXT)
 
 
 # sample_weight goes through the weighted regressor entry
@@ -334,6 +342,7 @@ class DecisionTreeRegressor(RandomForestRegressor):
     >>> model = mojolearn.DecisionTreeRegressor(max_depth=6).fit(X, y)
     >>> pred = model.predict(X)
     """
+    save = _TreeSave.save
 
     def __init__(
         self,
@@ -388,14 +397,6 @@ class DecisionTreeRegressor(RandomForestRegressor):
     def predict(self, X):
         """Predict the target of each row of ``X``."""
         return _TREES(self, _OP.trees_public_forest_predict, (X,), _TREES_CONTEXT)
-
-    def save(self, path):
-        """Save the fitted tree to ``path``.
-
-        Raises ``NotImplementedError`` for a tree fitted with
-        ``splitter="random"``.
-        """
-        return _ARCHIVE(self, "archive_save", (path,), _ARCHIVE_CONTEXT)
 
 
 # A tree saves in the random forest format, refusing a splitter='random'
@@ -542,6 +543,61 @@ class _BaggingBase(_TreesEnsembleBase):
     def estimators_(self, value):
         return _TREES(self, _OP.trees_bagging_members_set, (value,), _TREES_CONTEXT)
 
+class _BoostClassifierScore:
+    """The bagged and boosted classifiers' `score`: one native call (the native
+    predict and the native accuracy).
+    Each owner binds these functions into its own namespace (`name = Holder.name`)
+    instead of inheriting them: the native integrity checks walk every class's
+    ancestry on each call, so an extra base would add work to every call."""
+
+    def score(self, X, y, sample_weight=None):
+        """Mean accuracy of ``predict(X)`` against ``y``.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Test samples.
+        y : array-like of shape (n_samples,)
+            True labels.
+        sample_weight : array-like of shape (n_samples,), default None
+            Sample weights.
+
+        Returns
+        -------
+        float
+            Fraction of samples predicted correctly (weighted when
+            ``sample_weight`` is given).
+        """
+        return _TREES(self, _OP.trees_public_boost_score, (X, y, sample_weight), _TREES_CONTEXT)
+
+
+class _BoostRegressorScore:
+    """The bagged and boosted regressors' `score`: one native call (the native
+    predict and the native R^2).
+    Each owner binds these functions into its own namespace (`name = Holder.name`)
+    instead of inheriting them: the native integrity checks walk every class's
+    ancestry on each call, so an extra base would add work to every call."""
+
+    def score(self, X, y, sample_weight=None):
+        """Coefficient of determination R^2 of ``predict(X)`` against ``y``.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Test samples.
+        y : array-like of shape (n_samples,)
+            True targets.
+        sample_weight : array-like of shape (n_samples,), default None
+            Sample weights.
+
+        Returns
+        -------
+        float
+            R^2; 1.0 is a perfect fit.
+        """
+        return _TREES(self, _OP.trees_public_boost_score, (X, y, sample_weight), _TREES_CONTEXT)
+
+
 class BaggingClassifier(ClassifierScoreMixin, _BaggingBase):
     """A bagging ensemble of classifiers.
 
@@ -619,6 +675,7 @@ class BaggingClassifier(ClassifierScoreMixin, _BaggingBase):
     >>> model = mojolearn.BaggingClassifier(n_estimators=20, random_state=0).fit(X, y)
     >>> proba = model.predict_proba(X)
     """
+    score = _BoostClassifierScore.score
     _estimator_type = "classifier"
     #: the native lifecycle owner (trees_public_boost_*) tracks fits and validates inputs;
     #: no Python fit-tracking or output wrappers are installed
@@ -661,26 +718,6 @@ class BaggingClassifier(ClassifierScoreMixin, _BaggingBase):
     def predict(self, X):
         """Predict the class with the highest mean probability."""
         return _TREES(self, _OP.trees_public_boost_predict, (X,), _TREES_CONTEXT)
-
-    def score(self, X, y, sample_weight=None):
-        """Mean accuracy of ``predict(X)`` against ``y``.
-
-        Parameters
-        ----------
-        X : array-like of shape (n_samples, n_features)
-            Test samples.
-        y : array-like of shape (n_samples,)
-            True labels.
-        sample_weight : array-like of shape (n_samples,), default None
-            Sample weights.
-
-        Returns
-        -------
-        float
-            Fraction of samples predicted correctly (weighted when
-            ``sample_weight`` is given).
-        """
-        return _TREES(self, _OP.trees_public_boost_score, (X, y, sample_weight), _TREES_CONTEXT)
 
 class BaggingRegressor(RegressorScoreMixin, _BaggingBase):
     """A bagging ensemble of regressors.
@@ -752,6 +789,7 @@ class BaggingRegressor(RegressorScoreMixin, _BaggingBase):
     >>> model = mojolearn.BaggingRegressor(n_estimators=20, random_state=0).fit(X, y)
     >>> pred = model.predict(X)
     """
+    score = _BoostRegressorScore.score
     _estimator_type = "regressor"
     #: the native lifecycle owner (trees_public_boost_*) tracks fits and validates inputs;
     #: no Python fit-tracking or output wrappers are installed
@@ -787,25 +825,6 @@ class BaggingRegressor(RegressorScoreMixin, _BaggingBase):
     def predict(self, X):
         """Mean of the members' predictions, float64."""
         return _TREES(self, _OP.trees_public_boost_predict, (X,), _TREES_CONTEXT)
-
-    def score(self, X, y, sample_weight=None):
-        """Coefficient of determination R^2 of ``predict(X)`` against ``y``.
-
-        Parameters
-        ----------
-        X : array-like of shape (n_samples, n_features)
-            Test samples.
-        y : array-like of shape (n_samples,)
-            True targets.
-        sample_weight : array-like of shape (n_samples,), default None
-            Sample weights.
-
-        Returns
-        -------
-        float
-            R^2; 1.0 is a perfect fit.
-        """
-        return _TREES(self, _OP.trees_public_boost_score, (X, y, sample_weight), _TREES_CONTEXT)
 
 # ----------------------------------------------------------------- AdaBoost
 # Reference: scikit-learn `sklearn/ensemble/_weight_boosting.py`
@@ -881,6 +900,7 @@ class AdaBoostClassifier(ClassifierScoreMixin, _AdaBoostBase):
     >>> model = mojolearn.AdaBoostClassifier(n_estimators=50).fit(X, y)
     >>> proba = model.predict_proba(X)
     """
+    score = _BoostClassifierScore.score
     _estimator_type = "classifier"
     #: the native lifecycle owner (trees_public_boost_*) tracks fits and validates inputs;
     #: no Python fit-tracking or output wrappers are installed
@@ -937,26 +957,6 @@ class AdaBoostClassifier(ClassifierScoreMixin, _AdaBoostBase):
         """Predict the class with the highest weighted vote."""
         return _TREES(self, _OP.trees_public_boost_predict, (X,), _TREES_CONTEXT)
 
-    def score(self, X, y, sample_weight=None):
-        """Mean accuracy of ``predict(X)`` against ``y``.
-
-        Parameters
-        ----------
-        X : array-like of shape (n_samples, n_features)
-            Test samples.
-        y : array-like of shape (n_samples,)
-            True labels.
-        sample_weight : array-like of shape (n_samples,), default None
-            Sample weights.
-
-        Returns
-        -------
-        float
-            Fraction of samples predicted correctly (weighted when
-            ``sample_weight`` is given).
-        """
-        return _TREES(self, _OP.trees_public_boost_score, (X, y, sample_weight), _TREES_CONTEXT)
-
 class AdaBoostRegressor(RegressorScoreMixin, _AdaBoostBase):
     """An AdaBoost regressor (AdaBoost.R2).
 
@@ -1010,6 +1010,7 @@ class AdaBoostRegressor(RegressorScoreMixin, _AdaBoostBase):
     >>> model = mojolearn.AdaBoostRegressor(n_estimators=50, random_state=0).fit(X, y)
     >>> pred = model.predict(X)
     """
+    score = _BoostRegressorScore.score
     _estimator_type = "regressor"
     #: the native lifecycle owner (trees_public_boost_*) tracks fits and validates inputs;
     #: no Python fit-tracking or output wrappers are installed
@@ -1044,25 +1045,6 @@ class AdaBoostRegressor(RegressorScoreMixin, _AdaBoostBase):
     def predict(self, X):
         """Weighted median of the members' predictions."""
         return _TREES(self, _OP.trees_public_boost_predict, (X,), _TREES_CONTEXT)
-
-    def score(self, X, y, sample_weight=None):
-        """Coefficient of determination R^2 of ``predict(X)`` against ``y``.
-
-        Parameters
-        ----------
-        X : array-like of shape (n_samples, n_features)
-            Test samples.
-        y : array-like of shape (n_samples,)
-            True targets.
-        sample_weight : array-like of shape (n_samples,), default None
-            Sample weights.
-
-        Returns
-        -------
-        float
-            R^2; 1.0 is a perfect fit.
-        """
-        return _TREES(self, _OP.trees_public_boost_score, (X, y, sample_weight), _TREES_CONTEXT)
 
 # --------------------------------------------------------------------- DART
 # Reference: LightGBM `src/boosting/dart.hpp` (DART::DroppingTrees,
@@ -1186,6 +1168,7 @@ class DARTRegressor(RegressorScoreMixin, _DARTBase):
     >>> model = mojolearn.DARTRegressor(n_estimators=50).fit(X, y)
     >>> pred = model.predict(X)
     """
+    score = _BoostRegressorScore.score
     _estimator_type = "regressor"
     #: the native lifecycle owner (trees_public_boost_*) tracks fits and validates inputs;
     #: no Python fit-tracking or output wrappers are installed
@@ -1217,25 +1200,6 @@ class DARTRegressor(RegressorScoreMixin, _DARTBase):
     def predict(self, X):
         """Raw boosted score of each row, float64."""
         return _TREES(self, _OP.trees_public_boost_predict, (X,), _TREES_CONTEXT)
-
-    def score(self, X, y, sample_weight=None):
-        """Coefficient of determination R^2 of ``predict(X)`` against ``y``.
-
-        Parameters
-        ----------
-        X : array-like of shape (n_samples, n_features)
-            Test samples.
-        y : array-like of shape (n_samples,)
-            True targets.
-        sample_weight : array-like of shape (n_samples,), default None
-            Sample weights.
-
-        Returns
-        -------
-        float
-            R^2; 1.0 is a perfect fit.
-        """
-        return _TREES(self, _OP.trees_public_boost_score, (X, y, sample_weight), _TREES_CONTEXT)
 
 class DARTClassifier(ClassifierScoreMixin, _DARTBase):
     """Gradient boosting with DART dropout, classification.
@@ -1324,6 +1288,7 @@ class DARTClassifier(ClassifierScoreMixin, _DARTBase):
     >>> model = mojolearn.DARTClassifier(n_estimators=50).fit(X, y)
     >>> proba = model.predict_proba(X)
     """
+    score = _BoostClassifierScore.score
     _estimator_type = "classifier"
     #: the native lifecycle owner (trees_public_boost_*) tracks fits and validates inputs;
     #: no Python fit-tracking or output wrappers are installed
@@ -1373,26 +1338,6 @@ class DARTClassifier(ClassifierScoreMixin, _DARTBase):
     def predict(self, X):
         """Predict the class with the highest score."""
         return _TREES(self, _OP.trees_public_boost_predict, (X,), _TREES_CONTEXT)
-
-    def score(self, X, y, sample_weight=None):
-        """Mean accuracy of ``predict(X)`` against ``y``.
-
-        Parameters
-        ----------
-        X : array-like of shape (n_samples, n_features)
-            Test samples.
-        y : array-like of shape (n_samples,)
-            True labels.
-        sample_weight : array-like of shape (n_samples,), default None
-            Sample weights.
-
-        Returns
-        -------
-        float
-            Fraction of samples predicted correctly (weighted when
-            ``sample_weight`` is given).
-        """
-        return _TREES(self, _OP.trees_public_boost_score, (X, y, sample_weight), _TREES_CONTEXT)
 
 # ----------------------------------------------------- RandomTreesEmbedding
 # Reference: scikit-learn `sklearn/ensemble/_forest.py` RandomTreesEmbedding

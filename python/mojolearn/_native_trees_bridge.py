@@ -47,14 +47,8 @@ def _unavailable(error):
     return unavailable
 
 
-def _refusal(error):
-    # glue: a refusal recorded at import as "<Class>: <message>", the class
-    # the native owner raises again (the nearest builtin base the owner's
-    # error prefixes name)
-    for base in (ImportError, AttributeError, TypeError, RuntimeError, ValueError):  # glue: the fixed refusal classes
-        if isinstance(error, base):
-            return f"{base.__name__}: {error}"
-    return f"RuntimeError: {error}"
+# One refusal spelling for the import-time bridges (lane py-dedupe, 2026-11-15).
+from ._native_labels_bridge import _refusal  # noqa: E402
 
 
 def _entries(module):

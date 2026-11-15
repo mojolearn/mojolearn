@@ -210,6 +210,30 @@ class _MambaBase(NumericModeMixin):
         """
         return _native_neural_bridge.RUNTIME.neural_block_set_params(self, params, _native_neural_bridge.CONTEXT)
 
+    def backward(self, x, grad_output):
+        """Gradients of a zero-state prefill (a vector-Jacobian product).
+
+        Recomputes the forward with the current weights on every call; no earlier
+        forward or cached state is used or changed. Runs under ``numeric_mode``
+        'identical' or 'fast' (Apple GPUs only); other modes raise `NotImplementedError`. Gradients with
+        respect to a carried state, decode backward and final-state cotangents are not
+        available.
+
+        Parameters
+        ----------
+        x : float32 buffer, shape (B, L, d_model)
+            Forward input.
+        grad_output : float32 buffer, shape (B, L, d_model)
+            Gradient of the loss with respect to the block output. Must be finite.
+
+        Returns
+        -------
+        grads : dict of str to mojolearn.Array
+            ``'x'`` plus one entry per constructor weight, under the same names.
+        """
+        return _native_neural_bridge.RUNTIME.neural_block_backward(
+            self, x, grad_output, _native_neural_bridge.CONTEXT)
+
     def _extension(self):
         """The `_mojolearn_mamba` binding for THIS block's tier, with the
         binary's own compile-time answer cross-checked against it --
@@ -353,30 +377,6 @@ class Mamba1Block(_MambaBase, _native_constructor=True):
         """
         return _native_neural_bridge.RUNTIME.neural_block_forward(
             self, x, state, False, lengths, _native_neural_bridge.CONTEXT)
-
-    def backward(self, x, grad_output):
-        """Gradients of a zero-state prefill (a vector-Jacobian product).
-
-        Recomputes the forward with the current weights on every call; no earlier
-        forward or cached state is used or changed. Runs under ``numeric_mode``
-        'identical' or 'fast' (Apple GPUs only); other modes raise `NotImplementedError`. Gradients with
-        respect to a carried state, decode backward and final-state cotangents are not
-        available.
-
-        Parameters
-        ----------
-        x : float32 buffer, shape (B, L, d_model)
-            Forward input.
-        grad_output : float32 buffer, shape (B, L, d_model)
-            Gradient of the loss with respect to the block output. Must be finite.
-
-        Returns
-        -------
-        grads : dict of str to mojolearn.Array
-            ``'x'`` plus one entry per constructor weight, under the same names.
-        """
-        return _native_neural_bridge.RUNTIME.neural_block_backward(
-            self, x, grad_output, _native_neural_bridge.CONTEXT)
 
     def step(self, x, state):
         """Run one decode token.
@@ -670,30 +670,6 @@ class Mamba2Block(_MambaBase, _native_constructor=True):
         """
         return _native_neural_bridge.RUNTIME.neural_block_forward(
             self, x, state, False, lengths, _native_neural_bridge.CONTEXT)
-
-    def backward(self, x, grad_output):
-        """Gradients of a zero-state prefill (a vector-Jacobian product).
-
-        Recomputes the forward with the current weights on every call; no earlier
-        forward or cached state is used or changed. Runs under ``numeric_mode``
-        'identical' or 'fast' (Apple GPUs only); other modes raise `NotImplementedError`. Gradients with
-        respect to a carried state, decode backward and final-state cotangents are not
-        available.
-
-        Parameters
-        ----------
-        x : float32 buffer, shape (B, L, d_model)
-            Forward input.
-        grad_output : float32 buffer, shape (B, L, d_model)
-            Gradient of the loss with respect to the block output. Must be finite.
-
-        Returns
-        -------
-        grads : dict of str to mojolearn.Array
-            ``'x'`` plus one entry per constructor weight, under the same names.
-        """
-        return _native_neural_bridge.RUNTIME.neural_block_backward(
-            self, x, grad_output, _native_neural_bridge.CONTEXT)
 
     def step(self, x, state):
         """Run one decode token.
@@ -1095,30 +1071,6 @@ class Mamba3Block(_MambaBase, _native_constructor=True):
         """
         return _native_neural_bridge.RUNTIME.mamba_native_call(
             "forward_public", (self, x, state, lengths), _native_neural_bridge.CONTEXT)
-
-    def backward(self, x, grad_output):
-        """Gradients of a zero-state prefill (a vector-Jacobian product).
-
-        Recomputes the forward with the current weights on every call; no earlier
-        forward or cached state is used or changed. Runs under ``numeric_mode``
-        'identical' or 'fast' (Apple GPUs only); other modes raise `NotImplementedError`. Gradients with
-        respect to a carried state, decode backward and final-state cotangents are not
-        available.
-
-        Parameters
-        ----------
-        x : float32 buffer, shape (B, L, d_model)
-            Forward input.
-        grad_output : float32 buffer, shape (B, L, d_model)
-            Gradient of the loss with respect to the block output. Must be finite.
-
-        Returns
-        -------
-        grads : dict of str to mojolearn.Array
-            ``'x'`` plus one entry per constructor weight, under the same names.
-        """
-        return _native_neural_bridge.RUNTIME.neural_block_backward(
-            self, x, grad_output, _native_neural_bridge.CONTEXT)
 
     def step(self, x, state):
         """Run one decode token.

@@ -138,17 +138,23 @@ def _initializer(owner):
     return __init__
 
 
-def collect():
-    """Refresh `_CLASSES` with the classes of the loaded families."""
+def loaded_classes(sources):
+    """The classes of `sources` (class name -> package module) whose module is
+    already imported; never imports one. Shared with _native_full_reset_params."""
     # glue: fixed class inventory of the families imported so far
-    global _CLASSES
     import sys
     found = []
-    for name, source in _CLASS_SOURCES.items():  # glue: fixed vetted class table
+    for name, source in sources.items():  # glue: fixed vetted class table
         module = sys.modules.get(__package__ + '.' + source)
         if module is not None:
             found.append(getattr(module, name))
-    _CLASSES = tuple(found)
+    return tuple(found)
+
+
+def collect():
+    """Refresh `_CLASSES` with the classes of the loaded families."""
+    global _CLASSES
+    _CLASSES = loaded_classes(_CLASS_SOURCES)
 
 
 def install():

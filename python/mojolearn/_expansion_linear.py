@@ -998,22 +998,8 @@ class ARDRegression(_LinearRegressorMixin, NumericModeMixin):
         """
         return _XL_CALL(self, "fit_ard", (X, y), _XL_CONTEXT)
 
-    def predict(self, X, return_std=False):
-        """Predict targets with the posterior mean of the weights.
-
-        Parameters
-        ----------
-        X : array-like of shape (n_samples, n_features)
-            Samples, converted to float32.
-        return_std : bool, default False
-            Not supported: True raises ValueError.
-
-        Returns
-        -------
-        y_pred : float32 array of shape (n_samples,)
-            Predicted values.
-        """
-        return _XL_CALL(self, "regressor_predict", (X, return_std), _XL_CONTEXT)
+    # BayesianRidge's posterior-mean predict, the same one native call.
+    predict = BayesianRidge.predict
 
 
 # --------------------------------------------------------------------- LARS

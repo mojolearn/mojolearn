@@ -18,9 +18,8 @@ import numbers
 from . import _portable_math as math
 
 from . import _backend, _mojolearn_estimators
-from ._array import Array
 from ._buffer import (
-    addr, addr_ro, view, zeros,
+    addr, addr_ro, zeros,
 )
 from . import _native_archive_bridge, _native_classical_bridge
 from ._mode import NumericModeMixin, sklearn_tags as _sklearn_tags
@@ -48,62 +47,10 @@ _ARCHIVE, _ARCHIVE_CONTEXT = _native_archive_bridge.connect()
 # ---------------------------------------------------------------------------
 
 
-# `_shape_of` is the conversion layer's `shape_of` (lane migrate-shared-labels):
-# reading an argument's shape is argument checking, the shell's job.
-from ._buffer import shape_of as _shape_of  # noqa: E402
-
-
-# The `classes_` ORDER RULE and the label <-> code maps live in
-# `_labels.py` (DEVIATION 2340): `sorted_classes`, `decode_labels`. Every
-# classifier in the package orders `classes_` through that one spelling;
-# DEVIATION 2364 is this file's adoption of it (a Python list, int64 /
-# float64 Arrays out of `predict` for int / float labels, a list otherwise).
-
-
-def _flatten(obj):
-    """Every leaf of a nested list/tuple (or anything with `tolist()`) as
-    one flat Python list; a scalar is a one-element list."""
-    # read once natively (bindings/user_objects_native_door.mojo flatten)
-    from . import _user_objects
-    return _user_objects.call("flatten", obj)
-
-
-#: struct-format codes of the integer buffer types.
-_INT_FORMATS = frozenset("bBhHiIlLqQnN")
-
-
-def _buffer_format(obj):
-    """The struct format code of a buffer-protocol object, byte-order prefix
-    stripped; None when `obj` exports no buffer (a list, a scalar)."""
-    if isinstance(obj, Array):
-        return {"<f4": "f", "<f8": "d", "<i4": "i", "<i8": "q", "<u4": "I",
-                "<u1": "B", "<f2": "e"}.get(obj.dtype)
-    try:
-        with view(obj) as buf:
-            return buf.format.lstrip("<>=@!|")
-    except TypeError:
-        return None
-
-
-def _is_integer_labels(y):
-    """`np.issubdtype(y.dtype, np.integer)`: True for a buffer whose format
-    is an integer code (bools are NOT integers here, as in NumPy), or a
-    list/tuple whose every leaf is a Python int (bools excluded)."""
-    fmt = _buffer_format(y)
-    if fmt is not None:
-        return fmt in _INT_FORMATS
-    from . import _user_objects
-    leaves = _flatten(y)
-    return bool(leaves) and _user_objects.kinds(leaves)[_user_objects.KIND_EXACT_INT] == len(leaves)
-
-
-def _dtype_name(y):
-    """What to print for `y`'s dtype in a refusal: the buffer format code
-    when it has one, the Python type name otherwise."""
-    fmt = _buffer_format(y)
-    if fmt is not None:
-        return f"buffer format {fmt!r}"
-    return f"type {type(y).__name__}"
+# TOMBSTONE: linear_model `_shape_of` re-export, `_flatten`, `_INT_FORMATS`, `_buffer_format`, `_is_integer_labels`
+# and `_dtype_name` (no product caller: neighbors.py imported them unused since lane py-neighbors; their last caller,
+# the frozen oracle tests/_legacy_neighbors_knn.py, carries its own copies) deleted 2026-11-15 by lane py-dedupe;
+# code recoverable at 6906a59111.
 
 
 # TOMBSTONE: `_r2_sums` (the Python `_Reg` / `_r2_sums_of` R^2 program; no product caller, its native owners
@@ -131,6 +78,120 @@ def _dtype_name(y):
 # TOMBSTONE: `_ols_tsqr_centered` (the Python OLS one-entry TSQR solve on the decomp
 # kit) deleted 2026-11-11 by lane pyout-decomp-linalg: it had no caller (the native
 # linear owner, bindings/x_linear_native_door.mojo, runs the fit). Code recoverable at 6f82d0255d.
+
+
+class _ClassicalLinear:
+    """The public methods LinearRegression and Ridge share: each is one call
+    into the classical native owner (bindings/classical_native_pack.mojo).
+    Each owner binds these functions into its own namespace (`name = Holder.name`)
+    instead of inheriting them: the native integrity checks walk every class's
+    ancestry on each call, so an extra base would add work to every call."""
+
+    def predict(self, X):
+        """Predict with the fitted model.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Samples, read as float32.
+
+        Returns
+        -------
+        y_pred : ndarray or Array of shape (n_samples,), float64
+            ``X @ coef_ + intercept_``.
+
+        Raises
+        ------
+        ValueError
+            If the model is not fitted, or ``X`` has a different number of
+            features than the training data.
+        """
+        return _native_classical(self, "predict_public", (X,), _CLASSICAL)
+
+    def score(self, X, y):
+        """Return the coefficient of determination R^2 of the prediction.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Test samples.
+        y : array-like of shape (n_samples,)
+            True target values.
+
+        Returns
+        -------
+        score : float
+            ``1 - SS_res / SS_tot``, computed in float64. A constant ``y``
+            (``SS_tot == 0``) scores 0.0.
+        """
+        return _native_classical(self, "score_public", (X, y), _CLASSICAL)
+
+    def get_params(self, deep=True):
+        """Get this estimator's constructor parameters.
+
+        Parameters
+        ----------
+        deep : bool, default True
+            Accepted for scikit-learn compatibility; these parameters are
+            plain values with no nested estimators.
+
+        Returns
+        -------
+        params : dict
+            Each constructor parameter name mapped to its value.
+        """
+        return _native_classical(self, "get_params", (deep,), _CLASSICAL)
+
+    def set_params(self, **params):
+        """Set constructor parameters.
+
+        Any fitted state is dropped, as a new setting invalidates it.
+
+        Parameters
+        ----------
+        **params
+            Constructor parameters by name.
+
+        Returns
+        -------
+        self
+            This estimator.
+        """
+        return _native_classical(self, "set_params", (params,), _CLASSICAL)
+
+    @classmethod
+    def _get_param_names(cls):
+        return _native_classical(cls, "param_names", (), _CLASSICAL)
+
+    def __sklearn_is_fitted__(self):
+        return _native_classical(self, "is_fitted", (), _CLASSICAL)
+
+    def __sklearn_tags__(self):
+        # scikit-learn tag metadata is built in the Python compatibility
+        # layer; no native code calls into tag handling.
+        return _sklearn_tags(self)
+
+    def vendor_used(self):
+        """The backend this estimator runs on.
+
+        Returns
+        -------
+        str
+            ``'metal'``, ``'cuda'``, ``'hip'`` or ``'cpu'``, read from the
+            compiled binary the estimator uses.
+        """
+        return _native_classical(self, "vendor_used", (), _CLASSICAL)
+
+    def numeric_mode_used(self):
+        """The numeric mode this estimator runs in.
+
+        Returns
+        -------
+        str
+            ``'identical'`` or ``'fast'``, read from the compiled binary
+            the estimator uses, not from the argument it was given.
+        """
+        return _native_classical(self, "numeric_mode_used", (), _CLASSICAL)
 
 
 # Maintainer notes (moved from the docstring, 2026-10-12):
@@ -235,6 +296,15 @@ class LinearRegression(NumericModeMixin):
     >>> model = mojolearn.LinearRegression().fit(X, y)
     >>> pred = model.predict(X)
     """
+    predict = _ClassicalLinear.predict
+    score = _ClassicalLinear.score
+    get_params = _ClassicalLinear.get_params
+    set_params = _ClassicalLinear.set_params
+    _get_param_names = vars(_ClassicalLinear)["_get_param_names"]
+    __sklearn_is_fitted__ = _ClassicalLinear.__sklearn_is_fitted__
+    __sklearn_tags__ = _ClassicalLinear.__sklearn_tags__
+    vendor_used = _ClassicalLinear.vendor_used
+    numeric_mode_used = _ClassicalLinear.numeric_mode_used
 
     #: scikit-learn's estimator kind: `cross_val_score` stratifies a
     #: classifier's default folds, as scikit-learn's does.
@@ -280,45 +350,6 @@ class LinearRegression(NumericModeMixin):
         """
         return _native_classical(self, "ols_fit", (X, y, sample_weight), _CLASSICAL)
 
-    def predict(self, X):
-        """Predict with the fitted linear model.
-
-        Parameters
-        ----------
-        X : array-like of shape (n_samples, n_features)
-            Samples, read as float32.
-
-        Returns
-        -------
-        y_pred : ndarray or Array of shape (n_samples,), float64
-            ``X @ coef_ + intercept_``.
-
-        Raises
-        ------
-        ValueError
-            If the model is not fitted, or ``X`` has a different number of
-            features than the training data.
-        """
-        return _native_classical(self, "predict_public", (X,), _CLASSICAL)
-
-    def score(self, X, y):
-        """Return the coefficient of determination R^2 of the prediction.
-
-        Parameters
-        ----------
-        X : array-like of shape (n_samples, n_features)
-            Test samples.
-        y : array-like of shape (n_samples,)
-            True target values.
-
-        Returns
-        -------
-        score : float
-            ``1 - SS_res / SS_tot``, computed in float64. A constant ``y``
-            (``SS_tot == 0``) scores 0.0.
-        """
-        return _native_classical(self, "score_public", (X, y), _CLASSICAL)
-
     def save(self, path):
         """Save the fitted model to ``path`` as an ``.npz`` file.
 
@@ -363,73 +394,6 @@ class LinearRegression(NumericModeMixin):
             not match.
         """
         return _native_classical(cls, "load", (path,), _CLASSICAL)
-
-    def get_params(self, deep=True):
-        """Get this estimator's constructor parameters.
-
-        Parameters
-        ----------
-        deep : bool, default True
-            Accepted for scikit-learn compatibility; these parameters are
-            plain values with no nested estimators.
-
-        Returns
-        -------
-        params : dict
-            Each constructor parameter name mapped to its value.
-        """
-        return _native_classical(self, "get_params", (deep,), _CLASSICAL)
-
-    def set_params(self, **params):
-        """Set constructor parameters.
-
-        Any fitted state is dropped, as a new setting invalidates it.
-
-        Parameters
-        ----------
-        **params
-            Constructor parameters by name.
-
-        Returns
-        -------
-        self
-            This estimator.
-        """
-        return _native_classical(self, "set_params", (params,), _CLASSICAL)
-
-    @classmethod
-    def _get_param_names(cls):
-        return _native_classical(cls, "param_names", (), _CLASSICAL)
-
-    def __sklearn_is_fitted__(self):
-        return _native_classical(self, "is_fitted", (), _CLASSICAL)
-
-    def __sklearn_tags__(self):
-        # scikit-learn tag metadata is built in the Python compatibility
-        # layer; no native code calls into tag handling.
-        return _sklearn_tags(self)
-
-    def vendor_used(self):
-        """The backend this estimator runs on.
-
-        Returns
-        -------
-        str
-            ``'metal'``, ``'cuda'``, ``'hip'`` or ``'cpu'``, read from the
-            compiled binary the estimator uses.
-        """
-        return _native_classical(self, "vendor_used", (), _CLASSICAL)
-
-    def numeric_mode_used(self):
-        """The numeric mode this estimator runs in.
-
-        Returns
-        -------
-        str
-            ``'identical'`` or ``'fast'``, read from the compiled binary
-            the estimator uses, not from the argument it was given.
-        """
-        return _native_classical(self, "numeric_mode_used", (), _CLASSICAL)
 
 
 # Maintainer notes (moved from the docstring, 2026-10-12):
@@ -511,6 +475,15 @@ class Ridge(NumericModeMixin):
     >>> model = mojolearn.Ridge(alpha=0.5).fit(X, y)
     >>> pred = model.predict(X)
     """
+    predict = _ClassicalLinear.predict
+    score = _ClassicalLinear.score
+    get_params = _ClassicalLinear.get_params
+    set_params = _ClassicalLinear.set_params
+    _get_param_names = vars(_ClassicalLinear)["_get_param_names"]
+    __sklearn_is_fitted__ = _ClassicalLinear.__sklearn_is_fitted__
+    __sklearn_tags__ = _ClassicalLinear.__sklearn_tags__
+    vendor_used = _ClassicalLinear.vendor_used
+    numeric_mode_used = _ClassicalLinear.numeric_mode_used
 
     #: scikit-learn's estimator kind: `cross_val_score` stratifies a
     #: classifier's default folds, as scikit-learn's does.
@@ -563,45 +536,6 @@ class Ridge(NumericModeMixin):
         """
         return _native_classical(self, "ridge_fit", (X, y, sample_weight), _CLASSICAL)
 
-    def predict(self, X):
-        """Predict with the fitted ridge model.
-
-        Parameters
-        ----------
-        X : array-like of shape (n_samples, n_features)
-            Samples, read as float32.
-
-        Returns
-        -------
-        y_pred : ndarray or Array of shape (n_samples,), float64
-            ``X @ coef_ + intercept_``.
-
-        Raises
-        ------
-        ValueError
-            If the model is not fitted, or ``X`` has a different number of
-            features than the training data.
-        """
-        return _native_classical(self, "predict_public", (X,), _CLASSICAL)
-
-    def score(self, X, y):
-        """Return the coefficient of determination R^2 of the prediction.
-
-        Parameters
-        ----------
-        X : array-like of shape (n_samples, n_features)
-            Test samples.
-        y : array-like of shape (n_samples,)
-            True target values.
-
-        Returns
-        -------
-        score : float
-            ``1 - SS_res / SS_tot``, computed in float64. A constant ``y``
-            (``SS_tot == 0``) scores 0.0.
-        """
-        return _native_classical(self, "score_public", (X, y), _CLASSICAL)
-
     def save(self, path):
         """Save the fitted model to ``path`` as an ``.npz`` file.
 
@@ -644,73 +578,6 @@ class Ridge(NumericModeMixin):
             not match.
         """
         return _native_classical(cls, "load", (path,), _CLASSICAL)
-
-    def get_params(self, deep=True):
-        """Get this estimator's constructor parameters.
-
-        Parameters
-        ----------
-        deep : bool, default True
-            Accepted for scikit-learn compatibility; these parameters are
-            plain values with no nested estimators.
-
-        Returns
-        -------
-        params : dict
-            Each constructor parameter name mapped to its value.
-        """
-        return _native_classical(self, "get_params", (deep,), _CLASSICAL)
-
-    def set_params(self, **params):
-        """Set constructor parameters.
-
-        Any fitted state is dropped, as a new setting invalidates it.
-
-        Parameters
-        ----------
-        **params
-            Constructor parameters by name.
-
-        Returns
-        -------
-        self
-            This estimator.
-        """
-        return _native_classical(self, "set_params", (params,), _CLASSICAL)
-
-    @classmethod
-    def _get_param_names(cls):
-        return _native_classical(cls, "param_names", (), _CLASSICAL)
-
-    def __sklearn_is_fitted__(self):
-        return _native_classical(self, "is_fitted", (), _CLASSICAL)
-
-    def __sklearn_tags__(self):
-        # scikit-learn tag metadata is built in the Python compatibility
-        # layer; no native code calls into tag handling.
-        return _sklearn_tags(self)
-
-    def vendor_used(self):
-        """The backend this estimator runs on.
-
-        Returns
-        -------
-        str
-            ``'metal'``, ``'cuda'``, ``'hip'`` or ``'cpu'``, read from the
-            compiled binary the estimator uses.
-        """
-        return _native_classical(self, "vendor_used", (), _CLASSICAL)
-
-    def numeric_mode_used(self):
-        """The numeric mode this estimator runs in.
-
-        Returns
-        -------
-        str
-            ``'identical'`` or ``'fast'``, read from the compiled binary
-            the estimator uses, not from the argument it was given.
-        """
-        return _native_classical(self, "numeric_mode_used", (), _CLASSICAL)
 
 
 # cuML's `qn_params.loss` ids (cuml/linear_model/qn.h); the Python door maps
