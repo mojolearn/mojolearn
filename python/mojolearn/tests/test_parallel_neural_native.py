@@ -11,7 +11,27 @@ from mojolearn import ParallelNeuralTrainer, _backend
 from mojolearn._parallel_mlp import _native_parallel_mlp as mlp
 from mojolearn._parallel_neural import _native_parallel_neural as native
 from mojolearn._verify_native_runtime import audit_native_call
-from mojolearn.tests.test_parallel_mlp_native import model_fixture, independent_gradient
+from mojolearn.tests.test_parallel_mlp_native import model_fixture
+
+
+# Test-side float64 oracle of the small-MLP softmax cross-entropy gradient. It
+# lived in test_parallel_mlp_native.py until 2fb40775dc moved that file's shard
+# gradient test to checks/native_tests/training_small_mlp_cases.mojo and deleted
+# it there; test_parallel_neural_admission.py imports it from here.
+def independent_gradient(state, x, y):
+    w1, b1, w2, b2 = (np.asarray(state['weights'][name], dtype=np.float64)
+                       for name in ('weight1', 'bias1', 'weight2', 'bias2'))
+    z = np.asarray(x, dtype=np.float64) @ w1.T + b1
+    h = np.maximum(z, 0)
+    logits = h @ w2.T + b2
+    exp = np.exp(logits - logits.max(axis=1, keepdims=True))
+    probabilities = exp / exp.sum(axis=1, keepdims=True)
+    loss = -np.log(probabilities[np.arange(len(y)), y]).mean()
+    dl = probabilities.copy()
+    dl[np.arange(len(y)), y] -= 1
+    dl /= len(y)
+    dh = (dl @ w2) * (z > 0)
+    return loss, [dh.T @ x, dh.sum(axis=0), dl.T @ h, dl.sum(axis=0)]
 
 
 def checked(operation, *args):
