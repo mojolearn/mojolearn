@@ -72,7 +72,9 @@ comptime T11_LEVELS = 4
 # Restore: git apply experiments/removed/MOJOLEARN_TREES_T12_BYTES.patch (same patch as T12)
 comptime T12 = False
 comptime T12_BYTES = 256*1024*1024
-comptime T13 = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_TREES_T13"]()
+# TOMBSTONE: MOJOLEARN_TREES_T13 (unmeasured arm) deleted 2026-11-15 by expdel2-39-trees; code recoverable at the deletion commit^.
+# Restore: git apply experiments/removed/MOJOLEARN_TREES_T13.patch
+comptime T13 = False
 comptime T13_BYTES = get_defined_int["MOJOLEARN_TREES_T13_BYTES", 16*1024*1024]()
 # TOMBSTONE: MOJOLEARN_TREES_T14 (unmeasured arm) deleted 2026-11-15 by expdel2-39-trees; code recoverable at the deletion commit^.
 # Restore: git apply experiments/removed/MOJOLEARN_TREES_T14.patch
