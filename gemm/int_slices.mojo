@@ -3,10 +3,8 @@
 """fp32 GEMM on the integer matrix units by exact integer slicing: the device
 plans of the research profile `mojolearn.identical.gemm.fp32.v2-int`.
 
-PROTOTYPE (lane/gemm-int-slices, 2026-10-28, REPORT idea 13). Switch
-`-D MOJOLEARN_IDN_GEMM_INT_SLICES`, default OFF; off, nothing here is reached
-and the linalg GEMM is fp32.v1 byte for byte (the hook in
-`gemm/host_entry.mojo` is a `comptime if` on this file's constant). Contract:
+PROTOTYPE (lane/gemm-int-slices, 2026-10-28, REPORT idea 13). Reached only
+from its gate; the linalg GEMM is fp32.v1. Contract:
 `docs/plans/GEMM_INT_SLICES.md`. Seams: `gemm/int_slices_seams.mojo`. Host
 column: `gemm/host/gemm_int_slices_oracle.mojo`. Gate:
 `gemm/checks/gemm_int_slices_check.mojo`.
@@ -85,8 +83,8 @@ from gemm.int_slices_seams import (
     int_slices_strides,
 )
 
-#: THE SWITCH. Default OFF.
-comptime IDN_GEMM_INT_SLICES = is_defined["MOJOLEARN_IDN_GEMM_INT_SLICES"]()
+# TOMBSTONE: MOJOLEARN_IDN_GEMM_INT_SLICES (research profile fp32.v2-int dispatch hook; EXP:2263 pending, never measured) deleted 2026-11-15 by lane/expdel2-25-neural; code recoverable at 41a649b03c.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_GEMM_INT_SLICES.patch; record in docs/TOMBSTONES.md.
 
 #: The sabotage arm (see the module docstring).
 comptime INT_SLICES_SABOTAGE = is_defined["MOJOLEARN_INT_SLICES_SABOTAGE"]()
