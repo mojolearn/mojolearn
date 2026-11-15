@@ -34,10 +34,9 @@ comptime IDN_HDB_CONDENSE_TWO_READS = _IDN_HDB_ON
 (`tree_device.mojo::_condensed_two_reads`): the same kernels in the same
 order, the refusals with the same messages and first indices."""
 
-comptime IDN_HDB_SELECT_ONE_READ = (
-    # I14 current experiment: NEVER RUN — PENDING MEASUREMENT; existing defaults preserved.
-    _IDN_HDB_ON and not is_defined["MOJOLEARN_IDN_HDB_SELECT_ONE_READ_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_IDN_HDB_SELECT_ONE_READ_OFF (old path: multi-read selection; EXP:1915 owed row withdrawn) deleted 2026-11-15 by lane/expdel2-11-cluster; code recoverable at 7b7f05966a.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_HDB_SELECT_ONE_READ_OFF.patch; record in docs/TOMBSTONES.md.
+comptime IDN_HDB_SELECT_ONE_READ = _IDN_HDB_ON
 """Stabilities, selection, labels, scores and probabilities with no wait in
 between and ONE readback (`extract.mojo::_extract_one_read`); a nonzero
 `cluster_selection_epsilon` keeps the multi-read route."""
