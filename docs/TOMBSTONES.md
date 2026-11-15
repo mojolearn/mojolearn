@@ -654,6 +654,7 @@ in the tables after the sections.
 | [`MOJOLEARN_KDE_FAST_SLICES_OFF`](#mojolearn_kde_fast_slices_off-old-path-deleted-2026-11-15) | Kernel (KernelDensity fused pass train-row slices, FAST Apple) | removed (old path; FAST+Apple default KEPT 857fd5804, core-kde-slices-istella) | 2026-11-15 | [MOJOLEARN_KDE_FAST_SLICES_OFF.patch](../experiments/removed/MOJOLEARN_KDE_FAST_SLICES_OFF.patch) |
 | [`MOJOLEARN_KERNEL_FAST_NYS_RR_EIGH_OFF`](#mojolearn_kernel_fast_nys_rr_eigh_off-old-path-deleted-2026-11-15) | Kernel (Nystroem basis eigh, FAST Apple) | removed (old path; FAST+Apple default KEPT, kap2-km-nysrr-taxi) | 2026-11-15 | [MOJOLEARN_KERNEL_FAST_NYS_RR_EIGH_OFF.patch](../experiments/removed/MOJOLEARN_KERNEL_FAST_NYS_RR_EIGH_OFF.patch) |
 | [`MOJOLEARN_KM_FAST_PTR_IN_OFF`](#mojolearn_km_fast_ptr_in_off-old-path-deleted-2026-11-15) | Kernel (kernel approximation transforms' X upload, FAST Apple) | removed (old path; FAST+Apple default KEPT, kap2-km-ptrin-rbf-istella) | 2026-11-15 | [MOJOLEARN_KM_FAST_PTR_IN_OFF.patch](../experiments/removed/MOJOLEARN_KM_FAST_PTR_IN_OFF.patch) |
+| [`MOJOLEARN_KM_FAST_RBF_PIPE_OFF`](#mojolearn_km_fast_rbf_pipe_off-old-path-deleted-2026-11-15) | Kernel (RBFSampler fit_transform row-block pipeline, FAST Apple) | removed (old path; FAST+Apple default KEEP, rab12-rbfpipe) | 2026-11-15 | [MOJOLEARN_KM_FAST_RBF_PIPE_OFF.patch](../experiments/removed/MOJOLEARN_KM_FAST_RBF_PIPE_OFF.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -6355,4 +6356,12 @@ bits change on any vendor or the host column, no board row needs re-timing.
 - **Verdict**: KEPT, FAST+Apple default (EXPERIMENTS.md `KM_FAST_PTR_IN`, kap2-km-ptrin-rbf-istella): M3, rbf-sampler istella 121 -> 94 ms, kernel_rel_error identical. No bit change on any column.
 - **Deleted by**: lane/expdel-06-base-cluster-kernel (expdel-06-base-cluster-kernel, docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md); code recoverable at `484c3ee4ab`.
 - **Restore**: `git apply experiments/removed/MOJOLEARN_KM_FAST_PTR_IN_OFF.patch`, then delete the `MOJOLEARN_KM_FAST_PTR_IN_OFF` refusal in `core/experiment_guards_kernel.mojo`.
+- **Records**: refusal in `core/experiment_guards_kernel.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel-06-base-cluster-kernel section).
+
+## MOJOLEARN_KM_FAST_RBF_PIPE_OFF: old path deleted (2026-11-15)
+
+- **What it was**: the FAST+Apple rollback of RBFSampler.fit_transform's row-block pipeline (block k's upload, GEMM and epilogue overlapped with block k - 1's copy-out) to the whole-matrix STAGED sequence (`kernel_methods/rbf_resident.mojo` KM_FAST_RBF_PIPE). Only the define read is deleted: `_rbf_unpiped` stays for outputs smaller than two pipeline blocks.
+- **Verdict**: KEEP, FAST+Apple default (EXPERIMENTS.md `KM_FAST_RBF_PIPE`, rab12-rbfpipe): M3 one run per arm, rbf-sampler istella 56.7 -> 43.0 ms, taxi 35.6 -> 31.1 ms, kernel_rel_error identical. No bit change on any column.
+- **Deleted by**: lane/expdel-06-base-cluster-kernel (expdel-06-base-cluster-kernel, docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md); code recoverable at `e6a4e9f1a7`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_KM_FAST_RBF_PIPE_OFF.patch`, then delete the `MOJOLEARN_KM_FAST_RBF_PIPE_OFF` refusal in `core/experiment_guards_kernel.mojo`.
 - **Records**: refusal in `core/experiment_guards_kernel.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel-06-base-cluster-kernel section).
