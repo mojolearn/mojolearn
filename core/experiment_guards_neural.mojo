@@ -483,6 +483,65 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_MAMBA3_TILED_YINTRA"](), "removed 2026-11-15 (lane/expdel2-26-neural): MAMBA3_TILED_YINTRA (unmeasured opt-in arm) is gone; the default is kept; code at 5fc464dce4; restore: experiments/removed/MOJOLEARN_MAMBA3_TILED_YINTRA.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_NN35_CONV_PAIR.patch
     comptime assert not is_defined["MOJOLEARN_NN35_CONV_PAIR"](), "removed 2026-11-15 (lane/expdel2-26-neural): NN35_CONV_PAIR (unmeasured opt-in arm) is gone; the default is kept; code at 5fc464dce4; restore: experiments/removed/MOJOLEARN_NN35_CONV_PAIR.patch"
+    # Lane expdel2-25-neural (2026-11-15): unmeasured arms and superseded old paths deleted, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (docs/TOMBSTONES.md).
+    # Restore: git apply experiments/removed/MOJOLEARN_AFN_GEMM2_ALL.patch
+    comptime assert not is_defined["MOJOLEARN_AFN_GEMM2_ALL"](), "removed 2026-11-15 (lane/expdel2-25-neural): AFN_GEMM2_ALL (unmeasured opt-in arm) is gone; the default is kept; code at 45d3386430; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_AFN_GEMM2_BIGTILE.patch
+    comptime assert not is_defined["MOJOLEARN_AFN_GEMM2_BIGTILE"](), "removed 2026-11-15 (lane/expdel2-25-neural): AFN_GEMM2_BIGTILE (unmeasured opt-in arm) is gone; the default is kept; code at 45d3386430; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_AFN_GEMM2_DBUF.patch
+    comptime assert not is_defined["MOJOLEARN_AFN_GEMM2_DBUF"](), "removed 2026-11-15 (lane/expdel2-25-neural): AFN_GEMM2_DBUF (unmeasured opt-in arm) is gone; the default is kept; code at 45d3386430; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_AFN_GEMM2_DIRECT_B.patch
+    comptime assert not is_defined["MOJOLEARN_AFN_GEMM2_DIRECT_B"](), "removed 2026-11-15 (lane/expdel2-25-neural): AFN_GEMM2_DIRECT_B (unmeasured opt-in arm) is gone; the default is kept; code at 45d3386430; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_AFN_GEMM2_SWIZZLE.patch
+    comptime assert not is_defined["MOJOLEARN_AFN_GEMM2_SWIZZLE"](), "removed 2026-11-15 (lane/expdel2-25-neural): AFN_GEMM2_SWIZZLE (unmeasured opt-in arm) is gone; the default is kept; code at 45d3386430; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_AFN_GEMM2_SWZ_G.patch
+    comptime assert not is_defined["MOJOLEARN_AFN_GEMM2_SWZ_G"](), "removed 2026-11-15 (lane/expdel2-25-neural): AFN_GEMM2_SWZ_G (unmeasured opt-in arm) is gone; the default is kept; code at 45d3386430; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_AFN_GEMM_ALL.patch
+    comptime assert not is_defined["MOJOLEARN_AFN_GEMM_ALL"](), "removed 2026-11-15 (lane/expdel2-25-neural): AFN_GEMM_ALL (unmeasured opt-in arm) is gone; the default is kept; code at 02da0a0217; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_AFN_GEMM_BF16_MMA.patch
+    comptime assert not is_defined["MOJOLEARN_AFN_GEMM_BF16_MMA"](), "removed 2026-11-15 (lane/expdel2-25-neural): AFN_GEMM_BF16_MMA (old path beside the default) is gone; the default is kept; code at 02da0a0217; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_AFN_GEMM_CORES.patch
+    comptime assert not is_defined["MOJOLEARN_AFN_GEMM_CORES"](), "removed 2026-11-15 (lane/expdel2-25-neural): AFN_GEMM_CORES (unmeasured opt-in arm) is gone; the default is kept; code at 02da0a0217; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_AFN_GEMM_EPILOGUE.patch
+    comptime assert not is_defined["MOJOLEARN_AFN_GEMM_EPILOGUE"](), "removed 2026-11-15 (lane/expdel2-25-neural): AFN_GEMM_EPILOGUE (unmeasured opt-in arm) is gone; the default is kept; code at 02da0a0217; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_AFN_GEMM_INT8_MMA.patch
+    comptime assert not is_defined["MOJOLEARN_AFN_GEMM_INT8_MMA"](), "removed 2026-11-15 (lane/expdel2-25-neural): AFN_GEMM_INT8_MMA (unmeasured opt-in arm) is gone; the default is kept; code at 02da0a0217; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_AFN_GEMM_KB.patch
+    comptime assert not is_defined["MOJOLEARN_AFN_GEMM_KB"](), "removed 2026-11-15 (lane/expdel2-25-neural): AFN_GEMM_KB (unmeasured opt-in arm) is gone; the default is kept; code at 02da0a0217; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_AFN_GEMM_SIMDGROUP.patch
+    comptime assert not is_defined["MOJOLEARN_AFN_GEMM_SIMDGROUP"](), "removed 2026-11-15 (lane/expdel2-25-neural): AFN_GEMM_SIMDGROUP (unmeasured opt-in arm) is gone; the default is kept; code at 02da0a0217; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_AFN_GEMM_SPLITK.patch
+    comptime assert not is_defined["MOJOLEARN_AFN_GEMM_SPLITK"](), "removed 2026-11-15 (lane/expdel2-25-neural): AFN_GEMM_SPLITK (unmeasured opt-in arm) is gone; the default is kept; code at 02da0a0217; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_AFN_GEMM_TILESHAPE.patch
+    comptime assert not is_defined["MOJOLEARN_AFN_GEMM_TILESHAPE"](), "removed 2026-11-15 (lane/expdel2-25-neural): AFN_GEMM_TILESHAPE (unmeasured opt-in arm) is gone; the default is kept; code at 02da0a0217; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_EMBEDDING_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_AUTOGRAD_EMBEDDING_OFF"](), "removed 2026-11-15 (lane/expdel2-25-neural): AUTOGRAD_EMBEDDING_OFF (old path beside the default) is gone; the default is kept; code at 5ee3d0ca88; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_EMB_DEVICE_SCRATCH_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_EMB_DEVICE_SCRATCH_OFF"](), "removed 2026-11-15 (lane/expdel2-25-neural): EMB_DEVICE_SCRATCH_OFF (old path beside the default) is gone; the default is kept; code at 9b6b13052d; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_EMB_RESIDENT_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_EMB_RESIDENT_OFF"](), "removed 2026-11-15 (lane/expdel2-25-neural): EMB_RESIDENT_OFF (old path beside the default) is gone; the default is kept; code at 63a7445f96; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_GEMM_FAST_RAGGED_K_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_GEMM_FAST_RAGGED_K_OFF"](), "removed 2026-11-15 (lane/expdel2-25-neural): GEMM_FAST_RAGGED_K_OFF (old path beside the default) is gone; the default is kept; code at 02da0a0217; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_GEMM_INT_SLICES.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_GEMM_INT_SLICES"](), "removed 2026-11-15 (lane/expdel2-25-neural): IDN_GEMM_INT_SLICES (unmeasured opt-in arm) is gone; the default is kept; code at 41a649b03c; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_NEURAL_CHAINS.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_NEURAL_CHAINS"](), "removed 2026-11-15 (lane/expdel2-25-neural): IDN_NEURAL_CHAINS (unmeasured opt-in arm) is gone; the default is kept; code at a9109164e5; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_NEURAL_GEMM_EPILOGUE.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_NEURAL_GEMM_EPILOGUE"](), "removed 2026-11-15 (lane/expdel2-25-neural): IDN_NEURAL_GEMM_EPILOGUE (unmeasured opt-in arm) is gone; the default is kept; code at d95e19da90; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_NEURAL_GEMM_SCHEDULE.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_NEURAL_GEMM_SCHEDULE"](), "removed 2026-11-15 (lane/expdel2-25-neural): IDN_NEURAL_GEMM_SCHEDULE (unmeasured opt-in arm) is gone; the default is kept; code at 9813509a01; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_NEURAL_GEMM_SCHEDULE_ROLES.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_NEURAL_GEMM_SCHEDULE_ROLES"](), "removed 2026-11-15 (lane/expdel2-25-neural): IDN_NEURAL_GEMM_SCHEDULE_ROLES (unmeasured opt-in arm) is gone; the default is kept; code at 7737754a09; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_NEURAL_NN07.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_NEURAL_NN07"](), "removed 2026-11-15 (lane/expdel2-25-neural): IDN_NEURAL_NN07 (unmeasured opt-in arm) is gone; the default is kept; code at dd47bfb212; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_NEURAL_NN12.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_NEURAL_NN12"](), "removed 2026-11-15 (lane/expdel2-25-neural): IDN_NEURAL_NN12 (unmeasured opt-in arm) is gone; the default is kept; code at a9cf951197; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_NEURAL_NN16.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_NEURAL_NN16"](), "removed 2026-11-15 (lane/expdel2-25-neural): IDN_NEURAL_NN16 (unmeasured opt-in arm) is gone; the default is kept; code at 1362c86435; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_INT_SLICES_FORCE_FLAT.patch
+    comptime assert not is_defined["MOJOLEARN_INT_SLICES_FORCE_FLAT"](), "removed 2026-11-15 (lane/expdel2-25-neural): INT_SLICES_FORCE_FLAT (unmeasured opt-in arm) is gone; the default is kept; code at e62e7376e0; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_NI07_GROUPED_PROJECTIONS.patch
+    comptime assert not is_defined["MOJOLEARN_NI07_GROUPED_PROJECTIONS"](), "removed 2026-11-15 (lane/expdel2-25-neural): NI07_GROUPED_PROJECTIONS (unmeasured opt-in arm) is gone; the default is kept; code at e862759b5c; see docs/TOMBSTONES.md"
     return True
 
 

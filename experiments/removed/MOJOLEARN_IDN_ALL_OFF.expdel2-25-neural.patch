@@ -1,0 +1,354 @@
+diff --git a/checks/kernel_matrix.mojo b/checks/kernel_matrix.mojo
+index 4426c5dfda..9cc93a6838 100644
+--- a/checks/kernel_matrix.mojo
++++ b/checks/kernel_matrix.mojo
+@@ -14,8 +14,6 @@ from checks.numerics import (
+ )
+ 
+ 
+-# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (its terms here: every IDENTICAL switch off at once; EXP:2438 old path) deleted 2026-11-15 by lane/expdel2-25-neural; code recoverable at 5cde955daf.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-25-neural.patch.
+ comptime COLUMN_BIT_IDENTICAL = 0
+ comptime COLUMN_APPLE = 1
+ comptime COLUMN_NVIDIA = 2
+@@ -936,12 +934,14 @@ def ridx_only_splits_for[column: Int, identical: Bool]() -> Bool:
+         # record) gather through the index too. Opt-out:
+         # `-D MOJOLEARN_GBDT_IDENTICAL_RIDX_OFF`. Lane gap-trees-nv: `-D
+         # MOJOLEARN_GBDT_ID_RIDX` takes the same schedule on NVIDIA and AMD
+-        # IDENTICAL (opt-in until its A/B; Apple's schedule is its
+-        # pre-existing default and stays).
++        # IDENTICAL (opt-in until its A/B). fix-g1-gbdt: that opt-in arm
++        # also turns off under the master `-D MOJOLEARN_IDN_ALL_OFF`
++        # (Apple's schedule is its pre-existing default and stays).
+         return (
+             column == COLUMN_APPLE
+             or (
+                 is_defined["MOJOLEARN_GBDT_ID_RIDX"]()
++                and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+                 and (
+                     column == COLUMN_NVIDIA
+                     or column == COLUMN_AMD
+diff --git a/cholesky/checks/potrf.mojo b/cholesky/checks/potrf.mojo
+index 3ddcc3e6e5..d790fe063c 100644
+--- a/cholesky/checks/potrf.mojo
++++ b/cholesky/checks/potrf.mojo
+@@ -382,8 +382,6 @@ from checks.numerics import (
+ #: column order, the inner sum order or the trailing update's fold creates a
+ #: v2; it does not amend v1. Same discipline as
+ #: `mojolearn.identical.gemm.fp32.v1`.
+-# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (its terms here: every IDENTICAL switch off at once; EXP:2438 old path) deleted 2026-11-15 by lane/expdel2-25-neural; code recoverable at 5cde955daf.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-25-neural.patch.
+ comptime CHOL_PROFILE = "mojolearn.identical.cholesky.fp32.v1"
+ 
+ #: **NUMERIC. DEVIATION 1630.** The panel width, pinned for every shape under
+@@ -1456,9 +1454,9 @@ def _chol_left_launch[GUARD: Bool](
+ # the read to launch `zero_upper_kernel`, and the closing wait, are gone
+ # (a GaussianMixture M-step factors every component: two waits a component
+ # saved). A failed factor takes the old tail. Same kernels on the same
+-# cells: the same words. -D MOJOLEARN_IDN_CHOL_ONE_WAIT_OFF restores the
+-# three waits.
+-comptime IDN_CHOL_ONE_WAIT = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_IDN_CHOL_ONE_WAIT_OFF"]()
++# cells: the same words. -D MOJOLEARN_IDN_CHOL_ONE_WAIT_OFF (or
++# -D MOJOLEARN_IDN_ALL_OFF) restores the three waits.
++comptime IDN_CHOL_ONE_WAIT = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (is_defined["MOJOLEARN_IDN_CHOL_ONE_WAIT_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
+ 
+ 
+ def zero_upper_guarded_kernel(
+diff --git a/cluster/checks/reduce_by_key.mojo b/cluster/checks/reduce_by_key.mojo
+index fe6dd1ee5c..398a205078 100644
+--- a/cluster/checks/reduce_by_key.mojo
++++ b/cluster/checks/reduce_by_key.mojo
+@@ -78,8 +78,6 @@ from core.accelerator_target import TARGET_HAS_APPLE_GPU
+ # READ FROM THE MATRIX, not restated here. `checks/kernel_matrix.mojo`
+ # owns every tunable in this tree; changing TARGET_COLUMN there rebuilds
+ # this kernel for another vendor with no edit in this file.
+-# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (its terms here: every IDENTICAL switch off at once; EXP:2438 old path) deleted 2026-11-15 by lane/expdel2-25-neural; code recoverable at 5cde955daf.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-25-neural.patch.
+ comptime REDUCE_BY_KEY_TPB = lib_block_size_for[
+     K_LIB_REDUCE_BY_KEY, TARGET_COLUMN
+ ]()
+@@ -765,7 +763,7 @@ def finish_sum_kernel(
+ #: bench/results/box-run-2-20261005/candidate/). For skinny data (d about 10)
+ #: only `n / 1024 * d` threads are busy at 1024; 256 quadruples the busy
+ #: threads and the table (`n / 256 * k * d` Int32 cells).
+-#: `-D MOJOLEARN_IDN_KMEANS_ACC_ROWS_256_OFF=1`
++#: `-D MOJOLEARN_IDN_KMEANS_ACC_ROWS_256_OFF=1` (or `MOJOLEARN_IDN_ALL_OFF`)
+ #: restores 1024. `-D MOJOLEARN_IDN_KMEANS_ACC_ROWS_4096=1` stays an opt-in
+ #: candidate for wide data and wins over the default. The old opt-in
+ #: `-D MOJOLEARN_IDN_KMEANS_ACC_ROWS_256=1` is now a no-op. Int32 totals: no
+@@ -795,12 +793,14 @@ comptime BLOCK_ACC_ROWS_BASELINE = (
+     if (
+         # A08 AMD loser on stated fits; retained as an explicit experimental arm.
+         is_defined["MOJOLEARN_IDN_KMEANS_ACC_ROWS_4096"]()
++        and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+     )
+     else (
+         1024
+         if (
+             # A08 AMD loser on stated fits; retained as an explicit experimental arm.
+             is_defined["MOJOLEARN_IDN_KMEANS_ACC_ROWS_256_OFF"]()
++            or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+         )
+         else 256
+     )
+diff --git a/embedding/checks/embedding_identical.mojo b/embedding/checks/embedding_identical.mojo
+index 30ce602e1c..ea658f90a5 100644
+--- a/embedding/checks/embedding_identical.mojo
++++ b/embedding/checks/embedding_identical.mojo
+@@ -40,8 +40,6 @@ from max.gpu.memory import AddressSpace
+ from max.gpu.sync import barrier
+ 
+ 
+-# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (its terms here: every IDENTICAL switch off at once; EXP:2438 old path) deleted 2026-11-15 by lane/expdel2-25-neural; code recoverable at 5cde955daf.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-25-neural.patch.
+ comptime SAB_FOLD_DESCENDING = is_defined[
+     "MOJOLEARN_EMB_SABOTAGE_FOLD_DESCENDING"
+ ]()
+@@ -186,7 +184,7 @@ def emb_sabotage_name() -> String:
+ comptime PLAN_AUTO = 2
+ comptime EMB_AUTO_SORT = (
+     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+-    and not is_defined["MOJOLEARN_EMB_AUTO_SORT_OFF"]()
++    and not (is_defined["MOJOLEARN_EMB_AUTO_SORT_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
+ )
+ comptime EMB_AUTO_SORT_MIN_CELLS = get_defined_int["MOJOLEARN_EMB_AUTO_SORT_MIN_CELLS", 1 << 26]()
+ 
+@@ -272,11 +270,11 @@ comptime EMB_RUN_BEGIN_THREADS = 256
+ # every touched cell gets the same bits and every untouched cell keeps its
+ # seed. Both plans fill `perm[0 : run_begin[V]]` with non-padding positions,
+ # so the row is `ids[perm[r]]`. Off under every embedding sabotage arm (they
+-# patch `emb_backward_kernel`). -D MOJOLEARN_IDN_EMB_TOUCHED_ROWS_OFF
+-# restores the V * d launch.
++# patch `emb_backward_kernel`). -D MOJOLEARN_IDN_EMB_TOUCHED_ROWS_OFF (or
++# MOJOLEARN_IDN_ALL_OFF) restores the V * d launch.
+ comptime EMB_TOUCHED_ROWS = (
+     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+-    and not is_defined["MOJOLEARN_IDN_EMB_TOUCHED_ROWS_OFF"]()
++    and not (is_defined["MOJOLEARN_IDN_EMB_TOUCHED_ROWS_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
+     and not ANY_EMB_SABOTAGE
+ )
+ 
+@@ -286,6 +284,7 @@ comptime EMB_TOUCHED_ROWS = (
+ comptime NN49_EMB_VECTOR4 = (
+     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+     and is_defined["MOJOLEARN_NN49_EMB_VECTOR4"]()
++    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+     and not ANY_EMB_SABOTAGE
+ )
+ 
+@@ -310,9 +309,10 @@ comptime NN49_EMB_VECTOR4 = (
+ # runs. Integer counts are exactly associative: the compaction is the same
+ # list on every vendor. Opt-in per caller (`unique_rows`, the embedding
+ # binding's entries; the training loops keep their launch and their wait
+-# count); off with -D MOJOLEARN_IDN_EMB_UNIQUE_ROWS_OFF and under every sabotage arm (EMB_TOUCHED_ROWS).
++# count); off with -D MOJOLEARN_IDN_EMB_UNIQUE_ROWS_OFF (or
++# MOJOLEARN_IDN_ALL_OFF) and under every sabotage arm (EMB_TOUCHED_ROWS).
+ comptime EMB_UNIQUE_ROWS = EMB_TOUCHED_ROWS and not (
+-    is_defined["MOJOLEARN_IDN_EMB_UNIQUE_ROWS_OFF"]()
++    is_defined["MOJOLEARN_IDN_EMB_UNIQUE_ROWS_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+ )
+ #: threads per block of the compaction (a power of two: the tree folds halve it)
+ comptime EMB_UNIQ_TPB = 256
+diff --git a/embedding/embedding_words_run.mojo b/embedding/embedding_words_run.mojo
+index 032cc1068c..d61bb81a9a 100644
+--- a/embedding/embedding_words_run.mojo
++++ b/embedding/embedding_words_run.mojo
+@@ -51,8 +51,6 @@ from embedding.checks.embedding_oracle import (
+ from core.shared_slot import SharedSlot
+ 
+ # One process-lifetime DeviceContext per binding and tier (core/neural_context.mojo).
+-# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (its terms here: every IDENTICAL switch off at once; EXP:2438 old path) deleted 2026-11-15 by lane/expdel2-25-neural; code recoverable at 5cde955daf.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-25-neural.patch.
+ comptime _NEURAL_CTX = "MojolearnNeuralEmbeddingContextIdenticalV3" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnNeuralEmbeddingContextFastV3"
+ # The pinned stages of this binding's downloads (core/staged_download.mojo),
+ # one pool per binding and tier like the context above.
+@@ -123,10 +121,10 @@ comptime _EMB_IDENTICAL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+ # scratch separately; the IDENTICAL controls retain their existing policy.
+ # TOMBSTONE: MOJOLEARN_EMB_RESIDENT_OFF (old path in IDENTICAL: the per-call table upload and scan; no A/B recorded) deleted 2026-11-15 by lane/expdel2-25-neural; code recoverable at 63a7445f96.
+ # Restore: git apply experiments/removed/MOJOLEARN_EMB_RESIDENT_OFF.patch; record in docs/TOMBSTONES.md.
+-comptime EMB_RESIDENT = AFN26_EMB_RESIDENT or _EMB_IDENTICAL
++comptime EMB_RESIDENT = AFN26_EMB_RESIDENT or (_EMB_IDENTICAL and not is_defined["MOJOLEARN_IDN_ALL_OFF"]())
+ # TOMBSTONE: MOJOLEARN_EMB_DEVICE_SCRATCH_OFF (old path in IDENTICAL: host-filled per-call scratch; no A/B recorded) deleted 2026-11-15 by lane/expdel2-25-neural; code recoverable at 9b6b13052d.
+ # Restore: git apply experiments/removed/MOJOLEARN_EMB_DEVICE_SCRATCH_OFF.patch; record in docs/TOMBSTONES.md.
+-comptime EMB_DEVICE_SCRATCH = AFN26_EMB_SCRATCH or _EMB_IDENTICAL
++comptime EMB_DEVICE_SCRATCH = AFN26_EMB_SCRATCH or (_EMB_IDENTICAL and not is_defined["MOJOLEARN_IDN_ALL_OFF"]())
+ #: buffers kept per element type (the oldest is retired past these)
+ comptime EMB_POOL_F32_KEEP = 3
+ comptime EMB_POOL_I32_KEEP = 6
+diff --git a/gaussian_process/checks/kernel_gradient.mojo b/gaussian_process/checks/kernel_gradient.mojo
+index 9c3d041e42..56f91447ec 100644
+--- a/gaussian_process/checks/kernel_gradient.mojo
++++ b/gaussian_process/checks/kernel_gradient.mojo
+@@ -82,10 +82,8 @@ from gaussian_process.host.gp_theta import gp_free_count
+ #: is rounded before the subtraction either way (DEVIATION 1753): no bit
+ #: moves, and the host column is untouched. The function now waits once at
+ #: its end (the scaled copy is its own).
+-# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (its terms here: every IDENTICAL switch off at once; EXP:2438 old path) deleted 2026-11-15 by lane/expdel2-25-neural; code recoverable at 5cde955daf.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-25-neural.patch.
+ comptime GP_IDN_GRAD_PRESCALE = GP_IDN_PRESCALE and not (
+-    is_defined["MOJOLEARN_IDN_GP_GRAD_PRESCALE_OFF"]()
++    is_defined["MOJOLEARN_IDN_GP_GRAD_PRESCALE_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+ )
+ 
+ comptime GP_GRAD_RBF = 0
+diff --git a/gemm/checks/gemm_identical.mojo b/gemm/checks/gemm_identical.mojo
+index 6ddb05c0ff..f7edeb1751 100644
+--- a/gemm/checks/gemm_identical.mojo
++++ b/gemm/checks/gemm_identical.mojo
+@@ -219,8 +219,6 @@ from core.shared_slot import SharedSlot
+ #
+ #: The leaf boundary reads the LAUNCH instead of `k`: `L` is scaled by the
+ #: block size. Contract section 6's first sentence, violated.
+-# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (its terms here: every IDENTICAL switch off at once; EXP:2438 old path) deleted 2026-11-15 by lane/expdel2-25-neural; code recoverable at 5cde955daf.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-25-neural.patch.
+ comptime SAB_LEAF_READS_LAUNCH = is_defined[
+     "MOJOLEARN_GEMM_SABOTAGE_LEAF_READS_LAUNCH"
+ ]()
+@@ -300,7 +298,7 @@ comptime GEMM_FOLD_SLOTS = 16
+ 
+ # NI01/NI02/NI06 source-only arms, all default OFF. No compilation,
+ # identity, quality or timing evidence was collected for this source.
+-comptime _NI_GEMM_ENABLED = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
++comptime _NI_GEMM_ENABLED = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+ comptime NI01_GEOMETRIC_WORKSPACE = _NI_GEMM_ENABLED and is_defined["MOJOLEARN_NI01_GEMM_GEOMETRIC_WORKSPACE"]()
+ # Tried 2026-10-08 (NI02, MOJOLEARN_IDN_NEURAL_GEMM_SCHEDULE=3 stream_all: bounded 16-leaf partial windows for every
+ # GEMM caller, run ge123e6f9): NV/AMD gemm gaussian 2.07x/1.78x, lm-train-step 1.11x/1.07x SLOWER (quality not
+@@ -3236,7 +3234,7 @@ def _mfma_run(
+ 
+ 
+ comptime IDN_GEMM_MFMA_REUSE_WS = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
+-    is_defined["MOJOLEARN_IDN_GEMM_MFMA_REUSE_WS_OFF"]()
++    is_defined["MOJOLEARN_IDN_GEMM_MFMA_REUSE_WS_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+ )
+ """lane/fam-lm (2026-10-04), default ON under IDENTICAL; reached only where
+ `lib_gemm_mfma_for` is on (the AMD column). The matrix-core GROUP launch
+@@ -3252,7 +3250,7 @@ workspace is smaller takes `_mfma_run` unchanged.
+ 
+ 
+ comptime IDN_GEMM_MFMA_NO_LONE_GROUP = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
+-    is_defined["MOJOLEARN_IDN_GEMM_MFMA_NO_LONE_GROUP_OFF"]()
++    is_defined["MOJOLEARN_IDN_GEMM_MFMA_NO_LONE_GROUP_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+ )
+ """lane/nr-gemm (2026-10-04), default ON under IDENTICAL; reached only where
+ `lib_gemm_mfma_for` is on (the AMD column). The leaf split's rule answers a
+@@ -3271,7 +3269,7 @@ which the non-group store applies itself. Same bits.
+ 
+ comptime IDN_GEMM_AMD_BAND_MFMA = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
+     # A01 current experiment: NEVER RUN — PENDING MEASUREMENT; existing defaults preserved.
+-    is_defined["MOJOLEARN_IDN_GEMM_AMD_BAND_MFMA_OFF"]()
++    is_defined["MOJOLEARN_IDN_GEMM_AMD_BAND_MFMA_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+ )
+ """lane/nr-gemm (2026-10-04, review rank 1 "A4 fix"), default ON under
+ IDENTICAL; reached only on the AMD column with `lib_gemm_mfma_for` on. The
+@@ -3376,12 +3374,12 @@ def _mfma_run_ws(
+ # and the wave count are scheduling: no product, leaf or fold moves.
+ 
+ #: `-D MOJOLEARN_IDN_GEMM_MFMA16_OFF` keeps the scalar stepped-down and split
+-#: plans on the AMD column.
++#: plans on the AMD column; also off under `MOJOLEARN_IDN_ALL_OFF`.
+ # A01 experiment: NEVER RUN — PENDING MEASUREMENT; incumbent defaults retained.
+ # A01 PENDING: compile evidence alone does not qualify device correctness, quality or speed.
+ # Incumbent MFMA16 default retained; this card only compares explicit rollback arms.
+ comptime IDN_GEMM_MFMA16 = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
+-    is_defined["MOJOLEARN_IDN_GEMM_MFMA16_OFF"]()
++    is_defined["MOJOLEARN_IDN_GEMM_MFMA16_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+ )
+ 
+ 
+@@ -3826,7 +3824,7 @@ def _mfma16_try(
+ 
+ comptime IDN_AMD_MFMA_KPACK = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined[
+     "MOJOLEARN_IDN_AMD_MFMA_KPACK"
+-]()
++]() and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+ 
+ #: Waves a packed block holds: a 64 x (32 GEMM_AMD_KPACK_NW) tile; two waves
+ #: share each staged A page.
+@@ -4196,10 +4194,10 @@ def _mfma_kpack_try(
+ 
+ #: lane/nr-gemm (2026-10-04, review A2), default ON under IDENTICAL on the
+ #: NVIDIA column (kernel body row 1). `-D MOJOLEARN_IDN_GEMM_NV_STEP_KPACK_OFF`
+-#: keeps the scalar stepped-down plans.
++#: keeps the scalar stepped-down plans; also off under `MOJOLEARN_IDN_ALL_OFF`.
+ comptime IDN_GEMM_NV_STEP_KPACK = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
+     # N01 current experiment: NEVER RUN — PENDING MEASUREMENT; existing defaults preserved.
+-    is_defined["MOJOLEARN_IDN_GEMM_NV_STEP_KPACK_OFF"]()
++    is_defined["MOJOLEARN_IDN_GEMM_NV_STEP_KPACK_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+ )
+ 
+ 
+@@ -4799,7 +4797,7 @@ def _gemm_tile_step_down_rules(m: Int, n: Int, k: Int, plan: Int) -> Int:
+ #: keeps today's pick instead of changing the schedule.
+ comptime IDN_GEMM_FILL_TILES = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined[
+     "MOJOLEARN_IDN_GEMM_FILL_TILES"
+-]()
++]() and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+ comptime GEMM_FILL_WARPS_PER_SCHEDULER = 2
+ comptime GEMM_FILL_SCHEDULERS_PER_SM = 4
+ 
+@@ -7128,7 +7126,7 @@ comptime GEMM_KSPLIT_KS = 16
+ # ZERO timed samples. This checks GEMM only, not full models or combined
+ # defines. Apple checks identity; these scheduling changes target NVIDIA/AMD.
+ # Evidence: experiments/identical_speed/results/20261005/light-identity/.
+-comptime _IDN_GEMM_GROUP_ARMS = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
++comptime _IDN_GEMM_GROUP_ARMS = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+ # PROMOTED 2026-10-08 (lane/grid-act-2): slack 8 is the IDENTICAL default.
+ # IDENTICAL grid run ge123e6f9 (NVIDIA L40S sm_89 + AMD MI325X gfx942, full
+ # board data, one scored run per arm, noise floor from incumbent repeats),
+@@ -7146,7 +7144,8 @@ comptime _IDN_GEMM_GROUP_ARMS = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+ # long-k call with few output tiles issues about 8 blocks per SM instead of 4,
+ # which hides more load latency per SM at the cost of more `m n G` workspace
+ # (still under SPLITK_MAX_WORKSPACE_FLOATS, `gemm_step_ksplit_finest_leaves`)
+-# and a longer second-level fold. Off IDENTICAL the slack stays 4.
++# and a longer second-level fold. Off IDENTICAL (and under
++# MOJOLEARN_IDN_ALL_OFF) the slack stays 4.
+ comptime GEMM_KSPLIT_BRIEF_SLACK = 4
+ """The slack the long-k brief's section 4 hand counts were written at."""
+ comptime GEMM_KSPLIT_SLACK = (
+diff --git a/gemm/experiments/neural_profile.mojo b/gemm/experiments/neural_profile.mojo
+index f43b5ac724..1f2e37a6fe 100644
+--- a/gemm/experiments/neural_profile.mojo
++++ b/gemm/experiments/neural_profile.mojo
+@@ -14,10 +14,9 @@ from gemm.contract import (
+     GEMM_LEAF_ARM, GEMM_LEAF_ARM_NEURAL128, GEMM_LEAF_ARM_NEURAL256,
+ )
+ 
+-# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (its terms here: every IDENTICAL switch off at once; EXP:2438 old path) deleted 2026-11-15 by lane/expdel2-25-neural; code recoverable at 5cde955daf.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-25-neural.patch.
+ comptime NEURAL_EXPERIMENTS_ALLOWED = (
+     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
++    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+ )
+ # Leaf length and accumulator chains stay separate controls.
+ # NN03 = the neural arms (1 neural128, 2 neural256) of the ONE leaf switch
+diff --git a/gemm/experiments/neural_switches.mojo b/gemm/experiments/neural_switches.mojo
+index d0d7635e61..73626a76ec 100644
+--- a/gemm/experiments/neural_switches.mojo
++++ b/gemm/experiments/neural_switches.mojo
+@@ -40,10 +40,9 @@ every binding evaluates through GLOBAL_NUMERIC_MODE.
+ from std.sys.compile import is_defined, get_defined_int
+ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+ 
+-# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (its terms here: every IDENTICAL switch off at once; EXP:2438 old path) deleted 2026-11-15 by lane/expdel2-25-neural; code recoverable at 5cde955daf.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-25-neural.patch.
+ comptime _ALLOWED = (
+     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
++    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+ )
+ 
+ comptime SCHED_INCUMBENT = 0
+diff --git a/gemm/experiments/neural_tiled_v2.mojo b/gemm/experiments/neural_tiled_v2.mojo
+index ce4968f7dd..cfbf903df8 100644
+--- a/gemm/experiments/neural_tiled_v2.mojo
++++ b/gemm/experiments/neural_tiled_v2.mojo
+@@ -19,9 +19,7 @@ from gemm.checks.gemm_identical import (
+     contract_partition, gemm_operand_strides,
+ )
+ 
+-# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (its terms here: every IDENTICAL switch off at once; EXP:2438 old path) deleted 2026-11-15 by lane/expdel2-25-neural; code recoverable at 5cde955daf.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-25-neural.patch.
+-comptime _NEURAL_ARMS = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
++comptime _NEURAL_ARMS = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+ comptime NI07_GROUPED_PROJECTIONS = _NEURAL_ARMS and is_defined["MOJOLEARN_NI07_GROUPED_PROJECTIONS"]()
+ # TOMBSTONE: MOJOLEARN_IDN_NEURAL_GEMM_EPILOGUE=1 (slower) deleted 2026-10-09 by d48c5eaaf; code recoverable at d48c5eaaf^.
+ # Restore: git apply experiments/removed/MOJOLEARN_IDN_NEURAL_GEMM_EPILOGUE-arm1.patch; record in docs/TOMBSTONES.md.

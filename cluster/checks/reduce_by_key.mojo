@@ -78,6 +78,8 @@ from core.accelerator_target import TARGET_HAS_APPLE_GPU
 # READ FROM THE MATRIX, not restated here. `checks/kernel_matrix.mojo`
 # owns every tunable in this tree; changing TARGET_COLUMN there rebuilds
 # this kernel for another vendor with no edit in this file.
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (its terms here: every IDENTICAL switch off at once; EXP:2438 old path) deleted 2026-11-15 by lane/expdel2-25-neural; code recoverable at 5cde955daf.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-25-neural.patch.
 comptime REDUCE_BY_KEY_TPB = lib_block_size_for[
     K_LIB_REDUCE_BY_KEY, TARGET_COLUMN
 ]()
@@ -763,7 +765,7 @@ def finish_sum_kernel(
 #: bench/results/box-run-2-20261005/candidate/). For skinny data (d about 10)
 #: only `n / 1024 * d` threads are busy at 1024; 256 quadruples the busy
 #: threads and the table (`n / 256 * k * d` Int32 cells).
-#: `-D MOJOLEARN_IDN_KMEANS_ACC_ROWS_256_OFF=1` (or `MOJOLEARN_IDN_ALL_OFF`)
+#: `-D MOJOLEARN_IDN_KMEANS_ACC_ROWS_256_OFF=1`
 #: restores 1024. `-D MOJOLEARN_IDN_KMEANS_ACC_ROWS_4096=1` stays an opt-in
 #: candidate for wide data and wins over the default. The old opt-in
 #: `-D MOJOLEARN_IDN_KMEANS_ACC_ROWS_256=1` is now a no-op. Int32 totals: no
@@ -793,14 +795,12 @@ comptime BLOCK_ACC_ROWS_BASELINE = (
     if (
         # A08 AMD loser on stated fits; retained as an explicit experimental arm.
         is_defined["MOJOLEARN_IDN_KMEANS_ACC_ROWS_4096"]()
-        and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
     )
     else (
         1024
         if (
             # A08 AMD loser on stated fits; retained as an explicit experimental arm.
             is_defined["MOJOLEARN_IDN_KMEANS_ACC_ROWS_256_OFF"]()
-            or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
         )
         else 256
     )

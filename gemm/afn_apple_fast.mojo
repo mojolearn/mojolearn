@@ -3,11 +3,8 @@
 """lane/apple-fast-neural-gemm (2026-10-03): the Apple FAST GEMM candidates.
 
 Every symbol here is compiled only under `AFN_GEMM_APPLE` (the FAST tier on
-an Apple GPU build), with BF16 enabled by default and other routes enabled
-by their `MOJOLEARN_AFN_GEMM_*` defines below;
-IDENTICAL compiles main's code unchanged (`gemm/checks/gemm_identical.mojo`
-reads `AFN_GEMM_FP32_MMA`, which is False there, so no line of this file is
-instantiated under IDENTICAL).
+an Apple GPU build).
+IDENTICAL never instantiates a line of this file.
 
 THE KERNEL. `afn_gemm_mma_kernel` is one block per `BM x BN` output tile
 (`SGM x SGN` simdgroups of `FM x FN` 8x8 fragments, each lane two cells of
@@ -27,40 +24,13 @@ runs one barrier per window, else two.
 Operands are generic in `AT` and `BT`: float32, or bf16 BITS in a uint16
 buffer widened on the way into threadgroup memory (`bits << 16`, exact,
 contract L-1), so the bf16 profile's product runs from the bits with no
-widen launch and no float32 image of either operand (`AFN_GEMM_BF16_MMA`).
+widen launch and no float32 image of either operand.
 
-THE DEFINES (BF16 defaults ON in Apple FAST; the others default OFF;
-`MOJOLEARN_AFN_GEMM_ALL` enables the others but does not override BF16=0):
-
-  MOJOLEARN_AFN_GEMM_SIMDGROUP  fp32 products on this kernel at the 64x64
-      tile, ahead of the vendor route, from every fp32 entry point
-      (`identical_gemm`, `identical_gemm_into`, both `allow_vendor` arms:
-      the kernel is full fp32, so the TF32 objection that closes the vendor
-      route does not apply to it).
-  MOJOLEARN_AFN_GEMM_SPLITK     outputs with fewer than `2 x AFN_GEMM_CORES`
-      tiles split `k` over `grid.y` (whole windows per split, at least
-      `AFN_GEMM_SPLIT_MIN_STEPS` steps each, at most `AFN_GEMM_SPLIT_MAX`
-      splits) and add their partial tiles into a zeroed `C` with global f32
-      atomics (Metal has global float atomics: gbdt DEVIATION 93), one
-      zero launch and one GEMM launch. The sum order across splits is
-      nondeterministic, which FAST allows; f32 throughout.
-  MOJOLEARN_AFN_GEMM_TILESHAPE  the tile from the shape, on the host, with
-      no device readback: 128x32 when `n <= 32`, 32x128 when `m <= 32`,
-      32x32 when the 64x64 grid has fewer than `2 x AFN_GEMM_CORES` tiles
-      (four times the blocks), 64x64 otherwise. Composes with SPLITK (the
-      smaller tile first, then a split if the grid is still short).
-  MOJOLEARN_AFN_GEMM_BF16_MMA   `identical_gemm_bf16w_into` (float32 A, bf16
-      B) and the binding's bf16 x bf16 call run this kernel from the bits.
-      Default 1 on Apple FAST; explicitly set to 0 to disable this route.
-  MOJOLEARN_AFN_GEMM_INT8_MMA   `identical_gemm_int8_into` runs the exact
-      chunked matrix-unit kernel (`gemm_int8_apple_chunk.mojo`: every chunk
-      sum below 2^24 is a float32, Int32 between chunks, the flat kernel's
-      epilogue) instead of the flat one-thread-per-cell kernel's sliced
-      launches with a wait between slices. Same Int32, same bits.
-  MOJOLEARN_AFN_GEMM_EPILOGUE   `afn_gemm_fused_into` and the binding's
-      `gemm_fused`: bias, bias + residual, bias + SiLU, bias + GELU (exact
-      erf) applied in the store, for the attention, mamba and MLP lanes to
-      call later (nothing calls it this round).
+THE ROUTES (FAST + Apple only): `identical_gemm_bf16w_into` (float32 A,
+bf16 B) and the binding's bf16 x bf16 call run this kernel from the bits;
+fp32 products whose `k` is not a whole number of windows run on it
+(`AFN_GEMM_FAST_RAGGED_K`); the Samba head, the transformer LM weight
+gradient, PCA and the tall Cholesky call its launcher directly.
 
 Shared-memory pages carry a fits gate (`lib_smem_page_fits_for`); kernel
 arguments are fixed-width; pointers cross only `@always_inline` callees.
@@ -72,7 +42,6 @@ from max.gpu import block_dim, block_idx, thread_idx
 from std.math import erf, exp
 from std.memory import bitcast, stack_allocation
 from std.sys.compile import is_defined
-from std.sys.defines import get_defined_int
 from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace
@@ -87,9 +56,10 @@ from checks.kernel_matrix import (
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 from core.apple_air import simdgroup_load_legacy_air
 from gemm.contract import OP_NN, OP_NT, OP_TN
-# lane/apple-fast-neural-w2-gemm2: the second-round kernel (AFN_GEMM2_ON is
-# False unless FAST + Apple + a MOJOLEARN_AFN_GEMM2_* define).
-from gemm.afn_apple_fast2 import AFN_GEMM2_ON, afn2_gemm_dispatch
+# TOMBSTONE: MOJOLEARN_AFN_GEMM2_ALL, MOJOLEARN_AFN_GEMM2_BIGTILE, MOJOLEARN_AFN_GEMM2_DBUF, MOJOLEARN_AFN_GEMM2_DIRECT_B,
+# MOJOLEARN_AFN_GEMM2_SWIZZLE, MOJOLEARN_AFN_GEMM2_SWZ_G (never measured, Apple FAST second-round kernel gemm/afn_apple_fast2.mojo)
+# deleted 2026-11-15 by lane/expdel2-25-neural; code recoverable at 45d3386430.
+# Restore: git apply experiments/removed/MOJOLEARN_AFN_GEMM2_ALL.patch; record in docs/TOMBSTONES.md.
 
 
 # ===========================================================================
@@ -102,16 +72,12 @@ comptime AFN_GEMM_APPLE = (
     and TARGET_HAS_APPLE_GPU and not is_defined["MOJOLEARN_COLUMN_CPU"]()
     and TARGET_COLUMN == COLUMN_APPLE
 )
-comptime AFN_GEMM_ALL = AFN_GEMM_APPLE and is_defined["MOJOLEARN_AFN_GEMM_ALL"]()
-comptime AFN_GEMM_SIMDGROUP = AFN_GEMM_ALL or AFN_GEMM2_ON or (
-    AFN_GEMM_APPLE and is_defined["MOJOLEARN_AFN_GEMM_SIMDGROUP"]()
-)
-comptime AFN_GEMM_SPLITK = AFN_GEMM_ALL or (
-    AFN_GEMM_APPLE and is_defined["MOJOLEARN_AFN_GEMM_SPLITK"]()
-)
-comptime AFN_GEMM_TILESHAPE = AFN_GEMM_ALL or (
-    AFN_GEMM_APPLE and is_defined["MOJOLEARN_AFN_GEMM_TILESHAPE"]()
-)
+# TOMBSTONE: MOJOLEARN_AFN_GEMM_ALL, MOJOLEARN_AFN_GEMM_SIMDGROUP, MOJOLEARN_AFN_GEMM_SPLITK, MOJOLEARN_AFN_GEMM_TILESHAPE,
+# MOJOLEARN_AFN_GEMM_INT8_MMA, MOJOLEARN_AFN_GEMM_EPILOGUE (never measured opt-in arms), MOJOLEARN_AFN_GEMM_BF16_MMA (=0
+# off knob, never measured), MOJOLEARN_AFN_GEMM_KB and MOJOLEARN_AFN_GEMM_CORES (width knobs, never measured; 32 and 80
+# kept) and MOJOLEARN_GEMM_FAST_RAGGED_K_OFF (old path beside the EXP:2123 FAST default) deleted 2026-11-15 by
+# lane/expdel2-25-neural; code recoverable at 02da0a0217.
+# Restore: git apply experiments/removed/MOJOLEARN_AFN_GEMM_ALL.patch; record in docs/TOMBSTONES.md.
 # Owner-directed default (2026-10-15), scoped to existing explicit BF16 calls;
 # no FP32 quantization or model wiring. Caller audit and decision:
 # experiments/apple_fast_bf16_20261015/current_decision.json.
@@ -127,21 +93,13 @@ comptime AFN_GEMM_TILESHAPE = AFN_GEMM_ALL or (
 # Float32-A/BF16-B and transposes have correctness, not performance evidence.
 # This owner choice is not a same-source promotion A/B, estimator campaign,
 # full-board result or qualification of all targets. Other builds pending.
-# Explicit =0 wins over ALL/GEMM2 for BF16; no dimension-dependent selection.
-comptime AFN_GEMM_BF16_MMA = AFN_GEMM_APPLE and (
-    get_defined_int["MOJOLEARN_AFN_GEMM_BF16_MMA", 1]() != 0
-)
-comptime AFN_GEMM_INT8_MMA = AFN_GEMM_ALL or (
-    AFN_GEMM_APPLE and is_defined["MOJOLEARN_AFN_GEMM_INT8_MMA"]()
-)
-comptime AFN_GEMM_EPILOGUE = AFN_GEMM_ALL or (
-    AFN_GEMM_APPLE and is_defined["MOJOLEARN_AFN_GEMM_EPILOGUE"]()
-)
-#: The fp32 entry points take this kernel whenever any fp32 candidate is on
-#: (SPLITK and TILESHAPE are policies of the same kernel).
-comptime AFN_GEMM_FP32_MMA = AFN_GEMM_SIMDGROUP or AFN_GEMM_SPLITK or AFN_GEMM_TILESHAPE
+# No dimension-dependent selection.
+comptime AFN_GEMM_BF16_MMA = AFN_GEMM_APPLE
+#: Imported names of deleted arms, kept as their folded constants.
+comptime AFN_GEMM_EPILOGUE = False
+comptime AFN_GEMM_FP32_MMA = False
 #: lane/identical-gemm-ktail (2026-10-15), FAST default (was A/B define
-#: `-D MOJOLEARN_GEMM_FAST_RAGGED_K`; off switch `_OFF`). FAST Apple fp32 GEMMs whose `k` is not
+#: `-D MOJOLEARN_GEMM_FAST_RAGGED_K`). FAST Apple fp32 GEMMs whose `k` is not
 #: a whole number of this kernel's windows (`k % AFN_GEMM_KB != 0`) run on
 #: the simdgroup kernel below instead of MAX's `linalg.matmul`. Cause:
 #: public `mojolearn.linalg.matmul` fp32 FAST on an Apple M4 (one warmup,
@@ -161,14 +119,15 @@ comptime AFN_GEMM_FP32_MMA = AFN_GEMM_SIMDGROUP or AFN_GEMM_SPLITK or AFN_GEMM_T
 #: non-board estimator fit that reaches `gemm_nt` with a ragged feature count.
 #: FAST DEFAULT since 2026-10-15 (A/B on Apple M4, one run per arm, run3; arm A MAX matmul, arm B this kernel):
 #: 4096x4096x2500 1974.6 -> 97.7 ms, 3000x5000x2500 1780.5 -> 86.1 ms; relative RMS error vs FP64 equal
-#: (9.0e-7, 8.9e-7). Aligned k keeps MAX. `-D MOJOLEARN_GEMM_FAST_RAGGED_K_OFF` restores arm A.
-comptime AFN_GEMM_FAST_RAGGED_K = AFN_GEMM_APPLE and not is_defined["MOJOLEARN_GEMM_FAST_RAGGED_K_OFF"]()
+#: (9.0e-7, 8.9e-7). Aligned k keeps MAX.
+comptime AFN_GEMM_FAST_RAGGED_K = AFN_GEMM_APPLE
 
 #: The window: steps staged per barrier. 32 stages one 64x64 page of
 #: 17,920 bytes (one page on Apple's 32 KB); 16 stages two pages of 9,472.
-comptime AFN_GEMM_KB = get_defined_int["MOJOLEARN_AFN_GEMM_KB", 32]()
+comptime AFN_GEMM_KB = 32
 #: GPU cores the grid should cover twice over (M3 Ultra: 80).
-comptime AFN_GEMM_CORES = get_defined_int["MOJOLEARN_AFN_GEMM_CORES", 80]()
+comptime AFN_GEMM_CORES = 80
+#: Split-K policy bounds, for the Samba head and Mamba projection callers.
 comptime AFN_GEMM_SPLIT_MAX = 16
 comptime AFN_GEMM_SPLIT_MIN_STEPS = 256
 
@@ -566,17 +525,7 @@ def afn_strides(op: Int, m: Int, n: Int, k: Int) -> Tuple[Int, Int, Int, Int]:
 
 
 def afn_gemm_tile(m: Int, n: Int) -> Int:
-    """The tile for `(m, n)`: a host decision from the shape alone
-    (AFN_GEMM_TILESHAPE); the 64x64 tile when the define is off."""
-    comptime if not AFN_GEMM_TILESHAPE:
-        return AFN_TILE_SQUARE
-    if n <= 32 and m > 32:
-        return AFN_TILE_TALL
-    if m <= 32 and n > 32:
-        return AFN_TILE_WIDE
-    var tiles64 = ((m + 63) // 64) * ((n + 63) // 64)
-    if tiles64 < 2 * AFN_GEMM_CORES:
-        return AFN_TILE_SMALL
+    """The tile for `(m, n)`: the 64x64 tile."""
     return AFN_TILE_SQUARE
 
 
@@ -593,27 +542,6 @@ def afn_gemm_tile_count(tile: Int, m: Int, n: Int) -> Int:
         bm = 32
         bn = 128
     return ((m + bm - 1) // bm) * ((n + bn - 1) // bn)
-
-
-def afn_gemm_k_split(tiles: Int, k: Int) -> Int:
-    """Steps per split (`grid.y` walks `ceil(k / split)` splits), or 0 when
-    the product does not split: the grid already covers the cores twice,
-    `k` is too short, or AFN_GEMM_SPLITK is off. Whole windows per split."""
-    comptime if not AFN_GEMM_SPLITK:
-        return 0
-    var target = 2 * AFN_GEMM_CORES
-    if tiles >= target or k < 2 * AFN_GEMM_SPLIT_MIN_STEPS:
-        return 0
-    var s = (target + tiles - 1) // tiles
-    s = min(s, k // AFN_GEMM_SPLIT_MIN_STEPS)
-    s = min(s, AFN_GEMM_SPLIT_MAX)
-    if s <= 1:
-        return 0
-    var per = (k + s - 1) // s
-    per = ((per + AFN_GEMM_KB - 1) // AFN_GEMM_KB) * AFN_GEMM_KB
-    if (k + per - 1) // per <= 1:
-        return 0
-    return per
 
 
 def _afn_launch[
@@ -666,19 +594,8 @@ def afn_launch_tile_aux[
     k_split: Int,
 ) raises:
     """The named tile with the second output `aux` (only
-    AFN_EPI_SWIGLU_BWD writes it; any valid pointer otherwise). The
-    non-square tiles are instantiated only under
-    AFN_GEMM_TILESHAPE (`afn_gemm_tile` never names them otherwise)."""
-    comptime if AFN_GEMM_TILESHAPE:
-        if tile == AFN_TILE_SMALL:
-            _afn_launch[2, 2, 2, 2, AT, BT, SPLIT, EPI](ctx, c, a, b, bias, resid, aux, m, n, k, st, splits, k_split)
-            return
-        if tile == AFN_TILE_TALL:
-            _afn_launch[4, 1, 4, 4, AT, BT, SPLIT, EPI](ctx, c, a, b, bias, resid, aux, m, n, k, st, splits, k_split)
-            return
-        if tile == AFN_TILE_WIDE:
-            _afn_launch[1, 4, 4, 4, AT, BT, SPLIT, EPI](ctx, c, a, b, bias, resid, aux, m, n, k, st, splits, k_split)
-            return
+    AFN_EPI_SWIGLU_BWD writes it; any valid pointer otherwise). Every
+    caller names AFN_TILE_SQUARE (`afn_gemm_tile`)."""
     _afn_launch[2, 2, 4, 4, AT, BT, SPLIT, EPI](ctx, c, a, b, bias, resid, aux, m, n, k, st, splits, k_split)
 
 
@@ -749,7 +666,7 @@ def _afn_dispatch[
     k: Int,
     op: Int,
 ) raises -> Bool:
-    """Tile, split, launch. False for a shape or op this route does not
+    """Tile, launch. False for a shape or op this route does not
     serve (the caller falls through to its own dispatch). Asynchronous:
     every buffer is the caller's and nothing here waits."""
     if m <= 0 or n <= 0 or k <= 0:
@@ -758,25 +675,6 @@ def _afn_dispatch[
         return False
     var st = _afn_strides(op, m, n, k)
     var tile = afn_gemm_tile(m, n)
-    # w2-gemm2: the second-round kernel takes every product this route
-    # would run at the square tile without a split.
-    comptime if AFN_GEMM2_ON and EPI == AFN_EPI_NONE:
-        if tile == AFN_TILE_SQUARE and afn_gemm_k_split(afn_gemm_tile_count(tile, m, n), k) == 0:
-            if afn2_gemm_dispatch[AT, BT](ctx, c, a, b, m, n, k, op):
-                return True
-    comptime if AFN_GEMM_SPLITK and EPI == AFN_EPI_NONE:
-        var k_split = afn_gemm_k_split(afn_gemm_tile_count(tile, m, n), k)
-        if k_split > 0:
-            var splits = (k + k_split - 1) // k_split
-            ctx.enqueue_function[afn_zero_kernel](
-                c, Int32(m * n),
-                grid_dim=((m * n + 4 * AFN_ZERO_TPB - 1) // (4 * AFN_ZERO_TPB), 1, 1),
-                block_dim=(AFN_ZERO_TPB, 1, 1),
-            )
-            _afn_launch_tile[AT, BT, True, AFN_EPI_NONE](
-                ctx, tile, c, a, b, bias, resid, m, n, k, st, splits, k_split
-            )
-            return True
     _afn_launch_tile[AT, BT, False, EPI](ctx, tile, c, a, b, bias, resid, m, n, k, st, 1, k)
     return True
 
@@ -796,15 +694,9 @@ def afn_gemm_fp32_into(
     k: Int,
     op: Int,
 ) raises -> Bool:
-    """`C = op(A) . op(B)`, fp32 operands (AFN_GEMM_SIMDGROUP, _SPLITK,
-    _TILESHAPE). True when served."""
-    comptime if not AFN_GEMM_FP32_MMA:
-        return False
-    else:
-        var cp = c.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
-        return _afn_dispatch[DType.float32, DType.float32, AFN_EPI_NONE](
-            ctx, cp, a.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), b.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), cp, cp, m, n, k, op
-        )
+    """Imported name of the deleted fp32 arms: never serves (False); the
+    caller keeps its own route."""
+    return False
 
 
 def afn_gemm_fp32_ragged_k_ptr_into(
@@ -844,8 +736,8 @@ def afn_gemm_bf16_into(
     k: Int,
     op: Int,
 ) raises -> Bool:
-    """`C = op(A) . op(B)`, float32 A and bf16 bits B, from the bits
-    (AFN_GEMM_BF16_MMA). True when served."""
+    """`C = op(A) . op(B)`, float32 A and bf16 bits B, from the bits.
+    True when served."""
     comptime if not AFN_GEMM_BF16_MMA:
         return False
     else:
@@ -866,7 +758,7 @@ def afn_gemm_bf16_bits_into(
     op: Int,
 ) raises -> Bool:
     """`C = op(A) . op(B)`, both operands bf16 bits, from the bits
-    (AFN_GEMM_BF16_MMA; the board's gemm-bf16 call). True when served."""
+    (the board's gemm-bf16 call). True when served."""
     comptime if not AFN_GEMM_BF16_MMA:
         return False
     else:
@@ -889,160 +781,6 @@ def afn_gemm_fused_into(
     op: Int,
     epi: Int,
 ) raises -> Bool:
-    """`C = epi(op(A) . op(B))` (AFN_GEMM_EPILOGUE): `epi` is AFN_EPI_BIAS
-    (`+ bias[j]`), AFN_EPI_BIAS_RESID (`+ bias[j] + resid[i, j]`),
-    AFN_EPI_BIAS_SILU or AFN_EPI_BIAS_GELU (the gate on `+ bias[j]`), or
-    AFN_EPI_NONE. `bias` holds `n` floats; `resid` holds `m n` floats and is
-    read only by AFN_EPI_BIAS_RESID. Never splits `k`. True when served;
-    False for an unknown `epi` or an unserved shape."""
-    comptime if not AFN_GEMM_EPILOGUE:
-        return False
-    else:
-        if m <= 0 or n <= 0 or k <= 0:
-            return False
-        if op != OP_NN and op != OP_NT and op != OP_TN:
-            return False
-        var st = _afn_strides(op, m, n, k)
-        var tile = afn_gemm_tile(m, n)
-        var cp = c.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
-        var ap = a.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
-        var bp = b.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
-        var biasp = bias.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
-        var residp = resid.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
-        if epi == AFN_EPI_NONE:
-            _afn_launch_tile[DType.float32, DType.float32, False, AFN_EPI_NONE](
-                ctx, tile, cp, ap, bp, biasp, residp, m, n, k, st, 1, k
-            )
-        elif epi == AFN_EPI_BIAS:
-            _afn_launch_tile[DType.float32, DType.float32, False, AFN_EPI_BIAS](
-                ctx, tile, cp, ap, bp, biasp, residp, m, n, k, st, 1, k
-            )
-        elif epi == AFN_EPI_BIAS_RESID:
-            _afn_launch_tile[DType.float32, DType.float32, False, AFN_EPI_BIAS_RESID](
-                ctx, tile, cp, ap, bp, biasp, residp, m, n, k, st, 1, k
-            )
-        elif epi == AFN_EPI_BIAS_SILU:
-            _afn_launch_tile[DType.float32, DType.float32, False, AFN_EPI_BIAS_SILU](
-                ctx, tile, cp, ap, bp, biasp, residp, m, n, k, st, 1, k
-            )
-        elif epi == AFN_EPI_BIAS_GELU:
-            _afn_launch_tile[DType.float32, DType.float32, False, AFN_EPI_BIAS_GELU](
-                ctx, tile, cp, ap, bp, biasp, residp, m, n, k, st, 1, k
-            )
-        elif epi == AFN_EPI_RESID:
-            _afn_launch_tile[DType.float32, DType.float32, False, AFN_EPI_RESID](
-                ctx, tile, cp, ap, bp, biasp, residp, m, n, k, st, 1, k
-            )
-        else:
-            return False
-        return True
-
-
-# ===========================================================================
-# w2-gemm2 (2026-10-03): pointer entry points for the w2-lmgrad lane
-# ===========================================================================
-
-
-def afn_gemm_resid_ptr_into(
-    ctx: DeviceContext,
-    c: MutPointer[Float32, MutAnyOrigin],
-    a: MutPointer[Float32, MutAnyOrigin],
-    b: MutPointer[Float32, MutAnyOrigin],
-    resid: MutPointer[Float32, MutAnyOrigin],
-    m: Int,
-    n: Int,
-    k: Int,
-    op: Int,
-) raises -> Bool:
-    """`C[m x n] = op(A) . op(B) + resid[i, j]` in one launch, no bias
-    (AFN_EPI_RESID, behind AFN_GEMM_EPILOGUE). `c == resid` is safe.
-    Asynchronous; False (nothing enqueued) when the define is off or the op
-    or shape is not served."""
-    comptime if not AFN_GEMM_EPILOGUE:
-        return False
-    else:
-        if m <= 0 or n <= 0 or k <= 0:
-            return False
-        if op != OP_NN and op != OP_NT and op != OP_TN:
-            return False
-        var st = _afn_strides(op, m, n, k)
-        var tile = afn_gemm_tile(m, n)
-        _afn_launch_tile[DType.float32, DType.float32, False, AFN_EPI_RESID](
-            ctx, tile, c, a, b, resid, resid, m, n, k, st, 1, k
-        )
-        return True
-
-
-def afn_gemm_swiglu_bwd_ptr_into(
-    ctx: DeviceContext,
-    d_gate: MutPointer[Float32, MutAnyOrigin],
-    d_up: MutPointer[Float32, MutAnyOrigin],
-    a: MutPointer[Float32, MutAnyOrigin],
-    b: MutPointer[Float32, MutAnyOrigin],
-    gate: MutPointer[Float32, MutAnyOrigin],
-    up: MutPointer[Float32, MutAnyOrigin],
-    m: Int,
-    n: Int,
-    k: Int,
-    op: Int,
-) raises -> Bool:
-    """`d_gated = op(A) . op(B)` (`m x n`, e.g. `dY . W_down^T`, never
-    stored) and the SwiGLU backward in the store (AFN_EPI_SWIGLU_BWD,
-    behind AFN_GEMM_EPILOGUE; formula at the define): `d_gate[i, j]` and
-    `d_up[i, j]` from `gate[i, j]` (gate_proj output) and `up[i, j]`
-    (up_proj output), all `m x n` row-major. One launch, asynchronous;
-    False (nothing enqueued) when the define is off or the op or shape is
-    not served. Outputs must not alias the inputs."""
-    comptime if not AFN_GEMM_EPILOGUE:
-        return False
-    else:
-        if m <= 0 or n <= 0 or k <= 0:
-            return False
-        if op != OP_NN and op != OP_NT and op != OP_TN:
-            return False
-        var st = _afn_strides(op, m, n, k)
-        var tile = afn_gemm_tile(m, n)
-        afn_launch_tile_aux[DType.float32, DType.float32, False, AFN_EPI_SWIGLU_BWD](
-            ctx, tile, d_gate, a, b, gate, up, d_up, m, n, k, st, 1, k
-        )
-        return True
-
-
-def afn_gemm_accum_ptr_into(
-    ctx: DeviceContext,
-    c: MutPointer[Float32, MutAnyOrigin],
-    a: MutPointer[Float32, MutAnyOrigin],
-    b: MutPointer[Float32, MutAnyOrigin],
-    m: Int,
-    n: Int,
-    k: Int,
-    op: Int,
-    k_split: Int,
-) raises -> Bool:
-    """`C[m x n] += op(A) . op(B)` onto the EXISTING `C` (no zero launch):
-    split-K over `grid.y`, every split adding its partial tile with global
-    f32 atomics (behind AFN_GEMM_SPLITK). `k_split` > 0 is the steps per
-    split (a multiple of AFN_GEMM_KB keeps whole windows); `k_split` <= 0
-    takes `afn_gemm_k_split`'s policy, and a product that does not split
-    still runs as one split adding into `C`. One launch, asynchronous; the
-    order of the adds is nondeterministic (FAST). False (nothing enqueued)
-    when the define is off or the op or shape is not served."""
-    comptime if not AFN_GEMM_SPLITK:
-        return False
-    else:
-        if m <= 0 or n <= 0 or k <= 0:
-            return False
-        if op != OP_NN and op != OP_NT and op != OP_TN:
-            return False
-        var st = _afn_strides(op, m, n, k)
-        var tile = afn_gemm_tile(m, n)
-        var per = k_split
-        if per <= 0:
-            per = afn_gemm_k_split(afn_gemm_tile_count(tile, m, n), k)
-        if per <= 0 or per > k:
-            per = k
-        var splits = (k + per - 1) // per
-        _afn_launch_tile[DType.float32, DType.float32, True, AFN_EPI_NONE](
-            ctx, tile, c, a, b, c, c, m, n, k, st, splits, per
-        )
-        return True
+    """Imported name of the deleted epilogue arm: never serves (False); the
+    caller keeps its own route."""
+    return False

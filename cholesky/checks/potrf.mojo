@@ -382,6 +382,8 @@ from checks.numerics import (
 #: column order, the inner sum order or the trailing update's fold creates a
 #: v2; it does not amend v1. Same discipline as
 #: `mojolearn.identical.gemm.fp32.v1`.
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (its terms here: every IDENTICAL switch off at once; EXP:2438 old path) deleted 2026-11-15 by lane/expdel2-25-neural; code recoverable at 5cde955daf.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-25-neural.patch.
 comptime CHOL_PROFILE = "mojolearn.identical.cholesky.fp32.v1"
 
 #: **NUMERIC. DEVIATION 1630.** The panel width, pinned for every shape under
@@ -1454,9 +1456,9 @@ def _chol_left_launch[GUARD: Bool](
 # the read to launch `zero_upper_kernel`, and the closing wait, are gone
 # (a GaussianMixture M-step factors every component: two waits a component
 # saved). A failed factor takes the old tail. Same kernels on the same
-# cells: the same words. -D MOJOLEARN_IDN_CHOL_ONE_WAIT_OFF (or
-# -D MOJOLEARN_IDN_ALL_OFF) restores the three waits.
-comptime IDN_CHOL_ONE_WAIT = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (is_defined["MOJOLEARN_IDN_CHOL_ONE_WAIT_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
+# cells: the same words. -D MOJOLEARN_IDN_CHOL_ONE_WAIT_OFF restores the
+# three waits.
+comptime IDN_CHOL_ONE_WAIT = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_IDN_CHOL_ONE_WAIT_OFF"]()
 
 
 def zero_upper_guarded_kernel(

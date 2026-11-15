@@ -6,7 +6,7 @@ Every profile uses this SAME scalar arithmetic body on host and device. A
 profile may change bits across versions, never between vendors in one run.
 No compilation, identity, quality or timing has been run for this source.
 """
-from std.sys.compile import is_defined, get_defined_int
+
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz
 from checks.rtf_seam import rtf_mul_add
 from gemm.contract import (
@@ -14,28 +14,30 @@ from gemm.contract import (
     GEMM_LEAF_ARM, GEMM_LEAF_ARM_NEURAL128, GEMM_LEAF_ARM_NEURAL256,
 )
 
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (its terms here: every IDENTICAL switch off at once; EXP:2438 old path) deleted 2026-11-15 by lane/expdel2-25-neural; code recoverable at 5cde955daf.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-25-neural.patch.
 comptime NEURAL_EXPERIMENTS_ALLOWED = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 )
 # Leaf length and accumulator chains stay separate controls.
 # NN03 = the neural arms (1 neural128, 2 neural256) of the ONE leaf switch
 # MOJOLEARN_IDN_GEMM_LEAF (gemm/contract.mojo); arm 3 (all256) changes the
 # contract for every caller instead and leaves this profile unchanged.
-# NN04 = MOJOLEARN_IDN_NEURAL_CHAINS=2|4 (absent: one chain). The former enable
-# defines IDN_NEURAL_NN03/IDN_NEURAL_NN04/IDN_NEURAL_LEAF are gone.
+# TOMBSTONE: MOJOLEARN_IDN_NEURAL_CHAINS (NN04, 2|4 accumulator chains: opt-in arm, no A/B recorded; one chain kept) deleted 2026-11-15 by lane/expdel2-25-neural; code recoverable at a9109164e5.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_NEURAL_CHAINS.patch; record in docs/TOMBSTONES.md.
+# The former enable defines IDN_NEURAL_NN03/IDN_NEURAL_NN04/IDN_NEURAL_LEAF are gone.
 # All OFF pending four-column identity, neural quality and BOTH voting vendors'
 # full-workload A/Bs. No inherited I04 component result admits these profiles.
 comptime NN03 = NEURAL_EXPERIMENTS_ALLOWED and (
     GEMM_LEAF_ARM == GEMM_LEAF_ARM_NEURAL128 or GEMM_LEAF_ARM == GEMM_LEAF_ARM_NEURAL256
 )
-comptime NN04 = NEURAL_EXPERIMENTS_ALLOWED and is_defined["MOJOLEARN_IDN_NEURAL_CHAINS"]()
+comptime NN04 = False
 comptime NEURAL_PROFILE_CHANGED = NN03 or NN04
 comptime NEURAL_LEAF = (
     256 if NN03 and GEMM_LEAF_ARM == GEMM_LEAF_ARM_NEURAL256
     else (128 if NN03 else CONTRACT_K_LEAF_MIN)
 )
-comptime NEURAL_CHAINS = get_defined_int["MOJOLEARN_IDN_NEURAL_CHAINS",1]() if NN04 else 1
+comptime NEURAL_CHAINS = 1
 
 
 def neural_partition[MIN_LEAF: Int](k: Int) -> Tuple[Int, Int]:

@@ -96,11 +96,7 @@ from gemm.checks.gemm_int8_mma import (
     int8_mma_admits,
 )
 from gemm.contract import INT8_MAX_K, OP_NN, OP_NT, OP_TN, gemm_oracle_sabotage_value_flip
-from gemm.afn_apple_fast import AFN_GEMM_BF16_MMA, AFN_GEMM_INT8_MMA, afn_gemm_bf16_into
-from gemm.checks.gemm_int8_apple_chunk import (
-    INT8_APPLE_CHUNK_AVAILABLE,
-    identical_gemm_int8_apple_chunk_into,
-)
+from gemm.afn_apple_fast import AFN_GEMM_BF16_MMA, afn_gemm_bf16_into
 
 #: DEVIATION 2908, the value arm. Off in every build that does not name it.
 comptime LOWBIT_SABOTAGE = is_defined["MOJOLEARN_LOWBIT_SABOTAGE"]()
@@ -381,8 +377,8 @@ def identical_gemm_bf16w_into(
     float32 left operand.** `C[m x n] = op(A) . op(B)`, `B` stored as bf16
     bits in a `uint16` buffer, row-major and contiguous. Asynchronous: the
     caller owns `work` and waits."""
-    # lane/apple-fast-neural-gemm (2026-10-03): under FAST on Apple with
-    # MOJOLEARN_AFN_GEMM_BF16_MMA the product runs from the bf16 bits on the
+    # lane/apple-fast-neural-gemm (2026-10-03): under FAST on Apple the
+    # product runs from the bf16 bits on the
     # simdgroup kernel (no widen launch, no float32 image). IDENTICAL
     # compiles the two plans below unchanged.
     comptime if AFN_GEMM_BF16_MMA:
@@ -570,15 +566,8 @@ def identical_gemm_int8_into(
     DEVIATION 2910: the MMA plan when the column's row says True, the shape
     is admitted and the build does not force the flat plan; the flat plan
     otherwise. Both are the profile (contract L-9)."""
-    # lane/apple-fast-neural-gemm (2026-10-03): under FAST on Apple with
-    # MOJOLEARN_AFN_GEMM_INT8_MMA the exact chunked matrix-unit kernel (one
-    # launch, no slice waits; the same Int32 per cell, contract L-9's
-    # construction) replaces the flat plan. IDENTICAL compiles the lines
-    # below unchanged.
-    comptime if AFN_GEMM_INT8_MMA and INT8_APPLE_CHUNK_AVAILABLE:
-        if m > 0 and n > 0 and k > 0 and k <= INT8_MAX_K:
-            identical_gemm_int8_apple_chunk_into(ctx, c, qa, ea, qb, eb, m, n, k)
-            return
+    # TOMBSTONE: MOJOLEARN_AFN_GEMM_INT8_MMA (never measured, FAST Apple chunked int8 matrix-unit route) deleted 2026-11-15 by lane/expdel2-25-neural; code recoverable at 02da0a0217.
+    # Restore: git apply experiments/removed/MOJOLEARN_AFN_GEMM_ALL.patch; record in docs/TOMBSTONES.md.
     comptime if INT8_MMA_ENABLED:
         if int8_mma_admits(m, n, k):
             identical_gemm_int8_mma_into(ctx, c, qa, ea, qb, eb, m, n, k)

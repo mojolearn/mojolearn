@@ -6,7 +6,6 @@ All numerical work is Mojo; no classical path imports this module. No build
 or verification has been run.
 """
 from gemm.experiments.neural_profile_device import neural_profile_kernel
-from std.sys.compile import is_defined
 from max.gpu import block_idx,block_dim,thread_idx
 from max.gpu.host import DeviceBuffer,DeviceContext
 from checks.numerics import ftz
@@ -25,7 +24,9 @@ from gemm.experiments.neural_profile import (
 # shared-left / grouped A arms of neural_grouped_ab. IDENTICAL grid ge123e6f9
 # nn05/off NV/AMD: lm-forward 2.19x/2.80x, lm-train-step 3.72x/2.44x,
 # transformer-forward 3.85x/3.47x SLOWER; bits same. Recoverable at main 4e3da4282.
-comptime NN07 = NEURAL_EXPERIMENTS_ALLOWED and is_defined["MOJOLEARN_IDN_NEURAL_NN07"]()
+# TOMBSTONE: MOJOLEARN_IDN_NEURAL_NN07 (opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-25-neural; code recoverable at dd47bfb212.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_NEURAL_NN07.patch; record in docs/TOMBSTONES.md.
+comptime NN07 = False
 
 
 def neural_grouped_ab[JOBS: Int = 3](

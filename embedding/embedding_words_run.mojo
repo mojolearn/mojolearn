@@ -51,6 +51,8 @@ from embedding.checks.embedding_oracle import (
 from core.shared_slot import SharedSlot
 
 # One process-lifetime DeviceContext per binding and tier (core/neural_context.mojo).
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (its terms here: every IDENTICAL switch off at once; EXP:2438 old path) deleted 2026-11-15 by lane/expdel2-25-neural; code recoverable at 5cde955daf.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-25-neural.patch.
 comptime _NEURAL_CTX = "MojolearnNeuralEmbeddingContextIdenticalV3" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnNeuralEmbeddingContextFastV3"
 # The pinned stages of this binding's downloads (core/staged_download.mojo),
 # one pool per binding and tier like the context above.
@@ -101,13 +103,13 @@ comptime EMB_COPY_TASKS_MAX = 16
 # second time in both calls; new 128 MB device buffers for Y, dW and dY in
 # every call; and the scan plan's 2 * V * T id reads. IDENTICAL tier only
 # (the FAST paths are untouched):
-#   EMB_RESIDENT (off: -D MOJOLEARN_EMB_RESIDENT_OFF). The Python layer
+#   EMB_RESIDENT. The Python layer
 #     passes a table token (a new one whenever its `weight` is assigned).
 #     The table is uploaded and scanned once per token and its device copy
 #     kept in this binding's pool; later forwards gather from that copy.
 #     The same bytes in the same kernel: no bit moves. Token 0 (or the
 #     three-value params list) is the per-call upload and scan.
-#   EMB_DEVICE_SCRATCH (off: -D MOJOLEARN_EMB_DEVICE_SCRATCH_OFF). Y, dW,
+#   EMB_DEVICE_SCRATCH. Y, dW,
 #     dY, the ids and the run scratch (counts, run_begin, perm) are device
 #     buffers kept in the pool by size and never filled from the host: the
 #     seed kernel writes every dW cell of a fresh gradient and both plans
@@ -119,8 +121,12 @@ comptime EMB_COPY_TASKS_MAX = 16
 comptime _EMB_IDENTICAL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 # E09-E10: not tested. FAST opts into token-owned tables and fully written
 # scratch separately; the IDENTICAL controls retain their existing policy.
-comptime EMB_RESIDENT = AFN26_EMB_RESIDENT or (_EMB_IDENTICAL and not (is_defined["MOJOLEARN_EMB_RESIDENT_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()))
-comptime EMB_DEVICE_SCRATCH = AFN26_EMB_SCRATCH or (_EMB_IDENTICAL and not (is_defined["MOJOLEARN_EMB_DEVICE_SCRATCH_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()))
+# TOMBSTONE: MOJOLEARN_EMB_RESIDENT_OFF (old path in IDENTICAL: the per-call table upload and scan; no A/B recorded) deleted 2026-11-15 by lane/expdel2-25-neural; code recoverable at 63a7445f96.
+# Restore: git apply experiments/removed/MOJOLEARN_EMB_RESIDENT_OFF.patch; record in docs/TOMBSTONES.md.
+comptime EMB_RESIDENT = AFN26_EMB_RESIDENT or _EMB_IDENTICAL
+# TOMBSTONE: MOJOLEARN_EMB_DEVICE_SCRATCH_OFF (old path in IDENTICAL: host-filled per-call scratch; no A/B recorded) deleted 2026-11-15 by lane/expdel2-25-neural; code recoverable at 9b6b13052d.
+# Restore: git apply experiments/removed/MOJOLEARN_EMB_DEVICE_SCRATCH_OFF.patch; record in docs/TOMBSTONES.md.
+comptime EMB_DEVICE_SCRATCH = AFN26_EMB_SCRATCH or _EMB_IDENTICAL
 #: buffers kept per element type (the oldest is retired past these)
 comptime EMB_POOL_F32_KEEP = 3
 comptime EMB_POOL_I32_KEEP = 6
@@ -547,9 +553,9 @@ def _forward_run(
 # equal to the hand kernels'. The ids are the host list the binding already
 # refused. Launches (scan): runs 2 + fold 1, the hand scan's counts, prefix
 # and perm 3 + seed 1 + fold 1 (+ padding row 1). FAST on Apple (the atomic
-# backward) is unchanged. -D MOJOLEARN_AUTOGRAD_EMBEDDING_OFF keeps the
-# hand kernels (arm A).
-comptime AUTOGRAD_EMBEDDING = not is_defined["MOJOLEARN_AUTOGRAD_EMBEDDING_OFF"]()
+# backward) is unchanged. With no position the hand kernels run.
+# TOMBSTONE: MOJOLEARN_AUTOGRAD_EMBEDDING_OFF (old path: the hand backward kernels for every call, no A/B recorded) deleted 2026-11-15 by lane/expdel2-25-neural; code recoverable at 5ee3d0ca88.
+# Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_EMBEDDING_OFF.patch; record in docs/TOMBSTONES.md.
 
 
 def _tape_backward(
@@ -704,9 +710,7 @@ def _backward_run(
         var r_ids = _pool_i32(ctx, n_positions)
         if n_positions > 0:
             ctx.enqueue_copy(dst_buf=r_ids, src_ptr=idsp)
-        var tape_route = False
-        comptime if AUTOGRAD_EMBEDDING:
-            tape_route = n_positions > 0
+        var tape_route = n_positions > 0
         if tape_route:
             # Row N161: the tape route runs on pooled begin / perm / keys and
             # takes no counts buffer.
@@ -744,9 +748,7 @@ def _backward_run(
     var counts = _upload_i32(ctx, _zeros_i32(cfg.vocab))
     var run_begin = _upload_i32(ctx, _zeros_i32(cfg.vocab + 1))
     var perm = _upload_i32(ctx, _zeros_i32(n_positions))
-    var tape_route = False
-    comptime if AUTOGRAD_EMBEDDING:
-        tape_route = n_positions > 0
+    var tape_route = n_positions > 0
     if tape_route:
         _tape_backward(ctx, d_dw, d_dy, d_ids, n_positions, cfg, plan)
     else:
@@ -1051,9 +1053,7 @@ def _backward_dev_run(
         fast_embedding_backward_into(ctx, r_dw, r_dy, r_ids, n_positions, cfg)
         ctx.synchronize()
     else:
-        var tape_route = False
-        comptime if AUTOGRAD_EMBEDDING:
-            tape_route = n_positions > 0
+        var tape_route = n_positions > 0
         if tape_route:
             # Row N161: pooled begin / perm / keys, no counts buffer.
             _tape_backward_pooled(ctx, r_dw, r_dy, r_ids, n_positions, cfg, plan)

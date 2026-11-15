@@ -1,0 +1,97 @@
+diff --git a/gemm/host/linalg_native.mojo b/gemm/host/linalg_native.mojo
+index 6e92595a64..dd2925f4c0 100644
+--- a/gemm/host/linalg_native.mojo
++++ b/gemm/host/linalg_native.mojo
+@@ -4,6 +4,9 @@
+ # descriptor admission and GIL ownership belong to the common provider boundary.
+ from core.hostptr import f32_ptr, i8_ptr, i32_ptr, u16_ptr
+ from gemm.contract import INT8_MAX_K, INT15_MAX_K, OP_NN, OP_NT, OP_TN
++from std.sys.compile import is_defined
++from gemm.host.gemm_int_slices_oracle import gemm_int_slices_oracle
++from gemm.int_slices_seams import INT_SLICES_MAX_K
+ from decomposition.linalg_host_impl import (
+     gemm_host_run,
+     gemm_bf16_host_run,
+@@ -56,8 +59,14 @@ def gemm_native(
+         or k > LINALG_HOST_MAX_EXTENT
+     ):
+         raise Error("gemm: m, n and k must each be at most 2^30")
+-    # TOMBSTONE: MOJOLEARN_IDN_GEMM_INT_SLICES (research profile fp32.v2-int dispatch hook; EXP:2263 pending, never measured) deleted 2026-11-15 by lane/expdel2-25-neural; code recoverable at 41a649b03c.
+-    # Restore: git apply experiments/removed/MOJOLEARN_IDN_GEMM_INT_SLICES.patch; record in docs/TOMBSTONES.md.
++    # lane/gemm-int-slices (2026-10-28): the HOST COLUMN of the research
++    # profile fp32.v2-int behind -D MOJOLEARN_IDN_GEMM_INT_SLICES (default
++    # OFF; off, this block compiles to nothing and the CPU column is fp32.v1).
++    # Same seams as the device plans (gemm/int_slices_seams.mojo).
++    comptime if is_defined["MOJOLEARN_IDN_GEMM_INT_SLICES"]():
++        if k <= INT_SLICES_MAX_K:
++            gemm_int_slices_oracle(cp, f32_ptr(a_address), f32_ptr(b_address), m, n, k, op)
++            return m * n
+     var wrote = 0
+     wrote = gemm_host_run(cp, a_address, b_address, op, m, n, k)
+     return wrote
+diff --git a/gemm/host_entry.mojo b/gemm/host_entry.mojo
+index 581f14cc3f..c8d74a9f66 100644
+--- a/gemm/host_entry.mojo
++++ b/gemm/host_entry.mojo
+@@ -64,6 +64,9 @@ from gemm.host_transport import (
+     gemm_up_f32,
+ )
+ from gemm.contract import OP_NN, OP_NT, OP_TN
++from std.sys.compile import is_defined
++from checks.kernel_matrix import COLUMN_CPU, TARGET_COLUMN
++from gemm.int_slices import IDN_GEMM_INT_SLICES, identical_gemm_int_slices_into, int_slices_admits
+ 
+ # Tried 2026-10-08 (MOJOLEARN_IDN_GEMM_OZAKI_LINALG = 4 | 5 slices, run ge123e6f9): the linalg GEMM through
+ # gemm.neural_dispatch's Ozaki int8 profile; NV/AMD gemm gaussian S=4 3.97x/2.06x, S=5 7.99x/2.51x SLOWER -> deleted
+@@ -136,8 +139,21 @@ def identical_gemm_host(
+     # THE ONE LINE THAT COMPUTES ANYTHING. Everything above is transport and
+     # everything below is transport.
+     comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
+-        # TOMBSTONE: MOJOLEARN_IDN_GEMM_INT_SLICES (research profile fp32.v2-int dispatch hook; EXP:2263 pending, never measured) deleted 2026-11-15 by lane/expdel2-25-neural; code recoverable at 41a649b03c.
+-        # Restore: git apply experiments/removed/MOJOLEARN_IDN_GEMM_INT_SLICES.patch; record in docs/TOMBSTONES.md.
++        # lane/gemm-int-slices (2026-10-28): THE DISPATCH HOOK of the research
++        # profile fp32.v2-int (gemm/int_slices.mojo, docs/plans/GEMM_INT_SLICES.md)
++        # behind -D MOJOLEARN_IDN_GEMM_INT_SLICES, default OFF; off, this block
++        # compiles to nothing and the lines below are fp32.v1 as before. Admission
++        # is the exactness bound on k only (no shape rule). The CPU column's
++        # equivalent is gemm/host/linalg_native.mojo's hook.
++        comptime if IDN_GEMM_INT_SLICES and TARGET_COLUMN != COLUMN_CPU:
++            if int_slices_admits(m, n, k):
++                identical_gemm_int_slices_into(ctx, c, a, b, m, n, k, op)
++                gemm_down_f32(ctx, lease, c, c_ptr, m * n)
++                lease.release()
++                _ = a
++                _ = b
++                _ = c
++                return
+         # Tried 2026-10-08 (MOJOLEARN_IDN_GEMM_OZAKI_LINALG = 4 | 5 slices, run ge123e6f9): the linalg GEMM through
+         # gemm.neural_dispatch's Ozaki int8 profile; NV/AMD gemm gaussian S=4 3.97x/2.06x, S=5 7.99x/2.51x SLOWER -> deleted
+         # (the neural Ozaki control itself is untouched). Recoverable at main 42d1e42c6; row in docs/apple-fast/EXPERIMENTS.md.
+diff --git a/gemm/int_slices.mojo b/gemm/int_slices.mojo
+index f88d2a8646..b04b766c28 100644
+--- a/gemm/int_slices.mojo
++++ b/gemm/int_slices.mojo
+@@ -3,8 +3,10 @@
+ """fp32 GEMM on the integer matrix units by exact integer slicing: the device
+ plans of the research profile `mojolearn.identical.gemm.fp32.v2-int`.
+ 
+-PROTOTYPE (lane/gemm-int-slices, 2026-10-28, REPORT idea 13). Reached only
+-from its gate; the linalg GEMM is fp32.v1. Contract:
++PROTOTYPE (lane/gemm-int-slices, 2026-10-28, REPORT idea 13). Switch
++`-D MOJOLEARN_IDN_GEMM_INT_SLICES`, default OFF; off, nothing here is reached
++and the linalg GEMM is fp32.v1 byte for byte (the hook in
++`gemm/host_entry.mojo` is a `comptime if` on this file's constant). Contract:
+ `docs/plans/GEMM_INT_SLICES.md`. Seams: `gemm/int_slices_seams.mojo`. Host
+ column: `gemm/host/gemm_int_slices_oracle.mojo`. Gate:
+ `gemm/checks/gemm_int_slices_check.mojo`.
+@@ -83,8 +85,8 @@ from gemm.int_slices_seams import (
+     int_slices_strides,
+ )
+ 
+-# TOMBSTONE: MOJOLEARN_IDN_GEMM_INT_SLICES (research profile fp32.v2-int dispatch hook; EXP:2263 pending, never measured) deleted 2026-11-15 by lane/expdel2-25-neural; code recoverable at 41a649b03c.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_GEMM_INT_SLICES.patch; record in docs/TOMBSTONES.md.
++#: THE SWITCH. Default OFF.
++comptime IDN_GEMM_INT_SLICES = is_defined["MOJOLEARN_IDN_GEMM_INT_SLICES"]()
+ 
+ #: The sabotage arm (see the module docstring).
+ comptime INT_SLICES_SABOTAGE = is_defined["MOJOLEARN_INT_SLICES_SABOTAGE"]()
