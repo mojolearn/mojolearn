@@ -73,7 +73,9 @@ comptime T21_STREAMS = 1
 comptime T22 = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 
 # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
-comptime T25 = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_TREES_T25"]()
+# TOMBSTONE: MOJOLEARN_TREES_T25 (DELETE-ARM, opt-in, no A/B recorded, rule a) deleted 2026-11-15 by lane/expdel2-45-trees; code recoverable at 5de73a4228.
+# Restore: git apply experiments/removed/MOJOLEARN_TREES_T25.patch
+comptime T25 = False
 
 # T27 (alias of MOJOLEARN_2030_FUSED_EST_MOVE) deleted by lane/grid-prune 2026-10-07.
 
