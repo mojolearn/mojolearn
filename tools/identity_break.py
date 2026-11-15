@@ -11070,8 +11070,10 @@ def _host_infer_on(name):
     return lanes is True or (lanes is not None and name in lanes)
 
 
-#: The forest host binding's name in `mojolearn.runtime_report()["bindings"]`.
-FOREST_HOST_BINDING = "_mojolearn_forest_host"
+#: The forest host binding's key in `mojolearn.runtime_report()["bindings"]`
+#: (host bindings load as `mojolearn._host.<basename>`; the bare basename was
+#: never a key, so this check matched nothing before 2026-11-15).
+FOREST_HOST_BINDING = "mojolearn._host._mojolearn_forest_host"
 
 
 def _require_named_forest_binding(ml):
@@ -11079,19 +11081,20 @@ def _require_named_forest_binding(ml):
     MOJOLEARN_FOREST_HOST_BINARY names (a sabotage build's binary must be the
     one that predicts), and, when the variable is unset, when it is not this
     install's own forest host binding (the old check, unchanged in scope).
-    The LOADED path comes from the public runtime report's binding table, not
-    the model object's private `_binding`. The EXPECTED path is still the
-    private `_forest_host.binary_path()` (the variable, else the install's
-    binding as `_backend.host_module_path` resolves it): the report as
-    specified carries only the loaded path, so this one read stays private
-    until it gains `bindings[name]["expected_path"]`
-    (docs/plans/VERIFY_HARNESS_DECOUPLE_2026-11-15.md, needs product entry).
-    A binding not loaded yet has answered nothing."""
-    from mojolearn._forest_host import binary_path
-    want = binary_path()
+    Both paths come from the public runtime report's binding row: the LOADED
+    `path`, and the `expected_path` the product resolves for that binding
+    (the variable, else the install's binding as `_backend.host_module_path`
+    resolves it; `_backend.door_host_binary_path`). A loaded row with no path
+    or no expected path is refused, never passed. A binding not loaded yet
+    has answered nothing."""
     entry = (ml.runtime_report().get("bindings") or {}).get(FOREST_HOST_BINDING) or {}
-    bound = entry.get("path")
-    if entry.get("loaded") and bound and os.path.realpath(bound) != os.path.realpath(want):
+    if not entry.get("loaded"):
+        return
+    bound, want = entry.get("path"), entry.get("expected_path")
+    if not bound or not want:
+        raise RuntimeError(f"the runtime report's {FOREST_HOST_BINDING} row has path {bound!r} and "
+                           f"expected_path {want!r}; the binding that predicted cannot be named")
+    if os.path.realpath(bound) != os.path.realpath(want):
         raise RuntimeError(f"the forest binding in this process is {bound}, "
                            f"not MOJOLEARN_FOREST_HOST_BINARY {want}")
 
@@ -11260,12 +11263,16 @@ def _run_reference(args):
     # PTX set must never stand for the native NVIDIA column, nor the reverse.
     gpu_arch = code_format = None
     if ml.vendor() == "cuda":
-        # mojolearn.runtime_report(): `gpu_arch`, and `code_mode` "ptx" exactly
+        # mojolearn.runtime_report(): `gpu_arch`, and `code_kind` "ptx" exactly
         # when the PTX baseline set was selected (before: _backend.gpu_arch()
-        # and _backend.baseline_selection_receipt() is not None)
+        # and _backend.baseline_selection_receipt() is not None). `code_mode`
+        # is the compiled numeric mode and never said "ptx": every PTX record
+        # was refused as native until 2026-11-15.
         report = ml.runtime_report()
         gpu_arch = report["gpu_arch"]
-        code_format = "ptx" if str(report["code_mode"]).lower() == "ptx" else "native"
+        code_format = report["code_kind"]
+        if code_format not in ("ptx", "native"):
+            raise SystemExit(f"REFUSING: runtime_report()['code_kind'] is {code_format!r}, not 'ptx' or 'native'")
         if (code_format == "ptx") != ("ptx" in str(vendor).lower()):
             raise SystemExit(f"REFUSING: the {code_format} CUDA set ({gpu_arch}) is loaded and the vendor label is "
                              f"{vendor!r}; a PTX record is labelled nvidia-ptx-<gpu>-sm80 and only a PTX record is")

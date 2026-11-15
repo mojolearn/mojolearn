@@ -14,11 +14,11 @@ import mojolearn
 from mojolearn._verify_native_runtime import audit_native_call
 
 FIELDS = {
-    "version", "vendor", "vendor_how", "numeric_mode", "default_mode", "code_mode", "cpu_only",
+    "version", "vendor", "vendor_how", "numeric_mode", "default_mode", "code_mode", "code_kind", "cpu_only",
     "gpu_arch", "gpu_arch_how", "host_dir", "host_families_built", "bindings", "fallbacks",
     "harness_source", "source_commit", "checkout_root", "package_dir",
 }
-ROW_FIELDS = {"path", "loaded", "identity", "vendor", "mode", "compiled_mode", "sabotage"}
+ROW_FIELDS = {"path", "expected_path", "loaded", "identity", "vendor", "mode", "compiled_mode", "sabotage"}
 
 
 def _loaded_bindings():
@@ -35,6 +35,9 @@ def test_fields_and_public_agreement():
     assert report["gpu_arch_how"] == mojolearn.gpu_arch_how()
     assert report["default_mode"] in ("identical", "fast")
     assert report["code_mode"] in (None, "identical", "fast", "unknown")
+    assert report["code_kind"] in ("ptx", "native")
+    if report["cpu_only"]:
+        assert report["code_kind"] == "native"
     assert type(report["cpu_only"]) is bool and report["cpu_only"] == (report["vendor"] == "cpu")
     assert type(report["host_families_built"]) is tuple
     assert list(report["host_families_built"]) == sorted(report["host_families_built"])
@@ -44,6 +47,23 @@ def test_fields_and_public_agreement():
     for row in report["bindings"].values():
         assert set(row) == ROW_FIELDS
         assert type(row["loaded"]) is bool
+    for name, row in report["bindings"].items():
+        if not name.startswith("mojolearn._host."):
+            assert row["expected_path"] is None
+
+
+def test_host_expected_path_is_the_resolver_answer():
+    # The Python resolver `_backend.door_host_binary_path` is the oracle the
+    # native field mirrors (override variable, own file, merged file).
+    import os
+    from mojolearn import _backend
+    report = mojolearn.runtime_report()
+    rows = {k: r for k, r in report["bindings"].items() if k.startswith("mojolearn._host.")}
+    assert rows, "the package imported no host binding"
+    for key, row in rows.items():
+        want = _backend.door_host_binary_path(key.rsplit(".", 1)[-1])
+        assert row["expected_path"] is not None
+        assert os.path.realpath(row["expected_path"]) == os.path.realpath(want), key
 
 
 def test_fresh_and_read_only():

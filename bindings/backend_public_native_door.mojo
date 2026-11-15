@@ -235,9 +235,34 @@ def _identity(cache: PythonObject, path: String) raises -> PythonObject:
     return digest
 
 
+def _host_expected_path(context: PythonObject, host_dir: String, basename: String) raises -> PythonObject:
+    """The file the host binding `basename` (`_mojolearn_<x>_host`) loads or
+    would load, as `_backend.door_host_binary_path(basename)` answers it: the
+    `MOJOLEARN_<X>_HOST_BINARY` override (absolute, else joined to the working
+    directory), else `_merged.binding_path(host_dir, basename)`: its own
+    `<basename>.so` when present, else the merged file its index names (from
+    the index the package read), else the own path (absent)."""
+    var prefix = String(basename.removeprefix("_mojolearn_"))
+    var override = _env("MOJOLEARN_" + prefix.upper() + "_BINARY")
+    if override.byte_length() > 0:
+        if override.startswith("/"):
+            return PythonObject(override)
+        return PythonObject(String(py_call(context["getcwd"])) + "/" + override)
+    var own = host_dir + "/" + basename + ".so"
+    if isfile(own):
+        return PythonObject(own)
+    var cached = py_get(context["merged_cache"], PythonObject(host_dir + "/" + String(context["merged_index_name"])))
+    if cached is not None:
+        var merged = py_get(py_item(cached, PythonObject(1)), PythonObject(basename))
+        if merged is not None and isfile(String(merged)):
+            return merged
+    return PythonObject(own)
+
+
 def _binding_row(path: String, loaded: Bool, identity: PythonObject, vendor: PythonObject, mode: PythonObject) raises -> PythonObject:
     var row = Python.dict()
     py_setitem(row, PythonObject("path"), PythonObject(path))
+    py_setitem(row, PythonObject("expected_path"), PythonObject(None))
     py_setitem(row, PythonObject("loaded"), PythonObject(True) if loaded else PythonObject(False))
     py_setitem(row, PythonObject("identity"), identity)
     py_setitem(row, PythonObject("vendor"), vendor)
@@ -250,6 +275,7 @@ def _binding_row(path: String, loaded: Bool, identity: PythonObject, vendor: Pyt
 def _binding_row_unresolved() raises -> PythonObject:
     var row = Python.dict()
     py_setitem(row, PythonObject("path"), PythonObject(None))
+    py_setitem(row, PythonObject("expected_path"), PythonObject(None))
     py_setitem(row, PythonObject("loaded"), PythonObject(True))
     py_setitem(row, PythonObject("identity"), PythonObject(None))
     py_setitem(row, PythonObject("vendor"), PythonObject(None))
@@ -259,7 +285,7 @@ def _binding_row_unresolved() raises -> PythonObject:
     return row
 
 
-def _bindings(fields: PythonObject, context: PythonObject) raises -> PythonObject:
+def _bindings(fields: PythonObject, context: PythonObject, host_dir: String) raises -> PythonObject:
     var rows = Python.dict()
     var hashes = context["identity_cache"]
     var modules = context["modules"]
@@ -275,6 +301,12 @@ def _bindings(fields: PythonObject, context: PythonObject) raises -> PythonObjec
             continue
         if not (key.startswith("mojolearn.") or key == last):
             continue
+        # A host binding (`mojolearn._host._mojolearn_<x>_host`) also says the
+        # file it should have loaded (`expected_path`), so verify compares the
+        # loaded `path` with it and reads no private resolver.
+        var expected = PythonObject(None)
+        if key.startswith("mojolearn._host."):
+            expected = _host_expected_path(context, host_dir, last)
         var module = py_get(modules, keys[i])
         # Exact module type only: a CPU-only `_HostBinding`, a tier set or a
         # refusing stub would load or refuse on attribute access. The
@@ -291,7 +323,9 @@ def _bindings(fields: PythonObject, context: PythonObject) raises -> PythonObjec
         if file is None or py_type(file) is not text_type or not isfile(String(file)):
             # A loaded binding module with no resolvable file is reported
             # with path None; verify refuses it (never skipped silently).
-            py_setitem(rows, keys[i], _binding_row_unresolved())
+            var unresolved = _binding_row_unresolved()
+            py_setitem(unresolved, PythonObject("expected_path"), expected)
+            py_setitem(rows, keys[i], unresolved)
             continue
         var file_path = String(file)
         # The binding's own read-backs: `<suffix>_vendor()` and
@@ -326,6 +360,7 @@ def _bindings(fields: PythonObject, context: PythonObject) raises -> PythonObjec
         var row = _binding_row(file_path, True, _identity(hashes, file_path), vendor, tier)
         py_setitem(row, PythonObject("compiled_mode"), compiled)
         py_setitem(row, PythonObject("sabotage"), sabotage)
+        py_setitem(row, PythonObject("expected_path"), expected)
         py_setitem(rows, keys[i], row)
     # Members of a loaded tier that have not loaded yet (their file is known).
     var sets = fields["_SETS"]
@@ -358,6 +393,12 @@ def _runtime_report(fields: PythonObject, context: PythonObject, mode: PythonObj
     if entry is not None:
         code_mode = py_get(context["mode_codes"], _read(entry, context), PythonObject("unknown"))
     py_setitem(report, PythonObject("code_mode"), code_mode)
+    # `code_kind`: which code the GPU set carries, "ptx" exactly when the PTX
+    # set was selected at import (`_backend._BASELINE_SELECTION`, the receipt
+    # `_ptx_base` writes), else "native" (native GPU code, or the CPU
+    # bindings). One meaning per field: `code_mode` is the compiled numeric mode.
+    var ptx = py_get(fields, "_BASELINE_SELECTION")
+    py_setitem(report, PythonObject("code_kind"), PythonObject("native") if ptx is None else PythonObject("ptx"))
     py_setitem(report, PythonObject("cpu_only"), PythonObject(False) if fields["_CPU_ONLY"] is None else PythonObject(True))
     py_setitem(report, PythonObject("gpu_arch"), _gpu_arch(fields, False))
     py_setitem(report, PythonObject("gpu_arch_how"), _gpu_arch(fields, True))
@@ -373,7 +414,7 @@ def _runtime_report(fields: PythonObject, context: PythonObject, mode: PythonObj
         py_setitem(report, PythonObject("vendor_how"), PythonObject("no GPU binary set loaded; the CPU bindings under mojolearn/host/ only (DEVIATION 2615; built: " + built + ")"))
     else:
         py_setitem(report, PythonObject("vendor_how"), _text(fields["_VENDOR_HOW"], "vendor decision", True))
-    py_setitem(report, PythonObject("bindings"), _bindings(fields, context))
+    py_setitem(report, PythonObject("bindings"), _bindings(fields, context, host_dir))
     py_setitem(report, PythonObject("fallbacks"), context["fallbacks"])
     var root = _checkout_root(context)
     py_setitem(report, PythonObject("harness_source"), _harness_source(context, root))

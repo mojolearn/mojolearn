@@ -37,11 +37,13 @@ def runtime_report():
     Returns a new ``dict`` on every call: the package ``version``; the
     ``vendor`` (``'cuda'``, ``'hip'``, ``'metal'`` or ``'cpu'``); the loaded
     ``numeric_mode`` and the process ``default_mode``; ``code_mode``, the mode
-    the loaded gbdt binary says it was compiled as; ``cpu_only``;
-    ``gpu_arch`` and ``gpu_arch_how``; ``host_dir`` and the
+    the loaded gbdt binary says it was compiled as; ``code_kind``,
+    ``'ptx'`` when the PTX GPU set is loaded, else ``'native'``;
+    ``cpu_only``; ``gpu_arch`` and ``gpu_arch_how``; ``host_dir`` and the
     ``host_families_built`` there; ``bindings``, every native binding module
-    of the package keyed by module name, each with its ``path``, ``loaded``,
-    ``identity`` (the SHA-256 of the file), ``vendor`` and ``mode``;
+    of the package keyed by module name, each with its ``path``,
+    ``expected_path`` (for a CPU binding, the file it should load from),
+    ``loaded``, ``identity`` (the SHA-256 of the file), ``vendor`` and ``mode``;
     ``fallbacks``; and the ``harness_source``, ``source_commit``,
     ``checkout_root`` and ``package_dir`` the verification commands use.
 
