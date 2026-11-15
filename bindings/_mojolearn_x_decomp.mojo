@@ -259,7 +259,7 @@ def build__mojolearn_x_decomp() -> PythonObject:
         comptime if LU_QFIX:
             m.def_function[lu_resid_py]("x_decomp_lu_resid")
         # lane/apple-fast-s-linalg (x_decomp/s_linalg_fast.mojo): bit 2 DECOMP_FAST_ORTH_WS,
-        # bit 4 LU_FAST_RESIDENT (FAST + Apple defaults, _OFF rollbacks); bit 1
+        # bit 4 LU_FAST_RESIDENT (FAST + Apple defaults; LU_FAST_RESIDENT keeps an _OFF rollback); bit 1
         # RSVD_FAST_DEVSCAN and its x_decomp_dev_upload_scan were deleted 2026-11-08
         m.def_function[s_flags_py]("x_decomp_s_flags")
         comptime if DECOMP_FAST_ORTH_WS:

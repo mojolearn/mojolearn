@@ -657,6 +657,7 @@ in the tables after the sections.
 | [`MOJOLEARN_TSA_FAST_SELD_FUSED_OFF`](#mojolearn_tsa_fast_seld_fused_off-old-path-deleted-2026-11-15) | Time series (select_d KPSS rounds, FAST Apple) | removed (old path; FAST+Apple default KEPT 6c0ba4379) | 2026-11-15 | [MOJOLEARN_TSA_FAST_SELD_FUSED_OFF.patch](../experiments/removed/MOJOLEARN_TSA_FAST_SELD_FUSED_OFF.patch) |
 | [`MOJOLEARN_DECOMP_FAST_DICT_DEV_OFF`](#mojolearn_decomp_fast_dict_dev_off-old-path-deleted-2026-11-15) | Decomp (MiniBatchDictionaryLearning atom update, FAST) | removed (old path; FAST+Apple default KEPT, clus3-mbdl-dictdev) | 2026-11-15 | [MOJOLEARN_DECOMP_FAST_DICT_DEV_OFF.patch](../experiments/removed/MOJOLEARN_DECOMP_FAST_DICT_DEV_OFF.patch) |
 | [`MOJOLEARN_DECOMP_FAST_LASSO_GRP_OFF`](#mojolearn_decomp_fast_lasso_grp_off-old-path-deleted-2026-11-15) | Decomp (MiniBatchDictionaryLearning Lasso CD rows, FAST Apple) | removed (old path; FAST+Apple default KEPT, clus3-mbdl-lassogrp) | 2026-11-15 | [MOJOLEARN_DECOMP_FAST_LASSO_GRP_OFF.patch](../experiments/removed/MOJOLEARN_DECOMP_FAST_LASSO_GRP_OFF.patch) |
+| [`MOJOLEARN_DECOMP_FAST_ORTH_WS_OFF`](#mojolearn_decomp_fast_orth_ws_off-old-path-deleted-2026-11-15) | Decomp (Kit.orth on the device: randomized SVD / PCA / TruncatedSVD / FastICA, FAST Apple) | removed (old path; FAST+Apple default KEEP, rab15-rsvdbundle) | 2026-11-15 | [MOJOLEARN_DECOMP_FAST_ORTH_WS_OFF.patch](../experiments/removed/MOJOLEARN_DECOMP_FAST_ORTH_WS_OFF.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -6386,4 +6387,12 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md (section expdel-02-
 - **Verdict**: KEPT, FAST+Apple default (EXPERIMENTS.md `DECOMP_FAST_LASSO_GRP`, clus3-mbdl-lassogrp-istella): M3 one run per arm, mb-dict-learning istella 6,827 -> 3,185 ms (-53%), sparsity .08636 and reconstruction error .6483 identical. No bit change on any column.
 - **Deleted by**: lane/expdel-02-decomposition-series (docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md); code recoverable at `08bb175b23`.
 - **Restore**: `git apply experiments/removed/MOJOLEARN_DECOMP_FAST_LASSO_GRP_OFF.patch`, then delete the `MOJOLEARN_DECOMP_FAST_LASSO_GRP_OFF` refusal in `core/experiment_guards_decomposition.mojo`.
+- **Records**: refusal in `core/experiment_guards_decomposition.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel-02-decomposition-series section).
+
+### MOJOLEARN_DECOMP_FAST_ORTH_WS_OFF: old path deleted (2026-11-15)
+
+- **What it was**: the FAST+Apple rollback of `DECOMP_FAST_ORTH_WS` (`x_decomp/s_linalg_fast.mojo`, `s_flags` bit 2; taken by `bindings/_mojolearn_x_decomp.mojo` (registers `x_decomp_dev_orth_ws`) and `x_decomp/pca_randomized_dev.mojo`): with `-D MOJOLEARN_DECOMP_FAST_ORTH_WS_OFF` every device `Kit.orth` allocated dq / dw / TSQR scratch fresh. Deleted: the define read; `DECOMP_FAST_ORTH_WS` is `XD_FAST_APPLE`. `dev_orth_run` stays (every other build).
+- **Verdict**: KEEP, FAST+Apple default (EXPERIMENTS.md `RSVD_FAST_DEVSCAN + DECOMP_FAST_ORTH_WS`, rab15-rsvdbundle, M3 afc_ab_def, full board, one run per arm): randomized-svd istella 490.1 -> 435.1 ms, taxi 200.5 -> 189.8 ms, error equal to 1e-14 (bundle with RSVD_FAST_DEVSCAN, which keeps its own `_OFF`). No bit change on any column.
+- **Deleted by**: lane/expdel-02-decomposition-series (docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md); code recoverable at `de1175eb70`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_DECOMP_FAST_ORTH_WS_OFF.patch`, then delete the `MOJOLEARN_DECOMP_FAST_ORTH_WS_OFF` refusal in `core/experiment_guards_decomposition.mojo`.
 - **Records**: refusal in `core/experiment_guards_decomposition.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel-02-decomposition-series section).
