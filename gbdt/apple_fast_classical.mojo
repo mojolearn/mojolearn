@@ -2,18 +2,11 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn.
 """Independent Apple FAST classical scheduling experiments, 2026-10-06.
 
-NEVER RUN — PENDING MEASUREMENT. Source written only: uncompiled, unverified,
-unmeasured; no speed or quality outcome is claimed. Every switch is default OFF.
-Define presence enables an arm; omit the define for A (do not pass '=0').
-No switch changes bins, sampled features, row membership or solver settings.
+Every card was deleted unmeasured on 2026-11-15; the names remain as False.
 """
-from std.sys.compile import is_defined
-from core.accelerator_target import TARGET_HAS_APPLE_GPU
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 
-comptime AFCL_APPLE_FAST = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
-)
+# Every card below was deleted 2026-11-15 (lane/expdel2-41-trees, V2 rule g:
+# never run); each name stays as the constant False for the files that import it.
 
 # AFCL-T01: halve rows per quantized-histogram replica to shorten each
 # block's serial row walk; the existing occupancy floor/cap still applies.
@@ -62,5 +55,6 @@ comptime AFCL_PREDICT_BLOCK = 256
 
 # AFCL-T12: four SIMD groups per CTR elementwise block rather than eight;
 # same sorted categories, prefixes, priors and output destinations.
-# NEVER RUN — PENDING MEASUREMENT; uncompiled/unverified; default OFF.
-comptime AFCL_T12 = AFCL_APPLE_FAST and is_defined["MOJOLEARN_AFCL_T12"]()
+# TOMBSTONE: MOJOLEARN_AFCL_T12 (DELETE-EXPERIMENT, never-run Apple FAST programme card, rule g) deleted 2026-11-15 by lane/expdel2-41-trees; code recoverable at d985e1b336.
+# Restore: git apply experiments/removed/MOJOLEARN_AFCL_T12.patch; record in docs/TOMBSTONES.md.
+comptime AFCL_T12 = False
