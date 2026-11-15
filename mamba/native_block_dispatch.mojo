@@ -13,15 +13,15 @@ from mamba.impl.mamba_block_program import mamba_block_call_abi
 from mamba.impl.mamba_shell_impl import (
     Mamba3PrefillSession, _mamba1_backward_run, _mamba2_backward_run,
     _mamba3_backward_run, _m3_prefill_run,
-    _m3_prefill_backward_run, _M3_BWD_NONFINITE_DY, NN40_OWNED_WEIGHTS,
-    _m3_install_weights_run, _m3_export_weights_run, _mamba3_run_owned,
+    _m3_prefill_backward_run, _M3_BWD_NONFINITE_DY,
+    _m3_export_weights_run, _mamba3_run_owned,
 )
 from core.shared_slot import SharedSlot, shared_slot_lock, shared_slot_unlock
 from core.state_registry import StateRegistry
 from core.neural_entry_table import (
     NEURAL_MAMBA_OPERATIONS, NEURAL_MAMBA3_SESSION_CREATE, NEURAL_MAMBA3_SESSION_INFO,
     NEURAL_MAMBA3_SESSION_CAPS, NEURAL_MAMBA3_SESSION_CLOSE,
-    MAMBA3_CAP_SESSION_PREFILL, MAMBA3_CAP_REPORTS_OPTIONAL, MAMBA3_CAP_OWNED_WEIGHTS,
+    MAMBA3_CAP_SESSION_PREFILL, MAMBA3_CAP_REPORTS_OPTIONAL,
     MAMBA3_CAP_HELD_FORWARD, IDN_MAMBA3_FORWARD_DOOR_OLD,
 )
 from core.mamba3_prefill_session import mamba3_prefill_session_word, mamba3_prefill_session_of
@@ -102,8 +102,6 @@ def mamba3_prefill_image_caps() -> Int:
     var caps = MAMBA3_CAP_SESSION_PREFILL
     comptime if IDN_MAMBA3_REPORTS_ON_REQUEST:
         caps |= MAMBA3_CAP_REPORTS_OPTIONAL
-    comptime if NN40_OWNED_WEIGHTS:
-        caps |= MAMBA3_CAP_OWNED_WEIGHTS
     comptime if not IDN_MAMBA3_FORWARD_DOOR_OLD:
         caps |= MAMBA3_CAP_HELD_FORWARD
     return caps
@@ -184,20 +182,8 @@ def _mamba3_session_exec(op: Int, owner: MutPointer[Mamba3PrefillSession, MutUnt
     for i in range(1, len(words) - tail):  # small-loop(admitted native session scalar span)
         p.append(words[i])
     if op == 15:
-        comptime if not NN40_OWNED_WEIGHTS:
-            raise Error("mamba3 owned weights: NN40 arm is disabled")
-        if len(a) != 9 or len(p) != 1 or len(f) != 0:
-            raise Error("mamba3 owned weights: expected nine weight addresses and d_model")
-        var dims = Mamba3Dims.of(p[0])
-        var expanded: List[Int] = [0]
-        for i in range(9):  # small-loop(nine admitted owned weight addresses)
-            if a[i] == 0:
-                raise Error("mamba3 owned weights: null weight address")
-            expanded.append(a[i])
-        # Original copy-on-install helper commits the generation only after a
-        # complete upload. A failure preserves the previous usable snapshot.
-        _m3_install_weights_run(owner[], expanded, dims, p[0])
-        return owner[].weight_generation
+        # (Sweep 2026-11-15: NN40_OWNED_WEIGHTS is False on every build; the install path is gone.)
+        raise Error("mamba3 owned weights: NN40 arm is disabled")
     if op == 17:
         if len(a) != 9 or len(p) != 1 or len(f) != 0:
             raise Error("mamba3 owned export: expected nine writable buffers and generation")
