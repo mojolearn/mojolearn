@@ -27,12 +27,6 @@ ROOT = Path(__file__).resolve().parents[3]
 
 #: sha256 over forecast(24), level_, trend_, season_, sse_, alpha_, beta_,
 #: gamma_, n_iter_, criterion_ (that order), from pip mojolearn==0.8.13.
-DIGESTS_0813 = {
-    ("additive", 96, 2, 12, 2): "0918dea8d4662aa5b6494625d3640c1f0d092f5740da98fb8ef109cd1e6b2aa0",
-    ("additive", 40, 3, 4, 3): "974ab399ec881de27d166a23c03be79c6288df3fc1b05a825110f5004da76f57",
-    ("multiplicative", 96, 2, 12, 2): "fb8895af9424d729a52b29d6a39e7320952e1dd59eb20670a15ab0a7400209b2",
-    ("multiplicative", 40, 3, 4, 3): "05368f46b3185986e7943897f1826933201db1f8e3dabcc6eaa4aa9bb5aedfbd",
-}
 
 
 def _series(np, n, b, f):
@@ -51,13 +45,6 @@ def _fit_or_skip(y, **kw):
     except (ImportError, NotImplementedError, RuntimeError) as exc:
         pytest.skip(f"no binding fits Holt-Winters in this process: {type(exc).__name__}: {exc}")
 
-
-def _digest(np, m):
-    h = hashlib.sha256()
-    for v in (m.forecast(24), m.level_, m.trend_, m.season_, m.sse_, m.alpha_, m.beta_, m.gamma_,
-              m.n_iter_, m.criterion_):
-        h.update(np.ascontiguousarray(np.asarray(v)).tobytes())
-    return h.hexdigest()
 
 
 # -- surface ------------------------------------------------------------------
@@ -127,18 +114,8 @@ def test_device_and_host_share_one_estimate_function():
 
 # -- runtime ------------------------------------------------------------------
 
-@pytest.mark.parametrize("key", sorted(DIGESTS_0813))
-@pytest.mark.parametrize("name", ["heuristic", "cuml"])
-def test_heuristic_reproduces_0813_bits(key, name):
-    np = pytest.importorskip("numpy")
-    import mojolearn as _ml
-    if _ml._backend.requested_mode() != "identical":
-        pytest.skip("DIGESTS_0813 pin IDENTICAL-tier bits; FAST is not bitwise")
-    seasonal, n, b, f, sp = key
-    m = _fit_or_skip(_series(np, n, b, f), seasonal=seasonal, seasonal_periods=f, start_periods=sp,
-                     ts_num=b, initialization_method=name)
-    assert _digest(np, m) == DIGESTS_0813[key]
-
+# The 0.8.13 bit-pin test was deleted on 2026-11-15 (Andrew): bits are never held to an older version's bits
+# (AGENTS.md "Identity and bits"); the method's correctness is covered by the Mojo check tsa_holtwinters_initialization.
 
 def test_saved_model_keeps_the_method(tmp_path):
     np = pytest.importorskip("numpy")
