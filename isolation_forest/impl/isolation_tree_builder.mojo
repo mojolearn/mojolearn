@@ -162,10 +162,10 @@ from checks.numerics import (
 # Restore: git apply experiments/removed/MOJOLEARN_TREES_T40_ROWMAJOR.patch; record in docs/TOMBSTONES.md.
 # TOMBSTONE: MOJOLEARN_TREES_T41_TREE_BATCH (opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-46-trees; code recoverable at aa61101d80.
 # Restore: git apply experiments/removed/MOJOLEARN_TREES_T41_TREE_BATCH.patch; record in docs/TOMBSTONES.md.
-comptime IF_T41_TREE_BATCH = False
+# (Sweep 2026-11-15: IF_T41_TREE_BATCH removed; reader folded.)
 # TOMBSTONE: MOJOLEARN_TREES_T42_CORRECTION_CACHE (opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-46-trees; code recoverable at d30e6f5678.
 # Restore: git apply experiments/removed/MOJOLEARN_TREES_T42_CORRECTION_CACHE.patch; record in docs/TOMBSTONES.md.
-comptime IF_T42_CORRECTION_CACHE = False
+# (Sweep 2026-11-15: IF_T42_CORRECTION_CACHE removed; reader folded.)
 # TOMBSTONE: MOJOLEARN_TREES_C47_IF_LIVE_TASKS (opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-46-trees; code recoverable at 77a0ad6f45.
 # Restore: git apply experiments/removed/MOJOLEARN_TREES_C47_IF_LIVE_TASKS.patch; record in docs/TOMBSTONES.md.
 # TOMBSTONE: MOJOLEARN_TREES_C48_IF_PARTITION (opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-46-trees; code recoverable at dc94980d4a.
@@ -240,11 +240,7 @@ def compute_c_n(n_samples: Int) -> Float32:
 
 # TOMBSTONE: MOJOLEARN_TREES_T42_CORRECTION_CACHE (opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-46-trees; code recoverable at d30e6f5678.
 # Restore: git apply experiments/removed/MOJOLEARN_TREES_T42_CORRECTION_CACHE.patch; record in docs/TOMBSTONES.md.
-# if_correction_table_kernel stays: isolation_forest/impl/isolation_forest.mojo imports it (integrator removes it with that import).
-def if_correction_table_kernel(cache: MutPointer[Float32, MutAnyOrigin], count: Int32):
-    var i = Int(block_idx.x)*Int(block_dim.x)+Int(thread_idx.x)
-    if i < Int(count):
-        cache.unsafe_store(i, compute_c_n(i))
+# (Sweep 2026-11-15: if_correction_table_kernel, launched only under the folded IF_T42_CORRECTION_CACHE, removed.)
 
 
 # ---------------------------------------------------------------------------

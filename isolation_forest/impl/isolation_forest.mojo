@@ -83,7 +83,7 @@ from isolation_forest.impl.isolation_tree_builder import (
     IF_RNG_STATE_WORDS,
     IF_SCRATCH_WORDS_PER_NODE,
     IF_STACK_WORDS,
-    IF_FAST_ROWMAJOR, IF_T41_TREE_BATCH, IF_T42_CORRECTION_CACHE, IF_WORK_PLANES, if_correction_table_kernel,
+    IF_FAST_ROWMAJOR, IF_WORK_PLANES,
     build_isolation_trees_global_kernel,
     if_finite_scan_kernel,
     if_finite_scan_ftz_kernel,
@@ -1070,14 +1070,9 @@ struct IsolationForest(Movable):
         # Keep diagnostics' full-tree archive when explicitly requested.
         var scratch_stride = model.max_nodes_per_tree*IF_SCRATCH_WORDS_PER_NODE+IF_RNG_STATE_WORDS
         var batch_trees = n_trees
-        comptime if IF_T41_TREE_BATCH:
-            if not trace.enabled:
-                var live_bytes = 4*n_sampled_rows*n_sampled_features + 8*n_sampled_rows + 4*IF_WORK_PLANES*n_sampled_rows + 4*scratch_stride
-                batch_trees = max(1, min(n_trees, (128*1024*1024)//max(1, live_bytes)))
-        var corrections = ctx.enqueue_create_buffer[DType.float32](n_sampled_rows+1 if IF_T42_CORRECTION_CACHE else 1)
-        comptime if IF_T42_CORRECTION_CACHE:
-            ctx.enqueue_function[if_correction_table_kernel](corrections.unsafe_ptr(), Int32(n_sampled_rows+1),
-                grid_dim=(n_sampled_rows+256)//256, block_dim=256)
+        # (Sweep 2026-11-15: the folded IF_T41_TREE_BATCH cap and IF_T42_CORRECTION_CACHE table were removed;
+        # `corrections` is the one-word placeholder the build kernel takes.)
+        var corrections = ctx.enqueue_create_buffer[DType.float32](1)
         var subsample_buffer = _poisoned_f32(
             ctx, batch_trees * n_sampled_rows * n_sampled_features, pad, poison
         )
