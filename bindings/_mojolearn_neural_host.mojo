@@ -45,6 +45,10 @@ WHAT IT COMPUTES, and from which functions (no arithmetic of its own):
       addresses (x, the nine weights, k_cache, v_cache, y) through the same
       `transformer_host_forward` with the caller's caches, which are read
       at entry and written back. Returns the post-call cached_tokens.
+  `transformer_decode_steps(addrs, params)`
+      `_mojolearn_transformer_host`'s entry of the same name: n decode
+      tokens per row in one call, bytes equal to n `transformer_decode_step`
+      calls (TransformerDecodeSession.decode on the CPU route).
   `mamba3_forward_fresh`
       the block oracle from a constructed zero state, the final state
       discarded. `mamba3_forward_fresh` takes `_mojolearn_mamba`'s fifteen
@@ -76,7 +80,7 @@ from bindings.native_class_admission_door import static_builtin_type
 from bindings.sha256_door import sha256_hexdigest
 from providers.python.neural_descriptor_pyapi_door import neural_descriptor_capsule
 from core.neural_host_dispatch import NATIVE_HOST_PRIMITIVE_API, NATIVE_HOST_MAMBA_STATE_API, NATIVE_HOST_TRANSFORMER_API, NATIVE_HOST_MAMBA_BLOCK_API
-from core.mojolearn_neural_host_impl import _opt_read, _write, _run_forward, _m1_weights, _mamba1_run, _m2_weights, _mamba2_run, _m3_weights, _mamba3_run
+from core.mojolearn_neural_host_impl import _opt_read, _write, _run_forward, _run_decode_steps, _m1_weights, _mamba1_run, _m2_weights, _mamba2_run, _m3_weights, _mamba3_run
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 
@@ -423,6 +427,25 @@ def transformer_decode_step_binding(
     return PythonObject(out_len)
 
 
+def transformer_decode_steps_binding(
+    addrs: PythonObject, params: PythonObject
+) raises -> PythonObject:
+    """`n` decode tokens per row in one call. `addrs`: the thirteen of
+    `transformer_forward`, x and y_out (B, n, d_model). `params`:
+    `transformer_forward`'s ten with L = n: 0 B, 1 n, 2 d_model, 3 n_heads,
+    4 n_kv_heads, 5 head_dim, 6 intermediate, 7 max_tokens, 8 cached_tokens,
+    9 window, optionally the block options tail. Bytes equal n
+    `transformer_decode_step` calls. Returns the post-call cached_tokens."""
+    var what = String("transformer_decode_steps")
+    var a = _addrs_tail(addrs, 13, 7, what)
+    var p = _params_tail(params, 10, what)
+    var opts = BlockOptions.from_params(p, 10)
+    var out_len = 0
+    with GILReleased(Python()):
+        out_len = _run_decode_steps(a, p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8], p[9], opts)
+    return PythonObject(out_len)
+
+
 # ===========================================================================
 # Mamba-1, Mamba-2 and Mamba-3: the zero-state prefill, only y written
 # (lane/inference-neural-forward, 2026-09-15). The weights are read in the
@@ -658,6 +681,7 @@ def build__mojolearn_neural_host() -> PythonObject:
         module.def_function[transformer_forward_binding]("transformer_forward")
         module.def_function[transformer_forward_int15_binding]("transformer_forward_int15")
         module.def_function[transformer_decode_step_binding]("transformer_decode_step")
+        module.def_function[transformer_decode_steps_binding]("transformer_decode_steps")
         # TOMBSTONE: mamba1_session_info, mamba1_forward_fresh, mamba2_forward_fresh (dead native entries: no live caller) deleted 2026-10-26 by 391118b63; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_mamba.patch
         module.def_function[mamba1_forward_binding]("mamba1_forward")

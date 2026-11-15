@@ -661,7 +661,13 @@ def mamba_session_init(mut mods: NativeModules, session: PythonObject, block: Py
         [String("_handle"), String("_block"), String("_state")])
     var binding = _model_bindings(mods, fields["_native_route"], kind_name, context, py_get(fields, "numeric_mode"))[kind_name]
     var device_arm = _native_has_entry(mods, binding, kind_name + "_session_create")
-    if not device_arm and not _native_has_entry(mods, binding, kind_name + "_decode_step"):
+    # The host arm steps through the binding's `mamba_state_api_v1` descriptor
+    # when NEURAL_NATIVE_DISPATCH is on (_session_step_call), else through the
+    # per-call `<kind>_decode_step` entry. 5ef9975258 deleted the CPU
+    # binding's Python `mamba3_decode_step` (the descriptor serves it), so
+    # requiring that entry refused every host Mamba-3 session.
+    var host_arm = (NEURAL_NATIVE_DISPATCH and _native_has_entry(mods, binding, "mamba_state_api_v1")) or _native_has_entry(mods, binding, kind_name + "_decode_step")
+    if not device_arm and not host_arm:
         raise Error("NotImplementedError: " + what + ": the loaded binding exports neither a resident decode session nor the per-call " + kind_name + "_decode_step entry")
     if state is None:
         raise Error(what + ": state is required (allocate_state)")
