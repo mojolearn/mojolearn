@@ -10,7 +10,6 @@ from std.time import perf_counter_ns
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from max.gpu.host import DeviceBuffer, DeviceContext
-from std.sys.compile import is_defined
 from std.atomic import Atomic, Ordering, fence
 from max.gpu import grid_dim
 from checks.kernel_matrix import TARGET_COLUMN, COLUMN_NVIDIA, COLUMN_AMD
@@ -479,10 +478,11 @@ def repulse_split_kernel(n: Int32, y: F32P, row_z: F32P, rep: F32P, z_out: F32P,
 #: (the average of the two vendors decides). Trustworthiness@15 equal and
 #: digests identical in every arm on both vendors (istella ce69cdffd6f889b6,
 #: taxi cee32a8a52defb1c): no bit change.
-#: -D MOJOLEARN_IDN_ALL_OFF restores the split kernel.
 # TOMBSTONE: MOJOLEARN_IDN_TSNE_REP_TILE_OFF (old path; EXP:1823 PROMOTED the rep tile, NV+AMD average) deleted 2026-11-15 by lane/expdel2-14-cluster; code recoverable at 98ec52101e.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_TSNE_REP_TILE_OFF.patch; record in docs/TOMBSTONES.md.
-comptime IDN_TSNE_REP_TILE = TS_SPLIT and TS_LANE_FOLD and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-14-cluster (non-owner; owner expdel2-37-series); code recoverable at 5648a4a2e2.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-14-cluster.patch; record in docs/TOMBSTONES.md.
+comptime IDN_TSNE_REP_TILE = TS_SPLIT and TS_LANE_FOLD
 #: threads per row, lanes per thread, rows per block, candidates per tile
 comptime RT2_LQ = 16
 comptime RT2_U = TS_LANES // RT2_LQ

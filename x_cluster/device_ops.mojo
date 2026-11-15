@@ -14,7 +14,6 @@ from x_cluster.spectral_df64_device import cluster_qr_df64_device, discretize_df
 from std.atomic import Atomic
 from max.gpu import block_dim, block_idx, grid_dim, thread_idx
 from std.os import getenv
-from std.sys.compile import is_defined
 from std.time import perf_counter_ns
 from std.memory import bitcast, stack_allocation
 from max.gpu.host import DeviceBuffer, DeviceContext
@@ -527,9 +526,9 @@ def _ap_r_kernel(s: FPtr, a: FPtr, r: FPtr, n: Int32, damping: Float32):
 # R is the same words.
 # TOMBSTONE: MOJOLEARN_IDN_AP_R_TOP2_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-14-cluster; code recoverable at ee14292c4b.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_AP_R_TOP2_OFF.patch; record in docs/TOMBSTONES.md.
-comptime IDN_AP_R_TOP2 = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-14-cluster (non-owner; owner expdel2-37-series); code recoverable at 5648a4a2e2.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-14-cluster.patch; record in docs/TOMBSTONES.md.
+comptime IDN_AP_R_TOP2 = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 # TOMBSTONE: MOJOLEARN_AP_EXACT (SUPERSEDED) deleted 2026-11-15 by lane/expdel-01-cluster; code recoverable at 854fde92db.
 # Restore: git apply experiments/removed/MOJOLEARN_AP_EXACT.patch; record in docs/TOMBSTONES.md.
 # (its FAST opt-in arm of AP_R_TOP2; FAST keeps the two walks)
@@ -595,9 +594,9 @@ def _ap_r_top2_kernel(s: FPtr, a: FPtr, r: FPtr, n: Int32, damping: Float32):
 # drain). The chunk is 8 iterations.
 # TOMBSTONE: MOJOLEARN_IDN_AP_DEVICE_CONV_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-14-cluster; code recoverable at 5955a4cfd7.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_AP_DEVICE_CONV_OFF.patch; record in docs/TOMBSTONES.md.
-comptime IDN_AP_DEVICE_CONV = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-14-cluster (non-owner; owner expdel2-37-series); code recoverable at 5648a4a2e2.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-14-cluster.patch; record in docs/TOMBSTONES.md.
+comptime IDN_AP_DEVICE_CONV = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 # TOMBSTONE: MOJOLEARN_IDN_AP_CONV_CHUNK4 (unmeasured opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-14-cluster; code recoverable at 923cd01f55.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_AP_CONV_CHUNK4.patch; record in docs/TOMBSTONES.md.
 # TOMBSTONE: MOJOLEARN_IDN_AP_CONV_CHUNK16 (unmeasured opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-14-cluster; code recoverable at cd7a7a0890.
@@ -1447,9 +1446,9 @@ def _agg_rescan_kernel(dm: FPtr, live: IPtr, nn: IPtr, md: FPtr, n: Int32, st: I
 # Scheduling only, no bit moves. FAST keeps the per-call buffers and the drain.
 # TOMBSTONE: MOJOLEARN_IDN_BGMM_MOMENTS_POOL_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-14-cluster; code recoverable at 0fd51e8785.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_BGMM_MOMENTS_POOL_OFF.patch; record in docs/TOMBSTONES.md.
-comptime IDN_BGMM_MOMENTS_POOL = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-14-cluster (non-owner; owner expdel2-37-series); code recoverable at 5648a4a2e2.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-14-cluster.patch; record in docs/TOMBSTONES.md.
+comptime IDN_BGMM_MOMENTS_POOL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 
 
 struct _ClusterContext(Defaultable, Movable):

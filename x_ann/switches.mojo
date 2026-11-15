@@ -12,7 +12,6 @@ the line below that names it.
 Build an arm with `MOJOLEARN_MOJO_BUILD_FLAGS="-D <name>"` (every
 bindings/build_*.sh passes it to `mojo build`); tools/ann_apple2_ab.sh takes
 `<commit>+<name>[+<name>...]` as an arm."""
-from std.sys.compile import is_defined
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 
 #: IVF build host passes: list layout by memcpy and without the permuted
@@ -168,10 +167,9 @@ comptime IDN_PQ_DEVICE_CODEBOOKS = GLOBAL_NUMERIC_MODE != NUMERIC_FAST
 #: MOJOLEARN_IDN_PQ_TRAINSET_STRIDED_OFF restored the old path.
 # TOMBSTONE: MOJOLEARN_IDN_PQ_TRAINSET_STRIDED_OFF (old path; EXP:2065 KEEP, promoted 2026-10-11 NV+AMD) deleted 2026-11-15 by lane/expdel2-14-cluster; code recoverable at 532b33e7ba.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_PQ_TRAINSET_STRIDED_OFF.patch; record in docs/TOMBSTONES.md.
-comptime IDN_PQ_TRAINSET_STRIDED = (
-    GLOBAL_NUMERIC_MODE != NUMERIC_FAST
-    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-14-cluster (non-owner; owner expdel2-37-series); code recoverable at 5648a4a2e2.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-14-cluster.patch; record in docs/TOMBSTONES.md.
+comptime IDN_PQ_TRAINSET_STRIDED = GLOBAL_NUMERIC_MODE != NUMERIC_FAST
 comptime IDN_PQ_TRAIN_ROWS_PER_CODE = 256
 
 #: lane fg-ivf (read_ivf.md idea A3), DEFAULT ON outside FAST

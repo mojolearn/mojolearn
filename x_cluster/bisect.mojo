@@ -17,7 +17,6 @@ depth-first order are the labels; `predict` descends the tree on the device
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 
-from std.sys.compile import is_defined
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz
 from cluster.impl.kmeans_params import INIT_KMEANS_PLUS_PLUS, INIT_RANDOM
@@ -38,13 +37,12 @@ from x_cluster.post_bodies import FM_PROD, FM_VAL
 # they were Float64 chains (the same on the device and the host column; a
 # split pick moves only where two leaf scores agreed to a double's last
 # bits). Labels and centers are untouched unless a pick moves.
-# The master `-D MOJOLEARN_IDN_ALL_OFF` restores the readbacks; the define
-# must reach the host-column build too.
+# FAST keeps the readbacks.
 # TOMBSTONE: MOJOLEARN_IDN_BISECT_DEVICE_SCORES_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-14-cluster; code recoverable at d70760e0e8.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_BISECT_DEVICE_SCORES_OFF.patch; record in docs/TOMBSTONES.md.
-comptime IDN_BISECT_DEVICE_SCORES = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-14-cluster (non-owner; owner expdel2-37-series); code recoverable at 5648a4a2e2.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-14-cluster.patch; record in docs/TOMBSTONES.md.
+comptime IDN_BISECT_DEVICE_SCORES = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 
 # lane fix-c1-cluster (2026-10-04), IDENTICAL, default ON, BOTH COLUMNS (this
 # is the one driver): the column means and the centered matrix on the device.
@@ -57,13 +55,12 @@ comptime IDN_BISECT_DEVICE_SCORES = (
 # once for `ops.kmeans`. BITS: each mean is the float-float fold's quotient
 # where it was a Float64 ascending chain, so a centered word, and anything
 # downstream, can move in the last place; the device and the host column
-# move together. The master `-D MOJOLEARN_IDN_ALL_OFF` restores the host
-# centering; the define must reach the host-column build too.
+# move together. FAST keeps the host centering.
 # TOMBSTONE: MOJOLEARN_IDN_BISECT_DEVICE_CENTER_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-14-cluster; code recoverable at 9510cb8ef2.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_BISECT_DEVICE_CENTER_OFF.patch; record in docs/TOMBSTONES.md.
-comptime IDN_BISECT_DEVICE_CENTER = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-14-cluster (non-owner; owner expdel2-37-series); code recoverable at 5648a4a2e2.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-14-cluster.patch; record in docs/TOMBSTONES.md.
+comptime IDN_BISECT_DEVICE_CENTER = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 
 
 struct BisectTree(Movable):
