@@ -20,7 +20,7 @@ stays as its default constant so importers fold their dead arms.
 # (Sweep 2026-11-15: T02 and histogram_task_rows removed; readers folded.)
 # TOMBSTONE: MOJOLEARN_TREES_T03 (unmeasured arm) deleted 2026-11-15 by expdel2-39-trees; code recoverable at the deletion commit^.
 # Restore: git apply experiments/removed/MOJOLEARN_TREES_T03.patch
-comptime T03 = False
+# (Sweep 2026-11-15: T03 removed; the RF builder's retained-count fields and branches folded.)
 # TOMBSTONE: MOJOLEARN_TREES_T04 (unmeasured arm) deleted 2026-11-15 by expdel2-39-trees; code recoverable at the deletion commit^.
 # Restore: git apply experiments/removed/MOJOLEARN_TREES_T04.patch
 comptime T04 = False
