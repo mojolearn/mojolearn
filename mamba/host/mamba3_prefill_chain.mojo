@@ -79,6 +79,11 @@ from mamba.impl.modeling.modeling_mamba import (
 )
 from mamba.checks.mamba3_fixture import Mamba3Weights, Mamba3Dims
 
+from autograd.kernels.mamba3 import (
+    AFN_M3_BWD_CHUNK,
+    afn_m3_theta_chunks,
+    mamba3_afn_backward_angle_into,
+)
 # the result types and the scratch helpers stay with the device tree
 from autograd.kernels.mamba3_prefill import (
     IDN_M3_BWD_SKIP_DEAD,
@@ -286,9 +291,14 @@ def mamba3_prefill_backward_on(
     var d_angle_raw=_m3_scratch(afn_own, ctx,m*M3_NUM_ROPE_ANGLES)
     var d_dt_angle=_m3_scratch(afn_own, ctx,head_cells)
     comptime if not IDN_M3_BWD_SKIP_DEAD:
-        var sums_rot=_m3_scratch(afn_own, ctx,mamba3_angle_suffix_sums_cells(b,l,dims.nheads))
-        mamba3_backward_angle_into(ctx,d_angle_rate,d_angle_raw,d_dt_angle,d_theta_rot,stages.dt_work,stages.in_proj,b,l,dims,sums_rot)
-        afn_arena.keep.append(sums_rot^)
+        comptime if AFN_M3_BWD_CHUNK:
+            var afn_sums = _m3_scratch(afn_own, ctx, b * dims.nheads * M3_NUM_ROPE_ANGLES * afn_m3_theta_chunks(l))
+            mamba3_afn_backward_angle_into(ctx,d_angle_rate,d_angle_raw,d_dt_angle,d_theta_rot,stages.dt_work,stages.in_proj,afn_sums,b,l,dims)
+            afn_arena.keep.append(afn_sums^)
+        else:
+            var sums_rot=_m3_scratch(afn_own, ctx,mamba3_angle_suffix_sums_cells(b,l,dims.nheads))
+            mamba3_backward_angle_into(ctx,d_angle_rate,d_angle_raw,d_dt_angle,d_theta_rot,stages.dt_work,stages.in_proj,b,l,dims,sums_rot)
+            afn_arena.keep.append(sums_rot^)
         _mtick(ctx, ton, tk, "angle")
     var d_dt_available=_m3_scratch(afn_own, ctx,head_cells);var d_dt_raw=_m3_scratch(afn_own, ctx,head_cells);var d_dt_bias_rows=_m3_scratch(afn_own, ctx,head_cells);var d_dt_bias=_m3_scratch(afn_own, ctx,dims.nheads)
     comptime if not IDN_M3_BWD_SKIP_DEAD:
@@ -337,9 +347,14 @@ def mamba3_prefill_backward_on(
     mamba3_backward_join_current_into(ctx,d_b_join,d_c_join,d_gamma_join,d_dt_join_current,d_trap_join,d_b_qk,d_c_qk,d_kraw_join,d_qraw_join,d_gamma_qk,d_scale_join,d_dt_qk,d_trap_qk,d_beta_join,stages.dt_work,stages.sig_work,b,l,dims)
     _mtick(ctx, ton, tk, "join_current")
     var d_angle_rate_join=_m3_scratch(afn_own, ctx,m*dims.nheads*M3_NUM_ROPE_ANGLES);var d_angle_raw_join=_m3_scratch(afn_own, ctx,m*M3_NUM_ROPE_ANGLES);var d_dt_angle_join=_m3_scratch(afn_own, ctx,head_cells)
-    var sums_join=_m3_scratch(afn_own, ctx,mamba3_angle_suffix_sums_cells(b,l,dims.nheads))
-    mamba3_backward_angle_into(ctx,d_angle_rate_join,d_angle_raw_join,d_dt_angle_join,d_theta_join,stages.dt_work,stages.in_proj,b,l,dims,sums_join)
-    afn_arena.keep.append(sums_join^)
+    comptime if AFN_M3_BWD_CHUNK:
+        var afn_sums = _m3_scratch(afn_own, ctx, b * dims.nheads * M3_NUM_ROPE_ANGLES * afn_m3_theta_chunks(l))
+        mamba3_afn_backward_angle_into(ctx,d_angle_rate_join,d_angle_raw_join,d_dt_angle_join,d_theta_join,stages.dt_work,stages.in_proj,afn_sums,b,l,dims)
+        afn_arena.keep.append(afn_sums^)
+    else:
+        var sums_join=_m3_scratch(afn_own, ctx,mamba3_angle_suffix_sums_cells(b,l,dims.nheads))
+        mamba3_backward_angle_into(ctx,d_angle_rate_join,d_angle_raw_join,d_dt_angle_join,d_theta_join,stages.dt_work,stages.in_proj,b,l,dims,sums_join)
+        afn_arena.keep.append(sums_join^)
     _mtick(ctx, ton, tk, "angle")
     var d_dt_join_base=_m3_scratch(afn_own, ctx,head_cells);mamba3_backward_join_two_into(ctx,d_dt_join_base,d_dt_join_current,d_dt_join_adt,head_cells)
     _mtick(ctx, ton, tk, "join_two")

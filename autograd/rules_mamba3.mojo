@@ -102,6 +102,9 @@ from mamba.impl.modules.mamba3 import (
     mamba3_block_forward,
 )
 from autograd.kernels.mamba3 import (
+    AFN_M3_BWD_CHUNK,
+    afn_m3_theta_chunks,
+    mamba3_afn_backward_angle_into,
     mamba3_backward_gate_skip_into,
     mamba3_backward_qkdot_into,
     mamba3_backward_s16_s15_into,
@@ -641,12 +644,20 @@ struct Mamba3Rules(BackwardRules):
                 S.d_dt_qk, S.d_trap_qk, S.d_beta_scale, st.dt_work, st.sig_work, b, l, dims,
             )
             _mtick(ctx, self.ton, blk.tk, "join_current")
-            var sums_rot = _m3_scratch(own, ctx, mamba3_angle_suffix_sums_cells(b, l, nh))
-            mamba3_backward_angle_into(
-                ctx, S.d_angle_rate, S.d_angle_raw, S.d_dt_angle, S.d_theta_rot,
-                st.dt_work, st.in_proj, b, l, dims, sums_rot,
-            )
-            S.arena.keep.append(sums_rot^)
+            comptime if AFN_M3_BWD_CHUNK:
+                var afn_sums = _m3_scratch(own, ctx, b * nh * M3_NUM_ROPE_ANGLES * afn_m3_theta_chunks(l))
+                mamba3_afn_backward_angle_into(
+                    ctx, S.d_angle_rate, S.d_angle_raw, S.d_dt_angle, S.d_theta_rot,
+                    st.dt_work, st.in_proj, afn_sums, b, l, dims,
+                )
+                S.arena.keep.append(afn_sums^)
+            else:
+                var sums_rot = _m3_scratch(own, ctx, mamba3_angle_suffix_sums_cells(b, l, nh))
+                mamba3_backward_angle_into(
+                    ctx, S.d_angle_rate, S.d_angle_raw, S.d_dt_angle, S.d_theta_rot,
+                    st.dt_work, st.in_proj, b, l, dims, sums_rot,
+                )
+                S.arena.keep.append(sums_rot^)
             _mtick(ctx, self.ton, blk.tk, "angle")
             mamba3_backward_dt_partial_into(
                 ctx, S.d_dt_available, S.d_dt_raw, S.d_dt_bias_rows, S.d_dt_total, S.d_dt_angle,
@@ -711,12 +722,20 @@ struct Mamba3Rules(BackwardRules):
             S.d_dt_qk, S.d_trap_qk, S.d_beta_join, st.dt_work, st.sig_work, b, l, dims,
         )
         _mtick(ctx, self.ton, blk.tk, "join_current")
-        var sums_join = _m3_scratch(own, ctx, mamba3_angle_suffix_sums_cells(b, l, nh))
-        mamba3_backward_angle_into(
-            ctx, S.d_angle_rate_join, S.d_angle_raw_join, S.d_dt_angle_join, S.d_theta_join,
-            st.dt_work, st.in_proj, b, l, dims, sums_join,
-        )
-        S.arena.keep.append(sums_join^)
+        comptime if AFN_M3_BWD_CHUNK:
+            var afn_sums = _m3_scratch(own, ctx, b * nh * M3_NUM_ROPE_ANGLES * afn_m3_theta_chunks(l))
+            mamba3_afn_backward_angle_into(
+                ctx, S.d_angle_rate_join, S.d_angle_raw_join, S.d_dt_angle_join, S.d_theta_join,
+                st.dt_work, st.in_proj, afn_sums, b, l, dims,
+            )
+            S.arena.keep.append(afn_sums^)
+        else:
+            var sums_join = _m3_scratch(own, ctx, mamba3_angle_suffix_sums_cells(b, l, nh))
+            mamba3_backward_angle_into(
+                ctx, S.d_angle_rate_join, S.d_angle_raw_join, S.d_dt_angle_join, S.d_theta_join,
+                st.dt_work, st.in_proj, b, l, dims, sums_join,
+            )
+            S.arena.keep.append(sums_join^)
         _mtick(ctx, self.ton, blk.tk, "angle")
         mamba3_backward_join_two_into(ctx, S.d_dt_join_base, S.d_dt_join_current, S.d_dt_join_adt, head_cells)
         _mtick(ctx, self.ton, blk.tk, "join_two")
