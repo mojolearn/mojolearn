@@ -74,7 +74,7 @@ comptime ENETCV_FB_CHUNKS = 64
 # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C13_CD_FOLD_STATS.patch; record in docs/TOMBSTONES.md.
 # TOMBSTONE: MOJOLEARN_CLASSICAL_C14_GROUP_RHS (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-06-base; code recoverable at 9b13c93ee0.
 # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C14_GROUP_RHS.patch; record in docs/TOMBSTONES.md.
-comptime C14_GROUP_RHS = False
+# (Sweep 2026-11-15: comptime C14_GROUP_RHS removed; nothing read it.)
 # lane/classical-cv-folds (2026-10-07), NEW, opt-in, NOT MEASURED: RidgeCV's
 # float-float fallback (x_linear/ridge_ff_blocks.mojo). The incumbent runs one
 # thread per statistic serially over every training row (`kf_ff_unit_kernel`,
