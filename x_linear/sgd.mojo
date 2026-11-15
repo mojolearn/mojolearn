@@ -1013,7 +1013,6 @@ comptime SGD_OC_IDN_MB_DEFAULT = (
 # n < SGD_AUTO_STEPS * cap on the host column and every device together.
 # TOMBSTONE: MOJOLEARN_SGD_ADAPTIVE_BATCH_OFF (unmeasured old path, EXP:16 PENDING) deleted 2026-11-15 by lane/expdel2-21-linear; code recoverable at 5d8783f621.
 # Restore: git apply experiments/removed/MOJOLEARN_SGD_ADAPTIVE_BATCH_OFF.patch; record in docs/TOMBSTONES.md.
-comptime SGD_ADAPTIVE_BATCH = True
 # lane sgd-quality (2026-10-17): the step floor is 256 steps an epoch (was 32).
 # Quality: the live test of 0.8.50/0.8.51 (Apple M4, raw breast_cancer, 569
 # rows, 3-fold cv accuracy) had 'auto' at 32 steps trail per-sample updates
@@ -1045,8 +1044,8 @@ def sgd_batch(ipb: Int, k: Int, n: Int) -> Int:
     """The minibatch size of a fit from ip[12]: positive is the caller's,
     0 the per-sample fit, -1 "auto" for SGDOneClassSVM (k == 1, see
     SGD_OC_IDN_MB_DEFAULT; the per-sample fit for any other k, as before),
-    and -cap (cap >= 2) the row-count default of the other SGD estimators
-    (SGD_ADAPTIVE_BATCH): n // SGD_AUTO_STEPS, at least 1, at most cap."""
+    and -cap (cap >= 2) the row-count default of the other SGD estimators:
+    n // SGD_AUTO_STEPS, at least 1, at most cap."""
     if ipb > 0:
         return ipb
     if ipb < -1 and k != 1:
