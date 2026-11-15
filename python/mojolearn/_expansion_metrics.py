@@ -30,8 +30,6 @@ pyglue-sweep, 2026-10-03: the Python fallbacks and the
 MOJOLEARN_METRICS_EPILOGUE=python reference arm are gone). That is bitwise the same on every machine by the IEEE standard, and it
 is scikit-learn's own precision for the same step.
 """
-from . import _backend
-
 __all__ = []
 
 _BINDING = "_mojolearn_x_metrics"
@@ -41,14 +39,12 @@ _BINDING = "_mojolearn_x_metrics"
 # the typed table core/metrics_program_plan.mojo `metric_opcode`; code recoverable at 4f5a5ae6d8.
 
 
-def _binding(numeric_mode):
-    if numeric_mode is not None and (
-        not isinstance(numeric_mode, str)
-        or numeric_mode.strip().lower() not in ("fast", "identical")
-    ):
-        raise ValueError("numeric_mode must be 'fast' or 'identical'")
-    mode = (numeric_mode or _backend.default_mode()).strip().lower()
-    return _backend.binding(_BINDING, mode)
+# TOMBSTONE: `_binding` (the Python numeric_mode string check and binding load; no product caller: every
+# function below is one native call and its mode is resolved and refused natively,
+# bindings/classical_labels_door.mojo `_metrics_mode`) and the unused Python copies of the x_metrics kind
+# tables `_CM_*`, `_WSUM_BLOCK`, `_NORM_MODES`, `_KAPPA_W`, `_ROW`, `_CF_OUT`, `_CF_CHUNK`, `_CO_*`, `_RANK_*`,
+# `_ROC_ONE_CLASS`, `_OVO_WORDS`, `_ROWS_MSG` (their owners are bindings/metrics_exp_cls_door.mojo and
+# core/metrics_program_plan.mojo) deleted 2026-11-15 by lane py-metrics; code recoverable at fcc934a37c.
 
 
 # TOMBSTONE: P1_DEAD_PY_CURVE_DRIVERS (removed: the unreachable Python curve/metric drivers _FoldCurve, _curves, _fold_curves, _curve_out, _ovr, roc_auc_options, ... and the other unreferenced work functions of _expansion_metrics, _expansion_decomp, _expansion_prep, preprocessing, linear_model, _linalg_impl, _expansion_neighbors, _labels; their native owners are bindings/metrics_exp_curve.mojo and bindings/mcls_ranking.mojo) deleted 2026-11-09 by lane p1-python-callbacks-worst; code recoverable at e68654a757.
@@ -64,16 +60,6 @@ class UndefinedMetricWarning(UserWarning):
 # ---------------------------------------------------------------------------
 # Classification
 # ---------------------------------------------------------------------------
-
-#: cm_epi kinds (x_metrics/cm_epi.mojo, op 59; lane cpu2-l7-metrics)
-_CM_MLCM, _CM_MCC, _CM_COUNT, _CM_NORM, _CM_KAPPA, _CM_CLR, _CM_TOTAL, _CM_WSUM_LEAF, _CM_WSUM_FOLD = range(9)
-#: rows per `_wsum_leaf` unit (x_metrics/cm_epi.mojo WSUM_BLOCK)
-_WSUM_BLOCK = 256
-#: the NORM modes: the 'all' total, then 'all', 'true', 'pred', none
-_NORM_MODES = {"all": 1, "true": 2, "pred": 3, None: 4}
-#: the kappa weight modes
-_KAPPA_W = {None: 0, "linear": 1, "quadratic": 2}
-
 
 # Engineering notes (moved from the docstring):
 # Per-label one-vs-rest 2x2 confusion matrices, `[[tn, fp], [fn, tp]]`.
@@ -328,21 +314,6 @@ def d2_absolute_error_score(y_true, y_pred, *, sample_weight=None, multioutput="
 # Ranking and probabilistic scores (scikit-learn 1.9 _ranking.py, _classification.py)
 # ---------------------------------------------------------------------------
 
-_ROW = dict(topk=0, brier=1, logloss=2, hinge_bin=3, hinge_mc=4, dcg=5, coverage=6, lrap=7, rankloss=8,
-            dcg_ignore_ties=9)
-
-
-#: words per problem of the curve fold (x_metrics/par.mojo CF_OUT) and its
-#: points per chunk (x_metrics/plan.mojo CF_CHUNK)
-_CF_OUT = 10
-_CF_CHUNK = 1024
-
-
-#: x_metrics/curve_out.mojo kinds and statuses
-_CO_ROC, _CO_PR, _CO_DET = 0, 1, 2
-_CO_EMPTY, _CO_ZERO_CLASS = 1, 2
-
-
 # Engineering notes (moved from the docstring):
 # scikit-learn 1.9 `roc_curve` for binary targets: fpr, tpr, thresholds
 # (Float64; the first threshold is +inf). The sort, the cumulative
@@ -393,18 +364,6 @@ def auc(x, y):
     return _NATIVE(None, _OP.family_mexp_curve_auc, (x, y), _NATIVE_CONTEXT)
 
 
-#: rank_epi kinds of the ranking averages (x_metrics/rank_epi.mojo, lane cpu2-l7-metrics S3b)
-_RANK_ROW_SUM, _RANK_CURVE_SCORE, _RANK_AVERAGE, _RANK_OVO_MASK, _RANK_OVO_PAIR = 5, 6, 7, 8, 9
-_ROC_ONE_CLASS = "Only one class is present in y_true. ROC AUC score is not defined in that case."
-
-
-#: arena words one one-vs-one program may hold (its pairs' curve slots);
-#: more pairs go to further programs
-_OVO_WORDS = 1 << 26
-_ROWS_MSG = ("Target scores need to be probabilities for multiclass roc_auc, i.e. they "
-             "should sum up to 1.0 over classes")
-
-
 def average_precision_score(y_true, y_score, *, average="macro", pos_label=1, sample_weight=None,
                             numeric_mode=None):
     """scikit-learn 1.9 `average_precision_score` (binary and multiclass
@@ -422,10 +381,6 @@ def top_k_accuracy_score(y_true, y_score, *, k=2, normalize=True, sample_weight=
     return _NATIVE(None, _OP.family_mexp_curve_top_k,
                    (y_true, y_score, k, normalize, sample_weight, labels, numeric_mode),
                    _NATIVE_CONTEXT)
-
-
-#: rank_epi kinds (x_metrics/rank_epi.mojo)
-_RANK_MEAN, _RANK_NDCG_ROW, _RANK_D2_LOG, _RANK_D2_BRIER, _RANK_DCG_DISC = 0, 1, 2, 3, 4
 
 
 def brier_score_loss(y_true, y_proba, *, sample_weight=None, pos_label=None, labels=None,
