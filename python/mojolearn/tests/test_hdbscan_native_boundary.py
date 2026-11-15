@@ -5,7 +5,7 @@ import pickle
 import numpy as np
 import pytest
 
-from mojolearn import HDBSCAN
+from mojolearn import HDBSCAN, _backend
 from mojolearn import hdbscan as hd
 
 __mojolearn_user_boundary__ = True
@@ -78,8 +78,11 @@ def test_query_factory_replacement_cannot_execute_python(monkeypatch):
         raise AssertionError("Python HDBSCAN query factory executed")
 
     model = _model()
-    monkeypatch.setattr(model._bind(), "hdbscan_query_native_api_v1", forbidden)
-    with pytest.raises(TypeError, match="compiled extension|compiled factory|native descriptor"):
+    # The operation reads the exact compiled module connected at import
+    # (`_backend.exact_host_module`: the host extension on a CPU-only install,
+    # never its `_HostBinding` facade), so the replacement goes there.
+    monkeypatch.setattr(_backend.exact_host_module(model._bind()), "hdbscan_query_native_api_v1", forbidden)
+    with pytest.raises(TypeError, match="requires compiled entry hdbscan_query_native_api_v1"):
         hd.approximate_predict(model, _points()[[1, 4]])
     assert calls == []
 
