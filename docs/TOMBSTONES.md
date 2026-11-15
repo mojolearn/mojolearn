@@ -632,6 +632,7 @@ in the tables after the sections.
 | [`MOJOLEARN_LN_FAST_NOFILL_OFF`](#mojolearn_ln_fast_nofill_off) | Neural (Apple FAST LayerNorm, x_sequence) | superseded (LN_FAST_NOFILL default won) | 2026-11-15 | [MOJOLEARN_LN_FAST_NOFILL_OFF.patch](../experiments/removed/MOJOLEARN_LN_FAST_NOFILL_OFF.patch) |
 | [`MOJOLEARN_SEQ_FAST_PIPE_UP_OFF`](#mojolearn_seq_fast_pipe_up_off) | Neural (Apple FAST x_sequence executor uploads) | superseded (SEQ_FAST_PIPE_UP default won) | 2026-11-15 | [MOJOLEARN_SEQ_FAST_PIPE_UP_OFF.patch](../experiments/removed/MOJOLEARN_SEQ_FAST_PIPE_UP_OFF.patch) |
 | [`MOJOLEARN_SEQ_FAST_PIPE_DOWN_OFF`](#mojolearn_seq_fast_pipe_down_off) | Neural (Apple FAST x_sequence executor downloads) | superseded (SEQ_FAST_PIPE_DOWN default won) | 2026-11-15 | [MOJOLEARN_SEQ_FAST_PIPE_DOWN_OFF.patch](../experiments/removed/MOJOLEARN_SEQ_FAST_PIPE_DOWN_OFF.patch) |
+| [`MOJOLEARN_SEQ_FAST_THETA_SNAP_OFF`](#mojolearn_seq_fast_theta_snap_off) | Series on x_sequence (Apple FAST theta Nelder-Mead cycle watch) | superseded (SEQ_FAST_THETA_SNAP default won) | 2026-11-15 | [MOJOLEARN_SEQ_FAST_THETA_SNAP_OFF.patch](../experiments/removed/MOJOLEARN_SEQ_FAST_THETA_SNAP_OFF.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -5955,3 +5956,12 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md (section expdel-04-
 - Files: sequence/exec_device.mojo.
 - Deleted by: lane/expdel-04-neural (2026-11-15); code recoverable at `2e31a412c9`.
 - Restore: `git apply experiments/removed/MOJOLEARN_SEQ_FAST_PIPE_DOWN_OFF.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+
+### MOJOLEARN_SEQ_FAST_THETA_SNAP_OFF
+
+- Tried: the rollback of `SEQ_FAST_THETA_SNAP` in `sequence/theta.mojo`: under FAST + Apple, run every Nelder-Mead iteration of the theta fits instead of stopping a series whose state returned bit for bit to an earlier one (same final state).
+- Verdict: the snapshot default won (docs/apple-fast/EXPERIMENTS.md row `SEQ_FAST_THETA_SNAP`, lane/apple-fast-regress @ 93951fafb, M3 regress-dotm-snap: dynamic-optimized-theta taxi-hourly 2,088 -> 562 ms (-73%), same bits). KEPT f6a9e7c04. Apple FAST only.
+- Removed: the `_OFF` term of `THETA_SNAP` (now FAST + Apple). The plain run stays for every other build. No bits move.
+- Files: sequence/theta.mojo.
+- Deleted by: lane/expdel-04-neural (2026-11-15); code recoverable at `e382ce0c14`.
+- Restore: `git apply experiments/removed/MOJOLEARN_SEQ_FAST_THETA_SNAP_OFF.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
