@@ -1,7 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """MOJOLEARN_IDN_NORM_FIXED_LANES (lane norm-folds, 2026-10-28; idea 12 of
-the Oct 28 neural report, roadmap C4b / D10). IDENTICAL only, default OFF.
+the Oct 28 neural report, roadmap C4b / D10). IDENTICAL only; the switch was deleted 2026-11-15 (unmeasured), the fold
+helpers stay for their importers until they fold the False constant.
 
 BITS CHANGE across versions (allowed: every column moves together in one
 commit). The transformer/LM RMSNorm row statistic (contract S1, `sum x_j^2`),
@@ -40,19 +41,18 @@ the tree shape never depends on the row width.
 """
 from max.gpu import block_dim, block_idx, thread_idx
 from max.gpu.primitives.warp import shuffle_xor
-from std.sys.compile import is_defined
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_mul_add
+from checks.numerics import ftz, identical_mul_add
 
-comptime IDN_NORM_FIXED_LANES = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and is_defined["MOJOLEARN_IDN_NORM_FIXED_LANES"]()
-    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_IDN_NORM_FIXED_LANES (opt-in fixed 32-lane norm fold, EXP:2246 pending, never measured; the one-thread row chain stays) deleted 2026-11-15 by lane/expdel2-32-neural; code recoverable at c48e5cad76.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_NORM_FIXED_LANES.patch
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old-path umbrella term; owner another lane) deleted 2026-11-15 by lane/expdel2-32-neural; code recoverable at c48e5cad76.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-32-neural.patch
+comptime IDN_NORM_FIXED_LANES = False
 #: logical lanes of the fold (the tree has log2(NFL_LANES) = 5 levels)
 comptime NFL_LANES = 32
 #: threads a row-statistic kernel launches per token row: one 32-lane cell
 #: under the define, the one-thread row owner otherwise (arm B unchanged)
-comptime NORM_ROW_LANES = NFL_LANES if IDN_NORM_FIXED_LANES else 1
+comptime NORM_ROW_LANES = 1
 
 
 @always_inline
