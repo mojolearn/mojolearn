@@ -755,6 +755,7 @@ in the tables after the sections.
 | [`MOJOLEARN_C58_TEAM_MIB`](#mojolearn_c58_team_mib-unmeasured-arm-deleted-2026-11-15) | Sequence (classical series team state budget 64 MiB, IDENTICAL) | removed (unmeasured opt-in arm) | 2026-11-15 | [MOJOLEARN_C58_TEAM_MIB.patch](../experiments/removed/MOJOLEARN_C58_TEAM_MIB.patch) |
 | [`MOJOLEARN_C59_TRIAL_STATE`](#mojolearn_c59_trial_state-unmeasured-arm-deleted-2026-11-15) | Time series (ARIMA trial state reuse, IDENTICAL) | removed (unmeasured opt-in arm) | 2026-11-15 | [MOJOLEARN_C59_TRIAL_STATE.patch](../experiments/removed/MOJOLEARN_C59_TRIAL_STATE.patch) |
 | [`MOJOLEARN_C60_LAG4`](#mojolearn_c60_lag4-unmeasured-arm-deleted-2026-11-15) | Time series (shared detrended observations across lag tasks, IDENTICAL) | removed (unmeasured opt-in arm) | 2026-11-15 | [MOJOLEARN_C60_LAG4.patch](../experiments/removed/MOJOLEARN_C60_LAG4.patch) |
+| [`MOJOLEARN_IDN_GPC_OVR_OFF`](#mojolearn_idn_gpc_ovr_off-old-path-deleted-2026-11-15) | Kernel / GP (GaussianProcessClassifier one-vs-rest rollback to per-class binding calls, IDENTICAL old path) | removed (old path, no A/B recorded; the batched one-vs-rest default kept) | 2026-11-15 | [MOJOLEARN_IDN_GPC_OVR_OFF.patch](../experiments/removed/MOJOLEARN_IDN_GPC_OVR_OFF.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -7320,3 +7321,11 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md (section expdel-02-
 - **Deleted by**: lane/expdel2-07-base (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `ad78b8054f`.
 - **Restore**: `git apply experiments/removed/MOJOLEARN_C60_LAG4.patch`, then delete the `MOJOLEARN_C60_LAG4` refusal in `core/experiment_guards_series.mojo`.
 - **Records**: refusal in `core/experiment_guards_series.mojo`; `classical-misc.json` control `c60_lag4`: `removed` entry added (control removed from `controls` and from its algorithms); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-07-base section).
+
+## MOJOLEARN_IDN_GPC_OVR_OFF: old path deleted (2026-11-15)
+
+- **What it was**: the `_OFF` rollback of `GPC_IDN_OVR` (`gaussian_process/gpc_ovr.mojo`): `gp_idn_caps` answered 0 and the Python glue took the per-class binding calls. `GPC_IDN_OVR` stays as a constant; `MOJOLEARN_IDN_ALL_OFF` (same wave, non-owner fold in this lane) was the other way to reach it.
+- **Verdict**: no A/B recorded for the old path (plan rule b); deleted under AGENTS.md "An unmeasured arm is deleted" (Andrew, 2026-11-15). The batched one-vs-rest default is untouched. No bit change on any column.
+- **Deleted by**: lane/expdel2-07-base (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `abe1b14d9d`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_IDN_GPC_OVR_OFF.patch`, then delete the `MOJOLEARN_IDN_GPC_OVR_OFF` refusal in `core/experiment_guards_kernel.mojo`.
+- **Records**: refusal in `core/experiment_guards_kernel.mojo`; no `grid_controls` entry named it; `docs/apple-fast/EXPERIMENTS.md` row (expdel2-07-base section).

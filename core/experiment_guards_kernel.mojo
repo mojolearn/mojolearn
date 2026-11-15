@@ -50,6 +50,8 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_C52_PAIR_ROWS"](), "removed 2026-11-15 (lane/expdel2-07-base): C52_PAIR_ROWS (Kernel density (KDE pair-combine route with fixed 128/512 leaf, IDENTICAL)) was unmeasured opt-in arm; the opt-in arm is gone and the default path is unchanged; code recoverable at dd94b7ad88; see docs/TOMBSTONES.md"
     # Restore: git apply experiments/removed/MOJOLEARN_C54_PREDICT_TILES.patch
     comptime assert not is_defined["MOJOLEARN_C54_PREDICT_TILES"](), "removed 2026-11-15 (lane/expdel2-07-base): C54_PREDICT_TILES (Kernel / GP (four kernel columns share one scaled query load, IDENTICAL)) was unmeasured opt-in arm; the opt-in arm is gone and the default path is unchanged; code recoverable at 843366c4fd; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_GPC_OVR_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_GPC_OVR_OFF"](), "removed 2026-11-15 (lane/expdel2-07-base): IDN_GPC_OVR_OFF (Kernel / GP (GaussianProcessClassifier one-vs-rest rollback to per-class binding calls, IDENTICAL old path)) was old path, no A/B recorded; the batched one-vs-rest default kept; the default is the only path; code recoverable at abe1b14d9d; see docs/TOMBSTONES.md"
     return True
 
 
