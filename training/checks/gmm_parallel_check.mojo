@@ -11,7 +11,8 @@ and equal score_samples/predict_proba/predict bits. A collapse must raise the
 same message on both. Build with -D MOJOLEARN_GMM_PARALLEL_SABOTAGE=1 to see
 this gate fail.
 """
-from std.os import getenv, setenv
+from std.os import getenv
+from core.device_plan import device_plan_check_count, DEVICE_PLAN_GMM, DEVICE_PLAN_KMEANS
 from std.memory import bitcast
 from max.gpu.host import DeviceContext
 
@@ -45,10 +46,9 @@ from mixture.multi_gpu import gmm_e_step_dispatch
 
 
 def _set_devices(count: Int) raises:
-    if not setenv("MOJOLEARN_GMM_DEVICE_COUNT", String(count), True):
-        raise Error("setenv failed")
-    if not setenv("MOJOLEARN_KMEANS_DEVICE_COUNT", String(count), True):
-        raise Error("setenv failed")
+    # A thread device plan, not the variables: those are read once per
+    # process (core/device_plan.mojo `device_plan_check_count`).
+    device_plan_check_count(count, DEVICE_PLAN_GMM | DEVICE_PLAN_KMEANS)
 
 
 def _unit(seed: Int, a: Int, b: Int) -> Float32:

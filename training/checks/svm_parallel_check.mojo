@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Cloud-only cellwise identity for linear/RBF output-row partitions."""
-from std.os import getenv, setenv
+from std.os import getenv
+from core.device_plan import device_plan_check_count, DEVICE_PLAN_SVM
 from std.memory import bitcast
 from max.gpu.host import DeviceContext
 from metrics.checks.device_io import upload_f32, download_f32
@@ -43,13 +44,11 @@ def main() raises:
                 var kp = KernelParams.linear()
                 if kind == 1:
                     kp = KernelParams.rbf(0.01)
-                if not setenv("MOJOLEARN_SVM_DEVICE_COUNT", "1", True):
-                    raise Error("setenv failed")
+                device_plan_check_count(1, DEVICE_PLAN_SVM)
                 # This check is its own entry: it reads the plan after each setenv.
                 kernel_matrix_dispatch(device_plan_current("MOJOLEARN_SVM_DEVICE_COUNT"), ctx, kp, one, a, b, m, n, k, na, nb, ws)
                 ctx.synchronize()
-                if not setenv("MOJOLEARN_SVM_DEVICE_COUNT", "2", True):
-                    raise Error("setenv failed")
+                device_plan_check_count(2, DEVICE_PLAN_SVM)
                 kernel_matrix_dispatch(device_plan_current("MOJOLEARN_SVM_DEVICE_COUNT"), ctx, kp, many, a, b, m, n, k, na, nb, ws)
                 ctx.synchronize()
                 var x = download_f32(ctx, one, m * n)

@@ -28,7 +28,8 @@ the single PEERSOLVE pass, MOJOLEARN_PEERCOPY_TRIALS sets the PEERRACE trials
 MOJOLEARN_PEERCOPY_ENABLE_PEER=1 calls the native `comm.sync.enable_p2p()`
 first (peer access between every GPU pair, before any context is created).
 """
-from std.os import getenv, setenv
+from std.os import getenv
+from core.device_plan import device_plan_check_count, DEVICE_PLAN_CHOLESKY
 from comm.sync import enable_p2p
 from std.memory import bitcast
 from std.time import perf_counter_ns
@@ -262,11 +263,9 @@ def factor_history(n: Int) raises:
                 a.append(Float32(2.0))
             else:
                 a.append(Float32(((i + j) % 13)) / Float32(Float64(n) * 64.0))
-    if not setenv("MOJOLEARN_CHOLESKY_DEVICE_COUNT", "2", True):
-        raise Error("setenv failed")
+    device_plan_check_count(2, DEVICE_PLAN_CHOLESKY)
     var f = cholesky_factor_host(a, n, chol_jitter_pinned())
-    if not setenv("MOJOLEARN_CHOLESKY_DEVICE_COUNT", "1", True):
-        raise Error("setenv failed")
+    device_plan_check_count(1, DEVICE_PLAN_CHOLESKY)
     print("PEERSOLVE history factor n", n, "info", f.info)
 
 
