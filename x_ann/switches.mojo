@@ -110,7 +110,7 @@ comptime ANN3_ROW_THREADS = False
 #: insertions in the same order). Expected to move no bit.
 # TOMBSTONE: MOJOLEARN_ANN3_CAGRA_TEAM (unmeasured opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-14-cluster; code recoverable at 6e4834bbfa.
 # Restore: git apply experiments/removed/MOJOLEARN_ANN3_CAGRA_TEAM.patch; record in docs/TOMBSTONES.md.
-comptime ANN3_CAGRA_TEAM = False
+# (Sweep 2026-11-15: comptime ANN3_CAGRA_TEAM removed; always False, nothing read it.)
 
 
 #: lane fg-ivf (plan flagship-gaps-2026-10-09, read_ivf.md idea A1), DEFAULT ON
