@@ -55,7 +55,6 @@ from checks.numerics import (
     ftz, identical_div, identical_exp, identical_log, identical_sigmoid, identical_sqrt,
     identical_tanh,
 )
-from std.sys.compile import is_defined
 
 # Sequence codes 120/121 are recurrent scan kernels, intercepted before the
 # generic dispatcher. Codes OP_AG_FIRST..OP_AG_LAST are this family, on both
