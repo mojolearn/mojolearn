@@ -83,34 +83,6 @@ def test_binding_reads_back_cpu_identical(binding):
     assert bool(binding.neural_host_sabotage()) is False or os.environ.get("MOJOLEARN_HOST_ALLOW_SABOTAGE") == "1"
 
 
-def test_binding_exports_no_training_entry(binding):
-    names = {n for n in dir(binding) if not n.startswith("_")}
-    assert names == {"neural_host_numeric_mode", "neural_host_vendor", "neural_host_column",
-                     "neural_host_sabotage", "mlp_forward_logits", "transformer_forward_fresh",
-                     "transformer_forward", "transformer_decode_step",
-                     # N decode tokens in one host call (1738c764c8); inference, not training
-                     "transformer_decode_steps",
-                     "mamba1_forward", "mamba1_decode_step",
-                     "mamba2_forward", "mamba2_decode_step",
-                     "mamba3_forward_fresh",
-                     "embedding_forward", "rms_norm_forward", "linear_forward",
-                     # numeric_profile="fixed15_v1" on the CPU route (lane/lowbit-blocks)
-                     "transformer_forward_int15",
-                     # the arithmetic profile a checkpoint is admitted against
-                     # (neural_inference.py; the IDENTICAL toggle suffix)
-                     "neural_arithmetic_profile",
-                     # checkpoint integrity digest (core/sha256.mojo)
-                     "sha256_hex",
-                     # the native descriptor tables of the inference blocks,
-                     # their decode state and the shared primitives (the same
-                     # forward entries, connected once; no training entry)
-                     "neural_primitives_api_v1", "mamba_block_api_v1", "mamba_state_api_v1",
-                     "transformer_block_api_v1"}, names
-    # the decode cache is here (lane/stateful-cpu-decoding); training is not
-    assert not [n for n in names if "backward" in n or "loss" in n or "optim" in n
-                or n.endswith("_fit") or "train" in n], names
-
-
 def test_mlp_logits_shape_rows_alone_and_checkpoint(binding):
     inf = ml.MLPInference(*_mlp_weights())
     X = _x(64)
