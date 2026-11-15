@@ -1037,62 +1037,6 @@ def sgd_mb_steprows_kernel(
 
 # TOMBSTONE: MOJOLEARN_SGD_FAST_EPOCH_RESIDENT (unmeasured Apple FAST opt-in arm, EXP:1596 OPEN) deleted 2026-11-15 by lane/expdel2-21-linear; code recoverable at 639da56218.
 # Restore: git apply experiments/removed/MOJOLEARN_SGD_FAST_EPOCH_RESIDENT.patch; record in docs/TOMBSTONES.md.
-        return
-    var dd = ldi(ci, 2)
-    var loss = ldi(ci, 3)
-    var has_sw = ldi(ci, 4) != 0
-    var has_cw = ldi(ci, 5) != 0
-    var lr = ldi(ci, 6)
-    var nsub = ldi(ci, 7)
-    var penalty = ldi(ci, 8)
-    var fi = ldi(ci, 9) != 0
-    var need_obj = ldi(ci, 10) != 0
-    var one_class = ldi(ci, 11) != 0
-    var bsum = ldi(ci, 12) != 0
-    var sub = ldi(ci, 13)
-    var dblk = ldi(ci, 14)
-    var eps = ld(cf, 0)
-    var wpos = ld(cf, 1)
-    var wneg = ld(cf, 2)
-    var eta0 = ld(cf, 3)
-    var alpha = ld(cf, 5)
-    var l1r = ld(cf, 6)
-    var e = ld(etp, 0) if dev_eta != 0 else eta
-    var tid = Int(thread_idx.x)
-    var nt = Int(block_dim.x)
-    var bp = Int(bs_prev)
-    var wr = w0
-    var br = b0
-    if bp > 0:
-        var subs = mb_subs(bp, sub)
-        for j in range(tid, dd + 2, nt):
-            var g = Float32(0)
-            for s in range(subs):
-                g = fa(g, ld(parts_prev, j * nsub + s))
-            if j < dd:
-                st(w1, j, mb_step(ld(w0, j), g, bp, e, alpha, l1r, penalty, bsum))
-            elif j == dd:
-                if fi:
-                    st(b1, 0, mb_bias_step(ld(b0, 0), g, bp, e, alpha, one_class, bsum))
-                else:
-                    st(b1, 0, ld(b0, 0))
-            elif need_obj and Int(block_idx.x) == 0:
-                st(obj, 0, fa(ld(obj, 0), g))
-        wr = w1
-        br = b1
-    team_barrier()
-    var r = Int(block_idx.x) * nt + tid
-    if r < Int(bs):
-        var i = Int(idx.unsafe_load(Int(start) + r))
-        var o = mb_row(x, ys, i, dd, wr, 0, ld(br, 0), loss, eps, swp, has_sw, wpos, wneg, has_cw, lr, eta0, dblk)
-        st(dlv, r, o[0])
-        st(lv, r, o[1])
-    team_barrier()
-    if Int(bs) > 0:
-        var sb = Int(block_idx.x)
-        for j in range(tid, dd + 2, nt):
-            st(parts_cur, j * nsub + sb, mb_part(x, dd, idx, Int(start), dlv, lv, j, sb, Int(bs), sub))
-    witness_end(wf, woff, nonce)
 
 
 # lane/idn-sgd-multiblock: the fit's finiteness check on the device
