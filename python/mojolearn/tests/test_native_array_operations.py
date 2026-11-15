@@ -174,7 +174,9 @@ def test_protocol_methods_are_c_properties_over_the_native_entry():
 
 def test_helpers_are_connected_once():
     helpers = _array._ARRAY_CONTEXT['helpers']
-    assert set(helpers) == {'cast_elements', 'reduce_stat', 'strided_copy_bytes', 'equal_elements'}
+    # b58b2109ce added the base helper table key the native operations read.
+    assert set(helpers) == {'cast_elements', 'reduce_stat', 'strided_copy_bytes', 'equal_elements',
+                            'base_native_key'}
     assert _array._ARRAY_CONTEXT['entry'] is _array._ARRAY_NATIVE
     assert isinstance(array.array('B'), _array._ARRAY_CONTEXT['array_type'])
 
