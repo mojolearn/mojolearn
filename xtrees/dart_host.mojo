@@ -12,7 +12,6 @@ so the Python glue takes `_boost_loop_device` on both columns.
 
 Serial loops on purpose: this column is a verification digest and a
 CPU-only install's fit; it is never timed."""
-from gbdt.trees_identical_switches import T30
 from xtrees.ops import stream_base, draw
 from xtrees.dart_units import (
     IDN_DART_DEVICE, DART_CHUNK, F32P, I32P, I64P, U16P, dart_init_unit, dart_drop_unit, dart_row_unit,
@@ -87,7 +86,7 @@ struct DartHostSession(Movable):
         self.h = List[Float32](length=k * n, fill=0.0)
         self.nodes = List[UInt16](length=cap_iters * k * n, fill=0)
         self.values = List[Float32](length=cap_iters * k * node_cap, fill=0.0)
-        self.cached = List[Float32](length=cap_iters * k * n if T30 else 0, fill=0.0)
+        self.cached = List[Float32](length=0, fill=0.0)
         self.flags = List[Int32](length=cap_iters, fill=0)
         self.bad = List[Int32](length=1, fill=0)
         self.part = List[Float32](length=n_chunks * node_cap * 2, fill=0.0)

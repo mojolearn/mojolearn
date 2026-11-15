@@ -90,7 +90,7 @@ comptime T25 = False
 # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
 # TOMBSTONE: MOJOLEARN_TREES_T30 (DELETE-ARM, opt-in, no A/B recorded, rule a) deleted 2026-11-15 by lane/expdel2-45-trees; code recoverable at b0f082dd3e.
 # Restore: git apply experiments/removed/MOJOLEARN_TREES_T30.patch
-comptime T30 = False
+# (Sweep 2026-11-15: T30 removed; the DART cached-value launches and branches folded to the reference kernels.)
 
 # Independent sub-arms preserve the incumbent when omitted.
 # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.

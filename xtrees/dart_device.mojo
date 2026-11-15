@@ -44,7 +44,6 @@ gathered sum per row instead of one add per tree. The drop set, the shrink
 factors and the tree shapes are main's."""
 from max.gpu import block_idx, block_dim, grid_dim, thread_idx
 from std.sys.compile import is_defined
-from gbdt.trees_identical_switches import T30
 from std.sys import has_accelerator
 from max.gpu.host import DeviceBuffer, DeviceContext
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
@@ -406,10 +405,7 @@ def dart_open(
         var values = ctx.enqueue_create_buffer[DType.float32](n_trees * node_cap)
         # Fit-owned exact cache, released by dart_close; no mutable-input reuse.
         var cached: DeviceBuffer[DType.float32]
-        comptime if T30:
-            cached = ctx.enqueue_create_buffer[DType.float32](n_trees * n)
-        else:
-            cached = values.copy()  # not read by B; no extra allocation
+        cached = values.copy()  # not read by B; no extra allocation
         var coef = ctx.enqueue_create_buffer[DType.float32](n_trees)
         var thr = ctx.enqueue_create_buffer[DType.int64](cap_iters)
         var flags = ctx.enqueue_create_buffer[DType.int32](cap_iters)
@@ -483,24 +479,14 @@ def dart_step(
                 _i(reg[].sessions[idx].flags),
                 grid_dim=(_blocks(t), 1, 1), block_dim=(TPB, 1, 1),
             )
-        comptime if T30:
-            ctx.enqueue_function[dart_row_kernel](
-                Int64(n), Int64(n), Int32(k), Int32(t), Int32(reg[].sessions[idx].kind),
-                Int32(reg[].sessions[idx].node_cap), _i(reg[].sessions[idx].flags), _f(reg[].sessions[idx].coef),
-                _u16(reg[].sessions[idx].nodes), _f(reg[].sessions[idx].values), _f(reg[].sessions[idx].y),
-                _f(reg[].sessions[idx].score), _f(reg[].sessions[idx].dsum), _f(reg[].sessions[idx].target),
-                _f(reg[].sessions[idx].h), _f(reg[].sessions[idx].cached),
-                grid_dim=(_blocks((n + AFT_DART_ROWS - 1) // AFT_DART_ROWS), 1, 1), block_dim=(TPB, 1, 1),
-            )
-        else:
-            ctx.enqueue_function[dart_row_kernel_reference](
-                Int64(n), Int64(n), Int32(k), Int32(t), Int32(reg[].sessions[idx].kind),
-                Int32(reg[].sessions[idx].node_cap), _i(reg[].sessions[idx].flags), _f(reg[].sessions[idx].coef),
-                _u16(reg[].sessions[idx].nodes), _f(reg[].sessions[idx].values), _f(reg[].sessions[idx].y),
-                _f(reg[].sessions[idx].score), _f(reg[].sessions[idx].dsum), _f(reg[].sessions[idx].target),
-                _f(reg[].sessions[idx].h),
-                grid_dim=(_blocks((n + AFT_DART_ROWS - 1) // AFT_DART_ROWS), 1, 1), block_dim=(TPB, 1, 1),
-            )
+        ctx.enqueue_function[dart_row_kernel_reference](
+            Int64(n), Int64(n), Int32(k), Int32(t), Int32(reg[].sessions[idx].kind),
+            Int32(reg[].sessions[idx].node_cap), _i(reg[].sessions[idx].flags), _f(reg[].sessions[idx].coef),
+            _u16(reg[].sessions[idx].nodes), _f(reg[].sessions[idx].values), _f(reg[].sessions[idx].y),
+            _f(reg[].sessions[idx].score), _f(reg[].sessions[idx].dsum), _f(reg[].sessions[idx].target),
+            _f(reg[].sessions[idx].h),
+            grid_dim=(_blocks((n + AFT_DART_ROWS - 1) // AFT_DART_ROWS), 1, 1), block_dim=(TPB, 1, 1),
+        )
         if t > 0:
             var fsub = reg[].sessions[idx].flags.create_sub_buffer[DType.int32](0, t)
             ctx.enqueue_copy(dst_ptr=I32P(unsafe_from_address=flags_out), src_buf=fsub)
@@ -578,19 +564,11 @@ def dart_add(
             Float32(l1), Float32(mds), voff, _f(reg[].sessions[idx].values),
             grid_dim=(_blocks(n_nodes), 1, 1), block_dim=(TPB, 1, 1),
         )
-        comptime if T30:
-            ctx.enqueue_function[dart_add_kernel](
-                Int64(n), class_off, row_off, voff, Float32(factor), Float32(shrink), _u16(reg[].sessions[idx].nodes),
-                _f(reg[].sessions[idx].values), _f(reg[].sessions[idx].dsum), _f(reg[].sessions[idx].score),
-                _f(reg[].sessions[idx].cached),
-                grid_dim=(_blocks((n + AFT_DART_ADD_ROWS - 1) // AFT_DART_ADD_ROWS), 1, 1), block_dim=(TPB, 1, 1),
-            )
-        else:
-            ctx.enqueue_function[dart_add_kernel_reference](
-                Int64(n), class_off, row_off, voff, Float32(factor), Float32(shrink), _u16(reg[].sessions[idx].nodes),
-                _f(reg[].sessions[idx].values), _f(reg[].sessions[idx].dsum), _f(reg[].sessions[idx].score),
-                grid_dim=(_blocks((n + AFT_DART_ADD_ROWS - 1) // AFT_DART_ADD_ROWS), 1, 1), block_dim=(TPB, 1, 1),
-            )
+        ctx.enqueue_function[dart_add_kernel_reference](
+            Int64(n), class_off, row_off, voff, Float32(factor), Float32(shrink), _u16(reg[].sessions[idx].nodes),
+            _f(reg[].sessions[idx].values), _f(reg[].sessions[idx].dsum), _f(reg[].sessions[idx].score),
+            grid_dim=(_blocks((n + AFT_DART_ADD_ROWS - 1) // AFT_DART_ADD_ROWS), 1, 1), block_dim=(TPB, 1, 1),
+        )
         var vsub = reg[].sessions[idx].values.create_sub_buffer[DType.float32](j * node_cap, n_nodes)
         ctx.enqueue_copy(dst_ptr=F32P(unsafe_from_address=values_out), src_buf=vsub)
     else:
