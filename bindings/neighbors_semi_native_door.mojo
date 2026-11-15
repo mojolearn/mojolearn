@@ -26,6 +26,7 @@ from bindings.admitted_family_door import admit_family
 from bindings.admitted_input_unpack import admitted_finite_refuse
 from bindings.native_loaded_module_door import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_fields, py_setitem
+from bindings.py_cpython_table import cpython_table
 from bindings.classical_arrays_door import classical_address
 from bindings.classical_attributes_door import classical_connect_numpy
 from bindings.family_common_unpack import (
@@ -586,6 +587,15 @@ def _semi_row_normalize(binding: PythonObject, p: PythonObject, context: PythonO
     return out
 
 
+def _semi_class_at(classes: PythonObject, is_list: Bool, i: Int) raises -> PythonObject:
+    """`classes[i]`; a list (or list subclass) by the borrowed PyList_GetItem,
+    so no subclass `__getitem__` runs."""
+    if is_list:
+        var table = cpython_table()
+        return PythonObject(from_borrowed=table[].PyList_GetItem(classes._obj_ptr, i))
+    return classes[i]
+
+
 def _semi_class_array(classes: PythonObject, codes: PythonObject, context: PythonObject) raises -> PythonObject:
     """`_class_array`: int or bool classes decode as ints, real classes as
     floats, anything else as the labels themselves."""
@@ -595,8 +605,13 @@ def _semi_class_array(classes: PythonObject, codes: PythonObject, context: Pytho
     # The class tuples are built once per call, not twice per class.
     var int_kinds = Python.tuple(b.bool, b.int)
     var real_kinds = Python.tuple(b.int, b.float)
+    # A list `classes_` (the fit's ClassLabels, a list subclass) is read by
+    # PyList_GetItem: `classes[i]` ran ClassLabels.__getitem__, a Python frame
+    # per class twice per predict (census py-census-30, 2026-11-15). Its int
+    # index is list.__getitem__ itself, so the values are the same objects.
+    var is_list = family_isinstance(classes, b.list)
     for i in range(len(classes)):  # driver-loop: over the k class labels (type test)
-        var v = classes[i]
+        var v = _semi_class_at(classes, is_list, i)
         if all_int and not family_isinstance(v, int_kinds):
             all_int = False
         if all_real and not family_isinstance(v, real_kinds):
@@ -604,7 +619,7 @@ def _semi_class_array(classes: PythonObject, codes: PythonObject, context: Pytho
     if all_int or all_real:
         var values = Python.list()
         for i in range(len(classes)):  # driver-loop: over the k class values
-            _ = py_call(values.append, family_call(b.int if all_int else b.float, classes[i]))
+            _ = py_call(values.append, family_call(b.int if all_int else b.float, _semi_class_at(classes, is_list, i)))
         return classical_decode_labels(values, codes, context)
     return classical_decode_labels(classes, codes, context)
 
