@@ -28,7 +28,7 @@ def test_dbscan_native_requests_bypass_legacy_argument_list_entries(monkeypatch)
         calls.append(True)
         raise AssertionError("legacy DBSCAN entry was called")
 
-    binding = _backend.binding("_mojolearn_estimators", "identical")
+    binding = _backend.exact_host_module(_backend.binding("_mojolearn_estimators", "identical"))
     for name in ("dbscan_fit", "dbscan_fit_core", "dbscan_core_arrays", "labeled_reference_prepare", "labeled_reference_release", "labeled_reference_predict", "labeled_reference_predict_resident"):
         monkeypatch.setattr(binding, name, forbidden, raising=False)
     model = _model()
@@ -49,7 +49,7 @@ def test_dbscan_python_descriptor_factory_is_refused_before_call(operation, monk
         calls.append(True)
         raise AssertionError("Python DBSCAN descriptor factory was called")
 
-    binding = _backend.binding("_mojolearn_estimators", "identical")
+    binding = _backend.exact_host_module(_backend.binding("_mojolearn_estimators", "identical"))
     monkeypatch.setattr(binding, "dbscan_native_api_v1", forbidden)
     with pytest.raises(TypeError, match="compiled extension entry"):
         getattr(model, operation)(_x())
@@ -114,7 +114,7 @@ def test_dbscan_legacy_internal_query_keeps_its_direct_upload_route():
     model = _model().fit(_x())
     expected = np.asarray(model.predict(_x())).copy()
     model._resident_holder = None
-    binding = _backend.binding("_mojolearn_estimators", "identical")
+    binding = _backend.exact_host_module(_backend.binding("_mojolearn_estimators", "identical"))
     actual = density._NATIVE(model, "family_xc_dbscan_predict", (binding, _x()), density._NATIVE_CONTEXT)
     np.testing.assert_array_equal(np.asarray(actual), expected)
     assert model._resident_holder is None

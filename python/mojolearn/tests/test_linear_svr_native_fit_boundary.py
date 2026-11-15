@@ -5,6 +5,7 @@ import pickle
 import numpy as np
 import pytest
 
+from mojolearn import _backend
 from mojolearn.svm import LinearSVR
 
 __mojolearn_user_boundary__ = True
@@ -63,7 +64,7 @@ def test_linear_svr_native_factory_replacement_refuses_without_callback(monkeypa
         calls.append(True)
         raise AssertionError("Python QN provider invoked")
 
-    monkeypatch.setattr(model._bind(), "linear_svc_native_api_v1", forbidden)
+    monkeypatch.setattr(_backend.exact_host_module(model._bind()), "linear_svc_native_api_v1", forbidden)
     with pytest.raises(TypeError, match="compiled extension entry"):
         model.fit(_points(), [-1, 1] * 4)
     assert calls == []

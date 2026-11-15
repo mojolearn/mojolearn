@@ -5,6 +5,7 @@ import pickle
 import numpy as np
 import pytest
 
+from mojolearn import _backend
 from mojolearn import HDBSCAN
 from mojolearn import hdbscan as hd
 
@@ -78,7 +79,7 @@ def test_query_factory_replacement_cannot_execute_python(monkeypatch):
         raise AssertionError("Python HDBSCAN query factory executed")
 
     model = _model()
-    monkeypatch.setattr(model._bind(), "hdbscan_query_native_api_v1", forbidden)
+    monkeypatch.setattr(_backend.exact_host_module(model._bind()), "hdbscan_query_native_api_v1", forbidden)
     with pytest.raises(TypeError, match="compiled extension|compiled factory|native descriptor"):
         hd.approximate_predict(model, _points()[[1, 4]])
     assert calls == []

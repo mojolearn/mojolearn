@@ -5,6 +5,7 @@ import pickle
 import numpy as np
 import pytest
 
+from mojolearn import _backend
 from mojolearn.svm import LinearSVC, LinearSVR
 
 __mojolearn_user_boundary__ = True
@@ -106,7 +107,7 @@ def test_linear_svc_native_factory_refuses_python_replacement(operation, monkeyp
         calls.append(True)
         raise AssertionError("Python LinearSVC provider invoked")
 
-    monkeypatch.setattr(model._bind(), "linear_svc_native_api_v1", forbidden)
+    monkeypatch.setattr(_backend.exact_host_module(model._bind()), "linear_svc_native_api_v1", forbidden)
     with pytest.raises(TypeError, match="compiled extension entry"):
         if operation == "fit":
             model.fit(_points(), [-5, 9] * 4)
