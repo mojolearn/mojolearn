@@ -509,7 +509,7 @@ comptime FAST_REPLICATION_PIN_2040 = is_defined[
 # reorder pass to the consumer.
 #
 # OFF BY DEFAULT: the define is absent from every shipped build. Arm B
-# builds with `-D MOJOLEARN_2031_SYM_RIDX_SPLITS=1`. UNVERIFIED, RUN
+# builds with `-D MOJOLEARN_2031_SYM_RIDX_SPLITS=1` (define deleted 2026-11-15). UNVERIFIED, RUN
 # OWED -- A/B commands in archive/research/gbdt/UPSTREAM_SURVEY_2026-09.md and the PLAN
 # appendix; the gates that must hold under the define are
 # `check-fit-pointwise` (both searchers, one tree),
@@ -567,14 +567,12 @@ def ridx_schedule_pays(n_features: Int) -> Bool:
         return True
     return groups * (r - 1) <= r + 3
 
+# TOMBSTONE: MOJOLEARN_2031_SYM_RIDX_SPLITS (DELETE-ARM, opt-in arm off Apple, no A/B recorded, rule a) deleted 2026-11-15 by lane/expdel2-42-trees; code recoverable at 931e7ca76a.
+# Restore: git apply experiments/removed/MOJOLEARN_2031_SYM_RIDX_SPLITS.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_2031_SYM_RIDX_SPLITS_OFF (DELETE-OLD-PATH, Apple permuting reorder, no A/B recorded, rule b) deleted 2026-11-15 by lane/expdel2-42-trees; code recoverable at 931e7ca76a.
+# Restore: git apply experiments/removed/MOJOLEARN_2031_SYM_RIDX_SPLITS_OFF.patch; record in docs/TOMBSTONES.md.
 comptime SYM_RIDX_SPLITS_2031 = (
-    (
-        is_defined["MOJOLEARN_2031_SYM_RIDX_SPLITS"]()
-        or (
-            TARGET_COLUMN == COLUMN_APPLE
-            and not is_defined["MOJOLEARN_2031_SYM_RIDX_SPLITS_OFF"]()
-        )
-    )
+    TARGET_COLUMN == COLUMN_APPLE
     and ridx_only_splits_for[
         TARGET_COLUMN, HIST_BUILD_MODE == NUMERIC_IDENTICAL
     ]()
@@ -582,9 +580,7 @@ comptime SYM_RIDX_SPLITS_2031 = (
 """DEFAULT ON APPLE since trees-apple2 (2026-09-28), both modes (the
 `ridx_only_splits_for` row admits Apple IDENTICAL since the same lane):
 M4 Pro 1M rows FAST SymmetricTree taxi 919 -> 835 ms (0.909), the SAME
-model digest (steward 1790608403999). `-D
-MOJOLEARN_2031_SYM_RIDX_SPLITS_OFF` restores the permuting reorder on
-Apple; elsewhere the define above still opts in."""
+model digest (steward 1790608403999). Off on every other column."""
 
 # ================= DEVIATION BLOCK 2580 =================
 # QUANTIZE THE STATS ONCE PER LEVEL, NOT ONCE PER 4-FEATURE GROUP. Every
