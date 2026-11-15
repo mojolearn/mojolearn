@@ -6916,10 +6916,16 @@ def _(ml, X, yc, yr, Xh=None):
     for tag, labels, clf in (("strat", np.ascontiguousarray(yc[:n]).tolist(), True),
                              ("kfold", np.ascontiguousarray(yr[:n]).tolist(), False)):
         for splits in (3, 5):
-            # the runtime route (the core helpers, the sabotage control
-            # included; lane py-runtime-b moved the Python definition to
-            # mojolearn/tests/_fold_reference.py)
-            folds = [(a.tolist(), b.tolist()) for a, b in ms._default_fold_arrays(labels, splits, clf)]
+            # the product's route: cross_val_score's default folds for
+            # cv=None or an integer are bindings/msel_split_door.mojo
+            # `msel_default_folds` (the core fold helpers, the sabotage
+            # control included). f4d37e5eec deleted the Python
+            # `_default_fold_arrays` shim; verify calls the native owner's
+            # `family_msel_default_folds` operation, the same function
+            # msel_fold_source calls (the Python definition the fold tests
+            # hold it to stays mojolearn/tests/_fold_reference.py)
+            folds = [(a.tolist(), b.tolist()) for a, b in ms._NATIVE(
+                None, "family_msel_default_folds", (labels, splits, clf), ms._NATIVE_CONTEXT)]
             train = [np.asarray(a, dtype=np.int64) for a, _ in folds]
             test = [np.asarray(b, dtype=np.int64) for _, b in folds]
             parts[f"{tag}{splits}"] = _h(*(train + test))

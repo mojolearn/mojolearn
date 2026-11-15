@@ -12,9 +12,9 @@ same ops and the same order as the per-call `SambaStack.step` on a device
 build, so the bytes are the per-call step's.
 
 THE HOST ARM. On a host build (no published program entry) or the CPU inference
-model, the session steps the caller's own state through the per-call
-`samba_forward(step=True)`: there is nothing resident to hold. `sync_state`
-and `load_state` are then no-ops on a state that is always current.
+model, the session steps a session-owned copy of the caller's state
+(bindings/samba_decode_native_unpack.mojo, `_private`): `sync_state` copies it
+out to the caller's state, as the device arm's export does.
 """
 # The PACK half of the former `bindings/samba_decode_native.mojo` (fence-flip-2 split, 2026-11-12);
 # the UNPACK half is `bindings/samba_decode_native_unpack.mojo`.
@@ -38,6 +38,7 @@ from bindings.samba_admission_door import samba_admit_value
 from bindings.samba_decode_native_unpack import (
     _decode_release,
     _decode_require_open,
+    _samba_state_copy,
 )
 
 
@@ -48,6 +49,9 @@ def samba_decode_sync(session: PythonObject, context: PythonObject) raises -> Py
     var state = values["_state"]
     var handle = values["_handle"]
     if handle is None:
+        # The host arm: the session-owned state out to the caller's.
+        samba_admit_value(state, context["admission"])
+        _samba_state_copy(values["_model"], values["_private"], state, what)
         return state
     samba_admit_value(state, context["admission"])
     var model = values["_model"]

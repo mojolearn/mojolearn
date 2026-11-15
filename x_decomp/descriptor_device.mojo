@@ -57,12 +57,16 @@ def xd_iso_gather_min(d: Int, im: Int, sq: Int, q: Int, dc: Int, nn: Int, one: I
     # `_mode_of(col, rows)`: a q x 1 column against q x dc rows.
     var bmode = 0 if dc == 1 else 2
     var g = -1
+    # The uploaded index word: a native List held across the rank loop, not an
+    # Array per rank (an Array local whose address escapes only as an Int is not
+    # initialised for the callee in an optimized Mojo 1.2 build; smoke-triage C01).
+    var word = List[Float32](length=1, fill=Float32(0))
     for a in range(nn):  # driver-loop: over neighbor ranks (n_neighbors), one gather-and-min step each, all enqueued on the device
         var rows = pool_alloc(max(count, 1))
         _ = dev_move_run(d, im, rows, XD_MV_TAKE_ROWS, count, dc, 0, 0, nn, a, dn, count, imn)
         # mk_dev_gather(SQ, TAKE_COLS, [a]): the index word uploaded as an
         # exact float32, then the q x 1 column moved out.
-        var word = Array[Float32, 1](fill=Float32(Float64(a)))
+        word[0] = Float32(Float64(a))
         var di = pool_alloc(1)
         _ = dev_upload_run(di, F32Ptr(unsafe_from_address=Int(word.unsafe_ptr())), 1)
         _ = word[0]  # keep the index word alive through the synchronous upload

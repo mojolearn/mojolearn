@@ -676,8 +676,11 @@ def _rp_category_cell_equal(left: _RPArray, li: Int, right: _RPArray, ri: Int) r
     if (left.layout.kind == "f" and left.layout.item > 8) or (right.layout.kind == "f" and right.layout.item > 8) or (left.layout.kind == "c" and left.layout.item > 16) or (right.layout.kind == "c" and right.layout.item > 16):
         var components = 2 if left.layout.kind == "c" or right.layout.kind == "c" else 1
         for component in range(components):  # driver-loop: ordered numerical categories compare after exact native widening
-            var lbytes = Array[UInt8, 16](uninitialized=True)
-            var rbytes = Array[UInt8, 16](uninitialized=True)
+            # Native List storage, not Array (smoke-triage C01 pattern, reproduced on the Mac
+            # in an optimized Mojo 1.2 build): an Array whose address goes to a callee as an
+            # Int reads back its fill words afterwards (PyDict_Next looked empty).
+            var lbytes = List[UInt8](length=16, fill=UInt8(0))
+            var rbytes = List[UInt8](length=16, fill=UInt8(0))
             rp_widen(left.layout, la, Int(lbytes.unsafe_ptr()), component == 1, True)
             rp_widen(right.layout, ra, Int(rbytes.unsafe_ptr()), component == 1, True)
             var equal = True

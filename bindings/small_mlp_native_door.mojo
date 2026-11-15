@@ -26,7 +26,7 @@ from bindings.generation_buffers_door import GENERATION_BOUNDARY, generation_arr
 from bindings.py_balanced import py_call, py_contains, py_get, py_setitem, py_type
 from bindings.py_typed_call import py_call_typed
 from bindings.mode_metadata_native_door import _fields, _class_fields
-from bindings.native_loaded_module_door import NativeModules
+from bindings.native_loaded_module_door import NativeModules, native_interpreter_finalizing
 from bindings.native_class_admission_door import class_record, class_admit
 from bindings.native_buffer_owner_pack import native_storage_allocate, native_buffer_view
 from providers.python.lowbit_weight_pyapi_door import low_materialize, low_formats
@@ -1250,6 +1250,14 @@ def _small_fields(owner: PythonObject, required: PythonObject) raises -> PythonO
 def _owner_operation(operation: String, args: PythonObject) raises -> PythonObject:
     var b = SMALL_MLP_BOUNDARY.get_or_create_ptr()
     if operation == "owner_close":
+        # SmallMLPTrainer.__del__ during interpreter teardown (the mlp lanes
+        # and neural-trainer-unfused aborted after writing their JSON:
+        # "PyImport_GetModuleDict: interpreter has no modules dictionary",
+        # rc -6): the close reads loaded modules, which is fatal once the
+        # modules are cleared. The process is ending; nothing to release.
+        # Same rule as xcnn_native_pack and host_archive_lifetime_door.
+        if native_interpreter_finalizing():
+            return PythonObject(None)
         try:
             var fields = _small_fields(args[0], b[].trainer_cls)
             var handle = py_get(fields, "_handle")

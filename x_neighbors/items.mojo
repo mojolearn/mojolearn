@@ -471,7 +471,10 @@ def ocsvm_rho(g: FP, alpha: FP, cv: FP, n: Int) -> Float32:
     var pc = IP(unsafe_from_address=Int(pcl.unsafe_ptr()))
     for b in range(nb):
         ocsvm_rho_part_item(b, g, alpha, cv, pf, pc, n)
-    var info = Array[Float32, 1](fill=Float32(0))
+    # Native List, not Array: an Array local whose address escapes only as an Int is
+    # neither initialised for nor read back from the callee in an optimized Mojo 1.2
+    # build (reproduced on the Mac, smoke-triage C01 pattern).
+    var info = List[Float32](length=1, fill=Float32(0))
     var ip = FP(unsafe_from_address=Int(info.unsafe_ptr()))
     var stride = 1
     while True:

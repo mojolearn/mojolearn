@@ -28,7 +28,7 @@ from bindings.msel_public_metadata_pack import msel_splitter_repr, msel_scorer_r
 from bindings.msel_search_state_door import msel_search_fields, msel_search_plan, msel_search_initialize, msel_search_update
 from bindings.msel_split_door import (
     msel_split, msel_n_splits, msel_loo_at, msel_lpo_at, msel_logo_at, msel_lpgo_at, msel_check_cv,
-    msel_train_test_split, msel_truth, msel_flag_truth, msel_splitter_initialize,
+    msel_train_test_split, msel_truth, msel_flag_truth, msel_splitter_initialize, msel_default_folds,
 )
 
 
@@ -205,4 +205,12 @@ def msel_operation(model: PythonObject, operation: String, args: PythonObject,
         return msel_learning_curve(args, context)
     if operation == "family_msel_permutation_test_score":
         return msel_permutation_test_score(args, context)
+    if operation == "family_msel_default_folds":
+        # The default unshuffled folds cross_val_score / cross_validate take
+        # for cv=None or an integer (msel_fold_source), fold-order sabotage
+        # control included, without an estimator: (labels, n_splits,
+        # classifier). Verify's cross-val-folds lane hashes this exact route
+        # (tools/identity_break.py); last in the chain, so no public
+        # operation pays its comparison.
+        return msel_default_folds(args[0], args[1], msel_flag_truth(args[2], context), context)
     raise Error("RuntimeError: unknown model_selection operation " + operation)

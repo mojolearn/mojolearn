@@ -1412,7 +1412,10 @@ def lu_serial(a: F32Ptr, piv: I32Ptr, n: Int, info: F32Ptr):
     the trailing matrix takes step k's one fused multiply-add, steps in
     order; lane/algos-decomp 2026-09-28: one device thread took 7 s at 512)."""
     info.unsafe_store(0, Float32(0))
-    var scal = Array[Float32, 2](fill=Float32(0))
+    # Native List, not Array: an Array local whose address escapes only as an Int is
+    # neither initialised for nor read back from the callee in an optimized Mojo 1.2
+    # build (reproduced on the Mac, smoke-triage C01 pattern).
+    var scal = List[Float32](length=2, fill=Float32(0))
     var sp = F32Ptr(unsafe_from_address=Int(scal.unsafe_ptr()))
     for k in range(n):
         lu_pivot(a, piv, k, n)

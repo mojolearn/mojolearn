@@ -12,9 +12,14 @@ same ops and the same order as the per-call `SambaStack.step` on a device
 build, so the bytes are the per-call step's.
 
 THE HOST ARM. On a host build (no published program entry) or the CPU inference
-model, the session steps the caller's own state through the per-call
-`samba_forward(step=True)`: there is nothing resident to hold. `sync_state`
-and `load_state` are then no-ops on a state that is always current.
+model, the session steps a session-owned copy of the caller's state (`_private`,
+copied in at open) through the per-call `samba_forward(step=True)`, so it keeps
+the device arm's contract: `sync_state` copies the session's state out to the
+caller's, `load_state` copies the caller's state in, and the caller's state is
+not advanced between them. (Before lane cpu-native-crashes, 2026-11-15, the host
+arm stepped the caller's state itself and `load_state` could not discard the
+steps after a `sync_state`: smoke 91d5 samba-decode-session differed in 7585 of
+8192 bytes.)
 """
 from std.python import Python, PythonObject
 from std.memory import unsafe_memcpy
@@ -25,8 +30,9 @@ from bindings.causal_lm_public_door import _mutable, _writeback
 from bindings.samba_state_native_door import samba_fields, samba_entries, samba_entry_key
 from bindings.samba_inference_native_door import (
     _samba_inference_ids, samba_forward, samba_program_arm, samba_program_words, samba_program_open_owner,
-    samba_program_call, samba_state_words, samba_set_cursors,
+    samba_program_call, samba_state_words, samba_set_cursors, samba_allocate,
 )
+from training.samba_inference_run import _m3_shapes
 from core.samba_entry_table_programs import (
     SAMBA_PROGRAM_DECODE_STEP, SAMBA_PROGRAM_DECODE_TOKENS, SAMBA_PROGRAM_DECODE_EXPORT, SAMBA_PROGRAM_DECODE_LOAD,
 )
@@ -42,6 +48,54 @@ def _decode_mark(state: PythonObject, owner: PythonObject) raises:
     var layers = slots["layers"]
     for i in range(len(layers)):  # driver-loop: over the stack's layer state owners
         py_setitem(samba_fields(layers[i]), "_resident_session", owner)
+
+
+def _samba_state_counts(model: PythonObject, state: PythonObject) raises -> List[Int]:
+    """The float32 count of every piece `samba_state_words` lists, in its
+    order: k_cache and v_cache per attention layer, the ten Mamba-3 pieces
+    (`_m3_shapes`) per Mamba-3 layer."""
+    var fields = samba_fields(model)
+    var config = samba_fields(fields["config"])
+    var slots = samba_fields(state)
+    var b = Int(py=slots["batch_size"])
+    var smax = Int(py=slots["max_tokens"])
+    var layers = slots["layers"]
+    var blocks = fields["_blocks"]
+    var counts = List[Int]()
+    for i in range(len(config["layers"])):  # driver-loop: over the stack's layer state owners
+        if String(config["layers"][i]) == "attention":
+            var lslots = samba_fields(layers[i])
+            var n = b * Int(py=lslots["n_kv_heads"]) * smax * Int(py=lslots["head_dim"])
+            counts.append(n)
+            counts.append(n)
+        else:
+            var shapes = _m3_shapes(b, Int(py=samba_fields(blocks[i])["nheads"]))
+            for k in range(len(shapes)):  # driver-loop: over the fixed Mamba3 continuation buffer ABI
+                var n = 1
+                for j in range(len(shapes[k])):  # small-loop(piece rank)
+                    n *= shapes[k][j]
+                counts.append(n)
+    return counts^
+
+
+def _samba_state_copy(model: PythonObject, source: PythonObject, target: PythonObject, what: String) raises:
+    """Every piece and cursor of `source` into `target` (two states of the same
+    stack, rows and capacity): the host arm's open, sync_state and load_state."""
+    var keep = List[PythonObject]()
+    var copies = List[PythonObject]()
+    var src = samba_state_words(model, source, what, keep, copies)
+    var target_keep = List[PythonObject]()
+    var target_copies = List[PythonObject]()
+    var dst = samba_state_words(model, target, what, target_keep, target_copies)
+    var counts = _samba_state_counts(model, source)
+    for i in range(len(counts)):  # driver-loop: over the state's pieces (per layer)
+        unsafe_memcpy(dest=MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=dst[0][i]),
+                      src=MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=src[0][i]), count=counts[i])
+    _writeback(target_copies)
+    samba_set_cursors(model, target, src[1])
+    _ = keep^
+    _ = target_keep^
+    _ = copies^
 
 
 def samba_decode_init(session: PythonObject, model: PythonObject, state: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -100,6 +154,11 @@ def samba_decode_init(session: PythonObject, model: PythonObject, state: PythonO
         _ = keep^
         py_setitem(values, "_handle", handle)
         _decode_mark(state, PythonObject(True))
+    else:
+        # The host arm: a session-owned state, the caller's copied in.
+        var private = samba_allocate(model, PythonObject(b), PythonObject(smax), context)
+        _samba_state_copy(model, state, private, what)
+        py_setitem(values, "_private", private)
     py_setitem(values, "_open", PythonObject(True))
     return PythonObject(None)
 
@@ -122,8 +181,8 @@ def samba_decode_step(session: PythonObject, inputs: PythonObject, context: Pyth
     _decode_require_open(values, what)
     var handle = values["_handle"]
     if handle is None:
-        # The host arm: the per-call step on the caller's own state.
-        return samba_forward(values["_model"], inputs, values["_state"], PythonObject(None), True, context)
+        # The host arm: the per-call step on the session-owned state.
+        return samba_forward(values["_model"], inputs, values["_private"], PythonObject(None), True, context)
     var b = Int(py=values["_rows"])
     var v = Int(py=values["_vocab"])
     # The per-call step's own id admission: (B,) or (B, 1) native-endian
@@ -161,7 +220,7 @@ def samba_decode_tokens(session: PythonObject, inputs: PythonObject, context: Py
         raise Error(what + ": the session holds " + String(rows) + " rows, inputs has B = " + String(b))
     var output = generation_array([b, n, v])
     if handle is None:
-        # The host arm: the per-call step on the caller's own state, token by
+        # The host arm: the per-call step on the session-owned state, token by
         # token, with column t of the ids as the step's (B, 1) input.
         var src = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(py=ids._addr))
         var dst = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=output._addr))
@@ -170,7 +229,7 @@ def samba_decode_tokens(session: PythonObject, inputs: PythonObject, context: Py
             var col = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(py=column._addr))
             for r in range(b):  # driver-loop: over the batch rows, a host-arm copy of token t's id
                 col.unsafe_store(r, src.unsafe_load(r * n + t))
-            var logits = samba_forward(values["_model"], column, values["_state"], PythonObject(None), True, context)
+            var logits = samba_forward(values["_model"], column, values["_private"], PythonObject(None), True, context)
             var row = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=logits._addr))
             for r in range(b):  # driver-loop: over the batch rows, a host-arm copy of token t's logits
                 unsafe_memcpy(dest=dst + (r * n + t) * v, src=row + r * v, count=v)
@@ -193,6 +252,9 @@ def samba_decode_load(session: PythonObject, context: PythonObject) raises -> Py
     var state = values["_state"]
     var handle = values["_handle"]
     if handle is None:
+        # The host arm: the caller's state into the session-owned one.
+        samba_admit_value(state, context["admission"])
+        _samba_state_copy(values["_model"], state, values["_private"], what)
         return state
     samba_admit_value(state, context["admission"])
     var keep = List[PythonObject]()
@@ -207,6 +269,7 @@ def _decode_release(values: PythonObject) raises:
     if not Bool(py=py_get(values, "_open", PythonObject(False))):
         return
     py_setitem(values, "_open", PythonObject(False))
+    py_setitem(values, "_private", PythonObject(None))
     var handle = py_get(values, "_handle")
     py_setitem(values, "_handle", PythonObject(None))
     var state = py_get(values, "_state")
