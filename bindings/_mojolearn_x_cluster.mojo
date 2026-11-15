@@ -141,7 +141,7 @@ def resident_query_binding(
 
 def mbk_devscan_binding() raises -> PythonObject:
     """1 when MiniBatchKMeans' NaN/inf scan runs in this binding
-    (FAST + Apple default, rollback -D MOJOLEARN_MBK_FAST_DEVSCAN_OFF, x_cluster/minibatch_ptr.mojo), else 0."""
+    (FAST + Apple default, x_cluster/minibatch_ptr.mojo), else 0."""
     return PythonObject(1 if MBK_DEVSCAN_ANY else 0)
 
 

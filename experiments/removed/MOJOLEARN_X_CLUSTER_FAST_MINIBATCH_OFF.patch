@@ -1,0 +1,60 @@
+diff --git a/x_cluster/device_ops.mojo b/x_cluster/device_ops.mojo
+index d95ac77f97..0269a25338 100644
+--- a/x_cluster/device_ops.mojo
++++ b/x_cluster/device_ops.mojo
+@@ -2718,8 +2718,8 @@ struct DeviceOps(ClusterOps):
+         mut steps_done: Int, tol: Float64, cum_w: List[Float64],
+     ) raises -> Bool:
+         # lane/apple-fast-cluster (2026-10-02), FAST on Apple only, ON by
+-        # default (MINIBATCH_FAST_DEV); the driver (x_cluster/minibatch.mojo) asks
+-        # under the same flag
++        # default (MINIBATCH_FAST_DEV; `-D MOJOLEARN_X_CLUSTER_FAST_MINIBATCH_OFF=1`
++        # turns it off); the driver (x_cluster/minibatch.mojo) asks under the same flag
+         comptime if MINIBATCH_FAST_DEV:
+             self._ph0()
+             var took = minibatch_fast_steps(
+diff --git a/x_cluster/minibatch.mojo b/x_cluster/minibatch.mojo
+index f79b496ca2..b61bd4469b 100644
+--- a/x_cluster/minibatch.mojo
++++ b/x_cluster/minibatch.mojo
+@@ -330,7 +330,8 @@ def minibatch_fit[O: ClusterOps](
+     var wslot = ops.zeros(k)
+     ops.set(cslot, c)
+     var steps_done = 0
+-    # lane/apple-fast-cluster (2026-10-02), FAST on Apple, ON by default (see
++    # lane/apple-fast-cluster (2026-10-02), FAST on Apple, ON by default
++    # (`-D MOJOLEARN_X_CLUSTER_FAST_MINIBATCH_OFF=1` turns it off; see
+     # x_cluster/minibatch_fast.mojo for the M3 A/B): MINIBATCH_FAST_DEV runs the
+     # steps resident on the device (x_cluster/minibatch_fast.mojo: no upload,
+     # read-back or host center fold per step; the loop below pays all three
+diff --git a/x_cluster/minibatch_fast.mojo b/x_cluster/minibatch_fast.mojo
+index 1e337c6a31..0532217313 100644
+--- a/x_cluster/minibatch_fast.mojo
++++ b/x_cluster/minibatch_fast.mojo
+@@ -3,8 +3,9 @@
+ """MiniBatchKMeans, FAST on Apple: the mini-batch steps resident on the
+ device (lane/apple-fast-cluster, 2026-10-02). Switch: `MINIBATCH_FAST_DEV`
+ below, taken by `x_cluster/minibatch.mojo` `minibatch_fit`: on by default
+-in FAST on Apple (the old `-D MOJOLEARN_X_CLUSTER_FAST_MINIBATCH=1` is
+-harmless). No build reads the environment.
++in FAST on Apple; `-D MOJOLEARN_X_CLUSTER_FAST_MINIBATCH_OFF=1` turns it
++off (the old `-D MOJOLEARN_X_CLUSTER_FAST_MINIBATCH=1` is harmless). No
++build reads the environment.
+ 
+ Cause: `minibatch_fit`'s step loop (x_cluster/minibatch.mojo, `for step in
+ range(n_steps)`) gathers the batch on the host, uploads it (`ops.set`),
+@@ -51,9 +52,11 @@ from checks.soft_f64 import sf64_from_int, sf64_lt, sf64_mul
+ 
+ # Default in FAST on Apple since the M3 A/B (lane/apple-fast-cluster aaef7b261,
+ # n=1, Istella): minibatch-kmeans 388 -> 352 ms, silhouette .1167 -> .1182.
+-# TOMBSTONE: MOJOLEARN_X_CLUSTER_FAST_MINIBATCH_OFF (old path, superseded by the FAST+Apple default) deleted 2026-11-15 by lane/expdel-01-cluster; code recoverable at 336732d51d.
+-# Restore: git apply experiments/removed/MOJOLEARN_X_CLUSTER_FAST_MINIBATCH_OFF.patch; record in docs/TOMBSTONES.md.
+-comptime MINIBATCH_FAST_DEV = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
++# `-D MOJOLEARN_X_CLUSTER_FAST_MINIBATCH_OFF=1` turns it off.
++comptime MINIBATCH_FAST_DEV = (
++    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
++    and not is_defined["MOJOLEARN_X_CLUSTER_FAST_MINIBATCH_OFF"]()
++)
+ # AFCL-G07: NEVER RUN — PENDING MEASUREMENT; uncompiled and unverified.
+ # Four Apple SIMD groups per block reduce the register/shared footprint and
+ # increase independent assignment blocks. Keep the center chunk equal to

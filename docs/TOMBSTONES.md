@@ -701,6 +701,26 @@ Deletions reversed by new evidence. The code is back on main; the section and th
 | [GaussianMixture Python entries gmm_fit, gmm_fit_predict and the four scoring entries (native entries)](#dead-native-entries-gaussianmixture-python-entries-2026-11-11) | Mixture (GPU, host and inference-only host bindings) | removed (dead native entries: no live caller) | 2026-11-11 | [dead_entries_gmm_python.patch](../experiments/removed/dead_entries_gmm_python.patch) |
 | [TREES_LEGACY_PYTHON_ENTRIES: 36 rf/et Python fit registrations (rowmajor, weighted, shard and shard-export forms) (native entries)](#dead-native-entries-trees-legacy-python-entries-2026-11-12) | Forests (rf, rf host, trees, trees host bindings) | removed (dead native entries: no live caller) | 2026-11-12 | [TREES_LEGACY_PYTHON_ENTRIES.patch](../experiments/removed/TREES_LEGACY_PYTHON_ENTRIES.patch) |
 | [LABELS_NATIVE_API_V1_V2: the labels_native_api_v1 / v2 provider publications (native entries)](#dead-native-entries-labels-provider-v1-and-v2-2026-11-12) | Labels (base GPU and core host bindings) | removed (dead native entries: no live caller) | 2026-11-12 | [LABELS_NATIVE_API_V1_V2.patch](../experiments/removed/LABELS_NATIVE_API_V1_V2.patch) |
+| [`MOJOLEARN_ANN_FAST_KNN_BIGD_OFF`](#mojolearn_ann_fast_knn_bigd_off-old-path-deleted-2026-11-15) | ANN (k-NN graph for CAGRA build / t-SNE, FAST Apple) | removed (old path; FAST+Apple default KEPT 8d43ec357) | 2026-11-15 | [MOJOLEARN_ANN_FAST_KNN_BIGD_OFF.patch](../experiments/removed/MOJOLEARN_ANN_FAST_KNN_BIGD_OFF.patch) |
+| [`MOJOLEARN_IVFPQ_FAST_DEVICE_CODEBOOKS_OFF`](#mojolearn_ivfpq_fast_device_codebooks_off-old-path-deleted-2026-11-15) | ANN (IVF-PQ build codebooks, FAST Apple) | removed (old path; FAST+Apple default KEPT 8d43ec357) | 2026-11-15 | [MOJOLEARN_IVFPQ_FAST_DEVICE_CODEBOOKS_OFF.patch](../experiments/removed/MOJOLEARN_IVFPQ_FAST_DEVICE_CODEBOOKS_OFF.patch) |
+| [`MOJOLEARN_CAGRA_FAST_IVFG_EXACTD_OFF`](#mojolearn_cagra_fast_ivfg_exactd_off-old-path-deleted-2026-11-15) | ANN (CAGRA IVFG graph tile, FAST Apple) | removed (old path; FAST+Apple default KEPT 3852df59b) | 2026-11-15 | [MOJOLEARN_CAGRA_FAST_IVFG_EXACTD_OFF.patch](../experiments/removed/MOJOLEARN_CAGRA_FAST_IVFG_EXACTD_OFF.patch) |
+| [`MOJOLEARN_CAGRA_FAST_IVFG_LOWD_SEEDS4_OFF`](#mojolearn_cagra_fast_ivfg_lowd_seeds4_off-old-path-deleted-2026-11-15) | ANN (CAGRA low-d graph + 4x seeds, FAST Apple) | removed (old path; FAST+Apple DEFAULT, w2-cagra-lowds4-q PASS) | 2026-11-15 | [MOJOLEARN_CAGRA_FAST_IVFG_LOWD_SEEDS4_OFF.patch](../experiments/removed/MOJOLEARN_CAGRA_FAST_IVFG_LOWD_SEEDS4_OFF.patch) |
+| [`MOJOLEARN_CAGRA_FAST_IVFG_OFF`](#mojolearn_cagra_fast_ivfg_off-old-path-deleted-2026-11-15) | ANN (CAGRA build graph, FAST Apple) | removed (old path; FAST+Apple default KEPT 3852df59b) | 2026-11-15 | [MOJOLEARN_CAGRA_FAST_IVFG_OFF.patch](../experiments/removed/MOJOLEARN_CAGRA_FAST_IVFG_OFF.patch) |
+| [`MOJOLEARN_AP_EXACT`](#mojolearn_ap_exact-loser-deleted-2026-11-15) | Cluster (AffinityPropagation, FAST opt-in) | removed (SUPERSEDED: its steps are in every build) | 2026-11-15 | [MOJOLEARN_AP_EXACT.patch](../experiments/removed/MOJOLEARN_AP_EXACT.patch) |
+| [`MOJOLEARN_BISECT_FAST_ZEROCOPY_OFF`](#mojolearn_bisect_fast_zerocopy_off-old-path-deleted-2026-11-15) | Cluster (BisectingKMeans, FAST Apple) | removed (old path; FAST+Apple default KEPT) | 2026-11-15 | [MOJOLEARN_BISECT_FAST_ZEROCOPY_OFF.patch](../experiments/removed/MOJOLEARN_BISECT_FAST_ZEROCOPY_OFF.patch) |
+| [`MOJOLEARN_MBK_FAST_DEVSCAN_OFF`](#mojolearn_mbk_fast_devscan_off-old-path-deleted-2026-11-15) | Cluster (MiniBatchKMeans NaN/inf scan, FAST Apple) | removed (old path; FAST+Apple default KEEP, rab15-mbkdevscan) | 2026-11-15 | [MOJOLEARN_MBK_FAST_DEVSCAN_OFF.patch](../experiments/removed/MOJOLEARN_MBK_FAST_DEVSCAN_OFF.patch) |
+| [`MOJOLEARN_X_CLUSTER_FAST_CLS3_MBK_ROWGRP_OFF`](#mojolearn_x_cluster_fast_cls3_mbk_rowgrp_off-old-path-deleted-2026-11-15) | Cluster (MiniBatchKMeans batch assignment, FAST Apple) | removed (old path; FAST+Apple default KEPT) | 2026-11-15 | [MOJOLEARN_X_CLUSTER_FAST_CLS3_MBK_ROWGRP_OFF.patch](../experiments/removed/MOJOLEARN_X_CLUSTER_FAST_CLS3_MBK_ROWGRP_OFF.patch) |
+| [`MOJOLEARN_X_CLUSTER_FAST_MINIBATCH_OFF`](#mojolearn_x_cluster_fast_minibatch_off-old-path-deleted-2026-11-15) | Cluster (MiniBatchKMeans resident steps, FAST Apple) | removed (old path; FAST+Apple default KEPT 4b1311c12) | 2026-11-15 | [MOJOLEARN_X_CLUSTER_FAST_MINIBATCH_OFF.patch](../experiments/removed/MOJOLEARN_X_CLUSTER_FAST_MINIBATCH_OFF.patch) |
+| [`MOJOLEARN_X_CLUSTER_FAST_MEANSHIFT_OFF`](#mojolearn_x_cluster_fast_meanshift_off-old-path-deleted-2026-11-15) | Cluster (MeanShift shift grid, FAST Apple) | removed (old path; FAST+Apple default KEPT 4b1311c12) | 2026-11-15 | [MOJOLEARN_X_CLUSTER_FAST_MEANSHIFT_OFF.patch](../experiments/removed/MOJOLEARN_X_CLUSTER_FAST_MEANSHIFT_OFF.patch) |
+| [`MOJOLEARN_XN_FAST_ACHI2_DEVSCAN_OFF`](#mojolearn_xn_fast_achi2_devscan_off-old-path-deleted-2026-11-15) | Neighbors (AdditiveChi2Sampler fit negative check, FAST Apple) | removed (old path; FAST+Apple DEFAULT, w2-w3kf-xn-q PASS) | 2026-11-15 | [MOJOLEARN_XN_FAST_ACHI2_DEVSCAN_OFF.patch](../experiments/removed/MOJOLEARN_XN_FAST_ACHI2_DEVSCAN_OFF.patch) |
+| [`MOJOLEARN_XN_FAST_SCHI2_MOJO_MT_OFF`](#mojolearn_xn_fast_schi2_mojo_mt_off-old-path-deleted-2026-11-15) | Neighbors (SkewedChi2Sampler fit draws, FAST Apple) | removed (old path; FAST+Apple DEFAULT, w2-kfeat-xn-q-r1 PASS) | 2026-11-15 | [MOJOLEARN_XN_FAST_SCHI2_MOJO_MT_OFF.patch](../experiments/removed/MOJOLEARN_XN_FAST_SCHI2_MOJO_MT_OFF.patch) |
+| [`MOJOLEARN_XN_FAST_SCHI2_LAZYW_OFF`](#mojolearn_xn_fast_schi2_lazyw_off-old-path-deleted-2026-11-15) | Neighbors (SkewedChi2Sampler lazy weights, FAST Apple) | removed (old path; FAST+Apple DEFAULT, w2-w3kf-xn-q PASS) | 2026-11-15 | [MOJOLEARN_XN_FAST_SCHI2_LAZYW_OFF.patch](../experiments/removed/MOJOLEARN_XN_FAST_SCHI2_LAZYW_OFF.patch) |
+| [`MOJOLEARN_XN_FAST_CLS2_OCSVM_RES_OFF`](#mojolearn_xn_fast_cls2_ocsvm_res_off-old-path-deleted-2026-11-15) | Neighbors (OneClassSVM resident Gram, FAST Apple) | removed (old path; FAST+Apple default KEPT 417ba1ded) | 2026-11-15 | [MOJOLEARN_XN_FAST_CLS2_OCSVM_RES_OFF.patch](../experiments/removed/MOJOLEARN_XN_FAST_CLS2_OCSVM_RES_OFF.patch) |
+| [`MOJOLEARN_SVGP_FAST_RBFTILE_OFF`](#mojolearn_svgp_fast_rbftile_off-old-path-deleted-2026-11-15) | Neighbors (SVGP scaled rbf, FAST Apple) | removed (old path; FAST+Apple DEFAULT, w2-svgp-rbftile-q PASS) | 2026-11-15 | [MOJOLEARN_SVGP_FAST_RBFTILE_OFF.patch](../experiments/removed/MOJOLEARN_SVGP_FAST_RBFTILE_OFF.patch) |
+| [`MOJOLEARN_SVGP_FAST_BLKCHOL_OFF`](#mojolearn_svgp_fast_blkchol_off-old-path-deleted-2026-11-15) | Neighbors (SVGP float-float Cholesky, FAST Apple) | removed (old path; FAST+Apple DEFAULT, w2-svgp-blkchol-q PASS) | 2026-11-15 | [MOJOLEARN_SVGP_FAST_BLKCHOL_OFF.patch](../experiments/removed/MOJOLEARN_SVGP_FAST_BLKCHOL_OFF.patch) |
+| [`MOJOLEARN_SVGP_FAST_SYMTILE_OFF`](#mojolearn_svgp_fast_symtile_off-old-path-deleted-2026-11-15) | Neighbors (SVGP B = Kuf Kfu upper tiles, FAST Apple + IDENTICAL) | removed (old path; FAST+Apple default KEPT; IDENTICAL keeps MOJOLEARN_IDN_GATES_OFF) | 2026-11-15 | [MOJOLEARN_SVGP_FAST_SYMTILE_OFF.patch](../experiments/removed/MOJOLEARN_SVGP_FAST_SYMTILE_OFF.patch) |
+| [`MOJOLEARN_SVGP_FAST_COLSPLIT_OFF`](#mojolearn_svgp_fast_colsplit_off-old-path-deleted-2026-11-15) | Neighbors (SVGP column phase solves, FAST Apple + IDENTICAL) | removed (old path; FAST+Apple default KEPT; IDENTICAL keeps MOJOLEARN_IDN_GATES_OFF) | 2026-11-15 | [MOJOLEARN_SVGP_FAST_COLSPLIT_OFF.patch](../experiments/removed/MOJOLEARN_SVGP_FAST_COLSPLIT_OFF.patch) |
+| [`MOJOLEARN_SVGP_FAST_BSPLIT_OFF`](#mojolearn_svgp_fast_bsplit_off-old-path-deleted-2026-11-15) | Neighbors (SVGP B and b row-slice partials, FAST Apple) | removed (old path; FAST+Apple default KEEP, rab19-svgpbsplit) | 2026-11-15 | [MOJOLEARN_SVGP_FAST_BSPLIT_OFF.patch](../experiments/removed/MOJOLEARN_SVGP_FAST_BSPLIT_OFF.patch) |
 
 ## Trees
 
@@ -6123,3 +6143,162 @@ bits change on any vendor or the host column, no board row needs re-timing.
 - Files the patch restores: `xtrees/agnostic_device.mojo`
 - Guard refusal: core/experiment_guards_trees.mojo (lane expdel-05-trees block). No `grid_controls` entry named it.
 - EXPERIMENTS.md rows: 691, 692; appended row in the "Lane expdel-05-trees" section.
+## MOJOLEARN_ANN_FAST_KNN_BIGD_OFF: old path deleted (2026-11-15)
+
+- **What it was**: the FAST+Apple rollback to the untiled k-NN cell for rows wider than 64 features (`x_ann/fast_env.mojo` FAST_KNN_BIGD, read in `x_ann/knn_device.mojo` `knn_enqueue`). Only the define read is deleted: the untiled cell is the IDENTICAL path and stays.
+- **Verdict**: the tiled arm won (EXPERIMENTS.md `ANN_FAST_KNN_BIGD`, KEPT 8d43ec357): M3 one run per arm, CAGRA istella 173,188 -> 21,240 ms, recall .9838 unchanged (FAST Apple; no NVIDIA/AMD vote in `fast`). No bit change on any column.
+- **Deleted by**: lane/expdel-01-cluster (expdel-01-cluster, docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md); code recoverable at `54b6a264fc`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_ANN_FAST_KNN_BIGD_OFF.patch`, then delete the `MOJOLEARN_ANN_FAST_KNN_BIGD_OFF` refusal in `core/experiment_guards_cluster.mojo`.
+- **Records**: refusal in `core/experiment_guards_cluster.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel-01-cluster section).
+
+## MOJOLEARN_IVFPQ_FAST_DEVICE_CODEBOOKS_OFF: old path deleted (2026-11-15)
+
+- **What it was**: the FAST+Apple rollback to the per-subspace host codebook fits in the IVF-PQ build (`x_ann/fast_env.mojo` FAST_IVFPQ_DEVICE_CODEBOOKS, read in `x_ann/ivf_pq_device.mojo`). Only the define read is deleted: the host codebooks stay the path outside FAST+Apple (IDENTICAL has its own `IDN_PQ_DEVICE_CODEBOOKS`).
+- **Verdict**: the device codebooks won (EXPERIMENTS.md `IVFPQ_FAST_DEVICE_CODEBOOKS`, KEPT 8d43ec357): M3 istella IVF-PQ 6,049 -> 2,503 ms, IVF-refine 6,032 -> 2,507, IVF-filter 6,050 -> 2,517, recall up. No bit change on any column.
+- **Deleted by**: lane/expdel-01-cluster (expdel-01-cluster, docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md); code recoverable at `577b878c96`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_IVFPQ_FAST_DEVICE_CODEBOOKS_OFF.patch`, then delete the `MOJOLEARN_IVFPQ_FAST_DEVICE_CODEBOOKS_OFF` refusal in `core/experiment_guards_cluster.mojo`.
+- **Records**: refusal in `core/experiment_guards_cluster.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel-01-cluster section).
+
+## MOJOLEARN_CAGRA_FAST_IVFG_EXACTD_OFF: old path deleted (2026-11-15)
+
+- **What it was**: the FAST+Apple rollback of the CAGRA IVFG graph tile to the expanded form norms - 2 dot (`x_ann/fast_env.mojo` CAGRA_FAST_IVFG_EXACTD). Deleted with it: the `EXACTD` parameter of `cg_ivfg_kernel` / `cg_ivfg_enqueue` (`x_ann/cagra_fast_knn.mojo`; the kernel always takes the difference-form tile), the kernel's `xn` argument and the `xsn` row-norm buffer plus its `_norms` launch, which only the expanded form read. `_dt_tile`'s expanded form stays (`cg_dot_knn_kernel` uses it for the Lloyd and probe k-NN).
+- **Verdict**: EXACTD won as part of the IVFG + EXACTD + SEEDS + ITERS bundle (EXPERIMENTS.md, KEPT 3852df59b): M3 one run per arm, CAGRA istella 21,239 -> 1,254.3 ms, recall .9838 -> .9972; the expanded form alone lost recall (.9595 at 16 probes, .9597 at 32: float32 cancellation on Istella's wide-range features). FAST Apple only; no bit change on any column (the default always took EXACTD).
+- **Deleted by**: lane/expdel-01-cluster (expdel-01-cluster, docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md); code recoverable at `71c8454b4f`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_CAGRA_FAST_IVFG_EXACTD_OFF.patch`, then delete the `MOJOLEARN_CAGRA_FAST_IVFG_EXACTD_OFF` refusal in `core/experiment_guards_cluster.mojo`.
+- **Records**: refusal in `core/experiment_guards_cluster.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel-01-cluster section).
+
+## MOJOLEARN_CAGRA_FAST_IVFG_LOWD_SEEDS4_OFF: old path deleted (2026-11-15)
+
+- **What it was**: the FAST+Apple rollback to the exact k-NN graph for rows of 64 features or fewer and the 1x search seeds (`x_ann/fast_env.mojo` _CAGRA_LOWD_SEEDS4, CAGRA_FAST_IVFG_LOWD; `x_ann/cagra_device.mojo` `cagra_knn_enqueue`'s `d > 64 or CAGRA_FAST_IVFG_LOWD` test). Deleted with it: the CAGRA_FAST_IVFG_LOWD alias and the width test (IVFG is tried at every width wherever IVFG is on), and `tools/cagra_lowd_pair.py`, the A/B pair driver that only built this `_OFF` arm (tools are outside the patch; recoverable at the sha below). The exact graph stays the path outside FAST+Apple and IVFG's own refusals.
+- **Verdict**: DEFAULT (FAST+Apple) since EXPERIMENTS.md `CAGRA_FAST_IVFG_LOWD_SEEDS4`: M3 one run per arm, cagra taxi build 2,879.2 -> 714.9 ms (faiss-cpu 1,015.6), w2-cagra-lowds4-q PASS (recall@10 B >= A on taxi and istella). No bit change on any column.
+- **Deleted by**: lane/expdel-01-cluster (expdel-01-cluster, docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md); code recoverable at `b26ab50a56`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_CAGRA_FAST_IVFG_LOWD_SEEDS4_OFF.patch`, then delete the `MOJOLEARN_CAGRA_FAST_IVFG_LOWD_SEEDS4_OFF` refusal in `core/experiment_guards_cluster.mojo`.
+- **Records**: refusal in `core/experiment_guards_cluster.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel-01-cluster section).
+
+## MOJOLEARN_CAGRA_FAST_IVFG_OFF: old path deleted (2026-11-15)
+
+- **What it was**: the FAST+Apple rollback of the CAGRA build's intermediate graph from IVFG (approximate, device k-means lists) to the exact k-NN graph (`x_ann/fast_env.mojo` CAGRA_FAST_IVFG, read in `x_ann/cagra_device.mojo` `cagra_knn_enqueue`). Only the define read is deleted: the exact graph stays the IDENTICAL path and IVFG's fallback (small n or a short probe pool).
+- **Verdict**: KEPT 3852df59b (EXPERIMENTS.md `CAGRA_FAST_IVFG + IVFG_EXACTD + SEEDS + ITERS`): M3 one run per arm, cagra istella 21,239 -> 1,254.3 ms, recall .9838 -> .9972. No bit change on any column.
+- **Deleted by**: lane/expdel-01-cluster (expdel-01-cluster, docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md); code recoverable at `2f74cb72ed`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_CAGRA_FAST_IVFG_OFF.patch`, then delete the `MOJOLEARN_CAGRA_FAST_IVFG_OFF` refusal in `core/experiment_guards_cluster.mojo`.
+- **Records**: refusal in `core/experiment_guards_cluster.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel-01-cluster section).
+
+## MOJOLEARN_AP_EXACT: loser deleted (2026-11-15)
+
+- **What it was**: lane cluster-apple3's FAST opt-in for AffinityPropagation: the radix median, the device diagonals and the early-stopping equality scan (`x_cluster/affinity.mojo` AP_EXACT, read by nothing since lane cgr2-cluster made every build take them) and the FAST arm of `AP_R_TOP2` (`x_cluster/device_ops.mojo`: the one-walk top-2 responsibility kernel in FAST). Deleted: the unused alias and the FAST arm; `_ap_r_top2_kernel` stays (IDENTICAL default `IDN_AP_R_TOP2`), FAST keeps its default two walks.
+- **Verdict**: SUPERSEDED (EXPERIMENTS.md `AP_EXACT`, reconciled 2026-10-05): affinity-prop istella -4% (LEDGER 2026-10-03), the steps taken by every build, the define changes nothing. Default-off arm: no bit change on any column.
+- **Deleted by**: lane/expdel-01-cluster (expdel-01-cluster, docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md); code recoverable at `854fde92db`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_AP_EXACT.patch`, then delete the `MOJOLEARN_AP_EXACT` refusal in `core/experiment_guards_cluster.mojo`.
+- **Records**: refusal in `core/experiment_guards_cluster.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel-01-cluster section).
+
+## MOJOLEARN_BISECT_FAST_ZEROCOPY_OFF: old path deleted (2026-11-15)
+
+- **What it was**: the FAST+Apple rollback of BisectingKMeans from the zero-copy device-centered entry (`x_cluster/bisect_fast.mojo` BISECT_FAST_ZEROCOPY, taken in `x_cluster/device_execution.mojo`) to the generic copied-list fit. Only the define read is deleted: the generic fit stays the path outside FAST+Apple.
+- **Verdict**: KEPT, FAST+Apple default (EXPERIMENTS.md `BISECT_FAST_ZEROCOPY`, clus3-bisect-zc-istella): M3 n=1, bisecting-kmeans istella 2,033 -> 848 ms (-58.3%), silhouette .1183 identical. No bit change on any column.
+- **Deleted by**: lane/expdel-01-cluster (expdel-01-cluster, docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md); code recoverable at `a8d747b743`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_BISECT_FAST_ZEROCOPY_OFF.patch`, then delete the `MOJOLEARN_BISECT_FAST_ZEROCOPY_OFF` refusal in `core/experiment_guards_cluster.mojo`.
+- **Records**: refusal in `core/experiment_guards_cluster.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel-01-cluster section).
+
+## MOJOLEARN_MBK_FAST_DEVSCAN_OFF: old path deleted (2026-11-15)
+
+- **What it was**: the FAST+Apple rollback of MiniBatchKMeans' NaN/inf refusal from the scan of the uploaded device copy (`device_first_nonfinite`) back to Python's single-thread host `all_finite_f32` over all of X (`x_cluster/minibatch_ptr.mojo` MBK_FAST_DEVSCAN). Deleted: the define read and the `comptime if MBK_FAST_DEVSCAN` wrapper inside the MBK_ZEROCOPY path (MBK_FAST_DEVSCAN is now MBK_ZEROCOPY); MBK_DEVSCAN_ANY and the binding's `mbk_devscan_binding` are unchanged in value.
+- **Verdict**: KEEP, FAST+Apple default (EXPERIMENTS.md `MBK_FAST_DEVSCAN`, rab15-mbkdevscan): M3 one run per arm, minibatch-kmeans istella 142.3 -> 83.5 ms, taxi 40.4 -> 37.2 ms, silhouette identical. No bit change on any column.
+- **Deleted by**: lane/expdel-01-cluster (expdel-01-cluster, docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md); code recoverable at `a16e423aa4`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_MBK_FAST_DEVSCAN_OFF.patch`, then delete the `MOJOLEARN_MBK_FAST_DEVSCAN_OFF` refusal in `core/experiment_guards_cluster.mojo`.
+- **Records**: refusal in `core/experiment_guards_cluster.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel-01-cluster section).
+
+## MOJOLEARN_X_CLUSTER_FAST_CLS3_MBK_ROWGRP_OFF: old path deleted (2026-11-15)
+
+- **What it was**: the FAST+Apple rollback of MiniBatchKMeans' batch assignment from the 32-thread-group-per-row kernel (`_mbf_assign_rg_kernel`) to the thread-per-row `_mbf_assign_kernel` for k <= 16 (`x_cluster/minibatch_fast.mojo` MBK_CLS3_ROWGRP). Deleted: the define read, the MBK_CLS3_ROWGRP alias and its `comptime if` (the row-group kernel is taken for k <= MBF_RG_MAXK wherever MINIBATCH_FAST_DEV is); `_mbf_assign_kernel` stays for k > 16.
+- **Verdict**: KEPT, FAST+Apple default (EXPERIMENTS.md `X_CLUSTER_FAST_CLS3_MBK_ROWGRP`, clus3-mbk-rowgrp-istella): M3 n=1, minibatch-kmeans istella 172 -> 148 ms (-14.0%), silhouette .1182 identical. No bit change on any column.
+- **Deleted by**: lane/expdel-01-cluster (expdel-01-cluster, docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md); code recoverable at `b5c9d4c9c7`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_X_CLUSTER_FAST_CLS3_MBK_ROWGRP_OFF.patch`, then delete the `MOJOLEARN_X_CLUSTER_FAST_CLS3_MBK_ROWGRP_OFF` refusal in `core/experiment_guards_cluster.mojo`.
+- **Records**: refusal in `core/experiment_guards_cluster.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel-01-cluster section).
+
+## MOJOLEARN_X_CLUSTER_FAST_MINIBATCH_OFF: old path deleted (2026-11-15)
+
+- **What it was**: the FAST+Apple rollback of MiniBatchKMeans from the device-resident mini-batch steps (`x_cluster/minibatch_fast.mojo` MINIBATCH_FAST_DEV, read in `x_cluster/minibatch.mojo`, `x_cluster/device_ops.mojo`, `x_cluster/minibatch_ptr.mojo`) to the generic per-step loop. Only the define read is deleted: the generic loop stays the path outside FAST+Apple and for the shapes the device steps refuse.
+- **Verdict**: KEPT 4b1311c12 (EXPERIMENTS.md `X_CLUSTER_FAST_MINIBATCH`, cluster-mb-istella): M3, minibatch-kmeans istella 388 -> 352 ms (-9.5%), silhouette .1167 -> .1182. No bit change on any column.
+- **Deleted by**: lane/expdel-01-cluster (expdel-01-cluster, docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md); code recoverable at `336732d51d`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_X_CLUSTER_FAST_MINIBATCH_OFF.patch`, then delete the `MOJOLEARN_X_CLUSTER_FAST_MINIBATCH_OFF` refusal in `core/experiment_guards_cluster.mojo`.
+- **Records**: refusal in `core/experiment_guards_cluster.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel-01-cluster section).
+
+## MOJOLEARN_X_CLUSTER_FAST_MEANSHIFT_OFF: old path deleted (2026-11-15)
+
+- **What it was**: the FAST+Apple rollback of MeanShift from the (seed, row chunk) shift grid (`x_cluster/meanshift_fast.mojo` MEANSHIFT_FAST_GRID, read in `x_cluster/device_ops.mojo` `DeviceOps.meanshift`) to `_meanshift_team_kernel`, one block per seed. Only the define read is deleted: the team kernel stays the path outside FAST+Apple.
+- **Verdict**: KEPT 4b1311c12 (EXPERIMENTS.md `X_CLUSTER_FAST_MEANSHIFT`, cluster-ms-istella): M3, meanshift istella 52.1 -> 34.9 ms (-33%), same clusters. No bit change on any column.
+- **Deleted by**: lane/expdel-01-cluster (expdel-01-cluster, docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md); code recoverable at `2255b408f8`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_X_CLUSTER_FAST_MEANSHIFT_OFF.patch`, then delete the `MOJOLEARN_X_CLUSTER_FAST_MEANSHIFT_OFF` refusal in `core/experiment_guards_cluster.mojo`.
+- **Records**: refusal in `core/experiment_guards_cluster.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel-01-cluster section).
+
+## MOJOLEARN_XN_FAST_ACHI2_DEVSCAN_OFF: old path deleted (2026-11-15)
+
+- **What it was**: the FAST+Apple rollback of AdditiveChi2Sampler.fit's negative check from the size-gated device scan (`x_neighbors/kfeat_dev.mojo` XN_FAST_ACHI2_DEVSCAN, bit 1 of `kfeat_flags`) to the host `X.min()`. Only the define read is deleted: below `XN_ACHI2_DEVSCAN_MIN` and on every other build the host check stays.
+- **Verdict**: DEFAULT (FAST+Apple) per EXPERIMENTS.md `XN_FAST_ACHI2_DEVSCAN + size gate`: M3 one run per arm (ea6b2035e) istella 11.2 -> 4.4 ms, taxi 0.9 -> 1.1 ms (below the gate, host path: noise); w2-w3kf-xn-q PASS. No bit change on any column.
+- **Deleted by**: lane/expdel-01-cluster (expdel-01-cluster, docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md); code recoverable at `327ba1435e`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_XN_FAST_ACHI2_DEVSCAN_OFF.patch`, then delete the `MOJOLEARN_XN_FAST_ACHI2_DEVSCAN_OFF` refusal in `core/experiment_guards_cluster.mojo`.
+- **Records**: refusal in `core/experiment_guards_cluster.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel-01-cluster section).
+
+## MOJOLEARN_XN_FAST_SCHI2_MOJO_MT_OFF: old path deleted (2026-11-15)
+
+- **What it was**: the FAST+Apple rollback of SkewedChi2Sampler.fit's legacy MT19937 draws from Mojo (`x_neighbors/kfeat_dev.mojo` XN_FAST_SCHI2_MOJO_MT, bit 2 of `kfeat_flags`) to the Python loop and list comprehensions. Only the define read is deleted: the bit is 0 on every other build, where the binding's other path is unchanged.
+- **Verdict**: DEFAULT (FAST+Apple) per EXPERIMENTS.md `XN_FAST_SCHI2_MOJO_MT`: M3 one run per arm, skewed-chi2 istella 9.0 -> 2.2 ms, taxi 2.5 -> 1.5 ms; w2-kfeat-xn-q-r1 PASS (byte-identical outputs and refusals). No bit change on any column.
+- **Deleted by**: lane/expdel-01-cluster (expdel-01-cluster, docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md); code recoverable at `0d5b3201e0`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_XN_FAST_SCHI2_MOJO_MT_OFF.patch`, then delete the `MOJOLEARN_XN_FAST_SCHI2_MOJO_MT_OFF` refusal in `core/experiment_guards_cluster.mojo`.
+- **Records**: refusal in `core/experiment_guards_cluster.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel-01-cluster section).
+
+## MOJOLEARN_XN_FAST_SCHI2_LAZYW_OFF: old path deleted (2026-11-15)
+
+- **What it was**: the FAST+Apple rollback of SkewedChi2Sampler's lazy weights (fit draws z and the offsets on the host with no device work; transform runs log, the pending weights kernel and the map in one call; `x_neighbors/kfeat_dev.mojo` XN_FAST_SCHI2_LAZYW, bit 4 of `kfeat_flags`) to the eager weights (two waits in transform, one in fit). Only the define read is deleted: the eager form stays on every other build. `tools/kfeat_pair.py` no longer offers the three x_neighbors `_OFF` arms (its expected flags are 7) and the `_kfeat_flags` docstring in `python/mojolearn/_expansion_neighbors.py` drops the `_OFF` wording.
+- **Verdict**: DEFAULT (FAST+Apple) per EXPERIMENTS.md `XN_FAST_SCHI2_LAZYW`: M3 one run per arm (ea6b2035e) skewed-chi2 taxi 1.8 -> 0.4 ms, istella 2.1 -> 0.9 ms; w2-w3kf-xn-q PASS, same kernels, same words. No bit change on any column.
+- **Deleted by**: lane/expdel-01-cluster (expdel-01-cluster, docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md); code recoverable at `4cb9cbfa18`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_XN_FAST_SCHI2_LAZYW_OFF.patch`, then delete the `MOJOLEARN_XN_FAST_SCHI2_LAZYW_OFF` refusal in `core/experiment_guards_base.mojo`.
+- **Records**: refusal in `core/experiment_guards_base.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel-01-cluster section).
+
+## MOJOLEARN_XN_FAST_CLS2_OCSVM_RES_OFF: old path deleted (2026-11-15)
+
+- **What it was**: the FAST+Apple rollback of OneClassSVM.fit from the device-resident Gram (`x_neighbors/ocsvm_dev.mojo` OCSVM_CLS2_RES, `op_ocsvm_x`; read by `x_neighbors/ocsvm_resident_native_device.mojo`, `x_neighbors/native_descriptor_device.mojo`, `bindings/_mojolearn_x_neighbors.mojo`) to the 400 MB Gram download and re-upload. Only the define read is deleted (and the refusal text naming it); the non-resident path stays for builds without OCSVM_CLS2_RES / OCSVM_IDN_RES. The sibling rollbacks `_2L_OFF` and `_CHUNK256_OFF` are not part of this deletion (CHUNK256_OFF is KEEP-OPEN in the plan).
+- **Verdict**: KEEP / KEPT 417ba1ded (EXPERIMENTS.md `XN_FAST_CLS2_OCSVM_RES`, gapcls2-res-ocsvm-taxi): M3 n=1, ocsvm taxi -77% alone (RES+2L+CHUNK256 375.7 -> 65.0 ms), quality identical. No bit change on any column.
+- **Deleted by**: lane/expdel-01-cluster (expdel-01-cluster, docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md); code recoverable at `976cce176d`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_XN_FAST_CLS2_OCSVM_RES_OFF.patch`, then delete the `MOJOLEARN_XN_FAST_CLS2_OCSVM_RES_OFF` refusal in `core/experiment_guards_cluster.mojo`.
+- **Records**: refusal in `core/experiment_guards_cluster.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel-01-cluster section).
+
+## MOJOLEARN_SVGP_FAST_RBFTILE_OFF: old path deleted (2026-11-15)
+
+- **What it was**: the FAST+Apple rollback of SVGP's scaled rbf (Kuu, the Kfu tiles, Ksu) from the 64 x 64 tiled launch to one thread per cell (`x_neighbors/iter_device.mojo` SVGP_FAST_RBFTILE, folded into SVGP_RBFTILE with the IDENTICAL X6 switch). Only the define read is deleted: the per-cell kernel stays where neither tiled switch is on (`MOJOLEARN_IDN_SVGP_RBFTILE_OFF`). `tools/svgp_fast_pair.py` drops it from its B arms.
+- **Verdict**: DEFAULT (FAST+Apple) per EXPERIMENTS.md `SVGP_FAST_RBFTILE`: M3 one run per arm, svgp istella 336.3 -> 299.1 ms, taxi 285.9 -> 283.9 ms; w2-svgp-rbftile-q SVGP-FAST-PAIR PASS (r2/rmse/elbo). No bit change on any column.
+- **Deleted by**: lane/expdel-01-cluster (expdel-01-cluster, docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md); code recoverable at `9152d5f19c`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_SVGP_FAST_RBFTILE_OFF.patch`, then delete the `MOJOLEARN_SVGP_FAST_RBFTILE_OFF` refusal in `core/experiment_guards_cluster.mojo`.
+- **Records**: refusal in `core/experiment_guards_cluster.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel-01-cluster section).
+
+## MOJOLEARN_SVGP_FAST_BLKCHOL_OFF: old path deleted (2026-11-15)
+
+- **What it was**: the FAST+Apple rollback of SVGP's three m x m float-float Cholesky factors from one launch per 16-column panel to one launch per column (`x_neighbors/iter_device.mojo` SVGP_FAST_BLKCHOL, folded into SVGP_BLKCHOL with the IDENTICAL X5 switch). Only the define read is deleted: the per-column factor stays where neither panel switch is on (`MOJOLEARN_IDN_SVGP_BLKCHOL_OFF`). `tools/svgp_fast_pair.py` drops it from its B arms.
+- **Verdict**: DEFAULT (FAST+Apple) per EXPERIMENTS.md `SVGP_FAST_BLKCHOL`: M3 one run per arm, svgp taxi 287.0 -> 212.5 ms, istella 336.6 -> 265.7 ms (measured without RBFTILE; the combined retime the row names is a timing note, not a verdict), w2-svgp-blkchol-q PASS. No bit change on any column.
+- **Deleted by**: lane/expdel-01-cluster (expdel-01-cluster, docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md); code recoverable at `4b8e9ee649`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_SVGP_FAST_BLKCHOL_OFF.patch`, then delete the `MOJOLEARN_SVGP_FAST_BLKCHOL_OFF` refusal in `core/experiment_guards_cluster.mojo`.
+- **Records**: refusal in `core/experiment_guards_cluster.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel-01-cluster section).
+
+## MOJOLEARN_SVGP_FAST_SYMTILE_OFF: old path deleted (2026-11-15)
+
+- **What it was**: the rollback of SVGP's B = Kuf Kfu from the upper 4 x 4 block tiles with the mirror written to the full m x m float-float accumulation (`x_neighbors/iter_device.mojo` SVGP_FAST_SYMTILE = _SVGP_GATE_ON and not this define; FAST+Apple and the IDENTICAL default). Only the define read is deleted: the full accumulation stays where _SVGP_GATE_ON is off (the IDENTICAL rollback `MOJOLEARN_IDN_GATES_OFF` / `MOJOLEARN_IDN_ALL_OFF`, other FAST columns).
+- **Verdict**: KEPT (EXPERIMENTS.md `SVGP_FAST_SYMTILE`, kap2-svgp-symtile-taxi): M3, svgp taxi 611 -> 463 ms, r2/rmse identical; IDENTICAL default since lane/idn-gates (two_prod commutes bit for bit). No bit change on any column.
+- **Deleted by**: lane/expdel-01-cluster (expdel-01-cluster, docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md); code recoverable at `614ccc0790`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_SVGP_FAST_SYMTILE_OFF.patch`, then delete the `MOJOLEARN_SVGP_FAST_SYMTILE_OFF` refusal in `core/experiment_guards_cluster.mojo`.
+- **Records**: refusal in `core/experiment_guards_cluster.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel-01-cluster section).
+
+## MOJOLEARN_SVGP_FAST_COLSPLIT_OFF: old path deleted (2026-11-15)
+
+- **What it was**: the rollback of SVGP's column phase from 4m solve items plus m^2 finish items (`svgp_ff_col_solve_kernel`, `svgp_ff_col_fin_kernel`) to the m serial column threads (`svgp_ff_column_kernel`) (`x_neighbors/iter_device.mojo` SVGP_FAST_COLSPLIT = _SVGP_GATE_ON and not this define). Only the define read is deleted: the column kernel stays where _SVGP_GATE_ON is off (`MOJOLEARN_IDN_GATES_OFF` / `MOJOLEARN_IDN_ALL_OFF`, other FAST columns).
+- **Verdict**: KEPT (EXPERIMENTS.md `SVGP_FAST_COLSPLIT`, kap2-svgp-colsplit-taxi): M3, svgp taxi 613 -> 438 ms, r2/rmse identical; IDENTICAL default since lane/idn-gates. No bit change on any column.
+- **Deleted by**: lane/expdel-01-cluster (expdel-01-cluster, docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md); code recoverable at `2391fda738`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_SVGP_FAST_COLSPLIT_OFF.patch`, then delete the `MOJOLEARN_SVGP_FAST_COLSPLIT_OFF` refusal in `core/experiment_guards_cluster.mojo`.
+- **Records**: refusal in `core/experiment_guards_cluster.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel-01-cluster section).
+
+## MOJOLEARN_SVGP_FAST_BSPLIT_OFF: old path deleted (2026-11-15)
+
+- **What it was**: the FAST+Apple rollback of SVGP's B = Kuf Kfu and b = Kuf y from row-slice float-float partials (4 for B, 32 for b, summed slice-ascending: `matmul_tn_sym_ff_split_kernel`, `matmul_tn_vec_ff_split_kernel`, `svgp_ff_split_sum_kernel`) to SYMTILE's one-partial launches (`x_neighbors/iter_device.mojo` SVGP_FAST_BSPLIT). Only the define read is deleted: the SYMTILE / full-accumulation launches stay the IDENTICAL path. `tools/svgp_fast_pair.py` has no B arm left (DEFINES is empty).
+- **Verdict**: KEEP, FAST+Apple default (EXPERIMENTS.md `SVGP_FAST_BSPLIT`, rollback `_OFF`, rab19-svgpbsplit; supersedes the older OPEN rows): M3 one run per arm, svgp istella 224.6 -> 167.1 ms, taxi 211.3 -> 149.1 ms, r2 equal. No bit change on any column.
+- **Deleted by**: lane/expdel-01-cluster (expdel-01-cluster, docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md); code recoverable at `6d5bdfc57a`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_SVGP_FAST_BSPLIT_OFF.patch`, then delete the `MOJOLEARN_SVGP_FAST_BSPLIT_OFF` refusal in `core/experiment_guards_cluster.mojo`.
+- **Records**: refusal in `core/experiment_guards_cluster.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel-01-cluster section).

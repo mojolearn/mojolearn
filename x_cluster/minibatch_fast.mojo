@@ -3,9 +3,8 @@
 """MiniBatchKMeans, FAST on Apple: the mini-batch steps resident on the
 device (lane/apple-fast-cluster, 2026-10-02). Switch: `MINIBATCH_FAST_DEV`
 below, taken by `x_cluster/minibatch.mojo` `minibatch_fit`: on by default
-in FAST on Apple; `-D MOJOLEARN_X_CLUSTER_FAST_MINIBATCH_OFF=1` turns it
-off (the old `-D MOJOLEARN_X_CLUSTER_FAST_MINIBATCH=1` is harmless). No
-build reads the environment.
+in FAST on Apple (the old `-D MOJOLEARN_X_CLUSTER_FAST_MINIBATCH=1` is
+harmless). No build reads the environment.
 
 Cause: `minibatch_fit`'s step loop (x_cluster/minibatch.mojo, `for step in
 range(n_steps)`) gathers the batch on the host, uploads it (`ops.set`),
@@ -52,11 +51,9 @@ from checks.soft_f64 import sf64_from_int, sf64_lt, sf64_mul
 
 # Default in FAST on Apple since the M3 A/B (lane/apple-fast-cluster aaef7b261,
 # n=1, Istella): minibatch-kmeans 388 -> 352 ms, silhouette .1167 -> .1182.
-# `-D MOJOLEARN_X_CLUSTER_FAST_MINIBATCH_OFF=1` turns it off.
-comptime MINIBATCH_FAST_DEV = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
-    and not is_defined["MOJOLEARN_X_CLUSTER_FAST_MINIBATCH_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_X_CLUSTER_FAST_MINIBATCH_OFF (old path, superseded by the FAST+Apple default) deleted 2026-11-15 by lane/expdel-01-cluster; code recoverable at 336732d51d.
+# Restore: git apply experiments/removed/MOJOLEARN_X_CLUSTER_FAST_MINIBATCH_OFF.patch; record in docs/TOMBSTONES.md.
+comptime MINIBATCH_FAST_DEV = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
 # AFCL-G07: NEVER RUN — PENDING MEASUREMENT; uncompiled and unverified.
 # Four Apple SIMD groups per block reduce the register/shared footprint and
 # increase independent assignment blocks. Keep the center chunk equal to
@@ -115,9 +112,10 @@ comptime UPtr = MutPointer[UInt64, MutAnyOrigin]
 # them lane by lane in threadgroup memory. k <= MBF_RG_MAXK, else the old
 # kernel. FAST: the distance's summation order changes (quality, not bits).
 # FAST + Apple default since the M3 A/B clus3-mbk-rowgrp-istella (n=1):
-# minibatch-kmeans istella 172 -> 148 ms (-14.0%), silhouette .1182 identical;
-# -D MOJOLEARN_X_CLUSTER_FAST_CLS3_MBK_ROWGRP_OFF turns it off.
-comptime MBK_CLS3_ROWGRP = MINIBATCH_FAST_DEV and not is_defined["MOJOLEARN_X_CLUSTER_FAST_CLS3_MBK_ROWGRP_OFF"]()
+# minibatch-kmeans istella 172 -> 148 ms (-14.0%), silhouette .1182 identical.
+# It is taken wherever MINIBATCH_FAST_DEV is (`minibatch_fast_steps`).
+# TOMBSTONE: MOJOLEARN_X_CLUSTER_FAST_CLS3_MBK_ROWGRP_OFF (old path, superseded by the FAST+Apple default) deleted 2026-11-15 by lane/expdel-01-cluster; code recoverable at b5c9d4c9c7.
+# Restore: git apply experiments/removed/MOJOLEARN_X_CLUSTER_FAST_CLS3_MBK_ROWGRP_OFF.patch; record in docs/TOMBSTONES.md.
 comptime MBF_RG_W = 32
 """Threads per batch row."""
 comptime MBF_RG_ROWS = MBF_TPB // MBF_RG_W
@@ -197,7 +195,7 @@ def _mbf_assign_kernel(
 def _mbf_assign_rg_kernel(
     x: FPtr, idx: IPtr, batch: Int32, c: FPtr, k: Int32, d: Int32, lab: IPtr, dist: FPtr, ipart: FPtr,
 ):
-    """MBK_CLS3_ROWGRP: `_mbf_assign_kernel` with a 32-thread group per row
+    """CLS3_MBK_ROWGRP: `_mbf_assign_kernel` with a 32-thread group per row
     (see the switch). Ties to the lower center, as there."""
     var tid = Int(thread_idx.x)
     var g = tid // MBF_RG_W
@@ -550,9 +548,8 @@ def minibatch_fast_steps(
             return False
         var G = MBF_GROUP
         var kd = k * d
-        var rg = False
-        comptime if MBK_CLS3_ROWGRP:
-            rg = k <= MBF_RG_MAXK
+        # MBK_CLS3_ROWGRP (the FAST + Apple default): a 32-thread group per row
+        var rg = k <= MBF_RG_MAXK
         var nblk = (batch + MBF_TPB - 1) // MBF_TPB
         if rg:
             nblk = (batch + MBF_RG_ROWS - 1) // MBF_RG_ROWS

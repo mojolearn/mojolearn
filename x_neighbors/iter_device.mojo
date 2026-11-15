@@ -1990,11 +1990,10 @@ def op_ocsvm_labels(
 #: features ascending) and `unary_item`'s identity step. M3, one run per
 #: arm: istella 336.3 -> 299.1 ms, taxi 285.9 -> 283.9 ms; w2-svgp-rbftile-q
 #: SVGP-FAST-PAIR PASS (r2/rmse/elbo gates; A r2 taxi -0.19498, istella
-#: -0.10602). MOJOLEARN_SVGP_FAST_RBFTILE_OFF restores the per-cell kernel.
-comptime SVGP_FAST_RBFTILE = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
-    and not is_defined["MOJOLEARN_SVGP_FAST_RBFTILE_OFF"]()
-)
+#: -0.10602). The per-cell kernel stays where neither tiled switch is on.
+# TOMBSTONE: MOJOLEARN_SVGP_FAST_RBFTILE_OFF (old path, superseded by the FAST+Apple default) deleted 2026-11-15 by lane/expdel-01-cluster; code recoverable at 9152d5f19c.
+# Restore: git apply experiments/removed/MOJOLEARN_SVGP_FAST_RBFTILE_OFF.patch; record in docs/TOMBSTONES.md.
+comptime SVGP_FAST_RBFTILE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
 #: X6 (IDENTICAL, every vendor; lane ml-cluster-nbrs 2026-10-04): the same
 #: tiled launch. Each cell is `kernel_item`'s K_RBF chain (`_sub`, the pinned
 #: `identical_mul_add`, features ascending from +0 over exactly d) and
@@ -2164,22 +2163,25 @@ def svgp_b32_select_kernel(flag: FP, b32: FP, bh: FP, bl: FP, mm_: Int64):
 
 
 #: lane apple-fast-gap-kapprox2: the FAST + Apple default since the M3 A/B
-#: kap2-svgp-symtile-taxi (svgp taxi 611 -> 463 ms, r2/rmse identical); -D
-#: MOJOLEARN_SVGP_FAST_SYMTILE_OFF reverts.
+#: kap2-svgp-symtile-taxi (svgp taxi 611 -> 463 ms, r2/rmse identical).
 #: lane/idn-gates (2026-10-04): SYMTILE and COLSPLIT are also the IDENTICAL
 #: default on every vendor (two_prod commutes bit for bit and every entry
 #: keeps its p-ascending fold; the four solves are the column item's own);
-#: -D MOJOLEARN_IDN_GATES_OFF (or either _OFF) restores the old IDENTICAL form.
+#: -D MOJOLEARN_IDN_GATES_OFF restores the old IDENTICAL form.
 comptime _SVGP_GATE_ON = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU) or (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (is_defined["MOJOLEARN_IDN_GATES_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
 )
-comptime SVGP_FAST_SYMTILE = _SVGP_GATE_ON and not is_defined["MOJOLEARN_SVGP_FAST_SYMTILE_OFF"]()
+# TOMBSTONE: MOJOLEARN_SVGP_FAST_SYMTILE_OFF (old path, superseded by the FAST+Apple default) deleted 2026-11-15 by lane/expdel-01-cluster; code recoverable at 614ccc0790.
+# Restore: git apply experiments/removed/MOJOLEARN_SVGP_FAST_SYMTILE_OFF.patch; record in docs/TOMBSTONES.md.
+comptime SVGP_FAST_SYMTILE = _SVGP_GATE_ON
 
 
 #: lane apple-fast-gap-kapprox2: the FAST + Apple default since the M3 A/B
-#: kap2-svgp-colsplit-taxi (svgp taxi 613 -> 438 ms, r2/rmse identical); -D
-#: MOJOLEARN_SVGP_FAST_COLSPLIT_OFF reverts.
-comptime SVGP_FAST_COLSPLIT = _SVGP_GATE_ON and not is_defined["MOJOLEARN_SVGP_FAST_COLSPLIT_OFF"]()
+#: kap2-svgp-colsplit-taxi (svgp taxi 613 -> 438 ms, r2/rmse identical);
+#: -D MOJOLEARN_IDN_GATES_OFF restores the old IDENTICAL form.
+# TOMBSTONE: MOJOLEARN_SVGP_FAST_COLSPLIT_OFF (old path, superseded by the FAST+Apple default) deleted 2026-11-15 by lane/expdel-01-cluster; code recoverable at 2391fda738.
+# Restore: git apply experiments/removed/MOJOLEARN_SVGP_FAST_COLSPLIT_OFF.patch; record in docs/TOMBSTONES.md.
+comptime SVGP_FAST_COLSPLIT = _SVGP_GATE_ON
 
 
 def svgp_ff_col_solve_kernel(kuu: FP, bh: FP, bl: FP, w: FP, xb: FP, m_: Int64, n_: Int64, jitter: Float32):
@@ -2297,13 +2299,13 @@ def svgp_ff_fin_tree_kernel(w: FP, info: FP, nbn_: Int64, nbm_: Int64, nf: Float
 
 
 # ---- lane apple-fast-w2-svgp (2026-10-04): FAST + Apple candidates for
-# SVGP's fit (and predict). BLKCHOL is default; BSPLIT stays opt-in.
+# SVGP's fit (and predict). BLKCHOL and BSPLIT are default.
 
 #: SVGP_FAST_BLKCHOL, DEFAULT in FAST + Apple (lane/apple-fast-w2-svgp).
 #: M3, one run per arm (measured without RBFTILE; combined retime owed):
 #: taxi 287.0 -> 212.5 ms, istella 336.6 -> 265.7 ms; w2-svgp-blkchol-q
-#: SVGP-FAST-PAIR PASS. MOJOLEARN_SVGP_FAST_BLKCHOL_OFF restores the
-#: one-column-per-launch factor.
+#: SVGP-FAST-PAIR PASS. The one-column-per-launch factor stays where
+#: neither panel switch is on.
 #: The three m x m float-float Cholesky factors
 #: (L_u, L_s, then Q) one panel of SVGP_CHOL_PB columns per launch instead of
 #: one column per launch (m = 512: 1,024 dependent launches -> 64). Each block
@@ -2313,10 +2315,9 @@ def svgp_ff_fin_tree_kernel(w: FP, info: FP, nbn_: Int64, nbm_: Int64, nf: Float
 #: entry is the same chain as `_chol_col`: the pivot A[c,c] - L[c,k]^2 and
 #: the row A[i,c] - L[i,k] L[c,k], k ascending from 0, then sqrt / divide.
 #: The words only move with FAST's free contraction.
-comptime SVGP_FAST_BLKCHOL = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
-    and not is_defined["MOJOLEARN_SVGP_FAST_BLKCHOL_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_SVGP_FAST_BLKCHOL_OFF (old path, superseded by the FAST+Apple default) deleted 2026-11-15 by lane/expdel-01-cluster; code recoverable at 4b8e9ee649.
+# Restore: git apply experiments/removed/MOJOLEARN_SVGP_FAST_BLKCHOL_OFF.patch; record in docs/TOMBSTONES.md.
+comptime SVGP_FAST_BLKCHOL = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
 #: X5 (IDENTICAL, every vendor; lane ml-cluster-nbrs 2026-10-04): the same
 #: panel factor. Its chains are `_chol_col`'s through the shared ff helpers
 #: (x_linear/ff.mojo: two_prod and ff_mul on the pinned `fmad`), k ascending,
@@ -2469,12 +2470,11 @@ def _svgp_chol_panels(ctx: DeviceContext, wp: FP, m: Int, n: Int, nfac: Int) rai
 #: Source lane/apple-fast-w2-svgp@146898d2c.
 #: OUTCOME (M3 afc_ab_def, full board size, 1 run per arm, 2026-10-05,
 #: rab19-svgpbsplit): svgp istella 224.6 -> 167.1 ms, taxi 211.3 -> 149.1 ms,
-#: r2 equal. KEEP: the FAST + Apple default (with SYMTILE); rollback
-#: -D MOJOLEARN_SVGP_FAST_BSPLIT_OFF. See docs/apple-fast/EXPERIMENTS.md.
-comptime SVGP_FAST_BSPLIT = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU and SVGP_FAST_SYMTILE
-    and not is_defined["MOJOLEARN_SVGP_FAST_BSPLIT_OFF"]()
-)
+#: r2 equal. KEEP: the FAST + Apple default (with SYMTILE). See
+#: docs/apple-fast/EXPERIMENTS.md.
+# TOMBSTONE: MOJOLEARN_SVGP_FAST_BSPLIT_OFF (old path, superseded by the FAST+Apple default) deleted 2026-11-15 by lane/expdel-01-cluster; code recoverable at 6d5bdfc57a.
+# Restore: git apply experiments/removed/MOJOLEARN_SVGP_FAST_BSPLIT_OFF.patch; record in docs/TOMBSTONES.md.
+comptime SVGP_FAST_BSPLIT = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU and SVGP_FAST_SYMTILE
 comptime SVGP_BSPLIT_R = 4
 comptime SVGP_BSPLIT_RV = 32
 
