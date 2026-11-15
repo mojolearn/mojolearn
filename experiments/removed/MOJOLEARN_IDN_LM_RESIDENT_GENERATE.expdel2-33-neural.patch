@@ -1,0 +1,92 @@
+diff --git a/transformer/transformer_binding_impl.mojo b/transformer/transformer_binding_impl.mojo
+index 25dc2968c4..1753319c00 100644
+--- a/transformer/transformer_binding_impl.mojo
++++ b/transformer/transformer_binding_impl.mojo
+@@ -29,6 +29,7 @@ from max.gpu.host import DeviceBuffer, DeviceContext
+ from std.memory import bitcast, unsafe_memcpy
+ from std.os import getenv
+ from std.time import perf_counter_ns
++from std.sys.compile import is_defined
+ from checks.kernel_matrix import COLUMN_NVIDIA, TARGET_COLUMN
+ 
+ from core.identity_trace import IdentityTrace
+@@ -146,7 +147,7 @@ def _upload_addr[wait: Bool = True](
+     """Copy a live caller buffer, synchronizing before its borrow ends.
+ 
+     IDENTICAL uses DeviceContext's ordinary host-pointer transfer directly.
+-    Other modes retain pinned staging.
++    Other modes and the diagnostic legacy flag retain pinned staging.
+     `wait=False` (lane/neural-apple, 2026-09-28; the direct path only) leaves
+     the copy in flight: the caller's array outlives the call, every reader
+     is enqueued after it on the same in-order `ctx`, and the caller waits
+@@ -157,9 +158,7 @@ def _upload_addr[wait: Bool = True](
+     if n_buf < 1:
+         n_buf = 1
+     var dev = ctx.enqueue_create_buffer[DType.float32](n_buf)
+-    # TOMBSTONE: MOJOLEARN_TRANSFORMER_LEGACY_CALLER_TRANSFER (DELETE-OLD-PATH: no A/B recorded) deleted 2026-11-15 by lane/expdel2-33-neural; code recoverable at c3d1c7865f.
+-    # Restore: git apply experiments/removed/MOJOLEARN_TRANSFORMER_LEGACY_CALLER_TRANSFER.patch
+-    comptime if GLOBAL_NUMERIC_MODE <= NUMERIC_IDENTICAL:
++    comptime if GLOBAL_NUMERIC_MODE <= NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_TRANSFORMER_LEGACY_CALLER_TRANSFER"]():
+         if n > 0:
+             ctx.enqueue_copy(dst_buf=dev, src_ptr=p)
+             comptime if wait:
+@@ -185,9 +184,7 @@ def _download_addr[wait: Bool = True](
+     Temporary views and legacy staging always finish before their owners die.
+     """
+     var p = _f32_ptr(addr)
+-    # TOMBSTONE: MOJOLEARN_TRANSFORMER_LEGACY_CALLER_TRANSFER (DELETE-OLD-PATH: no A/B recorded) deleted 2026-11-15 by lane/expdel2-33-neural; code recoverable at c3d1c7865f.
+-    # Restore: git apply experiments/removed/MOJOLEARN_TRANSFORMER_LEGACY_CALLER_TRANSFER.patch
+-    comptime if GLOBAL_NUMERIC_MODE <= NUMERIC_IDENTICAL:
++    comptime if GLOBAL_NUMERIC_MODE <= NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_TRANSFORMER_LEGACY_CALLER_TRANSFER"]():
+         if n == len(buf):
+             ctx.enqueue_copy(dst_ptr=p, src_buf=buf)
+             comptime if wait:
+@@ -260,9 +257,7 @@ def _load_transformer_weights[wait: Bool = True](
+                 "transformer: gate_proj.weight address is null (the default"
+                 " options carry a gated MLP)"
+             )
+-        # TOMBSTONE: MOJOLEARN_TRANSFORMER_LEGACY_WEIGHT_COPY (DELETE-OLD-PATH: no A/B recorded) deleted 2026-11-15 by lane/expdel2-33-neural; code recoverable at c3d1c7865f.
+-        # Restore: git apply experiments/removed/MOJOLEARN_TRANSFORMER_LEGACY_WEIGHT_COPY.patch
+-        comptime if GLOBAL_NUMERIC_MODE <= NUMERIC_IDENTICAL:
++        comptime if GLOBAL_NUMERIC_MODE <= NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_TRANSFORMER_LEGACY_WEIGHT_COPY"]():
+             return LlamaDeviceWeights(
+                 ctx, dims, RMS_EPS,
+                 _upload_addr[wait](ctx, a[1], dm),
+@@ -1262,11 +1257,8 @@ comptime _LM_ARGMAX_TPB = 256
+ 
+ comptime _LM_ARGMAX_NONE: Int32 = 2147483647
+ 
+-# TOMBSTONE: MOJOLEARN_IDN_LM_RESIDENT_GENERATE (DELETE-ARM: no A/B recorded; owner lane/expdel2-02-base) folded here 2026-11-15 by lane/expdel2-33-neural; code recoverable at c3d1c7865f.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_LM_RESIDENT_GENERATE.expdel2-33-neural.patch
+-comptime LM_RESIDENT_GENERATE = False
+-"""Folded constant (the experiment is deleted; `transformer/native_lm_resident_dispatch.mojo`
+-imports the name). Was: experiment, default off (lane lm-resident-generate-20261028): the resident
++comptime LM_RESIDENT_GENERATE = is_defined["MOJOLEARN_IDN_LM_RESIDENT_GENERATE"]()
++"""Experiment, default off (lane lm-resident-generate-20261028): the resident
+ session also opens for a model without a final norm (`final_norm=False`,
+ norm address 0). Its head then reads the stack output itself, as the
+ per-layer route's head does (`hn` is a device copy of `x`): no float
+@@ -1354,8 +1346,9 @@ def _lm_open_run(mut s: CausalLMSession, pe: Int, pn: Int, ph: Int, b: Int, v: I
+     if b < 1 or v < 1 or d < 1:
+         raise Error("causal_lm_session_open: B, vocab and d_model must be positive")
+     var has_norm = pn != 0
+-    if not has_norm:
+-        raise Error("causal_lm_session_open: null buffer address")
++    comptime if not LM_RESIDENT_GENERATE:
++        if not has_norm:
++            raise Error("causal_lm_session_open: null buffer address")
+     if has_norm and (not isfinite(eps) or eps < Float32(0.0)):
+         raise Error("mojolearn samba ops: rms_norm eps must be finite and >= 0")
+     s.ctx = neural_ctx[_NEURAL_CTX]()
+@@ -1393,8 +1386,9 @@ def _lm_open_run_int15(
+     if b < 1 or v < 1 or d < 1:
+         raise Error("causal_lm_session_open: B, vocab and d_model must be positive")
+     var has_norm = pn != 0
+-    if not has_norm:
+-        raise Error("causal_lm_session_open_int15: null buffer address")
++    comptime if not LM_RESIDENT_GENERATE:
++        if not has_norm:
++            raise Error("causal_lm_session_open_int15: null buffer address")
+     if has_norm and (not isfinite(eps) or eps < Float32(0.0)):
+         raise Error("mojolearn samba ops: rms_norm eps must be finite and >= 0")
+     s.ctx = neural_ctx[_NEURAL_CTX]()

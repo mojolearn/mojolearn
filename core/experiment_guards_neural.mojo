@@ -950,6 +950,65 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_TSA2_STL_OFF"](), "removed 2026-11-15 (lane/expdel2-29-neural): TSA2_STL_OFF (old path) is gone; the default is kept; code at eb3180868d; restore: experiments/removed/MOJOLEARN_TSA2_STL_OFF.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_TSA2_VAR_OFF.patch
     comptime assert not is_defined["MOJOLEARN_TSA2_VAR_OFF"](), "removed 2026-11-15 (lane/expdel2-29-neural): TSA2_VAR_OFF (old path) is gone; the default is kept; code at b23d7039b8; restore: experiments/removed/MOJOLEARN_TSA2_VAR_OFF.patch"
+    # Lane expdel2-33-neural (2026-11-15): unmeasured arms and superseded old paths deleted, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (docs/TOMBSTONES.md).
+    # Restore: git apply experiments/removed/MOJOLEARN_AFN_ATTN_ALL.patch
+    comptime assert not is_defined["MOJOLEARN_AFN_ATTN_ALL"](), "removed 2026-11-15 (lane/expdel2-33-neural): AFN_ATTN_ALL (unmeasured opt-in bundle) is gone; the default is kept; code at c3d1c7865f; restore: experiments/removed/MOJOLEARN_AFN_ATTN_ALL.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_AFN_ATTN_NORM_SG.patch
+    comptime assert not is_defined["MOJOLEARN_AFN_ATTN_NORM_SG"](), "removed 2026-11-15 (lane/expdel2-33-neural): AFN_ATTN_NORM_SG (unmeasured opt-in arm) is gone; the default is kept; code at c3d1c7865f; restore: experiments/removed/MOJOLEARN_AFN_ATTN_NORM_SG.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_AFN_ATTN_ROPE_CACHE.patch
+    comptime assert not is_defined["MOJOLEARN_AFN_ATTN_ROPE_CACHE"](), "removed 2026-11-15 (lane/expdel2-33-neural): AFN_ATTN_ROPE_CACHE (unmeasured opt-in arm) is gone; the default is kept; code at c3d1c7865f; restore: experiments/removed/MOJOLEARN_AFN_ATTN_ROPE_CACHE.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_AFN_ATTN_GQA_TILE.patch
+    comptime assert not is_defined["MOJOLEARN_AFN_ATTN_GQA_TILE"](), "removed 2026-11-15 (lane/expdel2-33-neural): AFN_ATTN_GQA_TILE (unmeasured opt-in arm) is gone; the default is kept; code at c3d1c7865f; restore: experiments/removed/MOJOLEARN_AFN_ATTN_GQA_TILE.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_AFN_ATTN_FLASH.patch
+    comptime assert not is_defined["MOJOLEARN_AFN_ATTN_FLASH"](), "removed 2026-11-15 (lane/expdel2-33-neural): AFN_ATTN_FLASH (unmeasured opt-in arm) is gone; the default is kept; code at c3d1c7865f; restore: experiments/removed/MOJOLEARN_AFN_ATTN_FLASH.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_AFN_ATTN_FUSE_PRE.patch
+    comptime assert not is_defined["MOJOLEARN_AFN_ATTN_FUSE_PRE"](), "removed 2026-11-15 (lane/expdel2-33-neural): AFN_ATTN_FUSE_PRE (unmeasured opt-in arm) is gone; the default is kept; code at c3d1c7865f; restore: experiments/removed/MOJOLEARN_AFN_ATTN_FUSE_PRE.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_AFN_ATTN_FUSE_MLP.patch
+    comptime assert not is_defined["MOJOLEARN_AFN_ATTN_FUSE_MLP"](), "removed 2026-11-15 (lane/expdel2-33-neural): AFN_ATTN_FUSE_MLP (unmeasured opt-in arm) is gone; the default is kept; code at c3d1c7865f; restore: experiments/removed/MOJOLEARN_AFN_ATTN_FUSE_MLP.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_AFN_ATTN_AUDIT.patch
+    comptime assert not is_defined["MOJOLEARN_AFN_ATTN_AUDIT"](), "removed 2026-11-15 (lane/expdel2-33-neural): AFN_ATTN_AUDIT (unmeasured opt-in arm) is gone; the default is kept; code at c3d1c7865f; restore: experiments/removed/MOJOLEARN_AFN_ATTN_AUDIT.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_AFN_FLASH_HD_GENERIC_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_AFN_FLASH_HD_GENERIC_OFF"](), "removed 2026-11-15 (lane/expdel2-33-neural): AFN_FLASH_HD_GENERIC_OFF (unmeasured old path) is gone; the default is kept; code at c3d1c7865f; restore: experiments/removed/MOJOLEARN_AFN_FLASH_HD_GENERIC_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_AFN26_ATTN_NORM_TPB128.patch
+    comptime assert not is_defined["MOJOLEARN_AFN26_ATTN_NORM_TPB128"](), "removed 2026-11-15 (lane/expdel2-33-neural): AFN26_ATTN_NORM_TPB128 (unmeasured opt-in arm) is gone; the default is kept; code at c3d1c7865f; restore: experiments/removed/MOJOLEARN_AFN26_ATTN_NORM_TPB128.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_AFN26_ATTN_NORM_TPB512.patch
+    comptime assert not is_defined["MOJOLEARN_AFN26_ATTN_NORM_TPB512"](), "removed 2026-11-15 (lane/expdel2-33-neural): AFN26_ATTN_NORM_TPB512 (unmeasured opt-in arm) is gone; the default is kept; code at c3d1c7865f; restore: experiments/removed/MOJOLEARN_AFN26_ATTN_NORM_TPB512.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_AFN26_ATTN_FLASH_BK16.patch
+    comptime assert not is_defined["MOJOLEARN_AFN26_ATTN_FLASH_BK16"](), "removed 2026-11-15 (lane/expdel2-33-neural): AFN26_ATTN_FLASH_BK16 (unmeasured opt-in arm) is gone; the default is kept; code at c3d1c7865f; restore: experiments/removed/MOJOLEARN_AFN26_ATTN_FLASH_BK16.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_AFN26_ATTN_FLASH_TQ16.patch
+    comptime assert not is_defined["MOJOLEARN_AFN26_ATTN_FLASH_TQ16"](), "removed 2026-11-15 (lane/expdel2-33-neural): AFN26_ATTN_FLASH_TQ16 (unmeasured opt-in arm) is gone; the default is kept; code at c3d1c7865f; restore: experiments/removed/MOJOLEARN_AFN26_ATTN_FLASH_TQ16.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_AFN26_ATTN_PROJ_KB16.patch
+    comptime assert not is_defined["MOJOLEARN_AFN26_ATTN_PROJ_KB16"](), "removed 2026-11-15 (lane/expdel2-33-neural): AFN26_ATTN_PROJ_KB16 (unmeasured opt-in arm) is gone; the default is kept; code at c3d1c7865f; restore: experiments/removed/MOJOLEARN_AFN26_ATTN_PROJ_KB16.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_AFN26_ATTN_PROJ_BM32.patch
+    comptime assert not is_defined["MOJOLEARN_AFN26_ATTN_PROJ_BM32"](), "removed 2026-11-15 (lane/expdel2-33-neural): AFN26_ATTN_PROJ_BM32 (unmeasured opt-in arm) is gone; the default is kept; code at c3d1c7865f; restore: experiments/removed/MOJOLEARN_AFN26_ATTN_PROJ_BM32.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_AFN_CNN_DIRECT.patch
+    comptime assert not is_defined["MOJOLEARN_AFN_CNN_DIRECT"](), "removed 2026-11-15 (lane/expdel2-33-neural): AFN_CNN_DIRECT (unmeasured opt-in arm) is gone; the default is kept; code at c3d1c7865f; restore: experiments/removed/MOJOLEARN_AFN_CNN_DIRECT.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_AFN26_CNN_ROWS32.patch
+    comptime assert not is_defined["MOJOLEARN_AFN26_CNN_ROWS32"](), "removed 2026-11-15 (lane/expdel2-33-neural): AFN26_CNN_ROWS32 (unmeasured opt-in arm) is gone; the default is kept; code at c3d1c7865f; restore: experiments/removed/MOJOLEARN_AFN26_CNN_ROWS32.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_AFN26_CNN_CHANNELS16.patch
+    comptime assert not is_defined["MOJOLEARN_AFN26_CNN_CHANNELS16"](), "removed 2026-11-15 (lane/expdel2-33-neural): AFN26_CNN_CHANNELS16 (unmeasured opt-in arm) is gone; the default is kept; code at c3d1c7865f; restore: experiments/removed/MOJOLEARN_AFN26_CNN_CHANNELS16.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_AFN26_CNN_K16.patch
+    comptime assert not is_defined["MOJOLEARN_AFN26_CNN_K16"](), "removed 2026-11-15 (lane/expdel2-33-neural): AFN26_CNN_K16 (unmeasured opt-in arm) is gone; the default is kept; code at c3d1c7865f; restore: experiments/removed/MOJOLEARN_AFN26_CNN_K16.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_AFN26_CNN_COLS_ONCE.patch
+    comptime assert not is_defined["MOJOLEARN_AFN26_CNN_COLS_ONCE"](), "removed 2026-11-15 (lane/expdel2-33-neural): AFN26_CNN_COLS_ONCE (unmeasured opt-in arm) is gone; the default is kept; code at c3d1c7865f; restore: experiments/removed/MOJOLEARN_AFN26_CNN_COLS_ONCE.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_BN_FOLD_BLOCK_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_BN_FOLD_BLOCK_OFF"](), "removed 2026-11-15 (lane/expdel2-33-neural): BN_FOLD_BLOCK_OFF (unmeasured old path) is gone; the default is kept; code at c3d1c7865f; restore: experiments/removed/MOJOLEARN_BN_FOLD_BLOCK_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_ATTN_FOLD_V2.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_ATTN_FOLD_V2"](), "removed 2026-11-15 (lane/expdel2-33-neural): IDN_ATTN_FOLD_V2 (unmeasured opt-in arm) is gone; the default is kept; code at c3d1c7865f; restore: experiments/removed/MOJOLEARN_IDN_ATTN_FOLD_V2.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_DISABLE_RESIDUAL2_NEXT_NORM.patch
+    comptime assert not is_defined["MOJOLEARN_DISABLE_RESIDUAL2_NEXT_NORM"](), "removed 2026-11-15 (lane/expdel2-33-neural): DISABLE_RESIDUAL2_NEXT_NORM (unmeasured opt-in arm) is gone; the default is kept; code at c3d1c7865f; restore: experiments/removed/MOJOLEARN_DISABLE_RESIDUAL2_NEXT_NORM.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_FUSE_RESIDUAL1_NORM2.patch
+    comptime assert not is_defined["MOJOLEARN_FUSE_RESIDUAL1_NORM2"](), "removed 2026-11-15 (lane/expdel2-33-neural): FUSE_RESIDUAL1_NORM2 (unmeasured opt-in arm) is gone; the default is kept; code at c3d1c7865f; restore: experiments/removed/MOJOLEARN_FUSE_RESIDUAL1_NORM2.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_ATTN_CACHE_WAIT.patch
+    comptime assert not is_defined["MOJOLEARN_ATTN_CACHE_WAIT"](), "removed 2026-11-15 (lane/expdel2-33-neural): ATTN_CACHE_WAIT (unmeasured opt-in arm) is gone; the default is kept; code at c3d1c7865f; restore: experiments/removed/MOJOLEARN_ATTN_CACHE_WAIT.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_ATTN_CACHE_NOWAIT_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_ATTN_CACHE_NOWAIT_OFF"](), "removed 2026-11-15 (lane/expdel2-33-neural): IDN_ATTN_CACHE_NOWAIT_OFF (unmeasured old path) is gone; the default is kept; code at c3d1c7865f; restore: experiments/removed/MOJOLEARN_IDN_ATTN_CACHE_NOWAIT_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_LLAMA_REFUSE_BATCH_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_LLAMA_REFUSE_BATCH_OFF"](), "removed 2026-11-15 (lane/expdel2-33-neural): IDN_LLAMA_REFUSE_BATCH_OFF (unmeasured old path) is gone; the default is kept; code at c3d1c7865f; restore: experiments/removed/MOJOLEARN_IDN_LLAMA_REFUSE_BATCH_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_TRANSFORMER_LEGACY_CALLER_TRANSFER.patch
+    comptime assert not is_defined["MOJOLEARN_TRANSFORMER_LEGACY_CALLER_TRANSFER"](), "removed 2026-11-15 (lane/expdel2-33-neural): TRANSFORMER_LEGACY_CALLER_TRANSFER (unmeasured old path) is gone; the default is kept; code at c3d1c7865f; restore: experiments/removed/MOJOLEARN_TRANSFORMER_LEGACY_CALLER_TRANSFER.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_TRANSFORMER_LEGACY_WEIGHT_COPY.patch
+    comptime assert not is_defined["MOJOLEARN_TRANSFORMER_LEGACY_WEIGHT_COPY"](), "removed 2026-11-15 (lane/expdel2-33-neural): TRANSFORMER_LEGACY_WEIGHT_COPY (unmeasured old path) is gone; the default is kept; code at c3d1c7865f; restore: experiments/removed/MOJOLEARN_TRANSFORMER_LEGACY_WEIGHT_COPY.patch"
     return True
 
 
