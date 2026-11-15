@@ -1,0 +1,34 @@
+diff --git b/x_cluster/optics.mojo a/x_cluster/optics.mojo
+index ebe25ac8d6..439800c449 100644
+--- b/x_cluster/optics.mojo
++++ a/x_cluster/optics.mojo
+@@ -22,6 +22,8 @@ formulation; xc in Float32 with exact product tests, a bit change against the
+ old Float64 ratios at ties only). sklearn's `np.around(...,
+ decimals=precision)` of the core and reach distances is not carried
+ (NOT_IMPLEMENTED.tsv)."""
++from std.sys.compile import is_defined
++
+ from checks.kernel_matrix import COLUMN_APPLE, TARGET_COLUMN
+ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
+ from x_cluster.ops import ClusterOps
+@@ -34,17 +36,15 @@ from x_cluster.ops import ClusterOps
+ # (hr-optin-flags): the loop reads the device's n x n distances.
+ # Lane cluster2 (lane/apple-fast-cluster2, 2026-10-02), FAST + Apple, the
+ # GPU binding only, OPTICS_FAST_DEVICE_ORDER (DEFAULT ON since the M3 A/B:
+-# optics istella 432.7 -> 260.7 ms, n=1, quality identical; the old `-D`
+-# name is harmless):
++# optics istella 432.7 -> 260.7 ms, n=1, quality identical; off with
++# `-D MOJOLEARN_OPTICS_FAST_DEVICE_ORDER_OFF`, the old `-D` name is harmless):
+ # the ordering loop as n + 1 grid launches (`ops.optics_order_fast`,
+ # device_ops.mojo) in place of main's 2n (`ops.optics_order`).
+ # Each step folds the previous launch's partial keys itself, so the
+ # separate per-step partial-scan launch goes. Same picks, same reachability
+ # and predecessors (compares and selects only).
+ comptime XC2_FAST = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_COLUMN == COLUMN_APPLE
+-# TOMBSTONE: MOJOLEARN_OPTICS_FAST_DEVICE_ORDER_OFF (old path beside the FAST+Apple default, EXP:516; non-owner site) deleted 2026-11-15 by lane/expdel2-15-cluster; code recoverable at 75a1700222.
+-# Restore: git apply experiments/removed/MOJOLEARN_OPTICS_FAST_DEVICE_ORDER_OFF.expdel2-15-cluster.patch; record in docs/TOMBSTONES.md.
+-comptime OPTICS_FAST_DEVICE_ORDER = XC2_FAST
++comptime OPTICS_FAST_DEVICE_ORDER = XC2_FAST and not is_defined["MOJOLEARN_OPTICS_FAST_DEVICE_ORDER_OFF"]()
+ 
+ 
+ def dist_slot[O: ClusterOps](mut ops: O, n: Int) raises -> Int:
