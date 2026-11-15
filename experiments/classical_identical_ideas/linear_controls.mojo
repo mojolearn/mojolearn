@@ -253,7 +253,7 @@ comptime C19_SGD_CHUNK = 2048
 comptime C24_ROWS2048 = CLASSICAL_IDN
 # TOMBSTONE: MOJOLEARN_CLASSICAL_C24_TREE4 (measured arm not promoted) deleted 2026-11-15 by lane/expdel2-06-base; code recoverable at ba795517d7.
 # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C24_TREE4.patch; record in docs/TOMBSTONES.md.
-comptime C24_TREE4 = False
+# (Sweep 2026-11-15: comptime C24_TREE4 removed; nothing read it.)
 # C25_PROJECTION_REUSE (IDENTICAL default since 2026-10-10): RBFSampler's projection
 # runs as classical_projection_kernel (kernel_methods/rbf_fused.mojo), four rows per
 # thread reusing each projection weight, the GEMM-v1 leaf/tree fold, for every d.
