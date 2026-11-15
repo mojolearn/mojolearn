@@ -30,7 +30,7 @@ Jones transform and filter recurrence `_loglike_at` ran one order at a time
 after downloading and re-uploading `x`), marked -inf on a refusal code by
 `order_ll_kernel`.
 
-ARIMA_ORDER_SEASONAL (`-D MOJOLEARN_IDN_ARIMA_ORDER_SEASONAL_OFF=1`, needs
+ARIMA_ORDER_SEASONAL (its `_OFF` deleted 2026-11-15; needs
 ORDER_DEVICE). Seasonal grids (P, Q, one D, one s) take the grouped search:
 orders are grouped by r = max(p + s P, q + s Q + 1) and k after one shared
 differencing (d, D, s), r <= 5 as `validate_order` allows.
@@ -79,8 +79,10 @@ comptime ARIMA_ORDER_CAP = _ORDER_IDN
 # TOMBSTONE: MOJOLEARN_IDN_ARIMA_ORDER_DEVICE_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-47-promote; code recoverable at 1b2ff989e2.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_ARIMA_ORDER_DEVICE_OFF.patch; record in docs/TOMBSTONES.md.
 comptime ARIMA_ORDER_DEVICE = _ORDER_IDN
+# TOMBSTONE: MOJOLEARN_IDN_ARIMA_ORDER_SEASONAL_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-47-promote; code recoverable at 63fd8bf564.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ARIMA_ORDER_SEASONAL_OFF.patch; record in docs/TOMBSTONES.md.
 comptime ARIMA_ORDER_SEASONAL = (
-    ARIMA_ORDER_DEVICE and not is_defined["MOJOLEARN_IDN_ARIMA_ORDER_SEASONAL_OFF"]()
+    ARIMA_ORDER_DEVICE
 )
 comptime ARIMA_ORDER_IC_DEVICE = (
     ARIMA_ORDER_DEVICE and not is_defined["MOJOLEARN_IDN_ARIMA_IC_DEVICE_OFF"]()
