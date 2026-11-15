@@ -196,11 +196,9 @@ comptime IDN_KMEANS_FOLD_STORE = KMEANS_BLOCK_ACC and GLOBAL_NUMERIC_MODE == NUM
 # TOMBSTONE: MOJOLEARN_IDN_KMEANS_DEVICE_CONV_OFF (old path, EXP:2274 REFACTORED default kept) deleted 2026-11-15 by lane/expdel2-10-cluster; code recoverable at ea62796835.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_KMEANS_DEVICE_CONV_OFF.patch; record in docs/TOMBSTONES.md.
 comptime IDN_KMEANS_DEVICE_CONV = KMEANS_BLOCK_ACC and GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-#: Iterations enqueued per flag read: ONE int sweep define (lane
-#: classical-fixes, 2026-10-07), `-D MOJOLEARN_IDN_KMEANS_CONV_CHUNK=1|2|4|16|32`,
-#: default 8 when absent. It replaces the five mutually overriding defines
-#: `MOJOLEARN_IDN_KMEANS_CONV_CHUNK_1|_2|_4|_16|_32` (refused in
-#: core/six_lane_experiment_guards.mojo); each value keeps that arm's loop.
+#: Iterations enqueued per flag read: 8. The int sweep define of lane
+#: classical-fixes (2026-10-07; it replaced five mutually overriding chunk
+#: defines) is gone: see the tombstone below.
 #: Cost reasoning: a chunk trades one host flag read (a sync) per chunk
 #: against up to chunk-1 near-empty launches enqueued past convergence; it
 #: does not depend on the data shape. No bit depends on the chunk (labels,
@@ -215,7 +213,9 @@ comptime IDN_KMEANS_DEVICE_CONV = KMEANS_BLOCK_ACC and GLOBAL_NUMERIC_MODE == NU
 # candidate0.887/1.077/1.517 ms vs1.086/1.272/1.503 ms on
 # 100000x32,100001x33,65537x17,k32. One warmup/score; default8 retained.
 # Evidence: overnight-ab-20261006/nvidia/default-repair-normalized-measurements.json.
-comptime KMEANS_CONV_CHUNK = get_defined_int["MOJOLEARN_IDN_KMEANS_CONV_CHUNK", 8]()
+# TOMBSTONE: MOJOLEARN_IDN_KMEANS_CONV_CHUNK (int sweep arm, EXP:1571 RETIRED; A08 mixed on NVIDIA, default 8 kept) deleted 2026-11-15 by lane/expdel2-10-cluster; code recoverable at 9fb488c850.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_KMEANS_CONV_CHUNK.patch; record in docs/TOMBSTONES.md.
+comptime KMEANS_CONV_CHUNK = 8
 
 
 def kmeans_shift_threshold(tol: Float64) -> Float32:
