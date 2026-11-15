@@ -1996,7 +1996,7 @@ def kde_lse_serial_sum_kernel(
 # ===========================================================================
 # TOMBSTONE: MOJOLEARN_KDE_BLOCK_SUM_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-19-kernel; code recoverable at 8b543e49e0.
 # Restore: git apply experiments/removed/MOJOLEARN_KDE_BLOCK_SUM_OFF.patch; record in docs/TOMBSTONES.md.
-comptime KDE_BLOCK_SUM = True
+# (Sweep 2026-11-15: comptime KDE_BLOCK_SUM removed; always True, nothing read it.)
 comptime KDE_BLOCK_SUM_TPB = 256
 comptime KDE_BLOCK_SUM_TILE = 1024
 
