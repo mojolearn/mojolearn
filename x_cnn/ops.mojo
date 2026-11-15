@@ -278,48 +278,6 @@ def col2im_at(i: Int, dcols: FP, dx: FP, f2: FP, f3: FP, q: IP, p: IP):
 
 
 @always_inline
-def col2im_bounded_at(i: Int, dcols: FP, dx: FP, f2: FP, f3: FP, q: IP, p: IP):
-    """NI14 address-schedule arm: exclude taps outside the output image.
-
-    The bounds solve 0 <= h+PH-kh*DH <= (OH-1)*SH, and likewise for
-    width. Congruence checks and the surviving (kh,kw) contribution order
-    are unchanged, including CP_REV. No scatter atomics or new reduction.
-    This is also the resource/boundary fallback for NI14's cooperative tap
-    pages in x_cnn/neural_col2im.mojo; it introduces no partial sums.
-    """
-    var C = _g(p, CP_C); var H = _g(p, CP_H); var W = _g(p, CP_W)
-    var KH = _g(p, CP_KH); var KW = _g(p, CP_KW)
-    var OH = _g(p, CP_OH); var OW = _g(p, CP_OW)
-    var SH = _g(p, CP_SH); var SW = _g(p, CP_SW)
-    var PH = _g(p, CP_PH); var PW = _g(p, CP_PW)
-    var DH = _g(p, CP_DH); var DW = _g(p, CP_DW)
-    var w = _um(i, W); var t = _ud(i, W)
-    var h = _um(t, H)
-    t = _ud(t, H)
-    var c = _um(t, C); var n = _ud(t, C)
-    var hlo = max(0, h + PH - (OH - 1) * SH + DH - 1) // DH
-    var hhi = min(KH, (h + PH) // DH + 1)
-    var wlo = max(0, w + PW - (OW - 1) * SW + DW - 1) // DW
-    var whi = min(KW, (w + PW) // DW + 1)
-    var acc = Float32(0)
-    var ckk = C * KH * KW
-    for a in range(max(0, hhi - hlo)):
-        var kh = hhi - 1 - a if _g(p, CP_REV) != 0 else hlo + a
-        var th = h + PH - kh * DH
-        if _um(th, SH) != 0:
-            continue
-        var oh = _ud(th, SH)
-        for kw in range(wlo, whi):
-            var tw = w + PW - kw * DW
-            if _um(tw, SW) != 0:
-                continue
-            var ow = _ud(tw, SW)
-            var r = (n * OH + oh) * OW + ow
-            acc = ftz(acc + ftz(dcols.unsafe_load(r * ckk + (c * KH + kh) * KW + kw)))
-    dx.unsafe_store(i, acc)
-
-
-@always_inline
 def fill_one_at(i: Int, dst: FP, f1: FP, f2: FP, f3: FP, q: IP, p: IP):
     dst.unsafe_store(i, Float32(1))
 
@@ -573,17 +531,6 @@ def conv_relu_out_at(i: Int, y2: FP, bias: FP, yconv: FP, dst: FP, q: IP, p: IP)
     var v = conv_out_val(y2.unsafe_load((n * S + rem) * OC + oc), bias, oc, p)
     yconv.unsafe_store(i, v)
     dst.unsafe_store(i, relu_val(ftz(v)))
-
-
-@always_inline
-def relu_rows_bwd_at(i: Int, dout: FP, yconv: FP, grow: FP, f3: FP, q: IP, p: IP):
-    """NI16: no-pool ReLU VJP plus NCHW-to-rows, retaining both FTZ seams."""
-    var OC = _g(p, CP_OC)
-    var S = _g(p, CP_OH) * _g(p, CP_OW)
-    var r = _ud(i, OC); var oc = i - r * OC
-    var n = _ud(r, S); var rem = r - n * S
-    var j = (n * OC + oc) * S + rem
-    grow.unsafe_store(i, ftz(relu_bwd_val(yconv.unsafe_load(j), dout.unsafe_load(j))))
 
 
 @always_inline
