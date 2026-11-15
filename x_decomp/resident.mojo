@@ -682,13 +682,15 @@ comptime IDN_QR_R_RESIDENT = IDN_QR_R_DIRECT
 # MOJOLEARN_IDN_ALL_OFF) keeps the copy whatever the caller says.
 # TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-18-decomposition (non-owner; owner expdel2-37-series); code recoverable at 7fa6378a2a.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-18-decomposition.patch; record in docs/TOMBSTONES.md.
-comptime IDN_QR_R_INPLACE = IDN_QR_R_RESIDENT and not is_defined["MOJOLEARN_IDN_QR_R_INPLACE_OFF"]()
+# TOMBSTONE: MOJOLEARN_IDN_QR_R_INPLACE_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-18-decomposition; code recoverable at c735434b00.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_QR_R_INPLACE_OFF.patch; record in docs/TOMBSTONES.md.
+comptime IDN_QR_R_INPLACE = IDN_QR_R_RESIDENT
 
 
 def dev_qr_r_run(ia: Int, pr: F32Ptr, m: Int, n: Int, consume: Bool) raises -> Int:
     """`x_decomp_qr_r` of the device matrix a (m x n); r (n x n) is a host
-    address. p = [m, n] or [m, n, consume]. Without consume (or under
-    IDN_QR_R_INPLACE_OFF) a is left as it is: the QR destroys a device copy.
+    address. p = [m, n] or [m, n, consume]. Without consume (or outside
+    IDN_QR_R_INPLACE) a is left as it is: the QR destroys a device copy.
     With consume != 0 and IDN_QR_R_INPLACE the QR destroys a itself (the
     caller must not read a again). Returns 1 when a was consumed, else 0.
     Waits."""
