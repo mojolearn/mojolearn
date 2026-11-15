@@ -124,6 +124,9 @@ from kernel_methods.checks.random_features import (
 from kernel_methods.impl.distance.kernel_matrices import KM_EPILOGUE_TPB
 from kernel_methods.impl.kernel_ridge.kernel_ridge import (
     KRR_RIDGE_TPB,
+    add_ridge_diag,
+    kernel_ridge_factor_solve_enqueue,
+    kernel_ridge_ops_route,
     kernel_ridge_solve,
     kernel_ridge_workspace_floats,
 )
@@ -136,6 +139,7 @@ from svm.impl.svm_parameter import KernelParams
 from x_decomp.cells import F32Ptr
 from x_decomp.eigh_scale import enqueue_es_scale, enqueue_es_unscale, enqueue_es_unscale_diag
 from x_decomp.rr import RR_EIGH_SWEEPS, RR_OFF_TPB, rr_converged, rr_fro_kept
+from x_decomp.rr import rr_block, rr_cs, rr_vrow
 from experiments.classical_identical_ideas.linear_controls import C25_PROJECTION_REUSE
 from kernel_methods.rbf_fused import (
     classical_projection_kernel,
@@ -969,19 +973,29 @@ def kernel_ridge_fit_ptr_into[out_origin: MutOrigin, //](
         )
         trace.record_device(ctx, "krr.weighted", dk, cells)
 
-    # The ridge, the factor and the solve: `kernel_ridge_solve`'s
+    # Under -D MOJOLEARN_IDN_CHOL_OPS_FIT the ridge, the factor and the
+    # solve are enqueued read-free (lane n8-gp-krr-smo, the executor's
+    # Cholesky ops); `info` comes home with the dual coefficients and a
+    # failed factor raises after that one drain. The default, the
+    # identity-trace route and a multi-GPU plan keep `kernel_ridge_solve`'s
     # `potrf_lower` (one drain inside the factor for `info`, then the
-    # download's), the measured 0.8.66 route.
-    # TOMBSTONE: MOJOLEARN_IDN_CHOL_OPS_FIT (opt-in B arm, EXP:581 RUN OWED; AMD 1.14-1.25x slower 2026-11-13) deleted 2026-11-15 by lane/expdel2-16-decomposition; code recoverable at 860e94a3f4.
-    # Restore: git apply experiments/removed/MOJOLEARN_IDN_CHOL_OPS_FIT.patch; record in docs/TOMBSTONES.md.
-    # (Sweep 2026-11-15: the always-False kernel_ridge_ops_route branch, kernel_ridge_factor_solve_enqueue and the info word it read home removed.)
-    var info0 = kernel_ridge_solve(
-        ctx, dk, dy, cws, n_samples, n_targets, alpha, trace,
-        CHOL_PANEL_TPB, CHOL_ELEM_TPB, CHOL_SOLVE_TPB, KRR_RIDGE_TPB, KMSAB_NONE,
-    )
-    if info0 != 0:
-        ctx.synchronize()
-        raise Error(_krr_not_pd_message(info0, kp.kernel, n_samples))
+    # download's): the measured 0.8.66 route (cholesky/chol_ops.mojo
+    # CHOL_OPS_FIT, lane fable-perf-classical-0855).
+    var dinfo = ctx.enqueue_create_buffer[DType.int32](1)
+    var hinfo = ctx.enqueue_create_host_buffer[DType.int32](1)
+    if not kernel_ridge_ops_route(trace):
+        var info0 = kernel_ridge_solve(
+            ctx, dk, dy, cws, n_samples, n_targets, alpha, trace,
+            CHOL_PANEL_TPB, CHOL_ELEM_TPB, CHOL_SOLVE_TPB, KRR_RIDGE_TPB, KMSAB_NONE,
+        )
+        if info0 != 0:
+            ctx.synchronize()
+            raise Error(_krr_not_pd_message(info0, kp.kernel, n_samples))
+        enqueue_fill(ctx, dinfo, Int32(0))
+    else:
+        add_ridge_diag(ctx, dk, n_samples, alpha, KRR_RIDGE_TPB, KMSAB_NONE)
+        kernel_ridge_factor_solve_enqueue(ctx, dk, dy, dinfo, n_samples, n_targets)
+    ctx.enqueue_copy(dst_ptr=hinfo.unsafe_ptr(), src_buf=dinfo)
     if weighted:
         _krr_scale_rows_dev(ctx, dy, dsw, n_samples, n_targets)
     _download_into(ctx, dy, dual_out, n_samples * n_targets)
@@ -989,6 +1003,11 @@ def kernel_ridge_fit_ptr_into[out_origin: MutOrigin, //](
         # A fold's X_fit_: the device copy of the gathered rows, home once.
         ctx.enqueue_copy(dst_ptr=MutPointer[Float32, MutAnyOrigin](unsafe_from_address=xfit_addr), src_buf=qx.x)
     ctx.synchronize()
+    var info = Int(hinfo.unsafe_ptr().unsafe_load(0))
+    _ = hinfo^
+    _ = dinfo^
+    if info != 0:
+        raise Error(_krr_not_pd_message(info, kp.kernel, n_samples))
     _ = dsw^
     _ = qx^
     _ = dy^
