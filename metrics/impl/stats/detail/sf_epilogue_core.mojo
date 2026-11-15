@@ -9,9 +9,7 @@ integer histogram (k ints) or contingency matrix (k^2 ints) back. DEVIATION
 651 made the IDENTICAL log-bearing epilogues Float32 through
 `identical_log`, about seven digits against the Float64 reference.
 
-Under IDN_METRIC_EPI (IDENTICAL, ON by default, -D
-MOJOLEARN_IDN_METRIC_EPI_OFF or MOJOLEARN_IDN_ALL_OFF restores both
-deviations' code) the epilogue is integer arithmetic on the binary64
+Under IDN_METRIC_EPI (IDENTICAL) the epilogue is integer arithmetic on the binary64
 encoding (checks/soft_f64.mojo: correctly rounded add, mul, div, fma and
 the portable log), run in device kernels next to the counts, and one
 binary64 word comes back instead of k or k^2 ints:
@@ -40,17 +38,15 @@ THIS FILE is the arithmetic (no GPU import: the host oracle and the CPU-only
 binding import it); the kernels and device entries are sf_epilogue.mojo.
 """
 from std.memory import bitcast
-from std.sys.compile import is_defined
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from checks.soft_f64 import (
     SF64_ZERO, SF64_ONE, _norm_round_pack, sf64_add, sf64_sub, sf64_mul, sf64_div, sf64_fma, sf64_neg, sf64_log,
 )
 
-comptime IDN_METRIC_EPI = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not (is_defined["MOJOLEARN_IDN_METRIC_EPI_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
-)
+# TOMBSTONE: MOJOLEARN_IDN_METRIC_EPI_OFF, MOJOLEARN_IDN_ALL_OFF (old paths, no A/B recorded; umbrella EXP:2438) deleted 2026-11-15 by lane/expdel2-37-series; code recoverable at d8a165cb14.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_METRIC_EPI_OFF.patch and experiments/removed/MOJOLEARN_IDN_ALL_OFF.patch; record in docs/TOMBSTONES.md.
+comptime IDN_METRIC_EPI = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 
 #: terms a chunk folds (a constant of the source, never of a launch)
 comptime EPI_CH = 64
