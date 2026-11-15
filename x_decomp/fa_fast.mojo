@@ -35,9 +35,9 @@ defines (docs/apple-fast/ab/fa.md):
   host in main's order and the tol test is main's. Implies GRAM_ONCE's pass.
 - MOJOLEARN_FA_LIVEBUF: ITER_DEVICE's scratch as one arena buffer (one live
   Metal buffer instead of ~12) and W + psi read back in one copy.
-- MOJOLEARN_FA_TRANSFORM_FUSED: `fa_transform_kernel`, transform as one
-  launch over rows with P = (W / psi)^T cov_z (d x nc) and the mean in
-  threadgroup memory, one row per thread, the n x nc result read back once.
+- MOJOLEARN_FA_TRANSFORM_FUSED (`fa_transform_kernel`, transform as one
+  launch over rows) was NEUTRAL (rab7-fatransform istella +2.0%) and was
+  deleted 2026-11-15 (docs/TOMBSTONES.md).
 - (QUALITY-FIX, lane/apple-fast-fa-quality 2026-10-04) every ITER_DEVICE
   arm forms G in double-float (`fa_gram_tile_df_kernel`), factors it once
   (`fa_chol_df_kernel`, R^T R = G) and takes main's one-sided SVD of
@@ -143,17 +143,8 @@ comptime FA_LIVEBUF = FA_FAST_APPLE and is_defined["MOJOLEARN_FA_LIVEBUF"]()
 # TOMBSTONE: MOJOLEARN_FA_LL_DEVICE (DROPPED-slower) deleted 2026-10-09 by lane/owed-deletions-D3; code recoverable at b639a2bd2.
 # Tried: the FA EM convergence test on the device (double-float ll sum in fa_finish_kernel, a flag read every 4 iterations); only timed with EIG_SMALL (FA_ALL istella +99.3%), alone never timed.
 # Restore: git apply experiments/removed/MOJOLEARN_FA_LL_DEVICE.patch; record in docs/TOMBSTONES.md.
-#: (FAST + Apple, default OFF; RECORD rab7-fatransform 2026-10-04: istella
-#: 10313.84 -> 10524.26 ms (+2.0%), taxi +0.3%, quality identical: stays off)
-#: FactorAnalysis.transform as one launch over
-#: rows (`fa_transform_kernel`): P = (W / psi)^T cov_z (d x nc) and the mean
-#: in threadgroup memory, one row per thread, in place of a sub, two GEMMs
-#: and their n x d / n x nc intermediates. Limits from the kernel: nc <=
-#: FA_TR_MAXK register accumulators, d (nc + 1) <= FA_TR_FLOATS (a 16 KB
-#: threadgroup page, checked against the column's page). Source
-#: lane/apple-fast-fa@3efbce2af. Prior M3 B arms: istella 6201 ms, taxi
-#: 243 ms against board 10351 / 308 (whole fit + transform lane). No failure.
-comptime FA_TRANSFORM_FUSED = FA_FAST_APPLE and is_defined["MOJOLEARN_FA_TRANSFORM_FUSED"]()
+# TOMBSTONE: MOJOLEARN_FA_TRANSFORM_FUSED (NEUTRAL loser, rab7-fatransform istella +2.0%) deleted 2026-11-15 by lane/expdel-02-decomposition-series; code recoverable at 7e904cf531.
+# Restore: git apply experiments/removed/MOJOLEARN_FA_TRANSFORM_FUSED.patch; record in docs/TOMBSTONES.md.
 #: (FAST + Apple, QUALITY-FIX, lane/apple-fast-fa-quality 2026-10-04) the
 #: ITER_DEVICE loop's spectral step. Every ITER_DEVICE arm takes it unless -D MOJOLEARN_FA_GRAM_QOLD keeps the float32 route.
 #: Cause: the float32 Gram + float32 eigh of D G D / n resolve B = D G D / n
@@ -1142,53 +1133,9 @@ def fa_em_run(
 
 
 # ------------------------------------------------------------ transform
-comptime FA_TR_TPB = 256
-comptime FA_TR_MAXK = 16
-comptime FA_TR_FLOATS = 4096
-comptime FA_TR_SMEM_BYTES = FA_TR_FLOATS * 4
-comptime FA_TR_FITS = lib_smem_page_fits_for[TARGET_COLUMN, FA_TR_SMEM_BYTES]()
-
-
-def fa_transform_kernel(x: F32Ptr, mean: F32Ptr, pm: F32Ptr, dst: F32Ptr, n_in: Int32, d_in: Int32, nc_in: Int32):
-    """out[row] = (x[row] - mean) P, P d x nc in threadgroup memory with the
-    mean behind it, one row per thread, nc <= FA_TR_MAXK accumulators."""
-    var n = Int(n_in)
-    var d = Int(d_in)
-    var nc = Int(nc_in)
-    var tid = Int(thread_idx.x)
-    var sh = stack_allocation[FA_TR_FLOATS, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
-    var np = d * nc
-    for idx in range(tid, np + d, FA_TR_TPB):
-        sh[idx] = pm.unsafe_load(idx) if idx < np else mean.unsafe_load(idx - np)
-    barrier()
-    var row = Int(block_idx.x) * FA_TR_TPB + tid
-    if row >= n:
-        return
-    var acc = Array[Float32, FA_TR_MAXK](fill=Float32(0.0))
-    for j in range(d):
-        var xj = x.unsafe_load(row * d + j) - sh[np + j]
-        for kk in range(nc):
-            acc[kk] += xj * sh[j * nc + kk]
-    for kk in range(nc):
-        dst.unsafe_store(row * nc + kk, acc[kk])
-
-
-def fa_transform_run(x: Int, mean: Int, pm: Int, dst: Int, n: Int, d: Int, nc: Int) raises -> Int:
-    """dst (n x nc, device id) = (X - mean) P for the resident X (n x d),
-    mean (d) and P (d x nc), all device ids; enqueued, no sync. Returns n."""
-    if n < 1 or d < 1 or nc < 1:
-        raise Error("x_decomp fa_transform: empty input")
-    if nc > FA_TR_MAXK or d * nc + d > FA_TR_FLOATS:
-        raise Error("x_decomp fa_transform: P and the mean do not fit the page (nc <= 16, d (nc + 1) <= 4096)")
-    var px = _ptr(x, n * d)
-    var pmean = _ptr(mean, d)
-    var pp = _ptr(pm, d * nc)
-    var po = _ptr(dst, n * nc)
-    var ctx = xd_ctx()
-    ctx.enqueue_function[fa_transform_kernel](
-        px, pmean, pp, po, Int32(n), Int32(d), Int32(nc), grid_dim=(n + FA_TR_TPB - 1) // FA_TR_TPB, block_dim=FA_TR_TPB
-    )
-    return n
+# TOMBSTONE: MOJOLEARN_FA_TRANSFORM_FUSED (NEUTRAL loser, rab7-fatransform istella +2.0%) deleted 2026-11-15 by lane/expdel-02-decomposition-series; code recoverable at 7e904cf531.
+# Restore: git apply experiments/removed/MOJOLEARN_FA_TRANSFORM_FUSED.patch; record in docs/TOMBSTONES.md.
+# (fa_transform_kernel / fa_transform_run and the FA_TR_* page limits went with it.)
 
 
 # ------------------------------------------------------------ the defines

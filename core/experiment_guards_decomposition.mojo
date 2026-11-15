@@ -101,6 +101,8 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_IDN_LU_RESIDENT_PAIR_OFF"](), "removed 2026-11-15 (lane/expdel-02-decomposition-series): IDN_LU_RESIDENT_PAIR_OFF (IDENTICAL rollback to the host-staged lu_factor / lu_solve) is gone; the resident pair is the IDENTICAL path (lu-factor synthetic NV 822.7 -> 369.0 ms, AMD 568.0 -> 315.4 ms, digests NV == AMD); MOJOLEARN_IDN_ALL_OFF still reverts it; restore: experiments/removed/MOJOLEARN_IDN_LU_RESIDENT_PAIR_OFF.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_FA_FAST_QRR_OFF.patch
     comptime assert not is_defined["MOJOLEARN_FA_FAST_QRR_OFF"](), "removed 2026-11-15 (lane/expdel-02-decomposition-series): FA_FAST_QRR_OFF (FAST+Apple rollback to the host List staging of DevExec.qr_r) is gone with FA_FAST_QRR; the direct upload is the qr_r path in every mode (factor-analysis istella 10391.5 -> 10254.8 ms, digest identical); restore: experiments/removed/MOJOLEARN_FA_FAST_QRR_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_FA_TRANSFORM_FUSED.patch
+    comptime assert not is_defined["MOJOLEARN_FA_TRANSFORM_FUSED"](), "removed 2026-11-15 (lane/expdel-02-decomposition-series): FA_TRANSFORM_FUSED (FAST+Apple opt-in FactorAnalysis.transform as one fa_transform_kernel launch) was NEUTRAL: rab7-fatransform istella 10313.84 -> 10524.26 ms (+2.0%), taxi +0.3%, quality identical; the kit's sub + two GEMMs are the only transform; restore: experiments/removed/MOJOLEARN_FA_TRANSFORM_FUSED.patch"
     return True
 
 

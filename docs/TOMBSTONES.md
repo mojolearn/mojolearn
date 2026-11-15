@@ -660,6 +660,7 @@ in the tables after the sections.
 | [`MOJOLEARN_DECOMP_FAST_ORTH_WS_OFF`](#mojolearn_decomp_fast_orth_ws_off-old-path-deleted-2026-11-15) | Decomp (Kit.orth on the device: randomized SVD / PCA / TruncatedSVD / FastICA, FAST Apple) | removed (old path; FAST+Apple default KEEP, rab15-rsvdbundle) | 2026-11-15 | [MOJOLEARN_DECOMP_FAST_ORTH_WS_OFF.patch](../experiments/removed/MOJOLEARN_DECOMP_FAST_ORTH_WS_OFF.patch) |
 | [`MOJOLEARN_IDN_LU_RESIDENT_PAIR_OFF`](#mojolearn_idn_lu_resident_pair_off-old-path-deleted-2026-11-15) | Decomp (lu_factor / lu_solve resident pair, IDENTICAL) | removed (old path; IDENTICAL default PROMOTED, NV 0.45x / AMD 0.56x) | 2026-11-15 | [MOJOLEARN_IDN_LU_RESIDENT_PAIR_OFF.patch](../experiments/removed/MOJOLEARN_IDN_LU_RESIDENT_PAIR_OFF.patch) |
 | [`MOJOLEARN_FA_FAST_QRR_OFF`](#mojolearn_fa_fast_qrr_off-old-path-deleted-2026-11-15) | Decomp (FactorAnalysis DevExec.qr_r upload, FAST Apple) | removed (old path; FAST+Apple default ACCEPT, afc_ab_def) | 2026-11-15 | [MOJOLEARN_FA_FAST_QRR_OFF.patch](../experiments/removed/MOJOLEARN_FA_FAST_QRR_OFF.patch) |
+| [`MOJOLEARN_FA_TRANSFORM_FUSED`](#mojolearn_fa_transform_fused-loser-deleted-2026-11-15) | Decomp (FactorAnalysis.transform, FAST Apple opt-in) | NEUTRAL (rab7-fatransform istella +2.0%) | 2026-11-15 | [MOJOLEARN_FA_TRANSFORM_FUSED.patch](../experiments/removed/MOJOLEARN_FA_TRANSFORM_FUSED.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -6413,4 +6414,12 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md (section expdel-02-
 - **Verdict**: ACCEPT/DEFAULT, FAST+Apple default (EXPERIMENTS.md `FA_FAST_QRR`, afc_ab_def, M3 full board, one run per arm, 2026-10-04): factor-analysis istella 10391.5 -> 10254.8 ms, digest identical. No bit change on any column.
 - **Deleted by**: lane/expdel-02-decomposition-series (docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md); code recoverable at `e0d53def90`.
 - **Restore**: `git apply experiments/removed/MOJOLEARN_FA_FAST_QRR_OFF.patch`, then delete the `MOJOLEARN_FA_FAST_QRR_OFF` refusal in `core/experiment_guards_decomposition.mojo`.
+- **Records**: refusal in `core/experiment_guards_decomposition.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel-02-decomposition-series section).
+
+### MOJOLEARN_FA_TRANSFORM_FUSED: loser deleted (2026-11-15)
+
+- **What it was**: the FAST+Apple opt-in `FA_TRANSFORM_FUSED` (`x_decomp/fa_fast.mojo`): FactorAnalysis.transform as one launch over rows (`fa_transform_kernel`, P = (W / psi)^T cov_z and the mean in threadgroup memory, one row per thread) in place of the kit's sub and two GEMMs. Deleted: the define read, `FA_TRANSFORM_FUSED`, `fa_transform_kernel`, `fa_transform_run`, the `FA_TR_*` page limits, `fa_flags` bit 4, the `fa_transform` method of the `DecompDev` trait and of `DevDecomp` / `HostDecomp`, and the fused branch (with `_FA_TR_MAXK` / `_FA_TR_FLOATS`) of `x_decomp/fa_owner.mojo`'s transform. The default kit transform runs the same operations in the same order.
+- **Verdict**: NEUTRAL (EXPERIMENTS.md `FA_TRANSFORM_FUSED`, reconciled 2026-10-05, Verdicts batch 4): rab7-fatransform M3 one run per arm, factor-analysis istella 10313.84 -> 10524.26 ms (+2.0%), taxi +0.3%, quality identical; stayed off. No bit change on any column.
+- **Deleted by**: lane/expdel-02-decomposition-series (docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md); code recoverable at `7e904cf531`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_FA_TRANSFORM_FUSED.patch`, then delete the `MOJOLEARN_FA_TRANSFORM_FUSED` refusal in `core/experiment_guards_decomposition.mojo`.
 - **Records**: refusal in `core/experiment_guards_decomposition.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel-02-decomposition-series section).

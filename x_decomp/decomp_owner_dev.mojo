@@ -23,8 +23,7 @@ from x_decomp.lda_fit import LdaArgs
 from x_decomp.lda_fit_dev import lda_fit_dev_run
 from x_decomp.kit_device import lda_online_dev_run
 from x_decomp.fa_fast import (
-    FA_FAST_APPLE, FA_GRAM_DF, FA_GRAM_ONCE, FA_ITER_DEVICE, FA_TRANSFORM_FUSED, fa_em_run, fa_gram_run,
-    fa_transform_run,
+    FA_FAST_APPLE, FA_GRAM_DF, FA_GRAM_ONCE, FA_ITER_DEVICE, fa_em_run, fa_gram_run,
 )
 
 
@@ -90,8 +89,8 @@ struct DevDecomp(DecompDev):
                 f |= 1
             comptime if FA_ITER_DEVICE:
                 f |= 2
-            comptime if FA_TRANSFORM_FUSED:
-                f |= 4
+            # TOMBSTONE: MOJOLEARN_FA_TRANSFORM_FUSED (NEUTRAL loser, rab7-fatransform istella +2.0%) deleted 2026-11-15 by lane/expdel-02-decomposition-series; code recoverable at 7e904cf531 (bit 4 is 0).
+            # Restore: git apply experiments/removed/MOJOLEARN_FA_TRANSFORM_FUSED.patch; record in docs/TOMBSTONES.md.
             comptime if FA_GRAM_DF:
                 f |= 8
         return f
@@ -104,10 +103,6 @@ struct DevDecomp(DecompDev):
     def fa_em(g: Int, psi_src: F32Ptr, w_dst: F32Ptr, psi_dst: F32Ptr, ll_dst: MutPointer[Float64, MutAnyOrigin],
               d: Int, nc: Int, n: Int, max_iter: Int, tol: Float64) raises -> Int:
         return fa_em_run(g, psi_src, w_dst, psi_dst, ll_dst, d, nc, n, max_iter, tol)
-
-    @staticmethod
-    def fa_transform(x: Int, mean: Int, pm: Int, dst: Int, n: Int, d: Int, nc: Int) raises:
-        _ = fa_transform_run(x, mean, pm, dst, n, d, nc)
 
     @staticmethod
     def lda_rows(x: Int, ew: Int, d: Int, e: Int, n: Int, k: Int, v: Int, max_iter: Int, prior: Float64,

@@ -108,7 +108,8 @@ trait DecompDev:
     @staticmethod
     def fa_flags() -> Int:
         """FactorAnalysis's FAST Apple switches (`x_decomp_fa_defines`): bit 1
-        GRAM_ONCE, 2 ITER_DEVICE, 4 TRANSFORM_FUSED, 8 GRAM_DF; 0 elsewhere."""
+        GRAM_ONCE, 2 ITER_DEVICE, 8 GRAM_DF (4 was TRANSFORM_FUSED, deleted
+        2026-11-15); 0 elsewhere."""
         ...
 
     @staticmethod
@@ -118,10 +119,6 @@ trait DecompDev:
     @staticmethod
     def fa_em(g: Int, psi_src: F32Ptr, w_dst: F32Ptr, psi_dst: F32Ptr, ll_dst: MutPointer[Float64, MutAnyOrigin],
               d: Int, nc: Int, n: Int, max_iter: Int, tol: Float64) raises -> Int:
-        ...
-
-    @staticmethod
-    def fa_transform(x: Int, mean: Int, pm: Int, dst: Int, n: Int, d: Int, nc: Int) raises:
         ...
 
     @staticmethod

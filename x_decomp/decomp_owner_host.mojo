@@ -82,10 +82,6 @@ struct HostDecomp(DecompDev):
         raise Error("x_decomp: no FAST Apple FactorAnalysis on the host binding")
 
     @staticmethod
-    def fa_transform(x: Int, mean: Int, pm: Int, dst: Int, n: Int, d: Int, nc: Int) raises:
-        raise Error("x_decomp: no FAST Apple FactorAnalysis on the host binding")
-
-    @staticmethod
     def lda_rows(x: Int, ew: Int, d: Int, e: Int, n: Int, k: Int, v: Int, max_iter: Int, prior: Float64,
                  tol: Float64) raises:
         raise Error("x_decomp: no resident matrices on the host binding")
