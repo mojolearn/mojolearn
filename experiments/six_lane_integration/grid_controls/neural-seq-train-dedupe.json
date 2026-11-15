@@ -137,16 +137,7 @@
       "binding": "_mojolearn_byte_lm",
       "route": "fit step: training/byte_lm.mojo train step -> embedding (embedding/checks/embedding_identical) -> blocks -> identical_ce_forward_into/backward_into (training/checks/loss.mojo) -> optimizer (_byte_neural_group_update | identical_optimizer_step)",
       "controls": [],
-      "interaction_groups": [
-        [
-          "ce_token_fold",
-          "ce_grad_fused"
-        ],
-        [
-          "lm_views",
-          "train_scratch"
-        ]
-      ]
+      "interaction_groups": []
     },
     "neural:mamba2-forward": {
       "binding": "_mojolearn_mamba",

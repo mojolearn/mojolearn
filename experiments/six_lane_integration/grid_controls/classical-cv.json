@@ -9,23 +9,13 @@
    "binding": "_mojolearn_x_linear",
    "route": "fit: python _enetcv_fit -> x_linear_fit ALGO_ENETCV -> device.mojo enetcv_fit_grid (cd_grid.mojo): spans, prep stats [enetcv_fold_blocks | staged means+gram], ecv_grid_kernel, ecv_path_kernel (t_enet_gram_cd [c18_residual_next]), score, refit; predict: x_linear_decision",
    "controls": [],
-   "interaction_groups": [
-    [
-     "enetcv_fold_blocks",
-     "c18_residual_next"
-    ]
-   ]
+   "interaction_groups": []
   },
   "expanded:enet-cv": {
    "binding": "_mojolearn_x_linear",
    "route": "same as lasso-cv with l1_ratio grid",
    "controls": [],
-   "interaction_groups": [
-    [
-     "enetcv_fold_blocks",
-     "c18_residual_next"
-    ]
-   ]
+   "interaction_groups": []
   },
   "expanded:ridge-cv": {
    "binding": "_mojolearn_x_linear",

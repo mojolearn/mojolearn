@@ -8,12 +8,9 @@
   "neural:mamba1-forward": {
    "binding": "_mojolearn_mamba",
    "route": "Mamba1Block.forward -> modeling_mamba.mamba_selective_scan -> selective_scan_fn -> m1_persistent_scan (on) | selective_scan_fwd_kernel (off)",
-   "controls": [
-    "m1_scan"
-   ],
+   "controls": [],
    "interaction_groups": [
     [
-     "m1_scan",
      "NI38:MOJOLEARN_IDN_M1_STATE_WINDOW (exclusive)",
      "NN34:MOJOLEARN_NN34_AFFINE_PREFIX (supersedes)",
      "NI46:MOJOLEARN_IDN_MAMBA1_ELEMENTWISE_FUSED"

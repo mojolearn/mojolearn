@@ -9,22 +9,8 @@
   "trees:gbdt-ordered": {
    "binding": "_mojolearn_gbdt",
    "route": "fit: fit_ordered tree loop (F skip of the unsearched learn permutation; C concatenated cursors + one derivative launch) -> fit_oblivious_tree_structure_traced fold arm (C one-launch fold bins; E permutation-order index; A small-fold histograms in compute_hist2_non_binary_dev[8]) -> batched estimation tasks",
-   "controls": [
-    "ORD_SKIP_UNSEARCHED_PERM",
-    "IDN_ORD_CAT_PLANES",
-    "ORD_HIST_FOLD_SKIP",
-    "IDN_ORD_INDEX_SHARED"
-   ],
-   "interaction_groups": [
-    [
-     "ORD_SKIP_UNSEARCHED_PERM",
-     "IDN_ORD_CAT_PLANES"
-    ],
-    [
-     "ORD_HIST_FOLD_SKIP",
-     "IDN_ORD_INDEX_SHARED"
-    ]
-   ]
+   "controls": [],
+   "interaction_groups": []
   }
  },
  "removed": [

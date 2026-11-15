@@ -10,11 +10,7 @@
       "binding": "_mojolearn_x_neighbors",
       "route": "KNNImputer.transform -> iter_device knn_impute (one 64x64 distance tile per block of query rows) [xn_impute_rowdist]",
       "controls": [],
-      "interaction_groups": [
-        [
-          "xn_impute_rowdist"
-        ]
-      ]
+      "interaction_groups": []
     },
     "expanded:ivf-pq": {
       "binding": "_mojolearn_x_ann",

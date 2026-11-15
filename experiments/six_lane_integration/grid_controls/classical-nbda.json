@@ -13,9 +13,7 @@
    "interaction_groups": [],
    "not_reached": [
     "MOJOLEARN_CLASSICAL_C02_STATS_PAIR (StandardScaler only)",
-    "MOJOLEARN_CLASSICAL_C02_LINEAR_PAIR (OLS/Ridge centering)",
-    "MOJOLEARN_CLASSICAL_C04_* (PCA / LDA transform)",
-    "MOJOLEARN_CLASSICAL_C12_SPARSE_COUNTS (classification-report counts, untimed)"
+    "MOJOLEARN_CLASSICAL_C04_* (PCA / LDA transform)"
    ]
   },
   "expanded:multinomial-nb": {
@@ -23,48 +21,35 @@
    "route": "fit: _nb_counts (csb1_part + csb_fold, already one pass, sums only) -> mnb_params",
    "controls": [],
    "interaction_groups": [],
-   "not_reached": [
-    "c61_nb (no class variance read)"
-   ]
+   "not_reached": []
   },
   "expanded:complement-nb": {
    "binding": "_mojolearn_x_prep",
    "route": "fit: _nb_counts (csb1_part + csb_fold) -> cnb_params",
    "controls": [],
    "interaction_groups": [],
-   "not_reached": [
-    "c61_nb"
-   ]
+   "not_reached": []
   },
   "expanded:bernoulli-nb": {
    "binding": "_mojolearn_x_prep",
    "route": "fit: _nb_counts with binarize threshold (csb1_part + csb_fold) -> bnb_params",
    "controls": [],
    "interaction_groups": [],
-   "not_reached": [
-    "c61_nb"
-   ]
+   "not_reached": []
   },
   "expanded:categorical-nb": {
    "binding": "_mojolearn_x_prep",
    "route": "fit: cat_hpart / cat_hfold histogram counts -> cat_params",
    "controls": [],
    "interaction_groups": [],
-   "not_reached": [
-    "c61_nb",
-    "MOJOLEARN_CLASSICAL_C12_SPARSE_COUNTS (report counts only)"
-   ]
+   "not_reached": []
   },
   "expanded:lda-clf": {
    "binding": "_mojolearn_x_prep",
    "route": "fit(svd): _cls[csb1_part, csb_fold] -> lda_prep -> center_rows(z) -> _cs(z) -> lda_w | C61_DA: csbm_part, csbm_fold, csbm_pool -> lda_w; then center_rows(z2) -> _gram -> eigh -> lda_stage2 -> eigh -> lda_stage3; predict/proba: matmul jll",
    "controls": [],
    "interaction_groups": [],
-   "not_reached": [
-    "c04_lda (transform only)",
-    "c56_lda_input (binary decision_function only)",
-    "MOJOLEARN_CLASSICAL_C01_LEAF* (x_metrics leaf, untimed)"
-   ],
+   "not_reached": [],
    "note": "NV istella 1.83x (T.combined.minus-C55) is preparation_seconds 5.22 vs 2.15 s; fit 1.412 vs 1.428 s, inference equal: no define cause (~/mojolearn-evidence/classical-nbda-lda-istella-1.83x.txt)"
   },
   "expanded:qda": {
@@ -72,9 +57,7 @@
    "route": "fit: _cls[csb1_part, csb_fold] (means only) -> lda_prep -> _qda_cov -> eigh -> qda_prep; predict/proba: qda_dec",
    "controls": [],
    "interaction_groups": [],
-   "not_reached": [
-    "c61_da (no shrinkage: no class variance)"
-   ]
+   "not_reached": []
   }
  },
  "removed": [

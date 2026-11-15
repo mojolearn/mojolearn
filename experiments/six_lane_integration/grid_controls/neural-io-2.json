@@ -28,11 +28,7 @@
    "binding": "_mojolearn_x_sequence",
    "route": "Adafactor.step (resident) -> adafactor_resident_step_dev_py -> adafactor_core [idn_af_vec_fused]",
    "controls": [],
-   "interaction_groups": [
-    [
-     "idn_af_vec_fused"
-    ]
-   ]
+   "interaction_groups": []
   }
  },
  "removed": [

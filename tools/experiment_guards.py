@@ -58,6 +58,18 @@ def guard_texts(root=ROOT):
     return [(rel, (Path(root) / rel).read_text()) for rel in guard_files(root)]
 
 
+_REMOVED_RE = re.compile(r'comptime assert not is_defined\["(MOJOLEARN_\w+)"\]\(\)\s*,')
+
+
+def removed_defines(root=ROOT):
+    """Every define a guard module refuses outright (`comptime assert not is_defined["D"](), ...`): the deleted
+    experiments. Planning tools drop controls and arms that name one of these."""
+    out = set()
+    for _, text in guard_texts(root):
+        out.update(_REMOVED_RE.findall(text))
+    return out
+
+
 def body_lines(text):
     """The lines of _check_configuration's body (between its def line and `return True`)."""
     lines = text.split("\n")
@@ -133,6 +145,7 @@ def record_problems(before_text, after_texts):
     out = []
     for rel, text in after_texts.items():
         last = -1
+        here = set()
         for l in body_lines(text):
             if l not in pos:
                 continue
@@ -140,6 +153,12 @@ def record_problems(before_text, after_texts):
                 have[l] += 1
             else:
                 seen_comments.add(l)
+                # A comment repeated later in the same module is a later addition with the same text (deletion
+                # lanes append generic provenance lines such as "# docs/apple-fast/EXPERIMENTS.md, ..."), not a
+                # moved record line; it is not judged for order.
+                if l in here:
+                    continue
+                here.add(l)
             nxt = [p for p in pos[l] if p > last]
             if not nxt:
                 out.append("%s: %r is out of its original order" % (rel, l.strip()[:80]))

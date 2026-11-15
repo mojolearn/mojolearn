@@ -30,24 +30,14 @@
    "binding": "_mojolearn_x_decomp",
    "route": "fit: MinCovDet._fast_mcd_native -> x_decomp_mcd -> mcd.mojo emp_cov_at [C23_MCD] -> Kit.classical_centered_gram (device.mojo bm_centered_gram_panels)",
    "controls": [],
-   "interaction_groups": [
-    [
-     "C23_MCD",
-     "C57_CANDIDATE_STATE"
-    ]
-   ],
+   "interaction_groups": [],
    "note": "C23_MCD takes precedence over C57 in emp_cov_at (both edit the same function; owned by the stats lane)"
   },
   "expanded:elliptic-envelope": {
    "binding": "_mojolearn_x_decomp",
    "route": "as min-cov-det",
    "controls": [],
-   "interaction_groups": [
-    [
-     "C23_MCD",
-     "C57_CANDIDATE_STATE"
-    ]
-   ]
+   "interaction_groups": []
   },
   "expanded:incremental-pca": {
    "binding": "_mojolearn_x_decomp",

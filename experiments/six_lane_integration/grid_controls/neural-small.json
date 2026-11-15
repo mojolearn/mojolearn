@@ -105,33 +105,15 @@
       "binding": "_mojolearn_byte_lm",
       "route": "byte_lm train step -> training/byte_lm.mojo byte_train_step_resident -> modeling_llama decoder (llama_attention_forward -> fused attention fwd r2 / estash backward _launch_bwd_estash) + GEMMs via gemm.neural_dispatch.identical_gemm_into -> gemm_identical (choose_gemm_plan_tiles / gemm_tile_step_down / kpack body)",
       "controls": [
-        "attn_tile_order",
-        "attn_fwd_tq_rule",
-        "attn_tile_rule_off",
-        "grouped_projections_v2",
         "gemm_tile_min_blocks",
         "gemm_split_min_leaves",
         "gemm_kpack_rpt4"
       ],
       "interaction_groups": [
         [
-          "attn_tile_order",
-          "attn_fwd_tq_rule",
-          "attn_tile_rule_off",
-          "attn_stash",
-          "attn_scale_mask"
-        ],
-        [
-          "grouped_projections_v2",
-          "neural_gemm_pair",
-          "neural_gemm_schedule"
-        ],
-        [
           "gemm_tile_min_blocks",
           "gemm_split_min_leaves",
-          "gemm_kpack_rpt4",
-          "gemm_leaf",
-          "neural_gemm_schedule"
+          "gemm_kpack_rpt4"
         ]
       ]
     },
@@ -139,30 +121,15 @@
       "binding": "_mojolearn_byte_lm",
       "route": "byte_lm forward (forward_only) -> modeling_llama decoder -> fused attention fwd r2 + head GEMM via neural_dispatch",
       "controls": [
-        "attn_tile_order",
-        "attn_fwd_tq_rule",
-        "grouped_projections_v2",
         "gemm_tile_min_blocks",
         "gemm_split_min_leaves",
         "gemm_kpack_rpt4"
       ],
       "interaction_groups": [
         [
-          "attn_tile_order",
-          "attn_fwd_tq_rule",
-          "attn_scale_mask"
-        ],
-        [
-          "grouped_projections_v2",
-          "neural_gemm_pair",
-          "neural_gemm_schedule"
-        ],
-        [
           "gemm_tile_min_blocks",
           "gemm_split_min_leaves",
-          "gemm_kpack_rpt4",
-          "gemm_leaf",
-          "neural_gemm_schedule"
+          "gemm_kpack_rpt4"
         ]
       ]
     },
@@ -170,30 +137,15 @@
       "binding": "_mojolearn_transformer",
       "route": "transformer binding (forward_only) -> modeling_llama llama_attention_forward -> fused attention fwd r2; projections via neural_dispatch",
       "controls": [
-        "attn_tile_order",
-        "attn_fwd_tq_rule",
-        "grouped_projections_v2",
         "gemm_tile_min_blocks",
         "gemm_split_min_leaves",
         "gemm_kpack_rpt4"
       ],
       "interaction_groups": [
         [
-          "attn_tile_order",
-          "attn_fwd_tq_rule",
-          "attn_scale_mask"
-        ],
-        [
-          "grouped_projections_v2",
-          "neural_gemm_pair",
-          "neural_gemm_schedule"
-        ],
-        [
           "gemm_tile_min_blocks",
           "gemm_split_min_leaves",
-          "gemm_kpack_rpt4",
-          "gemm_leaf",
-          "neural_gemm_schedule"
+          "gemm_kpack_rpt4"
         ]
       ]
     },
@@ -201,19 +153,11 @@
       "binding": "_mojolearn_mamba + _mojolearn_transformer",
       "route": "python samba stack -> mamba3 layers (_mojolearn_mamba mamba3_block_forward -> m3_siso_forward angle kernel; projections idn_gemm_ws -> neural_dispatch) + attention layers (_mojolearn_transformer -> llama_attention_forward)",
       "controls": [
-        "attn_tile_order",
-        "attn_fwd_tq_rule",
-        "grouped_projections_v2",
         "gemm_tile_min_blocks",
         "gemm_split_min_leaves",
-        "gemm_kpack_rpt4",
-        "m3_yintra_tile"
+        "gemm_kpack_rpt4"
       ],
       "interaction_groups": [
-        [
-          "attn_tile_order",
-          "attn_fwd_tq_rule"
-        ],
         [
           "gemm_tile_min_blocks",
           "gemm_split_min_leaves",
@@ -226,28 +170,15 @@
       "binding": "_mojolearn_mamba + _mojolearn_transformer + _mojolearn_training",
       "route": "python samba step -> training.samba_ops linear/head via neural_dispatch + mamba3 tape forward (angle kernel) and the Mamba-3 tape stage rules -> mamba3_backward_s17_operands_into + transformer attention fwd/bwd",
       "controls": [
-        "attn_tile_order",
-        "attn_fwd_tq_rule",
-        "attn_tile_rule_off",
-        "grouped_projections_v2",
         "gemm_tile_min_blocks",
         "gemm_split_min_leaves",
-        "gemm_kpack_rpt4",
-        "m3_yintra_tile"
+        "gemm_kpack_rpt4"
       ],
       "interaction_groups": [
         [
-          "attn_tile_order",
-          "attn_fwd_tq_rule",
-          "attn_tile_rule_off",
-          "attn_stash"
-        ],
-        [
           "gemm_tile_min_blocks",
           "gemm_split_min_leaves",
-          "gemm_kpack_rpt4",
-          "gemm_leaf",
-          "neural_gemm_schedule"
+          "gemm_kpack_rpt4"
         ]
       ]
     },
@@ -263,10 +194,7 @@
         [
           "gemm_tile_min_blocks",
           "gemm_split_min_leaves",
-          "gemm_kpack_rpt4",
-          "gemm_leaf",
-          "mlp_gemm_leaf128",
-          "neural_gemm_schedule"
+          "gemm_kpack_rpt4"
         ]
       ],
       "not_reached": [
@@ -279,18 +207,12 @@
       "binding": "_mojolearn_mamba",
       "route": "_mojolearn_mamba mamba1_forward -> modeling_mamba.mojo:1918 mamba_proj_gemm (mamba/impl/modules/idn_gemm_ws.mojo:78) -> gemm.neural_dispatch.identical_gemm_into (ROLE_PROJECTION)",
       "controls": [
-        "neural_gemm_schedule",
-        "gemm_leaf",
-        "neural_gemm_chains",
         "gemm_tile_min_blocks",
         "gemm_split_min_leaves",
         "gemm_kpack_rpt4"
       ],
       "interaction_groups": [
         [
-          "neural_gemm_schedule",
-          "gemm_leaf",
-          "neural_gemm_chains",
           "gemm_tile_min_blocks",
           "gemm_split_min_leaves",
           "gemm_kpack_rpt4"
@@ -306,18 +228,12 @@
       "binding": "_mojolearn_mamba",
       "route": "_mojolearn_mamba mamba2_forward -> mamba2.mojo:1222 mamba_proj_gemm (mamba/impl/modules/idn_gemm_ws.mojo:78) -> gemm.neural_dispatch.identical_gemm_into (ROLE_PROJECTION)",
       "controls": [
-        "neural_gemm_schedule",
-        "gemm_leaf",
-        "neural_gemm_chains",
         "gemm_tile_min_blocks",
         "gemm_split_min_leaves",
         "gemm_kpack_rpt4"
       ],
       "interaction_groups": [
         [
-          "neural_gemm_schedule",
-          "gemm_leaf",
-          "neural_gemm_chains",
           "gemm_tile_min_blocks",
           "gemm_split_min_leaves",
           "gemm_kpack_rpt4"
@@ -333,18 +249,12 @@
       "binding": "_mojolearn_mamba",
       "route": "_mojolearn_mamba mamba3_forward_fresh -> mamba3.mojo:1479/1761 mamba_proj_gemm (+ m3_siso_forward angle kernel) (mamba/impl/modules/idn_gemm_ws.mojo:78) -> gemm.neural_dispatch.identical_gemm_into (ROLE_PROJECTION)",
       "controls": [
-        "neural_gemm_schedule",
-        "gemm_leaf",
-        "neural_gemm_chains",
         "gemm_tile_min_blocks",
         "gemm_split_min_leaves",
         "gemm_kpack_rpt4"
       ],
       "interaction_groups": [
         [
-          "neural_gemm_schedule",
-          "gemm_leaf",
-          "neural_gemm_chains",
           "gemm_tile_min_blocks",
           "gemm_split_min_leaves",
           "gemm_kpack_rpt4"
@@ -360,42 +270,22 @@
       "binding": "_mojolearn_x_cnn",
       "route": "fit: CNNClassifier.fit (python/mojolearn/_expansion_cnn.py:1423 dev_epoch=True) -> x_cnn_fit_epoch_d (bindings/_mojolearn_x_cnn.mojo:1401) -> x_cnn/device.mojo conv_block_forward_into :2872 / conv_block_backward_into :2948 (_conv_relu_on_device :2817, pool_relu_rows_bwd_at :2995, _col2im :3022, bias_grad_gemm :3014, res_gather_pair_perm :2643), device_gemm :530 -> gemm.neural_dispatch.identical_gemm_into; predict: x_cnn_conv_block_forward_r -> conv_block_forward_into",
       "controls": [
-        "ni10_cnn_tape",
-        "ni11_direct_taps64",
         "ni12_implicit_conv",
-        "ni15_bias_no_ones",
-        "ni18_epoch_gather",
-        "nn46_gather_bounds",
-        "cnn_conv_relu",
         "gemm_tile_min_blocks",
         "gemm_split_min_leaves",
-        "gemm_kpack_rpt4",
-        "ni14_col2im"
+        "gemm_kpack_rpt4"
       ],
       "interaction_groups": [
         [
-          "ni14_col2im",
-          "nn46_gather_bounds"
-        ],
-        [
-          "ni12_implicit_conv",
-          "neural_gemm_ozaki_slices"
-        ],
-        [
-          "ni15_bias_no_ones",
-          "neural_gemm_ozaki_slices"
+          "ni12_implicit_conv"
         ],
         [
           "gemm_tile_min_blocks",
           "gemm_split_min_leaves",
-          "gemm_kpack_rpt4",
-          "neural_gemm_ozaki_slices"
+          "gemm_kpack_rpt4"
         ]
       ],
       "not_reached": [
-        "ni10_cnn_tape",
-        "ni11_direct_taps64",
-        "cnn_conv_relu",
         "gemm_split_min_leaves"
       ],
       "note": "Board config (tools/bench_board_algos.py:1068): 1x28x28, Conv-ReLU-MaxPool x2 (8,16), k3, batch 128. Not reached: ni10 (tape ~11 MB, under the 64 MiB budget), ni11 (block 1 ckk 9 already direct, block 2 ckk 72 > 64), cnn_conv_relu (both arms live in the no-pool branch; both board blocks pool)."
@@ -404,7 +294,6 @@
       "binding": "_mojolearn_linalg",
       "route": "linalg gemm_binding (bindings/_mojolearn_linalg.mojo:211) -> gemm/host_entry.mojo identical_gemm_host -> gemm_identical.identical_gemm_into",
       "controls": [
-        "gemm_contract_leaf",
         "gemm_tile_min_blocks",
         "gemm_split_min_leaves",
         "gemm_kpack_rpt4"
@@ -414,7 +303,6 @@
           "gemm_tile_min_blocks",
           "gemm_split_min_leaves",
           "gemm_kpack_rpt4",
-          "gemm_contract_leaf",
           "gemm_group_slack",
           "gemm_one_page",
           "gemm_global_workspace"

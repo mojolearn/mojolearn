@@ -9,239 +9,77 @@
     "trees:rf": {
       "binding": "_mojolearn_rf",
       "route": "fit: fit_forest -> RowSampler (RF_SAMPLE) -> batched_levelalgo Builder.enqueue_best_splits (T05 fused | histogram T02/T04/T08 + find_best_splits T07) -> node split (C48) -> device level loop (T11); predict: core/forest_inference launch_forest_inference (FOREST_ROUTE, T33, T34)",
-      "controls": [
-        "T02",
-        "T03",
-        "T04",
-        "T05",
-        "T05_ROW_VISITS",
-        "T07",
-        "T08",
-        "RF_SAMPLE",
-        "T11_LEVELS",
-        "T12",
-        "T13",
-        "T14",
-        "C48"
-      ],
-      "interaction_groups": [
-        [
-          "T02",
-          "T04",
-          "T08"
-        ],
-        [
-          "T05",
-          "T05_ROW_VISITS",
-          "T07"
-        ],
-        [
-          "C48",
-          "T11_LEVELS",
-          "T12",
-          "T13"
-        ]
-      ],
+      "controls": [],
+      "interaction_groups": [],
       "note": "T03 does not fire on the default sqrt classifier or regressor; T14 regressor only",
       "notes": "Only T12=256MiB T12=1024MiB T13=4MiB T13=16MiB reach this lane."
     },
     "trees:et": {
       "binding": "_mojolearn_trees",
       "route": "fit: extratrees batched_levelalgo builder (T05 <=128-row fused, T02 et_loop, C48, ET_LOOP_K T11); predict: core/forest_inference",
-      "controls": [
-        "T02",
-        "T04",
-        "T05",
-        "T07",
-        "T11_LEVELS",
-        "T12",
-        "T13",
-        "T14",
-        "C48"
-      ],
-      "interaction_groups": [
-        [
-          "T02",
-          "T04"
-        ],
-        [
-          "T05",
-          "T07"
-        ],
-        [
-          "C48",
-          "T11_LEVELS",
-          "T12",
-          "T13"
-        ]
-      ],
+      "controls": [],
+      "interaction_groups": [],
       "notes": "Only T11_LEVELS=8 T11_LEVELS=16 T12=64MiB T12=256MiB T14=on reach this lane."
     },
     "trees:gbdt-symmetric": {
       "binding": "_mojolearn_gbdt",
       "route": "fit: doc-parallel oblivious searcher, 8-bit hist2 (T21_STREAMS), C45 score fusion, leaf estimation (T23, T27); predict: resident model (C50_GB)",
-      "controls": [
-        "T21_STREAMS",
-        "T23",
-        "C45_GBDT"
-      ],
-      "interaction_groups": [
-        [
-          "T21_STREAMS",
-          "C45_GBDT"
-        ]
-      ]
+      "controls": [],
+      "interaction_groups": []
     },
     "trees:gbdt-symmetric-1000": {
       "binding": "_mojolearn_gbdt",
       "route": "as gbdt-symmetric",
-      "controls": [
-        "T21_STREAMS",
-        "T23",
-        "C45_GBDT"
-      ],
-      "interaction_groups": [
-        [
-          "T21_STREAMS",
-          "C45_GBDT"
-        ]
-      ]
+      "controls": [],
+      "interaction_groups": []
     },
     "trees:gbdt-depthwise": {
       "binding": "_mojolearn_gbdt",
       "route": "fit: greedy_search_helper_depthwise (T19_DEFER, T21 group width, T18, C45 root, T26 RMSE leaf); predict: C50_GB",
-      "controls": [
-        "T19_DEFER",
-        "T21",
-        "T26",
-        "T23",
-        "C45_GBDT",
-        "T21_STREAMS"
-      ],
-      "interaction_groups": [
-        [
-          "T19_DEFER",
-          "T21",
-          "C45_GBDT"
-        ],
-        [
-          "T23",
-          "T26"
-        ]
-      ]
+      "controls": [],
+      "interaction_groups": []
     },
     "trees:gbdt-lossguide": {
       "binding": "_mojolearn_gbdt",
       "route": "fit: greedy_search_helper_depthwise lossguide exact batch (T17_BATCH, C47_GBDT, T19_DEFER, T21); predict: C50_GB",
-      "controls": [
-        "T17_BATCH",
-        "T19_DEFER",
-        "T21",
-        "T26",
-        "T23",
-        "C45_GBDT",
-        "T21_STREAMS"
-      ],
-      "interaction_groups": [
-        [
-          "T19_DEFER",
-          "T21"
-        ]
-      ]
+      "controls": [],
+      "interaction_groups": []
     },
     "trees:gbdt-multiclass": {
       "binding": "_mojolearn_gbdt",
       "route": "fit: symmetric searcher, multi-dim leaf estimation (T23 off for blocked-Hessian); predict: C50_GB",
-      "controls": [
-        "C45_GBDT"
-      ],
+      "controls": [],
       "interaction_groups": []
     },
     "trees:gbdt-categorical": {
       "binding": "_mojolearn_gbdt",
       "route": "fit: Plain Lossguide, 4 CTR permutations: CTR prep (T28 arms) + greedy_search_helper_depthwise lossguide (T17_BATCH, T19_DEFER, T21, T18 multi-permutation batch) + 8-bit hist2 (T21_STREAMS); predict: non-symmetric resident model (C50_GB | gbdt_ns_predict_bitvec)",
-      "controls": [
-        "T28",
-        "T18",
-        "T23",
-        "C45_GBDT",
-        "T17_BATCH",
-        "T19_DEFER",
-        "T21",
-        "T21_STREAMS"
-      ],
-      "interaction_groups": [
-        [
-          "T19_DEFER",
-          "T21"
-        ]
-      ]
+      "controls": [],
+      "interaction_groups": []
     },
     "trees:gbdt-ordered": {
       "binding": "_mojolearn_gbdt",
       "route": "fit: SymmetricTree Ordered boosting, 4 permutations, no categorical columns (T22, T24, T25); predict: C50_GB guarded",
-      "controls": [
-        "T22",
-        "T24",
-        "T25",
-        "T23",
-        "C45_GBDT"
-      ],
-      "interaction_groups": [
-        [
-          "T22",
-          "T25"
-        ]
-      ]
+      "controls": [],
+      "interaction_groups": []
     },
     "trees:gbdt-rank-yetirank": {
       "binding": "_mojolearn_gbdt",
       "route": "fit: yeti_rank objective (T29) + symmetric searcher; predict: C50_GB",
-      "controls": [
-        "T21_STREAMS",
-        "T23",
-        "C45_GBDT"
-      ],
-      "interaction_groups": [
-        [
-          "T21_STREAMS",
-          "C45_GBDT"
-        ]
-      ]
+      "controls": [],
+      "interaction_groups": []
     },
     "trees:gbdt-rank-pairlogit": {
       "binding": "_mojolearn_gbdt",
       "route": "fit: pair_logit_group (T29 arms) + symmetric searcher; predict: C50_GB",
-      "controls": [
-        "T29",
-        "T21_STREAMS",
-        "T23",
-        "C45_GBDT"
-      ],
-      "interaction_groups": [
-        [
-          "T21_STREAMS",
-          "C45_GBDT"
-        ]
-      ]
+      "controls": [],
+      "interaction_groups": []
     },
     "trees:iforest": {
       "binding": "_mojolearn_svm",
       "route": "fit: isolation_tree_builder (T40, T41, C47_IF, C48_IF); score: isolation_forest (T42, C50_IF; T43 contamination variant)",
-      "controls": [
-        "T40",
-        "C47_IF",
-        "C48_IF",
-        "C50_IF",
-        "T43"
-      ],
-      "interaction_groups": [
-        [
-          "T40",
-          "C47_IF",
-          "C48_IF"
-        ]
-      ]
+      "controls": [],
+      "interaction_groups": []
     }
   },
   "removed": [
@@ -571,56 +409,13 @@
       "_mojolearn_gbdt",
       "_mojolearn_svm"
     ],
-    "all_off": [
-      "MOJOLEARN_TREES_T22_OFF",
-      "MOJOLEARN_TREES_T17_BATCH=32"
-    ],
+    "all_off": [],
     "all_on": [
-      "MOJOLEARN_TREES_C45_GBDT",
       "MOJOLEARN_TREES_C47_GBDT",
-      "MOJOLEARN_TREES_C47_IF_LIVE_TASKS",
-      "MOJOLEARN_TREES_C48",
-      "MOJOLEARN_TREES_C48_IF_PARTITION",
-      "MOJOLEARN_TREES_C50_IF_PACKED",
-      "MOJOLEARN_TREES_RF_SAMPLE=1",
-      "MOJOLEARN_TREES_T02",
-      "MOJOLEARN_TREES_T03",
-      "MOJOLEARN_TREES_T04",
-      "MOJOLEARN_TREES_T05",
-      "MOJOLEARN_TREES_T06",
-      "MOJOLEARN_TREES_T07",
-      "MOJOLEARN_TREES_T08",
-      "MOJOLEARN_TREES_T08_BITS=16",
-      "MOJOLEARN_TREES_T08_LAYOUT=3",
       "MOJOLEARN_TREES_T09",
-      "MOJOLEARN_TREES_T11_LEVELS=16",
-      "MOJOLEARN_TREES_T12",
-      "MOJOLEARN_TREES_T13",
-      "MOJOLEARN_TREES_T14",
-      "MOJOLEARN_TREES_T14_EXACT",
-      "MOJOLEARN_TREES_T15",
-      "MOJOLEARN_TREES_T18",
       "MOJOLEARN_TREES_T19",
-      "MOJOLEARN_TREES_T19_DEFER",
-      "MOJOLEARN_TREES_T21",
-      "MOJOLEARN_TREES_T21_STREAMS=4",
-      "MOJOLEARN_TREES_T23",
-      "MOJOLEARN_TREES_T24",
-      "MOJOLEARN_TREES_T25",
-      "MOJOLEARN_TREES_T26",
       "MOJOLEARN_TREES_T27",
-      "MOJOLEARN_TREES_T28",
-      "MOJOLEARN_TREES_T28_PREFIX",
-      "MOJOLEARN_TREES_T28_SORT",
-      "MOJOLEARN_TREES_T29",
-      "MOJOLEARN_TREES_T29_VERSIONED",
-      "MOJOLEARN_TREES_T30",
-      "MOJOLEARN_TREES_T30_ADABOOST",
-      "MOJOLEARN_TREES_T40_ROWMAJOR",
-      "MOJOLEARN_TREES_T41_TREE_BATCH",
-      "MOJOLEARN_TREES_T42_CORRECTION_CACHE",
-      "MOJOLEARN_TREES_T43_RADIX_SELECT",
-      "MOJOLEARN_TREES_T45_LINEAR_UNWIND"
+      "MOJOLEARN_TREES_T29_VERSIONED"
     ]
   }
 }

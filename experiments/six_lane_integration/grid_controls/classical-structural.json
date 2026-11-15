@@ -31,41 +31,27 @@
   "expanded:sgd-reg": {
    "binding": "_mojolearn_x_linear (host twin _mojolearn_x_linear_host)",
    "route": "fit: SGDRegressor.fit -> _sgd_fit -> x_linear_fit -> fit_device -> _sgd_mb_grid (batch 4096: sgd_perm_kernel [+ sgd_gather_x/vec kernels under sgd_epoch_contiguous] -> SGD_IDN_MB_FUSE rows/steprows + parts kernels per batch -> sgd_mb_end_kernel)",
-   "controls": [
-    "sgd_epoch_contiguous"
-   ],
+   "controls": [],
    "interaction_groups": []
   },
   "expanded:sgd-clf": {
    "binding": "_mojolearn_x_linear (host twin _mojolearn_x_linear_host)",
    "route": "fit: SGDClassifier.fit -> _sgd_fit -> x_linear_fit -> fit_device -> _sgd_mb_grid (same minibatch route as sgd-reg; binary hinge)",
-   "controls": [
-    "sgd_epoch_contiguous"
-   ],
+   "controls": [],
    "interaction_groups": []
   },
   "classical:ols": {
    "binding": "_mojolearn_estimators + _mojolearn_x_decomp (host columns _mojolearn_estimators_host, _mojolearn_x_decomp_host)",
    "route": "fit: LinearRegression.fit -> [linear_gram_solve: linear_gram_fit (status 0 ends the fit)] -> else _ols_tsqr_centered -> x_decomp_ols_tsqr_r (C24_TSQR) -> _tsqr_lstsq_core",
    "controls": [],
-   "interaction_groups": [
-    [
-     "linear_gram_solve",
-     "C24_TSQR"
-    ]
-   ],
+   "interaction_groups": [],
    "note": "with linear_gram_solve on and the Gram trusted, C24_TSQR is inert (fallback path only); the crossing records that"
   },
   "more:ridge": {
    "binding": "_mojolearn_estimators (host column _mojolearn_estimators_host)",
    "route": "fit: Ridge.fit -> [linear_gram_solve: linear_gram_fit (status 0 ends the fit)] -> else _column_means/_classical_xy_means (c02_linear_pair) + _center + ridge_fit (ridge_eig_traced)",
    "controls": [],
-   "interaction_groups": [
-    [
-     "linear_gram_solve",
-     "c02_linear_pair"
-    ]
-   ],
+   "interaction_groups": [],
    "note": "with linear_gram_solve on and the Gram trusted, c02_linear_pair is inert (the centering glue is bypassed)"
   },
   "expanded:randomized-svd": {

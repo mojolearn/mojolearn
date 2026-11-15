@@ -482,12 +482,21 @@ def load_all(controls_dir=CONTROLS_DIR):
     aft, aft_groups, f1 = load_aft()
     afcl, afcl_groups, f2 = load_afcl()
     untried, untried_groups, untried_excluded, f3, owed = load_untried(controls_dir)
+    # A control whose define or any arm define a guard module refuses outright was deleted (docs/TOMBSTONES.md):
+    # the idea records keep its card as history; the grid plans nothing for it.
+    import experiment_guards
+    gone = experiment_guards.removed_defines(ROOT)
     controls = {}
     for part in (aft, afcl, untried):
         for k, c in part.items():
             if k in controls:
                 raise ValueError('Duplicate FAST control ' + k)
+            names = {c['define']} | {G.norm_define(d).split('=')[0] for d in c['arms']['on'] + c['both_defines']}
+            if names & gone:
+                continue
             controls[k] = c
+    untried_excluded = [e for e in untried_excluded if not set(re.findall(r'MOJOLEARN_\w+', str(e.get('define', '')))) & gone]
+    owed = [o for o in owed if not set(re.findall(r'MOJOLEARN_\w+', o['line'])) & gone]
     files = dict(f1, **f2, **f3)
     files['board'] = dict(path=_rel(BOARD_MD), sha256=G.file_sha(BOARD_MD))
     return controls, aft_groups + afcl_groups, untried_groups, untried_excluded, files, owed

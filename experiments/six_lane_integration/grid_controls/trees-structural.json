@@ -9,37 +9,20 @@
   "trees:gbdt-ordered": {
    "binding": "_mojolearn_gbdt",
    "route": "fit: fit_ordered tree loop -> score noise + scale sums (ORD_STD_GRIDFOLD: _ord_std_gridfold_kernel -> _ord_std_combine[_scale] (T24)); host column gbdt_oracle_ordered follows",
-   "controls": [
-    "ORD_STD_GRIDFOLD",
-    "T24"
-   ],
-   "interaction_groups": [
-    [
-     "ORD_STD_GRIDFOLD",
-     "T24"
-    ]
-   ],
-   "not_reached": [
-    "CTR_SORTFREE_SUMS",
-    "LG_LEVEL_ROUNDS"
-   ]
+   "controls": [],
+   "interaction_groups": [],
+   "not_reached": []
   },
   "trees:gbdt-lossguide": {
    "binding": "_mojolearn_gbdt",
    "route": "fit: fit_non_symmetric_tree lossguide exact batch round width (LG_LEVEL_ROUNDS over T17_BATCH)",
-   "controls": [
-    "LG_LEVEL_ROUNDS"
-   ],
+   "controls": [],
    "interaction_groups": []
   },
   "trees:gbdt-categorical": {
    "binding": "_mojolearn_gbdt",
    "route": "fit: Lossguide search (LG_LEVEL_ROUNDS round width) -> per-tree CTR permutation leaf estimation, batched walk (CTR_SORTFREE_SUMS: bins -> counts -> bin-keyed oracle sums -> per-row apply)",
-   "controls": [
-    "LG_LEVEL_ROUNDS",
-    "CTR_SORTFREE_SUMS",
-    "T18"
-   ],
+   "controls": [],
    "interaction_groups": [],
    "note": "gbdt-categorical is grow_policy Lossguide with Logloss (tools/speed_gbdt_arm.py TASK_LANES), so LG_LEVEL_ROUNDS reaches it; the search rounds and the leaf estimation are separate stages (independent)."
   }
@@ -72,12 +55,7 @@
    "_mojolearn_gbdt",
    "_mojolearn_gbdt_host"
   ],
-  "all_off": [
-   "MOJOLEARN_TREES_ORD_STD_GRIDFOLD_OFF"
-  ],
-  "all_on": [
-   "MOJOLEARN_TREES_LG_LEVEL_ROUNDS",
-   "MOJOLEARN_TREES_CTR_SORTFREE_SUMS"
-  ]
+  "all_off": [],
+  "all_on": []
  }
 }

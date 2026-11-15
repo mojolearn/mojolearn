@@ -115,26 +115,14 @@
       "binding": "_mojolearn_svm",
       "route": "fit: svc/svr_fit_binding -> svm/estimator.mojo -> SmoSolver.solve (svm/impl/smosolver.mojo:749): KernelCache (C20) -> get_square_tile_without_caching (C20_PAIR_LOAD, C22) -> launch_block_solve/smo_grid_solve_kernel (C21) -> init_full_tile_batching (C20_PAIR_LOAD :410)",
       "controls": [],
-      "interaction_groups": [
-        [
-          "c20_pair_load",
-          "c21_extrema",
-          "c22_triangle"
-        ]
-      ],
+      "interaction_groups": [],
       "note": "C20_ROW_CACHE deleted 2026-10-07 (serial shape); C22 and the square-tile C20_PAIR_LOAD site are reachable again. Grid: pair_load x extrema x triangle = 8 arms."
     },
     "more:svr": {
       "binding": "_mojolearn_svm",
       "route": "fit: svc/svr_fit_binding -> svm/estimator.mojo -> SmoSolver.solve (svm/impl/smosolver.mojo:749): KernelCache (C20) -> get_square_tile_without_caching (C20_PAIR_LOAD, C22) -> launch_block_solve/smo_grid_solve_kernel (C21) -> init_full_tile_batching (C20_PAIR_LOAD :410)",
       "controls": [],
-      "interaction_groups": [
-        [
-          "c20_pair_load",
-          "c21_extrema",
-          "c22_triangle"
-        ]
-      ],
+      "interaction_groups": [],
       "note": "C20_ROW_CACHE deleted 2026-10-07 (serial shape); C22 and the square-tile C20_PAIR_LOAD site are reachable again. Grid: pair_load x extrema x triangle = 8 arms."
     },
     "classical:knn": {
@@ -232,7 +220,6 @@
       ],
       "interaction_groups": [
         [
-          "c59_trial_state",
           "arima_search_reuse"
         ]
       ]
@@ -392,22 +379,6 @@
     {
       "define": "MOJOLEARN_LEGACY_SHAPE_KNN_BOARD",
       "reason": "DELETED 2026-11-15 (lane/expdel2-12-cluster, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md): its owed removal A/B (owed_removal_ab) never ran; the size rule is the one rule; under \"An unmeasured arm is deleted\" the arm goes, the default stays (no bit change); code at 147979bdbf; patch experiments/removed/MOJOLEARN_LEGACY_SHAPE_KNN_BOARD.patch."
-    }
-  ],
-  "owed_removal_ab": [
-    {
-      "define": "MOJOLEARN_LEGACY_SHAPE_KNN_BOARD",
-      "source": "neighbors/impl/detail/knn_brute_force.mojo:198",
-      "A": "default build (size rule knn_large_request(n_index, n_queries): n_queries>=1024 and n_index*n_queries>=2^28)",
-      "B": [
-        "MOJOLEARN_LEGACY_SHAPE_KNN_BOARD"
-      ],
-      "effect": "gates only NVIDIA vector index loads (:1003) and Apple preflight metadata (:1014), both bit-neutral; no effect on AMD. classical:knn (k=64, sqrt metric) flips: A vector on, B off. knn-clf/reg (uniform weights, unrooted) unaffected.",
-      "vendors": [
-        "nvidia"
-      ],
-      "shapes": "neighbors of 400000x4000x32: n_index {300000, 400000, 500000}, n_queries {3000, 4000, 5000}, d {32, 64}, k {10, 15, 64}, metric euclidean (sqrt), plus one non-board dataset (e.g. a 1M x 16 random index)",
-      "status": "RUN OWED (not expressible as one lq RACE line: needs a committed neighbor-shape script); delete the define after it lands"
     }
   ],
   "ideas": [

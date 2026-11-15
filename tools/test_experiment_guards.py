@@ -110,7 +110,7 @@ def test_grid_guards_read_every_module():
     assert g.assert_count >= 348
     assert g.problems([]) == []
     assert g.problems(['MOJOLEARN_IDN_NEURAL_NN01=1'])           # a neural module record
-    assert g.problems(['MOJOLEARN_IDN_NEURAL_GEMM_SCHEDULE=3'])  # a shared arm set
+    assert g.problems(['MOJOLEARN_IDN_NEURAL_GEMM_SCHEDULE=3'])  # a removed refusal (deleted 2026-11-15)
     assert [str(p.relative_to(G.ROOT)) for p in G.GUARD_FILES] == eg.guard_files()
     for rel, text in eg.guard_texts():   # each module stands alone: every comptime name it uses is its own
         assert G.Guards(text).problems([]) == [], rel

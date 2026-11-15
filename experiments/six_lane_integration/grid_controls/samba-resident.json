@@ -8,23 +8,10 @@
   "neural:samba-forward": {
    "binding": "_mojolearn_training (the mamba3 and llama device functions of _mojolearn_mamba and _mojolearn_transformer linked into it under the define)",
    "route": "forward: SambaStack.forward -> _forward_resident -> _mojolearn_training samba_resident_forward (training/samba_resident.mojo samba_resident_forward: identical_embedding_forward_into -> mamba3_block_forward | llama_decoder_layer_forward per layer -> llama_rms_norm -> identical_gemm_into OP_NT -> one logits download); arm B: _forward per-layer binding calls",
-   "controls": [
-    "samba_resident_step"
-   ],
+   "controls": [],
    "interaction_groups": [
     [
-     "samba_resident_step",
-     "attn_tile_order"
-    ],
-    [
-     "samba_resident_step",
-     "m3_angle_parallel",
-     "m3_angle_block"
-    ],
-    [
-     "samba_resident_step",
      "gemm_tile_min_blocks",
-     "gemm_tile_short_k",
      "gemm_split_min_leaves"
     ]
    ]
@@ -32,43 +19,8 @@
   "neural:samba-train-step": {
    "binding": "_mojolearn_training (the mamba3 and llama device functions of _mojolearn_mamba and _mojolearn_transformer linked into it under the define)",
    "route": "training step: SambaStack.train_step -> _train_step_resident -> _mojolearn_training samba_resident_step (training/samba_resident.mojo samba_resident_train_step: embedding -> blocks -> llama_rms_norm -> identical_gemm_into[ROLE_HEAD] -> identical_ce_loss_resident -> identical_gemm_backward_a_into[ROLE_HEAD] / identical_gemm_backward_b_into -> bwd_rms_norm -> the Mamba-3 tape stage rules (autograd/rules_mamba3.mojo) | llama_decoder_layer_backward_device per layer -> identical_embedding_backward_into -> pair add -> identical_optimizer_step_resident_io); arm B: loss_and_grads per-layer calls + samba_head_loss_host + optimizer_resident_step",
-   "controls": [
-    "samba_resident_step"
-   ],
-   "interaction_groups": [
-    [
-     "samba_resident_step",
-     "neural_gemm_schedule",
-     "neural_gemm_schedule_roles",
-     "gemm_leaf"
-    ],
-    [
-     "samba_resident_step",
-     "ce_denom_rowfold",
-     "ce_grad_fused"
-    ],
-    [
-     "samba_resident_step",
-     "attn_tile_order",
-     "attn_stash"
-    ],
-    [
-     "samba_resident_step",
-     "m3_angle_parallel",
-     "m3_s17_tail",
-     "m3_angle_carry_cache"
-    ],
-    [
-     "samba_resident_step",
-     "act_retain",
-     "nn58_accumulate_status"
-    ],
-    [
-     "samba_attn_recompute",
-     "samba_resident_step",
-     "attn_stash"
-    ]
-   ]
+   "controls": [],
+   "interaction_groups": []
   }
  },
  "removed": [

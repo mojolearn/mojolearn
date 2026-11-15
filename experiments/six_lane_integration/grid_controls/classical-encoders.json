@@ -35,13 +35,10 @@
    ],
    "interaction_groups": [
     [
-     "c07_radix_bits",
-     "c07_radix_rows",
      "c08_target_codes"
     ],
     [
-     "c08_target_codes",
-     "c08_unique_scan"
+     "c08_target_codes"
     ]
    ]
   },
@@ -49,45 +46,25 @@
    "binding": "_mojolearn_x_prep",
    "route": "fit: _fit_categories: sort_cols[radix] + unique_cols[C08_UNIQUE_SCAN]; transform: codes + onehot op 9[C08_GROUPED_OUTPUT]",
    "controls": [],
-   "interaction_groups": [
-    [
-     "c07_radix_bits",
-     "c07_radix_rows"
-    ]
-   ]
+   "interaction_groups": []
   },
   "expanded:ordinal": {
    "binding": "_mojolearn_x_prep",
    "route": "fit: _fit_categories: sort_cols[radix] + unique_cols[C08_UNIQUE_SCAN]; transform: codes lookup",
    "controls": [],
-   "interaction_groups": [
-    [
-     "c07_radix_bits",
-     "c07_radix_rows"
-    ]
-   ]
+   "interaction_groups": []
   },
   "expanded:quantile-transformer": {
    "binding": "_mojolearn_x_prep",
    "route": "fit: sort_cols[radix] (python/mojolearn/_expansion_prep.py:3706) + quantiles; transform: interpolation",
    "controls": [],
-   "interaction_groups": [
-    [
-     "c07_radix_bits",
-     "c07_radix_rows"
-    ]
-   ]
+   "interaction_groups": []
   },
   "expanded:kbins": {
    "binding": "_mojolearn_x_prep",
    "route": "fit (strategy=quantile): sort_cols[radix] (python/mojolearn/_expansion_prep.py:2214) + edges; transform: bin lookup",
    "controls": [],
-   "interaction_groups": [
-    [
-     "c07_radix_bits",
-     "c07_radix_rows"
-    ]
-   ]
+   "interaction_groups": []
   },
   "expanded:categorical-nb": {
    "binding": "_mojolearn_x_prep",

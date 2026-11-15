@@ -173,129 +173,42 @@
     "neural:lm-train-step": {
       "binding": "_mojolearn_byte_lm",
       "route": "byte_lm train step -> dev_tensors linear (gemm.neural_dispatch.identical_gemm_into / GemmWorkspace.run; backward via gemm.neural_backward) + LM head (ROLE_HEAD) -> modeling_llama decoder (eager_attention_forward, llama_rms_norm, rope, swiglu) -> fused attention backward",
-      "controls": [
-        "neural_gemm_schedule",
-        "neural_gemm_schedule_roles",
-        "gemm_leaf",
-        "neural_gemm_chains",
-        "neural_gemm_pair",
-        "neural_gemm_workspace",
-        "neural_gemm_zero_tail",
-        "norm"
-      ],
-      "interaction_groups": [
-        [
-          "neural_gemm_schedule",
-          "neural_gemm_schedule_roles",
-          "gemm_leaf",
-          "neural_gemm_chains",
-          "neural_gemm_workspace",
-          "neural_gemm_zero_tail"
-        ],
-        [
-          "neural_gemm_pair",
-          "neural_gemm_schedule"
-        ],
-        [
-          "attn_scale_mask",
-          "attn_stash"
-        ],
-        [
-          "rope",
-          "train_no_decode_cache"
-        ]
-      ],
+      "controls": [],
+      "interaction_groups": [],
       "notes": "Only neural_gemm_schedule=stream neural_gemm_schedule=stream_all neural_gemm_schedule=pages neural_gemm_schedule=fold_exact neural_gemm_schedule=threadmap train_scratch=2 gemm_split_min_leaves=3 reach this lane."
     },
     "neural:lm-forward": {
       "binding": "_mojolearn_byte_lm",
       "route": "byte_lm forward -> modeling_llama decoder + head GEMM (ROLE_HEAD)",
-      "controls": [
-        "neural_gemm_schedule",
-        "neural_gemm_schedule_roles",
-        "gemm_leaf",
-        "neural_gemm_chains",
-        "neural_gemm_pair",
-        "norm",
-        "neural_gemm_zero_tail"
-      ],
-      "interaction_groups": [
-        [
-          "neural_gemm_schedule",
-          "neural_gemm_schedule_roles",
-          "gemm_leaf",
-          "neural_gemm_chains"
-        ]
-      ],
+      "controls": [],
+      "interaction_groups": [],
       "notes": "Only neural_gemm_schedule=stream neural_gemm_schedule=pages neural_gemm_schedule=fold_exact neural_gemm_schedule=threadmap attn_tile_order=asc gemm_split_min_leaves=3 reach this lane."
     },
     "neural:transformer-forward": {
       "binding": "_mojolearn_transformer",
       "route": "transformer binding -> modeling_llama forward (llama_proj -> GemmWorkspace.run ROLE_PROJECTION; eager_attention_forward; llama_rms_norm; rope); no LM head",
-      "controls": [
-        "neural_gemm_schedule",
-        "gemm_leaf",
-        "neural_gemm_chains",
-        "neural_gemm_pair",
-        "norm"
-      ],
-      "interaction_groups": [
-        [
-          "neural_gemm_schedule",
-          "gemm_leaf",
-          "neural_gemm_chains",
-          "neural_gemm_pair"
-        ]
-      ],
+      "controls": [],
+      "interaction_groups": [],
       "notes": "Only neural_gemm_schedule=stream neural_gemm_schedule=pages neural_gemm_schedule=fold_exact neural_gemm_schedule=threadmap attn_tile_order=asc gemm_split_min_leaves=3 reach this lane."
     },
     "neural:samba-train-step": {
       "binding": "_mojolearn_mamba + _mojolearn_transformer + _mojolearn_training",
       "route": "python samba step -> training.samba_ops linear (projection/wgrad) + samba_head_loss_host (ROLE_HEAD) + transformer attention block",
-      "controls": [
-        "neural_gemm_schedule",
-        "neural_gemm_schedule_roles",
-        "gemm_leaf",
-        "neural_gemm_chains",
-        "norm"
-      ],
-      "interaction_groups": [
-        [
-          "neural_gemm_schedule",
-          "neural_gemm_schedule_roles",
-          "gemm_leaf",
-          "neural_gemm_chains"
-        ]
-      ],
+      "controls": [],
+      "interaction_groups": [],
       "notes": "Only neural_gemm_schedule=stream neural_gemm_schedule=pages neural_gemm_schedule=fold_exact neural_gemm_schedule=threadmap train_scratch=1 gemm_split_min_leaves=3 gemm_split_min_leaves=2 reach this lane."
     },
     "neural:mlp-train-step": {
       "binding": "_mojolearn_training",
       "route": "training binding -> training.mlp_ops _gemm (forward/dInput ROLE_PROJECTION, dW ROLE_WGRAD) -> neural_dispatch.neural_model_leaf_into[128] (mlp_gemm_leaf128 default) | identical_gemm_into (_OFF or any neural GEMM arm)",
-      "controls": [
-        "neural_gemm_schedule",
-        "neural_gemm_schedule_roles",
-        "gemm_leaf",
-        "mlp_gemm_leaf128",
-        "neural_gemm_chains"
-      ],
-      "interaction_groups": [
-        [
-          "neural_gemm_schedule",
-          "neural_gemm_schedule_roles",
-          "gemm_leaf",
-          "mlp_gemm_leaf128",
-          "neural_gemm_chains"
-        ]
-      ],
+      "controls": [],
+      "interaction_groups": [],
       "notes": "Only neural_gemm_schedule=stream neural_gemm_schedule=pages neural_gemm_schedule=fold_exact neural_gemm_schedule=threadmap train_scratch=1 reach this lane."
     },
     "gemm:gemm": {
       "binding": "_mojolearn_linalg",
       "route": "linalg binding -> gemm/checks/gemm_identical (not the neural dispatch)",
       "controls": [
-        "gemm_contract_leaf",
-        "neural_gemm_schedule",
         "gemm_one_page",
         "gemm_group_slack",
         "gemm_global_workspace",
@@ -305,8 +218,6 @@
       ],
       "interaction_groups": [
         [
-          "gemm_contract_leaf",
-          "neural_gemm_schedule",
           "gemm_one_page",
           "gemm_group_slack",
           "gemm_global_workspace"

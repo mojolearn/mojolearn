@@ -9,32 +9,13 @@
    "binding": "_mojolearn_byte_lm",
    "route": "fit step: training/byte_lm.mojo:1488 identical_ce_forward_into -> training/checks/loss.mojo L4 (and L9 under smoothing): _ce_denom_rowfold_into | identical_gemm_into(expo, ones, n_rows, 1, vocab)",
    "controls": [],
-   "interaction_groups": [
-    [
-     "ce_denom_rowfold",
-     "neural_gemm_schedule",
-     "neural_gemm_schedule_roles",
-     "gemm_leaf"
-    ],
-    [
-     "ce_denom_rowfold",
-     "ce_token_fold",
-     "ce_grad_fused"
-    ]
-   ]
+   "interaction_groups": []
   },
   "neural:samba-train-step": {
    "binding": "_mojolearn_mamba + _mojolearn_transformer + _mojolearn_training",
    "route": "training step: _mojolearn_training samba_head_loss_host (training/samba_ops.mojo:432) -> training/estimator.mojo identical_ce_loss_resident -> identical_ce_forward_into -> loss.mojo L4/L9 as above",
    "controls": [],
-   "interaction_groups": [
-    [
-     "ce_denom_rowfold",
-     "neural_gemm_schedule",
-     "neural_gemm_schedule_roles",
-     "gemm_leaf"
-    ]
-   ]
+   "interaction_groups": []
   }
  },
  "removed": [

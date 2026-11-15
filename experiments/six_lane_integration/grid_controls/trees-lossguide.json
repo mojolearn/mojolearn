@@ -10,30 +10,14 @@
     "trees:gbdt-lossguide": {
       "binding": "_mojolearn_gbdt",
       "route": "fit: doc_parallel_boosting -> fit_non_symmetric_tree (greedy_search_helper_depthwise, Lossguide, LG_EXACT_ID) -> split chain (8 launches; IDN_LG_FUSED_CHAIN: _launch_fused_split_chain + histogram copy)",
-      "controls": [
-        "hist_packed_gh",
-        "hist_warp_agg"
-      ],
-      "interaction_groups": [
-        [
-          "hist_packed_gh",
-          "hist_warp_agg"
-        ]
-      ]
+      "controls": [],
+      "interaction_groups": []
     },
     "trees:gbdt-categorical": {
       "binding": "_mojolearn_gbdt",
       "route": "fit: CatBoost CTR columns -> doc_parallel_boosting -> fit_non_symmetric_tree (Lossguide) per permutation",
-      "controls": [
-        "hist_packed_gh",
-        "hist_warp_agg"
-      ],
-      "interaction_groups": [
-        [
-          "hist_packed_gh",
-          "hist_warp_agg"
-        ]
-      ]
+      "controls": [],
+      "interaction_groups": []
     }
   },
   "removed": [

@@ -11,13 +11,10 @@
    "controls": [],
    "interaction_groups": [
     [
-     "c07_radix_bits",
-     "c07_radix_rows",
      "c08_target_codes"
     ],
     [
-     "c08_target_codes",
-     "c08_unique_scan"
+     "c08_target_codes"
     ]
    ]
   },

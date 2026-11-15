@@ -31,14 +31,10 @@
    "binding": "_mojolearn_gbdt",
    "route": "fit: doc_parallel_boosting -> run_tree_layout_traced -> launch_histograms_for_blocks -> launch_hist2_8bit (254 borders, I32 mode) -> hist2_8bit_kernel/gather_kernel; switch on: launch_hist2_8bit_wide[2,FG]",
    "controls": [
-    "hist_packed_gh",
-    "hist_warp_agg",
     "hist_sym_feature_parallel"
    ],
    "interaction_groups": [
     [
-     "hist_packed_gh",
-     "hist_warp_agg",
      "hist_sym_feature_parallel"
     ]
    ]
@@ -47,14 +43,10 @@
    "binding": "_mojolearn_gbdt",
    "route": "as trees/gbdt-symmetric",
    "controls": [
-    "hist_packed_gh",
-    "hist_warp_agg",
     "hist_sym_feature_parallel"
    ],
    "interaction_groups": [
     [
-     "hist_packed_gh",
-     "hist_warp_agg",
      "hist_sym_feature_parallel"
     ]
    ]
@@ -62,30 +54,14 @@
   "trees:gbdt-depthwise": {
    "binding": "_mojolearn_gbdt",
    "route": "fit: greedy_search_helper_depthwise -> launch_histograms_for_blocks -> launch_hist2_8bit or launch_hist2_width_group[8] (2581) -> hist2_8bit_kernel",
-   "controls": [
-    "hist_packed_gh",
-    "hist_warp_agg"
-   ],
-   "interaction_groups": [
-    [
-     "hist_packed_gh",
-     "hist_warp_agg"
-    ]
-   ]
+   "controls": [],
+   "interaction_groups": []
   },
   "trees:gbdt-lossguide": {
    "binding": "_mojolearn_gbdt",
    "route": "as trees/gbdt-depthwise",
-   "controls": [
-    "hist_packed_gh",
-    "hist_warp_agg"
-   ],
-   "interaction_groups": [
-    [
-     "hist_packed_gh",
-     "hist_warp_agg"
-    ]
-   ]
+   "controls": [],
+   "interaction_groups": []
   },
   "trees:gbdt-multiclass": {
    "binding": "_mojolearn_gbdt",
@@ -97,14 +73,10 @@
    "binding": "_mojolearn_gbdt",
    "route": "SymmetricTree greedy (run_tree_layout_traced); two-stat 8-bit path assumed, stat_count not re-verified",
    "controls": [
-    "hist_packed_gh",
-    "hist_warp_agg",
     "hist_sym_feature_parallel"
    ],
    "interaction_groups": [
     [
-     "hist_packed_gh",
-     "hist_warp_agg",
      "hist_sym_feature_parallel"
     ]
    ]
@@ -113,14 +85,10 @@
    "binding": "_mojolearn_gbdt",
    "route": "as trees/gbdt-rank-yetirank",
    "controls": [
-    "hist_packed_gh",
-    "hist_warp_agg",
     "hist_sym_feature_parallel"
    ],
    "interaction_groups": [
     [
-     "hist_packed_gh",
-     "hist_warp_agg",
      "hist_sym_feature_parallel"
     ]
    ]
@@ -128,16 +96,8 @@
   "trees:gbdt-categorical": {
    "binding": "_mojolearn_gbdt",
    "route": "Plain Lossguide (as trees/gbdt-lossguide): greedy_search_helper_depthwise -> launch_histograms_for_blocks -> launch_hist2_8bit; float features take the fused 2-stat 8-bit kernel",
-   "controls": [
-    "hist_packed_gh",
-    "hist_warp_agg"
-   ],
-   "interaction_groups": [
-    [
-     "hist_packed_gh",
-     "hist_warp_agg"
-    ]
-   ]
+   "controls": [],
+   "interaction_groups": []
   }
  },
  "not_reached": {

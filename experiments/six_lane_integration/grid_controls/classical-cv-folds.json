@@ -8,51 +8,20 @@
   "expanded:ridge-cv": {
    "binding": "_mojolearn_x_linear",
    "route": "fit: _expansion_linear.py RidgeCV -> x_linear_fit ALGO_RIDGE_KFOLD -> device.mojo _ridge_kfold_grid: unit A (C13 fold cache or kf_means/kf_cells, kf_solve_kernel with trust flags), unit B (float-float stats + solve for untrusted alphas [ridgecv_ff_blocked], kf_pred, kf_ysum/kf_sq/kf_score); then Ridge refit ALGO_RIDGE -> ridge_fit_grid, _ridge_ff_grid when untrusted [ridgecv_ff_blocked; c14_group_rhs in t_ridge_solve_best]",
-   "controls": [
-    "c14_group_rhs"
-   ],
-   "interaction_groups": [
-    [
-     "ridgecv_ff_blocked",
-     "c14_group_rhs"
-    ]
-   ]
+   "controls": [],
+   "interaction_groups": []
   },
   "expanded:lasso-cv": {
    "binding": "_mojolearn_x_linear",
    "route": "fit: _expansion_linear.py _enetcv_fit -> x_linear_fit ALGO_ENETCV -> device.mojo -> cd_grid.mojo enetcv_fit_grid: spans, prep stats [enetcv_fold_blocks | staged means+gram], ecv_grid_kernel, ecv_path_kernel (t_enet_gram_cd [c18_residual_next]), score [enetcv_score_blocks | ecv_score_staged_kernel], refit",
-   "controls": [
-    "enetcv_fold_blocks",
-    "c18_residual_next"
-   ],
-   "interaction_groups": [
-    [
-     "enetcv_score_blocks",
-     "enetcv_fold_blocks"
-    ],
-    [
-     "enetcv_score_blocks",
-     "c18_residual_next"
-    ]
-   ]
+   "controls": [],
+   "interaction_groups": []
   },
   "expanded:enet-cv": {
    "binding": "_mojolearn_x_linear",
    "route": "same as lasso-cv with the l1_ratio grid (paths = folds x l1_ratios)",
-   "controls": [
-    "enetcv_fold_blocks",
-    "c18_residual_next"
-   ],
-   "interaction_groups": [
-    [
-     "enetcv_score_blocks",
-     "enetcv_fold_blocks"
-    ],
-    [
-     "enetcv_score_blocks",
-     "c18_residual_next"
-    ]
-   ]
+   "controls": [],
+   "interaction_groups": []
   }
  },
  "removed": [
