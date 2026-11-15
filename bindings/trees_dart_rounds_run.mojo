@@ -284,7 +284,12 @@ def dart_rounds_run(plan: DartRoundPlan, var member: ForestFitArgs) raises -> Da
                                           plan.col_seed, j)
                     cols = Int(col_ids.unsafe_ptr())
                     dc = plan.col_count
-                _member_fit(plan, args, handle, c, j, rows, m, cols, dc, got)
+                # The member fits every row when the round is not bagged (rows 0):
+                # its row count is n, as `_dart_member_fit` passed (`m = n if rows is
+                # None`). `m` stays 0 for xd_add (0 = every row). 71efbd8c7c passed
+                # m = 0 here: the host entry refused 'invalid shape', the device one
+                # fit zero rows.
+                _member_fit(plan, args, handle, c, j, rows, m if plan.bag else n, cols, dc, got)
                 var w = got.count() - 1
                 var node = got.word(w, DART_M_NODE_START)
                 var nodes = got.word(w, DART_M_NODES)
