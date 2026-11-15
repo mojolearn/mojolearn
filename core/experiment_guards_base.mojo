@@ -159,6 +159,9 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_IDN_PT_BLOCKED_OFF"](), "removed 2026-11-15 (lane/expdel2-09-base): IDN_PT_BLOCKED_OFF (old path, never measured) is gone; the default is kept; code at b358d19039; restore: experiments/removed/MOJOLEARN_IDN_PT_BLOCKED_OFF.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_SELECT_BLOCKED_OFF.patch
     comptime assert not is_defined["MOJOLEARN_IDN_SELECT_BLOCKED_OFF"](), "removed 2026-11-15 (lane/expdel2-09-base): IDN_SELECT_BLOCKED_OFF (old path, never measured) is gone; the default is kept; code at 27b4b5a66a; restore: experiments/removed/MOJOLEARN_IDN_SELECT_BLOCKED_OFF.patch"
+    # Lane expdel2-16-decomposition (2026-11-15): unmeasured arms and superseded old paths deleted, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (docs/TOMBSTONES.md).
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_GATES_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_GATES_OFF"](), "removed 2026-11-15 (lane/expdel2-16-decomposition): IDN_GATES_OFF (old path) is gone; the default is kept; code at d224fbc6f5; restore: experiments/removed/MOJOLEARN_IDN_GATES_OFF.patch"
     return True
 
 

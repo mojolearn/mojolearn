@@ -1,0 +1,17 @@
+diff --git a/x_decomp/api.mojo b/x_decomp/api.mojo
+index 652e7c0b6a..34abcb8b39 100644
+--- a/x_decomp/api.mojo
++++ b/x_decomp/api.mojo
+@@ -288,10 +288,8 @@ comptime IDN_RAND_RESIDENT = _API_IDN and not is_defined["MOJOLEARN_IDN_ALL_OFF"
+ # has at least 16,384 values, instead of downloading the operand (which then
+ # lives on the host) and uploading the result at its next product: NMF's
+ # W^T and H^T, FactorAnalysis, PLS, the svd tail's column selections, LLE.
+-# Copies only: the same words.
+-# TOMBSTONE: MOJOLEARN_IDN_RES_MOVES_OFF (unmeasured old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-16-decomposition; code recoverable at d82ec62247.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_RES_MOVES_OFF.patch; record in docs/TOMBSTONES.md.
+-comptime IDN_RES_MOVES = _API_IDN and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
++# Copies only: the same words. -D MOJOLEARN_IDN_RES_MOVES_OFF clears the bit.
++comptime IDN_RES_MOVES = _API_IDN and not (is_defined["MOJOLEARN_IDN_RES_MOVES_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
+ # lane fix-d1-decomp (2026-10-04, audit F7/B7): the decomp Python leftovers.
+ # IDN_NMF_L2_CELL (bit 5): NMF's coordinate descent adds l2 to H H^T's
+ # diagonal with one `axpy` cell against the identity mask on EVERY column of

@@ -1,0 +1,49 @@
+diff --git a/x_decomp/device.mojo b/x_decomp/device.mojo
+index d8bbefb183..4321c41b43 100644
+--- a/x_decomp/device.mojo
++++ b/x_decomp/device.mojo
+@@ -46,6 +46,7 @@ from x_decomp.lasso_grp import DECOMP_FAST_LASSO_GRP, LG_MAXK, LG_TPB, lasso_grp
+ # TOMBSTONE: MOJOLEARN_CHOL_FAST_BLOCKED (DROPPED-slower+quality) deleted 2026-10-09 by lane/owed-deletions-D3; code recoverable at b639a2bd2.
+ # Tried: blocked right-looking Cholesky (x_decomp/fast_chol.mojo, 3 n / 32 launches); cholesky synthetic 259.4 -> 330.7 ms, relative_residual 1.66e-7 -> 1.98e-6.
+ # Restore: git apply experiments/removed/MOJOLEARN_CHOL_FAST_BLOCKED.patch; record in docs/TOMBSTONES.md.
++from x_decomp.omp_block import DECOMP_FAST_OMP_BLOCK, OMP_TPB, omp_block_fits, omp_block_kernel
+ # TOMBSTONE: MOJOLEARN_QR_FAST_DEV (DROPPED-slower: rab3-qrdev istella 1628.1 -> 7319.9 ms, taxi 47.6 -> 91.7) deleted 2026-10-09
+ # on lane/owed-deletions-D1 (x_decomp/fast_qr.mojo grid-fold geqrf / orgqr, with its sub-arm MOJOLEARN_AFCL_L09); code
+ # recoverable at b639a2bd2. Restore: git apply experiments/removed/MOJOLEARN_QR_FAST_DEV.patch; record in docs/TOMBSTONES.md.
+@@ -3649,19 +3650,29 @@ struct DevExec(Exec):
+     def omp_rows(g: F32Ptr, q: F32Ptr, w: F32Ptr, s: F32Ptr, na: F32Ptr, n: Int, k: Int, nnz: Int) raises:
+         var ctx = xd_ctx()
+         var per = k * k + 3 * k
+-        # TOMBSTONE: MOJOLEARN_DECOMP_FAST_OMP_BLOCK (unmeasured Apple FAST opt-in arm, EXP:449 verdict owed) deleted 2026-11-15 by lane/expdel2-16-decomposition; code recoverable at 6aa22d61f9.
+-        # Restore: git apply experiments/removed/MOJOLEARN_DECOMP_FAST_OMP_BLOCK.expdel2-16-decomposition.patch; record in docs/TOMBSTONES.md.
++        # -D MOJOLEARN_DECOMP_FAST_OMP_BLOCK (x_decomp/omp_block.mojo, default
++        # off, FAST + Apple): one block per row, no per-row device scratch
++        var block = False
++        comptime if DECOMP_FAST_OMP_BLOCK:
++            block = n > 0 and omp_block_fits(k, nnz)
+         var dg = _up(ctx, g, k * k)
+         var dq = _up(ctx, q, n * k)
+         var dw = ctx.enqueue_create_buffer[DType.float32](n * k if n * k > 0 else 1)
+-        var ds = ctx.enqueue_create_buffer[DType.float32](n * per if n * per > 0 else 1)
++        var ds = ctx.enqueue_create_buffer[DType.float32](n * per if (n * per > 0 and not block) else 1)
+         var dn = ctx.enqueue_create_buffer[DType.float32](n if n > 0 else 1)
++        comptime if DECOMP_FAST_OMP_BLOCK:
++            if block:
++                ctx.enqueue_function[omp_block_kernel](
++                    dg.unsafe_ptr(), dq.unsafe_ptr(), dw.unsafe_ptr(), dn.unsafe_ptr(), Int32(n), Int32(k),
++                    Int32(nnz), grid_dim=n, block_dim=OMP_TPB,
++                )
+         # TOMBSTONE: MOJOLEARN_CLASSICAL_C28_BUCKET_SOLVES (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-16-decomposition; code recoverable at d1bf9a2e59.
+         # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C28_BUCKET_SOLVES.expdel2-16-decomposition.patch; record in docs/TOMBSTONES.md.
+-        ctx.enqueue_function[omp_rows_kernel](
+-            dg.unsafe_ptr(), dq.unsafe_ptr(), dw.unsafe_ptr(), ds.unsafe_ptr(), dn.unsafe_ptr(), Int32(n), Int32(k),
+-            Int32(nnz), grid_dim=_blocks(n), block_dim=TPB,
+-        )
++        if not block:
++            ctx.enqueue_function[omp_rows_kernel](
++                dg.unsafe_ptr(), dq.unsafe_ptr(), dw.unsafe_ptr(), ds.unsafe_ptr(), dn.unsafe_ptr(), Int32(n), Int32(k),
++                Int32(nnz), grid_dim=_blocks(n), block_dim=TPB,
++            )
+         _down(ctx, dw, w, n * k)
+         _down(ctx, dn, na, n)
+         ctx.synchronize()

@@ -167,6 +167,11 @@ def _check_configuration() -> Bool:
     # Lane expdel2-08-base (2026-11-15): unmeasured arms and superseded old paths deleted, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (docs/TOMBSTONES.md).
     # Restore: git apply experiments/removed/MOJOLEARN_MULTIOUT_RIDGE_OFF.patch
     comptime assert not is_defined["MOJOLEARN_MULTIOUT_RIDGE_OFF"](), "removed 2026-11-15 (lane/expdel2-08-base): MULTIOUT_RIDGE_OFF (old path of the FAST Apple default) is gone; the default is kept; code at 7866bd9303; restore: experiments/removed/MOJOLEARN_MULTIOUT_RIDGE_OFF.patch"
+    # Lane expdel2-16-decomposition (2026-11-15): unmeasured arms and superseded old paths deleted, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (docs/TOMBSTONES.md).
+    # Restore: git apply experiments/removed/MOJOLEARN_CHOL_FAST_DEVIO_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_CHOL_FAST_DEVIO_OFF"](), "removed 2026-11-15 (lane/expdel2-16-decomposition): CHOL_FAST_DEVIO_OFF (unmeasured old path beside the FAST Apple and IDENTICAL default) is gone; the default is kept; code at 70d6bad292; restore: experiments/removed/MOJOLEARN_CHOL_FAST_DEVIO_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_CHOL_HOST_SCALAR.patch
+    comptime assert not is_defined["MOJOLEARN_CHOL_HOST_SCALAR"](), "removed 2026-11-15 (lane/expdel2-16-decomposition): CHOL_HOST_SCALAR (unmeasured opt-in before arm) is gone; the default is kept; code at 61bd06b986; restore: experiments/removed/MOJOLEARN_CHOL_HOST_SCALAR.patch"
     return True
 
 

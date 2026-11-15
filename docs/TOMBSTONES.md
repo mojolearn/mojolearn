@@ -622,6 +622,31 @@ in the tables after the sections.
 | [`MOJOLEARN_IDN_TREE_SHAPE_NATIVE_OFF`](#mojolearn_idn_tree_shape_native_off) | Trees (get_depth / get_n_leaves) | removed (unmeasured old path) | 2026-11-15 | [MOJOLEARN_IDN_TREE_SHAPE_NATIVE_OFF.patch](../experiments/removed/MOJOLEARN_IDN_TREE_SHAPE_NATIVE_OFF.patch) |
 | [`MOJOLEARN_TE_NATIVE_SPLITS_OFF`](#mojolearn_te_native_splits_off) | Trees (FAST Apple wrapper splits) | removed (old path of the FAST Apple default) | 2026-11-15 | [MOJOLEARN_TE_NATIVE_SPLITS_OFF.patch](../experiments/removed/MOJOLEARN_TE_NATIVE_SPLITS_OFF.patch) |
 | [`MOJOLEARN_TE_ADA_SESSION_SHARE_OFF`](#mojolearn_te_ada_session_share_off) | Trees (FAST Apple AdaBoost session) | removed (old path of the FAST Apple default) | 2026-11-15 | [MOJOLEARN_TE_ADA_SESSION_SHARE_OFF.patch](../experiments/removed/MOJOLEARN_TE_ADA_SESSION_SHARE_OFF.patch) |
+| [`MOJOLEARN_AFCL_L10`](#mojolearn_afcl_l10) | Decomposition (NMF multiply-divide, FAST Apple) | removed (never-run Apple FAST programme card) | 2026-11-15 | [MOJOLEARN_AFCL_L10.patch](../experiments/removed/MOJOLEARN_AFCL_L10.patch) |
+| [`MOJOLEARN_XD_FAST_SVD_ONE_BLOCK`](#mojolearn_xd_fast_svd_one_block) | Decomposition (dense SVD route) | removed (unmeasured opt-in arm) | 2026-11-15 | [MOJOLEARN_XD_FAST_SVD_ONE_BLOCK.patch](../experiments/removed/MOJOLEARN_XD_FAST_SVD_ONE_BLOCK.patch) |
+| [`MOJOLEARN_DECOMP_FAST_GEMM_MMA_OFF`](#mojolearn_decomp_fast_gemm_mma_off) | Decomposition (kit GEMM, FAST Apple) | removed (old path of the FAST Apple default) | 2026-11-15 | [MOJOLEARN_DECOMP_FAST_GEMM_MMA_OFF.patch](../experiments/removed/MOJOLEARN_DECOMP_FAST_GEMM_MMA_OFF.patch) |
+| [`MOJOLEARN_IDN_XD_SWEEP_OFF`](#mojolearn_idn_xd_sweep_off) | Decomposition (Jacobi waits and convergence read, IDENTICAL) | removed (unmeasured old path) | 2026-11-15 | [MOJOLEARN_IDN_XD_SWEEP_OFF.patch](../experiments/removed/MOJOLEARN_IDN_XD_SWEEP_OFF.patch) |
+| [`MOJOLEARN_IDN_XD_SVD_GROUP_OFF`](#mojolearn_idn_xd_svd_group_off) | Decomposition (svd sweep grouping, IDENTICAL) | removed (old path of the bit-neutral default) | 2026-11-15 | [MOJOLEARN_IDN_XD_SVD_GROUP_OFF.patch](../experiments/removed/MOJOLEARN_IDN_XD_SVD_GROUP_OFF.patch) |
+| [`MOJOLEARN_IDN_QR_R_DIRECT_OFF`](#mojolearn_idn_qr_r_direct_off) | Decomposition (DevExec.qr_r input, IDENTICAL) | removed (unmeasured old path) | 2026-11-15 | [MOJOLEARN_IDN_QR_R_DIRECT_OFF.patch](../experiments/removed/MOJOLEARN_IDN_QR_R_DIRECT_OFF.patch) |
+| [`MOJOLEARN_IDN_LU_GESV_OFF`](#mojolearn_idn_lu_gesv_off) | Decomposition (linalg.solve one entry, IDENTICAL) | removed (unmeasured old path) | 2026-11-15 | [MOJOLEARN_IDN_LU_GESV_OFF.patch](../experiments/removed/MOJOLEARN_IDN_LU_GESV_OFF.patch) |
+| [`MOJOLEARN_IDN_LLE_DEV_F0_OFF`](#mojolearn_idn_lle_dev_f0_off) | Decomposition (LLE F0 build, IDENTICAL) | removed (unmeasured old path) | 2026-11-15 | [MOJOLEARN_IDN_LLE_DEV_F0_OFF.patch](../experiments/removed/MOJOLEARN_IDN_LLE_DEV_F0_OFF.patch) |
+| [`MOJOLEARN_IDN_RAND_RESIDENT_OFF`](#mojolearn_idn_rand_resident_off) | Decomposition (kit rand draws, IDENTICAL) | removed (unmeasured old path) | 2026-11-15 | [MOJOLEARN_IDN_RAND_RESIDENT_OFF.patch](../experiments/removed/MOJOLEARN_IDN_RAND_RESIDENT_OFF.patch) |
+| [`MOJOLEARN_IDN_RES_MOVES_OFF`](#mojolearn_idn_res_moves_off) | Decomposition (resident transpose / take moves, IDENTICAL) | removed (unmeasured old path) | 2026-11-15 | [MOJOLEARN_IDN_RES_MOVES_OFF.patch](../experiments/removed/MOJOLEARN_IDN_RES_MOVES_OFF.patch) |
+| [`MOJOLEARN_IDN_NMF_L2_CELL_OFF`](#mojolearn_idn_nmf_l2_cell_off) | Decomposition (NMF l2 diagonal, IDENTICAL) | removed (unmeasured old path) | 2026-11-15 | [MOJOLEARN_IDN_NMF_L2_CELL_OFF.patch](../experiments/removed/MOJOLEARN_IDN_NMF_L2_CELL_OFF.patch) |
+| [`MOJOLEARN_IDN_ICA_LIM_DEV_OFF`](#mojolearn_idn_ica_lim_dev_off) | Decomposition (FastICA convergence max, IDENTICAL) | removed (unmeasured old path) | 2026-11-15 | [MOJOLEARN_IDN_ICA_LIM_DEV_OFF.patch](../experiments/removed/MOJOLEARN_IDN_ICA_LIM_DEV_OFF.patch) |
+| [`MOJOLEARN_IDN_POLAR_MAX_DEV_OFF`](#mojolearn_idn_polar_max_dev_off) | Decomposition (rotation _polar max, IDENTICAL) | removed (unmeasured old path) | 2026-11-15 | [MOJOLEARN_IDN_POLAR_MAX_DEV_OFF.patch](../experiments/removed/MOJOLEARN_IDN_POLAR_MAX_DEV_OFF.patch) |
+| [`MOJOLEARN_IDN_LLE_PAD_DEV_OFF`](#mojolearn_idn_lle_pad_dev_off) | Decomposition (LLE zero-row pad, IDENTICAL) | removed (unmeasured old path) | 2026-11-15 | [MOJOLEARN_IDN_LLE_PAD_DEV_OFF.patch](../experiments/removed/MOJOLEARN_IDN_LLE_PAD_DEV_OFF.patch) |
+| [`MOJOLEARN_IDN_CHOL_OPS_FIT`](#mojolearn_idn_chol_ops_fit) | Kernel / GP / mixture (Cholesky fits on the executor ops) | removed (opt-in B arm, RUN OWED) | 2026-11-15 | [MOJOLEARN_IDN_CHOL_OPS_FIT.patch](../experiments/removed/MOJOLEARN_IDN_CHOL_OPS_FIT.patch) |
+| [`MOJOLEARN_CHOL_FAST_DEVIO_OFF`](#mojolearn_chol_fast_devio_off) | Cholesky (device input route) | removed (unmeasured old path beside the FAST Apple and IDENTICAL default) | 2026-11-15 | [MOJOLEARN_CHOL_FAST_DEVIO_OFF.patch](../experiments/removed/MOJOLEARN_CHOL_FAST_DEVIO_OFF.patch) |
+| [`MOJOLEARN_IDN_GATES_OFF`](#mojolearn_idn_gates_off) | Cross-family (IDENTICAL device gates umbrella) | removed (old path) | 2026-11-15 | [MOJOLEARN_IDN_GATES_OFF.patch](../experiments/removed/MOJOLEARN_IDN_GATES_OFF.patch) |
+| [`MOJOLEARN_CHOL_HOST_SCALAR`](#mojolearn_chol_host_scalar) | Cholesky (host column trailing update and solves) | removed (unmeasured opt-in before arm) | 2026-11-15 | [MOJOLEARN_CHOL_HOST_SCALAR.patch](../experiments/removed/MOJOLEARN_CHOL_HOST_SCALAR.patch) |
+| [`MOJOLEARN_IDN_GEMM_TN_CENTERED`](#mojolearn_idn_gemm_tn_centered) | Decomposition (PCA wide covariance Gram, IDENTICAL) | removed (unmeasured opt-in arm) | 2026-11-15 | [MOJOLEARN_IDN_GEMM_TN_CENTERED.patch](../experiments/removed/MOJOLEARN_IDN_GEMM_TN_CENTERED.patch) |
+| [`MOJOLEARN_IDN_PCA_LEAN_SCRATCH_OFF`](#mojolearn_idn_pca_lean_scratch_off) | Decomposition (PCA scratch, IDENTICAL) | removed (old path of the confirmed default) | 2026-11-15 | [MOJOLEARN_IDN_PCA_LEAN_SCRATCH_OFF.patch](../experiments/removed/MOJOLEARN_IDN_PCA_LEAN_SCRATCH_OFF.patch) |
+| [`MOJOLEARN_EIGH_FAST_TRIDIAG_PANELS_OFF`](#mojolearn_eigh_fast_tridiag_panels_off) | Decomposition (eigh, FAST Apple) | removed (old path of the FAST Apple default) | 2026-11-15 | [MOJOLEARN_EIGH_FAST_TRIDIAG_PANELS_OFF.patch](../experiments/removed/MOJOLEARN_EIGH_FAST_TRIDIAG_PANELS_OFF.patch) |
+| [`MOJOLEARN_IDN_EIGH_TRIDIAG_OFF`](#mojolearn_idn_eigh_tridiag_off) | Decomposition (eigh, IDENTICAL) | removed (old path of the KEPT IDENTICAL default) | 2026-11-15 | [MOJOLEARN_IDN_EIGH_TRIDIAG_OFF.patch](../experiments/removed/MOJOLEARN_IDN_EIGH_TRIDIAG_OFF.patch) |
+| [`MOJOLEARN_IDN_EIGH_BLOCK_OFF`](#mojolearn_idn_eigh_block_off) | Decomposition (block eigh override) | removed (unmeasured old path) | 2026-11-15 | [MOJOLEARN_IDN_EIGH_BLOCK_OFF.patch](../experiments/removed/MOJOLEARN_IDN_EIGH_BLOCK_OFF.patch) |
+| [`MOJOLEARN_IDN_EIGH_BLOCK_ON`](#mojolearn_idn_eigh_block_on) | Decomposition (block eigh candidate) | removed (unmeasured opt-in arm) | 2026-11-15 | [MOJOLEARN_IDN_EIGH_BLOCK_ON.patch](../experiments/removed/MOJOLEARN_IDN_EIGH_BLOCK_ON.patch) |
+| [`MOJOLEARN_PCA_RR_EIGH_OFF`](#mojolearn_pca_rr_eigh_off) | Decomposition (PCA / TruncatedSVD eigensolver, IDENTICAL) | removed (unmeasured old path) | 2026-11-15 | [MOJOLEARN_PCA_RR_EIGH_OFF.patch](../experiments/removed/MOJOLEARN_PCA_RR_EIGH_OFF.patch) |
 
 | [`MOJOLEARN_IDN_EIGH_SMALL_OFF`](#n9-every-dense-eigh-on-the-executor-ops-2026-11-09) | Decomposition (dense eigh, IDENTICAL) | removed (superseded: the one-launch Jacobi is the op's only route below TD_MIN_N) | 2026-11-09 | [MOJOLEARN_IDN_EIGH_SMALL.patch](../experiments/removed/MOJOLEARN_IDN_EIGH_SMALL.patch) |
 | [`MOJOLEARN_IDN_EIGH_SMALL_N64`](#n9-every-dense-eigh-on-the-executor-ops-2026-11-09) | Decomposition (dense eigh, IDENTICAL candidate arm) | removed (superseded: no small-n cut left) | 2026-11-09 | [MOJOLEARN_IDN_EIGH_SMALL.patch](../experiments/removed/MOJOLEARN_IDN_EIGH_SMALL.patch) |
@@ -9160,3 +9185,242 @@ The owner lanes write these defines' sections; here the inline markers and `expe
 - `MOJOLEARN_TREES_T44_METADATA_CACHE`: `_TREE_SHAP_CACHE` is False; the create-args check refuses in providers/python/xtrees_api_pyapi_door.mojo; `3f0e029eb4`, recoverable at `adde5aacdd`; `experiments/removed/MOJOLEARN_TREES_T44_METADATA_CACHE.expdel2-08-base.patch`.
 
 Not deleted, contrary to the plan (KEEP set): `MOJOLEARN_NATIVE_CONV_BAD_GRADIENT`, `MOJOLEARN_NATIVE_OPTIMIZER_BAD_REFERENCE` and `MOJOLEARN_NATIVE_SVM_BAD_PREDICTION` (fixture-only negative controls of packaging/native_only/cases: sabotage arms); `MOJOLEARN_SCRATCH` (the A/B toggle of the standalone probe tools/lowbit_amd_tuned/scratch_first.mojo, built both ways by scratch_first.sh); `MOJOLEARN_UMAP_IDENTICAL_OPT_TPB_64` / `_256` (the launch-width builds of the UMAP fingerprint gate in tools/umap_lane_pod_run.sh); `MOJOLEARN_COLUMN_CPU` (coordinator correction) and the `MOJOLEARN_IDN_ALL_OFF` umbrella reads (kept as the plan's Method says). The remaining defines of the section are read in this lane's files only through mode-dependent aliases owned by other lanes' files, which stay as they are.
+
+## Experiment deletions: lane expdel2-16-decomposition (2026-11-15)
+
+Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2-16-decomposition), under AGENTS.md "An unmeasured arm is deleted" (Andrew, 2026-11-15). Each record named below was read first. No bit changes: every deletion removes a non-default arm or a rollback beside the default, and the default branch is kept byte for byte.
+
+### MOJOLEARN_AFCL_L10
+
+- Tried: programme card AFCL-L10: NMF's OP_MUZ as a specialized kernel with four coalesced output stripes per thread (`nmf_muz_striped_kernel`).
+- Evidence: no EXPERIMENTS.md row, no A/B: the card was never run (rule g of the V2 plan).
+- Removed: the alias, `nmf_muz_striped_kernel`, its gate in `launch_ew` and the unused OP_MUZ import; `launch_ew` always takes `ew_kernel`. Default unchanged: no bits move.
+- Files: x_decomp/device.mojo.
+- Deleted by: lane/expdel2-16-decomposition `0564fdef0e` (2026-11-15); code recoverable at `6837570bd9`.
+- Restore: `git apply experiments/removed/MOJOLEARN_AFCL_L10.patch`, then delete the refusal in `core/experiment_guards_decomposition.mojo`.
+
+### MOJOLEARN_XD_FAST_SVD_ONE_BLOCK
+
+- Tried: opt-in arm: `DevExec._svd_on` (PCA / TruncatedSVD / randomized_svd / linalg.svd) through the executor op `svd_op_tall` (one gated block per Jacobi) instead of the round launches.
+- Evidence: EXPERIMENTS.md row 2366 PENDING (owed row svd-tall-vs-rounds never ran). Deleted unmeasured (rule a).
+- Removed: `DevExec._svd_on_op`, its gate in `_svd_on` and the `svd_op_tall` import; the alias stays False for x_decomp/kit_device.mojo's import (lane expdel2-17's file). Default unchanged: no bits move.
+- Files: x_decomp/device.mojo.
+- Deleted by: lane/expdel2-16-decomposition `f899386021` (2026-11-15); code recoverable at `0564fdef0e`.
+- Restore: `git apply experiments/removed/MOJOLEARN_XD_FAST_SVD_ONE_BLOCK.patch`, then delete the refusal in `core/experiment_guards_decomposition.mojo`.
+
+### MOJOLEARN_DECOMP_FAST_GEMM_MMA_OFF
+
+- Tried: old path: the per-cell kit GEMM instead of the Apple matrix-unit GEMM on FAST + Apple.
+- Evidence: EXPERIMENTS.md DECOMP_FAST_GEMM_MMA KEPT (M3: randomized-svd istella 711 -> 533 ms, nmf istella 8,155 -> 6,333 ms, errors the same); row 435 DROPPED-slower for the tiled alternative. FAST is Apple only: no NVIDIA/AMD A/B owed (rule e).
+- Removed: the `and not is_defined` term: `DECOMP_FAST_GEMM_MMA = AFN_GEMM_APPLE`. Default unchanged: no bits move.
+- Files: x_decomp/device.mojo.
+- Deleted by: lane/expdel2-16-decomposition `0ddee7ae4b` (2026-11-15); code recoverable at `f899386021`.
+- Restore: `git apply experiments/removed/MOJOLEARN_DECOMP_FAST_GEMM_MMA_OFF.patch`, then delete the refusal in `core/experiment_guards_decomposition.mojo`.
+
+### MOJOLEARN_IDN_XD_SWEEP_OFF
+
+- Tried: old path: the Jacobi rounds wait every PJ_SYNC_ROUNDS on every vendor, svd reads h flags per sweep, tsqr waits between pack and factor.
+- Evidence: no EXPERIMENTS.md row, no grid control: no A/B recorded (rule b).
+- Removed: the `_OFF` term: `IDN_XD_SWEEP` is the IDENTICAL mode term. Default unchanged: no bits move.
+- Files: x_decomp/device.mojo.
+- Deleted by: lane/expdel2-16-decomposition `02aeadc9f6` (2026-11-15); code recoverable at `0ddee7ae4b`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_XD_SWEEP_OFF.patch`, then delete the refusal in `core/experiment_guards_decomposition.mojo`.
+
+### MOJOLEARN_IDN_XD_SVD_GROUP_OFF
+
+- Tried: old path: one convergence readback per svd sweep instead of four sweeps a readback.
+- Evidence: EXPERIMENTS.md row 2145 DEFAULT (bit-neutral); grid gap-tsqr.json xd_svd_group default on. The old path never won (rule e).
+- Removed: the `_OFF` term: `IDN_XD_SVD_GROUP = IDN_XD_SWEEP`; grid gap-tsqr.json entry moved to removed. Default unchanged: no bits move.
+- Files: x_decomp/device.mojo.
+- Deleted by: lane/expdel2-16-decomposition `0c86559205` (2026-11-15); code recoverable at `02aeadc9f6`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_XD_SVD_GROUP_OFF.patch`, then delete the refusal in `core/experiment_guards_decomposition.mojo`.
+
+### MOJOLEARN_IDN_QR_R_DIRECT_OFF
+
+- Tried: old path: `DevExec.qr_r` copied the matrix through a host List on one thread and R through a second List.
+- Evidence: no EXPERIMENTS.md row, no grid control: no A/B recorded (rule b).
+- Removed: the `_OFF` term: `IDN_QR_R_DIRECT` is the IDENTICAL mode term. Default unchanged: no bits move.
+- Files: x_decomp/device.mojo.
+- Deleted by: lane/expdel2-16-decomposition `8d5d392bf1` (2026-11-15); code recoverable at `0c86559205`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_QR_R_DIRECT_OFF.patch`, then delete the refusal in `core/experiment_guards_decomposition.mojo`.
+
+### MOJOLEARN_IDN_LU_GESV_OFF
+
+- Tried: old path: `idn_flags_run` bit 1 cleared, so solve took the old call sequence instead of `lu_gesv_py`.
+- Evidence: no EXPERIMENTS.md row, no grid control: no A/B recorded (rule b).
+- Removed: the `_OFF` term of `IDN_LU_GESV` in x_decomp/api.mojo. Default unchanged: no bits move.
+- Files: x_decomp/api.mojo.
+- Deleted by: lane/expdel2-16-decomposition `79f4ad1e97` (2026-11-15); code recoverable at `c9e3c20372`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_LU_GESV_OFF.patch`, then delete the refusal in `core/experiment_guards_decomposition.mojo`.
+
+### MOJOLEARN_IDN_LLE_DEV_F0_OFF
+
+- Tried: old path: LLE downloaded F, sliced columns on the host and uploaded F^ again instead of building F0 in cells.
+- Evidence: no EXPERIMENTS.md row, no grid control: no A/B recorded (rule b).
+- Removed: the `_OFF` term of `IDN_LLE_DEV_F0` in x_decomp/api.mojo. Default unchanged: no bits move.
+- Files: x_decomp/api.mojo.
+- Deleted by: lane/expdel2-16-decomposition `c47a9137eb` (2026-11-15); code recoverable at `79f4ad1e97`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_LLE_DEV_F0_OFF.patch`, then delete the refusal in `core/experiment_guards_decomposition.mojo`.
+
+### MOJOLEARN_IDN_RAND_RESIDENT_OFF
+
+- Tried: old path: every kit `rand` draw downloaded and uploaded again for the first product.
+- Evidence: no EXPERIMENTS.md row, no grid control: no A/B recorded (rule b).
+- Removed: the `_OFF` term of `IDN_RAND_RESIDENT` in x_decomp/api.mojo. Default unchanged: no bits move.
+- Files: x_decomp/api.mojo.
+- Deleted by: lane/expdel2-16-decomposition `d82ec62247` (2026-11-15); code recoverable at `c47a9137eb`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_RAND_RESIDENT_OFF.patch`, then delete the refusal in `core/experiment_guards_decomposition.mojo`.
+
+### MOJOLEARN_IDN_RES_MOVES_OFF
+
+- Tried: old path: resident transpose, column selection and row range downloaded the operand instead of moving on the device.
+- Evidence: no EXPERIMENTS.md row, no grid control: no A/B recorded (rule b).
+- Removed: the `_OFF` term of `IDN_RES_MOVES` in x_decomp/api.mojo. Default unchanged: no bits move.
+- Files: x_decomp/api.mojo.
+- Deleted by: lane/expdel2-16-decomposition `87157c4174` (2026-11-15); code recoverable at `d82ec62247`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_RES_MOVES_OFF.patch`, then delete the refusal in `core/experiment_guards_decomposition.mojo`.
+
+### MOJOLEARN_IDN_NMF_L2_CELL_OFF
+
+- Tried: old path: NMF added l2 to H H^T's diagonal on a host copy in a Python loop.
+- Evidence: no EXPERIMENTS.md row, no grid control: no A/B recorded (rule b).
+- Removed: the `_OFF` term of `IDN_NMF_L2_CELL` in x_decomp/api.mojo. Default unchanged: no bits move.
+- Files: x_decomp/api.mojo.
+- Deleted by: lane/expdel2-16-decomposition `b6300f1d85` (2026-11-15); code recoverable at `87157c4174`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_NMF_L2_CELL_OFF.patch`, then delete the refusal in `core/experiment_guards_decomposition.mojo`.
+
+### MOJOLEARN_IDN_ICA_LIM_DEV_OFF
+
+- Tried: old path: FastICA downloaded k words and took the max on the host.
+- Evidence: no EXPERIMENTS.md row, no grid control: no A/B recorded (rule b).
+- Removed: the `_OFF` term of `IDN_ICA_LIM_DEV` in x_decomp/api.mojo. Default unchanged: no bits move.
+- Files: x_decomp/api.mojo.
+- Deleted by: lane/expdel2-16-decomposition `6278f49a67` (2026-11-15); code recoverable at `b6300f1d85`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_ICA_LIM_DEV_OFF.patch`, then delete the refusal in `core/experiment_guards_decomposition.mojo`.
+
+### MOJOLEARN_IDN_POLAR_MAX_DEV_OFF
+
+- Tried: old path: varimax / quartimax `_polar` downloaded the k x k matrix for its max |A|.
+- Evidence: no EXPERIMENTS.md row, no grid control: no A/B recorded (rule b).
+- Removed: the `_OFF` term of `IDN_POLAR_MAX_DEV` in x_decomp/api.mojo. Default unchanged: no bits move.
+- Files: x_decomp/api.mojo.
+- Deleted by: lane/expdel2-16-decomposition `4265e949c0` (2026-11-15); code recoverable at `6278f49a67`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_POLAR_MAX_DEV_OFF.patch`, then delete the refusal in `core/experiment_guards_decomposition.mojo`.
+
+### MOJOLEARN_IDN_LLE_PAD_DEV_OFF
+
+- Tried: old path: LLE's shift-invert loop downloaded X and uploaded [X; 0] twice per iteration.
+- Evidence: no EXPERIMENTS.md row, no grid control: no A/B recorded (rule b).
+- Removed: the `_OFF` term of `IDN_LLE_PAD_DEV` in x_decomp/api.mojo. Default unchanged: no bits move.
+- Files: x_decomp/api.mojo.
+- Deleted by: lane/expdel2-16-decomposition `860e94a3f4` (2026-11-15); code recoverable at `4265e949c0`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_LLE_PAD_DEV_OFF.patch`, then delete the refusal in `core/experiment_guards_decomposition.mojo`.
+
+### MOJOLEARN_IDN_CHOL_OPS_FIT
+
+- Tried: B arm: KernelRidge, GPR, GPC, the GMM precision chain and x_decomp `chol_inv` on the executor Cholesky ops instead of the 0.8.66 `potrf_lower` + `cho_solve` / `chol_logdet` route.
+- Evidence: EXPERIMENTS.md row 581 RUN OWED (owed row chol-ops-fit); the one measurement (2026-11-13, MI325X) had the ops AMD kernel-ridge 1.21-1.25x, gpr 1.14-1.18x, gpc 1.20-1.21x slower, NVIDIA kernel-ridge the same. Deleted (rule a).
+- Removed: in this lane's files the ops branches of `DevExec.chol_inv`, `kernel_ridge_solve` and the gmm workspace check; `kernel_ridge_ops_route` returns False and `CHOL_OPS_FIT` stays False for the importers in other lanes' files (gaussian_process/*, mixture/checks/mstep.mojo, kernel_methods/estimator.mojo, x_decomp/kit_device.mojo). Default unchanged: no bits move.
+- Files: cholesky/chol_ops.mojo, kernel_methods/impl/kernel_ridge/kernel_ridge.mojo, mixture/checks/gmm_check.mojo, x_decomp/device.mojo.
+- Deleted by: lane/expdel2-16-decomposition `70d6bad292` (2026-11-15); code recoverable at `860e94a3f4`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_CHOL_OPS_FIT.patch`, then delete the refusal in `core/experiment_guards_kernel.mojo`.
+
+### MOJOLEARN_CHOL_FAST_DEVIO_OFF
+
+- Tried: old path: the Cholesky fit's host-List input route instead of the device validator and one staging buffer.
+- Evidence: EXPERIMENTS.md CHOL_FAST_DEVIO KEPT (M3 cholesky synthetic 435 -> 290 ms, residual the same); row 1395 READY-AB (POOLIO, on top). No A/B of the old path (rule b).
+- Removed: the `and not is_defined` term of `CHOL_FAST_DEVIO`. Default unchanged: no bits move.
+- Files: cholesky/estimator.mojo.
+- Deleted by: lane/expdel2-16-decomposition `d224fbc6f5` (2026-11-15); code recoverable at `70d6bad292`.
+- Restore: `git apply experiments/removed/MOJOLEARN_CHOL_FAST_DEVIO_OFF.patch`, then delete the refusal in `core/experiment_guards_linear.mojo`.
+
+### MOJOLEARN_IDN_GATES_OFF
+
+- Tried: old path: the lane idn-gates umbrella rollback to the host-List routes on IDENTICAL.
+- Evidence: record read (EXPERIMENTS.md row 2479 and the idn-gates defaults): the gates are the IDENTICAL default, the old paths never won (rule e).
+- Removed: the term of `CHOL_FAST_DEVIO` in cholesky/estimator.mojo; the other reads are in other lanes' files, folded there with their own .<lane>.patch. Default unchanged: no bits move.
+- Files: cholesky/estimator.mojo.
+- Deleted by: lane/expdel2-16-decomposition `61bd06b986` (2026-11-15); code recoverable at `d224fbc6f5`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_GATES_OFF.patch`, then delete the refusal in `core/experiment_guards_base.mojo`.
+
+### MOJOLEARN_CHOL_HOST_SCALAR
+
+- Tried: before arm: the per-cell host trailing update and triangular solves instead of the SIMD CHOL_W cells.
+- Evidence: no EXPERIMENTS.md row, no grid control: no A/B recorded (rule a).
+- Removed: the alias, its three branches and the gemm_oracle_cell / OP_NT / is_defined imports. Default unchanged: no bits move.
+- Files: cholesky/host/chol_oracle.mojo.
+- Deleted by: lane/expdel2-16-decomposition `4b13787b83` (2026-11-15); code recoverable at `61bd06b986`.
+- Restore: `git apply experiments/removed/MOJOLEARN_CHOL_HOST_SCALAR.patch`, then delete the refusal in `core/experiment_guards_linear.mojo`.
+
+### MOJOLEARN_IDN_GEMM_TN_CENTERED
+
+- Tried: P3 arm: the v1 split-plan Gram centering at its tile load (gemm/tn_centered.mojo) instead of shift_columns + gemm_tn + restore.
+- Evidence: grid fg-pca.json gemm_tn_centered held at postmerge-20261010, never measured (rule a).
+- Removed: the alias, its branch, `centered_v1` and the gemm/tn_centered.mojo import; grid fg-pca.json entry moved to removed. gemm/tn_centered.mojo (lane expdel2-07's file) has no reader left. Default unchanged: no bits move.
+- Files: decomposition/impl/linalg/detail/pca.mojo.
+- Deleted by: lane/expdel2-16-decomposition `e1c7b2b99a` (2026-11-15); code recoverable at `4b13787b83`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_GEMM_TN_CENTERED.patch`, then delete the refusal in `core/experiment_guards_decomposition.mojo`.
+
+### MOJOLEARN_IDN_PCA_LEAN_SCRATCH_OFF
+
+- Tried: old path: PCA restored +mu after the Gram (dead pass) and sized both alias buffers at n*d.
+- Evidence: EXPERIMENTS.md row 1689 owed; grid fg-pca.json confirmed:postmerge-20261010 (lean scratch stays the default). Deleted (rule b).
+- Removed: the `_OFF` term: `PCA_LEAN_SCRATCH` is the IDENTICAL mode term; the unused is_defined import; grid fg-pca.json entry moved to removed. Default unchanged: no bits move.
+- Files: decomposition/impl/linalg/detail/pca.mojo.
+- Deleted by: lane/expdel2-16-decomposition `15bbecfc2b` (2026-11-15); code recoverable at `e1c7b2b99a`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_PCA_LEAN_SCRATCH_OFF.patch`, then delete the refusal in `core/experiment_guards_decomposition.mojo`.
+
+### MOJOLEARN_EIGH_FAST_TRIDIAG_PANELS_OFF
+
+- Tried: old path: the FAST Apple Jacobi eigh beside the panel tridiagonal default.
+- Evidence: EXPERIMENTS.md row 931 (M3 43765.6 -> 700.3 ms; no-regression criterion PASS); no A/B of the old path (rule b). FAST is Apple only.
+- Removed: the `_OFF` term: `EIGH_FAST_TRIDIAG` = FAST + Apple; the unused is_defined import. Default unchanged: no bits move.
+- Files: x_decomp/eigh_tridiag.mojo.
+- Deleted by: lane/expdel2-16-decomposition `8e83b98cee` (2026-11-15); code recoverable at `15bbecfc2b`.
+- Restore: `git apply experiments/removed/MOJOLEARN_EIGH_FAST_TRIDIAG_PANELS_OFF.patch`, then delete the refusal in `core/experiment_guards_decomposition.mojo`.
+
+### MOJOLEARN_IDN_EIGH_TRIDIAG_OFF
+
+- Tried: old path: the IDENTICAL Jacobi eigh beside the tridiagonal route.
+- Evidence: EXPERIMENTS.md row 476 KEEP default (AMD 8620.1 -> 353.7 ms a1600, NV 21119.9 -> 367.2 ms v0006, NV == AMD); grid gap-linalg.json promoted. Deleted (rule e).
+- Removed: the `_OFF` term of `EIGH_TD_IDN`; grid gap-linalg.json entry moved to removed. The Jacobi stays compiled as the refusal fallback. Default unchanged: no bits move.
+- Files: x_decomp/eigh_tridiag.mojo, x_decomp/eigh_tridiag_cells.mojo.
+- Deleted by: lane/expdel2-16-decomposition `9f9381859b` (2026-11-15); code recoverable at `8e83b98cee`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_EIGH_TRIDIAG_OFF.patch`, then delete the refusal in `core/experiment_guards_decomposition.mojo`.
+
+### MOJOLEARN_IDN_EIGH_BLOCK_OFF
+
+- Tried: override that kept the opt-in block eigh off even when requested.
+- Evidence: no EXPERIMENTS.md row: no A/B recorded (rule b).
+- Removed: its reads in the two block-eigh quality tools; the x_decomp/rr_block.mojo read is another lane's file. Default unchanged: no bits move.
+- Files: tools/identical_wave_eigh_block_refusal.mojo, tools/identical_wave_eigh_centered_pivot.mojo.
+- Deleted by: lane/expdel2-16-decomposition `2d8c673dc0` (2026-11-15); code recoverable at `d5f1bc4291`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_EIGH_BLOCK_OFF.patch`, then delete the refusal in `core/experiment_guards_decomposition.mojo`.
+
+### MOJOLEARN_IDN_EIGH_BLOCK_ON
+
+- Tried: opt-in arm: the quarantined block Jacobi eigh (observed convergence failure).
+- Evidence: no EXPERIMENTS.md row: no A/B recorded (rule a).
+- Removed: its reads and precedence checks in the two block-eigh quality tools, and the run-time refusals in `DevExec._eigh_jacobi_dev` and `eigh_op_sym_host` (the build-time refusal replaces them); the x_decomp/rr_block.mojo read is another lane's file. Default unchanged: no bits move.
+- Files: tools/identical_wave_eigh_block_refusal.mojo, tools/identical_wave_eigh_centered_pivot.mojo, x_decomp/device.mojo, x_decomp/eigh_ops_host.mojo.
+- Deleted by: lane/expdel2-16-decomposition `5972d75b59`, `af37fc8403` (2026-11-15); code recoverable at `2d8c673dc0`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_EIGH_BLOCK_ON.patch`, then delete the refusal in `core/experiment_guards_decomposition.mojo`.
+
+### MOJOLEARN_PCA_RR_EIGH_OFF
+
+- Tried: old path: the cyclic one-block `jacobi_eigh_kernel` instead of the round-robin Jacobi on every column.
+- Evidence: no EXPERIMENTS.md row, no grid control: no A/B recorded (rule b).
+- Removed: the `_OFF` term of `PCA_RR_EIGH`; the cyclic solver stays compiled for FAST. Default unchanged: no bits move.
+- Files: decomposition/pca_rr_switch.mojo.
+- Deleted by: lane/expdel2-16-decomposition `0b64d03d68` (2026-11-15); code recoverable at `5972d75b59`.
+- Restore: `git apply experiments/removed/MOJOLEARN_PCA_RR_EIGH_OFF.patch`, then delete the refusal in `core/experiment_guards_decomposition.mojo`.
+
+### Non-owner folds in this lane's files
+
+- `MOJOLEARN_CLASSICAL_C14_GROUP_RHS`: trs_group_kernel, trs_block_group and their branches in launch_trs_tri and trs_tri_cols (x_decomp/device.mojo, x_decomp/cells.mojo); `d1bf9a2e59`, recoverable at `8d5d392bf1`; `experiments/removed/MOJOLEARN_CLASSICAL_C14_GROUP_RHS.expdel2-16-decomposition.patch`.
+- `MOJOLEARN_CLASSICAL_C28_BUCKET_SOLVES`: the ALS bucket order (als_bucket_keys_kernel, the order buffer and kernel argument) and the three sparse-code bucket branches (x_decomp/device.mojo); launch_classical_code_rows stays for x_decomp/kit_device.mojo's import; `6aa22d61f9`, recoverable at `d1bf9a2e59`; `experiments/removed/MOJOLEARN_CLASSICAL_C28_BUCKET_SOLVES.expdel2-16-decomposition.patch`.
+- `MOJOLEARN_DECOMP_FAST_OMP_BLOCK`: the one-block-per-row branch of DevExec.omp_rows and its x_decomp/omp_block.mojo import (x_decomp/device.mojo); `c9e3c20372`, recoverable at `6aa22d61f9`; `experiments/removed/MOJOLEARN_DECOMP_FAST_OMP_BLOCK.expdel2-16-decomposition.patch`.
+- `MOJOLEARN_CLASSICAL_C01_MEAN`: the host_bm_column_mean branch of host_column_mean_launch (decomposition/host/pca_oracle.mojo); `c41dc34810`, recoverable at `0b64d03d68`; `experiments/removed/MOJOLEARN_CLASSICAL_C01_MEAN.expdel2-16-decomposition.patch`.
+- `MOJOLEARN_IDN_ALL_OFF`: the umbrella term of CHOL_FAST_DEVIO, PCA_RR_EIGH, PCA_RR_FLAG_TEST, the eight x_decomp/api bits, IDN_XD_SWEEP, IDN_QR_R_DIRECT, EIGH_TD_IDN and the route gate tool; `e98f1fff82`, recoverable at `af37fc8403`; `experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-16-decomposition.patch`.
+
+Not deleted: `MOJOLEARN_COLUMN_CPU` (the CPU-column build switch; plan correction). The other non-owner defines of the section (`AFN_GEMM_KB`, `CD_IDN_GRAM_OFF`, `CLASSICAL_RSVD_TSQR_ORTHO_OFF`, `IDN_*_RESIDENT_OFF`, `IDN_GBDT_PREDICT_FOUR_OFF`, `IDN_GMM_FUSED_CHOL_OFF`, `LU_FAST_MMA_OFF`, `LU_FAST_STEP1_OFF`, `LU_QOLD`, `TSVD_QOLD`) are read in this lane's files only through aliases owned by other lanes' files whose value stays the default (an int knob or a mode term), so those reads are unchanged; comments naming them were updated.

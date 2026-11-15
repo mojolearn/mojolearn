@@ -880,6 +880,8 @@ Files: `bindings/_mojolearn_x_decomp.mojo`, `cholesky/checks/chol_fast_tall.mojo
 
 Owned here (patch, TOMBSTONES.md section, refusal, grid and EXPERIMENTS.md records): `AFCL_L10`, `CHOL_FAST_DEVIO_OFF`, `CHOL_HOST_SCALAR`, `DECOMP_FAST_GEMM_MMA_OFF`, `EIGH_FAST_TRIDIAG_PANELS_OFF`, `IDN_CHOL_OPS_FIT`, `IDN_EIGH_BLOCK_OFF`, `IDN_EIGH_BLOCK_ON`, `IDN_EIGH_TRIDIAG_OFF`, `IDN_GATES_OFF`, `IDN_GEMM_TN_CENTERED`, `IDN_ICA_LIM_DEV_OFF`, `IDN_LLE_DEV_F0_OFF`, `IDN_LLE_PAD_DEV_OFF`, `IDN_LU_GESV_OFF`, `IDN_NMF_L2_CELL_OFF`, `IDN_PCA_LEAN_SCRATCH_OFF`, `IDN_POLAR_MAX_DEV_OFF`, `IDN_QR_R_DIRECT_OFF`, `IDN_RAND_RESIDENT_OFF`, `IDN_RES_MOVES_OFF`, `IDN_XD_SVD_GROUP_OFF`, `IDN_XD_SWEEP_OFF`, `PCA_RR_EIGH_OFF`, `XD_FAST_SVD_ONE_BLOCK`
 
+Lane result (expdel2-16-decomposition, 2026-11-15): all 25 owned defines deleted with their records; 5 non-owner defines folded in this lane's files (`CLASSICAL_C14_GROUP_RHS`, `CLASSICAL_C28_BUCKET_SOLVES`, `DECOMP_FAST_OMP_BLOCK`, `CLASSICAL_C01_MEAN`, `IDN_ALL_OFF`). KEPT: `COLUMN_CPU` (correction). The other non-owner defines are read here only through other lanes' aliases whose value stays the default (int knob or mode term); comments naming them were updated. Left for other lanes: `XD_FAST_SVD_ONE_BLOCK` and `CHOL_OPS_FIT` stay `False` and `launch_classical_code_rows` + its two kernels and `kernel_ridge_ops_route` stay only for imports in other lanes' files (x_decomp/kit_device.mojo, gaussian_process/*, mixture/checks/mstep.mojo, kernel_methods/estimator.mojo); gemm/tn_centered.mojo (expdel2-07) and x_decomp/omp_block.mojo have no reader left in this lane's files.
+
 ### expdel2-17-decomposition (42 defines, 22 code files)
 
 | define | decision | rule | sites | lines | evidence / why |

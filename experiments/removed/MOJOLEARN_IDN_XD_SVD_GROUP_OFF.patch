@@ -1,0 +1,16 @@
+diff --git a/x_decomp/device.mojo b/x_decomp/device.mojo
+index cdd6187eb9..76f7302c75 100644
+--- a/x_decomp/device.mojo
++++ b/x_decomp/device.mojo
+@@ -224,9 +224,8 @@ comptime XD_NO_FLAG = Int32(2147483647)
+ # flags. 4 sweeps a group: the Jacobi of a well-conditioned R converges in
+ # ~8-12 sweeps, so the waits fall 3-4x while at most 3 identity sweeps are
+ # spent after convergence; a size, not a shape, rule.
+-# TOMBSTONE: MOJOLEARN_IDN_XD_SVD_GROUP_OFF (old path, EXP:2145 DEFAULT bit-neutral grouping) deleted 2026-11-15 by lane/expdel2-16-decomposition; code recoverable at 02aeadc9f6.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_XD_SVD_GROUP_OFF.patch; record in docs/TOMBSTONES.md.
+-comptime IDN_XD_SVD_GROUP = IDN_XD_SWEEP
++# `-D MOJOLEARN_IDN_XD_SVD_GROUP_OFF` restores one readback per sweep.
++comptime IDN_XD_SVD_GROUP = IDN_XD_SWEEP and not is_defined["MOJOLEARN_IDN_XD_SVD_GROUP_OFF"]()
+ comptime XD_SVD_GROUP = 4 if IDN_XD_SVD_GROUP else 1
+ 
+ # TOMBSTONE: MOJOLEARN_XD_FAST_SVD_ONE_BLOCK (unmeasured opt-in arm, EXP:2366 PENDING) deleted 2026-11-15 by lane/expdel2-16-decomposition; code recoverable at 0564fdef0e.

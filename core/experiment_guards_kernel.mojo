@@ -56,6 +56,9 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_IDN_GPC_OVR_OFF"](), "removed 2026-11-15 (lane/expdel2-07-base): IDN_GPC_OVR_OFF (Kernel / GP (GaussianProcessClassifier one-vs-rest rollback to per-class binding calls, IDENTICAL old path)) was old path, no A/B recorded; the batched one-vs-rest default kept; the default is the only path; code recoverable at abe1b14d9d; see docs/TOMBSTONES.md"
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_GPR_PTR_OFF.patch
     comptime assert not is_defined["MOJOLEARN_IDN_GPR_PTR_OFF"](), "removed 2026-11-15 (lane/expdel2-07-base): IDN_GPR_PTR_OFF (Kernel / GP (GaussianProcessRegressor rollback to host-list gpr_fit / gpr_predict, IDENTICAL old path)) was old path, no A/B recorded; the resident pointer default kept; the default is the only path; code recoverable at b2a4adf292; see docs/TOMBSTONES.md"
+    # Lane expdel2-16-decomposition (2026-11-15): unmeasured arms and superseded old paths deleted, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (docs/TOMBSTONES.md).
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_CHOL_OPS_FIT.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_CHOL_OPS_FIT"](), "removed 2026-11-15 (lane/expdel2-16-decomposition): IDN_CHOL_OPS_FIT (opt-in B arm, RUN OWED) is gone; the default is kept; code at 860e94a3f4; restore: experiments/removed/MOJOLEARN_IDN_CHOL_OPS_FIT.patch"
     return True
 
 
