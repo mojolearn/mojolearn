@@ -4576,9 +4576,10 @@ def fused_bwd_dkdv_stash_kernel[HD: Int, BJ: Int, SABOTAGE: Bool](
 #: (768 blocks at the board shape instead of 384) and 32 stays everywhere
 #: else; `-D MOJOLEARN_ATTN_DKDV_BJ32=1` restores 32 on AMD. The keys a block
 #: owns touch no chain: same bits.
+# TOMBSTONE: MOJOLEARN_ATTN_DKDV_BJ16 (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-34-neural; code recoverable at 6955f6e721.
+# Restore: git apply experiments/removed/MOJOLEARN_ATTN_DKDV_BJ16.patch
 comptime ATTN_DKDV_BJ_R32 = (
-    16 if is_defined["MOJOLEARN_ATTN_DKDV_BJ16"]()
-    or (TARGET_COLUMN == COLUMN_AMD and not is_defined["MOJOLEARN_ATTN_DKDV_BJ32"]())
+    16 if (TARGET_COLUMN == COLUMN_AMD and not is_defined["MOJOLEARN_ATTN_DKDV_BJ32"]())
     else 32
 )
 
@@ -4633,7 +4634,6 @@ comptime ATTN_DQ_TQ_PINNED = (
 )
 comptime ATTN_DKDV_BJ_PINNED = (
     ATTN_TILE_RULE_OFF
-    or is_defined["MOJOLEARN_ATTN_DKDV_BJ16"]()
     or is_defined["MOJOLEARN_ATTN_DKDV_BJ32"]()
 )
 
