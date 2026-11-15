@@ -2097,6 +2097,16 @@ def _saved_fields(est, *keys):
             return tuple(np.array(z[k]) for k in keys)
 
 
+def _synthetic_bpe(ml):
+    """The synthetic 512-rank vocabulary through the public constructor
+    `BpeTokenizer.from_token_bytes`, where the lanes called the private
+    `BpeTokenizer._synthetic()` (which is that call plus a source label; the
+    identity, ids and bytes do not depend on the label). The token list is the
+    verify fixture `_tokenizer_synthetic.vocabulary()`."""
+    from mojolearn._tokenizer_synthetic import vocabulary
+    return ml.tokenizer.BpeTokenizer.from_token_bytes(vocabulary())
+
+
 def _labels_and_proba(m, X):
     """The two public classifier views, `predict` and `predict_proba`, in
     that order. Two public calls (two forest traversals) where the harness
@@ -6027,7 +6037,7 @@ def _(ml, X, yc, yr, Xh=None):
     of X viewed as bytes (the byte-lm lane's derivation without _ids'
     modulus), encoded with <|endoftext|> allowed, then decoded back; the
     held-out probe encodes Xh's first 4,096 bytes."""
-    tok = ml.tokenizer.BpeTokenizer._synthetic()
+    tok = _synthetic_bpe(ml)
     raw = np.ascontiguousarray(X).tobytes()[:4096]
     ids = np.asarray(tok.encode_bytes(raw, allow_endoftext=True), dtype=np.int32)
     back = np.frombuffer(tok.decode_bytes(ids.tolist()), dtype=np.uint8)
@@ -6194,7 +6204,7 @@ def _(ml, X, yc, yr, Xh=None):
         schedule = json.dumps(b.data_schedule(), sort_keys=True).encode("ascii")
         ok = LC.tokenizer_for(b.data_schedule(), c.vocabulary_path)
         try:
-            LC.require_vocabulary(b.data_schedule(), ml.tokenizer.BpeTokenizer._synthetic())
+            LC.require_vocabulary(b.data_schedule(), _synthetic_bpe(ml))
             refused = 0
         except ValueError as exc:
             refused = int("vocabulary mismatch" in str(exc))
@@ -6941,16 +6951,14 @@ def _(ml, X, yc, yr, Xh=None):
     for tag, labels, clf in (("strat", np.ascontiguousarray(yc[:n]).tolist(), True),
                              ("kfold", np.ascontiguousarray(yr[:n]).tolist(), False)):
         for splits in (3, 5):
-            # the product's route: cross_val_score's default folds for
-            # cv=None or an integer are bindings/msel_split_door.mojo
-            # `msel_default_folds` (the core fold helpers, the sabotage
-            # control included). f4d37e5eec deleted the Python
-            # `_default_fold_arrays` shim; verify calls the native owner's
-            # `family_msel_default_folds` operation, the same function
-            # msel_fold_source calls (the Python definition the fold tests
-            # hold it to stays mojolearn/tests/_fold_reference.py)
-            folds = [(a.tolist(), b.tolist()) for a, b in ms._NATIVE(
-                None, "family_msel_default_folds", (labels, splits, clf), ms._NATIVE_CONTEXT)]
+            # The public route to the folds an integer cv means: `check_cv`
+            # (StratifiedKFold for a classifier's discrete labels, KFold
+            # otherwise, unshuffled), as scikit-learn defines cross_val_score's
+            # cv=int. Before 2026-11-15 the lane called the private native
+            # operation `ms._NATIVE(None, "family_msel_default_folds", ...)`;
+            # the fold indices are the same rows (the Python definition the
+            # fold tests hold both to is mojolearn/tests/_fold_reference.py).
+            folds = list(ms.check_cv(splits, labels, classifier=clf).split(Xn, labels))
             train = [np.asarray(a, dtype=np.int64) for a, _ in folds]
             test = [np.asarray(b, dtype=np.int64) for _, b in folds]
             parts[f"{tag}{splits}"] = _h(*(train + test))
@@ -7493,6 +7501,17 @@ def _(ml, X, yc, yr, Xh=None):
                 m, lambda e: e.search(Xh[:64]) + (e.n_candidates_,))
 
 
+def _ivf_copy(ml, index):
+    """An independent IVFIndex holding the same index arrays: the public
+    `save` then `IVFIndex.load` (a loaded index searches and extends, as its
+    docstring says), where the lane used the private `_clone`. An extend on
+    the copy leaves `index` as it was."""
+    with tempfile.TemporaryDirectory(prefix="ib-ivf-copy-") as d:
+        path = os.path.join(d, "index.npz")
+        index.save(path)
+        return ml.IVFIndex.load(path)
+
+
 @lane("ivf-extend")
 def _(ml, X, yc, yr, Xh=None):
     """IVFIndex.extend (python/mojolearn/_ivf_impl.py; lane/inference-embedding-
@@ -7506,8 +7525,8 @@ def _(ml, X, yc, yr, Xh=None):
     model column saves the extended index; the probe searches 64 held-out
     rows."""
     base = ml.IVFIndex(n_lists=16, n_probes=4, n_neighbors=8, random_state=3).fit(X[:3072])
-    one = base._clone().extend(X[3072:4096])
-    two = base._clone().extend(X[3072:3584])
+    one = _ivf_copy(ml, base).extend(X[3072:4096])
+    two = _ivf_copy(ml, base).extend(X[3072:3584])
     first = np.asarray(two.extend_labels_).copy()
     two.extend(X[3584:4096])
     for name in ("centers_", "center_norms_", "list_offsets_", "list_indices_", "list_data_"):
@@ -9478,7 +9497,7 @@ def _batch_ivf_extend(ml, e, Xh):
     extends a fresh clone of the fitted index; the ids are not compared,
     because a row's id is its position in the extension by contract."""
     return [_BatchRows("extend (new-row lists)", Xh[:64],
-                       lambda r: (np.asarray(e._clone().extend(r).extend_labels_),))]
+                       lambda r: (np.asarray(_ivf_copy(ml, e).extend(r).extend_labels_),))]
 
 
 _batch_decl(_batch_ivf_extend, "ivf-extend")
@@ -11162,9 +11181,7 @@ def _shown(verdict, values):
 
 
 def run(args):
-    from mojolearn._cpu_reference import reference_training
-    with reference_training():
-        return _run_reference(args)
+    return _run_reference(args)
 
 
 def _run_reference(args):
@@ -11190,9 +11207,12 @@ def _run_reference(args):
     # PTX set must never stand for the native NVIDIA column, nor the reverse.
     gpu_arch = code_format = None
     if ml.vendor() == "cuda":
-        from mojolearn import _backend as _ml_backend
-        gpu_arch = _ml_backend.gpu_arch()
-        code_format = "ptx" if _ml_backend.baseline_selection_receipt() is not None else "native"
+        # mojolearn.runtime_report(): `gpu_arch`, and `code_mode` "ptx" exactly
+        # when the PTX baseline set was selected (before: _backend.gpu_arch()
+        # and _backend.baseline_selection_receipt() is not None)
+        report = ml.runtime_report()
+        gpu_arch = report["gpu_arch"]
+        code_format = "ptx" if str(report["code_mode"]).lower() == "ptx" else "native"
         if (code_format == "ptx") != ("ptx" in str(vendor).lower()):
             raise SystemExit(f"REFUSING: the {code_format} CUDA set ({gpu_arch}) is loaded and the vendor label is "
                              f"{vendor!r}; a PTX record is labelled nvidia-ptx-<gpu>-sm80 and only a PTX record is")
