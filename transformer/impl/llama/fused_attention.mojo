@@ -1884,19 +1884,27 @@ def _attn_speculative() -> Bool:
     off on NVIDIA and AMD (the L40S toggle sweep read 0.99-1.00) and ON on
     the Apple column (lane/neural-pass43, 2026-10-01: one Metal round trip
     a layer instead of two; `MOJOLEARN_ATTN_SPECULATIVE=0` restores the
-    scan in front); the identity gate is the check."""
-    var v = String(getenv("MOJOLEARN_ATTN_SPECULATIVE"))
-    comptime if TARGET_COLUMN == COLUMN_APPLE:
-        return v != "0"
-    return v == "1"
+    scan in front); the identity gate is the check.
+
+    A build constant since lane envgate-neural-lm (2026-11-15): it was a
+    getenv per attention launcher call (forward, twice a layer per step).
+    The column defaults are unchanged; `-D MOJOLEARN_ATTN_SPECULATIVE` is the
+    NVIDIA/AMD B arm and `-D MOJOLEARN_ATTN_SPECULATIVE_OFF` the Apple one."""
+    return ATTN_SPECULATIVE
+
+
+comptime ATTN_SPECULATIVE = is_defined["MOJOLEARN_ATTN_SPECULATIVE"]() or (
+    TARGET_COLUMN == COLUMN_APPLE and not is_defined["MOJOLEARN_ATTN_SPECULATIVE_OFF"]()
+)
+"""See `_attn_speculative`: on for the Apple column, off on NVIDIA and AMD."""
 
 
 def _attn_timer_on() -> Bool:
-    """The per-kernel timers: compiled by `MOJOLEARN_ATTN_PHASE_TIMERS`,
-    switched on by the block timers' run-time switch."""
-    comptime if ATTN_PHASE_TIMERS:
-        return String(getenv("MOJOLEARN_TRANSFORMER_TIMING")) != ""
-    return False
+    """The per-kernel timers: on in a build with both
+    `-D MOJOLEARN_ATTN_PHASE_TIMERS` and `-D MOJOLEARN_TRANSFORMER_TIMING`
+    (the block timers' define; it was a run-time environment switch read
+    per launcher call until lane envgate-neural-lm, 2026-11-15)."""
+    return ATTN_PHASE_TIMERS and is_defined["MOJOLEARN_TRANSFORMER_TIMING"]()
 
 
 def _attn_tick(ctx: DeviceContext, on: Bool, mut t: Int, name: String) raises:

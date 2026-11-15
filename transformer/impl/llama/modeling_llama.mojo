@@ -298,7 +298,6 @@ from transformer.experiments.norm_fixed_lanes import (
 # qk_rope_pair_kernel, score_scale_mask_kernel.)
 from max.gpu import block_dim, block_idx, thread_idx
 from std.memory import bitcast, unsafe_memcpy, stack_allocation
-from std.os import getenv
 from std.time import perf_counter_ns
 from std.sys.compile import is_defined
 from max.gpu.host import DeviceBuffer, DeviceContext
@@ -3760,9 +3759,17 @@ def swiglu_training_fused_kernel(
     gated.unsafe_store(i, ftz(identical_mul(ftz(sil), ftz(up.unsafe_load(i)))))
 
 
+comptime SWIGLU_FUSED = is_defined["MOJOLEARN_SWIGLU_FUSED"]()
+"""`-D MOJOLEARN_SWIGLU_FUSED`: the forward-only fused SiLU*gate (one launch
+instead of two per layer). Default off, unchanged; it was a getenv per block
+call until lane envgate-neural-lm (2026-11-15). RUN OWED on NVIDIA
+(bench/results/paper_compare/owed-pre0867.json "swiglu-fused";
+docs/apple-fast/EXPERIMENTS.md)."""
+
+
 def swiglu_fused_enabled() -> Bool:
-    """`MOJOLEARN_SWIGLU_FUSED=1`; read per block call, default off."""
-    return String(getenv("MOJOLEARN_SWIGLU_FUSED")) == "1"
+    """`-D MOJOLEARN_SWIGLU_FUSED`; a build constant, default off."""
+    return SWIGLU_FUSED
 
 
 def mlp_gated_kernel(
@@ -4209,11 +4216,17 @@ def llama_attention_scale(head_dim: Int) -> Float32:
     return ftz(identical_rsqrt(Float32(head_dim)))
 
 
+comptime TRANSFORMER_TIMING = is_defined["MOJOLEARN_TRANSFORMER_TIMING"]()
+"""`-D MOJOLEARN_TRANSFORMER_TIMING`: the block and step timers. Was a getenv
+per block call / step / session call until lane envgate-neural-lm
+(2026-11-15); a build without the define pays nothing."""
+
+
 def timing_on() -> Bool:
-    """`MOJOLEARN_TRANSFORMER_TIMING=1`: print a host-timed, synchronized
+    """`-D MOJOLEARN_TRANSFORMER_TIMING`: print a host-timed, synchronized
     phase breakdown of every block call. A traced or timed run is not a
     measurement of anything else; this exists to say where the time goes."""
-    return String(getenv("MOJOLEARN_TRANSFORMER_TIMING")) != ""
+    return TRANSFORMER_TIMING
 
 
 def timing_tick(
@@ -4241,10 +4254,12 @@ comptime ATTN_PATH_FUSED = 2
 def attention_path_choice(plant_at: Int) -> Int:
     """Which attention path THIS call takes, before the data is looked at.
 
-    `MOJOLEARN_TRANSFORMER_ATTN_PATH=eager` forces the eager kernels (the
+    `-D MOJOLEARN_TRANSFORMER_ATTN_PATH_EAGER` forces the eager kernels (the
     A/B arm for timing; also what a sabotage build and a planted call get
-    unconditionally). `fused` asks for the fused kernels; the default is
-    `auto`, which is `fused`.
+    unconditionally). `-D MOJOLEARN_TRANSFORMER_ATTN_PATH_FUSED` asks for the
+    fused kernels; the default is `auto`, which is `fused`. Both were the
+    run-time `MOJOLEARN_TRANSFORMER_ATTN_PATH=eager|fused`, read per block
+    call, until lane envgate-neural-lm (2026-11-15).
 
     THIS FUNCTION USED TO RETURN EAGER FOR A FAST BUILD,
     which is the whole case against that tier existing in this lane: the
@@ -4259,12 +4274,15 @@ def attention_path_choice(plant_at: Int) -> Int:
         return ATTN_PATH_EAGER
     if plant_at != PLANT_AT_NONE:
         return ATTN_PATH_EAGER
-    var want = String(getenv("MOJOLEARN_TRANSFORMER_ATTN_PATH"))
-    if want == "eager":
+    comptime if TRANSFORMER_ATTN_PATH_EAGER:
         return ATTN_PATH_EAGER
-    if want == "fused":
+    comptime if TRANSFORMER_ATTN_PATH_FUSED:
         return ATTN_PATH_FUSED
     return ATTN_PATH_AUTO
+
+
+comptime TRANSFORMER_ATTN_PATH_EAGER = is_defined["MOJOLEARN_TRANSFORMER_ATTN_PATH_EAGER"]()
+comptime TRANSFORMER_ATTN_PATH_FUSED = is_defined["MOJOLEARN_TRANSFORMER_ATTN_PATH_FUSED"]()
 
 
 # TOMBSTONE: MOJOLEARN_IDN_ATTN_SOFTMAX=2 (slower) deleted 2026-10-10 by c1bf9d832; code recoverable at ca25d9321.
