@@ -1,0 +1,24 @@
+diff --git a/bindings/hotpath_device_door.mojo b/bindings/hotpath_device_door.mojo
+index 443b53aa90..9faced4a1d 100644
+--- a/bindings/hotpath_device_door.mojo
++++ b/bindings/hotpath_device_door.mojo
+@@ -29,7 +29,7 @@ five off):
+   IDN_HPDEV_REDUCE  -D MOJOLEARN_IDN_HPDEV_REDUCE_OFF  reduce_stat's min,
+                     max, argmax and integral test (the sequential float
+                     sum stays the host helper's)
+-  IDN_HPDEV_INIT    (always on; its _OFF was deleted)  uniform_init_f32
++  IDN_HPDEV_INIT    -D MOJOLEARN_IDN_HPDEV_INIT_OFF    uniform_init_f32
+   IDN_HPDEV_ISUM    -D MOJOLEARN_IDN_HPDEV_ISUM_OFF    reduce_stat's exact
+                     integer sum (lane fix-s1-shared)
+   IDN_HPDEV_NORMAL  -D MOJOLEARN_IDN_HPDEV_NORMAL_OFF  normal_init_f32
+@@ -121,9 +121,7 @@ from core.msel_helpers_device import (
+ # IDN_HPDEV_LABELS lives in core/hotpath_device_run.mojo beside hpdev_try_encode_labels.
+ # IDN_HPDEV_FOLDS lives in core/base_helpers_device.mojo (imported above),
+ # beside the typed runs the base helper table publishes.
+-# TOMBSTONE: MOJOLEARN_IDN_HPDEV_INIT_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-02-base; code recoverable at 2136ab3bb0.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_HPDEV_INIT_OFF.patch; record in docs/TOMBSTONES.md.
+-comptime IDN_HPDEV_INIT = _HPDEV_BASE
++comptime IDN_HPDEV_INIT = _HPDEV_BASE and not is_defined["MOJOLEARN_IDN_HPDEV_INIT_OFF"]()
+ #: lane fix-s1-shared: reduce_stat's exact integer sum as a device tile fold.
+ #: lane fix-s1-shared: cast_elements between two dtypes on the device.
+ #: lane fix-s1-shared: normal_init_f32 drawn on the device.

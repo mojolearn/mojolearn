@@ -2,7 +2,7 @@
 discriminant analysis). One entry runs a program of units on the device
 (x_prep/common.mojo); the host binding runs the same units on the CPU."""
 from core.experiment_guards_base import BASE_GUARDS_OK
-from experiments.classical_identical_ideas.shared_controls import C08_DICTIONARY, C08_TARGET_CODES, C08_ONEHOT_FT, C08_ORDINAL_FT, C04_LDA, C56_LDA_INPUT
+from experiments.classical_identical_ideas.shared_controls import C08_DICTIONARY, C08_TARGET_CODES
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 
@@ -30,7 +30,7 @@ from x_prep.select_blocked import IDN_SELECT_BLOCKED
 from x_prep.pt_blocked import IDN_PT_BLOCKED
 from x_prep.host.rr_eigh_host import IDN_RR_EIGH
 from x_prep.fam2 import IDN_WDRAW, IDN_PERM_DRAW, IDN_WPICK, IDN_PARTIAL_CODES, IDN_LABEL_INV
-from x_prep.gram_blocked import IDN_GRAM_BLOCKED, IDN_GRAM_ROWTILE, IDN_GRAM_ROWS
+from x_prep.gram_blocked import IDN_GRAM_BLOCKED, IDN_GRAM_ROWS
 from x_prep.proba64 import PROBA64
 from x_prep.prep3 import PREP3_MAXABS
 from x_prep.fastmaxabs import maxabs_fit_direct
@@ -271,17 +271,25 @@ def proba64_binding() raises -> PythonObject:
 
 def c08_routes_binding() raises -> PythonObject:
     """C08 routes compiled in (lane classical-encoders): 1 TargetEncoder fit codes,
-    2 OneHotEncoder.fit_transform, 4 OrdinalEncoder.fit_transform."""
-    return PythonObject(Int(C08_TARGET_CODES) | (Int(C08_ONEHOT_FT) << 1) | (Int(C08_ORDINAL_FT) << 2))
+    2 retired (C08 OneHotEncoder arm, deleted 2026-11-15), 4 retired (C08 OrdinalEncoder arm, deleted 2026-11-15)."""
+    # TOMBSTONE: MOJOLEARN_CLASSICAL_C08_ORDINAL_FT (opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-02-base; code recoverable at 46115a2bb3.
+    # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C08_ORDINAL_FT.expdel2-02-base.patch; record in docs/TOMBSTONES.md.
+    # TOMBSTONE: MOJOLEARN_CLASSICAL_C08_ONEHOT_FT (opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-02-base; code recoverable at 59c24bdf40.
+    # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C08_ONEHOT_FT.expdel2-02-base.patch; record in docs/TOMBSTONES.md.
+    return PythonObject(Int(C08_TARGET_CODES))
 
 
 def classical_shared_binding() raises -> PythonObject:
     """Bits read by python/mojolearn/_expansion_prep.py `_classical_shared`:
-    1 C08_DICTIONARY, 2 retired (C55, deleted 2026-10-07), 4 C04_LDA,
-    8 C56_LDA_INPUT; 16-48 and 64 retired (C61 NB arms / DA, deleted 2026-10-08
+    1 C08_DICTIONARY, 2 retired (C55, deleted 2026-10-07), 4 retired (C04 LDA, deleted 2026-11-15),
+    8 retired (C56 LDA input, deleted 2026-11-15); 16-48 and 64 retired (C61 NB arms / DA, deleted 2026-10-08
     after grid ge123e6f9: slower on both vendors, quality same)."""
+    # TOMBSTONE: MOJOLEARN_CLASSICAL_C56_LDA_INPUT (opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-02-base; code recoverable at 859362ebd3.
+    # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C56_LDA_INPUT.expdel2-02-base.patch; record in docs/TOMBSTONES.md.
+    # TOMBSTONE: MOJOLEARN_CLASSICAL_C04_LDA (opt-in arm, EXP:1532 DROPPED-serial) deleted 2026-11-15 by lane/expdel2-02-base; code recoverable at 93b7a49f96.
+    # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C04_LDA.expdel2-02-base.patch; record in docs/TOMBSTONES.md.
     return PythonObject(
-        Int(C08_DICTIONARY) | (Int(C04_LDA) << 2) | (Int(C56_LDA_INPUT) << 3)
+        Int(C08_DICTIONARY)
     )
 
 
@@ -304,11 +312,13 @@ def idn_fam2_binding() raises -> PythonObject:
     by python/mojolearn/_expansion_prep.py `_idn_fam2` (1 IDN_WDRAW: ops
     230-232, 2 IDN_PERM_DRAW: op 233, 4 IDN_WPICK: op 234, 8
     IDN_PARTIAL_CODES: op 235, 16 IDN_GRAM_BLOCKED: ops 236, 238-240, 32
-    IDN_GRAM_ROWTILE: op 237 (candidate), 64 IDN_LABEL_INV: op 241, bits 16 and up: the Gram's rows per
+    retired (IDN_GRAM_ROWTILE, deleted 2026-11-15), 64 IDN_LABEL_INV: op 241, bits 16 and up: the Gram's rows per
     block); registered only when one is on."""
+    # TOMBSTONE: MOJOLEARN_IDN_GRAM_ROWTILE (opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-02-base; code recoverable at ba54f83c9b.
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_GRAM_ROWTILE.expdel2-02-base.patch; record in docs/TOMBSTONES.md.
     return PythonObject(
         (1 if IDN_WDRAW else 0) | (2 if IDN_PERM_DRAW else 0) | (4 if IDN_WPICK else 0)
-        | (8 if IDN_PARTIAL_CODES else 0) | (16 if IDN_GRAM_BLOCKED else 0) | (32 if IDN_GRAM_ROWTILE else 0)
+        | (8 if IDN_PARTIAL_CODES else 0) | (16 if IDN_GRAM_BLOCKED else 0)
         | (64 if IDN_LABEL_INV else 0) | (IDN_GRAM_ROWS << 16)
     )
 

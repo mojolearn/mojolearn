@@ -4,30 +4,6 @@
  "branch": "lane/neural-io-2",
  "head": "bf06ffdb3",
  "controls": {
-  "seq_moe_device_io_off": {
-   "define": "MOJOLEARN_SEQ_MOE_DEVICE_IO_OFF",
-   "kind": "switch",
-   "arms": {
-    "off": [],
-    "on": [
-     "MOJOLEARN_SEQ_MOE_DEVICE_IO_OFF=1"
-    ]
-   },
-   "default": "off",
-   "source": [
-    "bindings/_mojolearn_x_sequence.mojo:46",
-    "sequence/moe_dev.mojo:30",
-    "sequence/pyapi.mojo (moe_forward_core)",
-    "python/mojolearn/_x_sequence_moe.py (MoEBlock._forward_dev, to_device)",
-    "tools/bench_board_algos.py (_seq_device_io)"
-   ],
-   "binding": [
-    "_mojolearn_x_sequence"
-   ],
-   "bits_change": false,
-   "status": "confirmed:postmerge-20261010 (lane/postmerge-act-6; post-merge neural A/B, one run per arm (nv2 L40S v1052/v1056 defaults on main 9f83ea479, amd MI325X a1152/a1156 on main 0a7b206f1)): device IO stays the default",
-   "note": "Lane neural-io-2. Default ON (waste removal): MoEBlock's forward on resident sequence tensors (x, y, logits, picks, weights stay on the device; 2 x 4 T D bytes over PCIe and four host zero-filled outputs per call removed; host-array entry outputs np.empty). The OFF arm leaves moe_forward_dev out of the binding, so MoEBlock.to_device returns host arrays and the host-array entry runs (the before arm). Same moe_forward_core launches on the same words: no bit moves. A/B owed on moe plus a neighboring shape (e.g. T=6144, D=1024, F=2816; T=8192, D=768). CONFIRMED 2026-10-10: the _OFF arm is slower, moe NV 23.16 -> 30.19 ms (1.30x, v1058) / AMD 18.79 -> 22.25 ms (1.18x, a1158); digest 393fefe9 unchanged."
-  },
   "xcnn_res_new_nozero_off": {
    "define": "MOJOLEARN_XCNN_RES_NEW_NOZERO_OFF",
    "kind": "switch",
@@ -74,18 +50,6 @@
   }
  },
  "algorithms": {
-  "neural:moe": {
-   "binding": "_mojolearn_x_sequence",
-   "route": "MoEBlock.forward(SequenceDeviceTensor) -> moe_forward_dev -> moe_forward_core [seq_moe_device_io_off]",
-   "controls": [
-    "seq_moe_device_io_off"
-   ],
-   "interaction_groups": [
-    [
-     "seq_moe_device_io_off"
-    ]
-   ]
-  },
   "expanded:embedding": {
    "binding": "_mojolearn_embedding",
    "route": "Embedding.backward(ids, dy on device) -> embedding_backward_dev -> _backward_dev_run (eager refusal scans; idn_emb_scan_deferred_off removed 2026-10-10)",
@@ -142,6 +106,11 @@
    "define": "MOJOLEARN_IDN_EMB_SCAN_DEFERRED_OFF",
    "control": "idn_emb_scan_deferred_off",
    "reason": "DELETED 2026-10-10 (lane postmerge-act-6): the _OFF arm (eager scans) WON the post-merge neural A/B, one run per arm (nv2 L40S v1056 -> v1059 on main 9f83ea479, amd MI325X a1156 -> a1159 on main 0a7b206f1): embedding NV 2.70 -> 2.28 ms (0.84x) / AMD 2.09 -> 1.94 ms (0.92x), digest 2753e61a unchanged. The deferred scan (MOJOLEARN_IDN_EMB_SCAN_DEFERRED, default on) is deleted, the eager scans are the only path; both defines refused in core/six_lane_experiment_guards.mojo; code recoverable at main 9f83ea479 (experiments/removed/MOJOLEARN_IDN_EMB_SCAN_DEFERRED.patch)."
+  },
+  {
+   "define": "MOJOLEARN_SEQ_MOE_DEVICE_IO_OFF",
+   "control": "seq_moe_device_io_off",
+   "reason": "DELETED 2026-11-15 (lane/expdel2-02-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md): the host-array MoE rollback; device IO stayed the default after the postmerge-20261010 A/B; moe_forward_dev and moe_forward_dev_alloc are always registered (no bit change); define refused in core/experiment_guards_base.mojo; code recoverable at the sha named in docs/TOMBSTONES.md."
   }
  ]
 }

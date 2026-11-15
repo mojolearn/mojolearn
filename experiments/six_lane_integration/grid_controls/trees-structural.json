@@ -5,24 +5,6 @@
  "head": "75dd2db9a",
  "mode": "identical",
  "controls": {
-  "GBDT_STEP_OLD": {
-   "define": "MOJOLEARN_IDN_GBDT_STEP_OLD",
-   "kind": "switch",
-   "arms": {
-    "off": [],
-    "on": [
-     "MOJOLEARN_IDN_GBDT_STEP_OLD"
-    ]
-   },
-   "default": "off",
-   "source": [
-    "gbdt/methods/greedy_subsets_searcher/greedy_search_helper_depthwise.mojo:1296"
-   ],
-   "binding": "_mojolearn_gbdt",
-   "bits_change": false,
-   "status": "new",
-   "notes": "lane gbdt-per-node-regression 2026-11-14: on = the Lossguide tree pool back at 1 << max_depth leaf slots (65,536 at the board's max_depth 16, zeroed every tree); off (default) = the fit's leaf capacity. A/B owed on gbdt-lossguide istella/taxi, NVIDIA + AMD."
-  },
   "ORD_STD_GRIDFOLD": {
    "define": "MOJOLEARN_TREES_ORD_STD_GRIDFOLD_OFF",
    "kind": "switch",
@@ -136,7 +118,13 @@
    "note": "gbdt-categorical is grow_policy Lossguide with Logloss (tools/speed_gbdt_arm.py TASK_LANES), so LG_LEVEL_ROUNDS reaches it; the search rounds and the leaf estimation are separate stages (independent)."
   }
  },
- "removed": [],
+ "removed": [
+  {
+   "define": "MOJOLEARN_IDN_GBDT_STEP_OLD",
+   "control": "GBDT_STEP_OLD",
+   "reason": "DELETED 2026-11-15 (lane/expdel2-02-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md; AGENTS.md 'An unmeasured arm is deleted'): the A/B on gbdt-lossguide was owed and never ran (EXPERIMENTS.md PENDING row); the old 1 << max_depth Lossguide pool arm is gone, the leaf-capacity pool stays the default (no bit change); define refused in core/experiment_guards_base.mojo; code recoverable at the sha named in docs/TOMBSTONES.md."
+  }
+ ],
  "stage0_build": {
   "note": "lanes do not compile (rule change 2026-10-07); the orchestrator builds each binding with IDENTICAL + column define, once all-off and once all-on",
   "bindings": [

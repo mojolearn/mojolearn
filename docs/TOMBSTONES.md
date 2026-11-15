@@ -555,6 +555,19 @@ in the tables after the sections.
 | [`x_decomp_dev_eigh` branch of the linalg kit's eigh](#dead-code-found-by-the-python-audits-2026-11-09) | Linalg (eigh, svd hermitian) | removed (dead code: unreachable) | 2026-11-09 | [dead_code_p5_20261109.patch](../experiments/removed/dead_code_p5_20261109.patch) |
 | [`_take` (Mamba weight-dict order helper)](#dead-code-found-by-the-python-audits-2026-11-09) | Neural (Mamba blocks) | removed (dead code: no caller) | 2026-11-09 | none (recoverable at `78dffe4a08`^) |
 | [the manifold kit's 35 named x_decomp entries (`x_decomp_graph_*` / `_dev_graph_*`, `_barycenter_rows`, `_lle_apply`, `_lle_local`, `_lle_iterate`, `_lle_gemm_ordered`, `_lle_lu_ordered`, `_mds_fit`, `_lanczos`, `_dev_lanczos`, `_eigh_tridiag`, `_dev_eigh_tridiag`, `_trisolve`, `_dev_trisolve`, `_dsum_sq`, `_dev_dsum_sq`, `_order_f`, `_dev_order_f`) and 8 `*_pyapi.mojo` door files](#the-manifold-kits-named-x_decomp-entries-2026-11-12) | Decomposition / manifold (both bindings) | removed (superseded: x_decomp table operations 120-150, no live caller) | 2026-11-12 | [x_decomp_mani_named_entries.patch](../experiments/removed/x_decomp_mani_named_entries.patch) |
+| [`MOJOLEARN_BYTE_LM_LOGITS_ZERO_FILL`](#mojolearn_byte_lm_logits_zero_fill) | Neural (byte LM trainer) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_BYTE_LM_LOGITS_ZERO_FILL.patch](../experiments/removed/MOJOLEARN_BYTE_LM_LOGITS_ZERO_FILL.patch) |
+| [`MOJOLEARN_DART_ROUND_REF_OFF`](#mojolearn_dart_round_ref_off) | Trees (DART rounds) | removed (old path, no A/B recorded) | 2026-11-15 | [MOJOLEARN_DART_ROUND_REF_OFF.patch](../experiments/removed/MOJOLEARN_DART_ROUND_REF_OFF.patch) |
+| [`MOJOLEARN_IDN_GBDT_STEP_OLD`](#mojolearn_idn_gbdt_step_old) | Trees (GBDT Lossguide) | removed (old path, no A/B recorded) | 2026-11-15 | [MOJOLEARN_IDN_GBDT_STEP_OLD.patch](../experiments/removed/MOJOLEARN_IDN_GBDT_STEP_OLD.patch) |
+| [`MOJOLEARN_IDN_HPDEV_INIT_OFF`](#mojolearn_idn_hpdev_init_off) | Base helpers (device) | removed (old path, no A/B recorded) | 2026-11-15 | [MOJOLEARN_IDN_HPDEV_INIT_OFF.patch](../experiments/removed/MOJOLEARN_IDN_HPDEV_INIT_OFF.patch) |
+| [`MOJOLEARN_IDN_HPDEV_NORMAL_OFF`](#mojolearn_idn_hpdev_normal_off) | Base helpers (device) | removed (old path, no A/B recorded) | 2026-11-15 | [MOJOLEARN_IDN_HPDEV_NORMAL_OFF.patch](../experiments/removed/MOJOLEARN_IDN_HPDEV_NORMAL_OFF.patch) |
+| [`MOJOLEARN_IDN_IF_FIT_OWN_X`](#mojolearn_idn_if_fit_own_x) | Trees (IsolationForest) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_IDN_IF_FIT_OWN_X.patch](../experiments/removed/MOJOLEARN_IDN_IF_FIT_OWN_X.patch) |
+| [`MOJOLEARN_IDN_IF_FIT_EXPORT`](#mojolearn_idn_if_fit_export) | Trees (IsolationForest) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_IDN_IF_FIT_EXPORT.patch](../experiments/removed/MOJOLEARN_IDN_IF_FIT_EXPORT.patch) |
+| [`MOJOLEARN_IDN_LM_RESIDENT_GENERATE`](#mojolearn_idn_lm_resident_generate) | Neural (CausalLM generate) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_IDN_LM_RESIDENT_GENERATE.patch](../experiments/removed/MOJOLEARN_IDN_LM_RESIDENT_GENERATE.patch) |
+| [`MOJOLEARN_MAMBA3_FORWARD_ZERO_FILL`](#mojolearn_mamba3_forward_zero_fill) | Neural (Mamba-3 outputs) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_MAMBA3_FORWARD_ZERO_FILL.patch](../experiments/removed/MOJOLEARN_MAMBA3_FORWARD_ZERO_FILL.patch) |
+| [`MOJOLEARN_MLP_SESSIONS_PACKED`](#mojolearn_mlp_sessions_packed) | Neural (small MLP sessions) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_MLP_SESSIONS_PACKED.patch](../experiments/removed/MOJOLEARN_MLP_SESSIONS_PACKED.patch) |
+| [`MOJOLEARN_MSEL_UNITS_GPU_PARALLEL`](#mojolearn_msel_units_gpu_parallel) | Model selection (CV units) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_MSEL_UNITS_GPU_PARALLEL.patch](../experiments/removed/MOJOLEARN_MSEL_UNITS_GPU_PARALLEL.patch) |
+| [`MOJOLEARN_NEURAL_TABLE_ROUTE_OFF`](#mojolearn_neural_table_route_off) | Neural (block doors) | removed (old path, no A/B recorded) | 2026-11-15 | [MOJOLEARN_NEURAL_TABLE_ROUTE_OFF.patch](../experiments/removed/MOJOLEARN_NEURAL_TABLE_ROUTE_OFF.patch) |
+| [`MOJOLEARN_SEQ_MOE_DEVICE_IO_OFF`](#mojolearn_seq_moe_device_io_off) | Neural (MoE block) | removed (old path, no A/B recorded) | 2026-11-15 | [MOJOLEARN_SEQ_MOE_DEVICE_IO_OFF.patch](../experiments/removed/MOJOLEARN_SEQ_MOE_DEVICE_IO_OFF.patch) |
 
 | [`MOJOLEARN_IDN_EIGH_SMALL_OFF`](#n9-every-dense-eigh-on-the-executor-ops-2026-11-09) | Decomposition (dense eigh, IDENTICAL) | removed (superseded: the one-launch Jacobi is the op's only route below TD_MIN_N) | 2026-11-09 | [MOJOLEARN_IDN_EIGH_SMALL.patch](../experiments/removed/MOJOLEARN_IDN_EIGH_SMALL.patch) |
 | [`MOJOLEARN_IDN_EIGH_SMALL_N64`](#n9-every-dense-eigh-on-the-executor-ops-2026-11-09) | Decomposition (dense eigh, IDENTICAL candidate arm) | removed (superseded: no small-n cut left) | 2026-11-09 | [MOJOLEARN_IDN_EIGH_SMALL.patch](../experiments/removed/MOJOLEARN_IDN_EIGH_SMALL.patch) |
@@ -7332,3 +7345,141 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2
 - **Deleted by**: lane/expdel2-05-base (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `cffcc56511`.
 - **Restore**: `git apply experiments/removed/MOJOLEARN_FOREST_DEVICE_FINITE_OFF.patch`, then delete the `MOJOLEARN_FOREST_DEVICE_FINITE_OFF` refusal in `core/experiment_guards_trees.mojo`.
 - **Records**: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-05-base section).
+## Experiment deletions: lane expdel2-02-base (2026-11-15)
+
+Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2-02-base), under AGENTS.md "An unmeasured arm is deleted" (Andrew, 2026-11-15). Each record named below was read first. No bit changes: every deletion removes a non-default arm or a rollback beside the default, and the default branch is kept byte for byte.
+
+### MOJOLEARN_BYTE_LM_LOGITS_ZERO_FILL
+
+- Tried: opt-in arm: the resident logits pool allocated a fresh store as a zero-filled array.array copy instead of the unfilled bytearray.
+- Evidence: EXPERIMENTS.md row 2415 PENDING (owed A/B wave2-lm-forward-door, never run). Verdict: deleted unmeasured (rule a/b/e of the V2 plan).
+- Removed: the alias, both arms of `_pooled_logits`, `_pooled_store_type` and `byte_lm_pooled_finalize`, the unused imports; the unfilled store stays the default. Default unchanged: no bits move.
+- Files: bindings/byte_lm_trainer_native_door.mojo.
+- Deleted by: lane/expdel2-02-base `650388311e` (2026-11-15); code recoverable at `337c096a5b`.
+- Restore: `git apply experiments/removed/MOJOLEARN_BYTE_LM_LOGITS_ZERO_FILL.patch`, then delete the refusal in `core/experiment_guards_base.mojo`.
+
+### MOJOLEARN_DART_ROUND_REF_OFF
+
+- Tried: old path: re-resolved the x_trees glue entry three times per round and member instead of once per fit.
+- Evidence: EXPERIMENTS.md row 2393 PENDING (owed NV + AMD A/B, never run). Verdict: deleted unmeasured (rule a/b/e of the V2 plan).
+- Removed: the alias and the `_glue` helper; the five calls take the glue resolved once per fit. Default unchanged: no bits move.
+- Files: bindings/trees_dart_rounds_run.mojo.
+- Deleted by: lane/expdel2-02-base `f644604c7a` (2026-11-15); code recoverable at `650388311e`.
+- Restore: `git apply experiments/removed/MOJOLEARN_DART_ROUND_REF_OFF.patch`, then delete the refusal in `core/experiment_guards_base.mojo`.
+
+### MOJOLEARN_IDN_GBDT_STEP_OLD
+
+- Tried: old path: the Lossguide tree pool at 1 << max_depth leaf slots, zeroed whole every tree.
+- Evidence: EXPERIMENTS.md row 2423 PENDING (owed gbdt-lossguide A/B, never run); grid trees-structural.json GBDT_STEP_OLD status new. Verdict: deleted unmeasured (rule a/b/e of the V2 plan).
+- Removed: the check's skip of the S3 pool assertion under the define (now always asserted); the product read belongs to the lane owning greedy_search_helper_depthwise.mojo. Default unchanged: no bits move.
+- Files: checks/gbdt_step_cost_check.mojo (this lane); gbdt/methods/greedy_subsets_searcher/greedy_search_helper_depthwise.mojo (its own lane).
+- Deleted by: lane/expdel2-02-base `2136ab3bb0` (2026-11-15); code recoverable at `f644604c7a`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_GBDT_STEP_OLD.patch`, then delete the refusal in `core/experiment_guards_base.mojo`.
+
+### MOJOLEARN_IDN_HPDEV_INIT_OFF
+
+- Tried: old path: uniform_init_f32 on the host helper instead of the device draw.
+- Evidence: no EXPERIMENTS.md row, no grid control: no A/B recorded. Verdict: deleted unmeasured (rule a/b/e of the V2 plan).
+- Removed: the `and not is_defined` term: `IDN_HPDEV_INIT = _HPDEV_BASE`. Default unchanged: no bits move.
+- Files: bindings/hotpath_device_door.mojo (this lane); sequence/model_outputs_device.mojo (its own lane).
+- Deleted by: lane/expdel2-02-base `31aef6de0f` (2026-11-15); code recoverable at `2136ab3bb0`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_HPDEV_INIT_OFF.patch`, then delete the refusal in `core/experiment_guards_base.mojo`.
+
+### MOJOLEARN_IDN_HPDEV_NORMAL_OFF
+
+- Tried: old path: normal_init_f32 on the host helper instead of the device draw.
+- Evidence: no EXPERIMENTS.md row, no grid control: no A/B recorded. Verdict: deleted unmeasured (rule a/b/e of the V2 plan).
+- Removed: the `and not is_defined` term: `IDN_HPDEV_NORMAL = _HPDEV_BASE`. Default unchanged: no bits move.
+- Files: bindings/hotpath_device_door.mojo.
+- Deleted by: lane/expdel2-02-base `0a98ac1ae9` (2026-11-15); code recoverable at `31aef6de0f`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_HPDEV_NORMAL_OFF.patch`, then delete the refusal in `core/experiment_guards_base.mojo`.
+
+### MOJOLEARN_IDN_IF_FIT_OWN_X
+
+- Tried: opt-in arm: the fit owned a parallel copy of a borrowed float32 X (0292b73ab3) on a resident binary.
+- Evidence: EXPERIMENTS.md row 2396 PENDING (owed fit A/B, never run). Verdict: deleted unmeasured (rule a/b/e of the V2 plan).
+- Removed: the alias and the `comptime if`; a resident binary borrows the caller's X as 0.8.55 did. Default unchanged: no bits move.
+- Files: bindings/trees_public_iforest_door.mojo.
+- Deleted by: lane/expdel2-02-base `cfce0d30ce` (2026-11-15); code recoverable at `0a98ac1ae9`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_IF_FIT_OWN_X.patch`, then delete the refusal in `core/experiment_guards_base.mojo`.
+
+### MOJOLEARN_IDN_IF_FIT_EXPORT
+
+- Tried: opt-in arm: fit read the forest out at its end and held it as `_if_forest` (two more native calls, a synchronize and the node download per fit).
+- Evidence: no EXPERIMENTS.md row; the source comment names an owed A/B that never ran. Verdict: deleted unmeasured (rule a/b/e of the V2 plan).
+- Removed: the alias, the `fresh and` term of `keep` and the fit-end read-out; save() and pickle read the resident forest out when they run. Default unchanged: no bits move.
+- Files: bindings/trees_public_iforest_door.mojo.
+- Deleted by: lane/expdel2-02-base `29fe2d5748` (2026-11-15); code recoverable at `cfce0d30ce`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_IF_FIT_EXPORT.patch`, then delete the refusal in `core/experiment_guards_base.mojo`.
+
+### MOJOLEARN_IDN_LM_RESIDENT_GENERATE
+
+- Tried: opt-in arm: a model without a final norm was admitted to the resident generate and forward routes.
+- Evidence: EXPERIMENTS.md row 2262 pending (NV + AMD, never run). Verdict: deleted unmeasured (rule a/b/e of the V2 plan).
+- Removed: the alias and its early return in `_resident_norm_ok`; such models take the per-layer route. Default unchanged: no bits move.
+- Files: bindings/causal_lm_public_door.mojo (this lane); transformer/transformer_binding_impl.mojo (its own lane).
+- Deleted by: lane/expdel2-02-base `54f0ca8d71` (2026-11-15); code recoverable at `29fe2d5748`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_LM_RESIDENT_GENERATE.patch`, then delete the refusal in `core/experiment_guards_base.mojo`.
+
+### MOJOLEARN_MAMBA3_FORWARD_ZERO_FILL
+
+- Tried: opt-in arm: every Mamba-3 output a native call writes whole was zero-filled per call.
+- Evidence: EXPERIMENTS.md rows 2407 / 2409 PENDING (owed A/B restore-mamba3-forward-unfilled, never run). Verdict: deleted unmeasured (rule a/b/e of the V2 plan).
+- Removed: the alias and the zero-filled branch of `_m3_output_array` (kept, other doors import it); outputs stay unfilled. Default unchanged: no bits move.
+- Files: bindings/neural_prefill_native_door.mojo.
+- Deleted by: lane/expdel2-02-base `1c0608ab17` (2026-11-15); code recoverable at `54f0ca8d71`.
+- Restore: `git apply experiments/removed/MOJOLEARN_MAMBA3_FORWARD_ZERO_FILL.patch`, then delete the refusal in `core/experiment_guards_base.mojo`.
+
+### MOJOLEARN_MLP_SESSIONS_PACKED
+
+- Tried: opt-in arm: lane m2's packed sessions as ONE forward of the small-MLP program (op SESSIONS).
+- Evidence: EXPERIMENTS.md row 2381 RUN OWED (never run). Verdict: deleted unmeasured (rule a/b/e of the V2 plan).
+- Removed: both aliases, `_predict_sessions_packed` and the packed branch of `training_mlp_sessions`; one forward per session through `mlp_sessions` stays. Default unchanged: no bits move.
+- Files: bindings/small_mlp_native_door.mojo, bindings/training_extra_native_door.mojo.
+- Deleted by: lane/expdel2-02-base `853bb6d0ee` (2026-11-15); code recoverable at `1c0608ab17`.
+- Restore: `git apply experiments/removed/MOJOLEARN_MLP_SESSIONS_PACKED.patch`, then delete the refusal in `core/experiment_guards_base.mojo`.
+
+### MOJOLEARN_MSEL_UNITS_GPU_PARALLEL
+
+- Tried: opt-in arm: CV units and CalibratedClassifierCV folds fitted in parallel on a GPU (crashes in Metal command-buffer completion).
+- Evidence: EXPERIMENTS.md row 2371 DEFAULT OFF, RUN OWED after a thread-safety lane (never run). Verdict: deleted unmeasured (rule a/b/e of the V2 plan).
+- Removed: the alias and its early return; GPU units run one at a time, host units stay parallel. Default unchanged: no bits move.
+- Files: bindings/native_unit_threads_unpack.mojo.
+- Deleted by: lane/expdel2-02-base `0ace134aa9` (2026-11-15); code recoverable at `853bb6d0ee`.
+- Restore: `git apply experiments/removed/MOJOLEARN_MSEL_UNITS_GPU_PARALLEL.patch`, then delete the refusal in `core/experiment_guards_base.mojo`.
+
+### MOJOLEARN_NEURAL_TABLE_ROUTE_OFF
+
+- Tried: old path: the pre-table route (the image's Python entries called with Python address/parameter lists, as at 9d029f500a).
+- Evidence: EXPERIMENTS.md row 2391 PENDING (never run). Verdict: deleted unmeasured (rule a/b/e of the V2 plan).
+- Removed: the alias, `_neural_python_words` and nine B-arm branches; the neural entry table is the only route. Default unchanged: no bits move.
+- Files: bindings/neural_block_public_door.mojo.
+- Deleted by: lane/expdel2-02-base `193542c352` (2026-11-15); code recoverable at `0ace134aa9`.
+- Restore: `git apply experiments/removed/MOJOLEARN_NEURAL_TABLE_ROUTE_OFF.patch`, then delete the refusal in `core/experiment_guards_base.mojo`.
+
+### MOJOLEARN_SEQ_MOE_DEVICE_IO_OFF
+
+- Tried: old path: left the device-resident MoE entries unregistered, so MoEBlock took the host-array entry.
+- Evidence: EXPERIMENTS.md row 1789 owed; grid neural-io-2.json confirmed:postmerge-20261010 (device IO stays the default). Verdict: deleted unmeasured (rule a/b/e of the V2 plan).
+- Removed: the alias; moe_forward_dev and moe_forward_dev_alloc are always registered. Default unchanged: no bits move.
+- Files: bindings/_mojolearn_x_sequence.mojo.
+- Deleted by: lane/expdel2-02-base `cee5698695` (2026-11-15); code recoverable at `193542c352`.
+- Restore: `git apply experiments/removed/MOJOLEARN_SEQ_MOE_DEVICE_IO_OFF.patch`, then delete the refusal in `core/experiment_guards_base.mojo`.
+
+### Non-owner folds in this lane's files
+
+Inline TOMBSTONE markers only; the owner lane of each define writes its section, refusal and records.
+
+- `MOJOLEARN_FOREST_SEPARATE_NODES`: FOREST_PACKED_NODES folded to True in bindings/forest_inference_binding_door.mojo, checks/forest_inference_model.mojo; `6819bded14`, recoverable at `cee5698695`; `experiments/removed/MOJOLEARN_FOREST_SEPARATE_NODES.expdel2-02-base.patch`.
+- `MOJOLEARN_TREES_T38_FUSED_LABELS`: T38 capability probe returns False in bindings/forest_inference_binding_door.mojo; `2e9d66525c`, recoverable at `6819bded14`; `experiments/removed/MOJOLEARN_TREES_T38_FUSED_LABELS.expdel2-02-base.patch`.
+- `MOJOLEARN_IDN_MAMBA12_FORWARD_COPIES_OLD`: the old-path branches folded (stateless plan, unfilled y and h_last) in bindings/causal_lm_public_door.mojo; `f1c5239d24`, recoverable at `2e9d66525c`; `experiments/removed/MOJOLEARN_IDN_MAMBA12_FORWARD_COPIES_OLD.expdel2-02-base.patch`.
+- `MOJOLEARN_IDN_MAMBA12_FORWARD_DOOR_OLD`: the direct stateless call is unconditional in bindings/neural_block_public_door.mojo, bindings/causal_lm_public_door.mojo; `7dd7ac668d`, recoverable at `f1c5239d24`; `experiments/removed/MOJOLEARN_IDN_MAMBA12_FORWARD_DOOR_OLD.expdel2-02-base.patch`.
+- `MOJOLEARN_SAMBA_PROGRAM_FORWARD`: the resident stateless forward is unconditional in bindings/samba_inference_native_door.mojo; `59c24bdf40`, recoverable at `7dd7ac668d`; `experiments/removed/MOJOLEARN_SAMBA_PROGRAM_FORWARD.expdel2-02-base.patch`.
+- `MOJOLEARN_CLASSICAL_C08_ONEHOT_FT`: bit 2 of c08_routes retired in bindings/_mojolearn_x_prep.mojo, bindings/_mojolearn_x_prep_host.mojo; `46115a2bb3`, recoverable at `59c24bdf40`; `experiments/removed/MOJOLEARN_CLASSICAL_C08_ONEHOT_FT.expdel2-02-base.patch`.
+- `MOJOLEARN_CLASSICAL_C08_ORDINAL_FT`: bit 4 of c08_routes retired in bindings/_mojolearn_x_prep.mojo, bindings/_mojolearn_x_prep_host.mojo; `93b7a49f96`, recoverable at `46115a2bb3`; `experiments/removed/MOJOLEARN_CLASSICAL_C08_ORDINAL_FT.expdel2-02-base.patch`.
+- `MOJOLEARN_CLASSICAL_C04_LDA`: bit 4 of classical_shared retired in bindings/_mojolearn_x_prep.mojo, bindings/_mojolearn_x_prep_host.mojo; `859362ebd3`, recoverable at `93b7a49f96`; `experiments/removed/MOJOLEARN_CLASSICAL_C04_LDA.expdel2-02-base.patch`.
+- `MOJOLEARN_CLASSICAL_C56_LDA_INPUT`: bit 8 of classical_shared retired in bindings/_mojolearn_x_prep.mojo, bindings/_mojolearn_x_prep_host.mojo; `ba54f83c9b`, recoverable at `859362ebd3`; `experiments/removed/MOJOLEARN_CLASSICAL_C56_LDA_INPUT.expdel2-02-base.patch`.
+- `MOJOLEARN_IDN_GRAM_ROWTILE`: bit 32 of idn_fam2 retired in bindings/_mojolearn_x_prep.mojo, bindings/_mojolearn_x_prep_host.mojo; `4e82efa310`, recoverable at `ba54f83c9b`; `experiments/removed/MOJOLEARN_IDN_GRAM_ROWTILE.expdel2-02-base.patch`.
+
+Not deleted, contrary to the plan: `MOJOLEARN_COLUMN_CPU` (the CPU-column build switch, not an experiment; coordinator correction 2026-11-15) and `MOJOLEARN_134_CONTROL` (the DEVIATION 134f greedy positive control, a sabotage arm, which the plan's own KEEP set excludes). The other 21 defines of the section have no read in this lane's files beyond mode-dependent aliases (IDN_LABEL, IDN_NB_*, IDN_*_BLOCKED, IDN_RR_EIGH, AF_RESIDENT, PROBA64, PREP3_MAXABS, CAT_CLS2_*, NB_TEXT_CSR, FUSED_EST_MOVE_2030, IDN_GRAM_ROWS) whose value stays the same expression of the numeric mode, so those reads are unchanged.
+
