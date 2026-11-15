@@ -539,14 +539,13 @@ def _upload(
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_GP_BULK_DOWNLOAD_OFF.patch; record in docs/TOMBSTONES.md.
 comptime GP_IDN_BULK_DOWNLOAD = _CTX_MODE == _CTX_IDENTICAL
 
-#: fam-kernel-gp (2026-10-04), IDENTICAL, ON by default
-#: (`-D MOJOLEARN_IDN_GP_PREDICT_LAZY_L_OFF` restores the upload):
+#: fam-kernel-gp (2026-10-04), IDENTICAL, ON by default:
 #: `gpr_predict_host` uploads the n_train x n_train factor only when
 #: `return_std` asks for the variance; the mean reads K_trans and the dual
 #: alone. No kernel reads the factor on the mean-only path: no bit moves.
-comptime GP_IDN_PREDICT_LAZY_L = _CTX_MODE == _CTX_IDENTICAL and not (
-    is_defined["MOJOLEARN_IDN_GP_PREDICT_LAZY_L_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_IDN_GP_PREDICT_LAZY_L_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-19-kernel; code recoverable at 6969d83ccb.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_GP_PREDICT_LAZY_L_OFF.patch; record in docs/TOMBSTONES.md.
+comptime GP_IDN_PREDICT_LAZY_L = _CTX_MODE == _CTX_IDENTICAL
 
 
 def _download(
