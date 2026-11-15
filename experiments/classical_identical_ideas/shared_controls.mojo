@@ -110,7 +110,7 @@ comptime C08_UNIQUE_SCAN = CLASSICAL_IDENTICAL
 # (Sweep 2026-11-15: comptime C11_DRAW_GATHER removed; nothing read it.)
 # TOMBSTONE: MOJOLEARN_CLASSICAL_C12_SPARSE_COUNTS (no A/B recorded for the opt-in arm) deleted 2026-11-15 by lane/expdel2-07-base; code recoverable at 9f2212b4b1.
 # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C12_SPARSE_COUNTS.patch
-comptime C12_SPARSE_COUNTS = False
+# (Sweep 2026-11-15: comptime C12_SPARSE_COUNTS removed; nothing read it.)
 # TOMBSTONE: MOJOLEARN_CLASSICAL_C55_CLASS_GROUP (quality loss) deleted 2026-10-07 by 213f349ed; code recoverable at 213f349ed^.
 # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C55_CLASS_GROUP.patch; record in docs/TOMBSTONES.md.
 # C08 independent grouped one-hot emission; immutable dictionary is unchanged.
