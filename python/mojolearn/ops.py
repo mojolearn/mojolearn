@@ -87,8 +87,6 @@ _OP = {
 # autograd/ops_api.mojo OPS_COMPARE and OPS_LOGICAL kinds
 _COMPARE = {"eq": 0, "gt": 1, "lt": 2, "ge": 3, "le": 4, "ne": 5}
 _GELU = {"none": 0, "tanh": 1}
-# the largest tensor rank (autograd/rankn.mojo RN_MAX_RANK)
-_MAX_RANK = 8
 _ACTIVATION = {None: 0, "none": 0, "relu": 1, "sigmoid": 2, "tanh": 3, "softmax": 4}
 _REDUCTION = {"mean": 0, "sum": 1}
 _AXIS = {None: -1, 0: 0, 1: 1}
@@ -104,31 +102,11 @@ _PACK_HANDLES, _PACK_INTS, _PACK_FLOATS = 4, 8, 4
 _PACK_WORDS = _PACK_F + (_PACK_FLOATS + 1) // 2
 
 
-def _int(value, name, low=None):
-    if isinstance(value, bool) or not isinstance(value, (int, np.integer)):
-        raise TypeError(f"{name} must be an integer")
-    value = int(value)
-    if low is not None and value < low:
-        raise ValueError(f"{name} must be >= {low}")
-    return value
-
-
-def _seed_words(seed):
-    seed = _int(seed, "seed", 0)
-    if seed >= 2 ** 64:
-        raise ValueError("seed must be in [0, 2**64)")
-    return [seed & 0xFFFFFFFF, seed >> 32]
-
-
-def _axes(axis, name="axis"):
-    """[] for None, else the listed axes as integers (Mojo normalizes them)."""
-    if axis is None:
-        return []
-    if isinstance(axis, (tuple, list)):
-        if len(axis) > _MAX_RANK:
-            raise ValueError(f"{name} lists more than {_MAX_RANK} axes")
-        return [_int(a, name) for a in axis]  # glue: at most eight axis arguments
-    return [_int(axis, name)]
+# The Python `_int`, `_seed_words`, `_axes`, `Session._sid` and
+# `Session._handles` refusals had no caller left (lane py-tail, 2026-11-15):
+# every Session operation is one `_SESSION_CALL` and the ops door refuses its
+# arguments (providers/python/autograd_ops_frontend_pyapi_door.mojo `_int`,
+# `_axes`, `_seed_words`).
 
 
 class Session:
@@ -203,11 +181,6 @@ class Session:
 
     def __exit__(self, *exc):
         return _SESSION_CALL(self, "exit", ())
-
-    def _sid(self):
-        if self._id is None:
-            raise ValueError("this session is closed")
-        return self._id
 
     def reset(self):
         """Drop every computed tensor (and the recorded graph); tensors made
@@ -990,15 +963,6 @@ class Session:
         ...     values = s.numpy(hv)
         """
         return _SESSION_CALL(self, "hvp", (loss, params, v))
-
-    @staticmethod
-    def _handles(hs):
-        if isinstance(hs, (int, np.integer)) and not isinstance(hs, bool):
-            hs = [hs]
-        hs = [_int(h, "handle", 1) for h in hs]  # glue: the call's input handles
-        if not hs:
-            raise ValueError("give at least one tensor")
-        return hs
 
     # ------------------------------------------------------------ captured programs
     def capture(self, inputs, outputs):
