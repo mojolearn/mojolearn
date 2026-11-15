@@ -698,6 +698,7 @@ in the tables after the sections.
 | [`MOJOLEARN_PREP2_FAST_EIGH_BLOCK_OFF`](#mojolearn_prep2_fast_eigh_block_off-old-path-deleted-2026-11-15) | Preprocessing (IterativeImputer eigh on a threadgroup, FAST Apple) | removed (old path; FAST+Apple DEFAULT, afc_ab_def) | 2026-11-15 | [MOJOLEARN_PREP2_FAST_EIGH_BLOCK_OFF.patch](../experiments/removed/MOJOLEARN_PREP2_FAST_EIGH_BLOCK_OFF.patch) |
 | [`MOJOLEARN_CD_FAST_GRID_GRAM_OFF`](#mojolearn_cd_fast_grid_gram_off-old-path-deleted-2026-11-15) | Solver (CD Gram on the grid, FAST Apple) | removed (old path; FAST+Apple default KEPT, linear-lasso-rm-istella / linear-enet-rm-istella) | 2026-11-15 | [MOJOLEARN_CD_FAST_GRID_GRAM_OFF.patch](../experiments/removed/MOJOLEARN_CD_FAST_GRID_GRAM_OFF.patch) |
 | [`MOJOLEARN_CD_FAST_ROWMAJOR_OFF`](#mojolearn_cd_fast_rowmajor_off-old-path-deleted-2026-11-15) | Solver (CD row-major grid Gram, FAST Apple) | removed (old path; FAST+Apple default KEPT, linear-lasso-rm-istella / linear-enet-rm-istella) | 2026-11-15 | [MOJOLEARN_CD_FAST_ROWMAJOR_OFF.patch](../experiments/removed/MOJOLEARN_CD_FAST_ROWMAJOR_OFF.patch) |
+| [`MOJOLEARN_C31_DEVICE_BUCKETS`](#mojolearn_c31_device_buckets-unmeasured-arm-deleted-2026-11-15) | Classical IDENTICAL graph / cluster candidate (ball-cover kNN) | removed (unmeasured opt-in arm; plan V2 rule a) | 2026-11-15 | [MOJOLEARN_C31_DEVICE_BUCKETS.patch](../experiments/removed/MOJOLEARN_C31_DEVICE_BUCKETS.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -6754,3 +6755,15 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md (section expdel-02-
 - **Deleted by**: lane/expdel-03-linear (expdel-03-linear, docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md); code recoverable at `7d40f892a7`.
 - **Restore**: `git apply experiments/removed/MOJOLEARN_CD_FAST_ROWMAJOR_OFF.patch`, then delete the `MOJOLEARN_CD_FAST_ROWMAJOR_OFF` refusal in `core/experiment_guards_linear.mojo`.
 - **Records**: refusal in `core/experiment_guards_linear.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel-03-linear section).
+
+## Experiment deletions: lane expdel2-05-base (2026-11-15)
+
+Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2-05-base, "An unmeasured arm is deleted", Andrew 2026-11-15); each evidence row named in the plan was read before the deletion. No bit changes: every deletion removes a non-default arm or the rollback of a default, and the default path is unchanged.
+
+### MOJOLEARN_C31_DEVICE_BUCKETS: unmeasured arm deleted (2026-11-15)
+
+- **What it was**: Opt-in IDENTICAL arm (classical source-only candidate C31): random ball cover landmark buckets built on the device. The alias `C31_DEVICE_BUCKETS` in `experiments/classical_identical_ideas/graph_controls.mojo` stays as the constant `False` so its readers (neighbors/checks/ball_cover_canonical_order.mojo) compile unchanged until their lanes fold it.
+- **Verdict**: no record (no A/B recorded for the opt-in arm); deleted under "An unmeasured arm is deleted" (Andrew, 2026-11-15). The default build never set it, so no bit changes on any column.
+- **Deleted by**: lane/expdel2-05-base (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `337c096a5b`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_C31_DEVICE_BUCKETS.patch`, then delete the `MOJOLEARN_C31_DEVICE_BUCKETS` refusal in `core/experiment_guards_cluster.mojo`.
+- **Records**: refusal in `core/experiment_guards_cluster.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-05-base section).

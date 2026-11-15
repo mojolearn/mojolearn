@@ -69,7 +69,9 @@ comptime KMEANS_ROW_ASSIGN = GRAPH_IDENTICAL and KMEANS_ROW_ASSIGN_ROWS > 0
 # bound is a per-thread chain length, a power of two, far from k*d at any
 # board row (88 and 1760).
 comptime KMEANS_ROW_ASSIGN_MAX_KD = 512
-comptime C31_DEVICE_BUCKETS = GRAPH_IDENTICAL and is_defined["MOJOLEARN_C31_DEVICE_BUCKETS"]()
+# TOMBSTONE: MOJOLEARN_C31_DEVICE_BUCKETS (unmeasured arm) deleted 2026-11-15 by lane/expdel2-05-base; code recoverable at 337c096a5b.
+# Restore: git apply experiments/removed/MOJOLEARN_C31_DEVICE_BUCKETS.patch; record in docs/TOMBSTONES.md.
+comptime C31_DEVICE_BUCKETS = False
 comptime C32_COUNT_FUSION = GRAPH_IDENTICAL and is_defined["MOJOLEARN_C32_COUNT_FUSION"]()
 comptime C32_EMIT_FUSION = GRAPH_IDENTICAL and is_defined["MOJOLEARN_C32_EMIT_FUSION"]()
 comptime C33_FROZEN_CHUNKS = GRAPH_IDENTICAL and is_defined["MOJOLEARN_C33_FROZEN_CHUNKS"]()
