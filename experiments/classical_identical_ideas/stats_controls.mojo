@@ -54,7 +54,7 @@ comptime C53_BGMM_STATS = CLASSICAL_IDENTICAL and is_defined["MOJOLEARN_C53_BGMM
 # budget only: it sets series per launch slice, never per-series arithmetic.
 # TOMBSTONE: MOJOLEARN_C58_TEAM_MIB (no A/B recorded for the opt-in arm) deleted 2026-11-15 by lane/expdel2-07-base; code recoverable at d6045cbd0a.
 # Restore: git apply experiments/removed/MOJOLEARN_C58_TEAM_MIB.patch
-comptime C58_TEAM_MIB = 256
+# (Sweep 2026-11-15: comptime C58_TEAM_MIB removed; nothing read it.)
 # TOMBSTONE: MOJOLEARN_C59_TRIAL_STATE (no A/B recorded for the opt-in arm) deleted 2026-11-15 by lane/expdel2-07-base; code recoverable at 7935a1db35.
 # Restore: git apply experiments/removed/MOJOLEARN_C59_TRIAL_STATE.patch
 # (Sweep 2026-11-15: comptime C59_TRIAL_STATE removed; nothing read it.)
