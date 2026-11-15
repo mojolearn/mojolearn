@@ -2697,8 +2697,10 @@ def deferred_checks_at(addr: Int) -> MutPointer[LlamaDeferredChecks, MutAnyOrigi
     return MutPointer[LlamaDeferredChecks, MutAnyOrigin](unsafe_from_address=addr)
 
 
+# TOMBSTONE: MOJOLEARN_IDN_ATTN_BWD_SCAN_REUSE_OFF (unmeasured old path) deleted 2026-11-15 by lane/expdel2-34-neural; code recoverable at f0d7af0f4d.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ATTN_BWD_SCAN_REUSE_OFF.patch
 comptime IDN_ATTN_BWD_SCAN_REUSE = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
-    is_defined["MOJOLEARN_IDN_ATTN_BWD_SCAN_REUSE_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+    is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 )
 """lane/nr-attn (2026-10-04), default ON under IDENTICAL (the review's
 "backward regime scan re-reads q_rope/k_cache/v_cache", fused_attention
@@ -2713,8 +2715,7 @@ the backward, handed a record that matches its own buffers, scans dctx only
 and takes the other three maxima from the record. `max` over the same
 partials of the same bytes is the same value, so the regime decision is the
 same decision: no bit moves on any column. A NaN or absent maximum (-1) falls
-back to the full scan. `-D MOJOLEARN_IDN_ATTN_BWD_SCAN_REUSE_OFF` restores
-the four-buffer scan."""
+back to the full scan."""
 
 
 struct AttnFwdScan(Copyable, Movable):
