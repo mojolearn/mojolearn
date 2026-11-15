@@ -477,7 +477,7 @@ def worker(name, device, out_path):
 
 def worker_env(device):
     """The worker's environment: the shipped defaults of the installed wheel. Every MOJOLEARN_* variable of the box
-    is dropped (a job-level knob such as MOJOLEARN_GBDT_SHARD_ONE_DEVICE, MOJOLEARN_VENDOR, MOJOLEARN_IDN_ALL_OFF, a
+    is dropped (a job-level knob such as MOJOLEARN_GBDT_SHARD_ONE_DEVICE, MOJOLEARN_VENDOR, a
     sabotage or fault-injection switch would otherwise keep a lane on one rank or change its route: a FAIL that
     is not a product defect), as is every *_DEVICE_COUNT; then only the two settings this gate needs are set."""
     env = {k: v for k, v in os.environ.items()

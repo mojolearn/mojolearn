@@ -151,8 +151,8 @@ ENTRIES = (
     {"name": "autograd-mamba-tape", "source": "mamba/checks/mamba_tape_backward_check.mojo",
      "what": "Mamba-1/2 tape backward against stored gradient digests and the Mamba-1 host oracle"},
     # byte LM: its hand step and tape backward wrapper (autograd/rules_lm.mojo) were deleted with plan row X7
-    # (2026-11-09) and restored as the default step on 2026-11-13 (the program step is the B arm
-    # -D MOJOLEARN_BYTE_LM_PROGRAM_STEP); the stored-digest check stays deleted. Covered by the public
+    # (2026-11-09) and restored as the default step on 2026-11-13 (the program-step B arm was deleted
+    # 2026-11-15); the stored-digest check stays deleted. Covered by the public
     # SmallByteLanguageModelTrainer tests (python/mojolearn/tests/test_byte_lm_step_routes.py) and the `byte-lm` identity lane.
     # small MLP: its hand step and tape-rule check were deleted with plan row X2 (2026-11-09); the trainer is a
     # captured program, covered by the public SmallMLPTrainer tests and the `mlp` identity lane.

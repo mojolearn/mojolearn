@@ -7,7 +7,7 @@
 # drift on the Mac lands on both. Every arm prints its XCNN-DIGEST lines:
 # IDENTICAL arms must print the same digests.
 #
-#   CAB_ARMS="before=-D MOJOLEARN_XCNN_NO_MMA_SPLIT;after=" CAB_ROUNDS=2 \
+#   CAB_ARMS="before=-D MOJOLEARN_<DEFINE>;after=" CAB_ROUNDS=2 \
 #   CAB_PARTS="speed entries" CAB_PLANS="t_b2_dw,c64_dw" sh tools/apple_speed_cnn/ab.sh
 #
 # CAB_PY_<name>: extra profile.py words for that arm (e.g. legacy).
