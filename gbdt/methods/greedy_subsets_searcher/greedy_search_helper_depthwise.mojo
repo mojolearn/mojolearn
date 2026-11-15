@@ -8,6 +8,8 @@ from max.gpu import block_dim, block_idx, thread_idx
 from core.device_zero import enqueue_fill
 # TOMBSTONE: MOJOLEARN_AFT_N02 (DELETE-EXPERIMENT, never-run Apple FAST programme card, rule g; non-owner fold to False) deleted 2026-11-15 by lane/expdel2-43-trees; code recoverable at 2c3151597f.
 # Restore: git apply experiments/removed/MOJOLEARN_AFT_N02.expdel2-43-trees.patch; record in docs/TOMBSTONES.md.
+# RESTORED 2026-11-15 by lane/restore-apple-fast-trees: opt-in arm back as it was, default off, Apple fast only; default path unchanged.
+from gbdt.apple_fast_tree_experiments import AFT_N01, AFT_N02
 
 from checks.fixed_point import choose_scale
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
@@ -1168,8 +1170,25 @@ def select_leaves_to_visit(leaves: List[TLeaf]) raises -> List[Int]:
     return out^
 
 
-#: FAST on Apple, Lossguide B-best-leaves batch (GBDT_LG_BATCH): off since
-#: 2026-09-26 for a quality loss against best-first; arms deleted 2026-11-15.
+#: FAST on Apple: Lossguide splits the B best leaves per iteration (the same
+#: strict-< argmin, repeated, over leaves not yet taken) instead of one, so
+#: a tree pays about max_leaves / B host round trips instead of max_leaves;
+#: more than two new leaves are scored through the Depthwise leafwise
+#: kernel. Splitting one leaf never changes another leaf's best split, so
+#: the batch only differs from best-first where the leaf budget runs out.
+#: M4, 1M rows, 100 trees: taxi 11.6 -> 4.25 s, Istella-S 13.8 -> 9.7 s,
+#: logloss/AUC equal or better. Default 16; arms `-D
+#: MOJOLEARN_GBDT_LG_BATCH2|4|8|32` (the old `_OFF` switch stays deleted).
+#: OFF BY DEFAULT since 2026-09-26 (lane/apple-identical-neural): a quality
+#: check against best-first (one leaf per iteration), five 300k training
+#: subsets each, 300 trees, max_leaves 31, paired by subset, found the batch
+#: of 16 systematically worse: Istella regression test RMSE 0.5950-0.5970 ->
+#: 0.6072-0.6089 (about +2% on every subset), taxi AUC 0.6127 -> 0.6123 and
+#: log-loss 0.53820 -> 0.53831 (mean). When the leaf budget binds, the batch
+#: splits a different set of leaves than best-first. FAST may differ in bits
+#: but not in quality, so best-first stays the FAST default;
+#: `-D MOJOLEARN_GBDT_LG_BATCH=1` turns the batch on as a trial arm (fit
+#: time taxi 23 -> 10.5 s, Istella ~50 -> 17 s on the M4).
 # TOMBSTONE: MOJOLEARN_GBDT_LG_BATCH (DELETE-ARM, opt-in, no A/B recorded, rule a) deleted 2026-11-15 by lane/expdel2-43-trees; code recoverable at ba59d96b6a.
 # Restore: git apply experiments/removed/MOJOLEARN_GBDT_LG_BATCH.patch; record in docs/TOMBSTONES.md.
 # TOMBSTONE: MOJOLEARN_GBDT_LG_BATCH2 (DELETE-ARM, opt-in, no A/B recorded, rule a) deleted 2026-11-15 by lane/expdel2-43-trees; code recoverable at ba59d96b6a.
@@ -1182,10 +1201,25 @@ def select_leaves_to_visit(leaves: List[TLeaf]) raises -> List[Int]:
 # Restore: git apply experiments/removed/MOJOLEARN_GBDT_LG_BATCH32.patch; record in docs/TOMBSTONES.md.
 # TOMBSTONE: MOJOLEARN_GBDT_LG_BATCH_OFF (DELETE-OLD-PATH, no A/B recorded, rule b) deleted 2026-11-15 by lane/expdel2-43-trees; code recoverable at ba59d96b6a.
 # Restore: git apply experiments/removed/MOJOLEARN_GBDT_LG_BATCH_OFF.patch; record in docs/TOMBSTONES.md.
+# RESTORED 2026-11-15 by lane/restore-apple-fast-trees: MOJOLEARN_GBDT_LG_BATCH, _BATCH2, _BATCH4, _BATCH8, _BATCH32: opt-in arm back as it was, default off, Apple fast only; default path unchanged.
+comptime _LG_FAST_APPLE = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+    and TARGET_HAS_APPLE_GPU
+    and is_defined["MOJOLEARN_GBDT_LG_BATCH"]()
+)
+comptime GBDT_LG_BATCH = 1 if not _LG_FAST_APPLE else (
+    32 if is_defined["MOJOLEARN_GBDT_LG_BATCH32"]() else (
+        8 if is_defined["MOJOLEARN_GBDT_LG_BATCH8"]() else (
+            4 if is_defined["MOJOLEARN_GBDT_LG_BATCH4"]() else (
+                2 if is_defined["MOJOLEARN_GBDT_LG_BATCH2"]() else 16
+            )
+        )
+    )
+)
 
 
 #: FAST on Apple, trees-apple3: EXACT best-first in batches. The batch above
-#: (GBDT_LG_BATCH, deleted) split the B best leaves and keeps them all, which grows a
+#: (GBDT_LG_BATCH) splits the B best leaves and keeps them all, which grows a
 #: different tree than best-first when the leaf budget binds (its quality
 #: note). This one grows the SAME tree as one leaf per iteration:
 #:
@@ -1216,7 +1250,7 @@ def select_leaves_to_visit(leaves: List[TLeaf]) raises -> List[Int]:
 #: histograms vary run to run in both arms). Width 64 since aft-ab-lgw64
 #: (M3, vs 32: taxi 16.8 -> 14.9 s, Istella 22.9 -> 20.7 s, quality within
 #: spread; width 16 was slower, 18.1 s taxi); arms `-D
-#: MOJOLEARN_GBDT_LG_EXACT_BATCH32|128` (both deleted 2026-11-15).
+#: MOJOLEARN_GBDT_LG_EXACT_BATCH32|128` (both restored 2026-11-15).
 #:
 #: IDENTICAL, every GPU (lane gap-trees-nv): the same rounds under `-D
 #: MOJOLEARN_GBDT_LG_EXACT_ID`. Same bits as one leaf per iteration because
@@ -1280,6 +1314,7 @@ comptime LG_EXACT_BATCH = (
 # One warmup/one score; caller67d0efb29; exact cases/builds/hashes:
 # ~/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F12/lossguide.
 # Compilation/identity reused. No combined-toggle/full-board claim.
+    and not _LG_FAST_APPLE
 ) or LG_EXACT_ID
 # TOMBSTONE: MOJOLEARN_GBDT_LG_EXACT_BATCH_OFF (DELETE-OLD-PATH, no A/B recorded for the old path, rule b) deleted 2026-11-15 by lane/expdel2-43-trees; code recoverable at c556cd4e1d.
 # Restore: git apply experiments/removed/MOJOLEARN_GBDT_LG_EXACT_BATCH_OFF.patch; record in docs/TOMBSTONES.md.
@@ -1287,22 +1322,37 @@ comptime LG_EXACT_BATCH = (
 #: FAST on Apple: width 128, THE DEFAULT since lane apple-fast-lgw128
 #: (2026-10-03): M3 Ultra A/B aft-ab-lgw128 on main 5f5eadcde, lossguide taxi,
 #: n=2: 13,148 -> 12,921 ms (-1.7%), AUC .6320 unchanged.
-#: FAST elsewhere: width 64. IDENTICAL (`LG_EXACT_ID`): width 128 (T17 below).
-#: The width arms were deleted 2026-11-15. Lossguide only; depthwise never
-#: reads the width.
+#: The old `-D MOJOLEARN_GBDT_LG_EXACT_BATCH128` forces 128 (restored
+#: 2026-11-15; its `_OFF` rollback stays deleted). FAST elsewhere: width 64
+#: (arms 32|128). IDENTICAL (`LG_EXACT_ID`): width 128 (T17 below).
+#: Lossguide only; depthwise never reads the width.
 # TOMBSTONE: MOJOLEARN_GBDT_LG_EXACT_BATCH128 (DELETE-ARM, EXP:113 force-on knob of the FAST Apple default, rule e) deleted 2026-11-15 by lane/expdel2-43-trees; code recoverable at 25eeaf016e.
 # Restore: git apply experiments/removed/MOJOLEARN_GBDT_LG_EXACT_BATCH128.patch; record in docs/TOMBSTONES.md.
 # TOMBSTONE: MOJOLEARN_GBDT_LG_EXACT_BATCH128_OFF (DELETE-OLD-PATH, EXP:113 KEPT 9722e5a2b on Apple M3; one-vendor promotion, rule d) deleted 2026-11-15 by lane/expdel2-43-trees; code recoverable at e50ac0e432.
 # Restore: git apply experiments/removed/MOJOLEARN_GBDT_LG_EXACT_BATCH128_OFF.patch; record in docs/TOMBSTONES.md.
 # TOMBSTONE: MOJOLEARN_GBDT_LG_EXACT_BATCH32 (DELETE-ARM, opt-in, no A/B recorded, rule a) deleted 2026-11-15 by lane/expdel2-43-trees; code recoverable at c9cb94022d.
 # Restore: git apply experiments/removed/MOJOLEARN_GBDT_LG_EXACT_BATCH32.patch; record in docs/TOMBSTONES.md.
-comptime _LG_EXACT_BATCH128 = TARGET_HAS_APPLE_GPU
+# RESTORED 2026-11-15 by lane/restore-apple-fast-trees: MOJOLEARN_GBDT_LG_EXACT_BATCH128 and _BATCH32: opt-in arm back as it was, default off, Apple fast only; default path unchanged.
+comptime _LG_EXACT_BATCH128 = (
+    is_defined["MOJOLEARN_GBDT_LG_EXACT_BATCH128"]()
+    or (
+        TARGET_HAS_APPLE_GPU
+        and not is_defined["MOJOLEARN_GBDT_LG_EXACT_BATCH32"]()
+    )
+)
 # TOMBSTONE: MOJOLEARN_GBDT_LG_EXACT_BATCH16 (DROPPED-slower) deleted 2026-10-03 by dc23f13c8; code recoverable at dc23f13c8^.
 # Restore: git apply experiments/removed/MOJOLEARN_GBDT_LG_EXACT_BATCH16.patch; record in docs/TOMBSTONES.md.
 # TOMBSTONE: MOJOLEARN_AFT_N01 (DELETE-EXPERIMENT, never-run Apple FAST programme card, rule g; non-owner fold to False) deleted 2026-11-15 by lane/expdel2-43-trees; code recoverable at 74a26fca92.
 # Restore: git apply experiments/removed/MOJOLEARN_AFT_N01.expdel2-43-trees.patch; record in docs/TOMBSTONES.md.
-comptime LG_EXACT_BATCH_WIDTH = (
-    128 if _LG_EXACT_BATCH128 else 64
+# RESTORED 2026-11-15 by lane/restore-apple-fast-trees: MOJOLEARN_AFT_N01 and MOJOLEARN_GBDT_LG_EXACT_BATCH32: opt-in arm back as it was, default off, Apple fast only; default path unchanged.
+# N01: 256 speculative candidates amortize exact-batch control over twice
+# the default candidate slots. This trades scratch bytes for fewer rounds;
+# the existing exact replay still admits leaves in global best-first order.
+# No performance/quality evidence; source only, default OFF.
+comptime LG_EXACT_BATCH_WIDTH = 256 if AFT_N01 else (
+    128 if _LG_EXACT_BATCH128 else (
+        32 if is_defined["MOJOLEARN_GBDT_LG_EXACT_BATCH32"]() else 64
+    )
 ) if GLOBAL_NUMERIC_MODE == NUMERIC_FAST else 128
 # TOMBSTONE: MOJOLEARN_GBDT_LG_EXACT_BATCH64 (DELETE-ARM, EXP:114 KEPT is the FAST width (superseded by 128); the IDENTICAL arm 64 was never measured, rule e) deleted 2026-11-15 by lane/expdel2-43-trees; code recoverable at d61b232e98.
 # Restore: git apply experiments/removed/MOJOLEARN_GBDT_LG_EXACT_BATCH64.patch; record in docs/TOMBSTONES.md.
@@ -1485,6 +1535,33 @@ def _lg_exact_plan(
         for i in range(len(sim)):  # small-loop(sim: replayed leaves, at most max_leaves): final leaf id list copy
             out.final_nodes.append(sim[i])
     return out^
+
+
+def _lossguide_top_b(leaves: List[TLeaf], b: Int) raises -> List[Int]:
+    """GBDT_LG_BATCH: up to `b` leaves, each the strict-< argmin of the
+    stored gain over the defined leaves not yet taken, returned in ascending
+    id order (the multi-leaf MakeSplit numbers right children by position)."""
+    var chosen = List[Int]()
+    for _ in range(b):  # small-loop(b: leaves per batch, a handful): batch leaf choice for the plan
+        var best = -1
+        var best_gain = Float32.MAX
+        for i in range(len(leaves)):  # small-loop(leaves: tree leaves, at most max_leaves): argmin of stored winner gains
+            if not leaves[i].best_split.defined:
+                continue
+            var taken = False
+            for ci in range(len(chosen)):  # small-loop(chosen: leaves already taken, at most b): batch membership test
+                if chosen[ci] == i:
+                    taken = True
+            if taken:
+                continue
+            if leaves[i].best_split.gain < best_gain:
+                best_gain = leaves[i].best_split.gain
+                best = i
+        if best < 0:
+            break
+        chosen.append(best)
+    sort(chosen)
+    return chosen^
 
 
 def select_leaves_to_split(leaves: List[TLeaf]) raises -> List[Int]:
@@ -2853,7 +2930,7 @@ def fit_non_symmetric_tree[
                             dense_ids, hist, acc_i32, block_hist,
                             hist_cells_per_leaf,
                             width_plans=ws[0].width_plans,
-                            nonsymmetric_work=False,
+                            nonsymmetric_work=AFT_N02,
                         )
                     else:
                         gbdt_hist_dispatch[
@@ -2866,7 +2943,7 @@ def fit_non_symmetric_tree[
                             dense_ids, hist, acc_i32, block_hist,
                             hist_cells_per_leaf,
                             width_plans=ws[0].width_plans,
-                            nonsymmetric_work=False,
+                            nonsymmetric_work=AFT_N02,
                         )
                 else:
                     if use_ridx:
@@ -2879,7 +2956,7 @@ def fit_non_symmetric_tree[
                             cindex, row_index, stats, p_off, p_sz, d_ids,
                             dense_ids, hist, acc_i32, block_hist,
                             hist_cells_per_leaf,
-                            nonsymmetric_work=False,
+                            nonsymmetric_work=AFT_N02,
                         )
                     else:
                         gbdt_hist_dispatch[
@@ -2891,7 +2968,7 @@ def fit_non_symmetric_tree[
                             cindex, row_index, stats, p_off, p_sz, d_ids,
                             dense_ids, hist, acc_i32, block_hist,
                             hist_cells_per_leaf,
-                            nonsymmetric_work=False,
+                            nonsymmetric_work=AFT_N02,
                         )
             mgr.stream_kernel()
             stage_times.end(ctx, "hist.build")
@@ -3098,6 +3175,7 @@ def fit_non_symmetric_tree[
             if (
                 lossguide
                 and len(visit) > 2
+                and GBDT_LG_BATCH == 1
                 and not lg_exact
             ):
                 raise Error(
@@ -3436,65 +3514,71 @@ def fit_non_symmetric_tree[
             # ladder, then delegates the decision untouched. Host records
             # only -- no drain -- so it stays outside the stage timers'
             # concern, and the trace/timer mutual exclusion covers the rest.
-            to_split = List[Int]()
-            var lg_done = False
-            comptime if LG_EXACT_BATCH:
-                if lg_exact:
-                    lg_done = True
-                    # how many leaves this round may split: the width, the free
-                    # slots, and (capacity below the depth bound) the slots the
-                    # certain splits still to come may need
-                    var lg_limit = LG_EXACT_BATCH_WIDTH
-                    comptime if LG_LEVEL_ROUNDS:
-                        # one depth level a round (the setup's banner);
-                        # the free-slot clamp below still applies
-                        if lg_level_rounds and lg_exact:
-                            lg_limit = max_leaves
-                    if max_leaves - len(leaves) < lg_limit:
-                        lg_limit = max_leaves - len(leaves)
-                    var lg_plan = _lg_exact_plan(
-                        lg_node_left, lg_node_right, lg_node_gain, lg_node_state,
-                        options.max_leaves, options.min_split_gain, 1,
-                    )
-                    if lg_plan.blocked:
-                        raise Error(
-                            "Lossguide exact batch: a leaf has no score at the"
-                            " selection (every nonterminal leaf is scored"
-                            " before it)"
-                        )
-                    if lg_plan.complete:
-                        lg_final = lg_plan.final_nodes.copy()
-                    else:
-                        if lg_room_bound:
-                            var lg_safe = (
-                                max_leaves + 2 - options.max_leaves
-                                - len(leaves) + lg_plan.exact_picks
-                            )
-                            if lg_safe < lg_limit:
-                                lg_limit = lg_safe
-                        if lg_limit < 1:
-                            raise Error(
-                                String("Lossguide exact batch: no slot for a")
-                                + " certain split; leaves="
-                                + String(len(leaves))
-                                + " capacity="
-                                + String(max_leaves)
-                            )
-                        if lg_limit > 1:
-                            lg_plan = _lg_exact_plan(
-                                lg_node_left, lg_node_right, lg_node_gain,
-                                lg_node_state, options.max_leaves,
-                                options.min_split_gain, lg_limit,
-                            )
-                        for i in range(len(lg_plan.expand)):  # small-loop(expand: leaves the replay expands, at most max_leaves): split id plan list
-                            to_split.append(lg_node_leaf[lg_plan.expand[i]])
-                        # the multi-leaf MakeSplit numbers right children by
-                        # position: ascending ids
-                        sort(to_split)
-            if not lg_done:
-                to_split = lossguide_select_leaves_to_split_traced(
-                    leaves, trace, d_tag
+            comptime if GBDT_LG_BATCH > 1:
+                var room = max_leaves - len(leaves)
+                to_split = _lossguide_top_b(
+                    leaves, GBDT_LG_BATCH if GBDT_LG_BATCH < room else room
                 )
+            else:
+                to_split = List[Int]()
+                var lg_done = False
+                comptime if LG_EXACT_BATCH:
+                    if lg_exact:
+                        lg_done = True
+                        # how many leaves this round may split: the width, the free
+                        # slots, and (capacity below the depth bound) the slots the
+                        # certain splits still to come may need
+                        var lg_limit = LG_EXACT_BATCH_WIDTH
+                        comptime if LG_LEVEL_ROUNDS:
+                            # one depth level a round (the setup's banner);
+                            # the free-slot clamp below still applies
+                            if lg_level_rounds and lg_exact:
+                                lg_limit = max_leaves
+                        if max_leaves - len(leaves) < lg_limit:
+                            lg_limit = max_leaves - len(leaves)
+                        var lg_plan = _lg_exact_plan(
+                            lg_node_left, lg_node_right, lg_node_gain, lg_node_state,
+                            options.max_leaves, options.min_split_gain, 1,
+                        )
+                        if lg_plan.blocked:
+                            raise Error(
+                                "Lossguide exact batch: a leaf has no score at the"
+                                " selection (every nonterminal leaf is scored"
+                                " before it)"
+                            )
+                        if lg_plan.complete:
+                            lg_final = lg_plan.final_nodes.copy()
+                        else:
+                            if lg_room_bound:
+                                var lg_safe = (
+                                    max_leaves + 2 - options.max_leaves
+                                    - len(leaves) + lg_plan.exact_picks
+                                )
+                                if lg_safe < lg_limit:
+                                    lg_limit = lg_safe
+                            if lg_limit < 1:
+                                raise Error(
+                                    String("Lossguide exact batch: no slot for a")
+                                    + " certain split; leaves="
+                                    + String(len(leaves))
+                                    + " capacity="
+                                    + String(max_leaves)
+                                )
+                            if lg_limit > 1:
+                                lg_plan = _lg_exact_plan(
+                                    lg_node_left, lg_node_right, lg_node_gain,
+                                    lg_node_state, options.max_leaves,
+                                    options.min_split_gain, lg_limit,
+                                )
+                            for i in range(len(lg_plan.expand)):  # small-loop(expand: leaves the replay expands, at most max_leaves): split id plan list
+                                to_split.append(lg_node_leaf[lg_plan.expand[i]])
+                            # the multi-leaf MakeSplit numbers right children by
+                            # position: ascending ids, as `_lossguide_top_b`
+                            sort(to_split)
+                if not lg_done:
+                    to_split = lossguide_select_leaves_to_split_traced(
+                        leaves, trace, d_tag
+                    )
         else:
             to_split = select_leaves_to_split(leaves)
 
