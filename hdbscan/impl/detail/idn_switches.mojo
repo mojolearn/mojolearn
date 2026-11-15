@@ -2,9 +2,9 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """IDENTICAL speed switches of lane fam2-cluster (2026-10-04), HDBSCAN.
 
-Each is ON by default under `GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL` on
-every vendor, has its own `-D MOJOLEARN_<name>_OFF=1`, and is off under the
-master `-D MOJOLEARN_IDN_ALL_OFF=1`. None moves a bit: each one runs the
+Each is ON under `GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL` on every
+vendor (their `_OFF` old paths were deleted 2026-11-15, lane
+expdel2-11-cluster; docs/TOMBSTONES.md). None moves a bit: each one runs the
 same kernels on the same values and removes waits, readbacks or whole
 passes. The FAST Apple switches of `fast_apple.mojo` are not changed; where
 a mechanism was written there first (lane af-hdbscan2), the IDENTICAL
@@ -17,10 +17,9 @@ from std.sys.defines import get_defined_int
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 
 
-comptime _IDN_HDB_ON = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (its term here: every switch below off at once) deleted 2026-11-15 by lane/expdel2-11-cluster; code recoverable at 18255f368e.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-11-cluster.patch.
+comptime _IDN_HDB_ON = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 
 comptime IDN_HDB_ONE_SYNC = (
     # I14 current experiment: NEVER RUN — PENDING MEASUREMENT; existing defaults preserved.
