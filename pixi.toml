@@ -1346,6 +1346,11 @@ check-bpe-trainer-sabotage = "sh tokenizer/tools/gen_unicode_table.sh && python3
 # tie-break expressed as a sort rather than a scan order, and holds the
 # trainer to it on the lane's own 4,096-byte fixture corpus.
 check-bpe-trainer-oracle = "python3 tools/bpe_trainer_oracle_check.py"
+# Run it against a wheel whose tokenizer host binding was built with
+# MOJOLEARN_BUILD_EXTRA_DEFINES="-D MOJOLEARN_BPE_TRAINER_SABOTAGE=1" (the CPU
+# identity gate's sabotage host set): the trainer's run-time environment arm
+# is gone (lane envgate-neural-lm, 2026-11-15), so the variable below now only
+# labels the run and switches the Python reference file's own arm.
 check-bpe-trainer-oracle-sabotage = "MOJOLEARN_BPE_TRAINER_SABOTAGE=1 python3 tools/bpe_trainer_oracle_check.py --sabotage-expected"
 # The fold partition: combinatorial invariants that RAISE (the lane only
 # hashes them), plus an independent recomputation of both branches. The
