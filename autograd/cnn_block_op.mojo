@@ -56,7 +56,7 @@ from x_cnn.ops import FP as XFP, IP as XIP, neural_tape_budget_bytes
 from x_cnn.shape_words import (
     conv_params, pool_params, CP_N, CP_C, CP_OC, CP_KH, CP_KW, CP_OH, CP_OW, PP_OH, PP_OW,
 )
-from x_cnn.device import conv_block_forward_into, linear_forward_into
+from x_cnn.device import conv_block_forward_into, linear_forward_into, ni12_implicit_layer
 from autograd.kernels.cnn import conv_block_backward_into, linear_backward_into
 
 #: The session op codes (autograd/ops_api.mojo) and the tape custom tags
@@ -115,20 +115,25 @@ def cnn_block_out_dims(cprm: List[Int32], pprm: List[Int32], pool: Bool) -> Tupl
     return (Int(cprm[CP_OH]), Int(cprm[CP_OW]))
 
 
-def cnn_block_saved_sizes(cprm: List[Int32]) -> Tuple[Int, Int]:
-    """Words of the saved im2col matrix and conv output."""
+def cnn_block_saved_sizes(cprm: List[Int32], device: Bool) -> Tuple[Int, Int]:
+    """Words of the saved im2col matrix and conv output. On the device an
+    implicit-conv layer (x_cnn/device.mojo `ni12_implicit_layer`) never writes
+    or reads cols, so its cols slot is one word (a non-zero save address); the
+    host twins always write the full matrix."""
     var ckk = Int(cprm[CP_C]) * Int(cprm[CP_KH]) * Int(cprm[CP_KW])
     var rows = Int(cprm[CP_N]) * Int(cprm[CP_OH]) * Int(cprm[CP_OW])
+    if device and ni12_implicit_layer(Int(cprm[CP_OC]), ckk):
+        return (1, rows * Int(cprm[CP_OC]))
     # TOMBSTONE: MOJOLEARN_NN14_BOUNDED_IM2COL (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-23-neural (non-owner); code recoverable at f839bce651.
     # Restore: git apply experiments/removed/MOJOLEARN_NN14_BOUNDED_IM2COL.expdel2-23-neural.patch; record in docs/TOMBSTONES.md.
     var cols = rows * ckk
     return (cols, rows * Int(cprm[CP_OC]))
 
 
-def cnn_block_keep(cprm: List[Int32]) -> Bool:
+def cnn_block_keep(cprm: List[Int32], device: Bool) -> Bool:
     """The hand classifier's tape rule: save the im2col matrix and the conv
     output when they fit the x_cnn tape budget (-1: unbounded)."""
-    var sz = cnn_block_saved_sizes(cprm)
+    var sz = cnn_block_saved_sizes(cprm, device)
     var budget = neural_tape_budget_bytes()
     return budget < 0 or 4 * (sz[0] + sz[1]) <= budget
 

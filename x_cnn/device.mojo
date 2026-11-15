@@ -96,7 +96,29 @@ comptime _NI_CNN_ENABLED = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 # MEASURE OWED / SPLIT CANDIDATE (2026-10-11): grid g50ebe26a5 has the _OFF arm FASTER on cnn-clf synthetic (NV L40S 193.6 -> 173.9 ms,
 # v1446; AMD 303.5 -> 274.0 ms, b0080; avg 0.90x) while the 2026-10-10 promotion A/B had implicit conv winning on conv2d and
 # resnet-block (0.69x-0.74x). Decide per algorithm (cnn-clf off, conv2d/resnet-block on) after one confirm run on both vendors.
+# DECIDED PER LAYER 2026-11-15 (lane fix-cnn-clf-implicit-conv): not per algorithm but by the
+# layer's own tile fill, `ni12_implicit_layer` below (NI12_FILL_RULE). RUN OWED against both old arms.
 comptime NI12_IMPLICIT_CONV = _NI_CNN_ENABLED and not is_defined["MOJOLEARN_NI12_IMPLICIT_CONV_OFF"]()
+# NI12 FILL RULE (lane fix-cnn-clf-implicit-conv, 2026-11-15). Why implicit conv lost on cnn-clf:
+# `implicit_conv_kernel` is a 64-row x 64-channel register tile and `implicit_wgrad_leaf_kernel`
+# a 64-channel x 64-tap tile; a block costs the same (its staging, its 16-tap slabs, its two
+# barriers a slab) whether or not its channels / taps are live, so a narrow layer pays the full
+# 64-wide tile. cnn-clf's layers (OC 8 over 9 taps, OC 16 over 72 taps) fill 1/8 and 1/4 of the
+# channel axis forward and 1/8 x 9/64 and 1/4 x 72/128 of the wgrad tile, i.e. 2% and 14% of the
+# FMA lanes do work, while the materialized arm scales with OC: the first layer (k <= DC_MAXK)
+# runs `direct_conv_kernel` (one thread a row, which the implicit branch preempted) and the
+# weight gradient the pinned GEMM's TN plan on the saved cols, which picks narrow tiles. Conv2d and
+# resnet-block (OC 64 over 576 taps) fill the tile completely, where the gather saves the cols
+# write + read and implicit wins 0.69x-0.74x. Rule: implicit only when at least half of each tile
+# axis is live on the layer, OC >= 32 and C*KH*KW >= 32 (`NI12_FILL_MIN` = NI12_TN / 2, a
+# property of the tile, not of a board shape: every OC / tap count from 32 up keeps implicit, every
+# narrower layer keeps the measured materialized/direct path). The band 32..63 is unmeasured
+# (owed row ni12-fill-rule-neighbour). Bits: the arms are the same contract words (the
+# promotion's digests did not move), so the per-layer choice moves no bits; the host column has
+# no implicit/materialized split.
+# `-D MOJOLEARN_NI12_FILL_RULE_OFF` restores implicit conv on every layer (the 2026-10-10 default);
+# `-D MOJOLEARN_NI12_IMPLICIT_CONV_OFF` the materialized path on every layer (the g50ebe26a5 winner).
+comptime NI12_FILL_RULE = NI12_IMPLICIT_CONV and not is_defined["MOJOLEARN_NI12_FILL_RULE_OFF"]()
 # TOMBSTONE: MOJOLEARN_NI14_COL2IM (DELETE-ARM, unmeasured opt-in, rule a) deleted 2026-11-15 by lane/expdel2-35-neural; code recoverable at 145be10898.
 # Restore: git apply experiments/removed/MOJOLEARN_NI14_COL2IM.patch
 # (Sweep 2026-11-15: NI14_BOUNDED_COL2IM = False removed with its reader in autograd/kernels/cnn.mojo.)
@@ -383,6 +405,21 @@ comptime NI12_RC = 4
 comptime NI12_TMP = NI12_TM + 1
 comptime NI12_TNP = NI12_TN + 1
 comptime NI12_NCELL = NI12_RC * NI12_RC
+#: half a tile axis: the least live channels / taps a layer needs to run implicit (NI12_FILL_RULE)
+comptime NI12_FILL_MIN = NI12_TN // 2
+
+
+@always_inline
+def ni12_implicit_layer(OC: Int, ckk: Int) -> Bool:
+    """Whether a conv layer with OC output channels over ckk = C*KH*KW taps
+    runs the implicit conv (forward and weight gradient) or the materialized
+    cols (direct conv / im2col + GEMM). One decision per layer, read by the
+    forward, the backward and the tape's save sizing alike (see NI12_FILL_RULE)."""
+    comptime if not NI12_IMPLICIT_CONV:
+        return False
+    comptime if not NI12_FILL_RULE:
+        return True
+    return OC >= NI12_FILL_MIN and ckk >= NI12_FILL_MIN
 
 
 @always_inline
@@ -1121,8 +1158,9 @@ def conv2d_forward_m(a: List[Int], dev: Int, prm: List[Int32]) raises:
     var dw = m_in(ctx, 1, a[1], OC * ckk, isdev(dev, 1))
     var dbias = m_in(ctx, 2, a[2], OC, isdev(dev, 2))
     var dp = put_prm(ctx, 3, prm)
-    var cols = ws(ctx, 4, 1 if NI12_IMPLICIT_CONV else rows * ckk)
-    var y2 = ws(ctx, 5, 1 if NI12_IMPLICIT_CONV else rows * OC)
+    var implicit = ni12_implicit_layer(OC, ckk)
+    var cols = ws(ctx, 4, 1 if implicit else rows * ckk)
+    var y2 = ws(ctx, 5, 1 if implicit else rows * OC)
     var dout = m_out(ctx, 6, a[3], rows * OC, isdev(dev, 3))
     _conv_relu_on_device(ctx, dx, dw, dbias, dp, cols, y2, dout, rows, OC, ckk, N, C, False)
     m_fetch(ctx, dout, a[3], rows * OC, isdev(dev, 3))
@@ -2411,9 +2449,11 @@ def _conv_relu_on_device(
     var relu_out = FP(unsafe_from_address=relu_addr) if relu_addr != 0 else fp(yconv)
     var fuse_relu = Int32(1 if relu_addr != 0 else 0)
     comptime if NI12_IMPLICIT_CONV:
-        if rows > 0 and OC > 0:
+        if rows > 0 and OC > 0 and ni12_implicit_layer(OC, ckk):
             # lane gap-gemm-layers: the backward's dW gathers the columns
-            # too (`_implicit_wgrad`), so `need_cols` never builds them.
+            # too (`_implicit_wgrad`, the same per-layer rule), so `need_cols`
+            # never builds them. A narrow layer (NI12_FILL_RULE) falls through
+            # to the direct conv / im2col + GEMM below, which honour `need_cols`.
             var lp = contract_partition(ckk)
             ctx.enqueue_function[implicit_conv_kernel](
                 fp(dx), fp(dw), fp(dbias), fp(yconv), ip(dp), Int32(rows),
@@ -2467,8 +2507,11 @@ def conv_block_forward_into[resident: Bool = False](
     var dbias = put[resident](ctx, 2, bias, OC)
     var dp = put_prm(ctx, 3, cprm)
     var saved = resident and save_y != 0 and save_cols != 0
-    var cols = view(ctx, FP(unsafe_from_address=save_cols), rows * ckk) if saved else ws(ctx, 4, 1 if NI12_IMPLICIT_CONV else rows * ckk)
-    var y2 = ws(ctx, 5, 1 if NI12_IMPLICIT_CONV else rows * OC)
+    # an implicit layer's save slot is one word (cnn_block_saved_sizes): nothing writes cols
+    var implicit = ni12_implicit_layer(OC, ckk)
+    var ncols = 1 if implicit else rows * ckk
+    var cols = view(ctx, FP(unsafe_from_address=save_cols), ncols) if saved else ws(ctx, 4, ncols)
+    var y2 = ws(ctx, 5, 1 if implicit else rows * OC)
     var yconv = view(ctx, FP(unsafe_from_address=save_y), ny) if saved else ws(ctx, 6, ny)
     var pout = outb[resident](ctx, 7, dst, no)
     var relu_addr = 0
