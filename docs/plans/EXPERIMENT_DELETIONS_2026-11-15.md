@@ -95,6 +95,14 @@ Defines: `MOJOLEARN_AF_FAST_RESIDENT_OFF` (old-path), `MOJOLEARN_APPLE_FAST_GEMM
 
 Files: `bindings/_mojolearn_kernel_methods.mojo`, `bindings/_mojolearn_x_prep.mojo`, `bindings/_mojolearn_x_sequence.mojo`, `cluster/host/kmeans_oracle.mojo`, `cluster/impl/detail/min_cluster_distance_compute.mojo`, `cluster/impl/kmeans_params.mojo`, `core/gemm.mojo`, `experiments/six_lane_integration/grid_controls/classical-fixes.json`, `experiments/six_lane_integration/grid_controls/fg-ivf.json`, `experiments/six_lane_integration/grid_controls/gap-ivf.json`, `hdbscan/impl/detail/idn_switches.mojo`, `ivf/impl/neighbors/ivf_flat/ivf_flat_build.mojo`, `kde/impl/neighbors/kernel_density.mojo`, `kernel_methods/estimator.mojo`, `kernel_methods/rbf_resident.mojo`, `neighbors/estimator.mojo`, `neighbors/impl/detail/fast_mma_knn.mojo`, `sequence/opt_resident.mojo`, `x_neighbors/nan_cells_device.mojo`
 
+Lane result (expdel-06-base-cluster-kernel, 2026-11-15): 14 deleted (`AF_FAST_RESIDENT_OFF`, `APPLE_FAST_GEMM_TN_V1_OFF`,
+`IVF_FAST_SEED_DEVICE_OFF`, `KDE_FAST_SLICES_OFF`, `KERNEL_FAST_NYS_RR_EIGH_OFF`, `KM_FAST_PTR_IN_OFF`, `KM_FAST_RBF_PIPE_OFF`,
+`KM_FAST_RBF_STAGED_OFF`, `KM_FAST_RBF_RESIDENT_OFF`, `KNN_FAST_MMA_K64_OFF`, `KNN_FAST_REFINE`, `X_PREP_FAST_UNIQUE_OFF`,
+`SPLINE_FAST_FUSED_OFF`, `XN_FAST_NAN_COLMISS_ONLY_OFF`). 4 moved to KEEP-OPEN after reading the evidence rows:
+`IDN_HDB_SPARSE_MIN_ROWS` (unmeasured threshold candidate, not a loser), `KDE_DIMTILE` (its own row EXP:339 is a KEEP; the DROP
+rows are combos), `KMEANS_LAZY_SHIFT_IDN_OFF` and `KMEANS_LIVE_CORES_OFF` (IDENTICAL `new default` by plan, no NVIDIA + AMD A/B;
+EXP:1671 PENDING). No grid_controls file was touched (only the KEEP-OPEN defines have entries).
+
 ## What stays OPEN and why
 
 | reason | defines |
@@ -517,7 +525,7 @@ Columns: verdict = evidence class (WIN / LOSE / OPEN / none) and the newest evid
 | define | decision | verdict + evidence | sites | lines | tomb | first site | reason / lane |
 |---|---|---|---|---|---|---|---|
 | `MOJOLEARN_AP_EXACT` | DELETE-LOSER | LOSE EXP:495 SUPERSEDED | 2+4/0 | 13 | - | x_cluster/affinity.mojo:36 | expdel-01 |
-| `MOJOLEARN_IDN_HDB_SPARSE_MIN_ROWS` | DELETE-LOSER | LOSE grid classical-fixes.json removed | 1+1/0 | 2 | c | hdbscan/impl/detail/idn_switches.mojo:87 | expdel-06 |
+| `MOJOLEARN_IDN_HDB_SPARSE_MIN_ROWS` | KEEP-OPEN | LOSE grid classical-fixes.json removed | 1+1/0 | 2 | c | hdbscan/impl/detail/idn_switches.mojo:87 | expdel-06: KEEP-OPEN (2026-11-15): not a loser: an unmeasured IDENTICAL threshold candidate (default 46340 = PAIRWISE_MAX_ROWS, no change); classical-fixes.json `removed` says only "not registered: no board effect" (the board's 100,000 rows already take the sparse arm). Owed: A/B of =4096 / =16384 vs default on NVIDIA + AMD on HDBSCAN designs below 46,341 rows (non-board) |
 | `MOJOLEARN_KNN_FAST_REFINE` | DELETE-LOSER | LOSE EXP:1291 REVERTED: no gain | 1+3/0 | 12 | c | neighbors/estimator.mojo:136 | expdel-06 |
 | `MOJOLEARN_ANN_FAST_KNN_BIGD_OFF` | DELETE-OLD-PATH | WIN EXP:311 KEPT 8d43ec357 | 1+2/0 | 3 | - | x_ann/fast_env.mojo:34 | expdel-01 |
 | `MOJOLEARN_BISECT_FAST_ZEROCOPY_OFF` | DELETE-OLD-PATH | WIN EXP:524 KEPT, FAST+Apple default (`_OFF` off) | 1+4/0 | 5 | - | x_cluster/bisect_fast.mojo:48 | expdel-01 |
@@ -526,8 +534,8 @@ Columns: verdict = evidence class (WIN / LOSE / OPEN / none) and the newest evid
 | `MOJOLEARN_CAGRA_FAST_IVFG_OFF` | DELETE-OLD-PATH | WIN EXP:323 KEPT 3852df59b | 1+4/0 | 5 | - | x_ann/fast_env.mojo:69 | expdel-01 |
 | `MOJOLEARN_IVFPQ_FAST_DEVICE_CODEBOOKS_OFF` | DELETE-OLD-PATH | WIN EXP:328 KEPT 8d43ec357 | 1+2/0 | 3 | - | x_ann/fast_env.mojo:44 | expdel-01 |
 | `MOJOLEARN_IVF_FAST_SEED_DEVICE_OFF` | DELETE-OLD-PATH | WIN EXP:462 KEEP (FAST+Apple default, `_OFF`; lane/apple-fast-m2b1-m3) | 1+2/0 | 12 | - | ivf/impl/neighbors/ivf_flat/ivf_flat_build.mojo:157 | expdel-06 |
-| `MOJOLEARN_KMEANS_LAZY_SHIFT_IDN_OFF` | DELETE-OLD-PATH | WIN grid gap-ivf.json new default (plan gaps-2026-10-08 section 6 item 3) | 1+3/0 | 4 | - | cluster/impl/kmeans_params.mojo:46 | expdel-06 |
-| `MOJOLEARN_KMEANS_LIVE_CORES_OFF` | DELETE-OLD-PATH | WIN grid fg-ivf.json new default (read_ivf.md B5) | 1+2/0 | 3 | - | cluster/impl/detail/min_cluster_distance_compute.mojo:102 | expdel-06 |
+| `MOJOLEARN_KMEANS_LAZY_SHIFT_IDN_OFF` | KEEP-OPEN | WIN grid gap-ivf.json new default (plan gaps-2026-10-08 section 6 item 3) | 1+3/0 | 4 | - | cluster/impl/kmeans_params.mojo:46 | expdel-06: KEEP-OPEN (2026-11-15): no measurement: gap-ivf.json `new default (plan gaps-2026-10-08 section 6 item 3)` is a plan, not an A/B; IDENTICAL bits move for early-converging lazy_shift fits. Owed: NVIDIA + AMD A/B (ivf, ivf-pq istella/taxi) default vs _OFF |
+| `MOJOLEARN_KMEANS_LIVE_CORES_OFF` | KEEP-OPEN | WIN grid fg-ivf.json new default (read_ivf.md B5) | 1+2/0 | 3 | - | cluster/impl/detail/min_cluster_distance_compute.mojo:102 | expdel-06: KEEP-OPEN (2026-11-15): no measurement: EXP:1671 `PENDING A/B` (owed); fg-ivf.json `new default (read_ivf.md B5)` is a plan. Owed: NVIDIA + AMD A/B (ivf, ivf-pq coarse, k-means taxi/istella + one non-board k-means dataset) default vs _OFF |
 | `MOJOLEARN_KNN_FAST_MMA_K64_OFF` | DELETE-OLD-PATH | WIN EXP:301 KEPT 857fd5804 | 1+0/0 | 1 | - | neighbors/impl/detail/fast_mma_knn.mojo:134 | expdel-06 |
 | `MOJOLEARN_MBK_FAST_DEVSCAN_OFF` | DELETE-OLD-PATH | WIN EXP:1415 KEEP (FAST+Apple default, `_OFF`) | 1+3/0 | 4 | - | x_cluster/minibatch_ptr.mojo:64 | expdel-01 |
 | `MOJOLEARN_SVGP_FAST_BLKCHOL_OFF` | DELETE-OLD-PATH | WIN EXP:879 DEFAULT (FAST+Apple), rollback `MOJOLEARN_SVGP_FAST_BLKCHOL_OFF`: M3 one run per | 1+2/0 | 3 | - | x_neighbors/iter_device.mojo:2318 | expdel-01 |
@@ -1052,7 +1060,7 @@ Columns: verdict = evidence class (WIN / LOSE / OPEN / none) and the newest evid
 
 | define | decision | verdict + evidence | sites | lines | tomb | first site | reason / lane |
 |---|---|---|---|---|---|---|---|
-| `MOJOLEARN_KDE_DIMTILE` | DELETE-LOSER | LOSE EXP:343 DROP | 1+3/0 | 4 | c | kde/impl/neighbors/kernel_density.mojo:2748 | expdel-06 |
+| `MOJOLEARN_KDE_DIMTILE` | KEEP-OPEN | LOSE EXP:343 DROP | 1+3/0 | 4 | c | kde/impl/neighbors/kernel_density.mojo:2748 | expdel-06: KEEP-OPEN (2026-11-15): the define's own row is a WIN (EXP:339 `KDE_DIMTILE` KEEP, istella 137.2 -> 69.2 ms; the tile pass is now the FAST+Apple default at every d); EXP:343 and its siblings are the DROPPED combos (already deleted 2026-10-09). The define now only overrides MOJOLEARN_LEGACY_NARROW_KDE_DIMTILE: orchestrator decides whether to delete it as redundant with LEGACY_NARROW |
 | `MOJOLEARN_KDE_FAST_SLICES_OFF` | DELETE-OLD-PATH | WIN EXP:299 KEPT 857fd5804 | 1+0/0 | 1 | - | kde/impl/neighbors/kernel_density.mojo:4429 | expdel-06 |
 | `MOJOLEARN_KERNEL_FAST_NYS_RR_EIGH_OFF` | DELETE-OLD-PATH | WIN EXP:694 KEPT | 1+0/0 | 1 | - | kernel_methods/estimator.mojo:1330 | expdel-06 |
 | `MOJOLEARN_KM_FAST_PTR_IN_OFF` | DELETE-OLD-PATH | WIN EXP:693 KEPT | 1+4/0 | 5 | - | kernel_methods/estimator.mojo:288 | expdel-06 |
