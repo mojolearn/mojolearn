@@ -106,7 +106,9 @@ comptime ANN3_TSNE_STEP_ROWS = is_defined["MOJOLEARN_ANN3_TSNE_STEP_ROWS"]()
 #: the threads form a parent's neighbor distances side by side, thread 0
 #: keeps the cell's walk (the itopk list in threadgroup memory, the same
 #: insertions in the same order). Expected to move no bit.
-comptime ANN3_CAGRA_TEAM = is_defined["MOJOLEARN_ANN3_CAGRA_TEAM"]()
+# TOMBSTONE: MOJOLEARN_ANN3_CAGRA_TEAM (unmeasured opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-14-cluster; code recoverable at 6e4834bbfa.
+# Restore: git apply experiments/removed/MOJOLEARN_ANN3_CAGRA_TEAM.patch; record in docs/TOMBSTONES.md.
+comptime ANN3_CAGRA_TEAM = False
 
 
 #: lane fg-ivf (plan flagship-gaps-2026-10-09, read_ivf.md idea A1), DEFAULT ON
