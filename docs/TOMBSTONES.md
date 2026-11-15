@@ -730,6 +730,7 @@ in the tables after the sections.
 | [`MOJOLEARN_CLASSICAL_C01_MEAN`](#mojolearn_classical_c01_mean-unmeasured-arm-deleted-2026-11-15) | Decomposition (PCA / TSVD column mean as leaf column sums + binary-counter fold, IDENTICAL) | removed (opt-in arm; EXP:1530 names it as the replacement, no A/B of its own) | 2026-11-15 | [MOJOLEARN_CLASSICAL_C01_MEAN.patch](../experiments/removed/MOJOLEARN_CLASSICAL_C01_MEAN.patch) |
 | [`MOJOLEARN_CLASSICAL_C03_FINITE_EXTREMA`](#mojolearn_classical_c03_finite_extrema-unmeasured-arm-deleted-2026-11-15) | Preprocessing (MinMaxScaler finite extrema, IDENTICAL) | removed (unmeasured opt-in arm) | 2026-11-15 | [MOJOLEARN_CLASSICAL_C03_FINITE_EXTREMA.patch](../experiments/removed/MOJOLEARN_CLASSICAL_C03_FINITE_EXTREMA.patch) |
 | [`MOJOLEARN_CLASSICAL_C04_LDA`](#mojolearn_classical_c04_lda-unmeasured-arm-deleted-2026-11-15) | Prep (LDA transform centered_matmul, IDENTICAL) | removed (opt-in arm; EXP:1532 DROPPED-serial record for its PCA half, no A/B for the LDA arm) | 2026-11-15 | [MOJOLEARN_CLASSICAL_C04_LDA.patch](../experiments/removed/MOJOLEARN_CLASSICAL_C04_LDA.patch) |
+| [`MOJOLEARN_CLASSICAL_C05_PHASE_SCRATCH`](#mojolearn_classical_c05_phase_scratch-unmeasured-arm-deleted-2026-11-15) | Metrics (x_metrics plan phase scratch, IDENTICAL) | removed (unmeasured opt-in arm) | 2026-11-15 | [MOJOLEARN_CLASSICAL_C05_PHASE_SCRATCH.patch](../experiments/removed/MOJOLEARN_CLASSICAL_C05_PHASE_SCRATCH.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -7095,3 +7096,11 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md (section expdel-02-
 - **Deleted by**: lane/expdel2-07-base (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `1c0b13a0e4`.
 - **Restore**: `git apply experiments/removed/MOJOLEARN_CLASSICAL_C04_LDA.patch`, then delete the `MOJOLEARN_CLASSICAL_C04_LDA` refusal in `core/experiment_guards_base.mojo`.
 - **Records**: refusal in `core/experiment_guards_base.mojo`; `classical-decomp.json` control `C04_LDA`: `removed` entry added (control removed from `controls` and from its algorithms); `classical-nbda.json` control `c04_lda`: `removed` entry added (control removed from `controls` and from its algorithms); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-07-base section).
+
+## MOJOLEARN_CLASSICAL_C05_PHASE_SCRATCH: unmeasured arm deleted (2026-11-15)
+
+- **What it was**: the opt-in arm behind `C05_PHASE_SCRATCH` in `experiments/classical_identical_ideas/shared_controls.mojo`; the alias stays as the folded constant so importers in other lanes compile, and each importer's lane deletes its branch.
+- **Verdict**: no record: no A/B was recorded for the opt-in arm (plan rule a; AGENTS.md "An unmeasured arm is deleted", Andrew 2026-11-15). No bit change on any column.
+- **Deleted by**: lane/expdel2-07-base (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `1ebc49831d`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_CLASSICAL_C05_PHASE_SCRATCH.patch`, then delete the `MOJOLEARN_CLASSICAL_C05_PHASE_SCRATCH` refusal in `core/experiment_guards_base.mojo`.
+- **Records**: refusal in `core/experiment_guards_base.mojo`; `classical-misc.json` control `c05_phase_scratch`: `removed` entry added (control removed from `controls` and from its algorithms); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-07-base section).
