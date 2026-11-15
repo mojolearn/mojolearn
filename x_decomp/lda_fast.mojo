@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """LatentDirichletAllocation's E-step and sufficient statistics in ONE launch
-(lane apple-fast-nb, 2026-10-02). FAST + Apple ONLY, default on (off with
--D MOJOLEARN_LDA_FUSED_SS_OFF): the IDENTICAL binding, the other vendors and a
-FAST build with the _OFF define do not export `x_decomp_dev_lda_estep_ss`, and
+(lane apple-fast-nb, 2026-10-02). FAST + Apple ONLY, default on (the _OFF
+rollback was deleted 2026-11-15): the IDENTICAL binding and the other vendors
+do not export `x_decomp_dev_lda_estep_ss`, and
 `_expansion_decomp.LatentDirichletAllocation._e_step` keeps main's chain
 (`lda_block_kernel`, then norm_phi = Et exp_dir (n x v), X / norm_phi and
 the (k x n)(n x v) gemm).

@@ -24,7 +24,7 @@ defines (docs/apple-fast/ab/fa.md):
   becomes the eigh of D G D / n (same spectrum: R^T R = G), the route main
   already takes when n < d. The Python loop stays Python.
 - MOJOLEARN_FA_ITER_DEVICE (the FAST + Apple default since 2026-10-04,
-  rab7-faiterfix; rollback MOJOLEARN_FA_ITER_DEVICE_OFF): `fa_em_py`, the
+  rab7-faiterfix; the rollback was deleted 2026-11-15): `fa_em_py`, the
   whole EM loop as one call on the
   resident G: per iteration `fa_scale_kernel` (D G D / n and sqrt(psi) +
   1e-12), the round-robin eigh (main's kernels and sweeps, no sign-flip and
