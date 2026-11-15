@@ -221,7 +221,9 @@ a launch whose result is then thrown away."""
 # The qualified default instead replays omitted masked terms with exact bits.
 # ===========================================================================
 
-comptime ATTN_STICKY = is_defined["MOJOLEARN_ATTN_STICKY"]()
+# TOMBSTONE: MOJOLEARN_ATTN_STICKY (unmeasured opt-in arm; the H100 control recorded a 3.6% regression) deleted 2026-11-15 by lane/expdel2-34-neural; code recoverable at 99987befbf.
+# Restore: git apply experiments/removed/MOJOLEARN_ATTN_STICKY.patch
+comptime ATTN_STICKY = False
 
 comptime FUSED_THREADS = 256
 """Threads per block for the row-tiled kernels: `TQ * head_dim`."""
