@@ -722,6 +722,7 @@ in the tables after the sections.
 | [`MOJOLEARN_CLASSICAL_C28_BUCKET_SOLVES`](#mojolearn_classical_c28_bucket_solves-unmeasured-arm-deleted-2026-11-15) | Decomposition (ALS / sparse-code bucketed row solves, IDENTICAL) | removed (opt-in arm; unmeasured opt-in arm) | 2026-11-15 | [MOJOLEARN_CLASSICAL_C28_BUCKET_SOLVES.patch](../experiments/removed/MOJOLEARN_CLASSICAL_C28_BUCKET_SOLVES.patch) |
 | [`MOJOLEARN_CLASSICAL_ENETCV_FOLD_BLOCKS`](#mojolearn_classical_enetcv_fold_blocks-unmeasured-arm-deleted-2026-11-15) | Linear (LassoCV / ElasticNetCV fold-block chunk count arms, IDENTICAL) | removed (opt-in arm; losing arms =16|32) | 2026-11-15 | [MOJOLEARN_CLASSICAL_ENETCV_FOLD_BLOCKS.patch](../experiments/removed/MOJOLEARN_CLASSICAL_ENETCV_FOLD_BLOCKS.patch) |
 | [`MOJOLEARN_CLASSICAL_ENETCV_FOLD_BLOCKS_OFF`](#mojolearn_classical_enetcv_fold_blocks_off-old-path-deleted-2026-11-15) | Linear (LassoCV / ElasticNetCV staged means + Gram, IDENTICAL old path) | removed (old path; IDENTICAL default kept) | 2026-11-15 | [MOJOLEARN_CLASSICAL_ENETCV_FOLD_BLOCKS_OFF.patch](../experiments/removed/MOJOLEARN_CLASSICAL_ENETCV_FOLD_BLOCKS_OFF.patch) |
+| [`MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS`](#mojolearn_classical_enetcv_score_blocks-unmeasured-arm-deleted-2026-11-15) | Linear (LassoCV / ElasticNetCV score rows per block arm, IDENTICAL) | removed (opt-in arm; losing arm =4096) | 2026-11-15 | [MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS.patch](../experiments/removed/MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -6970,3 +6971,11 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md (section expdel-02-
 - **Deleted by**: lane/expdel2-06-base (expdel2-06-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `a483990d2f`.
 - **Restore**: `git apply experiments/removed/MOJOLEARN_CLASSICAL_ENETCV_FOLD_BLOCKS_OFF.patch`, then delete the `MOJOLEARN_CLASSICAL_ENETCV_FOLD_BLOCKS_OFF` refusal in `core/experiment_guards_linear.mojo`.
 - **Records**: refusal in `core/experiment_guards_linear.mojo`; `classical-cv.json` control `enetcv_fold_blocks`: `removed` entry added (control removed from `controls` and from its algorithms); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-06-base section).
+
+## MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS: unmeasured arm deleted (2026-11-15)
+
+- **What it was**: the opt-in arm in which the =4096 rows-per-score-block arm of the promoted blocked held-out scoring (x_linear/cd_grid.mojo, cd.mojo read `ENETCV_SCORE_BLOCKS`); absent = 1024. `experiments/classical_identical_ideas/linear_controls.mojo` now defines `ENETCV_SCORE_BLOCKS` as the constant of the kept default, so the importers in other lanes compile before and after; the integrator folds their dead branches.
+- **Verdict**: EXP:2068 KEEP (1024 promoted IDENTICAL default, lane/owed-decide, NV v0063/v0064, AMD a1645/a1646): 4096 -> 1024 average B/A 0.935, quality identical; the 4096 arm lost. No bit change on any vendor or the host column: the default arm is untouched.
+- **Deleted by**: lane/expdel2-06-base (expdel2-06-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `7d1eee8179`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS.patch`, then delete the `MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS` refusal in `core/experiment_guards_linear.mojo`.
+- **Records**: refusal in `core/experiment_guards_linear.mojo`; `classical-cv-folds.json` control `enetcv_score_blocks`: `removed` entry added; `docs/apple-fast/EXPERIMENTS.md` row (expdel2-06-base section).

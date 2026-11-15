@@ -126,10 +126,11 @@ comptime RIDGECV_FF_BLOCKED = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_
 # The grid ge123e6f9 verdict above (4096 over 1024) predates the later
 # fold-block and staging changes on this path; the newer same-box A/B wins.
 # -D MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS_OFF restores the old 4096
-# default; -D MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS=4096 is the same arm
-# (an explicit =1024 is the default). FAST keeps the unblocked path (0).
+# default; the =N arm define was deleted 2026-11-15. FAST keeps the unblocked path (0).
 comptime ENETCV_SCORE_BLOCKS_OFF = is_defined["MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS_OFF"]()
-comptime _ESB_RAW = 4096 if ENETCV_SCORE_BLOCKS_OFF else get_defined_int["MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS", 1024]()
+# TOMBSTONE: MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS (losing arm =4096) deleted 2026-11-15 by lane/expdel2-06-base; code recoverable at 7d1eee8179.
+# Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS.patch; record in docs/TOMBSTONES.md.
+comptime _ESB_RAW = 4096 if ENETCV_SCORE_BLOCKS_OFF else 1024
 comptime ENETCV_SCORE_BLOCKS = _ESB_RAW if CLASSICAL_IDN else 0
 comptime ENETCV_SCORE_BLOCKS_LEGAL = _ESB_RAW == 1024 or _ESB_RAW == 4096
 # TOMBSTONE: MOJOLEARN_CLASSICAL_C15_FACTOR_SOLVE (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-06-base; code recoverable at 72270680f8.

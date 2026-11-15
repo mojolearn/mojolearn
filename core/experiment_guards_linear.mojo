@@ -144,6 +144,8 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_CLASSICAL_ENETCV_FOLD_BLOCKS"](), "removed 2026-11-15 (lane/expdel2-06-base): CLASSICAL_ENETCV_FOLD_BLOCKS (Linear (LassoCV / ElasticNetCV fold-block chunk count arms, IDENTICAL)) was losing arms =16|32; the opt-in arm is gone and the default path is unchanged; code recoverable at 4eb80b4abf; see docs/TOMBSTONES.md"
     # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_ENETCV_FOLD_BLOCKS_OFF.patch
     comptime assert not is_defined["MOJOLEARN_CLASSICAL_ENETCV_FOLD_BLOCKS_OFF"](), "removed 2026-11-15 (lane/expdel2-06-base): CLASSICAL_ENETCV_FOLD_BLOCKS_OFF (Linear (LassoCV / ElasticNetCV staged means + Gram, IDENTICAL old path)) was old path, superseded by the measured IDENTICAL default; the measured IDENTICAL default is the only path; code recoverable at a483990d2f; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS.patch
+    comptime assert not is_defined["MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS"](), "removed 2026-11-15 (lane/expdel2-06-base): CLASSICAL_ENETCV_SCORE_BLOCKS (Linear (LassoCV / ElasticNetCV score rows per block arm, IDENTICAL)) was losing arm =4096; the opt-in arm is gone and the default path is unchanged; code recoverable at 7d1eee8179; see docs/TOMBSTONES.md"
     return True
 
 

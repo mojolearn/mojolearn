@@ -105,5 +105,11 @@
    ]
   }
  },
- "removed": []
+ "removed": [
+  {
+   "define": "MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS",
+   "control": "enetcv_score_blocks",
+   "reason": "DELETED 2026-11-15 (lane/expdel2-06-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md; recoverable at 7d1eee8179; patch experiments/removed/MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS.patch): losing arm =4096. EXP:2068 KEEP (1024 promoted IDENTICAL default, lane/owed-decide, NV v0063/v0064, AMD a1645/a1646): 4096 -> 1024 average B/A 0.935, quality identical; the 4096 arm lost. Refused in core/experiment_guards_linear.mojo; docs/TOMBSTONES.md."
+  }
+ ]
 }
