@@ -88,7 +88,7 @@ comptime C33_CHUNK = 16
 # (Sweep 2026-11-15: comptime C34_PARALLEL_EDGES removed; nothing read it.)
 # TOMBSTONE: MOJOLEARN_C35_PACKED_LISTS (unmeasured arm) deleted 2026-11-15 by lane/expdel2-05-base; code recoverable at d391e6ab95.
 # Restore: git apply experiments/removed/MOJOLEARN_C35_PACKED_LISTS.patch; record in docs/TOMBSTONES.md.
-comptime C35_PACKED_LISTS = False
+# (Sweep 2026-11-15: comptime C35_PACKED_LISTS removed; nothing read it.)
 # TOMBSTONE: MOJOLEARN_C35_ROWS_128 (unmeasured arm) deleted 2026-11-15 by lane/expdel2-05-base; code recoverable at 54b5cb96f6.
 # Restore: git apply experiments/removed/MOJOLEARN_C35_ROWS_128.patch; record in docs/TOMBSTONES.md.
 comptime C35_TASK_ROWS = 256
