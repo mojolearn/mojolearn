@@ -68,7 +68,9 @@ from std.memory import bitcast
 from x_decomp.cells import F32Ptr
 from x_decomp.rr import pj_first, pj_second
 
-comptime IDN_EIGH_BLOCK = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_IDN_EIGH_BLOCK_ON"]() and not (is_defined["MOJOLEARN_IDN_EIGH_BLOCK_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-18-decomposition (non-owner; owner expdel2-37-series); code recoverable at 7fa6378a2a.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-18-decomposition.patch; record in docs/TOMBSTONES.md.
+comptime IDN_EIGH_BLOCK = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_IDN_EIGH_BLOCK_ON"]() and not is_defined["MOJOLEARN_IDN_EIGH_BLOCK_OFF"]()
 
 comptime _RB_B_WIDE = 32 if is_defined["MOJOLEARN_IDN_EIGH_BLOCK_B32"]() else 16
 #: columns a block

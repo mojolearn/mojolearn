@@ -128,7 +128,9 @@ comptime _TS_FAST_APPLE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APP
 # ON; single-sample component evidence does not qualify a full caller change.
 # All arms: one excluded same-context warmup/one score, rc=0, prior identity
 # reused without revalidation; measurements/20261006/index.json has receipts.
-comptime TS_GRID_UPDATE = (_TS_IDN and not (is_defined["MOJOLEARN_IDN_TSQR_GRID_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())) or (_TS_FAST_APPLE and is_defined["MOJOLEARN_DECOMP_FAST_TSQR_GRID"]())
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-18-decomposition (non-owner; owner expdel2-37-series); code recoverable at 7fa6378a2a.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-18-decomposition.patch; record in docs/TOMBSTONES.md.
+comptime TS_GRID_UPDATE = (_TS_IDN and not is_defined["MOJOLEARN_IDN_TSQR_GRID_OFF"]()) or (_TS_FAST_APPLE and is_defined["MOJOLEARN_DECOMP_FAST_TSQR_GRID"]())
 # Scored FAST quality: 9/9 metrics within the existing bands; PASS.
 # F11/default M3 2026-10-06: 6 retained public-caller timings;
 # B/A range 0.9704..1.0015, mixed/regressing; FAST candidate stays OFF.
@@ -140,7 +142,7 @@ comptime TS_GRID_UPDATE = (_TS_IDN and not (is_defined["MOJOLEARN_IDN_TSQR_GRID_
 # 1.108/1.102/1.096, NVIDIA L40S 1.035/1.032/1.032 (all rollback LOSS).
 # Fused norm chains and grid remain ON. Full-estimator qualification remains
 # separate; these are factor/apply helper timings, not a dataset board run.
-comptime TS_NORM_FUSED = (_TS_IDN and not (is_defined["MOJOLEARN_IDN_TSQR_NORM_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())) or (_TS_FAST_APPLE and is_defined["MOJOLEARN_DECOMP_FAST_TSQR_NORM"]())
+comptime TS_NORM_FUSED = (_TS_IDN and not is_defined["MOJOLEARN_IDN_TSQR_NORM_OFF"]()) or (_TS_FAST_APPLE and is_defined["MOJOLEARN_DECOMP_FAST_TSQR_NORM"]())
 # I22 STRIP-only LOSS/neutral, same freeze/cases/protocol: candidate/incumbent
 # AMD 1.100/1.097/1.001, NVIDIA L40S 1.082/1.075/1.000. The explicit
 # ts_leaf_update_kernel[2] groups two trailing chunks; width18 has only one
@@ -148,7 +150,7 @@ comptime TS_NORM_FUSED = (_TS_IDN and not (is_defined["MOJOLEARN_IDN_TSQR_NORM_O
 # REUSE+STRIP bundle wins vs refactoring: AMD 0.564/0.564/0.541, NVIDIA
 # 0.571/0.573/0.555. REUSE alone below is faster on both wider cases; the
 # bundle does not demonstrate a strip improvement. STRIP stays OFF.
-comptime TS_STRIP_UPDATE = _TS_IDN and is_defined["MOJOLEARN_IDN_TSQR_STRIP_UPDATE"]() and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+comptime TS_STRIP_UPDATE = _TS_IDN and is_defined["MOJOLEARN_IDN_TSQR_STRIP_UPDATE"]()
 comptime TS_SMEM_OK = lib_smem_page_fits_for[TARGET_COLUMN, TS_SMEM_BYTES]()
 comptime TS_SMEM2_OK = (
     lib_smem_page_fits_for[TARGET_COLUMN, TS_SMEM2_BYTES]()

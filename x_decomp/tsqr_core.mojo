@@ -104,12 +104,10 @@ comptime TS_MAX_N = 512
 # bench/results/paper_compare/owed-pre0867.json (arms: default,
 # -D MOJOLEARN_IDN_TSQR_WY_PAIR_OFF, -D MOJOLEARN_IDN_TSQR_TREE_PAR_OFF, both;
 # ols / qr / svd / lstsq taxi + istella, NV + AMD).
-comptime TS_WY_PAIR = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
-    is_defined["MOJOLEARN_IDN_TSQR_WY_PAIR_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
-comptime TS_TREE_PAR = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
-    is_defined["MOJOLEARN_IDN_TSQR_TREE_PAR_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-18-decomposition (non-owner; owner expdel2-37-series); code recoverable at 7fa6378a2a.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-18-decomposition.patch; record in docs/TOMBSTONES.md.
+comptime TS_WY_PAIR = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_IDN_TSQR_WY_PAIR_OFF"]()
+comptime TS_TREE_PAR = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_IDN_TSQR_TREE_PAR_OFF"]()
 # TOMBSTONE: MOJOLEARN_IDN_TSQR_RSTACK_TREE (loser) deleted 2026-10-11 by 7d76f567e; code recoverable at 7d76f567e^.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_TSQR_RSTACK_TREE.patch
 #: reflectors of a panel pair (the pair's T2 is TS_W2 x TS_W2)

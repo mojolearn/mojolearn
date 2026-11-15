@@ -10,7 +10,7 @@ verdicts batch 6 (2026-10-05), each with an _OFF rollback:
   bit 4  LU_FAST_RESIDENT    (`-D MOJOLEARN_LU_FAST_RESIDENT_OFF`)
   bit 8  IDN_LU_RESIDENT_PAIR (IDENTICAL default since 2026-10-11; its _OFF rollback deleted 2026-11-15, docs/TOMBSTONES.md)
 
-IDENTICAL compiles only IDN_LU_RESIDENT_PAIR's entries (unless -D MOJOLEARN_IDN_ALL_OFF).
+IDENTICAL compiles only IDN_LU_RESIDENT_PAIR's entries.
 """
 from max.gpu import block_dim, block_idx, thread_idx
 from std.sys.compile import is_defined
@@ -121,14 +121,12 @@ comptime LU_FAST_RESIDENT = XD_FAST_APPLE and LU_QFIX and not is_defined["MOJOLE
 #: AMD MI325X a1615/a1616), digests equal NV == AMD on both arms, quality
 #: equal: lu-factor synthetic NV 822.7 -> 369.0 ms (0.45x), AMD 568.0 ->
 #: 315.4 ms (0.56x), avg 0.50x; lu-solve NV 353.0 -> 378.7 (1.07x), AMD
-#: 317.0 -> 317.3 (1.00x), avg 1.04x (noise). Rollback:
-#: -D MOJOLEARN_IDN_ALL_OFF only.
+#: 317.0 -> 317.3 (1.00x), avg 1.04x (noise).
 # TOMBSTONE: MOJOLEARN_IDN_LU_RESIDENT_PAIR_OFF (old path, superseded by the FAST+Apple default) deleted 2026-11-15 by lane/expdel-02-decomposition-series; code recoverable at 63d9ceea61.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_LU_RESIDENT_PAIR_OFF.patch; record in docs/TOMBSTONES.md.
-comptime IDN_LU_RESIDENT_PAIR = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-18-decomposition (non-owner; owner expdel2-37-series); code recoverable at 7fa6378a2a.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-18-decomposition.patch; record in docs/TOMBSTONES.md.
+comptime IDN_LU_RESIDENT_PAIR = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 #: Whether the binding registers `x_decomp_dev_lu_factor` / `_dev_lu_solve`.
 comptime LU_RESIDENT_ENTRIES = LU_FAST_RESIDENT or IDN_LU_RESIDENT_PAIR
 
