@@ -507,15 +507,16 @@ def cd_axpy_pair_kernel(
 
 comptime CD_STEP_TPB = 256
 comptime CD_STEP_MAX_BLOCKS = 64
+# TOMBSTONE: MOJOLEARN_CD_TWO_STEP_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-20-linear; code recoverable at f2dad24e5a.
+# Restore: git apply experiments/removed/MOJOLEARN_CD_TWO_STEP_OFF.patch; record in docs/TOMBSTONES.md.
 comptime CD_TWO_STEP = (
     CD_THREE_LAUNCH
     and not SAB_SOFT_SWAP
     and not SAB_ZERO_FOLD_MAX
     and not SAB_ZERO_FOLD_MAX_SWAPPED
-    and not is_defined["MOJOLEARN_CD_TWO_STEP_OFF"]()
 )
 """lane/linear-apple2: TWO launches per coordinate (Apple, IDENTICAL, on by
-default; -D MOJOLEARN_CD_TWO_STEP_OFF=1 returns to three). The fold and the
+default). The fold and the
 update of coordinate `prev` move into the NEXT coordinate's axpy launch,
 `cd_step_kernel`: every block folds the P partials itself (the same tree)
 and runs the update body on its own copy, so every block holds the same -r
