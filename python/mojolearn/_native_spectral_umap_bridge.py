@@ -74,10 +74,7 @@ def _host_owner(binding):
     # refuses it. Resolve the facade to its exact host module at import, as
     # _native_family_bridge.connect_bindings does.
     from . import _backend
-    if type(binding) is _backend._HostBinding and _backend._CPU_ONLY is not None:
-        basename = vars(binding)["_HostBinding__basename"]
-        return _backend.load_host_module(basename)  # import-time: import connection of an explicitly selected CPU-only binding
-    return binding
+    return _backend.exact_host_module(binding)
 
 
 def connect():

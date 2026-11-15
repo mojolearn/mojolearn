@@ -17,7 +17,15 @@ def connect(scaler_class):
         try:
             prep = _backend.binding("_mojolearn_preprocessing", mode)
             xprep = _backend.binding("_mojolearn_x_prep", mode)
-            entries = {"native_scaler_provider": prep, "native_program_provider": xprep}
+            # The provider admission (providers/python/neural_descriptor_pyapi_door.mojo
+            # `neural_descriptor_entry`) takes an exact module that owns its
+            # entry. On a CPU-only install `_backend.binding` returns the lazy
+            # `_HostBinding` facade; resolve it to its host module here, as
+            # _native_family_bridge.connect_bindings does, or GP normalize_y
+            # refused "native provider requires an exact compiled module"
+            # (smoke-triage 2026-11-15: lanes gp-normalize-y, gp-sample-y-normalize).
+            entries = {"native_scaler_provider": _backend.exact_host_module(prep),
+                       "native_program_provider": _backend.exact_host_module(xprep)}
             for name in ("standard_fit", "standard_fit_direct", "standard_transform", "standard_transform_direct", "standard_fit_transform_direct", "standard_fit_transform", "preprocessing_numeric_mode"):  # glue: cache compiled scaler symbols
                 try:
                     entry = getattr(prep, name)
