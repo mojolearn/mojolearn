@@ -2399,8 +2399,7 @@ def launch_lu(
         # steps in order through tiles. The same cells in the same
         # order as the per-step route below.
         var k0 = 0
-        # LU_FAST_STEP1 (FAST + Apple default, x_decomp/lu_fast.mojo; -D
-        # MOJOLEARN_LU_FAST_STEP1_OFF reverts):
+        # LU_FAST_STEP1 (FAST + Apple default, x_decomp/lu_fast.mojo):
         # each panel column one launch instead of five; the same cells.
         var step1 = False
         comptime if LU_FAST_STEP1:
@@ -2410,7 +2409,7 @@ def launch_lu(
         var lfs_p1 = ctx.enqueue_create_buffer[DType.float32](n * nb if step1 else 1)
         var lfs_pa = ctx.enqueue_create_buffer[DType.float32](2 * lfs_mb if step1 else 1)
         var lfs_pb = ctx.enqueue_create_buffer[DType.float32](2 * lfs_mb if step1 else 1)
-        # LU_FAST_MMA (FAST + Apple default, x_decomp/lu_fast_mma.mojo; rollback -D MOJOLEARN_LU_FAST_MMA_OFF):
+        # LU_FAST_MMA (FAST + Apple default, x_decomp/lu_fast_mma.mojo):
         # 256-column outer blocks, the trailing updates delayed and run on
         # the Apple matrix unit (one pass over the trailing square per 256
         # columns instead of per 32). Off: main's loop below.
