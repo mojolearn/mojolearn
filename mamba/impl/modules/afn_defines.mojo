@@ -56,7 +56,7 @@ comptime AFN_MAMBA_ALL = False
 #: Apple alike; never the host column). Both switches are plumbing: the
 #: kernels, their launch geometry and every fold are main's, so no bit moves.
 #:
-#: IDN_MAMBA_ARENA (default ON; `-D MOJOLEARN_IDN_ALL_OFF` restores main): the arena form below under
+#: IDN_MAMBA_ARENA (default ON; restores main): the arena form below under
 #: IDENTICAL. A Mamba-1/2/3 block call's weights, state, stages and x are
 #: views of ONE allocation filled once, the caller's arrays are copied in
 #: with no per-buffer wait, the per-stage waits are kept only on a traced
@@ -65,19 +65,20 @@ comptime AFN_MAMBA_ALL = False
 #: stage.
 #:
 #: IDN_MAMBA_DEVICE_REFUSAL (default ON; `-D
-#: MOJOLEARN_IDN_MAMBA_DEVICE_REFUSAL_OFF` or `-D MOJOLEARN_IDN_ALL_OFF`
+#: MOJOLEARN_IDN_MAMBA_DEVICE_REFUSAL_OFF`
 #: restores main): the non-finite refusal of every named input as device
 #: reductions with ONE readback per call (afn_refusal.mojo), in the same
 #: name order with the same message, where main downloaded each named buffer
 #: to the host and walked it there (Mamba-1, Mamba-2) or read back once per
 #: name (Mamba-3).
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (the IDENTICAL old-path umbrella; resident defaults kept, EXP:2438) deleted 2026-11-15 by lane/expdel2-27-neural (non-owner); code recoverable at b7c5be55f1.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-27-neural.patch
 comptime _IDN_MAMBA_DEVICE = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     and not is_defined["MOJOLEARN_COLUMN_CPU"]()
-    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 )
 #: IDN_MAMBA_ALLOC_NOWAIT (default ON; `-D MOJOLEARN_IDN_MAMBA_ALLOC_NOWAIT_OFF`
-#: or `-D MOJOLEARN_IDN_ALL_OFF` restores main): `mamba_zeros` and
+#: restores main): `mamba_zeros` and
 #: `mamba_scratch` return without waiting for their fill. The buffer is
 #: returned to its owner and the fill is ahead of every reader on the same
 #: in-order context, so the wait ordered nothing; it was one host round trip
@@ -89,7 +90,7 @@ comptime IDN_MAMBA_ALLOC_NOWAIT = _IDN_MAMBA_DEVICE and not is_defined[
     "MOJOLEARN_IDN_MAMBA_ALLOC_NOWAIT_OFF"
 ]()
 #: lane/fam2-lm (2026-10-04) IDN_MAMBA3_REPORTS_ON_REQUEST (default ON;
-#: `-D MOJOLEARN_IDN_MAMBA3_REPORTS_ON_REQUEST_OFF` or `-D MOJOLEARN_IDN_ALL_OFF`
+#: `-D MOJOLEARN_IDN_MAMBA3_REPORTS_ON_REQUEST_OFF`
 #: restores the refusal of a null report address): the Mamba-3 prefill
 #: session forward downloads a report (h_last, k_last, v_last, theta_last)
 #: only where the caller passed an address for it. A stack forward (Samba)
@@ -99,7 +100,7 @@ comptime IDN_MAMBA3_REPORTS_ON_REQUEST = _IDN_MAMBA_DEVICE and not is_defined[
     "MOJOLEARN_IDN_MAMBA3_REPORTS_ON_REQUEST_OFF"
 ]()
 #: lane/fam2-lm (2026-10-04) IDN_M3_SESSION_STAGE_REUSE (default ON;
-#: `-D MOJOLEARN_IDN_M3_SESSION_STAGE_REUSE_OFF` or `-D MOJOLEARN_IDN_ALL_OFF`
+#: `-D MOJOLEARN_IDN_M3_SESSION_STAGE_REUSE_OFF`
 #: rebuilds per call): a Mamba-3 prefill session forward at the (B, L,
 #: d_model) of the stages it retained refills those 43 buffers with zeros
 #: instead of freeing them and allocating 43 new ones. The forward starts
@@ -114,7 +115,7 @@ comptime IDN_MAMBA_DEVICE_REFUSAL = _IDN_MAMBA_DEVICE and not is_defined[
     "MOJOLEARN_IDN_MAMBA_DEVICE_REFUSAL_OFF"
 ]()
 #: lane nr-mamba (2026-10-04, roadmap B2) IDN_MAMBA_CONV_CELL (default ON;
-#: `-D MOJOLEARN_IDN_MAMBA_CONV_CELL_OFF` or `-D MOJOLEARN_IDN_ALL_OFF`
+#: `-D MOJOLEARN_IDN_MAMBA_CONV_CELL_OFF`
 #: restores main): the Mamba-1 and Mamba-2 causal depthwise conv + SiLU
 #: launch one thread per (batch, position, channel) instead of one thread per
 #: (batch, channel) walking the sequence. Every output cell is the same
