@@ -8,7 +8,6 @@ trainer. The cell backward scan is autograd/kernels/recurrent_scan.mojo."""
 from sequence.exec_trait import Exec
 from sequence.ops import FP, Args, OP_COLSUM, OP_GEMM_SPLITK
 from sequence.recurrent import (
-    NN43_WGRAD_FIXED128,
     SEQ_WGRAD_BLOCKED,
     WGRAD_IDN_SCRATCH,
     WGRAD_MIN_BLOCK,
@@ -19,14 +18,6 @@ from sequence.recurrent import (
 def wgrad_block(K: Int) -> Int:
     """Rows per block: the smallest power of two R >= WGRAD_MIN_BLOCK with
     R * R >= K (so at most R blocks)."""
-    comptime if NN43_WGRAD_FIXED128:
-        # A single cell's leaf partials must fit the fixed scratch budget.
-        # For exceptionally long K, double the leaf on ALL columns until
-        # it fits. This resource rule covers every neighboring K equally.
-        var leaf = 128
-        while (K + leaf - 1) // leaf > WGRAD_IDN_SCRATCH:
-            leaf *= 2
-        return leaf
     var r = WGRAD_MIN_BLOCK
     while r * r < K:
         r *= 2
