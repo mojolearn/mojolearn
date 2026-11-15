@@ -5455,8 +5455,9 @@ def fused_bwd_zdot_stash_pf_kernel[HD: Int, TQ: Int, SABN: Bool](
         # its staging barrier, which the folding threads reach only once
         # their fold is done, and the staging writes `ks` / `vs`, whose last
         # readers passed the barrier above. Synchronization only.
-        # `-D MOJOLEARN_ATTN_ZDOT_STASH_FOLD_BARRIER` restores it.
-        comptime if TARGET_COLUMN != COLUMN_APPLE or is_defined["MOJOLEARN_ATTN_ZDOT_STASH_FOLD_BARRIER"]():
+        # TOMBSTONE: MOJOLEARN_ATTN_ZDOT_STASH_FOLD_BARRIER (unmeasured Apple opt-in arm) deleted 2026-11-15 by lane/expdel2-34-neural; code recoverable at 1a7b79977c.
+        # Restore: git apply experiments/removed/MOJOLEARN_ATTN_ZDOT_STASH_FOLD_BARRIER.patch
+        comptime if TARGET_COLUMN != COLUMN_APPLE:
             barrier()
     if valid and lane == 0:
         var zf = ftz(z)
