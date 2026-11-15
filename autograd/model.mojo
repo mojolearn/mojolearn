@@ -10,6 +10,7 @@ the tape's fixed blocked folds), so the bits are the same on Apple, NVIDIA
 and AMD. Host loops run over layers, batches and epochs only.
 """
 from std.memory import bitcast, unsafe_memcpy
+from std.sys.compile import is_defined
 from sequence.exec_trait import Exec
 from sequence.ops import (
     FP, Args, OP_COPY, OP_FILL, OP_GATHER_ROWS, OP_MLP_PERM, OP_ONE_HOT, OP_PROBA2, OP_SEQ_IOTA,
