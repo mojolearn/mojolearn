@@ -108,7 +108,7 @@ WHAT IS NOT HERE YET, NAMED SO IT IS NOT MISTAKEN FOR DONE
 from max.gpu.host import DeviceContext
 
 from dbscan.impl.dbscan import dbscan_fit_impl_weighted
-from std.os import getenv
+from std.sys import is_defined
 from dbscan.impl.runner import EPS_NN_BRUTE_FORCE, EPS_NN_RBC
 from dbscan.impl.neighbors.epsilon_neighborhood import (
     DBSCAN_METRIC_COSINE,
@@ -143,6 +143,13 @@ from max.gpu import block_dim, block_idx, thread_idx
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-10-cluster.patch; record in docs/TOMBSTONES.md.
 # TOMBSTONE: MOJOLEARN_IDN_DBSCAN_COSINE_DEVICE_OFF (old path, no A/B row) deleted 2026-11-15 by lane/expdel2-10-cluster; code recoverable at 6ddc7b32e5.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_DBSCAN_COSINE_DEVICE_OFF.patch; record in docs/TOMBSTONES.md.
+#: DBSCAN phase timer: `-D MOJOLEARN_DBSCAN_PHASES` builds print the phase
+#: times; default builds compile the timer out. Before (lane
+#: envgate-classical-deviceplan, docs/plans/ENV_GATES_2026-11-15.md): a
+#: getenv per fit.
+comptime DBSCAN_PHASES_ON = is_defined["MOJOLEARN_DBSCAN_PHASES"]()
+
+
 comptime IDN_DBSCAN_COSINE_DEVICE = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 
 #: fam2-cluster (2026-10-04), IDENTICAL, every column: the labels (and the
@@ -378,7 +385,7 @@ def dbscan_fit(
         max_mbytes_per_batch,
         cap,
         eps_nn_method,
-        String(getenv("MOJOLEARN_DBSCAN_PHASES")) == "1",
+        DBSCAN_PHASES_ON,
         metric,
         has_weights,
         out_core_addr,
