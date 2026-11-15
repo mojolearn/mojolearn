@@ -724,6 +724,7 @@ in the tables after the sections.
 | [`MOJOLEARN_IDN_GRAM_FF_FALLBACK_OFF`](#mojolearn_idn_gram_ff_fallback_off-old-path-deleted-2026-11-15) | Linear (float-float Gram second chance for a gate-rejected Ridge fit, IDENTICAL) | removed (old path; IDENTICAL default PROMOTED fg2, ridge istella NV 0.96x / AMD 0.51x) | 2026-11-15 | [MOJOLEARN_IDN_GRAM_FF_FALLBACK_OFF.patch](../experiments/removed/MOJOLEARN_IDN_GRAM_FF_FALLBACK_OFF.patch) |
 | [`MOJOLEARN_IDN_GFF_GRAM_TILED_OFF`](#mojolearn_idn_gff_gram_tiled_off-old-path-deleted-2026-11-15) | Linear (register-tiled float-float leaf Gram, IDENTICAL) | removed (old path; IDENTICAL default PROMOTED w2-decide-linalg, ridge istella 0.917) | 2026-11-15 | [MOJOLEARN_IDN_GFF_GRAM_TILED_OFF.patch](../experiments/removed/MOJOLEARN_IDN_GFF_GRAM_TILED_OFF.patch) |
 | [`MOJOLEARN_IDN_COLVAR_FUSED_OFF`](#mojolearn_idn_colvar_fused_off-old-path-deleted-2026-11-15) | Decomposition (TruncatedSVD column variance in registers, IDENTICAL) | removed (old path; IDENTICAL default PROMOTED fg2, tsvd taxi NV 0.76x / AMD 0.97x) | 2026-11-15 | [MOJOLEARN_IDN_COLVAR_FUSED_OFF.patch](../experiments/removed/MOJOLEARN_IDN_COLVAR_FUSED_OFF.patch) |
+| [`MOJOLEARN_IDN_TSVD_ONE_UPLOAD_OFF`](#mojolearn_idn_tsvd_one_upload_off-old-path-deleted-2026-11-15) | Decomposition (TruncatedSVD one upload of X, IDENTICAL) | removed (old path; IDENTICAL default CONFIRMED g50ebe26a5, _OFF 1.610x slower) | 2026-11-15 | [MOJOLEARN_IDN_TSVD_ONE_UPLOAD_OFF.patch](../experiments/removed/MOJOLEARN_IDN_TSVD_ONE_UPLOAD_OFF.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -6992,3 +6993,11 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2
 - **Deleted by**: lane/expdel2-05-base (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `7fdb249ce5`.
 - **Restore**: `git apply experiments/removed/MOJOLEARN_IDN_COLVAR_FUSED_OFF.patch`, then delete the `MOJOLEARN_IDN_COLVAR_FUSED_OFF` refusal in `core/experiment_guards_decomposition.mojo`.
 - **Records**: refusal in `core/experiment_guards_decomposition.mojo`; `experiments/six_lane_integration/grid_controls/fg-pca.json` control `colvar_fused` moved to `removed` (the generated grid/grid-plan.json and grid/GRID.md still list it until the next grid regeneration); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-05-base section).
+
+### MOJOLEARN_IDN_TSVD_ONE_UPLOAD_OFF: old path deleted (2026-11-15)
+
+- **What it was**: The rollback of `TSVD_ONE_UPLOAD` (T1, lane fg-pca): `tsvd_fit_explained_host` ran `tsvd_fit_host` then `tsvd_explained_host`, two H2D copies of X. `TSVD_ONE_UPLOAD` is now `GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL`; FAST keeps its two-call pooled pair (that branch stays, it is mode-dependent).
+- **Verdict**: CONFIRMED (EXPERIMENTS.md IDN_TSVD_ONE_UPLOAD_OFF rows): grid g50ebe26a5 _OFF arm 1.610x combined slower; fg2 with PCA_LEAN_SCRATCH_OFF: tsvd istella NV 1.60x / AMD 1.48x slower. No bit change on any column.
+- **Deleted by**: lane/expdel2-05-base (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `34a0226192`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_IDN_TSVD_ONE_UPLOAD_OFF.patch`, then delete the `MOJOLEARN_IDN_TSVD_ONE_UPLOAD_OFF` refusal in `core/experiment_guards_decomposition.mojo`.
+- **Records**: refusal in `core/experiment_guards_decomposition.mojo`; `experiments/six_lane_integration/grid_controls/fg-pca.json` control `tsvd_one_upload` moved to `removed` (the generated grid/grid-plan.json and grid/GRID.md still list it until the next grid regeneration); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-05-base section).

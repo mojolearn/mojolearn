@@ -115,6 +115,8 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_IDN_JACOBI_ROUND_ROBIN_OFF"](), "removed 2026-11-15 (lane/expdel2-05-base): IDN_JACOBI_ROUND_ROBIN_OFF (rollback of the linear models' eig routes to the one-block cyclic Jacobi) is gone; the round-robin Jacobi is the IDENTICAL path"
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_COLVAR_FUSED_OFF.patch
     comptime assert not is_defined["MOJOLEARN_IDN_COLVAR_FUSED_OFF"](), "removed 2026-11-15 (lane/expdel2-05-base): IDN_COLVAR_FUSED_OFF (rollback of the TruncatedSVD column variance to the shift + square passes) is gone; the fused tile fold is the only form"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_TSVD_ONE_UPLOAD_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_TSVD_ONE_UPLOAD_OFF"](), "removed 2026-11-15 (lane/expdel2-05-base): IDN_TSVD_ONE_UPLOAD_OFF (rollback of the IDENTICAL TruncatedSVD fit to two uploads of X) is gone; one upload is the IDENTICAL path"
     return True
 
 

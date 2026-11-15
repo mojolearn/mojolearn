@@ -1,0 +1,32 @@
+diff --git a/decomposition/estimator.mojo b/decomposition/estimator.mojo
+index 0c89ef92bf..78673a9924 100644
+--- a/decomposition/estimator.mojo
++++ b/decomposition/estimator.mojo
+@@ -713,8 +713,8 @@ def _tsvd_explained_tail(
+     _ = xt^
+ 
+ 
+-#: T1, lane fg-pca (2026-10-09), IDENTICAL default (the
+-#: `-D MOJOLEARN_IDN_TSVD_ONE_UPLOAD_OFF` rollback is deleted). `TruncatedSVD.fit` called
++#: T1, lane fg-pca (2026-10-09), IDENTICAL default; rollback
++#: `-D MOJOLEARN_IDN_TSVD_ONE_UPLOAD_OFF`. `TruncatedSVD.fit` called
+ #: `tsvd_fit` and then `tsvd_explained`, and each copied X host -> device
+ #: (n*d*4 bytes each: 880 MB at 1M x 220, about 46 ms per copy at a
+ #: pageable ~19 GB/s) and allocated its own n*d buffer. `tsvd_fit_explained`
+@@ -723,10 +723,12 @@ def _tsvd_explained_tail(
+ #: SAME device buffer. Cost: -1 H2D copy of X and -1 n*d allocation per fit at
+ #: any shape. Bits: none (the same kernels on the same words in the same
+ #: order; the components reach the tail through the same Float32 output
+-#: array). FAST, which keeps its pooled pair, runs the two calls in order.
+-# TOMBSTONE: MOJOLEARN_IDN_TSVD_ONE_UPLOAD_OFF (old path of the CONFIRMED default) deleted 2026-11-15 by lane/expdel2-05-base; code recoverable at 34a0226192.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_TSVD_ONE_UPLOAD_OFF.patch; record in docs/TOMBSTONES.md.
+-comptime TSVD_ONE_UPLOAD = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
++#: array). The OFF arm (and FAST, which keeps its pooled pair) runs the two
++#: calls in order.
++comptime TSVD_ONE_UPLOAD = (
++    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
++    and not is_defined["MOJOLEARN_IDN_TSVD_ONE_UPLOAD_OFF"]()
++)
+ 
+ 
+ def tsvd_fit_explained_host(
