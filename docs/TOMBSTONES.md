@@ -719,6 +719,7 @@ in the tables after the sections.
 | [`MOJOLEARN_KMEANS_ROW_ASSIGN`](#mojolearn_kmeans_row_assign-unmeasured-arm-deleted-2026-11-15) | Cluster (KMeans row-register assignment, IDENTICAL) | removed (unmeasured opt-in arm; KEPT row withdrawn, no own verdict) | 2026-11-15 | [MOJOLEARN_KMEANS_ROW_ASSIGN.patch](../experiments/removed/MOJOLEARN_KMEANS_ROW_ASSIGN.patch) |
 | [`MOJOLEARN_IVF_DIRECT_DISTANCE_OFF`](#mojolearn_ivf_direct_distance_off-old-path-deleted-2026-11-15) | Neighbors (IVF-Flat direct distances, IDENTICAL) | removed (old path; IDENTICAL default PROMOTED ge123e6f9, _OFF loses recall g50ebe26a5) | 2026-11-15 | [MOJOLEARN_IVF_DIRECT_DISTANCE_OFF.patch](../experiments/removed/MOJOLEARN_IVF_DIRECT_DISTANCE_OFF.patch) |
 | [`MOJOLEARN_C62_SAME_COMPONENT_SKIP`](#mojolearn_c62_same_component_skip-unmeasured-arm-deleted-2026-11-15) | Classical IDENTICAL graph / cluster candidate (hdbscan) | removed (unmeasured opt-in arm; EXPERIMENTS.md OPEN, never measured) | 2026-11-15 | [MOJOLEARN_C62_SAME_COMPONENT_SKIP.patch](../experiments/removed/MOJOLEARN_C62_SAME_COMPONENT_SKIP.patch) |
+| [`MOJOLEARN_IDN_RIDGE_RESIDENT_OFF`](#mojolearn_idn_ridge_resident_off-old-path-deleted-2026-11-15) | Linear (Ridge resident eig fallback at the Gram gate, IDENTICAL) | removed (old path; IDENTICAL default CONFIRMED fg2, _OFF ridge istella NV 2.22x / AMD 1.28x slower) | 2026-11-15 | [MOJOLEARN_IDN_RIDGE_RESIDENT_OFF.patch](../experiments/removed/MOJOLEARN_IDN_RIDGE_RESIDENT_OFF.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -6947,3 +6948,11 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2
 - **Deleted by**: lane/expdel2-05-base (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `774f01dc6b`.
 - **Restore**: `git apply experiments/removed/MOJOLEARN_C62_SAME_COMPONENT_SKIP.patch`, then delete the `MOJOLEARN_C62_SAME_COMPONENT_SKIP` refusal in `core/experiment_guards_cluster.mojo`.
 - **Records**: refusal in `core/experiment_guards_cluster.mojo`; `experiments/six_lane_integration/grid_controls/classical-misc.json` control `c61_same_component_skip` moved to `removed` (the generated grid/grid-plan.json and grid/GRID.md still list it until the next grid regeneration); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-05-base section).
+
+### MOJOLEARN_IDN_RIDGE_RESIDENT_OFF: old path deleted (2026-11-15)
+
+- **What it was**: The rollback of `IDN_RIDGE_RESIDENT` (L2, lane fg-linear): with the define a Ridge fit the resident Gram gate rejected returned status 1 to Python (four PCIe crossings of X) instead of running the eig route on the resident X / y and means. `IDN_RIDGE_RESIDENT` is now `LINEAR_GRAM_SOLVE` (read by glm/impl/gram_solve.mojo).
+- **Verdict**: CONFIRMED (EXPERIMENTS.md IDN_RIDGE_RESIDENT_OFF rows, fg2 nv2 v1021-v1050 / MI325X a1161-a1190, one run per arm): _OFF arm ridge istella NV 2.22x / AMD 1.28x slower, taxi NV 0.87x / AMD 0.99x; hashes unchanged in every arm. No bit change on any column.
+- **Deleted by**: lane/expdel2-05-base (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `fe4ab80cd9`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_IDN_RIDGE_RESIDENT_OFF.patch`, then delete the `MOJOLEARN_IDN_RIDGE_RESIDENT_OFF` refusal in `core/experiment_guards_linear.mojo`.
+- **Records**: refusal in `core/experiment_guards_linear.mojo`; `experiments/six_lane_integration/grid_controls/fg-linear.json` control `ridge_resident` moved to `removed` (the generated grid/grid-plan.json and grid/GRID.md still list it until the next grid regeneration); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-05-base section).

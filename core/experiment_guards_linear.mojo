@@ -122,6 +122,8 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_CD_FAST_GRID_GRAM_OFF"](), "removed 2026-11-15 (lane/expdel-03-linear): CD_FAST_GRID_GRAM_OFF (FAST+Apple rollback of the CD Gram to the staged copy + gemm_nt / cd_gram_partial_kernel) is gone; the grid Gram is the only CD_FAST_GRAM product (lasso istella 264 -> 149 ms, KEPT 0ae9c28cd); code recoverable at e592fb6e9f"
     # Restore: git apply experiments/removed/MOJOLEARN_CD_FAST_ROWMAJOR_OFF.patch
     comptime assert not is_defined["MOJOLEARN_CD_FAST_ROWMAJOR_OFF"](), "removed 2026-11-15 (lane/expdel-03-linear): CD_FAST_ROWMAJOR_OFF (FAST+Apple rollback of the CD grid Gram to the transposed, centered design) is gone; the row-major tiles are the FAST+Apple path (lasso istella 264 -> 149 ms with GRID_GRAM, KEPT 0ae9c28cd); code recoverable at 7d40f892a7"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_RIDGE_RESIDENT_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_RIDGE_RESIDENT_OFF"](), "removed 2026-11-15 (lane/expdel2-05-base): IDN_RIDGE_RESIDENT_OFF (rollback of the Ridge resident eig fallback to status 1 and the Python glue) is gone; the resident fallback is the IDENTICAL path"
     return True
 
 

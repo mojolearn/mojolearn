@@ -5,26 +5,6 @@
  "head": "a5101cb29",
  "head_note": "lane fg-linear (flagship gaps, 2026-10-09): code only, nothing compiled, run or queued by the lane. Read file docs/plans/flagship-gaps-20261009/read_linear.md.",
  "controls": {
-  "ridge_resident": {
-   "define": "MOJOLEARN_IDN_RIDGE_RESIDENT_OFF",
-   "kind": "switch",
-   "arms": {
-    "on": [],
-    "off": [
-     "MOJOLEARN_IDN_RIDGE_RESIDENT_OFF"
-    ]
-   },
-   "default": "on",
-   "source": [
-    "experiments/classical_identical_ideas/fg_linear_controls.mojo:IDN_RIDGE_RESIDENT",
-    "glm/impl/gram_solve.mojo:_gs_ridge_resident_fallback",
-    "glm/impl/gram_solve.mojo:584"
-   ],
-   "binding": "_mojolearn_estimators",
-   "bits_change": false,
-   "status": "confirmed:postmerge-20261009 (lane/postmerge-act-5; fg2 board-bridge A/B on main 0a7b206f1, one run per arm (nv2 L40S v1021-v1050, amd MI325X a1161-a1190; ratio = arm / fg2.default-linear)): resident stays the default",
-   "notes": "L2. A Ridge fit the resident Gram trust gate rejects runs the eig route (center_buf + ridge_eig_scratch_traced, ridge_fit_resident_host's statements) on the X/y and means already resident, status 0, instead of status 1 and the Python glue's 4 PCIe crossings of X. Expected no bit change (same launches as the glue's route); host column unchanged (its own reject runs the host eig route). Arm 'off' = -D MOJOLEARN_IDN_RIDGE_RESIDENT_OFF. Only reached when linear_gram_solve is on and the gate rejects (istella-like collinear designs). CONFIRMED: the _OFF arm is ridge istella NV 2.22x / AMD 1.28x slower (taxi NV 0.87x / AMD 0.99x; hashes unchanged)."
-  },
   "jacobi_round_robin": {
    "define": "MOJOLEARN_IDN_JACOBI_ROUND_ROBIN_OFF",
    "kind": "switch",
@@ -104,20 +84,11 @@
    "binding": "_mojolearn_estimators (host column _mojolearn_estimators_host)",
    "route": "fit: Ridge.fit -> linear_gram_fit (linear_pinned_upload) -> gate reject -> [gram_ff_fallback: _gs_ff_fit] -> [ridge_resident: _gs_ridge_resident_fallback -> ridge_eig_scratch_traced -> svd_eig_scratch_traced (jacobi_round_robin)] -> else status 1 -> Python glue + ridge_fit_host (linear_pinned_upload, jacobi_round_robin)",
    "controls": [
-    "ridge_resident",
     "jacobi_round_robin",
     "gram_ff_fallback",
     "gff_gram_tiled"
    ],
    "interaction_groups": [
-    [
-     "ridge_resident",
-     "jacobi_round_robin"
-    ],
-    [
-     "gram_ff_fallback",
-     "ridge_resident"
-    ],
     [
      "gram_ff_fallback",
      "jacobi_round_robin"
@@ -172,6 +143,11 @@
    "define": "MOJOLEARN_IDN_GS_SOLVE_ONE_LAUNCH",
    "control": "gs_solve_one_launch",
    "reason": "DELETED 2026-10-11 (lane w2-decide-linalg, deletion fbf3d50a0; recoverable at fbf3d50a0^; patch experiments/removed/MOJOLEARN_IDN_GS_SOLVE_ONE_LAUNCH.patch): NOISE: ols 0.997/1.036, ridge 1.008/0.961, ridge-cv/ard/bayesian-ridge 1.00; nv2 v0136/v0081, amd a1718/a1663. A/B on main c8ef6c66d, same box, one run per arm, NV==AMD digests; see docs/TOMBSTONES.md"
+  },
+  {
+   "define": "MOJOLEARN_IDN_RIDGE_RESIDENT_OFF",
+   "control": "ridge_resident",
+   "reason": "DELETED 2026-11-15 (lane/expdel2-05-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md): old path of the CONFIRMED default (fg2: _OFF ridge istella NV 2.22x / AMD 1.28x slower). Code recoverable at fe4ab80cd9."
   }
  ]
 }
