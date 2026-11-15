@@ -37,7 +37,6 @@ min-norm card, which a bypass to `lstsq_eig` cannot do.
 
 from max.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
-from std.sys.compile import is_defined
 
 from core.identity_trace import IdentityTrace
 from glm.impl.ols import (
