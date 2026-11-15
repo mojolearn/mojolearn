@@ -49,7 +49,7 @@ comptime T21 = False
 # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
 # TOMBSTONE: MOJOLEARN_TREES_T21_STREAMS (DELETE-ARM, opt-in, no A/B recorded, rule a) deleted 2026-11-15 by lane/expdel2-45-trees; code recoverable at 293d3da2dd.
 # Restore: git apply experiments/removed/MOJOLEARN_TREES_T21_STREAMS.patch
-comptime T21_STREAMS = 1
+# (Sweep 2026-11-15: the unread constant T21_STREAMS was removed.)
 
 # T22 document-keyed ordered storage: fold-position compressed storage, the
 # original document ids passed to the dither (no bits change).
@@ -96,15 +96,15 @@ comptime T30 = False
 # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
 # TOMBSTONE: MOJOLEARN_TREES_T19_DEFER (DELETE-ARM, rule e, EXP:1627 DROP (quality loss)) deleted 2026-11-15 by lane/expdel2-45-trees; code recoverable at 2f68cbff39.
 # Restore: git apply experiments/removed/MOJOLEARN_TREES_T19_DEFER.patch
-comptime T19_DEFER = False
+# (Sweep 2026-11-15: the unread constant T19_DEFER was removed.)
 # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
 # TOMBSTONE: MOJOLEARN_TREES_T28_SORT (DELETE-ARM, opt-in, no A/B recorded, rule a) deleted 2026-11-15 by lane/expdel2-45-trees; code recoverable at 7745e944ef.
 # Restore: git apply experiments/removed/MOJOLEARN_TREES_T28_SORT.patch
-comptime T28_SORT = False
+# (Sweep 2026-11-15: the unread constant T28_SORT was removed.)
 # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
 # TOMBSTONE: MOJOLEARN_TREES_T28_PREFIX (DELETE-ARM, opt-in, no A/B recorded, rule a) deleted 2026-11-15 by lane/expdel2-45-trees; code recoverable at 7ffe9b4185.
 # Restore: git apply experiments/removed/MOJOLEARN_TREES_T28_PREFIX.patch
-comptime T28_PREFIX = False
+# (Sweep 2026-11-15: the unread constant T28_PREFIX was removed.)
 # C47_GBDT (8 MiB cap on the lossguide exact batch width) deleted by lane/grid-prune 2026-10-07; T17_BATCH owns the width.
 
 # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
@@ -132,12 +132,12 @@ comptime T26 = False
 # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
 # TOMBSTONE: MOJOLEARN_TREES_T30_ADABOOST (DELETE-ARM, opt-in, no A/B recorded, rule a) deleted 2026-11-15 by lane/expdel2-45-trees; code recoverable at 0469c65bd2.
 # Restore: git apply experiments/removed/MOJOLEARN_TREES_T30_ADABOOST.patch
-comptime T30_ADABOOST = False
+# (Sweep 2026-11-15: the unread constant T30_ADABOOST was removed.)
 
 # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
 # TOMBSTONE: MOJOLEARN_TREES_C45_GBDT (DELETE-ARM, opt-in, no A/B recorded, rule a) deleted 2026-11-15 by lane/expdel2-45-trees; code recoverable at 92620cf9db.
 # Restore: git apply experiments/removed/MOJOLEARN_TREES_C45_GBDT.patch
-comptime C45_GBDT = False
+# (Sweep 2026-11-15: the unread constant C45_GBDT was removed.)
 
 # ---- Lane S3 trees-structural (2026-10-07), all default OFF ----
 
@@ -163,14 +163,14 @@ comptime ORD_STD_GRIDFOLD = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 # depth level with an uncapped frontier. Bit-neutral (see the call sites).
 # TOMBSTONE: MOJOLEARN_TREES_LG_LEVEL_ROUNDS (DELETE-ARM, opt-in, no A/B recorded, rule a) deleted 2026-11-15 by lane/expdel2-45-trees; code recoverable at ce4ab6287e.
 # Restore: git apply experiments/removed/MOJOLEARN_TREES_LG_LEVEL_ROUNDS.patch
-comptime LG_LEVEL_ROUNDS = False
+# (Sweep 2026-11-15: the unread constant LG_LEVEL_ROUNDS was removed.)
 
 # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
 # CTR_SORTFREE_SUMS (gbdt-categorical, gbdt-ordered non-symmetric leaves):
 # per-(permutation, leaf) sums without the per-permutation radix sort.
 # TOMBSTONE: MOJOLEARN_TREES_CTR_SORTFREE_SUMS (DELETE-ARM, opt-in, no A/B recorded, rule a) deleted 2026-11-15 by lane/expdel2-45-trees; code recoverable at a3d500c032.
 # Restore: git apply experiments/removed/MOJOLEARN_TREES_CTR_SORTFREE_SUMS.patch
-comptime CTR_SORTFREE_SUMS = False
+# (Sweep 2026-11-15: the unread constant CTR_SORTFREE_SUMS was removed.)
 
 # ======== lane fg-gbdt-ordered (2026-10-09): the Ordered fold-arm overhead ========
 # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.

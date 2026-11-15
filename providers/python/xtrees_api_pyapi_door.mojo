@@ -7,7 +7,6 @@ helpers they call are in `xtrees/api_kernels.mojo`), shared by the GPU binding
 Every buffer is a caller-owned address; `params` is a Python list of ints and
 floats. Nothing is retained."""
 from bindings.py_lists import py_list_i64
-from gbdt.trees_identical_switches import T30_ADABOOST
 from std.python import PythonObject
 from std.python.bindings import PythonModuleBuilder
 from xtrees.label_weights_native import LABEL_WEIGHTS_API
