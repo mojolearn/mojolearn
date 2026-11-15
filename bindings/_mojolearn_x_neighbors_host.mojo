@@ -35,7 +35,8 @@ from providers.python.x_neighbors_host_pyapi_door import unit_ff_binding
 from providers.python.x_neighbors_host_pyapi_door import ocsvm_labels_binding, nc_labels_binding, nc_proba_binding, lp_dense_proba_binding
 from x_neighbors.graph_host import op_louvain, op_pr_csr, op_louvain_csr
 from providers.python.x_neighbors_host_pyapi_door import kpca_resident_binding
-from x_neighbors.kfeat_rng import XN_IDN_SKETCH_CTR
+# TOMBSTONE: MOJOLEARN_IDN_XN_SKETCH_CTR_OFF (old path, no A/B row; owner expdel2-15-cluster; non-owner sites) deleted 2026-11-15 by lane/expdel2-10-cluster; code recoverable at 847cbd32c1.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_XN_SKETCH_CTR_OFF.expdel2-10-cluster.patch; record in docs/TOMBSTONES.md.
 from providers.python.x_neighbors_host_pyapi_door import kfeat_pcs_draw_idn_host_binding, kfeat_schi2_fit_idn_host_binding
 
 
@@ -1252,9 +1253,10 @@ def build__mojolearn_x_neighbors_host() -> PythonObject:
         # lane ne3-g-svc-gp-neighbors (N324): LabelPropagation rbf predict / proba in one session
         m.def_function[lp_dense_proba_binding]("x_neighbors_lp_dense_proba")
         # lane fix-k1-neighbors: the host column of the samplers' counter-based draws
-        comptime if XN_IDN_SKETCH_CTR:
-            m.def_function[kfeat_schi2_fit_idn_host_binding]("x_neighbors_kfeat_schi2_fit_idn")
-            m.def_function[kfeat_pcs_draw_idn_host_binding]("x_neighbors_kfeat_pcs_draw_idn")
+        # TOMBSTONE: MOJOLEARN_IDN_XN_SKETCH_CTR_OFF (old path, no A/B row; owner expdel2-15-cluster; non-owner sites) deleted 2026-11-15 by lane/expdel2-10-cluster; code recoverable at 847cbd32c1.
+        # Restore: git apply experiments/removed/MOJOLEARN_IDN_XN_SKETCH_CTR_OFF.expdel2-10-cluster.patch; record in docs/TOMBSTONES.md.
+        m.def_function[kfeat_schi2_fit_idn_host_binding]("x_neighbors_kfeat_schi2_fit_idn")
+        m.def_function[kfeat_pcs_draw_idn_host_binding]("x_neighbors_kfeat_pcs_draw_idn")
         return m.finalize()
     except e:
         abort(String("failed to create _mojolearn_x_neighbors_host: ", e))

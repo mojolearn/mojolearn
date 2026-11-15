@@ -52,7 +52,8 @@ from providers.python.x_neighbors_dev_pyapi_door import (
     kfeat_schi2_fit_idn_binding,
     kfeat_pcs_draw_idn_binding,
 )
-from x_neighbors.kfeat_rng import XN_IDN_SKETCH_CTR
+# TOMBSTONE: MOJOLEARN_IDN_XN_SKETCH_CTR_OFF (old path, no A/B row; owner expdel2-15-cluster; non-owner sites) deleted 2026-11-15 by lane/expdel2-10-cluster; code recoverable at 847cbd32c1.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_XN_SKETCH_CTR_OFF.expdel2-10-cluster.patch; record in docs/TOMBSTONES.md.
 
 
 def _a(v: PythonObject, k: Int) raises -> Int:
@@ -1270,9 +1271,10 @@ def build__mojolearn_x_neighbors() -> PythonObject:
             m.def_function[kfeat_schi2_weights_binding]("x_neighbors_kfeat_schi2_weights")
             m.def_function[kfeat_schi2_transform_binding]("x_neighbors_kfeat_schi2_transform")
         # lane fix-k1-neighbors: the samplers' counter-based draws (IDENTICAL)
-        comptime if XN_IDN_SKETCH_CTR:
-            m.def_function[kfeat_schi2_fit_idn_binding]("x_neighbors_kfeat_schi2_fit_idn")
-            m.def_function[kfeat_pcs_draw_idn_binding]("x_neighbors_kfeat_pcs_draw_idn")
+        # TOMBSTONE: MOJOLEARN_IDN_XN_SKETCH_CTR_OFF (old path, no A/B row; owner expdel2-15-cluster; non-owner sites) deleted 2026-11-15 by lane/expdel2-10-cluster; code recoverable at 847cbd32c1.
+        # Restore: git apply experiments/removed/MOJOLEARN_IDN_XN_SKETCH_CTR_OFF.expdel2-10-cluster.patch; record in docs/TOMBSTONES.md.
+        m.def_function[kfeat_schi2_fit_idn_binding]("x_neighbors_kfeat_schi2_fit_idn")
+        m.def_function[kfeat_pcs_draw_idn_binding]("x_neighbors_kfeat_pcs_draw_idn")
         return m.finalize()
     except e:
         abort(String("failed to create _mojolearn_x_neighbors: ", e))
