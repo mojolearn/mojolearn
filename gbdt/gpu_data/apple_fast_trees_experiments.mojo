@@ -60,7 +60,9 @@ comptime AFT_G08 = False
 comptime AFT_G09 = False
 # G10: four coalesced rows per weighted-frequency/mean-scatter CTR worker.
 # No performance/quality evidence; preserve priors, index maps and prefix sums.
-comptime AFT_G10 = AFT_G_APPLE_FAST and is_defined["MOJOLEARN_AFT_G10"]()
+# TOMBSTONE: MOJOLEARN_AFT_G10 (DELETE-EXPERIMENT, never-run Apple FAST programme card, rule g) deleted 2026-11-15 by lane/expdel2-42-trees; code recoverable at d9dedc681d.
+# Restore: git apply experiments/removed/MOJOLEARN_AFT_G10.patch; record in docs/TOMBSTONES.md.
+comptime AFT_G10 = False
 # G11: 128-thread ordered batched derivative/weight reduction.
 # No performance/quality evidence; same prefix tasks, eight chunks and RNG.
 comptime AFT_G11 = AFT_G_APPLE_FAST and is_defined["MOJOLEARN_AFT_G11"]()
