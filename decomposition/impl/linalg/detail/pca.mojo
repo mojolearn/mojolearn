@@ -40,7 +40,8 @@ from gemm.contract import OP_TN
 #: gl2p-pca-grammma-istella-r; M2 quality-only check gl2p-pca-quality on a
 #: seeded 200,000 x 220 matrix: explained_variance_ max relative difference
 #: 3.4e-06, largest component subspace angle 1.8e-06 rad).
-#: -D MOJOLEARN_PCA_FAST_GRAM_MMA_OFF restores the IDENTICAL Gram (the A/B arm).
+#: (Its -D MOJOLEARN_PCA_FAST_GRAM_MMA_OFF rollback, the A/B arm, was deleted
+#: 2026-11-15; docs/TOMBSTONES.md.)
 #: Past the split-K Gram's capacity (d > 128: Istella's 220 features) the
 #: FAST covariance ran `gemm_tn_identical_v1`, the IDENTICAL profile's
 #: one-chain-per-cell Gram, plus a second centering pass to restore the
@@ -49,7 +50,9 @@ from gemm.contract import OP_TN
 #: row ranges summed with f32 atomics into a zeroed output), then the
 #: 1 / (n - 1) scale. The device copy is the fit's own (`pca_fit_host`
 #: uploads it), so the restore pass is skipped. FAST + Apple only.
-comptime PCA_FAST_GRAM_MMA = AFN_GEMM_APPLE and not is_defined["MOJOLEARN_PCA_FAST_GRAM_MMA_OFF"]()
+# TOMBSTONE: MOJOLEARN_PCA_FAST_GRAM_MMA_OFF (old path, superseded by the FAST+Apple default) deleted 2026-11-15 by lane/expdel-02-decomposition-series; code recoverable at d6f96dfe59.
+# Restore: git apply experiments/removed/MOJOLEARN_PCA_FAST_GRAM_MMA_OFF.patch; record in docs/TOMBSTONES.md.
+comptime PCA_FAST_GRAM_MMA = AFN_GEMM_APPLE
 #: blocks the split Gram aims for (tiles x splits), about 8 per M3 Ultra core
 comptime PCA_GRAM_BLOCK_TARGET = 640
 from checks.numerics import ftz, identical_div, identical_mul

@@ -662,6 +662,7 @@ in the tables after the sections.
 | [`MOJOLEARN_FA_FAST_QRR_OFF`](#mojolearn_fa_fast_qrr_off-old-path-deleted-2026-11-15) | Decomp (FactorAnalysis DevExec.qr_r upload, FAST Apple) | removed (old path; FAST+Apple default ACCEPT, afc_ab_def) | 2026-11-15 | [MOJOLEARN_FA_FAST_QRR_OFF.patch](../experiments/removed/MOJOLEARN_FA_FAST_QRR_OFF.patch) |
 | [`MOJOLEARN_FA_TRANSFORM_FUSED`](#mojolearn_fa_transform_fused-loser-deleted-2026-11-15) | Decomp (FactorAnalysis.transform, FAST Apple opt-in) | NEUTRAL (rab7-fatransform istella +2.0%) | 2026-11-15 | [MOJOLEARN_FA_TRANSFORM_FUSED.patch](../experiments/removed/MOJOLEARN_FA_TRANSFORM_FUSED.patch) |
 | [`MOJOLEARN_IPCA_FAST_DEV_OFF`](#mojolearn_ipca_fast_dev_off-old-path-deleted-2026-11-15) | Decomp (IncrementalPCA batch stack, FAST Apple) | removed (old path; FAST+Apple default KEPT, gl2k-ipca-dev) | 2026-11-15 | [MOJOLEARN_IPCA_FAST_DEV_OFF.patch](../experiments/removed/MOJOLEARN_IPCA_FAST_DEV_OFF.patch) |
+| [`MOJOLEARN_PCA_FAST_GRAM_MMA_OFF`](#mojolearn_pca_fast_gram_mma_off-old-path-deleted-2026-11-15) | Decomp (PCA covariance Gram past the split-K capacity, FAST Apple) | removed (old path; FAST+Apple default KEPT, gl2p-pca-grammma) | 2026-11-15 | [MOJOLEARN_PCA_FAST_GRAM_MMA_OFF.patch](../experiments/removed/MOJOLEARN_PCA_FAST_GRAM_MMA_OFF.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -6431,4 +6432,12 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md (section expdel-02-
 - **Verdict**: KEPT, FAST+Apple default (EXPERIMENTS.md `IPCA_FAST_DEV`, gl2k-ipca-dev-taxi): M3 one run per arm, incremental-pca taxi 159 -> 136 ms (-14.5%), output digest bit-identical. No bit change on any column.
 - **Deleted by**: lane/expdel-02-decomposition-series (docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md); code recoverable at `91dc329408`.
 - **Restore**: `git apply experiments/removed/MOJOLEARN_IPCA_FAST_DEV_OFF.patch`, then delete the `MOJOLEARN_IPCA_FAST_DEV_OFF` refusal in `core/experiment_guards_decomposition.mojo`.
+- **Records**: refusal in `core/experiment_guards_decomposition.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel-02-decomposition-series section).
+
+### MOJOLEARN_PCA_FAST_GRAM_MMA_OFF: old path deleted (2026-11-15)
+
+- **What it was**: the FAST+Apple rollback of `PCA_FAST_GRAM_MMA` (`decomposition/impl/linalg/detail/pca.mojo`; also the base of `PCA_FAST_POOL` / `TSVD_FAST_POOL` in `decomposition/estimator.mojo`): with `-D MOJOLEARN_PCA_FAST_GRAM_MMA_OFF` the FAST covariance past the split-K Gram's capacity ran the IDENTICAL one-chain-per-cell Gram and a second centering pass. Deleted: the define read; `PCA_FAST_GRAM_MMA` is `AFN_GEMM_APPLE`. The IDENTICAL Gram stays for every other build.
+- **Verdict**: KEPT, FAST+Apple default (EXPERIMENTS.md `PCA_FAST_GRAM_MMA`, gl2p-pca-grammma-istella-r, quality gl2p-pca-quality on the M2): M3 one run per arm, pca istella 606 -> 490 ms (-19%); explained_variance_ relative difference 3.4e-06, subspace angle 1.8e-06 rad (FAST, nondeterministic atomic sum). No bit change on any column.
+- **Deleted by**: lane/expdel-02-decomposition-series (docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md); code recoverable at `d6f96dfe59`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_PCA_FAST_GRAM_MMA_OFF.patch`, then delete the `MOJOLEARN_PCA_FAST_GRAM_MMA_OFF` refusal in `core/experiment_guards_decomposition.mojo`.
 - **Records**: refusal in `core/experiment_guards_decomposition.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel-02-decomposition-series section).
