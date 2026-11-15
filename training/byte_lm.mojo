@@ -217,33 +217,23 @@ comptime BYTE_LM_RELEASE_EAGER = (
     is_defined["MOJOLEARN_BYTE_LM_RELEASE_EAGER"]() or byte_lm_release_eager_for[TARGET_COLUMN]()
 ) and not is_defined["MOJOLEARN_BYTE_LM_RETAIN_EAGER"]()
 
-comptime BYTE_LM_CE_UNALIASED = is_defined["MOJOLEARN_BYTE_LM_CE_UNALIASED"]()
+# TOMBSTONE: MOJOLEARN_BYTE_LM_CE_UNALIASED (opt-in arm: five separate [M, V] CE buffers, no A/B recorded) deleted
+# 2026-11-15 by lane/expdel2-31-neural; code recoverable at 578fb1af7e. The aliased buffers are the only spelling;
+# byte_lm_ce_aliased() stays as the witness the binding exports and returns True.
+# Restore: git apply experiments/removed/MOJOLEARN_BYTE_LM_CE_UNALIASED.patch
 # lane restore-byte-lm-hand-step (2026-11-13): the B arm of the restored hand
 # step (see "the hand step (default)" below). A/B arm (default off): every
 # step, gradient, update and evaluation of the trainer on its captured program
 # (lane x7) instead of the hand step. The switch is defined once in
 # training/byte_lm_config.mojo (BYTE_LM_PROGRAM_STEP) so the CPU column reads
 # the same one (lane restore-byte-lm-host-step).
-"""DEVIATION 3011: build the five `[M, V]` cross-entropy buffers as five
-SEPARATE allocations, the way they were before the LM step memory work
-aliased them.
-
-THIS DEFINE EXISTS TO BE THE OTHER ARM. Aliasing is a storage decision and
-the whole claim about it is that it moves no bit, so the claim is only worth
-something if the unaliased spelling can still be BUILT and RUN beside it on
-the same fixture. `[[mojotrees-switches-must-flip]]`: a flip nobody can flip
-is prose. The shipped build defines nothing and gets the aliased buffers,
-which are 3 * M * V * 4 bytes smaller."""
+"""DEVIATION 3011: the five `[M, V]` cross-entropy buffers are aliased views
+(the unaliased B arm was deleted 2026-11-15, see the TOMBSTONE above)."""
 
 
 def byte_lm_ce_aliased() -> Bool:
-    """False in a build carrying `-D MOJOLEARN_BYTE_LM_CE_UNALIASED=1`.
-
-    An A/B that cannot tell its two arms apart is not an A/B: without this
-    witness, building the same arm twice and comparing it with itself reads
-    exactly like a passed identity gate."""
-    comptime if BYTE_LM_CE_UNALIASED:
-        return False
+    """True: the cross-entropy buffers are always aliased (the unaliased arm
+    and its define were deleted 2026-11-15)."""
     return True
 
 
@@ -728,10 +718,7 @@ struct ByteBuffers(Movable):
         if config.chunked_lm_head_v2:
             self.ce_shift = _zeros(ctx, 1)
         else:
-            comptime if BYTE_LM_CE_UNALIASED:
-                self.ce_shift = _zeros(ctx, M * V)
-            else:
-                self.ce_shift = self.logits.create_sub_buffer[DType.float32](0, M * V)
+            self.ce_shift = self.logits.create_sub_buffer[DType.float32](0, M * V)
         self.ce_expo = _zeros(ctx, 1 if config.chunked_lm_head_v2 else M * V)
         self.ce_denom = _zeros(ctx, M)
         self.ce_logdenom = _zeros(ctx, M)
@@ -748,12 +735,8 @@ struct ByteBuffers(Movable):
             self.ce_weights = _zeros(ctx, 1)
             self.ce_dlogits = _zeros(ctx, 1)
         else:
-            comptime if BYTE_LM_CE_UNALIASED:
-                self.ce_weights = _zeros(ctx, M * V)
-                self.ce_dlogits = _zeros(ctx, M * V)
-            else:
-                self.ce_weights = self.ce_expo.create_sub_buffer[DType.float32](0, M * V)
-                self.ce_dlogits = self.ce_expo.create_sub_buffer[DType.float32](0, M * V)
+            self.ce_weights = self.ce_expo.create_sub_buffer[DType.float32](0, M * V)
+            self.ce_dlogits = self.ce_expo.create_sub_buffer[DType.float32](0, M * V)
         self.ce_ones = _ones(ctx, 1 if config.chunked_lm_head_v2 else identical_ce_ones_floats(M, V))
         comptime if NN62_LIFETIME_ARENA:
             self.ce_ws = self.neural_scratch[0].view(0, 0)
