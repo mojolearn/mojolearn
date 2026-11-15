@@ -50,6 +50,17 @@ def cg_search_kernel(
 # Restore: git apply experiments/removed/MOJOLEARN_ANN3_CAGRA_TEAM.expdel2-13-cluster.patch; record in docs/TOMBSTONES.md.
 
 
+#: The device prune and merge (gap-fails2, 2026-10-02): one block per node,
+#: threads striding over the row, the row's composite keys sorted block-wide
+#: in threadgroup memory. The widest row is the comptime capacity of the
+#: launched specialization (64, 128, 256, 512 or 1024 entries, the smallest
+#: that holds intermediate_graph_degree), so no degree routes to the host.
+comptime PRUNE_KMAX = 1024
+comptime PRUNE_TPB = 256
+comptime U64_MAX = ~UInt64(0)
+
+
+@always_inline
 def _u32_bits(v: Int32) -> UInt64:
     """`v`'s 32 bits, zero-extended (masked: index_map.mojo::key_lo's
     sign-extension note)."""
