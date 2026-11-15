@@ -7,7 +7,6 @@ NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED �
 """
 # TOMBSTONE: MOJOLEARN_TREES_T16 (slower) deleted 2026-10-07 by 359df2d05; code recoverable at 359df2d05^.
 # Restore: git apply experiments/removed/MOJOLEARN_TREES_T16.patch; record in docs/TOMBSTONES.md.
-from std.sys.compile import is_defined, get_defined_int
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 
 # T16 (resident Lossguide frontier, = I17) removed 2026-10-07: lost on NVIDIA and AMD.
@@ -24,8 +23,6 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 #   gbdt-categorical taxicat AMD 10988 -> 10558 ms (0.961x); NV cell not
 #   measured, quality FAIL on that cell's second check (open, both arms).
 #   Geometric mean 0.922x; quality SAME on the lossguide cells; no bits change.
-# `-D MOJOLEARN_TREES_T17_BATCH=32` measures the old width (the grid's
-# "32" arm); 64 stays a sweep arm; `=0` still selects the pre-T17 rule.
 # TOMBSTONE: MOJOLEARN_TREES_T17_BATCH (DELETE-ARM, rule e, EXP:1641: the width force values beside the promoted 128 default) deleted 2026-11-15 by lane/expdel2-45-trees; code recoverable at fe9794876a.
 # Restore: git apply experiments/removed/MOJOLEARN_TREES_T17_BATCH.patch
 comptime T17_BATCH = 128 if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else 0
@@ -48,8 +45,7 @@ comptime T18 = False
 comptime T21 = False
 
 # T21 stream count is a scheduling arm, never an accumulator-width change:
-# one int sweep `-D MOJOLEARN_TREES_T21_STREAMS=1|2|4` (absent = 1, the
-# incumbent single replica stream). Replaces T21_STREAM / T21_STREAM4.
+# one replica stream (the sweep define is deleted).
 # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
 # TOMBSTONE: MOJOLEARN_TREES_T21_STREAMS (DELETE-ARM, opt-in, no A/B recorded, rule a) deleted 2026-11-15 by lane/expdel2-45-trees; code recoverable at 293d3da2dd.
 # Restore: git apply experiments/removed/MOJOLEARN_TREES_T21_STREAMS.patch
@@ -65,9 +61,7 @@ comptime T21_STREAMS = 1
 #   With ORD_STD_GRIDFOLD also on, istella NV reads 0.675x. Quality SAME,
 #   NV vs AMD output hashes MATCH. Geometric mean 0.887x. Ordered fits of
 #   gbdt-categorical reach this storage too; not measured there.
-# `-D MOJOLEARN_TREES_T22_OFF` restores the incumbent storage (the grid's
-# "off" arm). The old opt-in define is refused in
-# core/six_lane_experiment_guards.mojo.
+# The old opt-in define is refused in core/six_lane_experiment_guards.mojo.
 # TOMBSTONE: MOJOLEARN_TREES_T22_OFF (DELETE-OLD-PATH, rule e, EXP:1636 PROMOTED: the document-keyed storage above is the measured default) deleted 2026-11-15 by lane/expdel2-45-trees; code recoverable at 0fcc31241b.
 # Restore: git apply experiments/removed/MOJOLEARN_TREES_T22_OFF.patch
 comptime T22 = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
@@ -158,9 +152,7 @@ comptime C45_GBDT = False
 #   gbdt-ordered taxi    NV 22296 -> 21538 ms (0.966x)  AMD 24991 -> 23004 ms (0.921x)
 #   gbdt-ordered istella NV 54409 -> 54239 ms (0.997x)  AMD 39277 -> 38241 ms (0.974x)
 #   Geometric mean 0.964x. Quality SAME; NV vs AMD output hashes MATCH.
-# `-D MOJOLEARN_TREES_ORD_STD_GRIDFOLD_OFF` restores the 256 lane chains on
-# the device and in the host column together (the grid's "off" arm). The old
-# opt-in define is refused in core/six_lane_experiment_guards.mojo.
+# The old opt-in define is refused in core/six_lane_experiment_guards.mojo.
 # TOMBSTONE: MOJOLEARN_TREES_ORD_STD_GRIDFOLD_OFF (DELETE-OLD-PATH, rule e, EXP:1637 PROMOTED: the full-grid fold above is the measured default) deleted 2026-11-15 by lane/expdel2-45-trees; code recoverable at 56ec6a17df.
 # Restore: git apply experiments/removed/MOJOLEARN_TREES_ORD_STD_GRIDFOLD_OFF.patch
 comptime ORD_STD_GRIDFOLD = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
@@ -187,7 +179,7 @@ comptime CTR_SORTFREE_SUMS = False
 # against CatBoost's 25 ms). Every switch below is IDENTICAL-only; FAST builds
 # keep their own (Apple ORD_ALL / ORDERED_BATCH_EST) paths untouched.
 
-# F ORD_SKIP_UNSEARCHED_PERM (default ON, pure waste removal; `_OFF` restores).
+# F ORD_SKIP_UNSEARCHED_PERM (always on under IDENTICAL, pure waste removal).
 # `fit_ordered` picks the structure's learn permutation as
 # `rng % (learn_count - 1)` (CatBoost's modulus, dynamic_boosting.h:282-289),
 # so the LAST learn permutation (`learn_count - 1`, when learn_count > 1) is
@@ -209,7 +201,7 @@ comptime CTR_SORTFREE_SUMS = False
 # Restore: git apply experiments/removed/MOJOLEARN_ORD_SKIP_UNSEARCHED_PERM_OFF.patch
 comptime ORD_SKIP_UNSEARCHED_PERM = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 
-# C IDN_ORD_CAT_PLANES (default ON, launch removal; `_OFF` restores).
+# C IDN_ORD_CAT_PLANES (always on under IDENTICAL, launch removal).
 # Each learn permutation's F fold cursors live in ONE buffer at the
 # concatenated fold offsets (sub-buffer views, as Apple's ORDERED_CAT_CURSORS),
 # and each searchable learn permutation keeps its own-order targets and weights
