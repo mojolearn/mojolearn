@@ -2586,3 +2586,11 @@ Plan `docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md`; sections in docs/TOMBST
 | `MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS_OFF` | enet-cv, lasso-cv | lane/expdel2-06-base (recoverable at 6ac3a7434d) | NV v0063/v0064, AMD a1645/a1646 | avg 0.935 (4096 -> 1024) | DELETED 2026-11-15 (old path; default kept) | `ENETCV_SCORE_BLOCKS` folded to its default constant; patch experiments/removed/MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS_OFF.patch |
 | `MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE_OFF` | ols, ridge | lane/expdel2-06-base (recoverable at 439c466840) | g50ebe26a5 | ridge taxi off 5.76x slower | DELETED 2026-11-15 (old path; default kept) | `LINEAR_GRAM_SOLVE` folded to its default constant; patch experiments/removed/MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE_OFF.patch |
 | `MOJOLEARN_CLASSICAL_RIDGECV_FF_BLOCKED` | ridge-cv (float-float fallback) | lane/expdel2-06-base (recoverable at 49c61a4093) | none | - | DELETED 2026-11-15 (opt-in arm; unmeasured opt-in arm) | `RIDGECV_FF_BLOCKED` folded to its default constant; patch experiments/removed/MOJOLEARN_CLASSICAL_RIDGECV_FF_BLOCKED.patch |
+
+## Experiment deletions V2: lane expdel2-07-base (2026-11-15)
+
+Plan `docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md`; sections in docs/TOMBSTONES.md. No bits change: each deleted arm was off by default and each deleted `_OFF` rollback left the default.
+
+| define | algorithm / dataset | branch@sha | A/B tag | before -> after | verdict | reason |
+|---|---|---|---|---|---|---|
+| `MOJOLEARN_CLASSICAL_C01_LEAF` | regression metrics (sgd-reg regression_report) | lane/expdel2-07-base (recoverable at 561d08802a) | - | - | DELETED 2026-11-15 (arm) | loser / unmeasured sweep; `C01_LEAF` = 32 and `C01_LEAF_LEGAL` = True kept as constants; patch experiments/removed/MOJOLEARN_CLASSICAL_C01_LEAF.patch; no bit change |

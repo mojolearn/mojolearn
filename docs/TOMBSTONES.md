@@ -726,6 +726,7 @@ in the tables after the sections.
 | [`MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS_OFF`](#mojolearn_classical_enetcv_score_blocks_off-old-path-deleted-2026-11-15) | Linear (LassoCV / ElasticNetCV 4096-row score blocks, IDENTICAL old path) | removed (old path; IDENTICAL default kept) | 2026-11-15 | [MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS_OFF.patch](../experiments/removed/MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS_OFF.patch) |
 | [`MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE_OFF`](#mojolearn_classical_linear_gram_solve_off-old-path-deleted-2026-11-15) | Linear (OLS / Ridge incumbent routes beside the resident Gram, IDENTICAL old path) | removed (old path; IDENTICAL default kept) | 2026-11-15 | [MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE_OFF.patch](../experiments/removed/MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE_OFF.patch) |
 | [`MOJOLEARN_CLASSICAL_RIDGECV_FF_BLOCKED`](#mojolearn_classical_ridgecv_ff_blocked-unmeasured-arm-deleted-2026-11-15) | Linear (RidgeCV float-float fallback in block partials, IDENTICAL) | removed (opt-in arm; unmeasured opt-in arm) | 2026-11-15 | [MOJOLEARN_CLASSICAL_RIDGECV_FF_BLOCKED.patch](../experiments/removed/MOJOLEARN_CLASSICAL_RIDGECV_FF_BLOCKED.patch) |
+| [`MOJOLEARN_CLASSICAL_C01_LEAF`](#mojolearn_classical_c01_leaf-arm-deleted-2026-11-15) | Metrics (regression-metrics PairSum leaf length sweep 32/64/128, IDENTICAL) | removed (opt-in arm; EXP:1530 DROPPED-slower record, no winning arm) | 2026-11-15 | [MOJOLEARN_CLASSICAL_C01_LEAF.patch](../experiments/removed/MOJOLEARN_CLASSICAL_C01_LEAF.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -7059,3 +7060,11 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md (section expdel-02-
 - **Deleted by**: lane/expdel2-06-base (expdel2-06-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `49c61a4093`.
 - **Restore**: `git apply experiments/removed/MOJOLEARN_CLASSICAL_RIDGECV_FF_BLOCKED.patch`, then delete the `MOJOLEARN_CLASSICAL_RIDGECV_FF_BLOCKED` refusal in `core/experiment_guards_linear.mojo`.
 - **Records**: refusal in `core/experiment_guards_linear.mojo`; `classical-cv-folds.json` control `ridgecv_ff_blocked`: `removed` entry added (control removed from `controls` and from its algorithms); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-06-base section).
+
+## MOJOLEARN_CLASSICAL_C01_LEAF: arm deleted (2026-11-15)
+
+- **What it was**: the opt-in arm behind `C01_LEAF` in `experiments/classical_identical_ideas/shared_controls.mojo`; the alias stays as the folded constant so importers in other lanes compile, and each importer's lane deletes its branch.
+- **Verdict**: EXP:1530 (`CLASSICAL_C01_LEAF64` / `_LEAF128`, six-lane all-on 20261006): DROPPED-slower; the =64/=128 sweep that replaced them has no A/B. Deleted under AGENTS.md "An unmeasured arm is deleted" (Andrew, 2026-11-15). No bit change on any column.
+- **Deleted by**: lane/expdel2-07-base (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `561d08802a`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_CLASSICAL_C01_LEAF.patch`, then delete the `MOJOLEARN_CLASSICAL_C01_LEAF` refusal in `core/experiment_guards_base.mojo`.
+- **Records**: refusal in `core/experiment_guards_base.mojo`; `classical-decomp.json` control `C01_LEAF`: `removed` entry added (control removed from `controls` and from its algorithms); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-07-base section).

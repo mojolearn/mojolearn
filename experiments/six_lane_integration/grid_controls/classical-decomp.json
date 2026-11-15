@@ -4,27 +4,6 @@
  "branch": "lane/classical-decomp",
  "head": "f0bbeef91",
  "controls": {
-  "C01_LEAF": {
-   "define": "MOJOLEARN_CLASSICAL_C01_LEAF",
-   "kind": "int_sweep",
-   "arms": {
-    "32": [],
-    "64": [
-     "MOJOLEARN_CLASSICAL_C01_LEAF=64"
-    ],
-    "128": [
-     "MOJOLEARN_CLASSICAL_C01_LEAF=128"
-    ]
-   },
-   "default": "32",
-   "source": [
-    "x_metrics/common.mojo:46",
-    "experiments/classical_identical_ideas/shared_controls.mojo:15"
-   ],
-   "binding": "_mojolearn_x_metrics",
-   "bits_change": true,
-   "status": "split_from:C01_LEAF64/C01_LEAF128"
-  },
   "C01_MEAN": {
    "define": "MOJOLEARN_CLASSICAL_C01_MEAN",
    "kind": "switch",
@@ -141,9 +120,7 @@
   "expanded:sgd-reg@regression_report": {
    "binding": "_mojolearn_x_metrics",
    "route": "regression metrics PairSum leaf [C01_LEAF]",
-   "controls": [
-    "C01_LEAF"
-   ],
+   "controls": [],
    "interaction_groups": []
   },
   "classical:ols": {
@@ -223,6 +200,11 @@
    "define": "MOJOLEARN_CLASSICAL_C25_PROJECTION_REUSE_OFF",
    "control": "C25_PROJECTION_REUSE",
    "reason": "DELETED 2026-11-15 (lane/expdel2-06-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md; recoverable at 935328056e; patch experiments/removed/MOJOLEARN_CLASSICAL_C25_PROJECTION_REUSE_OFF.patch): old path, superseded by the measured IDENTICAL default. EXP:1984 PROMOTED (restored; IDENTICAL default; grid ge123e6f9 + ge123e6f9r2): geo-mean 0.903x over 8 vendor cells, worst 0.983x, kernel_rel_error SAME; the default is the recorded winner. Refused in core/experiment_guards_kernel.mojo; docs/TOMBSTONES.md."
+  },
+  {
+   "define": "MOJOLEARN_CLASSICAL_C01_LEAF",
+   "control": "C01_LEAF",
+   "reason": "DELETED 2026-11-15 (lane/expdel2-07-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md; recoverable at 561d08802a; patch experiments/removed/MOJOLEARN_CLASSICAL_C01_LEAF.patch): opt-in arm; EXP:1530 DROPPED-slower record, no winning arm. EXP:1530 (`CLASSICAL_C01_LEAF64` / `_LEAF128`, six-lane all-on 20261006): DROPPED-slower; the =64/=128 sweep that replaced them has no A/B. Deleted under AGENTS.md \"An unmeasured arm is deleted\" (Andrew, 2026-11-15). Refused in core/experiment_guards_base.mojo; docs/TOMBSTONES.md."
   }
  ],
  "notes": [
