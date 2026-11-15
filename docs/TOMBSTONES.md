@@ -2174,6 +2174,7 @@ Deletions reversed by new evidence. The code is back on main; the section and th
 | [`MOJOLEARN_IDN_MCD_CHOL`](#mojolearn_idn_mcd_chol-unmeasured-arm-deleted-2026-11-15) | MinCovDet / EllipticEnvelope IDENTICAL (x_decomp/mcd.mojo, x_decomp/kit_device.mojo) | 2026-11-15 (`c387c0b2c1`) | 2026-11-15 (lane/expdel2-restore-owed) | opt-in B arm, default unchanged, A/B owed at the wave sha | [MOJOLEARN_IDN_MCD_CHOL.patch](../experiments/removed/MOJOLEARN_IDN_MCD_CHOL.patch) |
 | [`MOJOLEARN_BYTE_LM_PROGRAM_STEP`](#mojolearn_byte_lm_program_step) | Neural (byte LM training step) | 2026-11-15 (`f105b7dcfb`) | 2026-11-15 (lane/expdel2-restore-owed) | opt-in B arm, default unchanged, A/B owed at the wave sha | [MOJOLEARN_BYTE_LM_PROGRAM_STEP.patch](../experiments/removed/MOJOLEARN_BYTE_LM_PROGRAM_STEP.patch) |
 | [`MOJOLEARN_AUTOGRAD_OPTIM`](#mojolearn_autograd_optim) | Neural (MLP trainer executor optimizer) | 2026-11-15 (`92d4b79ec8`) | 2026-11-15 (lane/expdel2-restore-owed) | opt-in B arm, default unchanged, A/B owed at the wave sha | [MOJOLEARN_AUTOGRAD_OPTIM.2026-11-15.patch](../experiments/removed/MOJOLEARN_AUTOGRAD_OPTIM.2026-11-15.patch) + [.expdel2-30-neural.patch](../experiments/removed/MOJOLEARN_AUTOGRAD_OPTIM.expdel2-30-neural.patch) |
+| [`MOJOLEARN_TREES_HIST_PACKED_GH`](#mojolearn_trees_hist_packed_gh) | GBDT (64-bit packed grad/hess histogram atomic, IDENTICAL, NVIDIA/AMD) | 2026-11-15 (`1082bcb01c`) | 2026-11-15 (lane/restore-run-arms-trees) | opt-in RUN arm (docs/plans/DELETED_ARMS_WORTH_RUNNING_2026-11-15.md), default unchanged, A/B owed on NVIDIA L40S | [MOJOLEARN_TREES_HIST_PACKED_GH.patch](../experiments/removed/MOJOLEARN_TREES_HIST_PACKED_GH.patch) |
 
 ## Trees
 
@@ -20356,6 +20357,7 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2
 - Records: refusal in `core/experiment_guards_trees.mojo`; grid entries moved to `removed` in `trees-hist-ideas.json` (hist_packed_gh); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-45-trees section).
 
 - Sweep (lane/expdel2-sweep, 2026-11-15): gbdt/trees_hist_switches.mojo: the unread HIST_PACKED_GH and HIST_WARP_AGG constants removed; no bits change (ce43384a98).
+Restored 2026-11-15 (lane/restore-run-arms-trees): RUN arm of docs/plans/DELETED_ARMS_WORTH_RUNNING_2026-11-15.md, opt-in, default unchanged; see Restored table.
 
 ### MOJOLEARN_TREES_HIST_WARP_AGG
 

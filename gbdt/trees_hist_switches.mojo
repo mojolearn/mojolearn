@@ -29,6 +29,8 @@ comptime _IDN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 # TOMBSTONE: MOJOLEARN_TREES_HIST_PACKED_GH (DELETE-ARM, opt-in, no A/B recorded, rule a) deleted 2026-11-15 by lane/expdel2-45-trees; code recoverable at e312bd1c25.
 # Restore: git apply experiments/removed/MOJOLEARN_TREES_HIST_PACKED_GH.patch
 # (Sweep 2026-11-15: the unread HIST_PACKED_GH constant was removed.)
+# RESTORED 2026-11-15 by lane/restore-run-arms-trees: RUN #10 of docs/plans/DELETED_ARMS_WORTH_RUNNING_2026-11-15.md (opt-in, default off; A/B owed on NVIDIA L40S).
+comptime HIST_PACKED_GH = _IDN and is_defined["MOJOLEARN_TREES_HIST_PACKED_GH"]()
 
 # Idea 2: wave-aggregated atomics. When every lane of a hardware wave holds
 # the same (feature, bin) cell, the wave sums its addends with one shuffle
