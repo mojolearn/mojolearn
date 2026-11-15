@@ -2,7 +2,7 @@
 discriminant analysis). One entry runs a program of units on the device
 (x_prep/common.mojo); the host binding runs the same units on the CPU."""
 from core.experiment_guards_base import BASE_GUARDS_OK
-from experiments.classical_identical_ideas.shared_controls import C08_DICTIONARY, C08_TARGET_CODES, C08_ORDINAL_FT, C04_LDA, C56_LDA_INPUT
+from experiments.classical_identical_ideas.shared_controls import C08_DICTIONARY, C08_TARGET_CODES, C04_LDA, C56_LDA_INPUT
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 
@@ -271,10 +271,12 @@ def proba64_binding() raises -> PythonObject:
 
 def c08_routes_binding() raises -> PythonObject:
     """C08 routes compiled in (lane classical-encoders): 1 TargetEncoder fit codes,
-    2 retired (C08 OneHotEncoder arm, deleted 2026-11-15), 4 OrdinalEncoder.fit_transform."""
+    2 retired (C08 OneHotEncoder arm, deleted 2026-11-15), 4 retired (C08 OrdinalEncoder arm, deleted 2026-11-15)."""
+    # TOMBSTONE: MOJOLEARN_CLASSICAL_C08_ORDINAL_FT (opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-02-base; code recoverable at 46115a2bb3.
+    # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C08_ORDINAL_FT.expdel2-02-base.patch; record in docs/TOMBSTONES.md.
     # TOMBSTONE: MOJOLEARN_CLASSICAL_C08_ONEHOT_FT (opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-02-base; code recoverable at 59c24bdf40.
     # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C08_ONEHOT_FT.expdel2-02-base.patch; record in docs/TOMBSTONES.md.
-    return PythonObject(Int(C08_TARGET_CODES) | (Int(C08_ORDINAL_FT) << 2))
+    return PythonObject(Int(C08_TARGET_CODES))
 
 
 def classical_shared_binding() raises -> PythonObject:
