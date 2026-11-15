@@ -8,8 +8,10 @@ What this file holds, on the host it runs on:
   - both classes read back a CPU, IDENTICAL, CPU-column binding;
   - MLP logits from a saved checkpoint equal the four-weight constructor's,
     each row equals the row alone, and every checkpoint refusal is by name;
-  - the Transformer stateless forward equals itself split by batch rows and
-    by ragged lengths, and every training entry is refused by name;
+  - the Transformer stateless forward equals itself split by ragged lengths,
+    and every training entry is refused by name (rows alone, the causal
+    prefix, decode == prefill and the one-ULP witness of the Transformer and
+    the MLP's rows alone are checks/native_tests/training_neural_inference.mojo);
   - when the source reference bindings are also present (a CPU identity
     column, never a wheel), both equal `SmallMLPTrainer.predict_logits` and
     `TransformerBlock.forward` byte for byte.
@@ -111,10 +113,8 @@ def test_mlp_logits_shape_rows_alone_and_checkpoint(binding):
     inf = ml.MLPInference(*_mlp_weights())
     X = _x(64)
     got = np.asarray(inf.predict_logits(X))
+    # rows alone equal the batch: the native check training_neural_inference
     assert got.shape == (64, 3) and got.dtype == np.float32
-    for i in (0, 1, 7, 63):
-        assert np.asarray(inf.predict_logits(X[i:i + 1])).tobytes() == got[i:i + 1].tobytes(), i
-    assert np.asarray(inf.predict_logits(X[1:8])).tobytes() == got[1:8].tobytes()
     assert set(inf.weights_) == {"weight1", "bias1", "weight2", "bias2"}
 
 
@@ -185,10 +185,7 @@ def test_transformer_forward_rows_ragged_and_refusals(binding):
         x = np.random.default_rng(5).standard_normal((4, 16, 32)).astype(np.float32)
         y = np.asarray(blk.forward(x))
         assert y.shape == (4, 16, 32)
-        for i in range(4):
-            assert np.asarray(blk.forward(x[i:i + 1])).tobytes() == y[i:i + 1].tobytes(), (window, i)
-        # causal: a prefix is the prefix of the whole
-        assert np.asarray(blk.forward(np.ascontiguousarray(x[:, :7]))).tobytes() == np.ascontiguousarray(y[:, :7]).tobytes()
+        # rows alone and the causal prefix: the native check training_neural_inference
         lengths = [16, 7, 1, 12]
         yr = np.asarray(blk.forward(x, lengths=lengths))
         for i, n in enumerate(lengths):
@@ -294,18 +291,6 @@ def _step_equals_full(model, x, alloc, as_position):
     return None
 
 
-def test_transformer_decode_equals_the_prefill(binding):
-    """THE DECODE IS THE PREFILL. A carried state, step and allocate_state
-    were refused by name until lane/stateful-cpu-decoding, because the
-    binding exported the fresh entry alone."""
-    tw = _block_weights()
-    x = np.random.default_rng(23).standard_normal((2, 12, 32)).astype(np.float32)
-    for window in (0, 8):
-        blk = ml.TransformerBlockInference(tw, n_heads=2, n_kv_heads=1, window=window)
-        bad = _step_equals_full(blk, x, lambda: blk.allocate_state(2, 12), np.asarray)
-        assert bad is None, (window, bad)
-
-
 @pytest.mark.parametrize("kind,cls,kw", _MAMBA)
 def test_mamba_decode_equals_the_prefill(binding, kind, cls, kw):
     blk = getattr(ml, cls)(_mamba_weights(kind), **kw)
@@ -328,30 +313,6 @@ def test_samba_decode_equals_the_forward(binding, tied):
     assert head.tobytes() == np.ascontiguousarray(full[:, :5]).tobytes()
     tail = np.asarray(inf.forward(np.ascontiguousarray(ids[:, 5:]), state))
     assert tail.tobytes() == np.ascontiguousarray(full[:, 5:]).tobytes()
-
-
-def test_one_ulp_in_the_cache_moves_a_position(binding):
-    """The comparison above CAN fail: one ULP on one cached value moves a
-    later position. v_cache cell 7 is named because a single ULP in a single
-    cached component is often absorbed (k_cache absorbs it at all of the
-    first thirty-two cells here), and an arm that absorbs its own
-    perturbation is indistinguishable from a pass."""
-    tw = _block_weights()
-    x = np.random.default_rng(3).standard_normal((2, 12, 32)).astype(np.float32)
-    blk = ml.TransformerBlockInference(tw, n_heads=2, n_kv_heads=1)
-    full = np.asarray(blk.forward(np.ascontiguousarray(x)))
-    state = blk.allocate_state(2, 12)
-    moved = None
-    for t in range(12):
-        if t == 6:
-            u = np.asarray(state.v_cache).reshape(-1).view(np.uint32)
-            before = int(u[7])
-            u[7] = before + 1
-            assert int(np.asarray(state.v_cache).reshape(-1).view(np.uint32)[7]) == before + 1
-        one = np.asarray(blk.step(np.ascontiguousarray(x[:, t:t + 1]), state))
-        if moved is None and np.ascontiguousarray(full[:, t:t + 1]).tobytes() != one.tobytes():
-            moved = t
-    assert moved == 6, moved
 
 
 def _samba_config(tied=True):
