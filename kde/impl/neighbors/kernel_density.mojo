@@ -2728,8 +2728,7 @@ comptime _KDE2_FAST_APPLE = (
 #: KDE2_DIMTILE_ANY_D: the explicit defines take the tile pass at every d.
 comptime KDE2_DIMTILE_ANY_D = _KDE2_FAST_APPLE and is_defined["MOJOLEARN_KDE_DIMTILE"]()
 #: FAST + Apple DEFAULT since lane/apple-fast-batchv (2026-10-03) for
-#: every n_features since 2026-10-04 (old n_features > 32 gate behind
-#: MOJOLEARN_LEGACY_NARROW_KDE_DIMTILE): M3 A/B vs main batchv-kde-dimtile-istella3
+#: every n_features since 2026-10-04: M3 A/B vs main batchv-kde-dimtile-istella3
 #: kde istella (d = 220) 137.2 -> 69.2 ms, mean_log_likelihood -222.27058 both;
 #: taxi (d = 11) 9.0 -> 17.8 ms (the old gate kept main's fused pass). Quality
 #: (tools/batchv_quality.sh, M2): score_samples within 9e-8 of the output scale.
@@ -2737,12 +2736,8 @@ comptime KDE2_DIMTILE_ANY_D = _KDE2_FAST_APPLE and is_defined["MOJOLEARN_KDE_DIM
 comptime KDE2_DIMTILE = KDE2_DIMTILE_ANY_D or (
     _KDE2_FAST_APPLE and not is_defined["MOJOLEARN_KDE_DIMTILE_OFF"]()
 )
-#: LEGACY, default OFF: the old gate took the tile pass only for
-#: n_features > 32, chosen between taxi (d 11, slower) and istella (d 220,
-#: faster). Removed as benchmark-tuned on 2026-10-04: the tile pass (which
-#: runs at any d) now serves every d; UNMEASURED.
-comptime KDE2_DIMTILE_LEGACY_NARROW = is_defined["MOJOLEARN_LEGACY_NARROW_KDE_DIMTILE"]()
-comptime KDE2_DIMTILE_MIN_D = 32
+# TOMBSTONE: MOJOLEARN_LEGACY_NARROW_KDE_DIMTILE (old benchmark-tuned n_features > 32 gate, no A/B recorded) deleted 2026-11-15 by lane/expdel2-19-kernel; code recoverable at 531563873b.
+# Restore: git apply experiments/removed/MOJOLEARN_LEGACY_NARROW_KDE_DIMTILE.patch; record in docs/TOMBSTONES.md.
 
 #: Threads per block, and the thread grid over (queries, train rows).
 comptime KDE2_TPB = 128
@@ -4245,10 +4240,7 @@ def kde_score_samples_device(
         # lane/apple-fast-kde2: FAST + Apple + -D MOJOLEARN_KDE_DIMTILE takes
         # the 2D tile pass (any d); every other build skips this block.
         comptime if KDE2_DIMTILE:
-            if (not staged_only) and not trace.enabled and (
-                KDE2_DIMTILE_ANY_D or not KDE2_DIMTILE_LEGACY_NARROW
-                or n_features > KDE2_DIMTILE_MIN_D
-            ):
+            if (not staged_only) and not trace.enabled:
                 kde2_score_samples_fast_apple(
                     ctx, train, query, weights, has_weights, sum_weights,
                     n_train, n_query, n_features, bandwidth, kernel, metric,
