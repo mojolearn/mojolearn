@@ -231,7 +231,7 @@ comptime C19_SGD_CHUNK = 2048
 # Grid g50ebe26a5: tsvd NV/AMD istella 2.34x/3.46x, taxi 1.83x/1.38x SLOWER (combined 2.84x / 1.59x).
 # TOMBSTONE: MOJOLEARN_CLASSICAL_C24_PANEL8 (measured arm not promoted) deleted 2026-11-15 by lane/expdel2-06-base; code recoverable at 2d9d6f1bd4.
 # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C24_PANEL8.patch; record in docs/TOMBSTONES.md.
-comptime C24_PANEL8 = False
+# (Sweep 2026-11-15: comptime C24_PANEL8 removed; nothing read it.)
 # C24 ROWS2048: TSQR leaf blocks of 2048 rows instead of 4096
 # (x_decomp/tsqr_core.mojo TS_ROWS; twice the leaf blocks in flight per
 # panel, a fixed row count, not a data shape). Bits change (the leaf
