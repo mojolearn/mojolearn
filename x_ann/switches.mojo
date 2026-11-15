@@ -74,7 +74,7 @@ comptime ANN3_DIRECT_OUT = False
 #: Plain copies: no bit moves.
 # TOMBSTONE: MOJOLEARN_ANN3_TRAINSET_COPY (unmeasured opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-14-cluster; code recoverable at 8d1d604991.
 # Restore: git apply experiments/removed/MOJOLEARN_ANN3_TRAINSET_COPY.patch; record in docs/TOMBSTONES.md.
-comptime ANN3_TRAINSET_COPY = False
+# (Sweep 2026-11-15: comptime ANN3_TRAINSET_COPY removed; always False, nothing read it.)
 
 #: The IVF-PQ / IVF-SQ residual launch and the IVF-SQ encode launch run one
 #: thread per ROW, each walking its row's cells in order, instead of one
