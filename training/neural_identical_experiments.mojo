@@ -30,7 +30,7 @@ comptime IDN_TRAIN_NO_DECODE_CACHE = False
 # Arm 3 of the ONE norm switch MOJOLEARN_IDN_NORM (norm_profile_contract.mojo).
 # TOMBSTONE: MOJOLEARN_IDN_NORM (arm 3, opt-in, no A/B recorded; owner another lane) deleted 2026-11-15 by lane/expdel2-32-neural; code recoverable at 311b50e05c.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_NORM.expdel2-32-neural.patch
-comptime IDN_RMS_ROW_BLOCK = False
+# (Sweep 2026-11-15: IDN_RMS_ROW_BLOCK = False removed with its reader and llama_rms_norm_row_block_kernel.)
 # NI26 (+ NN26, merged 2026-10-07; both enabled the same training_swiglu
 # launch): preserve both silu_out and gated for tracing and backward.
 # TOMBSTONE: MOJOLEARN_IDN_TRAIN_SWIGLU (opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-32-neural; code recoverable at 311b50e05c.

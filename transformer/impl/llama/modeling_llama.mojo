@@ -290,7 +290,7 @@ from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from gemm.experiments.neural_tiled_v2 import NI07_GROUPED_PROJECTIONS, neural_projection_triplet
 from training.neural_identical_experiments import (
-    IDN_RMS_ROW_BLOCK, IDN_TRAIN_SWIGLU, IDN_ROPE_CACHE,
+    IDN_TRAIN_SWIGLU, IDN_ROPE_CACHE,
     IDN_TRAIN_NO_DECODE_CACHE,
 )
 # DEVIATION 2630: the step phase timers and counters (core/step_phase.mojo;
@@ -2112,43 +2112,6 @@ def llama_rms_norm_kernel(
         )
 
 
-def llama_rms_norm_row_block_kernel(
-    sumsq: MutPointer[Float32, MutAnyOrigin],
-    out_buf: MutPointer[Float32, MutAnyOrigin],
-    x: MutPointer[Float32, MutAnyOrigin],
-    weight: MutPointer[Float32, MutAnyOrigin],
-    dm_in: Int32,
-    eps_in: Float32,
-):
-    """NI25 S arm: one block per row; original serial S1, parallel S3/S4.
-
-    Lane zero alone owns the original ascending FMA chain. A shared scalar
-    broadcasts the same rounded rstd to all output lanes, so the physical
-    thread count is never a numerical reduction parameter. No shape cutoff.
-    """
-    var t = Int(block_idx.x)
-    var lane = Int(thread_idx.x)
-    var dm = Int(dm_in)
-    var shared = stack_allocation[1, Float32, address_space=AddressSpace.SHARED]()
-    if lane == 0:
-        var acc = Float32(0.0)
-        comptime if IDN_NORM_FIXED_LANES:
-            # the fixed 32-lane fold, one thread (same bits as the cell)
-            acc = nfl_dot(x, x, t * dm, t * dm, dm)
-        else:
-            for j in range(dm):
-                var xj = ftz(x.unsafe_load(t * dm + j))
-                acc = ftz(identical_mul_add(xj, xj, acc))
-        sumsq.unsafe_store(t, acc)
-        var mean = ftz(identical_div(acc, Float32(dm)))
-        shared.unsafe_store(0, ftz(identical_rsqrt(ftz(mean + eps_in))))
-    barrier()
-    var rstd = shared.unsafe_load(0)
-    for j in range(lane, dm, Int(block_dim.x)):
-        var inner = ftz(identical_mul(ftz(x.unsafe_load(t * dm + j)), rstd))
-        out_buf.unsafe_store(t * dm + j, ftz(identical_mul(ftz(weight.unsafe_load(j)), inner)))
-
-
 def residual_rms_norm_kernel(
     residual: MutPointer[Float32, MutAnyOrigin],
     sumsq: MutPointer[Float32, MutAnyOrigin],
@@ -2290,14 +2253,6 @@ def llama_rms_norm(
             out_buf.unsafe_ptr(), sumsq.unsafe_ptr(), x.unsafe_ptr(),
             weight.unsafe_ptr(), Int32(m), Int32(d_model), eps,
             grid_dim=(_grid(m * d_model), 1, 1), block_dim=(LLAMA_TPB, 1, 1),
-        )
-        return
-    comptime if IDN_RMS_ROW_BLOCK and not BLOCK_ANY_SABOTAGE:
-        step_count_launch()
-        ctx.enqueue_function[llama_rms_norm_row_block_kernel](
-            sumsq.unsafe_ptr(), out_buf.unsafe_ptr(), x.unsafe_ptr(),
-            weight.unsafe_ptr(), Int32(d_model), eps,
-            grid_dim=(m, 1, 1), block_dim=(LLAMA_TPB, 1, 1),
         )
         return
     # DEVIATION 2645:
