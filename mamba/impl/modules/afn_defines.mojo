@@ -134,8 +134,7 @@ comptime IDN_MAMBA_CONV_CELL = _IDN_MAMBA_DEVICE and not is_defined[
 ]()
 #: lane nr-mamba (2026-10-04, roadmap B1) IDN_M2_SSD_TILES (default ON where
 #: the 20,480-byte shared page fits the column; `-D
-#: MOJOLEARN_IDN_M2_SSD_TILES_OFF` or `-D MOJOLEARN_IDN_ALL_OFF` restores
-#: main): the Mamba-2 SSD Y_diag (S13/S14) and C_state (S16) cells and the
+#: MOJOLEARN_IDN_ALL_OFF` restores main): the Mamba-2 SSD Y_diag (S13/S14) and C_state (S16) cells and the
 #: backward's ydiag/xd reverse as threadgroup tiles. M = G o L is formed once
 #: per (row, column) and B * decay once per (row, n) in shared memory instead
 #: of once per output column p; X_d / d_y rows are staged once per tile. Every
@@ -146,7 +145,8 @@ comptime IDN_MAMBA_CONV_CELL = _IDN_MAMBA_DEVICE and not is_defined[
 comptime IDN_M2_SSD_TILES = (
     _IDN_MAMBA_DEVICE
     # I08 current experiment: NEVER RUN — PENDING MEASUREMENT; existing defaults preserved.
-    and not is_defined["MOJOLEARN_IDN_M2_SSD_TILES_OFF"]()
+    # TOMBSTONE: MOJOLEARN_IDN_M2_SSD_TILES_OFF (unmeasured old path beside the SSD tile default) deleted 2026-11-15 by lane/expdel2-27-neural; code recoverable at 9bc4a91aba.
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_M2_SSD_TILES_OFF.patch
     and lib_smem_page_fits_for[TARGET_COLUMN, 20480]()
 )
 
