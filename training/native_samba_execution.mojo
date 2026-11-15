@@ -285,6 +285,7 @@ struct NativeSambaModel(Movable):
             for reverse in range(len(self.layers)):  # driver-loop: complete native reverse layer/tape walk
                 var i = len(self.layers) - reverse - 1
                 var next = self.layers[i].backward(Int(dh.unsafe_ptr()), elements)
+                _ = len(dh)  # named after the call that reads it through its address (Mojo frees a List at its last named use; the reassignment below is not a use, so the layer read a freed dy: "grad_output must be finite", or a zeroed dy when its own dx reused the block)
                 dh = next^
             if self.dropout:
                 var dropped = List[Float32](length=elements, fill=0)
