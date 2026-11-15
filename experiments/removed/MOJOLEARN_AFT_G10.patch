@@ -1,0 +1,38 @@
+diff --git a/gbdt/ctrs/kernel/ctr_calcers.mojo b/gbdt/ctrs/kernel/ctr_calcers.mojo
+index 4fad38ebb7..962d409c52 100644
+--- a/gbdt/ctrs/kernel/ctr_calcers.mojo
++++ b/gbdt/ctrs/kernel/ctr_calcers.mojo
+@@ -74,6 +74,7 @@ from gbdt.ctrs.index_wrapper import (
+ )
+ 
+ 
++from gbdt.gpu_data.apple_fast_trees_experiments import AFT_G10
+ 
+ # G09: eight numerator rows amortize target predicate/segment-sign setup;
+ # the exact scan and prefix exclusion run unchanged. No performance/quality
+@@ -83,9 +84,7 @@ from gbdt.ctrs.index_wrapper import (
+ comptime AFT_CTR_TARGET_DOCS = 4
+ # G10: four coalesced independent lookups per lane amortize prior/map setup.
+ # Uncompiled/unverified/unmeasured; no category/prefix approximation.
+-# TOMBSTONE: MOJOLEARN_AFT_G10 (DELETE-EXPERIMENT, never-run Apple FAST programme card, rule g) deleted 2026-11-15 by lane/expdel2-42-trees; code recoverable at d6735a6c9b.
+-# Restore: git apply experiments/removed/MOJOLEARN_AFT_G10.patch; record in docs/TOMBSTONES.md.
+-comptime AFT_CTR_LOOKUP_DOCS = 1
++comptime AFT_CTR_LOOKUP_DOCS = 4 if AFT_G10 else 1
+ 
+ comptime CTR_BLOCK_SIZE = 128 if AFCL_T12 else 256
+ """`const ui32 blockSize = 256`, every launcher in `ctr_calcers.cu`."""
+diff --git a/gbdt/gpu_data/apple_fast_trees_experiments.mojo b/gbdt/gpu_data/apple_fast_trees_experiments.mojo
+index da9e35ba1f..0237bfeb17 100644
+--- a/gbdt/gpu_data/apple_fast_trees_experiments.mojo
++++ b/gbdt/gpu_data/apple_fast_trees_experiments.mojo
+@@ -60,9 +60,7 @@ comptime AFT_G08 = False
+ comptime AFT_G09 = False
+ # G10: four coalesced rows per weighted-frequency/mean-scatter CTR worker.
+ # No performance/quality evidence; preserve priors, index maps and prefix sums.
+-# TOMBSTONE: MOJOLEARN_AFT_G10 (DELETE-EXPERIMENT, never-run Apple FAST programme card, rule g) deleted 2026-11-15 by lane/expdel2-42-trees; code recoverable at d9dedc681d.
+-# Restore: git apply experiments/removed/MOJOLEARN_AFT_G10.patch; record in docs/TOMBSTONES.md.
+-comptime AFT_G10 = False
++comptime AFT_G10 = AFT_G_APPLE_FAST and is_defined["MOJOLEARN_AFT_G10"]()
+ # G11: 128-thread ordered batched derivative/weight reduction.
+ # No performance/quality evidence; same prefix tasks, eight chunks and RNG.
+ comptime AFT_G11 = AFT_G_APPLE_FAST and is_defined["MOJOLEARN_AFT_G11"]()

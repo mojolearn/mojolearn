@@ -15,7 +15,9 @@ from core.device_zero import enqueue_fill
 from max.gpu.host.device_attribute import DeviceAttribute
 
 from checks.fixed_point import choose_scale
-from gbdt.trees_identical_switches import T21_STREAMS
+# TOMBSTONE: MOJOLEARN_TREES_T21_STREAMS (DELETE-ARM, replica stream sweep, no A/B recorded, rule a; non-owner) deleted 2026-11-15 by lane/expdel2-42-trees; code recoverable at efe2e38a94.
+# Restore: git apply experiments/removed/MOJOLEARN_TREES_T21_STREAMS.expdel2-42-trees.patch; record in docs/TOMBSTONES.md.
+# The stream count is its default 1 below (one replica stream, the kernels' stream 0).
 from gbdt.trees_hist_switches import HIST_SYM_FEATURE_PARALLEL
 from gbdt.trees_small_switches import HIST_REP_SM, HIST_REP_SM_ON, HIST_REP_BPSM, HIST_REP_DEVICE, HIST_REP_DEVICE_X4
 from gbdt.methods.greedy_subsets_searcher.kernel.hist_2_one_byte_8bit_wide import (
@@ -50,7 +52,6 @@ from gbdt.methods.greedy_subsets_searcher.split_properties_helper import (
     zero_leaves,
 )
 from std.sys.compile import is_defined
-from std.sys.defines import get_defined_int
 from std.sys.info import size_of
 from core.device_liveness import (
     DEAD_DEVICE_CANARY_MAGIC,
@@ -103,12 +104,11 @@ from gbdt.options.catboost_options import (
     SCORE_FUNCTION_NEWTON_L2,
 )
 from gbdt.data.permutation import TRandom
-from gbdt.trees_identical_switches import C45_GBDT
 from gbdt.methods.greedy_subsets_searcher.kernel.compute_scores import (
     FLOAT32_MAX,
     SCORE_BLOCK_SIZE,
     TARGET_VARIANCE_BLOCK,
-    compute_optimal_splits_kernel, fused_symmetric_scan_score_kernel,
+    compute_optimal_splits_kernel,
     compute_target_variance_kernel,
     target_variance_blocks,
 )
@@ -186,7 +186,6 @@ from gbdt.methods.greedy_subsets_searcher.kernel.split_points_ridx import (
     launch_reorder_index_only,
 )
 from checks.numerics import PIN_DETERMINISM
-from gbdt.apple_fast_tree_experiments import AFT_N02
 from checks.numerics import NUMERIC_IDENTICAL
 from gbdt.methods.greedy_subsets_searcher.kernel.hist_one_byte import (
     BUILD_MODE as HIST_BUILD_MODE,
@@ -280,21 +279,16 @@ from gbdt.methods.greedy_subsets_searcher.kernel.fused_level import (
 # `AppendModels` (the cursor add) waits for the gates; a rare early stop
 # takes the unfused tail after its rollback, exactly as before.
 #
-# DEFAULT ON. `-D MOJOLEARN_GBDT_FUSED_LEVEL_OFF` restores the unfused
-# schedule for the A/B; a partition the single-pass route would take
+# DEFAULT ON. A partition the single-pass route would take
 # (`max_live_rows > FAST_SORT_SIZE`) keeps the unfused split chain.
 # ====================================================================
-comptime SYM_FUSED_LEVEL = not is_defined["MOJOLEARN_GBDT_FUSED_LEVEL_OFF"]()
-# per-fusion switches under the umbrella, for bisecting one fused kernel
-comptime SYM_FUSED_SCAN = SYM_FUSED_LEVEL and not is_defined[
-    "MOJOLEARN_GBDT_FUSED_SCAN_OFF"
-]()
-comptime SYM_FUSED_SPLIT = SYM_FUSED_LEVEL and not is_defined[
-    "MOJOLEARN_GBDT_FUSED_SPLIT_OFF"
-]()
-comptime SYM_FUSED_COPY = SYM_FUSED_LEVEL and not is_defined[
-    "MOJOLEARN_GBDT_FUSED_COPY_OFF"
-]()
+# TOMBSTONE: MOJOLEARN_GBDT_FUSED_LEVEL_OFF (DELETE-OLD-PATH, unfused level schedule, no A/B recorded, rule b) deleted 2026-11-15 by lane/expdel2-42-trees; code recoverable at 413f6bdc16.
+# Restore: git apply experiments/removed/MOJOLEARN_GBDT_FUSED_LEVEL_OFF.patch; record in docs/TOMBSTONES.md.
+comptime SYM_FUSED_LEVEL = True
+# per-fusion switches, for bisecting one fused kernel
+comptime SYM_FUSED_SCAN = not is_defined["MOJOLEARN_GBDT_FUSED_SCAN_OFF"]()
+comptime SYM_FUSED_SPLIT = not is_defined["MOJOLEARN_GBDT_FUSED_SPLIT_OFF"]()
+comptime SYM_FUSED_COPY = not is_defined["MOJOLEARN_GBDT_FUSED_COPY_OFF"]()
 
 
 def compute_target_std_dev(
@@ -509,7 +503,7 @@ comptime FAST_REPLICATION_PIN_2040 = is_defined[
 # reorder pass to the consumer.
 #
 # OFF BY DEFAULT: the define is absent from every shipped build. Arm B
-# builds with `-D MOJOLEARN_2031_SYM_RIDX_SPLITS=1`. UNVERIFIED, RUN
+# builds with `-D MOJOLEARN_2031_SYM_RIDX_SPLITS=1` (define deleted 2026-11-15). UNVERIFIED, RUN
 # OWED -- A/B commands in archive/research/gbdt/UPSTREAM_SURVEY_2026-09.md and the PLAN
 # appendix; the gates that must hold under the define are
 # `check-fit-pointwise` (both searchers, one tree),
@@ -523,20 +517,23 @@ comptime SYM_RIDX_MAX_FEATURES = 64
 ridx schedule was taken only when the layout had at most this many features,
 a cut placed between the two board widths it was measured at (16 and 220)."""
 
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (DELETE-OLD-PATH, IDENTICAL master rollback, EXP:2438 DELETED; non-owner) deleted 2026-11-15 by lane/expdel2-42-trees; code recoverable at e2e7e7425f.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-42-trees.patch; record in docs/TOMBSTONES.md.
 comptime RIDX_FEATURE_CUT_OFF = is_defined[
     "MOJOLEARN_GBDT_RIDX_COST_RULE_OFF"
-]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+]()
 """lane/no-dim-idn (2026-10-04): `-D MOJOLEARN_GBDT_RIDX_COST_RULE_OFF`
 restores the old 64-feature cut in the symmetric and the depthwise drivers
-(A/B arm B; also under `MOJOLEARN_IDN_ALL_OFF`). Bit-inert either way: both schedules give the same digests."""
+(A/B arm B). Bit-inert either way: both schedules give the same digests."""
 
-comptime RIDX_GATHER_COST = get_defined_int["MOJOLEARN_GBDT_RIDX_GATHER_COST", 2]()
+# TOMBSTONE: MOJOLEARN_GBDT_RIDX_GATHER_COST (DELETE-ARM, gather cost sweep knob, no A/B recorded, rule a) deleted 2026-11-15 by lane/expdel2-42-trees; code recoverable at 5ee0e727f3.
+# Restore: git apply experiments/removed/MOJOLEARN_GBDT_RIDX_GATHER_COST.patch; record in docs/TOMBSTONES.md.
+comptime RIDX_GATHER_COST = 2
 """The cost of one gathered 4-byte stat load in units of one contiguous
 4-byte load (`ridx_schedule_pays`). 2 is the smallest integer ratio at which
 a gather costs more than a streamed load (a leaf's rows are visited in
 ascending row order, so most gathers share a sector or line with a
-neighbor); it is a hardware assumption, not fitted to a dataset. The A/B
-sweeps it through the define."""
+neighbor); it is a hardware assumption, not fitted to a dataset."""
 
 
 @always_inline
@@ -567,14 +564,12 @@ def ridx_schedule_pays(n_features: Int) -> Bool:
         return True
     return groups * (r - 1) <= r + 3
 
+# TOMBSTONE: MOJOLEARN_2031_SYM_RIDX_SPLITS (DELETE-ARM, opt-in arm off Apple, no A/B recorded, rule a) deleted 2026-11-15 by lane/expdel2-42-trees; code recoverable at 931e7ca76a.
+# Restore: git apply experiments/removed/MOJOLEARN_2031_SYM_RIDX_SPLITS.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_2031_SYM_RIDX_SPLITS_OFF (DELETE-OLD-PATH, Apple permuting reorder, no A/B recorded, rule b) deleted 2026-11-15 by lane/expdel2-42-trees; code recoverable at 931e7ca76a.
+# Restore: git apply experiments/removed/MOJOLEARN_2031_SYM_RIDX_SPLITS_OFF.patch; record in docs/TOMBSTONES.md.
 comptime SYM_RIDX_SPLITS_2031 = (
-    (
-        is_defined["MOJOLEARN_2031_SYM_RIDX_SPLITS"]()
-        or (
-            TARGET_COLUMN == COLUMN_APPLE
-            and not is_defined["MOJOLEARN_2031_SYM_RIDX_SPLITS_OFF"]()
-        )
-    )
+    TARGET_COLUMN == COLUMN_APPLE
     and ridx_only_splits_for[
         TARGET_COLUMN, HIST_BUILD_MODE == NUMERIC_IDENTICAL
     ]()
@@ -582,9 +577,7 @@ comptime SYM_RIDX_SPLITS_2031 = (
 """DEFAULT ON APPLE since trees-apple2 (2026-09-28), both modes (the
 `ridx_only_splits_for` row admits Apple IDENTICAL since the same lane):
 M4 Pro 1M rows FAST SymmetricTree taxi 919 -> 835 ms (0.909), the SAME
-model digest (steward 1790608403999). `-D
-MOJOLEARN_2031_SYM_RIDX_SPLITS_OFF` restores the permuting reorder on
-Apple; elsewhere the define above still opts in."""
+model digest (steward 1790608403999). Off on every other column."""
 
 # ================= DEVIATION BLOCK 2580 =================
 # QUANTIZE THE STATS ONCE PER LEVEL, NOT ONCE PER 4-FEATURE GROUP. Every
@@ -597,16 +590,16 @@ Apple; elsewhere the define above still opts in."""
 # per point. Same position, same dither key, same scale, so the histogram
 # receives the same integer addends and no bit can move.
 #
-# Opt-in: `-D MOJOLEARN_2580_LEVEL_QUANT=1`. Reaches the fused 8-bit
+# Was opt-in (`-D MOJOLEARN_2580_LEVEL_QUANT=1`, deleted 2026-11-15). Reached the fused 8-bit
 # kernel on both tiers (IDENTICAL's maxBins ladder sends 254-border blocks
 # there; FAST's `greedy_one_byte_fixed_for` sends every width there) and
 # the ladder under 2581. Off under DEVIATION 2031, whose stat reads go
 # through row ids. Named checks, one per side:
 # `checks/sym_arms_check.mojo` `check_2580_off` / `check_2580_on`.
 # ====================================================
-comptime SYM_LEVEL_QUANT_2580 = (
-    is_defined["MOJOLEARN_2580_LEVEL_QUANT"]() and not SYM_RIDX_SPLITS_2031
-)
+# TOMBSTONE: MOJOLEARN_2580_LEVEL_QUANT (DELETE-ARM, opt-in arm, no A/B recorded, rule a) deleted 2026-11-15 by lane/expdel2-42-trees; code recoverable at 7a9e6c5691.
+# Restore: git apply experiments/removed/MOJOLEARN_2580_LEVEL_QUANT.patch; record in docs/TOMBSTONES.md.
+# The level quantize kernel stays: `checks/sym_arms_check.mojo` instantiates both sides.
 
 # ================= DEVIATION BLOCK 2581 =================
 # PICK THE BIT WIDTH PER 4-FEATURE GROUP. CatBoost's
@@ -624,9 +617,8 @@ comptime SYM_LEVEL_QUANT_2580 = (
 #
 # DEFAULT ON UNDER IDENTICAL since 2026-09-11 (MI300X Hot Aisle, tools/
 # flip_verdict.py FLIP geomean=0.995 taxi=1.006 istella=0.985 quality=ok);
-# `-D MOJOLEARN_2581_GROUP_WIDTH_OFF=1` restores the block-widest ladder.
-# FAST stays OPT-IN (`-D MOJOLEARN_2581_GROUP_WIDTH=1`; NO FLIP geomean=1.007
-# on the same box). What it reaches today: Istella-S's one-byte block is 32
+# FAST keeps the block-widest ladder (its opt-in arm measured NO FLIP
+# geomean=1.007 on the same box; both switches deleted 2026-11-15). What it reaches today: Istella-S's one-byte block is 32
 # groups, 31 of them 8-bit and one short 7-bit group, so one group leaves the
 # 8-bit route; taxi's two groups are both 8-bit and only change launcher.
 # Named checks, one per side, both instantiated explicitly whatever the
@@ -636,24 +628,23 @@ comptime SYM_LEVEL_QUANT_2580 = (
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from checks.numerics import NUMERIC_FAST
 
-comptime SYM_RIDX_GENERAL = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and not is_defined["MOJOLEARN_LEGACY_NARROW_SYM_RIDX"]()
-)
+# TOMBSTONE: MOJOLEARN_LEGACY_NARROW_SYM_RIDX (DELETE-OLD-PATH, FAST 64-feature cap, EXP:1331 OWED, no A/B recorded, rule b) deleted 2026-11-15 by lane/expdel2-42-trees; code recoverable at f0b3e68972.
+# Restore: git apply experiments/removed/MOJOLEARN_LEGACY_NARROW_SYM_RIDX.patch; record in docs/TOMBSTONES.md.
+comptime SYM_RIDX_GENERAL = GLOBAL_NUMERIC_MODE == NUMERIC_FAST
 """lane apple-fast-no-narrow-2 (2026-10-04): under FAST the DEVIATION 2031
 ridx-only schedule takes every layout width. SYM_RIDX_MAX_FEATURES (64)
 sat between taxi's 16 and istella's 220 features with only those two points
 measured; removed as benchmark-tuned, replacement UNMEASURED. No kernel
 needs it: the schedule is bit-inert at any width (DEVIATION 1902's
-argument), so it is a speed choice only. `-D
-MOJOLEARN_LEGACY_NARROW_SYM_RIDX` restores the cap in FAST. IDENTICAL still
+argument), so it is a speed choice only. IDENTICAL still
 uses the board-shaped rule; generalize it on every vendor together
 (same-bits rule), owed to the IDENTICAL program."""
 
-comptime SYM_GROUP_WIDTH_2581 = is_defined["MOJOLEARN_2581_GROUP_WIDTH"]() or (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not is_defined["MOJOLEARN_2581_GROUP_WIDTH_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_2581_GROUP_WIDTH (DELETE-ARM, FAST opt-in arm, NO FLIP on MI300X, rule a) deleted 2026-11-15 by lane/expdel2-42-trees; code recoverable at a0d1816b17.
+# Restore: git apply experiments/removed/MOJOLEARN_2581_GROUP_WIDTH.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_2581_GROUP_WIDTH_OFF (DELETE-OLD-PATH, IDENTICAL block-widest ladder, no A/B recorded for the old path, rule b) deleted 2026-11-15 by lane/expdel2-42-trees; code recoverable at a0d1816b17.
+# Restore: git apply experiments/removed/MOJOLEARN_2581_GROUP_WIDTH_OFF.patch; record in docs/TOMBSTONES.md.
+comptime SYM_GROUP_WIDTH_2581 = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 
 #: Threads per block of the level quantize launch; no shared memory.
 comptime LEVEL_QUANT_BLOCK = 512
@@ -2120,9 +2111,7 @@ def sym_arms_path_line(blocks: List[PolicyBlock]) -> String:
         TARGET_COLUMN, HIST_BUILD_MODE == NUMERIC_IDENTICAL
     ]()
     var line = String("GBDT-SYM-PATH mode=") + numeric_mode_name()
-    line += String(" level_quant_2580=") + (
-        String("1") if SYM_LEVEL_QUANT_2580 else String("0")
-    )
+    line += String(" level_quant_2580=0")
     line += String(" group_width_2581=") + (
         String("1") if SYM_GROUP_WIDTH_2581 else String("0")
     )
@@ -2287,9 +2276,9 @@ def launch_hist2_width_group[bits: Int, preq: Bool, col_map: Bool](
         var replicas = replication_int32_for(
             groups, n_live, 1, sm_count, gather=(depth > 0)
         )
-        comptime for replica_stream in range(T21_STREAMS):
+        comptime for replica_stream in range(1):
             if depth == 0:
-                ctx.enqueue_function[hist2_8bit_kernel[preq, col_map, replica_stream, T21_STREAMS]](
+                ctx.enqueue_function[hist2_8bit_kernel[preq, col_map, replica_stream, 1]](
                     folds, fold_off, grp_off, grp_sz,
                     Int32(n_features), cindex.unsafe_ptr(), Int32(line),
                     Int32(base), stats_ptr, Int32(n_rows),
@@ -2301,7 +2290,7 @@ def launch_hist2_width_group[bits: Int, preq: Bool, col_map: Bool](
                 )
             else:
                 ctx.enqueue_function[
-                    hist2_8bit_gather_kernel[False, preq, col_map, replica_stream, T21_STREAMS]
+                    hist2_8bit_gather_kernel[False, preq, col_map, replica_stream, 1]
                 ](
                     folds, fold_off, grp_off, grp_sz,
                     Int32(n_features), cindex.unsafe_ptr(), Int32(line),
@@ -2523,11 +2512,11 @@ def launch_hist2_8bit[ridx_stats: Bool = False](
     var replicas = replication_int32_for(
         blk.replication_groups, n_live, 1, sm_count, gather=(depth > 0)
     )
-    comptime for replica_stream in range(T21_STREAMS):
+    comptime for replica_stream in range(1):
         if depth == 0:
             # bound explicitly: the kernel carries DEVIATION 2580/2581's comptime
             # parameters, and an unbound name is a generic enqueue refuses
-            ctx.enqueue_function[hist2_8bit_kernel[False, False, replica_stream, T21_STREAMS]](
+            ctx.enqueue_function[hist2_8bit_kernel[False, False, replica_stream, 1]](
                 blk.folds.unsafe_ptr(), blk.fold_off.unsafe_ptr(),
                 blk.grp_off.unsafe_ptr(), blk.grp_sz.unsafe_ptr(),
                 Int32(blk.n_features), cindex.unsafe_ptr(), Int32(line),
@@ -2542,7 +2531,7 @@ def launch_hist2_8bit[ridx_stats: Bool = False](
             # `ridx_stats` (DEVIATION 1902): the gather arm's stat loads go
             # through the row index when the ridx-only split route is on.
             ctx.enqueue_function[
-                hist2_8bit_gather_kernel[ridx_stats, False, False, replica_stream, T21_STREAMS]
+                hist2_8bit_gather_kernel[ridx_stats, False, False, replica_stream, 1]
             ](
                 blk.folds.unsafe_ptr(), blk.fold_off.unsafe_ptr(),
                 blk.grp_off.unsafe_ptr(), blk.grp_sz.unsafe_ptr(),
@@ -2965,39 +2954,8 @@ def sym_argmax_blocks_for(hist_cells_per_leaf: Int) -> Int:
 
 
 
-def c45_symmetric_fusion_fits(cells: Int, stats: Int, leaves: Int) -> Bool:
-    # The incumbent one-block score grid is the synchronization boundary.
-    # Its two 128-entry shared score/tie arrays occupy 1 KiB. Limit the complete
-    # histogram work owned by this block to 16 KiB; no dataset/dimension target.
-    return C45_GBDT and cells > 0 and stats > 0 and leaves > 0 and sym_argmax_blocks_for(cells) == 1 and cells <= (16*1024)//4//stats//leaves
-
-
-def enqueue_c45_symmetric_score(ctx: DeviceContext, score_function: Int,
-    mut skip: DeviceBuffer[DType.uint8], cells: Int,
-    mut features: DeviceBuffer[DType.uint32], mut weights: DeviceBuffer[DType.float32],
-    mut hist: DeviceBuffer[DType.float32], mut part_stats: DeviceBuffer[DType.float32], stats: Int,
-    mut part_ids: DeviceBuffer[DType.uint32], leaves: Int, multiclass: Bool,
-    lambda_l2: Float32, score_std_dev: Float32, seed: UInt64,
-    mut out_score: DeviceBuffer[DType.float32], mut out_bin: DeviceBuffer[DType.uint32],
-    mut first: DeviceBuffer[DType.uint32], mut folds: DeviceBuffer[DType.uint32], mut one_hot: DeviceBuffer[DType.uint8], feature_count: Int,
-    compute_ids: MutPointer[UInt32, MutAnyOrigin], compute_count: Int,
-    mut sub_from: DeviceBuffer[DType.uint32], mut sub_what: DeviceBuffer[DType.uint32], sub_count: Int,
-) raises:
-    # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
-    if score_function == SCORE_FUNCTION_L2 or score_function == SCORE_FUNCTION_NEWTON_L2:
-        ctx.enqueue_function[fused_symmetric_scan_score_kernel[SCORE_FUNCTION_L2]](
-            skip.unsafe_ptr(), Int32(cells), features.unsafe_ptr(), weights.unsafe_ptr(), hist.unsafe_ptr(), part_stats.unsafe_ptr(),
-            Int32(stats), part_ids.unsafe_ptr(), Int32(leaves), Int32(1 if multiclass else 0), lambda_l2, Float32(0), seed,
-            out_score.unsafe_ptr(), out_bin.unsafe_ptr(), first.unsafe_ptr(), folds.unsafe_ptr(), one_hot.unsafe_ptr(), Int32(feature_count),
-            compute_ids, Int32(compute_count), sub_from.unsafe_ptr(), sub_what.unsafe_ptr(), Int32(sub_count),
-            grid_dim=1, block_dim=SCORE_BLOCK_SIZE)
-    else:
-        ctx.enqueue_function[fused_symmetric_scan_score_kernel[SCORE_FUNCTION_COSINE]](
-            skip.unsafe_ptr(), Int32(cells), features.unsafe_ptr(), weights.unsafe_ptr(), hist.unsafe_ptr(), part_stats.unsafe_ptr(),
-            Int32(stats), part_ids.unsafe_ptr(), Int32(leaves), Int32(1 if multiclass else 0), lambda_l2, score_std_dev, seed,
-            out_score.unsafe_ptr(), out_bin.unsafe_ptr(), first.unsafe_ptr(), folds.unsafe_ptr(), one_hot.unsafe_ptr(), Int32(feature_count),
-            compute_ids, Int32(compute_count), sub_from.unsafe_ptr(), sub_what.unsafe_ptr(), Int32(sub_count),
-            grid_dim=1, block_dim=SCORE_BLOCK_SIZE)
+# TOMBSTONE: MOJOLEARN_TREES_C45_GBDT (DELETE-ARM, IDENTICAL fused symmetric scan+score, no A/B recorded, rule a; non-owner) deleted 2026-11-15 by lane/expdel2-42-trees; code recoverable at ca88825ff9.
+# Restore: git apply experiments/removed/MOJOLEARN_TREES_C45_GBDT.expdel2-42-trees.patch; record in docs/TOMBSTONES.md.
 
 
 def replication_for(
@@ -3248,14 +3206,8 @@ def launch_histograms_for_blocks[
         var replicas = replication_for(
             groups, n_live, stat_count, sm_count, gather=(depth > 0)
         )
-        # N02 caller is guarded Apple FAST, non-symmetric only. Halve the
-        # occupancy-derived replicas to reduce duplicated partial histograms
-        # and their fold traffic; every replica keeps its complete row stride.
-        # This can lose parallelism on narrow/deep work. No timing/quality
-        # evidence. Scratch needs cannot exceed the baseline allocation.
-        comptime if AFT_N02:
-            if nonsymmetric_work:
-                replicas = max(1, (replicas + 1) // 2)
+        # TOMBSTONE: MOJOLEARN_AFT_N02 (DELETE-EXPERIMENT, never-run Apple FAST programme card, rule g; non-owner) deleted 2026-11-15 by lane/expdel2-42-trees; code recoverable at d3416dee9e.
+        # Restore: git apply experiments/removed/MOJOLEARN_AFT_N02.expdel2-42-trees.patch; record in docs/TOMBSTONES.md.
         if replicas_override > 0:
             replicas = replicas_override
 
@@ -4192,7 +4144,7 @@ struct TTreeWorkspace(Movable):
         self.h_scale = ctx.enqueue_create_host_buffer[DType.float32](1)
         self.dblocks = List[DeviceBlock]()
         self.qstats = ctx.enqueue_create_buffer[DType.int32](
-            stat_count * n_rows if SYM_LEVEL_QUANT_2580 else 1
+            1
         )
         self.width_plans = List[OneByteWidthPlan]()
         self.refresh_layout_metadata(ctx, layout, blocks)
@@ -4644,7 +4596,7 @@ def fused_split_chain_ok(max_live_rows: Int) -> Bool:
     """Whether DEVIATION 3110's fused split chain stands in for
     `launch_stable_partition_routed`: only where the router takes the
     three-phase path, which it always does at or under `FAST_SORT_SIZE`."""
-    return SYM_FUSED_LEVEL and max_live_rows <= FAST_SORT_SIZE
+    return max_live_rows <= FAST_SORT_SIZE
 
 
 def enqueue_fused_resolve_split_partition(
@@ -4806,8 +4758,6 @@ struct TSynchronizedSymmetricLevelState(Movable):
     var live_leaves: Int
     var last_pre_score_accounting: Int
     var cindex_changed_since_histogram: Bool
-    var c45_pending_score: Bool
-    var c45_pending_subtract: Bool
     var last_winner_score: Float32
     var last_winner_bin: UInt32
     # The fit's device plan, a value read once at the binding entry. The
@@ -4843,8 +4793,6 @@ struct TSynchronizedSymmetricLevelState(Movable):
         self.live_leaves = 1
         self.last_pre_score_accounting = 0
         self.cindex_changed_since_histogram = False
-        self.c45_pending_score = False
-        self.c45_pending_subtract = False
         self.last_winner_score = Float32(0.0)
         self.last_winner_bin = DEAD_DEVICE_POISON
         self.device_plan = plan_for_single()
@@ -4892,8 +4840,6 @@ struct TSynchronizedSymmetricLevelState(Movable):
         self.live_leaves = 1
         self.last_pre_score_accounting = 0
         self.cindex_changed_since_histogram = False
-        self.c45_pending_score = False
-        self.c45_pending_subtract = False
         self.last_winner_score = Float32(0.0)
         self.last_winner_bin = DEAD_DEVICE_POISON
 
@@ -4953,30 +4899,7 @@ struct TSynchronizedSymmetricLevelState(Movable):
     ) raises:
         """Score current histograms into the persistent winner scratch."""
         ref workspace = self.workspace[0]
-        if self.c45_pending_score:
-            var compute_ids = workspace.zero_ids.unsafe_ptr()
-            var compute_count = self.live_leaves
-            var subtract_count = 0
-            if self.c45_pending_subtract:
-                compute_ids = rebind[type_of(compute_ids)](
-                    workspace.ids_compute.unsafe_ptr()
-                )
-                compute_count = self.live_leaves // 2
-                subtract_count = compute_count
-            enqueue_c45_symmetric_score(
-                ctx, score_function, workspace.skip, self.layout.hist_cells,
-                workspace.bff, workspace.ffw, workspace.hist,
-                workspace.part_stats, self.stat_count, workspace.dense_ids,
-                self.live_leaves, multiclass_optimization, l2_leaf_reg,
-                score_std_dev, level_seed, workspace.out_score,
-                workspace.out_bin, workspace.flat_first, workspace.flat_folds,
-                workspace.flat_one_hot, len(self.layout.features),
-                rebind[MutPointer[UInt32, MutAnyOrigin]](compute_ids),
-                compute_count, workspace.sub_from, workspace.sub_what,
-                subtract_count,
-            )
-            self.c45_pending_score = False
-        elif (
+        if (
             score_function == SCORE_FUNCTION_L2
             or score_function == SCORE_FUNCTION_NEWTON_L2
         ):
@@ -5034,12 +4957,6 @@ struct TSynchronizedSymmetricLevelState(Movable):
             and not self.cindex_changed_since_histogram
         )
         var n_compute = half if planned else n_live
-        # C45 leaves raw histogram bins pending until the sole score block
-        # scans and derives siblings. Traced levels retain their old captures.
-        self.c45_pending_score = c45_symmetric_fusion_fits(
-            self.layout.hist_cells, self.stat_count, n_live
-        ) and not trace.enabled
-        self.c45_pending_subtract = planned and half > 0
         var fixed_scale = rebind[MutPointer[Float32, MutAnyOrigin]](
             workspace.scale_dev.unsafe_ptr()
         )
@@ -5078,45 +4995,44 @@ struct TSynchronizedSymmetricLevelState(Movable):
                 workspace.ids_compute.unsafe_ptr()
             )
         var accounting = 1
-        if not self.c45_pending_score:
-            ctx.enqueue_function[scan_histograms_kernel](
-                level_ids,
-                workspace.flat_first.unsafe_ptr(),
-                workspace.flat_folds.unsafe_ptr(),
-                workspace.flat_one_hot.unsafe_ptr(),
-                Int32(len(self.layout.features)), Int32(self.layout.hist_cells),
-                workspace.hist.unsafe_ptr(),
-                grid_dim=(
-                    (len(self.layout.features) + 255) // 256,
-                    n_compute, self.stat_count,
-                ),
-                block_dim=(256, 1, 1),
-            )
+        ctx.enqueue_function[scan_histograms_kernel](
+            level_ids,
+            workspace.flat_first.unsafe_ptr(),
+            workspace.flat_folds.unsafe_ptr(),
+            workspace.flat_one_hot.unsafe_ptr(),
+            Int32(len(self.layout.features)), Int32(self.layout.hist_cells),
+            workspace.hist.unsafe_ptr(),
+            grid_dim=(
+                (len(self.layout.features) + 255) // 256,
+                n_compute, self.stat_count,
+            ),
+            block_dim=(256, 1, 1),
+        )
+        accounting += 1
+        if planned and half > 0:
+            if self.layout.hist_cells % 4 == 0:
+                ctx.enqueue_function[substract_histograms_vec4_kernel](
+                    workspace.sub_from.unsafe_ptr(),
+                    workspace.sub_what.unsafe_ptr(),
+                    Int32(self.layout.hist_cells), workspace.hist.unsafe_ptr(),
+                    grid_dim=(
+                        (self.layout.hist_cells // 4 + 255) // 256,
+                        half, self.stat_count,
+                    ),
+                    block_dim=(256, 1, 1),
+                )
+            else:
+                ctx.enqueue_function[substract_histograms_kernel](
+                    workspace.sub_from.unsafe_ptr(),
+                    workspace.sub_what.unsafe_ptr(),
+                    Int32(self.layout.hist_cells), workspace.hist.unsafe_ptr(),
+                    grid_dim=(
+                        (self.layout.hist_cells + 255) // 256,
+                        half, self.stat_count,
+                    ),
+                    block_dim=(256, 1, 1),
+                )
             accounting += 1
-            if planned and half > 0:
-                if self.layout.hist_cells % 4 == 0:
-                    ctx.enqueue_function[substract_histograms_vec4_kernel](
-                        workspace.sub_from.unsafe_ptr(),
-                        workspace.sub_what.unsafe_ptr(),
-                        Int32(self.layout.hist_cells), workspace.hist.unsafe_ptr(),
-                        grid_dim=(
-                            (self.layout.hist_cells // 4 + 255) // 256,
-                            half, self.stat_count,
-                        ),
-                        block_dim=(256, 1, 1),
-                    )
-                else:
-                    ctx.enqueue_function[substract_histograms_kernel](
-                        workspace.sub_from.unsafe_ptr(),
-                        workspace.sub_what.unsafe_ptr(),
-                        Int32(self.layout.hist_cells), workspace.hist.unsafe_ptr(),
-                        grid_dim=(
-                            (self.layout.hist_cells + 255) // 256,
-                            half, self.stat_count,
-                        ),
-                        block_dim=(256, 1, 1),
-                    )
-                accounting += 1
         times.end(ctx, "sym.hist")
         if trace.enabled:
             trace.record_device(
@@ -6094,19 +6010,13 @@ def run_tree_layout_traced[
         # DEVIATION 2031: `ridx_stats` routes the gather kernels' stat
         # loads through `row_index` when the flag holds; False is the
         # shipped byte-for-byte default.
-        comptime if SYM_LEVEL_QUANT_2580 or SYM_GROUP_WIDTH_2581:
-            # DEVIATIONS 2580 / 2581: the level quantize over the compute
-            # leaves, then the histogram launch reading its plane.
+        comptime if SYM_GROUP_WIDTH_2581:
+            # DEVIATION 2581: the per-group-width histogram launch.
             if planned:
-                comptime if SYM_LEVEL_QUANT_2580:
-                    enqueue_level_quantize(
-                        ctx, n_compute, n_rows, stat_count, sm_count, stats,
-                        qstats, p_off, p_sz, ids_compute, fixed_scale,
-                    )
                 if use_ridx:
                     gbdt_hist_dispatch[
                         hist2_smem_mode, True,
-                        SYM_LEVEL_QUANT_2580, SYM_GROUP_WIDTH_2581,
+                        False, SYM_GROUP_WIDTH_2581,
                     ](
                         device_plan,
                         ctx, dblocks, depth, n_compute, n_rows, stat_count,
@@ -6120,7 +6030,7 @@ def run_tree_layout_traced[
                 else:
                     gbdt_hist_dispatch[
                         hist2_smem_mode, False,
-                        SYM_LEVEL_QUANT_2580, SYM_GROUP_WIDTH_2581,
+                        False, SYM_GROUP_WIDTH_2581,
                     ](
                         device_plan,
                         ctx, dblocks, depth, n_compute, n_rows, stat_count,
@@ -6132,15 +6042,10 @@ def run_tree_layout_traced[
                         qstats=Optional(qstats.copy()), width_plans=width_plans,
                     )
             else:
-                comptime if SYM_LEVEL_QUANT_2580:
-                    enqueue_level_quantize(
-                        ctx, n_compute, n_rows, stat_count, sm_count, stats,
-                        qstats, p_off, p_sz, zero_ids, fixed_scale,
-                    )
                 if use_ridx:
                     gbdt_hist_dispatch[
                         hist2_smem_mode, True,
-                        SYM_LEVEL_QUANT_2580, SYM_GROUP_WIDTH_2581,
+                        False, SYM_GROUP_WIDTH_2581,
                     ](
                         device_plan,
                         ctx, dblocks, depth, n_compute, n_rows, stat_count,
@@ -6154,7 +6059,7 @@ def run_tree_layout_traced[
                 else:
                     gbdt_hist_dispatch[
                         hist2_smem_mode, False,
-                        SYM_LEVEL_QUANT_2580, SYM_GROUP_WIDTH_2581,
+                        False, SYM_GROUP_WIDTH_2581,
                     ](
                         device_plan,
                         ctx, dblocks, depth, n_compute, n_rows, stat_count,
@@ -6218,20 +6123,101 @@ def run_tree_layout_traced[
                     )
         mgr.stream_kernel()
 
-        var c45_fused = c45_symmetric_fusion_fits(
-            hist_cells_per_leaf, stat_count, n_live
-        ) and not trace.enabled
-        if c45_fused:
-            # Partition statistics have no histogram dependency. Their exact
-            # existing chunk grid and fold run before the fused prefix/score;
-            # max_live_rows is not a reduction-order input in these launchers.
+        # TOMBSTONE: MOJOLEARN_TREES_C45_GBDT (DELETE-ARM, IDENTICAL fused symmetric scan+score, no A/B recorded, rule a; non-owner) deleted 2026-11-15 by lane/expdel2-42-trees; code recoverable at ca88825ff9.
+        # Restore: git apply experiments/removed/MOJOLEARN_TREES_C45_GBDT.expdel2-42-trees.patch; record in docs/TOMBSTONES.md.
+        comptime if SYM_FUSED_SCAN:
+            # DEVIATION 3110: scan (+ subtract) and pstats phase 1 in one
+            # launch, then phase 2; the same bytes as the branch below.
+            var fused_launches = enqueue_fused_scan_sub_pstats(
+                ctx, use_ridx, planned and half > 0,
+                rebind[MutPointer[UInt32, MutAnyOrigin]](level_ids), sub_from,
+                flat_first, flat_folds, flat_one_hot,
+                len(active_fold_counts), hist_cells_per_leaf, hist,
+                n_compute, n_live, stat_count, n_rows,
+                dense_ids, p_off, p_sz, stats, row_index,
+                stat_partials, part_stats, sm_count,
+            )
+            for _ in range(fused_launches):
+                mgr.stream_kernel()
             times.end(ctx, "sym.hist")
+            if trace.enabled:
+                trace.record_device(
+                    ctx,
+                    tree_tag + ".depth" + _sym_dd2(depth) + ".hist",
+                    hist,
+                    count=n_live * stat_count * hist_cells_per_leaf,
+                )
+        else:
+            # their `TScanHistogramsKernel` (`:1262`), over the computed set;
+            # a prefix sum is linear, so the derived sibling needs no scan.
+            ctx.enqueue_function[scan_histograms_kernel](
+                level_ids,
+                flat_first.unsafe_ptr(), flat_folds.unsafe_ptr(),
+                flat_one_hot.unsafe_ptr(),
+                Int32(len(active_fold_counts)), Int32(hist_cells_per_leaf),
+                hist.unsafe_ptr(),
+                grid_dim=(
+                    (len(active_fold_counts) + 255) // 256, n_compute, stat_count
+                ),
+                block_dim=(256, 1, 1),
+            )
+            mgr.stream_kernel()
+
+            # their `SubstractHistograms(bigLeaves, smallLeaves, subsets)`
+            # (`:1354`). `from - what`, in place, one launch for all pairs:
+            # from = the right children (`dense_ids + half`, whose slots hold
+            # the parent via `copy_histograms`), what = the computed left.
+            if planned and half > 0:
+                if hist_cells_per_leaf % 4 == 0:
+                    ctx.enqueue_function[substract_histograms_vec4_kernel](
+                        sub_from.unsafe_ptr(), sub_what.unsafe_ptr(),
+                        Int32(hist_cells_per_leaf), hist.unsafe_ptr(),
+                        grid_dim=(
+                            (hist_cells_per_leaf // 4 + 255) // 256,
+                            half, stat_count
+                        ),
+                        block_dim=(256, 1, 1),
+                    )
+                else:
+                    ctx.enqueue_function[substract_histograms_kernel](
+                        sub_from.unsafe_ptr(), sub_what.unsafe_ptr(),
+                        Int32(hist_cells_per_leaf), hist.unsafe_ptr(),
+                        grid_dim=(
+                            (hist_cells_per_leaf + 255) // 256,
+                            half, stat_count
+                        ),
+                        block_dim=(256, 1, 1),
+                    )
+                mgr.stream_kernel()
+
+            times.end(ctx, "sym.hist")
+
+            # ---- identity checkpoint: this depth's REDUCED histograms ----
+            # `hist` is `[leaf][stat][binFeature]` leaf-major, and at this
+            # point slots 0..n_live-1 hold the level's SCANNED histograms
+            # (computed or sibling-derived); the tail holds deeper slots'
+            # stale cells, so only the live prefix is hashed (identity_trace
+            # rule 3). Records drain -- a traced run is not a timing (rule 4)
+            # -- and sit OUTSIDE the timed regions.
+            if trace.enabled:
+                trace.record_device(
+                    ctx,
+                    tree_tag + ".depth" + _sym_dd2(depth) + ".hist",
+                    hist,
+                    count=n_live * stat_count * hist_cells_per_leaf,
+                )
+
+            # their `AllReduceThroughMaster(subsets->CurrentPartStats(), ...)`
             times.begin(ctx)
+            # DEVIATION 2031: with stationary stats, phase 1 gathers through
+            # `row_index`; the walk order over positions is unchanged, so the
+            # value sequence entering every partial is identical.
             if use_ridx:
                 compute_partition_stats_gather(
                     ctx, n_live, max_live_rows, stat_count, n_rows,
                     dense_ids, p_off, p_sz, stats, row_index,
-                    stat_partials, part_stats, sm_count=sm_count,
+                    stat_partials, part_stats,
+                    sm_count=sm_count,
                 )
             else:
                 compute_partition_stats(
@@ -6240,111 +6226,7 @@ def run_tree_layout_traced[
                     sm_count=sm_count,
                 )
             mgr.stream_kernel()
-            mgr.stream_kernel()
             times.end(ctx, "sym.pstats")
-        else:
-            comptime if SYM_FUSED_SCAN:
-                # DEVIATION 3110: scan (+ subtract) and pstats phase 1 in one
-                # launch, then phase 2; the same bytes as the branch below.
-                var fused_launches = enqueue_fused_scan_sub_pstats(
-                    ctx, use_ridx, planned and half > 0,
-                    rebind[MutPointer[UInt32, MutAnyOrigin]](level_ids), sub_from,
-                    flat_first, flat_folds, flat_one_hot,
-                    len(active_fold_counts), hist_cells_per_leaf, hist,
-                    n_compute, n_live, stat_count, n_rows,
-                    dense_ids, p_off, p_sz, stats, row_index,
-                    stat_partials, part_stats, sm_count,
-                )
-                for _ in range(fused_launches):
-                    mgr.stream_kernel()
-                times.end(ctx, "sym.hist")
-                if trace.enabled:
-                    trace.record_device(
-                        ctx,
-                        tree_tag + ".depth" + _sym_dd2(depth) + ".hist",
-                        hist,
-                        count=n_live * stat_count * hist_cells_per_leaf,
-                    )
-            else:
-                # their `TScanHistogramsKernel` (`:1262`), over the computed set;
-                # a prefix sum is linear, so the derived sibling needs no scan.
-                ctx.enqueue_function[scan_histograms_kernel](
-                    level_ids,
-                    flat_first.unsafe_ptr(), flat_folds.unsafe_ptr(),
-                    flat_one_hot.unsafe_ptr(),
-                    Int32(len(active_fold_counts)), Int32(hist_cells_per_leaf),
-                    hist.unsafe_ptr(),
-                    grid_dim=(
-                        (len(active_fold_counts) + 255) // 256, n_compute, stat_count
-                    ),
-                    block_dim=(256, 1, 1),
-                )
-                mgr.stream_kernel()
-
-                # their `SubstractHistograms(bigLeaves, smallLeaves, subsets)`
-                # (`:1354`). `from - what`, in place, one launch for all pairs:
-                # from = the right children (`dense_ids + half`, whose slots hold
-                # the parent via `copy_histograms`), what = the computed left.
-                if planned and half > 0:
-                    if hist_cells_per_leaf % 4 == 0:
-                        ctx.enqueue_function[substract_histograms_vec4_kernel](
-                            sub_from.unsafe_ptr(), sub_what.unsafe_ptr(),
-                            Int32(hist_cells_per_leaf), hist.unsafe_ptr(),
-                            grid_dim=(
-                                (hist_cells_per_leaf // 4 + 255) // 256,
-                                half, stat_count
-                            ),
-                            block_dim=(256, 1, 1),
-                        )
-                    else:
-                        ctx.enqueue_function[substract_histograms_kernel](
-                            sub_from.unsafe_ptr(), sub_what.unsafe_ptr(),
-                            Int32(hist_cells_per_leaf), hist.unsafe_ptr(),
-                            grid_dim=(
-                                (hist_cells_per_leaf + 255) // 256,
-                                half, stat_count
-                            ),
-                            block_dim=(256, 1, 1),
-                        )
-                    mgr.stream_kernel()
-
-                times.end(ctx, "sym.hist")
-
-                # ---- identity checkpoint: this depth's REDUCED histograms ----
-                # `hist` is `[leaf][stat][binFeature]` leaf-major, and at this
-                # point slots 0..n_live-1 hold the level's SCANNED histograms
-                # (computed or sibling-derived); the tail holds deeper slots'
-                # stale cells, so only the live prefix is hashed (identity_trace
-                # rule 3). Records drain -- a traced run is not a timing (rule 4)
-                # -- and sit OUTSIDE the timed regions.
-                if trace.enabled:
-                    trace.record_device(
-                        ctx,
-                        tree_tag + ".depth" + _sym_dd2(depth) + ".hist",
-                        hist,
-                        count=n_live * stat_count * hist_cells_per_leaf,
-                    )
-
-                # their `AllReduceThroughMaster(subsets->CurrentPartStats(), ...)`
-                times.begin(ctx)
-                # DEVIATION 2031: with stationary stats, phase 1 gathers through
-                # `row_index`; the walk order over positions is unchanged, so the
-                # value sequence entering every partial is identical.
-                if use_ridx:
-                    compute_partition_stats_gather(
-                        ctx, n_live, max_live_rows, stat_count, n_rows,
-                        dense_ids, p_off, p_sz, stats, row_index,
-                        stat_partials, part_stats,
-                        sm_count=sm_count,
-                    )
-                else:
-                    compute_partition_stats(
-                        ctx, n_live, max_live_rows, stat_count, n_rows,
-                        dense_ids, p_off, p_sz, stats, stat_partials, part_stats,
-                        sm_count=sm_count,
-                    )
-                mgr.stream_kernel()
-                times.end(ctx, "sym.pstats")
 
         # ---- identity checkpoint: the level's per-leaf totals ---------
         # `part_stats` is the REDUCED `[leaf][stat]` result the score
@@ -6372,18 +6254,7 @@ def run_tree_layout_traced[
         # kernel arm. Cosine is their GPU default and pairs with
         # NewtonCosine onto one calcer, L2 with NewtonL2 onto the other,
         # exactly as the kernel's docstring lays out.
-        if c45_fused:
-            enqueue_c45_symmetric_score(
-                ctx, score_function, skip, hist_cells_per_leaf, bff, ffw,
-                hist, part_stats, stat_count, dense_ids, n_live,
-                multiclass_optimization, l2_leaf_reg, score_std_dev,
-                level_seed, out_score, out_bin, flat_first, flat_folds,
-                flat_one_hot, len(active_fold_counts),
-                rebind[MutPointer[UInt32, MutAnyOrigin]](level_ids),
-                n_compute, sub_from, sub_what,
-                half if planned and half > 0 else 0,
-            )
-        elif (
+        if (
             score_function == SCORE_FUNCTION_L2
             or score_function == SCORE_FUNCTION_NEWTON_L2
         ):
@@ -6709,7 +6580,7 @@ def run_tree_layout_traced[
     # recorded none since the previous drain; a full-queue synchronize
     # covers every copy enqueued before it whatever the manager recorded.
     # The manager is per call, so the activity it still records dies here.
-    var spec_tail = SYM_FUSED_LEVEL
+    var spec_tail = True
     if spec_tail and apply_to_cursor:
         if use_ridx:
             compute_partition_stats_gather(

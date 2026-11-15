@@ -65,7 +65,6 @@ deviation `fill.mojo` and `split_points.mojo` already record.
 from max.gpu import block_dim, block_idx, thread_idx
 from std.memory import bitcast
 from max.gpu.host import DeviceBuffer, DeviceContext
-from gbdt.apple_fast_classical import AFCL_T12
 
 from gbdt.ctrs.index_wrapper import (
     CTR_SEGMENT_START_BIT,
@@ -74,17 +73,22 @@ from gbdt.ctrs.index_wrapper import (
 )
 
 
-from gbdt.gpu_data.apple_fast_trees_experiments import AFT_G09, AFT_G10
 
 # G09: eight numerator rows amortize target predicate/segment-sign setup;
 # the exact scan and prefix exclusion run unchanged. No performance/quality
 # evidence. Keep the separate frequency kernel's four-row tile unchanged.
-comptime AFT_CTR_TARGET_DOCS = 8 if AFT_G09 else 4
+# TOMBSTONE: MOJOLEARN_AFT_G09 (DELETE-EXPERIMENT, never-run Apple FAST programme card, rule g) deleted 2026-11-15 by lane/expdel2-42-trees; code recoverable at 85224dc690.
+# Restore: git apply experiments/removed/MOJOLEARN_AFT_G09.patch; record in docs/TOMBSTONES.md.
+comptime AFT_CTR_TARGET_DOCS = 4
 # G10: four coalesced independent lookups per lane amortize prior/map setup.
 # Uncompiled/unverified/unmeasured; no category/prefix approximation.
-comptime AFT_CTR_LOOKUP_DOCS = 4 if AFT_G10 else 1
+# TOMBSTONE: MOJOLEARN_AFT_G10 (DELETE-EXPERIMENT, never-run Apple FAST programme card, rule g) deleted 2026-11-15 by lane/expdel2-42-trees; code recoverable at d6735a6c9b.
+# Restore: git apply experiments/removed/MOJOLEARN_AFT_G10.patch; record in docs/TOMBSTONES.md.
+comptime AFT_CTR_LOOKUP_DOCS = 1
 
-comptime CTR_BLOCK_SIZE = 128 if AFCL_T12 else 256
+# TOMBSTONE: MOJOLEARN_AFCL_T12 (DELETE-EXPERIMENT, never-run Apple FAST classical card, rule g; non-owner) deleted 2026-11-15 by lane/expdel2-42-trees; code recoverable at 55948e963a.
+# Restore: git apply experiments/removed/MOJOLEARN_AFCL_T12.expdel2-42-trees.patch; record in docs/TOMBSTONES.md.
+comptime CTR_BLOCK_SIZE = 256
 """`const ui32 blockSize = 256`, every launcher in `ctr_calcers.cu`."""
 
 comptime CTR_DOCS_PER_THREAD = 4

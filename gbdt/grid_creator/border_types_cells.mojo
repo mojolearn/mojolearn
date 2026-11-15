@@ -4,7 +4,6 @@ per-column functions, moved verbatim so the host oracle imports no `std.gpu`
 module. The device file imports every name back.
 """
 from std.memory import bitcast
-from std.sys.compile import is_defined
 from std.sys.info import is_apple_gpu
 
 from checks.numerics import ftz, pinned_mul_f32, portable_divf
@@ -44,14 +43,14 @@ comptime BT_EPS12 = UInt64(0x3D719799812DEA11)  # 1e-12, their `Eps`
 #: range), so every word is the one the soft path returned and the columns
 #: keep their bits; the DP no longer spends a few hundred integer
 #: instructions per add on the devices that have the unit.
-#: `-D MOJOLEARN_GBDT_BT_HW_F64_OFF` restores the soft path everywhere.
-comptime BT_HW_F64 = not is_defined["MOJOLEARN_GBDT_BT_HW_F64_OFF"]()
+# TOMBSTONE: MOJOLEARN_GBDT_BT_HW_F64_OFF (DELETE-OLD-PATH, soft binary64 DP everywhere, EXP:2272 CANDIDATE, no A/B recorded for the old path, rule b) deleted 2026-11-15 by lane/expdel2-42-trees; code recoverable at 533f4a23f1.
+# Restore: git apply experiments/removed/MOJOLEARN_GBDT_BT_HW_F64_OFF.patch; record in docs/TOMBSTONES.md.
 
 
 @always_inline
 def _dp_add(a: UInt64, b: UInt64) -> UInt64:
     """`sf64_add`, on the binary64 unit where there is one."""
-    comptime if BT_HW_F64 and not is_apple_gpu():
+    comptime if not is_apple_gpu():
         return bitcast[DType.uint64](bitcast[DType.float64](a) + bitcast[DType.float64](b))
     else:
         return sf64_add(a, b)
@@ -60,7 +59,7 @@ def _dp_add(a: UInt64, b: UInt64) -> UInt64:
 @always_inline
 def _dp_lt(a: UInt64, b: UInt64) -> Bool:
     """`sf64_lt` (non-NaN operands), on the binary64 unit where there is one."""
-    comptime if BT_HW_F64 and not is_apple_gpu():
+    comptime if not is_apple_gpu():
         return bitcast[DType.float64](a) < bitcast[DType.float64](b)
     else:
         return sf64_lt(a, b)

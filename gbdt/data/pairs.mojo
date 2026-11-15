@@ -38,14 +38,12 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 #: (`gbdt/host/gbdt_oracle_pair.mojo::host_pair_groups` and the `_group_*`
 #: functions) under this same constant, so NVIDIA, AMD, Apple and the host
 #: change together. A caller's own pair list keeps the pair-list path.
-#: `-D MOJOLEARN_IDN_GBDT_PAIRLOGIT_GROUP_OFF` (or the master
-#: `-D MOJOLEARN_IDN_ALL_OFF`) restores the pair list on all four.
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (DELETE-OLD-PATH, IDENTICAL master rollback, EXP:2438 DELETED; non-owner) deleted 2026-11-15 by lane/expdel2-42-trees; code recoverable at e2e7e7425f.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-42-trees.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_IDN_GBDT_PAIRLOGIT_GROUP_OFF (DELETE-OLD-PATH, IDENTICAL pair list, no A/B recorded, rule b) deleted 2026-11-15 by lane/expdel2-42-trees; code recoverable at 88680d2aa2.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_GBDT_PAIRLOGIT_GROUP_OFF.patch; record in docs/TOMBSTONES.md.
 comptime IDN_PAIRLOGIT_GROUP = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not (
-        is_defined["MOJOLEARN_IDN_GBDT_PAIRLOGIT_GROUP_OFF"]()
-        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-    )
 )
 
 #: `MAX_PAIR_COUNT_ON_GPU` (`private/libs/pairs/util.h:13`)

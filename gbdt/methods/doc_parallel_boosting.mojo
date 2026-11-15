@@ -9,13 +9,9 @@ from core.device_zero import enqueue_fill
 from max.gpu.host.device_attribute import DeviceAttribute
 from std.math import isfinite
 from std.sys.compile import is_defined
-from gbdt.trees_identical_switches import T18, T26, CTR_SORTFREE_SUMS
-from gbdt.methods.leaves_estimation.bin_keyed_stats import (
-    bk_partials_len,
-    enqueue_bin_keyed_apply,
-    enqueue_bin_keyed_counts,
-    enqueue_bk_copy_f32,
-)
+from gbdt.trees_identical_switches import T18, T26
+# TOMBSTONE: MOJOLEARN_TREES_CTR_SORTFREE_SUMS (DELETE-ARM, IDENTICAL sort-free CTR leaf sums, no A/B recorded, rule a; non-owner) deleted 2026-11-15 by lane/expdel2-42-trees; code recoverable at 8cc12e71fe.
+# Restore: git apply experiments/removed/MOJOLEARN_TREES_CTR_SORTFREE_SUMS.expdel2-42-trees.patch; record in docs/TOMBSTONES.md.
 from gbdt.methods.leaves_estimation.tree_t26_device import t26_estimate_apply
 from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from gbdt.methods.kernel_add_model_value import (
@@ -240,9 +236,8 @@ from gbdt.overfitting_detector.od_device import (
 )
 
 #: lane/apple-fast-trees-depthwise (2026-10-02, family `trees-ctr`),
-#: FAST + Apple DEFAULT ON (2026-10-02); `-D MOJOLEARN_GBDT_CTR_PERM_BATCH_OFF=1`
-#: restores the serial loop (the old `-D MOJOLEARN_GBDT_CTR_PERM_BATCH=1` is
-#: now harmless). M3 A/B tdw-cat-permbatch-tc (gbdt-categorical taxicat, n=2):
+#: FAST + Apple DEFAULT ON (2026-10-02; the `_OFF` rollback was deleted
+#: 2026-11-15, the old `-D MOJOLEARN_GBDT_CTR_PERM_BATCH=1` is harmless). M3 A/B tdw-cat-permbatch-tc (gbdt-categorical taxicat, n=2):
 #: 36,772 -> 35,780 ms (-2.7%, both B runs below both A), auc .6309 -> .6311.
 #: CAUSE: with CTR-bearing categorical features the fit keeps
 #: `permutation_count` (4) column sets, and the non-symmetric per-tree loop
@@ -266,21 +261,20 @@ from gbdt.overfitting_detector.od_device import (
 #: permutation's task launches the kernels of its serial run on the same
 #: inputs in the same order (the paragraph above), and only the drains are
 #: shared, so the bits are the serial loop's on every column and the host
-#: column is untouched. `-D MOJOLEARN_IDN_GBDT_CTR_PERM_BATCH_OFF` (or the
-#: master `-D MOJOLEARN_IDN_ALL_OFF`) restores the serial loop under
-#: IDENTICAL.
+#: column is untouched.
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (DELETE-OLD-PATH, IDENTICAL master rollback, EXP:2438 DELETED; non-owner) deleted 2026-11-15 by lane/expdel2-42-trees; code recoverable at e2e7e7425f.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-42-trees.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_IDN_GBDT_CTR_PERM_BATCH_OFF (DELETE-OLD-PATH, IDENTICAL serial permutation loop, no A/B recorded, rule b) deleted 2026-11-15 by lane/expdel2-42-trees; code recoverable at 4fc6907fab.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_GBDT_CTR_PERM_BATCH_OFF.patch; record in docs/TOMBSTONES.md.
 comptime IDN_CTR_PERM_BATCH = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not (
-        is_defined["MOJOLEARN_IDN_GBDT_CTR_PERM_BATCH_OFF"]()
-        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-    )
 )
 comptime CTR_PERM_BATCH = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
     and TARGET_HAS_APPLE_GPU
-    and not is_defined["MOJOLEARN_GBDT_CTR_PERM_BATCH_OFF"]()
 ) or IDN_CTR_PERM_BATCH
+# TOMBSTONE: MOJOLEARN_GBDT_CTR_PERM_BATCH_OFF (DELETE-OLD-PATH, rule d: promoted on Apple M3 FAST only (EXP:108 KEPT 57ddea946); NVIDIA/AMD A/B owed if FAST ever reopens there) deleted 2026-11-15 by lane/expdel2-42-trees; code recoverable at 9adf63d224.
+# Restore: git apply experiments/removed/MOJOLEARN_GBDT_CTR_PERM_BATCH_OFF.patch; record in docs/TOMBSTONES.md.
 # TOMBSTONE: MOJOLEARN_IDN_CTR_PERM_GRID (noise) deleted 2026-10-11 by d092b6e2d; code recoverable at d092b6e2d^.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_CTR_PERM_GRID.patch
 from gbdt.gpu_util.kernel.fill import launch_make_sequence
@@ -2472,17 +2466,9 @@ def _estimate_prepare(
     ref d_p_sz = est_ws[0].d_p_sz
     ref h_po = est_ws[0].h_po
     ref h_ps = est_ws[0].h_ps
-    # Lane S3 `CTR_SORTFREE_SUMS`: `natural_bins` given, the rows stay in
-    # ORIGINAL order: no gathers, the oracle reads the fit's target and
-    # weight planes directly and walks a copy of the cursor
-    var bin_keyed = False
-    comptime if CTR_SORTFREE_SUMS:
-        if natural_bins.__bool__():
-            if staged:
-                raise Error("_estimate_prepare: bin-keyed rows are never staged")
-            bin_keyed = True
-            enqueue_bk_copy_f32(ctx, g_cursor, cursor, n_rows)
-    if not staged and not bin_keyed:
+    # TOMBSTONE: MOJOLEARN_TREES_CTR_SORTFREE_SUMS (DELETE-ARM, IDENTICAL sort-free CTR leaf sums, no A/B recorded, rule a; non-owner) deleted 2026-11-15 by lane/expdel2-42-trees; code recoverable at 8cc12e71fe.
+    # Restore: git apply experiments/removed/MOJOLEARN_TREES_CTR_SORTFREE_SUMS.expdel2-42-trees.patch; record in docs/TOMBSTONES.md.
+    if not staged:
         launch_gather_with_mask_f32(
             ctx, g_target, targets, row_index, n_rows,
             UInt32(0xFFFFFFFF),
@@ -2505,10 +2491,6 @@ def _estimate_prepare(
     stage_times.begin(ctx)
     var o_target = g_target.copy()
     var o_weights = g_weights.copy()
-    if bin_keyed:
-        o_target = targets.copy()
-        if has_weights:
-            o_weights = weights.copy()
     var oracle = make_bin_optimized_oracle(
         ctx, n_rows, n_leaves, sizes,
         o_target^, o_weights^, g_cursor.copy(),
@@ -2602,17 +2584,9 @@ def _estimate_complete(
     ref d_est = est_ws[0].d_est
     trace.record_device(ctx, leaf_tag, d_est, n_leaves)
     leaf_values.clear()
-    var bk_applied = False
-    comptime if CTR_SORTFREE_SUMS:
-        # Lane S3: the cursor is in original order and row r's leaf is
-        # `natural_bins[r]` (the same per-row statement, `bin_keyed_stats`)
-        if append_to_cursor and natural_bins.__bool__():
-            var nb = natural_bins.value().copy()
-            enqueue_bin_keyed_apply(
-                ctx, nb, d_est, learning_rate, cursor, pending.n_rows
-            )
-            bk_applied = True
-    if append_to_cursor and not bk_applied:
+    # TOMBSTONE: MOJOLEARN_TREES_CTR_SORTFREE_SUMS (DELETE-ARM, IDENTICAL sort-free CTR leaf sums, no A/B recorded, rule a; non-owner) deleted 2026-11-15 by lane/expdel2-42-trees; code recoverable at 8cc12e71fe.
+    # Restore: git apply experiments/removed/MOJOLEARN_TREES_CTR_SORTFREE_SUMS.expdel2-42-trees.patch; record in docs/TOMBSTONES.md.
+    if append_to_cursor:
         var amv_gx = 2 * oracle.sm_count
         if amv_gx < 1:
             amv_gx = 1
@@ -4464,13 +4438,8 @@ def fit_with_test(
     # permutation (every task's buffers live at once), and the arena the
     # batched path carves them from. Empty when the arm is compiled out.
     var perm_leaf_parts = List[DeviceLeafPartitioner]()
-    # Lane S3 CTR_SORTFREE_SUMS: per permutation, the leaf row counts (device
-    # and host) and the bin-keyed fold's scratch, kept for the fit
-    var bk_counts = List[DeviceBuffer[DType.int32]]()
-    var bk_h_counts = List[HostBuffer[DType.int32]]()
-    var bk_parts = List[DeviceBuffer[DType.float32]]()
-    var bk_cap_rows = -1
-    var bk_cap_leaves = -1
+    # TOMBSTONE: MOJOLEARN_TREES_CTR_SORTFREE_SUMS (DELETE-ARM, IDENTICAL sort-free CTR leaf sums, no A/B recorded, rule a; non-owner) deleted 2026-11-15 by lane/expdel2-42-trees; code recoverable at 8cc12e71fe.
+    # Restore: git apply experiments/removed/MOJOLEARN_TREES_CTR_SORTFREE_SUMS.expdel2-42-trees.patch; record in docs/TOMBSTONES.md.
     var perm_est_ws = List[List[TEstimationWorkspace]]()
     var perm_arena = BufferArena()
     # FAST Depthwise and Lossguide fits otherwise download and counting-sort
@@ -5107,45 +5076,8 @@ def fit_with_test(
                     var inherit_learn = T18 and len(dws) == 1
                     if inherit_learn:
                         inherit_learn = dws[0].final_ready and len(dws[0].final_sizes) == n_bins
-                    # Lane S3 `MOJOLEARN_TREES_CTR_SORTFREE_SUMS` (IDENTICAL,
-                    # default off). NOT COMPILED — NOT TESTED — IDENTITY NOT
-                    # VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
-                    # Every permutation keeps its rows in ORIGINAL order: the
-                    # model walk's per-row leaf ids (`lp.bins`), exact integer
-                    # leaf counts (`enqueue_bin_keyed_counts`) behind the same
-                    # ONE drain, and the oracle's per-leaf sums keyed by leaf id
-                    # in a fixed float order (`bin_keyed_stats.mojo`): no radix
-                    # sort, no gathers into leaf order, no partition scatter.
-                    # COST: a stable radix sort of n (leaf, row) pairs plus
-                    # three gathers per permutation per tree become one
-                    # broadcast scan per (stat, 256-leaf group) per evaluation.
-                    # BITS CHANGE (float fold order; NVIDIA = AMD; no host
-                    # column: the CPU binding refuses CTR columns outside
-                    # SymmetricTree). T18's inherited learn partition is not
-                    # used under this switch (every permutation is sort-free).
-                    var sortfree = False
-                    comptime if CTR_SORTFREE_SUMS:
-                        sortfree = True
-                        inherit_learn = False
-                        var bk_cap = ns_max_leaves if ns_max_leaves > n_bins else n_bins
-                        if (
-                            len(bk_counts) != perm_count
-                            or bk_cap_rows != n_rows
-                            or bk_cap_leaves < n_bins
-                        ):
-                            bk_counts.clear()
-                            bk_h_counts.clear()
-                            bk_parts.clear()
-                            for _ in range(perm_count):  # small-loop(perm_count: learn permutations, a handful): pooled scratch per permutation
-                                bk_counts.append(ctx.enqueue_create_buffer[DType.int32](bk_cap))
-                                bk_h_counts.append(ctx.enqueue_create_host_buffer[DType.int32](bk_cap))
-                                bk_parts.append(
-                                    ctx.enqueue_create_buffer[DType.float32](
-                                        bk_partials_len(bk_cap, 2, n_rows)
-                                    )
-                                )
-                            bk_cap_rows = n_rows
-                            bk_cap_leaves = bk_cap
+                    # TOMBSTONE: MOJOLEARN_TREES_CTR_SORTFREE_SUMS (DELETE-ARM, IDENTICAL sort-free CTR leaf sums, no A/B recorded, rule a; non-owner) deleted 2026-11-15 by lane/expdel2-42-trees; code recoverable at 8cc12e71fe.
+                    # Restore: git apply experiments/removed/MOJOLEARN_TREES_CTR_SORTFREE_SUMS.expdel2-42-trees.patch; record in docs/TOMBSTONES.md.
                     # TOMBSTONE: MOJOLEARN_IDN_CTR_PERM_GRID (noise) deleted 2026-10-11 by d092b6e2d; code recoverable at d092b6e2d^.
                     # Restore: git apply experiments/removed/MOJOLEARN_IDN_CTR_PERM_GRID.patch
                     for p in range(perm_count):
@@ -5162,45 +5094,13 @@ def fit_with_test(
                                 ctx, layout_for_test, tree.model_structure,
                                 perm_cindexes[p], n_rows, lp.bins,
                             )
-                        if sortfree:
-                            enqueue_bin_keyed_counts(
-                                ctx, n_bins, n_rows, lp.bins, bk_counts[p]
-                            )
-                            ctx.enqueue_copy(
-                                dst_buf=bk_h_counts[p], src_buf=bk_counts[p]
-                            )
-                        else:
-                            lp.partition_enqueue(ctx, n_rows, n_bins)
+                        lp.partition_enqueue(ctx, n_rows, n_bins)
                     loop_times.stop_host("iter_bins_for_model", t_bins_b)
                     var t_part_b = loop_times.start()
                     # ONE drain settles every permutation's leaf bounds
                     ctx.synchronize()
                     var parts = List[LeafPartition]()
                     for p in range(perm_count):
-                        if sortfree:
-                            # sizes from the exact counts; offsets their
-                            # running sum (the oracle's `d_p_sz` is the
-                            # unweighted leaf weight); the row index is
-                            # never read on this arm
-                            var bk_sizes = List[Int]()
-                            var bk_offsets = List[Int]()
-                            var bk_running = 0
-                            for leaf in range(n_bins):  # small-loop(n_bins: the tree's leaves): counts readback to sizes
-                                var c = Int(bk_h_counts[p].unsafe_ptr().unsafe_load(leaf))
-                                bk_offsets.append(bk_running)
-                                bk_sizes.append(c)
-                                bk_running += c
-                            if bk_running != n_rows:
-                                raise Error(
-                                    "CTR_SORTFREE_SUMS: leaf counts sum to "
-                                    + String(bk_running) + " for "
-                                    + String(n_rows) + " rows"
-                                )
-                            parts.append(LeafPartition(
-                                perm_leaf_parts[p].vals.copy(),
-                                bk_offsets^, bk_sizes^,
-                            ))
-                            continue
                         if inherit_learn and p == learn_p:
                             parts.append(LeafPartition(
                                 row_index.copy(), dws[0].final_offsets.copy(),
@@ -5218,11 +5118,6 @@ def fit_with_test(
                     # step behind one drain per round, completed in order
                     var pend = List[PendingEstimation]()
                     for p in range(perm_count):
-                        var nb_opt = Optional[DeviceBuffer[DType.uint32]]()
-                        var bkp_opt = Optional[DeviceBuffer[DType.float32]]()
-                        if sortfree:
-                            nb_opt = Optional(perm_leaf_parts[p].bins.copy())
-                            bkp_opt = Optional(bk_parts[p].copy())
                         pend.append(
                             _estimate_prepare(
                                 ctx, n_rows, n_bins,
@@ -5234,8 +5129,6 @@ def fit_with_test(
                                 leaf_estimation_method,
                                 perm_est_ws[p], perm_arena, stage_times,
                                 iterations=leaf_estimation_iterations,
-                                natural_bins=nb_opt^,
-                                bk_partials=bkp_opt^,
                                 # lane gbdt-categorical-oom (1): the policy's
                                 # leaf bound, the same capacity the
                                 # partitioners above take
@@ -5252,9 +5145,6 @@ def fit_with_test(
                                     walking = True
                     for p in range(perm_count):  # small-loop(perm_count: learn permutations, a handful): one completion launch set per permutation task
                         var pv_b = List[Float32]()
-                        var nbc_opt = Optional[DeviceBuffer[DType.uint32]]()
-                        if sortfree:
-                            nbc_opt = Optional(perm_leaf_parts[p].bins.copy())
                         _estimate_complete(
                             ctx, pend[p], parts[p].row_index, cursors[p],
                             learning_rate, pv_b, not_pd_total, trace,
@@ -5262,7 +5152,6 @@ def fit_with_test(
                             _tree_tag(iteration) + ".perm" + String(p)
                             + ".leaves.estimated",
                             perm_est_ws[p],
-                            natural_bins=nbc_opt^,
                         )
                     # the batch's closing drain: one per tree
                     ctx.synchronize()

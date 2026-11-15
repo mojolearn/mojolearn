@@ -40,8 +40,6 @@ from max.gpu import block_dim, block_idx, grid_dim, thread_idx
 from std.memory import bitcast, stack_allocation
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
-from gbdt.apple_fast_classical import AFCL_T03
-from gbdt.gpu_data.apple_fast_trees_experiments import AFT_G05, AFT_G06
 
 
 #: `binarize.cu:26`.
@@ -80,7 +78,11 @@ def write_compressed_index_kernel(
 # G05: a 512-thread group stages the same at-most-256 borders while
 # halving group occupancy pressure. Eight rows/lane and comparisons stay.
 # Uncompiled/unverified/unmeasured; A/B uses the same quantization route.
-comptime BINARIZE_BLOCK_SIZE = 512 if AFT_G05 or AFCL_T03 else 1024
+# TOMBSTONE: MOJOLEARN_AFT_G05 (DELETE-EXPERIMENT, never-run Apple FAST programme card, rule g) deleted 2026-11-15 by lane/expdel2-42-trees; code recoverable at a2d4deb701.
+# Restore: git apply experiments/removed/MOJOLEARN_AFT_G05.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_AFCL_T03 (DELETE-EXPERIMENT, never-run Apple FAST classical card, rule g; non-owner) deleted 2026-11-15 by lane/expdel2-42-trees; code recoverable at 10b9a4c50c.
+# Restore: git apply experiments/removed/MOJOLEARN_AFCL_T03.expdel2-42-trees.patch; record in docs/TOMBSTONES.md.
+comptime BINARIZE_BLOCK_SIZE = 1024
 comptime BINARIZE_DOCS_PER_THREAD = 8
 
 
@@ -202,8 +204,10 @@ def binarize_float_feature_kernel(
 # G06: retain 2048 rows per block but halve threads and double independent
 # rows per worker, amortizing the shared word/border table over more work
 # per lane. This deliberately trades registers for occupancy; no evidence.
-comptime PACK_BLOCK = 128 if AFT_G06 else 256
-comptime PACK_DOCS = 16 if AFT_G06 else 8
+# TOMBSTONE: MOJOLEARN_AFT_G06 (DELETE-EXPERIMENT, never-run Apple FAST programme card, rule g) deleted 2026-11-15 by lane/expdel2-42-trees; code recoverable at eedd37dfb4.
+# Restore: git apply experiments/removed/MOJOLEARN_AFT_G06.patch; record in docs/TOMBSTONES.md.
+comptime PACK_BLOCK = 256
+comptime PACK_DOCS = 8
 #: the most features one compressed-index word holds (the binary policy's
 #: `features_per_int`), and the shared slab for the word's border values:
 #: 32 x 1 (binary), 8 x 15 (half-byte) or 4 x 255 (one-byte) at most, so
