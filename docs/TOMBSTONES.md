@@ -2152,6 +2152,7 @@ Deletions reversed by new evidence. The code is back on main; the section and th
 | [`MOJOLEARN_IDN_OLS_PREDICT_TILED`](#mojolearn_idn_ols_predict_tiled-opt-in-arm-deleted-2026-11-15) | OLS predict gemv (IDENTICAL) | 2026-11-15 (`1900f1d297`) | 2026-11-15 (lane/expdel2-restore-owed) | opt-in B arm, default unchanged, A/B owed at the wave sha | [MOJOLEARN_IDN_OLS_PREDICT_TILED.patch](../experiments/removed/MOJOLEARN_IDN_OLS_PREDICT_TILED.patch) |
 | [`MOJOLEARN_IDN_TSQR_TREE_PAR_OFF`](#mojolearn_idn_tsqr_tree_par_off) | Decomposition (TSQR tree combine, IDENTICAL) | 2026-11-15 (`77c81ac782`) | 2026-11-15 (lane/expdel2-restore-owed) | opt-in B arm, default unchanged, A/B owed at the wave sha | [MOJOLEARN_IDN_TSQR_TREE_PAR_OFF.patch](../experiments/removed/MOJOLEARN_IDN_TSQR_TREE_PAR_OFF.patch) |
 | [`MOJOLEARN_MAMBA3_FORWARD_ZERO_FILL`](#mojolearn_mamba3_forward_zero_fill) | Neural (Mamba-3 outputs) | 2026-11-15 (`1c0608ab17`) | 2026-11-15 (lane/expdel2-restore-owed) | opt-in B arm, default unchanged, A/B owed at the wave sha | [MOJOLEARN_MAMBA3_FORWARD_ZERO_FILL.patch](../experiments/removed/MOJOLEARN_MAMBA3_FORWARD_ZERO_FILL.patch) |
+| [`MOJOLEARN_MAMBA_CALL_PROGRAM`](#mojolearn_mamba_call_program) | Neural (per-call Mamba door x in place) | 2026-11-15 (`449d72a027`) | 2026-11-15 (lane/expdel2-restore-owed) | opt-in B arm, default unchanged, A/B owed at the wave sha | [MOJOLEARN_MAMBA_CALL_PROGRAM.patch](../experiments/removed/MOJOLEARN_MAMBA_CALL_PROGRAM.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -14602,6 +14603,7 @@ Restored 2026-11-15 (lane/expdel2-restore-owed): owed B arm, deletion premature;
 - Files: autograd/block_step_ops.mojo.
 - Deleted by: lane/expdel2-23-neural `449d72a027` (2026-11-15); code recoverable at `ea4327182b`.
 - Restore: `git apply experiments/removed/MOJOLEARN_MAMBA_CALL_PROGRAM.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+Restored 2026-11-15 (lane/expdel2-restore-owed): owed B arm, deletion premature; see Restored table.
 
 ### MOJOLEARN_NN50_OWNED_RUNS
 

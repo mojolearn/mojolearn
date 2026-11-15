@@ -419,8 +419,7 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_MAMBA3_S17_OPERANDS_NAIVE"](), "removed 2026-11-15 (lane/expdel2-23-neural): MAMBA3_S17_OPERANDS_NAIVE (arm) is gone; the default path is the only one; code at 60e95e5888; restore: experiments/removed/MOJOLEARN_MAMBA3_S17_OPERANDS_NAIVE.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_MAMBA3_S17_TAIL_NAIVE.patch
     comptime assert not is_defined["MOJOLEARN_MAMBA3_S17_TAIL_NAIVE"](), "removed 2026-11-15 (lane/expdel2-23-neural): MAMBA3_S17_TAIL_NAIVE (arm) is gone; the default path is the only one; code at ccf74402cb; restore: experiments/removed/MOJOLEARN_MAMBA3_S17_TAIL_NAIVE.patch"
-    # Restore: git apply experiments/removed/MOJOLEARN_MAMBA_CALL_PROGRAM.patch
-    comptime assert not is_defined["MOJOLEARN_MAMBA_CALL_PROGRAM"](), "removed 2026-11-15 (lane/expdel2-23-neural): MAMBA_CALL_PROGRAM (arm) is gone; the default path is the only one; code at ea4327182b; restore: experiments/removed/MOJOLEARN_MAMBA_CALL_PROGRAM.patch"
+    # MOJOLEARN_MAMBA_CALL_PROGRAM: refusal removed 2026-11-15 (restored; owed B arm, see docs/TOMBSTONES.md Restored table)
     # Restore: git apply experiments/removed/MOJOLEARN_NN50_OWNED_RUNS.patch
     comptime assert not is_defined["MOJOLEARN_NN50_OWNED_RUNS"](), "removed 2026-11-15 (lane/expdel2-23-neural): NN50_OWNED_RUNS (arm) is gone; the default path is the only one; code at 4f9d2d5288; restore: experiments/removed/MOJOLEARN_NN50_OWNED_RUNS.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_TRANSFORMER_GENERIC_PREFILL.patch
