@@ -11,6 +11,8 @@ session and only when a collected test carries its marker.
     needs_numpy_free_python  MOJOLEARN_NUMPY_FREE_PYTHON names an interpreter
     needs_installed_package  `import mojolearn` works in a child with no PYTHONPATH
                              (the package is installed or editable-installed)
+    needs_gpu                `mojolearn.vendor()` is a GPU (metal, cuda or hip), not a
+                             CPU-only install
 
 `slow` marks a test whose work is long by nature (each mark is listed with its
 reason in the lane table). MOJOLEARN_TEST_SLOW=0 deselects them; the default
