@@ -666,6 +666,7 @@ in the tables after the sections.
 | [`MOJOLEARN_X_PREP_FAST_TE_ENC_OFF`](#mojolearn_x_prep_fast_te_enc_off-old-path-deleted-2026-11-15) | Preprocessing (TargetEncoder te_enc by threadgroup, FAST Apple) | removed (old path; FAST+Apple DEFAULT, afc_ab_def) | 2026-11-15 | [MOJOLEARN_X_PREP_FAST_TE_ENC_OFF.patch](../experiments/removed/MOJOLEARN_X_PREP_FAST_TE_ENC_OFF.patch) |
 | [`MOJOLEARN_PREP2_FAST_EIGH_BLOCK_OFF`](#mojolearn_prep2_fast_eigh_block_off-old-path-deleted-2026-11-15) | Preprocessing (IterativeImputer eigh on a threadgroup, FAST Apple) | removed (old path; FAST+Apple DEFAULT, afc_ab_def) | 2026-11-15 | [MOJOLEARN_PREP2_FAST_EIGH_BLOCK_OFF.patch](../experiments/removed/MOJOLEARN_PREP2_FAST_EIGH_BLOCK_OFF.patch) |
 | [`MOJOLEARN_CD_FAST_GRID_GRAM_OFF`](#mojolearn_cd_fast_grid_gram_off-old-path-deleted-2026-11-15) | Solver (CD Gram on the grid, FAST Apple) | removed (old path; FAST+Apple default KEPT, linear-lasso-rm-istella / linear-enet-rm-istella) | 2026-11-15 | [MOJOLEARN_CD_FAST_GRID_GRAM_OFF.patch](../experiments/removed/MOJOLEARN_CD_FAST_GRID_GRAM_OFF.patch) |
+| [`MOJOLEARN_CD_FAST_ROWMAJOR_OFF`](#mojolearn_cd_fast_rowmajor_off-old-path-deleted-2026-11-15) | Solver (CD row-major grid Gram, FAST Apple) | removed (old path; FAST+Apple default KEPT, linear-lasso-rm-istella / linear-enet-rm-istella) | 2026-11-15 | [MOJOLEARN_CD_FAST_ROWMAJOR_OFF.patch](../experiments/removed/MOJOLEARN_CD_FAST_ROWMAJOR_OFF.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -6463,4 +6464,12 @@ bits change on any vendor or the host column, no board row needs re-timing.
 - **Verdict**: KEPT 0ae9c28cd (EXPERIMENTS.md `CD_FAST_GRID_GRAM + CD_FAST_ROWMAJOR`, linear-lasso-rm-istella, linear-enet-rm-istella): M3 one run per arm, lasso istella 264 -> 149 ms, elasticnet 262 -> 143 ms, r2 .2616 -> .2609. No bit change on any column.
 - **Deleted by**: lane/expdel-03-linear (expdel-03-linear, docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md); code recoverable at `e592fb6e9f`.
 - **Restore**: `git apply experiments/removed/MOJOLEARN_CD_FAST_GRID_GRAM_OFF.patch`, then delete the `MOJOLEARN_CD_FAST_GRID_GRAM_OFF` refusal in `core/experiment_guards_linear.mojo`.
+- **Records**: refusal in `core/experiment_guards_linear.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel-03-linear section).
+
+## MOJOLEARN_CD_FAST_ROWMAJOR_OFF: old path deleted (2026-11-15)
+
+- **What it was**: the FAST+Apple rollback of Lasso / ElasticNet's C-order design on the CD_FAST_GRAM path from reading the row-major tiles as uploaded (no device transpose, no centering passes, means from the grid chunks: `cd_grid_sums_kernel` / `cd_grid_means_kernel`) to the device transpose plus `pre_process_data` / `post_process_data`. Only the `and not is_defined` term of `CD_FAST_ROWMAJOR` (solver/impl/cd.mojo) is gone; the transpose stays the path of weighted fits, of shapes the grid Gram does not serve and of every non-FAST-Apple build.
+- **Verdict**: KEPT 0ae9c28cd (EXPERIMENTS.md `CD_FAST_GRID_GRAM + CD_FAST_ROWMAJOR`, linear-lasso-rm-istella, linear-enet-rm-istella): M3 one run per arm, lasso istella 264 -> 149 ms, elasticnet 262 -> 143 ms with both, r2 .2616 -> .2609. Measured as the pair. No bit change on any column.
+- **Deleted by**: lane/expdel-03-linear (expdel-03-linear, docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md); code recoverable at `7d40f892a7`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_CD_FAST_ROWMAJOR_OFF.patch`, then delete the `MOJOLEARN_CD_FAST_ROWMAJOR_OFF` refusal in `core/experiment_guards_linear.mojo`.
 - **Records**: refusal in `core/experiment_guards_linear.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel-03-linear section).
