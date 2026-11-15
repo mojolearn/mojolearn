@@ -78,7 +78,7 @@ Kept, with the reason (34 sites):
 - `_families.load_all()` (2: `_verify.py`, `_verify_worker.py`): verify and its workers run on the complete loaded set
   so every unit is vendor- and mode-checked and hashed. There is no public "load everything" call, and adding one to
   the product for verify would be verify steering the product.
-- Fixture modules shared with the product and with about 25 tests and tools (18: `_causal_lm_fixtures` in
+- Fixture modules shared with the product and with about 25 tests and tools (15: `_causal_lm_fixtures` in
   `_verify_api_models`, `_verify_causal_lm`, `_verify_generation`; `_tokenizer_synthetic` in `_verify_api_misc`;
   `_gpu_witness` in `_verify_distributed`; `_parallel_cv_witness` in `_verify_parallel_cv`). `_causal_lm_fixtures`
   is imported by `_portable_math.py` and `_tokenizer_synthetic` by `tokenizer.py`, so they are not test-only. The
