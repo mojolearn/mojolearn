@@ -23,25 +23,6 @@
    "status": "kept",
    "note": "256-lane fixed halving tree, two streams per barrier; StandardScaler mean pass only (finite input)."
   },
-  "c59_trial_state": {
-   "define": "MOJOLEARN_C59_TRIAL_STATE",
-   "kind": "switch",
-   "arms": {
-    "off": [],
-    "on": [
-     "MOJOLEARN_C59_TRIAL_STATE"
-    ]
-   },
-   "default": "off",
-   "source": [
-    "arima/impl/batched_kalman.mojo:673",
-    "arima/impl/fast_eval_ws.mojo:343"
-   ],
-   "binding": "_mojolearn_arima",
-   "bits_change": false,
-   "status": "kept",
-   "note": "one observation copy instead of N+1; indexing only."
-  },
   "c60_lag4": {
    "define": "MOJOLEARN_C60_LAG4",
    "kind": "switch",
@@ -280,9 +261,7 @@
   "more:arima": {
    "binding": "_mojolearn_arima",
    "route": "fit: ARIMA.fit -> arima/estimator.mojo:511 batched_fit_x -> batched_fit.mojo:498 -> FastEvalWS loop kernel (batched_kalman.mojo:673)",
-   "controls": [
-    "c59_trial_state"
-   ],
+   "controls": [],
    "interaction_groups": []
   },
   "expanded:autoarima": {
@@ -290,7 +269,6 @@
    "route": "select_d -> select_d_host -> auto_arima.mojo:74 -> select_d_fast (C60_LAG4, stationarity.mojo:233); order search -> fast_order_search (search reuse) ; per-order ARIMA.fit (C59)",
    "controls": [
     "c60_lag4",
-    "c59_trial_state",
     "arima_search_reuse"
    ],
    "interaction_groups": [
@@ -443,6 +421,11 @@
    "define": "MOJOLEARN_C58_TEAM_MIB",
    "control": "c58_team_mib",
    "reason": "DELETED 2026-11-15 (lane/expdel2-07-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md; recoverable at d6045cbd0a; patch experiments/removed/MOJOLEARN_C58_TEAM_MIB.patch): unmeasured opt-in arm. no record: no A/B was recorded for the opt-in arm (plan rule a; AGENTS.md \"An unmeasured arm is deleted\", Andrew 2026-11-15). Refused in core/experiment_guards_neural.mojo; docs/TOMBSTONES.md."
+  },
+  {
+   "define": "MOJOLEARN_C59_TRIAL_STATE",
+   "control": "c59_trial_state",
+   "reason": "DELETED 2026-11-15 (lane/expdel2-07-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md; recoverable at 7935a1db35; patch experiments/removed/MOJOLEARN_C59_TRIAL_STATE.patch): unmeasured opt-in arm. no record: no A/B was recorded for the opt-in arm (plan rule a; AGENTS.md \"An unmeasured arm is deleted\", Andrew 2026-11-15). Refused in core/experiment_guards_series.mojo; docs/TOMBSTONES.md."
   }
  ],
  "owed_removal_ab": [

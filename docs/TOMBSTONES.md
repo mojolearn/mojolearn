@@ -753,6 +753,7 @@ in the tables after the sections.
 | [`MOJOLEARN_C57_CANDIDATE_STATE`](#mojolearn_c57_candidate_state-unmeasured-arm-deleted-2026-11-15) | Decomposition (MinCovDet candidate mean retained for its covariance, IDENTICAL) | removed (unmeasured opt-in arm) | 2026-11-15 | [MOJOLEARN_C57_CANDIDATE_STATE.patch](../experiments/removed/MOJOLEARN_C57_CANDIDATE_STATE.patch) |
 | [`MOJOLEARN_C58_SERIES4`](#mojolearn_c58_series4-unmeasured-arm-deleted-2026-11-15) | Time series (Holt-Winters four series per thread, IDENTICAL) | removed (unmeasured opt-in arm) | 2026-11-15 | [MOJOLEARN_C58_SERIES4.patch](../experiments/removed/MOJOLEARN_C58_SERIES4.patch) |
 | [`MOJOLEARN_C58_TEAM_MIB`](#mojolearn_c58_team_mib-unmeasured-arm-deleted-2026-11-15) | Sequence (classical series team state budget 64 MiB, IDENTICAL) | removed (unmeasured opt-in arm) | 2026-11-15 | [MOJOLEARN_C58_TEAM_MIB.patch](../experiments/removed/MOJOLEARN_C58_TEAM_MIB.patch) |
+| [`MOJOLEARN_C59_TRIAL_STATE`](#mojolearn_c59_trial_state-unmeasured-arm-deleted-2026-11-15) | Time series (ARIMA trial state reuse, IDENTICAL) | removed (unmeasured opt-in arm) | 2026-11-15 | [MOJOLEARN_C59_TRIAL_STATE.patch](../experiments/removed/MOJOLEARN_C59_TRIAL_STATE.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -7302,3 +7303,11 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md (section expdel-02-
 - **Deleted by**: lane/expdel2-07-base (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `d6045cbd0a`.
 - **Restore**: `git apply experiments/removed/MOJOLEARN_C58_TEAM_MIB.patch`, then delete the `MOJOLEARN_C58_TEAM_MIB` refusal in `core/experiment_guards_neural.mojo`.
 - **Records**: refusal in `core/experiment_guards_neural.mojo`; `classical-misc.json` control `c58_team_mib`: `removed` entry added (control removed from `controls` and from its algorithms); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-07-base section).
+
+## MOJOLEARN_C59_TRIAL_STATE: unmeasured arm deleted (2026-11-15)
+
+- **What it was**: the opt-in arm behind `C59_TRIAL_STATE` in `experiments/classical_identical_ideas/stats_controls.mojo`; the alias stays as the folded constant so importers in other lanes compile, and each importer's lane deletes its branch.
+- **Verdict**: no record: no A/B was recorded for the opt-in arm (plan rule a; AGENTS.md "An unmeasured arm is deleted", Andrew 2026-11-15). No bit change on any column.
+- **Deleted by**: lane/expdel2-07-base (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `7935a1db35`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_C59_TRIAL_STATE.patch`, then delete the `MOJOLEARN_C59_TRIAL_STATE` refusal in `core/experiment_guards_series.mojo`.
+- **Records**: refusal in `core/experiment_guards_series.mojo`; `classical-misc.json` control `c59_trial_state`: `removed` entry added (control removed from `controls` and from its algorithms); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-07-base section).

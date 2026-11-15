@@ -55,7 +55,9 @@ comptime C58_SERIES4 = False
 # TOMBSTONE: MOJOLEARN_C58_TEAM_MIB (no A/B recorded for the opt-in arm) deleted 2026-11-15 by lane/expdel2-07-base; code recoverable at d6045cbd0a.
 # Restore: git apply experiments/removed/MOJOLEARN_C58_TEAM_MIB.patch
 comptime C58_TEAM_MIB = 256
-comptime C59_TRIAL_STATE = CLASSICAL_IDENTICAL and is_defined["MOJOLEARN_C59_TRIAL_STATE"]()
+# TOMBSTONE: MOJOLEARN_C59_TRIAL_STATE (no A/B recorded for the opt-in arm) deleted 2026-11-15 by lane/expdel2-07-base; code recoverable at 7935a1db35.
+# Restore: git apply experiments/removed/MOJOLEARN_C59_TRIAL_STATE.patch
+comptime C59_TRIAL_STATE = False
 # C60: shared detrended observations across independent lag tasks.
 comptime C60_LAG4 = CLASSICAL_IDENTICAL and is_defined["MOJOLEARN_C60_LAG4"]()
 # C60_DIFF_REUSE removed 2026-10-07 (lane classical-misc): dead code. It fired only
