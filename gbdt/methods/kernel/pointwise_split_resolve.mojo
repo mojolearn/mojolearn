@@ -309,9 +309,9 @@ def launch_pw_pack_winner(
 # ====================================================================
 # TOMBSTONE: MOJOLEARN_GBDT_FUSED_LEVEL_OFF (DELETE-OLD-PATH, no A/B recorded for the old path, rule b; non-owner fold, PW_FUSED_LEVEL kept as the constant True for its importers) deleted 2026-11-15 by lane/expdel2-43-trees; code recoverable at c91aa521d9.
 # Restore: git apply experiments/removed/MOJOLEARN_GBDT_FUSED_LEVEL_OFF.expdel2-43-trees.patch; record in docs/TOMBSTONES.md.
-comptime PW_FUSED_LEVEL = True
+# (Sweep 2026-11-15: the always-True PW_FUSED_LEVEL constant was folded into PW_FUSED_SEARCH.)
 # the searcher's fused launch alone, for bisecting
-comptime PW_FUSED_SEARCH = PW_FUSED_LEVEL and not is_defined[
+comptime PW_FUSED_SEARCH = not is_defined[
     "MOJOLEARN_GBDT_FUSED_PW_OFF"
 ]()
 
