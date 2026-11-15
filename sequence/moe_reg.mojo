@@ -37,7 +37,6 @@ from std.atomic import Atomic
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 
-from std.sys.compile import is_defined
 from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL, ftz, identical_div, identical_exp, identical_silu
 from sequence.ops import FP, add, fma3, ld, mul, st, sub
@@ -59,7 +58,10 @@ from sequence.ops import FP, add, fma3, ld, mul, st, sub
 # NVIDIA/AMD A/B of REGTILE against moe_tiled is owed) deleted 2026-11-15 by lane/expdel2-29-neural; code recoverable at 253d6543b0.
 # Restore: git apply experiments/removed/MOJOLEARN_MOE_REGTILE_OFF.patch
 comptime MOE_REGTILE = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU) or GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-comptime MOE_DEVGROUP = MOE_REGTILE and not is_defined["MOJOLEARN_MOE_DEVGROUP_OFF"]()
+# TOMBSTONE: MOJOLEARN_MOE_DEVGROUP_OFF (old path; EXP:587 KEPT 499e1b72c, promoted on the M3 (FAST) only; the IDENTICAL
+# NVIDIA/AMD A/B is owed) deleted 2026-11-15 by lane/expdel2-29-neural; code recoverable at 2ca18f9b39.
+# Restore: git apply experiments/removed/MOJOLEARN_MOE_DEVGROUP_OFF.patch
+comptime MOE_DEVGROUP = MOE_REGTILE
 
 #: pairs per block, outputs per block, reduction slab, threads per block
 comptime RM = 64
