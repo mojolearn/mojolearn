@@ -2028,6 +2028,10 @@ in the tables after the sections.
 | [`MOJOLEARN_SHAP_PERM_CACHE_OFF`](#mojolearn_shap_perm_cache_off) | Trees (Permutation SHAP per-chunk cache rollback) | removed (old path, no A/B recorded) | 2026-11-15 | [MOJOLEARN_SHAP_PERM_CACHE_OFF.patch](../experiments/removed/MOJOLEARN_SHAP_PERM_CACHE_OFF.patch) |
 | [`MOJOLEARN_DART_DEVICE_OFF`](#mojolearn_dart_device_off) | Trees (DART FAST device round rollback) | removed (old path) | 2026-11-15 | [MOJOLEARN_DART_DEVICE_OFF.patch](../experiments/removed/MOJOLEARN_DART_DEVICE_OFF.patch) |
 | [`MOJOLEARN_IDN_DART_DEVICE_OFF`](#mojolearn_idn_dart_device_off) | Trees (DART IDENTICAL device round rollback) | removed (old path, no A/B recorded) | 2026-11-15 | [MOJOLEARN_IDN_DART_DEVICE_OFF.patch](../experiments/removed/MOJOLEARN_IDN_DART_DEVICE_OFF.patch) |
+| [`MOJOLEARN_IDN_ARIMA_ORDER_CAP_OFF`](#mojolearn_idn_arima_order_cap_off-expdel2-47-promote) | Time series (AutoARIMA order-group workspace cap, IDENTICAL) | removed (old path, no A/B recorded) | 2026-11-15 | [MOJOLEARN_IDN_ARIMA_ORDER_CAP_OFF.patch](../experiments/removed/MOJOLEARN_IDN_ARIMA_ORDER_CAP_OFF.patch) |
+| [`MOJOLEARN_IDN_ARIMA_ORDER_DEVICE_OFF`](#mojolearn_idn_arima_order_device_off-expdel2-47-promote) | Time series (AutoARIMA order search on device, IDENTICAL) | removed (old path, no A/B recorded) | 2026-11-15 | [MOJOLEARN_IDN_ARIMA_ORDER_DEVICE_OFF.patch](../experiments/removed/MOJOLEARN_IDN_ARIMA_ORDER_DEVICE_OFF.patch) |
+| [`MOJOLEARN_IDN_ARIMA_ORDER_SEASONAL_OFF`](#mojolearn_idn_arima_order_seasonal_off-expdel2-47-promote) | Time series (AutoARIMA seasonal grouped search, IDENTICAL) | removed (old path, no A/B recorded) | 2026-11-15 | [MOJOLEARN_IDN_ARIMA_ORDER_SEASONAL_OFF.patch](../experiments/removed/MOJOLEARN_IDN_ARIMA_ORDER_SEASONAL_OFF.patch) |
+| [`MOJOLEARN_IDN_ARIMA_IC_DEVICE_OFF`](#mojolearn_idn_arima_ic_device_off-expdel2-47-promote) | Time series (AutoARIMA IC argmin on device, IDENTICAL) | removed (old path, no A/B recorded) | 2026-11-15 | [MOJOLEARN_IDN_ARIMA_IC_DEVICE_OFF.patch](../experiments/removed/MOJOLEARN_IDN_ARIMA_IC_DEVICE_OFF.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -20827,3 +20831,47 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2
 - `MOJOLEARN_AFT_G08`: folded to False in gbdt/methods/kernel_add_model_value.mojo; `a61d0e7d75`, recoverable at `acfd453fec`; `experiments/removed/MOJOLEARN_AFT_G08.expdel2-43-trees.patch`.
 
 Not deleted, contrary to the plan: `MOJOLEARN_IDN_GBDT_STEP_OLD` (restore switch; its NVIDIA + AMD A/B is owed this wave) and `MOJOLEARN_COLUMN_CPU` (the CPU-column build switch).
+
+## expdel2-47-promote (2026-11-15)
+
+Old paths deleted from arima/impl/fast_order_search.mojo under "An unmeasured arm is deleted" (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md). Non-owner fold here: `MOJOLEARN_IDN_ALL_OFF` (owner expdel2-37-series; patch experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-47-promote.patch). `MOJOLEARN_ARIMA_ORDER_BATCH_OFF` and `MOJOLEARN_IDN_ARIMA_ORDER_BATCH_OFF` have no read site in this file; expdel2-37-series deleted them (ORDER_BATCH_OFF tombstone: promoted on Apple only, NVIDIA/AMD A/B owed). `MOJOLEARN_ARIMA_FAST_SEARCH_REUSE` was promoted, not deleted (FAST + Apple default, rollback `_OFF`; EXPERIMENTS.md).
+
+### MOJOLEARN_IDN_ARIMA_ORDER_CAP_OFF (expdel2-47-promote)
+
+- Tried: Time series (AutoARIMA order-group workspace cap, IDENTICAL): the `_OFF` restored the pre-2026-10-04 per-order path.
+- Evidence: no A/B recorded for the old path (plan rule b). Verdict: deleted (V2 rule, DELETE-OLD-PATH).
+- Removed: the `is_defined` read, folded to False; the alias keeps its name as `_ORDER_IDN` (mode-dependent, so the `comptime if` branches stay). No bits move.
+- Files: arima/impl/fast_order_search.mojo.
+- Deleted by: lane/expdel2-47-promote `1b2ff989e2` (2026-11-15); code recoverable at `7cbcdf1758`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_ARIMA_ORDER_CAP_OFF.patch`, then delete the refusal in `core/experiment_guards_series.mojo`.
+- Records: refusal in `core/experiment_guards_series.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-47-promote).
+
+### MOJOLEARN_IDN_ARIMA_ORDER_DEVICE_OFF (expdel2-47-promote)
+
+- Tried: Time series (AutoARIMA order search on device, IDENTICAL): the `_OFF` restored the pre-2026-10-04 per-order path.
+- Evidence: no A/B recorded for the old path (plan rule b). Verdict: deleted (V2 rule, DELETE-OLD-PATH).
+- Removed: the `is_defined` read, folded to False; the alias keeps its name as `_ORDER_IDN` (mode-dependent, so the `comptime if` branches stay). No bits move.
+- Files: arima/impl/fast_order_search.mojo.
+- Deleted by: lane/expdel2-47-promote `63fd8bf564` (2026-11-15); code recoverable at `1b2ff989e2`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_ARIMA_ORDER_DEVICE_OFF.patch`, then delete the refusal in `core/experiment_guards_series.mojo`.
+- Records: refusal in `core/experiment_guards_series.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-47-promote).
+
+### MOJOLEARN_IDN_ARIMA_ORDER_SEASONAL_OFF (expdel2-47-promote)
+
+- Tried: Time series (AutoARIMA seasonal grouped search, IDENTICAL): the `_OFF` restored the pre-2026-10-04 per-order path.
+- Evidence: no A/B recorded for the old path (plan rule b). Verdict: deleted (V2 rule, DELETE-OLD-PATH).
+- Removed: the `is_defined` read, folded to False; the alias keeps its name as `_ORDER_IDN` (mode-dependent, so the `comptime if` branches stay). No bits move.
+- Files: arima/impl/fast_order_search.mojo.
+- Deleted by: lane/expdel2-47-promote `f25113893d` (2026-11-15); code recoverable at `63fd8bf564`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_ARIMA_ORDER_SEASONAL_OFF.patch`, then delete the refusal in `core/experiment_guards_series.mojo`.
+- Records: refusal in `core/experiment_guards_series.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-47-promote).
+
+### MOJOLEARN_IDN_ARIMA_IC_DEVICE_OFF (expdel2-47-promote)
+
+- Tried: Time series (AutoARIMA IC argmin on device, IDENTICAL): the `_OFF` restored the pre-2026-10-04 per-order path.
+- Evidence: no A/B recorded for the old path (plan rule b). Verdict: deleted (V2 rule, DELETE-OLD-PATH).
+- Removed: the `is_defined` read, folded to False; the alias keeps its name as `_ORDER_IDN` (mode-dependent, so the `comptime if` branches stay). No bits move.
+- Files: arima/impl/fast_order_search.mojo.
+- Deleted by: lane/expdel2-47-promote `51a4fafc28` (2026-11-15); code recoverable at `f25113893d`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_ARIMA_IC_DEVICE_OFF.patch`, then delete the refusal in `core/experiment_guards_series.mojo`.
+- Records: refusal in `core/experiment_guards_series.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-47-promote).
