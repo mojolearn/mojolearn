@@ -2541,3 +2541,11 @@ sections and patches). No bits change: each deleted arm was off by default.
 | `MOJOLEARN_PREP2_FAST_EIGH_BLOCK_OFF` | iterative-imputer / taxi (FAST Apple) | lane/expdel-03-linear (recoverable at 4867560045) | afc_ab_def | 218.6 -> 185.3 | DELETED 2026-11-15 (old path; default kept) | rollback switch, its alias, the Prep2Switches.eigh_block field and the launch's comptime gate removed; eigh_unit stays for non-FAST-Apple builds; patch experiments/removed/MOJOLEARN_PREP2_FAST_EIGH_BLOCK_OFF.patch |
 | `MOJOLEARN_CD_FAST_GRID_GRAM_OFF` | lasso, elasticnet / istella (FAST Apple) | lane/expdel-03-linear (recoverable at e592fb6e9f) | linear-lasso-rm-istella, linear-enet-rm-istella | 264 -> 149 / 262 -> 143 | DELETED 2026-11-15 (old path; default kept) | rollback switch, the staged-copy gemm_nt arm, cd_gram_partial_kernel and CD_GRAM_ROWS removed; patch experiments/removed/MOJOLEARN_CD_FAST_GRID_GRAM_OFF.patch |
 | `MOJOLEARN_CD_FAST_ROWMAJOR_OFF` | lasso, elasticnet / istella (FAST Apple) | lane/expdel-03-linear (recoverable at 7d40f892a7) | linear-lasso-rm-istella, linear-enet-rm-istella | 264 -> 149 / 262 -> 143 (pair) | DELETED 2026-11-15 (old path; default kept) | rollback switch removed; the device transpose stays for weighted fits, unserved shapes and non-FAST-Apple builds; patch experiments/removed/MOJOLEARN_CD_FAST_ROWMAJOR_OFF.patch |
+
+## Experiment deletions V2: lane expdel2-06-base (2026-11-15)
+
+Plan `docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md`; sections in docs/TOMBSTONES.md. No bits change: each deleted arm was off by default and each deleted `_OFF` rollback left the measured default.
+
+| define | algorithm / dataset | branch@sha | A/B tag | before -> after | verdict | reason |
+|---|---|---|---|---|---|---|
+| `MOJOLEARN_CLASSICAL_C13_LOGCV_WEIGHTS` | logreg-cv (weighted) | lane/expdel2-06-base (recoverable at 337c096a5b) | none | - | DELETED 2026-11-15 (opt-in arm; unmeasured opt-in arm) | `C13_LOGCV_WEIGHTS` folded to its default constant; patch experiments/removed/MOJOLEARN_CLASSICAL_C13_LOGCV_WEIGHTS.patch |

@@ -54,26 +54,6 @@
    "bits_change": false,
    "status": "kept",
    "note": "Measured alone neutral and quality-equal (T.C18.residual-only: NV 1.009/1.006/0.970/1.007, AMD 1.004/1.034/0.946/0.974 lasso taxi/istella, enet taxi/istella). Forwarding only; coordinate order and FMA unchanged."
-  },
-  "c13_logcv_weights": {
-   "define": "MOJOLEARN_CLASSICAL_C13_LOGCV_WEIGHTS",
-   "kind": "switch",
-   "arms": {
-    "off": [],
-    "on": [
-     "MOJOLEARN_CLASSICAL_C13_LOGCV_WEIGHTS"
-    ]
-   },
-   "default": "off",
-   "source": [
-    "x_linear/logcv_grid.mojo:289",
-    "x_linear/logcv_grid.mojo:552",
-    "x_linear/logcv.mojo:220"
-   ],
-   "binding": "_mojolearn_x_linear",
-   "bits_change": true,
-   "status": "kept",
-   "note": "Untouched by this lane; only reaches fits with sample weights (swb)."
   }
  },
  "algorithms": {
@@ -114,9 +94,7 @@
   "expanded:logreg-cv": {
    "binding": "_mojolearn_x_linear",
    "route": "fit: ALGO_LOGCV -> logcv_grid.mojo logcv_fit_grid; not touched by this lane",
-   "controls": [
-    "c13_logcv_weights"
-   ],
+   "controls": [],
    "interaction_groups": []
   }
  },
@@ -137,6 +115,11 @@
    "define": "MOJOLEARN_CLASSICAL_C13_FOLD_STATS_OFF",
    "control": "c13_fold_stats_ridgecv",
    "reason": "DELETED 2026-10-08 (lane grid-act-3): IDENTICAL grid ge123e6f9, the off arm loses. off/on ms ratio NV/AMD: ridge-cv istella 1.19/1.11 (23110.5 -> 27500.3 NV, 62881.7 -> 69645.8 AMD), taxi 19.52/18.01 (152.2 -> 2970.3 NV, 287.9 -> 5183.8 AMD); quality SAME. The switch is gone: C13_FOLD_STATS = CLASSICAL_IDN (the fold cache is the only IDENTICAL RidgeCV route; FAST keeps the per-fold passes). Recoverable at main bc10b8b56; define refused in core/six_lane_experiment_guards.mojo."
+  },
+  {
+   "define": "MOJOLEARN_CLASSICAL_C13_LOGCV_WEIGHTS",
+   "control": "c13_logcv_weights",
+   "reason": "DELETED 2026-11-15 (lane/expdel2-06-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md; recoverable at 337c096a5b; patch experiments/removed/MOJOLEARN_CLASSICAL_C13_LOGCV_WEIGHTS.patch): unmeasured opt-in arm. no record: no A/B was recorded for the opt-in arm (plan rule a; AGENTS.md \"An unmeasured arm is deleted\", Andrew 2026-11-15); it only reached fits with sample weights. Refused in core/experiment_guards_linear.mojo; docs/TOMBSTONES.md."
   }
  ],
  "cv_local_profiles": {

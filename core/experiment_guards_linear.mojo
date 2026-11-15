@@ -122,6 +122,10 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_CD_FAST_GRID_GRAM_OFF"](), "removed 2026-11-15 (lane/expdel-03-linear): CD_FAST_GRID_GRAM_OFF (FAST+Apple rollback of the CD Gram to the staged copy + gemm_nt / cd_gram_partial_kernel) is gone; the grid Gram is the only CD_FAST_GRAM product (lasso istella 264 -> 149 ms, KEPT 0ae9c28cd); code recoverable at e592fb6e9f"
     # Restore: git apply experiments/removed/MOJOLEARN_CD_FAST_ROWMAJOR_OFF.patch
     comptime assert not is_defined["MOJOLEARN_CD_FAST_ROWMAJOR_OFF"](), "removed 2026-11-15 (lane/expdel-03-linear): CD_FAST_ROWMAJOR_OFF (FAST+Apple rollback of the CD grid Gram to the transposed, centered design) is gone; the row-major tiles are the FAST+Apple path (lasso istella 264 -> 149 ms with GRID_GRAM, KEPT 0ae9c28cd); code recoverable at 7d40f892a7"
+    # Lane expdel2-06-base (2026-11-15): the C13-C28 classical arms with no recorded A/B and the _OFF rollbacks of measured
+    # IDENTICAL defaults read by experiments/classical_identical_ideas/linear_controls.mojo (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md).
+    # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C13_LOGCV_WEIGHTS.patch
+    comptime assert not is_defined["MOJOLEARN_CLASSICAL_C13_LOGCV_WEIGHTS"](), "removed 2026-11-15 (lane/expdel2-06-base): CLASSICAL_C13_LOGCV_WEIGHTS (Linear (weighted LogisticRegressionCV fold weight sums, IDENTICAL)) was unmeasured opt-in arm; the opt-in arm is gone and the default path is unchanged; code recoverable at 337c096a5b; see docs/TOMBSTONES.md"
     return True
 
 

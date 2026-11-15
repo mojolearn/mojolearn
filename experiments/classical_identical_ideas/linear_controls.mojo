@@ -246,4 +246,6 @@ comptime C28_BUCKET_SOLVES = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_C
 # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C13_CD_FOLD_STATS.patch; record in docs/TOMBSTONES.md.
 comptime C27_FA_COMPONENTS = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_C27_FA_COMPONENTS"]()
 comptime C27_NORM_VECTOR = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_C27_NORM_VECTOR"]()
-comptime C13_LOGCV_WEIGHTS = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_C13_LOGCV_WEIGHTS"]()
+# TOMBSTONE: MOJOLEARN_CLASSICAL_C13_LOGCV_WEIGHTS (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-06-base; code recoverable at 337c096a5b.
+# Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C13_LOGCV_WEIGHTS.patch; record in docs/TOMBSTONES.md.
+comptime C13_LOGCV_WEIGHTS = False

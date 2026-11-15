@@ -698,6 +698,7 @@ in the tables after the sections.
 | [`MOJOLEARN_PREP2_FAST_EIGH_BLOCK_OFF`](#mojolearn_prep2_fast_eigh_block_off-old-path-deleted-2026-11-15) | Preprocessing (IterativeImputer eigh on a threadgroup, FAST Apple) | removed (old path; FAST+Apple DEFAULT, afc_ab_def) | 2026-11-15 | [MOJOLEARN_PREP2_FAST_EIGH_BLOCK_OFF.patch](../experiments/removed/MOJOLEARN_PREP2_FAST_EIGH_BLOCK_OFF.patch) |
 | [`MOJOLEARN_CD_FAST_GRID_GRAM_OFF`](#mojolearn_cd_fast_grid_gram_off-old-path-deleted-2026-11-15) | Solver (CD Gram on the grid, FAST Apple) | removed (old path; FAST+Apple default KEPT, linear-lasso-rm-istella / linear-enet-rm-istella) | 2026-11-15 | [MOJOLEARN_CD_FAST_GRID_GRAM_OFF.patch](../experiments/removed/MOJOLEARN_CD_FAST_GRID_GRAM_OFF.patch) |
 | [`MOJOLEARN_CD_FAST_ROWMAJOR_OFF`](#mojolearn_cd_fast_rowmajor_off-old-path-deleted-2026-11-15) | Solver (CD row-major grid Gram, FAST Apple) | removed (old path; FAST+Apple default KEPT, linear-lasso-rm-istella / linear-enet-rm-istella) | 2026-11-15 | [MOJOLEARN_CD_FAST_ROWMAJOR_OFF.patch](../experiments/removed/MOJOLEARN_CD_FAST_ROWMAJOR_OFF.patch) |
+| [`MOJOLEARN_CLASSICAL_C13_LOGCV_WEIGHTS`](#mojolearn_classical_c13_logcv_weights-unmeasured-arm-deleted-2026-11-15) | Linear (weighted LogisticRegressionCV fold weight sums, IDENTICAL) | removed (opt-in arm; unmeasured opt-in arm) | 2026-11-15 | [MOJOLEARN_CLASSICAL_C13_LOGCV_WEIGHTS.patch](../experiments/removed/MOJOLEARN_CLASSICAL_C13_LOGCV_WEIGHTS.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -6754,3 +6755,11 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md (section expdel-02-
 - **Deleted by**: lane/expdel-03-linear (expdel-03-linear, docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md); code recoverable at `7d40f892a7`.
 - **Restore**: `git apply experiments/removed/MOJOLEARN_CD_FAST_ROWMAJOR_OFF.patch`, then delete the `MOJOLEARN_CD_FAST_ROWMAJOR_OFF` refusal in `core/experiment_guards_linear.mojo`.
 - **Records**: refusal in `core/experiment_guards_linear.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel-03-linear section).
+
+## MOJOLEARN_CLASSICAL_C13_LOGCV_WEIGHTS: unmeasured arm deleted (2026-11-15)
+
+- **What it was**: the opt-in arm in which weighted LogisticRegressionCV kept immutable disjoint-fold training-weight sums and combined the retained fold IDs ascending for every objective (x_linear/logcv.mojo, logcv_grid.mojo, logcv_host.mojo, x_linear_host_impl.mojo, x_linear/device.mojo read `C13_LOGCV_WEIGHTS`). `experiments/classical_identical_ideas/linear_controls.mojo` now defines `C13_LOGCV_WEIGHTS` as the constant of the kept default, so the importers in other lanes compile before and after; the integrator folds their dead branches.
+- **Verdict**: no record: no A/B was recorded for the opt-in arm (plan rule a; AGENTS.md "An unmeasured arm is deleted", Andrew 2026-11-15); it only reached fits with sample weights. No bit change on any vendor or the host column: the default arm is untouched.
+- **Deleted by**: lane/expdel2-06-base (expdel2-06-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `337c096a5b`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_CLASSICAL_C13_LOGCV_WEIGHTS.patch`, then delete the `MOJOLEARN_CLASSICAL_C13_LOGCV_WEIGHTS` refusal in `core/experiment_guards_linear.mojo`.
+- **Records**: refusal in `core/experiment_guards_linear.mojo`; `classical-cv.json` control `c13_logcv_weights`: `removed` entry added (control removed from `controls` and from its algorithms); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-06-base section).
