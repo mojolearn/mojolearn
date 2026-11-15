@@ -718,6 +718,7 @@ in the tables after the sections.
 | [`MOJOLEARN_KDE_DIRECT_DISTANCE`](#mojolearn_kde_direct_distance-unmeasured-arm-deleted-2026-11-15) | Classical IDENTICAL graph / cluster candidate (kde) | removed (unmeasured opt-in arm; plan V2 rule a) | 2026-11-15 | [MOJOLEARN_KDE_DIRECT_DISTANCE.patch](../experiments/removed/MOJOLEARN_KDE_DIRECT_DISTANCE.patch) |
 | [`MOJOLEARN_KMEANS_ROW_ASSIGN`](#mojolearn_kmeans_row_assign-unmeasured-arm-deleted-2026-11-15) | Cluster (KMeans row-register assignment, IDENTICAL) | removed (unmeasured opt-in arm; KEPT row withdrawn, no own verdict) | 2026-11-15 | [MOJOLEARN_KMEANS_ROW_ASSIGN.patch](../experiments/removed/MOJOLEARN_KMEANS_ROW_ASSIGN.patch) |
 | [`MOJOLEARN_IVF_DIRECT_DISTANCE_OFF`](#mojolearn_ivf_direct_distance_off-old-path-deleted-2026-11-15) | Neighbors (IVF-Flat direct distances, IDENTICAL) | removed (old path; IDENTICAL default PROMOTED ge123e6f9, _OFF loses recall g50ebe26a5) | 2026-11-15 | [MOJOLEARN_IVF_DIRECT_DISTANCE_OFF.patch](../experiments/removed/MOJOLEARN_IVF_DIRECT_DISTANCE_OFF.patch) |
+| [`MOJOLEARN_C62_SAME_COMPONENT_SKIP`](#mojolearn_c62_same_component_skip-unmeasured-arm-deleted-2026-11-15) | Classical IDENTICAL graph / cluster candidate (hdbscan) | removed (unmeasured opt-in arm; EXPERIMENTS.md OPEN, never measured) | 2026-11-15 | [MOJOLEARN_C62_SAME_COMPONENT_SKIP.patch](../experiments/removed/MOJOLEARN_C62_SAME_COMPONENT_SKIP.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -6938,3 +6939,11 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2
 - **Deleted by**: lane/expdel2-05-base (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `3cf1b7b6af`.
 - **Restore**: `git apply experiments/removed/MOJOLEARN_IVF_DIRECT_DISTANCE_OFF.patch`, then delete the `MOJOLEARN_IVF_DIRECT_DISTANCE_OFF` refusal in `core/experiment_guards_cluster.mojo`.
 - **Records**: refusal in `core/experiment_guards_cluster.mojo`; `experiments/six_lane_integration/grid_controls/classical-kmeans.json` control `ivf_direct` moved to `removed` (the generated grid/grid-plan.json and grid/GRID.md still list it until the next grid regeneration); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-05-base section).
+
+### MOJOLEARN_C62_SAME_COMPONENT_SKIP: unmeasured arm deleted (2026-11-15)
+
+- **What it was**: Opt-in IDENTICAL arm (candidate C61/C62, lane classical-misc): the HDBSCAN sparse mutual-reachability Boruvka tiled search skips a j tile whose points all lie in the block's single component (bit-identical by construction). The alias stays as the constant `False` for hdbscan/impl/cluster/detail/sparse_mr_mst.mojo until its lane folds it. With this commit graph_controls.mojo reads no define (the `is_defined` / `get_defined_int` imports go).
+- **Verdict**: EXPERIMENTS.md C62_SAME_COMPONENT_SKIP row: unmeasured, OPEN (lane/classical-misc @ f7abb25cf). Deleted under "An unmeasured arm is deleted" (Andrew, 2026-11-15). No bit changes on any column.
+- **Deleted by**: lane/expdel2-05-base (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `774f01dc6b`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_C62_SAME_COMPONENT_SKIP.patch`, then delete the `MOJOLEARN_C62_SAME_COMPONENT_SKIP` refusal in `core/experiment_guards_cluster.mojo`.
+- **Records**: refusal in `core/experiment_guards_cluster.mojo`; `experiments/six_lane_integration/grid_controls/classical-misc.json` control `c61_same_component_skip` moved to `removed` (the generated grid/grid-plan.json and grid/GRID.md still list it until the next grid regeneration); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-05-base section).

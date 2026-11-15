@@ -2566,3 +2566,4 @@ sections and patches). No bits change: each deleted arm was off by default.
 | `MOJOLEARN_KDE_DIRECT_DISTANCE` | kde | lane/expdel2-05-base (recoverable at 1fef4f5d4a) | - | - | DELETED 2026-11-15 (unmeasured arm) | never measured; alias held as the constant `False` |
 | `MOJOLEARN_KMEANS_ROW_ASSIGN` | kmeans / istella, taxi | lane/expdel2-05-base (recoverable at b97e8ccd99) | - | - | DELETED 2026-11-15 (unmeasured arm) | no own verdict; alias held as 0 / False |
 | `MOJOLEARN_IVF_DIRECT_DISTANCE_OFF` | ivf / istella, taxi | lane/expdel2-05-base (recoverable at 3cf1b7b6af) | ge123e6f9, g50ebe26a5 | NV 2259 -> 2117 / AMD 1562 -> 1505 (istella) | DELETED 2026-11-15 (old path; default kept) | rollback switch removed; IVF_DIRECT_DISTANCE = GRAPH_IDENTICAL |
+| `MOJOLEARN_C62_SAME_COMPONENT_SKIP` | hdbscan sparse MR Boruvka | lane/expdel2-05-base (recoverable at 774f01dc6b) | - | - | DELETED 2026-11-15 (unmeasured arm) | never measured; alias held as False |
