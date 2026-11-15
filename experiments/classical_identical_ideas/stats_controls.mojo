@@ -13,8 +13,10 @@ comptime CLASSICAL_IDENTICAL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 # the KDE pair-combine route with that fixed leaf (a numerical profile shared
 # by the device and the host oracle, not a scheduling leaf); absent = incumbent
 # route. Legal set enforced in core/six_lane_experiment_guards.mojo.
-comptime C52_PAIR = CLASSICAL_IDENTICAL and is_defined["MOJOLEARN_C52_PAIR_ROWS"]()
-comptime C52_ROWS = get_defined_int["MOJOLEARN_C52_PAIR_ROWS", 128]()
+# TOMBSTONE: MOJOLEARN_C52_PAIR_ROWS (no A/B recorded for the opt-in arm) deleted 2026-11-15 by lane/expdel2-07-base; code recoverable at dd94b7ad88.
+# Restore: git apply experiments/removed/MOJOLEARN_C52_PAIR_ROWS.patch
+comptime C52_PAIR = False
+comptime C52_ROWS = 128
 # C53: independent GMM/BGMM centered-component staging arms.
 comptime C53_CENTER4 = CLASSICAL_IDENTICAL and is_defined["MOJOLEARN_C53_CENTER4"]()
 comptime C53_BGMM_STATS = CLASSICAL_IDENTICAL and is_defined["MOJOLEARN_C53_BGMM_STATS"]()

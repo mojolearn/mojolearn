@@ -23,31 +23,6 @@
    "status": "kept",
    "note": "256-lane fixed halving tree, two streams per barrier; StandardScaler mean pass only (finite input)."
   },
-  "c52_pair_rows": {
-   "define": "MOJOLEARN_C52_PAIR_ROWS",
-   "kind": "arms",
-   "arms": {
-    "off": [],
-    "128": [
-     "MOJOLEARN_C52_PAIR_ROWS=128"
-    ],
-    "512": [
-     "MOJOLEARN_C52_PAIR_ROWS=512"
-    ]
-   },
-   "default": "off",
-   "source": [
-    "experiments/classical_identical_ideas/stats_controls.mojo:16",
-    "kde/impl/neighbors/kernel_density.mojo:3548",
-    "kde/impl/neighbors/kernel_density.mojo:3699",
-    "kde/impl/neighbors/kernel_density.mojo:3792",
-    "kde/host/kde_oracle.mojo:295"
-   ],
-   "binding": "_mojolearn_estimators (+ _mojolearn_estimators_host: build the host column with the same define)",
-   "bits_change": true,
-   "status": "split_from:C52_PAIR_128+C52_PAIR_512",
-   "note": "leaf 256 -> 128|512 and pair_parts combine tree; host oracle follows the same define."
-  },
   "c58_series4": {
    "define": "MOJOLEARN_C58_SERIES4",
    "kind": "switch",
@@ -285,9 +260,7 @@
   "classical:kde": {
    "binding": "_mojolearn_estimators",
    "route": "score_samples: kde_score_samples_binding -> kernel_density.mojo:4029 chunk-LSE pass -> kde_chunk_rows_for (:3548) -> reduce kernels (:3699, :3792)",
-   "controls": [
-    "c52_pair_rows"
-   ],
+   "controls": [],
    "interaction_groups": []
   },
   "more:ets": {
@@ -499,6 +472,11 @@
    "define": "MOJOLEARN_CLASSICAL_C05_OLS_PHASE",
    "control": "c05_ols_phase",
    "reason": "DELETED 2026-11-15 (lane/expdel2-07-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md; recoverable at eb67cbe21f; patch experiments/removed/MOJOLEARN_CLASSICAL_C05_OLS_PHASE.patch): unmeasured opt-in arm. no record: no A/B was recorded for the opt-in arm (plan rule a; AGENTS.md \"An unmeasured arm is deleted\", Andrew 2026-11-15). Refused in core/experiment_guards_linear.mojo; docs/TOMBSTONES.md."
+  },
+  {
+   "define": "MOJOLEARN_C52_PAIR_ROWS",
+   "control": "c52_pair_rows",
+   "reason": "DELETED 2026-11-15 (lane/expdel2-07-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md; recoverable at dd94b7ad88; patch experiments/removed/MOJOLEARN_C52_PAIR_ROWS.patch): unmeasured opt-in arm. no record: no A/B was recorded for the opt-in arm (plan rule a; AGENTS.md \"An unmeasured arm is deleted\", Andrew 2026-11-15). Refused in core/experiment_guards_kernel.mojo; docs/TOMBSTONES.md."
   }
  ],
  "owed_removal_ab": [
