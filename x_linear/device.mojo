@@ -1855,7 +1855,8 @@ struct _SgdMbEpochs(LoopStep, Movable):
     var ddl: DeviceBuffer[DType.float32]
     var dlv: DeviceBuffer[DType.float32]
     var dparts: DeviceBuffer[DType.float32]
-    var dparts2: DeviceBuffer[DType.float32]
+    # SGD_FAST_EPOCH_RESIDENT only: the second partials buffer; None on every other path (no allocation)
+    var dparts2: Optional[DeviceBuffer[DType.float32]]
     var dw: DeviceBuffer[DType.float32]
     var dbias: DeviceBuffer[DType.float32]
     var dobj: DeviceBuffer[DType.float32]
@@ -1955,8 +1956,12 @@ struct _SgdMbEpochs(LoopStep, Movable):
         self.ddl = ctx.enqueue_create_buffer[DType.float32](batch)
         self.dlv = ctx.enqueue_create_buffer[DType.float32](batch)
         self.dparts = ctx.enqueue_create_buffer[DType.float32]((d + 2) * nsub)
-        # SGD_FAST_EPOCH_RESIDENT: the second partials buffer (one word otherwise)
-        self.dparts2 = ctx.enqueue_create_buffer[DType.float32]((d + 2) * nsub if SGD_FAST_EPOCH_RESIDENT else 1)
+        # SGD_FAST_EPOCH_RESIDENT: the second partials buffer, created only for that arm (the default path
+        # allocates nothing for it; it used to create a one-word buffer per fit here)
+        self.dparts2 = None
+        comptime if SGD_FAST_EPOCH_RESIDENT:
+            if ocm == 0 and sub == XG_TPB:
+                self.dparts2 = ctx.enqueue_create_buffer[DType.float32]((d + 2) * nsub)
         self.dw = ctx.enqueue_create_buffer[DType.float32](max(d, 1))
         # the intercept as (hi, lo): the one-class float-float (SGD_OC_MB_IMPLICIT;
         # the low word stays 0 and unread with ocm 0)
@@ -2194,7 +2199,7 @@ struct _SgdMbEpochs(LoopStep, Movable):
                 var ba = Int(self.dbias.unsafe_ptr())
                 var bb = Int(self.dbias2.unsafe_ptr())
                 var pa = Int(self.dparts.unsafe_ptr())
-                var pb = Int(self.dparts2.unsafe_ptr())
+                var pb = Int(self.dparts2.value().unsafe_ptr())
                 while start < n:  # driver-loop: over the epoch's minibatches, one launch each
                     var bs = min(batch, n - start)
                     var et = mb_eta(lr, eta0, eta0, alpha, power_t, self.opt_init, t)
