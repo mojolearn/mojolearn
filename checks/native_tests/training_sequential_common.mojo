@@ -29,6 +29,7 @@ from autograd.model import (
     OUT_THRESHOLD, model_predict, parse_model, ModelSpec,
 )
 from autograd.model_execution import model_fit_native, model_float_words
+from autograd.model_checkpoint import model_save_checkpoint, model_load_checkpoint, model_checkpoint_info
 from core.cast_in import CastIn
 from sequence.exec_trait import Exec
 from sequence.ops import FP, OPT_SGD, OPT_ADAM, OPT_ADAMW
@@ -81,6 +82,8 @@ struct SeqModel(Movable):
     var batch: Int
     var shuffle: Bool
     var fitted: Bool
+    var target: Int
+    var y_1d: Int
     # the last validated fit's validation curve and (executed, retained) epochs
     var validation_curve: List[Float32]
     var validation_info: List[Int64]
@@ -113,6 +116,8 @@ struct SeqModel(Movable):
         self.batch = 32
         self.shuffle = True
         self.fitted = False
+        self.target = TARGET_DENSE
+        self.y_1d = 1
         self.validation_curve = List[Float32]()
         self.validation_info = List[Int64]()
 
@@ -136,7 +141,8 @@ struct SeqModel(Movable):
 
     # ---------------------------------------------------------------- compile
     def compile(mut self, loss: Int, optimizer: String, lr: Float64, weight_decay: Float64 = 0.0, sched: Int = 0,
-                step_size: Int = 1, gamma: Float64 = 0.1, tol: Float64 = 1e-4, patience: Int = 0) raises:
+                step_size: Int = 1, gamma: Float64 = 0.1, tol: Float64 = 1e-4, patience: Int = 0,
+                nesterov: Bool = False) raises:
         """`compile(loss, optimizer, lr, ...)` with the public defaults (momentum
         0.9 without Nesterov, betas 0.9/0.999, eps 1e-8, huber_delta 1)."""
         self.loss = loss
@@ -156,6 +162,7 @@ struct SeqModel(Movable):
             self.opt = OPT_SGD
             self.f1 = 0.9
             self.f2 = 0.0
+            self.flags = 1 if nesterov else 0
         elif optimizer == "sgd":
             self.opt = OPT_SGD
             self.f1 = 0.0
@@ -274,6 +281,8 @@ struct SeqModel(Movable):
         self.batch = batch_size
         self.shuffle = shuffled
         self.fitted = True
+        self.target = target
+        self.y_1d = 1 if y_cols == 1 else 0
         # every buffer the entry read stays alive past the call
         _ = previous^
         _ = x
@@ -281,6 +290,61 @@ struct SeqModel(Movable):
         _ = vx
         _ = vy
         return self.n_iter
+
+    def _fit_floats(self) -> List[Float64]:
+        var fp: List[Float64] = [
+            self.lr, self.f1, self.f2, self.eps, self.weight_decay, 0.0, self.tol, self.gamma, self.huber_delta,
+        ]
+        for i in range(len(self.floats)):  # driver-loop: over layers
+            fp.append(self.floats[i])
+        return fp^
+
+    # ---------------------------------------------------------------- checkpoints
+    def save(self, file: String, features: Int, export: Bool) raises -> Int:
+        """`save_checkpoint(file)` (export False) or `export(file)` through
+        autograd/model_checkpoint.mojo::model_save_checkpoint, without
+        classes (the codes are the labels here). Returns the byte count."""
+        var spec = self.spec(features)
+        var ip: List[Int] = [
+            1 if export else 0, self.loss, self.target, self.opt, self.flags, self.sched, self.step_size,
+            self.patience, self.batch, 1 if self.shuffle else 0, features, spec.out_features(), self.y_1d,
+            self.n_iter, 0,
+        ]
+        var addrs: List[Int] = [
+            Int(self.params.unsafe_ptr()), Int(self.m.unsafe_ptr()), Int(self.v.unsafe_ptr()),
+            Int(self.state.unsafe_ptr()), Int(self.curve.unsafe_ptr()),
+        ]
+        return model_save_checkpoint(file, self.program(features), addrs, ip, self._fit_floats(), List[Int]())
+
+    def load(mut self, file: String, features: Int) raises:
+        """`Sequential.from_checkpoint(file)` / `Sequential.load(file)` into this
+        description: the buffers, counters, batch and shuffle of the file
+        (model_checkpoint_info, model_load_checkpoint)."""
+        var info = model_checkpoint_info(file)
+        var n = len(self.codes)
+        if len(info.layer_ints) != 3 * n:
+            raise Error("the checkpoint describes another model")
+        for i in range(n):  # driver-loop: over layers
+            if info.layer_ints[3 * i] != self.codes[i]:
+                raise Error("the checkpoint's layer " + String(i) + " differs")
+        var n_params = info.ints[len(info.ints) - 1]
+        var n_run = info.ints[12]
+        self.params = List[Float32](length=n_params, fill=Float32(0))
+        self.m = List[Float32](length=n_params, fill=Float32(0))
+        self.v = List[Float32](length=n_params, fill=Float32(0))
+        self.state = List[Int64](length=FIT_STATE_WORDS, fill=Int64(0))
+        self.curve = List[Float32](length=max(n_run, 1), fill=Float32(0))
+        var addrs: List[Int] = [
+            Int(self.params.unsafe_ptr()), Int(self.m.unsafe_ptr()), Int(self.v.unsafe_ptr()),
+            Int(self.state.unsafe_ptr()), Int(self.curve.unsafe_ptr()), 0,
+        ]
+        _ = model_load_checkpoint(file, addrs)
+        self.n_iter = n_run
+        self.batch = info.ints[7]
+        self.shuffle = info.ints[8] != 0
+        self.target = info.ints[1]
+        self.y_1d = info.ints[11]
+        self.fitted = not info.is_export
 
     def losses(self) -> List[Float32]:
         """`loss_curve_`: the first n_iter epoch losses."""
