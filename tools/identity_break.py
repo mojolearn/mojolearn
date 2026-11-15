@@ -2107,6 +2107,31 @@ def _synthetic_bpe(ml):
     return ml.tokenizer.BpeTokenizer.from_token_bytes(vocabulary())
 
 
+#: What each neural model was BUILT FROM, by object: id -> (object, arguments).
+#: A block or a LanguageModelInference copies its weights once at construction
+#: and exposes no public read of them, so the harness keeps the public
+#: arguments it gave the constructor. `_neural_inference` and `_long_byte_lm`
+#: rebuild a model from these (the inference classes take the same
+#: constructor arguments), where they read the private `_W_NAMES`/`_w`,
+#: `_parameters`, `_threaded` and `_threads`. The object is held so its id
+#: is never reused while the entry exists.
+_BUILT = {}
+
+
+def _built(obj, **args):
+    """Record the public constructor arguments of `obj`; return `obj`."""
+    _BUILT[id(obj)] = (obj, args)
+    return obj
+
+
+def _built_args(obj):
+    entry = _BUILT.get(id(obj))
+    if entry is None or entry[0] is not obj:
+        raise RuntimeError(f"identity_break: {type(obj).__name__} was not built through _built, so its "
+                           "constructor arguments are unknown (no private weight read)")
+    return entry[1]
+
+
 def _labels_and_proba(m, X):
     """The two public classifier views, `predict` and `predict_proba`, in
     that order. Two public calls (two forest traversals) where the harness
@@ -3385,7 +3410,8 @@ def _(ml, X, yc, yr, Xh=None):
     measures whatever CPU the box has."""
     shape = ml.ByteLanguageModelConfig()
     _, flat = _byte_lm_params(shape)
-    m = ml.LanguageModelInference(flat, shape=shape, threaded=False)
+    m = _built(ml.LanguageModelInference(flat, shape=shape, threaded=False),
+               parameters=flat, threaded=False, threads=None)
     ids = _ids(X, shape.batch, shape.length + 1)
     return _fit(dict(loss_bits=_h(np.uint32(m.loss_bits(ids))), logits=_h(np.asarray(m.logits(ids[:, :-1]))),
                      next=_h(np.asarray(m.next_bytes(ids[:, :-1])))),
@@ -3559,7 +3585,7 @@ def _(ml, X, yc, yr, Xh=None):
         "conv1d.bias": (di,), "x_proj.weight": (r + 32, di), "dt_proj.weight": (di, r),
         "dt_proj.bias": (di,), "A_log": (di, 16), "D": (di,), "out_proj.weight": (dm, di)},
         ones=("norm.weight",))
-    blk = ml.Mamba1Block(w)
+    blk = _built(ml.Mamba1Block(w), weights=w)
     parts = _block_fit(blk, _seq(X, 2, 16, dm), _seq(X, 2, 16, dm, skip=1024), {})
     return _fit(parts, blk, lambda e: (np.asarray(e.forward(_seq(Xh, 2, 16, dm))),))
 
@@ -3573,7 +3599,7 @@ def _(ml, X, yc, yr, Xh=None):
         "conv1d.bias": (cd,), "dt_bias": (nh,), "A_log": (nh,), "D": (nh,), "norm.weight": (di,),
         "out_proj.weight": (dm, di)},
         ones=("block_norm.weight", "norm.weight"))
-    blk = ml.Mamba2Block(w)
+    blk = _built(ml.Mamba2Block(w), weights=w)
     parts = _block_fit(blk, _seq(X, 2, 16, dm), _seq(X, 2, 16, dm, skip=1024), {})
     return _fit(parts, blk, lambda e: (np.asarray(e.forward(_seq(Xh, 2, 16, dm))),))
 
@@ -3590,7 +3616,7 @@ def _(ml, X, yc, yr, Xh=None):
         # B_norm and C_norm are the same shape; at ones they were bitwise
         # equal and a swap of them was invisible (2026-09-16, lane/dead-arms)
         near_one=("B_norm.weight", "C_norm.weight"))
-    blk = ml.Mamba3Block(w)
+    blk = _built(ml.Mamba3Block(w), weights=w)
     parts = _block_fit(blk, _seq(X, 2, 16, dm), _seq(X, 2, 16, dm, skip=1024), {})
     # Mamba3Block.session_info -> mamba_public_native.mojo:mamba3_session_info ->
     # the session's info operation (op 45 on its registry handle): the counters of the device prefill session the
@@ -3615,7 +3641,7 @@ def _(ml, X, yc, yr, Xh=None):
         # the two layernorms are the same shape; at ones they were bitwise
         # equal and a swap of them was invisible (2026-09-16, lane/dead-arms)
         near_one=("input_layernorm.weight", "post_attention_layernorm.weight"))
-    blk = ml.TransformerBlock(w, n_heads=nh, n_kv_heads=nkv)
+    blk = _built(ml.TransformerBlock(w, n_heads=nh, n_kv_heads=nkv), weights=w)
     parts = _block_fit(blk, _seq(X, 2, 16, dm), _seq(X, 2, 16, dm, skip=1024), dict(max_tokens=32))
     return _fit(parts, blk, lambda e: (np.asarray(_neural_inference(ml, "transformer", e).forward(_seq(Xh, 2, 16, dm))),))
 
@@ -3640,7 +3666,8 @@ def _lowbit_block_lane(ml, X, Xh, base, fmt):
             "o_proj.weight": (dm, nh * hd), "gate_proj.weight": (it, dm), "up_proj.weight": (it, dm),
             "down_proj.weight": (dm, it)},
             near_one=("input_layernorm.weight", "post_attention_layernorm.weight"))
-        blk = ml.TransformerBlock(ml.lowbit.pack(w, fmt), n_heads=nh, n_kv_heads=nkv)
+        wp = ml.lowbit.pack(w, fmt)
+        blk = _built(ml.TransformerBlock(wp, n_heads=nh, n_kv_heads=nkv), weights=wp)
         state_kw = dict(max_tokens=32)
     elif base == "mamba1":
         dm, di, r = 32, 64, 2
@@ -3649,7 +3676,8 @@ def _lowbit_block_lane(ml, X, Xh, base, fmt):
             "conv1d.bias": (di,), "x_proj.weight": (r + 32, di), "dt_proj.weight": (di, r),
             "dt_proj.bias": (di,), "A_log": (di, 16), "D": (di,), "out_proj.weight": (dm, di)},
             ones=("norm.weight",))
-        blk = ml.Mamba1Block(ml.lowbit.pack(w, fmt))
+        wp = ml.lowbit.pack(w, fmt)
+        blk = _built(ml.Mamba1Block(wp), weights=wp)
         state_kw = {}
     elif base == "mamba2":
         dm, di, nh = 32, 64, 1                      # the mamba2 lane's dims
@@ -3659,14 +3687,16 @@ def _lowbit_block_lane(ml, X, Xh, base, fmt):
             "conv1d.bias": (cd,), "dt_bias": (nh,), "A_log": (nh,), "D": (nh,), "norm.weight": (di,),
             "out_proj.weight": (dm, di)},
             ones=("block_norm.weight", "norm.weight"))
-        blk = ml.Mamba2Block(ml.lowbit.pack(w, fmt))
+        wp = ml.lowbit.pack(w, fmt)
+        blk = _built(ml.Mamba2Block(wp), weights=wp)
         state_kw = {}
     else:
         dm = 32
         di = 2 * dm
         w = _block_weights(base, _mamba3_shapes(dm, di), ones=("block_norm.weight",),
                            near_one=("B_norm.weight", "C_norm.weight"))
-        blk = ml.Mamba3Block(ml.lowbit.pack(w, fmt))
+        wp = ml.lowbit.pack(w, fmt)
+        blk = _built(ml.Mamba3Block(wp), weights=wp)
         state_kw = {}
     assert blk.weight_format == fmt, (base, fmt, blk.weight_format)
     parts = _block_fit(blk, _seq(X, 2, 16, dm), _seq(X, 2, 16, dm, skip=1024), state_kw)
@@ -5029,7 +5059,7 @@ def _(ml, X, yc, yr, Xh=None):
         "out_proj.weight": (dm, di)},
         ones=("block_norm.weight", "norm.weight"))
     seqlen = 8                                   # FLOORED, see @floor above
-    blk = ml.Mamba2Block(w, dt_limit=(0.5, 0.9))
+    blk = _built(ml.Mamba2Block(w, dt_limit=(0.5, 0.9)), weights=w)
     parts = _block_fit(blk, _seq(X, 2, seqlen, dm), _seq(X, 2, seqlen, dm, skip=1024), {})
     return _fit(parts, blk, lambda e: (np.asarray(e.forward(_seq(Xh, 2, seqlen, dm))),))
 
@@ -5047,7 +5077,7 @@ def _(ml, X, yc, yr, Xh=None):
         # the two layernorms are the same shape; at ones they were bitwise
         # equal and a swap of them was invisible (2026-09-16, lane/dead-arms)
         near_one=("input_layernorm.weight", "post_attention_layernorm.weight"))
-    blk = ml.TransformerBlock(w, n_heads=nh, n_kv_heads=nkv, window=8)
+    blk = _built(ml.TransformerBlock(w, n_heads=nh, n_kv_heads=nkv, window=8), weights=w)
     parts = _block_fit(blk, _seq(X, 2, 16, dm), _seq(X, 2, 16, dm, skip=1024), dict(max_tokens=32))
     return _fit(parts, blk, lambda e: (np.asarray(_neural_inference(ml, "transformer-window", e).forward(_seq(Xh, 2, 16, dm))),))
 
@@ -5120,7 +5150,8 @@ def _(ml, X, yc, yr, Xh=None):
     fold's combine is exercised on every box the same way."""
     shape = ml.ByteLanguageModelConfig()
     _, flat = _byte_lm_params(shape)
-    m = ml.LanguageModelInference(flat, shape=shape, threaded=True, threads=2)
+    m = _built(ml.LanguageModelInference(flat, shape=shape, threaded=True, threads=2),
+               parameters=flat, threaded=True, threads=2)
     ids = _ids(X, shape.batch, shape.length + 1)
     return _fit(dict(loss_bits=_h(np.uint32(m.loss_bits(ids))), logits=_h(np.asarray(m.logits(ids[:, :-1]))),
                      next=_h(np.asarray(m.next_bytes(ids[:, :-1])))),
@@ -8074,7 +8105,7 @@ def _(ml, X, yc, yr, Xh=None):
         "conv1d.bias": (di,), "x_proj.weight": (r + 32, di), "dt_proj.weight": (di, r),
         "dt_proj.bias": (di,), "A_log": (di, 16), "D": (di,), "out_proj.weight": (dm, di)},
         ones=("norm.weight",))
-    blk = ml.Mamba1Block(w)
+    blk = _built(ml.Mamba1Block(w), weights=w)
     from mojolearn.mamba import Mamba1DecodeSession
     steps, resident = _decode_session_probe(blk, lambda: blk.allocate_state(2), 2, 16, dm, X)
     held = blk.allocate_state(2)
@@ -8189,7 +8220,7 @@ def _(ml, X, yc, yr, Xh=None):
         "o_proj.weight": (dm, nh * hd), "gate_proj.weight": (it, dm), "up_proj.weight": (it, dm),
         "down_proj.weight": (dm, it)},
         near_one=("input_layernorm.weight", "post_attention_layernorm.weight"))
-    blk = ml.TransformerBlock(w, n_heads=nh, n_kv_heads=nkv)
+    blk = _built(ml.TransformerBlock(w, n_heads=nh, n_kv_heads=nkv), weights=w)
 
     from mojolearn.transformer import TransformerDecodeSession
 
@@ -8254,7 +8285,7 @@ def _neural_inference(ml, lane_name, est):
         cls = dict(mamba1=ml.Mamba1BlockInference, mamba3=ml.Mamba3BlockInference).get(
             lane_name, ml.Mamba2BlockInference)
         kw = dict(dt_limit=est.dt_limit) if cls is ml.Mamba2BlockInference else {}
-        return cls(dict(zip(est._W_NAMES, est._w)), **kw)
+        return cls(_built_args(est)["weights"], **kw)
     if lane_name in ("samba", "samba-untied-dropout-accum"):
         with tempfile.TemporaryDirectory() as d:
             path = os.path.join(d, "samba.ckpt")
@@ -8264,8 +8295,12 @@ def _neural_inference(ml, lane_name, est):
         with tempfile.TemporaryDirectory() as d:
             path = os.path.join(d, "byte_lm.json")
             est.export_checkpoint(path)
-            return ml.LanguageModelInference.from_checkpoint(path)
-    return ml.TransformerBlockInference(dict(zip(est._W_NAMES, est._w)), n_heads=est.n_heads,
+            # from_checkpoint's defaults; the parameters are the trainer's
+            # public `parameters_`, held to the loaded model's
+            # parameters_sha256 where `_long_byte_lm` rebuilds from them
+            return _built(ml.LanguageModelInference.from_checkpoint(path),
+                          parameters=np.asarray(est.parameters_, dtype=np.float32), threaded=True, threads=None)
+    return ml.TransformerBlockInference(_built_args(est)["weights"], n_heads=est.n_heads,
                                         n_kv_heads=est.n_kv_heads, head_dim=est.head_dim, window=est.window)
 
 
@@ -10056,7 +10091,13 @@ def _long_byte_lm(ml, e):
     since 2026-09-16 byte-lm-resident runs one block at d_model 16."""
     shape = ml.ByteLanguageModelConfig(**dict(_byte_lm_shape(ml, e).to_dict(), length=SCALE_LONG_L))
     if isinstance(e, ml.LanguageModelInference):
-        return ml.LanguageModelInference(e._parameters, shape=shape, threaded=e._threaded, threads=e._threads)
+        a = _built_args(e)
+        long_m = ml.LanguageModelInference(a["parameters"], shape=shape, threaded=a["threaded"],
+                                           threads=a["threads"])
+        if long_m.parameters_sha256() != e.parameters_sha256():
+            raise RuntimeError("identity_break: the long byte LM's parameters are not the lane model's "
+                               f"({long_m.parameters_sha256()} != {e.parameters_sha256()})")
+        return long_m
     return ml.SmallByteLanguageModelTrainer(np.asarray(e.parameters_),
                                             data_schedule={"dataset": "identity_break", "order": "sequential"},
                                             shape=shape)
@@ -10893,7 +10934,7 @@ def _rlpair_byte_lm_host(ml, e, Xh):
     REFERENCE forward, `logits(threaded=False)`, the oracles as written; the
     samplers are the lane's own arm and the other arm."""
     shape = e.shape
-    other = not e._threaded
+    other = not _built_args(e)["threaded"]
     samplers = [_rl_prefix_sampler("lane arm prefix recompute", lambda ids: e.logits(ids)),
                 _rl_prefix_sampler(f"threaded={other} prefix recompute",
                                    lambda ids: e.logits(ids, threaded=other, threads=2 if other else None))]
