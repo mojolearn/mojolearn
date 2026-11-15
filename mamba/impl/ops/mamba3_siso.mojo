@@ -531,10 +531,10 @@ comptime M3_ANGLE_PARALLEL = (
 
 #: Tokens per block. The bits do not depend on it (integer chain), so the
 #: three sizes are timing arms only.
+# TOMBSTONE: MOJOLEARN_IDN_M3_ANGLE_BLOCK_32 (unmeasured timing arm of the M3_ANGLE_PARALLEL candidate; non-owner sites) deleted 2026-11-15 by lane/expdel2-28-neural; code recoverable at 1ec110c4c3.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_M3_ANGLE_BLOCK_32.expdel2-28-neural.patch; record in docs/TOMBSTONES.md.
 comptime M3_ANGLE_Q_BLOCK = (
-    32 if is_defined["MOJOLEARN_IDN_M3_ANGLE_BLOCK_32"]() else (
-        128 if is_defined["MOJOLEARN_IDN_M3_ANGLE_BLOCK_128"]() else 64
-    )
+    128 if is_defined["MOJOLEARN_IDN_M3_ANGLE_BLOCK_128"]() else 64
 )
 comptime M3_ANGLE_Q_MASK = 8388607  # 2**23 - 1
 comptime M3_ANGLE_Q_SCALE = Float32(8388608.0)  # 2**23
