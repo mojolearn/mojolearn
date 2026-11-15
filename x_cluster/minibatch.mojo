@@ -329,17 +329,16 @@ def minibatch_fit[O: ClusterOps](
     # final centers for the readback after the loop (else it would hand back
     # the centers uploaded above). lane/no-bench-tuning-2 (2026-10-04): was
     # unit weights and tol <= 0 only (the board's configuration); weighted
-    # draws and the tol stop now run on the device too
-    # (`-D MOJOLEARN_X_CLUSTER_FAST_MINIBATCH_GENERAL_OFF=1` restores the gate).
+    # draws and the tol stop now run on the device too.
+    # TOMBSTONE: MOJOLEARN_X_CLUSTER_FAST_MINIBATCH_GENERAL_OFF (old path: the unit-weight, tol <= 0 gate of the FAST Apple device steps; no A/B row) deleted 2026-11-15 by lane/expdel2-15-cluster; code recoverable at 653e50e4f4.
+    # Restore: git apply experiments/removed/MOJOLEARN_X_CLUSTER_FAST_MINIBATCH_GENERAL_OFF.patch; record in docs/TOMBSTONES.md.
     comptime if MINIBATCH_FAST_DEV:
-        var general = not is_defined["MOJOLEARN_X_CLUSTER_FAST_MINIBATCH_GENERAL_OFF"]()
-        if general or (not weighted and p.tol <= 0):
-            if ops.minibatch_fast(
-                xs, n, d, k, batch, n_steps, p.max_no_improvement, p.reassignment_ratio, p.seed, rng, c, w,
-                steps_done, p.tol, cum_w,
-            ):
-                n_steps = 0
-                ops.set(cslot, c)
+        if ops.minibatch_fast(
+            xs, n, d, k, batch, n_steps, p.max_no_improvement, p.reassignment_ratio, p.seed, rng, c, w,
+            steps_done, p.tol, cum_w,
+        ):
+            n_steps = 0
+            ops.set(cslot, c)
     # lane n3 (2026-11-09): THE ONE STEP LOOP, every mode and both columns
     # (fam2-cluster's group form, which was the IDENTICAL default; its
     # per-step twin is deleted, see the TOMBSTONE below). MB_GROUP steps are

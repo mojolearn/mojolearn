@@ -147,7 +147,7 @@ def minibatch_entry_ptr(
 ) raises -> Bool:
     """`entries.minibatch_entry` with X read from `xp` (nx values, alive for
     the call). False (nothing done, `out` untouched) outside the switch or
-    for weights (tol > 0 only under the GENERAL_OFF define), or a shape the device steps refuse before any
+    for weights, or a shape the device steps refuse before any
     work (the binding then copies X and runs `minibatch_entry`)."""
     comptime if MBK_ZEROCOPY:
         var n = ip[0]
@@ -156,8 +156,9 @@ def minibatch_entry_ptr(
         # lane/no-bench-tuning-2: tol > 0 runs here too (the device steps
         # stop on the squared center shift); weights take `minibatch_entry`,
         # whose weighted init and draws run the same device steps
-        var tol_ok = fp[0] <= 0 or not is_defined["MOJOLEARN_X_CLUSTER_FAST_MINIBATCH_GENERAL_OFF"]()
-        if has_w or not tol_ok or n * d != nx:
+        # TOMBSTONE: MOJOLEARN_X_CLUSTER_FAST_MINIBATCH_GENERAL_OFF (old path: the unit-weight, tol <= 0 gate of the FAST Apple device steps; no A/B row) deleted 2026-11-15 by lane/expdel2-15-cluster; code recoverable at 653e50e4f4.
+        # Restore: git apply experiments/removed/MOJOLEARN_X_CLUSTER_FAST_MINIBATCH_GENERAL_OFF.patch; record in docs/TOMBSTONES.md.
+        if has_w or n * d != nx:
             return False
         var p = MiniBatchParams(
             k=ip[2], max_iter=ip[3], batch_size=ip[4], tol=fp[0], max_no_improvement=ip[5],
