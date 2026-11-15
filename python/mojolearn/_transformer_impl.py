@@ -125,7 +125,6 @@ import threading
 
 from . import _buffer as _buffers, _bufcheck as _checks
 from ._array import Array as _Array
-from ._arrays import _addr, _addr_ro
 from . import _backend
 from . import lowbit as _lowbit
 from . import _numeric_profile
@@ -445,7 +444,7 @@ class TransformerBlock(NumericModeMixin, _native_constructor=True):
     def _tail_addrs(self):
         """The eleven optional addresses in `_OPT_NAMES` order, 0 where
         absent -- the addrs tail, sent only when `_extended`."""
-        return [0 if a is None else _addr_ro(a) for a in self._wopt]  # glue: one address per weight tensor
+        return [0 if a is None else _buffers.addr_ro(a, name="input buffer") for a in self._wopt]  # glue: one address per weight tensor
 
     def _with_tails(self, addrs, params):
         """The two lists as the binding wants them: the old lists for a

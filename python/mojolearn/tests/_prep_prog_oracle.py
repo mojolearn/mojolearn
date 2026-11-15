@@ -59,7 +59,7 @@ _NONE = -1
 
 def _native_helper(key):
     """The base binding's host helper `key` (`_buffer._native`)."""
-    from ._buffer import _native
+    from .._buffer import _native
     return _native(key)
 
 
@@ -679,7 +679,7 @@ def _label_buffer(y):
     MOJOLEARN_XPREP_LABELS switch)."""
     if isinstance(y, (list, tuple, str, bytes)):
         return None
-    from ._buffer import Buf, _has_buffer, _materialize, _raw_store_type, typestr_of
+    from .._buffer import Buf, _has_buffer, _materialize, _raw_store_type, typestr_of
     if not isinstance(y, Array):
         if not _has_buffer(y):
             return None

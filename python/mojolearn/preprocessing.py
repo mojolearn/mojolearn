@@ -14,7 +14,6 @@ from ._array import Array
 from ._buffer import empty, zeros, full
 from ._labels import is_bool
 
-from ._arrays import _addr, _addr_ro
 from ._mode import PublicOutputsMixin, sklearn_tags as _sklearn_tags
 
 __all__ = ['MinMaxScaler', 'StandardScaler']

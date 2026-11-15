@@ -107,7 +107,6 @@ from fractions import Fraction
 
 import ctypes
 import operator
-from ._arrays import _addr, _addr_ro
 
 from . import _backend
 from ._array import Array
@@ -1090,7 +1089,7 @@ def _rng_call(binding, kind, n, offset, seed, stream, a, b, inp=None):
     # stream_id, kind, a, b] (mirrored word for word in
     # bindings/_mojolearn_training.mojo::neural_rng_binding).
     binding.neural_rng(
-        [_addr(out), _addr_ro(inp)],
+        [_buffers.addr(out, name="output buffer"), _buffers.addr_ro(inp, name="input buffer")],
         [int(n), int(offset), int(seed & 0xFFFFFFFF),
          int((seed >> 32) & 0xFFFFFFFF), int(stream), int(kind),
          float(a), float(b)],

@@ -53,7 +53,6 @@ from . import lowbit as _lowbit
 from ._mlp_impl import _NATIVE as _MLP_NATIVE
 from ._transformer_impl import TransformerBlock
 from ._mamba_impl import Mamba1Block, Mamba2Block, Mamba3Block
-from ._arrays import _addr, _addr_ro
 
 _EXTENSION = "_mojolearn_neural_host"
 

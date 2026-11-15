@@ -82,7 +82,6 @@ from pathlib import Path
 import threading
 
 from . import _backend
-from ._arrays import _addr, _addr_ro
 from ._byte_lm_config import ByteLanguageModelConfig, state_shape
 from . import _byte_lm_checkpoint
 
