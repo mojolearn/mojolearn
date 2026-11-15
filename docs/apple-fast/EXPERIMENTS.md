@@ -2561,3 +2561,4 @@ sections and patches). No bits change: each deleted arm was off by default.
 | `MOJOLEARN_C40_ACTIVE_SEEDS` | mean-shift | lane/expdel2-05-base (recoverable at a72d2aefd3) | - | - | DELETED 2026-11-15 (unmeasured arm) | never measured; alias held as the constant `False` |
 | `MOJOLEARN_C41_FUSED_MINIMA` | x_cluster | lane/expdel2-05-base (recoverable at 77d0694779) | - | - | DELETED 2026-11-15 (unmeasured arm) | never measured; alias held as the constant `False` |
 | `MOJOLEARN_C42_ACTIVE_TRIANGLE` | x_cluster | lane/expdel2-05-base (recoverable at 9276415968) | - | - | DELETED 2026-11-15 (unmeasured arm) | never measured; alias held as the constant `False` |
+| `MOJOLEARN_C43_RESIDENT_NORMALIZATION` | spectral, x_neighbors graphs | lane/expdel2-05-base (recoverable at a4aa6b55b6) | - | - | DELETED 2026-11-15 (unmeasured arm) | never measured; alias held as the constant `False` |

@@ -133,7 +133,9 @@ comptime C41_FUSED_MINIMA = False
 # TOMBSTONE: MOJOLEARN_C42_ACTIVE_TRIANGLE (unmeasured arm) deleted 2026-11-15 by lane/expdel2-05-base; code recoverable at 9276415968.
 # Restore: git apply experiments/removed/MOJOLEARN_C42_ACTIVE_TRIANGLE.patch; record in docs/TOMBSTONES.md.
 comptime C42_ACTIVE_TRIANGLE = False
-comptime C43_RESIDENT_NORMALIZATION = GRAPH_IDENTICAL and is_defined["MOJOLEARN_C43_RESIDENT_NORMALIZATION"]()
+# TOMBSTONE: MOJOLEARN_C43_RESIDENT_NORMALIZATION (unmeasured arm) deleted 2026-11-15 by lane/expdel2-05-base; code recoverable at a4aa6b55b6.
+# Restore: git apply experiments/removed/MOJOLEARN_C43_RESIDENT_NORMALIZATION.patch; record in docs/TOMBSTONES.md.
+comptime C43_RESIDENT_NORMALIZATION = False
 comptime C44_SAMPLING_DESCRIPTORS = GRAPH_IDENTICAL and is_defined["MOJOLEARN_C44_SAMPLING_DESCRIPTORS"]()
 # C61 (lane classical-misc, 2026-10-07): HDBSCAN sparse mutual-reachability
 # Boruvka search, tiled kernel (NVIDIA/AMD default): skip a j tile whose points
