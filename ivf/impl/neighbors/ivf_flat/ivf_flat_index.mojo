@@ -43,7 +43,6 @@ which is a different sentence and `ivf/NOT_IMPLEMENTED.tsv` says which is which.
 """
 
 from std.memory import bitcast
-from std.sys.compile import is_defined
 from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 from x_ann.switches import ANN3_HOST_PASSES
@@ -120,8 +119,7 @@ comptime IVF_TRAINSET_STRIDE = not (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARG
 # Restore: git apply experiments/removed/MOJOLEARN_IVF_IDN_RECLUSTER_CAP_OFF.patch; record in docs/TOMBSTONES.md.
 comptime IVF_IDN_RECLUSTER_CAP = GLOBAL_NUMERIC_MODE != NUMERIC_FAST
 #: lane fg-ivf (read_ivf.md idea B1), DEFAULT ON outside FAST since lane
-#: postmerge-act-3 (2026-10-09; `-D MOJOLEARN_IVF_IDN_STRIDED_INIT_OFF`
-#: restores k-means|| seeding). Post-merge A/B on main a47bd9fb2, one run per
+#: postmerge-act-3 (2026-10-09; k-means|| seeding before). Post-merge A/B on main a47bd9fb2, one run per
 #: arm (default nv2 v0996 / amd a1131, arm nv2 v0993 / amd a1134): ivf-pq
 #: istella NV 1008.1 -> 756.9 ms (0.75x) / AMD 853.1 -> 542.2 ms (0.64x),
 #: recall@10 0.7489 -> 0.8021 on both; taxi NV 157.2 -> 100.0 ms (0.64x) /
@@ -138,9 +136,9 @@ comptime IVF_IDN_RECLUSTER_CAP = GLOBAL_NUMERIC_MODE != NUMERIC_FAST
 #: IVF-Flat and to IVF-PQ's coarse step (the same build). B2 is moot with it.
 # TOMBSTONE: MOJOLEARN_IVF_FAST_STRIDED_COARSE (DROPPED-noise: M4 IVFSQIndex 500k x 128 3276 -> 3260 ms, recall@8 0.8194 -> 0.8183) deleted 2026-10-15 by 1a76955b5; code recoverable at 1a76955b5^.
 # Restore: git apply experiments/removed/MOJOLEARN_IVF_FAST_STRIDED_COARSE.patch
-comptime IVF_IDN_STRIDED_INIT = (
-    GLOBAL_NUMERIC_MODE != NUMERIC_FAST and not is_defined["MOJOLEARN_IVF_IDN_STRIDED_INIT_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_IVF_IDN_STRIDED_INIT_OFF (old path of the CONFIRMED default, EXP:1803) deleted 2026-11-15 by lane/expdel2-12-cluster; code recoverable at bdd885b9b1.
+# Restore: git apply experiments/removed/MOJOLEARN_IVF_IDN_STRIDED_INIT_OFF.patch; record in docs/TOMBSTONES.md.
+comptime IVF_IDN_STRIDED_INIT = GLOBAL_NUMERIC_MODE != NUMERIC_FAST
 
 
 def ivf_strided_init_row(c: Int, n_train: Int, n_lists: Int) -> Int:
