@@ -726,6 +726,7 @@ in the tables after the sections.
 | [`MOJOLEARN_IDN_COLVAR_FUSED_OFF`](#mojolearn_idn_colvar_fused_off-old-path-deleted-2026-11-15) | Decomposition (TruncatedSVD column variance in registers, IDENTICAL) | removed (old path; IDENTICAL default PROMOTED fg2, tsvd taxi NV 0.76x / AMD 0.97x) | 2026-11-15 | [MOJOLEARN_IDN_COLVAR_FUSED_OFF.patch](../experiments/removed/MOJOLEARN_IDN_COLVAR_FUSED_OFF.patch) |
 | [`MOJOLEARN_IDN_TSVD_ONE_UPLOAD_OFF`](#mojolearn_idn_tsvd_one_upload_off-old-path-deleted-2026-11-15) | Decomposition (TruncatedSVD one upload of X, IDENTICAL) | removed (old path; IDENTICAL default CONFIRMED g50ebe26a5, _OFF 1.610x slower) | 2026-11-15 | [MOJOLEARN_IDN_TSVD_ONE_UPLOAD_OFF.patch](../experiments/removed/MOJOLEARN_IDN_TSVD_ONE_UPLOAD_OFF.patch) |
 | [`MOJOLEARN_PCA_FAST_POOL_OFF`](#mojolearn_pca_fast_pool_off-old-path-deleted-2026-11-15) | Decomposition (PCA pooled device copy of X, FAST Apple) | removed (old path; FAST+Apple default, READY-AB with no A/B row (V2 rule b)) | 2026-11-15 | [MOJOLEARN_PCA_FAST_POOL_OFF.patch](../experiments/removed/MOJOLEARN_PCA_FAST_POOL_OFF.patch) |
+| [`MOJOLEARN_SAMBA_WEIGHT_EPOCH_GLOBAL`](#mojolearn_samba_weight_epoch_global-unmeasured-arm-deleted-2026-11-15) | Neural (Samba resident copy keyed by the process weight epoch) | removed (unmeasured B arm; EXPERIMENTS.md PENDING, owed A/B never ran) | 2026-11-15 | [MOJOLEARN_SAMBA_WEIGHT_EPOCH_GLOBAL.patch](../experiments/removed/MOJOLEARN_SAMBA_WEIGHT_EPOCH_GLOBAL.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -7010,3 +7011,11 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2
 - **Deleted by**: lane/expdel2-05-base (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `b261ccae4f`.
 - **Restore**: `git apply experiments/removed/MOJOLEARN_PCA_FAST_POOL_OFF.patch`, then delete the `MOJOLEARN_PCA_FAST_POOL_OFF` refusal in `core/experiment_guards_decomposition.mojo`.
 - **Records**: refusal in `core/experiment_guards_decomposition.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-05-base section).
+
+### MOJOLEARN_SAMBA_WEIGHT_EPOCH_GLOBAL: unmeasured arm deleted (2026-11-15)
+
+- **What it was**: The B arm of the owed A/B fix-samba-weight-epoch-per-model (bench/results/paper_compare/owed-pre0867.json): `registry_epoch`, `registry_epoch_bump`, `RegistryKey.take` and `RegistryKey.current` read and bumped the process-wide `weight_epoch` instead of the per-registry stamp. The four branches are folded to the per-registry form; the alias stays `False` for checks/native_tests/registry_epoch_suite.mojo until its lane folds it.
+- **Verdict**: EXPERIMENTS.md SAMBA_WEIGHT_EPOCH_GLOBAL row: PENDING (A = per-registry key is the default); no A/B ran. Deleted under "An unmeasured arm is deleted" (Andrew, 2026-11-15). Only the upload count differed between arms: no bit change on any column.
+- **Deleted by**: lane/expdel2-05-base (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `4fdfffd7c8`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_SAMBA_WEIGHT_EPOCH_GLOBAL.patch`, then delete the `MOJOLEARN_SAMBA_WEIGHT_EPOCH_GLOBAL` refusal in `core/experiment_guards_neural.mojo`.
+- **Records**: refusal in `core/experiment_guards_neural.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-05-base section).
