@@ -124,9 +124,7 @@ each staged B word of their column, k ascending from +0.0, and store
 div(sum, f1) into p4[n]: `op_colsum` then `op_divs` (OP_COLSUM_DIV) word for
 word, so the fused linear node's bias gradient rides in its dW launch.
 
-IDENTICAL, NVIDIA and AMD (Apple keeps its measured paths).
--D MOJOLEARN_IDN_SEQ_GEMM_TILED_OFF (or MOJOLEARN_IDN_ALL_OFF) restores the
-one-thread launch."""
+IDENTICAL, NVIDIA and AMD (Apple keeps its measured paths)."""
 from max.gpu import block_idx, thread_idx
 from std.memory import stack_allocation
 from max.gpu.memory import AddressSpace
@@ -159,11 +157,9 @@ comptime GT_PAGE_BYTES = (GT_M * GT_AS + GT_K * GT_BS) * 4
 #: not keyed to any data shape)
 comptime GT_MIN_EDGE = 8
 
-comptime SEQ_GEMM_TILED = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not TARGET_HAS_APPLE_GPU
-    and not (is_defined["MOJOLEARN_IDN_SEQ_GEMM_TILED_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
-)
+# TOMBSTONE: MOJOLEARN_IDN_SEQ_GEMM_TILED_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-29-neural; code recoverable at 4f0461d50d.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_SEQ_GEMM_TILED_OFF.patch
+comptime SEQ_GEMM_TILED = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not TARGET_HAS_APPLE_GPU
 
 
 @always_inline
