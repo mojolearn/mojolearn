@@ -81,24 +81,6 @@
       "grid": "exclude",
       "note": "UNREACHED: classical:ols takes the TSQR route (x_decomp/api.mojo:585 IDN_OLS_ONE_ENTRY) and never calls ols_fit; :208 is FAST-Apple only, :340 weighted only."
     },
-    "c22_triangle": {
-      "define": "MOJOLEARN_CLASSICAL_C22_TRIANGLE",
-      "kind": "switch",
-      "arms": {
-        "off": [],
-        "on": [
-          "MOJOLEARN_CLASSICAL_C22_TRIANGLE"
-        ]
-      },
-      "default": "off",
-      "source": [
-        "svm/impl/distance/kernel_matrices.mojo:534"
-      ],
-      "binding": "_mojolearn_svm",
-      "bits_change": true,
-      "status": "kept",
-      "note": "fires only for the SMO square tile (m==n, same pointer); n*n grid with half idle, classical_dot fixed leaf tree. Not reached by kernel-ridge, kernel-pca, ocsvm (catalog claims removed). 2026-10-07: C20_ROW_CACHE deleted; it returned before kernel_op, so C22 is reachable again through the incumbent square tile. Never measured on its own: OWES its own A/B (off vs on), bits change."
-    },
     "c52_pair_rows": {
       "define": "MOJOLEARN_C52_PAIR_ROWS",
       "kind": "arms",
@@ -318,9 +300,7 @@
     "classical:svc": {
       "binding": "_mojolearn_svm",
       "route": "fit: svc/svr_fit_binding -> svm/estimator.mojo -> SmoSolver.solve (svm/impl/smosolver.mojo:749): KernelCache (C20) -> get_square_tile_without_caching (C20_PAIR_LOAD, C22) -> launch_block_solve/smo_grid_solve_kernel (C21) -> init_full_tile_batching (C20_PAIR_LOAD :410)",
-      "controls": [
-        "c22_triangle"
-      ],
+      "controls": [],
       "interaction_groups": [
         [
           "c20_pair_load",
@@ -333,9 +313,7 @@
     "more:svr": {
       "binding": "_mojolearn_svm",
       "route": "fit: svc/svr_fit_binding -> svm/estimator.mojo -> SmoSolver.solve (svm/impl/smosolver.mojo:749): KernelCache (C20) -> get_square_tile_without_caching (C20_PAIR_LOAD, C22) -> launch_block_solve/smo_grid_solve_kernel (C21) -> init_full_tile_batching (C20_PAIR_LOAD :410)",
-      "controls": [
-        "c22_triangle"
-      ],
+      "controls": [],
       "interaction_groups": [
         [
           "c20_pair_load",
@@ -563,6 +541,11 @@
       "define": "MOJOLEARN_CLASSICAL_C21_EXTREMA",
       "control": "c21_extrema",
       "reason": "DELETED 2026-11-15 (lane/expdel2-06-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md; recoverable at 9aca9aa819; patch experiments/removed/MOJOLEARN_CLASSICAL_C21_EXTREMA.patch): unmeasured opt-in arm. no record: no A/B was recorded for the opt-in arm (plan rule a; AGENTS.md \"An unmeasured arm is deleted\", Andrew 2026-11-15). Refused in core/experiment_guards_kernel.mojo; docs/TOMBSTONES.md."
+    },
+    {
+      "define": "MOJOLEARN_CLASSICAL_C22_TRIANGLE",
+      "control": "c22_triangle",
+      "reason": "DELETED 2026-11-15 (lane/expdel2-06-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md; recoverable at 45379ff055; patch experiments/removed/MOJOLEARN_CLASSICAL_C22_TRIANGLE.patch): unmeasured opt-in arm. no record: no A/B was recorded for the opt-in arm (plan rule a; AGENTS.md \"An unmeasured arm is deleted\", Andrew 2026-11-15); the grid note says it owed its own A/B and changes bits. Refused in core/experiment_guards_kernel.mojo; docs/TOMBSTONES.md."
     }
   ],
   "owed_removal_ab": [

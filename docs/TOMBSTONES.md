@@ -708,6 +708,7 @@ in the tables after the sections.
 | [`MOJOLEARN_CLASSICAL_C19_SGD_CHUNK`](#mojolearn_classical_c19_sgd_chunk-unmeasured-arm-deleted-2026-11-15) | Linear (SGD ordered samples per launch sweep, IDENTICAL) | removed (opt-in arm; unmeasured opt-in arm) | 2026-11-15 | [MOJOLEARN_CLASSICAL_C19_SGD_CHUNK.patch](../experiments/removed/MOJOLEARN_CLASSICAL_C19_SGD_CHUNK.patch) |
 | [`MOJOLEARN_CLASSICAL_C20_PAIR_LOAD`](#mojolearn_classical_c20_pair_load-unmeasured-arm-deleted-2026-11-15) | Kernel (SVM working-set row + norm gather, IDENTICAL) | removed (opt-in arm; unmeasured opt-in arm) | 2026-11-15 | [MOJOLEARN_CLASSICAL_C20_PAIR_LOAD.patch](../experiments/removed/MOJOLEARN_CLASSICAL_C20_PAIR_LOAD.patch) |
 | [`MOJOLEARN_CLASSICAL_C21_EXTREMA`](#mojolearn_classical_c21_extrema-unmeasured-arm-deleted-2026-11-15) | Kernel (SMO four-way extrema tree, IDENTICAL) | removed (opt-in arm; unmeasured opt-in arm) | 2026-11-15 | [MOJOLEARN_CLASSICAL_C21_EXTREMA.patch](../experiments/removed/MOJOLEARN_CLASSICAL_C21_EXTREMA.patch) |
+| [`MOJOLEARN_CLASSICAL_C22_TRIANGLE`](#mojolearn_classical_c22_triangle-unmeasured-arm-deleted-2026-11-15) | Kernel (SMO square tile upper triangle mirrored, IDENTICAL) | removed (opt-in arm; unmeasured opt-in arm) | 2026-11-15 | [MOJOLEARN_CLASSICAL_C22_TRIANGLE.patch](../experiments/removed/MOJOLEARN_CLASSICAL_C22_TRIANGLE.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -6844,3 +6845,11 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md (section expdel-02-
 - **Deleted by**: lane/expdel2-06-base (expdel2-06-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `9aca9aa819`.
 - **Restore**: `git apply experiments/removed/MOJOLEARN_CLASSICAL_C21_EXTREMA.patch`, then delete the `MOJOLEARN_CLASSICAL_C21_EXTREMA` refusal in `core/experiment_guards_kernel.mojo`.
 - **Records**: refusal in `core/experiment_guards_kernel.mojo`; `classical-misc.json` control `c21_extrema`: `removed` entry added (control removed from `controls` and from its algorithms); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-06-base section).
+
+## MOJOLEARN_CLASSICAL_C22_TRIANGLE: unmeasured arm deleted (2026-11-15)
+
+- **What it was**: the opt-in arm in which the same-buffer square kernel tile computed its upper triangle once with the GEMM-v1 dot fold and mirrored the words (svm/impl/distance/kernel_matrices.mojo). `experiments/classical_identical_ideas/linear_controls.mojo` now defines `C22_TRIANGLE` as the constant of the kept default, so the importers in other lanes compile before and after; the integrator folds their dead branches.
+- **Verdict**: no record: no A/B was recorded for the opt-in arm (plan rule a; AGENTS.md "An unmeasured arm is deleted", Andrew 2026-11-15); the grid note says it owed its own A/B and changes bits. No bit change on any vendor or the host column: the default arm is untouched.
+- **Deleted by**: lane/expdel2-06-base (expdel2-06-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `45379ff055`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_CLASSICAL_C22_TRIANGLE.patch`, then delete the `MOJOLEARN_CLASSICAL_C22_TRIANGLE` refusal in `core/experiment_guards_kernel.mojo`.
+- **Records**: refusal in `core/experiment_guards_kernel.mojo`; `classical-misc.json` control `c22_triangle`: `removed` entry added (control removed from `controls` and from its algorithms); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-06-base section).

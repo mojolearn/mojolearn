@@ -42,6 +42,8 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_CLASSICAL_C20_PAIR_LOAD"](), "removed 2026-11-15 (lane/expdel2-06-base): CLASSICAL_C20_PAIR_LOAD (Kernel (SVM working-set row + norm gather, IDENTICAL)) was unmeasured opt-in arm; the opt-in arm is gone and the default path is unchanged; code recoverable at 911bf993d5; see docs/TOMBSTONES.md"
     # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C21_EXTREMA.patch
     comptime assert not is_defined["MOJOLEARN_CLASSICAL_C21_EXTREMA"](), "removed 2026-11-15 (lane/expdel2-06-base): CLASSICAL_C21_EXTREMA (Kernel (SMO four-way extrema tree, IDENTICAL)) was unmeasured opt-in arm; the opt-in arm is gone and the default path is unchanged; code recoverable at 9aca9aa819; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C22_TRIANGLE.patch
+    comptime assert not is_defined["MOJOLEARN_CLASSICAL_C22_TRIANGLE"](), "removed 2026-11-15 (lane/expdel2-06-base): CLASSICAL_C22_TRIANGLE (Kernel (SMO square tile upper triangle mirrored, IDENTICAL)) was unmeasured opt-in arm; the opt-in arm is gone and the default path is unchanged; code recoverable at 45379ff055; see docs/TOMBSTONES.md"
     return True
 
 
