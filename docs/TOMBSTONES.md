@@ -650,6 +650,7 @@ in the tables after the sections.
 | [`MOJOLEARN_KSHAP_FAST_BATCH_OFF`](#mojolearn_kshap_fast_batch_off) | Trees (GBDT, Apple FAST) | removed (old path; KSHAP_FAST_BATCH KEPT) | 2026-11-15 | [MOJOLEARN_KSHAP_FAST_BATCH_OFF.patch](../experiments/removed/MOJOLEARN_KSHAP_FAST_BATCH_OFF.patch) |
 | [`MOJOLEARN_AF_FAST_RESIDENT_OFF`](#mojolearn_af_fast_resident_off-old-path-deleted-2026-11-15) | Sequence (Adafactor resident second moment, FAST Apple) | removed (old path; FAST+Apple default KEEP, rab10-afresident) | 2026-11-15 | [MOJOLEARN_AF_FAST_RESIDENT_OFF.patch](../experiments/removed/MOJOLEARN_AF_FAST_RESIDENT_OFF.patch) |
 | [`MOJOLEARN_APPLE_FAST_GEMM_TN_V1_OFF`](#mojolearn_apple_fast_gemm_tn_v1_off-old-path-deleted-2026-11-15) | Core (gemm_tn past split-K, FAST Apple) | removed (old path; FAST+Apple default KEPT 7484503b6, tier-ols-tnv1b) | 2026-11-15 | [MOJOLEARN_APPLE_FAST_GEMM_TN_V1_OFF.patch](../experiments/removed/MOJOLEARN_APPLE_FAST_GEMM_TN_V1_OFF.patch) |
+| [`MOJOLEARN_IVF_FAST_SEED_DEVICE_OFF`](#mojolearn_ivf_fast_seed_device_off-old-path-deleted-2026-11-15) | IVF (coarse quantizer k-means++ seeding, FAST Apple) | removed (old path; FAST+Apple default KEEP, fastonly2-3-ivf-pq-istella-m3) | 2026-11-15 | [MOJOLEARN_IVF_FAST_SEED_DEVICE_OFF.patch](../experiments/removed/MOJOLEARN_IVF_FAST_SEED_DEVICE_OFF.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -6320,3 +6321,11 @@ bits change on any vendor or the host column, no board row needs re-timing.
 - **Deleted by**: lane/expdel-06-base-cluster-kernel (expdel-06-base-cluster-kernel, docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md); code recoverable at `1005624c27`.
 - **Restore**: `git apply experiments/removed/MOJOLEARN_APPLE_FAST_GEMM_TN_V1_OFF.patch`, then delete the `MOJOLEARN_APPLE_FAST_GEMM_TN_V1_OFF` refusal in `core/experiment_guards_base.mojo`.
 - **Records**: refusal in `core/experiment_guards_base.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel-06-base-cluster-kernel section).
+
+## MOJOLEARN_IVF_FAST_SEED_DEVICE_OFF: old path deleted (2026-11-15)
+
+- **What it was**: the FAST+Apple rollback of the IVF coarse quantizer's k-means++ seeding from the device (`x_ann/kpp_seed_device.mojo`) to the host `kpp_seed` over the host training rows plus one upload and sync (`ivf/impl/neighbors/ivf_flat/ivf_flat_build.mojo` IVF_FAST_SEED_DEVICE). The alias, the host branch and its `kpp_seed` import in this file are deleted; `x_ann/kpp_seed.mojo` stays (IVF-PQ codebooks use it).
+- **Verdict**: KEEP, FAST+Apple default (EXPERIMENTS.md `ANN3_COARSE_SEED + IVF_FAST_SEED_DEVICE`, lane/apple-fast-m2b1-m3): M3, ivf-pq istella host seed -> device seed 5,516 -> 5,243 ms (-4.9%), recall_at_10 .6017 -> .6071. No bit change on any column (the default arm is unchanged).
+- **Deleted by**: lane/expdel-06-base-cluster-kernel (expdel-06-base-cluster-kernel, docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md); code recoverable at `24d88b46f5`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_IVF_FAST_SEED_DEVICE_OFF.patch`, then delete the `MOJOLEARN_IVF_FAST_SEED_DEVICE_OFF` refusal in `core/experiment_guards_cluster.mojo`.
+- **Records**: refusal in `core/experiment_guards_cluster.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel-06-base-cluster-kernel section).
