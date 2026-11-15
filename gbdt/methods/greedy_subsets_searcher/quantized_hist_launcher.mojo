@@ -48,7 +48,6 @@ from checks.kernel_matrix import (
     greedy_quantized_hist_for,
 )
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
-from std.sys.compile import is_defined
 from core.accelerator_target import TARGET_HAS_APPLE_GPU
 
 #: THE ONE TRUTH the driver keys its dispatch on. Comptime, so the
