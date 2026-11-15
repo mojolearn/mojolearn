@@ -51,7 +51,7 @@ comptime _ENABLED = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 # in identical_ce_backward_into; one switch (L11, 2026-10-07).
 # TOMBSTONE: MOJOLEARN_IDN_CE_GRAD_FUSED (opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-32-neural; code recoverable at 311b50e05c.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_CE_GRAD_FUSED.patch
-comptime IDN_CE_GRAD_FUSED = False
+# (Sweep 2026-11-15: IDN_CE_GRAD_FUSED = False removed with its last (unused) import in training/checks/loss.mojo.)
 # R6 (lane/neural-ce-denom, 2026-10-07): the CE softmax denominator (loss L4,
 # and L9 under smoothing) computed by one block per row that walks the GEMM
 # contract's own leaf chains and fold tree (training/checks/loss.mojo
