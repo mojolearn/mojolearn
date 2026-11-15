@@ -9,7 +9,8 @@
 and non-Apple FAST compile main's statements unchanged.
 `-D MOJOLEARN_ORD_ALL_OFF` compiles it out. Since 2026-10-04 it runs at
 every width; the old width gate (more than 32 features) was removed as
-benchmark-tuned and survives only behind MOJOLEARN_LEGACY_NARROW_ORD_ALL.
+benchmark-tuned (its switch MOJOLEARN_LEGACY_NARROW_ORD_ALL was deleted
+2026-11-15, docs/TOMBSTONES.md).
 
 WHY THE OLD WIDTH GATE EXISTED (M3 A/Bs, one run per arm, 2026-10-03, gbdt-ordered):
     istella (220 features): 75,758 -> 63,554 ms (-16.1%), auc .979518 ->
@@ -60,22 +61,14 @@ comptime ORD_ALL = (
     and TARGET_HAS_APPLE_GPU
     and not is_defined["MOJOLEARN_ORD_ALL_OFF"]()
 )
-#: LEGACY, default OFF: the old width gate admitted only data with more than
-#: 32 compressed-index features, chosen between taxi (11, auc -0.0003 in one
-#: run) and istella (220). Removed as benchmark-tuned on 2026-10-04; the
-#: bundle now runs at every width; generic 11/17-width M3 caller evidence
-#: is recorded above. Full-dataset taxi quality admission remains separate.
-comptime ORD_ALL_LEGACY_WIDTH = is_defined["MOJOLEARN_LEGACY_NARROW_ORD_ALL"]()
-comptime ORD_ALL_MIN_FEATURES = 32
+# TOMBSTONE: MOJOLEARN_LEGACY_NARROW_ORD_ALL (DELETE-OLD-PATH, the benchmark-tuned width gate, no A/B recorded for the old path, rule b) deleted 2026-11-15 by lane/expdel2-44-trees; code recoverable at f8ce124897.
+# Restore: git apply experiments/removed/MOJOLEARN_LEGACY_NARROW_ORD_ALL.patch; record in docs/TOMBSTONES.md.
 
 
 def ord_all_on(n_features: Int) -> Bool:
     """True when the bundle is compiled in (any width since 2026-10-04)."""
     comptime if ORD_ALL:
-        comptime if ORD_ALL_LEGACY_WIDTH:
-            return n_features > ORD_ALL_MIN_FEATURES
-        else:
-            return n_features >= 1
+        return n_features >= 1
     else:
         return False
 
