@@ -147,12 +147,22 @@ def test_public_inference_refusals_are_native(operation, args):
 
 def test_stateless_forward_leaves_block_reports_untouched():
     # lane perf-neural-sessions (2026-11-13): a stack's Mamba-3 blocks discard
-    # their reports, so the stateless forward requests none (as the 0.8.55
-    # resident forward did): no report arrays are allocated or published.
+    # their reports, so the stateless forward on a device build requests none
+    # (as the 0.8.55 resident forward did): no report arrays are allocated or
+    # published. A CPU-only install's host image has no optional reports
+    # (checks/native_tests/mamba3_prefill_session.mojo unit 7 requires the host
+    # caps to lack MAMBA3_CAP_REPORTS_OPTIONAL), so its per-block calls publish
+    # them as a block forward does.
+    from mojolearn import _backend
     _, model = _models(["mamba3", "attention"])
     block = model._blocks[0]
-    before = {name: vars(block).get(name) for name in ("h_last_", "k_last_", "v_last_", "theta_last_")}
+    names = ("h_last_", "k_last_", "v_last_", "theta_last_")
+    before = {name: vars(block).get(name) for name in names}
     audit_native_call(model.forward, np.array([[1, 2, 3], [4, 5, 6]], dtype="i4")).assert_native()
+    if _backend.vendor() == "cpu":
+        for name in names:
+            assert vars(block).get(name) is not None, name
+        return
     for name, value in before.items():
         assert vars(block).get(name) is value, name
 
