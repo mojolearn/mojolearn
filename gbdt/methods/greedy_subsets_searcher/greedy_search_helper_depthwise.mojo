@@ -6,7 +6,8 @@ from gbdt.options.child_hessian import child_hessian_threshold
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from max.gpu import block_dim, block_idx, thread_idx
 from core.device_zero import enqueue_fill
-from gbdt.apple_fast_tree_experiments import AFT_N02
+# TOMBSTONE: MOJOLEARN_AFT_N02 (DELETE-EXPERIMENT, never-run Apple FAST programme card, rule g; non-owner fold to False) deleted 2026-11-15 by lane/expdel2-43-trees; code recoverable at 2c3151597f.
+# Restore: git apply experiments/removed/MOJOLEARN_AFT_N02.expdel2-43-trees.patch; record in docs/TOMBSTONES.md.
 
 from checks.fixed_point import choose_scale
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
@@ -2844,7 +2845,7 @@ def fit_non_symmetric_tree[
                             dense_ids, hist, acc_i32, block_hist,
                             hist_cells_per_leaf,
                             width_plans=ws[0].width_plans,
-                            nonsymmetric_work=AFT_N02,
+                            nonsymmetric_work=False,
                         )
                     else:
                         gbdt_hist_dispatch[
@@ -2857,7 +2858,7 @@ def fit_non_symmetric_tree[
                             dense_ids, hist, acc_i32, block_hist,
                             hist_cells_per_leaf,
                             width_plans=ws[0].width_plans,
-                            nonsymmetric_work=AFT_N02,
+                            nonsymmetric_work=False,
                         )
                 else:
                     if use_ridx:
@@ -2870,7 +2871,7 @@ def fit_non_symmetric_tree[
                             cindex, row_index, stats, p_off, p_sz, d_ids,
                             dense_ids, hist, acc_i32, block_hist,
                             hist_cells_per_leaf,
-                            nonsymmetric_work=AFT_N02,
+                            nonsymmetric_work=False,
                         )
                     else:
                         gbdt_hist_dispatch[
@@ -2882,7 +2883,7 @@ def fit_non_symmetric_tree[
                             cindex, row_index, stats, p_off, p_sz, d_ids,
                             dense_ids, hist, acc_i32, block_hist,
                             hist_cells_per_leaf,
-                            nonsymmetric_work=AFT_N02,
+                            nonsymmetric_work=False,
                         )
             mgr.stream_kernel()
             stage_times.end(ctx, "hist.build")
