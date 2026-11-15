@@ -634,6 +634,7 @@ in the tables after the sections.
 | [`MOJOLEARN_SEQ_FAST_PIPE_DOWN_OFF`](#mojolearn_seq_fast_pipe_down_off) | Neural (Apple FAST x_sequence executor downloads) | superseded (SEQ_FAST_PIPE_DOWN default won) | 2026-11-15 | [MOJOLEARN_SEQ_FAST_PIPE_DOWN_OFF.patch](../experiments/removed/MOJOLEARN_SEQ_FAST_PIPE_DOWN_OFF.patch) |
 | [`MOJOLEARN_SEQ_FAST_THETA_SNAP_OFF`](#mojolearn_seq_fast_theta_snap_off) | Series on x_sequence (Apple FAST theta Nelder-Mead cycle watch) | superseded (SEQ_FAST_THETA_SNAP default won) | 2026-11-15 | [MOJOLEARN_SEQ_FAST_THETA_SNAP_OFF.patch](../experiments/removed/MOJOLEARN_SEQ_FAST_THETA_SNAP_OFF.patch) |
 | [`MOJOLEARN_SEQ_FAST_THETA_SPEC_OFF`](#mojolearn_seq_fast_theta_spec_off) | Series on x_sequence (Apple FAST theta speculative Nelder-Mead) | superseded (SEQ_FAST_THETA_SPEC default won) | 2026-11-15 | [MOJOLEARN_SEQ_FAST_THETA_SPEC_OFF.patch](../experiments/removed/MOJOLEARN_SEQ_FAST_THETA_SPEC_OFF.patch) |
+| [`MOJOLEARN_IDN_SEQ_REG_OFF`](#mojolearn_idn_seq_reg_off) | Series on x_sequence (IDENTICAL theta register form) | superseded (IDN_SEQ_REG promoted) | 2026-11-15 | [MOJOLEARN_IDN_SEQ_REG_OFF.patch](../experiments/removed/MOJOLEARN_IDN_SEQ_REG_OFF.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -5975,3 +5976,12 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md (section expdel-04-
 - Files: sequence/theta_spec.mojo.
 - Deleted by: lane/expdel-04-neural (2026-11-15); code recoverable at `c5925a0e35`.
 - Restore: `git apply experiments/removed/MOJOLEARN_SEQ_FAST_THETA_SPEC_OFF.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+
+### MOJOLEARN_IDN_SEQ_REG_OFF
+
+- Tried: the rollback of `IDN_SEQ_REG` in `sequence/theta.mojo`: IDENTICAL theta with the stored-row run (five state words and one error written and read back per step) instead of the register form.
+- Verdict: the register form won on both vendors (`grid_controls/seq-reg.json` `idn_seq_reg`, PROMOTED 2026-10-11 by lane/i17-decide-linalg-seq; A/B main b2657cc89, one run per arm, NV v0037/v0038, AMD a1620/a1621, digests NV == AMD, quality equal): theta synthetic avg 0.62x, theta taxi-hourly 0.63x, dynamic-optimized-theta synthetic 0.71x, taxi-hourly 0.78x, damped-ets 1.00x.
+- Removed: the `_OFF` term of `THETA_REG`'s IDENTICAL half. The stored-row code stays (FAST off Apple, `MOJOLEARN_IDN_ALL_OFF`). No bits move: the register form is bit-identical by construction and was the default.
+- Files: sequence/theta.mojo; grid entry `idn_seq_reg` moved to `removed` in seq-reg.json.
+- Deleted by: lane/expdel-04-neural (2026-11-15); code recoverable at `38664dbf45`.
+- Restore: `git apply experiments/removed/MOJOLEARN_IDN_SEQ_REG_OFF.patch`, then delete the refusal in `core/experiment_guards_neural.mojo` and move the entry back to `controls` in `experiments/six_lane_integration/grid_controls/seq-reg.json`.
