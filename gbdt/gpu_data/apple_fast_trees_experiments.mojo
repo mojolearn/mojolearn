@@ -35,7 +35,9 @@ comptime AFT_G03 = False
 comptime AFT_G04 = False
 # G05: 512-thread quantization block at the original eight rows per lane.
 # No performance/quality evidence; identical borders and comparison routine.
-comptime AFT_G05 = AFT_G_APPLE_FAST and is_defined["MOJOLEARN_AFT_G05"]()
+# TOMBSTONE: MOJOLEARN_AFT_G05 (DELETE-EXPERIMENT, never-run Apple FAST programme card, rule g) deleted 2026-11-15 by lane/expdel2-42-trees; code recoverable at d39d33ceb2.
+# Restore: git apply experiments/removed/MOJOLEARN_AFT_G05.patch; record in docs/TOMBSTONES.md.
+comptime AFT_G05 = False
 # G06: 128-thread compressed-word packing with sixteen rows per lane.
 # No performance/quality evidence; same 2048 rows/block and bit layout.
 comptime AFT_G06 = AFT_G_APPLE_FAST and is_defined["MOJOLEARN_AFT_G06"]()
