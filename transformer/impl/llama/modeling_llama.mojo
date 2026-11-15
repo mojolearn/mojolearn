@@ -2249,9 +2249,10 @@ def residual_next_norm_fusion_enabled(
     m: Int, dm: Int, norm_kind: Int, norm_bias: Bool
 ) -> Bool:
     """The measured cross-block residual2 -> norm1 route."""
+    # TOMBSTONE: MOJOLEARN_DISABLE_RESIDUAL2_NEXT_NORM (DELETE-ARM: no A/B recorded for the opt-in arm) deleted 2026-11-15 by lane/expdel2-33-neural; code recoverable at c3d1c7865f.
+    # Restore: git apply experiments/removed/MOJOLEARN_DISABLE_RESIDUAL2_NEXT_NORM.patch
     return (
-        not is_defined["MOJOLEARN_DISABLE_RESIDUAL2_NEXT_NORM"]()
-        and TARGET_COLUMN == COLUMN_APPLE
+        TARGET_COLUMN == COLUMN_APPLE
         and residual_norm_fusion_size_ok(m, dm)
         and norm_kind == NORM_RMSNORM and not norm_bias
     )
@@ -3978,9 +3979,9 @@ def _refuse_nonfinite_at(
     )
 
 
-comptime IDN_LLAMA_REFUSE_BATCH = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
-    is_defined["MOJOLEARN_IDN_LLAMA_REFUSE_BATCH_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_IDN_LLAMA_REFUSE_BATCH_OFF (DELETE-OLD-PATH: no A/B recorded for the old path) deleted 2026-11-15 by lane/expdel2-33-neural; code recoverable at c3d1c7865f.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_LLAMA_REFUSE_BATCH_OFF.patch
+comptime IDN_LLAMA_REFUSE_BATCH = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 """lane/fam-lm (2026-10-04), default ON under IDENTICAL: the per-call
 refusal scans of `llama_refuse_bad_call` (hidden states, rotary inv_freq
 and, on a decode step, the key and value caches) are enqueued together on
@@ -3989,23 +3990,20 @@ allocations, where each scan had its own partials buffer, pinned host
 buffer and wait (two per layer per forward, four on a decode step). Same
 kernel, same geometry, same integer first-index fold; the names are tested
 in the same order, so the refusal raised is the one the separate scans
-raised. No float is produced: no bit moves on any column.
-`-D MOJOLEARN_IDN_LLAMA_REFUSE_BATCH_OFF` restores the separate scans."""
+raised. No float is produced: no bit moves on any column. FAST builds and
+`-D MOJOLEARN_IDN_ALL_OFF` keep the separate scans."""
 
-comptime IDN_ATTN_CACHE_NOWAIT = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
-    is_defined["MOJOLEARN_IDN_ATTN_CACHE_NOWAIT_OFF"]()
-    or is_defined["MOJOLEARN_ATTN_CACHE_WAIT"]()
-    or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_IDN_ATTN_CACHE_NOWAIT_OFF (DELETE-OLD-PATH) and MOJOLEARN_ATTN_CACHE_WAIT (DELETE-ARM), no A/B recorded, deleted 2026-11-15 by lane/expdel2-33-neural; code recoverable at c3d1c7865f.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ATTN_CACHE_NOWAIT_OFF.patch (and MOJOLEARN_ATTN_CACHE_WAIT.patch)
+comptime IDN_ATTN_CACHE_NOWAIT = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 """lane/nr-attn (2026-10-04), default ON under IDENTICAL; ported from
 lane/neural-pass67 087231ba3 (`MOJOLEARN_ATTN_CACHE_WAIT`). The per-layer
 hard wait after the KV cache update in `llama_attention_forward` is compiled
 out: every reader of the caches is a launch on the same in-order context,
 so the wait ordered nothing (one wait per layer per forward; 0.54 ms a
 layer on the M3, 0.05 ms on the MI325X when measured on 2026-10-01). No
-arithmetic moves: same bits on every column. `-D
-MOJOLEARN_IDN_ATTN_CACHE_NOWAIT_OFF` (or the old `-D
-MOJOLEARN_ATTN_CACHE_WAIT=1`) restores the wait."""
+arithmetic moves: same bits on every column. FAST builds and `-D
+MOJOLEARN_IDN_ALL_OFF` keep the wait."""
 
 
 def _llama_refuse_bad_call_deferred(
@@ -5794,16 +5792,12 @@ def llama_decoder_layer_forward_planted(
 
     # ---- residual + hidden_states (:317). S22. The mamba lane's S16
     #      kernel, IMPORTED (contract section 0).
-    comptime fuse_residual_norm = (
-        is_defined["MOJOLEARN_FUSE_RESIDUAL1_NORM2"]()
-        or TARGET_COLUMN == COLUMN_APPLE
-    )
+    # TOMBSTONE: MOJOLEARN_FUSE_RESIDUAL1_NORM2 (DELETE-ARM: no A/B recorded for the opt-in arm) deleted 2026-11-15 by lane/expdel2-33-neural; code recoverable at c3d1c7865f.
+    # Restore: git apply experiments/removed/MOJOLEARN_FUSE_RESIDUAL1_NORM2.patch
+    comptime fuse_residual_norm = TARGET_COLUMN == COLUMN_APPLE
     var fused_residual_norm = (
         fuse_residual_norm and w.opts.norm_kind == NORM_RMSNORM
-        and not w.opts.norm_bias and (
-            is_defined["MOJOLEARN_FUSE_RESIDUAL1_NORM2"]()
-            or residual_norm_fusion_size_ok(m, dm)
-        )
+        and not w.opts.norm_bias and residual_norm_fusion_size_ok(m, dm)
     )
     step_count_launch()
     if fused_residual_norm:
