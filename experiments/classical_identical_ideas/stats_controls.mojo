@@ -15,7 +15,7 @@ comptime CLASSICAL_IDENTICAL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 # route. Legal set enforced in core/six_lane_experiment_guards.mojo.
 # TOMBSTONE: MOJOLEARN_C52_PAIR_ROWS (no A/B recorded for the opt-in arm) deleted 2026-11-15 by lane/expdel2-07-base; code recoverable at dd94b7ad88.
 # Restore: git apply experiments/removed/MOJOLEARN_C52_PAIR_ROWS.patch
-comptime C52_PAIR = False
+# (Sweep 2026-11-15: comptime C52_PAIR removed; nothing read it.)
 comptime C52_ROWS = 128
 # C53: independent GMM/BGMM centered-component staging arms.
 # TOMBSTONE: MOJOLEARN_C53_CENTER4 (no A/B recorded for the opt-in arm) deleted 2026-11-15 by lane/expdel2-07-base; code recoverable at f76fba175b.
