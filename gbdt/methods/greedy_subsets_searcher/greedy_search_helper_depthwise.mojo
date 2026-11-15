@@ -6,7 +6,7 @@ from gbdt.options.child_hessian import child_hessian_threshold
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from max.gpu import block_dim, block_idx, thread_idx
 from core.device_zero import enqueue_fill
-from gbdt.apple_fast_tree_experiments import AFT_N01, AFT_N02
+from gbdt.apple_fast_tree_experiments import AFT_N02
 
 from checks.fixed_point import choose_scale
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
@@ -1293,13 +1293,11 @@ comptime _LG_EXACT_BATCH128 = (
         and not is_defined["MOJOLEARN_GBDT_LG_EXACT_BATCH32"]()
     )
 ) and not is_defined["MOJOLEARN_GBDT_LG_EXACT_BATCH128_OFF"]()
-# N01: 256 speculative candidates amortize exact-batch control over twice
-# the default candidate slots. This trades scratch bytes for fewer rounds;
-# the existing exact replay still admits leaves in global best-first order.
-# No performance/quality evidence; source only, default OFF.
 # TOMBSTONE: MOJOLEARN_GBDT_LG_EXACT_BATCH16 (DROPPED-slower) deleted 2026-10-03 by dc23f13c8; code recoverable at dc23f13c8^.
 # Restore: git apply experiments/removed/MOJOLEARN_GBDT_LG_EXACT_BATCH16.patch; record in docs/TOMBSTONES.md.
-comptime LG_EXACT_BATCH_WIDTH = 256 if AFT_N01 else (
+# TOMBSTONE: MOJOLEARN_AFT_N01 (DELETE-EXPERIMENT, never-run Apple FAST programme card, rule g; non-owner fold to False) deleted 2026-11-15 by lane/expdel2-43-trees; code recoverable at 74a26fca92.
+# Restore: git apply experiments/removed/MOJOLEARN_AFT_N01.expdel2-43-trees.patch; record in docs/TOMBSTONES.md.
+comptime LG_EXACT_BATCH_WIDTH = (
     128 if _LG_EXACT_BATCH128 else (
         32 if is_defined["MOJOLEARN_GBDT_LG_EXACT_BATCH32"]() else 64
     )
