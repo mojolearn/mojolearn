@@ -504,7 +504,7 @@ comptime FAST_REPLICATION_PIN_2040 = is_defined[
 # reorder pass to the consumer.
 #
 # OFF BY DEFAULT: the define is absent from every shipped build. Arm B
-# builds with `-D MOJOLEARN_2031_SYM_RIDX_SPLITS=1` (define deleted 2026-11-15). UNVERIFIED, RUN
+# builds with `-D MOJOLEARN_2031_SYM_RIDX_SPLITS=1` (restored 2026-11-15). UNVERIFIED, RUN
 # OWED -- A/B commands in archive/research/gbdt/UPSTREAM_SURVEY_2026-09.md and the PLAN
 # appendix; the gates that must hold under the define are
 # `check-fit-pointwise` (both searchers, one tree),
@@ -569,8 +569,12 @@ def ridx_schedule_pays(n_features: Int) -> Bool:
 # Restore: git apply experiments/removed/MOJOLEARN_2031_SYM_RIDX_SPLITS.patch; record in docs/TOMBSTONES.md.
 # TOMBSTONE: MOJOLEARN_2031_SYM_RIDX_SPLITS_OFF (DELETE-OLD-PATH, Apple permuting reorder, no A/B recorded, rule b) deleted 2026-11-15 by lane/expdel2-42-trees; code recoverable at 931e7ca76a.
 # Restore: git apply experiments/removed/MOJOLEARN_2031_SYM_RIDX_SPLITS_OFF.patch; record in docs/TOMBSTONES.md.
+# RESTORED 2026-11-15 by lane/restore-apple-fast-trees: MOJOLEARN_2031_SYM_RIDX_SPLITS opt-in arm back as it was, default off; its _OFF old path stays deleted; default path unchanged.
 comptime SYM_RIDX_SPLITS_2031 = (
-    TARGET_COLUMN == COLUMN_APPLE
+    (
+        is_defined["MOJOLEARN_2031_SYM_RIDX_SPLITS"]()
+        or TARGET_COLUMN == COLUMN_APPLE
+    )
     and ridx_only_splits_for[
         TARGET_COLUMN, HIST_BUILD_MODE == NUMERIC_IDENTICAL
     ]()
@@ -578,7 +582,7 @@ comptime SYM_RIDX_SPLITS_2031 = (
 """DEFAULT ON APPLE since trees-apple2 (2026-09-28), both modes (the
 `ridx_only_splits_for` row admits Apple IDENTICAL since the same lane):
 M4 Pro 1M rows FAST SymmetricTree taxi 919 -> 835 ms (0.909), the SAME
-model digest (steward 1790608403999). Off on every other column."""
+model digest (steward 1790608403999). Elsewhere the define above opts in."""
 
 # ================= DEVIATION BLOCK 2580 =================
 # QUANTIZE THE STATS ONCE PER LEVEL, NOT ONCE PER 4-FEATURE GROUP. Every
@@ -618,8 +622,8 @@ model digest (steward 1790608403999). Off on every other column."""
 #
 # DEFAULT ON UNDER IDENTICAL since 2026-09-11 (MI300X Hot Aisle, tools/
 # flip_verdict.py FLIP geomean=0.995 taxi=1.006 istella=0.985 quality=ok);
-# FAST keeps the block-widest ladder (its opt-in arm measured NO FLIP
-# geomean=1.007 on the same box; both switches deleted 2026-11-15). What it reaches today: Istella-S's one-byte block is 32
+# FAST stays OPT-IN (`-D MOJOLEARN_2581_GROUP_WIDTH=1`; NO FLIP geomean=1.007
+# on the same box; restored 2026-11-15, the _OFF rollback stays deleted). What it reaches today: Istella-S's one-byte block is 32
 # groups, 31 of them 8-bit and one short 7-bit group, so one group leaves the
 # 8-bit route; taxi's two groups are both 8-bit and only change launcher.
 # Named checks, one per side, both instantiated explicitly whatever the
@@ -645,7 +649,10 @@ uses the board-shaped rule; generalize it on every vendor together
 # Restore: git apply experiments/removed/MOJOLEARN_2581_GROUP_WIDTH.patch; record in docs/TOMBSTONES.md.
 # TOMBSTONE: MOJOLEARN_2581_GROUP_WIDTH_OFF (DELETE-OLD-PATH, IDENTICAL block-widest ladder, no A/B recorded for the old path, rule b) deleted 2026-11-15 by lane/expdel2-42-trees; code recoverable at a0d1816b17.
 # Restore: git apply experiments/removed/MOJOLEARN_2581_GROUP_WIDTH_OFF.patch; record in docs/TOMBSTONES.md.
-comptime SYM_GROUP_WIDTH_2581 = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+# RESTORED 2026-11-15 by lane/restore-apple-fast-trees: MOJOLEARN_2581_GROUP_WIDTH opt-in arm back as it was, default off; its _OFF old path stays deleted; default path unchanged.
+comptime SYM_GROUP_WIDTH_2581 = is_defined["MOJOLEARN_2581_GROUP_WIDTH"]() or (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+)
 
 #: Threads per block of the level quantize launch; no shared memory.
 comptime LEVEL_QUANT_BLOCK = 512
