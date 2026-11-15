@@ -32,8 +32,6 @@ THE DEFINES (each default OFF):
       launch and no fold launch. At the mamba board shape (m = 2048) out_proj
       has 192 tiles and never splits; at the Samba shape (m = 1024) it has 96
       and splits in two.
-  MOJOLEARN_AFN_EPI_ALL              both of the above, plus
-      MOJOLEARN_AFN_SAMBA_HEAD_GEMM (training/samba_afn.mojo).
 
 The z-gate SiLU is NOT fused: the kernel stores `c[i * n + j]` with the row
 stride equal to `n`, so it cannot write the z column slice of the wider
@@ -80,11 +78,12 @@ comptime AFN_W2EPI_APPLE = (
     and not is_defined["MOJOLEARN_COLUMN_CPU"]()
     and TARGET_COLUMN == COLUMN_APPLE
 )
-comptime AFN_W2EPI_ALL = AFN_W2EPI_APPLE and is_defined["MOJOLEARN_AFN_EPI_ALL"]()
-comptime AFN_MAMBA_PROJ_EPILOGUE = AFN_W2EPI_ALL or (
+# TOMBSTONE: MOJOLEARN_AFN_EPI_ALL (neural MERGED-UNMEASURED FAST+Apple opt-in arm: the w2-epi bundle) deleted 2026-11-15 by lane/expdel2-27-neural; code recoverable at 1d8bc94f90.
+# Restore: git apply experiments/removed/MOJOLEARN_AFN_EPI_ALL.patch
+comptime AFN_MAMBA_PROJ_EPILOGUE = (
     AFN_W2EPI_APPLE and is_defined["MOJOLEARN_AFN_MAMBA_PROJ_EPILOGUE"]()
 )
-comptime AFN_MAMBA_PROJ_SPLITK = AFN_W2EPI_ALL or (
+comptime AFN_MAMBA_PROJ_SPLITK = (
     AFN_W2EPI_APPLE and is_defined["MOJOLEARN_AFN_MAMBA_PROJ_SPLITK"]()
 )
 #: in_proj and out_proj take the matrix-unit route whenever either is on
