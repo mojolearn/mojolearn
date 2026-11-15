@@ -323,10 +323,15 @@ def test_host_warning_category_hooks_are_refused_before_native_publication(tmp_p
         warnings.simplefilter("always")
         with monkeypatch.context() as patch:
             patch.setattr(builtins, "UserWarning", category)
+            # Only the product call is observed: a hook the interpreter or the test controller runs
+            # while building and installing the hooked class is not product work. If the product
+            # reads the class before refusing, `observed` still shows it.
+            touched.clear()
             audit = audit_native_call(predict, x)
+            observed = list(touched)
     _refused(audit, TypeError)
     assert_connected_export_refused(audit, "builtins", "UserWarning")
-    assert touched == []
+    assert observed == []
     assert caught == []
 
 
