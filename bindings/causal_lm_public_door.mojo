@@ -52,7 +52,6 @@ from providers.python.borrowed_buffer_pyapi_unpack import admit_native_buffer_ex
 from bindings.sha256_door import sha256_update, sha256_update_text
 from std.math import isfinite
 from std.os import getenv
-from std.sys.compile import is_defined
 
 from transformer.causal_lm_public_impl import (
     causal_lm_rows_done, causal_lm_join_resident, causal_lm_join_continuation,
@@ -124,18 +123,11 @@ def _causal_model_fields(mut mods: NativeModules, model: PythonObject) raises ->
             "_blocks", "_native_entries", "_native_vendor", "_native_numeric_mode", "_head_int15",
             "_closed", "_failed", "_runtime", "_parallel_entry", "_block_kwargs", "unused_names", "_block_class", "_prims", "_causal_entries_owner"))
 
-comptime _LM_RESIDENT_GENERATE = is_defined["MOJOLEARN_IDN_LM_RESIDENT_GENERATE"]()
-"""Experiment, default off (lane lm-resident-generate-20261028): a model
-without a final norm (`final_norm=False`) is admitted to the resident
-generate and forward routes (the session's head reads the stack output, as
-the per-layer route's does; no float operation changes). Off, such models
-take the per-layer route (`_run_snapshot`), as before."""
-
-
+# TOMBSTONE: MOJOLEARN_IDN_LM_RESIDENT_GENERATE (opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-02-base; code recoverable at 29fe2d5748.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_LM_RESIDENT_GENERATE.patch; record in docs/TOMBSTONES.md.
 def _resident_norm_ok(model: PythonObject) raises -> Bool:
-    """Whether the model's final norm lets it open a resident session."""
-    comptime if _LM_RESIDENT_GENERATE:
-        return True
+    """Whether the model's final norm lets it open a resident session (a
+    model without one takes the per-layer route, `_run_snapshot`)."""
     return model._norm is not None
 
 
