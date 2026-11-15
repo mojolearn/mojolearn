@@ -11,7 +11,9 @@ one binary per compile-time route define (their own pixi tasks).
 """
 from checks.native_tests.adafactor import register as register_adafactor
 from checks.native_tests.agglo_native import register as register_agglo_native
+from checks.native_tests.ann_cagra_filtered import register as register_ann_cagra_filtered
 from checks.native_tests.ann_ivf_surface import register as register_ann_ivf_surface
+from checks.native_tests.ann_ivfpq_host_filter import register as register_ann_ivfpq_host_filter
 from checks.native_tests.ann_ops import register as register_ann_ops
 from checks.native_tests.arima_state import register as register_arima_state
 from checks.native_tests.bf16_conversion import register as register_bf16_conversion
@@ -31,7 +33,9 @@ from checks.native_tests.cnn_trainer import register as register_cnn_trainer
 from checks.native_tests.core_chunked_lm_head_denormals import register as register_core_chunked_lm_head_denormals
 from checks.native_tests.core_convert import register as register_core_convert
 from checks.native_tests.core_helpers import register as register_core_helpers
+from checks.native_tests.core_import_lower import register as register_core_import_lower
 from checks.native_tests.core_ne2_rounds import register as register_core_ne2_rounds
+from checks.native_tests.core_ne3_fused_entries import register as register_core_ne3_fused_entries
 from checks.native_tests.core_ops_import_kinds import register as register_core_ops_import_kinds
 from checks.native_tests.core_ops_layernorm_view import register as register_core_ops_layernorm_view
 from checks.native_tests.core_ops_program import register as register_core_ops_program
@@ -52,6 +56,7 @@ from checks.native_tests.decomp_ne2_g_decomp_entries import register as register
 from checks.native_tests.eigh_route import register as register_eigh_route
 from checks.native_tests.embedding_ne3_entries import register as register_embedding_ne3_entries
 from checks.native_tests.embedding_surface import register as register_embedding_surface
+from checks.native_tests.gbdt_ova_link import register as register_gbdt_ova_link
 from checks.native_tests.gbdt_public_fits import register as register_gbdt_public_fits
 from checks.native_tests.gbdt_resident_ns_predict import register as register_gbdt_resident_ns_predict
 from checks.native_tests.gp_entry_table import register as register_gp_entry_table
@@ -61,6 +66,7 @@ from checks.native_tests.gp_theta import register as register_gp_theta
 from checks.native_tests.gpc_score import register as register_gpc_score
 from checks.native_tests.gpr_score import register as register_gpr_score
 from checks.native_tests.hdbscan_native import register as register_hdbscan_native
+from checks.native_tests.hdbscan_surface import register as register_hdbscan_surface
 from checks.native_tests.holtwinters_state import register as register_holtwinters_state
 from checks.native_tests.iforest_forest_export import register as register_iforest_forest_export
 from checks.native_tests.int8_linalg import register as register_int8_linalg
@@ -84,8 +90,10 @@ from checks.native_tests.logistic_numeric import register as register_logistic_n
 from checks.native_tests.lowbit_weights import register as register_lowbit_weights
 from checks.native_tests.mamba12_forward_exec import register as register_mamba12_forward_exec
 from checks.native_tests.mamba3_output_coverage import register as register_mamba3_output_coverage
+from checks.native_tests.mamba_decode_sessions import register as register_mamba_decode_sessions
 from checks.native_tests.mamba3_prefill_session import register as register_mamba3_prefill_session
 from checks.native_tests.mamba3_prefix_step import register as register_mamba3_prefix_step
+from checks.native_tests.mani_decomp_repeat import register as register_mani_decomp_repeat
 from checks.native_tests.metrics_selection_host_p2 import register as register_metrics_selection_host_p2
 from checks.native_tests.metrics_smallfam_public import register as register_metrics_smallfam_public
 from checks.native_tests.metrics_weighted_score import register as register_metrics_weighted_score
@@ -168,7 +176,9 @@ def all_checks() -> List[Check]:
     var checks = List[Check]()
     checks.append(register_adafactor())
     checks.append(register_agglo_native())
+    checks.append(register_ann_cagra_filtered())
     checks.append(register_ann_ivf_surface())
+    checks.append(register_ann_ivfpq_host_filter())
     checks.append(register_ann_ops())
     checks.append(register_arima_state())
     checks.append(register_bf16_conversion())
@@ -188,7 +198,9 @@ def all_checks() -> List[Check]:
     checks.append(register_core_chunked_lm_head_denormals())
     checks.append(register_core_convert())
     checks.append(register_core_helpers())
+    checks.append(register_core_import_lower())
     checks.append(register_core_ne2_rounds())
+    checks.append(register_core_ne3_fused_entries())
     checks.append(register_core_ops_import_kinds())
     checks.append(register_core_ops_layernorm_view())
     checks.append(register_core_ops_program())
@@ -209,6 +221,7 @@ def all_checks() -> List[Check]:
     checks.append(register_eigh_route())
     checks.append(register_embedding_ne3_entries())
     checks.append(register_embedding_surface())
+    checks.append(register_gbdt_ova_link())
     checks.append(register_gbdt_public_fits())
     checks.append(register_gbdt_resident_ns_predict())
     checks.append(register_gp_entry_table())
@@ -218,6 +231,7 @@ def all_checks() -> List[Check]:
     checks.append(register_gpc_score())
     checks.append(register_gpr_score())
     checks.append(register_hdbscan_native())
+    checks.append(register_hdbscan_surface())
     checks.append(register_holtwinters_state())
     checks.append(register_iforest_forest_export())
     checks.append(register_int8_linalg())
@@ -241,8 +255,10 @@ def all_checks() -> List[Check]:
     checks.append(register_lowbit_weights())
     checks.append(register_mamba12_forward_exec())
     checks.append(register_mamba3_output_coverage())
+    checks.append(register_mamba_decode_sessions())
     checks.append(register_mamba3_prefill_session())
     checks.append(register_mamba3_prefix_step())
+    checks.append(register_mani_decomp_repeat())
     checks.append(register_metrics_selection_host_p2())
     checks.append(register_metrics_smallfam_public())
     checks.append(register_metrics_weighted_score())

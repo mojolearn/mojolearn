@@ -111,9 +111,13 @@ def _state_bytes(state):
     return np.concatenate(out).tobytes()
 
 
-@pytest.mark.parametrize("which", ["mamba1", "transformer"])
+@pytest.mark.parametrize("which", ["transformer"])
 def test_session_step_is_byte_for_byte_the_per_call_step(which):
-    """The session docstrings' own claim, on whichever arm this box has."""
+    """The session docstrings' own claim, on whichever arm this box has.
+    The Mamba-1 case is the native check
+    checks/native_tests/mamba_decode_sessions.mojo (typed session entry
+    mamba/mamba_decode_session_run.mojo); the Transformer's host arm is
+    Python (python/mojolearn/_transformer_impl.py), so it stays here."""
     block, dm, fresh = _block(which)
     x = _tokens(2, 8, dm)
     session_state = fresh()
