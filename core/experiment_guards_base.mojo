@@ -85,6 +85,8 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_IDN_RADIX_TILE128"](), "removed 2026-11-15 (lane/expdel2-07-base): IDN_RADIX_TILE128 (Prep (stable nibble radix pairs with 128-thread tiles, I19)) was unmeasured opt-in arm; the opt-in arm is gone and the default path is unchanged; code recoverable at 51ec4db2c0; see docs/TOMBSTONES.md"
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_RAGGED_RADIX_NIBBLE.patch
     comptime assert not is_defined["MOJOLEARN_IDN_RAGGED_RADIX_NIBBLE"](), "removed 2026-11-15 (lane/expdel2-07-base): IDN_RAGGED_RADIX_NIBBLE (Prep (four-bit nibble stable radix pairs for ragged sorts, I19)) was unmeasured opt-in arm; the opt-in arm is gone and the default path is unchanged; code recoverable at 36a2cc0af1; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_RAGGED_FLOAT_RADIX.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_RAGGED_FLOAT_RADIX"](), "removed 2026-11-15 (lane/expdel2-07-base): IDN_RAGGED_FLOAT_RADIX (Prep (I19 ragged float-word sort by stable radix instead of the bounded rank control)) was opt-in arm; AMD-only component screening, never an NVIDIA + AMD full-operation A/B; the opt-in arm is gone and the default path is unchanged; code recoverable at 6e8a669206; see docs/TOMBSTONES.md"
     return True
 
 
