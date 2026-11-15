@@ -678,10 +678,11 @@ def cat_hfold_unit(t: Int, f: FP, q: IP):
 #: comes back to the host between the flag and the dense stages. The words
 #: are `toarray`'s for float32 data: zeros, each entry added in its row's
 #: stored order (a duplicate column sums, -0.0 becomes +0.0, NaN stays).
-#: -D MOJOLEARN_IDN_NB_CSR_DENSE_OFF restores the host densify.
+# TOMBSTONE: MOJOLEARN_IDN_NB_CSR_DENSE_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-09-base; code recoverable at 93d56e9d87.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_NB_CSR_DENSE_OFF.patch; record in docs/TOMBSTONES.md.
 comptime IDN_NB_CSR_DENSE = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not (is_defined["MOJOLEARN_IDN_NB_CSR_DENSE_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
+    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 )
 
 
