@@ -473,8 +473,10 @@ def _embedding_array[E: Exec & Movable & Deinitable](mut r: OpsSession[E], ids: 
 
 def _embedding[E: Exec & Movable & Deinitable, KIND: Int](sid: Int, h: Int, mut r: OpsSession[E]) raises:
     var res = _import[E, KIND](sid, h, 3, "ids", dims2(_BATCH, _EMB_T))
+    # the native import names dtypes "i64" (autograd/import_reader.mojo dtype_name); the
+    # Python boundary renames it "int64" (importers/_native_import_bridge.py)
     require(len(res.in_names) == 1 and res.in_names[0] == "ids" and _same_dims(res.in_dims[0], dims2(_BATCH, _EMB_T))
-            and res.in_dtypes[0] == "int64", "embedding_linear: the program input (ids, (3, 4), int64)")
+            and res.in_dtypes[0] == "i64", "embedding_linear: the program input (ids, (3, 4), i64)")
     require(len(res.prog.in_kinds) == 1 and res.prog.in_kinds[0] == PROGRAM_IN_IDS,
             "embedding_linear: the input is an ids input")
     var out_dims = dims3(_BATCH, _EMB_T, 3)
