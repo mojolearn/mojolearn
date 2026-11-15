@@ -90,6 +90,8 @@ def _check_configuration() -> Bool:
     # Lane expdel-01-cluster (2026-11-15): owed deletions of docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md (docs/TOMBSTONES.md).
     # Restore: git apply experiments/removed/MOJOLEARN_ANN_FAST_KNN_BIGD_OFF.patch
     comptime assert not is_defined["MOJOLEARN_ANN_FAST_KNN_BIGD_OFF"](), "removed 2026-11-15 (lane/expdel-01-cluster): ANN_FAST_KNN_BIGD_OFF (FAST+Apple rollback to the untiled k-NN cell for d > 64) is gone; the tiled bigd kernel is the FAST+Apple path (CAGRA istella 173,188 -> 21,240 ms, KEPT 8d43ec357); restore: experiments/removed/MOJOLEARN_ANN_FAST_KNN_BIGD_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_IVFPQ_FAST_DEVICE_CODEBOOKS_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IVFPQ_FAST_DEVICE_CODEBOOKS_OFF"](), "removed 2026-11-15 (lane/expdel-01-cluster): IVFPQ_FAST_DEVICE_CODEBOOKS_OFF (FAST+Apple rollback to the per-subspace host codebook fits) is gone; the batched device codebooks are the FAST+Apple path (IVF-PQ istella 6,049 -> 2,503 ms, KEPT 8d43ec357); restore: experiments/removed/MOJOLEARN_IVFPQ_FAST_DEVICE_CODEBOOKS_OFF.patch"
     return True
 
 

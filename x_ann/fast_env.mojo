@@ -40,9 +40,10 @@ comptime FAST_KNN_BIGD = ANN_FAST_APPLE
 #: downloaded residual matrix. FAST+Apple default since the M3 A/B (n=1,
 #: istella): IVF-PQ 6,049 -> 2,503 ms (recall .5995 -> .7561), IVF-refine
 #: 6,032 -> 2,507 (recall .8622 -> .982), IVF-filter 6,050 -> 2,517 (recall
-#: .6527 -> .801). `-D MOJOLEARN_IVFPQ_FAST_DEVICE_CODEBOOKS_OFF` restores
-#: the host codebooks.
-comptime FAST_IVFPQ_DEVICE_CODEBOOKS = ANN_FAST_APPLE and not is_defined["MOJOLEARN_IVFPQ_FAST_DEVICE_CODEBOOKS_OFF"]()
+#: .6527 -> .801). The host codebooks stay the path outside FAST+Apple.
+# TOMBSTONE: MOJOLEARN_IVFPQ_FAST_DEVICE_CODEBOOKS_OFF (old path, superseded by the FAST+Apple default) deleted 2026-11-15 by lane/expdel-01-cluster; code recoverable at 577b878c96.
+# Restore: git apply experiments/removed/MOJOLEARN_IVFPQ_FAST_DEVICE_CODEBOOKS_OFF.patch; record in docs/TOMBSTONES.md.
+comptime FAST_IVFPQ_DEVICE_CODEBOOKS = ANN_FAST_APPLE
 # TOMBSTONE: MOJOLEARN_CAGRA_FAST_WIDE (DROPPED-semantics) deleted 2026-10-03 by 3852df59b; code recoverable at 3852df59b^.
 # Restore: git apply experiments/removed/MOJOLEARN_CAGRA_FAST_DOT.patch; record in docs/TOMBSTONES.md.
 # TOMBSTONE: MOJOLEARN_CAGRA_FAST_IVFG_P32 (DROPPED-quality) deleted 2026-10-03 by 3852df59b; code recoverable at 3852df59b^.

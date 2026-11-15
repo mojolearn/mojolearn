@@ -1,0 +1,45 @@
+diff --git a/x_ann/fast_env.mojo b/x_ann/fast_env.mojo
+index 2eeb52c565..5f2f3cc1f5 100644
+--- a/x_ann/fast_env.mojo
++++ b/x_ann/fast_env.mojo
+@@ -40,10 +40,9 @@ comptime FAST_KNN_BIGD = ANN_FAST_APPLE
+ #: downloaded residual matrix. FAST+Apple default since the M3 A/B (n=1,
+ #: istella): IVF-PQ 6,049 -> 2,503 ms (recall .5995 -> .7561), IVF-refine
+ #: 6,032 -> 2,507 (recall .8622 -> .982), IVF-filter 6,050 -> 2,517 (recall
+-#: .6527 -> .801). The host codebooks stay the path outside FAST+Apple.
+-# TOMBSTONE: MOJOLEARN_IVFPQ_FAST_DEVICE_CODEBOOKS_OFF (old path, superseded by the FAST+Apple default) deleted 2026-11-15 by lane/expdel-01-cluster; code recoverable at 577b878c96.
+-# Restore: git apply experiments/removed/MOJOLEARN_IVFPQ_FAST_DEVICE_CODEBOOKS_OFF.patch; record in docs/TOMBSTONES.md.
+-comptime FAST_IVFPQ_DEVICE_CODEBOOKS = ANN_FAST_APPLE
++#: .6527 -> .801). `-D MOJOLEARN_IVFPQ_FAST_DEVICE_CODEBOOKS_OFF` restores
++#: the host codebooks.
++comptime FAST_IVFPQ_DEVICE_CODEBOOKS = ANN_FAST_APPLE and not is_defined["MOJOLEARN_IVFPQ_FAST_DEVICE_CODEBOOKS_OFF"]()
+ # TOMBSTONE: MOJOLEARN_CAGRA_FAST_WIDE (DROPPED-semantics) deleted 2026-10-03 by 3852df59b; code recoverable at 3852df59b^.
+ # Restore: git apply experiments/removed/MOJOLEARN_CAGRA_FAST_DOT.patch; record in docs/TOMBSTONES.md.
+ # TOMBSTONE: MOJOLEARN_CAGRA_FAST_IVFG_P32 (DROPPED-quality) deleted 2026-10-03 by 3852df59b; code recoverable at 3852df59b^.
+diff --git a/x_ann/ivf_pq_device.mojo b/x_ann/ivf_pq_device.mojo
+index ef1206ba1f..1c50828a86 100644
+--- a/x_ann/ivf_pq_device.mojo
++++ b/x_ann/ivf_pq_device.mojo
+@@ -441,7 +441,8 @@ def _ivf_pq_build_impl[resident: Bool](
+         _enqueue_residual(ctx, n, dim, rot_dim, _dp(dx), _dp(dc), _dp(dl), _dp(dr))
+     ctx.synchronize()
+     st.host("residual")
+-    # FAST on Apple, default (lane/apple-fast-ann, 2026-10-02; x_ann/pq_kmeans_device.mojo): the codebooks of
++    # FAST on Apple, default (off: `-D MOJOLEARN_IVFPQ_FAST_DEVICE_CODEBOOKS_OFF`; lane/apple-
++    # fast-ann, 2026-10-02; x_ann/pq_kmeans_device.mojo): the codebooks of
+     # every subspace from one batched device Lloyd loop over the residuals
+     # already in `dr`, on the same sample size as `_codebooks` (a stride
+     # sample). Cause: `_codebooks` downloads the n x rot_dim residuals,
+diff --git a/x_ann/pq_kmeans_device.mojo b/x_ann/pq_kmeans_device.mojo
+index c9e847e4b0..8b89cdafcf 100644
+--- a/x_ann/pq_kmeans_device.mojo
++++ b/x_ann/pq_kmeans_device.mojo
+@@ -2,7 +2,7 @@
+ # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
+ """IVF-PQ: every subspace codebook trained by ONE batched Lloyd loop on the
+ device (lane/apple-fast-ann, 2026-10-02; FAST on Apple;
+-FAST+Apple default, x_ann/fast_env.mojo).
++FAST+Apple default, off: `-D MOJOLEARN_IVFPQ_FAST_DEVICE_CODEBOOKS_OFF`, x_ann/fast_env.mojo).
+ 
+ Cause (`x_ann/ivf_pq_device.mojo` `_codebooks`, `ivf_pq_build_device`): the
+ n x rot_dim residual matrix was downloaded to the host (352 MB on Istella),

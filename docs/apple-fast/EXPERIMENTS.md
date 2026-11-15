@@ -2427,3 +2427,4 @@ per arm, NVIDIA and AMD; the verdict is the average of the two vendors' ratios (
 | define | algorithm / dataset | branch@sha | A/B tag | before -> after ms | verdict | reason |
 |---|---|---|---|---|---|---|
 | `MOJOLEARN_ANN_FAST_KNN_BIGD_OFF` | cagra / istella (k-NN graph, FAST Apple) | lane/expdel-01-cluster (code at 54b6a264fc) | ann-cagra-knnbigd-istella | - | DELETED (old path) | old path of the KEPT FAST+Apple default (173,188 -> 21,240 ms, recall same); define read removed, untiled cell stays as the IDENTICAL path; no bit change |
+| `MOJOLEARN_IVFPQ_FAST_DEVICE_CODEBOOKS_OFF` | ivf-pq, ivf-refine, ivf-filter / istella (FAST Apple) | lane/expdel-01-cluster (code at 577b878c96) | ann-ivfpq-devcb-istella | - | DELETED (old path) | old path of the KEPT FAST+Apple default (6,049 -> 2,503 ms, recall up); define read removed; no bit change |

@@ -441,8 +441,7 @@ def _ivf_pq_build_impl[resident: Bool](
         _enqueue_residual(ctx, n, dim, rot_dim, _dp(dx), _dp(dc), _dp(dl), _dp(dr))
     ctx.synchronize()
     st.host("residual")
-    # FAST on Apple, default (off: `-D MOJOLEARN_IVFPQ_FAST_DEVICE_CODEBOOKS_OFF`; lane/apple-
-    # fast-ann, 2026-10-02; x_ann/pq_kmeans_device.mojo): the codebooks of
+    # FAST on Apple, default (lane/apple-fast-ann, 2026-10-02; x_ann/pq_kmeans_device.mojo): the codebooks of
     # every subspace from one batched device Lloyd loop over the residuals
     # already in `dr`, on the same sample size as `_codebooks` (a stride
     # sample). Cause: `_codebooks` downloads the n x rot_dim residuals,
