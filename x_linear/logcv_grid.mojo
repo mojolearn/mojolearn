@@ -24,8 +24,7 @@ The StratifiedKFold ids are built on the grid from the labels
 per fold one count, and the result once. The host column runs `logcv_fit`:
 the same statements on the same rows in the same order: the same words.
 """
-from experiments.classical_identical_ideas.linear_controls import C13_LOGCV_WEIGHTS
-from x_linear.logcv import lcv_disjoint_weight, lcv_retained_weight, lcv_caller_folds, LCV_ROLES_AFTER
+from x_linear.logcv import lcv_caller_folds, LCV_ROLES_AFTER
 from x_linear.cv_roles import cv_train, cv_test
 from max.gpu import block_idx, block_dim, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
@@ -280,26 +279,19 @@ def lcv_score_fin_kernel(sp: FP, nb: Int32, res: FP, wf: IP, woff: Int32, nonce:
     witness_end(wf, woff, nonce)
 
 
+# TOMBSTONE: MOJOLEARN_CLASSICAL_C13_LOGCV_WEIGHTS (unmeasured opt-in arm; non-owner sites) deleted 2026-11-15 by lane/expdel2-21-linear; code recoverable at e7b27dab14.
+# Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C13_LOGCV_WEIGHTS.expdel2-21-linear.patch; record in docs/TOMBSTONES.md.
 def lcv_finish_kernel(th: FP, g: FP, f: FP, outs: FP, cs: FP, kp: Int32, d: Int32, sw: Int32, cnt: Int32,
-                      fold_weights: FP, nf: Int32, held: Int32,
                       parts: FP, wf: IP, woff: Int32, nonce: Int32):
     """One block: `logcv_finish_t` on the folded sums; f[0] by the lead."""
     var t = team_at(Int(thread_idx.x), Int(block_dim.x), parts, 0, 0, 0)
     var swb = sw != 0
     var fv = logcv_finish_t(t, g, 0, th, 0, Int(kp), Int(d), swb, ld(cs, 0), Int(cnt), ld(outs, 0),
-                            (lcv_retained_weight(fold_weights, Int(nf), Int(held)) if C13_LOGCV_WEIGHTS else ld(outs, 1)) if swb else Float32(0), parts)
+                            ld(outs, 1) if swb else Float32(0), parts)
     if t.lead():
         st(f, 0, fv)
     witness_end(wf, woff, nonce)
 
-
-
-def classical_lcv_weight_kernel(y: FP, n: Int32, nf: Int32, sw: Int32, cache: FP,
-                                 wf: IP, woff: Int32, nonce: Int32):
-    var f = Int(block_idx.x) * LCV_TPB + Int(thread_idx.x)
-    if f < Int(nf):
-        st(cache, f, lcv_disjoint_weight(y, Int(n), f, sw != 0))
-    witness_end(wf, woff, nonce)
 
 
 def lcv_theta_kernel(lw: FP, p: Int32, c: Int32):
@@ -370,8 +362,6 @@ struct LcvObjective(LbObjective):
     var outs: DeviceBuffer[DType.float32]
     var parts: DeviceBuffer[DType.float32]
     var cs: DeviceBuffer[DType.float32]
-    var fold_weights: DeviceBuffer[DType.float32]
-    var nf: Int
     var ix: DeviceBuffer[DType.int32]
     var n: Int
     var d: Int
@@ -391,8 +381,6 @@ struct LcvObjective(LbObjective):
         self.outs = ctx.enqueue_create_buffer[DType.float32](2)
         self.parts = ctx.enqueue_create_buffer[DType.float32](vscratch(kp * d) + 16)
         self.cs = ctx.enqueue_create_buffer[DType.float32](2)
-        self.fold_weights = ctx.enqueue_create_buffer[DType.float32](max(nf, 1) if C13_LOGCV_WEIGHTS else 1)
-        self.nf = nf
         self.ix = ctx.enqueue_create_buffer[DType.int32](max(n, 1))
         if n_x > 0:
             ctx.enqueue_copy(dst_buf=self.x, src_ptr=x)
@@ -444,7 +432,6 @@ struct LcvObjective(LbObjective):
         )
         ctx.enqueue_function[lcv_finish_kernel](  # small-launch(kp: classes): one block strides the K-prime by d+1 gradient cells and one vfold sum
             th, g, f, self.outs.unsafe_ptr(), self.cs.unsafe_ptr(), Int32(kp), Int32(d), sw, Int32(cnt),
-            self.fold_weights.unsafe_ptr(), Int32(self.nf), Int32(self.fold),
             self.parts.unsafe_ptr(), wf, Int32(woff + b1 + b2 + b3), nonce, grid_dim=1, block_dim=LBD_TPB,
         )
 
@@ -552,18 +539,6 @@ def logcv_fit_grid(
         lcv_fold_ids_device(c.copy(), FP(unsafe_from_address=Int(obj.y.unsafe_ptr())), n, max(kp, 2), nf)
     c.synchronize()
     _ = hc^
-    comptime if C13_LOGCV_WEIGHTS:
-        var prep = Witness(c, _blocks(nf))
-        var attempt = 0
-        while True:
-            var nonce = prep.begin()
-            c.enqueue_function[classical_lcv_weight_kernel](obj.y.unsafe_ptr(), Int32(n), Int32(nf), Int32(1 if sw else 0),
-                obj.fold_weights.unsafe_ptr(), prep.p(), Int32(0), nonce, grid_dim=_blocks(nf), block_dim=LCV_TPB)
-            if prep.ok(c, _blocks(nf), "LogisticRegressionCV disjoint weight cache"):
-                break
-            attempt += 1
-            if attempt >= WITNESS_TRIES:
-                prep.fail()
     var lp = FP(unsafe_from_address=Int(lw.unsafe_ptr()))
     var bt = _blocks(p)
     for f in range(nf):

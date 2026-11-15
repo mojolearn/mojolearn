@@ -6,7 +6,7 @@ The binding unpacks Python object arguments and calls one function here; the
 input checks, target preparation, fit dispatch and decision loops live here
 with no Python import, moved word for word (lane thin-core, 2026-10-21: a
 pure move, no bit change)."""
-from experiments.classical_identical_ideas.linear_controls import C13_LOGCV_WEIGHTS, ENETCV_FOLD_BLOCKS
+from experiments.classical_identical_ideas.linear_controls import ENETCV_FOLD_BLOCKS
 from x_linear.enetcv_blocks import fb_host_words
 from x_linear.ops import FP, IP
 from core.host_parallel import host_parallelize
@@ -57,9 +57,8 @@ def x_linear_fit_host(
     comptime if ENETCV_FOLD_BLOCKS:
         if a == 9 and n_ip >= 4:
             n_fw += fb_host_words(d, Int(ipl[3]))
-    comptime if C13_LOGCV_WEIGHTS:
-        if a == ALGO_LOGCV:
-            n_fw += Int(ipl[4]) + 1
+    # TOMBSTONE: MOJOLEARN_CLASSICAL_C13_LOGCV_WEIGHTS (unmeasured opt-in arm; non-owner sites) deleted 2026-11-15 by lane/expdel2-21-linear; code recoverable at e7b27dab14.
+    # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C13_LOGCV_WEIGHTS.expdel2-21-linear.patch; record in docs/TOMBSTONES.md.
     var fw = List[Float32](length=max(n_fw, 1), fill=Float32(0))
     var iw = List[Int32](length=max(n_iw, 1), fill=Int32(0))
     var bufs = team_rows(a, IP(unsafe_from_address=Int(ipl.unsafe_ptr())))
@@ -67,10 +66,6 @@ def x_linear_fit_host(
     var tw = List[Float32](length=team_work(n, bufs, own), fill=Float32(0))
     var x = _fp(x_addr)
     var y = _fp(y_addr)
-    comptime if C13_LOGCV_WEIGHTS:
-        # the opt-in C13 weight sums assume disjoint folds (x_linear/cv_roles.mojo)
-        if a == ALGO_LOGCV and n > 0 and dims[3] > n and y[n] < Float32(0):
-            raise Error("x_linear: MOJOLEARN_CLASSICAL_C13_LOGCV_WEIGHTS sums disjoint folds; a cv that is not a partition (ShuffleSplit, overlapping or partial splits) is refused under it")
     var out = _fp(out_addr)
     _finite(x, dims[2], "X")
     _finite(y, dims[3], "y")
