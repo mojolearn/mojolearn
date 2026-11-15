@@ -651,6 +651,7 @@ in the tables after the sections.
 | [`MOJOLEARN_AF_FAST_RESIDENT_OFF`](#mojolearn_af_fast_resident_off-old-path-deleted-2026-11-15) | Sequence (Adafactor resident second moment, FAST Apple) | removed (old path; FAST+Apple default KEEP, rab10-afresident) | 2026-11-15 | [MOJOLEARN_AF_FAST_RESIDENT_OFF.patch](../experiments/removed/MOJOLEARN_AF_FAST_RESIDENT_OFF.patch) |
 | [`MOJOLEARN_APPLE_FAST_GEMM_TN_V1_OFF`](#mojolearn_apple_fast_gemm_tn_v1_off-old-path-deleted-2026-11-15) | Core (gemm_tn past split-K, FAST Apple) | removed (old path; FAST+Apple default KEPT 7484503b6, tier-ols-tnv1b) | 2026-11-15 | [MOJOLEARN_APPLE_FAST_GEMM_TN_V1_OFF.patch](../experiments/removed/MOJOLEARN_APPLE_FAST_GEMM_TN_V1_OFF.patch) |
 | [`MOJOLEARN_IVF_FAST_SEED_DEVICE_OFF`](#mojolearn_ivf_fast_seed_device_off-old-path-deleted-2026-11-15) | IVF (coarse quantizer k-means++ seeding, FAST Apple) | removed (old path; FAST+Apple default KEEP, fastonly2-3-ivf-pq-istella-m3) | 2026-11-15 | [MOJOLEARN_IVF_FAST_SEED_DEVICE_OFF.patch](../experiments/removed/MOJOLEARN_IVF_FAST_SEED_DEVICE_OFF.patch) |
+| [`MOJOLEARN_KDE_FAST_SLICES_OFF`](#mojolearn_kde_fast_slices_off-old-path-deleted-2026-11-15) | Kernel (KernelDensity fused pass train-row slices, FAST Apple) | removed (old path; FAST+Apple default KEPT 857fd5804, core-kde-slices-istella) | 2026-11-15 | [MOJOLEARN_KDE_FAST_SLICES_OFF.patch](../experiments/removed/MOJOLEARN_KDE_FAST_SLICES_OFF.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -6329,3 +6330,11 @@ bits change on any vendor or the host column, no board row needs re-timing.
 - **Deleted by**: lane/expdel-06-base-cluster-kernel (expdel-06-base-cluster-kernel, docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md); code recoverable at `24d88b46f5`.
 - **Restore**: `git apply experiments/removed/MOJOLEARN_IVF_FAST_SEED_DEVICE_OFF.patch`, then delete the `MOJOLEARN_IVF_FAST_SEED_DEVICE_OFF` refusal in `core/experiment_guards_cluster.mojo`.
 - **Records**: refusal in `core/experiment_guards_cluster.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel-06-base-cluster-kernel section).
+
+## MOJOLEARN_KDE_FAST_SLICES_OFF: old path deleted (2026-11-15)
+
+- **What it was**: the FAST+Apple rollback of KernelDensity's fused score pass from train-row slices along grid.y plus `kde_slice_merge_kernel` to one thread per query over every train row (`kde/impl/neighbors/kernel_density.mojo` `kde_fast_slices_on`). Only the define read is deleted: the unsliced fused kernels stay the path of every other build.
+- **Verdict**: KEPT 857fd5804, FAST+Apple default (EXPERIMENTS.md `KDE_FAST_SLICES`, core-kde-slices-istella): M3, kde istella 1,519 -> 141 ms (-91%), log-likelihood same. No bit change on any column.
+- **Deleted by**: lane/expdel-06-base-cluster-kernel (expdel-06-base-cluster-kernel, docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md); code recoverable at `6af1055b8a`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_KDE_FAST_SLICES_OFF.patch`, then delete the `MOJOLEARN_KDE_FAST_SLICES_OFF` refusal in `core/experiment_guards_kernel.mojo`.
+- **Records**: refusal in `core/experiment_guards_kernel.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel-06-base-cluster-kernel section).

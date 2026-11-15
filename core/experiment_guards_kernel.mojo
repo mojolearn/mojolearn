@@ -25,6 +25,9 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_IDN_SVC_ONE_BLOCK"](), "promoted 2026-10-11 (lane/w2-decide-algos, same-box A/B on main c8ef6c66d): one-block SMO solve is the IDENTICAL default (svc 0.720/0.663); drop -D MOJOLEARN_IDN_SVC_ONE_BLOCK, use -D MOJOLEARN_IDN_SVC_ONE_BLOCK_OFF for the old path"
     # lane n8-gp-krr-smo (2026-11-09): the GPC Newton loop is one device loop (gaussian_process/gpc_newton.mojo).
     comptime assert not is_defined["MOJOLEARN_IDN_GPC_NEWTON_LOGDET_OFF"](), "removed 2026-11-09 (lane/n8-gp-krr-smo): IDN_GPC_NEWTON_LOGDET_OFF read log|B| home per Newton iteration; the loop is now one bounded device loop over the executor's Cholesky ops and log|B| never leaves the device. Code at f59d913b0b, patch experiments/removed/N8_GPC_NEWTON_ONE_LOOP.patch (docs/TOMBSTONES.md)"
+    # Lane expdel-06-base-cluster-kernel (2026-11-15): owed deletions of docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md (docs/TOMBSTONES.md).
+    # Restore: git apply experiments/removed/MOJOLEARN_KDE_FAST_SLICES_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_KDE_FAST_SLICES_OFF"](), "removed 2026-11-15 (lane/expdel-06-base-cluster-kernel): KDE_FAST_SLICES_OFF (FAST+Apple rollback to one thread per query over every train row) is gone; the train-row slices are the FAST+Apple path (kde istella 1,519 -> 141 ms, core-kde-slices-istella); restore: experiments/removed/MOJOLEARN_KDE_FAST_SLICES_OFF.patch"
     return True
 
 
