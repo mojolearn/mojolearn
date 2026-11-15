@@ -15,6 +15,7 @@ POOL: a freed buffer is kept and handed to the next request that fits
 DeviceContext runs its work in order, so a buffer reused by a later launch
 is written only after every earlier launch that read it. Free capacity past
 POOL_KEEP_BYTES is released after a sync."""
+from std.sys.compile import is_defined
 from max.gpu.host import DeviceBuffer, DeviceContext
 from core.device_zero import enqueue_fill
 from core.admitted_finite_status import enqueue_finite_status
@@ -959,6 +960,8 @@ comptime GRP_CLS2_DEVSCAN = (
 # TOMBSTONE: MOJOLEARN_XD_FAST_CLS2_GRP_LAZY (unmeasured Apple FAST opt-in arm) deleted 2026-11-15 by lane/expdel2-18-decomposition; code recoverable at 17fa14cc92.
 # Restore: git apply experiments/removed/MOJOLEARN_XD_FAST_CLS2_GRP_LAZY.patch; record in docs/TOMBSTONES.md.
 # (Sweep 2026-11-15: comptime GRP_CLS2_LAZY removed; its flag-bit readers folded (bit 4 stays 0).)
+# RESTORED 2026-11-15 by lane/restore-apple-fast-classical: Apple fast is paused, not abandoned (Andrew); opt-in, default off.
+comptime GRP_CLS2_LAZY = _CLS2_FAST_APPLE and is_defined["MOJOLEARN_XD_FAST_CLS2_GRP_LAZY"]()
 #: lane apple-fast-gap-kapprox2 (2026-10-03), the FAST + Apple default since
 #: the M3 A/Bs kap2-grp-fused-{taxi,istella}, kap2-srp-fused-{taxi,istella}
 #: (gaussian-rp taxi 3.4 -> 2.1 ms, istella -4.6%; sparse-rp taxi -10.7%,
@@ -1001,7 +1004,7 @@ comptime GRP_FAST_FUSED = _CLS2_FAST_APPLE and GRP_CLS2_DEVSCAN
 # TOMBSTONE: MOJOLEARN_XD_FAST_SRP_STRAT_OFF (old path beside the FAST + Apple default, no A/B recorded) deleted 2026-11-15 by lane/expdel2-18-decomposition; code recoverable at f45bdace85.
 # Restore: git apply experiments/removed/MOJOLEARN_XD_FAST_SRP_STRAT_OFF.patch; record in docs/TOMBSTONES.md.
 comptime GRP_FAST_SRP_STRAT = GRP_FAST_FUSED
-comptime GRP_CLS2_ANY = GRP_CLS2_DEVSCAN
+comptime GRP_CLS2_ANY = GRP_CLS2_DEVSCAN or GRP_CLS2_LAZY
 
 
 # grp_cls2_py (the compiled-in switch bits) lives in the shell next to this file.

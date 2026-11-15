@@ -12,19 +12,19 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 from x_ann.device_ctx import x_ann_ctx
 from x_ann.stage_timer import AnnStages
 from x_ann.switches import (
-    ANN3_HOST_PASSES,
-    IDN_PQ_DEVICE_CODEBOOKS,
-    IDN_PQ_TRAINSET_STRIDED,
-    IDN_PQ_TRAIN_ROWS_PER_CODE,
+    ANN3_DIRECT_OUT, ANN3_HOST_PASSES, ANN3_PQ_SEED, ANN3_ROW_THREADS, IDN_PQ_DEVICE_CODEBOOKS,
+    IDN_PQ_TRAINSET_STRIDED, IDN_PQ_TRAIN_ROWS_PER_CODE,
     IVF_PQ_ONE_UPLOAD,
 )
+from x_ann.kpp_seed import kpp_seed
 from x_ann.fast_env import FAST_IVFPQ_DEVICE_CODEBOOKS
 from x_ann.pq_kmeans_device import pq_codebooks_device
 from x_ann.ivf_pq_core import PQK_CODES_MAX, PQK_LEN_MAX
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from x_ann.ivf_scan_device import ivf_scan_search
 
 from cluster.estimator import kmeans_fit_rows
-from cluster.impl.kmeans_params import INIT_KMEANS_PLUS_PLUS, METRIC_L2_EXPANDED
+from cluster.impl.kmeans_params import INIT_ARRAY, INIT_KMEANS_PLUS_PLUS, METRIC_L2_EXPANDED
 from ivf.estimator import ivf_flat_build_host, ivf_flat_build_resident_host
 from ivf.impl.neighbors.ivf_flat.ivf_flat_build import IvfFlatBuildDevice, ivf_trainset_rows
 from ivf.impl.neighbors.ivf_flat.ivf_flat_index import ivf_explicit_train_rows, ivf_explicit_train_stride
@@ -52,6 +52,12 @@ row is still encoded against the trained codebooks. IDENTICAL trains on every
 row. Quality: bench/speed/ann_fast_quality.py."""
 comptime PQ_FAST_ROWS_PER_CODE = 256
 
+comptime PQ_FAST_SEED = ANN3_PQ_SEED and GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
+"""FAST on Apple, OPT-IN (lane ann-apple3, `-D MOJOLEARN_ANN3_PQ_SEED`): each
+subspace codebook is seeded by `x_ann/kpp_seed.mojo` (host k-means++ over a
+stride sample of its training rows, its own stream per subspace) and
+cluster/'s k-means starts from those seeds (`INIT_ARRAY`), so it runs its
+Lloyd iterations without its own seeding rounds."""
 # (Sweep 2026-11-15: comptime PQ_FAST_SEED (always False: ANN3_PQ_SEED) and its kpp_seed branch removed.)
 
 
@@ -65,15 +71,32 @@ def residual_kernel(count: Int32, x: F32P, centers: F32P, labels: I32P, dim: Int
         pq_residual_cell(e, x, centers, labels, Int(dim), Int(rot_dim), dst)
 
 
+def residual_rows_kernel(n: Int32, x: F32P, centers: F32P, labels: I32P, dim: Int32, rot_dim: Int32, dst: F32P):
+    """`residual_kernel` with one thread per ROW (lane ann-apple3, OPT-IN
+    `ANN3_ROW_THREADS`): thread i runs `pq_residual_cell` for its row's
+    rot_dim cells in order. A cell reads its own inputs and writes its own
+    word, so the words are the ones one thread per cell writes."""
+    var i = _tid()
+    if i < Int(n):
+        var rd = Int(rot_dim)
+        for c in range(rd):
+            pq_residual_cell(i * rd + c, x, centers, labels, Int(dim), rd, dst)
+
+
 def _enqueue_residual(
     ctx: DeviceContext, n: Int, dim: Int, rot_dim: Int, x: F32P, centers: F32P, labels: I32P, dst: F32P,
 ) raises:
     """The residual launch: one thread per row under `ANN3_ROW_THREADS`, one
     per cell otherwise."""
-    ctx.enqueue_function[residual_kernel](
-        Int32(n * rot_dim), x, centers, labels, Int32(dim), Int32(rot_dim), dst,
-        grid_dim=_grid(n * rot_dim), block_dim=TPB,
-    )
+    comptime if ANN3_ROW_THREADS:
+        ctx.enqueue_function[residual_rows_kernel](
+            Int32(n), x, centers, labels, Int32(dim), Int32(rot_dim), dst, grid_dim=_grid(n), block_dim=TPB,
+        )
+    else:
+        ctx.enqueue_function[residual_kernel](
+            Int32(n * rot_dim), x, centers, labels, Int32(dim), Int32(rot_dim), dst,
+            grid_dim=_grid(n * rot_dim), block_dim=TPB,
+        )
 
 
 def assign_kernel(count: Int32, r: F32P, cb: F32P, pq_dim: Int32, rot_dim: Int32, pq_len: Int32, n_codes: Int32, codes: I32P):
@@ -255,10 +278,25 @@ def _codebooks(
         )
         cbs.host(String("gather.") + String(j))
         var cb_ptr = codebooks.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin]().unsafe_offset(j * cb_len)
+        var init_kind: Int = INIT_KMEANS_PLUS_PLUS
+        comptime if PQ_FAST_SEED:
+            # FAST on Apple, OPT-IN (`-D MOJOLEARN_ANN3_PQ_SEED`): the host
+            # k-means++ seed reads the sample, so this opt-in arm alone
+            # downloads it
+            if n_train >= n_codes:
+                var sub = download_f32(ctx, dsub, n_train * pq_len)
+                var cb = List[Float32](length=cb_len, fill=Float32(0.0))
+                kpp_seed(
+                    sub, n_train, pq_len, n_codes,
+                    UInt64(seed) ^ (UInt64(j + 1) * UInt64(0x9E3779B97F4A7C15)), 16, cb,
+                )
+                unsafe_memcpy(dest=cb_ptr, src=cb.unsafe_ptr(), count=cb_len)
+                init_kind = INIT_ARRAY
+                cbs.host("seed")
         _ = kmeans_fit_rows(
             ctx, dsub, cb_ptr, rows, pq_len, n_codes, cb_ptr,
             lab.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin](),
-            pq_iters, Float64(1e-4), UInt64(seed), 1, INIT_KMEANS_PLUS_PLUS, METRIC_L2_EXPANDED, Float64(2.0),
+            pq_iters, Float64(1e-4), UInt64(seed), 1, init_kind, METRIC_L2_EXPANDED, Float64(2.0),
             lazy_shift=True,  # KMEANS_LAZY_SHIFT (FAST on Apple default, 2026-10-04): IVF-PQ codebooks
         )
         ctx.synchronize()
@@ -455,7 +493,14 @@ def _ivf_pq_build_impl[resident: Bool](
         swap(out_dev.dcenters, dc)
         st.host("encode_resident")
     else:
-        codes = download_i32(ctx, dcodes, n * pq_dim)
+        var direct = False
+        comptime if ANN3_DIRECT_OUT:
+            direct = codes_addr != 0
+        if direct:
+            ctx.enqueue_copy(dst_ptr=I32P(unsafe_from_address=codes_addr), src_buf=dcodes)
+            ctx.synchronize()
+        else:
+            codes = download_i32(ctx, dcodes, n * pq_dim)
         st.host("encode")
     _ = dcodes^
     _ = dcb^
@@ -640,6 +685,16 @@ def sq_encode_kernel(count: Int32, r: F32P, dim: Int32, vmin: F32P, delta: F32P,
         sq_encode_cell(e, r, Int(dim), vmin, delta, codes)
 
 
+def sq_encode_rows_kernel(n: Int32, r: F32P, dim: Int32, vmin: F32P, delta: F32P, codes: I32P):
+    """`sq_encode_kernel` with one thread per ROW (lane ann-apple3, OPT-IN
+    `ANN3_ROW_THREADS`): the row's dim cells in order, each `sq_encode_cell`."""
+    var i = _tid()
+    if i < Int(n):
+        var d = Int(dim)
+        for c in range(d):
+            sq_encode_cell(i * d + c, r, d, vmin, delta, codes)
+
+
 def ivf_sq_build_device(
     x: List[Float32], n: Int, dim: Int, n_lists: Int, kmeans_n_iters: Int, seed: Int,
     mut centers: List[Float32], mut offsets: List[Int32], mut list_indices: List[Int32],
@@ -678,13 +733,26 @@ def ivf_sq_build_device(
     else:
         _sq_range_enqueue(ctx, dr, n, dim, dvmin, ddelta)
     st.mark(ctx, "range")
-    ctx.enqueue_function[sq_encode_kernel](Int32(n * dim), dr.unsafe_ptr(), Int32(dim), dvmin.unsafe_ptr(),
-                                           ddelta.unsafe_ptr(), dcodes.unsafe_ptr(), grid_dim=_grid(n * dim),
-                                           block_dim=TPB)
+    comptime if ANN3_ROW_THREADS:
+        ctx.enqueue_function[sq_encode_rows_kernel](Int32(n), dr.unsafe_ptr(), Int32(dim), dvmin.unsafe_ptr(),
+                                                    ddelta.unsafe_ptr(), dcodes.unsafe_ptr(), grid_dim=_grid(n),
+                                                    block_dim=TPB)
+    else:
+        ctx.enqueue_function[sq_encode_kernel](Int32(n * dim), dr.unsafe_ptr(), Int32(dim), dvmin.unsafe_ptr(),
+                                               ddelta.unsafe_ptr(), dcodes.unsafe_ptr(), grid_dim=_grid(n * dim),
+                                               block_dim=TPB)
     ctx.synchronize()
     vmin = download_f32(ctx, dvmin, dim)
     delta = download_f32(ctx, ddelta, dim)
-    codes = download_i32(ctx, dcodes, n * dim)
+    var direct = False
+    comptime if ANN3_DIRECT_OUT:
+        direct = codes_addr != 0
+    if direct:
+        codes = List[Int32]()
+        ctx.enqueue_copy(dst_ptr=I32P(unsafe_from_address=codes_addr), src_buf=dcodes)
+        ctx.synchronize()
+    else:
+        codes = download_i32(ctx, dcodes, n * dim)
     st.host("encode")
     _ = dcodes^
     _ = ddelta^

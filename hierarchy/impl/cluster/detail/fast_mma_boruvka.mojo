@@ -33,6 +33,7 @@ finite or above `MB_NORM_CAP`, when a core distance is not finite, or when
 or the scalar kernel's non-finite refusal must run.
 """
 
+from std.sys.compile import is_defined
 from std.bit import count_trailing_zeros
 from max.gpu import block_idx, thread_idx
 from max.gpu.primitives.warp import shuffle_xor
@@ -54,9 +55,20 @@ comptime FAST_MMA_BORUVKA_ENABLED = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARG
 
 comptime MB_SG = 8
 comptime MB_TPB = MB_SG * 32
+# AFCL-G14: NEVER RUN — PENDING MEASUREMENT; uncompiled and unverified.
+# Halve staged reference rows, retaining complete 32-row MMA admission
+# groups. This halves shared operand/metadata pages and prefetch registers
+# but doubles tile barriers. All points remain candidates, and the scalar
+# recomputation, lower-bound filter and value/index tie ordering are fixed.
+# Applies to agglomerative and HDBSCAN callers of this same MST search.
+comptime AFCL_G14 = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
+    and is_defined["MOJOLEARN_AFCL_G14"]()
+)
+comptime MB_T = 64 if AFCL_G14 else 128
 # TOMBSTONE: MOJOLEARN_AFCL_G14 (never-run Apple FAST programme card: 64 staged reference rows instead of 128) deleted 2026-11-15 by lane/expdel2-11-cluster; code recoverable at b21ae6d074.
 # Restore: git apply experiments/removed/MOJOLEARN_AFCL_G14.patch; record in docs/TOMBSTONES.md.
-comptime MB_T = 128
+# RESTORED 2026-11-15 by lane/restore-apple-fast-classical: Apple fast is paused, not abandoned (Andrew); opt-in, default off, Apple fast only.
 comptime MB_MAX_D = 32
 comptime MB_A = 2
 """Listed-point 8-blocks per simdgroup (4: 2.08 s against 1.72-1.80 s at

@@ -184,6 +184,12 @@ trait ClusterOps(Movable):
         and every IDENTICAL build answer False."""
         ...
 
+    def ward_nn(mut self, c: Int, sz: Int, l: Int, d: Int, nn: Int, md: Int) raises:
+        """FAST ward: nn[p], md[p] = the cluster q != p among the first `l`
+        (centroids c, l x d; sizes sz) at the lowest `bodies.ward_cell`, the
+        lowest q on a tie."""
+        ...
+
     def kth_flat(mut self, m: Int, n: Int, k: Int) raises -> Float32:
         """The k-th smallest (1-based) of the first `n` values of slot `m`
         (non-negative), the value `kth` gives for one row of n columns. On

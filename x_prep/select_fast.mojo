@@ -44,6 +44,7 @@ the sums: pairwise instead of row order, never less accurate.
 """
 from max.gpu import block_idx, thread_idx
 from std.memory import stack_allocation
+from std.sys.compile import is_defined
 from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace
@@ -80,9 +81,14 @@ comptime RL = 8
 #: threads per tile and per fold threadgroup
 comptime TPB = CT * RL
 #: rows each thread walks
+# AFCL-P07: NEVER RUN — PENDING MEASUREMENT. Uncompiled/unverified.
+# Twice as many row tiles, half as many observations per lane: an occupancy
+# versus partial-buffer traffic experiment covering every feature width.
+comptime AFCL_P07 = SELECT_FAST_APPLE and is_defined["MOJOLEARN_AFCL_P07"]()
+comptime RPT = 32 if AFCL_P07 else 64
 # TOMBSTONE: MOJOLEARN_AFCL_P07 (never-run Apple FAST programme card) deleted 2026-11-15 by lane/expdel2-36-neural-series-linear; code recoverable at 145be10898.
 # Restore: git apply experiments/removed/MOJOLEARN_AFCL_P07.patch; record in docs/TOMBSTONES.md.
-comptime RPT = 64
+# RESTORED 2026-11-15 by lane/restore-apple-fast-classical: Apple fast is paused, not abandoned (Andrew); opt-in, default off, Apple fast only.
 #: rows per tile
 comptime RT = RL * RPT
 #: the most classes the class-sum tile holds in threadgroup memory

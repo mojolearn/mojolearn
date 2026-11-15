@@ -33,6 +33,7 @@ Chan's formula. FAST promises quality, not bits: Welford + Chan is never
 less accurate than the serial two-pass fold. IDENTICAL never compiles a
 call to this file (x_prep/device.mojo gates every launch).
 """
+from std.sys.compile import is_defined
 from max.gpu import block_idx, thread_idx
 from std.memory import stack_allocation
 from core.accelerator_target import TARGET_HAS_APPLE_GPU
@@ -46,8 +47,14 @@ from x_prep.transform import PT_STATE, pt_finish, power_log, power_from_log
 from x_prep.pt_score import SCORE_WORDS, score_tile, score_finish
 from x_prep.pt_center import PT_SCORE_STABLE
 
+# AFCL-P01: NEVER RUN — PENDING MEASUREMENT. Uncompiled/unverified.
+# Separate even/odd Welford chains hide their division dependencies; Chan
+# combines their centered moments. All observations and NaN handling remain.
+# This covers the current SI_ONEPASS path as well as fused-transform callers.
+comptime AFCL_P01 = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU and is_defined["MOJOLEARN_AFCL_P01"]()
 # TOMBSTONE: MOJOLEARN_AFCL_P01 (never-run Apple FAST programme card) deleted 2026-11-15 by lane/expdel2-22-linear; code recoverable at 9995c7281f.
 # Restore: git apply experiments/removed/MOJOLEARN_AFCL_P01.patch
+# RESTORED 2026-11-15 by lane/restore-apple-fast-classical: Apple fast is paused, not abandoned (Andrew); opt-in, default off, Apple fast only.
 
 comptime _FAST_APPLE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
 # HOLD-quality, 2026-10-04, gap26-pt-score-quality, source bc112b172:
@@ -87,9 +94,14 @@ comptime PT_COLBATCH = _FAST_APPLE and PT_SCORE
 #: M2): median statistics exact, mean statistics within 1.2e-7 absolute (one float32 ulp).
 # TOMBSTONE: MOJOLEARN_SI_ONEPASS (force-on knob; the one-pass col_stats is the FAST+Apple default, EXP:1888) deleted 2026-11-15 by lane/expdel2-22-linear; code recoverable at 11e4797706.
 # Restore: git apply experiments/removed/MOJOLEARN_SI_ONEPASS.patch
+# RESTORED 2026-11-15 by lane/restore-apple-fast-classical: Apple fast is paused, not abandoned (Andrew); opt-in, default off, Apple fast only.
 # TOMBSTONE: MOJOLEARN_SI_ONEPASS_OFF (old path; the one-pass col_stats is the FAST+Apple default, EXP:1888) deleted 2026-11-15 by lane/expdel2-22-linear; code recoverable at 8193833d2e.
 # Restore: git apply experiments/removed/MOJOLEARN_SI_ONEPASS_OFF.patch
 comptime SI_ONEPASS = _FAST_APPLE
+#: The force-on knob, restored 2026-11-15 as it was: SI_ONEPASS is the FAST +
+#: Apple default (its _OFF rollback is deleted), so the knob changes nothing;
+#: `-D MOJOLEARN_SI_ONEPASS` build lines keep compiling.
+comptime SI_ONEPASS_FORCE = _FAST_APPLE and is_defined["MOJOLEARN_SI_ONEPASS"]()
 #: the bits `x_prep_ptimpute_flags` exports (registered only when nonzero):
 #: the Python layer shrinks the buffers the device no longer touches by them
 #: (bit 2 was PT_SPEC, bit 4 PT_FUSED_TRANSFORM and bit 16 PT_FOLD_NOX, all deleted 2026-10-09)
@@ -314,6 +326,9 @@ def cs_tile_kernel(f: FP, pp: FP, X: Int32, n: Int32, d: Int32, rows: Int32, tpb
     var cnt = Float32(0)
     var mean = Float32(0)
     var m2 = Float32(0)
+    var cnt_odd = Float32(0)
+    var mean_odd = Float32(0)
+    var m2_odd = Float32(0)
     var lo = inf
     var hi = -inf
     var ma = Float32(0)
@@ -323,15 +338,30 @@ def cs_tile_kernel(f: FP, pp: FP, X: Int32, n: Int32, d: Int32, rows: Int32, tpb
         if is_nan(x):
             continue
         var v = x
+        comptime if AFCL_P01:
+            if (i - row0) % 2 == 0:
+                cnt += Float32(1)
+                var delta = v - mean
+                mean += delta / cnt
+                m2 += delta * (v - mean)
+            else:
+                cnt_odd += Float32(1)
+                var delta = v - mean_odd
+                mean_odd += delta / cnt_odd
+                m2_odd += delta * (v - mean_odd)
+        else:
+            cnt += Float32(1)
+            var delta = v - mean
+            mean += delta / cnt
+            m2 += delta * (v - mean)
         # TOMBSTONE: MOJOLEARN_AFCL_P01 (never-run Apple FAST programme card) deleted 2026-11-15 by lane/expdel2-22-linear; code recoverable at 9995c7281f.
         # Restore: git apply experiments/removed/MOJOLEARN_AFCL_P01.patch
-        cnt += Float32(1)
-        var delta = v - mean
-        mean += delta / cnt
-        m2 += delta * (v - mean)
+        # RESTORED 2026-11-15 by lane/restore-apple-fast-classical: Apple fast is paused, not abandoned (Andrew); opt-in, default off, Apple fast only.
         lo = min(lo, v)
         hi = max(hi, v)
         ma = max(ma, abs(v))
+    comptime if AFCL_P01:
+        _chan(cnt, mean, m2, cnt_odd, mean_odd, m2_odd)
     var o = (chunk * dd + c) * 6
     pp[o] = cnt
     pp[o + 1] = mean

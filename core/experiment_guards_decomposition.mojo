@@ -192,10 +192,8 @@ def _check_configuration() -> Bool:
     # Lane expdel2-18-decomposition (2026-11-15): unmeasured arms and old paths deleted, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (docs/TOMBSTONES.md).
     # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_RSVD_TSQR_ORTHO_OFF.patch
     comptime assert not is_defined["MOJOLEARN_CLASSICAL_RSVD_TSQR_ORTHO_OFF"](), "removed 2026-11-15 (lane/expdel2-18-decomposition): CLASSICAL_RSVD_TSQR_ORTHO_OFF (old path) is gone; the default is kept; code at 77c81ac782; restore: experiments/removed/MOJOLEARN_CLASSICAL_RSVD_TSQR_ORTHO_OFF.patch"
-    # Restore: git apply experiments/removed/MOJOLEARN_DECOMP_FAST_TSQR_GRID.patch
-    comptime assert not is_defined["MOJOLEARN_DECOMP_FAST_TSQR_GRID"](), "removed 2026-11-15 (lane/expdel2-18-decomposition): DECOMP_FAST_TSQR_GRID (arm) is gone; the default path is the only one; code at 23f8f5063b; restore: experiments/removed/MOJOLEARN_DECOMP_FAST_TSQR_GRID.patch"
-    # Restore: git apply experiments/removed/MOJOLEARN_DECOMP_FAST_TSQR_NORM.patch
-    comptime assert not is_defined["MOJOLEARN_DECOMP_FAST_TSQR_NORM"](), "removed 2026-11-15 (lane/expdel2-18-decomposition): DECOMP_FAST_TSQR_NORM (arm) is gone; the default path is the only one; code at 735e11f676; restore: experiments/removed/MOJOLEARN_DECOMP_FAST_TSQR_NORM.patch"
+    # MOJOLEARN_DECOMP_FAST_TSQR_GRID: refusal removed 2026-11-15 (restored by lane/restore-apple-fast-classical: Apple fast paused, not abandoned; opt-in, default off; see docs/TOMBSTONES.md Restored table)
+    # MOJOLEARN_DECOMP_FAST_TSQR_NORM: refusal removed 2026-11-15 (restored by lane/restore-apple-fast-classical: Apple fast paused, not abandoned; opt-in, default off; see docs/TOMBSTONES.md Restored table)
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_CD_RESIDENT_OFF.patch
     comptime assert not is_defined["MOJOLEARN_IDN_CD_RESIDENT_OFF"](), "removed 2026-11-15 (lane/expdel2-18-decomposition): IDN_CD_RESIDENT_OFF (old path) is gone; the default is kept; code at ee37c009aa; restore: experiments/removed/MOJOLEARN_IDN_CD_RESIDENT_OFF.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_CODE_RESIDENT_OFF.patch
@@ -229,18 +227,15 @@ def _check_configuration() -> Bool:
     # MOJOLEARN_RSVD_FAST_DEVSCAN_OFF: refusal removed 2026-11-15 (restored; owed B arm, see docs/TOMBSTONES.md Restored table)
     # Restore: git apply experiments/removed/MOJOLEARN_XD_FAST_CLS2_GRP_DEVSCAN_OFF.patch
     comptime assert not is_defined["MOJOLEARN_XD_FAST_CLS2_GRP_DEVSCAN_OFF"](), "removed 2026-11-15 (lane/expdel2-18-decomposition): XD_FAST_CLS2_GRP_DEVSCAN_OFF (old path) is gone; the default is kept; code at 772bf55066; restore: experiments/removed/MOJOLEARN_XD_FAST_CLS2_GRP_DEVSCAN_OFF.patch"
-    # Restore: git apply experiments/removed/MOJOLEARN_XD_FAST_CLS2_GRP_LAZY.patch
-    comptime assert not is_defined["MOJOLEARN_XD_FAST_CLS2_GRP_LAZY"](), "removed 2026-11-15 (lane/expdel2-18-decomposition): XD_FAST_CLS2_GRP_LAZY (arm) is gone; the default path is the only one; code at 17fa14cc92; restore: experiments/removed/MOJOLEARN_XD_FAST_CLS2_GRP_LAZY.patch"
+    # MOJOLEARN_XD_FAST_CLS2_GRP_LAZY: refusal removed 2026-11-15 (restored by lane/restore-apple-fast-classical: Apple fast paused, not abandoned; opt-in, default off; see docs/TOMBSTONES.md Restored table)
     # Restore: git apply experiments/removed/MOJOLEARN_XD_FAST_CLS2_GRP_NOSCAN.patch
     comptime assert not is_defined["MOJOLEARN_XD_FAST_CLS2_GRP_NOSCAN"](), "removed 2026-11-15 (lane/expdel2-18-decomposition): XD_FAST_CLS2_GRP_NOSCAN (arm) is gone; the default path is the only one; code at 081ec2e9c2; restore: experiments/removed/MOJOLEARN_XD_FAST_CLS2_GRP_NOSCAN.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_XD_FAST_SRP_STRAT_OFF.patch
     comptime assert not is_defined["MOJOLEARN_XD_FAST_SRP_STRAT_OFF"](), "removed 2026-11-15 (lane/expdel2-18-decomposition): XD_FAST_SRP_STRAT_OFF (old path) is gone; the default is kept; code at f45bdace85; restore: experiments/removed/MOJOLEARN_XD_FAST_SRP_STRAT_OFF.patch"
     # Lane expdel2-17-decomposition (2026-11-15), removed under "An unmeasured arm is deleted" (docs/TOMBSTONES.md,
     # docs/apple-fast/EXPERIMENTS.md, experiments/removed/*.patch).
-    # Restore: git apply experiments/removed/MOJOLEARN_AFCL_L13.patch
-    comptime assert not is_defined["MOJOLEARN_AFCL_L13"](), "removed 2026-11-15 (lane/expdel2-17-decomposition): AFCL_L13 (never-run Apple FAST card, MinCovDet support selection on four SIMD groups) is gone; the default path is the only one; see docs/TOMBSTONES.md"
-    # Restore: git apply experiments/removed/MOJOLEARN_DECOMP_FAST_OMP_BLOCK.patch
-    comptime assert not is_defined["MOJOLEARN_DECOMP_FAST_OMP_BLOCK"](), "removed 2026-11-15 (lane/expdel2-17-decomposition): DECOMP_FAST_OMP_BLOCK (FAST Apple opt-in OMP block per row, never A/B'd) is gone; the default path is the only one; see docs/TOMBSTONES.md"
+    # MOJOLEARN_AFCL_L13: refusal removed 2026-11-15 (restored by lane/restore-apple-fast-classical: Apple fast paused, not abandoned; opt-in, default off; see docs/TOMBSTONES.md Restored table)
+    # MOJOLEARN_DECOMP_FAST_OMP_BLOCK: refusal removed 2026-11-15 (restored by lane/restore-apple-fast-classical: Apple fast paused, not abandoned; opt-in, default off; see docs/TOMBSTONES.md Restored table)
     # Restore: git apply experiments/removed/MOJOLEARN_FA_GRAM_ONCE.patch
     comptime assert not is_defined["MOJOLEARN_FA_GRAM_ONCE"](), "removed 2026-11-15 (lane/expdel2-17-decomposition): FA_GRAM_ONCE (FAST Apple opt-in Gram-once Python EM loop, HOLD-quality) is gone; the default path is the only one; see docs/TOMBSTONES.md"
     # Restore: git apply experiments/removed/MOJOLEARN_FA_GRAM_QOLD.patch

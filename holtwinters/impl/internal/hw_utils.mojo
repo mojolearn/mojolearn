@@ -151,9 +151,15 @@ comptime PG_EPS = Float32(Float64(1e-10))
 comptime MAX_BLOCKS_PER_DIM = 65535
 
 # The seasonal fit path's fixed optimizer launch width (`hw_optim.cuh:862-863`).
+# AFCL-P14: NEVER RUN — PENDING MEASUREMENT. Uncompiled/unverified.
+# Half as many independent optimizer series per block lowers per-block
+# register demand for long seasonal state. It does not change any recurrence,
+# season length, initial state, parameter search or stopping budget.
+comptime AFCL_P14 = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU and is_defined["MOJOLEARN_AFCL_P14"]()
+comptime HW_OPTIM_TPB = 64 if AFCL_P14 else 128
 # TOMBSTONE: MOJOLEARN_AFCL_P14 (never-run Apple FAST programme card: 64-wide optimizer blocks) deleted 2026-11-15 by lane/expdel2-37-series; code recoverable at 82df561cdb.
 # Restore: git apply experiments/removed/MOJOLEARN_AFCL_P14.patch; record in docs/TOMBSTONES.md.
-comptime HW_OPTIM_TPB = 128
+# RESTORED 2026-11-15 by lane/restore-apple-fast-classical: Apple fast is paused, not abandoned (Andrew); opt-in, default off, Apple fast only.
 
 
 def get_threads_per_block(n: Int, max_threads: Int = 512) -> Int:

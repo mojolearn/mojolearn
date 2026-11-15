@@ -95,9 +95,11 @@ comptime FAST_WS_SORT = (
 #: `-D MOJOLEARN_SVM_FAST_WS_SELECT_OFF` restores the host-counted gathers.
 # TOMBSTONE: MOJOLEARN_SVM_WS1024 (unmeasured opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-21-linear; code recoverable at a4bd9fe9ae.
 # Restore: git apply experiments/removed/MOJOLEARN_SVM_WS1024.patch; record in docs/TOMBSTONES.md.
+# RESTORED 2026-11-15 by lane/restore-apple-fast-classical: Apple fast is paused, not abandoned (Andrew); opt-in, default off, Apple fast only.
 comptime SVM_WS_MAX = 2048 if (
     FAST_WS_SORT and GLOBAL_NUMERIC_MODE == NUMERIC_FAST
     and TARGET_HAS_APPLE_GPU
+    and not is_defined["MOJOLEARN_SVM_WS1024"]()
 ) else 1024
 """FAST on Apple: a working set of up to 2048 (the grid solve carries it
 over eight blocks of 256, `smoblocksolve.mojo`), half

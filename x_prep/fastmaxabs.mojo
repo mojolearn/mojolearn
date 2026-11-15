@@ -19,6 +19,9 @@ in any order), `maxabs_fold_kernel` the largest partial and sklearn's
 `_handle_zeros_in_scale` of it (`zero_to_one`): the program route's
 max_abs_ and scale_ word for word.
 """
+from std.sys.compile import is_defined
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from max.gpu import block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
 from checks.numerics import ftz
@@ -28,16 +31,22 @@ from x_prep.device import x_prep_ctx
 from x_prep.prep3 import PREP3_MAXABS, PREP3_MAXABS_POOL
 from core.device_pool import pool_give, pool_take
 
+# AFCL-P02: NEVER RUN — PENDING MEASUREMENT. Uncompiled/unverified.
+# Halve work per column lane to expose more independent blocks for every
+# width. This doubles partial storage; the existing width policy is unchanged.
+comptime AFCL_P02 = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU and is_defined["MOJOLEARN_AFCL_P02"]()
 # TOMBSTONE: MOJOLEARN_AFCL_P02 (never-run Apple FAST programme card) deleted 2026-11-15 by lane/expdel2-22-linear; code recoverable at d837f02ccf.
 # Restore: git apply experiments/removed/MOJOLEARN_AFCL_P02.patch
+# RESTORED 2026-11-15 by lane/restore-apple-fast-classical: Apple fast is paused, not abandoned (Andrew); opt-in, default off, Apple fast only.
 
 #: threads per block: one column each, consecutive columns of one row
 comptime MA_TPB = 256
 #: rows per chunk (wide X) and for a narrow X (more chunks, more threads)
+comptime MA_ROWS = 512 if AFCL_P02 else 1024
+comptime MA_ROWS_NARROW = 64 if AFCL_P02 else 128
 # TOMBSTONE: MOJOLEARN_AFCL_P02 (never-run Apple FAST programme card) deleted 2026-11-15 by lane/expdel2-22-linear; code recoverable at d837f02ccf.
 # Restore: git apply experiments/removed/MOJOLEARN_AFCL_P02.patch
-comptime MA_ROWS = 1024
-comptime MA_ROWS_NARROW = 128
+# RESTORED 2026-11-15 by lane/restore-apple-fast-classical: Apple fast is paused, not abandoned (Andrew); opt-in, default off, Apple fast only.
 comptime MA_NARROW = 64
 
 

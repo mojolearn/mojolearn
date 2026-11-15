@@ -3,6 +3,7 @@ program is one launch of one thread per unit on the same stream (so stage s
 sees every write of stage s-1), and the arena comes back once."""
 # TOMBSTONE: MOJOLEARN_CLASSICAL_C08_GROUPED_OUTPUT (no A/B recorded for the opt-in arm) deleted 2026-11-15 by lane/expdel2-22-linear; code recoverable at 5b9c50922b.
 # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C08_GROUPED_OUTPUT.expdel2-22-linear.patch
+from std.sys.compile import is_defined
 from experiments.classical_identical_ideas.shared_controls import C07_RADIX_ROWS, C08_DICTIONARY, C08_UNIQUE_SCAN
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
@@ -28,9 +29,10 @@ from x_prep.fastred import (
     ii_gram_fast_kernel,
 )
 from x_prep.dmi import mi_cd_device, mi_w_words, mi_scratch_words
+from x_prep.fastnb import NB_CAT_ATOMIC, AFCL_P03, cat_hist_atomic_kernel, cat_hist_convert_kernel
 # TOMBSTONE: MOJOLEARN_AFCL_P03 (never-run Apple FAST programme card) deleted 2026-11-15 by lane/expdel2-22-linear; code recoverable at 5f02f5b9e3.
 # Restore: git apply experiments/removed/MOJOLEARN_AFCL_P03.patch
-from x_prep.fastnb import NB_CAT_ATOMIC, cat_hist_atomic_kernel, cat_hist_convert_kernel
+# RESTORED 2026-11-15 by lane/restore-apple-fast-classical: Apple fast is paused, not abandoned (Andrew); opt-in, default off, Apple fast only.
 from x_prep.label_fast import LABEL_SCATTER, label_scatter_kernel
 from x_prep.select_fast import (
     SELECT_FREG, SELECT_FCLS, OP_F_CLASSIF, OP_F_REGRESSION, program_has_op, select_scratch_words,
@@ -214,9 +216,10 @@ comptime _MI_FA = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
 comptime MI_REG_TIES = _MI_FA
 # TOMBSTONE: MOJOLEARN_MI_REG_RANKMAJOR (FAST+Apple opt-in arm, EXP:377 OPEN, no A/B recorded) deleted 2026-11-15 by lane/expdel2-22-linear; code recoverable at 6a50f39dd3.
 # Restore: git apply experiments/removed/MOJOLEARN_MI_REG_RANKMAJOR.patch
+comptime MI_REG_SORTED = _MI_FA and (MI_REG_TIES or is_defined["MOJOLEARN_MI_REG_SORTCOUNT"]())
 # TOMBSTONE: MOJOLEARN_MI_REG_SORTCOUNT (force-on knob; the sorted search is the FAST+Apple default through MI_REG_TIES, EXP:379) deleted 2026-11-15 by lane/expdel2-22-linear; code recoverable at 699627ef7b.
 # Restore: git apply experiments/removed/MOJOLEARN_MI_REG_SORTCOUNT.patch
-comptime MI_REG_SORTED = _MI_FA
+# RESTORED 2026-11-15 by lane/restore-apple-fast-classical: Apple fast is paused, not abandoned (Andrew); opt-in, default off, Apple fast only.
 # TOMBSTONE: MOJOLEARN_MI_FAST_FOLDS (DROP speed + quality: mi-reg-folds-istella-x -0.2%; M2 tie-heavy fixture scores
 # move up to 3.2% of scale, selected-set symmetric difference 2) deleted 2026-10-09 on lane/owed-deletions-D2: ops 66 / 70
 # as threadgroup folds; code recoverable at b639a2bd2. Restore: git apply experiments/removed/MOJOLEARN_MI_FAST_FOLDS.patch
@@ -225,9 +228,14 @@ comptime MI_REG_SORTED = _MI_FA
 #: scores bit-identical (tools/miv_quality.sh, M2).
 # TOMBSTONE: MOJOLEARN_MI_CLF_RANKMAJOR (force-on knob; the arm is the FAST+Apple default through its _OFF switch, EXP:374) deleted 2026-11-15 by lane/expdel2-22-linear; code recoverable at 8b76065907.
 # Restore: git apply experiments/removed/MOJOLEARN_MI_CLF_RANKMAJOR.patch
+# RESTORED 2026-11-15 by lane/restore-apple-fast-classical: Apple fast is paused, not abandoned (Andrew); opt-in, default off, Apple fast only.
 # TOMBSTONE: MOJOLEARN_MI_CLF_RANKMAJOR_OFF (old path; promoted on FAST+Apple only (EXP:374, M3); the other vendors' A/B is owed and moot (FAST is Apple only)) deleted 2026-11-15 by lane/expdel2-22-linear; code recoverable at 31dc3269c3.
 # Restore: git apply experiments/removed/MOJOLEARN_MI_CLF_RANKMAJOR_OFF.patch
 comptime MI_CLF_RANKMAJOR = _MI_FA
+#: The force-on knob, restored 2026-11-15 as it was: MI_CLF_RANKMAJOR is the
+#: FAST + Apple default (its _OFF rollback is deleted), so the knob changes
+#: nothing; `-D MOJOLEARN_MI_CLF_RANKMAJOR` build lines keep compiling.
+comptime MI_CLF_RANKMAJOR_FORCE = _MI_FA and is_defined["MOJOLEARN_MI_CLF_RANKMAJOR"]()
 comptime OP_MI_CC = 68
 
 #: op 69 (`mi_cd`) runs as the sorted neighbour search of x_prep/dmi.mojo
@@ -784,11 +792,13 @@ def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int, 
                 var words = Int(hq[2]) * Int(hq[4]) * Int(hq[6])
                 if cells > 0 and cells <= 2147483647 and words > 0:
                     ctx.enqueue_memset(df.create_sub_buffer[DType.float32](Int(hq[8]), words), Float32(0))
+                    var cat_block = BLOCK // 2 if AFCL_P03 else BLOCK
 # TOMBSTONE: MOJOLEARN_AFCL_P03 (never-run Apple FAST programme card) deleted 2026-11-15 by lane/expdel2-22-linear; code recoverable at 5f02f5b9e3.
 # Restore: git apply experiments/removed/MOJOLEARN_AFCL_P03.patch
+# RESTORED 2026-11-15 by lane/restore-apple-fast-classical: Apple fast is paused, not abandoned (Andrew); opt-in, default off, Apple fast only.
                     ctx.enqueue_function[cat_hist_atomic_kernel](
                         df.unsafe_ptr(), qp, Int32(cells),
-                        grid_dim=(cells + BLOCK - 1) // BLOCK, block_dim=BLOCK,
+                        grid_dim=(cells + cat_block - 1) // cat_block, block_dim=cat_block,
                     )
                     continue
             if op == OP_CAT_HFOLD and host_q.unsafe_load(s * STAGE_INTS + 2 + 6) < 0:

@@ -37,6 +37,7 @@ stop takes that step's centers and counts from the history. FAST promises
 quality, not bits: the summation order and the reassignment stream
 differ from the step loop's. IDENTICAL compiles none of this.
 """
+from std.sys.compile import is_defined
 from max.gpu import block_idx, thread_idx
 from std.memory import stack_allocation
 from core.accelerator_target import TARGET_HAS_APPLE_GPU
@@ -53,9 +54,17 @@ from checks.soft_f64 import sf64_from_int, sf64_lt, sf64_mul
 # TOMBSTONE: MOJOLEARN_X_CLUSTER_FAST_MINIBATCH_OFF (old path, superseded by the FAST+Apple default) deleted 2026-11-15 by lane/expdel-01-cluster; code recoverable at 336732d51d.
 # Restore: git apply experiments/removed/MOJOLEARN_X_CLUSTER_FAST_MINIBATCH_OFF.patch; record in docs/TOMBSTONES.md.
 comptime MINIBATCH_FAST_DEV = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
+# AFCL-G07: NEVER RUN — PENDING MEASUREMENT; uncompiled and unverified.
+# Four Apple SIMD groups per block reduce the register/shared footprint and
+# increase independent assignment blocks. Keep the center chunk equal to
+# the block width for the existing one-row-per-thread compaction kernel.
+# Every batch, random draw, speculative group and convergence test remains;
+# partial-sum association can move FAST bits and the stopping trajectory.
+comptime AFCL_G07 = MINIBATCH_FAST_DEV and is_defined["MOJOLEARN_AFCL_G07"]()
+comptime MBF_TPB = 128 if AFCL_G07 else 256
 # TOMBSTONE: MOJOLEARN_AFCL_G07 (never-run Apple FAST programme card: four SIMD groups per block, MBF_TPB 128) deleted 2026-11-15 by lane/expdel2-15-cluster; code recoverable at 01c1811429.
 # Restore: git apply experiments/removed/MOJOLEARN_AFCL_G07.patch; record in docs/TOMBSTONES.md.
-comptime MBF_TPB = 256
+# RESTORED 2026-11-15 by lane/restore-apple-fast-classical: Apple fast is paused, not abandoned (Andrew); opt-in, default off, Apple fast only.
 comptime MBF_CH = MBF_TPB
 """Batch rows per chunk of `_mbf_sum_cmp_kernel`."""
 comptime MBF_MAX_KD = 4096

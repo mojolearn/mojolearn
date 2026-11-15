@@ -19,12 +19,17 @@ of the two here and the `-D MOJOLEARN_VSEARCH_ALL` bundle were deleted
 deleted 2026-10-09). The mechanism of each is docs/apple-fast/ab/vsearch.md; the profile
 they answer is docs/apple-fast/notes/vsearch.md; the record is
 docs/apple-fast/EXPERIMENTS.md."""
+from std.sys.compile import is_defined
 from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 
 comptime VSEARCH_FAST_APPLE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
+#: no-op alias since 2026-10-04 (the switches it bundled are defaults); kept so
+#: `-D MOJOLEARN_VSEARCH_ALL` build lines still parse to the default build
+comptime VSEARCH_ALL = is_defined["MOJOLEARN_VSEARCH_ALL"]()
 # TOMBSTONE: MOJOLEARN_VSEARCH_ALL (force-on bundle, a no-op since 2026-10-04: every switch it bundled is the FAST + Apple default) deleted 2026-11-15 by lane/expdel2-14-cluster; code recoverable at 72e3226c20.
 # Restore: git apply experiments/removed/MOJOLEARN_VSEARCH_ALL.patch; record in docs/TOMBSTONES.md.
+# RESTORED 2026-11-15 by lane/restore-apple-fast-classical: Apple fast is paused, not abandoned (Andrew); opt-in, default off, Apple fast only.
 
 #: VSEARCH_ALL A/B on the M3 (afc_ab_def, full board size, 1 run per arm,
 #: 2026-10-04, source ad265a028), A = default, B = -D MOJOLEARN_VSEARCH_ALL,
