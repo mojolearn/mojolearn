@@ -144,14 +144,10 @@ comptime IDN_GBDT_MC_ONE_STEP_DEVICE = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 #: search returns, before the next estimation reuses the staging). Two
 #: drains per tree become one. Schedule only: the same kernels on the same
 #: queue in the same order, so no bit moves anywhere and the host column is
-#: untouched. `-D MOJOLEARN_IDN_GBDT_SYM_EST_DEFER_DRAIN_OFF` (or the master
-#: `-D MOJOLEARN_IDN_ALL_OFF`) restores the drain per task.
-comptime IDN_GBDT_SYM_EST_DEFER_DRAIN = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not (
-        is_defined["MOJOLEARN_IDN_GBDT_SYM_EST_DEFER_DRAIN_OFF"]()
-    )
-)
+#: untouched.
+# TOMBSTONE: MOJOLEARN_IDN_GBDT_SYM_EST_DEFER_DRAIN_OFF (DELETE-OLD-PATH, no A/B recorded for the old path, rule b) deleted 2026-11-15 by lane/expdel2-44-trees; code recoverable at 71b261799b.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_GBDT_SYM_EST_DEFER_DRAIN_OFF.patch; record in docs/TOMBSTONES.md.
+comptime IDN_GBDT_SYM_EST_DEFER_DRAIN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 
 #: the widest class count `multiclass_one_step_kernel` solves (its
 #: per-thread system is `MC_ONE_STEP_MAX_CLASSES^2` doubles of local memory)
