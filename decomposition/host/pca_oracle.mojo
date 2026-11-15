@@ -138,9 +138,7 @@ The restatement is a prediction until measured. The CPU identity gate
 pca,pca-whiten,tsvd --require-columns 4`) is the measurement, and the
 brief records what it has shown.
 """
-from experiments.classical_identical_ideas.shared_controls import C01_MEAN
 # TOMBSTONE: MOJOLEARN_CLASSICAL_PCA_COV=4 (arm c04, slower) deleted 2026-10-10 by lane/grid-act-6; code recoverable at 328b0ae58.
-from core.blocked_moments_host import host_bm_column_mean
 # TOMBSTONE: MOJOLEARN_CLASSICAL_TSVD_FUSED_STATS (slower) deleted 2026-10-10 by lane/grid-act-6; code recoverable at 328b0ae58.
 from core.classical_centered import centered_gram_v1_cell
 # SPDX-License-Identifier: Apache-2.0
@@ -243,10 +241,8 @@ def host_column_mean(x: List[Float32], n_rows: Int, n_cols: Int) -> List[Float32
 def host_column_mean_launch(x: List[Float32], n_rows: Int, n_cols: Int) -> List[Float32]:
     """`core/xtdz_coalesced.mojo::column_mean_launch`'s value: the tile
     order under IDN_XTY_TILED (lane fam2-shared), else `host_column_mean`."""
-    comptime if C01_MEAN:
-        # core/blocked_moments.mojo `bm_column_mean`'s host column
-        if n_rows >= 1 and n_cols >= 1:
-            return host_bm_column_mean(x, n_rows, n_cols)
+    # TOMBSTONE: MOJOLEARN_CLASSICAL_C01_MEAN (DROPPED-slower, EXP C01_MEAN row) deleted 2026-11-15 by lane/expdel2-16-decomposition; code recoverable at 0b64d03d68.
+    # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C01_MEAN.expdel2-16-decomposition.patch; record in docs/TOMBSTONES.md.
     comptime if IDN_XTY_TILED:
         if n_rows >= 1 and n_cols >= 1:
             return host_column_mean_tiled(x, n_rows, n_cols)
