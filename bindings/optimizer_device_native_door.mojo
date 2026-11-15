@@ -6,7 +6,7 @@ from bindings.py_cpython_table import cpython_table
 from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem
 from bindings.native_class_admission_door import dict_keys_admitted, dict_keys_admit
 from bindings.optimizer_admission_door import opt_value, opt_scalar
-from bindings.optimizer_public_door import new_array, TensorView, tensor_view
+from bindings.optimizer_public_door import new_array, new_zeros, TensorView, tensor_view
 from bindings.optimizer_container_boundary_unpack import OptimizerInputOwners
 from bindings.optimizer_scalar_boundary_unpack import optimizer_integer
 from bindings.optimizer_descriptor_boundary_door import optimizer_provider_entries, optimizer_driver, optimizer_device_available
@@ -229,13 +229,18 @@ def device_operation(operation: String, owner: PythonObject, values: PythonObjec
         return device_new(fields["_b"], fields["h"], dims, owner if base is None else base, context)
     if operation == "device_host":
         var dims = device_shape(fields["shape"], context)
-        var result = new_array(dims, "<f4")
+        var count = Int(py=fields["size"])
+        optimizer_device_output(dims, count)
+        # lane unfilled-storage-audit (2026-11-15): new_array is unfilled
+        # (1bcfa0d69b). A rebound public size may download only a prefix of
+        # `count` floats, so that result keeps zeros in its unwritten tail; a
+        # full download (size == the shape count, what device_allocate sets)
+        # stays unfilled: the download writes every element.
+        var result = new_array(dims, "<f4") if count == shape_count(dims) else new_zeros(dims, "<f4")
         var provider = optimizer_provider_entries(entries)
         var driver = optimizer_driver(provider)
         var handle = Int(py=fields["h"])
         var address = Int(py=result._addr)
-        var count = Int(py=fields["size"])
-        optimizer_device_output(dims, count)
         with GILReleased(Python()):
             _ = driver.download_device(handle, address, count)
         _ = provider
