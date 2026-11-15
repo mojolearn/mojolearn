@@ -7,8 +7,8 @@ unchanged. The profile this answers is docs/apple-fast/notes/sym-iter.md:
 main makes eight host waits and ~25 Metal allocations per tree before any
 histogram work.
 
-The defines (each default OFF, each its own A/B; `MOJOLEARN_SYM_ITER_ALL`
-turns on SYM_BUF_ARENA only; the other three are recorded DROPs):
+The defines (each default OFF, each its own A/B; the other three are recorded
+DROPs):
 
 - `MOJOLEARN_SYM_BUF_ARENA` (`SYM_BUF_ARENA`): a per-fit pool of one
   (`SymIterPool`) for every buffer the loop made per tree -- the two split
@@ -87,15 +87,9 @@ from gbdt.options.catboost_options import LEAF_ESTIMATION_NEWTON
 comptime SYM_ITER_FAST_APPLE = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
 )
-#: recovery 2026-10-04 (lane/apple-fast-rec-sym): source
-#: lane/apple-fast-sym-iter@4956a2234; SYM_ITER_ALL compiled rc=0 on the
-#: laptop 2026-10-03, singles never built, never timed.
-#: apple-fast LEDGER 2026-10-03: DROP sym-iter-all istella (0.0%, auc
-#: .980163 -> .980122). The umbrella now holds only SYM_BUF_ARENA, the one
-#: switch with no verdict.
-comptime SYM_ITER_ALL = (
-    SYM_ITER_FAST_APPLE and is_defined["MOJOLEARN_SYM_ITER_ALL"]()
-)
+# TOMBSTONE: MOJOLEARN_SYM_ITER_ALL (NEUTRAL: rab4-symiter 1000-taxi +0.2%, quality identical) umbrella of
+# SYM_BUF_ARENA deleted 2026-11-15 by lane/expdel-05-trees; code recoverable at a768195223.
+# Restore: git apply experiments/removed/MOJOLEARN_SYM_ITER_ALL.patch
 #: recovery 2026-10-04 (lane/apple-fast-rec-sym): source
 #: lane/apple-fast-sym-iter@4956a2234; SYM_ITER_ALL compiled rc=0 on the
 #: laptop 2026-10-03, singles never built, never timed. Port: the searcher's
@@ -109,7 +103,7 @@ comptime SYM_BUF_ARENA = SYM_ITER_FAST_APPLE and (
 # One warmup/one score; caller67d0efb29; exact cases/builds/hashes:
 # ~/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F12/arena.
 # Compilation/identity reused. No combined-toggle/full-board claim.
-    is_defined["MOJOLEARN_SYM_BUF_ARENA"]() or SYM_ITER_ALL
+    is_defined["MOJOLEARN_SYM_BUF_ARENA"]()
 )
 #: TOMBSTONE: MOJOLEARN_SYM_LEAF_FROM_STATS (DROPPED-noise: sym-iter-leaf istella/taxi -0.2%, old base) deleted 2026-10-09 on
 #: lane/owed-deletions-D1 (one Newton step from the searcher's partition stats, on the device); code recoverable at b639a2bd2.

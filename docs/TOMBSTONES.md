@@ -633,6 +633,7 @@ in the tables after the sections.
 | [`MOJOLEARN_GBDT_EVAL_FUSED`](#mojolearn_gbdt_eval_fused) | Trees (GBDT, Apple FAST) | NEUTRAL | 2026-11-15 | [MOJOLEARN_GBDT_EVAL_FUSED.patch](../experiments/removed/MOJOLEARN_GBDT_EVAL_FUSED.patch) |
 | [`MOJOLEARN_SYM_HIST_ALL`](#mojolearn_sym_hist_all) | Trees (GBDT, Apple FAST) | NEUTRAL | 2026-11-15 | [MOJOLEARN_SYM_HIST_ALL.patch](../experiments/removed/MOJOLEARN_SYM_HIST_ALL.patch) |
 | [`MOJOLEARN_SYM_SORT_SWAP`](#mojolearn_sym_sort_swap) | Trees (GBDT, Apple FAST) | NEUTRAL | 2026-11-15 | [MOJOLEARN_SYM_SORT_SWAP.patch](../experiments/removed/MOJOLEARN_SYM_SORT_SWAP.patch) |
+| [`MOJOLEARN_SYM_ITER_ALL`](#mojolearn_sym_iter_all) | Trees (GBDT, Apple FAST) | NEUTRAL | 2026-11-15 | [MOJOLEARN_SYM_ITER_ALL.patch](../experiments/removed/MOJOLEARN_SYM_ITER_ALL.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -5969,3 +5970,12 @@ bits change on any vendor or the host column, no board row needs re-timing.
 - Files the patch restores: `gbdt/methods/kernel/sym_fast.mojo`, `gbdt/methods/pointwise_optimization_subsets.mojo`
 - Guard refusal: core/experiment_guards_trees.mojo (lane expdel-05-trees block). No `grid_controls` entry named it.
 - EXPERIMENTS.md rows: 203, 227, 1303; appended row in the "Lane expdel-05-trees" section.
+
+### MOJOLEARN_SYM_ITER_ALL
+
+- Tried: one umbrella define for the FAST + Apple per-iteration fixed-cost switches of the pointwise SymmetricTree arm, narrowed to SYM_BUF_ARENA (the old four-switch umbrella was a DROP on 2026-10-03, auc .980163 -> .980122).
+- Verdict: NEUTRAL. rab4-symiter (M3 Ultra, Verdicts batch 4, 2026-10-05): gbdt-symmetric-1000 taxi +0.2%, quality identical; stays off. Apple FAST only. Deleted 2026-11-15 by lane/expdel-05-trees (one commit for this define).
+- Recoverable at `a768195223`. Patch: `experiments/removed/MOJOLEARN_SYM_ITER_ALL.patch` (the reverse of the deletion commit, code files only; apply in reverse deletion order when restoring several of this lane).
+- Files the patch restores: `gbdt/methods/sym_iter_fast.mojo`
+- Guard refusal: core/experiment_guards_trees.mojo (lane expdel-05-trees block). No `grid_controls` entry named it.
+- EXPERIMENTS.md rows: 196, 220, 1301; appended row in the "Lane expdel-05-trees" section.
