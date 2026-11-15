@@ -35,7 +35,7 @@ ORDER_DEVICE). Seasonal grids (P, Q, one D, one s) take the grouped search:
 orders are grouped by r = max(p + s P, q + s Q + 1) and k after one shared
 differencing (d, D, s), r <= 5 as `validate_order` allows.
 
-ARIMA_ORDER_IC_DEVICE (`-D MOJOLEARN_IDN_ARIMA_IC_DEVICE_OFF=1`, needs
+ARIMA_ORDER_IC_DEVICE (its `_OFF` deleted 2026-11-15; needs
 ORDER_DEVICE). The information criterion and the first-minimum order choice
 run on the device (`order_ic_argmin_kernel`): ic = fma(-2, loglike, penalty)
 in float32, one rounding (the product is exact, so no contraction choice
@@ -84,8 +84,10 @@ comptime ARIMA_ORDER_DEVICE = _ORDER_IDN
 comptime ARIMA_ORDER_SEASONAL = (
     ARIMA_ORDER_DEVICE
 )
+# TOMBSTONE: MOJOLEARN_IDN_ARIMA_IC_DEVICE_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-47-promote; code recoverable at f25113893d.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ARIMA_IC_DEVICE_OFF.patch; record in docs/TOMBSTONES.md.
 comptime ARIMA_ORDER_IC_DEVICE = (
-    ARIMA_ORDER_DEVICE and not is_defined["MOJOLEARN_IDN_ARIMA_IC_DEVICE_OFF"]()
+    ARIMA_ORDER_DEVICE
 )
 comptime ORDER_TPB = 128
 
