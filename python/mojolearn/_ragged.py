@@ -64,7 +64,10 @@ a different token count from the sequences alone, and clause 9.2 of the
 optimizer contract says that count is part of the numerical specification;
 a caller who wants per-sequence gradients runs the sequences as their own
 calls and accumulates.
-"""
+
+Callers (lane py-tail, 2026-11-15): no product module imports this file any
+more (the ragged batch is admitted, padded and zeroed by the native doors);
+the tests use it as the reference for `lengths=`."""
 
 import array
 import operator

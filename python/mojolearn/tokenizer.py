@@ -291,23 +291,9 @@ class BpeTokenizer:
 
     # ------------------------------------------------------------ encode
 
-    @staticmethod
-    def _text_bytes(text):
-        if isinstance(text, str):
-            return text.encode("utf-8")
-        if isinstance(text, (bytes, bytearray, memoryview)):
-            return bytes(text)
-        raise TypeError(
-            f"mojolearn: text must be str or bytes-like, got {type(text).__name__}"
-        )
-
-    @staticmethod
-    def _flag(allow_endoftext):
-        if type(allow_endoftext) is not bool:
-            raise TypeError(
-                f"mojolearn: allow_endoftext must be a bool, got {type(allow_endoftext).__name__}"
-            )
-        return allow_endoftext
+    # The uncalled `_text_bytes` / `_flag` refusals are gone (lane py-tail,
+    # 2026-11-15): the tokenizer binding refuses text and `allow_endoftext`
+    # itself (bindings/_mojolearn_tokenizer_host.mojo `_flag`).
 
     def encode_bytes(self, data, allow_endoftext=False):
         """Encode a byte string.

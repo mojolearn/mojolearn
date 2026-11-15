@@ -85,7 +85,6 @@ from . import _backend
 from ._arrays import _addr, _addr_ro
 from ._byte_lm_config import ByteLanguageModelConfig, state_shape
 from . import _byte_lm_checkpoint
-from . import _ragged
 
 PROFILE = 'mojolearn.byte-lm.b2-l32-d32-h4-kv2-ff64-v256-blocks2.fp32.v1'
 # Compatibility constants describe only the original regression fixture.

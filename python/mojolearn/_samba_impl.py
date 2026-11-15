@@ -28,7 +28,6 @@ from ._array import Array as _Array
 import json
 from pathlib import Path
 
-from . import _portable_math as math
 from ._training_impl import _round_f32
 
 from . import _backend

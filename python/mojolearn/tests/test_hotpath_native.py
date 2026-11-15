@@ -734,7 +734,8 @@ def test_sabotage_build_diverges():
     if not _EXPECT_SABOTAGE:
         assert not _DIVERGED
         return
-    groups = {"astype", "getitem", "reduce", "equal", "lists", "buffers", "labels",
-              "folds", "indices"}
+    # The "folds" and "indices" groups went with the Python fold/index routes
+    # that py-msel-prep-cnn deleted (bfd3f40b9d); no test records them now.
+    groups = {"astype", "getitem", "reduce", "equal", "lists", "buffers", "labels"}
     missing = groups - set(_DIVERGED)
     assert not missing, f"no divergence seen under sabotage in: {sorted(missing)}"

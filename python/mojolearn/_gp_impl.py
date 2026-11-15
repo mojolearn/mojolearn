@@ -72,7 +72,7 @@ exposure is a correctness claim, not a
 speed claim.
 """
 
-from . import _backend, _native_archive_bridge, _native_family_bridge
+from . import _native_archive_bridge, _native_family_bridge
 
 #: `gaussian_process/gp_optim_items.mojo`'s stop words (GP_STOP_*).
 _OPT_STOPS = ("running", "pgtol", "no-descent", "line-search", "ftol", "max-iter", "nonfinite-start")
@@ -137,11 +137,6 @@ class Kernel:
         else `(values, bounds)` for the leaf's free entries."""
         raise NotImplementedError
 
-    def _replace(self, values):
-        """A copy with the free entries replaced by `values` (consumed from
-        the front of the list, which is mutated)."""
-        raise NotImplementedError
-
     def _free_flags(self):
         return [0 if h is None else 1 for h in self._hyper()]  # glue: one flag per postfix node
 
@@ -203,10 +198,6 @@ class ConstantKernel(Kernel):
         b = self.constant_value_bounds
         return [None if b == "fixed" else ([self.constant_value], b)]
 
-    def _replace(self, values):
-        v = values.pop(0) if self.constant_value_bounds != "fixed" else self.constant_value
-        return ConstantKernel(v, self.constant_value_bounds)
-
     def _name(self):
         return f"ConstantKernel({self.constant_value!r})"
 
@@ -244,10 +235,6 @@ class WhiteKernel(Kernel):
     def _hyper(self):
         b = self.noise_level_bounds
         return [None if b == "fixed" else ([self.noise_level], b)]
-
-    def _replace(self, values):
-        v = values.pop(0) if self.noise_level_bounds != "fixed" else self.noise_level
-        return WhiteKernel(v, self.noise_level_bounds)
 
     def _name(self):
         return f"WhiteKernel({self.noise_level!r})"
@@ -287,12 +274,6 @@ class RBF(Kernel):
     def _hyper(self):
         b = self.length_scale_bounds
         return [None if b == "fixed" else (list(self.length_scale), b)]
-
-    def _replace(self, values):
-        ls = list(self.length_scale)
-        if self.length_scale_bounds != "fixed":
-            ls = [values.pop(0) for _ in ls]  # glue: consumes this leaf's length scales
-        return RBF(ls, self.length_scale_bounds)
 
     def _name(self):
         return f"RBF({self.length_scale!r})"
@@ -338,12 +319,6 @@ class Matern(Kernel):
         b = self.length_scale_bounds
         return [None if b == "fixed" else (list(self.length_scale), b)]
 
-    def _replace(self, values):
-        ls = list(self.length_scale)
-        if self.length_scale_bounds != "fixed":
-            ls = [values.pop(0) for _ in ls]  # glue: consumes this leaf's length scales
-        return Matern(ls, self.length_scale_bounds, nu=self.nu)
-
     def _name(self):
         return f"Matern({self.length_scale!r}, nu={self.nu!r})"
 
@@ -357,9 +332,6 @@ class _Combined(Kernel):
 
     def _hyper(self):
         return self.a._hyper() + self.b._hyper() + [None]
-
-    def _replace(self, values):
-        return _Combined(self.a._replace(values), self.b._replace(values), self.op, self.sym)
 
     def _name(self):
         return f"({self.a._name()} {self.sym} {self.b._name()})"
@@ -380,9 +352,6 @@ class _SavedKernel(Kernel):
     def _hyper(self):
         # A saved kernel carries no bounds: every hyperparameter is fixed.
         return [None for _ in self.__nodes]  # glue: one None per postfix node
-
-    def _replace(self, values):
-        return _SavedKernel(self.__nodes)
 
     def _name(self):
         return f"_SavedKernel({len(self.__nodes)} nodes)"
@@ -621,26 +590,6 @@ class GaussianProcessRegressor(NumericModeMixin):
 
     # -- the binding, and the tier it really is -----------------------------
 
-    def _extension(self):
-        """The `_mojolearn_gp` binding for THIS estimator's tier, with the
-        binary's own compile-time answer cross-checked against it --
-        `_arima_impl.py`'s pattern, for its reason: a wrong-arm measurement
-        that is correctly labelled by accident is the failure the
-        three-tier design exists to prevent."""
-        mod = self._bind()
-        want = getattr(self, "numeric_mode", None) or _backend.default_mode()
-        fn = getattr(mod, "gp_numeric_mode", None)
-        if fn is not None:
-            got = int(fn())
-            if got != _MODE_CODE.get(want):
-                raise RuntimeError(
-                    "mojolearn GaussianProcessRegressor: numeric_mode="
-                    f"{want!r} was requested but {mod.__name__} reports "
-                    f"compile-time mode code {got}; the binary and the "
-                    "directory it sits in disagree, rebuild it with "
-                    "bash bindings/build_gp.sh"
-                )
-        return mod
 
     # -- fit ----------------------------------------------------------------
 

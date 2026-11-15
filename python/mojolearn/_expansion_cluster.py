@@ -15,10 +15,8 @@ first imported, after the package, so both may rely on every module existing:
                                its `_HostBound`; never import it at module level
 """
 
-from . import _portable_math as math
 
 from . import _backend, _buffer
-from . import _portable_math as _pm
 from ._array import Array
 from ._mode import NumericModeMixin
 from . import _native_family_bridge
@@ -49,10 +47,6 @@ class _XCluster(NumericModeMixin):
     (the CPU host binding `_mojolearn_x_cluster_host` on a CPU-only install)."""
     _mojolearn_native_public = True
     _BINDING = "_mojolearn_x_cluster"
-
-    def _check_fitted(self, attr):
-        if getattr(self, attr, None) is None:
-            raise RuntimeError(f"this {type(self).__name__} is not fitted yet")
 
 
 class _CentersMixin:

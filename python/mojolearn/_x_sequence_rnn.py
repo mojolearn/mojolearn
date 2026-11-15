@@ -61,13 +61,6 @@ class _RecurrentBase(ParamsMixin):
         return _FULL_RESET_INIT(self, (), {"hidden_size": hidden_size, "num_layers": num_layers, "optimizer": optimizer, "learning_rate": learning_rate, "batch_size": batch_size, "max_epochs": max_epochs, "shuffle": shuffle, "random_state": random_state, "optimizer_options": optimizer_options, "nonlinearity": nonlinearity, "numeric_mode": numeric_mode, "predict_chunk": predict_chunk, "lr_schedule": lr_schedule}, _FULL_RESET_CONTEXT, type(self))
 
     # ------------------------------------------------------------ shape
-    def _cell(self):
-        if self._CELL == "rnn":
-            if self.nonlinearity not in ("tanh", "relu"):
-                raise ValueError("nonlinearity must be 'tanh' or 'relu' (nn.RNN)")
-            return CELLS["rnn_" + self.nonlinearity]
-        return CELLS[self._CELL]
-
     def state_dict(self):
         """{torch name: array}: `nn.LSTM`/`nn.GRU`/`nn.RNN` names for the
         recurrent layers, `head.weight` and `head.bias` for the `nn.Linear`."""

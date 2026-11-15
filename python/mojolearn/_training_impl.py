@@ -101,7 +101,6 @@ than hidden, and both have a cheaper device-side form that is OWED.
 
 from . import _buffer as _buffers, _bufcheck as _checks
 from ._array import Array as _Array
-from . import _portable_math as math
 from . import _numeric_profile
 from . import _native_samba_bridge
 from fractions import Fraction
@@ -852,13 +851,8 @@ def _lr_native(key):
 class _LrTable(object):
     """`lr_at`, `lr_values` and `bits_at` of a built-in schedule, one native
     call each. A subclass provides `_lr_spec()` (its `LrSpec` words: four
-    ints and four floats, sequence/lr_table.mojo) and `_lr_refuse(status,
-    t)` (its refusal of step t)."""
-
-    def _lr_refuse(self, st, t):
-        if st == _LR_ONE_BASED:
-            raise ValueError("mojolearn schedule: step t is ONE-BASED, got %d" % t)
-        _lr_status(st)
+    ints and four floats, sequence/lr_table.mojo); the step refusals are the
+    native entry's, in the wording `_LR_STYLE` selects."""
 
     #: whose refusal messages `lr_at` / `lr_values` raise (bindings/lr_table_helpers_door.mojo)
     _LR_STYLE = 0
