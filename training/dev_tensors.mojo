@@ -39,9 +39,12 @@ from training.estimator import identical_ce_loss_dev
 # TOMBSTONE: MOJOLEARN_IDN_TRAIN_SCRATCH arms 1/3 (IDN_TRAIN_BACKWARD_SCRATCH, shared dA/dW scratch; opt-in, no A/B
 # recorded; owner elsewhere) folded to False 2026-11-15 by lane/expdel2-31-neural; code recoverable at e7b9a56a35.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_TRAIN_SCRATCH.expdel2-31-neural.patch
-from training.neural_gemm_workspace import (
-    IDN_TRAINING_GEMM_WORKSPACE, training_gemm_cached_into, training_gemm_cached_close,
-)
+# TOMBSTONE: MOJOLEARN_NI01_TRAINING_WORKSPACE (opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-32-neural; code recoverable at 19d2549589.
+# Restore: git apply experiments/removed/MOJOLEARN_NI01_TRAINING_WORKSPACE.patch
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old-path umbrella term; owner another lane) deleted 2026-11-15 by lane/expdel2-32-neural; code recoverable at 19d2549589.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-32-neural.patch
+# (Sweep 2026-11-15: training/neural_gemm_workspace.mojo deleted: IDN_TRAINING_GEMM_WORKSPACE = False, its two arms here,
+# training_gemm_cached_into / training_gemm_cached_close and the _TrainingGemmScratch slot.)
 from core.shared_slot import SharedSlot
 
 # TOMBSTONE: MOJOLEARN_IDN_TRAIN_DEV_TENSORS_OFF (old path, no A/B recorded) and the MOJOLEARN_IDN_ALL_OFF term
@@ -117,12 +120,6 @@ def train_dev_free(ctx: DeviceContext, h: Int) raises:
         pool[].workspace[h].close(ctx)
     pool[].b[h] = ctx.enqueue_create_buffer[DType.float32](1)
     pool[].n[h] = 0
-    comptime if IDN_TRAINING_GEMM_WORKSPACE:
-        var any_live = False
-        for i in range(len(pool[].n)):  # small-loop(pool: device-array handles): inspect allocation metadata, never tensor elements
-            any_live = any_live or pool[].n[i] > 0
-        if not any_live:
-            training_gemm_cached_close(ctx)
 
 
 def train_dev_view(ctx: DeviceContext, h: Int, n: Int, name: String) raises -> DeviceBuffer[DType.float32]:
@@ -175,9 +172,6 @@ def train_linear_forward_dev(ctx: DeviceContext, c_h: Int, a_h: Int, w_h: Int, m
     comptime if NEURAL_WORKSPACE_REUSE_ENABLED:
         var pool = _DEV_POOL.get_or_create_ptr()
         pool[].workspace[c_h].run(ctx,c,a,w,m,n,k,OP_NT)
-    elif IDN_TRAINING_GEMM_WORKSPACE:
-        training_gemm_cached_into(ctx, c, a, w, m, n, k, OP_NT)
-        ctx.synchronize()
     else:
         var ws = ctx.enqueue_create_buffer[DType.float32](identical_gemm_workspace_max_floats(m, n, k))
         identical_gemm_into(ctx, c, a, w, ws, m, n, k, OP_NT)
