@@ -172,12 +172,9 @@ comptime SVM_IDN_FUSED_UPDATE_F = (
 #: flag, scan alpha, scan f); it is one: the flag is cleared once before the
 #: loop, and a set flag raises, so nothing ever needs it cleared again. The
 #: same verdict on the same words; no arithmetic.
-#: `-D MOJOLEARN_SVM_IDN_NAN_SCAN_ONE_OFF` (or `MOJOLEARN_IDN_ALL_OFF`)
-#: restores the three launches.
-comptime SVM_IDN_NAN_SCAN_ONE = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not (is_defined["MOJOLEARN_SVM_IDN_NAN_SCAN_ONE_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
-)
+# TOMBSTONE: MOJOLEARN_SVM_IDN_NAN_SCAN_ONE_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-20-linear; the MOJOLEARN_IDN_ALL_OFF term goes with it here; code recoverable at 788f90f025.
+# Restore: git apply experiments/removed/MOJOLEARN_SVM_IDN_NAN_SCAN_ONE_OFF.patch; record in docs/TOMBSTONES.md.
+comptime SVM_IDN_NAN_SCAN_ONE = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 
 
 def flag_nan2_f32_kernel(
