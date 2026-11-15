@@ -18,7 +18,7 @@ comptime C01_LEAF = 32
 # C01_MEAN: the leaf column-sum mean arm of core/xtdz_coalesced.mojo column_mean_launch, never measured.
 # TOMBSTONE: MOJOLEARN_CLASSICAL_C01_MEAN (no A/B recorded for the opt-in arm) deleted 2026-11-15 by lane/expdel2-07-base; code recoverable at 569d288205.
 # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C01_MEAN.patch
-comptime C01_MEAN = False
+# (Sweep 2026-11-15: comptime C01_MEAN removed; nothing read it.)
 comptime C02_STATS_PAIR = CLASSICAL_IDENTICAL and is_defined["MOJOLEARN_CLASSICAL_C02_STATS_PAIR"]()
 # TOMBSTONE: MOJOLEARN_CLASSICAL_C03_FINITE_EXTREMA (no A/B recorded for the opt-in arm) deleted 2026-11-15 by lane/expdel2-07-base; code recoverable at cf8de5ae6c.
 # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C03_FINITE_EXTREMA.patch
