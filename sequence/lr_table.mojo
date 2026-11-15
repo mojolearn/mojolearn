@@ -27,7 +27,7 @@ Host scalar code on every column: a schedule value is one number per
 optimizer step (the CPU route by nature, DEVIATION 5540). No Python here."""
 from std.math import ceil, floor
 from std.memory import bitcast
-from std.os import getenv
+from std.sys import is_defined
 
 from checks.numerics import pinned_mul_f64
 from sequence.bigrat import Nat, Rat, ncmp, nshl, nsub, rat_of_f64, rdiv
@@ -332,10 +332,23 @@ struct LrSpec(Copyable, ImplicitlyCopyable, Movable):
     var f3: Float64
 
 
+#: The LR schedule table (lane envgate-train-seq-mamba, 2026-11-15): a build
+#: constant holding today's default (on). Before, two environment reads per
+#: schedule fill (MOJOLEARN_LR_TABLE=0 or MOJOLEARN_LR_EXACT_ONLY=1 kept every
+#: step on the exact route). ROUTE-DEFAULT-SUSPECT, no A/B on record: B arm
+#: `-D MOJOLEARN_LR_TABLE_OFF` (or its old spelling `-D MOJOLEARN_LR_EXACT_ONLY`),
+#: every step on the exact route; RUN OWED in
+#: bench/results/paper_compare/owed-pre0867.json ("lr-table-off"). The answers
+#: are the same on both arms.
+comptime LR_TABLE_ON = not (
+    is_defined["MOJOLEARN_LR_TABLE_OFF"]() or is_defined["MOJOLEARN_LR_EXACT_ONLY"]()
+)
+
+
+@always_inline
 def lr_table_on() -> Bool:
-    """MOJOLEARN_LR_TABLE=0 or MOJOLEARN_LR_EXACT_ONLY=1 keeps every step on
-    the exact route (the table's A/B); the answers are the same."""
-    return String(getenv("MOJOLEARN_LR_TABLE")) != "0" and String(getenv("MOJOLEARN_LR_EXACT_ONLY")) != "1"
+    """Whether schedule fills use the table: the build constant LR_TABLE_ON."""
+    return LR_TABLE_ON
 
 
 def _decide_run(vs: List[Float64], es: List[Float64], n: Int, dst: F32P, mut ok: List[UInt8]) -> Int:
