@@ -117,7 +117,7 @@ comptime C08_UNIQUE_SCAN = CLASSICAL_IDENTICAL
 # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
 # TOMBSTONE: MOJOLEARN_CLASSICAL_C08_GROUPED_OUTPUT (no A/B recorded for the opt-in arm) deleted 2026-11-15 by lane/expdel2-07-base; code recoverable at 9a0b339815.
 # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C08_GROUPED_OUTPUT.patch
-comptime C08_GROUPED_OUTPUT = False
+# (Sweep 2026-11-15: comptime C08_GROUPED_OUTPUT removed; nothing read it.)
 
 # Independent C02 linear sums and C56 LDA input reuse, default OFF.
 # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
