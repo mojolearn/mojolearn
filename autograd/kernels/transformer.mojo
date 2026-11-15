@@ -99,6 +99,10 @@ from transformer.impl.llama.fused_attention import (
     fused_backward_launch,
     fused_backward_launch_estash_ran,
     fused_backward_launch_estash_report,
+    # RESTORED 2026-11-15 (lane/restore-apple-fast-neural): MOJOLEARN_ATTN_APPLE_ERECOMP opt-in arm
+    ATTN_APPLE_ESTASH_RECOMPUTE,
+    attention_estash_recompute_granted,
+    fused_backward_launch_erecomp_report,
 )
 from transformer.impl.llama.modeling_llama import (
     ATTN_PATH_AUTO,
@@ -3020,6 +3024,19 @@ def bwd_attention_dispatch(
                 )
                 estash_done = True
         # (Sweep 2026-11-15: the ATTN_APPLE_ESTASH_RECOMPUTE arm (False on every build) removed.)
+        # RESTORED 2026-11-15 (lane/restore-apple-fast-neural): MOJOLEARN_ATTN_APPLE_ERECOMP opt-in arm back, default off.
+        comptime if ATTN_APPLE_ESTASH_RECOMPUTE:
+            # lane/neural-apple2: a process denied the kept stashes
+            # recomputes this layer's (fused_attention.mojo,
+            # ATTN_APPLE_ESTASH_RECOMPUTE); same bits, one extra forward.
+            if not estash_done and attention_estash_recompute_granted():
+                status = fused_backward_launch_erecomp_report(
+                    ctx, bst.attn_zdot, bst.d_q_rope, bst.d_k_cache, bst.d_v_cache,
+                    fwd.q_rope, bst.d_attn_ctx, fwd.k_cache, fwd.v_cache, fwd.amax,
+                    fwd.denom, b, l, nh, nkv, hd, s, pos0, key_lo, window, scale,
+                    bst.attn_repaired,
+                )
+                estash_done = True
         if not estash_done:
             status = fused_backward_launch(
                 ctx, bst.attn_zdot, bst.d_q_rope, bst.d_k_cache, bst.d_v_cache,

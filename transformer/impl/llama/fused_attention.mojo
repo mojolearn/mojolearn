@@ -1511,6 +1511,30 @@ default before the estash flip (its backward is the shipped
 # Restore: git apply experiments/removed/MOJOLEARN_ATTN_APPLE_ERECOMP.patch
 # (Sweep 2026-11-15: ATTN_APPLE_ESTASH_RECOMPUTE = False, attention_estash_recompute_granted and
 # fused_backward_launch_erecomp_report removed with the dead arm in autograd/kernels/transformer.mojo.)
+# RESTORED 2026-11-15 (lane/restore-apple-fast-neural): opt-in arm back, default off, Apple fast only (Andrew: a paused programme's arms are kept).
+comptime ATTN_APPLE_ESTASH_RECOMPUTE = (
+    ATTN_APPLE_ESTASH_GATED and is_defined["MOJOLEARN_ATTN_APPLE_ERECOMP"]()
+)
+"""lane/neural-apple2 (2026-09-28): an Apple process DENIED the estash word
+(its kept stashes do not fit) recomputes ONE layer's exp stash in the
+backward instead of running the round 3 zdot: the estash forward's own
+instantiation (`fused_forward_launch_estash_ran` under the column default,
+writing `e`, the row maxima and the denominators into per-call scratch) and
+then the estash backward over it, exactly the granted path's two launches
+with the forward repeated. Same kernels, same inputs, so the same `e` bits
+the granted process keeps, and the granted backward's bits, which equal the
+round 3 backward's (every final witness equal across the words). Memory: one
+layer's `[B, n_heads, L, S]` stash on top of the y/dy pair the round 3
+backward already allocates, granted by `attention_estash_memory_grant` under
+the same 35% rule. A recompute forward that raises the corner flag falls
+back to the round 3 backward, unchanged.
+
+OPT-IN ONLY (`-D MOJOLEARN_ATTN_APPLE_ERECOMP`). Measured on the M3 Ultra at the
+T3 shard (B4 L2048 d768 12L V50257, estash forced denied, steward job
+1790603073363, 5 steps each): round 3 backward 3.537 s a step, recompute
+3.619 s, the granted estash word 2.923 s; final witness and loss digests
+equal in all three. The recompute forward costs more than the round 3 zdot
+saves, so a denied process keeps the round 3 backward."""
 
 # TOMBSTONE: MOJOLEARN_ATTN_APPLE_ESTASH_FORCE_DENY (unmeasured Apple opt-in arm) deleted 2026-11-15 by lane/expdel2-34-neural; code recoverable at 9125339d58.
 # Restore: git apply experiments/removed/MOJOLEARN_ATTN_APPLE_ESTASH_FORCE_DENY.patch
@@ -1521,15 +1545,19 @@ struct _AttnEstashGate(Defaultable, Movable):
     var denied: Bool
     var need: Int
     var free: Int
+    var recompute: Bool
+    var recompute_denied: Bool
 
     def __init__(out self):
         self.granted = False
         self.denied = False
         self.need = 0
         self.free = 0
+        self.recompute = False
+        self.recompute_denied = False
 
 
-comptime _ATTN_ESTASH_GATE = SharedSlot[_AttnEstashGate, "MojolearnAttnEstashGateV3"]
+comptime _ATTN_ESTASH_GATE = SharedSlot[_AttnEstashGate, "MojolearnAttnEstashGateV2"]
 
 
 def attention_estash_granted() -> Bool:
@@ -1580,7 +1608,29 @@ def attention_estash_memory_grant(
         g[].granted = True
     else:
         g[].denied = True
+        # lane/neural-apple2: one layer's recomputed stash beside the y/dy
+        # pair (ATTN_APPLE_ESTASH_RECOMPUTE), under the same rule; a refusal
+        # is sticky like the grant's.
+        comptime if ATTN_APPLE_ESTASH_RECOMPUTE:
+            var need_r = 3 * 4 * b * nh * l * s + step_transient_bytes
+            if need_r * 100 <= free * 35:
+                g[].recompute = True
+            else:
+                g[].recompute_denied = True
     return g[].granted and not g[].denied
+
+
+def attention_estash_recompute_granted() -> Bool:
+    """Whether this process's denied backward recomputes one layer's exp
+    stash (ATTN_APPLE_ESTASH_RECOMPUTE): the estash word was refused, the
+    recompute was granted and never refused. False on every other build."""
+    comptime if not ATTN_APPLE_ESTASH_RECOMPUTE:
+        return False
+    try:
+        var g = _ATTN_ESTASH_GATE.get_or_create_ptr()
+        return g[].denied and g[].recompute and not g[].recompute_denied
+    except:
+        return False
 
 
 # TOMBSTONE: byte_lm_context_keeper_active, byte_lm_attention_estash_gate (dead native entries: diagnostic read-backs, no package or gate reader) deleted 2026-10-26 by 9d5242f68; code recoverable at a88745022.
@@ -11186,6 +11236,83 @@ def fused_backward_launch_estash_report(
 # RESTORED 2026-11-15 by lane/restore-run-arms-neural: RUN #3 of docs/plans/DELETED_ARMS_WORTH_RUNNING_2026-11-15.md
 # brings the fused v2 fold back (reverse of a803ea45ba, the ATTN_FOLD_V2 parts only; the estash recompute stub that
 # commit's context carried stays deleted).
+def fused_backward_launch_erecomp_report(
+    ctx: DeviceContext,
+    mut zdot: DeviceBuffer[DType.float32],
+    mut dq: DeviceBuffer[DType.float32],
+    mut dk: DeviceBuffer[DType.float32],
+    mut dv: DeviceBuffer[DType.float32],
+    mut q_rope: DeviceBuffer[DType.float32],
+    mut dctx: DeviceBuffer[DType.float32],
+    mut k_cache: DeviceBuffer[DType.float32],
+    mut v_cache: DeviceBuffer[DType.float32],
+    mut amax: DeviceBuffer[DType.float32],
+    mut denom: DeviceBuffer[DType.float32],
+    b: Int,
+    l: Int,
+    nh: Int,
+    nkv: Int,
+    hd: Int,
+    s: Int,
+    pos0: Int,
+    key_lo: Int,
+    window: Int,
+    scale: Float32,
+    mut repaired: Int,
+) raises -> Int:
+    """ATTN_APPLE_ESTASH_RECOMPUTE's backward (lane/neural-apple2): the
+    column default's estash forward into per-call scratch (`e`, row maxima,
+    denominators, context), then the column default's estash backward over
+    that `e` and those denominators. When the default word does not run the
+    estash backward at this head_dim, or the recompute forward does not end
+    FUSED_RAN (a regime refusal or the corner flag), the plain launcher runs,
+    exactly the denied process's old path. `amax` and `denom` (the caller's
+    forward row scalars) are read only by that fallback."""
+    repaired = 0
+    comptime if ATTN_APPLE_ESTASH_RECOMPUTE:
+        var arm = ATTN_ARM_DEFAULT
+        if hd == ATTN_STASH_HD and fused_attention_arm_estash_runs(arm):
+            var cells = b * nh * l * s
+            var rows = b * nh * l
+            step_count_device_alloc()
+            var kept = ctx.enqueue_create_buffer[DType.float32](cells)
+            step_count_device_alloc()
+            var ctx_s = ctx.enqueue_create_buffer[DType.float32](b * l * nh * hd)
+            step_count_device_alloc()
+            var amax_s = ctx.enqueue_create_buffer[DType.float32](rows)
+            step_count_device_alloc()
+            var denom_s = ctx.enqueue_create_buffer[DType.float32](rows)
+            var fran = 0
+            var kept_cells = 0
+            var fs = fused_forward_launch_estash_ran(
+                ctx, ctx_s, amax_s, denom_s, q_rope, k_cache, v_cache, kept,
+                b, l, nh, nkv, hd, s, pos0, key_lo, window, scale, arm, fran,
+                kept_cells,
+            )
+            if fs == FUSED_RAN and kept_cells == cells:
+                var bran = 0
+                var st = fused_backward_launch_estash_report(
+                    ctx, zdot, dq, dk, dv, q_rope, dctx, k_cache, v_cache,
+                    amax_s, denom_s, kept, kept_cells, b, l, nh, nkv, hd, s,
+                    pos0, key_lo, window, scale, arm, bran, repaired,
+                )
+                # The estash backward waits before it returns; the scratch
+                # is released after it.
+                _ = kept^
+                _ = ctx_s^
+                _ = amax_s^
+                _ = denom_s^
+                return st
+            step_count_sync()
+            ctx.synchronize()
+            _ = kept^
+            _ = ctx_s^
+            _ = amax_s^
+            _ = denom_s^
+    return fused_backward_launch(
+        ctx, zdot, dq, dk, dv, q_rope, dctx, k_cache, v_cache, amax, denom,
+        b, l, nh, nkv, hd, s, pos0, key_lo, window, scale,
+    )
 
 
 # ===========================================================================
