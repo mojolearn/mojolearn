@@ -7,7 +7,9 @@ uses one threshold drawn from the node-local feature range, following sklearn's
 RandomSplitter, instead of cuML's quantile histogram (DEVIATION 137).
 """
 
-from ensemble.tree_identical_ideas import T14, T14_EXACT
+from ensemble.tree_identical_ideas import T14
+# TOMBSTONE: MOJOLEARN_TREES_T14_EXACT (DELETE-ARM, opt-in, no A/B recorded, rule a; non-owner fold to False) deleted 2026-11-15 by lane/expdel2-41-trees; code recoverable at c3a84428df.
+# Restore: git apply experiments/removed/MOJOLEARN_TREES_T14_EXACT.expdel2-41-trees.patch; record in docs/TOMBSTONES.md.
 from ensemble.tree_moments import moment_pair, moment_finish, et_leaf_moment_host
 from checks.soft_f64 import sf64_from_f32
 from std.sys.compile import is_defined
@@ -2966,7 +2968,7 @@ def leaf_values_host(
             continue
         var begin = Int(instance_ranges[unsafe_offset=node_id].begin)
         var count = Int(instance_ranges[unsafe_offset=node_id].count)
-        comptime if T14 and not T14_EXACT:
+        comptime if T14:
             if not is_classification:
                 out[node_id*num_outputs] = et_leaf_moment_host(row_ids,labels_q,begin,count,inv_scale)
                 continue
@@ -3048,7 +3050,7 @@ def _leaf_body[
     var begin = Int(instance_ranges[unsafe_offset=node_id].begin)
     var count = Int(instance_ranges[unsafe_offset=node_id].count)
 
-    comptime if T14 and not T14_EXACT and not CLASSIFICATION and not WEIGHTED:
+    comptime if T14 and not CLASSIFICATION and not WEIGHTED:
         # V1: exact row-ID keyed partials, shared portable binary64 pair tree.
         # Same logical 128 slots as host regardless of TPB/warp width.
         # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
