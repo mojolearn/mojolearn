@@ -175,7 +175,7 @@ def connect():
     except ImportError as error:
         _ENTRY, _CONTEXT = _unavailable(error), {"trees_unavailable": str(error)}
         return _ENTRY, _CONTEXT
-    import numbers
+    from ._native_loaded_modules import REAL_TYPES, INTEGRAL_TYPES
     import types
     from ._labels import ClassLabels
     from ._native_labels_bridge import label_context
@@ -188,7 +188,7 @@ def connect():
         trees_boost_classes={}, trees_meta_classes={},
         trees_constructors={}, trees_gbdt_adapter_constructors={}, trees_state_layouts={},
         trees_missing=object(), trees_namespace=types.SimpleNamespace,
-        trees_real_type=numbers.Real, trees_integral_type=numbers.Integral,
+        trees_real_type=REAL_TYPES, trees_integral_type=INTEGRAL_TYPES,
         classifier_labels_class=ClassLabels,
         classifier_labels_namespace=dict(vars(ClassLabels)),
         classifier_labels_mro=type.__dict__["__mro__"].__get__(ClassLabels),

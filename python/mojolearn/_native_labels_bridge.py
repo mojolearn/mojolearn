@@ -73,11 +73,11 @@ def label_context():
     """The context entries bindings/classical_labels_door.mojo reads, connected
     once; each owner's bridge merges them into its own context."""
     if not _LABEL_CONTEXT:
-        import numbers
+        from ._native_loaded_modules import REAL_TYPES, INTEGRAL_TYPES
         import types
         _LABEL_CONTEXT.update(
             labels_base_binding=_base_binding(), labels_bindings=_metrics(),
-            labels_real_type=numbers.Real, labels_integral_type=numbers.Integral,
+            labels_real_type=REAL_TYPES, labels_integral_type=INTEGRAL_TYPES,
             labels_namespace=types.SimpleNamespace,
         )
     return dict(_LABEL_CONTEXT)
