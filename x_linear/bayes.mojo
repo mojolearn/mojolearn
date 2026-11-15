@@ -621,14 +621,9 @@ def _t_ard_sigma(t: Team, d: Int, fw: FP, gg: Int, aa: Int, sg: Int, lamo: Int, 
     each its own `chol_solve` reading only the factor, split across the team.
     Every word is `_ard_sigma`'s. On the device the whole of it ran on the
     lead thread every iteration (ARD at 220 features: about 57 ms an
-    iteration on the M4's GPU). `-D MOJOLEARN_X_LINEAR_ARD_LEAD=1` restores
-    the lead-only call."""
-    comptime if is_defined["MOJOLEARN_X_LINEAR_ARD_LEAD"]():
-        var dk0 = 0
-        if t.lead():
-            dk0 = _ard_sigma(d, fw, gg, aa, sg, lamo, alpha, iw, keep)
-        t.sync()
-        return dk0
+    iteration on the M4's GPU)."""
+    # TOMBSTONE: MOJOLEARN_X_LINEAR_ARD_LEAD (unmeasured opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-21-linear; code recoverable at a33761f577.
+    # Restore: git apply experiments/removed/MOJOLEARN_X_LINEAR_ARD_LEAD.patch; record in docs/TOMBSTONES.md.
     if t.nt <= 1:
         return _ard_sigma(d, fw, gg, aa, sg, lamo, alpha, iw, keep)
     if d >= ARD_TEAM_MIN:
