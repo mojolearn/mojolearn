@@ -92,6 +92,7 @@ from checks.native_tests.logistic_numeric import register as register_logistic_n
 from checks.native_tests.lowbit_weights import register as register_lowbit_weights
 from checks.native_tests.mamba12_forward_exec import register as register_mamba12_forward_exec
 from checks.native_tests.mamba3_output_coverage import register as register_mamba3_output_coverage
+from checks.native_tests.mamba_decode_n_tokens import register as register_mamba_decode_n_tokens
 from checks.native_tests.mamba_decode_sessions import register as register_mamba_decode_sessions
 from checks.native_tests.mamba3_prefill_session import register as register_mamba3_prefill_session
 from checks.native_tests.mamba3_prefix_step import register as register_mamba3_prefix_step
@@ -156,6 +157,7 @@ from checks.native_tests.svc_accuracy_native import register as register_svc_acc
 from checks.native_tests.svc_probability import register as register_svc_probability
 from checks.native_tests.svr_native import register as register_svr_native
 from checks.native_tests.theta_state import register as register_theta_state
+from checks.native_tests.tokenizer_pretokenize_cuts import register as register_tokenizer_pretokenize_cuts
 from checks.native_tests.training_autograd_model import register as register_training_autograd_model
 from checks.native_tests.training_autograd_save_resume import register as register_training_autograd_save_resume
 from checks.native_tests.training_autograd_usability import register as register_training_autograd_usability
@@ -265,6 +267,7 @@ def all_checks() -> List[Check]:
     checks.append(register_lowbit_weights())
     checks.append(register_mamba12_forward_exec())
     checks.append(register_mamba3_output_coverage())
+    checks.append(register_mamba_decode_n_tokens())
     checks.append(register_mamba_decode_sessions())
     checks.append(register_mamba3_prefill_session())
     checks.append(register_mamba3_prefix_step())
@@ -329,6 +332,7 @@ def all_checks() -> List[Check]:
     checks.append(register_svc_probability())
     checks.append(register_svr_native())
     checks.append(register_theta_state())
+    checks.append(register_tokenizer_pretokenize_cuts())
     checks.append(register_training_autograd_model())
     checks.append(register_training_autograd_save_resume())
     checks.append(register_training_autograd_usability())

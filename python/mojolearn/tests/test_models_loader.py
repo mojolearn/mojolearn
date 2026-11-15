@@ -537,25 +537,13 @@ def _small_vocab():
     return tokens, merges
 
 
+# The hand-computed cuts of the three patterns (19 cases) moved to
+# checks/native_tests/tokenizer_pretokenize_cuts.mojo (lane
+# tests-prune-remaining-models): the entry `pretokenize_pattern` the door runs.
+# One case per pattern stays here for the public door's pattern names.
 @pytest.mark.parametrize("pattern, text, pieces", [
-    ("llama3", b"Hello world", [b"Hello", b" world"]),
-    ("llama3", b"IT'S", [b"IT", b"'S"]),
-    ("llama3", b"a  b", [b"a", b" ", b" b"]),
     ("llama3", b"12345", [b"123", b"45"]),
-    ("llama3", b" 123", [b" ", b"123"]),
-    ("llama3", b"x,\n\ny", [b"x", b",\n\n", b"y"]),
-    ("llama3", b"a \n b", [b"a", b" \n", b" b"]),
-    ("llama3", b"-hello", [b"-hello"]),
-    ("llama3", b"hi\n", [b"hi", b"\n"]),
-    ("llama3", b"a   ", [b"a", b"   "]),
-    ("llama3", b"tab\tx", [b"tab", b"\tx"]),
-    ("llama3", b"we're", [b"we", b"'re"]),
-    ("llama3", b"caf\xc3\xa9 2024!", [b"caf\xc3\xa9", b" ", b"202", b"4", b"!"]),
-    ("llama3", b"\xff\xfe", [b"\xff", b"\xfe"]),
     ("qwen2", b"12345", [b"1", b"2", b"3", b"4", b"5"]),
-    ("qwen2", b"Hello world", [b"Hello", b" world"]),
-    ("gpt2", b"IT'S", [b"IT", b"'", b"S"]),
-    ("gpt2", b"a  b", [b"a", b" ", b" b"]),
     ("gpt2", b"12345", [b"12345"]),
 ])
 def test_pretokenize_cuts_as_the_pattern_says(pattern, text, pieces):
