@@ -105,7 +105,9 @@ comptime C09_REG_BUNDLE = False
 # TOMBSTONE: MOJOLEARN_CLASSICAL_C10_RANK_REUSE (no A/B recorded for the opt-in arm) deleted 2026-11-15 by lane/expdel2-07-base; code recoverable at cf7f3199b2.
 # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C10_RANK_REUSE.patch
 comptime C10_RANK_REUSE = False
-comptime C11_DRAW_GATHER = CLASSICAL_IDENTICAL and is_defined["MOJOLEARN_CLASSICAL_C11_DRAW_GATHER"]()
+# TOMBSTONE: MOJOLEARN_CLASSICAL_C11_DRAW_GATHER (no A/B recorded for the opt-in arm) deleted 2026-11-15 by lane/expdel2-07-base; code recoverable at bfc7696dd0.
+# Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C11_DRAW_GATHER.patch
+comptime C11_DRAW_GATHER = False
 comptime C12_SPARSE_COUNTS = CLASSICAL_IDENTICAL and is_defined["MOJOLEARN_CLASSICAL_C12_SPARSE_COUNTS"]()
 # TOMBSTONE: MOJOLEARN_CLASSICAL_C55_CLASS_GROUP (quality loss) deleted 2026-10-07 by 213f349ed; code recoverable at 213f349ed^.
 # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C55_CLASS_GROUP.patch; record in docs/TOMBSTONES.md.
