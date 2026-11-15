@@ -212,6 +212,10 @@
   "seq-tiled-predict-on": {
    "define": "MOJOLEARN_IDN_SEQ_TILED_PREDICT",
    "status": "define in code (autograd/model.mojo SEQ_TILED_PREDICT, restored 2026-11-15 by lane restore-run-arms-neural): B = the whole set in one predict chunk when the inference scratch fits 1 GiB and every Linear keeps its split-K decision; A = the caller's 4096-row chunks"
+  },
+  "gemm-int-slices-on": {
+   "define": "MOJOLEARN_IDN_GEMM_INT_SLICES",
+   "status": "define in code (gemm/int_slices.mojo IDN_GEMM_INT_SLICES, restored 2026-11-15 by lane restore-run-arms-neural): B = fp32 GEMM as four int8 planes on the tuned IMMA kernel plus the one-rounding epilogue (research profile fp32.v2-int) for k <= 65536, device and host column; A = fp32.v1"
   }
  },
  "rows": [
@@ -1342,6 +1346,20 @@
     "seq-tiled-predict-on"
    ],
    "decides": "NVIDIA L40S only (the NVIDIA-only campaign): promote the whole-set chunk (B) to the default (with a _OFF define) when sequential-predict is faster than A on every dataset and the output digests match A (same per-row chains: no bit change expected); otherwise delete the arm with a tombstone"
+  },
+  {
+   "id": "gemm-int-slices",
+   "source": "restore-run-arms-neural (2026-11-15; RUN #2 of docs/plans/DELETED_ARMS_WORTH_RUNNING_2026-11-15.md: gemm 75.8 ms NV L40S [0.8.55 46.0], torch 34.0)",
+   "kind": "ab",
+   "lane": [
+    "gemm"
+   ],
+   "dataset": "*",
+   "rows": "full",
+   "b_arms": [
+    "gemm-int-slices-on"
+   ],
+   "decides": "NVIDIA L40S only (the NVIDIA-only campaign): B changes bits and precision on every column; promote only if gemm is faster than A and the max relative error against an fp64 reference is no worse than A's (read the quality, it is not a gate on the time); then change every vendor column and the host column together; otherwise delete the arm with a tombstone"
   }
  ]
 }

@@ -509,8 +509,7 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_EMB_RESIDENT_OFF"](), "removed 2026-11-15 (lane/expdel2-25-neural): EMB_RESIDENT_OFF (old path beside the default) is gone; the default is kept; code at 63a7445f96; see docs/TOMBSTONES.md"
     # Restore: git apply experiments/removed/MOJOLEARN_GEMM_FAST_RAGGED_K_OFF.patch
     comptime assert not is_defined["MOJOLEARN_GEMM_FAST_RAGGED_K_OFF"](), "removed 2026-11-15 (lane/expdel2-25-neural): GEMM_FAST_RAGGED_K_OFF (old path beside the default) is gone; the default is kept; code at 02da0a0217; see docs/TOMBSTONES.md"
-    # Restore: git apply experiments/removed/MOJOLEARN_IDN_GEMM_INT_SLICES.patch
-    comptime assert not is_defined["MOJOLEARN_IDN_GEMM_INT_SLICES"](), "removed 2026-11-15 (lane/expdel2-25-neural): IDN_GEMM_INT_SLICES (unmeasured opt-in arm) is gone; the default is kept; code at 41a649b03c; see docs/TOMBSTONES.md"
+    # MOJOLEARN_IDN_GEMM_INT_SLICES: refusal removed 2026-11-15 (restored; RUN #2 of docs/plans/DELETED_ARMS_WORTH_RUNNING_2026-11-15.md, see docs/TOMBSTONES.md Restored table)
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_NEURAL_CHAINS.patch
     comptime assert not is_defined["MOJOLEARN_IDN_NEURAL_CHAINS"](), "removed 2026-11-15 (lane/expdel2-25-neural): IDN_NEURAL_CHAINS (unmeasured opt-in arm) is gone; the default is kept; code at a9109164e5; see docs/TOMBSTONES.md"
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_NEURAL_GEMM_EPILOGUE.patch
