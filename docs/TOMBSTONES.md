@@ -771,6 +771,7 @@ Deletions reversed by new evidence. The code is back on main; the section and th
 | [`MOJOLEARN_SVGP_FAST_SYMTILE_OFF`](#mojolearn_svgp_fast_symtile_off-old-path-deleted-2026-11-15) | Neighbors (SVGP B = Kuf Kfu upper tiles, FAST Apple + IDENTICAL) | removed (old path; FAST+Apple default KEPT; IDENTICAL keeps MOJOLEARN_IDN_GATES_OFF) | 2026-11-15 | [MOJOLEARN_SVGP_FAST_SYMTILE_OFF.patch](../experiments/removed/MOJOLEARN_SVGP_FAST_SYMTILE_OFF.patch) |
 | [`MOJOLEARN_SVGP_FAST_COLSPLIT_OFF`](#mojolearn_svgp_fast_colsplit_off-old-path-deleted-2026-11-15) | Neighbors (SVGP column phase solves, FAST Apple + IDENTICAL) | removed (old path; FAST+Apple default KEPT; IDENTICAL keeps MOJOLEARN_IDN_GATES_OFF) | 2026-11-15 | [MOJOLEARN_SVGP_FAST_COLSPLIT_OFF.patch](../experiments/removed/MOJOLEARN_SVGP_FAST_COLSPLIT_OFF.patch) |
 | [`MOJOLEARN_SVGP_FAST_BSPLIT_OFF`](#mojolearn_svgp_fast_bsplit_off-old-path-deleted-2026-11-15) | Neighbors (SVGP B and b row-slice partials, FAST Apple) | removed (old path; FAST+Apple default KEEP, rab19-svgpbsplit) | 2026-11-15 | [MOJOLEARN_SVGP_FAST_BSPLIT_OFF.patch](../experiments/removed/MOJOLEARN_SVGP_FAST_BSPLIT_OFF.patch) |
+| [`MOJOLEARN_ET_SCALAR_STAGE_COMPARE`](#mojolearn_et_scalar_stage_compare-unmeasured-arm-deleted-2026-11-15) | Trees (ExtraTrees batched level builder staging copy) | removed (unmeasured opt-in arm; AGENTS.md 2026-11-15) | 2026-11-15 | [MOJOLEARN_ET_SCALAR_STAGE_COMPARE.patch](../experiments/removed/MOJOLEARN_ET_SCALAR_STAGE_COMPARE.patch) |
 
 ## Trees
 
@@ -6754,3 +6755,11 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md (section expdel-02-
 - **Deleted by**: lane/expdel-03-linear (expdel-03-linear, docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md); code recoverable at `7d40f892a7`.
 - **Restore**: `git apply experiments/removed/MOJOLEARN_CD_FAST_ROWMAJOR_OFF.patch`, then delete the `MOJOLEARN_CD_FAST_ROWMAJOR_OFF` refusal in `core/experiment_guards_linear.mojo`.
 - **Records**: refusal in `core/experiment_guards_linear.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel-03-linear section).
+
+## MOJOLEARN_ET_SCALAR_STAGE_COMPARE: unmeasured arm deleted (2026-11-15)
+
+- **What it was**: an opt-in reference arm that staged the ExtraTrees batched-level builder's node buffers with scalar element copies instead of vector byte copies, plus its witness answer `scalar_reference` from `trees_stage_copy_policy` (`bindings/_mojolearn_trees.mojo`). This lane folded the binding to `vector_bytes`; the two builder reads in `extratrees/impl/decisiontree/batched_levelalgo/builder.mojo` are folded by lane expdel2-40-trees (its own inline tombstones and patch).
+- **Verdict**: no A/B recorded for the opt-in arm (plan rule a); deleted under AGENTS.md "An unmeasured arm is deleted" (Andrew, 2026-11-15). The default (vector byte copies) is untouched. No bit change on any column.
+- **Deleted by**: lane/expdel2-01-base (expdel2-01-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `337c096a5b`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_ET_SCALAR_STAGE_COMPARE.patch`, then delete the `MOJOLEARN_ET_SCALAR_STAGE_COMPARE` refusal in `core/experiment_guards_trees.mojo`.
+- **Records**: refusal in `core/experiment_guards_trees.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-01-base section).
