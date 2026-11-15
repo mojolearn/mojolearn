@@ -128,7 +128,7 @@ comptime XCLUSTER_ROW_ASSIGN_ROWS = 0
 # (Sweep 2026-11-15: comptime C40_ACTIVE_SEEDS removed; nothing read it.)
 # TOMBSTONE: MOJOLEARN_C41_FUSED_MINIMA (unmeasured arm) deleted 2026-11-15 by lane/expdel2-05-base; code recoverable at 77d0694779.
 # Restore: git apply experiments/removed/MOJOLEARN_C41_FUSED_MINIMA.patch; record in docs/TOMBSTONES.md.
-comptime C41_FUSED_MINIMA = False
+# (Sweep 2026-11-15: comptime C41_FUSED_MINIMA removed; nothing read it.)
 # TOMBSTONE: MOJOLEARN_C42_ACTIVE_TRIANGLE (unmeasured arm) deleted 2026-11-15 by lane/expdel2-05-base; code recoverable at 9276415968.
 # Restore: git apply experiments/removed/MOJOLEARN_C42_ACTIVE_TRIANGLE.patch; record in docs/TOMBSTONES.md.
 comptime C42_ACTIVE_TRIANGLE = False
