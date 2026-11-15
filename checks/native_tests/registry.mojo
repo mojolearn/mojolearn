@@ -90,6 +90,7 @@ from checks.native_tests.mamba3_output_coverage import register as register_mamb
 from checks.native_tests.mamba_decode_sessions import register as register_mamba_decode_sessions
 from checks.native_tests.mamba3_prefill_session import register as register_mamba3_prefill_session
 from checks.native_tests.mamba3_prefix_step import register as register_mamba3_prefix_step
+from checks.native_tests.mani_decomp_repeat import register as register_mani_decomp_repeat
 from checks.native_tests.metrics_selection_host_p2 import register as register_metrics_selection_host_p2
 from checks.native_tests.metrics_smallfam_public import register as register_metrics_smallfam_public
 from checks.native_tests.metrics_weighted_score import register as register_metrics_weighted_score
@@ -251,6 +252,7 @@ def all_checks() -> List[Check]:
     checks.append(register_mamba_decode_sessions())
     checks.append(register_mamba3_prefill_session())
     checks.append(register_mamba3_prefix_step())
+    checks.append(register_mani_decomp_repeat())
     checks.append(register_metrics_selection_host_p2())
     checks.append(register_metrics_smallfam_public())
     checks.append(register_metrics_weighted_score())
