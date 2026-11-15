@@ -450,7 +450,21 @@ class MaxAbsScaler(_PrepBase):
 # ---------------------------------------------------------------- encoders
 
 
-class OrdinalEncoder(_PrepBase):
+class _EncodeFitTransform:
+    """The encoders' and imputer's `fit_transform`: one call into the encode owner."""
+
+    def fit_transform(self, X, y=None, **fit_params):
+        """Fit to ``X``, then transform ``X``.
+
+        Returns
+        -------
+        array
+            The transformed data.
+        """
+        return _ENCODE_CALL(self, "fit_transform", (X, y, fit_params), _ENCODE_CONTEXT)
+
+
+class OrdinalEncoder(_EncodeFitTransform, _PrepBase):
     """Encode numeric categorical features as integer codes.
 
     Follows scikit-learn's ``OrdinalEncoder`` for numeric columns. Each value is replaced by its index
@@ -524,16 +538,6 @@ class OrdinalEncoder(_PrepBase):
     def fit(self, X, y=None):
         return _ENCODE_CALL(self, "fit", (X, y), _ENCODE_CONTEXT)
 
-    def fit_transform(self, X, y=None, **fit_params):
-        """Fit to ``X``, then transform ``X``.
-
-        Returns
-        -------
-        array
-            The transformed data.
-        """
-        return _ENCODE_CALL(self, "fit_transform", (X, y, fit_params), _ENCODE_CONTEXT)
-
     def transform(self, X):
         return _ENCODE_CALL(self, "transform", (X,), _ENCODE_CONTEXT)
 
@@ -541,7 +545,7 @@ class OrdinalEncoder(_PrepBase):
         return _ENCODE_CALL(self, "inverse_transform", (X,), _ENCODE_CONTEXT)
 
 
-class OneHotEncoder(_PrepBase):
+class OneHotEncoder(_EncodeFitTransform, _PrepBase):
     """Encode numeric categorical features as one-hot columns.
 
     Follows scikit-learn's ``OneHotEncoder`` for numeric columns. Each column becomes a block of 0/1
@@ -621,16 +625,6 @@ class OneHotEncoder(_PrepBase):
 
     def fit(self, X, y=None):
         return _ENCODE_CALL(self, "fit", (X, y), _ENCODE_CONTEXT)
-
-    def fit_transform(self, X, y=None, **fit_params):
-        """Fit to ``X``, then transform ``X``.
-
-        Returns
-        -------
-        array
-            The transformed data.
-        """
-        return _ENCODE_CALL(self, "fit_transform", (X, y, fit_params), _ENCODE_CONTEXT)
 
     def transform(self, X):
         return _ENCODE_CALL(self, "transform", (X,), _ENCODE_CONTEXT)
@@ -744,7 +738,7 @@ class TargetEncoder(_PrepBase):
 # A callable strategy is sklearn's `strategy(masked_X[:, j].compressed())`: it
 # runs in Python on the host, over each column's non-NaN float32
 # values compacted on the device (p2m_sel_*); the fill runs on the device.
-class SimpleImputer(_PrepBase):
+class SimpleImputer(_EncodeFitTransform, _PrepBase):
     """Replace missing values with a per-column statistic.
 
     Follows scikit-learn's ``SimpleImputer`` for numeric data. Missing entries (``missing_values``) are
@@ -805,16 +799,6 @@ class SimpleImputer(_PrepBase):
     def fit(self, X, y=None):
         return _ENCODE_CALL(self, "fit", (X, y), _ENCODE_CONTEXT)
 
-    def fit_transform(self, X, y=None, **fit_params):
-        """Fit to ``X``, then transform ``X``.
-
-        Returns
-        -------
-        array
-            The transformed data.
-        """
-        return _ENCODE_CALL(self, "fit_transform", (X, y, fit_params), _ENCODE_CONTEXT)
-
     def transform(self, X):
         return _ENCODE_CALL(self, "transform", (X,), _ENCODE_CONTEXT)
 
@@ -824,7 +808,7 @@ class SimpleImputer(_PrepBase):
 # random_state by splitmix64 (sklearn draws numpy's). Weighted 'quantile' edges
 # follow sklearn's `_weighted_percentile`; with sample_weight above `subsample`
 # rows the weights drive the resample and are then spent.
-class KBinsDiscretizer(_PrepBase):
+class KBinsDiscretizer(_EncodeFitTransform, _PrepBase):
     """Bin continuous features into intervals.
 
     Follows scikit-learn's ``KBinsDiscretizer``. Each column is split into ``n_bins`` intervals and each
@@ -897,16 +881,6 @@ class KBinsDiscretizer(_PrepBase):
 
     def fit(self, X, y=None, sample_weight=None):
         return _ENCODE_CALL(self, "fit", (X, y, sample_weight), _ENCODE_CONTEXT)
-
-    def fit_transform(self, X, y=None, **fit_params):
-        """Fit to ``X``, then transform ``X``.
-
-        Returns
-        -------
-        array
-            The transformed data.
-        """
-        return _ENCODE_CALL(self, "fit_transform", (X, y, fit_params), _ENCODE_CONTEXT)
 
     def transform(self, X):
         return _ENCODE_CALL(self, "transform", (X,), _ENCODE_CONTEXT)
@@ -1517,13 +1491,27 @@ class QuadraticDiscriminantAnalysis(_Classifier):
         return _CLS_CALL(self, "decision_function", (X,), _CLS_CONTEXT)
 
 
+class _StatelessFitTransform:
+    """The stateless-owner transformers' `fit_transform`: one native call."""
+
+    def fit_transform(self, X, y=None, **fit_params):
+        """Fit to ``X``, then transform ``X``.
+
+        Returns
+        -------
+        array
+            The transformed data.
+        """
+        return _STATELESS_CALL(self, "fit_transform", (X, y), _STATELESS_CONTEXT)
+
+
 # ---------------------------------------------------------------- additions: transformers
 # Transform is sklearn's two-sided interpolation; 'normal' uses Acklam's
 # inverse normal CDF in float32, clipped at sklearn's +-5.1993.
 # inverse_transform is sklearn's (norm.cdf as Cephes ndtr in float32 for
 # 'normal', then np.interp back onto the quantiles). The subsample is a
 # without-replacement draw from random_state by splitmix64.
-class QuantileTransformer(_PrepBase):
+class QuantileTransformer(_StatelessFitTransform, _PrepBase):
     """Map each feature to a uniform or normal distribution through its quantiles.
 
     Follows scikit-learn's ``QuantileTransformer``. Fit computes, per column, numpy's linear percentiles
@@ -1586,16 +1574,6 @@ class QuantileTransformer(_PrepBase):
     def fit(self, X, y=None):
         return _STATELESS_CALL(self, "fit", (X, y), _STATELESS_CONTEXT)
 
-    def fit_transform(self, X, y=None, **fit_params):
-        """Fit to ``X``, then transform ``X``.
-
-        Returns
-        -------
-        array
-            The transformed data.
-        """
-        return _STATELESS_CALL(self, "fit_transform", (X, y), _STATELESS_CONTEXT)
-
     def transform(self, X):
         return _STATELESS_CALL(self, "transform", (X,), _STATELESS_CONTEXT)
 
@@ -1608,7 +1586,7 @@ class QuantileTransformer(_PrepBase):
 # (-2, 2)), float32. inverse_transform is x * scale + mean, then scipy's
 # inv_boxcox or sklearn's yeo-johnson inverse as exp(log1p(lambda x) / lambda)
 # in float32.
-class PowerTransformer(_PrepBase):
+class PowerTransformer(_StatelessFitTransform, _PrepBase):
     """Apply a power transform per feature to make the data more Gaussian.
 
     Follows scikit-learn's ``PowerTransformer``. Each column gets the Yeo-Johnson or Box-Cox transform
@@ -1658,16 +1636,6 @@ class PowerTransformer(_PrepBase):
 
     def fit(self, X, y=None):
         return _STATELESS_CALL(self, "fit", (X, y), _STATELESS_CONTEXT)
-
-    def fit_transform(self, X, y=None, **fit_params):
-        """Fit to ``X``, then transform ``X``.
-
-        Returns
-        -------
-        array
-            The transformed data.
-        """
-        return _STATELESS_CALL(self, "fit_transform", (X, y), _STATELESS_CONTEXT)
 
     def transform(self, X):
         return _STATELESS_CALL(self, "transform", (X,), _STATELESS_CONTEXT)
@@ -1731,7 +1699,7 @@ class Normalizer(_PrepBase):
 
 
 # Each output column is the product of its input columns left to right.
-class PolynomialFeatures(_PrepBase):
+class PolynomialFeatures(_StatelessFitTransform, _PrepBase):
     """Generate polynomial and interaction features.
 
     Follows scikit-learn's ``PolynomialFeatures``, with the same output column order: the bias column,
@@ -1783,16 +1751,6 @@ class PolynomialFeatures(_PrepBase):
 
     def transform(self, X):
         return _STATELESS_CALL(self, "transform", (X,), _STATELESS_CONTEXT)
-
-    def fit_transform(self, X, y=None, **fit_params):
-        """Fit to ``X``, then transform ``X``.
-
-        Returns
-        -------
-        array
-            The transformed data.
-        """
-        return _STATELESS_CALL(self, "fit_transform", (X, y), _STATELESS_CONTEXT)
 
 
 class SplineTransformer(_PrepBase):
@@ -1886,7 +1844,7 @@ class SplineTransformer(_PrepBase):
         return _ENCODE_CALL(self, "transform", (X,), _ENCODE_CONTEXT)
 
 
-class Binarizer(_PrepBase):
+class Binarizer(_StatelessFitTransform, _PrepBase):
     """Set feature values to 0 or 1 by a threshold.
 
     Follows scikit-learn's ``Binarizer``: values greater than ``threshold`` become 1, the others 0; NaN
@@ -1927,16 +1885,6 @@ class Binarizer(_PrepBase):
 
     def transform(self, X, copy=None):
         return _STATELESS_CALL(self, "transform", (X,), _STATELESS_CONTEXT)
-
-    def fit_transform(self, X, y=None, **fit_params):
-        """Fit to ``X``, then transform ``X``.
-
-        Returns
-        -------
-        array
-            The transformed data.
-        """
-        return _STATELESS_CALL(self, "fit_transform", (X, y), _STATELESS_CONTEXT)
 
 
 # ---------------------------------------------------------------- label transformers
