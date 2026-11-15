@@ -1,0 +1,53 @@
+diff --git a/x_metrics/plan.mojo b/x_metrics/plan.mojo
+index 30c79d60ba..75bff6729f 100644
+--- a/x_metrics/plan.mojo
++++ b/x_metrics/plan.mojo
+@@ -14,7 +14,7 @@ core count or the data), so the host and the device run the same stages.
+ A stage the planner cannot size (a group_sum whose OFF no earlier
+ group_sort wrote) runs its sequential unit unchanged.
+ """
+-from experiments.classical_identical_ideas.shared_controls import C10_RANK_REUSE, C12_SPARSE_COUNTS
++from experiments.classical_identical_ideas.shared_controls import C09_REG_BUNDLE, C10_RANK_REUSE, C12_SPARSE_COUNTS
+ from x_metrics.common import IP, STAGE_INTS, PARAMS, LEAF
+ from x_metrics.par import RUN, KEY_COL, KEY_CURVE, KEY_PERM, KEY_GROUP
+ from x_metrics.cls_epi import OP_CLS_EPI
+@@ -208,6 +208,17 @@ def _separate(a: Int, an: Int, b: Int, bn: Int) -> Bool:
+     return a < 0 or b < 0 or an <= 0 or bn <= 0 or a + an <= b or b + bn <= a
+ 
+ 
++def _reg_pair_safe(r: IP, following: IP, total: Int) -> Bool:
++    var y = _a(r, 0)
++    var pred = _a(r, 1)
++    var pn = _a(r, 3) if _a(r, 6) == 1 else total
++    var a = _a(r, 2)
++    var b = _a(following, 2)
++    return (a >= 0 and b >= 0 and _separate(a, total, b, total)
++            and _separate(a, total, y, total) and _separate(a, total, pred, pn)
++            and _separate(b, total, y, total) and _separate(b, total, pred, pn))
++
++
+ def _curve_pair_safe(r: IP, following: IP, n: Int, total: Int) -> Bool:
+     # Reuse only independent arenas. Aliased producer programs retain B.
+     # KEEP has extra write regions; it is left to the ordinary planner.
+@@ -353,8 +364,19 @@ def plan_program(q: IP, stages: Int, arena_len: Int) raises -> Plan:
+         if total <= 0:
+             pl.copy_stage(q, s)
+             continue
+-        # TOMBSTONE: MOJOLEARN_CLASSICAL_C09_REG_BUNDLE (opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-09-base; code recoverable at 0e0c18d8e0.
+-        # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C09_REG_BUNDLE.expdel2-09-base.patch; record in docs/TOMBSTONES.md.
++        comptime if C09_REG_BUNDLE:
++            if op == 3 and s+1 < stages:
++                var following = q + (s+1)*STAGE_INTS
++                # Only fuse adjacent independent SQ/ABS stages with the same
++                # inputs, broadcast and output geometry. B keeps both maps.
++                if (Int(following[0]) == 3 and Int(following[1]) == total
++                    and _a(r, 4) == 0 and _a(following, 4) == 1
++                    and _a(r, 0) == _a(following, 0) and _a(r, 1) == _a(following, 1)
++                    and _a(r, 3) == _a(following, 3) and _a(r, 6) == _a(following, 6)
++                    and _reg_pair_safe(r, following, total)):
++                    pl.emit(82, total, [_a(r,0), _a(r,1), _a(r,2), _a(following,2), _a(r,3), _a(r,6)])
++                    skip = s+1
++                    continue
+         if op == OP_GROUP_SORT:
+             var K = _a(r, 0)
+             var n = _a(r, 1)

@@ -1,0 +1,39 @@
+diff --git a/x_metrics/plan.mojo b/x_metrics/plan.mojo
+index 75bff6729f..e72b98650e 100644
+--- a/x_metrics/plan.mojo
++++ b/x_metrics/plan.mojo
+@@ -14,7 +14,7 @@ core count or the data), so the host and the device run the same stages.
+ A stage the planner cannot size (a group_sum whose OFF no earlier
+ group_sort wrote) runs its sequential unit unchanged.
+ """
+-from experiments.classical_identical_ideas.shared_controls import C09_REG_BUNDLE, C10_RANK_REUSE, C12_SPARSE_COUNTS
++from experiments.classical_identical_ideas.shared_controls import C05_PHASE_SCRATCH, C09_REG_BUNDLE, C10_RANK_REUSE, C12_SPARSE_COUNTS
+ from x_metrics.common import IP, STAGE_INTS, PARAMS, LEAF
+ from x_metrics.par import RUN, KEY_COL, KEY_CURVE, KEY_PERM, KEY_GROUP
+ from x_metrics.cls_epi import OP_CLS_EPI
+@@ -350,10 +350,16 @@ def _plan_cont_stats(mut pl: Plan, r: IP, total: Int) raises:
+ 
+ def plan_program(q: IP, stages: Int, arena_len: Int) raises -> Plan:
+     var pl = Plan(arena_len)
++    var peak = arena_len
+     var skip = -1
+-    # TOMBSTONE: MOJOLEARN_CLASSICAL_C05_PHASE_SCRATCH (opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-09-base; code recoverable at 890e449c3d.
+-    # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C05_PHASE_SCRATCH.expdel2-09-base.patch; record in docs/TOMBSTONES.md.
+     for s in range(stages):
++        # C05: every expansion finishes into caller arena before the next
++        # source stage. Retain one bounded, invocation-owned workspace and
++        # reuse its offsets after that boundary; no cross-call stale state.
++        # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
++        comptime if C05_PHASE_SCRATCH:
++            peak = max(peak, pl.size)
++            pl.size = arena_len
+         if s == skip:
+             continue
+         var r = q + s * STAGE_INTS
+@@ -562,4 +568,6 @@ def plan_program(q: IP, stages: Int, arena_len: Int) raises -> Plan:
+             pl.emit(OP_AX_FINAL, 1, [S, C, _a(r, 3)])
+         else:
+             pl.copy_stage(q, s)
++    comptime if C05_PHASE_SCRATCH:
++        pl.size = max(peak, pl.size)
+     return pl^
