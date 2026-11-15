@@ -99,6 +99,8 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_DECOMP_FAST_ORTH_WS_OFF"](), "removed 2026-11-15 (lane/expdel-02-decomposition-series): DECOMP_FAST_ORTH_WS_OFF (FAST+Apple rollback to three fresh device buffers per Kit.orth call) is gone; the pooled orth workspace is the FAST+Apple path (randomized-svd istella 490.1 -> 435.1 ms, taxi 200.5 -> 189.8 ms with RSVD_FAST_DEVSCAN, error equal to 1e-14); restore: experiments/removed/MOJOLEARN_DECOMP_FAST_ORTH_WS_OFF.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_LU_RESIDENT_PAIR_OFF.patch
     comptime assert not is_defined["MOJOLEARN_IDN_LU_RESIDENT_PAIR_OFF"](), "removed 2026-11-15 (lane/expdel-02-decomposition-series): IDN_LU_RESIDENT_PAIR_OFF (IDENTICAL rollback to the host-staged lu_factor / lu_solve) is gone; the resident pair is the IDENTICAL path (lu-factor synthetic NV 822.7 -> 369.0 ms, AMD 568.0 -> 315.4 ms, digests NV == AMD); MOJOLEARN_IDN_ALL_OFF still reverts it; restore: experiments/removed/MOJOLEARN_IDN_LU_RESIDENT_PAIR_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_FA_FAST_QRR_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_FA_FAST_QRR_OFF"](), "removed 2026-11-15 (lane/expdel-02-decomposition-series): FA_FAST_QRR_OFF (FAST+Apple rollback to the host List staging of DevExec.qr_r) is gone with FA_FAST_QRR; the direct upload is the qr_r path in every mode (factor-analysis istella 10391.5 -> 10254.8 ms, digest identical); restore: experiments/removed/MOJOLEARN_FA_FAST_QRR_OFF.patch"
     return True
 
 

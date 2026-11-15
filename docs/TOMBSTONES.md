@@ -659,6 +659,7 @@ in the tables after the sections.
 | [`MOJOLEARN_DECOMP_FAST_LASSO_GRP_OFF`](#mojolearn_decomp_fast_lasso_grp_off-old-path-deleted-2026-11-15) | Decomp (MiniBatchDictionaryLearning Lasso CD rows, FAST Apple) | removed (old path; FAST+Apple default KEPT, clus3-mbdl-lassogrp) | 2026-11-15 | [MOJOLEARN_DECOMP_FAST_LASSO_GRP_OFF.patch](../experiments/removed/MOJOLEARN_DECOMP_FAST_LASSO_GRP_OFF.patch) |
 | [`MOJOLEARN_DECOMP_FAST_ORTH_WS_OFF`](#mojolearn_decomp_fast_orth_ws_off-old-path-deleted-2026-11-15) | Decomp (Kit.orth on the device: randomized SVD / PCA / TruncatedSVD / FastICA, FAST Apple) | removed (old path; FAST+Apple default KEEP, rab15-rsvdbundle) | 2026-11-15 | [MOJOLEARN_DECOMP_FAST_ORTH_WS_OFF.patch](../experiments/removed/MOJOLEARN_DECOMP_FAST_ORTH_WS_OFF.patch) |
 | [`MOJOLEARN_IDN_LU_RESIDENT_PAIR_OFF`](#mojolearn_idn_lu_resident_pair_off-old-path-deleted-2026-11-15) | Decomp (lu_factor / lu_solve resident pair, IDENTICAL) | removed (old path; IDENTICAL default PROMOTED, NV 0.45x / AMD 0.56x) | 2026-11-15 | [MOJOLEARN_IDN_LU_RESIDENT_PAIR_OFF.patch](../experiments/removed/MOJOLEARN_IDN_LU_RESIDENT_PAIR_OFF.patch) |
+| [`MOJOLEARN_FA_FAST_QRR_OFF`](#mojolearn_fa_fast_qrr_off-old-path-deleted-2026-11-15) | Decomp (FactorAnalysis DevExec.qr_r upload, FAST Apple) | removed (old path; FAST+Apple default ACCEPT, afc_ab_def) | 2026-11-15 | [MOJOLEARN_FA_FAST_QRR_OFF.patch](../experiments/removed/MOJOLEARN_FA_FAST_QRR_OFF.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -6405,3 +6406,11 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md (section expdel-02-
 - **Deleted by**: lane/expdel-02-decomposition-series (docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md); code recoverable at `63d9ceea61`.
 - **Restore**: `git apply experiments/removed/MOJOLEARN_IDN_LU_RESIDENT_PAIR_OFF.patch`, then delete the `MOJOLEARN_IDN_LU_RESIDENT_PAIR_OFF` refusal in `core/experiment_guards_decomposition.mojo`.
 - **Records**: refusal in `core/experiment_guards_decomposition.mojo`; `experiments/six_lane_integration/grid_controls/lu-resident-pair.json` control `lu_resident_pair` moved to `removed` (the generated grid/grid-plan.json and grid/GRID.md still list it until the next grid regeneration); `docs/apple-fast/EXPERIMENTS.md` row (expdel-02-decomposition-series section).
+
+### MOJOLEARN_FA_FAST_QRR_OFF: old path deleted (2026-11-15)
+
+- **What it was**: the FAST+Apple rollback of `FA_FAST_QRR` (`x_decomp/device.mojo`): its host List staging was already removed when the direct upload became `DevExec.qr_r`'s only route (merge 2026-10-05, lane cpu3-core), so `FA_FAST_QRR` was read by nothing and `-D MOJOLEARN_FA_FAST_QRR_OFF` did nothing. Deleted: the define read and the `FA_FAST_QRR` constant.
+- **Verdict**: ACCEPT/DEFAULT, FAST+Apple default (EXPERIMENTS.md `FA_FAST_QRR`, afc_ab_def, M3 full board, one run per arm, 2026-10-04): factor-analysis istella 10391.5 -> 10254.8 ms, digest identical. No bit change on any column.
+- **Deleted by**: lane/expdel-02-decomposition-series (docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md); code recoverable at `e0d53def90`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_FA_FAST_QRR_OFF.patch`, then delete the `MOJOLEARN_FA_FAST_QRR_OFF` refusal in `core/experiment_guards_decomposition.mojo`.
+- **Records**: refusal in `core/experiment_guards_decomposition.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel-02-decomposition-series section).
