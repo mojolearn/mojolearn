@@ -24,11 +24,10 @@ one-device launch when `plan.single()` (setting "" or "1", the exact test the
 old in-file branches made), so single-device bits cannot move; otherwise they
 run the feature-group shard plans below.
 """
-from core.device_plan import DevicePlan
+from core.device_plan import DevicePlan, device_plan_gbdt_one_device
 from max.gpu.host import DeviceContext, DeviceBuffer
 from core.host_parallel import host_parallelize
 from core.device_zero import enqueue_fill
-from std.os import getenv
 from std.sys.compile import is_defined
 from core.multi_gpu import peer_clone, copy_columns_kernel, copy_scalar_kernel
 from checks.numerics import NUMERIC_IDENTICAL
@@ -90,7 +89,9 @@ def gbdt_plan_shard_device(plan: DevicePlan, rank: Int) raises -> Int:
     `MOJOLEARN_GBDT_SHARD_ONE_DEVICE=1` (the logical-shard diagnostic of
     `core.multi_gpu.gbdt_shard_device_id`, here from the plan value instead
     of the thread plan)."""
-    if String(getenv("MOJOLEARN_GBDT_SHARD_ONE_DEVICE")) == "1":
+    # Read once per process (`device_plan_gbdt_one_device`); before: a
+    # getenv per shard.
+    if device_plan_gbdt_one_device():
         return plan.device(0)
     return plan.device(rank)
 
