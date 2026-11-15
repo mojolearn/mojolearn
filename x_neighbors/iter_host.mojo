@@ -1,7 +1,5 @@
 """The CPU column of `x_neighbors/iter_device.mojo`: the same loop over the
 same items. HOST ONLY."""
-from experiments.classical_identical_ideas.graph_controls import C43_RESIDENT_NORMALIZATION
-from x_neighbors.classical_graph import classical_graph_degree, classical_graph_product
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 
@@ -44,15 +42,11 @@ def op_lp_iterate(
     alpha: Float32,
 ) raises:
     var tol = bitcast[DType.float64]((UInt64(tol_hi) << UInt64(32)) | UInt64(tol_lo))
-    var raw_graph = C43_RESIDENT_NORMALIZATION and variant >= 2
+    # TOMBSTONE: MOJOLEARN_C43_RESIDENT_NORMALIZATION (unmeasured opt-in arm: raw affinity graph with resident row normalization; non-owner sites) deleted 2026-11-15 by lane/expdel2-15-cluster; code recoverable at 35bdee28db.
+    # Restore: git apply experiments/removed/MOJOLEARN_C43_RESIDENT_NORMALIZATION.expdel2-15-cluster.patch; record in docs/TOMBSTONES.md.
     var clamp_variant = variant % 2
     var nc = n * c
     var pg = FP(unsafe_from_address=g)
-    var degree = List[Float32](length=max(n,1) if raw_graph else 1,fill=Float32(0))
-    var pd = degree.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
-    if raw_graph:
-        for row in range(n):
-            classical_graph_degree(row,pg,pd,n,clamp_variant)
     var pys = FP(unsafe_from_address=ystatic)
     var punl = IP(unsafe_from_address=unlabeled)
     var a = List[Float32](length=nc if nc > 0 else 1, fill=Float32(0))
@@ -75,10 +69,7 @@ def op_lp_iterate(
             converged = True
             break
         for t in range(nc):
-            if raw_graph:
-                classical_graph_product(t,pg,pd,cur,pn,n,c,clamp_variant)
-            else:
-                matmul_item(t, pg, cur, pn, n, n, c)
+            matmul_item(t, pg, cur, pn, n, n, c)
         if clamp_variant == 0:
             for t in range(n):
                 lp_clamp_item(t, pn, pys, punl, prev, n, c)

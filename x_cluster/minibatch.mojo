@@ -15,15 +15,12 @@ rows, then per init the init rows and the k-means++ picks, then per step the
 batch rows (uniform with replacement, unit weights) and any reassignment.
 Not scikit-learn's Mersenne Twister stream, so a fit agrees with sklearn's
 at a tolerance, never bit for bit (NOT_IMPLEMENTED.tsv)."""
-from experiments.classical_identical_ideas.graph_controls import XCLUSTER_KPP_DISTINCT
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 
 from std.memory import bitcast
-from std.sys.compile import is_defined
 
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, ftz, identical_div, identical_mul, identical_mul64
-from checks.numerics import NUMERIC_IDENTICAL
+from checks.numerics import ftz, identical_div, identical_mul, identical_mul64
 from x_cluster.bodies import SPLITMIX_GAMMA, SplitMix64, splitmix_at
 from x_cluster.common import gather_rows, greedy_kmeans_pp, nearest_all, sum_f64, weighted_draw
 from x_cluster.post_bodies import FM_VAL, FOLD_CHUNK
@@ -31,33 +28,25 @@ from x_cluster.minibatch_fast import MINIBATCH_FAST_DEV
 from x_cluster.ops import ClusterOps
 
 
-# Lane cluster-apple3, FAST only, OPT-IN while unproven
-# (`-D MOJOLEARN_MINIBATCH_ONE_PASS=1`): `update_center_dense` for every
-# center in ONE walk of the batch. Each center still gets `c * w`, then its
-# rows in batch order, then `w += wsum` and the scale, so every center's
-# chain of operations is the per-center loop's and no bit moves; the batch is
-# walked twice, not 2 k times.
-comptime MINIBATCH_ONE_PASS = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and is_defined["MOJOLEARN_MINIBATCH_ONE_PASS"]()
-)
+# TOMBSTONE: MOJOLEARN_MINIBATCH_ONE_PASS (unmeasured opt-in arm, FAST: every center updated in one batch walk) deleted 2026-11-15 by lane/expdel2-15-cluster; code recoverable at 4f3953bdbe.
+# Restore: git apply experiments/removed/MOJOLEARN_MINIBATCH_ONE_PASS.patch; record in docs/TOMBSTONES.md.
 
 
 # fam2-cluster (2026-10-04): THE STEP LOOP IN GROUPS of MB_GROUP steps
 # between two waits (`minibatch_fit`'s loop comment; since lane n3,
 # 2026-11-09, the one loop in every mode and column).
-# CANDIDATE ARMS for the group (default 16):
-# `-D MOJOLEARN_IDN_MINIBATCH_GROUP8=1`, `..._GROUP32=1`, `..._GROUP64=1`.
+# The group is 16 steps (the candidate arms 8, 32 and 64 were never measured).
+# TOMBSTONE: MOJOLEARN_IDN_MINIBATCH_GROUP64 (unmeasured opt-in arm: 64 steps per group) deleted 2026-11-15 by lane/expdel2-15-cluster; code recoverable at 088188b08f.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_MINIBATCH_GROUP64.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_IDN_MINIBATCH_GROUP32 (unmeasured opt-in arm: 32 steps per group) deleted 2026-11-15 by lane/expdel2-15-cluster; code recoverable at dc50e0b2ed.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_MINIBATCH_GROUP32.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_IDN_MINIBATCH_GROUP8 (unmeasured opt-in arm: 8 steps per group) deleted 2026-11-15 by lane/expdel2-15-cluster; code recoverable at e71076ddae.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_MINIBATCH_GROUP8.patch; record in docs/TOMBSTONES.md.
 # TOMBSTONE: MOJOLEARN_IDN_MINIBATCH_GROUP_OFF (removed: superseded by the one
 # group loop) deleted 2026-11-09 by lane n3-sgd-minibatch-loops; code
 # recoverable at integ/pre-0867-w2 f59d913b0b.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_MINIBATCH_GROUP_OFF.patch
-comptime MB_GROUP = (
-    8 if is_defined["MOJOLEARN_IDN_MINIBATCH_GROUP8"]()
-    else (
-        32 if is_defined["MOJOLEARN_IDN_MINIBATCH_GROUP32"]()
-        else (64 if is_defined["MOJOLEARN_IDN_MINIBATCH_GROUP64"]() else 16)
-    )
-)
+comptime MB_GROUP = 16
 
 
 def mb_fold_scratch(n: Int) -> Int:
@@ -109,10 +98,9 @@ def _mb_kpp_indices_slot[O: ClusterOps](
             vs.append(rng.unit() * pot)
         ops.kpp_search(closest, -1, m, vs, ids)
         ops.gather_rows(xs, d, ids, n_trials, cslot)
-        comptime if XCLUSTER_KPP_DISTINCT:
-            ops.kpp_distinct(cslot, ids, n_trials, xs, m, d, dc_s)
-        else:
-            ops.sqdist(cslot, n_trials, xs, m, d, dc_s)
+        # TOMBSTONE: MOJOLEARN_XCLUSTER_KPP_DISTINCT (dropped / unmeasured arm; non-owner site) deleted 2026-11-15 by lane/expdel2-15-cluster; code recoverable at 59bcf4d7c7.
+        # Restore: git apply experiments/removed/MOJOLEARN_XCLUSTER_KPP_DISTINCT.expdel2-15-cluster.patch; record in docs/TOMBSTONES.md.
+        ops.sqdist(cslot, n_trials, xs, m, d, dc_s)
         var pots = ops.kpp_pots(dc_s, closest, -1, n_trials, m)
         var best = 0
         for t in range(1, n_trials):  # small-loop(n_trials: candidate potentials)
@@ -339,17 +327,16 @@ def minibatch_fit[O: ClusterOps](
     # final centers for the readback after the loop (else it would hand back
     # the centers uploaded above). lane/no-bench-tuning-2 (2026-10-04): was
     # unit weights and tol <= 0 only (the board's configuration); weighted
-    # draws and the tol stop now run on the device too
-    # (`-D MOJOLEARN_X_CLUSTER_FAST_MINIBATCH_GENERAL_OFF=1` restores the gate).
+    # draws and the tol stop now run on the device too.
+    # TOMBSTONE: MOJOLEARN_X_CLUSTER_FAST_MINIBATCH_GENERAL_OFF (old path: the unit-weight, tol <= 0 gate of the FAST Apple device steps; no A/B row) deleted 2026-11-15 by lane/expdel2-15-cluster; code recoverable at 653e50e4f4.
+    # Restore: git apply experiments/removed/MOJOLEARN_X_CLUSTER_FAST_MINIBATCH_GENERAL_OFF.patch; record in docs/TOMBSTONES.md.
     comptime if MINIBATCH_FAST_DEV:
-        var general = not is_defined["MOJOLEARN_X_CLUSTER_FAST_MINIBATCH_GENERAL_OFF"]()
-        if general or (not weighted and p.tol <= 0):
-            if ops.minibatch_fast(
-                xs, n, d, k, batch, n_steps, p.max_no_improvement, p.reassignment_ratio, p.seed, rng, c, w,
-                steps_done, p.tol, cum_w,
-            ):
-                n_steps = 0
-                ops.set(cslot, c)
+        if ops.minibatch_fast(
+            xs, n, d, k, batch, n_steps, p.max_no_improvement, p.reassignment_ratio, p.seed, rng, c, w,
+            steps_done, p.tol, cum_w,
+        ):
+            n_steps = 0
+            ops.set(cslot, c)
     # lane n3 (2026-11-09): THE ONE STEP LOOP, every mode and both columns
     # (fam2-cluster's group form, which was the IDENTICAL default; its
     # per-step twin is deleted, see the TOMBSTONE below). MB_GROUP steps are
@@ -621,36 +608,9 @@ def minibatch_step[O: ClusterOps](
     var batch_inertia = sum_f64(bd, batch)
     # update_center_dense, per center
     c_new = c.copy()
-    var one_pass = False
-    comptime if MINIBATCH_ONE_PASS:
-        one_pass = True
-        for t in range(batch):
-            if Int(bl[t]) < 0 or Int(bl[t]) >= k:
-                one_pass = False
-    if one_pass:
-        var ws = List[Float32](length=k, fill=Float32(0))
-        for t in range(batch):
-            var j = Int(bl[t])
-            ws[j] = ftz(ws[j] + (bw[t] if bweighted else Float32(1)))
-        for j in range(k):
-            if ws[j] > Float32(0):
-                for f in range(d):
-                    c_new[j * d + f] = ftz(identical_mul(c[j * d + f], w[j]))
-        for t in range(batch):
-            var j = Int(bl[t])
-            if ws[j] > Float32(0):
-                for f in range(d):
-                    if bweighted:
-                        c_new[j * d + f] = ftz(c_new[j * d + f] + ftz(identical_mul(ftz(bx[t * d + f]), bw[t])))
-                    else:
-                        c_new[j * d + f] = ftz(c_new[j * d + f] + ftz(bx[t * d + f]))
-        for j in range(k):
-            if ws[j] > Float32(0):
-                w[j] = ftz(w[j] + ws[j])
-                var alpha = ftz(identical_div(Float32(1), w[j]))
-                for f in range(d):
-                    c_new[j * d + f] = ftz(identical_mul(c_new[j * d + f], alpha))
-    for j in range(0 if not one_pass else k, k):
+    # TOMBSTONE: MOJOLEARN_MINIBATCH_ONE_PASS (unmeasured opt-in arm, FAST: every center updated in one batch walk) deleted 2026-11-15 by lane/expdel2-15-cluster; code recoverable at 4f3953bdbe.
+    # Restore: git apply experiments/removed/MOJOLEARN_MINIBATCH_ONE_PASS.patch; record in docs/TOMBSTONES.md.
+    for j in range(k):
         var wsum = Float32(0)
         for t in range(batch):
             if Int(bl[t]) == j:

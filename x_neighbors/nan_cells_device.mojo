@@ -32,7 +32,6 @@ from core.device_fold import device_sum_i32
 from core.device_pool import pool_give, pool_take
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
 from core.accelerator_target import TARGET_HAS_APPLE_GPU
-from std.sys.compile import is_defined
 
 
 comptime NC_TPB = 256
@@ -218,13 +217,15 @@ def nan_colmiss_kernel(x: FP, colmiss: IP, n_: Int64, d_: Int64):
 comptime NC_COLMISS_ONLY = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
 
 
-# FAST Apple default; MOJOLEARN_XN_FAST_NAN_FIT_LEAN_GPU_OFF restores main.
+# FAST Apple default.
 # M3 w2-knn-lean-gpu-taxi-r1: 2.2 -> 0.8 ms; knn-lean-gpu-v2 quality
 # PASS: 31 arrays exact (transforms/flags/counts/total/empty refusal,
 # wide all-missing/all-present and pool reuse). Measured sourcef9c5887a8.
 # Both column counts and total use parallel GPU integer atomics; host does
 # no count reduction. Synchronize before return/pool reuse. See EXPERIMENTS.
-comptime _NC_FIT_LEAN_FAST = NC_COLMISS_ONLY and not is_defined["MOJOLEARN_XN_FAST_NAN_FIT_LEAN_GPU_OFF"]()
+# TOMBSTONE: MOJOLEARN_XN_FAST_NAN_FIT_LEAN_GPU_OFF (old path: the host count reduction of the FAST Apple KNNImputer fit; EXP:1049 DEFAULT) deleted 2026-11-15 by lane/expdel2-15-cluster; code recoverable at d91ea2daf9.
+# Restore: git apply experiments/removed/MOJOLEARN_XN_FAST_NAN_FIT_LEAN_GPU_OFF.patch; record in docs/TOMBSTONES.md.
+comptime _NC_FIT_LEAN_FAST = NC_COLMISS_ONLY
 
 # lane/neighbors-small-ports (2026-10-11, idea D3): -D MOJOLEARN_IDN_NC_FIT_LEAN admits
 # the same lean fit on IDENTICAL (default off, OPEN). Structural reason: KNNImputer.fit
@@ -236,9 +237,10 @@ comptime _NC_FIT_LEAN_FAST = NC_COLMISS_ONLY and not is_defined["MOJOLEARN_XN_FA
 #: PROMOTED to the IDENTICAL default 2026-10-11 (lane/w2-decide-algos, same-box A/B on main c8ef6c66d,
 #: one run per arm, NV L40S / AMD MI325X, digests NV==AMD): knn-imputer istella 0.093 (NV 0.099, AMD
 #: 0.087); nearest-centroid 1.00/1.05 untouched; same bits; runs v0105/a1687 vs A v0104/a1686,
-#: v0103/a1685 vs A v0102/a1684. -D MOJOLEARN_IDN_NC_FIT_LEAN_OFF restores the old path.
-comptime _NC_FIT_LEAN_IDN = (GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-                             and not is_defined["MOJOLEARN_IDN_NC_FIT_LEAN_OFF"]())
+#: v0103/a1685 vs A v0102/a1684.
+# TOMBSTONE: MOJOLEARN_IDN_NC_FIT_LEAN_OFF (old path: the full cell compaction in the IDENTICAL KNNImputer fit; EXP:2049 KEEP, promoted 2026-10-11 on NVIDIA and AMD) deleted 2026-11-15 by lane/expdel2-15-cluster; code recoverable at 5ff291e065.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_NC_FIT_LEAN_OFF.patch; record in docs/TOMBSTONES.md.
+comptime _NC_FIT_LEAN_IDN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 comptime NC_FIT_LEAN = _NC_FIT_LEAN_FAST or _NC_FIT_LEAN_IDN
 
 

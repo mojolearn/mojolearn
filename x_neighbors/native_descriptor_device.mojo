@@ -5,7 +5,6 @@ from core.native_descriptor_abi import NativeDescriptorCall, NativeDescriptorErr
 from core.native_descriptor_call import native_descriptor_words, native_descriptor_report
 from x_neighbors.descriptor_schema import XN_ABI_NAME, xn_schema, xn_min_ints
 from x_neighbors.native_descriptor_aux_device import xn_aux_execute
-from experiments.classical_identical_ideas.graph_controls import C43_RESIDENT_NORMALIZATION
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from x_neighbors.device_ops import op_softmax64
 from x_neighbors.proba64_nc import NC_PROBA64
@@ -15,9 +14,8 @@ from x_neighbors.ocsvm_dev import op_ocsvm
 from x_neighbors.graph_dev import op_louvain, op_pr_csr, op_louvain_csr
 from x_neighbors.ocsvm_dev import OCSVM_CLS2_RES
 from x_neighbors.ocsvm_dev import OCSVM_IDN_RES
-from x_neighbors.ocsvm_init import XN_OCSVM_DEV_INIT, XN_UNIT_DEV
+from x_neighbors.ocsvm_init import XN_OCSVM_DEV_INIT
 from x_neighbors.kfeat_dev import XN_FAST_SCHI2_LAZYW, XN_KFEAT_ANY
-from x_neighbors.kfeat_rng import XN_IDN_SKETCH_CTR
 
 
 def _a(v: List[Int], k: Int) raises -> Int:
@@ -312,8 +310,8 @@ def xn_native_softmax(a_: List[Int], i_: List[Int], f_: List[Float64]) raises ->
 
 
 def xn_native_softmax64(a_: List[Int], i_: List[Int], f_: List[Float64]) raises -> Int:
-    """Lane apple-fast-q-clf: registered only under NC_PROBA64 (FAST, not
-    -D MOJOLEARN_PROBA64_QOLD); NearestCentroid.predict_proba as float64."""
+    """Lane apple-fast-q-clf: registered only under NC_PROBA64 (FAST);
+    NearestCentroid.predict_proba as float64."""
     var v_x = _a(a_, 0)
     var v_res = _a(a_, 1)
     var v_n = _n(i_, 0)

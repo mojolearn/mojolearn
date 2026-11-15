@@ -11,10 +11,6 @@ same values; only the stopping sum crosses back, one float per iteration,
 compared in double exactly as Python compared it. The CPU column runs the
 same loop over the items (`x_neighbors/iter_host.mojo`).
 """
-from experiments.classical_identical_ideas.graph_controls import C43_RESIDENT_NORMALIZATION
-from x_neighbors.classical_graph import classical_graph_degree, classical_graph_product
-from experiments.classical_identical_ideas.stats_controls import C54_PREDICT_TILES
-from experiments.classical_identical_ideas.graph_controls import C33_FROZEN_CHUNKS, C33_CHUNK
 from x_neighbors.items import matmul_item
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
@@ -57,13 +53,13 @@ from x_neighbors.nan_cells_device import (
 )
 from x_neighbors.graph_dev import pr_iterate_gpu
 from x_neighbors.items import FP, IP, absdiff_sum_item, xn_fold_blocks, _sub, _add, knn_sq_item, knn_impute_finish
-from x_neighbors.items import XN_IMPUTE_TIE_MEAN, knn_impute_tie_mean_item
-from x_neighbors.items import XN_TREE, XN_TREE_ON, xn_tree_slot
+from x_neighbors.items import knn_impute_tie_mean_item
+from x_neighbors.items import XN_TREE, xn_tree_slot
 from checks.numerics import identical_mul, identical_div, identical_sqrt
 from std.memory import bitcast as _bc
 from x_neighbors.device_ops import (
     xn_ctx, _buf, _buf_i, _down, _down_i, _grid, _tid, BLOCK, xn_finite_behind,
-    absdiff_sum_k0, absdiff_sum_k1, matmul_kernel, lp_clamp_kernel, ls_clamp_kernel,
+    absdiff_sum_k0, matmul_kernel, lp_clamp_kernel, ls_clamp_kernel,
     pagerank_step_kernel, cc_step_kernel,
     pcs_sketch_kernel, pcs_conv_kernel, pcs_copy0_kernel, op_knn_sq, op_knn_impute_cells,
     kernel_kernel, rowsum_kernel, scale_div_kernel, kpca_center_kernel, unary_kernel, svgp_var_kernel,
@@ -91,12 +87,11 @@ def _absdiff_launch(ctx: DeviceContext, a: FP, b: FP, s: FP, part: FP, count: In
     ctx.enqueue_function[absdiff_sum_k0](
         a, b, s, part, Int64(count), grid_dim=_grid(nb), block_dim=(BLOCK if nb > 1 else 1),
     )
-    comptime if XN_TREE_ON:
-        # lane apple-fast-purity: the partials folded by one block of XN_TREE
-        # threads (`xn_tree_fold`'s steps), not by one thread
-        ctx.enqueue_function[xn_tree_fold_kernel](part, s, Int64(nb), grid_dim=1, block_dim=XN_TREE)
-    else:
-        ctx.enqueue_function[absdiff_sum_k1](a, b, s, part, Int64(count), grid_dim=1, block_dim=1)
+    # lane apple-fast-purity: the partials folded by one block of XN_TREE
+    # threads (`xn_tree_fold`'s steps), not by one thread
+    # TOMBSTONE: MOJOLEARN_PURITY_4_OFF (old path: the ascending one-thread fold of the absolute-difference partials; no A/B row) deleted 2026-11-15 by lane/expdel2-15-cluster; code recoverable at 91c9ed48ff.
+    # Restore: git apply experiments/removed/MOJOLEARN_PURITY_4_OFF.patch; record in docs/TOMBSTONES.md.
+    ctx.enqueue_function[xn_tree_fold_kernel](part, s, Int64(nb), grid_dim=1, block_dim=XN_TREE)
 
 
 comptime _XN_TREE_SMEM_FITS = lib_smem_page_fits_for[TARGET_COLUMN, XN_TREE * 4]()
@@ -122,15 +117,13 @@ def xn_tree_fold_kernel(part: FP, res: FP, nb_: Int64):
 
 # TOMBSTONE: MOJOLEARN_C33_FROZEN_CHUNKS in op_lp_iterate (REFACTORED: the frozen-chunk body is the only path, on autograd/program_loop_device.mojo) deleted 2026-11-09 by lane/n4-mds-labelprop-nmf-loops; code recoverable at f59d913b0b.
 # Restore: git apply -3 experiments/removed/N4_MDS_LABELPROP_NMF_HOST_LOOPS.patch; record in docs/TOMBSTONES.md.
-def lp_dense_product_gated(gate: IP, graph: FP, cur: FP, nxt: FP, n: Int32, c: Int32, degree: FP, raw_graph: Int32, variant: Int32):
-    """The dense graph product (`matmul_item`, or the raw affinity's
-    `classical_graph_product`) while the bounded loop runs (gate[0] == 0)."""
+# TOMBSTONE: MOJOLEARN_C43_RESIDENT_NORMALIZATION (unmeasured opt-in arm: raw affinity graph with resident row normalization; non-owner sites) deleted 2026-11-15 by lane/expdel2-15-cluster; code recoverable at 35bdee28db.
+# Restore: git apply experiments/removed/MOJOLEARN_C43_RESIDENT_NORMALIZATION.expdel2-15-cluster.patch; record in docs/TOMBSTONES.md.
+def lp_dense_product_gated(gate: IP, graph: FP, cur: FP, nxt: FP, n: Int32, c: Int32):
+    """The dense graph product (`matmul_item`) while the bounded loop runs (gate[0] == 0)."""
     var t = Int(block_idx.x)*Int(block_dim.x)+Int(thread_idx.x)
     if gate[0] == 0 and t < Int(n)*Int(c):
-        if raw_graph != 0:
-            classical_graph_product(t,graph,degree,cur,nxt,Int(n),Int(c),Int(variant))
-        else:
-            matmul_item(t,graph,cur,nxt,Int(n),Int(n),Int(c))
+        matmul_item(t,graph,cur,nxt,Int(n),Int(n),Int(c))
 
 
 def lp_clamp_gated(gate: IP, nxt: FP, ys: FP, unl: IP, output: FP, n: Int32, c: Int32, variant: Int32, alpha: Float32):
@@ -146,12 +139,6 @@ def lp_clamp_gated(gate: IP, nxt: FP, ys: FP, unl: IP, output: FP, n: Int32, c: 
         ls_clamp_item(t,nxt,ys,output,Int(n)*Int(c),alpha)
 
 
-def _c43_graph_degree(a: FP,degree: FP,n: Int32,variant: Int32):
-    var t=_tid()
-    if t < Int(n):
-        classical_graph_degree(t,a,degree,Int(n),Int(variant))
-
-
 # The step keeps its device addresses untracked (a struct field cannot expose
 # AnyOrigin); enqueue_step hands the kernels MutAnyOrigin views of them.
 comptime _LpF = MutPointer[Float32, MutUntrackedOrigin]
@@ -159,15 +146,13 @@ comptime _LpI = MutPointer[Int32, MutUntrackedOrigin]
 
 
 struct _LpDenseStep(LoopStep, Movable):
-    """One iteration of `_LabelPropagationBase.fit` over the dense (or raw
-    affinity) graph as a step of the bounded device loop: the stopping sum
+    """One iteration of `_LabelPropagationBase.fit` over the dense graph as a step of the bounded device loop: the stopping sum
     (`absdiff_sum`'s blocked fold) and its criterion first, then the gated
     product (the ELL SpMM op over G's nonzeros when sparse) and the gated
     clamp into the buffer the old prev held. The ping-pong pair is chosen by
     the iteration's parity, so a stop at iteration `it` leaves the last
     distributions in a when (it - 1) is even."""
     var graph: _LpF
-    var degree: _LpF
     var a: _LpF
     var b: _LpF
     var nxt: _LpF
@@ -182,19 +167,17 @@ struct _LpDenseStep(LoopStep, Movable):
     var n: Int
     var c: Int
     var maxk: Int
-    var raw_graph: Bool
     var use_sparse: Bool
     var variant: Int
     var alpha: Float32
     var threshold: Float32
 
     def __init__(
-        out self, graph: FP, degree: FP, a: FP, b: FP, nxt: FP, ys: FP, unl: IP, part: FP, cnt: IP, cols: IP,
+        out self, graph: FP, a: FP, b: FP, nxt: FP, ys: FP, unl: IP, part: FP, cnt: IP, cols: IP,
         vals: FP, s: DeviceBuffer[DType.float32], flag: DeviceBuffer[DType.int32], n: Int, c: Int, maxk: Int,
-        raw_graph: Bool, use_sparse: Bool, variant: Int, alpha: Float32, threshold: Float32,
+        use_sparse: Bool, variant: Int, alpha: Float32, threshold: Float32,
     ):
         self.graph = graph.unsafe_origin_cast[MutUntrackedOrigin]()
-        self.degree = degree.unsafe_origin_cast[MutUntrackedOrigin]()
         self.a = a.unsafe_origin_cast[MutUntrackedOrigin]()
         self.b = b.unsafe_origin_cast[MutUntrackedOrigin]()
         self.nxt = nxt.unsafe_origin_cast[MutUntrackedOrigin]()
@@ -209,7 +192,6 @@ struct _LpDenseStep(LoopStep, Movable):
         self.n = n
         self.c = c
         self.maxk = maxk
-        self.raw_graph = raw_graph
         self.use_sparse = use_sparse
         self.variant = variant
         self.alpha = alpha
@@ -220,7 +202,6 @@ struct _LpDenseStep(LoopStep, Movable):
     ) raises:
         var nc = self.n * self.c
         var graph: FP = self.graph.unsafe_origin_cast[MutAnyOrigin]()
-        var degree: FP = self.degree.unsafe_origin_cast[MutAnyOrigin]()
         var a: FP = self.a.unsafe_origin_cast[MutAnyOrigin]()
         var b: FP = self.b.unsafe_origin_cast[MutAnyOrigin]()
         var nxt: FP = self.nxt.unsafe_origin_cast[MutAnyOrigin]()
@@ -242,8 +223,7 @@ struct _LpDenseStep(LoopStep, Movable):
             lp_ell_spmm_enqueue(ctx, gate, self.flag, cnt, cols, vals, self.maxk, graph, cur, nxt, self.n, self.c, BLOCK)
         else:
             ctx.enqueue_function[lp_dense_product_gated](
-                gate, graph, cur, nxt, Int32(self.n), Int32(self.c), degree,
-                Int32(1 if self.raw_graph else 0), Int32(self.variant), grid_dim=_grid(nc), block_dim=BLOCK,
+                gate, graph, cur, nxt, Int32(self.n), Int32(self.c), grid_dim=_grid(nc), block_dim=BLOCK,
             )
         loop_lap(ctx, timers, "product")
         # prev = ld; ld = clamp(nxt): the clamp writes over the buffer the old
@@ -260,7 +240,7 @@ def op_lp_iterate(
     n: Int, c: Int, max_iter: Int, variant: Int, tol_hi: Int, tol_lo: Int,
     alpha: Float32,
 ) raises:
-    """variant 0 propagation, 1 spreading; C43 adds 2 for raw affinity.
+    """variant 0 propagation, 1 spreading (variant % 2 is used).
     `ld` in:
     the initial label distributions, out: the last. info (int32 x 2): the
     fit's n_iter_ and converged.
@@ -276,14 +256,12 @@ def op_lp_iterate(
     home every iteration and the frozen-chunk body
     (`-D MOJOLEARN_C33_FROZEN_CHUNKS`) was a second, dense-only copy."""
     var tol = bitcast[DType.float64]((UInt64(tol_hi) << UInt64(32)) | UInt64(tol_lo))
-    var raw_graph = C43_RESIDENT_NORMALIZATION and variant >= 2
+    # TOMBSTONE: MOJOLEARN_C43_RESIDENT_NORMALIZATION (unmeasured opt-in arm: raw affinity graph with resident row normalization; non-owner sites) deleted 2026-11-15 by lane/expdel2-15-cluster; code recoverable at 35bdee28db.
+    # Restore: git apply experiments/removed/MOJOLEARN_C43_RESIDENT_NORMALIZATION.expdel2-15-cluster.patch; record in docs/TOMBSTONES.md.
     var clamp_variant = variant % 2
     var nc = n * c
     var ctx = xn_ctx()
     var d_g = _buf(ctx, g, n * n, True)
-    var d_degree = ctx.enqueue_create_buffer[DType.float32](max(n,1) if raw_graph else 1)
-    if raw_graph and n > 0:
-        ctx.enqueue_function[_c43_graph_degree](_p(d_g),_p(d_degree),Int32(n),Int32(clamp_variant),grid_dim=_grid(n),block_dim=BLOCK)
     var d_a = _buf(ctx, ld, nc, True)
     var d_b = _buf(ctx, 0, nc, False)
     ctx.enqueue_memset(d_b, Float32(0))
@@ -308,7 +286,7 @@ def op_lp_iterate(
     ctx.synchronize()
     var nnz = Int(hst[0])
     var maxk = Int(hst[1])
-    var use_sparse = not raw_graph and nnz > 0 and nnz * 8 < n * n
+    var use_sparse = nnz > 0 and nnz * 8 < n * n
     var ell = n * maxk if use_sparse else 1
     var d_cols = ctx.enqueue_create_buffer[DType.int32](max(ell, 1))
     var d_vals = ctx.enqueue_create_buffer[DType.float32](max(ell, 1))
@@ -318,10 +296,10 @@ def op_lp_iterate(
             grid_dim=_grid(n), block_dim=(BLOCK if n > 1 else 1),
         )
     var step = _LpDenseStep(
-        _p(d_g), _p(d_degree), _p(d_a), _p(d_b), _p(d_nxt), _p(d_ys),
+        _p(d_g), _p(d_a), _p(d_b), _p(d_nxt), _p(d_ys),
         d_unl.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), d_part.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
         d_cnt.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), d_cols.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
-        d_vals.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), d_s, d_flag, n, c, maxk, raw_graph, use_sparse,
+        d_vals.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), d_s, d_flag, n, c, maxk, use_sparse,
         clamp_variant, alpha, _lpki_tol_ceil(tol),
     )
     var registers = LoopRegisters(ctx)
@@ -356,7 +334,6 @@ def op_lp_iterate(
     _ = d_cols^
     _ = d_vals^
     _ = d_g^
-    _ = d_degree^
     _ = d_a^
     _ = d_b^
     _ = d_nxt^
@@ -822,9 +799,9 @@ def op_pcs_resident(
     var nxt: FP = d_b.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
     var cur_is_a = True
     for p in range(1, degree):
+        # TOMBSTONE: MOJOLEARN_XN_PCS_CELL (unmeasured opt-in arm: forced the per-cell convolution) deleted 2026-11-15 by lane/expdel2-15-cluster; code recoverable at 89867bbda4.
+        # Restore: git apply experiments/removed/MOJOLEARN_XN_PCS_CELL.patch; record in docs/TOMBSTONES.md.
         var row_kernel = nc <= PCS_ROW_MAX_NC
-        comptime if is_defined["MOJOLEARN_XN_PCS_CELL"]():
-            row_kernel = False
         if row_kernel:
             ctx.enqueue_function[pcs_conv_row_kernel](
                 cur, d_sk.unsafe_ptr(), nxt, Int64(n), Int64(nc), Int64(degree), Int64(p),
@@ -862,7 +839,7 @@ comptime KNN_TILE_MAX_D = 64
 #: KNNImputer's neighbor search (`knn_sq_tiled_kernel`, `knn_sq_tiled2_kernel`).
 #: Neither switch changes a bit, so the host column (`knn_sq_item`) is untouched.
 #:
-#: XN_KNN_LEAN (default ON; -D MOJOLEARN_IDN_XN_KNN_LEAN_OFF): one ftz per
+#: XN_KNN_LEAN (IDENTICAL): one ftz per
 #: pair-feature, not four. `knn_sq_item`'s step is
 #: acc = ftz(fma(df, df, acc)), df = ftz(ftz(x) - ftz(y)). The inputs are
 #: flushed once when they are staged (ftz is idempotent). The flush of df is
@@ -872,17 +849,22 @@ comptime KNN_TILE_MAX_D = 64
 #: flushed df = +-0 gives; a device that reads a subnormal operand as zero
 #: computes the same.
 #:
-#: XN_KNN_PRUNE (default ON; -D MOJOLEARN_IDN_XN_KNN_PRUNE_OFF): a pair's
+#: XN_KNN_PRUNE (IDENTICAL): a pair's
 #: chain stops once its partial sum is not below its row's current k-th
 #: distance. The chain never decreases (every term is >= 0), so the full
 #: value would fail the insertion's strict `<` too: the same lists. In the
 #: 2-D kernel a thread skips a feature chunk once all 16 of its pairs are
 #: out (the rows' k-th distances are published in threadgroup memory per y
 #: tile); in the row kernel the check runs every 8 features.
-#: Both off under MOJOLEARN_IDN_ALL_OFF.
-comptime _XN_KNN_IDN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-comptime XN_KNN_LEAN = _XN_KNN_IDN and not is_defined["MOJOLEARN_IDN_XN_KNN_LEAN_OFF"]()
-comptime XN_KNN_PRUNE = _XN_KNN_IDN and not is_defined["MOJOLEARN_IDN_XN_KNN_PRUNE_OFF"]()
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch, EXP:2438 DELETED; non-owner sites) deleted 2026-11-15 by lane/expdel2-15-cluster; code recoverable at 6837570bd9.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-15-cluster.patch; record in docs/TOMBSTONES.md.
+comptime _XN_KNN_IDN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+# TOMBSTONE: MOJOLEARN_IDN_XN_KNN_LEAN_OFF (old path: four ftz per pair-feature in the IDENTICAL fused k-NN; no A/B row) deleted 2026-11-15 by lane/expdel2-15-cluster; code recoverable at 50df4c2ba5.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_XN_KNN_LEAN_OFF.patch; record in docs/TOMBSTONES.md.
+comptime XN_KNN_LEAN = _XN_KNN_IDN
+# TOMBSTONE: MOJOLEARN_IDN_XN_KNN_PRUNE_OFF (old path: every pair's chain run to the end in the IDENTICAL fused k-NN; no A/B row) deleted 2026-11-15 by lane/expdel2-15-cluster; code recoverable at 2511f69d69.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_XN_KNN_PRUNE_OFF.patch; record in docs/TOMBSTONES.md.
+comptime XN_KNN_PRUNE = _XN_KNN_IDN
 
 
 @always_inline
@@ -970,8 +952,8 @@ def knn_sq_tiled_kernel(
 # order to the item's strict-< insertion. The same values in the same order,
 # so the same lists. The one-thread-per-row kernel this replaces for d above
 # KNN_TILE_MAX_D read every y row from device memory in every thread
-# (LabelPropagation on istella, 220 features: 23 s at 20,000 rows on the M4).
-# `-D MOJOLEARN_XN_KNN_ROWWISE=1` restores it.
+# (LabelPropagation on istella, 220 features: 23 s at 20,000 rows on the M4);
+# it stays only where the tile's threadgroup page does not fit.
 comptime KNN2_TX = 64
 comptime KNN2_TY = 64
 comptime KNN2_FC = 16
@@ -1091,7 +1073,9 @@ def op_knn_sq_tiled(
     if d > KNN_TILE_MAX_D:
         # the 2-D tiled kernel's threadgroup pages (25,344 bytes) under every
         # column's limit, or the row kernel (every shared page has a fits gate)
-        comptime if is_defined["MOJOLEARN_XN_KNN_ROWWISE"]() or not lib_smem_page_fits_for[TARGET_COLUMN, KNN2_SMEM_BYTES]():
+        # TOMBSTONE: MOJOLEARN_XN_KNN_ROWWISE (unmeasured opt-in arm: forced the row kernel above KNN_TILE_MAX_D) deleted 2026-11-15 by lane/expdel2-15-cluster; code recoverable at 02e970ed32.
+        # Restore: git apply experiments/removed/MOJOLEARN_XN_KNN_ROWWISE.patch; record in docs/TOMBSTONES.md.
+        comptime if not lib_smem_page_fits_for[TARGET_COLUMN, KNN2_SMEM_BYTES]():
             op_knn_sq(x, y, dist, idx, n, m, d, k, exclude_self, status)
             return
         # direct device copies in and out (no host-thread staging)
@@ -1244,9 +1228,9 @@ def op_knn_impute_tiled(
     var d_bd = _buf(ctx, 0, n * d * k, False)
     var d_bi = _buf_i(ctx, 0, n * d * k, False)
     var d_res = _buf(ctx, res, n * d, True)
+    # TOMBSTONE: MOJOLEARN_XN_IMPUTE_NO_SPLIT (unmeasured opt-in arm: forced the tiled KNNImputer kernel) deleted 2026-11-15 by lane/expdel2-15-cluster; code recoverable at 2d1d60acad.
+    # Restore: git apply experiments/removed/MOJOLEARN_XN_IMPUTE_NO_SPLIT.patch; record in docs/TOMBSTONES.md.
     var split = k <= IMPS_KMAX
-    comptime if is_defined["MOJOLEARN_XN_IMPUTE_NO_SPLIT"]():
-        split = False
     if split:
         ctx.enqueue_function[knn_impute_split_kernel](
             d_cells.unsafe_ptr(), d_x.unsafe_ptr(), d_fx.unsafe_ptr(), d_bd.unsafe_ptr(), d_bi.unsafe_ptr(),
@@ -1259,13 +1243,14 @@ def op_knn_impute_tiled(
             d_res.unsafe_ptr(), Int64(n), Int64(m), Int64(d), Int64(k), Int64(weights), Int64(nc),
             grid_dim=(nc + IMP_TPB - 1) // IMP_TPB, block_dim=IMP_TPB,
         )
-    comptime if XN_IMPUTE_TIE_MEAN:
-        if weights == 0:
-            ctx.enqueue_function[knn_impute_tie_mean_kernel](
-                d_cells.unsafe_ptr(), d_x.unsafe_ptr(), d_fx.unsafe_ptr(), d_bd.unsafe_ptr(), d_bi.unsafe_ptr(),
-                d_res.unsafe_ptr(), Int64(m), Int64(d), Int64(k), Int64(nc),
-                grid_dim=(nc + IMP_TPB - 1) // IMP_TPB, block_dim=IMP_TPB,
-            )
+    # TOMBSTONE: MOJOLEARN_XN_FAST_IMPUTE_TIE_MEAN_OFF (old path: the lower-index tie rule of KNNImputer; EXP:2125 A/B owed, never run) deleted 2026-11-15 by lane/expdel2-15-cluster; code recoverable at ac1f01c0f3.
+    # Restore: git apply experiments/removed/MOJOLEARN_XN_FAST_IMPUTE_TIE_MEAN_OFF.patch; record in docs/TOMBSTONES.md.
+    if weights == 0:
+        ctx.enqueue_function[knn_impute_tie_mean_kernel](
+            d_cells.unsafe_ptr(), d_x.unsafe_ptr(), d_fx.unsafe_ptr(), d_bd.unsafe_ptr(), d_bi.unsafe_ptr(),
+            d_res.unsafe_ptr(), Int64(m), Int64(d), Int64(k), Int64(nc),
+            grid_dim=(nc + IMP_TPB - 1) // IMP_TPB, block_dim=IMP_TPB,
+        )
     _down(ctx, d_res, res, n * d)
     ctx.synchronize()
     _ = d_cells^
@@ -1277,8 +1262,8 @@ def op_knn_impute_tiled(
     _ = ctx^
 
 
-# KNNImputer's tie mean: the rule, its history and the define are at
-# `XN_IMPUTE_TIE_MEAN` in x_neighbors/items.mojo (every mode and vendor and
+# KNNImputer's tie mean: the rule and its history are at
+# `knn_impute_tie_mean_item` in x_neighbors/items.mojo (every mode and vendor and
 # the host column since lane quality-fix-identical, 2026-10-15). This kernel
 # runs `knn_impute_tie_mean_item`'s statements with the fit rows staged per
 # block (d <= IMP_MAX_D); `knn_impute_tie_mean_cells_kernel` runs the item
@@ -1514,7 +1499,6 @@ def knn_impute_split_kernel(
 # best_i scratch, as in knn_sq_tiled2_kernel). Tile sizes come from the
 # threadgroup page (IMR_SMEM_BYTES under every column's limit; the fits gate
 # keeps the cell kernels where it does not fit).
-# -D MOJOLEARN_XN_IMPUTE_ROWDIST_OFF restores the per-cell kernels.
 # ============================================================================
 comptime IMR_G = 64
 comptime IMR_JT = 64
@@ -1524,8 +1508,9 @@ comptime IMR_TPB = 256
 comptime IMR_R = 4
 comptime IMR_XS = IMR_FC + 1  # padded rows (bank spread)
 comptime IMR_SMEM_BYTES = 4 * (IMR_G * IMR_XS + IMR_JT * IMR_XS + IMR_G * (IMR_JT + 1) + 4 * IMR_G)
-comptime IMR_ROWDIST = (not is_defined["MOJOLEARN_XN_IMPUTE_ROWDIST_OFF"]()
-                        and lib_smem_page_fits_for[TARGET_COLUMN, IMR_SMEM_BYTES]())
+# TOMBSTONE: MOJOLEARN_XN_IMPUTE_ROWDIST_OFF (old path: the per-cell KNNImputer kernels where the row tile fits; EXP:1650 A/B owed, never run) deleted 2026-11-15 by lane/expdel2-15-cluster; code recoverable at 5384f50cc6.
+# Restore: git apply experiments/removed/MOJOLEARN_XN_IMPUTE_ROWDIST_OFF.patch; record in docs/TOMBSTONES.md.
+comptime IMR_ROWDIST = lib_smem_page_fits_for[TARGET_COLUMN, IMR_SMEM_BYTES]()
 
 
 def knn_impute_rows_head_kernel(cells: IP, rq: IP, rc: IP, counter: IP, d_: Int64, nc_: Int64):
@@ -1744,19 +1729,20 @@ def _op_knn_impute_rows(
         Int64(m), Int64(d), Int64(k), Int64(weights),
         grid_dim=(max_rows + IMR_G - 1) // IMR_G, block_dim=IMR_TPB,
     )
-    comptime if XN_IMPUTE_TIE_MEAN:
-        if weights == 0 and d <= IMP_MAX_D:
-            ctx.enqueue_function[knn_impute_tie_mean_kernel](
-                d_cells.unsafe_ptr(), d_x.unsafe_ptr(), d_fx.unsafe_ptr(), d_bd.unsafe_ptr(), d_bi.unsafe_ptr(),
-                d_res.unsafe_ptr(), Int64(m), Int64(d), Int64(k), Int64(nc),
-                grid_dim=(nc + IMP_TPB - 1) // IMP_TPB, block_dim=IMP_TPB,
-            )
-        elif weights == 0:
-            ctx.enqueue_function[knn_impute_tie_mean_cells_kernel](
-                d_cells.unsafe_ptr(), d_x.unsafe_ptr(), d_fx.unsafe_ptr(), d_bd.unsafe_ptr(), d_bi.unsafe_ptr(),
-                d_res.unsafe_ptr(), Int64(m), Int64(d), Int64(k), Int64(nc),
-                grid_dim=(nc + IMP_TPB - 1) // IMP_TPB, block_dim=IMP_TPB,
-            )
+    # TOMBSTONE: MOJOLEARN_XN_FAST_IMPUTE_TIE_MEAN_OFF (old path: the lower-index tie rule of KNNImputer; EXP:2125 A/B owed, never run) deleted 2026-11-15 by lane/expdel2-15-cluster; code recoverable at ac1f01c0f3.
+    # Restore: git apply experiments/removed/MOJOLEARN_XN_FAST_IMPUTE_TIE_MEAN_OFF.patch; record in docs/TOMBSTONES.md.
+    if weights == 0 and d <= IMP_MAX_D:
+        ctx.enqueue_function[knn_impute_tie_mean_kernel](
+            d_cells.unsafe_ptr(), d_x.unsafe_ptr(), d_fx.unsafe_ptr(), d_bd.unsafe_ptr(), d_bi.unsafe_ptr(),
+            d_res.unsafe_ptr(), Int64(m), Int64(d), Int64(k), Int64(nc),
+            grid_dim=(nc + IMP_TPB - 1) // IMP_TPB, block_dim=IMP_TPB,
+        )
+    elif weights == 0:
+        ctx.enqueue_function[knn_impute_tie_mean_cells_kernel](
+            d_cells.unsafe_ptr(), d_x.unsafe_ptr(), d_fx.unsafe_ptr(), d_bd.unsafe_ptr(), d_bi.unsafe_ptr(),
+            d_res.unsafe_ptr(), Int64(m), Int64(d), Int64(k), Int64(nc),
+            grid_dim=(nc + IMP_TPB - 1) // IMP_TPB, block_dim=IMP_TPB,
+        )
     _down(ctx, d_res, res, n * d)
     ctx.synchronize()
     _ = d_cells^
@@ -1998,10 +1984,11 @@ comptime SVGP_FAST_RBFTILE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_
 #: tiled launch. Each cell is `kernel_item`'s K_RBF chain (`_sub`, the pinned
 #: `identical_mul_add`, features ascending from +0 over exactly d) and
 #: `unary_item`'s identity step, so the words are the per-cell kernel's.
-#: `-D MOJOLEARN_IDN_SVGP_RBFTILE_OFF` (or MOJOLEARN_IDN_ALL_OFF) restores it.
-comptime IDN_SVGP_RBFTILE = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
-    is_defined["MOJOLEARN_IDN_SVGP_RBFTILE_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_IDN_SVGP_RBFTILE_OFF (old path: the IDENTICAL per-cell SVGP RBF kernel; no A/B row) deleted 2026-11-15 by lane/expdel2-15-cluster; code recoverable at 49c0fc2b9e.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_SVGP_RBFTILE_OFF.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch, EXP:2438 DELETED; non-owner sites) deleted 2026-11-15 by lane/expdel2-15-cluster; code recoverable at 6837570bd9.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-15-cluster.patch; record in docs/TOMBSTONES.md.
+comptime IDN_SVGP_RBFTILE = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 comptime SVGP_RBFTILE = SVGP_FAST_RBFTILE or IDN_SVGP_RBFTILE
 comptime SVGP_RBF_T = 64
 comptime SVGP_RBF_TP = SVGP_RBF_T + 1
@@ -2067,41 +2054,17 @@ def svgp_rbf_tile_kernel(q: FP, z: FP, dst: FP, rows_: Int64, m_: Int64, d_: Int
                 dst.unsafe_store(i * m + j, ftz(identical_mul_add(variance, ftz(k), Float32(0))))
 
 
-# C54 predicts four independent inducing-point outputs per query thread.
-# The feature fold, exponential, and variance scale match the incumbent;
-# query feature loads are reused. Scratch is four scalar accumulators.
-# NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
-def _c54_svgp_predict_kernel(q: FP,z: FP,dst: FP,rows: Int32,m: Int32,d: Int32,gamma: Float32,variance: Float32):
-    var tile = _tid()
-    var per_row = (Int(m)+3)//4
-    var row = tile//per_row
-    var first = (tile%per_row)*4
-    if row >= Int(rows):
-        return
-    var sums = Array[Float32,4](fill=Float32(0))
-    for feature in range(Int(d)):
-        var qv=q.unsafe_load(row*Int(d)+feature)
-        comptime for lane in range(4):
-            if first+lane < Int(m):
-                var delta=_sub(qv,z.unsafe_load((first+lane)*Int(d)+feature))
-                sums[lane]=ftz(identical_mul_add(delta,delta,sums[lane]))
-    comptime for lane in range(4):
-        if first+lane < Int(m):
-            var kval=ftz(identical_exp(ftz(identical_mul(-gamma,sums[lane]))))
-            dst.unsafe_store(row*Int(m)+first+lane,ftz(identical_mul_add(variance,ftz(kval),Float32(0))))
+# TOMBSTONE: MOJOLEARN_C54_PREDICT_TILES (unmeasured opt-in arm: four inducing-point outputs per SVGP predict thread; non-owner site) deleted 2026-11-15 by lane/expdel2-15-cluster; code recoverable at 5fbe95dbc9.
+# Restore: git apply experiments/removed/MOJOLEARN_C54_PREDICT_TILES.expdel2-15-cluster.patch; record in docs/TOMBSTONES.md.
 
 
 def _launch_scaled_rbf(
     ctx: DeviceContext, q: FP, z: FP, kbuf: FP, dst: FP, rows: Int, m: Int, d: Int, gamma: Float32, variance: Float32,
-    prediction: Bool = False,
 ) raises:
     """SVGP's `_k`: the rbf kernel (coef0 0, degree 0), then
     `unary(K, identity, variance, 0)`."""
-    comptime if C54_PREDICT_TILES:
-        if prediction:
-            if rows*m > 0:
-                ctx.enqueue_function[_c54_svgp_predict_kernel](q,z,dst,Int32(rows),Int32(m),Int32(d),gamma,variance,grid_dim=_grid(rows*((m+3)//4)),block_dim=BLOCK)
-            return
+    # TOMBSTONE: MOJOLEARN_C54_PREDICT_TILES (unmeasured opt-in arm: four inducing-point outputs per SVGP predict thread; non-owner site) deleted 2026-11-15 by lane/expdel2-15-cluster; code recoverable at 5fbe95dbc9.
+    # Restore: git apply experiments/removed/MOJOLEARN_C54_PREDICT_TILES.expdel2-15-cluster.patch; record in docs/TOMBSTONES.md.
     comptime if SVGP_RBFTILE:
         if rows * m > 0:
             var nblk = ((rows + SVGP_RBF_T - 1) // SVGP_RBF_T) * ((m + SVGP_RBF_T - 1) // SVGP_RBF_T)
@@ -2166,10 +2129,13 @@ def svgp_b32_select_kernel(flag: FP, b32: FP, bh: FP, bl: FP, mm_: Int64):
 #: kap2-svgp-symtile-taxi (svgp taxi 611 -> 463 ms, r2/rmse identical).
 #: lane/idn-gates (2026-10-04): SYMTILE and COLSPLIT are also the IDENTICAL
 #: default on every vendor (two_prod commutes bit for bit and every entry
-#: keeps its p-ascending fold; the four solves are the column item's own);
-#: -D MOJOLEARN_IDN_GATES_OFF restores the old IDENTICAL form.
+#: keeps its p-ascending fold; the four solves are the column item's own).
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch, EXP:2438 DELETED; non-owner sites) deleted 2026-11-15 by lane/expdel2-15-cluster; code recoverable at 6837570bd9.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-15-cluster.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_IDN_GATES_OFF (old path umbrella; non-owner site) deleted 2026-11-15 by lane/expdel2-15-cluster; code recoverable at 02653ea11e.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_GATES_OFF.expdel2-15-cluster.patch; record in docs/TOMBSTONES.md.
 comptime _SVGP_GATE_ON = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU) or (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (is_defined["MOJOLEARN_IDN_GATES_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 )
 # TOMBSTONE: MOJOLEARN_SVGP_FAST_SYMTILE_OFF (old path, superseded by the FAST+Apple default) deleted 2026-11-15 by lane/expdel-01-cluster; code recoverable at 614ccc0790.
 # Restore: git apply experiments/removed/MOJOLEARN_SVGP_FAST_SYMTILE_OFF.patch; record in docs/TOMBSTONES.md.
@@ -2177,8 +2143,7 @@ comptime SVGP_FAST_SYMTILE = _SVGP_GATE_ON
 
 
 #: lane apple-fast-gap-kapprox2: the FAST + Apple default since the M3 A/B
-#: kap2-svgp-colsplit-taxi (svgp taxi 613 -> 438 ms, r2/rmse identical);
-#: -D MOJOLEARN_IDN_GATES_OFF restores the old IDENTICAL form.
+#: kap2-svgp-colsplit-taxi (svgp taxi 613 -> 438 ms, r2/rmse identical).
 # TOMBSTONE: MOJOLEARN_SVGP_FAST_COLSPLIT_OFF (old path, superseded by the FAST+Apple default) deleted 2026-11-15 by lane/expdel-01-cluster; code recoverable at 2391fda738.
 # Restore: git apply experiments/removed/MOJOLEARN_SVGP_FAST_COLSPLIT_OFF.patch; record in docs/TOMBSTONES.md.
 comptime SVGP_FAST_COLSPLIT = _SVGP_GATE_ON
@@ -2322,11 +2287,12 @@ comptime SVGP_FAST_BLKCHOL = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_
 #: panel factor. Its chains are `_chol_col`'s through the shared ff helpers
 #: (x_linear/ff.mojo: two_prod and ff_mul on the pinned `fmad`), k ascending,
 #: so no contraction choice can move a word: the factor of the one-column
-#: launches bit for bit. `-D MOJOLEARN_IDN_SVGP_BLKCHOL_OFF` (or
-#: MOJOLEARN_IDN_ALL_OFF) restores one column per launch.
-comptime IDN_SVGP_BLKCHOL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
-    is_defined["MOJOLEARN_IDN_SVGP_BLKCHOL_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
+#: launches bit for bit.
+# TOMBSTONE: MOJOLEARN_IDN_SVGP_BLKCHOL_OFF (old path: the IDENTICAL one-column-per-launch SVGP Cholesky; no A/B row) deleted 2026-11-15 by lane/expdel2-15-cluster; code recoverable at e68da202a3.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_SVGP_BLKCHOL_OFF.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch, EXP:2438 DELETED; non-owner sites) deleted 2026-11-15 by lane/expdel2-15-cluster; code recoverable at 6837570bd9.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-15-cluster.patch; record in docs/TOMBSTONES.md.
+comptime IDN_SVGP_BLKCHOL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 comptime SVGP_BLKCHOL = SVGP_FAST_BLKCHOL or IDN_SVGP_BLKCHOL
 #: panel width (columns per launch)
 comptime SVGP_CHOL_PB = 16
@@ -2783,7 +2749,7 @@ def op_svgp_predict(
     var r0 = 0
     while r0 < n:
         var rows = min(tr, n - r0)
-        _launch_scaled_rbf(ctx, qp + r0 * d, _p(d_z), _p(d_k), _p(d_ks), rows, m, d, gamma, variance, True)
+        _launch_scaled_rbf(ctx, qp + r0 * d, _p(d_z), _p(d_k), _p(d_ks), rows, m, d, gamma, variance)
         _launch_matmul(ctx, _p(d_ks), _p(d_al), mp + r0, rows, m, 1)
         ctx.enqueue_function[svgp_var_kernel](
             _p(d_ks), _p(d_c), vp + r0, Int64(rows), Int64(m), kdiag,
@@ -3248,7 +3214,11 @@ def op_nc_stats(x: Int, lab: Int, nk: Int, cent: Int, std: Int, dsc: Int, n: Int
 #: in float32 on the device. Expected: the per-iteration boundary crossings
 #: gone (LabelPropagation taxi runs its 1,000 steps).
 comptime LPK_TPB = 256
-comptime LPK_BATCH = C33_CHUNK if C33_FROZEN_CHUNKS else 16
+# TOMBSTONE: MOJOLEARN_C33_CHUNK_4 (unmeasured opt-in arm: four iterations per register read; non-owner site) deleted 2026-11-15 by lane/expdel2-15-cluster; code recoverable at 1afc78b64a.
+# Restore: git apply experiments/removed/MOJOLEARN_C33_CHUNK_4.expdel2-15-cluster.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_C33_FROZEN_CHUNKS (superseded arm, EXP:2323 DELETED; non-owner site) deleted 2026-11-15 by lane/expdel2-15-cluster; code recoverable at 707a4b8732.
+# Restore: git apply experiments/removed/MOJOLEARN_C33_FROZEN_CHUNKS.expdel2-15-cluster.patch; record in docs/TOMBSTONES.md.
+comptime LPK_BATCH = 16
 comptime LPK_FAST_BUILD = GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL
 #: The resident loop is the only kNN-graph path on every vendor and tier
 #: (lane n4-mds-labelprop-nmf-loops, 2026-11-09). It was the measured

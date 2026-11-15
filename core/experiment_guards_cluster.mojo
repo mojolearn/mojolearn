@@ -554,6 +554,65 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_KNN_WIDE_OFF"](), "removed 2026-11-15 (lane/expdel2-13-cluster): KNN_WIDE_OFF (old path, no A/B recorded) is gone; the default is kept; code at 7778cba4e1; restore: experiments/removed/MOJOLEARN_KNN_WIDE_OFF.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_TSNE_KNN_TILE_SELECT_OFF.patch
     comptime assert not is_defined["MOJOLEARN_IDN_TSNE_KNN_TILE_SELECT_OFF"](), "removed 2026-11-15 (lane/expdel2-13-cluster): IDN_TSNE_KNN_TILE_SELECT_OFF (old path of a promoted default) is gone; the default is kept; code at 7e06e9c43e; restore: experiments/removed/MOJOLEARN_IDN_TSNE_KNN_TILE_SELECT_OFF.patch"
+    # Lane expdel2-15-cluster (2026-11-15): unmeasured arms, never-run cards and superseded old paths deleted, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (docs/TOMBSTONES.md).
+    # Restore: git apply experiments/removed/MOJOLEARN_AFCL_G07.patch
+    comptime assert not is_defined["MOJOLEARN_AFCL_G07"](), "removed 2026-11-15 (lane/expdel2-15-cluster): AFCL_G07 (never-run Apple FAST card: Four Apple SIMD groups per block (MBF_TPB 128) instead of 8 in the FAST Apple MiniBatchKMeans device steps) is gone; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_AFCL_G12.patch
+    comptime assert not is_defined["MOJOLEARN_AFCL_G12"](), "removed 2026-11-15 (lane/expdel2-15-cluster): AFCL_G12 (never-run Apple FAST card: Two row passes per block (MSG_T 512) in the FAST Apple MeanShift bandwidth test) is gone; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_CLUSTER_FAST_STOP_GROUP8.patch
+    comptime assert not is_defined["MOJOLEARN_CLUSTER_FAST_STOP_GROUP8"](), "removed 2026-11-15 (lane/expdel2-15-cluster): CLUSTER_FAST_STOP_GROUP8 (opt-in arm: Eight steps per speculative group (MBF_GROUP 8) instead of 32 between two reads of the batch inertias) is gone; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_MBK_RESIDENT_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_MBK_RESIDENT_OFF"](), "removed 2026-11-15 (lane/expdel2-15-cluster): IDN_MBK_RESIDENT_OFF (old path: Rollback of the resident IDENTICAL MiniBatchKMeans fit (X uploaded once from the caller's pointer) to the copying fit) is gone; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_MINIBATCH_GROUP32.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_MINIBATCH_GROUP32"](), "removed 2026-11-15 (lane/expdel2-15-cluster): IDN_MINIBATCH_GROUP32 (opt-in arm: 32 steps enqueued per group between two waits instead of 16) is gone; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_MINIBATCH_GROUP64.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_MINIBATCH_GROUP64"](), "removed 2026-11-15 (lane/expdel2-15-cluster): IDN_MINIBATCH_GROUP64 (opt-in arm: 64 steps enqueued per group between two waits instead of 16) is gone; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_MINIBATCH_GROUP8.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_MINIBATCH_GROUP8"](), "removed 2026-11-15 (lane/expdel2-15-cluster): IDN_MINIBATCH_GROUP8 (opt-in arm: 8 steps enqueued per group between two waits instead of 16) is gone; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_NC_CHUNKED_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_NC_CHUNKED_OFF"](), "removed 2026-11-15 (lane/expdel2-15-cluster): IDN_NC_CHUNKED_OFF (old path: Rollback of the chunked IDENTICAL NearestCentroid statistics to whole-column chains) is gone; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_NC_FIT_LEAN_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_NC_FIT_LEAN_OFF"](), "removed 2026-11-15 (lane/expdel2-15-cluster): IDN_NC_FIT_LEAN_OFF (old path: Rollback of the lean IDENTICAL KNNImputer fit (column counts only) to the full n x d cell compaction) is gone; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_OPTICS_FUSED_STEP_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_OPTICS_FUSED_STEP_OFF"](), "removed 2026-11-15 (lane/expdel2-15-cluster): IDN_OPTICS_FUSED_STEP_OFF (old path: Rollback of the IDENTICAL one-launch OPTICS step to the two launches (optics_part_kernel then optics_step_kernel)) is gone; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_SVGP_BLKCHOL_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_SVGP_BLKCHOL_OFF"](), "removed 2026-11-15 (lane/expdel2-15-cluster): IDN_SVGP_BLKCHOL_OFF (old path: Rollback of the IDENTICAL panel Cholesky of SVGP to one column per launch) is gone; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_SVGP_RBFTILE_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_SVGP_RBFTILE_OFF"](), "removed 2026-11-15 (lane/expdel2-15-cluster): IDN_SVGP_RBFTILE_OFF (old path: Rollback of the IDENTICAL tiled SVGP RBF launch to the per-cell kernel) is gone; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_XN_KNN_LEAN_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_XN_KNN_LEAN_OFF"](), "removed 2026-11-15 (lane/expdel2-15-cluster): IDN_XN_KNN_LEAN_OFF (old path: Rollback of the one-ftz-per-pair-feature fused k-NN step to four ftz) is gone; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_XN_KNN_PRUNE_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_XN_KNN_PRUNE_OFF"](), "removed 2026-11-15 (lane/expdel2-15-cluster): IDN_XN_KNN_PRUNE_OFF (old path: Rollback of the pruned fused k-NN chains (a pair stops once not below its row's k-th distance) to full chains) is gone; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_XN_SKETCH_CTR_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_XN_SKETCH_CTR_OFF"](), "removed 2026-11-15 (lane/expdel2-15-cluster): IDN_XN_SKETCH_CTR_OFF (old path: Dropped the counter-based sketch draws in IDENTICAL so the glue fell back to the MT19937 host draws) is gone; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_MBK_ZEROCOPY_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_MBK_ZEROCOPY_OFF"](), "removed 2026-11-15 (lane/expdel2-15-cluster): MBK_ZEROCOPY_OFF (old path: Rollback of the FAST Apple MiniBatchKMeans upload straight from the caller's array to the copying fit) is gone; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_MINIBATCH_ONE_PASS.patch
+    comptime assert not is_defined["MOJOLEARN_MINIBATCH_ONE_PASS"](), "removed 2026-11-15 (lane/expdel2-15-cluster): MINIBATCH_ONE_PASS (opt-in arm: update_center_dense for every center in one walk of the batch) is gone; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_OPTICS_SIMD.patch
+    comptime assert not is_defined["MOJOLEARN_OPTICS_SIMD"](), "removed 2026-11-15 (lane/expdel2-15-cluster): OPTICS_SIMD (opt-in arm: The host ordering loop's two row walks as vector min, compare and select) is gone; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_PURITY_4_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_PURITY_4_OFF"](), "removed 2026-11-15 (lane/expdel2-15-cluster): PURITY_4_OFF (old path: Rollback of the XN_TREE fold of the absdiff partials to the ascending one-thread chain) is gone; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_XC_ALLOC.patch
+    comptime assert not is_defined["MOJOLEARN_XC_ALLOC"](), "removed 2026-11-15 (lane/expdel2-15-cluster): XC_ALLOC (opt-in arm: A slot a distance kernel fills completely not zeroed first (OPTICS, MeanShift, AffinityPropagation, agglomerative)) is gone; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_XN_FAST_IMPUTE_TIE_MEAN_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_XN_FAST_IMPUTE_TIE_MEAN_OFF"](), "removed 2026-11-15 (lane/expdel2-15-cluster): XN_FAST_IMPUTE_TIE_MEAN_OFF (old path: Rollback of the KNNImputer tie mean to the lower-index rule in every mode) is gone; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_XN_FAST_NAN_FIT_LEAN_GPU_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_XN_FAST_NAN_FIT_LEAN_GPU_OFF"](), "removed 2026-11-15 (lane/expdel2-15-cluster): XN_FAST_NAN_FIT_LEAN_GPU_OFF (old path: Rollback of the FAST Apple lean fit counts on the GPU) is gone; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_XN_IMPUTE_NO_SPLIT.patch
+    comptime assert not is_defined["MOJOLEARN_XN_IMPUTE_NO_SPLIT"](), "removed 2026-11-15 (lane/expdel2-15-cluster): XN_IMPUTE_NO_SPLIT (opt-in arm: Forced the tiled KNNImputer kernel where the split kernel applies) is gone; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_XN_IMPUTE_ROWDIST_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_XN_IMPUTE_ROWDIST_OFF"](), "removed 2026-11-15 (lane/expdel2-15-cluster): XN_IMPUTE_ROWDIST_OFF (old path: Rollback of the row-distance KNNImputer transform to the per-cell kernels where the row tile fits) is gone; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_XN_KNN_ROWWISE.patch
+    comptime assert not is_defined["MOJOLEARN_XN_KNN_ROWWISE"](), "removed 2026-11-15 (lane/expdel2-15-cluster): XN_KNN_ROWWISE (opt-in arm: Forced the one-thread-per-row k-NN kernel above KNN_TILE_MAX_D) is gone; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_XN_PCS_CELL.patch
+    comptime assert not is_defined["MOJOLEARN_XN_PCS_CELL"](), "removed 2026-11-15 (lane/expdel2-15-cluster): XN_PCS_CELL (opt-in arm: Forced the per-cell convolution kernel instead of the row kernel) is gone; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_X_CLUSTER_FAST_CLS2_MBK_POOL_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_X_CLUSTER_FAST_CLS2_MBK_POOL_OFF"](), "removed 2026-11-15 (lane/expdel2-15-cluster): X_CLUSTER_FAST_CLS2_MBK_POOL_OFF (old path: Rollback of the pooled X device buffer of the FAST Apple zero-copy MiniBatchKMeans fit to a fresh allocation per fit) is gone; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_X_CLUSTER_FAST_MINIBATCH_GENERAL_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_X_CLUSTER_FAST_MINIBATCH_GENERAL_OFF"](), "removed 2026-11-15 (lane/expdel2-15-cluster): X_CLUSTER_FAST_MINIBATCH_GENERAL_OFF (old path: Restored the unit-weight, tol <= 0 gate in front of the FAST Apple device steps) is gone; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_X_CLUSTER_FAST_W2_MBK_SUMCMP_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_X_CLUSTER_FAST_W2_MBK_SUMCMP_OFF"](), "removed 2026-11-15 (lane/expdel2-15-cluster): X_CLUSTER_FAST_W2_MBK_SUMCMP_OFF (old path: Rollback of the compacted center sum to the full 256-row chunk walk per feature (`_mbf_sum_kernel`)) is gone; see docs/TOMBSTONES.md"
     return True
 
 
