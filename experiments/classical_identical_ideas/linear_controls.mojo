@@ -182,7 +182,7 @@ comptime C16_GLM_FUSED = False
 # and BOARD.md; C13+C18 quality failures do not establish C18 as their cause.
 # TOMBSTONE: MOJOLEARN_CLASSICAL_C18_RESIDUAL_NEXT (unqualified opt-in arm, neutral) deleted 2026-11-15 by lane/expdel2-06-base; code recoverable at 7ca2a3400c.
 # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C18_RESIDUAL_NEXT.patch; record in docs/TOMBSTONES.md.
-comptime C18_RESIDUAL_NEXT = False
+# (Sweep 2026-11-15: comptime C18_RESIDUAL_NEXT removed; nothing read it.)
 # C19: ONE integer sweep (was ORDERED_128/ORDERED_32, two defines where 32
 # silently won when both were on). SGD_PS samples per ordered launch; legal
 # set {32, 128, 2048}; absent = 2048 = incumbent. Sample order, time index and
