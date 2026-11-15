@@ -338,8 +338,7 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_TRANSFORMER_FRESH_PREFILL"](), "removed 2026-11-15 (lane/expdel2-01-base): MOJOLEARN_TRANSFORMER_FRESH_PREFILL (the opt-in export of the per-call transformer_forward_fresh entry off NVIDIA) is gone, no A/B was ever recorded for that arm; the entry is exported on the NVIDIA IDENTICAL build only; restore: experiments/removed/MOJOLEARN_TRANSFORMER_FRESH_PREFILL.expdel2-01-base.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_TRANSFORMER_LEGACY_FRESH_PREFILL.patch
     comptime assert not is_defined["MOJOLEARN_TRANSFORMER_LEGACY_FRESH_PREFILL"](), "removed 2026-11-15 (lane/expdel2-01-base): MOJOLEARN_TRANSFORMER_LEGACY_FRESH_PREFILL (the NVIDIA opt-out of the per-call transformer_forward_fresh export) is gone; NVIDIA IDENTICAL builds always export it (NVIDIA's full public A/B gate admitted it); restore: experiments/removed/MOJOLEARN_TRANSFORMER_LEGACY_FRESH_PREFILL.patch"
-    # Restore: git apply experiments/removed/MOJOLEARN_SAMBA_WEIGHT_EPOCH_GLOBAL.patch
-    comptime assert not is_defined["MOJOLEARN_SAMBA_WEIGHT_EPOCH_GLOBAL"](), "removed 2026-11-15 (lane/expdel2-05-base): SAMBA_WEIGHT_EPOCH_GLOBAL (Samba resident copies keyed by the process weight epoch, never measured) is gone; the per-registry key is the only one"
+    # MOJOLEARN_SAMBA_WEIGHT_EPOCH_GLOBAL: refusal removed 2026-11-15 (restored; owed B arm, see docs/TOMBSTONES.md Restored table)
     # Lane expdel2-04-base (2026-11-15): unmeasured arms and old paths deleted under "An unmeasured arm is deleted" (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md, docs/TOMBSTONES.md).
     # MOJOLEARN_IDN_MAMBA3_FORWARD_DOOR_OLD: refusal removed 2026-11-15 (restored; owed B arm, see docs/TOMBSTONES.md Restored table)
     # Restore: git apply experiments/removed/MOJOLEARN_STEP_GLUE_TRIAL.patch
