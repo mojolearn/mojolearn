@@ -307,8 +307,8 @@ def xn_native_softmax(a_: List[Int], i_: List[Int], f_: List[Float64]) raises ->
 
 
 def xn_native_softmax64(a_: List[Int], i_: List[Int], f_: List[Float64]) raises -> Int:
-    """Lane apple-fast-q-clf: registered only under NC_PROBA64 (FAST, not
-    -D MOJOLEARN_PROBA64_QOLD); NearestCentroid.predict_proba as float64."""
+    """Lane apple-fast-q-clf: registered only under NC_PROBA64 (FAST);
+    NearestCentroid.predict_proba as float64."""
     var v_x = _a(a_, 0)
     var v_res = _a(a_, 1)
     var v_n = _n(i_, 0)
