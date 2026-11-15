@@ -2146,6 +2146,7 @@ Deletions reversed by new evidence. The code is back on main; the section and th
 | [`MOJOLEARN_IDN_KDE_QTILE_FORCE`](#mojolearn_idn_kde_qtile_force) | Kernel density (IDENTICAL query-tile pass) | 2026-11-15 (`4bf6c39024`) | 2026-11-15 (lane/expdel2-restore-owed) | opt-in B arm, default unchanged, A/B owed at the wave sha | [MOJOLEARN_IDN_KDE_QTILE_FORCE.patch](../experiments/removed/MOJOLEARN_IDN_KDE_QTILE_FORCE.patch) |
 | [`MOJOLEARN_IDN_KNN_DOOR_FIT_XN_EAGER`](#mojolearn_idn_knn_door_fit_xn_eager-opt-in-arm-deleted-2026-11-15) | k-NN fit door (x_neighbors admission) | 2026-11-15 (`31c68bae2d`) | 2026-11-15 (lane/expdel2-restore-owed) | opt-in B arm, default unchanged, A/B owed at the wave sha | [MOJOLEARN_IDN_KNN_DOOR_FIT_XN_EAGER.patch](../experiments/removed/MOJOLEARN_IDN_KNN_DOOR_FIT_XN_EAGER.patch) |
 | [`MOJOLEARN_IDN_KNN_I32_LABEL_RANGE_OLD`](#mojolearn_idn_knn_i32_label_range_old-old-path-deleted-2026-11-15) | k-NN classifier fit int32 labels | 2026-11-15 (`10c4fb4ffc`) | 2026-11-15 (lane/expdel2-restore-owed) | opt-in B arm, default unchanged, A/B owed at the wave sha | [MOJOLEARN_IDN_KNN_I32_LABEL_RANGE_OLD.patch](../experiments/removed/MOJOLEARN_IDN_KNN_I32_LABEL_RANGE_OLD.patch) |
+| [`MOJOLEARN_IDN_MAMBA12_FORWARD_DOOR_OLD`](#mojolearn_idn_mamba12_forward_door_old) | Neural (Mamba-1/2 held stage arena and door) | 2026-11-15 (`29b23a6003`) | 2026-11-15 (lane/expdel2-restore-owed) | opt-in B arm, default unchanged, A/B owed at the wave sha | [MOJOLEARN_IDN_MAMBA12_FORWARD_DOOR_OLD.patch](../experiments/removed/MOJOLEARN_IDN_MAMBA12_FORWARD_DOOR_OLD.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -14508,6 +14509,7 @@ Restored 2026-11-15 (lane/expdel2-restore-owed): owed B arm, deletion premature;
 - Files: autograd/block_step_ops.mojo.
 - Deleted by: lane/expdel2-23-neural `29b23a6003` (2026-11-15); code recoverable at `ddf9b022e1`.
 - Restore: `git apply experiments/removed/MOJOLEARN_IDN_MAMBA12_FORWARD_DOOR_OLD.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
+Restored 2026-11-15 (lane/expdel2-restore-owed): owed B arm, deletion premature; see Restored table.
 
 ### MOJOLEARN_IDN_MAMBA_BWD_FOLDS
 

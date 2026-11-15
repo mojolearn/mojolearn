@@ -403,8 +403,7 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_IDN_M3_S17_TAIL_PIPE_OFF"](), "removed 2026-11-15 (lane/expdel2-23-neural): IDN_M3_S17_TAIL_PIPE_OFF (old path) is gone; the default is kept; code at 1629ea8265; restore: experiments/removed/MOJOLEARN_IDN_M3_S17_TAIL_PIPE_OFF.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_MAMBA12_FORWARD_COPIES_OLD.patch
     comptime assert not is_defined["MOJOLEARN_IDN_MAMBA12_FORWARD_COPIES_OLD"](), "removed 2026-11-15 (lane/expdel2-23-neural): IDN_MAMBA12_FORWARD_COPIES_OLD (old path) is gone; the default is kept; code at 449d72a027; restore: experiments/removed/MOJOLEARN_IDN_MAMBA12_FORWARD_COPIES_OLD.patch"
-    # Restore: git apply experiments/removed/MOJOLEARN_IDN_MAMBA12_FORWARD_DOOR_OLD.patch
-    comptime assert not is_defined["MOJOLEARN_IDN_MAMBA12_FORWARD_DOOR_OLD"](), "removed 2026-11-15 (lane/expdel2-23-neural): IDN_MAMBA12_FORWARD_DOOR_OLD (old path) is gone; the default is kept; code at ddf9b022e1; restore: experiments/removed/MOJOLEARN_IDN_MAMBA12_FORWARD_DOOR_OLD.patch"
+    # MOJOLEARN_IDN_MAMBA12_FORWARD_DOOR_OLD: refusal removed 2026-11-15 (restored; owed B arm, see docs/TOMBSTONES.md Restored table)
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_MAMBA_BWD_FOLDS.patch
     comptime assert not is_defined["MOJOLEARN_IDN_MAMBA_BWD_FOLDS"](), "removed 2026-11-15 (lane/expdel2-23-neural): IDN_MAMBA_BWD_FOLDS (arm) is gone; the default path is the only one; code at 786965c6c8; restore: experiments/removed/MOJOLEARN_IDN_MAMBA_BWD_FOLDS.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_TRANSPOSE_TILE_OFF.patch

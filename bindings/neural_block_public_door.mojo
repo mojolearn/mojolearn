@@ -42,6 +42,7 @@ from providers.python.mamba3_prefill_session_pyapi_door import (
 from core.mamba_state_entry_table import Mamba3StateRoute
 from bindings.causal_lm_public_door import _causal_array_guard
 from bindings.causal_lm_public_door import causal_mamba_entry, causal_mamba_stateless_run
+from autograd.block_step_ops import IDN_MAMBA12_FORWARD_DOOR_OLD
 from core.entry_table import EntryRef, entry_ref_unresolved, entry_ref_call
 from core.neural_entry_table import (
     NeuralEntryKey, neural_entry_vendor, neural_entry_call, neural_ref,
@@ -82,7 +83,8 @@ struct NativeBlockPlan(Movable, Writable):
     # vendor and Mamba-1 profile are fixed for a plan, so it is decided here
     # once (hot-path audit 2026-11-13: it read two entry words per call).
     var stateless_forward: Bool
-    # Lane fix-mamba-forward-doors (bindings/causal_lm_public_door.mojo): the Mamba state entry a stateless
+    # Lane fix-mamba-forward-doors (IDN_MAMBA12_FORWARD_DOOR_OLD,
+    # bindings/causal_lm_public_door.mojo): the Mamba state entry a stateless
     # forward calls, resolved at the plan's first stateless forward and held
     # (word 0 until then).
     var mamba_entry: EntryRef
@@ -839,16 +841,19 @@ def _neural_plain(mut mods: NativeModules, owner: NativeBlockExecution, x: Pytho
             if nplan.stateless_forward:
                 # TOMBSTONE: MOJOLEARN_IDN_MAMBA12_FORWARD_DOOR_OLD (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-02-base; code recoverable at f1c5239d24.
                 # Restore: git apply experiments/removed/MOJOLEARN_IDN_MAMBA12_FORWARD_DOOR_OLD.expdel2-02-base.patch; record in docs/TOMBSTONES.md.
-                # lane fix-mamba-forward-doors: one direct call with the
-                # plan's prepared layer and held Mamba entry
-                if nplan.layer is not None:
-                    if nplan.mamba_entry.word == 0:
-                        nplan.mamba_entry = causal_mamba_entry(nplan.entries)
-                    var direct = causal_mamba_stateless_run(mods, owner.fields, nplan.mamba_entry, nplan.kind,
-                        nplan.d_model, nplan.layer, x)
-                    if locked:
-                        lock_lease.release()
-                    return direct
+                # RESTORED 2026-11-15 by lane/expdel2-restore-owed: owed B arm (owed-pre0867.json), under four weeks old; the deletion was premature.
+                comptime if not IDN_MAMBA12_FORWARD_DOOR_OLD:
+                    # lane fix-mamba-forward-doors: one direct call with the
+                    # plan's prepared layer and held Mamba entry (the
+                    # causal_layer_run_fields hop is the B arm)
+                    if nplan.layer is not None:
+                        if nplan.mamba_entry.word == 0:
+                            nplan.mamba_entry = causal_mamba_entry(nplan.entries)
+                        var direct = causal_mamba_stateless_run(mods, owner.fields, nplan.mamba_entry, nplan.kind,
+                            nplan.d_model, nplan.layer, x)
+                        if locked:
+                            lock_lease.release()
+                        return direct
                 var fresh_result = _neural_layer_run(mods, owner, x, PythonObject(None), step, True)
                 if locked:
                     lock_lease.release()
