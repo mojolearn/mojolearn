@@ -70,6 +70,20 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_IDN_NM_SPEC_OFF"](), "removed 2026-11-15 (lane/expdel2-28-neural): IDN_NM_SPEC_OFF (old path beside the measured default) is gone; the default is kept; code at 33ca37483e; restore: experiments/removed/MOJOLEARN_IDN_NM_SPEC_OFF.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_SEQ_CROSTON_REG_OFF.patch
     comptime assert not is_defined["MOJOLEARN_SEQ_CROSTON_REG_OFF"](), "removed 2026-11-15 (lane/expdel2-28-neural): SEQ_CROSTON_REG_OFF (old path of the FAST Apple default) is gone; the default is kept; code at a2b075952e; restore: experiments/removed/MOJOLEARN_SEQ_CROSTON_REG_OFF.patch"
+    # Lane expdel2-36-neural-series-linear (2026-11-15): unmeasured arms and old paths deleted under "An unmeasured arm is deleted" (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md, docs/TOMBSTONES.md).
+    # Restore: git apply experiments/removed/MOJOLEARN_SELECT_D_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_SELECT_D_OFF"](), "removed 2026-11-15 (lane/expdel2-36-neural-series-linear): SELECT_D_OFF (old path beside a recorded default, Series (AutoARIMA select_d FAST+Apple device rounds)) is gone; the default path is the only one; code recoverable at 145be10898; restore: experiments/removed/MOJOLEARN_SELECT_D_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_SELECT_D_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_SELECT_D_OFF"](), "removed 2026-11-15 (lane/expdel2-36-neural-series-linear): IDN_SELECT_D_OFF (old path, no A/B recorded, Series (AutoARIMA select_d IDENTICAL device rounds)) is gone; the default path is the only one; code recoverable at 145be10898; restore: experiments/removed/MOJOLEARN_IDN_SELECT_D_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_KPSS_ONE_WAIT_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_KPSS_ONE_WAIT_OFF"](), "removed 2026-11-15 (lane/expdel2-36-neural-series-linear): IDN_KPSS_ONE_WAIT_OFF (old path, no A/B recorded, Series (KPSS one-wait binding call)) is gone; the default path is the only one; code recoverable at 145be10898; restore: experiments/removed/MOJOLEARN_IDN_KPSS_ONE_WAIT_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_AFCL_P11.patch
+    comptime assert not is_defined["MOJOLEARN_AFCL_P11"](), "removed 2026-11-15 (lane/expdel2-36-neural-series-linear): AFCL_P11 (never-run Apple FAST programme card, Series (Apple FAST card P11 two-chain series sums)) is gone; the default path is the only one; code recoverable at 145be10898; restore: experiments/removed/MOJOLEARN_AFCL_P11.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_KPSS_SCAN_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_KPSS_SCAN_OFF"](), "removed 2026-11-15 (lane/expdel2-36-neural-series-linear): IDN_KPSS_SCAN_OFF (old path, no A/B recorded, Series (KPSS blocked scan)) is gone; the default path is the only one; code recoverable at 145be10898; restore: experiments/removed/MOJOLEARN_IDN_KPSS_SCAN_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_TSA_FAST_KPSS_PACK_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_TSA_FAST_KPSS_PACK_OFF"](), "removed 2026-11-15 (lane/expdel2-36-neural-series-linear): TSA_FAST_KPSS_PACK_OFF (old path beside a recorded default, Series (KPSS packed one-launch FAST+Apple)) is gone; the default path is the only one; code recoverable at 145be10898; restore: experiments/removed/MOJOLEARN_TSA_FAST_KPSS_PACK_OFF.patch"
+    # ---- end lane expdel2-36-neural-series-linear
     return True
 
 
