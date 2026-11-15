@@ -7,7 +7,7 @@ from core.tree_math import tree_log
 from ensemble.tree_moments import balanced_mse_gain, et_leaf_moment_host
 # TOMBSTONE: MOJOLEARN_TREES_T11_LEVELS, MOJOLEARN_TREES_T14_EXACT, MOJOLEARN_TREES_T12_BYTES, MOJOLEARN_TREES_T13_BYTES (T11/T14_EXACT folded to their constants here; T12/T13 byte budgets read their default constants) deleted 2026-11-15 by lane/expdel2-40-trees; code recoverable at 6641db4b18.
 # Restore: git apply experiments/removed/MOJOLEARN_TREES_T11_LEVELS.expdel2-40-trees.patch; experiments/removed/MOJOLEARN_TREES_T14_EXACT.expdel2-40-trees.patch; experiments/removed/MOJOLEARN_TREES_T12_BYTES.expdel2-40-trees.patch; experiments/removed/MOJOLEARN_TREES_T13_BYTES.expdel2-40-trees.patch
-from ensemble.tree_identical_ideas import T02, T04, T05, T06, T07, T12, T12_BYTES, T13, T13_BYTES, T14, C48
+from ensemble.tree_identical_ideas import T04, T05, T06, T07, T12, T12_BYTES, T13, T13_BYTES, T14, C48
 from std.memory import bitcast, unsafe_memcpy
 
 from ensemble.instruments import StageTimes

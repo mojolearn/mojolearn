@@ -17,7 +17,7 @@ stays as its default constant so importers fold their dead arms.
 # NVIDIA and AMD. Its T01_ROWS task-size knob is covered by T02's cost rule.
 # TOMBSTONE: MOJOLEARN_TREES_T02 (DROP, EXP:1581) deleted 2026-11-15 by expdel2-39-trees; code recoverable at the deletion commit^.
 # Restore: git apply experiments/removed/MOJOLEARN_TREES_T02.patch
-comptime T02 = False
+# (Sweep 2026-11-15: T02 and histogram_task_rows removed; readers folded.)
 # TOMBSTONE: MOJOLEARN_TREES_T03 (unmeasured arm) deleted 2026-11-15 by expdel2-39-trees; code recoverable at the deletion commit^.
 # Restore: git apply experiments/removed/MOJOLEARN_TREES_T03.patch
 comptime T03 = False
@@ -89,7 +89,3 @@ comptime T15 = False
 # Restore: git apply experiments/removed/MOJOLEARN_TREES_C48.patch
 comptime C48 = False
 
-@always_inline
-def histogram_task_rows(histogram_bytes: Int, row_bytes: Int, reference: Int) -> Int:
-    """Rows per histogram task: the reference geometry (the T02 arm is deleted)."""
-    return reference

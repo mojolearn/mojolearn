@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Random Forest decision-tree builder and device training pipeline, aligned with the pinned cuML batched-level algorithm."""
 
-from ensemble.tree_identical_ideas import T02, T03, T04, T05, T05_ROW_VISITS, T07, T13, T13_BYTES, histogram_task_rows
+from ensemble.tree_identical_ideas import T03, T04, T05, T05_ROW_VISITS, T07, T13, T13_BYTES
 from max.gpu import WARP_SIZE
 from std.sys.compile import is_defined
 from std.math import ceildiv
@@ -1558,7 +1558,7 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
         self.num_outputs = num_outputs
         self.scales = scales
         self.min_weight_leaf = Float32(0)
-        self.hist_task_rows = histogram_task_rows(Int(params.max_n_bins) * Int(num_outputs) * size_of[Self.O.BinT](), 4 + size_of[Scalar[Self.O.LabelT]](), HIST_WORKLOAD_GRANULARITY)
+        self.hist_task_rows = HIST_WORKLOAD_GRANULARITY
         self.retained_counts = None
         self.retained_counts_reset = True
         self.retained_counts_phase = False
