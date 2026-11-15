@@ -95,7 +95,6 @@ def test_ocsvm_precomputed_index_conversion_does_not_call_array_tolist(monkeypat
 
 @pytest.mark.parametrize("entry", ["x_neighbors_native_api_v1", "ocsvm_resident_native_api_v1"])
 def test_ocsvm_rebound_factory_is_refused_without_python_call(monkeypatch, entry):
-    monkeypatch.setenv("MOJOLEARN_CLASSICAL_NATIVE_DISPATCH", "0")
     model = _model(gamma="auto")
     calls = []
 

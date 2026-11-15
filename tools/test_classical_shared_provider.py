@@ -42,7 +42,10 @@ def test_repeated_binary_calls_do_not_reread_model_settings_or_query_shape():
 
 def test_common_provider_is_selected_without_new_provider_type():
     src = body('_svc_provider')
-    assert 'MOJOLEARN_CLASSICAL_NATIVE_DISPATCH' in src
+    # A build constant (B arm -D MOJOLEARN_CLASSICAL_NATIVE_DISPATCH), never an
+    # environment read on the call path.
+    assert 'if not CLASSICAL_NATIVE_DISPATCH:' in src
+    assert 'getenv' not in PUBLIC
     assert 'neural_descriptor_entry(binding, "svm_binary_api_v1", False)' in src
     assert 'neural_descriptor_connect(factory, String(SVC_ABI_NAME), 12)' in src
     assert 'return PythonObject(None)' in src

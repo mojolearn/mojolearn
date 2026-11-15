@@ -3,7 +3,7 @@
 # enters compiled code once; runtime selection reads current mode/registry data
 # and never invokes Python _bind/load_set/_ModeSet.__getattr__ callbacks.
 from std.python import Python, PythonObject
-from std.os import getenv
+from providers.python.classical_native_dispatch import CLASSICAL_NATIVE_DISPATCH
 from bindings.native_loaded_module_door import native_loaded_module
 from bindings.py_cpython_table import cpython_table
 from bindings.admitted_call_door import AdmittedCall
@@ -177,10 +177,11 @@ def estimator_checked_mode(module: PythonObject, reader: String, name: String,
     # owner validates descriptor mode once; fast retains its legacy readback.
     if name == "_mojolearn_kernel_methods" and requested == "identical":
         return module
-    # Name tests first: the environment is read only for the two families
-    # the switch can affect, not on every public operation.
-    if ((name == "_mojolearn_svm" or name == "_mojolearn_x_neighbors")
-            and getenv("MOJOLEARN_CLASSICAL_NATIVE_DISPATCH", "0") == "1"):
+    # B arm only (-D MOJOLEARN_CLASSICAL_NATIVE_DISPATCH,
+    # providers/python/classical_native_dispatch.mojo): the descriptor provider
+    # checks mode itself. A build constant: no environment read per operation.
+    if (CLASSICAL_NATIVE_DISPATCH
+            and (name == "_mojolearn_svm" or name == "_mojolearn_x_neighbors")):
         if requested != "identical":
             raise Error("native dispatch candidate requires identical mode")
         return module

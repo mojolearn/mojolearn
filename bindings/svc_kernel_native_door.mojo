@@ -100,7 +100,7 @@ from core.host_finite_scan import host_all_finite_f32_strided
 from providers.python.svc_descriptor_pyapi_door import svc_epilogue_execute, svc_platt_execute, svc_splitmix_execute, svc_descriptor_execute, svc_descriptor_flags, svc_ovo_execute
 from providers.python.compiled_binding_snapshot_pyapi_door import CompiledBindingSnapshot
 from providers.python.array_metadata_pyapi_door import ArrayMetadata, ArrayPin, array_shape_once, array_metadata_once
-from std.os import getenv
+from providers.python.classical_native_dispatch import CLASSICAL_NATIVE_DISPATCH
 from svm.operation_metadata import SvcOperationSettings, SVC_ABI_NAME
 from bindings.py_optional import py_or_none
 from providers.python.neural_descriptor_pyapi_door import (
@@ -111,7 +111,10 @@ from providers.python.neural_descriptor_pyapi_door import (
 def _svc_provider(binding: PythonObject) raises -> PythonObject:
     # One common provider admission per public operation, never a pair/fold
     # cache lookup. Retain its checked module/table until the operation ends.
-    if getenv("MOJOLEARN_CLASSICAL_NATIVE_DISPATCH", "0") != "1":
+    # The route is the build's (providers/python/classical_native_dispatch.mojo):
+    # default None = by-name entries with the device-resident fitted state;
+    # the environment read this replaced ran once per public SVC/SVR operation.
+    if not CLASSICAL_NATIVE_DISPATCH:
         return PythonObject(None)
     var factory = neural_descriptor_entry(binding, "svm_binary_api_v1", False)
     if factory is None:
