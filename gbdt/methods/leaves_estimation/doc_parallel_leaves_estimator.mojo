@@ -60,7 +60,9 @@ from gbdt.gpu_util.kernel.reorder_one_bit import REORDER_BLOCK
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 
-comptime DEVICE_LEAF_PARTITION = is_defined["MOJOLEARN_2551_DEVICE_PARTITION"]() or (
+# TOMBSTONE: MOJOLEARN_2551_DEVICE_PARTITION (DELETE-ARM, opt-in force arm, no A/B recorded, rule a) deleted 2026-11-15 by lane/expdel2-44-trees; code recoverable at f431553766.
+# Restore: git apply experiments/removed/MOJOLEARN_2551_DEVICE_PARTITION.patch; record in docs/TOMBSTONES.md.
+comptime DEVICE_LEAF_PARTITION = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     and not is_defined["MOJOLEARN_2551_DEVICE_PARTITION_OFF"]()
 )
