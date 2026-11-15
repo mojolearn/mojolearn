@@ -9,7 +9,7 @@ exact: any globally selected point must occur in its task's KM best.
 One integer task-total readback sizes scratch; no input arithmetic on host."""
 from core.classical_distance import direct_squared_distance
 from experiments.classical_identical_ideas.graph_controls import IVF_DIRECT_DISTANCE
-from experiments.classical_identical_ideas.graph_controls import C35_PACKED_LISTS, C35_TASK_ROWS
+from experiments.classical_identical_ideas.graph_controls import C35_PACKED_LISTS
 # SPDX-License-Identifier: Apache-2.0
 
 from max.gpu import block_idx,thread_idx,lane_id
@@ -18,7 +18,9 @@ from max.gpu.host import DeviceBuffer,DeviceContext
 from checks.numerics import ftz,identical_mul_add,GLOBAL_NUMERIC_MODE,NUMERIC_FAST
 from ivf.impl.neighbors.ivf_flat.identical_ivf_scan import WARP_SIZE,_key,_kless
 from ivf.impl.neighbors.ivf_flat.ivf_group_device import device_exclusive_scan_total_from
-comptime TASK_ROWS=C35_TASK_ROWS if C35_PACKED_LISTS else 256
+# TOMBSTONE: MOJOLEARN_C35_ROWS_128 (unmeasured arm) folded here 2026-11-15 by lane/expdel2-12-cluster; code recoverable at a822b1cd69.
+# Restore: git apply experiments/removed/MOJOLEARN_C35_ROWS_128.expdel2-12-cluster.patch; record in docs/TOMBSTONES.md.
+comptime TASK_ROWS=256
 
 def _task_counts(probes: MutPointer[UInt32,MutAnyOrigin],off: MutPointer[Int32,MutAnyOrigin],counts: MutPointer[Int32,MutAnyOrigin],pairs: Int32):
     var i=Int(block_idx.x)*256+Int(thread_idx.x)
