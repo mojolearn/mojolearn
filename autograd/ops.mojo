@@ -151,13 +151,15 @@ def agk_colsum_args(a: Args) -> Args:
 #     its copy; matmul reads the parent's buffer through GEMM strides (the
 #     same words in the same k order); any other reader materializes the
 #     copy once, when it first reads the value (Tape._use / materialize).
-#     -D MOJOLEARN_AUTOGRAD_TRANSPOSE_VIEW_OFF.
+#     The only route: MOJOLEARN_AUTOGRAD_TRANSPOSE_VIEW_OFF is deleted (TOMBSTONE below).
 #   AUTOGRAD_CURVE_WORD (H(1)): model_fit's per-batch curve word (the loss
 #     times the batch rows) is stored by the loss's own fold launch
 #     (mul(loss, B) on the loss's stored word, as tape.scale computes it)
 #     instead of a scale launch and a copy launch: 2 launches a batch fewer.
 #     -D MOJOLEARN_AUTOGRAD_CURVE_WORD_OFF.
-comptime AUTOGRAD_TRANSPOSE_VIEW = not is_defined["MOJOLEARN_AUTOGRAD_TRANSPOSE_VIEW_OFF"]()
+# TOMBSTONE: MOJOLEARN_AUTOGRAD_TRANSPOSE_VIEW_OFF (old path, no A/B recorded) deleted 2026-11-15 by
+# lane/expdel2-24-neural with the AUTOGRAD_TRANSPOSE_VIEW alias; code recoverable at 5b147f4046.
+# Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_TRANSPOSE_VIEW_OFF.patch
 comptime AUTOGRAD_CURVE_WORD = not is_defined["MOJOLEARN_AUTOGRAD_CURVE_WORD_OFF"]()
 
 # Node kinds recorded by the tape. Binary and unary kinds also travel as a

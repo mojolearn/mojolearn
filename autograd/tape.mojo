@@ -23,7 +23,7 @@ from autograd.ops import (
     REDUCE, SOFTMAX, LOG_SOFTMAX, MATMUL, LINEAR, CUSTOM, AXIS_ALL, AXIS_ROWS, AXIS_COLS,
     ag_fold_block, unary_vjp_reads_input, unary_vjp_reads_output, LOSS_ELEM, LOSS_CE, LOSS_SCE,
     OP_AGK_BIN_VJP_PART, OP_AGK_GEMM_EPI,
-    LOSS_REDUCED, AUTOGRAD_LOSS_REDUCED, AUTOGRAD_TRANSPOSE_VIEW, AUTOGRAD_CURVE_WORD,
+    LOSS_REDUCED, AUTOGRAD_LOSS_REDUCED, AUTOGRAD_CURVE_WORD,
 )
 from autograd.loss_ops import (
     OP_LS_ELEM_FWD, OP_LS_ELEM_VJP, OP_LS_CE_FWD, OP_LS_CE_VJP, LS_MSE, LS_MAE, LS_HUBER,
@@ -558,10 +558,7 @@ struct Tape(Movable):
             return True
         if op >= CUSTOM + RN_TAG_FIRST and op < CUSTOM + RN_TAG_END and self._nodes[i].saved.i10 == RN_VIEW_MARK:
             return True
-        comptime if AUTOGRAD_TRANSPOSE_VIEW:
-            return op == TRANSPOSE
-        else:
-            return False
+        return op == TRANSPOSE
 
     def _fill_view[E: Exec](self, mut ex: E, i: Int) raises:
         """Write pending view i's words into its value buffer (one copy
@@ -1582,13 +1579,9 @@ struct Tape(Movable):
         # more than two strides (or a base offset) is copied once here; a
         # dense operand or a pending transpose is untouched (no new launch on
         # any existing call)
-        comptime if AUTOGRAD_TRANSPOSE_VIEW:
-            if not self._gemm_view(xi)[0]:
-                self._materialize_at(ex, xi)
-            if not self._gemm_view(yi)[0]:
-                self._materialize_at(ex, yi)
-        else:
+        if not self._gemm_view(xi)[0]:
             self._materialize_at(ex, xi)
+        if not self._gemm_view(yi)[0]:
             self._materialize_at(ex, yi)
         var shape = self._lead_shape(xi, self._nodes[yi].cols)  # rank-N metadata only
         var a = self._nodes[xi]
@@ -1597,29 +1590,24 @@ struct Tape(Movable):
             raise Error("matmul inner dimensions differ")
         self._shape(a.rows, b.cols)
         var output = self._alloc(ex, a.rows * b.cols)
-        comptime if AUTOGRAD_TRANSPOSE_VIEW:
-            # each operand dense or a transpose view read through its strides
-            # (the GEMM folds the same words in the same k order either
-            # way); the backward reads the same buffers and strides (saved)
-            var l = self._operand(xi)
-            var r = self._operand(yi)
-            _gemm(ex, output, l[0], r[0], a.rows, b.cols, a.cols, l[1], l[2], r[1], r[2])
-            var saved = Args()
-            saved.p0 = l[0]
-            saved.p1 = r[0]
-            saved.i0 = l[3]
-            saved.i1 = r[3]
-            saved.i2 = l[1]
-            saved.i3 = l[2]
-            saved.i4 = r[1]
-            saved.i5 = r[2]
-            saved.i6 = 1
-            var t = self._record(ex, output, a.rows, b.cols, MATMUL, [x, y], saved)
-            return self._with_shape(t, shape)
-        else:
-            _gemm(ex, output, a.value, b.value, a.rows, b.cols, a.cols, a.cols, 1, b.cols, 1)
-            var t = self._record(ex, output, a.rows, b.cols, MATMUL, [x, y], Args())
-            return self._with_shape(t, shape)
+        # each operand dense or a transpose view read through its strides
+        # (the GEMM folds the same words in the same k order either
+        # way); the backward reads the same buffers and strides (saved)
+        var l = self._operand(xi)
+        var r = self._operand(yi)
+        _gemm(ex, output, l[0], r[0], a.rows, b.cols, a.cols, l[1], l[2], r[1], r[2])
+        var saved = Args()
+        saved.p0 = l[0]
+        saved.p1 = r[0]
+        saved.i0 = l[3]
+        saved.i1 = r[3]
+        saved.i2 = l[1]
+        saved.i3 = l[2]
+        saved.i4 = r[1]
+        saved.i5 = r[2]
+        saved.i6 = 1
+        var t = self._record(ex, output, a.rows, b.cols, MATMUL, [x, y], saved)
+        return self._with_shape(t, shape)
 
     def linear[E: Exec](
         mut self, mut ex: E, x: Tensor, weight: Tensor, bias: Optional[Tensor] = None,
@@ -1757,18 +1745,14 @@ struct Tape(Movable):
         var n_at = self._use(ex, x)
         var n = self._nodes[n_at]
         var output = self._alloc(ex, n.rows * n.cols)
-        comptime if AUTOGRAD_TRANSPOSE_VIEW:
-            # a view: the copy waits for its first dense reader (_use);
-            # matmul reads n's buffer through strides and never copies
-            var saved = Args()
-            saved.p0 = n.value
-            saved.i0 = n.rows
-            saved.i1 = n.cols
-            saved.i9 = 1
-            return self._record(ex, output, n.cols, n.rows, TRANSPOSE, [x], saved)
-        else:
-            _transpose(ex, output, n.value, n.rows, n.cols, True)
-            return self._record(ex, output, n.cols, n.rows, TRANSPOSE, [x], Args())
+        # a view: the copy waits for its first dense reader (_use);
+        # matmul reads n's buffer through strides and never copies
+        var saved = Args()
+        saved.p0 = n.value
+        saved.i0 = n.rows
+        saved.i1 = n.cols
+        saved.i9 = 1
+        return self._record(ex, output, n.cols, n.rows, TRANSPOSE, [x], saved)
 
     def _operand(self, i: Int) -> Tuple[FP, Int, Int, Int]:
         """matmul's view of node i: (buffer, row stride, column stride,
