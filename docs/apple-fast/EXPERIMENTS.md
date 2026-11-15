@@ -2558,3 +2558,4 @@ sections and patches). No bits change: each deleted arm was off by default.
 | `MOJOLEARN_XCLUSTER_KPP_DISTINCT` | minibatch-kmeans, bisecting-kmeans | lane/expdel2-05-base (recoverable at c3dc42fd2c) | - | - | DELETED 2026-11-15 (unmeasured arm) | never measured; alias held as the constant `False` |
 | `MOJOLEARN_C39_RETAIN_STATE` | bisecting-kmeans | lane/expdel2-05-base (recoverable at 9ac1d53067) | - | - | DELETED 2026-11-15 (unmeasured arm) | never measured; alias held as the constant `False` |
 | `MOJOLEARN_C40_SEED_TILES` | mean-shift | lane/expdel2-05-base (recoverable at 2c7364c31b) | - | - | DELETED 2026-11-15 (unmeasured arm) | never measured; alias held as the constant `False` |
+| `MOJOLEARN_C40_ACTIVE_SEEDS` | mean-shift | lane/expdel2-05-base (recoverable at a72d2aefd3) | - | - | DELETED 2026-11-15 (unmeasured arm) | never measured; alias held as the constant `False` |

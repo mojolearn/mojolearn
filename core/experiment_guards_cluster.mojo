@@ -159,6 +159,8 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_C39_RETAIN_STATE"](), "removed 2026-11-15 (lane/expdel2-05-base): C39_RETAIN_STATE (opt-in IDENTICAL arm, never measured) is gone; the incumbent path is the only one"
     # Restore: git apply experiments/removed/MOJOLEARN_C40_SEED_TILES.patch
     comptime assert not is_defined["MOJOLEARN_C40_SEED_TILES"](), "removed 2026-11-15 (lane/expdel2-05-base): C40_SEED_TILES (opt-in IDENTICAL arm, never measured) is gone; the incumbent path is the only one"
+    # Restore: git apply experiments/removed/MOJOLEARN_C40_ACTIVE_SEEDS.patch
+    comptime assert not is_defined["MOJOLEARN_C40_ACTIVE_SEEDS"](), "removed 2026-11-15 (lane/expdel2-05-base): C40_ACTIVE_SEEDS (opt-in IDENTICAL arm, never measured) is gone; the incumbent path is the only one"
     return True
 
 
