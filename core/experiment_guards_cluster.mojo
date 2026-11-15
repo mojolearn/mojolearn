@@ -133,6 +133,8 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_KNN_FAST_MMA_K64_OFF"](), "removed 2026-11-15 (lane/expdel-06-base-cluster-kernel): KNN_FAST_MMA_K64_OFF (FAST+Apple rollback of k <= 64 k-NN to the generic tiled arm) is gone; the K = 64 matrix-unit kernels are the FAST+Apple path (knn istella 1,581 -> 352 ms, core-knn-k64-istella); restore: experiments/removed/MOJOLEARN_KNN_FAST_MMA_K64_OFF.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_KNN_FAST_REFINE.patch
     comptime assert not is_defined["MOJOLEARN_KNN_FAST_REFINE"](), "removed 2026-11-15 (lane/expdel-06-base-cluster-kernel): KNN_FAST_REFINE (FAST opt-in k-NN pool + exact re-rank) is gone: NEUTRAL, rab5-knnref istella +3.7%, taxi -1.5%, recall identical; restore: experiments/removed/MOJOLEARN_KNN_FAST_REFINE.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_XN_FAST_NAN_COLMISS_ONLY_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_XN_FAST_NAN_COLMISS_ONLY_OFF"](), "removed 2026-11-15 (lane/expdel-06-base-cluster-kernel): XN_FAST_NAN_COLMISS_ONLY_OFF (FAST+Apple rollback of KNNImputer.fit to the full NaN cell-list pass) is gone; the column-count kernel is the FAST+Apple fit path (KEPT with TIE_MEAN, gmp-imp-taxi); restore: experiments/removed/MOJOLEARN_XN_FAST_NAN_COLMISS_ONLY_OFF.patch"
     return True
 
 

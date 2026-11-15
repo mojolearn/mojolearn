@@ -661,6 +661,7 @@ in the tables after the sections.
 | [`MOJOLEARN_KNN_FAST_REFINE`](#mojolearn_knn_fast_refine-loser-deleted-2026-11-15) | Neighbors (k-NN pool + exact re-rank, FAST opt-in) | NEUTRAL (REVERTED: no gain, rab5-knnref) | 2026-11-15 | [MOJOLEARN_KNN_FAST_REFINE.patch](../experiments/removed/MOJOLEARN_KNN_FAST_REFINE.patch) |
 | [`MOJOLEARN_X_PREP_FAST_UNIQUE_OFF`](#mojolearn_x_prep_fast_unique_off-old-path-deleted-2026-11-15) | Preprocessing (encoders' category fit, FAST Apple) | removed (old path; FAST+Apple default KEPT f419ea9f1, prep-onehot-uniq-taxi) | 2026-11-15 | [MOJOLEARN_X_PREP_FAST_UNIQUE_OFF.patch](../experiments/removed/MOJOLEARN_X_PREP_FAST_UNIQUE_OFF.patch) |
 | [`MOJOLEARN_SPLINE_FAST_FUSED_OFF`](#mojolearn_spline_fast_fused_off-old-path-deleted-2026-11-15) | Preprocessing (SplineTransformer fused fit / fit_transform, FAST Apple) | removed (old path; FAST+Apple default KEPT, kap2-spl-fused) | 2026-11-15 | [MOJOLEARN_SPLINE_FAST_FUSED_OFF.patch](../experiments/removed/MOJOLEARN_SPLINE_FAST_FUSED_OFF.patch) |
+| [`MOJOLEARN_XN_FAST_NAN_COLMISS_ONLY_OFF`](#mojolearn_xn_fast_nan_colmiss_only_off-old-path-deleted-2026-11-15) | Neighbors (KNNImputer fit NaN column counts, FAST Apple) | removed (old path; FAST+Apple default KEPT with TIE_MEAN, gmp-imp-taxi) | 2026-11-15 | [MOJOLEARN_XN_FAST_NAN_COLMISS_ONLY_OFF.patch](../experiments/removed/MOJOLEARN_XN_FAST_NAN_COLMISS_ONLY_OFF.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -6419,3 +6420,11 @@ bits change on any vendor or the host column, no board row needs re-timing.
 - **Deleted by**: lane/expdel-06-base-cluster-kernel (expdel-06-base-cluster-kernel, docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md); code recoverable at `a9826a67a5`.
 - **Restore**: `git apply experiments/removed/MOJOLEARN_SPLINE_FAST_FUSED_OFF.patch`, then delete the `MOJOLEARN_SPLINE_FAST_FUSED_OFF` refusal in `core/experiment_guards_base.mojo`.
 - **Records**: refusal in `core/experiment_guards_base.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel-06-base-cluster-kernel section).
+
+## MOJOLEARN_XN_FAST_NAN_COLMISS_ONLY_OFF: old path deleted (2026-11-15)
+
+- **What it was**: the FAST+Apple rollback of KNNImputer.fit's NaN scan from the column-count kernel alone (`colmiss_only = 1`: `nan_colmiss_kernel`, total summed on the device) to the full cell-list pass (four scan kernels, a sync and the list's download) (`x_neighbors/nan_cells_device.mojo` NC_COLMISS_ONLY). Only the define read is deleted: the full pass stays the transform's path and every other build's; `_NC_FIT_LEAN_FAST` (built on NC_COLMISS_ONLY) is unchanged.
+- **Verdict**: KEPT, FAST+Apple default with XN_FAST_IMPUTE_TIE_MEAN (EXPERIMENTS.md `XN_FAST_IMPUTE_TIE_MEAN + XN_FAST_NAN_COLMISS_ONLY`, gmp-imp-taxi, M3): knn-imputer taxi masked_rmse 6.152 -> 5.109 (sklearn 5.26), fit 2.3 -> 2.7 ms measured as the pair (COLMISS_ONLY's own fit time was not timed alone; the later FIT_LEAN_GPU default, 2.2 -> 0.8 ms, is built on it). No bit change on any column (integer counts).
+- **Deleted by**: lane/expdel-06-base-cluster-kernel (expdel-06-base-cluster-kernel, docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md); code recoverable at `51fa31eeda`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_XN_FAST_NAN_COLMISS_ONLY_OFF.patch`, then delete the `MOJOLEARN_XN_FAST_NAN_COLMISS_ONLY_OFF` refusal in `core/experiment_guards_cluster.mojo`.
+- **Records**: refusal in `core/experiment_guards_cluster.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel-06-base-cluster-kernel section).
