@@ -82,6 +82,12 @@ from gemm.host.neural_gemm import (
 )
 from gemm.contract import GEMM_ORACLE_HOST_SABOTAGE, OP_NT, contract_leaf_size, leaf_count
 from gemm.contract import OP_NN
+# idea 10 (lane/attn-fold, 2026-10-28): the v2 key-axis fold, default OFF.
+from transformer.impl.llama.attn_fold_v2 import (
+    ATTN_FOLD_V2,
+    attn_v2_context_cell,
+    attn_v2_denom_row,
+)
 from gemm.experiments.neural_profile import NEURAL_PROFILE_CHANGED
 from gemm.host.neural_gemm import neural_gemm_host_into
 from training.checks.loss_contract import (
@@ -103,6 +109,8 @@ from transformer.checks.transformer_oracle import RopeTable, refuse_nonfinite
 # TOMBSTONE: MOJOLEARN_IDN_NORM_FIXED_LANES (opt-in arm, EXP:2246 PENDING, never run; owner elsewhere) folded to False
 # 2026-11-15 by lane/expdel2-31-neural (the serial S1 fold stays); code recoverable at 3393bec2de.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_NORM_FIXED_LANES.expdel2-31-neural.patch
+# RESTORED 2026-11-15 by lane/restore-run-arms-neural: RUN #6 of docs/plans/DELETED_ARMS_WORTH_RUNNING_2026-11-15.md.
+from transformer.experiments.norm_fixed_lanes import IDN_NORM_FIXED_LANES, nfl_dot
 # TOMBSTONE: MOJOLEARN_IDN_ATTN_SOFTMAX=2 (slower) deleted 2026-10-10 by c1bf9d832; code recoverable at ca25d9321.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_ATTN_SOFTMAX-arm2.patch
 
@@ -534,9 +542,15 @@ def rms_norm_fast(x: List[Float32], wnorm_flushed: List[Float32], m: Int, dm: In
     for t in range(m):
         var base = t * dm
         var acc = Float32(0.0)
-        for j in range(dm):
-            var xj = ftz(xp.unsafe_load(base + j))
-            acc = ftz(identical_mul_add(xj, xj, acc))
+        comptime if IDN_NORM_FIXED_LANES:
+            # MOJOLEARN_IDN_NORM_FIXED_LANES: S1 as the fixed 32-lane fold,
+            # the device cells' and the oracle's bits
+            var xr = rebind[MutPointer[Float32, MutAnyOrigin]](xp)
+            acc = nfl_dot(xr, xr, base, base, dm)
+        else:
+            for j in range(dm):
+                var xj = ftz(xp.unsafe_load(base + j))
+                acc = ftz(identical_mul_add(xj, xj, acc))
         var mean = ftz(identical_div(acc, Float32(dm)))
         var rstd = ftz(identical_rsqrt(ftz(mean + RMS_EPS)))
         var rv = F32V(rstd)
@@ -746,9 +760,13 @@ def _softmax_head(cell: List[Float32], masks: List[Float32], l: Int, s: Int, sca
         # Under MOJOLEARN_IDN_ATTN_FOLD_V2: 128-key leaves + carry tree
         # (transformer/impl/llama/attn_fold_v2.mojo) over keys 0 .. count-1.
         var den = Float32(0.0)
-        for j in range(count):
-            den = ftz(ftz(den) + ftz(ep.unsafe_load(j)))
-        den = ftz(den)
+        comptime if ATTN_FOLD_V2:
+            den = attn_v2_denom_row(
+                MutPointer[Float32, MutAnyOrigin](unsafe_from_address=Int(ep)), 0, 0, count - 1)
+        else:
+            for j in range(count):
+                den = ftz(ftz(den) + ftz(ep.unsafe_load(j)))
+            den = ftz(den)
         # S18: `identical_div` is `portable_divf`, the flush around ONE
         # correctly rounded division, and every operand here is flushed.
         # The masked keys' weights are `+0.0`, written as such.
@@ -786,6 +804,14 @@ def _value_sum_head(aweights: List[Float32], vpack: List[Float32], l: Int, s: In
         var count = s
         if q_first >= 0 and q_first + qi + 1 < s:
             count = q_first + qi + 1
+        comptime if ATTN_FOLD_V2:
+            # S19 under MOJOLEARN_IDN_ATTN_FOLD_V2 over keys 0 .. count-1:
+            # 128-key leaves + carry tree, the device eager kernel's cell.
+            var awa = MutPointer[Float32, MutAnyOrigin](unsafe_from_address=Int(awp))
+            var vpa = MutPointer[Float32, MutAnyOrigin](unsafe_from_address=Int(vp))
+            for dv2 in range(hd):
+                ctxp.unsafe_store(cbase + dv2, attn_v2_context_cell(awa, wrow, vpa, 0, hd, dv2, 0, count - 1))
+            continue
         var dv0 = 0
         while dv0 + VALUE_SUM_64 * HOST_FW <= hbody:
             var pacc = Array[F32V, VALUE_SUM_64](fill=F32V(0.0))

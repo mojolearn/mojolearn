@@ -270,7 +270,12 @@ transcendentals and division below are OURS.
 from transformer.experiments.norm_profile import (
     NN24_NORM_LANES8, NN24_LANES, _sum, _square, norm_profile_dot,
 )
-from transformer.experiments.norm_fixed_lanes import norm_row_threads
+# RESTORED 2026-11-15 by lane/restore-run-arms-neural: MOJOLEARN_IDN_NORM_FIXED_LANES arms and helpers (RUN #6 of
+# docs/plans/DELETED_ARMS_WORTH_RUNNING_2026-11-15.md), reverse of the sweep 5d0bda260a.
+from transformer.experiments.norm_fixed_lanes import (
+    IDN_NORM_FIXED_LANES, NFL_LANES, nfl_cell, nfl_cell_dot, nfl_cell_total, nfl_dot,
+    nfl_square, nfl_sum, norm_row_threads,
+)
 # Markers moved from the deleted transformer/experiments/attention_schedules.mojo (sweep 2026-11-15):
 # TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old-path umbrella term; owner another lane) deleted 2026-11-15 by lane/expdel2-32-neural; code recoverable at 326b0d6e3d.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-32-neural.patch
@@ -382,6 +387,13 @@ from transformer.impl.llama.fused_attention import (
     fused_forward_launch,
     fused_forward_launch_estash_ran,
     fused_supported_head_dim,
+    _row_range,
+)
+# idea 10 (lane/attn-fold, 2026-10-28): the v2 key-axis fold, default OFF.
+from transformer.impl.llama.attn_fold_v2 import (
+    ATTN_FOLD_V2,
+    attn_v2_context_cell,
+    attn_v2_denom_row,
 )
 from core.device_scan import DeviceNonfiniteBatch, NONFINITE_NONE
 
@@ -1996,6 +2008,39 @@ def ensure_attention_stage_capacity(
 # ===========================================================================
 
 
+@always_inline
+def _nfl_rms_norm_cell(
+    sumsq: MutPointer[Float32, MutAnyOrigin],
+    out_buf: MutPointer[Float32, MutAnyOrigin],
+    x: MutPointer[Float32, MutAnyOrigin],
+    weight: MutPointer[Float32, MutAnyOrigin],
+    m: Int,
+    dm: Int,
+    eps_in: Float32,
+):
+    """S1-S4 of one row on a 32-lane cell (MOJOLEARN_IDN_NORM_FIXED_LANES).
+    S1 is `nfl_cell_dot(x, x)`, the fixed 32-lane fold every column runs;
+    every lane holds the same total, so the S2 scalars are the same bits on
+    every lane; S3/S4 are elementwise products (lane c owns c, c + 32, ...)."""
+    var cell = nfl_cell(m)
+    if not cell[2]:
+        return
+    var t = cell[0]
+    var lane = cell[1]
+    var acc = nfl_cell_dot(x, x, t * dm, t * dm, dm, lane)
+    if lane == 0:
+        sumsq.unsafe_store(t, acc)
+    var mean = ftz(identical_div(acc, Float32(dm)))
+    var rstd = ftz(identical_rsqrt(ftz(mean + eps_in)))
+    var j = lane
+    while j < dm:  # device-loop: this lane's elements of one row
+        var inner = ftz(identical_mul(ftz(x.unsafe_load(t * dm + j)), rstd))
+        out_buf.unsafe_store(
+            t * dm + j, ftz(identical_mul(ftz(weight.unsafe_load(j)), inner))
+        )
+        j += NFL_LANES
+
+
 def llama_rms_norm_kernel(
     sumsq: MutPointer[Float32, MutAnyOrigin],
     out_buf: MutPointer[Float32, MutAnyOrigin],
@@ -2013,6 +2058,12 @@ def llama_rms_norm_kernel(
     (launched with `norm_row_threads(m)` threads); S1 is the fixed 32-lane
     fold (transformer/experiments/norm_fixed_lanes.mojo), S2-S4 unchanged
     and computed per element by the lane that owns it."""
+    comptime if IDN_NORM_FIXED_LANES:
+        comptime assert not (SAB_S1_FOLD_DESCENDING or SAB_BATCHINV_NORM_CHUNK_FROM_M or NN24_NORM_LANES8), (
+            "MOJOLEARN_IDN_NORM_FIXED_LANES replaces S1's fold; it does not combine with S1 sabotage or MOJOLEARN_IDN_NORM=1/4"
+        )
+        _nfl_rms_norm_cell(sumsq, out_buf, x, weight, Int(m_in), Int(dm_in), eps_in)
+        return
     var m = Int(m_in)
     var dm = Int(dm_in)
     var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
@@ -2100,6 +2151,36 @@ def residual_rms_norm_kernel(
     S22 add unchanged), then the shuffle tree; each lane later rereads only
     the residual cells it wrote itself.
     """
+    comptime if IDN_NORM_FIXED_LANES:
+        comptime assert not NN24_NORM_LANES8, "MOJOLEARN_IDN_NORM_FIXED_LANES does not combine with MOJOLEARN_IDN_NORM=1/4"
+        var cell = nfl_cell(Int(m_in))
+        if not cell[2]:
+            return
+        var ct = cell[0]
+        var lane = cell[1]
+        var cdm = Int(dm_in)
+        var cacc = Float32(0.0)
+        var cj = lane
+        while cj < cdm:  # device-loop: this lane's slot of one row
+            var ci = ct * cdm + cj
+            var cr = ftz(ftz(a.unsafe_load(ci)) + ftz(b.unsafe_load(ci)))
+            residual.unsafe_store(ci, cr)
+            cacc = ftz(identical_mul_add(cr, cr, cacc))
+            cj += NFL_LANES
+        cacc = nfl_cell_total(cacc)
+        if lane == 0:
+            sumsq.unsafe_store(ct, cacc)
+        var cmean = ftz(identical_div(cacc, Float32(cdm)))
+        var crstd = ftz(identical_rsqrt(ftz(cmean + eps_in)))
+        cj = lane
+        while cj < cdm:  # device-loop: this lane's elements of one row
+            var ci2 = ct * cdm + cj
+            var cinner = ftz(identical_mul(ftz(residual.unsafe_load(ci2)), crstd))
+            out_buf.unsafe_store(
+                ci2, ftz(identical_mul(ftz(weight.unsafe_load(cj)), cinner))
+            )
+            cj += NFL_LANES
+        return
     var m = Int(m_in)
     var dm = Int(dm_in)
     var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
@@ -2188,7 +2269,7 @@ def llama_rms_norm(
     # block) cannot hold a cell and is not offered under the define.
     var norm_blocks = _grid(norm_row_threads(m))
     var norm_threads = LLAMA_TPB
-    comptime if STEP_GLUE_SHIPPED_ROWS:
+    comptime if STEP_GLUE_SHIPPED_ROWS and not IDN_NORM_FIXED_LANES:
         var glue_rows = step_glue_rows_of(step_glue_arm_from_env())
         if glue_rows > 0:
             norm_blocks = step_glue_blocks(m, glue_rows)
@@ -2247,15 +2328,22 @@ def llama_norm_variant_kernel(
         return
     if kind == NORM_LAYERNORM:
         var acc = Float32(0.0)
-        for j in range(dm):
-            acc = ftz(ftz(acc) + ftz(x.unsafe_load(t * dm + j)))
+        comptime if IDN_NORM_FIXED_LANES:
+            # one thread, the fixed 32-lane fold (norm_fixed_lanes.mojo)
+            acc = nfl_sum(x, t * dm, dm)
+        else:
+            for j in range(dm):
+                acc = ftz(ftz(acc) + ftz(x.unsafe_load(t * dm + j)))
         comptime if NN24_NORM_LANES8:
             acc = _sum[NN24_LANES](x, t * dm, dm)
         var mean = ftz(identical_div(acc, Float32(dm)))
         var acc2 = Float32(0.0)
-        for j in range(dm):
-            var dev = ftz(ftz(x.unsafe_load(t * dm + j)) - mean)
-            acc2 = ftz(identical_mul_add(dev, dev, acc2))
+        comptime if IDN_NORM_FIXED_LANES:
+            acc2 = nfl_square(x, t * dm, dm, mean)
+        else:
+            for j in range(dm):
+                var dev = ftz(ftz(x.unsafe_load(t * dm + j)) - mean)
+                acc2 = ftz(identical_mul_add(dev, dev, acc2))
         comptime if NN24_NORM_LANES8:
             acc2 = _square[NN24_LANES](x, t * dm, dm, mean)
         sumsq.unsafe_store(t, acc2)
@@ -2270,9 +2358,12 @@ def llama_norm_variant_kernel(
             out_buf.unsafe_store(t * dm + j, y)
         return
     var acc = Float32(0.0)
-    for j in range(dm):
-        var xj = ftz(x.unsafe_load(t * dm + j))
-        acc = ftz(identical_mul_add(xj, xj, acc))
+    comptime if IDN_NORM_FIXED_LANES:
+        acc = nfl_dot(x, x, t * dm, t * dm, dm)
+    else:
+        for j in range(dm):
+            var xj = ftz(x.unsafe_load(t * dm + j))
+            acc = ftz(identical_mul_add(xj, xj, acc))
     comptime if NN24_NORM_LANES8:
         acc = norm_profile_dot[NN24_LANES](x, x, t * dm, t * dm, dm)
     sumsq.unsafe_store(t, acc)
@@ -3494,6 +3585,79 @@ def attn_context_kernel(
 
 # TOMBSTONE: MOJOLEARN_IDN_ATTN_FOLD_V2 (DELETE-ARM: no A/B recorded) deleted 2026-11-15 by lane/expdel2-33-neural: attn_denom_v2_kernel, attn_context_v2_kernel and their launch arms; code recoverable at c3d1c7865f.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_ATTN_FOLD_V2.patch
+# RESTORED 2026-11-15 by lane/restore-run-arms-neural: RUN #3 of docs/plans/DELETED_ARMS_WORTH_RUNNING_2026-11-15.md
+# (transformer-forward, lm-forward, lm-train-step; NVIDIA L40S A/B owed). Restored from the reverse of the deletion
+# commits b76ae8bbc3, a5a10b1930 and the sweep a803ea45ba, not from the patch (the patch also carries the Apple FAST
+# forward arms deleted between c3d1c7865f and a5a10b1930, which stay deleted).
+def attn_denom_v2_kernel(
+    denom: MutPointer[Float32, MutAnyOrigin],
+    aexp: MutPointer[Float32, MutAnyOrigin],
+    b_in: Int32,
+    nh_in: Int32,
+    l_in: Int32,
+    s_in: Int32,
+    pos0_in: Int32,
+    key_lo_in: Int32,
+    window_in: Int32,
+):
+    """S17 under `MOJOLEARN_IDN_ATTN_FOLD_V2` (attn_fold_v2.mojo): leaves of
+    128 keys at absolute positions, each v1's serial chain over the row's
+    visible keys, combined by the GEMM contract's carry tree. One thread per
+    `(batch, head, query)` row, as v1; the fused kernels are the fast path
+    and this is their exact fallback. Keys past the row's last visible key
+    are not part of the fold; keys before a window's first are exactly
+    `+0.0` and inert in a `+0.0`-seeded leaf chain."""
+    var b = Int(b_in)
+    var nh = Int(nh_in)
+    var l = Int(l_in)
+    var s = Int(s_in)
+    var r = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if r >= b * nh * l:
+        return
+    var rr = _row_range(r % l, Int(pos0_in), Int(key_lo_in), Int(window_in), s)
+    denom.unsafe_store(r, attn_v2_denom_row(aexp, r * s, rr[0], rr[1]))
+
+
+def attn_context_v2_kernel(
+    ctxv: MutPointer[Float32, MutAnyOrigin],
+    weights: MutPointer[Float32, MutAnyOrigin],
+    v_cache: MutPointer[Float32, MutAnyOrigin],
+    b_in: Int32,
+    l_in: Int32,
+    nh_in: Int32,
+    nkv_in: Int32,
+    hd_in: Int32,
+    s_in: Int32,
+    pos0_in: Int32,
+    key_lo_in: Int32,
+    window_in: Int32,
+):
+    """S19 under `MOJOLEARN_IDN_ATTN_FOLD_V2`: `attn_context_kernel`'s cell
+    and seam (`ftz(fma(ftz(w), ftz(v), acc))`), folded as 128-key leaves at
+    absolute positions plus the carry tree (attn_fold_v2.mojo). One thread
+    per output cell of `[M, n_heads*head_dim]`; `kvh = h // n_rep`."""
+    var b = Int(b_in)
+    var l = Int(l_in)
+    var nh = Int(nh_in)
+    var nkv = Int(nkv_in)
+    var hd = Int(hd_in)
+    var s = Int(s_in)
+    var n_rep = nh // nkv
+    var width = nh * hd
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i >= b * l * width:
+        return
+    var tok = i // width
+    var rem = i - tok * width
+    var h = rem // hd
+    var d = rem - h * hd
+    var bb = tok // l
+    var t = tok - bb * l
+    var kvh = h // n_rep
+    var wbase = ((bb * nh + h) * l + t) * s
+    var vbase = (bb * nkv + kvh) * s * hd
+    var rr = _row_range(t, Int(pos0_in), Int(key_lo_in), Int(window_in), s)
+    ctxv.unsafe_store(i, attn_v2_context_cell(weights, wbase, v_cache, vbase, hd, d, rr[0], rr[1]))
 
 
 # ===========================================================================
@@ -4527,18 +4691,35 @@ def attention_eager_core(
     )
 
     # ---- S17 (:208's denominator). SERIAL ASCENDING, ABSOLUTE index.
-    step_count_launch()
-    ctx.enqueue_function[attn_denom_kernel](
-        stages.denom.unsafe_ptr(),
-        stages.aexp.unsafe_ptr(),
-        stages.weights.unsafe_ptr(),  # DEVIATION 1023, sabotage scratch
-        Int32(b),
-        Int32(nh),
-        Int32(l),
-        Int32(s),
-        grid_dim=(_grid(b * nh * l), 1, 1),
-        block_dim=(LLAMA_TPB, 1, 1),
-    )
+    #      Under MOJOLEARN_IDN_ATTN_FOLD_V2: 128-key leaves + carry tree.
+    comptime if ATTN_FOLD_V2:
+        step_count_launch()
+        ctx.enqueue_function[attn_denom_v2_kernel](
+            stages.denom.unsafe_ptr(),
+            stages.aexp.unsafe_ptr(),
+            Int32(b),
+            Int32(nh),
+            Int32(l),
+            Int32(s),
+            Int32(pos0),
+            Int32(key_lo),
+            Int32(window),
+            grid_dim=(_grid(b * nh * l), 1, 1),
+            block_dim=(LLAMA_TPB, 1, 1),
+        )
+    else:
+        step_count_launch()
+        ctx.enqueue_function[attn_denom_kernel](
+            stages.denom.unsafe_ptr(),
+            stages.aexp.unsafe_ptr(),
+            stages.weights.unsafe_ptr(),  # DEVIATION 1023, sabotage scratch
+            Int32(b),
+            Int32(nh),
+            Int32(l),
+            Int32(s),
+            grid_dim=(_grid(b * nh * l), 1, 1),
+            block_dim=(LLAMA_TPB, 1, 1),
+        )
     # DEVIATION 2721 (lane/wait-removal): WAIT REMOVED here. The next
     # statement is a trace record. `IdentityTrace.record_device` returns
     # at once when tracing is off; when it is on it enqueues its OWN copy
@@ -4628,6 +4809,27 @@ def attention_eager_core(
                 )
                 step_count_sync()
                 ctx.synchronize()
+    elif ATTN_FOLD_V2:
+        step_count_launch()
+        ctx.enqueue_function[attn_context_v2_kernel](
+            stages.ctxv.unsafe_ptr(),
+            stages.weights.unsafe_ptr(),
+            stages.v_cache.unsafe_ptr(),
+            Int32(b),
+            Int32(l),
+            Int32(nh),
+            Int32(nkv),
+            Int32(hd),
+            Int32(s),
+            Int32(pos0),
+            Int32(key_lo),
+            Int32(window),
+            grid_dim=(_grid(b * l * nh * hd), 1, 1),
+            block_dim=(LLAMA_TPB, 1, 1),
+        )
+        if fence:
+            step_count_sync()
+            ctx.synchronize()
     else:
         step_count_launch()
         ctx.enqueue_function[attn_context_kernel](

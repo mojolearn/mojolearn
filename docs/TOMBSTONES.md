@@ -2179,6 +2179,11 @@ Deletions reversed by new evidence. The code is back on main; the section and th
 | [`MOJOLEARN_TREES_LG_LEVEL_ROUNDS`](#mojolearn_trees_lg_level_rounds) | GBDT (lossguide one exact round per depth level, IDENTICAL) | 2026-11-15 (`a3d500c032`) | 2026-11-15 (lane/restore-run-arms-trees) | opt-in RUN arm (docs/plans/DELETED_ARMS_WORTH_RUNNING_2026-11-15.md), default unchanged, A/B owed on NVIDIA L40S | [MOJOLEARN_TREES_LG_LEVEL_ROUNDS.patch](../experiments/removed/MOJOLEARN_TREES_LG_LEVEL_ROUNDS.patch) |
 | [`MOJOLEARN_GBDT_ID_DEFER_COPY`](#mojolearn_gbdt_id_defer_copy) | Trees (GBDT depthwise/lossguide, NVIDIA/AMD IDENTICAL deferred histogram copy) | 2026-11-15 (`7be6f0b80e`) | 2026-11-15 (lane/restore-run-arms-trees) | opt-in RUN arm (docs/plans/DELETED_ARMS_WORTH_RUNNING_2026-11-15.md), default unchanged, A/B owed on NVIDIA L40S | [MOJOLEARN_GBDT_ID_DEFER_COPY.patch](../experiments/removed/MOJOLEARN_GBDT_ID_DEFER_COPY.patch) |
 | [`MOJOLEARN_TREES_C48_IF_PARTITION`](#mojolearn_trees_c48_if_partition) | Trees (IsolationForest fused stable partition, IDENTICAL) | 2026-11-15 (`b35af0836a`) | 2026-11-15 (lane/restore-run-arms-trees) | opt-in RUN arm (docs/plans/DELETED_ARMS_WORTH_RUNNING_2026-11-15.md), default unchanged, A/B owed on NVIDIA L40S | [MOJOLEARN_TREES_C48_IF_PARTITION.patch](../experiments/removed/MOJOLEARN_TREES_C48_IF_PARTITION.patch) |
+| [`MOJOLEARN_IDN_SEQ_TILED_PREDICT`](#mojolearn_idn_seq_tiled_predict) | Neural (autograd model_predict chunk, autograd/model.mojo) | 2026-11-15 (`d19ca4f0c2`) | 2026-11-15 (lane/restore-run-arms-neural) | opt-in arm (RUN #4), default unchanged, NVIDIA L40S A/B owed at the wave sha; no bit change (same per-row chains; the split-K decision is checked unchanged) | [MOJOLEARN_IDN_SEQ_TILED_PREDICT.patch](../experiments/removed/MOJOLEARN_IDN_SEQ_TILED_PREDICT.patch) |
+| [`MOJOLEARN_IDN_GEMM_INT_SLICES`](#mojolearn_idn_gemm_int_slices-unmeasured-arm-deleted-2026-11-15) | Linalg GEMM research profile fp32.v2-int (gemm/host_entry.mojo device hook, gemm/host/linalg_native.mojo host column) | 2026-11-15 (`41a649b03c`) | 2026-11-15 (lane/restore-run-arms-neural) | opt-in arm (RUN #2), default unchanged, NVIDIA L40S A/B owed at the wave sha; B changes bits and precision on every column (device and host hooks restored together) | [MOJOLEARN_IDN_GEMM_INT_SLICES.patch](../experiments/removed/MOJOLEARN_IDN_GEMM_INT_SLICES.patch) |
+| [`MOJOLEARN_IDN_SSD_OCCUPANCY`](#mojolearn_idn_ssd_occupancy) | Mamba-2 SSD S10/S12/S18 kernels (mamba/impl/modules/ssd_minimal.mojo; host column keeps the cell kernels) | 2026-11-15 (`44ec9b2ec9`) | 2026-11-15 (lane/restore-run-arms-neural) | opt-in arm (RUN #5), default unchanged, NVIDIA L40S A/B owed at the wave sha; no bit change (same per-cell chains; host column keeps the cell kernels) | [MOJOLEARN_IDN_SSD_OCCUPANCY.patch](../experiments/removed/MOJOLEARN_IDN_SSD_OCCUPANCY.patch) |
+| [`MOJOLEARN_IDN_ATTN_FOLD_V2`](#mojolearn_idn_attn_fold_v2) | Attention key-axis fold v2 (transformer/impl/llama/attn_fold_v2.mojo, modeling_llama.mojo eager kernels, fused_attention.mojo fused kernels, training/byte_lm_host_kernels.mojo host column) | 2026-11-15 (`c3d1c7865f`) | 2026-11-15 (lane/restore-run-arms-neural) | opt-in arm (RUN #3), default unchanged, NVIDIA L40S A/B owed at the wave sha; B changes bits on every column (fold order; device, fused, host oracle and byte-LM host kernels restored together) | [MOJOLEARN_IDN_ATTN_FOLD_V2.patch](../experiments/removed/MOJOLEARN_IDN_ATTN_FOLD_V2.patch) |
+| [`MOJOLEARN_IDN_NORM_FIXED_LANES`](#mojolearn_idn_norm_fixed_lanes) | RMSNorm / LayerNorm row statistics as one 32-lane cell (transformer/experiments/norm_fixed_lanes.mojo; modeling_llama.mojo, autograd/kernels/transformer.mojo, autograd/transformer_primitives_ops.mojo device; oracles, samba_ops_oracle and byte_lm_host_kernels host column) | 2026-11-15 (`c48e5cad76`) | 2026-11-15 (lane/restore-run-arms-neural) | opt-in arm (RUN #6), default unchanged, NVIDIA L40S A/B owed at the wave sha; B changes bits on every column (fold order; device kernels, oracles and host kernels restored together) | [MOJOLEARN_IDN_NORM_FIXED_LANES.patch](../experiments/removed/MOJOLEARN_IDN_NORM_FIXED_LANES.patch) |
 
 ## Trees
 
@@ -15034,6 +15039,7 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2
 - **Deleted by**: lane/expdel2-25-neural (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `41a649b03c` (deletion commit `e62e7376e0`).
 - **Restore**: `git apply experiments/removed/MOJOLEARN_IDN_GEMM_INT_SLICES.patch`, then delete the `MOJOLEARN_IDN_GEMM_INT_SLICES` refusal in `core/experiment_guards_neural.mojo`.
 - **Records**: refusal in `core/experiment_guards_neural.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-25-neural section).
+Restored 2026-11-15 (lane/restore-run-arms-neural): RUN #2 of docs/plans/DELETED_ARMS_WORTH_RUNNING_2026-11-15.md, opt-in arm, default unchanged; see Restored table.
 
 ### MOJOLEARN_IDN_NEURAL_CHAINS: unmeasured arm deleted (2026-11-15)
 
@@ -15423,6 +15429,7 @@ Restored 2026-11-15 (lane/expdel2-restore-owed): owed B arm, deletion premature;
 - Deleted by: lane/expdel2-24-neural `0bbf0a6c7e` (2026-11-15); code recoverable at `d19ca4f0c2`.
 - Restore: `git apply experiments/removed/MOJOLEARN_IDN_SEQ_TILED_PREDICT.patch`, then delete the refusal in `core/experiment_guards_neural.mojo`.
 - Records: refusal in `core/experiment_guards_neural.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-24-neural section).
+Restored 2026-11-15 (lane/restore-run-arms-neural): RUN #4 of docs/plans/DELETED_ARMS_WORTH_RUNNING_2026-11-15.md, opt-in arm, default unchanged; see Restored table.
 
 ### MOJOLEARN_SMALL_MLP_GENERIC_OPS
 
@@ -15981,6 +15988,7 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2
 - Records: refusal in `core/experiment_guards_neural.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-27-neural section).
 
 - Sweep (lane/expdel2-sweep, 2026-11-15): mamba/impl/modules/ssd_minimal.mojo IDN_SSD_OCCUPANCY and NN36_SHARED_DECAY (False, no reader; no generator substitution any more per orchestrator) removed; regenerating changes mamba/host/gen/ssd_minimal.mojo (lines ~705, ~897); no bits change (98cd3eeb58).
+Restored 2026-11-15 (lane/restore-run-arms-neural): RUN #5 of docs/plans/DELETED_ARMS_WORTH_RUNNING_2026-11-15.md, opt-in arm, default unchanged; see Restored table.
 
 ### MOJOLEARN_MAMBA3_LEGACY_CALLER_TRANSFER
 
@@ -16375,6 +16383,7 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2
 - Records: refusal in `core/experiment_guards_neural.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-32-neural section).
 
 - Sweep (lane/expdel2-sweep, 2026-11-15): transformer/experiments/norm_fixed_lanes.mojo IDN_NORM_FIXED_LANES, nfl_cell, nfl_cell_total, nfl_cell_dot removed (nfl_dot/nfl_sum/nfl_square and norm_row_threads stay for bench/residual_norm_price_main.mojo and experiments/norm_folds_20261028); seven dead arms in transformer/impl/llama/modeling_llama.mojo (and _nfl_rms_norm_cell) and autograd/kernels/transformer.mojo (and _norm_row_coefficients) folded; no bits change (5d0bda260a).
+Restored 2026-11-15 (lane/restore-run-arms-neural): RUN #6 of docs/plans/DELETED_ARMS_WORTH_RUNNING_2026-11-15.md, opt-in arm, default unchanged; see Restored table.
 
 ### MOJOLEARN_IDN_OPT_CLIP_BATCHED_OFF
 
@@ -17504,6 +17513,7 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2
 - Records: refusal in `core/experiment_guards_neural.mojo`; no grid_controls entry; `docs/apple-fast/EXPERIMENTS.md` row (expdel2-33-neural section).
 
 - Sweep (lane/expdel2-sweep, 2026-11-15): transformer/impl/llama/fused_attention.mojo: four ATTN_FOLD_V2 arms folded, fused_attn_v2_leaf_kernel, fused_attn_v2_combine_kernel, _launch_fwd_v2, _attn_v2_rows removed; training/byte_lm_host_kernels.mojo v2 denominator and context arms folded; transformer/impl/llama/attn_fold_v2.mojo stays (transformer/checks/transformer_oracle.mojo imports it); no bits change (a803ea45ba).
+Restored 2026-11-15 (lane/restore-run-arms-neural): RUN #3 of docs/plans/DELETED_ARMS_WORTH_RUNNING_2026-11-15.md, opt-in arm, default unchanged; see Restored table.
 
 ### MOJOLEARN_DISABLE_RESIDUAL2_NEXT_NORM
 

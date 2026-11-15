@@ -228,6 +228,26 @@
   "c48-if-partition": {
    "define": "MOJOLEARN_TREES_C48_IF_PARTITION",
    "status": "define in code (isolation_forest/impl/isolation_tree_builder.mojo IF_C48_FUSED_PARTITION, IF_WORK_PLANES 3): B = node split as one fused stable partition (flag and block scan once, destinations stored, one scatter; no atomics); A = the two-pass stable partition"
+  },
+  "seq-tiled-predict-on": {
+   "define": "MOJOLEARN_IDN_SEQ_TILED_PREDICT",
+   "status": "define in code (autograd/model.mojo SEQ_TILED_PREDICT, restored 2026-11-15 by lane restore-run-arms-neural): B = the whole set in one predict chunk when the inference scratch fits 1 GiB and every Linear keeps its split-K decision; A = the caller's 4096-row chunks"
+  },
+  "gemm-int-slices-on": {
+   "define": "MOJOLEARN_IDN_GEMM_INT_SLICES",
+   "status": "define in code (gemm/int_slices.mojo IDN_GEMM_INT_SLICES, restored 2026-11-15 by lane restore-run-arms-neural): B = fp32 GEMM as four int8 planes on the tuned IMMA kernel plus the one-rounding epilogue (research profile fp32.v2-int) for k <= 65536, device and host column; A = fp32.v1"
+  },
+  "ssd-occupancy-on": {
+   "define": "MOJOLEARN_IDN_SSD_OCCUPANCY",
+   "status": "define in code (mamba/impl/modules/ssd_minimal.mojo IDN_SSD_OCCUPANCY, restored 2026-11-15 by lane restore-run-arms-neural): B = coalesced S10 discretize (one thread per (b, t, h, p)), 16 x 16 shared-tile S12 G = C.B, S18/S19 Y_off row tiles; A = the cell kernels"
+  },
+  "attn-fold-v2-on": {
+   "define": "MOJOLEARN_IDN_ATTN_FOLD_V2",
+   "status": "define in code (transformer/impl/llama/attn_fold_v2.mojo ATTN_FOLD_V2, restored 2026-11-15 by lane restore-run-arms-neural): B = the attention key axis folded in 128-key leaves plus the GEMM contract's carry tree, fused forward split into row-tile x leaf blocks (hd64/hd128), eager v2 kernels otherwise, host oracle and byte-LM host kernels on the same fold; A = v1's serial chains"
+  },
+  "norm-fixed-lanes-on": {
+   "define": "MOJOLEARN_IDN_NORM_FIXED_LANES",
+   "status": "define in code (transformer/experiments/norm_fixed_lanes.mojo IDN_NORM_FIXED_LANES, restored 2026-11-15 by lane restore-run-arms-neural): B = RMSNorm / LayerNorm statistics and the norm-backward dot as one 32-lane cell per row (shuffle tree, chain depth d -> d/32 + 5) on every column; A = the one-thread serial row chain"
   }
  },
  "rows": [
@@ -1424,6 +1444,81 @@
     "c48-if-partition"
    ],
    "decides": "B is promoted only when iforest fit (istella, taxi) is faster on NVIDIA L40S; digests must not move (stable order kept on both sides)"
+  },
+  {
+   "id": "seq-tiled-predict",
+   "source": "restore-run-arms-neural (2026-11-15; RUN #4 of docs/plans/DELETED_ARMS_WORTH_RUNNING_2026-11-15.md: sequential-predict 3.3 ms NV L40S vs torch 1.4)",
+   "kind": "ab",
+   "lane": [
+    "sequential-predict"
+   ],
+   "dataset": "*",
+   "rows": "full",
+   "b_arms": [
+    "seq-tiled-predict-on"
+   ],
+   "decides": "NVIDIA L40S only (the NVIDIA-only campaign): promote the whole-set chunk (B) to the default (with a _OFF define) when sequential-predict is faster than A on every dataset and the output digests match A (same per-row chains: no bit change expected); otherwise delete the arm with a tombstone"
+  },
+  {
+   "id": "gemm-int-slices",
+   "source": "restore-run-arms-neural (2026-11-15; RUN #2 of docs/plans/DELETED_ARMS_WORTH_RUNNING_2026-11-15.md: gemm 75.8 ms NV L40S [0.8.55 46.0], torch 34.0)",
+   "kind": "ab",
+   "lane": [
+    "gemm"
+   ],
+   "dataset": "*",
+   "rows": "full",
+   "b_arms": [
+    "gemm-int-slices-on"
+   ],
+   "decides": "NVIDIA L40S only (the NVIDIA-only campaign): B changes bits and precision on every column; promote only if gemm is faster than A and the max relative error against an fp64 reference is no worse than A's (read the quality, it is not a gate on the time); then change every vendor column and the host column together; otherwise delete the arm with a tombstone"
+  },
+  {
+   "id": "ssd-occupancy",
+   "source": "restore-run-arms-neural (2026-11-15; RUN #5 of docs/plans/DELETED_ARMS_WORTH_RUNNING_2026-11-15.md: mamba2-forward 6.5 ms NV L40S [0.8.55 5.6], mamba-ssm 2.8)",
+   "kind": "ab",
+   "lane": [
+    "mamba2-forward",
+    "mamba2-infer"
+   ],
+   "dataset": "*",
+   "rows": "full",
+   "b_arms": [
+    "ssd-occupancy-on"
+   ],
+   "decides": "NVIDIA L40S only (the NVIDIA-only campaign): promote B (with a _OFF define) when mamba2-forward and mamba2-infer are faster than A and the output digests match A (same chains: no bit change expected; a digest change is a bug in the arm, not a new reference); otherwise delete the arm with a tombstone"
+  },
+  {
+   "id": "attn-fold-v2",
+   "source": "restore-run-arms-neural (2026-11-15; RUN #3 of docs/plans/DELETED_ARMS_WORTH_RUNNING_2026-11-15.md: transformer-forward 6.1 ms NV L40S (torch 2.4); lm-forward 58.6 [0.8.55 44.9] (torch 31.1); lm-train-step 36.0 (torch 10.8))",
+   "kind": "ab",
+   "lane": [
+    "transformer-forward",
+    "lm-forward",
+    "lm-train-step"
+   ],
+   "dataset": "*",
+   "rows": "full",
+   "b_arms": [
+    "attn-fold-v2-on"
+   ],
+   "decides": "NVIDIA L40S only (the NVIDIA-only campaign): B changes bits on every column (fold order); promote it (with a _OFF define) when the three rows are faster than A with quality (loss / perplexity) not worse; then the release's one verification records every vendor column and the host column on the new fold; otherwise delete the arm with a tombstone"
+  },
+  {
+   "id": "norm-fixed-lanes",
+   "source": "restore-run-arms-neural (2026-11-15; RUN #6 of docs/plans/DELETED_ARMS_WORTH_RUNNING_2026-11-15.md: transformer-forward 6.1 ms NV L40S (torch 2.4); lm-forward 58.6 [0.8.55 44.9]; lm-train-step 36.0 (torch 10.8))",
+   "kind": "ab",
+   "lane": [
+    "transformer-forward",
+    "lm-forward",
+    "lm-train-step"
+   ],
+   "dataset": "*",
+   "rows": "full",
+   "b_arms": [
+    "norm-fixed-lanes-on"
+   ],
+   "decides": "NVIDIA L40S only (the NVIDIA-only campaign): B changes bits on every column (fold order); promote it (with a _OFF define) when the three rows are faster than A with quality (loss / perplexity) not worse; then the release's one verification records every vendor column and the host column on the new fold; otherwise delete the arm with a tombstone. Time it alone and with attn-fold-v2-on only if both win alone"
   }
  ]
 }
