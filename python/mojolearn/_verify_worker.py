@@ -315,37 +315,34 @@ _HARNESSES = {}
 def execute(request):
     from . import _verify_all as verifier
     from . import _verify_reference as reference
-    from . import _backend
-    from ._cpu_reference import reference_training
     import mojolearn as ml
-    if _backend.numeric_mode() != "identical":
+    if ml.numeric_mode() != "identical":
         raise WorkerFailure("worker did not load identical numeric mode")
     path = request["harness"]
     if path not in _HARNESSES:
         _HARNESSES[path] = verifier.load_harness(path)
     harness = _HARNESSES[path]
     action = request["action"]
-    with reference_training():
-        if action == "cell":
-            fixture = request["fixture"]
-            data, held = harness.fixture(fixture), harness.heldout(fixture)
-            actual = dict(X=harness._h(data[0]), y_clf=harness._h(data[1]), y_reg=harness._h(data[2]),
-                          held=harness._h(held))
-            if actual != request["fixture_hashes"]:
-                raise WorkerFailure("worker fixture bytes differ from the controller")
-            value = verifier.run_cell(harness, ml, request["lane"], fixture, data, held,
-                                      request["repeats"], extra_parts=request["extra_parts"])
-        elif action == "self-test":
-            value = verifier.self_test(harness, ml, reference.load_table(request["table"]))
-        elif action == "models":
-            value = verifier.run_models(harness, ml, reference.load_table(request["table"]),
-                                        repeats=request["repeats"], host_only=request["host_only"])
-        elif action == "smoke":
-            fixture = request["fixture"]
-            value = verifier.run_smoke(harness, ml, [request["lane"]], fixture,
-                                       harness.fixture(fixture), harness.heldout(fixture))
-        else:
-            raise WorkerFailure(f"unknown worker action {action!r}")
+    if action == "cell":
+        fixture = request["fixture"]
+        data, held = harness.fixture(fixture), harness.heldout(fixture)
+        actual = dict(X=harness._h(data[0]), y_clf=harness._h(data[1]), y_reg=harness._h(data[2]),
+                      held=harness._h(held))
+        if actual != request["fixture_hashes"]:
+            raise WorkerFailure("worker fixture bytes differ from the controller")
+        value = verifier.run_cell(harness, ml, request["lane"], fixture, data, held,
+                                  request["repeats"], extra_parts=request["extra_parts"])
+    elif action == "self-test":
+        value = verifier.self_test(harness, ml, reference.load_table(request["table"]))
+    elif action == "models":
+        value = verifier.run_models(harness, ml, reference.load_table(request["table"]),
+                                    repeats=request["repeats"], host_only=request["host_only"])
+    elif action == "smoke":
+        fixture = request["fixture"]
+        value = verifier.run_smoke(harness, ml, [request["lane"]], fixture,
+                                   harness.fixture(fixture), harness.heldout(fixture))
+    else:
+        raise WorkerFailure(f"unknown worker action {action!r}")
     from . import _verify
     bindings = [dict(module=b["module"], sha256=b["sha256"], size=b["size"],
                      file=b["file"], path_source=b["path_source"])

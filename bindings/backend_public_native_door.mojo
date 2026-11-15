@@ -239,6 +239,16 @@ def _binding_row(path: String, loaded: Bool, identity: PythonObject, vendor: Pyt
     return row
 
 
+def _binding_row_unresolved() raises -> PythonObject:
+    var row = Python.dict()
+    py_setitem(row, PythonObject("path"), PythonObject(None))
+    py_setitem(row, PythonObject("loaded"), PythonObject(True))
+    py_setitem(row, PythonObject("identity"), PythonObject(None))
+    py_setitem(row, PythonObject("vendor"), PythonObject(None))
+    py_setitem(row, PythonObject("mode"), PythonObject(None))
+    return row
+
+
 def _bindings(fields: PythonObject, context: PythonObject) raises -> PythonObject:
     var rows = Python.dict()
     var hashes = Python.dict()
@@ -263,11 +273,17 @@ def _bindings(fields: PythonObject, context: PythonObject) raises -> PythonObjec
             continue
         var namespace = py_fields(module)
         var file = py_get(namespace, PythonObject("__file__"))
-        if file is None or py_type(file) is not text_type:
+        if file is None:
+            # An ExtensionFileLoader module may omit __file__: its spec origin.
+            var spec = py_get(namespace, PythonObject("__spec__"))
+            if spec is not None:
+                file = py_get(py_fields(spec), PythonObject("origin"))
+        if file is None or py_type(file) is not text_type or not isfile(String(file)):
+            # A loaded binding module with no resolvable file is reported
+            # with path None; verify refuses it (never skipped silently).
+            py_setitem(rows, keys[i], _binding_row_unresolved())
             continue
         var file_path = String(file)
-        if not isfile(file_path):
-            continue
         var fn_name: String
         if last == "_mojolearn":
             fn_name = "mojolearn_vendor"
@@ -318,8 +334,17 @@ def _runtime_report(fields: PythonObject, context: PythonObject, mode: PythonObj
     py_setitem(report, PythonObject("gpu_arch"), _gpu_arch(fields, False))
     py_setitem(report, PythonObject("gpu_arch_how"), _gpu_arch(fields, True))
     var host_dir = _host_dir(context)
+    var families = _host_families(context, host_dir)
     py_setitem(report, PythonObject("host_dir"), PythonObject(host_dir))
-    py_setitem(report, PythonObject("host_families_built"), _host_families(context, host_dir))
+    py_setitem(report, PythonObject("host_families_built"), families)
+    # How the vendor was decided (the words `_backend.vendor_how()` uses).
+    if fields["_CPU_ONLY"] is not None:
+        var built = String("none")
+        if len(families) > 0:
+            built = String(py_call(PythonObject(", ").join, families))
+        py_setitem(report, PythonObject("vendor_how"), PythonObject("no GPU binary set loaded; the CPU bindings under mojolearn/host/ only (DEVIATION 2615; built: " + built + ")"))
+    else:
+        py_setitem(report, PythonObject("vendor_how"), _text(fields["_VENDOR_HOW"], "vendor decision", True))
     py_setitem(report, PythonObject("bindings"), _bindings(fields, context))
     py_setitem(report, PythonObject("fallbacks"), context["fallbacks"])
     var root = _checkout_root(context)
