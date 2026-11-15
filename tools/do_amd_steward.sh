@@ -345,7 +345,7 @@ run)
     [ $# -gt 0 ] || die "run needs a command"
     cmd="$*"
     if [ "$persist" = 1 ]; then
-        bp_prepare "$tag" do_amd_steward "$TMPD/persist.sh" --slots 4 --every-min 10 --days 3 || die "$BP_MINT_FAILED"
+        bp_prepare "$tag" do_amd_steward "$TMPD/persist.sh" --slots 2 --every-min 30 --days 3 || die "$BP_MINT_FAILED"
         staged=$(bx 120 'bash -s' < "$TMPD/persist.sh") || true
         printf '%s\n' "$staged" | grep -q '^BOX_PERSIST_STAGED ' || die "could not stage the job's persistence on the droplet; nothing ran"
         cmd=$(bp_wrap "$res" "$cmd")

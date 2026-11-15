@@ -684,7 +684,7 @@ run)
     # the tree, the command sees it as $MOJOLEARN_RESULTS_DIR; an ssh drop leaves the job running and uploading
     _cmd="$*"
     if [ "$_persist" = 1 ]; then
-        bp_prepare "dp-$KEY" dev_pod "$TMPD/persist.sh" --slots 4 --every-min 10 --days 3 || die "$BP_MINT_FAILED"
+        bp_prepare "dp-$KEY" dev_pod "$TMPD/persist.sh" --slots 2 --every-min 30 --days 3 || die "$BP_MINT_FAILED"
         _staged=$(bx 120 "bash -s" < "$TMPD/persist.sh") || true
         printf '%s\n' "$_staged" | grep -q '^BOX_PERSIST_STAGED ' || die "could not stage the job's persistence on $KEY; nothing ran"
         _cmd=$(bp_wrap "${_res:-box-out/$BP_TAG}" "$_cmd")

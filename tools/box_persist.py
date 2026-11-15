@@ -514,7 +514,7 @@ def main(argv=None):
 
     def mint_args(p):
         p.add_argument("--tag", required=True)
-        p.add_argument("--slots", type=int, default=4)
+        p.add_argument("--slots", type=int, default=2)  # 2026-11-15: each slot is a whole re-tar of the results dir; 4 slots plus the final cost 5x its size in R2
         p.add_argument("--every-min", type=float, default=15.0)
         p.add_argument("--every-sec", type=int, default=None, help=argparse.SUPPRESS)   # tests
         p.add_argument("--days", type=float, default=3.0)
