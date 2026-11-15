@@ -31,23 +31,3 @@ def par_driver_sabotage():
     import os
     return (os.environ.get(PAR_DRIVER_SABOTAGE) == '1'
             and os.environ.get('MOJOLEARN_HOST_ALLOW_SABOTAGE') == '1')
-
-
-def public_method_result(estimator, method, result, frame):
-    """`result` as the plain `estimator.<method>` returns it to the caller
-    whose frame is `frame`: the public conversion (`_mode._public_result`)
-    for a caller outside the package, the native result otherwise. The
-    driver passes `sys._getframe(1)`, its own caller.
-
-    Every driver whose plain method is a public result method returns
-    through here: the native owner returns the native result (an internal
-    caller's), so the driver alone decides what its caller sees, exactly as
-    the plain method's `_mode._public_output` wrapper does (2026-10-24,
-    par-kernel-ridge dtype flip: a regressor's predict is float32 for the
-    identity harness, float64 for a user). Only the names that wrapper
-    covers (`_mode._OUTPUTS`) convert; any other method's result is the
-    plain method's own."""
-    from mojolearn import _mode
-    if method in _mode._OUTPUTS and _mode._caller_outside(frame):
-        return _mode._public_result(estimator, method, result)
-    return result

@@ -119,11 +119,8 @@ SHELL_MODULES = frozenset({"_buffer", "_array", "_arrays", "_bufcheck", "_sk_val
 GETTER_NAMES = frozenset({"binding", "_bind", "load_host_module", "load_door_host", "load_set",
                           "_load_member", "_exec_binding"})
 # Functions that ARE the conversion layer although they live outside SHELL_MODULES: a call into one is
-# a shell call, not walked. `_parallel_pool.public_method_result` applies `_mode._public_result`, the
-# public-output conversion every plain method's `_public_output` wrapper applies after the native call,
-# to a pooled driver's joined result (2026-10-24, par-kernel-ridge dtype flip). The wrapper is not on
-# any walked path; the driver's explicit call must not count as runtime Python either.
-# `_parallel_pool` moved to python/mojolearn/tests/ (2026-11-06): no package module holds such a function now.
+# a shell call, not walked. None is left: `_parallel_pool.public_method_result` (moved to the tests tree
+# 2026-11-06) had no caller and was deleted 2026-11-15 (lane smoke-triage-3).
 SHELL_FUNCTIONS = frozenset()
 NUMPY_NAMES = frozenset({"np", "numpy", "_np"})
 NUMPY_CONVERSION = frozenset({
