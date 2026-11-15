@@ -26,8 +26,13 @@ def archive_unicode_error(raw: ArchiveSpan, encoding: String, start: Int, end: I
     var message = "'" + encoding + "' codec can't decode "
     if end == start + 1:
         var value = raw.byte(start)
+        # The digit's code point (as_bytes), as native_archive_scalar_text.mojo does:
+        # Int() of the one-character slice parsed it as a decimal number,
+        # so 0x80 read "0x\x08" and a-f digits raised "String is not
+        # convertible to integer" (smoke 2026-11-15, test_archive_unicode_native).
         var digits = String("0123456789abcdef")
-        message += "byte 0x" + chr(Int(digits[byte=value >> 4])) + chr(Int(digits[byte=value & 15])) + " in position " + String(start)
+        var hex_digits = digits.as_bytes()
+        message += "byte 0x" + chr(Int(hex_digits[value >> 4])) + chr(Int(hex_digits[value & 15])) + " in position " + String(start)
     else:
         message += "bytes in position " + String(start) + "-" + String(end - 1)
     raise Error(message + ": " + reason)
