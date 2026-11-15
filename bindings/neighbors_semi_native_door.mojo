@@ -593,7 +593,9 @@ def _semi_class_at(classes: PythonObject, is_list: Bool, i: Int) raises -> Pytho
     if is_list:
         var table = cpython_table()
         return PythonObject(from_borrowed=table[].PyList_GetItem(classes._obj_ptr, i))
-    return classes[i]
+    # held in a local first: never return a subscript of a borrowed PythonObject directly (AGENTS.md, Mojo 1.2 tail call)
+    var item = classes[i]
+    return item^
 
 
 def _semi_class_array(classes: PythonObject, codes: PythonObject, context: PythonObject) raises -> PythonObject:
