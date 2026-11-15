@@ -712,6 +712,7 @@ in the tables after the sections.
 | [`MOJOLEARN_C40_SEED_TILES`](#mojolearn_c40_seed_tiles-unmeasured-arm-deleted-2026-11-15) | Classical IDENTICAL graph / cluster candidate (mean-shift) | removed (unmeasured opt-in arm; plan V2 rule a) | 2026-11-15 | [MOJOLEARN_C40_SEED_TILES.patch](../experiments/removed/MOJOLEARN_C40_SEED_TILES.patch) |
 | [`MOJOLEARN_C40_ACTIVE_SEEDS`](#mojolearn_c40_active_seeds-unmeasured-arm-deleted-2026-11-15) | Classical IDENTICAL graph / cluster candidate (mean-shift) | removed (unmeasured opt-in arm; plan V2 rule a) | 2026-11-15 | [MOJOLEARN_C40_ACTIVE_SEEDS.patch](../experiments/removed/MOJOLEARN_C40_ACTIVE_SEEDS.patch) |
 | [`MOJOLEARN_C41_FUSED_MINIMA`](#mojolearn_c41_fused_minima-unmeasured-arm-deleted-2026-11-15) | Classical IDENTICAL graph / cluster candidate (x_cluster) | removed (unmeasured opt-in arm; plan V2 rule a) | 2026-11-15 | [MOJOLEARN_C41_FUSED_MINIMA.patch](../experiments/removed/MOJOLEARN_C41_FUSED_MINIMA.patch) |
+| [`MOJOLEARN_C42_ACTIVE_TRIANGLE`](#mojolearn_c42_active_triangle-unmeasured-arm-deleted-2026-11-15) | Classical IDENTICAL graph / cluster candidate (x_cluster) | removed (unmeasured opt-in arm; plan V2 rule a) | 2026-11-15 | [MOJOLEARN_C42_ACTIVE_TRIANGLE.patch](../experiments/removed/MOJOLEARN_C42_ACTIVE_TRIANGLE.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -6883,4 +6884,12 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2
 - **Verdict**: no record (no A/B recorded for the opt-in arm); deleted under "An unmeasured arm is deleted" (Andrew, 2026-11-15). The default build never set it, so no bit changes on any column.
 - **Deleted by**: lane/expdel2-05-base (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `77d0694779`.
 - **Restore**: `git apply experiments/removed/MOJOLEARN_C41_FUSED_MINIMA.patch`, then delete the `MOJOLEARN_C41_FUSED_MINIMA` refusal in `core/experiment_guards_cluster.mojo`.
+- **Records**: refusal in `core/experiment_guards_cluster.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-05-base section).
+
+### MOJOLEARN_C42_ACTIVE_TRIANGLE: unmeasured arm deleted (2026-11-15)
+
+- **What it was**: Opt-in IDENTICAL arm (candidate C42): x_cluster pairwise work over the active triangle only. The alias `C42_ACTIVE_TRIANGLE` in `experiments/classical_identical_ideas/graph_controls.mojo` stays as the constant `False` so its readers (x_cluster/device_ops.mojo) compile unchanged until their lanes fold it.
+- **Verdict**: no record (no A/B recorded for the opt-in arm); deleted under "An unmeasured arm is deleted" (Andrew, 2026-11-15). The default build never set it, so no bit changes on any column.
+- **Deleted by**: lane/expdel2-05-base (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `9276415968`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_C42_ACTIVE_TRIANGLE.patch`, then delete the `MOJOLEARN_C42_ACTIVE_TRIANGLE` refusal in `core/experiment_guards_cluster.mojo`.
 - **Records**: refusal in `core/experiment_guards_cluster.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-05-base section).
