@@ -1925,6 +1925,10 @@ class _HostBinding(type(sys)):
         # (one dictionary read); only the sentence is reused.
         self.__misses = {}
 
+    def _host_loaded(self):
+        """Whether this facade's host binding is loaded (never loads it)."""
+        return (_HOST_MODULE_PREFIX + self.__basename) in sys.modules
+
     def __getattr__(self, item):
         if item.startswith("__"):
             raise AttributeError(item)
@@ -2113,8 +2117,15 @@ _CANONICAL_FINDER = _CanonicalFinder()
 
 
 def canonical_loaded(name):
-    """The canonical binding `name` if it is loaded, else None (never loads)."""
-    return sys.modules.get(__name__.rsplit(".", 1)[0] + "." + name)
+    """The canonical binding `name` if it is loaded, else None (never loads).
+    A CPU-only install puts a `_HostBinding` under every canonical name at
+    import; one whose host binding has not loaded yet is not loaded (reading
+    an entry through it would load it: `_native_backend_public.connect` loaded
+    `_mojolearn_gbdt_host` at `import mojolearn`, smoke 2026-11-15)."""
+    module = sys.modules.get(__name__.rsplit(".", 1)[0] + "." + name)
+    if isinstance(module, _HostBinding) and not module._host_loaded():
+        return None
+    return module
 
 
 def load_everything():

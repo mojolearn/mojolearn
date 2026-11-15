@@ -24,7 +24,8 @@ PKG = Path(__file__).resolve().parents[1]
 # HOST_IMPORT_ALIASES), the identical base binding (Array helpers and the
 # vendor read-back), the optional fast tokenizer, and at most one member of
 # the fast tier (the process metadata's vendor read-back of that tier).
-_CORE_LEAVES = {"_mojolearn", "_mojolearn_tokenizer_host", "_mojolearn_tokenizer_fast"}
+# `_mojolearn_core_host` is the core `_mojolearn` binding of a CPU-only install (_backend._HOST_MODULES).
+_CORE_LEAVES = {"_mojolearn", "_mojolearn_core_host", "_mojolearn_tokenizer_host", "_mojolearn_tokenizer_fast"}
 
 # Families a Ridge fit never needs: neural, sequence, language-model,
 # forecasting, boosting/forest, Gaussian-process, density-clustering, ANN and
