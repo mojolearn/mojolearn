@@ -576,7 +576,8 @@ them for you.
   import `sort` from `std.builtin.sort`. `host_parallelize` likewise takes a runtime closure with
   explicit captures (`def task(unit: Int) {imm pointer, imm count}:`). Use `comptime if`/`comptime for`
   for compile-time control flow; those statements no longer accept a parameter decorator.
-- `match` is a reserved keyword, including for local variables; use `matched` for a Boolean result.
+- `match` and `case` are reserved keywords, including for parameters and local variables (`def f(case: Int)` fails
+  with "expected argument name"); use `matched` for a Boolean result and `which` for a case index.
   Put `comptime assert` inside a function body, never at module scope.
 - Generic struct parameters used by fields, static methods or initializers must be qualified as
   `Self.E`, `Self.D`, `Self.RES` (and so on), including arguments to generic callees.
