@@ -407,7 +407,7 @@ EXPECTED_FAILED_CHECKS = {
     # numbers. scikit-learn's _NotAnArray exposes only __array__ (no buffer,
     # no len).
     # lane sgd-quality (2026-10-17): an object-dtype array of numbers is now
-    # converted like scikit-learn's check_array (`_buffer._materialize`), and
+    # converted like scikit-learn's check_array (the native admission), and
     # a non-number leaf raises its TypeError; SGDClassifier, Perceptron,
     # SGDRegressor and PassiveAggressiveClassifier are checked against it
     # (tools/sgd_quality_check.py). The entry stays (non-strict) for the
