@@ -128,14 +128,9 @@ comptime IDN_EST_ONE_STEP_DEVICE = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 #: (`gbdt/host/gbdt_oracle_multiclass.mojo::_estimate_multi`) is untouched.
 #: The task drains ONCE. Classes above `MC_ONE_STEP_MAX_CLASSES` (the
 #: per-thread system is a local array) keep the host walker.
-#: `-D MOJOLEARN_IDN_GBDT_MC_ONE_STEP_DEVICE_OFF` (or the master
-#: `-D MOJOLEARN_IDN_ALL_OFF`) restores the host walker.
-comptime IDN_GBDT_MC_ONE_STEP_DEVICE = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not (
-        is_defined["MOJOLEARN_IDN_GBDT_MC_ONE_STEP_DEVICE_OFF"]()
-    )
-)
+# TOMBSTONE: MOJOLEARN_IDN_GBDT_MC_ONE_STEP_DEVICE_OFF (DELETE-OLD-PATH, no A/B recorded for the old path, rule b) deleted 2026-11-15 by lane/expdel2-44-trees; code recoverable at 764c283909.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_GBDT_MC_ONE_STEP_DEVICE_OFF.patch; record in docs/TOMBSTONES.md.
+comptime IDN_GBDT_MC_ONE_STEP_DEVICE = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 
 #: lane fix-g1-gbdt (audit G1, the original handoff's "symmetric-fit drain
 #: merge"; IDENTICAL, every vendor; default ON): on the SYMMETRIC estimation
