@@ -69,7 +69,9 @@ from std.memory import bitcast
 # Apple and the host produce the same words. BITS CHANGE against the old
 # IDENTICAL DART (float32 state and chunked leaf sums instead of float64
 # row-order chains), on all four columns together.
-# `-D MOJOLEARN_IDN_DART_DEVICE_OFF` (or `MOJOLEARN_IDN_ALL_OFF`) restores
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old-path master switch; owner lane expdel2-37-series, EXP:2438 DELETED) deleted 2026-11-15 by lane/expdel2-46-trees; code recoverable at ef6b727b53.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-46-trees.patch; record in docs/TOMBSTONES.md.
+# `-D MOJOLEARN_IDN_DART_DEVICE_OFF` restores
 # main's loop on every column.
 # The gate itself is `xtrees/dart_units.mojo: IDN_DART_DEVICE` (shared with the host twin).
 

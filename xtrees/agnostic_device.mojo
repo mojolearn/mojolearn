@@ -53,12 +53,13 @@ comptime KSHAP_FAST_BATCH = _AGN_FAST_APPLE
 #:   Bit-inert: the same units write the same words to the same offsets; the
 #:   host column builds the matrix in the caller's buffer either way.
 comptime AGN_IDN_SYN_POOL = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (is_defined["MOJOLEARN_AGN_IDN_SYN_POOL_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_AGN_IDN_SYN_POOL_OFF"]()
 )
 comptime _AGN_SYN_POOL = KSHAP_FAST_BATCH or AGN_IDN_SYN_POOL
 #: lane fam2-forests (2026-10-04), the IDENTICAL default on NVIDIA, AMD and
-#: Apple (-D MOJOLEARN_IDN_SHAP_DEVICE_MODEL_OFF restores the model callback;
-#: also off under MOJOLEARN_IDN_ALL_OFF):
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old-path master switch; owner lane expdel2-37-series, EXP:2438 DELETED) deleted 2026-11-15 by lane/expdel2-46-trees; code recoverable at ef6b727b53.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-46-trees.patch; record in docs/TOMBSTONES.md.
+#: Apple (-D MOJOLEARN_IDN_SHAP_DEVICE_MODEL_OFF restores the model callback):
 #: MOJOLEARN_IDN_SHAP_DEVICE_MODEL  Kernel and Permutation SHAP over one of
 #:   this library's flat forests (RandomForest*, ExtraTrees*, DecisionTree*
 #:   predicting through the strict increasing-tree kernel) evaluate the
@@ -74,7 +75,7 @@ comptime _AGN_SYN_POOL = KSHAP_FAST_BATCH or AGN_IDN_SYN_POOL
 #:   other model keep the callback.
 comptime AGN_IDN_DEVICE_MODEL = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not (is_defined["MOJOLEARN_IDN_SHAP_DEVICE_MODEL_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
+    and not is_defined["MOJOLEARN_IDN_SHAP_DEVICE_MODEL_OFF"]()
 )
 # TOMBSTONE: MOJOLEARN_KSHAP_FAST_DEVICE_MODEL (never measured, deleted) deleted 2026-11-09 by e2adeea367; code
 # recoverable at f59d913b0b. Same commit: its twin MOJOLEARN_PSHAP_FAST_DEVICE_MODEL (bits 1024 / 2048).
