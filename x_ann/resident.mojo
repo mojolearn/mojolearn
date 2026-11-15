@@ -41,7 +41,6 @@ THE ADDRESSES (mirrored in python/mojolearn/_expansion_ann.py):
                     behind their upload; 0 or absent: not asked)
   release(handle)
 """
-from x_ann.switches import ANN3_PREPARE
 
 from max.gpu.host import DeviceBuffer, DeviceContext
 from checks.numerics import GLOBAL_NUMERIC_MODE
@@ -93,7 +92,9 @@ struct AnnResident(Movable):
     var i2: DeviceBuffer[DType.int32]
     var ones: DeviceBuffer[DType.int32]
     var offsets: List[Int32]
-    # lane ann-apple3, behind `ANN3_PREPARE` (x_ann/switches.mojo): the codes
+    # TOMBSTONE: MOJOLEARN_ANN3_PREPARE_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-13-cluster (non-owner; owner expdel2-14-cluster); code recoverable at a6a1253d08.
+    # Restore: git apply experiments/removed/MOJOLEARN_ANN3_PREPARE_OFF.expdel2-13-cluster.patch; record in docs/TOMBSTONES.md.
+    # lane ann-apple3: the codes
     # (and RaBitQ's norms and factors) in list order, gathered ONCE here by
     # the launches every search makes otherwise (`ivf_scan_search`); `pre`
     # says they are there (an index whose lists hold every row once: the
@@ -150,8 +151,6 @@ struct AnnResident(Movable):
         var ids = upload_i32(ctx, _in_i32(addrs, 2, n))
         var n_slots = Int(self.offsets[n_lists])
         var pre = n_slots == n
-        comptime if not ANN3_PREPARE:
-            pre = False
         var gs = n_slots if pre else 0
         self.pre = pre
         if kind == KIND_PQ:
@@ -226,8 +225,6 @@ struct AnnResident(Movable):
         var ids = upload_i32(ctx, built.list_indices)
         var n_slots = Int(self.offsets[self.n_lists])
         var pre = n_slots == n
-        comptime if not ANN3_PREPARE:
-            pre = False
         var gs = n_slots if pre else 0
         self.pre = pre
         self.f0 = ctx.enqueue_create_buffer[DType.float32](1)
