@@ -45,6 +45,8 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_ARIMA_FAST_EVAL_WS_OFF"](), "removed 2026-11-15 (lane/expdel-02-decomposition-series): ARIMA_FAST_EVAL_WS_OFF (FAST+Apple rollback to about 45 device buffers allocated and the series copied N + 1 times per candidate point) is gone; the held stacked workspace is the FAST+Apple path (autoarima taxi-hourly 50,299 -> 42,921 ms alone, 50,500 -> 39,504 ms with LLONLY, KEPT 6c54b7e87); restore: experiments/removed/MOJOLEARN_ARIMA_FAST_EVAL_WS_OFF.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_RESAMPLE_FAST_IDX_DIRECT_OFF.patch
     comptime assert not is_defined["MOJOLEARN_RESAMPLE_FAST_IDX_DIRECT_OFF"](), "removed 2026-11-15 (lane/expdel-02-decomposition-series): RESAMPLE_FAST_IDX_DIRECT_OFF (FAST+Apple rollback to the host buffer -> List -> store-loop index route) is gone with RESAMPLE_IDX_DIRECT and the binding's List route; every tier copies the drawn indices straight into the caller's buffer (resample taxi 71.7 -> 62.8 ms, same integers); restore: experiments/removed/MOJOLEARN_RESAMPLE_FAST_IDX_DIRECT_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_RESAMPLE_FAST_PERM_SELECT_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_RESAMPLE_FAST_PERM_SELECT_OFF"](), "removed 2026-11-15 (lane/expdel-02-decomposition-series): RESAMPLE_FAST_PERM_SELECT_OFF (FAST+Apple rollback to perm_select_stat_kernel for the mean / diff_means permutation null) is gone; the 4-bit radix select is the FAST+Apple path (permutation-test taxi 55.41 -> 35.49 ms, istella 55.28 -> 35.28 ms, pvalue identical); restore: experiments/removed/MOJOLEARN_RESAMPLE_FAST_PERM_SELECT_OFF.patch"
     return True
 
 

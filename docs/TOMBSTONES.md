@@ -651,6 +651,7 @@ in the tables after the sections.
 | [`MOJOLEARN_ARIMA_FAST_LLONLY_OFF`](#mojolearn_arima_fast_llonly_off-old-path-deleted-2026-11-15) | Time series (AutoARIMA Kalman loop, FAST Apple) | removed (old path; FAST+Apple default KEPT 6c54b7e87) | 2026-11-15 | [MOJOLEARN_ARIMA_FAST_LLONLY_OFF.patch](../experiments/removed/MOJOLEARN_ARIMA_FAST_LLONLY_OFF.patch) |
 | [`MOJOLEARN_ARIMA_FAST_EVAL_WS_OFF`](#mojolearn_arima_fast_eval_ws_off-old-path-deleted-2026-11-15) | Time series (AutoARIMA fit evaluation workspace, FAST Apple) | removed (old path; FAST+Apple default KEPT 6c54b7e87) | 2026-11-15 | [MOJOLEARN_ARIMA_FAST_EVAL_WS_OFF.patch](../experiments/removed/MOJOLEARN_ARIMA_FAST_EVAL_WS_OFF.patch) |
 | [`MOJOLEARN_RESAMPLE_FAST_IDX_DIRECT_OFF`](#mojolearn_resample_fast_idx_direct_off-old-path-deleted-2026-11-15) | Resample (resample(replace=True) row indices, FAST Apple) | removed (old path; FAST+Apple default KEPT, gmp-rs-idx) | 2026-11-15 | [MOJOLEARN_RESAMPLE_FAST_IDX_DIRECT_OFF.patch](../experiments/removed/MOJOLEARN_RESAMPLE_FAST_IDX_DIRECT_OFF.patch) |
+| [`MOJOLEARN_RESAMPLE_FAST_PERM_SELECT_OFF`](#mojolearn_resample_fast_perm_select_off-old-path-deleted-2026-11-15) | Resample (permutation_test null select, FAST Apple) | removed (old path; FAST+Apple default KEEP, ab1 d51f4b4bf) | 2026-11-15 | [MOJOLEARN_RESAMPLE_FAST_PERM_SELECT_OFF.patch](../experiments/removed/MOJOLEARN_RESAMPLE_FAST_PERM_SELECT_OFF.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -6332,4 +6333,12 @@ Deletions from docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md (section expdel-02-
 - **Verdict**: KEPT, FAST+Apple default (EXPERIMENTS.md `RESAMPLE_FAST_IDX_DIRECT`, gmp-rs-idx-taxi / gmp-rs-idx-istella): M3, resample taxi 71.7 -> 62.8 ms (-12.4%), istella -1.8%, max_mean_shift the same, same integers. No bit change on any column.
 - **Deleted by**: lane/expdel-02-decomposition-series (docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md); code recoverable at `080e0e6f72`.
 - **Restore**: `git apply experiments/removed/MOJOLEARN_RESAMPLE_FAST_IDX_DIRECT_OFF.patch`, then delete the `MOJOLEARN_RESAMPLE_FAST_IDX_DIRECT_OFF` refusal in `core/experiment_guards_series.mojo`.
+- **Records**: refusal in `core/experiment_guards_series.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel-02-decomposition-series section).
+
+### MOJOLEARN_RESAMPLE_FAST_PERM_SELECT_OFF: old path deleted (2026-11-15)
+
+- **What it was**: the FAST+Apple rollback of `RESAMPLE_FAST_PERM_SELECT` (`resample/estimator.mojo`, `permutation_test_host`): with `-D MOJOLEARN_RESAMPLE_FAST_PERM_SELECT_OFF` the mean / diff_means null went through `perm_null_dispatch` (main's `perm_select_stat_kernel`) instead of `perm_select_fast`. Deleted: the define read; `RESAMPLE_FAST_PERM_SELECT` is `RESAMPLE_FAST_APPLE`. `perm_null_dispatch` stays (every other statistic and every other build).
+- **Verdict**: KEEP, FAST+Apple default (EXPERIMENTS.md `RESAMPLE_FAST_PERM_SELECT`, M3 afc_ab_def, full board, one run per arm, 2026-10-04, ab1 d51f4b4bf): permutation-test taxi 55.41 -> 35.49 ms, istella 55.28 -> 35.28 ms, pvalue identical. No bit change on any column.
+- **Deleted by**: lane/expdel-02-decomposition-series (docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md); code recoverable at `1b6a31e9a1`.
+- **Restore**: `git apply experiments/removed/MOJOLEARN_RESAMPLE_FAST_PERM_SELECT_OFF.patch`, then delete the `MOJOLEARN_RESAMPLE_FAST_PERM_SELECT_OFF` refusal in `core/experiment_guards_series.mojo`.
 - **Records**: refusal in `core/experiment_guards_series.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel-02-decomposition-series section).
