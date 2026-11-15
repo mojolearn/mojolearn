@@ -950,20 +950,8 @@ class FactorAnalysis(_Base):
         """
         return _DECOMP_CALL(self, "transform", (X,), _DECOMP_CONTEXT)
 
-    def fit_transform(self, X, y=None):
-        """Fit to X, then return ``transform(X)``.
-
-        Parameters
-        ----------
-        X : array-like of shape (n_samples, n_features)
-            Training data.
-        y : ignored
-
-        Returns
-        -------
-        ndarray of shape (n_samples, n_components), float32
-        """
-        return _DECOMP_CALL(self, "fit_transform", (X,), _DECOMP_CONTEXT)
+    # The same one native call as _RandomProjection.fit_transform.
+    fit_transform = _RandomProjection.fit_transform
 
     def get_covariance(self):
         """Return the model covariance ``components_.T @ components_ + diag(noise_variance_)``.
@@ -1940,6 +1928,21 @@ class _BaseSparsePCA(_Base):
     # (bindings/decomp_public_lifecycle_unpack.mojo), so `_mode` installs no wrappers.
     _mojolearn_native_public = True
 
+    # fit is one call into the same owner, for both subclasses.
+    def fit(self, X, y=None):
+        """Fit the sparse components.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+        y : ignored
+
+        Returns
+        -------
+        self
+        """
+        return _DL_CALL(self, "spca_fit", (X,), _DL_CONTEXT)
+
     # fit, fit_transform, transform and inverse_transform are one call each
     # into the native dictionary-learning owner (bindings/dict_learning_native_unpack.mojo),
     # which tells SparsePCA and MiniBatchSparsePCA apart by class.
@@ -2060,20 +2063,6 @@ class SparsePCA(_BaseSparsePCA):
         self.U_init, self.V_init, self.verbose, self.random_state = U_init, V_init, verbose, random_state
         self.numeric_mode = numeric_mode
 
-    def fit(self, X, y=None):
-        """Fit the sparse components.
-
-        Parameters
-        ----------
-        X : array-like of shape (n_samples, n_features)
-        y : ignored
-
-        Returns
-        -------
-        self
-        """
-        return _DL_CALL(self, "spca_fit", (X,), _DL_CONTEXT)
-
 
 # MiniBatchDictionaryLearning on the centered X^T, the components its
 # lasso_lars transform of X^T. callback is not forwarded (never called).
@@ -2142,20 +2131,6 @@ class MiniBatchSparsePCA(_BaseSparsePCA):
         self.callback, self.batch_size, self.verbose, self.shuffle = callback, batch_size, verbose, shuffle
         self.n_jobs, self.method, self.random_state, self.tol = n_jobs, method, random_state, tol
         self.max_no_improvement, self.numeric_mode = max_no_improvement, numeric_mode
-
-    def fit(self, X, y=None):
-        """Fit the sparse components.
-
-        Parameters
-        ----------
-        X : array-like of shape (n_samples, n_features)
-        y : ignored
-
-        Returns
-        -------
-        self
-        """
-        return _DL_CALL(self, "spca_fit", (X,), _DL_CONTEXT)
 
 
 # ================================================================ LatentDirichletAllocation
