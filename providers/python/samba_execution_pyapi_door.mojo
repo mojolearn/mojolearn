@@ -3,7 +3,7 @@
 # The executor receives only native endpoints, pointers and stable metadata.
 from std.python import Python, PythonObject
 from bindings.native_loaded_module_door import native_loaded_module
-from std.os import getenv
+from std.sys.compile import is_defined
 from std.memory import unsafe_memcpy
 from bindings.py_balanced import py_call, py_get, py_setitem, py_setattr, py_type
 from bindings.generation_buffers_door import generation_address, generation_array
@@ -27,6 +27,17 @@ from providers.python.borrowed_buffer_pyapi_unpack import AdmittedBorrowedBuffer
 from providers.python.generation_metadata_pyapi_door import GenerationLayerSnapshot
 from bindings.native_buffer_address_unpack import native_buffer_address
 from training.native_samba_execution import NativeSambaLayer, NativeSambaModel
+
+
+# Lane envgate-neural-lm (2026-11-15): the block doors' setup switches are
+# build constants with today's defaults; each was a getenv per public call.
+# B arms RUN OWED (bench/results/paper_compare/owed-pre0867.json,
+# docs/apple-fast/EXPERIMENTS.md): -D MOJOLEARN_TRANSFORMER_LEGACY_SETUP
+# (was =1), -D MOJOLEARN_TRANSFORMER_SESSION_FRESH_OFF (was =0),
+# -D MOJOLEARN_MAMBA3_LEGACY_SETUP (was =1).
+comptime TRANSFORMER_LEGACY_SETUP = is_defined["MOJOLEARN_TRANSFORMER_LEGACY_SETUP"]()
+comptime TRANSFORMER_SESSION_FRESH = not is_defined["MOJOLEARN_TRANSFORMER_SESSION_FRESH_OFF"]()
+comptime MAMBA3_LEGACY_SETUP = is_defined["MOJOLEARN_MAMBA3_LEGACY_SETUP"]()
 
 
 struct SambaLayerPublication(Movable):
@@ -494,12 +505,12 @@ def samba_provider_eligible(fields: PythonObject) raises -> Bool:
         if String(block["_native_kind"]) == "transformer":
             if String(block["_native_route"]) == "cpu" and block["_int15"] is not None:
                 return False  # CPU training binding does not export packed projections.
-            if getenv("MOJOLEARN_TRANSFORMER_LEGACY_SETUP", "0") == "1" or getenv("MOJOLEARN_TRANSFORMER_SESSION_FRESH", "1") == "0":
+            if TRANSFORMER_LEGACY_SETUP or not TRANSFORMER_SESSION_FRESH:
                 return False
             var lock = OperationLockLease(block["_runtime_lock"])
             if lock.handle == 0:
                 return False
-        elif getenv("MOJOLEARN_MAMBA3_LEGACY_SETUP", "0") == "1":
+        elif MAMBA3_LEGACY_SETUP:
             return False
     return True
 

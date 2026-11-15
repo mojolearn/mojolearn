@@ -34,6 +34,33 @@ struct CorpusFileConnection(Defaultable, Movable):
 comptime CORPUS_FILES = SharedSlot[CorpusFileConnection, "MojolearnCorpusFileConnectionV1"]
 
 
+struct CorpusEnvironment(Defaultable, Movable):
+    """The corpus doors' user settings, read ONCE per process on first use
+    (lane envgate-neural-lm, 2026-11-15: `HOME` was a getenv per
+    `corpus_path` call and `MOJOLEARN_LM_CACHE` one per corpus call). Set
+    them before the process starts; a change after the first corpus call is
+    not seen."""
+    var home: String
+    var lm_cache: String
+
+    def __init__(out self):
+        self.home = String(getenv("HOME", ""))
+        self.lm_cache = String(getenv("MOJOLEARN_LM_CACHE", ""))
+
+
+comptime CORPUS_ENVIRONMENT = SharedSlot[CorpusEnvironment, "MojolearnCorpusEnvironmentV1"]
+
+
+def corpus_env_home() raises -> String:
+    """`HOME` as the process started (empty when unset)."""
+    return CORPUS_ENVIRONMENT.get_or_create_ptr()[].home.copy()
+
+
+def corpus_env_lm_cache() raises -> String:
+    """`MOJOLEARN_LM_CACHE` as the process started (empty when unset)."""
+    return CORPUS_ENVIRONMENT.get_or_create_ptr()[].lm_cache.copy()
+
+
 def corpus_files_initialize() raises:
     """Import-only native API connection; never called by a product operation."""
     var s = CORPUS_FILES.get_or_create_ptr()
@@ -154,7 +181,7 @@ def corpus_path(value: PythonObject, expand: Bool = False, resolve: Bool = False
         var name = parts[0][py_call(native_loaded_module("builtins").slice, 1, PythonObject(None))]
         var home = PythonObject("")
         if len(name) == 0:
-            var env_home = getenv("HOME", "")
+            var env_home = corpus_env_home()
             home = PythonObject(env_home)
             if len(home) == 0:
                 home = py_call(f["getpwuid"], py_call(f["getuid"]))[5]

@@ -52,7 +52,9 @@ class TokenizerPublicSource(unittest.TestCase):
                       "vocab_encode_ids(owner[]", "vocab_decode_ids(owner[]",
                       "render_ranks(vocab)", "render_tokenizer_json(vocab,"):
             self.assertIn(owner, source)
-        self.assertIn('getenv("MOJOLEARN_BPE_TRAINER_SABOTAGE", "")', source)
+        # The sabotage arm is the build define (lane envgate-neural-lm, 2026-11-15).
+        self.assertIn('var reverse = BPE_TRAINER_SABOTAGE', source)
+        self.assertNotIn('getenv(', source)
         self.assertIn('context[5][1]', source)  # retained optional native fast route
 
     def test_admission_precedes_buffer_acquisition_and_instance_storage(self):

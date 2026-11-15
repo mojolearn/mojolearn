@@ -20,7 +20,7 @@ from providers.python.borrowed_buffer_pyapi_unpack import admit_native_buffer_ex
 from bindings.boundary_read_door import buffer_view, view_int_at, read_exact_int_items
 from core.boundary_layout import BOUNDARY_KIND_FLOAT, BOUNDARY_KIND_BOOL
 from std.memory import unsafe_memcpy
-from std.os import getenv
+from std.sys.compile import is_defined
 from bindings.generation_buffers_door import generation_initialize_binding, generation_array, py_ints
 from bindings.causal_lm_construct_door import _model_block, _model_profile, _model_bindings, _model_f32, _model_shape, model_recurrent_weights_check
 from bindings.causal_lm_public_door import causal_lm_admit_binding, causal_layer_allocate, causal_layer_run, causal_layer_allocate_fields, causal_layer_run_fields, causal_layer_stateless_plan, _addr, _weight_addr, _native_function, _native_has_entry, _native_entry_fields, _standalone_record_fields, causal_prepared_layer
@@ -59,6 +59,17 @@ from bindings.py_model_records import (
     RECORDS_PREPARED, ContentRecord, content_value, records_stamped_get, records_stamped_put,
 )
 
+
+
+# Lane envgate-neural-lm (2026-11-15): the block doors' setup switches are
+# build constants with today's defaults; each was a getenv per public call.
+# B arms RUN OWED (bench/results/paper_compare/owed-pre0867.json,
+# docs/apple-fast/EXPERIMENTS.md): -D MOJOLEARN_TRANSFORMER_LEGACY_SETUP
+# (was =1), -D MOJOLEARN_TRANSFORMER_SESSION_FRESH_OFF (was =0),
+# -D MOJOLEARN_MAMBA3_LEGACY_SETUP (was =1).
+comptime TRANSFORMER_LEGACY_SETUP = is_defined["MOJOLEARN_TRANSFORMER_LEGACY_SETUP"]()
+comptime TRANSFORMER_SESSION_FRESH = not is_defined["MOJOLEARN_TRANSFORMER_SESSION_FRESH_OFF"]()
+comptime MAMBA3_LEGACY_SETUP = is_defined["MOJOLEARN_MAMBA3_LEGACY_SETUP"]()
 
 
 struct NativeBlockPlan(Movable, Writable):
@@ -777,7 +788,7 @@ def _neural_plain(mut mods: NativeModules, owner: NativeBlockExecution, x: Pytho
     # transformer-session-native): "block_session" marks a GPU Transformer
     # route (the former "forward_session" Python entry's presence).
     var forward = owner.plan.downcast_value_ptr[NativeBlockPlan]()[].forward_entry
-    var reuse = transformer and py_contains(e, "block_session") and String(getenv("MOJOLEARN_TRANSFORMER_LEGACY_SETUP")) != "1"
+    var reuse = transformer and py_contains(e, "block_session") and not TRANSFORMER_LEGACY_SETUP
     var lock = py_get(fields, "_runtime_lock") if transformer else PythonObject(None)
     var lock_lease = OperationLockLease(lock)
     var locked = transformer and (reuse or fields["_native_session"] is not None or fields["_int15"] is not None)
@@ -789,7 +800,7 @@ def _neural_plain(mut mods: NativeModules, owner: NativeBlockExecution, x: Pytho
             transformer_block_session_close(fields["_native_session"])
             py_setitem(fields, "_native_session", PythonObject(None))
         if transformer and supplied_state is None and not step and fields["_int15"] is None:
-            var fresh_session = reuse and py_contains(e, "transformer_session_forward_fresh") and String(getenv("MOJOLEARN_TRANSFORMER_SESSION_FRESH")) != "0"
+            var fresh_session = reuse and py_contains(e, "transformer_session_forward_fresh") and TRANSFORMER_SESSION_FRESH
             if fresh_session or py_contains(e, "transformer_forward_fresh"):
                 var y = generation_array([b, l, d])
                 var keep = List[PythonObject]()
@@ -1154,7 +1165,7 @@ def neural_mamba3_restore(mut mods: NativeModules, fields: PythonObject, entries
         py_setitem(fields, "_owned_generation", PythonObject(generation))
         py_setitem(fields, "_owned_restore_pending", False)
     if py_get(fields, "_owned_generation") is not None:
-        if (not route.has_sessions() or getenv("MOJOLEARN_MAMBA3_LEGACY_SETUP", "0") == "1"
+        if (not route.has_sessions() or MAMBA3_LEGACY_SETUP
                 or not mamba3_prefill_session_serves(py_get(fields, "_prefill_session"), route.session_ref())):
             raise Error("RuntimeError: Mamba3 owned snapshot requires its installed binding/setup")
 
@@ -1385,7 +1396,7 @@ def _neural_backward_prepared(mut mods: NativeModules, block: PythonObject, inpu
         lock_lease.acquire()
         mods.released()
         try:
-            var session = _native_has_entry(mods, entries, "transformer_session_backward") and String(getenv("MOJOLEARN_TRANSFORMER_LEGACY_SETUP")) != "1"
+            var session = _native_has_entry(mods, entries, "transformer_session_backward") and not TRANSFORMER_LEGACY_SETUP
             if session:
                 # The block's session is a registry handle of the training
                 # image (the GPU image publishes one entry for forward and
@@ -1433,7 +1444,7 @@ def _neural_backward_prepared(mut mods: NativeModules, block: PythonObject, inpu
             neural_mamba3_restore(mods, fields, entries, weights, route)
             var generation = py_get(fields, "_owned_generation")
             var session = ((mamba3_prefill_caps(train_entry) & MAMBA3_CAP_SESSION_PREFILL) != 0
-                and getenv("MOJOLEARN_MAMBA3_LEGACY_SETUP", "0") != "1")
+                and not MAMBA3_LEGACY_SETUP)
             if generation is not None:
                 var owned_addresses: List[Int] = [addresses[0]]
                 for i in range(10, len(addresses)):  # driver-loop: over input-gradient and result address slots

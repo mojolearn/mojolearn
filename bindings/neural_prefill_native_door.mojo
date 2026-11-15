@@ -3,7 +3,6 @@
 from std.python import Python, PythonObject
 from bindings.native_loaded_module_door import native_loaded_module
 from bindings.py_balanced import py_call, py_get, py_setitem
-from std.os import getenv
 from std.sys import is_defined
 from bindings.generation_buffers_door import generation_initialize_binding, generation_array, generation_array_unfilled, py_ints
 from bindings.neural_block_public_door import neural_training_selection, neural_mamba3_restore, neural_block_forward_binding, _neural_input, _neural_int_words
@@ -24,6 +23,15 @@ from providers.python.neural_descriptor_pyapi_door import (
 from bindings.causal_lm_construct_door import _model_f32, _model_shape
 from bindings.causal_lm_public_door import _native_function
 from core.shared_slot import SharedSlot
+
+
+# Lane envgate-neural-lm (2026-11-15): the block doors' setup switches are
+# build constants with today's defaults; each was a getenv per public call.
+# B arms RUN OWED (bench/results/paper_compare/owed-pre0867.json,
+# docs/apple-fast/EXPERIMENTS.md): -D MOJOLEARN_TRANSFORMER_LEGACY_SETUP
+# (was =1), -D MOJOLEARN_TRANSFORMER_SESSION_FRESH_OFF (was =0),
+# -D MOJOLEARN_MAMBA3_LEGACY_SETUP (was =1).
+comptime MAMBA3_LEGACY_SETUP = is_defined["MOJOLEARN_MAMBA3_LEGACY_SETUP"]()
 
 
 struct _PrefillVerdicts(Defaultable, Movable):
@@ -163,7 +171,7 @@ def _prefill_mamba3_reports(block: PythonObject, x: PythonObject, entries: Pytho
     var held = False
     comptime if not IDN_MAMBA3_FORWARD_DOOR_OLD:
         held = (caps & MAMBA3_CAP_HELD_FORWARD) != 0
-    var session = ((caps & MAMBA3_CAP_SESSION_PREFILL) != 0 or owned is not None) and getenv("MOJOLEARN_MAMBA3_LEGACY_SETUP", "0") != "1"
+    var session = ((caps & MAMBA3_CAP_SESSION_PREFILL) != 0 or owned is not None) and not MAMBA3_LEGACY_SETUP
     var skip = False
     if session and Bool(py=py_get(fields, "_discard_reports", PythonObject(False))):
         skip = (caps & MAMBA3_CAP_REPORTS_OPTIONAL) != 0

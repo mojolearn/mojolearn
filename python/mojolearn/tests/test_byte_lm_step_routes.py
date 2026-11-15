@@ -27,6 +27,8 @@ import os
 import numpy as np
 import pytest
 
+from mojolearn.tests._build_arms import two_build_compare
+
 from mojolearn import SmallByteLanguageModelTrainer as Trainer
 from mojolearn import ByteLanguageModelConfig as Shape
 
@@ -164,7 +166,10 @@ def test_host_and_device_give_the_same_words():
 #   step vs trainer loss             the composed step against the threaded loss
 # The last pair is the one the Mac run showed failing.
 
-STEP_ROWS_ENV = 'MOJOLEARN_BYTE_LM_HOST_STEP_ROWS'
+# The serial oracle arm is the build define -D MOJOLEARN_BYTE_LM_HOST_STEP_ROWS_OFF
+# (training/byte_lm_host_backward.mojo; it was MOJOLEARN_BYTE_LM_HOST_STEP_ROWS=0
+# in the environment until lane envgate-neural-lm, 2026-11-15), so the rows
+# against oracle comparison crosses two builds (python/mojolearn/tests/_build_arms.py).
 
 
 def _host_inference(threaded):
@@ -212,30 +217,29 @@ def test_host_step_loss_equals_host_loss():
     assert [int(host.train_step(ids))] == before
 
 
-def test_host_step_rows_equals_step_oracle(monkeypatch):
-    """`ce_host_rows` and `adam_host_rows` (the default) against the serial
-    oracle calls (MOJOLEARN_BYTE_LM_HOST_STEP_ROWS=0): loss, gradient,
-    parameters and both moments, every byte."""
+def test_host_step_rows_equals_step_oracle():
+    """`ce_host_rows` and `adam_host_rows` (the default build) against the
+    serial oracle calls (the -D MOJOLEARN_BYTE_LM_HOST_STEP_ROWS_OFF build):
+    loss, gradient, parameters and both moments, every byte. Run this file
+    once per build with MOJOLEARN_TWO_BUILD_RECORD / _REFERENCE."""
+    import hashlib
     ids = batches()[0]
-    monkeypatch.delenv(STEP_ROWS_ENV, raising=False)
-    rows = _host_trainer()
-    rows_loss = int(rows.train_step(ids))
-    monkeypatch.setenv(STEP_ROWS_ENV, '0')
-    oracle = _host_trainer()
-    oracle_loss = int(oracle.train_step(ids))
-    assert rows_loss == oracle_loss
-    assert _bytes(rows.gradient_) == _bytes(oracle.gradient_)
-    assert _bytes(rows.parameters_) == _bytes(oracle.parameters_)
-    assert _bytes(rows.m_) == _bytes(oracle.m_)
-    assert _bytes(rows.v_) == _bytes(oracle.v_)
+    host = _host_trainer()
+    loss = int(host.train_step(ids))
+    two_build_compare('byte_lm_host_step_rows', dict(
+        loss=loss,
+        **{name: hashlib.sha256(_bytes(getattr(host, name))).hexdigest()
+           for name in ('gradient_', 'parameters_', 'm_', 'v_')}))
 
 
-def test_host_step_oracle_loss_equals_reference_inference_loss(monkeypatch):
-    """The composed step with the serial oracle loss (gemm_host_rows head,
-    ce_forward_oracle) against the reference inference forward (gemm_oracle
-    head, ce_forward_oracle): the two differ only in the head GEMM call."""
+def test_host_step_oracle_loss_equals_reference_inference_loss():
+    """The composed step's loss against the reference inference forward
+    (gemm_oracle head, ce_forward_oracle). On the -D
+    MOJOLEARN_BYTE_LM_HOST_STEP_ROWS_OFF build the step's loss is the serial
+    oracle's (gemm_host_rows head, ce_forward_oracle), so the two differ only
+    in the head GEMM call; on the default build it is the rows loss, which
+    the two-build check above holds to the oracle's."""
     ids = batches()[0]
-    monkeypatch.setenv(STEP_ROWS_ENV, '0')
     host = _host_trainer()
     reference = _host_inference(threaded=False)
     assert int(host.train_step(ids)) == int(reference.loss_bits(ids))

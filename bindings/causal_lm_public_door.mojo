@@ -45,13 +45,13 @@ from bindings.generation_buffers_door import (
 )
 from bindings.native_array_snapshot_door import native_array_slots, NativeArrayAdmission
 from core.generation_policy_impl import GenerationSamplingScratch
-from core.generation_kv_policy import GenerationReadControl
+from core.generation_kv_policy import GenerationReadControl, GENERATION_NATIVE_ENGINE_FORCE, GENERATION_NATIVE_ENGINE_OFF
 from core.hostptr import f32_ptr, i32_ptr
 from core.sha256 import Sha256
 from providers.python.borrowed_buffer_pyapi_unpack import admit_native_buffer_exporter, AdmittedBorrowedBuffer
 from bindings.sha256_door import sha256_update, sha256_update_text
 from std.math import isfinite
-from std.os import getenv
+from std.sys.compile import is_defined
 
 from transformer.causal_lm_public_impl import (
     causal_lm_rows_done, causal_lm_join_resident, causal_lm_join_continuation,
@@ -75,6 +75,22 @@ from core.causal_lm_entry_table import (
     CAUSAL_PRIM_LINEAR_FORWARD, CAUSAL_BLOCK_HOST_FORWARD, CAUSAL_BLOCK_HOST_FORWARD_INT15,
     CAUSAL_MAMBA1_FORWARD, CAUSAL_MAMBA1_DECODE, CAUSAL_MAMBA2_FORWARD, CAUSAL_MAMBA2_DECODE,
 )
+
+
+# Lane envgate-neural-lm (2026-11-15): the CausalLM door's run-time switches
+# are build constants with today's defaults; each was a getenv per public
+# call, per layer of a forward, or per generate. B arms are RUN OWED
+# (bench/results/paper_compare/owed-pre0867.json; docs/apple-fast/EXPERIMENTS.md).
+#   -D MOJOLEARN_TRANSFORMER_LEGACY_SETUP       per-call layer setup, no block
+#                                               session (was =1); restored
+#                                               2026-11-09 (docs/TOMBSTONES.md)
+#   -D MOJOLEARN_CAUSAL_LM_RESIDENT_FORWARD_OFF  no resident forward (was =0)
+#   -D MOJOLEARN_EXPERIMENT_RESIDENT_SAMPLING_FP32  fp32 sampling stream (was =1)
+#   -D MOJOLEARN_EXPERIMENT_GENERATION_ROUTE_TRACE  route witness print (was =1)
+comptime TRANSFORMER_LEGACY_SETUP = is_defined["MOJOLEARN_TRANSFORMER_LEGACY_SETUP"]()
+comptime CAUSAL_LM_RESIDENT_FORWARD = not is_defined["MOJOLEARN_CAUSAL_LM_RESIDENT_FORWARD_OFF"]()
+comptime EXPERIMENT_RESIDENT_SAMPLING_FP32 = is_defined["MOJOLEARN_EXPERIMENT_RESIDENT_SAMPLING_FP32"]()
+comptime EXPERIMENT_GENERATION_ROUTE_TRACE = is_defined["MOJOLEARN_EXPERIMENT_GENERATION_ROUTE_TRACE"]()
 
 
 struct CausalPublicConnection(Defaultable, Movable):
@@ -1026,7 +1042,7 @@ def _causal_layer_run_bound(mut mods: NativeModules,
             py_setattr(st, "cached_tokens", PythonObject(_causal_table_call(_layer_entry[CAUSAL_TABLE_BLOCK](e, layer_entry),
                 CAUSAL_BLOCK_HOST_FORWARD_INT15 if head_profile else CAUSAL_BLOCK_HOST_FORWARD, a_words, p_words, [])))
             mods.released()
-        elif device15 or (py_contains(e, "block_session") and String(getenv("MOJOLEARN_TRANSFORMER_LEGACY_SETUP")) != "1"):
+        elif device15 or (not TRANSFORMER_LEGACY_SETUP and py_contains(e, "block_session")):
             # A GPU layer: the block's session (a native registry handle of its
             # image, opened on first use through the neural table) runs op 35
             # under fixed15_v1, else op 11, reserved with the GIL held and run
@@ -1341,7 +1357,7 @@ def _resident_forward_ok(mut mods: NativeModules, model: PythonObject, state: Py
         return False
     if not py_contains(e, "resident"):
         return False
-    if String(getenv("MOJOLEARN_TRANSFORMER_LEGACY_SETUP")) == "1" or String(getenv("MOJOLEARN_CAUSAL_LM_RESIDENT_FORWARD")) == "0":
+    comptime if TRANSFORMER_LEGACY_SETUP or not CAUSAL_LM_RESIDENT_FORWARD:
         return False
     if model._head_int15 is not None and String(e["resident_vendor"]) != "cuda":
         return False
@@ -1488,10 +1504,11 @@ def _use_native_generation_engine(mut mods: NativeModules, model: PythonObject, 
     # Select once at a public operation boundary, never in the token/layer
     # loop. No failed native admission/execution is caught and retried through
     # the object route: a selected engine keeps its original refusal semantics.
-    var setting = String(getenv("MOJOLEARN_GENERATION_NATIVE_ENGINE", "auto"))
-    if setting == "1":
+    # -D MOJOLEARN_GENERATION_NATIVE_ENGINE_FORCE / _OFF (was the run-time
+    # MOJOLEARN_GENERATION_NATIVE_ENGINE=1 / 0, default auto).
+    comptime if GENERATION_NATIVE_ENGINE_FORCE:
         return True
-    if setting != "auto":
+    comptime if GENERATION_NATIVE_ENGINE_OFF:
         return False
     # A build without native dispatch keeps automatic selection on its
     # compatibility route. A forced engine still reports admission failures.
@@ -1500,7 +1517,7 @@ def _use_native_generation_engine(mut mods: NativeModules, model: PythonObject, 
     var entries = model._native_entries
     if py_get(entries, "parallel_call") is not None or model._head_int15 is not None:
         return False
-    if String(getenv("MOJOLEARN_TRANSFORMER_LEGACY_SETUP")) == "1":
+    comptime if TRANSFORMER_LEGACY_SETUP:
         return False
     var kind = String(model.kind)
     if kind != "transformer" and kind != "mamba1" and kind != "mamba2":
@@ -1530,7 +1547,7 @@ def _engine_admission(mut mods: NativeModules, model: PythonObject, state: Pytho
             raise Error("CausalLM: native generation engine distributed execution is pending")
         if not resident_refused and _resident_forward_ok(mods, model, state):
             raise Error("CausalLM: native generation engine does not replace the existing resident route")
-        if getenv("MOJOLEARN_TRANSFORMER_LEGACY_SETUP", "0") == "1":
+        comptime if TRANSFORMER_LEGACY_SETUP:
             raise Error("CausalLM: native generation engine requires the supported session setup")
         var blocks = List[PythonObject]()
         for i in range(len(model._blocks)):  # driver-loop: one operation's retained model owners
@@ -2226,7 +2243,7 @@ def _options(mut mods: NativeModules, mut s: GenerationHandle, options: PythonOb
     # Host fallback and resident device sampling share the same compensated
     # Float32 implementation. Cross-vendor identity/quality remain unqualified.
     s.sampling_policy = 1 if (not s.greedy and
-        getenv("MOJOLEARN_EXPERIMENT_RESIDENT_SAMPLING_FP32", "0") == "1") else 0
+        EXPERIMENT_RESIDENT_SAMPLING_FP32) else 0
     if not s.greedy and options[1] is None:
         raise Error("generation: greedy=True is the default decoding; greedy=False (sampling) requires an explicit seed")
     if options[1] is not None:
@@ -2293,7 +2310,7 @@ def _generation_route_witness(route: String, capacity: Int, produced: Int,
                               eligible: Bool = False, skipped: Int = 0, invalidated: Bool = False):
     # Excluded-warmup diagnostic only, never a callback or per-token observer.
     # retained_kv now proves an actual skipped reload, not merely eligibility.
-    if getenv("MOJOLEARN_EXPERIMENT_GENERATION_ROUTE_TRACE", "0") == "1":
+    comptime if EXPERIMENT_GENERATION_ROUTE_TRACE:
         print("MOJOLEARN_GENERATION_ROUTE route=" + route + " capacity=" + String(capacity)
             + " produced=" + String(produced) + " retained_kv=" + String(Int(skipped > 0))
             + " requested_route=" + policy.route

@@ -5,7 +5,6 @@
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr, GILReleased
 from std.python.bindings import ExceptionType, raise_python_exception
-from std.os import getenv
 from std.ffi import c_int
 from std.memory import unsafe_memcpy
 from bindings.native_loaded_module_door import native_loaded_module, NativeModules
@@ -27,7 +26,7 @@ from tokenizer.impl.byte_unicode import codepoint_to_byte
 from tokenizer.impl.pretokenize import pretokenize_pattern
 from tokenizer.impl.unicode_class import builtin_unicode_classes, UNICODE_VERSION_PINNED
 from tokenizer.impl.vocab_build import MergeCheck, check_loose, table_from_tokens, ranks_text, unspell_error
-from tokenizer.train.bpe_train import TrainedVocabulary
+from tokenizer.train.bpe_train import TrainedVocabulary, BPE_TRAINER_SABOTAGE
 from tokenizer.train.emit import render_ranks, render_tokenizer_json
 from tokenizer.vocab import VocabTokenizer
 from core.sha256 import sha256_hex
@@ -797,8 +796,11 @@ def _trainer_train(trainer: PythonObject, input_documents: PythonObject, context
     var lengths = List[Int64]()
     for i in range(len(documents)):  # api-bound-loop: over the caller's documents (public type: sequence of str or bytes-like); one buffer read per document, never per byte or token
         lengths.append(Int64(_bytes_append(documents[i], arena)))
-    var sabotage = getenv("MOJOLEARN_BPE_TRAINER_SABOTAGE", "")
-    var reverse = sabotage != "" and sabotage != "0"
+    # The verify sabotage arm is the build define -D MOJOLEARN_BPE_TRAINER_SABOTAGE
+    # (tokenizer/train/bpe_train.mojo), the CPU identity gate's sabotage host
+    # set already builds with; the run-time environment arm, a getenv per train
+    # call, is gone (lane envgate-neural-lm, 2026-11-15).
+    var reverse = BPE_TRAINER_SABOTAGE
     var fast = context[4]
     if _fast_selected(context) and _bool(fast[1], "connected fast trainer") and not reverse and size <= _int(fast[3], "connected fast vocabulary limit"):
         var entry = context[5][2]
@@ -1590,8 +1592,11 @@ def tokenizer_bpe_train_corpus(data: PythonObject, point_values: PythonObject, l
     # The trainer sees only [lo, hi); a larger positive document limit has the
     # same cuts as this span length, without adding Int.MAX to a split offset.
     width = min(width, max(hi - lo, 1))
-    var sabotage = getenv("MOJOLEARN_BPE_TRAINER_SABOTAGE", "")
-    var reverse = sabotage != "" and sabotage != "0"
+    # The verify sabotage arm is the build define -D MOJOLEARN_BPE_TRAINER_SABOTAGE
+    # (tokenizer/train/bpe_train.mojo), the CPU identity gate's sabotage host
+    # set already builds with; the run-time environment arm, a getenv per train
+    # call, is gone (lane envgate-neural-lm, 2026-11-15).
+    var reverse = BPE_TRAINER_SABOTAGE
     var handle = BpeTrainedHandle()
     bpe_train_corpus_fill(handle, Int(bytes.unsafe_ptr()), points, lo, hi, width, size, frequency, reverse)
     var result = _trained_finish(handle.vocab.value(), size, frequency, _bpe_context())

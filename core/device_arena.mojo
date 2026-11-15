@@ -22,9 +22,9 @@ chunks free for the next session of any shape and never frees them under
 live views (the views die with their owner's fields, after `__deinit__`
 runs). The bytes a kernel reads and writes are the same; only where a
 buffer's storage sits moves. Default on for the Apple column, off
-elsewhere; `MOJOLEARN_DEVICE_ARENA=0/1` forces either.
+elsewhere; `-D MOJOLEARN_DEVICE_ARENA` / `-D MOJOLEARN_DEVICE_ARENA_OFF` force either.
 """
-from std.os import getenv
+from std.sys.compile import is_defined
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from checks.kernel_matrix import COLUMN_APPLE, TARGET_COLUMN
@@ -80,14 +80,22 @@ def _arena() raises -> UnsafePointer[_ArenaPool, MutAnyOrigin]:
     return pool
 
 
+comptime DEVICE_ARENA_ON = is_defined["MOJOLEARN_DEVICE_ARENA"]() or (
+    TARGET_COLUMN == COLUMN_APPLE and not is_defined["MOJOLEARN_DEVICE_ARENA_OFF"]()
+)
+"""Whether sessions carve their buffers from arenas: the Apple column by
+default, off elsewhere (CUDA and HIP launches do not pay per live buffer;
+reasoned, never measured). A build constant since lane envgate-neural-lm
+(2026-11-15): it was a getenv per session open and per arena call
+(`MOJOLEARN_DEVICE_ARENA=0/1`). B arms: `-D MOJOLEARN_DEVICE_ARENA` on NVIDIA
+and AMD (RUN OWED, bench/results/paper_compare/owed-pre0867.json
+"device-arena"; docs/apple-fast/EXPERIMENTS.md), `-D
+MOJOLEARN_DEVICE_ARENA_OFF` on Apple."""
+
+
 def device_arena_on() -> Bool:
-    """Whether sessions carve their buffers from arenas: the Apple column by
-    default, off elsewhere (CUDA and HIP launches do not pay per live
-    buffer); MOJOLEARN_DEVICE_ARENA=0/1 forces either."""
-    var v = String(getenv("MOJOLEARN_DEVICE_ARENA"))
-    comptime if TARGET_COLUMN == COLUMN_APPLE:
-        return v != "0"
-    return v == "1"
+    """See DEVICE_ARENA_ON: a build constant."""
+    return DEVICE_ARENA_ON
 
 
 def arena_begin() raises -> Int:

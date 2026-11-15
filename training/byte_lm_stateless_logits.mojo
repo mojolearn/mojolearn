@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Shared stateless logits owner, extracted without changing numerical transport.
-from std.os import getenv
+from std.sys.compile import is_defined
 from core.hostptr import f32_ptr
 from core.neural_context import neural_ctx
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
@@ -8,6 +8,10 @@ from training.byte_lm_binding_impl import ByteLMSession, BYTE_LM_CONTEXT_KEEPER,
 from training.byte_lm_config import ByteConfig
 from training.byte_lm_logits import byte_logits_validate, byte_logits_validate_params, byte_logits_from_params_into
 comptime _NEURAL_CTX = "MojolearnNeuralByteLMContextIdenticalV3" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnNeuralByteLMContextFastV3"
+# Lane envgate-neural-lm (2026-11-15): was a getenv per stateless logits call.
+# ROUTE-DEFAULT-SUSPECT, default off: B arm -D MOJOLEARN_BYTE_LM_KEEP_CONTEXT
+# (RUN OWED, bench/results/paper_compare/owed-pre0867.json "byte-lm-keep-context").
+comptime BYTE_LM_KEEP_CONTEXT = is_defined["MOJOLEARN_BYTE_LM_KEEP_CONTEXT"]()
 
 
 def byte_lm_stateless_logits_native(addr: List[Int], batch: Int, length: Int, cfg: ByteConfig) raises -> Int:
@@ -22,7 +26,7 @@ def byte_lm_stateless_logits_native(addr: List[Int], batch: Int, length: Int, cf
     var ids = _read_ids(addr[1], m)
     byte_logits_validate(ids, batch, length, cfg)
     byte_logits_validate_params(params, cfg)
-    var keep_context = String(getenv("MOJOLEARN_BYTE_LM_KEEP_CONTEXT")) == "1"
+    var keep_context = BYTE_LM_KEEP_CONTEXT
     # lane/neural-net-experiment: the logits land in the caller's array by
     # one device-to-host copy (`byte_logits_from_params_into`), no host
     # List, no second copy; the caller's array is alive for the whole call.
