@@ -246,14 +246,12 @@ comptime DBSCAN_RBC_KEEP_COUNTS = (
 #: by the exact 64-bit count (`adjlen_here = nnz1`), and the per-batch
 #: maximum degree feeds only `rbc_dbscan_take_one_pass`, which returns False
 #: unconditionally. Three drains and one launch per batch; no value any
-#: kernel reads changes. `-D MOJOLEARN_IDN_DBSCAN_RBC_DEAD_READS_OFF=1`
-#: restores them.
+#: kernel reads changes.
 # TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch, EXP:2438 DELETED; non-owner sites) deleted 2026-11-15 by lane/expdel2-10-cluster; code recoverable at 75ea427c34.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-10-cluster.patch; record in docs/TOMBSTONES.md.
-comptime IDN_DBSCAN_RBC_DEAD_READS = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not is_defined["MOJOLEARN_IDN_DBSCAN_RBC_DEAD_READS_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_IDN_DBSCAN_RBC_DEAD_READS_OFF (old path, no A/B row) deleted 2026-11-15 by lane/expdel2-10-cluster; code recoverable at 7a7bdb9b23.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_DBSCAN_RBC_DEAD_READS_OFF.patch; record in docs/TOMBSTONES.md.
+comptime IDN_DBSCAN_RBC_DEAD_READS = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 
 #: fam2-cluster (2026-10-04), IDENTICAL, every column: the border pass
 #: decides on the device which batches hold a labelled non-core row. One
