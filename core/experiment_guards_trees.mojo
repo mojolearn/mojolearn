@@ -154,6 +154,18 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_AFT_P11"](), "removed 2026-11-15 (lane/expdel2-03-base): AFT_P11 (Apple FAST trees programme (P)) is gone: never-run Apple FAST programme card, no A/B (V2 rule g); code at 5bc2865240; restore: experiments/removed/MOJOLEARN_AFT_P11.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_AFT_P12.patch
     comptime assert not is_defined["MOJOLEARN_AFT_P12"](), "removed 2026-11-15 (lane/expdel2-03-base): AFT_P12 (Apple FAST trees programme (P)) is gone: never-run Apple FAST programme card, no A/B (V2 rule g); code at 5bc2865240; restore: experiments/removed/MOJOLEARN_AFT_P12.patch"
+    # Lane expdel2-04-base (2026-11-15): unmeasured arms and old paths deleted under "An unmeasured arm is deleted" (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md, docs/TOMBSTONES.md).
+    # Restore: git apply experiments/removed/MOJOLEARN_FOREST_ORDERED_RESIDENT.patch
+    comptime assert not is_defined["MOJOLEARN_FOREST_ORDERED_RESIDENT"](), "removed 2026-11-15 (lane/expdel2-04-base): FOREST_ORDERED_RESIDENT (opt-in arm, Forest inference (ordered resident policy); no A/B recorded for the opt-in arm (rule a)) is gone; the default stays; code recoverable at 39d9cbb242; restore: experiments/removed/MOJOLEARN_FOREST_ORDERED_RESIDENT.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_FOREST_ORDERED_RESIDENT_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_FOREST_ORDERED_RESIDENT_OFF"](), "removed 2026-11-15 (lane/expdel2-04-base): FOREST_ORDERED_RESIDENT_OFF (old path, Forest inference (ordered resident policy); no A/B recorded beside the default (rule b)) is gone; the default stays; code recoverable at 057d3cc56b; restore: experiments/removed/MOJOLEARN_FOREST_ORDERED_RESIDENT_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_FOREST_PER_MODEL_IO.patch
+    comptime assert not is_defined["MOJOLEARN_FOREST_PER_MODEL_IO"](), "removed 2026-11-15 (lane/expdel2-04-base): FOREST_PER_MODEL_IO (opt-in arm, Forest inference (shared registry IO); no A/B recorded for the opt-in arm (rule a)) is gone; the default stays; code recoverable at c9c333f2d7; restore: experiments/removed/MOJOLEARN_FOREST_PER_MODEL_IO.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_FOREST_PINNED_STAGE.patch
+    comptime assert not is_defined["MOJOLEARN_FOREST_PINNED_STAGE"](), "removed 2026-11-15 (lane/expdel2-04-base): FOREST_PINNED_STAGE (opt-in arm, Forest inference (pinned host stage); no A/B recorded for the opt-in arm (rule a)) is gone; the default stays; code recoverable at 28a3c1be2b; restore: experiments/removed/MOJOLEARN_FOREST_PINNED_STAGE.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_RF_FAST_BATCH32K.patch
+    comptime assert not is_defined["MOJOLEARN_RF_FAST_BATCH32K"](), "removed 2026-11-15 (lane/expdel2-04-base): RF_FAST_BATCH32K (opt-in arm, RandomForest fit node batch (FAST Apple); no A/B recorded (Apple fast opt-in, rule a)) is gone; the default stays; code recoverable at 1f8a4570c6; restore: experiments/removed/MOJOLEARN_RF_FAST_BATCH32K.patch"
+    # ---- end lane expdel2-04-base
     return True
 
 

@@ -25,10 +25,8 @@ construction, and the identity hashes in `bench/apple_identical_steps_main
 
 WHERE. Apple, IDENTICAL only, like every other Apple-scheduling choice: the
 NVIDIA, AMD and CPU columns compile the unchanged loop.
-`-D MOJOLEARN_APPLE_STEP_UNROLL_OFF` restores the plain loop on Apple.
 """
 
-from std.sys.compile import is_defined
 from core.accelerator_target import TARGET_HAS_AMD_GPU, TARGET_HAS_APPLE_GPU, TARGET_HAS_NVIDIA_GPU
 
 from checks.numerics import (
@@ -46,21 +44,17 @@ from checks.numerics import (
 #: column: LinearSVC's gradient, Ridge's U^T b, lstsq) and the one-load-at-a-
 #: time single-block loss sums. Only which thread runs a chain and when its
 #: loads issue move; the adds and the fold are the same, so no bit moves.
-comptime APPLE_IDENTICAL_STEP_UNROLL = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not is_defined["MOJOLEARN_APPLE_STEP_UNROLL_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_APPLE_STEP_UNROLL_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-04-base; code recoverable at 853900db5b.
+# Restore: git apply experiments/removed/MOJOLEARN_APPLE_STEP_UNROLL_OFF.patch; record in docs/TOMBSTONES.md.
+comptime APPLE_IDENTICAL_STEP_UNROLL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 
 #: FAST on Apple (lane/linear-apple2): the same unrolled walks. A walk's
 #: adds are the plain loop's, in its order (only the loads move ahead), so
 #: FAST's words do not move either. Only the call sites that name it opt in
-#: (glm/impl/qn's loss sums and bias means). -D MOJOLEARN_APPLE_FAST_STEP_UNROLL_OFF=1
-#: reverts.
-comptime APPLE_FAST_STEP_UNROLL = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and TARGET_HAS_APPLE_GPU
-    and not is_defined["MOJOLEARN_APPLE_FAST_STEP_UNROLL_OFF"]()
-)
+#: (glm/impl/qn's loss sums and bias means).
+# TOMBSTONE: MOJOLEARN_APPLE_FAST_STEP_UNROLL_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-04-base; code recoverable at c34327db85.
+# Restore: git apply experiments/removed/MOJOLEARN_APPLE_FAST_STEP_UNROLL_OFF.patch; record in docs/TOMBSTONES.md.
+comptime APPLE_FAST_STEP_UNROLL = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
 
 #: IDENTICAL on NVIDIA and AMD (lane/gap-linear-nv, 2026-10-02): the same
 #: unrolled walks, the row-coalesced `X^T dZ` (`core/xtdz_coalesced.mojo`)
@@ -68,12 +62,12 @@ comptime APPLE_FAST_STEP_UNROLL = (
 #: `gemv_n` (`core/gemm.mojo::pinned_gemv_n_tiled_kernel`). Every one keeps
 #: its chain and fold, so the words are main's; only the loads move. The
 #: host column compiles none of it, so the device-vs-host ID check compares
-#: the new kernels against the old ones. `-D MOJOLEARN_NV_AMD_STEPS_OFF=1`
-#: restores main's kernels (the A/B define).
+#: the new kernels against the old ones.
+# TOMBSTONE: MOJOLEARN_NV_AMD_STEPS_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-04-base; code recoverable at d1fe4369a6.
+# Restore: git apply experiments/removed/MOJOLEARN_NV_AMD_STEPS_OFF.patch; record in docs/TOMBSTONES.md.
 comptime NV_AMD_IDENTICAL_STEPS = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     and (TARGET_HAS_NVIDIA_GPU or TARGET_HAS_AMD_GPU)
-    and not is_defined["MOJOLEARN_NV_AMD_STEPS_OFF"]()
 )
 
 comptime STRIDED_UNROLL = 32

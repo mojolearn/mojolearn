@@ -13,28 +13,33 @@ from std.memory import bitcast
 from std.time import perf_counter_ns
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
 from checks.kernel_matrix import TARGET_COLUMN, COLUMN_APPLE, COLUMN_NVIDIA, COLUMN_AMD
-from max.gpu.host import DeviceContext, DeviceBuffer, HostBuffer
+from max.gpu.host import DeviceContext, DeviceBuffer
 from core.forest_inference import (
     _forest_shape_checks, forest_pack_device, forest_validate_device, launch_forest_inference, launch_forest_argmax, FOREST_PACKED_NODES,
-    device_all_finite, forest_labels_kernel, launch_forest_leaf_labels,
+    device_all_finite,
 )
 from core.forest_inference_pool import PooledForest, forest_device_count
 from core.neural_context import process_ctx
 from core.admitted_finite_status import enqueue_finite_status
-from core.forest_experiments import T34_CHUNK_FOLD, T35_LEAF_REUSE, T36_FINITE_STAGE, T37_WORKSPACE, T38_FUSED_LABELS
+from core.forest_experiments import T36_FINITE_STAGE
+# TOMBSTONE: MOJOLEARN_TREES_T34_CHUNK_FOLD (opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-04-base; code recoverable at 08081353e1.
+# Restore: git apply experiments/removed/MOJOLEARN_TREES_T34_CHUNK_FOLD.expdel2-04-base.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_TREES_T38_FUSED_LABELS (opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-04-base; code recoverable at 1caa34cfb3.
+# Restore: git apply experiments/removed/MOJOLEARN_TREES_T38_FUSED_LABELS.expdel2-04-base.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_TREES_T37_WORKSPACE (opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-04-base; code recoverable at 9d8b51b0a6.
+# Restore: git apply experiments/removed/MOJOLEARN_TREES_T37_WORKSPACE.expdel2-04-base.patch; record in docs/TOMBSTONES.md.
 from core.shared_slot import SharedSlot
 
 
 #: The resident path checks its input and output for non-finite values on
 #: the device where they land (`device_all_finite`, core/forest_inference);
-#: the host scans of DEVIATION 2962 are gone (cpu-gpu-cleanup). With
-#: `MOJOLEARN_FOREST_PINNED_STAGE=1` a pinned host stage is still retained
-#: beside the device workspace pair (FOREST-IO-REUSE-1's lifetime) but the
-#: upload reads the caller's rows. `MOJOLEARN_FOREST_PROFILE=1` prints one
+#: the host scans of DEVIATION 2962 are gone (cpu-gpu-cleanup); the upload
+#: reads the caller's rows. `MOJOLEARN_FOREST_PROFILE=1` prints one
 #: line per call with the nanoseconds of each stage, the stream drained
 #: between stages so the numbers attribute; it is a diagnostic build, never
 #: a timed arm.
-comptime FOREST_PINNED_STAGE = is_defined["MOJOLEARN_FOREST_PINNED_STAGE"]()
+# TOMBSTONE: MOJOLEARN_FOREST_PINNED_STAGE (opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-04-base; code recoverable at 28a3c1be2b.
+# Restore: git apply experiments/removed/MOJOLEARN_FOREST_PINNED_STAGE.patch; record in docs/TOMBSTONES.md.
 comptime FOREST_PROFILE = is_defined["MOJOLEARN_FOREST_PROFILE"]()
 
 #: gap-fails2 (2026-10-02): every resident snapshot of one registry (RF or
@@ -46,9 +51,8 @@ comptime FOREST_PROFILE = is_defined["MOJOLEARN_FOREST_PROFILE"]()
 #: NVIDIA board held 47 X-sized workspaces, 41 GB, and the next fit ran the
 #: L40S out of memory. Calls are synchronous under the GIL, so one workspace
 #: serves every snapshot; same kernels, same launches, no bit moves.
-#: `-D MOJOLEARN_FOREST_PER_MODEL_IO` is main's arm (a context and a
-#: workspace per snapshot), the A/B until measured.
-comptime FOREST_PER_MODEL_IO = is_defined["MOJOLEARN_FOREST_PER_MODEL_IO"]()
+# TOMBSTONE: MOJOLEARN_FOREST_PER_MODEL_IO (opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-04-base; code recoverable at c9c333f2d7.
+# Restore: git apply experiments/removed/MOJOLEARN_FOREST_PER_MODEL_IO.patch; record in docs/TOMBSTONES.md.
 def forest_ordered_resident_policy[
     column: Int, mode: Int, forced: Bool, disabled: Bool
 ]() -> Bool:
@@ -65,32 +69,33 @@ def forest_ordered_resident_policy[
 
 #: Retain the resident model/workspaces while launching the strict
 #: increasing-tree kernel. H100 full-buffer qualification promotes this for
-#: Apple, NVIDIA and AMD in FAST/IDENTICAL. `_OFF` restores the former
-#: sequential IDENTICAL AUTO policy and resident FAST 32-grove graph; the
-#: positive define remains an experiment switch for other IDENTICAL columns.
+#: Apple, NVIDIA and AMD in FAST/IDENTICAL.
 #: Since 2026-09-22 this is the DEFAULT of a per-snapshot choice
 #: (`ResidentForest.ordered`, forest_prepare_gpu's optional 4th param): an
 #: IDENTICAL caller names it, strict for `auto` (the sequential bits) and
 #: the 32-grove graph for an explicit `parallel_groves` (the recorded fold,
 #: which the CPU host groves engine also computes). As a bare compiled
 #: default it moved recorded IDENTICAL parallel_groves cells on every GPU.
+# TOMBSTONE: MOJOLEARN_FOREST_ORDERED_RESIDENT (opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-04-base; code recoverable at 39d9cbb242.
+# Restore: git apply experiments/removed/MOJOLEARN_FOREST_ORDERED_RESIDENT.patch; record in docs/TOMBSTONES.md.
 comptime FOREST_ORDERED_RESIDENT = forest_ordered_resident_policy[
     TARGET_COLUMN,
     GLOBAL_NUMERIC_MODE,
-    is_defined["MOJOLEARN_FOREST_ORDERED_RESIDENT"](),
-    is_defined["MOJOLEARN_FOREST_ORDERED_RESIDENT_OFF"](),
+    False,
+    False,
 ]()
+# TOMBSTONE: MOJOLEARN_FOREST_ORDERED_RESIDENT_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-04-base; code recoverable at 057d3cc56b.
+# Restore: git apply experiments/removed/MOJOLEARN_FOREST_ORDERED_RESIDENT_OFF.patch; record in docs/TOMBSTONES.md.
 
 
 struct ForestIOWorkspace(Defaultable, Movable):
     """The input/output workspace every shared-context resident snapshot of
-    one registry borrows (FOREST_PER_MODEL_IO's default arm). Exact size:
+    one registry borrows. Exact size:
     a call of another size releases and reallocates, as a snapshot's own
     workspace did (FOREST-IO-REUSE-1)."""
     var input: Optional[DeviceBuffer[DType.float32]]
     var output: Optional[DeviceBuffer[DType.float32]]
     var label: Optional[DeviceBuffer[DType.int32]]
-    var stage: Optional[HostBuffer[DType.float32]]
     var input_len: Int
     var output_len: Int
     var label_len: Int
@@ -109,7 +114,6 @@ struct ForestIOWorkspace(Defaultable, Movable):
         self.input = Optional[DeviceBuffer[DType.float32]]()
         self.output = Optional[DeviceBuffer[DType.float32]]()
         self.label = Optional[DeviceBuffer[DType.int32]]()
-        self.stage = Optional[HostBuffer[DType.float32]]()
         self.input_len = 0
         self.output_len = 0
         self.label_len = 0
@@ -120,7 +124,6 @@ struct ForestIOWorkspace(Defaultable, Movable):
         self.input = None
         self.output = None
         self.label = None
-        self.stage = None
         self.input_len = 0
         self.output_len = 0
         self.label_len = 0
@@ -128,11 +131,7 @@ struct ForestIOWorkspace(Defaultable, Movable):
         self.staged_len = 0
 
     def _input_fits(self, n_in: Int) -> Bool:
-        if self.input_len == n_in:
-            return True
-        comptime if T37_WORKSPACE:
-            return n_in <= self.input_len <= 2*n_in
-        return False
+        return self.input_len == n_in
 
     def is_staged(self, addr: Int, n: Int) -> Bool:
         """True when the input buffer holds the staged rows `addr`, `n`."""
@@ -177,11 +176,6 @@ struct ForestIOWorkspace(Defaultable, Movable):
     def prepare(mut self, ctx: DeviceContext, n_in: Int, n_out: Int) raises:
         if self.input_len == n_in and self.output_len == n_out:
             return
-        comptime if T37_WORKSPACE:
-            # Reuse at most 2x the live request; capacity is bounded by caller
-            # demand and stale larger buffers are released on substantial shrink.
-            if n_in <= self.input_len <= 2*n_in and n_out <= self.output_len <= 2*n_out:
-                return
         if self.staged_len > 0 and self.staged_len == n_in and self._input_fits(n_in):
             # Keep the staged rows: only the output buffer is resized.
             self.output = None
@@ -198,9 +192,6 @@ struct ForestIOWorkspace(Defaultable, Movable):
         try:
             self.input = ctx.enqueue_create_buffer[DType.float32](n_in)
             self.output = ctx.enqueue_create_buffer[DType.float32](n_out)
-            comptime if FOREST_PINNED_STAGE:
-                self.stage = ctx.enqueue_create_host_buffer[DType.float32](n_in)
-                ctx.synchronize()
         except e:
             ctx.synchronize()
             self.release()
@@ -238,7 +229,6 @@ struct ResidentForest(Movable):
     var input_workspace: Optional[DeviceBuffer[DType.float32]]
     var output_workspace: Optional[DeviceBuffer[DType.float32]]
     var label_workspace: Optional[DeviceBuffer[DType.int32]]
-    var input_stage: Optional[HostBuffer[DType.float32]]
     var workspace_rows: Int
     var features: Int
     var outputs: Int
@@ -250,7 +240,7 @@ struct ResidentForest(Movable):
     #: IDENTICAL `auto` keeps the sequential bits on a resident snapshot.
     var ordered: Bool
     #: True: `ctx` is the registry's process context and the I/O workspace
-    #: is the registry's `ForestIOWorkspace` (FOREST_PER_MODEL_IO's default).
+    #: is the registry's `ForestIOWorkspace`.
     var shared: Bool
 
     def __init__(out self, offsets: List[Int32], columns: List[Int32],
@@ -266,7 +256,6 @@ struct ResidentForest(Movable):
         self.input_workspace = Optional[DeviceBuffer[DType.float32]]()
         self.output_workspace = Optional[DeviceBuffer[DType.float32]]()
         self.label_workspace = Optional[DeviceBuffer[DType.int32]]()
-        self.input_stage = Optional[HostBuffer[DType.float32]]()
         self.workspace_rows = 0
         self.features = features
         self.outputs = outputs
@@ -279,7 +268,7 @@ struct ResidentForest(Movable):
         self.left = Optional[DeviceBuffer[DType.int32]]()
         self.leaves = Optional[DeviceBuffer[DType.float32]]()
         var device_count = forest_device_count()
-        comptime if T34_CHUNK_FOLD or T36_FINITE_STAGE or T38_FUSED_LABELS:
+        comptime if T36_FINITE_STAGE:
             if device_count != 1:
                 raise Error("selected TREES inference experiment requires one device; pooled integration remains pending")
         comptime if FOREST_PACKED_NODES:
@@ -349,7 +338,6 @@ struct ResidentForest(Movable):
         _ = self.output_workspace^
         _ = self.label_workspace^
         _ = self.input_workspace^
-        _ = self.input_stage^
         _ = self.leaves^
         _ = self.left^
         _ = self.thresholds^
@@ -371,7 +359,6 @@ struct ResidentForest(Movable):
         self.output_workspace = None
         self.label_workspace = None
         self.input_workspace = None
-        self.input_stage = None
         self.workspace_rows = 0
         self.leaves = None
         self.left = None
@@ -465,7 +452,7 @@ struct ResidentForest(Movable):
         if self.pool:
             self.pool.value().predict_into[RF_INPUT](x, output, rows)
             return
-        if (reuse_io or T37_WORKSPACE) and self.shared:
+        if reuse_io and self.shared:
             var io = RF_IO.get_or_create_ptr()
             comptime if not RF_INPUT:
                 io = ET_IO.get_or_create_ptr()
@@ -474,27 +461,17 @@ struct ResidentForest(Movable):
             if not uploaded:
                 # Other rows overwrite the input buffer: nothing stays staged.
                 io[].unstage()
-            var io_stage = x
-            var io_staged = False
-            comptime if FOREST_PINNED_STAGE:
-                io_stage = io[].stage.value().unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
-                io_staged = True
             _predict_into_buffers[RF_INPUT](self.ctx.value(), self.offsets.value(),
                 self.columns.value(), self.thresholds.value(), self.left.value(),
                 self.leaves.value(), x, output, rows, features, outputs, self.trees,
-                io[].input.value(), io[].output.value(), io_stage, io_staged,
+                io[].input.value(), io[].output.value(), x, False,
                 self.ordered, uploaded)
-        elif reuse_io or T37_WORKSPACE:
+        elif reuse_io:
             self.prepare_workspace(rows)
-            var stage = x
-            var staged = False
-            comptime if FOREST_PINNED_STAGE:
-                stage = self.input_stage.value().unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
-                staged = True
             _predict_into_buffers[RF_INPUT](self.ctx.value(), self.offsets.value(),
                 self.columns.value(), self.thresholds.value(), self.left.value(),
                 self.leaves.value(), x, output, rows, features, outputs, self.trees,
-                self.input_workspace.value(), self.output_workspace.value(), stage, staged,
+                self.input_workspace.value(), self.output_workspace.value(), x, False,
                 self.ordered, False)
         else:
             var dx = self.ctx.value().enqueue_create_buffer[DType.float32](rows * features)
@@ -518,28 +495,18 @@ struct ResidentForest(Movable):
         # Calls are synchronous and the binding holds the GIL throughout.
         if self.workspace_rows == rows:
             return
-        comptime if T37_WORKSPACE:
-            if rows <= self.workspace_rows <= 2*rows:
-                return
         self.input_workspace = None
         self.output_workspace = None
         self.label_workspace = None
-        self.input_stage = None
         self.workspace_rows = 0
         try:
             self.input_workspace = self.ctx.value().enqueue_create_buffer[DType.float32](rows * self.features)
             self.output_workspace = self.ctx.value().enqueue_create_buffer[DType.float32](rows * self.outputs)
-            comptime if FOREST_PINNED_STAGE:
-                # DEVIATION 2962: the pinned input stage, the same lifetime
-                # as the device pair it feeds.
-                self.input_stage = self.ctx.value().enqueue_create_host_buffer[DType.float32](rows * self.features)
-                self.ctx.value().synchronize()
         except e:
             self.ctx.value().synchronize()
             self.input_workspace = None
             self.output_workspace = None
             self.label_workspace = None
-            self.input_stage = None
             raise e
         self.workspace_rows = rows
 
@@ -553,39 +520,6 @@ struct ResidentForest(Movable):
             self.ctx.value().enqueue_copy(dst_buf=dx.create_sub_buffer[DType.float32](0, rows*features), src_ptr=x)
             if not T36_FINITE_STAGE and not device_all_finite(self.ctx.value(), dx, rows * features):
                 raise Error("resident forest requires finite Float32 values")
-        comptime if T38_FUSED_LABELS and (T35_LEAF_REUSE or T36_FINITE_STAGE):
-            if self.ordered:
-                launch_forest_leaf_labels[RF_INPUT, False, FOREST_PACKED_NODES](self.ctx.value(), self.offsets.value(), self.columns.value(),
-                    self.thresholds.value(), self.left.value(), self.leaves.value(), dx, dlab, rows, features, outputs, self.trees)
-            else:
-                launch_forest_leaf_labels[RF_INPUT, True, FOREST_PACKED_NODES](self.ctx.value(), self.offsets.value(), self.columns.value(),
-                    self.thresholds.value(), self.left.value(), self.leaves.value(), dx, dlab, rows, features, outputs, self.trees)
-            self.ctx.value().enqueue_copy(dst_ptr=output, src_buf=dlab.create_sub_buffer[DType.int32](0, rows))
-            self.ctx.value().synchronize()
-            return
-        comptime if T38_FUSED_LABELS:
-            var bad = self.ctx.value().enqueue_create_buffer[DType.int32](1)
-            self.ctx.value().enqueue_memset(bad, Int32(0))
-            if self.ordered:
-                self.ctx.value().enqueue_function[forest_labels_kernel[RF_INPUT, False, FOREST_PACKED_NODES]](
-                    self.offsets.value().unsafe_ptr(), self.columns.value().unsafe_ptr(), self.thresholds.value().unsafe_ptr(),
-                    self.left.value().unsafe_ptr(), self.leaves.value().unsafe_ptr(), dx.unsafe_ptr(), dlab.unsafe_ptr(), bad.unsafe_ptr(),
-                    Int32(rows), Int32(features), Int32(outputs), Int32(self.trees), grid_dim=(rows+127)//128, block_dim=128)
-            else:
-                self.ctx.value().enqueue_function[forest_labels_kernel[RF_INPUT, True, FOREST_PACKED_NODES]](
-                    self.offsets.value().unsafe_ptr(), self.columns.value().unsafe_ptr(), self.thresholds.value().unsafe_ptr(),
-                    self.left.value().unsafe_ptr(), self.leaves.value().unsafe_ptr(), dx.unsafe_ptr(), dlab.unsafe_ptr(), bad.unsafe_ptr(),
-                    Int32(rows), Int32(features), Int32(outputs), Int32(self.trees), grid_dim=(rows+127)//128, block_dim=128)
-            var host_bad = self.ctx.value().enqueue_create_host_buffer[DType.int32](1)
-            self.ctx.value().enqueue_copy(dst_ptr=host_bad.unsafe_ptr(), src_buf=bad)
-            self.ctx.value().synchronize()
-            if host_bad.unsafe_ptr().unsafe_load(0) != 0:
-                raise Error("resident forest requires finite Float32 scores")
-            self.ctx.value().enqueue_copy(dst_ptr=output, src_buf=dlab.create_sub_buffer[DType.int32](0, rows))
-            self.ctx.value().synchronize()
-            _ = host_bad^
-            _ = bad^
-            return
         if self.ordered:
             launch_forest_inference[RF_INPUT, False, FOREST_PACKED_NODES](
                 self.ctx.value(), self.offsets.value(), self.columns.value(),
@@ -762,11 +696,10 @@ def resident_prepare[RF_INPUT: Bool](offsets: List[Int32], columns: List[Int32],
     comptime if not RF_INPUT:
         state = ET_REGISTRY.get_or_create_ptr()
     var shared = Optional[DeviceContext]()
-    comptime if not FOREST_PER_MODEL_IO:
-        comptime if RF_INPUT:
-            shared = process_ctx[RF_CTX_SLOT]()
-        else:
-            shared = process_ctx[ET_CTX_SLOT]()
+    comptime if RF_INPUT:
+        shared = process_ctx[RF_CTX_SLOT]()
+    else:
+        shared = process_ctx[ET_CTX_SLOT]()
     var model = ResidentForest(offsets, columns, thresholds, left, leaves, features, outputs,
                                ordered, shared)
     if state[].next_id == 9223372036854775807:
@@ -829,12 +762,10 @@ def resident_predict_labels[RF_INPUT: Bool](handle: Int,
 
 def resident_stage_input[RF_INPUT: Bool](x: MutPointer[Float32, MutAnyOrigin], n: Int) raises -> Bool:
     """Stage `n` host values at `x` as the registry's shared input (see
-    `ForestIOWorkspace.staged_len`); False where nothing is staged: a build
-    with a workspace per snapshot (FOREST_PER_MODEL_IO), several devices
-    (pooled snapshots upload per device), no live snapshot yet, or rows that
-    are not all finite. The caller unstages with `resident_unstage_input`."""
-    comptime if FOREST_PER_MODEL_IO:
-        return False
+    `ForestIOWorkspace.staged_len`); False where nothing is staged: several
+    devices (pooled snapshots upload per device), no live snapshot yet, or
+    rows that are not all finite. The caller unstages with
+    `resident_unstage_input`."""
     if forest_device_count() != 1:
         return False
     var state = RF_REGISTRY.get_or_create_ptr()

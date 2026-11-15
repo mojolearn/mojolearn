@@ -5,7 +5,6 @@ The measured switches, dtype/size coverage, kernels and host refusal replay
 are unchanged from bindings.hotpath_device. Callers own GIL/owner admission.
 """
 from std.memory import bitcast
-from std.sys.compile import is_defined
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from core.hotpath_impl import (
     HOTPATH_SABOTAGE, HpStat, HP_STAT_INT, HP_STAT_FLOAT, HP_STAT_TUPLE,
@@ -20,14 +19,21 @@ from core.hotpath_device import (
 from core.hotpath_device_impl import device_all_finite_span
 from core.neural_context import process_ctx
 
-comptime LABELS_DEVICE_BASE = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not HOTPATH_SABOTAGE
-    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
-comptime LABELS_DEVICE_ELEM = LABELS_DEVICE_BASE and not is_defined["MOJOLEARN_IDN_HPDEV_ELEM_OFF"]()
-comptime LABELS_DEVICE_REDUCE = LABELS_DEVICE_BASE and not is_defined["MOJOLEARN_IDN_HPDEV_REDUCE_OFF"]()
-comptime LABELS_DEVICE_ISUM = LABELS_DEVICE_BASE and not is_defined["MOJOLEARN_IDN_HPDEV_ISUM_OFF"]()
-comptime LABELS_DEVICE_CAST = LABELS_DEVICE_BASE and not is_defined["MOJOLEARN_IDN_HPDEV_CAST_OFF"]()
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-04-base; code recoverable at 7d3bf6d8e8.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-04-base.patch; record in docs/TOMBSTONES.md.
+comptime LABELS_DEVICE_BASE = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not HOTPATH_SABOTAGE
+# TOMBSTONE: MOJOLEARN_IDN_HPDEV_ELEM_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-04-base; code recoverable at 18a80bdd0b.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_HPDEV_ELEM_OFF.patch; record in docs/TOMBSTONES.md.
+comptime LABELS_DEVICE_ELEM = LABELS_DEVICE_BASE
+# TOMBSTONE: MOJOLEARN_IDN_HPDEV_REDUCE_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-04-base; code recoverable at 8ec3732a1b.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_HPDEV_REDUCE_OFF.patch; record in docs/TOMBSTONES.md.
+comptime LABELS_DEVICE_REDUCE = LABELS_DEVICE_BASE
+# TOMBSTONE: MOJOLEARN_IDN_HPDEV_ISUM_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-04-base; code recoverable at 8f026542e3.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_HPDEV_ISUM_OFF.patch; record in docs/TOMBSTONES.md.
+comptime LABELS_DEVICE_ISUM = LABELS_DEVICE_BASE
+# TOMBSTONE: MOJOLEARN_IDN_HPDEV_CAST_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-04-base; code recoverable at 8159159cc4.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_HPDEV_CAST_OFF.patch; record in docs/TOMBSTONES.md.
+comptime LABELS_DEVICE_CAST = LABELS_DEVICE_BASE
 comptime LABELS_DEVICE_INPUT = not HOTPATH_SABOTAGE
 comptime LABELS_DEVICE_CONTEXT = (
     "MojolearnCoreContextIdenticalV3" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnCoreContextFastV3"

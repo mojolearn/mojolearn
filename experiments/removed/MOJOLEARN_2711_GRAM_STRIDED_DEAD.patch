@@ -1,0 +1,21 @@
+diff --git a/core/gram_splitk.mojo b/core/gram_splitk.mojo
+index d96a96178a..0987a50c70 100644
+--- a/core/gram_splitk.mojo
++++ b/core/gram_splitk.mojo
+@@ -219,11 +219,11 @@ comptime GRAM_TPB = lib_block_size_for[K_LIB_GRAM_SPLITK, TARGET_COLUMN]()
+ #: Jacobi convergence on all three cases, where arm 0 is wrong in all 128
+ #: chunks. Arm 1 is the default from that day; it computes the same products
+ #: in the same k-ascending order with per-cell scalar accumulators, and the
+-#: M4 holds it bit-equal to arm 0. Arm 0 stays reachable only through the
+-#: explicit `STRIDED_ARM` parameter (decomposition/checks/jacobi_sm120a_probe.mojo).
+-# TOMBSTONE: MOJOLEARN_2711_GRAM_STRIDED_DEAD (opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-04-base; code recoverable at 7b75b0819e.
+-# Restore: git apply experiments/removed/MOJOLEARN_2711_GRAM_STRIDED_DEAD.patch; record in docs/TOMBSTONES.md.
+-comptime GRAM_STRIDED_ARM = 1
++#: M4 holds it bit-equal to arm 0. Build with
++#: `-D MOJOLEARN_2711_GRAM_STRIDED_DEAD=1` to get arm 0 back for an A/B.
++comptime GRAM_STRIDED_ARM = (
++    0 if is_defined["MOJOLEARN_2711_GRAM_STRIDED_DEAD"]() else 1
++)
+ 
+ #: Rows of X staged in shared memory per barrier. 32 rows keeps the staging
+ #: tile at `32 * GRAM_MAX_COLS * 4 = 16 KB`, half of Metal's 32 KB

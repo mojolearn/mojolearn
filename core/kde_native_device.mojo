@@ -4,9 +4,9 @@ from checks.numerics import GLOBAL_NUMERIC_MODE
 from checks.vendor import COMPILED_VENDOR
 from core.pca_native_api import pca_vendor_code
 from core.hostptr import f32_ptr, read_f32
-from core.kde_native_api import KDENativeKernels, KDEPrepareRequest, KDEQueryRequest, KDEResidentQuery, KDE_CAP_QUERY, KDE_CAP_RESIDENT, KDE_CAP_IMMUTABLE
+from core.kde_native_api import KDENativeKernels, KDEPrepareRequest, KDEQueryRequest, KDEResidentQuery, KDE_CAP_QUERY, KDE_CAP_RESIDENT
 from kde.estimator import kde_score_samples_host_ptr
-from kde.resident_fit import kde_fit_prepare, kde_fit_release, kde_score_samples_resident, KDE_FAST_IMMUTABLE_FIT
+from kde.resident_fit import kde_fit_prepare, kde_fit_release, kde_score_samples_resident
 
 
 struct KDEDeviceKernels(KDENativeKernels):
@@ -20,7 +20,9 @@ struct KDEDeviceKernels(KDENativeKernels):
 
     @staticmethod
     def capabilities() -> Int:
-        return KDE_CAP_QUERY | KDE_CAP_RESIDENT | (KDE_CAP_IMMUTABLE if KDE_FAST_IMMUTABLE_FIT else 0)
+        # TOMBSTONE: MOJOLEARN_KDE_FAST_IMMUTABLE_FIT (opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-04-base; code recoverable at 6b64b91b3f.
+        # Restore: git apply experiments/removed/MOJOLEARN_KDE_FAST_IMMUTABLE_FIT.expdel2-04-base.patch; record in docs/TOMBSTONES.md.
+        return KDE_CAP_QUERY | KDE_CAP_RESIDENT
 
     @staticmethod
     def prepare(r: KDEPrepareRequest) raises -> Int:

@@ -100,10 +100,9 @@ def pinned_gemm_nt_kernel(
 #: untiled global loads (Ridge's U = A V at 1M x 220 x 220, PCA's
 #: transform). The tiled kernel is plain shared memory and barriers; the
 #: simdgroup-matrix arm (`APPLE_GEMM_NT_MMA`) stays Apple-only via APPLE_MMA.
-comptime APPLE_GEMM_NT_TILED = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not is_defined["MOJOLEARN_APPLE_GEMM_NT_TILED_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_APPLE_GEMM_NT_TILED_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-04-base; code recoverable at 337c096a5b.
+# Restore: git apply experiments/removed/MOJOLEARN_APPLE_GEMM_NT_TILED_OFF.patch; record in docs/TOMBSTONES.md.
+comptime APPLE_GEMM_NT_TILED = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 """IDENTICAL on Apple: `gemm_nt` stages x and y tiles in threadgroup memory
 and gives each thread RM x RN cells. Every cell is still ONE chain,
 `acc = rtf_mul_add(ftz(x[i, p]), ftz(y[j, p]), acc)` for p = 0 .. k-1 in
@@ -194,11 +193,9 @@ def apple_gemm_nt_tiled_kernel[TM: Int, TN: Int, RM: Int, RN: Int](
                 z[i * n + j] = ftz(Float32(0.0) + ftz(acc[rr * RN + cc]))
 
 
-comptime APPLE_GEMM_NT_MMA = (
-    APPLE_GEMM_NT_TILED
-    and APPLE_MMA
-    and not is_defined["MOJOLEARN_APPLE_GEMM_NT_MMA_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_APPLE_GEMM_NT_MMA_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-04-base; code recoverable at ea1e949b3d.
+# Restore: git apply experiments/removed/MOJOLEARN_APPLE_GEMM_NT_MMA_OFF.patch; record in docs/TOMBSTONES.md.
+comptime APPLE_GEMM_NT_MMA = APPLE_GEMM_NT_TILED and APPLE_MMA
 """IDENTICAL on Apple (lane/apple-identical-neural, 2026-09-26): `gemm_nt`
 for m, n >= 64 on the simdgroup matrix unit. Every cell is still the one
 chain `acc = rtf_mul_add(ftz(x[i, p]), ftz(y[j, p]), acc)`, p ascending,
@@ -208,8 +205,7 @@ the GEMM's window admission holds (flushed operand exponent fields
 of the chain admitted, so every entering accumulator is a multiple of
 2^-126): then no step result can be subnormal and the bare FMA, which the
 M4's matrix chain reproduces bit for bit, IS `rtf_mul_add`. Any other
-window, every later one, and a ragged tail run `rtf_mul_add` cell by cell.
-`-D MOJOLEARN_APPLE_GEMM_NT_MMA_OFF` reverts to the tiled kernel."""
+window, every later one, and a ragged tail run `rtf_mul_add` cell by cell."""
 
 
 def apple_gemm_nt_mma_kernel(
@@ -391,7 +387,10 @@ def pinned_gemv_n_tiled_kernel(
         z.unsafe_store(i, ftz(Float32(0.0) + ftz(acc)))
 
 
-comptime GEMM_IDENT_SWAP_537 = is_defined["MOJOLEARN_537_GEMM_IDENT_SWAP"]()
+# TOMBSTONE: MOJOLEARN_537_GEMM_IDENT_SWAP (opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-04-base; code recoverable at 33a25f5e7e.
+# Restore: git apply experiments/removed/MOJOLEARN_537_GEMM_IDENT_SWAP.patch; record in docs/TOMBSTONES.md.
+# The name stays (bench/speed/gemm_speed_main.mojo imports it) as the folded constant.
+comptime GEMM_IDENT_SWAP_537 = False
 
 
 comptime PINNED_GEMM_TPB = 256
@@ -733,12 +732,10 @@ there; from the SIMD width up every lane of the vendor kernel has work.
 #: 4c2340386abc 5.52 / 3.02 (2x); istella infer did not regress. One cell
 #: each, with other 0.8.25 -> 0.8.37 harness/Python changes in between. So
 #: OLS predict (`gemv_n_ols_predict`) launches the measured plain kernel by
-#: default; `-D MOJOLEARN_IDN_OLS_PREDICT_TILED` is the B arm (today's tiled
-#: kernel), owed A/B row ols-predict-tiled (ols infer taxi + istella, NV +
-#: AMD) in bench/results/paper_compare/owed-pre0867.json. Fit and every other
-#: `gemv_n` caller keep NV_AMD_IDENTICAL_STEPS. Both kernels run the same
-#: chain per row: no bit moves.
-comptime IDN_OLS_PREDICT_TILED = is_defined["MOJOLEARN_IDN_OLS_PREDICT_TILED"]()
+#: default. Fit and every other `gemv_n` caller keep NV_AMD_IDENTICAL_STEPS.
+#: Both kernels run the same chain per row: no bit moves.
+# TOMBSTONE: MOJOLEARN_IDN_OLS_PREDICT_TILED (opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-04-base; code recoverable at 1900f1d297.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_OLS_PREDICT_TILED.patch; record in docs/TOMBSTONES.md.
 
 
 def gemv_n_ols_predict(
@@ -751,9 +748,8 @@ def gemv_n_ols_predict(
 ) raises:
     """`z[m] = x[m x k] . y[k]` for OLS predict: IDENTICAL launches the
     plain one-thread-per-row `pinned_gemv_n_kernel` (the measured 0.8.25
-    route) unless `-D MOJOLEARN_IDN_OLS_PREDICT_TILED`; every other case is
-    `gemv_n`."""
-    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not IDN_OLS_PREDICT_TILED:
+    route); every other case is `gemv_n`."""
+    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
         ctx.enqueue_function[pinned_gemv_n_kernel](
             z.unsafe_ptr(),
             x.unsafe_ptr(),
@@ -778,8 +774,7 @@ def gemv_n(
     """`z[m] = x[m x k] ."""
     comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
         # NVIDIA / AMD: the same chain per row, X staged through shared
-        # memory (NV_AMD_IDENTICAL_STEPS; -D MOJOLEARN_NV_AMD_STEPS_OFF=1
-        # restores the plain kernel).
+        # memory (NV_AMD_IDENTICAL_STEPS).
         comptime if NV_AMD_IDENTICAL_STEPS:
             ctx.enqueue_function[pinned_gemv_n_tiled_kernel](
                 z.unsafe_ptr(),
@@ -803,11 +798,9 @@ def gemv_n(
         return
     # FAST on Apple, k <= GEMV_FAST_PINNED_MAX_K: the one-thread-per-row
     # kernel beats the vendor gemv on narrow matrices.
-    # `-D MOJOLEARN_GEMV_FAST_VENDOR` keeps the vendor gemv.
-    comptime if (
-        TARGET_HAS_APPLE_GPU
-        and not is_defined["MOJOLEARN_GEMV_FAST_VENDOR"]()
-    ):
+    # TOMBSTONE: MOJOLEARN_GEMV_FAST_VENDOR (opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-04-base; code recoverable at 8fc20d312b.
+    # Restore: git apply experiments/removed/MOJOLEARN_GEMV_FAST_VENDOR.patch; record in docs/TOMBSTONES.md.
+    comptime if TARGET_HAS_APPLE_GPU:
         if k <= GEMV_FAST_PINNED_MAX_K:
             ctx.enqueue_function[pinned_gemv_n_kernel](
                 z.unsafe_ptr(),
