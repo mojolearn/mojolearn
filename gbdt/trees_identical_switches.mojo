@@ -94,7 +94,9 @@ comptime T29 = False
 # istella 3.43x/3.76x SLOWER -> deleted (T29 'on' stays). Recoverable at main 42d1e42c6; row in docs/apple-fast/EXPERIMENTS.md.
 
 # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
-comptime T30 = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_TREES_T30"]()
+# TOMBSTONE: MOJOLEARN_TREES_T30 (DELETE-ARM, opt-in, no A/B recorded, rule a) deleted 2026-11-15 by lane/expdel2-45-trees; code recoverable at b0f082dd3e.
+# Restore: git apply experiments/removed/MOJOLEARN_TREES_T30.patch
+comptime T30 = False
 
 # Independent sub-arms preserve the incumbent when omitted.
 # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
