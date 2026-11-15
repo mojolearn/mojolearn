@@ -48,8 +48,7 @@ from x_prep.device import x_prep_ctx
 # Restore: git apply experiments/removed/MOJOLEARN_NB_TEXT_CSR_OFF.patch; record in docs/TOMBSTONES.md.
 comptime NB_TEXT_CSR = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
 #: lane idn-int-prep (2026-10-04): the CSR text path in IDENTICAL on every
-#: vendor, ON by default (-D MOJOLEARN_IDN_NB_CSR_OFF: no export, the dense
-#: program). The fit counts in 64-bit integers held as two UInt32 words per
+#: vendor, always on there. The fit counts in 64-bit integers held as two UInt32 words per
 #: (class, feature) (`nb_csr_count_int_kernel`, lane gap-shap-nb 2026-10-08:
 #: Metal has no 64-bit atomic add, so the low word takes a UInt32 atomic add
 #: and a wrap carries 1 into the high word; the final pair is the exact sum
@@ -67,7 +66,9 @@ comptime NB_TEXT_CSR = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_
 #: (`nb_csr_jll_chk_kernel`) is `matmul_unit`'s ascending chain without the
 #: zero terms (a zero term adds nothing to a chain that starts at +0), under
 #: the same column-order flag.
-comptime IDN_NB_CSR = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (is_defined["MOJOLEARN_IDN_NB_CSR_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
+# TOMBSTONE: MOJOLEARN_IDN_NB_CSR_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-09-base; code recoverable at 2aca6c096a.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_NB_CSR_OFF.patch; record in docs/TOMBSTONES.md.
+comptime IDN_NB_CSR = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 #: out_flag levels of the IDENTICAL entries (the largest raised wins: a
 #: negative value is refused whatever else the input holds, as the dense fit)
 comptime CSR_FLAG_FALLBACK = 1
