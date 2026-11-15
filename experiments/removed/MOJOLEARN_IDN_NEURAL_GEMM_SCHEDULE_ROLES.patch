@@ -1,0 +1,43 @@
+diff --git a/gemm/experiments/neural_switches.mojo b/gemm/experiments/neural_switches.mojo
+index 40497294bc..d447297d0a 100644
+--- a/gemm/experiments/neural_switches.mojo
++++ b/gemm/experiments/neural_switches.mojo
+@@ -1,19 +1,26 @@
+ # SPDX-License-Identifier: Apache-2.0
+ """One-switch-per-idea neural GEMM controls (lane neural-gemm-attn-dedupe, 2026-10-07).
+ 
+-Imports nothing, so the low-level IDENTICAL GEMM
++Imports only std, so the low-level IDENTICAL GEMM
+ (gemm/checks/gemm_identical.mojo) can read the same switch without importing
+ the neural experiment modules.
+ 
+ The neural GEMM schedule is the incumbent IDENTICAL GEMM. The arm names
+ below stay as constants for the dispatcher (gemm/neural_dispatch.mojo).
+ 
+-Neural caller classes (`identical_gemm_into[ROLE=...]`): 1 projection,
+-2 head, 4 weight-grad; every role takes the one schedule.
++`-D MOJOLEARN_IDN_NEURAL_GEMM_SCHEDULE_ROLES=<mask>` (default 7 = every
++role): which neural caller classes take the selected schedule; the others
++keep the incumbent route in the same build. Bits: 1 projection (forward and
++dInput of every layer that is not the LM head), 2 head (LM head forward and
++dInput), 4 weight-grad (every dWeight/dBias product). The role is a
++call-site tag (`identical_gemm_into[ROLE=...]`), never a matrix size, so one
++mask covers every model width.
+ 
+ The legal-arm asserts live in core/six_lane_experiment_guards.mojo, which
+ every binding evaluates through GLOBAL_NUMERIC_MODE.
+ """
++from std.sys.compile import get_defined_int
++
+ # TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (its terms here: every IDENTICAL switch off at once; EXP:2438 old path) deleted 2026-11-15 by lane/expdel2-25-neural; code recoverable at 5cde955daf.
+ # Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-25-neural.patch.
+ 
+@@ -35,7 +42,5 @@ comptime ROLE_PROJECTION = 1
+ comptime ROLE_HEAD = 2
+ comptime ROLE_WGRAD = 4
+ comptime ROLE_ALL = 7
+-# TOMBSTONE: MOJOLEARN_IDN_NEURAL_GEMM_SCHEDULE_ROLES (role mask knob, no A/B; 7 kept) deleted 2026-11-15 by lane/expdel2-25-neural; code recoverable at 7737754a09.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_NEURAL_GEMM_SCHEDULE_ROLES.patch; record in docs/TOMBSTONES.md.
+-comptime NEURAL_GEMM_ROLES = ROLE_ALL
++comptime NEURAL_GEMM_ROLES = get_defined_int["MOJOLEARN_IDN_NEURAL_GEMM_SCHEDULE_ROLES", 7]()
+ 

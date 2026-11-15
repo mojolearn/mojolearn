@@ -1215,6 +1215,35 @@ in the tables after the sections.
 | [`MOJOLEARN_MCD_WIDE_OFF`](#mojolearn_mcd_wide_off-old-path-deleted-2026-11-15) | MinCovDet / EllipticEnvelope FAST Apple (x_decomp/mcd_fast.mojo) | removed (old path beside the default; V2) | 2026-11-15 | [MOJOLEARN_MCD_WIDE_OFF.patch](../experiments/removed/MOJOLEARN_MCD_WIDE_OFF.patch) |
 | [`MOJOLEARN_TSVD_QOLD`](#mojolearn_tsvd_qold-old-path-deleted-2026-11-15) | TruncatedSVD FAST (x_decomp/qfix.mojo) | removed (old path beside the default; V2) | 2026-11-15 | [MOJOLEARN_TSVD_QOLD.patch](../experiments/removed/MOJOLEARN_TSVD_QOLD.patch) |
 | [`MOJOLEARN_XDECOMP_HOST_SERIAL`](#mojolearn_xdecomp_host_serial-unmeasured-arm-deleted-2026-11-15) | decomposition host column (x_decomp/host.mojo) | removed (opt-in arm, no A/B recorded or record read; V2) | 2026-11-15 | [MOJOLEARN_XDECOMP_HOST_SERIAL.patch](../experiments/removed/MOJOLEARN_XDECOMP_HOST_SERIAL.patch) |
+| [`MOJOLEARN_AFN_GEMM2_ALL`](#mojolearn_afn_gemm2_all-unmeasured-arm-deleted-2026-11-15) | GEMM Apple FAST second-round kernel (gemm/afn_apple_fast2.mojo) | removed (opt-in arm, no A/B recorded or record read; V2) | 2026-11-15 | [MOJOLEARN_AFN_GEMM2_ALL.patch](../experiments/removed/MOJOLEARN_AFN_GEMM2_ALL.patch) |
+| [`MOJOLEARN_AFN_GEMM2_BIGTILE`](#mojolearn_afn_gemm2_bigtile-unmeasured-arm-deleted-2026-11-15) | GEMM Apple FAST second-round kernel (gemm/afn_apple_fast2.mojo) | removed (opt-in arm, no A/B recorded or record read; V2) | 2026-11-15 | [MOJOLEARN_AFN_GEMM2_BIGTILE.patch](../experiments/removed/MOJOLEARN_AFN_GEMM2_BIGTILE.patch) |
+| [`MOJOLEARN_AFN_GEMM2_DBUF`](#mojolearn_afn_gemm2_dbuf-unmeasured-arm-deleted-2026-11-15) | GEMM Apple FAST second-round kernel (gemm/afn_apple_fast2.mojo) | removed (opt-in arm, no A/B recorded or record read; V2) | 2026-11-15 | [MOJOLEARN_AFN_GEMM2_DBUF.patch](../experiments/removed/MOJOLEARN_AFN_GEMM2_DBUF.patch) |
+| [`MOJOLEARN_AFN_GEMM2_DIRECT_B`](#mojolearn_afn_gemm2_direct_b-unmeasured-arm-deleted-2026-11-15) | GEMM Apple FAST second-round kernel (gemm/afn_apple_fast2.mojo) | removed (opt-in arm, no A/B recorded or record read; V2) | 2026-11-15 | [MOJOLEARN_AFN_GEMM2_DIRECT_B.patch](../experiments/removed/MOJOLEARN_AFN_GEMM2_DIRECT_B.patch) |
+| [`MOJOLEARN_AFN_GEMM2_SWIZZLE`](#mojolearn_afn_gemm2_swizzle-unmeasured-arm-deleted-2026-11-15) | GEMM Apple FAST second-round kernel (gemm/afn_apple_fast2.mojo) | removed (opt-in arm, no A/B recorded or record read; V2) | 2026-11-15 | [MOJOLEARN_AFN_GEMM2_SWIZZLE.patch](../experiments/removed/MOJOLEARN_AFN_GEMM2_SWIZZLE.patch) |
+| [`MOJOLEARN_AFN_GEMM2_SWZ_G`](#mojolearn_afn_gemm2_swz_g-unmeasured-arm-deleted-2026-11-15) | GEMM Apple FAST second-round kernel (gemm/afn_apple_fast2.mojo) | removed (opt-in arm, no A/B recorded or record read; V2) | 2026-11-15 | [MOJOLEARN_AFN_GEMM2_SWZ_G.patch](../experiments/removed/MOJOLEARN_AFN_GEMM2_SWZ_G.patch) |
+| [`MOJOLEARN_AFN_GEMM_ALL`](#mojolearn_afn_gemm_all-unmeasured-arm-deleted-2026-11-15) | GEMM Apple FAST (gemm/afn_apple_fast.mojo) | removed (opt-in arm, no A/B recorded or record read; V2) | 2026-11-15 | [MOJOLEARN_AFN_GEMM_ALL.patch](../experiments/removed/MOJOLEARN_AFN_GEMM_ALL.patch) |
+| [`MOJOLEARN_AFN_GEMM_BF16_MMA`](#mojolearn_afn_gemm_bf16_mma-old-path-deleted-2026-11-15) | GEMM Apple FAST (gemm/afn_apple_fast.mojo) | removed (old path beside the default; V2) | 2026-11-15 | [MOJOLEARN_AFN_GEMM_BF16_MMA.patch](../experiments/removed/MOJOLEARN_AFN_GEMM_BF16_MMA.patch) |
+| [`MOJOLEARN_AFN_GEMM_CORES`](#mojolearn_afn_gemm_cores-unmeasured-arm-deleted-2026-11-15) | GEMM Apple FAST (gemm/afn_apple_fast.mojo) | removed (opt-in arm, no A/B recorded or record read; V2) | 2026-11-15 | [MOJOLEARN_AFN_GEMM_CORES.patch](../experiments/removed/MOJOLEARN_AFN_GEMM_CORES.patch) |
+| [`MOJOLEARN_AFN_GEMM_EPILOGUE`](#mojolearn_afn_gemm_epilogue-unmeasured-arm-deleted-2026-11-15) | GEMM Apple FAST (gemm/afn_apple_fast.mojo) | removed (opt-in arm, no A/B recorded or record read; V2) | 2026-11-15 | [MOJOLEARN_AFN_GEMM_EPILOGUE.patch](../experiments/removed/MOJOLEARN_AFN_GEMM_EPILOGUE.patch) |
+| [`MOJOLEARN_AFN_GEMM_INT8_MMA`](#mojolearn_afn_gemm_int8_mma-unmeasured-arm-deleted-2026-11-15) | GEMM Apple FAST (gemm/afn_apple_fast.mojo) and gemm/checks/gemm_lowbit.mojo | removed (opt-in arm, no A/B recorded or record read; V2) | 2026-11-15 | [MOJOLEARN_AFN_GEMM_INT8_MMA.patch](../experiments/removed/MOJOLEARN_AFN_GEMM_INT8_MMA.patch) |
+| [`MOJOLEARN_AFN_GEMM_KB`](#mojolearn_afn_gemm_kb-unmeasured-arm-deleted-2026-11-15) | GEMM Apple FAST (gemm/afn_apple_fast.mojo) | removed (opt-in arm, no A/B recorded or record read; V2) | 2026-11-15 | [MOJOLEARN_AFN_GEMM_KB.patch](../experiments/removed/MOJOLEARN_AFN_GEMM_KB.patch) |
+| [`MOJOLEARN_AFN_GEMM_SIMDGROUP`](#mojolearn_afn_gemm_simdgroup-unmeasured-arm-deleted-2026-11-15) | GEMM Apple FAST (gemm/afn_apple_fast.mojo) | removed (opt-in arm, no A/B recorded or record read; V2) | 2026-11-15 | [MOJOLEARN_AFN_GEMM_SIMDGROUP.patch](../experiments/removed/MOJOLEARN_AFN_GEMM_SIMDGROUP.patch) |
+| [`MOJOLEARN_AFN_GEMM_SPLITK`](#mojolearn_afn_gemm_splitk-unmeasured-arm-deleted-2026-11-15) | GEMM Apple FAST (gemm/afn_apple_fast.mojo) | removed (opt-in arm, no A/B recorded or record read; V2) | 2026-11-15 | [MOJOLEARN_AFN_GEMM_SPLITK.patch](../experiments/removed/MOJOLEARN_AFN_GEMM_SPLITK.patch) |
+| [`MOJOLEARN_AFN_GEMM_TILESHAPE`](#mojolearn_afn_gemm_tileshape-unmeasured-arm-deleted-2026-11-15) | GEMM Apple FAST (gemm/afn_apple_fast.mojo) | removed (opt-in arm, no A/B recorded or record read; V2) | 2026-11-15 | [MOJOLEARN_AFN_GEMM_TILESHAPE.patch](../experiments/removed/MOJOLEARN_AFN_GEMM_TILESHAPE.patch) |
+| [`MOJOLEARN_AUTOGRAD_EMBEDDING_OFF`](#mojolearn_autograd_embedding_off-old-path-deleted-2026-11-15) | Embedding IDENTICAL (embedding/embedding_words_run.mojo) | removed (old path beside the default; V2) | 2026-11-15 | [MOJOLEARN_AUTOGRAD_EMBEDDING_OFF.patch](../experiments/removed/MOJOLEARN_AUTOGRAD_EMBEDDING_OFF.patch) |
+| [`MOJOLEARN_EMB_DEVICE_SCRATCH_OFF`](#mojolearn_emb_device_scratch_off-old-path-deleted-2026-11-15) | Embedding IDENTICAL (embedding/embedding_words_run.mojo) | removed (old path beside the default; V2) | 2026-11-15 | [MOJOLEARN_EMB_DEVICE_SCRATCH_OFF.patch](../experiments/removed/MOJOLEARN_EMB_DEVICE_SCRATCH_OFF.patch) |
+| [`MOJOLEARN_EMB_RESIDENT_OFF`](#mojolearn_emb_resident_off-old-path-deleted-2026-11-15) | Embedding IDENTICAL (embedding/embedding_words_run.mojo) | removed (old path beside the default; V2) | 2026-11-15 | [MOJOLEARN_EMB_RESIDENT_OFF.patch](../experiments/removed/MOJOLEARN_EMB_RESIDENT_OFF.patch) |
+| [`MOJOLEARN_GEMM_FAST_RAGGED_K_OFF`](#mojolearn_gemm_fast_ragged_k_off-old-path-deleted-2026-11-15) | GEMM Apple FAST (gemm/afn_apple_fast.mojo) | removed (old path beside the default; V2) | 2026-11-15 | [MOJOLEARN_GEMM_FAST_RAGGED_K_OFF.patch](../experiments/removed/MOJOLEARN_GEMM_FAST_RAGGED_K_OFF.patch) |
+| [`MOJOLEARN_IDN_GEMM_INT_SLICES`](#mojolearn_idn_gemm_int_slices-unmeasured-arm-deleted-2026-11-15) | linalg GEMM IDENTICAL (gemm/host_entry.mojo, gemm/host/linalg_native.mojo, gemm/int_slices.mojo) | removed (opt-in arm, no A/B recorded or record read; V2) | 2026-11-15 | [MOJOLEARN_IDN_GEMM_INT_SLICES.patch](../experiments/removed/MOJOLEARN_IDN_GEMM_INT_SLICES.patch) |
+| [`MOJOLEARN_IDN_NEURAL_CHAINS`](#mojolearn_idn_neural_chains-unmeasured-arm-deleted-2026-11-15) | neural GEMM experiments IDENTICAL (gemm/experiments/neural_profile.mojo) | removed (opt-in arm, no A/B recorded or record read; V2) | 2026-11-15 | [MOJOLEARN_IDN_NEURAL_CHAINS.patch](../experiments/removed/MOJOLEARN_IDN_NEURAL_CHAINS.patch) |
+| [`MOJOLEARN_IDN_NEURAL_GEMM_EPILOGUE`](#mojolearn_idn_neural_gemm_epilogue-unmeasured-arm-deleted-2026-11-15) | neural GEMM experiments IDENTICAL (gemm/experiments/neural_tiled_v2.mojo) | removed (opt-in arm, no A/B recorded or record read; V2) | 2026-11-15 | [MOJOLEARN_IDN_NEURAL_GEMM_EPILOGUE.patch](../experiments/removed/MOJOLEARN_IDN_NEURAL_GEMM_EPILOGUE.patch) |
+| [`MOJOLEARN_IDN_NEURAL_GEMM_SCHEDULE`](#mojolearn_idn_neural_gemm_schedule-unmeasured-arm-deleted-2026-11-15) | neural GEMM experiments IDENTICAL (gemm/experiments/neural_switches.mojo) | removed (opt-in arm, no A/B recorded or record read; V2) | 2026-11-15 | [MOJOLEARN_IDN_NEURAL_GEMM_SCHEDULE.patch](../experiments/removed/MOJOLEARN_IDN_NEURAL_GEMM_SCHEDULE.patch) |
+| [`MOJOLEARN_IDN_NEURAL_GEMM_SCHEDULE_ROLES`](#mojolearn_idn_neural_gemm_schedule_roles-unmeasured-arm-deleted-2026-11-15) | neural GEMM experiments IDENTICAL (gemm/experiments/neural_switches.mojo) | removed (opt-in arm, no A/B recorded or record read; V2) | 2026-11-15 | [MOJOLEARN_IDN_NEURAL_GEMM_SCHEDULE_ROLES.patch](../experiments/removed/MOJOLEARN_IDN_NEURAL_GEMM_SCHEDULE_ROLES.patch) |
+| [`MOJOLEARN_IDN_NEURAL_NN07`](#mojolearn_idn_neural_nn07-unmeasured-arm-deleted-2026-11-15) | neural GEMM experiments IDENTICAL (gemm/experiments/neural_grouped.mojo) | removed (opt-in arm, no A/B recorded or record read; V2) | 2026-11-15 | [MOJOLEARN_IDN_NEURAL_NN07.patch](../experiments/removed/MOJOLEARN_IDN_NEURAL_NN07.patch) |
+| [`MOJOLEARN_IDN_NEURAL_NN12`](#mojolearn_idn_neural_nn12-unmeasured-arm-deleted-2026-11-15) | neural GEMM experiments IDENTICAL (gemm/experiments/neural_plans.mojo) | removed (opt-in arm, no A/B recorded or record read; V2) | 2026-11-15 | [MOJOLEARN_IDN_NEURAL_NN12.patch](../experiments/removed/MOJOLEARN_IDN_NEURAL_NN12.patch) |
+| [`MOJOLEARN_IDN_NEURAL_NN16`](#mojolearn_idn_neural_nn16-unmeasured-arm-deleted-2026-11-15) | neural GEMM experiments IDENTICAL (gemm/experiments/neural_streaming.mojo) | removed (opt-in arm, no A/B recorded or record read; V2) | 2026-11-15 | [MOJOLEARN_IDN_NEURAL_NN16.patch](../experiments/removed/MOJOLEARN_IDN_NEURAL_NN16.patch) |
+| [`MOJOLEARN_INT_SLICES_FORCE_FLAT`](#mojolearn_int_slices_force_flat-unmeasured-arm-deleted-2026-11-15) | GEMM int slices research profile (gemm/int_slices.mojo) | removed (opt-in arm, no A/B recorded or record read; V2) | 2026-11-15 | [MOJOLEARN_INT_SLICES_FORCE_FLAT.patch](../experiments/removed/MOJOLEARN_INT_SLICES_FORCE_FLAT.patch) |
+| [`MOJOLEARN_NI07_GROUPED_PROJECTIONS`](#mojolearn_ni07_grouped_projections-unmeasured-arm-deleted-2026-11-15) | neural GEMM experiments IDENTICAL (gemm/experiments/neural_tiled_v2.mojo) | removed (opt-in arm, no A/B recorded or record read; V2) | 2026-11-15 | [MOJOLEARN_NI07_GROUPED_PROJECTIONS.patch](../experiments/removed/MOJOLEARN_NI07_GROUPED_PROJECTIONS.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -12108,3 +12137,239 @@ Not deleted, contrary to the plan: `MOJOLEARN_COLUMN_CPU` (the CPU-column build 
 - **Deleted by**: lane/expdel2-17-decomposition (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `395d3136ad` (deletion commit `d203a04705`).
 - **Restore**: `git apply experiments/removed/MOJOLEARN_XDECOMP_HOST_SERIAL.patch`, then delete the `MOJOLEARN_XDECOMP_HOST_SERIAL` refusal in `core/experiment_guards_decomposition.mojo`.
 - **Records**: refusal in `core/experiment_guards_decomposition.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-17-decomposition section).
+
+## Experiment deletions V2: lane expdel2-25-neural (2026-11-15)
+
+Deletions from docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (section expdel2-25-neural). KEEP, not deleted: `MOJOLEARN_EMB_SORT_NEGATIVE_CONTROL` (the negative control of tools/check_embedding_plan_sort.sh) and `MOJOLEARN_COLUMN_CPU` (the CPU-column build switch). Non-owner folds in this lane's files (patches `experiments/removed/<D>.expdel2-25-neural.patch`): `MOJOLEARN_IDN_ALL_OFF`, `MOJOLEARN_EMB_AUTO_SORT_MIN_CELLS`, `MOJOLEARN_IDN_NORM_FIXED_LANES`, `MOJOLEARN_IDN_CHUNKED_LM_HEAD_V2`, `MOJOLEARN_NN14_BOUNDED_IM2COL`.
+
+### MOJOLEARN_AFN_GEMM2_ALL: unmeasured arm deleted (2026-11-15)
+
+- **What it was**: turned on all four second-round arms (BIGTILE, DBUF, DIRECT_B, SWIZZLE); the whole file `gemm/afn_apple_fast2.mojo` (`afn2_gemm_kernel`, `afn2_gemm_dispatch`) and its one dispatch branch in `_afn_dispatch` went with the five arms.
+- **Verdict**: never-measured opt-in arm of the second Apple FAST GEMM kernel; EXP:607 MERGED-UNMEASURED (neural; Andrew Oct 3), never measured (plan rule f). Deleted under AGENTS.md "An unmeasured arm is deleted" (Andrew, 2026-11-15). No bit change on any vendor or the host column: the default path is untouched.
+- **Deleted by**: lane/expdel2-25-neural (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `45d3386430` (deletion commit `02da0a0217`).
+- **Restore**: `git apply experiments/removed/MOJOLEARN_AFN_GEMM2_ALL.patch`, then delete the `MOJOLEARN_AFN_GEMM2_ALL` refusal in `core/experiment_guards_neural.mojo`.
+- **Records**: refusal in `core/experiment_guards_neural.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-25-neural section).
+
+### MOJOLEARN_AFN_GEMM2_BIGTILE: unmeasured arm deleted (2026-11-15)
+
+- **What it was**: 128x64 block tiles of the second-round kernel (file deleted with AFN_GEMM2_ALL).
+- **Verdict**: never-measured opt-in arm of the second Apple FAST GEMM kernel; EXP:608 MERGED-UNMEASURED (neural; Andrew Oct 3), never measured (plan rule f). Deleted under AGENTS.md "An unmeasured arm is deleted" (Andrew, 2026-11-15). No bit change on any vendor or the host column: the default path is untouched.
+- **Deleted by**: lane/expdel2-25-neural (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `45d3386430` (deletion commit `02da0a0217`).
+- **Restore**: `git apply experiments/removed/MOJOLEARN_AFN_GEMM2_BIGTILE.patch`, then delete the `MOJOLEARN_AFN_GEMM2_BIGTILE` refusal in `core/experiment_guards_neural.mojo`.
+- **Records**: refusal in `core/experiment_guards_neural.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-25-neural section).
+
+### MOJOLEARN_AFN_GEMM2_DBUF: unmeasured arm deleted (2026-11-15)
+
+- **What it was**: two threadgroup pages always, one barrier per window (file deleted with AFN_GEMM2_ALL).
+- **Verdict**: never-measured opt-in arm of the second Apple FAST GEMM kernel; EXP:609 MERGED-UNMEASURED (neural; Andrew Oct 3), never measured (plan rule f). Deleted under AGENTS.md "An unmeasured arm is deleted" (Andrew, 2026-11-15). No bit change on any vendor or the host column: the default path is untouched.
+- **Deleted by**: lane/expdel2-25-neural (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `45d3386430` (deletion commit `02da0a0217`).
+- **Restore**: `git apply experiments/removed/MOJOLEARN_AFN_GEMM2_DBUF.patch`, then delete the `MOJOLEARN_AFN_GEMM2_DBUF` refusal in `core/experiment_guards_neural.mojo`.
+- **Records**: refusal in `core/experiment_guards_neural.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-25-neural section).
+
+### MOJOLEARN_AFN_GEMM2_DIRECT_B: unmeasured arm deleted (2026-11-15)
+
+- **What it was**: B fragments built straight from device memory (file deleted with AFN_GEMM2_ALL).
+- **Verdict**: never-measured opt-in arm of the second Apple FAST GEMM kernel; EXP:610 MERGED-UNMEASURED (neural; Andrew Oct 3), never measured (plan rule f). Deleted under AGENTS.md "An unmeasured arm is deleted" (Andrew, 2026-11-15). No bit change on any vendor or the host column: the default path is untouched.
+- **Deleted by**: lane/expdel2-25-neural (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `45d3386430` (deletion commit `02da0a0217`).
+- **Restore**: `git apply experiments/removed/MOJOLEARN_AFN_GEMM2_DIRECT_B.patch`, then delete the `MOJOLEARN_AFN_GEMM2_DIRECT_B` refusal in `core/experiment_guards_neural.mojo`.
+- **Records**: refusal in `core/experiment_guards_neural.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-25-neural section).
+
+### MOJOLEARN_AFN_GEMM2_SWIZZLE: unmeasured arm deleted (2026-11-15)
+
+- **What it was**: block-index swizzle (file deleted with AFN_GEMM2_ALL).
+- **Verdict**: never-measured opt-in arm of the second Apple FAST GEMM kernel; EXP:685 MERGED-UNMEASURED (neural; Andrew Oct 3), never measured (plan rule f). Deleted under AGENTS.md "An unmeasured arm is deleted" (Andrew, 2026-11-15). No bit change on any vendor or the host column: the default path is untouched.
+- **Deleted by**: lane/expdel2-25-neural (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `45d3386430` (deletion commit `02da0a0217`).
+- **Restore**: `git apply experiments/removed/MOJOLEARN_AFN_GEMM2_SWIZZLE.patch`, then delete the `MOJOLEARN_AFN_GEMM2_SWIZZLE` refusal in `core/experiment_guards_neural.mojo`.
+- **Records**: refusal in `core/experiment_guards_neural.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-25-neural section).
+
+### MOJOLEARN_AFN_GEMM2_SWZ_G: unmeasured arm deleted (2026-11-15)
+
+- **What it was**: the swizzle group width knob (8) of AFN_GEMM2_SWIZZLE (file deleted with AFN_GEMM2_ALL).
+- **Verdict**: never-measured opt-in arm of the second Apple FAST GEMM kernel; EXP:685 MERGED-UNMEASURED (neural; Andrew Oct 3), never measured (plan rule f). Deleted under AGENTS.md "An unmeasured arm is deleted" (Andrew, 2026-11-15). No bit change on any vendor or the host column: the default path is untouched.
+- **Deleted by**: lane/expdel2-25-neural (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `45d3386430` (deletion commit `02da0a0217`).
+- **Restore**: `git apply experiments/removed/MOJOLEARN_AFN_GEMM2_SWZ_G.patch`, then delete the `MOJOLEARN_AFN_GEMM2_SWZ_G` refusal in `core/experiment_guards_neural.mojo`.
+- **Records**: refusal in `core/experiment_guards_neural.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-25-neural section).
+
+### MOJOLEARN_AFN_GEMM_ALL: unmeasured arm deleted (2026-11-15)
+
+- **What it was**: turned on every first-round opt-in arm (SIMDGROUP, SPLITK, TILESHAPE, INT8_MMA, EPILOGUE); the kernel `afn_gemm_mma_kernel` is untouched (the BF16 and ragged-k defaults launch it).
+- **Verdict**: never-measured opt-in arm; EXP:612 MERGED-UNMEASURED (neural; Andrew Oct 3), never measured (plan rule f). Deleted under AGENTS.md "An unmeasured arm is deleted" (Andrew, 2026-11-15). No bit change on any vendor or the host column: the default path is untouched.
+- **Deleted by**: lane/expdel2-25-neural (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `02da0a0217` (deletion commit `5ee3d0ca88`).
+- **Restore**: `git apply experiments/removed/MOJOLEARN_AFN_GEMM_ALL.patch`, then delete the `MOJOLEARN_AFN_GEMM_ALL` refusal in `core/experiment_guards_neural.mojo`.
+- **Records**: refusal in `core/experiment_guards_neural.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-25-neural section).
+
+### MOJOLEARN_AFN_GEMM_BF16_MMA: old path deleted (2026-11-15)
+
+- **What it was**: the `=0` off knob of the owner-directed BF16 default (`AFN_GEMM_BF16_MMA = AFN_GEMM_APPLE` now).
+- **Verdict**: never-measured opt-in arm; EXP:613 MERGED-UNMEASURED (neural; Andrew Oct 3), never measured (plan rule f). Deleted under AGENTS.md "An unmeasured arm is deleted" (Andrew, 2026-11-15). No bit change on any vendor or the host column: the default path is untouched.
+- **Deleted by**: lane/expdel2-25-neural (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `02da0a0217` (deletion commit `5ee3d0ca88`).
+- **Restore**: `git apply experiments/removed/MOJOLEARN_AFN_GEMM_BF16_MMA.patch`, then delete the `MOJOLEARN_AFN_GEMM_BF16_MMA` refusal in `core/experiment_guards_neural.mojo`.
+- **Records**: refusal in `core/experiment_guards_neural.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-25-neural section).
+
+### MOJOLEARN_AFN_GEMM_CORES: unmeasured arm deleted (2026-11-15)
+
+- **What it was**: the GPU core count knob (80 kept as the constant `AFN_GEMM_CORES`, imported by the Samba head and the transformer LM weight gradient).
+- **Verdict**: never-measured opt-in arm; EXP:684 MERGED-UNMEASURED (neural; Andrew Oct 3), never measured (plan rule f). Deleted under AGENTS.md "An unmeasured arm is deleted" (Andrew, 2026-11-15). No bit change on any vendor or the host column: the default path is untouched.
+- **Deleted by**: lane/expdel2-25-neural (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `02da0a0217` (deletion commit `5ee3d0ca88`).
+- **Restore**: `git apply experiments/removed/MOJOLEARN_AFN_GEMM_CORES.patch`, then delete the `MOJOLEARN_AFN_GEMM_CORES` refusal in `core/experiment_guards_neural.mojo`.
+- **Records**: refusal in `core/experiment_guards_neural.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-25-neural section).
+
+### MOJOLEARN_AFN_GEMM_EPILOGUE: unmeasured arm deleted (2026-11-15)
+
+- **What it was**: fused bias / residual / SiLU / GELU / SwiGLU-backward epilogues (`afn_gemm_fused_into` is a never-serving stub for its importers; `afn_gemm_resid_ptr_into`, `afn_gemm_swiglu_bwd_ptr_into` deleted); `AFN_GEMM_EPILOGUE` is the constant False.
+- **Verdict**: never-measured opt-in arm; EXP:682 MERGED-UNMEASURED (neural; Andrew Oct 3), never measured (plan rule f). Deleted under AGENTS.md "An unmeasured arm is deleted" (Andrew, 2026-11-15). No bit change on any vendor or the host column: the default path is untouched.
+- **Deleted by**: lane/expdel2-25-neural (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `02da0a0217` (deletion commit `5ee3d0ca88`).
+- **Restore**: `git apply experiments/removed/MOJOLEARN_AFN_GEMM_EPILOGUE.patch`, then delete the `MOJOLEARN_AFN_GEMM_EPILOGUE` refusal in `core/experiment_guards_neural.mojo`.
+- **Records**: refusal in `core/experiment_guards_neural.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-25-neural section).
+
+### MOJOLEARN_AFN_GEMM_INT8_MMA: unmeasured arm deleted (2026-11-15)
+
+- **What it was**: the chunked int8 matrix-unit route in `identical_gemm_int8_into` on Apple FAST (the chunk kernel stays for its own checks).
+- **Verdict**: never-measured opt-in arm; EXP:614 MERGED-UNMEASURED (neural; Andrew Oct 3), never measured (plan rule f). Deleted under AGENTS.md "An unmeasured arm is deleted" (Andrew, 2026-11-15). No bit change on any vendor or the host column: the default path is untouched.
+- **Deleted by**: lane/expdel2-25-neural (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `02da0a0217` (deletion commit `5ee3d0ca88`).
+- **Restore**: `git apply experiments/removed/MOJOLEARN_AFN_GEMM_INT8_MMA.patch`, then delete the `MOJOLEARN_AFN_GEMM_INT8_MMA` refusal in `core/experiment_guards_neural.mojo`.
+- **Records**: refusal in `core/experiment_guards_neural.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-25-neural section).
+
+### MOJOLEARN_AFN_GEMM_KB: unmeasured arm deleted (2026-11-15)
+
+- **What it was**: the window-depth knob (32 kept as the constant `AFN_GEMM_KB`).
+- **Verdict**: never-measured opt-in arm; EXP:683 MERGED-UNMEASURED (neural; Andrew Oct 3), never measured (plan rule f). Deleted under AGENTS.md "An unmeasured arm is deleted" (Andrew, 2026-11-15). No bit change on any vendor or the host column: the default path is untouched.
+- **Deleted by**: lane/expdel2-25-neural (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `02da0a0217` (deletion commit `5ee3d0ca88`).
+- **Restore**: `git apply experiments/removed/MOJOLEARN_AFN_GEMM_KB.patch`, then delete the `MOJOLEARN_AFN_GEMM_KB` refusal in `core/experiment_guards_neural.mojo`.
+- **Records**: refusal in `core/experiment_guards_neural.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-25-neural section).
+
+### MOJOLEARN_AFN_GEMM_SIMDGROUP: unmeasured arm deleted (2026-11-15)
+
+- **What it was**: fp32 products on the simdgroup kernel ahead of the vendor route (`afn_gemm_fp32_into` is a never-serving stub; `AFN_GEMM_FP32_MMA` is the constant False).
+- **Verdict**: never-measured opt-in arm; EXP:617 MERGED-UNMEASURED (neural; Andrew Oct 3), never measured (plan rule f). Deleted under AGENTS.md "An unmeasured arm is deleted" (Andrew, 2026-11-15). No bit change on any vendor or the host column: the default path is untouched.
+- **Deleted by**: lane/expdel2-25-neural (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `02da0a0217` (deletion commit `5ee3d0ca88`).
+- **Restore**: `git apply experiments/removed/MOJOLEARN_AFN_GEMM_SIMDGROUP.patch`, then delete the `MOJOLEARN_AFN_GEMM_SIMDGROUP` refusal in `core/experiment_guards_neural.mojo`.
+- **Records**: refusal in `core/experiment_guards_neural.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-25-neural section).
+
+### MOJOLEARN_AFN_GEMM_SPLITK: unmeasured arm deleted (2026-11-15)
+
+- **What it was**: split-K with global atomics on short grids (`afn_gemm_k_split`, `afn_gemm_accum_ptr_into` and the split branch of `_afn_dispatch` deleted; the SPLIT kernel parameter stays for the Samba head and LM gradient callers).
+- **Verdict**: never-measured opt-in arm; EXP:618 MERGED-UNMEASURED (neural; Andrew Oct 3), never measured (plan rule f). Deleted under AGENTS.md "An unmeasured arm is deleted" (Andrew, 2026-11-15). No bit change on any vendor or the host column: the default path is untouched.
+- **Deleted by**: lane/expdel2-25-neural (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `02da0a0217` (deletion commit `5ee3d0ca88`).
+- **Restore**: `git apply experiments/removed/MOJOLEARN_AFN_GEMM_SPLITK.patch`, then delete the `MOJOLEARN_AFN_GEMM_SPLITK` refusal in `core/experiment_guards_neural.mojo`.
+- **Records**: refusal in `core/experiment_guards_neural.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-25-neural section).
+
+### MOJOLEARN_AFN_GEMM_TILESHAPE: unmeasured arm deleted (2026-11-15)
+
+- **What it was**: the tile from the shape (`afn_gemm_tile` returns the square tile; the non-square launches in `afn_launch_tile_aux` deleted).
+- **Verdict**: never-measured opt-in arm; EXP:619 MERGED-UNMEASURED (neural; Andrew Oct 3), never measured (plan rule f). Deleted under AGENTS.md "An unmeasured arm is deleted" (Andrew, 2026-11-15). No bit change on any vendor or the host column: the default path is untouched.
+- **Deleted by**: lane/expdel2-25-neural (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `02da0a0217` (deletion commit `5ee3d0ca88`).
+- **Restore**: `git apply experiments/removed/MOJOLEARN_AFN_GEMM_TILESHAPE.patch`, then delete the `MOJOLEARN_AFN_GEMM_TILESHAPE` refusal in `core/experiment_guards_neural.mojo`.
+- **Records**: refusal in `core/experiment_guards_neural.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-25-neural section).
+
+### MOJOLEARN_AUTOGRAD_EMBEDDING_OFF: old path deleted (2026-11-15)
+
+- **What it was**: the rollback to the hand backward kernels for every call; the tape VJP serves every call with positions, the hand kernels stay for n_positions == 0.
+- **Verdict**: no record: no A/B recorded for the old path (plan rule b). Deleted under AGENTS.md "An unmeasured arm is deleted" (Andrew, 2026-11-15). No bit change on any vendor or the host column: the default path is untouched.
+- **Deleted by**: lane/expdel2-25-neural (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `5ee3d0ca88` (deletion commit `63a7445f96`).
+- **Restore**: `git apply experiments/removed/MOJOLEARN_AUTOGRAD_EMBEDDING_OFF.patch`, then delete the `MOJOLEARN_AUTOGRAD_EMBEDDING_OFF` refusal in `core/experiment_guards_neural.mojo`.
+- **Records**: refusal in `core/experiment_guards_neural.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-25-neural section).
+
+### MOJOLEARN_EMB_DEVICE_SCRATCH_OFF: old path deleted (2026-11-15)
+
+- **What it was**: the IDENTICAL rollback to host-filled per-call scratch (the host-filled route stays for FAST builds without AFN26).
+- **Verdict**: no record: no A/B recorded for the old path (plan rule b). Deleted under AGENTS.md "An unmeasured arm is deleted" (Andrew, 2026-11-15). No bit change on any vendor or the host column: the default path is untouched.
+- **Deleted by**: lane/expdel2-25-neural (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `9b6b13052d` (deletion commit `5cde955daf`).
+- **Restore**: `git apply experiments/removed/MOJOLEARN_EMB_DEVICE_SCRATCH_OFF.patch`, then delete the `MOJOLEARN_EMB_DEVICE_SCRATCH_OFF` refusal in `core/experiment_guards_neural.mojo`.
+- **Records**: refusal in `core/experiment_guards_neural.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-25-neural section).
+
+### MOJOLEARN_EMB_RESIDENT_OFF: old path deleted (2026-11-15)
+
+- **What it was**: the IDENTICAL rollback to the per-call table upload and scan (the per-call route stays for FAST builds without AFN26).
+- **Verdict**: no record: no A/B recorded for the old path (plan rule b). Deleted under AGENTS.md "An unmeasured arm is deleted" (Andrew, 2026-11-15). No bit change on any vendor or the host column: the default path is untouched.
+- **Deleted by**: lane/expdel2-25-neural (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `63a7445f96` (deletion commit `9b6b13052d`).
+- **Restore**: `git apply experiments/removed/MOJOLEARN_EMB_RESIDENT_OFF.patch`, then delete the `MOJOLEARN_EMB_RESIDENT_OFF` refusal in `core/experiment_guards_neural.mojo`.
+- **Records**: refusal in `core/experiment_guards_neural.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-25-neural section).
+
+### MOJOLEARN_GEMM_FAST_RAGGED_K_OFF: old path deleted (2026-11-15)
+
+- **What it was**: the rollback of FAST Apple ragged-k fp32 GEMMs to MAX's matmul (arm A).
+- **Verdict**: record read (plan rule e): EXP:2123 KEPT, FAST default (4096x4096x2500 1974.6 -> 97.7 ms on M4). Deleted under AGENTS.md "An unmeasured arm is deleted" (Andrew, 2026-11-15). No bit change on any vendor or the host column: the default path is untouched.
+- **Deleted by**: lane/expdel2-25-neural (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `02da0a0217` (deletion commit `5ee3d0ca88`).
+- **Restore**: `git apply experiments/removed/MOJOLEARN_GEMM_FAST_RAGGED_K_OFF.patch`, then delete the `MOJOLEARN_GEMM_FAST_RAGGED_K_OFF` refusal in `core/experiment_guards_neural.mojo`.
+- **Records**: refusal in `core/experiment_guards_neural.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-25-neural section).
+
+### MOJOLEARN_IDN_GEMM_INT_SLICES: unmeasured arm deleted (2026-11-15)
+
+- **What it was**: the dispatch hooks of the research profile fp32.v2-int (device and host column); the profile's plans stay for their gate `gemm/checks/gemm_int_slices_check.mojo`.
+- **Verdict**: record read (plan rule e): EXP:2263 pending, never measured. Deleted under AGENTS.md "An unmeasured arm is deleted" (Andrew, 2026-11-15). No bit change on any vendor or the host column: the default path is untouched.
+- **Deleted by**: lane/expdel2-25-neural (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `41a649b03c` (deletion commit `e62e7376e0`).
+- **Restore**: `git apply experiments/removed/MOJOLEARN_IDN_GEMM_INT_SLICES.patch`, then delete the `MOJOLEARN_IDN_GEMM_INT_SLICES` refusal in `core/experiment_guards_neural.mojo`.
+- **Records**: refusal in `core/experiment_guards_neural.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-25-neural section).
+
+### MOJOLEARN_IDN_NEURAL_CHAINS: unmeasured arm deleted (2026-11-15)
+
+- **What it was**: NN04, 2 or 4 accumulator chains (`NN04` False, `NEURAL_CHAINS` the constant 1); restoring also re-adds `from std.sys.compile import is_defined, get_defined_int` (dropped in 41a649b03c).
+- **Verdict**: no record: no A/B recorded for the opt-in arm (plan rule a). Deleted under AGENTS.md "An unmeasured arm is deleted" (Andrew, 2026-11-15). No bit change on any vendor or the host column: the default path is untouched.
+- **Deleted by**: lane/expdel2-25-neural (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `a9109164e5` (deletion commit `5779f73ea6`).
+- **Restore**: `git apply experiments/removed/MOJOLEARN_IDN_NEURAL_CHAINS.patch`, then delete the `MOJOLEARN_IDN_NEURAL_CHAINS` refusal in `core/experiment_guards_neural.mojo`.
+- **Records**: refusal in `core/experiment_guards_neural.mojo`; `grid_controls/neural-gemm-attn-dedupe.json` control `neural_gemm_chains` moved to `removed`; `docs/apple-fast/EXPERIMENTS.md` row (expdel2-25-neural section).
+
+### MOJOLEARN_IDN_NEURAL_GEMM_EPILOGUE: unmeasured arm deleted (2026-11-15)
+
+- **What it was**: NI09, the CNN tiled-bias arm (bit 2; `NI09_TILED_BIAS` the constant False); restoring also re-adds the define imports and `_NEURAL_ARMS` (dropped in 41a649b03c).
+- **Verdict**: record read (plan rule e): EXP:1767 DELETED (loser; AMD flat, NV 1.9x). Deleted under AGENTS.md "An unmeasured arm is deleted" (Andrew, 2026-11-15). No bit change on any vendor or the host column: the default path is untouched.
+- **Deleted by**: lane/expdel2-25-neural (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `d95e19da90` (deletion commit `a9109164e5`).
+- **Restore**: `git apply experiments/removed/MOJOLEARN_IDN_NEURAL_GEMM_EPILOGUE.patch`, then delete the `MOJOLEARN_IDN_NEURAL_GEMM_EPILOGUE` refusal in `core/experiment_guards_neural.mojo`.
+- **Records**: refusal in `core/experiment_guards_neural.mojo`; `grid_controls/neural-gemm-attn-dedupe.json` control `neural_gemm_epilogue` moved to `removed`; `docs/apple-fast/EXPERIMENTS.md` row (expdel2-25-neural section).
+
+### MOJOLEARN_IDN_NEURAL_GEMM_SCHEDULE: unmeasured arm deleted (2026-11-15)
+
+- **What it was**: the neural GEMM schedule arms 1 2 4 9 10 11 15 24 (`NEURAL_GEMM_SCHEDULE` the constant SCHED_INCUMBENT; the arm names stay for gemm/neural_dispatch.mojo).
+- **Verdict**: record read (plan rule e): EXP:1746 DROP (slower), the other arms never won. Deleted under AGENTS.md "An unmeasured arm is deleted" (Andrew, 2026-11-15). No bit change on any vendor or the host column: the default path is untouched.
+- **Deleted by**: lane/expdel2-25-neural (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `9813509a01` (deletion commit `7737754a09`).
+- **Restore**: `git apply experiments/removed/MOJOLEARN_IDN_NEURAL_GEMM_SCHEDULE.patch`, then delete the `MOJOLEARN_IDN_NEURAL_GEMM_SCHEDULE` refusal in `core/experiment_guards_neural.mojo`.
+- **Records**: refusal in `core/experiment_guards_neural.mojo`; `grid_controls/neural-gemm-attn-dedupe.json` control `neural_gemm_schedule` moved to `removed`; `docs/apple-fast/EXPERIMENTS.md` row (expdel2-25-neural section).
+
+### MOJOLEARN_IDN_NEURAL_GEMM_SCHEDULE_ROLES: unmeasured arm deleted (2026-11-15)
+
+- **What it was**: the role mask of the schedule (`NEURAL_GEMM_ROLES` the constant ROLE_ALL).
+- **Verdict**: no record: no A/B recorded for the opt-in arm (plan rule a). Deleted under AGENTS.md "An unmeasured arm is deleted" (Andrew, 2026-11-15). No bit change on any vendor or the host column: the default path is untouched.
+- **Deleted by**: lane/expdel2-25-neural (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `7737754a09` (deletion commit `a9cf951197`).
+- **Restore**: `git apply experiments/removed/MOJOLEARN_IDN_NEURAL_GEMM_SCHEDULE_ROLES.patch`, then delete the `MOJOLEARN_IDN_NEURAL_GEMM_SCHEDULE_ROLES` refusal in `core/experiment_guards_neural.mojo`.
+- **Records**: refusal in `core/experiment_guards_neural.mojo`; `grid_controls/neural-gemm-attn-dedupe.json` control `neural_gemm_schedule_roles` moved to `removed`; `docs/apple-fast/EXPERIMENTS.md` row (expdel2-25-neural section).
+
+### MOJOLEARN_IDN_NEURAL_NN07: unmeasured arm deleted (2026-11-15)
+
+- **What it was**: NN07 grouped pair (`NN07` the constant False for the dispatcher); restoring also re-adds `from std.sys.compile import is_defined` (dropped in 41a649b03c).
+- **Verdict**: no record: no A/B recorded for the opt-in arm (plan rule a). Deleted under AGENTS.md "An unmeasured arm is deleted" (Andrew, 2026-11-15). No bit change on any vendor or the host column: the default path is untouched.
+- **Deleted by**: lane/expdel2-25-neural (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `dd47bfb212` (deletion commit `e862759b5c`).
+- **Restore**: `git apply experiments/removed/MOJOLEARN_IDN_NEURAL_NN07.patch`, then delete the `MOJOLEARN_IDN_NEURAL_NN07` refusal in `core/experiment_guards_neural.mojo`.
+- **Records**: refusal in `core/experiment_guards_neural.mojo`; `grid_controls/neural-gemm-attn-dedupe.json` control `neural_gemm_pair` moved to `removed`; `docs/apple-fast/EXPERIMENTS.md` row (expdel2-25-neural section).
+
+### MOJOLEARN_IDN_NEURAL_NN12: unmeasured arm deleted (2026-11-15)
+
+- **What it was**: NN12 workspace reuse (`NN12` the constant False for the dispatcher); restoring also re-adds `from std.sys.compile import is_defined` (dropped in 41a649b03c).
+- **Verdict**: no record: no A/B recorded for the opt-in arm (plan rule a). Deleted under AGENTS.md "An unmeasured arm is deleted" (Andrew, 2026-11-15). No bit change on any vendor or the host column: the default path is untouched.
+- **Deleted by**: lane/expdel2-25-neural (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `a9cf951197` (deletion commit `1362c86435`).
+- **Restore**: `git apply experiments/removed/MOJOLEARN_IDN_NEURAL_NN12.patch`, then delete the `MOJOLEARN_IDN_NEURAL_NN12` refusal in `core/experiment_guards_neural.mojo`.
+- **Records**: refusal in `core/experiment_guards_neural.mojo`; `grid_controls/neural-gemm-attn-dedupe.json` control `neural_gemm_workspace` moved to `removed`; `docs/apple-fast/EXPERIMENTS.md` row (expdel2-25-neural section).
+
+### MOJOLEARN_IDN_NEURAL_NN16: unmeasured arm deleted (2026-11-15)
+
+- **What it was**: NN16 zero tail (`NN16` the constant False for the dispatcher); restoring also re-adds `from std.sys.compile import is_defined` (dropped in 41a649b03c).
+- **Verdict**: no record: no A/B recorded for the opt-in arm (plan rule a). Deleted under AGENTS.md "An unmeasured arm is deleted" (Andrew, 2026-11-15). No bit change on any vendor or the host column: the default path is untouched.
+- **Deleted by**: lane/expdel2-25-neural (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `1362c86435` (deletion commit `dd47bfb212`).
+- **Restore**: `git apply experiments/removed/MOJOLEARN_IDN_NEURAL_NN16.patch`, then delete the `MOJOLEARN_IDN_NEURAL_NN16` refusal in `core/experiment_guards_neural.mojo`.
+- **Records**: refusal in `core/experiment_guards_neural.mojo`; `grid_controls/neural-gemm-attn-dedupe.json` control `neural_gemm_zero_tail` moved to `removed`; `docs/apple-fast/EXPERIMENTS.md` row (expdel2-25-neural section).
+
+### MOJOLEARN_INT_SLICES_FORCE_FLAT: unmeasured arm deleted (2026-11-15)
+
+- **What it was**: forced the FLAT plan on a column with the integer unit (the gate's plan-agreement arm).
+- **Verdict**: no record: no A/B recorded for the opt-in arm (plan rule a). Deleted under AGENTS.md "An unmeasured arm is deleted" (Andrew, 2026-11-15). No bit change on any vendor or the host column: the default path is untouched.
+- **Deleted by**: lane/expdel2-25-neural (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `e62e7376e0` (deletion commit `085ef605b2`).
+- **Restore**: `git apply experiments/removed/MOJOLEARN_INT_SLICES_FORCE_FLAT.patch`, then delete the `MOJOLEARN_INT_SLICES_FORCE_FLAT` refusal in `core/experiment_guards_neural.mojo`.
+- **Records**: refusal in `core/experiment_guards_neural.mojo`; no `grid_controls` entry (none named it); `docs/apple-fast/EXPERIMENTS.md` row (expdel2-25-neural section).
+
+### MOJOLEARN_NI07_GROUPED_PROJECTIONS: unmeasured arm deleted (2026-11-15)
+
+- **What it was**: NI07 grouped Q/K/V projections (`NI07_GROUPED_PROJECTIONS` the constant False for modeling_llama); restoring also re-adds the define imports and `_NEURAL_ARMS` (dropped in 41a649b03c).
+- **Verdict**: no record: no A/B recorded for the opt-in arm (plan rule a). Deleted under AGENTS.md "An unmeasured arm is deleted" (Andrew, 2026-11-15). No bit change on any vendor or the host column: the default path is untouched.
+- **Deleted by**: lane/expdel2-25-neural (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md); code recoverable at `e862759b5c` (deletion commit `d95e19da90`).
+- **Restore**: `git apply experiments/removed/MOJOLEARN_NI07_GROUPED_PROJECTIONS.patch`, then delete the `MOJOLEARN_NI07_GROUPED_PROJECTIONS` refusal in `core/experiment_guards_neural.mojo`.
+- **Records**: refusal in `core/experiment_guards_neural.mojo`; `grid_controls/neural-gemm-attn-dedupe.json` control `grouped_projections_v2` moved to `removed`; `docs/apple-fast/EXPERIMENTS.md` row (expdel2-25-neural section).

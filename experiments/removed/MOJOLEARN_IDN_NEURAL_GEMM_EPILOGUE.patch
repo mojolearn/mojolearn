@@ -1,0 +1,15 @@
+diff --git a/gemm/experiments/neural_tiled_v2.mojo b/gemm/experiments/neural_tiled_v2.mojo
+index 8346e0a8f5..73c2f1ce13 100644
+--- a/gemm/experiments/neural_tiled_v2.mojo
++++ b/gemm/experiments/neural_tiled_v2.mojo
+@@ -33,9 +33,7 @@ comptime NI07_GROUPED_PROJECTIONS = False
+ # projection) was DELETED as an IDENTICAL grid ge123e6f9 loser, mlp-train-step
+ # NV 2.0 -> 3.8 / AMD 3.5 -> 3.4 ms (1.367x slower), same bits; recoverable at
+ # main 8ed94710a. core/six_lane_experiment_guards.mojo refuses bit 1.
+-# TOMBSTONE: MOJOLEARN_IDN_NEURAL_GEMM_EPILOGUE (NI09 CNN arm; EXP:1767 loser, AMD flat, NV 1.9x) deleted 2026-11-15 by lane/expdel2-25-neural; code recoverable at d95e19da90.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_NEURAL_GEMM_EPILOGUE.patch; record in docs/TOMBSTONES.md.
+-comptime NI09_TILED_BIAS = False
++comptime NI09_TILED_BIAS = _NEURAL_ARMS and (get_defined_int["MOJOLEARN_IDN_NEURAL_GEMM_EPILOGUE", 0]() & 2) != 0
+ comptime FP = MutPointer[Float32, MutAnyOrigin]
+ comptime BiasFn = def(Float32, Float32) thin -> Float32
+ # A 256-thread block owns 16x16 outputs and 2 KiB of operand staging.
