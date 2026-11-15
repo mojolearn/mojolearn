@@ -4571,17 +4571,16 @@ def fused_bwd_dkdv_stash_kernel[HD: Int, BJ: Int, SABOTAGE: Bool](
 # ===========================================================================
 
 #: lane/neural-pass65 (2026-10-01): the `_r32` dkdv arm's keys per block.
-#: PR #64's arm (`-D MOJOLEARN_ATTN_DKDV_BJ16=1`): MI325X lm-train-step
+#: PR #64's arm: MI325X lm-train-step
 #: 75.0 -> 71.9 ms, slower on the L40S, so 16 is the AMD column's default
 #: (768 blocks at the board shape instead of 384) and 32 stays everywhere
-#: else; `-D MOJOLEARN_ATTN_DKDV_BJ32=1` restores 32 on AMD. The keys a block
+#: else. The keys a block
 #: owns touch no chain: same bits.
 # TOMBSTONE: MOJOLEARN_ATTN_DKDV_BJ16 (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-34-neural; code recoverable at 6955f6e721.
 # Restore: git apply experiments/removed/MOJOLEARN_ATTN_DKDV_BJ16.patch
-comptime ATTN_DKDV_BJ_R32 = (
-    16 if (TARGET_COLUMN == COLUMN_AMD and not is_defined["MOJOLEARN_ATTN_DKDV_BJ32"]())
-    else 32
-)
+# TOMBSTONE: MOJOLEARN_ATTN_DKDV_BJ32 (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-34-neural; code recoverable at a5bc5b1913.
+# Restore: git apply experiments/removed/MOJOLEARN_ATTN_DKDV_BJ32.patch
+comptime ATTN_DKDV_BJ_R32 = 16 if TARGET_COLUMN == COLUMN_AMD else 32
 
 comptime TILED_TK = 16
 #: Query rows per block of `fused_bwd_dq_tiled_pf_kernel` (lane
@@ -4634,7 +4633,6 @@ comptime ATTN_DQ_TQ_PINNED = (
 )
 comptime ATTN_DKDV_BJ_PINNED = (
     ATTN_TILE_RULE_OFF
-    or is_defined["MOJOLEARN_ATTN_DKDV_BJ32"]()
 )
 
 
