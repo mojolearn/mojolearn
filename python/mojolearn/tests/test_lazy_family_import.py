@@ -64,7 +64,7 @@ mojolearn.Ridge(alpha=1.0).fit(X, y)
 
 def _run(action):
     env = dict(os.environ)
-    env["PYTHONPATH"] = os.pathsep.join(filter(None, (str(PKG.parent), env.get("PYTHONPATH"))))
+    env["PYTHONPATH"] = os.pathsep.join(filter(None, (_runtime_parent(), env.get("PYTHONPATH"))))
     done = subprocess.run([sys.executable, "-c", _PROBE.replace("{action}", action)], env=env,
                           capture_output=True, text=True, timeout=900)
     assert done.returncode == 0, done.stderr[-4000:]
@@ -191,7 +191,7 @@ print(json.dumps(dict(missing=missing)))
 
 def _family(action):
     env = dict(os.environ)
-    env["PYTHONPATH"] = os.pathsep.join(filter(None, (str(PKG.parent), env.get("PYTHONPATH"))))
+    env["PYTHONPATH"] = os.pathsep.join(filter(None, (_runtime_parent(), env.get("PYTHONPATH"))))
     done = subprocess.run([sys.executable, "-c", _FAMILY_PROBE.replace("{action}", action)], env=env,
                           capture_output=True, text=True, timeout=900)
     assert done.returncode == 0, done.stderr[-4000:]
@@ -283,3 +283,8 @@ def test_cross_validation_alone():
 scores = mojolearn.cross_val_score(mojolearn.Ridge(alpha=1.0), X, yr, cv=3)
 assert len(scores) == 3
 """)
+
+
+def _runtime_parent():
+    from mojolearn.tests._fresh_process import PACKAGE_PARENT  # the runtime this process imported
+    return PACKAGE_PARENT

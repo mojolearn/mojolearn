@@ -28,8 +28,19 @@ import sys
 import threading
 from pathlib import Path
 
-#: The directory holding the `mojolearn` package of this checkout or install.
-PACKAGE_PARENT = str(Path(__file__).resolve().parents[2])
+def _runtime_parent():
+    # The directory holding the `mojolearn` runtime THIS process imported: the
+    # source tree in an in-tree run, site-packages under the installed-runtime
+    # bootstrap (tools/run_python_tests.py INSTALLED_BOOTSTRAP). The tests
+    # directory's own parent is the source tree even when the runtime is
+    # installed, so children imported a source runtime with no binaries
+    # ("no identical binary exists", smoke-triage 2026-11-15, 11 files).
+    import mojolearn
+    return str(Path(mojolearn.__file__).resolve().parents[1])
+
+
+#: The directory holding the `mojolearn` package this process runs.
+PACKAGE_PARENT = _runtime_parent()
 
 
 def child_env(**overrides):
