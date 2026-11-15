@@ -20,7 +20,9 @@ the rows are cut into BR-row blocks:
                        (min(a,b), max(a,b)) ascending from zero, so the two
                        mirrored cells are the same word (qcb_fold then
                        divides by the class count, as qda_cov)
-  gb_part_row          CANDIDATE schedule of gb_part: one thread per
+  gb_part_row          retired candidate schedule of gb_part (its switch
+                       MOJOLEARN_IDN_GRAM_ROWTILE is deleted; the unit stays
+                       only while x_prep/fam2.mojo still names it): one thread per
                        (block, a) walks its rows once and advances every
                        b >= a (row-contiguous reads; the accumulators live in
                        the partial table). Each cell's chain is gb_part's, so
@@ -31,27 +33,29 @@ the old chain. Products are rounded before their add (`mul`, DEVIATION 5401)
 as before. All four columns run these units.
 
 SWITCHES (IDENTICAL only):
-  IDN_GRAM_BLOCKED, ON by default; -D MOJOLEARN_IDN_GRAM_BLOCKED_OFF (or
-      MOJOLEARN_IDN_ALL_OFF) restores matmul / qda_cov.
-  candidates, default OFF: -D MOJOLEARN_IDN_GRAM_ROWTILE (gb_part_row for the
-      LDA Gram), -D MOJOLEARN_IDN_GRAM_ROWS_512 / _8192 (rows per block; the
-      default is XB = 2048; a different block length is a different order).
+  IDN_GRAM_BLOCKED, always on.
+  rows per block: XB = 2048 (a different block length is a different order).
 The Python layer reads them from `x_prep_idn_fam2` and stages accordingly.
 """
-from std.sys.compile import is_defined
 from checks.numerics import ftz, GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from x_prep.common import FP, IP, p, ld, st, raw, RUN, run_block
 from x_prep.prims import add, sub, mul, div, mm_step
 from x_prep.blocked import XB
 
-comptime IDN_GRAM_BLOCKED = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not (is_defined["MOJOLEARN_IDN_GRAM_BLOCKED_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
-)
-comptime IDN_GRAM_ROWTILE = IDN_GRAM_BLOCKED and is_defined["MOJOLEARN_IDN_GRAM_ROWTILE"]()
-comptime IDN_GRAM_ROWS = (
-    512 if is_defined["MOJOLEARN_IDN_GRAM_ROWS_512"]() else (8192 if is_defined["MOJOLEARN_IDN_GRAM_ROWS_8192"]() else XB)
-)
+# TOMBSTONE: MOJOLEARN_IDN_GRAM_BLOCKED_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-09-base; code recoverable at 2b7e58bca5.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_GRAM_BLOCKED_OFF.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-09-base (non-owner; owner expdel2-37-series); code recoverable at df8ecc7030.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-09-base.patch; record in docs/TOMBSTONES.md.
+comptime IDN_GRAM_BLOCKED = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+# TOMBSTONE: MOJOLEARN_IDN_GRAM_ROWTILE (opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-09-base; code recoverable at eb6ccbf3bc.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_GRAM_ROWTILE.patch; record in docs/TOMBSTONES.md.
+# The alias stays False for x_prep/fam2.mojo (its importer, in no V2 lane); the integrator drops it with gb_part_row_unit.
+comptime IDN_GRAM_ROWTILE = False
+# TOMBSTONE: MOJOLEARN_IDN_GRAM_ROWS_512 (opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-09-base; code recoverable at 00a8ccee0a.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_GRAM_ROWS_512.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_IDN_GRAM_ROWS_8192 (opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-09-base; code recoverable at 46e0b201cf.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_GRAM_ROWS_8192.patch; record in docs/TOMBSTONES.md.
+comptime IDN_GRAM_ROWS = XB
 #: classes qcb_part keeps in registers (more: the partial table itself)
 comptime GRAM_REG = 8
 

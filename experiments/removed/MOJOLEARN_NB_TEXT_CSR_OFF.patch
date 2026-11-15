@@ -1,0 +1,36 @@
+diff --git a/x_prep/fastnb_csr.mojo b/x_prep/fastnb_csr.mojo
+index 0f143755b5..8ea44fbaee 100644
+--- a/x_prep/fastnb_csr.mojo
++++ b/x_prep/fastnb_csr.mojo
+@@ -1,9 +1,11 @@
+ # SPDX-License-Identifier: Apache-2.0
+ # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
+ """MultinomialNB / ComplementNB on a CSR count matrix (lane apple-fast-nb,
+-pass 2, 2026-10-02). FAST + Apple ONLY, always on there (M3 A/B:
+-multinomial-nb text 186.9 -> 35.4 ms (-81%), accuracy .9831 logloss .5595
+-identical; M2 nb-mnb-csr-text-x 221.7 -> 47.7 ms): the other vendors do
++pass 2, 2026-10-02). FAST + Apple ONLY, ON by default (-D
++MOJOLEARN_NB_TEXT_CSR_OFF reverts; M3 A/B: multinomial-nb text 186.9 ->
++35.4 ms (-81%), accuracy .9831 logloss .5595 identical; M2 nb-mnb-csr-text-x
++221.7 -> 47.7 ms): the
++IDENTICAL binding, the other vendors and a FAST build with the _OFF define do
+ not export `x_prep_nb_csr_fit` / `x_prep_nb_csr_jll`, and the Python layer
+ (`_expansion_prep._DiscreteNB`) keeps main's dense program.
+ 
+@@ -42,11 +44,11 @@ from x_prep.common import FP, IP
+ from x_prep.prims import add, mul
+ from x_prep.device import x_prep_ctx
+ 
+-#: FAST and Apple (default since the M3 A/B, multinomial-nb text 186.9 -> 35.4 ms,
+-#: same accuracy / logloss).
+-# TOMBSTONE: MOJOLEARN_NB_TEXT_CSR_OFF (old path; promoted on Apple FAST only, M3 + M2 A/B; NVIDIA and AMD never had the arm, no A/B owed there) deleted 2026-11-15 by lane/expdel2-09-base; code recoverable at a6a4828242.
+-# Restore: git apply experiments/removed/MOJOLEARN_NB_TEXT_CSR_OFF.patch; record in docs/TOMBSTONES.md.
+-comptime NB_TEXT_CSR = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
++#: The switch: FAST and Apple, unless -D MOJOLEARN_NB_TEXT_CSR_OFF (default ON
++#: since the M3 A/B, multinomial-nb text 186.9 -> 35.4 ms, same accuracy / logloss).
++comptime NB_TEXT_CSR = (
++    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU and not is_defined["MOJOLEARN_NB_TEXT_CSR_OFF"]()
++)
+ #: lane idn-int-prep (2026-10-04): the CSR text path in IDENTICAL on every
+ #: vendor, ON by default (-D MOJOLEARN_IDN_NB_CSR_OFF: no export, the dense
+ #: program). The fit counts in 64-bit integers held as two UInt32 words per

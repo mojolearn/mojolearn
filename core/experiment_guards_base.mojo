@@ -132,6 +132,33 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_IDN_RAGGED_RADIX_NIBBLE"](), "removed 2026-11-15 (lane/expdel2-07-base): IDN_RAGGED_RADIX_NIBBLE (Prep (four-bit nibble stable radix pairs for ragged sorts, I19)) was unmeasured opt-in arm; the opt-in arm is gone and the default path is unchanged; code recoverable at 36a2cc0af1; see docs/TOMBSTONES.md"
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_RAGGED_FLOAT_RADIX.patch
     comptime assert not is_defined["MOJOLEARN_IDN_RAGGED_FLOAT_RADIX"](), "removed 2026-11-15 (lane/expdel2-07-base): IDN_RAGGED_FLOAT_RADIX (Prep (I19 ragged float-word sort by stable radix instead of the bounded rank control)) was opt-in arm; AMD-only component screening, never an NVIDIA + AMD full-operation A/B; the opt-in arm is gone and the default path is unchanged; code recoverable at 6e8a669206; see docs/TOMBSTONES.md"
+    # Lane expdel2-09-base (2026-11-15): unmeasured arms deleted, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (docs/TOMBSTONES.md).
+    # Restore: git apply experiments/removed/MOJOLEARN_AFCL_P04.patch
+    comptime assert not is_defined["MOJOLEARN_AFCL_P04"](), "removed 2026-11-15 (lane/expdel2-09-base): AFCL_P04 (never-run Apple FAST programme card) is gone; the default is kept; code at 75ea427c34; restore: experiments/removed/MOJOLEARN_AFCL_P04.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_AFCL_P09.patch
+    comptime assert not is_defined["MOJOLEARN_AFCL_P09"](), "removed 2026-11-15 (lane/expdel2-09-base): AFCL_P09 (never-run Apple FAST programme card) is gone; the default is kept; code at 74cbc6951a; restore: experiments/removed/MOJOLEARN_AFCL_P09.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_NB_TEXT_CSR_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_NB_TEXT_CSR_OFF"](), "removed 2026-11-15 (lane/expdel2-09-base): NB_TEXT_CSR_OFF (old path (rule d)) is gone; the default is kept; code at a6a4828242; restore: experiments/removed/MOJOLEARN_NB_TEXT_CSR_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_NB_CSR_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_NB_CSR_OFF"](), "removed 2026-11-15 (lane/expdel2-09-base): IDN_NB_CSR_OFF (old path, never measured) is gone; the default is kept; code at 2aca6c096a; restore: experiments/removed/MOJOLEARN_IDN_NB_CSR_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_NB_ONEPASS_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_NB_ONEPASS_OFF"](), "removed 2026-11-15 (lane/expdel2-09-base): IDN_NB_ONEPASS_OFF (old path, never measured) is gone; the default is kept; code at 2909d00ab4; restore: experiments/removed/MOJOLEARN_IDN_NB_ONEPASS_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_CLASS_ONEPASS_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_CLASS_ONEPASS_OFF"](), "removed 2026-11-15 (lane/expdel2-09-base): IDN_CLASS_ONEPASS_OFF (old path, never measured) is gone; the default is kept; code at a7d5d989b5; restore: experiments/removed/MOJOLEARN_IDN_CLASS_ONEPASS_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_NB_CSR_DENSE_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_NB_CSR_DENSE_OFF"](), "removed 2026-11-15 (lane/expdel2-09-base): IDN_NB_CSR_DENSE_OFF (old path, never measured) is gone; the default is kept; code at 93d56e9d87; restore: experiments/removed/MOJOLEARN_IDN_NB_CSR_DENSE_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_GRAM_BLOCKED_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_GRAM_BLOCKED_OFF"](), "removed 2026-11-15 (lane/expdel2-09-base): IDN_GRAM_BLOCKED_OFF (old path, never measured) is gone; the default is kept; code at 2b7e58bca5; restore: experiments/removed/MOJOLEARN_IDN_GRAM_BLOCKED_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_GRAM_ROWTILE.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_GRAM_ROWTILE"](), "removed 2026-11-15 (lane/expdel2-09-base): IDN_GRAM_ROWTILE (opt-in arm, never measured) is gone; the default is kept; code at eb6ccbf3bc; restore: experiments/removed/MOJOLEARN_IDN_GRAM_ROWTILE.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_GRAM_ROWS_512.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_GRAM_ROWS_512"](), "removed 2026-11-15 (lane/expdel2-09-base): IDN_GRAM_ROWS_512 (opt-in arm, never measured) is gone; the default is kept; code at 00a8ccee0a; restore: experiments/removed/MOJOLEARN_IDN_GRAM_ROWS_512.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_GRAM_ROWS_8192.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_GRAM_ROWS_8192"](), "removed 2026-11-15 (lane/expdel2-09-base): IDN_GRAM_ROWS_8192 (opt-in arm, never measured) is gone; the default is kept; code at 46e0b201cf; restore: experiments/removed/MOJOLEARN_IDN_GRAM_ROWS_8192.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_PT_BLOCKED_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_PT_BLOCKED_OFF"](), "removed 2026-11-15 (lane/expdel2-09-base): IDN_PT_BLOCKED_OFF (old path, never measured) is gone; the default is kept; code at b358d19039; restore: experiments/removed/MOJOLEARN_IDN_PT_BLOCKED_OFF.patch"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_SELECT_BLOCKED_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_SELECT_BLOCKED_OFF"](), "removed 2026-11-15 (lane/expdel2-09-base): IDN_SELECT_BLOCKED_OFF (old path, never measured) is gone; the default is kept; code at 27b4b5a66a; restore: experiments/removed/MOJOLEARN_IDN_SELECT_BLOCKED_OFF.patch"
     return True
 
 
