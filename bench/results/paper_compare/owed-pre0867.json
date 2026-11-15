@@ -208,6 +208,10 @@
   "ni12-implicit-conv-off": {
    "define": "MOJOLEARN_NI12_IMPLICIT_CONV_OFF",
    "status": "define in code (x_cnn/device.mojo NI12_IMPLICIT_CONV): B = the materialized cols on every layer (direct conv / im2col + GEMM; the g50ebe26a5 cnn-clf winner)"
+  },
+  "seq-tiled-predict-on": {
+   "define": "MOJOLEARN_IDN_SEQ_TILED_PREDICT",
+   "status": "define in code (autograd/model.mojo SEQ_TILED_PREDICT, restored 2026-11-15 by lane restore-run-arms-neural): B = the whole set in one predict chunk when the inference scratch fits 1 GiB and every Linear keeps its split-K decision; A = the caller's 4096-row chunks"
   }
  },
  "rows": [
@@ -1324,6 +1328,20 @@
     "ni12-implicit-conv-off"
    ],
    "decides": "NI12_FILL_MIN = 32 (half the 64-wide tile) holds on non-board widths: the candidate must be at least as fast as the faster B arm at every width on the NVIDIA L40S; a loss where a layer turned implicit (OC 32 / 48) raises the threshold, a loss where it stayed materialized (OC 16 / 24) lowers it, with the reason beside NI12_FILL_RULE"
+  },
+  {
+   "id": "seq-tiled-predict",
+   "source": "restore-run-arms-neural (2026-11-15; RUN #4 of docs/plans/DELETED_ARMS_WORTH_RUNNING_2026-11-15.md: sequential-predict 3.3 ms NV L40S vs torch 1.4)",
+   "kind": "ab",
+   "lane": [
+    "sequential-predict"
+   ],
+   "dataset": "*",
+   "rows": "full",
+   "b_arms": [
+    "seq-tiled-predict-on"
+   ],
+   "decides": "NVIDIA L40S only (the NVIDIA-only campaign): promote the whole-set chunk (B) to the default (with a _OFF define) when sequential-predict is faster than A on every dataset and the output digests match A (same per-row chains: no bit change expected); otherwise delete the arm with a tombstone"
   }
  ]
 }
