@@ -646,6 +646,16 @@ def _sha256_file(path, chunk=1 << 20):
     return h.hexdigest()
 
 
+_SMALL_ROWS = []
+
+
+def _small_rows():
+    """tools/bench_board_small_rows.py, loaded once per process."""
+    if not _SMALL_ROWS:
+        _SMALL_ROWS.append(_load_tool("bench_board_small_rows"))
+    return _SMALL_ROWS[0]
+
+
 def _load_tool(name):
     """A tools/ module by path (tools/ is not a package)."""
     path = os.path.join(HERE, name + ".py")
@@ -2361,11 +2371,18 @@ def parse_tree_log(path):
     summ = _load_tool("bench_all_summarize")
     arms, verdict, shape = summ.parse_tree_log(path)
     bindings, warm, notes, verdict_line, mem, libs = {}, {}, [], None, {}, {}
-    states = {}
+    states, calls = {}, {}
+    small = _small_rows()
     with open(path, errors="replace") as fh:
         for line in fh:
             head, _, rest = line.rstrip("\n").partition(" ")
-            if head == "BENCH_BINDING":
+            if head == "FSPEED":
+                # SMALL ROWS (2026-11-15): a scored round of more than one call carries calls= min_ms= max_ms=
+                f = _kv(rest)
+                rec = small.parse_suffix(f)
+                if rec is not None and f.get("arm"):
+                    calls.setdefault(f["arm"], []).append(dict(rec, round=f.get("round")))
+            elif head == "BENCH_BINDING":
                 f = _kv(rest)
                 bindings[f.get("arm")] = f
             elif head == "FSPEED-WARMUP":
@@ -2405,7 +2422,7 @@ def parse_tree_log(path):
     return {"arms": arms, "verdict": verdict, "verdict_line": verdict_line,
             "shape": shape, "notes": notes, "bindings": bindings, "warmup": warm,
             "mem": {a: [rs[k] for k in sorted(rs)] for a, rs in mem.items()},
-            "libraries": libs, "state_receipts": states}
+            "libraries": libs, "state_receipts": states, "scored_calls": calls}
 
 
 def tree_cmd(ctx, race):
@@ -2609,6 +2626,8 @@ def tree_cells(ctx, race, parsed):
                                             "source": "tools/speed_gbdt_arm.py run"},
                                    "fit_verdict_line": parsed["verdict_line"]},
                     verdict=parsed["verdict"] or "UNKNOWN")
+        # SMALL ROWS (2026-11-15): calls per scored run and the spread of every call (median_ms is their median)
+        cell.update(_small_rows().cell_fields((parsed.get("scored_calls") or {}).get(arm)))
         cell.update(memory_fields(parsed.get("mem", {}).get(arm)))
         lib = (parsed.get("libraries") or {}).get(arm) or {}
         cell["library_version"] = lib.get("version")
@@ -3227,6 +3246,8 @@ def classical_cells(ctx, race, r):
                     library_version=info.get("version"),
                     comparability={"span": span, "span_asymmetry": asym},
                     verdict=verdict)
+        # SMALL ROWS (2026-11-15): calls per scored run and the spread of every call (median_ms is their median)
+        cell.update(_small_rows().cell_fields(a.get("scored_calls")))
         # FAIRNESS FIX (2026-10-13 audit): an arm the driver marks `not_opponent` (a sibling of
         # a compile arm that timed out: bench_board_neural.mark_not_opponents) was recorded as
         # an ordinary opponent and silently became the fastest opponent. It is now a "context"

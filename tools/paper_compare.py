@@ -101,6 +101,7 @@ REPO = os.path.dirname(HERE)
 sys.path.insert(0, HERE)
 import board_quality as BQ  # noqa: E402
 import board_best_ever as BE  # noqa: E402
+import bench_board_small_rows as SMALL  # noqa: E402
 
 SCHEMA = "mojolearn-paper-compare-recipes/1"
 COMPARE_SCHEMA = "mojolearn-paper-compare/1"
@@ -694,6 +695,7 @@ def compare_one(rec, races, not_run_why, hw_diff, base=None, same_host_opponents
             row["old_status"] = short_status(bcell.get("status"))
             if timed(row["old_status"], bcell.get("median_ms")):
                 row["old_ms"] = bcell.get("median_ms")
+                row.update(calls_fields("old", bcell))
     if cell is None:
         row.update(new_ms=None, new_status="missing", ratio=None, new_quality={},
                    why=not_run_why.get(rec["race_id"]) or ("race not in the new board" if race is None
@@ -705,6 +707,8 @@ def compare_one(rec, races, not_run_why, hw_diff, base=None, same_host_opponents
     new_t = timed(new_status, cell.get("median_ms"))
     row.update(new_ms=cell.get("median_ms") if new_t else None, new_status=new_status,
                new_quality=shown_quality(cell.get("quality")))
+    if new_t:
+        row.update(calls_fields("new", cell))
     missing = quality_missing(old["quality"], cell.get("quality")) if new_t else []   # untimed: BROKEN says it
     if missing:
         # QUALITY-MISSING (2026-11-13): the 0.8.55 record holds a judged metric the new cell lacks; the row cannot be
@@ -809,7 +813,8 @@ def attach_prior_board(row, version, races, flagged):
     status = short_status(c.get("status")) if c else "NOT-RUN on this box"
     ms = c.get("median_ms") if c and timed(status, c.get("median_ms")) else None
     r = (row["new_ms"] / ms) if number(row.get("new_ms")) and ms else None
-    row.setdefault("priors", {})[version] = {"ms": ms, "status": status, "ratio": r}
+    row.setdefault("priors", {})[version] = dict({"ms": ms, "status": status, "ratio": r},
+                                                 **(calls_fields("prior", c) if ms is not None else {}))
     if not flagged:
         return row
     row["prior_ms"], row["prior_status"], row["ratio_vs_prior"] = ms, status, r
@@ -893,7 +898,8 @@ def extra_row(rec):
     """A row for a new-board cell outside the recipes (the full-board screen): new time and best ever only."""
     return {"key": rec["key"], "race_id": rec["race_id"], "family": rec.get("family"), "lane": rec.get("lane"),
             "dataset": rec.get("dataset"), "phase": rec["phase"], "arm": rec["arm"], "batch": rec.get("batch"),
-            "new_ms": rec["ms"], "new_hash": rec.get("hash"), "new_device": rec.get("device"), "flags": []}
+            "new_ms": rec["ms"], "new_hash": rec.get("hash"), "new_device": rec.get("device"), "flags": [],
+            **calls_fields("new", rec)}
 
 
 def compare(doc, boards, not_run_why=None, prior_boards=None, reference=None, reference_label=None,
@@ -1005,6 +1011,29 @@ def fmt_ms(v):
     return "%.0f" % v if v >= 100 else "%.2f" % v if v >= 1 else "%.3f" % v
 
 
+def calls_fields(prefix, cell):
+    """SMALL ROWS (Andrew, 2026-11-15): {<prefix>_calls, <prefix>_min_ms, <prefix>_max_ms} of a cell whose time is
+    the median of more than one consecutive call; {} for one call (every cell before 2026-11-15, opponents)."""
+    calls = (cell or {}).get("calls")
+    if not isinstance(calls, int) or calls <= 1:
+        return {}
+    return {prefix + "_calls": calls, prefix + "_min_ms": cell.get("min_ms"), prefix + "_max_ms": cell.get("max_ms")}
+
+
+def fmt_ms_calls(r, prefix):
+    """A time with its calls and spread beside it: '0.76 (median of 20 calls, 0.7..0.95 ms)'."""
+    return fmt_ms(r.get(prefix + "_ms")) + SMALL.text({"calls": r.get(prefix + "_calls"),
+                                                       "min_ms": r.get(prefix + "_min_ms"),
+                                                       "max_ms": r.get(prefix + "_max_ms")})
+
+
+def fmt_prior_ms(r, version):
+    """One on-box prior column's time, with its calls and spread beside it when it was a median of calls."""
+    p = (r.get("priors") or {}).get(version) or {}
+    return fmt_ms(p.get("ms")) + SMALL.text({"calls": p.get("prior_calls"), "min_ms": p.get("prior_min_ms"),
+                                             "max_ms": p.get("prior_max_ms")})
+
+
 def fmt_ratio(v):
     return "%.2f" % v if number(v) else "-"
 
@@ -1073,7 +1102,7 @@ def render_md(res):
     lines.append("|---|---:|%s---:|---:|%s---|---:|%s---|---|---|---|---:|---:|---|" % (
         "---:|---:|" * len(pv), "---:|---|---:|" if bl else "", "---:|" if rl else ""))
     for r in res["rows"]:
-        pvals = "".join("%s | %s | " % (fmt_ms(((r.get("priors") or {}).get(x) or {}).get("ms")),
+        pvals = "".join("%s | %s | " % (fmt_prior_ms(r, x),
                                         fmt_ratio(((r.get("priors") or {}).get(x) or {}).get("ratio"))) for x in pv)
         bvals = best_ever_cells(r) if bl else ""
         rvals = "%s | " % fmt_ms(r.get("ref_prior_ms")) if rl else ""
@@ -1102,7 +1131,7 @@ def render_md(res):
             note.append("vs best ever: " + ",".join(r.get("best_ever_params_differ", [])[:6] +
                                                     (["hash"] if r.get("best_ever_hash_differs") else [])))
         lines.append("| %s | %s | %s%s | %s | %s%s | %s | %s%s | %s | %s | %s | %s | %s | %s |" % (
-            r["key"], fmt_ms(r.get("old_ms")), pvals, fmt_ms(r.get("new_ms")), fmt_ratio(r.get("ratio")), bvals,
+            r["key"], fmt_ms_calls(r, "old"), pvals, fmt_ms_calls(r, "new"), fmt_ratio(r.get("ratio")), bvals,
             " ".join(r["flags"]), fmt_ms(r.get("ref_ms")), rvals, fmt_q(r.get("old_quality")),
             fmt_q(r.get("new_quality")), r.get("quality_verdict", "-"),
             "%s (%s)" % (b.get("arm"), fmt_ms(b.get("opponent_ms"))) if b else "-",
@@ -1127,10 +1156,10 @@ def render_md(res):
                                                    (["hash"] if r.get("best_ever_hash_differs") else []))
             elif r.get("best_ever_ms") is None:
                 note = "no earlier measurement"
-            xvals = "".join("%s | %s | " % (fmt_ms(((r.get("priors") or {}).get(x) or {}).get("ms")),
+            xvals = "".join("%s | %s | " % (fmt_prior_ms(r, x),
                                             fmt_ratio(((r.get("priors") or {}).get(x) or {}).get("ratio")))
                             for x in allp)
-            lines.append("| %s | %s | %s%s%s | %s |" % (r["key"], fmt_ms(r.get("new_ms")), xvals, best_ever_cells(r),
+            lines.append("| %s | %s | %s%s%s | %s |" % (r["key"], fmt_ms_calls(r, "new"), xvals, best_ever_cells(r),
                                                          " ".join(r["flags"]), note.replace("|", "/")))
         lines.append("")
     return "\n".join(lines)
@@ -1171,12 +1200,12 @@ def render_summary(res, top=8):
     worst = sorted([r for r in timed_rows if "REGRESSION" in r["flags"]], key=lambda r: -r["ratio"])[:top]
     if worst:
         out.append("worst regressions:")
-        out += ["  %.2fx %s (%s -> %s ms)" % (r["ratio"], r["key"], fmt_ms(r["old_ms"]), fmt_ms(r["new_ms"]))
+        out += ["  %.2fx %s (%s -> %s ms)" % (r["ratio"], r["key"], fmt_ms_calls(r, "old"), fmt_ms_calls(r, "new"))
                 for r in worst]
     best = sorted([r for r in timed_rows if "FASTER" in r["flags"]], key=lambda r: r["ratio"])[:top]
     if best:
         out.append("biggest gains:")
-        out += ["  %.2fx %s (%s -> %s ms)" % (r["ratio"], r["key"], fmt_ms(r["old_ms"]), fmt_ms(r["new_ms"]))
+        out += ["  %.2fx %s (%s -> %s ms)" % (r["ratio"], r["key"], fmt_ms_calls(r, "old"), fmt_ms_calls(r, "new"))
                 for r in best]
     if res.get("prior_label"):
         worse = sorted([r for r in rows if "REGRESSION-VS-PRIOR" in r["flags"]], key=lambda r: -r["ratio_vs_prior"])

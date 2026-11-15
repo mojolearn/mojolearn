@@ -285,10 +285,21 @@ def emit_warmup(lane, arm, shape, ms):
     sys.stdout.flush()
 
 
-def emit_round(lane, arm, shape, index, ms, digest):
-    print("FSPEED lane=%s arm=%s shape=%s round=%d ms=%.3f hash=%s"
-          % (lane, arm, shape, index, ms, digest or "-"))
+def emit_round(lane, arm, shape, index, ms, digest, calls=None):
+    """`calls` (SMALL ROWS, 2026-11-15): the scored run's calls record (tools/bench_board_small_rows.spread);
+    more than one call appends `calls= min_ms= max_ms=` after the hash, and `ms` is their median."""
+    print("FSPEED lane=%s arm=%s shape=%s round=%d ms=%.3f hash=%s%s"
+          % (lane, arm, shape, index, ms, digest or "-", _small_rows().line_suffix(calls)))
     sys.stdout.flush()
+
+
+def _small_rows():
+    """tools/bench_board_small_rows.py (small rows: the median of consecutive calls in the one scored run)."""
+    here = os.path.dirname(os.path.abspath(__file__))
+    if here not in sys.path:
+        sys.path.insert(0, here)
+    import bench_board_small_rows
+    return bench_board_small_rows
 
 
 def emit_acc(lane, arm, metric, value):
@@ -4651,6 +4662,10 @@ def run(lane, arms, data, n_rounds, size, dev=None, *, rotate_order=False,
     spent = {a.name: 0.0 for a in arms}
     last_model = {}
     operation_scores = {}
+    # SMALL ROWS (Andrew, 2026-11-15; tools/bench_board_small_rows.py): our arm's warm-up fit time decides how
+    # many consecutive fits its one scored run makes (20 under 10 ms, else 1); opponents always make one
+    small = _small_rows()
+    warm_ms = {}
 
     for arm in arms:
         emit_header(lane, arm.name, dev, n_rounds, size)
@@ -4679,6 +4694,7 @@ def run(lane, arms, data, n_rounds, size, dev=None, *, rotate_order=False,
                             " ".join(str(exc).split())))
             continue
         emit_warmup(lane, arm.name, data.tag, ms)
+        warm_ms[arm.name] = ms
         spent[arm.name] += ms / 1000.0
         last_model[arm.name] = model
         live.append(arm)
@@ -4744,7 +4760,29 @@ def run(lane, arms, data, n_rounds, size, dev=None, *, rotate_order=False,
                         break
             except Exception:                      # noqa: BLE001
                 digest = None
-            emit_round(lane, arm.name, data.tag, r, ms, digest)
+            # SMALL ROWS: the rest of the scored run's fits, after the first fit's outputs were scored and
+            # hashed (same bits every fit); the accuracy below reads the last model, the same bits again
+            n_calls = small.calls_for(warm_ms.get(arm.name), arm.library == "mojolearn")
+            calls = [ms]
+            try:
+                for _ in range(1, n_calls):
+                    if operation_prepare is not None:
+                        operation_prepare(arm, data)
+                    t0 = time.perf_counter()
+                    model = arm.make()
+                    arm.fit(model, arm.data or data)
+                    arm.sync()
+                    calls.append((time.perf_counter() - t0) * 1000.0)
+                    last_model[arm.name] = model
+            except Exception as exc:               # noqa: BLE001
+                emit_refused(lane, arm.name, "%s at round %d call %d: %s"
+                             % (exc.__class__.__name__, r, len(calls) + 1,
+                                " ".join(str(exc).split())))
+                live.remove(arm)
+                continue
+            spent[arm.name] += sum(calls[1:]) / 1000.0
+            rec = small.spread(calls)
+            emit_round(lane, arm.name, data.tag, r, rec["ms"], digest, rec)
 
     # Accuracy, once per arm, from the last model each arm produced. Outside
     # every timer, and after the whole table, so a scoring failure cannot

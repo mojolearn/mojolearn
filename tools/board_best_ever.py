@@ -157,7 +157,10 @@ def cell_records(board, blob_vendor_hint=""):
                             "phase": phase, "arm": c.get("arm"), "batch": c.get("batch"), "vendor": vendor,
                             "device": device, "ms": float(ms), "hash": c.get("hash"), "params": params,
                             "params_source": psrc, "version": version, "release": release_of(version),
-                            "board_updated": when, "host_id": host_id})
+                            "board_updated": when, "host_id": host_id,
+                            # SMALL ROWS (2026-11-15): a median of consecutive calls carries its calls and spread
+                            **({k: c.get(k) for k in ("calls", "min_ms", "max_ms")}
+                               if isinstance(c.get("calls"), int) and c["calls"] > 1 else {})})
     return out
 
 

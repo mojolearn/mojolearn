@@ -382,6 +382,10 @@ DECODE_LANES = ("transformer-decode", "mamba1-decode", "mamba2-decode", "mamba3-
 #: step kernels instead (MAMBA_SSM_DECODE_LANES, 2026-10-22 lane measure-coverage).
 DECODE_TORCH_TWIN = ("transformer-decode",)
 TRAIN_LANES = ("lm-train-step", "samba-train-step", "mlp-train-step", "lm-host-train-step")
+#: SMALL ROWS (Andrew, 2026-11-15): lanes whose scored call advances the trained state or consumes the next
+#: batch (a training step, a recorded Session step), so a second call in the same scored run is not the same
+#: operation on the same inputs; their scored run stays one call whatever the warmup took.
+SMALL_ROW_STATEFUL_LANES = TRAIN_LANES + OPS_LANES
 #: Whole-fit lanes (2026-10-19, lane ag-bench): FIT_LANES above. Every arm's round is one fit
 #: from a fresh seeded initialization; nothing carries over between rounds, so the per-round
 #: digest of an identical arm repeats (digest_stable is meaningful).
@@ -1192,6 +1196,16 @@ def _load(name, alias=None):
             sys.modules[alias] = previous
         raise
     return mod
+
+
+_SMALL_ROWS = []
+
+
+def _small_rows_suffix(rec):
+    """tools/bench_board_small_rows.py line_suffix, the module loaded once per process."""
+    if not _SMALL_ROWS:
+        _SMALL_ROWS.append(_load("bench_board_small_rows"))
+    return _SMALL_ROWS[0].line_suffix(rec)
 
 
 def _load_mamba_corpus():
@@ -5458,6 +5472,14 @@ def worker(args):
     # peak memory per round, reset and read OUTSIDE the clock
     mem = _load("bench_board_probe").MemProbe((runner.info or {}).get("device", "gpu"),
         library=(runner.info or {}).get("library") or "?", arm=args.arm)
+    # SMALL ROWS (Andrew, 2026-11-15; tools/bench_board_small_rows.py): our warmup call's time decides how many
+    # consecutive calls the one scored run makes (20 under 10 ms, else 1). A lane whose call advances its
+    # state or consumes the next input (SMALL_ROW_STATEFUL_LANES) always makes one call: a repeat would not be
+    # the same operation on the same inputs. A lane whose warm-up is a different operation (PREDICT_LANES:
+    # the untimed fit) decides on its first scored call instead.
+    small = _load("bench_board_small_rows")
+    small_ok = (runner.info or {}).get("library") == "mojolearn" and args.lane not in SMALL_ROW_STATEFUL_LANES
+    warm_ms = None
     for line in sys.stdin:
         parts = line.split()
         if not parts:
@@ -5480,13 +5502,35 @@ def worker(args):
                 outputs = runner.outputs()
                 runner.sync()
                 operation_ms = (time.perf_counter() - t0) * 1000.0
-                m = mem.stop()
-                digest = runner.digest()
                 # 2026-10-19 (lane ag-inference-board): an inference runner's own sub-clocks (prefill, generate)
                 # and its UNTIMED memory pass, both read after the round's clock
                 extra = runner.round_extra() if hasattr(runner, "round_extra") else None
                 if extra and extra.get("clock_ms") is not None:
                     ms = float(extra["clock_ms"])     # the lane's clock: generate(prompt, N) alone
+                # SMALL ROWS: the rest of the scored run's calls, after the first call's outputs were taken (the
+                # hash, the saved outputs' bits and the receipt are the first call's; `extra` is the first call's
+                # sub-clocks). One call: nothing below runs and the order is as before.
+                n_calls = 1
+                if r > 0 and small_ok:
+                    n_calls = small.calls_for(ms if args.lane in PREDICT_LANES else warm_ms, True)
+                digest = runner.digest() if n_calls > 1 else None
+                calls = [ms]
+                for _ in range(1, n_calls):
+                    t1 = time.perf_counter()
+                    runner.call()
+                    runner.sync()
+                    call_ms = (time.perf_counter() - t1) * 1000.0
+                    if extra and extra.get("clock_ms") is not None:
+                        call_ms = float((runner.round_extra() or {}).get("clock_ms", call_ms))
+                    calls.append(call_ms)
+                if r == 0:
+                    warm_ms = ms
+                calls_rec = small.spread(calls) if r > 0 else None
+                if calls_rec is not None:
+                    ms = calls_rec["ms"]
+                m = mem.stop()
+                if digest is None:
+                    digest = runner.digest()
                 device_memory = None
                 if hasattr(runner, "memory_pass"):
                     try:
@@ -5507,6 +5551,7 @@ def worker(args):
                     except Exception as exc:  # noqa: BLE001  (a counter read never breaks a timing; recorded)
                         session_counters = {"error": "session_info failed: %r" % (exc,)}
                 round_message = {"event": "round", "round": r, "ms": ms, "digest": digest, "mem": m,
+                    "scored_calls": calls_rec,
                     "extra": extra, "device_memory": device_memory,
                     "mamba3_session_info": session_counters,
                     "state_receipt": state_receipt, "compiles": compiles_now,
@@ -6365,6 +6410,9 @@ def race(args):
                     result["arms"][arm]["warmup_deadline_s"] = warmup_deadline(arm, args)
             else:
                 result["arms"][arm]["ms"].append(msg["ms"])
+                # SMALL ROWS (2026-11-15): the calls of the scored run and their spread (ms is their median)
+                if msg.get("scored_calls") is not None:
+                    result["arms"][arm].setdefault("scored_calls", []).append(dict(msg["scored_calls"], round=r))
                 # COMPILE-IN-CLOCK (Andrew 2026-10-14): compiles inside the scored rounds, summed
                 rounds_c = result["arms"][arm].setdefault("compile_rounds", [])
                 rounds_c.append(msg.get("compiles"))
@@ -6386,8 +6434,9 @@ def race(args):
                 # lane fix-mamba-forward-doors: the session counters after each round
                 result["arms"][arm].setdefault("mamba3_session_info", []).append(
                     dict(msg["mamba3_session_info"], round=r, warmup=r == 0))
-            print("NEURAL-ROUND lane=%s arm=%s round=%d ms=%.3f digest=%s"
-                  % (lane, arm, r, msg["ms"], msg["digest"]), flush=True)
+            print("NEURAL-ROUND lane=%s arm=%s round=%d ms=%.3f digest=%s%s"
+                  % (lane, arm, r, msg["ms"], msg["digest"],
+                     _small_rows_suffix(msg.get("scored_calls"))), flush=True)
     outs = {}
     for arm in arms:
         w = workers[arm]

@@ -7565,6 +7565,10 @@ def worker(args):
     mem = _tool("bench_board_probe").MemProbe((runner.info or {}).get("device", "gpu"),
         library=(runner.info or {}).get("library") or "?", arm=args.arm)
     last = None
+    # SMALL ROWS (Andrew, 2026-11-15; tools/bench_board_small_rows.py): our warmup call's fit and infer
+    # times decide how many consecutive calls the one scored run makes (20 under 10 ms, else 1)
+    small = _tool("bench_board_small_rows")
+    warm = {}
     for line in sys.stdin:
         parts = line.split()
         if not parts:
@@ -7608,6 +7612,30 @@ def worker(args):
                 last = runner.outputs()
                 runner.sync_for_receipt()
                 operation_ms = (time.perf_counter() - whole_start) * 1000.0
+                # SMALL ROWS: the rest of the scored run's calls, after the first call's outputs were taken
+                # (the hash, the saved outputs and the receipt are the first call's; same bits every call).
+                # Opponents and rows at or above 10 ms make one call; nothing below runs for them.
+                ours_arm = args.arm in OURS_ARMS
+                n_fit = small.calls_for(warm.get("ms"), ours_arm) if r > 0 else 1
+                n_inf = small.calls_for(warm.get("infer_ms"), ours_arm) if r > 0 and did else 1
+                fit_calls, inf_calls = [ms], [ims]
+                for i in range(1, max(n_fit, n_inf)):
+                    if i < n_fit:
+                        t0 = time.perf_counter()
+                        runner.fit()
+                        fit_calls.append((time.perf_counter() - t0) * 1000.0)
+                    if i < n_inf:
+                        t1 = time.perf_counter()
+                        runner.infer()
+                        inf_calls.append((time.perf_counter() - t1) * 1000.0)
+                if r == 0:
+                    warm = {"ms": ms, "infer_ms": ims}
+                fit_rec = small.spread(fit_calls) if r > 0 else None
+                inf_rec = small.spread(inf_calls) if r > 0 and did else None
+                if fit_rec is not None:
+                    ms = fit_rec["ms"]
+                if inf_rec is not None:
+                    ims = inf_rec["ms"]
                 m = mem.stop()
                 h = hashlib.sha256()
                 for k in sorted(last):
@@ -7633,6 +7661,7 @@ def worker(args):
                 say({"event": "error", "stage": "round %d" % r, "error": repr(exc)})
                 return 1
             say({"event": "round", "round": r, "ms": ms, "infer_ms": ims, "digest": digest, "mem": m, "state_receipt": state_receipt,
+                 "scored_calls": fit_rec, "infer_scored_calls": inf_rec,
                  "aft_capture": aft_capture, "upload_separate": upload_sep,
                  "upload_separate_infer": upload_sep_infer, "compile": compile_rec,
                  "operation": {"ms": operation_ms, "preparation_ms": preparation_ms,
@@ -8706,6 +8735,11 @@ def race(args):
                 a["ms"].append(msg["ms"])
                 if msg.get("infer_ms") is not None:
                     a["infer_ms"].append(msg["infer_ms"])
+                # SMALL ROWS (2026-11-15): the calls of the scored run and their spread (ms is their median)
+                if msg.get("scored_calls") is not None:
+                    a.setdefault("scored_calls", []).append(dict(msg["scored_calls"], round=r))
+                if msg.get("infer_scored_calls") is not None:
+                    a.setdefault("infer_scored_calls", []).append(dict(msg["infer_scored_calls"], round=r))
                 # COMPILE-IN-CLOCK (Andrew 2026-10-14): compiles inside the scored calls, summed over the
                 # scored rounds (None when torch is not loaded in this arm's worker)
                 a.setdefault("compile_rounds", []).append(comp)
@@ -8727,8 +8761,9 @@ def race(args):
                 a.setdefault("upload_separate_infer", []).append(dict(msg["upload_separate_infer"], round=r,
                                                                        warmup=r == 0))
             a["mem"].append(msg.get("mem"))
-            print("ALGOS-ROUND lane=%s dataset=%s arm=%s round=%d ms=%.3f infer_ms=%s digest=%s"
-                  % (lane, ds, arm, r, msg["ms"], msg.get("infer_ms"), msg["digest"]), flush=True)
+            print("ALGOS-ROUND lane=%s dataset=%s arm=%s round=%d ms=%.3f infer_ms=%s digest=%s%s"
+                  % (lane, ds, arm, r, msg["ms"], msg.get("infer_ms"), msg["digest"],
+                     _tool("bench_board_small_rows").line_suffix(msg.get("scored_calls"))), flush=True)
     outs = {}
     for arm in arms:
         w = workers[arm]
@@ -8798,6 +8833,7 @@ def race(args):
         if has_infer(lane):
             ist = a["status"] if a["status"] != "ok" or a["infer_ms"] else "error"
             infer["arms"][arm] = {"ms": list(a["infer_ms"]), "warmup_ms": a["infer_warmup_ms"],
+                                  "scored_calls": a.get("infer_scored_calls"),
                                   "status": ist, "error": a.get("error") if ist != "ok" else None,
                                   "digests": a["digests"], "digest_stable": a["digest_stable"],
                                   "info": info, "span": predict_upload_span(arm, a)}
