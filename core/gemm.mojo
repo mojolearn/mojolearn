@@ -387,7 +387,10 @@ def pinned_gemv_n_tiled_kernel(
         z.unsafe_store(i, ftz(Float32(0.0) + ftz(acc)))
 
 
-comptime GEMM_IDENT_SWAP_537 = is_defined["MOJOLEARN_537_GEMM_IDENT_SWAP"]()
+# TOMBSTONE: MOJOLEARN_537_GEMM_IDENT_SWAP (opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-04-base; code recoverable at 33a25f5e7e.
+# Restore: git apply experiments/removed/MOJOLEARN_537_GEMM_IDENT_SWAP.patch; record in docs/TOMBSTONES.md.
+# The name stays (bench/speed/gemm_speed_main.mojo imports it) as the folded constant.
+comptime GEMM_IDENT_SWAP_537 = False
 
 
 comptime PINNED_GEMM_TPB = 256
