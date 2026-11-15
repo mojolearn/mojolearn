@@ -1,0 +1,25 @@
+diff --git b/x_cluster/minibatch_fast.mojo a/x_cluster/minibatch_fast.mojo
+index f47702314f..75444c3e1a 100644
+--- b/x_cluster/minibatch_fast.mojo
++++ a/x_cluster/minibatch_fast.mojo
+@@ -68,9 +68,17 @@ comptime MBF_MAX_BATCH = 4096
+ # Restore: git apply experiments/removed/MOJOLEARN_X_CLUSTER_FAST_CLS2_MBK_FIN.patch; record in docs/TOMBSTONES.md.
+ # TOMBSTONE: MOJOLEARN_X_CLUSTER_FAST_CLS2_MBK_FIN (DROPPED) deleted 2026-10-03 by 2b40bf184; code recoverable at 2b40bf184^.
+ # Restore: git apply experiments/removed/MOJOLEARN_X_CLUSTER_FAST_CLS2_MBK_FIN.patch; record in docs/TOMBSTONES.md.
+-# TOMBSTONE: MOJOLEARN_CLUSTER_FAST_STOP_GROUP8 (opt-in arm, 8 steps per group; F15/stopping M3 2026-10-06 B/A 0.9557..0.9820 single-sample, never promoted, no A/B row) deleted 2026-11-15 by lane/expdel2-15-cluster; code recoverable at 47c2b3d78f.
+-# Restore: git apply experiments/removed/MOJOLEARN_CLUSTER_FAST_STOP_GROUP8.patch; record in docs/TOMBSTONES.md.
+-comptime MBF_GROUP = 32
++# Bound speculative stopping work more tightly while retaining the same
++# batch schedule and convergence tests; group size is independent of data
++# dimensions. Qualification must compare reported completed iterations.
++# MEASURED M3 FAST; broader workload evidence remains separate.
++# F15/stopping M3 2026-10-06: 6 scored caller times; B/A
++# 0.9557..0.9820 (small single-sample gains); FAST candidate remains OFF.
++# Scored FAST quality 3/3 within existing bands; PASS.
++# One warmup/one score; caller67d0efb29; exact cases/builds/hashes:
++# ~/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F15/stopping.
++# Compilation/identity reused. No combined-toggle/full-board claim.
++comptime MBF_GROUP = 8 if (MINIBATCH_FAST_DEV and is_defined["MOJOLEARN_CLUSTER_FAST_STOP_GROUP8"]()) else 32
+ """Steps enqueued between two reads of the batch inertias."""
+ 
+ # lane/apple-fast-gap-cls2 (2026-10-03): MOJOLEARN_X_CLUSTER_FAST_CLS2_MBK_POOL
