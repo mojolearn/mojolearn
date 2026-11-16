@@ -60,6 +60,10 @@ NUMPY_ORACLES = {
     "mojolearn/_verify_api_programs.py", "mojolearn/_verify_api_runner.py",
     "mojolearn/_verify_api_training.py", "mojolearn/_verify_api_utilities.py",
     "mojolearn/_verify_light.py",
+    # The verify-model CLI controller: it imports NumPy itself (lazily, with the
+    # install hint) so that verify does not reach into the product's
+    # _optional_numpy guard. Product paths never call it.
+    "mojolearn/_verify_model.py",
 }
 
 
