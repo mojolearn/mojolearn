@@ -1284,6 +1284,15 @@ class OrderedRMSE(GradientBoosting):
         """
         return _TREES(self, "trees_public_gbdt_model_ordered_fit", (X, y, permutation, sample_weight), _TREES_CONTEXT)
 
+# glue: set_params rebuilds these two through their native constructors with no
+# Python __init__ frame; the argument tuples mirror the __init__ bodies above.
+from ._mode import _connect_native_init  # noqa: E402
+_connect_native_init(ExperimentalTwoLevelFeatureFreq, _TREES, "trees_gbdt_feature_freq_init",
+                     ("sources", "learning_rate", "l2_leaf_reg", "random_state", "numeric_mode"), _TREES_CONTEXT)
+_connect_native_init(OrderedRMSE, _TREES, "trees_gbdt_ordered_init",
+                     ("n_estimators", "max_depth", "learning_rate", "l2_leaf_reg", "border_count", "numeric_mode"),
+                     _TREES_CONTEXT)
+
 # Separate sklearn prediction contracts; legacy GradientBoosting stays unchanged.
 from ._gbdt_adapters import GradientBoostingClassifier, GradientBoostingRegressor
 

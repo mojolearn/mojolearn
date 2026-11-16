@@ -69,6 +69,12 @@ def connect(kinds, qselect, scores, owner_kinds=None, owner_classes=None):
                    prep_encode_qselect=bool(qselect), prep_encode_scores=dict(scores),
                    prep_owner_kinds=dict(owner_kinds or {}), prep_owner_classes=dict(owner_classes or {}))
     context.update(label_context())
+    # mutual_info's discrete_features indices (bindings/prep_select_native_door.mojo
+    # `_discrete_mask`): an exact int matches `int` by CPython's type test and
+    # never enters numbers.Integral's Python ABCMeta.__instancecheck__ (census
+    # d95f805cce: 2 frames per index).
+    from ._native_loaded_modules import INTEGRAL_TYPES
+    context["integral_type"] = INTEGRAL_TYPES
     # Only these exact composition classes use the native public lifecycle.
     # Keep the native instance-dictionary descriptor, not a Python getter.
     context['prep_composition_plans'] = {

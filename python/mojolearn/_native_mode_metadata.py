@@ -34,7 +34,8 @@ def connect_generic_params():
     entry = _binding()._module.full_reset_params_native_call
     if type(entry) is not BuiltinFunctionType:
         raise TypeError('generic parameter setters require a compiled native entry')
-    return entry, dict(plans={}, missing=object(), ready=False, originals={}, generic_setter=None)
+    return entry, dict(plans={}, missing=object(), ready=False, originals={}, generic_setter=None,
+                       native_inits={})
 
 
 def connect_classes(context, package):

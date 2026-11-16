@@ -31,7 +31,7 @@ from . import _mojolearn_rf, _mojolearn_x_trees  # noqa: F401  the bindings this
 from ._array import Array
 from ._mode import NumericModeMixin, available_if
 from ._class_weights import _trees_x_bind  # noqa: F401  re-exported: callers import it from this door
-from ._mode import ClassifierScoreMixin, RegressorScoreMixin
+from ._mode import ClassifierScoreMixin, RegressorScoreMixin, _connect_native_init
 from ._forest_protocol import forest_estimator
 from .extratrees import ExtraTreesRegressor, ExtraTreesClassifier as _ET_CLS
 from .randomforest import (
@@ -2722,3 +2722,21 @@ def _connect_explainers():
 
 
 _connect_explainers()
+
+
+# glue: set_params rebuilds these through their native constructors with no
+# Python __init__ frame (python/mojolearn/_mode.py `_connect_native_init`);
+# each argument tuple mirrors the __init__ body of its class above.
+_DART_INIT_ARGS = (
+    "n_estimators", "learning_rate", "num_leaves", "max_depth", "min_child_samples", "reg_lambda", "max_bin",
+    "drop_rate", "max_drop", "skip_drop", "xgboost_dart_mode", "uniform_drop", "drop_seed", "random_state",
+    "reg_alpha", "max_delta_step", "colsample_bytree", "subsample", "subsample_freq", "feature_fraction_seed",
+    "bagging_seed", "numeric_mode")
+_connect_native_init(DARTRegressor, _TREES, _OP.trees_dart_construct, _DART_INIT_ARGS, _TREES_CONTEXT)
+_connect_native_init(DARTClassifier, _TREES, _OP.trees_dart_construct, _DART_INIT_ARGS, _TREES_CONTEXT)
+_connect_native_init(TreeExplainer, _TREES, _OP.trees_explainer_init,
+                     ("model", "data", "feature_perturbation", "model_output", "numeric_mode"), _TREES_CONTEXT)
+_connect_native_init(KernelExplainer, _TREES, _OP.trees_agnostic_kernel_init,
+                     ("model", "data", "random_state", "link", "numeric_mode"), _TREES_CONTEXT)
+_connect_native_init(PermutationExplainer, _TREES, _OP.trees_agnostic_permutation_init,
+                     ("model", "data", "random_state", None, "numeric_mode"), _TREES_CONTEXT)

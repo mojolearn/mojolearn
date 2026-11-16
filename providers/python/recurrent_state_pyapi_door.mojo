@@ -27,7 +27,10 @@ def _state_fields(model: PythonObject, context: PythonObject) raises -> PythonOb
         for j in range(len(hooks)):  # small-loop(pinned native storage hooks)
             var fields = py_call(b.type.__dict__["__dict__"].__get__, hooks[j][0])
             if py_get(fields, hooks[j][1]) is not hooks[j][2]:
-                raise Error("TypeError: recurrent state refuses replaced Python storage hooks")
+                # Names the replaced slot (census d95f805cce: 12 state_dict /
+                # load_state_dict refusals in the api units, slot unknown).
+                raise Error("TypeError: recurrent state refuses replaced Python storage hooks ("
+                            + String(hooks[j][0].__qualname__) + "." + String(hooks[j][1]) + ")")
         var fields = py_call(layout[2], model, cls)
         var keys = py_call(b.list, fields)
         for j in range(len(keys)):  # small-loop(instance metadata keys)

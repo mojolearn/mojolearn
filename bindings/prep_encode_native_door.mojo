@@ -3232,8 +3232,9 @@ def _encode_dispatch(model: PythonObject, kind: String, operation: String, args:
             # integer is a user splitter, its folds read here once
             var cv = py_fields(model)["cv"]
             var splits = PythonObject(None)
-            if cv is not None and not Bool(py=py_call(native_loaded_module("builtins").isinstance, cv,
-                                                      native_loaded_module("numbers").Integral)):
+            # numbers.Integral by exact type (_int_like), never the ABC's
+            # Python __instancecheck__ (census d95f805cce: 2 frames per call).
+            if cv is not None and not _int_like(cv, context):
                 splits = _target_splitter_folds(model, args[0], args[1], Int(py=values[3]), context)
             result = _target_fit_transform(model, values, args[1], splits, context)
         _ = values^

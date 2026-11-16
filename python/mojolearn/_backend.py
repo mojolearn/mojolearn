@@ -160,7 +160,6 @@ cross-checked against the loaded binaries; `NumericModeMixin.vendor_used()`
 reports it per estimator.
 """
 
-import contextlib
 import importlib
 import importlib.machinery
 import importlib.util
@@ -168,7 +167,6 @@ import json
 import os
 import re
 import sys
-import threading
 
 from . import _merged
 from . import _rocm_runtime, gpu_plugins, host_surface
@@ -2427,24 +2425,6 @@ def _load_member(mode, name, path):
     _check_vendor(module, name, path)
     sys.modules[full] = module
     return module
-
-
-_HOST_HELPER = threading.local()
-
-
-@contextlib.contextmanager
-def host_helper_scope():
-    """For `_buffer._native` alone. The host-side byte helpers (cast,
-    transpose, finiteness) live in the IDENTICAL base binary in every tier and
-    launch no kernel, so resolving them is not an IDENTICAL request. Kept as
-    the marker of such a load; no tier refuses it (the PTX set serves every
-    tier since 2026-10-10)."""
-    previous = getattr(_HOST_HELPER, "active", False)
-    _HOST_HELPER.active = True
-    try:
-        yield
-    finally:
-        _HOST_HELPER.active = previous
 
 
 def load_set(mode):

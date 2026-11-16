@@ -745,3 +745,19 @@ _GENERIC_ATTRIBUTE, _GENERIC_ATTRIBUTE_CONTEXT = _connect_generic_attributes()
 PublicOutputsMixin.__getattribute__ = _GENERIC_ATTRIBUTE
 from ._native_mode_metadata import connect_generic_params as _connect_generic_params
 _GENERIC_PARAMS, _GENERIC_PARAMS_CONTEXT = _connect_generic_params()
+
+
+def _connect_native_init(cls, entry, operation, names, owner):
+    # glue: import-time registration, once per class, of a class whose public
+    # __init__ body is exactly `entry(self, operation, (<names>...), owner)`.
+    # The generic set_params rebuild (bindings/full_reset_params_native_door.mojo
+    # `_generic_reset`) then calls that native constructor directly instead of
+    # re-entering the Python __init__ body. `names` is the argument tuple in the
+    # body's order; None stands for a fixed None argument. Keep it in step with
+    # the __init__ body beside it.
+    if cls.__new__ is not object.__new__:
+        raise TypeError('native constructor registration requires object.__new__')
+    declared = tuple(inspect.signature(cls.__init__).parameters)[1:]
+    if sorted(name for name in names if name is not None) != sorted(declared):  # glue: import-time schema check
+        raise TypeError(cls.__name__ + ': native constructor arguments differ from its signature')
+    _GENERIC_PARAMS_CONTEXT['native_inits'][cls] = (entry, operation, tuple(names), owner, object.__new__)
