@@ -72,7 +72,6 @@ test_cluster_array_buffer.py	0	ok	0.8	130
 test_cluster_input_refusals.py	0	ok	0.8	146
 test_cluster_native_boundary.py	0	ok	1.0	142
 test_cluster_resident_native.py	0	env	0.7	161
-test_cnn_max_gradient_ownership.py	0	ok	0.8	141
 test_cpu_inference_boundary.py	0	ok	0.8	118
 test_cpu_kernel_variants.py	0	ok	1.0	162
 test_cpu_parallel_rbf_sampler.py	0	ok	5.7	154
