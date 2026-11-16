@@ -83,6 +83,9 @@ PACKAGING_FAMILIES = frozenset(("gpu_plugins", "host_surface"))
 #: inputs only a fixture can supply.
 _PROBE_SKIP = ("fit", "partial_fit", "train", "step", "load", "save", "export", "install", "run", "main", "backward",
                "forward", "generate", "prefetch")
+#: refusal texts of GPU-only operations on a CPU runner (multi-GPU drivers, device-resident optimizer entries):
+#: counted as cpu_refusals beside fixture_errors (py-census-14: 51 of the 147 in d95f805cce).
+_CPU_REFUSALS = ("no CPU implementation of the cooperative multi-GPU driver", "(a CPU-only install)")
 #: probed last: they end the instance's session.
 _PROBE_LAST = ("close", "free", "discard")
 
@@ -838,7 +841,7 @@ def report(directory):
     inv = json.loads((d / "inventory.json").read_text())
     merged = {m["id"]: dict(m, stats=_new_stats(), units=set()) for m in inv["members"]}
     unattributed, inside, import_time = collections.Counter(), collections.Counter(), collections.Counter()
-    fixture_errors, missing, profiler_errors = 0, [], collections.Counter()
+    fixture_errors, cpu_refusals, missing, profiler_errors = 0, 0, [], collections.Counter()
     for unit in inv["units"]:
         p = d / "units" / (re.sub(r"[^A-Za-z0-9_.-]", "_", unit["name"]) + ".json")
         try:
@@ -846,7 +849,13 @@ def report(directory):
         except (OSError, ValueError):
             missing.append(unit["name"])
             continue
-        fixture_errors += sum(1 for f in doc.get("fixtures", ()) if not f.get("ok"))
+        for f in doc.get("fixtures", ()):
+            if not f.get("ok"):
+                # a GPU-only operation refusing on a CPU runner is the product's answer, not a fixture defect
+                if any(t in (f.get("error") or "") for t in _CPU_REFUSALS):
+                    cpu_refusals += 1
+                else:
+                    fixture_errors += 1
         unattributed.update(doc.get("unattributed", {}))
         inside.update(doc.get("unattributed_inside", {}))
         import_time.update(doc.get("import_time", {}))
@@ -919,7 +928,7 @@ def report(directory):
              f"no_binding={counts['NO_BINDING']}) with_python={counts['PYTHON']} "
              f"native_attributes={counts['NATIVE_ATTRIBUTE']} packaging={counts['PACKAGING']} "
              f"units={len(inv['units'])} "
-             f"units_without_results={len(missing)} fixture_errors={fixture_errors} "
+             f"units_without_results={len(missing)} fixture_errors={fixture_errors} cpu_refusals={cpu_refusals} "
              f"export_errors={len(inv.get('export_errors', ()))} profiler_errors={sum(profiler_errors.values())} "
              f"(reports; gates nothing) census=python-frames/census.tsv"]
     for i, (k, (nm, ne, _)) in enumerate(funcs[:TOP_FUNCTIONS], 1):
