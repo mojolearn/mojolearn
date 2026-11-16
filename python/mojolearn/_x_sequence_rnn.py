@@ -692,13 +692,10 @@ class RNNClassifier(_RecurrentClassifier):
 
 
 def _state_layout(cls):
-    # glue: connect fixed native storage identities at module import.
-    mro = cls.__mro__
-    rows = tuple(vars(base) for base in mro)  # glue: imported class metadata
-    descriptor = next(row["__dict__"] for row in rows if "__dict__" in row)  # glue: native storage descriptor
-    names = ("__getattribute__", "__getattr__", "__setattr__", "__dict__")
-    hooks = tuple((base, name, row.get(name)) for base, row in zip(mro, rows) for name in names)  # glue: fixed native storage identities
-    return cls, mro, descriptor.__get__, hooks, cls._CELL
+    # glue: the exact recurrent class and its cell name. Storage, ancestry and
+    # hook admission is the connected owner contract (xseq_public_owner),
+    # pinned after the native attribute slots are installed.
+    return cls, cls._CELL
 
 
 _native_xseq_bridge.register(
@@ -713,10 +710,6 @@ _native_xseq_bridge.register(
 from ._native_full_reset_params import connect_module as _connect_full_reset
 _connect_full_reset(globals())
 del _connect_full_reset
-# glue: pin the storage hooks only after connect_full_reset has installed the
-# native __getattribute__ slot on these classes; a snapshot taken before it
-# records None and refuses every connected instance in state_dict and
-# load_state_dict, while a later replacement is still refused.
 _native_xseq_bridge.register(
     xseq_rnn_state_layouts=tuple(_state_layout(cls) for cls in (RNNRegressor, RNNClassifier, LSTMRegressor, LSTMClassifier, GRURegressor, GRUClassifier)),  # glue: fixed recurrent classes
 )
