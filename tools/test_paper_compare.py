@@ -432,6 +432,42 @@ class JobScript(unittest.TestCase):
         e = dict(os.environ, **(env or {}))
         return subprocess.run(["bash", "-c", body], env=e, capture_output=True, text=True, timeout=60)
 
+    def test_candidate_and_prior_smokes_overlap(self):
+        # PARALLEL PLAN (2026-11-16): the untimed smokes of the candidate and of every prior run at once in one shard
+        # set (the 0.8.55 smoke used to wait for the candidate's 3.6 h timed board); each arm keeps its own out dirs,
+        # the prior gets a done file, and the shard caches other than c1 are pruned
+        f = self.functions("nlines", "smoke_shards", "smoke_launch", "smoke_together")
+        with tempfile.TemporaryDirectory() as td:
+            fake = os.path.join(td, "fake.sh")
+            with open(fake, "w") as fh:
+                fh.write('out=""; while [ $# -gt 0 ]; do [ "$1" = --out ] && out=$2; shift; done\n'
+                         'echo "start $(basename "$out") $(date +%s%N)" >> "' + td + '/events"; sleep 1\n'
+                         'echo "end $(basename "$out") $(date +%s%N)" >> "' + td + '/events"\n')
+            for name, n in (("cand.txt", 6), ("prior.txt", 3)):
+                with open(os.path.join(td, name), "w") as fh:
+                    fh.write("".join("r%d\n" % i for i in range(n)))
+            for d in ("res/plan", "res/logs", "cache/c1", "cache/c2", "cache/cp1-1"):
+                os.makedirs(os.path.join(td, d))
+            open(os.path.join(td, "man"), "w").close()
+            body = ("say() { echo \"SAY $*\"; }\ndisk_gate() { :; }\nrun_as() { echo --arm \"$1\"; }\n" + f +
+                    "declare -A PRIOR_SMOKE_IDS ARM_MAN\nSMOKE_PIDS=(); SMOKE_PID_ARM=(); CARGS=(--x)\n"
+                    "RES=%s/res; CACHE_ROOT=%s/cache; PY='bash %s'; V=amd; PC_SMOKE_SHARDS=3\n"
+                    "PRIOR_ARMS=(prior-0.8.55); ARM_MAN[prior-0.8.55]=%s/man; PRIOR_SMOKE_IDS[prior-0.8.55]=%s/prior.txt\n"
+                    "smoke_together '' %s/cand.txt $RES/smoke; echo rc=$?\n" % (td, td, fake, td, td, td))
+            p = self.sh(body)
+            self.assertIn("rc=0", p.stdout, p.stderr)
+            ev = [ln.split() for ln in open(os.path.join(td, "events"))]
+            starts = {o: int(t) for k, o, t in ev if k == "start"}
+            ends = {o: int(t) for k, o, t in ev if k == "end"}
+            self.assertEqual(sorted(starts), ["smoke-prior-0.8.55-s1", "smoke-s1", "smoke-s2"])
+            # every shard starts before any shard ends: the candidate and the prior run at once
+            self.assertLess(max(starts.values()), min(ends.values()))
+            self.assertTrue(os.path.isfile(os.path.join(td, "res/plan/prior-0.8.55-smoke.done")))
+            self.assertEqual(sorted(os.listdir(os.path.join(td, "cache"))), ["c1"])
+            # a second call (the prior part of a split submit) does not smoke the prior again
+            p = self.sh(body.replace("smoke_together '' %s/cand.txt" % td, "smoke_together '' ''"))
+            self.assertIn("done in an earlier submit", p.stdout)
+
     def test_busy_cores_never_negative(self):
         # 2026-11-14, L40S pod nvc1: `busy=-18.3 total=128` from /proc/stat deltas (iowait goes backwards; the
         # container's /proc/stat is the host's). The pod's cgroup CPU time over wall time, clamped to the allocation.
@@ -651,7 +687,10 @@ class IdsAll(unittest.TestCase):
         self.assertEqual(subprocess.run(["bash", "-n", JobScript.JOB]).returncode, 0)
         self.assertIn("paper_compare.py ids-all", text)
         self.assertIn("--best-ever", text)
-        self.assertIn('smoke_shards "$NRACE"', text)
+        self.assertIn('smoke_shards "$total"', text)                # one shard set for every arm's smoke
+        self.assertIn('smoke_together all- "$PA/race-ids-smoke.txt" "$RES/smoke-all" --drop-race-scratch', text)
+        self.assertIn('smoke_together "" "$SMOKE_IDS" "$RES/smoke"', text)
+        self.assertNotIn("prior_smoke ", text)
         self.assertEqual(text.count("BYMEM"), 0)                     # one shard formula, in smoke_shards
         self.assertIn('--out "$RES/board-all"', text)
         self.assertNotIn("--with-opponents", text)
