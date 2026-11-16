@@ -64,7 +64,6 @@ from mojolearn import _backend
 from mojolearn.models.parallel_causal_lm import _native_parallel_causal
 from mojolearn._verify_native_runtime import audit_native_call
 from mojolearn._gpu_witness import visible_gpu_inventory, worker_process_inventory
-from mojolearn.tests import _mamba_block_reference
 vendor = _backend.vendor()
 # Test-only device inventory is outside the complete compiled worker loop.
 inventory = visible_gpu_inventory(vendor) if vendor in ('cuda', 'hip') else worker_process_inventory()

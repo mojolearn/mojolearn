@@ -59,7 +59,9 @@ directory = Path(os.environ['NATIVE_NEURAL_AUDIT_DIRECTORY'])
 sys.stdout = (directory / (str(os.getpid()) + '.stdout.log')).open('w', buffering=1)
 sys.stderr = (directory / (str(os.getpid()) + '.stderr.log')).open('w', buffering=1)
 from mojolearn import _backend
-from mojolearn._parallel_neural import _native_parallel_neural
+# Through the public module: importing the private _parallel_neural first
+# re-enters it half-initialized (_parallel_mlp -> parallel_training -> it).
+from mojolearn.parallel_training import _native_parallel_neural
 from mojolearn._verify_native_runtime import audit_native_call
 from mojolearn._gpu_witness import visible_gpu_inventory, worker_process_inventory
 vendor = _backend.vendor()
