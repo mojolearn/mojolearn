@@ -998,7 +998,11 @@ class Runner:
         # The parameter probe is a different, unfitted instance. Read the
         # estimator whose fit was actually timed, never that probe's counters.
         model = self.model_for_hash() if callable(self.model_for_hash) else None
-        record = _load("bench_board_params").arm_record(model) if model is not None else None
+        # board-smoke-3 (2026-11-16): the same record function as the preflight (worker "params",
+        # params_record: array-valued settings as their sha256 digest). BP.arm_record wrote an array
+        # setting as its repr, so ETS (endog=Y) was refused "actual fitted estimator settings changed
+        # after preflight" with every setting equal (box smoke of d95f805cce, classical2/ets/synthetic).
+        record = _load("classical_two_datasets").params_record(model) if model is not None else None
         if record is not None and self.fixed_params:
             record["params"].update(self.fixed_params)
         return dict(parameters=record, iterations=_load("bench_board_probe").iteration_receipt(model))
