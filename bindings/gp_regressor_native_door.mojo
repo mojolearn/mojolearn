@@ -255,7 +255,7 @@ def _gpr_optimize(model: PythonObject, binding: PythonObject, x: PythonObject, t
     _ = free
     _ = x
     _ = targets
-    var runs = fields["_optimizer_runs"]
+    var runs = fields["optimizer_runs_"]
     if py_type(runs) is not b.list:
         raise Error("TypeError: native GP optimizer history requires an exact list")
     var stops = context["family_gp_opt_stops"]
@@ -304,7 +304,7 @@ def _gpr_fit(model: PythonObject, args: GPArgumentPins, context: PythonObject) r
         y_mean = scaled.mean
         y_std = scaled.stddev
     var kernel_fit = fields["_kernel"]
-    py_setitem(fields, "_optimizer_runs", Python.list())
+    py_setitem(fields, "optimizer_runs_", Python.list())
     if fields["_optimizer"] is not None and gp_n_dims(fields["_kernel"], context) > 0:
         kernel_fit = _gpr_optimize(model, args[0], x, targets, n_rows, n_cols, context)
     var arrays = gp_kernel_arrays(kernel_fit, context)

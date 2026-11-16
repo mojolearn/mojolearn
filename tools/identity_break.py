@@ -5843,7 +5843,7 @@ def _gp_optimize_lane(restarts):
             m = ml.GaussianProcessRegressor(kernel=k, optimizer="fmin_l_bfgs_b")
         m.fit(X[:64, :4], yr[:64])
         mean, std = m.predict(X[64:128, :4], return_std=True)
-        runs = m._optimizer_runs
+        runs = m.optimizer_runs_
         return _fit(dict(theta=_h(np.array(m.kernel_.theta, dtype=np.float64)),
                          params=_h(*_saved_fields(m, "params", "ls")),
                          runs=_h(np.array([[r[0], r[1]] for r in runs], dtype=np.int64),
