@@ -134,16 +134,28 @@ def stage_entries(entries, stage):
 
 
 def audit_stage(tree, stage, workdir):
-    """[error lines] of the commit's source-only pack audits over STAGE: packaging/portable_math/wheel.py
-    audit_tree(python_only=True) and tools/wheel_api_audit.py audit's source_payload_complete."""
-    tree, stage = Path(tree), Path(stage)
-    errors = []
+    """[error lines] of the commit's source-only pack audits over STAGE."""
+    return math_errors(tree, stage) + payload_errors(tree, stage, workdir)
+
+
+def math_errors(tree, stage):
+    """[error lines] of TREE's packaging/portable_math/wheel.py audit_tree(STAGE, python_only=True): the NumPy,
+    dependency and Python-math rules the pack's finalize step applies to every shipped file."""
+    tree = Path(tree)
     sys.path.insert(0, str(tree / "packaging/portable_math"))
     math_audit = load_module(tree / "packaging/portable_math/wheel.py", "prebuild_portable_math_wheel")
     try:
-        math_audit.audit_tree(stage, python_only=True)
+        math_audit.audit_tree(Path(stage), python_only=True)
     except ValueError as exc:
-        errors += [f"portable_math/wheel.py: {line}" for line in str(exc).splitlines()[1:] or [str(exc)]]
+        return [f"portable_math/wheel.py: {line}" for line in str(exc).splitlines()[1:] or [str(exc)]]
+    return []
+
+
+def payload_errors(tree, stage, workdir):
+    """[error lines] of TREE's tools/wheel_api_audit.py audit over STAGE: the source_payload_complete refusal
+    pack_wheel raises (a package module the packer's list misses, a public name absent from the payload)."""
+    tree, stage = Path(tree), Path(stage)
+    errors = []
     sys.path.insert(0, str(tree / "tools"))
     api = load_module(tree / "tools/wheel_api_audit.py", "prebuild_wheel_api_audit")
     # audit() reads members out of a zip; this is the staged payload zipped, not a wheel
@@ -430,6 +442,9 @@ def main(argv=None):
             for line in log.read_text(errors="replace").splitlines()[-12:]:
                 print(f"    {line[:300]}", flush=True)
     if not failed:
+        # the export and the stage are kept for a failure's diagnosis only
+        for scratch in (tree, work / "staged-wheel-tree", work / "staged-payload.zip"):
+            shutil.rmtree(scratch, ignore_errors=True) if scratch.is_dir() else scratch.unlink(missing_ok=True)
         passed.write_text(json.dumps(dict(commit=commit, parts=parts, made=time.strftime("%Y-%m-%dT%H:%M:%SZ",
                                                                                           time.gmtime())), indent=2))
     print(f"# PREBUILD {'PASSED' if not failed else 'FAILED: ' + ', '.join(failed)}", flush=True)

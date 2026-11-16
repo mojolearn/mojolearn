@@ -44,6 +44,13 @@ wheel. sm_89 alone is refused: the NVIDIA wheel does not import without its PTX 
 Default: every set, as a release. candidate.json records the targets; tools/ops/measure_candidate.py stage refuses a
 vendor the build did not pack. A release has no --targets.
 
+PRE-BUILD CHECKS (2026-11-15, tools/prebuild_check.py): before the Release dispatches anything, the commit's pack
+source audits (NumPy/platform math, verification inputs, source/API payload) and the host-parse suite of
+native-checks.yml (every release host group parsed and elaborated on free runners, or a passed run of the same sha
+reused) run in parallel; a failure refuses the build. --probe-wheel <core.whl> adds the probe part (an earlier core
+wheel with this commit's Python on verify-smoke.yml). Logs: <work dir>/prebuild/. A resume reuses their PASS.json.
+--no-prebuild-check skips them. A dry run does not run them.
+
 At the end it asserts that origin/main and the tag lists (origin and local) are what they were at the start.
 """
 import argparse
@@ -200,6 +207,10 @@ def parse(argv):
                     "checkout's branch; it must hold this checkout's HEAD)")
     ap.add_argument("--work-root", default=str(CANDIDATE_ROOT), help="default ~/mojolearn-evidence/release-candidates")
     ap.add_argument("--dry-run", action="store_true", help="print the Release plan of the five steps; run nothing")
+    ap.add_argument("--no-prebuild-check", action="store_true", help="do not run tools/prebuild_check.py (the pack "
+                    "source audits and the host-parse suite) before the build is dispatched")
+    ap.add_argument("--probe-wheel", default="", help="tools/prebuild_check.py --probe-wheel: an earlier packed "
+                    "mojolearn_core-*.whl, smoked with this commit's Python before the build")
     ap.add_argument("--no-verify-smoke", action="store_true", help="do not start .github/workflows/verify-smoke.yml "
                     "on the packed core wheel (an A set starts it by default; it reports and gates nothing)")
     return ap.parse_args(argv)
@@ -297,6 +308,12 @@ def main(argv=None, release=None):
     print(f"measurement build {version} of {a.commit[:12]}" + (f" defines {defines}" if defines else "")
           + f"; targets {','.join(targets)}; wheels core,{','.join(built)}"
           + f"; work dir {work}; steps {', '.join(STEPS)} (every other release step is skipped)")
+    if not a.dry_run and not a.no_prebuild_check:
+        import prebuild_check
+        pre = ["--commit", a.commit, "--ref", args.candidate_ref, "--work", str(work / "prebuild"), "--reuse-pass"]
+        if prebuild_check.main(pre + (["--probe-wheel", a.probe_wheel] if a.probe_wheel else [])):
+            raise SystemExit(f"measurement build: the pre-build checks failed (logs {work / 'prebuild'}); nothing "
+                             "was dispatched. Fix and rerun, or pass --no-prebuild-check")
     rc = r.go()
 
     after = remote_refs()
