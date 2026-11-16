@@ -72,15 +72,12 @@ def test_pairs_validation():
     X, rel, g = _fixture()
     n = X.shape[0]
     pairs = _generated_pairs(rel, g)
-    # a list of tuples, a list of lists and an int array are the same pairs;
-    # no pairs_weight is unit weights
+    # a list of tuples, a list of lists and an int array are the same pairs
+    # (no pairs_weight equal to unit weights is gbdt_public_fits pair_logit kind 3)
     base = np.asarray(_model(n_estimators=2).fit(X, rel, group_id=g, pairs=pairs).predict(X))
     for same in ([list(p) for p in pairs], np.asarray(pairs, dtype=np.int64)):
         got = np.asarray(_model(n_estimators=2).fit(X, rel, group_id=g, pairs=same).predict(X))
         assert got.tobytes() == base.tobytes()
-    unit = np.ones(len(pairs), dtype=np.float32)
-    got = np.asarray(_model(n_estimators=2).fit(X, rel, group_id=g, pairs=pairs, pairs_weight=unit).predict(X))
-    assert got.tobytes() == base.tobytes()
 
     def refused(match, pairs, pairs_weight=None):
         with pytest.raises(ValueError, match=match):

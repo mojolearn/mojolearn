@@ -201,6 +201,9 @@ from checks.native_tests.x_linear_ops import register as register_x_linear_ops
 from checks.native_tests.models_checkpoint_widen import register as register_models_checkpoint_widen
 # lane tests-to-mojo-spatial (2026-11-16)
 from checks.native_tests.xcnn_sage_max_adjoint import register as register_xcnn_sage_max_adjoint
+# lane tests-to-mojo-trees (2026-11-16)
+from checks.native_tests.gbdt_feature_freq_experimental import register as register_gbdt_feature_freq_experimental
+from checks.native_tests.gbdt_host_archive_text import register as register_gbdt_host_archive_text
 
 
 def all_checks() -> List[Check]:
@@ -396,4 +399,7 @@ def all_checks() -> List[Check]:
     checks.append(register_models_checkpoint_widen())
     # lane tests-to-mojo-spatial (2026-11-16)
     checks.append(register_xcnn_sage_max_adjoint())
+    # lane tests-to-mojo-trees (2026-11-16)
+    checks.append(register_gbdt_feature_freq_experimental())
+    checks.append(register_gbdt_host_archive_text())
     return checks^

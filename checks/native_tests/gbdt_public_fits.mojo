@@ -13,8 +13,10 @@ functions are deleted in the same commit series):
 - `test_gbdt_pair_logit.py::test_learns_on_uneven_queries`,
   `::test_explicit_unit_pairs_equal_the_generated_pairs`,
   `::test_pairs_weight_changes_the_model`,
+  `::test_pairs_validation` (its unit-`pairs_weight` arm; lane tests-to-mojo-trees, 2026-11-16),
 - `test_gbdt_ranking_bootstrap.py` (whole file),
 - `test_gbdt_yeti_rank.py::test_same_seed_same_bytes_other_seed_other_bytes`,
+  `::test_learns_on_uneven_queries` (lane tests-to-mojo-trees, 2026-11-16),
 - the host-only units (the CPU suite runs them): the `*_fits_on_the_host_when_built`
   functions of `test_cpu_training_e3_gbdt.py`, `test_cpu_training_e3_gbdt_trees.py`,
   `test_cpu_training_gbdt_losses.py` and `test_cpu_training_gbdt_ordered.py`.
@@ -34,7 +36,7 @@ Inputs are the original NumPy streams, stored by `tools/gbdt_native_fixtures.py`
 under `checks/native_tests/fixtures/gbdt/` (column-major X). Every option,
 assertion and tolerance is the original test's.
 """
-from std.math import isfinite, log, min, max
+from std.math import isfinite, log, log2, min, max
 from std.memory import bitcast
 from core.host_parallel import host_parallelize
 from core.host_helpers_impl import argmax_rows_f32, argmax_rows_f64
@@ -63,7 +65,7 @@ from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, 
 comptime FIXTURE_DIR = "checks/native_tests/fixtures/gbdt/"
 comptime UNSET = -1.0
 #: units every column runs (CPU and GPU suites)
-comptime GBDT_COMMON_UNITS = 24
+comptime GBDT_COMMON_UNITS = 26
 #: units only the host column runs (the original `*_on_the_host_when_built` tests)
 comptime GBDT_HOST_UNITS = 20
 
@@ -706,8 +708,17 @@ def _pair_inputs() raises -> GbdtInputs:
 
 def pair_logit[I: GbdtImage](kind: Int) raises:
     """`test_learns_on_uneven_queries` (0), `test_explicit_unit_pairs_equal_the_generated_pairs`
-    (1), `test_pairs_weight_changes_the_model` (2)."""
+    (1), `test_pairs_weight_changes_the_model` (2), `test_pairs_validation`'s
+    "no pairs_weight is unit weights" (3: two trees, explicit pairs)."""
     var inp = _pair_inputs()
+    if kind == 3:
+        var o2 = _pair_model(2)
+        inp.pairs = load_u32("pl-pairs.u32", 2 * 1894)
+        var base = predict(fit[I](o2, inp).text, inp.x, 240)
+        inp.pair_weights = List[Float32](length=1894, fill=Float32(1))
+        var unit = predict(fit[I](o2, inp).text, inp.x, 240)
+        require(same_f32(base, unit), "unit pairs_weight changed the PairLogit model")
+        return
     var o = _pair_model()
     if kind == 0:
         var m = fit[I](o, inp)
@@ -798,6 +809,70 @@ def yeti_seed[I: GbdtImage]() raises:
     require(not same_f32(a, c), "YetiRank other seed is the same model")
 
 
+def _ndcg(pred: List[Float32], rel: List[Float32], sizes: List[UInt32]) -> Float64:
+    """The Python test's `_ndcg`: mean per-query NDCG, Base type, all
+    positions; rows ranked by descending prediction, ties lower grade first
+    (a stable sort, as Python's `sorted`). Queries are the consecutive runs of
+    `sizes` (the fixture's group ids ascend)."""
+    var total = 0.0
+    var begin = 0
+    for q in range(len(sizes)):  # small-loop(queries of one fit, inside one unit's task)
+        var size = Int(sizes[q])
+        var order = List[Int](length=size, fill=0)
+        var ideal_rel = List[Float64](length=size, fill=0.0)
+        for i in range(size):  # small-loop(rows of one query)
+            order[i] = i
+            ideal_rel[i] = Float64(rel[begin + i])
+        for i in range(1, size):  # small-loop(stable insertion sort of one query)
+            var key = order[i]
+            var kp = Float64(pred[begin + key])
+            var kt = Float64(rel[begin + key])
+            var j = i - 1
+            while j >= 0:
+                var op = Float64(pred[begin + order[j]])
+                var ot = Float64(rel[begin + order[j]])
+                if op < kp or (op == kp and ot > kt):
+                    order[j + 1] = order[j]
+                    j -= 1
+                else:
+                    break
+            order[j + 1] = key
+        for i in range(1, size):  # small-loop(descending sort of one query's grades)
+            var v = ideal_rel[i]
+            var j = i - 1
+            while j >= 0 and ideal_rel[j] < v:
+                ideal_rel[j + 1] = ideal_rel[j]
+                j -= 1
+            ideal_rel[j + 1] = v
+        var dcg = 0.0
+        var ideal = 0.0
+        for k in range(size):  # small-loop(positions of one query)
+            var decay = 1.0 / log2(Float64(k) + 2.0)
+            dcg += Float64(rel[begin + order[k]]) * decay
+            ideal += ideal_rel[k] * decay
+        total += dcg / ideal if ideal > 0.0 else 1.0
+        begin += size
+    return total / Float64(len(sizes))
+
+
+def yeti_learns[I: GbdtImage]() raises:
+    """`test_gbdt_yeti_rank.py::test_learns_on_uneven_queries`: YetiRank(10
+    trees, depth 4, bootstrap No, random_strength 0) on the PairLogit
+    fixture's uneven queries predicts 240 finite values, writes no loss
+    value (every `loss_curve_` entry is 0), and ranks better than a constant."""
+    var inp = _pair_inputs()
+    var o = GbdtOpts("YetiRank", 10, 4)
+    o.deterministic()
+    var m = fit[I](o, inp)
+    var pred = predict(m.text, inp.x, 240)
+    require(len(pred) == 240 and all_finite_f32(pred), "YetiRank predictions")
+    for v in m.learn:  # small-loop(the learn curve of one fit)
+        require(v == 0.0, "YetiRank wrote a loss value")
+    var zeros = List[Float32](length=240, fill=Float32(0))
+    require(_ndcg(pred, inp.y, inp.group_sizes) > _ndcg(zeros, inp.y, inp.group_sizes),
+            "YetiRank ranks no better than a constant")
+
+
 def common_unit[I: GbdtImage](unit: Int) raises:
     if unit == 0:
         multiclass_stochastic[I]("MultiClass")
@@ -819,8 +894,12 @@ def common_unit[I: GbdtImage](unit: Int) raises:
         ranking_temperature[I](_rank_loss(unit - 14))
     elif unit <= 22:
         ranking_discrete[I](_rank_loss((unit - 17) // 2), "Bernoulli" if (unit - 17) % 2 == 0 else "Poisson")
-    else:
+    elif unit == 23:
         yeti_seed[I]()
+    elif unit == 24:
+        pair_logit[I](3)
+    else:
+        yeti_learns[I]()
 
 
 # -------------------------------------------------------------- host units
