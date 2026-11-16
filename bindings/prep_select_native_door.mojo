@@ -477,7 +477,9 @@ def _discrete_mask(df: PythonObject, d: Int, context: PythonObject) raises -> Li
             mask.append(Bool(py=vals[i]))
         return mask^
     var mask = List[Bool](length=d, fill=False)
-    var integral = context["integral_type"] if py_contains(context, "integral_type") else Python.import_module("numbers").Integral
+    # (int, numbers.Integral), connected once (python/mojolearn/_native_prep_encode_bridge.py);
+    # the per-call numbers import fallback is gone.
+    var integral = context["integral_type"]
     for i in range(count):  # driver-loop: over the discrete_features indices
         var v = vals[i]
         if Bool(py=py_call(b.isinstance, v, b.bool)) or not Bool(py=py_call(b.isinstance, v, integral)):
