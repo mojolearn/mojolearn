@@ -59,7 +59,7 @@ NOT_ALGORITHMS = {
     "resample.BootstrapResult", "resample.PermutationTestResult", "resample.MonteCarloResult",
     "resample.STATISTICS", "resample.METHODS", "resample.ALTERNATIVES", "resample.INTEGRANDS",
     "training.numeric_mode_used", "training.vendor_used", "training.accumulation_is_aligned",
-    "model_selection.split_descriptor",
+    "model_selection.split_descriptor", "model_selection.default_folds",
 }
 
 CLASSIFIER_HINTS = ("Classifier", "SVC", "Logistic", "NB", "Discriminant", "Perceptron",

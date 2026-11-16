@@ -442,6 +442,7 @@
       "cross_val_predict",
       "cross_val_score",
       "cross_validate",
+      "default_folds",
       "get_scorer",
       "get_scorer_names",
       "learning_curve",
@@ -6076,6 +6077,15 @@
       "source": "python/mojolearn/model_selection.py",
       "canonical_algorithm": "mojolearn.model_selection.cross_validate",
       "symbol_origin": "mojolearn.model_selection.cross_validate"
+    },
+    {
+      "algorithm": "mojolearn.model_selection.default_folds",
+      "status": "missing",
+      "cases": [],
+      "reason": "No bounded standalone whole-operation fixture has been reviewed for this public algorithm. Existing kernel evidence does not fill this cell.",
+      "source": "python/mojolearn/model_selection.py",
+      "canonical_algorithm": "mojolearn.model_selection.default_folds",
+      "symbol_origin": "mojolearn.model_selection.default_folds"
     },
     {
       "algorithm": "mojolearn.model_selection.get_scorer",
