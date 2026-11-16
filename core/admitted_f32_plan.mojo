@@ -58,8 +58,9 @@ def admitted_f32_column(expected_rank: Int, rank: Int, cols: Int,
 
 def admitted_f32_shape_check(rank: Int, expected_rank: Int, column: Bool,
     rows: Int, cols: Int, name: String) raises -> Int:
-    if expected_rank >= 0 and rank != expected_rank and not column:
-        raise Error(name + " must be " + String(expected_rank) + "-D")
+    # The rank-mismatch refusal (expected_rank >= 0, rank differs, not a
+    # column target) is raised by the caller, bindings/admitted_input_unpack.mojo
+    # admit_x, which holds the full shape for the product's one wording.
     if rank > 2:
         raise Error(name + " must be at most 2-D")
     if rows < 1 or cols < 1:

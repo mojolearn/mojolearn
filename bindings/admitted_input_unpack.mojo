@@ -388,6 +388,16 @@ def admit_x(source: PythonObject, ndim: Int, name: String, context: PythonObject
         cols = 1 if nd < 2 else Int(py=value.shape[1])
         var column_source = py_type(source) is not b.list and py_type(source) is not b.tuple and py_type(source) is not b.memoryview
         column = admitted_f32_column(ndim, nd, cols, column_target, column_source)
+        if ndim >= 0 and nd != ndim and not column:
+            # The product's one rank refusal (as admit_x_unrecorded below), with
+            # the full shape and, below rank 2, the reshape hint. It replaces
+            # core/admitted_f32_plan.mojo's bare "<name> must be N-D", which
+            # could not see the shape (smoke d95f805cce,
+            # test_native_forest_auxiliary). Same one compare per call as the
+            # core check it replaces; the message is built on refusal only.
+            var hint = String(". ") + String(RESHAPE_HINT) if ndim == 2 and nd < 2 else String("")
+            raise Error("mojolearn: " + name + " must be " + String(ndim) + "-D, got " + String(nd)
+                        + "-D shape " + _repr(value.shape) + hint)
         if column:
             classical_warn_column(context)
         rank = admitted_f32_shape_check(nd, ndim, column, rows, cols, name)
