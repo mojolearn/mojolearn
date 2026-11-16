@@ -132,6 +132,10 @@ def _check_configuration() -> Bool:
     # Restore: git apply experiments/removed/MOJOLEARN_SEG_SUMS_SERIAL.patch
     comptime assert not is_defined["MOJOLEARN_SEG_SUMS_SERIAL"](), "removed 2026-11-15 (lane/expdel2-04-base): SEG_SUMS_SERIAL (opt-in arm, Segmented sort block-sum scan (FAST Apple); no A/B recorded for the opt-in arm on current source (rule a) is gone; the default stays; code recoverable at 28ac8cfd29; restore: experiments/removed/MOJOLEARN_SEG_SUMS_SERIAL.patch"
     # ---- end lane expdel2-04-base
+    # lane sqrt-comptime-step (2026-11-16): MOJOLEARN_NUMERICS_FAST_SQRT_COMPTIME_STEP is read in checks/numerics.mojo
+    # (portable_sqrtf), which every binding of every family reaches, so its guard is here, not in a family module.
+    # It is an IDENTICAL arm (A/B pending, NVIDIA L40S); Apple fast investment is stopped, so refuse it in fast mode.
+    comptime assert not (is_defined["MOJOLEARN_NUMERICS_FAST_SQRT_COMPTIME_STEP"]() and is_defined["MOJOLEARN_NUMERIC_FAST"]()), "MOJOLEARN_NUMERICS_FAST_SQRT_COMPTIME_STEP is an IDENTICAL arm (portable_sqrtf candidate step as comptime for, checks/numerics.mojo; A/B pending on the NVIDIA L40S); drop it from a MOJOLEARN_NUMERIC_FAST build"
     # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C06_NORM_ROWS.patch
     comptime assert not is_defined["MOJOLEARN_CLASSICAL_C06_NORM_ROWS"](), "removed 2026-11-15 (lane/expdel2-07-base): CLASSICAL_C06_NORM_ROWS (Row norms (rows per norm block 2/4 for KNN / KDE / KMeans, IDENTICAL)) was opt-in arm; EXP:1519 RESTRUCTURED, A/B owed and never run; the opt-in arm is gone and the default path is unchanged; code recoverable at 526172a06e; see docs/TOMBSTONES.md"
     # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C06_SMALL_D_THREAD.patch
