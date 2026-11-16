@@ -7,6 +7,7 @@ No Python objects, callbacks, dtype objects or product allocation are needed.
 """
 from core.host_parallel import host_parallelize
 from core.native_array_layout import NativeArrayLayout, native_array_itemsize, native_array_code, native_matrix_shape
+from checks.native_tests.runner import Check, Column, Report
 
 comptime ARRAY_LAYOUT_FIXTURES = 45
 comptime _MAX = 9223372036854775807
@@ -221,7 +222,7 @@ def run_fixture(fixture_id: Int) raises:
         _layout_refusal(fixture_id - 33)
 
 
-def main() raises:
+def run_checks() raises:
     var failures = List[Int](length=ARRAY_LAYOUT_FIXTURES, fill=0)
     var fp = failures.unsafe_ptr()
     def task(fixture_id: Int) {imm fp}:
@@ -236,3 +237,19 @@ def main() raises:
         failed += value
     require(failed == 0, "native_array_layout failed " + String(failed) + " fixtures")
     print("PASS native_array_layout:", ARRAY_LAYOUT_FIXTURES, "native shape/stride/dtype/overflow fixtures, parallel")
+
+
+# Registered by lane checks-register (2026-11-16): it was a standalone main()
+# that no CI job ran. One process per check name in CI keeps any fresh-process
+# precondition.
+# Host column: the suite is host work (its fixtures run across host
+# cores inside run_checks; the check counts as one case).
+def run_cases(column: Column, mut report: Report):
+    try:
+        run_checks()
+    except error:
+        report.abort(error)
+
+
+def register() -> Check:
+    return Check("native_array_layout_check", cpu=True, gpu=False, serial="", run=run_cases)

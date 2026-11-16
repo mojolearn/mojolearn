@@ -13,6 +13,7 @@ from core.host_parallel import host_parallelize
 from core.hostptr import f32_ptr
 from training.optimizer_public_common import PublicStep, step_lr
 from sequence.lr_table import LrSpec, lr_spec_fill, lr_spec_value, LR_ONE_BASED, LR_BEYOND, LR_EXACT_ONLY
+from checks.native_tests.runner import Check, Column, Report
 
 comptime LR_FIXTURES = 25
 comptime SENTINEL = Float32(31415.5)
@@ -162,7 +163,7 @@ def optimizer_rate_fixture() raises:
     require(refused, "typed optimizer accepted exhausted OneCycle schedule")
 
 
-def main() raises:
+def run_checks() raises:
     var failures = List[Int](length=LR_FIXTURES, fill=0)
     var fp = failures.unsafe_ptr()
     def task(fixture_id: Int) {imm fp}:
@@ -184,3 +185,19 @@ def main() raises:
         failed += value
     require(failed == 0, "lr_schedule failed " + String(failed) + " fixtures")
     print("PASS lr_schedule:", LR_FIXTURES, "parallel native fixtures; host scalar metadata for CPU/GPU")
+
+
+# Registered by lane checks-register (2026-11-16): it was a standalone main()
+# that no CI job ran. One process per check name in CI keeps any fresh-process
+# precondition.
+# Host column: the suite is host work (its fixtures run across host
+# cores inside run_checks; the check counts as one case).
+def run_cases(column: Column, mut report: Report):
+    try:
+        run_checks()
+    except error:
+        report.abort(error)
+
+
+def register() -> Check:
+    return Check("lr_schedule_check", cpu=True, gpu=False, serial="", run=run_cases)

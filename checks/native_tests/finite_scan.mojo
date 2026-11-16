@@ -19,6 +19,7 @@ from core.host_finite_scan import (
     host_all_finite_f64,
     host_all_finite_f32_strided,
 )
+from checks.native_tests.runner import Check, Column, Report
 
 comptime ROWS = 4096
 comptime COLS = 64
@@ -117,7 +118,7 @@ def _scan64(variant: Int) raises:
     _ = storage
 
 
-def main() raises:
+def run_checks() raises:
     var failed = List[Int](length=FIXTURES, fill=0)
     var failures_ptr = failed.unsafe_ptr()
     def task(unit: Int) {imm failures_ptr}:
@@ -137,3 +138,19 @@ def main() raises:
         failures += value
     _require(failures == 0, "finite_scan failed " + String(failures) + " of " + String(FIXTURES) + " fixtures")
     print("PASS finite_scan:", FIXTURES, "native fixtures, 262144 words, 4 layouts, parallel")
+
+
+# Registered by lane checks-register (2026-11-16): it was a standalone main()
+# that no CI job ran. One process per check name in CI keeps any fresh-process
+# precondition.
+# Host column: the suite is host work (its fixtures run across host
+# cores inside run_checks; the check counts as one case).
+def run_cases(column: Column, mut report: Report):
+    try:
+        run_checks()
+    except error:
+        report.abort(error)
+
+
+def register() -> Check:
+    return Check("finite_scan", cpu=True, gpu=False, serial="", run=run_cases)

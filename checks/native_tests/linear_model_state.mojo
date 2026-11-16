@@ -11,6 +11,7 @@ from core.linear_model_state import (
     LinearModelState, linear_state_predict_request, linear_state_is_fitted,
     linear_ridge_parameter_status, linear_ridge_parameter_error,
 )
+from checks.native_tests.runner import Check, Column, Report
 
 
 def _require(ok: Bool, message: String) raises:
@@ -127,7 +128,7 @@ def _parameters(unit: Int) raises:
     _require(refused == (status != 0), "parameter refusal must become a native error")
 
 
-def main() raises:
+def run_checks() raises:
     comptime FIXTURES = 50
     var failed = List[Int](length=FIXTURES, fill=0)
     var failures_ptr = failed.unsafe_ptr()
@@ -150,3 +151,19 @@ def main() raises:
         failures += value
     _require(failures == 0, "linear model state failed " + String(failures) + " of " + String(FIXTURES) + " fixtures")
     print("PASS linear_model_state:", FIXTURES, "native fixtures, parallel")
+
+
+# Registered by lane checks-register (2026-11-16): it was a standalone main()
+# that no CI job ran. One process per check name in CI keeps any fresh-process
+# precondition.
+# Host column: the suite is host work (its fixtures run across host
+# cores inside run_checks; the check counts as one case).
+def run_cases(column: Column, mut report: Report):
+    try:
+        run_checks()
+    except error:
+        report.abort(error)
+
+
+def register() -> Check:
+    return Check("linear_model_state", cpu=True, gpu=False, serial="", run=run_cases)
