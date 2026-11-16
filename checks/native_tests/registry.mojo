@@ -7,7 +7,9 @@ names from this file (`tools/ops/native_checks_report.py`), so a check that is
 not appended here never runs. No `main()`: imported by the two mains.
 
 Not here: `et_device_loop_early_exit` and `rf_device_loop_early_exit` build
-one binary per compile-time route define (their own pixi tasks).
+one binary per compile-time route define (their own pixi tasks), and
+`entry_table_image_provider` / `entry_table_image_consumer`, two shared
+images a controller loads separately (they cannot share one binary).
 """
 from checks.native_tests.adafactor import register as register_adafactor
 from checks.native_tests.agglo_native import register as register_agglo_native
