@@ -764,6 +764,16 @@ FULL_ALL="$RES/plan/race-ids-full-all.txt"
 cat "$RES/plan/race-ids-full.txt" "$RES/plan-owed/ids-candidate-full.txt" 2> /dev/null | awk 'NF && !seen[$0]++' > "$FULL_ALL"
 $PY tools/paper_compare.py pass-ids --full-ids "$FULL_ALL" "${SJ[@]}" --out "$PASS_IDS" > "$RES/logs/pass-ids.log" 2>&1
 tail -n 1 "$RES/logs/pass-ids.log"
+# A wheel whose smoke fails most races is broken, not slow: stop before the timed boards and the priors instead of
+# spending the cap on the survivors (2026-11-16: 132 of 199 races of 26709df246 failed its smoke on one device-plan
+# defect and the job still ran 4 h of boards and priors for 6 comparable rows). PC_SMOKE_MIN_PASS_PCT (default 50).
+SM_PLAN=$(sed -n 's/.*planned=\([0-9]*\).*/\1/p' "$RES/logs/pass-ids.log" | tail -n 1)
+SM_PASS=$(sed -n 's/.*smoke_passed=\([0-9]*\).*/\1/p' "$RES/logs/pass-ids.log" | tail -n 1)
+if [ -n "$SM_PLAN" ] && [ -n "$SM_PASS" ] && [ "$SM_PLAN" -gt 0 ] \
+        && [ $(( SM_PASS * 100 )) -lt $(( SM_PLAN * ${PC_SMOKE_MIN_PASS_PCT:-50} )) ]; then
+    say "STOP: only $SM_PASS of $SM_PLAN races passed the candidate smoke (under ${PC_SMOKE_MIN_PASS_PCT:-50}%); no board is timed. Read logs/smoke-s*.log"
+    exit 7
+fi
 
 # ---- the timed boards (one process at a time: serial by nature on one GPU) -------------------------------------
 board_run() {   # arm, ids file, out dir, extra args...
