@@ -224,7 +224,7 @@ def main(out_path, scratch):
     refuse("predict.y_1d_python_object", lambda: with_field("_y_1d", PyObject()).predict(X))
     refuse("predict.numeric_mode_python_object", lambda: with_field("numeric_mode", PyObject()).predict(X))
     # Fields only fit/save/state operations read: refused there (full walk).
-    for name in ("_opt_m", "loss_curve_", "_options"):
+    for name in ("optimizer_m_", "loss_curve_", "_options"):
         refuse("fit." + name + "_python_object", lambda name=name: with_field(name, PyObject()).fit(X, y, epochs=1, batch_size=8, seed=0, resume=True))
         refuse("save_checkpoint." + name + "_python_object", lambda name=name: with_field(name, PyObject()).save_checkpoint(str(scratch / "refused.ckpt")))
         refuse("predict." + name + "_python_object", lambda name=name: with_field(name, PyObject()).predict(X))
@@ -242,7 +242,7 @@ def main(out_path, scratch):
 # in a field that predict/layers never read was refused by the full inventory
 # walk and is not refused by the narrow admission; fit and save still refuse
 # it (the `fit.*` and `save_checkpoint.*` cases stay equal).
-NARROWED = tuple(op + "." + name + "_python_object" for op in ("predict", "layers") for name in ("_opt_m", "loss_curve_", "_options"))
+NARROWED = tuple(op + "." + name + "_python_object" for op in ("predict", "layers") for name in ("optimizer_m_", "loss_curve_", "_options"))
 
 
 def compare(before_path, after_path):

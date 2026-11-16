@@ -159,14 +159,14 @@ _CHILD = textwrap.dedent('''
 
     if mode == "save":
         straight = build().fit(X, y3, epochs=4, batch_size=25, seed=11)
-        print("DIGEST straight", h(straight.params_), h(straight._opt_m), h(straight._opt_v))
+        print("DIGEST straight", h(straight.params_), h(straight.optimizer_m_), h(straight.optimizer_v_))
         part = build().fit(X, y3, epochs=2, batch_size=25, seed=11)
         part.save_checkpoint(path + ".train")
         part.export(path + ".export")
         print("DIGEST predict", h(part.predict_proba(X)), h(part.predict(X)))
     else:
         back = ml.Sequential.from_checkpoint(path + ".train").fit(X, y3, epochs=2, resume=True)
-        print("DIGEST straight", h(back.params_), h(back._opt_m), h(back._opt_v))
+        print("DIGEST straight", h(back.params_), h(back.optimizer_m_), h(back.optimizer_v_))
         served = ml.Sequential.load(path + ".export")
         print("DIGEST predict", h(served.predict_proba(X)), h(served.predict(X)))
     print("COLUMN", ml.vendor())

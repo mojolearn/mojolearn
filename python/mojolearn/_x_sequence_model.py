@@ -74,6 +74,15 @@ class Sequential:
         then its bias).
     loss_curve_ : list of float
         Mean training loss of every epoch.
+    optimizer_m_ : ndarray of float32
+        The optimizer's first-moment state after the last step, laid out as
+        ``params_`` (the momentum buffer for ``'sgd'`` and ``'momentum'``, Adam's running
+        mean of the gradient for ``'adam'`` and ``'adamw'``). Not set on a
+        model loaded from an export.
+    optimizer_v_ : ndarray of float32
+        The optimizer's second-moment state, laid out as ``params_`` (Adam's
+        running mean of the squared gradient). Not set on a model loaded
+        from an export.
     n_iter_ : int
         Number of epochs run.
     n_features_in_ : int
@@ -607,7 +616,7 @@ def _connect_sequential_bindings():
         "defaultdict_class": defaultdict, "native_default_factories": (list, tuple, dict, OrderedDict, defaultdict, bool, int, float, str, bytes, bytearray),
         "native_value_types": (type(None), str, bytes, bytearray, bool, int, float, range, np.ndarray, Array, array, PosixPath, PurePosixPath, type(iter([])), type(iter(())), type(iter(range(0))), type(reversed([]))),
         "buffer_owner_types": (type(None), bytes, bytearray, array, np.ndarray, mmap.mmap), "ctypes_array_base": ctypes.Array, "array_fields": array_fields,
-        "model_fields": ("numeric_mode", "input_shape", "_layers", "_options", "params_", "n_features_in_", "n_outputs_", "_sample_shape", "n_iter_", "loss_curve_", "_fit_state", "_imported", "_fit_loss", "_target", "_fit_batch", "_fit_shuffle", "_y_1d", "classes_", "_opt_m", "_opt_v", "_curve", "validation_loss_curve_", "epochs_run_", "best_epoch_"),
+        "model_fields": ("numeric_mode", "input_shape", "_layers", "_options", "params_", "n_features_in_", "n_outputs_", "_sample_shape", "n_iter_", "loss_curve_", "_fit_state", "_imported", "_fit_loss", "_target", "_fit_batch", "_fit_shuffle", "_y_1d", "classes_", "optimizer_m_", "optimizer_v_", "_curve", "validation_loss_curve_", "epochs_run_", "best_epoch_"),
         "numeric_dtypes": numeric_dtypes, "buffer_codes": buffer_codes, "scalar_type": np.generic,
         "version": __version__, "uname": os.uname, "class_dtypes": class_dtypes,
         "loss_names": ("mse", "cross_entropy", "bce_with_logits", "huber"),

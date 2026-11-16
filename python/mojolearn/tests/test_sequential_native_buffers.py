@@ -89,7 +89,7 @@ def test_native_standard_buffers_and_nested_arrays_preserve_existing_fit_and_pre
     expected = reference(x, y)
     out = Sequential().linear(2).compile(loss="cross_entropy", optimizer="sgd", lr=0.03)
     assert audit_native_call(out.fit, x, y, epochs=2, batch_size=4, seed=123).assert_native() is out
-    for actual, wanted in zip((out.params_, out._opt_m, out._opt_v, out._fit_state,
+    for actual, wanted in zip((out.params_, out.optimizer_m_, out.optimizer_v_, out._fit_state,
                                np.asarray(out.loss_curve_, "f4"), out.classes_), expected[:6]):
         assert actual.dtype == wanted.dtype
         assert actual.tobytes() == wanted.tobytes()

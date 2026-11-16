@@ -82,8 +82,8 @@ def sequential_save(mut mods: NativeModules, model: PythonObject, path: PythonOb
     _ = py_call(fp.extend, sequential_table(model))
     var addresses = Python.list(sequential_address(fields["params_"]), 0, 0, 0, 0)
     if not export:
-        py_setitem(addresses, 1, sequential_address(fields["_opt_m"]))
-        py_setitem(addresses, 2, sequential_address(fields["_opt_v"]))
+        py_setitem(addresses, 1, sequential_address(fields["optimizer_m_"]))
+        py_setitem(addresses, 2, sequential_address(fields["optimizer_v_"]))
         py_setitem(addresses, 3, sequential_address(fields["_fit_state"]))
         py_setitem(addresses, 4, sequential_address(fields["_curve"]))
     var descriptor = PythonObject(None) if count == 0 else sequential_descriptor(classes, "classes")
@@ -174,7 +174,7 @@ def sequential_load_checkpoint(mut mods: NativeModules, cls: PythonObject, path:
     py_setitem(fields, "loss_curve_", Python.list() if export else sequential_curve(curve, Int(py=ip[12])))
     py_setitem(fields, "_fit_state", state)
     if not export:
-        py_setitem(fields, "_opt_m", m)
-        py_setitem(fields, "_opt_v", v)
+        py_setitem(fields, "optimizer_m_", m)
+        py_setitem(fields, "optimizer_v_", v)
         py_setitem(fields, "_curve", curve)
     return model
