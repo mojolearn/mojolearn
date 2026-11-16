@@ -419,6 +419,12 @@ def main(argv=None, release=None):
     if not a.dry_run and not a.no_prebuild_check:
         import prebuild_check
         pre = ["--commit", a.commit, "--ref", args.candidate_ref, "--work", str(work / "prebuild"), "--reuse-pass"]
+        base_pass = Path(base_build["build_dir"]).parent / "prebuild" / "PASS.json" if base_build else None
+        if base_pass and base_pass.is_file() and not (work / "prebuild" / "PASS.json").is_file():
+            # the checks read the commit's source only, which a B arm shares with its base: the base's pass is
+            # copied in and prebuild_check --reuse-pass still checks its commit and parts (8 arms ran them 8 times)
+            (work / "prebuild").mkdir(parents=True, exist_ok=True)
+            (work / "prebuild" / "PASS.json").write_bytes(base_pass.read_bytes())
         if prebuild_check.main(pre + (["--probe-wheel", a.probe_wheel] if a.probe_wheel else [])):
             raise SystemExit(f"measurement build: the pre-build checks failed (logs {work / 'prebuild'}); nothing "
                              "was dispatched. Fix and rerun, or pass --no-prebuild-check")
