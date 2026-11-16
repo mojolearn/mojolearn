@@ -31,7 +31,6 @@ import mojolearn
 from mojolearn import _backend, _serialize
 from mojolearn._array import Array
 from mojolearn._buffer import frombytes
-from contextlib import nullcontext as reference_training  # the no-op CPU-training scope (mojolearn._cpu_reference deleted 2026-11-15: CPU training is public)
 from mojolearn._gbdt_host import GBDT_FORMAT, HostGBDT, parse_model_text
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -98,7 +97,6 @@ def _forest_binary_built():
     return os.path.exists(binary_path())
 
 
-@reference_training()
 def test_four_modes_predict_through_host_model_when_built():
     if _backend._CPU_ONLY is None:
         print("SKIP: a GPU set loaded; the host route is not taken here")

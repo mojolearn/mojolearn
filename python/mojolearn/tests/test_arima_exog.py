@@ -17,7 +17,6 @@ from pathlib import Path
 
 import mojolearn
 from mojolearn import _backend
-from contextlib import nullcontext as reference_training  # the no-op CPU-training scope (mojolearn._cpu_reference deleted 2026-11-15: CPU training is public)
 
 
 # ---------------------------------------------------------------- runtime
@@ -31,7 +30,6 @@ def _can_fit():
     return "_mojolearn_arima_host" in _backend.host_families_built()
 
 
-@reference_training()
 def test_exog_fit_forecast_and_save_when_a_binding_can_fit():
     if not _can_fit():
         print("SKIP: nothing in this process fits ARIMA (no GPU set, no arima host binding)")

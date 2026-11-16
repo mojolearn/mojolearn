@@ -16,11 +16,9 @@ GATE_BACKENDS = ("cpu",)
 import sys
 
 import mojolearn
-from contextlib import nullcontext as reference_training  # the no-op CPU-training scope (mojolearn._cpu_reference deleted 2026-11-15: CPU training is public)
 from mojolearn import _backend
 
 
-@reference_training()
 def test_host_fits_run_and_repeat_on_a_cpu_only_install():
     """Runtime, only where it can run. Skipping is stated, never silent."""
     if _backend._CPU_ONLY is None:

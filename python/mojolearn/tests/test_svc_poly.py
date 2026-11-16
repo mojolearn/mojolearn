@@ -25,9 +25,7 @@ def _fit_or_skip(**kw):
     x = rng.normal(size=(300, 4)).astype(np.float32)
     y = ((x[:, 0] * x[:, 1] + 0.5 * x[:, 2]) > 0).astype(np.float32)
     try:
-        from contextlib import nullcontext as reference_training  # the no-op CPU-training scope (mojolearn._cpu_reference deleted 2026-11-15: CPU training is public)
-        with reference_training():
-            m = SVC(**kw).fit(x, y)
+        m = SVC(**kw).fit(x, y)
     except (ImportError, NotImplementedError) as exc:
         pytest.skip(f"no SVM binding that fits on this install: {exc}")
     return m, x, y

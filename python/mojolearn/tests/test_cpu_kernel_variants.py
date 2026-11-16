@@ -9,7 +9,6 @@ import numpy as np
 import pytest
 import mojolearn as ml
 from mojolearn import _backend
-from contextlib import nullcontext as reference_training  # the no-op CPU-training scope (mojolearn._cpu_reference deleted 2026-11-15: CPU training is public)
 
 GATE_BACKENDS = ("cpu",)
 
@@ -40,8 +39,7 @@ def test_kernel_host_reload_and_batch(family, kernel, degree, tmp_path):
     else:
         model = ml.Nystroem(n_components=7, random_state=3, **kwargs)
         method = 'transform'
-    with reference_training():
-        model.fit(X, y)
+    model.fit(X, y)
     expected = getattr(model, method)(Q)
     path = tmp_path / 'model.npz'
     model.save(path)
@@ -59,5 +57,5 @@ def test_kernel_host_reload_and_batch(family, kernel, degree, tmp_path):
 def test_host_rejects_out_of_range_polynomial_degree(degree):
     cpu()
     X = np.eye(3, dtype='float32')
-    with reference_training(), pytest.raises(Exception, match='degree'):
+    with pytest.raises(Exception, match='degree'):
         ml.KernelRidge(kernel='poly', degree=degree).fit(X, np.ones(3, dtype='float32'))

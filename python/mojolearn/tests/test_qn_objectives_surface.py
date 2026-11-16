@@ -16,7 +16,6 @@ import numpy as np
 import pytest
 
 import mojolearn as ml
-from contextlib import nullcontext as reference_training  # the no-op CPU-training scope (mojolearn._cpu_reference deleted 2026-11-15: CPU training is public)
 from mojolearn.svm import LinearSVC, LinearSVR
 from mojolearn.linear_model import QNRegressor
 
@@ -24,8 +23,7 @@ from mojolearn.linear_model import QNRegressor
 @pytest.fixture(autouse=True)
 def _reference_fits():
     """A CPU-only install fits only inside the verifier's scope."""
-    with reference_training():
-        yield
+    yield
 
 
 def _data(n=400, d=5, seed=0):

@@ -19,7 +19,6 @@ import sys
 import tempfile
 
 import mojolearn
-from contextlib import nullcontext as reference_training  # the no-op CPU-training scope (mojolearn._cpu_reference deleted 2026-11-15: CPU training is public)
 from mojolearn import _backend
 
 
@@ -38,7 +37,6 @@ from mojolearn import _backend
     # Native coverage: checks/native_tests/gbdt_public_fits.mojo (one_hot_features fits).
 
 
-@reference_training()
 def test_ordered_save_load_and_ctr_predictions_on_the_host_when_built():
     """The boundary arms of the host check: the OrderedRMSE archive round
     trip and the CTR model's predictions (served by the host CTR door). The

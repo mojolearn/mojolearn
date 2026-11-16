@@ -20,7 +20,6 @@ import sys
 from pathlib import Path
 
 import mojolearn
-from contextlib import nullcontext as reference_training  # the no-op CPU-training scope (mojolearn._cpu_reference deleted 2026-11-15: CPU training is public)
 from mojolearn import _backend
 
 
@@ -81,7 +80,6 @@ for make in kernels:
 """
 
 
-@reference_training()
 def test_gaussian_process_fits_on_the_host_when_built():
     if _backend._CPU_ONLY is None:
         print("SKIP: a GPU set loaded; the host route is not taken here")

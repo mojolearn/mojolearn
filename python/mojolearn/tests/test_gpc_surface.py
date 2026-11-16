@@ -23,7 +23,6 @@ import tempfile
 
 import mojolearn as ml
 from mojolearn import _backend
-from contextlib import nullcontext as reference_training  # the no-op CPU-training scope (mojolearn._cpu_reference deleted 2026-11-15: CPU training is public)
 from mojolearn._gpc_impl import GaussianProcessClassifier
 from mojolearn._classical_host import HostGaussianProcessClassifier
 
@@ -103,10 +102,9 @@ def test_binary_and_multiclass_fit_predict():
     _need_binding()
     X, y2, y3 = _data()
     q = X[:10]
-    with reference_training():
-        m = GaussianProcessClassifier(numeric_mode="identical").fit(X, y2)
-        m3 = GaussianProcessClassifier(kernel=ml.ConstantKernel(2.0) * ml.Matern(1.0, nu=1.5),
-                                       numeric_mode="identical").fit(X, y3)
+    m = GaussianProcessClassifier(numeric_mode="identical").fit(X, y2)
+    m3 = GaussianProcessClassifier(kernel=ml.ConstantKernel(2.0) * ml.Matern(1.0, nu=1.5),
+                                   numeric_mode="identical").fit(X, y3)
     p = m.predict_proba(q)
     assert tuple(p.shape) == (10, 2) and p.dtype == "<f8"
     assert m.n_classes_ == 2 and isinstance(m.n_iter_, int)
@@ -126,23 +124,22 @@ def test_binary_and_multiclass_fit_predict():
 def test_degenerate_classes():
     _need_binding()
     X, y2, _ = _data()
-    with reference_training():
-        _raises(ValueError, "requires 2 or more distinct classes; got 1 class",
-                GaussianProcessClassifier(numeric_mode="identical").fit, X, [7] * len(X))
-        # one class with a single sample, string labels
-        labels = ["b"] * len(X)
-        labels[5] = "a"
-        m = GaussianProcessClassifier(numeric_mode="identical").fit(X, labels)
-        assert m.classes_ == ["a", "b"]
-        assert set(m.predict(X[:4])) <= {"a", "b"}
-        # three classes, one of them a single sample
-        y3 = [0 if i % 2 else 1 for i in range(len(X))]
-        y3[0] = 2
-        m3 = GaussianProcessClassifier(numeric_mode="identical").fit(X, y3)
-        assert m3.n_classes_ == 3 and tuple(m3.predict_proba(X[:4]).shape) == (4, 3)
-        # max_iter_predict=1 stops after one Newton step
-        m1 = GaussianProcessClassifier(max_iter_predict=1, numeric_mode="identical").fit(X, y2)
-        assert m1.n_iter_ == 1
+    _raises(ValueError, "requires 2 or more distinct classes; got 1 class",
+            GaussianProcessClassifier(numeric_mode="identical").fit, X, [7] * len(X))
+    # one class with a single sample, string labels
+    labels = ["b"] * len(X)
+    labels[5] = "a"
+    m = GaussianProcessClassifier(numeric_mode="identical").fit(X, labels)
+    assert m.classes_ == ["a", "b"]
+    assert set(m.predict(X[:4])) <= {"a", "b"}
+    # three classes, one of them a single sample
+    y3 = [0 if i % 2 else 1 for i in range(len(X))]
+    y3[0] = 2
+    m3 = GaussianProcessClassifier(numeric_mode="identical").fit(X, y3)
+    assert m3.n_classes_ == 3 and tuple(m3.predict_proba(X[:4]).shape) == (4, 3)
+    # max_iter_predict=1 stops after one Newton step
+    m1 = GaussianProcessClassifier(max_iter_predict=1, numeric_mode="identical").fit(X, y2)
+    assert m1.n_iter_ == 1
     _raises(ValueError, "not fitted yet", GaussianProcessClassifier().predict, X)
 
 
@@ -151,9 +148,8 @@ def test_repeat_batch_save_load_and_host_model():
     X, y2, y3 = _data()
     q = X[:12]
     for y in (y2, y3):
-        with reference_training():
-            a = GaussianProcessClassifier(numeric_mode="identical").fit(X, y)
-            b = GaussianProcessClassifier(numeric_mode="identical").fit(X, y)
+        a = GaussianProcessClassifier(numeric_mode="identical").fit(X, y)
+        b = GaussianProcessClassifier(numeric_mode="identical").fit(X, y)
         pa = a.predict_proba(q)
         assert _bytes(pa) == _bytes(b.predict_proba(q))
         alone = [a.predict_proba(q[i:i + 1]).tolist()[0] for i in range(len(q))]

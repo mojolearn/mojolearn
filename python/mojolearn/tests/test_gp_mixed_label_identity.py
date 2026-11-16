@@ -5,7 +5,6 @@ import sys
 import numpy as np
 import pytest
 
-from contextlib import nullcontext as reference_training  # the no-op CPU-training scope (mojolearn._cpu_reference deleted 2026-11-15: CPU training is public)
 from mojolearn._gpc_impl import GaussianProcessClassifier
 
 
@@ -22,8 +21,7 @@ def test_mixed_scalar_classes_retain_first_original_objects(labels):
     # rule, not a Float64 normalization or a reproduction of the native index.
     expected = sorted(dict.fromkeys(labels))
     x = np.array([[-3, 0], [-2, 1], [-1, -1], [1, 1], [2, -1], [3, 0]], dtype=np.float32)
-    with reference_training():
-        model = GaussianProcessClassifier(max_iter_predict=3).fit(x, labels)
+    model = GaussianProcessClassifier(max_iter_predict=3).fit(x, labels)
     assert len(model.classes_) == len(expected)
     assert all(actual is original for actual, original in zip(model.classes_, expected))
 
@@ -38,8 +36,7 @@ def test_nested_text_labels_keep_native_text_routes_and_class_identity(labels):
     # outer sequence (providers/python/gp_public_lifecycle_pyapi_door.mojo, as scikit-learn), then flattens.
     nested = [(label,) if i % 2 else [label] for i, label in enumerate(labels)]
     x = np.array([[-3, 0], [-2, 1], [-1, -1], [1, 1], [2, -1], [3, 0]], dtype=np.float32)
-    with reference_training():
-        model = GaussianProcessClassifier(max_iter_predict=3).fit(x, nested)
+    model = GaussianProcessClassifier(max_iter_predict=3).fit(x, nested)
     assert len(model.classes_) == len(expected)
     assert all(actual is original for actual, original in zip(model.classes_, expected))
 
@@ -54,7 +51,6 @@ def test_native_array_label_capture_preserves_logical_matrix_order(layout):
     labels = Array.from_buffer(storage)
     expected_codes = (storage.ravel(order="C") == 7).astype(np.float32)
     x = np.array([[-3, 0], [-2, 1], [-1, -1], [1, 1], [2, -1], [3, 0]], dtype=np.float32)
-    with reference_training():
-        model = GaussianProcessClassifier(max_iter_predict=3).fit(x, labels)
+    model = GaussianProcessClassifier(max_iter_predict=3).fit(x, labels)
     assert list(model.classes_) == [-3, 7]
     np.testing.assert_array_equal(np.asarray(model.y_train_).reshape(-1), expected_codes)

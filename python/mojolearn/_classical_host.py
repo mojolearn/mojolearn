@@ -930,7 +930,7 @@ class HostGaussianProcessClassifier(_NativeArchiveLoad, GaussianProcessClassifie
     when only the reference set is built, `_mojolearn_gp_host`) on any box,
     a GPU box included, so a GPU fit and a CPU prediction compare in one
     process (`mojolearn.host_model` returns this for a saved classifier).
-    IDENTICAL only; fit refuses outside `reference_training()`."""
+    IDENTICAL only."""
 
     _HOST_INFERENCE_ONLY = True
 

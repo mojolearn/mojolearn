@@ -22,7 +22,6 @@ import sys
 from pathlib import Path
 
 import mojolearn
-from contextlib import nullcontext as reference_training  # the no-op CPU-training scope (mojolearn._cpu_reference deleted 2026-11-15: CPU training is public)
 from mojolearn import _backend
 
 
@@ -60,7 +59,7 @@ def test_the_gpc_class_fit_worker_follows_the_public_fit_guard():
     refusal check is gone with CPU training public). The two routes must answer
     the same way on a CPU-only install. Since dac6e4d15 (CPU training is
     public) that answer is "train": the plain fit and the driver both fit,
-    outside `reference_training()`, and agree byte for byte."""
+    and agree byte for byte."""
     if not _cpu_only_with("_mojolearn_gp_host"):
         return
     import numpy as np
@@ -76,7 +75,6 @@ def test_the_gpc_class_fit_worker_follows_the_public_fit_guard():
                 == np.asarray(getattr(plain.estimators_[0], name)).tobytes()), name
 
 
-@reference_training()
 def test_sharded_gpc_equals_the_plain_fit_when_built():
     """The class shards are real and the merge is byte exact: one
     `gpc_class_fit` per one-vs-rest column (ONE for two classes, THREE for
@@ -117,7 +115,6 @@ def test_sharded_gpc_equals_the_plain_fit_when_built():
         assert np.asarray(proba).tobytes() == np.asarray(plain.predict_proba(q)).tobytes()
 
 
-@reference_training()
 def test_sharded_scaler_equals_the_plain_fit_when_built():
     if not _cpu_only_with("_mojolearn_preprocessing_host"):
         return
@@ -136,7 +133,6 @@ def test_sharded_scaler_equals_the_plain_fit_when_built():
     assert np.asarray(t).tobytes() == np.asarray(plain.transform(X)).tobytes()
 
 
-@reference_training()
 def test_sharded_samba_publishes_the_ordered_sum_of_its_shard_gradients_when_built():
     """par-samba's shards are real: the gradient a two-shard step publishes
     is the ordered sum of the two shard gradients, byte for byte (wave 3,

@@ -27,7 +27,6 @@ GATE_BACKENDS = ("cpu",)
 import sys
 
 import mojolearn
-from contextlib import nullcontext as reference_training  # the no-op CPU-training scope (mojolearn._cpu_reference deleted 2026-11-15: CPU training is public)
 from mojolearn import _backend, host_surface
 
 #: The device's refusal of a metric it does not implement. The cosine metric
@@ -98,7 +97,6 @@ def _cpu_only_with(basename):
     return True
 
 
-@reference_training()
 def test_an_unsupported_metric_refuses_on_the_host_when_built():
     """Both halves of the refusal, because they live in different languages.
 
@@ -127,7 +125,6 @@ def test_an_unsupported_metric_refuses_on_the_host_when_built():
     raise AssertionError("KMeans(metric=2) fit on the host; an unknown code was accepted")
 
 
-@reference_training()
 def test_fold_gather_matches_python_indexing_when_built():
     if not _cpu_only_with("_mojolearn_core_host"):
         return
@@ -151,7 +148,6 @@ def test_fold_gather_matches_python_indexing_when_built():
     raise AssertionError("an out-of-range fold index was gathered")
 
 
-@reference_training()
 def test_bootstrap_runs_on_the_host_when_built():
     if not _cpu_only_with("_mojolearn_resample_host"):
         return
@@ -174,7 +170,6 @@ def test_bootstrap_runs_on_the_host_when_built():
     assert m.integral == 2.0 and m.closed_form == 2.0
 
 
-@reference_training()
 def test_neural_primitives_run_on_the_host_when_built():
     if not _cpu_only_with("_mojolearn_training_host"):
         return

@@ -37,7 +37,6 @@ import numpy as np
 
 import mojolearn
 from mojolearn import _backend, _serialize
-from contextlib import nullcontext as reference_training  # the no-op CPU-training scope (mojolearn._cpu_reference deleted 2026-11-15: CPU training is public)
 
 #: (label, factory). Every k-means lane's shape that has a fitted model: the
 #: default metric, the rooted metric, the random start, an explicit start,
@@ -112,8 +111,7 @@ def main():
     for label, kw, extra in CASES:
         with tempfile.TemporaryDirectory(prefix="kmeans_boundary_") as tmp:
             path = os.path.join(tmp, "model.npz")
-            with reference_training():
-                est = mojolearn.KMeans(**kw).fit(Xt, sample_weight=w if extra == "weights" else None)
+            est = mojolearn.KMeans(**kw).fit(Xt, sample_weight=w if extra == "weights" else None)
             est.save(path)
             gpu = probe(est, Xh)
             host_model = mojolearn.host_model(path)

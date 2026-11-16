@@ -167,12 +167,10 @@ def test_equals_the_reference_path_when_present(binding):
     """A CPU identity column only: the source reference bindings are there."""
     if not _reference_present():
         pytest.skip("the source reference training and transformer host bindings are not built here (a wheel has neither)")
-    from contextlib import nullcontext as reference_training  # the no-op CPU-training scope (mojolearn._cpu_reference deleted 2026-11-15: CPU training is public)
     X = _x(64, seed=9)
     t = np.random.default_rng(9).integers(0, 3, 64).astype(np.int32)
-    with reference_training():
-        tr = ml.SmallMLPTrainer(*_mlp_weights(), data_schedule={"dataset": "test"})
-        tr.train_step(X, t)
+    tr = ml.SmallMLPTrainer(*_mlp_weights(), data_schedule={"dataset": "test"})
+    tr.train_step(X, t)
     tmp = tempfile.mkdtemp()
     path = os.path.join(tmp, "trained.json")
     tr.save_checkpoint(path)
@@ -329,7 +327,6 @@ def test_mamba_samba_byte_lm_equal_the_reference_path_when_present(binding):
         pytest.skip("the source reference mamba host binding is not built here (a wheel has none)")
     if not _reference_present():
         pytest.skip("the source reference training and transformer host bindings are not built here")
-    from contextlib import nullcontext as reference_training  # the no-op CPU-training scope (mojolearn._cpu_reference deleted 2026-11-15: CPU training is public)
     x = np.random.default_rng(13).standard_normal((2, 16, 32)).astype(np.float32)
     for kind, cls, kw in _MAMBA:
         w = _mamba_weights(kind, seed=17)
@@ -340,9 +337,8 @@ def test_mamba_samba_byte_lm_equal_the_reference_path_when_present(binding):
     ids = np.random.default_rng(13).integers(0, 256, (2, 17)).astype(np.int32)
     tmp = tempfile.mkdtemp()
     for tied in (True, False):
-        with reference_training():
-            st = ml.SambaStack(_samba_config(tied), generator=ml.training.Generator(1), lr=1e-3)
-            st.train_step(ids[:, :-1], ids[:, 1:])
+        st = ml.SambaStack(_samba_config(tied), generator=ml.training.Generator(1), lr=1e-3)
+        st.train_step(ids[:, :-1], ids[:, 1:])
         path = os.path.join(tmp, f"samba-{tied}.ckpt")
         st.save_checkpoint(path)
         assert (np.asarray(ml.SambaInference.from_checkpoint(path).forward(ids[:, :-1])).tobytes()

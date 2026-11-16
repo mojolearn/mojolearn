@@ -16,9 +16,7 @@ from mojolearn._native_parallel_shard import _native_parallel_shard
 @pytest.fixture(autouse=True)
 def setup(monkeypatch):
     monkeypatch.setattr('mojolearn._backend.default_mode', lambda: 'identical')
-    from contextlib import nullcontext as reference_training  # the no-op CPU-training scope (mojolearn._cpu_reference deleted 2026-11-15: CPU training is public)
-    with reference_training():
-        yield
+    yield
 
 
 @pytest.mark.parametrize('labels', [[9, 3, 9, 3, 9], ['c', 'a', 'b', 'a', 'c']])

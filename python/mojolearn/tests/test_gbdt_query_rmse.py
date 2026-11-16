@@ -12,7 +12,6 @@ import numpy as np
 import pytest
 
 from mojolearn import GradientBoosting
-from contextlib import nullcontext as reference_training  # the no-op CPU-training scope (mojolearn._cpu_reference deleted 2026-11-15: CPU training is public)
 
 
 def _fixture(n=256, d=4, seed=5):
@@ -40,7 +39,6 @@ def _model(**kw):
     return GradientBoosting(**params)
 
 
-@reference_training()
 def test_learns_on_uneven_queries():
     X, rel, g = _fixture()
     m = _model().fit(X, rel, group_id=g)
@@ -51,7 +49,6 @@ def test_learns_on_uneven_queries():
     assert np.any(pred != 0)
 
 
-@reference_training()
 def test_group_id_spelling_does_not_change_the_model():
     X, rel, g = _fixture()
     as_int = np.asarray(_model().fit(X, rel, group_id=g).predict(X))
@@ -59,7 +56,6 @@ def test_group_id_spelling_does_not_change_the_model():
     assert as_int.tobytes() == as_str.tobytes()
 
 
-@reference_training()
 def test_refusals_by_name():
     X, rel, g = _fixture()
     # the device refuses in the QueryRMSE sentence; the host binding refuses
@@ -74,7 +70,6 @@ def test_refusals_by_name():
         _model(cat_features=[0]).fit(coded, rel, group_id=g)
 
 
-@reference_training()
 def test_split_query_still_refused():
     X, rel, g = _fixture()
     g = g.copy()

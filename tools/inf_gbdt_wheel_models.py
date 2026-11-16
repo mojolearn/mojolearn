@@ -41,21 +41,19 @@ def _ib():
 def dump(out):
     ib = _ib()
     import mojolearn as ml
-    from contextlib import nullcontext as reference_training  # the no-op CPU-training scope (mojolearn._cpu_reference deleted 2026-11-15: CPU training is public)
     os.makedirs(out, exist_ok=True)
     index = []
-    with reference_training():
-        for fx in ib.FIXTURES:
-            X, yc, yr = ib.fixture(fx)
-            Xh = ib.heldout(fx)
-            for lane in LANES:
-                f = ib.LANES[lane](ml, X, yc, yr, Xh)
-                stem = f"{lane}.{fx}"
-                f.est.save(os.path.join(out, stem + ".npz"))
-                xh = ib._coded(Xh) if lane in CODED else Xh
-                np.save(os.path.join(out, stem + ".xh.npy"), np.ascontiguousarray(xh, dtype=np.float32))
-                index.append(dict(lane=lane, fixture=fx, source_infer=_h(*f.probe(f.est))))
-                print("dumped", stem, flush=True)
+    for fx in ib.FIXTURES:
+        X, yc, yr = ib.fixture(fx)
+        Xh = ib.heldout(fx)
+        for lane in LANES:
+            f = ib.LANES[lane](ml, X, yc, yr, Xh)
+            stem = f"{lane}.{fx}"
+            f.est.save(os.path.join(out, stem + ".npz"))
+            xh = ib._coded(Xh) if lane in CODED else Xh
+            np.save(os.path.join(out, stem + ".xh.npy"), np.ascontiguousarray(xh, dtype=np.float32))
+            index.append(dict(lane=lane, fixture=fx, source_infer=_h(*f.probe(f.est))))
+            print("dumped", stem, flush=True)
     with open(os.path.join(out, "index.json"), "w") as fh:
         json.dump(index, fh, indent=1)
 

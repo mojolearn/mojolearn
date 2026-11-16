@@ -9,7 +9,6 @@ import time
 import numpy as np
 
 from mojolearn import MinMaxScaler, StandardScaler
-from contextlib import nullcontext as reference_training  # the no-op CPU-training scope (mojolearn._cpu_reference deleted 2026-11-15: CPU training is public)
 
 
 def measured(call, repeats):
@@ -31,32 +30,31 @@ def main():
     x = (np.arange(args.rows * args.columns, dtype=np.float32)
          .reshape(args.rows, args.columns) % np.float32(1000.0))
 
-    with reference_training():
-        cases = (
-            StandardScaler(numeric_mode="identical"),
-            StandardScaler(with_mean=False, numeric_mode="identical"),
-            StandardScaler(with_std=False, numeric_mode="identical"),
-            MinMaxScaler(numeric_mode="identical"),
-            MinMaxScaler(clip=True, numeric_mode="identical"),
-        )
-        for scaler in cases:
-            scaler.fit(x)
-            os.environ["MOJOLEARN_CPU_THREADS"] = "1"
-            serial, serial_s = measured(lambda: scaler.transform(x), args.repeats)
-            os.environ.pop("MOJOLEARN_CPU_THREADS", None)
-            parallel, parallel_s = measured(lambda: scaler.transform(x), args.repeats)
-            if serial.tobytes() != parallel.tobytes():
-                raise AssertionError(f"{type(scaler).__name__} parallel bytes moved")
-            os.environ["MOJOLEARN_CPU_THREADS"] = "1"
-            serial_restored = scaler.inverse_transform(serial)
-            os.environ.pop("MOJOLEARN_CPU_THREADS", None)
-            restored = scaler.inverse_transform(parallel)
-            if restored.tobytes() != serial_restored.tobytes():
-                raise AssertionError(f"{type(scaler).__name__} inverse bytes moved")
-            digest = hashlib.sha256(parallel.tobytes()).hexdigest()
-            print(type(scaler).__name__, scaler.get_params(),
-                  f"serial={serial_s:.6f}s parallel={parallel_s:.6f}s",
-                  f"speedup={serial_s / parallel_s:.3f}x sha256={digest}")
+    cases = (
+        StandardScaler(numeric_mode="identical"),
+        StandardScaler(with_mean=False, numeric_mode="identical"),
+        StandardScaler(with_std=False, numeric_mode="identical"),
+        MinMaxScaler(numeric_mode="identical"),
+        MinMaxScaler(clip=True, numeric_mode="identical"),
+    )
+    for scaler in cases:
+        scaler.fit(x)
+        os.environ["MOJOLEARN_CPU_THREADS"] = "1"
+        serial, serial_s = measured(lambda: scaler.transform(x), args.repeats)
+        os.environ.pop("MOJOLEARN_CPU_THREADS", None)
+        parallel, parallel_s = measured(lambda: scaler.transform(x), args.repeats)
+        if serial.tobytes() != parallel.tobytes():
+            raise AssertionError(f"{type(scaler).__name__} parallel bytes moved")
+        os.environ["MOJOLEARN_CPU_THREADS"] = "1"
+        serial_restored = scaler.inverse_transform(serial)
+        os.environ.pop("MOJOLEARN_CPU_THREADS", None)
+        restored = scaler.inverse_transform(parallel)
+        if restored.tobytes() != serial_restored.tobytes():
+            raise AssertionError(f"{type(scaler).__name__} inverse bytes moved")
+        digest = hashlib.sha256(parallel.tobytes()).hexdigest()
+        print(type(scaler).__name__, scaler.get_params(),
+              f"serial={serial_s:.6f}s parallel={parallel_s:.6f}s",
+              f"speedup={serial_s / parallel_s:.3f}x sha256={digest}")
 
 
 if __name__ == "__main__":

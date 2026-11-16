@@ -12,7 +12,6 @@ import numpy as np
 import pytest
 
 from mojolearn import GradientBoosting
-from contextlib import nullcontext as reference_training  # the no-op CPU-training scope (mojolearn._cpu_reference deleted 2026-11-15: CPU training is public)
 
 
 def _fixture(n=240, d=4, seed=11):
@@ -54,7 +53,6 @@ def _model(**kw):
     return GradientBoosting(**params)
 
 
-@reference_training()
 def test_refusals_by_name():
     X, rel, g = _fixture()
     pairs = _generated_pairs(rel, g)
@@ -70,7 +68,6 @@ def test_refusals_by_name():
         _model().fit(X, rel, group_id=g, pairs=[(0, X.shape[0] - 1)])
 
 
-@reference_training()
 def test_pairs_validation():
     X, rel, g = _fixture()
     n = X.shape[0]

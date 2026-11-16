@@ -26,7 +26,6 @@ import sys
 import numpy as np
 
 from mojolearn import KMeans
-from contextlib import nullcontext as reference_training  # the no-op CPU-training scope (mojolearn._cpu_reference deleted 2026-11-15: CPU training is public)
 from mojolearn.tests._expose_d_harness import Report, bind_or_exit, run
 
 
@@ -41,8 +40,7 @@ def _bits(a):
 
 def _fit(**kw):
     x = kw.pop("x")
-    with reference_training():
-        return KMeans(**kw).fit(x)
+    return KMeans(**kw).fit(x)
 
 
 def arm_shape(rep):

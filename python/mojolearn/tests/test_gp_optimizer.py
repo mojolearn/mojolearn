@@ -21,7 +21,6 @@ import sys
 
 import numpy as np
 
-from contextlib import nullcontext as reference_training  # the no-op CPU-training scope (mojolearn._cpu_reference deleted 2026-11-15: CPU training is public)
 from mojolearn._gp_impl import RBF, ConstantKernel, GaussianProcessRegressor, Matern, WhiteKernel
 from mojolearn.tests._expose_d_harness import Report, bind_or_exit, run
 
@@ -34,8 +33,7 @@ def _data(seed=3, n=48, d=3):
 
 
 def _fit(kernel, x, y, **kw):
-    with reference_training():
-        return GaussianProcessRegressor(kernel=kernel, optimizer="fmin_l_bfgs_b", **kw).fit(x, y)
+    return GaussianProcessRegressor(kernel=kernel, optimizer="fmin_l_bfgs_b", **kw).fit(x, y)
 
 
 def _bits(a):
@@ -62,8 +60,7 @@ def arm_gradient(rep):
                     ("matern05", ConstantKernel(1.0) * Matern(1.1, nu=0.5) + WhiteKernel(0.1)),
                     ("matern15", ConstantKernel(0.7) * Matern([1.0, 0.6, 1.4], nu=1.5) + WhiteKernel(0.1)),
                     ("matern25", Matern(0.9, nu=2.5) + ConstantKernel(0.3) + WhiteKernel(0.2))):
-        with reference_training():
-            m = GaussianProcessRegressor(kernel=k).fit(x, y)
+        m = GaussianProcessRegressor(kernel=k).fit(x, y)
         th = np.array(k.theta)
         lml, g = m.log_marginal_likelihood(th, eval_gradient=True)
         try:
@@ -109,8 +106,7 @@ def arm_optimize(rep):
     m2 = _fit(ConstantKernel(1.0) * RBF(1.0) + WhiteKernel(0.1), x, y)
     rep.check("OPTIMIZE", _bits(m2.alpha_) == _bits(m.alpha_) and m2.kernel_.theta == m.kernel_.theta,
               "a second fit gives the same bits")
-    with reference_training():
-        none = GaussianProcessRegressor(kernel=k).fit(x, y)
+    none = GaussianProcessRegressor(kernel=k).fit(x, y)
     rep.check("OPTIMIZE", none.kernel_ is none.kernel and none._optimizer_runs == [],
               "optimizer=None fits the kernel passed")
     fixed = _fit(ConstantKernel(1.0, "fixed") * RBF(1.0, "fixed"), x, y)
@@ -175,8 +171,7 @@ def arm_refuse(rep):
     rep.raises("REFUSE", ValueError, "bound", "a non-positive bound", RBF, 1.0, (0.0, 1.0))
     rep.raises("REFUSE", ValueError, "bounds must be", "a scalar bound (Matern's old positional nu)",
                Matern, 1.0, 2.5)
-    with reference_training():
-        m = GaussianProcessRegressor(kernel=RBF(1.0) + WhiteKernel(0.1)).fit(x, y)
+    m = GaussianProcessRegressor(kernel=RBF(1.0) + WhiteKernel(0.1)).fit(x, y)
     rep.raises("REFUSE", ValueError, "free hyperparameters", "a theta of the wrong length",
                m.log_marginal_likelihood, [0.0])
     rep.raises("REFUSE", ValueError, "needs a theta", "eval_gradient without theta",

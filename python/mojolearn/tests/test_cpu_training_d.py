@@ -20,7 +20,6 @@ import sys
 from pathlib import Path
 
 import mojolearn
-from contextlib import nullcontext as reference_training  # the no-op CPU-training scope (mojolearn._cpu_reference deleted 2026-11-15: CPU training is public)
 from mojolearn import _backend
 
 
@@ -78,7 +77,6 @@ def _twice(fit):
     assert a == b, "two host fits returned different bytes"
 
 
-@reference_training()
 def test_estimators_fit_on_the_host_when_built():
     import numpy as np
     rng = np.random.default_rng(0)

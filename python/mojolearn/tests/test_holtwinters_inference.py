@@ -32,11 +32,9 @@ def _series(np, n, b, f):
 
 def _fit_or_skip(np, seasonal, n=96, b=2, f=12):
     import mojolearn
-    from contextlib import nullcontext as reference_training  # the no-op CPU-training scope (mojolearn._cpu_reference deleted 2026-11-15: CPU training is public)
     y = _series(np, n, b, f)
     try:
-        with reference_training():
-            return y, mojolearn.ExponentialSmoothing(y, seasonal=seasonal, seasonal_periods=f, ts_num=b).fit()
+        return y, mojolearn.ExponentialSmoothing(y, seasonal=seasonal, seasonal_periods=f, ts_num=b).fit()
     except (ImportError, NotImplementedError, RuntimeError) as exc:
         pytest.skip(f"no binding fits Holt-Winters in this process: {type(exc).__name__}: {exc}")
 

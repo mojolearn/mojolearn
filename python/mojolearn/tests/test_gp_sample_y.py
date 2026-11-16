@@ -21,7 +21,6 @@ from pathlib import Path
 
 import numpy as np
 
-from contextlib import nullcontext as reference_training  # the no-op CPU-training scope (mojolearn._cpu_reference deleted 2026-11-15: CPU training is public)
 from mojolearn._gp_impl import RBF, ConstantKernel, GaussianProcessRegressor, WhiteKernel
 from mojolearn.tests._expose_d_harness import Report, bind_or_exit, run
 
@@ -38,8 +37,7 @@ def _data(seed=4, n=96, q=24):
 
 def _fit(x, y, normalize_y=False):
     kernel = ConstantKernel(1.0) * RBF(1.0) + WhiteKernel(0.1)
-    with reference_training():
-        return GaussianProcessRegressor(kernel=kernel, normalize_y=normalize_y).fit(x, y)
+    return GaussianProcessRegressor(kernel=kernel, normalize_y=normalize_y).fit(x, y)
 
 
 def _bits(a):

@@ -4,14 +4,12 @@ import numpy as np
 import pytest
 
 from mojolearn._gpc_impl import GaussianProcessClassifier
-from contextlib import nullcontext as reference_training  # the no-op CPU-training scope (mojolearn._cpu_reference deleted 2026-11-15: CPU training is public)
 
 
 @pytest.fixture
 def fitted():
     x = np.array([[-2, 0], [-1, 1], [-1, -1], [1, 1], [1, -1], [2, 0]], dtype=np.float32)
-    with reference_training():
-        model = GaussianProcessClassifier(max_iter_predict=8).fit(x, [0, 0, 0, 1, 1, 1])
+    model = GaussianProcessClassifier(max_iter_predict=8).fit(x, [0, 0, 0, 1, 1, 1])
     return model, x
 
 

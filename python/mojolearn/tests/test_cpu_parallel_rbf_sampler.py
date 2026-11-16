@@ -4,7 +4,6 @@ import numpy as np
 import pytest
 
 from mojolearn import RBFSampler, _backend
-from contextlib import nullcontext as reference_training  # the no-op CPU-training scope (mojolearn._cpu_reference deleted 2026-11-15: CPU training is public)
 from mojolearn._native_parallel_shard import _native_parallel_shard
 from mojolearn.parallel_classical import transform_rbf_sampler
 
@@ -31,8 +30,7 @@ def _require_cpu():
 def test_cpu_rbf_shards_preserve_exact_rows_and_fitted_state(shard_rows, monkeypatch):
     _require_cpu()
     X = np.random.default_rng(412).standard_normal((19, 7)).astype(np.float32)[::-1]
-    with reference_training():
-        model = RBFSampler(gamma=0.7, n_components=13, random_state=11).fit(X)
+    model = RBFSampler(gamma=0.7, n_components=13, random_state=11).fit(X)
     weights = np.asarray(model.random_weights_).tobytes()
     offsets = np.asarray(model.random_offset_).tobytes()
     expected = np.asarray(model.transform(X))
@@ -54,8 +52,7 @@ def test_cpu_rbf_shards_preserve_exact_rows_and_fitted_state(shard_rows, monkeyp
 def test_cpu_rbf_reordered_worker_rows_are_detectable(monkeypatch, request):
     _require_cpu()
     X = np.random.default_rng(77).standard_normal((15, 7)).astype(np.float32)
-    with reference_training():
-        model = RBFSampler(n_components=13, random_state=11).fit(X)
+    model = RBFSampler(n_components=13, random_state=11).fit(X)
     expected = np.asarray(model.transform(X))
     # the transport negative control (bindings/parallel_shard_common_door.mojo
     # `shard_map`): the first numerical batch comes back reversed, once; armed

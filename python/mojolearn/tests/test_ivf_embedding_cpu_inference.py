@@ -111,13 +111,11 @@ def test_the_search_binding_refuses_a_broken_index():
                     reason="the ivf reference and search host bindings are not both built here")
 def test_a_saved_host_index_searches_the_same_bytes_on_the_shipped_binding(tmp_path):
     import mojolearn
-    from contextlib import nullcontext as reference_training  # the no-op CPU-training scope (mojolearn._cpu_reference deleted 2026-11-15: CPU training is public)
     if _backend._CPU_ONLY is None:
         pytest.skip("a GPU set loaded; the reference fit would run on the GPU")
     x = np.random.default_rng(2).standard_normal((512, 8)).astype(np.float32)
     q = np.random.default_rng(3).standard_normal((16, 8)).astype(np.float32)
-    with reference_training():
-        m = IVFIndex(n_lists=8, n_probes=3, n_neighbors=5, random_state=1).fit(x)
+    m = IVFIndex(n_lists=8, n_probes=3, n_neighbors=5, random_state=1).fit(x)
     d0, i0 = m.search(q)
     one = IVFIndex(n_lists=8, n_probes=3, n_neighbors=5, random_state=1)
     path = str(tmp_path / "ivf.npz")
@@ -172,10 +170,8 @@ def test_clone_copies_and_does_not_alias():
 
 
 def _extend_pair(host_cls):
-    from contextlib import nullcontext as reference_training  # the no-op CPU-training scope (mojolearn._cpu_reference deleted 2026-11-15: CPU training is public)
     x = np.random.default_rng(6).standard_normal((600, 6)).astype(np.float32)
-    with reference_training():
-        base = IVFIndex(n_lists=8, n_probes=3, n_neighbors=5, random_state=2).fit(x[:400])
+    base = IVFIndex(n_lists=8, n_probes=3, n_neighbors=5, random_state=2).fit(x[:400])
     return base, x
 
 

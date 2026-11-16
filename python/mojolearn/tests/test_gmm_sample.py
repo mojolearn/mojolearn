@@ -20,7 +20,6 @@ import sys
 import numpy as np
 
 from mojolearn import GaussianMixture
-from contextlib import nullcontext as reference_training  # the no-op CPU-training scope (mojolearn._cpu_reference deleted 2026-11-15: CPU training is public)
 from mojolearn.tests._expose_d_harness import Report, bind_or_exit, run
 
 
@@ -32,8 +31,7 @@ def _blobs(seed=0, n=3000):
 
 
 def _fit(x, **kw):
-    with reference_training():
-        return GaussianMixture(**kw).fit(x)
+    return GaussianMixture(**kw).fit(x)
 
 
 def arm_shape(rep):

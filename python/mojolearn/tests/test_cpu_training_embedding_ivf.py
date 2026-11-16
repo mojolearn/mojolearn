@@ -26,7 +26,6 @@ GATE_BACKENDS = ("cpu",)
 import sys
 
 import mojolearn
-from contextlib import nullcontext as reference_training  # the no-op CPU-training scope (mojolearn._cpu_reference deleted 2026-11-15: CPU training is public)
 from mojolearn import _backend
 
 
@@ -40,7 +39,6 @@ def _cpu_only_with(basename):
     return True
 
 
-@reference_training()
 def test_embedding_runs_on_the_host_when_built():
     if not _cpu_only_with("_mojolearn_embedding_host"):
         return
@@ -78,7 +76,6 @@ def test_embedding_runs_on_the_host_when_built():
         raise AssertionError("an out-of-range id was gathered")
 
 
-@reference_training()
 def test_ivf_runs_on_the_host_when_built():
     if not _cpu_only_with("_mojolearn_ivf_host"):
         return
@@ -106,7 +103,6 @@ def test_ivf_runs_on_the_host_when_built():
         raise AssertionError("n_probes > n_lists was clamped")
 
 
-@reference_training()
 def test_byte_lm_trainer_runs_on_the_host_when_built():
     if not _cpu_only_with("_mojolearn_byte_lm_host"):
         return

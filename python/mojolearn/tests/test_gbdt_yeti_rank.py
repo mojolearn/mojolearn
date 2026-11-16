@@ -11,7 +11,6 @@ import numpy as np
 import pytest
 
 from mojolearn import GradientBoosting
-from contextlib import nullcontext as reference_training  # the no-op CPU-training scope (mojolearn._cpu_reference deleted 2026-11-15: CPU training is public)
 
 
 def _fixture(n=240, d=4, seed=11):
@@ -51,7 +50,6 @@ def _model(**kw):
     return GradientBoosting(**params)
 
 
-@reference_training()
 def test_learns_on_uneven_queries():
     X, rel, g = _fixture()
     m = _model().fit(X, rel, group_id=g)
@@ -63,7 +61,6 @@ def test_learns_on_uneven_queries():
     assert _ndcg(pred, rel, g) > _ndcg(np.zeros_like(pred), rel, g)
 
 
-@reference_training()
 def test_l2_default_is_zero_for_yeti_rank_only():
     X, rel, g = _fixture()
     default = np.asarray(_model().fit(X, rel, group_id=g).predict(X))
@@ -74,7 +71,6 @@ def test_l2_default_is_zero_for_yeti_rank_only():
     assert GradientBoosting().l2_leaf_reg is None
 
 
-@reference_training()
 def test_refusals_by_name():
     X, rel, g = _fixture()
     with pytest.raises(Exception, match="changing the leaf_estimation_method parameter is prohibited"):

@@ -38,7 +38,6 @@ def main():
         sys.path.insert(0, str(root / 'python'))
     import mojolearn as ml
     from mojolearn import _verify_all as suite, _verify_small as profile, _verify
-    from contextlib import nullcontext as reference_training  # the no-op CPU-training scope (mojolearn._cpu_reference deleted 2026-11-15: CPU training is public)
     if ml.vendor() != args.require_backend or ml.numeric_mode() != 'identical':
         parser.error(f'expected {args.require_backend}/identical, got {ml.vendor()}/{ml.numeric_mode()}')
     harness = suite.load_harness()
@@ -57,31 +56,30 @@ def main():
         record['host'] = harness.host_record(ml)
     save(path, record)
     try:
-        with reference_training():
-            for case, *_ in profile.CASES:
-                data = profile.fixture(harness, case)
-                heldout = profile.fixture(harness, case, heldout=True)[0]
-                record['inputs'][case] = dict(zip(('X', 'y_clf', 'y_reg', 'heldout'),
-                                                  map(harness._h, (*data, heldout))))
-                for lane in profile.LANES:
-                    cell = {part: [] for part in ('train', 'infer', 'model', 'batch')}
-                    errors = []
-                    cell_start = time.monotonic()
-                    for repeat in range(2):
-                        # Independent fits, each with fresh mutable inputs.
-                        result = suite.run_cell(harness, ml, lane, case,
-                            tuple(array.copy() for array in data), heldout.copy(), repeats=1)
-                        for part in cell:
-                            value, error = result[part]
-                            cell[part].append(value)
-                            if error:
-                                errors.append(dict(repeat=repeat, part=part, error=error))
-                    cell['errors'] = errors
-                    cell['seconds'] = round(time.monotonic() - cell_start, 6)
-                    record['cells'][f'{lane}/{case}'] = cell
-                    record['elapsed_seconds'] = round(time.monotonic() - started, 6)
-                    save(path, record)
-                    print(f'{lane}/{case}: {cell["seconds"]:.3f}s', flush=True)
+        for case, *_ in profile.CASES:
+            data = profile.fixture(harness, case)
+            heldout = profile.fixture(harness, case, heldout=True)[0]
+            record['inputs'][case] = dict(zip(('X', 'y_clf', 'y_reg', 'heldout'),
+                                              map(harness._h, (*data, heldout))))
+            for lane in profile.LANES:
+                cell = {part: [] for part in ('train', 'infer', 'model', 'batch')}
+                errors = []
+                cell_start = time.monotonic()
+                for repeat in range(2):
+                    # Independent fits, each with fresh mutable inputs.
+                    result = suite.run_cell(harness, ml, lane, case,
+                        tuple(array.copy() for array in data), heldout.copy(), repeats=1)
+                    for part in cell:
+                        value, error = result[part]
+                        cell[part].append(value)
+                        if error:
+                            errors.append(dict(repeat=repeat, part=part, error=error))
+                cell['errors'] = errors
+                cell['seconds'] = round(time.monotonic() - cell_start, 6)
+                record['cells'][f'{lane}/{case}'] = cell
+                record['elapsed_seconds'] = round(time.monotonic() - started, 6)
+                save(path, record)
+                print(f'{lane}/{case}: {cell["seconds"]:.3f}s', flush=True)
         record['bindings'] = _verify.binding_artifacts() + suite.host_binding_artifacts()
         record['complete'] = True
         record['status'] = 'CAPTURED_UNQUALIFIED'

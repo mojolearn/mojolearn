@@ -6,7 +6,7 @@ A fitted KMeans saves, and `mojolearn.host_model` answers `predict` and
 
 The format and refusal tests need no binding. The round-trip tests fit
 through the bindings this process routes (a GPU set, or the reference host
-set under `reference_training()` on a CPU-only install), save, load through
+set on a CPU-only install), save, load through
 `mojolearn.host_model` and require the host answer to be the same bytes as
 the fitted model's; they skip when the core host binding is not built.
 Cross-vendor identity is the verification's, not this file's.
@@ -24,7 +24,6 @@ import pytest
 
 import mojolearn
 from mojolearn import _backend, _classical_host, _serialize
-from contextlib import nullcontext as reference_training  # the no-op CPU-training scope (mojolearn._cpu_reference deleted 2026-11-15: CPU training is public)
 from mojolearn.cluster import _KMEANS_FORMAT
 
 
@@ -65,8 +64,7 @@ CASES = [
 
 
 def _fit_and_save(make, X, path):
-    with reference_training():
-        est = make().fit(X)
+    est = make().fit(X)
     est.save(path)
     return est
 

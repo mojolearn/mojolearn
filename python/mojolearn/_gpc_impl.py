@@ -64,9 +64,8 @@ WHAT IS HONORED AND WHAT IS REFUSED, one line per parameter:
                                     one after another on one device
 
 THE INFERENCE BOUNDARY.
-`fit` on a CPU-only install refuses unless the internal verifier's
-`reference_training()` is active. `predict`, `predict_proba`,
-`latent_mean_and_variance` and `load` are public on the CPU:
+`fit`, `predict`, `predict_proba`, `latent_mean_and_variance` and `load` are
+public on the CPU:
 `GaussianProcessClassifier.load(path)` routes `_mojolearn_gp` to
 `_mojolearn_gp_host` on a CPU-only install, and `mojolearn.host_model(path)`
 returns `HostGaussianProcessClassifier`, bound to the host binding on any
