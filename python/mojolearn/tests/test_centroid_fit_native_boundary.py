@@ -81,7 +81,7 @@ def test_affinity_diagnostic_and_similarity_exporters_are_separate_public_storag
         random_state=13, numeric_mode="identical",
     ).fit(x)
     affinity = np.asarray(model.affinity_matrix_)
-    diagnostic = np.asarray(model._message_diag)
+    diagnostic = np.asarray(model.message_diag_)
     assert affinity.shape == (3, 3) and affinity.dtype == np.dtype("float32")
     assert diagnostic.shape == (6,) and diagnostic.dtype == np.dtype("float32")
     before = diagnostic.copy()

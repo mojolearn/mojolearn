@@ -40,7 +40,7 @@ def _(ml, X, yc, yr, Xh=None):
     rows, five leaves by biggest inertia, two restarts per split; infer is
     the tree descent and the distances to the leaf centers."""
     m = ml.BisectingKMeans(n_clusters=5, n_init=2, random_state=3).fit(X[:2000, :6])
-    return _fit(dict(centers=_h(m.cluster_centers_), labels=_h(m.labels_), tree=_h(m._tree_nodes),
+    return _fit(dict(centers=_h(m.cluster_centers_), labels=_h(m.labels_), tree=_h(m.tree_nodes_),
                      inertia=_h(np.float64(m.inertia_))),
                 m, lambda e: (e.predict(Xh[:256, :6]), e.transform(Xh[:256, :6])))
 
@@ -199,7 +199,7 @@ def _(ml, X, yc, yr, Xh=None):
         S = (S + Z[:, None, c] * Z[None, :, c]).astype(np.float32)
     m = ml.AffinityPropagation(affinity="precomputed", damping=0.8, random_state=2).fit(S)
     return _fit(dict(centers=_h(m.cluster_centers_indices_), labels=_h(m.labels_), n_iter=_h(np.int64(m.n_iter_)),
-                     messages=_h(m._message_diag)),
+                     messages=_h(m.message_diag_)),
                 m, "n/a:precomputed (predict is not supported with affinity='precomputed', as scikit-learn)")
 
 

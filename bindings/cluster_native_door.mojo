@@ -283,10 +283,10 @@ def cluster_operation(model: PythonObject, operation: String, args: PythonObject
         var n = Int(py=x.shape[0])
         var d = Int(py=x.shape[1])
         var fields = py_fields(model)
-        var node_source = fields["_tree_nodes"]
+        var node_source = fields["tree_nodes_"]
         # Preserve the existing raw C-order byte interpretation, including
         # rebound storage. The extra array('i') and boxed Int list disappear.
-        var nodes = classical_c_bytes(node_source, "_tree_nodes", context)
+        var nodes = classical_c_bytes(node_source, "tree_nodes_", context)
         var byte_count = len(nodes)
         if byte_count % 4 != 0:
             raise Error("ValueError: bytes length not a multiple of item size")

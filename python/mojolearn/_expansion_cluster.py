@@ -379,6 +379,11 @@ class BisectingKMeans(_CentersMixin, _XCluster):
         center.
     n_features_in_ : int
         Number of features seen in `fit`.
+    tree_nodes_ : Array of shape (n_nodes, 3), int32
+        The bisecting tree, root first, one ``(left, right, label)`` row
+        per node: an inner node holds its two children's row indices; a
+        leaf has ``left == -1`` and holds its cluster label. `predict`
+        walks this tree from the root to the nearer child center.
 
     Examples
     --------
@@ -765,6 +770,9 @@ class AffinityPropagation(_XCluster):
         Cluster of each training row.
     affinity_matrix_ : Array of shape (n_samples, n_samples), float32
         The similarity matrix used.
+    message_diag_ : Array of shape (2 * n_samples,), float32
+        Diagonals of the final messages: the availabilities ``A[i, i]``,
+        then the responsibilities ``R[i, i]``.
     n_iter_ : int
         Number of iterations run.
     n_features_in_ : int
@@ -1128,9 +1136,9 @@ del _cluster_signature
 # Fixed fields replaced by the existing native fit owners, for callback-free release.
 _native_family_bridge.tables(cluster_public_replaced_fields={
     MiniBatchKMeans: ('_partial_batch', '_partial_init', '_partial_state', 'cluster_centers_', 'counts_', 'inertia_', 'labels_', 'n_features_in_', 'n_iter_', 'n_steps_'),
-    BisectingKMeans: ('_tree_centers', '_tree_nodes', 'cluster_centers_', 'inertia_', 'labels_', 'n_features_in_'),
+    BisectingKMeans: ('_tree_centers', 'cluster_centers_', 'inertia_', 'labels_', 'n_features_in_', 'tree_nodes_'),
     MeanShift: ('bandwidth_', 'cluster_centers_', 'labels_', 'n_features_in_', 'n_iter_'),
     OPTICS: ('cluster_hierarchy_', 'core_distances_', 'labels_', 'n_features_in_', 'ordering_', 'predecessor_', 'reachability_'),
-    AffinityPropagation: ('_message_diag', 'affinity_matrix_', 'cluster_centers_', 'cluster_centers_indices_', 'labels_', 'n_features_in_', 'n_iter_'),
+    AffinityPropagation: ('affinity_matrix_', 'cluster_centers_', 'cluster_centers_indices_', 'labels_', 'message_diag_', 'n_features_in_', 'n_iter_'),
     BayesianGaussianMixture: ('_full_pchol', '_log_consts', '_warm', 'converged_', 'covariance_prior_', 'covariances_', 'degrees_of_freedom_', 'degrees_of_freedom_prior_', 'lower_bound_', 'mean_precision_', 'mean_precision_prior_', 'mean_prior_', 'means_', 'n_features_in_', 'n_iter_', 'precisions_cholesky_', 'weight_concentration_', 'weight_concentration_prior_', 'weights_'),
 })

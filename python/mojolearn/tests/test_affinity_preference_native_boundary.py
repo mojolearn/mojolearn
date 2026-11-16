@@ -33,7 +33,7 @@ def _assert_preferences(preference, values):
     # availability is zero in the initial iteration. Existing epsilon noise
     # is bounded by the same 1e-4 used by the independent native fixture.
     expected = (np.asarray(values, dtype=np.float64) + [4, 4, 16]) * 0.5
-    np.testing.assert_allclose(np.asarray(model._message_diag)[3:], expected, rtol=0, atol=1e-4)
+    np.testing.assert_allclose(np.asarray(model.message_diag_)[3:], expected, rtol=0, atol=1e-4)
     return model
 
 

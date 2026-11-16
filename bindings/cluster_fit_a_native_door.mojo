@@ -452,7 +452,7 @@ def _bisect_fit(model: PythonObject, binding: PythonObject, source: PythonObject
     _set(model, "cluster_centers_", _xc_array(packed.centers, Python.tuple(k, d), "<f4", "f", context))
     var m = len(result.storage[0].tree_nodes) // 3
     _set(model, "_tree_centers", _xc_array(packed.tree_centers, Python.tuple(m, d), "<f4", "f", context))
-    _set(model, "_tree_nodes", _xc_array(packed.tree_nodes, Python.tuple(m, 3), "<i4", "i", context))
+    _set(model, "tree_nodes_", _xc_array(packed.tree_nodes, Python.tuple(m, 3), "<i4", "i", context))
     _set(model, "labels_", _xc_array(packed.labels, Python.tuple(n), "<i4", "i", context))
     _set(model, "inertia_", PythonObject(result.storage[0].inertia))
     _set(model, "n_features_in_", PythonObject(d))
@@ -686,7 +686,7 @@ def _affinity_fit(model: PythonObject, binding: PythonObject, source: PythonObje
     _set(model, "labels_", _xc_array(packed.labels, Python.tuple(n), "<i4", "i", context))
     _set(model, "affinity_matrix_", _xc_array(packed.affinity, Python.tuple(n, n), "<f4", "f", context))
     # Observable final availability/responsibility diagonals stay public.
-    _set(model, "_message_diag", _xc_array(packed.message_diagonal, Python.tuple(len(result.storage[0].message_diagonal)), "<f4", "f", context))
+    _set(model, "message_diag_", _xc_array(packed.message_diagonal, Python.tuple(len(result.storage[0].message_diagonal)), "<f4", "f", context))
     _set(model, "n_iter_", PythonObject(result.storage[0].iterations))
     _set(model, "n_features_in_", PythonObject(d))
     if not pre:
