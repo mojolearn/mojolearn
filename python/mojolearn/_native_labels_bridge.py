@@ -29,8 +29,7 @@ def _base_binding():
     if _backend._CPU_ONLY is not None:
         return False
     try:
-        with _backend.host_helper_scope():
-            module = _backend.binding("_mojolearn", mode="identical")
+        module = _backend.binding("_mojolearn", mode="identical")
     except ImportError as error:
         if _backend._CPU_ONLY is not None:
             # a CPU-only install (selected while resolving): the host column

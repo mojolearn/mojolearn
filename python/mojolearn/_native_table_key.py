@@ -42,8 +42,7 @@ def connected_key(name, required=False):
     the loader's ImportError (import-time glue)."""
     from . import _backend
     try:
-        with _backend.host_helper_scope():
-            module = _backend.binding(name, "identical")
+        module = _backend.binding(name, "identical")
         module = _backend.exact_host_module(module)  # import-time: the CPU-only facade resolved to its compiled host module once
     except (ImportError, AttributeError):
         if required:

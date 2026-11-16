@@ -1350,8 +1350,7 @@ def _label_entries():
     # `prepare_targets` and `gather_i32`), connected once at import; a
     # connection error is raised by the first call that needs them
     try:
-        with _backend.host_helper_scope():
-            base = _backend.binding("_mojolearn", mode="identical")
+        base = _backend.binding("_mojolearn", mode="identical")
         return {"prepare_targets": base.prepare_targets, "gather_i32": base.gather_i32}
     except Exception as error:  # glue: kept as text for the native owner to raise
         return f"ImportError: mojolearn metrics: the base binding's label entries are not connected: {error}"
