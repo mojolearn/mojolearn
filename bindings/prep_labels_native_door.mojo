@@ -765,7 +765,15 @@ def _multilabel_buffer(y: PythonObject, shape: PythonObject, context: PythonObje
     var b = _builtins()
     if Int(py=shape[0]) == 0 or Int(py=shape[1]) < 2:
         return None
-    if "bool" in _text(py_call(b.getattr, y, "dtype", "")):
+    var dtype = py_call(b.getattr, y, "dtype", "")
+    var ndarray = py_get(context, "ndarray")
+    if ndarray is not None and Bool(py=py_call(b.isinstance, y, ndarray)):
+        # An ndarray's dtype kind is a C attribute: str(dtype) ran NumPy's
+        # Python _dtype.__str__ / _name_get / issubdtype chain, 7 frames per
+        # call (census d95f805cce, LabelBinarizer fit 14, transform 161).
+        if String(py=dtype.kind) == "b":
+            raise Error(REFUSE_MULTIOUTPUT)
+    elif "bool" in _text(dtype):
         raise Error(REFUSE_MULTIOUTPUT)
     # y in its own dtype, C order (admit_c_view; lane a1b: was labels_view,
     # whose storage-order read of an F-ordered y needed a transpose below).
