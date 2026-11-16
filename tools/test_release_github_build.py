@@ -590,7 +590,7 @@ class Run(unittest.TestCase):
                 (dest / "retained.tar.gz").write_bytes(b"retained archive fixture")
                 return ""
             return original(*args)
-        def download(run, name, out, failed):
+        def download(run, name, out, failed, conclusion=None):
             self.assertEqual(name, "plan")
             out.mkdir(parents=True)
             (out / "plan.json").write_text(json.dumps(dict(compile_only=True, compile_groups="device",
