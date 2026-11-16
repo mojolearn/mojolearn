@@ -49,6 +49,11 @@ pointer comment). One new check, `models_checkpoint_widen` (cpu and gpu), regist
 
 - `test_samba_decode_session.py::test_session_steps_and_state_equal_the_per_call_step` failed as PRODUCT in smoke 1
   (`SMOKE_TRIAGE_2026-11-15_tests.tsv:147`): the session's logits bytes differ from the per-call step's.
+  Cause (lane samba-decode-logits): the host arm stepped the caller's state and `load_state` was a no-op, so the
+  steps after `sync_state` were not discarded; the first differing logits were the first step after `load_state`.
+  Fixed by da2ea61f61 (a session-owned state, bindings/samba_decode_native_unpack.mojo `_private`). The device arm
+  runs the same `SambaStackProgram._body` ops for both routes (training/samba_program_entry.mojo `_forward` and
+  `_decode_run`); no device difference was found statically.
 - `test_byte_lm_host_native_provider.py` was PRODUCT in smoke 1 (`assert 1 == 2`). Smoke 2 found it stale (fixed by
   76f808f364).
 - `checks/native_tests/registry.mojo` imports and appends `mamba_decode_sessions` twice (lines 110/113 and 302/305),

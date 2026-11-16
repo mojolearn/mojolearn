@@ -204,8 +204,8 @@ def samba_decode_tokens(session: PythonObject, inputs: PythonObject, context: Py
     """`decode(ids)`: (B, N) ids -> (B, N, vocab) logits in one native call
     (decode plan D2). The device arm runs `samba_decode_tokens` (one id
     upload, N step bodies on the device, one logits download); the host arm
-    runs the per-call step N times on the caller's own state. Either way the
-    logits and the state equal N `step` calls byte for byte."""
+    runs the per-call step N times on the session-owned state (`_private`).
+    Either way the logits and the state equal N `step` calls byte for byte."""
     var values = samba_fields(session)
     var what = String("SambaDecodeSession.decode")
     _decode_require_open(values, what)
@@ -224,9 +224,11 @@ def samba_decode_tokens(session: PythonObject, inputs: PythonObject, context: Py
         # token, with column t of the ids as the step's (B, 1) input.
         var src = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(py=ids._addr))
         var dst = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=output._addr))
+        # One (B, 1) id column for every token (was one allocation per token):
+        # the step's id admission copies it into its own array before the run.
+        var column = generation_array([b, 1], "i")
+        var col = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(py=column._addr))
         for t in range(n):  # driver-loop: over decode tokens, one host-arm step each
-            var column = generation_array([b, 1], "i")
-            var col = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(py=column._addr))
             for r in range(b):  # driver-loop: over the batch rows, a host-arm copy of token t's id
                 col.unsafe_store(r, src.unsafe_load(r * n + t))
             var logits = samba_forward(values["_model"], column, values["_private"], PythonObject(None), True, context)
@@ -234,7 +236,7 @@ def samba_decode_tokens(session: PythonObject, inputs: PythonObject, context: Py
             for r in range(b):  # driver-loop: over the batch rows, a host-arm copy of token t's logits
                 unsafe_memcpy(dest=dst + (r * n + t) * v, src=row + r * v, count=v)
             _ = logits^
-            _ = column^
+        _ = column^  # keep the id column alive past the last step's read
         _ = ids
         return output
     var addresses: List[Int] = [Int(py=ids._addr), Int(py=output._addr)]
