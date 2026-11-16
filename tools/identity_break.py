@@ -3700,6 +3700,13 @@ def _lowbit_block_lane(ml, X, Xh, base, fmt):
         state_kw = {}
     assert blk.weight_format == fmt, (base, fmt, blk.weight_format)
     parts = _block_fit(blk, _seq(X, 2, 16, dm), _seq(X, 2, 16, dm, skip=1024), state_kw)
+    if base != "transformer":
+        # The mamba low-bit lanes are NEURAL_PUBLIC_LANES: the probe is handed
+        # `_public_est(name, blk)`, already the public inference class on a CPU
+        # column (built from the `_built` weights), so it is asked directly,
+        # as the base mamba lanes do. Wrapping it a second time asked
+        # `_built_args` of an inference object `_built` never saw.
+        return _fit(parts, blk, lambda e: (np.asarray(e.forward(_seq(Xh, 2, 16, dm))),))
     return _fit(parts, blk, lambda e: (np.asarray(_neural_inference(ml, base, e).forward(_seq(Xh, 2, 16, dm))),))
 
 
