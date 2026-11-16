@@ -1487,8 +1487,9 @@ def make_plan(commit, cache_dir, root=ROOT, host_toolchain=None, prev=None, buil
     if names:
         moved = apply_defines(rows, current, facts, define_readers(commit, names, root), names)
         if ptx_proof and any((r["vendor"], r["arch"]) == PTX_SET for r in moved):
-            # the published PTX set was compiled without the defines: it cannot be taken whole
-            _refuse_ptx(rows, "a binding of the set reads the candidate defines")
+            # the published PTX set was compiled without the defines: it cannot be taken whole. Its leg runs
+            # and proves its own set (_settle_ptx), so its other rows stay REUSE like any set's: refusing
+            # every PTX row rebuilt all 33 sm_80 bindings for a define four of them read (lane arm-build-reuse)
             ptx_proof = None
     # A PUBLISHED PTX SET TAKEN WHOLE ships the host owner's host bindings
     # (ptx_reuse.HOST_OWNER_ADMISSION): the owner leg must run at this freeze
