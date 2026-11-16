@@ -64,6 +64,10 @@ FLAGS (per recipe; a recipe can carry several)
   PARAMS-DIFF    the explicit parameters our arm read back differ from the paper's (a float that rounds to the same
                  float32 is the same setting: the arms run FP32)
   HW-DIFF        the new board's GPU is not the paper's GPU
+  SCORING-MIXED  the new time and an on-box column it is divided by were taken under different small-row rules
+                 (tools/bench_board_small_rows.py: one is the median of 20 calls, the other one call, because their
+                 first scored calls fell on either side of 10 ms); scoring_mixed names the columns. Shown, the ratio
+                 kept
 With more --prior-board versions (the default job times one, 0.8.55: Andrew, 2026-11-16; an explicit extra prior or
 last release gets one each), each other version gets a column (ms, new / prior); the last one is the prior release:
   REGRESSION-VS-PRIOR / FASTER-VS-PRIOR   new / prior median ms above 1.10 / below 0.90
@@ -747,6 +751,7 @@ def compare_one(rec, races, not_run_why, hw_diff, base=None, same_host_opponents
         r = row["ratio"]
         row["flags"].append("REGRESSION" if r is not None and r > SLOWER else
                             "FASTER" if r is not None and r < FASTER else "SAME")
+        flag_scoring_mixed(row, "baseline", row.get("old_scoring"))
     elif row["old_status"] == "not run on this box":
         # the prior wheel has no cell for this row (its smoke failed, it refused at plan, the job did not reach it):
         # NOT-RUN for that column, never a regression (brief same-box-compare, 2026-11-14)
@@ -835,6 +840,8 @@ def attach_prior_board(row, version, races, flagged):
     r = (row["new_ms"] / ms) if number(row.get("new_ms")) and ms else None
     row.setdefault("priors", {})[version] = dict({"ms": ms, "status": status, "ratio": r},
                                                  **(calls_fields("prior", c) if ms is not None else {}))
+    if r is not None:
+        flag_scoring_mixed(row, version, row["priors"][version].get("prior_scoring"))
     if not flagged:
         return row
     row["prior_ms"], row["prior_status"], row["ratio_vs_prior"] = ms, status, r
@@ -1032,12 +1039,28 @@ def fmt_ms(v):
 
 
 def calls_fields(prefix, cell):
-    """SMALL ROWS (Andrew, 2026-11-15): {<prefix>_calls, <prefix>_min_ms, <prefix>_max_ms} of a cell whose time is
-    the median of more than one consecutive call; {} for one call (every cell before 2026-11-15, opponents)."""
+    """SMALL ROWS (Andrew, 2026-11-15): {<prefix>_scoring} (the rule the time was taken under, SMALL.scoring_of:
+    one call for every cell before 2026-11-15 and opponents) and, for a cell whose time is the median of more than
+    one consecutive call, {<prefix>_calls, <prefix>_min_ms, <prefix>_max_ms}."""
+    out = {prefix + "_scoring": SMALL.scoring_of(cell)}
     calls = (cell or {}).get("calls")
     if not isinstance(calls, int) or calls <= 1:
-        return {}
-    return {prefix + "_calls": calls, prefix + "_min_ms": cell.get("min_ms"), prefix + "_max_ms": cell.get("max_ms")}
+        return out
+    return dict(out, **{prefix + "_calls": calls, prefix + "_min_ms": cell.get("min_ms"),
+                        prefix + "_max_ms": cell.get("max_ms")})
+
+
+def flag_scoring_mixed(row, column, other_scoring):
+    """SCORING-MIXED (harness-small-row, 2026-11-16): the new time and the time of `column` it is divided by were
+    taken under different small-row rules (one a median of calls, the other one call: their first scored calls
+    fell on either side of 10 ms). The ratio is still shown; the flag says it compares a median with one call."""
+    new = row.get("new_scoring")
+    if new is None or other_scoring is None or new == other_scoring:
+        return row
+    row.setdefault("scoring_mixed", []).append("%s: new %s, %s %s" % (column, new, column, other_scoring))
+    if "SCORING-MIXED" not in row["flags"]:
+        row["flags"].append("SCORING-MIXED")
+    return row
 
 
 def fmt_ms_calls(r, prefix):
@@ -1248,7 +1271,7 @@ def render_summary(res, top=8):
                     r.get("best_ever_date"), fmt_ms(r["new_ms"])) for r in hit[:top]]
     for flag in ("RECOVERED", "STILL-REGRESSED", "FIXED", "BROKEN", "BASELINE-NOT-RUN", "NOT-COMPARED",
                  "QUALITY-DROP", "QUALITY-CHANGE",
-                 "QUALITY-MISSING", "NOW-WINS",
+                 "QUALITY-MISSING", "SCORING-MIXED", "NOW-WINS",
                  "NOW-LOSES", "PARAMS-DIFF", "NOT-RUN", "BEST-EVER-REGRESSION-UNCHECKED", "PARAMS-DIFFER"):
         hit = [r for r in rows if flag in r["flags"]]
         if hit:
