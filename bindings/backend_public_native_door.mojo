@@ -467,6 +467,17 @@ def backend_public_operation(operation: String, args: PythonObject, context: Pyt
         requested = py_call(text_type.lower, py_call(text_type.strip, requested))
         if String(requested) != "identical" and String(requested) != "fast":
             raise Error("ValueError: mojolearn: numeric_mode=" + String(py_call(text_type.__repr__, requested)) + "; it must be 'fast', or 'identical' (the default)")
+        # A CPU-ONLY INSTALL RUNS `identical` (the host column of the
+        # verification): the selector installed the host bindings under the
+        # canonical names and there is no tier directory, so the import-time
+        # plan for either tier holds the no-GPU refusal. Setting the mode the
+        # install already runs is accepted; 'fast' is Apple only and refused
+        # by name (cpu-surface-defects, 2026-11-16).
+        if fields["_CPU_ONLY"] is not None:
+            if String(requested) != "identical":
+                raise Error("ValueError: mojolearn: numeric_mode='fast' is available on Apple GPUs only; this CPU-only install runs 'identical'. Pass 'identical' or drop the call.")
+            py_setitem(fields, "_DEFAULT_MODE", requested)
+            return mode
         _refuse(context["plans"][requested]["error"])
         py_setitem(fields, "_DEFAULT_MODE", requested)
         return mode
