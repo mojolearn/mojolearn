@@ -199,6 +199,8 @@ from checks.native_tests.umap_ops import register as register_umap_ops
 from checks.native_tests.x_linear_ops import register as register_x_linear_ops
 # lane tests-to-mojo-models (2026-11-16)
 from checks.native_tests.models_checkpoint_widen import register as register_models_checkpoint_widen
+# lane tests-to-mojo-spatial (2026-11-16)
+from checks.native_tests.xcnn_sage_max_adjoint import register as register_xcnn_sage_max_adjoint
 
 
 def all_checks() -> List[Check]:
@@ -392,4 +394,6 @@ def all_checks() -> List[Check]:
     checks.append(register_x_linear_ops())
     # lane tests-to-mojo-models (2026-11-16)
     checks.append(register_models_checkpoint_widen())
+    # lane tests-to-mojo-spatial (2026-11-16)
+    checks.append(register_xcnn_sage_max_adjoint())
     return checks^
