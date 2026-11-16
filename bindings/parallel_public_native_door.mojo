@@ -155,6 +155,15 @@ def _predictor(model: PythonObject, operation: String, args: PythonObject, conte
             py_setitem(fields, "n_classes_", PythonObject(Int(py=original["_num_outputs"])))
         return PythonObject(None)
     var lock = py_get(fields, "_lock")
+    if lock is None and (operation == "predictor_close" or operation == "predictor_exit"):
+        # A CONSTRUCTION THAT FAILED before its lock (every refusal of
+        # predictor_init above runs before `_model` and `_lock` are stored):
+        # nothing resident was built, since the pool is built on the first
+        # predict. close is safe and idempotent there; drop whatever exists
+        # (cpu-surface-defects, 2026-11-16).
+        py_setitem(fields, "_model", PythonObject(None))
+        py_setitem(fields, "_closed", PythonObject(True))
+        return PythonObject(None)
     if py_type(lock) is not meta["lock_type"]:
         raise Error("TypeError: ParallelForestPredictor requires its native lock")
     if py_type(py_get(fields, "_closed")) is not b.bool or py_type(py_get(fields, "_classifier")) is not b.bool:
