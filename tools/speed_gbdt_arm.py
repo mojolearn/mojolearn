@@ -4672,6 +4672,8 @@ def run(lane, arms, data, n_rounds, size, dev=None, *, rotate_order=False,
 
     # The AFT full queue supplies its excluded warmup as a separate capture.
     # Historical callers retain the in-process warmup by default.
+    # An attribution run of an inference row (tools/ops/attribution_job.sh) does not time the fit: no fit warmup.
+    skip_warmup = skip_warmup or small.fit_warmup_skipped()
     live = list(arms) if skip_warmup else []
     for arm in (() if skip_warmup else arms):
         if time.time() > deadline:

@@ -100,6 +100,15 @@ def range_close():
         _RANGE.pop().pop_range()
 
 
+def fit_warmup_skipped(environ=None):
+    """True in an attribution run whose forced phase is an inference (FORCE_CALLS_PHASE_ENV `infer...`): the fit
+    only builds the model the timed inference calls use, so its excluded warmup fit is skipped (a 15-minute fit
+    would otherwise run twice per run). Never on a board (the variables are unset)."""
+    env = os.environ if environ is None else environ
+    return bool((env.get(FORCE_CALLS_ENV) or "").strip()) and \
+        (env.get(FORCE_CALLS_PHASE_ENV) or "").strip().startswith("infer")
+
+
 def calls_for(first_ms, ours, phase=None):
     """The calls the one scored run makes in all, given its FIRST scored call's time (taken after the
     excluded warmup): SMALL_ROW_CALLS for OUR arm when that call took under SMALL_ROW_MS, else 1 (an
