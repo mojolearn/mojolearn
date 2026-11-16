@@ -7,36 +7,33 @@ from bindings.py_balanced import py_call, py_type, py_get, py_setitem
 from bindings.classical_pandas_door import classical_admit_value
 from bindings.xseq_native_common_door import xseq_input, xseq_refuse_f64, xseq_zeros, xseq_f32p
 from bindings.admitted_sequence_door import admit_nd_f32
+from providers.python.xseq_public_lifecycle_pyapi_door import xseq_public_owner
 from sequence.recurrent_state_run import recurrent_state_layout
 
 
 def _state_fields(model: PythonObject, context: PythonObject) raises -> PythonObject:
+    # Admission is the connected owner contract every other recurrent method
+    # already uses (xseq_public_owner: exact metaclass, frozen ancestry, base
+    # and inherited storage/lookup hooks, instance protocol fields), pinned by
+    # the full-reset connection AFTER the native attribute slots are installed
+    # and cached per class state. The former import-time hook snapshot taken
+    # in _x_sequence_rnn predated the attribute-slot installation when the
+    # module loaded during package import, so it refused every untouched model
+    # (census d95f805cce: 12 state_dict / load_state_dict units). A replaced
+    # hook is still refused, by the owner contract.
     var b = native_loaded_module("builtins")
     var cls = py_type(model)
-    if py_type(cls) is not b.type:
-        raise Error("TypeError: recurrent state requires native class storage")
     var layouts = context["xseq_rnn_state_layouts"]
     for i in range(len(layouts)):  # small-loop(connected recurrent classes)
         var layout = layouts[i]
         if cls is not layout[0]:
             continue
-        var mro = py_call(b.type.__dict__["__mro__"].__get__, cls)
-        if mro is not layout[1]:
-            raise Error("TypeError: recurrent state class ancestry changed")
-        var hooks = layout[3]
-        for j in range(len(hooks)):  # small-loop(pinned native storage hooks)
-            var fields = py_call(b.type.__dict__["__dict__"].__get__, hooks[j][0])
-            if py_get(fields, hooks[j][1]) is not hooks[j][2]:
-                # Names the replaced slot (census d95f805cce: 12 state_dict /
-                # load_state_dict refusals in the api units, slot unknown).
-                raise Error("TypeError: recurrent state refuses replaced Python storage hooks ("
-                            + String(hooks[j][0].__qualname__) + "." + String(hooks[j][1]) + ")")
-        var fields = py_call(layout[2], model, cls)
+        var fields = xseq_public_owner(model, context, False)
         var keys = py_call(b.list, fields)
         for j in range(len(keys)):  # small-loop(instance metadata keys)
             if py_type(keys[j]) is not b.str:
                 raise Error("TypeError: recurrent state fields require exact string keys")
-        return Python.tuple(fields, layout[4])
+        return Python.tuple(fields, layout[1])
     raise Error("TypeError: recurrent state requires a connected native recurrent model")
 
 
