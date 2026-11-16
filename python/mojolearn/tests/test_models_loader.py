@@ -216,23 +216,17 @@ def test_safetensors_reader_dtypes_round_trip_and_widen_exactly():
             assert sf.metadata == {"format": "pt"}
             a = sf.read("a.f32")
             assert isinstance(a, Array) and a.dtype == "<f4" and a.shape == (3, 4) and a.tobytes() == f32.tobytes()
+            # The widening's values (every F16 and BF16 bit pattern through
+            # checkpoint_widen_halves) are checks/native_tests/models_checkpoint_widen.mojo;
+            # here the reader routes each dtype to it: 0x3C00 is 1.0 as a half,
+            # 0x3F80 is 1.0 as a bfloat16.
             b = sf.read("b.f16")
             assert b.dtype == "<f4" and b.shape == (12,)
-            # oracle: struct's own half -> double -> float, exact since f16 is a subset of f32
-            want = array.array("f", struct.unpack("<12e", h16.tobytes()))
-            got = array.array("f")
-            got.frombytes(b.tobytes())
-            for k in range(12):
-                if want[k] != want[k]:
-                    assert got[k] != got[k]  # a NaN stays a NaN
-                    assert (struct.unpack("<I", struct.pack("<f", got[k]))[0] & 0x80000000) == (h16[k] & 0x8000) << 16
-                else:
-                    assert struct.pack("<f", got[k]) == struct.pack("<f", want[k]), k
+            assert b.tobytes()[:4] == struct.pack("<f", 1.0)
             c = sf.read("c.bf16")
             assert c.dtype == "<f4" and c.shape == (3, 4)
-            shifted = array.array("I", [v << 16 for v in bf]).tobytes()
-            assert c.tobytes() == shifted
-            assert sf.read("c1.bf16").tobytes() == shifted
+            assert c.tobytes()[:4] == struct.pack("<f", 1.0)
+            assert sf.read("c1.bf16").tobytes() == c.tobytes()
             bits = sf.read("c.bf16", bf16="bits")
             assert isinstance(bits, lowbit.BF16Weight) and bits.bits.tobytes() == bf.tobytes()
             assert sf.read("c1.bf16", bf16="bits").dtype == "<u2"  # 1-D bits stay a plain Array
