@@ -324,6 +324,18 @@ class ParamsDiff(unittest.TestCase):
         self.assertEqual(PC.params_diff(old, moved), ["input_binning"])
         self.assertEqual(PC.params_diff(old, dict(new, max_depth=6)), ["max_depth"])
 
+    def test_float32_read_back_is_the_same_setting(self):
+        # FAIRNESS FIX (2026-11-16): sequential-fit / sequential-predict, paper record 0.001, every arm now passes and
+        # reads back float32(1e-3) (tools/bench_board_neural.py FIT_ADAM, 2026-10-27)
+        old = {"learning_rate": 0.001, "betas": [0.9, 0.999], "epochs": 1, "optimizer": "adam"}
+        new = dict(old, learning_rate=0.0010000000474974513)
+        self.assertEqual(PC.params_diff(old, new), [])
+        self.assertEqual(PC.params_diff(old, dict(new, betas=[0.8999999761581421, 0.999])), [])
+        self.assertEqual(PC.params_diff(old, dict(new, learning_rate=0.002)), ["learning_rate"])
+        self.assertEqual(PC.params_diff(old, dict(new, learning_rate=0.0010001)), ["learning_rate"])
+        self.assertEqual(PC.params_diff(old, dict(new, epochs=2)), ["epochs"])
+        self.assertEqual(PC.params_diff(old, dict(new, optimizer="sgd")), ["optimizer"])
+
 
 class Ids(unittest.TestCase):
     def test_plan_ids_and_pass_ids(self):
