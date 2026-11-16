@@ -238,8 +238,12 @@ def cmd_inventory(args):
         groups[owner["id"] if owner else public].add(public)
     for c in classes:
         attrs = set(c["attrs"])
-        if (est.applicable(c["id"], sorted(attrs & est.METHODS)) or "get_params" in attrs
-                or any(p in routed for p in c["aliases"])):
+        routed_class = any(p in routed for p in c["aliases"])
+        # A protocol base (ForestProtocol) is never constructed itself: its members run through the estimators that
+        # inherit them (VIA_SUBCLASS). Driving it as an estimator only failed (py-census-14: 9 fixture errors).
+        if c["qualname"].endswith("Protocol") and not routed_class:
+            continue
+        if (est.applicable(c["id"], sorted(attrs & est.METHODS)) or "get_params" in attrs or routed_class):
             groups[c["id"]].add(c["id"])
     for uid, publics in sorted(groups.items()):
         units.append(dict(name="api:" + uid, kind="api", id=uid, publics=sorted(publics)))
