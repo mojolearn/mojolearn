@@ -61,10 +61,11 @@ FLAGS (per recipe; a recipe can carry several)
                  quality_unavailable the cell's own reason); the row cannot be judged on it. Shown, never a gate
   NOW-WINS / NOW-LOSES  vs the paper's fastest stored opponent: only when the stored opponents ran on this box's
                  host (never, for the paper's boards; the ratio is shown)
-  PARAMS-DIFF    the explicit parameters our arm read back differ from the paper's
+  PARAMS-DIFF    the explicit parameters our arm read back differ from the paper's (a float that rounds to the same
+                 float32 is the same setting: the arms run FP32)
   HW-DIFF        the new board's GPU is not the paper's GPU
-With more --prior-board versions (default job: 0.8.55 and 0.8.66), each gets a column (ms, new / prior); the last
-one is the prior release:
+With more --prior-board versions (the default job times one, 0.8.55: Andrew, 2026-11-16; an explicit extra prior or
+last release gets one each), each other version gets a column (ms, new / prior); the last one is the prior release:
   REGRESSION-VS-PRIOR / FASTER-VS-PRIOR   new / prior median ms above 1.10 / below 0.90
   RECOVERED      the prior was > 1.10 x the on-box baseline and the new board is SAME or FASTER vs that baseline
   STILL-REGRESSED the prior was > 1.10 x the on-box baseline and the new board still is
@@ -94,6 +95,7 @@ import importlib.util
 import json
 import os
 import re
+import struct
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -654,11 +656,29 @@ def _param_value(key, value):
     return value
 
 
+def _same_fp32(a, b):
+    """Whether two read-back values are the same setting for an FP32 arm: equal, or floats (and lists of them) that
+    round to the same float32."""
+    if isinstance(a, list) and isinstance(b, list):
+        return len(a) == len(b) and all(_same_fp32(x, y) for x, y in zip(a, b))
+    if isinstance(a, float) and isinstance(b, float):
+        return a == b or struct.pack("<f", a) == struct.pack("<f", b)
+    return a == b
+
+
 def params_diff(old, new):
+    # FAIRNESS FIX (2026-11-16): neural/sequential-fit and sequential-predict were flagged PARAMS-DIFF
+    # ['learning_rate'] on every arm of the d95f805cce L40S job. Cause: the harness, not the product. The paper record
+    # (0.8.55 board) read back learning_rate 0.001; on 2026-10-27 (02cedb9b1c, FAIRNESS FIX 2026-10-13 audit)
+    # tools/bench_board_neural.py FIT_ADAM["lr"] became float.fromhex("0x1.0624de0000000p-10") = float32(1e-3),
+    # passed to every fit arm, so every arm now reads back 0.0010000000474974513 (the on-box 0.8.55 arm and the
+    # candidate agree). The product default is unchanged and the lane passes the value explicitly. Both values are
+    # the same float32, which is what the FP32 arms run, so a float (or a list of floats) that rounds to the same
+    # float32 is the same setting here; any other difference still flags.
     if old is None or new is None:
         return []
     keys = sorted(set(old) | set(new))
-    return [k for k in keys if _param_value(k, old.get(k)) != _param_value(k, new.get(k))]
+    return [k for k in keys if not _same_fp32(_param_value(k, old.get(k)), _param_value(k, new.get(k)))]
 
 
 def same_clock_ms(opp, cell, phase):

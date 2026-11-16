@@ -41,18 +41,48 @@ PAPER = {"race_ids": ["classical/kmeans/taxi/rows=full"],
 
 class Plan(unittest.TestCase):
     def test_units_skip_paper_races_and_record_missing_b(self):
-        units, smoke, drivers, missing, rowmap, bargs = MO.plan(OWED, PAPER, fake_planner(), "nvidia", ["b1"])
+        # with a last-release prior arm (an explicit PC_PRIOR_VERSION other than the paper baseline)
+        units, smoke, drivers, missing, rowmap, bargs = MO.plan(OWED, PAPER, fake_planner(), "nvidia", ["b1"], True)
         self.assertEqual(units[("candidate", "full")], ["algos/gmm/istella/rows=full", "algos/gmm/taxi/rows=full",
                                                         "algos/rfe/taxi/rows=full"])
         self.assertEqual(units[("prior", "full")], ["algos/rfe/taxi/rows=full"])
         self.assertEqual(units[("b1", "full")], ["algos/gmm/istella/rows=full", "algos/gmm/taxi/rows=full"])
         self.assertEqual(units[("candidate", "300000")], ["classical/kmeans/taxi/rows=300000"])
-        self.assertNotIn("classical/kmeans/taxi/rows=2000", smoke)       # the paper smoke covers it
-        self.assertIn("algos/rfe/taxi/rows=2000", smoke)
+        self.assertNotIn("classical/kmeans/taxi/rows=2000", smoke["candidate"])       # the paper smoke covers it
+        self.assertIn("algos/rfe/taxi/rows=2000", smoke["candidate"])
+        # the prior is smoked only on its own owed rows (the board row's rfe), never on the A/B row's gmm
+        self.assertEqual(smoke["prior"], ["algos/rfe/taxi/rows=2000"])
         self.assertIn("r-ab b2", missing)
         self.assertIn("r-gone no-such-lane", missing)
         self.assertEqual([d["id"] for d in drivers], ["r-drv"])
         self.assertIn("algos", bargs[bargs.index("--families") + 1])
+
+    def test_only_rows_a_report_reads(self):
+        # lane paper-plan-trim, 2026-11-16 (L40S job of d95f805cce, PC_PRIOR_VERSION=0.8.55, no B set): the candidate
+        # timed 197 races for a compare that read 61, and 0.8.55 was planned on the last release's 159. By default the
+        # job times one prior, the paper baseline: no board row (it compares with the last release), no A/B row
+        # without a staged B set, no driver row with one arm.
+        units, smoke, drivers, missing, rowmap, bargs = MO.plan(OWED, PAPER, fake_planner(), "nvidia", [])
+        self.assertEqual(units, {})
+        self.assertEqual(smoke, {"candidate": [], "prior": []})
+        self.assertEqual(drivers, [])
+        self.assertEqual(rowmap, {})
+        self.assertIn("last release", missing["r-board prior"])
+        self.assertIn("not staged", missing["r-ab b1"])
+        self.assertIn("this job runs only candidate", missing["r-drv"])
+        self.assertEqual(bargs[bargs.index("--families") + 1], "classical")     # the paper's own arguments only
+        # one staged B set: only its A/B row, candidate and B, on the same races
+        units, smoke, drivers, missing, rowmap, bargs = MO.plan(OWED, PAPER, fake_planner(), "nvidia", ["b1"])
+        self.assertEqual(sorted(units), [("b1", "full"), ("candidate", "full")])
+        self.assertEqual(units[("candidate", "full")], units[("b1", "full")])
+        self.assertEqual(sorted(rowmap), ["r-ab"])
+        self.assertEqual(smoke["prior"], [])
+
+    def test_driver_rows_need_two_present_arms(self):
+        row = {"id": "d", "kind": "driver", "arms": ["candidate:ndarray", "candidate:dataframe", "prior:ndarray"]}
+        self.assertEqual(MO.driver_arms(row, []), ["candidate:ndarray", "candidate:dataframe"])
+        self.assertEqual(MO.driver_arms(dict(row, arms=["candidate", "prior", "bx"]), ["bx"]), ["candidate", "bx"])
+        self.assertEqual(MO.driver_arms(dict(row, arms=["candidate", "prior"]), [], True), ["candidate", "prior"])
 
 
 class OwedBArms(unittest.TestCase):
@@ -112,6 +142,9 @@ class OwedBArms(unittest.TestCase):
                 self.assertIn("b_arms=-", why)
                 self.assertEqual(MO.main(["plan-check", "--plan-dir", out, "--b-arms", "b1", "--vendor", "nvidia"]), 1)
                 self.assertIsNone(MO.plan_stale(out, "", "nvidia"))
+                # a plan made without the last-release prior arm is stale for a job that times one
+                self.assertIn("prior=no", MO.plan_stale(out, "", "nvidia", True))
+                self.assertEqual(MO.main(["plan-check", "--plan-dir", out, "--vendor", "nvidia", "--prior"]), 1)
                 # the re-made plan has a B unit, which PC_OWED_ARMS=candidate,b1 then runs
                 MO.main(["plan", "--owed", owed, "--paper-recipes", paper, "--planner", "x", "--vendor", "nvidia",
                          "--b-arms", "b1", "--out-dir", out])
@@ -122,16 +155,18 @@ class OwedBArms(unittest.TestCase):
             self.assertIn("vendor nvidia", MO.plan_stale(out, "b1", "amd"))
             with open(os.path.join(out, "units.tsv")) as fh:
                 self.assertIn("b1", [ln.split("\t")[0] for ln in fh])
-            # a plan from before plan.json: current for a job without B sets, stale for one with them
+            # a plan from before plan.json (made with the prior arm, without B sets): current only for such a job
             os.remove(os.path.join(out, MO.PLAN_META))
-            self.assertIsNone(MO.plan_stale(out, "", "nvidia"))
+            self.assertIsNone(MO.plan_stale(out, "", "nvidia", True))
+            self.assertIn("prior=no", MO.plan_stale(out, "", "nvidia"))
             self.assertIn("no plan.json", MO.plan_stale(out, "b1", "nvidia"))
             self.assertIn("units.tsv missing", MO.plan_stale(os.path.join(td, "none"), "", "nvidia"))
 
     def test_job_rechecks_the_plan_without_the_plan_part(self):
         with open(self.JOB) as fh:
             text = fh.read()
-        self.assertIn('measure_owed.py plan-check --plan-dir "$RES/plan-owed" --b-arms "$B_CSV"', text)
+        self.assertIn('measure_owed.py plan-check --plan-dir "$RES/plan-owed" --b-arms "$B_CSV" --vendor "$V"', text)
+        self.assertIn('${OWED_PRIOR[@]+"${OWED_PRIOR[@]}"} 2>&1)', text)
         self.assertLess(text.index("plan-check"), text.index('FULL_ALL="$RES/plan/race-ids-full-all.txt"'))
         self.assertIn("PC_OWED_ARMS names $want: no owed unit", text)
 
@@ -154,12 +189,16 @@ class DataKeys(unittest.TestCase):
         m.ALGOS = types.SimpleNamespace(r2_keys=lambda lane, ds: ["corpus/enwik8/input.txt"] if lane == "gmm" else [],
                                         corpus_path=lambda k: "/c/" + k)
         paper = dict(PAPER, recipes=[{"family": "classical", "lane": "kmeans", "dataset": "taxi"}])
-        keys = MO.data_keys(OWED, paper, m, "nvidia", "/d")
+        keys = MO.data_keys(OWED, paper, m, "nvidia", "/d", ["b1"])
         self.assertIn(("gbm-bench/higgs/higgs_speed.npz", "/d/higgs/higgs_speed.npz"), keys)
         self.assertIn(("gbm-bench/istella/istella_speed.npz", "/d/istella/istella_speed.npz"), keys)
         self.assertIn(("corpus/enwik8/input.txt", "/c/corpus/enwik8/input.txt"), keys)
         self.assertIn({"family": "classical", "lane": "kmeans", "dataset": "taxi"}, seen)
-        self.assertTrue(any(r["lane"] == "gmm" for r in seen), "the owed rows' races count too")
+        self.assertTrue(any(r["lane"] == "gmm" for r in seen), "the planned owed rows' races count too")
+        # the rows the plan does not time (no B set staged, no last release) stage no dataset
+        del seen[:]
+        MO.data_keys(OWED, paper, m, "nvidia", "/d")
+        self.assertEqual([r["lane"] for r in seen], ["kmeans"])
 
 
 def write_boards(res, specs, hosts=None):

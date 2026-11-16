@@ -248,15 +248,22 @@ class JobScript(unittest.TestCase):
         def run(env):
             e = {k: v for k, v in os.environ.items() if not k.startswith("PC_")}
             e.update(env)
-            return subprocess.run(["bash", "-c", "set -u\n" + block + '\necho "PV=$PRIOR_VERSIONS"'], env=e,
-                                  capture_output=True, text=True, timeout=60)
-        p = run({"PRIOR": "0.8.66"})
-        self.assertIn("PV=0.8.55,0.8.66", p.stdout, p.stderr)
-        p = run({"PRIOR": "0.8.66", "PC_PRIOR_VERSIONS": "0.8.66,0.8.55,0.8.60"})
+            return subprocess.run(["bash", "-c", "set -u\n" + block + '\necho "PV=$PRIOR_VERSIONS LAST=$LAST_PRIOR"'],
+                                  env=e, capture_output=True, text=True, timeout=60)
+        # Andrew, 2026-11-16: a measurement job times ONE prior, 0.8.55 (the paper baseline), by default
+        p = run({})
+        self.assertIn("PV=0.8.55 LAST=\n", p.stdout, p.stderr)
+        self.assertIn("PAPER_VERSION=%s\n" % PC.PAPER_VERSION, block)  # the job's baseline is the compare's
+        p = run({"PC_PRIOR_VERSIONS": "0.8.55,0.8.66"})
+        self.assertIn("PV=0.8.66,0.8.55 LAST=\n", p.stdout)        # an explicit extra prior: paper rows only
+        # an explicit last release (PC_PRIOR_VERSION other than the paper's): timed, last, the owed prior arm
+        p = run({"PC_PRIOR_VERSION": "0.8.66"})
+        self.assertIn("PV=0.8.55,0.8.66 LAST=0.8.66", p.stdout, p.stderr)
+        p = run({"PC_PRIOR_VERSION": "0.8.66", "PC_PRIOR_VERSIONS": "0.8.66,0.8.55,0.8.60"})
         self.assertIn("PV=0.8.55,0.8.60,0.8.66", p.stdout)        # the last release always last
-        p = run({"PRIOR": "0.8.66", "PC_PRIOR_VERSIONS": "0.8.55"})
+        p = run({"PC_PRIOR_VERSION": "0.8.66", "PC_PRIOR_VERSIONS": "0.8.55"})
         self.assertIn("PV=0.8.55,0.8.66", p.stdout)               # the last release is always timed
-        p = run({"PRIOR": "0.8.66", "PC_PRIOR_VERSIONS": "0.8.55,bad"})
+        p = run({"PC_PRIOR_VERSION": "0.8.66", "PC_PRIOR_VERSIONS": "0.8.55,bad"})
         self.assertEqual(p.returncode, 2)
 
     def test_job_probes_first_and_compares_on_box_boards_only(self):
@@ -271,7 +278,12 @@ class JobScript(unittest.TestCase):
         self.assertNotIn("--prior-compare", t)                     # the stored compare never makes the column
         self.assertIn('[ "$arm" = prior ] && [ "$rows" = full ] && continue', t)    # no second prior timing
         self.assertIn("all-prior", t)
-        self.assertIn("--prior-version \"$PRIOR\"", t)
+        self.assertIn('${LAST_PRIOR:+--prior-version "$LAST_PRIOR"}', t)   # the owed prior is the last release only
+        self.assertIn('for arm in candidate ${LAST_PRIOR:+prior}', t)
+        # each prior is smoked only on the races it is compared on (2026-11-16: 0.8.55 planned on 159, lacked 98)
+        self.assertIn('PRIOR_SMOKE_IDS[$arm]="$RES/plan/race-ids-smoke.txt"', t)
+        self.assertIn('"$RES/plan-owed/smoke-ids-prior.txt"', t)
+        self.assertNotIn('sids="$SMOKE_IDS"', t)
 
     def test_prior_board_args_order(self):
         t = self.text()

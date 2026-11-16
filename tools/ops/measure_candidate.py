@@ -49,9 +49,11 @@ refuses any other GPU unless --allow-hw-diff (or PC_ALLOW_HW_DIFF=1); then the s
 PC_ALLOW_HW_DIFF=1, tools/ops/paper_compare_job.sh goes on, and tools/paper_compare.py flags every row HW-DIFF.
 
 Times are compared only on the same box (AGENTS.md, Andrew, 2026-11-14): the submit line carries PC_PRIOR_VERSIONS
-(--prior-versions, default 0.8.55,0.8.66) and PC_PRIOR_VERSION (its last entry); the job installs those releases
-from PyPI and times every paper row for each on the same box in the same job, and the compare's columns are those
-on-box boards. The prior boards double the board time (accepted). Their evidence counts in the disk need too.
+(--prior-versions, default 0.8.55: a measurement job times ONE prior, the paper baseline; Andrew, 2026-11-16) and
+PC_PRIOR_VERSION (its last entry); the job installs those releases from PyPI and times every paper row for each on
+the same box in the same job, and the compare's columns are those on-box boards. An explicit extra prior is
+accepted: a last entry other than 0.8.55 is the last-release arm, which also times the owed board rows. The prior
+board doubles the board time (accepted). Its evidence counts in the disk need too.
 """
 import argparse
 import os
@@ -70,8 +72,9 @@ import paper_compare as PC  # noqa: E402
 import release_gate as RG  # noqa: E402
 
 RELEASE_ROOT = Path.home() / "mojolearn-evidence" / "release"
-#: the paper baseline and the last release: re-timed on the box beside the candidate (paper_compare_job.sh)
-DEFAULT_PRIOR_VERSIONS = "0.8.55,0.8.66"
+#: the paper baseline only (Andrew, 2026-11-16: one prior, 0.8.55; 0.8.66 is never timed): re-timed on the box
+#: beside the candidate (paper_compare_job.sh)
+DEFAULT_PRIOR_VERSIONS = PC.PAPER_VERSION
 #: tools/release.py candidate's work root: a local version (X.Y.Z.devN+<sha12>[.label]) is a candidate build there
 CANDIDATE_ROOT = Path.home() / "mojolearn-evidence" / "release-candidates"
 
@@ -137,10 +140,11 @@ def check_b_arms(names, owed_file):
         raise SystemExit(f"measure-candidate: --b-arm {', '.join(dup)} given twice")
 
 
-def dataset_keys(vendor, owed_file, recipes_file, planner_file):
-    """The R2 keys the job's races read (tools/measure_owed.py data_keys: the board's own data_needs)."""
+def dataset_keys(vendor, owed_file, recipes_file, planner_file, b_names=(), last_prior=False):
+    """The R2 keys the job's races read (tools/measure_owed.py data_keys: the board's own data_needs over the owed rows
+    the job plans for these B sets and this prior choice, the rule the job's plan uses)."""
     keys = MO.data_keys(PC.load_json(owed_file), PC.load_json(recipes_file), MO.load_planner(str(planner_file)),
-                        vendor, DATA_ROOT)
+                        vendor, DATA_ROOT, list(b_names), last_prior)
     return [k for k, _ in keys]
 
 
@@ -294,7 +298,11 @@ def cmd_stage(a):
     check_b_arms([n for n, _, _ in specs], owed_file)
     recipes = results_file(f"paper_compare/recipes-{vendor}.json", tree, src)
     planner = tree / "tools" / "bench_board.py"
-    keys = dataset_keys(vendor, owed_file, recipes, planner if planner.is_file() else ROOT / "tools" / "bench_board.py")
+    prior_versions = [v for v in a.prior_versions.split(",") if v]
+    if not prior_versions or any(not re.fullmatch(r"[0-9]+(\.[0-9]+)+[.a-z0-9]*", v) for v in prior_versions):
+        raise SystemExit(f"measure-candidate: --prior-versions wants a comma list of releases, not {a.prior_versions!r}")
+    keys = dataset_keys(vendor, owed_file, recipes, planner if planner.is_file() else ROOT / "tools" / "bench_board.py",
+                        [n for n, _, _ in specs], prior_versions[-1] != PC.PAPER_VERSION)
     ds_manifest = results_file("dataset_store/manifest.tsv", src, tree)
     print(f"datasets the job reads ({vendor}): {' '.join(keys)} (pins {ds_manifest})")
     indir = f"{IN_BASE}/{commit[:12]}"
@@ -308,10 +316,8 @@ def cmd_stage(a):
         uploads += [(w, f"{indir}/b-{name}/{vendor}/{w.name}", False) for w in bw]
         b_lines.append(f"{name} {indir}/b-{name}/{vendor} {bsha}\n")
     # OUR prior wheels re-timed on the same box in the same job (AGENTS.md "Times are compared only on the same box",
-    # 2026-11-14): the compare's columns; the job installs them from PyPI. The last one is the prior release.
-    prior_versions = [v for v in a.prior_versions.split(",") if v]
-    if not prior_versions or any(not re.fullmatch(r"[0-9]+(\.[0-9]+)+[.a-z0-9]*", v) for v in prior_versions):
-        raise SystemExit(f"measure-candidate: --prior-versions wants a comma list of releases, not {a.prior_versions!r}")
+    # 2026-11-14): the compare's columns; the job installs them from PyPI. The last one is PC_PRIOR_VERSION (a last
+    # release when it is not the paper baseline).
     env = {"PC_WHEEL_DIR": f"{indir}/{vendor}", "PC_SOURCE_COMMIT": commit,
            "PC_PRIOR_VERSIONS": ",".join(prior_versions), "PC_PRIOR_VERSION": prior_versions[-1]}
     allow_hw_diff = a.allow_hw_diff or os.environ.get("PC_ALLOW_HW_DIFF") == "1"
@@ -490,7 +496,8 @@ def main(argv=None):
                    "reads changed source)")
     s.add_argument("--prior-versions", default=DEFAULT_PRIOR_VERSIONS,
                    help="OUR prior releases the job installs from PyPI and times on the same box beside the candidate "
-                        f"(the compare's columns; the last is the prior release); default {DEFAULT_PRIOR_VERSIONS}")
+                        "(the compare's columns; a last entry other than the paper baseline is the last-release arm, "
+                        f"which also times the owed board rows); default {DEFAULT_PRIOR_VERSIONS}")
     s.add_argument("--dry-run", action="store_true", help="validate locally and print every command; copy nothing")
     a = p.parse_args(argv)
     return cmd_stage(a)

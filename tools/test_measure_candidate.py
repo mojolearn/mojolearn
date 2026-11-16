@@ -214,5 +214,19 @@ class QueueCheck(unittest.TestCase):
         self.assertIn('s.add_argument("--allow-running"', src)
 
 
+
+class Priors(unittest.TestCase):
+    def test_one_prior_by_default(self):
+        # Andrew, 2026-11-16: a measurement job times ONE prior, 0.8.55; 0.8.66 is never timed
+        self.assertEqual(MC.DEFAULT_PRIOR_VERSIONS, "0.8.55")
+        self.assertEqual(MC.DEFAULT_PRIOR_VERSIONS, MC.PC.PAPER_VERSION)
+        self.assertIn('s.add_argument("--prior-versions", default=DEFAULT_PRIOR_VERSIONS', Path(MC.__file__).read_text())
+
+    def test_stage_keys_follow_the_owed_plan(self):
+        # the staged datasets are the owed rows the job plans (B sets staged, a last release or not)
+        src = Path(MC.__file__).read_text()
+        self.assertIn("[n for n, _, _ in specs], prior_versions[-1] != PC.PAPER_VERSION)", src)
+
+
 if __name__ == "__main__":
     unittest.main()
