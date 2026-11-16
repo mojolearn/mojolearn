@@ -2749,9 +2749,10 @@ def _(ml, X, yc, yr, Xh=None):
     parts = dict(predict=_h(m.predict(X[4096:4160])), proba=_h(m.predict_proba(X[4096:4160])),
                  multi=_h(m2.predict(X[4096:4160])))
     # A majority vote can hide a corrupted training label. Check the public
-    # fit's stored label columns against an independent transpose as well;
-    # keep existing output hashes so unchanged reference evidence remains valid.
-    mismatch = _mismatch_bytes("fitted label columns", m2._y_cols,
+    # fit's stored label columns (the `y_cols` member of the public `save`
+    # file, which writes the fitted columns as they are) against an
+    # independent transpose as well.
+    mismatch = _mismatch_bytes("fitted label columns", _saved_fields(m2, "y_cols")[0],
                                "input labels transposed", np.ascontiguousarray(y2.T, dtype=np.int32))
     if mismatch is not None:
         raise NumericalMismatch(mismatch, parts)
