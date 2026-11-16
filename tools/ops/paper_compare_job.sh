@@ -8,8 +8,10 @@
 #   bash tools/ops/paper_compare_job.sh --detect-vendor
 #
 # MODES
-#   published  (default; version default 0.8.66) the mlsys paper's 0.8.55 recipes on a release from PyPI
-#              (tools/pypi_wheel_install.py through tools/bench_board.py --mojolearn-version).
+#   published  (no PC_WHEEL_DIR) the mlsys paper's 0.8.55 recipes on a release from PyPI, the version under test
+#              given as the second argument (no default: the only prior is 0.8.55 and 0.8.66 is never timed,
+#              Andrew 2026-11-16; harness-small-row) (tools/pypi_wheel_install.py through tools/bench_board.py
+#              --mojolearn-version).
 #   candidate  (PC_WHEEL_DIR set, or the word `candidate`) the exact candidate wheels in PC_WHEEL_DIR on the box
 #              (mojolearn_core-<v>-*.whl and mojolearn_<vendor>-<v>-*.whl, staged by tools/ops/measure_candidate.py
 #              stage) of source commit PC_SOURCE_COMMIT (40 hex), installed by tools/candidate_wheel_install.py
@@ -49,7 +51,7 @@
 #            checked against its wheel manifest and our GPU set once; plus the board's dry run
 #   smoke    ALL ARMS AT ONCE (not timed): the candidate's paper + owed full-row races on the candidate venv and
 #            every prior's own races on its venv (--python-env --skip-install: no per-shard install), in one set of
-#            parallel shards on the one GPU split between the arms by race count; shards = min(nproc/2, MemAvailable
+#            parallel shards on the one GPU split between the arms by race count; shards = min(alloc/2, MemAvailable
 #            / PC_SMOKE_MEM_GB (default 12), NVIDIA GPU memory / PC_SMOKE_GPU_GB (default 3), PC_SMOKE_MAX (default
 #            16), races); PC_SMOKE_SHARDS overrides. The shards are host-bound, not GPU-bound (2000-row races: worker
 #            start, import, data read; see the smoke phase). After it each shard's work/ and evidence/ and the
@@ -70,7 +72,8 @@
 #            timed board, each prior wheel smoked (with the candidate) and timed on the same races (all-prior), compare against the
 #            on-box priors with the paper recipes and every row's best time ever (--best-ever) as reference; see the
 #            board-all block below and docs/plans/PRE_0867_MEASUREMENT.md "Full-board NVIDIA screen"
-# PARALLEL PLAN (HARD RULE, 2026-11-07): what is independent runs at once across the cgroup's cores: the installs
+# PARALLEL PLAN (HARD RULE, 2026-11-07): what is independent runs at once across the cgroup's cores (alloc_cores:
+# the cgroup quota, else nproc; the smoke shard count is taken from it, never from the host's visible CPUs): the installs
 # of every arm and the dry run (install), the smokes of the candidate and of every prior (smoke, untimed, shards
 # from smoke_shards), the plans (CPU, seconds). What is TIMED is serial by nature: one board process at a time on the
 # one GPU with nothing else running (timing must not share the GPU, and the drivers themselves use every core).
@@ -119,13 +122,21 @@ V=${1:-}
 ARG2=${2:-}
 [ -z "$V" ] || case "$V" in nvidia|amd) ;; *) usage ;; esac
 MODE=published
-VER=0.8.66
+VER=
 if [ "$ARG2" = candidate ] || { [ -z "$ARG2" ] && [ -n "${PC_WHEEL_DIR:-}" ]; }; then
     MODE=candidate
+    VER=candidate
 elif [ -n "$ARG2" ]; then
     VER=$ARG2
+else
+    # no default version (Andrew, 2026-11-16: the only prior is 0.8.55; 0.8.66 is never timed): published mode
+    # measures the release named on the command line
+    echo "paper-compare-job: published mode needs the version under test (<vendor> <version>), or PC_WHEEL_DIR" \
+         "for a candidate" >&2
+    exit 2
 fi
-[[ "$VER" =~ ^[0-9]+(\.[0-9]+)+([.a-z0-9]*)$ ]] || { echo "paper-compare-job: bad version $VER" >&2; exit 2; }
+[ "$MODE" = candidate ] || [[ "$VER" =~ ^[0-9]+(\.[0-9]+)+([.a-z0-9]*)$ ]] || {
+    echo "paper-compare-job: bad version $VER" >&2; exit 2; }
 # >>> prior-versions (tools/test_paper_compare_same_box.py runs this block)
 # the paper's version (tools/paper_compare.py PAPER_VERSION; tools/test_paper_compare_same_box.py checks they agree)
 PAPER_VERSION=0.8.55
@@ -456,13 +467,13 @@ run_as() {   # arm: the board args that run on that arm's installed venv (no ins
     echo --python-env "${ARM_PY[$1]}" --skip-install --wheel-manifest "${ARM_MAN[$1]}" --mojolearn-version "$(arm_version "$1")"
 }
 arm_version() { set -- ${ARM_ARGS[$1]}; echo "$2"; }   # ARM_ARGS starts with --mojolearn-version <v>
-# the parallel smoke shard count for NRACE races (see the smoke phase for why it is host-bound): min(nproc/2,
+# the parallel smoke shard count for NRACE races (see the smoke phase for why it is host-bound): min(alloc_cores/2,
 # MemAvailable / PC_SMOKE_MEM_GB (12), NVIDIA GPU GB / PC_SMOKE_GPU_GB (3), PC_SMOKE_MAX (16), races);
 # PC_SMOKE_SHARDS overrides. Sets S, MEMG and GPUG.
 smoke_shards() {
     local nrace=$1 bymem
     MEMG=$(awk '/MemAvailable/ {print int($2 / 1048576)}' /proc/meminfo 2> /dev/null || echo 16)
-    S=${PC_SMOKE_SHARDS:-$(( $(nproc) / 2 ))}
+    S=${PC_SMOKE_SHARDS:-$(( $(alloc_cores) / 2 ))}     # the cgroup allocation, not the host's visible CPUs
     bymem=$(( MEMG / ${PC_SMOKE_MEM_GB:-12} ))
     GPUG=0
     if [ "$V" = nvidia ]; then
@@ -519,7 +530,7 @@ smoke_together() {
     for i in "${!arms[@]}"; do
         arm=${arms[$i]}
         n=$(( S * counts[i] / total )); [ "$n" -lt 1 ] && n=1; [ "$n" -gt "${counts[$i]}" ] && n=${counts[$i]}
-        say "smoke $arm: ${counts[$i]} races in $n of $S parallel shards (all arms at once; nproc $(nproc), MemAvailable ${MEMG} GiB, GPU ${GPUG:-?} GiB)"
+        say "smoke $arm: ${counts[$i]} races in $n of $S parallel shards (all arms at once; allocation $(alloc_cores) of nproc $(nproc), MemAvailable ${MEMG} GiB, GPU ${GPUG:-?} GiB)"
         if [ "$arm" = candidate ]; then
             smoke_launch candidate "$cids" "$cbase" "$n" "" "$@"
         else
