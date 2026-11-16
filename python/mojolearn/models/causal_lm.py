@@ -186,7 +186,7 @@ class CausalLM:
 
     def generate(self, ids, max_new_tokens, *, greedy=True, seed=None,
                  temperature=1.0, top_k=0, top_p=1.0, eos_token_id=None,
-                 pad_token_id=None):
+                 pad_token_id=None, resident=False):
         """Return the prompt and up to `max_new_tokens` continuation ids.
 
         Greedy ties choose the lowest id. Sampling (`greedy=False`) requires
@@ -195,10 +195,20 @@ class CausalLM:
         batch rows are padded; decoding ends when every row finishes or reaches
         the token limit. With no EOS, the output has exactly `(B, L + max_new_tokens)`
         ids. A missing pad id uses the first EOS id, or zero.
+
+        `resident=True` keeps every layer's weights and decode session on the
+        GPU between calls and decodes the whole continuation in one device
+        pass. It returns the same ids as the default. It supports greedy
+        decoding without `eos_token_id` on a GPU model and raises `ValueError`
+        otherwise.
+
+        Example::
+
+            ids = model.generate(prompt, 32, resident=True)
         """
         return _NATIVE.causal_lm_generate(
             self, ids, max_new_tokens,
-            (greedy, seed, temperature, top_k, top_p, eos_token_id, pad_token_id))
+            (greedy, seed, temperature, top_k, top_p, eos_token_id, pad_token_id), resident)
 
     def stream(self, ids, max_new_tokens, *, greedy=True, seed=None,
                temperature=1.0, top_k=0, top_p=1.0, eos_token_id=None,
@@ -239,10 +249,6 @@ class CausalLM:
     def resume_generation(self, checkpoint, *, tokenizer=None):
         """Resume a generation checkpoint on the same model weights and settings."""
         return _NATIVE.causal_lm_resume(self, checkpoint, tokenizer)
-
-    def _generate_resident(self, ids, n_new, total, last_logits=None):
-        # Retained diagnostic door; arithmetic and lifecycle are native.
-        return _NATIVE.causal_lm_resident(self, ids, n_new, last_logits, None)
 
     def __repr__(self):
         return _NATIVE.causal_lm_repr(self)
