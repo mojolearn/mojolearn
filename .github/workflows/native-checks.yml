@@ -147,6 +147,15 @@ jobs:
           pixi run mojo build -j "$(nproc)" --emit llvm --no-optimization -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU \
             $target -I . -I bindings "out/$STEM.mojo" -o "out/$STEM.ll" > "out/$STEM.log" 2>&1
           rc=$?
+          # Parse, type check and elaboration are done when lowering starts. Without optimisation the lowering refuses
+          # llvm.masked.gather with a non-constant alignment (the optimised release build folds it): a group whose only
+          # errors are those is elaborated, so it passes (2026-11-16: _mojolearn_native_host and _native_x_host, both
+          # built green by the release leg at 26709df246).
+          if [ $rc -ne 0 ] && grep -q 'error:' "out/$STEM.log" && ! grep -E 'error:' "out/$STEM.log" \
+              | grep -q -v -E "failed to legalize operation 'pop.call_llvm_intrinsic'|llvm.masked.gather alignment must be a constant|could not lower funcs to LLVM|LowerToLLVMPipeline"; then
+            echo "host-parse $STEM: elaborated; unoptimised lowering refused masked.gather only (not a source error)"
+            rc=0
+          fi
           rm -f "out/$STEM.ll"
           echo "host-parse $STEM rc=$rc seconds=$(( $(date +%s) - start )) members=$MEMBERS" | tee -a "$GITHUB_STEP_SUMMARY"
           grep -m 20 -E 'error:' "out/$STEM.log"
