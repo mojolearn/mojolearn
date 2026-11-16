@@ -1252,6 +1252,23 @@ def _svc_base_helpers():
         return {"base_native_key": type(error).__name__ + ": " + str(error)}
 
 
+def _svc_warm_helpers():
+    # glue: once at import, fill `_buffer._NATIVE` with the five base helpers the
+    # native SVM owner reads (bindings/svc_common_door.mojo `svc_base` callers:
+    # gather_i64, threshold_labels_i64, argmax_rows_f32/_f64, class_ratio_f64).
+    # Census d95f805cce: the first SVC.fit / predict of a process resolved them
+    # inside the call (host_helper_scope, binding, load_host_module: 12 frames).
+    # A helper that does not resolve is left to the first call that needs it,
+    # which resolves again and raises the resolver's own error.
+    for name in ("gather_i64", "threshold_labels_i64", "argmax_rows_f32", "argmax_rows_f64",
+                 "class_ratio_f64"):  # glue: fixed helper names, once at import
+        try:
+            _native(name)
+        except Exception:  # noqa: BLE001 - raised by the first call that needs it
+            pass
+
+
+_svc_warm_helpers()
 _native_family_bridge.tables(family_svc_native=_native, family_svc_native_cache=_NATIVE_CACHE,
                              family_svc_base_helpers=_svc_base_helpers(),
                              family_svc_kernels=dict(_SVC_KERNELS),
