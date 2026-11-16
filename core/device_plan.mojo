@@ -575,7 +575,14 @@ def device_plan_current(name: String, default: String = "") raises -> DevicePlan
     `device_plan_root`. Binding entries call this; code below them takes the
     value. `default` is what `device_plan_setting(name, default)` falls back
     to without a plan or variable."""
-    var setting = device_plan_setting(name, default)
+    # An empty name consults no family's count setting (neural_device_plan
+    # reads the plan for its root only). device_plan_setting refuses a name
+    # that is not a family setting, so it is not called for one: every GPU
+    # entry through process_ctx raised "device plan:  is not a ... setting"
+    # (132 of 199 box smoke races of 26709df246).
+    var setting = default
+    if name != "":
+        setting = device_plan_setting(name, default)
     var count = _setting_count(setting)
     var size = device_plan_size()
     var devices = List[Int]()
