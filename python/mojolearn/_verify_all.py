@@ -1094,7 +1094,23 @@ def _cmd_self_test(args, ml):
     from ._verify_public import run as public_checks
     result['public_api'] = public_checks(self_test=True,scope='neural' if getattr(args,'neural_training',False) else 'all')
     # UNTESTED: this vendor is not one the shipped endpoint reference validates (CPU-only).
-    result['passed'] = result['passed'] and result['public_api']['status'] in ('MATCH', 'UNTESTED')
+    public = result['public_api']
+    if public['status'] not in ('MATCH', 'UNTESTED'):
+        before = len(result['problems'])
+        # Every reason the public checks did not pass is printed with the
+        # verdict; a NOT TRUSTWORTHY with no problem line names nothing to fix.
+        for part in ('tape', 'endpoints'):
+            row = public.get(part) or {}
+            if row.get('status') in ('MATCH', 'UNTESTED', None):
+                continue
+            reasons = list(row.get('errors') or [])
+            reasons += [f"{e}: {msg}" for e, msg in sorted((row.get('failures') or {}).items())]
+            reasons += [f"pending: {e}" for e in row.get('pending') or []]
+            result['problems'].append(f"public {part} checks read {row.get('status')}: "
+                                      + ('; '.join(map(str, reasons)) or 'no reason given'))
+        if len(result['problems']) == before:
+            result['problems'].append(f"public API checks read {public['status']}")
+    result['passed'] = result['passed'] and public['status'] in ('MATCH', 'UNTESTED')
     if json_out:
         _emit(json.dumps(dict(format="mojolearn.verify-self-test.v1", **result), indent=1, sort_keys=True))
     else:

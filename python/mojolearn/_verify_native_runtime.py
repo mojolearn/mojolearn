@@ -39,7 +39,17 @@ def loaded_binding(name, mode="identical", report=None):
     if report is None:
         from . import runtime_report
         report = runtime_report()
-    for key, tier in ((f"mojolearn._sets.{mode}.{name}", mode), (f"mojolearn.{name}", report["numeric_mode"])):
+    keys = [(f"mojolearn._sets.{mode}.{name}", mode), (f"mojolearn.{name}", report["numeric_mode"])]
+    if report.get("cpu_only"):
+        # A CPU-only install serves `mojolearn.<name>` through a facade the
+        # report skips (not an exact module); the binding that ran is its
+        # host extension, `mojolearn._host.<basename>`, which carries its own
+        # vendor and mode read-backs (host bindings build identical only).
+        from . import host_surface
+        basename = host_surface.routed_modules().get(name) or host_surface.inference_routes().get(name)
+        if basename:
+            keys.append((f"mojolearn._host.{basename}", "identical"))
+    for key, tier in keys:
         row = report["bindings"].get(key)
         if row is None or not row["loaded"] or row["path"] is None:
             continue
