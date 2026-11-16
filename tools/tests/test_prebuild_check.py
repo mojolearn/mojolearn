@@ -41,6 +41,13 @@ class SourceAuditTest(unittest.TestCase):
             write(stage / "mojolearn/_x.py", "def f():\n    return 1\n")
             self.assertEqual(pc.math_errors(ROOT, stage), [])
 
+    def test_lastuse_audit_runs_the_commits_tool_and_skips_without_it(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self.assertEqual(pc.lastuse_audit(Path(tmp), "HEAD"), 0)   # a commit that predates the audit
+            tree = Path(tmp) / "tree"
+            write(tree / "tools/mojo_lastuse_audit.py", "import sys\nprint('ran', sys.argv[1:])\nsys.exit(3)\n")
+            self.assertEqual(pc.lastuse_audit(tree, "abc123"), 3)       # its exit code fails the audits part
+
     def test_stage_entries_lays_out_wheel_members(self):
         with tempfile.TemporaryDirectory() as tmp:
             tmp = Path(tmp)
