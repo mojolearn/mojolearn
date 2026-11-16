@@ -172,11 +172,6 @@ def test_registered_native_inits_mirror_their_constructor_bodies():
     # set_params rebuild calls the native constructor with these argument
     # tuples instead of the Python __init__ body, so each must be that body's
     # argument tuple, in order (None for a literal None argument).
-    def literal(node, names):
-        if isinstance(node, ast.Name):
-            return names[node.id]
-        return ast.literal_eval(node)
-
     seen = 0
     for path in ('python/mojolearn/ensemble.py', 'python/mojolearn/_expansion_trees.py'):
         tree = ast.parse((ROOT / path).read_text())
