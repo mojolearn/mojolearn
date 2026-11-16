@@ -647,13 +647,15 @@ Ends when Andrew says. It is not the product direction: AMD and Apple remain in 
   two-vendor average, the AMD and Apple timing columns and the vendor-split flag return when Andrew reopens them.
   Bits across vendors are unaffected: the release's one verification still covers every vendor.
 - Order: fix everything known (every regression row, every audit finding, every leftover a lane reported) -> one
-  GitHub build -> the PAPER board (the 108 recipes of the 0.8.55 comparison) against 0.8.55 and the last release ->
+  GitHub build -> the PAPER board (the 108 recipes of the 0.8.55 comparison) against 0.8.55 alone ->
   read every flag -> for each regressed row look back through 0.8.55, the earlier releases and every stored
   measurement run (best-ever table, boards in `bench/results/` and R2) at what the BEST run of that row was doing,
   and restore that behaviour or beat it -> fix wave -> one build -> measure again. Repeat until every paper row is
   at least as fast as 0.8.55 with quality equal.
 - Only then the FULL board, NVIDIA only, against best-ever; then the same fix loop on its regressions. The full board
-  times one prior on the same box, 0.8.55 (Andrew, 2026-11-15); the last release is timed only on the paper rows.
+  times one prior on the same box, 0.8.55 (Andrew, 2026-11-15).
+- One prior only, on every board (Andrew, 2026-11-16): a measurement job times the candidate and 0.8.55 on the same box
+  and nothing else. 0.8.66 is not timed on the paper rows or anywhere; this overrides "and the last release" in part 3.
 - ONE integration branch for the whole campaign (Andrew, 2026-11-14: "everything, everything, everything"): every fix
   lane, every audit fix and every leftover is merged into the same integration branch (`preinteg/wave2-20261113` until
   it lands), which is the only branch compiled. main receives that branch whole, never a piece of it; no lane and no
