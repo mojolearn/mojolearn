@@ -165,3 +165,34 @@ def test_reset_marker_preserves_legacy_user_fields_but_new_fit_wins():
     end = source.index('\ndef _class_fields', start)
     body = source[start:end]
     assert body.index('"_mojolearn_fitted"') < body.index('"_mojolearn_params_reset"') < body.index('name.endswith("_")')
+
+
+def test_registered_native_inits_mirror_their_constructor_bodies():
+    # _mode._connect_native_init registrations (census d95f805cce): the generic
+    # set_params rebuild calls the native constructor with these argument
+    # tuples instead of the Python __init__ body, so each must be that body's
+    # argument tuple, in order (None for a literal None argument).
+    def literal(node, names):
+        if isinstance(node, ast.Name):
+            return names[node.id]
+        return ast.literal_eval(node)
+
+    seen = 0
+    for path in ('python/mojolearn/ensemble.py', 'python/mojolearn/_expansion_trees.py'):
+        tree = ast.parse((ROOT / path).read_text())
+        names = {node.targets[0].id: node.value for node in tree.body
+                 if isinstance(node, ast.Assign) and isinstance(node.targets[0], ast.Name)}
+        classes = {node.name: node for node in tree.body if isinstance(node, ast.ClassDef)}
+        for node in tree.body:
+            call = node.value if isinstance(node, ast.Expr) else None
+            if not (isinstance(call, ast.Call) and getattr(call.func, 'id', '') == '_connect_native_init'):
+                continue
+            cls, _, operation, registered, _ = call.args
+            registered = ast.literal_eval(names[registered.id] if isinstance(registered, ast.Name) else registered)
+            init = next(item for item in classes[cls.id].body
+                        if isinstance(item, ast.FunctionDef) and item.name == '__init__')
+            body = next(n for n in ast.walk(init) if isinstance(n, ast.Call) and getattr(n.func, 'id', '') == '_TREES')
+            assert ast.unparse(body.args[1]) == ast.unparse(operation), cls.id
+            assert tuple(None if isinstance(e, ast.Constant) else e.id for e in body.args[2].elts) == registered, cls.id
+            seen += 1
+    assert seen == 7
