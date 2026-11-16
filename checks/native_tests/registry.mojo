@@ -199,6 +199,7 @@ from checks.native_tests.umap_ops import register as register_umap_ops
 from checks.native_tests.x_linear_ops import register as register_x_linear_ops
 # lane tests-to-mojo-trees (2026-11-16)
 from checks.native_tests.gbdt_feature_freq_experimental import register as register_gbdt_feature_freq_experimental
+from checks.native_tests.gbdt_host_archive_text import register as register_gbdt_host_archive_text
 
 
 def all_checks() -> List[Check]:
@@ -392,4 +393,5 @@ def all_checks() -> List[Check]:
     checks.append(register_x_linear_ops())
     # lane tests-to-mojo-trees (2026-11-16)
     checks.append(register_gbdt_feature_freq_experimental())
+    checks.append(register_gbdt_host_archive_text())
     return checks^

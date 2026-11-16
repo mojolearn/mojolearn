@@ -7,9 +7,9 @@ categorical models, loaded by `mojolearn.host_model` and predicted by the
 shipped forest host binding.
 
 What the boundary checks hold: HostGBDT refuses an archive saved by any
-other estimator name, a subclass archive whose loss that class cannot save,
-and every CTR or tensor CTR record whose tables are missing, by name; the
-forest gate's coded fixture transform is the rule it documents.
+other estimator name and a subclass archive whose loss that class cannot
+save, by name (a CTR or tensor CTR record whose tables are missing is the
+native check `gbdt_host_archive_text`); the forest gate's coded fixture transform is the rule it documents.
 
 The runtime check (skipped, and SAID to be skipped, unless the gbdt host
 binding and the forest host binary are both built and the package took the
@@ -31,7 +31,7 @@ import mojolearn
 from mojolearn import _backend, _serialize
 from mojolearn._array import Array
 from mojolearn._buffer import frombytes
-from mojolearn._gbdt_host import GBDT_FORMAT, HostGBDT, parse_model_text
+from mojolearn._gbdt_host import GBDT_FORMAT, HostGBDT
 
 ROOT = Path(__file__).resolve().parents[3]
 
@@ -67,17 +67,6 @@ def test_archive_names_and_losses_refuse_before_any_binding_loads():
         path2 = os.path.join(d, "m2.npz")
         _archive(path2, "OrderedRMSE", "Logloss")
         _raises(lambda: HostGBDT.from_file(path2), "saves RMSE only")
-
-
-def test_ctr_and_tensor_ctr_records_without_tables_refuse():
-    # lane/inference-gbdt-ctr-tables (2026-09-15) reads the CTR records;
-    # a record whose tables are missing still refuses, as predict_floats does
-    for record, needle in (("ctr_columns 1", "1 CTR columns and 0 CTR tables"),
-                           ("tensor_ctr_registry 1 1", "declares 1 tables and carries 0"),
-                           ("feature_freq_tensor 2 hash_hi 0", "before its registry")):
-        text = TEXT.replace("losses 0\n", "losses 0\n" + record + "\n")
-        _raises(lambda: parse_model_text(text), needle)
-    assert parse_model_text(TEXT)["n_features"] == 1
 
 
 def test_gate_coded_transform_is_the_documented_rule():
