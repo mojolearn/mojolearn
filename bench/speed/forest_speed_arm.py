@@ -968,10 +968,15 @@ def run_inference(lane, arms, models, data, n_rounds, large_rows, deadline):
                     # SMALL ROWS: the rest of the scored run's calls; the hash, the accuracy and the receipt
                     # are the first call's output (same bits every call)
                     calls = [ms]
-                    for _ in range(1, small.calls_for(warm_ms.get(name), name.startswith("ours"))):
-                        t0 = time.perf_counter()
-                        call(x)
-                        calls.append((time.perf_counter() - t0) * 1000.0)
+                    n_calls = small.calls_for(warm_ms.get(name), name.startswith("ours"), "infer/" + batch)
+                    small.range_open(n_calls, "infer/" + batch)   # attribution profile runs only (no-op otherwise)
+                    try:
+                        for _ in range(1, n_calls):
+                            t0 = time.perf_counter()
+                            call(x)
+                            calls.append((time.perf_counter() - t0) * 1000.0)
+                    finally:
+                        small.range_close()
                     calls_rec = small.spread(calls)
                     ms = calls_rec["ms"]
                 except Exception as exc:           # noqa: BLE001

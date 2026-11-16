@@ -288,10 +288,14 @@ class JobScript(unittest.TestCase):
     def test_job_probes_first_and_compares_on_box_boards_only(self):
         t = self.text()
         self.assertEqual(subprocess.run(["bash", "-n", self.JOB]).returncode, 0)
-        self.assertIn("tools/ops/host_probe.py --vendor", t)
-        self.assertIn('export MOJOLEARN_HOST_PROBE="$J/host-probe.json"', t)
-        self.assertLess(t.index("phase probe"), t.index("phase all-plan"))
-        self.assertLess(t.index("phase probe"), t.index("phase plan"))
+        # the probe phase is tools/ops/box_job_lib.sh host_probe_phase (shared with tools/ops/attribution_job.sh)
+        with open(os.path.join(HERE, "ops", "box_job_lib.sh")) as fh:
+            lib = fh.read()
+        self.assertIn("tools/ops/host_probe.py --vendor", lib)
+        self.assertIn('export MOJOLEARN_HOST_PROBE="$J/host-probe.json"', lib)
+        self.assertIn("phase probe", lib[lib.index("host_probe_phase() {"):])
+        self.assertLess(t.index("\nhost_probe_phase\n"), t.index("phase all-plan"))
+        self.assertLess(t.index("\nhost_probe_phase\n"), t.index("phase plan"))
         self.assertIn("prior_board_args", t)
         self.assertIn("--reference-compare", t)
         self.assertNotIn("--prior-compare", t)                     # the stored compare never makes the column

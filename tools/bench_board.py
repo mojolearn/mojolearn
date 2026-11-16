@@ -2425,6 +2425,10 @@ def parse_tree_log(path):
             "libraries": libs, "state_receipts": states, "scored_calls": calls}
 
 
+#: attribution runs only: the own arms (and their order) a tree race times; see tree_cmd
+OWN_ARMS_ENV = "MOJOLEARN_BENCH_OWN_ARMS"
+
+
 def tree_cmd(ctx, race):
     ours = race["our_arms"]
     primary = ours.get("ours", "identical")
@@ -2441,6 +2445,15 @@ def tree_cmd(ctx, race):
     # times every paired own arm, e.g. gbdt-categorical's `ours` whose catboost-cpu is not on a GPU board,
     # and its unplanned cells refuse the race). `ours-ab` stays --ours-ab's.
     own = [a for a in ours if a != "ours-ab"]
+    # ATTRIBUTION RUNS ONLY (tools/ops/attribution_job.sh, 2026-11-16): MOJOLEARN_BENCH_OWN_ARMS (comma list) times
+    # exactly those planned own arms in that order (one arm alone, or the arm-order test); a board never sets it
+    forced = [a for a in (os.environ.get(OWN_ARMS_ENV) or "").split(",") if a.strip()]
+    if forced and own:
+        unknown = [a for a in forced if a not in own]
+        if unknown:
+            raise ValueError("%s names arms the race does not plan: %s (planned: %s)"
+                             % (OWN_ARMS_ENV, ",".join(unknown), ",".join(own)))
+        own = forced
     if own and not ctx.get("opponents_only"):
         cmd += ["--own-arms", ",".join(own)]
     if "ours-ab" in ours:

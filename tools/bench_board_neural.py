@@ -5566,9 +5566,10 @@ def worker(args):
                 # sub-clocks). One call: nothing below runs and the order is as before.
                 n_calls = 1
                 if r > 0 and small_ok:
-                    n_calls = small.calls_for(ms, True)
+                    n_calls = small.calls_for(ms, True, "fit")
                 digest = runner.digest() if n_calls > 1 else None
                 calls = [ms]
+                small.range_open(n_calls, "fit")       # attribution profile runs only (no-op otherwise)
                 for _ in range(1, n_calls):
                     t1 = time.perf_counter()
                     runner.call()
@@ -5577,6 +5578,7 @@ def worker(args):
                     if extra and extra.get("clock_ms") is not None:
                         call_ms = float((runner.round_extra() or {}).get("clock_ms", call_ms))
                     calls.append(call_ms)
+                small.range_close()
                 calls_rec = small.spread(calls) if r > 0 else None
                 if calls_rec is not None:
                     ms = calls_rec["ms"]

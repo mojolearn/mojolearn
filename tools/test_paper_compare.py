@@ -398,6 +398,7 @@ class CommittedRecipes(unittest.TestCase):
 
 class JobScript(unittest.TestCase):
     JOB = os.path.join(HERE, "ops", "paper_compare_job.sh")
+    LIB = os.path.join(HERE, "ops", "box_job_lib.sh")
 
     def run_job(self, *args, env=None):
         e = {k: v for k, v in os.environ.items() if k not in ("MOJOLEARN_BOX_PERSIST", "MOJOLEARN_ALLOW_UNPERSISTED",
@@ -432,9 +433,12 @@ class JobScript(unittest.TestCase):
         self.assertIn("prune_persist_staging", text)
 
     def functions(self, *names):
-        """The named shell functions of the job script, as text to source (each runs on its own, no job)."""
-        with open(self.JOB) as fh:
-            text = fh.read()
+        """The named shell functions of the job script and its shared library (tools/ops/box_job_lib.sh), as text to
+        source (each runs on its own, no job)."""
+        text = ""
+        for path in (self.JOB, self.LIB):
+            with open(path) as fh:
+                text += "\n" + fh.read()
         out = []
         for name in names:
             start = text.index("\n%s() {" % name) + 1
@@ -505,7 +509,7 @@ class JobScript(unittest.TestCase):
         self.assertIn("busy=16.0 total=32", line("1000 200 64 procstat", "2000 450 64 procstat"))
         self.assertIn("busy=32.0 total=32", line("1000 200 128 procstat", "2000 700 128 procstat"))
         self.assertIn("busy=NA", line("1000 900 128 procstat", "2000 100 128 procstat"))
-        with open(self.JOB) as fh:
+        with open(self.LIB) as fh:
             text = fh.read()
         self.assertIn("cpu.stat", text)
         self.assertIn("busy_line", text[text.index("cores_sampler() {"):])

@@ -2728,13 +2728,15 @@ def worker(args):
                 # SMALL ROWS: the rest of the scored run's calls, after the first call's outputs were taken
                 # (the hash and the receipt are the first call's; same bits every call). Opponents and rows at
                 # or above 10 ms make one call.
-                n_calls = small.calls_for(ms, ours_arm) if r > 0 else 1
+                n_calls = small.calls_for(ms, ours_arm, "fit") if r > 0 else 1
                 calls = [ms]
+                small.range_open(n_calls, "fit")       # attribution profile runs only (no-op otherwise)
                 for _ in range(1, n_calls):
                     t0 = time.perf_counter()
                     runner.call()
                     runner.sync()
                     calls.append((time.perf_counter() - t0) * 1000.0)
+                small.range_close()
                 calls_rec = small.spread(calls) if r > 0 else None
                 if calls_rec is not None:
                     ms = calls_rec["ms"]
@@ -2775,16 +2777,18 @@ def worker(args):
                 inf.call()
                 inf.sync()
                 ms = (time.perf_counter() - t0) * 1000.0
-                n_calls = small.calls_for(ms, ours_arm) if r > 0 else 1
+                n_calls = small.calls_for(ms, ours_arm, "infer") if r > 0 else 1
                 # SMALL ROWS: the hash is the first call's output, taken before the rest of the calls (one call:
                 # after the memory probe, as before)
                 digest = _digest(inf.outputs()) if n_calls > 1 else None
                 calls = [ms]
+                small.range_open(n_calls, "infer")     # attribution profile runs only (no-op otherwise)
                 for _ in range(1, n_calls):
                     t0 = time.perf_counter()
                     inf.call()
                     inf.sync()
                     calls.append((time.perf_counter() - t0) * 1000.0)
+                small.range_close()
                 infer_calls_rec = small.spread(calls) if r > 0 else None
                 if infer_calls_rec is not None:
                     ms = infer_calls_rec["ms"]
