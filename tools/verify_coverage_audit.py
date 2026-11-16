@@ -1388,9 +1388,9 @@ NEW_LANE_PURPOSE = {
                          "`Tokenizer(...)` and `Tokenizer.from_pretrained` (file and directory): "
                          "`causal_lm_generate_text`, `causal_lm_text_stream`, `causal_lm_resident`, "
                          "`vocab_pretrained` -> `vocab_json_public` -> `vocab_spelled_public`",
-    "hf-model-surface": "HFConfig, ModelPlan, TensorInfo, SafetensorsFile._map, Checkpoint._file and "
-                        "CausalLM._read_weights: `model_config_*`, `model_plan_init`, `tensor_info_*`, "
-                        "`safetensors_map`, `checkpoint_file`, `causal_model_read_weights`",
+    "hf-model-surface": "HFConfig, ModelPlan, TensorInfo, SafetensorsFile.read per tensor and per shard, "
+                        "CausalLM.load(...).parameters() and CausalLM(plan, weights): `model_config_*`, "
+                        "`model_plan_init`, `tensor_info_*`, `safetensors_map`, `causal_model_read_weights`",
     "training-device-cross-entropy": "training.cross_entropy, linear_forward and linear_backward on device arrays "
                                      "(GPU columns): `ce_loss_dev`, `linear_forward_dev`, `linear_backward_dev`",
     "sequence-layernorm-backward": "the functional layer_norm_backward",
