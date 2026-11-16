@@ -20,6 +20,12 @@ Fixtures are verify's own, never new ones written here:
   lane:<lane>    one process per CPU lane of verify's identity harness (mojolearn._identity_break, the lanes the
                  smoke's `lanes` step runs): the lane's fit on the base fixture, then the harness's own
                  _probe_fit (infer, model bytes, reload) and _probe_batch.
+After its fixtures, every unit PROBES the members they did not reach (py-census-14: 323 members UNCOVERED in
+d95f805cce): on the last instance of each public class the fixtures used, it reads each public property and calls
+each public method that takes no argument (never a fit, train, step, load, save, export or run name; close, free
+and discard last), then releases those instances under the profiler so their `__del__` is measured. Each probe is
+listed as a fixture (`probe <member>`). Packaging helpers (PACKAGING_FAMILIES: the install-metadata and surface
+report modules no public operation calls) are PACKAGING, not UNCOVERED.
 A public call is the outermost entry into product code (python/mojolearn outside tests/, verify and the harness)
 made while no other public call is active: a Python frame of a product file, or a C call of a member installed as
 a native function. A member no fixture reaches is listed UNCOVERED, never skipped.
@@ -69,6 +75,16 @@ MEMBER_DUNDERS = ("__init__", "__call__", "__getstate__", "__setstate__", "__del
 _FIXTURE_PREFIXES = ("_verify", "_verification", "_identity")
 _FIXTURE_DIRS = ("tests", "verify_reference")
 TOP_FUNCTIONS = 30
+#: families of package helpers that are installation and surface metadata, never called by a public operation:
+#: `gpu_plugins` (which wheel and plugin to install, its markers and commands) and `host_surface` (the generated
+#: inference-surface report). Listed as PACKAGING beside the census, never UNCOVERED (py-census-14).
+PACKAGING_FAMILIES = frozenset(("gpu_plugins", "host_surface"))
+#: zero-argument public methods a probe never calls: they fit, train, step, load, save, export or run work whose
+#: inputs only a fixture can supply.
+_PROBE_SKIP = ("fit", "partial_fit", "train", "step", "load", "save", "export", "install", "run", "main", "backward",
+               "forward", "generate", "prefetch")
+#: probed last: they end the instance's session.
+_PROBE_LAST = ("close", "free", "discard")
 
 
 # --------------------------------------------------------------------------------------------------------------
@@ -285,6 +301,8 @@ class Census:
         self.site = os.path.dirname(self.pkg_real)
         self.ext = tuple(importlib.machinery.EXTENSION_SUFFIXES) + (".so", ".pyd", ".dylib")
         self.classes = {(c["module"], c["qualname"]): c for c in inv["classes"]}
+        self.class_ids = {c["id"]: c for c in inv["classes"]}
+        self.instances = {}            # class id -> the last instance a member call ran on (probe_members)
         self.functions = {(f["module"], f["qualname"]): f["id"] for f in inv["functions"]}
         self.members = {}
         self.unattributed = collections.Counter()
@@ -387,6 +405,8 @@ class Census:
                 if pc is not None:
                     mids = self.codes_for(*pc).get(code)
                     if mids:
+                        if not isinstance(obj, type):
+                            self.instances[pc[0]["id"]] = obj
                         return mids
         fid = self.functions.get((frame.f_globals.get("__name__"), getattr(code, "co_qualname", code.co_name)))
         return [fid] if fid else None
@@ -400,6 +420,8 @@ class Census:
                 self.codes_for(*pc)
                 mids = self.native_names.get(pc[0]["id"], {}).get(name)
                 if mids:
+                    if not isinstance(owner, type):
+                        self.instances[pc[0]["id"]] = owner
                     return list(mids)
         cands = self.native_ids.get(id(arg))
         if cands:
@@ -642,6 +664,43 @@ class _Recorder:
         return self.rows[endpoint]
 
 
+def _probe_members(census, record, done):
+    """The members this unit's fixtures did not reach, on the last instance of each public class they used: each
+    public property read, each public method that takes no argument called (_PROBE_SKIP never; _PROBE_LAST last);
+    then the instances released under the profiler, so their finalizers are measured."""
+    import inspect
+    instances, census.instances = census.instances, {}
+    for cid in sorted(instances):
+        cls = census.class_ids.get(cid)
+        if cls is None:
+            continue
+        target = instances[cid]
+        names = sorted((a for a, k in cls["attrs"].items() if not a.startswith("_") and k in ("property", "method")
+                        and f"{cid}.{a}" not in census.members and not a.startswith(_PROBE_SKIP)),
+                       key=lambda a: (a in _PROBE_LAST, a))
+        for attr in names:
+            if cls["attrs"][attr] == "property":
+                def operation(target=target, attr=attr):
+                    getattr(target, attr)
+            else:
+                try:
+                    operation = getattr(target, attr)
+                    required = [p for p in inspect.signature(operation).parameters.values()
+                                if p.default is p.empty and p.kind not in (p.VAR_POSITIONAL, p.VAR_KEYWORD)]
+                except Exception:   # not a plain callable on this instance: nothing to probe
+                    continue
+                if required:
+                    continue
+            ok, error = census.run(operation)
+            operation = None   # holds the instance: dropped so the release below runs its finalizer
+            record(f"probe {cid}.{attr}", ok, error)
+        target = None
+    done()
+    ok, error = census.run(instances.clear)
+    record("release instances", ok, error)
+    done()
+
+
 def _api_unit(census, unit, record, done, inv_classes):
     from mojolearn import _verify_api_runner as runner, _verify_api_estimators as est
     from mojolearn import _verify_api_metadata as metadata
@@ -675,7 +734,7 @@ def _api_unit(census, unit, record, done, inv_classes):
     names = {"estimators": "estimator", "optimizers": "optimizer", "neural": "neural", "training": "training",
              "programs": "program", "models": "model", "misc": "misc"}
     for (family, public), (module, methods) in sorted(groups.items(), key=lambda kv: kv[0]):
-        try:
+        def checks(family=family, public=public, module=module, methods=methods):
             if family == "metadata":
                 module.parameter_checks(rec, public)
             elif family == "utilities":
@@ -683,10 +742,13 @@ def _api_unit(census, unit, record, done, inv_classes):
                                             and r["endpoint"] in routes and routes[r["endpoint"]][0] == family])
             else:
                 getattr(module, names[family] + "_checks")(rec, public, methods)
-            record(f"{family}:{public}", True, None)
-        except Exception as exc:   # the checker itself failed outside an endpoint: listed, the unit goes on
-            record(f"{family}:{public}", False, f"{type(exc).__name__}: {str(exc)[:300]}")
+        # The whole checker runs under the profiler (py-census-14): the constructors the fixture calls before an
+        # endpoint and the finalizers of the objects it drops on return are measured too. A checker that fails
+        # outside an endpoint is listed and the unit goes on.
+        ok, error = census.run(checks)
+        record(f"{family}:{public}", ok, error)
         done()
+    _probe_members(census, record, done)
 
 
 def _lane_unit(census, unit, record, done):
@@ -717,6 +779,9 @@ def _lane_unit(census, unit, record, done):
         ok, error = census.run(op)
         record(stage, ok, error)
         done()
+    ok, error = census.run(box.clear)   # the lane's fitted objects released under the profiler (finalizers)
+    record("release fit", ok, error)
+    _probe_members(census, record, done)
 
 
 def cmd_unit(args):
@@ -805,6 +870,8 @@ def report(directory):
         if st["calls"] == 0:
             if row["kind"] == "native_attribute":
                 return "NATIVE_ATTRIBUTE"
+            if row.get("family") in PACKAGING_FAMILIES:
+                return "PACKAGING"
             return "VIA_SUBCLASS" if row.get("defined") in ran else "UNCOVERED"
         if st["frames_max"] > 0:
             return "PYTHON"
@@ -850,7 +917,8 @@ def report(directory):
              f"zero_python={counts['ZERO'] + counts['NO_BINDING'] + counts['MULTI_BINDING']} "
              f"(one_binding_call={counts['ZERO']} multi_binding={counts['MULTI_BINDING']} "
              f"no_binding={counts['NO_BINDING']}) with_python={counts['PYTHON']} "
-             f"native_attributes={counts['NATIVE_ATTRIBUTE']} units={len(inv['units'])} "
+             f"native_attributes={counts['NATIVE_ATTRIBUTE']} packaging={counts['PACKAGING']} "
+             f"units={len(inv['units'])} "
              f"units_without_results={len(missing)} fixture_errors={fixture_errors} "
              f"export_errors={len(inv.get('export_errors', ()))} profiler_errors={sum(profiler_errors.values())} "
              f"(reports; gates nothing) census=python-frames/census.tsv"]
