@@ -38,7 +38,7 @@ def _bits_to_f32(tok: String) raises -> Float32:
     return bitcast[DType.float32](UInt32(Int(tok)))
 
 
-def main() raises:
+def run_checks() raises:
     var f = open("bench/border_types_oracle.txt", "r")
     var text = f.read()
     f.close()
@@ -133,3 +133,20 @@ def main() raises:
             + String(ncase) + " cases"
         )
     print("  all", ncase, "cases match CatBoost exactly")
+
+
+# Registered by lane checks-toplevel (2026-11-16): a standalone main() under
+# checks/ that no CI job ran. One process per check name in CI keeps any
+# fresh-process precondition. Host column: the suite is host work and does not branch on the target.
+from checks.native_tests.runner import Check, Column, Report
+
+
+def run_cases(column: Column, mut report: Report):
+    try:
+        run_checks()
+    except error:
+        report.abort(error)
+
+
+def register() -> Check:
+    return Check("border_types_check", cpu=True, gpu=False, serial="", run=run_cases)

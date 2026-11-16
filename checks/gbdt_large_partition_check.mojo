@@ -15,7 +15,7 @@ from gbdt.methods.greedy_subsets_searcher.kernel.split_points import PARTITION_B
 from gbdt.gpu_util.kernel.reorder_single_pass import launch_stable_partition_routed
 
 
-def main() raises:
+def run_checks() raises:
     var ctx = DeviceContext()
     comptime IDENTICAL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     comptime ROUTED = reorder_single_pass_for[TARGET_COLUMN, IDENTICAL]()
@@ -89,3 +89,21 @@ def main() raises:
                 assert_equal(got.unsafe_ptr()[i], UInt32(0xDEADBEEF))
                 assert_equal(gotflags.unsafe_ptr()[i], UInt8(9))
         print("PASS stable partition pattern", pattern)
+
+
+# Registered by lane checks-toplevel (2026-11-16): a standalone main() under
+# checks/ that no CI job ran. One process per check name in CI keeps any
+# fresh-process precondition. Device column only: the suite needs a GPU, so the CPU build never instantiates it.
+from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
+
+
+def run_cases(column: Column, mut report: Report):
+    try:
+        comptime if not CPU_COLUMN_BUILD:
+            run_checks()
+    except error:
+        report.abort(error)
+
+
+def register() -> Check:
+    return Check("gbdt_large_partition_check", cpu=False, gpu=True, serial="", run=run_cases)

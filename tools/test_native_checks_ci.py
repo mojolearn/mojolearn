@@ -46,10 +46,14 @@ def test_repo_registry_matches_check_files():
     assert len(ncr.column_names(checks, "cpu")) > 0
     assert len(ncr.column_names(checks, "gpu")) > 0
     nt = ROOT / "checks/native_tests"
-    registered = set(ncr._REGISTERED.findall((nt / "registry.mojo").read_text()))
-    # every module with a register() is in the registry, and each check is one file named after itself
-    with_register = {p.stem for p in nt.glob("*.mojo") if "def register() -> Check:" in p.read_text()}
+    modules = ncr._REGISTERED.findall((nt / "registry.mojo").read_text())
+    registered = {m.removeprefix("native_tests.") for m in modules}
+    # every module with a register() is in the registry (checks/native_tests/ and the standalone checks at the top
+    # of checks/), and each check is one file named after itself
+    with_register = {p.stem for d in (nt, ROOT / "checks") for p in d.glob("*.mojo")
+                     if "def register() -> Check:" in p.read_text()}
     assert with_register == registered
+    assert len(modules) == len(registered)
     assert set(checks) == registered
     # the five-file scaffolding is gone for every registered check
     for name in registered:

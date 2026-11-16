@@ -65,7 +65,7 @@ def mean_logloss(y: List[Float32], scores: List[Float32]) -> Float64:
     return total / Float64(len(y))
 
 
-def main() raises:
+def run_checks() raises:
     var ctx = DeviceContext()
     var failures = 0
     var n = 4096
@@ -207,3 +207,21 @@ def main() raises:
         )
     print("logloss train check: learn, replay, holdout, iterations knob, "
           "soft-target arm -- all pass")
+
+
+# Registered by lane checks-toplevel (2026-11-16): a standalone main() under
+# checks/ that no CI job ran. One process per check name in CI keeps any
+# fresh-process precondition. Device column only: the suite needs a GPU, so the CPU build never instantiates it.
+from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
+
+
+def run_cases(column: Column, mut report: Report):
+    try:
+        comptime if not CPU_COLUMN_BUILD:
+            run_checks()
+    except error:
+        report.abort(error)
+
+
+def register() -> Check:
+    return Check("logloss_train_check", cpu=False, gpu=True, serial="", run=run_cases)

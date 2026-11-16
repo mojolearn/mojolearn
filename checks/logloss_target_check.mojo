@@ -64,7 +64,7 @@ def close(a: Float64, b: Float64, tol: Float64) -> Bool:
     return abs(a - b) <= tol * (1.0 + max(abs(a), abs(b)))
 
 
-def main() raises:
+def run_checks() raises:
     comptime N = 4133
     var ctx = DeviceContext()
 
@@ -369,3 +369,21 @@ def main() raises:
         "logloss target check: 4 mode passes x", N,
         "rows, anchors, planted borders, fv/mags -- all match"
     )
+
+
+# Registered by lane checks-toplevel (2026-11-16): a standalone main() under
+# checks/ that no CI job ran. One process per check name in CI keeps any
+# fresh-process precondition. Device column only: the suite needs a GPU, so the CPU build never instantiates it.
+from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
+
+
+def run_cases(column: Column, mut report: Report):
+    try:
+        comptime if not CPU_COLUMN_BUILD:
+            run_checks()
+    except error:
+        report.abort(error)
+
+
+def register() -> Check:
+    return Check("logloss_target_check", cpu=False, gpu=True, serial="", run=run_cases)

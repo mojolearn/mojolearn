@@ -187,7 +187,7 @@ def _expect(name: String, got: Float32, want_bits: UInt32) raises:
         )
 
 
-def main() raises:
+def run_checks() raises:
     var sabotage = False
     for a in argv():
         if a == "sabotage":
@@ -600,3 +600,21 @@ def main() raises:
     _ = r_sg.unsafe_ptr()
     _ = r_sl.unsafe_ptr()
     _ = r_sp.unsafe_ptr()
+
+
+# Registered by lane checks-toplevel (2026-11-16): a standalone main() under
+# checks/ that no CI job ran. One process per check name in CI keeps any
+# fresh-process precondition. Device column only: the suite needs a GPU, so the CPU build never instantiates it.
+from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
+
+
+def run_cases(column: Column, mut report: Report):
+    try:
+        comptime if not CPU_COLUMN_BUILD:
+            run_checks()
+    except error:
+        report.abort(error)
+
+
+def register() -> Check:
+    return Check("portable_nn_check", cpu=False, gpu=True, serial="", run=run_cases)

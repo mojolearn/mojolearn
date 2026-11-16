@@ -204,7 +204,7 @@ def _require(ok: Bool, what: String) raises:
         raise Error("FAIL ndtri check: " + what)
 
 
-def main() raises:
+def run_checks() raises:
     print("ndtri check (DEVIATION 5410, IDENTITY_PATHS row 220); build mode", numeric_mode_name())
     comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
         raise Error("ndtri check: build under NUMERIC_IDENTICAL (tools/with_identical_mode.sh); this build is "
@@ -330,3 +330,21 @@ def main() raises:
     card.record_list_f32("5410.ndtri_ndtr.fixture", words)
     print("CERTIFICATE ndtri fnv1a", hex(fq), "ndtr fnv1a", hex(fc), "(", N, "lanes each; the same on every column)")
     print("PASS ndtri check")
+
+
+# Registered by lane checks-toplevel (2026-11-16): a standalone main() under
+# checks/ that no CI job ran. One process per check name in CI keeps any
+# fresh-process precondition. Device column only: the suite needs a GPU, so the CPU build never instantiates it.
+from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
+
+
+def run_cases(column: Column, mut report: Report):
+    try:
+        comptime if not CPU_COLUMN_BUILD:
+            run_checks()
+    except error:
+        report.abort(error)
+
+
+def register() -> Check:
+    return Check("ndtri_check", cpu=False, gpu=True, serial="", run=run_cases)

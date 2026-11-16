@@ -6,7 +6,7 @@ from std.time import perf_counter_ns
 from gbdt.metrics.sample_quantile import calculate_weighted_target_quantile
 
 
-def main() raises:
+def run_checks() raises:
     comptime N = 20000
     var y = List[Float32](capacity=N)
     var ones = List[Float32](capacity=N)
@@ -60,3 +60,20 @@ def main() raises:
         checksum,
     )
     print("sample quantile unweighted check: PASS")
+
+
+# Registered by lane checks-toplevel (2026-11-16): a standalone main() under
+# checks/ that no CI job ran. One process per check name in CI keeps any
+# fresh-process precondition. Host column: the suite is host work and does not branch on the target.
+from checks.native_tests.runner import Check, Column, Report
+
+
+def run_cases(column: Column, mut report: Report):
+    try:
+        run_checks()
+    except error:
+        report.abort(error)
+
+
+def register() -> Check:
+    return Check("sample_quantile_unweighted_check", cpu=True, gpu=False, serial="", run=run_cases)

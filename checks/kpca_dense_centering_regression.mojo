@@ -16,7 +16,7 @@ def require(condition: Bool, message: String) raises:
         raise Error(message)
 
 
-def main() raises:
+def run_checks() raises:
     var driver = XnDriver(xn_native_v1)
     var matrix: List[Float32] = [1.0, 2.0, 2.0, 4.0]
     var sums: List[Float32] = [-9999.0, 0.0, 0.0, -9999.0]
@@ -50,3 +50,20 @@ def main() raises:
     require(centered[1] == Float32(0.25) and centered[2] == Float32(-0.25)
         and centered[3] == Float32(-0.25) and centered[4] == Float32(0.25), "dense kernel centering differs")
     print("KPCA_REGRESSION independent_mean_and_centering=pass")
+
+
+# Registered by lane checks-toplevel (2026-11-16): a standalone main() under
+# checks/ that no CI job ran. One process per check name in CI keeps any
+# fresh-process precondition. Host column: the suite is host work and does not branch on the target.
+from checks.native_tests.runner import Check, Column, Report
+
+
+def run_cases(column: Column, mut report: Report):
+    try:
+        run_checks()
+    except error:
+        report.abort(error)
+
+
+def register() -> Check:
+    return Check("kpca_dense_centering_regression", cpu=True, gpu=False, serial="", run=run_cases)
