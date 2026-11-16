@@ -254,5 +254,13 @@ def kpp_seed_device(
             grid_dim=1, block_dim=KPP_TPB,
         )
     ctx.synchronize()
+    # lastuse-audit (2026-11-16): the MutAnyOrigin pointers keep these alive
+    # only while the pointers are live (std/origin UnsafeAnyOrigin); their
+    # last use is the last enqueue, and the queued kernels read the buffers
+    # until the synchronize. Named here so none is released under a launch.
+    _ = nearest^
+    _ = partials^
+    _ = d_units^
+    _ = d_idxs^
     _ = units^
     _ = idxs^
