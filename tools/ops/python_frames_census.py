@@ -21,10 +21,16 @@ Fixtures are verify's own, never new ones written here:
                  smoke's `lanes` step runs): the lane's fit on the base fixture, then the harness's own
                  _probe_fit (infer, model bytes, reload) and _probe_batch.
 After its fixtures, every unit PROBES the members they did not reach (py-census-14: 323 members UNCOVERED in
-d95f805cce): on the last instance of each public class the fixtures used, it reads each public property and calls
+d95f805cce): on the last FITTED instance of each public class the fixtures used (the last instance a fit-named member
+ran on; else the last instance: verify-fixtures-env, 2026-11-16, an unfitted prototype or a fresh metadata instance
+used last had drawn 60 "not fitted" refusals), it reads each public property and calls
 each public method that takes no argument (never a fit, train, step, load, save, export or run name; close, free
 and discard last), then releases those instances under the profiler so their `__del__` is measured. Each probe is
-listed as a fixture (`probe <member>`). Packaging helpers (PACKAGING_FAMILIES: the install-metadata and surface
+listed as a fixture (`probe <member>`). A failed fixture is counted in one of three classes, each failure listed with
+its class in failures.tsv: cpu_refusals (a GPU-only operation refusing on the CPU runner, _CPU_REFUSALS),
+probe_refusals (a probe the product refused in the instance's state: unfitted, closed, a conditional member; the
+member still ran) and fixture_errors (every other failure: a fixture defect or a product defect, read failures.tsv).
+Packaging helpers (PACKAGING_FAMILIES: the install-metadata and surface
 report modules no public operation calls) are PACKAGING, not UNCOVERED.
 A public call is the outermost entry into product code (python/mojolearn outside tests/, verify and the harness)
 made while no other public call is active: a Python frame of a product file, or a C call of a member installed as
@@ -84,8 +90,17 @@ PACKAGING_FAMILIES = frozenset(("gpu_plugins", "host_surface"))
 _PROBE_SKIP = ("fit", "partial_fit", "train", "step", "load", "save", "export", "install", "run", "main", "backward",
                "forward", "generate", "prefetch")
 #: refusal texts of GPU-only operations on a CPU runner (multi-GPU drivers, device-resident optimizer entries):
-#: counted as cpu_refusals beside fixture_errors (py-census-14: 51 of the 147 in d95f805cce).
-_CPU_REFUSALS = ("no CPU implementation of the cooperative multi-GPU driver", "(a CPU-only install)")
+#: counted as cpu_refusals beside fixture_errors (py-census-14: 51 of the 147 in d95f805cce). "has no device I/O
+#: entries": a to_device member on a host binding (Embedding.to_device in 23bc7a5ae3).
+_CPU_REFUSALS = ("no CPU implementation of the cooperative multi-GPU driver", "(a CPU-only install)",
+                 "this binding has no device I/O entries")
+#: member names that mark an instance FITTED for the probe (it probes the last fitted instance of a class)
+_FIT_NAMES = ("fit", "partial_fit", "train", "search")
+#: classes the estimator/metadata fixtures are never widened to (the census's own widening, never verify's routing):
+#: abstract mixins (neighbors.ClassifierScoreMixin, RegressorScoreMixin: no fit of their own), a program that only a
+#: session builds (ops.Program) and a model only a trained GBDT text builds (HostGBDT). Their members are reached
+#: through the classes and lanes that build them; widening them only drew fixture errors (23bc7a5ae3: 4).
+_NOT_WIDENED = ("mojolearn.ops.Program", "mojolearn.HostGBDT")
 #: probed last: they end the instance's session.
 _PROBE_LAST = ("close", "free", "discard")
 
@@ -310,6 +325,7 @@ class Census:
         self.classes = {(c["module"], c["qualname"]): c for c in inv["classes"]}
         self.class_ids = {c["id"]: c for c in inv["classes"]}
         self.instances = {}            # class id -> the last instance a member call ran on (probe_members)
+        self.fitted = {}               # class id -> the last instance a fit-named member ran on (probed first)
         self.functions = {(f["module"], f["qualname"]): f["id"] for f in inv["functions"]}
         self.members = {}
         self.unattributed = collections.Counter()
@@ -413,10 +429,16 @@ class Census:
                     mids = self.codes_for(*pc).get(code)
                     if mids:
                         if not isinstance(obj, type):
-                            self.instances[pc[0]["id"]] = obj
+                            self.note_instance(pc[0]["id"], obj, mids)
                         return mids
         fid = self.functions.get((frame.f_globals.get("__name__"), getattr(code, "co_qualname", code.co_name)))
         return [fid] if fid else None
+
+    def note_instance(self, cid, obj, mids):
+        """The instance a member call ran on, for the probe; a fit-named member marks it fitted too."""
+        self.instances[cid] = obj
+        if any(m.rsplit(".", 1)[-1].startswith(_FIT_NAMES) for m in mids):
+            self.fitted[cid] = obj
 
     def native_member(self, arg):
         owner = getattr(arg, "__self__", None)
@@ -428,7 +450,7 @@ class Census:
                 mids = self.native_names.get(pc[0]["id"], {}).get(name)
                 if mids:
                     if not isinstance(owner, type):
-                        self.instances[pc[0]["id"]] = owner
+                        self.note_instance(pc[0]["id"], owner, mids)
                     return list(mids)
         cands = self.native_ids.get(id(arg))
         if cands:
@@ -657,13 +679,21 @@ def _codes(raw):
 class _Recorder:
     """Stands in for _verify_api.Recorder: every endpoint the fixture asks for runs once, under the profiler."""
 
-    def __init__(self, census, record, done):
+    def __init__(self, census, record, done, public=None, cls=None):
         self.census, self.record, self.done = census, record, done
         self.rows = {}
+        self.public, self.cls = public, cls
 
     def check(self, endpoint, operation, *, kind="numerical"):
         if endpoint in self.rows:
             return self.rows[endpoint]
+        # A fixture endpoint naming a member the class does not have is no member to measure: verify's Recorder
+        # runs only its selected endpoints, this one runs every endpoint a fixture names (the metadata fixture's
+        # set_params on the model_selection splitters, which have get_params only: 15 errors in 23bc7a5ae3).
+        if self.cls is not None and endpoint.startswith(self.public + "."):
+            member = endpoint[len(self.public) + 1:].split(":", 1)[0]
+            if member and not hasattr(self.cls, member):
+                return dict(status="absent", kind=kind)
         ok, error = self.census.run(operation)
         self.rows[endpoint] = dict(status="captured" if ok else "failed", kind=kind)
         self.record(endpoint, ok, error)
@@ -676,7 +706,10 @@ def _probe_members(census, record, done):
     public property read, each public method that takes no argument called (_PROBE_SKIP never; _PROBE_LAST last);
     then the instances released under the profiler, so their finalizers are measured."""
     import inspect
-    instances, census.instances = census.instances, {}
+    # the last fitted instance of each class, else its last instance (an unfitted prototype or a fresh metadata
+    # instance used after the fit would only draw "not fitted" refusals); both dicts released together below
+    instances = dict(census.instances, **census.fitted)
+    census.instances, census.fitted = {}, {}
     for cid in sorted(instances):
         cls = census.class_ids.get(cid)
         if cls is None:
@@ -713,7 +746,6 @@ def _api_unit(census, unit, record, done, inv_classes):
     from mojolearn import _verify_api_metadata as metadata
     from mojolearn._verification_api_targets import TARGETS
     from mojolearn._verify_api import resolve
-    rec = _Recorder(census, record, done)
     publics = set(unit["publics"])
     classes = {c["id"]: c for c in inv_classes}
     try:
@@ -723,6 +755,7 @@ def _api_unit(census, unit, record, done, inv_classes):
     except Exception as exc:
         record(f"resolve {unit['id']}", False, f"{type(exc).__name__}: {str(exc)[:300]}")
         obj = None
+    rec = _Recorder(census, record, done, unit["id"], obj if isinstance(obj, type) else None)
     routes = runner.registry()
     groups = {}
     for row in TARGETS:
@@ -733,6 +766,8 @@ def _api_unit(census, unit, record, done, inv_classes):
     # (the class's own members from the inventory, so a default inherited from `object` is never driven)
     attrs = set(classes.get(unit["id"], {}).get("attrs", ()))
     extra = sorted(attrs & est.METHODS)
+    if unit["id"] in _NOT_WIDENED or unit["id"].endswith("Mixin"):
+        extra = []
     if extra and est.applicable(unit["id"], extra):
         key = next((k for k in groups if k[0] == "estimators"), ("estimators", unit["id"]))
         groups[key] = (est, sorted(set(groups.get(key, (est, []))[1]) | set(extra)))
@@ -845,7 +880,8 @@ def report(directory):
     inv = json.loads((d / "inventory.json").read_text())
     merged = {m["id"]: dict(m, stats=_new_stats(), units=set()) for m in inv["members"]}
     unattributed, inside, import_time = collections.Counter(), collections.Counter(), collections.Counter()
-    fixture_errors, cpu_refusals, missing, profiler_errors = 0, 0, [], collections.Counter()
+    fixture_errors, cpu_refusals, probe_refusals, missing, profiler_errors = 0, 0, 0, [], collections.Counter()
+    failures = []   # (unit, fixture, class, error): every failed fixture, by class (failures.tsv)
     for unit in inv["units"]:
         p = d / "units" / (re.sub(r"[^A-Za-z0-9_.-]", "_", unit["name"]) + ".json")
         try:
@@ -855,11 +891,20 @@ def report(directory):
             continue
         for f in doc.get("fixtures", ()):
             if not f.get("ok"):
+                error = f.get("error") or ""
                 # a GPU-only operation refusing on a CPU runner is the product's answer, not a fixture defect
-                if any(t in (f.get("error") or "") for t in _CPU_REFUSALS):
+                if any(t in error for t in _CPU_REFUSALS):
                     cpu_refusals += 1
+                    kind = "cpu_refusal"
+                # a probe ran the member on whatever state the fixtures left (unfitted, closed, a conditional
+                # member): its refusal is the product's answer to that state, and the member still ran
+                elif f.get("fixture", "").startswith("probe "):
+                    probe_refusals += 1
+                    kind = "probe_refusal"
                 else:
                     fixture_errors += 1
+                    kind = "fixture_error"
+                failures.append((unit["name"], f.get("fixture", ""), kind, " ".join(error.split())))
         unattributed.update(doc.get("unattributed", {}))
         inside.update(doc.get("unattributed_inside", {}))
         import_time.update(doc.get("import_time", {}))
@@ -915,6 +960,10 @@ def report(directory):
         fh.write("function\tpublic_members\tentries\tmembers\n")
         for k, (nm, ne, ms) in funcs:
             fh.write(f"{k}\t{nm}\t{ne}\t{', '.join(sorted(ms)[:12])}{' ...' if len(ms) > 12 else ''}\n")
+    with open(d / "failures.tsv", "w") as fh:
+        fh.write("unit\tfixture\tclass\terror\n")
+        for row in sorted(failures, key=lambda r: (r[2], r[0], r[1])):
+            fh.write("\t".join(row) + "\n")
     with open(d / "unattributed.tsv", "w") as fh:
         # entry: product Python entered outside any public member (a helper the fixture called, a door class the
         # inventory does not list); inside: the frames those entries ran; import_time: product frames run by an
@@ -933,6 +982,7 @@ def report(directory):
              f"native_attributes={counts['NATIVE_ATTRIBUTE']} packaging={counts['PACKAGING']} "
              f"units={len(inv['units'])} "
              f"units_without_results={len(missing)} fixture_errors={fixture_errors} cpu_refusals={cpu_refusals} "
+             f"probe_refusals={probe_refusals} (failures.tsv) "
              f"export_errors={len(inv.get('export_errors', ()))} profiler_errors={sum(profiler_errors.values())} "
              f"(reports; gates nothing) census=python-frames/census.tsv"]
     for i, (k, (nm, ne, _)) in enumerate(funcs[:TOP_FUNCTIONS], 1):
