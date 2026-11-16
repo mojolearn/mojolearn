@@ -11,7 +11,6 @@ def connect(context, register, registry):
     # already registered plan); no family is imported here.
     import inspect
     import sys
-    from . import _backend
 
     def loaded(name):
         return sys.modules.get(__package__ + '.' + name)
@@ -372,15 +371,27 @@ def connect(context, register, registry):
               for item in recipe if item[0] == 'binding'}  # glue: fixed ABI metadata connected once during package import
     if trees is not None:
         wanted.add('_mojolearn_metrics')  # the tree meta-estimators' metric owner, below
+    # The composed call hands a recipe's binding to the same native door the
+    # public call reaches, and that door admits only the exact compiled module
+    # (bindings/gp_native_boundary_door.mojo gp_entry_key,
+    # bindings/neighbors_knn_native_door.mojo knn_door). Read it from the
+    # family connection the public call uses (_native_family_bridge
+    # connect_bindings), which on a CPU-only install resolves the
+    # `_HostBinding` facade to its host extension once, at import. Lane
+    # imputer-gp-native-module (2026-11-16): the table used to hold
+    # `_backend.binding()`'s facade, so IterativeImputer/RFE over a
+    # GaussianProcessRegressor (and KNeighbors*, KernelRidge.score) refused
+    # with "requires its connected native module" on the CPU install.
+    from . import _native_family_bridge
+    connections = _native_family_bridge.shared_context().setdefault('family_binding_connections', {})
     modules = context.setdefault('family_msel_bindings', {})
-    for basename in sorted(wanted - set(modules)):  # glue: fixed ABI metadata connected once per binding
-        modes = {}
-        for mode in ('identical', 'fast'):  # glue: fixed ABI metadata connected once during package import
-            try:
-                modes[mode] = _backend.binding(basename, mode)
-            except (ImportError, AttributeError, TypeError, ValueError, RuntimeError) as error:
-                modes[mode] = type(error).__name__ + ': ' + str(error)
-        modules[basename] = modes
+    missing = sorted(wanted - set(modules))
+    fresh = tuple(name for name in missing if name not in connections)  # glue: fixed binding names
+    if fresh:
+        _native_family_bridge.connect_bindings(*fresh)
+    for basename in missing:  # glue: fixed ABI metadata connected once per binding
+        # (module, name, reader) or (refusal text,): the door raises the text.
+        modules[basename] = {mode: connections[basename][mode][0] for mode in ('identical', 'fast')}  # glue: two fixed modes
     # (family context, metrics bindings by mode): bindings/trees_public_meta_door.mojo calls the metrics owner natively
     if trees is not None:
         trees._TREES_CONTEXT['native_meta_metrics'] = (metrics._NATIVE_CONTEXT, modules['_mojolearn_metrics'])
