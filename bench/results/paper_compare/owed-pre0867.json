@@ -388,6 +388,10 @@
   "sampling-kv-upload-reuse": {
    "define": "MOJOLEARN_EXPERIMENT_SAMPLING_KV_UPLOAD_REUSE",
    "status": "define in code (core/generation_kv_policy.mojo EXPERIMENT_SAMPLING_KV_UPLOAD_REUSE: B = reuse KV uploads across sampling forwards (removes reloads); A = reload per forward. No board row)"
+  },
+  "sqrt-comptime-step": {
+   "define": "MOJOLEARN_NUMERICS_FAST_SQRT_COMPTIME_STEP",
+   "status": "define in code (checks/numerics.mojo portable_sqrtf NUMERICS_FAST_SQRT_COMPTIME_STEP: B = the four-candidate correction as a comptime for (offset a compile-time constant per step); A = the run-time for k in range(4) chain that Mojo 1.2 lowers to compare-and-branch. Same operations in the same order: bits unchanged on every column)"
   }
  },
  "rows": [
@@ -2555,6 +2559,87 @@
     "transformer-session-fresh-off"
    ],
    "decides": "keep today's default (A) unless the B arm is faster at equal quality on NVIDIA (the next L40S measurement); digests must not move (no arm changes arithmetic)"
+  },
+  {
+   "id": "sqrt-comptime-step-knn",
+   "source": "lane sqrt-comptime-step (2026-11-16; ~/mojolearn-evidence/kernel-attribution-20261116/ATTRIBUTION.md CODEGEN rows: pinned_distance_register_tile_kernel 81 -> 119 registers, sm_89 warps per SM 20 -> 16, from portable_sqrtf's candidate loop under Mojo 1.2; knn taxi 1.38x, knn istella 1.37x, knn-reg taxi 1.58x, knn-clf taxi 1.33x, hdbscan taxi 1.31x, part of kde taxi, vs 0.8.55 on the same box)",
+   "kind": "ab",
+   "lane": "knn",
+   "dataset": "*",
+   "rows": "full",
+   "vendor": "nvidia",
+   "b_arms": [
+    "sqrt-comptime-step"
+   ],
+   "decides": "promote B (comptime step) unless it is slower than A at equal quality on the NVIDIA L40S; digests must not move (same operations, same order); record registers/thread of the pinned distance kernel with each arm"
+  },
+  {
+   "id": "sqrt-comptime-step-knn-clf-reg-taxi",
+   "source": "lane sqrt-comptime-step (2026-11-16; ~/mojolearn-evidence/kernel-attribution-20261116/ATTRIBUTION.md CODEGEN rows: pinned_distance_register_tile_kernel 81 -> 119 registers, sm_89 warps per SM 20 -> 16, from portable_sqrtf's candidate loop under Mojo 1.2; knn taxi 1.38x, knn istella 1.37x, knn-reg taxi 1.58x, knn-clf taxi 1.33x, hdbscan taxi 1.31x, part of kde taxi, vs 0.8.55 on the same box)",
+   "kind": "ab",
+   "lane": [
+    "knn-clf",
+    "knn-reg"
+   ],
+   "dataset": "taxi",
+   "rows": "full",
+   "vendor": "nvidia",
+   "b_arms": [
+    "sqrt-comptime-step"
+   ],
+   "decides": "promote B (comptime step) unless it is slower than A at equal quality on the NVIDIA L40S; digests must not move (same operations, same order); record registers/thread of the pinned distance kernel with each arm"
+  },
+  {
+   "id": "sqrt-comptime-step-hdbscan-taxi",
+   "source": "lane sqrt-comptime-step (2026-11-16; ~/mojolearn-evidence/kernel-attribution-20261116/ATTRIBUTION.md CODEGEN rows: pinned_distance_register_tile_kernel 81 -> 119 registers, sm_89 warps per SM 20 -> 16, from portable_sqrtf's candidate loop under Mojo 1.2; knn taxi 1.38x, knn istella 1.37x, knn-reg taxi 1.58x, knn-clf taxi 1.33x, hdbscan taxi 1.31x, part of kde taxi, vs 0.8.55 on the same box)",
+   "kind": "ab",
+   "lane": "hdbscan",
+   "dataset": "taxi",
+   "rows": "full",
+   "vendor": "nvidia",
+   "b_arms": [
+    "sqrt-comptime-step"
+   ],
+   "decides": "promote B (comptime step) unless it is slower than A at equal quality on the NVIDIA L40S; digests must not move (same operations, same order); record registers/thread of the pinned distance kernel with each arm"
+  },
+  {
+   "id": "sqrt-comptime-step-kde-taxi",
+   "source": "lane sqrt-comptime-step (2026-11-16; ~/mojolearn-evidence/kernel-attribution-20261116/ATTRIBUTION.md CODEGEN rows: pinned_distance_register_tile_kernel 81 -> 119 registers, sm_89 warps per SM 20 -> 16, from portable_sqrtf's candidate loop under Mojo 1.2; knn taxi 1.38x, knn istella 1.37x, knn-reg taxi 1.58x, knn-clf taxi 1.33x, hdbscan taxi 1.31x, part of kde taxi, vs 0.8.55 on the same box)",
+   "kind": "ab",
+   "lane": "kde",
+   "dataset": "taxi",
+   "rows": "full",
+   "vendor": "nvidia",
+   "b_arms": [
+    "sqrt-comptime-step"
+   ],
+   "decides": "promote B (comptime step) unless it is slower than A at equal quality on the NVIDIA L40S; digests must not move (same operations, same order); record registers/thread of the pinned distance kernel with each arm"
+  },
+  {
+   "id": "sqrt-comptime-step-knn-neighbour",
+   "source": "lane sqrt-comptime-step (2026-11-16): neighbouring non-board shape, taxi at 300,000 rows (the change keys on no shape; every identical_sqrt site takes it)",
+   "kind": "ab",
+   "lane": "knn",
+   "dataset": "taxi",
+   "rows": 300000,
+   "vendor": "nvidia",
+   "b_arms": [
+    "sqrt-comptime-step"
+   ],
+   "decides": "promote B (comptime step) unless it is slower than A at equal quality on the NVIDIA L40S; digests must not move (same operations, same order); record registers/thread of the pinned distance kernel with each arm"
+  },
+  {
+   "id": "sqrt-comptime-step-knn-covtype",
+   "source": "lane sqrt-comptime-step (2026-11-16): non-board dataset, 54 features (between taxi's few features, where the per-cell epilogue dominates, and istella's 220)",
+   "kind": "ab",
+   "lane": "knn",
+   "dataset": "covtype",
+   "rows": "full",
+   "vendor": "nvidia",
+   "b_arms": [
+    "sqrt-comptime-step"
+   ],
+   "decides": "promote B (comptime step) unless it is slower than A at equal quality on the NVIDIA L40S; digests must not move (same operations, same order); record registers/thread of the pinned distance kernel with each arm"
   }
  ]
 }
