@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Public permutation_test_score group permutations agree with an independent
 counter-key oracle. The ShuffleSplit and StratifiedShuffleSplit row orders are
-checks/native_tests/resample_cv_row_order_*.mojo."""
+checks/native_tests/resample_cv_row_order.mojo."""
 import math
 
 import numpy as np

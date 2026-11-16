@@ -1,8 +1,8 @@
 """Complete native snapshot admission tests of the parallel small-MLP owner.
 
 The independent calculus of a shard gradient and the first two AdamW apply
-steps moved to checks/native_tests/training_small_mlp_{cpu,gpu}.mojo, the
-ordered left-associated gradient fold to training_primitives_{cpu,gpu}.mojo
+steps moved to checks/native_tests/training_small_mlp.mojo, the
+ordered left-associated gradient fold to training_primitives.mojo
 (lane tmig-training, 2026-11-14). Snapshot publication, reconstruction and
 target admission stay here.
 """
