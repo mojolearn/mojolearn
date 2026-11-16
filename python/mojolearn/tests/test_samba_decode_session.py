@@ -2,8 +2,9 @@
 """`SambaStack.decode_session` against the per-call `SambaStack.step`, byte
 for byte: every logits row, the synced state and its cursors, after a
 `load_state` rewind, and the refusals. On a binding with the resident decode
-the session steps on the device; elsewhere it steps the caller's state through
-the per-call step, and the same assertions hold.
+the session steps on the device; elsewhere it steps a session-owned copy of the
+state through the per-call step (copied in at open and `load_state`, out at
+`sync_state` and close), and the same assertions hold.
 """
 import os
 
