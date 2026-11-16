@@ -3895,6 +3895,15 @@ class Release(release_identity_wheels.IdentityOnWheels):
             if not d.is_dir():
                 raise StepFailed(f"{name} has no set directory at {d}; run linux-wait")
         dest = self.rel / "reuse" / "sets"
+        # DISK (2026-11-16: seven of eight arms died here with ENOSPC, 5.6 GB free): the measured bytes the assembly
+        # and the pack still write per Linux set (release_candidate.ASSEMBLE_PER_LINUX_SET_BYTES), times the sets
+        # about to assemble, must be free first; otherwise refuse with the numbers instead of crashing half-written
+        import release_candidate
+        refusal = release_candidate.space_refusal(
+            self.rel, len(release_reuse.LINUX_SETS) * release_candidate.ASSEMBLE_PER_LINUX_SET_BYTES,
+            f"linux-assemble of {len(release_reuse.LINUX_SETS)} Linux set(s)")
+        if refusal:
+            raise StepFailed(refusal)
         try:
             release_reuse.assemble_linux(plan, whl, legs, dest, say=self.say, leg_reuse=leg_reuse,
                                          host_owner=host_owner)
