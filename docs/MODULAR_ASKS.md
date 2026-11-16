@@ -368,3 +368,49 @@ of every leg, because no compiled form of a module survives one `mojo build`.
 group binaries by exact source closure (tools/bincache.py, key rule closure-v2), so a change
 recompiles only the groups whose closure it reaches, and we propose smaller groups by closure
 overlap (docs/build/COMPILE_CLOSURES.md). Neither removes the per-group cost of the shared files.
+
+## Mojo 1.2 no longer unrolls or if-converts a trip-count-4 loop branching on its induction variable (NVPTX) (2026-11-16, sqrt-comptime-step)
+
+**What we see.** `portable_sqrtf` (`checks/numerics.mojo`, source unchanged since 0.8.55) ends in a four-candidate
+correction, `for k in range(4): if k == 0: cb = yb - 1 elif k == 1: ... else: cb = yb + 2`, then a residual compare.
+Mojo 1.0.0 fully unrolled it and lowered the chain to `selp` (1,604 sites in 395 kernels of 0.8.55). Mojo 1.2.0 (2016d0cd)
+emits a rotated loop with `setp`/`bra` chains (0 `selp`, 1,054 branch-form sites). In
+`pinned_distance_register_tile_kernel` (32 inlined square roots per thread) registers went 81 -> 119 and warps per SM on
+sm_89 at 128 threads per block 20 -> 16 (SASS: ISETP +262, IMAD +172, BRA +96, FSEL -64); kNN, HDBSCAN and KDE rows on
+the NVIDIA L40S are 1.31-1.58x slower than 0.8.55. Evidence: `~/mojolearn-evidence/kernel-attribution-20261116/`
+(ATTRIBUTION.md, the `fam_55_67/knn` PTX and SASS diffs).
+
+**Smallest reproducer.**
+
+```mojo
+def pick(x: Float32, y: Float32) -> Float32:
+    var yb = rebind[UInt32](y.to_bits())
+    var best = y
+    var rb = abs(fma(-y, y, x))
+    for k in range(4):
+        var cb: UInt32
+        if k == 0:
+            cb = yb - 1
+        elif k == 1:
+            cb = yb + 1
+        elif k == 2:
+            cb = yb - 2
+        else:
+            cb = yb + 2
+        var c = bitcast[DType.float32](cb)
+        var r = abs(fma(-c, c, x))
+        if r < rb:
+            best = c
+            rb = r
+    return best
+# Kernel: out[i] = pick(x[i], y[i]) inlined 32 times per thread; build for sm_89 with Mojo 1.0.0 and 1.2.0 and
+# compare `selp` counts in the PTX and registers per thread in the cubin.
+```
+
+**The ask.** Restore the 1.0 lowering (full unroll plus if-conversion to selects) for a constant-trip-count loop whose
+body branches on the induction variable, or say which pass or option changed (LLVM unroll, SimplifyCFG or
+SpeculativeExecution thresholds for NVPTX) and how to request the old behaviour.
+
+**Meanwhile.** An ordinary source form, not a patch of compiler output: `-D MOJOLEARN_NUMERICS_FAST_SQRT_COMPTIME_STEP`
+writes the step as `comptime for k in range(4)` with a compile-time offset, the same operations in the same order (bits
+unchanged), default off until its NVIDIA A/B (docs/apple-fast/EXPERIMENTS.md). Nothing has been sent to Modular.
