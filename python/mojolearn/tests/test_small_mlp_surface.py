@@ -101,13 +101,6 @@ def test_default_skips_input_gradient_and_predict_does_not_update():
     assert set(result) == {'step', 'loss', 'logits', 'gradients'}
 
 
-def test_predict_matches_the_logits_of_the_next_step():
-    model = trainer()
-    x, y = batch(5)
-    predicted = np.asarray(model.predict_logits(x)).tobytes()
-    assert np.asarray(model.train_step(x, y)['logits']).tobytes() == predicted
-
-
 def test_failed_step_is_transactional():
     model = trainer()
     model.train_step(*batch())
@@ -266,27 +259,17 @@ def test_checkpoint_refuses_corruption_wrong_schema_and_oversize(tmp_path):
         SmallMLPTrainer.from_checkpoint(tmp_path / 'missing.json')
 
 
-def test_train_step_equals_loss_and_grads_then_apply_gradients():
-    # One program, one AdamW update: a train_step and the two-call form give the same state.
+def test_apply_gradients_returns_the_step_a_train_step_returns():
+    # The loss, parameter and moment words of train_step against
+    # loss_and_grads + apply_gradients, of predict_logits against the next
+    # step's logits and of train_steps against consecutive steps are the
+    # native check checks/native_tests/training_small_mlp_relations.mojo.
     x, y = batch(9)
-    a = trainer()
-    out = a.train_step(x, y)
+    out = trainer().train_step(x, y)
     b = trainer()
     loss, grads = b.loss_and_grads(x, y)
-    assert b.apply_gradients(grads) == out['step'] == 1
-    assert loss == out['loss']
-    assert state_bytes(a) == state_bytes(b)
-    np.testing.assert_array_equal(np.asarray(a.predict_logits(x)), np.asarray(b.predict_logits(x)))
-
-
-def test_train_steps_equals_consecutive_train_steps():
-    x, y = batch(12)
-    a = trainer()
-    multi = a.train_steps(x, y, 3)
-    b = trainer()
-    losses = [b.train_step(x[4 * i:4 * (i + 1)], y[4 * i:4 * (i + 1)])['loss'] for i in range(3)]
-    assert multi['losses'] == losses and multi['step'] == 3
-    assert state_bytes(a) == state_bytes(b)
+    assert isinstance(loss, float)
+    assert b.apply_gradients(grads) == out['step'] == b.step_ == 1
 
 
 def test_sessions_concatenate_the_per_batch_logits():

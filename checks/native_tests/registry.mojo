@@ -204,6 +204,9 @@ from checks.native_tests.xcnn_sage_max_adjoint import register as register_xcnn_
 # lane tests-to-mojo-trees (2026-11-16)
 from checks.native_tests.gbdt_feature_freq_experimental import register as register_gbdt_feature_freq_experimental
 from checks.native_tests.gbdt_host_archive_text import register as register_gbdt_host_archive_text
+# lane tests-to-mojo-neural (2026-11-15)
+from checks.native_tests.generator_draw import register as register_generator_draw
+from checks.native_tests.training_small_mlp_relations import register as register_training_small_mlp_relations
 
 
 def all_checks() -> List[Check]:
@@ -402,4 +405,7 @@ def all_checks() -> List[Check]:
     # lane tests-to-mojo-trees (2026-11-16)
     checks.append(register_gbdt_feature_freq_experimental())
     checks.append(register_gbdt_host_archive_text())
+    # lane tests-to-mojo-neural (2026-11-15)
+    checks.append(register_generator_draw())
+    checks.append(register_training_small_mlp_relations())
     return checks^
