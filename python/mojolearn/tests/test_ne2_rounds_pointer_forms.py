@@ -66,10 +66,14 @@ def test_resample_sequence_builds_list():
 
 
 # ------------------------------------------------- N054, N047, N065 pandas
-pd = pytest.importorskip("pandas")
+# pandas is optional: only the frame tests below skip without it; the
+# NumPy, sequence and RFE tests in this file run either way.
+@pytest.fixture
+def pd():
+    return pytest.importorskip("pandas")
 
 
-def _frame(n=120):
+def _frame(pd, n=120):
     return pd.DataFrame({
         "i8": np.arange(n, dtype=np.int8),
         "i32": np.arange(n, dtype=np.int32) * 3,
@@ -80,8 +84,8 @@ def _frame(n=120):
     })
 
 
-def test_resample_frame_mixed_dtypes_equal_iloc():
-    df = _frame()
+def test_resample_frame_mixed_dtypes_equal_iloc(pd):
+    df = _frame(pd)
     marker = np.arange(len(df), dtype=np.int64)
     out, idx = rs.resample(df, marker, n_samples=90, random_state=4)
     rows = _rows_of(idx)
@@ -91,14 +95,14 @@ def test_resample_frame_mixed_dtypes_equal_iloc():
     assert np.array_equal(got.view(np.uint8), np.ascontiguousarray(expect).view(np.uint8))
 
 
-def test_resample_frame_twice_reuses_numpy_table():
-    df = _frame(60)
+def test_resample_frame_twice_reuses_numpy_table(pd):
+    df = _frame(pd, 60)
     a = _np(rs.resample(df, n_samples=30, random_state=1))
     b = _np(rs.resample(df, n_samples=30, random_state=1))
     assert np.array_equal(a, b)
 
 
-def test_resample_tz_period_interval_cells():
+def test_resample_tz_period_interval_cells(pd):
     n = 40
     s_tz = pd.Series(pd.date_range("2024-01-01", periods=n, freq="h", tz="UTC"))
     s_tz.iloc[5] = pd.NaT
