@@ -107,25 +107,25 @@ def test_native_ready_signal_and_repeated_custom_exception_preserve_ownership():
     audit_native_call(owner.ready.set).assert_native()
     assert audit_native_call(owner.ready.wait, 0).assert_native()
     audit_native_call(owner.ready.clear).assert_native()
-    # The first refusal may retain the exception class once in its native slot (one reference for the
-    # process, smoke 9685746f95: 10 == 9 after eight refusals); the count is taken after it.
-    try:
-        owner._refuse('independent ownership check')
-    except cv.CrossVendorMismatch:
-        pass
-    gc.collect()
-    references = sys.getrefcount(cv.CrossVendorMismatch)
-    # A lost or extra reference per refusal moves the count by one each time;
-    # eight refusals show it as plainly as 128 did.
-    for _ in range(8):
-        audited = audit_native_call(owner._refuse, 'independent ownership check')
-        assert type(audited.exception) is cv.CrossVendorMismatch
-        report = audited.report()
-        for key in ('python_frames', 'forbidden_native_calls', 'wrapper_work', 'unobserved_existing_threads'):
-            assert not report[key], report
-        del audited, report
-    gc.collect()
-    assert sys.getrefcount(cv.CrossVendorMismatch) == references
+    # A per-call leak moves the class's count by one per refusal; a single
+    # retained reference (the last raised instance, held once whatever the
+    # number of refusals: smokes 9685746f95 and d95f805cce both saw 10 == 9
+    # after eight audited refusals, with and without a plain refusal first)
+    # does not. So the count is taken after a first audited batch and must
+    # not move over a second batch of the same size.
+    def refuse_audited(times):
+        for _ in range(times):
+            audited = audit_native_call(owner._refuse, 'independent ownership check')
+            assert type(audited.exception) is cv.CrossVendorMismatch
+            report = audited.report()
+            for key in ('python_frames', 'forbidden_native_calls', 'wrapper_work', 'unobserved_existing_threads'):
+                assert not report[key], report
+            del audited, report
+        gc.collect()
+        return sys.getrefcount(cv.CrossVendorMismatch)
+
+    references = refuse_audited(8)
+    assert refuse_audited(8) == references
 
 
 def test_whole_native_accept_run_with_independent_process_peer():
