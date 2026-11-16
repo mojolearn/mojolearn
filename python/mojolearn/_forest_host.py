@@ -196,14 +196,6 @@ class HostForest:
         """
         return _native_host_archive(self, _OP.host_tree_proba, (X,), _ARCHIVE_CONTEXT)
 
-    def _predict_with_proba(self, X):
-        """The two classifier views from one host traversal.
-
-        Kept in lockstep with the RF/ET estimator helper used by the identity
-        harness, including Extra Trees' exact float32-to-float64 widening.
-        """
-        return _native_host_archive(self, _OP.host_tree_predict_pair, (X,), _ARCHIVE_CONTEXT)
-
     def predict(self, X):
         """Predict with the saved model.
 

@@ -45,7 +45,6 @@ import operator
 import os
 
 from . import _backend
-from . import _tokenizer_synthetic
 from ._buffer import addr
 
 _EXTENSION = "_mojolearn_tokenizer_host"
@@ -252,14 +251,6 @@ class BpeTokenizer:
             merging by rank reproduces the merge list.
         """
         return _TOKENIZER_NATIVE.tokenizer_public_call('bpe_files', (cls, encoder_json, vocab_bpe), _TOKENIZER_CONTEXT)
-
-    @classmethod
-    def _synthetic(cls):
-        """The synthetic vocabulary mojolearn trains itself
-        (`_tokenizer_synthetic.py`), for the gates and the identity lane."""
-        tok = cls.from_token_bytes(_tokenizer_synthetic.vocabulary())
-        tok._source = "<mojolearn synthetic vocabulary>"
-        return tok
 
     @property
     def n_vocab(self):

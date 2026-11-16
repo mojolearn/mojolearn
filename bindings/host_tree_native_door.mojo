@@ -568,7 +568,6 @@ def host_tree_operation(model: PythonObject, operation: String, args: PythonObje
                 hash.update(Int(py=classical_address(value)), Int(py=value.nbytes))
         return PythonObject(hash.hexdigest())
     var probability = operation == "host_tree_proba"
-    var pair = operation == "host_tree_predict_pair"
     if gbdt:
         if probability:
             if String(fields["loss"]) == "MultiClass" or String(fields["loss"]) == "MultiClassOneVsAll":
@@ -587,14 +586,13 @@ def host_tree_operation(model: PythonObject, operation: String, args: PythonObje
         if wrote != rows:
             raise Error("RuntimeError: GBDT probability conversion did not write every row")
         return out
-    if (probability or pair) and not Bool(py=fields["is_classifier"]):
+    if probability and not Bool(py=fields["is_classifier"]):
         raise Error("AttributeError: this forest regressor has no predict_proba")
     var vote = host_tree_vote(fields, args[0], context)
     if operation == "host_tree_vote":
         return vote
-    if probability or pair:
-        var proba = vote if String(fields["family"]) == "rf" else host_tree_wide(vote, context)
-        return Python.tuple(host_tree_labels(fields["classes_"], vote, context), proba) if pair else proba
+    if probability:
+        return vote if String(fields["family"]) == "rf" else host_tree_wide(vote, context)
     if Bool(py=fields["is_classifier"]):
         return host_tree_labels(fields["classes_"], vote, context)
     var flat = classical_wrap_array(vote._store, Python.tuple(vote.shape[0]), "<f4", "C", context["output_context"])

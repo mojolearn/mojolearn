@@ -89,7 +89,6 @@ Nothing in this module imports NumPy.
 """
 
 from . import _mojolearn_trees, _native_archive_bridge, _native_trees_bridge
-from ._labels import argmax_rows, decode_labels
 from ._mode import NumericModeMixin
 from ._forest_protocol import ForestArchive, ForestClassifierPredict, ForestProtocol, forest_estimator
 
@@ -342,17 +341,6 @@ class ExtraTreesClassifier(_ExtraTreesBase):
             Columns in `classes_` order.
         """
         return _TREES(self, "trees_public_forest_proba", (X,), _TREES_CONTEXT)
-
-    def _predict_with_proba(self, X):
-        """Return labels and probabilities from one exact vote matrix.
-
-        ``predict`` consumes the float32 vote while ``predict_proba`` exactly
-        widens it to float64.  Keeping both views avoids a second complete
-        forest traversal in identity/evidence tooling without changing
-        either public result.
-        """
-        proba = self.predict_proba(X)
-        return decode_labels(self.classes_, argmax_rows(proba)), proba
 
 @forest_estimator("regressor")
 # Maintainer note (moved from the docstring): GPU training produces means of

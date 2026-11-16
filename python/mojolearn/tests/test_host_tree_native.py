@@ -63,7 +63,6 @@ def test_forest_prediction_matches_existing_bits_without_python(tmp_path, estima
     assert _state(audit_native_call(actual.predict, x).assert_native()) == _state(reference)
     if actual.is_classifier:
         assert _state(audit_native_call(actual.predict_proba, x).assert_native()) == _state(expected.predict_proba(x))
-        assert _state(audit_native_call(actual._predict_with_proba, x).assert_native()) == _state(expected._predict_with_proba(x))
 
 
 @pytest.mark.parametrize("labels", [[2, 7], [.5, 2.5], [False, True], ["left", "right"], [2**70, 2**70 + 1]])

@@ -34,7 +34,7 @@ import warnings
 import pytest
 
 import mojolearn as ml
-from mojolearn import _byte_lm_config, language_model, tokenizer
+from mojolearn import _byte_lm_config, _tokenizer_synthetic, language_model, tokenizer
 
 
 # ------------------------------------------------------- GPT2Tokenizer
@@ -90,8 +90,8 @@ def test_the_alias_encodes_what_the_class_encodes():
     price of a cell on every column."""
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", DeprecationWarning)
-        old = ml.GPT2Tokenizer._synthetic()
-    new = tokenizer.BpeTokenizer._synthetic()
+        old = ml.GPT2Tokenizer.from_token_bytes(_tokenizer_synthetic.vocabulary())
+    new = tokenizer.BpeTokenizer.from_token_bytes(_tokenizer_synthetic.vocabulary())
     raw = bytes(range(256)) * 4
     assert old.encode_bytes(raw) == new.encode_bytes(raw)
     assert old.identity == new.identity
