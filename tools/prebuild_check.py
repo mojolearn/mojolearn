@@ -19,7 +19,7 @@ skips it). Three builds were lost on 2026-11-15 to defects these catch:
   host-parse  (f29f76bf57: two host units did not parse; native-checks passed 166/166 because no check imports those
               doors) .github/workflows/native-checks.yml with suite=host-parse on a free runner: every release host
               group the Linux CPU leg builds (tools/merged_bindings.py plan --dir host --layout release) through
-              `mojo build --emit llvm -O0` (parse, type check and elaboration; no LLVM optimisation and no machine
+              `mojo build --emit llvm --no-optimization` (parse, type check and elaboration; no LLVM optimisation and no machine
               code), one runner per group, all in parallel. A completed run of the same sha whose host-parse jobs all
               passed is reused; one in progress is waited for; otherwise it is dispatched on --ref and waited for.
   probe       (26709df246: the verify smoke failed on Python-only defects) only with --probe-wheel: a COPY of an

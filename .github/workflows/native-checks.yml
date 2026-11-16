@@ -14,8 +14,15 @@ name: Native checks
 # with a per-check timeout, keeps going after a failure and writes results/<name>.txt plus logs/<name>.log.
 # summary: merges every shard into SUMMARY.md and fails the run when any check failed or never reported.
 #
+# host-parse (2026-11-15, tools/prebuild_check.py): every release host group the Linux CPU leg builds
+# (tools/merged_bindings.py plan --dir host --layout release, 17 groups at 6153a52c7b) generated as merged_build.sh does
+# and put through `mojo build --emit llvm --no-optimization` with the host set's defines and CPU: parse, type check and
+# elaboration, no LLVM optimisation and no machine code. One runner per group, all in parallel (each `-j` its cores).
+# It catches a host unit that does not parse even when no check imports it (f29f76bf57: `var fn` in two doors,
+# native checks 166/166). `suite` picks: all (default: the checks and host-parse), checks, host-parse.
+#
 # MANUAL ONLY (light-checks.yml refuses any other workflow with a push or schedule trigger):
-#   gh workflow run native-checks.yml --ref main -f ref=<sha|branch> [-f filter='spectral_*,gbdt_*']
+#   gh workflow run native-checks.yml --ref main -f ref=<sha|branch> [-f filter='spectral_*,gbdt_*'] [-f suite=host-parse]
 on:
   workflow_dispatch:
     inputs:
@@ -34,8 +41,12 @@ on:
         description: "seconds per check before TIMEOUT (rc 124)"
         required: false
         default: "900"
+      suite:
+        description: "all (the checks and host-parse), checks, or host-parse (every release host group parsed)"
+        required: false
+        default: "all"
 
-run-name: "native-checks ${{ inputs.ref }} ${{ inputs.column }} ${{ inputs.filter }}"
+run-name: "native-checks ${{ inputs.ref }} ${{ inputs.suite || 'all' }} ${{ inputs.column }} ${{ inputs.filter }}"
 
 permissions:
   contents: read
@@ -48,6 +59,8 @@ jobs:
       matrix: ${{ steps.plan.outputs.matrix }}
       count: ${{ steps.plan.outputs.count }}
       sha: ${{ steps.plan.outputs.sha }}
+      host_matrix: ${{ steps.plan.outputs.host_matrix }}
+      host_count: ${{ steps.plan.outputs.host_count }}
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
@@ -59,10 +72,26 @@ jobs:
         env:
           IN_FILTER: ${{ inputs.filter }}
           IN_COLUMN: ${{ inputs.column }}
+          IN_SUITE: ${{ inputs.suite || 'all' }}
         run: |
           set -euo pipefail
-          python3 tools/ops/native_checks_report.py plan --column "$IN_COLUMN" --filter "$IN_FILTER" \
-            --tasks-out planned.txt > plan.json
+          case "$IN_SUITE" in all|checks|host-parse) ;; *) echo "suite must be all, checks or host-parse" >&2; exit 2 ;; esac
+          if [ "$IN_SUITE" = host-parse ]; then
+            echo '{"count": 0, "shards": 0, "matrix": {"include": []}}' > plan.json; : > planned.txt
+          else
+            python3 tools/ops/native_checks_report.py plan --column "$IN_COLUMN" --filter "$IN_FILTER" \
+              --tasks-out planned.txt > plan.json
+          fi
+          if [ "$IN_SUITE" = checks ]; then
+            echo '[]' > host.json
+          else
+            # the release host groups, the plan bindings/merged_build.sh host builds on Linux (byte LM off on Linux)
+            python3 tools/merged_bindings.py plan --dir host --platform linux --byte-lm 0 --layout release \
+              | python3 -c 'import json,sys; print(json.dumps([dict(stem=l.split()[0], members=l.split()[2]) for l in sys.stdin if l.strip()]))' > host.json
+          fi
+          echo "host_matrix=$(cat host.json)" >> "$GITHUB_OUTPUT"
+          echo "host_count=$(python3 -c 'import json;print(len(json.load(open("host.json"))))')" >> "$GITHUB_OUTPUT"
+          python3 -c 'import json;print(len(json.load(open("host.json"))),"host groups to parse")'
           echo "count=$(python3 -c 'import json;print(json.load(open("plan.json"))["count"])')" >> "$GITHUB_OUTPUT"
           echo "matrix=$(python3 -c 'import json;print(json.dumps(json.load(open("plan.json"))["matrix"]))')" >> "$GITHUB_OUTPUT"
           echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
@@ -73,6 +102,61 @@ jobs:
           path: |
             plan.json
             planned.txt
+            host.json
+
+  host-parse:
+    needs: plan
+    if: needs.plan.outputs.host_count != '0' && needs.plan.outputs.host_count != ''
+    name: host-parse ${{ matrix.stem }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.plan.outputs.host_matrix) }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ needs.plan.outputs.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+      # Elaboration of the largest group is held in memory; the whole-set host compile was killed at 16 GB without
+      # swap (release-linux-build.yml, run 40272710760). The same swap helper, sized for one group.
+      - name: Swap
+        run: bash tools/gha_release_box.sh swap 16 "$RUNNER_TEMP/swap.txt" || echo "no swap added"
+      - uses: prefix-dev/setup-pixi@v0.10.1
+        with:
+          run-install: true
+          cache: true
+          cache-write: false
+          environments: default
+      - name: Parse and elaborate ${{ matrix.stem }} (mojo build --emit llvm --no-optimization)
+        env:
+          STEM: ${{ matrix.stem }}
+          MEMBERS: ${{ matrix.members }}
+        run: |
+          set +e -u
+          mkdir -p out
+          # bindings/merged_build.sh host: the host set's defines and the wheel's x86-64-v3 baseline
+          target="--target-cpu x86-64-v3 --target-features +avx,+avx2,+bmi,+bmi2,+cx16,+f16c,+fma,+lzcnt,+movbe,+popcnt,+sahf,+sse3,+sse4.1,+sse4.2,+ssse3,+xsave"
+          [ "$(uname -m)" = x86_64 ] || target=""
+          python3 tools/generated_sources.py prepare --repo "$PWD" < /dev/null > out/generated-sources.log 2>&1 \
+            || { tail -n 20 out/generated-sources.log; exit 1; }
+          python3 tools/merged_bindings.py root --stem "$STEM" --members "$MEMBERS" --out "out/$STEM.mojo" < /dev/null || exit 1
+          start=$(date +%s)
+          pixi run mojo build -j "$(nproc)" --emit llvm --no-optimization -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU \
+            $target -I . -I bindings "out/$STEM.mojo" -o "out/$STEM.ll" > "out/$STEM.log" 2>&1
+          rc=$?
+          rm -f "out/$STEM.ll"
+          echo "host-parse $STEM rc=$rc seconds=$(( $(date +%s) - start )) members=$MEMBERS" | tee -a "$GITHUB_STEP_SUMMARY"
+          grep -m 20 -E 'error:' "out/$STEM.log"
+          tail -n 5 "out/$STEM.log"
+          exit "$rc"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: host-parse-${{ matrix.stem }}
+          path: out/*.log
 
   build:
     needs: plan
