@@ -7,7 +7,9 @@ names from this file (`tools/ops/native_checks_report.py`), so a check that is
 not appended here never runs. No `main()`: imported by the two mains.
 
 Not here: `et_device_loop_early_exit` and `rf_device_loop_early_exit` build
-one binary per compile-time route define (their own pixi tasks).
+one binary per compile-time route define (their own pixi tasks), and
+`entry_table_image_provider` / `entry_table_image_consumer`, two shared
+images a controller loads separately (they cannot share one binary).
 """
 from checks.native_tests.adafactor import register as register_adafactor
 from checks.native_tests.agglo_native import register as register_agglo_native
@@ -206,6 +208,106 @@ from checks.native_tests.gbdt_host_archive_text import register as register_gbdt
 # lane tests-to-mojo-neural (2026-11-15)
 from checks.native_tests.generator_draw import register as register_generator_draw
 from checks.native_tests.training_small_mlp_relations import register as register_training_small_mlp_relations
+# lane checks-register (2026-11-16): the standalone main() checks no CI job ran, now registered
+from checks.native_tests.affinity_preference_plan import register as register_affinity_preference_plan
+from checks.native_tests.agglo_contract import register as register_agglo_contract
+from checks.native_tests.agglo_state import register as register_agglo_state
+from checks.native_tests.base_helpers_entry import register as register_base_helpers_entry
+from checks.native_tests.boundary_layout import register as register_boundary_layout
+from checks.native_tests.byte_lm_entry import register as register_byte_lm_entry
+from checks.native_tests.causal_lm_entry import register as register_causal_lm_entry
+from checks.native_tests.cfb_agglo_run import register as register_cfb_agglo_run
+from checks.native_tests.class_weight_plan import register as register_class_weight_plan
+from checks.native_tests.dbscan_contract import register as register_dbscan_contract
+from checks.native_tests.dbscan_door_run import register as register_dbscan_door_run
+from checks.native_tests.dbscan_options import register as register_dbscan_options
+from checks.native_tests.dbscan_state import register as register_dbscan_state
+from checks.native_tests.decomp_entry_table import register as register_decomp_entry_table
+from checks.native_tests.entry_table_contract import register as register_entry_table_contract
+from checks.native_tests.exec_owned_reuse import register as register_exec_owned_reuse
+from checks.native_tests.finite_scan import register as register_finite_scan
+from checks.native_tests.gp_contract import register as register_gp_contract
+from checks.native_tests.gp_label_owner import register as register_gp_label_owner
+from checks.native_tests.gp_owner import register as register_gp_owner
+from checks.native_tests.gp_state import register as register_gp_state
+from checks.native_tests.hdbscan_plan import register as register_hdbscan_plan
+from checks.native_tests.hierarchy_connectivity_plan import register as register_hierarchy_connectivity_plan
+from checks.native_tests.host_entry_forest import register as register_host_entry_forest
+from checks.native_tests.ipca_contract import register as register_ipca_contract
+from checks.native_tests.ipca_state import register as register_ipca_state
+from checks.native_tests.kde_contract import register as register_kde_contract
+from checks.native_tests.kde_state import register as register_kde_state
+from checks.native_tests.kmeans_contract import register as register_kmeans_contract
+from checks.native_tests.kmeans_variants_contract import register as register_kmeans_variants_contract
+from checks.native_tests.kmeans_variants_lease import register as register_kmeans_variants_lease
+from checks.native_tests.kpca_contract import register as register_kpca_contract
+from checks.native_tests.kpca_state import register as register_kpca_state
+from checks.native_tests.label_score_keys_stress import register as register_label_score_keys_stress
+from checks.native_tests.labels_accuracy import register as register_labels_accuracy
+from checks.native_tests.labels_driver import register as register_labels_driver
+from checks.native_tests.labels_score_keys import register as register_labels_score_keys
+from checks.native_tests.linear_boundary_contracts import register as register_linear_boundary_contracts
+from checks.native_tests.linear_entry_production import register as register_linear_entry_production
+from checks.native_tests.linear_model_state import register as register_linear_model_state
+from checks.native_tests.lof_plan_contract import register as register_lof_plan_contract
+from checks.native_tests.logistic_config import register as register_logistic_config
+from checks.native_tests.logistic_contracts import register as register_logistic_contracts
+from checks.native_tests.logistic_model_state import register as register_logistic_model_state
+from checks.native_tests.logistic_query_width import register as register_logistic_query_width
+from checks.native_tests.lr_schedule_check import register as register_lr_schedule_check
+from checks.native_tests.mani_tsne_run import register as register_mani_tsne_run
+from checks.native_tests.mani_umap_run import register as register_mani_umap_run
+from checks.native_tests.msel_helpers_entry import register as register_msel_helpers_entry
+from checks.native_tests.native_array_layout_check import register as register_native_array_layout_check
+from checks.native_tests.native_device_concurrency import register as register_native_device_concurrency
+from checks.native_tests.nearest_centroid_plan import register as register_nearest_centroid_plan
+from checks.native_tests.neighbors_ann_query_run import register as register_neighbors_ann_query_run
+from checks.native_tests.neighbors_ann_run import register as register_neighbors_ann_run
+from checks.native_tests.neighbors_graph_run import register as register_neighbors_graph_run
+from checks.native_tests.neighbors_kde_run import register as register_neighbors_kde_run
+from checks.native_tests.neighbors_knn_run import register as register_neighbors_knn_run
+from checks.native_tests.neighbors_local_run import register as register_neighbors_local_run
+from checks.native_tests.neighbors_semi_run import register as register_neighbors_semi_run
+from checks.native_tests.neural_entry import register as register_neural_entry
+from checks.native_tests.nmf_contract import register as register_nmf_contract
+from checks.native_tests.nmf_state import register as register_nmf_state
+from checks.native_tests.nonzero_scan import register as register_nonzero_scan
+from checks.native_tests.pandas_input_plan_check import register as register_pandas_input_plan_check
+from checks.native_tests.parallel_archive_entry import register as register_parallel_archive_entry
+from checks.native_tests.pca_contract import register as register_pca_contract
+from checks.native_tests.pca_query_state import register as register_pca_query_state
+from checks.native_tests.pcs_contract import register as register_pcs_contract
+from checks.native_tests.portable_math import register as register_portable_math
+from checks.native_tests.prep_entry_table import register as register_prep_entry_table
+from checks.native_tests.qn_door_run import register as register_qn_door_run
+from checks.native_tests.registry_epoch import register as register_registry_epoch
+from checks.native_tests.ridge_multi_entry import register as register_ridge_multi_entry
+from checks.native_tests.samba_entry_table import register as register_samba_entry_table
+from checks.native_tests.seq_opt_entry import register as register_seq_opt_entry
+from checks.native_tests.sequence_input_plan_check import register as register_sequence_input_plan_check
+from checks.native_tests.spectral_contract import register as register_spectral_contract
+from checks.native_tests.spectral_state import register as register_spectral_state
+from checks.native_tests.trees_door_run import register as register_trees_door_run
+from checks.native_tests.trees_entry_dart import register as register_trees_entry_dart
+from checks.native_tests.trees_entry_forest import register as register_trees_entry_forest
+from checks.native_tests.trees_entry_gbdt import register as register_trees_entry_gbdt
+from checks.native_tests.trees_entry_glue import register as register_trees_entry_glue
+from checks.native_tests.tsqr_host_ownership import register as register_tsqr_host_ownership
+from checks.native_tests.tsvd_contract import register as register_tsvd_contract
+from checks.native_tests.tsvd_lease_state import register as register_tsvd_lease_state
+from checks.native_tests.x_linear_door_run import register as register_x_linear_door_run
+from checks.native_tests.xcnn_bn_run import register as register_xcnn_bn_run
+from checks.native_tests.xcnn_classifier_run import register as register_xcnn_classifier_run
+from checks.native_tests.xcnn_conv_run import register as register_xcnn_conv_run
+from checks.native_tests.xcnn_entry_table import register as register_xcnn_entry_table
+from checks.native_tests.xcnn_graph_run import register as register_xcnn_graph_run
+from checks.native_tests.xcnn_pool_run import register as register_xcnn_pool_run
+from checks.native_tests.xcnn_tensor_run import register as register_xcnn_tensor_run
+from checks.native_tests.xseq_entry_glue import register as register_xseq_entry_glue
+from checks.native_tests.xseq_forecast_run import register as register_xseq_forecast_run
+from checks.native_tests.xseq_neural_run import register as register_xseq_neural_run
+from checks.native_tests.xseq_prophet_run import register as register_xseq_prophet_run
+from checks.native_tests.xseq_score_run import register as register_xseq_score_run
 
 
 def all_checks() -> List[Check]:
@@ -406,4 +508,104 @@ def all_checks() -> List[Check]:
     # lane tests-to-mojo-neural (2026-11-15)
     checks.append(register_generator_draw())
     checks.append(register_training_small_mlp_relations())
+    # lane checks-register (2026-11-16)
+    checks.append(register_affinity_preference_plan())
+    checks.append(register_agglo_contract())
+    checks.append(register_agglo_state())
+    checks.append(register_base_helpers_entry())
+    checks.append(register_boundary_layout())
+    checks.append(register_byte_lm_entry())
+    checks.append(register_causal_lm_entry())
+    checks.append(register_cfb_agglo_run())
+    checks.append(register_class_weight_plan())
+    checks.append(register_dbscan_contract())
+    checks.append(register_dbscan_door_run())
+    checks.append(register_dbscan_options())
+    checks.append(register_dbscan_state())
+    checks.append(register_decomp_entry_table())
+    checks.append(register_entry_table_contract())
+    checks.append(register_exec_owned_reuse())
+    checks.append(register_finite_scan())
+    checks.append(register_gp_contract())
+    checks.append(register_gp_label_owner())
+    checks.append(register_gp_owner())
+    checks.append(register_gp_state())
+    checks.append(register_hdbscan_plan())
+    checks.append(register_hierarchy_connectivity_plan())
+    checks.append(register_host_entry_forest())
+    checks.append(register_ipca_contract())
+    checks.append(register_ipca_state())
+    checks.append(register_kde_contract())
+    checks.append(register_kde_state())
+    checks.append(register_kmeans_contract())
+    checks.append(register_kmeans_variants_contract())
+    checks.append(register_kmeans_variants_lease())
+    checks.append(register_kpca_contract())
+    checks.append(register_kpca_state())
+    checks.append(register_label_score_keys_stress())
+    checks.append(register_labels_accuracy())
+    checks.append(register_labels_driver())
+    checks.append(register_labels_score_keys())
+    checks.append(register_linear_boundary_contracts())
+    checks.append(register_linear_entry_production())
+    checks.append(register_linear_model_state())
+    checks.append(register_lof_plan_contract())
+    checks.append(register_logistic_config())
+    checks.append(register_logistic_contracts())
+    checks.append(register_logistic_model_state())
+    checks.append(register_logistic_query_width())
+    checks.append(register_lr_schedule_check())
+    checks.append(register_mani_tsne_run())
+    checks.append(register_mani_umap_run())
+    checks.append(register_msel_helpers_entry())
+    checks.append(register_native_array_layout_check())
+    checks.append(register_native_device_concurrency())
+    checks.append(register_nearest_centroid_plan())
+    checks.append(register_neighbors_ann_query_run())
+    checks.append(register_neighbors_ann_run())
+    checks.append(register_neighbors_graph_run())
+    checks.append(register_neighbors_kde_run())
+    checks.append(register_neighbors_knn_run())
+    checks.append(register_neighbors_local_run())
+    checks.append(register_neighbors_semi_run())
+    checks.append(register_neural_entry())
+    checks.append(register_nmf_contract())
+    checks.append(register_nmf_state())
+    checks.append(register_nonzero_scan())
+    checks.append(register_pandas_input_plan_check())
+    checks.append(register_parallel_archive_entry())
+    checks.append(register_pca_contract())
+    checks.append(register_pca_query_state())
+    checks.append(register_pcs_contract())
+    checks.append(register_portable_math())
+    checks.append(register_prep_entry_table())
+    checks.append(register_qn_door_run())
+    checks.append(register_registry_epoch())
+    checks.append(register_ridge_multi_entry())
+    checks.append(register_samba_entry_table())
+    checks.append(register_seq_opt_entry())
+    checks.append(register_sequence_input_plan_check())
+    checks.append(register_spectral_contract())
+    checks.append(register_spectral_state())
+    checks.append(register_trees_door_run())
+    checks.append(register_trees_entry_dart())
+    checks.append(register_trees_entry_forest())
+    checks.append(register_trees_entry_gbdt())
+    checks.append(register_trees_entry_glue())
+    checks.append(register_tsqr_host_ownership())
+    checks.append(register_tsvd_contract())
+    checks.append(register_tsvd_lease_state())
+    checks.append(register_x_linear_door_run())
+    checks.append(register_xcnn_bn_run())
+    checks.append(register_xcnn_classifier_run())
+    checks.append(register_xcnn_conv_run())
+    checks.append(register_xcnn_entry_table())
+    checks.append(register_xcnn_graph_run())
+    checks.append(register_xcnn_pool_run())
+    checks.append(register_xcnn_tensor_run())
+    checks.append(register_xseq_entry_glue())
+    checks.append(register_xseq_forecast_run())
+    checks.append(register_xseq_neural_run())
+    checks.append(register_xseq_prophet_run())
+    checks.append(register_xseq_score_run())
     return checks^

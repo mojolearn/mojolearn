@@ -3,6 +3,7 @@
 from core.host_parallel import host_parallelize
 from x_decomp.cells import F32Ptr
 from x_decomp.tsqr_host import ts_factor_host, ts_apply_host, TS_HOST_STATE
+from checks.native_tests.runner import Check, Column, Report
 
 
 def require(ok: Bool, message: String) raises:
@@ -42,7 +43,7 @@ def temporary(fixture: Int) raises:
     _ = r
 
 
-def main() raises:
+def run_checks() raises:
     var a = values(17, 3, 31)
     var r = List[Float32](length=9, fill=0)
     ts_factor_host(F32Ptr(unsafe_from_address=Int(a.unsafe_ptr())), F32Ptr(unsafe_from_address=Int(a.unsafe_ptr())),
@@ -76,3 +77,19 @@ def main() raises:
     _ = eye
     _ = q
     print("PASS tsqr_host_ownership: 32 parallel temporary owners and retained factor/apply reconstruction")
+
+
+# Registered by lane checks-register (2026-11-16): it was a standalone main()
+# that no CI job ran. One process per check name in CI keeps any fresh-process
+# precondition.
+# Host column: the suite is host work (its fixtures run across host
+# cores inside run_checks; the check counts as one case).
+def run_cases(column: Column, mut report: Report):
+    try:
+        run_checks()
+    except error:
+        report.abort(error)
+
+
+def register() -> Check:
+    return Check("tsqr_host_ownership", cpu=True, gpu=False, serial="", run=run_cases)

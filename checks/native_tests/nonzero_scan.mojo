@@ -15,6 +15,7 @@ from std.memory import bitcast
 from core.host_parallel import host_parallelize
 from core.core_host_impl import nonzero_f64_count, nonzero_f64_fill
 from core.mojolearn_shell_impl import nonzero_f64_count_host, nonzero_f64_fill_host
+from checks.native_tests.runner import Check, Column, Report
 
 
 def _require(ok: Bool, message: String) raises:
@@ -204,7 +205,7 @@ def _capacity(arm: Int) raises:
     _ = values
 
 
-def main() raises:
+def run_checks() raises:
     var failed = List[Int](length=60, fill=0)
     var fp = failed.unsafe_ptr()
     def task(unit: Int) {imm fp}:
@@ -227,3 +228,19 @@ def main() raises:
         failures += value
     _require(failures == 0, "nonzero_scan failed " + String(failures) + " of 60 native fixture/implementation pairs")
     print("PASS nonzero_scan: 30 native fixtures x 2 typed scan implementations, parallel")
+
+
+# Registered by lane checks-register (2026-11-16): it was a standalone main()
+# that no CI job ran. One process per check name in CI keeps any fresh-process
+# precondition.
+# Host column: the suite is host work (its fixtures run across host
+# cores inside run_checks; the check counts as one case).
+def run_cases(column: Column, mut report: Report):
+    try:
+        run_checks()
+    except error:
+        report.abort(error)
+
+
+def register() -> Check:
+    return Check("nonzero_scan", cpu=True, gpu=False, serial="", run=run_cases)
