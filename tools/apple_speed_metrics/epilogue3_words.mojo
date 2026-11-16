@@ -250,6 +250,7 @@ def rows_and_scatter(n: Int, k: Int) raises -> Int:
     var refused = False
     try:
         scatter_rows(Int(srcw.unsafe_ptr()), Int(dst.unsafe_ptr()), Int(idx.unsafe_ptr()), n, n, 12)
+        _ = dst^  # lastuse-audit: the call reads it through an untracked address; Mojo frees a local at its last named use
     except:
         refused = True
     if not refused:

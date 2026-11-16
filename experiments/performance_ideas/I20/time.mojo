@@ -20,3 +20,4 @@ def main() raises:
         var elapsed=perf_counter_ns()-start
         print("MEASURE id=I20 phase="+String(phase)+" rows="+String(n)+" queries="+String(q)+" features="+String(d)+" elapsed_ns="+String(elapsed))
     kde_fit_release(handle)
+    _ = train^  # lastuse-audit: the resident handle reads it until its release through an untracked address; Mojo frees a local at its last named use

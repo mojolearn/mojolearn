@@ -16,6 +16,8 @@ skips it). Three builds were lost on 2026-11-15 to defects these catch:
               packaging/portable_math/wheel.py (audit_tree python_only) and the source/API payload audit
               (tools/wheel_api_audit.py audit, `source_payload_complete`, the refusal pack_wheel raises). Every rule
               is the COMMIT's own file, loaded from an export of the commit; nothing is copied here. Seconds.
+              Then the commit's tools/mojo_lastuse_audit.py over every .mojo blob of the commit (a local freed at its
+              last named use while an untracked address still reads it; tools/mojo_lastuse_allow.txt). Seconds.
   host-parse  (f29f76bf57: two host units did not parse; native-checks passed 166/166 because no check imports those
               doors) .github/workflows/native-checks.yml with suite=host-parse on a free runner: every release host
               group the Linux CPU leg builds (tools/merged_bindings.py plan --dir host --layout release) through
@@ -186,7 +188,20 @@ def run_audits(tree, commit, workdir, git_root=ROOT):
         print(f"AUDIT FAIL {line}")
     print(f"AUDIT {'FAIL' if errors else 'PASS'} {len(entries)} wheel entries ({py} .py) of {commit[:12]}, "
           f"{len(errors)} refusal(s)")
-    return 1 if errors else 0
+    lastuse = lastuse_audit(tree, commit, git_root)
+    return 1 if errors or lastuse else 0
+
+
+def lastuse_audit(tree, commit, git_root=ROOT):
+    """The COMMIT's tools/mojo_lastuse_audit.py over the commit's .mojo blobs (2026-11-16: a list freed at its last
+    named use while an untracked address still read it crashed four test files and five native check suites).
+    Prints its LASTUSE lines; returns its exit code (0 when the commit predates the audit)."""
+    tool = Path(tree) / "tools/mojo_lastuse_audit.py"
+    if not tool.is_file():
+        print(f"LASTUSE SKIP {commit[:12]} has no tools/mojo_lastuse_audit.py")
+        return 0
+    # a child process: the audit splits its files across a process pool, whose workers import it by path
+    return subprocess.call([sys.executable, str(tool), "--commit", commit, "--root", str(git_root)])
 
 
 # ------------------------------------------------------------------ the probe wheel

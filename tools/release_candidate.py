@@ -66,7 +66,20 @@ reused) run in parallel; a failure refuses the build. --probe-wheel <core.whl> a
 wheel with this commit's Python on verify-smoke.yml). Logs: <work dir>/prebuild/. A resume reuses their PASS.json.
 --no-prebuild-check skips them. A dry run does not run them.
 
-At the end it asserts that origin/main and the tag lists (origin and local) are what they were at the start.
+At the end it asserts that origin/main and the tag lists (origin and local) are what they were at the start
+(`git ls-remote`, three tries with a pause between them; refs that stay unreadable after a finished build are
+recorded as unknown, never a failed build).
+
+DISK (2026-11-16: seven of eight arms died with ENOSPC at linux-assemble, 5.6 GB free). SEVERAL ARMS start only
+when the work root's disk has arms x the measured need of one wheel set (arm_need: the source worktree plus
+PER_LINUX_SET_BYTES per Linux set) plus a reserve; linux-assemble (tools/release.py) refuses, with the numbers,
+when the measured need of the sets it is about to assemble is not free. After a set packs and its candidate.json is
+written, prune_set deletes what the final wheels and the records do not need: the payload of the downloaded leg
+trees, the host composition and assembled reuse sets, the audit's wheel copies, the unstripped wheels in linux/,
+and the source worktree. Kept: linux/final (wheels, candidate.json, split and strip audits), every .json and .log
+record (leg provenance and the PTX witnesses a B arm reads from its base, reuse/plan.json, audit reports, pack
+logs), state.json, ledger/, prebuild/. --keep-intermediates keeps everything. A work dir made before pruning
+existed is never pruned.
 """
 import argparse
 import hashlib
@@ -88,6 +101,98 @@ VENDORS = ("nvidia", "amd")
 LABEL_RE = re.compile(r"[a-z0-9]+(\.[a-z0-9]+)*")
 #: the owed B arms of the pre-0.8.67 measurement: {arm name: {define, status}} under "b_arms"
 OWED_FILE = "bench/results/paper_compare/owed-pre0867.json"
+
+GIB = 1 << 30
+#: MEASURED DISK NEED (du -sk of finished sets under ~/mojolearn-evidence/release-candidates, 2026-11-16): a wheel set
+#: of 23bc7a5ae358 (sm_89 + sm_80) held 4.2 GB as the A set and 5.2 GB as a B arm, fcc934a37cd4 (three sets) 5.3 GB.
+#: Of that, the detached source worktree is 1.9 GB, and each Linux set takes about 0.69 GB of downloaded leg trees
+#: (1.37 GB for two sets, 2.25 GB for three), 0.31 GB of host composition, 0.52 GB of assembled reuse sets (B arm:
+#: 1.0 GB for two) and 0.17 GB of packed and audited wheels. On 2026-11-16 seven of eight arms died with ENOSPC at
+#: linux-assemble with 5.6 GB free; these numbers make that a refusal before the work starts.
+SOURCE_TREE_BYTES = 2 * GIB
+PER_LINUX_SET_BYTES = int(1.7 * GIB)        # legs + host composition + assembled sets + packed wheels
+ASSEMBLE_PER_LINUX_SET_BYTES = int(0.7 * GIB)   # what linux-assemble and linux-pack still write per set
+RESERVE_BYTES = 1 * GIB                     # never fill the disk to the last byte
+#: what a finished set keeps of the trees prune_set thins: records, never payload
+KEEP_SUFFIXES = (".json", ".log", ".txt", ".md", ".exit", ".pid", ".sha256", ".tsv", ".csv")
+#: the intermediate trees of a set (<work>/<commit12>/) that the final wheels and the records do not need: the
+#: downloaded leg trees (their .so/.tar.gz/toolchain payload), the host composition and the assembled reuse sets
+#: (copies the packer read) and the audit's repaired wheel copies
+PRUNE_TREES = ("legs", "host-composition/sets", "reuse/sets", "linux/audit")
+
+
+def free_bytes(path):
+    """Free bytes on the file system that holds PATH (its nearest existing parent)."""
+    import shutil
+    p = Path(path).expanduser().resolve()
+    while not p.exists() and p != p.parent:
+        p = p.parent
+    return shutil.disk_usage(str(p)).free
+
+
+def space_refusal(path, need, what, free=None):
+    """None when PATH's disk has NEED bytes plus RESERVE_BYTES free, else the refusal with the numbers."""
+    free = free_bytes(path) if free is None else free
+    if free >= need + RESERVE_BYTES:
+        return None
+    return (f"{what}: {free / GIB:.1f} GB free at {path}, {(need + RESERVE_BYTES) / GIB:.1f} GB needed "
+            f"({need / GIB:.1f} GB measured need + {RESERVE_BYTES / GIB:.0f} GB reserve). Free space (finished "
+            "sets of ~/mojolearn-evidence/release-candidates/ hold their pruned records only) and rerun")
+
+
+def arm_need(n_linux_sets):
+    """The measured peak bytes of one wheel set (one candidate run) over N_LINUX_SETS Linux sets."""
+    return SOURCE_TREE_BYTES + n_linux_sets * PER_LINUX_SET_BYTES
+
+
+def prune_plan(set_dir):
+    """[(path, bytes)] that prune_set deletes in SET_DIR (<work>/<commit12>): every file under PRUNE_TREES whose
+    suffix is not in KEEP_SUFFIXES, and the unstripped wheels directly in linux/ (linux/final holds the shipped
+    ones). Kept: linux/final (wheels, candidate.json, split and strip audits), every .json/.log record (leg
+    provenance, the PTX witnesses a B arm reads, reuse/plan.json, audit reports), the pack logs."""
+    d = Path(set_dir)
+    out = []
+    for rel in PRUNE_TREES:
+        top = d / rel
+        if not top.is_dir():
+            continue
+        for root, _, files in os.walk(top):
+            for name in files:
+                p = Path(root) / name
+                if not name.endswith(KEEP_SUFFIXES):
+                    out.append((p, p.lstat().st_size))
+    for p in sorted((d / "linux").glob("*.whl")) if (d / "linux").is_dir() else ():
+        out.append((p, p.lstat().st_size))
+    return out
+
+
+def prune_set(work, commit, say=print):
+    """After a set packed and its candidate.json was written: delete prune_plan's files, the directories they
+    leave empty, and the detached source worktree <work>/source/<commit12> (a resume makes it again). Returns the
+    bytes freed."""
+    import shutil
+    d = Path(work) / commit[:12]
+    freed = 0
+    for p, size in prune_plan(d):
+        p.unlink(missing_ok=True)
+        freed += size
+    for rel in PRUNE_TREES:
+        for root, _, _ in os.walk(d / rel, topdown=False):
+            if not os.listdir(root):
+                os.rmdir(root)
+    src = Path(work) / "source" / commit[:12]
+    if src.exists():
+        size = sum(f.lstat().st_size for f in src.rglob("*") if f.is_file() or f.is_symlink())
+        sh("git", "worktree", "remove", "--force", str(src), check=False)
+        if src.exists():
+            shutil.rmtree(src, ignore_errors=True)
+            sh("git", "worktree", "prune", check=False)
+        freed += size
+    say(f"measurement build: pruned {freed / GIB:.2f} GB of intermediates from {Path(work)} (leg trees, host "
+        "composition, assembled sets, audit wheel copies, unstripped wheels, the source worktree); kept "
+        f"{d / 'linux' / 'final'} (wheels, candidate.json), every .json/.log record, state.json, ledger, prebuild. "
+        "--keep-intermediates keeps them")
+    return freed
 
 
 def owed_arms(path=OWED_FILE):
@@ -186,6 +291,13 @@ def run_arms(a, argv):
         if x.startswith("--owed-arm="):
             continue
         rest.append(x)
+    if not a.dry_run:
+        import release_reuse
+        n_sets = len(release_reuse.scope_linux_sets(a.targets))
+        refusal = space_refusal(a.work_root, len(arms) * arm_need(n_sets),
+                                f"ARMS: {len(arms)} arms x {arm_need(n_sets) / GIB:.1f} GB ({n_sets} Linux sets each)")
+        if refusal:
+            raise SystemExit(refusal)
     logs = Path(a.work_root).expanduser().resolve() / f"arms-{dt.datetime.now().strftime('%Y%m%d-%H%M%S')}"
     logs.mkdir(parents=True, exist_ok=True)
     workers = len(arms) if not a.dry_run else max(1, min(len(arms), os.cpu_count() or 1))
@@ -226,10 +338,32 @@ def inside(path, root):
     return path == root or root in path.parents
 
 
+def ls_remote(*args, attempts=3, backoff=(10, 30), timeout=120, sleep=None):
+    """`git ls-remote ARGS` with ATTEMPTS tries and a growing pause between them (2026-11-16: one 75 s network
+    timeout of the final tag check turned a finished arm into rc 1). SystemExit after the last failure."""
+    import time
+    sleep = sleep or time.sleep
+    why = ""
+    for n in range(attempts):
+        try:
+            p = subprocess.run(["git", "ls-remote", *args], cwd=str(ROOT), capture_output=True, text=True,
+                               timeout=timeout)
+            if p.returncode == 0:
+                return p.stdout.strip()
+            why = p.stderr.strip()[:300]
+        except subprocess.TimeoutExpired:
+            why = f"no answer in {timeout} s"
+        if n + 1 < attempts:
+            pause = backoff[min(n, len(backoff) - 1)]
+            print(f"candidate: git ls-remote {' '.join(args)} failed ({why}); retry {n + 2}/{attempts} in {pause} s")
+            sleep(pause)
+    raise SystemExit(f"candidate: git ls-remote {' '.join(args)} failed {attempts} times: {why}")
+
+
 def remote_refs():
     """(origin/main sha, sorted origin tag lines, sorted local tags): what a candidate must never change."""
-    main = sh("git", "ls-remote", "origin", "refs/heads/main").split()
-    tags = sorted(sh("git", "ls-remote", "--tags", "origin").splitlines())
+    main = ls_remote("origin", "refs/heads/main").split()
+    tags = sorted(ls_remote("--tags", "origin").splitlines())
     local = sorted(sh("git", "tag", "-l").splitlines())
     return dict(origin_main=main[0] if main else None,
                 origin_tags_sha256=hashlib.sha256("\n".join(tags).encode()).hexdigest(), origin_tags=len(tags),
@@ -302,6 +436,9 @@ def parse(argv):
                     "source audits and the host-parse suite) before the build is dispatched")
     ap.add_argument("--probe-wheel", default="", help="tools/prebuild_check.py --probe-wheel: an earlier packed "
                     "mojolearn_core-*.whl, smoked with this commit's Python before the build")
+    ap.add_argument("--keep-intermediates", action="store_true", help="keep the leg trees, host composition, "
+                    "assembled sets, audit wheel copies and source worktree after the pack (default: pruned once "
+                    "candidate.json is written; see prune_set)")
     ap.add_argument("--no-verify-smoke", action="store_true", help="do not start .github/workflows/verify-smoke.yml "
                     "on the packed core wheel (an A set starts it by default; it reports and gates nothing)")
     return ap.parse_args(argv)
@@ -389,7 +526,7 @@ def main(argv=None, release=None):
         state = dict(version=version, commit=a.commit, steps={}, release_modes=["identical"],
                      candidate=dict(version=version, commit=a.commit, defines=defines, label=label, targets=targets,
                                     base_version=base, committed_version=committed[1] if committed else None,
-                                    owed_arm=owed_arm, made=release.now()))
+                                    owed_arm=owed_arm, made=release.now(), prune=True))
     # THE TOOLING SHA, recorded at the first launch: a resume dispatches from the same pushed ref while it still
     # holds this sha with the same route files, even after the ref moved on (release_github_build.tooling_ref;
     # 2026-11-13: origin/main moved under the tooling checkout and every resume refused with "push it")
@@ -433,7 +570,14 @@ def main(argv=None, release=None):
     if plan:
         print(arm_summary(owed_arm or label, plan))
 
-    after = remote_refs()
+    try:
+        after = remote_refs()
+    except SystemExit as exc:
+        # the refs are reported, never a refusal of built wheels (below); a network that stays down after the
+        # retries leaves them unread, said so, and the build stands
+        print(f"measurement build: the refs after the run could not be read ({exc}); recorded as unknown")
+        after = {k: before[k] for k in before}
+        after["unread"] = str(exc)
     moved = [k for k in ("origin_main", "origin_tags_sha256", "local_tags_sha256") if before[k] != after[k]]
     if moved:
         # This path has no push, tag or publish command, so a change here is someone else's (2026-11-12: the
@@ -478,6 +622,13 @@ def main(argv=None, release=None):
         except (Exception, SystemExit) as exc:
             print(f"VERIFY-SMOKE not started ({exc}); by hand: python3 tools/ops/verify_smoke_dispatch.py "
                   f"--wheel-dir {final} --ref <pushed branch holding verify-smoke.yml>")
+    if a.keep_intermediates:
+        print("measurement build: --keep-intermediates: nothing pruned")
+    elif not cand.get("prune"):
+        # a work dir made before pruning existed is left exactly as it is
+        print(f"measurement build: {work} predates pruning; nothing pruned")
+    else:
+        prune_set(work, a.commit)
     for vendor in vendors:
         if defines:
             # a B set rides with its A set's stage line (measure_candidate reads this version from candidate.json)

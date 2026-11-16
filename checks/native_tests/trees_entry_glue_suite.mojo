@@ -461,6 +461,7 @@ def run_case(unit: Int) raises:
         var flags: List[Int32] = [9, 9, 9, 9]
         require(xt_oob_r2(k, _f64(acc), _i32(counts), _f32(y), _f64(pred), _f64(words), _i32(flags), 2) == 2,
                 "oob_r2 count")
+        _ = flags^  # lastuse-audit: the call reads it through an untracked address; Mojo frees a local at its last named use
         require(pred[0] == 2.0 and pred[1] == 2.0 and words[0] == 4.0 and words[3] == 2.0, "oob_r2")
         _ = acc
         _ = counts

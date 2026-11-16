@@ -96,6 +96,7 @@ def check_dot(mut card: IdentityTrace) raises:
     got[0] = dot(_p(a), 0, _p(b), 0, 37)
     _require(_bits(got[0]) == _bits(want), "dot: shipped fold != ascending fused fold")
     card.record_host("x_linear.seam5000.dot", _u(got), 1)
+    _ = got^  # lastuse-audit: read through an untracked pointer by the call; Mojo frees a local at its last named use
     print("PASS 5000 dot: ascending fused fold (fixture separates descending and unfused)")
 
 
@@ -120,6 +121,7 @@ def check_flush(mut card: IdentityTrace) raises:
         var v = bitcast[DType.float32](e)
         _require(_bits(fz_branchless(v)) == _bits(ftz(v)), "flush: the branchless flush and ftz give different words")
     card.record_host("x_linear.seam5001.flush", _u(got), 2)
+    _ = got^  # lastuse-audit: read through an untracked pointer by the call; Mojo frees a local at its last named use
     print("PASS 5001 flush: subnormal operands are signed zeros")
 
 
@@ -158,6 +160,7 @@ def check_cholesky(mut card: IdentityTrace) raises:
         for j in range(i + 1):
             _require(_bits(got[i * m + j]) == _bits(want[i * m + j]), "cholesky: L[" + String(i) + "," + String(j) + "]")
     card.record_host("x_linear.seam5002.cholesky", _u(got), m * m)
+    _ = got^  # lastuse-audit: read through an untracked pointer by the call; Mojo frees a local at its last named use
     print("PASS 5002 cholesky: column-ascending, inner-ascending factor")
 
 
@@ -185,6 +188,7 @@ def check_shuffle(mut card: IdentityTrace) raises:
         _require(Int(idx[i]) == want[i], "shuffle: position " + String(i))
         rec[i] = Float32(Int(idx[i]))
     card.record_host("x_linear.seam5004.shuffle", _u(rec), n)
+    _ = rec^  # lastuse-audit: read through an untracked pointer by the call; Mojo frees a local at its last named use
     print("PASS 5004 shuffle: splitmix64 Fisher-Yates, mod mapping")
 
 
@@ -216,8 +220,11 @@ def check_tie(mut card: IdentityTrace) raises:
     var iw = List[Int32](length=2 * d, fill=0)
     var tw = List[Float32](length=team_work(n, 0, 0), fill=0)
     lars_fit(solo(_p(tw), n, 0, 0), _p(x), _p(y), n, d, _pi(ip), _p(fp), _p(res), _p(fw), _pi(iw))
+    _ = ip^  # lastuse-audit: read through an untracked pointer by the call; Mojo frees a local at its last named use
+    _ = iw^
     _require(Int(res[d + 4]) == argmax_abs_first(xty), "tie: LARS's first active feature is not the lowest tied index")
     card.record_host("x_linear.seam5005.tie", _u(res), 2 * d + 4)
+    _ = res^  # lastuse-audit: read through an untracked pointer by the call; Mojo frees a local at its last named use
     print("PASS 5005 tie-break: the lowest index among exact ties")
 
 
@@ -242,10 +249,13 @@ def check_nan(mut card: IdentityTrace) raises:
     var iw = List[Int32](length=1, fill=0)
     var tw = List[Float32](length=team_work(3, 0, 0), fill=0)
     isotonic_predict(solo(_p(tw), 3, 0, 0), _p(q), _p(th), 3, 1, _pi(ip), _p(fp), _p(res), _p(fw), _pi(iw))
+    _ = ip^  # lastuse-audit: read through an untracked pointer by the call; Mojo frees a local at its last named use
+    _ = iw^
     _require(_bits(res[0]) == CANONICAL_NAN_BITS and _bits(res[2]) == CANONICAL_NAN_BITS,
              "nan: an out-of-bounds prediction is not the canonical word")
     _require(res[1] == Float32(1), "nan: the in-range prediction moved")
     card.record_host("x_linear.seam5006.nan", _u(res), 3)
+    _ = res^  # lastuse-audit: read through an untracked pointer by the call; Mojo frees a local at its last named use
     print("PASS 5006 nan: out of bounds writes 0x7FC00000")
 
 
@@ -271,6 +281,7 @@ def check_intercept(mut card: IdentityTrace) raises:
     got[0] = decision_one(_p(x), 0, d, _p(wb), 0, 0)
     _require(_bits(got[0]) == _bits(score_intercept_last(x, w, b)), "intercept: shipped score != fold then intercept")
     card.record_host("x_linear.seam5007.intercept", _u(got), 1)
+    _ = got^  # lastuse-audit: read through an untracked pointer by the call; Mojo frees a local at its last named use
     print("PASS 5007 intercept: joins after the fold")
 
 
@@ -303,6 +314,7 @@ def check_transcendentals(mut card: IdentityTrace) raises:
         got[2 * i] = e
         got[2 * i + 1] = l
     card.record_host("x_linear.seam5008.transcendentals", _u(got), len(got))
+    _ = got^  # lastuse-audit: read through an untracked pointer by the call; Mojo frees a local at its last named use
     print("PASS 5008 transcendentals: portable exp and log (fixture separates libm)")
 
 
@@ -321,6 +333,7 @@ def check_grid(mut card: IdentityTrace) raises:
         _require(_bits(got[k]) == _bits(want), "grid: alpha " + String(k))
     _require(sep, "VACUOUS grid fixture: the scaled-exp and log-interpolation spellings agree on all 100 alphas")
     card.record_host("x_linear.seam5009.grid", _u(got), a_n)
+    _ = got^  # lastuse-audit: read through an untracked pointer by the call; Mojo frees a local at its last named use
     print("PASS 5009 grid: exp(frac * log eps) spelling")
 
 
