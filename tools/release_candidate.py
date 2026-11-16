@@ -28,11 +28,25 @@ commit at source/<commit12> (the only tree it writes). It refuses a work dir or 
 checkout. The wheels land in <work dir>/<commit12>/linux/final/, with candidate.json beside them, the path
 tools/ops/measure_candidate.py stage reads for a local --version.
 
-DEFINES (the A/B "B" wheel sets): --defines makes an ordinary candidate of the same commit whose compiles get
-MOJOLEARN_BUILD_DEFINES. Only the bindings whose closure names a define compile again: the reuse plan builds the
-rows that read one (release_reuse.apply_defines) and the binding cache keys and builds every other one exactly as
-the A set (tools/bincache.py scope_build_defines), so those are cache hits on the A set's bytes. Run the A set
-first. The label defaults to `d` + 8 hex of the defines, so each define set has its own version and work dir.
+DEFINES (the A/B "B" wheel sets): --defines (or --owed-arm) makes a candidate of the same commit whose compiles get
+MOJOLEARN_BUILD_DEFINES. The label defaults to `d` + 8 hex of the defines, so each define set has its own version
+and work dir. RUN THE A SET FIRST: a B arm plans against its BASE BUILD, the finished A set of the same commit and
+targets at <work root>/<base>.dev0+<commit12>/ (release_reuse.base_build; lane arm-build-reuse, 2026-11-16). Every
+binding whose source closure names none of the defines is REUSE from the base (a guard module that only refuses a
+define still names it, so it reads it); the shard units (merged groups) holding a reading binding BUILD, every other
+unit gets no shard job (release_github_build.py run --skip-units) and the assemble job takes its archive from the
+binding cache, keyed exactly as the base's because tools/bincache.py scope_build_defines drops the defines a closure
+does not name; a leg runs only for a set with a unit to build. The pack places the base wheel's bytes for every
+REUSE row (release_reuse.assemble_linux; an NVIDIA rebuild of the same unit must reproduce them), so the arm's wheel
+is byte for byte what a full arm build packs. candidate.json `base` records the base and, per set, the units built
+and reused. Without a finished base every unit builds (printed). A dry run plans against a base still building
+(pending). A define read by every unit is a full build and the dry run says FULL BUILD.
+
+SEVERAL ARMS (`--owed-arm a --owed-arm b ...`, run_arms): one measurement build per distinct define set, all started
+at once as separate processes (their GitHub runs queue together; each dispatches only its BUILD units plus one
+assemble job per launched leg, so the free runners, about 20 at a time, are what bound the wall time, not a fixed
+worker count). A dry run plans them in parallel, one process per arm up to the Mac's cores. Each prints one line:
+ARM <name>: units BUILD / REUSE on its legs, rows BUILD / REUSE.
 
 --vendors names the vendor wheels validated and staged (tools/candidate_wheel_install.py build_manifest). The
 packer packs the core and the plugins of the targets from one set of legs, so the legs the plan needs always run.
@@ -40,7 +54,8 @@ packer packs the core and the plugins of the targets from one set of legs, so th
 --targets (2026-11-15; AGENTS.md part 8: measure on the NVIDIA L40S only) scopes the build to some Linux sets
 (release_reuse.scope_linux_sets): `--targets sm_89,sm_80` plans, dispatches, assembles and packs only the NVIDIA
 sets (and the host bindings their legs build), packs the core and the mojolearn-nvidia wheel, and no AMD or meta
-wheel. sm_89 alone is refused: the NVIDIA wheel does not import without its PTX slot sm_80, even on an sm_89 GPU.
+wheel. sm_89 alone is refused, for B arms too: the NVIDIA wheel does not import without its PTX slot sm_80, even on
+an sm_89 GPU, and a B arm's sm_80 units that read the define must carry it (the base's sm_80 bytes would not).
 Default: every set, as a release. candidate.json records the targets; tools/ops/measure_candidate.py stage refuses a
 vendor the build did not pack. A release has no --targets.
 
@@ -116,6 +131,81 @@ def resolve_owed(label, owed_arm, defines, path=OWED_FILE):
             raise SystemExit(f"candidate: --label {label} and --owed-arm {arm} name different arms")
         label = arm
     return (label or "").replace("-", ".").lower(), defines, arm or None
+
+
+def arm_summary(name, plan):
+    """One line per arm: shard units BUILD / REUSE over the launched legs, Linux rows BUILD / REUSE, the legs."""
+    import release_reuse
+    rows = [r for r in plan["rows"] if r["target"] == release_reuse.LINUX]
+    units = [u for s, us in (plan.get("units") or {}).items() if s.replace("/", "-") in plan["legs"] for u in us]
+    b = sum(u["decision"] == "BUILD" for u in units)
+    full = bool(units) and b == len(units)
+    return (f"ARM {name}: units BUILD {b} / REUSE {len(units) - b} on legs {','.join(plan['legs']) or 'none'}"
+            + f"; rows BUILD {sum(r['decision'] == 'BUILD' for r in rows)} / REUSE {sum(r['decision'] == 'REUSE' for r in rows)}"
+            + f"; against {(plan.get('previous') or {}).get('version')}"
+            + (" (FULL BUILD: every unit reads the define)" if full else ""))
+
+
+def reused_from_base(plan):
+    """candidate.json's record of what a B arm took from its base build: the base, and per set the units built
+    here and the units whose bytes are the base's (assemble_linux verified them against the base wheel)."""
+    prev = plan.get("previous") or {}
+    return dict(version=prev.get("version"), source_commit=prev.get("source_commit"), build_dir=prev.get("build_dir"),
+                wheels={k: prev[k] for k in ("linux", "nvidia", "amd") if prev.get(k)},
+                legs=plan.get("legs"),
+                units={s: dict(build=[u["unit"] for u in us if u["decision"] == "BUILD"],
+                               reuse=[u["unit"] for u in us if u["decision"] == "REUSE"])
+                       for s, us in (plan.get("units") or {}).items()})
+
+
+def run_arms(a, argv):
+    """SEVERAL ARMS AT ONCE (--owed-arm a --owed-arm b ...): one measurement build per distinct define set, every
+    one started at once as its own `release.py candidate` process (its own work dir, state and log), so their
+    GitHub runs queue together and keep the free runners full (GitHub runs about 20 jobs at once and queues the
+    rest; each arm dispatches only its BUILD units, release_reuse.unit_plan). Arms naming the same defines build
+    once. A dry run plans them in parallel too, one process per arm up to the Mac's cores. Logs:
+    <work root>/arms-<time>/<arm>.log. Returns non-zero when any arm failed."""
+    import concurrent.futures as cf
+    import datetime as dt
+    arms, seen = [], {}
+    for arm in a.owed_arm:
+        _, defines, _ = resolve_owed("", arm, "", a.owed_file)
+        if defines in seen:
+            print(f"ARMS: {arm} names the defines of {seen[defines]} ({defines}): built once, as {seen[defines]}")
+            continue
+        seen[defines] = arm
+        arms.append(arm)
+    rest, skip = [], False
+    for x in argv:
+        if skip:
+            skip = False
+            continue
+        if x == "--owed-arm":
+            skip = True
+            continue
+        if x.startswith("--owed-arm="):
+            continue
+        rest.append(x)
+    logs = Path(a.work_root).expanduser().resolve() / f"arms-{dt.datetime.now().strftime('%Y%m%d-%H%M%S')}"
+    logs.mkdir(parents=True, exist_ok=True)
+    workers = len(arms) if not a.dry_run else max(1, min(len(arms), os.cpu_count() or 1))
+    print(f"ARMS: {len(arms)} measurement builds ({', '.join(arms)}), {workers} at once; logs {logs}")
+
+    def one(arm):
+        log = logs / f"{arm}.log"
+        with open(log, "w") as fh:
+            rc = subprocess.call([sys.executable, str(ROOT / "tools" / "release.py"), "candidate", *rest,
+                                  "--owed-arm", arm], cwd=str(ROOT), stdout=fh, stderr=subprocess.STDOUT)
+        text = log.read_text(errors="replace").splitlines()
+        line = next((x for x in reversed(text) if x.startswith("ARM ")), f"ARM {arm}: no plan line")
+        return arm, rc, line, log
+
+    failed = 0
+    with cf.ThreadPoolExecutor(max_workers=workers) as ex:
+        for arm, rc, line, log in ex.map(one, arms):
+            print(f"{line}  [rc={rc}, {log}]")
+            failed += rc != 0
+    return 1 if failed else 0
 
 
 def sh(*args, cwd=ROOT, check=True):
@@ -198,8 +288,9 @@ def parse(argv):
     ap.add_argument("--defines", default="", help="B set: '-D NAME=V -D NAME2' or NAME=V,NAME2 (MOJOLEARN_BUILD_DEFINES)")
     ap.add_argument("--label", default="", help="the version's label (lower case [a-z0-9.]; a '-' becomes '.', so an "
                     "owed arm's name is a label; default: none for an A set, d<8 hex of the defines> for a B set)")
-    ap.add_argument("--owed-arm", default="", help="an owed B arm of the owed file's b_arms (e.g. small-mlp-generic): "
-                    "its define, and its name as the label (small.mlp.generic) and as candidate.json owed_arm")
+    ap.add_argument("--owed-arm", action="append", default=[], help="an owed B arm of the owed file's b_arms (e.g. "
+                    "small-mlp-generic): its define, and its name as the label (small.mlp.generic) and as candidate.json "
+                    "owed_arm. Repeat it for several arms: each runs as its own measurement build, all at once (ARMS)")
     ap.add_argument("--owed-file", default=OWED_FILE, help="the owed file (default %(default)s)")
     ap.add_argument("--base-version", default="", help="X.Y.Z of the .dev0 version (default: the commit's "
                     "_version.py plus one patch)")
@@ -218,6 +309,9 @@ def parse(argv):
 
 def main(argv=None, release=None):
     a = parse(sys.argv[1:] if argv is None else argv)
+    if len(a.owed_arm) > 1:
+        return run_arms(a, sys.argv[1:] if argv is None else argv)
+    a.owed_arm = a.owed_arm[0] if a.owed_arm else ""
     if release is None:
         import release  # noqa: F811 - tools/release.py, when this file is run directly
     import release_github_build
@@ -258,6 +352,19 @@ def main(argv=None, release=None):
         raise SystemExit("candidate: --base-version must be X.Y.Z")
     version = candidate_version(base, a.commit, label)
     work = Path(a.work_root).expanduser().resolve() / version
+    base_build = None
+    if defines:
+        # THE BASE BUILD (release_reuse.base_build): the A set of this commit and targets, from which every unit
+        # whose closure names none of the defines is reused
+        base_work = Path(a.work_root).expanduser().resolve() / candidate_version(base, a.commit, "")
+        base_build = release_reuse.base_build(base_work, a.commit, targets, dry=a.dry_run)
+        if base_build is None:
+            print(f"measurement build: NO BASE BUILD at {base_work} (the A set of {a.commit[:12]}, targets "
+                  f"{','.join(targets)}, finished): every unit of this arm builds. Build the A set first to reuse it")
+        else:
+            print(f"measurement build: base build {base_build['version']}"
+                  + (" (PENDING: still building; a real run waits for it to finish)" if base_build.get("pending")
+                     else f" ({base_build['build_dir']})"))
     main_tree = main_checkout()
     if inside(work, main_tree):
         raise SystemExit(f"candidate: the work dir {work} is inside the main checkout {main_tree}; refused")
@@ -301,6 +408,7 @@ def main(argv=None, release=None):
     args.release_modes = release_reuse.release_modes(default=("identical",))
     args.candidate_version, args.candidate_defines = version, defines
     args.candidate_ref = a.ref or cand.get("tooling_ref") or ""
+    args.candidate_base = base_build
     args.candidate_tooling_sha = tooling_sha
     r = release.Release(args)
     if r.commit != a.commit:
@@ -311,10 +419,19 @@ def main(argv=None, release=None):
     if not a.dry_run and not a.no_prebuild_check:
         import prebuild_check
         pre = ["--commit", a.commit, "--ref", args.candidate_ref, "--work", str(work / "prebuild"), "--reuse-pass"]
+        base_pass = Path(base_build["build_dir"]).parent / "prebuild" / "PASS.json" if base_build else None
+        if base_pass and base_pass.is_file() and not (work / "prebuild" / "PASS.json").is_file():
+            # the checks read the commit's source only, which a B arm shares with its base: the base's pass is
+            # copied in and prebuild_check --reuse-pass still checks its commit and parts (8 arms ran them 8 times)
+            (work / "prebuild").mkdir(parents=True, exist_ok=True)
+            (work / "prebuild" / "PASS.json").write_bytes(base_pass.read_bytes())
         if prebuild_check.main(pre + (["--probe-wheel", a.probe_wheel] if a.probe_wheel else [])):
             raise SystemExit(f"measurement build: the pre-build checks failed (logs {work / 'prebuild'}); nothing "
                              "was dispatched. Fix and rerun, or pass --no-prebuild-check")
     rc = r.go()
+    plan = r.plan() if defines else None
+    if plan:
+        print(arm_summary(owed_arm or label, plan))
 
     after = remote_refs()
     moved = [k for k in ("origin_main", "origin_tags_sha256", "local_tags_sha256") if before[k] != after[k]]
@@ -345,7 +462,8 @@ def main(argv=None, release=None):
                label=label, owed_arm=cand.get("owed_arm"), tooling_sha=tooling_sha, refs_moved=moved,
                wheel_dir=str(final), vendors=vendors, targets=targets, wheels_built=built, steps=list(STEPS),
                wheels={k: dict(file=w.name, sha256=release.sha256(w)) for k, w in finals.items() if w},
-               manifests=manifests, refs_before=before, refs_after=after, made=release.now())
+               manifests=manifests, refs_before=before, refs_after=after, made=release.now(),
+               **({"base": reused_from_base(plan)} if plan and (plan.get("previous") or {}).get("base") else {}))
     release.write_json(final / "candidate.json", doc)
     print(f"measurement build: {final}/candidate.json")
     if not defines and not a.no_verify_smoke:

@@ -301,7 +301,7 @@ class OwedArms(unittest.TestCase):
 
     def test_the_parser_takes_owed_arm(self):
         a = RC.parse(["--commit", C, "--owed-arm", "em-check-1"])
-        self.assertEqual(a.owed_arm, "em-check-1")
+        self.assertEqual(a.owed_arm, ["em-check-1"])   # repeatable: several arms at once (run_arms)
 
 
 class RecordedTooling(unittest.TestCase):

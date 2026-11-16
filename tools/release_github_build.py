@@ -589,7 +589,7 @@ def estimate(include, merged, sets, host, host_donor=False, shares=None, compile
     return out, total
 
 
-def build_plan(src, tokens, shards, modes=None, host_donor=False, compile_groups=""):
+def build_plan(src, tokens, shards, modes=None, host_donor=False, compile_groups="", skip_units=""):
     """The run's plan document: one shard row per compile slice (merged: one
     compile per row), its swap, the device sets, the host producer, and the
     estimate. Refuses what a free runner cannot build."""
@@ -639,12 +639,29 @@ def build_plan(src, tokens, shards, modes=None, host_donor=False, compile_groups
             raise SystemExit("compile-groups contains unknown or empty selections: " + " ".join(sorted(selected - known)))
         include = [r for r in include if r["only"] in selected]
         nbuilds = len(selected)
+    skipped = []
+    # the assemble job's swap covers every unit of the set: a skipped unit the cache misses compiles there
+    assemble_swap = max([r["swap_gib"] for r in include] or [0])
+    if skip_units:
+        # A B ARM'S BASE UNITS (lane arm-build-reuse, 2026-11-16; tools/release_reuse.py unit_plan): a merged
+        # compile whose source closure names none of the arm's defines has the base build's content key
+        # (tools/bincache.py scope_build_defines), so its archive is in the binding cache and its shard job would
+        # only fetch it. It gets no shard job; the assemble job's unchanged route takes it from the cache (a miss
+        # compiles there: slower, never wrong). An entry this plan does not know is refused, never guessed.
+        if not merged or compile_groups:
+            raise SystemExit("skip-units requires a merged device set and no compile-groups")
+        skip = set(skip_units.split())
+        known = {r["only"] for r in include}
+        if skip - known:
+            raise SystemExit("skip-units names entries this plan does not build: " + " ".join(sorted(skip - known)))
+        skipped = sorted({r["only"] for r in include if r["only"] in skip})
+        include = [r for r in include if r["only"] not in skip]
     per_set, total = estimate(include, bool(merged), sets, host, host_donor, shares, bool(compile_groups))
     return dict(matrix=dict(include=include), sets=sets, host=host, builds=nbuilds, shards=shards,
                 jobs_per_set=jobs_per_set, modes=list(modes or []),
                 layout=None if merged is None else ("merged" if merged else "per-binding"), members=members,
-                compile_groups=compile_groups, compile_only=bool(compile_groups),
-                assemble_swap_gib=max([r["swap_gib"] for r in include] or [0]),
+                compile_groups=compile_groups, compile_only=bool(compile_groups), skipped_units=skipped,
+                assemble_swap_gib=assemble_swap,
                 host_swap_gib=swap_gib(HOST_PRODUCER_PEAK_GIB) if host else 0,
                 # Who offers the vendor-neutral host groups to the binding cache
                 # (HOST_GROUPS_OWNER): the owner leg; every other set reads them
@@ -656,7 +673,7 @@ def build_plan(src, tokens, shards, modes=None, host_donor=False, compile_groups
 def cmd_plan(a):
     import release_modes
     modes = release_modes.parse_modes(a.modes) if a.modes else None
-    doc = build_plan(a.src, a.sets.split(), a.shards, modes, a.host_donor, a.compile_groups)
+    doc = build_plan(a.src, a.sets.split(), a.shards, modes, a.host_donor, a.compile_groups, a.skip_units)
     text = json.dumps(doc, indent=1)
     if a.json:
         Path(a.json).write_text(text + "\n")
@@ -664,7 +681,9 @@ def cmd_plan(a):
         with open(a.github_output, "a") as fh:
             fh.write("matrix=" + json.dumps(doc["matrix"], separators=(",", ":")) + "\n")
             fh.write("sets=" + json.dumps(doc["sets"], separators=(",", ":")) + "\n")
+            # a set whose every unit is skipped still assembles (from the cache): the shard job then has no matrix
             fh.write("has_devices=" + ("true" if doc["sets"] else "false") + "\n")
+            fh.write("has_shards=" + ("true" if doc["matrix"]["include"] else "false") + "\n")
             fh.write("host=" + ("true" if doc["host"] else "false") + "\n")
             fh.write("host_donor=" + ("true" if doc["host"] and a.host_donor else "false") + "\n")
             fh.write("jobs_per_set=%d\n" % doc["jobs_per_set"])
@@ -672,6 +691,8 @@ def cmd_plan(a):
             fh.write("host_swap_gib=%d\n" % doc["host_swap_gib"])
     print(f"layout {doc['layout']}, modes {' '.join(doc['modes']) or 'build_sets.sh default'}, "
           f"{doc['builds']} compiles per set")
+    for entry in doc["skipped_units"]:
+        print(f"skipped (the base build's archive, taken by the assemble job from the binding cache): {entry}")
     for row in doc["matrix"]["include"]:
         print(f"{row['vendor']}-{row['arch']} shard {row['shard']} [{row['unit']}]: {row['n']} builds, "
               f"weight {row['weight']}, planning peak {row['peak_gib']} GiB, swap {row['swap_gib']} GiB")
@@ -1326,6 +1347,8 @@ def cmd_run(a):
     defines = normalize_defines(a.defines)
     if defines and a.compile_groups:
         raise SystemExit("--defines builds a candidate set; it takes no --compile-groups")
+    if a.skip_units and (not defines or not a.arch or a.host):
+        raise SystemExit("--skip-units is a B arm's (--defines) on one --arch with no host producer")
     vendor = ARCHS.get(a.arch)
     name = f"{vendor}-{a.arch}" if a.arch else None
     out = Path(a.out).resolve()
@@ -1383,12 +1406,13 @@ def cmd_run(a):
            "-f", f"host_donor_sha256={donor_sha}", "-f", f"compile_groups={a.compile_groups}",
            "-f", f"reuse_host_groups={'true' if a.reuse_host_groups else 'false'}",
            # only when set: a workflow ref without the `defines` input still takes every release dispatch
-           *(["-f", f"defines={defines}"] if defines else []))
+           *(["-f", f"defines={defines}"] if defines else []),
+           *(["-f", f"skip_units={a.skip_units}"] if a.skip_units else []))
         (gha / "dispatch.json").write_text(json.dumps(dict(
             tag=tag, branch=branch, tooling_commit=head, recorded_tooling=a.tooling_sha or None, source_commit=a.commit, arch=a.arch, host=a.host,
             modes=list(modes), shards=a.shards, jobs=a.jobs, bincache=bool(map_url), host_donor=a.host_donor or None,
             host_donor_sha256=donor_sha or None, r2_objects=cleanup, compile_groups=a.compile_groups,
-            reuse_host_groups=a.reuse_host_groups, defines=defines or None,
+            reuse_host_groups=a.reuse_host_groups, defines=defines or None, skip_units=a.skip_units or None,
             dispatched_at=dt.datetime.now(dt.timezone.utc).isoformat()), indent=1) + "\n")
         run = find_run(tag, branch, wid)
         say(f"dispatched {run['url']}")
@@ -1487,6 +1511,8 @@ def main(argv=None):
                    "build_sets.sh's default tiers")
     p.add_argument("--host-donor", action="store_true", help="the dispatch carries host_donor_url")
     p.add_argument("--compile-groups", default="", help="compile only: device, or exact merged shard entries")
+    p.add_argument("--skip-units", default="", help="merged shard entries with no shard job: a B arm's units "
+                   "whose bytes are its base build's (tools/release_reuse.py unit_plan); assembly still runs")
     p.add_argument("--json")
     p.add_argument("--github-output")
     p.set_defaults(fn=cmd_plan)
@@ -1530,6 +1556,8 @@ def main(argv=None):
     p.add_argument("--allow-cold-amd", action="store_true")
     p.add_argument("--compile-groups", default="", help="retain only selected compilation archives; no assembly")
     p.add_argument("--reuse-host-groups", action="store_true", help="host producer compiles only changed groups against donor")
+    p.add_argument("--skip-units", default="", help="shard entries the run does not compile in shard jobs (a B arm's "
+                   "units its base build already compiled; the assemble job takes them from the binding cache)")
     p.add_argument("--defines", default="", help="candidate build defines (NAME=V,NAME2 or '-D NAME=V -D NAME2'): "
                    "the workflow's `defines`, MOJOLEARN_BUILD_DEFINES in every compile (tools/release.py candidate)")
     p.add_argument("--run-id", type=int, default=0, help="attach to this run instead of dispatching")

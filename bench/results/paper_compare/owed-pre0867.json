@@ -389,6 +389,10 @@
    "define": "MOJOLEARN_EXPERIMENT_SAMPLING_KV_UPLOAD_REUSE",
    "status": "define in code (core/generation_kv_policy.mojo EXPERIMENT_SAMPLING_KV_UPLOAD_REUSE: B = reuse KV uploads across sampling forwards (removes reloads); A = reload per forward. No board row)"
   },
+  "dbscan-brute-edge-free": {
+   "define": "MOJOLEARN_DBSCAN_FAST_BRUTE_EDGE_FREE",
+   "status": "define in code (dbscan/impl/runner.mojo, dbscan/impl/brute_edge_free.mojo DBSCAN_FAST_BRUTE_EDGE_FREE; opt-in, default off): B = algorithm='brute' through the degrees pass, a per-range brute bit matrix (word-major, N/8 bytes a query row, range = 25% of free memory) and union-find in doubling query chunks with 64-row block roots; A = the byte adjacency, CSR, weak_cc and merge passes. Same labels by construction; n_iter_ is 0 on the B route. The non-board shape of the EXPERIMENTS row (make_blobs 1,000,000 x 16, 50 centers) is no board race: time it with the arm's wheels by hand"
+  },
   "sqrt-comptime-step": {
    "define": "MOJOLEARN_NUMERICS_FAST_SQRT_COMPTIME_STEP",
    "status": "define in code (checks/numerics.mojo portable_sqrtf NUMERICS_FAST_SQRT_COMPTIME_STEP: B = the four-candidate correction as a comptime for (offset a compile-time constant per step); A = the run-time for k in range(4) chain that Mojo 1.2 lowers to compare-and-branch. Same operations in the same order: bits unchanged on every column)"
@@ -2622,6 +2626,45 @@
     "sqrt-comptime-step"
    ],
    "decides": "promote B (comptime step) unless it is slower than A at equal quality on the NVIDIA L40S; digests must not move (same operations, same order); record registers/thread of the pinned distance kernel with each arm"
+  },
+  {
+   "id": "dbscan-brute-edge-free-taxi",
+   "source": "lane dbscan-brute-edgefree (2026-11-16; docs/apple-fast/EXPERIMENTS.md MOJOLEARN_DBSCAN_FAST_BRUTE_EDGE_FREE row: dbscan algorithm='brute' on a degrees pass + per-range brute bit matrix + union-find, dbscan/impl/brute_edge_free.mojo; stored L40S brute: ours 943-1,582 s taxi / 602 s istella, cuML 440 / 63 s); board row, eps=3 min_samples=2",
+   "kind": "ab",
+   "lane": "dbscan",
+   "dataset": "taxi",
+   "rows": "full",
+   "vendor": "nvidia",
+   "b_arms": [
+    "dbscan-brute-edge-free"
+   ],
+   "decides": "promote B (the edge-free brute route) unless it is slower than A (the byte adjacency / CSR / weak_cc brute route) at equal quality on the NVIDIA L40S; labels must not move (same accumulation and compare per bit, union-find = weak_cc fixed point)"
+  },
+  {
+   "id": "dbscan-brute-edge-free-istella",
+   "source": "lane dbscan-brute-edgefree (2026-11-16; docs/apple-fast/EXPERIMENTS.md MOJOLEARN_DBSCAN_FAST_BRUTE_EDGE_FREE row: dbscan algorithm='brute' on a degrees pass + per-range brute bit matrix + union-find, dbscan/impl/brute_edge_free.mojo; stored L40S brute: ours 943-1,582 s taxi / 602 s istella, cuML 440 / 63 s); board row, eps=3 min_samples=2",
+   "kind": "ab",
+   "lane": "dbscan",
+   "dataset": "istella",
+   "rows": "full",
+   "vendor": "nvidia",
+   "b_arms": [
+    "dbscan-brute-edge-free"
+   ],
+   "decides": "promote B (the edge-free brute route) unless it is slower than A (the byte adjacency / CSR / weak_cc brute route) at equal quality on the NVIDIA L40S; labels must not move (same accumulation and compare per bit, union-find = weak_cc fixed point)"
+  },
+  {
+   "id": "dbscan-brute-edge-free-taxi-750k",
+   "source": "lane dbscan-brute-edgefree (2026-11-16; docs/apple-fast/EXPERIMENTS.md MOJOLEARN_DBSCAN_FAST_BRUTE_EDGE_FREE row: dbscan algorithm='brute' on a degrees pass + per-range brute bit matrix + union-find, dbscan/impl/brute_edge_free.mojo; stored L40S brute: ours 943-1,582 s taxi / 602 s istella, cuML 440 / 63 s); neighbouring shape",
+   "kind": "ab",
+   "lane": "dbscan",
+   "dataset": "taxi",
+   "rows": 750000,
+   "vendor": "nvidia",
+   "b_arms": [
+    "dbscan-brute-edge-free"
+   ],
+   "decides": "promote B (the edge-free brute route) unless it is slower than A (the byte adjacency / CSR / weak_cc brute route) at equal quality on the NVIDIA L40S; labels must not move (same accumulation and compare per bit, union-find = weak_cc fixed point)"
   }
  ]
 }

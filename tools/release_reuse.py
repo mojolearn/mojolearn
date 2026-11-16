@@ -66,6 +66,18 @@ publish manifests (candidate_builds). make_plan plans against the PyPI record
 and every newer candidate and keeps the source that reuses the most; its
 bytes come from the candidate's own build directory, else its TestPyPI
 wheels, verified the same way. Each REUSE row names its build (reuse_from).
+
+AN OWED A/B ARM REUSES ITS BASE BUILD (lane arm-build-reuse, 2026-11-16). A measurement build with defines (the B
+arm, tools/release.py candidate --owed-arm) plans against the BASE build: the measurement build of the same commit
+and targets with no defines (base_build, the A set), never against PyPI, whose release is a different commit and so
+reuses nothing (2026-11-15: every arm planned 0 REUSE / 211 BUILD and dispatched every shard of both sets). Every
+binding's identity equals the base's (same commit, same facts), so every row is REUSE until apply_defines moves
+the rows whose source closure names a define to BUILD (a guard module that only refuses the define reads it too).
+unit_plan lifts that to the shard units of the GitHub build (a merged group builds when one member builds; a unit
+whose members cannot be read builds); the legs skip the REUSE units (release_github_build.py run --skip-units)
+and the assemble job takes their archives from the binding cache, whose content key is the base build's because
+tools/bincache.py scope_build_defines drops a define no file of the closure names; the pack then places the base
+wheel's bytes for REUSE rows (assemble_linux), an NVIDIA rebuild having to reproduce them.
 """
 import argparse
 import datetime as dt
@@ -1303,8 +1315,116 @@ def apply_defines(rows, current, facts, readers, names):
     return moved
 
 
+def base_build(work, commit, targets, dry=False):
+    """The BASE of a B arm: the measurement build at WORK (<work root>/<version without label>) of COMMIT with no
+    defines, as a reuse source record (the shape of candidate_builds): its wheels from linux/final/candidate.json
+    (sha256 verified again by published_wheel), its identities from its reuse/plan.json, its legs (the PTX proof)
+    under its build dir. None when there is no such build, or it built other targets or other defines. Under DRY a
+    base still building (its state.json names COMMIT) is returned as `pending`: planned from this commit's own
+    identities, which the finished base will carry, so the dry run shows the arm's split before the A set lands;
+    a real run never takes a pending base."""
+    work = Path(work)
+    state = _read_json(work / "state.json") or {}
+    cand = state.get("candidate") or {}
+    if state.get("commit") != commit or cand.get("defines"):
+        return None
+    had = cand.get("targets") or [s for _, s in ALL_LINUX_SETS]
+    if [t for t in targets if t not in had]:
+        return None
+    d = work / commit[:12]
+    doc = _read_json(d / "linux" / "final" / "candidate.json") or {}
+    plan = _read_json(d / "reuse" / "plan.json") or {}
+    rec = dict(version=cand.get("version") or work.name, source_commit=commit, build_dir=str(d), record_dir=None,
+               channel="base", base=True)
+    for platform in ("linux", *SET_WHEELS.values()):
+        info = (doc.get("wheels") or {}).get(platform)
+        rec[platform] = dict(wheel=info["file"], sha256=info["sha256"]) if info else None
+    rec["macos"] = None
+    complete = (doc.get("source_commit") == commit and not doc.get("defines") and rec["linux"]
+                and plan.get("schema") == PLAN_SCHEMA and plan.get("commit") == commit)
+    if complete:
+        rec["identities"] = str(d / "reuse" / "plan.json")
+        return rec
+    if not dry:
+        return None
+    rec.update(identities=None, pending=True, linux=dict(wheel="<pending>", sha256=None))
+    for platform in SET_WHEELS.values():
+        rec[platform] = dict(wheel="<pending>", sha256=None)
+    return rec
+
+
+def unit_entry(tier, group=None, name=None):
+    """The shard entry of release_github_build.plan_set that compiles a row: "<tier>:merged_build.sh:<group>" in
+    the merged layout, else the binding's own "<numeric mode>:<script>" (host scripts build under identical)."""
+    if group is not None:
+        return f"{tier}:merged_build.sh:{group}"
+    script = "build.sh" if name == "_mojolearn" else "build_" + name[len("_mojolearn_"):] + ".sh"
+    return ("identical" if tier == "host" else tier) + ":" + script
+
+
+def commit_groups(commit, tiers, root=ROOT):
+    """{tier: {group: [members]}} of COMMIT's merged layout on Linux (its own tools/merged_bindings.py plan, as
+    release_github_build.source_groups runs it on the box), or None for a per-binding commit. Read from `git
+    archive` of bindings/ and that tool, never from a working tree."""
+    import release_github_build
+    import tempfile
+    if not release_github_build.commit_merged(commit, root=root):
+        return None
+    with tempfile.TemporaryDirectory(prefix="mojolearn-groups-") as d:
+        p = subprocess.Popen(["git", "-C", str(root), "archive", "--format=tar", commit, "--", "bindings",
+                              "tools/merged_bindings.py"], stdout=subprocess.PIPE)
+        with tarfile.open(fileobj=p.stdout, mode="r|") as tf:
+            tf.extractall(d, filter="data")
+        if p.wait() != 0:
+            raise SystemExit(f"release_reuse: git archive of {commit[:12]}'s merged layout failed")
+        return {tier: release_github_build.source_groups(d, tier) for tier in tiers}
+
+
+def unit_plan(plan, groups):
+    """The plan's Linux rows lifted to the shard units each launched leg compiles: {"vendor/arch": [{unit,
+    decision, members, reason}]}. A unit is BUILD when any row it compiles is BUILD (a merged file is one `mojo
+    build`), or when a member it names has no row in the plan (its closure cannot be established here); REUSE
+    otherwise. Host units are listed under every set (each leg's tree holds the host groups)."""
+    rows = [r for r in plan["rows"] if r["target"] == LINUX]
+    host = {r["name"]: r for r in rows if r["tier"] == "host"}
+    out = {}
+    for vendor, arch in LINUX_SETS:
+        dev = {(r["tier"], r["name"]): r for r in rows if r["tier"] != "host" and (r["vendor"], r["arch"]) == (vendor, arch)}
+        units = []
+        if groups is None:
+            members = [(unit_entry(t, name=n), [r]) for (t, n), r in dev.items()]
+            members += [(unit_entry("host", name=n), [r]) for n, r in host.items()]
+            for entry, rs in members:
+                units.append(dict(unit=entry, members=[rs[0]["name"]], decision=rs[0]["decision"],
+                                  reason=rs[0]["reason"] if rs[0]["decision"] == "BUILD" else ""))
+        else:
+            for tier, gs in sorted(groups.items()):
+                for group, names in sorted(gs.items()):
+                    rs = [host.get(n) if tier == "host" else dev.get((tier, n)) for n in names]
+                    unknown = [n for n, r in zip(names, rs) if r is None]
+                    build = [r for r in rs if r is not None and r["decision"] != "REUSE"]
+                    if unknown:
+                        why = "members without a plan row (closure not established): " + ", ".join(unknown[:4])
+                    elif build:
+                        why = "; ".join(f"{r['name']}: {r['reason']}" for r in build[:3]) + (
+                            f"; and {len(build) - 3} more" if len(build) > 3 else "")
+                    else:
+                        why = ""
+                    units.append(dict(unit=unit_entry(tier, group), members=list(names),
+                                      decision="BUILD" if (unknown or build) else "REUSE", reason=why))
+        out[f"{vendor}/{arch}"] = units
+    return out
+
+
+def skip_units(plan, vendor, arch):
+    """The shard entries a leg of (vendor, arch) does not compile in shard jobs: the plan's REUSE units of a
+    base-reusing plan (empty for any other plan, so a release dispatches exactly as before)."""
+    units = (plan.get("units") or {}).get(f"{vendor}/{arch}") or []
+    return [u["unit"] for u in units if u["decision"] == "REUSE"]
+
+
 def make_plan(commit, cache_dir, root=ROOT, host_toolchain=None, prev=None, builders_override=None,
-              evidence_root=None, candidates=None, modes=None, defines=""):
+              evidence_root=None, candidates=None, modes=None, defines="", base=None):
     """The REUSE/BUILD plan of COMMIT. `builders_override` ({builder: sha256})
     replaces a builder's bytes in every identity: the release's route overlay
     runs the tooling checkout's copy of a builder on the box
@@ -1342,13 +1462,14 @@ def make_plan(commit, cache_dir, root=ROOT, host_toolchain=None, prev=None, buil
         host_toolchain = darwin_toolchain()
     current = [(b, identity(b, facts, host_toolchain)) for target in (LINUX, MACOS) for b in bindings(target, modes)]
     rt = runtime_identity(facts)
-    sources = reuse_sources(prev, candidates, commit) or [None]
+    # a B arm's base (the A set of this commit) is its only source: nothing else is this commit
+    sources = [base] if base else (reuse_sources(prev, candidates, commit) or [None])
     plans = []
     for src in sources:
         try:
             plans.append(_decide(commit, root, cache_dir, facts, current, rt, src, evidence_root))
         except (OSError, ValueError, KeyError, subprocess.CalledProcessError) as exc:
-            if src is prev:
+            if src is prev or src is base:
                 raise
             # an unreadable candidate record is passed over, never fatal: the PyPI record still plans
             plans.append(dict(source=src, unusable="%s: %s" % (type(exc).__name__, exc)))
@@ -1366,8 +1487,9 @@ def make_plan(commit, cache_dir, root=ROOT, host_toolchain=None, prev=None, buil
     if names:
         moved = apply_defines(rows, current, facts, define_readers(commit, names, root), names)
         if ptx_proof and any((r["vendor"], r["arch"]) == PTX_SET for r in moved):
-            # the published PTX set was compiled without the defines: it cannot be taken whole
-            _refuse_ptx(rows, "a binding of the set reads the candidate defines")
+            # the published PTX set was compiled without the defines: it cannot be taken whole. Its leg runs
+            # and proves its own set (_settle_ptx), so its other rows stay REUSE like any set's: refusing
+            # every PTX row rebuilt all 33 sm_80 bindings for a define four of them read (lane arm-build-reuse)
             ptx_proof = None
     # A PUBLISHED PTX SET TAKEN WHOLE ships the host owner's host bindings
     # (ptx_reuse.HOST_OWNER_ADMISSION): the owner leg must run at this freeze
@@ -1395,11 +1517,15 @@ def make_plan(commit, cache_dir, root=ROOT, host_toolchain=None, prev=None, buil
         legs.append(name)
         why[name] = ("%d host binding(s)" % len(host_build) if host_build else "the runtime closure") + \
             " need a build box and no set does: the cheapest leg builds them"
-    return dict(schema=PLAN_SCHEMA, commit=commit, made=dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+    plan = dict(schema=PLAN_SCHEMA, commit=commit, made=dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
                 previous=prev, previous_identities_from=prev_source, considered=considered, rows=rows, runtime=runtime,
                 legs=legs, leg_reasons=why, ptx_proof=ptx_proof, host_toolchain=host_toolchain,
                 builders_override=dict(sorted((builders_override or {}).items())), release_modes=list(modes),
                 **({"candidate_defines": defines} if defines else {}))
+    if base:
+        # the shard units of the launched legs (unit_plan); only a base-reusing plan skips any
+        plan["units"] = unit_plan(plan, commit_groups(commit, list(modes) + ["host"], root))
+    return plan
 
 
 def _decide(commit, root, cache_dir, facts, current, rt, prev, evidence_root=None):
@@ -1486,6 +1612,9 @@ def _settle_ptx(rows, rt_decision, prev, evidence_root, origin):
     ptx = _ptx_device_rows(rows)
     if not ptx or any(r["decision"] != "REUSE" for r in ptx):
         return None
+    if prev and prev.get("pending"):
+        # a dry run against a base still building: its sm_80 leg will hold the proof (base_build)
+        return dict(source="the pending base build %s (its sm_80 leg)" % prev.get("version"), pending=True)
     if rt_decision != "REUSE":
         _refuse_ptx(rows, "the runtime closure changes, so the published set's original stage inventory does not hold")
         return None
@@ -1585,7 +1714,37 @@ def render(plan, full=False):
     elif reuses:
         out.append("   REUSE: %d bindings from %s %s (--full lists them)" % (
             len(reuses), prev.get("version"), prev.get("channel") or "pypi"))
+    out += render_units(plan)
     return "\n".join(out)
+
+
+def unit_counts(plan):
+    """{"vendor/arch": (BUILD units, REUSE units)} of a base-reusing plan, counted over the launched legs' sets
+    and over the sets whose leg does not run (all REUSE)."""
+    return {s: (sum(u["decision"] == "BUILD" for u in us), sum(u["decision"] == "REUSE" for u in us))
+            for s, us in (plan.get("units") or {}).items()}
+
+
+def render_units(plan):
+    if not plan.get("units"):
+        return []
+    prev = plan.get("previous") or {}
+    out = ["   SHARD UNITS against the base build %s%s (REUSE: no shard job; the assemble job takes the base's "
+           "archive from the binding cache):" % (prev.get("version"), " (pending)" if prev.get("pending") else "")]
+    total = sum(len(us) for us in plan["units"].values())
+    built = 0
+    for s, us in plan["units"].items():
+        leg = s.replace("/", "-") in plan["legs"]
+        b = [u for u in us if u["decision"] == "BUILD"]
+        built += len(b) if leg else 0
+        out.append("     %-12s BUILD %2d  REUSE %2d  %s" % (s, len(b), len(us) - len(b),
+                                                         "leg runs" if leg else "no leg: the base's set"))
+        for u in b if leg else []:
+            out.append("       BUILD %-52s %s" % (u["unit"], u["reason"][:200]))
+    if total and built == sum(len(us) for s, us in plan["units"].items() if s.replace("/", "-") in plan["legs"]) \
+            and plan["legs"]:
+        out.append("     FULL BUILD: every unit of every launched leg reads %s" % plan.get("candidate_defines"))
+    return out
 
 
 # ---------------------------------------------------------------- published bytes
