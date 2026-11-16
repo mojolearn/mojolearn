@@ -1,9 +1,10 @@
-# Pre-0.8.67 measurement: the measurement build against 0.8.55 and 0.8.66
+# Pre-0.8.67 measurement: the measurement build against 0.8.55
 
 One NVIDIA L40S and one AMD MI300X. One job per box measures the measurement build (wheels built from one commit to time them; never a release
 candidate, AGENTS.md), not a published release,
-against OUR 0.8.55 (the paper baseline) and 0.8.66 (the last release) wheels re-timed on the same box in the same
-job, plus every row tonight's lanes left owed. Our arms only. Opponents are never rerun; the compare shows the paper's
+against OUR 0.8.55 (the paper baseline) wheel re-timed on the same box in the same job (ONE prior: Andrew,
+2026-11-16; 0.8.66 is never timed), plus the owed rows a report reads (an A/B row whose B set is staged, a driver row
+with two arms here). Our arms only. Opponents are never rerun; the compare shows the paper's
 stored opponent cells with their host.
 
 **Times are compared only on the same box** (AGENTS.md, Andrew, 2026-11-14). On 2026-11-14 the measurement of
@@ -13,18 +14,20 @@ raised 56 REGRESSION flags, and rows whose code had not changed were 1.2-2.2x ap
 - probes the box first (`tools/ops/host_probe.py`: host id, CPU model, NUMA nodes, cgroup cores, host memcpy GB/s,
   host-to-device GB/s pageable and pinned, PCIe generation and width read during the copy, GPU and driver) into
   `job/host-probe.json` and `job/box.txt`; every board stores it (`box.host_probe`, each race's `host.host_id`);
-- installs the prior wheels from PyPI (`PC_PRIOR_VERSIONS`, default `0.8.55,0.8.66`; `PC_PRIOR_VERSION` is the
-  last release and always last) into their own ours-only venvs, smokes them, and times every paper row for each on
-  the same GPU, serial, like the candidate (`board-prior-<version>/`; the 0.8.66 board also times the owed rows'
-  prior full rows, so the prior is timed once). A row a prior refuses is NOT-RUN in its column, never a regression;
+- installs the prior wheel from PyPI (`PC_PRIOR_VERSIONS` and `PC_PRIOR_VERSION`, default `0.8.55`) into its own
+  ours-only venv, smokes it on the paper rows (at once with the candidate's smoke), and times every paper row on the
+  same GPU, serial, like the candidate (`board-prior-<version>/`). An explicit extra prior is still accepted: more
+  `PC_PRIOR_VERSIONS` entries are timed on the paper rows, and a `PC_PRIOR_VERSION` other than 0.8.55 is a last
+  release, the only arm that also times the owed board rows' prior rows. A row a prior refuses is NOT-RUN in its
+  column, never a regression;
 - compares against those on-box boards only (`paper_compare.py compare --prior-board <version>=<board.json>`). The
-  stored columns (the paper recipes' 0.8.55 numbers, the 0.8.66 `compare-<vendor>.json` as `--reference-compare`,
+  stored columns (the paper recipes' 0.8.55 numbers, the stored `compare-<vendor>.json` as `--reference-compare`,
   the paper's opponent cells, the best-ever file) are reference only, printed with their host, and never make a
   REGRESSION, FASTER, FIXED, RECOVERED, STILL-REGRESSED or NOW-WINS/LOSES flag. A prior board from another host id
   refuses the compare (non-zero exit); a board without a probe gives NOT-COMPARED. The summary prints both probes
   beside the verdict.
 
-The prior boards double the board time (accepted: we cannot compare across machines).
+The prior board doubles the paper rows' board time (accepted: we cannot compare across machines).
 
 | piece | file | what it does |
 |---|---|---|
@@ -33,8 +36,8 @@ The prior boards double the board time (accepted: we cannot compare across machi
 | install | `tools/bench_board.py --install-only --ours-install-only` | one venv per arm: our wheels, scikit-learn, pandas, no opponent stack |
 | candidate bytes | `tools/candidate_wheel_install.py` (through `bench_board --candidate-wheel`) | RECORD, metadata, tags and payload source-commit checks; sha256 of each file in `job/wheel-manifest-candidate.json` and in every board's `box.mojolearn.wheel` |
 | host probe | `tools/ops/host_probe.py` | on the box, first: what the box is (host id, CPU, NUMA, cgroup cores, memcpy, H2D pageable/pinned, PCIe under load); stored in every board |
-| paper compare | `tools/paper_compare.py compare --prior-board 0.8.55=... --prior-board 0.8.66=...` | three columns timed on this box: 0.8.55, 0.8.66, candidate. Flags: REGRESSION vs 0.8.55, REGRESSION-VS-PRIOR, RECOVERED, STILL-REGRESSED. Stored columns: reference only. Label: `candidate <sha12> (<version>)` |
-| owed rows | `bench/results/paper_compare/owed-pre0867.json`, `tools/measure_owed.py` | 29 rows: define A/Bs, deletions made without measurement, CV / search / RFE / stacking, pandas input, neighbour queries, trees, and one neighbouring non-board shape per family |
+| paper compare | `tools/paper_compare.py compare --prior-board 0.8.55=...` | two columns timed on this box: 0.8.55, candidate. Flags: REGRESSION vs 0.8.55 (with an explicit last release also REGRESSION-VS-PRIOR, RECOVERED, STILL-REGRESSED). Stored columns: reference only. Label: `candidate <sha12> (<version>)` |
+| owed rows | `bench/results/paper_compare/owed-pre0867.json`, `tools/measure_owed.py` | define A/Bs (planned when the B set is staged), board rows against the last release (planned only with an explicit last release), pandas input and other driver rows (planned when two of their arms run) |
 | drivers | `tools/measure_owed_driver.py` | the rows the board cannot express: `while_loop` `check_every`, pandas-input fits, an MLP fit on a non-board shape |
 
 ## 0. Inputs
@@ -140,17 +143,16 @@ python3 tools/ops/measure_candidate.py stage nvidia --version '0.8.67.dev0+<sha1
     [--b-arm em-check-1=<dir>@<sha40> ...]
 # prints, among others:
 SUBMIT bash tools/nvidia_central.sh submit measure --cap 240 --note pc-<sha12>-nvidia --results box-out/pc-<sha12>-nvidia \
-    --env PC_WHEEL_DIR=/root/pc-in/<sha12>/nvidia --env PC_SOURCE_COMMIT=<SHA40> --env PC_PRIOR_VERSIONS=0.8.55,0.8.66 \
-    --env PC_PRIOR_VERSION=0.8.66 [--env PC_B_ARMS=...] tools/ops/paper_compare_job.sh
+    --env PC_WHEEL_DIR=/root/pc-in/<sha12>/nvidia --env PC_SOURCE_COMMIT=<SHA40> --env PC_PRIOR_VERSIONS=0.8.55 \
+    --env PC_PRIOR_VERSION=0.8.55 [--env PC_B_ARMS=...] tools/ops/paper_compare_job.sh
 ```
 (`--prior-versions` on the stage step changes the list.) The NVIDIA queue caps a job at 240 minutes, so split it
 into four submits on the same `--results` dir, ON THE SAME POD (a submit on another pod gets another host id: the
 job says `HOST CHANGED` and the compare refuses to mix the boards). Add these to the printed line:
 ```
---env PC_PARTS=plan,install,smoke,board,compare                          # paper + owed measurement-build full rows
---env PC_PARTS=install,prior                                             # 0.8.55 and 0.8.66: smoke + timed boards
---env PC_PARTS=install,owed,compare --env PC_OWED_ARMS=candidate,em-check-1,em-check-8,sgd-check-1
---env PC_PARTS=install,owed,drivers,compare --env PC_OWED_ARMS=prior     # the prior's neighbouring shapes + drivers
+--env PC_PARTS=plan,install,smoke,board,compare                          # every smoke (candidate + 0.8.55) + the candidate's board
+--env PC_PARTS=install,prior                                             # 0.8.55: timed board
+--env PC_PARTS=install,owed,drivers,compare --env PC_OWED_ARMS=candidate,em-check-1,em-check-8,sgd-check-1
 ```
 A `prior` submit cut by the cap resumes: a finished prior smoke is not rerun (`plan/prior-<v>-smoke.done`) and each
 prior board resumes from its `board.json`.
@@ -162,7 +164,7 @@ nohup bash tools/do_amd_steward.sh run pc-<sha12>-amd box-out/pc-<sha12>-amd \
     'PC_WHEEL_DIR=/root/pc-in/<sha12>/amd PC_SOURCE_COMMIT=<SHA40> bash tools/ops/paper_compare_job.sh' \
     > ~/mojolearn-evidence/measure-candidate/amd-run.log 2>&1 &
 ```
-`PC_PRIOR_VERSIONS` defaults to `0.8.55,0.8.66` on the box too. `run` holds an ssh session for the whole job, hence `nohup`. The results persist to R2 either way. AMD has no
+`PC_PRIOR_VERSIONS` defaults to `0.8.55` on the box too. `run` holds an ssh session for the whole job, hence `nohup`. The results persist to R2 either way. AMD has no
 240-minute cap, so it runs as one job. Use `--dry-run` on the stage step to print every copy command without
 touching a box.
 
@@ -175,16 +177,15 @@ the timed board took 3405 s for 62 races, about 55 s per race.
 |---|---|---|---|---|
 | plan | CPU | one process, seconds | < 1 min | - |
 | install | CPU (+1 GPU set load per arm) | every arm at once + the dry run | 3-6 min | ~1 GB per arm venv (candidate, prior, each B) under `/root/pc-cache` |
-| smoke | one GPU, not timed; host-bound (2000-row races: worker start, import, data read) | min(nproc/2, MemAvailable/12 GB, NVIDIA GPU GB/3, 16, races) shards on ONE venv | 10-15 min | data blocks per shard cache, ~1-2 GB each; work/, evidence/ and caches c2.. deleted after the phase |
-| board (paper + owed measurement-build full rows, ~62 + ~90 races) | one GPU, timed | serial by nature, nothing else on the box | 2.5 h | results ~1.5 GB |
-| owed: B arms and neighbour rows (~30 races) | one GPU, timed | serial | 30-40 min | ~0.3 GB |
-| prior: 0.8.55 smoke + paper rows (~62 races) | smoke: shards like the candidate's; board: one GPU, timed | smoke parallel, board serial | 10 min + 1 h | ~1 GB |
-| prior: 0.8.66 smoke + paper rows + owed prior full rows (~62 + ~80 races) | as above | as above | 10 min + 2.2 h | ~2 GB |
-| owed: prior 0.8.66 neighbouring shapes | one GPU, timed | serial | 10-20 min | ~0.2 GB |
+| smoke | one GPU, not timed; host-bound (2000-row races: worker start, import, data read) | the candidate and every prior at once, each on its own venv, in min(nproc/2, MemAvailable/12 GB, NVIDIA GPU GB/3, 16, races) shards split by race count | 5-15 min | data blocks per shard cache, ~1-2 GB each; work/, evidence/ and every cache but c1 deleted after the phase |
+| board (the paper's 62 races + the owed full rows of staged B sets) | one GPU, timed | serial by nature, nothing else on the box | about 1.1 h without B sets (d95f805cce: 197 races in 3.6 h) | results ~0.5 GB |
+| owed: B arms and their neighbour rows | one GPU, timed | serial | per B set | ~0.3 GB |
+| prior: 0.8.55 paper rows (~62 races) | one GPU, timed | serial | 2.5 h (d95f805cce: 61 races) | ~1 GB |
 | drivers | one GPU, timed | serial | 5-10 min | - |
 | compare + report | CPU | seconds | < 1 min | - |
 
-Total: about 7 h per box (the prior boards were 1.2-1.5 h before; now about 3.5 h with 0.8.55 re-timed too). Budget 40 GB of free disk (the stage step checks it; the 2026-11-13 NVIDIA run wrote
+Total without B sets: about 4 h per box (the d95f805cce job of 2026-11-16, which still timed the 136 owed races no
+compare read and planned 0.8.55 on 159 races, took 6.5 h). Budget 40 GB of free disk (the stage step checks it; the 2026-11-13 NVIDIA run wrote
 14 GB of board evidence). A results dir over the 4 GB persist cap is tarred once without its largest files, chosen
 from their sizes before the tar (`PERSIST_TRUNCATED.txt` names them); fetch those from the box before it goes. The 0.8.66 smoke made a 13 GB venv per shard because it
 installed the opponent stack. An ours-only run installs our wheels, scikit-learn and pandas once per arm.
@@ -198,7 +199,7 @@ total in the report and do not add work during the board phases.
 
 ```
 python3 tools/box_persist.py fetch --tag <tag> --extract --dest ~/mojolearn-evidence/measure-candidate/<tag>
-head -n 16 <dest>/SUMMARY-<vendor>.txt     # PAPER-COMPARE vendor=.. 0.8.55->0.8.66->candidate_<sha12>_(0.8.67) ..; verdict + probes
+head -n 16 <dest>/SUMMARY-<vendor>.txt     # PAPER-COMPARE vendor=.. 0.8.55->candidate_<sha12>_(0.8.67) ..; verdict + probes
 head -n 12 <dest>/OWED-SUMMARY-<vendor>.txt # OWED-REPORT vendor=.. ; slower than the prior ; B arm faster ; drivers
 tail -n 8 <dest>/job/phases.tsv; tail -n 3 <dest>/job/cores.log; cat <dest>/job/status.json
 ```
@@ -206,11 +207,12 @@ How to read the flags:
 
 - First line after the header: `verdict: same box <host id>` and the probes of the candidate and each prior. Any
   other verdict (`no verdict: ...`) means no flag below is a time verdict: the rows carry `NOT-COMPARED`.
-- Paper rows: `REGRESSION` is slower than 0.8.55 on this box. `RECOVERED` is a 0.8.66 regression (vs 0.8.55 on this
-  box) fixed. `STILL-REGRESSED` and `REGRESSION-VS-PRIOR` are open work. `BASELINE-NOT-RUN`: 0.8.55 has no cell for
+- Paper rows: `REGRESSION` is slower than 0.8.55 on this box. With an explicit last release only: `RECOVERED` is a
+  last-release regression (vs 0.8.55 on this box) fixed; `STILL-REGRESSED` and `REGRESSION-VS-PRIOR` are open work. `BASELINE-NOT-RUN`: 0.8.55 has no cell for
   the row (its smoke failed, it refused): no verdict. The stored columns (`stored 0.8.55 ms`, `reference ms`, the
   opponents, the best ever) are shown with their host and never flag.
-- Owed rows: `REGRESSION` means the measurement build is slower than 0.8.66. `<b>:B-FASTER` means the define's B arm wins
+- Owed rows: `REGRESSION` (board rows, only with an explicit last release) means the measurement build is slower than
+  that release. `<b>:B-FASTER` means the define's B arm wins
   that cell. The define decision takes the NVIDIA and AMD average (CLAUDE.md measurement item 2).
 
 Every file carries the label `candidate <sha12> (<version>)` and the wheel sha256s. It can never be read as a
