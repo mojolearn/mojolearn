@@ -154,6 +154,7 @@ def fixture(unit: Int) raises:
         var refused = False
         try:
             gather_i64(layout, BOUNDARY_KIND_FLOAT, Int(dst.unsafe_ptr()))
+            _ = dst^  # lastuse-audit: the call reads it through an untracked address; Mojo frees a local at its last named use
         except:
             refused = True
         require(refused, "boundary_layout refuses float -> int64")

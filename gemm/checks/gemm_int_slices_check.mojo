@@ -171,6 +171,8 @@ def main() raises:
             z.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin](),
             1, 1, INT_SLICES_MAX_K + 1, OP_NN,
         )
+        _ = z^  # lastuse-audit: the call reads it through an untracked address; Mojo frees a local at its last named use
+        _ = c^
     except:
         refused = True
     if not refused:

@@ -332,6 +332,7 @@ def run_case(unit: Int) raises:
         try:
             var dst: List[Int64] = [0]
             _ = msel_leave_range_i64(k, 3, 2, 1, _a(dst), _a(dst))
+            _ = dst^  # lastuse-audit: the call reads it through an untracked address; Mojo frees a local at its last named use
             raise Error("an inverted leave range did not refuse")
         except problem:
             require("did not refuse" not in String(problem), String(problem))
