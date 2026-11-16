@@ -111,7 +111,7 @@ def density_public_operation(model: PythonObject, operation: String, args: Pytho
     if method == "getstate" or method == "setstate":
         return _state(model, args, dbscan, method == "setstate", context)
     if method == "sample":
-        raise Error("NotImplementedError: mojolearn KernelDensity: sample() is not implemented (cuML has none)")
+        raise Error("NotImplementedError: mojolearn KernelDensity: sample() is not implemented (drawing new points from the fitted density); score_samples() and score() are")
     if method == "release":
         var fields = py_fields(model)
         _resident(py_get(fields, "_resident"), False, context)
