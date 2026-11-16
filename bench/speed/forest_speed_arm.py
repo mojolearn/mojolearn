@@ -968,7 +968,7 @@ def run_inference(lane, arms, models, data, n_rounds, large_rows, deadline):
                     # SMALL ROWS: the rest of the scored run's calls; the hash, the accuracy and the receipt
                     # are the first call's output (same bits every call)
                     calls = [ms]
-                    for _ in range(1, small.calls_for(warm_ms.get(name), name.startswith("ours"))):
+                    for _ in range(1, small.calls_for(warm_ms.get(name), name.startswith("ours"), "infer/" + batch)):
                         t0 = time.perf_counter()
                         call(x)
                         calls.append((time.perf_counter() - t0) * 1000.0)

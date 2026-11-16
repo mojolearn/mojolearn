@@ -4761,7 +4761,7 @@ def run(lane, arms, data, n_rounds, size, dev=None, *, rotate_order=False,
                 digest = None
             # SMALL ROWS: the rest of the scored run's fits, after the first fit's outputs were scored and
             # hashed (same bits every fit); the accuracy below reads the last model, the same bits again
-            n_calls = small.calls_for(ms, arm.library == "mojolearn")
+            n_calls = small.calls_for(ms, arm.library == "mojolearn", "fit")
             calls = [ms]
             try:
                 for _ in range(1, n_calls):

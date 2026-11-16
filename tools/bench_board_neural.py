@@ -5566,7 +5566,7 @@ def worker(args):
                 # sub-clocks). One call: nothing below runs and the order is as before.
                 n_calls = 1
                 if r > 0 and small_ok:
-                    n_calls = small.calls_for(ms, True)
+                    n_calls = small.calls_for(ms, True, "fit")
                 digest = runner.digest() if n_calls > 1 else None
                 calls = [ms]
                 for _ in range(1, n_calls):

@@ -7619,8 +7619,8 @@ def worker(args):
                 # (the hash, the saved outputs and the receipt are the first call's; same bits every call).
                 # Opponents and rows at or above 10 ms make one call; nothing below runs for them.
                 ours_arm = args.arm in OURS_ARMS
-                n_fit = small.calls_for(ms, ours_arm) if r > 0 else 1
-                n_inf = small.calls_for(ims, ours_arm) if r > 0 and did else 1
+                n_fit = small.calls_for(ms, ours_arm, "fit") if r > 0 else 1
+                n_inf = small.calls_for(ims, ours_arm, "infer") if r > 0 and did else 1
                 fit_calls, inf_calls = [ms], [ims]
                 for i in range(1, max(n_fit, n_inf)):
                     if i < n_fit:

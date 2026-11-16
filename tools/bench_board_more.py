@@ -1882,7 +1882,7 @@ def worker(args):
                 # SMALL ROWS: the rest of the scored run's calls, after the first call's outputs were taken
                 # (the hash, the saved outputs and the receipt are the first call's; same bits every call).
                 # Opponents and rows at or above 10 ms make one call.
-                n_calls = small.calls_for(ms, (runner.info or {}).get("library") == "mojolearn") if r > 0 else 1
+                n_calls = small.calls_for(ms, (runner.info or {}).get("library") == "mojolearn", "fit") if r > 0 else 1
                 calls = [ms]
                 for _ in range(1, n_calls):
                     t0 = time.perf_counter()

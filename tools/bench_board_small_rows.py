@@ -24,6 +24,7 @@ Benchmark glue only, never product runtime. The N calls are serial by nature: th
 repetitions of one operation on one device, and running them concurrently would time contention.
 """
 import math
+import os
 import statistics
 
 #: a first scored call of our arm under this many milliseconds makes its scored run a median of calls
@@ -35,10 +36,42 @@ SCORING_MEDIAN = "median-of-calls"
 SCORING_ONE = "one-call"
 
 
-def calls_for(first_ms, ours):
+#: ATTRIBUTION RUNS ONLY (tools/ops/attribution_job.sh, 2026-11-16): our arm's scored run makes exactly this many
+#: calls whatever its first call took (1 is allowed: the job's differential profile subtracts a one-call run from a
+#: 20-call run), on the phase FORCE_CALLS_PHASE_ENV names (`fit`, `infer`, or `infer/<batch>`; unset: every phase).
+#: A board never sets it.
+FORCE_CALLS_ENV = "MOJOLEARN_BENCH_FORCE_CALLS"
+FORCE_CALLS_PHASE_ENV = "MOJOLEARN_BENCH_FORCE_CALLS_PHASE"
+
+
+def forced_calls(ours, phase=None, environ=None):
+    """The forced call count of an attribution run (FORCE_CALLS_ENV), or None when it does not apply: not our arm,
+    unset, not a positive integer, or another phase than FORCE_CALLS_PHASE_ENV names (`infer` matches every
+    `infer/<batch>`; a site that passes no phase matches only an unset phase filter)."""
+    env = os.environ if environ is None else environ
+    raw = (env.get(FORCE_CALLS_ENV) or "").strip()
+    if not ours or not raw:
+        return None
+    try:
+        n = int(raw)
+    except ValueError:
+        return None
+    if n < 1:
+        return None
+    want = (env.get(FORCE_CALLS_PHASE_ENV) or "").strip()
+    if want and (phase is None or (phase != want and not phase.startswith(want + "/"))):
+        return None
+    return n
+
+
+def calls_for(first_ms, ours, phase=None):
     """The calls the one scored run makes in all, given its FIRST scored call's time (taken after the
     excluded warmup): SMALL_ROW_CALLS for OUR arm when that call took under SMALL_ROW_MS, else 1 (an
-    opponent, a big row, or no time to decide on). The caller makes calls_for(...) - 1 more calls."""
+    opponent, a big row, or no time to decide on). The caller makes calls_for(...) - 1 more calls.
+    `phase` (`fit`, `infer/<batch>`) only matters to an attribution run's forced count (forced_calls)."""
+    forced = forced_calls(ours, phase)
+    if forced is not None:
+        return forced
     if not ours or first_ms is None or isinstance(first_ms, bool):
         return 1
     try:

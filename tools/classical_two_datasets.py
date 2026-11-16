@@ -2728,7 +2728,7 @@ def worker(args):
                 # SMALL ROWS: the rest of the scored run's calls, after the first call's outputs were taken
                 # (the hash and the receipt are the first call's; same bits every call). Opponents and rows at
                 # or above 10 ms make one call.
-                n_calls = small.calls_for(ms, ours_arm) if r > 0 else 1
+                n_calls = small.calls_for(ms, ours_arm, "fit") if r > 0 else 1
                 calls = [ms]
                 for _ in range(1, n_calls):
                     t0 = time.perf_counter()
@@ -2775,7 +2775,7 @@ def worker(args):
                 inf.call()
                 inf.sync()
                 ms = (time.perf_counter() - t0) * 1000.0
-                n_calls = small.calls_for(ms, ours_arm) if r > 0 else 1
+                n_calls = small.calls_for(ms, ours_arm, "infer") if r > 0 else 1
                 # SMALL ROWS: the hash is the first call's output, taken before the rest of the calls (one call:
                 # after the memory probe, as before)
                 digest = _digest(inf.outputs()) if n_calls > 1 else None
