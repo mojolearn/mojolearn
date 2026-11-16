@@ -1295,14 +1295,18 @@ def commit_witness():
 
 def host_record(ml):
     """The `host` object of a CPU column: the machine, the host bindings
-    built, and what each reads back (its kernel-matrix column, the column
-    the accelerator predicates detected, its sabotage flag). A binding that
-    refuses to load records the refusal, so a REFUSED cell is attributable
-    to an unbuilt or refused family rather than a bug."""
-    from mojolearn import _backend, host_surface
+    built, the bytes of each, and what each LOADED one reads back (its
+    kernel-matrix column, the column the accelerator predicates detected,
+    its sabotage flag), all from the public `runtime_report()`. Called after
+    the lanes ran: a family a lane used is loaded, and one no lane used is
+    recorded `loaded: False` with its file bytes (it computed nothing in the
+    record). A family whose load refused is attributed by its cells' own
+    refusal."""
+    from mojolearn import host_surface
+    report = ml.runtime_report()
+    rows = report["bindings"]
     families = {}
-    for basename in _backend.host_families_built():
-        prefix = basename[len("_mojolearn_"):]
+    for basename in report["host_families_built"]:
         # The file's bytes (2026-09-15, lane/cpu-training-gate-budget). The
         # host bindings load by path, so `package.bindings` (the loaded
         # `mojolearn._mojolearn*` modules) never lists them, and a CPU column
@@ -1310,31 +1314,33 @@ def host_record(ml):
         # to refuse parts that ran different builds.
         digest = {}
         try:
-            path = _backend.host_module_path(basename)
+            path = report["host_paths"][basename]
             with open(path, "rb") as fh:
                 digest = dict(sha256=hashlib.sha256(fh.read()).hexdigest(), size=os.path.getsize(path))
-        except OSError as exc:
+        except (OSError, TypeError) as exc:
             digest = dict(sha256_error=f"{type(exc).__name__}: {exc}"[:200])
-        try:
-            m = _backend.load_host_module(basename)
-            fam = dict(column=str(getattr(m, prefix + "_column")()), **digest)
-            detected = getattr(m, prefix + "_detected_column", None)
-            if detected is not None:
-                fam["detected_column"] = str(detected())
-            sab = getattr(m, prefix + "_sabotage", None)
-            if sab is not None:
-                fam["sabotage"] = bool(sab())
-        except Exception as exc:
-            fam = dict(error=f"{type(exc).__name__}: {exc}"[:300], **digest)
+        row = rows.get("mojolearn._host." + basename)
+        if row is None or not row.get("loaded"):
+            fam = dict(loaded=False, **digest)
+        elif row.get("column") is None:
+            fam = dict(error="the loaded binding reads back no column", **digest)
+        else:
+            fam = dict(column=row["column"], **digest)
+            if row.get("detected_column") is not None:
+                fam["detected_column"] = row["detected_column"]
+            if row.get("sabotage") is not None:
+                fam["sabotage"] = bool(row["sabotage"])
         families[basename] = fam
-    columns = sorted(set(f.get("column", "unreadable") for f in families.values()))
+    # The column of the families that ran (loaded); "none-loaded" when no
+    # host family loaded, which the CPU gate refuses as it refused "none-built".
+    columns = sorted(set(f.get("column", "unreadable") for f in families.values() if f.get("loaded", True)))
     return dict(
         cpu_model=cpu_model(), arch=platform.machine(),
         target_cpu=os.environ.get("MOJOLEARN_TARGET_CPU", "unrecorded"),
         mojo_version=os.environ.get("MOJOLEARN_MOJO_VERSION", "unrecorded"),
         python=platform.python_version(),
-        column=(columns[0] if len(columns) == 1 else ("none-built" if not columns else "MIXED:" + ",".join(columns))),
-        routed=dict(_backend._HOST_MODULES),
+        column=(columns[0] if len(columns) == 1 else ("none-loaded" if not columns else "MIXED:" + ",".join(columns))),
+        routed=dict(host_surface.routed_modules()),
         # The manifest the routing table and the gate lists are read from
         # (the host surface manifest lane, 2026-09-14), and every binding it
         # declares, so a family that is declared but absent from `families`
