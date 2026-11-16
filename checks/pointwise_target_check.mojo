@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """`pointwise_target_kernel` against a float64 libm oracle, per objective.
 
-    pixi run check-pointwise-target
+    pixi run check-native-gpu pointwise_target_check
 
 NO CATBOOST COUNTERPART: this is a gate, and `checks/` is where gates
 live.

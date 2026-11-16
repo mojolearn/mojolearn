@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """One-hot features across the GRID-POLICY BOUNDARIES.
 
-    pixi run check-onehot-cardinality
+    pixi run check-native-gpu one_hot_cardinality_check
 
 ## The bug this was written to catch, and it was shipped
 

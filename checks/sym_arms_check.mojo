@@ -26,7 +26,7 @@ Only one-byte cells are compared: on a FAST float column the binary and
 half-byte cells come from float atomics and are not run-to-run exact.
 
     pixi run check-sym-arms                       (FAST column)
-    pixi run check-sym-arms-identical             (IDENTICAL)
+    pixi run check-native-gpu sym_arms_check             (IDENTICAL)
 """
 
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer

@@ -1401,7 +1401,7 @@ def borders_plan_for(
 
     The category counts and the per-target-class histogram are computed in
     this function from the raw codes; the target GRID comes from the
-    library's `build_target_borders`, which `pixi run check-minentropy`
+    library's `build_target_borders`, which `pixi run check-native-cpu min_entropy_check`
     gates bit-exactly against CatBoost's own borders and which is not what
     this file is testing.
 

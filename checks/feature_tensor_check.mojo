@@ -26,7 +26,7 @@ implementation, in a different language, through a different compiler,
 and the comparison is evidence rather than a restatement of the implementation.
 Their `city.h` states outright that its results DIFFER from mainline
 CityHash, so a public CityHash vector would be the wrong oracle; theirs is
-the only ground truth and `pixi run check-cityhash` already gates the
+the only ground truth and `pixi run check-native-cpu cityhash_check` already gates the
 CityHash half cell for cell.
 
 Reproduce (the generator lives outside this lane's two files; it belongs

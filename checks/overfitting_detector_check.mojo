@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The overfitting detector and the held-out cursor that feeds it.
 
-    pixi run check-overfitting-detector
+    pixi run check-native-gpu overfitting_detector_check
 
 NOT to be confused with `checks/early_stop_check.mojo`, which is about
 `run_tree_layout`'s one-level ROLLBACK during tree growth. This is about

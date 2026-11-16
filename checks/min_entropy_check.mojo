@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """`best_split_min_entropy` against CatBoost's OWN MinEntropy borders.
 
-    pixi run check-minentropy
+    pixi run check-native-cpu min_entropy_check
 
 Reads `bench/minentropy_oracle.txt`, written by `tools/minentropy_oracle.py`
 from CatBoost itself. This is one of the few checks in this repository that

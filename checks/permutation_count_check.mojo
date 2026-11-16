@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """`permutation_count`: four CTR column sets, and which one the model gets.
 
-    pixi run check-permutation-count
+    pixi run check-native-gpu permutation_count_check
 
 CatBoost builds `permutation_count` datasets that differ ONLY in their
 permutation-dependent CTR columns (`doc_parallel_dataset_builder.cpp:

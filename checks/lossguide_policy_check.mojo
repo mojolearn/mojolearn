@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Which leaf Lossguide splits, proved against Depthwise on the same input.
 
-    pixi run check-lossguide-policy
+    pixi run check-native-gpu lossguide_policy_check
 
 NO CATBOOST COUNTERPART: a gate, so `checks/`. The sentence that used to
 sit here, "HOST ONLY -- it creates no `DeviceContext`, launches nothing",

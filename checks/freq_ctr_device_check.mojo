@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Gate the DEVICE FeatureFreq calcer against the host reference, per cell.
 
-    pixi run check-freq-ctr-device
+    pixi run check-native-gpu freq_ctr_device_check
 
 `TWeightedBinFreqCalcerGpu` + `compute_simple_ctrs_device`
 (`gbdt/ctrs/ctr_calcers.mojo`) against the host driver

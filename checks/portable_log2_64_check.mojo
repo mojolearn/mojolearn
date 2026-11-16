@@ -7,7 +7,7 @@ Each finite result must be within 2 ulp of platform libm log2 via FFI.
 The FNV-1a hash records our arithmetic independently of the reference. Matching
 hashes on separately executed hosts, not this one run, establish host agreement.
 
-    pixi run check-portable-log2-64
+    pixi run check-native-cpu portable_log2_64_check
 """
 from std.ffi import external_call
 

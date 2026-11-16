@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """`train(cat_features=...)`: the categorical path through the real surface.
 
-    pixi run check-ctr-train
+    pixi run check-native-gpu ctr_train_check
 
 `checks/ctr_check.mojo` gates the CTR ARITHMETIC. This gates the WIRING,
 which is a different failure: `CONTRIBUTING.md` (Evidence must be able to fail) -- a implemented file
@@ -474,7 +474,7 @@ def check_ctr_train() raises:
     # categorical feature -- three Borders priors and one FeatureFreq --
     # which is CatBoost's own GPU `simple_ctr` default. The values, the
     # ordering and the permutation are gated by
-    # `pixi run check-ctr-device`; what is asserted here is only that
+    # `pixi run check-native-gpu ctr_device_check`; what is asserted here is only that
     # `train()` takes the configuration at all.
     var borders_params = List[TCatFeatureParams]()
     borders_params.append(TCatFeatureParams.default())

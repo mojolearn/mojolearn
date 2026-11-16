@@ -14,7 +14,7 @@ first: it states which TIER the claim is in and why, what "the same tokens
 at a different batch size" has to mean for a recurrence, and what the
 sabotage and the three vacuity controls are.
 
-    tools/with_identical_mode.sh pixi run check-batch-invariance
+    tools/with_identical_mode.sh pixi run check-native-gpu batch_invariance_main
 
 Under FAST this driver still runs and still prints every
 number; it REPORTS instead of asserting, and says so on its banner

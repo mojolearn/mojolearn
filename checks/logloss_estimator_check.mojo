@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The device estimation stage against a float64 host simulation.
 
-    pixi run check-logloss-estimator
+    pixi run check-native-gpu logloss_estimator_check
 
 `BinOptimizedOracle` + `newton_like_walker_estimate` run the full Logloss
 leaves estimation on device -- shift-add MoveTo, fused der/der2 kernel,

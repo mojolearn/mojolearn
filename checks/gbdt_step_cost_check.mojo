@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The non-symmetric grower's step cost: host drains per tree and pool size.
 
-    pixi run check-gbdt-step-cost
+    pixi run check-native-gpu gbdt_step_cost_check
 
 WHAT IS UNDER TEST. `fit_non_symmetric_tree` grown 50 times per policy on the
 depthwise lane's fixture (4,096 rows x 16 features, the fixture

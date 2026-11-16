@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """`best_split` (GreedyLogSum) against CatBoost, on columns built to tie.
 
-    pixi run check-greedylogsum
+    pixi run check-native-cpu greedy_log_sum_check
 
 GreedyLogSum is the NUMERIC border default and therefore sits on the path of
 every dataset this repository benchmarks, which is what makes it worth a

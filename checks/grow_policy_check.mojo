@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """`grow_policy` on `train()`: the three policies are three different models.
 
-    pixi run check-grow-policy
+    pixi run check-native-gpu grow_policy_check
 
 NO CATBOOST COUNTERPART: a gate, so `checks/`. DEVIATION 259 put
 `grow_policy` / `max_leaves` / `min_data_in_leaf` on `train()` and the

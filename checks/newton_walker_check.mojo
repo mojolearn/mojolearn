@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The Newton walker's control flow, against hand-derived trajectories.
 
-    pixi run check-newton-walker
+    pixi run check-native-cpu newton_walker_check
 
 The walker is pure host logic, so its oracle can LIE in controlled ways and
 every expectation below is computed by hand from `descent_helpers.cpp`'s

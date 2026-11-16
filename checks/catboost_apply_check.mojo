@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """OUR apply against CATBOOST'S OWN MODEL and CATBOOST'S OWN PREDICTIONS.
 
-    pixi run check-catboost-apply
+    pixi run check-native-gpu catboost_apply_check
 
 WHY THIS IS DIFFERENT FROM EVERY OTHER APPLY CHECK HERE. The rest compare
 our device against a host tally we wrote ourselves, which is one reading of

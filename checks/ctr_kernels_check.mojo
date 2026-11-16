@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The ten CTR elementwise kernels, on device, cell by cell.
 
-    pixi run check-ctr-kernels
+    pixi run check-native-gpu ctr_kernels_check
 
 Every kernel in `gbdt/ctrs/kernel/ctr_calcers.mojo` is launched on a
 DeviceContext and its whole output is compared against a host tally

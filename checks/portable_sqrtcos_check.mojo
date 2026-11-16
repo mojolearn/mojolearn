@@ -25,7 +25,7 @@ Three arms, the same three as the translog gate:
    column. Run FIRST on any new backend, beside check-portable-translog.
 3. REACH (`sabotage` argv) -- device inputs nudged, compare must fail.
 
-Run: `pixi run check-portable-sqrtcos` (append `sabotage` for arm 3).
+Run: `pixi run check-native-gpu portable_sqrtcos_check` (append `sabotage` for arm 3).
 """
 
 from max.gpu.host import DeviceContext

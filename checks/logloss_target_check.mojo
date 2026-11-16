@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """`cross_entropy_kernel` against a float64 host oracle and libm anchors.
 
-    pixi run check-logloss-target
+    pixi run check-native-gpu logloss_target_check
 
 WHAT GATES WHAT. The kernel is the implementation of `CrossEntropyImpl`
 (`pointwise_targets.cu:327-390`), the one kernel Logloss and CrossEntropy

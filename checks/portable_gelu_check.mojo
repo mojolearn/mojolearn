@@ -82,7 +82,7 @@ not drifted; with an arm armed it must differ in the predicted place.
         too, that ulp count is comparing zeros wrongly.
 
 Run:
-    pixi run check-portable-gelu
+    pixi run check-native-gpu portable_gelu_check
     pixi run mojo run -D MOJOLEARN_GELU_SABOTAGE_ONE_GELU=1 \\
         -I . checks/portable_gelu_check.mojo
 and the same for the other three names. A misspelled define is silently

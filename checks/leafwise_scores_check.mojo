@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The LOSSGUIDE score kernel, against a host recomputation and five teeth.
 
-    pixi run check-leafwise-scores
+    pixi run check-native-gpu leafwise_scores_check
 
 NO CATBOOST COUNTERPART: a gate, so `checks/`.
 

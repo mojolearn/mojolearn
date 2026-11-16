@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Logloss end to end through `train(X, y)`: learn, agree, generalize.
 
-    pixi run check-logloss-train
+    pixi run check-native-gpu logloss_train_check
 
 Four claims on a synthetic binary task (probabilistic labels, hashed
 features, logits in a range whose Bayes logloss is well under log 2):

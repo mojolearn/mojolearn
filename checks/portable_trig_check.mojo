@@ -11,7 +11,7 @@ THE FIRST THING THIS FILE OWES IS NOT ABOUT SIN. `portable_cosf` is
 certified and other lanes depend on its bits; DEVIATION 820 moved its body
 into a shared core. So `check_cos_bits_did_not_move` runs FIRST, and the
 authoritative proof is not in this file at all -- it is
-`pixi run check-portable-sqrtcos`, whose printed `sqrtcos device hash`
+`pixi run check-native-gpu portable_sqrtcos_check`, whose printed `sqrtcos device hash`
 must still read 12295913102197186379. RUN THAT BEFORE TRUSTING ANY NUMBER
 BELOW IT. What this file adds is a second, independent witness over the
 same cos inputs (`trig cos-fixture hash`), which is a NEW number and not
@@ -110,7 +110,7 @@ SABOTAGE ARMS, and what each must do:
         arm 2 failure the specification predicts.
 
 Run:
-    pixi run check-portable-trig
+    pixi run check-native-gpu portable_trig_check
     pixi run mojo run -D MOJOLEARN_TRIG_SABOTAGE_NO_SECOND_FLIP=1 \\
         -I . checks/portable_trig_check.mojo
 and the same for the other three names. A misspelled define is silently
@@ -529,7 +529,7 @@ def check_cos_bits_did_not_move() raises:
 
     Printed: `trig cos-fixture hash`, cos over the sqrtcos gate's own cos
     inputs. The AUTHORITATIVE proof is still
-    `pixi run check-portable-sqrtcos` printing 12295913102197186379."""
+    `pixi run check-native-gpu portable_sqrtcos_check` printing 12295913102197186379."""
     for i in range(NPLANT):
         var x = _trig_x(i)
         var b = _bits(x)
@@ -573,7 +573,7 @@ def check_cos_bits_did_not_move() raises:
     print("check_cos_bits_did_not_move: cos == the shared core on every")
     print("  planted and swept lane; the no-flush clause holds")
     print("  trig cos-fixture hash =", h)
-    print("  (NOT the sqrtcos hash. Run `pixi run check-portable-sqrtcos`")
+    print("  (NOT the sqrtcos hash. Run `pixi run check-native-gpu portable_sqrtcos_check`")
     print("   and confirm `sqrtcos device hash` is still 12295913102197186379.)")
 
 

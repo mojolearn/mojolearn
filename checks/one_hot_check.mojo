@@ -149,7 +149,7 @@ def check_one_hot() raises:
 def run_checks() raises:
     # STANDALONE DRIVER, the same call `checks/probe_main.mojo` makes. The
     # cardinality sweep is a DIFFERENT module (`one_hot_cardinality_check`,
-    # `pixi run check-onehot-cardinality`) and stays there.
+    # `pixi run check-native-gpu one_hot_cardinality_check`) and stays there.
     check_one_hot()
 
 

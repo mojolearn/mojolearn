@@ -9,7 +9,7 @@ on three vendors, and the same sentence about sqrt was false once
 with the classes a Mamba block's divisions actually reach spelled out,
 and a hash a leg re-prints.
 
-    pixi run check-division            (append `sabotage` for the reach arm)
+    pixi run check-native-gpu division_check            (append `sabotage` for the reach arm)
 
 ## 2^20 hashed (a, b) pairs in 13 CLASSES (lane i's class is a function of
 ## i, so every column sees the same pairs), each judged BIT FOR BIT

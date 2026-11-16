@@ -13,7 +13,7 @@ computes a value a card hashes. Fixture VALUES come from
 
 New check code imports from here (CURRENT DIRECTIVES). Existing drivers
 keep their private copies until the consolidation pass migrates them.
-Tested by `checks/scaffold_check.mojo` (pixi run check-scaffold).
+Tested by `checks/scaffold_check.mojo` (pixi run check-native-gpu scaffold_check).
 """
 
 from std.memory import bitcast, unsafe_memcpy

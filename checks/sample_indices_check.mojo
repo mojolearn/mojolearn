@@ -16,7 +16,7 @@ column WITH REPLACEMENT and INDEPENDENTLY PER FEATURE, citing
 functions on the wrong code path, reached from `NCB::BuildBorders` rather
 than from the quantizer. DEVIATION 135.
 
-    pixi run check-sample-indices
+    pixi run check-native-cpu sample_indices_check
 """
 
 from std.math import log2

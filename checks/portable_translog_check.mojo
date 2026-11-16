@@ -24,7 +24,7 @@ Three claims, three arms:
    mismatches means the compare is blind and the gate is decoration.
    Sabotage PASSES by detecting mismatches.
 
-Run: `pixi run check-portable-translog` (append `sabotage` for arm 3).
+Run: `pixi run check-native-gpu portable_translog_check` (append `sabotage` for arm 3).
 """
 
 from max.gpu.host import DeviceContext

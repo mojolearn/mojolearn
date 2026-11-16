@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Gate the CTR estimation permutation against CatBoost's own generator.
 
-    pixi run check-permutation
+    pixi run check-native-cpu ctr_permutation_check
 
 `gbdt/data/permutation.mojo` is the implementation of `TDataPermutation` and of the
 two things under it: `NCatboostCuda::Shuffle` (`cuda/data/data_utils.h:21`)

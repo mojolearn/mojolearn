@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Gate the category hash stack against CatBoost's own compiled source.
 
-    pixi run check-cityhash
+    pixi run check-native-cpu cityhash_check
 
 Two functions under test, the whole key chain a category ever passes
 through in their system:

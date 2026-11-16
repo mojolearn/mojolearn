@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """`multilogit` against libm, against algebra, and against an already-gated kernel.
 
-    pixi run check-multilogit
+    pixi run check-native-gpu multilogit_check
 
 NO CATBOOST COUNTERPART: a gate, so `checks/`.
 

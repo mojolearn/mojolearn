@@ -1371,7 +1371,7 @@ def identical_erf(x: Float32) -> Float32:
 # x_prep/iterative.mojo shipped as `_ppnd7` / `_phi` (sample_posterior), moved
 # here unchanged so BCa (resample/checks/intervals.mojo) and the imputer read
 # ONE construction. Its accuracy against a float64 oracle (PPND16 refined by
-# Newton on erfc) is measured, bounded and hashed by `pixi run check-ndtri`
+# Newton on erfc) is measured, bounded and hashed by `pixi run check-native-gpu ndtri_check`
 # (checks/ndtri_check.mojo), host and device, bit for bit.
 # ---------------------------------------------------------------------------
 

@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The MultiClass oracle: gradient, blocked Hessian, and the gauge fixing.
 
-    pixi run check-multiclass-oracle
+    pixi run check-native-gpu multiclass_oracle_check
 
 NO CATBOOST COUNTERPART: a gate, so `checks/`.
 

@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The CTR block ON THE DEVICE, and the permutation that decides its answer.
 
-    pixi run check-ctr-device
+    pixi run check-native-gpu ctr_device_check
 
 `checks/ctr_check.mojo` gates the HOST calcers against an independent
 O(n^2) tally. This file gates the DEVICE ones -- the radix-sorted bin

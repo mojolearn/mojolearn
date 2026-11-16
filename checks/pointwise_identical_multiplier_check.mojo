@@ -3,7 +3,7 @@
 """Gate for DEVIATION 2624: an ordered-tier POINTWISE histogram depends on
 neither `sm_count` nor the order in which the device finishes its blocks.
 
-    pixi run check-pointwise-identical-multiplier
+    pixi run check-native-gpu pointwise_identical_multiplier_check
 
 WHAT BROKE. `EstimateBlockPerFeatureMultiplier` splits the document axis of
 every pointwise histogram launch `M` ways, and at `M > 1` each document

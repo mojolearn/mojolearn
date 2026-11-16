@@ -431,7 +431,7 @@ def run_checks() raises:
     # STANDALONE DRIVER. The depths `checks/probe_main.mojo` runs under
     # "ONE FULL LEVEL (GPU, end to end)". `check_hist_depends_on_partition`
     # runs beside these there but lives in `hist_dump_check` and has its
-    # own task (`pixi run check-hist-dump`).
+    # own task (`pixi run check-native-gpu hist_dump_check`).
     print("ONE FULL LEVEL (GPU, end to end):")
     check_one_level()
     check_tree(1)

@@ -3,7 +3,7 @@
 """LOGLOSS LEAF VALUES AGAINST CATBOOST'S OWN, TEN NEWTON ITERATIONS AND ONE.
 
     pixi run -e bench logloss-leaf-oracle-gen   # bench/oracle_logloss_leaves.txt
-    pixi run check-logloss-leaf-oracle          # this file
+    pixi run check-native-gpu logloss_leaf_oracle_check          # this file
 
 THE GAP THIS CLOSES
 -------------------

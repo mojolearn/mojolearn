@@ -34,7 +34,7 @@ inputs PER FUNCTION:
    many lanes per function. A sabotage run that reports zero mismatches
    for any function means that function's compare is blind.
 
-Run: `pixi run check-portable-nn` (append `sabotage` for arm 3).
+Run: `pixi run check-native-gpu portable_nn_check` (append `sabotage` for arm 3).
 """
 
 from max.gpu.host import DeviceContext

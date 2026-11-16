@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Gate for ordered boosting's FOLD AXIS, from `CreateFolds` to the histogram.
 
-    pixi run check-ordered-boosting
+    pixi run check-native-gpu ordered_boosting_check
 
 `check-dynamic-boosting-folds` gates the fold BOUNDARIES against a closed
 form and `check-fold-tasks` gates the fold LAYOUT (2N alternating partitions,

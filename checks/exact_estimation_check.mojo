@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The Exact leaf estimator against an ANALYTIC weighted quantile.
 
-    pixi run check-exact-estimation
+    pixi run check-native-gpu exact_estimation_check
 
 NO CATBOOST COUNTERPART: a gate, so it lives in `checks/`.
 

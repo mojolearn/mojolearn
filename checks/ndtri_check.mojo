@@ -5,7 +5,7 @@
 the way `check-division` certifies `portable_divf`.
 
     tools/with_identical_mode.sh pixi run mojo run -I . checks/ndtri_check.mojo
-    (tools/with_identical_mode.sh pixi run check-ndtri; a FAST build is refused:
+    (tools/with_identical_mode.sh pixi run check-native-gpu ndtri_check; a FAST build is refused:
     its ops are the stdlib's, which differ by vendor by design)
 
 ## 2^20 hashed inputs per function, in classes (lane i's class is a function

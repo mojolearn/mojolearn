@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """IDENTITY_PATHS rows 9 and 10, measured on this backend: div, sqrt, FMA.
 
-    pixi run check-ieee-arith
+    pixi run check-native-gpu ieee_arith_check
 
 Row 10 says division and `sqrt` in scoring are IEEE-correct "unless a
 backend substitutes a fast reciprocal or rsqrt -- verify per backend",

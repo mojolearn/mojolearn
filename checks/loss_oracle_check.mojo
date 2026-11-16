@@ -3,7 +3,7 @@
 """THE NINE NEW LOSSES AGAINST CATBOOST'S OWN OUTPUT.
 
     pixi run -e bench loss-oracle-gen      # regenerate bench/oracle_losses.txt
-    pixi run check-loss-oracle             # this file
+    pixi run check-native-gpu loss_oracle_check             # this file
 
 WHY IT EXISTS. Nine objectives were implemented -- Quantile, MAE, LogLinQuantile,
 MAPE, Poisson, Lq, Expectile, Tweedie, Huber -- and every gate on them

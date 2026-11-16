@@ -3,7 +3,7 @@
 """The CTR option surface and the two calcers, against answers written down
 in advance.
 
-    pixi run check-ctr
+    pixi run check-native-cpu ctr_check
 
 Five sections, and each one gates a thing that did not exist before this
 round:

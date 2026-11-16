@@ -6,7 +6,7 @@
 the flip was left as a measurement's job. This is that measurement.
 
 The two arms are BIT-IDENTICAL over twenty iterations
-(`pixi run check-fit-pointwise`), so this is purely a performance question
+(`pixi run check-native-gpu fit_pointwise_check`), so this is purely a performance question
 and nothing about the answer can change a user's numbers -- which is what
 makes flipping the default a free action if the measurement says to
 ([[mojotrees-switches-must-flip]]).

@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """`EGrowPolicy::Lossguide` grows a tree, and it is not Depthwise's tree.
 
-    pixi run check-lossguide
+    pixi run check-native-gpu lossguide_check
 
 NO CATBOOST COUNTERPART: a gate, so `checks/`.
 

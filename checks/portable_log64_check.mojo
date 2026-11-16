@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """`portable_log64` against the host libm, and its own hash.
 
-    pixi run check-portable-log64
+    pixi run check-native-cpu portable_log64_check
 
 HOST-ONLY (float64). 2^18 hashed finite positive doubles spanning denormals
 to near-overflow, plus the edges (1, e, 2^k, the sqrt(1/2) arm boundary, the

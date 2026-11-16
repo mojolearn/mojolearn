@@ -66,7 +66,7 @@ SABOTAGE ARMS:
         at least one moved lane carries a negative-payload NaN.
 
 Run:
-    pixi run check-portable-fmax
+    pixi run check-native-gpu portable_fmax_check
     pixi run mojo run -D MOJOLEARN_FMAX_SABOTAGE_HARDWARE_MAX=1 \\
         -I . checks/portable_fmax_check.mojo
 and the same for the other two names. A misspelled define is silently

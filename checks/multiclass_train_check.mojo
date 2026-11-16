@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """MultiClass end to end: train, predict, and make the two agree.
 
-    pixi run check-multiclass-train
+    pixi run check-native-gpu multiclass_train_check
 
 NO CATBOOST COUNTERPART: a gate, so `checks/`.
 
