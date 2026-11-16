@@ -295,12 +295,43 @@ def _generic_reset(model: PythonObject, params: PythonObject, context: PythonObj
     var values = _read(model, False, context["parameter_metadata"], Python.list())
     _merge(model, params, values, context, depth)
     ref cpy = Python().cpython()
-    var empty = Python.tuple()
-    var raw = cpy.PyObject_Call(cls._obj_ptr, empty._obj_ptr, values._obj_ptr)
-    if not raw:
-        var failure = stash_python_error()
-        raise failure^
-    var replacement = PythonObject(from_owned=raw)
+    var replacement: PythonObject
+    # A class whose public __init__ is a one-line Python body around its native
+    # constructor registers that constructor at import
+    # (python/mojolearn/_mode.py `_connect_native_init`): the rebuild calls it
+    # directly, with no Python frame. Census d95f805cce: the seven set_params
+    # members that re-entered a Python __init__ (DART, explainers, OrderedRMSE,
+    # ExperimentalTwoLevelFeatureFreq). Same native constructor and checks as
+    # type(self)(**params); only the Python wrapper frame is gone.
+    var native_init = py_get(context["native_inits"], cls)
+    if native_init is not None:
+        # (entry, operation, argument names in constructor order (None = a
+        # fixed None argument), owner context, object.__new__), fixed at import.
+        var names = native_init[2]
+        var argv = Python.list()
+        for i in range(len(names)):  # driver-loop: over constructor parameters
+            var name = names[i]
+            if name is None:
+                _ = py_call(argv.append, PythonObject(None))
+            else:
+                var value = values[name]
+                _ = py_call(argv.append, value)
+        var b_args = py_call(b.tuple, argv)
+        replacement = py_call(native_init[4], cls)
+        var call_args = Python.tuple(replacement, native_init[1], b_args, native_init[3])
+        var entry = native_init[0]
+        var init_raw = cpy.PyObject_Call(entry._obj_ptr, call_args._obj_ptr, PyObjectPtr())
+        if not init_raw:
+            var failure = stash_python_error()
+            raise failure^
+        _ = PythonObject(from_owned=init_raw)
+    else:
+        var empty = Python.tuple()
+        var raw = cpy.PyObject_Call(cls._obj_ptr, empty._obj_ptr, values._obj_ptr)
+        if not raw:
+            var failure = stash_python_error()
+            raise failure^
+        replacement = PythonObject(from_owned=raw)
     var fields = _fields(model)
     var fresh = _fields(replacement)
     # Old owners stay referenced until the public dictionary (whose identity
