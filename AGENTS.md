@@ -245,9 +245,11 @@ finds in the same round; a wave without that audit does not merge.
 - Opponents are scored once, stored, and run only by an explicit opponent job. No opponent re-score.
 - One scored run per arm, one seed (Andrew, 2026-10-03 and 2026-10-14): the harness may take one excluded warmup.
   `AB_MULTI_RUN=1` is the only override. Queue A/B lines with reps 1, rounds 1, pairs 1.
-- **Small rows are the median of consecutive calls inside the one scored run (Andrew, 2026-11-15).** A row whose warmup
-  call takes under 10 ms is scored as the median of N consecutive calls (N = 20) made inside that one scored run; the cell records N
-  and the spread. One scored run per arm is unchanged; nothing is rerun; big rows keep one call. Reason: a single call of a
+- **Small rows are the median of consecutive calls inside the one scored run (Andrew, 2026-11-15; reworded 2026-11-16).** A row
+  whose first call AFTER the warmup takes under 10 ms is scored as the median of N consecutive calls (N = 20) made inside that one
+  scored run (that call plus 19 more); the cell records N, the spread and which rule scored it. The warmup itself never decides: it
+  carries start-up and compilation (a 6 ms row had a 1,051 ms warmup and was scored from one call). A compare never divides a
+  median by a single call without flagging the row (SCORING-MIXED). One scored run per arm is unchanged; nothing is rerun; big rows keep one call. Reason: a single call of a
   millisecond-scale row is dominated by first-touch page faults and the allocator (program-run 3.4 ms once vs 0.76 ms steady).
 
 ### Times are compared only on the same box (Andrew, 2026-11-14)
