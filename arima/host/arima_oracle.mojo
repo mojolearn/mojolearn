@@ -90,13 +90,21 @@ public door. They are not restated; `_kalman` raises by name if a caller
 ever hands it `n_diff != 0`.
 
 WHAT IS REFUSED BY NAME (`arima_host_refuse_unrestated`, the binding calls it
-after the GPU binding's own validation): `p`, `q` or `P` above 1 (the Jones
-recursion and `test_invparams` past one coefficient), any `Q` (the seasonal
-MA arms of the matrices kernel and the seasonal least squares with an AR
-pre-fit), `d + D == 2` (the second difference and `_undiff_kernel[True]`),
+after the GPU binding's own validation): `p`, `q`, `P` or `Q` above 1 (the
+Jones recursion and `test_invparams` past one coefficient), `d + D == 2` (the second difference and `_undiff_kernel[True]`),
 `p + q + k == 0` (the seasonal-only arm of `start_params`). Every refused
 arm is spelled on the device and none is reached by the three lanes, so the
 CPU identity gate could not hold a restatement of it to anything.
+
+`Q == 1` IS SERVED (lane cpu-surface-defects, 2026-11-16). Its arms were
+already restated here: the seasonal MA column of the matrices kernel
+(`_kalman`, `sma` through `_param_to_poly` at `idx // s`, mirroring
+`batched_kalman.mojo:337`), the one-coefficient MA Jones transform
+(`_batched_jones`, the same routine as `q == 1`), and the seasonal least
+squares with its AR(max(P s, 2 Q s)) pre-fit (`_arma_least_squares` at
+`s = order.s`, mirroring `estimate_x0.mojo:357-374`). The refusal had held a
+GPU-supported order off the host column, so verify's `ARIMA.sma_` read failed
+there; the GPU and host columns now both answer it.
 
 THE NEGATIVE CONTROL. `-D MOJOLEARN_HOST_SABOTAGE=1` doubles the
 finite-difference step (2^-9 in place of DEVIATION 687's 2^-10), so every
@@ -258,7 +266,7 @@ def arima_host_refuse_unrestated(order: ArimaHostOrder, who: String) raises:
     `validate_order`, so every value that reaches here is one the GPU accepts."""
     var tail = String(
         "; the host restatement (arima/host/arima_oracle.mojo) covers p, q and"
-        " P of at most 1, Q = 0, d + D of at most 1 and p + q + k of at least"
+        " P and Q of at most 1, d + D of at most 1 and p + q + k of at least"
         " 1, the arms the arima, arima-011 and arima-seasonal-c lanes reach"
         " and the CPU identity gate holds to the GPU columns"
     )
@@ -279,11 +287,10 @@ def arima_host_refuse_unrestated(order: ArimaHostOrder, who: String) raises:
             who + ": no CPU implementation of ARIMA with P=" + String(order.P)
             + " (the Jones recursion past one seasonal AR coefficient)" + tail
         )
-    if order.Q != 0:
+    if order.Q > 1:
         raise Error(
             who + ": no CPU implementation of ARIMA with Q=" + String(order.Q)
-            + " (the seasonal MA arms of the state space matrices and the"
-            " seasonal least squares with an AR pre-fit)" + tail
+            + " (the Jones recursion past one seasonal MA coefficient)" + tail
         )
     if order.d + order.D > 1:
         raise Error(
