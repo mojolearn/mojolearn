@@ -17,16 +17,21 @@
 #              source commit are checked, every file's sha256 lands in job/wheel-manifest-candidate.json and in
 #              every board's box.mojolearn.wheel, and the compare is labelled "candidate <sha12> (<version>)".
 #              The owed rows (bench/results/paper_compare/owed-pre0867.json, tools/measure_owed.py) run too
-#              (PC_OWED=0 turns them off): the candidate, the prior release, and each B wheel set listed in
-#              PC_B_ARMS (a file on the box, lines `<name> <wheel dir> <source commit>`, names from the owed file's
-#              b_arms).
+#              (PC_OWED=0 turns them off), ONLY those a report reads (tools/measure_owed.py plan): an A/B row when one
+#              of its B wheel sets is listed in PC_B_ARMS (a file on the box, lines `<name> <wheel dir> <source
+#              commit>`, names from the owed file's b_arms), a board row (candidate against the last release) only
+#              when the job times a last release, a driver row when two of its arms run here.
 # SAME BOX ONLY (AGENTS.md "Times are compared only on the same box", Andrew, 2026-11-14: two L40S hosts differed
 # 1.2-2.2x on unchanged code and raised 56 false REGRESSION flags). In both modes the job installs OUR prior wheels
-# from PyPI (PC_PRIOR_VERSIONS, default "0.8.55,<PC_PRIOR_VERSION>" = the paper baseline and the last release,
-# default 0.8.66; the last release is put last) into their own ours-only venvs and TIMES every paper row for each,
-# on this box in this job, serial on the GPU like the candidate (board-prior-<version>/; the prior release's board
-# also times the owed rows' prior full rows, so the prior is never timed twice). Each prior is smoked first (a prior
-# wheel that refuses a row is NOT-RUN in its column, never a regression). The compare's columns are those on-box
+# from PyPI into their own ours-only venvs and TIMES every paper row for each, on this box in this job, serial on the
+# GPU like the candidate (board-prior-<version>/). ONE PRIOR BY DEFAULT (Andrew, 2026-11-16: a measurement job times
+# one prior, 0.8.55; 0.8.66 is never timed): PC_PRIOR_VERSIONS and PC_PRIOR_VERSION default to the paper baseline
+# 0.8.55 (tools/paper_compare.py PAPER_VERSION). An explicit extra prior is still accepted: PC_PRIOR_VERSIONS lists
+# more releases (each timed on the paper rows only), and a PC_PRIOR_VERSION other than 0.8.55 is the LAST RELEASE
+# arm (put last, the compare's flagged prior column): only it also times the owed board rows' prior full rows in its
+# board, and only it is the owed rows' "prior" arm. Each prior is planned and smoked only on the races it is compared
+# on (the paper rows; the last release: plus the owed prior rows); a prior wheel that refuses a row is NOT-RUN in its
+# column, never a regression. The compare's columns are those on-box
 # boards (tools/paper_compare.py compare --prior-board <version>=<board.json>); the stored columns (the paper
 # recipes' old_ms, bench/results/paper_compare/compare-<vendor>.json as --reference-compare, PC_REFERENCE_COMPARE)
 # are reference only, with their host, and never make a flag. The job's first step is the host probe
@@ -39,30 +44,36 @@
 # where the next phase still has inputs; the exit status is the worst phase's)
 #   probe    (every submit, seconds, before anything uses the GPU) tools/ops/host_probe.py -> job/host-probe.json
 #   plan     (CPU, seconds) paper_compare ids + measure_owed plan: race ids per board process
-#   install  (CPU, ALL AT ONCE) one ours-only venv per arm (bench_board --install-only --ours-install-only: our
+#   install  (CPU, ALL AT ONCE: every arm's venv and the dry run in parallel) one ours-only venv per arm (bench_board --install-only --ours-install-only: our
 #            wheels + scikit-learn + pandas, no opponent stack: the 0.8.66 smoke made a 13 GB venv per shard), each
 #            checked against its wheel manifest and our GPU set once; plus the board's dry run
-#   smoke    the paper races + the owed full-row races in parallel shards on the one GPU (not timed), all on the
-#            candidate venv (--python-env --skip-install: no per-shard install); shards = min(nproc/2, MemAvailable
+#   smoke    ALL ARMS AT ONCE (not timed): the candidate's paper + owed full-row races on the candidate venv and
+#            every prior's own races on its venv (--python-env --skip-install: no per-shard install), in one set of
+#            parallel shards on the one GPU split between the arms by race count; shards = min(nproc/2, MemAvailable
 #            / PC_SMOKE_MEM_GB (default 12), NVIDIA GPU memory / PC_SMOKE_GPU_GB (default 3), PC_SMOKE_MAX (default
 #            16), races); PC_SMOKE_SHARDS overrides. The shards are host-bound, not GPU-bound (2000-row races: worker
 #            start, import, data read; see the smoke phase). After it each shard's work/ and evidence/ and the
-#            caches c2.. are deleted (BOARD.md, board.json, smoke.json and logs/ stay)
+#            caches other than c1 are deleted (BOARD.md, board.json, smoke.json and logs/ stay). A prior smoke runs
+#            once per results dir (plan/prior-<v>-smoke.done)
 #   board    TIMED, SERIAL BY NATURE: one board process at a time on the one GPU with nothing else running
 #            (timing must not share the GPU; AGENTS.md "Full-machine CPU race resources"; the drivers themselves
 #            use every core, no thread caps): candidate paper+owed full rows
-#   prior    each prior wheel (PC_PRIOR_VERSIONS): its smoke in the same parallel shards on its own venv (once per
-#            results dir: plan/prior-<v>-smoke.done), then its TIMED board of the paper rows both it and the
-#            candidate passed (the last release: plus the owed prior full rows), serial on the GPU, board-prior-<v>/
+#   prior    each prior wheel (PC_PRIOR_VERSIONS; its smoke ran in the smoke phase, or here first when that part was
+#            not run), its TIMED board of the paper rows both it and the candidate passed (the last release: plus the
+#            owed prior full rows), serial on the GPU, board-prior-<v>/
 #   owed     each remaining owed unit (tools/measure_owed.py units.tsv: neighbouring --rows groups, the prior's
 #            neighbouring shapes, the B arms), then the driver rows (tools/measure_owed_driver.py per arm interpreter)
 #   compare  paper_compare compare --prior-board ... (COMPARE/compare/SUMMARY-<vendor>) and measure_owed report
 #            (OWED*-<vendor>)
 #   board-all (PC_PARTS=board-all; the full-board NVIDIA screen, Andrew 2026-11-13) instead of the above: every race
 #            the board plans (tools/paper_compare.py ids-all), our arm only, smoke in the same parallel shards, one
-#            timed board, each prior wheel smoked and timed on the same races (all-prior), compare against the
+#            timed board, each prior wheel smoked (with the candidate) and timed on the same races (all-prior), compare against the
 #            on-box priors with the paper recipes and every row's best time ever (--best-ever) as reference; see the
 #            board-all block below and docs/plans/PRE_0867_MEASUREMENT.md "Full-board NVIDIA screen"
+# PARALLEL PLAN (HARD RULE, 2026-11-07): what is independent runs at once across the cgroup's cores: the installs
+# of every arm and the dry run (install), the smokes of the candidate and of every prior (smoke, untimed, shards
+# from smoke_shards), the plans (CPU, seconds). What is TIMED is serial by nature: one board process at a time on the
+# one GPU with nothing else running (timing must not share the GPU, and the drivers themselves use every core).
 # PC_PARTS (default all: plan,install,smoke,board,prior,owed,drivers,compare) runs a subset (the probe always runs)
 # and PC_OWED_ARMS (comma list, default all) the owed units of some arms, so a job over the 240-minute
 # nvidia_central.sh cap is split into submits on the same results dir (the boards resume from board.json; a later
@@ -115,13 +126,18 @@ elif [ -n "$ARG2" ]; then
     VER=$ARG2
 fi
 [[ "$VER" =~ ^[0-9]+(\.[0-9]+)+([.a-z0-9]*)$ ]] || { echo "paper-compare-job: bad version $VER" >&2; exit 2; }
-PRIOR=${PC_PRIOR_VERSION:-0.8.66}
-[[ "$PRIOR" =~ ^[0-9]+(\.[0-9]+)+([.a-z0-9]*)$ ]] || { echo "paper-compare-job: bad PC_PRIOR_VERSION $PRIOR" >&2; exit 2; }
 # >>> prior-versions (tools/test_paper_compare_same_box.py runs this block)
-# OUR prior wheels re-timed on this box: the paper baseline and the last release (PRIOR is always in the list and
-# always last: the compare's flagged prior column and the owed rows' prior arm)
+# the paper's version (tools/paper_compare.py PAPER_VERSION; tools/test_paper_compare_same_box.py checks they agree)
+PAPER_VERSION=0.8.55
+PRIOR=${PC_PRIOR_VERSION:-$PAPER_VERSION}
+[[ "$PRIOR" =~ ^[0-9]+(\.[0-9]+)+([.a-z0-9]*)$ ]] || { echo "paper-compare-job: bad PC_PRIOR_VERSION $PRIOR" >&2; exit 2; }
+# OUR prior wheels re-timed on this box: by default the paper baseline only (Andrew, 2026-11-16). PRIOR is always in
+# the list and always last. LAST_PRIOR is PRIOR when it is not the paper baseline (an explicit last release: the
+# compare's flagged prior column and the owed rows' prior arm), else empty (no owed board row, no prior owed arm).
 PRIOR_VERSIONS=
-for pv in $(echo "${PC_PRIOR_VERSIONS:-0.8.55,$PRIOR}" | tr ',' ' ') "$PRIOR"; do
+LAST_PRIOR=
+[ "$PRIOR" != "$PAPER_VERSION" ] && LAST_PRIOR=$PRIOR
+for pv in $(echo "${PC_PRIOR_VERSIONS:-$PAPER_VERSION,$PRIOR}" | tr ',' ' ') "$PRIOR"; do
     [[ "$pv" =~ ^[0-9]+(\.[0-9]+)+([.a-z0-9]*)$ ]] || { echo "paper-compare-job: bad PC_PRIOR_VERSIONS entry $pv" >&2; exit 2; }
     [ "$pv" = "$PRIOR" ] && continue
     [[ ",$PRIOR_VERSIONS," == *",$pv,"* ]] || PRIOR_VERSIONS="${PRIOR_VERSIONS:+$PRIOR_VERSIONS,}$pv"
@@ -415,8 +431,10 @@ for pv in ${PRIOR_VERSIONS//,/ }; do
     [ "$MODE" = published ] && [ "$pv" = "$VER" ] && continue      # the version under test is the new column
     add_arm "prior-$pv" --mojolearn-version "$pv"; PRIOR_ARMS+=("prior-$pv")
 done
-# the owed rows name the last release "prior" (owed-pre0867.json, measure_owed units, measure_owed_driver --arm)
-venv_arm() { if [ "$1" = prior ]; then echo "prior-$PRIOR"; else echo "$1"; fi; }
+# the owed rows name the last release "prior" (owed-pre0867.json, measure_owed units, measure_owed_driver --arm):
+# LAST_PRIOR's venv, none when the job times no last release (the default: the paper baseline only)
+venv_arm() { if [ "$1" = prior ]; then echo "prior-${LAST_PRIOR:-none}"; else echo "$1"; fi; }
+OWED_PRIOR=(); [ -n "$LAST_PRIOR" ] && OWED_PRIOR=(--prior)   # measure_owed plans the owed prior arm only then
 # >>> b-arms (tools/test_measure_owed.py runs this block on a fake PC_B_ARMS file)
 B_NAMES=()
 if [ "$OWED" = 1 ] && [ -n "${PC_B_ARMS:-}" ]; then
@@ -460,33 +478,70 @@ smoke_shards() {
     return 0
 }
 
-# ---- the prior wheels on this box: their smoke, then their timed board (AGENTS.md "Times are compared only on the
-# same box", 2026-11-14) ---------------------------------------------------------------------------------------------
+# ---- the smokes (untimed, ALL ARMS AT ONCE) and the prior wheels' timed boards (AGENTS.md "Times are compared only
+# on the same box", 2026-11-14) ---------------------------------------------------------------------------------------
 # CARGS is the flow's board argument set (COMMON or COMMON_ALL), set before these run. PREFIX is "" (paper flow) or
-# "all-" (board-all). The smoke is the candidate's: parallel shards on the one GPU, not timed, on the arm's own venv,
-# once per results dir (plan/<prefix><arm>-smoke.done); a row the prior refuses there is NOT-RUN in its column.
-prior_smoke() {   # arm, smoke ids file, prefix, extra smoke args...
-    local arm=$1 ids=$2 pre=$3 nrace i p r d c src=0 pids=() done_f
-    shift 3
-    done_f="$RES/plan/${pre}${arm}-smoke.done"
-    [ -f "$done_f" ] && { say "smoke $arm: done in an earlier submit ($(cat "$done_f"))"; return 0; }
-    [ -f "${ARM_MAN[$arm]:-/nonexistent}" ] || { say "smoke $arm: no installed venv (logs/install-$arm.log); its column is NOT-RUN"; return 6; }
-    nrace=$(nlines "$ids")
-    [ "$nrace" -gt 0 ] || { say "smoke $arm: no races"; return 0; }
-    smoke_shards "$nrace"
-    disk_gate "smoke-$pre$arm" "$nrace" "$S" "${PC_SMOKE_EVIDENCE_MB_PER_RACE:-5}"
-    say "smoke $arm: $nrace races in $S parallel shards (nproc $(nproc), MemAvailable ${MEMG} GiB, GPU ${GPUG:-?} GiB)"
+# "all-" (board-all). PRIOR_SMOKE_IDS[<arm>] is the smoke ids file of each prior arm: the races it is compared on.
+declare -A PRIOR_SMOKE_IDS
+SMOKE_PIDS=(); SMOKE_PID_ARM=()
+smoke_launch() {   # arm, ids, out base, shards, cache tag, extra smoke args...: the arm's shards in the background
+    local arm=$1 ids=$2 base=$3 n=$4 tag=$5 i
+    shift 5
     # shellcheck disable=SC2046
-    for i in $(seq 1 "$S"); do
-        $PY tools/bench_board.py "${CARGS[@]}" $(run_as "$arm") --cache "$CACHE_ROOT/c$i" --race-ids @"$ids" \
-            --smoke "$@" --shard "$i/$S" --out "$RES/smoke-$pre$arm-s$i" > "$RES/logs/smoke-$pre$arm-s$i.log" 2>&1 &
-        pids+=($!)
+    for i in $(seq 1 "$n"); do
+        $PY tools/bench_board.py "${CARGS[@]}" $(run_as "$arm") --cache "$CACHE_ROOT/c$tag$i" --race-ids @"$ids" \
+            --smoke "$@" --shard "$i/$n" --out "$base-s$i" > "$RES/logs/$(basename "$base")-s$i.log" 2>&1 &
+        SMOKE_PIDS+=($!); SMOKE_PID_ARM+=("$arm")
     done
-    for p in "${pids[@]}"; do wait "$p"; r=$?; [ $r -gt $src ] && src=$r; done
-    grep -h -E '^SMOKE (PASS|FAIL)' "$RES"/logs/smoke-"$pre$arm"-s*.log | head -n 4
-    for d in "$RES"/smoke-"$pre$arm"-s*/; do rm -rf "${d}work" "${d}evidence"; done
-    for c in "$CACHE_ROOT"/c*/; do case "$(basename "$c")" in c1) ;; c[0-9]*) rm -rf "$c" ;; esac; done
-    echo "rc=$src shards=$S $(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$done_f"
+}
+# smoke_together <prefix> <candidate ids or ""> <candidate out base> [extra smoke args...]: the candidate's smoke and
+# the smoke of every prior arm not yet smoked in this results dir (plan/<prefix><arm>-smoke.done), at once, in ONE set
+# of smoke_shards shards on the one GPU split between the arms by race count (at least one each). Untimed, so they
+# overlap; before 2026-11-16 each prior's smoke ran alone after the candidate's 3.6 h timed board. A row a prior
+# refuses there is NOT-RUN in its column. Returns the worst shard rc; prints the arms' SMOKE lines.
+smoke_together() {
+    local pre=$1 cids=$2 cbase=$3 total=0 n k=0 i r src=0 arm d c
+    local -a arms=() counts=()
+    local -A arm_rc=()
+    shift 3
+    if [ -n "$cids" ]; then n=$(nlines "$cids"); [ "$n" -gt 0 ] && { arms+=(candidate); counts+=("$n"); total=$(( total + n )); }; fi
+    for arm in ${PRIOR_ARMS[@]+"${PRIOR_ARMS[@]}"}; do
+        [ -f "$RES/plan/${pre}${arm}-smoke.done" ] && { say "smoke $arm: done in an earlier submit ($(cat "$RES/plan/${pre}${arm}-smoke.done"))"; continue; }
+        [ -f "${ARM_MAN[$arm]:-/nonexistent}" ] || { say "smoke $arm: no installed venv (logs/install-$arm.log); its column is NOT-RUN"; src=6; continue; }
+        n=$(nlines "${PRIOR_SMOKE_IDS[$arm]:-/nonexistent}")
+        [ "$n" -gt 0 ] || { say "smoke $arm: no races"; continue; }
+        arms+=("$arm"); counts+=("$n"); total=$(( total + n ))
+    done
+    [ "$total" -gt 0 ] || return $src
+    smoke_shards "$total"
+    disk_gate "${pre}smoke" "$total" "$S" "${PC_SMOKE_EVIDENCE_MB_PER_RACE:-5}"
+    SMOKE_PIDS=(); SMOKE_PID_ARM=()
+    for i in "${!arms[@]}"; do
+        arm=${arms[$i]}
+        n=$(( S * counts[i] / total )); [ "$n" -lt 1 ] && n=1; [ "$n" -gt "${counts[$i]}" ] && n=${counts[$i]}
+        say "smoke $arm: ${counts[$i]} races in $n of $S parallel shards (all arms at once; nproc $(nproc), MemAvailable ${MEMG} GiB, GPU ${GPUG:-?} GiB)"
+        if [ "$arm" = candidate ]; then
+            smoke_launch candidate "$cids" "$cbase" "$n" "" "$@"
+        else
+            k=$(( k + 1 )); smoke_launch "$arm" "${PRIOR_SMOKE_IDS[$arm]}" "$RES/smoke-$pre$arm" "$n" "p$k-" "$@"
+        fi
+    done
+    for i in "${!SMOKE_PIDS[@]}"; do
+        wait "${SMOKE_PIDS[$i]}"; r=$?; arm=${SMOKE_PID_ARM[$i]}
+        [ "$r" -gt "${arm_rc[$arm]:-0}" ] && arm_rc[$arm]=$r
+        [ "$r" -gt "$src" ] && src=$r
+    done
+    for arm in "${arms[@]}"; do
+        [ "$arm" = candidate ] && continue
+        echo "rc=${arm_rc[$arm]:-0} together-with=${arms[*]} $(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$RES/plan/${pre}${arm}-smoke.done"
+    done
+    grep -h -E '^SMOKE (PASS|FAIL)' "$RES"/logs/smoke-*s[0-9]*.log 2> /dev/null | head -n 8
+    # the smoke scratch is not needed past this point: each shard keeps BOARD.md, board.json, smoke.json and logs/
+    # (what pass-ids and the persisted record read); its work/ and evidence/ go, and every shard cache but c1 (the
+    # timed boards use c1). The 80 GB L40S pod filled with 12 GB of smoke scratch on 2026-11-13.
+    for d in "$RES"/smoke-*s[0-9]*/; do [ -d "$d" ] && rm -rf "${d}work" "${d}evidence"; done
+    for c in "$CACHE_ROOT"/c*/; do case "$(basename "$c")" in c1) ;; c[0-9]*|cp[0-9]*) rm -rf "$c" ;; esac; done
+    say "smoke scratch pruned; $(df -h /root 2> /dev/null | awk 'NR==2 {print $4 " free on /root"}')"
     return $src
 }
 prior_smoke_args() {   # arm, prefix: the --smoke-json args of the arm's own smoke
@@ -574,26 +629,12 @@ if part all-plan || part all-install || part all-smoke || part all-board || part
         phase_end $rc
     fi
     [ -f "${ARM_MAN[candidate]}" ] || { say "the candidate arm has no wheel manifest (logs/install-all.log)"; exit 6; }
+    CARGS=("${COMMON_ALL[@]}")
+    for arm in ${PRIOR_ARMS[@]+"${PRIOR_ARMS[@]}"}; do PRIOR_SMOKE_IDS[$arm]="$PA/race-ids-smoke.txt"; done
     if part all-smoke; then
+        # the candidate and every prior wheel at once (untimed; smoke_together)
         phase all-smoke
-        NRACE=$(grep -c . "$PA/race-ids-smoke.txt")
-        smoke_shards "$NRACE"
-        disk_gate all-smoke "$NRACE" "$S" "${PC_SMOKE_EVIDENCE_MB_PER_RACE:-5}"
-        say "full-board smoke: $NRACE races in $S parallel shards (nproc $(nproc), MemAvailable ${MEMG} GiB, GPU ${GPUG:-?} GiB)"
-        pids=()
-        # shellcheck disable=SC2046
-        for i in $(seq 1 "$S"); do
-            $PY tools/bench_board.py "${COMMON_ALL[@]}" $(run_as candidate) --cache "$CACHE_ROOT/c$i" \
-                --race-ids @"$PA/race-ids-smoke.txt" --smoke --drop-race-scratch --shard "$i/$S" \
-                --out "$RES/smoke-all-s$i" > "$RES/logs/smoke-all-s$i.log" 2>&1 &
-            pids+=($!)
-        done
-        src=0
-        for p in "${pids[@]}"; do wait "$p"; r=$?; [ $r -gt $src ] && src=$r; done
-        grep -h -E '^SMOKE (PASS|FAIL)' "$RES"/logs/smoke-all-s*.log | head -n 8
-        for d in "$RES"/smoke-all-s*/; do rm -rf "${d}work" "${d}evidence"; done
-        for c in "$CACHE_ROOT"/c*/; do case "$(basename "$c")" in c1) ;; c[0-9]*) rm -rf "$c" ;; esac; done
-        say "full-board smoke scratch pruned; $(df -h /root 2> /dev/null | awk 'NR==2 {print $4 " free on /root"}')"
+        smoke_together all- "$PA/race-ids-smoke.txt" "$RES/smoke-all" --drop-race-scratch; src=$?
         phase_end $src
     fi
     SJA=()
@@ -616,10 +657,9 @@ if part all-plan || part all-install || part all-smoke || part all-board || part
     fi
     if part all-prior && [ "${#PRIOR_ARMS[@]}" -gt 0 ]; then
         phase all-prior
-        CARGS=("${COMMON_ALL[@]}")
-        rc=0
-        for arm in "${PRIOR_ARMS[@]}"; do
-            prior_smoke "$arm" "$PA/race-ids-smoke.txt" all- --drop-race-scratch; r=$?; [ $r -gt $rc ] && rc=$r
+        # a prior smoke the all-smoke part did not run (a split submit) runs here first, all priors at once
+        smoke_together all- "" "" --drop-race-scratch; rc=$?
+        for arm in "${PRIOR_ARMS[@]}"; do      # TIMED: one board at a time on the one GPU
             prior_board_run "$arm" "$PA/race-ids-pass.txt" "$RES/board-all-$arm" all-; r=$?; [ $r -gt $rc ] && rc=$r
         done
         phase_end $rc
@@ -645,7 +685,8 @@ fi
 # ---- plan (CPU, seconds) -----------------------------------------------------------------------------------------
 owed_plan() {   # the owed rows' plan for this job's B sets (plan-owed/plan.json records them)
     $PY tools/measure_owed.py plan --owed "$OWED_FILE" --paper-recipes "$RECIPES" --planner tools/bench_board.py \
-        --vendor "$V" --b-arms "$B_CSV" --out-dir "$RES/plan-owed" > "$RES/logs/owed-plan.log" 2>&1
+        --vendor "$V" --b-arms "$B_CSV" ${OWED_PRIOR[@]+"${OWED_PRIOR[@]}"} --out-dir "$RES/plan-owed" \
+        > "$RES/logs/owed-plan.log" 2>&1
     local r=$?; tail -n 2 "$RES/logs/owed-plan.log"; return $r
 }
 if part plan; then
@@ -662,7 +703,8 @@ elif [ "$OWED" = 1 ]; then
     # reused plan-owed/ from job 0001, made without PC_B_ARMS (b_arms=-): its units.tsv had no B unit, so
     # PC_OWED_ARMS=candidate,<b names> ran no B arm although all five B sets were installed. A plan made for other
     # B sets (or before plan.json existed) is re-made here (CPU, seconds); the candidate's ids do not change.
-    chk=$($PY tools/measure_owed.py plan-check --plan-dir "$RES/plan-owed" --b-arms "$B_CSV" --vendor "$V" 2>&1)
+    chk=$($PY tools/measure_owed.py plan-check --plan-dir "$RES/plan-owed" --b-arms "$B_CSV" --vendor "$V" \
+        ${OWED_PRIOR[@]+"${OWED_PRIOR[@]}"} 2>&1)
     if [ $? -ne 0 ]; then
         say "owed plan re-made: $chk"
         owed_plan || say "the owed plan failed (logs/owed-plan.log)"
@@ -678,7 +720,7 @@ fi
 # every dataset the races read, from the board's own data_needs over the paper and owed races (tools/measure_owed.py
 # data-keys; the same list tools/ops/measure_candidate.py stage stages): a missing one stops the job here, before any
 # install (2026-11-12: a missing higgs failed half the smoke shards)
-DK_OWED=(); [ "$OWED" = 1 ] && DK_OWED=(--owed "$OWED_FILE")
+DK_OWED=(); [ "$OWED" = 1 ] && DK_OWED=(--owed "$OWED_FILE" --b-arms "$B_CSV" ${OWED_PRIOR[@]+"${OWED_PRIOR[@]}"})
 $PY tools/measure_owed.py data-keys "${DK_OWED[@]}" --paper-recipes "$RECIPES" --planner tools/bench_board.py \
     --vendor "$V" --data-root "$DATA_ROOT" > "$RES/plan/data-keys.tsv" 2> "$RES/logs/data-keys.log" || {
     say "could not list the datasets (logs/data-keys.log)"; exit 4; }
@@ -724,34 +766,27 @@ fi
 # ---- smoke (parallel shards on the one GPU; not timed) ----------------------------------------------------------
 SMOKE_IDS="$RES/plan/race-ids-smoke-all.txt"
 cat "$RES/plan/race-ids-smoke.txt" "$RES/plan-owed/smoke-ids.txt" 2> /dev/null | sort -u > "$SMOKE_IDS"
+# each prior is smoked only on the races it is compared on: the paper rows; the last release (LAST_PRIOR) also the
+# owed rows' prior full rows (plan-owed/smoke-ids-prior.txt). 2026-11-16 (d95f805cce, L40S): 0.8.55 as PC_PRIOR_VERSION
+# was planned on the last release's 159 races, of which 98 0.8.55 does not have.
+CARGS=("${COMMON[@]}")
+for arm in ${PRIOR_ARMS[@]+"${PRIOR_ARMS[@]}"}; do
+    PRIOR_SMOKE_IDS[$arm]="$RES/plan/race-ids-smoke.txt"
+    if [ "$OWED" = 1 ] && [ -n "$LAST_PRIOR" ] && [ "$arm" = "prior-$LAST_PRIOR" ]; then
+        PRIOR_SMOKE_IDS[$arm]="$RES/plan/$arm-smoke-ids.txt"
+        cat "$RES/plan/race-ids-smoke.txt" "$RES/plan-owed/smoke-ids-prior.txt" 2> /dev/null | sort -u > "${PRIOR_SMOKE_IDS[$arm]}"
+    fi
+done
 if part smoke; then
     phase smoke
-    NRACE=$(grep -c . "$SMOKE_IDS")
     # NOT GPU-bound (read from the code; not measured): a smoke race runs SMOKE_ROWS=2000 rows at the `small` shape,
     # so each shard's time is CPU and I/O on the host: a fresh worker process per arm (interpreter start, `import
     # mojolearn`, the GPU context), the dataset npz read and sliced, the evidence sealed. Each shard runs one race at a
     # time and mostly one core, which is why 5 shards (nproc/4) showed busy 2-4 of 20 cores (2026-11-12, AMD). So the
     # shard count is nproc/2, bounded by host memory (PC_SMOKE_MEM_GB per shard), by GPU memory (PC_SMOKE_GPU_GB per
-    # shard's contexts and small buffers) and PC_SMOKE_MAX (16): smoke_shards.
-    smoke_shards "$NRACE"
-    disk_gate smoke "$NRACE" "$S" "${PC_SMOKE_EVIDENCE_MB_PER_RACE:-5}"
-    say "smoke: $NRACE races in $S parallel shards (nproc $(nproc), MemAvailable ${MEMG} GiB, GPU ${GPUG:-?} GiB), one venv"
-    pids=()
-    # shellcheck disable=SC2046
-    for i in $(seq 1 "$S"); do
-        $PY tools/bench_board.py "${COMMON[@]}" $(run_as candidate) --cache "$CACHE_ROOT/c$i" --race-ids @"$SMOKE_IDS" \
-            --smoke --shard "$i/$S" --out "$RES/smoke-s$i" > "$RES/logs/smoke-s$i.log" 2>&1 &
-        pids+=($!)
-    done
-    src=0
-    for p in "${pids[@]}"; do wait "$p"; r=$?; [ $r -gt $src ] && src=$r; done
-    grep -h -E '^SMOKE (PASS|FAIL)' "$RES"/logs/smoke-s*.log | head -n 8
-    # the smoke scratch is not needed past this point: each shard keeps BOARD.md, board.json, smoke.json and logs/
-    # (what pass-ids and the persisted record read); its work/ and evidence/ go, and the shards' caches c2.. (the timed
-    # boards use c1). The 80 GB L40S pod filled with 12 GB of smoke scratch on 2026-11-13.
-    for d in "$RES"/smoke-s*/; do rm -rf "${d}work" "${d}evidence"; done
-    for c in "$CACHE_ROOT"/c*/; do case "$(basename "$c")" in c1) ;; c[0-9]*) rm -rf "$c" ;; esac; done
-    say "smoke scratch pruned; $(df -h /root 2> /dev/null | awk 'NR==2 {print $4 " free on /root"}')"
+    # shard's contexts and small buffers) and PC_SMOKE_MAX (16): smoke_shards. The candidate and every prior wheel
+    # smoke at once in those shards (smoke_together), each on its own venv.
+    smoke_together "" "$SMOKE_IDS" "$RES/smoke"; src=$?
     phase_end $src     # a SMOKE FAIL exits 1: recorded, the passed races still go on
 fi
 SJ=()
@@ -794,22 +829,19 @@ if part board; then
     phase_end $rc
 fi
 if part prior && [ "${#PRIOR_ARMS[@]}" -gt 0 ]; then
-    # each prior wheel on this box: its smoke, then its timed board of the paper rows it and the candidate passed;
-    # the last release (prior-$PRIOR) also times the owed rows' prior full rows here (no second timing of the prior)
+    # each prior wheel on this box: its timed board of the paper rows it and the candidate passed; the last release
+    # (prior-$LAST_PRIOR) also times the owed rows' prior full rows here (no second timing of the prior). A prior smoke
+    # the smoke part did not run (a split submit) runs here first, every such prior at once.
     phase prior
-    CARGS=("${COMMON[@]}")
-    rc=0
-    for arm in "${PRIOR_ARMS[@]}"; do
+    smoke_together "" "" ""; rc=$?
+    for arm in "${PRIOR_ARMS[@]}"; do      # TIMED: one board at a time on the one GPU
         want="$RES/plan/$arm-want.txt"
-        sids="$RES/plan/race-ids-smoke.txt"
         cat "$RES/plan/race-ids-full.txt" > "$want.set"
-        if [ "$arm" = "prior-$PRIOR" ] && [ "$OWED" = 1 ]; then
+        if [ "$OWED" = 1 ] && [ -n "$LAST_PRIOR" ] && [ "$arm" = "prior-$LAST_PRIOR" ]; then
             cat "$RES/plan-owed/ids-prior-full.txt" >> "$want.set" 2> /dev/null
-            sids="$SMOKE_IDS"
         fi
         # in PASS_IDS order (paper rows first): a cap kill loses owed rows, never paper rows
         awk 'NR == FNR {w[$0] = 1; next} w[$0]' "$want.set" "$PASS_IDS" > "$want"
-        prior_smoke "$arm" "$sids" ""; r=$?; [ $r -gt $rc ] && rc=$r
         prior_board_run "$arm" "$want" "$RES/board-$arm" ""; r=$?; [ $r -gt $rc ] && rc=$r
     done
     phase_end $rc
@@ -822,7 +854,7 @@ if [ "$OWED" = 1 ] && part owed && [ -s "$RES/plan-owed/units.tsv" ]; then
     rc=0
     while IFS=$'\t' read -r arm rows ids; do
         [ "$arm" = candidate ] && [ "$rows" = full ] && continue   # timed with the paper races (part board)
-        [ "$arm" = prior ] && [ "$rows" = full ] && continue       # timed in board-prior-$PRIOR (part prior)
+        [ "$arm" = prior ] && [ "$rows" = full ] && continue       # timed in board-prior-$LAST_PRIOR (part prior)
         [ -n "${PC_OWED_ARMS:-}" ] && [[ ",$PC_OWED_ARMS," != *",$arm,"* ]] && continue   # a split submit
         if [ "$rows" = full ]; then
             # full rows: only the races whose smoke passed (the gate keys on family/lane/dataset, any venv)
@@ -842,7 +874,7 @@ if [ "$OWED" = 1 ] && part drivers && [ -s "$RES/plan-owed/drivers.json" ]; then
     for row in $($PY -c 'import json,sys; print(" ".join(r["id"] for r in json.load(open(sys.argv[1]))))' "$RES/plan-owed/drivers.json"); do
         # a driver row's B arms (its "arms" names a staged B set, e.g. restore-mamba-backward-glue's
         # mamba-backward-generic) run on that set's venv; measure_owed_driver.py skips an arm the row does not name
-        for arm in candidate prior ${B_NAMES[@]+"${B_NAMES[@]}"}; do
+        for arm in candidate ${LAST_PRIOR:+prior} ${B_NAMES[@]+"${B_NAMES[@]}"}; do
             va=$(venv_arm "$arm")
             [ -x "${ARM_PY[$va]:-/nonexistent}" ] || continue
             "${ARM_PY[$va]}" tools/measure_owed_driver.py --owed "$OWED_FILE" --row "$row" --arm "$arm" \
@@ -869,7 +901,7 @@ if part compare; then
     rc=$?; head -n 3 "$RES/logs/compare.log"
     if [ "$OWED" = 1 ]; then
         $PY tools/measure_owed.py report --owed "$OWED_FILE" --plan-dir "$RES/plan-owed" --results "$RES" \
-            --vendor "$V" --prior-version "$PRIOR" > "$RES/logs/owed-report.log" 2>&1
+            --vendor "$V" ${LAST_PRIOR:+--prior-version "$LAST_PRIOR"} > "$RES/logs/owed-report.log" 2>&1
         r=$?; head -n 2 "$RES/logs/owed-report.log"; [ $r -gt $rc ] && rc=$r
     fi
     phase_end $rc
