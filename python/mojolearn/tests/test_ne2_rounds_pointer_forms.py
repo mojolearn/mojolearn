@@ -92,7 +92,15 @@ def test_resample_frame_mixed_dtypes_equal_iloc(pd):
     expect = df.iloc[rows].to_numpy()
     got = _np(out)
     assert got.dtype == expect.dtype
-    assert np.array_equal(got.view(np.uint8), np.ascontiguousarray(expect).view(np.uint8))
+    if expect.dtype.hasobject:
+        # A frame mixing bool with numeric columns materializes as object
+        # cells (pandas iloc().to_numpy() does too); object storage holds
+        # references, so compare each cell's type and value, not bytes.
+        assert got.shape == expect.shape
+        for g, e in zip(got.ravel(), expect.ravel()):
+            assert type(g) is type(e) and g == e
+    else:
+        assert np.array_equal(got.view(np.uint8), np.ascontiguousarray(expect).view(np.uint8))
 
 
 def test_resample_frame_twice_reuses_numpy_table(pd):

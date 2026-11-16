@@ -420,9 +420,22 @@ def _rp_native_method(cls: PythonObject, name: String) raises -> PythonObject:
         var descriptor = py_get(_pd_type_fields(owner), name)
         if descriptor is None:
             continue
-        if py_type(descriptor) is not native_classmethod or descriptor.__objclass__ is not owner:
-            raise Error("TypeError: pandas scalar boxing requires its native classmethod descriptor")
-        return py_call(descriptor.__get__, PythonObject(None), cls)
+        var kind = py_type(descriptor)
+        if kind is native_classmethod and descriptor.__objclass__ is owner:
+            return py_call(descriptor.__get__, PythonObject(None), cls)
+        # Cython 3 (binding=True, every pandas wheel since 2.1) stores the
+        # compiled classmethod as an exact builtins.classmethod around a
+        # cython_function_or_method, not as a C classmethod_descriptor. Admit
+        # it only when the wrapped function is that compiled type and its
+        # qualified name is the owner's own entry; `__func__` is a data
+        # descriptor on classmethod, so no instance dictionary can shadow it,
+        # and binding goes through classmethod's own slot, not the instance.
+        if kind is b.classmethod:
+            var function = descriptor.__func__
+            var expected = String(py=owner.__qualname__) + "." + name
+            if String(py=py_type(function).__qualname__) == "cython_function_or_method" and String(py=function.__qualname__) == expected:
+                return py_call(b.classmethod.__dict__["__get__"], descriptor, PythonObject(None), cls)
+        raise Error("TypeError: pandas scalar boxing requires its native classmethod descriptor")
     raise Error("TypeError: pandas scalar boxing native classmethod is unavailable")
 
 
