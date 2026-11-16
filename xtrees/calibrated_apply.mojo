@@ -261,6 +261,12 @@ def calibrated_proba_host(pairs: List[CalPair], n: Int, k: Int, acc: MutPointer[
         for i in range(n * k):  # host-column: the CPU binding's float32 narrowing (`trees_f32`)
             qp[unsafe_offset=i] = Float32(pp[unsafe_offset=i])
         accumulate(acc, qp, n * k, 1.0)
+    # segfaults-4: the scratch Lists are read and written only through
+    # untracked-origin pointers; name them after the last such use.
+    _ = s^
+    _ = prob^
+    _ = col32^
+    _ = p32^
     if n * k > 0:
         scale_f64(acc, n * k, Float64(len(pairs)))
 
@@ -356,10 +362,17 @@ def ovr_assemble_host(columns: List[OvrColumn], n: Int, k: Int, finish: Int,
         return
     if len(columns) != k:
         raise Error("x_trees_ovr_assemble: one column per class")
-    var own = List[Float64](length=n * k, fill=0.0)
-    var sp = own.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin]()
-    if finish != OVR_ARGMAX:
-        sp = scores
+    # segfaults-4 (2026-11-16): `own` was allocated on every call and its
+    # last named use was `own.unsafe_ptr()` (an untracked-origin pointer does
+    # not extend its life), so Mojo freed it before the widening loop and the
+    # argmax finish (OneVsRest predict, k > 2) wrote n * k doubles into freed
+    # heap: the later allocator faults of the meta-estimator tests. The
+    # scratch is now made only for the argmax finish (the scores finishes
+    # write `scores` directly) and named after its last pointer use.
+    var own = List[Float64](length=n * k if finish == OVR_ARGMAX else 0, fill=0.0)
+    var sp = scores
+    if finish == OVR_ARGMAX:
+        sp = own.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin]()
     for j in range(k):  # driver-loop: over the members (one column each)
         ref col = columns[j]
         var src = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=col.blk)
@@ -369,3 +382,4 @@ def ovr_assemble_host(columns: List[OvrColumn], n: Int, k: Int, finish: Int,
         normalize_rows(sp, n, k)
     elif finish == OVR_ARGMAX:
         argmax_rows(sp, n, k, codes)
+    _ = own^  # keep the argmax scratch alive past every write and read through `sp`
