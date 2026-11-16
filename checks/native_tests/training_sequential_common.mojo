@@ -72,7 +72,7 @@ struct SeqModel(Movable):
     var huber_delta: Float64
     var tol: Float64
     var patience: Int
-    # fitted state (the door's params_, _opt_m, _opt_v, _fit_state, _curve)
+    # fitted state (the door's params_, optimizer_m_, optimizer_v_, _fit_state, _curve)
     var params: List[Float32]
     var m: List[Float32]
     var v: List[Float32]

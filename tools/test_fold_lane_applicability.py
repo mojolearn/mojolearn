@@ -11,8 +11,9 @@ ROOT = Path(__file__).resolve().parents[1]
 def test_descriptor_default_fold_route_reaches_native_helpers():
     # The Python fold shims (`_folds`, `_default_fold_arrays`) were deleted by
     # f4d37e5eec; the default folds are the native model_selection owner's
-    # `msel_default_folds`. split_descriptor and the verify lane both reach it
-    # through the one owner entry, and it calls core's fold helpers.
+    # `msel_default_folds`. split_descriptor and the public default_folds
+    # (which the verify lane calls) reach it through the one owner entry, and
+    # it calls core's fold helpers.
     tree = ast.parse((ROOT / 'python/mojolearn/model_selection.py').read_text())
     functions = {n.name: n for n in tree.body if isinstance(n, ast.FunctionDef)}
     assert '_default_fold_arrays' not in functions and '_folds' not in functions
@@ -32,7 +33,10 @@ def test_descriptor_default_fold_route_reaches_native_helpers():
     harness = (ROOT / 'tools/identity_break.py').read_text()
     lane = harness[harness.index('@lane("cross-val-folds")'):]
     lane = lane[:lane.index('\n@lane(')]
-    assert '"family_msel_default_folds"' in lane and 'ms._default_fold_arrays(' not in lane
+    assert 'ms.default_folds(' in lane and 'ms._NATIVE' not in lane and 'ms._default_fold_arrays(' not in lane
+    public = [n for n in ast.walk(functions['default_folds'])
+              if isinstance(n, ast.Call) and isinstance(n.func, ast.Name) and n.func.id == '_NATIVE']
+    assert [n.args[1].value for n in public] == ['family_msel_default_folds']
 
 
 def test_fold_lane_is_cpu_applicable_and_never_gpu_coverage():

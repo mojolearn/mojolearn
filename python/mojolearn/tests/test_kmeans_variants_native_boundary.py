@@ -67,9 +67,9 @@ def test_bisect_tree_arrays_keep_identity_aliases_and_serialization():
     x = np.array([[0.0], [1.0], [10.0], [11.0]], dtype=np.float32)
     model = ml.BisectingKMeans(n_clusters=2, random_state=7, numeric_mode="identical").fit(x)
     centers = model._tree_centers
-    nodes = model._tree_nodes
+    nodes = model.tree_nodes_
     assert centers is model._tree_centers
-    assert nodes is model._tree_nodes
+    assert nodes is model.tree_nodes_
     before = np.asarray(model.predict(x)).copy()
     view = np.asarray(nodes)
     # Swap only the two leaf labels in the observable existing tree storage.

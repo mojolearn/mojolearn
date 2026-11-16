@@ -144,6 +144,7 @@ NOT_MEASURED = (
     ("mojolearn.model_selection.get_scorer", "returns a scorer object; its compute is the metric lanes'"),
     ("mojolearn.model_selection.get_scorer_names", "returns names; no compute"),
     ("mojolearn.model_selection.make_scorer", "returns a scorer object; its compute is the metric lanes'"),
+    ("mojolearn.model_selection.default_folds", "returns fold row indices; no model compute"),
     ("mojolearn.model_selection.split_descriptor", "returns a split description; no compute"),
     ("mojolearn.training.accumulation_is_aligned", "a boolean check of two sizes; no compute"),
     ("mojolearn.training.numeric_mode_used", "getter; no compute"),

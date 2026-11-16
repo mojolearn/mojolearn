@@ -100,33 +100,33 @@ def arm_optimize(rep):
     m = _fit(k, x, y)
     rep.check("OPTIMIZE", m.kernel_ is not m.kernel and m.kernel.theta == list(np.log([1.0, 1.0, 0.1])),
               "kernel_ is a new kernel and kernel is untouched")
-    runs = m._optimizer_runs
+    runs = m.optimizer_runs_
     rep.check("OPTIMIZE", len(runs) == 1 and len(runs[0]) == 4,
               "one native optimizer run is packed as four fields", runs)
     m2 = _fit(ConstantKernel(1.0) * RBF(1.0) + WhiteKernel(0.1), x, y)
     rep.check("OPTIMIZE", _bits(m2.alpha_) == _bits(m.alpha_) and m2.kernel_.theta == m.kernel_.theta,
               "a second fit gives the same bits")
     none = GaussianProcessRegressor(kernel=k).fit(x, y)
-    rep.check("OPTIMIZE", none.kernel_ is none.kernel and none._optimizer_runs == [],
+    rep.check("OPTIMIZE", none.kernel_ is none.kernel and none.optimizer_runs_ == [],
               "optimizer=None fits the kernel passed")
     fixed = _fit(ConstantKernel(1.0, "fixed") * RBF(1.0, "fixed"), x, y)
-    rep.check("OPTIMIZE", fixed._optimizer_runs == [], "a kernel with no free hyperparameter is not optimized")
+    rep.check("OPTIMIZE", fixed.optimizer_runs_ == [], "a kernel with no free hyperparameter is not optimized")
 
 
 def arm_restarts(rep):
     x, y = _data(6)
     k = ConstantKernel(1.0) * Matern([1.0, 1.0, 1.0], nu=2.5) + WhiteKernel(0.1)
     m = _fit(k, x, y, n_restarts_optimizer=2, random_state=7)
-    runs = m._optimizer_runs
+    runs = m.optimizer_runs_
     rep.check("RESTARTS", len(runs) == 3, "the kernel's theta plus two restarts", runs)
     best = max(r[3] for r in runs)
     first = [r[3] for r in runs].index(best)
     rep.check("RESTARTS", m.log_marginal_likelihood_value_ == best, "the best likelihood wins")
     m2 = _fit(k, x, y, n_restarts_optimizer=2, random_state=7)
-    rep.check("RESTARTS", m2.kernel_.theta == m.kernel_.theta and m2._optimizer_runs == runs,
+    rep.check("RESTARTS", m2.kernel_.theta == m.kernel_.theta and m2.optimizer_runs_ == runs,
               "the same random_state gives the same runs")
     m3 = _fit(k, x, y, n_restarts_optimizer=2, random_state=2 ** 40 + 7)
-    rep.check("RESTARTS", m3._optimizer_runs[1:] != runs[1:], "the key's high word moves the restart starts")
+    rep.check("RESTARTS", m3.optimizer_runs_[1:] != runs[1:], "the key's high word moves the restart starts")
     rep.check("RESTARTS", first == [r[3] for r in runs].index(best), "a tie goes to the earliest run")
 
 

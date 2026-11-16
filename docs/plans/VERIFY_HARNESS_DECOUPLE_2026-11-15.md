@@ -55,6 +55,23 @@ vocabulary`) was added on this branch, so it must be renamed with the others whe
 | coverage 1034 `m._generate_resident` | `CausalLM`: a public resident-generation arm, or a product decision that `generate` is the only route (then the check is deleted). |
 | coverage 1110, 1111, 1126 (x2), 1137 `SafetensorsFile._map`, `Checkpoint._file`, `CausalLM._read_weights` | the hf-model-surface lane covers these native doors through their private Python names. Either public names (`SafetensorsFile.mapped_bytes()`, `Checkpoint.shard(file)`, `CausalLM.read_weights(ckpt, plan, fmt)`) or a product decision that they are internal (then the lane's `mapped`, `shards` and `weights` parts and the gathered-head model move to native tests). |
 
+**Status, 2026-11-16 (lane `verify-product-entries`).**
+
+| site | status |
+|---|---|
+| `host_record` | DONE. `runtime_report()` host rows carry `column` and `detected_column` read-backs (beside `sabotage`), and the report has `host_paths` (every built host family -> its file). `host_record` reads those and `host_surface.routed_modules()`; it no longer loads every built family: a family no lane loaded is recorded `loaded: False` with its file bytes, and `column` is over the loaded families (`none-loaded` replaces `none-built`). |
+| default folds | DONE. Public `model_selection.default_folds(y, n_splits=5, *, classifier=False)`, one call into the existing `family_msel_default_folds` entry; the lane calls it (sabotage arm unchanged). |
+| forest `expected_path` | DONE earlier (smoke-triage-3). |
+| knn-clf `_y_cols` | DONE with no product change: the `y_cols` member of the public `save` file (written from the fitted field as is). |
+| gp `_optimizer_runs` | DONE. Renamed to the public fitted attribute `optimizer_runs_` (documented). |
+| BisectingKMeans `_tree_nodes` | DONE. Renamed to `tree_nodes_` (documented). |
+| AffinityPropagation `_message_diag` | DONE. Renamed to `message_diag_` (documented). |
+| Sequential `_opt_m` | DONE. `_opt_m`, `_opt_v` renamed to `optimizer_m_`, `optimizer_v_` (documented). |
+| `to_device`, `SequenceDeviceTensor`, `train_to_device` | LEFT, decision needed: the product has three resident-tensor types (`_x_sequence_device.SequenceDeviceTensor`, `_training_impl.TrainDeviceArray`, `_expansion_cnn.to_device`'s); publishing each under its own `to_device` would make three public names for one idea. Decide one public resident tensor first. |
+| `CausalLM._generate_resident` | LEFT, decision needed: a "retained diagnostic door" (also used by `tools/lowbit_default/`); either a public arm or delete it and the check. |
+| `SafetensorsFile._map`, `Checkpoint._file`, `CausalLM._read_weights` | LEFT, decision needed: public names or native tests (see the row above). |
+
+
 **Fault arms (4).** native_owners 138 (`_SEQ_CONTEXT`, `to_device`) and 165: `_native_owner_failure_cleanup` swaps one
 native entry for a builtin to force the allocation-cleanup arm. The audit (section 4) keeps fault arms that reach
 internals on purpose; this one is registered as such.

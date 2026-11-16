@@ -39,11 +39,14 @@ def runtime_report():
     ``numeric_mode`` and the process ``default_mode``; ``code_mode``, the mode
     the loaded gbdt binary says it was compiled as; ``code_kind``,
     ``'ptx'`` when the PTX GPU set is loaded, else ``'native'``;
-    ``cpu_only``; ``gpu_arch`` and ``gpu_arch_how``; ``host_dir`` and the
-    ``host_families_built`` there; ``bindings``, every native binding module
+    ``cpu_only``; ``gpu_arch`` and ``gpu_arch_how``; ``host_dir``, the
+    ``host_families_built`` there and ``host_paths`` (each built CPU binding
+    and the file it loads from); ``bindings``, every native binding module
     of the package keyed by module name, each with its ``path``,
     ``expected_path`` (for a CPU binding, the file it should load from),
-    ``loaded``, ``identity`` (the SHA-256 of the file), ``vendor`` and ``mode``;
+    ``loaded``, ``identity`` (the SHA-256 of the file), ``vendor``, ``mode``
+    and, for a loaded CPU binding, its ``sabotage``, ``column`` and
+    ``detected_column`` read-backs;
     ``fallbacks``; and the ``harness_source``, ``source_commit``,
     ``checkout_root`` and ``package_dir`` the verification commands use.
 

@@ -524,6 +524,12 @@ class GaussianProcessRegressor(NumericModeMixin):
     log_marginal_likelihood_value_ : float
         Log marginal likelihood of the fitted kernel. Meaningful only when
         ``info_ == 0``.
+    optimizer_runs_ : list of tuple
+        One ``(iterations, evaluations, stop, log_marginal_likelihood)``
+        tuple per optimizer run, the start from ``kernel.theta`` first and
+        then each restart. ``stop`` names why the run ended (``'pgtol'``,
+        ``'ftol'``, ``'max-iter'``, ...). Empty when ``optimizer=None`` or
+        the kernel has no free hyperparameter.
     info_ : int
         LAPACK's Cholesky code. 0 means ``L_`` is a valid factor; ``k > 0``
         means the leading minor of order ``k`` was not positive definite.

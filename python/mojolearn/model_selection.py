@@ -36,7 +36,7 @@ from ._mode import _PARAMS_METADATA, _PARAMS_METADATA_CONTEXT
 #: WHOLE, and a splitter lane's door is this file.
 _SPLIT_BINDING = "_mojolearn_x_metrics"
 
-__all__ = ['cross_val_score', 'split_descriptor']
+__all__ = ['cross_val_score', 'split_descriptor', 'default_folds']
 
 #: THE DORMANT NEGATIVE CONTROL for the fold assignment (lane/data-ordering-
 #: determinism, 2026-09-16). Fold assignment is the one data-ordering decision
@@ -200,6 +200,42 @@ def split_descriptor(X, y, *, estimator=None, cv=None, groups=None):
     >>> record = split_descriptor(X, y, estimator=model)
     """
     return _NATIVE(None, "family_msel_split_descriptor", (X, y, estimator, cv, groups), _NATIVE_CONTEXT)
+
+
+def default_folds(y, n_splits=5, *, classifier=False):
+    """The folds ``cross_val_score`` and ``cross_validate`` use for an
+    integer ``cv``.
+
+    The default folds are unshuffled and depend only on ``y`` and the fold
+    count: stratified by class for a classifier, contiguous blocks of rows
+    otherwise. Use this to see which rows each fold scored, or to pass the
+    same folds to another library as a list of ``(train, test)`` pairs.
+
+    Parameters
+    ----------
+    y : array-like of shape (n_samples,)
+        Targets, in the order passed to ``cross_val_score``.
+    n_splits : int, default 5
+        Number of folds; at least 2 and at most the number of samples (for
+        a classifier, at most the size of the largest class).
+    classifier : bool, default False
+        True for the stratified folds a classifier gets.
+
+    Returns
+    -------
+    folds : list of (train, test)
+        One pair of integer row-index arrays per fold, in fold order.
+
+    Example
+    -------
+    >>> import numpy as np
+    >>> from mojolearn.model_selection import default_folds
+    >>> y = np.array([0, 1] * 50, dtype=np.int64)
+    >>> folds = default_folds(y, 5, classifier=True)
+    >>> len(folds)
+    5
+    """
+    return _NATIVE(None, "family_msel_default_folds", (y, n_splits, classifier), _NATIVE_CONTEXT)
 
 
 def cross_val_score(estimator, X, y, *, cv=None, scoring=None, groups=None,

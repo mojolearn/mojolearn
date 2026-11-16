@@ -1295,14 +1295,18 @@ def commit_witness():
 
 def host_record(ml):
     """The `host` object of a CPU column: the machine, the host bindings
-    built, and what each reads back (its kernel-matrix column, the column
-    the accelerator predicates detected, its sabotage flag). A binding that
-    refuses to load records the refusal, so a REFUSED cell is attributable
-    to an unbuilt or refused family rather than a bug."""
-    from mojolearn import _backend, host_surface
+    built, the bytes of each, and what each LOADED one reads back (its
+    kernel-matrix column, the column the accelerator predicates detected,
+    its sabotage flag), all from the public `runtime_report()`. Called after
+    the lanes ran: a family a lane used is loaded, and one no lane used is
+    recorded `loaded: False` with its file bytes (it computed nothing in the
+    record). A family whose load refused is attributed by its cells' own
+    refusal."""
+    from mojolearn import host_surface
+    report = ml.runtime_report()
+    rows = report["bindings"]
     families = {}
-    for basename in _backend.host_families_built():
-        prefix = basename[len("_mojolearn_"):]
+    for basename in report["host_families_built"]:
         # The file's bytes (2026-09-15, lane/cpu-training-gate-budget). The
         # host bindings load by path, so `package.bindings` (the loaded
         # `mojolearn._mojolearn*` modules) never lists them, and a CPU column
@@ -1310,31 +1314,33 @@ def host_record(ml):
         # to refuse parts that ran different builds.
         digest = {}
         try:
-            path = _backend.host_module_path(basename)
+            path = report["host_paths"][basename]
             with open(path, "rb") as fh:
                 digest = dict(sha256=hashlib.sha256(fh.read()).hexdigest(), size=os.path.getsize(path))
-        except OSError as exc:
+        except (OSError, TypeError) as exc:
             digest = dict(sha256_error=f"{type(exc).__name__}: {exc}"[:200])
-        try:
-            m = _backend.load_host_module(basename)
-            fam = dict(column=str(getattr(m, prefix + "_column")()), **digest)
-            detected = getattr(m, prefix + "_detected_column", None)
-            if detected is not None:
-                fam["detected_column"] = str(detected())
-            sab = getattr(m, prefix + "_sabotage", None)
-            if sab is not None:
-                fam["sabotage"] = bool(sab())
-        except Exception as exc:
-            fam = dict(error=f"{type(exc).__name__}: {exc}"[:300], **digest)
+        row = rows.get("mojolearn._host." + basename)
+        if row is None or not row.get("loaded"):
+            fam = dict(loaded=False, **digest)
+        elif row.get("column") is None:
+            fam = dict(error="the loaded binding reads back no column", **digest)
+        else:
+            fam = dict(column=row["column"], **digest)
+            if row.get("detected_column") is not None:
+                fam["detected_column"] = row["detected_column"]
+            if row.get("sabotage") is not None:
+                fam["sabotage"] = bool(row["sabotage"])
         families[basename] = fam
-    columns = sorted(set(f.get("column", "unreadable") for f in families.values()))
+    # The column of the families that ran (loaded); "none-loaded" when no
+    # host family loaded, which the CPU gate refuses as it refused "none-built".
+    columns = sorted(set(f.get("column", "unreadable") for f in families.values() if f.get("loaded", True)))
     return dict(
         cpu_model=cpu_model(), arch=platform.machine(),
         target_cpu=os.environ.get("MOJOLEARN_TARGET_CPU", "unrecorded"),
         mojo_version=os.environ.get("MOJOLEARN_MOJO_VERSION", "unrecorded"),
         python=platform.python_version(),
-        column=(columns[0] if len(columns) == 1 else ("none-built" if not columns else "MIXED:" + ",".join(columns))),
-        routed=dict(_backend._HOST_MODULES),
+        column=(columns[0] if len(columns) == 1 else ("none-loaded" if not columns else "MIXED:" + ",".join(columns))),
+        routed=dict(host_surface.routed_modules()),
         # The manifest the routing table and the gate lists are read from
         # (the host surface manifest lane, 2026-09-14), and every binding it
         # declares, so a family that is declared but absent from `families`
@@ -2749,9 +2755,10 @@ def _(ml, X, yc, yr, Xh=None):
     parts = dict(predict=_h(m.predict(X[4096:4160])), proba=_h(m.predict_proba(X[4096:4160])),
                  multi=_h(m2.predict(X[4096:4160])))
     # A majority vote can hide a corrupted training label. Check the public
-    # fit's stored label columns against an independent transpose as well;
-    # keep existing output hashes so unchanged reference evidence remains valid.
-    mismatch = _mismatch_bytes("fitted label columns", m2._y_cols,
+    # fit's stored label columns (the `y_cols` member of the public `save`
+    # file, which writes the fitted columns as they are) against an
+    # independent transpose as well.
+    mismatch = _mismatch_bytes("fitted label columns", _saved_fields(m2, "y_cols")[0],
                                "input labels transposed", np.ascontiguousarray(y2.T, dtype=np.int32))
     if mismatch is not None:
         raise NumericalMismatch(mismatch, parts)
@@ -5843,7 +5850,7 @@ def _gp_optimize_lane(restarts):
             m = ml.GaussianProcessRegressor(kernel=k, optimizer="fmin_l_bfgs_b")
         m.fit(X[:64, :4], yr[:64])
         mean, std = m.predict(X[64:128, :4], return_std=True)
-        runs = m._optimizer_runs
+        runs = m.optimizer_runs_
         return _fit(dict(theta=_h(np.array(m.kernel_.theta, dtype=np.float64)),
                          params=_h(*_saved_fields(m, "params", "ls")),
                          runs=_h(np.array([[r[0], r[1]] for r in runs], dtype=np.int64),
@@ -6992,18 +6999,14 @@ def _(ml, X, yc, yr, Xh=None):
             # the product's route: cross_val_score's default folds for
             # cv=None or an integer are bindings/msel_split_door.mojo
             # `msel_default_folds` (the core fold helpers, the sabotage
-            # control included). f4d37e5eec deleted the Python
-            # `_default_fold_arrays` shim; verify calls the native owner's
+            # control included), which the public
+            # `model_selection.default_folds` returns: the native owner's
             # `family_msel_default_folds` operation, the same function
             # msel_fold_source calls (the Python definition the fold tests
-            # hold it to stays mojolearn/tests/_fold_reference.py).
-            # KEPT PRIVATE (2026-11-15, verify-harness-decouple): the public
-            # `check_cv(...).split` reaches `msel_stratified_split`, which
-            # does not apply `msel_sabotage()`, so the msel sabotage arm could
-            # no longer move this cell. Needs a public route to the default
-            # folds (docs/plans/VERIFY_HARNESS_DECOUPLE_2026-11-15.md).
-            folds = [(a.tolist(), b.tolist()) for a, b in ms._NATIVE(
-                None, "family_msel_default_folds", (labels, splits, clf), ms._NATIVE_CONTEXT)]
+            # hold it to stays mojolearn/tests/_fold_reference.py). Not
+            # `check_cv(...).split`: that is StratifiedKFold's split, a
+            # different assignment without the msel sabotage arm.
+            folds = [(a.tolist(), b.tolist()) for a, b in ms.default_folds(labels, splits, classifier=clf)]
             train = [np.asarray(a, dtype=np.int64) for a, _ in folds]
             test = [np.asarray(b, dtype=np.int64) for _, b in folds]
             parts[f"{tag}{splits}"] = _h(*(train + test))
@@ -7074,7 +7077,7 @@ def _(ml, X, yc, yr, Xh=None):
     column); the string differs per column by design, so it is checked
     against the selected backend, never hashed."""
     m = ml.KernelRidge(alpha=0.1, kernel="rbf", gamma=0.5).fit(X[:256, :4], yr[:256])
-    if m.vendor_used() != ml._backend.vendor():
+    if m.vendor_used() != ml.vendor():
         raise AssertionError("KernelRidge.vendor_used disagrees with the selected backend")
     return _fit(dict(dual=_h(m.dual_coef_), info=_h(np.int64(m.info_)), predict=_h(m.predict(X[256:320, :4]))),
                 m, lambda e: (e.predict(Xh[:64, :4]),))
@@ -7605,7 +7608,7 @@ def _(ml, X, yc, yr, Xh=None):
     # through the native mode metadata; on the CPU column the host binding's
     # GPU-named exports) must name the selected backend. Checked, not hashed:
     # the vendor string differs per column by design.
-    if e.vendor_used() != ml._backend.vendor() or e.numeric_mode_used() != "identical":
+    if e.vendor_used() != ml.vendor() or e.numeric_mode_used() != "identical":
         raise AssertionError("Embedding.vendor_used/numeric_mode_used disagree with the selected backend")
     y = np.asarray(e.forward(ids))
     dw = np.asarray(e.backward(ids, dy))

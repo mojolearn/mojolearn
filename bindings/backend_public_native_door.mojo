@@ -269,6 +269,8 @@ def _binding_row(path: String, loaded: Bool, identity: PythonObject, vendor: Pyt
     py_setitem(row, PythonObject("mode"), mode)
     py_setitem(row, PythonObject("compiled_mode"), PythonObject(None))
     py_setitem(row, PythonObject("sabotage"), PythonObject(None))
+    py_setitem(row, PythonObject("column"), PythonObject(None))
+    py_setitem(row, PythonObject("detected_column"), PythonObject(None))
     return row
 
 
@@ -282,7 +284,21 @@ def _binding_row_unresolved() raises -> PythonObject:
     py_setitem(row, PythonObject("mode"), PythonObject(None))
     py_setitem(row, PythonObject("compiled_mode"), PythonObject(None))
     py_setitem(row, PythonObject("sabotage"), PythonObject(None))
+    py_setitem(row, PythonObject("column"), PythonObject(None))
+    py_setitem(row, PythonObject("detected_column"), PythonObject(None))
     return row
+
+
+def _host_column(namespace: PythonObject, name: String, context: PythonObject) raises -> PythonObject:
+    # One host binding's column read-back as text, None when the binding
+    # exports no such entry. Read through `_read` like the vendor read-back.
+    var entry = py_get(namespace, PythonObject(name))
+    if entry is None or py_type(entry) is not context["native_function_type"]:
+        return PythonObject(None)
+    var said = _read(entry, context, True)
+    if said is None:
+        return said
+    return py_call(py_type(PythonObject("")), said)
 
 
 def _bindings(fields: PythonObject, context: PythonObject, host_dir: String) raises -> PythonObject:
@@ -361,6 +377,13 @@ def _bindings(fields: PythonObject, context: PythonObject, host_dir: String) rai
         py_setitem(row, PythonObject("compiled_mode"), compiled)
         py_setitem(row, PythonObject("sabotage"), sabotage)
         py_setitem(row, PythonObject("expected_path"), expected)
+        # A host binding's kernel-matrix column read-backs: `<suffix>_column()`
+        # and, where it exports one, `<suffix>_detected_column()` (the column
+        # the accelerator predicates detected). The CPU column's host record
+        # reads them here (lane verify-product-entries, 2026-11-16).
+        if key.startswith("mojolearn._host."):
+            py_setitem(row, PythonObject("column"), _host_column(namespace, suffix + "_column", context))
+            py_setitem(row, PythonObject("detected_column"), _host_column(namespace, suffix + "_detected_column", context))
         py_setitem(rows, keys[i], row)
     # Members of a loaded tier that have not loaded yet (their file is known).
     var sets = fields["_SETS"]
@@ -406,6 +429,13 @@ def _runtime_report(fields: PythonObject, context: PythonObject, mode: PythonObj
     var families = _host_families(context, host_dir)
     py_setitem(report, PythonObject("host_dir"), PythonObject(host_dir))
     py_setitem(report, PythonObject("host_families_built"), families)
+    # `host_paths`: every built host family -> the file it loads or would
+    # load (the `expected_path` its binding row carries once loaded), so the
+    # CPU column records each family's file bytes without loading it.
+    var host_paths = Python.dict()
+    for i in range(len(families)):  # driver-loop: over the built host families, once per report
+        py_setitem(host_paths, families[i], _host_expected_path(context, host_dir, String(families[i])))
+    py_setitem(report, PythonObject("host_paths"), host_paths)
     # How the vendor was decided (the words `_backend.vendor_how()` uses).
     if fields["_CPU_ONLY"] is not None:
         var built = String("none")

@@ -559,7 +559,7 @@ def _(ml, X, yc, yr, Xh=None):
     m = m.compile(loss="cross_entropy", optimizer="momentum", lr=0.05, momentum=0.9)
     m = m.fit(x, y, epochs=1, batch_size=64, shuffle=False, seed=0)
     d = lambda a: _sequence_tape_digest(B, a)
-    return _fit(dict(loss=d(np.asarray(m.loss_curve_, dtype=np.float32)), grad=d(m._opt_m),
+    return _fit(dict(loss=d(np.asarray(m.loss_curve_, dtype=np.float32)), grad=d(m.optimizer_m_),
                      params=d(m.params_), proba=d(m.predict_proba(x)), held_proba=d(m.predict_proba(xh))))
 
 

@@ -131,7 +131,7 @@ def training_model(loss):
 
 
 def state_bytes(value):
-    return tuple(getattr(value, name).tobytes() for name in ("params_", "_opt_m", "_opt_v", "_fit_state")) + (
+    return tuple(getattr(value, name).tobytes() for name in ("params_", "optimizer_m_", "optimizer_v_", "_fit_state")) + (
         np.asarray(value.loss_curve_, "f4").tobytes(), value.n_iter_)
 
 

@@ -152,8 +152,8 @@ def sequential_fit(mut mods: NativeModules, model: PythonObject, args: PythonObj
     var curve = PythonObject(None)
     if resume:
         params = fields["params_"]
-        moment = fields["_opt_m"]
-        variance = fields["_opt_v"]
+        moment = fields["optimizer_m_"]
+        variance = fields["optimizer_v_"]
         state = fields["_fit_state"]
         previous = py_present(fields["_curve"])
         curve = sequential_array(mods, Python.tuple(Int(py=fields["n_iter_"]) + epochs), context["float32"], context)
@@ -275,8 +275,8 @@ def sequential_fit(mut mods: NativeModules, model: PythonObject, args: PythonObj
     py_setitem(fields, "_target", target)
     py_setitem(fields, "_fit_batch", batch_size)
     py_setitem(fields, "_fit_shuffle", Bool(py=shuffle))
-    py_setitem(fields, "_opt_m", moment)
-    py_setitem(fields, "_opt_v", variance)
+    py_setitem(fields, "optimizer_m_", moment)
+    py_setitem(fields, "optimizer_v_", variance)
     py_setitem(fields, "_fit_state", state)
     py_setitem(fields, "_curve", curve)
     py_setitem(fields, "_imported", False)
