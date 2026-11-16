@@ -61,7 +61,7 @@ class SourceAuditTest(unittest.TestCase):
                  str(ROOT / "tools"), str(tree), head], cwd=ROOT, capture_output=True, text=True)
             self.assertEqual(out.returncode, 0, out.stderr[-2000:])
             lines = out.stdout.split()
-            self.assertEqual(Path(lines[0]), tree / "tools/identity_break.py")
+            self.assertEqual(Path(lines[0]).resolve(), (tree / "tools/identity_break.py").resolve())
             self.assertEqual(Path(lines[1]), tree / "python/mojolearn/__init__.py")
             self.assertEqual(Path(lines[2]), tree / "python/mojolearn_diagnostics.py")
             self.assertEqual(lines[3], "False")   # tests never ship
