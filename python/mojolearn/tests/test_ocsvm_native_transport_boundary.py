@@ -119,7 +119,11 @@ def test_ocsvm_rebound_factory_is_refused_without_python_call(monkeypatch, entry
     with pytest.raises(TypeError, match="compiled (extension )?entry"):
         model.fit(_train())
     assert calls == []
-    assert "_gamma" in vars(model)
+    # No fitted state is published by a refused fit. Whether `_gamma` was
+    # written first is not part of the contract: the CPU column admits the
+    # compiled provider with the binding (bindings/svc_ocsvm_native_door.mojo
+    # _oc_binding, xn_admit) before any field write; the device route connects
+    # its driver lazily, after gamma is resolved.
     assert "support_" not in vars(model)
 
 
