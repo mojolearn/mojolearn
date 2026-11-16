@@ -26,6 +26,7 @@ repetitions of one operation on one device, and running them concurrently would 
 import math
 import os
 import statistics
+import sys
 
 #: a first scored call of our arm under this many milliseconds makes its scored run a median of calls
 SMALL_ROW_MS = 10.0
@@ -62,6 +63,41 @@ def forced_calls(ours, phase=None, environ=None):
     if want and (phase is None or (phase != want and not phase.startswith(want + "/"))):
         return None
     return n
+
+
+#: ATTRIBUTION PROFILE RUNS ONLY: the NVTX range name the job's `nsys profile --capture-range=nvtx` waits for, and a
+#: `pip --target` directory holding the `nvtx` package (the measured venvs stay untouched). Unset: no-ops.
+NVTX_RANGE_ENV = "MOJOLEARN_BENCH_NVTX_RANGE"
+NVTX_PATH_ENV = "MOJOLEARN_BENCH_NVTX_PATH"
+_RANGE = []      # the open range's nvtx module (one at most: the extra calls of one scored run)
+
+
+def range_open(n_calls, phase=None, environ=None):
+    """Open the attribution profile's NVTX range around the extra calls of a FORCED scored run (calls 2..n), so the
+    profiler captures exactly those n - 1 calls and nothing of the data load, the fit before an inference, the
+    warmup or the first call's hashing. Only when NVTX_RANGE_ENV is set, n_calls > 1 and forced_calls applies to this
+    phase; True when a range opened. Outside every clock (the callers open it before the next call's t0)."""
+    env = os.environ if environ is None else environ
+    name = (env.get(NVTX_RANGE_ENV) or "").strip()
+    if not name or _RANGE or int(n_calls or 1) <= 1 or forced_calls(True, phase, env) is None:
+        return False
+    try:
+        path = env.get(NVTX_PATH_ENV)
+        if path and path not in sys.path:
+            sys.path.insert(0, path)
+        import nvtx
+        nvtx.push_range(message=name)
+    except Exception as exc:                      # noqa: BLE001 -- the profile run reports a missing capture
+        print("ATTRIBUTION-NVTX unavailable: %s: %s" % (exc.__class__.__name__, exc), file=sys.stderr, flush=True)
+        return False
+    _RANGE.append(nvtx)
+    return True
+
+
+def range_close():
+    """Close the range range_open opened (a no-op when none is open)."""
+    if _RANGE:
+        _RANGE.pop().pop_range()
 
 
 def calls_for(first_ms, ours, phase=None):

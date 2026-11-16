@@ -1884,11 +1884,13 @@ def worker(args):
                 # Opponents and rows at or above 10 ms make one call.
                 n_calls = small.calls_for(ms, (runner.info or {}).get("library") == "mojolearn", "fit") if r > 0 else 1
                 calls = [ms]
+                small.range_open(n_calls, "fit")       # attribution profile runs only (no-op otherwise)
                 for _ in range(1, n_calls):
                     t0 = time.perf_counter()
                     runner.call()
                     runner.sync()
                     calls.append((time.perf_counter() - t0) * 1000.0)
+                small.range_close()
                 calls_rec = small.spread(calls) if r > 0 else None
                 if calls_rec is not None:
                     ms = calls_rec["ms"]

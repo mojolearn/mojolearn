@@ -4763,6 +4763,7 @@ def run(lane, arms, data, n_rounds, size, dev=None, *, rotate_order=False,
             # hashed (same bits every fit); the accuracy below reads the last model, the same bits again
             n_calls = small.calls_for(ms, arm.library == "mojolearn", "fit")
             calls = [ms]
+            small.range_open(n_calls, "fit")           # attribution profile runs only (no-op otherwise)
             try:
                 for _ in range(1, n_calls):
                     if operation_prepare is not None:
@@ -4774,11 +4775,13 @@ def run(lane, arms, data, n_rounds, size, dev=None, *, rotate_order=False,
                     calls.append((time.perf_counter() - t0) * 1000.0)
                     last_model[arm.name] = model
             except Exception as exc:               # noqa: BLE001
+                small.range_close()
                 emit_refused(lane, arm.name, "%s at round %d call %d: %s"
                              % (exc.__class__.__name__, r, len(calls) + 1,
                                 " ".join(str(exc).split())))
                 live.remove(arm)
                 continue
+            small.range_close()
             spent[arm.name] += sum(calls[1:]) / 1000.0
             rec = small.spread(calls)
             emit_round(lane, arm.name, data.tag, r, rec["ms"], digest, rec)
