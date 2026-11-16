@@ -7081,7 +7081,7 @@ def _(ml, X, yc, yr, Xh=None):
     column); the string differs per column by design, so it is checked
     against the selected backend, never hashed."""
     m = ml.KernelRidge(alpha=0.1, kernel="rbf", gamma=0.5).fit(X[:256, :4], yr[:256])
-    if m.vendor_used() != ml._backend.vendor():
+    if m.vendor_used() != ml.vendor():
         raise AssertionError("KernelRidge.vendor_used disagrees with the selected backend")
     return _fit(dict(dual=_h(m.dual_coef_), info=_h(np.int64(m.info_)), predict=_h(m.predict(X[256:320, :4]))),
                 m, lambda e: (e.predict(Xh[:64, :4]),))
@@ -7612,7 +7612,7 @@ def _(ml, X, yc, yr, Xh=None):
     # through the native mode metadata; on the CPU column the host binding's
     # GPU-named exports) must name the selected backend. Checked, not hashed:
     # the vendor string differs per column by design.
-    if e.vendor_used() != ml._backend.vendor() or e.numeric_mode_used() != "identical":
+    if e.vendor_used() != ml.vendor() or e.numeric_mode_used() != "identical":
         raise AssertionError("Embedding.vendor_used/numeric_mode_used disagree with the selected backend")
     y = np.asarray(e.forward(ids))
     dw = np.asarray(e.backward(ids, dy))
