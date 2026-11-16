@@ -306,3 +306,16 @@ def test_fitted_readback_uses_the_timed_model_not_the_constructor_probe():
     missing=bbm.Runner({},lambda:None,lambda:{},params=probe).fitted_readback()
     assert missing["iterations"]["status"] == "unavailable"
     assert missing["parameters"] is None
+
+
+def test_fitted_readback_carries_the_fixed_params_the_probe_record_carries():
+    # ivf: the harness adds kmeans_trainset_fraction to the probe's record; the timed
+    # estimator's read-back must carry it too, or the evidence check refuses the race.
+    class Estimator:
+        def get_params(self, deep=True): return {"n_lists": 4}
+    fixed = {"kmeans_trainset_fraction": 0.5}
+    probe = bbm._load("bench_board_params").arm_record(Estimator())
+    probe["params"].update(fixed)
+    runner = bbm.Runner({}, lambda: None, lambda: {}, params=probe, model_for_hash=Estimator,
+                        fixed_params=fixed)
+    assert runner.fitted_readback()["parameters"]["params"] == probe["params"]

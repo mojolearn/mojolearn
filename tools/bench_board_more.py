@@ -970,12 +970,19 @@ def length_scale_of(D):
 class Runner:
     """`call` is timed; `outputs` is run after the clock, once per round."""
 
-    def __init__(self, info, call, outputs, sync=None, params=None, model_for_hash=None):
+    def __init__(self, info, call, outputs, sync=None, params=None, model_for_hash=None, fixed_params=None):
         self.model_for_hash = model_for_hash
         self.info, self._call, self._outputs, self._sync = info, call, outputs, sync
         # the constructed estimator (or a declared dict for a function arm);
         # the worker sends its tools/bench_board_params.py record
         self.params = params
+        # Settings the harness adds to the probe's record because the estimator
+        # fixes them internally and has no constructor parameter for them (ivf:
+        # kmeans_trainset_fraction). The timed estimator's read-back carries the
+        # same entries, so the preflight/fitted comparison
+        # (bench_board_evidence.py "actual fitted estimator settings changed")
+        # compares like with like.
+        self.fixed_params = dict(fixed_params or {})
 
     def call(self):
         self._call()
@@ -991,8 +998,10 @@ class Runner:
         # The parameter probe is a different, unfitted instance. Read the
         # estimator whose fit was actually timed, never that probe's counters.
         model = self.model_for_hash() if callable(self.model_for_hash) else None
-        return dict(parameters=_load("bench_board_params").arm_record(model) if model is not None else None,
-                    iterations=_load("bench_board_probe").iteration_receipt(model))
+        record = _load("bench_board_params").arm_record(model) if model is not None else None
+        if record is not None and self.fixed_params:
+            record["params"].update(self.fixed_params)
+        return dict(parameters=record, iterations=_load("bench_board_probe").iteration_receipt(model))
 
 
 def _np():
@@ -1395,7 +1404,7 @@ def _build_ours(lane, D, rec, S, *, separate_inference=False, classical_variant=
     info = _ours(lane, probe)
     if d is not None:
         info["n_features"] = d
-    params = probe
+    params, fixed = probe, None
     if lane == "ivf":
         # smoke-fixes (2026-10-14; classical2/ivf: "kmeans_trainset_fraction missing from ours
         # read-back"): ours' IVFIndex takes no trainset option; its build fixes the coarse k-means
@@ -1407,10 +1416,15 @@ def _build_ours(lane, D, rec, S, *, separate_inference=False, classical_variant=
         # fixed fraction under cuVS's name, as tools/bench_board_algos.py _ivf_pq_effective does.
         n_rows = D["index"].shape[0]
         nlist = min(IVF_NLIST, n_rows // 4)
+        # ivf-params-readback (2026-11-16): the timed estimator's read-back gets the same fixed fraction
+        # (Runner.fixed_params). Since 2026-10-14 only the probe's record carried it, so every IVF race whose
+        # ours arm ran was refused "actual fitted estimator settings changed after preflight" (0.8.55 paper
+        # 2026-10-29; box smoke of d95f805cce 2026-11-16, classical2/ivf/{taxi,istella}/rows=2000).
+        fixed = {"kmeans_trainset_fraction": _ours_ivf_train_rows(n_rows, nlist) / float(n_rows)}
         params = _load("bench_board_params").arm_record(probe)
-        params["params"]["kmeans_trainset_fraction"] = _ours_ivf_train_rows(n_rows, nlist) / float(n_rows)
+        params["params"].update(fixed)
         params["source"] += " + fixed trainset stride (ivf_trainset_stride)"
-    return Runner(info, call, out, params=params, model_for_hash=lambda: S.get("est"))
+    return Runner(info, call, out, params=params, model_for_hash=lambda: S.get("est"), fixed_params=fixed)
 
 
 def _build_sklearn(lane, D, rec, S):
