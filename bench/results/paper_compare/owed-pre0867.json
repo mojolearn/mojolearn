@@ -396,6 +396,10 @@
   "sqrt-comptime-step": {
    "define": "MOJOLEARN_NUMERICS_FAST_SQRT_COMPTIME_STEP",
    "status": "define in code (checks/numerics.mojo portable_sqrtf NUMERICS_FAST_SQRT_COMPTIME_STEP: B = the four-candidate correction as a comptime for (offset a compile-time constant per step); A = the run-time for k in range(4) chain that Mojo 1.2 lowers to compare-and-branch. Same operations in the same order: bits unchanged on every column)"
+  },
+  "f16-widen-host": {
+   "define": "MOJOLEARN_CHECKPOINT_FAST_F16_WIDEN_HOST",
+   "status": "define in code (bindings/causal_checkpoint_door.mojo checkpoint_widen_f16 _F16_WIDEN_HOST; opt-in, default off): B = models.safetensors.widen_f16 widens a C-ordered source on the host with core/causal_checkpoint_impl.mojo checkpoint_widen_halves (65,536-half chunks across host cores, the safetensors reader's widening); A = the linalg binding's from_f16 (device kernel on a GPU install: upload, kernel, download, three synchronizes). Both run gemm/f16_widen.mojo f16_bits_to_f32 per element: bits unchanged"
   }
  },
  "rows": [
@@ -2665,6 +2669,29 @@
     "dbscan-brute-edge-free"
    ],
    "decides": "promote B (the edge-free brute route) unless it is slower than A (the byte adjacency / CSR / weak_cc brute route) at equal quality on the NVIDIA L40S; labels must not move (same accumulation and compare per bit, union-find = weak_cc fixed point)"
+  },
+  {
+   "id": "f16-widen-host",
+   "source": "lane owed-deletions (2026-11-16; docs/plans/TESTS_TO_MOJO_tests-to-mojo-models.md: two F16 widening routes ship; docs/apple-fast/EXPERIMENTS.md MOJOLEARN_CHECKPOINT_FAST_F16_WIDEN_HOST row)",
+   "kind": "driver",
+   "driver": "f16_widen",
+   "vendor": "nvidia",
+   "shape": {
+    "counts": [
+     4096,
+     1048576,
+     16777216,
+     67108864
+    ]
+   },
+   "arms": [
+    "candidate",
+    "f16-widen-host"
+   ],
+   "b_arms": [
+    "f16-widen-host"
+   ],
+   "decides": "promote B (host-parallel widening; then widen_f16 no longer calls linalg from_f16, and the route's A code goes with its tombstone) unless it is slower than A at any count of the row on the NVIDIA L40S; every output word must match between the arms (same bit construction)"
   }
  ]
 }

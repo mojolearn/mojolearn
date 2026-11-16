@@ -97,6 +97,7 @@ now IMPLEMENTED below: loop 2 reuses batch 0's CSR from loop 1 and takes the
 one-pass arm for the rest whenever `algo.cuh:119`'s spare guard admits it.
 """
 
+from std.sys.compile import is_defined
 from max.gpu import block_dim, block_idx, thread_idx
 from std.time import perf_counter_ns
 from core.accelerator_target import TARGET_HAS_APPLE_GPU
@@ -686,6 +687,11 @@ their code branches on is this Bool.
             + " weighted " + String(has_weights)
         )
 
+    # lane dbscan-brute-edgefree (2026-11-16): MOJOLEARN_DBSCAN_FAST_BRUTE_EDGE_FREE is an IDENTICAL NVIDIA/AMD
+    # experiment; it has no effect in fast mode, so refuse it there. Moved from core/experiment_guards_linear.mojo
+    # (lane owed-deletions, 2026-11-16): there it was read by all 16 bindings of the linear guard family, here
+    # only by the bindings that compile this runner.
+    comptime assert not (is_defined["MOJOLEARN_DBSCAN_FAST_BRUTE_EDGE_FREE"]() and is_defined["MOJOLEARN_NUMERIC_FAST"]()), "MOJOLEARN_DBSCAN_FAST_BRUTE_EDGE_FREE is the IDENTICAL NVIDIA/AMD brute DBSCAN edge-free route (dbscan/impl/brute_edge_free.mojo); it does nothing in fast mode: drop it from a MOJOLEARN_NUMERIC_FAST build"
     # MOJOLEARN_DBSCAN_FAST_BRUTE_EDGE_FREE (dbscan/impl/brute_edge_free.mojo):
     # a brute fit of more than one batch takes the bit-matrix + union-find
     # route (no byte adjacency, no CSR, no per-batch label or merge pass);

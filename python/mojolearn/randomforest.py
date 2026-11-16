@@ -67,7 +67,6 @@ imports NumPy.
 """
 
 from . import _mojolearn_rf, _native_archive_bridge, _native_trees_bridge
-from ._labels import argmax_rows, decode_labels
 from ._mode import NumericModeMixin
 from ._forest_protocol import ForestArchive, ForestClassifierPredict, ForestProtocol, forest_estimator
 
@@ -451,18 +450,6 @@ class RandomForestClassifier(_RandomForestBase):
             Columns in `classes_` order.
         """
         return _TREES(self, "trees_public_forest_proba", (X,), _TREES_CONTEXT)
-
-    def _predict_with_proba(self, X):
-        """Return both classifier views after one forest traversal.
-
-        This is an internal verification fast path.  ``predict`` is defined
-        as the first-max decode of ``predict_proba`` below, so retaining the
-        exact probability buffer and deriving the labels from it is byte for
-        byte the same work as the two public calls without traversing every
-        tree twice.
-        """
-        proba = self.predict_proba(X)
-        return decode_labels(self.classes_, argmax_rows(proba)), proba
 
 
 # Maintainer notes (moved from the docstring): the regression criteria are

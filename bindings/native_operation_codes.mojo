@@ -272,7 +272,6 @@ def _operation_names(mut names: List[String]):
     names.append("host_tree_init_gbdt")
     names.append("host_tree_parse")
     names.append("host_tree_predict")
-    names.append("host_tree_predict_pair")
     names.append("host_tree_proba")
     names.append("host_tree_setstate")
     names.append("host_tree_vote")

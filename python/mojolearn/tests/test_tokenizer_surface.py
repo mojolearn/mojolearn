@@ -55,7 +55,7 @@ def _skip(why):
 
 def _tokenizer():
     try:
-        return BpeTokenizer._synthetic()
+        return BpeTokenizer.from_token_bytes(syn.vocabulary())
     except ImportError as exc:
         if pytest is not None:
             pytest.skip(f"tokenizer host binding not built: {exc}")
@@ -381,7 +381,7 @@ def main(argv=None):
     _MODULE_RUN = True
     out = sys.stdout
     try:
-        tok = BpeTokenizer._synthetic()
+        tok = BpeTokenizer.from_token_bytes(syn.vocabulary())
     except ImportError as exc:
         out.write(f"test_tokenizer_surface: NOT RUN. {exc}\n")
         return 2

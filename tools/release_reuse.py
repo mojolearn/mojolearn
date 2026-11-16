@@ -1282,18 +1282,33 @@ def materialize_ptx_leg(proof, whl, dest):
 
 
 # ---------------------------------------------------------------- the plan
-def define_readers(commit, names, root=ROOT):
-    """The files of COMMIT that name any of the define NAMES as a whole word (one `git grep`)."""
-    if not names:
-        return set()
-    args = ["git", "-C", str(root), "grep", "-l", "-w", "-F"]
-    for n in names:
-        args += ["-e", n]
-    p = subprocess.run(args + [commit, "--"], capture_output=True, text=True)
+def _grep_files(commit, args, root):
+    p = subprocess.run(["git", "-C", str(root), "grep", "-l"] + args + [commit, "--"], capture_output=True, text=True)
     if p.returncode not in (0, 1):
         raise SystemExit("release_reuse: git grep for the candidate defines failed: " + p.stderr.strip()[:300])
     prefix = commit + ":"
     return {line[len(prefix):] for line in p.stdout.splitlines() if line.startswith(prefix)}
+
+
+def define_readers(commit, names, root=ROOT):
+    """The files of COMMIT that read any of the define NAMES. A `.mojo` file reads a define only through
+    `is_defined["NAME"]` or `get_defined_*["NAME"`: a mention in a comment, a docstring or a TOMBSTONE line
+    compiles to the same bytes with or without `-D NAME`, so it is not a reader (lane owed-deletions,
+    2026-11-16: the guard modules' "refusal removed ... restored" comment lines made every binding of
+    core/experiment_guards_base and _cluster rebuild for the restored arms if-fit-own-x and
+    knn-door-fit-xn-eager, 14 and 19 binding scripts where 5 and 4 read the code). Every other file (build
+    scripts, JSON, docs) is still matched by the whole word (two `git grep`s)."""
+    if not names:
+        return set()
+    words = []
+    for n in names:
+        words += ["-e", n]
+    named = _grep_files(commit, ["-w", "-F"] + words, root)
+    code = []
+    for n in names:
+        code += ["-e", r'(is_defined|get_defined_[a-z_]+)\["' + re.escape(n) + r'"\]']
+    reads = _grep_files(commit, ["-E"] + code, root) if any(f.endswith(".mojo") for f in named) else set()
+    return {f for f in named if not f.endswith(".mojo")} | (reads & named)
 
 
 def apply_defines(rows, current, facts, readers, names):
