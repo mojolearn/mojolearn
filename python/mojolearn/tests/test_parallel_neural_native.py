@@ -16,7 +16,7 @@ from mojolearn.tests.test_parallel_mlp_native import model_fixture
 
 # Test-side float64 oracle of the small-MLP softmax cross-entropy gradient. It
 # lived in test_parallel_mlp_native.py until 2fb40775dc moved that file's shard
-# gradient test to checks/native_tests/training_small_mlp_cases.mojo and deleted
+# gradient test to checks/native_tests/training_small_mlp.mojo and deleted
 # it there; test_parallel_neural_admission.py imports it from here.
 def independent_gradient(state, x, y):
     w1, b1, w2, b2 = (np.asarray(state['weights'][name], dtype=np.float64)

@@ -5,7 +5,7 @@ These are test controllers, not product runtime. Multi-device qualification
 requires MOJOLEARN_DISTRIBUTED_PROGRAM_DEVICES to name distinct physical GPUs.
 The single-device column-partition SGD and residency, pipeline forward and
 dense gradient, shared-parameter alias and Adam-moment migration checks run
-natively in checks/native_tests/core_partitioned_program_*.mojo.
+natively in checks/native_tests/core_partitioned_program.mojo.
 """
 import os
 import numpy as np
