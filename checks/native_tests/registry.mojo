@@ -197,6 +197,9 @@ from checks.native_tests.tsvd_fit import register as register_tsvd_fit
 from checks.native_tests.tsvd_native import register as register_tsvd_native
 from checks.native_tests.umap_ops import register as register_umap_ops
 from checks.native_tests.x_linear_ops import register as register_x_linear_ops
+# lane tests-to-mojo-neural (2026-11-15)
+from checks.native_tests.generator_draw import register as register_generator_draw
+from checks.native_tests.training_small_mlp_relations import register as register_training_small_mlp_relations
 
 
 def all_checks() -> List[Check]:
@@ -388,4 +391,7 @@ def all_checks() -> List[Check]:
     checks.append(register_tsvd_native())
     checks.append(register_umap_ops())
     checks.append(register_x_linear_ops())
+    # lane tests-to-mojo-neural (2026-11-15)
+    checks.append(register_generator_draw())
+    checks.append(register_training_small_mlp_relations())
     return checks^
