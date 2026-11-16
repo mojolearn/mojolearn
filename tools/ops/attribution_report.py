@@ -488,6 +488,8 @@ def _load(path):
 def _f(x, nd=2):
     if x is None:
         return "-"
+    if isinstance(x, int) and not isinstance(x, bool):
+        x = float(x)
     if isinstance(x, float):
         if abs(x) >= 100:
             return "%.0f" % x
