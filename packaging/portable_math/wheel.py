@@ -326,8 +326,8 @@ def python_math_errors(path, relative):
 
 
 def audit_tree(root, python_only=False):
-    """Audit an unpacked wheel. `python_only` is the release rehearsal's
-    dry run over a STAGED SOURCE TREE (tools/release_rehearsal.py): the same
+    """Audit an unpacked wheel. `python_only` is the pre-build dry run over a
+    STAGED SOURCE TREE (tools/prebuild_check.py audits): the same
     NumPy, dependency and Python-math rules over every shipped .py, with the
     native checks off, because a source tree's binaries have not been through
     stage() yet and would fail for that reason alone."""
@@ -536,16 +536,9 @@ def main():
     parser.add_argument("wheels", nargs="*", type=Path)
     parser.add_argument("--helper", type=Path)
     parser.add_argument("--audit-only", action="store_true")
-    parser.add_argument("--python-tree", type=Path, metavar="DIR",
-                        help="audit the .py files of a staged package tree (the wheel's root layout) and exit")
     args = parser.parse_args()
-    if args.python_tree:
-        report = audit_tree(args.python_tree, python_only=True)
-        print(json.dumps({"tree": str(args.python_tree), "numpy_optional": report["numpy_optional"],
-                          "python_math_policy": report["python_math_policy"]}))
-        return
     if not args.wheels:
-        parser.error("name at least one wheel, or --python-tree DIR")
+        parser.error("name at least one wheel (a staged source tree: tools/prebuild_check.py --only audits)")
     for wheel in args.wheels:
         report = finalize(wheel, args.helper, args.audit_only)
         print(json.dumps({"wheel": str(wheel), "platform_math_free": True, "numpy_optional": report["numpy_optional"],
