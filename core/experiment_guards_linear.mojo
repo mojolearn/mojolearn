@@ -346,6 +346,9 @@ def _check_configuration() -> Bool:
     # MOJOLEARN_X_LINEAR_FAST_FMA: refusal removed 2026-11-15 (restored by lane/restore-apple-fast-classical: Apple fast paused, not abandoned; opt-in, default off; see docs/TOMBSTONES.md Restored table)
     # Restore: git apply experiments/removed/MOJOLEARN_X_LINEAR_NO_STAGED_FOLD.patch
     comptime assert not is_defined["MOJOLEARN_X_LINEAR_NO_STAGED_FOLD"](), "removed 2026-11-15 (lane/expdel2-21-linear): X_LINEAR_NO_STAGED_FOLD (unmeasured opt-in arm) is gone; the default is kept; code at 51eabe26ef; restore: experiments/removed/MOJOLEARN_X_LINEAR_NO_STAGED_FOLD.patch"
+    # lane dbscan-brute-edgefree (2026-11-16): MOJOLEARN_DBSCAN_FAST_BRUTE_EDGE_FREE is an IDENTICAL NVIDIA/AMD experiment
+    # (dbscan/impl/brute_edge_free.mojo, A/B pending on the NVIDIA L40S); it has no effect in fast mode, so refuse it there.
+    comptime assert not (is_defined["MOJOLEARN_DBSCAN_FAST_BRUTE_EDGE_FREE"]() and is_defined["MOJOLEARN_NUMERIC_FAST"]()), "MOJOLEARN_DBSCAN_FAST_BRUTE_EDGE_FREE is the IDENTICAL NVIDIA/AMD brute DBSCAN edge-free route (dbscan/impl/brute_edge_free.mojo); it does nothing in fast mode: drop it from a MOJOLEARN_NUMERIC_FAST build"
     return True
 
 
