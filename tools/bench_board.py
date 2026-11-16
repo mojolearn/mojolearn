@@ -2437,6 +2437,12 @@ def tree_cmd(ctx, race):
                 "--arms", ",".join(race["opponents"])]
     else:
         cmd += ["--ours-only"]
+    # board-smoke-3 (2026-11-16): only the planned own arms are built and timed (the driver otherwise
+    # times every paired own arm, e.g. gbdt-categorical's `ours` whose catboost-cpu is not on a GPU board,
+    # and its unplanned cells refuse the race). `ours-ab` stays --ours-ab's.
+    own = [a for a in ours if a != "ours-ab"]
+    if own and not ctx.get("opponents_only"):
+        cmd += ["--own-arms", ",".join(own)]
     if "ours-ab" in ours:
         cmd += ["--ours-ab", "numeric_mode='%s'" % ours["ours-ab"]]
     if ctx.get("opponents_only"):
@@ -3697,6 +3703,12 @@ def params_probe(ctx, race, arms, scorer=None):
     log = os.path.join(probe_dir, "probe.log")
     out = {}
     if race["family"] == "trees":
+        # board-smoke-3 (2026-11-16): the trees driver's --arms names opponents only; own arm names
+        # there were refused "not built here" (ours-catboost-gpu), and every own arm was built. Own arms
+        # go to --own-arms (tree_cmd), the rest to --arms.
+        own = race.get("our_arms") or {}
+        sub = dict(sub, our_arms={a: m for a, m in own.items() if a in arms or a == "ours-ab"},
+                   opponents=[a for a in arms if a not in own])
         cmd, extra = tree_cmd(ctx, sub)
         cmd = cmd + ["--params-only"]
         rc, process = probe_run(cmd, child_env(ctx, extra), log, ctx["race_deadline_s"] + 900, nice=ctx["nice"])

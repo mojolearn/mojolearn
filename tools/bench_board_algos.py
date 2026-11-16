@@ -5748,8 +5748,13 @@ def _build_layer(lane, arm, D):
             dev_io = (getattr(layer, "_device_io", False)
                       and _os.environ.get("MOJOLEARN_SEQ_DEVICE_IO_OFF", "") != "1")
             if dev_io:
+                # board-smoke-3 (2026-11-16): the probe is the public `to_device` on one float,
+                # outside the clock; it refuses (RuntimeError) on a binding without the device
+                # entries, as the private `_dev_module` did before lane py-lm-neural deleted it
+                # (the harness read a product internal; a board probe uses the public surface).
                 try:
-                    layer._dev_module()
+                    _probe = layer.to_device(np.zeros(1, np.float32))
+                    del _probe
                 except RuntimeError:
                     dev_io = False
 

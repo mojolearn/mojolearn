@@ -1063,6 +1063,11 @@ def build_parser():
                         "a name asked for and not built is REFUSED by name. "
                         "`ours` always runs; the filter reads opponents only. "
                         "Naming opponents here races them (default: ours only).")
+    p.add_argument("--own-arms", default=None,
+                   help="comma-separated own arm names to construct and time (`ours` and the lane's "
+                        "paired own arms, tools/board_pairing.py); default: every one. The board passes "
+                        "the own arms it planned, so an own arm whose opponent is not on this board is "
+                        "neither built nor timed; a name the lane does not have is REFUSED by name")
     p.add_argument("--opponents-only", action="store_true", help="run only explicitly selected opponents; never construct or run ours")
     p.add_argument("--ours-ab", default=None, metavar="PARAM=VALUE",
                    help="add a second ours arm, `ours-ab`, equal to `ours` "
@@ -1325,9 +1330,21 @@ def main(argv=None):
     # back; `ours` takes its own pairing's settings, and `ours-ab` is `ours` with one key changed.
     pairing = board_pairing.OUR_PAIRINGS.get(lane) or {}
     own_settings = dict((pairing.get("ours") or {}).get("settings") or {})
-    arms = [] if args.opponents_only else build_ours(lane, cfg, data, extra=own_settings or None)
+    # board-smoke-3 (2026-11-16; L40S smoke of d95f805cce, trees/gbdt-categorical/taxi): the board plans
+    # only ours-catboost-gpu there (`ours` pairs with catboost-cpu, not on a GPU board), yet this driver
+    # built and timed `ours` too; its unplanned cells carried no preflight worker receipt and refused the
+    # race. --own-arms (tools/bench_board.py tree_cmd) builds only the planned own arms.
+    own_wanted = {n.strip() for n in (args.own_arms or "").split(",") if n.strip()} or None
+    if own_wanted is not None and not args.opponents_only:
+        for name in sorted(own_wanted - {"ours"} - set(board_pairing.extra_own_arms(lane))):
+            spec.emit_refused(lane, name, "asked for by --own-arms and not an own arm of this lane; "
+                                          "own arms: %s" % ",".join(["ours"] + board_pairing.extra_own_arms(lane)))
+    arms = [] if args.opponents_only or (own_wanted is not None and "ours" not in own_wanted) \
+        else build_ours(lane, cfg, data, extra=own_settings or None)
     if not args.opponents_only:
         for own in board_pairing.extra_own_arms(lane):
+            if own_wanted is not None and own not in own_wanted:
+                continue
             if pairing[own].get("prebinned"):
                 built = build_prebinned_ours(lane, cfg, data, own, dict(pairing[own]["settings"]))
             else:
@@ -1336,6 +1353,8 @@ def main(argv=None):
                 arm.agreement_group = "mojolearn:" + own   # another configuration on purpose
             arms.extend(built)
         for own, p in pairing.items():
+            if own_wanted is not None and own not in own_wanted:
+                continue
             spec.emit_note(lane, [own], "pairing", float(len(p["opponents"])),
                            "own arm %s races against %s only: %s"
                            % (own, ",".join(p["opponents"]), p["why"]))
