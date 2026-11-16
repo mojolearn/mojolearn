@@ -127,8 +127,15 @@ from dbscan.impl.vertexdeg.algo import (
     weighted_vertex_deg_dense,
 )
 from dbscan.impl.neighbors.epsilon_neighborhood import (
+    DBSCAN_METRIC_COSINE,
+    DBSCAN_METRIC_L1,
     DBSCAN_METRIC_L2,
     dbscan_metric_name,
+)
+from dbscan.impl.brute_edge_free import (
+    DBSCAN_BRUTE_EDGE_FREE,
+    brute_edge_free_applies,
+    dbscan_brute_edge_free_fit,
 )
 from dbscan.impl.label.classlabels import make_monotonic
 from dbscan.impl.sparse.detail.csr import (
@@ -678,6 +685,42 @@ their code branches on is this Bool.
             + " metric " + dbscan_metric_name(metric)
             + " weighted " + String(has_weights)
         )
+
+    # MOJOLEARN_DBSCAN_FAST_BRUTE_EDGE_FREE (dbscan/impl/brute_edge_free.mojo):
+    # a brute fit of more than one batch takes the bit-matrix + union-find
+    # route (no byte adjacency, no CSR, no per-batch label or merge pass);
+    # same labels. `dbscan.mojo` reads the same test and then allocates no
+    # byte adjacency. Off: never reached.
+    comptime if DBSCAN_BRUTE_EDGE_FREE:
+        if edge_free and brute_edge_free_applies(
+            not sparse_rbc_mode, metric, has_weights, n_rows, batch, min_pts
+        ):
+            var n_ranges: Int
+            if metric == DBSCAN_METRIC_L1:
+                n_ranges = dbscan_brute_edge_free_fit[DBSCAN_METRIC_L1](
+                    ctx, x, core, labels, n_rows, n_features, eps, min_pts,
+                    phase_timing,
+                )
+            elif metric == DBSCAN_METRIC_COSINE:
+                n_ranges = dbscan_brute_edge_free_fit[DBSCAN_METRIC_COSINE](
+                    ctx, x, core, labels, n_rows, n_features, eps, min_pts,
+                    phase_timing,
+                )
+            else:
+                n_ranges = dbscan_brute_edge_free_fit[DBSCAN_METRIC_L2](
+                    ctx, x, core, labels, n_rows, n_features, eps, min_pts,
+                    phase_timing,
+                )
+            if n_batches_out_addr != 0:
+                MutPointer[Int, MutUntrackedOrigin](
+                    unsafe_from_address=n_batches_out_addr
+                ).unsafe_store(0, n_ranges)
+            _dbscan_finish(
+                ctx, labels, core, work_buffer, block_sums, n_rows,
+                n_features, eps, min_pts, n_ranges, metric, has_weights,
+                phase_timing,
+            )
+            return 0
 
     # `runner.cuh:231-241`: build the index ONCE, before the batch loop, not
     # per batch. `rbc_build_index` is `cuvs::neighbors::ball_cover::build`.

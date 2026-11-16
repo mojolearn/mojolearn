@@ -48,6 +48,7 @@ from checks.kernel_matrix import COLUMN_AMD, COLUMN_NVIDIA, TARGET_COLUMN
 
 from dbscan.impl.adjgraph.algo import scan_blocks_needed
 from dbscan.impl.runner import EPS_NN_BRUTE_FORCE, EPS_NN_RBC, dbscan_fit
+from dbscan.impl.brute_edge_free import brute_edge_free_applies
 from dbscan.impl.neighbors.epsilon_neighborhood import DBSCAN_METRIC_L2
 
 
@@ -334,6 +335,15 @@ def dbscan_fit_impl_weighted(
                     )
     var adj_len = batch * n_rows
     if one_batch_plan:
+        adj_len = 1
+    # MOJOLEARN_DBSCAN_FAST_BRUTE_EDGE_FREE: the runner takes the brute
+    # edge-free route on this same test (a subset of its own: the runner's
+    # brute arm also covers the RBC downgrade) and reads no byte adjacency.
+    # Always False with the define off.
+    if brute_edge_free_applies(
+        eps_nn_method != EPS_NN_RBC, metric, has_weights, n_rows, batch,
+        min_pts,
+    ):
         adj_len = 1
     # TOMBSTONE: MOJOLEARN_DBSCAN_FAST_DENSE_ADJ (unmeasured Apple opt-in arm) deleted 2026-11-15 by lane/expdel2-10-cluster; code recoverable at b054d63e45.
     # Restore: git apply experiments/removed/MOJOLEARN_DBSCAN_FAST_DENSE_ADJ.patch; record in docs/TOMBSTONES.md.
