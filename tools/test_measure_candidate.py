@@ -225,7 +225,34 @@ class Priors(unittest.TestCase):
     def test_stage_keys_follow_the_owed_plan(self):
         # the staged datasets are the owed rows the job plans (B sets staged, a last release or not)
         src = Path(MC.__file__).read_text()
-        self.assertIn("[n for n, _, _ in specs], prior_versions[-1] != PC.PAPER_VERSION)", src)
+        self.assertIn("[n for n, _, _ in specs], prior_versions[-1] != PC.PAPER_VERSION, parts)", src)
+
+
+class Parts(unittest.TestCase):
+    """--parts (2026-11-16: two PC_PARTS=board-all submits died on corpus/enwik8/input.txt and corpus/pile_github/
+    input.txt, which stage had not staged: it listed the paper job's datasets only)."""
+    PLANNER = os.path.join(HERE, "bench_board.py")
+
+    def test_board_all_stages_the_full_boards_datasets(self):
+        keys = MC.dataset_keys("nvidia", None, None, self.PLANNER, parts=MC.parse_parts("board-all"))
+        self.assertIn("corpus/enwik8/input.txt", keys)
+        self.assertIn("corpus/pile_github/input.txt", keys)
+        # the same keys for one all-* part given alone (a split submit)
+        self.assertEqual(keys, MC.dataset_keys("nvidia", None, None, self.PLANNER, parts=["all-smoke"]))
+
+    def test_unknown_part_refused_and_default_is_the_paper_job(self):
+        with self.assertRaises(SystemExit):
+            MC.parse_parts("board-all,boards")
+        self.assertEqual(MC.parse_parts(""), [])
+        self.assertFalse(MC.runs_board_all(MC.parse_parts("plan,install,smoke,board,prior,compare")))
+        self.assertTrue(MC.runs_board_all(MC.parse_parts("board-all")))
+
+    def test_parts_match_the_job_and_ride_the_submit_line(self):
+        job = Path(HERE, "ops", "paper_compare_job.sh").read_text()
+        self.assertIn('PC_PARTS:-%s}' % ",".join(MC.PAPER_PARTS), job)
+        self.assertIn(",".join(MC.ALL_PARTS[1:]), job)
+        line = MC.submit_line("nvidia", "measure", "t", {"PC_PARTS": "board-all"})
+        self.assertIn("--env PC_PARTS=board-all", line)
 
 
 if __name__ == "__main__":
