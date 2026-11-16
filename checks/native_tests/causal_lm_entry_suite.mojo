@@ -166,7 +166,11 @@ def run_case(unit: Int) raises:
         require(bits[0] == 0x3F80 and bits[1] == 0xC020, "to_bf16 bits")
         _ = causal_entry_call(causal_ref[CAUSAL_TABLE_LINALG](k), CAUSAL_LIN_FROM_BF16, [_f32(back), _u16(bits)], [2], no_floats)
         require(back[0] == 1.0 and back[1] == -2.5, "from_bf16")
+        # Keep every list whose address an entry reads alive past the call:
+        # Mojo frees a local at its last named use, which for `bits` was the
+        # `_u16(bits)` argument, before from_bf16 read it.
         _ = x
+        _ = bits
     elif unit == 4:
         # linalg ops 3 and 4: small integers survive the int8 row codes
         var x: List[Float32] = [1.0, 2.0, 3.0, 4.0]
@@ -179,6 +183,8 @@ def run_case(unit: Int) raises:
             [_f32(back), _i8(codes), _i32(exponents)], [1, 4], no_floats)
         for i in range(4):  # small-loop(four fixture values)
             require(back[i] == x[i], "int8 round trip at " + String(i))
+        _ = codes
+        _ = exponents
     elif unit == 5:
         # linalg ops 6 and 5: [1, 2] . [3, 4] = 11 under int15
         var a: List[Float32] = [1.0, 2.0]
@@ -199,6 +205,12 @@ def run_case(unit: Int) raises:
         require(c[0] == 11.0, "int15 gemm")
         _ = a
         _ = b
+        _ = ahi
+        _ = alo
+        _ = aex
+        _ = bhi
+        _ = blo
+        _ = bex
     elif unit == 6:
         # block op 33 reaches the CPU image's Transformer dispatch
         var none = List[Int]()
