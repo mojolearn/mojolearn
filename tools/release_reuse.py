@@ -1291,23 +1291,31 @@ def _grep_files(commit, args, root):
 
 
 def define_readers(commit, names, root=ROOT):
-    """The files of COMMIT that read any of the define NAMES. A `.mojo` file reads a define only through
-    `is_defined["NAME"]` or `get_defined_*["NAME"`: a mention in a comment, a docstring or a TOMBSTONE line
-    compiles to the same bytes with or without `-D NAME`, so it is not a reader (lane owed-deletions,
-    2026-11-16: the guard modules' "refusal removed ... restored" comment lines made every binding of
-    core/experiment_guards_base and _cluster rebuild for the restored arms if-fit-own-x and
-    knn-door-fit-xn-eager, 14 and 19 binding scripts where 5 and 4 read the code). Every other file (build
-    scripts, JSON, docs) is still matched by the whole word (two `git grep`s)."""
+    """The files of COMMIT that read any of the define NAMES. A `.mojo` file reads a define when the QUOTED name
+    ("NAME") stands on a line that is not a `#` comment line: that covers `is_defined["NAME"]`,
+    `get_defined_int["NAME", default]` and the forms that put the name on its own line after `is_defined[`
+    (the Mamba kernels do). A bare mention in a comment or a TOMBSTONE line compiles to the same bytes with or
+    without `-D NAME`, so it is not a reader (lane owed-deletions, 2026-11-16: the guard modules' "refusal removed
+    ... restored" comment lines made 14 and 19 binding scripts rebuild where 5 and 4 read the code). The rule errs
+    towards BUILD: a quoted name in a docstring or a message counts as a read. Every other file (build scripts,
+    JSON, docs) is matched by the whole word."""
     if not names:
         return set()
     words = []
     for n in names:
         words += ["-e", n]
     named = _grep_files(commit, ["-w", "-F"] + words, root)
-    code = []
-    for n in names:
-        code += ["-e", r'(is_defined|get_defined_[a-z_]+)\["' + re.escape(n) + r'"\]']
-    reads = _grep_files(commit, ["-E"] + code, root) if any(f.endswith(".mojo") for f in named) else set()
+    reads = set()
+    if any(f.endswith(".mojo") for f in named):
+        quoted = []
+        for n in names:
+            quoted += ["-e", '"' + n + '"']
+        p = subprocess.run(["git", "-C", str(root), "grep", "-n", "-F"] + quoted + [commit, "--", "*.mojo"],
+                           capture_output=True, text=True)
+        for line in p.stdout.splitlines():
+            parts = line.split(":", 3)          # <commit>:<path>:<lineno>:<text>
+            if len(parts) == 4 and not parts[3].lstrip().startswith("#"):
+                reads.add(parts[1])
     return {f for f in named if not f.endswith(".mojo")} | (reads & named)
 
 
