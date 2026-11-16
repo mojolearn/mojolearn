@@ -2270,3 +2270,25 @@ def test_small_rows_paper_compare_prints_calls_beside_the_time():
     assert pc.fmt_ms_calls(row, "new") == "0.760 (median of 20 calls, 0.7..3.4 ms)"
     assert pc.calls_fields("new", {"median_ms": 12.0}) == {}
     assert pc.fmt_ms_calls({"new_ms": 12.0}, "new") == "12.00"
+
+
+def test_tree_command_builds_only_the_planned_own_arms(tmp_path):
+    # board-smoke-3 (2026-11-16): gbdt-categorical on a GPU board plans ours-catboost-gpu only; the driver
+    # must not also time `ours` (paired with catboost-cpu), and the probe passes own arms as --own-arms.
+    ctx = {"python": "py", "tree_driver": "drv", "vendor": "nvidia", "rounds": 1,
+           "arm_budget_s": 1, "race_deadline_s": 2}
+    race = dict(family="trees", lane="gbdt-categorical", dataset="taxi", rows=2000, opponents=[],
+                our_arms={"ours-catboost-gpu": "identical"}, arms=["ours-catboost-gpu"])
+    cmd, _env = bb.tree_cmd(ctx, race)
+    assert cmd[cmd.index("--own-arms") + 1] == "ours-catboost-gpu" and "--ours-only" in cmd
+    seen = {}
+    monkey = bb.probe_run
+    try:
+        bb.probe_run = lambda cmd_, env, log, deadline, nice=None: (seen.update(cmd=cmd_), (1, {}))[1]
+        bb.params_probe(dict(ctx, out=str(tmp_path), nice=0, data_root=str(tmp_path), race_deadline_s=2), dict(
+            race, id="trees/gbdt-categorical/taxi/rows=2000"), ["ours-catboost-gpu", "catboost-gpu"])
+    finally:
+        bb.probe_run = monkey
+    got = seen["cmd"]
+    assert got[got.index("--own-arms") + 1] == "ours-catboost-gpu"
+    assert got[got.index("--arms") + 1] == "catboost-gpu"
