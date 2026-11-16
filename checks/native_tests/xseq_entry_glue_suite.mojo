@@ -212,6 +212,8 @@ def run_case(unit: Int) raises:
                 "prophet_days unsorted status")
         _ = src
         _ = unsorted
+        _ = days
+        _ = info
     elif unit == 5:
         var days: List[Float64] = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]
         var periods: List[Float64] = [7.0]

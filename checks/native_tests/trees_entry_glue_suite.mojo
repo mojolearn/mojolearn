@@ -355,6 +355,7 @@ def run_case(unit: Int) raises:
         require(xt_device_folds(k, _i32(codes), _i32(rows), _i32(counts), 4, 2, 0) == 0, "device_folds status")
         require(counts[0] + counts[1] == 4, "device_folds sizes")
         _ = codes
+        _ = rows
     elif unit == 38:
         var x: List[Float64] = [1.0, 2.0, 3.0]
         var y: List[Float64] = [1.0, 2.0, 3.0]
