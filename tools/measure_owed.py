@@ -5,28 +5,39 @@
 planned through the board and reported beside the paper compare (lane measure-prep, 2026-11-09).
 
   plan   --owed JSON --paper-recipes JSON --planner tools/bench_board.py --vendor V --out-dir DIR [--b-arms a,b]
+         [--prior]
         ON THE BOX: resolves every board / ab row to the race ids the current board plans (bench_board.plan_races),
-        per ARM (candidate, prior = the published 0.8.66 ours-only venv, and each B wheel set named in --b-arms) and
-        per ROWS group ('full', or a neighbouring row count: its own bench_board --rows process). Writes into DIR:
+        per ARM (candidate; prior = a last-release ours-only venv, only with --prior; each B wheel set named in
+        --b-arms) and per ROWS group ('full', or a neighbouring row count: its own bench_board --rows process).
+        ONLY RACES A REPORT READS ARE PLANNED (lane paper-plan-trim, 2026-11-16: the L40S job of d95f805cce timed 197
+        candidate races for a compare that read 61, and planned 0.8.55 on 159 races it lacks 98 of): a board row
+        (candidate against the last release) is planned only with --prior, i.e. when the job times a last release
+        beside the paper baseline (PC_PRIOR_VERSION other than 0.8.55; Andrew, 2026-11-16: a measurement job times
+        ONE prior, 0.8.55, so by default none is); an ab row only when at least one of its B sets is staged (the
+        candidate alone is read by nobody); a driver row only when at least two of its arms run here. Every row left
+        out is named in not-planned.json. Writes into DIR:
           board-args.txt        the union of the paper's and the owed rows' families, lanes and datasets (one arg
                                 per line), so ONE board process can time the paper races and the owed races together
           units.tsv             arm <TAB> rows <TAB> ids-file, one line per board process the job runs, in order
           ids-<arm>-<rows>.txt  the race ids of that process
           smoke-ids.txt         the smoke ids (rows=<smoke rows>, shape=small) of the owed full-row races the paper
                                 smoke does not already cover; the job smokes them with the paper's
+          smoke-ids-prior.txt   the same for the prior arm's owed full rows (empty without --prior): the prior's
+                                smoke covers only the races it is compared on
           drivers.json          the driver rows (tools/measure_owed_driver.py), with the arms present on this box
           not-planned.json      {row id or race: why}: a lane the board no longer has, a B set not staged, ...
           rowmap.json           {row id: [race ids]} for the report
         A race id the paper recipes hold is not planned again for the candidate or the prior arm: the paper board
         times it for the candidate, and the prior release's on-box board (board-prior-<version>/) for the prior.
         The job times the prior's full-row units in that same board (no second timing of the prior, 2026-11-14).
-  plan-check --plan-dir DIR --b-arms a,b --vendor V
-        whether DIR's plan was made for these B sets and this vendor (plan.json, written by plan): prints
+  plan-check --plan-dir DIR --b-arms a,b --vendor V [--prior]
+        whether DIR's plan was made for these B sets, this vendor and this prior choice (plan.json, written by plan): prints
         OWED-PLAN-CURRENT (rc 0) or OWED-PLAN-STALE <why> (rc 1). The job re-makes a stale plan before its owed
         phase: job 0003 of ba08dac006 (L40S, 2026-11-13) ran without the plan part, reused the plan job 0001 made
         without PC_B_ARMS (b_arms=-), and PC_OWED_ARMS=candidate,<b names> ran no B arm though all five were installed.
   data-keys --owed JSON --paper-recipes JSON --planner tools/bench_board.py --vendor V --data-root DIR
-        the R2 dataset keys (bench/results/dataset_store/manifest.tsv) the paper and owed races read, one
+            [--b-arms a,b] [--prior]
+        the R2 dataset keys (bench/results/dataset_store/manifest.tsv) the paper and the PLANNED owed races read, one
         `<key> TAB <path>` line each, from the board's own data_needs (data_keys): what the stage step stages
         (tools/ops/measure_candidate.py) and what the job checks after its plan.
   report --owed JSON --plan-dir DIR --results RES --prior-version V --vendor V [--out-md --out-json --summary]
@@ -78,15 +89,25 @@ def family_of(planner):
     return out
 
 
-def row_arms(row, b_present):
-    """The board arms of an owed row: board rows race the candidate and the prior; ab rows the candidate and every
-    B set the row names that is staged on this box (the missing ones are returned apart)."""
+def row_arms(row, b_present, prior_present=False):
+    """(the board arms of an owed row, the arms it needs that this job does not run). A board row races the candidate
+    and the last-release prior: none without that prior (PRIOR_PRESENT), since its report compares the two. An ab row
+    races the candidate and every B set it names that is staged on this box: none when no B set is (the report reads
+    the candidate cell only for a B ratio). Remove what the change made unnecessary (2026-11-16): the candidate-only
+    units of rows nobody compares are no longer timed."""
     if row["kind"] == "board":
-        return ["candidate", "prior"], []
+        return (["candidate", "prior"], []) if prior_present else ([], ["prior"])
     if row["kind"] == "ab":
         want = as_list(row.get("b_arms") or [])
-        return ["candidate"] + [b for b in want if b in b_present], [b for b in want if b not in b_present]
+        have = [b for b in want if b in b_present]
+        return (["candidate"] + have if have else []), [b for b in want if b not in b_present]
     return [], []
+
+
+def driver_arms(row, b_present, prior_present=False):
+    """The arms of a driver row that run on this box (candidate[:variant], prior with PRIOR_PRESENT, staged B sets)."""
+    present = {"candidate"} | ({"prior"} if prior_present else set()) | set(b_present)
+    return [a for a in as_list(row.get("arms") or []) if str(a).split(":")[0] in present]
 
 
 def race_planner(planner, vendor):
@@ -116,15 +137,16 @@ def row_races(row, fam, planned):
     return lane_list, gone, rows, races
 
 
-def data_keys(doc, paper, planner, vendor, data_root):
+def data_keys(doc, paper, planner, vendor, data_root, b_present=(), prior_present=False):
     """[(R2 key, path the board reads it from)] for every input the job's races read: the paper recipes and the owed
-    board / ab rows, through the board's own data_needs (bench_board.py) and the algos corpus keys. The stage step
+    board / ab rows the plan times (row_arms: B_PRESENT, PRIOR_PRESENT, the same rule as plan), through the board's
+    own data_needs (bench_board.py) and the algos corpus keys. The stage step
     (tools/ops/measure_candidate.py) stages these before a submit and the job checks them after its plan (2026-11-12:
     a hand-written list left out higgs and half the smoke shards refused)."""
     fam, planned = race_planner(planner, vendor)
     races = [r for r in (paper.get("recipes") or []) if r.get("family") and r.get("lane") and r.get("dataset")]
     for row in doc.get("rows") or []:
-        if row.get("kind") in ("board", "ab"):
+        if row.get("kind") in ("board", "ab") and row_arms(row, b_present, prior_present)[0]:
             races += row_races(row, fam, planned)[3]
     needed, _ = planner.data_needs(races)
     out = [(planner.R2_KEYS[n], os.path.join(data_root, planner.DATA_FILES[n])) for n in needed if n in planner.R2_KEYS]
@@ -133,24 +155,38 @@ def data_keys(doc, paper, planner, vendor, data_root):
     return out + [(k, planner.ALGOS.corpus_path(k)) for k in corpus]
 
 
-def plan(doc, paper, planner, vendor, b_present):
-    """(units {(arm, rows): [race ids]}, smoke ids, drivers, not_planned, rowmap, board args)."""
+def plan(doc, paper, planner, vendor, b_present, prior_present=False):
+    """(units {(arm, rows): [race ids]}, smoke ids {"candidate": [...], "prior": [...]}, drivers, not_planned, rowmap,
+    board args). Only the rows whose compared arms run in this job are planned (row_arms, driver_arms)."""
     if doc.get("schema") != SCHEMA:
         raise SystemExit("measure_owed: not a %s document" % SCHEMA)
     fam, planned = race_planner(planner, vendor)
     paper_ids = set(paper.get("race_ids") or [])
     pb = paper.get("bench_board_args") or {}
     families, lanes, datasets = list(pb.get("families") or []), list(pb.get("lanes") or []), list(pb.get("datasets") or [])
-    units, smoke, drivers, missing, rowmap = {}, [], [], {}, {}
+    units, smoke, drivers, missing, rowmap = {}, {"candidate": set(), "prior": set()}, [], {}, {}
     smoke_rows = int(getattr(planner, "SMOKE_ROWS", 2000))
 
     for row in doc["rows"]:
         rid = row["id"]
         if row["kind"] == "driver":
-            drivers.append(row)
+            have = driver_arms(row, b_present, prior_present)
+            if len(have) >= 2:
+                drivers.append(row)
+            else:
+                missing[rid] = "driver row: needs two of its arms %s; this job runs only %s" % (
+                    ",".join(as_list(row.get("arms") or [])), ",".join(have) or "none")
             continue
         if row["kind"] not in ("board", "ab"):
             missing[rid] = "unknown kind %r" % row["kind"]
+            continue
+        arms, absent = row_arms(row, b_present, prior_present)
+        for b in absent:
+            missing["%s %s" % (rid, b)] = (
+                "B wheel set %s is not staged on this box (PC_B_ARMS)" % b if b != "prior" else
+                "the board row compares the candidate with the last release; this job times no last release "
+                "(PC_PRIOR_VERSION is the paper baseline)")
+        if not arms:
             continue
         lane_list, gone, rows, races = row_races(row, fam, planned)
         for l in gone:
@@ -164,9 +200,6 @@ def plan(doc, paper, planner, vendor, b_present):
             continue
         ids = sorted({r["id"] for r in races})
         rowmap[rid] = ids
-        arms, absent = row_arms(row, b_present)
-        for b in absent:
-            missing["%s %s" % (rid, b)] = "B wheel set %s is not staged on this box (PC_B_ARMS)" % b
         for arm in arms:
             todo = [i for i in ids if not (arm in ARMS_FIXED and rows is None and i in paper_ids)]
             if todo:
@@ -187,14 +220,17 @@ def plan(doc, paper, planner, vendor, b_present):
                     continue
                 sid = PC.smoke_id(i, smoke_rows)
                 if sid in sm:
-                    smoke.append(sid)
+                    smoke["candidate"].add(sid)
+                    if "prior" in arms:
+                        smoke["prior"].add(sid)
                 else:
                     missing["%s %s" % (rid, i)] = "the board plans no smoke race %s" % sid
     bargs = ["--vendor", vendor, "--families", ",".join(families), "--lanes", ",".join(lanes),
              "--modes", "identical", "--gpu-opponents-only"]
     if datasets:
         bargs += ["--datasets", ",".join(datasets)]
-    return ({k: sorted(v) for k, v in units.items()}, sorted(set(smoke)), drivers, missing, rowmap, bargs)
+    return ({k: sorted(v) for k, v in units.items()}, {k: sorted(v) for k, v in smoke.items()}, drivers, missing,
+            rowmap, bargs)
 
 
 def unit_order(key):
@@ -211,7 +247,7 @@ def cmd_plan(a):
     unknown = [b for b in b_present if b not in (doc.get("b_arms") or {})]
     if unknown:
         raise SystemExit("measure_owed: B set(s) %s are not in %s" % (",".join(unknown), a.owed))
-    units, smoke, drivers, missing, rowmap, bargs = plan(doc, paper, planner, a.vendor, b_present)
+    units, smoke, drivers, missing, rowmap, bargs = plan(doc, paper, planner, a.vendor, b_present, a.prior)
     os.makedirs(a.out_dir, exist_ok=True)
     lines = []
     for key in sorted(units, key=unit_order):
@@ -220,15 +256,17 @@ def cmd_plan(a):
         PC.write_atomic(f, "".join(i + "\n" for i in units[key]))
         lines.append("%s\t%s\t%s\n" % (arm, rows, f))
     PC.write_atomic(os.path.join(a.out_dir, "units.tsv"), "".join(lines))
-    PC.write_atomic(os.path.join(a.out_dir, "smoke-ids.txt"), "".join(i + "\n" for i in smoke))
+    PC.write_atomic(os.path.join(a.out_dir, "smoke-ids.txt"), "".join(i + "\n" for i in smoke["candidate"]))
+    PC.write_atomic(os.path.join(a.out_dir, "smoke-ids-prior.txt"), "".join(i + "\n" for i in smoke["prior"]))
     PC.write_atomic(os.path.join(a.out_dir, "board-args.txt"), "".join(x + "\n" for x in bargs))
     for name, obj in (("drivers.json", drivers), ("not-planned.json", missing), ("rowmap.json", rowmap)):
         PC.write_atomic(os.path.join(a.out_dir, name), PC.json_text(obj))
     # written last: plan-check reads it as "this plan is complete for these B sets"
-    PC.write_atomic(os.path.join(a.out_dir, PLAN_META), PC.json_text({"vendor": a.vendor, "b_arms": b_present}))
-    print("OWED-PLAN vendor=%s rows=%d units=%d races=%d smoke=%d drivers=%d not_planned=%d b_arms=%s"
-          % (a.vendor, len(doc["rows"]), len(units), sum(len(v) for v in units.values()), len(smoke),
-             len(drivers), len(missing), ",".join(b_present) or "-"))
+    PC.write_atomic(os.path.join(a.out_dir, PLAN_META),
+                    PC.json_text({"vendor": a.vendor, "b_arms": b_present, "prior": bool(a.prior)}))
+    print("OWED-PLAN vendor=%s rows=%d units=%d races=%d smoke=%d drivers=%d not_planned=%d b_arms=%s prior=%s"
+          % (a.vendor, len(doc["rows"]), len(units), sum(len(v) for v in units.values()), len(smoke["candidate"]),
+             len(drivers), len(missing), ",".join(b_present) or "-", "yes" if a.prior else "no"))
     return 0
 
 
@@ -236,8 +274,9 @@ def cmd_plan(a):
 PLAN_META = "plan.json"
 
 
-def plan_stale(plan_dir, b_arms, vendor):
-    """None when PLAN_DIR's plan was made for these B sets (a comma list, order free) and VENDOR; else why not."""
+def plan_stale(plan_dir, b_arms, vendor, prior=False):
+    """None when PLAN_DIR's plan was made for these B sets (a comma list, order free), VENDOR and PRIOR (a last-release
+    prior arm); else why not. A plan made before 2026-11-16 records no "prior" and planned the prior arm."""
     want = sorted(b for b in (b_arms or "").split(",") if b)
     if not os.path.isfile(os.path.join(plan_dir, "units.tsv")):
         return "no plan (units.tsv missing)"
@@ -245,8 +284,10 @@ def plan_stale(plan_dir, b_arms, vendor):
         with open(os.path.join(plan_dir, PLAN_META)) as fh:
             meta = json.load(fh)
     except (OSError, ValueError):
+        if not want and prior:
+            return None     # a plan from before plan.json was made without B sets and with the prior arm
         if not want:
-            return None     # a plan from before plan.json was made without B sets, as this job wants
+            return "the plan has no %s (made before 2026-11-13, with the prior arm); this job has prior=no" % PLAN_META
         return "the plan records no B sets (no %s: made before 2026-11-13); this job has b_arms=%s" % (
             PLAN_META, ",".join(want))
     have = sorted(meta.get("b_arms") or [])
@@ -254,11 +295,14 @@ def plan_stale(plan_dir, b_arms, vendor):
         return "the plan is for vendor %s, this job is %s" % (meta.get("vendor"), vendor)
     if have != want:
         return "the plan has b_arms=%s, this job has b_arms=%s" % (",".join(have) or "-", ",".join(want) or "-")
+    if bool(meta.get("prior", True)) != bool(prior):
+        return "the plan has prior=%s, this job has prior=%s" % (
+            "yes" if meta.get("prior", True) else "no", "yes" if prior else "no")
     return None
 
 
 def cmd_plan_check(a):
-    why = plan_stale(a.plan_dir, a.b_arms, a.vendor)
+    why = plan_stale(a.plan_dir, a.b_arms, a.vendor, a.prior)
     print("OWED-PLAN-STALE " + why if why else "OWED-PLAN-CURRENT b_arms=%s" % (a.b_arms or "-"))
     return 1 if why else 0
 
@@ -266,7 +310,8 @@ def cmd_plan_check(a):
 def cmd_data_keys(a):
     """One `<key> TAB <path>` line per input (tools/ops/paper_compare_job.sh checks each path after its plan)."""
     doc = PC.load_json(a.owed) if a.owed else {"rows": []}
-    keys = data_keys(doc, PC.load_json(a.paper_recipes), load_planner(a.planner), a.vendor, a.data_root)
+    keys = data_keys(doc, PC.load_json(a.paper_recipes), load_planner(a.planner), a.vendor, a.data_root,
+                     [b for b in (a.b_arms or "").split(",") if b], a.prior)
     sys.stdout.write("".join("%s\t%s\n" % kp for kp in keys))
     return 0
 
@@ -474,17 +519,23 @@ def build_parser():
     pl.add_argument("--planner", default=os.path.join(HERE, "bench_board.py"))
     pl.add_argument("--vendor", required=True, choices=PC.VENDORS)
     pl.add_argument("--b-arms", default="", help="comma list of the B wheel sets staged on this box")
+    pl.add_argument("--prior", action="store_true",
+                    help="the job times a last release beside the paper baseline (PC_PRIOR_VERSION is not 0.8.55): "
+                         "the owed board rows and the prior arm are planned; without it they are not")
     pl.add_argument("--out-dir", required=True)
     c = sub.add_parser("plan-check", help="whether a plan dir was made for these B sets and vendor")
     c.add_argument("--plan-dir", required=True)
     c.add_argument("--b-arms", default="")
     c.add_argument("--vendor", required=True, choices=PC.VENDORS)
+    c.add_argument("--prior", action="store_true", help="the job times a last-release prior arm (see plan --prior)")
     d = sub.add_parser("data-keys", help="the R2 dataset keys the paper and owed races read, with their paths")
     d.add_argument("--owed", default=None, help="the owed file (omitted: the paper races only)")
     d.add_argument("--paper-recipes", required=True)
     d.add_argument("--planner", default=os.path.join(HERE, "bench_board.py"))
     d.add_argument("--vendor", required=True, choices=PC.VENDORS)
     d.add_argument("--data-root", required=True, help="the board's --data-root (e.g. /root/datasets/gbm-bench)")
+    d.add_argument("--b-arms", default="", help="comma list of the B wheel sets the job stages (plan --b-arms)")
+    d.add_argument("--prior", action="store_true", help="the job times a last-release prior arm (plan --prior)")
     r = sub.add_parser("report", help="the owed rows' numbers from the job's boards and drivers")
     r.add_argument("--owed", required=True)
     r.add_argument("--plan-dir", required=True)
