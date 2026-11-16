@@ -104,6 +104,7 @@ def gp_lml_gradient_fold(
         )
     for p in range(n_free):
         gp_grad_fin_item(p, pp, nb, half, MutPointer[Float32, MutAnyOrigin](unsafe_from_address=Int(g.unsafe_ptr())))
+    _ = part^  # segfaults-4: `pp` is an integer-address pointer; keep the partials alive past the final read
     return g^
 
 

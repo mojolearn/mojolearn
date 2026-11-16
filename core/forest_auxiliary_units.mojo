@@ -105,3 +105,4 @@ def forest_auxiliary_host(forest: List[Int], x: Int, leaf_out: Int, prefix_out: 
                 AuxF32(unsafe_from_address=pred_out), totals, r, features, trees, outputs, leaf_out!=0, prefix_out!=0, pred_out!=0)
         if not ok:
             raise Error("forest auxiliary outputs require valid finite trees and input")
+    _ = sums^  # segfaults-4: written only through `totals`; keep it alive past the row loop
