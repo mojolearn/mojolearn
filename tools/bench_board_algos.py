@@ -7563,10 +7563,10 @@ def worker(args):
     mem = _tool("bench_board_probe").MemProbe((runner.info or {}).get("device", "gpu"),
         library=(runner.info or {}).get("library") or "?", arm=args.arm)
     last = None
-    # SMALL ROWS (Andrew, 2026-11-15; tools/bench_board_small_rows.py): our warmup call's fit and infer
-    # times decide how many consecutive calls the one scored run makes (20 under 10 ms, else 1)
+    # SMALL ROWS (Andrew, 2026-11-15; tools/bench_board_small_rows.py): our FIRST SCORED fit and infer calls'
+    # times decide how many consecutive calls the one scored run makes (20 under 10 ms, else 1); the warmup
+    # does not decide (it carries start-up and kernel compilation)
     small = _tool("bench_board_small_rows")
-    warm = {}
     for line in sys.stdin:
         parts = line.split()
         if not parts:
@@ -7614,8 +7614,8 @@ def worker(args):
                 # (the hash, the saved outputs and the receipt are the first call's; same bits every call).
                 # Opponents and rows at or above 10 ms make one call; nothing below runs for them.
                 ours_arm = args.arm in OURS_ARMS
-                n_fit = small.calls_for(warm.get("ms"), ours_arm) if r > 0 else 1
-                n_inf = small.calls_for(warm.get("infer_ms"), ours_arm) if r > 0 and did else 1
+                n_fit = small.calls_for(ms, ours_arm) if r > 0 else 1
+                n_inf = small.calls_for(ims, ours_arm) if r > 0 and did else 1
                 fit_calls, inf_calls = [ms], [ims]
                 for i in range(1, max(n_fit, n_inf)):
                     if i < n_fit:
@@ -7626,8 +7626,6 @@ def worker(args):
                         t1 = time.perf_counter()
                         runner.infer()
                         inf_calls.append((time.perf_counter() - t1) * 1000.0)
-                if r == 0:
-                    warm = {"ms": ms, "infer_ms": ims}
                 fit_rec = small.spread(fit_calls) if r > 0 else None
                 inf_rec = small.spread(inf_calls) if r > 0 and did else None
                 if fit_rec is not None:

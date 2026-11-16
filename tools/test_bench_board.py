@@ -2155,17 +2155,37 @@ def test_small_rows_rule_counts_and_spread():
     assert sr.calls_for(10.0, True) == 1          # at or above 10 ms: one call
     assert sr.calls_for(250.0, True) == 1
     assert sr.calls_for(0.5, False) == 1          # opponents are never repeated
-    assert sr.calls_for(None, True) == 1          # no warmup (external warmup): one call
+    assert sr.calls_for(None, True) == 1          # no first-call time: one call
     assert sr.calls_for(float("nan"), True) == 1
     rec = sr.spread([3.4] + [0.76] * 18 + [0.9])
     assert rec["calls"] == 20 and rec["ms"] == pytest.approx(0.76)
     assert rec["min_ms"] == pytest.approx(0.76) and rec["max_ms"] == pytest.approx(3.4)
     assert sr.line_suffix(rec).startswith(" calls=20 min_ms=")
-    assert sr.line_suffix(sr.spread([12.0])) == ""   # one call: the line is what it was
+    assert sr.line_suffix(sr.spread([12.0])) == " calls=1"   # one call: the line records its rule
+    assert sr.line_suffix(None) == ""
     assert sr.cell_fields(None) == {}
-    assert sr.cell_fields([{"calls": 1, "min_ms": 5.0, "max_ms": 5.0}]) == {"calls": 1}
-    assert sr.cell_fields([dict(rec, round=1)]) == {"calls": 20, "min_ms": pytest.approx(0.76),
-                                                    "max_ms": pytest.approx(3.4)}
+    assert sr.cell_fields([{"calls": 1, "min_ms": 5.0, "max_ms": 5.0}]) == {"calls": 1, "scoring": sr.SCORING_ONE}
+    assert sr.cell_fields([dict(rec, round=1)]) == {"calls": 20, "scoring": sr.SCORING_MEDIAN,
+                                                    "min_ms": pytest.approx(0.76), "max_ms": pytest.approx(3.4)}
+    assert sr.cell_fields([sr.parse_suffix({"calls": "1"})]) == {"calls": 1, "scoring": sr.SCORING_ONE}
+    assert sr.scoring_of({}) == sr.SCORING_ONE                     # cells before 2026-11-15, opponents
+    assert sr.scoring_of({"calls": 20}) == sr.SCORING_MEDIAN
+    assert sr.scoring_of({"scoring": sr.SCORING_ONE, "calls": 1}) == sr.SCORING_ONE
+
+
+def test_small_rows_decided_by_first_scored_call_not_warmup():
+    """2026-11-16: the first scored call decides, never the warmup (neural/mamba3-forward: warmup 1051 ms with
+    CUDA start-up and compilation, steady call 5.7 ms; the warmup rule scored it from one call). Every harness
+    passes the first scored call's time to calls_for."""
+    sr = _small_rows()
+    assert sr.calls_for(5.7, True) == 20
+    sites = {"bench_board_more.py": 1, "bench_board_neural.py": 1, "bench_board_algos.py": 2,
+             "classical_two_datasets.py": 2, "speed_gbdt_arm.py": 1}
+    for name, n in sites.items():
+        src = open(os.path.join(HERE, name)).read()
+        found = re.findall(r"calls_for\(([^,]+),", src)
+        assert len(found) == n, (name, found)
+        assert all("warm" not in a for a in found), (name, found)
     assert sr.parse_suffix({"calls": "20", "min_ms": "0.7", "max_ms": "1.5"}) == {"calls": 20, "min_ms": 0.7,
                                                                                     "max_ms": 1.5}
     assert sr.parse_suffix({"ms": "1.0"}) is None
@@ -2181,8 +2201,9 @@ def _speed_gbdt_arm():
 
 
 def test_small_rows_tree_driver_repeats_only_our_small_arm(monkeypatch, capsys):
-    """speed_gbdt_arm.run: our arm with a warmup under 10 ms makes 20 fits in its scored run and prints their
-    median with calls=20; our arm at or above 10 ms and an opponent under 10 ms each make one fit."""
+    """speed_gbdt_arm.run: our arm whose FIRST SCORED fit is under 10 ms makes 20 fits in its scored run and prints
+    their median with calls=20, whatever its warmup took (start-up and compilation: 1051 ms); our arm at or above
+    10 ms and an opponent under 10 ms each make one fit and print calls=1."""
     import types
     import time as real_time
     np = pytest.importorskip("numpy")
@@ -2205,18 +2226,21 @@ def test_small_rows_tree_driver_repeats_only_our_small_arm(monkeypatch, capsys):
     small_costs = [4.0, 3.0] + [1.0] * 10 + [2.0] * 9        # warmup 4, then 20 scored calls
     arms = [arm("ours", "mojolearn", small_costs),
             arm("ours-big", "mojolearn", [50.0, 40.0]),
+            arm("ours-cold", "mojolearn", [1051.0] + [5.7] * 20),
+            arm("ours-warm-small", "mojolearn", [4.0, 12.0]),
             arm("xgboost-gpu", "xgboost", [2.0, 1.5])]
     sg.run("gbdt", arms, types.SimpleNamespace(tag="t-100x4"), 1, "smoke", dev="x")
     lines = [l for l in capsys.readouterr().out.splitlines() if l.startswith("FSPEED ")]
     by_arm = {re.search(r"arm=(\S+)", l).group(1): l for l in lines}
-    assert fits == {"ours": 21, "ours-big": 2, "xgboost-gpu": 2}
+    assert fits == {"ours": 21, "ours-big": 2, "ours-cold": 21, "ours-warm-small": 2, "xgboost-gpu": 2}
     ours = bb._kv(by_arm["ours"].partition(" ")[2])
     assert ours["round"] == "1" and float(ours["ms"]) == pytest.approx(1.5)   # median of 3, 10x1, 9x2
     assert ours["calls"] == "20" and float(ours["min_ms"]) == 1.0 and float(ours["max_ms"]) == 3.0
     assert ours["hash"] != "-"
-    for name, ms in (("ours-big", 40.0), ("xgboost-gpu", 1.5)):
-        assert "calls=" not in by_arm[name], name                 # one call: the line is what it was
-        assert by_arm[name].endswith("ms=%.3f hash=%s" % (ms, bb._kv(by_arm[name].partition(" ")[2])["hash"]))
+    cold = bb._kv(by_arm["ours-cold"].partition(" ")[2])
+    assert cold["calls"] == "20" and float(cold["ms"]) == pytest.approx(5.7)
+    for name, ms in (("ours-big", 40.0), ("ours-warm-small", 12.0), ("xgboost-gpu", 1.5)):
+        assert by_arm[name].endswith("ms=%.3f hash=%s calls=1" % (ms, bb._kv(by_arm[name].partition(" ")[2])["hash"]))
 
 
 def test_small_rows_board_cells_carry_calls_and_spread(env, monkeypatch):

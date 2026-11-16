@@ -2694,11 +2694,11 @@ def worker(args):
     mem = _probe().MemProbe((runner.info or {}).get("device", "gpu"),
         library=(runner.info or {}).get("library") or "?", arm=args.arm)
     inf = None
-    # SMALL ROWS (Andrew, 2026-11-15; tools/bench_board_small_rows.py): our warmup call's time decides how
-    # many consecutive calls the one scored run makes (20 under 10 ms, else 1), for the fit and the inference
+    # SMALL ROWS (Andrew, 2026-11-15; tools/bench_board_small_rows.py): our FIRST SCORED call's time decides
+    # how many consecutive calls the one scored run makes (20 under 10 ms, else 1), for the fit and the
+    # inference; the warmup does not decide (it carries start-up and kernel compilation)
     small = _small_rows()
     ours_arm = (runner.info or {}).get("library") == "mojolearn"
-    warm_ms = warm_infer_ms = None
     for line in sys.stdin:
         parts = line.split()
         if not parts:
@@ -2728,15 +2728,13 @@ def worker(args):
                 # SMALL ROWS: the rest of the scored run's calls, after the first call's outputs were taken
                 # (the hash and the receipt are the first call's; same bits every call). Opponents and rows at
                 # or above 10 ms make one call.
-                n_calls = small.calls_for(warm_ms, ours_arm) if r > 0 else 1
+                n_calls = small.calls_for(ms, ours_arm) if r > 0 else 1
                 calls = [ms]
                 for _ in range(1, n_calls):
                     t0 = time.perf_counter()
                     runner.call()
                     runner.sync()
                     calls.append((time.perf_counter() - t0) * 1000.0)
-                if r == 0:
-                    warm_ms = ms
                 calls_rec = small.spread(calls) if r > 0 else None
                 if calls_rec is not None:
                     ms = calls_rec["ms"]
@@ -2777,7 +2775,7 @@ def worker(args):
                 inf.call()
                 inf.sync()
                 ms = (time.perf_counter() - t0) * 1000.0
-                n_calls = small.calls_for(warm_infer_ms, ours_arm) if r > 0 else 1
+                n_calls = small.calls_for(ms, ours_arm) if r > 0 else 1
                 # SMALL ROWS: the hash is the first call's output, taken before the rest of the calls (one call:
                 # after the memory probe, as before)
                 digest = _digest(inf.outputs()) if n_calls > 1 else None
@@ -2787,8 +2785,6 @@ def worker(args):
                     inf.call()
                     inf.sync()
                     calls.append((time.perf_counter() - t0) * 1000.0)
-                if r == 0:
-                    warm_infer_ms = ms
                 infer_calls_rec = small.spread(calls) if r > 0 else None
                 if infer_calls_rec is not None:
                     ms = infer_calls_rec["ms"]
