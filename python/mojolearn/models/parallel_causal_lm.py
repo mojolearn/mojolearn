@@ -106,12 +106,6 @@ class ParallelCausalLM(CausalLM):
     # The inherited public methods enter the shared native owner; remote
     # layer dispatch is cached as a compiled entry in _native_entries.
 
-    def _generate_resident(self, ids, n_new, total, last_logits=None):
-        # Blocks and decode handles belong to remote worker processes. The
-        # parent's single-process resident loop cannot consume those handles;
-        # The shared native generation loop drives the remote owners.
-        return _native_parallel_causal("resident", (self, ids, n_new, total, last_logits))
-
     def __init__(self, plan, weights, *, layer_devices, **kwargs):
         return _native_parallel_causal("init", (self, plan, weights, layer_devices, kwargs), _CAUSAL_CONTEXT)
 

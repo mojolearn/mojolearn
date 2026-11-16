@@ -254,9 +254,40 @@ def test_checkpoint_follows_the_sharded_index():
                 a = ck.read(name)
                 assert a.shape == shape and a.tobytes() == raw
             assert "model.layers.1.mlp.up_proj.weight" in ck
+            # Loader internals the verify lane hf-model-surface held until
+            # 2026-11-16 (it now reads through the public surface): one
+            # SafetensorsFile per shard, opened once and reused.
+            for name in tensors:
+                f = ck.info(name).file
+                assert ck._file(f) is ck._file(f)
+                assert ck._file(f).read(name).tobytes() == ck.read(name).tobytes()
         single = _write_checkpoint(os.path.join(d, "s"), cfg, tensors, shards=1)
         with Checkpoint.open(single) as ck:
             assert len(ck.names()) == len(tensors)
+        # The single file's map is the whole file, byte for byte.
+        path = os.path.join(single, "model.safetensors")
+        with open(path, "rb") as handle:
+            whole = handle.read()
+        sf = SafetensorsFile(path)
+        try:
+            assert bytes(sf._map()) == whole
+        finally:
+            sf.close()
+        # CausalLM._read_weights returns the checkpoint's top-level tensors
+        # and the layer maps the plan names, the dict CausalLM(plan, weights)
+        # takes.
+        plan = plan_for(HFConfig(cfg))
+        with Checkpoint.open(single) as ck:
+            weights = CausalLM._read_weights(ck, plan, "float32")
+        assert weights["embed"].tobytes() == tensors[plan.embed_name][2]
+        for key, name in (("norm", plan.norm_name), ("head", plan.head_name)):
+            if name is not None:
+                assert weights[key].tobytes() == tensors[name][2]
+        assert len(weights["layers"]) == plan.n_layers
+        for i, layer in enumerate(weights["layers"]):
+            for key, name, rows in plan.layer_weights(i):
+                if rows is None:
+                    assert layer[key].tobytes() == tensors[name][2]
         with pytest.raises(FileNotFoundError):
             Checkpoint.open(os.path.join(d, "missing"))
 

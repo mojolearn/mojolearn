@@ -18,8 +18,8 @@ generate  what a user who passes nothing gets from `generate` against what
           fp32_v1 gave them (the maintainer's condition before the merge):
           a 512-token prompt at B=1, N new tokens, (a) the default model
           (fp32_v1) and (b) a model loaded with
-          numeric_profile="fp32_v1" (its resident session where the binding
-          has one; which route ran is recorded). One untimed call each, then
+          numeric_profile="fp32_v1", both through the default `generate`
+          route (the decode program). One untimed call each, then
           the two alternate, R rounds; medians. Every timed call's ids are
           hashed after the clock and must agree within each arm.
 """
@@ -115,18 +115,6 @@ def main():
     if "generate" in phases:
         v = lm.vocab_size
         prompt = Array.from_list(token_ids(1, 512, v, SEED + 7), "<i4")
-        routes = {}
-
-        def spy(model, name):
-            inner = model._generate_resident
-
-            def wrapped(*a, **k):
-                out = inner(*a, **k)
-                routes.setdefault(name, set()).add("resident" if out is not None else "per-layer")
-                return out
-            model._generate_resident = wrapped
-        spy(lm, "default")
-        spy(ref, "fp32_v1")
         times = {"default": [], "fp32_v1": []}
         hashes = {"default": [], "fp32_v1": []}
 
@@ -146,9 +134,9 @@ def main():
         for name in times:
             med = statistics.median(times[name])
             agree = len(set(hashes[name])) == 1
-            g[name] = {"median_s": med, "runs_s": times[name], "route": sorted(routes.get(name, ())),
+            g[name] = {"median_s": med, "runs_s": times[name],
                        "ids_sha256": hashes[name][0], "ids_agree": agree}
-            print(f"RESULT generate box={args.box} arm={name} route={'+'.join(g[name]['route'])} "
+            print(f"RESULT generate box={args.box} arm={name} "
                   f"prompt=512 new={args.new} median {med * 1000:.1f} ms ({med * 1000 / args.new:.2f} ms/token) "
                   f"runs {' '.join(f'{x * 1000:.1f}' for x in times[name])} ids {'AGREE' if agree else 'DISAGREE'} "
                   f"{hashes[name][0][:16]}", flush=True)

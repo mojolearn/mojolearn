@@ -1354,10 +1354,10 @@ def parallel_causal_call(mut mods: NativeModules, operation: String, args: Pytho
         var device = devices[0 if name == "embedding" else len(devices) - 1]
         var typed = _parallel_causal_typed(mods, name, args[2])
         return _parallel_causal_rpc(mods, owner, device, typed.request, typed.payload, captured)
-    elif operation == "resident":
-        # Existing remote layer handles cannot enter the single-process
-        # resident token loop. The shared native generation loop owns tokens.
-        return PythonObject(None)
+    # The "resident" operation (ParallelCausalLM._generate_resident, always
+    # None) is gone with the private name; `generate(..., resident=True)`
+    # refuses a layer-worker model in bindings/causal_lm_public_door.mojo
+    # (lane verify-open-sites, 2026-11-16).
     else:
         raise Error("ParallelCausalLM: unknown native operation " + operation)
     return PythonObject(None)

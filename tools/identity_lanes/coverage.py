@@ -1000,8 +1000,9 @@ def _(ml, X, yc, yr, Xh=None):
     fixture's first 24 bytes spelled in that alphabet. The text continuation is
     held byte for byte in the cell to the stream read two tokens at a time, to
     the decoded ids of `generate` on the encoded prompt, and across the three
-    tokenizers; on a build with the resident decode session,
-    `CausalLM._generate_resident` (`causal_lm_resident`) is held to `generate`.
+    tokenizers; on a model with resident decode sessions,
+    `CausalLM.generate(..., resident=True)` (`causal_lm_resident`) is held to
+    `generate`; a model without them must refuse it with `ValueError`.
     A text stream paused after one read, checkpointed with `state_dict` and
     resumed with `resume_generation` (the tokenizer's `vocab_fingerprint`) is
     held to the greedy text too, and `CausalLM.blocks` to the layer count.
@@ -1031,8 +1032,14 @@ def _(ml, X, yc, yr, Xh=None):
         stream = m.stream_text(text, HF_LM_NEW, tokenizer=from_json)
         pieces = [stream.read(2) for _ in range(-(-HF_LM_NEW // 2) + 1)]  # glue: bounded reads
         full = np.asarray(m.generate(A(np.ascontiguousarray(prompt)), HF_LM_NEW), dtype=np.int32)
-        resident = m._generate_resident(A(np.ascontiguousarray(prompt)), HF_LM_NEW,
-                                        prompt.shape[1] + HF_LM_NEW)
+        try:
+            resident = m.generate(A(np.ascontiguousarray(prompt)), HF_LM_NEW, resident=True)
+        except ValueError as error:
+            # The documented refusal of a model with no resident sessions (the
+            # CPU column; a profile or norm the sessions do not cover).
+            if "resident=True" not in str(error):
+                raise
+            resident = None
         # A text stream paused after one read, checkpointed (state_dict records
         # the tokenizer's vocab_fingerprint) and resumed with the same tokenizer
         # (resume_generation checks it) must continue the greedy text byte for
@@ -1052,7 +1059,7 @@ def _(ml, X, yc, yr, Xh=None):
     _same_bytes("decoded generate continuation", _hf_text(direct.decode(cont[0].tolist())),
                 "generate_text", _hf_text(greedy))
     if resident is not None:
-        _same_bytes("CausalLM._generate_resident", np.asarray(resident, dtype=np.int32),
+        _same_bytes("CausalLM.generate(resident=True)", np.asarray(resident, dtype=np.int32),
                     "CausalLM.generate", full)
     _same_bytes("stream_text resumed from state_dict", _hf_text(head + tail),
                 "generate_text", _hf_text(greedy))
@@ -1072,14 +1079,19 @@ def _(ml, X, yc, yr, Xh=None):
     plan with `layer_weights` and `checkpoint_names` (`model_plan_init`,
     `model_layer_weights`, `model_checkpoint_names`), `TensorInfo` built by
     hand from each header entry with `nbytes` and `size` (`tensor_info_init`,
-    `tensor_info_size`), `SafetensorsFile._map` (`safetensors_map`),
-    `Checkpoint._file` on a shard (`checkpoint_file`),
-    `CausalLM._read_weights` (`causal_model_read_weights`) and `CausalLM(plan,
-    weights)` with a column-major head (`causal_model_init`,
+    `tensor_info_size`), `SafetensorsFile.read` of every tensor (through the
+    file's map, `safetensors_map`), each shard opened as its own
+    `SafetensorsFile` and read against `Checkpoint.read`, the weights
+    `CausalLM.load` read (`causal_model_read_weights`), back through
+    `parameters()` and assembled by `ModelPlan.layer_weights`, and
+    `CausalLM(plan, weights)` with a column-major head (`causal_model_init`,
     `causal_lm_gather_f32`). The tensors are the fixture's own bytes (F32
     values, F16 bit patterns). Parts: the config as JSON text, the plan
-    table, the header table, the mapped file bytes, the shard reads, the
-    top-level weights read, both models' logits and the flags."""
+    table, the header table, the single file's tensor reads, the shard reads,
+    the top-level weights read, both models' logits and the flags. The
+    loader internals (`SafetensorsFile._map`, `Checkpoint._file` and its
+    one-handle-per-shard cache, `CausalLM._read_weights`) stay private and
+    are held by python/mojolearn/tests/test_models_loader.py."""
     from mojolearn import _causal_lm_fixtures as fx
     d = _coverage_digester(ml)
     M = ml.models
@@ -1107,8 +1119,18 @@ def _(ml, X, yc, yr, Xh=None):
             rebuilt = [st.TensorInfo(t.name, t.dtype, t.shape, t.begin, t.end, t.file) for t in infos]  # glue: by hand
             header = "|".join(f"{t.name},{t.dtype},{t.shape},{t.begin},{t.end},{t.nbytes},{t.size}"
                               for t in rebuilt)
-            mapped = np.frombuffer(bytes(sf._map()), dtype=np.uint8).copy()
-            shard_bytes = np.concatenate([_hf_bytes(ck._file(ck.info(n).file).read(n)) for n in names])
+            mapped = np.concatenate([_hf_bytes(sf.read(n)) for n in names])  # glue: one read per tensor
+            shard_files = {}
+            try:
+                for n in names:  # glue: one public file per shard
+                    f = ck.info(n).file
+                    if f not in shard_files:
+                        shard_files[f] = st.SafetensorsFile(os.path.join(many, os.path.basename(f)))
+                shard_bytes = np.concatenate([_hf_bytes(shard_files[ck.info(n).file].read(n)) for n in names])
+                n_shard_files = len(shard_files)
+            finally:
+                for f in shard_files.values():
+                    f.close()
             whole_bytes = np.concatenate([_hf_bytes(ck.read(n)) for n in names])
             flags = np.asarray([
                 built.model_type == loaded.model_type == "llama",
@@ -1123,7 +1145,7 @@ def _(ml, X, yc, yr, Xh=None):
                 all(copy.layer_weights(i) == plan.layer_weights(i) for i in range(plan.n_layers)),
                 all((a.nbytes, a.size) == (b.nbytes, b.size) for a, b in zip(infos, rebuilt)),
                 _hf_refused(lambda: st.TensorInfo("t", "F32", (4,), 0, 15, "f"), "bytes differ"),
-                ck._file(ck.info(names[0]).file) is ck._file(ck.info(names[0]).file),
+                n_shard_files == 2,
                 shard_bytes.tobytes() == whole_bytes.tobytes(),
             ], dtype=np.int64)
         finally:
@@ -1132,11 +1154,17 @@ def _(ml, X, yc, yr, Xh=None):
         lcfg, ltensors = fx.family_fixture("llama", False)
         root = fx._write_checkpoint(os.path.join(tmp, "llama"), lcfg, ltensors)
         lplan = M.plan_for(M.HFConfig.from_json(root))
-        lck = st.Checkpoint.open(root)
-        try:
-            weights = M.causal_lm.CausalLM._read_weights(lck, lplan, "float32")
-        finally:
-            lck.close()
+        # The weights the loader read, back through the public parameters()
+        # (the constructor keeps their bytes), in the constructor's layout.
+        params = M.causal_lm.CausalLM.load(root, numeric_profile="fp32_v1").parameters()
+        weights = {"embed": params[lplan.embed_name],
+                   **{k: params[n] for k, n in (("norm", lplan.norm_name), ("head", lplan.head_name))
+                      if n is not None},  # glue: the two optional top-level tensors
+                   "layers": [{key: (params[name] if rows is None else
+                                     ml.Array.from_buffer(np.ascontiguousarray(
+                                         np.asarray(params[name], dtype=np.float32)[rows[0]:rows[1]])))
+                               for key, name, rows in lplan.layer_weights(i)}
+                              for i in range(lplan.n_layers)]}  # glue: driver over layers
     top = np.concatenate([np.asarray(weights[k], dtype=np.float32).reshape(-1)
                           for k in ("embed", "norm", "head") if weights.get(k) is not None])
     # The read weights assembled into a model twice: as read, and with the

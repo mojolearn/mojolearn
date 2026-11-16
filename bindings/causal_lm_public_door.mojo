@@ -2167,6 +2167,37 @@ def causal_lm_resident_binding(model: PythonObject, value: PythonObject, maximum
     return causal_lm_resident_binding(mods, model, value, maximum, last_logits, supplied_state)
 
 
+def _generate_resident_requested(args: PythonObject) raises -> Bool:
+    # `CausalLM.generate(..., resident=...)`: the fifth argument of the public
+    # generate call (lane verify-open-sites, 2026-11-16; was the private
+    # `CausalLM._generate_resident`). One tuple read and one type identity per
+    # generate call, against the builtins resolved once in GENERATION_BOUNDARY.
+    if len(args) < 5:
+        return False
+    var flag = args[4]
+    if py_type(flag) is not GENERATION_BOUNDARY.get_or_create_ptr()[].bi.bool:
+        raise Error("TypeError: generation: resident must be bool")
+    return Bool(py=flag)
+
+
+def causal_lm_generate_resident_binding(mut mods: NativeModules, model: PythonObject, value: PythonObject, maximum: PythonObject, options: PythonObject) raises -> PythonObject:
+    """`generate(..., resident=True)`: the resident decode sessions of
+    `causal_lm_resident_binding`, fresh caches, no last-logits output. The
+    route decodes greedily to `max_new_tokens`; sampling and EOS stopping
+    are refused rather than ignored, and a model without resident sessions
+    (CPU, a profile or norm the sessions do not cover, layer workers) is
+    refused, never routed elsewhere."""
+    if py_get(model._native_entries, "parallel_call") is not None:
+        raise Error("generation: resident=True runs in one process; ParallelCausalLM layers decode in their workers")
+    var bi = GENERATION_BOUNDARY.get_or_create_ptr()[].bi
+    if len(options) != 7 or py_type(options[0]) is not bi.bool or not Bool(py=options[0]) or options[5] is not None:
+        raise Error("generation: resident=True decodes greedily to max_new_tokens; it takes greedy=True and no eos_token_id")
+    var result = causal_lm_resident_binding(mods, model, value, maximum, PythonObject(None), PythonObject(None))
+    if result is None:
+        raise Error("generation: resident=True needs a GPU model whose numeric profile and norm have resident decode sessions")
+    return result
+
+
 struct GenerationHandle(Movable, Writable):
     var model: PythonObject
     var state: PythonObject
@@ -3424,7 +3455,10 @@ def _causal_public_execute[operation: Int](py_self: PyObjectPtr, args_ptr: PyObj
         elif operation == 6:
             result = causal_lm_info_binding(mods, args[0], stream_native)
         elif operation == 7:
-            result = causal_lm_generate_binding(mods, model, args[1], args[2], options)
+            if _generate_resident_requested(args):
+                result = causal_lm_generate_resident_binding(mods, model, args[1], args[2], options)
+            else:
+                result = causal_lm_generate_binding(mods, model, args[1], args[2], options)
         elif operation == 8:
             result = causal_lm_text_stream_binding(mods, model, args[1], args[2], args[3], options)
         elif operation == 9:

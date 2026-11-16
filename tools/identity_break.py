@@ -3496,10 +3496,9 @@ def _(ml, X, yc, yr, Xh=None):
     record ran the shipped profile or `byte-lm-resident`'s one block.
 
     THE PARTS. `profiles` is what the COMPILED side calls each shape, read
-    back through the binding's `byte_lm_config_profile` (the GPU binding
-    computes it natively; on a CPU column `_byte_lm_trainer_host.py` routes
-    it to the host binding's `byte_lm_host_profile`), so the cell records the
-    native name and not Python's. `derived` is the config's own integer
+    back through the public `LanguageModelInference.profile` (the profile
+    the host binding that runs the forward computes; the lane is host-only),
+    so the cell records the native name and not the config's. `derived` is the config's own integer
     table -- the native shape, every offset, n_total, n_tensors and every
     parameter shape -- which is what a checkpoint reader and a weight packer
     both index with. `logits`, `loss` and `next` are a real forward at each
@@ -3531,11 +3530,9 @@ def _(ml, X, yc, yr, Xh=None):
     is kept because it is the part a user reads, and because a real defect in
     the shape arithmetic would move it; it is not evidence of anything on its
     own."""
-    B = ml._backend.binding("_mojolearn_byte_lm", "identical")
     profiles, derived, logits, losses, nexts, flags = [], [], [], [], [], []
     for kw in LM_CONFIG_SHAPES:
         cfg = ml.LanguageModelConfig(**kw)
-        profiles.append(str(B.byte_lm_config_profile(list(cfg.native_shape))))
         derived.extend(cfg.native_shape)
         derived.extend(cfg.offsets)
         derived.extend((cfg.n_total, cfg.n_tensors, len(cfg.parameter_names)))
@@ -3543,6 +3540,7 @@ def _(ml, X, yc, yr, Xh=None):
             derived.extend((len(shp),) + tuple(shp))
         _, flat = _byte_lm_params(cfg)
         m = ml.LanguageModelInference(flat, shape=cfg, threaded=False)
+        profiles.append(str(m.profile))
         ids = _ids(X, cfg.batch, cfg.length + 1, vocab=cfg.vocab_size)
         logits.append(np.asarray(m.logits(ids[:, :-1])).reshape(-1))
         losses.append(np.uint32(m.loss_bits(ids)))
@@ -3567,7 +3565,8 @@ def _(ml, X, yc, yr, Xh=None):
         # `require_shape` and `state_shape` are held there too: they are not
         # on the public surface, so they are a test and not a cell.
         ml.LanguageModelConfig is ml.ByteLanguageModelConfig,
-        default.profile == str(B.byte_lm_config_profile(list(default.native_shape))),
+        default.profile == str(ml.LanguageModelInference(_byte_lm_params(default)[1], shape=default,
+                                                          threaded=False).profile),
         _refused(lambda: ml.LanguageModelInference(np.zeros(3, dtype=np.float32),
                                                    shape=ml.LanguageModelConfig(**LM_CONFIG_SHAPES[0])),
                  "parameters must be float32"),
