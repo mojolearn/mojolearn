@@ -28,7 +28,7 @@ refuses is refused here in the same sentence), `_refuse_shape`
 (`:165-175`), the `max_iterations` bound, `_predict_into`'s start and end
 checks (`:422-433`) and the forecast's `n_steps` bound (`:536-540`). After
 it, `arima_host_refuse_unrestated` refuses by name the parameter values
-whose arms the host file does not restate (p, q or P above 1, any Q, d + D
+whose arms the host file does not restate (p, q, P or Q above 1, d + D
 of 2, p + q + k of 0). Since 2026-09-15 `arima_predict` answers an in-sample
 prediction (`start < n_obs`) through `arima_host_predict`, from
 `bindings/arima_host_predict.mojo`, which the forecast inference binding

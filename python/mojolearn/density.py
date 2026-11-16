@@ -522,8 +522,8 @@ class KernelDensity(NumericModeMixin):
         return _NATIVE(self, "family_density_kde_score", (X,), _NATIVE_CONTEXT)
 
     def sample(self, n_samples=1, random_state=None):
-        """Not implemented; always raises ``NotImplementedError`` (cuML has
-        no ``sample`` either)."""
+        # Not implemented (the native owner refuses by name); listed in
+        # docs-site/api_exclude.txt, so it is omitted from the docs.
         return _NATIVE(self, "family_density_kde_sample", (n_samples, random_state), _NATIVE_CONTEXT)
 
     # npz layout (kde svc host lane, 2026-09-14): `x` <f4 as fitted, `weights` <f4 only when fit took

@@ -836,10 +836,6 @@ class KernelPCA(_XNeighbors):
         Independent term of the ``'poly'`` and ``'sigmoid'`` kernels.
     kernel_params : dict or None, default None
         Not supported; a non-empty value raises ``NotImplementedError``.
-    alpha : float, default 1.0
-        Accepted for scikit-learn compatibility; unused (no inverse transform).
-    fit_inverse_transform : bool, default False
-        Not supported; True raises ``NotImplementedError`` in ``fit``.
     eigen_solver : str, default 'auto'
         ``'auto'`` may use the iterative solver described above; any other
         value uses the dense solver.
@@ -946,8 +942,9 @@ class KernelPCA(_XNeighbors):
         return _KPCA_CALL(self, "transform", (X,), _KPCA_CONTEXT)
 
     def inverse_transform(self, X):
-        """Not supported: always raises ``NotImplementedError``."""
-        raise NotImplementedError("KernelPCA: inverse_transform needs fit_inverse_transform, which is not implemented")
+        # Not implemented; listed in docs-site/api_exclude.txt (omitted from the docs).
+        raise NotImplementedError("KernelPCA: inverse_transform() is not implemented (it needs the learned "
+                                  "pre-image map of fit_inverse_transform=True, which is not implemented)")
 
     def get_feature_names_out(self, input_features=None):
         """Output feature names: ``kernelpca0``, ``kernelpca1``, ...

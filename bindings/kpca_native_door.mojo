@@ -103,7 +103,7 @@ def kpca_fit(model: PythonObject, source: PythonObject, context: PythonObject) r
     if not py_contains(_kernels(context), kernel) and not precomputed:
         raise Error("NotImplementedError: KernelPCA: kernel=" + decomp_scalar_repr(kernel, context) + " is not implemented")
     if decomp_truth(_field(fields, "fit_inverse_transform"), context):
-        raise Error("NotImplementedError: KernelPCA: fit_inverse_transform is not implemented")
+        raise Error("NotImplementedError: KernelPCA: fit_inverse_transform=True is not implemented (the learned pre-image map that inverse_transform needs); construct KernelPCA with fit_inverse_transform=False")
     if decomp_truth(_field(fields, "kernel_params"), context):
         raise Error("NotImplementedError: KernelPCA: kernel_params is not implemented")
     var x = decomp_admit(source, "KernelPCA", context)

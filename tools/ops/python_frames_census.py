@@ -280,7 +280,7 @@ def cmd_inventory(args):
 
 class _Call:
     __slots__ = ("kind", "entry", "carg_name", "carg_self", "mids", "pre", "funcs", "n", "bindings", "bnames",
-                 "exempt", "imports", "exempt_root", "import_root")
+                 "exempt", "imports", "exempt_root", "import_root", "fallback")
 
     def __init__(self, kind, entry):
         self.kind, self.entry = kind, entry
@@ -291,6 +291,7 @@ class _Call:
         self.n = self.bindings = self.exempt = self.imports = 0
         self.bnames = collections.Counter()
         self.exempt_root = self.import_root = None
+        self.fallback = None   # (member ids, native reader) of a probe's own read (Census.open_member)
 
 
 def _new_stats():
@@ -563,8 +564,25 @@ class Census:
         call.funcs[self.key(code, frame)] += 1
         call.n += 1
 
+    def open_member(self, frame, mids, reader):
+        """Make a probe's own frame the entry of a call to `mids`. A Python accessor below it adopts the member as
+        any wrapper's child does (its own frame not counted). A property a class's NATIVE `__getattribute__`
+        serves (the native public attribute plans, e.g. ARIMA.ar_ .. sigma2_, Cholesky.logdet_, SVC.coef_) runs
+        no Python frame and no C call the profiler sees: until 2026-11-16 such a read was never a call, and the
+        members stayed UNCOVERED although every probe of them succeeded (lane cpu-surface-defects). `finish`
+        now credits the read to `mids`, with that native reader as its one binding call."""
+        call = self.call = _Call("py", frame)
+        call.fallback = (mids, reader)
+
     def finish(self, call):
         self.call = self.suspended.pop() if self.suspended else None
+        if call.mids is None and call.fallback is not None:
+            call.mids, reader = call.fallback
+            if reader is not None and call.n == 0 and call.bindings == 0:
+                # the class's native __getattribute__ (a compiled descriptor the package installed) is the one
+                # native call the read made; its type names it
+                call.bindings = 1
+                call.bnames[f"{type(reader).__module__}.{type(reader).__qualname__} (native __getattribute__)"] += 1
         if call.mids is None:
             for k in call.pre:
                 self.unattributed[k] += 1
@@ -687,8 +705,22 @@ def _probe_members(census, record, done):
                        key=lambda a: (a in _PROBE_LAST, a))
         for attr in names:
             if cls["attrs"][attr] == "property":
-                def operation(target=target, attr=attr):
-                    getattr(target, attr)
+                # The class's own __getattribute__ when it is not a Python function: the native reader that
+                # serves the property without a Python frame (Census.open_member).
+                try:
+                    reader = inspect.getattr_static(type(target), "__getattribute__")
+                except AttributeError:
+                    reader = None
+                if isinstance(reader, types.FunctionType) or reader is object.__getattribute__:
+                    reader = None
+
+                if reader is None:   # a Python accessor runs: attributed by its own frame, as before
+                    def operation(target=target, attr=attr):
+                        getattr(target, attr)
+                else:
+                    def operation(target=target, attr=attr, mids=[f"{cid}.{attr}"], reader=reader):
+                        census.open_member(sys._getframe(), mids, reader)
+                        getattr(target, attr)
             else:
                 try:
                     operation = getattr(target, attr)

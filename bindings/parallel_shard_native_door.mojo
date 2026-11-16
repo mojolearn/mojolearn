@@ -1534,8 +1534,12 @@ def parallel_shard_call(operation: String, args: PythonObject) raises -> PythonO
     if operation == "holder_close":
         if py_type(args[0]) is not _t("reference_driver_class") and py_type(args[0]) is not _t("query_driver_class"):
             raise Error("TypeError: parallel driver requires its exact connected class")
-        var pool = py_fields(args[0])["_pool"]
-        if not Bool(py=pool["closed"]):
+        # A construction that failed (every refusal of _holder_init runs
+        # before `_pool` is stored, and a failed _pool_open stores none) has
+        # no pool: close is safe and idempotent there, as _ivf_close is
+        # (cpu-surface-defects, 2026-11-16).
+        var pool = py_get(py_fields(args[0]), PythonObject("_pool"), PythonObject(None))
+        if pool is not None and not Bool(py=pool["closed"]):
             process_pool_close(pool)
         return PythonObject(None)
     if operation == "ivf_init":
