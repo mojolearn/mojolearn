@@ -322,6 +322,7 @@ def run_case(unit: Int) raises:
                 _refuses(problem, "needs a resident binding")
         _ = m
         _ = u
+        _ = sv
         _ = vt
     elif unit == 32:
         _device_refuses(XD_DEV_LU_FACTOR, 4, 4, 0, HOST_ONLY)

@@ -199,7 +199,11 @@ def case_maxpool2d_forward() raises:
     var idx: List[Int32] = [-1]
     require(_call(XC_MAXPOOL2D_FORWARD, [_f32(x), _f32(y), _i32(idx)], _pool_words()) == 1, "maxpool forward count")
     _same(y, [4.0], "maxpool 2x2 forward")
+    # idx is written by the entry: without this its last named use is the
+    # `_i32(idx)` argument and the entry writes freed heap (Mojo frees a local
+    # at its last named use), corrupting the allocator for the other cases.
     _ = x
+    _ = idx
 
 def case_maxpool2d_backward() raises:
     var x: List[Float32] = [1.0, 4.0, 2.0, 3.0]
@@ -213,6 +217,7 @@ def case_maxpool2d_backward() raises:
     _ = x
     _ = y
     _ = g
+    _ = idx
 
 def case_avgpool2d_forward() raises:
     var x: List[Float32] = [1.0, 4.0, 2.0, 3.0]
