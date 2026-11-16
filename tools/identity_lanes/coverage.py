@@ -1000,8 +1000,9 @@ def _(ml, X, yc, yr, Xh=None):
     fixture's first 24 bytes spelled in that alphabet. The text continuation is
     held byte for byte in the cell to the stream read two tokens at a time, to
     the decoded ids of `generate` on the encoded prompt, and across the three
-    tokenizers; on a build with the resident decode session,
-    `CausalLM._generate_resident` (`causal_lm_resident`) is held to `generate`.
+    tokenizers; on a model with resident decode sessions,
+    `CausalLM.generate(..., resident=True)` (`causal_lm_resident`) is held to
+    `generate`; a model without them must refuse it with `ValueError`.
     A text stream paused after one read, checkpointed with `state_dict` and
     resumed with `resume_generation` (the tokenizer's `vocab_fingerprint`) is
     held to the greedy text too, and `CausalLM.blocks` to the layer count.
@@ -1031,8 +1032,14 @@ def _(ml, X, yc, yr, Xh=None):
         stream = m.stream_text(text, HF_LM_NEW, tokenizer=from_json)
         pieces = [stream.read(2) for _ in range(-(-HF_LM_NEW // 2) + 1)]  # glue: bounded reads
         full = np.asarray(m.generate(A(np.ascontiguousarray(prompt)), HF_LM_NEW), dtype=np.int32)
-        resident = m._generate_resident(A(np.ascontiguousarray(prompt)), HF_LM_NEW,
-                                        prompt.shape[1] + HF_LM_NEW)
+        try:
+            resident = m.generate(A(np.ascontiguousarray(prompt)), HF_LM_NEW, resident=True)
+        except ValueError as error:
+            # The documented refusal of a model with no resident sessions (the
+            # CPU column; a profile or norm the sessions do not cover).
+            if "resident=True" not in str(error):
+                raise
+            resident = None
         # A text stream paused after one read, checkpointed (state_dict records
         # the tokenizer's vocab_fingerprint) and resumed with the same tokenizer
         # (resume_generation checks it) must continue the greedy text byte for
@@ -1052,7 +1059,7 @@ def _(ml, X, yc, yr, Xh=None):
     _same_bytes("decoded generate continuation", _hf_text(direct.decode(cont[0].tolist())),
                 "generate_text", _hf_text(greedy))
     if resident is not None:
-        _same_bytes("CausalLM._generate_resident", np.asarray(resident, dtype=np.int32),
+        _same_bytes("CausalLM.generate(resident=True)", np.asarray(resident, dtype=np.int32),
                     "CausalLM.generate", full)
     _same_bytes("stream_text resumed from state_dict", _hf_text(head + tail),
                 "generate_text", _hf_text(greedy))

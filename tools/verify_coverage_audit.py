@@ -1384,7 +1384,7 @@ NEW_LANE_PURPOSE = {
                                     "the live-column compaction (`x_decomp_order_small`, `x_decomp_dev_order_small`)",
     "saved-model-host-infer-trees": "HostForest and host_predict on saved Extra Trees and default-engine random "
                                     "forest regressors: `forest_host_et_predict`, `forest_host_rf_predict_reg`",
-    "hf-causal-lm-text": "CausalLM.generate_text, stream_text and _generate_resident with a tokenizer from "
+    "hf-causal-lm-text": "CausalLM.generate_text, stream_text and generate(resident=True) with a tokenizer from "
                          "`Tokenizer(...)` and `Tokenizer.from_pretrained` (file and directory): "
                          "`causal_lm_generate_text`, `causal_lm_text_stream`, `causal_lm_resident`, "
                          "`vocab_pretrained` -> `vocab_json_public` -> `vocab_spelled_public`",
