@@ -23,7 +23,15 @@
 #              nothing, --smoke covers only NOT APPLICABLE lanes, --cross-check refuses on a CPU-only install), so
 #              the harness runs directly; --no-batch --no-rlpair stamp each JSON partial_column, which
 #              _verify_reference.admit() refuses: nothing here can become a record.
-#   test-deps  pytest (pinned like tools/cpu_wheel_checks.sh), scipy, scikit-learn, added AFTER (a)-(c)
+#   test-deps  pytest (pinned like tools/cpu_wheel_checks.sh), scipy, scikit-learn, and the boundary/adapter test
+#              dependencies SMOKE_EXTRAS (pinned: CPU torch with onnx and onnxscript, the `mojolearn-core[torch]`
+#              extra; pandas), added AFTER (a)-(c) so those still run on the core wheel + numpy alone. The
+#              extras are DOWNLOADED in the background from the start of `install` (extras-download.log, its own
+#              SUMMARY line, not a verdict step), in parallel with the install, imports, selftest, lanes and
+#              frames steps, so test-deps only installs local files. MAX (`mojolearn-core[max]`) is not added: its
+#              cp312 manylinux_2_34 wheel would install here, but it pulls max-core and the Mojo compiler, the CPU
+#              core wheel refuses the framework adapters by design and no test imports max
+#              (verify-fixtures-env, 2026-11-16).
 #   frames     (e) the Python frames census (tools/ops/python_frames_census.py): the Python that runs inside every
 #              public call, with verify's own fixtures, one process per public class and per CPU lane;
 #              OUT/python-frames/census.tsv and the totals in SUMMARY.txt. Reports; gates nothing (always rc=0)
@@ -48,6 +56,11 @@ SOURCE_ROOT=${SOURCE_ROOT:-$(cd "$HERE/../.." && pwd)}
 PY=${PYTHON:-python3}
 VENV=${VENV:-$(mktemp -d)/venv}
 STEPS=${STEPS:-install,imports,selftest,lanes,frames,test-deps,tests}
+#: the pandas and torch boundary tests and the torch adapter tests (python/mojolearn/tests: 20 files importorskip
+#: pandas, 14 torch, 2 onnx); torch is the CPU build of the pin packaging/adapters/pins.json names (2.13)
+SMOKE_EXTRAS=${SMOKE_EXTRAS:-"torch==2.13.0+cpu onnx==1.18.0 onnxscript==0.5.6 pandas==2.2.3"}
+TORCH_CPU_INDEX=https://download.pytorch.org/whl/cpu
+EXTRAS_DIR="$(dirname "$VENV")/extras-wheels"
 HELPER="$PY $HERE/wheel_verify_smoke.py"
 : > "$OUT/SUMMARY.txt"
 
@@ -68,6 +81,14 @@ VPY="$VENV/bin/python"
 want() { case ",$STEPS," in *",$1,"*) return 0 ;; *) return 1 ;; esac; }
 mem() { [ -n "${MEMORY_FROM:-}" ] && [ -f "$MEMORY_FROM/$1/results.tsv" ] && echo "--memory-from $MEMORY_FROM/$1/results.tsv"; }
 
+extras_pid=""
+if want test-deps && [ -n "$SMOKE_EXTRAS" ]; then
+  # network-bound and one process: it overlaps the core steps, which keep every core busy
+  # shellcheck disable=SC2086
+  $HELPER step --out "$OUT" --name extras-download -- "$PY" -m pip download --disable-pip-version-check --no-input \
+    -q --dest "$EXTRAS_DIR" --extra-index-url "$TORCH_CPU_INDEX" $SMOKE_EXTRAS > /dev/null &
+  extras_pid=$!
+fi
 if want install && [ -e "$WHEEL" ]; then
   $HELPER step --out "$OUT" --name install -- bash -c \
     "'$PY' -m venv --clear '$VENV' && '$VPY' -m pip install --disable-pip-version-check --no-input -q --no-cache-dir '$WHEEL' numpy && '$VPY' -m pip list --disable-pip-version-check --format=freeze"
@@ -76,8 +97,11 @@ want imports && $HELPER imports --python "$VPY" --out "$OUT" $(mem imports)
 want selftest && $HELPER step --out "$OUT" --name selftest --timeout 900 -- "$VPY" -I -m mojolearn verify --self-test
 want lanes && $HELPER lanes --python "$VPY" --out "$OUT" --commit "${SOURCE_COMMIT:-}" $(mem lanes)
 want frames && $HELPER frames --python "$VPY" --out "$OUT" $(mem python-frames)
+[ -n "$extras_pid" ] && wait "$extras_pid"
+# shellcheck disable=SC2086
 want test-deps && $HELPER step --out "$OUT" --name test-deps -- "$VPY" -m pip install --disable-pip-version-check \
-  --no-input -q --no-cache-dir pytest==8.3.5 scipy scikit-learn
+  --no-input -q --no-cache-dir --find-links "$EXTRAS_DIR" --extra-index-url "$TORCH_CPU_INDEX" \
+  pytest==8.3.5 scipy scikit-learn $SMOKE_EXTRAS
 want tests && $HELPER tests --python "$VPY" --out "$OUT" --tests-root "$SOURCE_ROOT/python/mojolearn/tests" $(mem tests)
 
 # the verdict: every step named in STEPS must have a line, and every line rc=0
