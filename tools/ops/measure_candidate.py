@@ -5,7 +5,7 @@
 line of tools/ops/paper_compare_job.sh (lane measure-prep, 2026-11-09; docs/plans/PRE_0867_MEASUREMENT.md).
 
     python3 tools/ops/measure_candidate.py stage nvidia|amd --version V --source-commit SHA [--wheel-dir DIR]
-        [--lane LANE] [--tree DIR] [--b-arm NAME=DIR@SHA ...] [--tag TAG] [--dry-run]
+        [--lane LANE] [--tree DIR] [--b-arm NAME=DIR@SHA ...] [--tag TAG] [--parts PARTS] [--dry-run]
 
 The wheels are the ones tools/release.py packs (its linux-pack step, Release.split_final): for a candidate build
 (`tools/release.py candidate`, a local version X.Y.Z.devN+<sha12>[.label]) ~/mojolearn-evidence/release-candidates/
@@ -35,6 +35,16 @@ Before any copy it also (fix lane tooling-measure-stage, 2026-11-13, after the m
     The pins are the candidate's full source tree's bench/results/dataset_store/manifest.tsv
     (<work dir>/source/<commit12>/, written by tools/release.py candidate; --source-tree overrides), since the lean
     tooling worktree has no bench/results/. A file already on the box at its pins is kept, not refetched.
+    The keys follow --parts (PC_PARTS of the job, carried on the submit line; harness-small-row, 2026-11-16, after
+    two board-all submits died on corpus/enwik8 and corpus/pile_github): the paper parts read the paper recipes'
+    and owed rows' datasets; board-all (or any all-* part; that block exits before the paper parts) reads the full
+    board's, from the same planner call the job's all-plan makes (tools/paper_compare.py plan_all) through the same
+    data_keys, so the algos corpus keys (staged under <tree>/training/corpus/ on the box) are in the list.
+
+PARALLEL PLAN (HARD RULE, 2026-11-07): this tool plans and copies; it runs no workload. The planner call is CPU,
+seconds, one process. The dataset staging is one tools/dataset_store.sh stage call over every key (its downloads run
+on the box). The wheel copies are a few files through the wrapper. Nothing here is split further because nothing here
+is a unit of work worth a core: the measurement's parallel plan is tools/ops/paper_compare_job.sh's.
 
 A restage never moves a tree a job is reading (fix lane fix-board-quality-scorers, 2026-11-13: a restage during job
 0001 synced /root/mojolearn-<lane> under it and bench_board stopped with "source changed during measurement").
@@ -140,11 +150,38 @@ def check_b_arms(names, owed_file):
         raise SystemExit(f"measure-candidate: --b-arm {', '.join(dup)} given twice")
 
 
-def dataset_keys(vendor, owed_file, recipes_file, planner_file, b_names=(), last_prior=False):
-    """The R2 keys the job's races read (tools/measure_owed.py data_keys: the board's own data_needs over the owed rows
-    the job plans for these B sets and this prior choice, the rule the job's plan uses)."""
-    keys = MO.data_keys(PC.load_json(owed_file), PC.load_json(recipes_file), MO.load_planner(str(planner_file)),
-                        vendor, DATA_ROOT, list(b_names), last_prior)
+#: tools/ops/paper_compare_job.sh's parts: its default (the paper job) and the full-board screen's (board-all expands
+#: to the all-* parts; that block exits before the paper parts run)
+PAPER_PARTS = ("plan", "install", "smoke", "board", "prior", "owed", "drivers", "compare")
+ALL_PARTS = ("board-all", "all-plan", "all-install", "all-smoke", "all-board", "all-prior", "all-compare")
+
+
+def parse_parts(text):
+    """[part] of a PC_PARTS value ('' = the job's default, the paper parts); refuses a name the job does not know."""
+    parts = [p for p in (text or "").split(",") if p]
+    bad = [p for p in parts if p not in PAPER_PARTS + ALL_PARTS]
+    if bad:
+        raise SystemExit(f"measure-candidate: --parts {','.join(bad)} is not a part of tools/ops/paper_compare_job.sh "
+                         f"({','.join(PAPER_PARTS + ALL_PARTS)})")
+    return parts
+
+
+def runs_board_all(parts):
+    return any(p in ALL_PARTS for p in parts)
+
+
+def dataset_keys(vendor, owed_file, recipes_file, planner_file, b_names=(), last_prior=False, parts=()):
+    """The R2 keys the job's races read (tools/measure_owed.py data_keys: the board's own data_needs over the races
+    the job plans). The paper parts: the paper recipes and the owed rows the job plans for these B sets and this prior
+    choice. board-all (any all-* part): every race the board plans (tools/paper_compare.py plan_all, the job's
+    all-plan), with the algos corpus keys."""
+    planner = MO.load_planner(str(planner_file))
+    if runs_board_all(parts):
+        races = PC.plan_all(planner, vendor)[4]
+        keys = MO.data_keys({"rows": []}, {"recipes": races}, planner, vendor, DATA_ROOT)
+    else:
+        keys = MO.data_keys(PC.load_json(owed_file), PC.load_json(recipes_file), planner, vendor, DATA_ROOT,
+                            list(b_names), last_prior)
     return [k for k, _ in keys]
 
 
@@ -301,10 +338,12 @@ def cmd_stage(a):
     prior_versions = [v for v in a.prior_versions.split(",") if v]
     if not prior_versions or any(not re.fullmatch(r"[0-9]+(\.[0-9]+)+[.a-z0-9]*", v) for v in prior_versions):
         raise SystemExit(f"measure-candidate: --prior-versions wants a comma list of releases, not {a.prior_versions!r}")
+    parts = parse_parts(a.parts)
     keys = dataset_keys(vendor, owed_file, recipes, planner if planner.is_file() else ROOT / "tools" / "bench_board.py",
-                        [n for n, _, _ in specs], prior_versions[-1] != PC.PAPER_VERSION)
+                        [n for n, _, _ in specs], prior_versions[-1] != PC.PAPER_VERSION, parts)
     ds_manifest = results_file("dataset_store/manifest.tsv", src, tree)
-    print(f"datasets the job reads ({vendor}): {' '.join(keys)} (pins {ds_manifest})")
+    print(f"datasets the job reads ({vendor}, parts {','.join(parts) or 'default'}): {' '.join(keys)} "
+          f"(pins {ds_manifest})")
     indir = f"{IN_BASE}/{commit[:12]}"
     uploads = [(w, f"{indir}/{vendor}/{w.name}", False) for w in wheels]
     b_lines = []
@@ -320,6 +359,8 @@ def cmd_stage(a):
     # release when it is not the paper baseline).
     env = {"PC_WHEEL_DIR": f"{indir}/{vendor}", "PC_SOURCE_COMMIT": commit,
            "PC_PRIOR_VERSIONS": ",".join(prior_versions), "PC_PRIOR_VERSION": prior_versions[-1]}
+    if parts:
+        env["PC_PARTS"] = ",".join(parts)     # the job runs the parts whose datasets were staged above
     allow_hw_diff = a.allow_hw_diff or os.environ.get("PC_ALLOW_HW_DIFF") == "1"
     if vendor == "nvidia" and allow_hw_diff:
         env["PC_ALLOW_HW_DIFF"] = "1"     # the job then runs on another GPU and every row is flagged HW-DIFF
@@ -498,6 +539,9 @@ def main(argv=None):
                    help="OUR prior releases the job installs from PyPI and times on the same box beside the candidate "
                         "(the compare's columns; a last entry other than the paper baseline is the last-release arm, "
                         f"which also times the owed board rows); default {DEFAULT_PRIOR_VERSIONS}")
+    s.add_argument("--parts", default="",
+                   help="the job's PC_PARTS (default: the job's own, the paper parts); board-all (or any all-* part) "
+                        "stages the full board's datasets instead of the paper's, and the submit line carries PC_PARTS")
     s.add_argument("--dry-run", action="store_true", help="validate locally and print every command; copy nothing")
     a = p.parse_args(argv)
     return cmd_stage(a)

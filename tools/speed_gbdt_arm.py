@@ -4662,10 +4662,10 @@ def run(lane, arms, data, n_rounds, size, dev=None, *, rotate_order=False,
     spent = {a.name: 0.0 for a in arms}
     last_model = {}
     operation_scores = {}
-    # SMALL ROWS (Andrew, 2026-11-15; tools/bench_board_small_rows.py): our arm's warm-up fit time decides how
-    # many consecutive fits its one scored run makes (20 under 10 ms, else 1); opponents always make one
+    # SMALL ROWS (Andrew, 2026-11-15; tools/bench_board_small_rows.py): our arm's FIRST SCORED fit time decides
+    # how many consecutive fits its one scored run makes (20 under 10 ms, else 1); opponents always make one.
+    # The warm-up does not decide (it carries start-up and kernel compilation, and the AFT queue skips it).
     small = _small_rows()
-    warm_ms = {}
 
     for arm in arms:
         emit_header(lane, arm.name, dev, n_rounds, size)
@@ -4694,7 +4694,6 @@ def run(lane, arms, data, n_rounds, size, dev=None, *, rotate_order=False,
                             " ".join(str(exc).split())))
             continue
         emit_warmup(lane, arm.name, data.tag, ms)
-        warm_ms[arm.name] = ms
         spent[arm.name] += ms / 1000.0
         last_model[arm.name] = model
         live.append(arm)
@@ -4762,7 +4761,7 @@ def run(lane, arms, data, n_rounds, size, dev=None, *, rotate_order=False,
                 digest = None
             # SMALL ROWS: the rest of the scored run's fits, after the first fit's outputs were scored and
             # hashed (same bits every fit); the accuracy below reads the last model, the same bits again
-            n_calls = small.calls_for(warm_ms.get(arm.name), arm.library == "mojolearn")
+            n_calls = small.calls_for(ms, arm.library == "mojolearn")
             calls = [ms]
             try:
                 for _ in range(1, n_calls):

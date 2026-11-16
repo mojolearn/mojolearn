@@ -145,6 +145,25 @@ class SameHostFlags(unittest.TestCase):
         md = PC.render_md(res)
         self.assertIn("0.8.66 ms | new/0.8.66", md)
 
+    def test_median_against_one_call_is_flagged(self):
+        """SCORING-MIXED (2026-11-16): the new cell is a median of 20 calls, the on-box 0.8.55 cell one call (its first
+        scored call was at or above 10 ms); the ratio is kept and the row says it compares a median with one call."""
+        cand = on_host(new_board(), HOST_A)
+        for c in cand["races"]["classical/kmeans/taxi/rows=full"]["cells"]:
+            if c["arm"] == "ours":
+                c.update(calls=20, scoring="median-of-calls", min_ms=120.0, max_ms=140.0)
+        res = PC.compare(self.doc, [cand], {}, prior_boards=[("0.8.55", ours_board({}, HOST_A, "0.8.55"))])
+        rows = {r["key"]: r for r in res["rows"]}
+        km = rows[KM]
+        self.assertIn("SCORING-MIXED", km["flags"])
+        self.assertEqual(km["flags"].count("SCORING-MIXED"), 1)     # the baseline and its prior column: one flag
+        self.assertAlmostEqual(km["ratio"], 1.3)
+        self.assertTrue(any(m.startswith("baseline: new median-of-calls") for m in km["scoring_mixed"]))
+        for key, r in rows.items():
+            if key != KM:
+                self.assertNotIn("SCORING-MIXED", r["flags"], key)   # one call against one call
+        self.assertIn("SCORING-MIXED", PC.render_summary(res))
+
     def test_a_row_the_prior_wheel_does_not_run_is_not_run_never_a_regression(self):
         base = ours_board({}, HOST_A, "0.8.55")
         del base["races"]["classical/kmeans/taxi/rows=full"]       # 0.8.55 failed its smoke for kmeans

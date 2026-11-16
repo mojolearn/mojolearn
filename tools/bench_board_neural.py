@@ -5527,14 +5527,13 @@ def worker(args):
     # peak memory per round, reset and read OUTSIDE the clock
     mem = _load("bench_board_probe").MemProbe((runner.info or {}).get("device", "gpu"),
         library=(runner.info or {}).get("library") or "?", arm=args.arm)
-    # SMALL ROWS (Andrew, 2026-11-15; tools/bench_board_small_rows.py): our warmup call's time decides how many
-    # consecutive calls the one scored run makes (20 under 10 ms, else 1). A lane whose call advances its
-    # state or consumes the next input (SMALL_ROW_STATEFUL_LANES) always makes one call: a repeat would not be
-    # the same operation on the same inputs. A lane whose warm-up is a different operation (PREDICT_LANES:
-    # the untimed fit) decides on its first scored call instead.
+    # SMALL ROWS (Andrew, 2026-11-15; tools/bench_board_small_rows.py): our FIRST SCORED call's time decides how
+    # many consecutive calls the one scored run makes (20 under 10 ms, else 1). The warmup does not decide: it
+    # carries CUDA start-up and kernel compilation (mamba3-forward: warmup 1051 ms, steady 5.7 ms). A lane
+    # whose call advances its state or consumes the next input (SMALL_ROW_STATEFUL_LANES) always makes one
+    # call: a repeat would not be the same operation on the same inputs.
     small = _load("bench_board_small_rows")
     small_ok = (runner.info or {}).get("library") == "mojolearn" and args.lane not in SMALL_ROW_STATEFUL_LANES
-    warm_ms = None
     for line in sys.stdin:
         parts = line.split()
         if not parts:
@@ -5567,7 +5566,7 @@ def worker(args):
                 # sub-clocks). One call: nothing below runs and the order is as before.
                 n_calls = 1
                 if r > 0 and small_ok:
-                    n_calls = small.calls_for(ms if args.lane in PREDICT_LANES else warm_ms, True)
+                    n_calls = small.calls_for(ms, True)
                 digest = runner.digest() if n_calls > 1 else None
                 calls = [ms]
                 for _ in range(1, n_calls):
@@ -5578,8 +5577,6 @@ def worker(args):
                     if extra and extra.get("clock_ms") is not None:
                         call_ms = float((runner.round_extra() or {}).get("clock_ms", call_ms))
                     calls.append(call_ms)
-                if r == 0:
-                    warm_ms = ms
                 calls_rec = small.spread(calls) if r > 0 else None
                 if calls_rec is not None:
                     ms = calls_rec["ms"]

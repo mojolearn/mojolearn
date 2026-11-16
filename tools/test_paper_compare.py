@@ -412,9 +412,15 @@ class JobScript(unittest.TestCase):
         self.assertEqual(self.run_job().returncode, 2)
         self.assertEqual(self.run_job("apple").returncode, 2)
         self.assertEqual(self.run_job("nvidia", "not-a-version").returncode, 2)
-        p = self.run_job("nvidia", "0.8.66")
+        p = self.run_job("nvidia", "0.8.67")
         self.assertEqual(p.returncode, 2)
         self.assertIn("box_persist_run.sh", p.stderr)
+        # published mode has no default version (Andrew, 2026-11-16: the only prior is 0.8.55; 0.8.66 is never timed)
+        p = self.run_job("nvidia", env={"PC_WHEEL_DIR": ""})
+        self.assertEqual(p.returncode, 2)
+        self.assertIn("published mode needs the version under test", p.stderr)
+        with open(self.JOB) as fh:
+            self.assertNotIn("VER=0.8.66", fh.read())
 
     def test_datasets_from_data_keys_and_smoke_scratch_pruned(self):
         # 2026-11-12/13: a hand-written dataset list missed higgs; smoke scratch and staging tarballs filled the pod
