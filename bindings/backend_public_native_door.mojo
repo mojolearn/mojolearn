@@ -336,9 +336,9 @@ def _bindings(fields: PythonObject, context: PythonObject, host_dir: String) rai
         else:
             suffix = String(py_call(text_type.removeprefix, PythonObject(last), PythonObject("_mojolearn_")))
         var vendor = PythonObject(None)
-        var fn = py_get(namespace, PythonObject(suffix + "_vendor"))
-        if fn is not None and py_type(fn) is context["native_function_type"]:
-            var read = _read(fn, context, True)
+        var vendor_entry = py_get(namespace, PythonObject(suffix + "_vendor"))
+        if vendor_entry is not None and py_type(vendor_entry) is context["native_function_type"]:
+            var read = _read(vendor_entry, context, True)
             if read is not None:
                 vendor = _text(read, "compiled vendor")
         var compiled = PythonObject(None)

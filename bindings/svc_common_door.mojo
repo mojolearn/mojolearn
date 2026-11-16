@@ -112,9 +112,9 @@ def svc_base(name: String, context: PythonObject) raises -> PythonObject:
     frame per decode / threshold / argmax / class-ratio step of every SVC
     fit and predict."""
     var key = PythonObject(name)
-    var fn = py_get(context["family_svc_native_cache"], key)
-    if fn is not None:
-        return fn
+    var cached = py_get(context["family_svc_native_cache"], key)
+    if cached is not None:
+        return cached
     return family_call(context["family_svc_native"], key)
 
 
