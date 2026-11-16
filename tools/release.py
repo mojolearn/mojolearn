@@ -912,9 +912,14 @@ def github_legs(ctx):
         # the tooling sha the measurement build recorded at its first launch (release_candidate.py): a resume
         # runs from a moved ref that still holds it (release_github_build.tooling_ref)
         tooling = getattr(getattr(ctx, "args", None), "candidate_tooling_sha", "") or ""
+        # a B arm against its base build: the units whose bytes are the base's get no shard job
+        # (release_reuse.unit_plan; the assemble job takes them from the binding cache)
+        plan = ctx.plan() if defines and callable(getattr(ctx, "plan", None)) else None
+        skip = release_reuse.skip_units(plan, vendor, arch) if plan else []
         legs.append(Leg(name, vendor, arch,
                         ["python3", "tools/release_github_build.py", "run", "--commit", ctx.commit,
                          "--arch", arch, "--out", str(out)] + (["--defines", defines] if defines else [])
+                        + (["--skip-units", " ".join(skip)] if skip else [])
                         + (["--ref", ref] if ref else []) + (["--tooling-sha", tooling] if tooling else []),
                         {}, rb, legs_dir, out))
     return legs
@@ -2848,7 +2853,9 @@ class Release(release_identity_wheels.IdentityOnWheels):
             if (doc and doc.get("schema") == release_reuse.PLAN_SCHEMA and doc.get("commit") == self.commit
                     and release_reuse.record_modes(doc) == self.release_modes
                     and (doc.get("candidate_defines") or "") == candidate_defines(self)
-                    and doc.get("linux_sets") == scoped_sets()):
+                    and doc.get("linux_sets") == scoped_sets()
+                    and bool((doc.get("previous") or {}).get("base")) == bool(self.candidate_base())
+                    and not (doc.get("previous") or {}).get("pending")):
                 if self.readonly:
                     self._plan = doc
                     return doc
@@ -2863,10 +2870,15 @@ class Release(release_identity_wheels.IdentityOnWheels):
             # wins when it reuses more (release_reuse.candidate_builds, Andrew 2026-10-15)
             self._plan = release_reuse.make_plan(self.commit, self.evidence / "release" / "identities",
                                                  builders_override=override or None, evidence_root=self.evidence,
-                                                 modes=self.release_modes, defines=candidate_defines(self))
+                                                 modes=self.release_modes, defines=candidate_defines(self),
+                                                 base=self.candidate_base())
             if scoped_sets():
                 self._plan["linux_sets"] = scoped_sets()   # a plan of other targets is not reused (above)
             return self._plan
+
+    def candidate_base(self):
+        """The base build a B arm reuses (tools/release_candidate.py, release_reuse.base_build), else None."""
+        return getattr(self.args, "candidate_base", None) or None
 
     def step_reuse_plan(self):
         plan = self.plan()
