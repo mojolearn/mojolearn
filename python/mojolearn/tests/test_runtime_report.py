@@ -15,10 +15,11 @@ from mojolearn._verify_native_runtime import audit_native_call
 
 FIELDS = {
     "version", "vendor", "vendor_how", "numeric_mode", "default_mode", "code_mode", "code_kind", "cpu_only",
-    "gpu_arch", "gpu_arch_how", "host_dir", "host_families_built", "bindings", "fallbacks",
+    "gpu_arch", "gpu_arch_how", "host_dir", "host_families_built", "host_paths", "bindings", "fallbacks",
     "harness_source", "source_commit", "checkout_root", "package_dir",
 }
-ROW_FIELDS = {"path", "expected_path", "loaded", "identity", "vendor", "mode", "compiled_mode", "sabotage"}
+ROW_FIELDS = {"path", "expected_path", "loaded", "identity", "vendor", "mode", "compiled_mode", "sabotage",
+              "column", "detected_column"}
 
 
 def _loaded_bindings():
@@ -50,6 +51,24 @@ def test_fields_and_public_agreement():
     for name, row in report["bindings"].items():
         if not name.startswith("mojolearn._host."):
             assert row["expected_path"] is None
+            assert row["column"] is None and row["detected_column"] is None
+    assert set(report["host_paths"]) == set(report["host_families_built"])
+
+
+def test_host_rows_read_back_their_column():
+    # A loaded host binding reads back its kernel-matrix column, as the
+    # binding's own `<prefix>_column()` says it.
+    report = mojolearn.runtime_report()
+    for key, row in report["bindings"].items():
+        if not key.startswith("mojolearn._host.") or row["path"] is None:
+            continue
+        module = sys.modules[key]
+        prefix = key.rsplit(".", 1)[-1][len("_mojolearn_"):]
+        own = getattr(module, prefix + "_column", None)
+        assert row["column"] == (None if own is None else str(own())), key
+        basename = key.rsplit(".", 1)[-1]
+        if basename in report["host_paths"]:
+            assert report["host_paths"][basename] == row["expected_path"], key
 
 
 def test_host_expected_path_is_the_resolver_answer():
