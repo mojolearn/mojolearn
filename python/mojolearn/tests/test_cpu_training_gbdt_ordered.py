@@ -22,21 +22,6 @@ import mojolearn
 from mojolearn import _backend
 
 
-    # The remaining source-text checks of the binding are deleted: 285ac89b42 moved the
-    # gbdt host binding's RUN (the ordered/FeatureFreq dispatch and weight refusals) into gbdt/mojolearn_gbdt_host_run.mojo.
-    # Native coverage: checks/native_tests/gbdt_public_fits.mojo ("weighted OrderedRMSE", "weighted FeatureFreq" refusals).
-
-
-    # The remaining source-text checks of the binding are deleted: 285ac89b42 moved the
-    # gbdt host binding's RUN (the pointwise arm dispatch and its refusals) into gbdt/mojolearn_gbdt_host_run.mojo.
-    # Native coverage: checks/native_tests/gbdt_public_fits.mojo (pointwise option fits).
-
-
-    # The remaining source-text checks of the binding are deleted: 285ac89b42 moved the
-    # gbdt host binding's RUN (the one-hot resolution and model text) into gbdt/mojolearn_gbdt_host_run.mojo.
-    # Native coverage: checks/native_tests/gbdt_public_fits.mojo (one_hot_features fits).
-
-
 def test_ordered_save_load_and_ctr_predictions_on_the_host_when_built():
     """The boundary arms of the host check: the OrderedRMSE archive round
     trip and the CTR model's predictions (served by the host CTR door). The
