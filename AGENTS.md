@@ -550,6 +550,9 @@ them for you.
 - Never name a parameter `out`. It is a reserved word (an argument
   convention), and the compiler reports "expected argument name". Use `dst`
   or `y_out`.
+- Never name a local, a field or a parameter `fn`. It is a removed keyword: the compiler reports "'fn' has been
+  removed; use 'def' instead" and stops parsing the file, which hides every later error in it (2026-11-15: two host
+  units of a measurement build). Use `entry`, `cached` or `callee`.
 - A function launched as a kernel must not also be called from another
   kernel. The build fails with "compile offload result missing kernelId" and
   no source location. Put the body in an `@always_inline` helper and have
