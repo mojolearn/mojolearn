@@ -64,6 +64,15 @@ def _class_array(classes, codes):
 
 
 class LegacyNearestCentroid(NearestCentroid):
+    def _l1dist(self, A, B):
+        # Oracle-side copy of the product helper fb5-cleanup deleted (the public
+        # manhattan predict is one native call and no longer uses it).
+        n, d = A.shape
+        m = B.shape[0]
+        out = _empty_out((n, m), "<f4")
+        self._op("l1dist", [(A, 0), (B, 0), (out, 1)], (n, m, d))
+        return out
+
     def fit(self, X, y):
         """Fit the class centroids.
 
