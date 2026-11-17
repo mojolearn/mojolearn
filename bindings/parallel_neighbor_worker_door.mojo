@@ -2,7 +2,6 @@
 # Native handlers for the neighbor/IVF shard protocol. The same compiled
 # search/vote entries as the plain API; no estimator Python method is invoked.
 from std.math import isfinite
-from std.memory import unsafe_memcpy
 from std.python import Python, PythonObject
 from bindings.admitted_family_door import admit_family, admit_family_meta
 from bindings.native_loaded_module_door import native_loaded_module
@@ -12,8 +11,9 @@ from bindings.classical_attributes_door import classical_connect_numpy
 from bindings.classical_labels_door import labels_cast, labels_reshape, classical_decode_labels
 from bindings.admitted_input_unpack import admit_ids
 from bindings.family_common_pack import family_call, family_entry, family_array
-from bindings.parallel_shard_common_door import shard_model, shard_rows, shard_dtype, shard_array
+from bindings.parallel_shard_common_door import shard_model, shard_rows, shard_dtype
 from bindings.parallel_shard_common_run import shard_item
+from bindings.arena_materialize_native_door import arena_ragged_rows
 from bindings.host_archive_native_door import host_archive_rbc_metric_object
 from providers.python.array_metadata_pyapi_door import ArrayPin
 from bindings.neighbors_knn_native_door import (
@@ -254,25 +254,18 @@ def neighbor_radius_rows(triple: PythonObject, context: PythonObject) raises -> 
 
 
 def _ragged_rows(source: PythonObject, ptr: PythonObject, nq: Int, context: PythonObject) raises -> PythonObject:
-    # One output Array per query row (the ragged radius contract). The
-    # source dtype, item size, address and the row offsets are read once,
-    # not once per row as shard_rows does; each row is one native copy.
-    # The distance rows are built only when they are returned.
+    # One output Array per query row (the ragged radius contract), built by
+    # `arena_ragged_rows`: the source dtype, item size, address, the row
+    # offsets, the Array class admission, the zero seed and the slot setters
+    # are resolved once per call, not once per row (lane fb2-neighbors: the
+    # per-row shard_array -> tsa_array -> _owned path re-resolved them for
+    # every row, ~15 us x 2 x n_queries per radius_neighbors call). Each row
+    # is still one native copy into its own store. The distance rows are
+    # built only when they are returned.
     var dtype = shard_dtype(source)
     var item = shard_item(dtype)
-    var size = item[1]
-    var base = Int(py=classical_address(source))
-    var ip = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(ptr)))
-    var rows = Python.list()
-    for i in range(nq):  # driver-loop: native ragged output assembly, one output Array per query row
-        var lo = Int(ip[i])
-        var hi = Int(ip[i + 1])
-        var out = shard_array(dtype, Python.tuple(hi - lo), hi - lo, context)
-        if hi > lo:
-            unsafe_memcpy(dest=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(out))),
-                   src=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=base) + lo * size,
-                   count=(hi - lo) * size)
-        _ = py_call(rows.append, out)
+    var rows = arena_ragged_rows(item[0], dtype, item[1], Int(py=classical_address(source)),
+                                 Int(py=classical_address(ptr)), nq, context)
     _ = source  # keep the Python object alive through the native copies above
     _ = ptr
     return rows

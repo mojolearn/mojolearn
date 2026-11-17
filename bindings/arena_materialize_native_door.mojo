@@ -1,6 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 # DeviceRows owns the same typed msel store snapshots as model_selection.
-from bindings.native_array_storage_door import native_array_zeros
+from bindings.native_array_storage_door import native_array_zeros, native_array_unfilled, _zero_seed
+from bindings.native_buffer_address_unpack import native_buffer_address
+from std.memory import unsafe_memcpy
 from bindings.arena_buffer_copy_pack import buffer_copy_to_array
 from std.python import Python, PythonObject
 from bindings.arena_materialize_run import _itemsize, _cast_code, _cast_failure, _widen_elements, _canonical_half_nans
@@ -117,6 +119,94 @@ def _owned(store: PythonObject, shape: PythonObject, dtype: String, context: Pyt
     return _array(shape,dtype,native_buffer_view(store),store,PythonObject(None),context,PythonObject(None))
 
 
+# Below this many items a row's store is the zero seed repeated (one native
+# call; on CPython < 3.12 one memcpy per item, at most this many tiny
+# copies); from it on, the unfilled store (one malloc, its own per-call
+# probe amortized over the row). Cost reasoning only, no data shape.
+comptime _RAGGED_REPEAT_ITEMS = 4096
+
+
+def arena_ragged_rows(code: String, dtype: String, item: Int, source_addr: Int, offsets_addr: Int, nq: Int,
+                      context: PythonObject) raises -> PythonObject:
+    """One owned C-ordered 1-D Array per row r of a CSR block: a copy of the
+    `dtype` items [offsets[r], offsets[r + 1]) of the source at
+    `source_addr` (int32 offsets at `offsets_addr`, nq + 1 of them). The
+    same objects `_owned` builds (same slots, same values, own store per
+    row), but the class layout admission, the zero seed, the 14 slot
+    setters and the per-dtype constants are resolved ONCE per call. Lane
+    fb2-neighbors (2026-11-17): the per-row `_owned` path re-ran the seed
+    admission (module, type, typecode and byte probes), the layout record
+    check and 17 dict and attribute lookups for every row; radius_neighbors
+    builds 2 x n_queries rows per call (+600 ms per 20,000 queries on the
+    L40S full board, both datasets, independent of the neighbour count).
+    The caller keeps the source and offsets owners alive through the call."""
+    _array_layout(context)
+    var cls = context["array_class"]
+    var slots = context["owner_array_slots"]
+    var set_store = slots["_store"].__set__
+    var set_base = slots["_base"].__set__
+    var set_pin = slots["_pin"].__set__
+    var set_mv = slots["_mv"].__set__
+    var set_addr = slots["_addr"].__set__
+    var set_readonly = slots["_readonly"].__set__
+    var set_shape = slots["shape"].__set__
+    var set_dtype = slots["dtype"].__set__
+    var set_ndim = slots["ndim"].__set__
+    var set_size = slots["size"].__set__
+    var set_nbytes = slots["nbytes"].__set__
+    var set_itemsize = slots["itemsize"].__set__
+    var set_strides = slots["strides"].__set__
+    var set_order = slots["order"].__set__
+    var none = PythonObject(None)
+    var py_dtype = PythonObject(dtype)
+    var py_one = PythonObject(1)
+    var py_item = PythonObject(item)
+    var py_strides = Python.tuple(item)
+    var py_order = PythonObject("C")
+    var seed = _zero_seed(code)
+    var offsets = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=offsets_addr)
+    var rows = Python.list()
+    var append = rows.append
+    ref cpy = Python().cpython()
+    for r in range(nq):  # driver-loop: native ragged output assembly, one output Array per CSR row
+        var lo = Int(offsets[r])
+        var n = Int(offsets[r + 1]) - lo
+        if n < 0:
+            raise Error("RuntimeError: ragged row offsets decrease")
+        var store: PythonObject
+        if n >= _RAGGED_REPEAT_ITEMS:
+            store = native_array_unfilled(code, n)
+        else:
+            var raw = cpython_table()[].PySequence_Repeat(seed._obj_ptr, n)
+            if not raw:
+                raise cpy.unsafe_get_error()
+            store = PythonObject(from_owned=raw)
+        var view = native_buffer_view(store)
+        var address = native_buffer_address(store)
+        if n > 0:
+            unsafe_memcpy(dest=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=address),
+                          src=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=source_addr) + lo * item,
+                          count=n * item)
+        var result = native_storage_allocate(cls)
+        _ = py_call(set_store, result, store)
+        _ = py_call(set_base, result, none)
+        _ = py_call(set_pin, result, none)
+        _ = py_call(set_mv, result, view)
+        _ = py_call(set_addr, result, PythonObject(address))
+        _ = py_call(set_readonly, result, view.readonly)
+        _ = py_call(set_shape, result, Python.tuple(n))
+        _ = py_call(set_dtype, result, py_dtype)
+        _ = py_call(set_ndim, result, py_one)
+        _ = py_call(set_size, result, PythonObject(n))
+        _ = py_call(set_nbytes, result, PythonObject(n * item))
+        _ = py_call(set_itemsize, result, py_item)
+        _ = py_call(set_strides, result, py_strides)
+        _ = py_call(set_order, result, py_order)
+        _ = py_call(append, result)
+    _ = seed  # retain the seed owner through every repeat above
+    return rows
+
+
 def _empty(shape: PythonObject, dtype: String, context: PythonObject) raises -> PythonObject:
     var item = _itemsize(dtype)
     var count = 1
@@ -126,6 +216,21 @@ def _empty(shape: PythonObject, dtype: String, context: PythonObject) raises -> 
             raise Error("ValueError: native row output exceeds indexing bounds")
         count *= extent
     var store = native_array_zeros(String(_store_code(dtype)), count)
+    return _owned(store,shape,dtype,context)
+
+
+def _empty_unfilled(shape: PythonObject, dtype: String, context: PythonObject) raises -> PythonObject:
+    """`_empty` with NO fill pass (`native_array_unfilled`): only for an
+    output one native writer fills in full before anything reads it, or
+    that is discarded when the writer raises (the resident row take)."""
+    var item = _itemsize(dtype)
+    var count = 1
+    for i in range(len(shape)):  # driver-loop: allocate only the consumed output shape
+        var extent = Int(py=shape[i])
+        if extent < 0 or (count > 0 and extent > 9223372036854775807//item//count):
+            raise Error("ValueError: native row output exceeds indexing bounds")
+        count *= extent
+    var store = native_array_unfilled(String(_store_code(dtype)), count)
     return _owned(store,shape,dtype,context)
 
 

@@ -265,7 +265,9 @@ def cluster_public_operation(model: PythonObject, operation: String, args: Pytho
         if operation.startswith("family_cfa_"):
             result = cluster_fit_a_operation(model, operation, prepared, context)
         elif operation.startswith("family_xc_"):
-            result = cluster_operation(model, operation, prepared, context)
+            # prepared[1] is the X classical_check_x admitted above (finite,
+            # float32 C order): the cluster queries skip a second scan.
+            result = cluster_operation(model, operation, prepared, context, True)
         else:
             # X is the one classical_check_x admitted above (2-D, non-empty,
             # finite, float32 C order): the BayesianGaussianMixture queries

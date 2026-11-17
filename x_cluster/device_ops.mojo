@@ -1807,6 +1807,22 @@ struct DeviceOps(ClusterOps):
         self._ph1("put")
         return len(self.f) - 1
 
+    def put_addr(mut self, addr: Int, n: Int) raises -> Int:
+        """A new float slot holding the `n` float32 words at host `addr`,
+        uploaded straight from the caller's memory (lane fb2-neighbors: the
+        bisect predict copied the whole query block into a fresh List first,
+        one serial memcpy plus first-touch page faults over every byte, only
+        to upload it). The upload is synchronised before return, so the
+        caller's words are read before it can release them."""
+        self._ph0()
+        var buf = self.ctx.enqueue_create_buffer[DType.float32](n if n > 0 else 1)
+        if n > 0:
+            self.ctx.enqueue_copy(dst_buf=buf, src_ptr=MutPointer[Float32, MutAnyOrigin](unsafe_from_address=addr))
+            self._sync()
+        self.f.append(buf^)
+        self._ph1("put_addr")
+        return len(self.f) - 1
+
     def put_i(mut self, v: List[Int32]) raises -> Int:
         self._ph0()
         var n = len(v)
