@@ -27,7 +27,10 @@ board. This tool:
         ON THE BOX, the full-board screen: every race the board plans on V (every family and lane, identical, our
         arms), in the same files as ids plus races.json (family/lane/dataset per race, for measure_owed data-keys).
   pass-ids --full-ids FILE --smoke-json SMOKE.json... --out FILE
-        the full-size ids of the planned races whose smoke passed (smoke-failed.json beside --out lists the rest).
+        the full-size ids of the planned races whose smoke passed (smoke-failed.json beside --out lists the rest;
+        each failed race and its reason is printed as a PAPER-PASS-IDS-FAILED line).
+  left     --ids FILE --board BOARD.json
+        ON THE BOX: how many of the ids are not yet done in the board (the disk gate of a resumed board).
   compare  --recipes JSON --board BOARD.json... [--prior-board VERSION=BOARD.json ...] [--reference-compare JSON]
            [--best-ever [FILE]] [--out-md MD] [--out-json JSON] [--summary TXT]
         the new board against OUR prior wheels re-timed in the same job on the same box, per recipe: ms of each,
@@ -39,7 +42,10 @@ SAME BOX ONLY (AGENTS.md "Times are compared only on the same box", Andrew, 2026
 on code that had not changed). Every board carries the box's host probe (tools/ops/host_probe.py through
 bench_board --host-probe: box.host_probe and each race's host.host_id). A time flag is derived only from two cells
 whose boards carry the same host id. A --prior-board from another host REFUSES the compare (exit non-zero); a board
-without a probe gives no verdict (NOT-COMPARED). The stored paper record (old_ms in the recipes: ref_ms here), a
+without a probe gives no verdict (NOT-COMPARED). SAME SYSTEM SOFTWARE TOO (2026-11-17): the GPU uuid, GPU driver,
+kernel release and boot id (SOFTWARE_FIELDS) must each be one value on both sides and the same; otherwise (a pod
+restart or a driver update between the arms, or a field not recorded) every row is NOT-COMPARED and the summary's
+first line says why. The stored paper record (old_ms in the recipes: ref_ms here), a
 stored compare JSON (--reference-compare: ref_prior_ms), the paper's opponent cells and the best-ever file are
 shown with their host and never make a flag.
 
@@ -52,7 +58,8 @@ FLAGS (per recipe; a recipe can carry several)
   STILL-FAILING  neither has a time
   BASELINE-NOT-RUN  the baseline board has no cell for the race (its smoke failed, it does not plan it, the job did
                  not reach it): NOT-RUN for that column, never a regression
-  NOT-COMPARED   no on-box baseline (no --prior-board of the paper's version, or no host probe on either side)
+  NOT-COMPARED   no on-box baseline (no --prior-board of the paper's version, no host probe on either side, or the
+                 arms ran under different system software: driver, kernel or boot id)
   NOT-RUN        no new cell: the board no longer plans the race, its smoke failed, or the job did not reach it
   QUALITY-DROP   tools/board_quality.compare(new, paper record) FAILs on a one-sided score or a reference bound:
                  worse than 0.8.55 beyond the board's declared margin (the quality-parity policy)
@@ -76,11 +83,14 @@ last release gets one each), each other version gets a column (ms, new / prior);
 With --best-ever [FILE] (default bench/results/board_best_ever/<vendor>.json, tools/board_best_ever.py mine): a
 "best ever (NV)" / "(AMD)" reference column, our best time ever on that race key, with its date, release and host,
 and new / best-ever. Its time flags need the same host id on the best-ever cell (records mined before 2026-11-14
-carry none, so they are shown and never flagged):
+carry none, so they are shown and never flagged) and the same system state (SOFTWARE_FIELDS; mined records carry
+none yet, so these flags are shown only once the miner keeps it):
   BEST-EVER-REGRESSION  new / best ever > 1.10 with the same explicit parameters and the same output hash
   BEST-EVER-REGRESSION-UNCHECKED  the same, but the params or the hash of one side were not recorded
   BEST-EVER-SUSPECT  new / best ever > 1.10 but the best ever is below 5% of the row's median time
-  PARAMS-DIFFER  the best-ever cell's parameters (a shared key) or output hash differ from the new cell's (not a time)
+  PARAMS-DIFFER  the best-ever cell's explicit parameters differ from the new cell's on a shared key (not a time).
+                 A different output hash alone is not this flag: bits may change between versions (AGENTS.md); it is
+                 shown as "vs best ever: hash" in the note
   BEST-EVER-HW-DIFF  the best ever was measured on another device than the new board's
 Every our-arm cell of the new boards outside the recipes (a full-board screen, tools/ops/paper_compare_job.sh
 board-all) gets an extra row in its own table with the on-box prior columns (REGRESSION / FASTER vs the baseline,
@@ -296,6 +306,62 @@ def same_box(cand_boards, other_boards, what):
     return host, None
 
 
+# SAME SYSTEM SOFTWARE (fb-harness, 2026-11-17): the full-board compare of d95f805cce gave verdicts for two arms on the
+# same host id and GPU whose pod had restarted between them (candidate on NVIDIA driver 595.91.07 and kernel
+# 6.8.0-147, 0.8.55 on 595.112.07 and 6.8.0-149). A verdict now needs the GPU uuid, the GPU driver, the kernel release
+# and the boot id (/proc/sys/kernel/random/boot_id) to be one value on each side and the same on both; a field that
+# is not recorded is no proof, so it gives no verdict either.
+SOFTWARE_FIELDS = tuple(zip(BE.SOFTWARE_FIELDS, ("GPU uuid", "GPU driver", "kernel", "boot id")))
+
+
+def board_software(board):
+    """{(gpu uuid, driver, kernel, boot id): [race ids]} of one board: every distinct system state its races ran
+    under (a race's host record wins over the board default field by field). A board with no race gives its
+    default alone."""
+    base = BE.software_default(board)
+    out = {}
+    for rid, race in (board.get("races") or {}).items():
+        out.setdefault(tuple(BE.race_software(race, base)), []).append(rid)
+    if not out:
+        out[tuple(base[f] for f, _ in SOFTWARE_FIELDS)] = []
+    return out
+
+
+def software_mismatch(cand_boards, other_board, what):
+    """None when the candidate boards and OTHER_BOARD ran under one and the same system state (SOFTWARE_FIELDS), else
+    why not, in words: the first line of the summary."""
+    cand = {}
+    for b in cand_boards:
+        for k, v in board_software(b).items():
+            cand.setdefault(k, []).extend(v)
+    other = board_software(other_board)
+    why = []
+    for side, states in (("the candidate board", cand), (what, other)):
+        if len(states) > 1:
+            parts = []
+            for i, (f, label) in enumerate(SOFTWARE_FIELDS):
+                vals = sorted({str(k[i]) for k in states})
+                if len(vals) > 1:
+                    parts.append("%s %s" % (label, " / ".join(vals)))
+            why.append("%s spans %d system states (a restart or an update between its races: %s)"
+                       % (side, len(states), "; ".join(parts)))
+    if len(cand) == 1 and len(other) == 1:
+        c, o = next(iter(cand)), next(iter(other))
+        for i, (f, label) in enumerate(SOFTWARE_FIELDS):
+            if c[i] and o[i] and c[i] != o[i]:
+                why.append("%s %s (candidate) vs %s (%s)" % (label, c[i], o[i], what))
+    missing = []
+    for side, states in (("the candidate board", cand), (what, other)):
+        for i, (f, label) in enumerate(SOFTWARE_FIELDS):
+            if any(not k[i] for k in states):
+                missing.append("%s not recorded on %s" % (label, side))
+    if missing:
+        why.append("; ".join(missing) + " (a board made before 2026-11-17 has no boot id)")
+    if not why:
+        return None
+    return "the arms did not run under the same system software: " + "; ".join(why)
+
+
 def probe_line(probe):
     """One line of a host probe for the summary (both arms' probes are printed beside the verdict)."""
     if not probe:
@@ -305,10 +371,11 @@ def probe_line(probe):
             if pcie.get("gen") is not None else "pcie ?")
     g = lambda k: "-" if probe.get(k) is None else probe.get(k)  # noqa: E731
     return ("host %s; cpu %s; numa %s; cores %s (cgroup %s); memcpy %s GB/s; h2d pageable %s / pinned %s GB/s; %s; "
-            "gpu %s driver %s" % (g("host_id"), g("cpu_model"), g("numa_nodes"), g("affinity_cores") if probe.get(
-                "affinity_cores") is not None else g("nproc"), g("cgroup_cores"), g("memcpy_gbps"),
+            "gpu %s driver %s; kernel %s; boot %s" % (
+                g("host_id"), g("cpu_model"), g("numa_nodes"), g("affinity_cores") if probe.get(
+                    "affinity_cores") is not None else g("nproc"), g("cgroup_cores"), g("memcpy_gbps"),
                 g("h2d_pageable_gbps"), g("h2d_pinned_gbps"), link, (probe.get("gpu") or {}).get("name"),
-                (probe.get("gpu") or {}).get("driver")))
+                (probe.get("gpu") or {}).get("driver"), g("kernel"), g("boot_id")))
 
 
 def parse_prior_board(text):
@@ -618,7 +685,32 @@ def cmd_pass_ids(args):
     keep, failed = passed_full_ids(full, docs)
     write_atomic(args.out, "".join(x + "\n" for x in keep))
     write_atomic(os.path.join(os.path.dirname(os.path.abspath(args.out)), "smoke-failed.json"), json_text(failed))
+    # each failed race with its reason, before the count line (the job prints them to job.log): the d95f805cce
+    # full board lost 23 0.8.55 races at smoke and only the count reached the Mac (fb-harness, 2026-11-17)
+    for rid in sorted(failed):
+        print("PAPER-PASS-IDS-FAILED %s: %s" % (rid, str(failed[rid])[:300]))
     print("PAPER-PASS-IDS planned=%d smoke_passed=%d smoke_failed=%d" % (len(full), len(keep), len(failed)))
+    return 0
+
+
+def ids_left(ids, board):
+    """The ids not yet done in BOARD (a board.json document or None): what a resumed timed board still runs."""
+    races = (board or {}).get("races") or {}
+    return [x for x in ids if (races.get(x) or {}).get("status") != "done"]
+
+
+def cmd_left(args):
+    """(box) the number of races of --ids not yet done in --board: the disk gate counts only these (fb-harness,
+    2026-11-17: a resumed full board was gated on all 650 races and refused with 23 GB free)."""
+    with open(args.ids) as fh:
+        ids = [x.strip() for x in fh if x.strip()]
+    board = None
+    if os.path.isfile(args.board):
+        try:
+            board = load_json(args.board)
+        except (OSError, ValueError):
+            board = None
+    print(len(ids_left(ids, board)))
     return 0
 
 
@@ -880,10 +972,11 @@ def new_cell_records(boards, vendor):
     return out
 
 
-def attach_best_ever(row, new_rec, best_rows, host=None):
+def attach_best_ever(row, new_rec, best_rows, host=None, software=None):
     """The best-ever column of one row (module docstring). NEW_REC: the new cell's record or None. HOST: the new
-    board's host id. The best ever is a stored time of another run: its ratio is shown, and the time flags
-    (BEST-EVER-REGRESSION, -UNCHECKED, -SUSPECT) are derived only when it carries the same host id (2026-11-14)."""
+    board's host id; SOFTWARE: its one system state (SOFTWARE_FIELDS values, a list) or None. The best ever is a stored
+    time of another run: its ratio is shown, and the time flags (BEST-EVER-REGRESSION, -UNCHECKED, -SUSPECT) are
+    derived only when it carries the same host id (2026-11-14) and the same system state (2026-11-17)."""
     b = (best_rows or {}).get(row["key"])
     row.update(best_ever_ms=None, best_ever_date=None, best_ever_release=None, best_ever_commit=None,
                best_ever_device=None, best_ever_hash=None, best_ever_host=None, ratio_vs_best_ever=None,
@@ -907,9 +1000,16 @@ def attach_best_ever(row, new_rec, best_rows, host=None):
     row["best_ever_params_differ"], row["best_ever_hash_differs"] = pd, hd
     ratio = row["new_ms"] / best["ms"] if best["ms"] else None
     row["ratio_vs_best_ever"] = ratio
-    if pd or hd:
+    # PARAMS-DIFFER FIX (fb-harness, 2026-11-17): the flag was raised when only the output hash differed. The best ever
+    # is an older version's cell, and bits may change between versions (AGENTS.md "Bits may change between
+    # versions"): 241 of the 272 hash-only rows of the d95f805cce full board had the candidate's hash EQUAL to 0.8.55's
+    # on the same box (e.g. classical/ols/taxi fit: f396.. both, best ever 0.8.25 89843bf5..) with params_check
+    # MATCHED. The flag now means what it says, a shared parameter with another value; the hash difference is still
+    # shown (best_ever_hash_differs, "vs best ever: hash" in the note) and no longer hides a time flag.
+    if pd:
         row["flags"].append("PARAMS-DIFFER")
-    elif ratio is not None and ratio > SLOWER and host and best.get("host_id") == host:
+    elif (ratio is not None and ratio > SLOWER and host and best.get("host_id") == host
+          and software is not None and best.get("software") == software):
         known = (isinstance(best.get("params"), dict) and isinstance(new_rec.get("params"), dict)
                  and best.get("hash") and new_rec.get("hash"))
         if suspect:
@@ -945,6 +1045,11 @@ def compare(doc, boards, not_run_why=None, prior_boards=None, reference=None, re
     priors = []
     for version, pb in prior_boards or []:
         h, why = same_box(boards, [pb], "the %s prior board" % version)    # refuses two hosts
+        if h:
+            # one host id is not enough: the same GPU, driver, kernel and boot (SOFTWARE_FIELDS), else reference only
+            sw = software_mismatch(boards, pb, "the %s board" % version)
+            if sw:
+                h, why = None, sw
         priors.append({"version": version, "races": pb.get("races") or {}, "host_id": h, "why_not": why,
                        "probe": board_probe(pb), "versions": merge_boards([pb])[2]})
     base = next((p for p in priors if p["version"] == doc["paper_version"]), None)
@@ -968,9 +1073,13 @@ def compare(doc, boards, not_run_why=None, prior_boards=None, reference=None, re
         be_label = "best ever (%s)" % VENDOR_TAG.get(doc["vendor"], doc["vendor"])
         new_recs = new_cell_records(boards, doc["vendor"])
         best_rows = best_ever.get("rows") or {}
-        rows = [attach_best_ever(r, new_recs.get(r["key"]), best_rows, host) for r in rows]
+        states = {}
+        for b in boards:
+            states.update(board_software(b))
+        sw = list(next(iter(states))) if len(states) == 1 and all(next(iter(states))) else None
+        rows = [attach_best_ever(r, new_recs.get(r["key"]), best_rows, host, sw) for r in rows]
         recipe_keys = {r["key"] for r in doc["recipes"]}
-        extra = [attach_best_ever(extra_row(rec), rec, best_rows, host)
+        extra = [attach_best_ever(extra_row(rec), rec, best_rows, host, sw)
                  for k, rec in sorted(new_recs.items()) if k not in recipe_keys]
         if others or base:
             extra = [attach_extra_priors(r, base, others, flagged, verified) for r in extra]
@@ -1000,7 +1109,28 @@ def compare(doc, boards, not_run_why=None, prior_boards=None, reference=None, re
             "paper_gpu": paper_gpu, "new_gpus": gpus, "hw_diff": hw_diff,
             "thresholds": doc.get("thresholds"), "recipes": len(rows), "flag_counts": counts, "rows": rows,
             "best_ever_label": be_label, "best_ever_source": (best_ever or {}).get("mined_at_head"),
-            "extra_rows": extra, "extra_flag_counts": extra_counts}
+            "extra_rows": extra, "extra_flag_counts": extra_counts,
+            "progress": [dict(board_progress(boards), arm="candidate")]
+                        + [dict(board_progress([pb]), arm=v) for v, pb in prior_boards or []]}
+
+
+def board_progress(boards):
+    """{done, total, boot_ids}: the races of the boards' own plans that finished (status done), of how many; and every
+    boot id their races recorded (two: the job resumed after a restart). A board without a plan counts its races."""
+    plan, races, boots = [], {}, []
+    for b in boards:
+        plan += [x for x in (b.get("plan") or []) if isinstance(x, str)]
+        races.update(b.get("races") or {})
+        for x in (b.get("boot_ids") or []):
+            if x not in boots:
+                boots.append(x)
+        for r in (b.get("races") or {}).values():
+            x = ((r.get("host") or {}) if isinstance(r, dict) else {}).get("boot_id")
+            if x and x not in boots:
+                boots.append(x)
+    want = sorted(set(plan)) or sorted(races)
+    done = sum(1 for rid in want if (races.get(rid) or {}).get("status") == "done")
+    return {"done": done, "total": len(want), "boot_ids": boots}
 
 
 def attach_extra_priors(row, base, others, flagged, verified):
@@ -1110,6 +1240,11 @@ def render_md(res):
             cand.get("source_commit"), cand.get("version"),
             ", ".join("%s sha256 %s" % (w.get("file"), w.get("sha256")) for _, w in sorted(cand["wheels"].items()))))
         lines.append("")
+    for p in res.get("progress") or []:
+        lines.append("- progress %s: %d/%d races done%s" % (p["arm"], p["done"], p["total"],
+                                                            "; boot ids " + ", ".join(p["boot_ids"])
+                                                            if p.get("boot_ids") else ""))
+    lines.append("")
     lines.append("**Verdict basis**: %s. Times are compared only on the same box (AGENTS.md); every stored column "
                  "below is reference only and makes no flag." % res.get("verdict_basis"))
     lines.append("")
@@ -1218,12 +1353,22 @@ def best_ever_cells(r):
 def render_summary(res, top=8):
     rows = res["rows"]
     label = res.get("new_label") or ",".join(res["new_versions"]) or "?"
-    out = ["PAPER-COMPARE vendor=%s %s->%s%s recipes=%d gpu %s -> %s%s" % (
+    # the FIRST line is the verdict basis, in words (fb-harness, 2026-11-17): a compare without a verdict says why
+    # before anything else, and every row below it is reference only
+    basis = str(res.get("verdict_basis"))
+    out = [("NO VERDICT, every row is reference only: " + basis[len("no verdict: "):])
+           if basis.startswith("no verdict: ") else "verdict: " + basis]
+    out.append("PAPER-COMPARE vendor=%s %s->%s%s recipes=%d gpu %s -> %s%s" % (
         res["vendor"], res["paper_version"], (res["prior_label"] + "->") if res.get("prior_label") else "",
         label.replace(" ", "_"), res["recipes"],
-        res["paper_gpu"], ",".join(res["new_gpus"]) or "?", " HW-DIFF" if res["hw_diff"] else "")]
+        res["paper_gpu"], ",".join(res["new_gpus"]) or "?", " HW-DIFF" if res["hw_diff"] else ""))
+    # done/total per arm (a job over its cap resumes; a board cut short is a partial column) and its boot ids
+    if res.get("progress"):
+        out.append("progress: " + "; ".join("%s %d/%d races done%s" % (
+            p["arm"], p["done"], p["total"],
+            " (boot ids %s: resumed after a restart)" % ", ".join(p["boot_ids"]) if len(p.get("boot_ids") or []) > 1
+            else "") for p in res["progress"]))
     # the verdict is printed with BOTH arms' probes beside it: a verdict without the probe is not a verdict (AGENTS.md)
-    out.append("verdict: " + str(res.get("verdict_basis")))
     out.append("  probe candidate: " + probe_line(res.get("host_probe")))
     for p in res.get("prior_columns") or []:
         out.append("  probe %s: %s%s" % (p["version"], probe_line(p.get("probe")),
@@ -1343,6 +1488,9 @@ def build_parser():
     s.add_argument("--full-ids", required=True)
     s.add_argument("--smoke-json", action="append", default=[])
     s.add_argument("--out", required=True)
+    lf = sub.add_parser("left", help="(box) how many of --ids are not yet done in --board (the disk gate's count)")
+    lf.add_argument("--ids", required=True)
+    lf.add_argument("--board", required=True, help="board.json (absent: every id is left)")
     c = sub.add_parser("compare", help="the paper's numbers against a new board")
     c.add_argument("--recipes", required=True)
     c.add_argument("--board", action="append", default=[], required=True)
@@ -1369,7 +1517,7 @@ def build_parser():
 def main(argv=None):
     args = build_parser().parse_args(argv)
     return {"recipes": cmd_recipes, "ids": cmd_ids, "ids-all": cmd_ids_all, "pass-ids": cmd_pass_ids,
-            "compare": cmd_compare}[args.cmd](args)
+            "left": cmd_left, "compare": cmd_compare}[args.cmd](args)
 
 
 if __name__ == "__main__":
