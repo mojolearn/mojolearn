@@ -67,9 +67,15 @@ def test_bisect_tree_arrays_keep_identity_aliases_and_serialization():
     x = np.array([[0.0], [1.0], [10.0], [11.0]], dtype=np.float32)
     model = ml.BisectingKMeans(n_clusters=2, random_state=7, numeric_mode="identical").fit(x)
     centers = model._tree_centers
-    nodes = model.tree_nodes_
     assert centers is model._tree_centers
-    assert nodes is model.tree_nodes_
+    # The instance stores one tree Array (the object predict reads). Like
+    # every public fitted array, `tree_nodes_` read from outside the package
+    # is a zero-copy NumPy view of that stored memory, so two reads are two
+    # views of the same bytes, not the same object.
+    stored = vars(model)["tree_nodes_"]
+    assert vars(model)["tree_nodes_"] is stored
+    nodes = model.tree_nodes_
+    assert type(nodes) is np.ndarray and np.shares_memory(nodes, model.tree_nodes_)
     before = np.asarray(model.predict(x)).copy()
     view = np.asarray(nodes)
     # Swap only the two leaf labels in the observable existing tree storage.
@@ -77,9 +83,9 @@ def test_bisect_tree_arrays_keep_identity_aliases_and_serialization():
     np.testing.assert_array_equal(model.predict(x), 1 - before)
     restored = pickle.loads(pickle.dumps(model))
     np.testing.assert_array_equal(restored.predict(x), 1 - before)
-    raw = nodes._mv
+    raw = stored._mv
     expected = raw.tobytes()
-    del restored, model, centers, nodes, view
+    del restored, model, centers, nodes, view, stored
     gc.collect()
     assert raw.tobytes() == expected
 
