@@ -1723,11 +1723,30 @@ def box_key(box):
     return key
 
 
+#: the system state of this process (load_host_probe): GPU uuid and driver from the box's probe, the kernel release and
+#: boot id read here. A board resumed after a pod restart is a new process with a new boot id, so each race's record
+#: says which side of the restart it was timed on (fb-harness, 2026-11-17).
+_RACE_SOFTWARE = {}
+
+
+def boot_id():
+    """/proc/sys/kernel/random/boot_id, or None (not Linux)."""
+    try:
+        with open("/proc/sys/kernel/random/boot_id") as fh:
+            return fh.read().strip() or None
+    except OSError:
+        return None
+
+
 def race_host():
     """Where a race ran: the hostname, on RunPod the pod id, and the host probe's host_id (MOJOLEARN_HOST_ID, set by
-    main from --host-probe): tools/paper_compare.py refuses to compare races of two host ids (2026-11-14)."""
+    main from --host-probe): tools/paper_compare.py refuses to compare races of two host ids (2026-11-14). Plus the
+    system state it ran under (gpu_uuid, driver, kernel, boot_id): paper_compare gives a verdict only when both arms
+    ran under one and the same (2026-11-17)."""
     return {"hostname": platform.node(), "pod_id": os.environ.get("RUNPOD_POD_ID"),
-            "host_id": os.environ.get("MOJOLEARN_HOST_ID") or None}
+            "host_id": os.environ.get("MOJOLEARN_HOST_ID") or None,
+            "gpu_uuid": _RACE_SOFTWARE.get("gpu_uuid"), "driver": _RACE_SOFTWARE.get("driver"),
+            "kernel": platform.release() or None, "boot_id": boot_id()}
 
 
 def load_host_probe(path):
@@ -1744,6 +1763,7 @@ def load_host_probe(path):
     if not probe.get("host_id"):
         raise SystemExit("bench_board: the host probe %s has no host_id" % path)
     os.environ["MOJOLEARN_HOST_ID"] = probe["host_id"]
+    _RACE_SOFTWARE.update(gpu_uuid=probe.get("gpu_uuid"), driver=(probe.get("gpu") or {}).get("driver"))
     return probe
 
 
@@ -5345,15 +5365,24 @@ def smoke_verdict(race, rec, vendor, preflight=None):
     return fails
 
 
-def drop_race_scratch(out, rec):
+def drop_race_scratch(out, rec, keep_evidence=False):
     """--drop-race-scratch (the release measurement smoke, 2026-11-08: its scratch filled an 80 GB pod): once a race's
     record is in board.json, its driver scratch (out/work, the scored arrays the drivers write there) and its local
     evidence directory (the per-race archives of those arrays) are deleted. The record, the logs and raw/ (the
-    drivers' small JSON results) stay. Nothing outside `out` is touched. Returns the bytes freed."""
+    drivers' small JSON results) stay. Nothing outside `out` is touched. Returns the bytes freed.
+    KEEP_EVIDENCE (a timed board, fb-harness 2026-11-17: the full-board job filled the 80 GB pod): only out/work goes,
+    and only when the race's evidence was retained (its archive holds every work/ file the race wrote:
+    bench_board_evidence seal). Why nothing in work/ is shared between races: every driver writes there only the
+    files of its own race, named by lane, dataset (and shape, arm) and written during that race (the classical,
+    classical2 and algos scored arrays and quality references, the neural race's input file, which a timed race
+    always writes afresh: bench_board_neural.make_inputs); no driver reads a file another race wrote, and the shared
+    generated inputs (the prepared blocks) live in the cache (--cache), not in work/."""
     import shutil
     root = os.path.realpath(out)
+    if keep_evidence and rec.get("evidence_failure"):
+        return 0
     targets = [os.path.join(root, "work")]
-    if rec.get("evidence_directory"):
+    if rec.get("evidence_directory") and not keep_evidence:
         targets.append(os.path.join(root, str(rec["evidence_directory"])))
     freed = 0
     for t in targets:
@@ -5551,8 +5580,9 @@ def build_parser():
                    help="with --inputs synthetic: {race id: {input, verify_lanes, files}} "
                         "(tools/release_measurement_smoke.py smoke_inputs)")
     p.add_argument("--drop-race-scratch", action="store_true",
-                   help="with --smoke: delete each race's driver scratch (work/) and its local evidence directory "
-                        "once its record is written to board.json (the smoke judges the record only)")
+                   help="delete each race's driver scratch (work/) once its record is written to board.json; with "
+                        "--smoke also its local evidence directory (the smoke judges the record only). A timed board "
+                        "keeps its evidence, and its work/ when the evidence was not retained")
     p.add_argument("--race-ids", default=None, metavar="IDS|@FILE",
                    help="keep exactly these planned race ids (comma list or @file); unknown ids are refused")
     p.add_argument("--retime-cpu-opponents", action="store_true", help="fresh CPU opponents for this harness; GPU opponents stay missing-only")
@@ -5908,8 +5938,6 @@ def main(argv=None):
     arm_python = setup_arm_venvs(args, vendor, out, os.path.join(out, "logs", "setup.log"))
     if getattr(args, "prep_only", False) and not args.preflight_only:
         raise SystemExit("bench_board: --prep-only is for --preflight-only runs")
-    if getattr(args, "drop_race_scratch", False) and not args.smoke:
-        raise SystemExit("bench_board: --drop-race-scratch is for --smoke runs (a timed board keeps its evidence)")
     box_checked = bool(getattr(args, "box_checked", None)) and args.preflight_only
     if getattr(args, "box_checked", None) and not args.preflight_only:
         raise SystemExit("bench_board: --box-checked is for --preflight-only runs")
@@ -6017,8 +6045,15 @@ def main(argv=None):
                 "bench_board: REFUSING to resume %s on a different box or wheel:\n  was %s\n  now %s\n"
                 "One board is one box and one set of library bytes; use a new --out."
                 % (out, json.dumps(old, sort_keys=True), json.dumps(new, sort_keys=True)))
-        result.setdefault("box_history", []).append({"resumed": now_utc(), "packages": box["packages"]})
+        result.setdefault("box_history", []).append({"resumed": now_utc(), "packages": box["packages"],
+                                                     "boot_id": boot_id(), "kernel": platform.release() or None,
+                                                     "driver": (box.get("gpu") or {}).get("driver")})
         result["box"] = box
+    # every boot this board's races ran under (a job resumed after a pod restart carries two): tools/paper_compare.py
+    # prints them per arm and gives no verdict across two (fb-harness, 2026-11-17)
+    b_id = boot_id()
+    if b_id and b_id not in result.setdefault("boot_ids", []):
+        result["boot_ids"].append(b_id)
     result["config"] = {"artifact_identity": artifact_identity,
                         "harness_sha256": smoke_files_sha256(), "vendor": vendor, "modes": modes, "families": families,
                         "lanes": lanes, "datasets": datasets, "rows": rows,
@@ -6123,7 +6158,7 @@ def main(argv=None):
             _load_tool('retain_run_summary').retain_board, out, result, smoke=args.smoke)
         print("bench_board:   %s rc=%s %.0fs" % (rec["status"], rec["rc"], rec["wall_s"]), flush=True)
         if getattr(args, "drop_race_scratch", False):
-            drop_race_scratch(out, rec)
+            drop_race_scratch(out, rec, keep_evidence=not args.smoke)   # a timed board keeps its evidence
         if _load_tool("bench_board_evidence").blocks_campaign(rec):
             print("bench_board: stopped after retaining local evidence: " + rec["evidence_failure"], flush=True)
             return 1

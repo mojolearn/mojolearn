@@ -759,8 +759,24 @@ def test_a_race_scratch_is_gone_once_its_record_is_written(tmp_path):
     assert B.drop_race_scratch(str(out), dict(evidence_directory="../outside")) == 0 and (tmp_path / "outside").exists()
     src = (ROOT / "tools" / "bench_board.py").read_text()
     loop = src[src.index("        rec = run_race(ctx, r)"):src.index('    print("bench_board: board %s"')]
-    assert loop.index("save_result(rpath, result)") < loop.index("drop_race_scratch(out, rec)")
+    assert loop.index("save_result(rpath, result)") < loop.index("drop_race_scratch(out, rec")
     assert MS.board_drops_scratch()
+
+
+def test_a_timed_board_drops_only_the_race_work_and_only_with_its_evidence(tmp_path):
+    """fb-harness (2026-11-17): the full-board job filled the 80 GB pod. A timed board's race drops its work/ once its
+    record is written and its evidence retained; the evidence directory stays."""
+    import bench_board as B
+    out = tmp_path / "board-all"
+    for name in ("work", "evidence/r1", "raw"):
+        (out / name).mkdir(parents=True)
+    (out / "work" / "r1-ours.npz").write_bytes(b"x" * 10)
+    (out / "evidence" / "r1" / "raw.tar.gz").write_bytes(b"y" * 20)
+    rec = dict(evidence_directory="evidence/r1")
+    assert B.drop_race_scratch(str(out), dict(rec, evidence_failure="upload refused"), keep_evidence=True) == 0
+    assert (out / "work" / "r1-ours.npz").exists()            # no retained evidence: the work bytes stay
+    assert B.drop_race_scratch(str(out), rec, keep_evidence=True) == 10
+    assert not (out / "work").exists() and (out / "evidence" / "r1" / "raw.tar.gz").exists()
 
 
 # ------------------------------------------------------------------ the inputs: one fixture set for verify and smoke
