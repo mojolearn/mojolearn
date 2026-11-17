@@ -121,9 +121,9 @@ def connect_public(cls, context, install=True):
 
 
 def _fold_entry(name):
-    # glue (lanes a7c, a8c): the QN fit (`qn_fit_fold`) and inference
-    # (`qn_infer_fold`) of a cross-validation fold resident on the device,
-    # exported by the identical GPU base binding next to the fold store they
+    # glue (lanes a7c, a8c): the QN fold entry (`logistic_fold_native_api_v1`:
+    # fit and inference of a cross-validation fold resident on the device),
+    # exported by the identical GPU base binding next to the fold store it
     # read (bindings/msel_device_unpack.mojo); a build without them (the CPU
     # column) leaves None and the door gathers host rows.
     from types import BuiltinFunctionType
