@@ -22,7 +22,7 @@ ROWS = [
     ('cholesky', {'MOJOLEARN_XD_CHOL_SERIAL': '99999'}),
     ('svd', {'MOJOLEARN_LINALG_LEGACY_SIGN': '1'}),
     ('qr', {'MOJOLEARN_LINALG_LEGACY_SIGN': '1'}),
-    ('lr-warmup-cosine', {'MOJOLEARN_LR_EXACT_ONLY': '1'}),
+    # lr-warmup-cosine went (Andrew, 2026-11-17): the lr-* schedule lanes are call overhead, not races
     ('clip-grad-norm', {'MOJOLEARN_CLIP_PACKED': '1'}),
 ]
 phase = 'setup'
