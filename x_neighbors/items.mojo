@@ -1361,6 +1361,54 @@ def knn_impute_tie_mean_item(
 
 
 @always_inline
+def knn_impute_tie_mean_listed(t: Int, fx: FP, best_d: FP, best_i: IP, out_min: FP, res: FP, d: Int, k: Int) -> Bool:
+    """`knn_impute_tie_mean_item` from the cell's k listed donors alone, when
+    the scan proved no donor OUTSIDE the list sits at the k-th distance D_k
+    (fb-infer/D, 2026-11-17). `out_min[t]` is the smallest finite distance
+    of every donor the scan rejected or evicted (+inf when none). Rejected and
+    evicted donors are all at distance >= D_k, so `out_min[t] > D_k` means the
+    donors at distance <= D_k are exactly the listed ones: the item's c_lt,
+    c_eq and both sums, folded in ascending donor index (the listed indices
+    visited in ascending order), are the item's own words. Returns True when
+    the cell is done (here, or nothing to do: fewer than k donors), False
+    when a tie outside the list needs the item's full m x d rescan. Same
+    bits as the item; O(k^2) instead of O(m d) per cell."""
+    if Int(best_i.unsafe_load(t * k + k - 1)) < 0:
+        return True
+    var dk = best_d.unsafe_load(t * k + k - 1)
+    if not (out_min.unsafe_load(t) > dk):
+        return False
+    var c = t - (t // d) * d
+    var sum_lt = Float32(0)
+    var sum_eq = Float32(0)
+    var c_lt = 0
+    var c_eq = 0
+    var last = -1
+    for _ in range(k):
+        # the smallest listed donor index above `last` (indices are distinct)
+        var pick = -1
+        var at = 0
+        for s in range(k):
+            var j = Int(best_i.unsafe_load(t * k + s))
+            if j > last and (pick < 0 or j < pick):
+                pick = j
+                at = s
+        last = pick
+        var dist = best_d.unsafe_load(t * k + at)
+        var dv = fx.unsafe_load(pick * d + c)
+        if dist < dk:
+            sum_lt = _add(sum_lt, dv)
+            c_lt += 1
+        elif dist == dk:
+            sum_eq = _add(sum_eq, dv)
+            c_eq += 1
+    if c_eq > 0 and c_lt < k:
+        var fill = ftz(identical_mul(ftz(identical_div(sum_eq, Float32(c_eq))), Float32(k - c_lt)))
+        res.unsafe_store(t, ftz(identical_div(_add(sum_lt, fill), Float32(k))))
+    return True
+
+
+@always_inline
 def knn_impute_finish(
     t: Int, fx: FP, bd: FP, bi: IP, res: FP, m: Int, d: Int, k: Int, weights: Int, n_donors: Int,
 ):
