@@ -72,7 +72,8 @@ struct LrScheduleBlock(Movable, Writable):
     # admission of a step), the process CPython table (no global lookup per
     # call) and the optimizer context (admission of any other step type).
     var int_class: PythonObject
-    var table: UnsafePointer[CPythonTable, MutAnyOrigin]
+    # Untracked origin: a struct field may not expose AnyOrigin (Mojo 1.2).
+    var table: UnsafePointer[CPythonTable, MutUntrackedOrigin]
     var context: PythonObject
 
     def __init__(out self, spec: LrSpec, style: Int, int_class: PythonObject,
@@ -84,7 +85,7 @@ struct LrScheduleBlock(Movable, Writable):
         self.failed = 0
         self.rates = List[Float32]()
         self.int_class = int_class
-        self.table = table
+        self.table = table.unsafe_origin_cast[MutUntrackedOrigin]()
         self.context = context
 
     def write_to(self, mut writer: Some[Writer]):
@@ -147,7 +148,7 @@ struct LrScheduleBlock(Movable, Writable):
 
 
 @no_inline
-def _block_argument(table: UnsafePointer[CPythonTable, MutAnyOrigin], args: PyObjectPtr,
+def _block_argument(table: UnsafePointer[CPythonTable, MutUntrackedOrigin], args: PyObjectPtr,
     kwargs: PyObjectPtr, name: StaticString) raises -> PyObjectPtr:
     """The one step argument of a keyword call or a wrong arity, with the
     messages the former Python method `_LrTable.<name>(self, t)` raised.
