@@ -10,13 +10,14 @@ import random
 import pytest
 
 import mojolearn as ml
+from mojolearn import training
 
 
 def _schedules():
     return [
-        ml.ConstantLR(1e-3, warmup_steps=300),
-        ml.WarmupLinearLR(1e-3, warmup_steps=100, total_steps=700, min_lr=1e-5),
-        ml.WarmupCosineLR(3e-4, warmup_steps=50, total_steps=900, min_lr=3e-5),
+        training.ConstantLR(1e-3, warmup_steps=300),
+        training.WarmupLinearLR(1e-3, warmup_steps=100, total_steps=700, min_lr=1e-5),
+        training.WarmupCosineLR(3e-4, warmup_steps=50, total_steps=900, min_lr=3e-5),
         ml.StepLR(0.1, 70, 0.5),
         ml.ExponentialLR(0.1, 0.999),
         ml.OneCycleLR(0.1, 600),
@@ -61,7 +62,7 @@ def test_pickle_and_copy_rebind_the_block():
 
 
 def test_keyword_and_arity_forms_match_the_former_method():
-    schedule = ml.WarmupCosineLR(3e-4, warmup_steps=50, total_steps=900, min_lr=3e-5)
+    schedule = training.WarmupCosineLR(3e-4, warmup_steps=50, total_steps=900, min_lr=3e-5)
     assert schedule.lr_at(t=5) == schedule.lr_at(5)
     assert schedule.bits_at(t=700) == schedule.bits_at(700)
     with pytest.raises(TypeError, match="unexpected keyword argument 'step'"):
@@ -75,13 +76,13 @@ def test_keyword_and_arity_forms_match_the_former_method():
 
 
 def test_editing_a_setting_changes_lr_at():
-    schedule = ml.ConstantLR(1e-3, warmup_steps=10)
+    schedule = training.ConstantLR(1e-3, warmup_steps=10)
     before = schedule.lr_at(300)               # fills the block holding step 300
     schedule.peak_lr = 2e-3
     after = schedule.lr_at(300)
     assert after != before
-    assert after == ml.ConstantLR(2e-3, warmup_steps=10).lr_at(300)
-    assert list(schedule.lr_values(300)) == list(ml.ConstantLR(2e-3, warmup_steps=10).lr_values(300))
+    assert after == training.ConstantLR(2e-3, warmup_steps=10).lr_at(300)
+    assert list(schedule.lr_values(300)) == list(training.ConstantLR(2e-3, warmup_steps=10).lr_values(300))
     step = ml.StepLR(0.1, 70, 0.5)
     _ = step.lr_at(100)
     step.gamma = 0.25
@@ -89,16 +90,16 @@ def test_editing_a_setting_changes_lr_at():
 
 
 def test_an_edit_the_admission_refuses_raises_at_the_call():
-    schedule = ml.ConstantLR(1e-3, warmup_steps=10)
+    schedule = training.ConstantLR(1e-3, warmup_steps=10)
     schedule.peak_lr = "not a number"          # stored, as before
     with pytest.raises((TypeError, ValueError)):
         schedule.lr_at(1)
     schedule.peak_lr = 1e-3                    # a valid edit rebinds the block
-    assert schedule.lr_at(1) == ml.ConstantLR(1e-3, warmup_steps=10).lr_at(1)
+    assert schedule.lr_at(1) == training.ConstantLR(1e-3, warmup_steps=10).lr_at(1)
 
 
 def test_deleting_a_setting_leaves_no_stale_block():
-    schedule = ml.ConstantLR(1e-3, warmup_steps=10)
+    schedule = training.ConstantLR(1e-3, warmup_steps=10)
     _ = schedule.lr_at(5)                      # the block is filled
     del schedule.peak_lr
     with pytest.raises(Exception):
@@ -106,4 +107,4 @@ def test_deleting_a_setting_leaves_no_stale_block():
     with pytest.raises(AttributeError):
         del schedule.no_such_setting
     schedule.peak_lr = 2e-3                    # a valid edit rebinds the block
-    assert schedule.lr_at(5) == ml.ConstantLR(2e-3, warmup_steps=10).lr_at(5)
+    assert schedule.lr_at(5) == training.ConstantLR(2e-3, warmup_steps=10).lr_at(5)
