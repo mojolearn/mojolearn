@@ -1234,16 +1234,28 @@ def materialize_ptx_leg(proof, whl, dest):
     device file and index the proof names, the runtime closure the stage
     manifest lists and any adapters the proof names, each verified against the
     proof or the wheel's payload. A tree retained under the evidence root is
-    returned as it is. Returns the release-build directory."""
+    returned as it is while every device file its proof names is on disk; a
+    PRUNED tree (lane fb9-arm-builds, 2026-11-17: tools/release_candidate.py
+    prune_set keeps a measurement build's .json records, the witnesses among
+    them, and deletes its leg trees' .so files, so a B arm that rebuilds only
+    the host leg found mojolearn/cuda/sm_80/identical/_mojolearn_native.so
+    missing) is materialized like a record-only proof, from its retained raw
+    witnesses and the wheel. Returns the release-build directory."""
     if proof.get("release_build"):
-        return Path(proof["release_build"])
+        rb = Path(proof["release_build"])
+        named = (_read_json(rb / PTX_WITNESSES["proof"]) or {}).get("extensions") or {}
+        sets = rb / "build" / "sets"
+        if named and all((sets / Path(*Path(n).parts[1:])).is_file() for n in named):
+            return rb
     import gzip
     dest = Path(dest)
     if dest.exists():
         shutil.rmtree(dest)
     for key, rel in PTX_WITNESSES.items():
         w = proof["witnesses"][key]
-        data = gzip.decompress(Path(w["file"]).read_bytes())
+        raw = Path(w["file"]).read_bytes()
+        # a record's witnesses are gzip (record_ptx_proof); a retained leg tree's are the files themselves
+        data = gzip.decompress(raw) if str(w["file"]).endswith(".gz") else raw
         if hashlib.sha256(data).hexdigest() != w["sha256"]:
             raise SystemExit(f"release_reuse: the retained PTX {key} witness changed")
         (dest / rel).parent.mkdir(parents=True, exist_ok=True)
