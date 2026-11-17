@@ -7,7 +7,7 @@
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem
 from bindings.arena_materialize_native_door import (
-    _native_call, _prepare, _prepared_info, _cast, _slot, _empty, _resident_fields,
+    _native_call, _prepare, _prepared_info, _cast, _slot, _empty_unfilled, _resident_fields,
 )
 from bindings.msel_inputs_unpack import msel_input
 from bindings.p3_array_arena_records_unpack import P3_DICT_INT_IDS, p3_dict_admitted, p3_dict_admit
@@ -107,7 +107,11 @@ def arena_resident_take(fields: PythonObject, values: PythonObject, indices_valu
     var base_shape = array["shape"]
     for i in range(1,len(base_shape)):  # driver-loop: generic row shape preserves all trailing dimensions
         _ = py_call(shape.append,base_shape[i])
-    var output = _empty(py_call(b["tuple"],shape),String(array["dtype"]),context)
+    # The take writes every byte of the output (indices.size x row_bytes,
+    # one device download) or raises, discarding it: no zero fill first
+    # (lane fb2-neighbors: a full memset of the train and test outputs,
+    # n x d words per train_test_split, before the download overwrote them).
+    var output = _empty_unfilled(py_call(b["tuple"],shape),String(array["dtype"]),context)
     var n = Int(py=base_shape[0])
     var row_bytes = Int(py=array["nbytes"])//n if n else 0
     if Int(py=indices["size"]) and row_bytes:

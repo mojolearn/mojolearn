@@ -219,6 +219,21 @@ def _empty(shape: PythonObject, dtype: String, context: PythonObject) raises -> 
     return _owned(store,shape,dtype,context)
 
 
+def _empty_unfilled(shape: PythonObject, dtype: String, context: PythonObject) raises -> PythonObject:
+    """`_empty` with NO fill pass (`native_array_unfilled`): only for an
+    output one native writer fills in full before anything reads it, or
+    that is discarded when the writer raises (the resident row take)."""
+    var item = _itemsize(dtype)
+    var count = 1
+    for i in range(len(shape)):  # driver-loop: allocate only the consumed output shape
+        var extent = Int(py=shape[i])
+        if extent < 0 or (count > 0 and extent > 9223372036854775807//item//count):
+            raise Error("ValueError: native row output exceeds indexing bounds")
+        count *= extent
+    var store = native_array_unfilled(String(_store_code(dtype)), count)
+    return _owned(store,shape,dtype,context)
+
+
 def _buffer_owner(view: PythonObject, context: PythonObject) raises:
     var b = context["arena_native_types"]
     if py_type(view) is not context["arena_memoryview"]:
