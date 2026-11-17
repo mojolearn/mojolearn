@@ -191,14 +191,16 @@ def cross_vendor_coordinator(ml, cx):
     coord = cv.Coordinator(host="127.0.0.1", port=0, workers=1, logical_shards=4, steps=1,
                            accept_timeout=30, timeout=30)
     errors = []
-    started = threading.Event()
 
     def peer():
-        started.wait(30)
+        # the listener opens inside run(): connect once it is ready, as tests/test_cross_vendor.py's peers do
+        # (connecting as soon as the Coordinator returned was refused, and run() then timed out at 30 s)
+        if not coord.ready.wait(30):
+            errors.append(TimeoutError("coordinator never listened"))
+            return
         _oracle_peer(coord.bound_port, [0, 1, 2, 3], errors)
     thread = threading.Thread(target=peer, daemon=True)
     thread.start()
-    started.set()   # the listener is open once Coordinator returns; the peer connects while run() accepts
     coord.run()
     coord.drain_events()
     thread.join(40)
@@ -242,6 +244,10 @@ def _onnx_writer():
     path = _SOURCE / "python" / "mojolearn" / "tests" / "_onnx_fixture.py"
     spec = importlib.util.spec_from_file_location("_census_onnx_fixture", path)
     mod = importlib.util.module_from_spec(spec)
+    # its @dataclass records resolve their module through sys.modules ('NoneType' object has no attribute
+    # '__dict__' when the module was never registered)
+    import sys
+    sys.modules[spec.name] = mod
     spec.loader.exec_module(mod)
     return mod
 
