@@ -368,13 +368,21 @@ def mc_integer_view(values: PythonObject, context: PythonObject) raises -> Optio
         return None
     if Int(py=view.ndim) != 1:
         return None
-    var kind = mc_view_kind(classical_dtype_str(view, context))
+    var typestr = classical_dtype_str(view, context)
+    var kind = mc_view_kind(typestr)
     if kind == 0:
         return None
     var count = Int(py=view.shape[0])
     if count < 1:
         return None
     var item = Int(py=view.itemsize)
+    # fb-audit (2026-11-17): a non-native byte order ('>i4', '>i8', ...) is
+    # left to the label input step: both readers of this view (the in-place
+    # dense/radix encode and admitted_ids_i64 with swap=False) read native
+    # words, so a big-endian buffer was misread as other labels. One byte
+    # compare per call, at the boundary, no copy.
+    if item > 1 and String(typestr[byte=0:1]) == ">":
+        return None
     var stride = Int(py=view.strides[0])
     return MetricIntegerView(view, count, item, stride, kind == 1)
 
