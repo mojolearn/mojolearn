@@ -29,7 +29,7 @@ from bindings.generation_buffers_door import (
 )
 from bindings.causal_lm_public_door import _native_function, _native_has_entry, _mutable, _writeback
 from bindings.causal_lm_construct_door import _model_bindings, _model_block
-from bindings.neural_block_public_door import neural_training_entries, neural_training_selection, _neural_input, _neural_lengths, _neural_int_words, neural_block_snapshot_prepared
+from bindings.neural_block_public_door import neural_training_entries, neural_training_selection, _neural_input, _neural_input_rows, _neural_lengths, _neural_int_words, neural_block_snapshot_prepared
 from bindings.neural_block_admission_door import neural_block_fields, neural_block_snapshot, admit_block_f32, BLOCK_OPERATION, neural_array_snapshot, neural_native_scalar
 from bindings.mode_metadata_native_door import _fields, _class_fields
 from bindings.native_loaded_module_door import native_loaded_module, NativeModules
@@ -854,24 +854,36 @@ def mamba_session_step(mut mods: NativeModules, session: PythonObject, input: Py
     var kind = h[].plan.kind
     if not h[].plan.open:
         _session_require_open(hobj, _session_what(kind, ".step"))
-    var x = _neural_input(mods, input, h[].plan.d_model, True, context)
+    # Lane fb2-misc (2026-11-17), per decode token: x is admitted once
+    # (admit_block_f32 BLOCK_READ: one snapshot that pins the caller's owner)
+    # and its address read from that snapshot, as the Transformer session's
+    # per-token door does (`_neural_input_rows`). The old door built a
+    # (B, 1, d_model) metadata view of the snapshot (a new Array, fourteen
+    # attribute writes, two tuples) and then `generation_address` snapshotted
+    # that view again (a dict of every slot, two buffer exports, two
+    # memoryviews, a new Array and its slot writes); y and the reports were
+    # snapshotted the same way although this door has just created them as
+    # C-order Arrays. Same addresses, same bytes: no bit moves.
     var b = h[].plan.b
-    if Int(py=x.shape[0]) != b:
-        raise Error(_session_what(kind, ".step") + ": the session holds " + String(b) + " rows, x has B = " + String(x.shape[0]))
-    var keep = List[PythonObject]()
+    var rows = 0
+    var length = 0
+    var x = _neural_input_rows(mods, input, h[].plan.d_model, True, context, rows, length)
+    if rows != b:
+        raise Error(_session_what(kind, ".step") + ": the session holds " + String(b) + " rows, x has B = " + String(rows))
     var y = _session_output(kind, [b, 1, h[].plan.d_model])
     # Reports escape in the returned tuple/public h_last_ fields, so each
     # call still owns fresh arrays. Their temporary collection is native.
     var reports = List[PythonObject](capacity=len(h[].plan.report_dims))
     for i in range(len(h[].plan.report_dims)):  # driver-loop: over the fixed report buffers
         reports.append(_session_output(kind, h[].plan.report_dims[i]))
-    var input_address = generation_address(x, keep)
-    var output_address = generation_address(y, keep)
+    var input_address = Int(py=x._addr)
+    var output_address = Int(py=y._addr)
     var report_addresses = List[Int](capacity=len(reports))
-    for i in range(len(reports)):  # driver-loop: capture newly allocated report buffers at the provider boundary
-        report_addresses.append(generation_address(reports[i], keep))
+    for i in range(len(reports)):  # driver-loop: over the fixed report buffers this door just created
+        report_addresses.append(Int(py=reports[i]._addr))
     _session_step_call(mods, hobj, input_address, output_address, report_addresses)
-    _ = keep^
+    # x's snapshot pins the caller's storage until the native step returned.
+    _ = x^
     if kind == 1:
         return y
     if kind == 2:
