@@ -4625,6 +4625,7 @@ Verdict: superseded (no numeric change: the table operations run the same typed 
 - Numbers: none. RUN OWED NVIDIA + AMD, one run per arm: arm A `f7d10d2b09`, arm B the lane head, board rows mlp-predict, sequential-predict, gru/lstm/rnn predict.
 - The four lane patches (PREDICT, LOSS, OPTIM, DATA) are each the reverse of the whole lane restricted to the files listed, so they share hunks in `sequence/mlp_fit.mojo` and `sequence/recurrent.mojo`: apply one of them (`git apply -3` once main moves), not several.
 - Guard refusal: `core/experiment_guards_neural.mojo`, block "lane x3-mlp-rnn-predict-on-tape". No grid_controls entry existed. EXPERIMENTS.md: section "Hand-path deletions (2026-10-19)", the lane's rows.
+- **Restored 2026-11-17 for the MLP** (lane fb-neural; AGENTS.md "A measured winner is never deleted on reasoning": the fold-in had no measurement): `sequence/mlp_fit.mojo` has `gemm_epi`, `_act_launch`, `mlp_forward` and the hand `mlp_predict` again (code of `f7d10d2b09`) as the default; `-D MOJOLEARN_AUTOGRAD_PREDICT` (default off) takes the tape predict, now named `mlp_predict_autograd`, for the A/B. The guard refusal is lifted. The recurrent predict stays on the tape. Evidence: the full board on one L40S (wheel d95f805cce, tape, against 0.8.55, hand; same digests) had every MLP infer row slower: mlp-clf istella 42.6 -> 130.7 ms, mlp-reg istella 26.4 -> 64.7, mlp-clf taxi 15.1 -> 25.3, mlp-reg taxi 6.8 -> 10.1. Bits: none (same digest on both wheels). RUN OWED NVIDIA: the define on and off at the wave sha.
 
 ### MOJOLEARN_AUTOGRAD_LOSS
 

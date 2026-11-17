@@ -16,7 +16,7 @@ from bindings.sequence_optimizer_native_door import seq_binding
 from bindings.sequence_device_native_unpack import seq_device_make
 from bindings.classical_arrays_door import classical_address
 from bindings.classical_attributes_door import classical_connect_numpy
-from providers.python.sequence_layer_buffer_pyapi_unpack import SequenceFloatBuffer, SequenceResidentSnapshot, _array
+from providers.python.sequence_layer_buffer_pyapi_unpack import SequenceFloatBuffer, SequenceResidentSnapshot, _array, _array_unfilled
 from bindings.sequence_moe_native_door import sequence_moe_operation
 from core.scaler_fit_impl import scaler_fill
 from bindings.py_optional import py_present
@@ -290,7 +290,9 @@ def _run(input: LayerInput, d: Int, weight: PythonObject, bias: PythonObject, ep
     var entry = py_get(entries, "layer_norm")
     if entry is None:
         raise Error("ImportError: the sequence binding lacks layer_norm; rebuild it")
-    var output = _array(input.shape, context)
+    # y (forward) or dx (backward): the entry downloads every word, so the
+    # output is unfilled NumPy storage (lane fb-neural; see _array_unfilled)
+    var output = _array_unfilled(input.shape, context)
     var scratch = _array([1], context) if not backward else PythonObject(None)
     var dw = _array(grad_shape, context)
     var db = _array(grad_shape, context)

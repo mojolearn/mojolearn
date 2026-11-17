@@ -10,7 +10,7 @@ from autograd.ops import MULTIPLY, SCALE, SOFTMAX, TANH
 from sequence.exec_trait import Exec
 from sequence.ops import FP
 from sequence.mlp import ACT_SOFTMAX
-from sequence.mlp_fit import MLPNet, mlp_forward_autograd, mlp_predict
+from sequence.mlp_fit import MLPNet, mlp_forward_autograd, mlp_predict, mlp_predict_autograd
 from autograd.checks.support import check_values
 
 
@@ -250,6 +250,12 @@ def _mlp_case[E: Exec](mut ex: E, name: String, var sizes: List[Int], act: Int, 
     var predicted = List[Float32](length=N * O, fill=0)
     mlp_predict(ex, net, _ptr(x), N, _ptr(params), _ptr(predicted), 3)
     _same_bits(name + "_predict", recorded, predicted)
+    # RESTORED 2026-11-17 (lane fb-neural): mlp_predict is the hand predict again (one OP_GEMM_EPI a layer) and
+    # the tape predict is mlp_predict_autograd (-D MOJOLEARN_AUTOGRAD_PREDICT); both must give the tape
+    # forward's bits.
+    var predicted_tape = List[Float32](length=N * O, fill=0)
+    mlp_predict_autograd(ex, net, _ptr(x), N, _ptr(params), _ptr(predicted_tape), 3)
+    _same_bits(name + "_predict_tape", recorded, predicted_tape)
     if O == 1:
         var two = List[Float32](length=N * 2, fill=0)
         var two_want = List[Float32](length=N * 2, fill=0)

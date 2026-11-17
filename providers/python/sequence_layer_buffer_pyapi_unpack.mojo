@@ -3,7 +3,7 @@
 # argument; original owners and any prepared buffers remain alive through use.
 from std.python import PythonObject
 from bindings.native_loaded_module_door import native_loaded_module
-from bindings.py_balanced import py_call, py_type
+from bindings.py_balanced import py_call, py_type, py_get
 from bindings.py_typed_call import py_call_typed
 from bindings.optimizer_admission_door import opt_value
 from providers.python.array_layout_boundary_pack import native_shape_pack
@@ -25,6 +25,31 @@ def _array(shape: List[Int], context: PythonObject, wide: Bool = False) raises -
     var input = context["input_context"]
     classical_connect_numpy(input)
     return classical_typed(native_shape_pack(shape), "<i8" if wide else "<f4", input)
+
+
+def _array_unfilled(shape: List[Int], context: PythonObject) raises -> PythonObject:
+    """A float32 output that ONE native writer fills in full before anything
+    reads it (a layer's y or dx download, a cast copy, a resident read-back).
+
+    lane fb-neural (2026-11-17): with NumPy connected this is NumPy's own
+    uninitialised allocation (`ndarray(shape, float32)` with no buffer, as
+    0.8.55's `np.empty`): NumPy's allocator asks the kernel for huge pages on
+    blocks of 4 MB and more and runs no fill. `_array` above wraps a
+    `bytearray(nbytes)`: a memset pass over the whole output plus one 4 KB
+    page fault per page when the writer first touches it. At the board's
+    8192 x 1024 layer-norm output (32 MB) that is 8,192 faults and a 32 MB
+    fill per call (train-layer-norm-forward 13.5 -> 32.1 ms and -backward
+    16.9 -> 36.0 ms on the L40S, d95f805cce vs 0.8.55, one 32 MB host output
+    each). The cost scales with the output's bytes, not with a board shape:
+    any host LayerNorm, at any (M, D), pays it per call. Without NumPy the
+    zero-filled Array store of `_array` stays (no NumPy allocator to use).
+    Storage only: the writer stores every word, no bit moves."""
+    var input = context["input_context"]
+    classical_connect_numpy(input)
+    if py_get(input, "ndarray") is None:
+        return _array(shape, context)
+    _ = shape_count(shape)
+    return py_call(input["ndarray"], native_shape_pack(shape), dtype=input["float32"])
 
 
 struct SequenceFloatBuffer(Movable):
@@ -89,7 +114,8 @@ struct SequenceFloatBuffer(Movable):
             self.array = source
             self.address = layout.address
         else:
-            self.array = _array(self.shape, context)
+            # fully written by the cast below (lane fb-neural: unfilled)
+            self.array = _array_unfilled(self.shape, context)
             self.address = Int(py=classical_address(self.array))
             sequence_optimizer_cast(layout.address, layout.shape, layout.strides,
                 layout.itemsize, kind, native, self.address, self.count, False)
@@ -117,7 +143,8 @@ struct SequenceResidentSnapshot(Movable):
         self.entries = seq_binding(PythonObject(None), context, py_call(get["b"], value))
 
     def host(self, context: PythonObject) raises -> PythonObject:
-        var result = _array(self.shape, context)
+        # fully written by the download below (lane fb-neural: unfilled)
+        var result = _array_unfilled(self.shape, context)
         if self.count > 0:
             _ = py_call_typed(self.entries["seq_tensor_download"], self.handle,
                                classical_address(result), PythonObject(self.count))
