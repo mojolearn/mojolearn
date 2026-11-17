@@ -410,6 +410,7 @@ class Census:
         self.type_cache, self.code_maps, self.native_names = {}, {}, {}
         self.native_ids = collections.defaultdict(set)
         self.binding_cache = {}
+        self.type_modules = {}         # id(type) -> (type, module name) for native types without __module__
         self.seen = set()
         self.call = None
         self.suspended = []            # outer calls waiting while a member reached inside them runs as its own
@@ -561,13 +562,27 @@ class Census:
                     return [f"{cid}.{held}"]
         return None
 
+    def type_module(self, T):
+        """T's module name; for a native type registered under an undotted name (no __module__: the schedule rate
+        block `_LrScheduleBlock`), the loaded module that holds the type object, once per type."""
+        name = getattr(T, "__module__", None)
+        if name:
+            return name
+        cache = self.type_modules
+        if id(T) not in cache:
+            holders = [m.__name__ for m in list(sys.modules.values())
+                       if isinstance(m, types.ModuleType) and any(v is T for v in list(vars(m).values()))]
+            ours = [h for h in holders if h.lstrip("_").startswith("mojolearn")]
+            cache[id(T)] = (T, (ours or holders or [None])[0])
+        return cache[id(T)][1]
+
     def binding(self, arg):
         """(is a native mojolearn binding, its name) for a C callable."""
         owner = getattr(arg, "__self__", None)
         if isinstance(owner, types.ModuleType):
             mod, modname = owner, owner.__name__
         else:
-            modname = getattr(arg, "__module__", None) or (type(owner).__module__ if owner is not None else None)
+            modname = getattr(arg, "__module__", None) or (self.type_module(type(owner)) if owner is not None else None)
             mod = sys.modules.get(modname) if modname else None
         ck = id(mod) if mod is not None else modname
         hit = self.binding_cache.get(ck)
