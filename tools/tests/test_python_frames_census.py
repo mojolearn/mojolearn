@@ -94,6 +94,27 @@ class ReportTest(unittest.TestCase):
         self.assertEqual(census._function_key(len), "")
 
 
+class InstanceHeldNativeMethodTest(unittest.TestCase):
+    def test_a_native_method_held_by_a_public_instance_is_its_member(self):
+        # a schedule's lr_at is its native block's bound method, stored in the schedule's own dictionary
+        c = census.Census({"package": "/nonexistent/mojolearn", "classes": [
+            {"id": "mojolearn.Sched", "module": "m", "qualname": "Sched", "attrs": {"lr_at": "method"}}],
+            "functions": [], "members": []})
+
+        class Block:
+            pass
+
+        class Sched:
+            pass
+        held = len.__call__   # any builtin bound method whose owner is no public class
+        sched = Sched()
+        sched.lr_at = held
+        self.assertIsNone(c.native_member(held))
+        c.instances["mojolearn.Sched"] = sched
+        self.assertEqual(c.native_member(held), ["mojolearn.Sched.lr_at"])
+        self.assertIsNone(c.native_member(Block().__init__))
+
+
 class CensusSkipRuleTest(unittest.TestCase):
     def test_decision(self):
         inputs = {"python/mojolearn": "t1", "tools/ops/python_frames_census.py": "b1"}

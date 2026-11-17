@@ -543,6 +543,22 @@ class Census:
             fid = self.functions.get((owner.__name__, name))
             if fid:
                 return [fid]
+        if owner is not None:
+            # A native bound method a public instance holds in its own dictionary, shadowing the class member of
+            # that name (a schedule's `lr_at` / `bits_at` are its native rate block's methods, bound into the
+            # schedule at construction; fb6-smoke, 2026-11-17: they read UNCOVERED). The callable itself is the
+            # stored object, so identity with an instance entry attributes the call to the member of that entry's name.
+            for cid, inst in list(self.instances.items()):
+                try:
+                    fields = object.__getattribute__(inst, "__dict__")
+                except Exception:
+                    continue
+                if type(fields) is not dict:
+                    continue
+                attrs = self.class_ids[cid]["attrs"]
+                held = next((k for k, v in fields.items() if v is arg and k in attrs), None)
+                if held is not None:
+                    return [f"{cid}.{held}"]
         return None
 
     def binding(self, arg):

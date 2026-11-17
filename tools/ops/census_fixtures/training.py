@@ -78,6 +78,23 @@ def _schedule_from_config(name):
     return fixture
 
 
+def _schedule_block(path, args, kwargs):
+    # the rate block's lr_at / bits_at (native methods the schedule holds) and the pickle state pair, on a schedule
+    # built with explicit settings (the probe cannot construct one: every schedule needs its rate)
+    def fixture(ml, cx):
+        cls = ml
+        for part in path.split("."):
+            cls = getattr(cls, part)
+        sched = cls(*args, **kwargs)
+        sched.lr_at(2)
+        sched.bits_at(2)
+        state = sched.__getstate__()
+        restored = cls.__new__(cls)
+        restored.__setstate__(state)
+        restored.lr_at(3)
+    return fixture
+
+
 def generator_load_state_dict(ml, cx):
     gen = ml.training.Generator(7, numeric_mode="identical")
     gen.next_stream()
@@ -288,6 +305,13 @@ for _name in OPTIMIZERS:
 for _name in ("ConstantLR", "WarmupCosineLR", "WarmupLinearLR"):
     FIXTURES[f"{_name.lower()}_from_config"] = (_schedule_from_config(_name),
                                                 [f"mojolearn.training.{_name}.from_config"])
+for _path, _args, _kwargs in (("training.ConstantLR", (.125,), {"warmup_steps": 1}),
+                               ("training.WarmupLinearLR", (.125,), {"warmup_steps": 1, "total_steps": 3, "min_lr": .03125}),
+                               ("training.WarmupCosineLR", (.125,), {"warmup_steps": 1, "total_steps": 3, "min_lr": .03125}),
+                               ("StepLR", (.125, 2, .5), {}), ("ExponentialLR", (.125, .5), {}),
+                               ("OneCycleLR", (.125, 4), {})):
+    FIXTURES[f"{_path.rsplit('.', 1)[-1].lower()}_block"] = (_schedule_block(_path, _args, _kwargs), [
+        f"mojolearn.{_path}.{_m}" for _m in ("lr_at", "bits_at", "__getstate__", "__setstate__")])
 
 #: members whose real work needs device-resident optimizer state: on the CPU wheel their native entry refuses
 #: ("a CPU-only install"); the CPU fixtures above still call them (measured as the refusal), the "gpu" fixture runs
