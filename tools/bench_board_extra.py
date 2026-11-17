@@ -17,9 +17,10 @@ protocol, seed and parameter rules, and parameter check.
                                                            the SAME vocabulary (ours, rendered
                                                            as tokenizer.json)
     bpe-train         BpeVocabularyTrainer.train           tokenizers BpeTrainer, byte level
-    lr-step, lr-exponential, lr-onecycle, lr-constant, lr-warmup-linear, lr-warmup-cosine
-                      100,000 steps of the schedule        torch.optim.lr_scheduler, same
-                                                           parameters
+    internal-call-overhead-lr-at
+                      100,000 ConstantLR.lr_at calls       none: call overhead, internal check, not a
+                                                           race (our arm only, against our own prior
+                                                           version on the same box in the same job)
     jl-min-dim        johnson_lindenstrauss_min_dim        scikit-learn's, over one grid
     lowbit-*          mojolearn.linalg quantize_int8, dequantize_int8, quantize_int15,
                       dequantize_int15, matmul_int15, to_bf16, from_bf16
@@ -79,31 +80,16 @@ REFINE_K, REFINE_CANDIDATES = 10, 100   # ann-refine: the ANN lanes' k = 10, 10x
 QN = dict(loss="squared_error", fit_intercept=True, l1_strength=0.0, l2_strength=0.0,
           max_iter=1000, tol=1e-4, delta=1e-4 * 0.01, linesearch_max_iter=50, lbfgs_memory=5,
           warm_start=False, penalty_normalized=True)
-SCHED = {
-    "lr-step": ("StepLR", dict(base_lr=0.1, step_size=1000, gamma=0.5)),
-    "lr-exponential": ("ExponentialLR", dict(base_lr=0.1, gamma=0.9999)),
-    "lr-onecycle": ("OneCycleLR", dict(max_lr=0.1, total_steps=SCHED_STEPS, pct_start=0.3,
-                                       anneal_strategy="cos", div_factor=25.0,
-                                       final_div_factor=1e4, three_phase=False)),
-    "lr-constant": ("training.ConstantLR", dict(peak_lr=1e-3, warmup_steps=1000)),
-    "lr-warmup-linear": ("training.WarmupLinearLR", dict(peak_lr=1e-3, warmup_steps=1000,
-                                                         total_steps=SCHED_STEPS, min_lr=1e-5)),
-    "lr-warmup-cosine": ("training.WarmupCosineLR", dict(peak_lr=1e-3, warmup_steps=1000,
-                                                         total_steps=SCHED_STEPS, min_lr=1e-5)),
-}
-TORCH_SCHED_TEXT = {
-    "lr-step": "StepLR(SGD(lr=0.1), step_size=1000, gamma=0.5)",
-    "lr-exponential": "ExponentialLR(SGD(lr=0.1), gamma=0.9999)",
-    "lr-onecycle": "OneCycleLR(SGD(lr=0.1), max_lr=0.1, total_steps=100000, pct_start=0.3, "
-                   "anneal_strategy='cos', div_factor=25, final_div_factor=1e4, "
-                   "three_phase=False, cycle_momentum=False)",
-    "lr-constant": "LinearLR(SGD(lr=1e-3), start_factor=1/1000, end_factor=1, total_iters=999) "
-                   "(warmup to peak, then constant)",
-    "lr-warmup-linear": "SequentialLR([LinearLR(1/1000, 1, 999), LinearLR(1, 1e-5/1e-3, 99000)], "
-                        "milestones=[1000])",
-    "lr-warmup-cosine": "SequentialLR([LinearLR(1/1000, 1, 999), CosineAnnealingLR(T_max=99000, "
-                        "eta_min=1e-5)], milestones=[1000])",
-}
+# NOT A RACE (Andrew, 2026-11-17): the six learning-rate schedule lanes (lr-step, lr-exponential, lr-onecycle,
+# lr-constant, lr-warmup-linear, lr-warmup-cosine) timed a Python loop of single lr_at calls against
+# torch.optim.lr_scheduler: no GPU work, only call overhead, so they were not races. They are gone from the plan, and
+# tools/race_fairness.py rule 1c (lane_class) keeps their stored rows off every board, the paper and the site. ONE
+# internal row stays: ConstantLR(warmup_steps=0), whose lr_at returns peak_lr at every step (no warmup branch, no
+# decay arithmetic), the cheapest schedule, so the row is as close to the pure cost of one lr_at call as a schedule
+# gets. Our arm only; tools/paper_compare.py compares it only with our own prior version on the same box in the same
+# job (its "internal checks" section). The name equals race_fairness.INTERNAL_CALL_OVERHEAD_LANE.
+INTERNAL_LR_LANE = "internal-call-overhead-lr-at"
+INTERNAL_LR = ("training.ConstantLR", dict(peak_lr=1e-3, warmup_steps=0))
 _TS = ("taxi-hourly", "synthetic")
 _TAB = ("taxi", "istella")
 
@@ -182,12 +168,11 @@ def register(add):
                    "bpe-encode: both arms use OUR trained vocabulary (Hugging Face loads it "
                    "from render_tokenizer_json()), trained before the clock"],
             mism=["bpe-train: each library breaks count ties by its own rule"])
-    for slug, (cls, p) in SCHED.items():
-        add(slug, xlane="sequence" if "." not in cls else "training", ours=(cls,), kind="extra",
-            task="sched", block="tensor", datasets=("synthetic",), params=dict(p),
-            quality="x-sched",
-            fit_text="the learning rate of steps 1 .. %d" % SCHED_STEPS,
-            other={"torch-cpu": "torch"}, notes=["torch: " + TORCH_SCHED_TEXT[slug]])
+    add(INTERNAL_LR_LANE, xlane="training", ours=(INTERNAL_LR[0],), kind="extra", task="sched",
+        block="tensor", datasets=("synthetic",), params=dict(INTERNAL_LR[1]), quality="x-sched",
+        fit_text="%d single lr_at calls (steps 1 .. %d)" % (SCHED_STEPS, SCHED_STEPS), other={},
+        notes=["call overhead, internal check (Andrew, 2026-11-17): not a race, no opponent; compared only "
+               "with our own prior version on the same box in the same job"])
     # measure-coverage (2026-10-22, Andrew: every exposed API measured against its peer): the low-bit linalg
     # functions against torch twins of the SAME contract (gemm/IDENTICAL_LOWBIT_CONTRACT.md L-1..L-6,
     # W-1..W-7), explicit in torch ops: per-row power-of-two exponent read from the absmax's exponent field
@@ -1126,59 +1111,18 @@ def build(lane, arm, D, A):
                     "n": np.array([len(S["tok"])])}
         return Runner(info, fit, out, record=rec)
 
-    # ---- learning-rate schedules
+    # ---- the call-overhead internal check (not a race, Andrew 2026-11-17): our arm only. lr_at is bound once
+    # outside the clock; the clock holds the calls and the list append only, the array is built after it.
     if t == "sched":
         rec["input_arrays"] = input_arrays(lane, D, A)
-        if ours:
-            sched = fn(**p)
-
-            def fit():
-                S["lr"] = np.array([sched.lr_at(k) for k in range(1, SCHED_STEPS + 1)])
-            return Runner(info, fit, lambda: {"lr": S["lr"]}, record=rec)
-        import warnings
-        import torch
-        info.update(library="torch", version=torch.__version__, config=TORCH_SCHED_TEXT[lane])
-        O = torch.optim
-        L = O.lr_scheduler
-
-        def make():
-            base = p.get("base_lr", p.get("max_lr", p.get("peak_lr")))
-            opt = O.SGD([torch.nn.Parameter(torch.zeros(1))], lr=base)
-            if lane == "lr-step":
-                return L.StepLR(opt, step_size=p["step_size"], gamma=p["gamma"])
-            if lane == "lr-exponential":
-                return L.ExponentialLR(opt, gamma=p["gamma"])
-            if lane == "lr-onecycle":
-                return L.OneCycleLR(opt, max_lr=p["max_lr"], total_steps=p["total_steps"],
-                                    pct_start=p["pct_start"], anneal_strategy=p["anneal_strategy"],
-                                    div_factor=p["div_factor"], final_div_factor=p["final_div_factor"],
-                                    three_phase=p["three_phase"], cycle_momentum=False)
-            w = p["warmup_steps"]
-            warm = L.LinearLR(opt, start_factor=1.0 / w, end_factor=1.0, total_iters=w - 1)
-            if lane == "lr-constant":
-                return warm
-            span = p["total_steps"] - w
-            if lane == "lr-warmup-linear":
-                tail = L.LinearLR(opt, start_factor=1.0, end_factor=p["min_lr"] / p["peak_lr"],
-                                  total_iters=span)
-            else:
-                tail = L.CosineAnnealingLR(opt, T_max=span, eta_min=p["min_lr"])
-            return L.SequentialLR(opt, [warm, tail], milestones=[w])
+        if not ours:
+            raise SystemExit("REFUSING: %s is a call-overhead internal check, our arm only (no %s arm)"
+                             % (lane, arm))
+        lr_at = fn(**p).lr_at
 
         def fit():
-            with warnings.catch_warnings():
-                warnings.simplefilter("ignore")
-                sc = make()
-                out = np.empty(SCHED_STEPS)
-                for k in range(SCHED_STEPS):
-                    out[k] = sc.get_last_lr()[0]
-                    if k + 1 < SCHED_STEPS:
-                        sc.step()
-            S["lr"] = out
-        # measure-coverage (2026-10-24): the torch scheduler class, for the real-implementation check
-        impl = {"lr-step": L.StepLR, "lr-exponential": L.ExponentialLR, "lr-onecycle": L.OneCycleLR,
-                "lr-constant": L.LinearLR}.get(lane, L.SequentialLR)
-        return Runner(info, fit, lambda: {"lr": S["lr"]}, record=dict(rec, __implementation__=impl, **p))
+            S["lr"] = [lr_at(k) for k in range(1, SCHED_STEPS + 1)]
+        return Runner(info, fit, lambda: {"lr": np.asarray(S["lr"], dtype=np.float64)}, record=rec)
 
     # ---- Johnson-Lindenstrauss bound
     if t == "jl":
@@ -1268,9 +1212,10 @@ def quality(lane, D, outs, A):
                 if ref is not None:
                     theirs = set(bytes(ref["tokens"]).split(b"\x00"))
                     e["jaccard_vs_ours"] = len(mine & theirs) / float(len(mine | theirs))
-            elif t == "sched" and ref is not None:
-                r = ref["lr"].astype(np.float64)
-                e["max_rel_diff_vs_ours"] = float((np.abs(o["lr"] - r) / np.maximum(np.abs(r), 1e-30)).max())
+            elif t == "sched":
+                # ConstantLR(warmup_steps=0): every step's rate is peak_lr rounded to float32
+                peak = float(np.float32(s["params"]["peak_lr"]))
+                e["max_rel_diff_vs_peak_lr"] = float(np.abs(o["lr"] - peak).max() / peak)
             elif t.startswith("lowbit_") or t.startswith("tr_"):
                 e.update(_lowbit_train_quality(np, t, s["params"], o, A["SEED"]))
             elif t == "metric":

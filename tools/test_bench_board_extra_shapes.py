@@ -90,7 +90,7 @@ def test_clip_grad_norm_every_arm_records_its_input_arrays(monkeypatch):
 def test_tensor_lanes_without_staged_arrays_record_inputs_on_every_arm():
     G = dict(vars(A))
     G["_staging"] = lambda: None
-    for lane in ("lr-step", "jl-min-dim"):
+    for lane in (X.INTERNAL_LR_LANE, "jl-min-dim"):
         recs = X.input_arrays(lane, {}, G)
         cell = dict(params={"raw_params": {"input_arrays": recs}})
         assert E.measured_shape(cell, {}) == {"input_arrays": recs}, lane
