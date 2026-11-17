@@ -80,12 +80,14 @@ def _launch_hb[
     # cpu3-gbdt-a); held past the launch
     var scale_word = ctx.enqueue_create_buffer[DType.float32](1)
     enqueue_fill(ctx, scale_word, Float32(1.0))
+    # a launch lists every kernel parameter: no dither ids on this route
+    var no_dither_hb: Optional[MutPointer[UInt32, MutAnyOrigin]] = None
     ctx.enqueue_function[
         compute_split_properties_half_byte_kernel[full, m]
     ](
         p_off, p_ffi, p_folds, Int32(f_count), p_ci, p_tgt, p_wt, p_idx,
         p_part, p_sums, Int32(total_bin_features), scale_word.unsafe_ptr(),
-        Int32(0), grid_dim=(gx, 1, 1), block_dim=(PW_HB_BLOCK, 1, 1),
+        Int32(0), no_dither_hb, grid_dim=(gx, 1, 1), block_dim=(PW_HB_BLOCK, 1, 1),
     )
     _ = scale_word^
 
