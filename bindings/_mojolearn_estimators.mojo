@@ -10,7 +10,7 @@ from core.experiment_guards_linear import LINEAR_GUARDS_OK
 from glm.linear_predict_device import LINEAR_PREDICT_DEVICE_API, linear_predict_device
 from core.linear_boundary_types import LinearPredictRequest
 from core.logistic_native_api import (
-    QnFitRequest, QnQueryRequest, QnLinkRequest, QN_NATIVE_DECISION,
+    QnQueryRequest, QnLinkRequest, QN_NATIVE_DECISION,
     QN_NATIVE_BINARY, QN_NATIVE_MULTICLASS, QN_NATIVE_PROBA,
     QN_NATIVE_SIGMOID, QN_NATIVE_SOFTMAX,
 )
@@ -84,7 +84,6 @@ from decomposition.tsvd_resident_state import (
 from glm.estimator import (
     ols_fit_host,
     ols_fit_resident_host,
-    qn_fit_ovr_host,
     ridge_fit_host,
     ridge_fit_resident_host,
 )
@@ -1094,114 +1093,6 @@ def ridge_fit_resident_binding(
 # one-program ridge reaches core/linear_multi_device.mojo through the ridge multi table) deleted
 # 2026-11-11 by lane calltable-base-helpers; code recoverable at 17b0a91b04.
 
-
-def qn_fit_binding(
-    x_addr: PythonObject,
-    y_addr: PythonObject,
-    coef_addr: PythonObject,
-    info_addr: PythonObject,
-    params: PythonObject,
-) raises -> PythonObject:
-    """`qnFit` (DEVIATIONS 546-549). params: n_rows, n_features,
-    n_classes, penalty_l1, penalty_l2, grad_tol, change_tol, max_iter,
-    linesearch_max_iter, lbfgs_memory, fit_intercept, penalty_normalized,
-    has_sample_weight -- cuML's `qn_params` in its field order -- and,
-    since lane/logistic-multiclass (2026-09-14), an OPTIONAL 14th, the loss
-    id: QN_LOSS_LOGISTIC (0) with `n_classes == 2`, the value a 13-field
-    call gets, or QN_LOSS_SOFTMAX (2) with `n_classes > 2`, the coef buffer
-    then `n_classes * (n_features + fit_intercept)` floats. Since
-    lane/expose-qn-objectives (2026-09-20) the 14th also takes the SVC
-    losses (3, 4; `n_classes == 2`, y in {0, 1}) and the regression losses
-    (squared 1, absolute 7, SVR 5 and 6; `n_classes == 1`), and an
-    OPTIONAL 15th is `svr_eps`, the SVR sensitivity (0 when absent).
-    Lane sk-kernels: with has_sample_weight = 1 a 16th field is required,
-    the address of `n_rows` float32 per-row weights.
-    Lane a7c: an OPTIONAL 17th field (the 16th then present, 0 without
-    weights) is the host address of the deferred finite status word of X
-    (core/admitted_finite_status.mojo): the uploaded X is tested on the
-    device and the word written there; a non-finite X fits nothing.
-    Returns num_iters; info[0] = objective, info[1] = retcode."""
-    if len(params) < 13 or len(params) > 17:
-        raise Error("qn_fit: params must carry the 13 qn_params fields, plus an optional 14th, the loss id, an optional 15th, svr_eps, a 16th, the sample_weight address, when has_sample_weight is 1, and an optional 17th, the finite status address")
-    var xp = _f32_ptr(Int(py=x_addr))
-    var yp = _f32_ptr(Int(py=y_addr))
-    var wp = _f32_ptr(Int(py=coef_addr))
-    var ip = _f32_ptr(Int(py=info_addr))
-    var nr = Int(py=params[0])
-    var nf = Int(py=params[1])
-    var nc = Int(py=params[2])
-    var l1 = Float64(py=params[3])
-    var l2 = Float64(py=params[4])
-    var grad_tol = Float64(py=params[5])
-    var change_tol = Float64(py=params[6])
-    var max_iter = Int(py=params[7])
-    var ls_max = Int(py=params[8])
-    var mem = Int(py=params[9])
-    var fit_intercept = Int(py=params[10]) != 0
-    var normalized = Int(py=params[11]) != 0
-    var has_sw = Int(py=params[12]) != 0
-    var loss = Int(py=params[13]) if len(params) >= 14 else 0
-    var svr_eps = Float64(py=params[14]) if len(params) >= 15 else 0.0
-    if has_sw and len(params) < 16:
-        raise Error("qn_fit: has_sample_weight = 1 needs the 16th field, the sample_weight address")
-    var swp = _f32_ptr(Int(py=params[15])) if has_sw else yp
-    var status = Int(py=params[16]) if len(params) == 17 else 0
-    var request = QnFitRequest(Int(xp), Int(yp), Int(wp), Int(ip), Int(swp) if has_sw else 0, status,
-        nr, nf, nc, max_iter, ls_max, mem, fit_intercept, normalized, loss,
-        l1, l2, grad_tol, change_tol, svr_eps)
-    var iters = 0
-    with GILReleased(Python()):
-        iters = QnDeviceKernels.fit(request)
-    return PythonObject(iters)
-
-
-def qn_fit_ovr_binding(
-    x_addr: PythonObject,
-    codes_addr: PythonObject,
-    coef_addr: PythonObject,
-    info_addr: PythonObject,
-    params: PythonObject,
-) raises -> PythonObject:
-    """One-vs-rest `qnFit` with X uploaded once (lane fam2-linear). params:
-    n_rows, n_features, first_class, n_fits, penalty_l1, penalty_l2,
-    grad_tol, change_tol, max_iter, linesearch_max_iter, lbfgs_memory,
-    fit_intercept, penalty_normalized, loss (an SVC or the logistic id),
-    and (lane sk-kernels) an OPTIONAL 15th, the address of `n_rows` float32
-    per-row sample weights. codes: int32 dense class codes. coef: n_fits rows of n_features +
-    fit_intercept floats. info: per fit objective, retcode, num_iters."""
-    if len(params) != 14 and len(params) != 15:
-        raise Error("qn_fit_ovr: params must carry 14 fields and an optional 15th, the sample_weight address (see the docstring)")
-    var xp = _f32_ptr(Int(py=x_addr))
-    var cp = _i32_ptr(Int(py=codes_addr))
-    var wp = _f32_ptr(Int(py=coef_addr))
-    var ip = _f32_ptr(Int(py=info_addr))
-    var nr = Int(py=params[0])
-    var nf = Int(py=params[1])
-    var first = Int(py=params[2])
-    var n_fits = Int(py=params[3])
-    var l1 = Float64(py=params[4])
-    var l2 = Float64(py=params[5])
-    var grad_tol = Float64(py=params[6])
-    var change_tol = Float64(py=params[7])
-    var max_iter = Int(py=params[8])
-    var ls_max = Int(py=params[9])
-    var mem = Int(py=params[10])
-    var fit_intercept = Int(py=params[11]) != 0
-    var normalized = Int(py=params[12]) != 0
-    var loss = Int(py=params[13])
-    var has_sw = len(params) == 15
-    var swp = _f32_ptr(Int(py=params[14])) if has_sw else wp
-    with GILReleased(Python()):
-        var ctx = process_ctx[_DEVCTX_SLOT]()
-        qn_fit_ovr_host(
-            ctx, xp, cp, wp, ip, nr, nf, first, n_fits, l1, l2, grad_tol,
-            change_tol, max_iter, ls_max, mem, fit_intercept, normalized, loss,
-            has_sw, swp,
-        )
-        ctx.synchronize()
-    return PythonObject(0)
-
-
 def qn_decision_function_binding(
     x_addr: PythonObject,
     coef_addr: PythonObject,
@@ -1651,8 +1542,6 @@ def build__mojolearn_estimators() -> PythonObject:
         m.def_function[linear_gram_solve_default_binding]("linear_gram_solve_default")
         # TOMBSTONE: ridge_fit_multi / ridge_predict_multi registrations deleted 2026-11-11 by lane
         # calltable-base-helpers (see above); code recoverable at 17b0a91b04.
-        m.def_function[qn_fit_binding]("qn_fit")
-        m.def_function[qn_fit_ovr_binding]("qn_fit_ovr")
         m.def_function[qn_decision_function_binding]("qn_decision_function")
         m.def_function[qn_predict_binary_binding]("qn_predict_binary")
         m.def_function[qn_predict_multiclass_binding]("qn_predict_multiclass")

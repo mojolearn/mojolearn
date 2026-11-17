@@ -500,8 +500,8 @@ TRAINING_LANE_NAMES = {
     "minmax-scaler": "the min-max scaler",
     "scaler-fit-transform": "the standard and min-max scalers' fit_transform",
     # The logistic lane, same batch: glm/host/qn_oracle.mojo, the L-BFGS
-    # arm of the quasi-Newton solver, exported as qn_fit from the
-    # estimators host binding.
+    # arm of the quasi-Newton solver, reached through the estimators host
+    # binding's QN table.
     "logistic": "logistic regression",
     # Workstream E batch 3 (2026-09-14): the random forests train through
     # ensemble/host/rf_oracle.mojo, the device trainer restated on the host,
@@ -1633,7 +1633,7 @@ FAMILIES = (
             "byte_lm_trainer_api_v1", "byte_lm_native_session_handle_v1",
             "byte_lm_session_create", "byte_lm_session_close", "byte_lm_session_info",
             "byte_lm_numeric_mode", "byte_lm_vendor", "byte_lm_profile", "byte_lm_arithmetic_suffix",
-            "byte_lm_config_profile", "sha256_hex", "byte_lm_file_sha256",
+            "byte_lm_config_profile", "byte_lm_file_sha256",
             "byte_lm_run", "byte_lm_run_configured", "byte_lm_trainer_run", "byte_lm_logits",
             "byte_lm_trainer_step", "byte_lm_trainer_logits", "byte_lm_trainer_next_bytes",
             "byte_lm_trainer_export_state", "byte_lm_trainer_export_gradients",
@@ -2182,7 +2182,7 @@ FAMILIES = (
             "estimators_host_column", "estimators_host_sabotage",
             "estimators_vendor", "estimators_numeric_mode", "kde_score_samples",
             "pca_native_api_v1", "tsvd_native_api_v1", "kde_native_api_v1", "dbscan_native_api_v1",
-            "pca_fit", "pca_fit_full", "tsvd_fit", "ols_fit", "ridge_fit", "dbscan_fit", "qn_fit",
+            "pca_fit", "pca_fit_full", "tsvd_fit", "ols_fit", "ridge_fit", "dbscan_fit",
             # lane hr-small-passes (2026-10-02): the linear models' centering
             "lm_col_sums", "lm_center", "lm_scale_rows",
             "tsvd_explained",

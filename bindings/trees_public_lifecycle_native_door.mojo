@@ -87,7 +87,7 @@ def forest_public_operation(model: PythonObject, operation: String, args: Python
         return PythonObject(forest_prediction_engine(py_fields(model), context))
     if operation == "trees_public_forest_ordered_resident_auto":
         return PythonObject(forest_ordered_resident_auto(model, py_fields(model), context))
-    if operation == "trees_public_forest_apply" or operation == "trees_public_forest_predict_with_leaves" or operation == "trees_public_forest_staged_predict" or operation == "trees_public_forest_auxiliary":
+    if operation == "trees_public_forest_apply" or operation == "trees_public_forest_predict_with_leaves" or operation == "trees_public_forest_staged_predict":
         var method = String(operation[byte=String("trees_public_forest_").byte_length():])
         # Retained e087692fd public baseline: these auxiliary APIs return
         # Array/tuple-of-Arrays even externally with NumPy loaded. Preserve

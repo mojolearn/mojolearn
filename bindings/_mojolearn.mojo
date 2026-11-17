@@ -181,10 +181,6 @@ from bindings.msel_device_pack import (
     msel_live_binding,
     msel_take_rows_binding,
     msel_free_bytes_binding,
-    pca_transform_fold_binding,
-    pca_fit_fold_binding,
-    tsvd_fit_fold_binding,
-    qn_infer_fold_binding,
     msel_scatter_rows_binding,
     msel_proba_column_binding,
     msel_split_table_i32_binding,
@@ -232,7 +228,6 @@ from cluster.resident_centers import (
 from neighbors.impl.detail.knn_brute_force import KNN_METHOD_AUTO
 from neighbors.impl.multi_gpu import neighbors_device_plan
 from neighbors.resident_index import (
-    knn_fold_ready,
     knn_index_classify,
     knn_index_prepare,
     knn_index_regress,
@@ -336,17 +331,6 @@ def _dist_fold(dist_params: PythonObject) raises -> Tuple[Int, Int, Int]:
     if _dist_status(dist_params) == 0:
         raise Error("knn: a fold needs the status words' address")
     return (base, rows, index)
-
-
-def knn_fold_ready_binding() raises -> PythonObject:
-    """1 when a resident classify / regress can gather a model-selection
-    fold's queries on the device (neighbors/resident_index.mojo
-    `knn_fold_ready`), else 0: the door then gathers the fold on the host."""
-    var ready: Bool
-    with GILReleased(Python()):
-        ready = knn_fold_ready()
-    return PythonObject(1 if ready else 0)
-
 
 def _refuse_status(dist_params: PythonObject, what: String) raises:
     """The per-call entries (index uploaded every call) do not test their
@@ -1983,7 +1967,6 @@ def build__mojolearn() -> PythonObject:
         m.def_function[mojolearn_numeric_mode_binding]("mojolearn_numeric_mode")
         m.def_function[knn_search_binding]("knn_search")
         m.def_function[knn_index_prepare_binding]("knn_index_prepare")
-        m.def_function[knn_fold_ready_binding]("knn_fold_ready")
         m.def_function[knn_index_release_binding]("knn_index_release")
         m.def_function[knn_search_resident_binding]("knn_search_resident")
         m.def_function[knn_classify_neighbors_binding]("knn_classify_neighbors")
@@ -2034,13 +2017,9 @@ def build__mojolearn() -> PythonObject:
         m.def_function[msel_live_binding]("msel_live")
         m.def_function[msel_take_rows_binding]("msel_take_rows")
         m.def_function[msel_free_bytes_binding]("msel_free_bytes")
-        m.def_function[pca_transform_fold_binding]("pca_transform_fold")
-        m.def_function[pca_fit_fold_binding]("pca_fit_fold")
-        m.def_function[tsvd_fit_fold_binding]("tsvd_fit_fold")
         m.def_function[logistic_fold_native_api_v1_binding]("logistic_fold_native_api_v1")
         m.def_function[pca_fold_native_api_v1_binding]("pca_fold_native_api_v1")
         m.def_function[tsvd_fold_native_api_v1_binding]("tsvd_fold_native_api_v1")
-        m.def_function[qn_infer_fold_binding]("qn_infer_fold")
         m.def_function[kmeans_fit_fold_binding]("kmeans_fit_fold")
         m.def_function[kmeans_predict_fold_binding]("kmeans_predict_fold")
         m.def_function[kmeans_transform_fold_binding]("kmeans_transform_fold")

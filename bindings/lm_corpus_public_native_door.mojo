@@ -634,9 +634,6 @@ def lm_corpus_public_call(operation: String, args: PythonObject) raises -> Pytho
     if operation == "connect":
         return corpus_connect(args)
     var context = corpus_context()
-    if operation == "default_cache_dir":
-        _arity(args, 0)
-        return corpus_path_object(_default_cache())
     if operation == "prepare":
         _arity(args, 9)
         return _prepare(args, context)

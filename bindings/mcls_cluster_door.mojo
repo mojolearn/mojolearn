@@ -425,16 +425,4 @@ def mcls_cluster_operation(operation: String, args: PythonObject, context: Pytho
         return _regression_error(args, context)
     if operation == "family_mcls_r2":
         return _r2(args, context)
-    if operation == "family_mcls_regressor_score":
-        # `RegressorScoreMixin.score` (python/mojolearn/_mode.py): args = (binding, y, prediction,
-        # sample_weight, numeric_mode). y and the prediction are admitted as float32 of any rank up to
-        # 2 here (the native form of the former `_buffer.as_f32_c(..., ndim=None)`: a float64, integer
-        # or list input is cast once, in C), then `r2_score` with the uniform average, weights included.
-        var truth = admit_family(args[1], -1, "y", context).array
-        var prediction = admit_family(args[2], -1, "prediction", context).array
-        var scored = _r2(Python.tuple(args[0], truth, prediction, args[3], PythonObject("uniform_average"),
-                                      PythonObject(True), args[4]), context)
-        _ = truth  # keep the admitted arrays alive through the native call above
-        _ = prediction
-        return scored
     raise Error("RuntimeError: unknown family operation " + operation)

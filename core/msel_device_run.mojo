@@ -68,6 +68,6 @@ def pca_fit_fold_run(
     sp: MutPointer[Float32, MutUntrackedOrigin],
     nr: Int, nf: Int, nc: Int, dense: Bool, keep_mode: Int, frac: Float64,
 ) raises -> PCAFoldFit:
-    """`pca_fit_fold_binding`'s fit on this build's fold context."""
+    """PCA's exact fit over a model-selection fold on this build's fold context."""
     var ctx = msel_fold_entry_context()
     return pca_fit_fold(ctx, base_id, base_rows, index_id, cp, mp, ep, rp, sp, nr, nf, nc, dense, keep_mode, frac)

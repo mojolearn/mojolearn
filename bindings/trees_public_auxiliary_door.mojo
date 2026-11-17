@@ -213,10 +213,6 @@ def forest_auxiliary(model: PythonObject, operation: String, args: PythonObject,
     var leaf_requested = operation == "apply" or operation == "predict_with_leaves"
     var prefix_requested = operation == "staged_predict"
     var prediction_requested = operation == "predict_with_leaves"
-    if operation == "auxiliary":
-        leaf_requested = Bool(py=py_call_typed(trees_builtins().bool, args[1]))
-        prefix_requested = Bool(py=py_call_typed(trees_builtins().bool, args[2]))
-        prediction_requested = Bool(py=py_call_typed(trees_builtins().bool, args[3]))
     var leaf = admitted_array(Python.tuple(rows, trees), "<i4", context) if leaf_requested else PythonObject(None)
     var prefix = admitted_array(Python.tuple(rows, trees, outputs), "<f4", context) if prefix_requested else PythonObject(None)
     var prediction = admitted_array(Python.tuple(rows, outputs), "<f4", context) if prediction_requested else PythonObject(None)
@@ -244,6 +240,4 @@ def forest_auxiliary(model: PythonObject, operation: String, args: PythonObject,
         return leaf
     if operation == "staged_predict":
         return prefix
-    if operation == "predict_with_leaves":
-        return Python.tuple(prediction, leaf)
-    return Python.tuple(prediction, leaf, prefix)
+    return Python.tuple(prediction, leaf)

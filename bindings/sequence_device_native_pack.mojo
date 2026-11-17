@@ -113,8 +113,6 @@ def sequence_device_operation(operation: String, owner: PythonObject, values: Py
     var buffer_pins = OptimizerInputOwners()
     try:
         var b = native_loaded_module("builtins")
-        if operation == "seqdev_is":
-            return PythonObject(py_type(values[0]) is context["sequence_device_class"])
         if operation == "seqdev_size_of":
             return PythonObject(shape_count(device_shape(values[0], context)))
         if operation == "seqdev_construct":

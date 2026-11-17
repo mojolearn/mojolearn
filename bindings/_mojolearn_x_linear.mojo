@@ -11,7 +11,7 @@ the same address contract and runs the same x_linear/ source on the CPU."""
 from x_linear.ridge_descriptor_device import RIDGE_FIT_DEVICE_API
 from x_linear.x_linear_binding_run import _publish_linear_entry_table
 from x_linear.ops_entry_device import (
-    xl_fit_device_run, xl_fit_fold_device_run,
+    xl_fit_device_run,
     xl_decision_device_run, xl_decision_codes_device_run, xl_decision_rows_device_run, xl_huber_out_device_run,
     xl_class_prep_device_run, xl_spearman_device_run, xl_best_alpha_run,
 )
@@ -82,38 +82,6 @@ def fit_binding(algo: PythonObject, x_addr: PythonObject, y_addr: PythonObject, 
     _ = ipl^
     _ = fpl^
     return PythonObject(n_out)
-
-
-def fit_fold_binding(algo: PythonObject, ids: PythonObject, y_addr: PythonObject, dims: PythonObject,
-                     ip: PythonObject, fp: PythonObject, out_addr: PythonObject) raises -> PythonObject:
-    """`x_linear_fit` over a model-selection fold resident on the device
-    (XL_OP_FIT_FOLD, x_linear/ops_entry_device.mojo). `ids` is [base store
-    id, base rows, index store id]. Returns [n_out, finite word, range word]."""
-    if len(ids) != 3:
-        raise Error("x_linear_fit_fold: ids must hold 3 values")
-    var ipl = _int32_words(ip, Int(py=dims[7]))
-    var fpl = _float32_words(fp, Int(py=dims[8]))
-    var a = Int(py=algo)
-    var base_id = Int(py=ids[0])
-    var base_rows = Int(py=ids[1])
-    var index_id = Int(py=ids[2])
-    var ya = Int(py=y_addr)
-    var oa = Int(py=out_addr)
-    var n = Int(py=dims[0])
-    var d = Int(py=dims[1])
-    var n_x = Int(py=dims[2])
-    var n_y = Int(py=dims[3])
-    var n_out = Int(py=dims[4])
-    var finite = 0
-    var in_range = 0
-    with GILReleased(Python()):
-        var words = xl_fit_fold_device_run(a, base_id, base_rows, index_id, ya, n, d, n_x, n_y, n_out, ipl, fpl, oa)
-        finite = words[0]
-        in_range = words[1]
-    _ = ipl^
-    _ = fpl^
-    return Python.list(n_out, finite, in_range)
-
 
 def decision_binding(x_addr: PythonObject, wb_addr: PythonObject, dims: PythonObject,
                      out_addr: PythonObject) raises -> PythonObject:
@@ -271,10 +239,6 @@ def build__mojolearn_x_linear() -> PythonObject:
         var m = PythonModuleBuilder("_mojolearn_x_linear")
         m.def_function[fit_binding]("x_linear_fit")
         m.def_function[ridge_fit_native_api_v1_binding]("ridge_fit_native_api_v1")
-        # lane a8c: the fold store is the IDENTICAL base binding's, so only
-        # an IDENTICAL GPU build reads a device fold
-        comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
-            m.def_function[fit_fold_binding]("x_linear_fit_fold")
         m.def_function[device_plan_enter_binding]("device_plan_enter")
         m.def_function[device_plan_exit_binding]("device_plan_exit")
         m.def_function[device_plan_log_binding]("device_plan_log")

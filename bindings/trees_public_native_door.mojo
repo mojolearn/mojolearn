@@ -103,8 +103,8 @@ def trees_public_operation(model: PythonObject, operation: String, args: PythonO
         return forest_score(model, args, context)
     if operation.startswith("trees_iforest_"):
         return iforest_operation(model, operation, args, context)
-    if operation == "trees_bagging_members" or operation == "trees_bagging_members_slice":
-        return bagging_members(model, operation == "trees_bagging_members_slice")
+    if operation == "trees_bagging_members":
+        return bagging_members(model)
     if operation == "trees_bagging_members_set":
         return bagging_members_set(model, args[0], context)
     if operation.startswith("trees_public_boost_"):

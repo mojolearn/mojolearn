@@ -74,18 +74,6 @@ def dev_upload_py(id: PythonObject, addr: PythonObject, n: PythonObject) raises 
 # same body (x_decomp/resident.mojo dev_upload_finite_run); it never reached main, so no patch: recoverable at
 # lane/a8c-device-x-linear-prep-rfe@2141a3451b.
 
-
-def dev_download_py(id: PythonObject, addr: PythonObject, n: PythonObject) raises -> PythonObject:
-    """The device matrix into host floats, after every launch before it."""
-    var cnt = Int(py=n)
-    var dst = F32Ptr(unsafe_from_address=Int(py=addr))
-    var i = _id(id)
-    var r = 0
-    with GILReleased(Python()):
-        r = dev_download_run(i, dst, cnt)
-    return PythonObject(r)
-
-
 def dev_ew_py(
     a: PythonObject, b: PythonObject, c: PythonObject, dst: PythonObject, p: PythonObject, s: PythonObject
 ) raises -> PythonObject:
@@ -115,69 +103,6 @@ def dev_gemm_py(a: PythonObject, b: PythonObject, c: PythonObject, p: PythonObje
 
 # TOMBSTONE: the dead x_decomp exports (registrations only where the body stays live in the decomp owners; see docs/TOMBSTONES.md) deleted 2026-10-26 by 25b5daca2; code recoverable at a88745022.
 # Restore: git apply experiments/removed/dead_entries_x_decomp.patch
-
-
-def dev_rand_py(dst: PythonObject, p: PythonObject) raises -> PythonObject:
-    """p = [count, seed, stream, kind]: the counter-based Philox draws written
-    into the device matrix, enqueued (no sync, no download)."""
-    var count = _n(p, 0)
-    var seed = Int(py=p[1])
-    var stream = Int(py=p[2])
-    var kind = Int(py=p[3])
-    return PythonObject(dev_rand_run(_id(dst), count, seed, stream, kind))
-
-
-def dev_colsum_py(a: PythonObject, dst: PythonObject, p: PythonObject) raises -> PythonObject:
-    return PythonObject(dev_colsum_run(_id(a), _id(dst), _n(p, 0), _n(p, 1)))
-
-
-def dev_rowsum_py(a: PythonObject, dst: PythonObject, p: PythonObject) raises -> PythonObject:
-    return PythonObject(dev_rowsum_run(_id(a), _id(dst), _n(p, 0), _n(p, 1)))
-
-
-def dev_sqdist_py(a: PythonObject, b: PythonObject, dst: PythonObject, p: PythonObject) raises -> PythonObject:
-    # p = [na, nb, d] or [na, nb, d, kind, pw], as x_decomp_sqdist
-    var na = _n(p, 0)
-    var nb = _n(p, 1)
-    var d = _n(p, 2)
-    var kind = _n(p, 3) if len(p) > 3 else 0
-    var pw = Float64(py=p[4]) if len(p) > 4 else Float64(2)
-    return PythonObject(dev_sqdist_run(_id(a), _id(b), _id(dst), na, nb, d, kind, pw))
-
-
-def dev_absmax_py(a: PythonObject, dst: PythonObject, p: PythonObject) raises -> PythonObject:
-    # p = [n, d, by_col], as x_decomp_absmax_sign
-    var n = _n(p, 0)
-    var d = _n(p, 1)
-    var by_col = Int(py=p[2]) != 0
-    return PythonObject(dev_absmax_run(_id(a), _id(dst), n, d, by_col))
-
-
-def dev_orth_py(a: PythonObject, dst: PythonObject, p: PythonObject) raises -> PythonObject:
-    """dst = the orthonormalized columns of a (a is unchanged)."""
-    var m = _n(p, 0)
-    var l = _n(p, 1)
-    var ia = _id(a)
-    var io = _id(dst)
-    var r = 0
-    with GILReleased(Python()):
-        r = dev_orth_run(ia, io, m, l)
-    return PythonObject(r)
-
-
-def dev_orth_diag_py(a: PythonObject, dst: PythonObject, diag: PythonObject, p: PythonObject) raises -> PythonObject:
-    """`dev_orth_py`, and the host floats at `diag` (l) = the product of the
-    two passes' R diagonals."""
-    var m = _n(p, 0)
-    var l = _n(p, 1)
-    var ia = _id(a)
-    var io = _id(dst)
-    var pd = F32Ptr(unsafe_from_address=Int(py=diag))
-    var r = 0
-    with GILReleased(Python()):
-        r = dev_orth_diag_run(ia, io, pd, m, l)
-    return PythonObject(r)
-
 
 def dev_svd_py(a: PythonObject, s: PythonObject, v: PythonObject, p: PythonObject) raises -> PythonObject:
     """`x_decomp_svd` of the device matrix a (m x n, left as it is); s (n)
@@ -248,21 +173,6 @@ def dev_code_rows_py(g: PythonObject, q: PythonObject, w: PythonObject, p: Pytho
         r = dev_code_rows_run(ig, iq, iw, kind, n, k, a, b, alpha, tol)
     return PythonObject(r)
 
-
-def dev_eigh_py(a: PythonObject, w: PythonObject, v: PythonObject, p: PythonObject) raises -> PythonObject:
-    """`x_decomp_eigh` of the device matrix a (n x n, left as it is); w (n)
-    and v (n x n) are host addresses. p = [n, uplo]. Waits."""
-    var n = _n(p, 0)
-    var uplo = _n(p, 1)
-    var ia = _id(a)
-    var pw = F32Ptr(unsafe_from_address=Int(py=w))
-    var pv = F32Ptr(unsafe_from_address=Int(py=v))
-    var r = 0
-    with GILReleased(Python()):
-        r = dev_eigh_run(ia, pw, pv, n, uplo)
-    return PythonObject(r)
-
-
 def dev_eigh_to_py(a: PythonObject, w: PythonObject, v: PythonObject, p: PythonObject) raises -> PythonObject:
     """`x_decomp_eigh` of the device matrix a (n x n, left as it is) into the
     DEVICE matrices w (n) and v (n x n). p = [n, uplo]. Waits once."""
@@ -291,25 +201,6 @@ def grp_cls2_py() raises -> PythonObject:
     comptime if GRP_FAST_SRP_STRAT:
         f |= 16
     return PythonObject(f)
-
-
-def dev_move_py(src: PythonObject, idx: PythonObject, dst: PythonObject, p: PythonObject) raises -> PythonObject:
-    """`x_decomp_move` on device ids, enqueued (no sync); p = [op, count, a1,
-    a2, a3, ist, ioff, nsrc, ndst, nidx]."""
-    var op = Int(py=p[0])
-    var count = _n(p, 1)
-    var a1 = _n(p, 2)
-    var a2 = _n(p, 3)
-    var a3 = _n(p, 4)
-    var ist = _n(p, 5)
-    var ioff = _n(p, 6)
-    var nsrc = _n(p, 7)
-    var ndst = _n(p, 8)
-    var nidx = _n(p, 9)
-    return PythonObject(
-        dev_move_run(_id(src), _id(idx), _id(dst), op, count, a1, a2, a3, ist, ioff, nsrc, ndst, nidx)
-    )
-
 
 # TOMBSTONE: MOJOLEARN_MCD_ORDERED_COV (its test seam door mcd_cov_probe_py) deleted 2026-11-08 by 65b756872d; code recoverable at 41ffcec665.
 # Restore: git apply experiments/removed/MOJOLEARN_MCD_ORDERED_COV.patch

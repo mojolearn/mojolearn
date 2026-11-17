@@ -17,11 +17,11 @@ from bindings.classical_arrays_door import classical_wrap_array
 from bindings.gp_label_snapshot_native_unpack import gp_label_list
 
 
-def bagging_members(model: PythonObject, slice_only: Bool = False) raises -> PythonObject:
+def bagging_members(model: PythonObject) raises -> PythonObject:
     var context = py_fields(native_loaded_module("mojolearn._expansion_trees"))["_TREES_CONTEXT"]
     var fields = boost_admit(model, context)
     var existing = py_get(fields, "_estimators")
-    if existing is not None and not slice_only:
+    if existing is not None:
         return existing
     var batched = py_get(fields, "_batched")
     if batched is None:
@@ -83,8 +83,7 @@ def bagging_members(model: PythonObject, slice_only: Bool = False) raises -> Pyt
             py_setitem(mf, "n_classes_", n_classes)
         _ = py_call(result.append, member)
     _ = storage
-    if not slice_only:
-        py_setitem(fields, "_estimators", result)
+    py_setitem(fields, "_estimators", result)
     return result
 
 

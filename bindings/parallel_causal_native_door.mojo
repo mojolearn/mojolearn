@@ -1181,8 +1181,6 @@ def parallel_causal_call(mut mods: NativeModules, operation: String, args: Pytho
         parallel_causal_initialize(mods, args)
     elif operation == "worker":
         parallel_causal_worker(mods, args)
-    elif operation == "route":
-        return _parallel_causal_route(mods, args[0])
     elif operation == "init":
         _parallel_causal_init(mods, args[0], args[1], args[2], args[3], _parallel_causal_options(mods, args[4]), child)
     elif operation == "load" or operation == "load_with_worker":

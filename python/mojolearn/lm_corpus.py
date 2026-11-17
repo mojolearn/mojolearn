@@ -171,7 +171,8 @@ def prepare(corpus, *, vocab=None, cache_dir=None, vocab_size=_DEFAULT_VOCAB_SIZ
         ``"bytes"`` raises ValueError (byte-level training needs no
         vocabulary).
     cache_dir : str, path-like or None, default None
-        Cache location; None uses :func:`default_cache_dir`.
+        Cache location; None uses ``$MOJOLEARN_LM_CACHE``, or
+        ``~/.cache/mojolearn/lm`` when it is unset.
     vocab_size : int, default 50256
         Ranks to train (GPT-2's vocabulary size, without ``<|endoftext|>``).
     min_frequency : int, default 2

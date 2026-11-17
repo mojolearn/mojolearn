@@ -139,7 +139,7 @@ class TokenizerPublicSource(unittest.TestCase):
         for retained in ("bpe_encode_corpus_into(owner[]", "bpe_train_corpus_fill(handle,",
                          "tokens_gather_rows_into(src, dst,", 'native_array_unfilled("i", total)',
                          'neural_array_snapshot(ids_all, context)', 'neural_array_snapshot(output, context)',
-                         '"mojolearn.bpe-trainer.v1"', 'PyUnicode_AsASCIIString'):
+                         '"mojolearn.bpe-trainer.v1"'):
             self.assertIn(retained, corpus)
         for forbidden in ("hashlib", 'Python.import_module', 'py_call(module.', 'py_call(native_loaded_module("array").array',
                           "tokenizer._m", "vocabulary.render", "source.__buffer__"):

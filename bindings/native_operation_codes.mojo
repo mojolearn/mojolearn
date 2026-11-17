@@ -159,7 +159,6 @@ def _operation_names(mut names: List[String]):
     names.append("family_mcls_r2")
     names.append("family_mcls_rand")
     names.append("family_mcls_regression_error")
-    names.append("family_mcls_regressor_score")
     names.append("family_mcls_roc_auc")
     names.append("family_mcls_silhouette_samples")
     names.append("family_mcls_silhouette_score")
@@ -266,7 +265,6 @@ def _operation_names(mut names: List[String]):
     names.append("host_tree_ctr_predict")
     names.append("host_tree_engine")
     names.append("host_tree_getstate")
-    names.append("host_tree_groves")
     names.append("host_tree_hash")
     names.append("host_tree_init_forest")
     names.append("host_tree_init_gbdt")
@@ -281,7 +279,6 @@ def _operation_names(mut names: List[String]):
     names.append("trees_agnostic_permutation_values")
     names.append("trees_bagging_members")
     names.append("trees_bagging_members_set")
-    names.append("trees_bagging_members_slice")
     names.append("trees_dart_construct")
     names.append("trees_explainer_close")
     names.append("trees_explainer_init")
@@ -332,7 +329,7 @@ struct OperationTable(Defaultable, Movable):
 
 # Shared by every Mojo extension in the process; bump the version whenever a
 # name is added, removed or reordered (the codes are indices).
-comptime OPERATION_TABLE = SharedSlot[OperationTable, "MojolearnOperationCodesV2"]
+comptime OPERATION_TABLE = SharedSlot[OperationTable, "MojolearnOperationCodesV3"]
 
 
 def operation_table() raises -> UnsafePointer[OperationTable, MutAnyOrigin]:

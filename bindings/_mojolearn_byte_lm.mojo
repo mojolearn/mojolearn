@@ -736,12 +736,6 @@ def byte_lm_trainer_run_binding(addresses: PythonObject, named: PythonObject,
         byte_scatter_named(Int(py=addresses[8]), named_addr, cfg)
     return result
 
-
-def sha256_hex_binding(value: PythonObject) raises -> PythonObject:
-    """hashlib.sha256(value).hexdigest() for a bytes-like value, by the Mojo SHA-256."""
-    return sha256_hexdigest(value)
-
-
 def byte_lm_file_sha256_binding(path: PythonObject) raises -> PythonObject:
     """The SHA-256 of the file at `path`, streamed by `byte_file_sha256`."""
     var name = String(py=path)
@@ -797,28 +791,6 @@ def byte_lm_parallel_export_binding(session: PythonObject, addresses: PythonObje
 
 def byte_lm_pool_fault_available_binding() raises -> PythonObject:
     return PythonObject(pool_fault_available())
-
-
-def byte_lm_parallel_ownership_binding(session: PythonObject) raises -> PythonObject:
-    var owner = session.downcast_value_ptr[ByteParallelTrainer]()
-    owner[].require_open()
-    var out = Python.list()
-    for i in range(len(owner[].trainers)):  # driver-loop: over trainers: one trainer per replica device: reports per replica ranges, no data
-        ref b = owner[].trainers[i].buffers
-        var row = Python.list()
-        row.append(PythonObject(b.optimizer_first))
-        row.append(PythonObject(b.optimizer_count))
-        row.append(PythonObject(4*(len(b.m_state)+len(b.v_state))))
-        row.append(PythonObject(4*(len(b.shadow_p)+len(b.shadow_m)+len(b.shadow_v))))
-        var reduction_bytes = 0
-        if owner[].pool_optimizer:
-            reduction_bytes = 4*(len(owner[].pool_totals[i])+len(owner[].pool_incoming[i]))
-        elif i == 0:
-            reduction_bytes = 4*len(owner[].total.value())
-        row.append(PythonObject(reduction_bytes))
-        out.append(row)
-    return out
-
 
 def byte_lm_parallel_set_lr_binding(session: PythonObject, lr_arg: PythonObject) raises -> PythonObject:
     """Set the learning rate of every replica for the NEXT update (a
@@ -1072,7 +1044,6 @@ def build__mojolearn_byte_lm() -> PythonObject:
         module.def_function[byte_lm_trainer_logits_binding]("byte_lm_trainer_logits")
         module.def_function[byte_lm_trainer_next_bytes_binding]("byte_lm_trainer_next_bytes")
         module.def_function[byte_lm_trainer_run_binding]("byte_lm_trainer_run")
-        module.def_function[sha256_hex_binding]("sha256_hex")
         module.def_function[byte_lm_file_sha256_binding]("byte_lm_file_sha256")
         module.def_function[byte_lm_session_rollback_binding]("byte_lm_session_rollback")
         module.def_function[byte_lm_session_info_binding]("byte_lm_session_info")
@@ -1095,7 +1066,6 @@ def build__mojolearn_byte_lm() -> PythonObject:
         # TOMBSTONE: byte_lm_parallel_open, _open_pooled, _close, _rollback, _shard_gradient, _apply_gradient, _reduction_pool_available, _fold_reset, _shard_gradient_fold, _fold_add (dead native entries: no caller) deleted 2026-11-08 by f41ec913f2; code recoverable at 41ffcec665.
         # Restore: git apply experiments/removed/dead_entries_byte_lm_parallel.patch
         module.def_function[byte_lm_pool_fault_available_binding]("byte_lm_pool_fault_available")
-        module.def_function[byte_lm_parallel_ownership_binding]("byte_lm_parallel_ownership")
         module.def_function[byte_lm_parallel_step_binding]("byte_lm_parallel_step")
         module.def_function[byte_lm_parallel_export_binding]("byte_lm_parallel_export")
         module.def_function[byte_lm_parallel_set_lr_binding]("byte_lm_parallel_set_lr")

@@ -55,7 +55,7 @@ from core.experiment_guards_linear import LINEAR_GUARDS_OK
 from glm.host.linear_predict_native import LINEAR_PREDICT_HOST_API, linear_predict_host
 from core.linear_boundary_types import LinearPredictRequest
 from core.logistic_native_api import (
-    QnFitRequest, QnQueryRequest, QnLinkRequest, QN_NATIVE_DECISION,
+    QnQueryRequest, QnLinkRequest, QN_NATIVE_DECISION,
     QN_NATIVE_BINARY, QN_NATIVE_MULTICLASS, QN_NATIVE_PROBA,
     QN_NATIVE_SIGMOID, QN_NATIVE_SOFTMAX,
 )
@@ -787,62 +787,6 @@ def linear_gram_fit_binding(
             # ne2-g-linear (N406): X and y read in place (no owned copies).
             status = host_linear_gram_fit(x_address, y_address, nr, nf, alpha, center, wp, mp, ymp)
     return PythonObject(status)
-
-
-def qn_fit_binding(
-    x_addr: PythonObject,
-    y_addr: PythonObject,
-    coef_addr: PythonObject,
-    info_addr: PythonObject,
-    params: PythonObject,
-) raises -> PythonObject:
-    """`qnFit` on the host by `host_qn_fit` (L-BFGS, or OWL-QN when the
-    l1 penalty is nonzero; the binary logistic loss, or the softmax loss at
-    `n_classes > 2`, lane/cpu-training-batch3). params: n_rows, n_features,
-    n_classes, penalty_l1, penalty_l2, grad_tol, change_tol, max_iter,
-    linesearch_max_iter, lbfgs_memory, fit_intercept, penalty_normalized,
-    has_sample_weight, an OPTIONAL 14th, the loss id (QN_LOSS_LOGISTIC,
-    the value a 13-field call gets; all eight ids since
-    lane/expose-qn-objectives, 2026-09-20), and an OPTIONAL 15th, `svr_eps`
-    (0 when absent). `coef_addr` holds `n_targets *
-    (n_features + fit_intercept)` floats, written; `info_addr[0]` receives
-    the objective, `[1]` the OPT_RETCODE; returns num_iters.
-    Lane sk-kernels: with has_sample_weight = 1 a 16th field is required,
-    the address of `n_rows` float32 per-row weights (the device binding's
-    contract)."""
-    if len(params) < 13 or len(params) > 17:
-        raise Error("qn_fit: params must carry the 13 qn_params fields, plus an optional 14th, the loss id, an optional 15th, svr_eps, a 16th, the sample_weight address, when has_sample_weight is 1, and an optional 17th, the finite status address")
-    var x_address = _index(x_addr)
-    var y_address = _index(y_addr)
-    var wp = f32_ptr(_index(coef_addr))
-    var ip = f32_ptr(_index(info_addr))
-    var nr = _index(params[0])
-    var nf = _index(params[1])
-    var nc = _index(params[2])
-    var l1 = Float64(py=params[3])
-    var l2 = Float64(py=params[4])
-    var grad_tol = Float64(py=params[5])
-    var change_tol = Float64(py=params[6])
-    var max_iter = _index(params[7])
-    var ls_max = _index(params[8])
-    var mem = _index(params[9])
-    var fit_intercept = _index(params[10]) != 0
-    var normalized = _index(params[11]) != 0
-    var has_sw = _index(params[12]) != 0
-    var loss = _index(params[13]) if len(params) >= 14 else 0
-    var svr_eps = Float64(py=params[14]) if len(params) >= 15 else 0.0
-    if has_sw and len(params) < 16:
-        raise Error("qn_fit: has_sample_weight = 1 needs the 16th field, the sample_weight address")
-    var sw_address = _index(params[15]) if has_sw else 0
-    var status = _index(params[16]) if len(params) == 17 else 0
-    var request = QnFitRequest(x_address, y_address, Int(wp), Int(ip), sw_address, status,
-        nr, nf, nc, max_iter, ls_max, mem, fit_intercept, normalized, loss,
-        l1, l2, grad_tol, change_tol, svr_eps)
-    var iters = 0
-    with GILReleased(Python()):
-        iters = QnHostKernels.fit(request)
-    return PythonObject(iters)
-
 
 def dbscan_fit_binding(
     x_addr: PythonObject,
@@ -1595,7 +1539,6 @@ def build__mojolearn_estimators_host() -> PythonObject:
         # TOMBSTONE: estimators_py2mojo_cluster, pca_rank_finish, pca_fast_pool_on (dead native entries: constant probes nothing reads; pca_rank_finish runs inside the PCA owners) deleted 2026-10-26 by 65f812332; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_estimators.patch
         module.def_function[labeled_reference_predict_binding]("labeled_reference_predict")
-        module.def_function[qn_fit_binding]("qn_fit")
         module.def_function[linear_predict_native_api_v1_binding]("linear_predict_native_api_v1")
         module.def_function[pca_native_api_v1_binding]("pca_native_api_v1")
         module.def_function[kde_native_api_v1_binding]("kde_native_api_v1")

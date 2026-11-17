@@ -544,15 +544,6 @@ def host_tree_operation(model: PythonObject, operation: String, args: PythonObje
         py_setitem(state, "_groves", PythonObject(None))
         _ = py_call(state.pop, "_binding", PythonObject(None))
         return state
-    if operation == "host_tree_groves":
-        var addresses = List[Int](capacity=5)
-        var names = Python.tuple("_offsets", "_colid", "_quesval", "_left_child", "_leaves")
-        for i in range(5):  # driver-loop: the five fixed forest model buffers
-            var array = host_tree_array(fields, String(names[i]), "<f4" if i == 2 or i == 4 else "<i4", context)
-            addresses.append(Int(py=classical_address(array)))
-        var token = host_tree_groves(fields, addresses, context)
-        _ = addresses^
-        return token
     if operation == "host_tree_count":
         return fields["_arrays"]["n_trees"] if gbdt else fields["_n_trees"]
     if operation == "host_tree_engine":

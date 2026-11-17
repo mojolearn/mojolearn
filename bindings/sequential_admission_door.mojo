@@ -249,19 +249,17 @@ struct _SequentialFieldNames(Defaultable, Movable):
         self.names = List[PythonObject]()
 
 
-comptime _SEQUENTIAL_FIELD_NAMES = SharedSlot[_SequentialFieldNames, "MojolearnSequentialFieldNamesV2"]
+comptime _SEQUENTIAL_FIELD_NAMES = SharedSlot[_SequentialFieldNames, "MojolearnSequentialFieldNamesV3"]
 
 
 def _read_fields(operation: String) raises -> PythonObject:
     var slot = -1
-    if operation == "layers" or operation == "table" or operation == "program" or operation == "parameter_layers":
+    if operation == "layers" or operation == "table" or operation == "program":
         slot = 0
-    elif operation == "sample":
-        slot = 1
     elif operation == "forward":
-        slot = 2
+        slot = 1
     elif operation == "predict" or operation == "predict_proba":
-        slot = 3
+        slot = 2
     if slot < 0:
         return PythonObject(None)
     var saved = _SEQUENTIAL_FIELD_NAMES.get_or_create_ptr()
@@ -269,7 +267,6 @@ def _read_fields(operation: String) raises -> PythonObject:
         # Publish only a complete inventory if initialization raises.
         var names = List[PythonObject]()
         names.append(_read_fields_full("layers"))
-        names.append(_read_fields_full("sample"))
         names.append(_read_fields_full("forward"))
         names.append(_read_fields_full("predict"))
         saved[].names = names^
@@ -282,8 +279,7 @@ def _read_fields_full(operation: String) raises -> PythonObject:
 
     Each list is the exact set of fields the operation's native path reads
     (sequential_description, sequential_weights, sequential_execution):
-    layers/table/program/parameter_layers read `_layers`; sample reads
-    `input_shape` and `_layers`; forward also reads the fitted metadata and
+    layers/table/program read `_layers`; forward also reads the fitted metadata and
     `params_`; predict/predict_proba also read `_fit_loss`, `_y_1d` and
     `classes_`. Optimizer state, training history and the other fit fields
     are never read by these operations, so walking them only re-admitted
@@ -291,10 +287,8 @@ def _read_fields_full(operation: String) raises -> PythonObject:
     description edits (construct/add/append/compile) mutate or serialize
     the whole model and keep the full walk.
     """
-    if operation == "layers" or operation == "table" or operation == "program" or operation == "parameter_layers":
+    if operation == "layers" or operation == "table" or operation == "program":
         return Python.tuple("_layers")
-    if operation == "sample":
-        return Python.tuple("input_shape", "_layers")
     if operation == "forward":
         return Python.tuple("numeric_mode", "_layers", "params_", "n_features_in_", "n_outputs_", "_sample_shape")
     if operation == "predict" or operation == "predict_proba":

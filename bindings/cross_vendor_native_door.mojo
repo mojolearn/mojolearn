@@ -11,7 +11,6 @@ from bindings.native_transport_door import (
     transport_send,
     transport_receive,
     transport_receive_owned,
-    _transport_exact,
     transport_listen,
     transport_accept,
     transport_close,
@@ -257,8 +256,6 @@ def cross_vendor_call(operation: String, args: PythonObject, mut io_error: ByteC
         cross_vendor_refuse(args[0], cv_text(args[1], "refusal reason"))
     elif operation.startswith("event_"):
         return cross_vendor_event(operation, args)
-    elif operation == "f32":
-        return cross_vendor_f32(args[0])
     elif operation == "fold":
         return cross_vendor_fold(args[0], args[1])
     elif operation == "pair":
@@ -268,12 +265,6 @@ def cross_vendor_call(operation: String, args: PythonObject, mut io_error: ByteC
         return cross_vendor_fold(parts, PythonObject(None))
     elif operation == "state_hash":
         return cross_vendor_state_hash(args[0])
-    elif operation == "send":
-        transport_send(args[0], args[1], args[2])
-    elif operation == "receive":
-        return transport_receive(args[0], Int(py=args[1]))
-    elif operation == "receive_exact":
-        return _transport_exact(args[0], Int(py=args[1]))
     else:
         raise Error("cross_vendor: unknown native operation " + operation)
     return PythonObject(None)
@@ -299,8 +290,6 @@ def cross_vendor_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyOb
                 return causal_set_exception(error_without_class(error, "CrossVendorMismatch"), causal_borrowed_item(context, "mismatch"))
             except nested:
                 return raise_python_exception(nested, ExceptionType("PyExc_RuntimeError"))
-        if operation == "send" or operation == "receive" or operation == "receive_exact":
-            return raise_python_exception(error, ExceptionType("PyExc_ConnectionError"))
         return raise_python_exception(error_without_class(error, "ValueError"), ExceptionType.ValueError)
 
 
