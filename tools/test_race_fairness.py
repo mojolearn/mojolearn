@@ -32,6 +32,26 @@ def board(**races):
 
 
 class RaceFairness(unittest.TestCase):
+    def test_call_overhead_lanes_are_not_a_race(self):
+        """Andrew 2026-11-17: the lr-* schedule lanes and the internal lr_at row are NOT-A-RACE (rerace x, never shown
+        or raced); a prior audit moves to audit_history; other lanes are judged as before."""
+        b = board(**{"algos/lr-step/synthetic/rows=full": race("lr-step", [("torch-cpu", 10, {"device": "cpu"})]),
+                     "algos/internal-call-overhead-lr-at/synthetic/rows=full": race(RF.INTERNAL_CALL_OVERHEAD_LANE, []),
+                     "classical/ridge/taxi/rows=full": race("ridge", [("cuml-gpu", 10, {})])})
+        old = {"verdict": "MATCHED", "rerace": "", "rule": "older"}
+        b["races"]["algos/lr-step/synthetic/rows=full"]["audit"] = {"identical/fit": old}
+        RF.apply(b, None, "2026-11-17")
+        for rid in ("algos/lr-step/synthetic/rows=full", "algos/internal-call-overhead-lr-at/synthetic/rows=full"):
+            rr = b["races"][rid]
+            self.assertEqual(rr["rerace"], "x")
+            self.assertEqual(rr["lane_class"], RF.CALL_OVERHEAD)
+            self.assertEqual(rr["audit"]["identical/fit"]["verdict"], "NOT-A-RACE")
+        self.assertEqual(b["races"]["algos/lr-step/synthetic/rows=full"]["audit_history"],
+                         [dict(old, row="identical/fit")])
+        self.assertNotIn("lane_class", b["races"]["classical/ridge/taxi/rows=full"])
+        self.assertIsNone(RF.lane_class("ridge"))
+        self.assertIsNone(RF.lane_class(None))
+
     def test_neural_wheel_change_reuses_only_exact_typed_input_evidence(self):
         rr = race("gemm", [("torch-gpu", 10, {"family": "neural"})])
         rr["family"] = "neural"

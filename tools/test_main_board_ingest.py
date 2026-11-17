@@ -232,6 +232,24 @@ class MainBoardIngest(unittest.TestCase):
         self.assertTrue(any("opponents withheld" in m for m in ar["lane_config"]["mismatches"]))
         self.assertEqual(ar["cells"][0]["main_board"]["identity"]["status"], "MATCH")
 
+    def test_call_overhead_lanes_never_reach_a_main_board(self):
+        """Andrew 2026-11-17 (race_fairness rule 1c): an lr-* schedule run and the internal lr_at row are not races;
+        the main board emits no cell and no FAILED row for them."""
+        path = os.path.join(self.tmp, "nv-results-lr.txt")
+        with open(path, "w") as fh:
+            fh.write(NV_RESULTS + "\n".join((
+                "n0020 nvidia main@bbbbbbbbb ALGOS lane=lr-step dataset=synthetic arm=ours status=ok median_ms=90.0 "
+                "quality={} digest=9999999999999999",
+                "n0021 nvidia main@bbbbbbbbb ALGOS lane=internal-call-overhead-lr-at dataset=synthetic arm=ours "
+                "status=ok median_ms=80.0 quality={} digest=9999999999999998",
+                "n0022 nvidia main@bbbbbbbbb ALGOS lane=lr-onecycle dataset=synthetic arm=ours status=error "
+                "median_ms=None quality={} digest=none", "")))
+        self.run_tool(results=path)
+        nv = self.board("nvidia-l40s")
+        self.assertFalse([rid for rid in nv["races"] if "lr-" in rid])
+        with open(os.path.join(self.out, "main-nvidia-l40s", "BOARD.md")) as fh:
+            self.assertNotIn("lr-", fh.read())
+
     def test_rerun_is_stable_and_keeps_cells_when_inputs_rotate(self):
         self.run_tool()
         empty = os.path.join(self.tmp, "empty-results.txt")

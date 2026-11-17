@@ -90,7 +90,7 @@ def test_clip_grad_norm_every_arm_records_its_input_arrays(monkeypatch):
 def test_tensor_lanes_without_staged_arrays_record_inputs_on_every_arm():
     G = dict(vars(A))
     G["_staging"] = lambda: None
-    for lane in ("lr-step", "jl-min-dim"):
+    for lane in (X.INTERNAL_LR_LANE, "jl-min-dim"):
         recs = X.input_arrays(lane, {}, G)
         cell = dict(params={"raw_params": {"input_arrays": recs}})
         assert E.measured_shape(cell, {}) == {"input_arrays": recs}, lane
@@ -113,3 +113,14 @@ def test_refine_quality_returns_the_per_arm_dict():
     assert isinstance(q, dict) and set(q) == {"ours"}
     assert "quality_error" not in q["ours"]
     assert q["ours"]["recall_vs_exact_refine"] == 1.0
+
+
+def test_the_lr_at_row_is_one_internal_lane_named_as_race_fairness_names_it():
+    """Andrew 2026-11-17: the lr-* schedule races are gone; one internal row (ConstantLR, warmup 0), our arm only."""
+    RF = _load("race_fairness")
+    assert X.INTERNAL_LR_LANE == RF.INTERNAL_CALL_OVERHEAD_LANE
+    assert not [l for l in A.LANES if l.startswith("lr-")]
+    s = A.LANES[X.INTERNAL_LR_LANE]
+    assert s["params"] == {"peak_lr": 1e-3, "warmup_steps": 0}
+    assert all(A.opponents(v, X.INTERNAL_LR_LANE) == () for v in ("apple", "nvidia", "amd"))
+    assert [l for l in A.LANES if RF.lane_class(l)] == [X.INTERNAL_LR_LANE]

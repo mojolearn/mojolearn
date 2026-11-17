@@ -227,7 +227,8 @@ def test_tables_are_complete_and_stdlib_only():
     # 50aad5102: Lion races lion-pytorch and LAMB races timm's Lamb, so neither is alone any more.
     # 0c2c8e0a9 (measure-coverage): ann-refine has cuVS/hipVS on NVIDIA/AMD and no Apple opponent;
     # lowbit-matmul-int15 has torch arms on NVIDIA/AMD and none on Apple: both race ours alone on Apple.
-    assert alone == {"ann-refine", "lowbit-matmul-int15", "sgd-clf", "sgd-reg", "incremental-pca", "tree-shap",
+    # Andrew 2026-11-17: internal-call-overhead-lr-at is not a race (call overhead, internal check), our arm only.
+    assert alone == {"internal-call-overhead-lr-at", "ann-refine", "lowbit-matmul-int15", "sgd-clf", "sgd-reg", "incremental-pca", "tree-shap",
                      "decision-tree-clf", "decision-tree-reg", "bagging-clf", "bagging-reg",
                      "adaboost-clf", "adaboost-reg", "voting-clf", "voting-reg",
                      "stacking-clf", "stacking-reg", "quantile", "radius-neighbors", "tsne",
