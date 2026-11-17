@@ -10,6 +10,7 @@ from std.memory import bitcast
 from std.python import Python, PythonObject
 from bindings.optimizer_container_boundary_unpack import OptimizerInputOwners
 from bindings.py_balanced import py_call, py_type, py_fields, py_get, py_setitem
+from bindings.py_cpython_table import cpython_table
 from bindings.native_loaded_module_door import native_loaded_module
 from bindings.native_class_admission_door import dict_keys_admitted, dict_keys_admit
 from bindings.optimizer_admission_door import opt_exact, opt_scalar, opt_value, opt_schedule
@@ -276,6 +277,30 @@ def _seq_real(value: PythonObject, label: String) raises -> PythonObject:
         raise Error("TypeError: " + label + " must be a real number")
 
 
+def _seq_fill_f32(value: PythonObject, real: PythonObject) raises -> Float32:
+    """The float32 an admitted scalar option becomes, rounded ONCE, as the
+    former per-element cast of the scalar did (NumPy's `astype('f4')`): an
+    integer within int64 converts int64 -> float32 directly; a real number
+    (already `_seq_real`, a float64) rounds float64 -> float32. Rounding an
+    int64 through float64 first rounds twice (fb6-smoke, 2026-11-17: 2^62 +
+    2^38 + 1 came out one ulp low). Only integers beyond int64 take the
+    float64 route, which NumPy itself would not cast as int64."""
+    var table = cpython_table()
+    var index = table[].PyNumber_Index(value._obj_ptr)
+    if not index:
+        table[].PyErr_Clear()
+        return Float32(Float64(py=real))
+    var number = PythonObject(from_owned=index)
+    var overflow = List[Int32](length=1, fill=0)
+    var word = table[].PyLong_AsLongLongAndOverflow(number._obj_ptr, Int(overflow.unsafe_ptr()))
+    var wide = overflow[0] != 0
+    _ = overflow
+    if wide or (word == -1 and table[].PyErr_Occurred()):
+        table[].PyErr_Clear()
+        return Float32(Float64(py=real))
+    return word.cast[DType.float32]()
+
+
 def seq_construct(owner: PythonObject, values: PythonObject, mode: PythonObject, context: PythonObject) raises -> PythonObject:
     var buffer_pins = OptimizerInputOwners()
     try:
@@ -437,7 +462,7 @@ def seq_construct(owner: PythonObject, values: PythonObject, mode: PythonObject,
                 # 16 Mi floats; board adagrad 9.4 -> 417 ms) over a freshly
                 # memset array. The value 0 (the default) keeps the untouched
                 # zero slot, as 0.8.55 (`if init: fill`).
-                _ = py_call(states.append, seq_array(n, context, Float32(Float64(py=fp[5]))) if kind == 1 and i == 1 else seq_array(n, context))
+                _ = py_call(states.append, seq_array(n, context, _seq_fill_f32(options["initial_accumulator_value"], fp[5])) if kind == 1 and i == 1 else seq_array(n, context))
             py_setitem(fields, "_state", states)
             py_setitem(fields, "_sc", seq_array(2 if kind == 6 else 3, context, 1.0))
         return PythonObject(None)
