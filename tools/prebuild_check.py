@@ -18,6 +18,8 @@ skips it). Three builds were lost on 2026-11-15 to defects these catch:
               is the COMMIT's own file, loaded from an export of the commit; nothing is copied here. Seconds.
               Then the commit's tools/mojo_lastuse_audit.py over every .mojo blob of the commit (a local freed at its
               last named use while an untracked address still reads it; tools/mojo_lastuse_allow.txt). Seconds.
+              Then the commit's tools/python_free_dirs.sh over the commit (no Mojo kernel, RUN module or non-boundary
+              binding imports Python), as the pre-push hook runs it, so a commit pushed past the hook cannot build.
   host-parse  (f29f76bf57: two host units did not parse; native-checks passed 166/166 because no check imports those
               doors) .github/workflows/native-checks.yml with suite=host-parse on a free runner: every release host
               group the Linux CPU leg builds (tools/merged_bindings.py plan --dir host --layout release) through
@@ -189,7 +191,23 @@ def run_audits(tree, commit, workdir, git_root=ROOT):
     print(f"AUDIT {'FAIL' if errors else 'PASS'} {len(entries)} wheel entries ({py} .py) of {commit[:12]}, "
           f"{len(errors)} refusal(s)")
     lastuse = lastuse_audit(tree, commit, git_root)
-    return 1 if errors or lastuse else 0
+    pyfree = python_free_audit(tree, commit, git_root)
+    return 1 if errors or lastuse or pyfree else 0
+
+
+def python_free_audit(tree, commit, git_root=ROOT):
+    """The COMMIT's tools/python_free_dirs.sh over the commit's tree (fb4-census, 2026-11-17): the no-Python-import
+    check for Mojo files the pre-push hook runs, here too, so a commit that bypassed the hook cannot build. Prints one
+    PYFREE line (the refused files when it fails); returns its exit code (0 when the commit predates the script)."""
+    tool = Path(tree) / "tools/python_free_dirs.sh"
+    if not tool.is_file():
+        print(f"PYFREE SKIP {commit[:12]} has no tools/python_free_dirs.sh")
+        return 0
+    p = subprocess.run(["bash", str(tool), commit], cwd=git_root, capture_output=True, text=True)
+    for line in (p.stdout + p.stderr).splitlines()[:60]:
+        print(f"PYFREE {line}")
+    print(f"PYFREE {'PASS' if p.returncode == 0 else 'FAIL'} tools/python_free_dirs.sh {commit[:12]} rc={p.returncode}")
+    return p.returncode
 
 
 def lastuse_audit(tree, commit, git_root=ROOT):
@@ -352,7 +370,7 @@ def run_probe(tree, commit, wheel, ref, workdir, timeout, git_root=ROOT):
     sys.path.insert(0, str(ROOT / "tools" / "ops"))
     import verify_smoke_dispatch
     since = utc_now()
-    token = verify_smoke_dispatch.dispatch(out, ref, commit)
+    token = verify_smoke_dispatch.dispatch(out, ref, commit, census=True, record=False)
     run_id = find_new_run(SMOKE_WORKFLOW, f"verify-smoke {commit} {token}", since)
     view = wait_run(run_id, timeout, "verify smoke")
     smoke = Path(workdir) / "probe-smoke"

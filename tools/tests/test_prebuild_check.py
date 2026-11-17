@@ -48,6 +48,16 @@ class SourceAuditTest(unittest.TestCase):
             write(tree / "tools/mojo_lastuse_audit.py", "import sys\nprint('ran', sys.argv[1:])\nsys.exit(3)\n")
             self.assertEqual(pc.lastuse_audit(tree, "abc123"), 3)       # its exit code fails the audits part
 
+    def test_python_free_audit_runs_the_commits_script_and_skips_without_it(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self.assertEqual(pc.python_free_audit(Path(tmp), "HEAD"), 0)   # a commit that predates the script
+            tree = Path(tmp) / "tree"
+            write(tree / "tools/python_free_dirs.sh", 'echo "kernels/x.mojo imports Python ($1)"; exit 1\n')
+            self.assertEqual(pc.python_free_audit(tree, "abc123"), 1)        # a refusal fails the audits part
+
+    def test_python_free_audit_passes_on_head(self):
+        self.assertEqual(pc.python_free_audit(ROOT, "HEAD"), 0)
+
     def test_stage_entries_lays_out_wheel_members(self):
         with tempfile.TemporaryDirectory() as tmp:
             tmp = Path(tmp)

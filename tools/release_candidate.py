@@ -441,6 +441,11 @@ def parse(argv):
                     "candidate.json is written; see prune_set)")
     ap.add_argument("--no-verify-smoke", action="store_true", help="do not start .github/workflows/verify-smoke.yml "
                     "on the packed core wheel (an A set starts it by default; it reports and gates nothing)")
+    g = ap.add_mutually_exclusive_group()
+    g.add_argument("--census", dest="census", action="store_true", default=None, help="the verify smoke takes "
+                   "the frames census even when nothing it reads changed (tools/ops/verify_smoke_dispatch.py)")
+    g.add_argument("--no-census", dest="census", action="store_false", help="the verify smoke skips the frames "
+                   "census (default: it runs when python/mojolearn or the census's files changed)")
     return ap.parse_args(argv)
 
 
@@ -618,7 +623,8 @@ def main(argv=None, release=None):
         try:
             sys.path.insert(0, str(ROOT / "tools" / "ops"))
             import verify_smoke_dispatch
-            verify_smoke_dispatch.dispatch(final, a.ref or cand.get("tooling_ref") or "", a.commit)
+            verify_smoke_dispatch.dispatch(final, a.ref or cand.get("tooling_ref") or "", a.commit,
+                                           census=getattr(a, "census", None))
         except (Exception, SystemExit) as exc:
             print(f"VERIFY-SMOKE not started ({exc}); by hand: python3 tools/ops/verify_smoke_dispatch.py "
                   f"--wheel-dir {final} --ref <pushed branch holding verify-smoke.yml>")
