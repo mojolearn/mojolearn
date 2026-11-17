@@ -1263,15 +1263,19 @@ def op_knn_impute_tiled(
         )
     # TOMBSTONE: MOJOLEARN_XN_FAST_IMPUTE_TIE_MEAN_OFF (old path: the lower-index tie rule of KNNImputer; EXP:2125 A/B owed, never run) deleted 2026-11-15 by lane/expdel2-15-cluster; code recoverable at ac1f01c0f3.
     # Restore: git apply experiments/removed/MOJOLEARN_XN_FAST_IMPUTE_TIE_MEAN_OFF.patch; record in docs/TOMBSTONES.md.
+    # The tie-mean launch records no out_min on this route (listed 0). A one-word stand-in,
+    # never read: the same buffer cannot be passed twice to one launch (mutable aliasing is
+    # refused). Declared here so it outlives the queued launch (named again after the wait).
+    var d_nomin = _buf(ctx, 0, 1, False)
     if weights == 0:
-        # this route records no out_min: listed 0 (d_bd stands in, never read)
         ctx.enqueue_function[knn_impute_tie_mean_kernel](
             d_cells.unsafe_ptr(), d_x.unsafe_ptr(), d_fx.unsafe_ptr(), d_bd.unsafe_ptr(), d_bi.unsafe_ptr(),
-            d_bd.unsafe_ptr(), d_res.unsafe_ptr(), Int64(m), Int64(d), Int64(k), Int64(nc), Int64(0),
+            d_nomin.unsafe_ptr(), d_res.unsafe_ptr(), Int64(m), Int64(d), Int64(k), Int64(nc), Int64(0),
             grid_dim=(nc + IMP_TPB - 1) // IMP_TPB, block_dim=IMP_TPB,
         )
     _down(ctx, d_res, res, n * d)
     ctx.synchronize()
+    _ = d_nomin^
     _ = d_cells^
     _ = d_x^
     _ = d_fx^
