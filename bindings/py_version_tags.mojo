@@ -26,11 +26,11 @@ themselves:
   the guarantee the 3.12 type watcher gives.
 
 LAYOUT. The words are read at their offsets in the 3.10 / 3.11 release
-layout (LP64): `ma_used` +16, `ma_version_tag` +24; `tp_flags` +176,
-`tp_version_tag` +392. Each offset is PROVEN once per process before use, on
+layout (LP64): `ma_used` +16, `ma_version_tag` +24; `tp_flags` +168,
+`tp_version_tag` +384. Each offset is PROVEN once per process before use, on
 objects made for the probe: a new dictionary's `ma_used` is 0, becomes 1 on
 one insertion (and `PyDict_Size` agrees), and its tag moves; a new class's
-flags at +176 equal `PyType_GetFlags`, a lookup gives it the valid flag and a
+flags at +168 equal `PyType_GetFlags`, a lookup gives it the valid flag and a
 nonzero tag, an attribute assignment clears the flag, and the next lookup
 gives a different tag. Any mismatch (a debug `Py_TRACE_REFS` build, another
 layout) leaves the mode off and every caller on its full check, as before.
