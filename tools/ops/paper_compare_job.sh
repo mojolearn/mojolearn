@@ -72,6 +72,9 @@
 #            timed board, each prior wheel smoked (with the candidate) and timed on the same races (all-prior), compare against the
 #            on-box priors with the paper recipes and every row's best time ever (--best-ever) as reference; see the
 #            board-all block below and docs/plans/PRE_0867_MEASUREMENT.md "Full-board NVIDIA screen"
+#   targeted (PC_PARTS=targeted, PC_ROWS=<rows file>; Andrew 2026-11-17) instead of the above: only the listed rows
+#            (tools/ops/targeted_rows.py), candidate and 0.8.55 interleaved by chunk, the staged B arms on their own
+#            rows with their base back to back, the full board's compare for those rows; see the targeted block below
 # PARALLEL PLAN (HARD RULE, 2026-11-07): what is independent runs at once across the cgroup's cores (alloc_cores:
 # the cgroup quota, else nproc; the smoke shard count is taken from it, never from the host's visible CPUs): the installs
 # of every arm and the dry run (install), the smokes of the candidate and of every prior (smoke, untimed, shards
@@ -552,6 +555,179 @@ if part all-plan || part all-install || part all-smoke || part all-board || part
             --out-md "$RES/COMPARE-ALL-$V.md" --out-json "$RES/compare-all-$V.json" --summary "$RES/SUMMARY-ALL-$V.txt" \
             > "$RES/logs/compare-all.log" 2>&1
         rc=$?; head -n 4 "$RES/logs/compare-all.log"
+        phase_end $rc
+    fi
+    echo finished > "$J/.phase"
+    exit "$WORST"
+fi
+
+# ---- targeted: only the listed rows (Andrew, 2026-11-17: "can we only measure the things that have changed? we don't
+# need a full board run") ------------------------------------------------------------------------------------------
+# PC_PARTS=targeted (= tg-install,tg-smoke,tg-board,tg-compare; each can be given alone to split a job over the cap:
+# the boards resume from board.json) with PC_ROWS=<rows file on the box> (tools/ops/targeted_rows.py writes it from a
+# compare and the changed lanes; tools/ops/measure_candidate.py stage --rows uploads it and refuses one whose estimate
+# is over the cap, naming the split). Our arms only, the same machinery as board-all on the listed races: the plan
+# (every submit, CPU, seconds: targeted_rows.py plan = the board's current plan of the listed races, in rows-file order,
+# and the recipes of those races only) -> every arm's venv at once -> every arm's smoke at once in one shard set (the
+# disk gate counts only the listed races) -> the TIMED races, INTERLEAVED BY ARM in chunks: chunk 1 on the candidate,
+# chunk 1 on 0.8.55, chunk 2 on the candidate, ..., so the two times of a row are minutes apart, not hours (a chunk is
+# about PC_TG_CHUNK_S = 600 s of the rows' stored candidate time; 0 = one race per chunk). The harness times one
+# bench_board process per board dir, which resumes from its board.json, so a chunk is one process per arm on the same
+# out dir; each process start (plan, preflight audit, smoke gate) is paid per chunk and arm, which is why a chunk is
+# not one race by default. Both arms run each chunk's races in the same order. -> the owed A/B arms staged in
+# PC_B_ARMS (tools/measure_owed.py plan: each B set only on the rows its define affects), each unit chunk by chunk
+# with its base (the candidate) back to back: board-tg-ab-<arm>-base-<rows>/ then board-tg-ab-<arm>-<rows>/ ->
+# the same compare as the full board (paper recipes of the listed races, extra and internal rows, on-box 0.8.55
+# column, best ever as reference) in COMPARE-TG/compare-tg/SUMMARY-TG-COMPARE-<vendor>, and SUMMARY-TG-<vendor>
+# (targeted_rows.py summary: timed on both, FASTER/SAME/REGRESSION, rows still over 1.10 worst first, rows fixed,
+# done/total per arm, the A/B ratios). GPU races are serial by nature (one process on the GPU); the installs, the
+# smokes and the plans use every cgroup core.
+[[ "$PARTS" == *",targeted,"* ]] && PARTS="$PARTS,tg-install,tg-smoke,tg-board,tg-compare,"
+if part tg-install || part tg-smoke || part tg-board || part tg-compare; then
+    TG="$RES/plan-tg"; TGO="$RES/plan-tg-owed"
+    mkdir -p "$TG"
+    { [ -n "${PC_ROWS:-}" ] && [ -s "$PC_ROWS" ]; } || { say "targeted: PC_ROWS (the rows file on the box) is missing or empty"; exit 2; }
+    cp "$PC_ROWS" "$TG/rows.tsv"
+    phase tg-plan
+    $PY tools/ops/targeted_rows.py plan --rows "$TG/rows.tsv" --vendor "$V" --planner tools/bench_board.py \
+        --recipes "$RECIPES" --out-dir "$TG" --chunk-s "${PC_TG_CHUNK_S:-600}" > "$RES/logs/tg-plan.log" 2>&1
+    rc=$?; tail -n 2 "$RES/logs/tg-plan.log"
+    if [ $rc -eq 0 ] && [ -n "$B_CSV" ]; then
+        # the owed A/B rows of the staged B sets; the empty paper doc leaves every unit its own base
+        $PY tools/measure_owed.py plan --owed "$OWED_FILE" --paper-recipes "$TG/owed-paper.json" \
+            --planner tools/bench_board.py --vendor "$V" --b-arms "$B_CSV" --out-dir "$TGO" > "$RES/logs/tg-owed-plan.log" 2>&1
+        r=$?; tail -n 1 "$RES/logs/tg-owed-plan.log"; [ $r -gt $rc ] && rc=$r
+    fi
+    phase_end $rc
+    [ -s "$TG/race-ids-full.txt" ] || { say "targeted: no listed race is planned by the board (logs/tg-plan.log)"; exit 5; }
+    DK=(); [ -n "$B_CSV" ] && DK=(--owed "$OWED_FILE" --b-arms "$B_CSV")
+    $PY tools/measure_owed.py data-keys "${DK[@]}" --paper-recipes "$TG/races.json" --planner tools/bench_board.py \
+        --vendor "$V" --data-root "$DATA_ROOT" > "$TG/data-keys.tsv" 2> "$RES/logs/data-keys-tg.log" || {
+        say "could not list the targeted rows' datasets (logs/data-keys-tg.log)"; exit 4; }
+    MISSING_KEYS=$(while IFS=$'\t' read -r key path; do [ -f "$path" ] || printf '%s ' "$key"; done < "$TG/data-keys.tsv")
+    if [ -n "$MISSING_KEYS" ]; then
+        say "missing datasets under $DATA_ROOT: $MISSING_KEYS; stage them from the Mac (measure_candidate.py stage --rows)"
+        exit 4
+    fi
+    mapfile -t BARGS_TG < "$TG/board-args.txt"
+    COMMON_TG=("${BARGS_TG[@]}" --data-root "$DATA_ROOT" --rounds 1 --evidence-local-only --fixtures-venv "$CACHE_ROOT/venv-nf")
+    CARGS=("${COMMON_TG[@]}")
+    if part tg-install; then
+        phase tg-install
+        pids=(); names=()
+        for arm in "${ARMS[@]}"; do      # every arm at once (CPU): the candidate, the priors, the B sets
+            # shellcheck disable=SC2086
+            $PY tools/bench_board.py "${COMMON_TG[@]}" ${ARM_ARGS[$arm]} --ours-install-only --install-only \
+                --venv "$CACHE_ROOT/venv-$arm" --cache "$CACHE_ROOT/i-$arm" --wheel-manifest "${ARM_MAN[$arm]}" \
+                --race-ids @"$TG/race-ids-full.txt" --out "$RES/install-tg-$arm" > "$RES/logs/install-tg-$arm.log" 2>&1 &
+            pids+=($!); names+=("$arm")
+        done
+        rc=0
+        for i in "${!pids[@]}"; do
+            wait "${pids[$i]}"; r=$?; say "install ${names[$i]} rc=$r"; [ $r -gt $rc ] && rc=$r
+        done
+        phase_end $rc
+    fi
+    [ -f "${ARM_MAN[candidate]}" ] || { say "the candidate arm has no wheel manifest (logs/install-tg-candidate.log)"; exit 6; }
+    cat "$TG/race-ids-smoke.txt" "$TGO/smoke-ids.txt" 2> /dev/null | sort -u > "$TG/smoke-ids-all.txt"
+    for arm in ${PRIOR_ARMS[@]+"${PRIOR_ARMS[@]}"}; do PRIOR_SMOKE_IDS[$arm]="$TG/race-ids-smoke.txt"; done
+    if part tg-smoke; then
+        phase tg-smoke    # the candidate (listed + owed rows) and every prior (listed rows) at once, untimed
+        smoke_together tg- "$TG/smoke-ids-all.txt" "$RES/smoke-tg" --drop-race-scratch; src=$?
+        phase_end $src
+    fi
+    SJT=()
+    for f in "$RES"/smoke-tg-s*-smoke/smoke.json; do [ -f "$f" ] && SJT+=(--smoke-json "$f"); done
+    $PY tools/paper_compare.py pass-ids --full-ids "$TG/race-ids-full.txt" "${SJT[@]}" --out "$TG/race-ids-pass.txt" \
+        > "$RES/logs/pass-ids-tg.log" 2>&1
+    tail -n 1 "$RES/logs/pass-ids-tg.log"
+    tg_board() {   # arm, ids file, out dir, rows ("" = full), smoke-json args...: one TIMED process, resumes board.json
+        local arm=$1 ids=$2 out=$3 rows=$4 rc ra=()
+        shift 4
+        [ -s "$ids" ] || return 0
+        [ -f "${ARM_MAN[$arm]:-/nonexistent}" ] || { say "board $arm: no installed venv (logs/install-tg-$arm.log)"; return 6; }
+        [ -n "$rows" ] && ra=(--rows "$rows")
+        CUR_IDS=$ids; CUR_BOARD=$out
+        # shellcheck disable=SC2046
+        $PY tools/bench_board.py "${COMMON_TG[@]}" $(run_as "$arm") --cache "$CACHE_ROOT/c1" --race-ids @"$ids" \
+            "$@" ${ra[@]+"${ra[@]}"} --drop-race-scratch --out "$out" >> "$RES/logs/$(basename "$out").log" 2>&1
+        rc=$?; CUR_IDS=
+        say "board $arm $(basename "$ids") rc=$rc: $(tail -n 1 "$RES/logs/$(basename "$out").log" | head -c 160)"
+        return $rc
+    }
+    if part tg-board; then
+        phase tg-board
+        smoke_together tg- "" ""; rc=$?     # a prior smoke the tg-smoke part did not run (a split submit), all at once
+        left=$(races_left "$TG/race-ids-pass.txt" "$RES/board-tg/board.json"); nb=1
+        for arm in ${PRIOR_ARMS[@]+"${PRIOR_ARMS[@]}"}; do
+            # the races the candidate passed that this prior's own smoke passed too; its failures with their reasons
+            mapfile -t psj < <(prior_smoke_args "$arm" tg-)
+            mkdir -p "$TG/$arm"
+            $PY tools/paper_compare.py pass-ids --full-ids "$TG/race-ids-pass.txt" "${psj[@]}" \
+                --out "$TG/$arm/race-ids-pass.txt" > "$RES/logs/pass-ids-tg-$arm.log" 2>&1
+            say "$arm: $(tail -n 1 "$RES/logs/pass-ids-tg-$arm.log")"
+            grep -m 40 '^PAPER-PASS-IDS-FAILED' "$RES/logs/pass-ids-tg-$arm.log" | cut -c1-300
+            left=$(( left + $(races_left "$TG/$arm/race-ids-pass.txt" "$RES/board-tg-$arm/board.json") )); nb=$(( nb + 1 ))
+        done
+        if [ -s "$TGO/units.tsv" ]; then
+            while IFS=$'\t' read -r arm rows ids <&3; do
+                { [ "$arm" = candidate ] || [ "$arm" = prior ]; } && continue
+                left=$(( left + 2 * $(nlines "$ids") )); nb=$(( nb + 2 ))
+            done 3< "$TGO/units.tsv"
+        fi
+        disk_gate tg-board "$left" "$nb" "${PC_EVIDENCE_MB_PER_RACE:-40}"
+        # the listed rows: chunk by chunk, the candidate then each prior on the same races in the same order
+        $PY tools/ops/targeted_rows.py chunks --ids "$TG/race-ids-pass.txt" --rows "$TG/rows.tsv" \
+            --chunk-s "${PC_TG_CHUNK_S:-600}" --out-dir "$TG/chunks" | tail -n 1
+        for c in "$TG"/chunks/chunk-*.txt; do
+            [ -f "$c" ] || continue
+            tg_board candidate "$c" "$RES/board-tg" "" "${SJT[@]}"; r=$?; [ $r -gt $rc ] && rc=$r
+            for arm in ${PRIOR_ARMS[@]+"${PRIOR_ARMS[@]}"}; do
+                grep -Fx -f "$TG/$arm/race-ids-pass.txt" "$c" > "$c.$arm" 2> /dev/null
+                mapfile -t psj < <(prior_smoke_args "$arm" tg-)
+                tg_board "$arm" "$c.$arm" "$RES/board-tg-$arm" "" "${psj[@]}"; r=$?; [ $r -gt $rc ] && rc=$r
+            done
+        done
+        # the owed A/B arms: each unit chunk by chunk, its base (the candidate) and the arm back to back
+        if [ -s "$TGO/units.tsv" ]; then
+            while IFS=$'\t' read -r arm rows ids <&3; do
+                { [ "$arm" = candidate ] || [ "$arm" = prior ]; } && continue
+                [ -n "${PC_OWED_ARMS:-}" ] && [[ ",$PC_OWED_ARMS," != *",$arm,"* ]] && continue   # a split submit
+                abrows=""; use=$ids
+                if [ "$rows" = full ]; then      # full rows: only the races whose candidate smoke passed
+                    $PY tools/paper_compare.py pass-ids --full-ids "$ids" "${SJT[@]}" --out "$ids.pass" \
+                        > "$RES/logs/pass-ids-tg-ab-$arm.log" 2>&1
+                    use="$ids.pass"
+                else
+                    abrows=$rows                 # a neighbouring shape: no smoke gate (as the owed part)
+                fi
+                $PY tools/ops/targeted_rows.py chunks --ids "$use" --chunk-s "${PC_TG_CHUNK_S:-600}" \
+                    --out-dir "$TGO/chunks-$arm-$rows" | tail -n 1
+                for c in "$TGO/chunks-$arm-$rows"/chunk-*.txt; do
+                    [ -f "$c" ] || continue
+                    tg_board candidate "$c" "$RES/board-tg-ab-$arm-base-$rows" "$abrows" "${SJT[@]}"; r=$?; [ $r -gt $rc ] && rc=$r
+                    tg_board "$arm" "$c" "$RES/board-tg-ab-$arm-$rows" "$abrows" "${SJT[@]}"; r=$?; [ $r -gt $rc ] && rc=$r
+                done
+            done 3< "$TGO/units.tsv"
+        fi
+        phase_end $rc
+    fi
+    if part tg-compare; then
+        phase tg-compare
+        NR=()
+        for f in "$TG/not-planned.json" "$TG/smoke-failed.json"; do [ -f "$f" ] && NR+=(--not-run "$f"); done
+        mapfile -t PB < <(prior_board_args tg-)
+        RF=()
+        [ -f "$REF_COMPARE" ] && RF=(--reference-compare "$REF_COMPARE")
+        $PY tools/paper_compare.py compare --recipes "$TG/recipes.json" --board "$RES/board-tg/board.json" "${NR[@]}" \
+            "${PB[@]}" "${RF[@]}" --best-ever "${PC_BEST_EVER:-$TREE/bench/results/board_best_ever/$V.json}" \
+            --out-md "$RES/COMPARE-TG-$V.md" --out-json "$RES/compare-tg-$V.json" \
+            --summary "$RES/SUMMARY-TG-COMPARE-$V.txt" > "$RES/logs/compare-tg.log" 2>&1
+        rc=$?; head -n 3 "$RES/logs/compare-tg.log"
+        $PY tools/ops/targeted_rows.py summary --compare "$RES/compare-tg-$V.json" --rows "$TG/rows.tsv" \
+            --results "$RES" --ids "$TG/race-ids-full.txt" --units "$TGO/units.tsv" --prior-versions "$PRIOR_VERSIONS" \
+            --out "$RES/SUMMARY-TG-$V.txt" > "$RES/logs/summary-tg.log" 2>&1
+        r=$?; head -n 3 "$RES/logs/summary-tg.log"; [ $r -gt $rc ] && rc=$r
         phase_end $rc
     fi
     echo finished > "$J/.phase"

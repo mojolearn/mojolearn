@@ -80,6 +80,7 @@ import candidate_wheel_install as C  # noqa: E402
 import measure_owed as MO  # noqa: E402
 import paper_compare as PC  # noqa: E402
 import release_gate as RG  # noqa: E402
+import targeted_rows as TR  # noqa: E402
 
 RELEASE_ROOT = Path.home() / "mojolearn-evidence" / "release"
 #: the paper baseline only (Andrew, 2026-11-16: one prior, 0.8.55; 0.8.66 is never timed): re-timed on the box
@@ -154,29 +155,43 @@ def check_b_arms(names, owed_file):
 #: to the all-* parts; that block exits before the paper parts run)
 PAPER_PARTS = ("plan", "install", "smoke", "board", "prior", "owed", "drivers", "compare")
 ALL_PARTS = ("board-all", "all-plan", "all-install", "all-smoke", "all-board", "all-prior", "all-compare")
+#: the targeted job's parts (PC_PARTS=targeted with PC_ROWS: tools/ops/targeted_rows.py; that block exits before the
+#: paper parts too)
+TG_PARTS = ("targeted", "tg-install", "tg-smoke", "tg-board", "tg-compare")
 
 
 def parse_parts(text):
     """[part] of a PC_PARTS value ('' = the job's default, the paper parts); refuses a name the job does not know."""
     parts = [p for p in (text or "").split(",") if p]
-    bad = [p for p in parts if p not in PAPER_PARTS + ALL_PARTS]
+    known = PAPER_PARTS + ALL_PARTS + TG_PARTS
+    bad = [p for p in parts if p not in known]
     if bad:
         raise SystemExit(f"measure-candidate: --parts {','.join(bad)} is not a part of tools/ops/paper_compare_job.sh "
-                         f"({','.join(PAPER_PARTS + ALL_PARTS)})")
+                         f"({','.join(known)})")
     return parts
+
+
+def runs_targeted(parts):
+    return any(p in TG_PARTS for p in parts)
 
 
 def runs_board_all(parts):
     return any(p in ALL_PARTS for p in parts)
 
 
-def dataset_keys(vendor, owed_file, recipes_file, planner_file, b_names=(), last_prior=False, parts=()):
+def dataset_keys(vendor, owed_file, recipes_file, planner_file, b_names=(), last_prior=False, parts=(), rows_file=None):
     """The R2 keys the job's races read (tools/measure_owed.py data_keys: the board's own data_needs over the races
     the job plans). The paper parts: the paper recipes and the owed rows the job plans for these B sets and this prior
     choice. board-all (any all-* part): every race the board plans (tools/paper_compare.py plan_all, the job's
-    all-plan), with the algos corpus keys."""
+    all-plan), with the algos corpus keys. targeted (any tg-* part): the listed rows (ROWS_FILE) the board plans and
+    the owed rows of the staged B sets, as the job's targeted plan and data-keys read them."""
     planner = MO.load_planner(str(planner_file))
-    if runs_board_all(parts):
+    if runs_targeted(parts):
+        want = {r["id"] for r in TR.read_rows(rows_file)}
+        races = [r for r in PC.plan_all(planner, vendor)[4] if r["race_id"] in want]
+        doc = PC.load_json(owed_file) if b_names else {"rows": []}
+        keys = MO.data_keys(doc, {"recipes": races}, planner, vendor, DATA_ROOT, list(b_names), False)
+    elif runs_board_all(parts):
         races = PC.plan_all(planner, vendor)[4]
         keys = MO.data_keys({"rows": []}, {"recipes": races}, planner, vendor, DATA_ROOT)
     else:
@@ -339,8 +354,20 @@ def cmd_stage(a):
     if not prior_versions or any(not re.fullmatch(r"[0-9]+(\.[0-9]+)+[.a-z0-9]*", v) for v in prior_versions):
         raise SystemExit(f"measure-candidate: --prior-versions wants a comma list of releases, not {a.prior_versions!r}")
     parts = parse_parts(a.parts)
+    if a.rows and not parts:
+        parts = ["targeted"]
+    if runs_targeted(parts) != bool(a.rows):
+        raise SystemExit("measure-candidate: --rows and --parts targeted (or a tg-* part) go together")
+    if a.rows:
+        # the targeted job's cap check, before anything is copied: an estimate over the cap is refused with its split
+        est, split = TR.check_cap(a.rows, a.cap_min, a.chunk_s)
+        print(TR.estimate_line(est))
+        if split:
+            raise SystemExit(f"measure-candidate: {a.rows} is estimated at {est['total_min']:.0f} min, over the "
+                             f"{a.cap_min:.0f}-minute cap; submit the split, one job each (each times both arms):\n  "
+                             + "\n  ".join(f"{f}  {TR.estimate_line(e)}" for f, e in split))
     keys = dataset_keys(vendor, owed_file, recipes, planner if planner.is_file() else ROOT / "tools" / "bench_board.py",
-                        [n for n, _, _ in specs], prior_versions[-1] != PC.PAPER_VERSION, parts)
+                        [n for n, _, _ in specs], prior_versions[-1] != PC.PAPER_VERSION, parts, a.rows)
     ds_manifest = results_file("dataset_store/manifest.tsv", src, tree)
     print(f"datasets the job reads ({vendor}, parts {','.join(parts) or 'default'}): {' '.join(keys)} "
           f"(pins {ds_manifest})")
@@ -361,6 +388,12 @@ def cmd_stage(a):
            "PC_PRIOR_VERSIONS": ",".join(prior_versions), "PC_PRIOR_VERSION": prior_versions[-1]}
     if parts:
         env["PC_PARTS"] = ",".join(parts)     # the job runs the parts whose datasets were staged above
+    if a.rows:
+        rows_name = Path(a.rows).name
+        uploads.append((Path(a.rows).expanduser(), f"{indir}/rows/{rows_name}", False))
+        env["PC_ROWS"] = f"{indir}/rows/{rows_name}"
+        if a.chunk_s != TR.DEFAULT_CHUNK_S:
+            env["PC_TG_CHUNK_S"] = str(a.chunk_s)
     allow_hw_diff = a.allow_hw_diff or os.environ.get("PC_ALLOW_HW_DIFF") == "1"
     if vendor == "nvidia" and allow_hw_diff:
         env["PC_ALLOW_HW_DIFF"] = "1"     # the job then runs on another GPU and every row is flagged HW-DIFF
@@ -542,6 +575,13 @@ def main(argv=None):
     s.add_argument("--parts", default="",
                    help="the job's PC_PARTS (default: the job's own, the paper parts); board-all (or any all-* part) "
                         "stages the full board's datasets instead of the paper's, and the submit line carries PC_PARTS")
+    s.add_argument("--rows", default=None,
+                   help="a targeted rows file (tools/ops/targeted_rows.py): the job times only those rows "
+                        "(PC_PARTS=targeted, PC_ROWS); refused over --cap-min, naming the split")
+    s.add_argument("--cap-min", type=float, default=TR.DEFAULT_CAP_MIN,
+                   help="the targeted job's estimate cap in minutes (default %(default)s)")
+    s.add_argument("--chunk-s", type=int, default=TR.DEFAULT_CHUNK_S,
+                   help="the targeted job's interleave chunk in seconds of candidate time (PC_TG_CHUNK_S)")
     s.add_argument("--dry-run", action="store_true", help="validate locally and print every command; copy nothing")
     a = p.parse_args(argv)
     return cmd_stage(a)
