@@ -470,7 +470,10 @@ _add("meanshift", xlane="cluster", ours="MeanShift", task="cluster", block="cls"
 # scikit-learn's 'auto' builds a KD/ball tree: different neighbour searches. Both now run
 # algorithm='brute' (ours' own method; scikit-learn's brute NearestNeighbors). Results raced
 # before this change were wrong for this lane; apply extra scrutiny.
-_add("optics", xlane="cluster", ours="OPTICS", task="cluster", block="cls", sub={"X": SUB["quad"]},
+# NO INFER CELL (fb-harness, 2026-11-17): OPTICS has no predict (ours and scikit-learn: the labels come from the fit),
+# and the infer cell timed `predict(Xq) if hasattr(est, "predict") else None`, an empty call (0.012 ms on the
+# d95f805cce full board, flagged REGRESSION against 0.8.55's empty call). no_predict drops the cell from the plan.
+_add("optics", xlane="cluster", ours="OPTICS", task="cluster", block="cls", sub={"X": SUB["quad"]}, no_predict=True,
      sk="sklearn.cluster:OPTICS", params=dict(min_samples=10, xi=0.05, algorithm="brute"),
      sk_params=dict(min_samples=10, xi=0.05, algorithm="brute", n_jobs=-1),
      mism=["algorithm='brute' on both: ours always computes the full n x n distance matrix "
@@ -2084,7 +2087,7 @@ def has_infer(lane):
     if s["kind"] in ("layer", "ann", "svgp", "seqmodel", "cnnclf"):
         return True
     if s["kind"] in ("est", "dart"):
-        if s.get("fit_predict") or s["task"] in ("embed", "covariance", "select"):
+        if s.get("fit_predict") or s.get("no_predict") or s["task"] in ("embed", "covariance", "select"):
             return False
         return True
     # time series: the libraries fit and forecast in one call (statsforecast's
@@ -2111,7 +2114,7 @@ def infer_call(lane):
     if t in ("clf", "reg", "semi", "outlier", "multiclf", "multireg", "gmm"):
         return "predict(Xq)"
     if t == "cluster":
-        return "predict(Xq) or fit labels"
+        return "predict(Xq)"
     return "transform(Xq)"
 
 
@@ -3745,8 +3748,8 @@ def _build_est(lane, arm, D):
                     S["proba"] = None
         elif t == "gmm":
             S["pred"] = est.predict(Xq)
-        elif t == "cluster":
-            S["pred"] = est.predict(Xq) if hasattr(est, "predict") else None
+        elif t == "cluster":            # a lane without predict has no infer cell (no_predict: optics)
+            S["pred"] = est.predict(Xq)
         elif t == "radius":                 # neighbour count per query (ragged rows)
             _dist, ind = est.radius_neighbors(Xq)
             S["pred"] = [int(np.shape(r)[0]) for r in ind]

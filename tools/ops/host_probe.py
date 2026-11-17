@@ -21,6 +21,9 @@ it to --out. Fields (schema mojolearn-host-probe/1):
                      `nvidia-smi --query-gpu=pcie.link.gen.current,pcie.link.width.current`, AMD from the GPU's sysfs
                      current_link_speed / current_link_width; plus the maximum the link supports
   gpu                name and driver
+  kernel, boot_id    the kernel release (uname -r) and /proc/sys/kernel/random/boot_id: with the GPU driver, the system
+                     state tools/paper_compare.py requires to be the same on both arms (2026-11-17: a pod restart
+                     between the d95f805cce arms changed the driver and the kernel on the same host id)
   errors             every step that failed (the probe never fails the job; a missing field is shown as such)
 Tests: tools/test_paper_compare_same_box.py.
 """
@@ -289,6 +292,11 @@ def gpu_info(vendor):
     return {}
 
 
+def boot_id():
+    """/proc/sys/kernel/random/boot_id (a new value on every boot of the kernel the container runs on), or None."""
+    return (_read("/proc/sys/kernel/random/boot_id") or "").strip() or None
+
+
 def probe(vendor, mb=MB):
     out = {"schema": SCHEMA, "taken": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "vendor": vendor,
            "hostname": platform.node(), "pod_id": os.environ.get("RUNPOD_POD_ID") or None, "errors": []}
@@ -300,6 +308,8 @@ def probe(vendor, mb=MB):
             out["errors"].append("%s: %s" % (name, str(exc)[:300]))
             return None
 
+    out["kernel"] = platform.release() or None
+    out["boot_id"] = boot_id()
     out["cpu_model"] = step("cpu_model", cpu_model)
     out["numa_nodes"] = step("numa_nodes", numa_nodes)
     out["nproc"] = os.cpu_count()

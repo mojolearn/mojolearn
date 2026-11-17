@@ -122,6 +122,32 @@ def is_ours_identical(race, cell):
     return mode == "identical"
 
 
+#: the system state a time was taken under (fb-harness, 2026-11-17): tools/paper_compare.py derives a time verdict only
+#: when both sides carry one and the same value of each (a pod restart between the d95f805cce arms changed the NVIDIA
+#: driver and the kernel on the same host id)
+SOFTWARE_FIELDS = ("gpu_uuid", "driver", "kernel", "boot_id")
+
+
+def software_default(board):
+    """The board-level system state: its host probe's fields, else what bench_board's box fingerprint recorded
+    (box.gpu.driver, box.os.release). The probe and the box are rewritten on every resume, so they describe the LAST
+    process only; each race's own host record (bench_board race_host) overrides them field by field."""
+    box = board.get("box") or {}
+    p = box.get("host_probe") if isinstance(box.get("host_probe"), dict) else {}
+    hid = p.get("host_id") or ""
+    uuid = hid.split("/", 1)[1] if "/" in hid else None
+    return {"gpu_uuid": p.get("gpu_uuid") or (uuid if uuid and uuid != "-" else None),
+            "driver": (p.get("gpu") or {}).get("driver") or (box.get("gpu") or {}).get("driver"),
+            "kernel": p.get("kernel") or (box.get("os") or {}).get("release"),
+            "boot_id": p.get("boot_id")}
+
+
+def race_software(race, default):
+    """[gpu uuid, driver, kernel, boot id] of one race: its host record's fields over the board DEFAULT."""
+    h = (race.get("host") or {}) if isinstance(race, dict) else {}
+    return [h.get(f) or default.get(f) for f in SOFTWARE_FIELDS]
+
+
 def cell_records(board, blob_vendor_hint=""):
     """Every timed identical cell of our arms in one board document, as flat records (no commit/date)."""
     box_gpu = ((board.get("box") or {}).get("gpu") or {})
@@ -131,6 +157,7 @@ def cell_records(board, blob_vendor_hint=""):
     when = board.get("updated") or board.get("created")
     box_version = ((board.get("box") or {}).get("mojolearn") or {}).get("version")
     box_host_id = (((board.get("box") or {}).get("host_probe") or {}).get("host_id"))
+    sw_default = software_default(board)
     out = []
     for rid, race in races.items():
         if not rid or not isinstance(race, dict):
@@ -158,6 +185,7 @@ def cell_records(board, blob_vendor_hint=""):
                             "device": device, "ms": float(ms), "hash": c.get("hash"), "params": params,
                             "params_source": psrc, "version": version, "release": release_of(version),
                             "board_updated": when, "host_id": host_id,
+                            "software": race_software(race, sw_default),
                             # SMALL ROWS (2026-11-15): a median of consecutive calls carries its calls and spread
                             **({k: c.get(k) for k in ("calls", "min_ms", "max_ms")}
                                if isinstance(c.get("calls"), int) and c["calls"] > 1 else {})})
@@ -282,7 +310,7 @@ def mine(repo, jobs=None, rev_args=("--all", "--reflog")):
 
 def _entry(r):
     return {k: r.get(k) for k in ("ms", "date", "commit_date", "release", "version", "commit", "path", "hash",
-                                  "params", "params_source", "device", "host_id")}
+                                  "params", "params_source", "device", "host_id", "software")}
 
 
 SUSPECT_FRACTION = 0.05
