@@ -1314,12 +1314,17 @@ def _label_columns(Y: PythonObject, xt: PythonObject, context: PythonObject) rai
         var n = Int(py=view.shape[0])
         var m = Int(py=view.shape[1])
         var T = admitted_vector(m * n, target, context)
-        var W = admitted_vector(n * m, target, context)
-        trees_cast(Int(py=classical_address(view)), vt, trees_address(W), target, n * m, context)
-        _ = W  # keep the Python object alive through the native call above
-        _ = view  # keep the Python object alive through the native call above
-        _ = xt_transpose_f64(glue, trees_address(W), trees_address(T), n, m)
-        _ = W  # keep the Python object alive through the native call above
+        if vt == target:
+            # fb-boost-copy (2026-11-17): Y already holds the 8-byte words the
+            # transpose reads; it was cast float64->float64 (int64->int64)
+            # into a zero-filled n x m copy first on every fit (O(n m)).
+            _ = xt_transpose_f64(glue, Int(py=classical_address(view)), trees_address(T), n, m)
+        else:
+            var W = admitted_vector(n * m, target, context)
+            trees_cast(Int(py=classical_address(view)), vt, trees_address(W), target, n * m, context)
+            _ = xt_transpose_f64(glue, trees_address(W), trees_address(T), n, m)
+            _ = W  # keep the Python object alive through the native call above
+        _ = view  # keep the Python object alive through the native calls above
         _ = T  # keep the Python object alive through the native call above
         _ = view^
         return Python.tuple(T, n, m)
