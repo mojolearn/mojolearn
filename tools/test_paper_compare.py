@@ -626,7 +626,7 @@ class JobScript(unittest.TestCase):
     def test_timed_boards_drop_their_scratch_and_gate_on_races_left(self):
         with open(self.JOB) as fh:
             text = fh.read()
-        self.assertEqual(text.count("--drop-race-scratch --out"), 3)    # all-board, prior_board_run, board_run
+        self.assertEqual(text.count("--drop-race-scratch --out"), 4)    # all-board, prior_board_run, board_run, tg_board
         self.assertNotIn('disk_gate all-board "$(nlines', text)
         self.assertNotIn('disk_gate board "$(nlines', text)
         self.assertIn('phase_partial "$code"', text)

@@ -225,7 +225,7 @@ class Priors(unittest.TestCase):
     def test_stage_keys_follow_the_owed_plan(self):
         # the staged datasets are the owed rows the job plans (B sets staged, a last release or not)
         src = Path(MC.__file__).read_text()
-        self.assertIn("[n for n, _, _ in specs], prior_versions[-1] != PC.PAPER_VERSION, parts)", src)
+        self.assertIn("[n for n, _, _ in specs], prior_versions[-1] != PC.PAPER_VERSION, parts, a.rows)", src)
 
 
 class Parts(unittest.TestCase):
