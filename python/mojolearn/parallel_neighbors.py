@@ -40,8 +40,7 @@ _METHODS = {
 _shard.register(query_methods=_METHODS,
                 query_classes={cls.__name__: cls for cls in _METHODS},  # glue: fixed supported class metadata
                 nearest_class=_nb.NearestNeighbors, knc_class=_nb.KNeighborsClassifier,
-                knr_class=_nb.KNeighborsRegressor, kde_class=_den.KernelDensity,
-                context=_nb._NATIVE_CONTEXT)
+                knr_class=_nb.KNeighborsRegressor, kde_class=_den.KernelDensity)
 
 
 class ParallelQueries:

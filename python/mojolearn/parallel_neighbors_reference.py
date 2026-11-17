@@ -29,7 +29,7 @@ from ._native_parallel_shard import _native_parallel_shard
 
 # Import-time class metadata; shard queries and votes are native operations.
 _shard.register(nearest_class=_nb.NearestNeighbors, knc_class=_nb.KNeighborsClassifier,
-                knr_class=_nb.KNeighborsRegressor, context=_nb._NATIVE_CONTEXT)
+                knr_class=_nb.KNeighborsRegressor)
 
 
 class ReferenceShardedNeighbors:

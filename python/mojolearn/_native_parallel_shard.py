@@ -90,6 +90,11 @@ PLAN_BINDINGS = ('_mojolearn', '_mojolearn_estimators', '_mojolearn_gbdt', '_moj
 
 def register(**fixed):
     """Add one driver module's fixed tables to the owner, once, at import."""
-    # glue: import-time connection of compiled entries, classes and contexts
+    # glue: import-time connection of compiled entries, classes and contexts.
+    # Every driver's owner reads the family owners' shared `context` (array
+    # types, codes, classes); it was registered only by the neighbors drivers,
+    # so fit_scaler, the IVF shards and the GP classifier refused ("has no
+    # context") in a process that had not imported those (fb6-smoke census).
+    from ._native_family_bridge import shared_context
     _native_parallel_shard('register', dict(fixed, worker_bindings=_WORKER_BINDINGS,
-                                          table_keys=_TABLE_KEYS))
+                                          table_keys=_TABLE_KEYS, context=shared_context()))
