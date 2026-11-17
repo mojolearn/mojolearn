@@ -13,7 +13,7 @@ from bindings.mode_metadata_native_door import _fields, _class_fields
 from bindings.native_loaded_module_door import native_loaded_module
 from bindings.classical_attributes_door import classical_check_layout
 from bindings.prep_native_estimator_door import prep_estimator_admit, prep_estimator_has, prep_estimator_call
-from bindings.trees_public_inputs_door import trees_table, trees_call, trees_address, trees_reshape
+from bindings.trees_public_inputs_door import trees_table, trees_call, trees_address, trees_reshape, trees_cast
 from bindings.admitted_input_unpack import admitted_vector, admitted_unfilled, classical_view
 # TOMBSTONE: trees_view / trees_vector uses (the trees admission aliases) deleted 2026-11-09 by lane a1b-doors-opt-in-trees-linear; code recoverable at f59d913b0b.
 # Restore: experiments/removed/A1B_LABELS_ADMISSION_COPY.patch.
@@ -114,7 +114,25 @@ def _evaluate(model: PythonObject, method: String, x: PythonObject, n: Int,
         raise Error("ValueError: the explained model returned a different row count")
     var k = Int(py=view.shape[1]) if rank == 2 else 1
     _ = view
-    # A fresh snapshot table per output: a freed output's identity may be reused.
+    # Lane fb3-named (2026-11-17; kernel-shap +247 ms taxi, +1143 ms istella vs 0.8.55): the model output of
+    # every chunk went through _snapshot, a zero-filled Array of the output's size plus a serial memcpy of the
+    # whole output (and a second zero-filled Array plus a cast when it was not float32): nsamples * background
+    # rows per explained row. The output of a compiled estimator call is a fresh owned Array nobody else holds,
+    # so a C-order float32 one is read in place (0.8.55's as_f32_c borrowed it the same way) and any other
+    # numeric dtype is cast once into an unfilled float32 Array. The reshaped Array shares the store, which
+    # keeps the words alive; every caller also holds its result through the kernels that read it.
+    if (py_type(out) is context["array_class"] and out._base is None and out._pin is None
+            and (rank == 1 or String(out.order) == "C")):
+        var source_type = String(out.dtype)
+        if source_type == "<f4":
+            return trees_reshape(out, Python.tuple(n, k), context)
+        var narrow = admitted_unfilled([n * k], "<f4", context)
+        _ = _entry(context["trees_helpers"], "cast_elements")
+        trees_cast(trees_address(out), source_type, narrow.addr, "<f4", n * k, context)
+        _ = out  # the source words are read through the whole cast
+        return trees_reshape(narrow.keep, Python.tuple(n, k), context)
+    # Any other output object (a view over another owner): the snapshot copy, with a fresh snapshot table
+    # per output (a freed output's identity may be reused).
     var flat = _snapshot(out, "<f4", rank, "output", context, Python.dict())
     _ = out
     return trees_reshape(flat, Python.tuple(n, k), context)

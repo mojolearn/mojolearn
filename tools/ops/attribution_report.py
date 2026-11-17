@@ -41,7 +41,7 @@ import sys
 #: the scored calls of an attribution run (one excluded warmup first, as on the board)
 CALLS = 20
 #: the distance kernels of part C
-KERNEL_REGEX = r"(?i)distance"
+KERNEL_REGEX = r"(?i)distan"  # kernel names are cut to 30 characters: `neighbors_checks_pinned_distan...` (the register tile) never matched "distance"
 
 
 class Row:

@@ -368,7 +368,7 @@ if part kernels && [ -n "$NCU" ]; then
             d="$RES/ncu-$arm"; mkdir -p "$d"
             # two forced calls: ncu reads static launch properties and replays the first matched launches only
             run_board "$arm" "$rid" "$ph" "$own" "$d/$row-board" MOJOLEARN_BENCH_FORCE_CALLS=2 \
-                "$NCU" --target-processes all --kernel-name 'regex:.*[Dd]istance.*' --launch-count "${AT_NCU_LAUNCHES:-6}" \
+                "$NCU" --target-processes all --kernel-name 'regex:.*[Dd]istan.*' --launch-count "${AT_NCU_LAUNCHES:-6}" \
                 --section LaunchStats --section Occupancy --section SpeedOfLight --csv --page details \
                 --log-file "$d/$row.csv" < /dev/null
             r=$?; [ $r -gt $rc ] && rc=$r

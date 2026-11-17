@@ -6,6 +6,7 @@ from std.memory import bitcast
 from max.gpu import block_dim, block_idx, thread_idx
 from std.sys import is_defined
 from std.memory import unsafe_memcpy
+from std.ffi import external_call
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from sequence.moe_tiled import MOE_TPB, moe_combine_kernel, moe_hidden_tiled_kernel, moe_out_tiled_kernel
 from sequence.moe_group import (
@@ -340,12 +341,28 @@ def team_kernel[OP: Int](
 
 
 
+#: Experiment MOJOLEARN_SEQ_FAST_LIBC_COPY (lane fb3-named, 2026-11-17; A/B owed, NVIDIA L40S;
+#: docs/apple-fast/EXPERIMENTS.md). Default off. The transport copies into and out of the pinned stages
+#: (`_pcopy` and the pipelined upload chunks) call the C library's memcpy instead of the Mojo
+#: `unsafe_memcpy`. Reason to try it: against 0.8.55 (Mojo 1.0 `memcpy`, same source otherwise) the rows whose
+#: only large host pass is this copy grew by the same amount per staged megabyte on one box: mlp-reg/mlp-clf
+#: fit at 1,000,000 x 220 float32 (880 MB staged) +331 / +310 ms = 0.35-0.38 ms/MB, cross_entropy (256 MB
+#: logits up, 256 MB gradient down) +176 ms = 0.34 ms/MB, while the same box's C memcpy runs 16.7 GB/s
+#: (0.06 ms/MB) and its H2D DMA is unchanged between the wheels (iforest: 1,798 MB in 81 vs 84 ms). The A/B
+#: decides whether the copy is the cause; time it on a neighbouring shape (500,000 x 100) and a non-board
+#: array as well. Bytes copied are the same: no bit moves on any vendor.
+comptime SEQ_LIBC_COPY = is_defined["MOJOLEARN_SEQ_FAST_LIBC_COPY"]()
+
+
 def _pcopy(dst: FP, src: FP, n: Int):
     """A host transport copy: one memcpy on the calling thread (no host task
     pool on a GPU install; cpu-gpu-cleanup n-seq, 2026-10-02). Data movement
     only, the bytes are the same."""
     if n > 0:
-        unsafe_memcpy(dest=dst, src=src, count=n)
+        comptime if SEQ_LIBC_COPY:
+            _ = external_call["memcpy", Optional[MutPointer[UInt8, MutUntrackedOrigin]]](dst, src, n * 4)
+        else:
+            unsafe_memcpy(dest=dst, src=src, count=n)
 
 
 def coop_kernel[OP: Int](
@@ -834,7 +851,7 @@ struct DeviceExec(Exec, Movable):
                     var done = 0
                     while done < n:
                         var cnt = min(SEQ_PIPE_CH, n - done)
-                        unsafe_memcpy(dest=hpf + done, src=src + done, count=cnt)
+                        _pcopy(hpf + done, src + done, cnt)
                         self.execution_profile.copied(3, cnt * 4)
                         var cv = self._sub(found[0], found[1] + done, cnt)
                         self.ctx.enqueue_copy(dst_buf=cv, src_ptr=hpf + done)
