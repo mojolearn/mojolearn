@@ -523,7 +523,20 @@ def schedule_spec(schedule: PythonObject) raises -> LrSpec:
 
 def schedule_spec_admitted(schedule: PythonObject) raises -> LrSpec:
     """`schedule_spec` for a schedule its caller has just admitted with
-    `opt_schedule` (`opt_owner` admits the optimizer's `lr_schedule`)."""
+    `opt_schedule` (`opt_owner` admits the optimizer's `lr_schedule`). A
+    stored setting that is no number (an edit such as `peak_lr = "x"`, which
+    the attribute hook stores as object.__setattr__ would) raises TypeError,
+    not the bare conversion error (fb6-smoke, 2026-11-17)."""
+    try:
+        return _schedule_spec_read(schedule)
+    except error:
+        var message = String(error)
+        if message.startswith("TypeError: ") or message.startswith("ValueError: "):
+            raise error^
+        raise Error("TypeError: schedule setting: " + message)
+
+
+def _schedule_spec_read(schedule: PythonObject) raises -> LrSpec:
     var context = OPT_DOOR.get_or_create_ptr()[].context
     var fields = py_fields(schedule)
     var kind = 0
