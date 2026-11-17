@@ -6,6 +6,7 @@ from std.sys import is_defined
 # OPTIMIZER_RESIDENT (kept local so this unit does not import the training
 # package); B arm -D MOJOLEARN_OPTIMIZER_RESIDENT_OFF.
 comptime OPTIMIZER_RESIDENT = not is_defined["MOJOLEARN_OPTIMIZER_RESIDENT_OFF"]()
+from std.memory import bitcast
 from std.python import Python, PythonObject
 from bindings.optimizer_container_boundary_unpack import OptimizerInputOwners
 from bindings.py_balanced import py_call, py_type, py_fields, py_get, py_setitem
@@ -18,7 +19,7 @@ from training.optimizer_input_plan import same_shape
 from providers.python.array_layout_boundary_pack import native_shape_pack
 from bindings.optimizer_device_native_door import device_shape, shape_count
 from bindings.optimizer_schedule_native_door import schedule_operation
-from bindings.classical_arrays_door import classical_input, classical_typed, classical_address, classical_is_array, classical_cast_kind
+from bindings.classical_arrays_door import classical_input, classical_typed, classical_address, classical_is_array, classical_cast_kind, classical_numpy
 from bindings.classical_attributes_door import classical_connect_numpy
 from core.sequence_optimizer_inputs import sequence_optimizer_cast
 from core.scaler_fit_impl import scaler_fill
@@ -132,13 +133,40 @@ def seq_addr(value: PythonObject, count: Int, context: PythonObject, mut buffer_
     return view.addr
 
 
+#: seq_array's host buffers of at least this many bytes are private anonymous
+#: mappings (zero on first touch) instead of memset storage (see there).
+comptime _SEQ_LAZY_ZERO_BYTES = 1 << 20
+
+
 def seq_array(n: Int, context: PythonObject, fill: Float32 = 0.0, wide: Bool = False) raises -> PythonObject:
     if n < 0 or n > 9223372036854775807 // 8:
         raise Error("OverflowError: sequence optimizer buffer size is invalid")
     var input = context["input_context"]
     classical_connect_numpy(input)
-    var result = classical_typed(Python.tuple(n), "<i8" if wide else "<f4", input)
-    if not wide and fill != 0.0:
+    var result: PythonObject
+    var nbytes = n * (8 if wide else 4)
+    if nbytes >= _SEQ_LAZY_ZERO_BYTES and classical_numpy(input):
+        # lane fb-optim (2026-11-17): the optimizer's host state copies (one
+        # to three slots of n_total floats) are zeros that a resident or
+        # device step never reads or writes (W_PRISTINE + the zeroed open
+        # skip their upload). `classical_typed` builds them over a
+        # bytearray, whose constructor memsets every byte: each page is
+        # faulted in and zeroed at construction (~35 ms per 64 MB slot on
+        # the L40S host; 0.8.55's np.zeros left the pages untouched). A
+        # private anonymous mapping is zero filled by the kernel on first
+        # touch only, as calloc, so untouched slots cost nothing at
+        # construction or release. Below 1 MiB the memset is microseconds
+        # and a mapping per buffer would cost more (one syscall, page
+        # granularity), so small buffers keep `classical_typed`. Size
+        # reasoning only: neighbors (any parameter count above 256 Ki
+        # floats, any optimizer kind) take the same route.
+        var storage = py_call(input["native_mmap_type"], PythonObject(-1), PythonObject(nbytes),
+                              input["native_mmap_private"])
+        result = py_call(input["ndarray"], Python.tuple(n), dtype=input["int64" if wide else "float32"],
+                         buffer=storage)
+    else:
+        result = classical_typed(Python.tuple(n), "<i8" if wide else "<f4", input)
+    if not wide and bitcast[DType.uint32](fill) != 0:
         scaler_fill(MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(result))), n, fill)
     return result
 
@@ -401,7 +429,15 @@ def seq_construct(owner: PythonObject, values: PythonObject, mode: PythonObject,
             py_setitem(fields, "_af_state", states)
         else:
             for i in range(2 if kind == 6 else 3):  # driver-loop: over optimizer moment buffer owners
-                _ = py_call(states.append, seq_cast(options["initial_accumulator_value"], context, n) if kind == 1 and i == 1 else seq_array(n, context))
+                # lane fb-optim (2026-11-17): Adagrad's accumulator is its
+                # admitted float initial_accumulator_value (fp[5], already
+                # `_seq_real`) rounded once to float32 and filled natively;
+                # it was `seq_cast` of the scalar broadcast to n_total, a
+                # per-element index/stride/byte-assembly loop (~290 ms for
+                # 16 Mi floats; board adagrad 9.4 -> 417 ms) over a freshly
+                # memset array. The value 0 (the default) keeps the untouched
+                # zero slot, as 0.8.55 (`if init: fill`).
+                _ = py_call(states.append, seq_array(n, context, Float32(Float64(py=fp[5]))) if kind == 1 and i == 1 else seq_array(n, context))
             py_setitem(fields, "_state", states)
             py_setitem(fields, "_sc", seq_array(2 if kind == 6 else 3, context, 1.0))
         return PythonObject(None)

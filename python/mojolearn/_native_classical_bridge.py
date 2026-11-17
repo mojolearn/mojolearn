@@ -109,6 +109,10 @@ def _numpy_free_context():
         "native_value_types": (type(None), str, bytes, bytearray, bool, int, float, range, Array, array, PosixPath,
                                PurePosixPath, type(iter([])), type(iter(())), type(iter(range(0))), type(reversed([]))),
         "buffer_owner_types": (type(None), bytes, bytearray, array, mmap.mmap),
+        # Large zero host buffers that may never be touched (the sequence
+        # optimizers' state copies): a private anonymous mapping, zero filled
+        # by the kernel on first touch (bindings/sequence_optimizer_native_door.mojo seq_array).
+        "native_mmap_type": mmap.mmap, "native_mmap_private": mmap.MAP_PRIVATE,
         # The base of a native output store (a raw ctypes array class):
         # admission accepts a ctypes array class made directly from it with no
         # Python buffer hook (bindings/sequential_admission_door.mojo).
