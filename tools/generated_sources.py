@@ -54,6 +54,9 @@ GENERATOR_DIRS = {UNICODE_TABLE: "tokenizer/tools", ARCHIVE_TABLE: ARCHIVE_GENER
 COMMANDS = {UNICODE_TABLE: ["sh", "tokenizer/tools/gen_unicode_table.sh"],
             ARCHIVE_TABLE: ["python3", ARCHIVE_GENERATOR]}
 LOG_NAMES = {UNICODE_TABLE: "generate-unicode.log", ARCHIVE_TABLE: "generate-archive-unicode.log"}
+#: Runs of a generator that exits non-zero before preparation fails, and the backoff step between them.
+GENERATOR_ATTEMPTS = 4
+GENERATOR_RETRY_SECONDS = 5
 
 
 class GeneratedSourceError(ValueError):
@@ -332,7 +335,18 @@ def prepare_sources(repo, evidence=None, outputs=None, env=None, runner=None):
                     old.write_bytes(previous)
                     row.update(replaced_sha256=sha256(previous), replaced_reason=str(problem))
             log = evidence / LOG_NAMES[rel]
-            row.update(log=str(log), exit_code=runner(list(COMMANDS[rel]), root, environment, log))
+            # The archive table's generator downloads pinned UCD files from unicode.org, which refuses or drops some
+            # of the many fetches a GitHub build makes at once (every shard and the assemble job): a failed run is
+            # retried, its log kept beside the next (lane fb9-arm-builds, 2026-11-17: four builds failed here). The
+            # retry lives here, not in the generator, so the generator's bytes (part of the bindings' identity) stay.
+            for attempt in range(GENERATOR_ATTEMPTS):
+                if attempt:
+                    shutil.copy2(log, log.with_name(f"{log.name}.attempt{attempt}"))
+                    time.sleep(GENERATOR_RETRY_SECONDS * attempt)
+                row.update(log=str(log), attempts=attempt + 1,
+                           exit_code=runner(list(COMMANDS[rel]), root, environment, log))
+                if row["exit_code"] == 0:
+                    break
             require(row["exit_code"] == 0, "generator exited " + str(row["exit_code"]) + "; see " + str(log))
             require((root / rel).is_file(), "generator did not create " + rel)
             require(all((root / name).read_bytes() == raw for name, raw in inputs.items()),
@@ -357,7 +371,18 @@ def prepare_sources(repo, evidence=None, outputs=None, env=None, runner=None):
         row["retained"] = retained[rel]
     _atomic_json(evidence / "generated-sources.json", {"sources": rows})
     failed = [rel for rel, row in rows.items() if not row["verified"]]
-    require(not failed, "preparation failed for " + ", ".join(failed) + "; see " + str(evidence / "generated-sources.json"))
+    if failed:
+        # the evidence directory may not leave the box (a GitHub runner): name each cause and its log's tail here
+        causes = []
+        for rel in failed:
+            tail = ""
+            try:
+                lines = Path(rows[rel].get("log") or "").read_text(errors="replace").strip().splitlines()
+                tail = " | ".join(lines[-3:])
+            except OSError:
+                pass
+            causes.append(f"{rel}: {rows[rel].get('error', 'not verified')}" + (f" (log tail: {tail})" if tail else ""))
+        require(False, "preparation failed for " + "; ".join(causes) + "; see " + str(evidence / "generated-sources.json"))
     return rows
 
 
