@@ -8,8 +8,11 @@ imports it and adds only what is specific to Claude sessions.
   campaigns are kept verbatim in [docs/rules/RULES_HISTORY.md](docs/rules/RULES_HISTORY.md); it is history, not rules.
   How this file was consolidated: [docs/rules/RULES_CONSOLIDATION_2026-11-09.md](docs/rules/RULES_CONSOLIDATION_2026-11-09.md).
 
-The file is in seven parts: hard rules; the product (what Mojolearn is and never trades away); measurement; releases;
-how we work (lanes, compiles, boxes, logs, experiments); Mojo rules; public docs.
+The file is in eight parts: hard rules; the product (what Mojolearn is and never trades away); measurement; releases;
+how we work (lanes, compiles, boxes, logs, experiments); Mojo rules; public docs; and, last, TEMPORARY DIRECTIONS.
+Parts 1 to 7 are standing rules. Part 8 holds what Andrew has ordered for now only: read it first, because while a
+direction there is live it overrides the standing rule it names, and it is deleted (moved to RULES_HISTORY) when
+Andrew ends it. Nothing temporary is ever written into parts 1 to 7.
 
 ## 1. Hard rules (Andrew)
 
@@ -196,6 +199,17 @@ cleanup may remove, move out of the wheel, weaken or break any part of it. Verif
 not product execution ("No Python in the runtime"), so its Python is never a violation of that rule. A change that
 touches anything verify imports says so in its report and states how verify was exercised afterwards.
 
+**Verify follows the product; it never steers it (Andrew, 2026-11-15).** The product is decided by the best
+performance at equal quality, with the same bits across vendors. What is protected is that verify WORKS and can still
+fail: it runs from the built wheel, covers every lane, and catches a real difference. Its current internals,
+fixtures, references, tools and the product paths it happens to call are not protected from change. When a product
+change makes any of them stale (a faster default, a removed path or switch, changed bits, a renamed entry), the same
+change updates verify to test the new product, and says so. Never keep a slower path, a duplicate, an environment
+switch, an old route or old bits because verify or a verify tool uses them, and never shape a fix around what verify
+currently does. "Protected" forbids leaving verify broken, weakened or unable to fail; it does not make verify a
+reason to hold the product back. The verify smoke (`tools/ops/wheel_verify_smoke.sh`) is how a change shows verify
+still works.
+
 ### No refactor adds cost on a hot path (Andrew, 2026-11-11)
 
 A change that removes a Python crossing, a copy, a lookup or a layer is judged on the whole path it touches, never
@@ -231,9 +245,11 @@ finds in the same round; a wave without that audit does not merge.
 - Opponents are scored once, stored, and run only by an explicit opponent job. No opponent re-score.
 - One scored run per arm, one seed (Andrew, 2026-10-03 and 2026-10-14): the harness may take one excluded warmup.
   `AB_MULTI_RUN=1` is the only override. Queue A/B lines with reps 1, rounds 1, pairs 1.
-- **Small rows are the median of consecutive calls inside the one scored run (Andrew, 2026-11-15).** A row whose warmup
-  call takes under 10 ms is scored as the median of N consecutive calls (N = 20) made inside that one scored run; the cell records N
-  and the spread. One scored run per arm is unchanged; nothing is rerun; big rows keep one call. Reason: a single call of a
+- **Small rows are the median of consecutive calls inside the one scored run (Andrew, 2026-11-15; reworded 2026-11-16).** A row
+  whose first call AFTER the warmup takes under 10 ms is scored as the median of N consecutive calls (N = 20) made inside that one
+  scored run (that call plus 19 more); the cell records N, the spread and which rule scored it. The warmup itself never decides: it
+  carries start-up and compilation (a 6 ms row had a 1,051 ms warmup and was scored from one call). A compare never divides a
+  median by a single call without flagging the row (SCORING-MIXED). One scored run per arm is unchanged; nothing is rerun; big rows keep one call. Reason: a single call of a
   millisecond-scale row is dominated by first-touch page faults and the allocator (program-run 3.4 ms once vs 0.76 ms steady).
 
 ### Times are compared only on the same box (Andrew, 2026-11-14)
@@ -327,27 +343,12 @@ above or below a board row (rows, features, classes, k, vocabulary), or a board 
 `identical`, on any vendor. A rule must come from size, hardware or cost reasoning that covers neighboring shapes,
 stated in a comment. Removing such a rule may change bits: change all columns together. Each removal gets an A/B
 with the old rule as the B arm, timed on neighboring shapes and one non-board dataset.
-
-### The pre-0.8.67 measurement campaign is NVIDIA only, small board first (Andrew, 2026-11-14)
-
-- Until Andrew says otherwise, measurement builds are timed on the NVIDIA L40S only: no MI300X leg, no AMD rent, no
-  Apple timing, no verify at the end of a measurement. The cross-vendor verification happens once, at the release.
-- Order: fix everything known (every regression row, every audit finding, every leftover a lane reported) -> one
-  GitHub build -> the PAPER board (the 108 recipes of the 0.8.55 comparison) against 0.8.55 and the last release ->
-  read every flag -> for each regressed row look back through 0.8.55, the earlier releases and every stored
-  measurement run (best-ever table, boards in `bench/results/` and R2) at what the BEST run of that row was doing,
-  and restore that behaviour or beat it -> fix wave -> one build -> measure again. Repeat until every paper row is
-  at least as fast as 0.8.55 with quality equal.
-- Only then the FULL board, NVIDIA only, against best-ever; then the same fix loop on its regressions. The full board
-  times one prior on the same box, 0.8.55 (Andrew, 2026-11-15); the last release is timed only on the paper rows.
-- ONE integration branch for the whole campaign (Andrew, 2026-11-14: "everything, everything, everything"): every fix
-  lane, every audit fix and every leftover is merged into the same integration branch (`preinteg/wave2-20261113` until
-  it lands), which is the only branch compiled. main receives that branch whole, never a piece of it; no lane and no
-  tooling fix merges to main on its own. Fix as we go: a defect found while a build or a measurement runs gets its
-  lane at once on the integration branch, and no measurement is repeated for it alone.
-- Carefully, never narrowly: quality is never traded for speed (both arms' quality beside every time; a quality drop
-  is a regression), no rule may key on a benchmark shape or dataset ("No dimension targeting"), and no row is
-  "fixed" by measuring it on a smaller case. Not piecemeal: one wave fixes everything the last measurement showed.
+- **No knowledge of a board dataset in the product (Andrew, 2026-11-15).** No algorithm, kernel, default, threshold or
+  route is written, chosen or tuned from what we know about a benchmark dataset: its name, its rows, columns, classes
+  or features, its value distribution, sparsity, label balance, duplicates or ordering, or the parameters a board row
+  happens to use. A change is justified from the algorithm, the hardware and the sizes of the input in front of it,
+  so that it holds for data we have never seen. A fix found on a board row states the general cause and names a
+  neighboring shape and a non-board dataset on which it is timed. "It cannot happen on the board" is never a reason.
 
 ## 4. Releases
 
@@ -433,7 +434,7 @@ with the old rule as the B arm, timed on neighboring shapes and one non-board da
   `~/mojolearn-evidence/`.
 - **Use bash, not zsh,** for loops and variable expansion: zsh does not word-split `$FLAGS`.
 - **Final reply, short:** branch and head; one line per change with the cause as `file:line`; deletions; bit
-  changes; the A/B define; what it queued (box and id) and any RUN OWED; open doubts. No narrative, no diffs.
+  changes (and anything kept serial or duplicated to avoid one: there should be none); the A/B define; what it queued (box and id) and any RUN OWED; open doubts. No narrative, no diffs.
 - **Peer communication only for execution (Andrew, 2026-10-29).** Contact peers only to resolve ownership,
   coordinate a dependency, hand off required work or prevent conflicting changes; never for advice, reassurance or
   status. Put routine findings in handoff files.
@@ -441,6 +442,10 @@ with the old rule as the B arm, timed on neighboring shapes and one non-board da
   complete output to files, use targeted rg/grep with bounded surrounding lines and short tails, and summarize exit
   status, coverage, failures, and evidence paths. Expand only relevant diagnostic blocks; never hide failures or
   infer full success from filtered output."
+- Every lane brief and spawn prompt also carries the bits reminder (Andrew, 2026-11-15): "Bits can change. They must
+  match across vendors and the host column within one version, never against older code. Take the faster or parallel
+  form, change every column together, and report 'bits change'." A lane that reports "bits unchanged" names what it
+  kept serial, slower or duplicated to get that; the orchestrator opens a lane for each such item the same session.
 
 ### Compiles
 
@@ -500,6 +505,8 @@ with the old rule as the B arm, timed on neighboring shapes and one non-board da
 - A filtered excerpt or a few passing lines never proves the whole run passed: keep the original exit status,
   expected coverage, failures and skipped or incomplete work, and expand the relevant block when needed.
 - Never read a whole subagent transcript or a `tasks/*.output` file; ask for a concise status or read the artifact.
+- Pipe command output through `head`, `tail` or `grep` to reduce the result size (Andrew, 2026-11-15). Never `cat` a
+  large file into context; read a bounded range instead (the Read tool with offset and limit, or `sed -n a,bp`).
 - Put long results in a file under `~/mojolearn-evidence/` and report the path plus a few lines. Keep a routine
   diagnostic reply to about 2,000 tokens.
 
@@ -518,6 +525,10 @@ with the old rule as the B arm, timed on neighboring shapes and one non-board da
   at its sha). The default path stays byte-identical. An arm recorded as promoted but still opt-in in the code becomes the
   default (bits change on every column together) and its switch goes. The 1,300 undecided defines of
   `docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md` go under this rule.
+- **A paused programme's arms are not unmeasured (Andrew, 2026-11-15).** The four-week clock does not run for a
+  programme Andrew has paused: while Apple `fast` investment is stopped, its opt-in arms and its never-run experiment
+  cards stay in the code, opt-in and default off, to be run when he reopens it. Deleting on a calendar rule is for
+  arms that could have been run and were not; nothing is classed as waste because its programme is paused.
 
 #### Deleting an experiment
 
@@ -541,6 +552,9 @@ them for you.
 - Never name a parameter `out`. It is a reserved word (an argument
   convention), and the compiler reports "expected argument name". Use `dst`
   or `y_out`.
+- Never name a local, a field or a parameter `fn`. It is a removed keyword: the compiler reports "'fn' has been
+  removed; use 'def' instead" and stops parsing the file, which hides every later error in it (2026-11-15: two host
+  units of a measurement build). Use `entry`, `cached` or `callee`.
 - A function launched as a kernel must not also be called from another
   kernel. The build fails with "compile offload result missing kernelId" and
   no source location. Put the body in an `@always_inline` helper and have
@@ -574,7 +588,8 @@ them for you.
   import `sort` from `std.builtin.sort`. `host_parallelize` likewise takes a runtime closure with
   explicit captures (`def task(unit: Int) {imm pointer, imm count}:`). Use `comptime if`/`comptime for`
   for compile-time control flow; those statements no longer accept a parameter decorator.
-- `match` is a reserved keyword, including for local variables; use `matched` for a Boolean result.
+- `match` and `case` are reserved keywords, including for parameters and local variables (`def f(case: Int)` fails
+  with "expected argument name"); use `matched` for a Boolean result and `which` for a case index.
   Put `comptime assert` inside a function body, never at module scope.
 - Generic struct parameters used by fields, static methods or initializers must be qualified as
   `Self.E`, `Self.D`, `Self.RES` (and so on), including arguments to generic callees.
@@ -616,3 +631,44 @@ them for you.
 - The 162M two-route model is research and marketing material; it never appears in docs-site or the library docs.
 - We are alpha: no enterprise-grade checks. The docs, mojolearn.org and the measurements are generated from the
   latest origin/main by one publish command, run only when Andrew says so. Old URLs may break; no redirects.
+
+## 8. Temporary directions (for now only; each ends when Andrew says)
+
+Each entry says what it overrides and is removed whole when it ends. The standing rules in parts 1 to 7 are not edited
+to match a temporary direction, and no agent treats one as permanent or extends it to other work.
+
+### TEMPORARY: measure on NVIDIA only, small board first (Andrew, 2026-11-14; restated 2026-11-15)
+
+Ends when Andrew says. It is not the product direction: AMD and Apple remain in the contract and return to measurement.
+
+- Until Andrew says otherwise, measurement builds are timed on the NVIDIA L40S only: no MI300X leg, no AMD rent, no
+  Apple timing, no verify at the end of a measurement. The cross-vendor verification happens once, at the release.
+- While this campaign runs it overrides every "NVIDIA and AMD" in the measurement and release rules (restated
+  2026-11-15: "forget about AMD for now"): a switch is decided, a measured winner is replaced, a fix wave is measured
+  and an owed A/B arm is timed on the NVIDIA L40S alone. No AMD box is rented and no AMD build is waited on. The
+  two-vendor average, the AMD and Apple timing columns and the vendor-split flag return when Andrew reopens them.
+  Bits across vendors are unaffected: the release's one verification still covers every vendor.
+- Order: fix everything known (every regression row, every audit finding, every leftover a lane reported) -> one
+  GitHub build -> the PAPER board (the 108 recipes of the 0.8.55 comparison) against 0.8.55 alone ->
+  read every flag -> for each regressed row look back through 0.8.55, the earlier releases and every stored
+  measurement run (best-ever table, boards in `bench/results/` and R2) at what the BEST run of that row was doing,
+  and restore that behaviour or beat it -> fix wave -> one build -> measure again. Repeat until every paper row is
+  at least as fast as 0.8.55 with quality equal.
+- Only then the FULL board, NVIDIA only, against best-ever; then the same fix loop on its regressions. The full board
+  times one prior on the same box, 0.8.55 (Andrew, 2026-11-15).
+- One prior only, on every board (Andrew, 2026-11-16): a measurement job times the candidate and 0.8.55 on the same box
+  and nothing else. 0.8.66 is not timed on the paper rows or anywhere; this overrides "and the last release" in part 3.
+- 0.8.55 is not timed again (Andrew, 2026-11-17): the 0.8.55 times taken on the L40S on 2026-11-17 (full board, host
+  26ee0a3b0f86, driver 595.112.07) are the stored baseline for this campaign. A measurement job times OUR new wheel
+  only, on the same or a similar L40S, and only the rows a change touched plus the owed A/B switches; nothing already
+  known is measured again. This overrides "re-times OUR prior wheels on the same box in the same job" in part 3 while
+  it runs: the compare shows the stored 0.8.55 time with its host, driver and date beside each row and says in its
+  first line that the baseline is stored. A/B switches are still decided back to back in one job (base and arm).
+- ONE integration branch for the whole campaign (Andrew, 2026-11-14: "everything, everything, everything"): every fix
+  lane, every audit fix and every leftover is merged into the same integration branch (`preinteg/wave2-20261113` until
+  it lands), which is the only branch compiled. main receives that branch whole, never a piece of it; no lane and no
+  tooling fix merges to main on its own. Fix as we go: a defect found while a build or a measurement runs gets its
+  lane at once on the integration branch, and no measurement is repeated for it alone.
+- Carefully, never narrowly: quality is never traded for speed (both arms' quality beside every time; a quality drop
+  is a regression), no rule may key on a benchmark shape or dataset ("No dimension targeting"), and no row is
+  "fixed" by measuring it on a smaller case. Not piecemeal: one wave fixes everything the last measurement showed.
