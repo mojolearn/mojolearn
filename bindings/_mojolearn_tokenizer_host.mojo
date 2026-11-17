@@ -99,7 +99,7 @@ from bindings.cross_vendor_native_door import cross_vendor_c
 from bindings.native_codec_door import codec_c
 from bindings.native_process_pool_door import process_c
 from bindings.optimizer_lifecycle_unpack import optimizer_finalize_descriptor_binding
-from bindings.optimizer_native_router_door import optimizer_native_c
+from bindings.optimizer_native_router_door import optimizer_native_c, schedule_attribute_c
 from bindings.lr_schedule_block_door import register_lr_schedule_block
 from bindings.optimizer_owner_boundary_unpack import OptimizerOwner
 from std.python.bindings import lookup_py_type_object
@@ -1203,6 +1203,7 @@ def build__mojolearn_tokenizer_host() -> PythonObject:
         # Restore: git apply experiments/removed/dead_entries_tokenizer_host.patch
         module.def_function[optimizer_finalize_descriptor_binding]("optimizer_finalize_descriptor")
         module.def_py_c_function(optimizer_native_c, "optimizer_native")
+        module.def_py_c_function(schedule_attribute_c, "optimizer_schedule_attribute")
         module.def_py_c_function(embedding_layer_lifetime_c, "embedding_layer_lifetime")
         module.def_py_c_function(device_finalize_c, "optimizer_device_finalize")
         module.def_py_c_function(sequence_tensor_finalize_c, "sequence_tensor_finalize")

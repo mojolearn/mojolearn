@@ -19,7 +19,8 @@ an index into the block, PyFloat_FromDouble. No lookup, admission walk,
 allocation of ours, lock or GIL switch per call. `t=` keywords and wrong
 arities take a separate path with the former method's messages.
 Editing a setting (`sched.peak_lr = x`) rebinds the block through
-`_LrTable.__setattr__` (one native call per edit, never per step).
+`_LrTable.__setattr__`, a native descriptor (optimizer_native_router_door
+`schedule_attribute_c`; one native call per edit, never per step).
 
 Block size: `LR_BLOCK` (256), the run length `lr_spec_fill` already uses for
 one table pass, so one refill is exactly one kernel run (one set of its

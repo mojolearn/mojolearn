@@ -15,7 +15,6 @@ from core.native_descriptor_abi import PRIMITIVE_ABI_NAME
 from providers.python.neural_descriptor_pyapi_door import neural_descriptor_cached
 from std.memory import unsafe_memcpy
 from bindings.py_balanced import py_call, py_contains, py_get, py_setattr, py_setitem, py_type
-from sequence.lr_table import LR_TABLE_ON
 from std.python._cpython import GILReleased
 from core.entry_table import EntryRef, entry_ref_call
 from core.samba_entry_table import (
@@ -163,19 +162,18 @@ def samba_schedule_from_state(config: PythonObject, context: PythonObject) raise
     if not py_contains(context["schedule_classes"], kind):
         raise Error("Samba: unsupported saved learning-rate schedule")
     var result = py_call(bi.object.__new__, context["schedule_classes"][kind])
-    py_setattr(result, "peak_lr", PythonObject(Float64(Float32(Float64(py=py_call(bi.float, config["peak_lr"]))))))
-    py_setattr(result, "min_lr", PythonObject(Float64(Float32(Float64(py=py_call(bi.float, config["min_lr"]))))))
-    py_setattr(result, "warmup_steps", py_call(bi.int, config["warmup_steps"]))
-    py_setattr(result, "total_steps", PythonObject(None) if config["total_steps"] is None else py_call(bi.int, config["total_steps"]))
-    var warmup = Int(py=result.warmup_steps)
-    var tail = warmup + 1 if result.total_steps is None else max(Int(py=result.total_steps), warmup + 1)
-    # The schedule table switch is the build constant LR_TABLE_ON (was two
-    # environment reads per schedule load; lane envgate-train-seq-mamba).
-    py_setattr(result, "_fast", PythonObject(LR_TABLE_ON))
-    py_setattr(result, "_tail_t", PythonObject(tail))
-    py_setattr(result, "_tail_v", samba_schedule_rate(config, tail, context))
-    py_setattr(result, "_tb", PythonObject(-1))
-    py_setattr(result, "_tbv", PythonObject(None))
+    # fb6-smoke (2026-11-17): the settings go into the instance dictionary
+    # through the optimizer owner's native `schedule_setstate` (admission and
+    # ONE rate-block bind), not nine attribute sets through the schedule's
+    # __setattr__ (a Python frame and a block rebuild per set). The old
+    # `_fast`, `_tail_t`, `_tail_v`, `_tb`, `_tbv` table fields are gone:
+    # nothing has read them since the rate block replaced the Python table.
+    var state = bi.dict()
+    py_setitem(state, "peak_lr", PythonObject(Float64(Float32(Float64(py=py_call(bi.float, config["peak_lr"]))))))
+    py_setitem(state, "min_lr", PythonObject(Float64(Float32(Float64(py=py_call(bi.float, config["min_lr"]))))))
+    py_setitem(state, "warmup_steps", py_call(bi.int, config["warmup_steps"]))
+    py_setitem(state, "total_steps", PythonObject(None) if config["total_steps"] is None else py_call(bi.int, config["total_steps"]))
+    _ = py_call(context["schedule_native"], "schedule_setstate", result, Python.tuple(state), None, context["schedule_context"])
     return result
 
 

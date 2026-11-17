@@ -497,11 +497,34 @@ def optimizer_native_c(py_self: PyObjectPtr, packed: PyObjectPtr) abi("C") -> Py
             raise Error("TypeError: optimizer_native expects five arguments")
         return optimizer_native(String(py=args[0]), args[1], args[2], args[3], args[4]).steal_data()
     except error:
-        var message = String(error)
-        if message.startswith("ImportError: "):
-            return raise_python_exception(Error(message[byte=13:]), ExceptionType("PyExc_ImportError"))
-        if message.startswith("AttributeError: "):
-            return raise_python_exception(Error(message[byte=16:]), ExceptionType("PyExc_AttributeError"))
-        if message.startswith("IndexError: "):
-            return raise_python_exception(Error(message[byte=12:]), ExceptionType("PyExc_IndexError"))
-        return optimizer_python_error(error)
+        return _optimizer_router_error(error)
+
+
+def _optimizer_router_error(error: Error) -> PyObjectPtr:
+    var message = String(error)
+    if message.startswith("ImportError: "):
+        return raise_python_exception(Error(message[byte=13:]), ExceptionType("PyExc_ImportError"))
+    if message.startswith("AttributeError: "):
+        return raise_python_exception(Error(message[byte=16:]), ExceptionType("PyExc_AttributeError"))
+    if message.startswith("IndexError: "):
+        return raise_python_exception(Error(message[byte=12:]), ExceptionType("PyExc_IndexError"))
+    return optimizer_python_error(error)
+
+
+def schedule_attribute_c(py_self: PyObjectPtr, packed: PyObjectPtr) abi("C") -> PyObjectPtr:
+    """A built-in schedule's `__setattr__` / `__delattr__` (fb6-smoke,
+    2026-11-17). Installed at import as PyInstanceMethod(MethodType(this,
+    context)) on `_LrTable`, so `sched.x = v` arrives as (context, sched, "x",
+    v) and `del sched.x` as (context, sched, "x"): the same router operation
+    the Python methods called, with no Python frame. Construction, unpickling
+    and checkpoint restore write the instance dictionary directly and never
+    come here; only a caller's own edit does (one rebuild per edit)."""
+    try:
+        var args = PythonObject(from_borrowed=packed)
+        if len(args) == 4:
+            return optimizer_native("schedule_setattr", args[1], Python.tuple(args[2], args[3]), PythonObject(None), args[0]).steal_data()
+        if len(args) == 3:
+            return optimizer_native("schedule_delattr", args[1], Python.tuple(args[2]), PythonObject(None), args[0]).steal_data()
+        raise Error("TypeError: schedule attribute hook expects (name, value) or (name)")
+    except error:
+        return _optimizer_router_error(error)

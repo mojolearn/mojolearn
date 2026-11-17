@@ -854,20 +854,14 @@ class _LrTable(object):
     # A constructed schedule's `lr_at` / `bits_at` are its native rate block's
     # bound methods, stored on the instance (bindings/lr_schedule_block_door.mojo);
     # the two methods above document them. Pickling and copying carry the
-    # settings only and rebind the block; editing a setting rebinds it.
+    # settings only and rebind the block; editing or deleting a setting rebinds
+    # it through `__setattr__` / `__delattr__`, which are native descriptors
+    # installed at import (_native_optimizer_bridge.connect; no Python frame).
     def __getstate__(self):
         return _OPT_NATIVE("schedule_getstate", self, (), None, _OPT_CONTEXT)
 
     def __setstate__(self, state):
         return _OPT_NATIVE("schedule_setstate", self, (state,), None, _OPT_CONTEXT)
-
-    def __setattr__(self, name, value):
-        # an edited setting rebuilds the native rate block (one call per edit)
-        return _OPT_NATIVE("schedule_setattr", self, (name, value), None, _OPT_CONTEXT)
-
-    def __delattr__(self, name):
-        # a deleted setting rebuilds (or drops) the native rate block, as an edit does
-        return _OPT_NATIVE("schedule_delattr", self, (name,), None, _OPT_CONTEXT)
 
 
 class _Schedule(_LrTable):

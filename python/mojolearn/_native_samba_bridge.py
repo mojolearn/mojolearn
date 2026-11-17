@@ -173,6 +173,9 @@ def connect(config_cls, model_cls, training, neural, state_cls, session_cls=None
         "optimizer_step_io": "optimizer_resident_step_io" in entries,
         "optimizer_maximize_device": "optimizer_maximize_dev" in entries,
         "generator_class": training.Generator, "exact_schedule": exact_schedule,
+        # A restored schedule is built by the optimizer owner's native
+        # `schedule_setstate` (dictionary fill, admission, one block bind).
+        "schedule_native": training._OPT_NATIVE, "schedule_context": training._OPT_CONTEXT,
         "schedule_classes": {"constant": training.ConstantLR,
                              "linear": training.WarmupLinearLR,
                              "cosine": training.WarmupCosineLR},

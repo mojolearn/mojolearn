@@ -115,7 +115,15 @@ def connect(training):
         raise TypeError("optimizer ownership requires a compiled finalizer descriptor")
     training._Optimizer.__del__ = descriptor(MethodType(optimizer_finalizer, context))
     context["device_finalizer_descriptor"] = vars(training.TrainDeviceArray)["__del__"]
-    names += ("__del__",)
+    # A schedule's attribute edit and deletion rebuild its native rate block
+    # in the native hook itself (bindings/optimizer_native_router_door.mojo
+    # schedule_attribute_c); the descriptor binds the schedule, as __del__ does.
+    schedule_attribute = module.optimizer_schedule_attribute
+    if not isinstance(schedule_attribute, BuiltinFunctionType):
+        raise TypeError("schedule settings require the compiled schedule attribute hook")
+    training._LrTable.__setattr__ = descriptor(MethodType(schedule_attribute, context))
+    training._LrTable.__delattr__ = descriptor(MethodType(schedule_attribute, context))
+    names += ("__del__", "__delattr__")
     context["guards"] = tuple((cls, cls.__mro__, vars(cls), tuple((name, vars(cls).get(name)) for name in names))  # glue: retain finalizer and layout identities after native descriptor connection
                               for cls in guarded)  # glue: snapshot admitted owner layouts at import
     return native, context
