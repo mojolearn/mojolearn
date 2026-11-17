@@ -1518,6 +1518,14 @@ def run(argv=None, BB=None, resolve=None, out=sys.stdout):
         # an observation an older board stored without a version: the version file at its commit
         if not ob.get("version") and hasattr(resolve, "version"):
             ob["version"] = resolve.version(ob["sha"])
+    # NOT A RACE (Andrew, 2026-11-17; tools/race_fairness.py rule 1c): the lr-* schedule lanes and the internal
+    # call-overhead row time host lr_at calls, no GPU work. A main board never emits them (no cell, no FAILED row, no
+    # new ledger entry); their stored results, older ledger entries and opponent cells stay on disk.
+    for ob in all_obs:
+        if RF.lane_class(ob.get("lane")):
+            skips.add("not a race: %s (race_fairness rule 1c)" % RF.CALL_OVERHEAD,
+                      "%s/%s %s/%s" % (ob.get("box"), ob.get("job"), ob.get("lane"), ob.get("dataset")))
+    all_obs = [ob for ob in all_obs if not RF.lane_class(ob.get("lane"))]
     obs = dedupe(all_obs)
     winners, failures, ledger = choose(obs)
     filled = fill_input_home(winners, obs)
