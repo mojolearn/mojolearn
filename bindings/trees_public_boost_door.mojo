@@ -26,7 +26,8 @@
 # it on the device); RandomTreesEmbedding's `fit_transform`
 # converts X once for the fit and the transform.
 from std.python import Python, PythonObject
-from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem, py_fields
+from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem, py_setattr, py_fields
+from bindings.native_buffer_owner_pack import native_buffer_view, native_storage_allocate
 from bindings.py_attr import py_attr
 from bindings.py_typed_call import py_call_typed
 from bindings.trees_staged_input_door import trees_stage_members, trees_stage_rounds, trees_unstage
@@ -211,14 +212,53 @@ def _x_f32(source: PythonObject, context: PythonObject) raises -> AdmittedX:
 
 
 def _as_array(m: AdmittedX, shape: PythonObject, context: PythonObject) raises -> PythonObject:
-    """A C-order float32 matrix as an Array a member's fit or predict reads:
-    the matrix's own Array, or (a borrowed foreign buffer) one copy."""
-    if py_type(m.array) is context["array_class"] and Int(py=m.array._addr) == m.address:
-        return m.array
-    var out = admitted_array(shape, "<f4", context)
-    trees_cast(m.address, "<f4", trees_address(out), "<f4", m.rows * m.cols, context)
-    _ = out  # keep the Python object alive through the native call above
-    return out
+    """The admitted C-order float32 matrix or vector `m` (of `shape`, rank 1
+    or 2) as the Array a member's fit or predict reads, with no copy: the
+    matrix's own Array, or a zero-copy Array view pinning the foreign buffer
+    (an ndarray, a cast's fresh storage), as 0.8.55's `as_f32_c` gave (a
+    borrowed buffer was wrapped, never copied). Every caller and member only
+    reads it; a read-only buffer keeps its `_readonly` flag. A strided or
+    wrong-dtype input was already cast into fresh C-order float32 storage by
+    `admit_f32`, so `m.array` is always C-contiguous float32 words."""
+    # fb-boost-copy (2026-11-17): this copied every borrowed X (and y, and
+    # the meta door's weights and member outputs) into a new ZERO-FILLED
+    # Array (`admitted_array`: a serial fill of the whole buffer and its page
+    # faults, then a cast copy) on every Bagging/AdaBoost fit, predict and
+    # predict_proba, and every meta-estimator call (fb-infer measured the
+    # same copy at +480..984 ms on a 1M x 220 float32 X, ~1.5 GB/s). Cost is
+    # per element, so it holds for every shape (500k x 64, 1M x 16, any
+    # non-board float32 table). Callers keep `m` (its `array`) named past
+    # the last read of the returned view; the view's `_pin` and `_store`
+    # also hold the buffer for as long as the Array lives.
+    if py_type(m.array) is context["array_class"]:
+        if Int(py=m.array._addr) == m.address:
+            return m.array
+        # An Array whose words do not start at its own address (not produced
+        # by admit_f32 today): its buffer export would not start at
+        # `m.address`, so it keeps the one copy.
+        var out = admitted_array(shape, "<f4", context)
+        trees_cast(m.address, "<f4", trees_address(out), "<f4", m.rows * m.cols, context)
+        _ = out  # keep the Python object alive through the native call above
+        return out
+    var rank = len(shape)
+    var count = m.rows * m.cols
+    var pin = native_buffer_view(m.array)
+    var array = native_storage_allocate(context["array_class"])
+    py_setattr(array, "_store", m.array)
+    py_setattr(array, "_base", PythonObject(None))
+    py_setattr(array, "_pin", pin)
+    py_setattr(array, "_mv", py_call(py_call(pin.cast, "B").cast, "f"))
+    py_setattr(array, "_addr", PythonObject(m.address))
+    py_setattr(array, "_readonly", pin.readonly)
+    py_setattr(array, "shape", shape)
+    py_setattr(array, "dtype", PythonObject("<f4"))
+    py_setattr(array, "ndim", PythonObject(rank))
+    py_setattr(array, "size", PythonObject(count))
+    py_setattr(array, "nbytes", PythonObject(count * 4))
+    py_setattr(array, "itemsize", PythonObject(4))
+    py_setattr(array, "strides", Python.tuple(m.cols * 4, 4) if rank == 2 else Python.tuple(4))
+    py_setattr(array, "order", PythonObject("C"))
+    return array
 
 
 def _f32_vector(value: PythonObject, context: PythonObject) raises -> AdmittedX:
