@@ -261,12 +261,15 @@ for _name in ("Mamba1BlockInference", "Mamba2BlockInference", "Mamba3BlockInfere
     FIXTURES[f"{_name.lower()}_backward"] = (_block_backward(f"mojolearn.{_name}"), [f"mojolearn.{_name}.backward"])
 for _cls in _TRAINERS:
     FIXTURES[f"{_cls.lower()}_schedule"] = (_schedule_fixture(_cls), [
-        f"mojolearn.{_cls}.export_gradients", f"mojolearn.{_cls}.step_", f"mojolearn.{_cls}.from_checkpoint"])
+        f"mojolearn.{_cls}.export_gradients", f"mojolearn.{_cls}.step_", f"mojolearn.{_cls}.from_checkpoint"], "gpu")
     FIXTURES[f"{_cls.lower()}_train_step_from"] = (_train_step_from_fixture(_cls),
                                                    [f"mojolearn.{_cls}.train_step_from"])
 del _name, _cls
 
-#: every member above runs on the CPU wheel with devices=(0,) (verify's own training fixtures run these schedules
-#: there); none needs a GPU
-NEEDS_GPU = {}
+#: the cooperative byte-LM drivers (parallel, pooled, offloaded) have no CPU implementation: on the CPU wheel their
+#: train_step and checkpoint refuse ("no CPU implementation of the cooperative multi-GPU driver ..."), so the members
+#: that need a completed step or a checkpoint first (smoke b620cb2e0b: UNCOVERED) run only in the "gpu" fixture above
+NEEDS_GPU = {f"mojolearn.{_c}.{_m}": "the cooperative multi-GPU byte-LM driver has no CPU implementation: train_step "
+             "and checkpoint refuse on a CPU-only install, so no step or checkpoint exists to export or restore"
+             for _c in _TRAINERS for _m in ("export_gradients", "step_", "from_checkpoint")}
 WHY_NOT = {}
