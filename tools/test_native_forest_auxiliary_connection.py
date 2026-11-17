@@ -29,8 +29,8 @@ def test_public_and_private_doors_each_delegate_once_without_python_result_handl
         assert actual is result and len(calls) == 1
         owner, operation, args, connection = calls[0]
         assert owner is model and connection is context and args[0] is x
-        assert operation == 'trees_public_forest_' + ('auxiliary' if name.startswith('_') else name)
-        assert args[1:] == ((False, False, False) if name.startswith('_') else ())
+        assert operation == 'trees_public_forest_' + name
+        assert args[1:] == ()
 
 
 def test_all_six_registered_forest_classes_inherit_the_three_public_doors():
