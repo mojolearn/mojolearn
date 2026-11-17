@@ -1676,6 +1676,8 @@ class KNNImputer(_XNeighbors):
         ----------
         X : array-like or scipy.sparse matrix of shape (n_samples, n_features)
             Training data, with missing values marked by ``missing_values``.
+            A float32 C-order array is kept by reference, not copied: after
+            changing it in place, call `fit` again.
         y : None
             Ignored.
 

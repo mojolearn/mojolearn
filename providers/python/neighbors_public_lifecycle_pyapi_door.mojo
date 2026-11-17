@@ -232,11 +232,19 @@ def neighbors_public_begin(model: PythonObject, operation: String, args: PythonO
     if not operation.startswith("family_xn_kde_"):
         # Perf: a query (predict/transform/score/kneighbors) only reads X, so
         # an exact C-order float32 input that is not readonly is handed over
-        # as admitted, without a per-call copy. A fit (the model retains X),
-        # the imputer (writes into its X buffer) and a readonly view still get
-        # the owned copy.
-        var borrow = (not fitting and not operation.startswith("family_xn_loc_imp_")
-                      and not snapshot.readonly and snapshot.f32_c())
+        # as admitted, without a per-call copy. A fit whose model retains X
+        # (other than the k-NN, NearestCentroid and KNNImputer fits below) and
+        # a readonly view still get the owned copy.
+        # fb4-ten (2026-11-17): KNNImputer never writes its X. Every x_neighbors
+        # op it runs reads X and writes a separate output (nan_cells,
+        # p2m_mask_value, knn_impute*, p2m_nan_indicator: X is an input slot in
+        # each; transform's result starts from its own _copy_f32), as in
+        # 0.8.55, whose fit and transform borrowed X (`_f32`). The owned copy
+        # here was a zero-filled store plus a memcpy of all of X per fit and
+        # per transform: 0.16 ms per MB of X, every shape (board d95f805cce vs
+        # 0.8.55, 100k rows: fit 0.49 -> 2.9 ms at 4.4 MB, 5.2 -> 21 ms at 88 MB).
+        var imputer = operation.startswith("family_xn_loc_imp_")
+        var borrow = not fitting and not snapshot.readonly and snapshot.f32_c()
         # 0.8.66 regression C3 (knn-reg / knn-clf fit 8.5x on istella, 2.2x
         # on taxi): a k-NN fit keeps a reference to the caller's float32
         # C-order matrix as its index, as 0.8.55 and scikit-learn's brute
@@ -250,7 +258,7 @@ def neighbors_public_begin(model: PythonObject, operation: String, args: PythonO
         # vs 0.8.55: nearest-centroid istella fit 110 -> 184 ms on 1M x 220;
         # cost per element of X, every shape). It borrows X as 0.8.55 did.
         if (fitting and not borrow
-                and (operation.startswith("family_xn_knn_") or operation == "family_xn_loc_nc_fit")
+                and (operation.startswith("family_xn_knn_") or operation == "family_xn_loc_nc_fit" or imputer)
                 and snapshot.f32_c() and not snapshot.copied):
             borrow = True
         py_setitem(values, PythonObject(first), pin.keep if borrow else admit_family_owned(snapshot, pin, context))
