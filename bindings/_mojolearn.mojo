@@ -228,7 +228,6 @@ from cluster.resident_centers import (
 from neighbors.impl.detail.knn_brute_force import KNN_METHOD_AUTO
 from neighbors.impl.multi_gpu import neighbors_device_plan
 from neighbors.resident_index import (
-    knn_fold_ready,
     knn_index_classify,
     knn_index_prepare,
     knn_index_regress,
