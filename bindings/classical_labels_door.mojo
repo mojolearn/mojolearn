@@ -32,6 +32,7 @@ from bindings.py_attr import py_attr
 from std.python._cpython import PyObjectPtr, GILReleased
 from bindings.py_typed_call import py_call_typed, typed_python_error
 from bindings.native_buffer_owner_pack import native_buffer_view, native_storage_allocate
+from bindings.native_f32_view_pack import native_f32_view_array
 from bindings.classical_arrays_door import classical_wrap_array, _store_code, _buffer_typestr
 from bindings.classical_pandas_door import native_pandas_exact, native_pandas_f32, _pd_fields, _pd_get, classical_admit_value
 from bindings.sequential_admission_door import _ordinary_torch
@@ -1514,7 +1515,12 @@ def _accuracy_codes(yt: PythonObject, yp: PythonObject, n: Int, L: Int, var w: O
     var inputs: List[PythonObject] = [yt, yp]
     var w_array = PythonObject(None)
     if weighted:
-        w_array = w.value().array if py_type(w.value().array) is context["array_class"] else _owned_f32(w.value().view(), context)
+        # fb-boost-copy (2026-11-17): a foreign float32 buffer (an ndarray)
+        # is wrapped as a zero-copy Array view the runner reads in place; it
+        # was copied into a new zero-filled Array per weighted call (O(n)).
+        ref wv = w.value()
+        w_array = wv.array if py_type(wv.array) is context["array_class"] else native_f32_view_array(
+            wv.array, wv.address, Python.tuple(wv.rows), wv.rows, 1, context["array_class"])
         inputs.append(w_array)
     var arena = _accuracy_run(plan.program, inputs, mode, context)
     var base = arena.base()
@@ -1672,18 +1678,6 @@ def labels_score_from_codes(y_true: PythonObject, var classes: PythonObject, cod
         _ = codes  # keep the Python object alive through the native call above
         _ = yp  # keep the Python object alive through the native call above
     return _accuracy_codes(yt, yp, n, len(classes), w^, mode, context)
-
-
-def _owned_f32(w: AdmittedXView, context: PythonObject) raises -> PythonObject:
-    """A float32 Array copy of weights that borrow a foreign buffer (the
-    program runner copies Arrays into its arena; `put` took `as_f32_c`'s
-    Array). Copy the already-admitted contiguous float32 words natively."""
-    var count = w.rows * w.cols
-    var out = admitted_vector(count, "<f4", context)
-    # `array` owns the admitted storage; it need not itself export bytes.
-    unsafe_memcpy(dest=_F32P(unsafe_from_address=labels_address(out)),
-           src=_F32P(unsafe_from_address=w.address), count=count)
-    return out
 
 
 

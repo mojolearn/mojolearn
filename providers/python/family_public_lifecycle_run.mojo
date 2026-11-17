@@ -25,11 +25,19 @@ struct FamilyLifecycle(Copyable, Movable):
     # (its status slot, lane a8b-device-x-neighbors-rest): the scan is
     # deferred to it; a cast X is still refused by its cast.
     var defer: Bool
+    # The fit keeps a reference to X in its fitted state (LabelPropagation's
+    # X_, KernelPCA's X_fit_), so a replaced X is an owned copy at fit. False
+    # for a fit that only reads X and keeps what it derives (OneClassSVM's
+    # gathered support vectors, SVGP's gathered inducing rows, the chi2
+    # samplers' n_features_in_ and weights): it borrows the caller's float32
+    # C-order X as its queries do (fb-boost-copy, 2026-11-17: the copy was a
+    # serial-fill-then-copy pass over all of X per fit, cost per element).
+    var keeps_x: Bool
 
     def __init__(out self, method: String, requires_fit: Bool = True, scan: Bool = False,
                  replace: Bool = True, graph: Bool = False, target: Int = -1,
                  classifier: Bool = False, required: Bool = False, widen: Bool = False,
-                 device_x: Bool = False, defer: Bool = False):
+                 device_x: Bool = False, defer: Bool = False, keeps_x: Bool = True):
         self.method = method
         self.requires_fit = requires_fit
         self.scan = scan
@@ -41,6 +49,7 @@ struct FamilyLifecycle(Copyable, Movable):
         self.widen = widen
         self.device_x = device_x
         self.defer = defer
+        self.keeps_x = keeps_x
 
 
 def family_lifecycle_spec(operation: String) -> FamilyLifecycle:
@@ -48,9 +57,9 @@ def family_lifecycle_spec(operation: String) -> FamilyLifecycle:
     owner argument tuple's: 0 the resolved binding, 1 X, then the rest."""
     # OneClassSVM (bindings/svc_ocsvm_native_door.mojo). sample_weight is not a target.
     if operation == "family_svc_ocsvm_fit":
-        return FamilyLifecycle("fit", scan=True)
+        return FamilyLifecycle("fit", scan=True, keeps_x=False)
     if operation == "family_svc_ocsvm_fit_predict":
-        return FamilyLifecycle("fit_predict", scan=True)
+        return FamilyLifecycle("fit_predict", scan=True, keeps_x=False)
     if operation == "family_svc_ocsvm_score_samples":
         return FamilyLifecycle("score_samples", scan=True, widen=True)
     if operation == "family_svc_ocsvm_decision":
@@ -60,17 +69,17 @@ def family_lifecycle_spec(operation: String) -> FamilyLifecycle:
     # AdditiveChi2Sampler is stateless (transform needs no fit); a sparse
     # input keeps its sparse result, so X passes through unreplaced when sparse.
     if operation == "family_xn_semi_achi2_fit":
-        return FamilyLifecycle("fit", scan=True)
+        return FamilyLifecycle("fit", scan=True, keeps_x=False)
     if operation == "family_xn_semi_achi2_transform":
         return FamilyLifecycle("transform", requires_fit=False, scan=True)
     if operation == "family_xn_semi_achi2_fit_transform":
-        return FamilyLifecycle("fit_transform", scan=True)
+        return FamilyLifecycle("fit_transform", scan=True, keeps_x=False)
     if operation == "family_xn_semi_schi2_fit":
-        return FamilyLifecycle("fit", scan=True)
+        return FamilyLifecycle("fit", scan=True, keeps_x=False)
     if operation == "family_xn_semi_schi2_transform":
         return FamilyLifecycle("transform", scan=True)
     if operation == "family_xn_semi_schi2_fit_transform":
-        return FamilyLifecycle("fit_transform", scan=True)
+        return FamilyLifecycle("fit_transform", scan=True, keeps_x=False)
     # LabelPropagation / LabelSpreading: y (-1 marks unlabeled) at position 2.
     # Lane a8b-device-x-neighbors-rest: X's finite test rides behind the
     # owner's first op upload (bindings/neighbors_semi_native_door.mojo).
@@ -89,7 +98,7 @@ def family_lifecycle_spec(operation: String) -> FamilyLifecycle:
         return FamilyLifecycle("fit_predict", replace=False, graph=True)
     # SVGP (predict_f / predict_y are latent-function queries outside this table).
     if operation == "family_xn_graph_svgp_fit":
-        return FamilyLifecycle("fit", target=2, required=True)
+        return FamilyLifecycle("fit", target=2, required=True, keeps_x=False)
     if operation == "family_xn_graph_svgp_predict":
         return FamilyLifecycle("predict", widen=True)
     if operation == "family_xn_graph_svgp_score":

@@ -78,7 +78,6 @@ from bindings.p3_labels_metrics_native_door import p3_interleave_columns
 from bindings.metrics_cls_native_unpack import metrics_cls_operation
 from bindings.classifier_public_lifecycle_door import classifier_label_list
 from bindings.classical_pandas_door import native_pandas_exact
-from bindings.native_buffer_owner_pack import native_buffer_view, native_storage_allocate
 from bindings.native_unit_threads_unpack import (
     native_unit_threads_run, native_unit_gil_enter, native_unit_gil_leave, native_unit_jobs, NativeUnitFailure,
     native_unit_gate_enter, native_unit_device_workers,
@@ -187,44 +186,11 @@ def _x_array(X: PythonObject, context: PythonObject) raises -> PythonObject:
     if admitted_is_held(X):
         return X
     var m = _x_f32(X, context)
-    var Xa = _x_view_array(m, context)
+    # fb-boost-copy (2026-11-17): `_as_array` is now the zero-copy view this
+    # door's `_x_view_array` (fb-infer/C, deleted) built; one helper for both doors.
+    var Xa = _as_array(m, Python.tuple(m.rows, m.cols), context)
     _hold_finite(Xa, context)
     return Xa
-
-
-def _x_view_array(m: AdmittedX, context: PythonObject) raises -> PythonObject:
-    """The admitted C-order float32 X as the Array the members read, with no
-    copy: the matrix's own Array, or a zero-copy Array view pinning the
-    foreign buffer (an ndarray, a cast's fresh storage), as 0.8.55's
-    `as_f32_c` gave (`_materialize`: a borrowed buffer is wrapped, never
-    copied). Members and this door only read X."""
-    # fb-infer/C (2026-11-17): this was `_as_array` (trees_public_boost_door),
-    # which copied every ndarray X into a new ZERO-FILLED Array (a serial
-    # fill of the whole matrix, its page faults, then a parallel copy) on
-    # every fit and predict of every meta-estimator: board d95f805cce vs
-    # 0.8.55, multioutput-reg/clf istella predict 19 -> 73 ms and fit
-    # +480..530 ms, calibrated istella fit +984 ms (1M x 220 float32 X).
-    # Cost is per element of X, so it holds for every shape (neighbors:
-    # 100k x 64 and 1M x 16 predict; a non-board dataset such as covtype).
-    if py_type(m.array) is context["array_class"] and Int(py=m.array._addr) == m.address:
-        return m.array
-    var pin = native_buffer_view(m.array)
-    var array = native_storage_allocate(context["array_class"])
-    py_setattr(array, "_store", m.array)
-    py_setattr(array, "_base", PythonObject(None))
-    py_setattr(array, "_pin", pin)
-    py_setattr(array, "_mv", py_call(py_call(pin.cast, "B").cast, "f"))
-    py_setattr(array, "_addr", PythonObject(m.address))
-    py_setattr(array, "_readonly", pin.readonly)
-    py_setattr(array, "shape", Python.tuple(m.rows, m.cols))
-    py_setattr(array, "dtype", PythonObject("<f4"))
-    py_setattr(array, "ndim", PythonObject(2))
-    py_setattr(array, "size", PythonObject(m.rows * m.cols))
-    py_setattr(array, "nbytes", PythonObject(m.rows * m.cols * 4))
-    py_setattr(array, "itemsize", PythonObject(4))
-    py_setattr(array, "strides", Python.tuple(m.cols * 4, 4))
-    py_setattr(array, "order", PythonObject("C"))
-    return array
 
 
 def _hold_finite(Xa: PythonObject, context: PythonObject) raises:
@@ -1348,12 +1314,17 @@ def _label_columns(Y: PythonObject, xt: PythonObject, context: PythonObject) rai
         var n = Int(py=view.shape[0])
         var m = Int(py=view.shape[1])
         var T = admitted_vector(m * n, target, context)
-        var W = admitted_vector(n * m, target, context)
-        trees_cast(Int(py=classical_address(view)), vt, trees_address(W), target, n * m, context)
-        _ = W  # keep the Python object alive through the native call above
-        _ = view  # keep the Python object alive through the native call above
-        _ = xt_transpose_f64(glue, trees_address(W), trees_address(T), n, m)
-        _ = W  # keep the Python object alive through the native call above
+        if vt == target:
+            # fb-boost-copy (2026-11-17): Y already holds the 8-byte words the
+            # transpose reads; it was cast float64->float64 (int64->int64)
+            # into a zero-filled n x m copy first on every fit (O(n m)).
+            _ = xt_transpose_f64(glue, Int(py=classical_address(view)), trees_address(T), n, m)
+        else:
+            var W = admitted_vector(n * m, target, context)
+            trees_cast(Int(py=classical_address(view)), vt, trees_address(W), target, n * m, context)
+            _ = xt_transpose_f64(glue, trees_address(W), trees_address(T), n, m)
+            _ = W  # keep the Python object alive through the native call above
+        _ = view  # keep the Python object alive through the native calls above
         _ = T  # keep the Python object alive through the native call above
         _ = view^
         return Python.tuple(T, n, m)

@@ -109,7 +109,7 @@ def family_lifecycle_begin(mut admitted: AdmittedCall, model: PythonObject, oper
         columns = x.cols
         if not x.store.active():
             source = x.array
-            py_setitem(values, PythonObject(x_index), admit_family_owned(x.array, context) if spec.replace and fitting else x.array)
+            py_setitem(values, PythonObject(x_index), admit_family_owned(x.array, context) if spec.replace and fitting and spec.keeps_x else x.array)
         # else (lane a7d, `spec.device_x`): the fold stays resident; the
         # owner receives the DeviceRows and its device entry gathers the
         # rows (finite and range words returned with its result).
@@ -143,8 +143,9 @@ def family_lifecycle_begin(mut admitted: AdmittedCall, model: PythonObject, oper
             # Perf: a query only reads X (its owners write separate outputs),
             # so an admitted C-order float32 X that is not a readonly view is
             # handed over without a per-call copy; a fit retains X and keeps
-            # the owned copy.
-            var borrow = not fitting and not snapshot.readonly and snapshot.f32_c()
+            # the owned copy; a fit that does not keep X (`spec.keeps_x` False)
+            # reads it like a query and borrows it too.
+            var borrow = (not fitting or not spec.keeps_x) and not snapshot.readonly and snapshot.f32_c()
             py_setitem(values, PythonObject(x_index), pin.keep if borrow else admit_family_owned(snapshot, pin, context))
     if not fitting and Int(py=depth) == 0 and columns >= 0 and not spec.graph and not _precomputed(fields, b):
         var width = py_get(fields, "n_features_in_")
