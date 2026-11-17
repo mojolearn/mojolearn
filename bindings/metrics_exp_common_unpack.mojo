@@ -60,7 +60,7 @@ from bindings.metrics_native_support_door import (
 from bindings.metrics_native_inputs_door import metric_shape, metric_flatten
 from core.host_finite_scan import host_all_finite_f32
 from core.cast_in import CastIn, CAST_KIND_FLOAT, label_kind_of
-from core.label_cast import host_unique_inverse_cast
+from core.labels_score_encode import score_encode_cast
 from core.metrics_exp_impl import mexp_gather_i32
 from bindings.label_input_sources_unpack import labels_list_scalar_kind, LABELS_LIST_INT
 from bindings.p3_labels_metrics_native_door import p3_integral_list, p3_text_codes, p3_text_classes, P3_TEXT_OK
@@ -301,7 +301,9 @@ def _mx_buffer_labels(values: PythonObject, name: String, context: PythonObject)
     var raw = py_call(context["array_type"], PythonObject(mx_class_code(code_kind, item)),
                       py_call(context["native_bytes_type"], n * item))
     var codes = family_array(Python.tuple(PythonObject(n)), "<i4", context)
-    var k = host_unique_inverse_cast(src, lk, Int(py=py_call(raw.buffer_info)[0]),
+    # fb-metrics: a contiguous signed label buffer within its value range
+    # takes the dense table (core/labels_score_encode.mojo), else the radix route.
+    var k = score_encode_cast(src, lk, Int(py=py_call(raw.buffer_info)[0]),
                                      Int(py=classical_address(codes)))
     _ = source  # keep the Python object alive through the native call above
     _ = codes  # keep the Python object alive through the native call above

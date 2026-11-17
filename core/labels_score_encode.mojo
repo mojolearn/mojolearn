@@ -145,6 +145,21 @@ def score_encode_dense(addr: Int, item: Int, count: Int, classes_addr: Int, code
     return k
 
 
+def score_encode_cast(src: CastIn, label_kind: Int, classes_addr: Int, codes_addr: Int) -> Int:
+    """`host_unique_inverse_cast(src, label_kind, ...)` for the metric doors:
+    a contiguous 1-D signed integer buffer (`label_kind` 1) whose value
+    range is within its length takes the dense table, everything else
+    (floats, unsigned, bool, strided, wide ranges) the radix route. Same
+    contract and the same outputs: k, or -2 for a NaN label."""
+    comptime if not _DENSE_OFF:
+        if (label_kind == 1 and src.kind == CAST_KIND_SIGNED and src.cols == 1
+                and src.s0 == src.itemsize):
+            var dense = score_encode_dense(src.addr, src.itemsize, src.rows, classes_addr, codes_addr)
+            if dense >= 0:
+                return dense
+    return host_unique_inverse_cast(src, label_kind, classes_addr, codes_addr)
+
+
 def score_encode_signed(addr: Int, item: Int, count: Int, classes_addr: Int, codes_addr: Int) raises -> Int:
     """The ORDER RULE over `count` signed little-endian integer labels of
     `item` bytes (contiguous): the sorted distinct values written to
@@ -153,12 +168,8 @@ def score_encode_signed(addr: Int, item: Int, count: Int, classes_addr: Int, cod
     into the base binding's `prepare_targets` entry, the same classes and
     codes (exact integers). A value range within the label count takes the
     dense table (module docstring); any other range the radix route."""
-    comptime if not _DENSE_OFF:
-        var dense = score_encode_dense(addr, item, count, classes_addr, codes_addr)
-        if dense >= 0:
-            return dense
     var src = CastIn(addr, CAST_KIND_SIGNED, item, count, 1, item, item)
-    var k = host_unique_inverse_cast(src, 1, classes_addr, codes_addr)
+    var k = score_encode_cast(src, 1, classes_addr, codes_addr)
     if k < 0:
         raise Error("RuntimeError: prepare_targets refused integer labels")
     return k
