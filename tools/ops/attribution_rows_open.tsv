@@ -22,3 +22,12 @@ algos/graphsage/taxi/rows=full	fit	ours	timing=planned
 neural/mamba1-decode/gaussian/shape=full	fit	ours	timing=planned
 neural/mamba2-decode/gaussian/shape=full	fit	ours	timing=planned
 trees/gbdt-symmetric-1000/istella/rows=full	infer/test	ours	timing=planned
+# lane fb4-ten (2026-11-17): questions per row in ~/mojolearn-evidence/briefs-20261117/fb4-ten-RESULT.md. Every
+# full-board delta against 0.8.55 crossed the host reboot (candidate 2026-11-16 18:17..22:36 UTC, 0.8.55 after
+# 02:35 UTC), so these rows need both wheels back to back before any of them is a verdict.
+algos/knn-imputer/taxi/rows=full	fit	ours	name=knn-imputer-taxi	timing=planned
+algos/pagerank/istella/rows=full	fit	ours	name=pagerank-istella	timing=planned
+algos/select-d/synthetic/rows=full	fit	ours	name=select-d-synthetic	timing=planned
+algos/multioutput-reg/istella/rows=full	fit	ours	name=multioutput-reg-istella	timing=planned
+trees/gbdt-symmetric-1000/istella/rows=full	infer/large	ours	name=gbdt-symmetric-large	timing=planned
+neural/samba-train-step/bytes/shape=full	fit	ours	timing=planned
