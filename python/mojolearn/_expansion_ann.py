@@ -47,7 +47,7 @@ class _AnnResident:
     fitted index on the device under a handle made at the first search and
     reused while the index arrays are the same objects at the same addresses
     and shapes; every later search uploads only its queries (and a caller's
-    filter). A binding with no `x_ann_index_prepare` (the CPU host binding,
+    filter). A binding without the resident index (the CPU host binding,
     which already reads the caller's arrays in place, or an older build)
     takes the per-call door. `neighbors.py::_resident_index_handle`'s rule."""
 

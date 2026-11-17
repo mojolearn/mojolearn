@@ -21,7 +21,7 @@ from x_ann.ivf_pq_core import IvfPqIndex
 from x_ann.stage_timer import AnnStages
 from x_ann.cagra_device import cagra_build_device
 from x_ann.device_ctx import x_ann_ctx
-from providers.python.x_ann_resident_pyapi_pack import x_ann_index_prepare_binding, x_ann_index_release_binding, x_ann_index_search_binding
+from providers.python.x_ann_resident_pyapi_pack import x_ann_index_release_binding
 from providers.python.x_ann_resident_pyapi_pack import x_ann_index_export_codes_binding
 from bindings.archive_x_ann_entry import publish_archive_x_ann
 from x_ann.resident import x_ann_register_pq_built
@@ -399,8 +399,6 @@ def build__mojolearn_x_ann() -> PythonObject:
         m.def_function[filter_topk_binding]("x_ann_filter_topk")
         m.def_function[ivf_rabitq_build_binding]("x_ann_ivf_rabitq_build")
         m.def_function[ivf_rabitq_search_binding]("x_ann_ivf_rabitq_search")
-        m.def_function[x_ann_index_prepare_binding]("x_ann_index_prepare")
-        m.def_function[x_ann_index_search_binding]("x_ann_index_search")
         m.def_function[x_ann_index_release_binding]("x_ann_index_release")
         comptime if IVF_PQ_RESIDENT_FIT:
             # lane fg-ivf A7: the resident IVF-PQ fit and its codes export
