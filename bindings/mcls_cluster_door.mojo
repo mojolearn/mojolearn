@@ -81,7 +81,7 @@ def _cluster_codes(labels_true: PythonObject, labels_pred: PythonObject,
     var total = nt + npred
     # p3-labels-metrics: the class table (only k is used) is a native
     # scratch list, not a bytes object copied into an array.array.
-    var classes = List[Int64](length=max(total, 1), fill=0)
+    var classes = List[Int64](unsafe_uninit_length=max(total, 1))  # fb-metrics: only the first k words are written (was zero-filled: 8 bytes per label touched per call)
     var codes = family_array(Python.tuple(total), "<i4", context)
     var k = mc_encode_signed(base, 4, total, Int(classes.unsafe_ptr()),
                              Int(py=classical_address(codes)))
@@ -193,7 +193,7 @@ def _silhouette(args: PythonObject, caller: String, context: PythonObject) raise
                     + String(rows) + " rows")
     # `_labels.encode_labels(lab)`: prepare_targets over the int32 labels.
     # p3-labels-metrics: the class table is a native scratch list.
-    var store = List[Int64](length=max(n_lab, 1), fill=0)
+    var store = List[Int64](unsafe_uninit_length=max(n_lab, 1))  # fb-metrics: only the first k words are written (was zero-filled)
     var mapped = family_array(Python.tuple(n_lab), "<i4", context)
     var k = mc_encode_signed(Int(py=classical_address(lab)), 4, n_lab, Int(store.unsafe_ptr()),
                              Int(py=classical_address(mapped)))
