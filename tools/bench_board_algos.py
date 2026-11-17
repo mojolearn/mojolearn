@@ -2010,6 +2010,10 @@ NOT_RACED = {
     "monte_carlo_integrate": "no pinned library has a plain seeded Monte Carlo integrator "
                              "(numpy and torch have none; scipy.integrate.qmc_quad is "
                              "quasi-Monte Carlo over a QMCEngine); no opponent",
+    "StepLR / ExponentialLR / OneCycleLR / ConstantLR / WarmupLinearLR / WarmupCosineLR":
+        "call overhead, internal check, not a race (Andrew, 2026-11-17): lr_at is one host call per "
+        "step with no GPU work; algos/internal-call-overhead-lr-at times ConstantLR.lr_at, our arm "
+        "only, against our own prior version on the same box",
 }
 
 

@@ -139,6 +139,16 @@ NOT_MEASURED = (
                                                  "bench_board_algos.NOT_RACED"),
     ("mojolearn.ExperimentalTwoLevelFeatureFreq", "experimental one-tree depth-two helper; no peer library "
                                                   "implements it"),
+    # call overhead, not a race (Andrew, 2026-11-17): a schedule's lr_at is one host call per step, no GPU work.
+    # ConstantLR is timed by algos/internal-call-overhead-lr-at, the internal check (our arm only).
+    ("mojolearn.StepLR", "lr_at host call overhead, not a race (Andrew 2026-11-17); bench_board_algos.NOT_RACED"),
+    ("mojolearn.ExponentialLR", "lr_at host call overhead, not a race (Andrew 2026-11-17); "
+                                "bench_board_algos.NOT_RACED"),
+    ("mojolearn.OneCycleLR", "lr_at host call overhead, not a race (Andrew 2026-11-17); bench_board_algos.NOT_RACED"),
+    ("mojolearn.training.WarmupLinearLR", "lr_at host call overhead, not a race (Andrew 2026-11-17); "
+                                          "bench_board_algos.NOT_RACED"),
+    ("mojolearn.training.WarmupCosineLR", "lr_at host call overhead, not a race (Andrew 2026-11-17); "
+                                          "bench_board_algos.NOT_RACED"),
     # getters, factories and metadata: no compute of their own
     ("mojolearn.model_selection.check_cv", "returns a splitter object; no compute"),
     ("mojolearn.model_selection.get_scorer", "returns a scorer object; its compute is the metric lanes'"),
