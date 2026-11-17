@@ -244,8 +244,14 @@ def neighbors_public_begin(model: PythonObject, operation: String, args: PythonO
         # array is never frozen or otherwise changed (coordinator decision
         # 2026-11-08); the fit docstring tells users to refit after an
         # in-place edit.
-        if (fitting and not borrow and operation.startswith("family_xn_knn_") and snapshot.f32_c()
-                and not snapshot.copied):
+        # fb-infer (2026-11-17): NearestCentroid's fit keeps only its centroids
+        # (bindings/neighbors_local_native_door.mojo `_nc_fit`), never X, so
+        # the owned copy was a full pass over X for nothing (board d95f805cce
+        # vs 0.8.55: nearest-centroid istella fit 110 -> 184 ms on 1M x 220;
+        # cost per element of X, every shape). It borrows X as 0.8.55 did.
+        if (fitting and not borrow
+                and (operation.startswith("family_xn_knn_") or operation == "family_xn_loc_nc_fit")
+                and snapshot.f32_c() and not snapshot.copied):
             borrow = True
         py_setitem(values, PythonObject(first), pin.keep if borrow else admit_family_owned(snapshot, pin, context))
     elif not fitting and host_sparse_format(source).byte_length() == 0:
