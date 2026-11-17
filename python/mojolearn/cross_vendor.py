@@ -27,9 +27,6 @@ _native_cross_vendor("initialize", (_Array, CrossVendorMismatch, _connected_key(
 # ------------------------------------------------------------ the fold
 
 
-def _f32(payload):
-    return _native_cross_vendor("f32", (payload,))
-
 
 def fold_pair(total, shard):
     """Add two float32 buffers with the fixed FTZ reduction contract."""

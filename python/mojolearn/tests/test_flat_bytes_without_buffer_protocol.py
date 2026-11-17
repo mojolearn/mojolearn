@@ -28,7 +28,6 @@ def test_state_hash_and_f32_on_arrays_without_the_buffer_protocol(no_buffer_prot
     state = dict(parameters=a, m=a, v=a, flags=a)
     assert cross_vendor.state_hash(state) == hashlib.sha256(raw * 4).hexdigest()
     assert cross_vendor.state_hash(dict(parameters=raw, m=raw, v=raw, flags=raw)) == cross_vendor.state_hash(state)
-    assert list(cross_vendor._f32(a)) == [1.5, -2.0, 3.25]
     assert cross_vendor.ordered_fold([a, a]) == cross_vendor.ordered_fold([raw, raw])
 
 
