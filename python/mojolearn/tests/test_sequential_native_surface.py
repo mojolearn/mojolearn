@@ -66,7 +66,7 @@ def test_native_sequential_shape_layers_and_grouped_convolution_description():
                         9, 8, -1, 0, 0, 0, 0, 0,
                         10, 1, 0, -1, -1, -1, -1, 0,
                         11, 0, 0, 0, 0, 0, 0, 0]
-    assert audit_native_call(out._program, 256, sample).assert_native() == expected_program
+    assert audit_native_call(out._program, 256, (4, 8, 8)).assert_native() == expected_program
 
 
 @pytest.mark.parametrize("optimizer, f1, f2, flags, code", [
