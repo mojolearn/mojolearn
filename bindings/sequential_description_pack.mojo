@@ -231,16 +231,6 @@ def sequential_layers(model: PythonObject, context: PythonObject) raises -> Pyth
             _ = py_call(result.append, Python.tuple(name, layer[1], layer[2], layer[3]))
     return result
 
-
-def sequential_sample(mut mods: NativeModules, model: PythonObject, value: PythonObject) raises -> PythonObject:
-    # The public sample-inspection operation admits current shape metadata.
-    var shape = value.shape
-    var dims = List[Int]()
-    for k in range(Int(py=value.ndim)):  # driver-loop: over input rank metadata
-        dims.append(Int(py=shape[k]))
-    return sequential_sample_shape(mods, model, dims)
-
-
 def sequential_sample_shape(mut mods: NativeModules, model: PythonObject, dims: List[Int]) raises -> PythonObject:
     var b = mods.module("builtins")
     var fields = sequential_fields(model)

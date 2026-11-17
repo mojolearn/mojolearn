@@ -10,9 +10,9 @@ from bindings.py_balanced import py_call, py_setitem
 
 
 from bindings.sequential_description_unpack import sequential_fields, sequential_append
-from bindings.sequential_description_pack import sequential_add, sequential_compile, sequential_program, sequential_table, sequential_layers, sequential_sample, _shape
+from bindings.sequential_description_pack import sequential_add, sequential_compile, sequential_program, sequential_table, sequential_layers, _shape
 from bindings.sequential_execution_pack import sequential_entries, sequential_fit, sequential_forward, sequential_predict, sequential_targets
-from bindings.sequential_weights_pack import sequential_parameter_layers, sequential_load_weights
+from bindings.sequential_weights_pack import sequential_load_weights
 from bindings.sequential_checkpoint_door import sequential_save, sequential_load_checkpoint
 from providers.python.autograd_program_arrays_pyapi_door import initialize_program_arrays
 from bindings.sequential_admission_door import sequential_admit
@@ -49,8 +49,6 @@ def sequential_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObje
             result = sequential_program(mods, model, args[0], args[1])
         elif operation == "table":
             result = sequential_table(model)
-        elif operation == "sample":
-            result = sequential_sample(mods, model, args[0])
         elif operation == "fit":
             result = sequential_fit(mods, model, args, context)
         elif operation == "predict" or operation == "predict_proba":
@@ -59,8 +57,6 @@ def sequential_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObje
             result = sequential_forward(mods, model, args[0], Int(py=args[1]), args[2], sequential_entries(model, context), context)
         elif operation == "targets":
             result = sequential_targets(mods, model, args[0], Int(py=args[1]), Int(py=args[2]), String(args[3]), sequential_entries(model, context), context)
-        elif operation == "parameter_layers":
-            result = sequential_parameter_layers(model)
         elif operation == "load_weights":
             result = sequential_load_weights(mods, model, args, context)
         elif operation == "save":
