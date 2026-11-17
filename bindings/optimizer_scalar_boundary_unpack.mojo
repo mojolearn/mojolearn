@@ -5,6 +5,7 @@ from bindings.py_cpython_table import cpython_table
 from bindings.optimizer_admission_door import opt_scalar
 from bindings.optimizer_public_words_unpack import stash_python_error
 from bindings.py_balanced import py_type
+from bindings.optimizer_real_unpack import optimizer_real
 
 
 def optimizer_float(value: PythonObject, context: PythonObject) raises -> Float64:
@@ -19,7 +20,8 @@ def optimizer_float(value: PythonObject, context: PythonObject) raises -> Float6
         var failure = stash_python_error()
         raise failure^
     var number = PythonObject(from_owned=pointer)
-    return Float64(py=number)
+    # an integer above 2^53 rounds once to float32 (bindings/optimizer_real_unpack.mojo)
+    return optimizer_real(value, Float64(py=number))
 
 
 def optimizer_integer(value: PythonObject, context: PythonObject) raises -> Int:

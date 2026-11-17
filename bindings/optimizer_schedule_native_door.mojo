@@ -4,6 +4,7 @@ from std.memory import bitcast
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased, PyObjectPtr
 from bindings.py_cpython_table import cpython_table
+from bindings.optimizer_real_unpack import optimizer_real
 from bindings.optimizer_public_words_unpack import stash_python_error
 from bindings.py_balanced import py_call, py_type, py_fields, py_setitem
 from bindings.optimizer_admission_door import opt_scalar, opt_value, opt_schedule, opt_exact
@@ -31,10 +32,13 @@ def schedule_kind(owner: PythonObject, context: PythonObject) raises -> Int:
 
 def _sched_real(value: PythonObject, label: String) raises -> Float64:
     # Keep the public no-text-parsing conversion, after exact scalar admission.
+    var real: Float64
     try:
-        return Float64(py=value)
+        real = Float64(py=value)
     except:
         raise Error("TypeError: " + label + " must be a real number")
+    # an integer above 2^53 rounds once to float32 (bindings/optimizer_real_unpack.mojo)
+    return optimizer_real(value, real)
 
 
 def _sched_int(value: PythonObject, label: String, context: PythonObject) raises -> Int:

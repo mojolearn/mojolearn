@@ -19,6 +19,7 @@ from bindings.neural_labels_native_unpack import neural_encode_labels, neural_de
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from bindings.native_loaded_module_door import native_loaded_module, NativeModules
+from bindings.optimizer_real_unpack import optimizer_real
 from bindings.native_identity_key_door import NativeIdentityKey
 from bindings.native_prepared_owner_unpack import prepared_get, prepared_put, prepared_drop
 from bindings.py_model_records import records_open, model_generation
@@ -133,6 +134,13 @@ def xseq_argmax(scores: PythonObject, rows: Int, cols: Int, context: PythonObjec
 
 # ---------------------------------------------------------------- optimizer arguments
 
+def _opt_real(value: PythonObject) raises -> Float64:
+    """`float(value)` for an optimizer hyperparameter, an integer above 2^53
+    rounded once to float32 as every optimizer door does
+    (bindings/optimizer_real_unpack.mojo)."""
+    return optimizer_real(value, xseq_float(value))
+
+
 def _rnn_optimizer(name: PythonObject, options: PythonObject, context: PythonObject) raises -> XseqOptimizer:
     """`(kind, flags, [f1, f2, eps, weight_decay, f7, initial_accumulator])`
     of the binding's optimizer slots, PyTorch's defaults under `options`."""
@@ -157,23 +165,23 @@ def _rnn_optimizer(name: PythonObject, options: PythonObject, context: PythonObj
     var kind = Int(py=kinds[name])
     var label = String(py=name)
     if label == "sgd":
-        return xseq_run_opt_sgd(kind, xseq_truth(o["nesterov"]), xseq_float(o["momentum"]),
-                                xseq_float(o["weight_decay"]), xseq_float(o["dampening"]))
+        return xseq_run_opt_sgd(kind, xseq_truth(o["nesterov"]), _opt_real(o["momentum"]),
+                                _opt_real(o["weight_decay"]), _opt_real(o["dampening"]))
     elif label == "adam" or label == "adamw" or label == "adamax":
-        return xseq_run_opt_adam(label, kind, xseq_float(o["betas"][0]), xseq_float(o["betas"][1]),
-                                 xseq_float(o["eps"]), xseq_float(o["weight_decay"]))
+        return xseq_run_opt_adam(label, kind, _opt_real(o["betas"][0]), _opt_real(o["betas"][1]),
+                                 _opt_real(o["eps"]), _opt_real(o["weight_decay"]))
     elif label == "nadam":
-        return xseq_run_opt_nadam(kind, xseq_float(o["betas"][0]), xseq_float(o["betas"][1]), xseq_float(o["eps"]),
-                                  xseq_float(o["weight_decay"]), xseq_float(o["momentum_decay"]),
+        return xseq_run_opt_nadam(kind, _opt_real(o["betas"][0]), _opt_real(o["betas"][1]), _opt_real(o["eps"]),
+                                  _opt_real(o["weight_decay"]), _opt_real(o["momentum_decay"]),
                                   xseq_truth(o["decoupled_weight_decay"]))
     elif label == "lion":
-        return xseq_run_opt_lion(kind, xseq_float(o["betas"][0]), xseq_float(o["betas"][1]),
-                                 xseq_float(o["weight_decay"]))
+        return xseq_run_opt_lion(kind, _opt_real(o["betas"][0]), _opt_real(o["betas"][1]),
+                                 _opt_real(o["weight_decay"]))
     elif label == "rmsprop":
-        return xseq_run_opt_rmsprop(kind, xseq_truth(o["centered"]), xseq_float(o["alpha"]), xseq_float(o["eps"]),
-                                    xseq_float(o["weight_decay"]), xseq_float(o["momentum"]))
-    return xseq_run_opt_adagrad(kind, xseq_float(o["lr_decay"]), xseq_float(o["eps"]), xseq_float(o["weight_decay"]),
-                                xseq_float(o["initial_accumulator_value"]))
+        return xseq_run_opt_rmsprop(kind, xseq_truth(o["centered"]), _opt_real(o["alpha"]), _opt_real(o["eps"]),
+                                    _opt_real(o["weight_decay"]), _opt_real(o["momentum"]))
+    return xseq_run_opt_adagrad(kind, _opt_real(o["lr_decay"]), _opt_real(o["eps"]), _opt_real(o["weight_decay"]),
+                                _opt_real(o["initial_accumulator_value"]))
 
 
 def _rnn_rates(fields: PythonObject, steps: Int, context: PythonObject) raises -> PythonObject:
@@ -186,7 +194,7 @@ def _rnn_rates(fields: PythonObject, steps: Int, context: PythonObject) raises -
         opt_schedule(schedule, optimizer_context)
         return schedule_operation("schedule_values", schedule, Python.tuple(steps), optimizer_context)
     var rates = xseq_zeros(Python.tuple(steps), context)
-    var rate = Float32(xseq_float(fields["learning_rate"]))
+    var rate = Float32(_opt_real(fields["learning_rate"]))
     xseq_fill_f32(xseq_f32p(rates), steps, rate)
     _ = rates  # keep the Python object alive through the native call above
     return rates
@@ -649,9 +657,9 @@ def _mlp_fit(model: PythonObject, fields: PythonObject, x_source: PythonObject, 
     var shuffle = xseq_truth(fields["shuffle"])
     var request = XseqMlpFitRequest(rows, d, o, activation, out_act, loss_code, solver, rate_code, nesterov, batch,
                                     max_iter, shuffle, seed, xseq_int(fields["n_iter_no_change"]), hidden.copy(), n_out)
-    var fp: List[Float64] = [xseq_float(fields["learning_rate_init"]), xseq_float(fields["beta_1"]),
-                             xseq_float(fields["beta_2"]), xseq_float(fields["epsilon"]), xseq_float(fields["momentum"]),
-                             xseq_float(fields["power_t"]), xseq_float(fields["alpha"]), xseq_float(fields["tol"])]
+    var fp: List[Float64] = [_opt_real(fields["learning_rate_init"]), _opt_real(fields["beta_1"]),
+                             _opt_real(fields["beta_2"]), _opt_real(fields["epsilon"]), _opt_real(fields["momentum"]),
+                             _opt_real(fields["power_t"]), _opt_real(fields["alpha"]), _opt_real(fields["tol"])]
     var entries = xseq_entries(fields, context)
     var addresses: List[Int] = [Int(py=xseq_addr(x)), Int(py=xseq_addr(target)), Int(py=xseq_addr(params)), Int(py=xseq_addr(curve))]
     var provider = xseq_neural_provider(entries)
