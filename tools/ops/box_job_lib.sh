@@ -14,12 +14,27 @@ detect_vendor() {
 
 say() { echo "[$(date -u +%H:%M:%S) ${JOB_NAME:-box-job}] $*"; }
 
-phase() { PHASE=$1; P_T0=$(date +%s); echo "$1" > "$J/.phase"; say "phase $PHASE start"; }
+# job/phases.tsv: <phase> <rc> <seconds> <end UTC> <state>. State (fb-harness, 2026-11-17: a 240-minute cap cut every
+# full-board arm and the next submit resumed it with no line saying so): `done` (phase_end), `refused` (the disk
+# gate), `partial <done>/<total> <board>` (the job ended inside the phase: the cap's TERM, a crash; phase_partial from
+# the job's EXIT trap; the next submit resumes it from board.json), `restart` (host_probe_phase: the boot id changed
+# since the last submit). A phase that starts after its own `partial` line says "resuming".
+PHASE_OPEN=0
+phase() {
+    local last
+    PHASE=$1; P_T0=$(date +%s); PHASE_OPEN=1; echo "$1" > "$J/.phase"
+    last=$(awk -F'\t' -v p="$1" '$1 == p {s = $5} END {print s}' "$J/phases.tsv" 2> /dev/null)
+    case "$last" in
+        partial*) say "phase $PHASE start: resuming (an earlier submit ended inside it: $last)" ;;
+        *) say "phase $PHASE start" ;;
+    esac
+}
 phase_end() {   # rc
     local rc=$1 full
     full=$(disk_full_in_phase)
     [ -n "$full" ] && rc=$EXIT_DISK
-    printf '%s\t%s\t%s\t%s\n' "$PHASE" "$rc" "$(( $(date +%s) - P_T0 ))" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$J/phases.tsv"
+    printf '%s\t%s\t%s\t%s\tdone\n' "$PHASE" "$rc" "$(( $(date +%s) - P_T0 ))" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$J/phases.tsv"
+    PHASE_OPEN=0
     say "phase $PHASE rc=$rc $(( $(date +%s) - P_T0 )) s"
     [ "$rc" -gt "$WORST" ] && WORST=$rc
     if [ -n "$full" ]; then
@@ -29,6 +44,29 @@ phase_end() {   # rc
         exit "$EXIT_DISK"
     fi
     return 0
+}
+# the job's EXIT trap calls this: a phase still open when the job ends (the cap's TERM, a crash) gets its `partial`
+# line, with the timed board's done/total when one was running (CUR_IDS, CUR_BOARD: board_progress)
+phase_partial() {   # rc
+    [ "${PHASE_OPEN:-0}" = 1 ] || return 0
+    PHASE_OPEN=0
+    printf '%s\t%s\t%s\t%s\tpartial%s\n' "$PHASE" "$1" "$(( $(date +%s) - P_T0 ))" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+        "$(board_progress | sed 's/^./ &/')" >> "$J/phases.tsv"
+    say "phase $PHASE ended partial (rc=$1)$(board_progress | sed 's/^./: &/'); the next submit resumes it"
+}
+# "<done>/<total> <board dir>" of the timed board that is running (CUR_IDS: its race ids; CUR_BOARD: its out dir), or
+# nothing. Done is counted from its board.json (tools/paper_compare.py left).
+board_progress() {
+    local total left
+    [ -n "${CUR_IDS:-}" ] && [ -s "${CUR_IDS:-}" ] || return 0
+    total=$(nlines "$CUR_IDS")
+    left=$(races_left "$CUR_IDS" "$CUR_BOARD/board.json")
+    echo "$(( total - left ))/$total $(basename "$CUR_BOARD")"
+}
+# how many of the race ids in <ids> are not yet done in <board.json> (all of them without a readable board): what a
+# resumed timed board still runs, so what its disk gate counts
+races_left() {   # ids board.json
+    $PY tools/paper_compare.py left --ids "$1" --board "$2" 2> /dev/null || nlines "$1"
 }
 
 # ---- disk (2026-11-14) ---------------------------------------------------------------------------------------------
@@ -60,7 +98,8 @@ disk_gate() {   # <what> <races> <board processes> <MB per race>
     say "DISK $what: $races races x $per MB + $boards boards x ${PC_LOADED_MB:-400} MB + reserve ${PC_DISK_RESERVE_GB:-5} GB = $need_mb MB needed; $(( free_kb / 1024 )) MB free"
     if [ $(( free_kb / 1024 )) -lt "$need_mb" ]; then
         say "DISK $what refused: free space is below the predicted evidence; free disk or lower the estimate (exit $EXIT_DISK)"
-        printf '%s\t%s\t%s\t%s\n' "$what-disk-refused" "$EXIT_DISK" 0 "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$J/phases.tsv"
+        printf '%s\t%s\t%s\t%s\trefused\n' "$what-disk-refused" "$EXIT_DISK" 0 "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$J/phases.tsv"
+        PHASE_OPEN=0
         WORST=$EXIT_DISK
         exit "$EXIT_DISK"
     fi
@@ -148,19 +187,39 @@ prune_persist_staging() {
 # AGENTS.md "Times are compared only on the same box" (2026-11-14): what this box is (tools/ops/host_probe.py) in
 # job/host-probe.json and job/box.txt; every board stores it (bench_board reads MOJOLEARN_HOST_PROBE: box.host_probe
 # and each race's host.host_id) and tools/paper_compare.py refuses to compare boards of two host ids.
+probe_field() {   # <probe json> <top-level string field>: its value, or nothing
+    sed -n 's/^ *"'"$2"'": "\(.*\)",*$/\1/p' "$1" 2> /dev/null | head -n 1
+}
 host_probe_phase() {
-    local rc PREV_HOST
+    local rc PREV_HOST PREV_BOOT BOOT_ID
     phase probe
-    PREV_HOST=$(sed -n 's/^ *"host_id": "\(.*\)",*$/\1/p' "$J/host-probe.json" 2> /dev/null | head -n 1)
+    PREV_HOST=$(probe_field "$J/host-probe.json" host_id)
+    PREV_BOOT=$(probe_field "$J/host-probe.json" boot_id)
     $PY tools/ops/host_probe.py --vendor "$V" --out "$J/host-probe.json.new" > "$RES/logs/host-probe.log" 2>&1
     rc=$?
-    HOST_ID=$(sed -n 's/^ *"host_id": "\(.*\)",*$/\1/p' "$J/host-probe.json.new" 2> /dev/null | head -n 1)
+    HOST_ID=$(probe_field "$J/host-probe.json.new" host_id)
     if [ $rc -eq 0 ] && [ -n "$HOST_ID" ]; then
         if [ -n "$PREV_HOST" ] && [ "$PREV_HOST" != "$HOST_ID" ]; then
             # a split submit on another box: its boards carry the new host id and the compare refuses to mix them
             say "HOST CHANGED: an earlier submit of this results dir ran on $PREV_HOST, this one on $HOST_ID; boards" \
                 "resumed here mix hosts and the compare will refuse them (start a new results dir)"
             cp "$J/host-probe.json" "$J/host-probe-earlier.json" 2> /dev/null
+        fi
+        BOOT_ID=$(probe_field "$J/host-probe.json.new" boot_id)
+        if [ -n "$PREV_BOOT" ] && [ -n "$BOOT_ID" ] && [ "$PREV_BOOT" != "$BOOT_ID" ]; then
+            # RESTART (fb-harness, 2026-11-17): the d95f805cce pod restarted between its arms (NVIDIA driver 595.91.07
+            # -> 595.112.07, kernel 6.8.0-147 -> 149) and the compare gave verdicts across it. The earlier probe is
+            # kept (host-probe-boot-<id8>.json), phases.tsv says so, and each race's record carries its boot id
+            # (bench_board race_host), so the rows timed before and after are told apart; tools/paper_compare.py
+            # gives no verdict across two system states
+            cp "$J/host-probe.json" "$J/host-probe-boot-${PREV_BOOT:0:8}.json" 2> /dev/null
+            printf '%s\t0\t0\t%s\trestart boot %s -> %s; driver %s -> %s; kernel %s -> %s\n' restart \
+                "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$PREV_BOOT" "$BOOT_ID" \
+                "$(grep -m 1 '"driver"' "$J/host-probe.json" | sed 's/.*: "\(.*\)".*/\1/')" \
+                "$(grep -m 1 '"driver"' "$J/host-probe.json.new" | sed 's/.*: "\(.*\)".*/\1/')" \
+                "$(probe_field "$J/host-probe.json" kernel)" "$(probe_field "$J/host-probe.json.new" kernel)" >> "$J/phases.tsv"
+            say "RESTART: the box rebooted since the last submit (boot id $PREV_BOOT -> $BOOT_ID; see phases.tsv);" \
+                "boards resumed here carry both boot ids and the compare gives no verdict across them"
         fi
         mv "$J/host-probe.json.new" "$J/host-probe.json"
         { echo "== host probe (tools/ops/host_probe.py)"; cat "$J/host-probe.json"; } >> "$J/box.txt"

@@ -101,7 +101,14 @@
 # At start the job deletes the box_persist_run.sh upload leftovers of finished jobs. A phase that hits a full disk
 # (ENOSPC in a log written during it, or under PC_DISK_MIN_FREE_MB left) stops the job with exit 28, and a smoke,
 # board or owed phase refuses to start (exit 28) when the free disk is below its predicted evidence (disk_gate,
-# printed as a DISK line). Knobs: PC_GPU_TOKEN (the paper's GPU,
+# printed as a DISK line; a timed board counts only its races not yet done in its board.json). Every timed board runs
+# with --drop-race-scratch: each race's driver scratch (work/) goes once its record and evidence are written, the
+# evidence stays (the 80 GB L40S pod filled during the d95f805cce full board, 2026-11-17); the prepared input blocks
+# in the cache stay, because the prior boards later in this job read the same blocks.
+# RESUME (2026-11-17): a job cut by the 240-minute cap ends its open phase with a `partial <done>/<total> <board>` line
+# in job/phases.tsv (box_job_lib.sh phase_partial); the next submit says "resuming" and the boards resume from
+# board.json. A reboot between submits (the boot id changed) is a `restart` line with both boot ids, drivers and
+# kernels, and every race records its own (bench_board race_host): the compare gives no verdict across two. Knobs: PC_GPU_TOKEN (the paper's GPU,
 # default L40S / MI300X). NVIDIA refuses another GPU (exit 3) unless PC_ALLOW_HW_DIFF=1; AMD records HW-DIFF and
 # goes on unless PC_REQUIRE_SAME_GPU=1 (exit 3).
 # Tests: tools/test_paper_compare.py (syntax and the argument checks of this script).
@@ -204,6 +211,7 @@ finish() {
     trap - EXIT
     [ -n "$SAMPLER" ] && kill "$SAMPLER" 2> /dev/null
     [ "$WORST" -gt "$code" ] && code=$WORST
+    phase_partial "$code"     # a phase the cap or a crash cut: its `partial` line in phases.tsv (box_job_lib.sh)
     printf '{"vendor":"%s","mode":"%s","version":"%s","source_commit":"%s","prior":"%s","prior_versions":"%s","host_id":"%s","tree_head":"%s","phase":"%s","exit":%d,"job_script_sha256":"%s","recipes_sha256":"%s"}\n' \
         "$V" "$MODE" "${CVER:-$VER}" "${PC_SOURCE_COMMIT:-}" "$PRIOR" "$PRIOR_VERSIONS" "${HOST_ID:-}" "$(git -C "$TREE" rev-parse HEAD 2>/dev/null)" "$PHASE" \
         "$code" "$(sha256sum "$TREE/tools/ops/paper_compare_job.sh" | cut -d' ' -f1)" "$(sha256sum "$RECIPES" | cut -d' ' -f1)" \
@@ -419,13 +427,17 @@ prior_board_run() {   # arm, the ids the candidate passed (full), out dir, prefi
     mkdir -p "$(dirname "$ids")"
     $PY tools/paper_compare.py pass-ids --full-ids "$want" "${psj[@]}" --out "$ids" > "$RES/logs/pass-ids-$pre$arm.log" 2>&1
     say "$arm: $(tail -n 1 "$RES/logs/pass-ids-$pre$arm.log")"
+    # each race the prior's own smoke failed, with its reason (the 23 0.8.55 rows of the d95f805cce full board reached
+    # the Mac as a count only): job.log, and plan/<prefix><arm>/smoke-failed.json in full
+    grep -m 40 '^PAPER-PASS-IDS-FAILED' "$RES/logs/pass-ids-$pre$arm.log" | cut -c1-300
     [ -s "$ids" ] || { say "board $arm: no race passed both smokes; its column is NOT-RUN"; return 0; }
     [ -f "${ARM_MAN[$arm]:-/nonexistent}" ] || { say "board $arm: no installed venv (logs/install-$arm.log)"; return 6; }
-    disk_gate "board-$pre$arm" "$(nlines "$ids")" 1 "${PC_EVIDENCE_MB_PER_RACE:-40}"
+    disk_gate "board-$pre$arm" "$(races_left "$ids" "$out/board.json")" 1 "${PC_EVIDENCE_MB_PER_RACE:-40}"
+    CUR_IDS=$ids; CUR_BOARD=$out
     # shellcheck disable=SC2046
     $PY tools/bench_board.py "${CARGS[@]}" $(run_as "$arm") --cache "$CACHE_ROOT/c1" --race-ids @"$ids" \
-        "${psj[@]}" --out "$out" > "$RES/logs/$(basename "$out").log" 2>&1
-    rc=$?
+        "${psj[@]}" --drop-race-scratch --out "$out" > "$RES/logs/$(basename "$out").log" 2>&1
+    rc=$?; CUR_IDS=
     say "board $arm rc=$rc: $(tail -n 1 "$RES/logs/$(basename "$out").log" | head -c 200)"
     return $rc
 }
@@ -506,12 +518,14 @@ if part all-plan || part all-install || part all-smoke || part all-board || part
     tail -n 1 "$RES/logs/pass-ids-all.log"
     if part all-board; then
         phase all-board
-        disk_gate all-board "$(nlines "$PA/race-ids-pass.txt")" 1 "${PC_EVIDENCE_MB_PER_RACE:-40}"
+        disk_gate all-board "$(races_left "$PA/race-ids-pass.txt" "$RES/board-all/board.json")" 1 "${PC_EVIDENCE_MB_PER_RACE:-40}"
         if [ -s "$PA/race-ids-pass.txt" ]; then
+            CUR_IDS="$PA/race-ids-pass.txt"; CUR_BOARD="$RES/board-all"
             # shellcheck disable=SC2046
             $PY tools/bench_board.py "${COMMON_ALL[@]}" $(run_as candidate) --cache "$CACHE_ROOT/c1" \
-                --race-ids @"$PA/race-ids-pass.txt" "${SJA[@]}" --out "$RES/board-all" > "$RES/logs/board-all.log" 2>&1
-            rc=$?; say "board-all rc=$rc: $(tail -n 1 "$RES/logs/board-all.log" | head -c 200)"
+                --race-ids @"$PA/race-ids-pass.txt" "${SJA[@]}" --drop-race-scratch --out "$RES/board-all" \
+                > "$RES/logs/board-all.log" 2>&1
+            rc=$?; CUR_IDS=; say "board-all rc=$rc: $(tail -n 1 "$RES/logs/board-all.log" | head -c 200)"
         else
             say "no full-board race passed its smoke"; rc=6
         fi
@@ -677,16 +691,17 @@ board_run() {   # arm, ids file, out dir, extra args...
     local arm=$1 ids=$2 out=$3; shift 3
     [ -s "$ids" ] || { say "board $arm $(basename "$ids"): no races"; return 0; }
     [ -f "${ARM_MAN[$arm]:-/nonexistent}" ] || { say "board $arm: no installed venv (logs/install-$arm.log)"; return 6; }
+    CUR_IDS=$ids; CUR_BOARD=$out
     # shellcheck disable=SC2046
     $PY tools/bench_board.py "${COMMON[@]}" $(run_as "$arm") --cache "$CACHE_ROOT/c1" --race-ids @"$ids" \
-        "${SJ[@]}" "$@" --out "$out" > "$RES/logs/$(basename "$out").log" 2>&1
-    local rc=$?
+        "${SJ[@]}" "$@" --drop-race-scratch --out "$out" > "$RES/logs/$(basename "$out").log" 2>&1
+    local rc=$?; CUR_IDS=
     say "board $arm $(basename "$ids") rc=$rc: $(tail -n 1 "$RES/logs/$(basename "$out").log" | head -c 200)"
     return $rc
 }
 if part board; then
     phase board
-    disk_gate board "$(nlines "$PASS_IDS")" 1 "${PC_EVIDENCE_MB_PER_RACE:-40}"
+    disk_gate board "$(races_left "$PASS_IDS" "$RES/board/board.json")" 1 "${PC_EVIDENCE_MB_PER_RACE:-40}"
     if [ -s "$PASS_IDS" ]; then board_run candidate "$PASS_IDS" "$RES/board"; rc=$?; else say "no race passed its smoke"; rc=6; fi
     phase_end $rc
 fi
@@ -710,9 +725,15 @@ if part prior && [ "${#PRIOR_ARMS[@]}" -gt 0 ]; then
 fi
 if [ "$OWED" = 1 ] && part owed && [ -s "$RES/plan-owed/units.tsv" ]; then
     phase owed
-    # every owed unit's races (full rows may be fewer after the smoke gate: an upper bound), one board dir per unit
-    disk_gate owed "$(cut -f3 "$RES/plan-owed/units.tsv" | xargs cat 2> /dev/null | grep -c . || true)" \
-        "$(nlines "$RES/plan-owed/units.tsv")" "${PC_EVIDENCE_MB_PER_RACE:-40}"
+    # every owed unit's races not yet done in its board (full rows may be fewer after the smoke gate: an upper
+    # bound), one board dir per unit
+    left=0
+    while IFS=$'\t' read -r arm rows ids; do
+        { [ "$arm" = candidate ] || [ "$arm" = prior ]; } && [ "$rows" = full ] && continue   # timed in board/, board-prior-*
+        [ -n "${PC_OWED_ARMS:-}" ] && [[ ",$PC_OWED_ARMS," != *",$arm,"* ]] && continue
+        left=$(( left + $(races_left "$ids" "$RES/board-$arm-$rows/board.json") ))
+    done < "$RES/plan-owed/units.tsv"
+    disk_gate owed "$left" "$(nlines "$RES/plan-owed/units.tsv")" "${PC_EVIDENCE_MB_PER_RACE:-40}"
     rc=0
     while IFS=$'\t' read -r arm rows ids; do
         [ "$arm" = candidate ] && [ "$rows" = full ] && continue   # timed with the paper races (part board)
