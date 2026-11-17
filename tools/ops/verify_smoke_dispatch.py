@@ -66,7 +66,7 @@ def object_id(rev, path, repo=ROOT):
 
 def tooling_rev(ref, repo=ROOT):
     """The commit the workflow's tooling checkout will run: origin/<ref> when the remote has it, else <ref>."""
-    for rev in (f"origin/{ref}", ref):
+    for rev in ((ref,) if ref == "HEAD" else (f"origin/{ref}", ref)):
         p = subprocess.run(["git", "rev-parse", "-q", "--verify", f"{rev}^{{commit}}"], cwd=repo,
                            capture_output=True, text=True)
         if p.returncode == 0:

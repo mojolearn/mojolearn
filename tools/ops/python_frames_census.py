@@ -8,7 +8,7 @@ count, establishes compliance. This tool generalizes python/mojolearn/tests/test
 and the census records the Python functions entered inside the call (module:qualname, count; the public method's
 own frame excluded, wrapper frames before it included) and how many native binding calls the call made.
 
-Fixtures are verify's own, never new ones written here:
+Fixtures are verify's own, plus the census's own for the members verify never reaches (census_fixtures):
   api:<public>   one process per public class (or public function): the bounded endpoint fixtures of
                  `python -m mojolearn verify` (_verify_api_runner.registry(), the family checkers of
                  _verify_api_*.py, routed exactly as _verify_api_runner.capture() routes them). An estimator class
