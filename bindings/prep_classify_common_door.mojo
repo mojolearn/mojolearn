@@ -7,8 +7,7 @@
 # codes. Every stage group stages the words, operands and order the Python
 # helper of the same name staged.
 from std.os import getenv
-from std.memory import unsafe_memcpy
-from bindings.native_array_storage_door import native_array_empty
+from bindings.native_array_storage_door import native_array_empty, native_array_unfilled
 from bindings.native_loaded_module_door import native_loaded_module
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem, py_contains
@@ -210,23 +209,31 @@ def _i32_vector(source: PythonObject, name: String, context: PythonObject) raise
         raise Error(name + " must be 1-D")
     var n = Int(py=view.shape[0])
     var typestr = classical_dtype_str(view, context)
-    var out = i32_array(n, context)
-    var dest = I32P(unsafe_from_address=Int(py=classical_address(out)))
-    _ = out  # keep the Python object alive through the native call above
     if typestr != "<i4" and typestr != "<i8":
         raise Error("TypeError: " + name + " must hold int32 or int64 indices")
-    # A C-contiguous index buffer is read in place (p3-prep): int32 words are
-    # one memcpy, int64 words one range-checked narrowing pass. Only a
-    # strided view still takes the bytes copy first.
+    # fb-infer/B (2026-11-17): a C-contiguous int32 index buffer (scipy's own
+    # CSR form) is BORROWED, as 0.8.55's `_as_typed` returned it: the callers
+    # only read it (the CSR kernels' and the program's uploads) while CsrIn
+    # holds the view. d95f805cce built a zero-filled int32 array and memcpy'd
+    # the indices into it on every call: two serial passes over 4 * nnz fresh
+    # bytes per fit and per predict/predict_proba (MultinomialNB/ComplementNB
+    # istella fit +290 ms, infer +63 ms; text, taxi alike). Removed: that
+    # allocation and copy. A strided or int64 view still narrows into an
+    # unfilled array (every word written before any read).
+    if n == 0:
+        return classical_wrap_array(native_array_empty("i"), Python.tuple(0), "<i4", "C", context["output_context"])
+    if typestr == "<i4" and classical_c_order(view, context):
+        return view
+    var out = classical_wrap_array(native_array_unfilled("i", n), Python.tuple(n), "<i4", "C",
+                                   context["output_context"])
+    var dest = I32P(unsafe_from_address=Int(py=classical_address(out)))
+    _ = out  # keep the Python object alive through the native call above
+    # int64 words are one range-checked narrowing pass; only a strided view
+    # takes the bytes copy first.
     var raw = PythonObject(None)
     var src = 0
-    if n > 0 and classical_c_order(view, context):
+    if classical_c_order(view, context):
         src = Int(py=classical_address(view))
-        if typestr == "<i4":
-            unsafe_memcpy(dest=dest, src=I32P(unsafe_from_address=src), count=n)
-            _ = view  # keep the Python object alive through the copy above
-            _ = out  # keep the Python object alive through the copy above
-            return out
     else:
         raw = native_array_empty(String("q") if typestr == "<i8" else String("i"))
         _ = py_call(raw.frombytes, classical_c_bytes(view, name, context))
@@ -239,8 +246,6 @@ def _i32_vector(source: PythonObject, name: String, context: PythonObject) raise
         _ = out  # keep the Python object alive through the native call above
     _ = raw^
     _ = view  # keep the Python object alive through the reads above
-    if n == 0:
-        return classical_wrap_array(native_array_empty("i"), Python.tuple(0), "<i4", "C", context["output_context"])
     return out
 
 
