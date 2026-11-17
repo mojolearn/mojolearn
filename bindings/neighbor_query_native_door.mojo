@@ -496,8 +496,25 @@ def _ivf_snapshot_resident(fields: PythonObject, binding: PythonObject,
         return PythonObject(None)
     var key = _ivf_snapshot_key(fields, binding, snapshots, pins, fitted)
     var cached = py_get(fields, "_resident")
-    if cached is not None and _ivf_key_equal(cached[0], key):
-        return cached[1]
+    if cached is not None:
+        # FIX (lane fb-rest, 2026-11-17; classical2/ivf fit+search 2.7x istella,
+        # 1.35x taxi vs 0.8.55): fit (bindings/neighbors_ann_native_door.mojo
+        # _ivf_fit) keys the resident handle with id() of the compiled module it
+        # built on, while this search's `binding` is that module's import-time
+        # captured route (python/mojolearn/_native_neighbor_queries.py _capture).
+        # The ids never matched, so the first search after every fit exported
+        # the whole list data to the host (n x dim float32), released the
+        # handle and uploaded it all again. `_admit_state` -> `_resident_owner`
+        # already proved `cached[2]` is the connected alias of the minting
+        # module; when it is this route, the handle is this route's, so the
+        # stored module id stands for it. Every other key word is compared.
+        var b = native_loaded_module("builtins")
+        var probe = key
+        var stored = cached[0]
+        if cached[2] is binding and py_type(stored) is b.tuple and len(stored) == 7:
+            probe = Python.tuple(key[0], key[1], key[2], key[3], key[4], key[5], stored[6])
+        if _ivf_key_equal(stored, probe):
+            return cached[1]
     _ivf_snapshot_materialize(fields, snapshots, pins, fitted, context)
     _ann_release(fields, "ivf_flat_index_release")
     # p3-neighbors-cluster (hazard class A): the resident key holds identity,
