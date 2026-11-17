@@ -658,6 +658,12 @@ Ends when Andrew says. It is not the product direction: AMD and Apple remain in 
   times one prior on the same box, 0.8.55 (Andrew, 2026-11-15).
 - One prior only, on every board (Andrew, 2026-11-16): a measurement job times the candidate and 0.8.55 on the same box
   and nothing else. 0.8.66 is not timed on the paper rows or anywhere; this overrides "and the last release" in part 3.
+- 0.8.55 is not timed again (Andrew, 2026-11-17): the 0.8.55 times taken on the L40S on 2026-11-17 (full board, host
+  26ee0a3b0f86, driver 595.112.07) are the stored baseline for this campaign. A measurement job times OUR new wheel
+  only, on the same or a similar L40S, and only the rows a change touched plus the owed A/B switches; nothing already
+  known is measured again. This overrides "re-times OUR prior wheels on the same box in the same job" in part 3 while
+  it runs: the compare shows the stored 0.8.55 time with its host, driver and date beside each row and says in its
+  first line that the baseline is stored. A/B switches are still decided back to back in one job (base and arm).
 - ONE integration branch for the whole campaign (Andrew, 2026-11-14: "everything, everything, everything"): every fix
   lane, every audit fix and every leftover is merged into the same integration branch (`preinteg/wave2-20261113` until
   it lands), which is the only branch compiled. main receives that branch whole, never a piece of it; no lane and no
