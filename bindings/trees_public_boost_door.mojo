@@ -2160,7 +2160,14 @@ def _rte_fit(model: PythonObject, fields: PythonObject, x: AdmittedX, context: P
     py_setitem(settings, "random_state", _P(seed))
     py_setitem(settings, "numeric_mode", py_get(fields, "numeric_mode"))
     var forest = _new_member(context["trees_et_regressor"], settings, context)
-    _member_fit(forest, _as_array(x, Python.tuple(n, d), context), yr.array, PythonObject(None), context)
+    # fb-infer/D (2026-11-17): the member fit takes the admitted X itself (the
+    # caller's float32 C-order array when borrowed, else the door's own), as
+    # 0.8.55 passed `Xa` straight to ExtraTreesRegressor.fit; the member's
+    # own admission borrows it. `_as_array` here made one more serial n x d
+    # cast copy of every borrowed X before the fit (RTE fit 160 -> 754 ms on
+    # a 1M x 220 float32 X, 35 -> 60 ms on 1M x 10: ~1.5 GB/s, linear in
+    # n x d). Neighbours to time: 500k x 64 and any non-board float32 table.
+    _member_fit(forest, x.array, yr.array, PythonObject(None), context)
     py_setitem(fields, "forest_", forest)
     var ff = py_fields(forest)
     var offsets = ff["_offsets"]
