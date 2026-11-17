@@ -13,8 +13,9 @@ interpreter versions it may be used.
 
 THE RULE. A Mojo read or write of a CPython object word by offset:
   * takes its offset from a `comptime` below (each carries its reference),
-  * runs only when `cpython_layout_groups()` (the running interpreter's row
-    of the version table, resolved once per process) holds its group, AND
+  * runs only when `cpython_layout_groups()` (bindings/py_version_tags.mojo:
+    the running interpreter's row of the version table, resolved once per
+    process from `Py_GetVersion`) holds its group, AND
     its own once-per-process proof on objects made for the probe passed
     (py_version_tags.mojo for the class and dictionary words,
     native_array_storage_door.mojo for the array.array words). An
@@ -34,8 +35,6 @@ the stable ABI and are checked by the same tool, not gated here.
 All offsets are for the LP64 release (GIL) build, the only builds the wheels
 target (python/pyproject.toml: CPython 3.10-3.14, no free-threaded build).
 """
-from std.python import Python
-from core.native_string import unsafe_string_from_utf8_cstr
 from core.shared_slot import SharedSlot
 
 # ---------------------------------------------------------------- offsets
@@ -114,18 +113,10 @@ struct CPythonLayoutMode(Defaultable, Movable):
 comptime CPYTHON_LAYOUT_MODE = SharedSlot[CPythonLayoutMode, "MojolearnCPythonLayoutModeV1"]
 
 
-def native_python_version() raises -> String:
-    """`Py_GetVersion()`: the running interpreter's version text."""
-    ref cpy = Python().cpython()
-    var version_ptr = cpy.lib.get_function[Pointer[Int8, MutUntrackedOrigin]]("Py_GetVersion")()
-    return unsafe_string_from_utf8_cstr(version_ptr)
-
-
-def _running_row() raises -> Int:
-    # "3.11.16 (main, ...) [Clang ...]"; a free-threaded build says
-    # "free-threading build" in the same text (3.13: "experimental
-    # free-threading build").
-    var version = native_python_version()
+def cpython_layout_row_of_version(version: String) -> Int:
+    """The version table's row for `Py_GetVersion()` text ("3.11.16 (main,
+    ...) [Clang ...]"); a free-threaded build says "free-threading build" in
+    the same text (3.13: "experimental free-threading build")."""
     if not version.startswith("3."):
         return 0
     var text = version.as_bytes()
@@ -142,18 +133,6 @@ def _running_row() raises -> Int:
     if digits == 0 or i >= len(text) or Int(text[i]) != 46:  # "3.<minor>." or no row
         return 0
     return cpython_layout_row(minor, "free-threading" in version)
-
-
-def cpython_layout_groups() raises -> Int:
-    """The running interpreter's row of the version table, resolved once per
-    process (one `Py_GetVersion` on the first call)."""
-    var g = CPYTHON_LAYOUT_MODE.get_or_create_ptr()
-    if g[].groups != -2:
-        return g[].groups
-    var row = _running_row()
-    g = CPYTHON_LAYOUT_MODE.get_or_create_ptr()
-    g[].groups = row
-    return row
 
 
 @always_inline
