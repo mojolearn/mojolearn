@@ -9,6 +9,10 @@ from bindings.native_loaded_module_door import native_loaded_module
 from bindings.native_buffer_address_unpack import native_buffer_address
 from bindings.py_balanced import py_call, py_type, py_get
 from bindings.py_cpython_table import cpython_table
+from bindings.cpython_layout import (
+    ARRAY_OB_SIZE, ARRAY_OB_ITEM, ARRAY_ALLOCATED, LAYOUT_ARRAY_BLOCK, CPYTHON_LAYOUT_MODE,
+)
+from bindings.py_version_tags import cpython_layout_groups
 
 
 def _storage_metadata() raises -> PythonObject:
@@ -120,14 +124,17 @@ def native_array_zeros(code: String, count: Int) raises -> PythonObject:
 
 
 # The array.array object words `native_array_unfilled` writes (CPython
-# Modules/arraymodule.c `arrayobject`, unchanged from 3.10 through 3.14 on the
-# default build): PyObject_VAR_HEAD (ob_refcnt, ob_type, ob_size), then
-# ob_item (char *), then allocated (Py_ssize_t). Probed on every call against
-# the live seed (below); a build whose layout differs (free-threaded,
-# Py_TRACE_REFS) fails the probe and keeps the zero-filled store.
-comptime _ARRAY_WORD_SIZE = 2
-comptime _ARRAY_WORD_ITEM = 3
-comptime _ARRAY_WORD_ALLOCATED = 4
+# Modules/arraymodule.c `arrayobject`): the offsets and the versions they are
+# written on are bindings/cpython_layout.mojo (THE table, group
+# LAYOUT_ARRAY_BLOCK, checked by ctypes on 3.10-3.14 in
+# tools/tests/test_cpython_layout.py). The layout is proven ONCE per process
+# on a live seed (lane fb5-cpython-layout, 2026-11-17; it was probed on every
+# call, one more buffer export per output array): a version without a row
+# (free-threaded, 3.15+) or a build that fails the proof (Py_TRACE_REFS)
+# keeps the zero-filled store.
+comptime _ARRAY_WORD_SIZE = ARRAY_OB_SIZE // 8
+comptime _ARRAY_WORD_ITEM = ARRAY_OB_ITEM // 8
+comptime _ARRAY_WORD_ALLOCATED = ARRAY_ALLOCATED // 8
 
 
 def _array_words(value: PythonObject) -> MutPointer[Int, MutUntrackedOrigin]:
@@ -145,6 +152,18 @@ def _array_layout_matches(seed: PythonObject) raises -> Bool:
                    and words[_ARRAY_WORD_ALLOCATED] >= 1)
     _ = seed  # retain the seed while its words are read
     return matched
+
+
+def _array_block_writable(seed: PythonObject) raises -> Bool:
+    """True when this interpreter's table row lists the array block words and
+    the one-time proof on a live seed passed (resolved once per process)."""
+    var g = CPYTHON_LAYOUT_MODE.get_or_create_ptr()
+    if g[].arrays != -2:
+        return g[].arrays == 1
+    var proven = (cpython_layout_groups() & LAYOUT_ARRAY_BLOCK) != 0 and _array_layout_matches(seed)
+    g = CPYTHON_LAYOUT_MODE.get_or_create_ptr()
+    g[].arrays = 1 if proven else 0
+    return proven
 
 
 def native_array_unfilled(code: String, count: Int) raises -> PythonObject:
@@ -165,15 +184,15 @@ def native_array_unfilled(code: String, count: Int) raises -> PythonObject:
     zero allocator filled every output (a memset or per-block memcpy over the
     whole destination: 80.8% of the gemm row and 86.7% of lm-forward's
     snapshot in the 2026-11-14 L40S profile) before the writer overwrote it.
-    The object layout is probed on the live seed each call; when it does not
-    match, the zero-filled store is returned (the same bytes the writer then
-    overwrites)."""
+    The object layout is proven once per process (`_array_block_writable`);
+    when it is not, the zero-filled store is returned (the same bytes the
+    writer then overwrites)."""
     if count < 0:
         raise Error("ValueError: native array element count must be nonnegative")
     if count == 0:
         return native_array_zeros(code, 0)
     var seed = _zero_seed(code)
-    if not _array_layout_matches(seed):
+    if not _array_block_writable(seed):
         return native_array_zeros(code, count)
     var itemsize = Int(py=seed.itemsize)
     if count > (Int.MAX // 2) // itemsize:

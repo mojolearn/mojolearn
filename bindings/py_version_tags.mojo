@@ -25,8 +25,10 @@ themselves:
   equal to the recorded tag" means neither the class nor an ancestor changed:
   the guarantee the 3.12 type watcher gives.
 
-LAYOUT. The words are read at their offsets in the 3.10 / 3.11 release
-layout (LP64): `ma_used` +16, `ma_version_tag` +24; `tp_flags` +168,
+LAYOUT. The offsets and the versions they are read on are
+bindings/cpython_layout.mojo (THE table, checked by ctypes in
+tools/tests/test_cpython_layout.py); the words are read only when the running
+interpreter's row lists their group (3.10 / 3.11 release layout, LP64): `ma_used` +16, `ma_version_tag` +24; `tp_flags` +168,
 `tp_version_tag` +384. Each offset is PROVEN once per process before use, on
 objects made for the probe: a new dictionary's `ma_used` is 0, becomes 1 on
 one insertion (and `PyDict_Size` agrees), and its tag moves; a new class's
@@ -47,15 +49,25 @@ from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from bindings.py_cpython_table import cpython_table
 from bindings.py_attr import py_attr
-from bindings.py_version_tags_run import (
-    _DICT_USED, _DICT_VERSION, _TYPE_FLAGS, _TYPE_VERSION, _TPFLAGS_VALID_VERSION_TAG,
-    VERSION_TAG_MODE, _word64, _word32,
+from bindings.cpython_layout import (
+    DICT_MA_USED, DICT_MA_VERSION_TAG, TYPE_TP_FLAGS, TYPE_TP_VERSION_TAG, TYPE_TPFLAGS_VALID_VERSION_TAG,
+    LAYOUT_DICT_VERSION, LAYOUT_TYPE_VERSION, CPYTHON_LAYOUT_MODE, cpython_layout_row_of_version,
+    layout_word64, layout_word32,
 )
 
 
-def _python_310_or_311() raises -> Bool:
-    var version = native_python_version()
-    return version.startswith("3.10.") or version.startswith("3.11.")
+def cpython_layout_groups() raises -> Int:
+    """The running interpreter's row of the version table
+    (bindings/cpython_layout.mojo), resolved once per process from one
+    `Py_GetVersion`: the word groups that may be read by offset here. A
+    version the table does not list reads no word."""
+    var g = CPYTHON_LAYOUT_MODE.get_or_create_ptr()
+    if g[].groups != -2:
+        return g[].groups
+    var row = cpython_layout_row_of_version(native_python_version())
+    g = CPYTHON_LAYOUT_MODE.get_or_create_ptr()
+    g[].groups = row
+    return row
 
 
 def native_python_version() raises -> String:
@@ -68,28 +80,28 @@ def native_python_version() raises -> String:
 def dict_version_tags() raises -> Bool:
     """True on CPython 3.10 / 3.11 once the dictionary layout is proven
     (module docstring): `dict_version_tag` is then the dictionary's stamp."""
-    var g = VERSION_TAG_MODE.get_or_create_ptr()
+    var g = CPYTHON_LAYOUT_MODE.get_or_create_ptr()
     if g[].dicts != -2:
         return g[].dicts == 1
     g[].dicts = 0
-    if not _python_310_or_311():
+    if (cpython_layout_groups() & LAYOUT_DICT_VERSION) == 0:
         return False
     var t = cpython_table()
     var probe = Python.dict()
     var later = Python.dict()
     var a = Int(probe._obj_ptr)
-    var used0 = _word64(a + _DICT_USED)
-    var tag0 = _word64(a + _DICT_VERSION)
-    var tag_later = _word64(Int(later._obj_ptr) + _DICT_VERSION)
+    var used0 = layout_word64(a + DICT_MA_USED)
+    var tag0 = layout_word64(a + DICT_MA_VERSION_TAG)
+    var tag_later = layout_word64(Int(later._obj_ptr) + DICT_MA_VERSION_TAG)
     probe["mojolearn_probe"] = PythonObject(1)
-    var used1 = _word64(a + _DICT_USED)
-    var tag1 = _word64(a + _DICT_VERSION)
+    var used1 = layout_word64(a + DICT_MA_USED)
+    var tag1 = layout_word64(a + DICT_MA_VERSION_TAG)
     var proven = (used0 == 0 and used1 == 1 and t[].PyDict_Size(probe._obj_ptr) == 1
                   and tag0 != 0 and tag_later != tag0 and tag1 != tag0 and tag1 != tag_later)
     _ = probe
     _ = later
     if proven:
-        g = VERSION_TAG_MODE.get_or_create_ptr()
+        g = CPYTHON_LAYOUT_MODE.get_or_create_ptr()
         g[].dicts = 1
     return proven
 
@@ -97,11 +109,11 @@ def dict_version_tags() raises -> Bool:
 def type_version_tags() raises -> Bool:
     """True on CPython 3.10 / 3.11 once the class layout is proven (module
     docstring): `type_version_tag` is then the class's stamp."""
-    var g = VERSION_TAG_MODE.get_or_create_ptr()
+    var g = CPYTHON_LAYOUT_MODE.get_or_create_ptr()
     if g[].types != -2:
         return g[].types == 1
     g[].types = 0
-    if not _python_310_or_311():
+    if (cpython_layout_groups() & LAYOUT_TYPE_VERSION) == 0:
         return False
     var t = cpython_table()
     ref cpy = Python().cpython()
@@ -111,28 +123,28 @@ def type_version_tags() raises -> Bool:
     var type_type = PythonObject(from_owned=cpy.PyObject_Type(dict_type._obj_ptr))
     var cls = type_type(PythonObject("_MojolearnVersionTagProbe"), Python.tuple(), Python.dict())
     var a = Int(cls._obj_ptr)
-    var proven = _word64(a + _TYPE_FLAGS) == t[].PyType_GetFlags(cls._obj_ptr)
+    var proven = layout_word64(a + TYPE_TP_FLAGS) == t[].PyType_GetFlags(cls._obj_ptr)
     var tag0 = 0
     if proven:
         _ = py_attr(cls, "__init__")
-        proven = (_word64(a + _TYPE_FLAGS) & _TPFLAGS_VALID_VERSION_TAG) != 0
-        tag0 = Int(_word32(a + _TYPE_VERSION))
+        proven = (layout_word64(a + TYPE_TP_FLAGS) & TYPE_TPFLAGS_VALID_VERSION_TAG) != 0
+        tag0 = Int(layout_word32(a + TYPE_TP_VERSION_TAG))
         proven = proven and tag0 != 0
     if proven:
         var one = PythonObject(1)
         if cpy.PyObject_SetAttrString(cls._obj_ptr, String("mojolearn_probe"), one._obj_ptr) == -1:
             raise cpy.unsafe_get_error()
-        proven = (_word64(a + _TYPE_FLAGS) & _TPFLAGS_VALID_VERSION_TAG) == 0
-        proven = proven and _word64(a + _TYPE_FLAGS) == t[].PyType_GetFlags(cls._obj_ptr)
+        proven = (layout_word64(a + TYPE_TP_FLAGS) & TYPE_TPFLAGS_VALID_VERSION_TAG) == 0
+        proven = proven and layout_word64(a + TYPE_TP_FLAGS) == t[].PyType_GetFlags(cls._obj_ptr)
     if proven:
         _ = py_attr(cls, "__init__")
-        proven = (_word64(a + _TYPE_FLAGS) & _TPFLAGS_VALID_VERSION_TAG) != 0
-        var tag1 = Int(_word32(a + _TYPE_VERSION))
+        proven = (layout_word64(a + TYPE_TP_FLAGS) & TYPE_TPFLAGS_VALID_VERSION_TAG) != 0
+        var tag1 = Int(layout_word32(a + TYPE_TP_VERSION_TAG))
         proven = proven and tag1 != 0 and tag1 != tag0
     _ = cls
     _ = probe_dict
     if proven:
-        g = VERSION_TAG_MODE.get_or_create_ptr()
+        g = CPYTHON_LAYOUT_MODE.get_or_create_ptr()
         g[].types = 1
     return proven
 
@@ -141,9 +153,9 @@ def type_version_tag(cls: PythonObject) -> Int:
     """The live class's `tp_version_tag` when it holds a valid one, else 0
     (call only while `type_version_tags()` is True)."""
     var a = Int(cls._obj_ptr)
-    if (_word64(a + _TYPE_FLAGS) & _TPFLAGS_VALID_VERSION_TAG) == 0:
+    if (layout_word64(a + TYPE_TP_FLAGS) & TYPE_TPFLAGS_VALID_VERSION_TAG) == 0:
         return 0
-    return Int(_word32(a + _TYPE_VERSION))
+    return Int(layout_word32(a + TYPE_TP_VERSION_TAG))
 
 
 def type_version_tag_assign(cls: PythonObject) raises -> Int:
