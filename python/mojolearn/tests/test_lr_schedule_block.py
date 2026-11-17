@@ -95,3 +95,15 @@ def test_an_edit_the_admission_refuses_raises_at_the_call():
         schedule.lr_at(1)
     schedule.peak_lr = 1e-3                    # a valid edit rebinds the block
     assert schedule.lr_at(1) == ml.ConstantLR(1e-3, warmup_steps=10).lr_at(1)
+
+
+def test_deleting_a_setting_leaves_no_stale_block():
+    schedule = ml.ConstantLR(1e-3, warmup_steps=10)
+    _ = schedule.lr_at(5)                      # the block is filled
+    del schedule.peak_lr
+    with pytest.raises(Exception):
+        schedule.lr_at(5)                      # no stale answer from the old block
+    with pytest.raises(AttributeError):
+        del schedule.no_such_setting
+    schedule.peak_lr = 2e-3                    # a valid edit rebinds the block
+    assert schedule.lr_at(5) == ml.ConstantLR(2e-3, warmup_steps=10).lr_at(5)
