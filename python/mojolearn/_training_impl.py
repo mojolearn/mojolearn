@@ -912,7 +912,7 @@ class ConstantLR(_Schedule):
     Examples
     --------
     >>> import mojolearn
-    >>> sched = mojolearn.ConstantLR(1e-3, warmup_steps=100)
+    >>> sched = mojolearn.training.ConstantLR(1e-3, warmup_steps=100)
     >>> lr = sched.lr_at(1)
     """
 
@@ -951,7 +951,7 @@ class WarmupLinearLR(_Schedule):
     Examples
     --------
     >>> import mojolearn
-    >>> sched = mojolearn.WarmupLinearLR(1e-3, warmup_steps=100, total_steps=1000)
+    >>> sched = mojolearn.training.WarmupLinearLR(1e-3, warmup_steps=100, total_steps=1000)
     >>> lr = sched.lr_at(500)
     """
 
@@ -997,7 +997,7 @@ class WarmupCosineLR(_Schedule):
     Examples
     --------
     >>> import mojolearn
-    >>> sched = mojolearn.WarmupCosineLR(3e-4, warmup_steps=200, total_steps=10000, min_lr=3e-5)
+    >>> sched = mojolearn.training.WarmupCosineLR(3e-4, warmup_steps=200, total_steps=10000, min_lr=3e-5)
     >>> lr = sched.lr_at(5000)
     """
 
