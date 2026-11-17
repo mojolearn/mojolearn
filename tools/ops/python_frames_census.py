@@ -20,6 +20,15 @@ Fixtures are verify's own, never new ones written here:
   lane:<lane>    one process per CPU lane of verify's identity harness (mojolearn._identity_break, the lanes the
                  smoke's `lanes` step runs): the lane's fit on the base fixture, then the harness's own
                  _probe_fit (infer, model bytes, reload) and _probe_batch.
+  fixture:<m>.<f> one process per census fixture (tools/ops/census_fixtures/<m>.py, fb4-census 2026-11-17): the
+                 smallest working call of each public member verify's fixtures never reach (a tiny model, a two-worker
+                 pool on the CPU wheel, a model file saved inside the fixture). Testing tools, never product: each
+                 module imports only the standard library at load and takes `ml` (the installed mojolearn) and a
+                 context `cx` (cx.tmp a fresh directory; cx.access and cx.delete measure a descriptor by access and a
+                 finalizer by del). A member that cannot run on a CPU-only runner is listed in its module's NEEDS_GPU
+                 with the reason (status NEEDS_GPU, counted apart from UNCOVERED, and listed in needs_gpu.tsv for the
+                 GPU box's smoke; a fixture marked "gpu" runs only where MOJOLEARN_CENSUS_GPU=1); a member left
+                 unreached on purpose is listed in WHY_NOT with the reason (uncovered.tsv).
 After its fixtures, every unit PROBES the members they did not reach (py-census-14: 323 members UNCOVERED in
 d95f805cce): on the last FITTED instance of each public class the fixtures used (the last instance a fit-named member
 ran on; else the last instance: verify-fixtures-env, 2026-11-16, an unfitted prototype or a fresh metadata instance
@@ -50,6 +59,9 @@ anywhere (a finalizer the collector runs inside whatever call is active), is mea
 one waits. The unattributed entry keeps its own frames (unattributed.tsv, `inside`). A member never called itself but
 whose defining function ran through a subclass's member is VIA_SUBCLASS (a mixin's or protocol's method), not
 UNCOVERED.
+
+SUMMARY: the first line leads with measured / with_python / uncovered / needs_gpu, so "0 with Python" is always read
+beside what was not reached.
 
 Subcommands (run by `tools/ops/wheel_verify_smoke.py frames`, which owns the parallel pool):
   inventory --surface FILE --out DIR   in the wheel's python: resolve the members and plan the units
@@ -103,6 +115,34 @@ _FIT_NAMES = ("fit", "partial_fit", "train", "search")
 _NOT_WIDENED = ("mojolearn.ops.Program", "mojolearn.HostGBDT")
 #: probed last: they end the instance's session.
 _PROBE_LAST = ("close", "free", "discard")
+#: the census's own fixtures (one module per family group; see the module docstring)
+FIXTURE_DIR = Path(__file__).resolve().parent / "census_fixtures"
+
+
+def fixture_modules(directory=FIXTURE_DIR):
+    """{module name: module} of the census fixture modules, loaded by path (the unit runs under `python -I`, where
+    the tool's own directory is not on sys.path). Loading imports only the standard library."""
+    import importlib.util
+    mods = {}
+    for path in sorted(Path(directory).glob("[a-z]*.py")):
+        spec = importlib.util.spec_from_file_location(f"_census_fixtures_{path.stem}", path)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        mods[path.stem] = mod
+    return mods
+
+
+def fixture_plan(directory=FIXTURE_DIR):
+    """(fixtures, needs_gpu, why_not): fixtures {unit id "<module>.<name>": (fn, members, gpu)}, needs_gpu and
+    why_not {member: reason}. A module's FIXTURES maps a name to (fn, [members]) or (fn, [members], "gpu")."""
+    fixtures, needs_gpu, why_not = {}, {}, {}
+    for mname, mod in fixture_modules(directory).items():
+        for name, entry in getattr(mod, "FIXTURES", {}).items():
+            fn, members = entry[0], list(entry[1])
+            fixtures[f"{mname}.{name}"] = (fn, members, len(entry) > 2 and entry[2] == "gpu")
+        needs_gpu.update(getattr(mod, "NEEDS_GPU", {}))
+        why_not.update(getattr(mod, "WHY_NOT", {}))
+    return fixtures, needs_gpu, why_not
 
 
 # --------------------------------------------------------------------------------------------------------------
@@ -280,12 +320,26 @@ def cmd_inventory(args):
             src = ""
         refs = sorted(set(re.findall(r"\bml\.([A-Z]\w*)", src)))
         units.append(dict(name="lane:" + lane, kind="lane", id=lane, classes=refs))
+    # the census's own fixtures (tools/ops/census_fixtures): one unit per fixture, a "gpu" fixture only where
+    # MOJOLEARN_CENSUS_GPU=1 (the GPU box's smoke); NEEDS_GPU and WHY_NOT ride in the inventory for the report
+    needs_gpu, why_not = {}, {}
+    try:
+        fixtures, needs_gpu, why_not = fixture_plan()
+        gpu = os.environ.get("MOJOLEARN_CENSUS_GPU") == "1"
+        for fid, (_, fmembers, needs) in sorted(fixtures.items()):
+            if needs and not gpu:
+                continue
+            units.append(dict(name="fixture:" + fid, kind="fixture", id=fid, members=fmembers))
+    except Exception as exc:
+        errors.append(f"census_fixtures\t{type(exc).__name__}: {str(exc)[:200]}")
     inv = dict(format="mojolearn.python-frames-inventory.v1", version=mojolearn.__version__,
                package=os.path.dirname(os.path.abspath(mojolearn.__file__)), classes=classes,
-               functions=functions, members=members, units=units, export_errors=errors)
+               functions=functions, members=members, units=units, export_errors=errors, needs_gpu=needs_gpu,
+               why_not=why_not)
     (out / "inventory.json").write_text(json.dumps(inv, indent=1, sort_keys=True) + "\n")
     print(f"inventory: {len(members)} members ({len(classes)} classes, {len(functions)} functions), "
-          f"{len(units)} units ({len(lanes)} lanes), {len(errors)} export errors", flush=True)
+          f"{len(units)} units ({len(lanes)} lanes, {sum(u['kind'] == 'fixture' for u in units)} census fixtures), "
+          f"{len(errors)} export errors", flush=True)
     return 0
 
 
@@ -858,6 +912,82 @@ def _lane_unit(census, unit, record, done):
     _probe_members(census, record, done)
 
 
+class FixtureContext:
+    """What a census fixture gets beside `ml`: a fresh directory, and the two measurements a plain call cannot make.
+
+    access(obj, attr, member, expect=())  reads obj.attr as a call of `member` (a descriptor: a native or
+        `available_if` member whose read is the operation, or that refuses with AttributeError when the instance
+        does not offer it; pass that exception in `expect`). The read is credited as Census.open_member credits a
+        probe's read: Python frames under it are counted, a read served natively counts its reader as one binding.
+    delete(holder, key, member)  drops holder[key] (the fixture's last reference) as a call of `member`, so the
+        object's `__del__` runs under the profiler: a Python finalizer is counted by its frames, a native one (a
+        compiled descriptor installed as __del__, which CPython calls from C, unseen by the profiler) is credited
+        with that descriptor as its one binding. The census's own references to the object (the probe's instance
+        records) are dropped first so the del is the last one."""
+
+    def __init__(self, census, tmp):
+        self.census, self.tmp = census, Path(tmp)
+
+    def access(self, obj, attr, member, expect=()):
+        import inspect
+        try:
+            reader = inspect.getattr_static(type(obj), "__getattribute__")
+        except AttributeError:
+            reader = None
+        if isinstance(reader, types.FunctionType) or reader is object.__getattribute__:
+            reader = None
+        return self._read(obj, attr, [member], reader, tuple(expect))
+
+    def _read(self, obj, attr, mids, reader, expect):
+        self.census.open_member(sys._getframe(), mids, reader)
+        try:
+            return getattr(obj, attr)
+        except expect:
+            return None
+
+    def delete(self, holder, key, member):
+        import gc
+        import inspect
+        obj = holder[key]
+        try:
+            fin = inspect.getattr_static(type(obj), "__del__")
+        except AttributeError:
+            fin = None
+        reader = None if fin is None or isinstance(fin, types.FunctionType) else fin
+        for d in (self.census.instances, self.census.fitted):
+            for k in [k for k, v in d.items() if v is obj]:
+                del d[k]
+        obj = fin = None
+        if reader is None:   # a Python __del__ is its own call (Census.start / inner: a finalizer)
+            del holder[key]
+        else:
+            self._drop(holder, key, [member], reader)
+        gc.collect()
+
+    def _drop(self, holder, key, mids, reader):
+        self.census.open_member(sys._getframe(), mids, reader)
+        del holder[key]
+
+
+def _fixture_unit(census, unit, record, done):
+    import importlib
+    import tempfile
+    ml = importlib.import_module("mojolearn")
+    fixtures, _, _ = fixture_plan()
+    fn = fixtures[unit["id"]][0]
+    with tempfile.TemporaryDirectory(prefix="census-fixture-") as tmp:
+        cx = FixtureContext(census, tmp)
+        ok, error = census.run(lambda: fn(ml, cx))
+        record(unit["id"], ok, error)
+        done()
+        # the fixture's instances the census still holds (probe records), released under the profiler
+        held = [census.instances, census.fitted]
+        census.instances, census.fitted = {}, {}
+        ok, error = census.run(held.clear)
+        record("release instances", ok, error)
+    done()
+
+
 def cmd_unit(args):
     inv = json.loads(Path(args.inventory).read_text())
     unit = next((u for u in inv["units"] if u["name"] == args.unit), None)
@@ -891,6 +1021,8 @@ def cmd_unit(args):
             case = getattr(importlib.import_module("mojolearn._verify_light"), unit["id"])
             ok, error = census.run(case)
             record(unit["id"], ok, error)
+        elif unit["kind"] == "fixture":
+            _fixture_unit(census, unit, record, done)
         else:
             _lane_unit(census, unit, record, done)
     except Exception as exc:
@@ -952,6 +1084,7 @@ def report(directory):
             acc["bnames"].update(st.get("bnames", {}))
             row["units"].add(unit["name"])
 
+    needs_gpu, why_not = inv.get("needs_gpu") or {}, inv.get("why_not") or {}
     # a member whose defining function ran through another member (a mixin's method called on a subclass)
     ran = {r.get("defined") for r in merged.values() if r["stats"]["calls"] and r.get("defined")}
 
@@ -962,7 +1095,10 @@ def report(directory):
                 return "NATIVE_ATTRIBUTE"
             if row.get("family") in PACKAGING_FAMILIES:
                 return "PACKAGING"
-            return "VIA_SUBCLASS" if row.get("defined") in ran else "UNCOVERED"
+            if row.get("defined") in ran:
+                return "VIA_SUBCLASS"
+            # a member only a GPU (or a second device) can run, listed with its reason by the census fixtures
+            return "NEEDS_GPU" if row["id"] in needs_gpu else "UNCOVERED"
         if st["frames_max"] > 0:
             return "PYTHON"
         return "MULTI_BINDING" if st["bindings_max"] > 1 else ("ZERO" if st["bindings_max"] == 1 else "NO_BINDING")
@@ -1004,13 +1140,23 @@ def report(directory):
         for where, counter in (("entry", unattributed), ("inside", inside), ("import_time", import_time)):
             for k, n in counter.most_common():
                 fh.write(f"{where}\t{k}\t{n}\n")
+    # what was not reached, beside the census: UNCOVERED with the fixtures' reason when one is listed, and the
+    # NEEDS_GPU list the GPU box's smoke runs (MOJOLEARN_CENSUS_GPU=1)
+    with open(d / "uncovered.tsv", "w") as fh:
+        fh.write("member\tfamily\tkind\tstatus\treason\n")
+        for r in rows:
+            st = status(r)
+            if st in ("UNCOVERED", "NEEDS_GPU"):
+                reason = needs_gpu.get(r["id"]) if st == "NEEDS_GPU" else why_not.get(r["id"], "-")
+                fh.write(f"{r['id']}\t{r['family']}\t{r['kind']}\t{st}\t{reason}\n")
     counts = collections.Counter(status(r) for r in rows)
     measured = sum(1 for r in rows if r["stats"]["calls"])
-    lines = [f"frames rc=0 members={len(rows)} measured={measured} uncovered={counts['UNCOVERED']} "
+    lines = [f"frames rc=0 measured={measured} with_python={counts['PYTHON']} uncovered={counts['UNCOVERED']} "
+             f"needs_gpu={counts['NEEDS_GPU']} (uncovered.tsv) members={len(rows)} "
              f"via_subclass={counts['VIA_SUBCLASS']} "
              f"zero_python={counts['ZERO'] + counts['NO_BINDING'] + counts['MULTI_BINDING']} "
              f"(one_binding_call={counts['ZERO']} multi_binding={counts['MULTI_BINDING']} "
-             f"no_binding={counts['NO_BINDING']}) with_python={counts['PYTHON']} "
+             f"no_binding={counts['NO_BINDING']}) "
              f"native_attributes={counts['NATIVE_ATTRIBUTE']} packaging={counts['PACKAGING']} "
              f"units={len(inv['units'])} "
              f"units_without_results={len(missing)} fixture_errors={fixture_errors} cpu_refusals={cpu_refusals} "

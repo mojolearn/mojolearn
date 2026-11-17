@@ -370,7 +370,7 @@ def run_probe(tree, commit, wheel, ref, workdir, timeout, git_root=ROOT):
     sys.path.insert(0, str(ROOT / "tools" / "ops"))
     import verify_smoke_dispatch
     since = utc_now()
-    token = verify_smoke_dispatch.dispatch(out, ref, commit)
+    token = verify_smoke_dispatch.dispatch(out, ref, commit, census=True, record=False)
     run_id = find_new_run(SMOKE_WORKFLOW, f"verify-smoke {commit} {token}", since)
     view = wait_run(run_id, timeout, "verify smoke")
     smoke = Path(workdir) / "probe-smoke"

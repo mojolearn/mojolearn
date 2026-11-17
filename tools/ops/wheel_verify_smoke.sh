@@ -45,7 +45,8 @@
 # traces in OUT/crashes/<unit>.txt, the top frame per crash in SUMMARY.txt.
 # Environment: PYTHON (default python3), SOURCE_ROOT (the checkout whose tests run; default this script's tree),
 # SOURCE_COMMIT (the wheel's commit, for the harness's provenance), VENV (default a fresh mktemp dir),
-# MEMORY_FROM (an earlier OUT: plan each pool from its results.tsv instead of the committed plan), STEPS (default all).
+# MEMORY_FROM (an earlier OUT: plan each pool from its results.tsv instead of the committed plan), STEPS (default all),
+# CENSUS_STANDS (non-empty: the frames step is skipped with that line; set by the dispatcher's census skip rule).
 # Exit 0 only when every step passed.
 set -u
 [ $# -eq 2 ] || { echo "usage: $0 WHEEL_DIR OUT" >&2; exit 2; }
@@ -96,7 +97,13 @@ fi
 want imports && $HELPER imports --python "$VPY" --out "$OUT" $(mem imports)
 want selftest && $HELPER step --out "$OUT" --name selftest --timeout 900 -- "$VPY" -I -m mojolearn verify --self-test
 want lanes && $HELPER lanes --python "$VPY" --out "$OUT" --commit "${SOURCE_COMMIT:-}" $(mem lanes)
-want frames && $HELPER frames --python "$VPY" --out "$OUT" $(mem python-frames)
+# CENSUS_STANDS (tools/ops/verify_smoke_dispatch.py's skip rule): nothing the census reads changed since the last
+# census of this branch, so the step is skipped with one line naming the wheel whose census stands
+if want frames && [ -n "${CENSUS_STANDS:-}" ]; then
+  printf 'frames rc=0 skipped: %s\n' "$(printf '%s' "$CENSUS_STANDS" | tr -d '\n' | cut -c1-400)" >> "$OUT/SUMMARY.txt"
+elif want frames; then
+  $HELPER frames --python "$VPY" --out "$OUT" $(mem python-frames)
+fi
 [ -n "$extras_pid" ] && wait "$extras_pid"
 # shellcheck disable=SC2086
 want test-deps && $HELPER step --out "$OUT" --name test-deps -- "$VPY" -m pip install --disable-pip-version-check \

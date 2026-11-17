@@ -10,10 +10,18 @@ on this Mac) and the workflow gets a presigned GET, its name and its sha256. --r
 workflow file and smoke script run (default: this checkout's branch); the source tested is the wheel's commit
 (candidate.json source_commit). tools/release_candidate.py calls dispatch() after the pack, fail soft: the smoke
 reports and gates nothing. Prints `VERIFY-SMOKE dispatched ...` with the token its run-name carries.
+
+THE CENSUS SKIP RULE (fb4-census, 2026-11-17). The smoke's `frames` step (the Python frames census) is skipped, with a
+SUMMARY line naming the wheel whose census stands, when no file under python/mojolearn (at the wheel's commit) and none
+of the census's own files (CENSUS_FILES, at --ref, whose tooling runs) changed since the last census dispatched for
+that --ref: their git object ids are compared with the record in CENSUS_RECORDS. Default: the census runs whenever
+anything changed (or no record exists). --census forces it; --no-census skips it. A run that takes the census is
+recorded when it is dispatched; a run that skips it leaves the record as it was.
 """
 import argparse
 import hashlib
 import json
+import os
 import subprocess
 import sys
 import time
@@ -21,6 +29,12 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 WORKFLOW = "verify-smoke.yml"
+EVIDENCE = Path(os.environ.get("MOJOLEARN_EVIDENCE_ROOT", os.path.expanduser("~/mojolearn-evidence")))
+#: the last census dispatched per --ref: {ref: {commit, wheel, sha256, inputs, token, made}}
+CENSUS_RECORDS = EVIDENCE / "verify-smoke" / "census-records.json"
+#: the census's own files (read at --ref): the tool, its fixtures, the smoke step that runs it, the surface it reads
+CENSUS_FILES = ("tools/ops/python_frames_census.py", "tools/ops/census_fixtures", "tools/ops/wheel_verify_smoke.py",
+                "tools/ops/wheel_verify_smoke.sh", "tools/public_api_surface.py")
 
 
 def sha256(path):
@@ -43,8 +57,66 @@ def current_branch():
                           text=True).stdout.strip()
 
 
-def dispatch(wheel_dir, ref="", commit="", dry=False, days=2):
-    """Upload the core wheel, dispatch the workflow; returns the token its run-name carries."""
+def object_id(rev, path, repo=ROOT):
+    """The git object id of PATH at REV (a tree or a blob), or "" when it does not exist there."""
+    p = subprocess.run(["git", "rev-parse", "-q", "--verify", f"{rev}:{path}"], cwd=repo, capture_output=True,
+                       text=True)
+    return p.stdout.strip() if p.returncode == 0 else ""
+
+
+def tooling_rev(ref, repo=ROOT):
+    """The commit the workflow's tooling checkout will run: origin/<ref> when the remote has it, else <ref>."""
+    for rev in (f"origin/{ref}", ref):
+        p = subprocess.run(["git", "rev-parse", "-q", "--verify", f"{rev}^{{commit}}"], cwd=repo,
+                           capture_output=True, text=True)
+        if p.returncode == 0:
+            return p.stdout.strip()
+    return ref
+
+
+def census_inputs(commit, ref, repo=ROOT):
+    """{path: object id}: python/mojolearn at the wheel's commit and the census's own files at --ref."""
+    inputs = {"python/mojolearn": object_id(commit, "python/mojolearn", repo)}
+    rev = tooling_rev(ref, repo)
+    inputs.update({path: object_id(rev, path, repo) for path in CENSUS_FILES})
+    return inputs
+
+
+def load_records(path=CENSUS_RECORDS):
+    try:
+        return json.loads(Path(path).read_text())
+    except (OSError, ValueError):
+        return {}
+
+
+def census_decision(ref, inputs, census=None, records_path=CENSUS_RECORDS):
+    """(run, the SUMMARY line the smoke prints when it skips). census: True forces, False skips, None decides."""
+    last = load_records(records_path).get(ref)
+    stands = (f"{last['wheel']} ({last['commit'][:12]}, run token {last.get('token', '?')}, {last.get('made', '?')})"
+              if last else "none recorded")
+    if census is False:
+        return False, f"--no-census given; the census of {stands} on {ref} stands"
+    if census is True:
+        return True, ""
+    if last and all(inputs.get(k) for k in inputs) and last.get("inputs") == inputs:
+        return False, (f"no file under python/mojolearn and none of the census's files changed since the census of "
+                       f"{stands} on {ref}; that census stands (--census forces it)")
+    return True, ""
+
+
+def record_census(ref, entry, records_path=CENSUS_RECORDS):
+    records = load_records(records_path)
+    records[ref] = entry
+    Path(records_path).parent.mkdir(parents=True, exist_ok=True)
+    tmp = Path(records_path).with_suffix(".tmp")
+    tmp.write_text(json.dumps(records, indent=1, sort_keys=True) + "\n")
+    os.replace(tmp, records_path)
+
+
+def dispatch(wheel_dir, ref="", commit="", dry=False, days=2, census=None, record=True):
+    """Upload the core wheel, dispatch the workflow; returns the token its run-name carries. census: None applies
+    the skip rule, True forces the frames census, False skips it. record=False (the pre-build probe wheel, whose
+    native code is an earlier build's) never records its census as the branch's."""
     wheel = core_wheel(wheel_dir)
     if not commit:
         commit = json.loads((Path(wheel_dir) / "candidate.json").read_text())["source_commit"]
@@ -52,10 +124,14 @@ def dispatch(wheel_dir, ref="", commit="", dry=False, days=2):
     digest = sha256(wheel)
     token = hashlib.sha256(f"{commit} {time.time()}".encode()).hexdigest()[:12]
     key = f"verify-smoke/{commit[:12]}/{wheel.name}"
+    inputs = census_inputs(commit, ref)
+    run_census, stands = census_decision(ref, inputs, census)
+    census_args = [] if run_census else ["-f", f"census_stands={stands}"]
+    print(f"VERIFY-SMOKE census: {'runs' if run_census else 'skipped: ' + stands}")
     if dry:
         print(f"VERIFY-SMOKE would upload {wheel.name} to R2 {key} and run: gh workflow run {WORKFLOW} --ref {ref} "
               f"-f ref={commit} -f wheel_url=<presigned> -f wheel_name={wheel.name} -f wheel_sha256={digest} "
-              f"-f token={token}")
+              f"-f token={token}" + (" -f census_stands=..." if census_args else ""))
         return token
     sys.path.insert(0, str(ROOT / "tools"))
     import bincache
@@ -66,10 +142,13 @@ def dispatch(wheel_dir, ref="", commit="", dry=False, days=2):
         raise SystemExit(f"verify smoke: R2 upload of {wheel.name} failed (HTTP {status})")
     url = bincache.presign("GET", key, int(days * 86400), creds)
     argv = ["gh", "workflow", "run", WORKFLOW, "--ref", ref, "-f", f"ref={commit}", "-f", f"wheel_url={url}",
-            "-f", f"wheel_name={wheel.name}", "-f", f"wheel_sha256={digest}", "-f", f"token={token}"]
+            "-f", f"wheel_name={wheel.name}", "-f", f"wheel_sha256={digest}", "-f", f"token={token}"] + census_args
     p = subprocess.run(argv, cwd=ROOT, capture_output=True, text=True)
     if p.returncode != 0:
         raise SystemExit(f"verify smoke: gh workflow run failed: {(p.stderr or p.stdout).strip()[-400:]}")
+    if run_census and record:
+        record_census(ref, dict(commit=commit, wheel=wheel.name, sha256=digest, inputs=inputs, token=token,
+                                made=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())))
     print(f"VERIFY-SMOKE dispatched {WORKFLOW} on --ref {ref} for {commit[:12]} ({wheel.name}); run-name "
           f"'verify-smoke {commit} {token}'; find it: gh run list --workflow {WORKFLOW} -L 5")
     return token
@@ -81,8 +160,12 @@ def main(argv=None):
     ap.add_argument("--ref", default="", help="pushed branch holding the workflow (default: this checkout's branch)")
     ap.add_argument("--commit", default="", help="the wheel's source commit (default: candidate.json)")
     ap.add_argument("--dry-run", action="store_true")
+    g = ap.add_mutually_exclusive_group()
+    g.add_argument("--census", dest="census", action="store_true", default=None,
+                   help="take the frames census even when nothing it reads changed")
+    g.add_argument("--no-census", dest="census", action="store_false", help="skip the frames census")
     a = ap.parse_args(argv)
-    dispatch(a.wheel_dir, a.ref, a.commit, a.dry_run)
+    dispatch(a.wheel_dir, a.ref, a.commit, a.dry_run, census=a.census)
     return 0
 
 

@@ -43,6 +43,10 @@ on:
         description: "a label the dispatcher finds its run by"
         required: false
         default: ""
+      census_stands:
+        description: "empty: the frames census runs; else the skip line naming the wheel whose census stands"
+        required: false
+        default: ""
 
 run-name: "verify-smoke ${{ inputs.ref }} ${{ inputs.token }}"
 
@@ -98,6 +102,7 @@ jobs:
           SOURCE_COMMIT: ${{ inputs.ref }}
           SOURCE_ROOT: ${{ github.workspace }}/source
           VENV: ${{ runner.temp }}/smoke-venv/venv
+          CENSUS_STANDS: ${{ inputs.census_stands }}
         run: |
           echo "runner: $(nproc) cores, $(grep -m1 'model name' /proc/cpuinfo | cut -d: -f2), $(free -g | awk '/Mem:/{print $2}') GiB"
           bash tooling/tools/ops/wheel_verify_smoke.sh "$RUNNER_TEMP/wheels" "$RUNNER_TEMP/smoke-out" > "$RUNNER_TEMP/smoke.log" 2>&1
