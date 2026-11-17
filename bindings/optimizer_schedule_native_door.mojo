@@ -116,6 +116,18 @@ def schedule_construct(owner: PythonObject, values: PythonObject, context: Pytho
     return PythonObject(None)
 
 
+def _schedule_arguments(owner: PythonObject, kind: Int) raises -> PythonObject:
+    """The constructor arguments the stored settings stand for, in
+    `schedule_construct`'s order for `kind`."""
+    var fields = py_fields(owner)
+    if kind < 3:
+        return Python.tuple(fields["peak_lr"], fields["warmup_steps"], fields["total_steps"], fields["min_lr"])
+    if kind < 5:
+        return Python.tuple(fields["base_lr"], fields["step_size"] if kind == 3 else PythonObject(1), fields["gamma"])
+    return Python.tuple(fields["max_lr"], fields["total_steps"], fields["pct_start"], fields["anneal_strategy"],
+                        fields["div_factor"], fields["final_div_factor"], fields["three_phase"])
+
+
 def _schedule_rebind(owner: PythonObject, name: PythonObject, context: PythonObject) raises:
     """After an edit or a deletion of attribute `name`: rebuild the native
     rate block from the stored settings, or drop the bound block methods when
@@ -126,7 +138,13 @@ def _schedule_rebind(owner: PythonObject, name: PythonObject, context: PythonObj
         return
     try:
         opt_schedule(owner, context)
-        schedule_bind_block(owner, schedule_kind(owner, context), context)
+        # fb6-smoke (2026-11-17): the edited settings go through the
+        # constructor's own unpack and pack (float32 rates, validated ints,
+        # StepLR's `_step`), then one bind, so an edited schedule is the
+        # schedule a fresh constructor call builds on every reader (lr_at,
+        # bits_at, lr_values, schedule_at, config, pickle). The raw stored
+        # double gave lr_values' warmup steps one ulp off a fresh schedule.
+        _ = schedule_construct(owner, _schedule_arguments(owner, schedule_kind(owner, context)), context)
     except:
         var edited = py_fields(owner)
         _ = edited.pop(PythonObject("lr_at"), PythonObject(None))
