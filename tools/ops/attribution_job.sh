@@ -43,6 +43,12 @@
 # (when the report part runs): 0 every row has its timing runs and a captured profile on every wheel; 6 a row lacks
 # a profile; 7 a row lacks a time; the per-row failures are the SUMMARY lines in job.log and ATTRIBUTION-<v>.md. ncu
 # (part C) never fails the job. Earlier exits: 2 refused to start, 3 wrong box, 4 no venv, 5 no plan, 124 terminated.
+# AT_MEM_NODE (near|far|<node>) and AT_MEM_THP (off) time the part-A runs under a chosen host-memory placement through
+# tools/ops/mem_state.py exec: the CPUs of the GPU's NUMA node, of another node, or of the named node (memory follows by
+# first touch), and/or no transparent huge pages. Unset: the runs are untouched. Part A logs the box's memory state
+# (mem_state.py snapshot: huge-page fault counters, free 2 MB blocks per node) before and after each timing run as
+# `MEM` lines. The run-to-run drift test is three submits of AT_PARTS=tools,plan,time,report with
+# AT_ROWS_FILE=tools/ops/drift_rows.tsv on three results dirs: neither knob, AT_MEM_NODE=far, AT_MEM_THP=off.
 # Knobs: AT_ROWS_FILE, AT_ARMS, AT_CALLS (20), AT_MANIFEST_DIR (the earlier paper job's job/ holding wheel-manifest-<arm>.json;
 # default: the newest sibling results dir that has one), AT_NCU_LAUNCHES (6), PC_CACHE_ROOT, PC_DATA_ROOT,
 # PC_GPU_TOKEN (L40S), PC_ALLOW_HW_DIFF. Results: time-<arm>/<row>/<run>/ (bench_board out), profile-<arm>/<row>.*
@@ -78,6 +84,10 @@ TOKEN=${PC_GPU_TOKEN:-L40S}
 CALLS=${AT_CALLS:-20}
 RECIPES="$TREE/bench/results/paper_compare/recipes-$V.json"
 ROWS_FILE=${AT_ROWS_FILE:-$TREE/tools/ops/attribution_rows.tsv}
+TIME_PREFIX=()      # part A under a chosen memory placement (AT_MEM_NODE, AT_MEM_THP); empty: untouched
+if [ -n "${AT_MEM_NODE:-}${AT_MEM_THP:-}" ]; then
+    TIME_PREFIX=("$PY" tools/ops/mem_state.py exec --node "${AT_MEM_NODE:-any}" --thp "${AT_MEM_THP:-on}" --)
+fi
 IFS=',' read -r -a ARMS <<< "${AT_ARMS:-candidate,prior-0.8.55}"
 PARTS=",${AT_PARTS:-tools,plan,time,profile,stats,kernels,report},"
 part() { [[ "$PARTS" == *",$1,"* ]]; }
@@ -267,12 +277,16 @@ runs_of() {   # kind: the plan lines of that kind for the wanted rows
 # ---- A: time (GPU, serial) --------------------------------------------------------------------------------------
 if part time; then
     phase time
+    say "time runs under: node ${AT_MEM_NODE:-any}, huge pages ${AT_MEM_THP:-on}"
     n=$(runs_of time | grep -c .)
     disk_gate time $(( n * ${#ARMS[@]} )) $(( n * ${#ARMS[@]} )) "${PC_EVIDENCE_MB_PER_RACE:-40}"
     rc=0
     while IFS=$'\t' read -r _ row rid ph own tag; do
         for arm in "${ARMS[@]}"; do      # the wheels back to back: same box, minutes apart
-            run_board "$arm" "$rid" "$ph" "$own" "$RES/time-$arm/$row/$tag" - < /dev/null; r=$?; [ $r -gt $rc ] && rc=$r
+            say "MEM before $arm $row: $($PY tools/ops/mem_state.py snapshot 2>&1 < /dev/null | head -c 900)"
+            run_board "$arm" "$rid" "$ph" "$own" "$RES/time-$arm/$row/$tag" - ${TIME_PREFIX[@]+"${TIME_PREFIX[@]}"} < /dev/null
+            r=$?; [ $r -gt $rc ] && rc=$r
+            say "MEM after $arm $row: $($PY tools/ops/mem_state.py snapshot 2>&1 < /dev/null | head -c 900)"
         done
     done < <(runs_of time)
     phase_end $rc
