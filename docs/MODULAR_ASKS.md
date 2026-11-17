@@ -448,5 +448,6 @@ def get_c(py_self: PyObjectPtr, args: Pointer[PyObjectPtr, MutUntrackedOrigin],
 with `METH_FASTCALL | METH_KEYWORDS`; ideally also have `def_method` with keyword support use it.
 
 **Meanwhile.** `lr_at` / `bits_at` use the supported `METH_VARARGS | METH_KEYWORDS` form
-(bindings/lr_schedule_block_door.mojo): one CPython tuple per call, no other per-call work of ours. Nothing has been
-sent to Modular.
+(bindings/lr_schedule_block_door.mojo): one CPython tuple per call, no other per-call work of ours. Sent to Modular
+on 2026-11-17 with Andrew's word: https://github.com/modular/modular/issues/7640 (checked first: not in 1.2.0 or
+upstream main, no existing issue; #6521 names it as not yet done).
