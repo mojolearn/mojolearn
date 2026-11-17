@@ -15,7 +15,7 @@ Refused by name (sequence/NOT_IMPLEMENTED.tsv): solver='lbfgs',
 early_stopping=True, warm_start, partial_fit, multilabel targets, verbose,
 float64 input."""
 from ._optional_numpy import require_numpy
-from ._mode import ClassifierScoreMixin, ParamsMixin, RegressorScoreMixin
+from ._mode import ParamsMixin
 np = require_numpy('_x_sequence_mlp')
 
 from . import _native_xseq_bridge
@@ -49,7 +49,7 @@ class _BaseMLP(ParamsMixin):
         return _FULL_RESET_INIT(self, (), {"hidden_layer_sizes": hidden_layer_sizes, "activation": activation, "solver": solver, "alpha": alpha, "batch_size": batch_size, "learning_rate": learning_rate, "learning_rate_init": learning_rate_init, "power_t": power_t, "max_iter": max_iter, "shuffle": shuffle, "random_state": random_state, "tol": tol, "verbose": verbose, "warm_start": warm_start, "momentum": momentum, "nesterovs_momentum": nesterovs_momentum, "early_stopping": early_stopping, "validation_fraction": validation_fraction, "beta_1": beta_1, "beta_2": beta_2, "epsilon": epsilon, "n_iter_no_change": n_iter_no_change, "max_fun": max_fun, "numeric_mode": numeric_mode}, _FULL_RESET_CONTEXT, type(self))
 
 
-class MLPRegressor(RegressorScoreMixin, _BaseMLP):
+class MLPRegressor(_BaseMLP):
     """Multi-layer perceptron regressor, as scikit-learn's `MLPRegressor`.
 
     Minimizes half the mean squared error plus an L2 penalty, with an identity output
@@ -179,7 +179,7 @@ class MLPRegressor(RegressorScoreMixin, _BaseMLP):
         return _XSEQ(self, "mlp_score", (X, y, sample_weight), _XSEQ_CONTEXT)
 
 
-class MLPClassifier(ClassifierScoreMixin, _BaseMLP):
+class MLPClassifier(_BaseMLP):
     """Multi-layer perceptron classifier, as scikit-learn's `MLPClassifier`.
 
     Minimizes the log loss plus an L2 penalty, with a logistic output for two classes

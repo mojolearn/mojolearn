@@ -17,7 +17,6 @@ cover. Every search is exact, never approximate.
 from . import _mojolearn, _native_archive_bridge, _native_family_bridge
 from ._mode import NumericModeMixin as _NumericModeMixin
 from ._native_neighbor_queries import native_method as _native_query_method
-from ._mode import ClassifierScoreMixin, RegressorScoreMixin
 
 #: the x_neighbors binding, which holds the p2m_* ops the data loops below
 #: run through (lane apple-fast-py2mojo-neighbors)
@@ -370,7 +369,7 @@ class NearestNeighbors(_NumericModeMixin):
 # - classes_: the pyx's `cp.unique`; `_labels.sorted_classes`, DEVIATION
 #   2340 (a list rather than an ndarray). The Mojo side recomputes the set
 #   with `getUniquelabels` and `predict` asserts the two agree.
-class KNeighborsClassifier(ClassifierScoreMixin, NearestNeighbors):
+class KNeighborsClassifier(NearestNeighbors):
     """Classifier that votes among the k nearest training points.
 
     For each query, the classes of its `n_neighbors` nearest training points
@@ -596,7 +595,7 @@ class KNeighborsClassifier(ClassifierScoreMixin, NearestNeighbors):
 # in both numeric modes, with the seams flushed under NUMERIC_IDENTICAL
 # (DEVIATION 542). weights='distance' is DEVIATION 556. float64 targets are
 # cast to float32 as cuML does (convert_to_dtype=np.float32).
-class KNeighborsRegressor(RegressorScoreMixin, NearestNeighbors):
+class KNeighborsRegressor(NearestNeighbors):
     """Regressor that averages the targets of the k nearest training points.
 
     Each prediction is the mean of the `n_neighbors` nearest targets, or with

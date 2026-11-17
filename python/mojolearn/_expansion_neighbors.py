@@ -31,7 +31,6 @@ from ._array import Array
 from ._buffer import addr, addr_ro, empty, zeros
 from ._lazy_out import _empty_out
 from ._mode import NumericModeMixin, available_if
-from ._mode import RegressorScoreMixin
 from . import _native_family_bridge
 from ._native_robust_bridge import native_method as _native_local_method
 
@@ -2004,7 +2003,7 @@ class Louvain(_XNeighbors):
 # as staged items (x_neighbors/items.mojo `svgp_*_item`: a Cholesky column
 # per launch, one triangular solve per right-hand side); the fit is the
 # float-float resident chain `xn_svgp_fit_ff` (x_neighbors/svgp_ff.mojo).
-class SVGP(RegressorScoreMixin, _XNeighbors):
+class SVGP(_XNeighbors):
     """Sparse variational Gaussian process regression with inducing points.
 
     A Gaussian process regressor with a Gaussian likelihood, a

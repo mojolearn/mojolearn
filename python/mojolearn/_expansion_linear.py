@@ -23,7 +23,6 @@ flat float32 result. NumPy-free (NUMPY_FREE_CONTRACT.md).
 """
 from . import _backend
 from ._mode import NumericModeMixin, available_if
-from ._mode import RegressorScoreMixin
 from ._native_params_setter import NativeParamsSetter
 
 __all__ = ["SGDClassifier", "SGDRegressor", "PoissonRegressor", "GammaRegressor", "TweedieRegressor",
@@ -2357,7 +2356,7 @@ class LogisticRegressionCV(_LinearClassifierMixin, NumericModeMixin):
 # kernel x_linear/isotonic.mojo (sequential PAVA; interp1d-linear predict).
 
 
-class IsotonicRegression(RegressorScoreMixin, NumericModeMixin):
+class IsotonicRegression(NumericModeMixin):
     """Isotonic regression: the best monotone fit of one feature.
 
     Follows scikit-learn's IsotonicRegression: fits a non-decreasing (or

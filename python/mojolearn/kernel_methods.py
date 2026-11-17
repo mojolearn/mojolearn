@@ -39,7 +39,6 @@ transforms from a saved model on a CPU without a GPU.
 from . import _native_archive_bridge, _native_family_bridge
 from ._mode import NumericModeMixin as _NumericModeMixin
 from ._native_robust_bridge import native_method as _native_method
-from ._mode import RegressorScoreMixin
 
 #: The saved-model formats (lane/inference-linear-svm, 2026-09-15):
 #: `mojolearn.host_model(path)` predicts or transforms from each on a CPU.
@@ -108,7 +107,7 @@ class _KernelMethodBase(_NumericModeMixin):
 # non-positive gamma are refused on the Mojo host. The cosine and chi2 kernels
 # are each cell one pinned chain. `info_` is LAPACK's info from the
 # factorization.
-class KernelRidge(RegressorScoreMixin, _KernelMethodBase):
+class KernelRidge(_KernelMethodBase):
     """Kernel ridge regression.
 
     Follows `sklearn.kernel_ridge.KernelRidge` (and cuML's). Fitting forms

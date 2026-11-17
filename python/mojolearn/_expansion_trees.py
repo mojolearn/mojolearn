@@ -31,7 +31,7 @@ from . import _mojolearn_rf, _mojolearn_x_trees  # noqa: F401  the bindings this
 from ._array import Array
 from ._mode import NumericModeMixin, available_if
 from ._class_weights import _trees_x_bind  # noqa: F401  re-exported: callers import it from this door
-from ._mode import ClassifierScoreMixin, RegressorScoreMixin, _connect_native_init
+from ._mode import _connect_native_init
 from ._forest_protocol import forest_estimator
 from .extratrees import ExtraTreesRegressor, ExtraTreesClassifier as _ET_CLS
 from .randomforest import (
@@ -562,7 +562,7 @@ class _BoostRegressorScore:
         return _TREES(self, _OP.trees_public_boost_score, (X, y, sample_weight), _TREES_CONTEXT)
 
 
-class BaggingClassifier(ClassifierScoreMixin, _BaggingBase):
+class BaggingClassifier(_BaggingBase):
     """A bagging ensemble of classifiers.
 
     Follows scikit-learn's ``BaggingClassifier``: each member is fitted on a
@@ -683,7 +683,7 @@ class BaggingClassifier(ClassifierScoreMixin, _BaggingBase):
         """Predict the class with the highest mean probability."""
         return _TREES(self, _OP.trees_public_boost_predict, (X,), _TREES_CONTEXT)
 
-class BaggingRegressor(RegressorScoreMixin, _BaggingBase):
+class BaggingRegressor(_BaggingBase):
     """A bagging ensemble of regressors.
 
     Follows scikit-learn's ``BaggingRegressor``: each member is fitted on a
@@ -807,7 +807,7 @@ class _AdaBoostBase(_TreesEnsembleBase):
         self.learning_rate = learning_rate
         self.random_state = random_state
 
-class AdaBoostClassifier(ClassifierScoreMixin, _AdaBoostBase):
+class AdaBoostClassifier(_AdaBoostBase):
     """An AdaBoost classifier (SAMME).
 
     Follows scikit-learn's ``AdaBoostClassifier`` with the SAMME algorithm:
@@ -921,7 +921,7 @@ class AdaBoostClassifier(ClassifierScoreMixin, _AdaBoostBase):
         """Predict the class with the highest weighted vote."""
         return _TREES(self, _OP.trees_public_boost_predict, (X,), _TREES_CONTEXT)
 
-class AdaBoostRegressor(RegressorScoreMixin, _AdaBoostBase):
+class AdaBoostRegressor(_AdaBoostBase):
     """An AdaBoost regressor (AdaBoost.R2).
 
     Follows scikit-learn's ``AdaBoostRegressor``: each member is fitted on a
@@ -1048,7 +1048,7 @@ class _DARTBase(_TreesEnsembleBase):
     # one gathered sum per row (the docstring of dart_device.mojo).
     _DART_VALUES_CAP = 1 << 26
 
-class DARTRegressor(RegressorScoreMixin, _DARTBase):
+class DARTRegressor(_DARTBase):
     """Gradient boosting with DART dropout, squared-error loss.
 
     Follows LightGBM's ``boosting="dart"`` with the L2 objective: in each
@@ -1165,7 +1165,7 @@ class DARTRegressor(RegressorScoreMixin, _DARTBase):
         """Raw boosted score of each row, float64."""
         return _TREES(self, _OP.trees_public_boost_predict, (X,), _TREES_CONTEXT)
 
-class DARTClassifier(ClassifierScoreMixin, _DARTBase):
+class DARTClassifier(_DARTBase):
     """Gradient boosting with DART dropout, classification.
 
     Follows LightGBM's ``boosting="dart"``: binary log loss for two classes,
@@ -1532,7 +1532,7 @@ class _TreesWrapperBase(_TreesEnsembleBase):
 # 'soft' = weighted np.average of predict_proba --, VotingRegressor :500 --
 # weighted np.average of predict). Members are cloned, never refitted in
 # place; n_jobs and verbose are refused by name.
-class VotingClassifier(_MetaClassifierScore, ClassifierScoreMixin, _FitTransformMixin, _TreesWrapperBase):
+class VotingClassifier(_MetaClassifierScore, _FitTransformMixin, _TreesWrapperBase):
     """Combine classifiers by a weighted majority vote or averaged probabilities.
 
     Follows scikit-learn's ``VotingClassifier``. ``fit`` clones every estimator
@@ -1655,7 +1655,7 @@ class VotingClassifier(_MetaClassifierScore, ClassifierScoreMixin, _FitTransform
         return _TREES(self, _OP.trees_public_meta_transform, (X,), _TREES_CONTEXT)
 
 
-class VotingRegressor(_MetaRegressorScore, RegressorScoreMixin, _FitTransformMixin, _TreesWrapperBase):
+class VotingRegressor(_MetaRegressorScore, _FitTransformMixin, _TreesWrapperBase):
     """Average the predictions of several regressors.
 
     Follows scikit-learn's ``VotingRegressor``. ``fit`` clones every estimator
@@ -1783,7 +1783,7 @@ class _StackingBase(_FitTransformMixin, _TreesWrapperBase):
         return _TREES(self, _OP.trees_public_meta_transform, (X,), _TREES_CONTEXT)
 
 
-class StackingClassifier(_MetaClassifierScore, ClassifierScoreMixin, _StackingBase):
+class StackingClassifier(_MetaClassifierScore, _StackingBase):
     """Stack classifiers and train a final classifier on their cross-validated outputs.
 
     Follows scikit-learn's ``StackingClassifier``. ``fit`` refits every member on
@@ -1899,7 +1899,7 @@ class StackingClassifier(_MetaClassifierScore, ClassifierScoreMixin, _StackingBa
         return _TREES(self, _OP.trees_public_meta_predict_proba, (X,), _TREES_CONTEXT)
 
 
-class StackingRegressor(_MetaRegressorScore, RegressorScoreMixin, _StackingBase):
+class StackingRegressor(_MetaRegressorScore, _StackingBase):
     """Stack regressors and train a final regressor on their cross-validated outputs.
 
     Follows scikit-learn's ``StackingRegressor``. ``fit`` refits every member on
@@ -2001,7 +2001,7 @@ class StackingRegressor(_MetaRegressorScore, RegressorScoreMixin, _StackingBase)
 #: (glm/impl/ridge_multi.mojo) when the estimators binding publishes the
 #: ridge multi table (core/linear_entry_table_multi.mojo); the native owner takes that route (trees_public_meta.mojo
 #: `_multioutput_ridge_fit`), every other binding the per-target route.
-class MultiOutputRegressor(_MetaRegressorScore, RegressorScoreMixin, _TreesWrapperBase):
+class MultiOutputRegressor(_MetaRegressorScore, _TreesWrapperBase):
     """Fit one regressor per target column.
 
     Follows scikit-learn's ``MultiOutputRegressor``: ``fit`` clones
@@ -2186,7 +2186,7 @@ class MultiOutputClassifier(_TreesWrapperBase):
 # predict_proba :470 each class's positive probability, rows normalised in
 # the multiclass case). DEVIATION: a row whose scores sum to 0 is uniform,
 # where sklearn divides 0 / 0.
-class OneVsRestClassifier(_MetaClassifierScore, ClassifierScoreMixin, _TreesWrapperBase):
+class OneVsRestClassifier(_MetaClassifierScore, _TreesWrapperBase):
     """Multiclass classification with one binary classifier per class.
 
     Follows scikit-learn's ``OneVsRestClassifier``: ``fit`` trains one clone of
@@ -2297,7 +2297,7 @@ class OneVsRestClassifier(_MetaClassifierScore, ClassifierScoreMixin, _TreesWrap
 #: family's Python program builder; the native owner takes the reference
 #: route (bindings/trees_public_meta_door.mojo, header note).
 
-class CalibratedClassifierCV(_MetaClassifierScore, ClassifierScoreMixin, _TreesWrapperBase):
+class CalibratedClassifierCV(_MetaClassifierScore, _TreesWrapperBase):
     """Calibrate a classifier's probabilities with cross-validation.
 
     Follows scikit-learn's ``CalibratedClassifierCV``. The calibrator reads the
