@@ -1504,9 +1504,13 @@ def _rp_blocks(value: PythonObject, series: Bool) raises -> PythonObject:
         blocks = _pd_get("pandas._libs.internals", "BlockManager", "blocks", manager)
     if py_type(blocks) is not py_type(Python.tuple()) or (series and len(blocks) != 1):
         raise Error("ValueError: pandas block metadata is invalid")
+    # pandas >= 2.0 `get_block_type` stores a PeriodDtype column in an exact
+    # NDArrayBackedExtensionBlock (the DatetimeLikeBlock base), not an
+    # ExtensionBlock; admit that exact class too. The values it holds are a
+    # PeriodArray, read below by its NDArrayBacked descriptors only.
     for i in range(len(blocks)):  # driver-loop: admit exact native block classes before descriptor reads
         var cls = py_type(blocks[i])
-        if cls is not _pd_class("pandas.core.internals.blocks", "NumpyBlock") and cls is not _pd_class("pandas.core.internals.blocks", "NumericBlock") and cls is not _pd_class("pandas.core.internals.blocks", "ObjectBlock") and cls is not _pd_class("pandas.core.internals.blocks", "ExtensionBlock") and cls is not _pd_class("pandas.core.internals.blocks", "DatetimeLikeBlock") and cls is not _pd_class("pandas.core.internals.blocks", "DatetimeTZBlock"):
+        if cls is not _pd_class("pandas.core.internals.blocks", "NumpyBlock") and cls is not _pd_class("pandas.core.internals.blocks", "NumericBlock") and cls is not _pd_class("pandas.core.internals.blocks", "ObjectBlock") and cls is not _pd_class("pandas.core.internals.blocks", "ExtensionBlock") and cls is not _pd_class("pandas.core.internals.blocks", "NDArrayBackedExtensionBlock") and cls is not _pd_class("pandas.core.internals.blocks", "DatetimeLikeBlock") and cls is not _pd_class("pandas.core.internals.blocks", "DatetimeTZBlock"):
             raise Error("TypeError: pandas resample cannot invoke block subclass hooks")
     return blocks
 
