@@ -139,11 +139,6 @@ def host_compat_suffix() raises -> PythonObject:
 def host_compat_shape_profile(shape: PythonObject) raises -> PythonObject:
     return PythonObject(_config(_shape(shape)).profile())
 
-
-def host_compat_sha(data: PythonObject) raises -> PythonObject:
-    return sha256_hexdigest(data)
-
-
 def host_compat_file_sha(path: PythonObject) raises -> PythonObject:
     return PythonObject(sha256_file(String(py=native_path(path))))
 
@@ -283,7 +278,6 @@ def register(mut module: PythonModuleBuilder) raises:
     module.def_function[host_compat_profile]("byte_lm_profile")
     module.def_function[host_compat_suffix]("byte_lm_arithmetic_suffix")
     module.def_function[host_compat_shape_profile]("byte_lm_config_profile")
-    module.def_function[host_compat_sha]("sha256_hex")
     module.def_function[host_compat_file_sha]("byte_lm_file_sha256")
     module.def_function[host_compat_run_default]("byte_lm_run")
     module.def_function[host_compat_run_configured]("byte_lm_run_configured")

@@ -1633,7 +1633,7 @@ FAMILIES = (
             "byte_lm_trainer_api_v1", "byte_lm_native_session_handle_v1",
             "byte_lm_session_create", "byte_lm_session_close", "byte_lm_session_info",
             "byte_lm_numeric_mode", "byte_lm_vendor", "byte_lm_profile", "byte_lm_arithmetic_suffix",
-            "byte_lm_config_profile", "sha256_hex", "byte_lm_file_sha256",
+            "byte_lm_config_profile", "byte_lm_file_sha256",
             "byte_lm_run", "byte_lm_run_configured", "byte_lm_trainer_run", "byte_lm_logits",
             "byte_lm_trainer_step", "byte_lm_trainer_logits", "byte_lm_trainer_next_bytes",
             "byte_lm_trainer_export_state", "byte_lm_trainer_export_gradients",

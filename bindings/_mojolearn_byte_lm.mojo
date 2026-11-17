@@ -736,12 +736,6 @@ def byte_lm_trainer_run_binding(addresses: PythonObject, named: PythonObject,
         byte_scatter_named(Int(py=addresses[8]), named_addr, cfg)
     return result
 
-
-def sha256_hex_binding(value: PythonObject) raises -> PythonObject:
-    """hashlib.sha256(value).hexdigest() for a bytes-like value, by the Mojo SHA-256."""
-    return sha256_hexdigest(value)
-
-
 def byte_lm_file_sha256_binding(path: PythonObject) raises -> PythonObject:
     """The SHA-256 of the file at `path`, streamed by `byte_file_sha256`."""
     var name = String(py=path)
@@ -1072,7 +1066,6 @@ def build__mojolearn_byte_lm() -> PythonObject:
         module.def_function[byte_lm_trainer_logits_binding]("byte_lm_trainer_logits")
         module.def_function[byte_lm_trainer_next_bytes_binding]("byte_lm_trainer_next_bytes")
         module.def_function[byte_lm_trainer_run_binding]("byte_lm_trainer_run")
-        module.def_function[sha256_hex_binding]("sha256_hex")
         module.def_function[byte_lm_file_sha256_binding]("byte_lm_file_sha256")
         module.def_function[byte_lm_session_rollback_binding]("byte_lm_session_rollback")
         module.def_function[byte_lm_session_info_binding]("byte_lm_session_info")
