@@ -20,6 +20,7 @@ from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_setatt
 from bindings.admitted_input_unpack import admit_ids
 from bindings.classical_attributes_door import classical_connect_numpy
 from bindings.classical_arrays_door import classical_address, classical_wrap_array, classical_typed
+from bindings.native_array_storage_door import native_array_unfilled
 from bindings.admitted_input_unpack import admit_x
 from bindings.host_sparse_native_door import host_sparse_format
 from bindings.classical_validate_unpack import classical_view
@@ -114,11 +115,22 @@ def randomized_svd_call(args: PythonObject, context: PythonObject) raises -> Pyt
 
 
 def _typed(shape: PythonObject, typestr: String, code: String, item: Int, context: PythonObject) raises -> PythonObject:
+    # Every caller hands this Array to one native writer that writes every
+    # item before anything reads it (the device LU's factor, pivot and info
+    # downloads, the resident solve's X download, the pivot memcpy), or
+    # raises and drops it; a zero-item Array has nothing to write.
+    # Lane fb3-band (2026-11-17): the store is unfilled. It was
+    # array(code, bytes(count * item)): a zero-filled bytes object (one pass
+    # and its page faults) copied into a second allocation (another pass and
+    # its faults) before the download overwrote all of it, where 0.8.55's
+    # `_empty` cost neither; lu_factor on an 8192 x 8192 system (268 MB of
+    # factor) went 381 -> 465 ms on the L40S full board. The cost is per
+    # output byte, so it holds at every n (4096 and 16384 the same way).
     var output = context["output_context"]
     var count = 1
     for k in range(len(shape)):  # driver-loop: over array rank metadata
         count *= Int(py=shape[k])
-    var store = py_call(output["array_type"], PythonObject(code), py_call(output["native_bytes_type"], count * item))
+    var store = native_array_unfilled(code, count)
     return classical_wrap_array(store, shape, typestr, "C", output)
 
 
