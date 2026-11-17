@@ -15,6 +15,7 @@ from bindings.optimizer_public_words_unpack import PYTHON_ERROR_PENDING, optimiz
 from bindings.native_error_class import error_without_class
 from bindings.py_balanced import py_type
 from bindings.py_typed_call import typed_python_error
+from bindings.py_cpython_table import cpython_table
 from bindings.classical_attributes_door import classical_connect_numpy
 from providers.python.jl_scalar_pyapi_unpack import jl_scalar
 from x_decomp.jl_run import _cube_rounded, _pinned_log
@@ -26,8 +27,19 @@ def jl_min_dim(n_samples: PythonObject, eps: PythonObject, context: PythonObject
     var n = jl_scalar(n_samples, False, context)
     var denominator = (e * e) / 2.0 - _cube_rounded(e) / 3.0
     var bound = 4.0 * _pinned_log(n) / denominator
-    ref cpy = Python().cpython()
-    var result = cpy.lib.get_function[PyObjectPtr]("PyLong_FromDouble")(bound)
+    # Perf (lane fb-rest, 2026-11-17; algos/jl-min-dim 1.9x vs 0.8.55, one
+    # scalar call per point): a finite bound inside the int64 range is
+    # published through the import-resolved table's PyLong_FromLongLong; the
+    # Int64 conversion truncates toward zero as PyLong_FromDouble does, so
+    # the same integer. Before: a symbol lookup (dlsym) of PyLong_FromDouble
+    # on every call. NaN, infinity and larger bounds keep PyLong_FromDouble
+    # (its own OverflowError/ValueError).
+    var result: PyObjectPtr
+    if bound > -9.0e18 and bound < 9.0e18:
+        result = cpython_table()[].PyLong_FromLongLong(Int64(bound))
+    else:
+        ref cpy = Python().cpython()
+        result = cpy.lib.get_function[PyObjectPtr]("PyLong_FromDouble")(bound)
     if not result:
         raise typed_python_error()
     return PythonObject(from_owned=result)
