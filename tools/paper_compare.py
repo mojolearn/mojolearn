@@ -32,7 +32,7 @@ board. This tool:
   left     --ids FILE --board BOARD.json
         ON THE BOX: how many of the ids are not yet done in the board (the disk gate of a resumed board).
   compare  --recipes JSON --board BOARD.json... [--prior-board VERSION=BOARD.json ...] [--reference-compare JSON]
-           [--best-ever [FILE]] [--out-md MD] [--out-json JSON] [--summary TXT]
+           [--stored-baseline-board BOARD.json] [--best-ever [FILE]] [--out-md MD] [--out-json JSON] [--summary TXT]
         the new board against OUR prior wheels re-timed in the same job on the same box, per recipe: ms of each,
         ratios, quality, the flags below, and the stored columns (the paper record, a stored compare, the stored
         opponents, the best ever) as reference only. Prints a one-screen summary with both arms' host probes.
@@ -51,6 +51,13 @@ restart or a driver update between the arms, or a field not recorded) every row 
 first line says why. The stored paper record (old_ms in the recipes: ref_ms here), a
 stored compare JSON (--reference-compare: ref_prior_ms), the paper's opponent cells and the best-ever file are
 shown with their host and never make a flag.
+STORED BASELINE (Andrew, 2026-11-17, AGENTS.md part 8: "0.8.55 is not timed again"): --stored-baseline-board takes
+the 2026-11-17 L40S board of 0.8.55 as the baseline of a job that times our new wheel only. The verdict flags are
+derived from it; the summary's and the report's first line says the baseline is stored and names its host, GPU,
+driver, kernel and date beside this job's; a different host or driver is a WARNING line, not the refusal above (which
+stays for the two-arm modes). BOX-STATE: a row whose in-race upload probe (the harness's separate upload,
+upload_bytes_separate / upload_ms_separate of the race, else the median of its dataset) differs from the stored run's
+by more than 15% has its REGRESSION / FASTER / SAME replaced by BOX-STATE: the ratio is shown, not counted.
 
 FLAGS (per recipe; a recipe can carry several)
   REGRESSION     new / baseline median_ms > 1.10 (slower)     FASTER   new / baseline < 0.90
@@ -1086,13 +1093,18 @@ def stored_baseline_basis(version, stored, boards):
     return basis, warn
 
 
+#: the dataset fallback reads only uploads this large (bandwidth-bound, not latency-bound), so a targeted job's few
+#: races and the stored board's many give comparable medians
+LARGE_UPLOAD_BYTES = 16 * 1000 * 1000
+
+
 def upload_probe(cell):
-    """(ms, GB/s) of a cell's in-race separate upload probe (the harness's own, outside the clock:
+    """(ms, GB/s, bytes) of a cell's in-race separate upload probe (the harness's own, outside the clock:
     comparability.span upload_ms_separate over upload_bytes_separate), or None."""
     span = ((cell or {}).get("comparability") or {}).get("span") or {}
     ms, nb = span.get("upload_ms_separate"), span.get("upload_bytes_separate")
     if number(ms) and ms > 0 and number(nb) and nb > 0:
-        return ms, nb / ms / 1e6
+        return ms, nb / ms / 1e6, nb
     return None
 
 
@@ -1107,11 +1119,12 @@ def race_probe(race):
 
 
 def dataset_probes(races):
-    """{dataset: median GB/s} of every race probe in RACES: the fallback for a race that has none of its own."""
+    """{dataset: median GB/s} of the race probes in RACES of at least LARGE_UPLOAD_BYTES: the fallback for a race
+    that has none of its own."""
     by = {}
     for r in (races or {}).values():
         p = race_probe(r) if isinstance(r, dict) else None
-        if p:
+        if p and p[2] >= LARGE_UPLOAD_BYTES:
             by.setdefault(r.get("dataset"), []).append(p[1])
     return {d: sorted(v)[len(v) // 2] for d, v in by.items()}
 
@@ -1671,7 +1684,10 @@ def cmd_compare(args):
     if args.best_ever:
         best = BE.load(os.path.join(REPO, "bench", "results", "board_best_ever", "%s.json" % doc["vendor"])
                        if args.best_ever == "auto" else args.best_ever)
-    res = compare(doc, boards, why, priors, ref, rlabel, best)
+    stored = None
+    if args.stored_baseline_board:
+        stored = load_json(args.stored_baseline_board)     # unreadable: the compare fails (no silent NOT-RUN column)
+    res = compare(doc, boards, why, priors, ref, rlabel, best, stored)
     v = doc["vendor"]
     md = args.out_md or os.path.join(OUT_DIR, "COMPARE-%s.md" % v)
     js = args.out_json or os.path.join(os.path.dirname(os.path.abspath(md)), "compare-%s.json" % v)
@@ -1724,6 +1740,11 @@ def build_parser():
                    help="the best-ever column (tools/board_best_ever.py mine; no FILE: "
                         "bench/results/board_best_ever/<vendor>.json): BEST-EVER-REGRESSION, PARAMS-DIFFER, and a "
                         "row for every new cell outside the recipes")
+    c.add_argument("--stored-baseline-board", default=None, metavar="BOARD.json",
+                   help="a STORED board of the paper's version from another job (the 2026-11-17 direction: 0.8.55 is "
+                        "not timed again): the baseline in place of an on-box --prior-board; host and driver "
+                        "differences are WARNING lines, and a row whose in-race upload probe moved more than 15%% "
+                        "from the stored run's is BOX-STATE")
     c.add_argument("--out-md", default=None)
     c.add_argument("--out-json", default=None)
     c.add_argument("--summary", default=None)

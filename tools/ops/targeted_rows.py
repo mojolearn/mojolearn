@@ -742,27 +742,46 @@ def _done(board_path, ids):
 
 
 def summary(doc, rows, results, ids, units=(), prior_versions=None):
-    """The SUMMARY-TG text (module docstring)."""
+    """The SUMMARY-TG text (module docstring). Against a stored baseline (tools/paper_compare.py
+    --stored-baseline-board) its first line is the compare's own: the baseline is stored, with both sides' host, GPU,
+    driver, kernel and date; BOX-STATE rows (the upload probe moved) are counted apart and never as a verdict."""
     import measure_owed as MO
     want = {r["id"] for r in rows}
     input_ratio = {r["id"]: r.get("input_ratio") for r in rows}
+    control = {r["id"] for r in rows if "control" in r.get("reasons", [])}
     pv = doc.get("paper_version") or PC.PAPER_VERSION
-    lines = ["TARGETED vendor=%s %s -> %s rows=%d (%s)" % (doc.get("vendor"), pv, doc.get("new_label"), len(rows),
-                                                          doc.get("verdict_basis") or "no verdict")]
-    counts, over, now = {}, [], {}
-    for rid, ratio, r, _kind in compare_rows(doc):
+    stored = bool(doc.get("baseline_stored"))
+    lines = []
+    if stored:
+        lines += [doc.get("verdict_basis") or "STORED BASELINE"] + list(doc.get("baseline_warnings") or [])
+    lines.append("TARGETED vendor=%s %s -> %s rows=%d (%s)" % (
+        doc.get("vendor"), pv, doc.get("new_label"), len(rows),
+        "baseline stored, our new wheel timed alone" if stored else (doc.get("verdict_basis") or "no verdict")))
+    counts, over, now, box, slower_ctrl, seen = {}, [], {}, [], [], set()
+    for rid, _ratio, r, kind in compare_rows(doc):
         if rid not in want:
             continue
-        flags = [f for f in r.get("flags") or [] if f in ("FASTER", "SAME", "REGRESSION")]
+        flags = [f for f in r.get("flags") or [] if f in ("FASTER", "SAME", "REGRESSION", "BOX-STATE")]
+        ratio = r.get("ratio") if kind == "recipe" else ((r.get("priors") or {}).get(pv) or {}).get("ratio")
         if ratio is None or not flags:
             continue
         counts[flags[0]] = counts.get(flags[0], 0) + 1
+        old = r.get("old_ms") if kind == "recipe" else ((r.get("priors") or {}).get(pv) or {}).get("ms")
+        if flags[0] == "BOX-STATE":
+            box.append((ratio, r.get("key") or rid, r.get("upload_probe")))
+            seen.add(rid)
+            continue
         now[rid] = max(now.get(rid, ratio), ratio)
+        seen.add(rid)
         if ratio > PC.SLOWER:
-            over.append((ratio, r.get("key") or rid, r.get("new_ms"),
-                         r.get("old_ms") if "old_ms" in r else ((r.get("priors") or {}).get(pv) or {}).get("ms")))
-    lines.append("timed both=%d FASTER=%d SAME=%d REGRESSION=%d (rows of %d races)" % (
-        sum(counts.values()), counts.get("FASTER", 0), counts.get("SAME", 0), counts.get("REGRESSION", 0), len(now)))
+            over.append((ratio, r.get("key") or rid, r.get("new_ms"), old))
+            if rid in control:
+                slower_ctrl.append((ratio, r.get("key") or rid))
+    lines.append("timed=%d FASTER=%d SAME=%d REGRESSION=%d BOX-STATE=%d (rows of %d races; BOX-STATE: the in-race "
+                 "upload probe moved more than %d%% from the stored run's, ratio shown, not counted)" % (
+                     sum(counts.values()), counts.get("FASTER", 0), counts.get("SAME", 0),
+                     counts.get("REGRESSION", 0), counts.get("BOX-STATE", 0), len(seen),
+                     round(100 * PC.BOX_STATE_TOLERANCE)))
     lines.append("still over %.2f (%d), worst first:" % (PC.SLOWER, len(over)))
     for ratio, key, new, old in sorted(over, key=lambda x: -x[0]):
         lines.append("  %.2fx %s (%s -> %s ms)" % (ratio, key, PC.fmt_ms(old), PC.fmt_ms(new)))
@@ -770,24 +789,44 @@ def summary(doc, rows, results, ids, units=(), prior_versions=None):
                    and now.get(rid) is not None and now[rid] <= 1.0)
     lines.append("fixed (over %.2f in the input compare, now at or under 1.00): %d" % (PC.SLOWER, len(fixed)))
     lines += ["  %s (%.2fx -> %.2fx)" % (rid, input_ratio[rid], now[rid]) for rid in fixed]
+    if control:
+        lines.append("control rows that got slower (over %.2f): %d of %d control races" % (
+            PC.SLOWER, len(slower_ctrl), len(control)))
+        lines += ["  %.2fx %s" % x for x in sorted(slower_ctrl, reverse=True)]
+    if box:
+        lines.append("BOX-STATE rows (%d), ratio not counted:" % len(box))
+        lines += ["  %.2fx %s; probe %s" % (ratio, key, PC.probe_text(p)) for ratio, key, p in sorted(box, reverse=True)]
     lines.append("done/total candidate %d/%d" % (_done(os.path.join(results, "board-tg", "board.json"), ids), len(ids)))
-    for v in prior_versions or [pv]:
+    if stored:
+        lines.append("%s: stored, not timed in this job" % pv)
+    for v in ([] if stored else (prior_versions or [pv])):
         pid = os.path.join(results, "plan-tg", "prior-%s" % v, "race-ids-pass.txt")
         lines.append("done/total %s %d/%d (of the listed races; %s passed its own smoke)" % (
             v, _done(os.path.join(results, "board-tg-prior-%s" % v, "board.json"), ids), len(ids),
             sum(1 for _ in open(pid)) if os.path.isfile(pid) else "?"))
+    table, detail = [], []
     for arm, rows_tag, uids in units:
         base = MO.load_board(os.path.join(results, "board-tg-ab-%s-base-%s" % (arm, rows_tag), "board.json"))
         brd = MO.load_board(os.path.join(results, "board-tg-ab-%s-%s" % (arm, rows_tag), "board.json"))
+        ratios = []
         for rid in uids:
             bc = MO.our_cells(((base or {}).get("races") or {}).get(rid) or {})
             ac = MO.our_cells(((brd or {}).get("races") or {}).get(rid) or {})
             for k in sorted(set(bc) | set(ac), key=str):
                 b, x = MO.cell_ms(bc.get(k)), MO.cell_ms(ac.get(k))
                 r = x / b if b and x else None
-                lines.append("AB %s rows=%s %s %s %s: base %s -> arm %s ms ratio %s%s" % (
+                if r is not None:
+                    ratios.append(r)
+                detail.append("AB %s rows=%s %s %s %s: base %s -> arm %s ms ratio %s%s" % (
                     arm, rows_tag, rid, k[0], k[1], PC.fmt_ms(b), PC.fmt_ms(x), PC.fmt_ratio(r),
                     "" if r is None else " " + MO.verdict(r, "FASTER", "SLOWER", "SAME")))
+        med = statistics.median(ratios) if ratios else None
+        table.append("  %-34s rows=%-6s races=%-3d cells=%-3d median arm/base %s %s" % (
+            arm, rows_tag, len(uids), len(ratios), PC.fmt_ratio(med),
+            "-" if med is None else MO.verdict(med, "FASTER", "SLOWER", "SAME")))
+    if table:
+        lines.append("A/B (arm and its base, the candidate, back to back):")
+        lines += table + detail
     return "\n".join(lines) + "\n"
 
 
