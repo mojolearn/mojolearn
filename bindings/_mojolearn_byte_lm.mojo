@@ -792,28 +792,6 @@ def byte_lm_parallel_export_binding(session: PythonObject, addresses: PythonObje
 def byte_lm_pool_fault_available_binding() raises -> PythonObject:
     return PythonObject(pool_fault_available())
 
-
-def byte_lm_parallel_ownership_binding(session: PythonObject) raises -> PythonObject:
-    var owner = session.downcast_value_ptr[ByteParallelTrainer]()
-    owner[].require_open()
-    var out = Python.list()
-    for i in range(len(owner[].trainers)):  # driver-loop: over trainers: one trainer per replica device: reports per replica ranges, no data
-        ref b = owner[].trainers[i].buffers
-        var row = Python.list()
-        row.append(PythonObject(b.optimizer_first))
-        row.append(PythonObject(b.optimizer_count))
-        row.append(PythonObject(4*(len(b.m_state)+len(b.v_state))))
-        row.append(PythonObject(4*(len(b.shadow_p)+len(b.shadow_m)+len(b.shadow_v))))
-        var reduction_bytes = 0
-        if owner[].pool_optimizer:
-            reduction_bytes = 4*(len(owner[].pool_totals[i])+len(owner[].pool_incoming[i]))
-        elif i == 0:
-            reduction_bytes = 4*len(owner[].total.value())
-        row.append(PythonObject(reduction_bytes))
-        out.append(row)
-    return out
-
-
 def byte_lm_parallel_set_lr_binding(session: PythonObject, lr_arg: PythonObject) raises -> PythonObject:
     """Set the learning rate of every replica for the NEXT update (a
     per-step schedule); returns the float32 bits that were stored, so the
@@ -1088,7 +1066,6 @@ def build__mojolearn_byte_lm() -> PythonObject:
         # TOMBSTONE: byte_lm_parallel_open, _open_pooled, _close, _rollback, _shard_gradient, _apply_gradient, _reduction_pool_available, _fold_reset, _shard_gradient_fold, _fold_add (dead native entries: no caller) deleted 2026-11-08 by f41ec913f2; code recoverable at 41ffcec665.
         # Restore: git apply experiments/removed/dead_entries_byte_lm_parallel.patch
         module.def_function[byte_lm_pool_fault_available_binding]("byte_lm_pool_fault_available")
-        module.def_function[byte_lm_parallel_ownership_binding]("byte_lm_parallel_ownership")
         module.def_function[byte_lm_parallel_step_binding]("byte_lm_parallel_step")
         module.def_function[byte_lm_parallel_export_binding]("byte_lm_parallel_export")
         module.def_function[byte_lm_parallel_set_lr_binding]("byte_lm_parallel_set_lr")
