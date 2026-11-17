@@ -150,6 +150,30 @@ def schedule_operation(operation: String, owner: PythonObject, values: PythonObj
         _ = state.pop(PythonObject("lr_at"), PythonObject(None))
         _ = state.pop(PythonObject("bits_at"), PythonObject(None))
         return state
+    if operation == "schedule_setattr":
+        # `sched.<name> = value` (lane fb2-lr, 2026-11-17): the instance
+        # dictionary takes the value as object.__setattr__ stored it, then the
+        # rate block is rebuilt from the edited settings, so `lr_at` follows
+        # every edit as the per-call re-read did. Settings the admission
+        # refuses drop the bound block methods instead; the class methods
+        # then re-read and refuse at the call, as before. One native call per
+        # edit; nothing is added to `lr_at`.
+        var name = values[0]
+        if py_type(name) is not context["scalar_types"][5]:
+            raise Error("TypeError: attribute name must be string, not '"
+                        + String(py=py_call(context["type_name"], py_type(name))) + "'")
+        var edited = py_fields(owner)
+        py_setitem(edited, name, values[1])
+        var word = String(py=name)
+        if word == "lr_at" or word == "bits_at":
+            return PythonObject(None)
+        try:
+            opt_schedule(owner, context)
+            schedule_bind_block(owner, schedule_kind(owner, context), context)
+        except:
+            _ = edited.pop(PythonObject("lr_at"), PythonObject(None))
+            _ = edited.pop(PythonObject("bits_at"), PythonObject(None))
+        return PythonObject(None)
     if operation == "schedule_setstate":
         var restored = values[0]
         if py_type(restored) is not context["container_types"][2]:

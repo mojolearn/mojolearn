@@ -58,3 +58,40 @@ def test_pickle_and_copy_rebind_the_block():
             assert type(clone) is type(schedule)
             assert [clone.lr_at(t) for t in (1, 2, 300, 600)] == expected
             assert clone.lr_at is not schedule.lr_at
+
+
+def test_keyword_and_arity_forms_match_the_former_method():
+    schedule = ml.WarmupCosineLR(3e-4, warmup_steps=50, total_steps=900, min_lr=3e-5)
+    assert schedule.lr_at(t=5) == schedule.lr_at(5)
+    assert schedule.bits_at(t=700) == schedule.bits_at(700)
+    with pytest.raises(TypeError, match="unexpected keyword argument 'step'"):
+        schedule.lr_at(step=5)
+    with pytest.raises(TypeError, match="multiple values for argument 't'"):
+        schedule.lr_at(5, t=5)
+    with pytest.raises(TypeError, match="missing 1 required positional argument: 't'"):
+        schedule.bits_at()
+    with pytest.raises(TypeError, match="takes 2 positional arguments but 3 were given"):
+        schedule.lr_at(1, 2)
+
+
+def test_editing_a_setting_changes_lr_at():
+    schedule = ml.ConstantLR(1e-3, warmup_steps=10)
+    before = schedule.lr_at(300)               # fills the block holding step 300
+    schedule.peak_lr = 2e-3
+    after = schedule.lr_at(300)
+    assert after != before
+    assert after == ml.ConstantLR(2e-3, warmup_steps=10).lr_at(300)
+    assert list(schedule.lr_values(300)) == list(ml.ConstantLR(2e-3, warmup_steps=10).lr_values(300))
+    step = ml.StepLR(0.1, 70, 0.5)
+    _ = step.lr_at(100)
+    step.gamma = 0.25
+    assert step.lr_at(100) == ml.StepLR(0.1, 70, 0.25).lr_at(100)
+
+
+def test_an_edit_the_admission_refuses_raises_at_the_call():
+    schedule = ml.ConstantLR(1e-3, warmup_steps=10)
+    schedule.peak_lr = "not a number"          # stored, as before
+    with pytest.raises((TypeError, ValueError)):
+        schedule.lr_at(1)
+    schedule.peak_lr = 1e-3                    # a valid edit rebinds the block
+    assert schedule.lr_at(1) == ml.ConstantLR(1e-3, warmup_steps=10).lr_at(1)

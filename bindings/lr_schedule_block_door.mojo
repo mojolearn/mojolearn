@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """A built-in schedule's native rate block: `lr_at(t)` and `bits_at(t)` as
-METH_FASTCALL methods of a native owner, bound once at construction.
+raw C methods (METH_VARARGS | METH_KEYWORDS) of a native owner, bound once
+at construction.
 
 lane fb2-lr (2026-11-17). Board rows algos/lr-* time 100,000 single
 `schedule.lr_at(t)` calls. 0.8.55 served them from a 256-step block that
@@ -12,9 +13,13 @@ call (lr-constant 7,538 ms). Here the schedule's construction (and
 `from_config`, and unpickling) builds this owner once from the admitted
 spec and stores its two bound methods in the schedule's instance
 dictionary, where they shadow the class methods. A call is then CPython's
-vectorcall of a METH_FASTCALL builtin: one exact-int check (a type pointer
-compare), PyLong_AsLongLong, an index into the block, PyFloat_FromDouble.
-No tuple, lookup, admission walk, allocation, lock or GIL switch per call.
+call of a builtin method: a one-item argument tuple (CPython's, from its
+freelist), one exact-int check (a type pointer compare), PyLong_AsLongLong,
+an index into the block, PyFloat_FromDouble. No lookup, admission walk,
+allocation of ours, lock or GIL switch per call. `t=` keywords and wrong
+arities take a separate path with the former method's messages.
+Editing a setting (`sched.peak_lr = x`) rebinds the block through
+`_LrTable.__setattr__` (one native call per edit, never per step).
 
 Block size: `LR_BLOCK` (256), the run length `lr_spec_fill` already uses for
 one table pass, so one refill is exactly one kernel run (one set of its
@@ -36,7 +41,7 @@ are; it is not re-read from the instance dictionary per call.
 """
 from std.memory import bitcast
 from std.python import Python, PythonObject
-from std.python._cpython import GILReleased, PyObjectPtr, Py_ssize_t
+from std.python._cpython import GILReleased, PyObjectPtr
 from std.python.bindings import PythonModuleBuilder, lookup_py_type_object
 from bindings.py_cpython_table import CPythonTable, cpython_table
 from bindings.py_balanced import py_fields, py_setitem, py_type
@@ -141,23 +146,53 @@ struct LrScheduleBlock(Movable, Writable):
         return step
 
 
+@no_inline
+def _block_argument(table: UnsafePointer[CPythonTable, MutAnyOrigin], args: PyObjectPtr,
+    kwargs: PyObjectPtr, name: StaticString) raises -> PyObjectPtr:
+    """The one step argument of a keyword call or a wrong arity, with the
+    messages the former Python method `_LrTable.<name>(self, t)` raised.
+    Runs only when the call is not one positional argument."""
+    var where = "_LrTable." + String(name) + "()"
+    var given = table[].PyTuple_Size(args)
+    if given > 1:
+        raise Error("TypeError: " + where + " takes 2 positional arguments but " + String(given + 1) + " were given")
+    var found = table[].PyTuple_GetItem(args, 0) if given == 1 else PyObjectPtr()
+    if kwargs:
+        var position = List[Int](length=1, fill=0)
+        var pair = List[PyObjectPtr](length=2, fill=PyObjectPtr())
+        while table[].PyDict_Next(kwargs, Int(position.unsafe_ptr()),
+                Int(pair.unsafe_ptr()), Int(pair.unsafe_ptr() + 1)):  # driver-loop: over the call's keyword arguments (at most one is valid)
+            var key = String(py=PythonObject(from_borrowed=pair[0]))
+            if key != "t":
+                raise Error("TypeError: " + where + " got an unexpected keyword argument '" + key + "'")
+            if found:
+                raise Error("TypeError: " + where + " got multiple values for argument 't'")
+            found = pair[1]
+    if not found:
+        raise Error("TypeError: " + where + " missing 1 required positional argument: 't'")
+    return found
+
+
 @always_inline
-def _block_rate(py_self: PyObjectPtr, args: Pointer[PyObjectPtr, MutUntrackedOrigin],
-    nargs: Py_ssize_t, name: StaticString) raises -> Float32:
-    if nargs != 1:
-        raise Error("TypeError: " + String(name) + "() takes exactly one argument (" + String(nargs) + " given)")
+def _block_rate(py_self: PyObjectPtr, args: PyObjectPtr, kwargs: PyObjectPtr,
+    name: StaticString) raises -> Float32:
     # CPython passes this type's own instance as self (a method of the
     # registered type, bound to its owner at construction).
     var owner = PythonObject(from_borrowed=py_self)
     var block = owner.unchecked_downcast_value_ptr[LrScheduleBlock]()
-    var arg = args[]
+    var table = block[].table
+    var arg: PyObjectPtr
+    if not kwargs and table[].PyTuple_Size(args) == 1:
+        arg = table[].PyTuple_GetItem(args, 0)
+    else:
+        arg = _block_argument(table, args, kwargs, name)
     ref cpy = Python().cpython()
     var t: Int
     if PyObjectPtr(upcast_from=cpy.Py_TYPE(arg)) == block[].int_class._obj_ptr:
-        var word = block[].table[].PyLong_AsLongLong(arg)
+        var word = table[].PyLong_AsLongLong(arg)
         if word == -1 and cpy.PyErr_Occurred():
             # Out of machine range: the general admission raises as before.
-            block[].table[].PyErr_Clear()
+            table[].PyErr_Clear()
             t = block[].admit(arg)
         else:
             t = Int(word)
@@ -168,22 +203,25 @@ def _block_rate(py_self: PyObjectPtr, args: Pointer[PyObjectPtr, MutUntrackedOri
     return rate
 
 
-def lr_block_at_c(py_self: PyObjectPtr, args: Pointer[PyObjectPtr, MutUntrackedOrigin],
-    nargs: Py_ssize_t) abi("C") -> PyObjectPtr:
+# METH_VARARGS | METH_KEYWORDS (PyCFunctionWithKeywords): the stdlib's only
+# keyword-accepting raw method form (std/python/bindings.mojo, Mojo 1.2:
+# "METH_FASTCALL | METH_KEYWORDS ... is not implemented here yet"). CPython
+# packs the positional arguments into a tuple per call; docs/MODULAR_ASKS.md
+# asks for the fastcall-with-keywords form, which removes that tuple.
+def lr_block_at_c(py_self: PyObjectPtr, args: PyObjectPtr, kwargs: PyObjectPtr) abi("C") -> PyObjectPtr:
     """`schedule.lr_at(t)`: the float32 rate of ONE-BASED step t, as a float."""
     try:
-        var rate = _block_rate(py_self, args, nargs, "lr_at")
+        var rate = _block_rate(py_self, args, kwargs, "lr_at")
         ref cpy = Python().cpython()
         return cpy.PyFloat_FromDouble(Float64(rate))
     except error:
         return optimizer_python_error(error)
 
 
-def lr_block_bits_c(py_self: PyObjectPtr, args: Pointer[PyObjectPtr, MutUntrackedOrigin],
-    nargs: Py_ssize_t) abi("C") -> PyObjectPtr:
+def lr_block_bits_c(py_self: PyObjectPtr, args: PyObjectPtr, kwargs: PyObjectPtr) abi("C") -> PyObjectPtr:
     """`schedule.bits_at(t)`: `lr_at(t)` as its float32 bit pattern."""
     try:
-        var rate = _block_rate(py_self, args, nargs, "bits_at")
+        var rate = _block_rate(py_self, args, kwargs, "bits_at")
         ref cpy = Python().cpython()
         return cpy.PyLong_FromSsize_t(Int(bitcast[DType.uint32](rate)))
     except error:
@@ -223,9 +261,9 @@ def register_lr_schedule_block(mut module: PythonModuleBuilder) raises:
         _ = (
             module.add_type[LrScheduleBlock]("_LrScheduleBlock")
             .def_py_c_method(lr_block_at_c, "lr_at",
-                "lr_at($self, t, /)\n--\n\nThe float32 learning rate of ONE-BASED step `t`, as a float.")
+                "lr_at($self, t)\n--\n\nThe float32 learning rate of ONE-BASED step `t`, as a float.")
             .def_py_c_method(lr_block_bits_c, "bits_at",
-                "bits_at($self, t, /)\n--\n\n`lr_at(t)` as its float32 bit pattern, for fixtures.")
+                "bits_at($self, t)\n--\n\n`lr_at(t)` as its float32 bit pattern, for fixtures.")
         )
         return
     py_type_attach(module.module, "_LrScheduleBlock", existing)
