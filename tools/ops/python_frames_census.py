@@ -174,6 +174,19 @@ def _member_kind(cls, attr):
     return None
 
 
+def _function_key(raw):
+    """"<module>.<qualname>" of the Python function a class attribute runs, or "" (a native member): the same key
+    for every class that installs one function (randomforest's `save = ForestArchive.save`), so a member whose
+    function ran through another class's member reads VIA_SUBCLASS."""
+    if isinstance(raw, (staticmethod, classmethod)):
+        raw = raw.__func__
+    if isinstance(raw, property):
+        raw = raw.fget
+    if isinstance(raw, types.FunctionType):
+        return f"{raw.__module__}.{raw.__qualname__}"
+    return ""
+
+
 def _family(paths, obj):
     """The public submodule a member is exported from (linear_model, ensemble, nn, ...); for a name exported only
     at the top level, its defining module without the package prefix, leading underscores and the internal
@@ -244,7 +257,7 @@ def cmd_inventory(args):
                 listed = set()
             names = set(static_methods.get(obj.__name__, ())) | {a for a in listed if not a.startswith("_")}
             names |= {d for d in MEMBER_DUNDERS if d in listed}
-            attrs, defined = {}, {}
+            attrs, defined, codes = {}, {}, {}
             for attr in sorted(names):
                 if attr.startswith("_") and attr not in MEMBER_DUNDERS:
                     continue
@@ -256,9 +269,11 @@ def cmd_inventory(args):
                     attrs[attr] = kind
                     owner = next(k for k in obj.__mro__ if attr in vars(k))
                     defined[attr] = f"{owner.__module__}.{owner.__qualname__}.{attr}"
+                    codes[attr] = _function_key(vars(owner)[attr])
             classes.append(dict(id=canonical, module=module, qualname=obj.__qualname__, family=family,
                                 aliases=sorted(paths), attrs=attrs))
-            members += [dict(id=f"{canonical}.{a}", family=family, kind=k, defined=defined[a])
+            members += [dict(id=f"{canonical}.{a}", family=family, kind=k, defined=defined[a],
+                             **({"code": codes[a]} if codes.get(a) else {}))
                         for a, k in attrs.items()]
         elif callable(obj) and (module.startswith("mojolearn") or isinstance(obj, types.BuiltinFunctionType)):
             if isinstance(obj, types.FunctionType):
@@ -382,6 +397,13 @@ class Census:
         self.instances = {}            # class id -> the last instance a member call ran on (probe_members)
         self.fitted = {}               # class id -> the last instance a fit-named member ran on (probed first)
         self.functions = {(f["module"], f["qualname"]): f["id"] for f in inv["functions"]}
+        # every member by the function it defines ("<module>.<qualname>"): a static or class method whose first
+        # argument is no public instance (ConstantLR.from_config(dict)), or a member's function reached through a
+        # non-public owner, is credited by its own function (fb4-census: from_config stayed UNCOVERED)
+        self.by_defined = collections.defaultdict(list)
+        for m in inv["members"]:
+            if m.get("kind") in ("method", "property") and m.get("defined"):
+                self.by_defined[m["defined"]].append(m["id"])
         self.members = {}
         self.unattributed = collections.Counter()
         self.where_cache, self.key_cache = {}, {}
@@ -486,8 +508,11 @@ class Census:
                         if not isinstance(obj, type):
                             self.note_instance(pc[0]["id"], obj, mids)
                         return mids
-        fid = self.functions.get((frame.f_globals.get("__name__"), getattr(code, "co_qualname", code.co_name)))
-        return [fid] if fid else None
+        name, qual = frame.f_globals.get("__name__"), getattr(code, "co_qualname", code.co_name)
+        fid = self.functions.get((name, qual))
+        if fid:
+            return [fid]
+        return list(self.by_defined.get(f"{name}.{qual}", ())) or None
 
     def note_instance(self, cid, obj, mids):
         """The instance a member call ran on, for the probe; a fit-named member marks it fitted too."""
@@ -1087,6 +1112,7 @@ def report(directory):
     needs_gpu, why_not = inv.get("needs_gpu") or {}, inv.get("why_not") or {}
     # a member whose defining function ran through another member (a mixin's method called on a subclass)
     ran = {r.get("defined") for r in merged.values() if r["stats"]["calls"] and r.get("defined")}
+    ran |= {r.get("code") for r in merged.values() if r["stats"]["calls"] and r.get("code")}
 
     def status(row):
         st = row["stats"]
@@ -1095,7 +1121,7 @@ def report(directory):
                 return "NATIVE_ATTRIBUTE"
             if row.get("family") in PACKAGING_FAMILIES:
                 return "PACKAGING"
-            if row.get("defined") in ran:
+            if row.get("defined") in ran or (row.get("code") and row["code"] in ran):
                 return "VIA_SUBCLASS"
             # a member only a GPU (or a second device) can run, listed with its reason by the census fixtures
             return "NEEDS_GPU" if row["id"] in needs_gpu else "UNCOVERED"
