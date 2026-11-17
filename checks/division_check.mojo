@@ -9,7 +9,7 @@ on three vendors, and the same sentence about sqrt was false once
 with the classes a Mamba block's divisions actually reach spelled out,
 and a hash a leg re-prints.
 
-    pixi run check-division            (append `sabotage` for the reach arm)
+    pixi run check-native-gpu division_check            (append `sabotage` for the reach arm)
 
 ## 2^20 hashed (a, b) pairs in 13 CLASSES (lane i's class is a function of
 ## i, so every column sees the same pairs), each judged BIT FOR BIT
@@ -223,7 +223,7 @@ def _mode_name() -> String:
     return numeric_mode_name()
 
 
-def main() raises:
+def run_checks() raises:
     var sabotage = False
     for a in argv():
         if a == "sabotage":
@@ -531,3 +531,21 @@ def main() raises:
     _ = r_ident.unsafe_ptr()
     _ = r_rhw.unsafe_ptr()
     _ = r_rdv.unsafe_ptr()
+
+
+# Registered by lane checks-toplevel (2026-11-16): a standalone main() under
+# checks/ that no CI job ran. One process per check name in CI keeps any
+# fresh-process precondition. Device column only: the suite needs a GPU, so the CPU build never instantiates it.
+from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
+
+
+def run_cases(column: Column, mut report: Report):
+    try:
+        comptime if not CPU_COLUMN_BUILD:
+            run_checks()
+    except error:
+        report.abort(error)
+
+
+def register() -> Check:
+    return Check("division_check", cpu=False, gpu=True, serial="", run=run_cases)

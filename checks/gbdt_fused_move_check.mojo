@@ -112,7 +112,7 @@ def check[estimation: Bool](objective: Int, weighted: Bool,
           "rows", n, "split_ms", timings[0], "fused_ms", timings[1])
 
 
-def main() raises:
+def run_checks() raises:
     print("numeric_mode", numeric_mode_name())
     var objectives: List[Int] = [OBJECTIVE_LOGLOSS, OBJECTIVE_CROSSENTROPY,
         OBJECTIVE_RMSE, OBJECTIVE_POISSON, OBJECTIVE_TWEEDIE, OBJECTIVE_LQ,
@@ -125,3 +125,21 @@ def main() raises:
     for _ in range(5):
         check[True](OBJECTIVE_LOGLOSS, True, n=1000003, repeats=30)
     print("ALL FUSED MOVE ARMS GREEN")
+
+
+# Registered by lane checks-toplevel (2026-11-16): a standalone main() under
+# checks/ that no CI job ran. One process per check name in CI keeps any
+# fresh-process precondition. Device column only: the suite needs a GPU, so the CPU build never instantiates it.
+from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
+
+
+def run_cases(column: Column, mut report: Report):
+    try:
+        comptime if not CPU_COLUMN_BUILD:
+            run_checks()
+    except error:
+        report.abort(error)
+
+
+def register() -> Check:
+    return Check("gbdt_fused_move_check", cpu=False, gpu=True, serial="", run=run_cases)

@@ -122,7 +122,7 @@ run diff_defsab $IB --diff "$OUT/identity_break.$LABEL.json" "$OUT/identity_brea
 say "diff_defsab_exit=$(awk -F'\t' '$1=="diff_defsab"{print $2}' "$OUT/status.tsv") (expected non-zero: gbdt-catboost-defaults train DIVERGENT)"
 
 # host checks
-run border_types pixi run check-border-types
+run border_types pixi run check-native-cpu border_types_check
 say "check_border_types_exit=$(awk -F'\t' '$1=="border_types"{print $2}' "$OUT/status.tsv") (expected 0)"
 run border_types_sab pixi run check-border-types-sabotage
 say "check_border_types_sabotage_exit=$(awk -F'\t' '$1=="border_types_sab"{print $2}' "$OUT/status.tsv") (expected non-zero)"

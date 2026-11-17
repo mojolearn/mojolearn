@@ -267,7 +267,7 @@ def check_bin_order_has_teeth() raises:
     print("  the check has teeth: the old numbering fails, the new one holds")
 
 
-def main() raises:
+def run_checks() raises:
     # STANDALONE DRIVER. Nothing else in the tree calls this file: it has
     # never had a caller, in `probe_main` or anywhere else, so registering
     # `check-bin-order` without one meant the module could not run at all.
@@ -275,3 +275,21 @@ def main() raises:
     print("flat-bin numbering, input order NOT block order (host):")
     check_bin_order()
     check_bin_order_has_teeth()
+
+
+# Registered by lane checks-toplevel (2026-11-16): a standalone main() under
+# checks/ that no CI job ran. One process per check name in CI keeps any
+# fresh-process precondition. Device column only: the suite needs a GPU, so the CPU build never instantiates it.
+from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
+
+
+def run_cases(column: Column, mut report: Report):
+    try:
+        comptime if not CPU_COLUMN_BUILD:
+            run_checks()
+    except error:
+        report.abort(error)
+
+
+def register() -> Check:
+    return Check("bin_order_check", cpu=False, gpu=True, serial="", run=run_cases)

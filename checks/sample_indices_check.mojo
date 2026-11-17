@@ -16,7 +16,7 @@ column WITH REPLACEMENT and INDEPENDENTLY PER FEATURE, citing
 functions on the wrong code path, reached from `NCB::BuildBorders` rather
 than from the quantizer. DEVIATION 135.
 
-    pixi run check-sample-indices
+    pixi run check-native-cpu sample_indices_check
 """
 
 from std.math import log2
@@ -160,5 +160,22 @@ def check_sample_indices() raises:
     print("  all gates pass")
 
 
-def main() raises:
+def run_checks() raises:
     check_sample_indices()
+
+
+# Registered by lane checks-toplevel (2026-11-16): a standalone main() under
+# checks/ that no CI job ran. One process per check name in CI keeps any
+# fresh-process precondition. Host column: the suite is host work and does not branch on the target.
+from checks.native_tests.runner import Check, Column, Report
+
+
+def run_cases(column: Column, mut report: Report):
+    try:
+        run_checks()
+    except error:
+        report.abort(error)
+
+
+def register() -> Check:
+    return Check("sample_indices_check", cpu=True, gpu=False, serial="", run=run_cases)

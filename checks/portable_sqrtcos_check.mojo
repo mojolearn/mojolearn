@@ -25,7 +25,7 @@ Three arms, the same three as the translog gate:
    column. Run FIRST on any new backend, beside check-portable-translog.
 3. REACH (`sabotage` argv) -- device inputs nudged, compare must fail.
 
-Run: `pixi run check-portable-sqrtcos` (append `sabotage` for arm 3).
+Run: `pixi run check-native-gpu portable_sqrtcos_check` (append `sabotage` for arm 3).
 """
 
 from max.gpu.host import DeviceContext
@@ -92,7 +92,7 @@ def _ulp_dist(a: Float32, b: Float32) -> Int64:
     return d
 
 
-def main() raises:
+def run_checks() raises:
     var sabotage = False
     for a in argv():
         if a == "sabotage":
@@ -307,3 +307,21 @@ def main() raises:
     _ = r_s.unsafe_ptr()
     _ = r_c.unsafe_ptr()
     _ = r_p.unsafe_ptr()
+
+
+# Registered by lane checks-toplevel (2026-11-16): a standalone main() under
+# checks/ that no CI job ran. One process per check name in CI keeps any
+# fresh-process precondition. Device column only: the suite needs a GPU, so the CPU build never instantiates it.
+from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
+
+
+def run_cases(column: Column, mut report: Report):
+    try:
+        comptime if not CPU_COLUMN_BUILD:
+            run_checks()
+    except error:
+        report.abort(error)
+
+
+def register() -> Check:
+    return Check("portable_sqrtcos_check", cpu=False, gpu=True, serial="", run=run_cases)

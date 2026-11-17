@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Which leaf Lossguide splits, proved against Depthwise on the same input.
 
-    pixi run check-lossguide-policy
+    pixi run check-native-gpu lossguide_policy_check
 
 NO CATBOOST COUNTERPART: a gate, so `checks/`. The sentence that used to
 sit here, "HOST ONLY -- it creates no `DeviceContext`, launches nothing",
@@ -715,6 +715,24 @@ def _tag(line: String) raises -> String:
     return String(parts[1])
 
 
-def main() raises:
+def run_checks() raises:
     var ctx = DeviceContext()
     check_lossguide_policy(ctx)
+
+
+# Registered by lane checks-toplevel (2026-11-16): a standalone main() under
+# checks/ that no CI job ran. One process per check name in CI keeps any
+# fresh-process precondition. Device column only: the suite needs a GPU, so the CPU build never instantiates it.
+from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
+
+
+def run_cases(column: Column, mut report: Report):
+    try:
+        comptime if not CPU_COLUMN_BUILD:
+            run_checks()
+    except error:
+        report.abort(error)
+
+
+def register() -> Check:
+    return Check("lossguide_policy_check", cpu=False, gpu=True, serial="", run=run_cases)

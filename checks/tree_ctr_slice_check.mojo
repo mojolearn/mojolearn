@@ -58,7 +58,7 @@ from gbdt.methods.doc_parallel_boosting import (
 from gbdt.train import TrainedModel, predict_floats
 
 
-def main() raises:
+def run_checks() raises:
     var ctx = DeviceContext()
     # The model format must cover the full UInt64 hash domain. A direct
     # decimal parse through Int64 cannot represent this value.
@@ -782,3 +782,21 @@ def main() raises:
     if conserved_rows != 6:
         raise Error("synchronized tensor driver lost rows across two levels")
     print("tree CTR slice: deterministic pair FeatureFreq + text round trip PASS")
+
+
+# Registered by lane checks-toplevel (2026-11-16): a standalone main() under
+# checks/ that no CI job ran. One process per check name in CI keeps any
+# fresh-process precondition. Device column only: the suite needs a GPU, so the CPU build never instantiates it.
+from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
+
+
+def run_cases(column: Column, mut report: Report):
+    try:
+        comptime if not CPU_COLUMN_BUILD:
+            run_checks()
+    except error:
+        report.abort(error)
+
+
+def register() -> Check:
+    return Check("tree_ctr_slice_check", cpu=False, gpu=True, serial="", run=run_cases)

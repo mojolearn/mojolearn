@@ -288,7 +288,7 @@ def check_permuted_leaf_ids(depth: Int = 0, replicas: Int = 1, permute: Bool = T
     print("  non-contiguous leaf ids land in the right slots")
 
 
-def main() raises:
+def run_checks() raises:
     # STANDALONE DRIVER. The bare call `checks/probe_main.mojo` makes under
     # "non-contiguous leaf ids (GPU)", then the FOUR-ARM leaf-id /
     # replication matrix it runs afterwards. Both are needed: the
@@ -303,3 +303,21 @@ def main() raises:
     check_permuted_leaf_ids(0, 16, False)
     check_permuted_leaf_ids(0, 16, True)
     check_permuted_leaf_ids(1, 16, True)
+
+
+# Registered by lane checks-toplevel (2026-11-16): a standalone main() under
+# checks/ that no CI job ran. One process per check name in CI keeps any
+# fresh-process precondition. Device column only: the suite needs a GPU, so the CPU build never instantiates it.
+from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
+
+
+def run_cases(column: Column, mut report: Report):
+    try:
+        comptime if not CPU_COLUMN_BUILD:
+            run_checks()
+    except error:
+        report.abort(error)
+
+
+def register() -> Check:
+    return Check("permuted_ids_check", cpu=False, gpu=True, serial="", run=run_cases)

@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Gate the category hash stack against CatBoost's own compiled source.
 
-    pixi run check-cityhash
+    pixi run check-native-cpu cityhash_check
 
 Two functions under test, the whole key chain a category ever passes
 through in their system:
@@ -73,7 +73,7 @@ def _decode_hex_bytes(tok: StringSlice) raises -> List[UInt8]:
     return out^
 
 
-def main() raises:
+def run_checks() raises:
     var f = open("bench/cityhash_oracle.txt", "r")
     var txt = f.read()
     f.close()
@@ -151,3 +151,20 @@ def main() raises:
     if wrong64 + wrong32 + wrong_chain != 0:
         raise Error("cityhash check FAILED")
     print("cityhash check OK")
+
+
+# Registered by lane checks-toplevel (2026-11-16): a standalone main() under
+# checks/ that no CI job ran. One process per check name in CI keeps any
+# fresh-process precondition. Host column: the suite is host work and does not branch on the target.
+from checks.native_tests.runner import Check, Column, Report
+
+
+def run_cases(column: Column, mut report: Report):
+    try:
+        run_checks()
+    except error:
+        report.abort(error)
+
+
+def register() -> Check:
+    return Check("cityhash_check", cpu=True, gpu=False, serial="", run=run_cases)

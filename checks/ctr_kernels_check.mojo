@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The ten CTR elementwise kernels, on device, cell by cell.
 
-    pixi run check-ctr-kernels
+    pixi run check-native-gpu ctr_kernels_check
 
 Every kernel in `gbdt/ctrs/kernel/ctr_calcers.mojo` is launched on a
 DeviceContext and its whole output is compared against a host tally
@@ -626,5 +626,23 @@ def check_ctr_kernels() raises:
     )
 
 
-def main() raises:
+def run_checks() raises:
     check_ctr_kernels()
+
+
+# Registered by lane checks-toplevel (2026-11-16): a standalone main() under
+# checks/ that no CI job ran. One process per check name in CI keeps any
+# fresh-process precondition. Device column only: the suite needs a GPU, so the CPU build never instantiates it.
+from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
+
+
+def run_cases(column: Column, mut report: Report):
+    try:
+        comptime if not CPU_COLUMN_BUILD:
+            run_checks()
+    except error:
+        report.abort(error)
+
+
+def register() -> Check:
+    return Check("ctr_kernels_check", cpu=False, gpu=True, serial="", run=run_cases)

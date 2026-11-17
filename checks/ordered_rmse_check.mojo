@@ -195,7 +195,7 @@ def whole_loop_cursor_check(ctx: DeviceContext) raises:
     _ = hx^
 
 
-def main() raises:
+def run_checks() raises:
     print("ORDERED NUMERIC MODE", numeric_mode_name())
     if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
         raise Error("ordered RMSE certification requires MOJOLEARN_NUMERIC_IDENTICAL")
@@ -269,3 +269,21 @@ def main() raises:
     if not refused:
         raise Error("ordered fit accepted duplicate permutation ids")
     print("ORDERED RMSE PASS: prefix isolation, leakage control, zero-mass prefix L2=0, constant/mixed model apply, two cursor updates, weighted three-tree fit/apply, invalid permutation refusal")
+
+
+# Registered by lane checks-toplevel (2026-11-16): a standalone main() under
+# checks/ that no CI job ran. One process per check name in CI keeps any
+# fresh-process precondition. Device column only: the suite needs a GPU, so the CPU build never instantiates it.
+from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
+
+
+def run_cases(column: Column, mut report: Report):
+    try:
+        comptime if not CPU_COLUMN_BUILD:
+            run_checks()
+    except error:
+        report.abort(error)
+
+
+def register() -> Check:
+    return Check("ordered_rmse_check", cpu=False, gpu=True, serial="", run=run_cases)

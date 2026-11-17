@@ -24,7 +24,7 @@ def require(condition: Bool, message: String) raises:
         raise Error(message)
 
 
-def main() raises:
+def run_checks() raises:
     var n = 2000
     var d = 16
     var h = (n + d + 2) // 2  # ceil(0.5 (n + d + 1)), sklearn's n_support
@@ -70,3 +70,21 @@ def main() raises:
     _ = cov^
     _ = dist^
     print("MCD_STEP_COST drains_per_cstep=pass")
+
+
+# Registered by lane checks-toplevel (2026-11-16): a standalone main() under
+# checks/ that no CI job ran. One process per check name in CI keeps any
+# fresh-process precondition. Device column only: the suite needs a GPU, so the CPU build never instantiates it.
+from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
+
+
+def run_cases(column: Column, mut report: Report):
+    try:
+        comptime if not CPU_COLUMN_BUILD:
+            run_checks()
+    except error:
+        report.abort(error)
+
+
+def register() -> Check:
+    return Check("mcd_step_cost_check", cpu=False, gpu=True, serial="", run=run_cases)

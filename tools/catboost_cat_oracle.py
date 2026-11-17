@@ -157,7 +157,7 @@ numeric fixtures byte-identical in their handling.
 
 USAGE
   pixi run -e bench python tools/catboost_cat_oracle.py > bench/oracle_cat.json
-  pixi run oracle
+  pixi run check-native-gpu oracle_main
 """
 import json
 import os

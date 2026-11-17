@@ -115,10 +115,28 @@ def check_reorder_one_bit(n: Int = 20000, offset: Int = 37) raises:
     print("  ReorderOneBitImpl matches a host stable partition")
 
 
-def main() raises:
+def run_checks() raises:
     # STANDALONE DRIVER. BOTH arms `checks/probe_main.mojo` runs under "their
     # reorder path (SortWithoutCub)": the large multi-block one and the
     # 513-row one that straddles the block width at offset 0.
     print("their reorder path (SortWithoutCub):")
     check_reorder_one_bit(20000, 37)
     check_reorder_one_bit(513, 0)
+
+
+# Registered by lane checks-toplevel (2026-11-16): a standalone main() under
+# checks/ that no CI job ran. One process per check name in CI keeps any
+# fresh-process precondition. Device column only: the suite needs a GPU, so the CPU build never instantiates it.
+from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
+
+
+def run_cases(column: Column, mut report: Report):
+    try:
+        comptime if not CPU_COLUMN_BUILD:
+            run_checks()
+    except error:
+        report.abort(error)
+
+
+def register() -> Check:
+    return Check("reorder_check", cpu=False, gpu=True, serial="", run=run_cases)

@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """One-hot features across the GRID-POLICY BOUNDARIES.
 
-    pixi run check-onehot-cardinality
+    pixi run check-native-gpu one_hot_cardinality_check
 
 ## The bug this was written to catch, and it was shipped
 
@@ -290,5 +290,23 @@ def check_one_hot_cardinality() raises:
     )
 
 
-def main() raises:
+def run_checks() raises:
     check_one_hot_cardinality()
+
+
+# Registered by lane checks-toplevel (2026-11-16): a standalone main() under
+# checks/ that no CI job ran. One process per check name in CI keeps any
+# fresh-process precondition. Device column only: the suite needs a GPU, so the CPU build never instantiates it.
+from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
+
+
+def run_cases(column: Column, mut report: Report):
+    try:
+        comptime if not CPU_COLUMN_BUILD:
+            run_checks()
+    except error:
+        report.abort(error)
+
+
+def register() -> Check:
+    return Check("one_hot_cardinality_check", cpu=False, gpu=True, serial="", run=run_cases)

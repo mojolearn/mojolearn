@@ -427,11 +427,11 @@ def check_mixed_tree(max_depth: Int) raises:
     print("  mixed-width tree grows, splits and conserves every row")
 
 
-def main() raises:
+def run_checks() raises:
     # STANDALONE DRIVER. The depths `checks/probe_main.mojo` runs under
     # "ONE FULL LEVEL (GPU, end to end)". `check_hist_depends_on_partition`
     # runs beside these there but lives in `hist_dump_check` and has its
-    # own task (`pixi run check-hist-dump`).
+    # own task (`pixi run check-native-gpu hist_dump_check`).
     print("ONE FULL LEVEL (GPU, end to end):")
     check_one_level()
     check_tree(1)
@@ -439,3 +439,21 @@ def main() raises:
     check_tree(6)
     check_mixed_tree(4)
     check_mixed_tree(6)
+
+
+# Registered by lane checks-toplevel (2026-11-16): a standalone main() under
+# checks/ that no CI job ran. One process per check name in CI keeps any
+# fresh-process precondition. Device column only: the suite needs a GPU, so the CPU build never instantiates it.
+from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
+
+
+def run_cases(column: Column, mut report: Report):
+    try:
+        comptime if not CPU_COLUMN_BUILD:
+            run_checks()
+    except error:
+        report.abort(error)
+
+
+def register() -> Check:
+    return Check("level_check", cpu=False, gpu=True, serial="", run=run_cases)

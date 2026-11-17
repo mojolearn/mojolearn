@@ -45,7 +45,7 @@ to say so.
 from gbdt.gpu_data.compressed_index_builder import build_layout
 
 
-def main() raises:
+def run_checks() raises:
     var failures = 0
 
     # ---------------------------------------------------------------- K1
@@ -168,3 +168,20 @@ def main() raises:
         "compressed index packing: byte-identical to what CatBoost's"
         " pointwise family decodes (K1-K4)"
     )
+
+
+# Registered by lane checks-toplevel (2026-11-16): a standalone main() under
+# checks/ that no CI job ran. One process per check name in CI keeps any
+# fresh-process precondition. Host column: the suite is host work and does not branch on the target.
+from checks.native_tests.runner import Check, Column, Report
+
+
+def run_cases(column: Column, mut report: Report):
+    try:
+        run_checks()
+    except error:
+        report.abort(error)
+
+
+def register() -> Check:
+    return Check("cindex_packing_check", cpu=True, gpu=False, serial="", run=run_cases)

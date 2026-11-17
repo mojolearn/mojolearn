@@ -101,7 +101,7 @@ def exact(x: UInt64, p: UInt64, want: UInt64) raises:
         raise Error("pow64 special-case mismatch x=" + String(x) + " p=" + String(p) + " got=" + String(got) + " want=" + String(want))
 
 
-def main() raises:
+def run_checks() raises:
     comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
         raise Error("pow64 gate requires IDENTICAL build")
     # NaNs, signed zero, negative parity, infinities and retained subnormals.
@@ -159,3 +159,20 @@ def main() raises:
     if stats.failed != 0:
         raise Error("portable_pow64 accuracy admission failed")
     print("portable_pow64 special cases and approximation admission PASS")
+
+
+# Registered by lane checks-toplevel (2026-11-16): a standalone main() under
+# checks/ that no CI job ran. One process per check name in CI keeps any
+# fresh-process precondition. Host column: the suite is host work and does not branch on the target.
+from checks.native_tests.runner import Check, Column, Report
+
+
+def run_cases(column: Column, mut report: Report):
+    try:
+        run_checks()
+    except error:
+        report.abort(error)
+
+
+def register() -> Check:
+    return Check("portable_pow64_check", cpu=True, gpu=False, serial="", run=run_cases)

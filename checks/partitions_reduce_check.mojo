@@ -748,7 +748,7 @@ def check_partitions_reduce_sabotage() raises:
     )
 
 
-def main() raises:
+def run_checks() raises:
     # STANDALONE DRIVER. All three arms `checks/probe_main.mojo` runs under
     # "ComputePartitionStats vs an exact host tally (GPU)", in its order:
     # the size sweep, then the two reach arms.
@@ -756,3 +756,21 @@ def main() raises:
     check_partitions_reduce()
     check_partitions_reduce_sabotage()
     check_partitions_reduce_narrow_grid()
+
+
+# Registered by lane checks-toplevel (2026-11-16): a standalone main() under
+# checks/ that no CI job ran. One process per check name in CI keeps any
+# fresh-process precondition. Device column only: the suite needs a GPU, so the CPU build never instantiates it.
+from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
+
+
+def run_cases(column: Column, mut report: Report):
+    try:
+        comptime if not CPU_COLUMN_BUILD:
+            run_checks()
+    except error:
+        report.abort(error)
+
+
+def register() -> Check:
+    return Check("partitions_reduce_check", cpu=False, gpu=True, serial="", run=run_cases)

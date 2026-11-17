@@ -174,7 +174,7 @@ from gbdt.options.catboost_options import SCORE_FUNCTION_COSINE
 comptime MAX_DEPTH = 4
 
 
-def main() raises:
+def run_checks() raises:
     var ctx = DeviceContext()
     var failures = 0
     # ONE compression block, then THREE with a 50-key tail. See the module
@@ -510,3 +510,21 @@ def run_case(ctx: DeviceContext, n_rows: Int) raises -> Int:
             len(fp_splits), "splits and", N_ROWS, "leaf ids",
         )
     return failures
+
+
+# Registered by lane checks-toplevel (2026-11-16): a standalone main() under
+# checks/ that no CI job ran. One process per check name in CI keeps any
+# fresh-process precondition. Device column only: the suite needs a GPU, so the CPU build never instantiates it.
+from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
+
+
+def run_cases(column: Column, mut report: Report):
+    try:
+        comptime if not CPU_COLUMN_BUILD:
+            run_checks()
+    except error:
+        report.abort(error)
+
+
+def register() -> Check:
+    return Check("feature_parallel_identity_check", cpu=False, gpu=True, serial="", run=run_cases)

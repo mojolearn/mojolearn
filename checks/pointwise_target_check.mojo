@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """`pointwise_target_kernel` against a float64 libm oracle, per objective.
 
-    pixi run check-pointwise-target
+    pixi run check-native-gpu pointwise_target_check
 
 NO CATBOOST COUNTERPART: this is a gate, and `checks/` is where gates
 live.
@@ -707,6 +707,24 @@ def check_pointwise_targets(ctx: DeviceContext) raises:
     print("pointwise target check: PASS")
 
 
-def main() raises:
+def run_checks() raises:
     var ctx = DeviceContext()
     check_pointwise_targets(ctx)
+
+
+# Registered by lane checks-toplevel (2026-11-16): a standalone main() under
+# checks/ that no CI job ran. One process per check name in CI keeps any
+# fresh-process precondition. Device column only: the suite needs a GPU, so the CPU build never instantiates it.
+from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
+
+
+def run_cases(column: Column, mut report: Report):
+    try:
+        comptime if not CPU_COLUMN_BUILD:
+            run_checks()
+    except error:
+        report.abort(error)
+
+
+def register() -> Check:
+    return Check("pointwise_target_check", cpu=False, gpu=True, serial="", run=run_cases)

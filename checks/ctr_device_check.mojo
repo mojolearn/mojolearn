@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The CTR block ON THE DEVICE, and the permutation that decides its answer.
 
-    pixi run check-ctr-device
+    pixi run check-native-gpu ctr_device_check
 
 `checks/ctr_check.mojo` gates the HOST calcers against an independent
 O(n^2) tally. This file gates the DEVICE ones -- the radix-sorted bin
@@ -933,5 +933,23 @@ def check_ctr_device() raises:
     print("  all five sections green")
 
 
-def main() raises:
+def run_checks() raises:
     check_ctr_device()
+
+
+# Registered by lane checks-toplevel (2026-11-16): a standalone main() under
+# checks/ that no CI job ran. One process per check name in CI keeps any
+# fresh-process precondition. Device column only: the suite needs a GPU, so the CPU build never instantiates it.
+from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
+
+
+def run_cases(column: Column, mut report: Report):
+    try:
+        comptime if not CPU_COLUMN_BUILD:
+            run_checks()
+    except error:
+        report.abort(error)
+
+
+def register() -> Check:
+    return Check("ctr_device_check", cpu=False, gpu=True, serial="", run=run_cases)

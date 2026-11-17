@@ -6,7 +6,7 @@
 
     python3 tools/border_types_oracle.py            # needs catboost==1.2.10
 
-`checks/border_types_check.mojo` (`pixi run check-border-types`) holds
+`checks/border_types_check.mojo` (`pixi run check-native-cpu border_types_check`) holds
 `gbdt/grid_creator/binarization.mojo::select_borders` and `best_split` to
 these borders EXACTLY (float32 bits). CatBoost is only needed to regenerate
 the file; the check reads the committed file.

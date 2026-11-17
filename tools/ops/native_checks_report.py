@@ -58,7 +58,9 @@ _ERROR_LINE = re.compile(r"\berror:\s*(.*)")
 # Normalizes a message for grouping: paths with line/column, hex addresses and numbers vary between sites of one error.
 _LOCATION = re.compile(r"(?:[\w./-]+\.(?:mojo|🔥|py|c|h|cpp)):\d+(?::\d+)?")
 _NUMBER = re.compile(r"\b0x[0-9a-fA-F]+\b|\b\d+\b")
-_REGISTERED = re.compile(r"^from checks\.native_tests\.(\w+) import register\b", re.M)
+# A check module is `checks.native_tests.<name>` or, for the older standalone checks at the top of checks/,
+# `checks.<name>` (registered in place: other checks import them from there).
+_REGISTERED = re.compile(r"^from checks\.((?:native_tests\.)?\w+) import register\b", re.M)
 _CHECK = re.compile(r'Check\(\s*"([\w.-]+)"\s*,\s*cpu=(True|False)\s*,\s*gpu=(True|False)')
 _CHECK_LINE = re.compile(r"^CHECK (\S+) column=(\w+) cases=(\d+) failed=(\d+) skipped=(\d+)", re.M)
 
@@ -68,9 +70,10 @@ def load_checks(root: Path) -> dict[str, tuple[bool, bool]]:
     root = Path(root)
     checks: dict[str, tuple[bool, bool]] = {}
     for module in _REGISTERED.findall((root / REGISTRY).read_text()):
-        m = _CHECK.search((root / "checks/native_tests" / f"{module}.mojo").read_text())
+        path = Path("checks") / (module.replace(".", "/") + ".mojo")
+        m = _CHECK.search((root / path).read_text())
         if not m:
-            raise ValueError(f"checks/native_tests/{module}.mojo: no Check(\"<name>\", cpu=.., gpu=..) in register()")
+            raise ValueError(f"{path}: no Check(\"<name>\", cpu=.., gpu=..) in register()")
         checks[m.group(1)] = (m.group(2) == "True", m.group(3) == "True")
     return checks
 
