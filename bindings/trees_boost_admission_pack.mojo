@@ -104,3 +104,53 @@ def boost_admit(model: PythonObject, context: PythonObject, fitting: Bool = Fals
         _ = trees_side_put(_FITTED_SLOT, model, key)
         _fitted_stamp(model, fields, reps)
     return fields
+
+
+def boost_fitted_stamp(model: PythonObject) raises:
+    """Stamp the fitted admission at the end of an outermost native fit
+    (lane fb-infer/A, 2026-11-17). Every field and member the fit just
+    stored was written by the fit's own native PACK (members from the one
+    validated template, Arrays from native exports, scalars as exact
+    Python numbers), so the first predict after a fit takes the stamped
+    path instead of the full walk below, which admitted every member's
+    arrays and scalar configuration (DART: one walk of T one-tree members,
+    about 65-75 ms at T = 200 on the first predict of every fit; the
+    stamped path then reads content words). Any later assignment, member
+    replacement or container edit changes the generation or the content
+    words, and the next call admits in full as before. Nothing is stamped
+    when a member sequence is not an ordinary list or tuple or a member
+    has no instance dictionary: the full admission keeps its refusal."""
+    var fields = py_fields(model)
+    var b = native_loaded_module("builtins")
+    var classes = Python.list()
+    var reps = Python.list()
+    var forest = py_get(fields, "forest_")
+    if forest is not None:
+        _ = py_call(classes.append, py_type(forest))
+        _ = py_call(reps.append, forest)
+    for name in ["_estimators", "estimators_", "trees_", "_batched"]:  # small-loop(fixed stored member sequences)
+        var members = py_get(fields, name)
+        if members is None:
+            continue
+        if py_type(members) is not b.list and py_type(members) is not b.tuple:
+            return
+        for i in range(len(members)):  # driver-loop: each fitted member's class (pointer compares, once per fit)
+            var m = members[i]
+            var cls = py_type(m)
+            var seen = False
+            for j in range(len(classes)):  # small-loop(classes: distinct member classes, usually one)
+                if classes[j] is cls:
+                    seen = True
+                    break
+            if not seen:
+                var member_fields = PythonObject(None)
+                try:
+                    member_fields = py_fields(m)
+                except:
+                    return
+                if py_type(member_fields) is not b.dict:
+                    return
+                _ = py_call(classes.append, cls)
+                _ = py_call(reps.append, m)
+    _fitted_stamp(model, fields, reps)
+
