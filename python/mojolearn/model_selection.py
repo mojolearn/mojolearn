@@ -360,14 +360,6 @@ __all__ += [
 # MOJOLEARN_HOTPATH=python, below _NATIVE_MIN_ROWS rows, under the fold-order
 # sabotage control, or when the binary lacks a helper.
 
-#: The before arm of the lane's timing and equality job: False (or the
-#: environment's MOJOLEARN_MSEL_BEFORE=1) sends every route above back to its
-#: definition. Never set in production.
-_MSEL_NATIVE = True
-
-
-_LITTLE_ENDIAN = __import__('sys').byteorder == 'little'
-
 #: bytes.translate table flipping a 0/1 mask
 _FLIP = bytes([1, 0]) + bytes(254)
 

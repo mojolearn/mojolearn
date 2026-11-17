@@ -17,9 +17,6 @@ What is still Python here is named at each site: label encoding
 import numbers as _numbers
 
 from . import _backend, _mojolearn_estimators
-from ._buffer import (
-    addr as _addr, addr_ro as _addr_ro, zeros as _zeros,
-)
 from . import _native_archive_bridge, _native_classical_bridge
 from ._mode import NumericModeMixin as _NumericModeMixin, sklearn_tags as _sklearn_tags
 
@@ -579,13 +576,6 @@ class Ridge(_NumericModeMixin):
         return _native_classical(cls, "load", (path,), _CLASSICAL)
 
 
-# cuML's `qn_params.loss` ids (cuml/linear_model/qn.h); the Python door maps
-# 'sigmoid' to QN_LOSS_LOGISTIC and 'softmax' to QN_LOSS_SOFTMAX.
-_QN_OPT_RETCODE = {0: "OPT_SUCCESS", 1: "OPT_NUMERIC_ERROR",
-                   2: "OPT_LS_FAILED", 3: "OPT_MAX_ITERS_REACHED",
-                   4: "OPT_INVALID_ARGS"}
-
-
 #: `glm/impl/linear_model/qn.mojo`'s ids, the 14th `qn_fit` field.
 _QN_LOSS_LOGISTIC = 0
 _QN_LOSS_SQUARED = 1
@@ -950,36 +940,6 @@ _native_archive_bridge.register(LogisticRegression, _LOGISTIC_FORMAT, (
     ("class_table", "classes", "classes_", _numbers.Integral, _numbers.Real),
     ("i8", "meta", (("int", "n_features_in_"), ("bool", "fit_intercept"))),
 ))
-
-
-def _qn_weight_fields(sw):
-    """The `qn_fit` params from field 13 on that carry the row weights:
-    has_sample_weight, and with weights the address (field 16)."""
-    return (0, None) if sw is None else (1, _addr_ro(sw, name="sample_weight"))
-
-
-def _qn_fit_one_target(est, x, y_enc, n_classes, loss, l1, l2, grad_tol,
-                       change_tol, svr_eps=0.0, sw=None):
-    """One `qn_fit` call on a one-target loss (the 15-field form, 16 with
-    row weights `sw`): the fitted `(n_features + fit_intercept,)` float32
-    block, `num_iters`, the objective and the OPT_RETCODE. `est` supplies
-    the solver fields."""
-    rows, cols = x.shape
-    w = _zeros((cols + (1 if est.fit_intercept else 0),), "<f4")
-    info = _zeros((2,), "<f4")
-    has_sw, sw_addr = _qn_weight_fields(sw)
-    params = [rows, cols, n_classes,
-              float(l1), float(l2), float(grad_tol), float(change_tol),
-              int(est.max_iter), int(est.linesearch_max_iter),
-              int(est.lbfgs_memory), 1 if est.fit_intercept else 0,
-              1 if est.penalty_normalized else 0, has_sw, int(loss), float(svr_eps)]
-    if has_sw:
-        params.append(sw_addr)
-    n_iter = est._bind("_mojolearn_estimators").qn_fit(
-        _addr_ro(x, name="X"), _addr_ro(y_enc, name="y"),
-        _addr(w, name="coef_"), _addr(info, name="info"), params,
-    )
-    return w, int(n_iter), float(info[0]), int(info[1])
 
 
 # Maintainer notes (moved from the docstring, 2026-10-12):

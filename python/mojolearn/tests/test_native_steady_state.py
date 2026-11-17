@@ -118,19 +118,12 @@ def sha256_tokenizer():
     return (lambda: entry(data)), (data,)
 
 
-def sha256_byte_lm():
-    from mojolearn import _byte_lm_impl
-    data = bytes(range(256)) * 16
-    return (lambda: _byte_lm_impl._sha256_hex(data)), (data,)
-
-
 OPERATIONS = {
     "SmallMLPTrainer.train_step": small_mlp,
     "SmallByteLanguageModelTrainer.train_step": byte_lm,
     "Sequential.fit": sequential,
     "CausalLM.generate": causal_lm,
     "tokenizer sha256_hex": sha256_tokenizer,
-    "byte-LM sha256_hex": sha256_byte_lm,
 }
 
 

@@ -95,7 +95,6 @@ _EXTENSION = '_mojolearn_byte_lm'
 _CHECKPOINT_SCHEMA = 'mojolearn.small-byte-lm-json-checkpoint.v1'
 _CHECKPOINT_LIMIT = 2 * 1024 * 1024
 _LOGITS_MAX_BATCH = 1024
-_LOGITS_MAX_CELLS = 268435456
 
 
 def _canonical(value):
@@ -123,13 +122,6 @@ def _runtime_profile(shape, mode=None):
     binding = _backend.binding(_EXTENSION, mode) if mode else _load()
     # The suffix is the default profile's tail past PROFILE (see `_load`).
     return shape.profile + str(binding.byte_lm_profile())[len(PROFILE):]
-
-
-def _sha256_hex(data):
-    """The SHA-256 of the bytes `data` as 64 hex digits, computed by the Mojo
-    SHA-256 (core/sha256.mojo) behind the loaded byte LM binding's
-    `sha256_hex`: the same digest as before, over the same bytes."""
-    return str(_backend.binding(_EXTENSION, _backend.default_mode()).sha256_hex(data))
 
 
 # The ids admission, the greedy pick, the state and schedule admission and

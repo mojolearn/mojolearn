@@ -41,10 +41,6 @@ RESOLVERS = {
         (lambda: _backend.host_module_path("_mojolearn_byte_lm_host"), "_mojolearn_byte_lm_host.so"),
     "_backend.host_module_path(forest)":
         (lambda: _backend.host_module_path("_mojolearn_forest_host"), "_mojolearn_forest_host.so"),
-    "_backend.host_binding_path":
-        (_backend.host_binding_path, "_mojolearn_byte_lm_host.so"),
-    "_backend.forest_host_binding_path":
-        (_backend.forest_host_binding_path, "_mojolearn_forest_host.so"),
     "_byte_lm_host.binary_path":
         (_byte_lm_host.binary_path, "_mojolearn_byte_lm_host.so"),
     "_forest_host.binary_path":

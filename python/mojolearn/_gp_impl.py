@@ -137,8 +137,6 @@ class Kernel:
         else `(values, bounds)` for the leaf's free entries."""
         raise NotImplementedError
 
-    def _free_flags(self):
-        return [0 if h is None else 1 for h in self._hyper()]  # glue: one flag per postfix node
 
     def _free_values(self):
         return [v for h in self._hyper() if h is not None for v in h[0]]  # glue: collects free kernel hyperparameters (n_dims entries)

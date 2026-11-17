@@ -47,7 +47,6 @@ from ._buffer import addr, addr_ro, empty
 
 _EXTENSION = '_mojolearn_forest_host'
 _MODULE_NAME = 'mojolearn._host.' + _EXTENSION
-_IDENTICAL_CODE = 1
 
 
 # THE LOADER LIVES IN `_backend` (lane/lazy-imports, 2026-10-10):
@@ -73,9 +72,7 @@ _FORMATS = {
     'mojolearn-extratrees-1': 'et',
 }
 _GROVES_SUFFIX = '-parallel-groves-1'
-_ENGINES = ('sequential', 'parallel_groves')
 #: The binding's family codes for the grove entries.
-_GROVES_FAMILY = {'rf': 0, 'et': 1}
 _ESTIMATORS = {
     'RandomForestClassifier': ('rf', True),
     'RandomForestRegressor': ('rf', False),
@@ -163,10 +160,6 @@ class HostForest:
         'parallel_groves'. Read-only."""
         return _native_host_archive(self, _OP.host_tree_engine, (), _ARCHIVE_CONTEXT)
 
-    def _groves_handle(self):
-        """The host grove snapshot of this model (validated once, released
-        with the model), prepared on the first groves prediction."""
-        return _native_host_archive(self, _OP.host_tree_groves, (), _ARCHIVE_CONTEXT)
 
     def __getstate__(self):
         return _native_host_archive(self, _OP.host_tree_getstate, (), _ARCHIVE_CONTEXT)

@@ -89,9 +89,6 @@ _KERNELS = {
     "additive_chi2": _KERNEL_ADDITIVE_CHI2,
 }
 
-#: Kernels that read gamma. Under 'linear' it is ignored on both sides,
-#: exactly as scikit-learn's `pairwise_kernels` ignores it.
-_NEEDS_GAMMA = frozenset({_KERNEL_POLYNOMIAL, _KERNEL_RBF, _KERNEL_SIGMOID, _KERNEL_LAPLACIAN})
 
 _native_family_bridge.tables(family_km_kernels=dict(_KERNELS), family_km_mode_codes=dict(_MODE_CODE))
 

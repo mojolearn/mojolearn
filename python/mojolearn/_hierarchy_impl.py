@@ -38,7 +38,6 @@ DISTANCE_COSINE_EXPANDED = 2
 DISTANCE_L1 = 3
 
 #: `x_cluster/entries.mojo::ENTRY_AGGLO`.
-_E_AGGLO = 11
 
 # Only the two the implementation carries. cuML maps "euclidean" and "l2" to
 # L2SqrtExpanded; nothing in their table maps to L2Expanded, so no name for

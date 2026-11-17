@@ -194,8 +194,6 @@ _MAMBA2_LAYER = [
 #: tensors `embed`, `block{i}.*`, `lm_head`): the same Llama layer order and
 #: (out, in) projection layout as `_LLAMA_LAYER`, rotate-half rotary, and NO
 #: final norm (the head reads the last residual stream). `norm_name` is None.
-_BYTE_LM_FORMAT = "mojolearn.byte-lm"
-_BYTE_LM_MODEL_TYPE = "mojolearn-byte-lm"
 
 _BYTE_LM_LAYER = [
     ("input_layernorm.weight", "block{i}.norm1_w", None),

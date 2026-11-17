@@ -172,7 +172,6 @@ def test_invalid_map_precedes_model_or_worker_construction(devices):
 
 def test_native_route_admission_precedes_checkpoint_read(monkeypatch):
     selected = _backend.vendor()
-    assert checked(mod._admit_route, (0, 0)) == ('cpu' if selected == 'cpu' else 'gpu')
     refused(mod.ParallelCausalLM.load, FileNotFoundError, 'checkpoint directory',
             '/does/not/exist', layer_devices=(0, 0))
     if selected == 'metal':

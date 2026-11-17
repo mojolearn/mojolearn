@@ -86,19 +86,12 @@ _OP = {
 # autograd/ops_api.mojo OPS_COMPARE and OPS_LOGICAL kinds
 _COMPARE = {"eq": 0, "gt": 1, "lt": 2, "ge": 3, "le": 4, "ne": 5}
 _GELU = {"none": 0, "tanh": 1}
-_ACTIVATION = {None: 0, "none": 0, "relu": 1, "sigmoid": 2, "tanh": 3, "softmax": 4}
-_REDUCTION = {"mean": 0, "sum": 1}
-_AXIS = {None: -1, 0: 0, 1: 1}
-# sequence/ops.mojo OPT_* and autograd/model.mojo SCHED_* (Sequential.compile's codes)
-_OPTIMIZER = {"sgd": 0, "adam": 1, "adamw": 2}
-_SCHEDULE = {"constant": 0, "step": 1, "exponential": 2}
 # the state buffers autograd/ops_api.mojo optimizer_state returns, by kind
 _STATE_NAMES = {"sgd": ("momentum_buffer", None, None), "adam": ("exp_avg", "exp_avg_sq", None),
                 "adamw": ("exp_avg", "exp_avg_sq", None)}
 # autograd/ops_api.mojo OPS_PACK_*: the packed argument block of one call
 _PACK_H, _PACK_I, _PACK_F = 3, 7, 15
 _PACK_HANDLES, _PACK_INTS, _PACK_FLOATS = 4, 8, 4
-_PACK_WORDS = _PACK_F + (_PACK_FLOATS + 1) // 2
 
 
 # The Python `_int`, `_seed_words`, `_axes`, `Session._sid` and

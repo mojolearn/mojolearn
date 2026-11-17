@@ -24,23 +24,6 @@ LENS = (16, 1, 7, 9, 16, 3, 12, 15)
 
 # ---------------------------------------------------------------- helpers, nothing compiled
 
-@pytest.mark.parametrize("bad, kind, text", [
-    ((0, 3), ValueError, "outside [1, L = 3]"),
-    ((4, 3), ValueError, "outside [1, L = 3]"),
-    ((3,), ValueError, "lengths has 1 entries but the batch has B = 2"),
-    ((3.0, 3), TypeError, "is not an integer"),
-    ((True, 3), TypeError, "is a bool"),
-    (7, TypeError, "must be a sequence"),
-])
-def test_lengths_refused_by_name(bad, kind, text):
-    with pytest.raises(kind) as exc:
-        _ragged.lengths_for(bad, 2, 3, "Thing.forward")
-    assert text in str(exc.value) and "Thing.forward" in str(exc.value)
-
-
-def test_numpy_integers_are_admitted():
-    assert _ragged.lengths_for(np.array([3, 1], dtype=np.int64), 2, 3, "t") == (3, 1)
-
 
 def test_ragged_forward_refuses_a_state_before_calling():
     called = []

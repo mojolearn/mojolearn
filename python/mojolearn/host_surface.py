@@ -4682,17 +4682,6 @@ def comparable_lanes(lanes, device_class="cpu"):
     return [lane for lane in lanes if exposure[lane]["comparable"]]
 
 
-def lane_exposure_counts(lanes, device_class="cpu"):
-    """`{status: n}` over `lane_exposure(lanes)`, every status present even at
-    zero, so a reader sees the category that is empty rather than inferring
-    it from an absent key."""
-    exposure = lane_exposure(lanes, device_class)
-    counts = {s: 0 for s in LANE_STATUSES}
-    for row in exposure.values():
-        counts[row["status"]] += 1
-    return counts
-
-
 #: Public reference lanes of a shipped host family with no GPU path to cover,
 #: {lane: family} (2026-09-15). The tokenizer lane loads the synthetic
 #: vocabulary the harness trains itself, so it needs no vocabulary file on the

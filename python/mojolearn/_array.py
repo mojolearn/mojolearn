@@ -459,18 +459,6 @@ def _flatten(nested):
     return tuple(shape), flat
 
 
-def _nest(a):
-    """Nested Python lists of a C-order Array, built by `memoryview.tolist`
-    (CPython walks the rows in C; a float16 block goes through its exact
-    float64 values first)."""
-    if a.size == 0:
-        return _empty_nest(a.shape)
-    if a.dtype == "<f2":
-        flat = array.array("d", a._values())
-        return memoryview(flat).cast("B").cast("d", a.shape).tolist()
-    return a._mv.cast("B").cast(_CODE[a.dtype], a.shape).tolist()
-
-
 def _empty_nest(shape):
     """The nested lists of an empty block: no elements, only the list
     structure up to the first zero dimension."""

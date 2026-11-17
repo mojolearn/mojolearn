@@ -116,9 +116,6 @@ class ForestProtocol:
         whose snapshot takes the ordered word); False on a host binding."""
         return _TREES(self, "trees_public_forest_ordered_resident_auto", (), _TREES_CONTEXT)
 
-    def _forest_auxiliary(self, X, *, leaves=False, prefixes=False, prediction=False):
-        """T39 buffer/argument plumbing; all walks and reductions are Mojo."""
-        return _TREES(self, "trees_public_forest_auxiliary", (X, leaves, prefixes, prediction), _TREES_CONTEXT)
 
     def apply(self, X):
         """Return tree-relative leaf IDs, shape (rows, trees), from the native walk."""

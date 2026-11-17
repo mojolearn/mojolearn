@@ -9,26 +9,15 @@ np = require_numpy('_x_sequence_model')
 from . import _backend
 
 # Description codes (autograd/model.mojo LAYER_*, LOSS_*, ...).
-_SPEC_VERSION = 1
-# Version 2 (autograd/model.mojo SPEC2_*): a per-sample input shape of any
-# rank and the shape layers; [2, ndim, d0 .. d7, layer count] then per layer
-# (code, six arguments, 0).
-_SPEC2_VERSION = 2
-_SPEC2_DIMS = 8
-_SPEC2_ARGS = 6
 _LAYER = {"linear": 1, "relu": 2, "sigmoid": 3, "tanh": 4, "softmax": 5,
           "layer_norm": 6, "dropout": 7, "residual": 8,
           "reshape": 9, "permute": 10, "flatten": 11, "conv2d": 12, "max_pool2d": 13, "avg_pool2d": 14}
-_SHAPE_LAYERS = frozenset((9, 10, 11, 12, 13, 14))
 _LOSS = {"mse": 0, "cross_entropy": 1, "bce_with_logits": 2, "huber": 3}
 _TARGET_DENSE, _TARGET_CODES, _TARGET_CODE_VALUES = 0, 1, 2
 _SCHED = {"constant": 0, "step": 1, "exponential": 2}
 _OUT_RAW, _OUT_SOFTMAX, _OUT_SIGMOID, _OUT_PROBA2, _OUT_ARGMAX, _OUT_THRESHOLD = 0, 1, 2, 3, 4, 5
 # sequence/ops.mojo OPT_*: "momentum" is SGD with a momentum buffer.
 _OPT = {"sgd": 0, "momentum": 0, "adam": 1, "adamw": 2}
-_PREDICT_CHUNK = 4096
-# autograd/model.mojo FIT_STATE_WORDS: the fit's resumable counters
-_FIT_STATE_WORDS = 12
 # core/cast_in.mojo CAST_KIND_* and item size -> the classes_ dtype of a
 # loaded checkpoint
 _CLASS_DTYPE = {(0, 1): "u1", (0, 2): "u2", (0, 4): "u4", (0, 8): "u8",
@@ -284,9 +273,6 @@ class Sequential:
     def _table(self):
         return _SEQUENTIAL_ENTRY(self, "table", (), _SEQUENTIAL_CONTEXT)
 
-    def _sample_of(self, X):
-        # the per-sample shape of a version-2 model (None: version 1)
-        return _SEQUENTIAL_ENTRY(self, "sample", (X,), _SEQUENTIAL_CONTEXT)
 
     # ------------------------------------------------------------ training
     def fit(self, X, y, *, epochs=10, batch_size=None, shuffle=None, seed=0, resume=False,
@@ -345,9 +331,6 @@ class Sequential:
         return _SEQUENTIAL_ENTRY(self, "fit", (X, y, epochs, batch_size, shuffle, seed, resume, validation_data, restore_best_weights), _SEQUENTIAL_CONTEXT)
 
     # ------------------------------------------------------------ weight import
-    def _param_layers(self):
-        # (layer index, has bias) of every layer that holds parameters
-        return _SEQUENTIAL_ENTRY(self, "parameter_layers", (), _SEQUENTIAL_CONTEXT)
 
     def load_state_dict(self, state, *, source=None, names=None, prefix="", strict=True):
         """Load trained weights from PyTorch or a safetensors checkpoint.

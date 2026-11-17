@@ -106,12 +106,6 @@ def _lengths_array(lengths, batch, length, what):
     return arr
 
 
-def lengths_for(lengths, batch, length, what):
-    """`lengths` as a tuple of `batch` Python ints, each in [1, length],
-    refused by name otherwise."""
-    return tuple(_lengths_array(lengths, batch, length, what))
-
-
 def _row_bytes(arr):
     """(bytes per row, bytes per position) of a C-contiguous (B, L, ...) array."""
     b, l = int(arr.shape[0]), int(arr.shape[1])

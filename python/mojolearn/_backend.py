@@ -422,11 +422,8 @@ _CODE_MODE = {v: k for k, v in _MODE_CODE.items()}
 # THE VENDOR AXIS. See the module docstring, "THE VENDOR AXIS".
 # ===================================================================
 
-#: The accelerator APIs a set can be compiled for, in the order the box
-#: probe consults them. These are the DIRECTORY names under the package on
-#: Linux and the strings `<prefix>_vendor()` returns.
-_VENDORS = ("cuda", "hip", "metal")
-#: The two that can share one Linux wheel. `metal` is never a directory: the
+#: The accelerator APIs that can share one Linux wheel, as the DIRECTORY names under the package and the
+#: strings `<prefix>_vendor()` returns. `metal` is never a directory: the
 #: macOS wheel keeps the flat layout.
 _LINUX_VENDORS = ("cuda", "hip")
 
@@ -1396,22 +1393,6 @@ def requested_mode():
 #: The refusal `select()` would have raised, when it installed the CPU-only
 #: stubs instead; None on every install that loaded a GPU set.
 _CPU_ONLY = None
-
-
-def host_binding_path():
-    """Where the CPU inference binding lives on this install. THROUGH
-    `host_module_path`, like every other door onto a host binding: until
-    lane/host-path-resolution (2026-09-16) this built its own path from the
-    package directory and was one of four answers that did not follow
-    MOJOLEARN_HOST_DIR."""
-    return host_module_path("_mojolearn_byte_lm_host")
-
-
-def forest_host_binding_path():
-    """Where the CPU forest inference binding lives on this install (the
-    forest host lane, 2026-09-13, `_forest_host.py`). Through
-    `host_module_path`, as above."""
-    return host_module_path("_mojolearn_forest_host")
 
 
 def host_binding_built():

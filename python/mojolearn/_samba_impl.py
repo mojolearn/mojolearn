@@ -50,8 +50,6 @@ _M3_D_STATE = 128
 _M3_NGROUPS = 1
 _M3_NUM_ROPE_ANGLES = 32
 
-_LAYER_KINDS = ("mamba3", "attention")
-
 
 def _canonical(value):
     return json.dumps(value, sort_keys=True, separators=(",", ":"),

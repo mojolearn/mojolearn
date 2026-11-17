@@ -113,7 +113,7 @@ def test_byte_lm_trainer_runs_on_the_host_when_built():
     module = _backend.load_host_module("_mojolearn_byte_lm_host")
     assert not bool(module.byte_lm_host_sabotage()), "a sabotage build loaded outside the gate"
     binding = _backend.binding("_mojolearn_byte_lm", "identical")
-    assert adapter.is_cpu_trainer_binding(binding) and binding.byte_lm_vendor() == "cpu"
+    assert binding.byte_lm_vendor() == "cpu"
     assert getattr(binding, "byte_lm_parallel_create", None) is None
     try:
         binding.byte_lm_offload_step

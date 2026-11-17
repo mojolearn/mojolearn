@@ -86,10 +86,6 @@ class SequenceDeviceTensor:
         return _SEQ_NATIVE("seqdev_finalize", self, (), None, _SEQ_CONTEXT)
 
 
-def is_seq_tensor(x):
-    return _SEQ_NATIVE("seqdev_is", None, (x,), None, _SEQ_CONTEXT)
-
-
 def to_device(x, numeric_mode=None):
     """float32 array `x` as a `SequenceDeviceTensor` (uploaded once, here),
     or `x` itself as a float32 array on a binding without resident tensors."""

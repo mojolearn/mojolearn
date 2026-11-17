@@ -7,11 +7,6 @@ HOST_BASENAME = "_mojolearn_byte_lm_host"
 _BINDING = None
 
 
-def is_cpu_trainer_binding(value):
-    """Whether this is the connected CPU language-model binding."""
-    return value is _BINDING
-
-
 def binding():
     # glue: backend import-time connection only; public operations use the
     # native module's common descriptor table, never this loader or a proxy.

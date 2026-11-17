@@ -191,7 +191,6 @@ _PREDICT_SIGMOID = 2   # their `MultiProbability`, MultiClassOneVsAll
 #: pair `[1 - p, p]` as float64 (DEVIATION 2980, the resident door's spelling
 #: of `gbdt_sigmoid_pair`)
 _PREDICT_SIGMOID_PAIR = 3
-_PREDICT_CLASSES = 4
 _PREDICT_CLASSES_PINNED = 5
 _PREDICT_CLASSES_OVA = 6
 
@@ -496,8 +495,6 @@ OD_TYPES = ("None", "IncToDec", "Iter")
 # on the host side of this module. None of them touches a result bit.
 
 
-#: `np.iinfo(np.uint32).max`, as the literal.
-_U32_MAX = 4294967295
 
 
 # Maintainer notes moved out of the public docstring (CatBoost 1.2.10 source references):

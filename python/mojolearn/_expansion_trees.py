@@ -90,7 +90,6 @@ __all__ = [
 # out loud: splits are searched over `n_bins` per-feature quantiles (cuML's
 # rule, default 128), not every midpoint; and `splitter='random'` and
 # `max_leaf_nodes` (best-first growth) are refused by name.
-_DT_DEPTH = None
 
 
 # `_dt_common` (the splitter and best-first refusals) is the native owner's

@@ -144,16 +144,6 @@ _KIND_SGD = 0
 _KIND_ADAM = 1
 _KIND_ADAMW = 2
 
-#: `training/checks/loss_oracle.mojo`'s own constants.
-_REDUCTION_NONE = 0
-_REDUCTION_SUM = 1
-_REDUCTION_MEAN = 2
-_REDUCTIONS = {
-    "none": _REDUCTION_NONE,
-    "sum": _REDUCTION_SUM,
-    "mean": _REDUCTION_MEAN,
-}
-
 #: torch's own default, `loss_oracle.IGNORE_INDEX_DEFAULT`.
 _IGNORE_INDEX_DEFAULT = -100
 
@@ -829,10 +819,6 @@ def _lr_status(st):
 # OneCycleLR, the phases. MOJOLEARN_LR_TABLE=0 (or MOJOLEARN_LR_EXACT_ONLY=1)
 # keeps every step on the exact route (the A/B); the answers are the same.
 
-#: `lr_spec_fill`'s statuses beyond `_LR_ERRORS`: a step below 1, and a
-#: OneCycleLR step past total_steps + 1
-_LR_ONE_BASED = 4
-_LR_BEYOND = 5
 
 
 def _lr_native(key):
@@ -1088,11 +1074,6 @@ def accumulate_grads(microbatch_grads, tokens, numeric_mode=None):
 # draw consumes one stream id, so the sequence of draws is a pure function
 # of (seed, counter) and the counter is CARRIED STATE that belongs in a
 # checkpoint beside the optimizer moments.
-
-_RNG_UNIFORM = 0
-_RNG_NORMAL = 1
-_RNG_DROPOUT_FORWARD = 2
-_RNG_DROPOUT_BACKWARD = 3
 
 
 def _rng_call(binding, kind, n, offset, seed, stream, a, b, inp=None):

@@ -168,10 +168,6 @@ _OPT_NAMES = (
     "up_proj.bias", "down_proj.bias", "gate_proj.bias",
     "q_norm.weight", "k_norm.weight",
 )
-_NORM_KINDS = {"rmsnorm": 0, "layernorm": 1, "rmsnorm_offset": 2}
-_MLP_KINDS = {"swiglu": 0, "gelu": 1, "gelu_tanh": 2, "geglu": 3, "geglu_tanh": 4}
-_GATED_MLPS = ("swiglu", "geglu", "geglu_tanh")
-_ROPE_SCALINGS = {"linear": 1, "llama3": 2}
 _ROPE_THETA_BITS = 0x461C4000  # 10000.0, contract section 3
 _NORM_EPS_BITS = 0x358637BD  # 1e-6, LlamaConfig.rms_norm_eps: TODAY's eps
 _DEFAULT_TAIL_LEN = 17

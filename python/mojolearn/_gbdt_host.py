@@ -9,22 +9,14 @@ Mojo. ``predict`` returns float32 raw approximations; binary classification
 #: `_MODEL_FORMAT` in ensemble.py.
 GBDT_FORMAT = 'mojolearn-gbdt-1'
 #: `MODEL_TEXT_NAME` and `MODEL_TEXT_VERSION`, `gbdt/models/model_text.mojo:225-229`.
-_TEXT_NAME = 'mojolearn-model'
-_TEXT_VERSION = 2
 #: `NAN_TREATMENT_*`, `gbdt/data/quantization.mojo:73-76`, keyed by the
 #: token `nan_treatment_token` writes (`model_text.mojo:232-245`).
-_NAN_CODES = {'as_is': 0, 'as_false': 1, 'as_true': 2}
 _PROBA_LOSSES = ('Logloss', 'CrossEntropy')
 _MULTI_LOSSES = ('MultiClass', 'MultiClassOneVsAll')
 _CLASSIFICATION_LOSSES = _PROBA_LOSSES + _MULTI_LOSSES
 #: `ctr_type_name`, `gbdt/ctrs/ctr.mojo`: the names a `ctr_table` may carry.
-_CTR_TYPE_CODES = {'Borders': 0, 'Buckets': 1, 'BinarizedTargetMeanValue': 2,
-                   'FloatTargetMeanValue': 3, 'Counter': 4, 'FeatureFreq': 5}
 #: The types `TCtrValueTable.value_for` has apply-time arithmetic for; the
 #: others raise there and are refused here by name.
-_CTR_APPLIED = ('Borders', 'Counter', 'FeatureFreq')
-#: Records no reader of this version understands, refused by name.
-_REFUSED_RECORDS = ()
 
 
 def parse_model_text(text):

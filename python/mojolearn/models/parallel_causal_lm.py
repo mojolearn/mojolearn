@@ -35,14 +35,6 @@ from .causal_lm import CausalLM as _CausalLM, _NATIVE as _CAUSAL_RUNTIME, _NATIV
 __all__ = ['ParallelCausalLM']
 
 
-def _admit_route(layer_devices=()):
-    """`gpu` on CUDA/HIP or single-device Metal; `cpu` on a CPU-only install.
-
-    Called in the same two places the vendor check used to sit, and before a
-    layer is built or a checkpoint is read."""
-    return _native_parallel_causal("route", (layer_devices,))
-
-
 class _RemoteState:
     def __init__(self, layer, token):
         return _native_parallel_causal("state_init", (self, layer, token))

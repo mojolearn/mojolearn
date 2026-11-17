@@ -28,8 +28,6 @@ DTYPES = {
 INDEX_NAME = "model.safetensors.index.json"
 SINGLE_NAME = "model.safetensors"
 
-_HEADER_LIMIT = 100 * 1024 * 1024  # a header above this is not a checkpoint
-
 
 class TensorInfo:
     """One header entry: `name`, `dtype` (the safetensors spelling), `shape`

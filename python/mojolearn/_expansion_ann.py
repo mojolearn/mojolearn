@@ -35,9 +35,6 @@ from . import _backend  # noqa: E402
 __all__ = ["IVFPQIndex", "TSNE", "CagraIndex", "IVFSQIndex", "IVFRaBitQIndex", "refine"]
 
 
-_ONES = {}
-
-
 def _ann_int(owner, name, v):
     if isinstance(v, bool) or not isinstance(v, int):
         raise TypeError(f"mojolearn {owner}: {name} must be an int, got {type(v).__name__}")

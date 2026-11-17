@@ -13,7 +13,7 @@ def methods():
     tree = ast.parse(SOURCE.read_text())
     cls = next(node for node in tree.body if isinstance(node, ast.ClassDef) and node.name == 'ForestProtocol')
     return {node.name: node for node in cls.body if isinstance(node, ast.FunctionDef)
-            and node.name in ('apply', 'predict_with_leaves', 'staged_predict', '_forest_auxiliary')}
+            and node.name in ('apply', 'predict_with_leaves', 'staged_predict')}
 
 
 def test_public_and_private_doors_each_delegate_once_without_python_result_handling():

@@ -208,10 +208,3 @@ def test_nonfinite_inputs_still_refuse(method):
     assert 'valid finite trees and input' in str(error)
 
 
-def test_private_combined_request_still_returns_all_three_outputs():
-    model, arrays = fixture('RandomForestClassifier')
-    expected = reference(X, arrays, 2)
-    result = clean(model._forest_auxiliary, X, leaves=True, prefixes=True, prediction=True)
-    assert type(result) is tuple and len(result) == 3
-    for actual, value in zip(result, expected):
-        assert_bytes(actual, value)

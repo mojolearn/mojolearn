@@ -40,9 +40,6 @@ from . import _x_sequence_device as _sequence_device  # glue: connect native dev
 from ._training_impl import _OPT_NATIVE as _SEQ_NATIVE, _OPT_CONTEXT as _SEQ_CONTEXT
 
 
-_WEIGHTS = ("router", "gate_up_proj", "down_proj")
-
-
 # Weights stay on the device (lane gap-neural-overhead2): the forward reads device copies made
 # once by `moe_weights_put` instead of uploading the three arrays every call; any assignment of
 # router / gate_up_proj / down_proj (or load_state_dict) re-copies on the next forward, and the

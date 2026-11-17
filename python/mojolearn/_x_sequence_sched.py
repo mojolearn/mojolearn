@@ -29,9 +29,6 @@ from ._training_impl import _OPT_NATIVE, _OPT_CONTEXT
 from ._training_impl import _LrTable
 
 
-#: `LrSpec` kind codes (sequence/lr_table.mojo)
-_KIND_ONECYCLE = 10
-_KIND_POW = 20
 
 
 # ------------------------------------------------------------------ schedules

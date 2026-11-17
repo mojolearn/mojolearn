@@ -79,12 +79,6 @@ _DEFAULT_MIN_FREQUENCY = 2
 _DEFAULT_VOCAB_SAMPLE_BYTES = 10_000_000
 _DEFAULT_DOCUMENT_BYTES = 1 << 20
 _DEFAULT_BATCH_DOCUMENTS = 16
-_SCHEDULE = "train-range-modulo.v1"
-
-
-def _default_cache_dir():
-    """The default cache directory: ``$MOJOLEARN_LM_CACHE``, else ``~/.cache/mojolearn/lm``."""
-    return _NATIVE.lm_corpus_public_call("default_cache_dir", ())
 
 
 # ---------------------------------------------------------------- the corpus

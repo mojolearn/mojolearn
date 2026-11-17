@@ -670,8 +670,6 @@ class BasicBlock(_Layer):
                  numeric_mode=None):
         _XCNN(self, "block_init", (inplanes, planes, stride, downsample, random_state, input_shape, numeric_mode), _XCNN_CONTEXT)
 
-    def _bns(self):
-        return [self.bn1, self.bn2] + ([self.downsample[1]] if self.downsample else [])
 
     def train(self, mode=True):
         return _XCNN(self, "block_train", (mode,), _XCNN_CONTEXT)

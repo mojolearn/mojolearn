@@ -53,8 +53,6 @@ from ._native_loaded_modules import INTEGRAL_TYPES
 #: `mojolearn.host_model(path)` scores it on a CPU through the svm host
 #: binding's iforest_run, the same rebuild every GPU scoring call runs.
 _IFOREST_FORMAT = "mojolearn-iforest-1"
-_IFOREST_INTS = 11
-_IFOREST_REALS = 4
 #: Lane fix-iforest-save-device-forest (2026-11-13): `IsolationForest.save`
 #: writes the fitted forest, not the training matrix: the same `ints` and
 #: `reals`, then `tree_offsets` `<i4` (n_estimators + 1), `node_feature`
