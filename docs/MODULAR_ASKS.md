@@ -414,3 +414,39 @@ SpeculativeExecution thresholds for NVPTX) and how to request the old behaviour.
 **Meanwhile.** An ordinary source form, not a patch of compiler output: `-D MOJOLEARN_NUMERICS_FAST_SQRT_COMPTIME_STEP`
 writes the step as `comptime for k in range(4)` with a compile-time offset, the same operations in the same order (bits
 unchanged), default off until its NVIDIA A/B (docs/apple-fast/EXPERIMENTS.md). Nothing has been sent to Modular.
+
+## A raw `METH_FASTCALL | METH_KEYWORDS` method on a bound type (2026-11-17, fb2-lr)
+
+**What.** `PythonTypeBuilder.def_py_c_method` (Mojo 1.2, std/python/bindings.mojo) accepts `PyCFunction`
+(`METH_VARARGS`), `PyCFunctionWithKeywords` (`METH_VARARGS | METH_KEYWORDS`) and `PyCFunctionFast` (`METH_FASTCALL`).
+There is no form for `PyCFunctionFastWithKeywords` (`METH_FASTCALL | METH_KEYWORDS`, signature
+`(self, PyObject *const *args, Py_ssize_t nargs, PyObject *kwnames)`); the source says "is not implemented here yet".
+
+**Why it matters.** A public per-step scalar method (`schedule.lr_at(t)`, called once per optimizer step, 100,000
+times in a board row) must accept `t=` by keyword, as the Python method it replaced did. The only keyword-accepting
+raw form makes CPython pack a one-item tuple on every positional call; `METH_FASTCALL` would pass the argument in
+place and pay for keywords only when `kwnames` is non-null.
+
+**Smallest reproducer.**
+```mojo
+from std.python import PythonObject
+from std.python._cpython import PyObjectPtr, Py_ssize_t
+from std.python.bindings import PythonModuleBuilder
+
+struct Box(Movable, Writable):
+    var x: Int
+    def __init__(out self): self.x = 0
+
+def get_c(py_self: PyObjectPtr, args: Pointer[PyObjectPtr, MutUntrackedOrigin],
+          nargs: Py_ssize_t, kwnames: PyObjectPtr) abi("C") -> PyObjectPtr:
+    return py_self
+
+# m.add_type[Box]("Box").def_py_c_method(get_c, "get")   # no overload accepts this signature
+```
+
+**The ask.** A `def_py_c_method` (and `def_py_c_function`) overload taking `PyCFunctionFastWithKeywords`, registered
+with `METH_FASTCALL | METH_KEYWORDS`; ideally also have `def_method` with keyword support use it.
+
+**Meanwhile.** `lr_at` / `bits_at` use the supported `METH_VARARGS | METH_KEYWORDS` form
+(bindings/lr_schedule_block_door.mojo): one CPython tuple per call, no other per-call work of ours. Nothing has been
+sent to Modular.
