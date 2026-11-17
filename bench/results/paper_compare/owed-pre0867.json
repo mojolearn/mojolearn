@@ -11,395 +11,535 @@
  "b_arms": {
   "em-check-1": {
    "define": "MOJOLEARN_EM_LOOP_CHECK_EVERY=1",
-   "status": "define in code (core/em_loop_chunk.mojo:34)"
+   "status": "define in code (core/em_loop_chunk.mojo:34)",
+   "owed": "RUN"
   },
   "em-check-8": {
    "define": "MOJOLEARN_EM_LOOP_CHECK_EVERY=8",
-   "status": "define in code (core/em_loop_chunk.mojo:34)"
+   "status": "define in code (core/em_loop_chunk.mojo:34)",
+   "owed": "RUN"
   },
   "sgd-check-1": {
    "define": "MOJOLEARN_SGD_LOOP_CHECK_EVERY=1",
-   "status": "define in code (x_linear/device.mojo:1778)"
+   "status": "define in code (x_linear/device.mojo:1778)",
+   "owed": "RUN"
   },
   "svd-one-block": {
    "define": "MOJOLEARN_XD_FAST_SVD_ONE_BLOCK",
-   "status": "define in code (x_decomp/device.mojo:227): B routes DevExec._svd_on (pca / tsvd / randomized-svd through x_decomp_svd and x_decomp_dev_svd) through svd_op_tall; A = today's round launches"
+   "status": "define in code (x_decomp/device.mojo:227): B routes DevExec._svd_on (pca / tsvd / randomized-svd through x_decomp_svd and x_decomp_dev_svd) through svd_op_tall; A = today's round launches",
+   "owed": "RUN"
   },
   "small-mlp-generic": {
    "define": "MOJOLEARN_SMALL_MLP_GENERIC_OPS",
-   "status": "define in code (autograd/small_mlp_program.mojo SMALL_MLP_GENERIC_OPS): B = lane x2's transpose + OPS_LINEAR capture; A = op small_mlp (leaf-128 GEMM, hand backward)"
+   "status": "define in code (autograd/small_mlp_program.mojo SMALL_MLP_GENERIC_OPS): B = lane x2's transpose + OPS_LINEAR capture; A = op small_mlp (leaf-128 GEMM, hand backward)",
+   "owed": "RUN"
   },
   "small-mlp-leaf128-off": {
    "define": "MOJOLEARN_IDN_MLP_GEMM_LEAF128_OFF",
-   "status": "define in code (autograd/small_mlp_op.mojo SMALL_MLP_GEMM_LEAF128): B = op small_mlp on identical_gemm_into"
+   "status": "define in code (autograd/small_mlp_op.mojo SMALL_MLP_GEMM_LEAF128): B = op small_mlp on identical_gemm_into",
+   "owed": "RUN"
   },
   "cnn-generic": {
    "define": "MOJOLEARN_CNN_GENERIC_OPS",
-   "status": "define in code (autograd/cnn_block_op.mojo CNN_FUSED_OPS): B = lane x8's OPS_CONV2D / OPS_RELU / OPS_MAXPOOL2D / OPS_LINEAR chain; A = ops cnn_conv_block / cnn_linear"
+   "status": "define in code (autograd/cnn_block_op.mojo CNN_FUSED_OPS): B = lane x8's OPS_CONV2D / OPS_RELU / OPS_MAXPOOL2D / OPS_LINEAR chain; A = ops cnn_conv_block / cnn_linear",
+   "owed": "RUN"
   },
   "byte-lm-generic": {
    "define": "MOJOLEARN_BYTE_LM_GENERIC_OPS,MOJOLEARN_BYTE_LM_PROGRAM_STEP",
-   "status": "define in code (training/byte_lm_program.mojo, autograd/block_step_ops.mojo): B = generic OPS_EMBEDDING and no next-norm fusion; A = op lm_embedding (+ ATTN_STEP_NEXT_NORM on Apple). Since 2026-11-13 the program is itself the B arm byte-lm-program-step, so this arm carries MOJOLEARN_BYTE_LM_PROGRAM_STEP too (compare it with byte-lm-program-step, not with the default hand step)"
+   "status": "define in code (training/byte_lm_program.mojo, autograd/block_step_ops.mojo): B = generic OPS_EMBEDDING and no next-norm fusion; A = op lm_embedding (+ ATTN_STEP_NEXT_NORM on Apple). Since 2026-11-13 the program is itself the B arm byte-lm-program-step, so this arm carries MOJOLEARN_BYTE_LM_PROGRAM_STEP too (compare it with byte-lm-program-step, not with the default hand step)",
+   "owed": "DECIDED",
+   "evidence": "L40S A/B at ba08dac006 (2026-11-13, one job): neural/lm-train-step/bytes 35.71 -> 48.54 ms, B 1.36x SLOWER; A (op lm_embedding) stays. ~/mojolearn-evidence/measure-candidate/pc-ba08dac006f5-nvidia/final2/owed-nvidia.json; switch code unchanged since ba08dac006 (git diff ba08dac006 076beccb75 over every .mojo naming the switch: comment lines only, the 2026-11-15 delete + restore); recorded in docs/apple-fast/EXPERIMENTS.md (lane fb8-owed-arms, 2026-11-17)"
   },
   "byte-lm-program-step": {
    "define": "MOJOLEARN_BYTE_LM_PROGRAM_STEP",
-   "status": "define in code (training/byte_lm_config.mojo:10 (one switch for the host and GPU columns) BYTE_LM_PROGRAM_STEP): B = lane x7's program step (one Program.fit per call, OPS_ATTN_STEP per layer, executor AdamW); A = the restored hand step (0.8.55 route: per-layer llama_decoder_layer_forward, tape backward autograd/rules_lm.mojo, certified optimizer / step-glue update). Candidate 4c2340386abc: lm-train-step bytes NV 48.9 ms, AMD 50.5 ms vs 35.5 / 43.9 ms for the hand step (0.8.55 / 0.8.66)"
+   "status": "define in code (training/byte_lm_config.mojo:10 (one switch for the host and GPU columns) BYTE_LM_PROGRAM_STEP): B = lane x7's program step (one Program.fit per call, OPS_ATTN_STEP per layer, executor AdamW); A = the restored hand step (0.8.55 route: per-layer llama_decoder_layer_forward, tape backward autograd/rules_lm.mojo, certified optimizer / step-glue update). Candidate 4c2340386abc: lm-train-step bytes NV 48.9 ms, AMD 50.5 ms vs 35.5 / 43.9 ms for the hand step (0.8.55 / 0.8.66)",
+   "owed": "DECIDED",
+   "evidence": "L40S A/B at ba08dac006 (2026-11-13, one job): neural/lm-train-step/bytes 35.71 -> 48.52 ms, B 1.36x SLOWER; A (the hand step) stays. ~/mojolearn-evidence/measure-candidate/pc-ba08dac006f5-nvidia/final2/owed-nvidia.json; switch code unchanged since ba08dac006 (git diff ba08dac006 076beccb75 over every .mojo naming the switch: comment lines only, the 2026-11-15 delete + restore); recorded in docs/apple-fast/EXPERIMENTS.md (lane fb8-owed-arms, 2026-11-17)"
   },
   "transformer-generic-prefill": {
    "define": "MOJOLEARN_TRANSFORMER_GENERIC_PREFILL",
-   "status": "define in code (autograd/block_step_ops.mojo TRANSFORMER_GENERIC_PREFILL): B = lane x4b's generic step-op run for a stateless forward; A = attn_step_fresh_prefill (0.8.66's session fresh prefill)"
+   "status": "define in code (autograd/block_step_ops.mojo TRANSFORMER_GENERIC_PREFILL): B = lane x4b's generic step-op run for a stateless forward; A = attn_step_fresh_prefill (0.8.66's session fresh prefill)",
+   "owed": "RUN"
   },
   "rsvd-devscan-off": {
    "define": "MOJOLEARN_RSVD_FAST_DEVSCAN_OFF",
-   "status": "define in code (x_decomp/s_linalg_fast.mojo RSVD_FAST_DEVSCAN; FAST + Apple only): B = the one admission path's parallel host scan of M"
+   "status": "define in code (x_decomp/s_linalg_fast.mojo RSVD_FAST_DEVSCAN; FAST + Apple only): B = the one admission path's parallel host scan of M",
+   "owed": "PAUSED",
+   "evidence": "Apple FAST only (x_decomp/s_linalg_fast.mojo RSVD_FAST_DEVSCAN): Apple fast investment is stopped (AGENTS.md part 2; 'A paused programme's arms are not unmeasured'); no NVIDIA identical race reads it"
   },
   "chol-shared-sub": {
    "define": "MOJOLEARN_CHOL_FAST_SHARED_SUB",
-   "status": "define in code (cholesky/checks/fast_trsm.mojo CHOL_SHARED_SUB; Apple FAST opt-in, default OFF): B = the scoped lower-triangle subtract"
+   "status": "define in code (cholesky/checks/fast_trsm.mojo CHOL_SHARED_SUB; Apple FAST opt-in, default OFF): B = the scoped lower-triangle subtract",
+   "owed": "PAUSED",
+   "evidence": "Apple FAST opt-in (cholesky/checks/fast_trsm.mojo CHOL_SHARED_SUB): Apple fast investment is stopped (AGENTS.md part 2); no NVIDIA identical race reads it"
   },
   "arima-async-all": {
    "define": "MOJOLEARN_ARIMA_ASYNC_ALL",
-   "status": "define in code (arima/impl/fast_lbfgs_async.mojo ARIMA_ASYNC_ALL): B = the per-series solver on every route (lane n10 form); A = lock-step solver where the fit holds no evaluation workspace (FAST NVIDIA / AMD, FAST Apple with exog, IDENTICAL above IDN_EVAL_WS_MAX_CELLS), per-series elsewhere"
+   "status": "define in code (arima/impl/fast_lbfgs_async.mojo ARIMA_ASYNC_ALL): B = the per-series solver on every route (lane n10 form); A = lock-step solver where the fit holds no evaluation workspace (FAST NVIDIA / AMD, FAST Apple with exog, IDENTICAL above IDN_EVAL_WS_MAX_CELLS), per-series elsewhere",
+   "owed": "DECIDED",
+   "evidence": "L40S A/B at ba08dac006 (2026-11-13, one job): classical2/arima/synthetic fit 52.54 -> 54.52 ms, B 1.04x (SAME, no gain); A (lock-step) stays. ~/mojolearn-evidence/measure-candidate/pc-ba08dac006f5-nvidia/final2/owed-nvidia.json; switch code unchanged since ba08dac006 (git diff ba08dac006 076beccb75 over every .mojo naming the switch: comment lines only, the 2026-11-15 delete + restore); recorded in docs/apple-fast/EXPERIMENTS.md (lane fb8-owed-arms, 2026-11-17)"
   },
   "autograd-optim": {
    "define": "MOJOLEARN_AUTOGRAD_OPTIM",
-   "status": "define in code (sequence/mlp_fit.mojo and sequence/recurrent.mojo AUTOGRAD_OPTIM): B = the executor optimizer (OptimizerState + step_lr / step_lr_finish, lane X3 form); A = the hand OP_OPT update (mlp_fit inline words, rnn_fit opt_step)"
+   "status": "define in code (sequence/mlp_fit.mojo and sequence/recurrent.mojo AUTOGRAD_OPTIM): B = the executor optimizer (OptimizerState + step_lr / step_lr_finish, lane X3 form); A = the hand OP_OPT update (mlp_fit inline words, rnn_fit opt_step)",
+   "owed": "DECIDED",
+   "evidence": "L40S A/B at ba08dac006 (2026-11-13, one job): gru 113.82 -> 113.27, lstm 139.90 -> 139.62, mlp 183.47 -> 185.69, rnn 52.28 -> 51.76 ms fit, B 0.99-1.01x (SAME); A (hand OP_OPT) stays. ~/mojolearn-evidence/measure-candidate/pc-ba08dac006f5-nvidia/final2/owed-nvidia.json; switch code unchanged since ba08dac006 (git diff ba08dac006 076beccb75 over every .mojo naming the switch: comment lines only, the 2026-11-15 delete + restore); recorded in docs/apple-fast/EXPERIMENTS.md (lane fb8-owed-arms, 2026-11-17)"
   },
   "chol-ops-fit": {
    "define": "MOJOLEARN_IDN_CHOL_OPS_FIT",
-   "status": "define in code (cholesky/chol_ops.mojo CHOL_OPS_FIT): B = the N7/N8 Cholesky ops route for the KernelRidge and GPR resident fits, the GPC Laplace Newton loop (bounded device loop, gaussian_process/gpc_newton.mojo), and the GP estimator's fit / lml+gradient / sample_y and hyperparameter optimizer (device run sequencer); A = potrf_lower + cho_solve (the 0.8.66 routes, restored 2026-11-13 after AMD 1.14-1.25x: KRR/GPR by fable-perf-classical-0855, GPC and the GP estimator/optimizer by restore-classical-measured-routes); also (lane fix-chol-ops-remaining-callers, 2026-11-13) the GMM precision Cholesky host-read chain (mixture/checks/mstep.mojo gmm_precision_cholesky, and gmm_precision_enqueue where no one-launch factor applies: gmm_precision_reads_host) and x_decomp's DevExec.chol_inv / DMcd.chol (MinCovDet's Cholesky C-step): A = 0.8.66 potrf_lower + chol_logdet + trsm_lower (restored from 49e8c5b633^), B = the ops (49e8c5b633, 52fb3193be)"
+   "status": "define in code (cholesky/chol_ops.mojo CHOL_OPS_FIT): B = the N7/N8 Cholesky ops route for the KernelRidge and GPR resident fits, the GPC Laplace Newton loop (bounded device loop, gaussian_process/gpc_newton.mojo), and the GP estimator's fit / lml+gradient / sample_y and hyperparameter optimizer (device run sequencer); A = potrf_lower + cho_solve (the 0.8.66 routes, restored 2026-11-13 after AMD 1.14-1.25x: KRR/GPR by fable-perf-classical-0855, GPC and the GP estimator/optimizer by restore-classical-measured-routes); also (lane fix-chol-ops-remaining-callers, 2026-11-13) the GMM precision Cholesky host-read chain (mixture/checks/mstep.mojo gmm_precision_cholesky, and gmm_precision_enqueue where no one-launch factor applies: gmm_precision_reads_host) and x_decomp's DevExec.chol_inv / DMcd.chol (MinCovDet's Cholesky C-step): A = 0.8.66 potrf_lower + chol_logdet + trsm_lower (restored from 49e8c5b633^), B = the ops (49e8c5b633, 52fb3193be)",
+   "owed": "DECIDED",
+   "evidence": "L40S A/B at ba08dac006 (2026-11-13, one job): 14 cells kernel-ridge / gpr / gpc / gmm / min-cov-det / elliptic-envelope, B 0.91-1.10x, every cell SAME (gpr istella fit 79.86 -> 87.78 the widest); A (0.8.66 potrf_lower) stays. ~/mojolearn-evidence/measure-candidate/pc-ba08dac006f5-nvidia/final2/owed-nvidia.json; switch code unchanged since ba08dac006 (git diff ba08dac006 076beccb75 over every .mojo naming the switch: comment lines only, the 2026-11-15 delete + restore); recorded in docs/apple-fast/EXPERIMENTS.md (lane fb8-owed-arms, 2026-11-17)"
   },
   "program-run-entry": {
    "define": "MOJOLEARN_PROGRAM_RUN_ENTRY",
-   "status": "define in code (providers/python/autograd_program_pyapi_door.mojo PROGRAM_RUN_ENTRY): B = every fixed-shape Program.run on autograd/program_entries.mojo program_execute_run (fb75472a87); A = OpsSession.run_program (0.8.55 route: scratch-tape inputs, cached replay, download into the caller's array)"
+   "status": "define in code (providers/python/autograd_program_pyapi_door.mojo PROGRAM_RUN_ENTRY): B = every fixed-shape Program.run on autograd/program_entries.mojo program_execute_run (fb75472a87); A = OpsSession.run_program (0.8.55 route: scratch-tape inputs, cached replay, download into the caller's array)",
+   "owed": "RUN"
   },
   "session-call-descriptor": {
    "define": "MOJOLEARN_SESSION_CALL_DESCRIPTOR",
-   "status": "define in code (providers/python/autograd_session_public_request_pyapi_pack.mojo SESSION_CALL_DESCRIPTOR): B = every public Session/Program call through the session_public_api_v1 descriptor (d2f14a3de4, ec806eaf6f, 1edde63a6a); A = a direct typed call when the calling image owns the session registry"
+   "status": "define in code (providers/python/autograd_session_public_request_pyapi_pack.mojo SESSION_CALL_DESCRIPTOR): B = every public Session/Program call through the session_public_api_v1 descriptor (d2f14a3de4, ec806eaf6f, 1edde63a6a); A = a direct typed call when the calling image owns the session registry",
+   "owed": "RUN"
   },
   "if-fit-own-x": {
    "define": "MOJOLEARN_IDN_IF_FIT_OWN_X",
-   "status": "define in code (bindings/trees_public_iforest_door.mojo _IF_FIT_OWN_X): B = the fit owns a parallel copy of a borrowed float32 X (0292b73ab3); A = a resident binary borrows X (0.8.55)"
+   "status": "define in code (bindings/trees_public_iforest_door.mojo _IF_FIT_OWN_X): B = the fit owns a parallel copy of a borrowed float32 X (0292b73ab3); A = a resident binary borrows X (0.8.55)",
+   "owed": "RUN"
   },
   "if-scores-f64-off": {
    "define": "MOJOLEARN_IDN_IF_SCORES_F64_OFF",
-   "status": "define in code (isolation_forest/impl/isolation_forest.mojo IDN_IF_SCORES_F64): B = float32 download + the door's admit_family_f64 cast (115b5eb8bb); A = the epilogue writes the public float64 scores"
+   "status": "define in code (isolation_forest/impl/isolation_forest.mojo IDN_IF_SCORES_F64): B = float32 download + the door's admit_family_f64 cast (115b5eb8bb); A = the epilogue writes the public float64 scores",
+   "owed": "RUN"
   },
   "kde-qtile-force": {
    "define": "MOJOLEARN_IDN_KDE_QTILE_FORCE",
-   "status": "define in code (kde/impl/neighbors/kernel_density.mojo KDE_IDN_QTILE_FORCE): B = the query-tile pass at every width (the 2026-10-11 promotion); A = kde_qtile_applies cost rule (query tile only while q_tpb*4*d*4 <= 32 KiB)"
+   "status": "define in code (kde/impl/neighbors/kernel_density.mojo KDE_IDN_QTILE_FORCE): B = the query-tile pass at every width (the 2026-10-11 promotion); A = kde_qtile_applies cost rule (query tile only while q_tpb*4*d*4 <= 32 KiB)",
+   "owed": "RUN"
   },
   "samba-program-forward": {
    "define": "MOJOLEARN_SAMBA_PROGRAM_FORWARD",
-   "status": "define in code (training/neural_identical_experiments.mojo SAMBA_PROGRAM_FORWARD, read by bindings/samba_inference_native_door.mojo samba_forward): B = the stateless SambaStack.forward on SambaStackProgram (lane x6; its per-call waste fixed: held Mamba-3 stages, kept forward-only attention stages, no report copies); A = the restored resident forward samba_resident_forward (descriptor op 16, training/samba_resident.mojo)"
+   "status": "define in code (training/neural_identical_experiments.mojo SAMBA_PROGRAM_FORWARD, read by bindings/samba_inference_native_door.mojo samba_forward): B = the stateless SambaStack.forward on SambaStackProgram (lane x6; its per-call waste fixed: held Mamba-3 stages, kept forward-only attention stages, no report copies); A = the restored resident forward samba_resident_forward (descriptor op 16, training/samba_resident.mojo)",
+   "owed": "RUN"
   },
   "rf-device-loop": {
    "define": "MOJOLEARN_IDN_RF_DEVICE_LOOP",
-   "status": "define in code (ensemble/decisiontree/batched_levelalgo/builder.mojo:1016 IDN_RF_DEVICE_LOOP): B = the device level loop (every sampling round enqueued per batch at proven bounds, 2026-10-04 to 2026-11-13 default); A = the host-queue level loop, K trees pipelined (0.8.25 route)"
+   "status": "define in code (ensemble/decisiontree/batched_levelalgo/builder.mojo:1016 IDN_RF_DEVICE_LOOP): B = the device level loop (every sampling round enqueued per batch at proven bounds, 2026-10-04 to 2026-11-13 default); A = the host-queue level loop, K trees pipelined (0.8.25 route)",
+   "owed": "RUN"
   },
   "et-device-loop": {
    "define": "MOJOLEARN_IDN_ET_DEVICE_LOOP",
-   "status": "define in code (extratrees/impl/decisiontree/batched_levelalgo/builder.mojo:6921 ET_DEVICE_LOOP): B = the depth-wise device level loop (rescue enqueued every batch at proven bounds, 2026-10-04 to 2026-11-13 default); A = the host-queue merged-frontier loop (40286f2d28^ route)"
+   "status": "define in code (extratrees/impl/decisiontree/batched_levelalgo/builder.mojo:6921 ET_DEVICE_LOOP): B = the depth-wise device level loop (rescue enqueued every batch at proven bounds, 2026-10-04 to 2026-11-13 default); A = the host-queue merged-frontier loop (40286f2d28^ route)",
+   "owed": "RUN"
   },
   "mamba-call-program": {
    "define": "MOJOLEARN_MAMBA_CALL_PROGRAM",
-   "status": "define in code (autograd/block_step_ops.mojo MAMBA_CALL_PROGRAM; mamba/impl/mamba_block_program.mojo MambaBlockProgram.run): B = lane x5's per-call route (session op into a y tensor, x copied D2D into a zeroed dx, output copied D2D then downloaded); A = x uploaded into the kept x tensor, the block reading it in place, residual_out downloaded straight to the caller (0.8.55 _mamba1_run/_mamba2_run shape)"
+   "status": "define in code (autograd/block_step_ops.mojo MAMBA_CALL_PROGRAM; mamba/impl/mamba_block_program.mojo MambaBlockProgram.run): B = lane x5's per-call route (session op into a y tensor, x copied D2D into a zeroed dx, output copied D2D then downloaded); A = x uploaded into the kept x tensor, the block reading it in place, residual_out downloaded straight to the caller (0.8.55 _mamba1_run/_mamba2_run shape)",
+   "owed": "RUN"
   },
   "transformer-decode-per-token-door": {
    "define": "MOJOLEARN_TRANSFORMER_DECODE_PER_TOKEN_DOOR",
-   "status": "define in code (providers/python/transformer_decode_pyapi_door.mojo TRANSFORMER_DECODE_PER_TOKEN_DOOR; transformer/attn_step_session.mojo _WORD_EACH_TOKEN): B = the former per-token door: a Python-owned TransformerDecodeSession reached through the binding entries transformer_decode_session_* with py_ints argument lists, the (B, 1, d_model) Array view rebuilt per token by _neural_input, and one position-word fill per token; A = a native registry decode session reached by one native call per step through the CausalLM session table (CAUSAL_SESSION_DECODE_STEP / RUN / FORWARD), the (B, d_model) step input admitted as is (_neural_input_rows), the position word written once before any entry build"
+   "status": "define in code (providers/python/transformer_decode_pyapi_door.mojo TRANSFORMER_DECODE_PER_TOKEN_DOOR; transformer/attn_step_session.mojo _WORD_EACH_TOKEN): B = the former per-token door: a Python-owned TransformerDecodeSession reached through the binding entries transformer_decode_session_* with py_ints argument lists, the (B, 1, d_model) Array view rebuilt per token by _neural_input, and one position-word fill per token; A = a native registry decode session reached by one native call per step through the CausalLM session table (CAUSAL_SESSION_DECODE_STEP / RUN / FORWARD), the (B, d_model) step input admitted as is (_neural_input_rows), the position word written once before any entry build",
+   "owed": "RUN"
   },
   "cnn-predict-program-copy": {
    "define": "MOJOLEARN_CNN_PREDICT_PROGRAM_COPY",
-   "status": "define in code (sequence/cnn_classifier_program.mojo CNN_PREDICT_PROGRAM_COPY): B = lane x8b's resident predict per call (zero-filled X and (n, k) buffers, a new prepared replay, per-chunk OP_COPY); A = unfilled device buffers, the session's cached replay, one-chunk output read in place"
+   "status": "define in code (sequence/cnn_classifier_program.mojo CNN_PREDICT_PROGRAM_COPY): B = lane x8b's resident predict per call (zero-filled X and (n, k) buffers, a new prepared replay, per-chunk OP_COPY); A = unfilled device buffers, the session's cached replay, one-chunk output read in place",
+   "owed": "RUN"
   },
   "mcd-chol": {
    "define": "MOJOLEARN_IDN_MCD_CHOL",
-   "status": "define in code (x_decomp/mcd.mojo IDN_MCD_CHOL): B = the blocked Cholesky C-step (2cb89eb1b9, the default 0.8.42 .. 2026-11-13, never A/B'd); A = the LU + round-robin Jacobi pinvh C-step (0.8.25 .. 0.8.41, restored 2026-11-13). Bits differ between the arms (every column together)"
+   "status": "define in code (x_decomp/mcd.mojo IDN_MCD_CHOL): B = the blocked Cholesky C-step (2cb89eb1b9, the default 0.8.42 .. 2026-11-13, never A/B'd); A = the LU + round-robin Jacobi pinvh C-step (0.8.25 .. 0.8.41, restored 2026-11-13). Bits differ between the arms (every column together)",
+   "owed": "RUN"
   },
   "tsqr-wy-pair-off": {
    "define": "MOJOLEARN_IDN_TSQR_WY_PAIR_OFF",
-   "status": "define in code (x_decomp/tsqr_core.mojo TS_WY_PAIR): B = the single-panel WY update (before 3c5c5592a0); A = the paired-panel WY update (default since 2026-10-08, never A/B'd)"
+   "status": "define in code (x_decomp/tsqr_core.mojo TS_WY_PAIR): B = the single-panel WY update (before 3c5c5592a0); A = the paired-panel WY update (default since 2026-10-08, never A/B'd)",
+   "owed": "RUN"
   },
   "tsqr-tree-par-off": {
    "define": "MOJOLEARN_IDN_TSQR_TREE_PAR_OFF",
-   "status": "define in code (x_decomp/tsqr_core.mojo TS_TREE_PAR): B = the serial tree-combine norm and untiled Q C apply (before 3c5c5592a0); A = the lane-parallel tree fold and tiled apply (default since 2026-10-08, never A/B'd)"
+   "status": "define in code (x_decomp/tsqr_core.mojo TS_TREE_PAR): B = the serial tree-combine norm and untiled Q C apply (before 3c5c5592a0); A = the lane-parallel tree fold and tiled apply (default since 2026-10-08, never A/B'd)",
+   "owed": "RUN"
   },
   "tsqr-wy-pair-tree-par-off": {
    "define": "MOJOLEARN_IDN_TSQR_WY_PAIR_OFF,MOJOLEARN_IDN_TSQR_TREE_PAR_OFF",
-   "status": "both defines together: the whole pre-3c5c5592a0 TSQR (x_decomp/tsqr_core.mojo)"
+   "status": "both defines together: the whole pre-3c5c5592a0 TSQR (x_decomp/tsqr_core.mojo)",
+   "owed": "RUN"
   },
   "ols-predict-tiled": {
    "define": "MOJOLEARN_IDN_OLS_PREDICT_TILED",
-   "status": "define in code (core/gemm.mojo IDN_OLS_PREDICT_TILED): B = the shared-memory tiled gemv for OLS predict (NV_AMD_IDENTICAL_STEPS, 812de59288, never measured for predict); A = the plain one-thread-per-row pinned_gemv_n_kernel (0.8.25 route, restored 2026-11-13 for predict only). Same bits"
+   "status": "define in code (core/gemm.mojo IDN_OLS_PREDICT_TILED): B = the shared-memory tiled gemv for OLS predict (NV_AMD_IDENTICAL_STEPS, 812de59288, never measured for predict); A = the plain one-thread-per-row pinned_gemv_n_kernel (0.8.25 route, restored 2026-11-13 for predict only). Same bits",
+   "owed": "RUN"
   },
   "mamba12-forward-copies-old": {
    "define": "MOJOLEARN_IDN_MAMBA12_FORWARD_COPIES_OLD",
-   "status": "define in code (autograd/block_step_ops.mojo IDN_MAMBA12_FORWARD_COPIES_OLD; mamba/impl/mamba_block_program.mojo, bindings/causal_lm_public_door.mojo causal_layer_stateless, bindings/neural_block_public_door.mojo _neural_plain): B = the Mamba-1/2 per-call forward with its per-call plumbing (19 / 28 stage buffers allocated and zero-filled per L > 1 run, Mamba-1 with a constructor wait; the Mamba-2 h_last report copied device-to-device into the entry; forward(x) with no state allocating a host zero state that the call uploads and downloads; y and h_last zero-filled); A = stages held per (B, L[, buf_len]) on the program's step entry and refilled with zeros (rezero), h_last read from the held stages, the stateless call zeroing the state on the device with nothing read back, y and h_last unfilled. Same kernels, same launch order, same bits"
+   "status": "define in code (autograd/block_step_ops.mojo IDN_MAMBA12_FORWARD_COPIES_OLD; mamba/impl/mamba_block_program.mojo, bindings/causal_lm_public_door.mojo causal_layer_stateless, bindings/neural_block_public_door.mojo _neural_plain): B = the Mamba-1/2 per-call forward with its per-call plumbing (19 / 28 stage buffers allocated and zero-filled per L > 1 run, Mamba-1 with a constructor wait; the Mamba-2 h_last report copied device-to-device into the entry; forward(x) with no state allocating a host zero state that the call uploads and downloads; y and h_last zero-filled); A = stages held per (B, L[, buf_len]) on the program's step entry and refilled with zeros (rezero), h_last read from the held stages, the stateless call zeroing the state on the device with nothing read back, y and h_last unfilled. Same kernels, same launch order, same bits",
+   "owed": "RUN"
   },
   "mamba3-forward-zero-fill": {
    "define": "MOJOLEARN_MAMBA3_FORWARD_ZERO_FILL",
-   "status": "define in code (bindings/neural_prefill_native_door.mojo MAMBA3_FORWARD_ZERO_FILL, _m3_output_array): B = every Mamba-3 output a native call writes whole zero-filled per call (the forward's y and four reports; since fix-mamba3-unfilled-rest also _m3_state_call's y and reports in bindings/samba_inference_native_door.mojo, the kind-3 session step/decode outputs via _session_output in bindings/mamba_public_native_door.mojo, and the tape prefill y) (generation_array, candidate 4c2340386abc's shape); A = allocated unfilled (generation_array_unfilled in bindings/generation_buffers_door.mojo, 0.8.55's shape), every byte written by the kernel's downloads. Same bits"
+   "status": "define in code (bindings/neural_prefill_native_door.mojo MAMBA3_FORWARD_ZERO_FILL, _m3_output_array): B = every Mamba-3 output a native call writes whole zero-filled per call (the forward's y and four reports; since fix-mamba3-unfilled-rest also _m3_state_call's y and reports in bindings/samba_inference_native_door.mojo, the kind-3 session step/decode outputs via _session_output in bindings/mamba_public_native_door.mojo, and the tape prefill y) (generation_array, candidate 4c2340386abc's shape); A = allocated unfilled (generation_array_unfilled in bindings/generation_buffers_door.mojo, 0.8.55's shape), every byte written by the kernel's downloads. Same bits",
+   "owed": "RUN"
   },
   "knn-i32-label-range-old": {
    "define": "MOJOLEARN_IDN_KNN_I32_LABEL_RANGE_OLD",
-   "status": "define in code (neighbors/neighbors_knn_run.mojo KNN_I32_LABEL_RANGE_OLD, knn_labels_already_int32; bindings/neighbors_knn_native_door.mojo _clf_fit): B = int32 labels widened to int64, min and max as two device reductions, narrowed back (every release since 0.8.44); A = int32 labels copied straight into the label columns, no range check (it cannot refuse int32). Same bits"
+   "status": "define in code (neighbors/neighbors_knn_run.mojo KNN_I32_LABEL_RANGE_OLD, knn_labels_already_int32; bindings/neighbors_knn_native_door.mojo _clf_fit): B = int32 labels widened to int64, min and max as two device reductions, narrowed back (every release since 0.8.44); A = int32 labels copied straight into the label columns, no range check (it cannot refuse int32). Same bits",
+   "owed": "RUN"
   },
   "nv-fma-asm": {
    "define": "MOJOLEARN_IDN_NV_FMA_ASM_OLD",
-   "status": "define in code (checks/nv_fma_rn.mojo IDN_NV_FMA_ASM_OLD, nv_fma_rn_kernel; callers neighbors/checks/pinned_distance_tile.mojo _rt_step/_rt_step_exact, gemm/checks/gemm_identical.mojo _tuned_step/_admit_step, transformer/impl/llama/fused_attention.mojo _step x2): B = the NVIDIA rounded FMA as the inline-asm helper nv_fma_rn_f32 (62a6577b39, candidate 4c2340386abc's shape); A = the llvm.nvvm.fma.rn.f intrinsic (0.8.55's form). Same PTX fma.rn.f32, same fold order, same bits; NVIDIA identical column only (AMD is a no-change check); mul.rn/mul.rn.ftz stay asm in both arms"
+   "status": "define in code (checks/nv_fma_rn.mojo IDN_NV_FMA_ASM_OLD, nv_fma_rn_kernel; callers neighbors/checks/pinned_distance_tile.mojo _rt_step/_rt_step_exact, gemm/checks/gemm_identical.mojo _tuned_step/_admit_step, transformer/impl/llama/fused_attention.mojo _step x2): B = the NVIDIA rounded FMA as the inline-asm helper nv_fma_rn_f32 (62a6577b39, candidate 4c2340386abc's shape); A = the llvm.nvvm.fma.rn.f intrinsic (0.8.55's form). Same PTX fma.rn.f32, same fold order, same bits; NVIDIA identical column only (AMD is a no-change check); mul.rn/mul.rn.ftz stay asm in both arms",
+   "owed": "RUN"
   },
   "lm-forward-zero-fill": {
    "define": "MOJOLEARN_BYTE_LM_LOGITS_ZERO_FILL",
-   "status": "define in code (bindings/byte_lm_trainer_native_door.mojo BYTE_LM_LOGITS_ZERO_FILL, _pooled_logits): B = a fresh resident logits store made as array.array('f', bytes(count * 4)) (zero-filled bytes, then a copy into the array; 0.8.66 / candidate shape); A = an unfilled bytearray store (native_scratch_bytes, _wrap_pooled_unfilled), every byte written by the one logits download. Same bits"
+   "status": "define in code (bindings/byte_lm_trainer_native_door.mojo BYTE_LM_LOGITS_ZERO_FILL, _pooled_logits): B = a fresh resident logits store made as array.array('f', bytes(count * 4)) (zero-filled bytes, then a copy into the array; 0.8.66 / candidate shape); A = an unfilled bytearray store (native_scratch_bytes, _wrap_pooled_unfilled), every byte written by the one logits download. Same bits",
+   "owed": "RUN"
   },
   "samba-weight-epoch-global": {
    "define": "MOJOLEARN_SAMBA_WEIGHT_EPOCH_GLOBAL",
-   "status": "define in code (core/weight_epoch.mojo SAMBA_WEIGHT_EPOCH_GLOBAL, read by registry_epoch / registry_epoch_bump): B = the Samba resident registry copies (samba_resident_forward, SambaStackProgram.refresh_weights) keyed by the process weight epoch, so any model's weight write re-uploads every stack's registry; A = keyed per registry (RegistryKey: the written registry's own stamp)"
+   "status": "define in code (core/weight_epoch.mojo SAMBA_WEIGHT_EPOCH_GLOBAL, read by registry_epoch / registry_epoch_bump): B = the Samba resident registry copies (samba_resident_forward, SambaStackProgram.refresh_weights) keyed by the process weight epoch, so any model's weight write re-uploads every stack's registry; A = keyed per registry (RegistryKey: the written registry's own stamp)",
+   "owed": "RUN"
   },
   "rf-device-loop-early-exit": {
    "define": "MOJOLEARN_IDN_RF_DEVICE_LOOP_EARLY_EXIT",
-   "status": "define in code (ensemble/decisiontree/batched_levelalgo/builder.mojo IDN_RF_DEVICE_LOOP_EARLY_EXIT): B = the device level loop that reads each sampling round's 4-byte retry count back and stops the batch's rounds at the first empty one (one drain per round run); A = the host-queue level loop (default)"
+   "status": "define in code (ensemble/decisiontree/batched_levelalgo/builder.mojo IDN_RF_DEVICE_LOOP_EARLY_EXIT): B = the device level loop that reads each sampling round's 4-byte retry count back and stops the batch's rounds at the first empty one (one drain per round run); A = the host-queue level loop (default)",
+   "owed": "RUN"
   },
   "et-device-loop-early-exit": {
    "define": "MOJOLEARN_IDN_ET_DEVICE_LOOP_EARLY_EXIT",
-   "status": "define in code (extratrees/impl/decisiontree/batched_levelalgo/builder.mojo ET_DEVICE_LOOP_EARLY_EXIT): B = the depth-wise device level loop that reads each batch's 4-byte rescue count back and skips an empty DEVIATION 205 rescue; A = the host-queue merged-frontier loop (default)"
+   "status": "define in code (extratrees/impl/decisiontree/batched_levelalgo/builder.mojo ET_DEVICE_LOOP_EARLY_EXIT): B = the depth-wise device level loop that reads each batch's 4-byte rescue count back and skips an empty DEVIATION 205 rescue; A = the host-queue merged-frontier loop (default)",
+   "owed": "RUN"
   },
   "mamba-backward-generic": {
    "define": "MOJOLEARN_IDN_MAMBA_BACKWARD_GENERIC",
-   "status": "define in code (autograd/rules_mamba.mojo IDN_MAMBA_BACKWARD_GENERIC): B = the tape graph (mamba{1,2}_step_backward_tape, _m{1,2}_record_backward) as the block step op's Mamba-1/2 VJP (main 5005c07e74's shape); A = the restored 10-19 hand chain (mamba{1,2}_step_backward_hand, deleted by 47582a7fb) over the same kept stages. Same kernels in the same order: same bits"
+   "status": "define in code (autograd/rules_mamba.mojo IDN_MAMBA_BACKWARD_GENERIC): B = the tape graph (mamba{1,2}_step_backward_tape, _m{1,2}_record_backward) as the block step op's Mamba-1/2 VJP (main 5005c07e74's shape); A = the restored 10-19 hand chain (mamba{1,2}_step_backward_hand, deleted by 47582a7fb) over the same kept stages. Same kernels in the same order: same bits",
+   "owed": "RUN"
   },
   "gbdt-prebinned-infer-old": {
    "define": "MOJOLEARN_IDN_GBDT_PREBINNED_INFER_OLD",
-   "status": "define in code (gbdt/models/add_non_symmetric_tree_doc_parallel.mojo IDN_NS_RESIDENT_PACK): B = the resident Depthwise/Lossguide predict re-packing the ensemble every call through doc_parallel_boosting.predict (layout build, node staging, sixteen allocations, eight uploads, bins buffer); A = the pack held from the first predict (NsResidentPack), node offsets and bins buffer rewritten only when the row count changes (default). Same kernels, same arguments, same tree order: same bits"
+   "status": "define in code (gbdt/models/add_non_symmetric_tree_doc_parallel.mojo IDN_NS_RESIDENT_PACK): B = the resident Depthwise/Lossguide predict re-packing the ensemble every call through doc_parallel_boosting.predict (layout build, node staging, sixteen allocations, eight uploads, bins buffer); A = the pack held from the first predict (NsResidentPack), node offsets and bins buffer rewritten only when the row count changes (default). Same kernels, same arguments, same tree order: same bits",
+   "owed": "RUN"
   },
   "transformer-decode-per-token-admission": {
    "define": "MOJOLEARN_TRANSFORMER_DECODE_PER_TOKEN_ADMISSION",
-   "status": "define in code (providers/python/transformer_decode_pyapi_door.mojo TRANSFORMER_DECODE_PER_TOKEN_ADMISSION): B = the per-token admission of the GPU decode step (owner record fields of 3 names, block and state generation words, option-tail content check, a new NativeModules per token, x and y address re-snapshots and a keep list, the state generation re-stamp); A = 0.8.55's per-token shape: when the session's _state is the state admitted at init and the handle holds its registry session, the step admits only x, allocates y, reads/writes state.cached_tokens (exact int) and makes one native call on the pinned session"
+   "status": "define in code (providers/python/transformer_decode_pyapi_door.mojo TRANSFORMER_DECODE_PER_TOKEN_ADMISSION): B = the per-token admission of the GPU decode step (owner record fields of 3 names, block and state generation words, option-tail content check, a new NativeModules per token, x and y address re-snapshots and a keep list, the state generation re-stamp); A = 0.8.55's per-token shape: when the session's _state is the state admitted at init and the handle holds its registry session, the step admits only x, allocates y, reads/writes state.cached_tokens (exact int) and makes one native call on the pinned session",
+   "owed": "RUN"
   },
   "nv-mul-rn-asm": {
    "define": "MOJOLEARN_IDN_NV_MUL_RN_ASM_OLD",
-   "status": "define in code (checks/numerics.mojo IDN_NV_MUL_RN_ASM_OLD; nv_mul_rn_kernel_f32/_f64, nv_flush_by_one_kernel; callers checks/numerics.mojo ftz (NVIDIA hardware flush) and pinned_mul_f32/_f64 (every identical_mul/identical_mul64), neighbors/checks/pinned_distance_tile.mojo _rt_step, gemm/checks/gemm_identical.mojo _tuned_step/_fold_flush, transformer/impl/llama/fused_attention.mojo _step/_step_preflushed): B = PTX mul.rn.f32/.f64 and mul.rn.ftz.f32 x,1 as inline asm (62a6577b39, candidate 4c2340386abc's shape); A = llvm.nvvm.fma.rn.f/.d(a, b, -0.0) and llvm.nvvm.fma.rn.ftz.f(x, 1.0, -0.0), schedulable like 0.8.55's llvm.nvvm.mul.rn.* intrinsics. Same IEEE word for every input (exact product plus -0.0 rounded once; the by-one product is exact), same fold order; NVIDIA identical column only (AMD is a no-change check)"
+   "status": "define in code (checks/numerics.mojo IDN_NV_MUL_RN_ASM_OLD; nv_mul_rn_kernel_f32/_f64, nv_flush_by_one_kernel; callers checks/numerics.mojo ftz (NVIDIA hardware flush) and pinned_mul_f32/_f64 (every identical_mul/identical_mul64), neighbors/checks/pinned_distance_tile.mojo _rt_step, gemm/checks/gemm_identical.mojo _tuned_step/_fold_flush, transformer/impl/llama/fused_attention.mojo _step/_step_preflushed): B = PTX mul.rn.f32/.f64 and mul.rn.ftz.f32 x,1 as inline asm (62a6577b39, candidate 4c2340386abc's shape); A = llvm.nvvm.fma.rn.f/.d(a, b, -0.0) and llvm.nvvm.fma.rn.ftz.f(x, 1.0, -0.0), schedulable like 0.8.55's llvm.nvvm.mul.rn.* intrinsics. Same IEEE word for every input (exact product plus -0.0 rounded once; the by-one product is exact), same fold order; NVIDIA identical column only (AMD is a no-change check)",
+   "owed": "RUN"
   },
   "query-x-held-off": {
    "define": "MOJOLEARN_IDN_QUERY_X_HELD_OFF",
-   "status": "define in code (core/query_x_held.mojo IDN_QUERY_X_HELD): B = every resident kernel predict (SVC, SVR, GPR, GPC, KernelRidge) creating its query x, status pair (plus a fill launch) and pinned pair per call (DeviceQueryX per call, main 5005c07e74's shape); A = the buffers held by the model's lease or handle (high-water rows, grow only, prefix view for fewer rows), status pair filled once and flagged by a per-call mark, one pinned pair for the life of the model (default). Same kernels, same bytes: same bits"
+   "status": "define in code (core/query_x_held.mojo IDN_QUERY_X_HELD): B = every resident kernel predict (SVC, SVR, GPR, GPC, KernelRidge) creating its query x, status pair (plus a fill launch) and pinned pair per call (DeviceQueryX per call, main 5005c07e74's shape); A = the buffers held by the model's lease or handle (high-water rows, grow only, prefix view for fewer rows), status pair filled once and flagged by a per-call mark, one pinned pair for the life of the model (default). Same kernels, same bytes: same bits",
+   "owed": "RUN"
   },
   "knn-door-fit-xn-eager": {
    "define": "MOJOLEARN_IDN_KNN_DOOR_FIT_XN_EAGER",
-   "status": "define in code (neighbors/neighbors_knn_run.mojo KNN_DOOR_FIT_XN_EAGER, knn_fit_xn_eager; bindings/neighbors_knn_native_door.mojo _neighbors_knn_operation, _knn_xn): B = every KNeighborsClassifier/Regressor fit resolves and admits the x_neighbors binding up front (b412ea02f4's door form); A = only the multi-output label transpose resolves it (0.8.55's neighbors.py form). Same bits"
+   "status": "define in code (neighbors/neighbors_knn_run.mojo KNN_DOOR_FIT_XN_EAGER, knn_fit_xn_eager; bindings/neighbors_knn_native_door.mojo _neighbors_knn_operation, _knn_xn): B = every KNeighborsClassifier/Regressor fit resolves and admits the x_neighbors binding up front (b412ea02f4's door form); A = only the multi-output label transpose resolves it (0.8.55's neighbors.py form). Same bits",
+   "owed": "RUN"
   },
   "mamba12-forward-door-old": {
    "define": "MOJOLEARN_IDN_MAMBA12_FORWARD_DOOR_OLD",
-   "status": "define in code (autograd/block_step_ops.mojo IDN_MAMBA12_FORWARD_DOOR_OLD; mamba/impl/mamba_block_program.mojo zero_state/run/mamba_block_call, bindings/causal_lm_public_door.mojo causal_mamba_stateless_run, bindings/neural_block_public_door.mojo _neural_plain): B = lane fix-mamba12-forward-exec's held Mamba-1/2 stages (19 / 28 separately allocated buffers, Mamba-1 with one wait when built, one fill per stage per reuse), the buf_len word uploaded and written on every fresh Mamba-2 call, and the stateless forward through neural door -> causal_layer_run_fields -> _causal_layer_run_bound -> table; A = 0.8.55's arena form (_mamba1_run_arena / _mamba2_run_arena at 0e4de0f46e:422 / :1018): the held set as views of one held arena (one allocation and one fill when built, ONE fill per reuse), no word traffic on a fresh call while the device words are known zero, and one direct call from the neural door with the plan's prepared layer and a held Mamba entry. Same kernels, same launch order, same bits"
+   "status": "define in code (autograd/block_step_ops.mojo IDN_MAMBA12_FORWARD_DOOR_OLD; mamba/impl/mamba_block_program.mojo zero_state/run/mamba_block_call, bindings/causal_lm_public_door.mojo causal_mamba_stateless_run, bindings/neural_block_public_door.mojo _neural_plain): B = lane fix-mamba12-forward-exec's held Mamba-1/2 stages (19 / 28 separately allocated buffers, Mamba-1 with one wait when built, one fill per stage per reuse), the buf_len word uploaded and written on every fresh Mamba-2 call, and the stateless forward through neural door -> causal_layer_run_fields -> _causal_layer_run_bound -> table; A = 0.8.55's arena form (_mamba1_run_arena / _mamba2_run_arena at 0e4de0f46e:422 / :1018): the held set as views of one held arena (one allocation and one fill when built, ONE fill per reuse), no word traffic on a fresh call while the device words are known zero, and one direct call from the neural door with the plan's prepared layer and a held Mamba entry. Same kernels, same launch order, same bits",
+   "owed": "RUN"
   },
   "mamba3-forward-door-old": {
    "define": "MOJOLEARN_IDN_MAMBA3_FORWARD_DOOR_OLD",
-   "status": "define in code (core/neural_entry_table.mojo IDN_MAMBA3_FORWARD_DOOR_OLD; bindings/neural_prefill_native_door.mojo _prefill_mamba3_reports, providers/python/mamba3_prefill_session_pyapi_door.mojo, core/mamba3_prefill_session.mojo, mamba/native_block_dispatch.mojo): B = a caps table call per forward and the session's reserve / run / release as three table calls (three registry leases); A = the caps read once when the block's session opens and the forward as ONE table call that reserves, runs and releases in the image under one busy lock (MAMBA3_CAP_HELD_FORWARD). Same session, same weight compare, same _m3_prefill_run body, same bits"
+   "status": "define in code (core/neural_entry_table.mojo IDN_MAMBA3_FORWARD_DOOR_OLD; bindings/neural_prefill_native_door.mojo _prefill_mamba3_reports, providers/python/mamba3_prefill_session_pyapi_door.mojo, core/mamba3_prefill_session.mojo, mamba/native_block_dispatch.mojo): B = a caps table call per forward and the session's reserve / run / release as three table calls (three registry leases); A = the caps read once when the block's session opens and the forward as ONE table call that reserves, runs and releases in the image under one busy lock (MAMBA3_CAP_HELD_FORWARD). Same session, same weight compare, same _m3_prefill_run body, same bits",
+   "owed": "RUN"
   },
   "lars-grid-gram-off": {
    "define": "MOJOLEARN_IDN_LARS_GRID_GRAM_OFF",
-   "status": "define in code (x_linear/lars.mojo LARS_GRID_GRAM, x_linear/device.mojo XL_IDN_LARS_GRID_GRAM): B = the moments grid (mg_means_kernel / mg_cross_kernel); A = the blocked moments (core/blocked_moments.mojo). Both arms take the kept LARS Cholesky factor of lane/fix-lars-grid-gram"
+   "status": "define in code (x_linear/lars.mojo LARS_GRID_GRAM, x_linear/device.mojo XL_IDN_LARS_GRID_GRAM): B = the moments grid (mg_means_kernel / mg_cross_kernel); A = the blocked moments (core/blocked_moments.mojo). Both arms take the kept LARS Cholesky factor of lane/fix-lars-grid-gram",
+   "owed": "RUN"
   },
   "ni12-fill-rule-off": {
    "define": "MOJOLEARN_NI12_FILL_RULE_OFF",
-   "status": "define in code (x_cnn/device.mojo NI12_FILL_RULE): B = the implicit conv on every layer (the 2026-10-10 promoted default); A = implicit only when OC >= 32 and C*KH*KW >= 32"
+   "status": "define in code (x_cnn/device.mojo NI12_FILL_RULE): B = the implicit conv on every layer (the 2026-10-10 promoted default); A = implicit only when OC >= 32 and C*KH*KW >= 32",
+   "owed": "RUN"
   },
   "ni12-implicit-conv-off": {
    "define": "MOJOLEARN_NI12_IMPLICIT_CONV_OFF",
-   "status": "define in code (x_cnn/device.mojo NI12_IMPLICIT_CONV): B = the materialized cols on every layer (direct conv / im2col + GEMM; the g50ebe26a5 cnn-clf winner)"
+   "status": "define in code (x_cnn/device.mojo NI12_IMPLICIT_CONV): B = the materialized cols on every layer (direct conv / im2col + GEMM; the g50ebe26a5 cnn-clf winner)",
+   "owed": "RUN"
   },
   "hist-packed-gh": {
    "define": "MOJOLEARN_TREES_HIST_PACKED_GH",
-   "status": "define in code (gbdt/trees_hist_switches.mojo HIST_PACKED_GH, gbdt/methods/greedy_subsets_searcher/kernel/hist_2_one_byte_8bit.mojo H8_PACKED): B = grad+hess of a cell in one Int64 shared atomic (NVIDIA/AMD); A = two Int32 atomics"
+   "status": "define in code (gbdt/trees_hist_switches.mojo HIST_PACKED_GH, gbdt/methods/greedy_subsets_searcher/kernel/hist_2_one_byte_8bit.mojo H8_PACKED): B = grad+hess of a cell in one Int64 shared atomic (NVIDIA/AMD); A = two Int32 atomics",
+   "owed": "RUN"
   },
   "hist-warp-agg": {
    "define": "MOJOLEARN_TREES_HIST_WARP_AGG",
-   "status": "define in code (gbdt/trees_hist_switches.mojo HIST_WARP_AGG, gbdt/methods/greedy_subsets_searcher/kernel/hist_2_one_byte_8bit.mojo H8_WAVE_AGG / h8_add_point_wave): B = when a whole wave holds the same bin, one shuffle-tree sum and one atomic per stat (NVIDIA/AMD); A = one atomic per lane"
+   "status": "define in code (gbdt/trees_hist_switches.mojo HIST_WARP_AGG, gbdt/methods/greedy_subsets_searcher/kernel/hist_2_one_byte_8bit.mojo H8_WAVE_AGG / h8_add_point_wave): B = when a whole wave holds the same bin, one shuffle-tree sum and one atomic per stat (NVIDIA/AMD); A = one atomic per lane",
+   "owed": "RUN"
   },
   "lg-level-rounds": {
    "define": "MOJOLEARN_TREES_LG_LEVEL_ROUNDS",
-   "status": "define in code (gbdt/trees_identical_switches.mojo LG_LEVEL_ROUNDS, greedy_search_helper_depthwise.mojo lg_level_rounds): B = when max_leaves >= 2**max_depth (a parameter test), one exact lossguide round splits a whole depth level; A = LG_EXACT_BATCH_WIDTH (32) leaves a round"
+   "status": "define in code (gbdt/trees_identical_switches.mojo LG_LEVEL_ROUNDS, greedy_search_helper_depthwise.mojo lg_level_rounds): B = when max_leaves >= 2**max_depth (a parameter test), one exact lossguide round splits a whole depth level; A = LG_EXACT_BATCH_WIDTH (32) leaves a round",
+   "owed": "RUN"
   },
   "gbdt-id-defer-copy": {
    "define": "MOJOLEARN_GBDT_ID_DEFER_COPY",
-   "status": "define in code (greedy_search_helper_depthwise.mojo DEFER_HIST_COPY_1903): B = NVIDIA/AMD IDENTICAL take Apple IDENTICAL's deferred parent-histogram copy and dirty-slot zero pass; A = split-time copy and full zero pass"
+   "status": "define in code (greedy_search_helper_depthwise.mojo DEFER_HIST_COPY_1903): B = NVIDIA/AMD IDENTICAL take Apple IDENTICAL's deferred parent-histogram copy and dirty-slot zero pass; A = split-time copy and full zero pass",
+   "owed": "RUN"
   },
   "c48-if-partition": {
    "define": "MOJOLEARN_TREES_C48_IF_PARTITION",
-   "status": "define in code (isolation_forest/impl/isolation_tree_builder.mojo IF_C48_FUSED_PARTITION, IF_WORK_PLANES 3): B = node split as one fused stable partition (flag and block scan once, destinations stored, one scatter; no atomics); A = the two-pass stable partition"
+   "status": "define in code (isolation_forest/impl/isolation_tree_builder.mojo IF_C48_FUSED_PARTITION, IF_WORK_PLANES 3): B = node split as one fused stable partition (flag and block scan once, destinations stored, one scatter; no atomics); A = the two-pass stable partition",
+   "owed": "RUN"
   },
   "seq-tiled-predict-on": {
    "define": "MOJOLEARN_IDN_SEQ_TILED_PREDICT",
-   "status": "define in code (autograd/model.mojo SEQ_TILED_PREDICT, restored 2026-11-15 by lane restore-run-arms-neural): B = the whole set in one predict chunk when the inference scratch fits 1 GiB and every Linear keeps its split-K decision; A = the caller's 4096-row chunks"
+   "status": "define in code (autograd/model.mojo SEQ_TILED_PREDICT, restored 2026-11-15 by lane restore-run-arms-neural): B = the whole set in one predict chunk when the inference scratch fits 1 GiB and every Linear keeps its split-K decision; A = the caller's 4096-row chunks",
+   "owed": "RUN"
   },
   "gemm-int-slices-on": {
    "define": "MOJOLEARN_IDN_GEMM_INT_SLICES",
-   "status": "define in code (gemm/int_slices.mojo IDN_GEMM_INT_SLICES, restored 2026-11-15 by lane restore-run-arms-neural): B = fp32 GEMM as four int8 planes on the tuned IMMA kernel plus the one-rounding epilogue (research profile fp32.v2-int) for k <= 65536, device and host column; A = fp32.v1"
+   "status": "define in code (gemm/int_slices.mojo IDN_GEMM_INT_SLICES, restored 2026-11-15 by lane restore-run-arms-neural): B = fp32 GEMM as four int8 planes on the tuned IMMA kernel plus the one-rounding epilogue (research profile fp32.v2-int) for k <= 65536, device and host column; A = fp32.v1",
+   "owed": "RUN"
   },
   "ssd-occupancy-on": {
    "define": "MOJOLEARN_IDN_SSD_OCCUPANCY",
-   "status": "define in code (mamba/impl/modules/ssd_minimal.mojo IDN_SSD_OCCUPANCY, restored 2026-11-15 by lane restore-run-arms-neural): B = coalesced S10 discretize (one thread per (b, t, h, p)), 16 x 16 shared-tile S12 G = C.B, S18/S19 Y_off row tiles; A = the cell kernels"
+   "status": "define in code (mamba/impl/modules/ssd_minimal.mojo IDN_SSD_OCCUPANCY, restored 2026-11-15 by lane restore-run-arms-neural): B = coalesced S10 discretize (one thread per (b, t, h, p)), 16 x 16 shared-tile S12 G = C.B, S18/S19 Y_off row tiles; A = the cell kernels",
+   "owed": "RUN"
   },
   "attn-fold-v2-on": {
    "define": "MOJOLEARN_IDN_ATTN_FOLD_V2",
-   "status": "define in code (transformer/impl/llama/attn_fold_v2.mojo ATTN_FOLD_V2, restored 2026-11-15 by lane restore-run-arms-neural): B = the attention key axis folded in 128-key leaves plus the GEMM contract's carry tree, fused forward split into row-tile x leaf blocks (hd64/hd128), eager v2 kernels otherwise, host oracle and byte-LM host kernels on the same fold; A = v1's serial chains"
+   "status": "define in code (transformer/impl/llama/attn_fold_v2.mojo ATTN_FOLD_V2, restored 2026-11-15 by lane restore-run-arms-neural): B = the attention key axis folded in 128-key leaves plus the GEMM contract's carry tree, fused forward split into row-tile x leaf blocks (hd64/hd128), eager v2 kernels otherwise, host oracle and byte-LM host kernels on the same fold; A = v1's serial chains",
+   "owed": "RUN"
   },
   "norm-fixed-lanes-on": {
    "define": "MOJOLEARN_IDN_NORM_FIXED_LANES",
-   "status": "define in code (transformer/experiments/norm_fixed_lanes.mojo IDN_NORM_FIXED_LANES, restored 2026-11-15 by lane restore-run-arms-neural): B = RMSNorm / LayerNorm statistics and the norm-backward dot as one 32-lane cell per row (shuffle tree, chain depth d -> d/32 + 5) on every column; A = the one-thread serial row chain"
+   "status": "define in code (transformer/experiments/norm_fixed_lanes.mojo IDN_NORM_FIXED_LANES, restored 2026-11-15 by lane restore-run-arms-neural): B = RMSNorm / LayerNorm statistics and the norm-backward dot as one 32-lane cell per row (shuffle tree, chain depth d -> d/32 + 5) on every column; A = the one-thread serial row chain",
+   "owed": "RUN"
   },
   "lg-block-scratch-fill": {
    "define": "MOJOLEARN_TREES_BLOCK_SCRATCH_FILL_OFF",
-   "status": "define in code (gbdt/methods/greedy_subsets_searcher/greedy_search_helper.mojo BLOCK_SCRATCH_FILL_OFF, launch_histograms_for_blocks): B = the whole-buffer zero of block_hist (pool slots x stat_count x widest block folds) at every non-fixed-point block of every histogram build; A = the zero of the block's own span max_leaves x stat_count x total_folds"
+   "status": "define in code (gbdt/methods/greedy_subsets_searcher/greedy_search_helper.mojo BLOCK_SCRATCH_FILL_OFF, launch_histograms_for_blocks): B = the whole-buffer zero of block_hist (pool slots x stat_count x widest block folds) at every non-fixed-point block of every histogram build; A = the zero of the block's own span max_leaves x stat_count x total_folds",
+   "owed": "RUN"
   },
   "neural-native-dispatch-off": {
    "define": "MOJOLEARN_NEURAL_NATIVE_DISPATCH_OFF",
-   "status": "define in code (providers/python/neural_descriptor_pyapi_door.mojo NEURAL_NATIVE_DISPATCH, read by bindings/mamba_public_native_door.mojo, bindings/neural_block_public_door.mojo, bindings/causal_lm_construct_door.mojo, bindings/causal_lm_public_door.mojo, providers/python/transformer_decode_pyapi_door.mojo): B = every neural door finds each compiled entry by name and calls it through CPython per token / layer / call (the former MOJOLEARN_NEURAL_NATIVE_DISPATCH=0 environment default of every door but CausalLM); A = the native descriptor tables connected once at construction (the former =1). Same numerical functions and words: digests must not move."
+   "status": "define in code (providers/python/neural_descriptor_pyapi_door.mojo NEURAL_NATIVE_DISPATCH, read by bindings/mamba_public_native_door.mojo, bindings/neural_block_public_door.mojo, bindings/causal_lm_construct_door.mojo, bindings/causal_lm_public_door.mojo, providers/python/transformer_decode_pyapi_door.mojo): B = every neural door finds each compiled entry by name and calls it through CPython per token / layer / call (the former MOJOLEARN_NEURAL_NATIVE_DISPATCH=0 environment default of every door but CausalLM); A = the native descriptor tables connected once at construction (the former =1). Same numerical functions and words: digests must not move.",
+   "owed": "RUN"
   },
   "classical-native-dispatch": {
    "define": "MOJOLEARN_CLASSICAL_NATIVE_DISPATCH",
-   "status": "define in code (providers/python/classical_native_dispatch.mojo CLASSICAL_NATIVE_DISPATCH, read by bindings/svc_kernel_native_door.mojo _svc_provider, providers/python/x_neighbors_descriptor_pyapi_door.mojo xn_admit, providers/python/estimator_binding_pyapi_door.mojo estimator_checked_mode): B = SVC/SVR through the svm_binary_api_v1 descriptor table (no CPython entry call per pair/fold/epilogue, but no device-resident predict and no device-X fit), x_neighbors modules admitted natively, no SVM mode readback (the former MOJOLEARN_CLASSICAL_NATIVE_DISPATCH=1, never timed); A = by-name entries with the resident fitted state and device X (the former default \"0\", what every board row ran). Same numerical owners and words: digests must not move."
+   "status": "define in code (providers/python/classical_native_dispatch.mojo CLASSICAL_NATIVE_DISPATCH, read by bindings/svc_kernel_native_door.mojo _svc_provider, providers/python/x_neighbors_descriptor_pyapi_door.mojo xn_admit, providers/python/estimator_binding_pyapi_door.mojo estimator_checked_mode): B = SVC/SVR through the svm_binary_api_v1 descriptor table (no CPython entry call per pair/fold/epilogue, but no device-resident predict and no device-X fit), x_neighbors modules admitted natively, no SVM mode readback (the former MOJOLEARN_CLASSICAL_NATIVE_DISPATCH=1, never timed); A = by-name entries with the resident fitted state and device X (the former default \"0\", what every board row ran). Same numerical owners and words: digests must not move.",
+   "owed": "RUN"
   },
   "download-stage-off": {
    "define": "MOJOLEARN_DOWNLOAD_STAGE_OFF",
-   "status": "define in code (core/staged_download.mojo DOWNLOAD_STAGE_OFF (read by download_staged)): B = the raw host-pointer copy at every size (the former MOJOLEARN_DOWNLOAD_STAGE=0); A = the pinned two-stage pipeline from DOWNLOAD_STAGE_MIN floats (the former default). A transport/route choice: digests must not move."
+   "status": "define in code (core/staged_download.mojo DOWNLOAD_STAGE_OFF (read by download_staged)): B = the raw host-pointer copy at every size (the former MOJOLEARN_DOWNLOAD_STAGE=0); A = the pinned two-stage pipeline from DOWNLOAD_STAGE_MIN floats (the former default). A transport/route choice: digests must not move.",
+   "owed": "RUN"
   },
   "gemm-pool-off": {
    "define": "MOJOLEARN_GEMM_POOL_OFF",
-   "status": "define in code (gemm/host_transport.mojo GEMM_POOL_ON): B = fresh device buffers every matmul call (the former MOJOLEARN_GEMM_POOL=0); A = pooled grow-only device buffers per role (the former default). A transport/route choice: digests must not move."
+   "status": "define in code (gemm/host_transport.mojo GEMM_POOL_ON): B = fresh device buffers every matmul call (the former MOJOLEARN_GEMM_POOL=0); A = pooled grow-only device buffers per role (the former default). A transport/route choice: digests must not move.",
+   "owed": "RUN"
   },
   "gemm-stage-down-off": {
    "define": "MOJOLEARN_GEMM_STAGE_DOWN_OFF",
-   "status": "define in code (gemm/host_transport.mojo GEMM_STAGE_DOWN_ON): B = raw device-to-host-pointer download (the former MOJOLEARN_GEMM_STAGE_DOWN=0); A = staged (pinned, double-buffered) download (the former default). A transport/route choice: digests must not move."
+   "status": "define in code (gemm/host_transport.mojo GEMM_STAGE_DOWN_ON): B = raw device-to-host-pointer download (the former MOJOLEARN_GEMM_STAGE_DOWN=0); A = staged (pinned, double-buffered) download (the former default). A transport/route choice: digests must not move.",
+   "owed": "RUN"
   },
   "gemm-stage-up-off": {
    "define": "MOJOLEARN_GEMM_STAGE_UP_OFF",
-   "status": "define in code (gemm/host_transport.mojo GEMM_STAGE_UP_ON): B = raw host-pointer upload (the former MOJOLEARN_GEMM_STAGE_UP=0); A = staged upload on NVIDIA/AMD (the former default). A transport/route choice: digests must not move."
+   "status": "define in code (gemm/host_transport.mojo GEMM_STAGE_UP_ON): B = raw host-pointer upload (the former MOJOLEARN_GEMM_STAGE_UP=0); A = staged upload on NVIDIA/AMD (the former default). A transport/route choice: digests must not move.",
+   "owed": "RUN"
   },
   "lr-table-off": {
    "define": "MOJOLEARN_LR_TABLE_OFF",
-   "status": "define in code (sequence/lr_table.mojo LR_TABLE_ON (read by lr_table_on and bindings/samba_state_native_door.mojo); -D MOJOLEARN_LR_EXACT_ONLY is the same arm): B = every step on the exact route (the former MOJOLEARN_LR_TABLE=0 or MOJOLEARN_LR_EXACT_ONLY=1); the answers are the same; A = the LR schedule table (the former default). A transport/route choice: digests must not move."
+   "status": "define in code (sequence/lr_table.mojo LR_TABLE_ON (read by lr_table_on and bindings/samba_state_native_door.mojo); -D MOJOLEARN_LR_EXACT_ONLY is the same arm): B = every step on the exact route (the former MOJOLEARN_LR_TABLE=0 or MOJOLEARN_LR_EXACT_ONLY=1); the answers are the same; A = the LR schedule table (the former default). A transport/route choice: digests must not move.",
+   "owed": "RUN"
   },
   "mamba3-retain-stages-off": {
    "define": "MOJOLEARN_MAMBA3_RETAIN_STAGES_OFF",
-   "status": "define in code (mamba/impl/mamba_shell_impl.mojo MAMBA3_RETAIN_STAGES): B = stages dropped at the end of every forward; the backward recomputes it (the former =0); A = the forward's stages stay on the device for the backward (the former default). A transport/route choice: digests must not move."
+   "status": "define in code (mamba/impl/mamba_shell_impl.mojo MAMBA3_RETAIN_STAGES): B = stages dropped at the end of every forward; the backward recomputes it (the former =0); A = the forward's stages stay on the device for the backward (the former default). A transport/route choice: digests must not move.",
+   "owed": "RUN"
   },
   "mamba3-retain-weights-off": {
    "define": "MOJOLEARN_MAMBA3_RETAIN_WEIGHTS_OFF",
-   "status": "define in code (mamba/impl/mamba_shell_impl.mojo MAMBA3_RETAIN_WEIGHTS): B = the per-call weight upload (the former =0); A = the session keeps its weights resident (byte compare; the former default). A transport/route choice: digests must not move."
+   "status": "define in code (mamba/impl/mamba_shell_impl.mojo MAMBA3_RETAIN_WEIGHTS): B = the per-call weight upload (the former =0); A = the session keeps its weights resident (byte compare; the former default). A transport/route choice: digests must not move.",
+   "owed": "RUN"
   },
   "mamba3-s16-qk-regs2h": {
    "define": "MOJOLEARN_MAMBA3_S16_QK_ARM_REGS2H",
-   "status": "define in code (autograd/kernels/mamba3.mojo and mamba/host/gen/mamba3_backward.mojo M3_S16_QK_ARM): B = regs2h on NVIDIA (the AMD and Apple default); same bits on every arm; A = the S16 q/k arm regs on NVIDIA (the former default). A transport/route choice: digests must not move."
+   "status": "define in code (autograd/kernels/mamba3.mojo and mamba/host/gen/mamba3_backward.mojo M3_S16_QK_ARM): B = regs2h on NVIDIA (the AMD and Apple default); same bits on every arm; A = the S16 q/k arm regs on NVIDIA (the former default). A transport/route choice: digests must not move.",
+   "owed": "RUN"
   },
   "optimizer-resident-off": {
    "define": "MOJOLEARN_OPTIMIZER_RESIDENT_OFF",
-   "status": "define in code (training/optimizer_public_common.mojo OPTIMIZER_RESIDENT (the same define in sequence/opt_public_device.mojo, bindings/sequence_optimizer_native_door.mojo; imported by bindings/samba_step_native_door.mojo)): B = the per-call optimizer step (the former MOJOLEARN_OPTIMIZER_RESIDENT=0); A = resident optimizer state on the device (the former default). A transport/route choice: digests must not move."
+   "status": "define in code (training/optimizer_public_common.mojo OPTIMIZER_RESIDENT (the same define in sequence/opt_public_device.mojo, bindings/sequence_optimizer_native_door.mojo; imported by bindings/samba_step_native_door.mojo)): B = the per-call optimizer step (the former MOJOLEARN_OPTIMIZER_RESIDENT=0); A = resident optimizer state on the device (the former default). A transport/route choice: digests must not move.",
+   "owed": "RUN"
   },
   "opt-lazy-moments-off": {
    "define": "MOJOLEARN_OPT_LAZY_MOMENTS_OFF",
-   "status": "define in code (training/optimizer_public_common.mojo OPT_LAZY_MOMENTS (eager_moments; the same define in bindings/samba_construct_native_pack.mojo)): B = moments allocated with the optimizer and uploaded on the first step (the former =0); A = Adam moments allocated on first use (the former default). A transport/route choice: digests must not move."
+   "status": "define in code (training/optimizer_public_common.mojo OPT_LAZY_MOMENTS (eager_moments; the same define in bindings/samba_construct_native_pack.mojo)): B = moments allocated with the optimizer and uploaded on the first step (the former =0); A = Adam moments allocated on first use (the former default). A transport/route choice: digests must not move.",
+   "owed": "RUN"
   },
   "opt-scan-fused-off": {
    "define": "MOJOLEARN_OPT_SCAN_FUSED_OFF",
-   "status": "define in code (training/opt_gate.mojo OPT_SCAN_FUSED (read by opt_gate_wanted)): B = main's separate scans (the former =0); A = the fused refusal scan in the gated optimizer step (the former default). A transport/route choice: digests must not move."
+   "status": "define in code (training/opt_gate.mojo OPT_SCAN_FUSED (read by opt_gate_wanted)): B = main's separate scans (the former =0); A = the fused refusal scan in the gated optimizer step (the former default). A transport/route choice: digests must not move.",
+   "owed": "RUN"
   },
   "seq-moe-tiled-off": {
    "define": "MOJOLEARN_SEQ_MOE_TILED_OFF",
-   "status": "define in code (sequence/exec_device.mojo SEQ_MOE_TILED): B = the untiled MoE kernel (the former =0); A = the tiled MoE kernel (the former default). A transport/route choice: digests must not move."
+   "status": "define in code (sequence/exec_device.mojo SEQ_MOE_TILED): B = the untiled MoE kernel (the former =0); A = the tiled MoE kernel (the former default). A transport/route choice: digests must not move.",
+   "owed": "RUN"
   },
   "seq-var-block-off": {
    "define": "MOJOLEARN_SEQ_VAR_BLOCK_OFF",
-   "status": "define in code (sequence/exec_device.mojo SEQ_VAR_BLOCK): B = the one-thread ops (the former =0); A = VAR's Cholesky solve and forecast on one threadgroup (the former default). A transport/route choice: digests must not move."
+   "status": "define in code (sequence/exec_device.mojo SEQ_VAR_BLOCK): B = the one-thread ops (the former =0); A = VAR's Cholesky solve and forecast on one threadgroup (the former default). A transport/route choice: digests must not move.",
+   "owed": "RUN"
   },
   "seq-pool-off": {
    "define": "MOJOLEARN_SEQ_POOL_OFF",
-   "status": "define in code (sequence/exec_device.mojo SEQ_POOL (seq_pool_on)): B = fresh buffers per executor (the former =0); A = the sequence executor's device buffer pool (the former default). A transport/route choice: digests must not move."
+   "status": "define in code (sequence/exec_device.mojo SEQ_POOL (seq_pool_on)): B = fresh buffers per executor (the former =0); A = the sequence executor's device buffer pool (the former default). A transport/route choice: digests must not move.",
+   "owed": "RUN"
   },
   "clip-packed": {
    "define": "MOJOLEARN_CLIP_PACKED",
-   "status": "define in code (training/optimizer_public.mojo CLIP_PACKED (public_clip)): B = gather into one packed buffer, clip, scatter (the former MOJOLEARN_CLIP_PACKED=1); same device buffer, offsets and clip; A = grad-norm clip in place from each tensor's own memory (the former default). A transport/route choice: digests must not move."
+   "status": "define in code (training/optimizer_public.mojo CLIP_PACKED (public_clip)): B = gather into one packed buffer, clip, scatter (the former MOJOLEARN_CLIP_PACKED=1); same device buffer, offsets and clip; A = grad-norm clip in place from each tensor's own memory (the former default). A transport/route choice: digests must not move.",
+   "owed": "RUN"
   },
   "ivf-scan-grouped-off": {
    "define": "MOJOLEARN_IVF_SCAN_GROUPED_OFF",
-   "status": "define in code (ivf/impl/neighbors/ivf_flat/ivf_flat_search.mojo IVF_SCAN_GROUPED_ON): B = the per-query identical scan kernels (the former MOJOLEARN_IVF_SCAN_GROUPED=0); A = the scan grouped by list (identical_ivf_scan_grouped_kernel + identical_ivf_merge_kernel, the default since 0e5cf49a28). Same bits: digests must not move."
+   "status": "define in code (ivf/impl/neighbors/ivf_flat/ivf_flat_search.mojo IVF_SCAN_GROUPED_ON): B = the per-query identical scan kernels (the former MOJOLEARN_IVF_SCAN_GROUPED=0); A = the scan grouped by list (identical_ivf_scan_grouped_kernel + identical_ivf_merge_kernel, the default since 0e5cf49a28). Same bits: digests must not move.",
+   "owed": "RUN"
   },
   "xc-sqdist-tiled-off": {
    "define": "MOJOLEARN_XC_SQDIST_TILED_OFF",
-   "status": "define in code (x_cluster/device_ops.mojo SQDIST_TILED): B = the per-cell `_sqdist_kernel` (the former MOJOLEARN_XC_SQDIST_TILED=0); A = the tiled `_sqdist_tiled_kernel` where its page fits (the default since bda43f7250). Every word is the same: digests must not move."
+   "status": "define in code (x_cluster/device_ops.mojo SQDIST_TILED): B = the per-cell `_sqdist_kernel` (the former MOJOLEARN_XC_SQDIST_TILED=0); A = the tiled `_sqdist_tiled_kernel` where its page fits (the default since bda43f7250). Every word is the same: digests must not move.",
+   "owed": "RUN"
   },
   "nc-split-ops": {
    "define": "MOJOLEARN_NC_SPLIT_OPS",
-   "status": "define in code (neighbors/neighbors_local_run.mojo NC_SPLIT_OPS): B = NearestCentroid fit as the three separate ops (the former MOJOLEARN_NC_SPLIT_OPS=1); A = the fused fit (the default since c0047c99be). Digests must not move."
+   "status": "define in code (neighbors/neighbors_local_run.mojo NC_SPLIT_OPS): B = NearestCentroid fit as the three separate ops (the former MOJOLEARN_NC_SPLIT_OPS=1); A = the fused fit (the default since c0047c99be). Digests must not move.",
+   "owed": "RUN"
   },
   "byte-lm-layer-sync-off": {
    "define": "MOJOLEARN_BYTE_LM_LAYER_SYNC_OFF",
-   "status": "define in code (training/byte_lm.mojo BYTE_LM_LAYER_SYNC: B = no host wait after each layer's forward and backward (16 per step at board depth); A = the wait (NVIDIA/AMD default; the L40S toggle sweep read 1.00). Same kernels, same order: no bit change)"
+   "status": "define in code (training/byte_lm.mojo BYTE_LM_LAYER_SYNC: B = no host wait after each layer's forward and backward (16 per step at board depth); A = the wait (NVIDIA/AMD default; the L40S toggle sweep read 1.00). Same kernels, same order: no bit change)",
+   "owed": "RUN"
   },
   "device-arena": {
    "define": "MOJOLEARN_DEVICE_ARENA",
-   "status": "define in code (core/device_arena.mojo DEVICE_ARENA_ON: B = sessions carve their buffers from one arena (the Apple column's default); A = one allocation per buffer (NVIDIA/AMD default, chosen by reasoning). No bit change)"
+   "status": "define in code (core/device_arena.mojo DEVICE_ARENA_ON: B = sessions carve their buffers from one arena (the Apple column's default); A = one allocation per buffer (NVIDIA/AMD default, chosen by reasoning). No bit change)",
+   "owed": "RUN"
   },
   "byte-lm-keep-context": {
    "define": "MOJOLEARN_BYTE_LM_KEEP_CONTEXT",
-   "status": "define in code (training/byte_lm_session_ops.mojo, byte_lm_stateless_run.mojo, byte_lm_stateless_logits.mojo BYTE_LM_KEEP_CONTEXT: B = the device context is kept across stateless calls (no per-call context build); A = a context per call. No bit change)"
+   "status": "define in code (training/byte_lm_session_ops.mojo, byte_lm_stateless_run.mojo, byte_lm_stateless_logits.mojo BYTE_LM_KEEP_CONTEXT: B = the device context is kept across stateless calls (no per-call context build); A = a context per call. No bit change)",
+   "owed": "RUN"
   },
   "mamba3-legacy-setup": {
    "define": "MOJOLEARN_MAMBA3_LEGACY_SETUP",
-   "status": "define in code (bindings/neural_block_public_door.mojo, neural_prefill_native_door.mojo, providers/python/samba_execution_pyapi_door.mojo MAMBA3_LEGACY_SETUP: B = Mamba3 per-call setup without prefill sessions; A = sessions. Same words)"
+   "status": "define in code (bindings/neural_block_public_door.mojo, neural_prefill_native_door.mojo, providers/python/samba_execution_pyapi_door.mojo MAMBA3_LEGACY_SETUP: B = Mamba3 per-call setup without prefill sessions; A = sessions. Same words)",
+   "owed": "RUN"
   },
   "swiglu-fused": {
    "define": "MOJOLEARN_SWIGLU_FUSED",
-   "status": "define in code (transformer/impl/llama/modeling_llama.mojo SWIGLU_FUSED: B = the forward-only fused SiLU*gate (one launch instead of two per layer); A = two launches. Same saved stages)"
+   "status": "define in code (transformer/impl/llama/modeling_llama.mojo SWIGLU_FUSED: B = the forward-only fused SiLU*gate (one launch instead of two per layer); A = two launches. Same saved stages)",
+   "owed": "RUN"
   },
   "transformer-legacy-setup": {
    "define": "MOJOLEARN_TRANSFORMER_LEGACY_SETUP",
-   "status": "define in code (bindings/causal_lm_public_door.mojo, neural_block_public_door.mojo, providers/python/samba_execution_pyapi_door.mojo TRANSFORMER_LEGACY_SETUP: B = per-call layer setup, no block session (restored 2026-11-09, docs/TOMBSTONES.md); A = the block session)"
+   "status": "define in code (bindings/causal_lm_public_door.mojo, neural_block_public_door.mojo, providers/python/samba_execution_pyapi_door.mojo TRANSFORMER_LEGACY_SETUP: B = per-call layer setup, no block session (restored 2026-11-09, docs/TOMBSTONES.md); A = the block session)",
+   "owed": "RUN"
   },
   "transformer-norm-dw-own-ws": {
    "define": "MOJOLEARN_TRANSFORMER_NORM_DW_OWN_WS",
-   "status": "define in code (autograd/kernels/transformer.mojo TRANSFORMER_NORM_DW_OWN_WS: B = identical_gemm with its own workspace and two waits for the norm weight gradients; A = the routed form on the backward's workspace)"
+   "status": "define in code (autograd/kernels/transformer.mojo TRANSFORMER_NORM_DW_OWN_WS: B = identical_gemm with its own workspace and two waits for the norm weight gradients; A = the routed form on the backward's workspace)",
+   "owed": "RUN"
   },
   "transformer-session-fresh-off": {
    "define": "MOJOLEARN_TRANSFORMER_SESSION_FRESH_OFF",
-   "status": "define in code (bindings/neural_block_public_door.mojo, providers/python/samba_execution_pyapi_door.mojo TRANSFORMER_SESSION_FRESH: B = the per-call transformer_forward_fresh (the former env arm MOJOLEARN_TRANSFORMER_SESSION_FRESH=0 of row r1-transformer-prefill); A = the session fresh prefill)"
+   "status": "define in code (bindings/neural_block_public_door.mojo, providers/python/samba_execution_pyapi_door.mojo TRANSFORMER_SESSION_FRESH: B = the per-call transformer_forward_fresh (the former env arm MOJOLEARN_TRANSFORMER_SESSION_FRESH=0 of row r1-transformer-prefill); A = the session fresh prefill)",
+   "owed": "RUN"
   },
   "byte-lm-host-token-split-off": {
    "define": "MOJOLEARN_BYTE_LM_HOST_TOKEN_SPLIT_OFF",
-   "status": "define in code (training/byte_lm_host.mojo BYTE_LM_HOST_TOKEN_SPLIT: B = no token split inside a row on the CPU host byte LM; A = the split. CPU host binding, no board row (our CPU is never raced): decided by tools/measure_owed_driver.py on the host binding only if Andrew asks)"
+   "status": "define in code (training/byte_lm_host.mojo BYTE_LM_HOST_TOKEN_SPLIT: B = no token split inside a row on the CPU host byte LM; A = the split. CPU host binding, no board row (our CPU is never raced): decided by tools/measure_owed_driver.py on the host binding only if Andrew asks)",
+   "owed": "PAUSED",
+   "evidence": "CPU host binding only: our CPU is never raced (AGENTS.md part 3); decided by tools/measure_owed_driver.py only if Andrew asks"
   },
   "causal-lm-resident-forward-off": {
    "define": "MOJOLEARN_CAUSAL_LM_RESIDENT_FORWARD_OFF",
-   "status": "define in code (bindings/causal_lm_public_door.mojo CAUSAL_LM_RESIDENT_FORWARD: B = CausalLM per-call layer setup; A = resident forward. No board row (CausalLM generation is not on the board))"
+   "status": "define in code (bindings/causal_lm_public_door.mojo CAUSAL_LM_RESIDENT_FORWARD: B = CausalLM per-call layer setup; A = resident forward. board row: causal-lm-generate (greedy))",
+   "owed": "RUN"
   },
   "generation-route-legacy": {
    "define": "MOJOLEARN_EXPERIMENT_GENERATION_ROUTE_LEGACY",
-   "status": "define in code (core/generation_kv_policy.mojo EXPERIMENT_GENERATION_ROUTE: B = the legacy host read loop for every generate read; A = auto (the decode program where it serves). No board row)"
+   "status": "define in code (core/generation_kv_policy.mojo EXPERIMENT_GENERATION_ROUTE: B = the legacy host read loop for every generate read; A = auto (the decode program where it serves). board row: causal-lm-generate (greedy))",
+   "owed": "RUN"
   },
   "generation-native-engine-off": {
    "define": "MOJOLEARN_GENERATION_NATIVE_ENGINE_OFF",
-   "status": "define in code (core/generation_kv_policy.mojo GENERATION_NATIVE_ENGINE: B = engine 0 (also -D MOJOLEARN_GENERATION_NATIVE_ENGINE_FORCE = engine 1); A = auto. No board row)"
+   "status": "define in code (core/generation_kv_policy.mojo GENERATION_NATIVE_ENGINE: B = engine 0 (also -D MOJOLEARN_GENERATION_NATIVE_ENGINE_FORCE = engine 1); A = auto. board row: causal-lm-generate (greedy))",
+   "owed": "RUN"
   },
   "resident-sampling-fp32": {
    "define": "MOJOLEARN_EXPERIMENT_RESIDENT_SAMPLING_FP32",
-   "status": "define in code (bindings/causal_lm_public_door.mojo EXPERIMENT_RESIDENT_SAMPLING_FP32: B = fp32 compensated sampling stream (changes seeded output); A = the Float64 selector. No board row; quality and identity unqualified)"
+   "status": "define in code (bindings/causal_lm_public_door.mojo EXPERIMENT_RESIDENT_SAMPLING_FP32: B = fp32 compensated sampling stream (changes seeded output); A = the Float64 selector. No board row; quality and identity unqualified)",
+   "owed": "NO-ROW",
+   "evidence": "sampling route only (do_sample); the board's causal-lm-generate races are greedy (tools/test_neural_generate_startup.py: do_sample False): no board race reads it; needs a sampling driver row"
   },
   "sampling-kv-upload-reuse": {
    "define": "MOJOLEARN_EXPERIMENT_SAMPLING_KV_UPLOAD_REUSE",
-   "status": "define in code (core/generation_kv_policy.mojo EXPERIMENT_SAMPLING_KV_UPLOAD_REUSE: B = reuse KV uploads across sampling forwards (removes reloads); A = reload per forward. No board row)"
+   "status": "define in code (core/generation_kv_policy.mojo EXPERIMENT_SAMPLING_KV_UPLOAD_REUSE: B = reuse KV uploads across sampling forwards (removes reloads); A = reload per forward. No board row)",
+   "owed": "NO-ROW",
+   "evidence": "sampling route only (do_sample); the board's causal-lm-generate races are greedy: no board race reads it; needs a sampling driver row"
   },
   "dbscan-brute-edge-free": {
    "define": "MOJOLEARN_DBSCAN_FAST_BRUTE_EDGE_FREE",
-   "status": "define in code (dbscan/impl/runner.mojo, dbscan/impl/brute_edge_free.mojo DBSCAN_FAST_BRUTE_EDGE_FREE; opt-in, default off): B = algorithm='brute' through the degrees pass, a per-range brute bit matrix (word-major, N/8 bytes a query row, range = 25% of free memory) and union-find in doubling query chunks with 64-row block roots; A = the byte adjacency, CSR, weak_cc and merge passes. Same labels by construction; n_iter_ is 0 on the B route. The non-board shape of the EXPERIMENTS row (make_blobs 1,000,000 x 16, 50 centers) is no board race: time it with the arm's wheels by hand"
+   "status": "define in code (dbscan/impl/runner.mojo, dbscan/impl/brute_edge_free.mojo DBSCAN_FAST_BRUTE_EDGE_FREE; opt-in, default off): B = algorithm='brute' through the degrees pass, a per-range brute bit matrix (word-major, N/8 bytes a query row, range = 25% of free memory) and union-find in doubling query chunks with 64-row block roots; A = the byte adjacency, CSR, weak_cc and merge passes. Same labels by construction; n_iter_ is 0 on the B route. The non-board shape of the EXPERIMENTS row (make_blobs 1,000,000 x 16, 50 centers) is no board race: time it with the arm's wheels by hand",
+   "owed": "RUN"
   },
   "sqrt-comptime-step": {
    "define": "MOJOLEARN_NUMERICS_FAST_SQRT_COMPTIME_STEP",
-   "status": "define in code (checks/numerics.mojo portable_sqrtf NUMERICS_FAST_SQRT_COMPTIME_STEP: B = the four-candidate correction as a comptime for (offset a compile-time constant per step); A = the run-time for k in range(4) chain that Mojo 1.2 lowers to compare-and-branch. Same operations in the same order: bits unchanged on every column)"
+   "status": "define in code (checks/numerics.mojo portable_sqrtf NUMERICS_FAST_SQRT_COMPTIME_STEP: B = the four-candidate correction as a comptime for (offset a compile-time constant per step); A = the run-time for k in range(4) chain that Mojo 1.2 lowers to compare-and-branch. Same operations in the same order: bits unchanged on every column)",
+   "owed": "RUN"
   },
   "f16-widen-host": {
    "define": "MOJOLEARN_CHECKPOINT_FAST_F16_WIDEN_HOST",
-   "status": "define in code (bindings/causal_checkpoint_door.mojo checkpoint_widen_f16 _F16_WIDEN_HOST; opt-in, default off): B = models.safetensors.widen_f16 widens a C-ordered source on the host with core/causal_checkpoint_impl.mojo checkpoint_widen_halves (65,536-half chunks across host cores, the safetensors reader's widening); A = the linalg binding's from_f16 (device kernel on a GPU install: upload, kernel, download, three synchronizes). Both run gemm/f16_widen.mojo f16_bits_to_f32 per element: bits unchanged"
+   "status": "define in code (bindings/causal_checkpoint_door.mojo checkpoint_widen_f16 _F16_WIDEN_HOST; opt-in, default off): B = models.safetensors.widen_f16 widens a C-ordered source on the host with core/causal_checkpoint_impl.mojo checkpoint_widen_halves (65,536-half chunks across host cores, the safetensors reader's widening); A = the linalg binding's from_f16 (device kernel on a GPU install: upload, kernel, download, three synchronizes). Both run gemm/f16_widen.mojo f16_bits_to_f32 per element: bits unchanged",
+   "owed": "RUN"
+  },
+  "autograd-predict": {
+   "define": "MOJOLEARN_AUTOGRAD_PREDICT",
+   "status": "define in code (sequence/mlp_fit.mojo AUTOGRAD_PREDICT): B = the tape predict (mlp_predict_autograd, c3b7dc42e6); A = the hand mlp_predict (one OP_GEMM_EPI per layer), restored as the default by d5df71f348 (lane fb-neural, 2026-11-17). Same bits on both arms",
+   "owed": "RUN"
+  },
+  "metrics-dense-labels-off": {
+   "define": "MOJOLEARN_METRICS_FAST_DENSE_LABELS_OFF",
+   "status": "define in code (core/labels_score_encode.mojo _DENSE_OFF): B = the LSD radix route of host_unique_inverse_cast (e689ac329a); A = the dense label table route (lane fb-metrics 4515cf07af, 2026-11-17)",
+   "owed": "RUN"
+  },
+  "linear-lbd-batch-off": {
+   "define": "MOJOLEARN_LINEAR_LBD_BATCH_OFF",
+   "status": "define in code (x_linear/lbfgs_device.mojo): B = 0.8.55's form, one flag read per trial; A = the L-BFGS queue fix 66b788d75b (lane fb3-band, 2026-11-17)",
+   "owed": "RUN"
+  },
+  "seq-libc-copy": {
+   "define": "MOJOLEARN_SEQ_FAST_LIBC_COPY",
+   "status": "define in code (sequence/exec_device.mojo SEQ_LIBC_COPY, default off): B = the host copies of the sequence executor through libc memcpy (lane fb3-named, 2026-11-17); A = the element loop",
+   "owed": "RUN"
+  },
+  "cpu-threads-28": {
+   "define": "",
+   "env": "MOJOLEARN_CPU_THREADS=28",
+   "status": "ENV arm, no build (--b-arm cpu-threads-28=env:MOJOLEARN_CPU_THREADS=28): B = the host pool pinned at the L40S pod's 28-core cgroup quota; A = core/host_predict_threads.mojo's own resolution (the cgroup cap of 9fd0275a2d, lane fb-metrics 2026-11-17)",
+   "owed": "RUN"
+  },
+  "xprep-r3-off-view": {
+   "define": "",
+   "env": "MOJOLEARN_XPREP_R3_OFF=view",
+   "status": "ENV arm, no build (--b-arm xprep-r3-off-view=env:MOJOLEARN_XPREP_R3_OFF=view; read by bindings/x_prep_native_owner_run.mojo): B = the label buffer copy restored; A = the view (c6bd59448e, lane fb-metrics 2026-11-17)",
+   "owed": "RUN"
   }
  },
  "rows": [
@@ -2692,6 +2832,372 @@
     "f16-widen-host"
    ],
    "decides": "promote B (host-parallel widening; then widen_f16 no longer calls linalg from_f16, and the route's A code goes with its tombstone) unless it is slower than A at any count of the row on the NVIDIA L40S; every output word must match between the arms (same bit construction)"
+  },
+  {
+   "id": "autograd-predict-mlp",
+   "source": "lane fb8-owed-arms (2026-11-17; Andrew: 'we need to run the A/B switches'); fb-neural-RESULT.tsv rows 9/14/27/30",
+   "kind": "ab",
+   "lane": [
+    "mlp-clf",
+    "mlp-reg"
+   ],
+   "dataset": "*",
+   "rows": "full",
+   "vendor": "nvidia",
+   "b_arms": [
+    "autograd-predict"
+   ],
+   "decides": "keep A (the restored hand predict) unless B (tape predict) is at least as fast at equal quality on the NVIDIA L40S (fb-neural: mlp-clf istella infer 3.07x, mlp-reg istella 2.45x vs 0.8.55 under B); digests must not move"
+  },
+  {
+   "id": "autograd-predict-mlp-predict",
+   "source": "lane fb8-owed-arms (2026-11-17; Andrew: 'we need to run the A/B switches')",
+   "kind": "ab",
+   "lane": "mlp-predict",
+   "dataset": "*",
+   "rows": "full",
+   "vendor": "nvidia",
+   "b_arms": [
+    "autograd-predict"
+   ],
+   "decides": "as autograd-predict-mlp, on neural/mlp-predict"
+  },
+  {
+   "id": "metrics-dense-labels",
+   "source": "lane fb8-owed-arms (2026-11-17; Andrew: 'we need to run the A/B switches'); fb-metrics-RESULT.tsv rows with fix 4515cf07af",
+   "kind": "ab",
+   "lane": [
+    "metric-accuracy-score",
+    "metric-average-precision-score",
+    "metric-balanced-accuracy-score",
+    "metric-brier-score-loss",
+    "metric-class-likelihood-ratios",
+    "metric-classification-report",
+    "metric-cohen-kappa-score",
+    "metric-completeness-score",
+    "metric-confusion-matrix",
+    "metric-contingency-matrix",
+    "metric-d2-log-loss-score",
+    "metric-f1-score",
+    "metric-fbeta-score",
+    "metric-fowlkes-mallows-score",
+    "metric-hamming-loss",
+    "metric-hinge-loss",
+    "metric-homogeneity-completeness-v-measure",
+    "metric-homogeneity-score",
+    "metric-jaccard-score",
+    "metric-log-loss",
+    "metric-matthews-corrcoef",
+    "metric-multilabel-confusion-matrix",
+    "metric-mutual-info-score",
+    "metric-normalized-mutual-info-score",
+    "metric-pair-confusion-matrix",
+    "metric-precision-recall-curve",
+    "metric-precision-recall-fscore-support",
+    "metric-precision-score",
+    "metric-recall-score",
+    "metric-roc-auc-score",
+    "metric-silhouette-samples",
+    "metric-silhouette-score",
+    "metric-top-k-accuracy-score",
+    "metric-v-measure-score",
+    "metric-zero-one-loss"
+   ],
+   "dataset": "*",
+   "rows": "full",
+   "vendor": "nvidia",
+   "b_arms": [
+    "metrics-dense-labels-off"
+   ],
+   "decides": "keep A (dense label table) unless B (radix) is at least as fast at equal quality on the NVIDIA L40S; scores must not move (fb-metrics: the 35 classification metric lanes the label encode reaches, 1.2-5.1x vs 0.8.55 before the fix)"
+  },
+  {
+   "id": "metrics-dense-labels-neighbour",
+   "source": "lane fb8-owed-arms (2026-11-17; Andrew: 'we need to run the A/B switches')",
+   "kind": "ab",
+   "lane": [
+    "metric-f1-score",
+    "metric-confusion-matrix"
+   ],
+   "dataset": "taxi",
+   "rows": 300000,
+   "vendor": "nvidia",
+   "b_arms": [
+    "metrics-dense-labels-off"
+   ],
+   "decides": "neighbouring shape of metrics-dense-labels (300k labels; the docstring of core/labels_score_encode.mojo asks for it): same verdict rule"
+  },
+  {
+   "id": "linear-lbd-batch",
+   "source": "lane fb8-owed-arms (2026-11-17; Andrew: 'we need to run the A/B switches'); fb3-band-RESULT.tsv rows 20/21/25/26",
+   "kind": "ab",
+   "lane": [
+    "huber",
+    "logreg-cv"
+   ],
+   "dataset": "*",
+   "rows": "full",
+   "vendor": "nvidia",
+   "b_arms": [
+    "linear-lbd-batch-off"
+   ],
+   "decides": "keep A (66b788d75b) unless B is at least as fast at equal quality on the NVIDIA L40S (fb3-band: huber 1.31/1.45x, logreg-cv 1.22/1.23x vs 0.8.55 before the fix); coefficients must not move"
+  },
+  {
+   "id": "seq-libc-copy-mlp-istella",
+   "source": "lane fb8-owed-arms (2026-11-17; Andrew: 'we need to run the A/B switches'); fb3-named-RESULT.md",
+   "kind": "ab",
+   "lane": [
+    "mlp-clf",
+    "mlp-reg"
+   ],
+   "dataset": "istella",
+   "rows": "full",
+   "vendor": "nvidia",
+   "b_arms": [
+    "seq-libc-copy"
+   ],
+   "decides": "promote B (libc memcpy) unless it is slower than A at equal quality on the NVIDIA L40S; digests must not move"
+  },
+  {
+   "id": "seq-libc-copy-cross-entropy",
+   "source": "lane fb8-owed-arms (2026-11-17; Andrew: 'we need to run the A/B switches')",
+   "kind": "ab",
+   "lane": "cross-entropy",
+   "dataset": "*",
+   "rows": "full",
+   "vendor": "nvidia",
+   "b_arms": [
+    "seq-libc-copy"
+   ],
+   "decides": "as seq-libc-copy-mlp-istella, on cross-entropy"
+  },
+  {
+   "id": "cpu-threads-28-host",
+   "source": "lane fb8-owed-arms (2026-11-17; Andrew: 'we need to run the A/B switches'); fb-metrics-RESULT.tsv row 2, fb-audit-RESULT.md row 2",
+   "kind": "ab",
+   "lane": [
+    "resample",
+    "resample-indices",
+    "train-test-split",
+    "label-encoder",
+    "onehot"
+   ],
+   "dataset": "*",
+   "rows": "full",
+   "vendor": "nvidia",
+   "b_arms": [
+    "cpu-threads-28"
+   ],
+   "decides": "A must equal B within noise on the NVIDIA L40S (the cgroup cap resolves 28 by itself); B faster means the resolution is still wrong: fix core/host_predict_threads.mojo (fb-metrics: resample istella 6.48x vs 0.8.55 with 128 tasks under a 28-core quota)"
+  },
+  {
+   "id": "cpu-threads-28-metrics",
+   "source": "lane fb8-owed-arms (2026-11-17; Andrew: 'we need to run the A/B switches')",
+   "kind": "ab",
+   "lane": [
+    "metric-confusion-matrix",
+    "metric-precision-score"
+   ],
+   "dataset": "*",
+   "rows": "full",
+   "vendor": "nvidia",
+   "b_arms": [
+    "cpu-threads-28"
+   ],
+   "decides": "as cpu-threads-28-host, on two host-parallel label metric lanes (x_metrics/host/program.mojo, core/labels_score_encode.mojo)"
+  },
+  {
+   "id": "xprep-r3-off-view-binarizers",
+   "source": "lane fb8-owed-arms (2026-11-17; Andrew: 'we need to run the A/B switches'); fb-metrics-RESULT.tsv",
+   "kind": "ab",
+   "lane": [
+    "label-binarizer",
+    "multilabel-binarizer"
+   ],
+   "dataset": "*",
+   "rows": "full",
+   "vendor": "nvidia",
+   "b_arms": [
+    "xprep-r3-off-view"
+   ],
+   "decides": "keep A (the view) unless B is at least as fast at equal quality on the NVIDIA L40S; outputs must not move (fb-metrics: label-binarizer 1.7-2.0x, multilabel-binarizer 2.0-2.2x vs 0.8.55 before the fix)"
+  },
+  {
+   "id": "sqrt-comptime-step-hdbscan-istella",
+   "source": "lane fb8-owed-arms (2026-11-17; Andrew: 'we need to run the A/B switches'); fb3-band-RESULT.tsv codegen rows, fb3-named-RESULT.md (hdbscan istella smem_distance 128 -> 132 registers)",
+   "kind": "ab",
+   "lane": "hdbscan",
+   "dataset": "istella",
+   "rows": "full",
+   "vendor": "nvidia",
+   "b_arms": [
+    "sqrt-comptime-step"
+   ],
+   "decides": "as sqrt-comptime-step-knn: promote B unless it is slower than A at equal quality on the NVIDIA L40S; digests must not move"
+  },
+  {
+   "id": "sqrt-comptime-step-kde-istella",
+   "source": "lane fb8-owed-arms (2026-11-17; Andrew: 'we need to run the A/B switches'); fb3-band-RESULT.tsv codegen rows, fb3-named-RESULT.md (hdbscan istella smem_distance 128 -> 132 registers)",
+   "kind": "ab",
+   "lane": "kde",
+   "dataset": "istella",
+   "rows": "full",
+   "vendor": "nvidia",
+   "b_arms": [
+    "sqrt-comptime-step"
+   ],
+   "decides": "as sqrt-comptime-step-knn: promote B unless it is slower than A at equal quality on the NVIDIA L40S; digests must not move"
+  },
+  {
+   "id": "sqrt-comptime-step-codegen",
+   "source": "lane fb8-owed-arms (2026-11-17; Andrew: 'we need to run the A/B switches'); fb3-band-RESULT.tsv codegen rows, fb3-named-RESULT.md (hdbscan istella smem_distance 128 -> 132 registers)",
+   "kind": "ab",
+   "lane": [
+    "stl",
+    "ann-refine",
+    "rbf-sampler"
+   ],
+   "dataset": "*",
+   "rows": "full",
+   "vendor": "nvidia",
+   "b_arms": [
+    "sqrt-comptime-step"
+   ],
+   "decides": "as sqrt-comptime-step-knn: promote B unless it is slower than A at equal quality on the NVIDIA L40S; digests must not move"
+  },
+  {
+   "id": "sqrt-comptime-step-codegen-istella",
+   "source": "lane fb8-owed-arms (2026-11-17; Andrew: 'we need to run the A/B switches'); fb3-band-RESULT.tsv codegen rows, fb3-named-RESULT.md (hdbscan istella smem_distance 128 -> 132 registers)",
+   "kind": "ab",
+   "lane": "bisecting-kmeans",
+   "dataset": "istella",
+   "rows": "full",
+   "vendor": "nvidia",
+   "b_arms": [
+    "sqrt-comptime-step"
+   ],
+   "decides": "as sqrt-comptime-step-knn: promote B unless it is slower than A at equal quality on the NVIDIA L40S; digests must not move"
+  },
+  {
+   "id": "sqrt-comptime-step-codegen-taxi",
+   "source": "lane fb8-owed-arms (2026-11-17; Andrew: 'we need to run the A/B switches'); fb3-band-RESULT.tsv codegen rows, fb3-named-RESULT.md (hdbscan istella smem_distance 128 -> 132 registers)",
+   "kind": "ab",
+   "lane": [
+    "gpr",
+    "randomized-svd"
+   ],
+   "dataset": "taxi",
+   "rows": "full",
+   "vendor": "nvidia",
+   "b_arms": [
+    "sqrt-comptime-step"
+   ],
+   "decides": "as sqrt-comptime-step-knn: promote B unless it is slower than A at equal quality on the NVIDIA L40S; digests must not move"
+  },
+  {
+   "id": "sqrt-comptime-step-arima",
+   "source": "lane fb8-owed-arms (2026-11-17; Andrew: 'we need to run the A/B switches'); fb3-band-RESULT.tsv codegen rows, fb3-named-RESULT.md (hdbscan istella smem_distance 128 -> 132 registers)",
+   "kind": "ab",
+   "lane": "arima",
+   "dataset": "*",
+   "rows": "full",
+   "vendor": "nvidia",
+   "b_arms": [
+    "sqrt-comptime-step"
+   ],
+   "decides": "as sqrt-comptime-step-knn: promote B unless it is slower than A at equal quality on the NVIDIA L40S; digests must not move"
+  },
+  {
+   "id": "sqrt-comptime-step-als-text",
+   "source": "lane fb8-owed-arms (2026-11-17; Andrew: 'we need to run the A/B switches'); fb3-band-RESULT.tsv codegen rows, fb3-named-RESULT.md (hdbscan istella smem_distance 128 -> 132 registers)",
+   "kind": "ab",
+   "lane": "als",
+   "dataset": "text",
+   "rows": "full",
+   "vendor": "nvidia",
+   "b_arms": [
+    "sqrt-comptime-step"
+   ],
+   "decides": "as sqrt-comptime-step-knn: promote B unless it is slower than A at equal quality on the NVIDIA L40S; digests must not move"
+  },
+  {
+   "id": "sqrt-comptime-step-tree-predict-et",
+   "source": "lane fb8-owed-arms (2026-11-17; Andrew: 'we need to run the A/B switches'); fb3-band-RESULT.tsv codegen rows, fb3-named-RESULT.md (hdbscan istella smem_distance 128 -> 132 registers)",
+   "kind": "ab",
+   "lane": "et",
+   "dataset": "*",
+   "rows": "full",
+   "vendor": "nvidia",
+   "b_arms": [
+    "sqrt-comptime-step"
+   ],
+   "decides": "as sqrt-comptime-step-knn: promote B unless it is slower than A at equal quality on the NVIDIA L40S; digests must not move; the band lane put these tree predict rows on select-to-branch codegen (the same Mojo 1.2 lowering)"
+  },
+  {
+   "id": "sqrt-comptime-step-tree-predict-istella",
+   "source": "lane fb8-owed-arms (2026-11-17; Andrew: 'we need to run the A/B switches'); fb3-band-RESULT.tsv codegen rows, fb3-named-RESULT.md (hdbscan istella smem_distance 128 -> 132 registers)",
+   "kind": "ab",
+   "lane": [
+    "gbdt-ordered",
+    "gbdt-rank-yetirank",
+    "gbdt-symmetric-1000"
+   ],
+   "dataset": "istella",
+   "rows": "full",
+   "vendor": "nvidia",
+   "b_arms": [
+    "sqrt-comptime-step"
+   ],
+   "decides": "as sqrt-comptime-step-knn: promote B unless it is slower than A at equal quality on the NVIDIA L40S; digests must not move; the band lane put these tree predict rows on select-to-branch codegen (the same Mojo 1.2 lowering)"
+  },
+  {
+   "id": "causal-lm-resident-forward-off-generate",
+   "source": "lane fb8-owed-arms (2026-11-17; Andrew: 'we need to run the A/B switches'); the board's causal-lm-generate lanes (greedy generate) read the generation route",
+   "kind": "ab",
+   "lane": [
+    "causal-lm-generate",
+    "causal-lm-generate-smollm2"
+   ],
+   "dataset": "*",
+   "rows": "full",
+   "vendor": "nvidia",
+   "b_arms": [
+    "causal-lm-resident-forward-off"
+   ],
+   "decides": "keep A unless B is at least as fast at equal quality on the NVIDIA L40S; generated ids must not move"
+  },
+  {
+   "id": "generation-route-legacy-generate",
+   "source": "lane fb8-owed-arms (2026-11-17; Andrew: 'we need to run the A/B switches'); the board's causal-lm-generate lanes (greedy generate) read the generation route",
+   "kind": "ab",
+   "lane": [
+    "causal-lm-generate",
+    "causal-lm-generate-smollm2"
+   ],
+   "dataset": "*",
+   "rows": "full",
+   "vendor": "nvidia",
+   "b_arms": [
+    "generation-route-legacy"
+   ],
+   "decides": "keep A unless B is at least as fast at equal quality on the NVIDIA L40S; generated ids must not move"
+  },
+  {
+   "id": "generation-native-engine-off-generate",
+   "source": "lane fb8-owed-arms (2026-11-17; Andrew: 'we need to run the A/B switches'); the board's causal-lm-generate lanes (greedy generate) read the generation route",
+   "kind": "ab",
+   "lane": [
+    "causal-lm-generate",
+    "causal-lm-generate-smollm2"
+   ],
+   "dataset": "*",
+   "rows": "full",
+   "vendor": "nvidia",
+   "b_arms": [
+    "generation-native-engine-off"
+   ],
+   "decides": "keep A unless B is at least as fast at equal quality on the NVIDIA L40S; generated ids must not move"
   }
  ]
 }
