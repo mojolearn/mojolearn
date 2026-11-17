@@ -6,10 +6,10 @@ Each board recipe's smoke input, all of it generated on the box (the smoke stage
 
 | input | recipes |
 |---|---:|
-| verify fixture | 596 |
+| verify fixture | 591 |
 | synthetic file | 27 |
 | NO VERIFY LANE | 30 |
-| total | 653 |
+| total | 648 |
 
 Under `--inputs synthetic` (every smoke run over a tree whose board takes it): 0 bytes staged. A synthetic file holds the full file's keys and dtypes with 5120 head rows and 1024 tail rows (`tools/smoke_inputs.py`; a corpus: 65536 bytes of generated text) and is deleted with the race's scratch. From the nvidia plan, the work dir at most 1.36 GB at 64 workers (budget 2.0 GB): 54 distinct prep blocks 96.8 MB, race scratch 103.0 MB, synthetic files 106.9 MB, LM checkpoints 918.0 MB, layer fixtures 136.0 MB.
 
@@ -144,6 +144,7 @@ Under `--inputs synthetic` (every smoke run over a tree whose board takes it): 0
 | `algos/huber/taxi/rows=2000` | verify fixture | verify fixture `x-huber` (+3) | gbm-bench/taxi/taxi_speed.npz | nvidia,amd |
 | `algos/incremental-pca/istella/rows=2000` | verify fixture | verify fixture `x-decomp-ipca` | gbm-bench/istella/istella_speed.npz | nvidia,amd |
 | `algos/incremental-pca/taxi/rows=2000` | verify fixture | verify fixture `x-decomp-ipca` | gbm-bench/taxi/taxi_speed.npz | nvidia,amd |
+| `algos/internal-call-overhead-lr-at/synthetic/rows=2000` | verify fixture | verify fixture `native-schedule-series` (+1) | - | nvidia,amd |
 | `algos/isomap/istella/rows=2000` | verify fixture | verify fixture `x-decomp-manifold` | gbm-bench/istella/istella_speed.npz | nvidia,amd |
 | `algos/isomap/taxi/rows=2000` | verify fixture | verify fixture `x-decomp-manifold` | gbm-bench/taxi/taxi_speed.npz | nvidia,amd |
 | `algos/isotonic/istella/rows=2000` | verify fixture | verify fixture `x-isotonic` | gbm-bench/istella/istella_speed.npz | nvidia,amd |
@@ -211,12 +212,6 @@ Under `--inputs synthetic` (every smoke run over a tree whose board takes it): 0
 | `algos/lowbit-quantize-int15/synthetic/rows=2000` | verify fixture | verify fixture `gemm-int15` | - | nvidia,amd |
 | `algos/lowbit-quantize-int8/synthetic/rows=2000` | verify fixture | verify fixture `gemm-int8` | - | nvidia,amd |
 | `algos/lowbit-to-bf16/synthetic/rows=2000` | verify fixture | verify fixture `gemm-bf16` | - | nvidia,amd |
-| `algos/lr-constant/synthetic/rows=2000` | verify fixture | verify fixture `native-schedule-series` (+1) | - | nvidia,amd |
-| `algos/lr-exponential/synthetic/rows=2000` | verify fixture | verify fixture `sequence-lr-schedulers` (+1) | - | nvidia,amd |
-| `algos/lr-onecycle/synthetic/rows=2000` | verify fixture | verify fixture `sequence-lr-schedulers` (+1) | - | nvidia,amd |
-| `algos/lr-step/synthetic/rows=2000` | verify fixture | verify fixture `sequence-lr-schedulers` (+1) | - | nvidia,amd |
-| `algos/lr-warmup-cosine/synthetic/rows=2000` | verify fixture | verify fixture `native-schedule-series` (+1) | - | nvidia,amd |
-| `algos/lr-warmup-linear/synthetic/rows=2000` | verify fixture | verify fixture `native-schedule-series` (+1) | - | nvidia,amd |
 | `algos/lstm-clf/synthetic/rows=2000` | verify fixture | verify fixture `sequence-lstm` | - | nvidia,amd |
 | `algos/lstm-clf/taxi-hourly/rows=2000` | verify fixture | verify fixture `sequence-lstm` | gbm-bench/taxi/taxi_speed.npz | nvidia,amd |
 | `algos/lstm-reg/synthetic/rows=2000` | verify fixture | verify fixture `sequence-lstm` (+2) | - | nvidia,amd |
