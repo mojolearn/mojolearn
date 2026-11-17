@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Exceptions raised by mojolearn estimators."""
 
-import sys
+import sys as _sys
 
 __all__ = ["NotFittedError"]
 
@@ -33,9 +33,9 @@ class NotFittedError(ValueError, AttributeError):
 _BRIDGES = {}
 
 
-def not_fitted_error(message):
+def _not_fitted_error(message):
     """The `NotFittedError` instance to raise with `message`."""
-    module = sys.modules.get("sklearn.exceptions")
+    module = _sys.modules.get("sklearn.exceptions")
     base = getattr(module, "NotFittedError", None)
     if base is None or issubclass(NotFittedError, base):
         return NotFittedError(message)
@@ -44,6 +44,6 @@ def not_fitted_error(message):
         bridge = type("NotFittedError", (NotFittedError, base),
                       {"__module__": __name__, "__doc__": NotFittedError.__doc__,
                        # pickles (joblib workers) rebuild it through this function
-                       "__reduce__": lambda self: (not_fitted_error, self.args[:1])})
+                       "__reduce__": lambda self: (_not_fitted_error, self.args[:1])})
         _BRIDGES[base] = bridge
     return bridge(message)

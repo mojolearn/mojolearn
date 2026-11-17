@@ -3,8 +3,7 @@
 """GPU dimensionality reduction."""
 
 from . import _backend, _mojolearn_estimators, _native_archive_bridge, _native_pca_bridge, _native_tsvd_bridge
-from ._array import Array
-from ._mode import NumericModeMixin
+from ._mode import NumericModeMixin as _NumericModeMixin
 
 #: The model file formats (the classical host inference lane, 2026-09-13).
 #: `save` writes the fitted arrays as fitted, raw bytes and exact dtypes,
@@ -55,7 +54,7 @@ _ARCHIVE, _ARCHIVE_CONTEXT = _native_archive_bridge.connect()
 # division (cuML's threshold), keeping the sample-count scale. The whitened
 # pair is an additive binding export: an older extension needs a rebuild.
 # Options measured row by row by tools/e2u_matrix_fit.py.
-class PCA(NumericModeMixin):
+class PCA(_NumericModeMixin):
     """Principal component analysis.
 
     Centers the data and projects it onto its leading principal axes. Input
@@ -328,7 +327,7 @@ class PCA(NumericModeMixin):
 # explained_variance_ and _ratio_ are scikit-learn's (and tsvd.cuh's)
 # transformed-data definition, computed in this class's binding
 # (`tsvd_explained`). Options measured row by row by tools/e2u_matrix_fit.py.
-class TruncatedSVD(NumericModeMixin):
+class TruncatedSVD(_NumericModeMixin):
     """Dimensionality reduction by truncated singular value decomposition.
 
     Unlike :class:`PCA`, the data is not centered, so this works on raw term

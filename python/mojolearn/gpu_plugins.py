@@ -64,13 +64,6 @@ def valid_arches(profile, arches):
             and all(len(set(slot) & set(arches)) == 1 for slot in row["slots"]))  # glue: validate one installed set per registered hardware slot
 
 
-def wheel_size_limit(distribution):
-    """PyPI's per-file upload limit, the same for every distribution: 100 MiB.
-    No larger allowance has been granted for any mojolearn project (0.8.37:
-    the sm_89 + sm_90a NVIDIA wheel was 134.6 MiB and could not publish)."""
-    return 100 * 1024**2
-
-
 def package(profile):
     return next(row for row in distribution_rows(include_experimental=True) if row["profile"] == profile)  # glue: look up one package profile in the distribution registry
 

@@ -39,7 +39,6 @@ row slice of it (a slice copies bytes, no arithmetic).
 from ..tokenizer import _binding
 
 _NATIVE = _binding()._module
-import os
 
 __all__ = ["HFConfig", "ModelPlan", "UnsupportedModel", "FAMILIES", "plan_for",
            "INTERFACE_DEFAULTS", "FIXED_TODAY", "POSITION_CEILING"]
@@ -195,8 +194,6 @@ _MAMBA2_LAYER = [
 #: tensors `embed`, `block{i}.*`, `lm_head`): the same Llama layer order and
 #: (out, in) projection layout as `_LLAMA_LAYER`, rotate-half rotary, and NO
 #: final norm (the head reads the last residual stream). `norm_name` is None.
-BYTE_LM_FORMAT = "mojolearn.byte-lm"
-BYTE_LM_MODEL_TYPE = "mojolearn-byte-lm"
 
 _BYTE_LM_LAYER = [
     ("input_layernorm.weight", "block{i}.norm1_w", None),
@@ -244,7 +241,7 @@ FAMILIES = {
 
 
 #: The byte-LM format's row (not in FAMILIES: it is keyed by `format`, not `model_type`).
-BYTE_LM_ROW = (_plan, "bytelevel-bpe (GPT-2 pattern)", "byte-LM format: no final norm, untied head")
+_BYTE_LM_ROW = (_plan, "bytelevel-bpe (GPT-2 pattern)", "byte-LM format: no final norm, untied head")
 
 
 def plan_for(config):
@@ -257,7 +254,7 @@ _NATIVE_CONTEXT = {
     "config_class": HFConfig, "plan_class": ModelPlan, "unsupported_class": UnsupportedModel,
     "families": FAMILIES, "defaults": INTERFACE_DEFAULTS, "llama_layer": _LLAMA_LAYER,
     "qkv_bias": _QKV_BIAS_LAYER, "qk_norm": _QK_NORM_LAYER, "mamba1_layer": _MAMBA1_LAYER,
-    "mamba2_layer": _MAMBA2_LAYER, "byte_row": BYTE_LM_ROW, "byte_layer": _BYTE_LM_LAYER,
+    "mamba2_layer": _MAMBA2_LAYER, "byte_row": _BYTE_LM_ROW, "byte_layer": _BYTE_LM_LAYER,
     "byte_fixed": _BYTE_LM_FIXED,
 }
 

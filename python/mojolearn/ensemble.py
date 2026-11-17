@@ -126,7 +126,7 @@ __all__ = [
 # being lost to `MACOSX_DEPLOYMENT_TARGET` in the environment plus a compiler
 # cache that does not key on it, and the basename never mattered.
 from . import _backend, _mojolearn_gbdt, _native_archive_bridge, _native_trees_bridge
-from ._mode import NumericModeMixin
+from ._mode import NumericModeMixin as _NumericModeMixin
 
 #: The npz model-file format tag `save` writes and `load` requires.
 _MODEL_FORMAT = "mojolearn-gbdt-1"
@@ -191,7 +191,6 @@ _PREDICT_SIGMOID = 2   # their `MultiProbability`, MultiClassOneVsAll
 #: pair `[1 - p, p]` as float64 (DEVIATION 2980, the resident door's spelling
 #: of `gbdt_sigmoid_pair`)
 _PREDICT_SIGMOID_PAIR = 3
-_PREDICT_CLASSES = 4
 _PREDICT_CLASSES_PINNED = 5
 _PREDICT_CLASSES_OVA = 6
 
@@ -496,8 +495,6 @@ OD_TYPES = ("None", "IncToDec", "Iter")
 # on the host side of this module. None of them touches a result bit.
 
 
-#: `np.iinfo(np.uint32).max`, as the literal.
-_U32_MAX = 4294967295
 
 
 # Maintainer notes moved out of the public docstring (CatBoost 1.2.10 source references):
@@ -575,7 +572,7 @@ _U32_MAX = 4294967295
 #   because String(Float32) on this toolchain is one ULP wrong for 0.46% of values.
 # - loss_curve_: CatBoost's functionValue negated and divided by the row count.
 # - best_iteration_: the error tracker's best (error_tracker.h:73-75).
-class GradientBoosting(NumericModeMixin):
+class GradientBoosting(_NumericModeMixin):
     """Gradient-boosted decision trees with CatBoost's GPU learner as the reference.
 
     Fits an ensemble of trees with CatBoost's growth policies (oblivious

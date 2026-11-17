@@ -3,7 +3,7 @@
 """Density-based clustering on the GPU. Reference: cuML's DBSCAN."""
 
 from . import _mojolearn_estimators, _native_archive_bridge, _native_family_bridge
-from ._mode import NumericModeMixin, available_if
+from ._mode import NumericModeMixin as _NumericModeMixin, available_if as _available_if
 
 #: `KernelDensity.save`'s format tag (the kde svc host lane, 2026-09-14).
 _KDE_FORMAT = "mojolearn-kde-1"
@@ -26,13 +26,7 @@ _DBSCAN_UNSTORED = (
 _ARCHIVE, _ARCHIVE_CONTEXT = _native_archive_bridge.connect()
 
 
-EPS_NN_BRUTE_FORCE = 0
-EPS_NN_RBC = 1
 
-DBSCAN_METRIC_L2 = 0
-DBSCAN_METRIC_L1 = 1
-DBSCAN_METRIC_COSINE = 2
-DBSCAN_METRIC_PRECOMPUTED = 3
 
 # DBSCAN option codes and arm admission live in core/dbscan_native_state.mojo.
 _NATIVE, _NATIVE_CONTEXT = _native_family_bridge.connect()
@@ -63,7 +57,7 @@ _NATIVE, _NATIVE_CONTEXT = _native_family_bridge.connect()
 #   through the arms-agree gate on both vendors but has no cross-vendor card of its own yet.
 # - labels_ numbering: cuML's `final_relabel` + `relabelForSkl`. n_iter_: `dbscan/estimator.mojo`
 #   records the history of the "not the batch count" sentence.
-class DBSCAN(NumericModeMixin):
+class DBSCAN(_NumericModeMixin):
     """Density-based clustering (DBSCAN).
 
     Groups points that lie in dense regions and marks isolated points as
@@ -242,7 +236,7 @@ class DBSCAN(NumericModeMixin):
     # the GPU binding and the CPU host binding (`core/labeled_reference_host_predict.mojo`) compute the
     # same bytes. On 'rbc' the noise guarantee holds where the ball cover's predicate agrees with the
     # brute arm's (`check_dbscan_rbc_matches_brute`) and is not promised past that.
-    @available_if(lambda self: bool(self.prediction_data))
+    @_available_if(lambda self: bool(self.prediction_data))
     def predict(self, X):
         """Label new rows using the fitted clustering.
 
@@ -347,7 +341,7 @@ _native_archive_bridge.register(DBSCAN, _DBSCAN_FORMAT, (
 #   any finite positive normal p; the two-line binding change is in kde/README.md's HAND-OFF.
 # - score_samples measured 2026-08-23 within 1e-6 of sklearn on every kernel. The compact-kernel
 #   sentinel is DEVIATION 603 (kde/README.md).
-class KernelDensity(NumericModeMixin):
+class KernelDensity(_NumericModeMixin):
     """Kernel density estimation.
 
     Estimates the density of the training data with a brute-force sum

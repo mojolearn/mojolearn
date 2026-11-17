@@ -39,9 +39,6 @@ _SPECTRAL_FORMAT = "mojolearn-spectral-1"
 # builds the loaded model).
 _ARCHIVE, _ARCHIVE_CONTEXT = _native_archive_bridge.connect()
 
-#: The prediction data a `prediction_data=True` fit keeps.
-_PREDICTION_ATTRS = ("_pd_eigenvalues", "_pd_eigenvectors", "_pd_diag", "_pd_centroids", "_fit_X")
-
 _AFFINITIES = ("nearest_neighbors", "precomputed")
 #: SpectralEmbedding's affinities: the two above, scikit-learn's 'rbf' and
 #: 'precomputed_nearest_neighbors' (lane/algos-decomp, 2026-09-27).

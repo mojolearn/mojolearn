@@ -7,7 +7,7 @@ tokens, optional NFC normalization and BOS/EOS templates. Use `encode` and
 `decode` for text, or `encode_bytes` and `decode_bytes` for bytes. Vocabulary
 files are supplied by the caller.
 """
-import unicodedata
+import unicodedata as _unicodedata
 
 from ..tokenizer import _binding
 
@@ -56,7 +56,7 @@ class Tokenizer:
     `merges` the `(left, right)` byte pairs, `pattern` a name in
     `PATTERNS`, `added` `{content: id}`."""
 
-    unicode_version = unicodedata.unidata_version
+    unicode_version = _unicodedata.unidata_version
 
     def __init__(self, tokens, merges, *, pattern, added=None, normalizer=None,
                  bos_ids=(), eos_ids=(), ignore_merges=False, source="<tokens>"):
@@ -129,6 +129,6 @@ class Tokenizer:
 
 
 # Immutable import-time metadata; native execution owns all public operations.
-_TOKENIZER_CONTEXT = (Tokenizer, _NATIVE, _NAME_OF, unicodedata.unidata_version,
-                      unicodedata.normalize)
+_TOKENIZER_CONTEXT = (Tokenizer, _NATIVE, _NAME_OF, _unicodedata.unidata_version,
+                      _unicodedata.normalize)
 _NATIVE.tokenizer_public_call("connect_vocab", (), _TOKENIZER_CONTEXT)

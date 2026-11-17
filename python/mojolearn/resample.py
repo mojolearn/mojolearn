@@ -39,11 +39,9 @@ Examples
 >>> res = mojolearn.resample.bootstrap(x, statistic="mean", n_resamples=999)
 >>> low, high = res.confidence_interval
 """
-from collections import namedtuple
+from collections import namedtuple as _namedtuple
 
 from . import _backend
-from ._array import Array
-from ._buffer import addr, addr_ro, empty  # noqa: F401 (kept for importers)
 
 _MODE_CODE = {"fast": 0, "identical": 1}
 
@@ -64,7 +62,7 @@ INTEGRANDS = {"const": 0, "sum": 1, "product": 2}
 # Sep 22 pip smoke: `res.confidence_interval.low`, SciPy's spelling, raised AttributeError on the
 # plain tuple, hence the namedtuple.
 #: SciPy's ``ConfidenceInterval``: a 2-tuple ``(low, high)`` that also has ``.low`` and ``.high``.
-ConfidenceInterval = namedtuple("ConfidenceInterval", ["low", "high"])
+ConfidenceInterval = _namedtuple("ConfidenceInterval", ["low", "high"])
 
 
 class BootstrapResult:
@@ -373,14 +371,11 @@ def resample_indices(n, n_samples=None, replace=True, random_state=0, numeric_mo
                    numeric_mode), _NATIVE_CONTEXT)
 
 
-#: Bits of the resample binding's `resample_fast_defines()` mask
-#: (resample/estimator.mojo): FAST + Apple candidate defines, default OFF.
-FAST_DEFINE_CV_SLICE = 32
-FAST_DEFINE_CV_TRUST_FOLDS = 64
-FAST_DEFINE_GATHER_NARROW = 128
+# Bits of the resample binding's `resample_fast_defines()` mask (resample/estimator.mojo): FAST + Apple
+# candidate defines, default OFF: 32 CV_SLICE, 64 CV_TRUST_FOLDS, 128 GATHER_NARROW.
 
 
-def fast_defines(numeric_mode=None):
+def _fast_defines(numeric_mode=None):
     """The FAST + Apple candidate defines the resample binding was built
     with (`-D MOJOLEARN_RESAMPLE_FAST_*`, `-D MOJOLEARN_CV_FAST_*`), as the
     binding's bit mask; 0 off the FAST tier, on a build without the

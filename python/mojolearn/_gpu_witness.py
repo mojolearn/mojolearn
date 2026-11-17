@@ -104,33 +104,6 @@ def worker_process_inventory():
                 ppid=os.getppid())
 
 
-def require_distinct_processes(records, count):
-    """Require one distinct worker PROCESS per requested index.
-
-    The CPU counterpart of `require_distinct_workers`, deliberately a
-    SEPARATE function rather than a vendor branch inside it: the GPU check
-    demands a UUID, a PCI bus id and a local ordinal zero, and softening any
-    of those to let a CPU record through would have weakened the only place
-    that refuses two MIG instances on one card. Nothing here is a device
-    claim; see `worker_process_inventory`."""
-    if type(count) is not int or count < 1:
-        raise RuntimeError('worker placement requires a positive worker count')
-    if len(records) != count:
-        raise RuntimeError('worker inventory count differs from requested indices')
-    pids = set()
-    for record in records:  # glue: one identity record per worker
-        if record.get('kind') != 'worker-process-identity' or record.get('vendor') != 'cpu':
-            raise RuntimeError('worker inventory has the wrong kind or vendor')
-        pid, ppid = record.get('pid'), record.get('ppid')
-        if type(pid) is not int or pid < 1 or type(ppid) is not int or ppid < 1:
-            raise RuntimeError('worker inventory lacks process identity')
-        if ppid != os.getpid():
-            raise RuntimeError('worker inventory came from a process this driver did not start')
-        if pid in pids:
-            raise RuntimeError('workers resolve to a repeated process')
-        pids.add(pid)
-
-
 def require_distinct_workers(records, vendor, count):
     """Require one visible physical device per worker, with no repeated GPU.
 
@@ -200,23 +173,6 @@ def unmasked_device_count(vendor, timeout=INVENTORY_TIMEOUT_S):
         return int(answer['count'])
     except (ValueError, KeyError, TypeError) as exc:
         raise RuntimeError('the device count child did not answer a count: ' + repr(exc)) from None
-
-
-def require_device_count(vendor, count, timeout=INVENTORY_TIMEOUT_S):
-    """Refuse BY NAME unless this box shows at least `count` GPUs.
-
-    This is the guard that keeps a two-device column honest before it starts,
-    rather than after it has produced hashes nobody can place.
-    """
-    if type(count) is not int or count < 1:
-        raise RuntimeError('a device requirement must be a positive integer')
-    have = unmasked_device_count(vendor, timeout=timeout)
-    if have < count:
-        raise RuntimeError(f'this box shows {have} {vendor} device(s) and the requested column '
-                           f'needs {count}. A column recorded here would be a one-device column '
-                           'wearing a two-device name, which is the failure the count exists to '
-                           'stop. Run it on a box with the devices, or name fewer.')
-    return have
 
 
 def main(argv=None):

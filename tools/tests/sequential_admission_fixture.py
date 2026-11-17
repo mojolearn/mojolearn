@@ -129,8 +129,6 @@ def main(out_path, scratch):
     record("unfitted.layers", lambda: bare.layers)
     record("unfitted.table", lambda: bare._table())
     record("unfitted.program", lambda: bare._program(4))
-    record("unfitted.parameter_layers", lambda: bare._param_layers())
-    record("unfitted.sample", lambda: bare._sample_of(X))
 
     for optimizer in ("adam", "sgd"):
         try:

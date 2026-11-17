@@ -1894,7 +1894,6 @@ class Binarizer(_PrepBase):
 
 
 # ---------------------------------------------------------------- label transformers
-_F32_EXACT = 2 ** 24
 
 
 # Each public operation is one native call (bindings/prep_labels_native_door.mojo):

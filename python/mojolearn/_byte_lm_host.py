@@ -37,7 +37,6 @@ from . import _ragged
 
 _EXTENSION = '_mojolearn_byte_lm_host'
 _MODULE_NAME = 'mojolearn._host.' + _EXTENSION
-_IDENTICAL_CODE = 1
 
 
 # THE LOADER LIVES IN `_backend` (lane/lazy-imports, 2026-10-10):

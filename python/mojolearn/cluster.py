@@ -3,7 +3,7 @@
 """k-means on the GPU. Reference: cuVS."""
 
 from . import _mojolearn, _native_archive_bridge, _native_family_bridge
-from ._mode import NumericModeMixin
+from ._mode import NumericModeMixin as _NumericModeMixin
 
 #: The saved k-means model (lane/kmeans-save, 2026-09-16), read by
 #: `mojolearn.host_model` through `_classical_host.HostKMeans`. One format
@@ -26,25 +26,25 @@ _ARCHIVE, _ARCHIVE_CONTEXT = _native_archive_bridge.connect()
 # shell hands it the binding `_bind` resolves for the model's numeric mode.
 _NATIVE, _NATIVE_CONTEXT = _native_family_bridge.connect()
 
-INIT_KMEANS_PLUS_PLUS = 0
-INIT_RANDOM = 1
-INIT_ARRAY = 2
+_INIT_KMEANS_PLUS_PLUS = 0
+_INIT_RANDOM = 1
+_INIT_ARRAY = 2
 
-METRIC_L2_EXPANDED = 0
-METRIC_L2_SQRT_EXPANDED = 1
+_METRIC_L2_EXPANDED = 0
+_METRIC_L2_SQRT_EXPANDED = 1
 
 _INIT_NAMES = {
-    "k-means++": INIT_KMEANS_PLUS_PLUS,
-    "random": INIT_RANDOM,
-    "array": INIT_ARRAY,
+    "k-means++": _INIT_KMEANS_PLUS_PLUS,
+    "random": _INIT_RANDOM,
+    "array": _INIT_ARRAY,
 }
 
 #: init code -> the name `save` writes for it, so a model built with the
 #: integer code round-trips to the spelling the class documents.
 _INIT_SAVED = {
-    INIT_KMEANS_PLUS_PLUS: "k-means++",
-    INIT_RANDOM: "random",
-    INIT_ARRAY: "array",
+    _INIT_KMEANS_PLUS_PLUS: "k-means++",
+    _INIT_RANDOM: "random",
+    _INIT_ARRAY: "array",
 }
 
 #: cuVS's `DistanceType` members the kernel knows, by cuVS's own names
@@ -62,17 +62,17 @@ _INIT_SAVED = {
 #: table is still refused BY NAME by `_metric_code` below, which is the
 #: property the routing existed to provide.
 _METRIC_NAMES = {
-    "euclidean": METRIC_L2_EXPANDED,
-    "l2_expanded": METRIC_L2_EXPANDED,
-    "l2_sqrt_expanded": METRIC_L2_SQRT_EXPANDED,
+    "euclidean": _METRIC_L2_EXPANDED,
+    "l2_expanded": _METRIC_L2_EXPANDED,
+    "l2_sqrt_expanded": _METRIC_L2_SQRT_EXPANDED,
 }
 
 #: metric code -> the name `save` writes for it. `euclidean` and
 #: `l2_expanded` are the same code and the same arithmetic; the first is what
 #: the class documents as the default, so it is the spelling that travels.
 _METRIC_SAVED = {
-    METRIC_L2_EXPANDED: "euclidean",
-    METRIC_L2_SQRT_EXPANDED: "l2_sqrt_expanded",
+    _METRIC_L2_EXPANDED: "euclidean",
+    _METRIC_L2_SQRT_EXPANDED: "l2_sqrt_expanded",
 }
 
 
@@ -104,7 +104,7 @@ _METRIC_SAVED = {
 #   iteration's; cuVS and scikit-learn both run the extra pass.
 # - DEVIATION 2369: attributes are `_array.Array`s (NumPy-free) where they were
 #   ndarrays.
-class KMeans(NumericModeMixin):
+class KMeans(_NumericModeMixin):
     """K-means clustering.
 
     Partitions the rows of `X` into `n_clusters` groups by minimizing the
@@ -413,7 +413,7 @@ _native_archive_bridge.register(KMeans, _KMEANS_FORMAT, (
     ("choice", "metric", "@metric", dict(_METRIC_NAMES), dict(_METRIC_SAVED), None, "ValueError",
      f"mojolearn: metric must be one of {sorted(_METRIC_NAMES)}, got {{value}}",
      f"mojolearn KMeans.save: metric {{value}} is code {{code}}, which is not one of {sorted(_METRIC_SAVED)}"),
-    ("choice", "init", "@init", dict(_INIT_NAMES), dict(_INIT_SAVED), ("array", INIT_ARRAY), "ValueError",
+    ("choice", "init", "@init", dict(_INIT_NAMES), dict(_INIT_SAVED), ("array", _INIT_ARRAY), "ValueError",
      f"mojolearn KMeans.save: init must be one of {sorted(_INIT_NAMES)}, got {{value}}",
      f"mojolearn KMeans.save: init code {{code}} is not one of {sorted(_INIT_SAVED)}"),
     ("need", "labels_", "AttributeError", "'{cls}' object has no attribute 'labels_'"),

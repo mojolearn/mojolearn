@@ -130,21 +130,6 @@ def test_qn_squared_agrees_with_ridge_loosely():
     assert np.max(np.abs(np.asarray(q.coef_) - np.asarray(r.coef_).reshape(-1))) < 5e-3
 
 
-def test_binding_refuses_a_mismatched_loss_by_name():
-    X, yc, yr = _data(n=32)
-    est = QNRegressor()
-    from mojolearn.linear_model import _qn_fit_one_target
-    from mojolearn.tests._typed_input import as_f32_c
-    x, _ = as_f32_c(X, ndim=2, name="X")
-    t, _ = as_f32_c(yr, ndim=1, name="y")
-    with pytest.raises(Exception, match="n_classes == 1"):
-        _qn_fit_one_target(est, x, t, 2, 1, 0.0, 0.0, 1e-4, 1e-6)
-    with pytest.raises(Exception, match="svr_eps"):
-        _qn_fit_one_target(est, x, t, 1, 1, 0.0, 0.0, 1e-4, 1e-6, svr_eps=0.1)
-    with pytest.raises(Exception, match="qn_loss_type"):
-        _qn_fit_one_target(est, x, t, 1, 42, 0.0, 0.0, 1e-4, 1e-6)
-
-
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__, "-q"]))
 

@@ -45,7 +45,6 @@ def arm_kernel(rep):
     rep.check("KERNEL", k.n_dims == 3, "a constant, an ARD pair and a fixed white kernel give 3 entries", k.n_dims)
     rep.check("KERNEL", np.allclose(k.theta, np.log([2.0, 1.0, 3.0])), "theta is the log in leaf order", k.theta)
     rep.check("KERNEL", np.allclose(k.bounds, np.log([[1e-5, 1e5]] * 3)), "the default bounds are scikit-learn's")
-    rep.check("KERNEL", k._free_flags() == [1, 1, 0, 0, 0], "one free flag per postfix node", k._free_flags())
     rep.check("KERNEL", GaussianProcessRegressor().kernel.n_dims == 0, "the default kernel is fixed, as scikit-learn's")
     m = Matern(1.0, (1e-2, 1e2), nu=2.5)
     rep.check("KERNEL", m.nu == 2.5 and np.allclose(m.bounds, [np.log([1e-2, 1e2])]),

@@ -15,7 +15,6 @@ connection of those owners.
 from . import _native_family_bridge, _native_runtime_manifold_bridge
 from ._mode import SklearnTagsMixin, available_if, _PARAMS_METADATA, _PARAMS_METADATA_CONTEXT
 from ._native_declared_params import ENTRY as _DECLARED_PARAMS_SET, CONTEXT as _DECLARED_PARAMS_CONTEXT
-from ._mode import RegressorScoreMixin
 
 
 __all__ = ["IncrementalPCA", "GaussianRandomProjection", "SparseRandomProjection", "johnson_lindenstrauss_min_dim",
@@ -1262,7 +1261,7 @@ def lstsq(a, b, rcond=None, *, numeric_mode=None):
     return _LINALG_CALL(None, "lstsq", (a, b, rcond, numeric_mode), _LINALG_CONTEXT)
 
 
-class _PLS(RegressorScoreMixin, _Base):
+class _PLS(_Base):
     """sklearn `cross_decomposition/_pls.py::_PLS` (NIPALS): `fit`,
     `_get_first_singular_vectors_power_method`, `_center_scale_xy`,
     `_get_first_singular_vectors_svd` (PLSCanonical algorithm='svd'),

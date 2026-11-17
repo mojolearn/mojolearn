@@ -54,11 +54,10 @@ Example
 ...     p = s.softmax(s.matmul(x, w))
 ...     probs = s.numpy(p)
 """
-import os
-from types import SimpleNamespace
+from types import SimpleNamespace as _SimpleNamespace
 
-from ._optional_numpy import require_numpy
-np = require_numpy('mojolearn.ops')
+from ._optional_numpy import require_numpy as _require_numpy
+_require_numpy('mojolearn.ops')
 
 from . import _backend
 from ._distributed_program import DistributedProgram as _DistributedProgram
@@ -87,19 +86,12 @@ _OP = {
 # autograd/ops_api.mojo OPS_COMPARE and OPS_LOGICAL kinds
 _COMPARE = {"eq": 0, "gt": 1, "lt": 2, "ge": 3, "le": 4, "ne": 5}
 _GELU = {"none": 0, "tanh": 1}
-_ACTIVATION = {None: 0, "none": 0, "relu": 1, "sigmoid": 2, "tanh": 3, "softmax": 4}
-_REDUCTION = {"mean": 0, "sum": 1}
-_AXIS = {None: -1, 0: 0, 1: 1}
-# sequence/ops.mojo OPT_* and autograd/model.mojo SCHED_* (Sequential.compile's codes)
-_OPTIMIZER = {"sgd": 0, "adam": 1, "adamw": 2}
-_SCHEDULE = {"constant": 0, "step": 1, "exponential": 2}
 # the state buffers autograd/ops_api.mojo optimizer_state returns, by kind
 _STATE_NAMES = {"sgd": ("momentum_buffer", None, None), "adam": ("exp_avg", "exp_avg_sq", None),
                 "adamw": ("exp_avg", "exp_avg_sq", None)}
 # autograd/ops_api.mojo OPS_PACK_*: the packed argument block of one call
 _PACK_H, _PACK_I, _PACK_F = 3, 7, 15
 _PACK_HANDLES, _PACK_INTS, _PACK_FLOATS = 4, 8, 4
-_PACK_WORDS = _PACK_F + (_PACK_FLOATS + 1) // 2
 
 
 # The Python `_int`, `_seed_words`, `_axes`, `Session._sid` and
@@ -1555,7 +1547,7 @@ def _connect_session_mode(mode):
     # ("native provider requires an exact compiled module": every imported
     # program and Session on a CPU-only install, smoke 2026-11-15).
     module = _backend.exact_host_module(_backend.binding("_mojolearn_x_sequence", mode))
-    distributed = SimpleNamespace(
+    distributed = _SimpleNamespace(
         ops_distributed_open=getattr(module, "ops_distributed_open", None),
         ops_distributed_load=getattr(module, "ops_distributed_load", None),
         ops_distributed_fit=getattr(module, "ops_distributed_fit", None),
@@ -1578,7 +1570,7 @@ def _connect_session_mode(mode):
         ops_partitioned_exit=getattr(module, "ops_partitioned_exit", None),
         ops_partitioned_profile=getattr(module, "ops_partitioned_profile", None),
     )
-    result = SimpleNamespace(
+    result = _SimpleNamespace(
         binding=module, initialize=module.ops_session_initialize,
         numeric_mode=module.x_sequence_numeric_mode, open=module.ops_session_create,
         call=module.ops_session_call, execute=module.ops_program_execute,
@@ -1589,7 +1581,7 @@ def _connect_session_mode(mode):
     names = ("__dict__", "__getattribute__", "__getattr__", "__setattr__", "__delattr__")
     layout = tuple((name, vars(Session).get(name)) for name in names)  # glue: connect exact Session storage and attribute identities at import
     admission.update(ops_session_class=Session, ops_program_class=Program,
-                     ops_connection_type=SimpleNamespace, ops_session_layout=layout)
+                     ops_connection_type=_SimpleNamespace, ops_session_layout=layout)
     result.native_module = module.model_native_api_v1.__self__
     result.public_provider = module.ops_session_public_connect(result.native_module)
     result.native_provider = result.initialize(None, None, None, result.native_module, None, admission)

@@ -37,9 +37,8 @@ transforms from a saved model on a CPU without a GPU.
 # No speed claim: the lane has no published number and this door adds none.
 
 from . import _native_archive_bridge, _native_family_bridge
-from ._mode import NumericModeMixin
-from ._native_robust_bridge import native_method
-from ._mode import RegressorScoreMixin
+from ._mode import NumericModeMixin as _NumericModeMixin
+from ._native_robust_bridge import native_method as _native_method
 
 #: The saved-model formats (lane/inference-linear-svm, 2026-09-15):
 #: `mojolearn.host_model(path)` predicts or transforms from each on a CPU.
@@ -69,36 +68,32 @@ _MODE_CODE = {"fast": 0, "identical": 1}
 #: laplacian at 5. A renumbering on either side is a WRONG KERNEL, not a
 #: failure, which is why the surface test plants a fixture whose answer
 #: moves if the codes move.
-KERNEL_LINEAR = 0
-KERNEL_POLYNOMIAL = 1
-KERNEL_RBF = 2
-KERNEL_SIGMOID = 3
-KERNEL_PRECOMPUTED = 4
-KERNEL_LAPLACIAN = 5
-KERNEL_COSINE = 6
-KERNEL_CHI2 = 7
-KERNEL_ADDITIVE_CHI2 = 8
+_KERNEL_LINEAR = 0
+_KERNEL_POLYNOMIAL = 1
+_KERNEL_RBF = 2
+_KERNEL_SIGMOID = 3
+_KERNEL_LAPLACIAN = 5
+_KERNEL_COSINE = 6
+_KERNEL_CHI2 = 7
+_KERNEL_ADDITIVE_CHI2 = 8
 
 _KERNELS = {
-    "linear": KERNEL_LINEAR,
-    "poly": KERNEL_POLYNOMIAL,
-    "polynomial": KERNEL_POLYNOMIAL,
-    "rbf": KERNEL_RBF,
-    "sigmoid": KERNEL_SIGMOID,
-    "laplacian": KERNEL_LAPLACIAN,
-    "cosine": KERNEL_COSINE,
-    "chi2": KERNEL_CHI2,
-    "additive_chi2": KERNEL_ADDITIVE_CHI2,
+    "linear": _KERNEL_LINEAR,
+    "poly": _KERNEL_POLYNOMIAL,
+    "polynomial": _KERNEL_POLYNOMIAL,
+    "rbf": _KERNEL_RBF,
+    "sigmoid": _KERNEL_SIGMOID,
+    "laplacian": _KERNEL_LAPLACIAN,
+    "cosine": _KERNEL_COSINE,
+    "chi2": _KERNEL_CHI2,
+    "additive_chi2": _KERNEL_ADDITIVE_CHI2,
 }
 
-#: Kernels that read gamma. Under 'linear' it is ignored on both sides,
-#: exactly as scikit-learn's `pairwise_kernels` ignores it.
-_NEEDS_GAMMA = frozenset({KERNEL_POLYNOMIAL, KERNEL_RBF, KERNEL_SIGMOID, KERNEL_LAPLACIAN})
 
 _native_family_bridge.tables(family_km_kernels=dict(_KERNELS), family_km_mode_codes=dict(_MODE_CODE))
 
 
-class _KernelMethodBase(NumericModeMixin):
+class _KernelMethodBase(_NumericModeMixin):
     _BINDING = "_mojolearn_kernel_methods"
     _WHERE = "kernel method"
 
@@ -109,7 +104,7 @@ class _KernelMethodBase(NumericModeMixin):
 # non-positive gamma are refused on the Mojo host. The cosine and chi2 kernels
 # are each cell one pinned chain. `info_` is LAPACK's info from the
 # factorization.
-class KernelRidge(RegressorScoreMixin, _KernelMethodBase):
+class KernelRidge(_KernelMethodBase):
     """Kernel ridge regression.
 
     Follows `sklearn.kernel_ridge.KernelRidge` (and cuML's). Fitting forms
@@ -190,7 +185,7 @@ class KernelRidge(RegressorScoreMixin, _KernelMethodBase):
     # scikit-learn's `_solve_cholesky_kernel` weighted arm: `sw = sqrt(w)`
     # (binary64, rounded once to float32), `y * sw`, `K * outer(sw, sw)`,
     # then `dual_coef * sw` (float32 on both columns, DEVIATION 1688).
-    @native_method
+    @_native_method
     def fit(self, X, y, sample_weight=None):
         """Fit the kernel ridge model.
 
@@ -214,7 +209,7 @@ class KernelRidge(RegressorScoreMixin, _KernelMethodBase):
 
     # Maintainer note: `K(X, X_fit_) . dual_coef_` through the identical GEMM
     # (DEVIATION 1680).
-    @native_method
+    @_native_method
     def predict(self, X):
         """Predict with the fitted model: `K(X, X_fit_) @ dual_coef_`.
 
@@ -231,7 +226,7 @@ class KernelRidge(RegressorScoreMixin, _KernelMethodBase):
         """
         return _NATIVE(self, "family_km_krr_predict", (None, X), _NATIVE_CONTEXT)
 
-    @native_method
+    @_native_method
     def score(self, X, y, sample_weight=None):
         """Coefficient of determination R^2 of ``predict(X)`` against ``y``.
 
@@ -289,7 +284,7 @@ class KernelRidge(RegressorScoreMixin, _KernelMethodBase):
         return _ARCHIVE(self, "archive_save", (path,), _ARCHIVE_CONTEXT)
 
     @classmethod
-    @native_method  # the native archive loader publishes the fitted state: no Python _loader wrapper
+    @_native_method  # the native archive loader publishes the fitted state: no Python _loader wrapper
     def load(cls, path):
         """Load a model written by `save`.
 
@@ -381,7 +376,7 @@ class Nystroem(_KernelMethodBase):
         self.n_components = n_components
         self.random_state = random_state
 
-    @native_method
+    @_native_method
     def fit(self, X, y=None):
         """Choose the basis rows and compute the normalization.
 
@@ -399,7 +394,7 @@ class Nystroem(_KernelMethodBase):
         """
         return _NATIVE(self, "family_km_nys_fit", (None, X, y), _NATIVE_CONTEXT)
 
-    @native_method
+    @_native_method
     def transform(self, X):
         """Map `X` to the approximate kernel feature space.
 
@@ -415,7 +410,7 @@ class Nystroem(_KernelMethodBase):
         """
         return _NATIVE(self, "family_km_nys_transform", (None, X), _NATIVE_CONTEXT)
 
-    @native_method
+    @_native_method
     def fit_transform(self, X, y=None):
         """Fit to `X`, then transform `X`.
 
@@ -455,7 +450,7 @@ class Nystroem(_KernelMethodBase):
         return _ARCHIVE(self, "archive_save", (path,), _ARCHIVE_CONTEXT)
 
     @classmethod
-    @native_method  # the native archive loader publishes the fitted state: no Python _loader wrapper
+    @_native_method  # the native archive loader publishes the fitted state: no Python _loader wrapper
     def load(cls, path):
         """Load a transformer written by `save`.
 
@@ -530,7 +525,7 @@ class RBFSampler(_KernelMethodBase):
         self.n_components = n_components
         self.random_state = random_state
 
-    @native_method
+    @_native_method
     def fit(self, X, y=None):
         """Draw the random weights and offsets.
 
@@ -551,7 +546,7 @@ class RBFSampler(_KernelMethodBase):
         """
         return _NATIVE(self, "family_km_rbf_fit", (None, X, y), _NATIVE_CONTEXT)
 
-    @native_method
+    @_native_method
     def transform(self, X):
         """Map `X` to the random Fourier feature space.
 
@@ -567,7 +562,7 @@ class RBFSampler(_KernelMethodBase):
         """
         return _NATIVE(self, "family_km_rbf_transform", (None, X), _NATIVE_CONTEXT)
 
-    @native_method
+    @_native_method
     def fit_transform(self, X, y=None):
         """Fit to `X`, then transform `X`.
 
@@ -607,7 +602,7 @@ class RBFSampler(_KernelMethodBase):
         return _ARCHIVE(self, "archive_save", (path,), _ARCHIVE_CONTEXT)
 
     @classmethod
-    @native_method  # the native archive loader publishes the fitted state: no Python _loader wrapper
+    @_native_method  # the native archive loader publishes the fitted state: no Python _loader wrapper
     def load(cls, path):
         """Load a sampler written by `save`.
 

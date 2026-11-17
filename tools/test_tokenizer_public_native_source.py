@@ -116,9 +116,7 @@ class TokenizerPublicSource(unittest.TestCase):
         self.assertIn('tokenizer_public_call("connect_vocab", (), _TOKENIZER_CONTEXT)', connection)
 
     def test_corpus_helpers_have_complete_native_boundaries(self):
-        expected = {"_identity_from_tokens_text", "_identity_of_ranks_file", "_identity_of_handle",
-                    "_native_trainer", "_train_native", "_read_trained", "_train_corpus",
-                    "_gather_rows", "_encode_corpus"}
+        expected = {"_gather_rows"}
         tree = ast.parse((ROOT / "python/mojolearn/tokenizer.py").read_text())
         found = set()
         for method in ast.walk(tree):

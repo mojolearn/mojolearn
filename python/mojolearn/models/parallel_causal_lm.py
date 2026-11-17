@@ -30,17 +30,9 @@ right. Metal admits only device zero: its worker uses the ordinary GPU
 route, and no visibility mask or physical multi-device isolation is claimed.
 """
 from .. import _backend
-from .causal_lm import CausalLM, _NATIVE as _CAUSAL_RUNTIME, _NATIVE_CONTEXT as _CAUSAL_CONTEXT
+from .causal_lm import CausalLM as _CausalLM, _NATIVE as _CAUSAL_RUNTIME, _NATIVE_CONTEXT as _CAUSAL_CONTEXT
 
 __all__ = ['ParallelCausalLM']
-
-
-def _admit_route(layer_devices=()):
-    """`gpu` on CUDA/HIP or single-device Metal; `cpu` on a CPU-only install.
-
-    Called in the same two places the vendor check used to sit, and before a
-    layer is built or a checkpoint is read."""
-    return _native_parallel_causal("route", (layer_devices,))
 
 
 class _RemoteState:
@@ -95,7 +87,7 @@ class _RemotePrimitives:
         return _native_parallel_causal("primitive", (self, "head_int15", x))
 
 
-class ParallelCausalLM(CausalLM):
+class ParallelCausalLM(_CausalLM):
     """Experimental layer ownership. Use ``load(path, layer_devices=(0, 1))``.
 
     One device index per checkpoint layer; repeated indices are allowed.

@@ -13,6 +13,8 @@ def scan(args):
     try: tree = ast.parse(open(path, encoding="utf-8").read())
     except SyntaxError: return rel, None, [], {}
     allv, tops, classes = None, [], {}
+    # `from m import X as _X`: a base spelled `_X` is the class `X` (aliasing a base does not change the class)
+    alias = {a.asname: a.name for n in tree.body if isinstance(n, ast.ImportFrom) for a in n.names if a.asname}
     for n in tree.body:
         if isinstance(n, ast.Assign) and any(isinstance(t, ast.Name) and t.id == "__all__" for t in n.targets):
             try: allv = [str(x) for x in ast.literal_eval(n.value)]
@@ -28,7 +30,8 @@ def scan(args):
                 if isinstance(m, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)): attrs.add(m.name)
                 elif isinstance(m, ast.Assign): attrs |= {t.id for t in m.targets if isinstance(t, ast.Name)}
                 elif isinstance(m, ast.AnnAssign) and isinstance(m.target, ast.Name): attrs.add(m.target.id)
-            bases = [b.id if isinstance(b, ast.Name) else (b.attr if isinstance(b, ast.Attribute) else "") for b in n.bases]
+            bases = [alias.get(b.id, b.id) if isinstance(b, ast.Name) else (b.attr if isinstance(b, ast.Attribute) else "")
+                     for b in n.bases]
             classes[n.name] = (attrs, bases)
     return rel, allv, tops, classes
 

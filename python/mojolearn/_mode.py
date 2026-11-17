@@ -189,8 +189,8 @@ def _needs_fit(method, name, require_fit=True):
     @functools.wraps(method)
     def guarded(self, *args, **kwargs):
         if require_fit and not is_fitted(self):
-            from .exceptions import not_fitted_error
-            raise not_fitted_error(
+            from .exceptions import _not_fitted_error
+            raise _not_fitted_error(
                 f"This {type(self).__name__} instance is not fitted yet. Call 'fit' with "
                 f"appropriate arguments before using {name}.")
         if vars(self).get("_mojolearn_fitting"):
@@ -498,63 +498,6 @@ class SklearnTagsMixin(PublicOutputsMixin):
 
     def __sklearn_is_fitted__(self):
         return _MODE_METADATA(self, "is_fitted", _MODE_METADATA_CONTEXT)
-
-
-class ClassifierScoreMixin:
-    """scikit-learn's `ClassifierMixin.score` for a classifier without its own:
-    the default scorer of `GridSearchCV` and `cross_val_score`."""
-
-    def score(self, X, y, sample_weight=None):
-        """Mean accuracy of ``predict(X)`` against ``y``.
-
-        Parameters
-        ----------
-        X : array-like of shape (n_samples, n_features)
-            Test samples.
-        y : array-like of shape (n_samples,)
-            True labels.
-        sample_weight : array-like of shape (n_samples,), default None
-            Sample weights.
-
-        Returns
-        -------
-        float
-            Fraction of samples predicted correctly (weighted when
-            ``sample_weight`` is given).
-        """
-        # The match count and weight total are the x_metrics binding's sums.
-        from ._expansion_metrics import accuracy_fraction
-        return accuracy_fraction(y, self.predict(X), sample_weight,
-                                 getattr(self, "numeric_mode", None))
-
-
-class RegressorScoreMixin:
-    """scikit-learn's `RegressorMixin.score` for a regressor without its own:
-    the default scorer of `GridSearchCV` and `cross_val_score`."""
-
-    def score(self, X, y, sample_weight=None):
-        """Coefficient of determination R^2 of ``predict(X)`` against ``y``.
-
-        Parameters
-        ----------
-        X : array-like of shape (n_samples, n_features)
-            Test samples.
-        y : array-like of shape (n_samples,) or (n_samples, n_outputs)
-            True targets.
-        sample_weight : array-like of shape (n_samples,), default None
-            Sample weights.
-
-        Returns
-        -------
-        float
-            R^2, averaged uniformly over outputs; 1.0 is a perfect fit.
-        """
-        # One native call: the metrics owner admits y and the prediction as
-        # float32 and runs the pinned-sum r2_score, weights included
-        # (bindings/mcls_cluster_door.mojo, family_mcls_regressor_score).
-        from ._metrics_impl import _regressor_score
-        return _regressor_score(y, self.predict(X), sample_weight,
-                                getattr(self, "numeric_mode", None))
 
 
 class ParamsMixin(SklearnTagsMixin):

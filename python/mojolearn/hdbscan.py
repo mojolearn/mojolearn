@@ -36,19 +36,19 @@ Each raises `ValueError` for a clusterer fitted without
 float32 throughout, where cuML uses float64 in some steps.
 """
 from . import _native_archive_bridge, _native_family_bridge
-from ._mode import NumericModeMixin
+from ._mode import NumericModeMixin as _NumericModeMixin
 
 _MODE_CODE = {"fast": 0, "identical": 1}
 
 #: `hierarchy/impl/cluster/detail/connectivities.mojo::DISTANCE_L2_SQRT_EXPANDED`,
 #: the one metric `fit_hdbscan` accepts (their RAFT_EXPECTS).
-METRIC_L2_SQRT_EXPANDED = 1
+_METRIC_L2_SQRT_EXPANDED = 1
 
 #: `hdbscan/impl/detail/select.mojo`'s codes.
-SELECTION_EOM = 0
-SELECTION_LEAF = 1
+_SELECTION_EOM = 0
+_SELECTION_LEAF = 1
 
-_METRICS = {"euclidean": METRIC_L2_SQRT_EXPANDED, "l2": METRIC_L2_SQRT_EXPANDED}
+_METRICS = {"euclidean": _METRIC_L2_SQRT_EXPANDED, "l2": _METRIC_L2_SQRT_EXPANDED}
 
 #: The model file (the neighbors and density inference lane, 2026-09-15):
 #: what `approximate_predict` reads and nothing else. `raw_data` `<f4`
@@ -71,7 +71,7 @@ _HDBSCAN_NAMES = "mojolearn HDBSCAN.save: metric and cluster_selection_method mu
 # writes the schema registered below the class; host_archive_native.mojo
 # builds the loaded model).
 _ARCHIVE, _ARCHIVE_CONTEXT = _native_archive_bridge.connect()
-_SELECTION = {"eom": SELECTION_EOM, "leaf": SELECTION_LEAF}
+_SELECTION = {"eom": _SELECTION_EOM, "leaf": _SELECTION_LEAF}
 
 # The compiled family owner, connected once at import: `fit` and
 # `fit_predict` are one native call each (bindings/cluster_fit_a_native_door.mojo:
@@ -87,7 +87,7 @@ _native_family_bridge.tables(family_cfa_hdbscan_metrics=dict(_METRICS), family_c
 # on the host by one function both routes call (DEVIATION 5115).
 # probabilities_: cuML `get_probabilities` (DEVIATION 5116).
 # prediction_data: cuML's parameter (`hdbscan.pyx:568`).
-class HDBSCAN(NumericModeMixin):
+class HDBSCAN(_NumericModeMixin):
     """Hierarchical density-based clustering (HDBSCAN).
 
     Follows cuML's `cuml.cluster.HDBSCAN`: builds the mutual reachability

@@ -14,40 +14,6 @@ import pytest
 from mojolearn import cross_vendor as cv
 
 
-def test_frame_round_trip_and_oversize_refusal():
-    # Since the cross-vendor protocol moved into native code (e28c8bcf3,
-    # cc4c14732) framing runs on owned native sockets only; a Python socket
-    # object is refused by bindings/native_transport_door.mojo.
-    import socket
-    from mojolearn import _backend
-    native = _backend.load_host_module('_mojolearn_tokenizer_host').native_transport_call
-    native('initialize', ())
-    python_a, python_b = socket.socketpair()
-    try:
-        with pytest.raises(ConnectionError, match='owned native socket'):
-            cv._send(python_a, {"cmd": "apply", "step": 3}, b"\x00" * 16)
-    finally:
-        python_a.close()
-        python_b.close()
-    server = native('listen', ('127.0.0.1', 0, 5.0))
-    try:
-        host, port = native('address', (server, False))
-        a = native('connect', (host, port, 5.0))
-        b = native('accept', (server, 5.0))
-    finally:
-        native('close', (server,))
-    try:
-        cv._send(a, {"cmd": "apply", "step": 3}, b"\x00" * 16)
-        head, payload = cv._recv(b, 16)
-        assert head == {"cmd": "apply", "step": 3, "nbytes": 16} and payload == b"\x00" * 16
-        cv._send(a, {"cmd": "apply"}, b"\x00" * 32)
-        with pytest.raises(ConnectionError):
-            cv._recv(b, 16)
-    finally:
-        native('close', (a,))
-        native('close', (b,))
-
-
 class _Fake:
     """A trainer whose 'gradient' of shard k is a fixed vector and whose
     update is param -= total; state is param only (m, v, flags empty)."""

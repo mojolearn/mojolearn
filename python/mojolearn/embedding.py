@@ -12,7 +12,7 @@ There is no autograd here: the layer holds the table and computes the two calls;
 never updates `weight` itself.
 """
 from . import _native_archive_bridge
-from ._mode import NumericModeMixin
+from ._mode import NumericModeMixin as _NumericModeMixin
 
 _NO_PADDING = -1
 #: The saved-table format tag (`save`, `load`, `mojolearn.host_model`;
@@ -36,7 +36,7 @@ _ARCHIVE, _ARCHIVE_CONTEXT = _native_archive_bridge.connect()
 # upward on the IDENTICAL tier; clause (d) holds counts, perm and dW bit-identical across plans).
 # backward's grad carry: contract 7.4. Device I/O (lane gap-neural-io): forward(device=True) returns
 # a SequenceDeviceTensor; a binding without the resident entries refuses device=True by name.
-class Embedding(NumericModeMixin):
+class Embedding(_NumericModeMixin):
     """Embedding table with a reproducible gather and dense gradient, as `torch.nn.Embedding`.
 
     The table is the layer's own float32 copy, taken at construction (and again whenever

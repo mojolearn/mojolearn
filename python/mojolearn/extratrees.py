@@ -89,8 +89,8 @@ Nothing in this module imports NumPy.
 """
 
 from . import _mojolearn_trees, _native_archive_bridge, _native_trees_bridge
-from ._mode import NumericModeMixin
-from ._forest_protocol import ForestArchive, ForestClassifierPredict, ForestProtocol, forest_estimator
+from ._mode import NumericModeMixin as _NumericModeMixin
+from ._forest_protocol import ForestArchive as _ForestArchive, ForestClassifierPredict as _ForestClassifierPredict, ForestProtocol as _ForestProtocol, forest_estimator as _forest_estimator
 
 #: The npz model-file format tag `save` writes and `load` requires.
 _MODEL_FORMAT = "mojolearn-extratrees-1"
@@ -151,10 +151,10 @@ _UNSUPPORTED_CRITERIA = {
 # py-trees (2026-11-14) deleted their Python copies here.
 
 
-class _ExtraTreesBase(ForestProtocol, NumericModeMixin):
+class _ExtraTreesBase(_ForestProtocol, _NumericModeMixin):
     _BINDING = "_mojolearn_trees"
-    save = ForestArchive.save
-    load = vars(ForestArchive)["load"]
+    save = _ForestArchive.save
+    load = vars(_ForestArchive)["load"]
 
 
 #: The saved formats `load` reads, and the save schema of both extra-trees
@@ -179,7 +179,7 @@ _native_archive_bridge.register(_ExtraTreesBase, _MODEL_FORMATS, (
 ))
 
 
-@forest_estimator("classifier")
+@_forest_estimator("classifier")
 # Maintainer note (moved from the docstring): `predict_proba` is
 # `forest_vote`'s average of per-tree leaf distributions (cuML
 # `randomforest.cuh:229-242`); `predict` is its argmax through `classes_`.
@@ -276,7 +276,7 @@ class ExtraTreesClassifier(_ExtraTreesBase):
     >>> model = mojolearn.ExtraTreesClassifier(n_estimators=50).fit(X, y)
     >>> proba = model.predict_proba(X)
     """
-    predict = ForestClassifierPredict.predict
+    predict = _ForestClassifierPredict.predict
 
     def __init__(
         self,
@@ -342,7 +342,7 @@ class ExtraTreesClassifier(_ExtraTreesBase):
         """
         return _TREES(self, "trees_public_forest_proba", (X,), _TREES_CONTEXT)
 
-@forest_estimator("regressor")
+@_forest_estimator("regressor")
 # Maintainer note (moved from the docstring): GPU training produces means of
 # fixed-point quantized labels (deviation 135).
 class ExtraTreesRegressor(_ExtraTreesBase):

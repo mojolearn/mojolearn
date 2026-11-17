@@ -40,24 +40,13 @@ issues a DeprecationWarning).
 #   (`mojolearn/_tokenizer_synthetic.py`) and to a pure Python encoder of the
 #   same algorithm; `python/mojolearn/tests/test_tokenizer_surface.py` holds
 #   this door to the same cases plus every refusal by name.
-import json
-import operator
-import os
+import os as _os
 
 from . import _backend
-from ._buffer import addr
 
 _EXTENSION = "_mojolearn_tokenizer_host"
 
 __all__ = ["BpeTokenizer", "BpeVocabularyTrainer", "TrainedBpeVocabulary"]
-
-_NO_VOCABULARY = (
-    "mojolearn: BpeTokenizer needs a vocabulary, and mojolearn ships none. "
-    "Load one you obtained yourself: BpeTokenizer.from_files(encoder_json, vocab_bpe) "
-    "with the encoder.json and vocab.bpe that OpenAI publishes with its GPT-2 release, "
-    "BpeTokenizer.from_ranks_file(path) with a rank<TAB>hex file, or "
-    "BpeTokenizer.from_token_bytes(tokens)"
-)
 
 
 #: The binding's entries were `gpt2_*` until 2026-09-18 and are `bpe_*`
@@ -83,23 +72,7 @@ class _Entries:
         return getattr(self._module, name)
 
 
-VOCABULARY_SCHEMA = "mojolearn.bpe-vocabulary.v1"
-
-
-def _identity_from_tokens_text(text, n_ranks):
-    # the digest is the Mojo SHA-256 (core/sha256.mojo), the same hex as hashlib's
-    return _TOKENIZER_NATIVE.tokenizer_public_call('identity_text', (text, n_ranks), _TOKENIZER_CONTEXT)
-
-
-def _identity_of_ranks_file(path):
-    """`_identity_from_tokens_text` over the canonical rendering of a rank
-    file. The binding loads (and refuses) the file and renders the canonical
-    text (`tokenizer/impl/vocab_build.mojo::ranks_text`)."""
-    return _TOKENIZER_NATIVE.tokenizer_public_call('identity_file', (path,), _TOKENIZER_CONTEXT)
-
-
-def _identity_of_handle(m, handle):
-    return _TOKENIZER_NATIVE.tokenizer_public_call('identity_handle', (handle,), _TOKENIZER_CONTEXT)
+_VOCABULARY_SCHEMA = "mojolearn.bpe-vocabulary.v1"
 
 
 def _binding():
@@ -121,10 +94,10 @@ def _fast_binding(*, connect_all=False):
     if not connect_all and selected != "fast":
         return _NO_FAST
     try:
-        path = os.path.join(_backend.tier_dir("fast"), _FAST_EXTENSION + ".so")
+        path = _os.path.join(_backend.tier_dir("fast"), _FAST_EXTENSION + ".so")
     except ImportError:
         return _NO_FAST
-    if not os.path.exists(path):
+    if not _os.path.exists(path):
         return _NO_FAST
     module = _backend._load_member("fast", _FAST_EXTENSION, path)
     if int(module.tokenizer_fast_numeric_mode()) != 0:
@@ -344,12 +317,6 @@ class BpeTokenizer:
         """
         return _TOKENIZER_NATIVE.tokenizer_public_call('bpe_encode', (self, documents, allow_endoftext, False, True), _TOKENIZER_CONTEXT)
 
-    def _encode_corpus(self, data, points, document_bytes):
-        """`lm_corpus._tokenize`'s work in one call (`bpe_encode_corpus`):
-        `data` cut into documents by the corpus rule, each encoded alone.
-        Returns `(ids int32 array, {point: id offset}, n_documents, max_id,
-        ids_above_255)`."""
-        return _TOKENIZER_NATIVE.tokenizer_public_call('encode_corpus', (self, data, points, document_bytes), _TOKENIZER_CONTEXT)
 
     # ------------------------------------------------------------ decode
 
@@ -548,30 +515,6 @@ class BpeVocabularyTrainer:
 
     def __repr__(self):
         return _TOKENIZER_NATIVE.tokenizer_public_call('trainer_repr', (self,), _TOKENIZER_CONTEXT)
-
-
-def _native_trainer(required):
-    """The binding when it exports `bpe_train`, else None (or the reason,
-    raised, when `required`)."""
-    return _TOKENIZER_NATIVE.tokenizer_public_call('native_trainer', (required,), _TOKENIZER_CONTEXT)
-
-
-def _train_native(module, raws, vocab_size, min_frequency, break_ties_high):
-    """`(tokens, merges, stats)` from the Mojo trainer: one crossing in (the
-    documents back to back with int64 lengths), one out (the token bytes,
-    lengths and merge ids)."""
-    return _TOKENIZER_NATIVE.tokenizer_public_call('train_native', (module, raws, vocab_size, min_frequency, break_ties_high), _TOKENIZER_CONTEXT)
-
-
-def _read_trained(module, handle, vocab_size, min_frequency):
-    return _TOKENIZER_NATIVE.tokenizer_public_call('read_trained', (module, handle, vocab_size, min_frequency), _TOKENIZER_CONTEXT)
-
-
-def _train_corpus(data, points, lo, hi, document_bytes, vocab_size, min_frequency):
-    """`lm_corpus`'s vocabulary: the documents of `data[lo:hi]` (cut by the
-    corpus rule in Mojo, `bpe_train_corpus`) trained in the same call.
-    `points` are the corpus's sorted split points."""
-    return _TOKENIZER_NATIVE.tokenizer_public_call('train_corpus', (data, points, lo, hi, document_bytes, vocab_size, min_frequency), _TOKENIZER_CONTEXT)
 
 
 def _gather_rows(ids_all, out, batch, length, lo, modulus, base):

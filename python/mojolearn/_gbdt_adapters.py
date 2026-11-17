@@ -16,7 +16,7 @@ from ._mode import PublicOutputsMixin, _PARAMS_METADATA, _PARAMS_METADATA_CONTEX
 
 # One NotFittedError for the package; an instance of scikit-learn's too when
 # scikit-learn is imported (see mojolearn.exceptions).
-from .exceptions import NotFittedError, not_fitted_error  # noqa: F401
+from .exceptions import NotFittedError, _not_fitted_error  # noqa: F401
 
 # The compiled tree-ensemble owner: `decision_function`, `predict` and
 # `predict_proba` are one native call each (bindings/trees_public_gbdt_door.mojo).
@@ -83,7 +83,7 @@ class _GBDTAdapter(PublicOutputsMixin):
 
     def _check_fitted(self):
         if not self.__sklearn_is_fitted__():
-            raise not_fitted_error(f'{type(self).__name__} is not fitted')
+            raise _not_fitted_error(f'{type(self).__name__} is not fitted')
 
     def __sklearn_is_fitted__(self):
         return _TREES(self, "trees_public_gbdt_adapter_is_fitted", (), _TREES_CONTEXT)

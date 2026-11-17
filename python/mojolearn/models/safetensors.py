@@ -7,15 +7,12 @@ float32; `bf16="bits"` retains uint16 bits and returns a `BF16Weight` for a
 matrix. Other storage types are refused by name. Files are mapped lazily and
 may be closed explicitly or used with a context manager.
 """
-import mmap
-import os
 
 from .. import lowbit as _lowbit
-from .._array import Array
+from .._array import Array as _Array
 from ..tokenizer import _binding
 
 _NATIVE = _binding()._module
-from .._buffer import frombytes
 
 __all__ = ["SafetensorsFile", "Checkpoint", "TensorInfo", "DTYPES", "INDEX_NAME", "SINGLE_NAME"]
 
@@ -30,8 +27,6 @@ DTYPES = {
 
 INDEX_NAME = "model.safetensors.index.json"
 SINGLE_NAME = "model.safetensors"
-
-_HEADER_LIMIT = 100 * 1024 * 1024  # a header above this is not a checkpoint
 
 
 class TensorInfo:
@@ -157,7 +152,7 @@ from .. import _linalg_impl as _checkpoint_linalg
 
 # Native file/mmap owners release their resources with normal reference lifetime;
 # no Python __del__ callback is needed when native load owns temporary readers.
-_NATIVE_CONTEXT = {"array_class": Array, "bf16_class": _lowbit.BF16Weight,
+_NATIVE_CONTEXT = {"array_class": _Array, "bf16_class": _lowbit.BF16Weight,
                    "info_class": TensorInfo, "file_class": SafetensorsFile,
                    "checkpoint_class": Checkpoint,
                    "linalg_context": _checkpoint_linalg._NATIVE_CONTEXT}

@@ -26,7 +26,7 @@ objective-change tolerance is ``0.1 * tol``. This follows cuML's
 ``LinearSVC`` and ``LinearSVR``.
 """
 
-from ._mode import NumericModeMixin
+from ._mode import NumericModeMixin as _NumericModeMixin
 from . import _native_family_bridge
 from ._svm_impl import SVC, SVR
 from .linear_model import _QN_LOSS_SVC_L1, _QN_LOSS_SVC_L2, _QN_LOSS_SVR_L1, _QN_LOSS_SVR_L2
@@ -42,7 +42,7 @@ __all__ = ["SVC", "SVR", "LinearSVC", "LinearSVR"]
 # estimators binding admitted by the shared provider after native entry.
 _NATIVE, _NATIVE_CONTEXT = _native_family_bridge.connect()
 
-class _LinearSVMBase(NumericModeMixin):
+class _LinearSVMBase(_NumericModeMixin):
     """The fields and refusals the two linear machines share."""
 
     _BINDING = "_mojolearn_estimators"

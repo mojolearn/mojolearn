@@ -16,7 +16,7 @@ Refused by name (sequence/NOT_IMPLEMENTED.tsv): bidirectional, dropout
 between layers, proj_size, initial hidden state, packed / variable-length
 sequences, float64.
 """
-from ._mode import ClassifierScoreMixin, ParamsMixin, RegressorScoreMixin
+from ._mode import ParamsMixin
 
 from collections import OrderedDict
 from . import _native_xseq_bridge
@@ -76,7 +76,7 @@ class _RecurrentBase(ParamsMixin):
         return _XSEQ(self, "rnn_hidden_sequence", (X,), _XSEQ_CONTEXT)
 
 
-class _RecurrentRegressor(RegressorScoreMixin, _RecurrentBase):
+class _RecurrentRegressor(_RecurrentBase):
     # scikit-learn tags, read by `_mode.sklearn_tags`
     _estimator_type = "regressor"
     _TASK = 0
@@ -107,7 +107,7 @@ class _RecurrentRegressor(RegressorScoreMixin, _RecurrentBase):
         return _XSEQ(self, "rnn_score", (X, y, sample_weight), _XSEQ_CONTEXT)
 
 
-class _RecurrentClassifier(ClassifierScoreMixin, _RecurrentBase):
+class _RecurrentClassifier(_RecurrentBase):
     # scikit-learn tags, read by `_mode.sklearn_tags`
     _estimator_type = "classifier"
     _TASK = 1

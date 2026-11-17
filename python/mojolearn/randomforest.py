@@ -67,8 +67,8 @@ imports NumPy.
 """
 
 from . import _mojolearn_rf, _native_archive_bridge, _native_trees_bridge
-from ._mode import NumericModeMixin
-from ._forest_protocol import ForestArchive, ForestClassifierPredict, ForestProtocol, forest_estimator
+from ._mode import NumericModeMixin as _NumericModeMixin
+from ._forest_protocol import ForestArchive as _ForestArchive, ForestClassifierPredict as _ForestClassifierPredict, ForestProtocol as _ForestProtocol, forest_estimator as _forest_estimator
 
 #: The npz model-file format tag `save` writes and `load` requires.
 _MODEL_FORMAT = "mojolearn-randomforest-1"
@@ -232,11 +232,11 @@ _MAX_LEAF_NODES_WHY = (
 # Lane py-trees (2026-11-14) deleted the Python copies of those checks here.
 
 
-class _RandomForestBase(ForestProtocol, NumericModeMixin):
+class _RandomForestBase(_ForestProtocol, _NumericModeMixin):
     #: This family's binding, for `NumericModeMixin._bind`.
     _BINDING = "_mojolearn_rf"
-    save = ForestArchive.save
-    load = vars(ForestArchive)["load"]
+    save = _ForestArchive.save
+    load = vars(_ForestArchive)["load"]
 
     def _fit_with_tree_start(self, X, y, tree_start=None, *, feature_importances=False,
                              sample_weight=None):
@@ -274,7 +274,7 @@ _native_archive_bridge.register(_RandomForestBase, _MODEL_FORMATS, _SAVE_SCHEMA)
 # cuML's in neither. `max_depth=None` matches cuML >= v26.08.00; this surface
 # substituted 16 until 2026-09-01 (DEVIATION 409, closed by aligning).
 # `max_leaf_nodes` is refused by name (DEVIATION 408, see _MAX_LEAF_NODES_WHY).
-@forest_estimator("classifier")
+@_forest_estimator("classifier")
 class RandomForestClassifier(_RandomForestBase):
     """Random forest classifier with cuML's defaults.
 
@@ -385,7 +385,7 @@ class RandomForestClassifier(_RandomForestBase):
     >>> model = mojolearn.RandomForestClassifier(n_estimators=50).fit(X, y)
     >>> proba = model.predict_proba(X)
     """
-    predict = ForestClassifierPredict.predict
+    predict = _ForestClassifierPredict.predict
 
     def __init__(
         self,
@@ -460,7 +460,7 @@ class RandomForestClassifier(_RandomForestBase):
 # stumps; `fit` refuses instead. `max_features=1.0` is cuML's regressor
 # default (`randomforestregressor.py:162`). `max_depth=None` since
 # 2026-09-01 (DEVIATION 409); `max_leaf_nodes` refused (DEVIATION 408).
-@forest_estimator("regressor")
+@_forest_estimator("regressor")
 class RandomForestRegressor(_RandomForestBase):
     """Random forest regressor with cuML's defaults.
 

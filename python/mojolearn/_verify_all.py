@@ -1496,15 +1496,6 @@ COMPARE_INPUT_FORMAT = "mojolearn.verify-all-report.v1"
 #: is NOT a bit pattern and must never be compared as though it were one.
 _HASH_RE = re.compile(r"\A[0-9a-f]{8,64}\Z")
 
-#: Values that mean THE BOX DISAGREED WITH ITSELF. `vref.judge` reads all
-#: three as DIVERGENT. Two documents both carrying `MOVED` for a cell hold
-#: the same STRING, and equality on strings counted that as agreement: two
-#: machines "agreeing" that neither of them is deterministic, reported as a
-#: pass. That is the precise opposite of the claim being checked, so it gets
-#: its own verdict and its own non-zero exit.
-_SELF_CONTRADICTED = ("MOVED", "BATCH_MOVED", "RELOAD-MOVED", "RLPAIR_MOVED")
-
-
 def _value_kind(v):
     """Classify one cell value. The whole point is that only `hash` is a bit
     pattern two machines can agree ON; the rest are agreements about nothing."""

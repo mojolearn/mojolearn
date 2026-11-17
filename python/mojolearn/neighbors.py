@@ -15,9 +15,8 @@ cover. Every search is exact, never approximate.
 """
 
 from . import _mojolearn, _native_archive_bridge, _native_family_bridge
-from ._mode import NumericModeMixin
+from ._mode import NumericModeMixin as _NumericModeMixin
 from ._native_neighbor_queries import native_method as _native_query_method
-from ._mode import ClassifierScoreMixin, RegressorScoreMixin
 
 #: the x_neighbors binding, which holds the p2m_* ops the data loops below
 #: run through (lane apple-fast-py2mojo-neighbors)
@@ -96,7 +95,7 @@ _native_family_bridge.tables(**_label_context())
 # - The arm (fused vs tiled, `KNN_METHOD_AUTO`) is not a parameter by design
 #   (POLICY CHOICE 4); under NUMERIC_IDENTICAL AUTO is pinned to the tiled
 #   arm on every column (DEVIATION 509).
-class NearestNeighbors(NumericModeMixin):
+class NearestNeighbors(_NumericModeMixin):
     """Exact k-nearest-neighbor search.
 
     Every query is compared against every fitted point (``algorithm='brute'``,
@@ -370,7 +369,7 @@ class NearestNeighbors(NumericModeMixin):
 # - classes_: the pyx's `cp.unique`; `_labels.sorted_classes`, DEVIATION
 #   2340 (a list rather than an ndarray). The Mojo side recomputes the set
 #   with `getUniquelabels` and `predict` asserts the two agree.
-class KNeighborsClassifier(ClassifierScoreMixin, NearestNeighbors):
+class KNeighborsClassifier(NearestNeighbors):
     """Classifier that votes among the k nearest training points.
 
     For each query, the classes of its `n_neighbors` nearest training points
@@ -596,7 +595,7 @@ class KNeighborsClassifier(ClassifierScoreMixin, NearestNeighbors):
 # in both numeric modes, with the seams flushed under NUMERIC_IDENTICAL
 # (DEVIATION 542). weights='distance' is DEVIATION 556. float64 targets are
 # cast to float32 as cuML does (convert_to_dtype=np.float32).
-class KNeighborsRegressor(RegressorScoreMixin, NearestNeighbors):
+class KNeighborsRegressor(NearestNeighbors):
     """Regressor that averages the targets of the k nearest training points.
 
     Each prediction is the mean of the `n_neighbors` nearest targets, or with
@@ -791,7 +790,7 @@ class KNeighborsRegressor(RegressorScoreMixin, NearestNeighbors):
 # - Two calls cross the boundary per query (count, then fill), because the
 #   output size is not a function of the inputs; the ball cover is built in
 #   each (`neighbors/estimator.mojo`).
-class RadiusNeighbors(NumericModeMixin):
+class RadiusNeighbors(_NumericModeMixin):
     """Find every fitted point within a radius of each query.
 
     Returns scikit-learn's `radius_neighbors` shape: a ragged

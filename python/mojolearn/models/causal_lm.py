@@ -13,10 +13,8 @@ In `identical` mode, mojolearn returns the same bits on Apple, NVIDIA and AMD GP
 from .. import _backend
 from .. import _numeric_profile
 from .. import lowbit as _lowbit
-from .._array import Array
-from .._buffer import addr, addr_ro, empty
-from .config import POSITION_CEILING, HFConfig, plan_for
-from .safetensors import Checkpoint
+from .._array import Array as _Array
+from .._buffer import addr as _addr, addr_ro as _addr_ro, empty as _empty
 
 __all__ = ["CausalLM", "CausalLMState", "GenerationStream"]
 
@@ -78,24 +76,24 @@ class _CpuPrimitives:
     def embedding(self, table, ids_flat):
         n = int(ids_flat.size)
         v, d = int(table.shape[0]), int(table.shape[1])
-        y = empty((n, d), "<f4")
+        y = _empty((n, d), "<f4")
         self._ext.embedding_forward(
-            [addr(y, name="x"), addr_ro(table, name="embed"), addr_ro(ids_flat, name="ids")], [n, v, d])
+            [_addr(y, name="x"), _addr_ro(table, name="embed"), _addr_ro(ids_flat, name="ids")], [n, v, d])
         return y
 
     def rms_norm(self, x2d, weight, eps):
         n, d = int(x2d.shape[0]), int(x2d.shape[1])
-        y = empty((n, d), "<f4")
+        y = _empty((n, d), "<f4")
         self._ext.rms_norm_forward(
-            [addr(y, name="hn"), addr_ro(x2d, name="x"), addr_ro(weight, name="norm")], [n, d, float(eps)])
+            [_addr(y, name="hn"), _addr_ro(x2d, name="x"), _addr_ro(weight, name="norm")], [n, d, float(eps)])
         return y
 
     def linear(self, x2d, weight):
         n, d = int(x2d.shape[0]), int(x2d.shape[1])
         v = int(weight.shape[0])
-        y = empty((n, v), "<f4")
+        y = _empty((n, v), "<f4")
         self._ext.linear_forward(
-            [addr(y, name="logits"), addr_ro(x2d, name="hn"), addr_ro(weight, name="head")], [n, v, d])
+            [_addr(y, name="logits"), _addr_ro(x2d, name="hn"), _addr_ro(weight, name="head")], [n, v, d])
         return y
 
     def linear_int15(self, x2d, planes):
@@ -292,7 +290,7 @@ def _connect_causal_native():
     runtime = runtime_binding()._module
     from .._native_operation_lock import connect as connect_operation_lock
     connect_operation_lock(runtime)
-    runtime.native_codec_call("initialize", (Array, _lowbit.BF16Weight, _lowbit.Int8Weight))
+    runtime.native_codec_call("initialize", (_Array, _lowbit.BF16Weight, _lowbit.Int8Weight))
     selected_mode = _backend.default_mode()
     bindings = {"cpu:identical": _causal_native_connections()}
     vendor = _backend.vendor()
@@ -325,7 +323,7 @@ def _connect_causal_native():
         "profile_defaults": _numeric_profile._defaults,
         "rejected_profiles": _numeric_profile.REJECTED,
         "config_context": config_context, "checkpoint_context": checkpoint_context,
-        "array_class": Array, "bf16_class": _lowbit.BF16Weight,
+        "array_class": _Array, "bf16_class": _lowbit.BF16Weight,
         "int8_class": _lowbit.Int8Weight, "projections": _PROJECTIONS,
         "optional_names": _OPT_NAMES, "rlock": _thread.RLock,
         "training_module": training,
@@ -340,7 +338,7 @@ def _connect_causal_native():
         "transformer_session_class": TransformerDecodeSession,
         "mamba_session_classes": {"mamba1": Mamba1DecodeSession, "mamba2": Mamba2DecodeSession,
                                   "mamba3": Mamba3DecodeSession},
-        "generation_classes": (Array, CausalLMState,
+        "generation_classes": (_Array, CausalLMState,
                                {"transformer": TransformerState, "mamba1": Mamba1State,
                                 "mamba2": Mamba2State}, GenerationStream),
     }

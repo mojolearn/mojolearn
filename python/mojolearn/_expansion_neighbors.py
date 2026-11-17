@@ -31,7 +31,6 @@ from ._array import Array
 from ._buffer import addr, addr_ro, empty, zeros
 from ._lazy_out import _empty_out
 from ._mode import NumericModeMixin, available_if
-from ._mode import RegressorScoreMixin
 from . import _native_family_bridge
 from ._native_robust_bridge import native_method as _native_local_method
 
@@ -54,8 +53,6 @@ __all__ = ["LocalOutlierFactor", "NearestCentroid", "OneClassSVM", "KernelPCA", 
            "PageRank", "connected_components", "Louvain", "SVGP"]
 
 # x_neighbors/items.mojo's codes
-#: x_neighbors/iter_device.mojo XN_PRECOMPUTED_KIND: `kpca_transform` reads q as the kernel
-_XN_PRECOMPUTED_KIND = 100
 _KERNELS = {"linear": 0, "poly": 1, "polynomial": 1, "rbf": 2, "sigmoid": 3, "laplacian": 4,
             "cosine": 5, "chi2": 6, "additive_chi2": 7}
 _U_EXP, _U_LOG, _U_SQRT, _U_TANH, _U_COS, _U_SIN, _U_IDENTITY, _U_RECIP = range(8)
@@ -82,9 +79,6 @@ def _f32_scalar(v):
     return Array.from_list([float(v)], "<f4").tolist()[0]
 
 
-#: the kernels the resident route builds from the kit's sqdist / gemm and
-#: elementwise launches (any other kernel takes main's path)
-_KPCA_RESIDENT_KERNELS = ("rbf", "linear", "poly", "sigmoid")
 
 
 #: A/B arm (lane neighbors-apple2): the k-NN primitive as the two ops it
@@ -120,15 +114,6 @@ def _kfeat_flags(est):
         return 0
     fn = getattr(est._bind(), "x_neighbors_kfeat_flags", None)
     return int(fn()) if fn is not None else 0
-
-
-def _classical_graph_normalization(est):
-    """C43 binary capability, IDENTICAL only and default OFF.
-
-    NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
-    """
-    flag = getattr(est._bind(), "x_neighbors_classical_graph_normalization", None)
-    return flag is not None and bool(flag())
 
 
 # TOMBSTONE: x_neighbors_lp_fast_resident (dead export: always 1) deleted 2026-11-09 by lane/n3b-sgd-on-program-fit; code recoverable at 5b5490960d.
@@ -168,12 +153,6 @@ class _XNeighbors(NumericModeMixin):
         self._op("sqdist", [(A, 0), (B, 0), (out, 1)], (n, m, d))
         return out
 
-    def _l1dist(self, A, B):
-        n, d = A.shape
-        m = B.shape[0]
-        out = _empty_out((n, m), "<f4")
-        self._op("l1dist", [(A, 0), (B, 0), (out, 1)], (n, m, d))
-        return out
 
     def _fast_tier(self):
         """True on the FAST tier (the lane/apple-fast-neighbors2 switches
@@ -2004,7 +1983,7 @@ class Louvain(_XNeighbors):
 # as staged items (x_neighbors/items.mojo `svgp_*_item`: a Cholesky column
 # per launch, one triangular solve per right-hand side); the fit is the
 # float-float resident chain `xn_svgp_fit_ff` (x_neighbors/svgp_ff.mojo).
-class SVGP(RegressorScoreMixin, _XNeighbors):
+class SVGP(_XNeighbors):
     """Sparse variational Gaussian process regression with inducing points.
 
     A Gaussian process regressor with a Gaussian likelihood, a

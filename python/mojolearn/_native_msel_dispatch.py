@@ -21,7 +21,7 @@ def connect(context, package):
     resample = loaded('resample')
     _backend.default_mode()  # glue: settle the shared default before native metadata reads
     # The CV's FAST define masks (bindings/msel_cv_door.mojo:232 reads the
-    # current mode's entry). `identical` is 0 by definition (resample.fast_defines);
+    # current mode's entry). `identical` is 0 by definition (resample._fast_defines);
     # the `fast` mask needs the resample binding, so it is read when resample is
     # loaded, or now when the process runs FAST. Before that it is 0, and it is
     # rewritten when resample loads (lane lazy-import-fix: the key used to be
@@ -31,7 +31,7 @@ def connect(context, package):
         if resample is None and _backend.default_mode() == "fast":
             import importlib
             resample = importlib.import_module(package.__name__ + '.resample')
-        fresh = {"identical": 0, "fast": resample.fast_defines("fast") if resample is not None else 0}
+        fresh = {"identical": 0, "fast": resample._fast_defines("fast") if resample is not None else 0}
         if masks is None:
             context["family_msel_fast_masks"] = fresh
         else:

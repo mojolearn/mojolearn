@@ -260,11 +260,6 @@ def importers_read(ml, cx):
 
 def importers_records(ml, cx):
     from mojolearn import importers
-    from mojolearn.importers import onnx
-    onnx.TensorInfo("w", "float32", (2,), None)
-    node = onnx.Node("Relu", "", "relu", ("x",), ("y",))
-    onnx.GraphIR(17, (("x", "float32", (2,)),), (("y", "float32", (2,)),), (node,), {}, "census")
-    onnx.Resolved({}, {}, {}, (), ())
     importers.UnsupportedModel("census", (("relu", "Relu", "census fixture"),))
 
 
@@ -306,11 +301,7 @@ FIXTURES = {
                                                   "mojolearn.cross_vendor.Worker.drain_events"]),
     "importers_read": (importers_read, ["mojolearn.importers.onnx.read", "mojolearn.importers.supported_ops",
                                         "mojolearn.importers.onnx.reader_error"]),
-    "importers_records": (importers_records, ["mojolearn.importers.onnx.TensorInfo.__init__",
-                                              "mojolearn.importers.onnx.Node.__init__",
-                                              "mojolearn.importers.onnx.GraphIR.__init__",
-                                              "mojolearn.importers.onnx.Resolved.__init__",
-                                              "mojolearn.importers.UnsupportedModel.__init__"]),
+    "importers_records": (importers_records, ["mojolearn.importers.UnsupportedModel.__init__"]),
 }
 
 NEEDS_GPU = {
@@ -320,23 +311,4 @@ NEEDS_GPU = {
 }
 
 #: members no public operation runs, left unreached on purpose
-_LEAKED = ("a private helper imported into the module's namespace (the module has no __all__), not a public "
-           "operation of it; ")
-WHY_NOT = {
-    "mojolearn.linear_model.addr": _LEAKED + "mojolearn._buffer.addr, the buffer-address helper linear_model's "
-                                   "own calls use",
-    "mojolearn.linear_model.addr_ro": _LEAKED + "mojolearn._buffer.addr_ro",
-    "mojolearn.linear_model.zeros": _LEAKED + "mojolearn._buffer.zeros",
-    "mojolearn.density.available_if.__init__": _LEAKED + "mojolearn._mode.available_if, a class-body decorator: "
-                                               "it runs at import, when a class is defined",
-    "mojolearn.density.available_if.__call__": _LEAKED + "mojolearn._mode.available_if (import time)",
-    "mojolearn.extratrees.forest_estimator": _LEAKED + "the forest classes' import-time class decorator "
-                                             "(_forest_protocol.forest_estimator registers each native constructor)",
-    "mojolearn.neighbors.ClassifierScoreMixin.score": "dead: every public subclass (KNeighborsClassifier, the "
-                                                      "recurrent classifiers) overrides score with its one native "
-                                                      "call; the mixin body (predict, then the metric) never runs "
-                                                      "through a public class. An owed deletion",
-    "mojolearn.neighbors.RegressorScoreMixin.score": "dead: every public subclass (KNeighborsRegressor, KernelRidge, "
-                                                     "PLS, SVGP, MLPRegressor, the recurrent regressors) overrides "
-                                                     "score; an owed deletion",
-}
+WHY_NOT = {}
