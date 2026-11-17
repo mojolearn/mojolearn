@@ -153,7 +153,24 @@ class Worker:
 
 
 # ------------------------------------------------------------ command line
-def _main(argv=None):
+def main(argv=None):
+    """Run the ``python -m mojolearn.cross_vendor`` command line.
+
+    Parameters
+    ----------
+    argv : list of str, optional
+        The arguments after the program name. The default reads ``sys.argv``.
+
+    Returns
+    -------
+    int
+        The process exit status.
+
+    Examples
+    --------
+    >>> from mojolearn import cross_vendor
+    >>> cross_vendor.main(["coordinator", "--workers", "2", "--shards", "4", "--steps", "100"])  # doctest: +SKIP
+    """
     return _native_cross_vendor("main", (argv,), _cross_vendor_errors)
 
 
@@ -164,4 +181,4 @@ _native_cross_vendor("worker_initialize", (_ParallelByte, BatchFeed, LearningRat
 
 
 if __name__ == "__main__":
-    _sys.exit(_main())
+    _sys.exit(main())
