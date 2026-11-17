@@ -21,6 +21,8 @@ sentence in one place:
                           1 (tools/mac_slot.py, tools/nvidia_serial_guard.py),
                           and that setting makes every path here serial.
   unset or not positive   one task per physical core (`num_physical_cores`),
+                          capped by the cgroup CPU quota when the process
+                          has one (`_cgroup_cpu_quota`, lane fb-metrics),
                           the byte LM host's default (`training/byte_lm_host.
                           mojo::byte_host_worker_count`).
 
@@ -39,6 +41,7 @@ count and at 1.
 """
 from std.os import getenv
 from std.sys.info import num_physical_cores
+from std.os.path import exists
 from core.shared_slot import SharedSlot
 
 #: The most tasks one call splits into, whatever the box reports; the byte
@@ -81,12 +84,65 @@ def _host_threads_env() -> Int:
         return 0
 
 
+def _read_words(path: String) -> List[String]:
+    """The whitespace-separated words of a small text file, or none."""
+    var out = List[String]()
+    try:
+        if not exists(path):
+            return out^
+        var text: String
+        with open(path, "r") as fh:
+            text = fh.read()
+        for w in text.split():  # driver-loop: the words of a one-line control file
+            out.append(String(w))
+    except:
+        pass
+    return out^
+
+
+def _cgroup_cpu_quota() -> Int:
+    """The CPU quota of the process's cgroup in whole cores (rounded up), or
+    0 when there is none or it cannot be read: cgroup v2 `cpu.max`
+    ("<quota> <period>" or "max <period>"), else cgroup v1
+    `cpu.cfs_quota_us` / `cpu.cfs_period_us` (-1: none).
+    Lane fb-metrics (2026-11-17): a rented container shows the host's
+    cores (the L40S box: 128 physical, 256 visible) while its quota is 28;
+    one task per visible physical core on such a box splits a host copy into
+    128 tasks under a 28-core quota (resample on a 880 MB output read 6.5x
+    slower than 0.8.55's single NumPy gather). AGENTS.md's own rule: the
+    core count is the allocation, not the host's visible CPUs."""
+    try:
+        var v2 = _read_words("/sys/fs/cgroup/cpu.max")
+        if len(v2) >= 2:
+            if v2[0] == "max":
+                return 0
+            var quota = Int(atol(v2[0]))
+            var period = Int(atol(v2[1]))
+            if quota > 0 and period > 0:
+                return (quota + period - 1) // period
+            return 0
+        var q = _read_words("/sys/fs/cgroup/cpu/cpu.cfs_quota_us")
+        var per = _read_words("/sys/fs/cgroup/cpu/cpu.cfs_period_us")
+        if len(q) >= 1 and len(per) >= 1:
+            var quota = Int(atol(q[0]))
+            var period = Int(atol(per[0]))
+            if quota > 0 and period > 0:
+                return (quota + period - 1) // period
+    except:
+        pass
+    return 0
+
+
 def _host_threads_resolve(requested: Int) -> Int:
     """The worker ceiling for a request: the request when positive, else
-    one per physical core, clamped to [1, HOST_PREDICT_MAX_TASKS]."""
+    one per physical core, capped by the cgroup CPU quota when there is one,
+    clamped to [1, HOST_PREDICT_MAX_TASKS]. A thread count moves no bit."""
     var workers = requested
     if workers <= 0:
         workers = num_physical_cores()
+        var quota = _cgroup_cpu_quota()
+        if quota > 0 and quota < workers:
+            workers = quota
     if workers < 1:
         workers = 1
     if workers > HOST_PREDICT_MAX_TASKS:

@@ -384,32 +384,39 @@ def mc_int_store(values: PythonObject, context: PythonObject) raises -> PythonOb
     var input = mc_integer_view(values, context)
     if not input:
         return PythonObject(None)
-    var count = input.value().count
+    return mc_int_store_view(input.value())
+
+
+def mc_int_store_view(input: MetricIntegerView) raises -> PythonObject:
+    """`(int64 store, count)` of an admitted integer view, or None."""
+    var count = input.count
     # The native conversion route writes all count words, or refuses and the
     # store is dropped (lane fix-output-zero-fill (2026-11-14): unfilled, was zero-filled).
     var store = native_array_unfilled(String("q"), count)
     var dst = FAMILY_I64P(unsafe_from_address=Int(py=py_call(store.buffer_info)[0]))
-    var admitted = admitted_ids_i64(Int(py=classical_address(input.value().view)), input.value().stride,
-        0, count, 1, input.value().item, input.value().signed, False, dst)
-    _ = input  # retain the source owner through success and refusal
+    var admitted = admitted_ids_i64(Int(py=classical_address(input.view)), input.stride,
+        0, count, 1, input.item, input.signed, False, dst)
     _ = store
     if not admitted:
         return PythonObject(None)
     return Python.tuple(store, PythonObject(count))
 
 
-def mc_encode_store(store: PythonObject, count: Int, context: PythonObject) raises -> PythonObject:
-    """`(classes, codes)` of `count` int64 labels (the ORDER RULE: sorted
-    distinct values, one dense int32 code per row), encoded natively: the
-    classes as a Python int list."""
+def mc_encode_words(addr: Int, item: Int, count: Int, context: PythonObject) raises -> PythonObject:
+    """`(classes, codes)` of `count` contiguous signed labels of `item` bytes
+    at `addr` (the ORDER RULE: sorted distinct values, one dense int32 code
+    per row), encoded natively: the classes as a Python int list.
+    Lane fb-metrics (2026-11-17): the labels are read at their own width
+    (an int32 label buffer is no longer widened into an n-word int64 store
+    first) and the class scratch is not zero-filled (only its first k
+    words are written and read): with core/labels_score_encode.mojo's
+    dense-range encoder, a call touches the codes and a k-slot table, not
+    some 60 bytes of fresh scratch per label."""
     # p3-labels-metrics: the class words land in a native scratch list and
-    # only the k classes become Python ints (one presized list), instead of
-    # an n-slot bytes + array store, a slice and a tolist.
-    var classes = List[Int64](length=max(count, 1), fill=0)
+    # only the k classes become Python ints (one presized list).
+    var classes = List[Int64](unsafe_uninit_length=max(count, 1))
     var codes = family_array(Python.tuple(count), "<i4", context)
-    var k = mc_encode_signed(Int(py=py_call(store.buffer_info)[0]), 8, count,
-                             Int(classes.unsafe_ptr()), Int(py=classical_address(codes)))
-    _ = store  # keep the label store alive through the native call above
+    var k = mc_encode_signed(addr, item, count, Int(classes.unsafe_ptr()), Int(py=classical_address(codes)))
     _ = codes  # keep the Python object alive through the native call above
     ref cpy = Python().cpython()
     var t = cpython_table()
@@ -417,13 +424,30 @@ def mc_encode_store(store: PythonObject, count: Int, context: PythonObject) rais
     if not raw:
         raise cpy.unsafe_get_error()
     var listed = PythonObject(from_owned=raw)
+    var at = Int(classes.unsafe_ptr())
     for c in range(k):  # driver-loop: over the k distinct classes
-        var item = t[].PyLong_FromLongLong(classes[c])
-        if not item:
+        var value: Int64
+        if item == 8:
+            value = FAMILY_I64P(unsafe_from_address=at)[c]
+        elif item == 4:
+            value = Int64(FAMILY_I32P(unsafe_from_address=at)[c])
+        elif item == 2:
+            value = Int64(MutPointer[Int16, MutUntrackedOrigin](unsafe_from_address=at)[c])
+        else:
+            value = Int64(MutPointer[Int8, MutUntrackedOrigin](unsafe_from_address=at)[c])
+        var obj = t[].PyLong_FromLongLong(value)
+        if not obj:
             raise cpy.unsafe_get_error()
-        _ = t[].PyList_SetItem(listed._obj_ptr, c, item)
+        _ = t[].PyList_SetItem(listed._obj_ptr, c, obj)
     _ = classes^
     return Python.tuple(listed, codes)
+
+
+def mc_encode_store(store: PythonObject, count: Int, context: PythonObject) raises -> PythonObject:
+    """`(classes, codes)` of `count` int64 labels held in an array.array('q') store."""
+    var encoded = mc_encode_words(Int(py=py_call(store.buffer_info)[0]), 8, count, context)
+    _ = store  # keep the label store alive through the native call above
+    return encoded
 
 
 def mc_fast_labels(values: PythonObject, context: PythonObject, admitted: Bool = False) raises -> PythonObject:
@@ -455,7 +479,19 @@ def mc_fast_labels(values: PythonObject, context: PythonObject, admitted: Bool =
         var shape = metric_shape_admitted(values, context) if admitted else mc_shape_of(values, context)
         if mc_rank(shape) != 1:
             return PythonObject(None)
-        var packed = mc_int_store(values, context)
+        var input = mc_integer_view(values, context)
+        if not input:
+            return PythonObject(None)
+        if input.value().signed and input.value().stride == input.value().item:
+            # Lane fb-metrics: a contiguous signed label buffer is encoded in
+            # place at its own width (no int64 store copy).
+            count = input.value().count
+            var direct = mc_encode_words(Int(py=classical_address(input.value().view)), input.value().item,
+                                         count, context)
+            _ = input  # retain the source owner through the native encode
+            return Python.tuple(direct[0], direct[1], PythonObject(count))
+        var packed = mc_int_store_view(input.value())
+        _ = input  # retain the source owner through the conversion
         if packed is None:
             return PythonObject(None)
         store = packed[0]
