@@ -2379,15 +2379,16 @@ def _flat_copy(view: PythonObject, context: PythonObject) raises -> PythonObject
 
 def _f32_target(view: PythonObject, context: PythonObject) raises -> PythonObject:
     # `num.astype("<f4")`: the flat float32 target (cast_elements).
-    var n = _v_size(view)
-    var out = admitted_vector(n, "<f4", context)
+    # fb-boost-copy (2026-11-17): a float32 target is the C-order view
+    # itself (`admit_c_view`); the program only reads it (EncProg.put), so
+    # it is no longer copied into a zero-filled vector per fit (O(n)).
     var t = _v_type(view, context)
     if t == "<f4":
-        unsafe_memcpy(dest=_ptr(out), src=F32P(unsafe_from_address=_v_addr(view)), count=n)
-        _ = out  # keep the Python object alive through the native call above
-    else:
-        labels_cast(_v_addr(view), t, labels_address(out), "<f4", n, context)
-        _ = out  # keep the Python object alive through the native call above
+        return view
+    var n = _v_size(view)
+    var out = admitted_vector(n, "<f4", context)
+    labels_cast(_v_addr(view), t, labels_address(out), "<f4", n, context)
+    _ = out  # keep the Python object alive through the native call above
     return out
 
 
@@ -2401,9 +2402,15 @@ def _all_integral(view: PythonObject, vector: Bool, context: PythonObject) raise
     # `vector`: `_target_arrays` tests y as it is; `_target_kind` its flat copy
     if (t != "<f4" and t != "<f8") or n == 0 or (vector and not _is_vector(view)) or n * per > 1073741824:
         raise Error("TypeError: mojolearn: the integral test takes a float32 or float64 vector")
-    var words = classical_typed(Python.tuple(n * per), "<f4", context["output_context"])
-    unsafe_memcpy(dest=_ptr(words), src=F32P(unsafe_from_address=_v_addr(view)), count=n * per)
-    _ = words  # keep the Python object alive through the native call above
+    # fb-boost-copy (2026-11-17): a float32 view (C order, `admit_c_view`)
+    # is read in place by the scan; only a float64 one is copied, as its
+    # n x 2 float32 words (the program's record size is the owner's `size`
+    # in float32 words). It was copied into a zero-filled store per call.
+    var words = view
+    if per != 1:
+        words = classical_typed(Python.tuple(n * per), "<f4", context["output_context"])
+        unsafe_memcpy(dest=_ptr(words), src=F32P(unsafe_from_address=_v_addr(view)), count=n * per)
+        _ = words  # keep the Python object alive through the native call above
     var ch = max(4096, (n + 4095) // 4096)
     var nch = (n + ch - 1) // ch
     var mode = _default_mode(context)
@@ -2853,12 +2860,11 @@ def _pearson(mut p: EncProg, values: PythonObject, y: PythonObject, mode: Python
     var target = admit_f32(y, 1, "y", context, finite=False)
     if target.rows != n:
         raise Error("mojolearn: X and y have different numbers of rows")
-    var yv = admitted_vector(n, "<f4", context)
-    unsafe_memcpy(dest=_ptr(yv), src=F32P(unsafe_from_address=target.address), count=n)
-    _ = yv  # keep the Python object alive through the native call above
-    _ = target  # keep the Python object alive through the native call above
+    # fb-boost-copy (2026-11-17): the program reads the admitted C-order
+    # float32 y in place (EncProg.put holds its owner for the run); it was
+    # copied into a zero-filled vector per f_regression call (O(n)).
     var xo = p.put_x(values)
-    var yo = p.put(yv, n)
+    var yo = p.put(target.array, n)
     var sc = p.alloc(d)
     var pv = p.alloc(d)
     var co = p.alloc(d)
