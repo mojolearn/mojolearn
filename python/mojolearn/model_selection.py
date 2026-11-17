@@ -24,7 +24,7 @@ Behavior to know:
   rows scikit-learn would pick for that seed.
 """
 from . import _arena_io
-from ._array import Array
+from ._array import Array as _Array
 from ._mode import _PARAMS_METADATA, _PARAMS_METADATA_CONTEXT
 # The splitters' random draws (lane/metrics): a module-level import, so the
 # lane selector sees model_selection reach the x_metrics binding (the native
@@ -113,7 +113,7 @@ class _Resident:
 
 #: The descriptor `split_descriptor` returns. Versioned because a reader who
 #: is handed one has to know what was and was not covered by its digest.
-SPLIT_DESCRIPTOR_SCHEMA = 'mojolearn.split_descriptor.v1'
+_SPLIT_DESCRIPTOR_SCHEMA = 'mojolearn.split_descriptor.v1'
 
 
 # Maintainer notes (moved from the docstring):
@@ -1894,7 +1894,7 @@ _native_family_bridge.tables(
         ShuffleSplit=ShuffleSplit, GroupShuffleSplit=GroupShuffleSplit,
         StratifiedShuffleSplit=StratifiedShuffleSplit, PredefinedSplit=PredefinedSplit, _IterableCV=_IterableCV,
         ParameterGrid=ParameterGrid, ParameterSampler=ParameterSampler, GridSearchCV=GridSearchCV,
-        RandomizedSearchCV=RandomizedSearchCV, Array=Array),
+        RandomizedSearchCV=RandomizedSearchCV, Array=_Array),
     family_msel_miss=object(),
     family_msel_codes=dict(_MSEL_CODE),
     family_msel_native_code=dict(_ARRAY_CODE), family_msel_reduce_integral=_REDUCE_INTEGRAL,
@@ -1904,7 +1904,7 @@ _native_family_bridge.tables(
     family_msel_splitters=(KFold, StratifiedKFold, GroupKFold, StratifiedGroupKFold, TimeSeriesSplit, LeaveOneOut,
                            LeavePOut, LeaveOneGroupOut, LeavePGroupsOut, RepeatedKFold, RepeatedStratifiedKFold,
                            ShuffleSplit, GroupShuffleSplit, StratifiedShuffleSplit, PredefinedSplit, _IterableCV),
-    family_msel_schema=SPLIT_DESCRIPTOR_SCHEMA, family_msel_arena_io=_arena_io)
+    family_msel_schema=_SPLIT_DESCRIPTOR_SCHEMA, family_msel_arena_io=_arena_io)
 
 from ._native_msel_inputs import connect as _connect_msel_inputs  # noqa: E402
 _connect_msel_inputs(_NATIVE_CONTEXT, _RESIDENT_CONTEXT)

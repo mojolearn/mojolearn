@@ -40,12 +40,9 @@ issues a DeprecationWarning).
 #   (`mojolearn/_tokenizer_synthetic.py`) and to a pure Python encoder of the
 #   same algorithm; `python/mojolearn/tests/test_tokenizer_surface.py` holds
 #   this door to the same cases plus every refusal by name.
-import json
-import operator
-import os
+import os as _os
 
 from . import _backend
-from ._buffer import addr
 
 _EXTENSION = "_mojolearn_tokenizer_host"
 
@@ -83,7 +80,7 @@ class _Entries:
         return getattr(self._module, name)
 
 
-VOCABULARY_SCHEMA = "mojolearn.bpe-vocabulary.v1"
+_VOCABULARY_SCHEMA = "mojolearn.bpe-vocabulary.v1"
 
 
 def _identity_from_tokens_text(text, n_ranks):
@@ -121,10 +118,10 @@ def _fast_binding(*, connect_all=False):
     if not connect_all and selected != "fast":
         return _NO_FAST
     try:
-        path = os.path.join(_backend.tier_dir("fast"), _FAST_EXTENSION + ".so")
+        path = _os.path.join(_backend.tier_dir("fast"), _FAST_EXTENSION + ".so")
     except ImportError:
         return _NO_FAST
-    if not os.path.exists(path):
+    if not _os.path.exists(path):
         return _NO_FAST
     module = _backend._load_member("fast", _FAST_EXTENSION, path)
     if int(module.tokenizer_fast_numeric_mode()) != 0:

@@ -48,7 +48,7 @@ def test_native_public_unfitted_exception_preserves_both_library_relationships(m
     def forbidden(*args, **kwargs):
         raise AssertionError("Python fitted-state factory reached")
 
-    monkeypatch.setattr(exceptions, "not_fitted_error", forbidden)
+    monkeypatch.setattr(exceptions, "_not_fitted_error", forbidden)
     audit = audit_native_call(native_score, model, x, y) if operation == "score" else audit_native_call(native_predict, model, x)
     error = clean_error(audit, exceptions.NotFittedError)
     assert isinstance(error, ValueError)

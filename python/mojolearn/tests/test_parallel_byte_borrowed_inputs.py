@@ -48,8 +48,8 @@ def _tokens(tmp_path, batch=1, length=4, count=64):
     directory.mkdir(parents=True)
     payload = array.array("i", [i % 5 for i in range(count)]).tobytes()
     (directory / "tokens.i32").write_bytes(payload)
-    manifest = dict(schema=lm_corpus.TOKENS_SCHEMA, source=dict(sha256="c" * 64),
-                    vocabulary=dict(schema=lm_corpus.VOCABULARY_SCHEMA, sha256="v" * 64, n_vocab=16),
+    manifest = dict(schema=lm_corpus._TOKENS_SCHEMA, source=dict(sha256="c" * 64),
+                    vocabulary=dict(schema=lm_corpus._VOCABULARY_SCHEMA, sha256="v" * 64, n_vocab=16),
                     sha256=hashlib.sha256(payload).hexdigest(), bytes=len(payload), tokens=count,
                     train_range=[3, count - 2])
     (directory / "manifest.json").write_text(json.dumps(manifest) + "\n")

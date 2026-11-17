@@ -126,7 +126,7 @@ __all__ = [
 # being lost to `MACOSX_DEPLOYMENT_TARGET` in the environment plus a compiler
 # cache that does not key on it, and the basename never mattered.
 from . import _backend, _mojolearn_gbdt, _native_archive_bridge, _native_trees_bridge
-from ._mode import NumericModeMixin
+from ._mode import NumericModeMixin as _NumericModeMixin
 
 #: The npz model-file format tag `save` writes and `load` requires.
 _MODEL_FORMAT = "mojolearn-gbdt-1"
@@ -575,7 +575,7 @@ _U32_MAX = 4294967295
 #   because String(Float32) on this toolchain is one ULP wrong for 0.46% of values.
 # - loss_curve_: CatBoost's functionValue negated and divided by the row count.
 # - best_iteration_: the error tracker's best (error_tracker.h:73-75).
-class GradientBoosting(NumericModeMixin):
+class GradientBoosting(_NumericModeMixin):
     """Gradient-boosted decision trees with CatBoost's GPU learner as the reference.
 
     Fits an ensemble of trees with CatBoost's growth policies (oblivious

@@ -15,7 +15,7 @@ cover. Every search is exact, never approximate.
 """
 
 from . import _mojolearn, _native_archive_bridge, _native_family_bridge
-from ._mode import NumericModeMixin
+from ._mode import NumericModeMixin as _NumericModeMixin
 from ._native_neighbor_queries import native_method as _native_query_method
 from ._mode import ClassifierScoreMixin, RegressorScoreMixin
 
@@ -96,7 +96,7 @@ _native_family_bridge.tables(**_label_context())
 # - The arm (fused vs tiled, `KNN_METHOD_AUTO`) is not a parameter by design
 #   (POLICY CHOICE 4); under NUMERIC_IDENTICAL AUTO is pinned to the tiled
 #   arm on every column (DEVIATION 509).
-class NearestNeighbors(NumericModeMixin):
+class NearestNeighbors(_NumericModeMixin):
     """Exact k-nearest-neighbor search.
 
     Every query is compared against every fitted point (``algorithm='brute'``,
@@ -791,7 +791,7 @@ class KNeighborsRegressor(RegressorScoreMixin, NearestNeighbors):
 # - Two calls cross the boundary per query (count, then fill), because the
 #   output size is not a function of the inputs; the ball cover is built in
 #   each (`neighbors/estimator.mojo`).
-class RadiusNeighbors(NumericModeMixin):
+class RadiusNeighbors(_NumericModeMixin):
     """Find every fitted point within a radius of each query.
 
     Returns scikit-learn's `radius_neighbors` shape: a ragged

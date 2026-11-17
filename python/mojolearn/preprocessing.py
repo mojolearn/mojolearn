@@ -7,21 +7,15 @@ statistics in float32, treat NaN as a missing value and support the
 imputers, transformers) are available from the top-level ``mojolearn``
 namespace.
 """
-import ctypes
-import struct
-import numbers
-from ._array import Array
-from ._buffer import empty, zeros, full
-from ._labels import is_bool
+from ._array import Array as _Array
 
-from ._mode import PublicOutputsMixin, sklearn_tags as _sklearn_tags
+from ._mode import PublicOutputsMixin as _PublicOutputsMixin, sklearn_tags as _sklearn_tags
 
 __all__ = ['MinMaxScaler', 'StandardScaler']
 
 
 # One NotFittedError for the package; an instance of scikit-learn's too when
 # scikit-learn is imported (see mojolearn.exceptions).
-from .exceptions import NotFittedError, not_fitted_error  # noqa: F401
 
 #: The saved-model format of both scalers (lane/inference-linear-svm,
 #: 2026-09-15): `mojolearn.host_model(path)` transforms from it on a CPU.
@@ -39,12 +33,12 @@ def _seen(counts, weighted):
     float32 weight sums)."""
     if weighted:
         vals = [float(v) for v in counts]  # glue: converts the device sample counts (counts-sized: per-column sample counts)
-        return vals[0] if len(set(vals)) == 1 else Array.from_list(vals, "<f4")
+        return vals[0] if len(set(vals)) == 1 else _Array.from_list(vals, "<f4")
     vals = [int(v) for v in counts]  # glue: converts the device sample counts (counts-sized: per-column sample counts)
-    return vals[0] if len(set(vals)) == 1 else Array.from_list(vals, "<i8")
+    return vals[0] if len(set(vals)) == 1 else _Array.from_list(vals, "<i8")
 
 
-class _ScalerProtocol(PublicOutputsMixin):
+class _ScalerProtocol(_PublicOutputsMixin):
     # The base `fit_transform` composition is deleted (lane py-tail-2, 2026-11-15): MinMaxScaler
     # and StandardScaler (and their host twins) define their own.
 

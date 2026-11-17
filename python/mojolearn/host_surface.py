@@ -85,11 +85,11 @@ place the reason belongs.
 and `python3 -m mojolearn.host_surface ...` says the same thing on a box
 where the package imports.
 """
-import argparse
-import ast
-import json
-import os
-import sys
+import argparse as _argparse
+import ast as _ast
+import json as _json
+import os as _os
+import sys as _sys
 
 # ------------------------------------------------ the algorithm expansion
 #: THE EXPANSION LANES (lane/algos-prep, 2026-09-27; `metrics` joined the same day, lane/metrics).
@@ -132,26 +132,26 @@ def expansion_host_family(lane):
 
 
 def expansion_fragment_path(lane):
-    return os.path.join(os.path.dirname(os.path.abspath(__file__)), f"_surface_{lane}.py")
+    return _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), f"_surface_{lane}.py")
 
 
 def _read_expansion_fragment(lane):
     """One lane's fragment as a dict of EXPANSION_KEYS, refused unless it is
     literal data binding only its own names."""
     path = expansion_fragment_path(lane)
-    if not os.path.isfile(path):
+    if not _os.path.isfile(path):
         raise RuntimeError(f"host_surface: the {lane} lane's fragment {path} is missing; "
                            "every expansion lane ships one, empty until the lane declares something")
     with open(path, encoding="utf-8") as fh:
         text = fh.read()
-    tree = ast.parse(text, filename=path)
+    tree = _ast.parse(text, filename=path)
     out = {"GPU_BINDINGS": (), "FAMILIES": (), "TRAINING_LANE_NAMES": {}, "PUBLIC_PENDING_LANES": {}}
     bound = set()
     for k, node in enumerate(tree.body):
-        if k == 0 and isinstance(node, ast.Expr) and isinstance(node.value, ast.Constant):
+        if k == 0 and isinstance(node, _ast.Expr) and isinstance(node.value, _ast.Constant):
             continue  # the docstring
-        if not (isinstance(node, ast.Assign) and len(node.targets) == 1
-                and isinstance(node.targets[0], ast.Name) and node.targets[0].id in EXPANSION_KEYS):
+        if not (isinstance(node, _ast.Assign) and len(node.targets) == 1
+                and isinstance(node.targets[0], _ast.Name) and node.targets[0].id in EXPANSION_KEYS):
             raise RuntimeError(f"host_surface: {path}:{getattr(node, 'lineno', '?')}: a fragment binds only "
                                f"{', '.join(EXPANSION_KEYS)}, each once, as literal data")
         if node.targets[0].id in bound:
@@ -161,13 +161,13 @@ def _read_expansion_fragment(lane):
         bound.add(node.targets[0].id)
         # `dict(key=value, ...)` is the manifest's own spelling of a family;
         # nothing else is callable in a fragment.
-        for sub in ast.walk(node.value):
-            if isinstance(sub, ast.Call) and not (isinstance(sub.func, ast.Name) and sub.func.id == "dict"):
+        for sub in _ast.walk(node.value):
+            if isinstance(sub, _ast.Call) and not (isinstance(sub.func, _ast.Name) and sub.func.id == "dict"):
                 raise RuntimeError(f"host_surface: {path}:{sub.lineno}: only dict(...) may be called in a fragment")
-            if isinstance(sub, ast.Name) and sub.id != "dict":
+            if isinstance(sub, _ast.Name) and sub.id != "dict":
                 raise RuntimeError(f"host_surface: {path}:{sub.lineno}: a fragment names nothing but literals "
                                    f"({sub.id!r})")
-        out[node.targets[0].id] = eval(compile(ast.Expression(node.value), path, "eval"),  # noqa: S307
+        out[node.targets[0].id] = eval(compile(_ast.Expression(node.value), path, "eval"),  # noqa: S307
                                        {"__builtins__": {"dict": dict}})
     gpu, family = expansion_gpu_binding(lane), expansion_host_family(lane)
     if not isinstance(out["GPU_BINDINGS"], tuple) or set(out["GPU_BINDINGS"]) - {gpu}:
@@ -5118,7 +5118,7 @@ def as_dict():
 
 
 def main(argv=None):
-    p = argparse.ArgumentParser(description="the CPU surface manifest; one flag per list")
+    p = _argparse.ArgumentParser(description="the CPU surface manifest; one flag per list")
     g = p.add_mutually_exclusive_group(required=True)
     g.add_argument("--families", action="store_true", help="every host family")
     g.add_argument("--routed-families", action="store_true", help="families routed by _backend._HOST_MODULES")
@@ -5183,7 +5183,7 @@ def main(argv=None):
             print(f"{name}: {why}")
         return 0
     if args.json:
-        print(json.dumps(as_dict(), indent=2, sort_keys=True))
+        print(_json.dumps(as_dict(), indent=2, sort_keys=True))
         return 0
     if args.markdown:
         print(markdown_table())
@@ -5230,4 +5230,4 @@ def main(argv=None):
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    _sys.exit(main())

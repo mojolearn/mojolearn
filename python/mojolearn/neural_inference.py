@@ -51,8 +51,8 @@ from . import _native_samba_bridge
 from . import _native_neural_bridge
 from . import lowbit as _lowbit
 from ._mlp_impl import _NATIVE as _MLP_NATIVE
-from ._transformer_impl import TransformerBlock
-from ._mamba_impl import Mamba1Block, Mamba2Block, Mamba3Block
+from ._transformer_impl import TransformerBlock as _TransformerBlock
+from ._mamba_impl import Mamba1Block as _Mamba1Block, Mamba2Block as _Mamba2Block, Mamba3Block as _Mamba3Block
 
 _EXTENSION = "_mojolearn_neural_host"
 
@@ -166,7 +166,7 @@ _MLP_NATIVE("inference_connect", (_connect_mlp_inference(),))
 # exports transformer_forward and transformer_decode_step, so the parent's native forward is the
 # arithmetic (decode = prefill entry at L = 1 with the cache carried);
 # tools/step_vs_full_check.py measures step-vs-full bitwise agreement on this column.
-class TransformerBlockInference(TransformerBlock):
+class TransformerBlockInference(_TransformerBlock):
     """Forward-only `TransformerBlock` on the CPU, from weights trained on a GPU.
 
     Takes the same constructor arguments as `TransformerBlock` (the nine named
@@ -226,7 +226,7 @@ class _RecurrentBlockInference:
 # Shared base _RecurrentBlockInference: only the binding and backward are overridden; the
 # binding exports mamba{1,2,3}_forward / mamba{1,2,3}_decode_step, so the parent's native
 # forward is the arithmetic; tools/step_vs_full_check.py checks step-by-step decode against prefill.
-class Mamba1BlockInference(_RecurrentBlockInference, Mamba1Block):
+class Mamba1BlockInference(_RecurrentBlockInference, _Mamba1Block):
     """Forward-only `Mamba1Block` on the CPU, from weights trained on a GPU.
 
     Takes the same constructor arguments as `Mamba1Block` (its ten named weights) and
@@ -239,7 +239,7 @@ class Mamba1BlockInference(_RecurrentBlockInference, Mamba1Block):
     """
 
 
-class Mamba2BlockInference(_RecurrentBlockInference, Mamba2Block):
+class Mamba2BlockInference(_RecurrentBlockInference, _Mamba2Block):
     """Forward-only `Mamba2Block` on the CPU, from weights trained on a GPU.
 
     Takes the same constructor arguments as `Mamba2Block` (its nine named weights and `dt_limit`, default ``(0.0, inf)``) and
@@ -252,7 +252,7 @@ class Mamba2BlockInference(_RecurrentBlockInference, Mamba2Block):
     """
 
 
-class Mamba3BlockInference(_RecurrentBlockInference, Mamba3Block):
+class Mamba3BlockInference(_RecurrentBlockInference, _Mamba3Block):
     """Forward-only `Mamba3Block` on the CPU, from weights trained on a GPU.
 
     Takes the same constructor arguments as `Mamba3Block` (its nine named weights) and

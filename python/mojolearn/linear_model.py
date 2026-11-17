@@ -14,15 +14,14 @@ What is still Python here is named at each site: label encoding
 (permitted, O(rows)).
 """
 
-import numbers
-from . import _portable_math as math
+import numbers as _numbers
 
 from . import _backend, _mojolearn_estimators
 from ._buffer import (
-    addr, addr_ro, zeros,
+    addr as _addr, addr_ro as _addr_ro, zeros as _zeros,
 )
 from . import _native_archive_bridge, _native_classical_bridge
-from ._mode import NumericModeMixin, sklearn_tags as _sklearn_tags
+from ._mode import NumericModeMixin as _NumericModeMixin, sklearn_tags as _sklearn_tags
 
 #: The model file formats (the classical host inference lane, 2026-09-13).
 #: `save` writes exactly what `predict` reads, raw bytes and exact dtypes,
@@ -241,7 +240,7 @@ class _ClassicalLinear:
 #   finding). cuML's sums accumulate in float32, so coef_ can differ from cuML's
 #   in the last bits on ill-conditioned data.
 # - Honored/refused rows were measured by tools/e2u_matrix_fit.py.
-class LinearRegression(NumericModeMixin):
+class LinearRegression(_NumericModeMixin):
     """Ordinary least squares linear regression.
 
     Fits ``y ~ X @ coef_ + intercept_`` by minimizing the sum of squared
@@ -417,7 +416,7 @@ class LinearRegression(NumericModeMixin):
 #                  column): `fit` sends both to the x_linear ridge kernel
 #                  (x_linear/ridge.mojo, weighted means + Cholesky; lane sk-edges)
 #   y 2-D          refused, one target only
-class Ridge(NumericModeMixin):
+class Ridge(_NumericModeMixin):
     """Linear least squares with l2 regularization.
 
     Minimizes ``||y - X w||^2 + alpha * ||w||^2``, the same objective and
@@ -649,7 +648,7 @@ _PY2MOJO_ROWS = 2
 # line search's one host multiply-add is an fma, so the accepted steps, the
 # L-BFGS history, the iteration count and the coefficients are a function of the
 # inputs alone; the card (`qn.iterNNNN.*`, `qn.n_iter`, `qn.coef`) records them.
-class LogisticRegression(NumericModeMixin):
+class LogisticRegression(_NumericModeMixin):
     """Logistic regression classifier, solved by a quasi-Newton method.
 
     Minimizes ``mean_i logloss_i + penalty(w) / (C * n_samples)``, which
@@ -948,7 +947,7 @@ _native_archive_bridge.register(LogisticRegression, _LOGISTIC_FORMAT, (
     _native_archive_bridge.fitted("_w"),
     *_native_archive_bridge.head(_LOGISTIC_FORMAT),
     ("array", "w", "_w"),
-    ("class_table", "classes", "classes_", numbers.Integral, numbers.Real),
+    ("class_table", "classes", "classes_", _numbers.Integral, _numbers.Real),
     ("i8", "meta", (("int", "n_features_in_"), ("bool", "fit_intercept"))),
 ))
 
@@ -956,7 +955,7 @@ _native_archive_bridge.register(LogisticRegression, _LOGISTIC_FORMAT, (
 def _qn_weight_fields(sw):
     """The `qn_fit` params from field 13 on that carry the row weights:
     has_sample_weight, and with weights the address (field 16)."""
-    return (0, None) if sw is None else (1, addr_ro(sw, name="sample_weight"))
+    return (0, None) if sw is None else (1, _addr_ro(sw, name="sample_weight"))
 
 
 def _qn_fit_one_target(est, x, y_enc, n_classes, loss, l1, l2, grad_tol,
@@ -966,8 +965,8 @@ def _qn_fit_one_target(est, x, y_enc, n_classes, loss, l1, l2, grad_tol,
     block, `num_iters`, the objective and the OPT_RETCODE. `est` supplies
     the solver fields."""
     rows, cols = x.shape
-    w = zeros((cols + (1 if est.fit_intercept else 0),), "<f4")
-    info = zeros((2,), "<f4")
+    w = _zeros((cols + (1 if est.fit_intercept else 0),), "<f4")
+    info = _zeros((2,), "<f4")
     has_sw, sw_addr = _qn_weight_fields(sw)
     params = [rows, cols, n_classes,
               float(l1), float(l2), float(grad_tol), float(change_tol),
@@ -977,8 +976,8 @@ def _qn_fit_one_target(est, x, y_enc, n_classes, loss, l1, l2, grad_tol,
     if has_sw:
         params.append(sw_addr)
     n_iter = est._bind("_mojolearn_estimators").qn_fit(
-        addr_ro(x, name="X"), addr_ro(y_enc, name="y"),
-        addr(w, name="coef_"), addr(info, name="info"), params,
+        _addr_ro(x, name="X"), _addr_ro(y_enc, name="y"),
+        _addr(w, name="coef_"), _addr(info, name="info"), params,
     )
     return w, int(n_iter), float(info[0]), int(info[1])
 
@@ -988,7 +987,7 @@ def _qn_fit_one_target(est, x, y_enc, n_classes, loss, l1, l2, grad_tol,
 # cuml/cpp/src/glm/qn/glm_linear.cuh; the Mojo implementation is
 # glm/impl/qn/glm_linear.mojo (DEVIATION 707). change_tol = delta if given else
 # tol * 0.01 (qn.pyx:504-506). sample_weight: glm/NOT_IMPLEMENTED.tsv.
-class QNRegressor(NumericModeMixin):
+class QNRegressor(_NumericModeMixin):
     """Linear regression on the squared or absolute loss, solved by a
     quasi-Newton method.
 

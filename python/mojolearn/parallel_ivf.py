@@ -8,12 +8,12 @@ index and extending a distributed index are outside this API.
 """
 __all__ = ['DistributedIVFIndex']
 
-from ._ivf_impl import IVFIndex
+from ._ivf_impl import IVFIndex as _IVFIndex
 from . import _native_parallel_shard as _shard
 from ._native_parallel_shard import _native_parallel_shard
 
 # Import-time class metadata; admission, storage and partial searches are native.
-_shard.register(ivf_class=IVFIndex)
+_shard.register(ivf_class=_IVFIndex)
 
 
 class DistributedIVFIndex:

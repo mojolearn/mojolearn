@@ -109,9 +109,9 @@ _CPU_REFUSALS = ("no CPU implementation of the cooperative multi-GPU driver", "(
 #: member names that mark an instance FITTED for the probe (it probes the last fitted instance of a class)
 _FIT_NAMES = ("fit", "partial_fit", "train", "search")
 #: classes the estimator/metadata fixtures are never widened to (the census's own widening, never verify's routing):
-#: abstract mixins (neighbors.ClassifierScoreMixin, RegressorScoreMixin: no fit of their own), a program that only a
-#: session builds (ops.Program) and a model only a trained GBDT text builds (HostGBDT). Their members are reached
-#: through the classes and lanes that build them; widening them only drew fixture errors (23bc7a5ae3: 4).
+#: a program that only a session builds (ops.Program) and a model only a trained GBDT text builds (HostGBDT). Their
+#: members are reached through the classes and lanes that build them; widening them only drew fixture errors
+#: (23bc7a5ae3: 4).
 _NOT_WIDENED = ("mojolearn.ops.Program", "mojolearn.HostGBDT")
 #: probed last: they end the instance's session.
 _PROBE_LAST = ("close", "free", "discard")

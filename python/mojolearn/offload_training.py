@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: Apache-2.0
 """Memory-bounded single-GPU replay of ordered byte-LM checkpoints."""
-from .parallel_training import ParallelByteLanguageModelTrainer, _native_parallel_byte
+from .parallel_training import ParallelByteLanguageModelTrainer as _ParallelByteLanguageModelTrainer, _native_parallel_byte
 
 
-class OffloadedByteLanguageModelTrainer(ParallelByteLanguageModelTrainer):
+class OffloadedByteLanguageModelTrainer(_ParallelByteLanguageModelTrainer):
     """Replay a pooled checkpoint with one decoder layer on one GPU at a time.
 
     Parameters, optimizer state, gradient sums and saved activations live in

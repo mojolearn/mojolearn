@@ -189,8 +189,8 @@ def _needs_fit(method, name, require_fit=True):
     @functools.wraps(method)
     def guarded(self, *args, **kwargs):
         if require_fit and not is_fitted(self):
-            from .exceptions import not_fitted_error
-            raise not_fitted_error(
+            from .exceptions import _not_fitted_error
+            raise _not_fitted_error(
                 f"This {type(self).__name__} instance is not fitted yet. Call 'fit' with "
                 f"appropriate arguments before using {name}.")
         if vars(self).get("_mojolearn_fitting"):

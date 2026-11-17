@@ -30,7 +30,7 @@ right. Metal admits only device zero: its worker uses the ordinary GPU
 route, and no visibility mask or physical multi-device isolation is claimed.
 """
 from .. import _backend
-from .causal_lm import CausalLM, _NATIVE as _CAUSAL_RUNTIME, _NATIVE_CONTEXT as _CAUSAL_CONTEXT
+from .causal_lm import CausalLM as _CausalLM, _NATIVE as _CAUSAL_RUNTIME, _NATIVE_CONTEXT as _CAUSAL_CONTEXT
 
 __all__ = ['ParallelCausalLM']
 
@@ -95,7 +95,7 @@ class _RemotePrimitives:
         return _native_parallel_causal("primitive", (self, "head_int15", x))
 
 
-class ParallelCausalLM(CausalLM):
+class ParallelCausalLM(_CausalLM):
     """Experimental layer ownership. Use ``load(path, layer_devices=(0, 1))``.
 
     One device index per checkpoint layer; repeated indices are allowed.

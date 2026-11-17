@@ -4,7 +4,7 @@
 
 In `identical` mode, mojolearn returns the same bits on Apple, NVIDIA and AMD GPUs.
 """
-import sys
+import sys as _sys
 
 PROTOCOL = "mojolearn.cross-vendor.v1"
 _TINY = 2.0 ** -126  # smallest normal float32
@@ -160,7 +160,7 @@ class Worker:
 
 
 # ------------------------------------------------------------ command line
-def main(argv=None):
+def _main(argv=None):
     return _native_cross_vendor("main", (argv,), _cross_vendor_errors)
 
 
@@ -171,4 +171,4 @@ _native_cross_vendor("worker_initialize", (_ParallelByte, BatchFeed, LearningRat
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    _sys.exit(_main())

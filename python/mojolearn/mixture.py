@@ -17,7 +17,7 @@
 with scikit-learn's parameter names and meanings.
 """
 from . import _native_archive_bridge, _native_family_bridge
-from ._mode import NumericModeMixin
+from ._mode import NumericModeMixin as _NumericModeMixin
 
 _MODE_CODE = {"fast": 0, "identical": 1}
 
@@ -51,7 +51,7 @@ _ARCHIVE, _ARCHIVE_CONTEXT = _native_archive_bridge.connect()
 # log_det_chol_ is `_compute_log_det_cholesky`'s answer from the device fold
 # (DEVIATION 1726), never re-derived from the diagonal in Python.
 # converged_=False: scikit-learn warns, this reports (DEVIATION 1746).
-class GaussianMixture(NumericModeMixin):
+class GaussianMixture(_NumericModeMixin):
     """Gaussian mixture model fitted by expectation-maximization.
 
     Follows scikit-learn's `GaussianMixture`: every parameter has the same
