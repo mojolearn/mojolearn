@@ -110,7 +110,10 @@ HOST = "pod-a/GPU-0000"
 def with_host(board, host=HOST):
     """BOARD as the job writes it on a probed box (bench_board --host-probe: box.host_probe)."""
     b = copy.deepcopy(board)
-    b.setdefault("box", {})["host_probe"] = {"schema": "mojolearn-host-probe/1", "host_id": host}
+    # the system state (2026-11-17): a verdict needs one GPU driver, kernel and boot id on both arms
+    b.setdefault("box", {})["host_probe"] = {"schema": "mojolearn-host-probe/1", "host_id": host,
+                                             "gpu": {"driver": "570.1"}, "kernel": "6.8.0-147-generic",
+                                             "boot_id": "boot-1"}
     return b
 
 
@@ -559,6 +562,75 @@ class JobScript(unittest.TestCase):
         with open(os.path.join(d, "job", "phases.tsv")) as fh:
             self.assertIn("smoke\t28\t", fh.read())
 
+    def job_dir(self):
+        d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, d, True)
+        for sub in ("job", "logs", "board-all"):
+            os.makedirs(os.path.join(d, sub))
+        return d
+
+    def test_a_cut_phase_is_partial_with_done_of_total_and_the_next_submit_resumes(self):
+        """fb-harness (2026-11-17): the 240-minute cap cut every full-board arm (650 races take 3.5 to 4.5 h) and the
+        next submit resumed it silently. The cut phase gets a `partial <done>/<total> <board>` line; the disk gate of
+        the resumed board counts only the races left."""
+        d = self.job_dir()
+        ids = os.path.join(d, "ids.txt")
+        with open(ids, "w") as fh:
+            fh.write("r/a\nr/b\nr/c\n")
+        with open(os.path.join(d, "board-all", "board.json"), "w") as fh:
+            json.dump({"races": {"r/a": {"status": "done"}, "r/b": {"status": "done"}, "r/c": {"status": "failed"}}},
+                      fh)
+        f = self.functions("say", "nlines", "free_gb", "disk_full_in_phase", "races_left", "board_progress", "phase",
+                           "phase_end", "phase_partial")
+        base = 'cd %s; PY=%s; RES=%s; J=$RES/job; EXIT_DISK=28; WORST=0; PHASE_OPEN=0; ' % (
+            os.path.dirname(HERE), sys.executable, d)
+        p = self.sh(base + f + 'phase all-board; CUR_IDS=%s; CUR_BOARD=$RES/board-all; phase_partial 124; '
+                    'echo LEFT=$(races_left %s $RES/board-all/board.json) NONE=$(races_left %s $RES/nowhere.json); '
+                    'phase all-board; phase_end 0; phase_partial 0' % (ids, ids, ids))
+        self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
+        self.assertIn("phase all-board ended partial (rc=124): 2/3 board-all", p.stdout)
+        self.assertIn("LEFT=1 NONE=3", p.stdout)
+        self.assertIn("resuming (an earlier submit ended inside it: partial 2/3 board-all)", p.stdout)
+        with open(os.path.join(d, "job", "phases.tsv")) as fh:
+            lines = [x.split("\t") for x in fh.read().splitlines()]
+        self.assertEqual([(x[0], x[1], x[4]) for x in lines],
+                         [("all-board", "124", "partial 2/3 board-all"), ("all-board", "0", "done")])
+
+    def test_a_reboot_between_submits_is_a_restart_line(self):
+        """fb-harness (2026-11-17): the d95f805cce pod restarted between its arms (driver 595.91.07 -> 595.112.07,
+        kernel 6.8.0-147 -> 149). The probe phase compares the boot id with the last submit's."""
+        d = self.job_dir()
+        fake = os.path.join(d, "fakepy")
+        with open(fake, "w") as fh:
+            fh.write('#!/bin/bash\nwhile [ $# -gt 0 ]; do [ "$1" = --out ] && out=$2; shift; done\n'
+                     'printf \'{\\n "boot_id": "%s",\\n "gpu": {\\n  "driver": "%s"\\n },\\n "host_id": "h/GPU-1",\\n'
+                     ' "kernel": "%s"\\n}\\n\' "$FAKE_BOOT" "$FAKE_DRIVER" "$FAKE_KERNEL" > "$out"\n')
+        os.chmod(fake, 0o755)
+        f = self.functions("say", "free_gb", "disk_full_in_phase", "phase", "phase_end", "probe_field",
+                           "host_probe_phase")
+        base = 'PY=%s; RES=%s; J=$RES/job; V=nvidia; EXIT_DISK=28; WORST=0; PHASE_OPEN=0; ' % (fake, d)
+        one = self.sh(base + f + "host_probe_phase",
+                      env={"FAKE_BOOT": "aaaa1111", "FAKE_DRIVER": "595.91.07", "FAKE_KERNEL": "6.8.0-147-generic"})
+        self.assertEqual(one.returncode, 0, one.stdout + one.stderr)
+        self.assertNotIn("RESTART", one.stdout)
+        two = self.sh(base + f + "host_probe_phase",
+                      env={"FAKE_BOOT": "bbbb2222", "FAKE_DRIVER": "595.112.07", "FAKE_KERNEL": "6.8.0-149-generic"})
+        self.assertEqual(two.returncode, 0, two.stdout + two.stderr)
+        self.assertIn("RESTART: the box rebooted since the last submit (boot id aaaa1111 -> bbbb2222", two.stdout)
+        with open(os.path.join(d, "job", "phases.tsv")) as fh:
+            text = fh.read()
+        self.assertIn("restart boot aaaa1111 -> bbbb2222; driver 595.91.07 -> 595.112.07; "
+                      "kernel 6.8.0-147-generic -> 6.8.0-149-generic", text)
+        self.assertTrue(os.path.exists(os.path.join(d, "job", "host-probe-boot-aaaa1111.json")))
+
+    def test_timed_boards_drop_their_scratch_and_gate_on_races_left(self):
+        with open(self.JOB) as fh:
+            text = fh.read()
+        self.assertEqual(text.count("--drop-race-scratch --out"), 3)    # all-board, prior_board_run, board_run
+        self.assertNotIn('disk_gate all-board "$(nlines', text)
+        self.assertNotIn('disk_gate board "$(nlines', text)
+        self.assertIn('phase_partial "$code"', text)
+
 
 # ---------------------------------------------------------------------------------------------------------------
 # --best-ever (tools/board_best_ever.py files) and the full-board screen (ids-all, board-all)
@@ -582,10 +654,15 @@ def be_new_board(gpu=GPU):
     return b
 
 
-def be_entry(ms, params=None, hash_="h-ours", device=GPU, release="0.8.25", date="2026-09-30", host=HOST):
-    """A best-ever entry; HOST: the box it was timed on (the same host as the new board by default)."""
+SOFTWARE = ["GPU-0000", "570.1", "6.8.0-147-generic", "boot-1"]     # with_host's system state
+
+
+def be_entry(ms, params=None, hash_="h-ours", device=GPU, release="0.8.25", date="2026-09-30", host=HOST,
+             software=SOFTWARE):
+    """A best-ever entry; HOST, SOFTWARE: the box and the system state it was timed on (the new board's by default)."""
     return {"ms": ms, "params": params, "hash": hash_, "device": device, "release": release, "date": date,
-            "commit": "c0ffee", "params_source": "cell" if params is not None else None, "host_id": host}
+            "commit": "c0ffee", "params_source": "cell" if params is not None else None, "host_id": host,
+            "software": software}
 
 
 def be_doc(vendor="nvidia", **rows):
@@ -597,6 +674,15 @@ def be_doc(vendor="nvidia", **rows):
     return {"schema": "mojolearn-board-best-ever/1", "vendor": vendor, "mined_at_head": "abc", "rows": out}
 
 
+class OpticsHasNoInferCell(unittest.TestCase):
+    def test_a_cluster_lane_without_predict_plans_no_infer_cell(self):
+        """fb-harness (2026-11-17): OPTICS has no predict; its infer cell timed an empty call (0.012 ms)."""
+        import bench_board_algos as A
+        self.assertFalse(A.has_infer("optics"))
+        self.assertEqual([l for l, s in A.LANES.items() if s.get("task") == "cluster" and not A.has_infer(l)],
+                         ["optics"])
+
+
 class BestEver(unittest.TestCase):
     def setUp(self):
         self.doc = PC.extract_recipes(paper_board(), "nvidia")
@@ -606,7 +692,7 @@ class BestEver(unittest.TestCase):
         self.keys = k
         rows = {
             k["km"]: be_entry(110.0, {"n_clusters": 9}),                  # 130 / 110 = 1.18, same params and hash
-            k["ols"]: be_entry(40.0, {"n_clusters": 8}, hash_="h-old"),  # another hash: PARAMS-DIFFER
+            k["ols"]: be_entry(40.0, {"n_clusters": 8}, hash_="h-old"),  # another hash only: bits change, no flag
             k["gb"]: be_entry(3000.0, None),                              # no params recorded: UNCHECKED
             k["rf"]: be_entry(600.0, {"n_clusters": 8}),                  # faster than ever: no flag
             k["pca"]: be_entry(10.0, {"n_clusters": 8}, device="NVIDIA GeForce RTX 4090"),
@@ -628,9 +714,12 @@ class BestEver(unittest.TestCase):
         self.assertIn("REGRESSION", km["flags"])            # the 0.8.55 flags are unchanged
         self.assertIn("PARAMS-DIFF", km["flags"])
         ols = rows[self.keys["ols"]]
-        self.assertIn("PARAMS-DIFFER", ols["flags"])
+        # PARAMS-DIFFER FIX (2026-11-17): an output hash of an older version alone is not a parameter difference
+        # (bits may change between versions); it is shown and the time flag stands (52 / 40)
+        self.assertNotIn("PARAMS-DIFFER", ols["flags"])
         self.assertTrue(ols["best_ever_hash_differs"])
-        self.assertNotIn("BEST-EVER-REGRESSION", ols["flags"])
+        self.assertIn("BEST-EVER-REGRESSION", ols["flags"])
+        self.assertIn("vs best ever: hash", PC.render_md(res))
         gb = rows[self.keys["gb"]]
         self.assertIn("BEST-EVER-REGRESSION-UNCHECKED", gb["flags"])
         rf = rows[self.keys["rf"]]
@@ -640,7 +729,24 @@ class BestEver(unittest.TestCase):
         self.assertEqual(gm["flags"], ["NOT-RUN"])
         self.assertIsNone(gm["best_ever_ms"])
         self.assertEqual(res["best_ever_label"], "best ever (NV)")
-        self.assertEqual(res["flag_counts"]["BEST-EVER-REGRESSION"], 1)
+        self.assertEqual(res["flag_counts"]["BEST-EVER-REGRESSION"], 2)
+
+    def test_params_differ_only_on_a_shared_parameter(self):
+        self.best["rows"][self.keys["ols"]]["best"]["params"] = {"n_clusters": 7}
+        _, rows, _ = self.run_compare()
+        ols = rows[self.keys["ols"]]
+        self.assertIn("PARAMS-DIFFER", ols["flags"])
+        self.assertEqual(ols["best_ever_params_differ"], ["n_clusters"])
+        self.assertNotIn("BEST-EVER-REGRESSION", ols["flags"])
+
+    def test_a_best_ever_of_another_system_state_never_flags(self):
+        # the same host id, but another boot (or a record mined before 2026-11-17, which has no system state)
+        for sw in (["GPU-0000", "570.1", "6.8.0-147-generic", "boot-0"], None):
+            self.best["rows"][self.keys["km"]]["best"]["software"] = sw
+            _, rows, _ = self.run_compare()
+            km = rows[self.keys["km"]]
+            self.assertAlmostEqual(km["ratio_vs_best_ever"], 130.0 / 110.0)       # shown
+            self.assertNotIn("BEST-EVER-REGRESSION", km["flags"])
 
     def test_extra_rows_outside_the_recipes(self):
         res, _, extra = self.run_compare()

@@ -1124,8 +1124,9 @@ def board_progress(boards):
         for x in (b.get("boot_ids") or []):
             if x not in boots:
                 boots.append(x)
+        default = BE.software_default(b)
         for r in (b.get("races") or {}).values():
-            x = ((r.get("host") or {}) if isinstance(r, dict) else {}).get("boot_id")
+            x = BE.race_software(r, default)[3]          # the race's boot id, else the board's probe's
             if x and x not in boots:
                 boots.append(x)
     want = sorted(set(plan)) or sorted(races)

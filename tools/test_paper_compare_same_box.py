@@ -33,7 +33,8 @@ HOST_B = "1e08d01c3d48/GPU-bbbb"      # the ba08dac006 run's L40S pod
 def probe_doc(host):
     return {"schema": HP.SCHEMA, "host_id": host, "cpu_model": "AMD EPYC 9354", "numa_nodes": 2,
             "cgroup_cores": 16, "memcpy_gbps": 11.0, "h2d_pageable_gbps": 9.5, "h2d_pinned_gbps": 24.1,
-            "pcie": {"gen": 4, "width": 16, "read_during_copy": True}, "gpu": {"name": GPU, "driver": "570.1"}}
+            "pcie": {"gen": 4, "width": 16, "read_during_copy": True}, "gpu": {"name": GPU, "driver": "570.1"},
+            "kernel": "6.8.0-147-generic", "boot_id": "boot-1"}
 
 
 def on_host(board, host):
@@ -79,7 +80,7 @@ class CrossHostNeverFlags(unittest.TestCase):
         for r in res["rows"]:
             self.assertFalse(TIME_FLAGS & set(r["flags"]), (r["key"], r["flags"]))
         self.assertTrue(res["verdict_basis"].startswith("no verdict"))
-        self.assertIn("no verdict", PC.render_summary(res))
+        self.assertTrue(PC.render_summary(res).startswith("NO VERDICT, every row is reference only: no on-box"))
 
     def test_stored_compare_and_best_ever_of_another_run_never_flag(self):
         ref = {r["key"]: dict(r, new_ms=50.0, flags=["REGRESSION"]) for r in
@@ -209,6 +210,93 @@ class HostMismatchRefuses(unittest.TestCase):
         self.assertEqual(PC.parse_prior_board("0.8.55=/x/board.json"), ("0.8.55", "/x/board.json"))
 
 
+class SameSystemSoftware(unittest.TestCase):
+    """fb-harness (2026-11-17): the d95f805cce full-board arms ran on one host id and GPU, but the pod restarted between
+    them (candidate NVIDIA driver 595.91.07, kernel 6.8.0-147; 0.8.55 on 595.112.07, 6.8.0-149) and the compare gave
+    27 REGRESSION and 30 FASTER verdicts. A verdict needs one GPU uuid, driver, kernel and boot id on both arms."""
+
+    def setUp(self):
+        self.doc = PC.extract_recipes(paper_board(), "nvidia")
+
+    def compare(self, cand, base):
+        res = PC.compare(self.doc, [cand], {}, prior_boards=[("0.8.55", base)])
+        for r in res["rows"]:
+            self.assertFalse(TIME_FLAGS & set(r["flags"]), (r["key"], r["flags"]))
+        return res, PC.render_summary(res)
+
+    def test_another_driver_and_kernel_give_no_verdict_and_say_why_first(self):
+        base = ours_board({}, HOST_A, "0.8.55")
+        base["box"]["host_probe"].update(gpu={"name": GPU, "driver": "570.2"}, kernel="6.8.0-149-generic",
+                                         boot_id="boot-2")
+        res, summary = self.compare(on_host(new_board(), HOST_A), base)
+        first = summary.splitlines()[0]
+        self.assertTrue(first.startswith("NO VERDICT, every row is reference only: the arms did not run under the "
+                                         "same system software: "), first)
+        for part in ("GPU driver 570.1 (candidate) vs 570.2 (the 0.8.55 board)",
+                     "kernel 6.8.0-147-generic (candidate) vs 6.8.0-149-generic (the 0.8.55 board)",
+                     "boot id boot-1 (candidate) vs boot-2 (the 0.8.55 board)"):
+            self.assertIn(part, first)
+        km = {r["key"]: r for r in res["rows"]}[KM]
+        self.assertEqual(km["flags"][:1], ["NOT-COMPARED"])
+        self.assertIsNone(km["ratio"])
+
+    def test_a_board_that_spans_a_restart_gives_no_verdict(self):
+        cand = on_host(new_board(), HOST_A)
+        cand["races"]["classical/ols/taxi/rows=full"]["host"].update(boot_id="boot-9", driver="570.9")
+        _, summary = self.compare(cand, ours_board({}, HOST_A, "0.8.55"))
+        self.assertIn("the candidate board spans 2 system states (a restart or an update between its races: "
+                      "GPU driver 570.1 / 570.9; boot id boot-1 / boot-9)", summary.splitlines()[0])
+
+    def test_a_field_not_recorded_is_no_proof(self):
+        base = ours_board({}, HOST_A, "0.8.55")
+        del base["box"]["host_probe"]["boot_id"]
+        _, summary = self.compare(on_host(new_board(), HOST_A), base)
+        self.assertIn("boot id not recorded on the 0.8.55 board", summary.splitlines()[0])
+
+    def test_the_box_fingerprint_stands_in_for_an_older_probe(self):
+        """The stored d95f805cce boards: the probe has the driver but no kernel; box.os.release has the kernel."""
+        cand, base = on_host(new_board(), HOST_A), ours_board({}, HOST_A, "0.8.55")
+        for b, kernel in ((cand, "6.8.0-147-generic"), (base, "6.8.0-149-generic")):
+            del b["box"]["host_probe"]["kernel"]
+            b["box"]["os"] = {"release": kernel}
+        _, summary = self.compare(cand, base)
+        self.assertIn("kernel 6.8.0-147-generic (candidate) vs 6.8.0-149-generic", summary.splitlines()[0])
+
+    def test_progress_and_boot_ids_per_arm(self):
+        cand = on_host(new_board(), HOST_A)
+        cand["plan"] = sorted(cand["races"]) + ["classical/never/taxi/rows=full"]
+        for rid, race in cand["races"].items():
+            race["status"] = "done"
+        cand["races"]["classical/ols/taxi/rows=full"]["host"]["boot_id"] = "boot-9"
+        res = PC.compare(self.doc, [cand], {}, prior_boards=[("0.8.55", ours_board({}, HOST_A, "0.8.55"))])
+        n = len(cand["races"])
+        line = next(x for x in PC.render_summary(res).splitlines() if x.startswith("progress: "))
+        self.assertIn("candidate %d/%d races done (boot ids boot-1, boot-9: resumed after a restart)" % (n, n + 1), line)
+        self.assertIn("0.8.55 0/", line)
+
+    def test_left_counts_races_not_done(self):
+        self.assertEqual(PC.ids_left(["a", "b", "c"], {"races": {"a": {"status": "done"}, "b": {"status": "failed"}}}),
+                         ["b", "c"])
+        self.assertEqual(PC.ids_left(["a"], None), ["a"])
+
+    def test_pass_ids_prints_each_failure_with_its_reason(self):
+        with tempfile.TemporaryDirectory() as td:
+            full, smoke, out = (os.path.join(td, n) for n in ("full.txt", "smoke.json", "pass.txt"))
+            with open(full, "w") as fh:
+                fh.write("algos/adaboost-clf/taxi/rows=full\nalgos/ard/taxi/rows=full\n")
+            json.dump({"races": {"algos/adaboost-clf/taxi": {"id": "algos/adaboost-clf/taxi/rows=2000", "pass": False,
+                                                             "failures": [{"arm": "ours", "reason": "refused n_bins"}]},
+                                 "algos/ard/taxi": {"id": "algos/ard/taxi/rows=2000", "pass": True}}},
+                      open(smoke, "w"))
+            p = subprocess.run([sys.executable, os.path.join(HERE, "paper_compare.py"), "pass-ids", "--full-ids", full,
+                                "--smoke-json", smoke, "--out", out], capture_output=True, text=True, timeout=120)
+            self.assertEqual(p.returncode, 0, p.stderr)
+            lines = p.stdout.splitlines()
+            self.assertIn("PAPER-PASS-IDS-FAILED algos/adaboost-clf/taxi/rows=full: smoke failed: ours: refused n_bins",
+                          lines)
+            self.assertTrue(lines[-1].startswith("PAPER-PASS-IDS planned=2 smoke_passed=1 smoke_failed=1"))
+
+
 class ProbeRoundTrip(unittest.TestCase):
     def test_probe_json_round_trip_into_a_board(self):
         doc = HP.probe("none", mb=4)          # no GPU here: host-side fields only, every failure recorded
@@ -228,6 +316,11 @@ class ProbeRoundTrip(unittest.TestCase):
                 probe = BB.load_host_probe(path)
                 self.assertEqual(probe, back)
                 self.assertEqual(BB.race_host()["host_id"], doc["host_id"])
+                # the system state per race (2026-11-17): the probe's GPU uuid and driver, this process's kernel and
+                # boot id (the probe records the same two)
+                rh = BB.race_host()
+                self.assertEqual((rh["kernel"], rh["boot_id"]), (doc["kernel"], doc["boot_id"]))
+                self.assertEqual(rh["gpu_uuid"], doc.get("gpu_uuid"))
             finally:
                 os.environ.pop("MOJOLEARN_HOST_ID", None)
                 if old is not None:
