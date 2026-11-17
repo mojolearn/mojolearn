@@ -275,7 +275,9 @@ def _check_configuration() -> Bool:
     # path per decision in the MLP and recurrent trainers (docs/TOMBSTONES.md, docs/apple-fast/EXPERIMENTS.md).
     # TOMBSTONE: MOJOLEARN_AUTOGRAD_PREDICT (folded in: the tape forward is the one predict path) deleted 2026-11-08 by c3b7dc42e6; code recoverable at c3b7dc42e6^.
     # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_PREDICT.patch
-    comptime assert not is_defined["MOJOLEARN_AUTOGRAD_PREDICT"](), "removed 2026-11-08 (lane/x3-mlp-rnn-predict-on-tape, c3b7dc42e6 + 9a9a8e3148): MLP and GRU/LSTM/RNN predict always run the tape forward in inference mode; the hand mlp_predict / mlp_forward and the recurrent hand forward + head are deleted. Drop the define. Restore with experiments/removed/MOJOLEARN_AUTOGRAD_PREDICT.patch"
+    # TOMBSTONE restored 2026-11-17 by lane/fb-neural: MOJOLEARN_AUTOGRAD_PREDICT is live again as the opt-in A/B arm
+    # (sequence/mlp_fit.mojo: the hand mlp_predict is the default again, as at 0.8.55; the define takes the tape
+    # predict mlp_predict_autograd for MLP only; the recurrent predict stays on the tape). No refusal.
     # TOMBSTONE: MOJOLEARN_AUTOGRAD_LOSS (rnn_fit: promoted, the blocked fold replaces the serial OP_SUM) deleted 2026-11-08 by dbab55bea7; code recoverable at c3b7dc42e6^.
     # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_LOSS.patch
     comptime assert not is_defined["MOJOLEARN_AUTOGRAD_LOSS"](), "removed 2026-11-08 (lane/x3-mlp-rnn-predict-on-tape, dbab55bea7): rnn_fit's reported loss always uses the blocked fold (loss_value_into; the serial OP_SUM is deleted); mlp_fit keeps its loss block (already blocked, the arm added launches). Drop the define. Restore with experiments/removed/MOJOLEARN_AUTOGRAD_LOSS.patch"
