@@ -3,7 +3,8 @@
 # (lane attribution-job, 2026-11-16). Diagnostic tooling, not a board: it times and profiles OUR arms only, on the
 # L40S pod whose earlier paper job left the candidate venv ($PC_CACHE_ROOT/venv-candidate), the 0.8.55 venv
 # ($PC_CACHE_ROOT/venv-prior-0.8.55) and the datasets ($PC_DATA_ROOT). The rows, their forced phase and their arm runs
-# are the ROWS table of tools/ops/attribution_report.py (the one list).
+# come from a rows file: AT_ROWS_FILE, default tools/ops/attribution_rows.tsv (the nine regressed paper rows; the one
+# list). Any board row can be profiled by naming its race id, forced phase and arm in such a file.
 #
 #   tools/nvidia_central.sh submit measure --cap 240 --results box-out/attr-<tag> tools/ops/attribution_job.sh
 #
@@ -35,10 +36,14 @@
 # the report. The race drivers themselves use every core (no thread caps). job/cores.log: busy cores of total.
 #
 # AT_PARTS (default tools,plan,time,profile,stats,kernels,report) and AT_ROWS (comma list of row names, default all)
-# split the job over submits on the same results dir; the report reads whatever the dir holds. Pod minutes:
-# `python3 tools/ops/attribution_report.py estimate --recipes bench/results/paper_compare/recipes-nvidia.json`
-# (printed in job.log at the plan phase).
-# Knobs: AT_ARMS, AT_CALLS (20), AT_MANIFEST_DIR (the earlier paper job's job/ holding wheel-manifest-<arm>.json;
+# split the job over submits on the same results dir; the report reads whatever the dir holds. Pod minutes per row
+# and in all: `python3 tools/ops/attribution_report.py estimate --recipes bench/results/paper_compare/recipes-nvidia.json
+# [--rows-file F]` (printed in job.log at the plan phase as ESTIMATE row=... pod_min=...).
+# A failed run prints its first error line into job.log (`run ... FAILED: <line>`, also <run dir>.error). EXIT CODE
+# (when the report part runs): 0 every row has its timing runs and a captured profile on every wheel; 6 a row lacks
+# a profile; 7 a row lacks a time; the per-row failures are the SUMMARY lines in job.log and ATTRIBUTION-<v>.md. ncu
+# (part C) never fails the job. Earlier exits: 2 refused to start, 3 wrong box, 4 no venv, 5 no plan, 124 terminated.
+# Knobs: AT_ROWS_FILE, AT_ARMS, AT_CALLS (20), AT_MANIFEST_DIR (the earlier paper job's job/ holding wheel-manifest-<arm>.json;
 # default: the newest sibling results dir that has one), AT_NCU_LAUNCHES (6), PC_CACHE_ROOT, PC_DATA_ROOT,
 # PC_GPU_TOKEN (L40S), PC_ALLOW_HW_DIFF. Results: time-<arm>/<row>/<run>/ (bench_board out), profile-<arm>/<row>.*
 # (nsys report, stats CSVs, parsed json), ncu-<arm>/<row>.*, ATTRIBUTION-nvidia.md and .json, job/ (job.log,
@@ -72,12 +77,14 @@ CACHE_ROOT=${PC_CACHE_ROOT:-/root/pc-cache}
 TOKEN=${PC_GPU_TOKEN:-L40S}
 CALLS=${AT_CALLS:-20}
 RECIPES="$TREE/bench/results/paper_compare/recipes-$V.json"
+ROWS_FILE=${AT_ROWS_FILE:-$TREE/tools/ops/attribution_rows.tsv}
 IFS=',' read -r -a ARMS <<< "${AT_ARMS:-candidate,prior-0.8.55}"
 PARTS=",${AT_PARTS:-tools,plan,time,profile,stats,kernels,report},"
 part() { [[ "$PARTS" == *",$1,"* ]]; }
 ROWS_WANT=",${AT_ROWS:-},"
 row_wanted() { [ "$ROWS_WANT" = ",," ] || [[ "$ROWS_WANT" == *",$1,"* ]]; }
 WORST=0
+REPORT_RC=      # the report's exit code (EXIT_* of attribution_report.py) once the report part ran: the job's exit
 PHASE=start
 P_T0=$(date +%s)
 RANGE=attr-calls     # the NVTX range the harness opens (MOJOLEARN_BENCH_NVTX_RANGE) and nsys waits for
@@ -88,7 +95,9 @@ finish() {
     local code=$?
     trap - EXIT
     [ -n "$SAMPLER" ] && kill "$SAMPLER" 2> /dev/null
-    [ "$WORST" -gt "$code" ] && code=$WORST
+    # a finished report decides the exit (per-row timing and profile); a TERM or an earlier refusal keeps its own code
+    if [ -n "$REPORT_RC" ] && [ "$code" -eq 0 ]; then code=$REPORT_RC
+    elif [ "$WORST" -gt "$code" ]; then code=$WORST; fi
     printf '{"job":"attribution","vendor":"%s","arms":"%s","rows":"%s","parts":"%s","host_id":"%s","tree_head":"%s","phase":"%s","exit":%d,"job_script_sha256":"%s"}\n' \
         "$V" "${ARMS[*]}" "${AT_ROWS:-all}" "$PARTS" "${HOST_ID:-}" "$(git -C "$TREE" rev-parse HEAD 2>/dev/null)" "$PHASE" "$code" \
         "$(sha256sum "$TREE/tools/ops/attribution_job.sh" | cut -d' ' -f1)" > "$J/status.json"
@@ -203,16 +212,19 @@ PYSPY=$(find_tool py-spy) || PYSPY=
 say "tools: $(tr '\n' ';' < "$J/tools.txt" | head -c 600)"
 
 # ---- plan (CPU): the board arguments of the paper recipes and the runs -------------------------------------------
-if part plan || [ ! -s "$RES/plan/board-args.txt" ]; then
+if part plan || [ ! -s "$RES/plan/board-args.txt" ] || [ ! -s "$RES/plan/rows.tsv" ]; then
     phase plan
+    cp "$ROWS_FILE" "$RES/plan/rows.tsv" 2>> "$RES/logs/plan.log" || { say "no rows file $ROWS_FILE"; exit 5; }
     $PY tools/paper_compare.py ids --recipes "$RECIPES" --planner tools/bench_board.py --out-dir "$RES/plan" \
         > "$RES/logs/plan.log" 2>&1
     rc=$?
-    $PY tools/ops/attribution_report.py plan > "$RES/plan/runs.tsv" 2>> "$RES/logs/plan.log" || rc=5
+    $PY tools/ops/attribution_report.py plan --rows-file "$RES/plan/rows.tsv" > "$RES/plan/runs.tsv" \
+        2>> "$RES/logs/plan.log" || { rc=5; say "rows file refused: $(tail -n 1 "$RES/logs/plan.log")"; }
     while IFS=$'\t' read -r _ row rid _; do
         grep -qxF "$rid" "$RES/plan/race-ids-full.txt" 2> /dev/null || say "NOTE: $row ($rid) is not in the planned paper races"
     done < <(awk -F'\t' '!seen[$2]++' "$RES/plan/runs.tsv")
-    $PY tools/ops/attribution_report.py estimate --recipes "$RECIPES" 2>&1 | while read -r ln; do say "$ln"; done
+    $PY tools/ops/attribution_report.py estimate --recipes "$RECIPES" --rows-file "$RES/plan/rows.tsv" \
+        --wheels "${#ARMS[@]}" 2>&1 | while read -r ln; do say "$ln"; done
     phase_end $rc
 fi
 [ -s "$RES/plan/board-args.txt" ] && [ -s "$RES/plan/runs.tsv" ] || { say "no plan in $RES/plan (part plan failed: logs/plan.log)"; exit 5; }
@@ -234,9 +246,16 @@ run_board() {   # arm, race id, phase, own arms (`-` = planned), out dir, extra 
         ${man[@]+"${man[@]}"} ${ver[@]+"${ver[@]}"} --cache "$CACHE_ROOT/c1" --race-ids @"$out.ids" --no-smoke-gate \
         --guarded-smoke-override-reason "attribution job: diagnostic re-run of paper rows this pod's paper job smoked" \
         --out "$out" > "$out.log" 2>&1
-    local rc=$?
+    local rc=$? err
     rm -rf "$out/work"
-    say "run $arm $rid ($ph, arms $own) rc=$rc $(( SECONDS - t0 )) s: $(tail -n 1 "$out.log" | head -c 160)"
+    rm -f "$out.error"
+    if [ $rc -eq 0 ]; then
+        say "run $arm $rid ($ph, arms $own) rc=0 $(( SECONDS - t0 )) s: $(tail -n 1 "$out.log" | head -c 160)"
+    else    # the failing command's first error line (a preflight refusal, a failed race, a driver error), not its last
+        err=$($PY tools/ops/attribution_report.py error --out "$out" --log "$out.log" 2>&1 | head -n 1)
+        echo "$err" > "$out.error"
+        say "run $arm $rid ($ph, arms $own) rc=$rc $(( SECONDS - t0 )) s FAILED: ${err:0:400}"
+    fi
     return $rc
 }
 runs_of() {   # kind: the plan lines of that kind for the wanted rows
@@ -273,7 +292,11 @@ if part profile; then
                     --capture-range=nvtx --nvtx-capture="$RANGE" --capture-range-end=stop --force-overwrite=true \
                     -o "$d/$row" < /dev/null
                 r=$?
-                [ -f "$d/$row.nsys-rep" ] || [ -f "$d/$row.qdrep" ] || { say "profile $arm $row: no nsys report (no range captured?)"; [ $r -eq 0 ] && r=6; }
+                if [ ! -f "$d/$row.nsys-rep" ] && [ ! -f "$d/$row.qdrep" ]; then
+                    [ -s "$d/$row-board.error" ] || echo "no nsys report: the run opened no NVTX range $RANGE (one scored call?)" > "$d/$row-board.error"
+                    say "profile $arm $row: no nsys report: $(head -n 1 "$d/$row-board.error" | head -c 300)"
+                    [ $r -eq 0 ] && r=6
+                fi
             elif [ -n "$PYSPY" ]; then
                 run_board "$arm" "$rid" "$ph" "$own" "$d/$row-board" - \
                     "$PYSPY" record --native --subprocesses --rate 250 --format raw -o "$d/$row.collapsed" -- < /dev/null
@@ -347,8 +370,12 @@ fi
 if part report; then
     phase report
     arms_csv=$(IFS=,; echo "${ARMS[*]}")
-    $PY tools/ops/attribution_report.py report --res "$RES" --vendor "$V" --arms "$arms_csv" > "$RES/logs/report.log" 2>&1
+    $PY tools/ops/attribution_report.py report --res "$RES" --vendor "$V" --arms "$arms_csv" \
+        --rows-file "$RES/plan/rows.tsv" > "$RES/logs/report.log" 2>&1
     rc=$?
-    say "report rc=$rc: $(tail -n 1 "$RES/logs/report.log") -> ATTRIBUTION-$V.md"
+    grep -E '^(ATTRIBUTION|SUMMARY) ' "$RES/logs/report.log" | while read -r ln; do say "$ln"; done
+    say "report rc=$rc -> ATTRIBUTION-$V.md$( case $rc in 0|6|7) ;; *) echo "; report failed: $(tail -n 1 "$RES/logs/report.log")" ;; esac)"
+    REPORT_RC=$rc
     phase_end $rc
 fi
+exit 0      # finish() turns this into the report's code (REPORT_RC) or the worst phase's

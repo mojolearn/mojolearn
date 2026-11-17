@@ -386,6 +386,20 @@ TRAIN_LANES = ("lm-train-step", "samba-train-step", "mlp-train-step", "lm-host-t
 #: batch (a training step, a recorded Session step), so a second call in the same scored run is not the same
 #: operation on the same inputs; their scored run stays one call whatever the warmup took.
 SMALL_ROW_STATEFUL_LANES = TRAIN_LANES + OPS_LANES
+
+
+def attribution_train_calls(lane, small):
+    """ATTRIBUTION RUNS ONLY (tools/ops/attribution_job.sh; a board never sets MOJOLEARN_BENCH_FORCE_CALLS): the
+    forced call count of a training lane's scored run, else None. A training step consumes the next batch, so the
+    forced calls are consecutive training steps, each on its own batch of the lane's schedule (the race stages
+    rounds + 1 + forced - 1 batches); every step is the same operation on the same shapes, which is what the
+    attribution profile attributes. fb3-attr-tool (2026-11-17, L40S): samba-train-step was held to one call, so its
+    min..max equalled the median and the nsys capture range (opened only around calls 2..n) never opened: "no nsys
+    report" on both wheels. OPS_LANES (a recorded Session step on one fixed batch) keep one call."""
+    if lane not in TRAIN_LANES:
+        return None
+    n = small.forced_calls(True, "fit")
+    return n if n is not None and n > 1 else None
 #: Whole-fit lanes (2026-10-19, lane ag-bench): FIT_LANES above. Every arm's round is one fit
 #: from a fresh seeded initialization; nothing carries over between rounds, so the per-round
 #: digest of an identical arm repeats (digest_stable is meaningful).
@@ -5533,7 +5547,8 @@ def worker(args):
     # whose call advances its state or consumes the next input (SMALL_ROW_STATEFUL_LANES) always makes one
     # call: a repeat would not be the same operation on the same inputs.
     small = _load("bench_board_small_rows")
-    small_ok = (runner.info or {}).get("library") == "mojolearn" and args.lane not in SMALL_ROW_STATEFUL_LANES
+    small_ok = (runner.info or {}).get("library") == "mojolearn" and (
+        args.lane not in SMALL_ROW_STATEFUL_LANES or attribution_train_calls(args.lane, small) is not None)
     for line in sys.stdin:
         parts = line.split()
         if not parts:
@@ -6327,7 +6342,9 @@ def race(args):
         os.environ[HIGGS_ENV] = os.path.abspath(os.path.expanduser(args.higgs))   # fit_arrays reads it
     if getattr(args, "lm_checkpoints", None):
         os.environ[LM_CKPT_ENV] = os.path.abspath(os.path.expanduser(args.lm_checkpoints))   # lm_checkpoint reads it
-    inputs = make_inputs(lane, shape, args.rounds + 1, data_path)
+    # the attribution job's forced training steps each take the next batch (attribution_train_calls)
+    forced_train = attribution_train_calls(lane, _load("bench_board_small_rows")) or 1
+    inputs = make_inputs(lane, shape, args.rounds + forced_train, data_path)
     srec = shape_record(lane, shape)
     result = {"lane": lane, "dataset": DATA_OF[lane], "shape": srec["label"], "shape_record": srec,
               "inputs": inputs, "arms": {}, "rounds_requested": args.rounds, "started": now_utc(),

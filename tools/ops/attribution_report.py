@@ -4,15 +4,19 @@
 """Attribution of the regressed paper rows: where each row's time goes, on both wheels, same box, same job.
 
 The driver of tools/ops/attribution_job.sh (lane attribution-job, 2026-11-16). Measurement tooling, never product
-runtime. The ROWS table below is the one list of rows, phases and arm runs; the job reads it through `plan`.
+runtime. The rows (race id, forced phase, profiled arm, timing runs) come from a rows file, tools/ops/attribution_rows.tsv
+by default (the nine regressed paper rows); `--rows-file` (the job's AT_ROWS_FILE) profiles any board row.
 
-    attribution_report.py plan                      TSV the job runs: kind, row, race id, forced phase, own arms
-    attribution_report.py estimate --recipes R      pod minutes from the stored 0.8.55 row times
+    attribution_report.py plan [--rows-file F]      TSV the job runs: kind, row, race id, forced phase, own arms
+    attribution_report.py estimate --recipes R [--rows-file F] [--wheels N]
+                                                    pod minutes per row and in all, from the stored 0.8.55 row times
+    attribution_report.py error --out DIR --log L   the first error line of one failed run (job.log)
     attribution_report.py nsys --prefix P --calls N --out J [--kernel-regex RE]
                                                     per-call counts from `nsys stats` CSVs of one capture
     attribution_report.py ncu --csv C --out J       registers/occupancy/duration of the matched kernels
-    attribution_report.py report --res RES --vendor V --arms A,B
-                                                    ATTRIBUTION-<vendor>.md + .json in RES
+    attribution_report.py report --res RES --vendor V --arms A,B [--rows-file F]
+                                                    ATTRIBUTION-<vendor>.md + .json in RES; SUMMARY lines per row and
+                                                    the job's exit code (EXIT_* below)
 
 What each row records, per wheel:
   A. the scored run of 20 consecutive calls after one excluded warmup (MOJOLEARN_BENCH_FORCE_CALLS=20 on the row's
@@ -54,20 +58,51 @@ class Row:
         return self.phase.split("/", 1)[1] if "/" in self.phase else None
 
 
-ROWS = [
-    Row("mamba3-forward", "neural/mamba3-forward/gaussian/shape=full", "fit", "ours"),
-    Row("samba-train-step", "neural/samba-train-step/bytes/shape=full", "fit", "ours"),
-    Row("ols", "classical/ols/taxi/rows=full", "fit", "ours"),
-    # the prebinned arm ALONE, then both arms in each order: the arm-order test
-    Row("gbdt-depthwise", "trees/gbdt-depthwise/istella/rows=full", "infer/test", "ours-prebinned",
-        timing=(["ours-prebinned"], ["ours", "ours-prebinned"], ["ours-prebinned", "ours"])),
-    Row("gbdt-lossguide", "trees/gbdt-lossguide/istella/rows=full", "infer/test", "ours-gain0",
-        timing=(["ours-gain0"],)),
-    Row("iforest", "trees/iforest/istella/rows=full", "fit", "ours"),
-    Row("hdbscan", "classical/hdbscan/istella/rows=full", "fit", "ours", kernels=True),
-    Row("knn", "classical/knn/taxi/rows=full", "fit", "ours", kernels=True),
-    Row("kde", "classical/kde/taxi/rows=full", "fit", "ours", kernels=True),
-]
+#: the default row list (attribution_job.sh AT_ROWS_FILE names another file of the same form)
+DEFAULT_ROWS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "attribution_rows.tsv")
+
+
+def parse_rows(text, where="rows file"):
+    """[Row] from a rows file: per line race id, forced phase, profiled arm, then `name=`, `timing=` (runs split by
+    `|`, each `planned` or an own-arm list `a,b`) and `kernels`; `#` comments and blank lines skipped. A malformed
+    line, an unknown field or a duplicate name is refused by line number, never dropped."""
+    rows, names = [], set()
+    for i, raw in enumerate(text.splitlines(), 1):
+        line = raw.split("#", 1)[0].strip()
+        if not line:
+            continue
+        f = line.split()
+        if len(f) < 3 or f[0].count("/") < 2 or not (f[1] == "fit" or f[1].startswith("infer")):
+            raise ValueError("%s line %d: want <race id> <fit|infer/<batch>> <arm> [name=] [timing=] [kernels]: %r"
+                             % (where, i, raw))
+        rid, phase, arm = f[0], f[1], f[2]
+        name, timing, kernels = rid.split("/")[1], [None], False
+        for opt in f[3:]:
+            if opt == "kernels":
+                kernels = True
+            elif opt.startswith("name="):
+                name = opt[5:]
+            elif opt.startswith("timing="):
+                timing = [None if run == "planned" else [a for a in run.split(",") if a]
+                          for run in opt[7:].split("|") if run]
+            else:
+                raise ValueError("%s line %d: unknown field %r" % (where, i, opt))
+        if not name or name in names:
+            raise ValueError("%s line %d: row name %r empty or repeated (give name=)" % (where, i, name))
+        names.add(name)
+        rows.append(Row(name, rid, phase, arm, timing=timing or [None], kernels=kernels))
+    if not rows:
+        raise ValueError("%s: no rows" % where)
+    return rows
+
+
+def load_rows(path=None):
+    path = path or DEFAULT_ROWS_FILE
+    with open(path) as fh:
+        return parse_rows(fh.read(), path)
+
+
+ROWS = load_rows()
 ROW_BY_NAME = {r.name: r for r in ROWS}
 
 
@@ -122,12 +157,13 @@ def run_seconds(stored, race_id, arms, phase, calls=CALLS, overhead_s=90.0, slow
     return overhead_s + total
 
 
-def estimate(recipes, arms_per_wheel=2, overhead_s=90.0, profile_slowdown=1.5, ncu_s=180.0, setup_s=600.0):
-    """{rows: [{row, runs, seconds}], wheel_s, total_min}: the job's pod minutes from the stored times (0.8.55, one
-    wheel), times the wheels, plus tool setup and the nsys stats (setup_s)."""
+def estimate(recipes, arms_per_wheel=2, overhead_s=90.0, profile_slowdown=1.5, ncu_s=180.0, setup_s=600.0,
+             rows=None):
+    """{rows: [{row, runs, seconds, pod_min}], wheel_s, total_min}: the job's pod minutes from the stored times (0.8.55,
+    one wheel), per row (`pod_min`: every wheel) and in all, plus tool setup and the nsys stats (setup_s)."""
     stored = _stored(recipes)
     per = []
-    for r in ROWS:
+    for r in (ROWS if rows is None else rows):
         planned = sorted({a for (rid, _, a, _) in stored if rid == r.race_id})
         secs, runs = 0.0, 0
         for arms in r.timing:
@@ -139,7 +175,8 @@ def estimate(recipes, arms_per_wheel=2, overhead_s=90.0, profile_slowdown=1.5, n
         if r.kernels:
             secs += ncu_s
             runs += 1
-        per.append({"row": r.name, "runs": runs, "seconds": round(secs, 1)})
+        per.append({"row": r.name, "runs": runs, "seconds": round(secs, 1),
+                    "pod_min": round(secs * arms_per_wheel / 60.0, 1)})
     wheel = sum(p["seconds"] for p in per)
     return {"rows": per, "wheel_s": round(wheel, 1), "wheels": arms_per_wheel,
             "total_min": round((wheel * arms_per_wheel + setup_s) / 60.0, 1),
@@ -563,20 +600,25 @@ def _spread(t):
                              _f(t["max_ms"] / t["min_ms"]) if t.get("min_ms") else "-")
 
 
-def collect(res, arms):
+def collect(res, arms, rows_in=None):
     """{rows: {row: {...}}} from a results dir: time-<arm>/<row>/<tag>/ (bench_board out), profile-<arm>/<row>.json
     (parse_nsys output), ncu-<arm>/<row>.json (parse_ncu output)."""
     rows = {}
-    for row in ROWS:
+    for row in (ROWS if rows_in is None else rows_in):
         rec = {"race_id": row.race_id, "phase": row.phase, "arm": row.arm, "timing": {}, "order_test": {},
-               "profile": {}, "ncu": {}}
+               "profile": {}, "ncu": {}, "runs": {}}
         for wheel in arms:
             for arms_list in row.timing:
                 tag = variant_tag(arms_list)
                 d = os.path.join(res, "time-%s" % wheel, row.name, tag)
                 if not os.path.isdir(d):
+                    rec["runs"].setdefault(wheel, {})[tag] = {"error": _error_note(d) or "not run"}
                     continue
                 got = run_timing(d, row, arms_list or [row.arm])
+                missing = [a for a in (arms_list or [row.arm]) if (got.get(a) or {}).get("ms") is None]
+                rec["runs"].setdefault(wheel, {})[tag] = (
+                    {"error": "no time for %s: %s" % (",".join(missing), _error_note(d) or first_error(d, d + ".log"))}
+                    if missing else {"ok": True})
                 if arms_list is None or arms_list == [row.arm]:
                     rec["timing"][wheel] = got.get(row.arm)
                 if arms_list and len(arms_list) > 1:
@@ -584,6 +626,10 @@ def collect(res, arms):
             p = _load(os.path.join(res, "profile-%s" % wheel, "%s.json" % row.name))
             if p is not None:
                 rec["profile"][wheel] = p
+            if not (p or {}).get("captured"):
+                note = _error_note(os.path.join(res, "profile-%s" % wheel, "%s-board" % row.name))
+                rec.setdefault("profile_error", {})[wheel] = (
+                    note or ("capture empty (no NVTX range)" if p is not None else "no nsys capture"))
             n = _load(os.path.join(res, "ncu-%s" % wheel, "%s.json" % row.name))
             if n is not None:
                 rec["ncu"][wheel] = n
@@ -592,10 +638,12 @@ def collect(res, arms):
     return {"rows": rows}
 
 
-def render(doc, arms, header_lines):
+def render(doc, arms, header_lines, rows=None):
     """ATTRIBUTION-<vendor>.md text."""
-    out = ["# Attribution of the regressed paper rows", ""] + header_lines + [""]
-    for row in ROWS:
+    out = ["# Attribution of board rows", ""] + header_lines + [""]
+    if doc.get("summary"):
+        out += ["## Summary", ""] + ["- " + ln for ln in doc["summary"]["lines"]] + [""]
+    for row in (ROWS if rows is None else rows):
         rec = doc["rows"][row.name]
         out += ["## %s (%s, %s, %s arm)" % (row.name, row.race_id, row.phase, row.arm), "",
                 "Reading: " + rec["reading"], ""]
@@ -682,6 +730,80 @@ def render(doc, arms, header_lines):
     return "\n".join(out) + "\n"
 
 
+#: the job's exit codes for a finished report (attribution_job.sh exits with the report's code; its own earlier exits:
+#: 2 refused to start, 3 not an NVIDIA box / other GPU, 4 no venv, 5 no plan, 124 terminated, EXIT_DISK disk full)
+EXIT_OK = 0                 # every row has its timing runs and a captured profile on every wheel
+EXIT_NO_PROFILE = 6         # every row timed; one or more rows without a captured profile on some wheel
+EXIT_NO_TIMING = 7          # one or more rows without a timing run's time on some wheel
+ERROR_RX = re.compile(r"Traceback|\b\w*(error|exception)\b|\b(refused|failed)\b|No reports were generated", re.I)
+
+
+def _error_note(out_dir):
+    """The first error line attribution_job.sh recorded for one run (`<out>.error`), or None."""
+    try:
+        with open(out_dir + ".error", errors="replace") as fh:
+            return fh.readline().strip() or None
+    except OSError:
+        return None
+
+
+def first_error(out_dir, log=None):
+    """The first error line of one failed bench_board run: the board's preflight refusal (its problems), a failed
+    race's failure, else the first error-looking line of the run's own log and then of the driver logs under the
+    run directory, else the log's last line. fb3-attr-tool (2026-11-17): the job printed only the last log line
+    (`bench_board: board .../BOARD.md`), which hid the preflight refusal of the tree infer rows."""
+    board = _load(os.path.join(out_dir, "board.json")) or {}
+    for rid, rec in sorted((board.get("failed_preflight_recipes") or {}).items()):
+        probs = (rec or {}).get("problems") or []
+        if probs:
+            return "preflight refused %s: %s" % (rid, "; ".join(str(p) for p in probs))[:400]
+    for rid, rec in sorted((board.get("races") or {}).items()):
+        if isinstance(rec, dict) and rec.get("failure"):
+            return "race %s failed: %s" % (rid, rec["failure"])[:400]
+    logs = [log] if log else []
+    for root, _, files in os.walk(out_dir):
+        logs += sorted(os.path.join(root, f) for f in files if f.endswith(".log"))
+    last = None
+    for lg in logs:
+        try:
+            with open(lg, errors="replace") as fh:
+                for ln in fh:
+                    ln = ln.strip()
+                    if not ln:
+                        continue
+                    if lg == log:
+                        last = ln
+                    if ERROR_RX.search(ln) and "tcmalloc" not in ln:
+                        return ("%s: %s" % (os.path.basename(lg), ln))[:400]
+        except OSError:
+            continue
+    return ("no error line; last line: %s" % last)[:400] if last else "no error line and no log"
+
+
+def summarize(doc, arms):
+    """{lines, code, failed}: one SUMMARY line per row (timing and profile on each wheel, ncu shown, never failing)
+    and the job's exit code (EXIT_*)."""
+    lines, no_time, no_prof = [], [], []
+    for name, rec in doc["rows"].items():
+        bad_t = ["%s %s: %s" % (w, tag, r["error"]) for w in arms for tag, r in (rec["runs"].get(w) or {}).items()
+                 if r.get("error")]
+        bad_p = ["%s: %s" % (w, rec.get("profile_error", {})[w]) for w in arms if w in rec.get("profile_error", {})]
+        ncu = ["%s %s" % (w, (rec["ncu"].get(w) or {}).get("status", "?")) for w in arms if rec["ncu"].get(w)]
+        if bad_t:
+            no_time.append(name)
+        if bad_p:
+            no_prof.append(name)
+        lines.append("SUMMARY row=%s timing=%s profile=%s%s" % (
+            name, "ok" if not bad_t else "FAILED(" + " | ".join(bad_t) + ")",
+            "ok" if not bad_p else "FAILED(" + " | ".join(bad_p) + ")",
+            (" ncu=" + ",".join(ncu)) if ncu else ""))
+    code = EXIT_NO_TIMING if no_time else EXIT_NO_PROFILE if no_prof else EXIT_OK
+    lines.append("SUMMARY rows=%d complete=%d no_timing=%s no_profile=%s exit=%d" % (
+        len(doc["rows"]), sum(1 for n in doc["rows"] if n not in no_time and n not in no_prof),
+        ",".join(no_time) or "-", ",".join(no_prof) or "-", code))
+    return {"lines": lines, "code": code, "no_timing": no_time, "no_profile": no_prof}
+
+
 def cores_summary(path):
     """`busy max B of N (mean M) over K samples` from job/cores.log, or None."""
     vals, total = [], None
@@ -701,7 +823,9 @@ def cores_summary(path):
 
 def cmd_report(a):
     arms = [x for x in a.arms.split(",") if x]
-    doc = collect(a.res, arms)
+    rows = load_rows(a.rows_file)
+    doc = collect(a.res, arms, rows)
+    doc["summary"] = summarize(doc, arms)
     j = os.path.join(a.res, "job")
     head = ["- GPU work is SERIAL: one race process on the GPU at a time, nothing else running (timing must not "
             "share the GPU); the tool installs, nsys stats and this report use every allocated core."]
@@ -722,7 +846,7 @@ def cmd_report(a):
                 "run (profiled; its times are not the A times); the reading compares %s against %s." %
                 (CALLS, arms[0] if arms else "?", arms[1] if len(arms) > 1 else "-"))
     doc.update(arms=arms, header=head)
-    md = render(doc, arms, head)
+    md = render(doc, arms, head, rows)
     with open(os.path.join(a.res, "ATTRIBUTION-%s.md" % a.vendor), "w") as fh:
         fh.write(md)
     with open(os.path.join(a.res, "ATTRIBUTION-%s.json" % a.vendor), "w") as fh:
@@ -730,16 +854,23 @@ def cmd_report(a):
     print("ATTRIBUTION rows=%d with_timing=%d with_profile=%d" % (
         len(doc["rows"]), sum(1 for r in doc["rows"].values() if r["timing"]),
         sum(1 for r in doc["rows"].values() if any((p or {}).get("captured") for p in r["profile"].values()))))
-    return 0
+    print("\n".join(doc["summary"]["lines"]))
+    return doc["summary"]["code"]
 
 
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     sub = ap.add_subparsers(dest="cmd", required=True)
-    sub.add_parser("plan")
+    pl = sub.add_parser("plan")
+    pl.add_argument("--rows-file")
     e = sub.add_parser("estimate")
     e.add_argument("--recipes", required=True)
     e.add_argument("--overhead-s", type=float, default=90.0)
+    e.add_argument("--rows-file")
+    e.add_argument("--wheels", type=int, default=2)
+    er = sub.add_parser("error")
+    er.add_argument("--out", required=True)
+    er.add_argument("--log")
     n = sub.add_parser("nsys")
     n.add_argument("--prefix", required=True)
     n.add_argument("--calls", type=int, required=True)
@@ -752,15 +883,21 @@ def main(argv=None):
     r.add_argument("--res", required=True)
     r.add_argument("--vendor", default="nvidia")
     r.add_argument("--arms", required=True)
+    r.add_argument("--rows-file")
     a = ap.parse_args(argv)
     if a.cmd == "plan":
-        print("\n".join(plan_lines()))
+        print("\n".join(plan_lines(load_rows(a.rows_file))))
+        return 0
+    if a.cmd == "error":
+        print(first_error(a.out, a.log))
         return 0
     if a.cmd == "estimate":
         with open(a.recipes) as fh:
-            est = estimate(json.load(fh), overhead_s=a.overhead_s)
+            est = estimate(json.load(fh), arms_per_wheel=a.wheels, overhead_s=a.overhead_s,
+                           rows=load_rows(a.rows_file))
         for p in est["rows"]:
-            print("ESTIMATE row=%s runs_per_wheel=%d seconds_per_wheel=%.0f" % (p["row"], p["runs"], p["seconds"]))
+            print("ESTIMATE row=%s runs_per_wheel=%d seconds_per_wheel=%.0f pod_min=%.1f" % (
+                p["row"], p["runs"], p["seconds"], p["pod_min"]))
         print("ESTIMATE total_min=%.0f wheels=%d (%s)" % (est["total_min"], est["wheels"],
                                                           json.dumps(est["assumptions"], sort_keys=True)))
         return 0

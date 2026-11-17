@@ -131,6 +131,29 @@ class SmallRowsKnobs(unittest.TestCase):
 
 
 class OwnArms(unittest.TestCase):
+    def test_own_arms_narrow_the_race_so_the_preflight_expects_only_them(self):
+        """fb3-attr-tool (2026-11-17 L40S job): `ours-prebinned` alone was refused by the preflight ("missing
+        parameter/version probe: ours") because only the driver command was narrowed."""
+        try:
+            bb = _load("bench_board_t2", os.path.join(HERE, "bench_board.py"))
+        except Exception as exc:                  # noqa: BLE001
+            self.skipTest("tools/bench_board.py does not import here: %s" % exc)
+        tree = {"id": "trees/gbdt-depthwise/istella/rows=full", "family": "trees", "arms": ["ours", "ours-prebinned",
+                "xgboost-gpu"], "our_arms": {"ours": "identical", "ours-prebinned": "identical"},
+                "opponents": ["xgboost-gpu"]}
+        neural = {"id": "neural/samba-train-step/bytes/shape=full", "family": "neural", "arms": ["ours"],
+                  "our_arms": {"ours": "identical"}, "opponents": []}
+        races = [tree]
+        self.assertIs(bb.select_own_arms(races, {}), races)                  # unset (every board): untouched
+        got = bb.select_own_arms([tree, neural], {bb.OWN_ARMS_ENV: "ours-prebinned"})
+        self.assertEqual(got[0]["our_arms"], {"ours-prebinned": "identical"})
+        self.assertEqual(got[0]["arms"], ["ours-prebinned", "xgboost-gpu"])
+        self.assertIs(got[1], neural)                                         # only tree races take own arms
+        got = bb.select_own_arms([tree], {bb.OWN_ARMS_ENV: "ours-prebinned,ours"})
+        self.assertEqual(list(got[0]["our_arms"]), ["ours-prebinned", "ours"])
+        with self.assertRaises(ValueError):
+            bb.select_own_arms([tree], {bb.OWN_ARMS_ENV: "ours-gain0"})
+
     def test_tree_cmd_takes_the_own_arms_in_order_and_refuses_unplanned(self):
         try:
             bb = _load("bench_board_t", os.path.join(HERE, "bench_board.py"))
@@ -139,18 +162,12 @@ class OwnArms(unittest.TestCase):
         ctx = {"python": "py", "tree_driver": "drv", "vendor": "nvidia", "rounds": 1, "arm_budget_s": 1,
                "race_deadline_s": 1}
         race = {"our_arms": {"ours": "identical", "ours-prebinned": "identical"}, "lane": "gbdt-depthwise",
-                "dataset": "istella", "rows": None, "opponents": []}
+                "dataset": "istella", "rows": None, "opponents": [], "family": "trees",
+                "arms": ["ours", "ours-prebinned"]}
 
         def own(env):
-            old = os.environ.pop(bb.OWN_ARMS_ENV, None)
-            try:
-                if env is not None:
-                    os.environ[bb.OWN_ARMS_ENV] = env
-                cmd, _ = bb.tree_cmd(ctx, race)
-            finally:
-                os.environ.pop(bb.OWN_ARMS_ENV, None)
-                if old is not None:
-                    os.environ[bb.OWN_ARMS_ENV] = old
+            r = bb.select_own_arms([race], {} if env is None else {bb.OWN_ARMS_ENV: env})[0]
+            cmd, _ = bb.tree_cmd(ctx, r)
             return cmd[cmd.index("--own-arms") + 1]
         self.assertEqual(own(None), "ours,ours-prebinned")
         self.assertEqual(own("ours-prebinned"), "ours-prebinned")
@@ -345,8 +362,12 @@ class Report(unittest.TestCase):
             r = subprocess.run([sys.executable, os.path.join(HERE, "ops", "attribution_report.py"), "report",
                                 "--res", d, "--vendor", "nvidia", "--arms", "candidate,prior-0.8.55"],
                                capture_output=True, text=True)
-            self.assertEqual(r.returncode, 0, r.stderr)
+            # seven rows have no run here: exit 7 (a row without timing), each row named by a SUMMARY line
+            self.assertEqual(r.returncode, AR.EXIT_NO_TIMING, r.stderr)
             self.assertIn("ATTRIBUTION rows=9 with_timing=2 with_profile=1", r.stdout)
+            self.assertIn("SUMMARY row=knn timing=ok profile=ok ncu=candidate no-permission,prior-0.8.55 "
+                          "no-permission", r.stdout)
+            self.assertIn("SUMMARY row=mamba3-forward timing=FAILED(candidate planned: not run", r.stdout)
             md = open(os.path.join(d, "ATTRIBUTION-nvidia.md")).read()
             doc = json.load(open(os.path.join(d, "ATTRIBUTION-nvidia.json")))
         self.assertIn("SERIAL", md)
@@ -402,6 +423,94 @@ class PlanAndEstimate(unittest.TestCase):
         self.assertEqual(lg["runs"], 2)
 
 
+class RowsFile(unittest.TestCase):
+    def test_default_file_holds_the_nine_rows(self):
+        self.assertEqual([r.name for r in AR.ROWS], ["mamba3-forward", "samba-train-step", "ols", "gbdt-depthwise",
+                                                     "gbdt-lossguide", "iforest", "hdbscan", "knn", "kde"])
+        dep = AR.ROW_BY_NAME["gbdt-depthwise"]
+        self.assertEqual(dep.timing, [["ours-prebinned"], ["ours", "ours-prebinned"], ["ours-prebinned", "ours"]])
+        self.assertEqual((dep.phase, dep.arm), ("infer/test", "ours-prebinned"))
+        self.assertEqual(AR.ROW_BY_NAME["ols"].timing, [None])
+        self.assertTrue(AR.ROW_BY_NAME["knn"].kernels)
+
+    def test_any_board_row_and_refusals(self):
+        rows = AR.parse_rows("# c\nclassical/pca/taxi/rows=full fit ours\n"
+                             "trees/gbdt-depthwise/higgs/rows=full infer/test ours name=dep-higgs timing=ours|planned\n")
+        self.assertEqual([r.name for r in rows], ["pca", "dep-higgs"])
+        self.assertEqual(rows[1].timing, [["ours"], None])
+        lines = [ln.split("\t") for ln in AR.plan_lines(rows)]
+        self.assertIn(["profile", "dep-higgs", "trees/gbdt-depthwise/higgs/rows=full", "infer/test", "ours",
+                       "profile"], lines)
+        for bad in ("classical/pca fit ours", "classical/pca/taxi/rows=full predict ours",
+                    "classical/pca/taxi/rows=full fit ours colour=red",
+                    "classical/pca/taxi/rows=full fit ours\nclassical/pca/higgs/rows=full fit ours", "# none\n"):
+            with self.assertRaises(ValueError):
+                AR.parse_rows(bad)
+
+    def test_estimate_states_pod_minutes_per_row(self):
+        with tempfile.TemporaryDirectory() as d:
+            rec = os.path.join(d, "r.json")
+            rows = os.path.join(d, "rows.tsv")
+            write(rec, json.dumps({"recipes": []}))
+            write(rows, "classical/pca/taxi/rows=full fit ours\n")
+            r = subprocess.run([sys.executable, os.path.join(HERE, "ops", "attribution_report.py"), "estimate",
+                                "--recipes", rec, "--rows-file", rows, "--wheels", "2"],
+                               capture_output=True, text=True)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        # two runs (time, profile) of overhead only, on two wheels: 2 * 2 * 90 s = 6 pod minutes
+        self.assertIn("ESTIMATE row=pca runs_per_wheel=2 seconds_per_wheel=180 pod_min=6.0", r.stdout)
+
+
+class FailuresAndExit(unittest.TestCase):
+    def test_first_error_names_the_preflight_refusal_not_the_last_line(self):
+        with tempfile.TemporaryDirectory() as d:
+            out = os.path.join(d, "ours-prebinned")
+            write(out + ".log", "bench_board: board %s/BOARD.md\n" % out)
+            write(os.path.join(out, "board.json"), json.dumps({"failed_preflight_recipes": {
+                "trees/x/y/rows=full": {"problems": ["missing parameter/version probe: ours"]}}, "races": {}}))
+            self.assertEqual(AR.first_error(out, out + ".log"),
+                             "preflight refused trees/x/y/rows=full: missing parameter/version probe: ours")
+            os.remove(os.path.join(out, "board.json"))
+            write(os.path.join(out, "raw", "drv.log"), "tcmalloc warning: Unable to mbind\nok\n"
+                                                         "RuntimeError: boom\nlater error\n")
+            self.assertEqual(AR.first_error(out, out + ".log"), "drv.log: RuntimeError: boom")
+
+    def test_exit_code_and_summary(self):
+        ok = {"runs": {"a": {"planned": {"ok": True}}}, "ncu": {}}
+        doc = {"rows": {"r1": dict(ok), "r2": dict(ok)}}
+        self.assertEqual(AR.summarize(doc, ["a"])["code"], AR.EXIT_OK)
+        doc["rows"]["r2"] = dict(ok, profile_error={"a": "no nsys capture"})
+        s = AR.summarize(doc, ["a"])
+        self.assertEqual(s["code"], AR.EXIT_NO_PROFILE)
+        self.assertIn("SUMMARY row=r2 timing=ok profile=FAILED(a: no nsys capture)", s["lines"])
+        doc["rows"]["r1"] = {"runs": {"a": {"x": {"error": "no time for x: boom"}}}, "ncu": {"a": {"status": "no-kernels"}}}
+        s = AR.summarize(doc, ["a"])
+        self.assertEqual(s["code"], AR.EXIT_NO_TIMING)
+        self.assertIn("SUMMARY row=r1 timing=FAILED(a x: no time for x: boom) profile=ok ncu=a no-kernels", s["lines"])
+        self.assertIn("exit=7", s["lines"][-1])
+
+
+class TrainLaneForcedCalls(unittest.TestCase):
+    def test_training_lanes_take_the_forced_calls_in_an_attribution_run_only(self):
+        """fb3-attr-tool (2026-11-17): samba-train-step scored one call (min..max = median) and opened no NVTX
+        range (no nsys report) in the attribution job."""
+        try:
+            nb = _load("bench_board_neural_t", os.path.join(HERE, "bench_board_neural.py"))
+        except Exception as exc:                  # noqa: BLE001
+            self.skipTest("tools/bench_board_neural.py does not import here: %s" % exc)
+
+        class Small:
+            def __init__(self, n):
+                self.n = n
+
+            def forced_calls(self, ours, phase=None):
+                return self.n
+        self.assertEqual(nb.attribution_train_calls("samba-train-step", Small(20)), 20)
+        self.assertIsNone(nb.attribution_train_calls("samba-train-step", Small(None)))     # a board: one call
+        self.assertIsNone(nb.attribution_train_calls("ops-session-step", Small(20)))       # fixed batch: one call
+        self.assertIsNone(nb.attribution_train_calls("mamba3-forward", Small(20)))         # not a training lane
+
+
 class JobScript(unittest.TestCase):
     def test_syntax_and_refuses_unpersisted(self):
         self.assertEqual(subprocess.run(["bash", "-n", JOB]).returncode, 0)
@@ -420,6 +529,14 @@ class JobScript(unittest.TestCase):
         self.assertIn('xargs -P "$NCORES"', text)
         self.assertIn("--capture-range=nvtx", text)
         self.assertIn("MOJOLEARN_BENCH_FORCE_CALLS", text)
+
+    def test_rows_file_error_line_and_exit_from_the_report(self):
+        text = open(JOB).read()
+        self.assertIn("AT_ROWS_FILE", text)
+        self.assertIn('--rows-file "$RES/plan/rows.tsv"', text)
+        self.assertIn("attribution_report.py error --out", text)
+        self.assertIn("REPORT_RC=$rc", text)
+        self.assertIn('--wheels "${#ARMS[@]}"', text)
 
 
 if __name__ == "__main__":

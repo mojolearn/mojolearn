@@ -1,0 +1,17 @@
+# The rows tools/ops/attribution_job.sh times and profiles by default (AT_ROWS_FILE names another file of this form).
+# One row per line, tab or space separated: race id, forced phase, profiled arm, then optional fields:
+#   name=<row>                the row's directory name (default: the race's lane)
+#   timing=<run>|<run>...     the timing runs, each an own-arm list in order (a,b) or `planned` (default: planned)
+#   kernels                   part C (the distance kernels under ncu) applies
+# Phase: `fit`, `infer/<batch>`. Arm: the own arm the profile times (`ours` unless the race plans another);
+# only tree races take an own-arm list (MOJOLEARN_BENCH_OWN_ARMS).
+neural/mamba3-forward/gaussian/shape=full	fit	ours	timing=planned
+neural/samba-train-step/bytes/shape=full	fit	ours	timing=planned
+classical/ols/taxi/rows=full	fit	ours	timing=planned
+# the prebinned arm ALONE, then both arms in each order: the arm-order test
+trees/gbdt-depthwise/istella/rows=full	infer/test	ours-prebinned	timing=ours-prebinned|ours,ours-prebinned|ours-prebinned,ours
+trees/gbdt-lossguide/istella/rows=full	infer/test	ours-gain0	timing=ours-gain0
+trees/iforest/istella/rows=full	fit	ours	timing=planned
+classical/hdbscan/istella/rows=full	fit	ours	timing=planned	kernels
+classical/knn/taxi/rows=full	fit	ours	timing=planned	kernels
+classical/kde/taxi/rows=full	fit	ours	timing=planned	kernels

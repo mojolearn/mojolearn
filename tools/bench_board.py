@@ -2445,8 +2445,37 @@ def parse_tree_log(path):
             "libraries": libs, "state_receipts": states, "scored_calls": calls}
 
 
-#: attribution runs only: the own arms (and their order) a tree race times; see tree_cmd
+#: attribution runs only: the own arms (and their order) a tree race times; see select_own_arms
 OWN_ARMS_ENV = "MOJOLEARN_BENCH_OWN_ARMS"
+
+
+def select_own_arms(races, environ=None):
+    """ATTRIBUTION RUNS ONLY (tools/ops/attribution_job.sh): MOJOLEARN_BENCH_OWN_ARMS (comma list) narrows every tree
+    race to exactly those planned own arms, in that order (one arm alone, or the arm-order test); a board never sets
+    it. The race's `our_arms` and `arms` are narrowed, not only the driver command: fb3-attr-tool (2026-11-17, L40S
+    attribution job) -- the env used to reach tree_cmd alone, so the preflight still expected a probe of every
+    planned own arm and refused `ours-prebinned` / `ours-gain0` alone with "missing parameter/version probe: ours"
+    (bench_board rc 1, four runs on each wheel). An arm the race does not plan is refused by name."""
+    env = os.environ if environ is None else environ
+    forced = [a.strip() for a in (env.get(OWN_ARMS_ENV) or "").split(",") if a.strip()]
+    if not forced:
+        return races
+    out = []
+    for race in races:
+        ours = race.get("our_arms") or {}
+        own = [a for a in ours if a != "ours-ab"]
+        if race.get("family") != "trees" or not own:
+            out.append(race)
+            continue
+        unknown = [a for a in forced if a not in own]
+        if unknown:
+            raise ValueError("%s names arms the race does not plan: %s (planned: %s)"
+                             % (OWN_ARMS_ENV, ",".join(unknown), ",".join(own)))
+        keep = {a: ours[a] for a in forced}
+        if "ours-ab" in ours:
+            keep["ours-ab"] = ours["ours-ab"]
+        out.append(dict(race, our_arms=keep, arms=list(keep) + [a for a in race["arms"] if a not in ours]))
+    return out
 
 
 def tree_cmd(ctx, race):
@@ -2464,16 +2493,8 @@ def tree_cmd(ctx, race):
     # board-smoke-3 (2026-11-16): only the planned own arms are built and timed (the driver otherwise
     # times every paired own arm, e.g. gbdt-categorical's `ours` whose catboost-cpu is not on a GPU board,
     # and its unplanned cells refuse the race). `ours-ab` stays --ours-ab's.
+    # ATTRIBUTION RUNS: MOJOLEARN_BENCH_OWN_ARMS already narrowed and ordered race["our_arms"] (select_own_arms)
     own = [a for a in ours if a != "ours-ab"]
-    # ATTRIBUTION RUNS ONLY (tools/ops/attribution_job.sh, 2026-11-16): MOJOLEARN_BENCH_OWN_ARMS (comma list) times
-    # exactly those planned own arms in that order (one arm alone, or the arm-order test); a board never sets it
-    forced = [a for a in (os.environ.get(OWN_ARMS_ENV) or "").split(",") if a.strip()]
-    if forced and own:
-        unknown = [a for a in forced if a not in own]
-        if unknown:
-            raise ValueError("%s names arms the race does not plan: %s (planned: %s)"
-                             % (OWN_ARMS_ENV, ",".join(unknown), ",".join(own)))
-        own = forced
     if own and not ctx.get("opponents_only"):
         cmd += ["--own-arms", ",".join(own)]
     if "ours-ab" in ours:
@@ -5870,6 +5891,7 @@ def main(argv=None):
         races = [dict(r, our_arms={}, arms=list(r["opponents"])) for r in races]
     if getattr(args, "race_ids", None):
         races = select_race_ids(races, args.race_ids)
+    races = select_own_arms(races)
     if args.opponent_arms:
         if not args.opponents_only:
             raise SystemExit('--opponent-arms requires --opponents-only')
