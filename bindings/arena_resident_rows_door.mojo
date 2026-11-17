@@ -7,7 +7,7 @@
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem
 from bindings.arena_materialize_native_door import (
-    _native_call, _prepare, _prepared_info, _cast, _slot, _empty_unfilled, _resident_fields,
+    _native_call, _prepare, _prepared_info, _cast, _slot, _empty, _empty_unfilled, _resident_fields,
 )
 from bindings.msel_inputs_unpack import msel_input
 from bindings.p3_array_arena_records_unpack import P3_DICT_INT_IDS, p3_dict_admitted, p3_dict_admit
@@ -111,14 +111,18 @@ def arena_resident_take(fields: PythonObject, values: PythonObject, indices_valu
     # one device download) or raises, discarding it: no zero fill first
     # (lane fb2-neighbors: a full memset of the train and test outputs,
     # n x d words per train_test_split, before the download overwrote them).
-    var output = _empty_unfilled(py_call(b["tuple"],shape),String(array["dtype"]),context)
+    # A source with no rows has nothing to take: its output is the zero-filled
+    # Array (every byte written by the fill), as before the unfilled change
+    # (fb6-smoke, 2026-11-17: replaces fb4-audit's refusal, which broke the
+    # zero-size materialize contract). The fill runs only on that empty-source
+    # corner, never on a take that downloads rows.
     var n = Int(py=base_shape[0])
+    var output: PythonObject
+    if n:
+        output = _empty_unfilled(py_call(b["tuple"],shape),String(array["dtype"]),context)
+    else:
+        output = _empty(py_call(b["tuple"],shape),String(array["dtype"]),context)
     var row_bytes = Int(py=array["nbytes"])//n if n else 0
-    if n == 0 and Int(py=indices["size"]) and Int(py=_slot(output,"nbytes",context)):
-        # fb4-audit (2026-11-17): nothing could fill the unfilled output (no
-        # source row to take); it was a zero-filled Array before, so refuse
-        # rather than return uninitialised words.
-        raise Error("ValueError: resident take indices select rows of a source with no rows")
     if Int(py=indices["size"]) and row_bytes:
         _ = _native_call(context["arena_msel_take_rows"],Python.tuple(base_entry[2],n,row_bytes,index_entry[2],indices["size"],_slot(output,"_addr",context)))
     return output
