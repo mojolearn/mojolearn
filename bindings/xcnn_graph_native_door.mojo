@@ -25,6 +25,7 @@ the typed entries of `x_cnn/graph_layer_run.mojo` (lane py-msel-prep-cnn,
 """
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
+from bindings.py_cpython_table import cpython_table
 from bindings.mode_metadata_native_door import _fields
 from bindings.native_buffer_owner_pack import native_buffer_view
 from providers.python.borrowed_buffer_pyapi_unpack import AdmittedBorrowedBuffer
@@ -49,7 +50,7 @@ from x_cnn.graph_layer_run import (
     gcn_backward_host_run, sage_backward_host_run,
 )
 from x_cnn.graph_run import (
-    graph_run_csr_words, graph_run_check_edge_layout, graph_run_check_cache_dims, graph_run_check_index_layout,
+    graph_run_bytes_equal, graph_run_csr_words, graph_run_check_edge_layout, graph_run_check_cache_dims, graph_run_check_index_layout,
     graph_run_check_gemm, graph_run_check_graph_x, graph_run_check_x,
     graph_run_check_bias, graph_run_check_gcn_weight, graph_run_check_root_weight, graph_run_check_linear_input,
     graph_run_check_linear_weights, graph_run_check_linear_gradient, graph_run_check_gradient,
@@ -75,7 +76,7 @@ def _graph_key(n: Int, arrays: PythonObject, views: PythonObject, context: Pytho
     # admitted native views retained for this call. No input protocol lookup.
     # p3-cnn-sequence-tsa (hazard A, caller-aliased input): the key also
     # holds an owned byte snapshot of each admitted buffer (one C-level copy
-    # through the buffer protocol, compared by memcmp in `_keys_equal`), so an
+    # through the buffer protocol, compared against the live input by `_key_matches`), so an
     # in-place edit of edge_index / edge_weight (same object, same address)
     # misses and rebuilds the graph and its resident copy. The copy and the
     # compare are far cheaper than the CSR build they guard.
@@ -111,18 +112,79 @@ def _graph_sig_admit(sig: PythonObject) raises:
             neural_plain_value(item[j], 0, PythonObject(None))
 
 
-def _keys_equal(a: PythonObject, b: PythonObject) raises -> Bool:
+def _key_matches(a: PythonObject, n: Int, arrays: PythonObject, views: PythonObject,
+                 context: PythonObject) raises -> Bool:
+    """The cached graph key `a` (`_graph_key`, built once at the miss)
+    against this call's inputs, without building a new key: n, the original
+    owners by identity, each input's layout words, then the live bytes
+    against the key's owned snapshot (`graph_run_bytes_equal`, split across
+    the host pool, GIL released). The verdict is the one a fresh key's `==`
+    gave; the fresh key's Python `bytes` copy of the whole input per forward
+    (16 E bytes for a (2, E) int64 edge_index: an allocation, its page faults
+    and a copy, then a serial compare; +2 to +3.5 ms per GCN/SAGE call on the
+    L40S board, rows of 1.26M edges) is gone (lane fb-neural, 2026-11-17).
+    A non-contiguous input keeps the logical-order `bytes` compare."""
     var bi = xcnn_builtins()
     if py_type(a) is not bi.tuple or len(a) != 3 or py_type(a[1]) is not bi.tuple:
         raise Error("TypeError: graph cache key requires native metadata")
     neural_plain_value(a[0], 0, PythonObject(None))
     _graph_sig_admit(a[2])
-    if Int(py=a[0]) != Int(py=b[0]) or len(a[1]) != len(b[1]):
+    if Int(py=a[0]) != n or len(a[1]) != len(arrays):
         return False
-    for i in range(len(a[1])):  # small-loop(original graph buffer owners)
-        if a[1][i] is not b[1][i]:
+    for i in range(len(arrays)):  # small-loop(original graph buffer owners)
+        if a[1][i] is not arrays[i]:
             return False
-    return Bool(py=a[2] == b[2])
+    var sig = a[2]
+    if len(sig) != len(views):
+        return False
+    for i in range(len(views)):  # small-loop(one or two graph inputs)
+        var item = sig[i]
+        var v = views[i]
+        if v is None or item is None:
+            if not (v is None and item is None):
+                return False
+            continue
+        var live = 0
+        var nbytes = 0
+        var contiguous = True
+        if i == 0:
+            # the edge view: (pin, shape, strides, address, itemsize, kind, dtype str, native order)
+            if not Bool(py=item[0] == v[1]) or not Bool(py=item[1] == v[6]) or not Bool(py=item[2] == v[3]):
+                return False
+            var rows = Int(py=v[1][0])
+            var cols = Int(py=v[1][1])
+            var size = Int(py=v[4])
+            nbytes = rows * cols * size
+            contiguous = nbytes == 0 or ((cols <= 1 or Int(py=v[2][1]) == size)
+                                         and (rows <= 1 or Int(py=v[2][0]) == cols * size))
+            live = Int(py=v[3])
+        else:
+            if (not Bool(py=item[0] == xcnn_tuple(xcnn_shape(v))) or not Bool(py=item[1] == PythonObject(String(v.dtype.str)))
+                    or not Bool(py=item[2] == xcnn_addr(v))):
+                return False
+            nbytes = Int(py=v.nbytes)
+            contiguous = Bool(py=v.flags.c_contiguous)
+            live = Int(py=xcnn_addr(v))
+        var snap = item[3]
+        if not contiguous:
+            if not Bool(py=snap == py_call(bi.bytes, v[0] if i == 0 else v)):
+                return False
+            continue
+        if len(snap) != nbytes:
+            return False
+        var t = cpython_table()
+        var stored = t[].PyBytes_AsString(snap._obj_ptr)
+        if stored == 0:
+            raise Error("TypeError: graph cache key requires native metadata")
+        var equal = False
+        var py = Python()
+        with GILReleased(py):
+            equal = graph_run_bytes_equal(live, stored, nbytes)
+        _ = snap  # the snapshot and the pinned view stay alive through the compare
+        _ = v
+        if not equal:
+            return False
+    return True
 
 
 def _edge_view(source: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -586,8 +648,8 @@ def xcnn_gcn_forward(layer: PythonObject, args: PythonObject, context: PythonObj
     if xcnn_is_t(x, context):
         x = xcnn_reshape_t(x, shape, context)
     var n = shape[0]
-    var key = Python.tuple(_graph_key(n, Python.tuple(args[1], args[2]), Python.tuple(edge_index, edge_weight), context), fields["improved"],
-                           fields["add_self_loops"], fields["normalize"])
+    var arrays = Python.tuple(args[1], args[2])
+    var views = Python.tuple(edge_index, edge_weight)
     var hit = py_get(fields, "_gcache")
     if hit is not None and (py_type(hit) is not xcnn_builtins().tuple or len(hit) != 2):
         raise Error("TypeError: graph cache requires a native pair")
@@ -598,14 +660,17 @@ def xcnn_gcn_forward(layer: PythonObject, args: PythonObject, context: PythonObj
             raise Error("TypeError: GCN cache requires native graph metadata")
         for i in range(1, 4):  # small-loop(three cached graph normalization flags)
             neural_plain_value(hit[0][i], 0, PythonObject(None))
-    if (hit is not None and _keys_equal(hit[0][0], key[0]) and Bool(py=hit[0][1] == key[1])
-            and Bool(py=hit[0][2] == key[2]) and Bool(py=hit[0][3] == key[3])):
+    if (hit is not None and Bool(py=hit[0][1] == fields["improved"]) and Bool(py=hit[0][2] == fields["add_self_loops"])
+            and Bool(py=hit[0][3] == fields["normalize"]) and _key_matches(hit[0][0], n, arrays, views, context)):
         g = hit[1][0]
         vals = hit[1][1]
     else:
         var gv = _gcn_graph(fields, entries, n, edge_index, edge_weight, context)
         g = gv[0]
         vals = gv[1]
+        # the key (and its owned snapshot) is built at the miss only
+        var key = Python.tuple(_graph_key(n, arrays, views, context), fields["improved"],
+                               fields["add_self_loops"], fields["normalize"])
         py_setitem(fields, "_gcache", Python.tuple(key, Python.tuple(g, vals)))
     _graph_admit(g, context)
     if xcnn_mixed(entries):
@@ -733,19 +798,21 @@ def xcnn_sage_forward(layer: PythonObject, args: PythonObject, context: PythonOb
     if xcnn_is_t(x, context):
         x = xcnn_reshape_t(x, shape, context)
     var n = shape[0]
-    var key = _graph_key(n, Python.tuple(args[1]), Python.tuple(edge_index), context)
+    var arrays = Python.tuple(args[1])
+    var views = Python.tuple(edge_index)
     var hit = py_get(fields, "_gcache")
     if hit is not None and (py_type(hit) is not xcnn_builtins().tuple or len(hit) != 2):
         raise Error("TypeError: graph cache requires a native pair")
     var g = PythonObject(None)
-    if hit is not None and _keys_equal(hit[0], key):
+    if hit is not None and _key_matches(hit[0], n, arrays, views, context):
         g = hit[1]
     else:
         var calls = GraphDoorCalls(entries, context)
         var edges = _edges_run(calls, edge_index, n)
         var views = graph_views_run(calls, edges.src, edges.dst, n, edges.count)
         g = _graph_pack(calls, views)
-        py_setitem(fields, "_gcache", Python.tuple(key, g))
+        # the key (and its owned snapshot) is built at the miss only
+        py_setitem(fields, "_gcache", Python.tuple(_graph_key(n, arrays, views, context), g))
     _graph_admit(g, context)
     if _sage_res_form(fields, entries):
         return _sage_forward_dev(layer, fields, entries, x, g, context)
