@@ -270,7 +270,9 @@ class OwedArms(unittest.TestCase):
         self.owed = Path(self.td.name) / "owed.json"
         self.owed.write_text(json.dumps(dict(b_arms={
             "small-mlp-generic": dict(define="MOJOLEARN_SMALL_MLP_GENERIC_OPS"),
-            "em-check-1": dict(define="MOJOLEARN_EM_LOOP_CHECK_EVERY=1")})))
+            "em-check-1": dict(define="MOJOLEARN_EM_LOOP_CHECK_EVERY=1"),
+            "dec-1": dict(define="MOJOLEARN_D", owed="DECIDED", evidence="L40S A/B"),
+            "env-1": dict(define="", env="MOJOLEARN_V=1", owed="RUN")})))
 
     def tearDown(self):
         self.td.cleanup()
@@ -293,6 +295,12 @@ class OwedArms(unittest.TestCase):
             RC.resolve_owed("", "em-check-1", "MOJOLEARN_EM_LOOP_CHECK_EVERY=8", str(self.owed))
         with self.assertRaises(SystemExit):
             RC.resolve_owed("small-mlp-generic", "em-check-1", "", str(self.owed))
+        with self.assertRaises(SystemExit) as cm:
+            RC.resolve_owed("", "dec-1", "", str(self.owed))                            # DECIDED: no build
+        self.assertIn("DECIDED", str(cm.exception))
+        with self.assertRaises(SystemExit) as cm:
+            RC.resolve_owed("", "env-1", "", str(self.owed))                            # env arm: no build
+        self.assertIn("env:MOJOLEARN_V=1", str(cm.exception))
 
     def test_plain_labels_are_unchanged(self):
         self.assertEqual(RC.resolve_owed("em1", "", "A=1", str(self.owed)), ("em1", "A=1", None))

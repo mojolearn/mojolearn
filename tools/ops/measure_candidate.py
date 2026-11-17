@@ -146,9 +146,13 @@ def results_file(name, *roots):
     raise SystemExit(f"measure-candidate: no bench/results/{name} under " + " or ".join(str(r) for r in roots))
 
 
-def check_b_arms(names, owed_file):
-    """Refuse a B set name the owed file does not list (the job would report its rows "not planned")."""
-    known = sorted((PC.load_json(str(owed_file)).get("b_arms") or {}))
+def check_b_arms(names, owed_file, envs=None):
+    """Refuse a B set name the owed file does not list (the job would report its rows "not planned"), an arm the
+    file classifies other than RUN (lane fb8-owed-arms, 2026-11-17: `owed` DECIDED already has its L40S A/B, PAUSED
+    belongs to a paused programme, NO-ROW has no board race; nothing is timed twice), and, with ENVS ({name: the
+    'VAR=VALUE' of an env arm, or None for a built set}), an arm staged in the other form than the file's (`env`)."""
+    arms = PC.load_json(str(owed_file)).get("b_arms") or {}
+    known = sorted(arms)
     bad = [n for n in names if n not in known]
     if bad:
         raise SystemExit(f"measure-candidate: --b-arm {', '.join(bad)} not in {owed_file} b_arms; "
@@ -156,6 +160,15 @@ def check_b_arms(names, owed_file):
     dup = sorted({n for n in names if names.count(n) > 1})
     if dup:
         raise SystemExit(f"measure-candidate: --b-arm {', '.join(dup)} given twice")
+    done = [f"{n} ({arms[n]['owed']}: {str(arms[n].get('evidence', ''))[:120]})" for n in names
+            if arms[n].get("owed", "RUN") != "RUN"]
+    if done:
+        raise SystemExit("measure-candidate: --b-arm not owed: " + "; ".join(done))
+    for n, env in (envs or {}).items():
+        want = arms[n].get("env")
+        if (env or None) != (want or None):
+            raise SystemExit(f"measure-candidate: --b-arm {n} is " + (f"the env arm {n}=env:{want}" if want else
+                             "a built B set NAME=DIR@SHA (tools/release.py candidate --owed-arm), not an env arm"))
 
 
 #: tools/ops/paper_compare_job.sh's parts: its default (the paper job) and the full-board screen's (board-all expands
@@ -383,7 +396,8 @@ def cmd_stage(a):
     src = source_tree(wdir, commit, a.source_tree)
     owed_file = Path(a.owed_file).expanduser() if a.owed_file else results_file(f"paper_compare/{OWED_NAME}", tree, src)
     specs = [parse_b_arm(spec) for spec in a.b_arm]
-    check_b_arms([n for n, _, _ in specs], owed_file)
+    check_b_arms([n for n, _, _ in specs], owed_file,
+                 {n: (str(d)[4:] if sha is None else None) for n, d, sha in specs})
     if any(sha is None for _, _, sha in specs) and not a.rows:
         raise SystemExit("measure-candidate: an env arm (NAME=env:VAR=VALUE) runs in the targeted job only (--rows)")
     recipes = results_file(f"paper_compare/recipes-{vendor}.json", tree, src)
