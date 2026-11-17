@@ -809,8 +809,8 @@ def xcnn_sage_forward(layer: PythonObject, args: PythonObject, context: PythonOb
     else:
         var calls = GraphDoorCalls(entries, context)
         var edges = _edges_run(calls, edge_index, n)
-        var views = graph_views_run(calls, edges.src, edges.dst, n, edges.count)
-        g = _graph_pack(calls, views)
+        var gviews = graph_views_run(calls, edges.src, edges.dst, n, edges.count)
+        g = _graph_pack(calls, gviews)
         # the key (and its owned snapshot) is built at the miss only
         py_setitem(fields, "_gcache", Python.tuple(_graph_key(n, arrays, views, context), g))
     _graph_admit(g, context)
