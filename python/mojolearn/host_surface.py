@@ -500,8 +500,8 @@ TRAINING_LANE_NAMES = {
     "minmax-scaler": "the min-max scaler",
     "scaler-fit-transform": "the standard and min-max scalers' fit_transform",
     # The logistic lane, same batch: glm/host/qn_oracle.mojo, the L-BFGS
-    # arm of the quasi-Newton solver, exported as qn_fit from the
-    # estimators host binding.
+    # arm of the quasi-Newton solver, reached through the estimators host
+    # binding's QN table.
     "logistic": "logistic regression",
     # Workstream E batch 3 (2026-09-14): the random forests train through
     # ensemble/host/rf_oracle.mojo, the device trainer restated on the host,
@@ -2182,7 +2182,7 @@ FAMILIES = (
             "estimators_host_column", "estimators_host_sabotage",
             "estimators_vendor", "estimators_numeric_mode", "kde_score_samples",
             "pca_native_api_v1", "tsvd_native_api_v1", "kde_native_api_v1", "dbscan_native_api_v1",
-            "pca_fit", "pca_fit_full", "tsvd_fit", "ols_fit", "ridge_fit", "dbscan_fit", "qn_fit",
+            "pca_fit", "pca_fit_full", "tsvd_fit", "ols_fit", "ridge_fit", "dbscan_fit",
             # lane hr-small-passes (2026-10-02): the linear models' centering
             "lm_col_sums", "lm_center", "lm_scale_rows",
             "tsvd_explained",

@@ -81,9 +81,8 @@ def _publish_linear_entry_table() raises:
 
 def _publish_estimators_qn_table() raises:
     # The CPU column of the estimators QN table
-    # (core/estimators_entry_table.mojo): QNRegressor's owner calls it
-    # instead of the `qn_fit` / `qn_decision_function` Python exports, which
-    # remain for the other doors and the Python tests.
+    # (core/estimators_entry_table.mojo): QNRegressor's owner calls it; the
+    # `qn_fit` Python export it replaced is deleted (no caller).
     var api = LOGISTIC_HOST_API.get_or_create_ptr()
     estimators_table_publish[ESTIMATORS_TABLE_QN](EstimatorsEntryKey(Int(GLOBAL_NUMERIC_MODE), 0),
         Int(api[].entries.unsafe_ptr()), qn_host_native_v1)

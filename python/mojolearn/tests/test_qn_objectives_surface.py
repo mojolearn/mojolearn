@@ -5,7 +5,7 @@ objectives.
 
 Runs as a module, `cd python && python3 -m mojolearn.tests.test_qn_objectives_surface`,
 and under pytest. The refusal tests need no binding. The fit tests go
-through `qn_fit` of whichever `_mojolearn_estimators` this install routes
+through the QN entry of whichever `_mojolearn_estimators` this install routes
 to, and check the SURFACE and that the reported objective is the documented
 one recomputed in float64. The LinearSVC and LinearSVR objective, epsilon,
 unit-weight and one-vs-rest numerics run in Mojo on the QN providers
