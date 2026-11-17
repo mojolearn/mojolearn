@@ -865,6 +865,16 @@ class _LrTable(object):
         """`lr_at(t)` as its float32 bit pattern, for fixtures."""
         return _OPT_NATIVE("schedule_bits", self, (t,), None, _OPT_CONTEXT)
 
+    # A constructed schedule's `lr_at` / `bits_at` are its native rate block's
+    # bound methods, stored on the instance (bindings/lr_schedule_block_door.mojo);
+    # the two methods above document them. Pickling and copying carry the
+    # settings only and rebind the block.
+    def __getstate__(self):
+        return _OPT_NATIVE("schedule_getstate", self, (), None, _OPT_CONTEXT)
+
+    def __setstate__(self, state):
+        return _OPT_NATIVE("schedule_setstate", self, (state,), None, _OPT_CONTEXT)
+
 
 class _Schedule(_LrTable):
     """Shared half of the schedules. `t` is the optimizer's ONE-BASED step

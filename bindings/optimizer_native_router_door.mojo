@@ -313,24 +313,10 @@ def optimizer_native(operation: String, owner: PythonObject, values: PythonObjec
         return training_metadata(operation, mode, context)
     if operation == "device_finalize":
         return device_finalize(owner, context)
-    if operation == "schedule_at" or operation == "schedule_bits":
-        # lane fb-optim (2026-11-17): one step's learning rate is a per-step
-        # call (a training loop asks `lr_at(t)` every step; the board's
-        # lr-* rows ask it 100,000 times). The full `opt_guards` walk below
-        # re-admits every registered optimizer, Array and schedule class
-        # layout (tens of rows) on each call, which made one `lr_at` ~70 us
-        # against 0.8.55's block-served value (board build d95f805cce:
-        # lr-constant 8.8 ms -> 7538 ms). These two operations read only
-        # the schedule's instance dictionary through `py_fields`
-        # (PyObject_GenericGetDict: no class or instance hooks run), and
-        # `schedule_operation` still admits the exact schedule class and
-        # every stored field's exact scalar type (`opt_schedule`) and the
-        # step (`opt_scalar`), so the layout walk adds nothing here. Once
-        # the door is connected on this same context, go straight there;
-        # the first call (door not yet connected) takes the full path.
-        var door = OPT_DOOR.get_or_create_ptr()
-        if door[].ready and door[].context is context and py_type(values) is context["container_types"][1]:
-            return schedule_operation(operation, owner, values, context)
+    # lane fb2-lr (2026-11-17): the per-step `lr_at` / `bits_at` no longer
+    # reach this router; they are the schedule's bound native block methods
+    # (bindings/lr_schedule_block_door.mojo). lane fb-optim's shortcut past
+    # `opt_guards` for them (03ef3ecee3) is removed with it.
     opt_guards(context)
     if operation == "seqdev_finalize":
         return sequence_device_finalize(owner, values, context)

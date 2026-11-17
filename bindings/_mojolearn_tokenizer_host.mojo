@@ -100,6 +100,7 @@ from bindings.native_codec_door import codec_c
 from bindings.native_process_pool_door import process_c
 from bindings.optimizer_lifecycle_unpack import optimizer_finalize_descriptor_binding
 from bindings.optimizer_native_router_door import optimizer_native_c
+from bindings.lr_schedule_block_door import register_lr_schedule_block
 from bindings.optimizer_owner_boundary_unpack import OptimizerOwner
 from std.python.bindings import lookup_py_type_object
 from bindings.py_type_registry import py_type_absent, py_type_attach
@@ -1181,6 +1182,8 @@ def build__mojolearn_tokenizer_host() -> PythonObject:
     try:
         var module = PythonModuleBuilder("_mojolearn_tokenizer_host")
         register_optimizer_owner(module)
+        # A schedule's native rate block (lr_at / bits_at as METH_FASTCALL methods).
+        register_lr_schedule_block(module)
         transport_initialize()
         module.def_py_c_function(transport_c, "native_transport_call")
         module.def_py_c_function(cross_vendor_c, "cross_vendor_call")

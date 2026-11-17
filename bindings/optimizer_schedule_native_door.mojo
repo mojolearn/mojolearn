@@ -7,6 +7,7 @@ from bindings.py_cpython_table import cpython_table
 from bindings.py_balanced import py_call, py_type, py_fields, py_setitem
 from bindings.optimizer_admission_door import opt_scalar, opt_value, opt_schedule, opt_exact
 from bindings.optimizer_public_door import schedule_spec_admitted
+from bindings.lr_schedule_block_door import schedule_bind_block
 from bindings.optimizer_scalar_boundary_unpack import optimizer_integer, optimizer_truth
 from bindings.native_array_storage_door import native_array_unfilled
 from bindings.native_buffer_owner_pack import native_storage_allocate
@@ -104,6 +105,9 @@ def schedule_construct(owner: PythonObject, values: PythonObject, context: Pytho
         py_setitem(fields, "div_factor", PythonObject(spec.f1))
         py_setitem(fields, "final_div_factor", PythonObject(spec.f2))
         py_setitem(fields, "three_phase", PythonObject(optimizer_truth(values[6], context)))
+    # lane fb2-lr (2026-11-17): `lr_at` / `bits_at` are the native block's
+    # METH_FASTCALL methods, bound here once (bindings/lr_schedule_block_door.mojo).
+    schedule_bind_block(owner, kind, context)
     return PythonObject(None)
 
 
@@ -132,7 +136,29 @@ def schedule_operation(operation: String, owner: PythonObject, values: PythonObj
         var spec = _warmup_unpack(kind, peak, warmup, total, low, label, context)
         var result = native_storage_allocate(cls)
         _warmup_pack(result, spec)
+        schedule_bind_block(result, kind, context)
         return result
+    if operation == "schedule_getstate":
+        # Pickle and copy state: the stored settings only. The bound block
+        # methods are rebuilt by `schedule_setstate`, never serialized.
+        opt_schedule(owner, context)
+        var stored = py_fields(owner)
+        var copied = cpython_table()[].PyDict_Copy(stored._obj_ptr)
+        if not copied:
+            raise Error("RuntimeError: schedule state copy failed")
+        var state = PythonObject(from_owned=copied)
+        _ = state.pop(PythonObject("lr_at"), PythonObject(None))
+        _ = state.pop(PythonObject("bits_at"), PythonObject(None))
+        return state
+    if operation == "schedule_setstate":
+        var restored = values[0]
+        if py_type(restored) is not context["container_types"][2]:
+            raise Error("TypeError: schedule state requires a native dictionary")
+        var target = py_fields(owner)
+        _ = target.update(restored)
+        opt_schedule(owner, context)
+        schedule_bind_block(owner, schedule_kind(owner, context), context)
+        return PythonObject(None)
     opt_schedule(owner, context)
     var kind = schedule_kind(owner, context)
     var spec = schedule_spec_admitted(owner)
