@@ -643,12 +643,27 @@ def decomp_kit_out_shape(mut door: DecompDoor, mut kit: DKit, a: Int, shape: Pyt
     var n = kit.size(a)
     var result = classical_typed(shape, "<f4", door.output)
     if n:
-        var src = 0
+        var dst = Int(py=classical_address(result))
         var py = Python()
-        with GILReleased(py):
-            src = kit.at(a)
-        unsafe_memcpy(dest=DecompF32(unsafe_from_address=Int(py=classical_address(result))),
-                      src=DecompF32(unsafe_from_address=src), count=n)
+        if kit.matrices[a].device >= 0 and not kit._has_host(a):
+            # A device-only result comes down ONCE, straight into the
+            # output's words (lane fb2-neighbors: it came down into a fresh
+            # zero-filled kit store first, then one serial memcpy of every
+            # word into the output: two extra passes over n words per
+            # public decomp output). The kit closes after this PACK, so no
+            # later step reads a host copy of matrix a.
+            # If a caller keeps using the kit, matrix a counts as a host
+            # matrix after this PACK, as `kit.at` leaves it (routes read
+            # on_device); a later host read downloads it then.
+            with GILReleased(py):
+                kit.dev_download(kit.matrices[a].device, dst, n)
+            kit.matrices[a].on_device = False
+        else:
+            var src = 0
+            with GILReleased(py):
+                src = kit.at(a)
+            unsafe_memcpy(dest=DecompF32(unsafe_from_address=dst),
+                          src=DecompF32(unsafe_from_address=src), count=n)
         _ = result  # keep the Python object alive through the copy above
     return result
 
