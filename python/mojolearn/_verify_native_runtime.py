@@ -92,8 +92,45 @@ def _native_call_origin(function):
         # Built-in owner types compute __module__ rather than storing it in
         # their dictionaries. Call the retained native type descriptor, not
         # a metaclass property or custom __getattribute__ implementation.
-        module = type.__dict__["__module__"].__get__(owner)
+        try:
+            module = type.__dict__["__module__"].__get__(owner)
+        except AttributeError:
+            # A heap type registered by a compiled binding under an undotted
+            # name (Mojo `add_type`, e.g. the schedule's `_LrScheduleBlock`,
+            # whose bound `lr_at` / `bits_at` are the public methods) has no
+            # __module__. Its origin is the module that holds the type object
+            # itself; with none, it stays unresolved (fail closed).
+            module = _registering_extension(owner)
     return _module_name(module)
+
+
+#: id(type) -> (type, name or None): the extension module holding each heap
+#: type without __module__ (the type is retained so its id cannot be reused).
+_REGISTERED_TYPE_MODULES = {}
+
+
+def _registering_extension(owner):
+    entry = _REGISTERED_TYPE_MODULES.get(id(owner))
+    if entry is not None and entry[0] is owner:
+        return entry[1]
+    # Every loaded module that holds the type object itself. A forbidden
+    # module among them wins, so a forbidden type re-exported elsewhere is
+    # still reported; otherwise the first holder (the registering binding).
+    holders = []
+    read_fields = ModuleType.__dict__["__dict__"].__get__
+    for module in list(sys.modules.values()):
+        if type(module) is not ModuleType:
+            continue
+        fields = read_fields(module)
+        if any(item is owner for item in list(fields.values())):
+            name = _ordinary_field(fields, "__name__")
+            if type(name) is str and name:
+                holders.append(name)
+    found = next((n for n in holders if any(n == m or n.startswith(m + ".") for m in _FORBIDDEN_NATIVE_MODULES)),
+                 holders[0] if holders else None)
+    if found is not None:
+        _REGISTERED_TYPE_MODULES[id(owner)] = (owner, found)
+    return found
 
 
 class NativeRuntimeAudit:
