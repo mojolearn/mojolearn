@@ -32,15 +32,28 @@ Lane n2-cd-qn-glm-loops: in `identical` builds off Apple the host queues
 LBD_BATCH first-trial units (tt = 1) back to back and reads the four flag
 words once. `lbd_halt_kernel` sets the halt word after a unit that was
 rejected or stopped the fit; the trial and step kernels of every unit
-queued after it do nothing, and the objective those units still run reads a
-theta it already evaluated (or the rejected trial's scratch) and rewrites
-the same words, because it is a pure function of theta. A rejected first
-trial then halves on the host exactly as before. Same trials, same words,
-same iteration count; one wait per LBD_BATCH accepted iterations instead
-of one per trial.
+queued after it do nothing, and neither do the objective's kernels of those
+units (`lbd_live`: every objective kernel reads the halt word at entry when
+its launch is one of a queued unit). A rejected first trial then halves on
+the host exactly as before. Same trials, same words, same iteration count;
+one wait per LBD_BATCH accepted iterations instead of one per trial.
+
+Lane fb3-band (2026-11-17): until this lane the objective of every unit
+queued after the halt still ran in full (its row map and block parts over
+all n rows, rewriting words it had already written), so a fit paid up to
+LBD_BATCH - 1 whole passes over the data at each rejected first trial and at
+its stop. On the L40S full board (wheel d95f805cce against 0.8.55, same
+box) HuberRegressor went 125 -> 182 ms and 708 -> 928 ms and
+LogisticRegressionCV 67 -> 83 ms and 8.26 -> 10.1 s; 0.8.55 read the flags
+after every trial and ran no objective it did not use. The words a halted unit's
+objective wrote were the words already there, so skipping them moves no bit.
+`-D MOJOLEARN_LINEAR_LBD_BATCH_OFF` is the A/B arm: 0.8.55's form, one read
+per trial (docs/apple-fast/EXPERIMENTS.md; the queued form was never timed
+against it).
 """
 from max.gpu import block_idx, thread_idx, block_dim
 from std.memory import bitcast
+from std.sys.compile import is_defined
 from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from max.gpu.host import DeviceBuffer, DeviceContext
@@ -53,7 +66,20 @@ from x_linear.witness import Witness, witness_end, WITNESS_TRIES
 comptime LBD_TPB = 256
 #: first-trial units queued between host reads (see the module docstring)
 comptime LBD_BATCH = 8
-comptime LBD_BATCH_ON = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not TARGET_HAS_APPLE_GPU
+comptime LBD_BATCH_ON = (GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not TARGET_HAS_APPLE_GPU
+                         and not is_defined["MOJOLEARN_LINEAR_LBD_BATCH_OFF"]())
+
+
+@always_inline
+def lbd_live(halt: FP, gated: Int32) -> Bool:
+    """Whether an objective kernel does its work: always for an ungated
+    launch (the start and the host-driven trials, where `halt` is not read),
+    and for a queued unit's launch only while the halt word is clear. Every
+    thread of the launch reads the same word; only `lbd_halt_kernel`, a
+    separate launch, writes it."""
+    if gated == 0:
+        return True
+    return ld(halt, 0) == Float32(0)
 
 
 @always_inline
@@ -201,10 +227,14 @@ trait LbObjective(Movable):
         """Witness words one evaluation's kernels write."""
         ...
 
-    def enqueue(mut self, mut ctx: DeviceContext, th: FP, g: FP, f: FP, wf: IP, woff: Int, nonce: Int32) raises:
+    def enqueue(mut self, mut ctx: DeviceContext, th: FP, g: FP, f: FP, wf: IP, woff: Int, nonce: Int32,
+                halt: FP, gated: Int32) raises:
         """f[0] and g[0, P) at the device theta th, enqueued; every kernel
         ends with witness_end at its words from woff. Idempotent: it reads
-        only th and data the fit does not change."""
+        only th and data the fit does not change. Every kernel of the
+        evaluation takes `halt` and `gated` and does its work only under
+        `lbd_live(halt, gated)`, so the evaluation of a unit queued after
+        the halt writes nothing and costs no pass over the rows."""
         ...
 
 
@@ -227,11 +257,13 @@ def lbfgs_device[O: LbObjective](
     var fl = lw.create_sub_buffer[DType.float32](lbd_flags(p), 4)
     # the halt word and the unit count (`lbd_halt_kernel`)
     var hb = lw.create_sub_buffer[DType.float32](lbd_flags(p) + 2, 2)
+    # the halt word's address for the objective's kernels (`lbd_live`)
+    var hp = lp + lbd_flags(p) + 2
     var tries = 0
     while True:
         var nonce = wit.begin()
         var wf = wit.p()
-        obj.enqueue(ctx, lp + lbd_th(p, 0), lp + lbd_g(p, 0), lp + lbd_sc(p, 0), wf, 0, nonce)
+        obj.enqueue(ctx, lp + lbd_th(p, 0), lp + lbd_g(p, 0), lp + lbd_sc(p, 0), wf, 0, nonce, hp, Int32(0))
         ctx.enqueue_function[lbd_start_kernel](lp, Int32(p), tol, wf, Int32(ob), nonce, grid_dim=1, block_dim=LBD_TPB)  # small-launch(p: parameters): one block strides the P-vector two-loop recursion, sequential over the history pairs
         ctx.enqueue_copy(dst_ptr=flags.unsafe_ptr(), src_buf=fl)
         if wit.ok(ctx, ob + 1, what):
@@ -259,7 +291,8 @@ def lbfgs_device[O: LbObjective](
                 var wf = wit.p()
                 ctx.enqueue_function[lbd_trial_kernel](lp, Int32(p), Int32(cu), Float32(1), wf, Int32(0), nonce,
                                                        grid_dim=bt, block_dim=LBD_TPB)
-                obj.enqueue(ctx, lp + lbd_th(p, 1 - cu), lp + lbd_g(p, 1 - cu), lp + lbd_sc(p, 1 - cu), wf, bt, nonce)
+                obj.enqueue(ctx, lp + lbd_th(p, 1 - cu), lp + lbd_g(p, 1 - cu), lp + lbd_sc(p, 1 - cu), wf, bt, nonce,
+                            hp, Int32(1))
                 ctx.enqueue_function[lbd_step_kernel](lp, Int32(p), Int32(cu), Float32(1), tol, wf, Int32(bt + ob), nonce,  # small-launch(p: parameters): one block strides the P-vector accept, pair and two-loop
                                                       grid_dim=1, block_dim=LBD_TPB)
                 ctx.enqueue_function[lbd_halt_kernel](lp, Int32(p), grid_dim=1, block_dim=1)
@@ -287,7 +320,8 @@ def lbfgs_device[O: LbObjective](
                 var wf = wit.p()
                 ctx.enqueue_function[lbd_trial_kernel](lp, Int32(p), Int32(c), tt, wf, Int32(0), nonce,
                                                        grid_dim=bt, block_dim=LBD_TPB)
-                obj.enqueue(ctx, lp + lbd_th(p, 1 - c), lp + lbd_g(p, 1 - c), lp + lbd_sc(p, 1 - c), wf, bt, nonce)
+                obj.enqueue(ctx, lp + lbd_th(p, 1 - c), lp + lbd_g(p, 1 - c), lp + lbd_sc(p, 1 - c), wf, bt, nonce,
+                            hp, Int32(0))
                 ctx.enqueue_function[lbd_step_kernel](lp, Int32(p), Int32(c), tt, tol, wf, Int32(bt + ob), nonce,  # small-launch(p: parameters): one block strides the P-vector accept, pair and two-loop phases, sequential over pairs
                                                       grid_dim=1, block_dim=LBD_TPB)
                 ctx.enqueue_copy(dst_ptr=flags.unsafe_ptr(), src_buf=fl)
