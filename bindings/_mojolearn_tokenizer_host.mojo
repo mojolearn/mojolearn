@@ -1182,7 +1182,7 @@ def build__mojolearn_tokenizer_host() -> PythonObject:
     try:
         var module = PythonModuleBuilder("_mojolearn_tokenizer_host")
         register_optimizer_owner(module)
-        # A schedule's native rate block (lr_at / bits_at as METH_FASTCALL methods).
+        # A schedule's native rate block (lr_at / bits_at as METH_VARARGS | METH_KEYWORDS methods).
         register_lr_schedule_block(module)
         transport_initialize()
         module.def_py_c_function(transport_c, "native_transport_call")

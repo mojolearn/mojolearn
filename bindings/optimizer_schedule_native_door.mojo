@@ -107,7 +107,7 @@ def schedule_construct(owner: PythonObject, values: PythonObject, context: Pytho
         py_setitem(fields, "final_div_factor", PythonObject(spec.f2))
         py_setitem(fields, "three_phase", PythonObject(optimizer_truth(values[6], context)))
     # lane fb2-lr (2026-11-17): `lr_at` / `bits_at` are the native block's
-    # METH_FASTCALL methods, bound here once (bindings/lr_schedule_block_door.mojo).
+    # METH_VARARGS | METH_KEYWORDS methods, bound here once (bindings/lr_schedule_block_door.mojo).
     schedule_bind_block(owner, kind, context)
     return PythonObject(None)
 
