@@ -1432,22 +1432,6 @@ def tokenizer_bpe_identity_file(path: PythonObject) raises -> PythonObject:
     return _identity(ranks_text(handle.tok.value().ranks), handle.tok.value().n_vocab() - 1)
 
 
-def tokenizer_bpe_identity_text(text: PythonObject, n_ranks: PythonObject) raises -> PythonObject:
-    var canonical = _str(text, "canonical ranks text")
-    var ranks = _int(n_ranks, "rank count")
-    # The old identity helper encoded canonical rank text as ASCII, not UTF-8.
-    # Preserve its refusal and native Python exception class before hashing.
-    ref cpy = Python().cpython()
-    var raw = cpy.lib.get_function[PyObjectPtr]("PyUnicode_AsASCIIString")(text._obj_ptr)
-    if not raw:
-        var error = stash_python_error()
-        raise error^
-    var keep = PythonObject(from_owned=raw)
-    var result = _identity(canonical, ranks)
-    _ = keep
-    return result
-
-
 def tokenizer_bpe_identity(tokenizer: PythonObject) raises -> PythonObject:
     var fields = _owner(tokenizer, _bpe_context()[0])
     var handle = native_instance_item(fields, PythonObject("_handle"))
@@ -1653,79 +1637,6 @@ def tokenizer_gather_rows(ids_all: PythonObject, output: PythonObject, batch_val
     return PythonObject(count)
 
 
-def _trained_from_handle(module: PythonObject, handle: PythonObject, context: PythonObject) raises -> TrainedVocabulary:
-    if module is context[3]:
-        var owner = handle.downcast_value_ptr[BpeTrainedHandle]()
-        if not owner[].vocab:
-            raise Error("ValueError: tokenizer handle holds no trained vocabulary")
-        var result = owner[].vocab.value().copy()
-        _ = handle
-        return result^
-    if context[4][0] is None or module is not context[4][0]:
-        raise Error("TypeError: trained vocabulary requires a connected native provider")
-    var sizes_entry = context[5][3]
-    var copy_entry = context[5][4]
-    _native(sizes_entry)
-    _native(copy_entry)
-    var sizes = py_call(sizes_entry, handle)
-    _sequence(sizes, "trained sizes")
-    if len(sizes) != 5:
-        raise Error("RuntimeError: tokenizer trainer returned invalid sizes")
-    var count = _int(sizes[0], "trained tokens")
-    var byte_count = _int(sizes[1], "trained bytes")
-    var merges = _int(sizes[2], "trained merges")
-    if count < 256 or byte_count < 0 or merges < 0:
-        raise Error("RuntimeError: tokenizer trainer returned negative sizes")
-    var result = TrainedVocabulary()
-    result.arena = List[UInt8](length=byte_count, fill=0)
-    result.length = List[Int](length=count, fill=0)
-    result.merge_left = List[Int](length=merges, fill=0)
-    result.merge_right = List[Int](length=merges, fill=0)
-    _ = py_call(copy_entry, handle, Int(result.arena.unsafe_ptr()), Int(result.length.unsafe_ptr()), Int(result.merge_left.unsafe_ptr()), Int(result.merge_right.unsafe_ptr()))
-    result.n_ties_broken = _int(sizes[3], "trained ties")
-    result.n_groups = _int(sizes[4], "trained groups")
-    trained_vocab_settle(result, count, merges)
-    _ = handle
-    return result^
-
-
-def _trained_tuple(value: TrainedVocabulary, size: PythonObject, frequency: PythonObject, context: PythonObject) raises -> PythonObject:
-    var result = _trained_finish(value, _int(size, "vocab_size"), _int(frequency, "min_frequency"), context, False)
-    var fields = _owner(result, context[1])
-    return Python.tuple(native_instance_item(fields, PythonObject("tokens")), native_instance_item(fields, PythonObject("merges")), native_instance_item(fields, PythonObject("stats")))
-
-
-def _train_native_values(module: PythonObject, documents: PythonObject, size_value: PythonObject, frequency_value: PythonObject, reverse_value: PythonObject, context: PythonObject) raises -> PythonObject:
-    var size = _int(size_value, "vocab_size")
-    var frequency = _int(frequency_value, "min_frequency")
-    var reverse = _bool(reverse_value, "break_ties_high")
-    var values = _documents(documents, "training documents")
-    if len(values) == 0:
-        raise Error("ValueError: train needs at least one document")
-    var arena = List[UInt8]()
-    var lengths = List[Int64]()
-    for i in range(len(values)):  # api-bound-loop: over the caller's documents (public type: sequence of str or bytes-like); one buffer read per document, never per byte or token
-        lengths.append(Int64(_bytes_append(values[i], arena, False)))
-    var result = PythonObject(None)
-    if module is context[3]:
-        var handle = BpeTrainedHandle()
-        bpe_train_fill(handle, Int(arena.unsafe_ptr()), Int(lengths.unsafe_ptr()), len(lengths), len(arena), size, frequency, reverse)
-        result = _trained_tuple(handle.vocab.value(), size_value, frequency_value, context)
-    else:
-        if context[4][0] is None or module is not context[4][0]:
-            raise Error("TypeError: training requires its connected native provider")
-        var entry = context[5][2]
-        _native(entry)
-        var handle = py_call(entry, Int(arena.unsafe_ptr()), Int(lengths.unsafe_ptr()), Python.tuple(len(lengths), len(arena), size, frequency, reverse))
-        var trained = _trained_from_handle(module, handle, context)
-        result = _trained_tuple(trained, size_value, frequency_value, context)
-    _ = arena
-    _ = lengths
-    _ = values
-    _ = documents
-    return result
-
-
 def tokenizer_public_call(operation: String, args: PythonObject, context: PythonObject) raises -> PythonObject:
     _sequence(args, "operation arguments")
     _sequence(context, "connected context")
@@ -1749,32 +1660,8 @@ def tokenizer_public_call(operation: String, args: PythonObject, context: Python
         _connect_error_handlers()
         state[].bpe = context
         return PythonObject(None)
-    if operation == "identity_file":
-        return tokenizer_bpe_identity_file(args[0])
-    if operation == "identity_text":
-        return tokenizer_bpe_identity_text(args[0], args[1])
-    if operation == "identity_handle":
-        var handle = args[0]
-        var owner = handle.downcast_value_ptr[BpeHandle]()
-        if not owner[].tok:
-            raise Error("ValueError: tokenizer handle is not loaded")
-        var result = _identity(ranks_text(owner[].tok.value().ranks), owner[].tok.value().n_vocab() - 1)
-        _ = handle
-        return result
-    if operation == "encode_corpus":
-        return tokenizer_bpe_encode_corpus(args[0], args[1], args[2], args[3])
-    if operation == "train_corpus":
-        return tokenizer_bpe_train_corpus(args[0], args[1], args[2], args[3], args[4], args[5], args[6])
     if operation == "gather_rows":
         return tokenizer_gather_rows(args[0], args[1], args[2], args[3], args[4], args[5], args[6])
-    if operation == "native_trainer":
-        _ = _bool(args[0], "required")
-        return context[3]
-    if operation == "train_native":
-        return _train_native_values(args[0], args[1], args[2], args[3], args[4], context)
-    if operation == "read_trained":
-        var value = _trained_from_handle(args[0], args[1], context)
-        return _trained_tuple(value, args[2], args[3], context)
     if operation == "connect_vocab":
         if len(context) != 5 or py_type(context[0]) is not native_loaded_module("builtins").type:
             raise Error("TypeError: tokenizer connection requires its exact class and five metadata entries")
