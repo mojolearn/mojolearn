@@ -36,6 +36,9 @@ board. This tool:
         the new board against OUR prior wheels re-timed in the same job on the same box, per recipe: ms of each,
         ratios, quality, the flags below, and the stored columns (the paper record, a stored compare, the stored
         opponents, the best ever) as reference only. Prints a one-screen summary with both arms' host probes.
+        A row that is not a race (tools/race_fairness.py lane_class: the call-overhead internal check
+        algos/internal-call-overhead-lr-at, Andrew 2026-11-17) is never a recipe or a best-ever row: it has its own
+        "internal checks" section, new against our prior versions re-timed on this box only.
 
 SAME BOX ONLY (AGENTS.md "Times are compared only on the same box", Andrew, 2026-11-14; the 2026-11-14 compare of
 80a7f8aca3 on L40S host 9204fff9f8f7 against stored numbers from host 1e08d01c3d48 raised 56 false REGRESSION flags
@@ -117,6 +120,7 @@ REPO = os.path.dirname(HERE)
 sys.path.insert(0, HERE)
 import board_quality as BQ  # noqa: E402
 import board_best_ever as BE  # noqa: E402
+import race_fairness as RF  # noqa: E402
 import bench_board_small_rows as SMALL  # noqa: E402
 
 SCHEMA = "mojolearn-paper-compare-recipes/1"
@@ -1066,19 +1070,30 @@ def compare(doc, boards, not_run_why=None, prior_boards=None, reference=None, re
     if reference is not None:
         rows = [attach_reference(r, reference) for r in rows]
     extra, extra_counts, be_label = [], {}, None
+    # CALL OVERHEAD, INTERNAL CHECK (Andrew, 2026-11-17; tools/race_fairness.py rule 1c): a lane that is not a race
+    # (the lr_at call-overhead row) is never a recipe, an extra row or a best-ever row. It gets its own section, new
+    # against OUR prior versions re-timed on this box in this job only (the same REGRESSION / FASTER rule as a
+    # recipe, when the prior's host and system software are verified); never a stored or best-ever column.
+    recipe_keys = {r["key"] for r in doc["recipes"]}
+    all_recs = new_cell_records(boards, doc["vendor"])
+    internal = [attach_extra_priors(extra_row(rec), base, others, flagged, verified)
+                for k, rec in sorted(all_recs.items()) if RF.lane_class(rec.get("lane")) and k not in recipe_keys]
+    internal_counts = {}
+    for r in internal:
+        for f in r["flags"]:
+            internal_counts[f] = internal_counts.get(f, 0) + 1
     if best_ever is not None:
         if best_ever.get("vendor") != doc["vendor"]:
             raise SystemExit("paper_compare: the best-ever file is %s, the recipes %s"
                              % (best_ever.get("vendor"), doc["vendor"]))
         be_label = "best ever (%s)" % VENDOR_TAG.get(doc["vendor"], doc["vendor"])
-        new_recs = new_cell_records(boards, doc["vendor"])
+        new_recs = {k: rec for k, rec in all_recs.items() if not RF.lane_class(rec.get("lane"))}
         best_rows = best_ever.get("rows") or {}
         states = {}
         for b in boards:
             states.update(board_software(b))
         sw = list(next(iter(states))) if len(states) == 1 and all(next(iter(states))) else None
         rows = [attach_best_ever(r, new_recs.get(r["key"]), best_rows, host, sw) for r in rows]
-        recipe_keys = {r["key"] for r in doc["recipes"]}
         extra = [attach_best_ever(extra_row(rec), rec, best_rows, host, sw)
                  for k, rec in sorted(new_recs.items()) if k not in recipe_keys]
         if others or base:
@@ -1110,6 +1125,7 @@ def compare(doc, boards, not_run_why=None, prior_boards=None, reference=None, re
             "thresholds": doc.get("thresholds"), "recipes": len(rows), "flag_counts": counts, "rows": rows,
             "best_ever_label": be_label, "best_ever_source": (best_ever or {}).get("mined_at_head"),
             "extra_rows": extra, "extra_flag_counts": extra_counts,
+            "internal_label": RF.CALL_OVERHEAD, "internal_rows": internal, "internal_flag_counts": internal_counts,
             "progress": [dict(board_progress(boards), arm="candidate")]
                         + [dict(board_progress([pb]), arm=v) for v, pb in prior_boards or []]}
 
@@ -1341,7 +1357,29 @@ def render_md(res):
             lines.append("| %s | %s | %s%s%s | %s |" % (r["key"], fmt_ms_calls(r, "new"), xvals, best_ever_cells(r),
                                                          " ".join(r["flags"]), note.replace("|", "/")))
         lines.append("")
+    lines += render_internal_md(res)
     return "\n".join(lines)
+
+
+def render_internal_md(res):
+    """The internal checks section (call overhead, not a race): new against our prior versions on this box only."""
+    rows = res.get("internal_rows") or []
+    if not rows:
+        return []
+    allp = [p["version"] for p in res.get("prior_columns") or []]
+    lines = ["## Internal checks, %s: %d (not a race; new against our own prior on this box only)" % (
+        res.get("internal_label") or "call overhead", len(rows)), ""]
+    if res.get("internal_flag_counts"):
+        lines += ["Flags: " + ", ".join("%s %d" % kv for kv in sorted(res["internal_flag_counts"].items())), ""]
+    xcols = "".join("%s ms | new/%s | " % (x, x) for x in allp)
+    lines.append("| row | new ms | %sflags |" % xcols)
+    lines.append("|---|---:|%s---|" % ("---:|---:|" * len(allp)))
+    for r in rows:
+        xvals = "".join("%s | %s | " % (fmt_prior_ms(r, x), fmt_ratio(((r.get("priors") or {}).get(x) or {}).get("ratio")))
+                        for x in allp)
+        lines.append("| %s | %s | %s%s |" % (r["key"], fmt_ms_calls(r, "new"), xvals, " ".join(r["flags"]) or "-"))
+    lines.append("")
+    return lines
 
 
 def best_ever_cells(r):
@@ -1423,6 +1461,16 @@ def render_summary(res, top=8):
         if hit:
             out.append("%s (%d): %s%s" % (flag, len(hit), ", ".join(r["key"] for r in hit[:6]),
                                           " ..." if len(hit) > 6 else ""))
+    internal = res.get("internal_rows") or []
+    if internal:
+        out.append("internal checks (%s; not a race, our prior on this box only): %d; flags: %s" % (
+            res.get("internal_label") or "call overhead", len(internal),
+            " ".join("%s=%d" % kv for kv in sorted((res.get("internal_flag_counts") or {}).items())) or "-"))
+        for r in internal:
+            pri = "; ".join("%s %s ms new/%s %s" % (v, fmt_prior_ms(r, v), v, fmt_ratio(x.get("ratio")))
+                            for v, x in sorted((r.get("priors") or {}).items()))
+            out.append("  %s new %s ms%s%s" % (r["key"], fmt_ms_calls(r, "new"), ("; " + pri) if pri else "",
+                                                (" " + " ".join(r["flags"])) if r["flags"] else ""))
     return "\n".join(out)
 
 
