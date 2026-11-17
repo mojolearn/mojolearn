@@ -241,7 +241,8 @@ def xcnn_tensor_layout(context: PythonObject) raises:
     # p3-cnn-sequence-tsa: the verdict is kept per class under a type watcher
     # (`class_record`; any edit of the class or an ancestor misses), so the
     # MRO / namespace / slot walk runs once, not 3-8 times per layer call.
-    # Python 3.10/3.11 keep the full walk on every call.
+    # Python 3.10/3.11 key the record on the class's version tag
+    # (bindings/py_version_tags.mojo).
     var mods = NativeModules()
     if class_record(mods, _XCNN_TENSOR_LAYOUT_SLOT, cls) is not None:
         return
