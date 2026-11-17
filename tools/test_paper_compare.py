@@ -674,6 +674,49 @@ def be_doc(vendor="nvidia", **rows):
     return {"schema": "mojolearn-board-best-ever/1", "vendor": vendor, "mined_at_head": "abc", "rows": out}
 
 
+INTERNAL = "algos/internal-call-overhead-lr-at/synthetic/rows=full"
+OLD_LR = "algos/lr-step/synthetic/rows=full"
+
+
+def internal_race(rid, ms):
+    c = new_cell("ours", ms, lane=rid.split("/")[1])
+    c["mode"] = "identical"
+    return {"family": "algos", "lane": rid.split("/")[1], "dataset": "synthetic", "cells": [c]}
+
+
+class InternalCallOverhead(unittest.TestCase):
+    """Andrew 2026-11-17: the lr_at row is call overhead, an internal check, not a race: its own section, new against
+    our own prior on this box only; never a recipe, an extra (best-ever) row; an old lr-* schedule row never shows."""
+
+    def run_compare(self, best=True):
+        doc = PC.extract_recipes(paper_board(), "nvidia")
+        new = be_new_board()
+        new["races"][INTERNAL] = internal_race(INTERNAL, 150.0)
+        new["races"][OLD_LR] = internal_race(OLD_LR, 90.0)
+        prior = baseline_board()
+        prior["races"][INTERNAL] = internal_race(INTERNAL, 100.0)
+        key = INTERNAL + " fit ours"
+        best_doc = be_doc(**{key.replace(" ", "__"): be_entry(1.0)}) if best else None
+        return PC.compare(doc, [new], {}, prior_boards=[("0.8.55", prior)], best_ever=best_doc)
+
+    def test_internal_row_has_its_own_section_against_our_prior_only(self):
+        for best in (True, False):
+            res = self.run_compare(best)
+            internal = {r["key"]: r for r in res["internal_rows"]}
+            self.assertEqual(sorted(internal), [INTERNAL + " fit ours", OLD_LR + " fit ours"])
+            r = internal[INTERNAL + " fit ours"]
+            self.assertAlmostEqual(r["priors"]["0.8.55"]["ratio"], 1.5)
+            self.assertIn("REGRESSION", r["flags"])
+            self.assertNotIn("best_ever_ms", r)                        # never a best-ever column
+            self.assertFalse(any(x["key"].startswith(("algos/internal-", "algos/lr-")) for x in res["extra_rows"]))
+            self.assertFalse(any(x["key"].startswith("algos/") for x in res["rows"]))
+            self.assertEqual(res["internal_flag_counts"].get("REGRESSION"), 1)
+            self.assertIn("Internal checks, call overhead, internal check: 2", PC.render_md(res))
+            summary = PC.render_summary(res)
+            self.assertIn("internal checks (call overhead, internal check; not a race", summary)
+            self.assertIn(INTERNAL + " fit ours new 150", summary)
+
+
 class OpticsHasNoInferCell(unittest.TestCase):
     def test_a_cluster_lane_without_predict_plans_no_infer_cell(self):
         """fb-harness (2026-11-17): OPTICS has no predict; its infer cell timed an empty call (0.012 ms)."""
