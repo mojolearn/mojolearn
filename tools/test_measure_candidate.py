@@ -38,6 +38,25 @@ class BArms(unittest.TestCase):
             with self.assertRaises(SystemExit):
                 MC.check_b_arms(["em-check-1", "em-check-1"], self.owed(d))
 
+    def test_not_owed_and_wrong_form_refused(self):
+        # lane fb8-owed-arms, 2026-11-17: a DECIDED / PAUSED / NO-ROW arm is never staged (nothing is timed twice);
+        # an env arm is staged as NAME=env:VAR=VALUE, a built arm as NAME=DIR@SHA
+        with tempfile.TemporaryDirectory() as d:
+            f = Path(d) / "owed.json"
+            f.write_text(json.dumps({"b_arms": {
+                "run1": {"define": "X", "owed": "RUN"}, "dec1": {"define": "Y", "owed": "DECIDED", "evidence": "L40S"},
+                "env1": {"define": "", "env": "V=1", "owed": "RUN"}}, "rows": []}))
+            MC.check_b_arms(["run1", "env1"], f, {"run1": None, "env1": "V=1"})
+            with self.assertRaises(SystemExit) as cm:
+                MC.check_b_arms(["dec1"], f)
+            self.assertIn("DECIDED", str(cm.exception))
+            with self.assertRaises(SystemExit):
+                MC.check_b_arms(["env1"], f, {"env1": None})          # an env arm staged as a wheel set
+            with self.assertRaises(SystemExit):
+                MC.check_b_arms(["env1"], f, {"env1": "V=2"})         # another value than the file's
+            with self.assertRaises(SystemExit):
+                MC.check_b_arms(["run1"], f, {"run1": "X=1"})         # a built arm staged as env
+
 
 class Built(unittest.TestCase):
     def test_stage_refuses_a_vendor_the_targets_did_not_build(self):

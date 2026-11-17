@@ -207,6 +207,22 @@ def owed_arms(path=OWED_FILE):
     return {name: (row or {}).get("define") or "" for name, row in arms.items()}
 
 
+def owed_arm_refusal(arm, path=OWED_FILE):
+    """Why the owed ARM gets no build, or None (lane fb8-owed-arms, 2026-11-17): an env arm (`env`) runs in the A
+    set's venv, and an arm the file classifies other than RUN (`owed` DECIDED / PAUSED / NO-ROW) is not timed."""
+    f = Path(path) if Path(path).is_absolute() else ROOT / path
+    try:
+        row = (json.loads(f.read_text() if f.is_file() else sh("git", "show", f"HEAD:{path}")).get("b_arms") or {}).get(arm)
+    except (OSError, ValueError, SystemExit):
+        return None
+    row = row or {}
+    if row.get("env"):
+        return f"{arm} is an env arm ({row['env']}): no build; stage it as --b-arm {arm}=env:{row['env']}"
+    if row.get("owed", "RUN") != "RUN":
+        return f"{arm} is {row['owed']}, not owed: {str(row.get('evidence', ''))[:160]}"
+    return None
+
+
 def resolve_owed(label, owed_arm, defines, path=OWED_FILE):
     """(label, defines, owed arm name) of a measurement build. The owed file's arm names carry hyphens, which a
     PEP 440 local label cannot (they split wheel file names): a '-' becomes '.' (`small-mlp-generic` ->
@@ -218,6 +234,9 @@ def resolve_owed(label, owed_arm, defines, path=OWED_FILE):
         arms = owed_arms(path)
         if arm not in arms:
             raise SystemExit(f"candidate: --owed-arm {arm} is not an owed arm of {path} ({', '.join(sorted(arms))})")
+        why = owed_arm_refusal(arm, path)
+        if why:
+            raise SystemExit(f"candidate: --owed-arm {why}")
     elif label:
         try:
             arms = owed_arms(path)

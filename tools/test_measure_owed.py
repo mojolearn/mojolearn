@@ -365,6 +365,23 @@ class CommittedOwed(unittest.TestCase):
             for b in r.get("b_arms") or []:
                 self.assertIn(b, doc["b_arms"])
 
+    def test_every_arm_is_classified(self):
+        # lane fb8-owed-arms, 2026-11-17: RUN / DECIDED / PAUSED / NO-ROW; a non-RUN arm cites its evidence; an env
+        # arm names VAR=VALUE and no define; every RUN arm has a row
+        doc = json.load(open(os.path.join(PC.OUT_DIR, "owed-pre0867.json")))
+        used = {b for r in doc["rows"] for b in r.get("b_arms") or []}
+        for name, arm in doc["b_arms"].items():
+            self.assertIn(arm.get("owed"), ("RUN", "DECIDED", "PAUSED", "NO-ROW"), name)
+            if arm["owed"] != "RUN":
+                self.assertTrue(arm.get("evidence"), name)
+            if arm.get("env"):
+                self.assertRegex(arm["env"], r"^[A-Z_][A-Z0-9_]*=\S+$")
+                self.assertFalse(arm.get("define"), name)
+            else:
+                self.assertTrue(arm.get("define"), name)
+            if arm["owed"] == "RUN":
+                self.assertIn(name, used, name)
+
 
 if __name__ == "__main__":
     unittest.main()
