@@ -24,6 +24,7 @@ from providers.python.array_metadata_pyapi_door import ArrayPin, array_slot_once
 from providers.python.neighbors_public_lifecycle_pyapi_door import NeighborPublicCall, neighbors_public_end, neighbors_public_finish, neighbors_public_refusal
 from providers.python.estimator_lifecycle_pyapi_unpack import estimator_outside, estimator_fit_begin
 from core.native_scalar_decode import native_scalar_real
+from core.host_finite_scan import host_all_finite_f32_strided
 from bindings.py_optional import py_or_none, py_present
 
 
@@ -282,9 +283,9 @@ def radius_fit(model: PythonObject, args: PythonObject, context: PythonObject) r
     if host_sparse_format(args[0]).byte_length() > 0:
         raise Error("TypeError: Sparse data was passed for X, but dense data is required. Use '.toarray()' to convert to a dense numpy array. (RadiusNeighbors takes dense X only.)")
     # Lane a8b-device-x-neighbors-rest: the index is tested finite ONCE,
-    # here at fit, in the pass that makes its owned copy (a cast input by its
-    # cast, below; a borrowed one by `admit_family_owned_finite`), on the GPU
-    # and the CPU column alike; no radius query scans the index again.
+    # here at fit (a cast input by its cast; a held float32 C-order one by
+    # one parallel host scan, below), on the GPU and the CPU column alike; no
+    # radius query scans the index again.
     var name = String(py_type(model).__name__)
     var x_pin = ArrayPin()
     var x = admit_family_meta(args[0], 2, "X", context, x_pin, False, True,
@@ -294,7 +295,23 @@ def radius_fit(model: PythonObject, args: PythonObject, context: PythonObject) r
     var call = NeighborPublicCall(args, fields, args[0], "fit", True, estimator_outside(), estimator_fit_begin(fields), x.shape[0], x.shape[1])
     try:
         _radius_refusals(fields, settings, context)
-        py_setitem(fields, "_index", admit_family_owned_finite(x, x_pin, name, context))
+        # fb-infer/D (2026-11-17): a float32 C-order X that admission did
+        # not copy is HELD, not copied (0.8.55 held `as_f32_dense_c(X)`;
+        # NearestNeighbors' fit holds `input_pin.keep` the same way). Its
+        # one finite test stays here (lane a8b: no radius query scans the
+        # index again). `admit_family_owned_finite` scanned AND made a
+        # parallel copy of every borrowed X: RadiusNeighbors fit 0.03 ->
+        # 33 ms on a 200k x 220 float32 X (L40S box, d95f805cce). A cast or
+        # strided input still takes the owned cast copy that tests it.
+        var index: PythonObject
+        if x.f32_c() and not x.copied:
+            var src = x.source
+            if not host_all_finite_f32_strided(src.addr, src.s0, src.s1, src.rows, src.cols):
+                raise Error(admitted_finite_wording(name, "X"))
+            index = x_pin.keep
+        else:
+            index = admit_family_owned_finite(x, x_pin, name, context)
+        py_setitem(fields, "_index", index)
         py_setitem(fields, "n_samples_fit_", PythonObject(x.shape[0]))
         py_setitem(fields, "n_features_in_", PythonObject(x.shape[1]))
     except error:

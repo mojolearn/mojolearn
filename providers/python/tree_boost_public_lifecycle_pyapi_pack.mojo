@@ -9,7 +9,7 @@ from bindings.classical_validate_unpack import classical_check_x, classical_chec
 from bindings.classical_validate_run import classical_check_width
 from bindings.classical_labels_door import labels_shape_of
 from bindings.classical_exceptions_door import classical_require_fitted
-from bindings.trees_boost_admission_pack import boost_admit
+from bindings.trees_boost_admission_pack import boost_admit, boost_fitted_stamp
 from bindings.trees_public_boost_door import boost_kind, boost_operation_of
 from bindings.trees_public_mixin_score_pack import boost_score
 from bindings.trees_public_auxiliary_door import embedding_apply
@@ -127,6 +127,10 @@ def tree_boost_public_operation(model: PythonObject, operation: String, args: Py
             if fitting:
                 estimator_fit_end(model, depth)
         estimator_fit_complete(model, args[0], classifier, context)
+        if depth == 0:
+            # The fit's own stored state is the admitted fitted state: the
+            # first predict after it reads the stamp, not a full member walk.
+            boost_fitted_stamp(model)
         if method == "fit":
             return result
     elif method == "score":

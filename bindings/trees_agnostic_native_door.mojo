@@ -14,7 +14,7 @@ from bindings.native_loaded_module_door import native_loaded_module
 from bindings.classical_attributes_door import classical_check_layout
 from bindings.prep_native_estimator_door import prep_estimator_admit, prep_estimator_has, prep_estimator_call
 from bindings.trees_public_inputs_door import trees_table, trees_call, trees_address, trees_reshape
-from bindings.admitted_input_unpack import admitted_vector, classical_view
+from bindings.admitted_input_unpack import admitted_vector, admitted_unfilled, classical_view
 # TOMBSTONE: trees_view / trees_vector uses (the trees admission aliases) deleted 2026-11-09 by lane a1b-doors-opt-in-trees-linear; code recoverable at f59d913b0b.
 # Restore: experiments/removed/A1B_LABELS_ADMISSION_COPY.patch.
 from bindings.classical_pandas_door import classical_admit_value
@@ -425,7 +425,10 @@ def _kernel_values(fields: PythonObject, args: PythonObject, context: PythonObje
                 if m > 0:
                     if not reuse or not syn or Int(py=syn.value().size) != rows * m * nb * d:
                         syn = Optional[PythonObject]()
-                        syn = Optional[PythonObject](admitted_vector(rows * m * nb * d, "<f4", context))
+                        # Unfilled (fb-infer/C, 2026-11-17): x_trees_kshap_synth writes every
+                        # cell (ksynth_kernel over all rows*m*nb*d, then the download), so the
+                        # zero fill (a serial pass over up to the 128 MB chunk budget) is dropped.
+                        syn = Optional[PythonObject](admitted_unfilled([rows * m * nb * d], "<f4", context).keep)
                     _ = _call(s.table, "x_trees_kshap_synth", Python.list(PythonObject(x0 + 4 * r0 * d), PythonObject(bg0), taddr,
                               PythonObject(trees_address(syn.value())),
                               _ints(rows, nb, d, nfixed, m, nfull, L, npaired, r0, s.seed, wbits)))

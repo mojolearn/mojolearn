@@ -71,7 +71,7 @@ from x_neighbors.nan_cells_device import (
 )
 from x_neighbors.graph_dev import pr_iterate_gpu
 from x_neighbors.items import FP, IP, absdiff_sum_item, xn_fold_blocks, _sub, _add, knn_sq_item, knn_impute_finish
-from x_neighbors.items import knn_impute_tie_mean_item
+from x_neighbors.items import knn_impute_tie_mean_item, knn_impute_tie_mean_listed
 from x_neighbors.items import XN_TREE, xn_tree_slot
 from checks.numerics import identical_mul, identical_div, identical_sqrt
 from std.memory import bitcast as _bc
@@ -1264,9 +1264,10 @@ def op_knn_impute_tiled(
     # TOMBSTONE: MOJOLEARN_XN_FAST_IMPUTE_TIE_MEAN_OFF (old path: the lower-index tie rule of KNNImputer; EXP:2125 A/B owed, never run) deleted 2026-11-15 by lane/expdel2-15-cluster; code recoverable at ac1f01c0f3.
     # Restore: git apply experiments/removed/MOJOLEARN_XN_FAST_IMPUTE_TIE_MEAN_OFF.patch; record in docs/TOMBSTONES.md.
     if weights == 0:
+        # this route records no out_min: listed 0 (d_bd stands in, never read)
         ctx.enqueue_function[knn_impute_tie_mean_kernel](
             d_cells.unsafe_ptr(), d_x.unsafe_ptr(), d_fx.unsafe_ptr(), d_bd.unsafe_ptr(), d_bi.unsafe_ptr(),
-            d_res.unsafe_ptr(), Int64(m), Int64(d), Int64(k), Int64(nc),
+            d_bd.unsafe_ptr(), d_res.unsafe_ptr(), Int64(m), Int64(d), Int64(k), Int64(nc), Int64(0),
             grid_dim=(nc + IMP_TPB - 1) // IMP_TPB, block_dim=IMP_TPB,
         )
     _down(ctx, d_res, res, n * d)
@@ -1289,21 +1290,26 @@ def op_knn_impute_tiled(
 
 
 def knn_impute_tie_mean_cells_kernel(
-    cells: IP, x: FP, fx: FP, best_d: FP, best_i: IP, res: FP,
-    m_: Int64, d_: Int64, k_: Int64, nc_: Int64,
+    cells: IP, x: FP, fx: FP, best_d: FP, best_i: IP, out_min: FP, res: FP,
+    m_: Int64, d_: Int64, k_: Int64, nc_: Int64, listed_: Int64,
 ):
     """`knn_impute_tie_mean_item` for each missing cell of the compact list,
-    one thread per cell (the row pass's d above IMP_MAX_D)."""
+    one thread per cell (the row pass's d above IMP_MAX_D). `listed_` != 0
+    (the row pass, which records `out_min`): a cell with no donor outside
+    its list at D_k takes `knn_impute_tie_mean_listed` (the same words from
+    the k listed donors) and skips the m x d rescan."""
     var q = Int(block_idx.x) * IMP_TPB + Int(thread_idx.x)
     if q >= Int(nc_):
         return
-    knn_impute_tie_mean_item(Int(cells.unsafe_load(q)), x, fx, best_d, best_i, res,
-                             Int(m_), Int(d_), Int(k_))
+    var t = Int(cells.unsafe_load(q))
+    if Int(listed_) != 0 and knn_impute_tie_mean_listed(t, fx, best_d, best_i, out_min, res, Int(d_), Int(k_)):
+        return
+    knn_impute_tie_mean_item(t, x, fx, best_d, best_i, res, Int(m_), Int(d_), Int(k_))
 
 
 def knn_impute_tie_mean_kernel(
-    cells: IP, x: FP, fx: FP, best_d: FP, best_i: IP, res: FP,
-    m_: Int64, d_: Int64, k_: Int64, nc_: Int64,
+    cells: IP, x: FP, fx: FP, best_d: FP, best_i: IP, out_min: FP, res: FP,
+    m_: Int64, d_: Int64, k_: Int64, nc_: Int64, listed_: Int64,
 ):
     """Rewrites the imputed value of each missing cell whose scan found k
     donors as the tie mean (above). Fewer than k donors: every donor is
@@ -1325,6 +1331,10 @@ def knn_impute_tie_mean_kernel(
         r = t // d
         c = t - r * d
         if Int(best_i.unsafe_load(t * k + k - 1)) < 0:
+            live = False
+        elif Int(listed_) != 0 and knn_impute_tie_mean_listed(t, fx, best_d, best_i, out_min, res, d, k):
+            # no donor outside the list at D_k: done from the list (the
+            # thread still stages its share of the fit rows below)
             live = False
         else:
             dk = best_d.unsafe_load(t * k + k - 1)
@@ -1552,7 +1562,7 @@ def knn_impute_rows_head_kernel(cells: IP, rq: IP, rc: IP, counter: IP, d_: Int6
 
 
 def knn_impute_rows_kernel(
-    cells: IP, rq: IP, rc: IP, counter: IP, colmiss: IP, x: FP, fx: FP, best_d: FP, best_i: IP, res: FP,
+    cells: IP, rq: IP, rc: IP, counter: IP, colmiss: IP, x: FP, fx: FP, best_d: FP, best_i: IP, out_min: FP, res: FP,
     m_: Int64, d_: Int64, k_: Int64, weights_: Int64,
 ):
     """Block per IMR_G slots of the row list: the rows' distance tiles to
@@ -1606,6 +1616,7 @@ def knn_impute_rows_kernel(
         for s in range(k):
             best_d.unsafe_store(t * k + s, inf)
             best_i.unsafe_store(t * k + s, Int32(-1))
+        out_min.unsafe_store(t, inf)
         e += IMR_TPB
     var ta = tid // 16
     var tb = tid - ta * 16
@@ -1673,6 +1684,12 @@ def knn_impute_rows_kernel(
             var bd = best_d + t * k
             var bi = best_i + t * k
             var worst = bd.unsafe_load(k - 1)
+            # fb-infer/D: the smallest distance of a donor left out of the
+            # list (rejected, or evicted from slot k - 1); the tie-mean pass
+            # skips its m x d rescan when it is above D_k
+            # (`knn_impute_tie_mean_listed`). A NaN distance (no shared
+            # feature) is never a donor and never compares below.
+            var omin = out_min.unsafe_load(t)
             for bb in range(rows):
                 var j = j0 + bb
                 var dv = fx.unsafe_load(j * d + c)
@@ -1680,7 +1697,11 @@ def knn_impute_rows_kernel(
                     continue
                 var v = dt[lo * (IMR_JT + 1) + bb]
                 if not (v < worst):
+                    if v < omin:
+                        omin = v
                     continue
+                if Int(bi.unsafe_load(k - 1)) >= 0 and worst < omin:
+                    omin = worst
                 var s = k - 1
                 while s > 0 and v < bd.unsafe_load(s - 1):
                     bd.unsafe_store(s, bd.unsafe_load(s - 1))
@@ -1689,6 +1710,7 @@ def knn_impute_rows_kernel(
                 bd.unsafe_store(s, v)
                 bi.unsafe_store(s, Int32(j))
                 worst = bd.unsafe_load(k - 1)
+            out_min.unsafe_store(t, omin)
             e += IMR_TPB
         barrier()
         j0 += rows
@@ -1727,6 +1749,9 @@ def _op_knn_impute_rows(
     var d_rq = _buf_i(ctx, 0, nc, False)
     var d_rc = _buf_i(ctx, 0, nc, False)
     var d_cnt = _buf_i(ctx, 0, 1, False)
+    # per cell: the smallest distance of a donor the scan left out (seeded
+    # +inf by the row kernel); the tie-mean pass reads it
+    var d_mo = _buf(ctx, 0, n * d, False)
     d_cm.enqueue_fill(Int32(0))
     d_cnt.enqueue_fill(Int32(0))
     if m > 0 and d > 0:
@@ -1743,7 +1768,7 @@ def _op_knn_impute_rows(
     var max_rows = min(n, nc)
     ctx.enqueue_function[knn_impute_rows_kernel](
         d_cells.unsafe_ptr(), d_rq.unsafe_ptr(), d_rc.unsafe_ptr(), d_cnt.unsafe_ptr(), d_cm.unsafe_ptr(),
-        d_x.unsafe_ptr(), d_fx.unsafe_ptr(), d_bd.unsafe_ptr(), d_bi.unsafe_ptr(), d_res.unsafe_ptr(),
+        d_x.unsafe_ptr(), d_fx.unsafe_ptr(), d_bd.unsafe_ptr(), d_bi.unsafe_ptr(), d_mo.unsafe_ptr(), d_res.unsafe_ptr(),
         Int64(m), Int64(d), Int64(k), Int64(weights),
         grid_dim=(max_rows + IMR_G - 1) // IMR_G, block_dim=IMR_TPB,
     )
@@ -1752,13 +1777,13 @@ def _op_knn_impute_rows(
     if weights == 0 and d <= IMP_MAX_D:
         ctx.enqueue_function[knn_impute_tie_mean_kernel](
             d_cells.unsafe_ptr(), d_x.unsafe_ptr(), d_fx.unsafe_ptr(), d_bd.unsafe_ptr(), d_bi.unsafe_ptr(),
-            d_res.unsafe_ptr(), Int64(m), Int64(d), Int64(k), Int64(nc),
+            d_mo.unsafe_ptr(), d_res.unsafe_ptr(), Int64(m), Int64(d), Int64(k), Int64(nc), Int64(1),
             grid_dim=(nc + IMP_TPB - 1) // IMP_TPB, block_dim=IMP_TPB,
         )
     elif weights == 0:
         ctx.enqueue_function[knn_impute_tie_mean_cells_kernel](
             d_cells.unsafe_ptr(), d_x.unsafe_ptr(), d_fx.unsafe_ptr(), d_bd.unsafe_ptr(), d_bi.unsafe_ptr(),
-            d_res.unsafe_ptr(), Int64(m), Int64(d), Int64(k), Int64(nc),
+            d_mo.unsafe_ptr(), d_res.unsafe_ptr(), Int64(m), Int64(d), Int64(k), Int64(nc), Int64(1),
             grid_dim=(nc + IMP_TPB - 1) // IMP_TPB, block_dim=IMP_TPB,
         )
     _down(ctx, d_res, res, n * d)
@@ -1773,6 +1798,7 @@ def _op_knn_impute_rows(
     _ = d_rq^
     _ = d_rc^
     _ = d_cnt^
+    _ = d_mo^
     _ = ctx^
 
 

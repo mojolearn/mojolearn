@@ -43,6 +43,7 @@ from bindings.trees_public_inputs_door import (
     trees_env,
     trees_reshape,
     trees_address,
+    trees_freeze,
     trees_encode_labels,
     trees_decode_labels,
     trees_cast,
@@ -105,7 +106,8 @@ from bindings.py_trees_resident import (
     trees_resident_forget, trees_resident_unpin,
 )
 from bindings.py_model_records import model_identity_key, model_generation
-from bindings.p3nc_fitted_freeze_unpack import fitted_freeze
+from bindings.p3nc_fitted_freeze_unpack import fitted_freeze, fitted_is_freezable
+from bindings.p3nc_fitted_freeze_pack import _fitted_slot
 from core.trees_entry_table import TreesEntryKey
 from xtrees.dart_abi import XD_CAP_RESIDENT, XD_FOREST_RELEASE
 from xtrees.dart_calls import (
@@ -1782,6 +1784,10 @@ def _dart_boost(model: PythonObject, fields: PythonObject, x: AdmittedXView, y32
         dart_member_into(rounds, j, dst)
         _ = arrays  # the Arrays own the addresses written above
         _ = values
+        # Exported read-only, as `_store_model` exports the four node arrays:
+        # the kept device forest mirrors these leaf values (`_dart_freeze`
+        # then only reads the flag at the first predict).
+        trees_freeze(values)
         _ = py_call(arrays.append, Python.list(PythonObject(rounds.word(j, DART_M_TREES)),
                                                PythonObject(rounds.word(j, DART_M_OUTPUTS))))
         _member_store(tree, arrays, rounds.word(j, DART_M_COLS))
@@ -1856,20 +1862,40 @@ def _dart_key(model: PythonObject, fields: PythonObject, K: Int) raises -> Pytho
                        PythonObject(len(tree_coefs)))
 
 
+def _dart_freeze_one(value: PythonObject, cls: PythonObject, mut admitted: Bool, context: PythonObject) raises:
+    """`fitted_freeze(value)`, skipped for an exact Array already read-only.
+    The Array storage layout is admitted once per freeze walk (`admitted`);
+    after that the `_readonly` slot is a native member read. A fresh fit
+    exports every array the kept forest mirrors frozen already (the node
+    arrays in `_store_model`, the leaf values at DART's PACK), so the first
+    predict after a fit reads T*5 flags instead of running T*5 full
+    admissions and slot writes (lane fb-infer/A, 2026-11-17: that first
+    predict is every timed predict of a fit-then-predict caller)."""
+    if py_type(value) is cls:
+        if not admitted:
+            admitted = fitted_is_freezable(value, context)
+        if admitted and _fitted_slot(value, "_readonly") is PythonObject(True):
+            return
+    _ = fitted_freeze(value, context)
+
+
 def _dart_freeze(fields: PythonObject, context: PythonObject) raises:
     """The read-only rule (p3nc_fitted_freeze) for every array the kept
     forest mirrors: each tree's node arrays and leaf values. Once per
-    fitted model (the first predict)."""
+    fitted model (the first predict); arrays already read-only (a fit's own
+    exports) are only checked."""
     var trees = fields["trees_"]
     var values = fields["tree_values_"]
     var count = min(len(trees), len(values))
+    var cls = context["array_class"]
+    var admitted = False
     for i in range(count):  # driver-loop: over the T fitted trees, once per fitted model
         var tf = py_fields(trees[i])
-        _ = fitted_freeze(tf["_offsets"], context)
-        _ = fitted_freeze(tf["_colid"], context)
-        _ = fitted_freeze(tf["_quesval"], context)
-        _ = fitted_freeze(tf["_left_child"], context)
-        _ = fitted_freeze(values[i], context)
+        _dart_freeze_one(tf["_offsets"], cls, admitted, context)
+        _dart_freeze_one(tf["_colid"], cls, admitted, context)
+        _dart_freeze_one(tf["_quesval"], cls, admitted, context)
+        _dart_freeze_one(tf["_left_child"], cls, admitted, context)
+        _dart_freeze_one(values[i], cls, admitted, context)
 
 
 def _dart_words(values: PythonObject, code: String, typestr: String, context: PythonObject) raises -> PythonObject:
@@ -2134,7 +2160,14 @@ def _rte_fit(model: PythonObject, fields: PythonObject, x: AdmittedX, context: P
     py_setitem(settings, "random_state", _P(seed))
     py_setitem(settings, "numeric_mode", py_get(fields, "numeric_mode"))
     var forest = _new_member(context["trees_et_regressor"], settings, context)
-    _member_fit(forest, _as_array(x, Python.tuple(n, d), context), yr.array, PythonObject(None), context)
+    # fb-infer/D (2026-11-17): the member fit takes the admitted X itself (the
+    # caller's float32 C-order array when borrowed, else the door's own), as
+    # 0.8.55 passed `Xa` straight to ExtraTreesRegressor.fit; the member's
+    # own admission borrows it. `_as_array` here made one more serial n x d
+    # cast copy of every borrowed X before the fit (RTE fit 160 -> 754 ms on
+    # a 1M x 220 float32 X, 35 -> 60 ms on 1M x 10: ~1.5 GB/s, linear in
+    # n x d). Neighbours to time: 500k x 64 and any non-board float32 table.
+    _member_fit(forest, x.array, yr.array, PythonObject(None), context)
     py_setitem(fields, "forest_", forest)
     var ff = py_fields(forest)
     var offsets = ff["_offsets"]
