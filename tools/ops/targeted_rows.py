@@ -32,6 +32,21 @@ SELECT (the Mac, seconds; writes the rows file the job reads as PC_ROWS):
   (<out>.part<i>.tsv, each under the cap, each a complete same-box job) and names it; tools/ops/measure_candidate.py
   stage --rows refuses a rows file over the cap with the same split.
 
+OWN-ONLY (Andrew, 2026-11-17: "we only run A/B and what has changed"; 0.8.55 is not timed again):
+
+    python3 tools/ops/targeted_rows.py --own-only --from-compare <compare-all json> [--results-dir DIR]
+        [--merged-into REF] [--measured SHA] [--control N] [--seed S] [--out <rows.tsv>]
+
+  selects ONLY the races a merged fix covers, read from the lanes' per-row result files (RESULT_GLOBS in
+  --results-dir): an entry selects its races when its fix cell names a commit that is on --merged-into and not already
+  in the measured build --measured (the 15cca53af1 class-layout rows included where a lane assigned them). Not
+  selected: entries classed harness (class b), noise or box state, no cause found / not fixed / needs a timing split,
+  waiting on an A/B only (timed by its A/B arm); a back-to-back "not a regression" vetoes the race whatever fix another
+  entry names. Plus the internal call-overhead row and --control N seeded random SAME/FASTER races (default 0). It
+  prints per fix commit how many races it selects, every entry NOT selected with its reason, the entries that name no
+  planned race (also in <out>.audit.txt), and the one-arm estimate (our new wheel only; the stored baseline is
+  compared in tools/paper_compare.py --stored-baseline-board).
+
   The rows file: `# ` comment lines, then one row per line, tab separated:
       <race id>  <reasons, comma list>  <est candidate s>  <est 0.8.55 s>  <input ratio, the worst of the race's rows
                                                                            against 0.8.55 in the given compare, or ->
@@ -715,7 +730,7 @@ def cmd_plan(a):
     by_id = {r["id"]: r for r in rows}
     print("TG-PLAN vendor=%s rows=%d planned=%d not_planned=%d paper_recipes=%d" % (
         a.vendor, len(want), len(ids), len(not_planned), len(rec["recipes"])))
-    print(estimate_line(estimate([by_id[i] for i in ids], a.chunk_s)))
+    print(estimate_line(estimate([by_id[i] for i in ids], a.chunk_s, a.one_arm)))
     return 0
 
 
@@ -893,6 +908,7 @@ def build_box_parser():
     pl.add_argument("--recipes", required=True)
     pl.add_argument("--out-dir", required=True)
     pl.add_argument("--chunk-s", type=int, default=DEFAULT_CHUNK_S)
+    pl.add_argument("--one-arm", action="store_true", help="the stored-baseline job: our new wheel timed alone")
     ch = sub.add_parser("chunks")
     ch.add_argument("--ids", required=True)
     ch.add_argument("--rows", default=None)

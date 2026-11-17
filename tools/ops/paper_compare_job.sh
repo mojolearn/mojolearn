@@ -616,7 +616,8 @@ if part tg-install || part tg-smoke || part tg-board || part tg-compare; then
     cp "$PC_ROWS" "$TG/rows.tsv"
     phase tg-plan
     $PY tools/ops/targeted_rows.py plan --rows "$TG/rows.tsv" --vendor "$V" --planner tools/bench_board.py \
-        --recipes "$RECIPES" --out-dir "$TG" --chunk-s "${PC_TG_CHUNK_S:-600}" > "$RES/logs/tg-plan.log" 2>&1
+        --recipes "$RECIPES" --out-dir "$TG" --chunk-s "${PC_TG_CHUNK_S:-600}" ${BASELINE_BOARD:+--one-arm} \
+        > "$RES/logs/tg-plan.log" 2>&1
     rc=$?; tail -n 2 "$RES/logs/tg-plan.log"
     if [ $rc -eq 0 ] && [ -n "$B_CSV" ]; then
         # the owed A/B rows of the staged B sets; the empty paper doc leaves every unit its own base
