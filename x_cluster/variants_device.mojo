@@ -8,7 +8,7 @@ from x_cluster.variants_dispatch import KMeansVariantsBackend, kmeans_variants_d
 from x_cluster.device_execution import cluster_device_execute
 from x_cluster.device_ops import DeviceOps
 from x_cluster.minibatch_ptr import MBK_DEVSCAN_ANY
-from x_cluster.bisect import bisect_predict
+from x_cluster.bisect import bisect_predict_slot
 from x_cluster.resident import xc_centers_prepare, xc_centers_release, xc_resident_query
 from x_cluster.out import ClusterOut
 
@@ -30,13 +30,16 @@ struct VariantsDeviceBackend(KMeansVariantsBackend):
     @staticmethod
     def tree_predict(source: Int, count: Int, centers: Int, center_count: Int,
                      nodes: Int, node_count: Int, rows: Int, features: Int) raises -> List[Int32]:
-        var x = read_f32(source, count) if count > 0 else List[Float32]()
+        # The query rows go up straight from the caller's words (put_addr,
+        # synchronised): no host List copy of the whole block first (lane
+        # fb2-neighbors). The caller (bindings/cluster_native_door.mojo)
+        # keeps X alive through this call. Same words uploaded, same labels.
         var c = read_f32(centers, center_count) if center_count > 0 else List[Float32]()
         var tree = read_i32(nodes, node_count) if node_count > 0 else List[Int32]()
         var ops = DeviceOps()
-        var labels = bisect_predict(ops, x, rows, features, c, tree)
+        var xs = ops.put_addr(source, count)
+        var labels = bisect_predict_slot(ops, xs, rows, features, c, tree)
         _ = ops^
-        _ = x^
         _ = c^
         _ = tree^
         return labels^

@@ -78,11 +78,18 @@ def _xc_f32_ready(source: PythonObject, context: PythonObject) raises -> Bool:
     return classical_is_f32(source, context) and classical_c_order(source, context)
 
 
-def _xc_input(mut mods: NativeModules, model: PythonObject, source: PythonObject, context: PythonObject) raises -> PythonObject:
+def _xc_input(mut mods: NativeModules, model: PythonObject, source: PythonObject, context: PythonObject,
+              admitted: Bool = False) raises -> PythonObject:
     """`_XCluster._input_like_fit`: `_f32(X)` (as_f32_c, nonempty, finite)
-    and the fitted feature count."""
+    and the fitted feature count. `admitted`: the public door's
+    classical_check_x already refused a non-finite X with scikit-learn's
+    wording and returned this float32 C-order block (lane fb2-neighbors:
+    the second full scan was HEAD-only work, one read of all n x d words
+    per predict/transform/score)."""
     var x = PythonObject(None)
-    if _xc_f32_ready(source, context):
+    if admitted and _xc_f32_ready(source, context):
+        x = source
+    elif _xc_f32_ready(source, context):
         # Perf (lane pass2-cluster-nbr): the public door hands over its
         # admitted X (an exact float32 C-order Array or ndarray), which
         # `as_f32_c` would return as is. Only the finite refusal is repeated,
@@ -256,8 +263,11 @@ def _agglo_predict(model: PythonObject, binding: PythonObject, source: PythonObj
 
 
 def cluster_operation(model: PythonObject, operation: String, args: PythonObject,
-                      context: PythonObject) raises -> PythonObject:
-    """args[0] is the resolved binding, args[1] X."""
+                      context: PythonObject, x_admitted: Bool = False) raises -> PythonObject:
+    """args[0] is the resolved binding, args[1] X. `x_admitted`: args[1] is
+    the X the public door already admitted (classical_check_x: 2-D,
+    non-empty, finite, C-ordered float32), so the finite scan is not run a
+    second time over the same words."""
     classical_connect_numpy(context)
     var b = native_loaded_module("builtins")
     # One module handle for every fitted-field read of this call.
@@ -269,17 +279,17 @@ def cluster_operation(model: PythonObject, operation: String, args: PythonObject
             or operation == "family_xc_variants_score"
             or operation == "family_xc_transform" or operation == "family_xc_score"):
         var centers = _xc_fitted(mods, model, "cluster_centers_")
-        var x = _xc_input(mods, model, args[1], context)
+        var x = _xc_input(mods, model, args[1], context, x_admitted)
         var kind = _XC_RES_PREDICT if operation == "family_xc_variants_predict" else (
             _XC_RES_TRANSFORM if (operation == "family_xc_variants_transform" or operation == "family_xc_transform") else _XC_RES_SCORE)
         return _centers_query(model, binding, x, centers, kind, context)
     if operation == "family_xc_predict":
         var centers = _xc_fitted(mods, model, "cluster_centers_")
-        var x = _xc_input(mods, model, args[1], context)
+        var x = _xc_input(mods, model, args[1], context, x_admitted)
         return _centers_query(model, binding, x, centers, _XC_RES_PREDICT, context)
     if operation == "family_xc_bisect_predict":
         _ = _xc_fitted(mods, model, "cluster_centers_")
-        var x = _xc_input(mods, model, args[1], context)
+        var x = _xc_input(mods, model, args[1], context, x_admitted)
         var n = Int(py=x.shape[0])
         var d = Int(py=x.shape[1])
         var fields = py_fields(model)
@@ -312,7 +322,7 @@ def cluster_operation(model: PythonObject, operation: String, args: PythonObject
         var affinity = native_fitted_get(mods, model, "affinity")
         if py_type(affinity) is b.str and String(affinity) == "precomputed":
             raise Error("Predict method is not supported when affinity='precomputed'.")
-        var x = _xc_input(mods, model, args[1], context)
+        var x = _xc_input(mods, model, args[1], context, x_admitted)
         var centers = native_fitted_get(mods, model, "cluster_centers_")
         if Int(py=centers.shape[0]) == 0:
             var labels = family_array(Python.tuple(Int(py=x.shape[0])), "<i4", context)

@@ -323,6 +323,14 @@ def bisect_predict[O: ClusterOps](
     mut ops: O, x: List[Float32], n: Int, d: Int, tree_centers: List[Float32], nodes: List[Int32]
 ) raises -> List[Int32]:
     var xs = ops.put(x)
+    return bisect_predict_slot(ops, xs, n, d, tree_centers, nodes)
+
+
+def bisect_predict_slot[O: ClusterOps](
+    mut ops: O, xs: Int, n: Int, d: Int, tree_centers: List[Float32], nodes: List[Int32]
+) raises -> List[Int32]:
+    """`bisect_predict` over rows already in float slot `xs` (the device
+    tree predict uploads them straight from the caller's words)."""
     var cs = ops.put(tree_centers)
     var ns = ops.put_i(nodes)
     var ls = ops.zeros_i(n)
