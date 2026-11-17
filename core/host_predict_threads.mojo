@@ -110,27 +110,100 @@ def _cgroup_cpu_quota() -> Int:
     one task per visible physical core on such a box splits a host copy into
     128 tasks under a 28-core quota (resample on a 880 MB output read 6.5x
     slower than 0.8.55's single NumPy gather). AGENTS.md's own rule: the
-    core count is the allocation, not the host's visible CPUs."""
+    core count is the allocation, not the host's visible CPUs.
+
+    fb-audit (2026-11-17): the quota is read along the process's OWN cgroup
+    path (/proc/self/cgroup: "0::<path>" for v2, the "cpu" controller line
+    for v1) and every ancestor up to the mount root, taking the tightest:
+    reading only the mount root saw no quota when there is no cgroup
+    namespace (a systemd slice or a runtime that does not namespace), where
+    the root has no `cpu.max` and the limit sits on the leaf or a parent.
+    Inside a namespaced container the path is "/" and this is the root read
+    it was. Runs once per process (`_HostThreadPolicy`)."""
+    var best = 0
     try:
-        var v2 = _read_words("/sys/fs/cgroup/cpu.max")
-        if len(v2) >= 2:
-            if v2[0] == "max":
+        var v2_rel = String("")
+        var v1_rel = String("")
+        var text = _read_text("/proc/self/cgroup")
+        for line in text.split("\n"):  # driver-loop: the lines of a small control file
+            var row = String(line)
+            var parts = row.split(":")
+            if len(parts) < 3:
+                continue
+            if String(parts[0]) == "0" and String(parts[1]) == "":
+                v2_rel = String(parts[2])
+                continue
+            var controllers = String(parts[1])
+            for c in controllers.split(","):  # driver-loop: the controllers of one line
+                if String(c) == "cpu":
+                    v1_rel = String(parts[2])
+        best = _cgroup_tighter(best, _cgroup_walk("/sys/fs/cgroup", v2_rel, True))
+        best = _cgroup_tighter(best, _cgroup_walk("/sys/fs/cgroup/cpu", v1_rel, False))
+    except:
+        pass
+    return best
+
+
+def _read_text(path: String) -> String:
+    """A small text file's contents, or "" when it is missing or unreadable."""
+    try:
+        if not exists(path):
+            return String("")
+        var text: String
+        with open(path, "r") as fh:
+            text = fh.read()
+        return text^
+    except:
+        return String("")
+
+
+def _cgroup_tighter(best: Int, quota: Int) -> Int:
+    """The smaller positive quota of the two (0 means none)."""
+    if quota > 0 and (best == 0 or quota < best):
+        return quota
+    return best
+
+
+def _cgroup_dir_quota(dir: String, v2: Bool) -> Int:
+    """Whole cores (rounded up) of one cgroup directory's CPU quota, or 0."""
+    try:
+        var quota = 0
+        var period = 0
+        if v2:
+            var w = _read_words(dir + "/cpu.max")
+            if len(w) < 2 or w[0] == "max":
                 return 0
-            var quota = Int(atol(v2[0]))
-            var period = Int(atol(v2[1]))
-            if quota > 0 and period > 0:
-                return (quota + period - 1) // period
-            return 0
-        var q = _read_words("/sys/fs/cgroup/cpu/cpu.cfs_quota_us")
-        var per = _read_words("/sys/fs/cgroup/cpu/cpu.cfs_period_us")
-        if len(q) >= 1 and len(per) >= 1:
-            var quota = Int(atol(q[0]))
-            var period = Int(atol(per[0]))
-            if quota > 0 and period > 0:
-                return (quota + period - 1) // period
+            quota = Int(atol(w[0]))
+            period = Int(atol(w[1]))
+        else:
+            var q = _read_words(dir + "/cpu.cfs_quota_us")
+            var p = _read_words(dir + "/cpu.cfs_period_us")
+            if len(q) < 1 or len(p) < 1:
+                return 0
+            quota = Int(atol(q[0]))
+            period = Int(atol(p[0]))
+        if quota > 0 and period > 0:
+            return (quota + period - 1) // period
     except:
         pass
     return 0
+
+
+def _cgroup_walk(root: String, rel: String, v2: Bool) -> Int:
+    """The tightest quota on `root` and each directory of `rel` below it
+    (`rel` "" or "/" is the root alone)."""
+    var best = _cgroup_tighter(0, _cgroup_dir_quota(root, v2))
+    var at = root
+    try:
+        for part in rel.split("/"):  # driver-loop: the components of one cgroup path
+            var name = String(part)
+            if name.byte_length() == 0:
+                continue
+            at = at + "/" + name
+            best = _cgroup_tighter(best, _cgroup_dir_quota(at, v2))
+    except:
+        pass
+    return best
 
 
 def _host_threads_resolve(requested: Int) -> Int:
