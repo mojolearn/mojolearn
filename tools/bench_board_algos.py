@@ -7629,15 +7629,21 @@ def worker(args):
                 n_fit = small.calls_for(ms, ours_arm, "fit") if r > 0 else 1
                 n_inf = small.calls_for(ims, ours_arm, "infer") if r > 0 and did else 1
                 fit_calls, inf_calls = [ms], [ims]
-                for i in range(1, max(n_fit, n_inf)):
-                    if i < n_fit:
-                        t0 = time.perf_counter()
-                        runner.fit()
-                        fit_calls.append((time.perf_counter() - t0) * 1000.0)
-                    if i < n_inf:
-                        t1 = time.perf_counter()
-                        runner.infer()
-                        inf_calls.append((time.perf_counter() - t1) * 1000.0)
+                # attribution and call profile runs only (no-op otherwise): the window around the forced phase's
+                # extra calls; a call profile run makes one call of the other phase, so the window holds one phase
+                small.range_open(n_fit, "fit") or small.range_open(n_inf, "infer")
+                try:
+                    for i in range(1, max(n_fit, n_inf)):
+                        if i < n_fit:
+                            t0 = time.perf_counter()
+                            runner.fit()
+                            fit_calls.append((time.perf_counter() - t0) * 1000.0)
+                        if i < n_inf:
+                            t1 = time.perf_counter()
+                            runner.infer()
+                            inf_calls.append((time.perf_counter() - t1) * 1000.0)
+                finally:
+                    small.range_close()
                 fit_rec = small.spread(fit_calls) if r > 0 else None
                 inf_rec = small.spread(inf_calls) if r > 0 and did else None
                 if fit_rec is not None:
