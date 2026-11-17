@@ -1033,20 +1033,146 @@ def extra_row(rec):
             **calls_fields("new", rec)}
 
 
+# ---------------------------------------------------------------------------------------------------------------
+# the STORED baseline (Andrew, 2026-11-17, AGENTS.md part 8 "0.8.55 is not timed again"): the 0.8.55 times of the
+# 2026-11-17 L40S full board are the campaign's baseline; a job times our new wheel only and is compared against
+# that stored board. The same-box and same-software refusals of the two-arm modes become WARNING lines here (the
+# direction overrides them for this campaign), and the first line of the summary says the baseline is stored.
+# ---------------------------------------------------------------------------------------------------------------
+#: a row whose in-race upload probe differs from the stored run's by more than this fraction is BOX-STATE: the box's
+#: host-memory path moved (lane fb3-drift, 2026-11-17: istella X upload 85 ms in three runs, 113..126 ms in the slow
+#: one, and single-call rows moved by the same milliseconds); its ratio is shown and is not a verdict
+BOX_STATE_TOLERANCE = 0.15
+VERDICT_FLAGS = ("REGRESSION", "FASTER", "SAME")
+
+
+def board_side(board):
+    """{host, gpu, drivers, kernels, date} of one board, for the stored-baseline line: every distinct value its
+    races ran under (SOFTWARE_FIELDS), its host ids, its GPU name and the date its probe was taken (else created)."""
+    states = board_software(board)
+    probe = board_probe(board) or {}
+    vals = lambda i: sorted({str(k[i]) for k in states if k[i]})  # noqa: E731
+    return {"host": ", ".join(sorted(board_host_ids(board))) or host_label(board) or "not recorded",
+            "gpu": (probe.get("gpu") or {}).get("name") or gpu_name(board) or "?",
+            "drivers": vals(1), "kernels": vals(2),
+            "date": str(probe.get("taken") or board.get("created") or "?")[:10]}
+
+
+def side_text(s):
+    return "host %s, GPU %s, driver %s, kernel %s, date %s" % (
+        s["host"], s["gpu"], " / ".join(s["drivers"]) or "?", " / ".join(s["kernels"]) or "?", s["date"])
+
+
+def stored_baseline_basis(version, stored, boards):
+    """(basis line, [WARNING lines]) of a compare against a stored baseline board: the basis names both sides; a
+    WARNING says when the host or the GPU driver differ (the direction of 2026-11-17 makes these warnings, not the
+    refusal of the two-arm modes)."""
+    st = board_side(stored)
+    new = [board_side(b) for b in boards]
+    nh = sorted({s["host"] for s in new})
+    nd = sorted({d for s in new for d in s["drivers"]})
+    cur = {"host": ", ".join(nh) or "not recorded", "gpu": ", ".join(sorted({s["gpu"] for s in new})) or "?",
+           "drivers": nd, "kernels": sorted({k for s in new for k in s["kernels"]}),
+           "date": ", ".join(sorted({s["date"] for s in new})) or "?"}
+    basis = ("STORED BASELINE, not timed in this job: %s stored (%s); this job: %s"
+             % (version, side_text(st), side_text(cur)))
+    warn = []
+    if set(nh) != {st["host"]}:
+        warn.append("WARNING: the stored %s baseline ran on host %s, this job on %s; times of two hosts are compared "
+                    "under the 2026-11-17 direction (0.8.55 is not timed again)" % (version, st["host"], cur["host"]))
+    if nd and st["drivers"] and set(nd) != set(st["drivers"]):
+        warn.append("WARNING: GPU driver %s (stored %s) vs %s (this job)"
+                    % (" / ".join(st["drivers"]), version, " / ".join(nd)))
+    return basis, warn
+
+
+def upload_probe(cell):
+    """(ms, GB/s) of a cell's in-race separate upload probe (the harness's own, outside the clock:
+    comparability.span upload_ms_separate over upload_bytes_separate), or None."""
+    span = ((cell or {}).get("comparability") or {}).get("span") or {}
+    ms, nb = span.get("upload_ms_separate"), span.get("upload_bytes_separate")
+    if number(ms) and ms > 0 and number(nb) and nb > 0:
+        return ms, nb / ms / 1e6
+    return None
+
+
+def race_probe(race):
+    """The upload probe of a race: the first of our cells that carries one (the fit cell), or None."""
+    for c in (race or {}).get("cells") or []:
+        if str(c.get("arm", "")).startswith("ours"):
+            p = upload_probe(c)
+            if p:
+                return p
+    return None
+
+
+def dataset_probes(races):
+    """{dataset: median GB/s} of every race probe in RACES: the fallback for a race that has none of its own."""
+    by = {}
+    for r in (races or {}).values():
+        p = race_probe(r) if isinstance(r, dict) else None
+        if p:
+            by.setdefault(r.get("dataset"), []).append(p[1])
+    return {d: sorted(v)[len(v) // 2] for d, v in by.items()}
+
+
+def attach_box_state(row, new_races, stored_races, new_ds, stored_ds):
+    """The in-race upload probe of the row's race beside the stored run's for the same race (else the median of the
+    same dataset on each side), and BOX-STATE when they differ by more than BOX_STATE_TOLERANCE: the verdict flag
+    (REGRESSION / FASTER / SAME) is then replaced by BOX-STATE and the ratio is shown, not counted."""
+    rid = row["race_id"]
+    nr, sr = (new_races or {}).get(rid), (stored_races or {}).get(rid)
+    ds = row.get("dataset") or (nr or {}).get("dataset") or (sr or {}).get("dataset")
+    n, s = race_probe(nr), race_probe(sr)
+    ng = n[1] if n else new_ds.get(ds)
+    sg = s[1] if s else stored_ds.get(ds)
+    if ng is None or sg is None:
+        row["upload_probe"] = None
+        return row
+    diff = ng / sg - 1.0
+    row["upload_probe"] = {"new_ms": n[0] if n else None, "new_gbps": ng, "stored_ms": s[0] if s else None,
+                           "stored_gbps": sg, "diff": diff,
+                           "source": "race" if n and s else "dataset %s median" % ds}
+    if abs(diff) > BOX_STATE_TOLERANCE and any(f in row["flags"] for f in VERDICT_FLAGS):
+        row["flags"] = [f for f in row["flags"] if f not in VERDICT_FLAGS] + ["BOX-STATE"]
+    return row
+
+
+def probe_text(p):
+    if not p:
+        return "-"
+    return "%s GB/s%s vs stored %s GB/s%s (%+.0f%%, %s)" % (
+        "%.2f" % p["new_gbps"], " (%s ms)" % fmt_ms(p["new_ms"]) if p.get("new_ms") is not None else "",
+        "%.2f" % p["stored_gbps"], " (%s ms)" % fmt_ms(p["stored_ms"]) if p.get("stored_ms") is not None else "",
+        100 * p["diff"], p["source"])
+
+
 def compare(doc, boards, not_run_why=None, prior_boards=None, reference=None, reference_label=None,
-            best_ever=None):
+            best_ever=None, stored_baseline=None):
     """PRIOR_BOARDS: [(version, board doc)] of OUR prior wheels re-timed in the same job on the same box
     (tools/ops/paper_compare_job.sh board-prior-<version>/): the one whose version is the paper's is the baseline
     (old_ms, the REGRESSION / FASTER / FIXED / BROKEN flags), the last other one the flagged prior column
     (REGRESSION-VS-PRIOR, RECOVERED, STILL-REGRESSED). A prior board from another host refuses (SystemExit).
     REFERENCE: {recipe key: row} of a stored compare JSON (another run): a reference column, never a flag.
-    BEST_EVER: a tools/board_best_ever.py document of the compare's vendor (the best-ever column), or None."""
+    BEST_EVER: a tools/board_best_ever.py document of the compare's vendor (the best-ever column), or None.
+    STORED_BASELINE: a board of the paper's version from another job (the 2026-11-17 direction: 0.8.55 is not timed
+    again): it is the baseline in place of an on-box prior board; host and driver differences are WARNING lines, not
+    refusals, and each row's upload probe is checked against it (BOX-STATE)."""
     races, gpus, versions = merge_boards(boards)
     candidate = board_candidate(boards)
     paper_gpu = doc["source"].get("gpu")
     hw_diff = bool(gpus) and paper_gpu is not None and any(g != paper_gpu for g in gpus)
     host, why_no_host = candidate_host(boards)
     priors = []
+    stored_basis, stored_warn = None, []
+    if stored_baseline is not None:
+        if any(v == doc["paper_version"] for v, _ in prior_boards or []):
+            raise SystemExit("paper_compare: a stored baseline and an on-box %s board in one compare; give one"
+                             % doc["paper_version"])
+        stored_basis, stored_warn = stored_baseline_basis(doc["paper_version"], stored_baseline, boards)
+        priors.append({"version": doc["paper_version"], "races": stored_baseline.get("races") or {},
+                       "host_id": board_side(stored_baseline)["host"], "why_not": None, "stored": True,
+                       "probe": board_probe(stored_baseline), "versions": merge_boards([stored_baseline])[2]})
     for version, pb in prior_boards or []:
         h, why = same_box(boards, [pb], "the %s prior board" % version)    # refuses two hosts
         if h:
@@ -1078,6 +1204,12 @@ def compare(doc, boards, not_run_why=None, prior_boards=None, reference=None, re
     all_recs = new_cell_records(boards, doc["vendor"])
     internal = [attach_extra_priors(extra_row(rec), base, others, flagged, verified)
                 for k, rec in sorted(all_recs.items()) if RF.lane_class(rec.get("lane")) and k not in recipe_keys]
+    box_state = None
+    if stored_baseline is not None:
+        sds, nds = dataset_probes(base["races"]), dataset_probes(races)
+        box_state = lambda r: attach_box_state(r, races, base["races"], nds, sds)  # noqa: E731
+        rows = [box_state(r) for r in rows]
+        internal = [box_state(r) for r in internal]
     internal_counts = {}
     for r in internal:
         for f in r["flags"]:
@@ -1098,6 +1230,8 @@ def compare(doc, boards, not_run_why=None, prior_boards=None, reference=None, re
                  for k, rec in sorted(new_recs.items()) if k not in recipe_keys]
         if others or base:
             extra = [attach_extra_priors(r, base, others, flagged, verified) for r in extra]
+        if box_state is not None:
+            extra = [box_state(r) for r in extra]
         for r in extra:
             for f in r["flags"]:
                 extra_counts[f] = extra_counts.get(f, 0) + 1
@@ -1105,7 +1239,9 @@ def compare(doc, boards, not_run_why=None, prior_boards=None, reference=None, re
     for r in rows:
         for f in r["flags"]:
             counts[f] = counts.get(f, 0) + 1
-    if verified(base):
+    if stored_basis:
+        basis = stored_basis
+    elif verified(base):
         basis = "same box %s: %s re-timed in this job" % (host, base["version"])
     elif base is not None:
         basis = "no verdict: %s" % base["why_not"]
@@ -1115,7 +1251,10 @@ def compare(doc, boards, not_run_why=None, prior_boards=None, reference=None, re
             "new_versions": versions, "new_label": new_label(candidate, versions), "candidate": candidate,
             "host_id": host, "host_probe": next((board_probe(b) for b in boards if board_probe(b)), None),
             "host_missing": why_no_host, "verdict_basis": basis,
-            "baseline_label": ("%s (this box)" % base["version"]) if base else None,
+            "baseline_stored": stored_baseline is not None, "baseline_warnings": stored_warn,
+            "box_state_tolerance": BOX_STATE_TOLERANCE if stored_baseline is not None else None,
+            "baseline_label": ("%s (%s)" % (base["version"], "stored" if base.get("stored") else "this box"))
+                              if base else None,
             "prior_label": flagged["version"] if flagged else None,
             "prior_columns": [{"version": p["version"], "host_id": p["host_id"], "probe": p["probe"],
                                "why_not": p["why_not"], "board_versions": p["versions"]} for p in priors],
@@ -1128,6 +1267,11 @@ def compare(doc, boards, not_run_why=None, prior_boards=None, reference=None, re
             "internal_label": RF.CALL_OVERHEAD, "internal_rows": internal, "internal_flag_counts": internal_counts,
             "progress": [dict(board_progress(boards), arm="candidate")]
                         + [dict(board_progress([pb]), arm=v) for v, pb in prior_boards or []]}
+
+
+def box_state_rows(res):
+    """Every recipe, extra and internal row flagged BOX-STATE."""
+    return [r for k in ("rows", "extra_rows", "internal_rows") for r in res.get(k) or [] if "BOX-STATE" in r["flags"]]
 
 
 def board_progress(boards):
@@ -1251,6 +1395,10 @@ def render_md(res):
     base = res.get("baseline_label") or "%s (no on-box board)" % res["paper_version"]
     lines = ["# Paper measurements: %s%s against %s on %s" % (base, "".join(", %s (this box)" % x for x in pv), new, v),
              ""]
+    if res.get("baseline_stored"):
+        # the FIRST line says the baseline is stored, with both sides' host, GPU, driver, kernel and date
+        lines = ["**%s**" % res.get("verdict_basis"), ""] + ["**%s**" % w for w in res.get("baseline_warnings") or []] \
+            + lines
     cand = res.get("candidate")
     if cand:
         lines.append("**Candidate build, not a release**: source %s, version %s; wheels %s." % (
@@ -1277,10 +1425,12 @@ def render_md(res):
     lines.append("Paper GPU: %s. New GPU: %s.%s" % (res["paper_gpu"], ", ".join(res["new_gpus"]) or "?",
                  " **Different hardware: timings are not comparable.**" if res["hw_diff"] else ""))
     t = res.get("thresholds") or {}
-    lines.append("Ratio = new / %s median ms on this box; REGRESSION above %s, FASTER below %s; quality judged by %s "
+    lines.append("Ratio = new / %s median ms%s; REGRESSION above %s, FASTER below %s; quality judged by %s "
                  "against the paper record. Opponents are the paper's stored cells (never rerun, host %s); 'vs opp' is "
                  "ours over the paper's fastest paired opponent on that comparison's clock, shown, never a flag across "
-                 "hosts." % (base, t.get("regression_ratio_above"), t.get("faster_ratio_below"),
+                 "hosts." % (base, " (the stored board; BOX-STATE: the upload probe moved more than %d%%, ratio "
+                             "not counted)" % round(100 * BOX_STATE_TOLERANCE) if res.get("baseline_stored")
+                             else " on this box", t.get("regression_ratio_above"), t.get("faster_ratio_below"),
                              t.get("quality_policy"), res.get("stored_host") or "not recorded"))
     lines.append("")
     lines.append("Flags: " + ", ".join("%s %d" % kv for kv in sorted(res["flag_counts"].items())))
@@ -1325,6 +1475,8 @@ def render_md(res):
         if r.get("best_ever_params_differ") or r.get("best_ever_hash_differs"):
             note.append("vs best ever: " + ",".join(r.get("best_ever_params_differ", [])[:6] +
                                                     (["hash"] if r.get("best_ever_hash_differs") else [])))
+        if r.get("upload_probe"):
+            note.append("upload probe " + probe_text(r["upload_probe"]))
         lines.append("| %s | %s | %s%s | %s | %s%s | %s | %s%s | %s | %s | %s | %s | %s | %s |" % (
             r["key"], fmt_ms_calls(r, "old"), pvals, fmt_ms_calls(r, "new"), fmt_ratio(r.get("ratio")), bvals,
             " ".join(r["flags"]), fmt_ms(r.get("ref_ms")), rvals, fmt_q(r.get("old_quality")),
@@ -1351,6 +1503,8 @@ def render_md(res):
                                                    (["hash"] if r.get("best_ever_hash_differs") else []))
             elif r.get("best_ever_ms") is None:
                 note = "no earlier measurement"
+            if r.get("upload_probe"):
+                note = (note + "; " if note else "") + "upload probe " + probe_text(r["upload_probe"])
             xvals = "".join("%s | %s | " % (fmt_prior_ms(r, x),
                                             fmt_ratio(((r.get("priors") or {}).get(x) or {}).get("ratio")))
                             for x in allp)
@@ -1395,8 +1549,11 @@ def render_summary(res, top=8):
     # the FIRST line is the verdict basis, in words (fb-harness, 2026-11-17): a compare without a verdict says why
     # before anything else, and every row below it is reference only
     basis = str(res.get("verdict_basis"))
-    out = [("NO VERDICT, every row is reference only: " + basis[len("no verdict: "):])
-           if basis.startswith("no verdict: ") else "verdict: " + basis]
+    if res.get("baseline_stored"):
+        out = [basis] + list(res.get("baseline_warnings") or [])
+    else:
+        out = [("NO VERDICT, every row is reference only: " + basis[len("no verdict: "):])
+               if basis.startswith("no verdict: ") else "verdict: " + basis]
     out.append("PAPER-COMPARE vendor=%s %s->%s%s recipes=%d gpu %s -> %s%s" % (
         res["vendor"], res["paper_version"], (res["prior_label"] + "->") if res.get("prior_label") else "",
         label.replace(" ", "_"), res["recipes"],
@@ -1416,7 +1573,17 @@ def render_summary(res, top=8):
         res["paper_version"], res.get("stored_host") or "not recorded",
         "; %s" % res["reference_label"] if res.get("reference_label") else ""))
     out.append("flags: " + " ".join("%s=%d" % kv for kv in sorted(res["flag_counts"].items())))
-    timed_rows = [r for r in rows if number(r.get("ratio"))]
+    if res.get("baseline_stored"):
+        bs = box_state_rows(res)
+        checked = sum(1 for k in ("rows", "extra_rows", "internal_rows") for r in res.get(k) or []
+                      if r.get("upload_probe"))
+        out.append("BOX-STATE %d rows (the in-race upload probe differs from the stored run's by more than %d%%; "
+                   "ratio shown, not counted as REGRESSION or FASTER); %d rows had a probe on both sides" % (
+                       len(bs), round(100 * (res.get("box_state_tolerance") or BOX_STATE_TOLERANCE)), checked))
+        out += ["  %s %s; probe %s" % (fmt_ratio(r.get("ratio") if r.get("ratio") is not None else
+                                                 ((r.get("priors") or {}).get(res["paper_version"]) or {}).get("ratio")),
+                                       r["key"], probe_text(r.get("upload_probe"))) for r in bs[:top]]
+    timed_rows = [r for r in rows if number(r.get("ratio")) and "BOX-STATE" not in r["flags"]]
     if timed_rows:
         rs = sorted(r["ratio"] for r in timed_rows)
         geo = 1.0

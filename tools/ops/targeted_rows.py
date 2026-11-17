@@ -69,7 +69,7 @@ sys.path.insert(0, str(ROOT / "tools" / "ops"))
 import paper_compare as PC  # noqa: E402
 import race_fairness as RF  # noqa: E402
 
-REASONS = ("paper", "slower", "changed", "changed?", "internal")
+REASONS = ("paper", "slower", "changed", "changed?", "fix", "internal", "control")
 #: the job's fixed cost outside the timed races, seconds (d95f805cce full board, L40S, job/phases.tsv: probe 2, plan
 #: 0, install 8-46, compare 1): rounded up
 FIXED_S = 90
@@ -81,6 +81,7 @@ SMOKE_S_PER_RACE = 0.65
 PROC_S = 30
 DEFAULT_CAP_MIN = 230       # under tools/nvidia_central.sh's 240-minute cap, with the job's own teardown
 DEFAULT_CHUNK_S = 600
+DEFAULT_SEED = 20261117
 BINDING_RE = re.compile(r"_mojolearn_[a-z0-9_]+")
 CALL_RE = re.compile(r"^\s*(mojolearn(?:\.[A-Za-z_][A-Za-z0-9_]*)+)")
 
@@ -117,30 +118,34 @@ def rows_text(rows, header=()):
 # ---------------------------------------------------------------------------------------------------------------
 # the estimate and the split
 # ---------------------------------------------------------------------------------------------------------------
-def estimate(rows, chunk_s=DEFAULT_CHUNK_S):
-    """{candidate_s, prior_s, smoke_s, overhead_s, chunks, total_s, total_min} of a job over ROWS."""
+def estimate(rows, chunk_s=DEFAULT_CHUNK_S, one_arm=False):
+    """{candidate_s, prior_s, smoke_s, overhead_s, chunks, total_s, total_min} of a job over ROWS. ONE_ARM: the job
+    times our new wheel only against the stored baseline (no 0.8.55 venv, smoke or races; Andrew, 2026-11-17)."""
+    if one_arm:
+        rows = [dict(r, prior_s=None) for r in rows]
     new = sum(r.get("new_s") or 0.0 for r in rows)
     prior = sum(r.get("prior_s") or 0.0 for r in rows)
     nchunks = len(chunk_ids([r["id"] for r in rows], {r["id"]: r for r in rows}, chunk_s))
     smoke = SMOKE_S_PER_RACE * (len(rows) + sum(1 for r in rows if (r.get("prior_s") or 0) > 0))
-    over = FIXED_S + 2 * PROC_S * nchunks
+    over = FIXED_S + (1 if one_arm else 2) * PROC_S * nchunks
     total = new + prior + smoke + over
     return {"candidate_s": new, "prior_s": prior, "smoke_s": smoke, "overhead_s": over, "chunks": nchunks,
-            "total_s": total, "total_min": total / 60.0}
+            "total_s": total, "total_min": total / 60.0, "one_arm": one_arm}
 
 
 def estimate_line(est):
-    return ("TG-ESTIMATE minutes total=%.0f candidate=%.0f 0.8.55=%.0f smoke=%.0f overhead=%.0f (chunks=%d, %d s per "
-            "process assumed)" % (est["total_min"], est["candidate_s"] / 60, est["prior_s"] / 60, est["smoke_s"] / 60,
-                                  est["overhead_s"] / 60, est["chunks"], PROC_S))
+    return ("TG-ESTIMATE minutes total=%.0f candidate=%.0f 0.8.55=%s smoke=%.0f overhead=%.0f (chunks=%d, %d s per "
+            "process assumed)" % (est["total_min"], est["candidate_s"] / 60,
+                                  "stored (one arm)" if est.get("one_arm") else "%.0f" % (est["prior_s"] / 60),
+                                  est["smoke_s"] / 60, est["overhead_s"] / 60, est["chunks"], PROC_S))
 
 
-def split_rows(rows, cap_min, chunk_s=DEFAULT_CHUNK_S):
+def split_rows(rows, cap_min, chunk_s=DEFAULT_CHUNK_S, one_arm=False):
     """ROWS in file order cut into parts whose estimate is under CAP_MIN each (a row alone over the cap is a part of
     its own: it cannot be split further)."""
     parts, cur = [], []
     for r in rows:
-        if cur and estimate(cur + [r], chunk_s)["total_min"] > cap_min:
+        if cur and estimate(cur + [r], chunk_s, one_arm)["total_min"] > cap_min:
             parts.append(cur)
             cur = []
         cur.append(r)
@@ -149,21 +154,21 @@ def split_rows(rows, cap_min, chunk_s=DEFAULT_CHUNK_S):
     return parts
 
 
-def check_cap(rows_path, cap_min, chunk_s=DEFAULT_CHUNK_S, write_split=True):
+def check_cap(rows_path, cap_min, chunk_s=DEFAULT_CHUNK_S, write_split=True, one_arm=False):
     """(estimate, [split file paths]) of a rows file; the split list is empty when it fits under CAP_MIN. The parts
-    are written beside it as <stem>.part<i>.tsv, each one complete job (both arms on the same box)."""
+    are written beside it as <stem>.part<i>.tsv, each one complete job (every arm it times on the same box)."""
     rows = read_rows(rows_path)
-    est = estimate(rows, chunk_s)
+    est = estimate(rows, chunk_s, one_arm)
     if est["total_min"] <= cap_min:
         return est, []
     p = Path(rows_path)
     files = []
-    for i, part in enumerate(split_rows(rows, cap_min, chunk_s), 1):
+    for i, part in enumerate(split_rows(rows, cap_min, chunk_s, one_arm), 1):
         f = p.with_name("%s.part%d%s" % (p.stem, i, p.suffix or ".tsv"))
         if write_split:
             PC.write_atomic(str(f), rows_text(part, ["part %d of %s (cap %s min): %s" % (
-                i, p.name, cap_min, estimate_line(estimate(part, chunk_s)))]))
-        files.append((str(f), estimate(part, chunk_s)))
+                i, p.name, cap_min, estimate_line(estimate(part, chunk_s, one_arm)))]))
+        files.append((str(f), estimate(part, chunk_s, one_arm)))
     return est, files
 
 
@@ -327,6 +332,181 @@ def changed_races(plan_ids, board, since, head="HEAD", cache_dir=None, root=ROOT
     return out, notes
 
 
+# ---------------------------------------------------------------------------------------------------------------
+# --own-only: the rows a merged fix covers (Andrew, 2026-11-17: "we only run A/B and what has changed")
+# ---------------------------------------------------------------------------------------------------------------
+#: the lanes' per-row result files (the source of truth for --own-only): TSVs with a row column and a fix-like
+#: column, and markdown reports whose tables name rows and their fix or status
+RESULT_DIR = Path.home() / "mojolearn-evidence" / "briefs-20261117"
+RESULT_GLOBS = ("fb-*-RESULT.tsv", "fb2-*-RESULT.tsv", "fb3-band-RESULT.tsv", "fb3-named-RESULT.md",
+                "fb4-ten-RESULT.md")
+INTEGRATION_REF = "origin/preinteg/wave2-20261113"
+SHA_RE = re.compile(r"\b[0-9a-f]{10,40}\b")
+#: the column (lower-cased header) a TSV entry's fix is read from, first match wins; a row's cause column is never
+#: read for shas (it names the commit that CAUSED the regression, fb-neural: "6869626579 ... _graph_key")
+FIX_COLUMNS = ("fix", "fix or timing split", "fix_or_split", "explanation", "status")
+#: markdown cells read for a fix (the cause / delta cells are not)
+MD_FIX_HEADERS = ("fix", "status", "finding", "what reading established", "explanation")
+#: an entry whose fix text starts like this names no fix of its own, whatever sha it mentions in passing ("not found
+#: (the cgroup cap 9fd0275a2d may cover it)": a guess, not an assignment)
+NO_FIX_START = re.compile(r"^\s*(not found|not fixed|needs timing split|on-box split|re-time|open\b|-\s*$|$)", re.I)
+#: the build the stored baseline compare measured (d95f805cce, the 2026-11-17 L40S full board): a commit already in it
+#: changed nothing since that measurement, so it selects no row (the lanes cite it as "the product path at d95f805cce")
+MEASURED_BUILD = "d95f805cce"
+NOT_REGRESSION = re.compile(r"not a regression|not reproducible|shows no regression", re.I)
+EXCLUDE_KINDS = (
+    ("harness", re.compile(r"\bharness\b", re.I)),
+    ("noise or box state", re.compile(r"noise|box[ -]state|drift|not a regression|not reproducible|"
+                                      r"single call, no structure", re.I)),
+    ("waiting on an A/B only (timed by its A/B arm)", re.compile(r"owed a/b|a/b owed", re.I)),
+)
+
+
+def _cells_md(line):
+    return [c.strip() for c in line.strip().strip("|").split("|")]
+
+
+def result_entries(paths):
+    """[{file, row, cls, fix, text}] of every per-row entry in the lanes' result files. TSV: the header's row column
+    (first), class column when there is one, and the fix column (FIX_COLUMNS, else the last). Markdown: every table
+    row; fix = the cells under MD_FIX_HEADERS (else the last cell)."""
+    out = []
+    for p in paths:
+        name = os.path.basename(str(p))
+        lines = Path(p).read_text(errors="replace").splitlines()
+        if str(p).endswith(".tsv"):
+            if not lines:
+                continue
+            head = [h.strip().lower() for h in lines[0].split("\t")]
+            if head[0] not in ("row",):
+                continue                                    # per-site tables (fb-boost-copy, fb5-cpython-layout)
+            fi = next((head.index(c) for c in FIX_COLUMNS if c in head), len(head) - 1)
+            ci = head.index("class") if "class" in head else None
+            for ln in lines[1:]:
+                f = ln.split("\t")
+                if not f or not f[0].strip():
+                    continue
+                out.append({"file": name, "row": f[0].strip(), "cls": f[ci].strip() if ci is not None and ci < len(f)
+                            else "", "fix": f[fi].strip() if fi < len(f) else "", "text": ln})
+            continue
+        head = None
+        for ln in lines:
+            if not ln.lstrip().startswith("|"):
+                head = None
+                continue
+            cells = _cells_md(ln)
+            if all(set(c) <= set("-: ") for c in cells):
+                continue
+            if head is None:
+                head = [c.lower() for c in cells]
+                continue
+            # the fix / status cell when the table has one; else the finding cell (a cause cell names culprits)
+            idx = ([i for i, h in enumerate(head) if h in ("fix", "status")]
+                   or [i for i, h in enumerate(head) if h in MD_FIX_HEADERS] or [len(cells) - 1])
+            out.append({"file": name, "row": cells[0], "cls": "",
+                        "fix": " ".join(cells[i] for i in idx if i < len(cells)), "text": ln})
+    return out
+
+
+def is_merged(sha, ref=INTEGRATION_REF, root=ROOT, cache={}):  # noqa: B006 (a per-process memo)
+    key = (sha, ref)
+    if key not in cache:
+        cache[key] = subprocess.run(["git", "-C", str(root), "merge-base", "--is-ancestor", sha, ref],
+                                    capture_output=True).returncode == 0
+    return cache[key]
+
+
+def entry_decision(e, merged=is_merged):
+    """('fix', [merged shas]) or ('excluded', why) of one entry (module docstring, --own-only)."""
+    fix, cls = e["fix"], e["cls"].lower()
+    if cls.startswith("b") and "a" not in cls:
+        return "excluded", "harness (class %s)" % e["cls"]
+    # a fix cell that names a commit assigns the row to it even when it also says "harness already fixed" or "plus
+    # box state" (fb2-smallcall, fb4-ten: the 15cca53af1 rows); without one, those words exclude the row
+    if not SHA_RE.search(fix) or NO_FIX_START.match(fix):
+        for why, rx in EXCLUDE_KINDS[:2]:
+            if rx.search(e["text"]):
+                return "excluded", why
+    if NO_FIX_START.match(fix):
+        if EXCLUDE_KINDS[2][1].search(e["text"]):
+            return "excluded", EXCLUDE_KINDS[2][0]
+        return "excluded", "no cause found or not fixed (%s)" % (fix[:60] or "-")
+    shas = list(dict.fromkeys(SHA_RE.findall(fix)))
+    if not shas:
+        if EXCLUDE_KINDS[2][1].search(fix):
+            return "excluded", EXCLUDE_KINDS[2][0]
+        return "excluded", "names no fix commit (%s)" % fix[:60]
+    ok = [s for s in shas if merged(s)]
+    if not ok:
+        return "excluded", "fix %s not on %s, or already in the measured build %s" % (
+            ",".join(shas), INTEGRATION_REF, MEASURED_BUILD)
+    return "fix", ok
+
+
+def race_index(plan_ids):
+    """({lane: [race ids]}, {datasets}) of the board's current plan."""
+    lanes, ds = {}, set()
+    for rid in plan_ids:
+        p = rid.split("/")
+        if len(p) >= 3:
+            lanes.setdefault(p[1], []).append(rid)
+            ds.add(p[2])
+    return lanes, ds
+
+
+def resolve_row(text, plan_ids, index=None):
+    """The planned race ids an entry's row text names: a race id or a key ('fam/lane/ds/rows=full fit ours'), a
+    'fam/lane/ds phase', a 'lane/ds phase', or prose ('kernel-shap taxi / istella', 'gcn / graphsage fit (4 rows)':
+    every planned lane named, on the datasets named, else on all of its datasets)."""
+    planned = set(plan_ids)
+    lanes, dsets = index or race_index(plan_ids)
+    first = text.split()[0] if text.split() else ""
+    seg = first.split("/")
+    if len(seg) >= 4 and "/".join(seg[:4]) in planned:
+        return ["/".join(seg[:4])]
+    if len(seg) == 3 and seg[1] in lanes:
+        return [r for r in lanes[seg[1]] if r.split("/")[0] == seg[0] and r.split("/")[2] == seg[2]]
+    if len(seg) == 2 and seg[0] in lanes and seg[1] in dsets:
+        return [r for r in lanes[seg[0]] if r.split("/")[2] == seg[1]]
+    toks = [t for t in re.split(r"[\s,/()]+", text) if t]
+    named = [t for t in toks if t in lanes]
+    want = {t for t in toks if t in dsets}
+    out = []
+    for lane in dict.fromkeys(named):
+        out += [r for r in lanes[lane] if not want or r.split("/")[2] in want]
+    return out
+
+
+def own_only_select(plan_ids, entries, merged=is_merged):
+    """({race id: [merged fix shas]}, [(entry, why)] not selected, [entries naming no planned race]): a race is
+    selected when ANY entry naming it names a merged fix (an entry classed harness / noise / box state names none)."""
+    index = race_index(plan_ids)
+    fixes, rejected, unmapped = {}, [], []
+    for e in entries:
+        rids = resolve_row(e["row"], plan_ids, index)
+        kind, why = entry_decision(e, merged)
+        if not rids:
+            unmapped.append((e, why if kind == "excluded" else "fix " + ",".join(why)))
+            continue
+        e["races"] = rids
+        if kind == "fix":
+            for rid in rids:
+                fixes.setdefault(rid, [])
+                fixes[rid] += [s for s in why if s not in fixes[rid]]
+        else:
+            rejected.append((e, why))
+    # a back-to-back attribution that showed the row is NOT a regression vetoes it, whatever fix another entry names
+    # (fb4-ten: gbdt-symmetric infer "Not a regression"; fb3-named: gbdt-depthwise / lossguide "not reproducible")
+    for e, why in rejected:
+        if why == "noise or box state" and NOT_REGRESSION.search(e["text"]):
+            for r in e["races"]:
+                fixes.pop(r, None)
+            e["veto"] = True
+    not_sel = [(e, why + (" (vetoes any fix)" if e.get("veto") else "")) for e, why in rejected
+               if not any(r in fixes for r in e["races"])]
+    return fixes, not_sel, unmapped
+
+
 def stored_seconds(board):
     return {rid: r.get("wall_s") for rid, r in ((board or {}).get("races") or {}).items()
             if r.get("status") == "done" and isinstance(r.get("wall_s"), (int, float))}
@@ -384,9 +564,90 @@ def select(compare_doc, plan_ids, slower, board, prior_board, changed=None):
     return rows, counts, sorted(gone), guessed
 
 
+def own_only_rows(plan_ids, fixes, compare_doc, board, control=0, seed=DEFAULT_SEED):
+    """(rows in job order: the fix rows (most fixes first, then worst input ratio), the internal row, then CONTROL
+    seeded random races that were SAME or FASTER in the stored compare (a check that nothing fine got slower), all
+    with no 0.8.55 estimate (one arm), counts per reason, how many have no stored time)."""
+    import random
+    planned = set(plan_ids)
+    worst, verdict = {}, {}
+    for rid, ratio, row, _kind in compare_rows(compare_doc):
+        if rid in planned and ratio is not None:
+            worst[rid] = max(worst.get(rid, ratio), ratio)
+            verdict[rid] = verdict.get(rid, True) and ratio <= PC.SLOWER
+    reasons = {rid: ["fix"] + ["fix=" + s for s in shas] for rid, shas in fixes.items() if rid in planned}
+    for rid in plan_ids:
+        if rid.split("/")[1] == RF.INTERNAL_CALL_OVERHEAD_LANE:
+            reasons.setdefault(rid, []).append("internal")
+    pool = sorted(rid for rid, ok in verdict.items() if ok and rid not in reasons)
+    for rid in random.Random(seed).sample(pool, min(control, len(pool))):
+        reasons[rid] = ["control"]
+    new_s = stored_seconds(board)
+    med = family_medians(new_s)
+    rows, guessed = [], 0
+    for rid, rs in reasons.items():
+        n = new_s.get(rid)
+        if n is None:
+            n = med.get(rid.split("/")[0])
+            guessed += 1
+        rows.append({"id": rid, "reasons": rs, "new_s": n, "prior_s": None, "input_ratio": worst.get(rid)})
+    order = {"fix": 0, "internal": 1, "control": 2}
+    rows.sort(key=lambda r: (order[r["reasons"][0]], -len(r["reasons"]), -(r["input_ratio"] or 0.0), r["id"]))
+    counts = {k: sum(1 for x in rows if k in x["reasons"]) for k in ("fix", "internal", "control")}
+    return rows, counts, guessed
+
+
+def cmd_own_only(a, planner, plan_ids):
+    doc = PC.load_json(a.from_compare)
+    d = os.path.dirname(os.path.abspath(a.from_compare))
+    board = PC.load_json(a.board or os.path.join(d, "board-all", "board.json"))
+    paths = sorted({str(p) for g in RESULT_GLOBS for p in Path(a.results_dir).glob(g)})
+    entries = result_entries(paths)
+    # a fix counts when it is on the integration branch and NOT already in the measured build
+    merged = lambda s: is_merged(s, a.merged_into) and not is_merged(s, a.measured)  # noqa: E731
+    fixes, not_sel, unmapped = own_only_select(plan_ids, entries, merged)
+    rows, counts, guessed = own_only_rows(plan_ids, fixes, doc, board, a.control, a.seed)
+    head = subprocess.run(["git", "-C", str(ROOT), "rev-parse", "--short=12", "HEAD"], capture_output=True,
+                          text=True).stdout.strip()
+    out = a.out or str(Path.home() / "mojolearn-evidence" / "targeted" / ("rows-own-%s.tsv" % head))
+    os.makedirs(os.path.dirname(os.path.abspath(out)), exist_ok=True)
+    per_fix = {}
+    for rid, shas in fixes.items():
+        if rid in set(plan_ids):
+            for s in shas:
+                per_fix[s] = per_fix.get(s, 0) + 1
+    audit = ["own-only (tools/ops/targeted_rows.py --own-only) at %s: %d result files in %s, %d entries, fixes merged "
+             "into %s" % (head, len(paths), a.results_dir, len(entries), a.merged_into)]
+    audit += ["fix %s selects %d races" % kv for kv in sorted(per_fix.items(), key=lambda kv: (-kv[1], kv[0]))]
+    PC.write_atomic(out, rows_text(rows, audit))
+    lines = list(audit)
+    lines.append("NOT selected (%d entries; a race another entry assigns to a merged fix is selected, not listed):"
+                 % len(not_sel))
+    lines += ["  %s [%s] %s: %s" % (e["row"][:90], e["file"], ",".join(e["races"])[:160], why) for e, why in not_sel]
+    lines.append("no planned race (%d entries: not on the board now, a paper or prose row, or a note line):"
+                 % len(unmapped))
+    lines += ["  %s [%s]: %s" % (e["row"][:90], e["file"], why) for e, why in unmapped]
+    PC.write_atomic(out + ".audit.txt", "\n".join(lines) + "\n")
+    print("TG-ROWS %s rows=%d planned_now=%d own-only %s" % (out, len(rows), len(plan_ids),
+                                                         " ".join("%s=%d" % kv for kv in counts.items())))
+    for ln in lines:
+        print("TG-OWN " + ln)
+    if guessed:
+        print("TG-NOTE %d rows have no stored candidate time: family median used" % guessed)
+    est, split = check_cap(out, a.cap_min, a.chunk_s, one_arm=True)
+    print(estimate_line(est))
+    if split:
+        print("TG-SPLIT over the %s-minute cap: %d parts, each a complete job:" % (a.cap_min, len(split)))
+        for f, e in split:
+            print("  %s  %s" % (f, estimate_line(e)))
+    return 0
+
+
 def cmd_select(a):
     planner = PC.load_planner(a.planner)
     plan_ids = PC.plan_all(planner, a.vendor)[0]
+    if a.own_only:
+        return cmd_own_only(a, planner, plan_ids)
     doc = PC.load_json(a.from_compare)
     d = os.path.dirname(os.path.abspath(a.from_compare))
     board = PC.load_json(a.board or os.path.join(d, "board-all", "board.json"))
@@ -570,6 +831,16 @@ def build_select_parser():
     p.add_argument("--cap-min", type=float, default=DEFAULT_CAP_MIN)
     p.add_argument("--chunk-s", type=int, default=DEFAULT_CHUNK_S)
     p.add_argument("--facts-cache", default=None, help="tools/release_reuse.py facts cache dir")
+    p.add_argument("--own-only", action="store_true",
+                   help="the rows a MERGED fix covers (the lanes' per-row result files, --results-dir) plus the "
+                        "internal call-overhead row, timed on our new wheel only against the stored baseline")
+    p.add_argument("--results-dir", default=str(RESULT_DIR), help="the lanes' *-RESULT.tsv / .md files")
+    p.add_argument("--merged-into", default=INTEGRATION_REF, help="a fix counts when it is an ancestor of this ref")
+    p.add_argument("--measured", default=MEASURED_BUILD,
+                   help="the build the stored compare measured: a fix already in it selects nothing")
+    p.add_argument("--control", type=int, default=0,
+                   help="--own-only: add N seeded random races that were SAME or FASTER in --from-compare")
+    p.add_argument("--seed", type=int, default=DEFAULT_SEED)
     return p
 
 
