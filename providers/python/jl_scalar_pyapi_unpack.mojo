@@ -25,6 +25,22 @@ def jl_scalar(value: PythonObject, epsilon: Bool, context: PythonObject) raises 
         # exact type admission excludes every user comparison/conversion slot.
         if epsilon:
             raise Error(epsilon_error)
+        # Perf (lane fb-rest, 2026-11-17; algos/jl-min-dim 1.9x vs 0.8.55):
+        # an int64-range count is read through the import-resolved table
+        # (PyLong_AsLongLongAndOverflow) and widened to binary64 with
+        # round-to-nearest-even, PyLong_AsDouble's own rounding, so the same
+        # value. Before: two symbol lookups (dlsym) per call. A count outside
+        # int64 keeps the exact CPython comparison and conversion below.
+        var overflow = List[Int32](length=1, fill=0)
+        var word = cpython_table()[].PyLong_AsLongLongAndOverflow(value._obj_ptr, Int(overflow.unsafe_ptr()))
+        if overflow[0] == 0:
+            if word == -1 and cpython_table()[].PyErr_Occurred():
+                raise typed_python_error()
+            if word <= 0:
+                raise Error(positive_error)
+            return Float64(word)
+        if overflow[0] < 0:
+            raise Error(positive_error)
         ref cpy = Python().cpython()
         var zero = PythonObject(0)
         var nonpositive = cpy.lib.get_function[Int32]("PyObject_RichCompareBool")(
