@@ -244,7 +244,10 @@ def neighbors_public_begin(model: PythonObject, operation: String, args: PythonO
         # per transform: 0.16 ms per MB of X, every shape (board d95f805cce vs
         # 0.8.55, 100k rows: fit 0.49 -> 2.9 ms at 4.4 MB, 5.2 -> 21 ms at 88 MB).
         var imputer = operation.startswith("family_xn_loc_imp_")
-        var borrow = not fitting and not snapshot.readonly and snapshot.f32_c()
+        # fb4-audit (2026-11-17): the imputer's transform borrows a readonly X
+        # too (its fit already did): no op it runs writes X, so readonly
+        # changes nothing but the cost of the owned copy.
+        var borrow = not fitting and (imputer or not snapshot.readonly) and snapshot.f32_c()
         # 0.8.66 regression C3 (knn-reg / knn-clf fit 8.5x on istella, 2.2x
         # on taxi): a k-NN fit keeps a reference to the caller's float32
         # C-order matrix as its index, as 0.8.55 and scikit-learn's brute

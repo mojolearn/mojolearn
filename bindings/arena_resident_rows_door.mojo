@@ -114,6 +114,11 @@ def arena_resident_take(fields: PythonObject, values: PythonObject, indices_valu
     var output = _empty_unfilled(py_call(b["tuple"],shape),String(array["dtype"]),context)
     var n = Int(py=base_shape[0])
     var row_bytes = Int(py=array["nbytes"])//n if n else 0
+    if n == 0 and Int(py=indices["size"]) and Int(py=_slot(output,"nbytes",context)):
+        # fb4-audit (2026-11-17): nothing could fill the unfilled output (no
+        # source row to take); it was a zero-filled Array before, so refuse
+        # rather than return uninitialised words.
+        raise Error("ValueError: resident take indices select rows of a source with no rows")
     if Int(py=indices["size"]) and row_bytes:
         _ = _native_call(context["arena_msel_take_rows"],Python.tuple(base_entry[2],n,row_bytes,index_entry[2],indices["size"],_slot(output,"_addr",context)))
     return output

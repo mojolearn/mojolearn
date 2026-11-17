@@ -879,6 +879,10 @@ class _LrTable(object):
         # an edited setting rebuilds the native rate block (one call per edit)
         return _OPT_NATIVE("schedule_setattr", self, (name, value), None, _OPT_CONTEXT)
 
+    def __delattr__(self, name):
+        # a deleted setting rebuilds (or drops) the native rate block, as an edit does
+        return _OPT_NATIVE("schedule_delattr", self, (name,), None, _OPT_CONTEXT)
+
 
 class _Schedule(_LrTable):
     """Shared half of the schedules. `t` is the optimizer's ONE-BASED step

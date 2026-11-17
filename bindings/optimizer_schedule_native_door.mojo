@@ -2,8 +2,9 @@
 """Schedule UNPACK/PACK; typed plans own validation and native execution."""
 from std.memory import bitcast
 from std.python import Python, PythonObject
-from std.python._cpython import GILReleased
+from std.python._cpython import GILReleased, PyObjectPtr
 from bindings.py_cpython_table import cpython_table
+from bindings.optimizer_public_words_unpack import stash_python_error
 from bindings.py_balanced import py_call, py_type, py_fields, py_setitem
 from bindings.optimizer_admission_door import opt_scalar, opt_value, opt_schedule, opt_exact
 from bindings.optimizer_public_door import schedule_spec_admitted
@@ -106,9 +107,26 @@ def schedule_construct(owner: PythonObject, values: PythonObject, context: Pytho
         py_setitem(fields, "final_div_factor", PythonObject(spec.f2))
         py_setitem(fields, "three_phase", PythonObject(optimizer_truth(values[6], context)))
     # lane fb2-lr (2026-11-17): `lr_at` / `bits_at` are the native block's
-    # METH_FASTCALL methods, bound here once (bindings/lr_schedule_block_door.mojo).
+    # METH_VARARGS | METH_KEYWORDS methods, bound here once (bindings/lr_schedule_block_door.mojo).
     schedule_bind_block(owner, kind, context)
     return PythonObject(None)
+
+
+def _schedule_rebind(owner: PythonObject, name: PythonObject, context: PythonObject) raises:
+    """After an edit or a deletion of attribute `name`: rebuild the native
+    rate block from the stored settings, or drop the bound block methods when
+    the admission refuses them (the class methods then re-read and refuse at
+    the call). An edit of `lr_at` / `bits_at` themselves rebuilds nothing."""
+    var word = String(py=name)
+    if word == "lr_at" or word == "bits_at":
+        return
+    try:
+        opt_schedule(owner, context)
+        schedule_bind_block(owner, schedule_kind(owner, context), context)
+    except:
+        var edited = py_fields(owner)
+        _ = edited.pop(PythonObject("lr_at"), PythonObject(None))
+        _ = edited.pop(PythonObject("bits_at"), PythonObject(None))
 
 
 def schedule_operation(operation: String, owner: PythonObject, values: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -164,15 +182,23 @@ def schedule_operation(operation: String, owner: PythonObject, values: PythonObj
                         + String(py=py_call(context["type_name"], py_type(name))) + "'")
         var edited = py_fields(owner)
         py_setitem(edited, name, values[1])
-        var word = String(py=name)
-        if word == "lr_at" or word == "bits_at":
-            return PythonObject(None)
-        try:
-            opt_schedule(owner, context)
-            schedule_bind_block(owner, schedule_kind(owner, context), context)
-        except:
-            _ = edited.pop(PythonObject("lr_at"), PythonObject(None))
-            _ = edited.pop(PythonObject("bits_at"), PythonObject(None))
+        _schedule_rebind(owner, name, context)
+        return PythonObject(None)
+    if operation == "schedule_delattr":
+        # `del sched.<name>` (lane fb4-audit, 2026-11-17): object.__delattr__'s
+        # own deletion and refusal (PyObject_GenericSetAttr with no value),
+        # then the same rebuild as an edit. Without it a deleted setting left
+        # the old bound block answering `lr_at` from the settings it no longer
+        # has; now the class methods re-read and refuse at the call, as the
+        # per-call re-read did. One native call per deletion.
+        var name = values[0]
+        if py_type(name) is not context["scalar_types"][5]:
+            raise Error("TypeError: attribute name must be string, not '"
+                        + String(py=py_call(context["type_name"], py_type(name))) + "'")
+        if cpython_table()[].PyObject_GenericSetAttr(owner._obj_ptr, name._obj_ptr, PyObjectPtr()) != 0:
+            var failure = stash_python_error()
+            raise failure^
+        _schedule_rebind(owner, name, context)
         return PythonObject(None)
     if operation == "schedule_setstate":
         var restored = values[0]
