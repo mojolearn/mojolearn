@@ -165,6 +165,11 @@ for pv in $(echo "${PC_PRIOR_VERSIONS:-$PAPER_VERSION,$PRIOR}" | tr ',' ' ') "$P
 done
 PRIOR_VERSIONS="${PRIOR_VERSIONS:+$PRIOR_VERSIONS,}$PRIOR"
 # <<< prior-versions
+# THE STORED BASELINE (Andrew, 2026-11-17, AGENTS.md part 8 "0.8.55 is not timed again"): PC_BASELINE_BOARD = the
+# 0.8.55 board of the 2026-11-17 L40S full board, staged on the box by tools/ops/measure_candidate.py stage --rows.
+# The targeted job then times OUR new wheel only: no 0.8.55 venv, smoke or races; the compare reads the stored board
+# (tools/paper_compare.py --stored-baseline-board: host and driver differences are WARNING lines, BOX-STATE rows).
+BASELINE_BOARD=${PC_BASELINE_BOARD:-}
 if [ "$MODE" = candidate ]; then
     [ -n "${PC_WHEEL_DIR:-}" ] || { echo "paper-compare-job: candidate mode needs PC_WHEEL_DIR" >&2; exit 2; }
     [[ "${PC_SOURCE_COMMIT:-}" =~ ^[0-9a-f]{40}$ ]] || {
@@ -300,7 +305,13 @@ else
 fi
 # OUR prior wheels from PyPI, timed on this box in this job (the compare's columns): prior-<version>
 PRIOR_ARMS=()
+if [ -n "$BASELINE_BOARD" ]; then
+    [[ "$PARTS" == *",targeted,"* || "$PARTS" == *",tg-"* ]] || { say "PC_BASELINE_BOARD is for the targeted job (PC_PARTS=targeted)"; exit 2; }
+    [ -s "$BASELINE_BOARD" ] || { say "PC_BASELINE_BOARD $BASELINE_BOARD: no such file on the box (measure_candidate.py stage uploads it)"; exit 2; }
+    say "baseline: STORED $BASELINE_BOARD ($(sha256sum "$BASELINE_BOARD" | cut -c1-16)); no prior venv, smoke or races in this job"
+fi
 for pv in ${PRIOR_VERSIONS//,/ }; do
+    [ -n "$BASELINE_BOARD" ] && break                                 # the stored baseline: no prior arm at all
     [ "$MODE" = published ] && [ "$pv" = "$VER" ] && continue      # the version under test is the new column
     add_arm "prior-$pv" --mojolearn-version "$pv"; PRIOR_ARMS+=("prior-$pv")
 done
@@ -309,12 +320,24 @@ done
 venv_arm() { if [ "$1" = prior ]; then echo "prior-${LAST_PRIOR:-none}"; else echo "$1"; fi; }
 OWED_PRIOR=(); [ -n "$LAST_PRIOR" ] && OWED_PRIOR=(--prior)   # measure_owed plans the owed prior arm only then
 # >>> b-arms (tools/test_measure_owed.py runs this block on a fake PC_B_ARMS file)
+# A line is `<name> <wheel dir> <commit>` (a B wheel set built from another commit) or `<name> env:VAR=VALUE[,VAR=VALUE]
+# <commit>` (an ENV-ONLY arm, no rebuild: the candidate's own venv run with those variables set, e.g.
+# MOJOLEARN_CPU_THREADS=28 or MOJOLEARN_XPREP_R3_OFF=view; the targeted job only). ARM_ENV holds an env arm's variables.
 B_NAMES=()
+declare -A ARM_ENV
 if [ "$OWED" = 1 ] && [ -n "${PC_B_ARMS:-}" ]; then
     [ -s "$PC_B_ARMS" ] || say "PC_B_ARMS=$PC_B_ARMS: no such file on the box (or empty); no B arm runs"
     while read -r name dir commit; do
         [ -z "${name:-}" ] || [ "${name:0:1}" = "#" ] && continue
         [[ "$name" =~ ^[a-z0-9][a-z0-9.-]*$ ]] && [[ "${commit:-}" =~ ^[0-9a-f]{40}$ ]] || { say "bad PC_B_ARMS line: $name"; continue; }
+        if [[ "$dir" == env:* ]]; then
+            [[ "$PARTS" == *",targeted,"* || "$PARTS" == *",tg-"* ]] || { say "env arm $name: the targeted job only (PC_PARTS=targeted)"; continue; }
+            [[ "${dir#env:}" =~ ^[A-Z_][A-Z0-9_]*=[^,[:space:]]*(,[A-Z_][A-Z0-9_]*=[^,[:space:]]*)*$ ]] || { say "bad env arm $name: $dir"; continue; }
+            add_arm "$name" ${ARM_ARGS[candidate]}
+            ARM_PY[$name]=${ARM_PY[candidate]}; ARM_MAN[$name]=${ARM_MAN[candidate]}; ARM_ENV[$name]=${dir#env:}
+            B_NAMES+=("$name")
+            continue
+        fi
         bw=(); for w in "$dir"/mojolearn_core-*.whl "$dir"/mojolearn_"$V"-*.whl; do [ -f "$w" ] && bw+=("$w"); done
         [ "${#bw[@]}" -eq 2 ] || { say "B set $name: $dir must hold one core and one $V wheel"; continue; }
         a="--mojolearn-version $(basename "${bw[0]}" | cut -d- -f2) --candidate-source-commit $commit"
@@ -581,7 +604,10 @@ fi
 # column, best ever as reference) in COMPARE-TG/compare-tg/SUMMARY-TG-COMPARE-<vendor>, and SUMMARY-TG-<vendor>
 # (targeted_rows.py summary: timed on both, FASTER/SAME/REGRESSION, rows still over 1.10 worst first, rows fixed,
 # done/total per arm, the A/B ratios). GPU races are serial by nature (one process on the GPU); the installs, the
-# smokes and the plans use every cgroup core.
+# smokes and the plans use every cgroup core. With PC_BASELINE_BOARD (the stored 0.8.55 board; Andrew, 2026-11-17:
+# "0.8.55 is not timed again") the job has NO prior arm: the plan, the candidate's install (and the B sets'), its smoke
+# of the listed races, its board, and the compare against the stored board (first line: the baseline is stored).
+# Env-only A/B arms (PC_B_ARMS `<name> env:VAR=VALUE <commit>`) run the candidate's venv with those variables.
 [[ "$PARTS" == *",targeted,"* ]] && PARTS="$PARTS,tg-install,tg-smoke,tg-board,tg-compare,"
 if part tg-install || part tg-smoke || part tg-board || part tg-compare; then
     TG="$RES/plan-tg"; TGO="$RES/plan-tg-owed"
@@ -616,6 +642,7 @@ if part tg-install || part tg-smoke || part tg-board || part tg-compare; then
         phase tg-install
         pids=(); names=()
         for arm in "${ARMS[@]}"; do      # every arm at once (CPU): the candidate, the priors, the B sets
+            [ -n "${ARM_ENV[$arm]:-}" ] && continue      # an env arm runs in the candidate's venv: nothing to install
             # shellcheck disable=SC2086
             $PY tools/bench_board.py "${COMMON_TG[@]}" ${ARM_ARGS[$arm]} --ours-install-only --install-only \
                 --venv "$CACHE_ROOT/venv-$arm" --cache "$CACHE_ROOT/i-$arm" --wheel-manifest "${ARM_MAN[$arm]}" \
@@ -648,8 +675,9 @@ if part tg-install || part tg-smoke || part tg-board || part tg-compare; then
         [ -f "${ARM_MAN[$arm]:-/nonexistent}" ] || { say "board $arm: no installed venv (logs/install-tg-$arm.log)"; return 6; }
         [ -n "$rows" ] && ra=(--rows "$rows")
         CUR_IDS=$ids; CUR_BOARD=$out
+        local envs=(); [ -n "${ARM_ENV[$arm]:-}" ] && IFS=, read -r -a envs <<< "${ARM_ENV[$arm]}"
         # shellcheck disable=SC2046
-        $PY tools/bench_board.py "${COMMON_TG[@]}" $(run_as "$arm") --cache "$CACHE_ROOT/c1" --race-ids @"$ids" \
+        env ${envs[@]+"${envs[@]}"} $PY tools/bench_board.py "${COMMON_TG[@]}" $(run_as "$arm") --cache "$CACHE_ROOT/c1" --race-ids @"$ids" \
             "$@" ${ra[@]+"${ra[@]}"} --drop-race-scratch --out "$out" >> "$RES/logs/$(basename "$out").log" 2>&1
         rc=$?; CUR_IDS=
         say "board $arm $(basename "$ids") rc=$rc: $(tail -n 1 "$RES/logs/$(basename "$out").log" | head -c 160)"
@@ -717,6 +745,7 @@ if part tg-install || part tg-smoke || part tg-board || part tg-compare; then
         NR=()
         for f in "$TG/not-planned.json" "$TG/smoke-failed.json"; do [ -f "$f" ] && NR+=(--not-run "$f"); done
         mapfile -t PB < <(prior_board_args tg-)
+        [ -n "$BASELINE_BOARD" ] && PB=(--stored-baseline-board "$BASELINE_BOARD")
         RF=()
         [ -f "$REF_COMPARE" ] && RF=(--reference-compare "$REF_COMPARE")
         $PY tools/paper_compare.py compare --recipes "$TG/recipes.json" --board "$RES/board-tg/board.json" "${NR[@]}" \
@@ -725,7 +754,8 @@ if part tg-install || part tg-smoke || part tg-board || part tg-compare; then
             --summary "$RES/SUMMARY-TG-COMPARE-$V.txt" > "$RES/logs/compare-tg.log" 2>&1
         rc=$?; head -n 3 "$RES/logs/compare-tg.log"
         $PY tools/ops/targeted_rows.py summary --compare "$RES/compare-tg-$V.json" --rows "$TG/rows.tsv" \
-            --results "$RES" --ids "$TG/race-ids-full.txt" --units "$TGO/units.tsv" --prior-versions "$PRIOR_VERSIONS" \
+            --results "$RES" --ids "$TG/race-ids-full.txt" --units "$TGO/units.tsv" \
+            --prior-versions "$([ -n "$BASELINE_BOARD" ] || echo "$PRIOR_VERSIONS")" \
             --out "$RES/SUMMARY-TG-$V.txt" > "$RES/logs/summary-tg.log" 2>&1
         r=$?; head -n 3 "$RES/logs/summary-tg.log"; [ $r -gt $rc ] && rc=$r
         phase_end $rc

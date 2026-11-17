@@ -103,6 +103,13 @@ def dir_version(wheel_dir, fallback):
     except (OSError, ValueError, KeyError):
         return fallback
 IN_BASE = "/root/pc-in"
+#: the STORED baseline of the targeted job (Andrew, 2026-11-17, AGENTS.md part 8 "0.8.55 is not timed again"): the
+#: 0.8.55 board of the 2026-11-17 L40S full board (host 26ee0a3b0f86, driver 595.112.07, kernel 6.8.0-149). 44 MB, too
+#: large for bench/results/, so stage uploads it from the evidence path beside the wheels
+STORED_BASELINE = (Path.home() / "mojolearn-evidence" / "measure-candidate" / "build-d95f805cce" / "full"
+                   / "board-all-prior-0.8.55" / "board.json")
+#: the candidate board of that full board: the stored wall seconds the A/B plan's minutes are estimated from
+STORED_TIMES = STORED_BASELINE.parents[1] / "board-all" / "board.json"
 AMD_TREE = "/root/mojolearn"
 #: the job's --data-root (tools/ops/paper_compare_job.sh PC_DATA_ROOT default); dataset_store.sh stages there
 DATA_ROOT = "/root/datasets/gbm-bench"
@@ -315,11 +322,40 @@ class StagePlan:
         return self.box_sh("sha256sum " + " ".join(shlex.quote(r) for r in remotes))
 
 
+ENV_ARM_RE = re.compile(r"([a-z0-9][a-z0-9.-]*)=env:([A-Z_][A-Z0-9_]*=[^,\s]*(?:,[A-Z_][A-Z0-9_]*=[^,\s]*)*)")
+
+
 def parse_b_arm(text):
+    """(name, wheel dir, sha) of a built B set NAME=DIR@SHA, or (name, 'env:VAR=VALUE[,..]', None) of an ENV-ONLY arm
+    NAME=env:VAR=VALUE (no rebuild: the job runs the candidate's venv with those variables; the targeted job only)."""
+    m = ENV_ARM_RE.fullmatch(text)
+    if m:
+        return m.group(1), "env:" + m.group(2), None
     m = re.fullmatch(r"([a-z0-9][a-z0-9.-]*)=(.+)@([0-9a-f]{40})", text)
     if not m:
-        raise SystemExit(f"measure-candidate: --b-arm wants NAME=DIR@SHA (40 hex), not {text!r}")
+        raise SystemExit(f"measure-candidate: --b-arm wants NAME=DIR@SHA (40 hex) or NAME=env:VAR=VALUE, not {text!r}")
     return m.group(1), Path(m.group(2)).expanduser(), m.group(3)
+
+
+def ab_plan(owed_file, planner_file, vendor, b_names, times_board, chunk_s=TR.DEFAULT_CHUNK_S):
+    """[(arm, rows tag, races, minutes)] of the owed A/B units the job times for these B arms (tools/measure_owed.py
+    plan, the same call the job's targeted plan makes, with no paper race left to a paper board): each unit is its
+    base (the candidate) and the arm back to back, so its minutes are twice the races' stored candidate seconds (the
+    family median for a race or a neighbouring shape with no stored time) plus one process start per chunk and arm."""
+    if not b_names:
+        return []
+    planner = MO.load_planner(str(planner_file))
+    units = MO.plan(PC.load_json(owed_file), {"recipes": [], "race_ids": []}, planner, vendor, list(b_names))[0]
+    secs = TR.stored_seconds(PC.load_json(times_board)) if times_board and Path(times_board).is_file() else {}
+    med = TR.family_medians(secs)
+    out = []
+    for (arm, rows), ids in sorted(units.items(), key=lambda kv: MO.unit_order(kv[0])):
+        if arm == "candidate":
+            continue
+        s = sum((secs.get(i) if rows == "full" else None) or med.get(i.split("/")[0], chunk_s / 4.0) for i in ids)
+        nchunks = len(TR.chunk_ids(ids, {}, chunk_s)) if ids else 0
+        out.append((arm, rows, len(ids), (2 * s + 2 * TR.PROC_S * nchunks) / 60.0))
+    return out
 
 
 def submit_line(vendor, lane, tag, env):
@@ -348,6 +384,8 @@ def cmd_stage(a):
     owed_file = Path(a.owed_file).expanduser() if a.owed_file else results_file(f"paper_compare/{OWED_NAME}", tree, src)
     specs = [parse_b_arm(spec) for spec in a.b_arm]
     check_b_arms([n for n, _, _ in specs], owed_file)
+    if any(sha is None for _, _, sha in specs) and not a.rows:
+        raise SystemExit("measure-candidate: an env arm (NAME=env:VAR=VALUE) runs in the targeted job only (--rows)")
     recipes = results_file(f"paper_compare/recipes-{vendor}.json", tree, src)
     planner = tree / "tools" / "bench_board.py"
     prior_versions = [v for v in a.prior_versions.split(",") if v]
@@ -358,16 +396,29 @@ def cmd_stage(a):
         parts = ["targeted"]
     if runs_targeted(parts) != bool(a.rows):
         raise SystemExit("measure-candidate: --rows and --parts targeted (or a tg-* part) go together")
+    stored = bool(a.rows) and a.baseline_board != "none"
+    if stored and not Path(a.baseline_board).expanduser().is_file():
+        raise SystemExit(f"measure-candidate: --baseline-board {a.baseline_board}: no such file")
     if a.rows:
-        # the targeted job's cap check, before anything is copied: an estimate over the cap is refused with its split
-        est, split = TR.check_cap(a.rows, a.cap_min, a.chunk_s)
+        # the targeted job's cap check, before anything is copied: an estimate over the cap is refused with its split.
+        # Against the stored baseline the job times one arm (our new wheel): no 0.8.55 seconds.
+        est, split = TR.check_cap(a.rows, a.cap_min, a.chunk_s, one_arm=stored)
         print(TR.estimate_line(est))
+        abp = ab_plan(owed_file, planner if planner.is_file() else ROOT / "tools" / "bench_board.py", vendor,
+                      [n for n, _, _ in specs], a.times_board, a.chunk_s)
+        for arm, rows, n, m in abp:
+            print(f"TG-AB arm={arm} rows={rows} races={n} minutes={m:.0f} (base and arm back to back)")
+        if abp:
+            tot = est["total_min"] + sum(m for *_, m in abp)
+            print(f"TG-ESTIMATE-ALL minutes={tot:.0f} (rows {est['total_min']:.0f} + A/B {tot - est['total_min']:.0f})"
+                  + (f"; OVER the {a.cap_min:.0f}-minute cap: split the A/B arms with PC_OWED_ARMS on a second "
+                     f"submit (tg-board resumes)" if tot > a.cap_min else ""))
         if split:
             raise SystemExit(f"measure-candidate: {a.rows} is estimated at {est['total_min']:.0f} min, over the "
                              f"{a.cap_min:.0f}-minute cap; submit the split, one job each (each times both arms):\n  "
                              + "\n  ".join(f"{f}  {TR.estimate_line(e)}" for f, e in split))
     keys = dataset_keys(vendor, owed_file, recipes, planner if planner.is_file() else ROOT / "tools" / "bench_board.py",
-                        [n for n, _, _ in specs], prior_versions[-1] != PC.PAPER_VERSION, parts, a.rows)
+                        [n for n, _, _ in specs], prior_versions[-1] != PC.PAPER_VERSION and not stored, parts, a.rows)
     ds_manifest = results_file("dataset_store/manifest.tsv", src, tree)
     print(f"datasets the job reads ({vendor}, parts {','.join(parts) or 'default'}): {' '.join(keys)} "
           f"(pins {ds_manifest})")
@@ -375,6 +426,9 @@ def cmd_stage(a):
     uploads = [(w, f"{indir}/{vendor}/{w.name}", False) for w in wheels]
     b_lines = []
     for name, bdir, bsha in specs:
+        if bsha is None:                                     # an env arm: the candidate's own wheels, no upload
+            b_lines.append(f"{name} {bdir} {commit}\n")
+            continue
         bver = dir_version(bdir, a.b_version or version)     # a B candidate has its own local version
         check_built(bdir, vendor)
         bw = pick_wheels(bdir, vendor, bver)
@@ -394,6 +448,13 @@ def cmd_stage(a):
         env["PC_ROWS"] = f"{indir}/rows/{rows_name}"
         if a.chunk_s != TR.DEFAULT_CHUNK_S:
             env["PC_TG_CHUNK_S"] = str(a.chunk_s)
+        if stored:
+            # the stored 0.8.55 board goes beside the wheels; the job times no prior arm (paper_compare_job.sh)
+            base = Path(a.baseline_board).expanduser()
+            uploads.append((base, f"{indir}/baseline/{base.parent.name}.board.json", False))
+            env["PC_BASELINE_BOARD"] = f"{indir}/baseline/{base.parent.name}.board.json"
+            for k in ("PC_PRIOR_VERSIONS", "PC_PRIOR_VERSION"):
+                env.pop(k, None)
     allow_hw_diff = a.allow_hw_diff or os.environ.get("PC_ALLOW_HW_DIFF") == "1"
     if vendor == "nvidia" and allow_hw_diff:
         env["PC_ALLOW_HW_DIFF"] = "1"     # the job then runs on another GPU and every row is flagged HW-DIFF
@@ -582,6 +643,12 @@ def main(argv=None):
                    help="the targeted job's estimate cap in minutes (default %(default)s)")
     s.add_argument("--chunk-s", type=int, default=TR.DEFAULT_CHUNK_S,
                    help="the targeted job's interleave chunk in seconds of candidate time (PC_TG_CHUNK_S)")
+    s.add_argument("--baseline-board", default=str(STORED_BASELINE),
+                   help="the targeted job's STORED 0.8.55 board (default the 2026-11-17 L40S full board's): uploaded "
+                        "beside the wheels (PC_BASELINE_BOARD); the job then times our new wheel only. 'none' times "
+                        "0.8.55 on the box beside the candidate instead (the two-arm targeted job)")
+    s.add_argument("--times-board", default=str(STORED_TIMES),
+                   help="a candidate board.json whose stored wall seconds estimate the A/B arms' minutes")
     s.add_argument("--dry-run", action="store_true", help="validate locally and print every command; copy nothing")
     a = p.parse_args(argv)
     return cmd_stage(a)

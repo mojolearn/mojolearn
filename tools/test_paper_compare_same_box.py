@@ -411,6 +411,73 @@ class JobScript(unittest.TestCase):
                                                    "--prior-board", "0.8.66=/r/board-all-prior-0.8.66/board.json"])
 
 
+class StoredBaseline(unittest.TestCase):
+    """Andrew, 2026-11-17 (AGENTS.md part 8 "0.8.55 is not timed again"): the 0.8.55 board of the 2026-11-17 L40S full
+    board is the baseline; a job times our new wheel only. Another host or driver is a WARNING, not a refusal; the
+    first line says the baseline is stored; a row whose upload probe moved more than 15% is BOX-STATE."""
+
+    def setUp(self):
+        self.doc = PC.extract_recipes(paper_board(), "nvidia")
+
+    @staticmethod
+    def with_upload(board, ms, nbytes=880e6):
+        for r in board["races"].values():
+            for c in r["cells"]:
+                if c["arm"] == "ours":
+                    c.setdefault("comparability", {}).setdefault("span", {}).update(
+                        upload_ms_separate=ms, upload_bytes_separate=nbytes)
+        return board
+
+    def stored(self, ms_upload=40.0):
+        b = self.with_upload(ours_board({}, HOST_B, "0.8.55"), ms_upload)
+        b["box"]["host_probe"]["gpu"]["driver"] = "595.112.07"
+        b["box"]["host_probe"]["taken"] = "2026-11-17T06:43:38Z"
+        return b
+
+    def test_another_host_and_driver_warn_and_still_flag(self):
+        cand = self.with_upload(on_host(new_board(), HOST_A), 41.0)
+        with self.assertRaises(SystemExit):          # the two-arm mode still refuses two hosts
+            PC.compare(self.doc, [cand], {}, prior_boards=[("0.8.55", ours_board({}, HOST_B, "0.8.55"))])
+        res = PC.compare(self.doc, [cand], {}, stored_baseline=self.stored())
+        km = {r["key"]: r for r in res["rows"]}[KM]
+        self.assertEqual((km["old_ms"], round(km["ratio"], 2)), (100.0, 1.3))
+        self.assertIn("REGRESSION", km["flags"])
+        self.assertNotIn("BOX-STATE", km["flags"])           # 41 vs 40 ms: 2.5%
+        text = PC.render_summary(res).splitlines()
+        self.assertTrue(text[0].startswith("STORED BASELINE, not timed in this job: 0.8.55 stored (host %s, GPU %s, "
+                                           "driver 595.112.07" % (HOST_B, GPU)), text[0])
+        self.assertIn("date 2026-11-17", text[0])
+        self.assertIn("this job: host %s" % HOST_A, text[0])
+        self.assertTrue(text[1].startswith("WARNING: the stored 0.8.55 baseline ran on host %s" % HOST_B))
+        self.assertTrue(text[2].startswith("WARNING: GPU driver 595.112.07 (stored 0.8.55) vs 570.1"))
+        self.assertTrue(PC.render_md(res).startswith("**STORED BASELINE"))
+        with self.assertRaises(SystemExit):          # one baseline only
+            PC.compare(self.doc, [cand], {}, prior_boards=[("0.8.55", ours_board({}, HOST_A, "0.8.55"))],
+                       stored_baseline=self.stored())
+
+    def test_upload_probe_moved_is_box_state(self):
+        cand = self.with_upload(on_host(new_board(), HOST_A), 60.0)     # 880 MB in 60 ms vs 40 ms: -33%
+        res = PC.compare(self.doc, [cand], {}, stored_baseline=self.stored())
+        km = {r["key"]: r for r in res["rows"]}[KM]
+        self.assertIn("BOX-STATE", km["flags"])
+        self.assertFalse({"REGRESSION", "FASTER", "SAME"} & set(km["flags"]))
+        self.assertAlmostEqual(km["ratio"], 1.3)                       # shown
+        self.assertEqual(km["upload_probe"]["source"], "race")
+        self.assertAlmostEqual(km["upload_probe"]["diff"], 40.0 / 60.0 - 1.0)
+        summ = PC.render_summary(res)
+        self.assertIn("BOX-STATE %d rows" % len(PC.box_state_rows(res)), summ)
+        self.assertNotIn("worst regressions", summ)
+
+    def test_dataset_median_fallback_reads_large_uploads_only(self):
+        races = {"a/x/taxi/rows=full": {"dataset": "taxi", "cells": [
+                     {"arm": "ours", "comparability": {"span": {"upload_ms_separate": 1.0,
+                                                                "upload_bytes_separate": 1e3}}}]},
+                 "a/y/taxi/rows=full": {"dataset": "taxi", "cells": [
+                     {"arm": "ours", "comparability": {"span": {"upload_ms_separate": 2.0,
+                                                                "upload_bytes_separate": 40e6}}}]}}
+        self.assertEqual(PC.dataset_probes(races), {"taxi": 20.0})
+
+
 class OwedPriorIsTheOnBoxBoard(unittest.TestCase):
     def test_board_dir(self):
         self.assertEqual(MO.board_dir("/r", "prior", "full", "0.8.66"), "/r/board-prior-0.8.66")
