@@ -36,12 +36,12 @@ from providers.python.x_decomp_decomp_owner_pyapi_pack import ica_fit_py, ica_pr
 
 from providers.python.x_decomp_select_ops_pyapi_pack import order_small_py, reduce_py
 from providers.python.x_decomp_select_dev_pyapi_pack import (
-    dev_argmin_all_py, dev_order_small_py, dev_pca_mle_rank_py, dev_reduce_py, dev_select_smallest_py,
+    dev_order_small_py, dev_pca_mle_rank_py,
 )
 # TOMBSTONE: MOJOLEARN_MCD_ORDERED_COV (x_decomp_mcd_cov_reach, x_decomp_mcd_cov_probe, x_decomp_dev_mcd_cov) deleted 2026-11-08 by 65b756872d; code recoverable at 41ffcec665.
 # Restore: git apply experiments/removed/MOJOLEARN_MCD_ORDERED_COV.patch
 from providers.python.x_decomp_resident_pyapi_pack import (
-    dev_alloc_py, dev_colsum_py, dev_download_py, dev_ew_py, dev_free_py, dev_live_py, dev_gemm_py, dev_rand_py, dev_rowsum_py, dev_sqdist_py, dev_upload_py, dev_absmax_py, dev_orth_py, dev_orth_diag_py, dev_move_py,
+    dev_alloc_py, dev_ew_py, dev_free_py, dev_live_py, dev_gemm_py, dev_upload_py,
 )
 from x_decomp.resident import GRP_CLS2_ANY
 from providers.python.x_decomp_resident_pyapi_pack import grp_cls2_py
@@ -52,7 +52,7 @@ from providers.python.x_decomp_resident_pyapi_pack import dev_lu_py, dev_lu_aux_
 from x_decomp.resident import IDN_CODE_RESIDENT
 from providers.python.x_decomp_resident_pyapi_pack import dev_code_rows_py
 from x_decomp.resident import IDN_EIGH_RESIDENT
-from providers.python.x_decomp_resident_pyapi_pack import dev_eigh_py, dev_eigh_to_py
+from providers.python.x_decomp_resident_pyapi_pack import dev_eigh_to_py
 # TOMBSTONE: MOJOLEARN_LLE_FAST_DEV_LU (the w4 alias of `dev_lu_aux_py`; "x_decomp_dev_lu_aux" is now only the
 # IDN_LU_RESIDENT entry) deleted 2026-11-08 by ed9ba6e7a1; code recoverable at 41ffcec665.
 # Restore: git apply experiments/removed/MOJOLEARN_LLE_FAST_DEV_LU.patch
@@ -228,29 +228,23 @@ def build__mojolearn_x_decomp() -> PythonObject:
         # TOMBSTONE: the dead x_decomp exports (registrations only where the body stays live in the decomp owners; see docs/TOMBSTONES.md) deleted 2026-10-26 by 25b5daca2; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_x_decomp.patch
         m.def_function[pca_mle_rank_host_py]("x_decomp_pca_mle_rank")
-        m.def_function[dev_move_py]("x_decomp_dev_move")
         # lane cpu2-l8-decomp: exact select reductions and the small stable order (x_decomp/select_*.mojo)
         m.def_function[reduce_py]("x_decomp_reduce")
         m.def_function[order_small_py]("x_decomp_order_small")
-        m.def_function[dev_reduce_py]("x_decomp_dev_reduce")
         m.def_function[dev_order_small_py]("x_decomp_dev_order_small")
         m.def_function[dev_pca_mle_rank_py]("x_decomp_dev_pca_mle_rank")
-        m.def_function[dev_argmin_all_py]("x_decomp_dev_argmin_all")
-        m.def_function[dev_select_smallest_py]("x_decomp_dev_select_smallest")
         # device-resident matrices (x_decomp/resident.mojo; GPU binding only)
         m.def_function[dev_alloc_py]("x_decomp_dev_alloc")
         m.def_function[dev_free_py]("x_decomp_dev_free")
         m.def_function[dev_live_py]("x_decomp_dev_live")
         m.def_function[dev_upload_py]("x_decomp_dev_upload")
         # TOMBSTONE: x_decomp_dev_upload_finite (lane a8c duplicate of op XD_DEV_UPLOAD_FINITE) folded into the op 2026-11-09 at integration; never reached main (lane/a8c-device-x-linear-prep-rfe@2141a3451b).
-        m.def_function[dev_download_py]("x_decomp_dev_download")
         m.def_function[dev_ew_py]("x_decomp_dev_ew")
         m.def_function[dev_gemm_py]("x_decomp_dev_gemm")
         # TOMBSTONE: MOJOLEARN_MCD_ORDERED_COV (x_decomp_mcd_cov_reach, x_decomp_mcd_cov_probe, x_decomp_dev_mcd_cov) deleted 2026-11-08 by 65b756872d; code recoverable at 41ffcec665.
         # Restore: git apply experiments/removed/MOJOLEARN_MCD_ORDERED_COV.patch
         # TOMBSTONE: the dead x_decomp exports (registrations only where the body stays live in the decomp owners; see docs/TOMBSTONES.md) deleted 2026-10-26 by 25b5daca2; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_x_decomp.patch
-        m.def_function[dev_rand_py]("x_decomp_dev_rand")
         # TOMBSTONE: MOJOLEARN_RSVD_FAST_DIRECT_IN and MOJOLEARN_IDN_RSVD_DIRECT_IN (KEPT defaults, superseded: randomized_svd is one driver that reads M in place; their x_decomp_w4_flags entry had no other bit) deleted 2026-11-08 by lane a3-admit-decomp-prep-metrics; code recoverable at f7d10d2b09.
         # Restore: experiments/removed/A3_ADMISSION_HELPERS.patch.
         # lane/apple-fast-q-linalg (x_decomp/qfix.mojo): FAST quality repairs
@@ -267,12 +261,6 @@ def build__mojolearn_x_decomp() -> PythonObject:
         # LU_FAST_RESIDENT (FAST + Apple) or IDN_LU_RESIDENT_PAIR (IDENTICAL default; IDN_ALL_OFF reverts)
         # TOMBSTONE: MOJOLEARN_LLE_FAST_DEV_LU (its x_decomp_dev_lu_aux registration) deleted 2026-11-08 by ed9ba6e7a1; code recoverable at 41ffcec665.
         # Restore: git apply experiments/removed/MOJOLEARN_LLE_FAST_DEV_LU.patch
-        m.def_function[dev_colsum_py]("x_decomp_dev_colsum")
-        m.def_function[dev_rowsum_py]("x_decomp_dev_rowsum")
-        m.def_function[dev_sqdist_py]("x_decomp_dev_sqdist")
-        m.def_function[dev_absmax_py]("x_decomp_dev_absmax")
-        m.def_function[dev_orth_py]("x_decomp_dev_orth")
-        m.def_function[dev_orth_diag_py]("x_decomp_dev_orth_diag")
         # TOMBSTONE: the dead x_decomp exports (registrations only where the body stays live in the decomp owners; see docs/TOMBSTONES.md) deleted 2026-10-26 by 25b5daca2; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_x_decomp.patch
         comptime if IDN_SVD_RESIDENT:
@@ -289,7 +277,6 @@ def build__mojolearn_x_decomp() -> PythonObject:
             m.def_function[dev_code_rows_py]("x_decomp_dev_code_rows")
         comptime if IDN_EIGH_RESIDENT:
             # lane fam-decomp: IDENTICAL default (x_decomp/resident.mojo)
-            m.def_function[dev_eigh_py]("x_decomp_dev_eigh")
             # lane n9-decomp-eigh-families: device outputs (DevExec.eigh_into), no w / V round trip
             m.def_function[dev_eigh_to_py]("x_decomp_dev_eigh_to")
         # TOMBSTONE: the dead x_decomp exports (registrations only where the body stays live in the decomp owners; see docs/TOMBSTONES.md) deleted 2026-10-26 by 25b5daca2; code recoverable at a88745022.
