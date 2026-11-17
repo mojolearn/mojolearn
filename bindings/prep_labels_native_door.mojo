@@ -15,7 +15,7 @@ from std.memory import unsafe_memcpy
 from std.python import Python, PythonObject
 from bindings.native_loaded_module_door import native_loaded_module
 from bindings.native_array_storage_door import native_array_zeros, native_array_empty, native_array_from_bytes, native_array_unfilled
-from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem, py_contains
+from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem, py_contains, py_setattr
 from bindings.py_typed_call import py_call_typed
 from bindings.optimizer_public_words_unpack import stash_python_error
 from bindings.classical_arrays_door import classical_address, classical_wrap_array
@@ -26,7 +26,8 @@ from bindings.admitted_input_unpack import admitted_array, admitted_vector, admi
 from core.preprocessing_program import prep_program_stage as _stage
 from bindings.scaler_lifecycle_native_door import _entries
 from bindings.prep_entry_cache_unpack import prep_entry_word
-from bindings.x_prep_native_owner_door import xprep_values
+from bindings.x_prep_native_owner_door import xprep_values, xprep_address
+from bindings.x_prep_native_owner_run import xprep_r3
 from bindings.prep_encode_native_door import (
     EncProg, NONE, _take1, _word, _iword, _label_chunk, _fit_categories, _codes, _default_mode, _truth)
 from bindings.prep_encode_prog_run import OUT_MARK, enc_label_load
@@ -122,6 +123,32 @@ def _take_words(ran: PythonObject, offset: Int, count: Int, shape: PythonObject,
         start = 0
     var words = count * width // 4
     var part = py_call(b.memoryview, store)[py_call(b.slice, start, start + words)]
+    if py_type(store) is b.memoryview and words >= 1048576 and xprep_r3("view"):
+        # fb-metrics (2026-11-17; full board d95f805cce vs 0.8.55: LabelBinarizer
+        # and MultiLabelBinarizer fit/transform 1.6-2.2x): a large mapped
+        # output is returned as a view that retains its slice and mapping, as
+        # 0.8.55's _Prog._take and the encoder owner's xprep_take
+        # (bindings/x_prep_native_owner_door.mojo) do, not copied word by
+        # word into a fresh store (a full n x K copy and its first touch per
+        # call). Same bytes. MOJOLEARN_XPREP_R3_OFF=view restores the copy.
+        var typed = py_call(py_call(part.cast, "B").cast, code)
+        var ndim = Int(py=py_call(b.len, shape))
+        var result = py_call(b.object.__new__, context["array_class"])
+        py_setattr(result, "_store", PythonObject(None))
+        py_setattr(result, "_base", store)
+        py_setattr(result, "_pin", PythonObject(None))
+        py_setattr(result, "_mv", typed)
+        py_setattr(result, "_addr", PythonObject(xprep_address(typed)))
+        py_setattr(result, "_readonly", PythonObject(False))
+        py_setattr(result, "shape", shape)
+        py_setattr(result, "dtype", PythonObject(typestr))
+        py_setattr(result, "ndim", PythonObject(ndim))
+        py_setattr(result, "size", PythonObject(count))
+        py_setattr(result, "nbytes", PythonObject(count * width))
+        py_setattr(result, "itemsize", PythonObject(width))
+        py_setattr(result, "strides", Python.tuple(width) if ndim == 1 else Python.tuple(Int(py=shape[1]) * width, width))
+        py_setattr(result, "order", PythonObject("C"))
+        return result
     var data = native_array_from_bytes(code, py_call(part.cast, "B"))
     return classical_wrap_array(data, shape, typestr, "C", _out(context))
 
@@ -1283,34 +1310,51 @@ def _mlb_flat(y: PythonObject, context: PythonObject) raises -> Optional[MLBFlat
     var int_word = Int(b.int._obj_ptr)
     var y_word = p3_type_word(y._obj_ptr)
     var y_exact = y_word == list_word or y_word == tuple_word
-    var list_fn = b.list
+    # fb-metrics (2026-11-17; MultiLabelBinarizer fit 2.0-2.2x vs 0.8.55):
+    # a set row is walked by its C iterator in both passes (0.8.55 chained
+    # the rows in C), not copied into a fresh Python list per row first.
+    ref cpy = Python().cpython()
+    var table = cpython_table()
     var rows = List[PythonObject](capacity=nrows)
-    var row_tuple = List[Bool](capacity=nrows)
+    var row_kind = List[Int](capacity=nrows)  # 0 list, 1 tuple, 2 set or frozenset
     for i in range(nrows):  # list-input: one borrowed read per row of the caller's Python label rows (ragged, no buffer form)
         var row = PythonObject(from_borrowed=p3_item(y, i, y_word == tuple_word)) if y_exact else y[i]
         var w = p3_type_word(row._obj_ptr)
         if w == list_word or w == tuple_word:
             rows.append(row)
-            row_tuple.append(w == tuple_word)
+            row_kind.append(1 if w == tuple_word else 0)
         elif w == set_word or w == frozenset_word:
-            rows.append(py_call(list_fn, row))
-            row_tuple.append(False)
+            rows.append(row)
+            row_kind.append(2)
         else:
             return None
     var total = 0
     for i in range(nrows):  # list-input: one read per row of the caller's Python label rows (ragged, no buffer form)
         var m = len(rows[i])
-        for j in range(m):  # list-input: one borrowed class-word check per label of a ragged Python label set
-            if p3_type_word(p3_item(rows[i], j, row_tuple[i])) != int_word:
-                return None
+        if row_kind[i] == 2:
+            var raw_it = table[].PyObject_GetIter(rows[i]._obj_ptr)
+            if not raw_it:
+                raise cpy.unsafe_get_error()
+            var it = PythonObject(from_owned=raw_it)
+            for _ in range(m):  # list-input: one class-word check per label of a Python label set, by its C iterator
+                var raw = table[].PyIter_Next(it._obj_ptr)
+                if not raw:
+                    if cpy.PyErr_Occurred():
+                        raise cpy.unsafe_get_error()
+                    raise Error("RuntimeError: a label set changed size during iteration")
+                var label = PythonObject(from_owned=raw)
+                if p3_type_word(label._obj_ptr) != int_word:
+                    return None
+        else:
+            for j in range(m):  # list-input: one borrowed class-word check per label of a ragged Python label set
+                if p3_type_word(p3_item(rows[i], j, row_kind[i] == 1)) != int_word:
+                    return None
         total += m
     if total == 0 or total > LABEL_WORDS_MAX or 2 * total > LABEL_WORDS_MAX:
         return None
     # Each exact int is read with PyLong_AsLongLong (an int outside int64
     # sets OverflowError, which is cleared and takes the label input step):
     # no Python rich comparison or Int conversion per label (p3-prep).
-    ref cpy = Python().cpython()
-    var table = cpython_table()
     var nw = 2 * total
     var words = classical_wrap_array(native_array_zeros("i", nw), Python.tuple(nw), "<i4", "C", _out(context))
     var dest = I64P(unsafe_from_address=Int(py=classical_address(words)))
@@ -1321,17 +1365,40 @@ def _mlb_flat(y: PythonObject, context: PythonObject) raises -> Optional[MLBFlat
     var at = 0
     for i in range(nrows):  # list-input: one read per row of the caller's Python label rows (ragged, no buffer form)
         var m = len(rows[i])
-        for j in range(m):  # list-input: one borrowed PyLong_AsLongLong per label of a ragged Python label set
-            var word = table[].PyLong_AsLongLong(p3_item(rows[i], j, row_tuple[i]))
-            if word == -1 and cpy.PyErr_Occurred():
-                cpython_table()[].PyErr_Clear()
-                return None
-            dest[at] = word
-            _ = words  # keep the Python object alive through the native call above
-            at += 1
+        if at + m > total:
+            raise Error("RuntimeError: a label row changed size during iteration")
+        if row_kind[i] == 2:
+            # the same unmodified set iterates in the same order as the check pass
+            var raw_it = table[].PyObject_GetIter(rows[i]._obj_ptr)
+            if not raw_it:
+                raise cpy.unsafe_get_error()
+            var it = PythonObject(from_owned=raw_it)
+            for _ in range(m):  # list-input: one PyLong_AsLongLong per label of a Python label set, by its C iterator
+                var raw = table[].PyIter_Next(it._obj_ptr)
+                if not raw:
+                    if cpy.PyErr_Occurred():
+                        raise cpy.unsafe_get_error()
+                    raise Error("RuntimeError: a label set changed size during iteration")
+                var label = PythonObject(from_owned=raw)
+                var word = table[].PyLong_AsLongLong(label._obj_ptr)
+                if word == -1 and cpy.PyErr_Occurred():
+                    cpython_table()[].PyErr_Clear()
+                    return None
+                dest[at] = word
+                _ = words  # keep the Python object alive through the native call above
+                at += 1
+        else:
+            for j in range(m):  # list-input: one borrowed PyLong_AsLongLong per label of a ragged Python label set
+                var word = table[].PyLong_AsLongLong(p3_item(rows[i], j, row_kind[i] == 1))
+                if word == -1 and cpy.PyErr_Occurred():
+                    cpython_table()[].PyErr_Clear()
+                    return None
+                dest[at] = word
+                _ = words  # keep the Python object alive through the native call above
+                at += 1
         od[i + 1] = Int32(at)
         _ = offs  # keep the Python object alive through the native call above
-    _ = len(rows)  # keep the rows (and the listed set rows) alive through the borrowed label reads above
+    _ = len(rows)  # keep the rows alive through the borrowed label reads above
     return MLBFlat(nrows, LabelBuf(3, words, total, nw, False), offs)
 
 
