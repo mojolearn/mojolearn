@@ -209,20 +209,20 @@ def run_checks() raises:
     var d_tgt = ctx.enqueue_create_buffer[DType.float32](N_ROWS)
     var d_wt = ctx.enqueue_create_buffer[DType.float32](N_ROWS)
     var d_ci = ctx.enqueue_create_buffer[DType.uint32](N_GROUPS * N_ROWS)
-    ctx.enqueue_copy(dst_buf=d_off, src_ptr=offset_h.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_ffi, src_ptr=first_fold_h.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_folds, src_ptr=folds_h.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_idx, src_ptr=indices_h.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_tgt, src_ptr=target_h.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_wt, src_ptr=weight_h.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_ci, src_ptr=cindex_h.unsafe_ptr())
+    upload_whole_into[DType.uint32](ctx, d_off, offset_h)
+    upload_whole_into[DType.uint32](ctx, d_ffi, first_fold_h)
+    upload_whole_into[DType.uint32](ctx, d_folds, folds_h)
+    upload_whole_into[DType.uint32](ctx, d_idx, indices_h)
+    upload_whole_into[DType.float32](ctx, d_tgt, target_h)
+    upload_whole_into[DType.float32](ctx, d_wt, weight_h)
+    upload_whole_into[DType.uint32](ctx, d_ci, cindex_h)
 
     # ONE partition covering everything, at a non-zero offset
     var part_off = 4
     var part_n = 2900
     var parts_h: List[UInt32] = [UInt32(part_off), UInt32(part_n)]
     var d_part = ctx.enqueue_create_buffer[DType.uint32](2)
-    ctx.enqueue_copy(dst_buf=d_part, src_ptr=parts_h.unsafe_ptr())
+    upload_whole_into[DType.uint32](ctx, d_part, parts_h)
 
     var n_out = total_bin_features * 2
     var d_sums = ctx.enqueue_create_buffer[DType.float32](n_out)
@@ -303,7 +303,7 @@ def run_checks() raises:
                 d_part.unsafe_ptr(), d_sums.unsafe_ptr(),
                 total_bin_features, scale, N_GROUPS, 1,
             )
-        ctx.enqueue_copy(dst_buf=h_sums, src_buf=d_sums)
+        download_host_into[DType.float32](ctx, d_sums, h_sums)
         ctx.synchronize()
         var claimed = String("")
         for g in range(N_GROUPS):
@@ -330,8 +330,6 @@ def run_checks() raises:
                 "]",
             )
 
-    _ = offset_h^  # past the drain: a queued copy reads it after its last named use
-    _ = parts_h^  # past the drain: a queued copy reads it after its last named use
     ctx.enqueue_memset(d_sums, Float32(0.0))
     _launch[5, True, 1](ctx, d_off.unsafe_ptr(), d_ffi.unsafe_ptr(),
                           d_folds.unsafe_ptr(), d_ci.unsafe_ptr(),
@@ -357,7 +355,7 @@ def run_checks() raises:
                           d_wt.unsafe_ptr(), d_idx.unsafe_ptr(),
                           d_part.unsafe_ptr(), d_sums.unsafe_ptr(),
                           total_bin_features, scale, N_GROUPS, 1)
-    ctx.enqueue_copy(dst_buf=h_sums, src_buf=d_sums)
+    download_host_into[DType.float32](ctx, d_sums, h_sums)
     ctx.synchronize()
 
     var bad = 0
@@ -435,7 +433,7 @@ def run_checks() raises:
                           d_wt.unsafe_ptr(), d_idx.unsafe_ptr(),
                           d_part.unsafe_ptr(), d_sums.unsafe_ptr(),
                           total_bin_features, scale, N_GROUPS * 4, 1)
-    ctx.enqueue_copy(dst_buf=h_sums, src_buf=d_sums)
+    download_host_into[DType.float32](ctx, d_sums, h_sums)
     ctx.synchronize()
 
     var bad3 = 0
@@ -478,7 +476,7 @@ def run_checks() raises:
         UInt32(2200), UInt32(700),   # part 3 : right of pair 1, SMALLER
     ]
     var d_part2 = ctx.enqueue_create_buffer[DType.uint32](8)
-    ctx.enqueue_copy(dst_buf=d_part2, src_ptr=p2.unsafe_ptr())
+    upload_whole_into[DType.uint32](ctx, d_part2, p2)
 
     var hist_line = total_bin_features * 2
     var d_sums2 = ctx.enqueue_create_buffer[DType.float32](hist_line * 4)
@@ -513,7 +511,6 @@ def run_checks() raises:
                            total_bin_features, scale, N_GROUPS, 2)
     ctx.enqueue_copy(dst_buf=h_sums2, src_buf=d_sums2)
     ctx.synchronize()
-    _ = p2^  # past the drain: a queued copy reads it after its last named use
 
     # host: pair 0's smaller is part 0 (600 rows), filed at slot 2;
     #       pair 1's smaller is part 3 (700 rows), filed at slot 3
@@ -589,6 +586,7 @@ def run_checks() raises:
 # checks/ that no CI job ran. One process per check name in CI keeps any
 # fresh-process precondition. Device column only: the suite needs a GPU, so the CPU build never instantiates it.
 from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
+from checks.native_tests.kit import download_host_into, upload_whole_into
 
 
 def run_cases(column: Column, mut report: Report):

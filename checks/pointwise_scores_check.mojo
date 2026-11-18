@@ -717,7 +717,7 @@ def _sweep(
     for b in range(b_count):
         for k in range(b_count):
             masked[3 * k + 2] = UInt32(0) if k == b else UInt32(1)
-        ctx.enqueue_copy(dst_buf=d_bf, src_ptr=masked.unsafe_ptr())
+        upload_whole_into[DType.uint32](ctx, d_bf, masked)
 
         find_optimal_split(
             ctx, d_bf, b_count, d_cat, d_binw, fx.n_features, d_hist,
@@ -725,8 +725,8 @@ def _sweep(
             1, sf, l2, meta_l2_exponent, meta_frequency, normalize, std_dev,
             seed, gathered,
         )
-        ctx.enqueue_copy(dst_buf=h_rid, src_buf=d_rid)
-        ctx.enqueue_copy(dst_buf=h_rsc, src_buf=d_rsc)
+        download_host_into[DType.uint32](ctx, d_rid, h_rid)
+        download_host_into[DType.float32](ctx, d_rsc, h_rsc)
         ctx.synchronize()
 
         var ok = True
@@ -935,9 +935,9 @@ def run_checks() raises:
             var d_out = ctx.enqueue_create_buffer[DType.float32](n)
             var h_out = ctx.enqueue_create_host_buffer[DType.float32](n)
             ctx.enqueue_memset(d_out, Float32(-1.0))
-            ctx.enqueue_copy(dst_buf=d_in, src_ptr=src.unsafe_ptr())
+            upload_whole_into[DType.float32](ctx, d_in, src)
             gather_histogram_by_leaves(ctx, d_in, bc, hc, lc, fc, d_out)
-            ctx.enqueue_copy(dst_buf=h_out, src_buf=d_out)
+            download_host_into[DType.float32](ctx, d_out, h_out)
             ctx.synchronize()
             for f in range(bc):
                 for leaf in range(lc):
@@ -1109,8 +1109,8 @@ def run_checks() raises:
         fb.p_count, 1, d_sb2, d_ri2, d_rs2, 2, SCORE_FUNCTION_COSINE,
         l2, Float32(1.0), Float32(0.0), False, Float32(0.0), seed, False,
     )
-    ctx.enqueue_copy(dst_buf=h_ri2, src_buf=d_ri2)
-    ctx.enqueue_copy(dst_buf=h_rs2, src_buf=d_rs2)
+    download_host_into[DType.uint32](ctx, d_ri2, h_ri2)
+    download_host_into[DType.float32](ctx, d_rs2, h_rs2)
     ctx.synchronize()
     # ([[mojo-buffer-freed-at-last-use]])
     _ = d_sb2.unsafe_ptr()
@@ -1379,10 +1379,10 @@ def run_checks() raises:
     var d_pu = ctx.enqueue_create_buffer[DType.uint32](2 * n_parts)
     var d_ps = ctx.enqueue_create_buffer[DType.float32](3 * n_parts)
     var h_ps = ctx.enqueue_create_host_buffer[DType.float32](3 * n_parts)
-    ctx.enqueue_copy(dst_buf=d_t, src_ptr=tgt.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_w, src_ptr=wts.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_c, src_ptr=cnt.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_pu, src_ptr=parts_u.unsafe_ptr())
+    upload_whole_into[DType.float32](ctx, d_t, tgt)
+    upload_whole_into[DType.float32](ctx, d_w, wts)
+    upload_whole_into[DType.float32](ctx, d_c, cnt)
+    upload_whole_into[DType.uint32](ctx, d_pu, parts_u)
 
     var want_w = List[Float32]()
     var want_s = List[Float32]()
@@ -1413,7 +1413,7 @@ def run_checks() raises:
             ctx, d_t, d_w, d_c, have_t[run], have_w[run], have_c[run],
             d_pu, d_ps, n_parts,
         )
-        ctx.enqueue_copy(dst_buf=h_ps, src_buf=d_ps)
+        download_host_into[DType.float32](ctx, d_ps, h_ps)
         ctx.synchronize()
         for p in range(n_parts):
             var ew = want_w[p] if have_w[run] else Float32(0.0)
@@ -1432,10 +1432,6 @@ def run_checks() raises:
                         ")",
                     )
                 r_bad += 1
-    _ = cnt^  # past the drain: a queued copy reads it after its last named use
-    _ = parts_u^  # past the drain: a queued copy reads it after its last named use
-    _ = tgt^  # past the drain: a queued copy reads it after its last named use
-    _ = wts^  # past the drain: a queued copy reads it after its last named use
     if r_bad != 0:
         print("FAIL R1-R4: --", r_bad, "partition-stat cells wrong.")
         failures += 1
@@ -1470,6 +1466,7 @@ def run_checks() raises:
 # checks/ that no CI job ran. One process per check name in CI keeps any
 # fresh-process precondition. Device column only: the suite needs a GPU, so the CPU build never instantiates it.
 from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
+from checks.native_tests.kit import download_host_into, upload_whole_into
 
 
 def run_cases(column: Column, mut report: Report):

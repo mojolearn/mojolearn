@@ -150,9 +150,8 @@ def claim_counts(
     var z = ctx.enqueue_create_host_buffer[DType.uint32](n_rows * lay.columns)
     for i in range(n_rows * lay.columns):
         z.unsafe_ptr().unsafe_store(i, UInt32(0))
-    ctx.enqueue_copy(dst_buf=cindex, src_ptr=z.unsafe_ptr())
+    upload_host_into[DType.uint32](ctx, cindex, z)
     ctx.synchronize()
-    _ = z^  # past the drain: a queued copy reads it after its last named use
 
     var hb = ctx.enqueue_create_host_buffer[DType.uint8](n_rows)
     var bins = ctx.enqueue_create_buffer[DType.uint8](n_rows)
@@ -162,7 +161,7 @@ def claim_counts(
             hb.unsafe_ptr().unsafe_store(
                 r, UInt8(binarize(o.x[f][r], o.borders[f]))
             )
-        ctx.enqueue_copy(dst_buf=bins, src_ptr=hb.unsafe_ptr())
+        upload_host_into[DType.uint8](ctx, bins, hb)
         ctx.enqueue_function[write_compressed_index_kernel](
             Int32(Int(cf.offset) * n_rows), cf.mask, cf.shift,
             bins.unsafe_ptr(), Int32(n_rows), cindex.unsafe_ptr(),
@@ -183,9 +182,9 @@ def claim_counts(
         ht.unsafe_ptr().unsafe_store(r, o.y[r])
         hw.unsafe_ptr().unsafe_store(r, Float32(1.0))
         hd.unsafe_ptr().unsafe_store(r, UInt32(r))
-    ctx.enqueue_copy(dst_buf=targets, src_ptr=ht.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=weights, src_ptr=hw.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=docs, src_ptr=hd.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, targets, ht)
+    upload_host_into[DType.float32](ctx, weights, hw)
+    upload_host_into[DType.uint32](ctx, docs, hd)
 
     # `TDataPartition{Offset, Size}` pairs. Sixteen slots so no shift the
     # offsets helper computes can run off the end; only slot 0 is non-empty.
@@ -194,12 +193,8 @@ def claim_counts(
     for i in range(32):
         hp.unsafe_ptr().unsafe_store(i, UInt32(0))
     hp.unsafe_ptr().unsafe_store(1, UInt32(n_rows))
-    ctx.enqueue_copy(dst_buf=parts, src_ptr=hp.unsafe_ptr())
+    upload_host_into[DType.uint32](ctx, parts, hp)
     ctx.synchronize()
-    _ = hd^  # past the drain: a queued copy reads it after its last named use
-    _ = hp^  # past the drain: a queued copy reads it after its last named use
-    _ = ht^  # past the drain: a queued copy reads it after its last named use
-    _ = hw^  # past the drain: a queued copy reads it after its last named use
 
     var gids = List[Int]()
     for f in range(n_features):
@@ -434,6 +429,7 @@ def run_checks() raises:
 # checks/ that no CI job ran. One process per check name in CI keeps any
 # fresh-process precondition. Device column only: the suite needs a GPU, so the CPU build never instantiates it.
 from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
+from checks.native_tests.kit import upload_host_into
 
 
 def run_cases(column: Column, mut report: Report):

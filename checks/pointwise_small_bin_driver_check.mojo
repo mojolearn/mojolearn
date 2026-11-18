@@ -197,16 +197,16 @@ def run_checks() raises:
     var d_tgt = ctx.enqueue_create_buffer[DType.float32](N_ROWS)
     var d_wt = ctx.enqueue_create_buffer[DType.float32](N_ROWS)
     var d_ci = ctx.enqueue_create_buffer[DType.uint32](N_ROWS)
-    ctx.enqueue_copy(dst_buf=d_idx, src_ptr=indices_h.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_tgt, src_ptr=target_h.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_wt, src_ptr=weight_h.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_ci, src_ptr=cindex_h.unsafe_ptr())
+    upload_whole_into[DType.uint32](ctx, d_idx, indices_h)
+    upload_whole_into[DType.float32](ctx, d_tgt, target_h)
+    upload_whole_into[DType.float32](ctx, d_wt, weight_h)
+    upload_whole_into[DType.uint32](ctx, d_ci, cindex_h)
 
     var part_off = 6
     var part_n = 2800
     var parts_h: List[UInt32] = [UInt32(part_off), UInt32(part_n)]
     var d_part = ctx.enqueue_create_buffer[DType.uint32](2)
-    ctx.enqueue_copy(dst_buf=d_part, src_ptr=parts_h.unsafe_ptr())
+    upload_whole_into[DType.uint32](ctx, d_part, parts_h)
 
     # ================================================================ E1
     var hb_ffi = List[UInt32]()
@@ -222,9 +222,9 @@ def run_checks() raises:
     var d_hoff = ctx.enqueue_create_buffer[DType.uint32](8)
     var d_hffi = ctx.enqueue_create_buffer[DType.uint32](8)
     var d_hfolds = ctx.enqueue_create_buffer[DType.uint32](8)
-    ctx.enqueue_copy(dst_buf=d_hoff, src_ptr=hb_off.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_hffi, src_ptr=hb_ffi.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_hfolds, src_ptr=hb_folds.unsafe_ptr())
+    upload_whole_into[DType.uint32](ctx, d_hoff, hb_off)
+    upload_whole_into[DType.uint32](ctx, d_hffi, hb_ffi)
+    upload_whole_into[DType.uint32](ctx, d_hfolds, hb_folds)
 
     var n_hb = hb_total * 2
     var d_hs = ctx.enqueue_create_buffer[DType.float32](n_hb)
@@ -248,10 +248,8 @@ def run_checks() raises:
         d_wt.unsafe_ptr(), d_idx.unsafe_ptr(), d_part.unsafe_ptr(),
         d_hs.unsafe_ptr(), hb_total, 1,
     )
-    ctx.enqueue_copy(dst_buf=h_hs, src_buf=d_hs)
+    download_host_into[DType.float32](ctx, d_hs, h_hs)
     ctx.synchronize()
-    _ = hb_off^  # past the drain: a queued copy reads it after its last named use
-    _ = parts_h^  # past the drain: a queued copy reads it after its last named use
 
     var bad1 = 0
     for k in range(n_hb):
@@ -304,8 +302,8 @@ def run_checks() raises:
         b_off.append(0)
     var d_boff = ctx.enqueue_create_buffer[DType.uint32](32)
     var d_bffi = ctx.enqueue_create_buffer[DType.uint32](32)
-    ctx.enqueue_copy(dst_buf=d_boff, src_ptr=b_off.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_bffi, src_ptr=b_ffi.unsafe_ptr())
+    upload_whole_into[DType.uint32](ctx, d_boff, b_off)
+    upload_whole_into[DType.uint32](ctx, d_bffi, b_ffi)
 
     var n_b = 32 * 2
     var d_bs = ctx.enqueue_create_buffer[DType.float32](n_b)
@@ -330,10 +328,8 @@ def run_checks() raises:
         d_idx.unsafe_ptr(), d_part.unsafe_ptr(), d_bs.unsafe_ptr(),
         32, 1,
     )
-    ctx.enqueue_copy(dst_buf=h_bs, src_buf=d_bs)
+    download_host_into[DType.float32](ctx, d_bs, h_bs)
     ctx.synchronize()
-    _ = b_ffi^  # past the drain: a queued copy reads it after its last named use
-    _ = b_off^  # past the drain: a queued copy reads it after its last named use
 
     var bad3 = 0
     for k in range(n_b):
@@ -396,7 +392,7 @@ def run_checks() raises:
         t_hs.unsafe_ptr(), hb_total, 4,
     )
     _m_fold(ctx, t_hs, d_hs, n_hb, 4)
-    ctx.enqueue_copy(dst_buf=h_hs, src_buf=d_hs)
+    download_host_into[DType.float32](ctx, d_hs, h_hs)
     ctx.synchronize()
     _ = t_hs^  # held past the fold and the copy
     var bad5 = 0
@@ -414,7 +410,7 @@ def run_checks() raises:
         32, 4,
     )
     _m_fold(ctx, t_bs, d_bs, n_b, 4)
-    ctx.enqueue_copy(dst_buf=h_bs, src_buf=d_bs)
+    download_host_into[DType.float32](ctx, d_bs, h_bs)
     ctx.synchronize()
     _ = t_bs^  # held past the fold and the copy
     for k in range(n_b):
@@ -461,6 +457,7 @@ def run_checks() raises:
 # checks/ that no CI job ran. One process per check name in CI keeps any
 # fresh-process precondition. Device column only: the suite needs a GPU, so the CPU build never instantiates it.
 from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
+from checks.native_tests.kit import download_host_into, upload_whole_into
 
 
 def run_cases(column: Column, mut report: Report):

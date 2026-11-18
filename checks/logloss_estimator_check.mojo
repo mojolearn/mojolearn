@@ -236,27 +236,25 @@ def run_checks() raises:
 
         for i in range(n):
             h_f.unsafe_ptr().unsafe_store(i, targets[i])
-        ctx.enqueue_copy(dst_buf=d_target, src_ptr=h_f.unsafe_ptr())
+        upload_host_into[DType.float32](ctx, d_target, h_f)
         ctx.synchronize()
         for i in range(n):
             h_f.unsafe_ptr().unsafe_store(i, weights[i])
-        ctx.enqueue_copy(dst_buf=d_weights, src_ptr=h_f.unsafe_ptr())
+        upload_host_into[DType.float32](ctx, d_weights, h_f)
         ctx.synchronize()
         for i in range(n):
             h_f.unsafe_ptr().unsafe_store(i, cursor0[i])
-        ctx.enqueue_copy(dst_buf=d_cursor, src_ptr=h_f.unsafe_ptr())
+        upload_host_into[DType.float32](ctx, d_cursor, h_f)
         var off = 0
         for leaf in range(LEAVES):
             h_u.unsafe_ptr().unsafe_store(leaf, UInt32(off))
             off += leaf_sizes[leaf]
-        ctx.enqueue_copy(dst_buf=d_p_off, src_ptr=h_u.unsafe_ptr())
+        upload_host_into[DType.uint32](ctx, d_p_off, h_u)
         ctx.synchronize()
-        _ = h_f^  # past the drain: a queued copy reads it after its last named use
         for leaf in range(LEAVES):
             h_u.unsafe_ptr().unsafe_store(leaf, UInt32(leaf_sizes[leaf]))
-        ctx.enqueue_copy(dst_buf=d_p_sz, src_ptr=h_u.unsafe_ptr())
+        upload_host_into[DType.uint32](ctx, d_p_sz, h_u)
         ctx.synchronize()
-        _ = h_u^  # past the drain: a queued copy reads it after its last named use
 
         var oracle = make_bin_optimized_oracle(
             ctx, n, LEAVES, leaf_sizes,
@@ -308,6 +306,7 @@ def run_checks() raises:
 # checks/ that no CI job ran. One process per check name in CI keeps any
 # fresh-process precondition. Device column only: the suite needs a GPU, so the CPU build never instantiates it.
 from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
+from checks.native_tests.kit import upload_host_into
 
 
 def run_cases(column: Column, mut report: Report):

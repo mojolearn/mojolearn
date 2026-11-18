@@ -1049,18 +1049,12 @@ def _verify_level(
     var g_gat_t = ctx.enqueue_create_host_buffer[DType.float32](n)
     var g_parts = ctx.enqueue_create_host_buffer[DType.uint32](m * 2)
     var g_stats = ctx.enqueue_create_host_buffer[DType.float32](m * 3)
-    ctx.enqueue_copy(dst_ptr=g_idx.unsafe_ptr(), src_buf=subsets.indices)
-    ctx.enqueue_copy(dst_ptr=g_bins.unsafe_ptr(), src_buf=subsets.bins)
-    ctx.enqueue_copy(
-        dst_ptr=g_gat_w.unsafe_ptr(), src_buf=subsets.gathered_weight
-    )
-    ctx.enqueue_copy(
-        dst_ptr=g_gat_t.unsafe_ptr(), src_buf=subsets.gathered_target
-    )
-    ctx.enqueue_copy(dst_ptr=g_parts.unsafe_ptr(), src_buf=subsets.partitions)
-    ctx.enqueue_copy(
-        dst_ptr=g_stats.unsafe_ptr(), src_buf=subsets.partition_stats
-    )
+    download_host_into[DType.uint32](ctx, subsets.indices, g_idx)
+    download_host_into[DType.uint32](ctx, subsets.bins, g_bins)
+    download_host_into[DType.float32](ctx, subsets.gathered_weight, g_gat_w)
+    download_host_into[DType.float32](ctx, subsets.gathered_target, g_gat_t)
+    download_host_into[DType.uint32](ctx, subsets.partitions, g_parts)
+    download_host_into[DType.float32](ctx, subsets.partition_stats, g_stats)
     ctx.synchronize()
 
     # ---- ORDER ----------------------------------------------------------
@@ -1287,7 +1281,7 @@ def check_subsets() raises:
             n + d, UInt32((_val_c(d) << 4) | (_val_b(d) << 8))
         )
     var d_cindex = ctx.enqueue_create_buffer[DType.uint32](2 * n)
-    ctx.enqueue_copy(dst_buf=d_cindex, src_ptr=h_cindex.unsafe_ptr())
+    upload_host_into[DType.uint32](ctx, d_cindex, h_cindex)
 
     # ---- TL2Target, two columns, in ORIGINAL document order --------------
     # `TL2Target { WeightedTarget; Weights; }` -- two buffers, theirs.
@@ -1298,12 +1292,9 @@ def check_subsets() raises:
         h_t.unsafe_ptr().unsafe_store(d, Float32(_target(d)))
     var d_w = ctx.enqueue_create_buffer[DType.float32](n)
     var d_t = ctx.enqueue_create_buffer[DType.float32](n)
-    ctx.enqueue_copy(dst_buf=d_w, src_ptr=h_w.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_t, src_ptr=h_t.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, d_w, h_w)
+    upload_host_into[DType.float32](ctx, d_t, h_t)
     ctx.synchronize()
-    _ = h_cindex^  # past the drain: a queued copy reads it after its last named use
-    _ = h_t^  # past the drain: a queued copy reads it after its last named use
-    _ = h_w^  # past the drain: a queued copy reads it after its last named use
 
     # `groupedByBinObservations = TStripeBuffer<ui32>::CopyMapping(observations)`
     # (`oblivious_tree_doc_parallel_structure_searcher.cpp:27`) and the
@@ -1462,6 +1453,7 @@ def run_checks() raises:
 # checks/ that no CI job ran. One process per check name in CI keeps any
 # fresh-process precondition. Device column only: the suite needs a GPU, so the CPU build never instantiates it.
 from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
+from checks.native_tests.kit import download_host_into, upload_host_into
 
 
 def run_cases(column: Column, mut report: Report):

@@ -190,17 +190,12 @@ def run_case(
         h_off.unsafe_ptr().unsafe_store(i, UInt32(dev_offsets[i]))
         h_sz.unsafe_ptr().unsafe_store(i, UInt32(dev_sizes[i]))
 
-    ctx.enqueue_copy(dst_buf=d_target, src_ptr=h_t.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_w, src_ptr=h_w.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_cursor, src_ptr=h_c.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_off, src_ptr=h_off.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_sz, src_ptr=h_sz.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, d_target, h_t)
+    upload_host_into[DType.float32](ctx, d_w, h_w)
+    upload_host_into[DType.float32](ctx, d_cursor, h_c)
+    upload_host_into[DType.uint32](ctx, d_off, h_off)
+    upload_host_into[DType.uint32](ctx, d_sz, h_sz)
     ctx.synchronize()
-    _ = h_c^  # past the drain: a queued copy reads it after its last named use
-    _ = h_off^  # past the drain: a queued copy reads it after its last named use
-    _ = h_sz^  # past the drain: a queued copy reads it after its last named use
-    _ = h_t^  # past the drain: a queued copy reads it after its last named use
-    _ = h_w^  # past the drain: a queued copy reads it after its last named use
 
     var lam = LAMBDA
     if sab == 1:
@@ -227,8 +222,8 @@ def run_case(
     var h_hess = ctx.enqueue_create_host_buffer[DType.float32](n_leaves * tri)
     oracle.enqueue_multi_dim_evaluation(d_der)
     var layout = oracle.enqueue_multi_dim_hessian(d_hess)
-    ctx.enqueue_copy(dst_ptr=h_der.unsafe_ptr(), src_buf=d_der)
-    ctx.enqueue_copy(dst_ptr=h_hess.unsafe_ptr(), src_buf=d_hess)
+    download_host_into[DType.float32](ctx, d_der, h_der)
+    download_host_into[DType.float32](ctx, d_hess, h_hess)
     ctx.synchronize()
     var gradient = List[Float64](length=n_leaves * num_classes, fill=0.0)
     for leaf in range(n_leaves):
@@ -422,6 +417,7 @@ def run_checks() raises:
 # checks/ that no CI job ran. One process per check name in CI keeps any
 # fresh-process precondition. Device column only: the suite needs a GPU, so the CPU build never instantiates it.
 from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
+from checks.native_tests.kit import download_host_into, upload_host_into
 
 
 def run_cases(column: Column, mut report: Report):
