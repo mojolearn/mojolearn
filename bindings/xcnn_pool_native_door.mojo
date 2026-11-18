@@ -94,20 +94,7 @@ def xcnn_maxpool_forward(model: PythonObject, x: PythonObject, context: PythonOb
         pool_run_check_nchw(xs, "MaxPool2d")
         if not xcnn_on_dev(entries, x, context):
             return xcnn_wrap(entries, xcnn_maxpool_forward(model, xcnn_host_of(x, context), context), context)
-        var prm = _pool_words(fields, xs, context)
-        var shape = pool_run_out_words(prm, xs)
-        var out = xcnn_out_new(entries, shape, context)   # the pool stores every word
-        var h = xcnn_dev_get(model, entries, "idx", xcnn_size(shape), context)
-        var key = xcnn_ref(entries)
-        var addrs: List[Int] = [xcnn_word(x.h), xcnn_word(out.h), xcnn_word(h)]
-        var py = Python()
-        with GILReleased(py):
-            pool_run_max_forward_m(key, 7, addrs[0], addrs[1], addrs[2], prm)
-        _set(fields, "_xshape", xcnn_tuple(xs))
-        _set(fields, "_idx_host", PythonObject(None))
-        _set(fields, "_idx_dev", h)
-        _set(fields, "_idx_shape", xcnn_tuple(shape))
-        return out
+        return _max_forward_res(model, fields, entries, x, xs, _pool_words(fields, xs, context), xcnn_tuple(xs), False, context)
     var a = xcnn_f32(x, "x", context)
     var xs = xcnn_shape(a)
     pool_run_check_nchw(xs, "MaxPool2d")
@@ -145,6 +132,50 @@ def xcnn_maxpool_forward(model: PythonObject, x: PythonObject, context: PythonOb
     return out
 
 
+def _out_dims(shape: List[Int], one_d: Bool) -> List[Int]:
+    """The output tensor's dimensions: (N, C, OH, OW), or (N, C, OL) for a
+    1-D pool (the 2-D pool's unit height dropped)."""
+    if one_d:
+        return [shape[0], shape[1], shape[3]]
+    return shape.copy()
+
+
+def _max_forward_res(model: PythonObject, fields: PythonObject, entries: PythonObject, x: PythonObject, xs: List[Int],
+                     prm: List[Int], xshape: PythonObject, one_d: Bool, context: PythonObject) raises -> PythonObject:
+    """MaxPool2d's resident forward of a tensor admitted on this binding:
+    x, the output and the winners resident. The caller admitted `x`, read
+    its (N, C, H, W) shape `xs` (`xshape` as a tuple) and built the
+    parameter words; `one_d`: the output is made (N, C, OL) directly (the
+    same words; no reshape view)."""
+    var shape = pool_run_out_words(prm, xs)
+    var out = xcnn_out_new(entries, _out_dims(shape, one_d), context)   # the pool stores every word
+    var h = xcnn_dev_get(model, entries, "idx", xcnn_size(shape), context)
+    var key = xcnn_ref(entries)
+    var addrs: List[Int] = [xcnn_word(x.h), xcnn_word(out.h), xcnn_word(h)]
+    var py = Python()
+    with GILReleased(py):
+        pool_run_max_forward_m(key, 7, addrs[0], addrs[1], addrs[2], prm)
+    _set(fields, "_xshape", xshape)
+    _set(fields, "_idx_host", PythonObject(None))
+    _set(fields, "_idx_dev", h)
+    _set(fields, "_idx_shape", xcnn_tuple(shape))
+    return out
+
+
+def _avg_forward_res(fields: PythonObject, entries: PythonObject, x: PythonObject, xs: List[Int], prm: List[Int],
+                     xshape: PythonObject, one_d: Bool, context: PythonObject) raises -> PythonObject:
+    """AvgPool2d's resident forward of a tensor admitted on this binding (see
+    `_max_forward_res`)."""
+    var out = xcnn_out_new(entries, _out_dims(pool_run_out_words(prm, xs), one_d), context)   # the pool stores every word
+    var key = xcnn_ref(entries)
+    var addrs: List[Int] = [xcnn_word(x.h), xcnn_word(out.h)]
+    var py = Python()
+    with GILReleased(py):
+        pool_run_avg_forward_m(key, 3, addrs[0], addrs[1], prm)
+    _set(fields, "_xshape", xshape)
+    return out
+
+
 def xcnn_avgpool_forward(model: PythonObject, x: PythonObject, context: PythonObject) raises -> PythonObject:
     """`AvgPool2d.forward(x)`."""
     var fields = _fields(model)
@@ -155,15 +186,7 @@ def xcnn_avgpool_forward(model: PythonObject, x: PythonObject, context: PythonOb
         pool_run_check_nchw(xs, "AvgPool2d")
         if not xcnn_on_dev(entries, x, context):
             return xcnn_wrap(entries, xcnn_avgpool_forward(model, xcnn_host_of(x, context), context), context)
-        var prm = _pool_words(fields, xs, context)
-        var out = xcnn_out_new(entries, pool_run_out_words(prm, xs), context)   # the pool stores every word
-        var key = xcnn_ref(entries)
-        var addrs: List[Int] = [xcnn_word(x.h), xcnn_word(out.h)]
-        var py = Python()
-        with GILReleased(py):
-            pool_run_avg_forward_m(key, 3, addrs[0], addrs[1], prm)
-        _set(fields, "_xshape", xcnn_tuple(xs))
-        return out
+        return _avg_forward_res(fields, entries, x, xs, _pool_words(fields, xs, context), xcnn_tuple(xs), False, context)
     var a = xcnn_f32(x, "x", context)
     var xs = xcnn_shape(a)
     pool_run_check_nchw(xs, "AvgPool2d")
@@ -191,18 +214,33 @@ def xcnn_pool_forward(model: PythonObject, x: PythonObject, context: PythonObjec
     """A pool's `forward`: the 1-D pools run the 2-D pool over (N, C, 1, L)."""
     if not _is(model, "xcnn_pool1d_class", context):
         return _pool2d_forward(model, x, context)
-    var name = _class_name(model)
     if xcnn_is_t(x, context):
         var s = xcnn_shape(x)
-        pool_run_check_ncl(s, name)
-        var out = _pool2d_forward(model, xcnn_reshape_t(x, [s[0], s[1], 1, s[2]], context), context)
+        if len(s) != 3:   # the class name is read only for the refusal
+            pool_run_check_ncl(s, _class_name(model))
+        var x4: List[Int] = [s[0], s[1], 1, s[2]]
+        var fields = _fields(model)
+        var entries = xcnn_entries(fields, context)
+        if xcnn_on_dev(entries, x, context):
+            # lane fb15-sync-counts (2026-11-18): x of this binding runs the
+            # 2-D pool's resident forward on its own handle under the
+            # (N, C, 1, L) words, and the output is made (N, C, OL) directly:
+            # the input and output reshape views (two tensor objects with
+            # their slot writes) and the second admission of the view are
+            # gone; the same entry, words and handles.
+            var prm = _pool_words(fields, x4, context)
+            if _is(model, "xcnn_maxpool_class", context):
+                return _max_forward_res(model, fields, entries, x, x4, prm, xcnn_tuple(x4), True, context)
+            return _avg_forward_res(fields, entries, x, x4, prm, xcnn_tuple(x4), True, context)
+        var out = _pool2d_forward(model, xcnn_reshape_t(x, x4, context), context)
         var o = xcnn_shape(out)
         if xcnn_is_t(out, context):
             return xcnn_reshape_t(out, [o[0], o[1], o[3]], context)
         return xcnn_reshape(out, [o[0], o[1], o[3]], context)
     var a = xcnn_f32(x, "x", context)
     var s = xcnn_shape(a)
-    pool_run_check_ncl(s, name)
+    if len(s) != 3:
+        pool_run_check_ncl(s, _class_name(model))
     var out = _pool2d_forward(model, xcnn_reshape(a, [s[0], s[1], 1, s[2]], context), context)
     var o = xcnn_shape(out)
     return xcnn_reshape(out, [o[0], o[1], o[3]], context)
@@ -593,13 +631,28 @@ def xcnn_adaptive_forward(model: PythonObject, x: PythonObject, context: PythonO
     var xs = xcnn_shape(value)
     if len(xs) != 4:   # the class name is read only for the refusal
         pool_run_check_nchw(xs, _class_name(model))
-    _set(fields, "_xshape", xcnn_tuple(xs))
+    var xshape = xcnn_tuple(xs)
+    _set(fields, "_xshape", xshape)
     _set(fields, "_idx_host", PythonObject(None))
     _set(fields, "_idx_dev", PythonObject(None))
     var o = _adaptive_output(fields, context)
     if pool_run_adaptive_divides(xs, o):
-        var layer = _pool_layer(model, entries, pool_run_adaptive_kernel(xs, o), maxed, context)
+        var k = pool_run_adaptive_kernel(xs, o)
+        var layer = _pool_layer(model, entries, k, maxed, context)
         _set(fields, "_layer", layer)
+        if xt:
+            # lane fb15-sync-counts (2026-11-18): a resident x of this binding
+            # (admitted above) runs the inner pool's resident forward directly,
+            # with the words `_pool_words` reads back from the fields
+            # `_pool_layer` set (kernel = stride = k, no padding, dilation 1,
+            # count_include_pad, no ceil, no divisor). The inner layer's second
+            # binding lookup, shape read, residency admission, class test and
+            # settings parse (the same answers, per call) are gone.
+            var prm = pool_run_words(PoolSettings(k[0], k[1], k[0], k[1], 0, 0, 1, 1, True, False, 0), xs)
+            var lf = _fields(layer)
+            if maxed:
+                return _max_forward_res(layer, lf, entries, value, xs, prm, xshape, False, context)
+            return _avg_forward_res(lf, entries, value, xs, prm, xshape, False, context)
         var out = _pool2d_forward(layer, value, context)
         if maxed and not m:
             _set(fields, "_idx_host", _layer_indices(layer, context))
