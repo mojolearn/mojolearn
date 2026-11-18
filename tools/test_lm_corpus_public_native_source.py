@@ -30,7 +30,7 @@ class CorpusPublicSource(unittest.TestCase):
             self.assertEqual(ast.unparse(call.func), "_NATIVE.lm_corpus_public_call")
             self.assertIn('operation == "' + call.args[0].value + '"', NATIVE.read_text())
             count += 1
-        self.assertEqual(count, 21)
+        self.assertEqual(count, 20)  # 569afe8062 deleted default_cache_dir (its only caller was deleted)
 
     def test_preparation_owns_cache_and_existing_tokenizer_routes(self):
         source = NATIVE.read_text()
@@ -117,16 +117,20 @@ class CorpusPublicSource(unittest.TestCase):
 
     def test_numpy_step_arithmetic_is_typed_and_promotion_is_captured(self):
         source = SCALARS.read_text() + SCALARS_RUN.read_text()
-        self.assertIn('native_numpy_module_fields(owner)', source)
-        self.assertIn('py_type(getter) is not py_type(bi.len)', source)
-        self.assertIn('getter.__self__ is not owner', source)
-        self.assertIn('major == 2 and minor >= 2', source)
-        self.assertIn('var mode = py_call(getter)', source)
+        # The promotion-state read is the shared native_scalar_weak_promotion (1d303680ad, db8e4d935b).
+        self.assertIn('native_scalar_weak_promotion(context["admission_context"], "corpus")', source)
+        shared = (ROOT / "bindings/native_scalar_promotion_unpack.mojo").read_text()
+        self.assertIn('native_numpy_module_fields(owner)', shared)
+        self.assertIn('py_type(getter) is not static_builtin_type("types", "BuiltinFunctionType")', shared)
+        self.assertIn('getter.__self__ is not owner', shared)
+        self.assertIn('var mode = py_call(getter)', shared)
+        self.assertIn('major == 2 and minor >= 2', (ROOT / "bindings/native_scalar_promotion_run.mojo").read_text())
         self.assertIn('Float16(Float32(left) * Float32(row_count))', source)
         self.assertIn('var first = Float32(value) * Float32(batch)', source)
         self.assertIn('kind == 0 and width == 8 and not weak', source)
         self.assertIn('_integer_base(step, batch, length, 8 * width, kind == 0, True)', source)
-        numpy_path = source.split('if not neural_native_scalar(step, context):', 1)[1]
+        # the NumPy path of the door (the RUN file's docstring quotes the original expression)
+        numpy_path = SCALARS.read_text().split('if not neural_native_scalar(step, context):', 1)[1]
         self.assertNotIn('step *', numpy_path)
         self.assertNotIn('np.multiply', source)
         self.assertNotIn('py_call(step.', source)
