@@ -128,12 +128,13 @@ struct _XcnnNames(Defaultable, Movable):
 comptime _XCNN_NAMES = SharedSlot[_XcnnNames, "MojolearnXcnnHeldNamesV1"]
 
 
-def _xcnn_type_address(sample: PythonObject) raises -> Int:
-    # The `_is_exact_dict` idiom of bindings/py_balanced.mojo.
-    ref cpy = Python().cpython()
-    var cls = cpy.PyObject_Type(sample._obj_ptr)
-    var address = Int(cls)
-    cpy.Py_DecRef(cls)
+def _xcnn_type_address(value: PythonObject) raises -> Int:
+    # The address of `type(value)`. The held types are CPython's static,
+    # immortal builtin types, so an address read from a C-created sample
+    # stays that type's for the process.
+    var cls = py_type(value)
+    var address = Int(cls._obj_ptr)
+    _ = cls  # the class object is alive while its address is read
     return address
 
 
@@ -170,19 +171,16 @@ def xcnn_name(which: Int) raises -> PythonObject:
     return g[].keys[which]
 
 
-def _xcnn_exact_ptr(value: PyObjectPtr, kind: Int) raises -> Bool:
-    var g = _xcnn_names()
-    ref cpy = Python().cpython()
-    var cls = cpy.PyObject_Type(value)
-    var same = Int(cls) == g[].types[kind]
-    cpy.Py_DecRef(cls)
-    return same
-
-
 def xcnn_exact(value: PythonObject, kind: Int) raises -> Bool:
     """`type(value) is <the builtin type XT_<kind>>`: an exact-type test
     against the type of a C-created value (no `builtins` attribute read)."""
-    return _xcnn_exact_ptr(value._obj_ptr, kind)
+    var g = _xcnn_names()
+    return _xcnn_type_address(value) == g[].types[kind]
+
+
+def _xcnn_exact_ptr(value: PyObjectPtr, kind: Int) raises -> Bool:
+    """`xcnn_exact` of a borrowed item pointer (its container is alive)."""
+    return xcnn_exact(PythonObject(from_borrowed=value), kind)
 
 
 def xcnn_plain_scalar(value: PythonObject) raises -> Bool:
@@ -195,10 +193,7 @@ def xcnn_plain_scalar(value: PythonObject) raises -> Bool:
     if value is None:
         return True
     var g = _xcnn_names()
-    ref cpy = Python().cpython()
-    var cls = cpy.PyObject_Type(value._obj_ptr)
-    var address = Int(cls)
-    cpy.Py_DecRef(cls)
+    var address = _xcnn_type_address(value)
     return (address == g[].types[XT_INT] or address == g[].types[XT_FLOAT] or address == g[].types[XT_BOOL]
             or address == g[].types[XT_STR])
 
@@ -254,16 +249,17 @@ def xcnn_int_pair(value: PythonObject, mut first: Int, mut second: Int) raises -
     var b = t[].PyTuple_GetItem(value._obj_ptr, 1)
     if not _xcnn_exact_ptr(a, XT_INT) or not _xcnn_exact_ptr(b, XT_INT):
         return False
-    ref cpy = Python().cpython()
     var wa = t[].PyLong_AsLongLong(a)
-    if wa == -1 and cpy.PyErr_Occurred():
-        # Out of machine range: the general parse raises as before.
-        t[].PyErr_Clear()
-        return False
+    if wa == -1:
+        if t[].PyErr_Occurred():
+            # Out of machine range: the general parse raises as before.
+            t[].PyErr_Clear()
+            return False
     var wb = t[].PyLong_AsLongLong(b)
-    if wb == -1 and cpy.PyErr_Occurred():
-        t[].PyErr_Clear()
-        return False
+    if wb == -1:
+        if t[].PyErr_Occurred():
+            t[].PyErr_Clear()
+            return False
     first = Int(wa)
     second = Int(wb)
     return True
@@ -471,22 +467,29 @@ def xcnn_shape(value: PythonObject) raises -> List[Int]:
     # at a miss only. The tuple is read with borrowed item reads.
     var mods = NativeModules()
     var shape = PythonObject(None)
+    var read = False
     if class_record(mods, _XCNN_SHAPE_SLOT, cls) is not None:
         var g = _xcnn_names()
-        var raw = cpython_table()[].PyObject_GenericGetAttr(value._obj_ptr, g[].keys[XK_SHAPE]._obj_ptr)
-        if not raw:
-            raise Python().cpython().unsafe_get_error()
-        shape = PythonObject(from_owned=raw)
-    else:
+        var t0 = cpython_table()
+        var raw = t0[].PyObject_GenericGetAttr(value._obj_ptr, g[].keys[XK_SHAPE]._obj_ptr)
+        if raw:
+            shape = PythonObject(from_owned=raw)
+            read = True
+        else:
+            # The getter raised: the descriptor call below raises it again,
+            # through the same path as before.
+            t0[].PyErr_Clear()
+    if not read:
         var namespace = _class_fields(cls)
         var descriptor = py_get(namespace, "shape")
-        var types = native_loaded_module("types")
-        if (py_type(descriptor) is not types.MemberDescriptorType
-                and py_type(descriptor) is not py_type(xcnn_builtins().type.__dict__["__dict__"])):
-            raise Error("TypeError: CNN shape requires native storage metadata")
-        if descriptor.__objclass__ is not cls:
-            raise Error("TypeError: CNN shape refuses subclasses")
-        class_admit(mods, _XCNN_SHAPE_SLOT, cls, PythonObject(True))
+        if class_record(mods, _XCNN_SHAPE_SLOT, cls) is None:
+            var types = native_loaded_module("types")
+            if (py_type(descriptor) is not types.MemberDescriptorType
+                    and py_type(descriptor) is not py_type(xcnn_builtins().type.__dict__["__dict__"])):
+                raise Error("TypeError: CNN shape requires native storage metadata")
+            if descriptor.__objclass__ is not cls:
+                raise Error("TypeError: CNN shape refuses subclasses")
+            class_admit(mods, _XCNN_SHAPE_SLOT, cls, PythonObject(True))
         shape = py_call(descriptor.__get__, value, cls)
     if not xcnn_exact(shape, XT_TUPLE):
         raise Error("TypeError: CNN shape requires an exact tuple")
@@ -595,11 +598,16 @@ def _xcnn_slot_raw(value: PythonObject, name: String, context: PythonObject) rai
     # for the slot, a bound `__get__` object and a call envelope (about 4k
     # instructions; a resident pool forward did eight to ten of them).
     var g = _xcnn_names()
-    if py_type(value) is not xcnn_item(context, XK_TENSOR_CLASS):
+    var cls = xcnn_item(context, XK_TENSOR_CLASS)
+    if py_type(value) is not cls:
         raise Error("TypeError: CNN tensor requires the connected native storage class")
-    var raw = cpython_table()[].PyObject_GenericGetAttr(value._obj_ptr, g[].keys[_xcnn_slot_name(name)]._obj_ptr)
+    var t = cpython_table()
+    var raw = t[].PyObject_GenericGetAttr(value._obj_ptr, g[].keys[_xcnn_slot_name(name)]._obj_ptr)
     if not raw:
-        raise Python().cpython().unsafe_get_error()
+        # An unset slot (a partially initialized tensor): the descriptor call
+        # raises its AttributeError through the same path as before.
+        t[].PyErr_Clear()
+        return py_call(context["xcnn_tensor_slots"][PythonObject(name)].__get__, value, cls)
     return PythonObject(from_owned=raw)
 
 
@@ -611,9 +619,12 @@ def _xcnn_set_raw(value: PythonObject, name: String, item: PythonObject, context
     var g = _xcnn_names()
     if py_type(value) is not xcnn_item(context, XK_TENSOR_CLASS):
         raise Error("TypeError: CNN tensor requires the connected native storage class")
-    if cpython_table()[].PyObject_GenericSetAttr(value._obj_ptr, g[].keys[_xcnn_slot_name(name)]._obj_ptr,
-                                                 item._obj_ptr) != 0:
-        raise Python().cpython().unsafe_get_error()
+    var t = cpython_table()
+    if t[].PyObject_GenericSetAttr(value._obj_ptr, g[].keys[_xcnn_slot_name(name)]._obj_ptr, item._obj_ptr) != 0:
+        # The setter refused: the descriptor call raises it through the same
+        # path as before.
+        t[].PyErr_Clear()
+        _ = py_call(context["xcnn_tensor_slots"][PythonObject(name)].__set__, value, item)
 
 
 def xcnn_tensor_slot(value: PythonObject, name: String, context: PythonObject) raises -> PythonObject:
