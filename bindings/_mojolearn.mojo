@@ -104,18 +104,15 @@ from core.hotpath_device import (
     HPD_U32,
     HPD_U8,
 )
-from core.label_rows_device import LRD_MAX_N, device_argmax_last_f32
+from core.label_rows_device import LRD_MAX_N
 from bindings.normal_dist_helpers_pack import truncnorm_draws_binding
 from bindings.lr_table_helpers_door import (
     lr_schedule_exact_binding,
-    lr_schedule_at_c, lr_schedule_series_c,
+    lr_schedule_at_c,
 )
-from bindings.optimizer_public_door import entry_init
 from bindings.array_helpers_pack import (
-    nsum_f64_binding,
     row_means_f64_binding,
     fsum_f64_binding,
-    row_stds_f64_binding,
 )
 from core.rows_bytes_device import device_gather_rows_bytes, device_scatter_rows_bytes
 from core.ic_min_device import device_ic_running_min
@@ -123,9 +120,6 @@ from bindings.hotpath_helpers_door import (
     assign_fold_i64_binding,
     count_fold_hits_i64_binding,
     mark_split_roles_f32_binding,
-    strat_alloc_i64_binding,
-    group_fold_assign_i32_binding,
-    strat_group_plan_i32_binding,
 )
 # lane fam2-shared (2026-10-04): these eighteen helpers run on the device in
 # this binding (bindings/hotpath_device.mojo, same names and signatures; each
@@ -147,7 +141,6 @@ from bindings.hotpath_device_door import (
     threshold_labels_i64_binding,
     bincount_i64_binding,
     bincount2_i32_binding,
-    first_seen_i32_binding,
     strat_fold_assign_i32_binding,
     # lane cpu2-l1-input: the input helpers on the device (no _OFF arm; the
     # host loops below and in bindings/array_helpers.mojo are the host column
@@ -175,16 +168,9 @@ from bindings.msel_device_unpack import (
 )
 from bindings.msel_device_pack import (
     msel_put_binding,
-    msel_alloc_binding,
-    msel_read_binding,
     msel_free_binding,
     msel_live_binding,
     msel_take_rows_binding,
-    msel_free_bytes_binding,
-    msel_scatter_rows_binding,
-    msel_proba_column_binding,
-    msel_split_table_i32_binding,
-    msel_group_fold_perm_i32_binding,
 )
 # lane calltable-msel: the same model-selection helpers as one native entry
 # for the model-selection doors (core/msel_entry_table.mojo).
@@ -1751,34 +1737,6 @@ def ic_running_min_f32_binding(
                                   ic_addr, best_ic_addr, best_idx_addr)
 
 
-def argmax_last_rows_f32_binding(
-    logits_addr: PythonObject, dims: PythonObject, dst_addr: PythonObject,
-) raises -> PythonObject:
-    """dims = [b, l, v]: the first-max argmax (DEVIATION 2500's rule) of the
-    LAST position of each row of float32 logits `[b, l, v]` into int64
-    `dst[b]`, on the device (lane cpu4-python: the callers' host row gather
-    `gather_rows_bytes` before `argmax_rows_f32` is gone)."""
-    if len(dims) != 3:
-        raise Error("argmax_last_rows_f32: dims [b, l, v]")
-    var b = Int(py=dims[0])
-    var l = Int(py=dims[1])
-    var v = Int(py=dims[2])
-    if b < 0 or l < 1 or v < 1:
-        raise Error("argmax_last_rows_f32: b must be non-negative, l and v positive")
-    if b == 0:
-        return PythonObject(0)
-    if Int(py=logits_addr) == 0 or Int(py=dst_addr) == 0:
-        raise Error("argmax_last_rows_f32: null buffer address")
-    if b > LRD_MAX_N // l or v > LRD_MAX_N:
-        raise Error("argmax_last_rows_f32: more rows or columns than the device argmax holds")
-    var la = Int(py=logits_addr)
-    var da = Int(py=dst_addr)
-    var ctx = process_ctx[_DEVCTX_SLOT]()
-    with GILReleased(Python()):
-        device_argmax_last_f32(ctx, la, b, l, v, da)
-    return PythonObject(0)
-
-
 # TOMBSTONE: the *_parallel_available multi-GPU capability probes (dead native entries: constant 1, no driver or package code looks them up) deleted 2026-10-26 by b3cad1ef6; code recoverable at a88745022.
 # Restore: git apply experiments/removed/dead_entries_parallel_probes.patch
 
@@ -1790,44 +1748,6 @@ def argmax_last_rows_f32_binding(
 # `_spectral_impl._DenseCOO` and `SpectralEmbedding._precomputed_knn_affinity`
 # (compares and the exact values 0, 0.5, 1; no fold).
 # ===========================================================================
-
-
-def nonzero_f32_count_binding(src_addr: PythonObject, n: PythonObject) raises -> PythonObject:
-    """How many of the `n` float32 values at `src` satisfy `v != 0.0`."""
-    var count = Int(py=n)
-    if count < 0:
-        raise Error("nonzero_f32_count: n must be non-negative, got " + String(count))
-    if count == 0:
-        return PythonObject(0)
-    var sp = f32_ptr(Int(py=src_addr))
-    var nz = 0
-    with GILReleased(Python()):
-        nz = dense_nonzero_f32_count(sp, count)
-    return PythonObject(nz)
-
-
-def nonzero_f32_fill_binding(
-    src_addr: PythonObject, rows: PythonObject, cols: PythonObject, outs: PythonObject, capacity: PythonObject,
-) raises -> PythonObject:
-    """`nonzero_f64_fill` over a C-contiguous float32 `[rows, cols]` matrix:
-    row, column and value of every `v != 0.0`, row major. Returns the count."""
-    var nr = Int(py=rows)
-    var nc = Int(py=cols)
-    var cap = Int(py=capacity)
-    if nr < 0 or nc < 0 or cap < 0:
-        raise Error("nonzero_f32_fill: rows, cols and capacity must be non-negative")
-    if len(outs) != 3:
-        raise Error("nonzero_f32_fill: outs must hold 3 addresses, got " + String(len(outs)))
-    if nr == 0 or nc == 0:
-        return PythonObject(0)
-    var sp = f32_ptr(Int(py=src_addr))
-    var rp = i32_ptr(Int(py=outs[0]))
-    var cp = i32_ptr(Int(py=outs[1]))
-    var vp = f32_ptr(Int(py=outs[2]))
-    var k = 0
-    with GILReleased(Python()):
-        k = dense_nonzero_f32_fill(sp, nr, nc, rp, cp, vp, cap)
-    return PythonObject(k)
 
 
 def knn_affinity_f32_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
@@ -1950,9 +1870,6 @@ def _publish_neighbors_ops(module: PythonObject) raises:
     py_setattr(module, "neighbors_native_key", Python.tuple(PythonObject(Int(GLOBAL_NUMERIC_MODE)), PythonObject(word)))
 
 
-
-
-
 def build__mojolearn() -> PythonObject:
     comptime assert BASE_GUARDS_OK, "invalid integrated experiment configuration (base guards)"
     try:
@@ -1996,8 +1913,6 @@ def build__mojolearn() -> PythonObject:
         m.def_function[transpose_f32_binding]("transpose_f32")
         m.def_function[nonzero_f64_count_binding]("nonzero_f64_count")
         m.def_function[nonzero_f64_fill_binding]("nonzero_f64_fill")
-        m.def_function[nonzero_f32_count_binding]("nonzero_f32_count")
-        m.def_function[nonzero_f32_fill_binding]("nonzero_f32_fill")
         m.def_function[knn_affinity_f32_binding]("knn_affinity_f32")
         m.def_function[unique_inverse_binding]("unique_inverse")
         # lane migrate-shared-labels: the shared argument-and-label entry
@@ -2011,22 +1926,15 @@ def build__mojolearn() -> PythonObject:
         # native model-selection doors in another extension module.
         publish_msel_helpers_device()
         m.def_function[msel_put_binding]("msel_put")
-        m.def_function[msel_alloc_binding]("msel_alloc")
-        m.def_function[msel_read_binding]("msel_read")
         m.def_function[msel_free_binding]("msel_free")
         m.def_function[msel_live_binding]("msel_live")
         m.def_function[msel_take_rows_binding]("msel_take_rows")
-        m.def_function[msel_free_bytes_binding]("msel_free_bytes")
         m.def_function[logistic_fold_native_api_v1_binding]("logistic_fold_native_api_v1")
         m.def_function[pca_fold_native_api_v1_binding]("pca_fold_native_api_v1")
         m.def_function[tsvd_fold_native_api_v1_binding]("tsvd_fold_native_api_v1")
         m.def_function[kmeans_fit_fold_binding]("kmeans_fit_fold")
         m.def_function[kmeans_predict_fold_binding]("kmeans_predict_fold")
         m.def_function[kmeans_transform_fold_binding]("kmeans_transform_fold")
-        m.def_function[msel_scatter_rows_binding]("msel_scatter_rows")
-        m.def_function[msel_proba_column_binding]("msel_proba_column")
-        m.def_function[msel_split_table_i32_binding]("msel_split_table_i32")
-        m.def_function[msel_group_fold_perm_i32_binding]("msel_group_fold_perm_i32")
         # DEVIATION 2500: label encode/decode and the class argmax, host side.
         # TOMBSTONE: encode_labels_* exports (their Mojo bodies stay live), lr_schedule_exact_block, next_combination_i64 (dead native entries: no live caller) deleted 2026-10-26 by e9a91ed29; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_core.patch
@@ -2064,36 +1972,26 @@ def build__mojolearn() -> PythonObject:
         m.def_function[mark_split_roles_f32_binding]("mark_split_roles_f32")
         m.def_function[scatter_rows_bytes_binding]("scatter_rows_bytes")
         m.def_function[uniform_init_f32_binding]("uniform_init_f32")
-        m.def_function[normal_init_f32_binding]("normal_init_f32")
         # TOMBSTONE: adam_hyper_f64 (dead native entry: no live caller) deleted 2026-10-26 by ce303e2d1; code recoverable at 485ba9cc1.
         # Restore: git apply experiments/removed/adam_hyper_f64.patch
-        m.def_function[first_seen_i32_binding]("first_seen_i32")
         m.def_function[strat_fold_assign_i32_binding]("strat_fold_assign_i32")
-        m.def_function[strat_alloc_i64_binding]("strat_alloc_i64")
-        m.def_function[group_fold_assign_i32_binding]("group_fold_assign_i32")
-        m.def_function[strat_group_plan_i32_binding]("strat_group_plan_i32")
         m.def_function[bincount2_i32_binding]("bincount2_i32")
         m.def_function[strided_copy_bytes_binding]("strided_copy_bytes")
         m.def_function[check_lengths_i64_binding]("check_lengths_i64")
         m.def_function[ragged_rows_bytes_binding]("ragged_rows_bytes")
-        m.def_function[nsum_f64_binding]("nsum_f64")
         m.def_function[row_means_f64_binding]("row_means_f64")
         m.def_function[truncnorm_draws_binding]("truncnorm_draws")
         m.def_function[fsum_f64_binding]("fsum_f64")
-        m.def_function[row_stds_f64_binding]("row_stds_f64")
         m.def_function[lr_schedule_exact_binding]("lr_schedule_exact")
         # TOMBSTONE: encode_labels_* exports (their Mojo bodies stay live), lr_schedule_exact_block, next_combination_i64 (dead native entries: no live caller) deleted 2026-10-26 by e9a91ed29; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_core.patch
         # TOMBSTONE: lr_schedule_fill (dead native entry: no live caller) deleted 2026-10-26 by a98f13f57; code recoverable at 485ba9cc1.
         # Restore: git apply experiments/removed/lr_schedule_fill.patch
         m.def_py_c_function(lr_schedule_at_c, "lr_schedule_at")
-        m.def_py_c_function(lr_schedule_series_c, "lr_schedule_series")
-        m.def_py_c_function(entry_init, "optimizer_door_init")
         m.def_function[class_ratio_f64_binding]("class_ratio_f64")
         m.def_function[gather_i64_binding]("gather_i64")
         m.def_function[gather_f64_binding]("gather_f64")
         m.def_function[argmax_rows_f32_binding]("argmax_rows_f32")
-        m.def_function[argmax_last_rows_f32_binding]("argmax_last_rows_f32")
         m.def_function[argmax_rows_f64_binding]("argmax_rows_f64")
         # TOMBSTONE: the *_parallel_available multi-GPU capability probes (dead native entries: constant 1, no driver or package code looks them up) deleted 2026-10-26 by b3cad1ef6; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_parallel_probes.patch

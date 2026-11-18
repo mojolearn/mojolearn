@@ -592,8 +592,6 @@ def parallel_neural_call(operation: String, args: PythonObject) raises -> Python
     if operation == "worker":
         neural_worker(args)
         return PythonObject(None)
-    if operation == "worker_dispatch":
-        return neural_worker_dispatch(args[0])
     var owner = args[0]
     _ = owner._lock.acquire()
     var result = PythonObject(None)

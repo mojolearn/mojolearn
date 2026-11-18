@@ -94,17 +94,6 @@ def ragged_rows_bytes_binding(
     return PythonObject(0)
 
 
-def nsum_f64_binding(addr: PythonObject, n: PythonObject) raises -> PythonObject:
-    """`_portable_math.nsum`: CPython 3.12+'s float `sum`, `0 + x0`, then
-    Neumaier's compensated sum in order, the compensation added once at the
-    end when it is nonzero and finite. 0.0 for an empty input."""
-    var count = Int(py=n)
-    if count <= 0:
-        return PythonObject(0.0)
-    var p = _addr_ptr[DType.float64](Int(py=addr))
-    return PythonObject(nsum_f64(p, count))
-
-
 def row_means_f64_binding(
     src_addr: PythonObject, rows: PythonObject, cols: PythonObject, out_addr: PythonObject,
 ) raises -> PythonObject:
@@ -140,26 +129,6 @@ def fsum_f64_binding(src_addr: PythonObject, n: PythonObject, out_addr: PythonOb
         return PythonObject(0)
     var sp = _addr_ptr[DType.float64](Int(py=src_addr))
     return PythonObject(fsum_f64(sp, op, count))
-
-
-def row_stds_f64_binding(
-    src_addr: PythonObject, rows: PythonObject, cols: PythonObject, means_addr: PythonObject,
-    out_addr: PythonObject,
-) raises -> PythonObject:
-    """The population standard deviation of each row of a C-order float64
-    (rows, cols) score table about its mean (lane py-runtime round 3; it was
-    Python's sqrt(fsum((v - m) * (v - m)) / cols) per search candidate): the
-    same binary64 subtraction and product per score, the exact fsum, one
-    division and the correctly rounded sqrt."""
-    var nr = Int(py=rows)
-    var nc = Int(py=cols)
-    if nr <= 0 or nc <= 0:
-        return PythonObject(0)
-    var sp = _addr_ptr[DType.float64](Int(py=src_addr))
-    var mp = _addr_ptr[DType.float64](Int(py=means_addr))
-    var op = _addr_ptr[DType.float64](Int(py=out_addr))
-    row_stds_f64(sp, mp, op, nr, nc)
-    return PythonObject(0)
 
 
 def class_ratio_f64_host_binding(

@@ -92,15 +92,6 @@ def dev_ew_py(
 # Restore: git apply experiments/removed/MOJOLEARN_MCD_ORDERED_COV.patch
 
 
-def dev_gemm_py(a: PythonObject, b: PythonObject, c: PythonObject, p: PythonObject) raises -> PythonObject:
-    var m = _n(p, 0)
-    var k = _n(p, 1)
-    var n = _n(p, 2)
-    var ta = Int(py=p[3]) != 0
-    var tb = Int(py=p[4]) != 0
-    return PythonObject(dev_gemm_run(_id(a), _id(b), _id(c), m, k, n, ta, tb))
-
-
 # TOMBSTONE: the dead x_decomp exports (registrations only where the body stays live in the decomp owners; see docs/TOMBSTONES.md) deleted 2026-10-26 by 25b5daca2; code recoverable at a88745022.
 # Restore: git apply experiments/removed/dead_entries_x_decomp.patch
 

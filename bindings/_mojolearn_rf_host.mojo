@@ -289,28 +289,6 @@ def _rf_fit_py[CLASSIFIER: Bool, ROWMAJOR: Bool](
     return _rf_handle_py(_rf_fit[CLASSIFIER, ROWMAJOR](args), export)
 
 
-def rf_classifier_fit_aux_export_binding(
-    x_addr: PythonObject, y_addr: PythonObject, params: PythonObject,
-    criterion: PythonObject, weights_addr: PythonObject,
-    oob_addr: PythonObject, score_addr: PythonObject, importance_addr: PythonObject,
-) raises -> PythonObject:
-    """T15 host twin: optional native OOB+score and Float32 feature importance.
-    NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
-    """
-    return _rf_fit_py[True, False](x_addr, y_addr, params, criterion, True, weights=_index(weights_addr),
-                                   oob=_index(oob_addr), score=_index(score_addr), importance=_index(importance_addr))
-
-
-def rf_regressor_fit_aux_export_binding(
-    x_addr: PythonObject, y_addr: PythonObject, params: PythonObject,
-    criterion: PythonObject, oob_addr: PythonObject, score_addr: PythonObject,
-    importance_addr: PythonObject,
-) raises -> PythonObject:
-    """T15 host requested auxiliary outputs; same unqualified status."""
-    return _rf_fit_py[False, False](x_addr, y_addr, params, criterion, True, oob=_index(oob_addr),
-                                    score=_index(score_addr), importance=_index(importance_addr))
-
-
 # TOMBSTONE: the legacy-arm rf/et fits and rf_regressor_fit_session_export (dead native entries: reached only by the deleted MOJOLEARN_FOREST_EXPORT=legacy arm / no caller) deleted 2026-10-26 by f515bbcb9; code recoverable at a88745022.
 # Restore: git apply experiments/removed/dead_entries_trees.patch
 
@@ -809,8 +787,6 @@ def build__mojolearn_rf_host() -> PythonObject:
         module.def_function[rf_host_sabotage_binding]("rf_host_sabotage")
         module.def_function[rf_vendor_binding]("rf_vendor")
         module.def_function[rf_numeric_mode_binding]("rf_numeric_mode")
-        module.def_function[rf_classifier_fit_aux_export_binding]("rf_classifier_fit_aux_export")
-        module.def_function[rf_regressor_fit_aux_export_binding]("rf_regressor_fit_aux_export")
         # TOMBSTONE: the legacy-arm rf/et fits and rf_regressor_fit_session_export (dead native entries: reached only by the deleted MOJOLEARN_FOREST_EXPORT=legacy arm / no caller) deleted 2026-10-26 by f515bbcb9; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_trees.patch
         module.def_function[rf_classifier_fit_export_binding]("rf_classifier_fit_export")
@@ -824,7 +800,6 @@ def build__mojolearn_rf_host() -> PythonObject:
         # TOMBSTONE: the legacy-arm rf/et fits and rf_regressor_fit_session_export (dead native entries: reached only by the deleted MOJOLEARN_FOREST_EXPORT=legacy arm / no caller) deleted 2026-10-26 by f515bbcb9; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_trees.patch
         module.def_function[rf_classifier_fit_shard_binding]("rf_classifier_fit_shard")
-        module.def_function[rf_regressor_fit_shard_binding]("rf_regressor_fit_shard")
         module.def_function[rf_forest_export_binding]("forest_export")
         module.def_function[rf_forest_export_legacy_binding]("forest_export_legacy")
         module.def_function[rf_forest_export_release_binding]("forest_export_release")
@@ -848,7 +823,6 @@ def build__mojolearn_rf_host() -> PythonObject:
         # Restore: git apply experiments/removed/dead_entries_trees.patch
         module.def_function[rf_regressor_fit_session_rows_binding]("rf_regressor_fit_session_rows_export")
         # box-run-2-dart-host: the DART member fit on the host DART session
-        module.def_function[rf_regressor_fit_dart_binding]("rf_regressor_fit_dart_export")
         module.def_function[rf_classifier_fit_weighted_session_binding]("rf_classifier_fit_weighted_session_export")
         return module.finalize()
     except error:

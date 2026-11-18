@@ -189,9 +189,6 @@ from cholesky.estimator import (
 # (cholesky/checks/fast_trsm.mojo); the LU define stays deleted.
 from experiments.apple_fast.gemm.scoped_dispatch import shared_sub_count
 
-def gp_shared_sub_count_py() raises -> PythonObject:
-    return PythonObject(shared_sub_count(True))
-
 
 def gp_numeric_mode_binding() raises -> PythonObject:
     """THE BUILD'S TIER, as the `NUMERIC_*` code itself: 0 FAST, 1
@@ -1503,7 +1500,6 @@ def build__mojolearn_gp() -> PythonObject:
     try:
         var m = PythonModuleBuilder("_mojolearn_gp")
         m.def_function[gp_native_api_v1_binding]("gp_native_api_v1")
-        m.def_function[gp_shared_sub_count_py]("gp_shared_sub_count")
         # TOMBSTONE: the *_parallel_available multi-GPU capability probes (dead native entries: constant 1, no driver or package code looks them up) deleted 2026-10-26 by b3cad1ef6; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_parallel_probes.patch
         m.def_function[device_plan_enter_binding]("device_plan_enter")
@@ -1522,7 +1518,6 @@ def build__mojolearn_gp() -> PythonObject:
         m.def_function[gp_theta_params_binding]("gp_theta_params")
         m.def_function[gpc_fit_binding]("gpc_fit")
         m.def_function[gpc_predict_binding]("gpc_predict")
-        m.def_function[gpc_ovr_combine_binding]("gpc_ovr_combine")
         m.def_function[gp_idn_caps_binding]("gp_idn_caps")
         m.def_function[gpc_fit_all_binding]("gpc_fit_all")
         m.def_function[gpc_predict_all_binding]("gpc_predict_all")

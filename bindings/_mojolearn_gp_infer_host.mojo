@@ -110,7 +110,6 @@ def build__mojolearn_gp_infer_host() -> PythonObject:
         module.def_function[gp_numeric_mode_binding]("gp_numeric_mode")
         module.def_function[gpr_predict_binding]("gpr_predict")
         module.def_function[gpc_predict_binding]("gpc_predict")
-        module.def_function[gpc_ovr_combine_binding]("gpc_ovr_combine")
         var published = module.finalize()
         _publish_gp_table(published)
         return published

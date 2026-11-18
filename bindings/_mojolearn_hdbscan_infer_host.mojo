@@ -88,7 +88,6 @@ def build__mojolearn_hdbscan_infer_host() -> PythonObject:
         module.def_function[hdbscan_infer_host_sabotage_binding]("hdbscan_infer_host_sabotage")
         module.def_function[hdbscan_vendor_binding]("hdbscan_vendor")
         module.def_function[hdbscan_numeric_mode_binding]("hdbscan_numeric_mode")
-        module.def_function[hdbscan_approximate_predict_binding]("hdbscan_approximate_predict")
         module.def_function[hdbscan_query_native_api_v1_binding]("hdbscan_query_native_api_v1")
         module.def_function[hdbscan_membership_vector_binding]("hdbscan_membership_vector")
         module.def_function[hdbscan_all_points_membership_vectors_binding]("hdbscan_all_points_membership_vectors")

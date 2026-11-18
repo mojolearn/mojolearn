@@ -41,7 +41,7 @@ from providers.python.kernel_public_lifecycle_pyapi_pack import kernel_public_ad
 from providers.python.kernel_method_descriptor_pyapi_door import kernel_method_provider, kernel_method_execute, kernel_method_metadata
 from providers.python.neural_descriptor_pyapi_door import (
     neural_descriptor_execute, neural_descriptor_adopt, neural_descriptor_resource_close,
-    neural_descriptor_info, neural_descriptor_entry,
+    neural_descriptor_entry,
 )
 from core.scale_gamma_exact import scale_gamma_from_limbs, SGX_BAD
 from bindings.mcls_cluster_door import mcls_cluster_operation
@@ -1222,11 +1222,6 @@ def _km_par_apply(model: PythonObject, args: PythonObject, context: PythonObject
 
 def kernel_methods_operation(model: PythonObject, operation: String, args: PythonObject,
                              context: PythonObject) raises -> PythonObject:
-    if operation == "family_km_provider_info":
-        var provider = py_get(py_fields(model), "_native_kernel_method_provider")
-        if provider is None:
-            raise Error("kernel methods provider was not admitted")
-        return neural_descriptor_info(provider)
     if operation == "family_km_par_fit" or operation == "family_km_par_apply":
         var admitted = estimator_arguments(model, "_mojolearn_kernel_methods", args, context)
         if operation == "family_km_par_fit":

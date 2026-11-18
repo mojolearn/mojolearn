@@ -82,16 +82,9 @@ from core.experiment_guards_linear import LINEAR_GUARDS_OK
 from bindings.parallel_base_entry_host import publish_parallel_base_host
 from bindings.msel_host_pack import (
     msel_put_binding,
-    msel_alloc_binding,
-    msel_read_binding,
     msel_free_binding,
     msel_live_binding,
     msel_take_rows_binding,
-    msel_free_bytes_binding,
-    msel_scatter_rows_binding,
-    msel_proba_column_binding,
-    msel_split_table_i32_binding,
-    msel_group_fold_perm_i32_binding,
 )
 # lane calltable-msel: the same model-selection helpers as one native entry
 # for the model-selection doors (core/msel_entry_table.mojo).
@@ -107,7 +100,6 @@ from std.sys.compile import is_defined
 from bindings.host_helpers_pack import (
     all_finite_f32_binding,
     all_finite_f64_binding,
-    argmax_last_rows_f32_binding,
     argmax_rows_f32_binding,
     argmax_rows_f64_binding,
     cast_f64_to_f32_binding,
@@ -147,27 +139,20 @@ from bindings.hotpath_helpers_door import (
     scatter_rows_bytes_host_binding,
     uniform_init_f32_binding,
     normal_init_f32_binding,
-    first_seen_i32_binding,
     strat_fold_assign_i32_binding,
-    strat_alloc_i64_binding,
-    group_fold_assign_i32_binding,
-    strat_group_plan_i32_binding,
     bincount2_i32_host_binding,
 )
 from bindings.normal_dist_helpers_pack import truncnorm_draws_binding
 from bindings.lr_table_helpers_door import (
     lr_schedule_exact_binding,
-    lr_schedule_at_c, lr_schedule_series_c,
+    lr_schedule_at_c,
 )
-from bindings.optimizer_public_door import entry_init
 from bindings.array_helpers_pack import (
     strided_copy_bytes_binding,
     check_lengths_i64_binding,
     ragged_rows_bytes_binding,
-    nsum_f64_binding,
     row_means_f64_binding,
     fsum_f64_binding,
-    row_stds_f64_binding,
     class_ratio_f64_host_binding,
 )
 from core.hostptr import f32_ptr, f64_ptr, i32_ptr, u32_ptr
@@ -1022,44 +1007,6 @@ def kmeans_transform_binding(
 # ===========================================================================
 
 
-def nonzero_f32_count_binding(src_addr: PythonObject, n: PythonObject) raises -> PythonObject:
-    """How many of the `n` float32 values at `src` satisfy `v != 0.0`."""
-    var count = Int(py=n)
-    if count < 0:
-        raise Error("nonzero_f32_count: n must be non-negative, got " + String(count))
-    if count == 0:
-        return PythonObject(0)
-    var sp = f32_ptr(Int(py=src_addr))
-    var nz = 0
-    with GILReleased(Python()):
-        nz = dense_nonzero_f32_count(sp, count)
-    return PythonObject(nz)
-
-
-def nonzero_f32_fill_binding(
-    src_addr: PythonObject, rows: PythonObject, cols: PythonObject, outs: PythonObject, capacity: PythonObject,
-) raises -> PythonObject:
-    """`nonzero_f64_fill` over a C-contiguous float32 `[rows, cols]` matrix:
-    row, column and value of every `v != 0.0`, row major. Returns the count."""
-    var nr = Int(py=rows)
-    var nc = Int(py=cols)
-    var cap = Int(py=capacity)
-    if nr < 0 or nc < 0 or cap < 0:
-        raise Error("nonzero_f32_fill: rows, cols and capacity must be non-negative")
-    if len(outs) != 3:
-        raise Error("nonzero_f32_fill: outs must hold 3 addresses, got " + String(len(outs)))
-    if nr == 0 or nc == 0:
-        return PythonObject(0)
-    var sp = f32_ptr(Int(py=src_addr))
-    var rp = i32_ptr(Int(py=outs[0]))
-    var cp = i32_ptr(Int(py=outs[1]))
-    var vp = f32_ptr(Int(py=outs[2]))
-    var k = 0
-    with GILReleased(Python()):
-        k = dense_nonzero_f32_fill(sp, nr, nc, rp, cp, vp, cap)
-    return PythonObject(k)
-
-
 def knn_affinity_f32_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
     """addrs = [dense, rows, cols, vals, affinity, status (3 int32)] (0 where unused);
     params = [n, k, nnz, sparse]. See `core/dense_coo.mojo::knn_affinity_f32`."""
@@ -1157,8 +1104,6 @@ def build__mojolearn_core_host() -> PythonObject:
         module.def_function[cast_colmajor_f64_to_f32_binding]("cast_colmajor_f64_to_f32")
         module.def_function[nonzero_f64_count_binding]("nonzero_f64_count")
         module.def_function[nonzero_f64_fill_binding]("nonzero_f64_fill")
-        module.def_function[nonzero_f32_count_binding]("nonzero_f32_count")
-        module.def_function[nonzero_f32_fill_binding]("nonzero_f32_fill")
         module.def_function[knn_affinity_f32_binding]("knn_affinity_f32")
         module.def_function[unique_inverse_binding]("unique_inverse")
         module.def_function[cast_f64_to_f32_binding]("cast_f64_to_f32")
@@ -1172,19 +1117,11 @@ def build__mojolearn_core_host() -> PythonObject:
         # native model-selection doors in another extension module.
         publish_msel_helpers_host()
         module.def_function[msel_put_binding]("msel_put")
-        module.def_function[msel_alloc_binding]("msel_alloc")
-        module.def_function[msel_read_binding]("msel_read")
         module.def_function[msel_free_binding]("msel_free")
         module.def_function[msel_live_binding]("msel_live")
         module.def_function[msel_take_rows_binding]("msel_take_rows")
-        module.def_function[msel_free_bytes_binding]("msel_free_bytes")
-        module.def_function[msel_scatter_rows_binding]("msel_scatter_rows")
-        module.def_function[msel_proba_column_binding]("msel_proba_column")
-        module.def_function[msel_split_table_i32_binding]("msel_split_table_i32")
-        module.def_function[msel_group_fold_perm_i32_binding]("msel_group_fold_perm_i32")
         module.def_function[argmax_rows_f32_binding]("argmax_rows_f32")
         module.def_function[argmax_rows_f64_binding]("argmax_rows_f64")
-        module.def_function[argmax_last_rows_f32_binding]("argmax_last_rows_f32")
         # lane/python-hotpath (2026-09-17, DEVIATIONS 3100-3104): the helpers
         # of bindings/hotpath_helpers.mojo, and the ORDER RULE's encoder the
         # base binding has carried since DEVIATION 2500, so a CPU-only
@@ -1225,35 +1162,26 @@ def build__mojolearn_core_host() -> PythonObject:
         module.def_function[mark_split_roles_f32_binding]("mark_split_roles_f32")
         module.def_function[scatter_rows_bytes_host_binding]("scatter_rows_bytes")
         module.def_function[uniform_init_f32_binding]("uniform_init_f32")
-        module.def_function[normal_init_f32_binding]("normal_init_f32")
         # TOMBSTONE: adam_hyper_f64 (dead native entry: no live caller) deleted 2026-10-26 by ce303e2d1; code recoverable at 485ba9cc1.
         # Restore: git apply experiments/removed/adam_hyper_f64.patch
-        module.def_function[first_seen_i32_binding]("first_seen_i32")
         module.def_function[strat_fold_assign_i32_binding]("strat_fold_assign_i32")
-        module.def_function[strat_alloc_i64_binding]("strat_alloc_i64")
-        module.def_function[group_fold_assign_i32_binding]("group_fold_assign_i32")
         # StratifiedGroupKFold's group x class table and group plan (the GPU
         # base binding's bincount2_i32 / strat_group_plan_i32): a CPU-only
         # install refused StratifiedGroupKFold.split without them (lane
         # run-sabotage-arms, 2026-10-21: x-metrics-splitters on the host column)
         module.def_function[bincount2_i32_host_binding]("bincount2_i32")
-        module.def_function[strat_group_plan_i32_binding]("strat_group_plan_i32")
         module.def_function[strided_copy_bytes_binding]("strided_copy_bytes")
         module.def_function[check_lengths_i64_binding]("check_lengths_i64")
         module.def_function[ragged_rows_bytes_binding]("ragged_rows_bytes")
-        module.def_function[nsum_f64_binding]("nsum_f64")
         module.def_function[row_means_f64_binding]("row_means_f64")
         module.def_function[truncnorm_draws_binding]("truncnorm_draws")
         module.def_function[fsum_f64_binding]("fsum_f64")
-        module.def_function[row_stds_f64_binding]("row_stds_f64")
         module.def_function[lr_schedule_exact_binding]("lr_schedule_exact")
         # TOMBSTONE: encode_labels_* exports (their Mojo bodies stay live), lr_schedule_exact_block, next_combination_i64 (dead native entries: no live caller) deleted 2026-10-26 by e9a91ed29; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_core.patch
         # TOMBSTONE: lr_schedule_fill (dead native entry: no live caller) deleted 2026-10-26 by a98f13f57; code recoverable at 485ba9cc1.
         # Restore: git apply experiments/removed/lr_schedule_fill.patch
         module.def_py_c_function(lr_schedule_at_c, "lr_schedule_at")
-        module.def_py_c_function(lr_schedule_series_c, "lr_schedule_series")
-        module.def_py_c_function(entry_init, "optimizer_door_init")
         module.def_function[class_ratio_f64_host_binding]("class_ratio_f64")
         var published_module = module.finalize()
         _publish_neighbors_ops(published_module)

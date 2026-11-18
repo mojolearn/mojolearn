@@ -42,7 +42,6 @@ from forest_inference_binding_door import (
     forest_stage_input_gpu_binding,
     forest_unstage_input_gpu_binding,
     forest_ordered_resident_binding,
-    forest_identical_fused_labels_binding,
 )
 from core.forest_inference_run import (
     forest_prepare_gpu_native, forest_predict_resident_into_gpu_native,
@@ -473,7 +472,6 @@ def build__mojolearn_trees() -> PythonObject:
         # Restore: git apply experiments/removed/dead_entries_trees.patch
         m.def_function[forest_ordered_resident_binding]("forest_ordered_resident")
         # T38/C50 — NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
-        m.def_function[forest_identical_fused_labels_binding]("forest_identical_fused_labels")
         # TOMBSTONE: the legacy-arm et fits, et_predict_gpu_parallel, trees_shap_pair_count, the forest comparison arms and probes (dead native entries: no live caller) deleted 2026-10-26 by f515bbcb9; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_trees.patch
         m.def_function[et_forest_export_binding]("forest_export")

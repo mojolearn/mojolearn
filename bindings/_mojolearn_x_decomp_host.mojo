@@ -13,7 +13,7 @@ from std.python.bindings import PythonModuleBuilder
 from checks.kernel_matrix import COLUMN_CPU, TARGET_COLUMN, column_name
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from providers.python.x_decomp_api_pyapi_pack import (
-    colsum_py, eigh_py, ew_py, gemm_py, lu_py, lu_solve_py, numeric_mode_py, orth_py, orth_diag_py, rand_py, svd_py, lasso_rows_py, lars_rows_py, lu_aux_py, omp_rows_py, absmax_sign_py, geqrf_py, orgqr_py, rank_above_py, move_py, select_smallest_py, argmin_all_py, pca_mle_rank_host_py, rowsum_py, sqdist_py, vendor_py, idn_flags_py, ols_tsqr_r_py,
+    colsum_py, eigh_py, ew_py, gemm_py, lu_py, lu_solve_py, numeric_mode_py, orth_py, orth_diag_py, rand_py, svd_py, lasso_rows_py, lars_rows_py, lu_aux_py, omp_rows_py, absmax_sign_py, geqrf_py, orgqr_py, move_py, select_smallest_py, argmin_all_py, pca_mle_rank_host_py, rowsum_py, sqdist_py, vendor_py, idn_flags_py, ols_tsqr_r_py,
 )
 from x_decomp.host import HostExec, X_DECOMP_HOST_SABOTAGE
 from x_decomp.pca_randomized import NoRDev
@@ -169,7 +169,6 @@ def build__mojolearn_x_decomp_host() -> PythonObject:
         m.def_function[lda_py[HostExec, NoRDev, False, HostDecomp]]("x_decomp_lda_owner")
         m.def_function[rp_fit_py[HostExec, NoRDev, False, HostDecomp]]("x_decomp_rp_fit")
         m.def_function[rp_project_py[HostExec, NoRDev, False, HostDecomp]]("x_decomp_rp_project")
-        m.def_function[rank_above_py]("x_decomp_rank_above")
         # lane idn-dense-linalg: the one-entry OLS and solve routes
         m.def_function[idn_flags_py]("x_decomp_idn_flags")
         # x_decomp_tsqr_r, x_decomp_tsqr_q and x_decomp_r_signs removed (lane entangled-decompkit,
@@ -187,14 +186,9 @@ def build__mojolearn_x_decomp_host() -> PythonObject:
         # Restore: git apply experiments/removed/dead_entries_x_decomp.patch
         # TOMBSTONE: the dead x_decomp exports (registrations only where the body stays live in the decomp owners; see docs/TOMBSTONES.md) deleted 2026-10-26 by 25b5daca2; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_x_decomp.patch
-        m.def_function[move_py]("x_decomp_move")
-        m.def_function[reduce_py]("x_decomp_reduce")
         m.def_function[order_small_py]("x_decomp_order_small")
-        m.def_function[select_smallest_py]("x_decomp_select_smallest")
-        m.def_function[argmin_all_py]("x_decomp_argmin_all")
         # TOMBSTONE: the dead x_decomp exports (registrations only where the body stays live in the decomp owners; see docs/TOMBSTONES.md) deleted 2026-10-26 by 25b5daca2; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_x_decomp.patch
-        m.def_function[pca_mle_rank_host_py]("x_decomp_pca_mle_rank")
         m.def_function[numeric_mode_py]("x_decomp_numeric_mode")
         m.def_function[vendor_py[HostExec]]("x_decomp_vendor")
         var published_module = m.finalize()

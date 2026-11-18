@@ -35,7 +35,7 @@ from core.classical_pandas_impl import pd_raw_at, _pd_double
 from bindings.sequence_device_native_pack import sequence_device_operation, sequence_device_finalize
 from bindings.sequence_optimizer_native_door import sequence_optimizer_operation
 from bindings.optimizer_schedule_native_door import schedule_operation
-from bindings.optimizer_device_native_door import device_operation, device_new, device_entries, device_finalize, device_adopt
+from bindings.optimizer_device_native_door import device_operation, device_new, device_entries, device_adopt
 from bindings.training_linear_native_unpack import training_linear_operation
 from bindings.training_rms_native_unpack import training_rms_operation
 from bindings.training_embedding_native_door import training_embedding_operation
@@ -311,8 +311,6 @@ def optimizer_native(operation: String, owner: PythonObject, values: PythonObjec
         # Metadata needs only its connected native entries, not optimizer
         # object admission, buffer initialization or runtime binding loaders.
         return training_metadata(operation, mode, context)
-    if operation == "device_finalize":
-        return device_finalize(owner, context)
     # lane fb2-lr (2026-11-17): the per-step `lr_at` / `bits_at` no longer
     # reach this router; they are the schedule's bound native block methods
     # (bindings/lr_schedule_block_door.mojo). lane fb-optim's shortcut past

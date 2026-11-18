@@ -226,8 +226,6 @@ def build__mojolearn_hdbscan_host() -> PythonObject:
         module.def_function[hdbscan_numeric_mode_binding]("hdbscan_numeric_mode")
         module.def_function[hdbscan_fit_binding]("hdbscan_fit")
         module.def_function[hdbscan_fit_native_api_v1_binding]("hdbscan_fit_native_api_v1")
-        module.def_function[hdbscan_generate_prediction_data_binding]("hdbscan_generate_prediction_data")
-        module.def_function[hdbscan_approximate_predict_binding]("hdbscan_approximate_predict")
         module.def_function[hdbscan_query_native_api_v1_binding]("hdbscan_query_native_api_v1")
         # TOMBSTONE: hdbscan_host_predict_sabotage and the host tsa_vendor aliases (dead native entries: the host loader reads <prefix>_sabotage / <prefix>_vendor) deleted 2026-10-26 by 2013bdd1e; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_host_aliases.patch

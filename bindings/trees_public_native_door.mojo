@@ -20,8 +20,7 @@ from bindings.trees_public_iforest_door import iforest_getstate
 from bindings.trees_bagging_members_native_pack import bagging_members, bagging_members_set
 from bindings.trees_public_boost_door import boost_operation
 from providers.python.tree_boost_public_lifecycle_pyapi_pack import tree_boost_public_operation
-from bindings.trees_public_auxiliary_door import embedding_apply, tree_export_state
-from bindings.trees_public_state_pack import tree_is_fitted
+from bindings.trees_public_auxiliary_door import tree_export_state
 from bindings.trees_gbdt_adapter_lifecycle_door import gbdt_adapter_public_operation, gbdt_model_public_operation
 from bindings.trees_gbdt_parameters_pack import gbdt_adapter_construct, gbdt_adapter_set_params
 from bindings.trees_public_meta_door import meta_operation
@@ -35,8 +34,8 @@ from bindings.trees_public_gbdt_fit_door import (
     adapter_regressor_fit, gbdt_ordered_construct, gbdt_feature_freq_construct,
 )
 from bindings.trees_public_gbdt_door import (
-    gbdt_predict, gbdt_predict_proba, gbdt_predict_classes, gbdt_tree_metadata_op, ordered_rmse_fit,
-    feature_freq_fit, adapter_decision_function, adapter_predict, adapter_predict_proba, adapter_codes,
+    gbdt_predict, gbdt_predict_classes, gbdt_tree_metadata_op, ordered_rmse_fit,
+    feature_freq_fit, adapter_decision_function, adapter_predict, adapter_predict_proba,
 )
 
 
@@ -54,16 +53,12 @@ def trees_public_operation(model: PythonObject, operation: String, args: PythonO
         return gbdt_adapter_construct(model, args, context)
     if operation == "trees_gbdt_adapter_public_set_params":
         return gbdt_adapter_set_params(model, args[0], context)
-    if operation == "trees_gbdt_adapter_is_fitted":
-        return tree_is_fitted(model, False)
     if operation == "trees_iforest_getstate":
         # Lane fix-iforest-save-device-forest: a fitted IsolationForest
         # pickles its forest, not the (possibly borrowed) training matrix.
         return iforest_getstate(model, context)
     if operation == "trees_forest_getstate" or operation == "trees_gbdt_getstate":
         return tree_export_state(model, operation)
-    if operation == "trees_embedding_apply":
-        return embedding_apply(model, args, context)
     if operation == "trees_forest_construct":
         return forest_construct(model, args, context)
     if operation == "trees_dart_construct":
@@ -145,8 +140,6 @@ def _gbdt_operation(model: PythonObject, operation: String, args: PythonObject,
         return catboost_auto_learning_rate_op(args, context)
     if operation == "trees_gbdt_predict":
         return gbdt_predict(model, args[0], context)
-    if operation == "trees_gbdt_predict_proba":
-        return gbdt_predict_proba(model, args[0], context)
     if operation == "trees_gbdt_predict_classes":
         return gbdt_predict_classes(model, args[0], context)
     if operation == "trees_gbdt_leaf_counts":
@@ -163,8 +156,6 @@ def _gbdt_operation(model: PythonObject, operation: String, args: PythonObject,
         return adapter_predict(model, args[0], context)
     if operation == "trees_gbdt_adapter_proba":
         return adapter_predict_proba(model, args[0], context)
-    if operation == "trees_gbdt_adapter_codes":
-        return adapter_codes(model, args[0], context)
     raise Error("unknown gradient boosting operation " + operation)
 
 

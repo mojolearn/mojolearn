@@ -102,76 +102,8 @@ def decision_binding(x_addr: PythonObject, wb_addr: PythonObject, dims: PythonOb
     return PythonObject(cells)
 
 
-def decision_codes_binding(x_addr: PythonObject, wb_addr: PythonObject, dims: PythonObject,
-                           out_addr: PythonObject) raises -> PythonObject:
-    """Each row's class code (int32) of link(X W^T + b): dims = [n, d, k,
-    link, strict, below, above] (k == 1: the threshold at 0; k > 1: the
-    argmax), on the device (lane pyglue-numeric)."""
-    var n = Int(py=dims[0])
-    var d = Int(py=dims[1])
-    var k = Int(py=dims[2])
-    var link = Int(py=dims[3])
-    var strict = Int(py=dims[4])
-    var below = Int(py=dims[5])
-    var above = Int(py=dims[6])
-    # dims[7] (optional): the deferred finite status word's host address.
-    var status = Int(py=dims[7]) if len(dims) > 7 else 0
-    var xa = Int(py=x_addr)
-    var wa = Int(py=wb_addr)
-    var oa = Int(py=out_addr)
-    var rows = 0
-    with GILReleased(Python()):
-        rows = xl_decision_codes_device_run(xa, wa, n, d, k, link, strict, below, above, oa, status)
-    return PythonObject(rows)
-
-
 # TOMBSTONE: x_linear_glm_ydom, x_linear_cls1_flags (dead native entries: constant / switch-word probes nothing reads) deleted 2026-10-26 by 44fc3b5bb; code recoverable at a88745022.
 # Restore: git apply experiments/removed/dead_entries_x_linear.patch
-
-
-def decision_rows_binding(x_addr: PythonObject, wb_addr: PythonObject, dims: PythonObject,
-                          out_addr: PythonObject) raises -> PythonObject:
-    """predict_proba in one call: link(X W^T + b) then `py2mojo_rows` mode
-    `rows_mode` (2 SGD_PROBA, 3 LRCV_PROBA) on the device; dims = [n, d, k,
-    link, rows_mode]; out float32 n x max(k, 2). Returns n."""
-    # ne2-g-linear (N362): the scores stay on the device between the two steps.
-    if len(dims) != 5 and len(dims) != 6:
-        raise Error("x_linear_decision_rows: dims must contain n, d, k, link, rows_mode (and the status address)")
-    var n = Int(py=dims[0])
-    var d = Int(py=dims[1])
-    var k = Int(py=dims[2])
-    var link = Int(py=dims[3])
-    var mode = Int(py=dims[4])
-    var status = Int(py=dims[5]) if len(dims) > 5 else 0
-    var xa = Int(py=x_addr)
-    var wa = Int(py=wb_addr)
-    var oa = Int(py=out_addr)
-    var rows = 0
-    with GILReleased(Python()):
-        rows = xl_decision_rows_device_run(xa, wa, n, d, k, link, mode, oa, status)
-    return PythonObject(rows)
-
-
-def decision_huber_out_binding(x_addr: PythonObject, wb_addr: PythonObject, dims: PythonObject,
-                               out_addr: PythonObject) raises -> PythonObject:
-    """HuberRegressor.outliers_ in one call: the one-target decision on the
-    training rows, then |y - pred| > thr (`py2mojo_rows` ROWS_HUBER_OUT) on
-    the device; dims = [n, d, link, y_addr, thr]; out uint8 n. Returns n."""
-    # ne2-g-linear (N302): the prediction stays on the device.
-    if len(dims) != 5:
-        raise Error("x_linear_decision_huber_out: dims must contain n, d, link, y address, thr")
-    var n = Int(py=dims[0])
-    var d = Int(py=dims[1])
-    var link = Int(py=dims[2])
-    var ya = Int(py=dims[3])
-    var thr = Float64(py=dims[4])
-    var xa = Int(py=x_addr)
-    var wa = Int(py=wb_addr)
-    var oa = Int(py=out_addr)
-    var rows = 0
-    with GILReleased(Python()):
-        rows = xl_huber_out_device_run(xa, wa, n, d, link, ya, thr, oa)
-    return PythonObject(rows)
 
 
 def numeric_mode_binding() raises -> PythonObject:
@@ -180,7 +112,6 @@ def numeric_mode_binding() raises -> PythonObject:
 
 def vendor_binding() raises -> PythonObject:
     return PythonObject(String(COMPILED_VENDOR))
-
 
 
 def py2mojo_rows_binding(mode: PythonObject, src_addr: PythonObject, dst_addr: PythonObject,
@@ -192,40 +123,6 @@ def py2mojo_rows_binding(mode: PythonObject, src_addr: PythonObject, dst_addr: P
 
 def py2mojo_linear_flags_binding() raises -> PythonObject:
     return PythonObject(py2mojo_linear_flags())
-
-
-def spearman_sign_binding(x_addr: PythonObject, y_addr: PythonObject, n_obj: PythonObject) raises -> PythonObject:
-    """The sign (-1, 0, 1) of Spearman's rho of n float32 x and y, exact
-    (x_linear/spearman.mojo, lane cpu2-l10-linear)."""
-    var n = Int(py=n_obj)
-    var xa = Int(py=x_addr)
-    var ya = Int(py=y_addr)
-    var sign = 0
-    with GILReleased(Python()):
-        sign = xl_spearman_device_run(xa, ya, n)
-    return PythonObject(sign)
-
-
-def class_prep_binding(codes_addr: PythonObject, sw_addr: PythonObject, cw_addr: PythonObject,
-                       dims: PythonObject, out_addr: PythonObject) raises -> PythonObject:
-    """Class counts, 'balanced' class weights and per-row class weights on
-    the device (x_linear/class_prep.mojo, lane cpu2-l10-linear). codes: n
-    int32 class codes in [0, k); sw: n float32 sample weights or 0; cw: k
-    float32 (written when balanced, else read); out: n float32 row weights
-    or 0. dims = [n, k, balanced, weighted]. Returns the largest unweighted
-    class count."""
-    var n = Int(py=dims[0])
-    var k = Int(py=dims[1])
-    var balanced = Int(py=dims[2]) != 0
-    var weighted = Int(py=dims[3]) != 0
-    var ca = Int(py=codes_addr)
-    var sa = Int(py=sw_addr)
-    var wa = Int(py=cw_addr)
-    var oa = Int(py=out_addr)
-    var largest = 0
-    with GILReleased(Python()):
-        largest = xl_class_prep_device_run(ca, sa, wa, oa, n, k, balanced, weighted)
-    return PythonObject(largest)
 
 
 # The module body. Its @export PyInit lives in bindings/entry/entry__mojolearn_x_linear.mojo
@@ -245,12 +142,7 @@ def build__mojolearn_x_linear() -> PythonObject:
         m.def_function[best_alpha_binding]("x_linear_best_alpha")
         # TOMBSTONE: x_linear_glm_ydom, x_linear_cls1_flags (dead native entries: constant / switch-word probes nothing reads) deleted 2026-10-26 by 44fc3b5bb; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_x_linear.patch
-        m.def_function[class_prep_binding]("x_linear_class_prep")
-        m.def_function[spearman_sign_binding]("x_linear_spearman_sign")
         m.def_function[decision_binding]("x_linear_decision")
-        m.def_function[decision_codes_binding]("x_linear_decision_codes")
-        m.def_function[decision_rows_binding]("x_linear_decision_rows")
-        m.def_function[decision_huber_out_binding]("x_linear_decision_huber_out")
         m.def_function[numeric_mode_binding]("x_linear_numeric_mode")
         # TOMBSTONE: x_linear_glm_ydom, x_linear_cls1_flags (dead native entries: constant / switch-word probes nothing reads) deleted 2026-10-26 by 44fc3b5bb; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_x_linear.patch

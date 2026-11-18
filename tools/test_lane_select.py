@@ -1623,7 +1623,7 @@ def test_native_door_walk_preserves_required_dependencies():
     assert "user_objects_native_call" in lane_select._read("python/mojolearn/_user_objects.py")
     expected = {"bindings/array_native_door.mojo", "bindings/native_buffer_owner_pack.mojo",
                 "bindings/native_loaded_module_door.mojo", "bindings/py_typed_call.mojo",
-                "bindings/user_objects_native_door.mojo", "bindings/py_attr.mojo", "core/user_objects.mojo"}
+                "bindings/user_objects_native_door.mojo", "bindings/py_attr.mojo"}
     assert expected <= lane_select._mojo_closure(["bindings/array_native_door.mojo",
                                                 "bindings/user_objects_native_door.mojo"])
 

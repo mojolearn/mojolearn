@@ -175,7 +175,6 @@ def type_name(value: PythonObject) raises -> String:
     return String(py=py_call(OPT_DOOR.get_or_create_ptr()[].context["type_name"], py_type(value)))
 
 
-
 # shape_text, TensorView, _contiguous, base_format, _format_name, _typestr_name and _array_code moved to bindings/tensor_view.mojo (lane a6-device-x-family-classical).
 
 
@@ -208,8 +207,6 @@ def owner_kind(opt: PythonObject) raises -> Int:
 
 # ---------------------------------------------------------------------------
 # one tensor, read through the buffer protocol
-
-
 
 
 def dtype_name(obj: PythonObject, fmt: String, itemsize: Int) raises -> String:
@@ -342,7 +339,6 @@ def tensor_view(obj: PythonObject, mut v: TensorView, mut pins: OptimizerInputOw
     v.dtype = dtype_name(obj, v.fmt, v.itemsize)
     pins.buffers.append(lease^)
     return True
-
 
 
 # ---------------------------------------------------------------------------
@@ -605,22 +601,6 @@ def optimizer_publish_registry(owner: PythonObject, registry: OptimizerRegistryP
     py_setitem(fields, "buf_initialized", registry.initialized)
 
 
-def door_init(opt: PythonObject, params: PythonObject) raises -> PythonObject:
-    """Legacy registry export using the same native preparation and publication."""
-    door_ready()
-    opt_owner(opt, OPT_DOOR.get_or_create_ptr()[].context)
-    var kind = owner_kind(opt)
-    var name = String("SGD") if kind == 0 else (String("Adam") if kind == 1 else String("AdamW"))
-    var registry = optimizer_prepare_registry(params, name)
-    optimizer_owner_idle(opt)
-    var owner_state = optimizer_owner_new(opt, owner_kind(opt), not registry.plan.eager)
-    var construction = OptimizerOwnerLease(opt, owner_state)
-    set_field(opt, "_native_optimizer_owner", owner_state)
-    optimizer_publish_registry(opt, registry)
-    _ = construction
-    return PythonObject(registry.plan.count)
-
-
 def door_step(
     module: PythonObject, provider: PythonObject, opt: PythonObject, grads: PythonObject, max_norm: PythonObject, op: Int,
     tokens: PythonObject,
@@ -875,7 +855,6 @@ def door_io(module: PythonObject, provider: PythonObject, opt: PythonObject,
     operation: Int, tensors: PythonObject, name: String, tensor: Int) raises -> PythonObject:
     var value = optimizer_io(module, provider, opt, operation, tensors, name, tensor)
     return optimizer_pack_io(provider, operation, value)
-
 
 
 def door_zero(opt: PythonObject, grads: PythonObject) raises -> PythonObject:
@@ -1204,15 +1183,6 @@ def entry_io(py_self: PyObjectPtr, packed: PyObjectPtr) -> PyObjectPtr:
         return optimizer_python_error(error)
 
 
-def entry_zero(py_self: PyObjectPtr, packed: PyObjectPtr) abi("C") -> PyObjectPtr:
-    """optimizer_zero(opt, grads)."""
-    try:
-        var a = entry_args(packed, 2, "optimizer_zero")
-        return door_zero(a[0], a[1]).steal_data()
-    except error:
-        return optimizer_python_error(error)
-
-
 def entry_state(py_self: PyObjectPtr, packed: PyObjectPtr) -> PyObjectPtr:
     """optimizer_state(opt, which)."""
     try:
@@ -1269,10 +1239,3 @@ def entry_accumulate(py_self: PyObjectPtr, packed: PyObjectPtr) -> PyObjectPtr:
         return optimizer_python_error(error)
 
 
-def entry_init(py_self: PyObjectPtr, packed: PyObjectPtr) abi("C") -> PyObjectPtr:
-    """optimizer_init(opt, params)."""
-    try:
-        var a = entry_args(packed, 2, "optimizer_init")
-        return door_init(a[0], a[1]).steal_data()
-    except error:
-        return optimizer_python_error(error)

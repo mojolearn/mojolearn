@@ -168,7 +168,6 @@ def svm_numeric_mode_binding() raises -> PythonObject:
     return PythonObject(GLOBAL_NUMERIC_MODE)
 
 
-
 def _c_rows(params: PythonObject, slot: Int, n_rows: Int, who: String) raises -> List[Float32]:
     """The OPTIONAL per-row bounds `C * sample_weight` (float32, formed and
     rounded once by the caller; `InitPenalty`'s weighted arm) at the address
@@ -1011,12 +1010,6 @@ def iforest_forest_run_binding(
     return PythonObject(n_query)
 
 
-def iforest_forest_io_binding() raises -> PythonObject:
-    """1: this binary has `iforest_forest_export` and `iforest_forest_run`
-    (a saved IsolationForest holds its forest, not its training matrix)."""
-    return PythonObject(1)
-
-
 def svm_vendor_binding() raises -> PythonObject:
     """THE ACCELERATOR API THIS BINARY WAS COMPILED FOR: 'metal', 'cuda',
     'hip' or 'none'. A compile-time constant folded in from
@@ -1078,7 +1071,6 @@ def iforest_device_scan_binding() raises -> PythonObject:
     return PythonObject(0)
 
 
-
 def svm_scale_gamma_limbs_binding(
     x_addr: PythonObject, count: PythonObject, out_addr: PythonObject
 ) raises -> PythonObject:
@@ -1135,7 +1127,6 @@ def build__mojolearn_svm() -> PythonObject:
         m.def_function[iforest_resident_release_binding]("iforest_resident_release")
         m.def_function[iforest_forest_export_binding]("iforest_forest_export")
         m.def_function[iforest_forest_run_binding]("iforest_forest_run")
-        m.def_function[iforest_forest_io_binding]("iforest_forest_io")
         m.def_function[iforest_device_scan_binding]("iforest_device_scan")
         m.def_function[iforest_device_finite_scan_binding]("iforest_device_finite_scan")
         m.def_function[svm_scale_gamma_limbs_binding]("scale_gamma_limbs")

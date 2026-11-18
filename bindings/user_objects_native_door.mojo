@@ -17,18 +17,16 @@
 #   ("kinds", values)                         -> counts per kind (KIND_* below)
 #   ("ints", values) / ("floats", values)     -> int64 / float64 words of int(v) / float(v)
 #   ("strs", values)                          -> [str(v) for v in values]
-#   ("column", rows, j) / ("column_f32", rows, j) -> [r[j] for r in rows] / its float32 words
+#   ("column", rows, j)                       -> [r[j] for r in rows]
 #   ("transpose", cols)                       -> [list(r) for r in zip(*cols)]
 #   ("scatter", rows, address, count, vals)   -> rows[idx[k]] = vals[k]
 #   ("flatten", obj)                          -> leaves of admitted native containers/array storage
 #   ("nested", obj, array_type)               -> (shape, leaves) of a rectangular nested list
-#   ("group_runs", ids)                       -> int64 run lengths of a ranking pool's group ids
 #   ("pairs", rows, weights, n_rows)          -> (int64 winner/loser words, float64 weights)
 #   ("sorted_codes", values, unknown)         -> float32 codes over sorted((str(type(v)), v))
 #   ("f32_exact", values)                     -> [float(v)] when float32 holds every real label, else None
 #   ("indicator", rows)                       -> (status, float32 words, width) of a 0/1 label matrix
 #   ("group_rows", codes, k)                  -> k int64 stores: the rows of each code
-#   ("group_permute", values, rows, perms)    -> values permuted within each group's rows
 #
 # A refusal comes back as ("__refuse__", exception name, message); the door
 # raises it, so the exception type and wording are the ones the Python had.
@@ -41,7 +39,6 @@ from bindings.py_balanced import py_call, py_type, py_setitem, py_get
 from bindings.boundary_read_door import admitted_buffer_view
 from core.boundary_layout import gather_i64, gather_f64
 from bindings.py_attr import py_attr
-from core.user_objects import group_run_sizes
 from bindings.user_object_flatten_door import user_object_flatten
 from bindings.py_cpython_table import cpython_table
 from bindings.cpython_borrowed_unpack import borrowed_type_word
@@ -474,19 +471,6 @@ def _column(env: _Env, rows: PythonObject, j: Int) raises -> PythonObject:
     return result
 
 
-def _column_f32(env: _Env, rows: PythonObject, j: Int) raises -> PythonObject:
-    var n = len(rows)
-    var words = env.store("f", n, 4)
-    var out = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=_address(words))
-    _ = words  # keep the Python object alive through the native call above
-    var kind = _seq_kind(env, rows)
-    for i in range(n):  # list-input: Python probability rows read once by user_objects_c (column_f32): borrowed row and item, one PyFloat_AsDouble
-        var row = _item_at(rows, kind, i)
-        out[i] = Float32(_float_word(env, _item_at(row, _seq_kind(env, row), j)))
-        _ = words  # keep the Python object alive through the native call above
-    return words
-
-
 def _transpose(env: _Env, cols: PythonObject) raises -> PythonObject:
     var m = len(cols)
     if m == 0:
@@ -552,45 +536,6 @@ def _key_bytes(env: _Env, raw: PythonObject, mut keys: List[UInt8]) raises -> In
         _ = arr  # keep the Python object alive through the native call above
     _ = arr^
     return n
-
-
-def _group_runs(env: _Env, ids: PythonObject) raises -> PythonObject:
-    # ensemble._group_id_key per id (bytes as is, str as UTF-8, an integer as
-    # its decimal spelling, anything else refused), then the runs natively
-    var n = len(ids)
-    var keys = List[UInt8]()
-    var starts = List[Int](capacity=n)
-    var lengths = List[Int](capacity=n)
-    var kind = _seq_kind(env, ids)
-    for i in range(n):  # list-input: group_id objects (int/str/bytes) read once by user_objects_c (group_runs): borrowed item, exact classes by class word
-        var v = _item_at(ids, kind, i)
-        var word = borrowed_type_word(v._obj_ptr)
-        var exact = word == env.bytes_word or word == env.str_word or word == env.int_word
-        var raw: PythonObject
-        if word == env.bytes_word or (not exact and env.isinstance(v, env.b.bytes)):
-            raw = v
-        elif word == env.str_word or (not exact and env.isinstance(v, env.b.str)):
-            raw = py_call(v.encode, "utf-8")
-        elif word == env.int_word or (env.isinstance(v, env.integral) and not env.isinstance(v, env.b.bool)):
-            raw = py_call(py_call(env.b.str, py_call(env.b.int, v)).encode, "ascii")
-        else:
-            raise _refusal("ValueError", "mojolearn: group_id[" + String(i) + "] object (" + env.py_repr(v)
-                           + ") is unsuitable (should be string or integral type)")
-        starts.append(len(keys))
-        lengths.append(_key_bytes(env, raw, keys))
-    var sizes = List[Int]()
-    var bad = group_run_sizes(keys, starts, lengths, sizes)
-    if bad >= 0:
-        raise _refusal("ValueError", "mojolearn: group Ids are not consecutive: the rows of group "
-                       + env.py_repr(ids[bad]) + " are split into more than one run (row " + String(bad)
-                       + "); CatBoost requires every group's rows to be contiguous")
-    var words = env.store("q", len(sizes), 8)
-    var out = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=_address(words))
-    _ = words  # keep the Python object alive through the native call above
-    for k in range(len(sizes)):  # driver-loop: over the groups
-        out[k] = Int64(sizes[k])
-        _ = words  # keep the Python object alive through the native call above
-    return words
 
 
 def _pairs(env: _Env, rows: PythonObject, weights: PythonObject, n_rows: Int) raises -> PythonObject:
@@ -752,34 +697,6 @@ def _group_rows(env: _Env, codes: PythonObject, k: Int) raises -> PythonObject:
     return stores
 
 
-def _group_permute(env: _Env, values: PythonObject, rows: PythonObject, perms: PythonObject) raises -> PythonObject:
-    # permutation_test_score's groups route: yp = list(values), then per
-    # group, yp[rows[a]] = values[rows[perm[a]]]
-    var out = py_call(env.b.list, values)
-    var n_out = len(out)
-    var kind = _seq_kind(env, values)
-    for g in range(len(rows)):  # driver-loop: over the groups
-        var r = rows[g]
-        var p = perms[g]
-        var m = min(len(r), len(p))
-        if m == 0:
-            continue
-        var rp = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=_address(r))
-        _ = r  # keep the Python object alive through the native call above
-        var pp = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=_address(p))
-        _ = p  # keep the Python object alive through the native call above
-        for a in range(m):  # list-input: Python label objects read once by user_objects_c (group_permute): borrowed source item, C store into the copy
-            var dst_row = Int(rp[a])
-            var item = _item_at(values, kind, Int(rp[Int(pp[a])]))
-            if dst_row >= 0 and dst_row < n_out:
-                _list_put(out, dst_row, item)
-            else:
-                py_setitem(out, PythonObject(dst_row), item)
-            _ = p  # keep the Python object alive through the native call above
-            _ = r  # keep the Python object alive through the native call above
-    return out
-
-
 def _f32_exact(env: _Env, values: PythonObject) raises -> PythonObject:
     # the labels as Python floats when every one is a real number (not a
     # bool) that float32 holds exactly and none is NaN, else None
@@ -858,8 +775,6 @@ def user_objects_call(call: PythonObject) raises -> PythonObject:
         return _strs(env, call[1])
     if operation == "column":
         return _column(env, call[1], Int(py=call[2]))
-    if operation == "column_f32":
-        return _column_f32(env, call[1], Int(py=call[2]))
     if operation == "transpose":
         return _transpose(env, call[1])
     if operation == "scatter":
@@ -868,8 +783,6 @@ def user_objects_call(call: PythonObject) raises -> PythonObject:
         var flat = Python.list()
         var shape = _nested_into(env, call[1], call[2], flat)
         return Python.tuple(shape, flat)
-    if operation == "group_runs":
-        return _group_runs(env, call[1])
     if operation == "pairs":
         return _pairs(env, call[1], call[2], Int(py=call[3]))
     if operation == "sorted_codes":
@@ -880,8 +793,6 @@ def user_objects_call(call: PythonObject) raises -> PythonObject:
         return _indicator(env, call[1])
     if operation == "group_rows":
         return _group_rows(env, call[1], Int(py=call[2]))
-    if operation == "group_permute":
-        return _group_permute(env, call[1], call[2], call[3])
     raise Error("TypeError: unknown user-object operation " + operation)
 
 

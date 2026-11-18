@@ -14,7 +14,7 @@ from std.os import getenv
 from bindings.native_loaded_module_door import native_loaded_module
 from bindings.classical_pandas_door import classical_admit_value
 from bindings.host_inference_scalars_door import host_inference_scalar
-from providers.python.neural_descriptor_pyapi_door import neural_descriptor_reuse, neural_descriptor_execute, neural_descriptor_info, neural_descriptor_entry
+from providers.python.neural_descriptor_pyapi_door import neural_descriptor_reuse, neural_descriptor_execute, neural_descriptor_entry
 from bindings.py_balanced import py_call, py_get, py_setitem, py_type, py_fields
 from bindings.family_common_unpack import family_repr, family_str, family_type_name, family_isinstance
 from bindings.family_common_pack import family_call
@@ -846,8 +846,6 @@ def lin_lowbit_operation(operation: String, var args: PythonObject, context: Pyt
     if operation == "family_lin_require_identical":
         lin_require_identical(binding, context)
         return PythonObject(None)
-    if operation == "family_lin_provider_info":
-        return neural_descriptor_info(py_get(lin_state(context), "_native_provider"))
     if operation == "family_lin_matmul":
         return _lin_matmul(args, context)
     if operation == "family_lin_matmul_fused":

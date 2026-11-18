@@ -184,9 +184,8 @@ def msel_operation(model: PythonObject, operation: String, args: PythonObject,
         return msel_cross_val_predict(args, context)
     if operation == "family_msel_split_descriptor":
         return msel_split_descriptor(args, context)
-    if operation == "family_msel_grid" or operation == "family_msel_grid_iter":
-        var result = msel_grid_list(_msel_attr(model, "param_grid", context), context)
-        return py_call(b.iter, result) if operation.endswith("_iter") else result
+    if operation == "family_msel_grid_iter":
+        return py_call(b.iter, msel_grid_list(_msel_attr(model, "param_grid", context), context))
     if operation == "family_msel_grid_len":
         return PythonObject(msel_grid_len(_msel_attr(model, "param_grid", context), context))
     if operation == "family_msel_grid_item":
@@ -195,10 +194,10 @@ def msel_operation(model: PythonObject, operation: String, args: PythonObject,
         # to return one entry (lane perf-sweep-msel-nbr-svc).
         var prepared = PreparedParameterGrid(_msel_attr(model, "param_grid", context), context)
         return prepared.item(Int(py=index))
-    if operation == "family_msel_sampler" or operation == "family_msel_sampler_iter":
+    if operation == "family_msel_sampler_iter":
         var result = msel_sampler_list(_msel_attr(model, "param_distributions", context), _msel_attr(model, "n_iter", context),
                                        _msel_attr(model, "random_state", context), context)
-        return py_call(b.iter, result) if operation.endswith("_iter") else result
+        return py_call(b.iter, result)
     if operation == "family_msel_sampler_len":
         return msel_sampler_len(_msel_attr(model, "param_distributions", context), _msel_attr(model, "n_iter", context), context)
     if operation == "family_msel_search_fit":

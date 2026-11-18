@@ -1177,9 +1177,6 @@ def parallel_byte_call(operation: String, args: PythonObject) raises -> PythonOb
         py_setitem(config, "lr", PythonObject(Float64(lr)))
         py_setitem(rec[].state, "config", config)
         return PythonObject(Float64(lr))
-    if operation == "require_split":
-        _parallel_require_split(record, String(args[1]))
-        return PythonObject(None)
     if operation == "require_fold":
         _parallel_require_split(record, "shard_gradient")
         return PythonObject(None)

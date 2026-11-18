@@ -203,33 +203,6 @@ def argmax_rows_f64_binding(
     return PythonObject(0)
 
 
-def argmax_last_rows_f32_binding(
-    logits_addr: PythonObject, dims: PythonObject, dst_addr: PythonObject,
-) raises -> PythonObject:
-    """dims = [b, l, v]: the first-max argmax (`argmax_rows_f32_binding`'s
-    rule: strictly greater replaces, ties keep the lowest column, a NaN never
-    replaces) of the LAST position of each row of C-order float32 logits
-    `[b, l, v]` into int64 `dst[b]`. The host column of the base binding's
-    device `argmax_last_rows_f32` (greedy next-token choice of the byte LM
-    and `models.causal_lm`), so a CPU-only install serves it natively."""
-    if len(dims) != 3:
-        raise Error("argmax_last_rows_f32: dims [b, l, v]")
-    var b = Int(py=dims[0])
-    var l = Int(py=dims[1])
-    var v = Int(py=dims[2])
-    if b < 0 or l < 1 or v < 1:
-        raise Error("argmax_last_rows_f32: b must be non-negative, l and v positive")
-    if b == 0:
-        return PythonObject(0)
-    if Int(py=logits_addr) == 0 or Int(py=dst_addr) == 0:
-        raise Error("argmax_last_rows_f32: null buffer address")
-    var sp = f32_ptr(Int(py=logits_addr))
-    var dp = _i64_ptr(Int(py=dst_addr))
-    with GILReleased(Python()):
-        argmax_last_rows_f32(sp, b, l, v, dp)
-    return PythonObject(0)
-
-
 # ---------------------------------------------------------------------------
 # The three centering helpers of `linear_model.py` (workstream E): the base
 # binding's definitions on the calling thread.

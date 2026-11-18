@@ -56,7 +56,6 @@ from max.gpu.host import DeviceContext
 from core.neural_context import process_ctx
 
 
-
 from core.labeled_reference_predict import labeled_reference_predict
 from bindings.labeled_reference_resident_binding_pack import (
     labeled_reference_prepare_binding,
@@ -897,7 +896,6 @@ def lm_scale_rows_binding(x_addr: PythonObject, w_addr: PythonObject, out_addr: 
     return PythonObject(0)
 
 
-
 def tsvd_native_api_v1_binding() raises -> PythonObject:
     var api = TSVD_DEVICE_API.get_or_create_ptr()
     return neural_descriptor_capsule(api[].name, api[].entries)
@@ -1184,32 +1182,6 @@ def qn_predict_binary_binding(
     return PythonObject(0)
 
 
-def qn_predict_multiclass_binding(
-    x_addr: PythonObject,
-    coef_addr: PythonObject,
-    out_addr: PythonObject,
-    params: PythonObject,
-) raises -> PythonObject:
-    """Multiclass `qn_predict` (lane fam2-linear): int64 class codes, the
-    row argmax of the softmax decision function taken on the device (first
-    maximum wins). params: n_rows, n_features, fit_intercept, n_classes."""
-    # lane a8c: an optional 5th, the deferred finite status word's host address
-    if len(params) != 4 and len(params) != 5:
-        raise Error("qn_predict_multiclass: params must contain n_rows, n_features, fit_intercept, n_classes and an optional status address")
-    var nr = Int(py=params[0])
-    var nf = Int(py=params[1])
-    var fi = Int(py=params[2]) != 0
-    var nc = Int(py=params[3])
-    var status = Int(py=params[4]) if len(params) == 5 else 0
-    var op = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=Int(py=out_addr))
-    var xp = _f32_ptr(Int(py=x_addr))
-    var cp = _f32_ptr(Int(py=coef_addr))
-    var request = QnQueryRequest(Int(xp), Int(cp), Int(op), status, nr, nf, nc, fi, False)
-    with GILReleased(Python()):
-        QnDeviceKernels.query(QN_NATIVE_MULTICLASS, request)
-    return PythonObject(0)
-
-
 def qn_sigmoid_binding(
     scores_addr: PythonObject,
     out_addr: PythonObject,
@@ -1423,7 +1395,6 @@ def estimators_vendor_binding() raises -> PythonObject:
     return PythonObject(String(COMPILED_VENDOR))
 
 
-
 def py2mojo_rows_binding(mode: PythonObject, src_addr: PythonObject, dst_addr: PythonObject,
                          params: PythonObject) raises -> PythonObject:
     """lane/apple-fast-py2mojo-linear: per-row probability glue on the
@@ -1544,7 +1515,6 @@ def build__mojolearn_estimators() -> PythonObject:
         # calltable-base-helpers (see above); code recoverable at 17b0a91b04.
         m.def_function[qn_decision_function_binding]("qn_decision_function")
         m.def_function[qn_predict_binary_binding]("qn_predict_binary")
-        m.def_function[qn_predict_multiclass_binding]("qn_predict_multiclass")
         m.def_function[qn_sigmoid_binding]("qn_sigmoid")
         m.def_function[qn_softmax_binding]("qn_softmax")
         var published_module = m.finalize()

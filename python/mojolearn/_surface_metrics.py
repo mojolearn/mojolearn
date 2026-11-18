@@ -122,7 +122,6 @@ FAMILIES = (
             "x_metrics_host_numeric_mode", "x_metrics_host_vendor", "x_metrics_host_column",
             "x_metrics_host_sabotage", "x_metrics_run", "x_metrics_run_out", "x_metrics_numeric_mode", "x_metrics_vendor",
             # lane metrics-apple3 (2026-09-28): integer label plumbing
-            "x_metrics_first_rows",
             # manifest sync (lane rehearsal-suite-green, 2026-10-08): registered in the binding source
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",

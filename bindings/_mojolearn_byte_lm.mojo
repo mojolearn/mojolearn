@@ -132,20 +132,6 @@ from training.byte_lm_door_run import (
 )
 
 
-def byte_lm_step_glue_arm_binding() raises -> PythonObject:
-    """DEVIATION 2648 read-back, so a result names the glue arm the step ran
-    instead of an environment variable that may be unset or misspelled:
-    [arm, trial_build]. A trial build reads MOJOLEARN_STEP_GLUE_ARM and
-    raises on an invalid name, exactly as the launchers do; every other
-    build returns `shipped` without reading the environment. Reads
-    constants and the environment only; no GPU operation."""
-    var arm = step_glue_arm_from_env()
-    var out = Python.list()
-    out.append(PythonObject(step_glue_arm_name(arm)))
-    out.append(PythonObject(1 if step_glue_trial_build() else 0))
-    return out
-
-
 def byte_lm_attention_arm_binding() raises -> PythonObject:
     """DEVIATION 2534 read-back, so a result can never confuse `baseline`,
     `stash_tiled` and the column's default: [arm, default, trial_build,
@@ -173,26 +159,6 @@ def byte_lm_attention_arm_binding() raises -> PythonObject:
 
 # TOMBSTONE: byte_lm_context_keeper_active, byte_lm_attention_estash_gate (dead native entries: diagnostic read-backs, no package or gate reader) deleted 2026-10-26 by 9d5242f68; code recoverable at a88745022.
 # Restore: git apply experiments/removed/dead_entries_byte_lm.patch
-
-
-def byte_lm_attention_memory_profile_binding(shape: PythonObject) raises -> PythonObject:
-    """Build-profile readback plus retained-exp allocation for one layer."""
-    var cfg = _byte_config(shape)
-    var out = Python.list()
-    out.append(PythonObject(attention_v1_backward_memory_profile()))
-    out.append(PythonObject(attention_v1_retained_exp_bytes(cfg.batch,cfg.length,cfg.n_heads,cfg.length)))
-    return out
-
-
-def byte_lm_native_api_binding() raises -> PythonObject:
-    var api = BYTE_LM_NATIVE_TABLE.get_or_create_ptr()
-    return neural_descriptor_capsule(api[].name, api[].entries)
-
-
-def byte_lm_native_session_handle_binding(session: PythonObject) raises -> PythonObject:
-    # Only the extension that minted this exact native value may unwrap it.
-    # The Python provider retains session and module for every use of this handle.
-    return PythonObject(Int(session.downcast_value_ptr[ByteLMSession]()))
 
 
 def byte_lm_session_create_binding() raises -> PythonObject:
@@ -384,26 +350,6 @@ def byte_lm_session_step_binding(session: PythonObject, addresses: PythonObject,
     return PythonObject(result)
 
 
-def byte_lm_session_eval_binding(session: PythonObject, addresses: PythonObject,
-                                 params: PythonObject, shape: PythonObject) raises -> PythonObject:
-    """Forward-only loss on the resident state. addresses[3] = [in_ids_i32,
-    in_flags_i32, out_loss_f32]; params[12] with action=0. Returns the
-    unchanged completed step. The work is `byte_session_eval`.
-    """
-    _require_binding_profile()
-    var cfg_shape = _byte_config(shape)
-    var owner = session.downcast_value_ptr[ByteLMSession]()
-    if _params_action(params) != 0:
-        raise Error("byte LM: session eval requires action 0")
-    var completed = _params_completed(params)
-    var cfg = _params_optimizer(params)
-    var addr = _read_addresses(addresses, 3)
-    var result = completed
-    with GILReleased(Python()):
-        result = byte_session_eval(owner[], addr, completed, cfg, cfg_shape)
-    return PythonObject(result)
-
-
 def byte_lm_session_export_state_binding(session: PythonObject, addresses: PythonObject,
                                          shape: PythonObject) raises -> PythonObject:
     """Copy the resident state out. addresses[4] = [out_param, out_m,
@@ -417,22 +363,6 @@ def byte_lm_session_export_state_binding(session: PythonObject, addresses: Pytho
     var result = 0
     with GILReleased(Python()):
         result = byte_session_export_state(owner[], addr, cfg_shape)
-    return PythonObject(result)
-
-
-def byte_lm_session_export_gradients_binding(session: PythonObject, addresses: PythonObject,
-                                             shape: PythonObject) raises -> PythonObject:
-    """Copy the gradient of the LAST completed step out. addresses[1] =
-    [out_grad]. Returns the step the gradient belongs to. The work is
-    `byte_session_export_gradients`.
-    """
-    _require_binding_profile()
-    var cfg_shape = _byte_config(shape)
-    var owner = session.downcast_value_ptr[ByteLMSession]()
-    var addr = _read_addresses(addresses, 1)
-    var result = 0
-    with GILReleased(Python()):
-        result = byte_session_export_gradients(owner[], addr[0], cfg_shape)
     return PythonObject(result)
 
 
@@ -587,26 +517,6 @@ def byte_lm_session_logits_binding(session: PythonObject, addresses: PythonObjec
     return PythonObject(result)
 
 
-def byte_lm_session_next_bytes_binding(session: PythonObject, addresses: PythonObject,
-                                       dims: PythonObject, shape: PythonObject,
-                                       completed: PythonObject) raises -> PythonObject:
-    """cpu3-seq (2026-10-04): the greedy next byte of every row on an open
-    resident session. addresses[2] = [in_ids_i32 (batch * length),
-    out_next_i32 (batch)]; dims = [batch, length]; `completed` as in
-    `byte_lm_session_logits`. The logits stay on the device. Returns
-    `batch`. The work is `byte_session_logits`."""
-    _require_binding_profile()
-    var cfg_shape = _byte_config(shape)
-    var owner = session.downcast_value_ptr[ByteLMSession]()
-    var bl = _logits_dims(dims, cfg_shape)
-    var claimed = _claimed_step(completed)
-    var addr = _read_addresses(addresses, 2)
-    var result = 0
-    with GILReleased(Python()):
-        result = byte_session_logits(owner[], addr, bl[0], bl[1], claimed, cfg_shape, True)
-    return PythonObject(result)
-
-
 # ---------------------------------------------------------------------------
 # The single-device trainer owner (mojolearn.SmallByteLanguageModelTrainer):
 # one entry per public method; each unpacks its arguments, calls ONE typed
@@ -641,108 +551,6 @@ def byte_lm_trainer_step_binding(session: PythonObject, addresses: PythonObject,
     with GILReleased(Python()):
         result = byte_owner_step(owner[], addr, completed, cfg, cfg_shape, action == 1)
     return PythonObject(result)
-
-
-def byte_lm_trainer_export_state_binding(session: PythonObject, addresses: PythonObject,
-                                         shape: PythonObject, completed: PythonObject,
-                                         release: PythonObject) raises -> PythonObject:
-    """The trainer's state export in one call. addresses[5] = [in_flags_i32,
-    out_param, out_m, out_v, out_flags_i32]; `completed` the committed step;
-    a true `release` closes the session after the export. Returns the
-    exported step. The work is `byte_owner_export_state`."""
-    _require_binding_profile()
-    var cfg_shape = _byte_config(shape)
-    var owner = session.downcast_value_ptr[ByteLMSession]()
-    var claimed = _claimed_step(completed)
-    var close = Bool(py=release)
-    var addr = _read_addresses(addresses, 5)
-    var result = 0
-    with GILReleased(Python()):
-        result = byte_owner_export_state(owner[], addr, claimed, cfg_shape, close)
-    return PythonObject(result)
-
-
-def byte_lm_trainer_export_gradients_binding(session: PythonObject, addresses: PythonObject,
-                                             shape: PythonObject, completed: PythonObject) raises -> PythonObject:
-    """The trainer's gradient export in one call. addresses = [out_grad]
-    and, for the gradient by name, one output per parameter tensor. Returns
-    the gradient's step, which must be `completed`. The work is
-    `byte_owner_export_gradients`."""
-    _require_binding_profile()
-    var cfg_shape = _byte_config(shape)
-    var owner = session.downcast_value_ptr[ByteLMSession]()
-    var claimed = _claimed_step(completed)
-    var addr = _read_address_list(addresses)
-    var result = 0
-    with GILReleased(Python()):
-        result = byte_owner_export_gradients(owner[], addr, claimed, cfg_shape)
-    return PythonObject(result)
-
-
-def _byte_lm_trainer_logits(session: PythonObject, addresses: PythonObject, dims: PythonObject,
-                            params: PythonObject, shape: PythonObject, next_bytes: Bool) raises -> PythonObject:
-    _require_binding_profile()
-    var cfg_shape = _byte_config(shape)
-    var owner = session.downcast_value_ptr[ByteLMSession]()
-    var bl = _logits_dims(dims, cfg_shape)
-    var completed = _params_completed(params)
-    var cfg = _params_optimizer(params)
-    var addr = _read_addresses(addresses, 6)
-    var result = 0
-    with GILReleased(Python()):
-        result = byte_owner_logits(owner[], addr, bl[0], bl[1], completed, cfg, cfg_shape, next_bytes)
-    return PythonObject(result)
-
-
-def byte_lm_trainer_logits_binding(session: PythonObject, addresses: PythonObject, dims: PythonObject,
-                                   params: PythonObject, shape: PythonObject) raises -> PythonObject:
-    """The trainer's `logits` in one call. addresses[6] = [in_ids_i32,
-    out_logits_f32, in_flags_i32, in_param, in_m, in_v] (the last three 0
-    on an open session); dims = [batch, length]; params[12] as
-    `_byte_lm_run` (the committed step and optimizer the admission uses).
-    Returns the number of logits written."""
-    return _byte_lm_trainer_logits(session, addresses, dims, params, shape, False)
-
-
-def byte_lm_trainer_next_bytes_binding(session: PythonObject, addresses: PythonObject, dims: PythonObject,
-                                       params: PythonObject, shape: PythonObject) raises -> PythonObject:
-    """The trainer's `next_bytes` in one call: as `byte_lm_trainer_logits`
-    with an int32 output of `batch` greedy next bytes. Returns `batch`."""
-    return _byte_lm_trainer_logits(session, addresses, dims, params, shape, True)
-
-
-def byte_lm_trainer_run_binding(addresses: PythonObject, named: PythonObject,
-                                params: PythonObject, shape: PythonObject) raises -> PythonObject:
-    """`train_step` / `evaluate` of a stateless trainer in one call:
-    `byte_lm_run_configured` (addresses[11], params[12]), then, for a
-    training step with `named` holding one output per parameter tensor, the
-    returned gradient split by name. Returns the completed step."""
-    var cfg = _byte_config(shape)
-    var named_addr = _read_address_list(named)
-    if len(named_addr) > 0:
-        if Int(py=params[0]) != 1:
-            raise Error("byte LM trainer: an evaluation returns no gradient")
-        var slots: List[Int] = [Int(py=addresses[8])]
-        var cells: List[Int] = [cfg.n_total()]
-        for j in range(len(named_addr)):  # driver-loop: over model parameter tensors
-            slots.append(named_addr[j])
-            cells.append(cfg.param_count(j))
-        if len(named_addr) != cfg.n_tensors():
-            raise Error("byte LM: expected one named output per parameter tensor")
-        _validate_slot_table(slots, cells, 0)
-    var session = ByteLMSession()
-    var result = _byte_lm_run(addresses, params, cfg, session)
-    if len(named_addr) > 0:
-        byte_scatter_named(Int(py=addresses[8]), named_addr, cfg)
-    return result
-
-def byte_lm_file_sha256_binding(path: PythonObject) raises -> PythonObject:
-    """The SHA-256 of the file at `path`, streamed by `byte_file_sha256`."""
-    var name = String(py=path)
-    var hex = String()
-    with GILReleased(Python()):
-        hex = byte_file_sha256(name)
-    return PythonObject(hex)
 
 
 def byte_lm_parallel_create_binding() raises -> PythonObject:
@@ -817,120 +625,6 @@ def byte_lm_parallel_fold_export_binding(session: PythonObject, addresses: Pytho
     return PythonObject(n)
 
 
-def byte_lm_model_pool_create_binding() raises -> PythonObject:
-    return PythonObject(alloc=ByteModelPool())
-
-
-def byte_lm_model_pool_close_binding(session: PythonObject) raises -> PythonObject:
-    var owner = session.downcast_value_ptr[ByteModelPool]()
-    owner[].close()
-    return PythonObject(0)
-
-
-def byte_lm_model_pool_open_binding(session: PythonObject, addresses: PythonObject,
-    params: PythonObject, shape: PythonObject, devices: PythonObject, shard_count: PythonObject) raises -> PythonObject:
-    _require_binding_profile()
-    var cfg_shape = _byte_config(shape)
-    var completed = _params_completed(params)
-    var cfg = _params_optimizer(params)
-    var addr = _read_addresses(addresses, 4)
-    var state = byte_open_state(addr, cfg_shape, completed)
-    var device_ids = List[Int]()
-    for i in range(Int(py=devices.__len__())):  # driver-loop: over devices: the caller's device list: reads device ordinals, no data
-        device_ids.append(Int(py=devices[i]))
-    var owner = session.downcast_value_ptr[ByteModelPool]()
-    # Retain the GIL: it is also the native object's exclusion lock.
-    owner[].open(device_ids, Int(py=shard_count), state.p, state.m, state.v, state.flags, completed, cfg, cfg_shape)
-    return PythonObject(completed)
-
-
-def byte_lm_model_pool_step_binding(session: PythonObject, addresses: PythonObject,
-    completed_arg: PythonObject) raises -> PythonObject:
-    var completed = Int(py=completed_arg)
-    _require_binding_profile()
-    var owner = session.downcast_value_ptr[ByteModelPool]()
-    owner[].require_open()
-    if completed != owner[].completed:
-        raise Error("byte LM parallel: completed-step mismatch")
-    var count = owner[].logical_shards
-    var addr = _read_addresses(addresses, count)
-    var shards = byte_step_shards(addr, count, owner[].config)
-    var losses = owner[].step(shards)
-    try:
-        var out = Python.list()
-        for i in range(len(losses)):  # driver-loop: over losses: one loss per shard: returns the shard losses
-            out.append(PythonObject(losses[i]))
-        return out
-    except error:
-        owner[].rollback()
-        raise error
-
-
-def byte_lm_model_pool_export_binding(session: PythonObject, addresses: PythonObject,
-    rank_arg: PythonObject, gradients_arg: PythonObject) raises -> PythonObject:
-    _require_binding_profile()
-    var owner = session.downcast_value_ptr[ByteModelPool]()
-    owner[].require_open()
-    if Int(py=rank_arg) != 0:
-        raise Error("byte model pool: canonical export has no replica rank; use rank=0")
-    var gradients = Bool(gradients_arg)
-    var count = 1 if gradients else 4
-    var addr = _read_addresses(addresses,count)
-    return PythonObject(byte_model_pool_export_run(owner[], addr, gradients))
-
-
-def byte_lm_model_pool_rollback_binding(session: PythonObject) raises -> PythonObject:
-    var owner = session.downcast_value_ptr[ByteModelPool]()
-    owner[].require_open()
-    owner[].rollback()
-    return PythonObject(owner[].completed)
-
-
-def byte_lm_model_pool_ownership_binding(session: PythonObject) raises -> PythonObject:
-    var owner = session.downcast_value_ptr[ByteModelPool]()
-    owner[].require_open()
-    var out = Python.list()
-    for i in range(len(owner[].chunks)):  # driver-loop: over chunks: one model chunk per device: reports per chunk ranges, no data
-        ref chunk = owner[].chunks[i]
-        var row = Python.list()
-        row.append(PythonObject(chunk.owner))
-        row.append(PythonObject(chunk.first))
-        row.append(PythonObject(len(chunk.p)))
-        row.append(PythonObject(4*len(chunk.p)))
-        row.append(PythonObject(4*(len(chunk.m)+len(chunk.v))))
-        row.append(PythonObject(4*(len(chunk.shadow_p)+len(chunk.shadow_m)+len(chunk.shadow_v))))
-        row.append(PythonObject(4*len(chunk.g)))
-        out.append(row)
-    return out
-
-
-def byte_lm_offload_create_binding() raises -> PythonObject:
-    return PythonObject(alloc=ByteOffloadedReplay())
-
-
-def byte_lm_offload_close_binding(session: PythonObject) raises -> PythonObject:
-    var owner = session.downcast_value_ptr[ByteOffloadedReplay]()
-    owner[].close()
-    return PythonObject(0)
-
-
-def byte_lm_offload_open_binding(session: PythonObject, addresses: PythonObject,
-    params: PythonObject, shape: PythonObject, devices: PythonObject, shard_count: PythonObject) raises -> PythonObject:
-    _require_binding_profile()
-    var cfg_shape = _byte_config(shape)
-    var completed = _params_completed(params)
-    var cfg = _params_optimizer(params)
-    var addr = _read_addresses(addresses, 4)
-    var state = byte_open_state(addr, cfg_shape, completed)
-    var device_ids = List[Int]()
-    for i in range(Int(py=devices.__len__())):  # driver-loop: over devices: the caller's device list: reads device ordinals, no data
-        device_ids.append(Int(py=devices[i]))
-    var owner = session.downcast_value_ptr[ByteOffloadedReplay]()
-    # Retain the GIL: it is also the native object's exclusion lock.
-    owner[].open(device_ids, Int(py=shard_count), state.p, state.m, state.v, state.flags, completed, cfg, cfg_shape)
-    return PythonObject(completed)
-
-
 def byte_lm_offload_step_binding(session: PythonObject, addresses: PythonObject,
     completed_arg: PythonObject) raises -> PythonObject:
     var completed = Int(py=completed_arg)
@@ -953,33 +647,11 @@ def byte_lm_offload_step_binding(session: PythonObject, addresses: PythonObject,
         raise error
 
 
-def byte_lm_offload_export_binding(session: PythonObject, addresses: PythonObject,
-    rank_arg: PythonObject, gradients_arg: PythonObject) raises -> PythonObject:
-    _require_binding_profile()
-    var owner = session.downcast_value_ptr[ByteOffloadedReplay]()
-    owner[].require_open()
-    if Int(py=rank_arg) != 0:
-        raise Error("byte model pool: canonical export has no replica rank; use rank=0")
-    var gradients = Bool(gradients_arg)
-    var count = 1 if gradients else 4
-    var addr = _read_addresses(addresses,count)
-    return PythonObject(byte_offload_export_run(owner[], addr, gradients))
-
-
-def byte_lm_offload_rollback_binding(session: PythonObject) raises -> PythonObject:
-    var owner = session.downcast_value_ptr[ByteOffloadedReplay]()
-    owner[].require_open()
-    owner[].rollback()
-    return PythonObject(owner[].completed)
-
-
 # TOMBSTONE: byte_lm_launch_probe (dead native entry: tool-only launch-cost probe; byte_lm_session_launch_probe with it) deleted 2026-10-26 by be2f9a1be; code recoverable at 485ba9cc1.
 # Restore: git apply experiments/removed/byte_lm_launch_probe.patch
 # The private byte-LM schedule descriptor table (session value, operations,
 # C entry) is RUN code in training/byte_lm_door_run.mojo; the door keeps
 # its capsule, factory and handle exports below.
-
-
 
 
 def byte_lm_schedule_api_binding() raises -> PythonObject:
@@ -1021,8 +693,6 @@ def build__mojolearn_byte_lm() -> PythonObject:
         module.def_function[byte_lm_run_configured_binding]("byte_lm_run_configured")
         _ = module.add_type[ByteLMSession]("_ByteLMSession")
         module.def_function[byte_lm_session_create_binding]("byte_lm_session_create")
-        module.def_function[byte_lm_native_api_binding]("byte_lm_trainer_api_v1")
-        module.def_function[byte_lm_native_session_handle_binding]("byte_lm_native_session_handle_v1")
         module.def_function[byte_lm_session_close_binding]("byte_lm_session_close")
         # TOMBSTONE: byte_lm_launch_probe (dead native entry: tool-only launch-cost probe, deleted with tools/byte_lm_launch_probe.py and its byte_lm_session_launch_probe partner) deleted 2026-10-26 by be2f9a1be; code recoverable at 485ba9cc1.
         # Restore: git apply experiments/removed/byte_lm_launch_probe.patch
@@ -1031,20 +701,11 @@ def build__mojolearn_byte_lm() -> PythonObject:
         # DEVIATION 2514: the device-owned session entries.
         module.def_function[byte_lm_session_open_binding]("byte_lm_session_open")
         module.def_function[byte_lm_session_step_binding]("byte_lm_session_step")
-        module.def_function[byte_lm_session_eval_binding]("byte_lm_session_eval")
         module.def_function[byte_lm_session_export_state_binding]("byte_lm_session_export_state")
-        module.def_function[byte_lm_session_export_gradients_binding]("byte_lm_session_export_gradients")
         # DEVIATION 2658: forward-only logits.
         module.def_function[byte_lm_logits_binding]("byte_lm_logits")
         module.def_function[byte_lm_session_logits_binding]("byte_lm_session_logits")
-        module.def_function[byte_lm_session_next_bytes_binding]("byte_lm_session_next_bytes")
         module.def_function[byte_lm_trainer_step_binding]("byte_lm_trainer_step")
-        module.def_function[byte_lm_trainer_export_state_binding]("byte_lm_trainer_export_state")
-        module.def_function[byte_lm_trainer_export_gradients_binding]("byte_lm_trainer_export_gradients")
-        module.def_function[byte_lm_trainer_logits_binding]("byte_lm_trainer_logits")
-        module.def_function[byte_lm_trainer_next_bytes_binding]("byte_lm_trainer_next_bytes")
-        module.def_function[byte_lm_trainer_run_binding]("byte_lm_trainer_run")
-        module.def_function[byte_lm_file_sha256_binding]("byte_lm_file_sha256")
         module.def_function[byte_lm_session_rollback_binding]("byte_lm_session_rollback")
         module.def_function[byte_lm_session_info_binding]("byte_lm_session_info")
         module.def_function[byte_lm_fault_inject_available_binding]("byte_lm_fault_inject_available")
@@ -1058,9 +719,7 @@ def build__mojolearn_byte_lm() -> PythonObject:
         module.def_function[byte_lm_attention_arm_binding]("byte_lm_attention_arm")
         # TOMBSTONE: byte_lm_context_keeper_active, byte_lm_attention_estash_gate (dead native entries: diagnostic read-backs, no package or gate reader) deleted 2026-10-26 by 9d5242f68; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_byte_lm.patch
-        module.def_function[byte_lm_attention_memory_profile_binding]("byte_lm_attention_memory_profile")
         # DEVIATION 2648: the step glue arm read-back (arm, trial).
-        module.def_function[byte_lm_step_glue_arm_binding]("byte_lm_step_glue_arm")
         _ = module.add_type[ByteParallelTrainer]("_ByteParallelTrainer")
         module.def_function[byte_lm_parallel_create_binding]("byte_lm_parallel_create")
         # TOMBSTONE: byte_lm_parallel_open, _open_pooled, _close, _rollback, _shard_gradient, _apply_gradient, _reduction_pool_available, _fold_reset, _shard_gradient_fold, _fold_add (dead native entries: no caller) deleted 2026-11-08 by f41ec913f2; code recoverable at 41ffcec665.
@@ -1071,20 +730,8 @@ def build__mojolearn_byte_lm() -> PythonObject:
         module.def_function[byte_lm_parallel_set_lr_binding]("byte_lm_parallel_set_lr")
         module.def_function[byte_lm_parallel_fold_export_binding]("byte_lm_parallel_fold_export")
         _ = module.add_type[ByteOffloadedReplay]("_ByteOffloadedReplay")
-        module.def_function[byte_lm_offload_create_binding]("byte_lm_offload_create")
-        module.def_function[byte_lm_offload_open_binding]("byte_lm_offload_open")
-        module.def_function[byte_lm_offload_close_binding]("byte_lm_offload_close")
         module.def_function[byte_lm_offload_step_binding]("byte_lm_offload_step")
-        module.def_function[byte_lm_offload_export_binding]("byte_lm_offload_export")
-        module.def_function[byte_lm_offload_rollback_binding]("byte_lm_offload_rollback")
         _ = module.add_type[ByteModelPool]("_ByteModelPool")
-        module.def_function[byte_lm_model_pool_create_binding]("byte_lm_model_pool_create")
-        module.def_function[byte_lm_model_pool_open_binding]("byte_lm_model_pool_open")
-        module.def_function[byte_lm_model_pool_close_binding]("byte_lm_model_pool_close")
-        module.def_function[byte_lm_model_pool_step_binding]("byte_lm_model_pool_step")
-        module.def_function[byte_lm_model_pool_export_binding]("byte_lm_model_pool_export")
-        module.def_function[byte_lm_model_pool_rollback_binding]("byte_lm_model_pool_rollback")
-        module.def_function[byte_lm_model_pool_ownership_binding]("byte_lm_model_pool_ownership")
         # Private schedule descriptor/factory (bindings/parallel_byte_native.mojo).
         _ = module.add_type[ByteScheduleSession]("_ByteScheduleSession")
         module.def_function[byte_lm_schedule_api_binding]("byte_lm_schedule_api_v1")

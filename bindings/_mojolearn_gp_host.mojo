@@ -630,7 +630,6 @@ def build__mojolearn_gp_host() -> PythonObject:
         module.def_function[gp_theta_params_binding]("gp_theta_params")
         module.def_function[gpc_fit_binding]("gpc_fit")
         module.def_function[gpc_predict_binding]("gpc_predict")
-        module.def_function[gpc_ovr_combine_binding]("gpc_ovr_combine")
         module.def_function[cholesky_profile_jitter_binding]("cholesky_profile_jitter")
         module.def_function[cholesky_factor_binding]("cholesky_factor")
         module.def_function[cholesky_solve_binding]("cholesky_solve")

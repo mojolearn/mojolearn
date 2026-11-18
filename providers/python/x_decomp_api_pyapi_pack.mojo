@@ -268,16 +268,6 @@ def absmax_sign_py[E: Exec](a: PythonObject, dst: PythonObject, p: PythonObject)
     return PythonObject(r)
 
 
-def rank_above_py(sv: PythonObject, p: PythonObject, rtol: PythonObject) raises -> PythonObject:
-    """How many singular values at sv are > 0 and > s[0] * rtol
-    (`rank_above_run`). p = [n]."""
-    var n = _n(p, 0)
-    var a = Int(py=sv)
-    var t = Float64(py=rtol)
-    var r = rank_above_run(a, n, t)
-    return PythonObject(r)
-
-
 def idn_flags_py() raises -> PythonObject:
     """The IDENTICAL route bits (`idn_flags_run`)."""
     return PythonObject(idn_flags_run())
@@ -300,8 +290,6 @@ def ols_tsqr_r_py[E: Exec](
     with GILReleased(Python()):
         n = ols_tsqr_r_run[E](pa, pb, pr, pm, ya, m, d)
     return PythonObject(n)
-
-
 
 
 def geqrf_py[E: Exec](a: PythonObject, tau: PythonObject, p: PythonObject) raises -> PythonObject:

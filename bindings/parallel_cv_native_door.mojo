@@ -340,8 +340,6 @@ def msel_parallel_operation(operation: String, args: PythonObject, context: Pyth
         return msel_wire_unpack(msel_wire_pack(args[0], context), context)
     elif operation == "family_msel_parallel_model_pack":
         return msel_parallel_model_pack(args[0], context)
-    elif operation == "family_msel_parallel_scorer_pack":
-        return msel_parallel_scorer_pack(args[0], context)
     elif operation == "family_msel_parallel_last_run":
         return context["family_msel_parallel"]["last_run"]
     elif operation == "family_msel_parallel_require_batch":

@@ -94,15 +94,6 @@ def _execute(op: Int, session: PythonObject, addresses: PythonObject, params: Py
     return PythonObject(host_trainer_operation(op, descriptors, words, plan[1]))
 
 
-def host_compat_api() raises -> PythonObject:
-    var table = BYTE_HOST_TRAINER_TABLE.get_or_create_ptr()
-    return neural_descriptor_capsule(table[].name, table[].entries)
-
-
-def host_compat_handle(session: PythonObject) raises -> PythonObject:
-    return PythonObject(Int(session.downcast_value_ptr[ByteHostSession]()))
-
-
 def host_compat_create() raises -> PythonObject:
     return PythonObject(alloc=ByteHostSession())
 
@@ -139,9 +130,6 @@ def host_compat_suffix() raises -> PythonObject:
 def host_compat_shape_profile(shape: PythonObject) raises -> PythonObject:
     return PythonObject(_config(_shape(shape)).profile())
 
-def host_compat_file_sha(path: PythonObject) raises -> PythonObject:
-    return PythonObject(sha256_file(String(py=native_path(path))))
-
 
 def host_compat_run(addresses: PythonObject, named: PythonObject, params: PythonObject, shape: PythonObject) raises -> PythonObject:
     var session = host_compat_create()
@@ -158,41 +146,6 @@ def host_compat_run_default(addresses: PythonObject, params: PythonObject) raise
 
 def host_compat_trainer_step(session: PythonObject, addresses: PythonObject, params: PythonObject, shape: PythonObject) raises -> PythonObject:
     return _execute(1, session, addresses, params, shape, PythonObject(None), PythonObject(None))
-
-
-def host_compat_trainer_logits(session: PythonObject, addresses: PythonObject, dims: PythonObject,
-                               params: PythonObject, shape: PythonObject) raises -> PythonObject:
-    return _execute(2, session, addresses, params, shape, dims, PythonObject(None))
-
-
-def host_compat_trainer_next(session: PythonObject, addresses: PythonObject, dims: PythonObject,
-                            params: PythonObject, shape: PythonObject) raises -> PythonObject:
-    return _execute(6, session, addresses, params, shape, dims, PythonObject(None))
-
-
-def host_compat_trainer_export(session: PythonObject, addresses: PythonObject, shape: PythonObject,
-                              completed: PythonObject, release: PythonObject) raises -> PythonObject:
-    var plan = _defaults(shape, _int(completed))
-    var owner = session.downcast_value_ptr[ByteHostSession]()
-    var values = _words(addresses)
-    var a: List[Int] = [Int(owner)]
-    for i in range(len(values)):  # driver-loop: over state output descriptors
-        a.append(values[i])
-    var words = plan[0].copy()
-    if py_type(release) is not native_loaded_module("builtins").bool:
-        raise Error("byte LM: release must be a bool")
-    words[16] = Int(Bool(py=release))
-    return PythonObject(host_trainer_operation(3, a, words, plan[1]))
-
-
-def host_compat_trainer_grad(session: PythonObject, addresses: PythonObject, shape: PythonObject,
-                            completed: PythonObject) raises -> PythonObject:
-    var plan = _defaults(shape, _int(completed))
-    var values = _words(addresses)
-    var a: List[Int] = [Int(session.downcast_value_ptr[ByteHostSession]())]
-    for i in range(len(values)):  # driver-loop: over gradient output descriptors
-        a.append(values[i])
-    return PythonObject(host_trainer_operation(10, a, plan[0], plan[1]))
 
 
 def host_compat_logits(addresses: PythonObject, dims: PythonObject, shape: PythonObject) raises -> PythonObject:
@@ -221,27 +174,12 @@ def host_compat_step(session: PythonObject, addresses: PythonObject, params: Pyt
         _words(addresses), _config(plan[0]), host_optimizer(plan[0], plan[1]), plan[0][11]))
 
 
-def host_compat_eval(session: PythonObject, addresses: PythonObject, params: PythonObject, shape: PythonObject) raises -> PythonObject:
-    var plan = _plan(shape, params)
-    if plan[0][10] != 0:
-        raise Error("byte LM: session eval requires action 0")
-    return PythonObject(session.downcast_value_ptr[ByteHostSession]()[].evaluate(
-        _words(addresses), _config(plan[0]), host_optimizer(plan[0], plan[1]), plan[0][11]))
-
-
 def host_compat_rollback(session: PythonObject) raises -> PythonObject:
     return PythonObject(session.downcast_value_ptr[ByteHostSession]()[].rollback())
 
 
 def host_compat_export(session: PythonObject, addresses: PythonObject, shape: PythonObject) raises -> PythonObject:
     return PythonObject(session.downcast_value_ptr[ByteHostSession]()[].export_state(_words(addresses), _config(_shape(shape))))
-
-
-def host_compat_grad(session: PythonObject, addresses: PythonObject, shape: PythonObject) raises -> PythonObject:
-    var values = _words(addresses)
-    if len(values) != 1:
-        raise Error("byte LM: byte_lm_session_export_gradients expects 1 address")
-    return PythonObject(session.downcast_value_ptr[ByteHostSession]()[].export_gradients(values[0], _config(_shape(shape))))
 
 
 def _resident_logits(session: PythonObject, addresses: PythonObject, dims: PythonObject,
@@ -261,15 +199,8 @@ def host_compat_resident_logits(session: PythonObject, addresses: PythonObject, 
     return _resident_logits(session, addresses, dims, shape, completed, False)
 
 
-def host_compat_resident_next(session: PythonObject, addresses: PythonObject, dims: PythonObject,
-                             shape: PythonObject, completed: PythonObject) raises -> PythonObject:
-    return _resident_logits(session, addresses, dims, shape, completed, True)
-
-
 def register(mut module: PythonModuleBuilder) raises:
     _ = module.add_type[ByteHostSession]("_ByteHostSession")
-    module.def_function[host_compat_api]("byte_lm_trainer_api_v1")
-    module.def_function[host_compat_handle]("byte_lm_native_session_handle_v1")
     module.def_function[host_compat_create]("byte_lm_session_create")
     module.def_function[host_compat_close]("byte_lm_session_close")
     module.def_function[host_compat_info]("byte_lm_session_info")
@@ -278,21 +209,12 @@ def register(mut module: PythonModuleBuilder) raises:
     module.def_function[host_compat_profile]("byte_lm_profile")
     module.def_function[host_compat_suffix]("byte_lm_arithmetic_suffix")
     module.def_function[host_compat_shape_profile]("byte_lm_config_profile")
-    module.def_function[host_compat_file_sha]("byte_lm_file_sha256")
     module.def_function[host_compat_run_default]("byte_lm_run")
     module.def_function[host_compat_run_configured]("byte_lm_run_configured")
-    module.def_function[host_compat_run]("byte_lm_trainer_run")
     module.def_function[host_compat_logits]("byte_lm_logits")
     module.def_function[host_compat_trainer_step]("byte_lm_trainer_step")
-    module.def_function[host_compat_trainer_logits]("byte_lm_trainer_logits")
-    module.def_function[host_compat_trainer_next]("byte_lm_trainer_next_bytes")
-    module.def_function[host_compat_trainer_export]("byte_lm_trainer_export_state")
-    module.def_function[host_compat_trainer_grad]("byte_lm_trainer_export_gradients")
     module.def_function[host_compat_open]("byte_lm_session_open")
     module.def_function[host_compat_step]("byte_lm_session_step")
-    module.def_function[host_compat_eval]("byte_lm_session_eval")
     module.def_function[host_compat_rollback]("byte_lm_session_rollback")
     module.def_function[host_compat_export]("byte_lm_session_export_state")
-    module.def_function[host_compat_grad]("byte_lm_session_export_gradients")
     module.def_function[host_compat_resident_logits]("byte_lm_session_logits")
-    module.def_function[host_compat_resident_next]("byte_lm_session_next_bytes")

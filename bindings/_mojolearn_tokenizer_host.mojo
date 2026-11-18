@@ -613,179 +613,6 @@ def _table_from_spelled(
     return table^
 
 
-def bpe_load_tokens_binding(addresses: PythonObject, dims: PythonObject) raises -> PythonObject:
-    """`BpeTokenizer.from_token_bytes`: `addresses` `[token_bytes(u8),
-    lengths(i64)]`, `dims` `[n_tokens]`. Refuses an empty or repeated token
-    and a missing single byte by name (`vocab_build.mojo`)."""
-    var n = _index(dims[0])
-    var lengths = _i64_list(_index(addresses[1]) if n > 0 else 0, n)
-    var total = _bytes_total(lengths)
-    var arena = _u8_list(_index(addresses[0]) if total > 0 else 0, total)
-    var table = table_from_tokens(arena, lengths)
-    return PythonObject(alloc=_handle_from_table(table^))
-
-
-def bpe_load_spelled_binding(vocab: PythonObject, merges: PythonObject) raises -> PythonObject:
-    """`BpeTokenizer.from_files`: `vocab` the `encoder.json` object without
-    `<|endoftext|>`, `merges` the `vocab.bpe` text."""
-    var table = _table_from_spelled(vocab, merges, True, False)
-    return PythonObject(alloc=_handle_from_table(table^))
-
-
-def bpe_ranks_text_binding(handle: PythonObject) raises -> PythonObject:
-    """The canonical rank file text of the loaded table (its identity is the
-    SHA-256 of these bytes)."""
-    var owner = handle.downcast_value_ptr[BpeHandle]()
-    _require_loaded(Bool(owner[].tok))
-    return PythonObject(ranks_text(owner[].tok.value().ranks))
-
-
-def bpe_decode_seq_binding(
-    handle: PythonObject, seq: PythonObject, out_addr: PythonObject, out_cap: PythonObject
-) raises -> PythonObject:
-    """`BpeTokenizer.decode_bytes` over a Python sequence of ids: type and
-    range checked by position, decoded, written at `out_addr`."""
-    var owner = handle.downcast_value_ptr[BpeHandle]()
-    _require_loaded(Bool(owner[].tok))
-    # One shared id reader (tokenizer_public_native `_ids`): exact list/tuple
-    # items through the C API (no Python-level `operator.index` call or
-    # class-name string per id), and one buffer read for an integer array.
-    var ids = _ids(seq)
-    var nv = owner[].tok.value().n_vocab()
-    bpe_check_ids(ids, nv)
-    var cap = _index(out_cap)
-    if len(ids) == 0:
-        return PythonObject(0)
-    var out = bpe_decode_seq_bytes(owner[], ids, cap)
-    unsafe_memcpy(dest=_u8_ptr(_index(out_addr)), src=out.unsafe_ptr(), count=len(out))
-    return PythonObject(len(out))
-
-
-def bpe_decode_batch_binding(
-    handle: PythonObject, batch: PythonObject, out_addr: PythonObject,
-    out_cap: PythonObject, lengths_addr: PythonObject
-) raises -> PythonObject:
-    """`decode_bytes` of each id sequence in `batch`, back to back at
-    `out_addr`, each one's byte count (int64) at `lengths_addr`. An id is
-    refused by its position inside its own sequence."""
-    var owner = handle.downcast_value_ptr[BpeHandle]()
-    _require_loaded(Bool(owner[].tok))
-    var bi = native_loaded_module("builtins")
-    var n = Int(py=py_call(bi.len, batch))
-    var cap = _index(out_cap)
-    var nv = owner[].tok.value().n_vocab()
-    var joined = List[UInt8]()
-    var lens = List[Int](capacity=n)
-    for s in range(n):  # cpu-route: Python objects marshaled one element at a time before the runtime
-        bpe_decode_batch_append(owner[], _ids(batch[s]), nv, joined, lens)
-    bpe_decode_batch_fit(joined, cap)
-    if n > 0:
-        tokenizer_store_i64(_i64_ptr(_index(lengths_addr)), lens)
-    if len(joined) > 0:
-        unsafe_memcpy(dest=_u8_ptr(_index(out_addr)), src=joined.unsafe_ptr(), count=len(joined))
-    return PythonObject(len(joined))
-
-
-def bpe_render_binding(addresses: PythonObject, dims: PythonObject) raises -> PythonObject:
-    """A trained vocabulary rendered by `tokenizer/train/emit.mojo`:
-    `addresses` `[token_bytes(u8), lengths(i64), merge_left(i64),
-    merge_right(i64)]`, `dims` `[n_tokens, n_merges, which]`, `which` 0 for
-    the rank file, 1 for `tokenizer.json`."""
-    var n = _index(dims[0])
-    var nm = _index(dims[1])
-    var which = _index(dims[2])
-    var v = TrainedVocabulary()
-    v.length = _i64_list(_index(addresses[1]) if n > 0 else 0, n)
-    var total = _bytes_total(v.length)
-    v.arena = _u8_list(_index(addresses[0]) if total > 0 else 0, total)
-    v.merge_left = _i64_list(_index(addresses[2]) if nm > 0 else 0, nm)
-    v.merge_right = _i64_list(_index(addresses[3]) if nm > 0 else 0, nm)
-    trained_vocab_settle(v, n, nm)
-    if which == 0:
-        return PythonObject(render_ranks(v))
-    return PythonObject(render_tokenizer_json(v, String(GPT2_PAT_STR), String(GPT2_ENDOFTEXT)))
-
-
-def bpe_encode_corpus_binding(
-    handle: PythonObject, addresses: PythonObject, dims: PythonObject
-) raises -> PythonObject:
-    """`lm_corpus._tokenize`'s work in one call: cut the corpus into
-    documents (`_cut_documents`), encode each ALONE (`allow_endoftext`
-    False), ids back to back. `addresses` `[data(u8), points(i64),
-    ids_out(i32), bounds_out(i64), stats_out(i64)]`, `dims` `[n_bytes,
-    n_points, document_bytes, ids_cap]`. `points` are the sorted split
-    points (0 and n_bytes included); `bounds_out[j]` is the id offset where
-    point j starts. `stats_out` gets `[n_documents, max_id, ids_above_255]`.
-    Returns the id count."""
-    var owner = handle.downcast_value_ptr[BpeHandle]()
-    _require_loaded(Bool(owner[].tok))
-    var n = _index(dims[0])
-    var n_points = _index(dims[1])
-    var document_bytes = _index(dims[2])
-    var cap = _index(dims[3])
-    if document_bytes < 1:
-        raise Error("ValueError: document_bytes must be >= 1")
-    var data_address = _index(addresses[0]) if n > 0 else 0
-    var points = _i64_list(_index(addresses[1]), n_points)
-    var ids_address = _index(addresses[2]) if cap > 0 else 0
-    var bounds_address = _index(addresses[3])
-    var stats_address = _index(addresses[4])
-    var total = 0
-    with GILReleased(Python()):
-        total = bpe_encode_corpus_into(
-            owner[], data_address, points, n, n_points, document_bytes, cap,
-            ids_address, bounds_address, stats_address,
-        )
-    return PythonObject(total)
-
-
-def bpe_train_corpus_binding(addresses: PythonObject, dims: PythonObject) raises -> PythonObject:
-    """`lm_corpus`'s vocabulary training in one call: the documents of
-    `[lo, hi)` cut by `_cut_documents`, trained by `train_bpe`.
-    `addresses` `[data(u8), points(i64)]`, `dims` `[n_bytes, n_points, lo,
-    hi, document_bytes, vocab_size, min_frequency, break_ties_high]`."""
-    var n = _index(dims[0])
-    var n_points = _index(dims[1])
-    var lo = _index(dims[2])
-    var hi = _index(dims[3])
-    var document_bytes = _index(dims[4])
-    var vocab_size = _index(dims[5])
-    var min_frequency = _index(dims[6])
-    var reverse = _flag(dims[7], "break_ties_high")
-    if lo < 0 or hi > n or lo > hi:
-        raise Error("ValueError: bpe_train_corpus: [lo, hi) must lie inside the corpus")
-    if document_bytes < 1:
-        raise Error("ValueError: document_bytes must be >= 1")
-    var data_address = _index(addresses[0]) if n > 0 else 0
-    var points = _i64_list(_index(addresses[1]), n_points)
-    var handle = BpeTrainedHandle()
-    with GILReleased(Python()):
-        bpe_train_corpus_fill(
-            handle, data_address, points, lo, hi, document_bytes, vocab_size,
-            min_frequency, reverse,
-        )
-    return PythonObject(alloc=handle^)
-
-
-def tokens_gather_rows_binding(addresses: PythonObject, dims: PythonObject) raises -> PythonObject:
-    """`lm_corpus.TokenBatches.ids`: row b of step k reads int32 ids
-    `[lo + (base + b*length) % modulus : + length + 1]`, `base` =
-    `k*batch*length`. `addresses` `[src(i32), out(i32)]`, `dims` `[n_src,
-    batch, length, lo, modulus, base]`."""
-    var n_src = _index(dims[0])
-    var batch = _index(dims[1])
-    var length = _index(dims[2])
-    var lo = _index(dims[3])
-    var modulus = _index(dims[4])
-    var base = _index(dims[5])
-    var width = tokens_gather_rows_width(n_src, batch, length, lo, modulus, base)
-    if batch == 0:
-        return PythonObject(0)
-    var src = i32_ptr(_index(addresses[0]))
-    var dst = i32_ptr(_index(addresses[1]))
-    return PythonObject(tokens_gather_rows_into(src, dst, batch, length, width, lo, modulus, base))
-
-
 def _py_bytes_list(raw: PythonObject) raises -> List[UInt8]:
     """The bytes of a Python bytes-like object, one memcpy through an
     `array('B')` buffer (no Python loop over the bytes)."""
@@ -1282,15 +1109,6 @@ def build__mojolearn_tokenizer_host() -> PythonObject:
         module.def_function[bpe_train_binding]("bpe_train")
         module.def_function[bpe_trained_sizes_binding]("bpe_trained_sizes")
         module.def_function[bpe_trained_copy_binding]("bpe_trained_copy")
-        module.def_function[bpe_load_tokens_binding]("bpe_load_tokens")
-        module.def_function[bpe_load_spelled_binding]("bpe_load_spelled")
-        module.def_function[bpe_ranks_text_binding]("bpe_ranks_text")
-        module.def_function[bpe_decode_seq_binding]("bpe_decode_seq")
-        module.def_function[bpe_decode_batch_binding]("bpe_decode_batch")
-        module.def_function[bpe_render_binding]("bpe_render")
-        module.def_function[bpe_encode_corpus_binding]("bpe_encode_corpus")
-        module.def_function[bpe_train_corpus_binding]("bpe_train_corpus")
-        module.def_function[tokens_gather_rows_binding]("tokens_gather_rows")
         _ = module.add_type[VocabHandle]("_VocabHandle")
         module.def_py_c_function(_vocab_public_c[0], "vocab_init_public")
         module.def_py_c_function(_vocab_public_c[1], "vocab_spelled_public")
@@ -1371,7 +1189,6 @@ def build__mojolearn_tokenizer_host() -> PythonObject:
         module.def_py_c_function(operation_lock_c[3], "operation_lock_enter")
         module.def_py_c_function(operation_lock_c[4], "operation_lock_exit")
         module.def_py_c_function(operation_lock_c[5], "operation_lock_owned")
-        module.def_function[neural_descriptor_info]("neural_native_dispatch_info")
         # causal_pin_entries stores PythonObject(alloc=CausalExecutionEntries(...)).
         _ = module.add_type[CausalExecutionEntries]("_CausalExecutionEntries")
         native_identity_type(module)
