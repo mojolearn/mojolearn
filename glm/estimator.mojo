@@ -46,7 +46,7 @@ from glm.impl.ols import (
 )
 from glm.impl.qn.qn import qn_fit_x
 from glm.qn_resident import qn_loss_name, qn_check_loss_args, qn_fit_resident
-from core.admitted_finite_status import enqueue_finite_status
+from core.admitted_finite_status import enqueue_finite_word
 from glm.qn_infer import qn_x_status, qn_scores_resident, qn_codes_resident
 from glm.impl.ridge import RIDGE_ALGO_EIG, ridge_eig_scratch_traced, ridge_fit_traced
 from glm.impl.linear_model.qn import (
@@ -525,8 +525,7 @@ def qn_fit_host(
     # door refuses.
     var dstat = ctx.enqueue_create_buffer[DType.int32](1)
     if status != 0:
-        dstat.enqueue_fill(Int32(0))
-        enqueue_finite_status(ctx, x.unsafe_ptr(), n_rows * n_features, dstat.unsafe_ptr(), 0)
+        enqueue_finite_word(ctx, x.unsafe_ptr(), n_rows * n_features, dstat, 0)
         ctx.enqueue_copy(dst_ptr=MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=status), src_buf=dstat)
     var iters = qn_fit_resident(
         ctx, x^, y_ptr, coef_ptr, info_ptr, n_rows, n_features, n_classes, penalty_l1, penalty_l2,

@@ -33,8 +33,12 @@ constant 1 into its own input's word: no atomics, no order, no 64-bit word
 (Apple has no 64-bit atomic). Numerics: none; no output bit changes.
 """
 from max.gpu import block_dim, block_idx, grid_dim, thread_idx
-from std.memory import bitcast
-from max.gpu.host import DeviceContext
+from max.gpu.memory import AddressSpace
+from max.gpu.sync import barrier
+from std.memory import bitcast, stack_allocation
+from std.sys.compile import is_defined
+from max.gpu.host import DeviceBuffer, DeviceContext
+from core.device_zero import enqueue_fill
 
 comptime AFS_TPB = 256
 comptime AFS_REDUCE_BLOCKS = 1024
@@ -43,6 +47,20 @@ comptime AFS_MAX_N = 2147483000
 #: Status word values.
 comptime AFS_FINITE: Int32 = 0
 comptime AFS_NONFINITE: Int32 = 1
+
+#: Experiment (lane fb12-kde-finite, 2026-11-17; default off, A/B owed):
+#: `enqueue_finite_word` writes a short span's verdict with ONE single-block
+#: launch that stores 0 or 1 unconditionally, so the per-call fill launch of
+#: the status word goes. Off: fill the word, then the grid-stride test (the
+#: form every caller had inline before this lane).
+comptime ADMIT_FAST_FINITE_VERDICT = is_defined["MOJOLEARN_ADMIT_FAST_FINITE_VERDICT"]()
+#: The longest span the single-block verdict takes. Cost reasoning, not a
+#: board shape: one block streams roughly one SM's share of bandwidth (tens of
+#: GB/s), so 65,536 words (256 KB) take a few microseconds, about the host and
+#: GPU cost of the one fill launch it removes; past that the grid-stride test
+#: over all SMs plus the fill is cheaper. Holds for every row count and width.
+comptime AFS_VERDICT_MAX_N = 65536
+comptime AFS_VERDICT_TPB = 1024
 
 comptime _AFS_F32 = MutPointer[Float32, MutAnyOrigin]
 comptime _AFS_I32 = MutPointer[Int32, MutAnyOrigin]
@@ -103,3 +121,53 @@ def enqueue_finite_status[wo: MutOrigin, so: MutOrigin, //](
 # threads (the no-host-routes fence).
 # integ-w3: the merge keeps lane a6's move: host_finite_status lives in core/host_finite_scan.mojo
 # (caller bindings/_mojolearn_estimators_host.mojo); only the copy in this module is gone.
+
+
+def _afs_verdict_kernel(src: _AFS_F32, n_: Int32, status: _AFS_I32, slot_: Int32):
+    """One block: status[slot] = 1 when any of src[0:n] is NaN or infinite,
+    else 0, stored by thread 0 after the block's barrier (no fill needed, no
+    order across blocks because there is one block)."""
+    var flag = stack_allocation[1, Int32, address_space=AddressSpace.SHARED]()
+    var t = Int(thread_idx.x)
+    if t == 0:
+        flag[0] = AFS_FINITE
+    barrier()
+    var n = Int(n_)
+    var i = t
+    var hit = False
+    while i < n:
+        if (bitcast[DType.uint32](src.unsafe_load(i)) & UInt32(0x7FFFFFFF)) >= UInt32(0x7F800000):
+            hit = True
+            break
+        i += Int(block_dim.x)
+    if hit:
+        flag[0] = AFS_NONFINITE
+    barrier()
+    if t == 0:
+        status.unsafe_store(Int(slot_), flag[0])
+
+
+def enqueue_finite_word[wo: MutOrigin, //](
+    ctx: DeviceContext, d_words: MutPointer[Float32, wo], n: Int, mut d_status: DeviceBuffer[DType.int32], slot: Int,
+) raises:
+    """Word `slot` of `d_status` becomes the finite status of the `n`
+    resident float32 words at `d_words` (0 every word finite, 1 otherwise),
+    written fresh: the caller does NOT fill it, and reads it back with its
+    result as with `enqueue_finite_status`. Only this span writes the word.
+    `n` 0 leaves the word 0. Default: a fill of the one word, then
+    `enqueue_finite_status`. `MOJOLEARN_ADMIT_FAST_FINITE_VERDICT`: a span of
+    at most `AFS_VERDICT_MAX_N` words takes one single-block launch instead
+    of the two."""
+    comptime if ADMIT_FAST_FINITE_VERDICT:
+        if n <= AFS_VERDICT_MAX_N:
+            ctx.enqueue_function[_afs_verdict_kernel](
+                d_words.unsafe_origin_cast[MutAnyOrigin](), Int32(max(n, 0)),
+                d_status.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), Int32(slot),
+                grid_dim=1, block_dim=AFS_VERDICT_TPB,
+            )
+            return
+    var word = d_status.create_sub_buffer[DType.int32](slot, 1)
+    enqueue_fill[DType.int32](ctx, word, AFS_FINITE)
+    if n > 0:
+        enqueue_finite_status(ctx, d_words, n, d_status.unsafe_ptr(), slot)
+    _ = word^

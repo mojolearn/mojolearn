@@ -10,7 +10,7 @@ one by one. Plain copies: the same words. At the IVF shapes these lists are
 1M x 28 floats (the residuals) and 1M x 14 codes."""
 from std.memory import unsafe_memcpy
 from max.gpu.host import DeviceBuffer, DeviceContext
-from core.admitted_finite_status import enqueue_finite_status
+from core.admitted_finite_status import enqueue_finite_status, enqueue_finite_word
 from core.device_zero import enqueue_fill
 
 
@@ -81,8 +81,7 @@ def enqueue_query_status(
         return status^
     if status_addr < 0 or status_addr % 4 != 0:
         raise Error("x_ann: the status address must be a positive int32-aligned address")
-    enqueue_fill[DType.int32](ctx, status, Int32(0))
-    enqueue_finite_status(ctx, dq.unsafe_ptr(), n, status.unsafe_ptr(), 0)
+    enqueue_finite_word(ctx, dq.unsafe_ptr(), n, status, 0)
     ctx.enqueue_copy(dst_ptr=MutPointer[Int32, MutAnyOrigin](unsafe_from_address=status_addr), src_buf=status)
     return status^
 

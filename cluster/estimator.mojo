@@ -124,7 +124,7 @@ from cluster.impl.detail.min_cluster_distance_compute import (
 )
 from cluster.impl.kmeans import fit_predict, predict
 from core.device_zero import enqueue_fill
-from core.admitted_finite_status import enqueue_finite_status
+from core.admitted_finite_status import enqueue_finite_word
 from core.row_norms import NORM_TPB, row_norm_kernel
 from cluster.impl.kmeans_params import (
     INIT_ARRAY,
@@ -401,8 +401,7 @@ def kmeans_fit(
     var status = ctx.enqueue_create_buffer[DType.int32](1)
     var word = ctx.enqueue_create_host_buffer[DType.int32](1)
     if finite_word != 0:
-        enqueue_fill[DType.int32](ctx, status, Int32(0))
-        enqueue_finite_status(ctx, x.unsafe_ptr(), n_samples * n_features, status.unsafe_ptr(), 0)
+        enqueue_finite_word(ctx, x.unsafe_ptr(), n_samples * n_features, status, 0)
         ctx.enqueue_copy(dst_ptr=word.unsafe_ptr(), src_buf=status)
 
     # The scale from the design on the device (`plan_sum_scale`, one
@@ -772,8 +771,7 @@ def kmeans_predict(
     var status = ctx.enqueue_create_buffer[DType.int32](1)
     var word = ctx.enqueue_create_host_buffer[DType.int32](1)
     if finite_word != 0:
-        enqueue_fill[DType.int32](ctx, status, Int32(0))
-        enqueue_finite_status(ctx, x.unsafe_ptr(), n_samples * n_features, status.unsafe_ptr(), 0)
+        enqueue_finite_word(ctx, x.unsafe_ptr(), n_samples * n_features, status, 0)
         ctx.enqueue_copy(dst_ptr=word.unsafe_ptr(), src_buf=status)
     kmeans_predict_device(
         ctx, x, n_samples, n_features, n_clusters, centroids, labels, metric
@@ -893,8 +891,7 @@ def kmeans_transform(
     var status = ctx.enqueue_create_buffer[DType.int32](1)
     var word = ctx.enqueue_create_host_buffer[DType.int32](1)
     if finite_word != 0:
-        enqueue_fill[DType.int32](ctx, status, Int32(0))
-        enqueue_finite_status(ctx, x.unsafe_ptr(), n_samples * n_features, status.unsafe_ptr(), 0)
+        enqueue_finite_word(ctx, x.unsafe_ptr(), n_samples * n_features, status, 0)
         ctx.enqueue_copy(dst_ptr=word.unsafe_ptr(), src_buf=status)
     # kmeans_transform_device ends with its own synchronisation: the word is
     # home when it returns.

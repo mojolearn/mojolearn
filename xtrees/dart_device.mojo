@@ -48,7 +48,7 @@ from std.sys import has_accelerator
 from max.gpu.host import DeviceBuffer, DeviceContext
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 from core.device_zero import enqueue_fill
-from core.admitted_finite_status import enqueue_finite_status
+from core.admitted_finite_status import enqueue_finite_word
 from ensemble.nan_refusal import RF_NONFINITE_REFUSAL
 from core.neural_context import process_ctx
 from xtrees.ops import stream_base, draw
@@ -426,8 +426,7 @@ def dart_open(
         # one synchronize; the DART door's host scan of X before the round
         # (bindings/trees_public_boost_door.mojo, TREES_NONFINITE) is deleted.
         var x_status = ctx.enqueue_create_buffer[DType.int32](1)
-        enqueue_fill[DType.int32](ctx, x_status, Int32(0))
-        enqueue_finite_status(ctx, x.unsafe_ptr(), n * d, x_status.unsafe_ptr(), 0)
+        enqueue_finite_word(ctx, x.unsafe_ptr(), n * d, x_status, 0)
         var x_word = ctx.enqueue_create_host_buffer[DType.int32](1)
         ctx.enqueue_copy(dst_buf=x_word, src_buf=x_status)
         ctx.synchronize()

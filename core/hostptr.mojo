@@ -5,7 +5,7 @@ Counts are nonnegative numbers of elements. Callers validate spans and keep
 both allocations alive for the entire call. Copies require disjoint spans (or exactly the same
 span); partial overlap is not supported. No pointer is retained.
 """
-from std.memory import unsafe_memcpy
+from std.memory import bitcast, unsafe_memcpy
 
 
 def f32_ptr(addr: Int) raises -> MutPointer[Float32, MutUntrackedOrigin]:
@@ -46,6 +46,36 @@ def copy_f32[src_origin: Origin, dst_origin: MutOrigin, //](
     while i < n:
         dst_ptr.unsafe_store(i, src_ptr.unsafe_load(i))
         i += 1
+
+
+def copy_f32_finite[src_origin: Origin, dst_origin: MutOrigin, //](
+    src_ptr: Pointer[Float32, src_origin],
+    dst_ptr: MutPointer[Float32, dst_origin], n: Int,
+) -> Bool:
+    """`copy_f32` that also returns True when every copied word is finite
+    (lane fb12-kde-finite, 2026-11-17). The test is on bits, exponent field
+    all ones (core/admitted_finite_status.mojo contract: NaN, +inf and -inf
+    fail, a subnormal passes), folded branch-free into the copy's own SIMD
+    loads, so admission of a host input that is staged anyway costs no
+    second pass. Every word is copied even when one is non-finite."""
+    comptime EXP = UInt32(0x7F800000)
+    var hit = SIMD[DType.uint32, 8](0)
+    var i = 0
+    var body = n - n % 8
+    while i < body:
+        var v = src_ptr.unsafe_load[width=8](i)
+        dst_ptr.unsafe_store[width=8](i, v)
+        var e = bitcast[DType.uint32, 8](v) & SIMD[DType.uint32, 8](EXP)
+        hit |= e.eq(SIMD[DType.uint32, 8](EXP)).cast[DType.uint32]()
+        i += 8
+    var tail = UInt32(0)
+    while i < n:
+        var w = src_ptr.unsafe_load(i)
+        dst_ptr.unsafe_store(i, w)
+        if (bitcast[DType.uint32](w) & EXP) == EXP:
+            tail = 1
+        i += 1
+    return hit.reduce_or() == 0 and tail == 0
 
 
 def read_f32(addr: Int, n: Int) raises -> List[Float32]:
