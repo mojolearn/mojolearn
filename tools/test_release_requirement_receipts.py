@@ -146,7 +146,8 @@ class CandidateReceiptTests(unittest.TestCase):
         self.assertEqual(rows["adapters"]["completed"], len(adapter_gate.PHASES))
         self.assertEqual(rows["measured-plan-pairs"]["completed"], 7)
         self.assertEqual(receipt["measured_pairs"], 9)
-        self.assertEqual(receipt["autograd_artifacts"], 8)
+        # one per compiled smoke entry (906614f138 removed the lm-tape entries)
+        self.assertEqual(receipt["autograd_artifacts"], len(gate_autograd_artifacts.expected("nvidia")))
         self.assertNotEqual(R.coverage_summary(receipt)["completed"], 5)
 
     def test_existing_receipt_reparses_raw_gate_and_rejects_caller_counts(self):
