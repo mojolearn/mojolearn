@@ -291,3 +291,55 @@ struct RegistryKey(Copyable, Movable):
         else:
             return self.word != 0 and self.epoch == Int(
                 Atomic.load[ordering=Ordering.ACQUIRE](_EpochWord(unsafe_from_address=self.word)))
+
+    @staticmethod
+    def stamp_and_take(addr: Int) raises -> RegistryKey:
+        """The holder of a resident copy has just written the registry at
+        `addr` FROM that copy (a Samba train step's download): give the
+        registry a fresh stamp, so every OTHER copy keyed by it reloads at
+        its next use, and return the key at that stamp, so the writer's own
+        copy stays current. One lock and one table lookup, what the
+        `registry_epoch_bump` it replaces took; the stamp and the key are
+        the same word value read under that lock, so a later write by
+        anyone leaves the key not current. Only for
+        `-D MOJOLEARN_SAMBA_FAST_STEP_REGISTRY_RESIDENT` (below)."""
+        if addr == 0:
+            return RegistryKey()
+        comptime if SAMBA_WEIGHT_EPOCH_GLOBAL:
+            # the process epoch after this bump (fetch_add returns the value before it)
+            var before = Int(Atomic.fetch_add(_ptr(), Int64(1)))
+            return RegistryKey(addr, before + 1, 0)
+        else:
+            var slot = _REGISTRY.get_or_create_ptr()
+            var lock = _lock_word(slot)
+            shared_slot_lock(lock)
+            var i = _find(slot, addr)
+            if i < 0:
+                # No copy was ever keyed by this registry (the session's
+                # first step): nothing to invalidate; `take` gives it a slot
+                # with a fresh stamp. Cold: once per registry.
+                shared_slot_unlock(lock)
+                return RegistryKey.take(addr)
+            var stamp = _next_stamp(slot)
+            Atomic.store[ordering=Ordering.RELEASE](_slot_word(slot, i), stamp)
+            var word = Int(_slot_word(slot, i))
+            shared_slot_unlock(lock)
+            return RegistryKey(addr, Int(stamp), word)
+
+
+# ---- lane fx-samba-step-resident (2026-11-18), EXPERIMENT, default off:
+# -D MOJOLEARN_SAMBA_FAST_STEP_REGISTRY_RESIDENT. A Samba resident train step
+# (training/samba_resident.mojo) uploaded the whole registry host -> device
+# and scanned it for a non-finite weight at every step, although the device
+# copy it wrote one step earlier holds exactly the bytes it downloaded to the
+# host. Under the define the step reuses the forward's mechanism (`wkey`,
+# lane fix-samba-weight-upload): it uploads and admits only when its key is
+# not current, and after its own download it stamps the registry and keeps
+# the key (`RegistryKey.stamp_and_take`). The stamp moves from the provider
+# door (providers/python/samba_resident_pyapi_door.mojo) INTO the step, so
+# both files read this one constant: the define must reach every binding of
+# an arm build (a door without its stamp and a step without the arm would
+# leave other copies stale; a step with the arm under a door that still
+# stamps only re-uploads, i.e. the default behaviour).
+comptime SAMBA_STEP_REGISTRY_RESIDENT = is_defined["MOJOLEARN_SAMBA_FAST_STEP_REGISTRY_RESIDENT"]()
+
