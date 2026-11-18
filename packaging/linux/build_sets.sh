@@ -48,6 +48,14 @@ CUDA_CODE_FORMAT="${MOJOLEARN_CUDA_CODE_FORMAT:-native}"
 python3 "$REPO/packaging/linux/ptx_baseline.py" validate-config \
   --code-format "$CUDA_CODE_FORMAT" --arch "${MOJOLEARN_GPU_ARCHS:-}" || exit 2
 mkdir -p "$DEST/build_logs" "$DEST/sets"
+# AMD IDENTICAL machine-code audit needs an LLVM disassembler that knows amdgcn
+# (packaging/linux/hip_contract.py). Checked BEFORE compiling, so a box without
+# one fails in seconds rather than after the build.
+if [[ "${MOJOLEARN_GPU_ARCHS:-}" == gfx* ]] && ! python3 "$REPO/packaging/linux/hip_contract.py" find-disassembler > /dev/null; then
+  { sudo -n apt-get install -y -qq llvm-18 > /dev/null 2>&1 || apt-get install -y -qq llvm-18 > /dev/null 2>&1; } || true
+  python3 "$REPO/packaging/linux/hip_contract.py" find-disassembler > /dev/null \
+    || { echo 'REFUSING: no llvm-objdump with the amdgcn target for the AMD IDENTICAL audit (set MOJOLEARN_LLVM_OBJDUMP)' >&2; exit 2; }
+fi
 PIXI_ENV="${MOJOLEARN_BUILD_PIXI_ENV:-gbmbench}"
 JOBS="${MOJOLEARN_BUILD_JOBS:-4}"
 # 1..128: a sanity range, not a sizing cap (tools/build_sizing.py MAX_JOBS; a rented
@@ -907,6 +915,19 @@ if [[ "$VENDOR" = cuda ]] && ls "$SET"/identical/*.so > /dev/null 2>&1; then
   fi
   say "IDENTICAL machine code: $(python3 -c 'import json,sys; r=[json.loads(l) for l in open(sys.argv[1])][1:]; print(sum(x["in_place"] for x in r), "modules fatbin in place,", sum(x["moved"] for x in r), "moved (lea repointed), ptxas --fmad=false")' "$DEST/cubin.jsonl")"
   fi # native cubin conversion; the PTX set retains the rounding-pinned PTX
+fi
+
+# ------------------------------------------- AMD IDENTICAL, NO APPROXIMATE OPS
+# packaging/linux/hip_contract.py: no V_SQRT/V_RSQ/V_EXP/V_LOG/V_SIN/V_COS or bare
+# V_RCP_F32 in an IDENTICAL kernel (their results are AMD's own); the PTX half is
+# ptx_contract.py's audit above. Every code object disassembled, all cores.
+if [[ "$VENDOR" = hip ]] && ls "$SET"/identical/*.so > /dev/null 2>&1; then
+  if ! python3 "$REPO/packaging/linux/hip_contract.py" audit --mcpu "$ARCH" "$SET"/identical/*.so > "$DEST/hip_audit.jsonl"; then
+    say "REFUSING: IDENTICAL AMD kernels carry an approximate instruction (read $DEST/hip_audit.jsonl):"
+    grep -v '"refused": \[\]' "$DEST/hip_audit.jsonl" | head -5 | cut -c1-240 | sed 's/^/    /'
+    exit 5
+  fi
+  say "IDENTICAL AMD machine code: no approximate instruction"
 fi
 
 # ------------------------------------------------- CPU ISA BASELINE
