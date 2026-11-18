@@ -72,6 +72,8 @@ def _knn_at(ctx: DeviceContext, n_index: Int, n_queries: Int) raises -> Int:
             hq.unsafe_ptr().unsafe_store(i * d + f, Float32(_u01(i, f, 2)))
     ctx.enqueue_copy(dst_buf=queries, src_ptr=hq.unsafe_ptr())
     ctx.synchronize()
+    _ = hi^  # past the drain: a queued copy reads it after its last named use
+    _ = hq^  # past the drain: a queued copy reads it after its last named use
 
     var best = 0
     for r in range(REPEATS):
@@ -108,6 +110,7 @@ def _dbscan_at(ctx: DeviceContext, n: Int) raises:
             h.unsafe_ptr().unsafe_store(i * d + f, Float32(_u01(i, f, 4) * 4.0))
     ctx.enqueue_copy(dst_buf=x, src_ptr=h.unsafe_ptr())
     ctx.synchronize()
+    _ = h^  # past the drain: a queued copy reads it after its last named use
 
     # The workspace is allocated INSIDE, and the batch size is chosen from
     # the device's memory, which is `dbscanFitImpl` (`dbscan.cuh:101`). The
@@ -159,6 +162,7 @@ def _dbscan_rbc_only_at(ctx: DeviceContext, n: Int) raises:
             h.unsafe_ptr().unsafe_store(i * d + f, Float32(_u01(i, f, 4) * 4.0))
     ctx.enqueue_copy(dst_buf=x, src_ptr=h.unsafe_ptr())
     ctx.synchronize()
+    _ = h^  # past the drain: a queued copy reads it after its last named use
 
     for _r in range(REPEATS):
         var t0 = perf_counter_ns()

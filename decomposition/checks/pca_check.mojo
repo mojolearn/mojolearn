@@ -156,6 +156,7 @@ def _fill(
             hx.unsafe_ptr().unsafe_store(i * PCA_COLS + j, Float32(v))
     ctx.enqueue_copy(dst_buf=x, src_ptr=hx.unsafe_ptr())
     ctx.synchronize()
+    _ = hx^  # past the drain: a queued copy reads it after its last named use
 
 
 def _fit(
@@ -756,6 +757,7 @@ def _fill_wide(
             hx.unsafe_ptr().unsafe_store(i * n_cols + j, Float32(v))
     ctx.enqueue_copy(dst_buf=x, src_ptr=hx.unsafe_ptr())
     ctx.synchronize()
+    _ = hx^  # past the drain: a queued copy reads it after its last named use
 
 
 def _fit_wide(
@@ -1080,6 +1082,7 @@ def _sign_flip_roundtrip(
         p_in.unsafe_store(i, bits[i])
     ctx.enqueue_copy(dst_buf=buf, src_ptr=h_in.unsafe_ptr())
     ctx.synchronize()
+    _ = h_in^  # past the drain: a queued copy reads it after its last named use
 
     ctx.enqueue_function[sign_flip_kernel](
         buf.unsafe_ptr(),
@@ -1846,6 +1849,8 @@ def _whiten_scores(
     ctx.enqueue_copy(dst_buf=comps, src_ptr=h_comps.unsafe_ptr())
     ctx.enqueue_copy(dst_buf=sing, src_ptr=h_sing.unsafe_ptr())
     ctx.synchronize()
+    _ = h_comps^  # past the drain: a queued copy reads it after its last named use
+    _ = h_sing^  # past the drain: a queued copy reads it after its last named use
 
     # The TRANSFORM_ROWS arm is a DRIVER arm: it breaks nothing inside the
     # kernel, it hands the kernel the wrong row count, so the kernel launched
@@ -2008,6 +2013,8 @@ def check_whiten_round_trip() raises:
     ctx.enqueue_copy(dst_buf=comps, src_ptr=h_c.unsafe_ptr())
     ctx.enqueue_copy(dst_buf=sing, src_ptr=h_s.unsafe_ptr())
     ctx.synchronize()
+    _ = h_c^  # past the drain: a queued copy reads it after its last named use
+    _ = h_s^  # past the drain: a queued copy reads it after its last named use
 
     whiten_components(
         ctx, comps, comps_f, sing, PCA_COMPONENTS, PCA_COLS, PCA_ROWS, False
@@ -2207,6 +2214,8 @@ def _whiten_edge_run(
     ctx.enqueue_copy(dst_buf=src, src_ptr=h_src.unsafe_ptr())
     ctx.enqueue_copy(dst_buf=sing, src_ptr=h_sing.unsafe_ptr())
     ctx.synchronize()
+    _ = h_sing^  # past the drain: a queued copy reads it after its last named use
+    _ = h_src^  # past the drain: a queued copy reads it after its last named use
 
     _whiten_launch(
         ctx, src, dst, sing, n_components, n_cols, n_fit_rows, inverse, arm

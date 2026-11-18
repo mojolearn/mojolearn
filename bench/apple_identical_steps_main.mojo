@@ -57,6 +57,7 @@ def _fill(ctx: DeviceContext, mut buf: DeviceBuffer[DType.float32], n: Int, salt
         p.unsafe_store(i, v)
     ctx.enqueue_copy(dst_buf=buf, src_ptr=h.unsafe_ptr())
     ctx.synchronize()
+    _ = h^  # past the drain: a queued copy reads it after its last named use
 
 
 def _hash(ctx: DeviceContext, mut buf: DeviceBuffer[DType.float32], n: Int) raises -> UInt64:

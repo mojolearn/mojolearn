@@ -148,6 +148,7 @@ def run_checks() raises:
         hi.unsafe_ptr().unsafe_store(r, UInt32(r))
     ctx.enqueue_copy(dst_buf=row_index, src_ptr=hi.unsafe_ptr())
     ctx.synchronize()
+    _ = hi^  # past the drain: a queued copy reads it after its last named use
 
     var scratch = ctx.enqueue_create_buffer[DType.float32](1)
     var greedy_splits = List[TBinarySplit]()
@@ -171,6 +172,7 @@ def run_checks() raises:
         dst_buf=d_g, src_ptr=hs.unsafe_ptr().unsafe_offset(N_ROWS)
     )
     ctx.synchronize()
+    _ = hs^  # past the drain: a queued copy reads it after its last named use
 
     var pw_pool = List[PointwiseTreeWorkspace]()
     var pw_splits = fit_oblivious_tree_structure(

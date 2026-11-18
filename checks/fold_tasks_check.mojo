@@ -246,6 +246,7 @@ def run_checks() raises:
     ctx.enqueue_copy(dst_buf=w7, src_ptr=h7.unsafe_ptr())
     ctx.enqueue_copy(dst_buf=t7, src_ptr=h7.unsafe_ptr())
     ctx.synchronize()
+    _ = h7^  # past the drain: a queued copy reads it after its last named use
     var src7 = TL2Target(w7^, t7^, n7)
     comptime G7_DEPTH = 4
     var subs = create_subsets(

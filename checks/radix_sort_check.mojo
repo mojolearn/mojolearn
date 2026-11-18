@@ -131,6 +131,8 @@ def check_radix_sort(n_bins: Int, first_bit: Int, last_bit: Int) raises:
     ctx.enqueue_copy(dst_buf=d_keys, src_ptr=h_keys.unsafe_ptr())
     ctx.enqueue_copy(dst_buf=d_vals, src_ptr=h_vals.unsafe_ptr())
     ctx.synchronize()
+    _ = h_keys^  # past the drain: a queued copy reads it after its last named use
+    _ = h_vals^  # past the drain: a queued copy reads it after its last named use
 
     launch_radix_sort_bins(
         ctx, n, first_bit, last_bit, d_keys, d_vals, d_tkeys, d_tvals,

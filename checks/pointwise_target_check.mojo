@@ -507,6 +507,9 @@ def run_objective(
     ctx.enqueue_copy(dst_buf=d_p, src_ptr=h_p.unsafe_ptr())
     ctx.enqueue_copy(dst_buf=d_w, src_ptr=h_w.unsafe_ptr())
     ctx.synchronize()
+    _ = h_p^  # past the drain: a queued copy reads it after its last named use
+    _ = h_t^  # past the drain: a queued copy reads it after its last named use
+    _ = h_w^  # past the drain: a queued copy reads it after its last named use
 
     if estimation:
         launch_pointwise_target_kernel[True](

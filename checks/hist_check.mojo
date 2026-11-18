@@ -112,6 +112,8 @@ def check_binary_histogram() raises:
             block_dim=WRITE_BLOCK_SIZE,
         )
     ctx.synchronize()
+    _ = host_bins^  # past the drain: a queued copy reads it after its last named use
+    _ = zero32^  # past the drain: a queued copy reads it after its last named use
 
     # --- one partition holding every row ----------------------------------
     var p_off = ctx.enqueue_create_buffer[DType.uint32](1)
@@ -134,6 +136,9 @@ def check_binary_histogram() raises:
     ctx.enqueue_copy(dst_buf=p_ids, src_ptr=h_ids.unsafe_ptr())
     ctx.enqueue_copy(dst_buf=p_sz, src_ptr=h_sz.unsafe_ptr())
     ctx.synchronize()
+    _ = h_ids^  # past the drain: a queued copy reads it after its last named use
+    _ = h_off^  # past the drain: a queued copy reads it after its last named use
+    _ = h_sz^  # past the drain: a queued copy reads it after its last named use
 
     # --- every row carries stat 1.0 ---------------------------------------
     var stats = ctx.enqueue_create_buffer[DType.float32](n_rows)
@@ -167,6 +172,12 @@ def check_binary_histogram() raises:
         zerof.unsafe_ptr().unsafe_store(f, Float32(0.0))
     ctx.enqueue_copy(dst_buf=sums, src_ptr=zerof.unsafe_ptr())
     ctx.synchronize()
+    _ = h_fold_off^  # past the drain: a queued copy reads it after its last named use
+    _ = h_folds^  # past the drain: a queued copy reads it after its last named use
+    _ = h_grp_off^  # past the drain: a queued copy reads it after its last named use
+    _ = h_grp_sz^  # past the drain: a queued copy reads it after its last named use
+    _ = host_stats^  # past the drain: a queued copy reads it after its last named use
+    _ = zerof^  # past the drain: a queued copy reads it after its last named use
 
     # DEVIATION 95: the histogram kernels read `fixed_scale` from DEVICE
     # memory. `upload_scale` returns the buffer and the CALLER keeps it
@@ -256,6 +267,7 @@ def check_two_partitions() raises:
         zero32.unsafe_ptr().unsafe_store(i, UInt32(0))
     ctx.enqueue_copy(dst_buf=cindex, src_ptr=zero32.unsafe_ptr())
     ctx.synchronize()
+    _ = zero32^  # past the drain: a queued copy reads it after its last named use
 
     var host_bins = ctx.enqueue_create_host_buffer[DType.uint8](n_rows)
     var bins = ctx.enqueue_create_buffer[DType.uint8](n_rows)
@@ -323,6 +335,15 @@ def check_two_partitions() raises:
         zerof.unsafe_ptr().unsafe_store(i, Float32(0.0))
     ctx.enqueue_copy(dst_buf=sums, src_ptr=zerof.unsafe_ptr())
     ctx.synchronize()
+    _ = h_fold_off^  # past the drain: a queued copy reads it after its last named use
+    _ = h_folds^  # past the drain: a queued copy reads it after its last named use
+    _ = h_grp_off^  # past the drain: a queued copy reads it after its last named use
+    _ = h_grp_sz^  # past the drain: a queued copy reads it after its last named use
+    _ = h_ids^  # past the drain: a queued copy reads it after its last named use
+    _ = h_off^  # past the drain: a queued copy reads it after its last named use
+    _ = h_sz^  # past the drain: a queued copy reads it after its last named use
+    _ = host_stats^  # past the drain: a queued copy reads it after its last named use
+    _ = zerof^  # past the drain: a queued copy reads it after its last named use
 
     # DEVIATION 95: the histogram kernels read `fixed_scale` from DEVICE
     # memory. `upload_scale` returns the buffer and the CALLER keeps it
@@ -410,6 +431,7 @@ def check_half_byte_histogram() raises:
         zero32.unsafe_ptr().unsafe_store(i, UInt32(0))
     ctx.enqueue_copy(dst_buf=cindex, src_ptr=zero32.unsafe_ptr())
     ctx.synchronize()
+    _ = zero32^  # past the drain: a queued copy reads it after its last named use
 
     var host_bins = ctx.enqueue_create_host_buffer[DType.uint8](n_rows)
     var bins = ctx.enqueue_create_buffer[DType.uint8](n_rows)
@@ -475,6 +497,15 @@ def check_half_byte_histogram() raises:
         zerof.unsafe_ptr().unsafe_store(i, Float32(0.0))
     ctx.enqueue_copy(dst_buf=sums, src_ptr=zerof.unsafe_ptr())
     ctx.synchronize()
+    _ = h_fold_off^  # past the drain: a queued copy reads it after its last named use
+    _ = h_folds^  # past the drain: a queued copy reads it after its last named use
+    _ = h_grp_off^  # past the drain: a queued copy reads it after its last named use
+    _ = h_grp_sz^  # past the drain: a queued copy reads it after its last named use
+    _ = h_ids^  # past the drain: a queued copy reads it after its last named use
+    _ = h_off^  # past the drain: a queued copy reads it after its last named use
+    _ = h_sz^  # past the drain: a queued copy reads it after its last named use
+    _ = host_stats^  # past the drain: a queued copy reads it after its last named use
+    _ = zerof^  # past the drain: a queued copy reads it after its last named use
 
     # DEVIATION 95: the histogram kernels read `fixed_scale` from DEVICE
     # memory. `upload_scale` returns the buffer and the CALLER keeps it
@@ -588,6 +619,9 @@ def check_subtraction() raises:
     ctx.enqueue_copy(dst_buf=from_ids, src_ptr=hf.unsafe_ptr())
     ctx.enqueue_copy(dst_buf=what_ids, src_ptr=hw.unsafe_ptr())
     ctx.synchronize()
+    _ = h^  # past the drain: a queued copy reads it after its last named use
+    _ = hf^  # past the drain: a queued copy reads it after its last named use
+    _ = hw^  # past the drain: a queued copy reads it after its last named use
 
     ctx.enqueue_function[substract_histograms_kernel](
         from_ids.unsafe_ptr(),
@@ -666,12 +700,16 @@ def check_scan() raises:
     ctx.enqueue_copy(dst_buf=first_bin, src_ptr=h_first.unsafe_ptr())
     ctx.enqueue_copy(dst_buf=folds_b, src_ptr=h_folds.unsafe_ptr())
     ctx.synchronize()
+    _ = h^  # past the drain: a queued copy reads it after its last named use
+    _ = h_first^  # past the drain: a queued copy reads it after its last named use
+    _ = h_folds^  # past the drain: a queued copy reads it after its last named use
 
     var scan_ids = ctx.enqueue_create_buffer[DType.uint32](1)
     var scan_ids_h = ctx.enqueue_create_host_buffer[DType.uint32](1)
     scan_ids_h.unsafe_ptr().unsafe_store(0, UInt32(0))
     ctx.enqueue_copy(dst_buf=scan_ids, src_ptr=scan_ids_h.unsafe_ptr())
     ctx.synchronize()
+    _ = scan_ids_h^  # past the drain: a queued copy reads it after its last named use
     # all-binary fixture: no one-hot features, so the skip never fires
     var scan_onehot = ctx.enqueue_create_buffer[DType.uint8](256)
     ctx.enqueue_function[scan_histograms_kernel](
@@ -805,6 +843,10 @@ def check_scores() raises:
     var out_score = ctx.enqueue_create_buffer[DType.float32](1)
     var out_bin = ctx.enqueue_create_buffer[DType.uint32](1)
     ctx.synchronize()
+    _ = h^  # past the drain: a queued copy reads it after its last named use
+    _ = hi^  # past the drain: a queued copy reads it after its last named use
+    _ = hp^  # past the drain: a queued copy reads it after its last named use
+    _ = hs^  # past the drain: a queued copy reads it after its last named use
 
     var sc_bff = ctx.enqueue_create_buffer[DType.uint32](n_bf)
     var sc_hbf = ctx.enqueue_create_host_buffer[DType.uint32](n_bf)
@@ -816,6 +858,8 @@ def check_scores() raises:
     ctx.enqueue_copy(dst_buf=sc_bff, src_ptr=sc_hbf.unsafe_ptr())
     ctx.enqueue_copy(dst_buf=sc_ffw, src_ptr=sc_hfw.unsafe_ptr())
     ctx.synchronize()
+    _ = sc_hbf^  # past the drain: a queued copy reads it after its last named use
+    _ = sc_hfw^  # past the drain: a queued copy reads it after its last named use
 
     ctx.enqueue_function[
         # This check hand-computes an L2 score, so it must name the L2
@@ -914,6 +958,7 @@ def check_split_points() raises:
         zero32.unsafe_ptr().unsafe_store(i, UInt32(0))
     ctx.enqueue_copy(dst_buf=cindex, src_ptr=zero32.unsafe_ptr())
     ctx.synchronize()
+    _ = zero32^  # past the drain: a queued copy reads it after its last named use
 
     # Write a decoy into a neighbouring feature first, then the real one.
     var host_bins = ctx.enqueue_create_host_buffer[DType.uint8](n_rows)
@@ -932,6 +977,7 @@ def check_split_points() raises:
         block_dim=WRITE_BLOCK_SIZE,
     )
     ctx.synchronize()
+    _ = host_bins^  # past the drain: a queued copy reads it after its last named use
 
     var bins2 = ctx.enqueue_create_buffer[DType.uint8](n_rows)
     var host_bins2 = ctx.enqueue_create_host_buffer[DType.uint8](n_rows)
@@ -949,6 +995,7 @@ def check_split_points() raises:
         block_dim=WRITE_BLOCK_SIZE,
     )
     ctx.synchronize()
+    _ = host_bins2^  # past the drain: a queued copy reads it after its last named use
 
     var load_idx = ctx.enqueue_create_buffer[DType.uint32](n_rows)
     var h_load = ctx.enqueue_create_host_buffer[DType.uint32](n_rows)
@@ -1005,6 +1052,14 @@ def check_split_points() raises:
     ctx.enqueue_copy(dst_buf=flags, src_ptr=hzf.unsafe_ptr())
     ctx.enqueue_copy(dst_buf=seq, src_ptr=hzs.unsafe_ptr())
     ctx.synchronize()
+    _ = h_feats^  # past the drain: a queued copy reads it after its last named use
+    _ = h_lid^  # past the drain: a queued copy reads it after its last named use
+    _ = h_load^  # past the drain: a queued copy reads it after its last named use
+    _ = h_off^  # past the drain: a queued copy reads it after its last named use
+    _ = h_spb^  # past the drain: a queued copy reads it after its last named use
+    _ = h_sz^  # past the drain: a queued copy reads it after its last named use
+    _ = hzf^  # past the drain: a queued copy reads it after its last named use
+    _ = hzs^  # past the drain: a queued copy reads it after its last named use
 
     ctx.enqueue_function[split_and_make_sequence_kernel](
         cindex.unsafe_ptr(),
@@ -1112,6 +1167,13 @@ def check_partition_update() raises:
     ctx.enqueue_copy(dst_buf=left, src_ptr=hl.unsafe_ptr())
     ctx.enqueue_copy(dst_buf=right, src_ptr=hr.unsafe_ptr())
     ctx.synchronize()
+    _ = h_off^  # past the drain: a queued copy reads it after its last named use
+    _ = h_off2^  # past the drain: a queued copy reads it after its last named use
+    _ = h_sz^  # past the drain: a queued copy reads it after its last named use
+    _ = h_sz2^  # past the drain: a queued copy reads it after its last named use
+    _ = hf^  # past the drain: a queued copy reads it after its last named use
+    _ = hl^  # past the drain: a queued copy reads it after its last named use
+    _ = hr^  # past the drain: a queued copy reads it after its last named use
 
     ctx.enqueue_function[update_partitions_after_split_kernel](
         left.unsafe_ptr(),
@@ -1194,6 +1256,8 @@ def check_zero_and_copy() raises:
     hids.unsafe_ptr().unsafe_store(1, UInt32(3))
     ctx.enqueue_copy(dst_buf=ids, src_ptr=hids.unsafe_ptr())
     ctx.synchronize()
+    _ = h^  # past the drain: a queued copy reads it after its last named use
+    _ = hids^  # past the drain: a queued copy reads it after its last named use
 
     ctx.enqueue_function[zero_histograms_kernel](
         ids.unsafe_ptr(),
@@ -1229,6 +1293,8 @@ def check_zero_and_copy() raises:
     ctx.enqueue_copy(dst_buf=left, src_ptr=hl.unsafe_ptr())
     ctx.enqueue_copy(dst_buf=right, src_ptr=hr.unsafe_ptr())
     ctx.synchronize()
+    _ = hl^  # past the drain: a queued copy reads it after its last named use
+    _ = hr^  # past the drain: a queued copy reads it after its last named use
 
     ctx.enqueue_function[copy_histograms_kernel](
         left.unsafe_ptr(),
@@ -1305,6 +1371,9 @@ def check_stable_partition() raises:
     var gmap = ctx.enqueue_create_buffer[DType.uint32](n_rows)
     var sflags = ctx.enqueue_create_buffer[DType.uint8](n_rows)
     ctx.synchronize()
+    _ = h_lid^  # past the drain: a queued copy reads it after its last named use
+    _ = h_off^  # past the drain: a queued copy reads it after its last named use
+    _ = h_sz^  # past the drain: a queued copy reads it after its last named use
 
     var max_chunks = (n0 + PARTITION_BLOCK - 1) // PARTITION_BLOCK
     var chunk_zeros = ctx.enqueue_create_buffer[DType.uint32](2 * max_chunks)
@@ -1386,6 +1455,7 @@ def check_one_byte_bits[bits: Int](n_stats: Int = 1, rows_per_fold: Int = 10, sc
         zero32.unsafe_ptr().unsafe_store(i, UInt32(0))
     ctx.enqueue_copy(dst_buf=cindex, src_ptr=zero32.unsafe_ptr())
     ctx.synchronize()
+    _ = zero32^  # past the drain: a queued copy reads it after its last named use
 
     var host_bins = ctx.enqueue_create_host_buffer[DType.uint8](n_rows)
     var bins = ctx.enqueue_create_buffer[DType.uint8](n_rows)
@@ -1472,6 +1542,15 @@ def check_one_byte_bits[bits: Int](n_stats: Int = 1, rows_per_fold: Int = 10, sc
         n_stats * group_size
     )
     ctx.synchronize()
+    _ = a^  # past the drain: a queued copy reads it after its last named use
+    _ = bb^  # past the drain: a queued copy reads it after its last named use
+    _ = cc^  # past the drain: a queued copy reads it after its last named use
+    _ = hst^  # past the drain: a queued copy reads it after its last named use
+    _ = q1^  # past the drain: a queued copy reads it after its last named use
+    _ = q2^  # past the drain: a queued copy reads it after its last named use
+    _ = q3^  # past the drain: a queued copy reads it after its last named use
+    _ = q4^  # past the drain: a queued copy reads it after its last named use
+    _ = zf^  # past the drain: a queued copy reads it after its last named use
 
     # DEVIATION 95: the histogram kernels read `fixed_scale` from DEVICE
     # memory. `upload_scale` returns the buffer and the CALLER keeps it
@@ -1577,6 +1656,7 @@ def check_gather_matches_direct() raises:
         z.unsafe_ptr().unsafe_store(i, UInt32(0))
     ctx.enqueue_copy(dst_buf=cindex, src_ptr=z.unsafe_ptr())
     ctx.synchronize()
+    _ = z^  # past the drain: a queued copy reads it after its last named use
 
     var hb = ctx.enqueue_create_host_buffer[DType.uint8](n_rows)
     var bins = ctx.enqueue_create_buffer[DType.uint8](n_rows)
@@ -1649,6 +1729,14 @@ def check_gather_matches_direct() raises:
     # without the `_ = scale_keep^` below the buffer is dead before the
     # kernel runs and the next allocation lands on it.
     var scale_keep = upload_scale(ctx, Float32(1.0))
+    _ = a^  # past the drain: a queued copy reads it after its last named use
+    _ = b^  # past the drain: a queued copy reads it after its last named use
+    _ = c^  # past the drain: a queued copy reads it after its last named use
+    _ = hs^  # past the drain: a queued copy reads it after its last named use
+    _ = q1^  # past the drain: a queued copy reads it after its last named use
+    _ = q2^  # past the drain: a queued copy reads it after its last named use
+    _ = q3^  # past the drain: a queued copy reads it after its last named use
+    _ = q4^  # past the drain: a queued copy reads it after its last named use
     var scale_ptr = rebind[MutPointer[Float32, MutAnyOrigin]](
         scale_keep.unsafe_ptr()
     )

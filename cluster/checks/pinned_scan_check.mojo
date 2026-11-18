@@ -126,6 +126,7 @@ def main() raises:
     )
     ctx.enqueue_copy(dst_ptr=hout.unsafe_ptr(), src_buf=out)
     ctx.synchronize()
+    _ = ha^  # past the drain: a queued copy reads it after its last named use
     var got = List[List[Float32]]()
     for k in range(6):
         var row = List[Float32]()

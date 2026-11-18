@@ -196,6 +196,11 @@ def run_case(
     ctx.enqueue_copy(dst_buf=d_off, src_ptr=h_off.unsafe_ptr())
     ctx.enqueue_copy(dst_buf=d_sz, src_ptr=h_sz.unsafe_ptr())
     ctx.synchronize()
+    _ = h_c^  # past the drain: a queued copy reads it after its last named use
+    _ = h_off^  # past the drain: a queued copy reads it after its last named use
+    _ = h_sz^  # past the drain: a queued copy reads it after its last named use
+    _ = h_t^  # past the drain: a queued copy reads it after its last named use
+    _ = h_w^  # past the drain: a queued copy reads it after its last named use
 
     var lam = LAMBDA
     if sab == 1:

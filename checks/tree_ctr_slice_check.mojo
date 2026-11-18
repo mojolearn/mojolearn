@@ -496,6 +496,9 @@ def run_checks() raises:
         production_one_hot, production_borders, 6, 3, grid,
         learning_rate=Float32(0.1),
     )
+    _ = h_base^  # past the drain: a queued copy reads it after its last named use
+    _ = h_rows^  # past the drain: a queued copy reads it after its last named use
+    _ = h_stats^  # past the drain: a queued copy reads it after its last named use
     var fitted_nan = List[Int]()
     fitted_nan.resize(len(fitted.fold_counts), 0)
     var fitted_model = TrainedModel(

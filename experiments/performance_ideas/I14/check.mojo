@@ -48,6 +48,8 @@ def check(ctx: DeviceContext, n: Int, topology: Int) raises:
             if out[row]!=Int32(want):
                 raise Error("I14 noncanonical convergence label at "+String(row))
         print("I14 topology=",topology,"rows=",n,"repeat=",repeat,"first_converged_pass=",passes)
+    _ = edges^  # past the drain: a queued copy reads it after its last named use
+    _ = offsets^  # past the drain: a queued copy reads it after its last named use
     _ = ia^; _ = ja^; _ = core^; _ = labels^; _ = dc^
 
 # NEVER RUN — PENDING MEASUREMENT

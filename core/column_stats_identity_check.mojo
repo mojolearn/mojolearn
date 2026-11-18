@@ -621,6 +621,8 @@ def check_xty_contraction_pin() raises:
     ctx.enqueue_copy(dst_buf=x, src_ptr=hx.unsafe_ptr())
     ctx.enqueue_copy(dst_buf=y, src_ptr=hy.unsafe_ptr())
     ctx.synchronize()
+    _ = hx^  # past the drain: a queued copy reads it after its last named use
+    _ = hy^  # past the drain: a queued copy reads it after its last named use
 
     ctx.enqueue_function[xty_kernel](
         xty.unsafe_ptr(),

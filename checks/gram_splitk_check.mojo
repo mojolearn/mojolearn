@@ -235,6 +235,7 @@ def _gram_one(ctx: DeviceContext, m: Int, k: Int, arm: Int) raises -> String:
     ctx.enqueue_copy(dst_buf=xt, src_ptr=hpois.unsafe_ptr())
     ctx.enqueue_copy(dst_buf=xt2, src_ptr=hpois.unsafe_ptr())
     ctx.synchronize()
+    _ = hpois^  # past the drain: a queued copy reads it after its last named use
 
     if arm == ARM_SPLITK:
         gemm_tn_splitk(ctx, z, x, m, k)
@@ -600,6 +601,7 @@ def check_gram_tf32_bound_separates() raises:
     ctx.enqueue_copy(dst_buf=x, src_ptr=hx_tf32.unsafe_ptr())
     ctx.enqueue_copy(dst_buf=z, src_ptr=hz.unsafe_ptr())
     ctx.synchronize()
+    _ = hx_tf32^  # past the drain: a queued copy reads it after its last named use
     gemm_tn_splitk(ctx, z, x, m, k)
     ctx.synchronize()
     ctx.enqueue_copy(dst_ptr=hz.unsafe_ptr(), src_buf=z)

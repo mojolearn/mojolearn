@@ -204,6 +204,9 @@ def check_segmented_scan_vector(inclusive: Bool) raises:
     ctx.enqueue_copy(dst_buf=d_flags, src_ptr=h_flags.unsafe_ptr())
     ctx.enqueue_copy(dst_buf=d_out, src_ptr=h_out.unsafe_ptr())
     ctx.synchronize()
+    _ = h_flags^  # past the drain: a queued copy reads it after its last named use
+    _ = h_out^  # past the drain: a queued copy reads it after its last named use
+    _ = h_vals^  # past the drain: a queued copy reads it after its last named use
 
     launch_segmented_scan_vector(
         ctx, n, inclusive, SEGMENT_START_MASK, d_vals, d_flags, d_out,
@@ -297,6 +300,9 @@ def check_segmented_scan_scatter(inclusive: Bool) raises:
     ctx.enqueue_copy(dst_buf=d_idx, src_ptr=h_idx.unsafe_ptr())
     ctx.enqueue_copy(dst_buf=d_out, src_ptr=h_out.unsafe_ptr())
     ctx.synchronize()
+    _ = h_idx^  # past the drain: a queued copy reads it after its last named use
+    _ = h_out^  # past the drain: a queued copy reads it after its last named use
+    _ = h_vals^  # past the drain: a queued copy reads it after its last named use
 
     launch_segmented_scan_and_scatter_non_negative(
         ctx, n, inclusive, d_vals, d_idx, d_out,

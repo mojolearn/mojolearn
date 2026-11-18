@@ -136,6 +136,7 @@ def check_layout[RF_INPUT: Bool](outputs: Int) raises:
         poison.unsafe_ptr().unsafe_store(i, Float32(10000))
     model.ctx.value().enqueue_copy(dst_buf=model.leaves.value(), src_ptr=poison.unsafe_ptr())
     model.ctx.value().synchronize()
+    _ = poison^  # past the drain: a queued copy reads it after its last named use
     var changed = model.predict[RF_INPUT](x, 5, 2, outputs)
     if bitcast[DType.uint32](changed[0]) == bitcast[DType.uint32](expected[0]):
         raise Error("packed leaf sabotage did not change prediction")

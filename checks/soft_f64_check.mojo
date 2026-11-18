@@ -209,6 +209,8 @@ def run_checks() raises:
                 if dev_bad <= 5:
                     print("DEVICE DIFF op", ops[i], "a", hex(av[i]), "host",
                           hex(host[i]), "device", hex(got[i]))
+    _ = bv^  # past the drain: a queued copy reads it after its last named use
+    _ = cv^  # past the drain: a queued copy reads it after its last named use
     var ok = host_bad == 0 and dev_bad <= 0
     print(
         "SOFT_F64 host_mismatch=" + String(host_bad) + " device_mismatch="

@@ -90,6 +90,7 @@ def _u32_dev(
         host.unsafe_ptr().unsafe_store(i, values[i])
     ctx.enqueue_copy(dst_buf=buf, src_ptr=host.unsafe_ptr())
     ctx.synchronize()
+    _ = host^  # past the drain: a queued copy reads it after its last named use
     return buf^
 
 
@@ -103,6 +104,7 @@ def _f32_dev(
         host.unsafe_ptr().unsafe_store(i, values[i])
     ctx.enqueue_copy(dst_buf=buf, src_ptr=host.unsafe_ptr())
     ctx.synchronize()
+    _ = host^  # past the drain: a queued copy reads it after its last named use
     return buf^
 
 
@@ -116,6 +118,7 @@ def _u8_dev(
         host.unsafe_ptr().unsafe_store(i, values[i])
     ctx.enqueue_copy(dst_buf=buf, src_ptr=host.unsafe_ptr())
     ctx.synchronize()
+    _ = host^  # past the drain: a queued copy reads it after its last named use
     return buf^
 
 

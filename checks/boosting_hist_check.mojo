@@ -157,6 +157,7 @@ def check_boosting_histogram(
         z.unsafe_ptr().unsafe_store(i, UInt32(0))
     ctx.enqueue_copy(dst_buf=cindex, src_ptr=z.unsafe_ptr())
     ctx.synchronize()
+    _ = z^  # past the drain: a queued copy reads it after its last named use
 
     var host_bin = List[List[Int]]()
     var hb = ctx.enqueue_create_host_buffer[DType.uint8](n_rows)
@@ -231,6 +232,7 @@ def check_boosting_histogram(
         mag = g_mag
     var scale = choose_scale(mag)
     var scale_keep = upload_scale(ctx, Float32(scale))
+    _ = hs^  # past the drain: a queued copy reads it after its last named use
     var fixed_scale = rebind[MutPointer[Float32, MutAnyOrigin]](
         scale_keep.unsafe_ptr()
     )
@@ -303,6 +305,11 @@ def check_boosting_histogram(
         max_leaves * stat_count * widest
     )
     ctx.synchronize()
+    _ = h_dense^  # past the drain: a queued copy reads it after its last named use
+    _ = h_ids^  # past the drain: a queued copy reads it after its last named use
+    _ = h_off^  # past the drain: a queued copy reads it after its last named use
+    _ = h_sz^  # past the drain: a queued copy reads it after its last named use
+    _ = hi^  # past the drain: a queued copy reads it after its last named use
 
     # ---- the two host tallies, once --------------------------------------
     # `[leaf][stat][flat bin]`, the layout the bridge leaves behind.
@@ -403,6 +410,7 @@ def check_boosting_histogram(
             ci_bad.unsafe_ptr().unsafe_store(i, UInt32(0))
     ctx.enqueue_copy(dst_buf=cindex, src_ptr=ci_bad.unsafe_ptr())
     ctx.synchronize()
+    _ = ci_bad^  # past the drain: a queued copy reads it after its last named use
 
     var broken = run_hist_arm(
         ctx, dblocks, n_live, n_rows, stat_count, max_leaves, 1, fixed_scale,

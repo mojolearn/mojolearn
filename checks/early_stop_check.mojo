@@ -87,6 +87,8 @@ def _fit(
     var cursor = ctx.enqueue_create_buffer[DType.float32](ES_ROWS)
     ctx.enqueue_memset(cursor, Float32(0.0))
     ctx.synchronize()
+    _ = hi^  # past the drain: a queued copy reads it after its last named use
+    _ = hs^  # past the drain: a queued copy reads it after its last named use
 
     var _lo = List[Int]()
     var _ws0 = List[TTreeWorkspace]()

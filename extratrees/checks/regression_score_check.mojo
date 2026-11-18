@@ -696,6 +696,13 @@ def main() raises:
     ctx.enqueue_copy(dst_buf=d_items, src_ptr=s_items.unsafe_ptr())
     ctx.enqueue_copy(dst_buf=d_wl, src_ptr=s_wl.unsafe_ptr())
     ctx.synchronize()
+    _ = s_colids^  # past the drain: a queued copy reads it after its last named use
+    _ = s_data^  # past the drain: a queued copy reads it after its last named use
+    _ = s_items^  # past the drain: a queued copy reads it after its last named use
+    _ = s_lab^  # past the drain: a queued copy reads it after its last named use
+    _ = s_lab_big^  # past the drain: a queued copy reads it after its last named use
+    _ = s_row_ids^  # past the drain: a queued copy reads it after its last named use
+    _ = s_wl^  # past the drain: a queued copy reads it after its last named use
 
     # ------------------------------------------------------------------
     # ARM P -- the range pass, this check's INPUT.
@@ -1563,6 +1570,15 @@ def main() raises:
     ctx.enqueue_copy(dst_buf=e_ts, src_ptr=t_ts.unsafe_ptr())
     ctx.enqueue_memset(e_mx, Int32(0))
     ctx.synchronize()
+    _ = t_c^  # past the drain: a queued copy reads it after its last named use
+    _ = t_de^  # past the drain: a queued copy reads it after its last named use
+    _ = t_l^  # past the drain: a queued copy reads it after its last named use
+    _ = t_m^  # past the drain: a queued copy reads it after its last named use
+    _ = t_nb^  # past the drain: a queued copy reads it after its last named use
+    _ = t_nc^  # past the drain: a queued copy reads it after its last named use
+    _ = t_nu^  # past the drain: a queued copy reads it after its last named use
+    _ = t_q^  # past the drain: a queued copy reads it after its last named use
+    _ = t_v^  # past the drain: a queued copy reads it after its last named use
 
     ctx.enqueue_function[split_reduce_init_kernel](
         e_q.unsafe_ptr(),

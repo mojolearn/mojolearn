@@ -516,6 +516,9 @@ def run_checks() raises:
     var d_docs = ctx.enqueue_create_buffer[DType.uint32](n_docs)
     ctx.enqueue_copy(dst_buf=d_docs, src_ptr=ids.unsafe_ptr())
     ctx.synchronize()
+    _ = hb_folds_host^  # past the drain: a queued copy reads it after its last named use
+    _ = off_host^  # past the drain: a queued copy reads it after its last named use
+    _ = oh_host^  # past the drain: a queued copy reads it after its last named use
 
     var hist_cells = (1 << MAX_DEPTH) * fold_count * hist_line * 2
     var d_hist = ctx.enqueue_create_buffer[DType.float32](hist_cells)
@@ -617,6 +620,8 @@ def run_checks() raises:
     var d_sb = ctx.enqueue_create_buffer[DType.float32](1)
     d_sb.enqueue_fill(Float32(0.0))
     ctx.synchronize()
+    _ = bf_host^  # past the drain: a queued copy reads it after its last named use
+    _ = ones^  # past the drain: a queued copy reads it after its last named use
 
     var supported: List[Int] = [
         SCORE_FUNCTION_SOLAR_L2,

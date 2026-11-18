@@ -2672,6 +2672,7 @@ def check_matmul_colmajor(mut rows: List[Verdict]) raises:
         hz.unsafe_ptr().unsafe_store(i, Float32(-987654.0))
     ctx.enqueue_copy(dst_buf=z, src_ptr=hz.unsafe_ptr())
     ctx.synchronize()
+    _ = hpois^  # past the drain: a queued copy reads it after its last named use
 
     gemm_tn_via_transpose(ctx, z, x, xa, xa2, mm, mm, km)
     ctx.enqueue_copy(dst_ptr=hz.unsafe_ptr(), src_buf=z)

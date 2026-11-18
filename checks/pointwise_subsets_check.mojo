@@ -1004,6 +1004,8 @@ def _poison_tail(
         size=n_tail * 3,
     )
     ctx.synchronize()
+    _ = h_f^  # past the drain: a queued copy reads it after its last named use
+    _ = h_u^  # past the drain: a queued copy reads it after its last named use
 
 
 def _verify_level(
@@ -1299,6 +1301,9 @@ def check_subsets() raises:
     ctx.enqueue_copy(dst_buf=d_w, src_ptr=h_w.unsafe_ptr())
     ctx.enqueue_copy(dst_buf=d_t, src_ptr=h_t.unsafe_ptr())
     ctx.synchronize()
+    _ = h_cindex^  # past the drain: a queued copy reads it after its last named use
+    _ = h_t^  # past the drain: a queued copy reads it after its last named use
+    _ = h_w^  # past the drain: a queued copy reads it after its last named use
 
     # `groupedByBinObservations = TStripeBuffer<ui32>::CopyMapping(observations)`
     # (`oblivious_tree_doc_parallel_structure_searcher.cpp:27`) and the

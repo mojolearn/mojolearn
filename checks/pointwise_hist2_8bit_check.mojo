@@ -329,6 +329,8 @@ def run_checks() raises:
     )
     ctx.enqueue_copy(dst_buf=h_out, src_buf=d_out)
     ctx.synchronize()
+    _ = tgt3^  # past the drain: a queued copy reads it after its last named use
+    _ = wt3^  # past the drain: a queued copy reads it after its last named use
 
     var over_bound = 0
     var signed_err = Float64(0.0)

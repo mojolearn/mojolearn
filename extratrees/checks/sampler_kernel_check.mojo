@@ -211,6 +211,7 @@ def run_device(
     d_report.enqueue_fill(SAMPLER_UNVISITED)
     d_scratch.enqueue_fill(Int32(-9))
     ctx.synchronize()
+    _ = h_items^  # past the drain: a queued copy reads it after its last named use
 
     var got_plan = sample_features_device(
         ctx,

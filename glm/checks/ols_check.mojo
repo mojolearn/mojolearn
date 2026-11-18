@@ -161,6 +161,8 @@ def _solve(
     ctx.enqueue_copy(dst_buf=a, src_ptr=ha.unsafe_ptr())
     ctx.enqueue_copy(dst_buf=b, src_ptr=hb.unsafe_ptr())
     ctx.synchronize()
+    _ = ha^  # past the drain: a queued copy reads it after its last named use
+    _ = hb^  # past the drain: a queued copy reads it after its last named use
 
     # Through `olsFit`'s dispatch (`ols.cuh:112`), not around it. Calling
     # `lstsq_eig` directly is what let a singular shape reach the solver.
@@ -385,6 +387,8 @@ def _solve_shaped(ctx: DeviceContext, n: Int, d: Int) raises -> List[Float64]:
     ctx.enqueue_copy(dst_buf=a, src_ptr=ha.unsafe_ptr())
     ctx.enqueue_copy(dst_buf=b, src_ptr=hb.unsafe_ptr())
     ctx.synchronize()
+    _ = ha^  # past the drain: a queued copy reads it after its last named use
+    _ = hb^  # past the drain: a queued copy reads it after its last named use
 
     ols_fit(
         ctx, a, b, w, cov_a, q, qs, s_vec, ab, inv, a_alias, a_alias2,

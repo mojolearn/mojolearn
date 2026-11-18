@@ -166,6 +166,8 @@ def _fill_fixture(
     ctx.enqueue_copy(dst_buf=x, src_ptr=hx.unsafe_ptr())
     ctx.enqueue_copy(dst_buf=weights, src_ptr=hw.unsafe_ptr())
     ctx.synchronize()
+    _ = hw^  # past the drain: a queued copy reads it after its last named use
+    _ = hx^  # past the drain: a queued copy reads it after its last named use
     return worst
 
 
@@ -237,6 +239,7 @@ def check_kmeans_fit() raises:
             )
     ctx.enqueue_copy(dst_buf=centroids, src_ptr=hc.unsafe_ptr())
     ctx.synchronize()
+    _ = hc^  # past the drain: a queued copy reads it after its last named use
 
     var params = KMeansParams.default()
     params.n_clusters = CHECK_CLUSTERS
@@ -411,6 +414,7 @@ def check_reach_by_sabotage() raises:
             )
     ctx.enqueue_copy(dst_buf=centroids, src_ptr=hc.unsafe_ptr())
     ctx.synchronize()
+    _ = hc^  # past the drain: a queued copy reads it after its last named use
 
     ctx.enqueue_function[row_norm_kernel](
         x_norm.unsafe_ptr(),
@@ -454,6 +458,7 @@ def check_reach_by_sabotage() raises:
         )
     ctx.enqueue_copy(dst_buf=centroid_norm, src_ptr=hn.unsafe_ptr())
     ctx.synchronize()
+    _ = hn^  # past the drain: a queued copy reads it after its last named use
 
     _assign(
         ctx, x, x_norm, centroids, centroid_norm, dist_buf, labels, min_dist,
@@ -506,6 +511,7 @@ def check_reach_by_sabotage() raises:
         )
     ctx.enqueue_copy(dst_buf=x_norm, src_ptr=hxn.unsafe_ptr())
     ctx.synchronize()
+    _ = hxn^  # past the drain: a queued copy reads it after its last named use
 
     _assign(
         ctx, x, x_norm, centroids, centroid_norm, dist_buf, labels, min_dist,
@@ -871,6 +877,8 @@ def _poison_outputs(
     ctx.enqueue_copy(dst_buf=keys, src_ptr=hk.unsafe_ptr())
     ctx.enqueue_copy(dst_buf=values, src_ptr=hv.unsafe_ptr())
     ctx.synchronize()
+    _ = hk^  # past the drain: a queued copy reads it after its last named use
+    _ = hv^  # past the drain: a queued copy reads it after its last named use
 
 
 def _surviving_poison(
@@ -1008,6 +1016,7 @@ def check_assignment_arm_dispatch() raises:
         hpoison.unsafe_ptr().unsafe_store(i, ARM_SENTINEL)
     ctx.enqueue_copy(dst_buf=dist_buf, src_ptr=hpoison.unsafe_ptr())
     ctx.synchronize()
+    _ = hpoison^  # past the drain: a queued copy reads it after its last named use
 
     # --- poison both arms' OUTPUTS too (DEVIATION 529): a row the kernel
     # never writes must read back as poison, not as whatever the allocator
@@ -1670,6 +1679,9 @@ def check_privatized_accumulate() raises:
     ctx.enqueue_copy(dst_buf=labels, src_ptr=hl.unsafe_ptr())
     ctx.enqueue_copy(dst_buf=weights, src_ptr=hw.unsafe_ptr())
     ctx.synchronize()
+    _ = hl^  # past the drain: a queued copy reads it after its last named use
+    _ = hw^  # past the drain: a queued copy reads it after its last named use
+    _ = hx^  # past the drain: a queued copy reads it after its last named use
 
     var h_direct_s = ctx.enqueue_create_host_buffer[DType.int32](cd)
     var h_direct_w = ctx.enqueue_create_host_buffer[DType.int32](k)
@@ -1830,6 +1842,9 @@ def _accumulate_arm_correct(d: Int, expect_veclen: Int) raises:
     ctx.enqueue_copy(dst_buf=labels, src_ptr=hl.unsafe_ptr())
     ctx.enqueue_copy(dst_buf=weights, src_ptr=hw.unsafe_ptr())
     ctx.synchronize()
+    _ = hl^  # past the drain: a queued copy reads it after its last named use
+    _ = hw^  # past the drain: a queued copy reads it after its last named use
+    _ = hx^  # past the drain: a queued copy reads it after its last named use
 
     var h_direct_s = ctx.enqueue_create_host_buffer[DType.int32](cd)
     var h_direct_w = ctx.enqueue_create_host_buffer[DType.int32](k)
@@ -1943,6 +1958,9 @@ def check_blocked_accumulate() raises:
     ctx.enqueue_copy(dst_buf=labels, src_ptr=hl.unsafe_ptr())
     ctx.enqueue_copy(dst_buf=weights, src_ptr=hw.unsafe_ptr())
     ctx.synchronize()
+    _ = hl^  # past the drain: a queued copy reads it after its last named use
+    _ = hw^  # past the drain: a queued copy reads it after its last named use
+    _ = hx^  # past the drain: a queued copy reads it after its last named use
 
     # --- run A: the DIRECT atomic kernels, as the oracle ------------------
     _zero_and_wait(ctx, sums, cd)
@@ -2549,6 +2567,8 @@ def check_scalable_sampling_selection() raises:
     ctx.enqueue_copy(dst_buf=min_dist, src_ptr=hd.unsafe_ptr())
     ctx.enqueue_copy(dst_buf=is_centroid, src_ptr=hp.unsafe_ptr())  # reset
     ctx.synchronize()
+    _ = hd^  # past the drain: a queued copy reads it after its last named use
+    _ = hp^  # past the drain: a queued copy reads it after its last named use
 
     var sab_expected = List[Int]()
     for e in range(len(expected)):
@@ -2818,6 +2838,8 @@ def check_scalable_supplement_branch() raises:
     ctx.enqueue_copy(dst_buf=x, src_ptr=hx.unsafe_ptr())
     ctx.enqueue_copy(dst_buf=weights, src_ptr=hw.unsafe_ptr())
     ctx.synchronize()
+    _ = hw^  # past the drain: a queued copy reads it after its last named use
+    _ = hx^  # past the drain: a queued copy reads it after its last named use
     var sum_scale = Float32(choose_scale(magnitude))
     var weight_scale = Float32(choose_scale(Float64(CHECK_ROWS)))
 

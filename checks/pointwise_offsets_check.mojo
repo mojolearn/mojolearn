@@ -278,6 +278,7 @@ def run_checks() raises:
     var back = ctx.enqueue_create_host_buffer[DType.float32](n_cells)
     ctx.enqueue_copy(dst_buf=back, src_buf=d_hist)
     ctx.synchronize()
+    _ = hist_host^  # past the drain: a queued copy reads it after its last named use
 
     # host prefix, cell by cell, over the SAME hashed plants
     var wrong_p4 = 0

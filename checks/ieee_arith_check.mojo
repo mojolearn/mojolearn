@@ -543,6 +543,7 @@ def run_checks() raises:
     ctx.enqueue_copy(dst_buf=sc, src_ptr=hsc.unsafe_ptr())
     ctx.enqueue_copy(dst_buf=sbp, src_ptr=hsbp.unsafe_ptr())
     ctx.synchronize()
+    _ = hsbp^  # past the drain: a queued copy reads it after its last named use
     ctx.enqueue_function[arith_kernel](
         sa.unsafe_ptr(), sb.unsafe_ptr(), sc.unsafe_ptr(), sbp.unsafe_ptr(),
         s_div.unsafe_ptr(), s_sqrt.unsafe_ptr(), s_l2.unsafe_ptr(),
@@ -660,6 +661,9 @@ def run_checks() raises:
     ctx.enqueue_copy(dst_buf=dz_b, src_ptr=sz_b.unsafe_ptr())
     ctx.enqueue_copy(dst_buf=dz_c, src_ptr=sz_c.unsafe_ptr())
     ctx.synchronize()
+    _ = sz_a^  # past the drain: a queued copy reads it after its last named use
+    _ = sz_b^  # past the drain: a queued copy reads it after its last named use
+    _ = sz_c^  # past the drain: a queued copy reads it after its last named use
     ctx.enqueue_function[signed_zero_kernel](
         dz_a.unsafe_ptr(), dz_b.unsafe_ptr(), dz_c.unsafe_ptr(),
         dz_o.unsafe_ptr(),

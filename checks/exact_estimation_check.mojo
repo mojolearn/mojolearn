@@ -254,6 +254,10 @@ def run_case(
     ctx.enqueue_copy(dst_buf=s.residuals, src_ptr=h_r.unsafe_ptr())
     ctx.enqueue_copy(dst_buf=s.residual_weights, src_ptr=h_w.unsafe_ptr())
     ctx.synchronize()
+    _ = h_off^  # past the drain: a queued copy reads it after its last named use
+    _ = h_r^  # past the drain: a queued copy reads it after its last named use
+    _ = h_sz^  # past the drain: a queued copy reads it after its last named use
+    _ = h_w^  # past the drain: a queued copy reads it after its last named use
 
     var use_alpha = alpha
     if sabotage == 1:
@@ -354,6 +358,10 @@ def run_mape_case(
     ctx.enqueue_copy(dst_buf=s.residuals, src_ptr=h_r.unsafe_ptr())
     ctx.enqueue_copy(dst_buf=s.residual_weights, src_ptr=h_w.unsafe_ptr())
     ctx.synchronize()
+    _ = h_off^  # past the drain: a queued copy reads it after its last named use
+    _ = h_r^  # past the drain: a queued copy reads it after its last named use
+    _ = h_sz^  # past the drain: a queued copy reads it after its last named use
+    _ = h_w^  # past the drain: a queued copy reads it after its last named use
 
     var point = List[Float32]()
     compute_exact_approx(

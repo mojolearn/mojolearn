@@ -60,6 +60,7 @@ def check_one_level() raises:
         z.unsafe_ptr().unsafe_store(i, UInt32(0))
     ctx.enqueue_copy(dst_buf=cindex, src_ptr=z.unsafe_ptr())
     ctx.synchronize()
+    _ = z^  # past the drain: a queued copy reads it after its last named use
 
     var host_bin = ctx.enqueue_create_host_buffer[DType.uint8](n_rows)
     var bins = ctx.enqueue_create_buffer[DType.uint8](n_rows)
@@ -108,6 +109,8 @@ def check_one_level() raises:
         hi.unsafe_ptr().unsafe_store(r, UInt32(r))
     ctx.enqueue_copy(dst_buf=row_index, src_ptr=hi.unsafe_ptr())
     ctx.synchronize()
+    _ = hi^  # past the drain: a queued copy reads it after its last named use
+    _ = hs^  # past the drain: a queued copy reads it after its last named use
 
     var res = run_one_level(
         ctx,
@@ -171,6 +174,7 @@ def check_tree(max_depth: Int) raises:
         z.unsafe_ptr().unsafe_store(i, UInt32(0))
     ctx.enqueue_copy(dst_buf=cindex, src_ptr=z.unsafe_ptr())
     ctx.synchronize()
+    _ = z^  # past the drain: a queued copy reads it after its last named use
 
     var host_bin = ctx.enqueue_create_host_buffer[DType.uint8](n_rows)
     var bins = ctx.enqueue_create_buffer[DType.uint8](n_rows)
@@ -229,6 +233,8 @@ def check_tree(max_depth: Int) raises:
         hi.unsafe_ptr().unsafe_store(r, UInt32(r))
     ctx.enqueue_copy(dst_buf=row_index, src_ptr=hi.unsafe_ptr())
     ctx.synchronize()
+    _ = hi^  # past the drain: a queued copy reads it after its last named use
+    _ = hs^  # past the drain: a queued copy reads it after its last named use
 
     var sizes = run_tree(
         ctx, n_rows, n_features, max_depth, cindex, stats, row_index,
@@ -304,6 +310,7 @@ def check_mixed_tree(max_depth: Int) raises:
         z.unsafe_ptr().unsafe_store(i, UInt32(0))
     ctx.enqueue_copy(dst_buf=cindex, src_ptr=z.unsafe_ptr())
     ctx.synchronize()
+    _ = z^  # past the drain: a queued copy reads it after its last named use
 
     var lay = build_layout(folds)
     var hb = ctx.enqueue_create_host_buffer[DType.uint8](n_rows)
@@ -362,6 +369,8 @@ def check_mixed_tree(max_depth: Int) raises:
         hi.unsafe_ptr().unsafe_store(r, UInt32(r))
     ctx.enqueue_copy(dst_buf=row_index, src_ptr=hi.unsafe_ptr())
     ctx.synchronize()
+    _ = hi^  # past the drain: a queued copy reads it after its last named use
+    _ = hs^  # past the drain: a queued copy reads it after its last named use
 
     # No cursor here: growth only. `apply_to_cursor` defaults off, so this
     # buffer is never written.

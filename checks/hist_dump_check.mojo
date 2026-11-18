@@ -60,6 +60,7 @@ def check_hist_depends_on_partition() raises:
         z.unsafe_ptr().unsafe_store(i, UInt32(0))
     ctx.enqueue_copy(dst_buf=cindex, src_ptr=z.unsafe_ptr())
     ctx.synchronize()
+    _ = z^  # past the drain: a queued copy reads it after its last named use
 
     var hb = ctx.enqueue_create_host_buffer[DType.uint8](n_rows)
     var bins = ctx.enqueue_create_buffer[DType.uint8](n_rows)
@@ -141,6 +142,13 @@ def check_hist_depends_on_partition() raises:
         zf.unsafe_ptr().unsafe_store(i, Float32(0.0))
     ctx.enqueue_copy(dst_buf=hist, src_ptr=zf.unsafe_ptr())
     ctx.synchronize()
+    _ = hi^  # past the drain: a queued copy reads it after its last named use
+    _ = hid^  # past the drain: a queued copy reads it after its last named use
+    _ = hs^  # past the drain: a queued copy reads it after its last named use
+    _ = qa^  # past the drain: a queued copy reads it after its last named use
+    _ = qb^  # past the drain: a queued copy reads it after its last named use
+    _ = qc^  # past the drain: a queued copy reads it after its last named use
+    _ = qd^  # past the drain: a queued copy reads it after its last named use
     # DEVIATION 95: `fixed_scale` is read from DEVICE memory now. ONE
     # buffer serves BOTH cases below, and the hold is placed after CASE B
     # -- the last launch that reads it -- not after case A. Mojo frees at
@@ -173,6 +181,9 @@ def check_hist_depends_on_partition() raises:
     ctx.enqueue_copy(dst_buf=p_sz, src_ptr=hz.unsafe_ptr())
     ctx.enqueue_copy(dst_buf=hist, src_ptr=zf.unsafe_ptr())
     ctx.synchronize()
+    _ = ho^  # past the drain: a queued copy reads it after its last named use
+    _ = hz^  # past the drain: a queued copy reads it after its last named use
+    _ = zf^  # past the drain: a queued copy reads it after its last named use
 
     ctx.enqueue_function[binary_hist_gather_kernel[False]](
         folds.unsafe_ptr(), fold_off.unsafe_ptr(), grp_off.unsafe_ptr(),

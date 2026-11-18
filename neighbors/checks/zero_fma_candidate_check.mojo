@@ -83,6 +83,7 @@ def main() raises:
         ctx.enqueue_function[vector_exponent_minimum_kernel](packed.unsafe_ptr(), minima.unsafe_ptr(), Int32(2), Int32(4), grid_dim=(1, 1, 1), block_dim=(128, 1, 1))
         ctx.enqueue_copy(dst_ptr=min_host.unsafe_ptr(), src_buf=minima)
         ctx.synchronize()
+        _ = packed_host^  # past the drain: a queued copy reads it after its last named use
         if min_host.unsafe_ptr().unsafe_load(0) != 255 or min_host.unsafe_ptr().unsafe_load(1) != 1:
             raise Error("metadata did not reflect mutated zero/subnormal/nonfinite inputs")
         print("METADATA MUTATION PASS")

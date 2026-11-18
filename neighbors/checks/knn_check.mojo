@@ -334,6 +334,8 @@ def check_knn_reach_by_sabotage() raises:
             )
     ctx.enqueue_copy(dst_buf=queries, src_ptr=hq.unsafe_ptr())
     ctx.synchronize()
+    _ = hi^  # past the drain: a queued copy reads it after its last named use
+    _ = hq^  # past the drain: a queued copy reads it after its last named use
 
     compute_norms(ctx, index, index_norm, KNN_INDEX, KNN_FEATURES, False)
     compute_norms(ctx, queries, query_norm, KNN_QUERIES, KNN_FEATURES, False)
@@ -363,6 +365,7 @@ def check_knn_reach_by_sabotage() raises:
         )
     ctx.enqueue_copy(dst_buf=index_norm, src_ptr=hn.unsafe_ptr())
     ctx.synchronize()
+    _ = hn^  # past the drain: a queued copy reads it after its last named use
 
     tiled_brute_force_knn(
         ctx, queries, query_norm, index, index_norm, dist_tile, buf_val,
@@ -394,6 +397,7 @@ def check_knn_reach_by_sabotage() raises:
         )
     ctx.enqueue_copy(dst_buf=query_norm, src_ptr=hqn.unsafe_ptr())
     ctx.synchronize()
+    _ = hqn^  # past the drain: a queued copy reads it after its last named use
 
     tiled_brute_force_knn(
         ctx, queries, query_norm, index, index_norm, dist_tile, buf_val,
@@ -478,6 +482,8 @@ def check_vendor_topk_matches_ours() raises:
             )
     ctx.enqueue_copy(dst_buf=queries, src_ptr=hq.unsafe_ptr())
     ctx.synchronize()
+    _ = hi^  # past the drain: a queued copy reads it after its last named use
+    _ = hq^  # past the drain: a queued copy reads it after its last named use
     compute_norms(ctx, index, index_norm, n, KNN_FEATURES, False)
     compute_norms(ctx, queries, query_norm, KNN_QUERIES, KNN_FEATURES, False)
     ctx.synchronize()
@@ -736,6 +742,7 @@ def check_fused_l2_knn() raises:
     ctx.enqueue_copy(dst_ptr=hd.unsafe_ptr(), src_buf=od)
     ctx.enqueue_copy(dst_ptr=ho.unsafe_ptr(), src_buf=oi)
     ctx.synchronize()
+    _ = ho^  # past the drain: a queued copy reads it after its last named use
     var sq_bad = 0
     var sq_same = 0
     for i in range(FCHK_QUERIES * ksq):
@@ -826,6 +833,8 @@ def check_fused_reach_by_sabotage() raises:
             )
     ctx.enqueue_copy(dst_buf=queries, src_ptr=hq.unsafe_ptr())
     ctx.synchronize()
+    _ = hi^  # past the drain: a queued copy reads it after its last named use
+    _ = hq^  # past the drain: a queued copy reads it after its last named use
 
     compute_norms(ctx, index, inorm, FCHK_INDEX, FCHK_FEATURES, False)
     compute_norms(ctx, queries, qnorm, FCHK_QUERIES, FCHK_FEATURES, False)
@@ -858,6 +867,7 @@ def check_fused_reach_by_sabotage() raises:
         )
     ctx.enqueue_copy(dst_buf=inorm, src_ptr=hn.unsafe_ptr())
     ctx.synchronize()
+    _ = hn^  # past the drain: a queued copy reads it after its last named use
 
     fused_l2_knn(
         ctx, queries, qnorm, index, inorm, od, oi,
@@ -903,6 +913,7 @@ def check_fused_reach_by_sabotage() raises:
         )
     ctx.enqueue_copy(dst_buf=qnorm, src_ptr=hqn.unsafe_ptr())
     ctx.synchronize()
+    _ = hqn^  # past the drain: a queued copy reads it after its last named use
 
     fused_l2_knn(
         ctx, queries, qnorm, index, inorm, od, oi,
@@ -1120,6 +1131,8 @@ def check_dispatch_takes_fused() raises:
     ctx.enqueue_copy(dst_buf=oi, src_ptr=seed_u.unsafe_ptr())
     ctx.enqueue_copy(dst_buf=oi32, src_ptr=seed_i.unsafe_ptr())
     ctx.synchronize()
+    _ = seed_i^  # past the drain: a queued copy reads it after its last named use
+    _ = seed_u^  # past the drain: a queued copy reads it after its last named use
     brute_force_knn_impl(
         ctx, queries, qnorm, index, inorm, dist, bv, bi, od, oi, oi32,
         FCHK_QUERIES, FCHK_INDEX, FCHK_FEATURES, kf, tile, buf_len, False,
@@ -1235,6 +1248,7 @@ def check_dispatch_takes_fused() raises:
     ctx.enqueue_copy(dst_buf=boi, src_ptr=hbu.unsafe_ptr())
     ctx.enqueue_copy(dst_buf=boi32, src_ptr=hbi.unsafe_ptr())
     ctx.synchronize()
+    _ = hbq^  # past the drain: a queued copy reads it after its last named use
     compute_norms(ctx, bqueries, bqnorm, big_q, FCHK_FEATURES, False)
     brute_force_knn_impl(
         ctx, bqueries, bqnorm, index, inorm, bdist, bv, bi, bod, boi, boi32,
@@ -1662,6 +1676,7 @@ def check_fused_queue_reach_by_sabotage() raises:
         )
     ctx.enqueue_copy(dst_buf=index, src_ptr=hi.unsafe_ptr())
     ctx.synchronize()
+    _ = hi^  # past the drain: a queued copy reads it after its last named use
     compute_norms(ctx, index, inorm, FCHK_INDEX, FCHK_FEATURES, False)
     ctx.synchronize()
 
@@ -1794,6 +1809,8 @@ def check_fused_k_ceiling() raises:
             )
     ctx.enqueue_copy(dst_buf=queries, src_ptr=hq.unsafe_ptr())
     ctx.synchronize()
+    _ = hi^  # past the drain: a queued copy reads it after its last named use
+    _ = hq^  # past the drain: a queued copy reads it after its last named use
     compute_norms(ctx, index, inorm, FCHK2_INDEX, FCHK2_FEATURES, False)
     compute_norms(ctx, queries, qnorm, FCHK2_QUERIES, FCHK2_FEATURES, False)
     ctx.synchronize()

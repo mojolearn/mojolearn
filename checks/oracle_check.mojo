@@ -679,6 +679,7 @@ def tree_structure_diff(
         z.unsafe_ptr().unsafe_store(i, UInt32(0))
     ctx.enqueue_copy(dst_buf=cindex, src_ptr=z.unsafe_ptr())
     ctx.synchronize()
+    _ = z^  # past the drain: a queued copy reads it after its last named use
 
     var hb = ctx.enqueue_create_host_buffer[DType.uint8](n_rows)
     var bins = ctx.enqueue_create_buffer[DType.uint8](n_rows)
@@ -721,6 +722,8 @@ def tree_structure_diff(
     ctx.enqueue_copy(dst_buf=targets, src_ptr=ht.unsafe_ptr())
     ctx.enqueue_copy(dst_buf=weights, src_ptr=hw.unsafe_ptr())
     ctx.synchronize()
+    _ = ht^  # past the drain: a queued copy reads it after its last named use
+    _ = hw^  # past the drain: a queued copy reads it after its last named use
 
     var model = TAdditiveModel()
     var losses = fit(

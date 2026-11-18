@@ -228,6 +228,9 @@ def run_case(
     ctx.enqueue_copy(dst_buf=d_w, src_ptr=h_w.unsafe_ptr())
     ctx.enqueue_copy(dst_buf=d_pred, src_ptr=h_p.unsafe_ptr())
     ctx.synchronize()
+    _ = h_p^  # past the drain: a queued copy reads it after its last named use
+    _ = h_t^  # past the drain: a queued copy reads it after its last named use
+    _ = h_w^  # past the drain: a queued copy reads it after its last named use
 
     launch_multilogit_value_and_der(
         ctx, num_classes, n, d_target, d_w, True, d_pred, n,
@@ -391,6 +394,9 @@ def check_two_class_collapse(ctx: DeviceContext) raises -> Int:
     ctx.enqueue_copy(dst_buf=d_w, src_ptr=h_w.unsafe_ptr())
     ctx.enqueue_copy(dst_buf=d_pred, src_ptr=h_p.unsafe_ptr())
     ctx.synchronize()
+    _ = h_c^  # past the drain: a queued copy reads it after its last named use
+    _ = h_p^  # past the drain: a queued copy reads it after its last named use
+    _ = h_t^  # past the drain: a queued copy reads it after its last named use
 
     launch_multilogit_value_and_der(
         ctx, 2, n, d_target, d_w, True, d_pred, n,
@@ -479,6 +485,8 @@ def check_search_mode(ctx: DeviceContext, num_classes: Int) raises -> Int:
     ctx.enqueue_copy(dst_buf=d_w, src_ptr=h_w.unsafe_ptr())
     ctx.enqueue_copy(dst_buf=d_p, src_ptr=h_p.unsafe_ptr())
     ctx.synchronize()
+    _ = h_p^  # past the drain: a queued copy reads it after its last named use
+    _ = h_t^  # past the drain: a queued copy reads it after its last named use
 
     launch_multilogit_value_and_der(
         ctx, num_classes, n, d_t, d_w, True, d_p, n,
@@ -615,6 +623,7 @@ def check_one_vs_all(ctx: DeviceContext, num_classes: Int) raises -> Int:
     ctx.enqueue_copy(dst_buf=d_w, src_ptr=h_w.unsafe_ptr())
     ctx.enqueue_copy(dst_buf=d_p, src_ptr=h_p.unsafe_ptr())
     ctx.synchronize()
+    _ = h_t^  # past the drain: a queued copy reads it after its last named use
 
     launch_one_vs_all_value_and_der[False](
         ctx, num_classes, n, d_t, d_w, True, d_p, n,
@@ -710,6 +719,9 @@ def check_clip_prob_differs(ctx: DeviceContext) raises -> Int:
     ctx.enqueue_copy(dst_buf=d_w, src_ptr=hw2.unsafe_ptr())
     ctx.enqueue_copy(dst_buf=d_t, src_ptr=ht2.unsafe_ptr())
     ctx.synchronize()
+    _ = hp^  # past the drain: a queued copy reads it after its last named use
+    _ = ht2^  # past the drain: a queued copy reads it after its last named use
+    _ = hw2^  # past the drain: a queued copy reads it after its last named use
 
     launch_one_vs_all_second_der(
         ctx, 1, n, d_w, True, d_p, n, d_der2, n,

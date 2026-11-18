@@ -258,6 +258,11 @@ def device_float_borders(
             borders.append(bs^)
             modes.append(m)
         base += width
+    # past the drain: `h_seg` is read through `hs` by the two segment uploads
+    # above; its last named use was there, so it was freed while they were
+    # queued. The loop runs at least once (n_float > 0), so this is after the
+    # first chunk's drain.
+    _ = h_seg^
     _ = d_f64s^
     _ = d_i32s^
     _ = d_uniq^

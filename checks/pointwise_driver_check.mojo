@@ -330,6 +330,8 @@ def run_checks() raises:
                 "]",
             )
 
+    _ = offset_h^  # past the drain: a queued copy reads it after its last named use
+    _ = parts_h^  # past the drain: a queued copy reads it after its last named use
     ctx.enqueue_memset(d_sums, Float32(0.0))
     _launch[5, True, 1](ctx, d_off.unsafe_ptr(), d_ffi.unsafe_ptr(),
                           d_folds.unsafe_ptr(), d_ci.unsafe_ptr(),
@@ -511,6 +513,7 @@ def run_checks() raises:
                            total_bin_features, scale, N_GROUPS, 2)
     ctx.enqueue_copy(dst_buf=h_sums2, src_buf=d_sums2)
     ctx.synchronize()
+    _ = p2^  # past the drain: a queued copy reads it after its last named use
 
     # host: pair 0's smaller is part 0 (600 rows), filed at slot 2;
     #       pair 1's smaller is part 3 (700 rows), filed at slot 3

@@ -482,6 +482,9 @@ def _nt_rows(
     ctx.enqueue_copy(dst_buf=y, src_ptr=hy.unsafe_ptr())
     ctx.enqueue_copy(dst_buf=out, src_ptr=hz.unsafe_ptr())
     ctx.synchronize()
+    _ = hx^  # past the drain: a queued copy reads it after its last named use
+    _ = hy^  # past the drain: a queued copy reads it after its last named use
+    _ = hz^  # past the drain: a queued copy reads it after its last named use
     gemm_nt(ctx, out, x, y, m, n, k)
     ctx.synchronize()
     _ = x
