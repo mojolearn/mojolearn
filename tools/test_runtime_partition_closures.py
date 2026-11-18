@@ -213,7 +213,15 @@ def test_classical_resident_allocation_and_lifetime_are_owned_by_one_development
             if unit != 'runtime_trees':
                 archive = {node[2] for node in closure if node[1] == 'bindings/host_archive_native_door.mojo'}
                 assert archive <= helpers, (unit, name, archive - helpers)
-    assert reached == {('runtime_trees', 'trees_native_call')}, reached
+    # runtime_classical registers the TreesResident types (the registration check below) and its saved-model load
+    # of an IsolationForest validates through trees_public_iforest_door.iforest_validate (host_archive_native_door,
+    # 0aa17b4c40; a24f111a94 made it write the fitted forest), which allocates the resident: the classical call
+    # reaches the allocator too. No other unit does.
+    assert reached == {('runtime_trees', 'trees_native_call'), ('runtime_classical', 'classical_native_call')}, reached
+
+
+#: owner entries added after the host split, never exported by the legacy tokenizer host module
+NEW_SINCE_SPLIT = {'linear_entry_connection_v1'}
 
 
 def test_classical_legacy_exports_are_declared_native_aliases_with_one_type_registration():
@@ -238,7 +246,8 @@ def test_classical_legacy_exports_are_declared_native_aliases_with_one_type_regi
     seen = set()
     for spec in specs:
         owner = (ROOT/f"bindings/{spec['binding']}.mojo").read_text()
-        assert set(spec['functions']) <= names(legacy), spec['binding']
+        # entries an owner gained after the 2026-11-07 split have no legacy export (7d917a61aa)
+        assert set(spec['functions']) - names(legacy) <= NEW_SINCE_SPLIT, spec['binding']
         assert set(spec['functions']) == names(owner), spec['binding']
         assert not seen & set(spec['functions'])
         seen |= set(spec['functions'])
