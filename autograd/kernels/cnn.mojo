@@ -384,7 +384,7 @@ def conv2d_backward_m(a: List[Int], dev: Int, prm: List[Int32]) raises:
     var dw = m_in(ctx, 1, a[1], OC * ckk, isdev(dev, 1))
     var ddout = m_in(ctx, 2, a[2], rows * OC, isdev(dev, 2))
     var dp = put_prm(ctx, 3, prm)
-    # one decision per layer (x_cnn/device.mojo NI12_FILL_RULE), the forward's
+    # one decision per layer (x_cnn/device.mojo ni12_implicit_layer), the forward's
     var implicit = ni12_implicit_layer(OC, ckk)
     var cols = ws(ctx, 4, 1 if implicit else rows * ckk)
     var g = ws(ctx, 5, rows * OC)
@@ -521,7 +521,7 @@ def conv_block_backward_into[resident: Bool = False](
     var dp = put_prm(ctx, 5, cprm)
     var saved = resident and save_y != 0 and save_cols != 0
     var tile_rows = rows
-    # one decision per layer (x_cnn/device.mojo NI12_FILL_RULE), the forward's; an
+    # one decision per layer (x_cnn/device.mojo ni12_implicit_layer), the forward's; an
     # implicit layer's save slot is one word (cnn_block_saved_sizes)
     var implicit = ni12_implicit_layer(OC, ckk)
     var cols = view(ctx, FP(unsafe_from_address=save_cols), 1 if implicit else rows * ckk) if saved else ws(ctx, 7, 1 if implicit else tile_rows * ckk)
