@@ -132,7 +132,7 @@ class HarnessWindow(unittest.TestCase):
             os.mkfifo(ctl)
             os.mkfifo(ack)
             got = []
-            ready = threading.Event()
+            ready, done = threading.Event(), threading.Event()
 
             def fake_perf():      # perf: reads the control FIFO, acks every command
                 rfd = os.open(ctl, os.O_RDONLY | os.O_NONBLOCK)
@@ -149,6 +149,9 @@ class HarnessWindow(unittest.TestCase):
                             got.append(w)
                             os.write(afd, b"ack\n")
                 finally:
+                    # Hold the ack FIFO open until the caller has read its last ack: closing the only writer end
+                    # discards a buffered ack the reader has not opened yet (lost under load, 2026-11-17 runs).
+                    done.wait(10)
                     os.close(rfd)
                     os.close(afd)
             t = threading.Thread(target=fake_perf)
@@ -164,6 +167,7 @@ class HarnessWindow(unittest.TestCase):
             self.assertFalse(SR.range_open(20, "fit", env))                  # one window at a time
             SR.range_close()
             SR.range_close()                                                 # nothing open: no-op
+            done.set()
             t.join(10)
             self.assertEqual(got, ["enable", "disable"])
             win = CP.read_window(w)
