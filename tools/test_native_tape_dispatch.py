@@ -44,16 +44,15 @@ def test_transformer_resident_table_preserves_packed_and_plain_native_owners():
     _, failures = audit(ROOT, ('transformer.native_decode_dispatch',))
     assert not failures, failures
     native=(ROOT/'transformer/native_decode_dispatch.mojo').read_text()
-    for operation in ('open','open_run_int15','step','forward','export','load'):
+    for operation in ('open','open_run_int15','export','load'):
         target = '_session_open_run_int15' if operation == 'open_run_int15' else f'_session_{operation}_run'
         assert target + '(owner[]' in native
+    # step/decode/forward run on the session the door resolved and pinned once (4006c9b4a0),
+    # not through the owner per token.
+    for operation in ('step','decode','forward'):
+        assert f'_session_{operation}_run(s, x, y' in native
     assert 'BlockOptions.from_params(p, 9)' in native
     assert 'owner[].usable = False' in native
     assert 'owner[].release()' in native
-    provider=(ROOT/'providers/python/transformer_resident_pyapi.mojo').read_text()
-    assert 'neural_descriptor_value_handle(provider,' in provider
-    assert 'neural_descriptor_reserved_execute(provider, session, handle,' in provider
-    public=(ROOT/'bindings/causal_lm_public_door.mojo').read_text()
-    for operation in (22,23,24):
-        assert f', {operation},' in public
-    assert '19 if int15 else 18' in public
+    # The CausalLM descriptor-provider session path (transformer_resident_pyapi.mojo, ops 18-24,
+    # the value-handle cache) was deleted by 58fbf80607: sessions are native registry handles.
