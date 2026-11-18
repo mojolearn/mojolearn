@@ -58,6 +58,8 @@ BOX HELPERS (tools/ops/paper_compare_job.sh, CPU, seconds):
              owed B units are timed with their own base here, so none is left to a paper board); prints the estimate.
     chunks   --ids F --rows R --chunk-s N --out-dir D: the interleave chunks (see the job): consecutive races whose
              estimated candidate seconds add up to about N; chunk-<i>.txt.
+    prep-groups --ids F [--ids G] --out-dir D: the races cut into one group per family and prep dataset
+             (group-<family>-<dataset>.txt), which the job's tg-prep phase prepares at once, one process each.
     summary  --compare C --rows R --results RES --ids F [--units U]: SUMMARY-TG (rows timed on both,
              FASTER/SAME/REGRESSION, rows still over 1.10 worst first, rows fixed (over 1.10 in the input compare, now
              at or under 1.00), done/total per arm, and each owed A/B unit's arm over its back-to-back base).
@@ -768,6 +770,41 @@ def cmd_chunks(a):
     return 0
 
 
+#: the datasets each family's block prep is keyed by (tools/bench_board.py DATASETS): a race on any other dataset
+#: (synthetic, text, ...) preps under the first of them, so it joins that group and no two groups write one block
+PREP_DATASETS = ("taxi", "istella")
+
+
+def prep_groups(ids, datasets=PREP_DATASETS):
+    """{group name: [race id]} of IDS ('family/lane/dataset/...'), one group per family and prep dataset, in first
+    appearance order. Each family preps into its own cache dir (algos-data, more-data, ctd-data) and its blocks are
+    keyed by dataset, so the groups write disjoint files and run at once (tools/ops/paper_compare_job.sh tg-prep)."""
+    out = {}
+    for i in ids:
+        f = i.split("/")
+        fam = f[0] if f and f[0] else "x"
+        ds = f[2] if len(f) > 2 and f[2] in datasets else datasets[0]
+        out.setdefault("%s-%s" % (fam, ds), []).append(i)
+    return out
+
+
+def cmd_prep_groups(a):
+    ids = []
+    for path in a.ids:
+        if os.path.isfile(path):
+            with open(path) as fh:
+                ids += [x.strip() for x in fh if x.strip() and x.strip() not in ids]
+    groups = prep_groups(ids)
+    os.makedirs(a.out_dir, exist_ok=True)
+    for f in Path(a.out_dir).glob("group-*.txt"):
+        f.unlink()
+    for name, gids in groups.items():
+        PC.write_atomic(os.path.join(a.out_dir, "group-%s.txt" % name), "".join(x + "\n" for x in gids))
+    print("TG-PREP-GROUPS races=%d groups=%d (%s)" % (len(ids), len(groups),
+                                                     ", ".join("%s %d" % (k, len(v)) for k, v in groups.items())))
+    return 0
+
+
 def _done(board_path, ids):
     try:
         races = (PC.load_json(board_path).get("races") or {})
@@ -955,6 +992,9 @@ def build_box_parser():
     ch.add_argument("--rows", default=None)
     ch.add_argument("--chunk-s", type=int, default=DEFAULT_CHUNK_S)
     ch.add_argument("--out-dir", required=True)
+    pg = sub.add_parser("prep-groups", help="the listed races cut into the groups tg-prep prepares at once")
+    pg.add_argument("--ids", action="append", required=True, help="an ids file (repeat it; a missing file is skipped)")
+    pg.add_argument("--out-dir", required=True)
     sm = sub.add_parser("summary")
     sm.add_argument("--compare", required=True)
     sm.add_argument("--rows", required=True)
@@ -968,9 +1008,9 @@ def build_box_parser():
 
 def main(argv=None):
     argv = list(sys.argv[1:] if argv is None else argv)
-    if argv and argv[0] in ("plan", "chunks", "summary"):
+    if argv and argv[0] in ("plan", "chunks", "prep-groups", "summary"):
         a = build_box_parser().parse_args(argv)
-        return {"plan": cmd_plan, "chunks": cmd_chunks, "summary": cmd_summary}[a.cmd](a)
+        return {"plan": cmd_plan, "chunks": cmd_chunks, "prep-groups": cmd_prep_groups, "summary": cmd_summary}[a.cmd](a)
     return cmd_select(build_select_parser().parse_args(argv))
 
 
