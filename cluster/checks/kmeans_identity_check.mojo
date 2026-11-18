@@ -77,6 +77,7 @@ from checks.kernel_matrix import (
     lib_block_size_for,
 )
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, numeric_mode_name
+from checks.native_tests.kit import download_host_into, upload_host_into
 
 
 comptime IDENTICAL_BUILD = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
@@ -214,9 +215,8 @@ def check_pinned_fold_shape() raises:
         )
         values.append(v)
         ha.unsafe_ptr().unsafe_store(i, v)
-    ctx.enqueue_copy(dst_buf=a, src_ptr=ha.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, a, ha)
     ctx.synchronize()
-    _ = ha^  # past the drain: a queued copy reads it after its last named use
 
     var halving = _host_halving_fold(values)
     var sequential = _host_sequential_fold(values)
@@ -234,7 +234,7 @@ def check_pinned_fold_shape() raises:
         block_dim=(FOLD_TPB, 1, 1),
     )
     ctx.synchronize()
-    ctx.enqueue_copy(dst_ptr=hout.unsafe_ptr(), src_buf=out)
+    download_host_into[DType.float32](ctx, out, hout)
     ctx.synchronize()
     var got = hout.unsafe_ptr().unsafe_load(0)
 
@@ -445,11 +445,9 @@ def check_fused_contraction_pin() raises:
                 j * d + f,
                 Float32(3.0 * Float32(j)) + _spread(j + 500000, f),
             )
-    ctx.enqueue_copy(dst_buf=x, src_ptr=hx.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=c, src_ptr=hc.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, x, hx)
+    upload_host_into[DType.float32](ctx, c, hc)
     ctx.synchronize()
-    _ = hc^  # past the drain: a queued copy reads it after its last named use
-    _ = hx^  # past the drain: a queued copy reads it after its last named use
 
     # The norms come from the DEVICE and are handed to BOTH the kernel and
     # the oracle, so this check is about the contraction inside the distance
@@ -479,9 +477,9 @@ def check_fused_contraction_pin() raises:
     var hval = ctx.enqueue_create_host_buffer[DType.float32](n)
     var hfval = ctx.enqueue_create_host_buffer[DType.float32](n)
     var hnval = ctx.enqueue_create_host_buffer[DType.float32](n)
-    ctx.enqueue_copy(dst_ptr=hval.unsafe_ptr(), src_buf=oval)
-    ctx.enqueue_copy(dst_ptr=hfval.unsafe_ptr(), src_buf=fval)
-    ctx.enqueue_copy(dst_ptr=hnval.unsafe_ptr(), src_buf=nval)
+    download_host_into[DType.float32](ctx, oval, hval)
+    download_host_into[DType.float32](ctx, fval, hfval)
+    download_host_into[DType.float32](ctx, nval, hnval)
     ctx.synchronize()
 
     var separating = 0
@@ -637,11 +635,9 @@ def check_assignment_geometry_invariance() raises:
             hc.unsafe_ptr().unsafe_store(
                 j * d + f, _spread(src + 500000, f)
             )
-    ctx.enqueue_copy(dst_buf=x, src_ptr=hx.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=c, src_ptr=hc.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, x, hx)
+    upload_host_into[DType.float32](ctx, c, hc)
     ctx.synchronize()
-    _ = hc^  # past the drain: a queued copy reads it after its last named use
-    _ = hx^  # past the drain: a queued copy reads it after its last named use
 
     ctx.enqueue_function[row_norm_kernel](
         xn.unsafe_ptr(), x.unsafe_ptr(), Int32(d), Int32(0),
@@ -667,8 +663,8 @@ def check_assignment_geometry_invariance() raises:
     var tied_rows = 0
     for g in range(len(grids)):
         _run_fused(ctx, x, c, xn, cn, okey, oval, n, k, d, grids[g])
-        ctx.enqueue_copy(dst_ptr=hval.unsafe_ptr(), src_buf=oval)
-        ctx.enqueue_copy(dst_ptr=hkey.unsafe_ptr(), src_buf=okey)
+        download_host_into[DType.float32](ctx, oval, hval)
+        download_host_into[DType.uint32](ctx, okey, hkey)
         ctx.synchronize()
         if g == 0:
             for i in range(n):
@@ -892,11 +888,10 @@ def _traced_fit(
         )
     for i in range(n):
         hw.unsafe_ptr().unsafe_store(i, Float32(1.0))
-    ctx.enqueue_copy(dst_buf=x, src_ptr=hx.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=w, src_ptr=hw.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=cent, src_ptr=hc.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, x, hx)
+    upload_host_into[DType.float32](ctx, w, hw)
+    upload_host_into[DType.float32](ctx, cent, hc)
     ctx.synchronize()
-    _ = hw^  # past the drain: a queued copy reads it after its last named use
     if perturb_cell >= 0:
         hx.unsafe_ptr().unsafe_store(perturb_cell, saved)
 
