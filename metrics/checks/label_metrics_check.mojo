@@ -93,6 +93,7 @@ from checks.numerics import (
     identical_mul_add,
     numeric_mode_name,
 )
+from checks.native_tests.kit import download_host_into
 
 
 comptime IDENTICAL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
@@ -300,7 +301,7 @@ def check_contingency_matrix_exact(ctx: DeviceContext) raises:
         var dmat = ctx.enqueue_create_buffer[DType.int32](k * k)
         contingency_matrix(ctx, dt, dp, N, dmat, mm[0], mm[1])
         var h = ctx.enqueue_create_host_buffer[DType.int32](k * k)
-        ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=dmat)
+        download_host_into[DType.int32](ctx, dmat, h)
         ctx.synchronize()
         var want = _host_contingency(yt, yp, mm[0], k)
         var bad = 0
@@ -321,7 +322,6 @@ def check_contingency_matrix_exact(ctx: DeviceContext) raises:
                         + String(want[idx])
                     )
                 bad += 1
-        _ = h^
         if bad != 0:
             raise Error(
                 "contingency matrix k="
