@@ -2,6 +2,7 @@
 # RobustScaler owns its existing x_prep stage sequence and public lifecycle.
 # The PACK half of the former `bindings/robust_native.mojo` (fence-flip-2 split, 2026-11-12);
 # the UNPACK half is `bindings/robust_native_unpack.mojo`.
+from std.sys.compile import is_defined
 from std.os import getenv
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
@@ -213,7 +214,7 @@ def robust_transform(model: PythonObject, source: PythonObject, context: PythonO
     var dest = n*d+(d if center is not None else 0)+(d if scale is not None else 0)
     if dest+n*d > 2147483647:
         raise Error("x_prep: the program exceeds the native Int32 indexing bound")
-    var dev_out = n*d >= 134217728 and py_get(entries,"x_prep_run_out") is not None and String(getenv("MOJOLEARN_XPREP_OUT","1")) != "0"
+    var dev_out = n*d >= 134217728 and py_get(entries,"x_prep_run_out") is not None and not is_defined["MOJOLEARN_XPREP_FAST_OUT_OFF"]()
     var host = dest+(0 if dev_out else n*d)
     var arena = xprep_storage(host,context)
     var output_store = xprep_storage(n*d,context) if dev_out else PythonObject(None)

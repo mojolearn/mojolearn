@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Native owner for the established _Prog transport contract. Arithmetic and
 # stream synchronization remain in the same x_prep exported implementations.
+from std.sys.compile import is_defined
 from bindings.native_array_storage_door import native_array_empty, native_array_zeros
 from bindings.native_loaded_module_door import native_loaded_module
 from std.os import getenv
@@ -425,7 +426,7 @@ def xprep_run_records(storage: PythonObject, host: Int, scratch: Int, output: Py
     var scope = Optional[PythonObject]()
     var cache_state = Optional[PythonObject]()
     var inout_values = List[PythonObject]()
-    var direct_on = String(getenv("MOJOLEARN_XPREP_DIRECT","1").strip()) != "0"
+    var direct_on = not is_defined["MOJOLEARN_XPREP_FAST_DIRECT_OFF"]()
     var dev_put_on = py_get(entries,"x_prep_dev_put") is not None and py_get(entries,"x_prep_dev_free") is not None
     try:
         # UNPACK

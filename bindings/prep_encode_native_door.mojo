@@ -8,6 +8,7 @@
 # stores the fitted attributes under the names, types and dtypes the Python
 # set. fit_transform converts X once and hands the converted X to the
 # transform program.
+from std.sys.compile import is_defined
 from std.memory import unsafe_memcpy, bitcast
 from std.math import ceil
 from std.os import getenv
@@ -184,8 +185,8 @@ struct EncProg(Movable):
 
     def output(mut self, words: Int, entries: PythonObject) raises -> Int:
         # Below OUT_MIN_WORDS, or on a binding without an output region
-        # (the host column; MOJOLEARN_XPREP_OUT=0), the output is host words.
-        var region = words >= OUT_MIN_WORDS and py_get(entries, "x_prep_run_out") is not None and String(getenv("MOJOLEARN_XPREP_OUT", "1")) != "0"
+        # (the host column; -D MOJOLEARN_XPREP_FAST_OUT_OFF), the output is host words.
+        var region = words >= OUT_MIN_WORDS and py_get(entries, "x_prep_run_out") is not None and not is_defined["MOJOLEARN_XPREP_FAST_OUT_OFF"]()
         return self.prog.output(words, region)
 
     def _record(mut self, record: PythonObject, words: Int) -> Int:
@@ -2632,7 +2633,7 @@ def _target_run(model: PythonObject, values: PythonObject, info: TargetInfo, fol
         else:
             bstart = p.alloc(d * (cmax + 1))
             brows = p.alloc(n * d)
-        if String(getenv("MOJOLEARN_XPREP_TE_PBUCKET", "1")) != "0":
+        if not is_defined["MOJOLEARN_XPREP_FAST_TE_PBUCKET_OFF"]():
             var ch = max(1, min(256, (n + 4095) // 4096))
             var hh = p.scratch(d * ch * cmax)
             var tot = p.scratch(d * cmax)
@@ -2642,7 +2643,7 @@ def _target_run(model: PythonObject, values: PythonObject, info: TargetInfo, fol
             _stage(p.prog.program, OP_TE_HSCATTER, d * ch, codes, n, d, cmax, ch, hh, bstart, brows)
         else:
             _stage(p.prog.program, OP_TE_BUCKET, d, codes, n, d, cmax, bstart, brows)
-        if String(getenv("MOJOLEARN_XPREP_TE_GATHER", "1")) != "0":
+        if not is_defined["MOJOLEARN_XPREP_FAST_TE_GATHER_OFF"]():
             var gb = p.scratch(n * d * (1 + T))
             _stage(p.prog.program, OP_TE_GATHER, n * d, brows, n, d, yo, T, fo, gb)
             _stage(p.prog.program, OP_TE_ENC, (F + 1) * d * cmax * T, codes, n, d, yo, T, fo, cmax, nco, meta, smo, enc,

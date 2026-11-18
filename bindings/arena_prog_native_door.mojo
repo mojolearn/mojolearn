@@ -13,6 +13,7 @@
 # release of every device slot it acquired. It replaces the Python bodies of
 # `_expansion_prep._Prog.run` and `_expansion_metrics._execute` step for
 # step: the same entries are called with the same words, so no bit moves.
+from std.sys.compile import is_defined
 from bindings.native_array_storage_door import native_array_zeros
 from std.memory import unsafe_memcpy
 from core.metrics_program_plan import MetricProgramPlan
@@ -45,7 +46,7 @@ comptime INT32_MAX = 2147483647
 # (lane prep-apple3 `mapped`); _expansion_prep._MAP_MIN_WORDS.
 comptime PREP_MAP_MIN_WORDS = 262144
 # x_prep: an input of at least this many words goes up from its own buffer
-# into a slot freed after the run (MOJOLEARN_XPREP_DIRECT);
+# into a slot freed after the run (on unless -D MOJOLEARN_XPREP_FAST_DIRECT_OFF);
 # _expansion_prep._DIRECT_MIN_WORDS.
 comptime PREP_DIRECT_MIN_WORDS = 1048576
 # Words of one stage record: op, total and _PARAMS (14) parameters.
@@ -238,7 +239,7 @@ def _prep_run_impl(prog: PythonObject, mode: PythonObject, context: PythonObject
     var on = 0 if fields["out_size"] is None else _int(fields["out_size"], context)
     var out_code = String(fields["_out_code"])
     var has_out = py_get(entries, "x_prep_run_out") is not None
-    var dev_out = has_out and on > 0 and String(getenv("MOJOLEARN_XPREP_OUT", "1")) != "0"
+    var dev_out = has_out and on > 0 and not is_defined["MOJOLEARN_XPREP_FAST_OUT_OFF"]()
     var has_scratch_entry = sc > 0 and not has_out and py_get(entries, "x_prep_run_scratch") is not None
     var dev_scratch = sc > 0 and (has_out or has_scratch_entry)
     if H + sc + on > INT32_MAX:
@@ -254,7 +255,7 @@ def _prep_run_impl(prog: PythonObject, mode: PythonObject, context: PythonObject
     var t_alloc = Int(perf_counter_ns()) if profile else 0
     var ranges = (dev_scratch or sc == 0) and _switch("MOJOLEARN_ARENA_RANGES") and py_get(entries, "x_prep_run_ranges") is not None
     var direct_ok = (py_get(entries, "x_prep_dev_put") is not None and py_get(entries, "x_prep_dev_free") is not None
-                     and _switch("MOJOLEARN_XPREP_DIRECT"))
+                     and not is_defined["MOJOLEARN_XPREP_FAST_DIRECT_OFF"]())
     var inout_pairs = List[Int]()
     var inout = fields["_inout"]
     for k in range(len(inout)):  # driver-loop: over the program's in-out input ranges
