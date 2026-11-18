@@ -422,23 +422,14 @@ measured: Andrew decides measure-once or delete; the plan recommends delete (a F
 
 1,306 files under `tools/`; 498 `test_*.py` are collected by pytest and live. Of the 808 non-test tools, **140 have no
 inbound reference** by stem across `tools/ .github/ docs/ python/ packaging/ bindings/ pixi.toml`, 170 carry probe
-names (`probe`, `ab`, `check`, `audit`, `capture`, `diagnostic`). The first sixty by name, with first commit where it
-dates them (one-off probes from August-October): `add_source_headers` (08-31), `af_board_full_sync` (10-04),
-`af_ident_to_afb`, `agglo_device_check` (10-02), `appendix_delta` (09-19), `apple_byte_lm_first_step` (09-07),
-`apple_fast_tree_capture`, `arima_fit_identity_capture` (09-05), `audit_portable_primitive_calls`, `bench_boundary_tax`,
-`bench_numpy_free_conversion`, `board_quality_backfill` (10-12), `bpe_trainer_determinism`, `byte_lm_capture_regression`,
-`byte_lm_config_binding_check`, `byte_lm_model_pool_capacity_check`, `byte_lm_runtime_numerical_check`,
-`byte_lm_session_bench`, `capture_small_training`, `catboost_cat_oracle` (08-21), `check_not_implemented`,
-`check_serialization`, `check_trees_resident` (11-06), `checks_that_cannot_fail_probe`, `chol_fast_tall_pair`,
-`compare_umap_portable_host_math`, `cpu_public_fit_smoke`, `criteo_dense_arms`, `do_byte_lm_leg`, `fa_diag`,
-`fast_speed_diff`, `forest_experiment_board`, `forest_ordered_default_smoke`, `full_ab_watch`, `gbdt_cpu_parity_matrix`,
-`gbdt_cpu_refusal_probe`, `gbdt_partition_cache_ab`, `gbdt_prepared_check`, `gbdt_small_probe`,
-`gemm_class_section_gate`, `gemm_identical_table`, `gemm_training_cross_vendor`, `hdbscan_idcheck`, `hdbscan_sparse_taxi`,
-`identical_candidate_gate`, `identical_dart_wave_receipt`, `identical_family_bit_diagnostic`,
-`identical_gmm_power_bit_diagnostic`, `identical_pca_bit_diagnostic`, `identical_quality_batch`,
-`identical_source_bit_checks`, `identical_wave_identity_merge`, `identical_wave_v2_stage`, `identity_overhead2`,
-`inert_condition_audit` (08-25, 1148 lines), `inf_gbdt_wheel_models`, `istella_rank_summary`, `kernel_pca_gpu_trial`,
-`kmeans_linear_profile`, `knn_coalesced_columns_summary`. Caveat: a tool invoked only from `~/mojolearn-ops` or a brief
+names (`probe`, `ab`, `check`, `audit`, `capture`, `diagnostic`). Of the first sixty by name on 2026-11-08, those still present (lane fx-tools-prune deleted 37 of them on 2026-11-18,
+recorded in `docs/TOMBSTONES.md`; the rest are named elsewhere or were kept as unsure), with first commit where it
+dates them: `add_source_headers` (08-31), `af_board_full_sync` (10-04), `apple_fast_tree_capture`,
+`arima_fit_identity_capture` (09-05), `bench_boundary_tax`, `bench_numpy_free_conversion`, `board_quality_backfill`
+(10-12), `bpe_trainer_determinism`, `byte_lm_model_pool_capacity_check`, `catboost_cat_oracle` (08-21),
+`check_trees_resident` (11-06), `checks_that_cannot_fail_probe`, `chol_fast_tall_pair`, `criteo_dense_arms`,
+`forest_experiment_board`, `full_ab_watch`, `gbdt_partition_cache_ab`, `gbdt_prepared_check`, `gbdt_small_probe`,
+`gemm_identical_table`, `identical_gmm_power_bit_diagnostic`, `kernel_pca_gpu_trial`, `kmeans_linear_profile`. Caveat: a tool invoked only from `~/mojolearn-ops` or a brief
 under `~/mojolearn-evidence/` is invisible to the scan, so the tools lane confirms each against `~/mojolearn-ops/` and
 the briefs before deleting; tools are not experiments (no patch), but the deletion commit lists them in one
 `TOMBSTONES.md` section as the 2026-10-26 batches did.
