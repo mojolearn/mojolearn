@@ -22743,3 +22743,33 @@ them. The entry and its two tools are one owed decision. The record above is kep
 - **Guard / records**: no `-D` define was removed, so no guard refusal, no `grid_controls` entry and no
   `docs/apple-fast/EXPERIMENTS.md` row. `tools/native_caller_audit.py` fails if either name is registered again with
   no caller; the host manifest test fails if a host binding registers `byte_lm_run` without a manifest row.
+
+## Dead tools: the Hot Aisle runner (lane fx-dead-small, 2026-11-18)
+
+AMD is the DigitalOcean MI300X (AGENTS.md "Boxes"); Hot Aisle was last rented in 2026-10 and its central box's lease ended
+2026-09-29. Lane fx-tools-prune kept these scripts because live callers named them; this lane removed the Hot Aisle branches
+from those callers first, then the scripts and their tests. Tools are not experiments: no define, no refusal, no grid entry
+and no patch; everything is recoverable at `7c1aad6561` (`git checkout 7c1aad6561 -- <path>`). Every DigitalOcean and
+RunPod path keeps its behaviour; no product code, no bits, no default of the product changed.
+
+- Deleted: `tools/hotaisle_leg.sh`, `tools/hotaisle_release_leg.sh`, `tools/hotaisle_vm_lib.sh`,
+  `tools/hotaisle_smoke_body.sh`, `tools/classical_hotaisle_leg.sh`, `tools/trees_hotaisle_body.sh`,
+  `tools/tests/test_hotaisle_leg_shim.py`, `tools/tests/test_hotaisle_release_shim.py`,
+  `tools/tests/test_lm_run_driver_hotaisle.py`.
+- Callers changed: `tools/release.py` (AMD build route: `hotaisle` gone from `AMD_BUILD_PROVIDERS` and `--amd-provider`;
+  auto is DigitalOcean; the droplet probe `do_gpu_busy`, `do_refused_live` and the linux-wait walk to Hot Aisle removed),
+  `tools/release_tooling.py` (BUILD_TOOLING), `tools/release_rehearsal.py` (the Hot Aisle dry run),
+  `tools/release_limits.sh` (`HOTAISLE_RELEASE_BUILD_CAP`), `tools/prebuild_changed.py` (docstring),
+  `tools/dev_pod.sh` (the Hot Aisle VM fallback and the `host` shared bare-metal AMD host with its GPU slots; a state file
+  with PROVIDER=hotaisle or amdhost is refused by name), `tools/release_wheel_smoke.sh` (provider `hotaisle`,
+  `--hotaisle-spec`, `--hotaisle-cap`, sudo box commands; auto walks RunPod then DigitalOcean),
+  `tools/index_install_check.sh` (AMD default `do`), `tools/lm_run_driver.py` (provider `hotaisle` refused, the
+  re-render-per-device plumbing and Hot Aisle busy phrases removed), `tools/pick_box.sh` (the Hot Aisle check and
+  `--spec`), `tools/live_xvendor_leg.sh` (its `amd` worker refuses: no AMD runner is wired), `tools/ops/archive_all_boxes.sh`,
+  and the tests that named the removed paths (`test_release.py`, `test_release_wheel_smoke.py`, `test_build_sizing.py`,
+  `test_no_hidden_build_bounds.py`, `test_box_persist.py`, `tests/test_lm_run_driver_resume.py`).
+- Kept: Hot Aisle as a provenance label of recorded evidence (`tools/board_hardware.py` amd2, `tools/main_board_ingest.py`,
+  `tools/six_lane_grid_lq.py`, `tools/lm_file_evidence.py`), the `MOJOLEARN_HOTAISLE_` prefix in `tools/bincache.py`'s
+  non-build prefixes (it only keeps such variables out of the cache key), usage comments in leg bodies that DigitalOcean
+  also runs, `tools/amd_central.sh` (its box was a Hot Aisle dev box; see the lane result), and `bench/results/`.
+
