@@ -176,7 +176,7 @@ class Summary(unittest.TestCase):
             for sub, ms in (("board-tg-ab-em-check-1-base-full", 10.0), ("board-tg-ab-em-check-1-full", 8.0)):
                 os.makedirs(os.path.join(res, sub))
                 Path(res, sub, "board.json").write_text(json.dumps({"races": {B: {"cells": [cell(ms)]}}}))
-            text = TR.summary(doc, rows, res, [A, C], [("em-check-1", "full", [B])])
+            text = TR.summary(doc, rows, res, [A, C], [("em-check-1", "full", [B], None)])
         self.assertIn("timed=2 FASTER=0 SAME=1 REGRESSION=1 BOX-STATE=0", text)
         self.assertIn("1.30x " + A + " fit ours", text)
         self.assertIn("fixed (over 1.10 in the input compare, now at or under 1.00): 1", text)

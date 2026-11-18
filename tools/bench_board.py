@@ -2857,9 +2857,24 @@ def ensure_classical_prep(ctx, races):
                   % (rc, log), flush=True)
 
 
+def race_round_seconds(path):
+    """{race id: seconds} from a --race-round-seconds file ({"round_seconds": {...}}), or {} without one."""
+    if not path:
+        return {}
+    with open(path) as fh:
+        doc = json.load(fh)
+    return {str(k): int(v) for k, v in (doc.get("round_seconds") or {}).items() if v}
+
+
+def round_seconds_for(ctx, race, default):
+    """The per-round ceiling of one race: its own cap (--race-round-seconds, a stored-base A/B arm), else
+    --round-seconds, else the family default DEFAULT."""
+    return (ctx.get("race_round_seconds") or {}).get(race.get("id")) or ctx["round_seconds"] or default
+
+
 def classical_cmd(ctx, race):
     lane, ds = race["lane"], race["dataset"]
-    rsec = ctx["round_seconds"] or classical_round_seconds(lane, ds, ctx["vendor"])
+    rsec = round_seconds_for(ctx, race, classical_round_seconds(lane, ds, ctx["vendor"]))
     cmd = [ctx["python"], "-u", ctx["classical_driver"], "race",
            "--lane", lane, "--dataset", ds,
            "--data", classical_data_dir(ctx, race["rows"], race),
@@ -2920,7 +2935,7 @@ def more_round_seconds(rows):
 
 def more_cmd(ctx, race):
     """tools/bench_board_more.py race for one classical2 (lane, dataset)."""
-    rsec = ctx["round_seconds"] or more_round_seconds(race["rows"])
+    rsec = round_seconds_for(ctx, race, more_round_seconds(race["rows"]))
     cmd = [ctx["python"], "-u", ctx["more_driver"], "race",
            "--lane", race["lane"], "--dataset", race["dataset"],
            "--data", more_data_dir(ctx, race["rows"], race),
@@ -3140,7 +3155,7 @@ def _fixture_lanes(fixdir):
 
 def algos_cmd(ctx, race):
     """tools/bench_board_algos.py race for one algos (lane, dataset)."""
-    rsec = ctx["round_seconds"] or more_round_seconds(race["rows"])
+    rsec = round_seconds_for(ctx, race, more_round_seconds(race["rows"]))
     cmd = [ctx["python"], "-u", ctx["algos_driver"], "race",
            "--lane", race["lane"], "--dataset", race["dataset"],
            "--data", algos_data_dir(ctx, race["rows"], race),
@@ -3189,7 +3204,7 @@ def neural_round_seconds(shape):
 
 def neural_cmd(ctx, race):
     """tools/bench_board_neural.py race for one neural lane."""
-    rsec = ctx["round_seconds"] or neural_round_seconds(race.get("shape"))
+    rsec = round_seconds_for(ctx, race, neural_round_seconds(race.get("shape")))
     cmd = [ctx["python"], "-u", ctx["neural_driver"], "race",
            "--lane", race["lane"], "--shape", race.get("shape") or "full",
            "--arms", ",".join(race["arms"]),
@@ -5557,6 +5572,10 @@ def build_parser():
                    help="trees: process deadline per race (MOJOLEARN_SPEED_DEADLINE_S)")
     p.add_argument("--round-seconds", type=int, default=0,
                    help="classical per-round ceiling (0: per lane default)")
+    p.add_argument("--race-round-seconds", default=None,
+                   help="a JSON file whose \"round_seconds\" maps race ids to their own per-round ceiling (classical, "
+                        "more, algos, neural): tools/measure_owed.py writes it for an A/B arm capped at a stored base "
+                        "time; a round that reaches it stops and the cell records the timeout")
     p.add_argument("--nice", type=int, default=0)
     p.add_argument("--skip-failed", action="store_true",
                    help="on resume, do not retry races that failed (default: retry them)")
@@ -6014,6 +6033,7 @@ def main(argv=None):
            "commit": repo_commit(), "mojolearn_version": args.mojolearn_version,
            "wheel": wheel, "arm_budget_s": args.arm_budget_s,
            "race_deadline_s": args.race_deadline_s, "round_seconds": args.round_seconds,
+           "race_round_seconds": race_round_seconds(args.race_round_seconds),
            "nice": args.nice, "ptxas": ptxas, "infer": not args.no_infer,
            "tree_driver": os.path.abspath(args.tree_driver),
            "classical_driver": os.path.abspath(args.classical_driver),
