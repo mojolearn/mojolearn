@@ -141,7 +141,14 @@ def check_bootstrap() raises:
           diff8, "of", BOOTSTRAP_SEED_COUNT)
 
     # ---- 2 + 3: distribution and the two-plane multiply -------------------
-    var mags = ctx.enqueue_create_buffer[DType.float32](2)
+    # 2 * blocks partials (fb11, 2026-11-17): the kernel stores each block's
+    # (|w|, |g|) at mags[2 * block], 256 blocks at BS_ROWS rows. A buffer of
+    # 2 was overrun by 510 floats; on the L40S the overrun landed in the
+    # stats buffer allocated next to it ("the two planes took different
+    # draws at row 0"). The product sizes it by bootstrap_grid_blocks.
+    var mags = ctx.enqueue_create_buffer[DType.float32](
+        2 * bootstrap_grid_blocks(BS_ROWS)
+    )
     ctx.enqueue_memset(mags, Float32(0.0))
     var stats = _ones_stats(ctx)
     launch_bootstrap(
@@ -295,7 +302,14 @@ def check_bernoulli_and_poisson(ctx: DeviceContext) raises:
     (`gpu_data/bootstrap.h:100-102`).
     """
     var seeds = create_bootstrap_seeds(ctx, UInt64(11))
-    var mags = ctx.enqueue_create_buffer[DType.float32](2)
+    # 2 * blocks partials (fb11, 2026-11-17): the kernel stores each block's
+    # (|w|, |g|) at mags[2 * block], 256 blocks at BS_ROWS rows. A buffer of
+    # 2 was overrun by 510 floats; on the L40S the overrun landed in the
+    # stats buffer allocated next to it ("the two planes took different
+    # draws at row 0"). The product sizes it by bootstrap_grid_blocks.
+    var mags = ctx.enqueue_create_buffer[DType.float32](
+        2 * bootstrap_grid_blocks(BS_ROWS)
+    )
 
     # -- Bernoulli, the two exact identities -----------------------------
     for rate_i in range(2):
