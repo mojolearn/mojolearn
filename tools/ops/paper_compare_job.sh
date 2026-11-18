@@ -857,6 +857,13 @@ if part tg-install || part tg-prep || part tg-smoke || part tg-board || part tg-
         [ -n "$rows" ] && ra=(--rows "$rows")
         CUR_IDS=$ids; CUR_BOARD=$out
         local envs=(); [ -n "${ARM_ENV[$arm]:-}" ] && IFS=, read -r -a envs <<< "${ARM_ENV[$arm]}"
+        # an env arm names the keys it sets on purpose, so tools/cpu_quota.py lets them through the race workers'
+        # cap reset (lane fx-harness, 2026-11-18: cpu-threads-cgroup never took effect without this)
+        if [ ${#envs[@]} -gt 0 ]; then
+            local kv keys=""
+            for kv in "${envs[@]}"; do keys="${keys:+$keys,}${kv%%=*}"; done
+            envs+=("MOJOLEARN_BENCH_ARM_ENV_KEYS=$keys")
+        fi
         # shellcheck disable=SC2046
         run_timed "$RES/logs/$(basename "$out").log" 1 env ${envs[@]+"${envs[@]}"} $PY tools/bench_board.py "${COMMON_TG[@]}" \
             $(run_as "$arm") --cache "$CACHE_ROOT/c1" --race-ids @"$ids" "$@" ${ra[@]+"${ra[@]}"} --drop-race-scratch --out "$out"

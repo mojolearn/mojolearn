@@ -36,3 +36,20 @@ def test_board_extra_cannot_restore_cpu_caps():
         env = board.child_env({'data_root':'/tmp/data', 'vendor':'apple'}, {'OMP_NUM_THREADS':'1', 'MOJOLEARN_BENCH_THREADS':'1', 'MOJOLEARN_CPU_THREADS':'1'})
     assert not set(cq.INHERITED_CAPS).intersection(env)
     assert env['MOJOLEARN_BENCH_CPU_POLICY'] == 'full-allocation'
+
+
+def test_env_arm_explicit_value_is_let_through():
+    # lane fx-harness (2026-11-18): an A/B env arm's declared key keeps its value over the quota
+    with patch('builtins.open', mock_open(read_data='1400000 100000')), patch.object(cq.os, 'cpu_count', return_value=128):
+        env = cq.apply_cpu_quota({'MOJOLEARN_CPU_THREADS': '7', 'OMP_NUM_THREADS': '1',
+                                  cq.ARM_ENV_KEYS: 'MOJOLEARN_CPU_THREADS'})
+    assert env['MOJOLEARN_CPU_THREADS'] == '7'
+    assert env['OMP_NUM_THREADS'] == '14'          # undeclared caps still follow the quota
+    assert env['MOJOLEARN_BENCH_ARM_ENV_KEPT'] == 'MOJOLEARN_CPU_THREADS=7'
+
+
+def test_without_declaration_default_is_unchanged():
+    with patch('builtins.open', mock_open(read_data='1400000 100000')), patch.object(cq.os, 'cpu_count', return_value=128):
+        env = cq.apply_cpu_quota({'MOJOLEARN_CPU_THREADS': '7'})
+    assert env['MOJOLEARN_CPU_THREADS'] == '14'
+    assert 'MOJOLEARN_BENCH_ARM_ENV_KEPT' not in env
