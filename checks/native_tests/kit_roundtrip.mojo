@@ -4,7 +4,7 @@
 Device column: every dtype the checks move goes up and comes back bit for
 bit through `upload` / `download`, a prefix through `upload_into`, a list
 through `download_into`, a caller's pinned buffer and a host address through
-`upload_host` / `upload_host_into` / `upload_address`, and the undrained set
+`upload_host` / `upload_host_into` / `upload_address` / `download_host_into`, and the undrained set
 with the returned pinned buffer held past the caller's drain. The float
 fixtures carry NaN payloads, both zeros, both infinities and subnormals, so
 a transfer that goes through a float value instead of the bits fails.
@@ -19,7 +19,7 @@ from std.memory import bitcast
 from max.gpu.host import DeviceContext
 
 from checks.native_tests.kit import (
-    all_finite, allclose, download, download_into, download_undrained_keep, same_words, upload, upload_address,
+    all_finite, allclose, download, download_host_into, download_into, download_undrained_keep, same_words, upload, upload_address,
     upload_host, upload_host_into, upload_into, upload_into_undrained_keep, word_hex,
 )
 from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require
@@ -175,10 +175,17 @@ def _host_forms(ctx: DeviceContext) raises:
     var second = ctx.enqueue_create_buffer[DType.uint32](KIT_WORDS)
     upload_host_into[DType.uint32](ctx, second, host)
     same_words[DType.uint32](download[DType.uint32](ctx, second, KIT_WORDS), values, "upload_host_into")
+    var back = ctx.enqueue_create_host_buffer[DType.uint32](KIT_WORDS)
+    download_host_into[DType.uint32](ctx, second, back)
+    var read = List[UInt32](length=KIT_WORDS, fill=0)
+    for i in range(KIT_WORDS):
+        read[i] = back.unsafe_ptr().unsafe_load(i)
+    same_words[DType.uint32](read, values, "download_host_into")
     var third = upload_address[DType.uint32](ctx, Int(values.unsafe_ptr()), KIT_WORDS)
     same_words[DType.uint32](download[DType.uint32](ctx, third, KIT_WORDS), values, "upload_address")
     _ = values
     _ = host^
+    _ = back^
     _ = first^
     _ = second^
     _ = third^

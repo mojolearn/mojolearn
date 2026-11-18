@@ -14,6 +14,11 @@ can do frees host memory a queued copy still reads.
     upload_into[DType.uint8](ctx, flags, host_flags)   # into an existing one
     var got = download[DType.uint32](ctx, d, n)         # an ordinary List
 
+A check that fills a pinned buffer itself hands the buffer over instead
+(`upload_host`, `upload_host_into`, `download_host_into`, the buffer a
+`var` of the caller): the call borrows it and drains, so no keep-alive line
+follows.
+
 What the kit does not cover: a DEVICE buffer that a queued launch reads is
 still the caller's to keep alive until the caller's next drain (`download`
 drains, so a device input named after the download that follows its launch
@@ -84,7 +89,7 @@ def upload_into[dt: DType](ctx: DeviceContext, mut dst: DeviceBuffer[dt], values
     _ = host^
 
 
-def upload_host[dt: DType](ctx: DeviceContext, host: HostBuffer[dt], count: Int) raises -> DeviceBuffer[dt]:
+def upload_host[dt: DType](ctx: DeviceContext, mut host: HostBuffer[dt], count: Int) raises -> DeviceBuffer[dt]:
     """A new device buffer of `count` elements holding the first `count`
     elements of the pinned buffer `host` (filled by the caller), drained
     before it returns: the caller may free `host` at once."""
@@ -95,7 +100,7 @@ def upload_host[dt: DType](ctx: DeviceContext, host: HostBuffer[dt], count: Int)
     return buf^
 
 
-def upload_host_into[dt: DType](ctx: DeviceContext, mut dst: DeviceBuffer[dt], host: HostBuffer[dt]) raises:
+def upload_host_into[dt: DType](ctx: DeviceContext, mut dst: DeviceBuffer[dt], mut host: HostBuffer[dt]) raises:
     """The pinned buffer `host` (at least `len(dst)` elements, filled by the
     caller) into the whole of `dst`, drained before it returns."""
     ctx.enqueue_copy(dst_buf=dst, src_ptr=host.unsafe_ptr())
@@ -160,6 +165,14 @@ def download_into[dt: DType](ctx: DeviceContext, mut src: DeviceBuffer[dt], mut 
         _ = view^
     unsafe_memcpy(dest=dst.unsafe_ptr(), src=host.unsafe_ptr(), count=n)
     _ = host^
+
+
+def download_host_into[dt: DType](ctx: DeviceContext, mut src: DeviceBuffer[dt], mut host: HostBuffer[dt]) raises:
+    """The whole of `src` into the caller's pinned buffer `host` (at least
+    `len(src)` elements), drained before it returns: `host` is readable at
+    once."""
+    ctx.enqueue_copy(dst_ptr=host.unsafe_ptr(), src_buf=src)
+    ctx.synchronize()
 
 
 # --- the queue left undrained: the caller holds what is returned ------------
