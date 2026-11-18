@@ -179,6 +179,13 @@ struct _CnnContext(Defaultable, Movable):
     #: lane idn-cnn-resident: the leading words of workspace slot
     #: `ONES_WS_SLOT` that already hold 1.0f (`ones_buf`).
     var ones_n: Int
+    #: lane fb15-sync-counts: the parameter blocks already on the device
+    #: (`put_prm`, `put_hyper`), keyed by their 4-byte words, with the clock
+    #: tick of their last use (the least recently used one is rewritten).
+    var prm_keys: List[List[Int32]]
+    var prm_bufs: List[DeviceBuffer[DType.int32]]
+    var prm_used: List[Int]
+    var prm_clock: Int
 
     def __init__(out self):
         self.ctx = Optional[DeviceContext]()
@@ -187,13 +194,18 @@ struct _CnnContext(Defaultable, Movable):
         self.tuned = List[Int]()
         self.pool = List[DeviceBuffer[DType.float32]]()
         self.ones_n = 0
+        self.prm_keys = List[List[Int32]]()
+        self.prm_bufs = List[DeviceBuffer[DType.int32]]()
+        self.prm_used = List[Int]()
+        self.prm_clock = 0
 
 
 #: The pinned stages of this binding's downloads (core/staged_download.mojo),
 #: one pool per binding and tier like the context.
 comptime _XCNN_STAGE_POOL = "MojolearnDownloadStagesXCnnIdenticalV1" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnDownloadStagesXCnnFastV1"
-comptime _CTX_NAME = "MojolearnXCnnContextIdenticalV3" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnXCnnContextFastV3"
-comptime X_CNN_CONTEXT = SharedSlot[_CnnContext, _CTX_NAME]
+# lane fb15-sync-counts: V4 / layout version 2 (the parameter-block cache fields)
+comptime _CTX_NAME = "MojolearnXCnnContextIdenticalV4" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnXCnnContextFastV4"
+comptime X_CNN_CONTEXT = SharedSlot[_CnnContext, _CTX_NAME, 2]
 
 
 def cnn_ctx() raises -> DeviceContext:
@@ -873,8 +885,68 @@ def put_i[resident: Bool](ctx: DeviceContext, slot: Int, src: IP, n: Int) raises
     return b^
 
 
+# lane fb15-sync-counts (2026-11-18): THE PARAMETER-BLOCK CACHE. Every entry
+# uploaded its parameter block (a few dozen shape words) on every call: one
+# cuMemcpyHtoDAsync (6-11 us of API time on the L40S, plus the runtime's
+# capture queries) for words that are the same on every call of a layer
+# (global-avgpool infer: 1 of its 1 H2D; batchnorm: 1 of 2; dropout2d: 2 of
+# 2). A block is now uploaded once into its own small device buffer and found
+# again by its words. Bound: `PRM_CACHE_MAX` blocks of at most
+# `PRM_CACHE_WORDS` words; a longer block takes the workspace slot as before.
+# A miss in a full cache rewrites the least recently used block: the rewrite
+# is stream-ordered after every earlier reader on this one context, and an
+# entry uses at most three blocks, so the victim is never one this entry
+# already holds. Kernels only read their parameter blocks. No bit moves.
+comptime PRM_CACHE_MAX = 32
+comptime PRM_CACHE_WORDS = 64
+
+
+def _prm_cached(ctx: DeviceContext, words: List[Int32]) raises -> Int:
+    """The device address of a cached block holding `words` (uploaded on a
+    miss from the cache's own copy), or 0 when the block is too long for the
+    cache."""
+    var n = len(words)
+    if n == 0 or n > PRM_CACHE_WORDS:
+        return 0
+    var s = _slots()
+    s[].prm_clock += 1
+    var victim = -1
+    for i in range(len(s[].prm_keys)):  # small-loop(prm cache: at most PRM_CACHE_MAX blocks): lookup by words, no data
+        if len(s[].prm_keys[i]) == n:
+            var same = True
+            for j in range(n):  # small-loop(one parameter block: at most PRM_CACHE_WORDS words)
+                if s[].prm_keys[i][j] != words[j]:
+                    same = False
+                    break
+            if same:
+                s[].prm_used[i] = s[].prm_clock
+                return Int(s[].prm_bufs[i].unsafe_ptr())
+        if victim < 0 or s[].prm_used[i] < s[].prm_used[victim]:
+            victim = i
+    if len(s[].prm_keys) < PRM_CACHE_MAX:
+        s[].prm_bufs.append(ctx.enqueue_create_buffer[DType.int32](PRM_CACHE_WORDS))
+        s[].prm_keys.append(words.copy())
+        s[].prm_used.append(s[].prm_clock)
+        victim = len(s[].prm_keys) - 1
+    else:
+        s[].prm_keys[victim] = words.copy()
+        s[].prm_used[victim] = s[].prm_clock
+    var addr = Int(s[].prm_bufs[victim].unsafe_ptr())
+    var b = view_i(ctx, IP(unsafe_from_address=addr), n)
+    # the source is the cache's own copy of the words: it lives until this
+    # block is the victim of a later miss, after this entry's synchronize
+    ctx.enqueue_copy(dst_buf=b, src_ptr=s[].prm_keys[victim].unsafe_ptr())
+    _ = b^
+    return addr
+
+
 def put_prm(ctx: DeviceContext, slot: Int, prm: List[Int32]) raises -> DeviceBuffer[DType.int32]:
-    """A parameter block into slot `slot` (the caller keeps `prm` alive past its synchronize)."""
+    """A parameter block on the device: the cached copy of its words
+    (`_prm_cached`), or slot `slot` for a block too long for the cache (the
+    caller keeps `prm` alive past its synchronize)."""
+    var addr = _prm_cached(ctx, prm)
+    if addr != 0:
+        return view_i(ctx, IP(unsafe_from_address=addr), len(prm))
     var b = ws_i(ctx, slot, len(prm))
     if len(prm) > 0:
         ctx.enqueue_copy(dst_buf=b, src_ptr=prm.unsafe_ptr())
@@ -882,6 +954,17 @@ def put_prm(ctx: DeviceContext, slot: Int, prm: List[Int32]) raises -> DeviceBuf
 
 
 def put_hyper(ctx: DeviceContext, slot: Int, h: List[Float32]) raises -> DeviceBuffer[DType.float32]:
+    """A float hyperparameter block: the parameter-block cache keyed by its
+    4-byte words (the same bytes; nothing is converted), or slot `slot`."""
+    if len(h) > 0 and len(h) <= PRM_CACHE_WORDS:
+        var words = List[Int32](capacity=len(h))
+        var src = h.unsafe_ptr().bitcast[Int32]()
+        for i in range(len(h)):  # small-loop(one hyperparameter block: at most PRM_CACHE_WORDS words)
+            words.append(src[i])
+        var addr = _prm_cached(ctx, words)
+        _ = words^
+        if addr != 0:
+            return view(ctx, FP(unsafe_from_address=addr), len(h))
     var b = ws(ctx, slot, len(h))
     if len(h) > 0:
         ctx.enqueue_copy(dst_buf=b, src_ptr=h.unsafe_ptr())
