@@ -35,7 +35,7 @@ jobs:
       matrix:
         shard: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
     env:
-      SHARDS: 12
+      TT_SHARDS: 12
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
@@ -49,13 +49,13 @@ jobs:
           environments: test
       - name: Tool tests, shard ${{ matrix.shard }} of 12 (all cores of the runner)
         env:
-          SHARD: ${{ matrix.shard }}
+          TT_SHARD: ${{ matrix.shard }}
         run: |
           set -u
           mapfile -t ALL < <(ls tools/test_*.py tools/tests/test_*.py | LC_ALL=C sort)
           FILES=()
-          for i in "${!ALL[@]}"; do [ $((i % SHARDS)) -eq "$SHARD" ] && FILES+=("${ALL[$i]}"); done
-          echo "shard $SHARD: ${#FILES[@]} of ${#ALL[@]} files, $(nproc) cores"
+          for i in "${!ALL[@]}"; do [ $((i % TT_SHARDS)) -eq "$TT_SHARD" ] && FILES+=("${ALL[$i]}"); done
+          echo "shard $TT_SHARD: ${#FILES[@]} of ${#ALL[@]} files, $(nproc) cores"
           export MOJOLEARN_TOOL_TESTS_OUT="$RUNNER_TEMP/tool-tests"
           export MOJOLEARN_TEST_PY="$PWD/.pixi/envs/test/bin/python"
           rc=0
