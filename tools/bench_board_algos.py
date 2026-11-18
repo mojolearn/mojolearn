@@ -7750,10 +7750,19 @@ def worker(args):
                 ours_arm = args.arm in OURS_ARMS
                 n_fit = small.calls_for(ms, ours_arm, "fit") if r > 0 else 1
                 n_inf = small.calls_for(ims, ours_arm, "infer") if r > 0 and did else 1
+                # BOARD ORDER (call profile phase fit+infer, lane fx-harness 2026-11-18): both phases the same count,
+                # interleaved below as on the board: each fit, then the first predict right after it
+                pair = small.paired_calls(ms, ims, ours_arm) if r > 0 and did else None
+                if pair is not None:
+                    n_fit = n_inf = pair
                 fit_calls, inf_calls = [ms], [ims]
                 # attribution and call profile runs only (no-op otherwise): the window around the forced phase's
                 # extra calls; a call profile run makes one call of the other phase, so the window holds one phase
-                small.range_open(n_fit, "fit") or small.range_open(n_inf, "infer")
+                # (board order: the window holds the fit and inference pairs)
+                if pair is not None:
+                    small.range_open(pair, small.BOARD_ORDER)
+                else:
+                    small.range_open(n_fit, "fit") or small.range_open(n_inf, "infer")
                 try:
                     for i in range(1, max(n_fit, n_inf)):
                         if i < n_fit:

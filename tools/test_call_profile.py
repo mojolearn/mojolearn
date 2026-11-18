@@ -505,3 +505,24 @@ class Job(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def test_board_order_rows_parse():
+    # lane fx-harness (2026-11-18): fit+infer profiles each fit and the first predict right after it
+    rows = CP.parse_rows("algos/mlp-reg/istella/rows=full fit+infer\nalgos/mlp-reg/istella/rows=full infer\n")
+    assert [r.phase for r in rows] == ["fit+infer", "infer"]
+    assert rows[0].name == "mlp-reg" and rows[1].name == "mlp-reg-infer"
+    assert CP._h2d({"count": 2.0, "mb": 88.0}) == "2.0 (88.00 MB)" and CP._h2d(None) == "-"
+    assert any(r.phase == "fit+infer" for r in CP.load_rows(os.path.join(
+        os.path.dirname(os.path.abspath(__file__)), "ops", "call_profile_rows_unexplained.tsv")))
+
+
+def test_board_order_forces_both_phases_to_one_count():
+    env = {SR.FORCE_CALLS_ENV: "20", SR.FORCE_CALLS_PHASE_ENV: SR.BOARD_ORDER}
+    assert SR.forced_calls(True, "fit", env) == 20 and SR.forced_calls(True, "infer", env) == 20
+    assert SR.forced_calls(False, "fit", env) is None              # opponents are never forced
+    assert SR.paired_calls(900.0, 100.0, True, env) == 20
+    env[SR.PROFILE_SECONDS_ENV] = "30"                              # 30 s at 1 s per pair: 31 pairs
+    assert SR.paired_calls(900.0, 100.0, True, env) == 31
+    assert SR.paired_calls(900.0, 100.0, True, {SR.FORCE_CALLS_ENV: "20", SR.FORCE_CALLS_PHASE_ENV: "infer"}) is None
+    assert SR.fit_warmup_skipped(env) is False                      # the board's warmup fit runs in board order

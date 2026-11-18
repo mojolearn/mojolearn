@@ -43,6 +43,11 @@ SCORING_ONE = "one-call"
 #: A board never sets it.
 FORCE_CALLS_ENV = "MOJOLEARN_BENCH_FORCE_CALLS"
 FORCE_CALLS_PHASE_ENV = "MOJOLEARN_BENCH_FORCE_CALLS_PHASE"
+#: BOARD ORDER (lane fx-harness, 2026-11-18): the forced phase `fit+infer` forces BOTH phases to the same count, so
+#: the window holds pairs in the board's order: a fit, then the FIRST predict right after it (the worker interleaves
+#: them). Consecutive forced predicts cannot show a cost only the first predict after a large fit pays (mlp istella
+#: infer: the executor pool sits at its 3 GiB bound after the fit; ideas-unexplained-rows-RESULT.md section 2).
+BOARD_ORDER = "fit+infer"
 
 
 def forced_calls(ours, phase=None, environ=None):
@@ -60,9 +65,28 @@ def forced_calls(ours, phase=None, environ=None):
     if n < 1:
         return None
     want = (env.get(FORCE_CALLS_PHASE_ENV) or "").strip()
+    if want == BOARD_ORDER:
+        # board order: the fit, every inference batch and the pair itself
+        return n if phase is not None and (phase in ("fit", BOARD_ORDER) or phase.startswith("infer")) else None
     if want and (phase is None or (phase != want and not phase.startswith(want + "/"))):
         return None
     return n
+
+
+def paired_calls(fit_ms, infer_ms, ours, environ=None):
+    """BOARD ORDER: the calls of each phase of a forced `fit+infer` run (the same count for both, sized by the time of
+    the first scored pair, fit plus inference), or None when the run is not one."""
+    env = os.environ if environ is None else environ
+    if (env.get(FORCE_CALLS_PHASE_ENV) or "").strip() != BOARD_ORDER:
+        return None
+    forced = forced_calls(ours, BOARD_ORDER, env)
+    if forced is None:
+        return None
+    try:
+        pair = float(fit_ms or 0.0) + float(infer_ms or 0.0)
+    except (TypeError, ValueError):
+        pair = 0.0
+    return profile_calls(forced, pair if pair > 0 else None, env)
 
 
 #: ATTRIBUTION PROFILE RUNS ONLY: the NVTX range name the job's `nsys profile --capture-range=nvtx` waits for, and a
