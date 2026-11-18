@@ -670,7 +670,7 @@ def identical_exp64(x: Float64) -> Float64:
 
 
 def portable_log64(x_in: Float64) -> Float64:
-    """HOST-ONLY (no float64 on device): `log` for Float64 as one arithmetic, the sibling of `portable_exp64` for the same reason (each host libm rounds double log differently in the last bit)."""
+    """`log` for Float64 on the host and on NVIDIA / AMD devices (explicit fma, IEEE division and bit work only; Metal has no float64, so never in an Apple kernel) as one arithmetic, the sibling of `portable_exp64` for the same reason (each host libm rounds double log differently in the last bit)."""
     from std.math import fma
     from std.memory import bitcast
 
