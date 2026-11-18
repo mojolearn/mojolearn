@@ -257,6 +257,16 @@ def xcnn_builtins() raises -> PythonObject:
 
 def xcnn_connect_numpy(context: PythonObject) raises:
     """Connect the optional NumPy metadata without requiring arrays."""
+    # fx-cnn-layers (2026-11-18): the connected case first, through held
+    # names. With `ndarray` connected on the context and on its admission
+    # context (or no admission context) every statement below is a no-op
+    # (`classical_connect_numpy` returns at its own probe), so this is the
+    # same outcome with two or three dictionary reads; it ran two probes that
+    # each built a dict and a str, and two more by-name reads, per layer call.
+    if xcnn_get(context, XK_NDARRAY) is not None:
+        var connected = xcnn_get(context, XK_ADMISSION)
+        if connected is None or xcnn_get(connected, XK_NDARRAY) is not None:
+            return
     classical_connect_numpy(context)
     if py_get(context, "ndarray") is None and py_get(context, "xcnn_numpy_import_tried") is None:
         # The CNN host buffers are ndarrays. Importing the package never loads
@@ -295,12 +305,17 @@ def xcnn_entries(fields: PythonObject, context: PythonObject) raises -> PythonOb
     # compare or decode. Same refusals, same writes, same result. Timing:
     # global-avgpool / batchnorm2d infer (board), a Conv2d(3, 16, 3) on
     # 32 x 32 x 8 random input (non-board).
-    var b = xcnn_builtins()
-    var mode = py_get(fields, "numeric_mode")
-    neural_plain_value(mode, 0, context)
+    # fx-cnn-layers (2026-11-18): the fields, the context and the connected
+    # entries are read through held names, the exact-type tests use the held
+    # builtin types, and the plain-value scan runs only for a value it could
+    # refuse (it returns at once for None and an exact str). Same refusals in
+    # the same order, same writes.
+    var mode = xcnn_get(fields, XK_NUMERIC_MODE)
+    if mode is not None and not xcnn_exact(mode, XT_STR):
+        neural_plain_value(mode, 0, context)
     if mode is None or not Bool(py=mode):
-        mode = context["backend_fields"]["_DEFAULT_MODE"]
-    if py_type(mode) is not b.str:
+        mode = xcnn_item(xcnn_item(context, XK_BACKEND_FIELDS), XK_DEFAULT_MODE)
+    if not xcnn_exact(mode, XT_STR):
         raise Error("numeric_mode must be fast, identical or None")
     # p3-cnn-sequence-tsa: an exact "identical" / "fast" is used as it is
     var text = String(py=mode)
@@ -312,16 +327,20 @@ def xcnn_entries(fields: PythonObject, context: PythonObject) raises -> PythonOb
         key = PythonObject(text)
     if text != "identical" and text != "fast":
         raise Error("numeric_mode must be fast, identical or None")
-    var entries = context["xcnn_bindings"][key]
-    var entries_type = py_type(entries)
-    if entries_type is b.str or (entries_type is not b.dict and Bool(py=py_call(b.isinstance, entries, b.str))):
+    var entries = py_item(xcnn_item(context, XK_BINDINGS), key)
+    if xcnn_exact(entries, XT_STR):
         raise Error(String(py=entries))
+    if not xcnn_exact(entries, XT_DICT):
+        var b = xcnn_builtins()
+        if Bool(py=py_call(b.isinstance, entries, b.str)):
+            raise Error(String(py=entries))
     if text == "identical":
         # API-shell metadata only: the arithmetic version the binding names,
         # kept on the model so state persistence cannot switch versions
-        var current = entries["profile"]
-        var previous = py_get(fields, "numerical_profile_")
-        neural_plain_value(previous, 0, context)
+        var current = xcnn_item(entries, XK_PROFILE)
+        var previous = xcnn_get(fields, XK_PROFILE_REC)
+        if previous is not None and not xcnn_exact(previous, XT_STR):
+            neural_plain_value(previous, 0, context)
         if (previous is not None and current is not None and previous is not current
                 and not Bool(py=previous == current)):
             raise Error("mojolearn: CNN numerical profile differs from this model's recorded "
@@ -331,10 +350,10 @@ def xcnn_entries(fields: PythonObject, context: PythonObject) raises -> PythonOb
                         + "profile; use a matching binding or a fresh model for the new version")
         if current is not None and previous is None:
             # equal to `previous` otherwise (checked above): written once
-            py_setitem(fields, "numerical_profile_", current)
-    var recorded = py_get(fields, "numeric_mode_")
-    if recorded is not key and (recorded is None or py_type(recorded) is not b.str or String(py=recorded) != text):
-        py_setitem(fields, "numeric_mode_", key)
+            xcnn_put(fields, XK_PROFILE_REC, current)
+    var recorded = xcnn_get(fields, XK_MODE_REC)
+    if recorded is not key and (recorded is None or not xcnn_exact(recorded, XT_STR) or String(py=recorded) != text):
+        xcnn_put(fields, XK_MODE_REC, key)
     return entries
 
 
@@ -342,10 +361,10 @@ def xcnn_key(entries: PythonObject) raises -> XcnnEntryKey:
     """The native table key of the layer's connected x_cnn image (the bridge
     records it at import as `native_key`): the doors call that image's
     published entry (core/xcnn_entry_table.mojo), not its Python entries."""
-    var key = py_get(entries, "native_key")
+    var key = xcnn_get(entries, XK_NATIVE_KEY)
     if key is None:
         raise Error("ImportError: mojolearn: the x_cnn binding publishes no native entry table")
-    return XcnnEntryKey(Int(py=key[0]), Int(py=key[1]))
+    return XcnnEntryKey(Int(py=xcnn_at(key, 0)), Int(py=xcnn_at(key, 1)))
 
 
 def xcnn_ref(entries: PythonObject) raises -> EntryRef:
@@ -387,21 +406,21 @@ def xcnn_ptr(value: PythonObject) raises -> Int:
 
 def xcnn_mixed(entries: PythonObject) raises -> Bool:
     """Whether the binding has the mixed-residency entries (`x_cnn_*_m`)."""
-    return Bool(py=entries["mixed"])
+    return Bool(py=xcnn_item(entries, XK_MIXED))
 
 
 def xcnn_idn(entries: PythonObject, bit: Int) raises -> Bool:
-    return (Int(py=entries["idn"]) & bit) != 0
+    return (Int(py=xcnn_item(entries, XK_IDN)) & bit) != 0
 
 
 def xcnn_idn2(entries: PythonObject, bit: Int) raises -> Bool:
-    return (Int(py=entries["idn2"]) & bit) != 0
+    return (Int(py=xcnn_item(entries, XK_IDN2)) & bit) != 0
 
 
 def xcnn_device_io_off(entries: PythonObject, context: PythonObject) raises -> Bool:
     """The resident I/O route is off: the environment switches read at
     import, or a `-D MOJOLEARN_IDN_ALL_OFF` build of the binding."""
-    return Bool(py=context["xcnn_device_io_off"]) or xcnn_idn2(entries, XCNN_F2_ALL_OFF)
+    return Bool(py=xcnn_item(context, XK_DEVICE_IO_OFF)) or xcnn_idn2(entries, XCNN_F2_ALL_OFF)
 
 
 def xcnn_resident(entries: PythonObject, context: PythonObject) raises -> Bool:
