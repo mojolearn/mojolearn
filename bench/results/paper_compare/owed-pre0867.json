@@ -160,7 +160,8 @@
   "nv-fma-asm": {
    "define": "MOJOLEARN_IDN_NV_FMA_ASM_OLD",
    "status": "define in code (checks/nv_fma_rn.mojo IDN_NV_FMA_ASM_OLD, nv_fma_rn_kernel; callers neighbors/checks/pinned_distance_tile.mojo _rt_step/_rt_step_exact, gemm/checks/gemm_identical.mojo _tuned_step/_admit_step, transformer/impl/llama/fused_attention.mojo _step x2): B = the NVIDIA rounded FMA as the inline-asm helper nv_fma_rn_f32 (62a6577b39, candidate 4c2340386abc's shape); A = the llvm.nvvm.fma.rn.f intrinsic (0.8.55's form). Same PTX fma.rn.f32, same fold order, same bits; NVIDIA identical column only (AMD is a no-change check); mul.rn/mul.rn.ftz stay asm in both arms",
-   "owed": "RUN"
+   "owed": "DECIDED",
+   "evidence": "ab2 2026-11-18, NVIDIA L40S host c6dd9ebea3e3, wheel d652a4b0a1, base and arm back to back, one run per arm (~/mojolearn-evidence/measure-candidate/build-ec1c4b5aff/fetched/nvc-ab-20261118T140734Z-8f0269/x/, tables ~/mojolearn-evidence/briefs-20261118/fx-verdicts/tab-<arm>.txt): digests equal on all 30 cells, asm/intrinsic geomean 0.971 over 29 like-scored cells (ols taxi 0.74-0.80, ridge taxi 0.82); the asm helper PROMOTED to the NVIDIA default, MOJOLEARN_IDN_NV_FMA_ASM_OLD refused, MOJOLEARN_IDN_NV_FMA_ASM_OFF restores the intrinsic (lane fx-verdicts); pca taxi infer 0.03 is a scoring-mode artifact"
   },
   "lm-forward-zero-fill": {
    "define": "MOJOLEARN_BYTE_LM_LOGITS_ZERO_FILL",
@@ -475,6 +476,12 @@
   "sqrt-comptime-step": {
    "define": "MOJOLEARN_NUMERICS_FAST_SQRT_COMPTIME_STEP",
    "status": "define in code (checks/numerics.mojo portable_sqrtf NUMERICS_FAST_SQRT_COMPTIME_STEP: B = the four-candidate correction as a comptime for (offset a compile-time constant per step); A = the run-time for k in range(4) chain that Mojo 1.2 lowers to compare-and-branch. Same operations in the same order: bits unchanged on every column). PARTIAL A/B ab1 2026-11-18, NVIDIA L40S host 37f71a6102af, wheel d652a4b0a1, base and arm back to back, one run per arm (~/mojolearn-evidence/measure-candidate/build-d652a4b0a1/ab1-table.txt): capped after 8 of 25 cells (bisecting-kmeans istella infer 0.67, randomized-svd taxi 0.89, ann-refine 0.94/0.97, others 0.96-1.00, digests equal); knn / HDBSCAN / KDE rows not reached: still owed, not flipped",
+   "owed": "DECIDED",
+   "evidence": "ab2 2026-11-18, NVIDIA L40S host c6dd9ebea3e3, wheel d652a4b0a1, base and arm back to back, one run per arm (~/mojolearn-evidence/measure-candidate/build-ec1c4b5aff/fetched/nvc-ab-20261118T140734Z-8f0269/x/, tables ~/mojolearn-evidence/briefs-20261118/fx-verdicts/tab-<arm>.txt): digests and quality equal on all 36 cells, geomean 0.973 (hdbscan taxi 0.80, knn taxi 0.84, knn-reg taxi 0.85, knn-clf taxi 0.88); PROMOTED to the default on every column, the old define refused (lane fx-verdicts); rbf-sampler istella fit 1.31 re-time owed as b_arm sqrt-comptime-step-off"
+  },
+  "sqrt-comptime-step-off": {
+   "define": "MOJOLEARN_NUMERICS_FAST_SQRT_COMPTIME_STEP_OFF",
+   "status": "define in code (checks/numerics.mojo NUMERICS_SQRT_COMPTIME_STEP): B = the run-time for k in range(4) candidate loop; A = the comptime step, default since 2026-11-18 (lane fx-verdicts). Same bits on both arms. Owed only to re-time the one slower ab2 cell",
    "owed": "RUN"
   },
   "f16-widen-host": {
@@ -491,7 +498,8 @@
   "metrics-dense-labels-off": {
    "define": "MOJOLEARN_METRICS_FAST_DENSE_LABELS_OFF",
    "status": "define in code (core/labels_score_encode.mojo _DENSE_OFF): B = the LSD radix route of host_unique_inverse_cast (e689ac329a); A = the dense label table route (lane fb-metrics 4515cf07af, 2026-11-17)",
-   "owed": "RUN"
+   "owed": "DECIDED",
+   "evidence": "ab2 2026-11-18, NVIDIA L40S host c6dd9ebea3e3, wheel d652a4b0a1, base and arm back to back, one run per arm (~/mojolearn-evidence/measure-candidate/build-ec1c4b5aff/fetched/nvc-ab-20261118T140734Z-8f0269/x/, tables ~/mojolearn-evidence/briefs-20261118/fx-verdicts/tab-<arm>.txt): B (radix) slower on 68 of 72 cells, geomean 3.62, median 4.16; digests and scores equal; arm DELETED (lane fx-verdicts)"
   },
   "linear-lbd-batch-off": {
    "define": "MOJOLEARN_LINEAR_LBD_BATCH_OFF",
@@ -508,7 +516,8 @@
    "define": "",
    "env": "MOJOLEARN_XPREP_R3_OFF=view",
    "status": "ENV arm, no build (--b-arm xprep-r3-off-view=env:MOJOLEARN_XPREP_R3_OFF=view; read by bindings/x_prep_native_owner_run.mojo): B = the label buffer copy restored; A = the view (c6bd59448e, lane fb-metrics 2026-11-17)",
-   "owed": "RUN"
+   "owed": "DECIDED",
+   "evidence": "ab2 2026-11-18, NVIDIA L40S host c6dd9ebea3e3, wheel d652a4b0a1, base and arm back to back, one run per arm (~/mojolearn-evidence/measure-candidate/build-ec1c4b5aff/fetched/nvc-ab-20261118T140734Z-8f0269/x/, tables ~/mojolearn-evidence/briefs-20261118/fx-verdicts/tab-<arm>.txt): B (copy) slower on every cell, geomean 1.40 (label-binarizer taxi fit 1.67, multilabel-binarizer taxi fit 1.55); digests equal; the label door's view switch DELETED (lane fx-verdicts; the encoder owner's view choice stays)"
   },
   "cpu-threads-28": {
    "define": "",
@@ -521,7 +530,8 @@
    "define": "",
    "env": "MOJOLEARN_CPU_THREADS=@cgroup_cores",
    "status": "ENV arm, no build (--b-arm cpu-threads-cgroup=env:MOJOLEARN_CPU_THREADS=@cgroup_cores): B = the host pool pinned at the box's cgroup core count, which tools/ops/paper_compare_job.sh puts in place of @cgroup_cores on the box (alloc_cores: the cgroup quota, else nproc); A = core/host_predict_threads.mojo's own resolution (unset). Replaces cpu-threads-28, invalid on a 14-core pod (lane fb15-ab-verdicts, 2026-11-18)",
-   "owed": "RUN"
+   "owed": "INVALID",
+   "evidence": "ab2 2026-11-18, NVIDIA L40S host c6dd9ebea3e3, wheel d652a4b0a1, base and arm back to back, one run per arm (~/mojolearn-evidence/measure-candidate/build-ec1c4b5aff/fetched/nvc-ab-20261118T140734Z-8f0269/x/, tables ~/mojolearn-evidence/briefs-20261118/fx-verdicts/tab-<arm>.txt): the arm was never applied: tools/cpu_quota.py apply_cpu_quota pops MOJOLEARN_CPU_THREADS in every race worker and sets the cgroup quota, so both arms ran at 13 (raw records); resample istella 21.38 is a one-off of identical settings (warmup and scored call both 13.4 s in the arm process; base 0.63 s, candidate board 0.32 s). No arm can test this until the harness lets an arm's MOJOLEARN_CPU_THREADS through"
   }
  },
  "rows": [
@@ -3080,6 +3090,19 @@
     "sqrt-comptime-step"
    ],
    "decides": "as sqrt-comptime-step-knn: promote B unless it is slower than A at equal quality on the NVIDIA L40S; digests must not move; the band lane put these tree predict rows on select-to-branch codegen (the same Mojo 1.2 lowering)"
+  },
+  {
+   "id": "sqrt-comptime-step-off-rbf-sampler",
+   "source": "lane fx-verdicts (2026-11-18): ab2 rbf-sampler istella fit arm/base 59.88 -> 78.66 ms (1.31; taxi 1.00), digests equal, the one slower cell of the promoted sqrt-comptime-step",
+   "kind": "ab",
+   "lane": "rbf-sampler",
+   "dataset": "*",
+   "rows": "full",
+   "vendor": "nvidia",
+   "b_arms": [
+    "sqrt-comptime-step-off"
+   ],
+   "decides": "re-time only: keep the comptime step unless the loop (B) is faster on rbf-sampler istella and taxi at equal digests on the NVIDIA L40S; one run per arm"
   },
   {
    "id": "causal-lm-resident-forward-off-generate",
