@@ -44,18 +44,6 @@
    "status": "define in code (autograd/cnn_block_op.mojo CNN_FUSED_OPS): B = lane x8's OPS_CONV2D / OPS_RELU / OPS_MAXPOOL2D / OPS_LINEAR chain; A = ops cnn_conv_block / cnn_linear",
    "owed": "RUN"
   },
-  "byte-lm-generic": {
-   "define": "MOJOLEARN_BYTE_LM_GENERIC_OPS,MOJOLEARN_BYTE_LM_PROGRAM_STEP",
-   "status": "define in code (training/byte_lm_program.mojo, autograd/block_step_ops.mojo): B = generic OPS_EMBEDDING and no next-norm fusion; A = op lm_embedding (+ ATTN_STEP_NEXT_NORM on Apple). Since 2026-11-13 the program is itself the B arm byte-lm-program-step, so this arm carries MOJOLEARN_BYTE_LM_PROGRAM_STEP too (compare it with byte-lm-program-step, not with the default hand step)",
-   "owed": "DECIDED",
-   "evidence": "L40S A/B at ba08dac006 (2026-11-13, one job): neural/lm-train-step/bytes 35.71 -> 48.54 ms, B 1.36x SLOWER; A (op lm_embedding) stays. ~/mojolearn-evidence/measure-candidate/pc-ba08dac006f5-nvidia/final2/owed-nvidia.json; switch code unchanged since ba08dac006 (git diff ba08dac006 076beccb75 over every .mojo naming the switch: comment lines only, the 2026-11-15 delete + restore); recorded in docs/apple-fast/EXPERIMENTS.md (lane fb8-owed-arms, 2026-11-17)"
-  },
-  "byte-lm-program-step": {
-   "define": "MOJOLEARN_BYTE_LM_PROGRAM_STEP",
-   "status": "define in code (training/byte_lm_config.mojo:10 (one switch for the host and GPU columns) BYTE_LM_PROGRAM_STEP): B = lane x7's program step (one Program.fit per call, OPS_ATTN_STEP per layer, executor AdamW); A = the restored hand step (0.8.55 route: per-layer llama_decoder_layer_forward, tape backward autograd/rules_lm.mojo, certified optimizer / step-glue update). Candidate 4c2340386abc: lm-train-step bytes NV 48.9 ms, AMD 50.5 ms vs 35.5 / 43.9 ms for the hand step (0.8.55 / 0.8.66)",
-   "owed": "DECIDED",
-   "evidence": "L40S A/B at ba08dac006 (2026-11-13, one job): neural/lm-train-step/bytes 35.71 -> 48.52 ms, B 1.36x SLOWER; A (the hand step) stays. ~/mojolearn-evidence/measure-candidate/pc-ba08dac006f5-nvidia/final2/owed-nvidia.json; switch code unchanged since ba08dac006 (git diff ba08dac006 076beccb75 over every .mojo naming the switch: comment lines only, the 2026-11-15 delete + restore); recorded in docs/apple-fast/EXPERIMENTS.md (lane fb8-owed-arms, 2026-11-17)"
-  },
   "transformer-generic-prefill": {
    "define": "MOJOLEARN_TRANSFORMER_GENERIC_PREFILL",
    "status": "define in code (autograd/block_step_ops.mojo TRANSFORMER_GENERIC_PREFILL): B = lane x4b's generic step-op run for a stateless forward; A = attn_step_fresh_prefill (0.8.66's session fresh prefill)",
@@ -72,24 +60,6 @@
    "status": "define in code (cholesky/checks/fast_trsm.mojo CHOL_SHARED_SUB; Apple FAST opt-in, default OFF): B = the scoped lower-triangle subtract",
    "owed": "PAUSED",
    "evidence": "Apple FAST opt-in (cholesky/checks/fast_trsm.mojo CHOL_SHARED_SUB): Apple fast investment is stopped (AGENTS.md part 2); no NVIDIA identical race reads it"
-  },
-  "arima-async-all": {
-   "define": "MOJOLEARN_ARIMA_ASYNC_ALL",
-   "status": "define in code (arima/impl/fast_lbfgs_async.mojo ARIMA_ASYNC_ALL): B = the per-series solver on every route (lane n10 form); A = lock-step solver where the fit holds no evaluation workspace (FAST NVIDIA / AMD, FAST Apple with exog, IDENTICAL above IDN_EVAL_WS_MAX_CELLS), per-series elsewhere",
-   "owed": "DECIDED",
-   "evidence": "L40S A/B at ba08dac006 (2026-11-13, one job): classical2/arima/synthetic fit 52.54 -> 54.52 ms, B 1.04x (SAME, no gain); A (lock-step) stays. ~/mojolearn-evidence/measure-candidate/pc-ba08dac006f5-nvidia/final2/owed-nvidia.json; switch code unchanged since ba08dac006 (git diff ba08dac006 076beccb75 over every .mojo naming the switch: comment lines only, the 2026-11-15 delete + restore); recorded in docs/apple-fast/EXPERIMENTS.md (lane fb8-owed-arms, 2026-11-17)"
-  },
-  "autograd-optim": {
-   "define": "MOJOLEARN_AUTOGRAD_OPTIM",
-   "status": "define in code (sequence/mlp_fit.mojo and sequence/recurrent.mojo AUTOGRAD_OPTIM): B = the executor optimizer (OptimizerState + step_lr / step_lr_finish, lane X3 form); A = the hand OP_OPT update (mlp_fit inline words, rnn_fit opt_step)",
-   "owed": "DECIDED",
-   "evidence": "L40S A/B at ba08dac006 (2026-11-13, one job): gru 113.82 -> 113.27, lstm 139.90 -> 139.62, mlp 183.47 -> 185.69, rnn 52.28 -> 51.76 ms fit, B 0.99-1.01x (SAME); A (hand OP_OPT) stays. ~/mojolearn-evidence/measure-candidate/pc-ba08dac006f5-nvidia/final2/owed-nvidia.json; switch code unchanged since ba08dac006 (git diff ba08dac006 076beccb75 over every .mojo naming the switch: comment lines only, the 2026-11-15 delete + restore); recorded in docs/apple-fast/EXPERIMENTS.md (lane fb8-owed-arms, 2026-11-17)"
-  },
-  "chol-ops-fit": {
-   "define": "MOJOLEARN_IDN_CHOL_OPS_FIT",
-   "status": "define in code (cholesky/chol_ops.mojo CHOL_OPS_FIT): B = the N7/N8 Cholesky ops route for the KernelRidge and GPR resident fits, the GPC Laplace Newton loop (bounded device loop, gaussian_process/gpc_newton.mojo), and the GP estimator's fit / lml+gradient / sample_y and hyperparameter optimizer (device run sequencer); A = potrf_lower + cho_solve (the 0.8.66 routes, restored 2026-11-13 after AMD 1.14-1.25x: KRR/GPR by fable-perf-classical-0855, GPC and the GP estimator/optimizer by restore-classical-measured-routes); also (lane fix-chol-ops-remaining-callers, 2026-11-13) the GMM precision Cholesky host-read chain (mixture/checks/mstep.mojo gmm_precision_cholesky, and gmm_precision_enqueue where no one-launch factor applies: gmm_precision_reads_host) and x_decomp's DevExec.chol_inv / DMcd.chol (MinCovDet's Cholesky C-step): A = 0.8.66 potrf_lower + chol_logdet + trsm_lower (restored from 49e8c5b633^), B = the ops (49e8c5b633, 52fb3193be)",
-   "owed": "DECIDED",
-   "evidence": "L40S A/B at ba08dac006 (2026-11-13, one job): 14 cells kernel-ridge / gpr / gpc / gmm / min-cov-det / elliptic-envelope, B 0.91-1.10x, every cell SAME (gpr istella fit 79.86 -> 87.78 the widest); A (0.8.66 potrf_lower) stays. ~/mojolearn-evidence/measure-candidate/pc-ba08dac006f5-nvidia/final2/owed-nvidia.json; switch code unchanged since ba08dac006 (git diff ba08dac006 076beccb75 over every .mojo naming the switch: comment lines only, the 2026-11-15 delete + restore); recorded in docs/apple-fast/EXPERIMENTS.md (lane fb8-owed-arms, 2026-11-17)"
   },
   "program-run-entry": {
    "define": "MOJOLEARN_PROGRAM_RUN_ENTRY",
@@ -904,10 +874,7 @@
    ],
    "dataset": "*",
    "rows": "full",
-   "decides": "families moved onto the N7 / N9b ops not slower than 0.8.66",
-   "b_arms": [
-    "chol-ops-fit"
-   ]
+   "decides": "families moved onto the N7 / N9b ops not slower than 0.8.66"
   },
   {
    "id": "neighbour-trees",
@@ -1013,21 +980,6 @@
    "decides": "keep the ops (A) unless the generic chain is at least as fast on NVIDIA and AMD (fit and infer) with quality equal; last NV fit 525 ms vs torch 203, infer 1.1 ms"
   },
   {
-   "id": "r1-byte-lm-ops",
-   "source": "R1 r1-restore-measured-winners (X7 5fff22515a embedding sort plan restored as op lm_embedding; next-norm fusion as ATTN_STEP_NEXT_NORM, Apple only)",
-   "kind": "ab",
-   "lane": [
-    "lm-train-step"
-   ],
-   "dataset": "*",
-   "rows": "full",
-   "b_arms": [
-    "byte-lm-program-step",
-    "byte-lm-generic"
-   ],
-   "decides": "keep the hand step (A, default since 2026-11-13) unless byte-lm-program-step is at least as fast with quality equal and peak memory not worse on NVIDIA and AMD (then the program is promoted and the hand step deleted with a tombstone); within the program, keep the restored ops unless byte-lm-generic is at least as fast as byte-lm-program-step; the fusion is Apple-only, so NV/AMD time the embedding op alone. Bits differ between A and B (the program uses the executor's embedding / GEMM / CE / AdamW bodies)"
-  },
-  {
    "id": "r1-rsvd-devscan",
    "source": "R1 r1-restore-measured-winners (A3 0cb550c337 RSVD_FAST_DEVSCAN restored inside the one call; DIRECT_IN proven subsumed by the code)",
    "kind": "ab",
@@ -1052,39 +1004,6 @@
     "chol-shared-sub"
    ],
    "decides": "Apple FAST only (paused): promote the scoped subtract when B beats A on fit with quality equal (one M3 sample on record: fit B/A 0.9514, solve 0.9839); else it stays opt-in"
-  },
-  {
-   "id": "r2-arima-async-all",
-   "source": "R2 r2-restore-unmeasured-defaults 1155f6ab56 (ARIMA lock-step L-BFGS restored as the unmeasured default; N10 eea60dbe74 had deleted it)",
-   "kind": "ab",
-   "lane": "arima",
-   "dataset": "*",
-   "rows": "full",
-   "modes": [
-    "fast",
-    "identical"
-   ],
-   "b_arms": [
-    "arima-async-all"
-   ],
-   "decides": "the per-series solver everywhere (B) replaces the lock-step default only if at least as fast on NVIDIA and AMD with forecast quality equal; IDENTICAL differs between arms only for fits above IDN_EVAL_WS_MAX_CELLS"
-  },
-  {
-   "id": "r2-autograd-optim",
-   "source": "R2 r2-restore-unmeasured-defaults e048e42e81 (X3 75825f479c promoted AUTOGRAD_OPTIM with no measurement; the pre-X3 hand update restored as default)",
-   "kind": "ab",
-   "lane": [
-    "mlp-fit",
-    "gru-fit",
-    "lstm-fit",
-    "rnn-fit"
-   ],
-   "dataset": "*",
-   "rows": "full",
-   "b_arms": [
-    "autograd-optim"
-   ],
-   "decides": "the executor optimizer (B) becomes the one update only if at least as fast as the hand OP_OPT update on NVIDIA and AMD; digests must not move in either arm"
   },
   {
    "id": "restore-executor-program-run",
@@ -1250,25 +1169,6 @@
     "cnn-predict-program-copy"
    ],
    "decides": "keep the trimmed resident predict (A) unless B is at least as fast on NVIDIA and AMD (infer); no 0.8.55 cell (AMD MI325X 9.21 ms at 0.8.62); softmax/argmax stay the generic ops in both arms (x_cnn_res_argmax deleted at 7c9d9d5575); digests must not move"
-  },
-  {
-   "id": "chol-ops-fit",
-   "source": "restore-classical-measured-routes (2026-11-13; history-audit hist-classical rows 1-5): GPC 24c4eed3a5 + e28e5af236, GP estimator 7ec10acd29, GP optimizer 4da49ab7a0; KRR/GPR afbb2b2769; GMM chain + x_decomp chol_inv 49e8c5b633, 52fb3193be (lane fix-chol-ops-remaining-callers)",
-   "kind": "ab",
-   "lane": [
-    "kernel-ridge",
-    "gpr",
-    "gpc",
-    "gmm",
-    "min-cov-det",
-    "elliptic-envelope"
-   ],
-   "dataset": "*",
-   "rows": "full",
-   "b_arms": [
-    "chol-ops-fit"
-   ],
-   "decides": "the Cholesky ops (B) become the default only if at least as fast as potrf_lower + cho_solve (A) on the NVIDIA + AMD average with the same words; on record (candidate on the ops vs 0.8.66, MI325X): kernel-ridge 1.21-1.25x, gpr 1.14-1.18x, gpc taxi 959 -> 1160 ms, istella 1442 -> 1728 ms. The GP optimizer, lml+gradient and sample_y follow the same define and are off the board (board GPR uses optimizer=None): a driver timing of gpr with optimizer is owed if B wins. gmm: identical fits with d <= 256 take the one-launch IDN factor in both arms, so the arms differ only for d > 256 or under MOJOLEARN_IDN_GMM_FUSED_CHOL_OFF (time one such shape; board gmm is a no-change check). min-cov-det / elliptic-envelope: chol_inv runs only in the Cholesky C-step, so this row is timed with both MOJOLEARN_IDN_MCD_CHOL arms (mcd-chol alone vs mcd-chol + chol-ops-fit)"
   },
   {
    "id": "mcd-chol",

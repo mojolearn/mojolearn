@@ -912,6 +912,11 @@ in the tables after the sections.
 | [`MOJOLEARN_MAMBA_CALL_PROGRAM`](#mojolearn_mamba_call_program) | Neural (per-call Mamba door x in place) | removed (opt-in B arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_MAMBA_CALL_PROGRAM.patch](../experiments/removed/MOJOLEARN_MAMBA_CALL_PROGRAM.patch) |
 | [`MOJOLEARN_NN50_OWNED_RUNS`](#mojolearn_nn50_owned_runs) | Neural (embedding retained token groups, IDENTICAL) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_NN50_OWNED_RUNS.patch](../experiments/removed/MOJOLEARN_NN50_OWNED_RUNS.patch) |
 | [`MOJOLEARN_TRANSFORMER_GENERIC_PREFILL`](#mojolearn_transformer_generic_prefill) | Neural (attention step fresh prefill) | removed (opt-in arm, no A/B recorded) | 2026-11-15 | [MOJOLEARN_TRANSFORMER_GENERIC_PREFILL.patch](../experiments/removed/MOJOLEARN_TRANSFORMER_GENERIC_PREFILL.patch) |
+| [`MOJOLEARN_ARIMA_ASYNC_ALL`](#mojolearn_arima_async_all-fb12-loser-arms) | Time series (ARIMA per-series L-BFGS on every route) | removed (decided B arm: L40S B 1.04x, no gain) | 2026-11-17 | [MOJOLEARN_ARIMA_ASYNC_ALL.fb12-loser-arms.patch](../experiments/removed/MOJOLEARN_ARIMA_ASYNC_ALL.fb12-loser-arms.patch) |
+| [`MOJOLEARN_AUTOGRAD_OPTIM`](#mojolearn_autograd_optim-fb12-loser-arms) | Neural (MLP / RNN trainers on the executor optimizer) | removed (decided B arm: L40S B 0.99-1.01x, same speed) | 2026-11-17 | [MOJOLEARN_AUTOGRAD_OPTIM.fb12-loser-arms.patch](../experiments/removed/MOJOLEARN_AUTOGRAD_OPTIM.fb12-loser-arms.patch) |
+| [`MOJOLEARN_BYTE_LM_GENERIC_OPS`](#mojolearn_byte_lm_generic_ops-fb12-loser-arms) | Neural (byte LM program: generic OPS_EMBEDDING, no next-norm fusion) | removed (decided B arm: L40S B 1.36x slower) | 2026-11-17 | [MOJOLEARN_BYTE_LM_GENERIC_OPS.fb12-loser-arms.patch](../experiments/removed/MOJOLEARN_BYTE_LM_GENERIC_OPS.fb12-loser-arms.patch) |
+| [`MOJOLEARN_BYTE_LM_PROGRAM_STEP`](#mojolearn_byte_lm_program_step-fb12-loser-arms) | Neural (byte LM trainer on its captured program, every column) | removed (decided B arm: L40S B 1.36x slower) | 2026-11-17 | [MOJOLEARN_BYTE_LM_PROGRAM_STEP.fb12-loser-arms.patch](../experiments/removed/MOJOLEARN_BYTE_LM_PROGRAM_STEP.fb12-loser-arms.patch) |
+| [`MOJOLEARN_IDN_CHOL_OPS_FIT`](#mojolearn_idn_chol_ops_fit-fb12-loser-arms) | Kernel / GP / mixture / x_decomp (Cholesky fits on the executor ops) | removed (decided B arm: L40S 14 cells B 0.91-1.10x, same speed) | 2026-11-17 | [MOJOLEARN_IDN_CHOL_OPS_FIT.fb12-loser-arms.patch](../experiments/removed/MOJOLEARN_IDN_CHOL_OPS_FIT.fb12-loser-arms.patch) |
 
 | [`MOJOLEARN_IDN_M1_SCAN`](#mojolearn_idn_m1_scan) | Neural (Mamba-1 scan selector, IDENTICAL) | removed (opt-in arms, no A/B recorded) | 2026-11-15 | [MOJOLEARN_IDN_M1_SCAN.patch](../experiments/removed/MOJOLEARN_IDN_M1_SCAN.patch) |
 | [`MOJOLEARN_IDN_M2_CB_LOWER_OFF`](#mojolearn_idn_m2_cb_lower_off) | Neural (Mamba-2 oracle cb.G triangle, IDENTICAL) | removed (old path, no A/B recorded) | 2026-11-15 | [MOJOLEARN_IDN_M2_CB_LOWER_OFF.patch](../experiments/removed/MOJOLEARN_IDN_M2_CB_LOWER_OFF.patch) |
@@ -22374,3 +22379,87 @@ Cross-lane dead code removed by lane/expdel2-sweep after the 47 V2 deletion lane
 - `MOJOLEARN_KPCA_FAST_LANCZOS_DEV`: x_decomp/lanczos_dev.mojo: comptime KPCA_FAST_LANCZOS_DEV (always True, no reader) removed; no 2026-11-15 marker, the switch was retired earlier; no bits change (f74503bee1).
 - `MOJOLEARN_DBSCAN_DIRECT_DISTANCE`: experiments/classical_identical_ideas/graph_controls.mojo comptime DBSCAN_DIRECT_DISTANCE removed; its readers folded in dbscan/impl/neighbors/epsilon_neighborhood.mojo (the comptime-if) and dbscan/host/dbscan_oracle.mojo (four ternaries), direct_distance_step imports dropped there; no bits change (068a85a698).
 - `MOJOLEARN_IDN_OCSVM_DEV_INIT_OFF`: XN_OCSVM_DEV_INIT (always True since MOJOLEARN_IDN_OCSVM_DEV_INIT_OFF was retired) folded at its four comptime-if readers: bindings/_mojolearn_x_neighbors{,_host}.mojo register x_neighbors_ocsvm_alpha_init unconditionally (imports dropped), x_neighbors/native_descriptor_aux_{device,host}.mojo lose the never-taken refusal; the constant stays for the descriptor flag bit; no bits change (c65867412a).
+
+## Decided B arms: lane fb12-loser-arms (2026-11-17)
+
+Five A/B switches decided with the B arm losing or giving no gain on the NVIDIA L40S (pc-ba08dac006f5-nvidia final2 (`~/mojolearn-evidence/measure-candidate/pc-ba08dac006f5-nvidia/final2/owed-nvidia.json`), NVIDIA L40S, one run per arm, A and B sets of ba08dac006; recorded in
+docs/apple-fast/EXPERIMENTS.md by lane fb8-owed-arms; NVIDIA only under AGENTS.md part 8). Each B arm was deleted on
+2026-11-15 by an expdel2 lane and restored the same day by lane/expdel2-restore-owed as an owed arm (see the Restored
+table); this is the deletion after the measurement. Defaults unchanged, no bit change on any column. Recoverable at
+`2203db7094` (the lane's base, preinteg/wave2-20261113). Restore order for the byte LM pair: PROGRAM_STEP first (it
+brings back training/byte_lm_program.mojo), then GENERIC_OPS.
+
+### mojolearn_arima_async_all (fb12-loser-arms)
+
+- What it was: `-D MOJOLEARN_ARIMA_ASYNC_ALL`, the per-series L-BFGS (`async_min_lbfgs`) on every route, in place of the
+  lock-step solver where the fit holds no evaluation workspace (lane n10 form).
+- Verdict: classical2/arima/synthetic fit 52.54 -> 54.52 ms, B 1.04x (no gain); quality same (same per-series iterates by
+  construction). A (lock-step) stays.
+- Files: arima/impl/fast_lbfgs_async.mojo (the switch), arima/impl/batched_fit.mojo (the route test). 20 lines removed.
+- Deleted by `80045048be` on lane/fb12-loser-arms; recoverable at `2203db7094`.
+- Patch: `experiments/removed/MOJOLEARN_ARIMA_ASYNC_ALL.fb12-loser-arms.patch`. Refusal: `core/experiment_guards_series.mojo`.
+
+### mojolearn_autograd_optim (fb12-loser-arms)
+
+- What it was: `-D MOJOLEARN_AUTOGRAD_OPTIM`, the MLP and RNN trainers' update through autograd/optim.mojo
+  (`OptimizerState` + `step_lr`, lane X3 form) instead of the hand OP_OPT launch.
+- Verdict: gru 113.82 -> 113.27, lstm 139.90 -> 139.62, mlp 183.47 -> 185.69, rnn 52.28 -> 51.76 ms fit, B 0.99-1.01x
+  (same speed); same bits by construction. The B arm was the simpler code (one optimizer implementation); the decision
+  as recorded (A stays) is kept. autograd/optim.mojo itself stays (Sequential and ops.Session use it).
+- Files: sequence/mlp_fit.mojo, sequence/recurrent.mojo (also mlp_fit's `t_upd` counter, read only by the B arm).
+  75 lines removed.
+- Deleted by `ac8a45f410` on lane/fb12-loser-arms; recoverable at `2203db7094`.
+- Patch: `experiments/removed/MOJOLEARN_AUTOGRAD_OPTIM.fb12-loser-arms.patch`. Refusal: `core/experiment_guards_neural.mojo`.
+
+### mojolearn_byte_lm_generic_ops (fb12-loser-arms)
+
+- What it was: `-D MOJOLEARN_BYTE_LM_GENERIC_OPS`, the byte LM program capturing the generic OPS_EMBEDDING and the
+  attention step op without the residual2 -> next norm1 fusion (`ATTN_STEP_NEXT_NORM` off on Apple).
+- Verdict: owed arm byte-lm-generic (built with PROGRAM_STEP): neural/lm-train-step/bytes 35.71 -> 48.54 ms, B 1.36x
+  slower. A (op lm_embedding, next-norm fusion) stays.
+- Files: autograd/block_step_ops.mojo (ATTN_STEP_NEXT_NORM), training/byte_lm_program.mojo (emb_code). 14 lines removed.
+- Deleted by `12d7230862` + `3f90f31056` (+ `7d5ea0d091` keeping the shared import) on lane/fb12-loser-arms;
+  recoverable at `2203db7094`.
+- Patch: `experiments/removed/MOJOLEARN_BYTE_LM_GENERIC_OPS.fb12-loser-arms.patch` (apply after the PROGRAM_STEP patch).
+  Refusal: `core/experiment_guards_neural.mojo`.
+
+### mojolearn_byte_lm_program_step (fb12-loser-arms)
+
+- What it was: `-D MOJOLEARN_BYTE_LM_PROGRAM_STEP`, lane x7's program step on every column: one Program.fit per call
+  (OPS_ATTN_STEP per layer, executor AdamW) on the GPU trainer, the host program on the CPU column.
+- Verdict: neural/lm-train-step/bytes 35.71 -> 48.52 ms, B 1.36x slower (candidate 4c2340386abc had NV 48.9 vs 35.5,
+  AMD 50.5 vs 43.9). A (the hand step; the composed host step on the CPU column) stays.
+- Files: training/byte_lm.mojo (program field, open/load/store/fit/eval/gradient routes), training/byte_lm_config.mojo
+  (the switch), training/byte_lm_host_execution.mojo, training/byte_lm_host_session.mojo, and the two modules only it
+  used, training/byte_lm_program.mojo and training/byte_lm_host_program.mojo (dropped from python/mojolearn/host_surface.py
+  host_modules); python/mojolearn/tests/test_byte_lm_step_routes.py's two-build route comparison
+  (test_both_routes_give_the_same_loss_words, route_words); comments in bindings/_mojolearn_byte_lm_host.mojo,
+  bindings/byte_lm_trainer_native_door.mojo, autograd/rules_lm.mojo, training/byte_lm_host*.mojo;
+  tools/test_byte_lm_session_steps_source.py now asserts the program is absent from the session's evaluate.
+  1037 lines removed.
+- Deleted by `499741ea25` on lane/fb12-loser-arms; recoverable at `2203db7094`.
+- Patch: `experiments/removed/MOJOLEARN_BYTE_LM_PROGRAM_STEP.fb12-loser-arms.patch`. Refusal: `core/experiment_guards_neural.mojo`.
+
+### mojolearn_idn_chol_ops_fit (fb12-loser-arms)
+
+- What it was: `-D MOJOLEARN_IDN_CHOL_OPS_FIT`, the N7/N8 executor Cholesky ops (cholesky/chol_ops.mojo: read-free,
+  info-gated factor / solve / logdet) for KernelRidge, the GPR resident fit, the GP estimator's fit / lml+gradient /
+  sample_y, the GP optimizer's device run sequencer, the GPC Laplace Newton bounded device loop, the GMM precision chain
+  and x_decomp's MinCovDet Cholesky. The 2026-11-15 deletion had folded the switch to False and left its readers.
+- Verdict: 14 cells kernel-ridge / gpr / gpc / gmm / min-cov-det / elliptic-envelope, B 0.91-1.10x, every cell the same
+  (gpr istella fit 79.86 -> 87.78 ms the widest); AMD 2026-11-13 had it 1.14-1.25x slower. A (0.8.66 potrf_lower,
+  chol_logdet, cho_solve, trsm_lower) stays.
+- Files: cholesky/chol_ops.mojo (deleted), checks/executor_n7_ops_compile.mojo (its Cholesky section),
+  cholesky/checks/potrf.mojo (logdet_guarded_kernel, enqueue_logdet_guarded), cholesky/checks/trsm.mojo
+  (trsm_lower_sweep_guarded_kernel, trsm_lower_multi_rhs_guarded_kernel, trsm_upper_ring_guarded_kernel),
+  kernel_methods/estimator.mojo and kernel_methods/impl/kernel_ridge/kernel_ridge.mojo (kernel_ridge_ops_route,
+  kernel_ridge_factor_solve_enqueue, the fit's info word / fill / copy / read), gaussian_process/gpr_resident.mojo,
+  gaussian_process/estimator.mojo, gaussian_process/gp_optim.mojo (_gpr_optimize_ops_runs, gp_opt_step_kernel,
+  gp_opt_advance_kernel, GP_OPT_EVAL_CHECK), gaussian_process/gp_optim_items.mojo (gp_opt_advance_item, GP_OPT_SEQ_*),
+  gaussian_process/gpc_newton.mojo (GPCNewtonStep, GPCNewtonBatch and their gated kernels), mixture/checks/mstep.mojo
+  (the enqueue-only ops chain; GmmCholScratch's work / identity / ld_scratch / ld_raw; the chain's per-call dinfo /
+  hinfo / hld / dscr / dld), mixture/checks/gmm_check.mojo, x_decomp/device.mojo, x_decomp/kit_device.mojo.
+  1705 lines removed. Default-path cost removed: KRR's info word, fill, copy and read per fit; GMM's two d x d
+  scratch buffers per fit and three small buffers per precision call.
+- Deleted by `e061695d42` on lane/fb12-loser-arms; recoverable at `2203db7094`.
+- Patch: `experiments/removed/MOJOLEARN_IDN_CHOL_OPS_FIT.fb12-loser-arms.patch`. Refusal: `core/experiment_guards_kernel.mojo`.
