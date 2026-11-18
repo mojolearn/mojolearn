@@ -1607,8 +1607,13 @@ def _decide(commit, root, cache_dir, facts, current, rt, prev, evidence_root=Non
     (None: no published record), and its score (REUSE rows + runtime)."""
     if prev:
         prev_rows, prev_runtime, prev_source = previous_identities(prev, cache_dir, root)
-        changed_files = set(git("diff", "--name-only", prev["source_commit"], commit, root=root).split()) \
-            if prev.get("source_commit") else set()
+        # changed_files only names the moved sources in a BUILD reason; a previous source commit missing
+        # from this clone (a shallow CI checkout) leaves that detail out and decides nothing differently
+        try:
+            changed_files = set(git("diff", "--name-only", prev["source_commit"], commit, root=root).split()) \
+                if prev.get("source_commit") else set()
+        except subprocess.CalledProcessError:
+            changed_files = set()
     else:
         prev_rows, prev_runtime, prev_source, changed_files = {}, None, "no published release record", set()
     origin = dict(version=prev.get("version"), channel=prev.get("channel") or "pypi",
