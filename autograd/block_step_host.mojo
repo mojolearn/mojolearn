@@ -78,10 +78,40 @@ struct HostStepScratch(Movable):
     the session tensors'."""
     var hattn: List[_HostAttnBlock]
     var hmamba: List[_HostMambaBlock]
+    #: lane fx-kv-inplace: the full-causal attention entries a FAILED run
+    #: dropped (`host_block_step_run`), as (state address, word address, the
+    #: used positions the entry's last run left, the op's integers), for
+    #: `host_attn_append_restore` (the device table's `lost_s`).
+    var lost_s: List[Int]
+    var lost_q: List[Int]
+    var lost_used: List[Int]
+    var lost_ints: List[List[Int]]
 
     def __init__(out self):
         self.hattn = List[_HostAttnBlock]()
         self.hmamba = List[_HostMambaBlock]()
+        self.lost_s = List[Int]()
+        self.lost_q = List[Int]()
+        self.lost_used = List[Int]()
+        self.lost_ints = List[List[Int]]()
+
+    def drop_lost(mut self, addr: Int):
+        """Forget the lost-append record over the state or word at `addr`."""
+        var i = len(self.lost_s) - 1
+        while i >= 0:  # driver-loop: over lost-append records (at most one per cache)
+            if self.lost_s[i] == addr or self.lost_q[i] == addr:
+                _ = self.lost_s.pop(i)
+                _ = self.lost_q.pop(i)
+                _ = self.lost_used.pop(i)
+                _ = self.lost_ints.pop(i)
+            i -= 1
+
+    def note_lost(mut self, s_addr: Int, q_addr: Int, used: Int, ints: List[Int]):
+        self.drop_lost(s_addr)
+        self.lost_s.append(s_addr)
+        self.lost_q.append(q_addr)
+        self.lost_used.append(used)
+        self.lost_ints.append(ints.copy())
 
     def count(self) -> Int:
         return len(self.hattn) + len(self.hmamba)
@@ -89,6 +119,8 @@ struct HostStepScratch(Movable):
     def forget(mut self, addr: Int):
         """Drop every entry over the session buffer at `addr` (written from
         outside a step, or freed)."""
+        if len(self.lost_s) > 0:
+            self.drop_lost(addr)
         if self.count() == 0:
             return
         var i = len(self.hattn) - 1
@@ -118,6 +150,10 @@ struct HostStepScratch(Movable):
     def clear(mut self):
         self.hattn.clear()
         self.hmamba.clear()
+        self.lost_s.clear()
+        self.lost_q.clear()
+        self.lost_used.clear()
+        self.lost_ints.clear()
 
 
 def _host_take(p: FP, at: Int, n: Int) raises -> List[Float32]:
@@ -246,6 +282,10 @@ def _host_attn_entry(mut sc: HostStepScratch, bufs: List[FP], counts: List[Int],
         if (sc.hattn[i].w_addr == Int(bufs[1]) and sc.hattn[i].s_addr == Int(bufs[2])
                 and sc.hattn[i].q_addr == Int(bufs[3]) and _same_ints(sc.hattn[i].ints, ints)):
             return i
+    if len(sc.lost_s) > 0:
+        # a new entry starts from the word: an older failed run's record
+        # over this cache is void
+        sc.drop_lost(Int(bufs[2]))
     sc.hattn.append(_HostAttnBlock(bufs[1], bufs[2], bufs[3], ints))
     return len(sc.hattn) - 1
 
@@ -289,6 +329,21 @@ def _host_attn_on(mut blk: _HostAttnBlock, bufs: List[FP], counts: List[Int], in
     return l
 
 
+def _host_attn_clear_tail(kv_addr: Int, ints: List[Int], word: Int, last: Int) raises:
+    """Slots [word, last) of every (batch, kv head) row of the host cache
+    tensor at `kv_addr` (stride s_max, keys then values) set to 0."""
+    var rows = ints[0] * ints[3]
+    var hd = ints[4]
+    var smax = ints[6]
+    var ssz = block_state_sizes(OPS_ATTN_STEP, ints)
+    var sat = block_offsets(ssz, block_guard(OPS_ATTN_STEP))
+    var base = FP(unsafe_from_address=kv_addr)
+    for r in range(rows):  # small-loop(rows: b * n_kv cache rows): one short tail each, see host_attn_append_restore
+        var at = (r * smax + word) * hd
+        unsafe_memset_zero(base + sat[0] + at, (last - word) * hd)
+        unsafe_memset_zero(base + sat[1] + at, (last - word) * hd)
+
+
 def host_attn_append_restore(mut sc: HostStepScratch, kvs: List[Int], qs: List[Int]) raises:
     """`HostExec.step_append_restore` (lane fx-kv-inplace, 2026-11-18): a
     bounded loop ran bodies past its stop over the append-only caches at
@@ -298,7 +353,9 @@ def host_attn_append_restore(mut sc: HostStepScratch, kvs: List[Int], qs: List[I
     used position, in every (batch, kv head) row; they are set back to 0,
     the value a run that stopped at the word leaves there, so the state does
     not depend on the loop's chunk (the device table's `attn_append_restore`
-    is the same repair over its packed layout).
+    is the same repair over its packed layout). When one of those bodies
+    failed and its entry was dropped, the last used position is the record
+    that failure left (`HostStepScratch.lost_s`).
 
     Not split across host tasks: it runs once when a loop leaves past its
     stop, over b * n_kv row tails of (positions past the stop) * head_dim
@@ -306,25 +363,23 @@ def host_attn_append_restore(mut sc: HostStepScratch, kvs: List[Int], qs: List[I
     if len(qs) != len(kvs):
         return
     for k in range(len(kvs)):  # driver-loop: over append-only caches
+        var word = _host_words(FP(unsafe_from_address=qs[k]), 1)[0]
+        var live = False
         for i in range(len(sc.hattn)):  # driver-loop: over host attention entries
-            if sc.hattn[i].s_addr != kvs[k] or sc.hattn[i].q_addr != qs[k] or sc.hattn[i].ints[7] != 0:
+            if sc.hattn[i].s_addr != kvs[k] or sc.hattn[i].q_addr != qs[k]:
                 continue
-            var word = _host_words(FP(unsafe_from_address=qs[k]), 1)[0]
+            live = True
             var last = sc.hattn[i].last
-            if word < 0 or word >= last:
+            if sc.hattn[i].ints[7] != 0 or word < 0 or word >= last:
                 continue
-            var ints = sc.hattn[i].ints.copy()
-            var rows = ints[0] * ints[3]
-            var hd = ints[4]
-            var smax = ints[6]
-            var ssz = block_state_sizes(OPS_ATTN_STEP, ints)
-            var sat = block_offsets(ssz, block_guard(OPS_ATTN_STEP))
-            var base = FP(unsafe_from_address=kvs[k])
-            for r in range(rows):  # small-loop(rows: b * n_kv cache rows): one short tail each, see the docstring
-                var at = (r * smax + word) * hd
-                unsafe_memset_zero(base + sat[0] + at, (last - word) * hd)
-                unsafe_memset_zero(base + sat[1] + at, (last - word) * hd)
+            _host_attn_clear_tail(kvs[k], sc.hattn[i].ints, word, last)
             sc.hattn[i].last = word
+        if live:
+            continue
+        for i in range(len(sc.lost_s)):  # driver-loop: over lost-append records
+            if sc.lost_s[i] == kvs[k] and sc.lost_q[i] == qs[k] and word >= 0 and word < sc.lost_used[i]:
+                _host_attn_clear_tail(kvs[k], sc.lost_ints[i], word, sc.lost_used[i])
+        sc.drop_lost(kvs[k])
 
 
 def _host_run_attn(mut sc: HostStepScratch, bufs: List[FP], counts: List[Int], ints: List[Int], y_out: FP) raises:
@@ -623,8 +678,18 @@ def host_block_step_run(
         else:
             raise Error("ops: " + String(code) + " is not a block step op")
     except err:
+        # lane fx-kv-inplace: a full-causal attention entry is about to go;
+        # keep how far its runs appended (`HostStepScratch.lost_s`).
+        var lost_used = -1
+        if code == OPS_ATTN_STEP and len(bufs) == 4:
+            for i in range(len(sc.hattn)):  # driver-loop: over host attention entries
+                if (sc.hattn[i].s_addr == Int(bufs[2]) and sc.hattn[i].q_addr == Int(bufs[3])
+                        and sc.hattn[i].ints[7] == 0):
+                    lost_used = sc.hattn[i].last
         for k in range(1, len(bufs)):  # small-loop(bufs: the op's three or four operands): entry eviction, no data
             sc.forget(Int(bufs[k]))
+        if lost_used >= 0:
+            sc.note_lost(Int(bufs[2]), Int(bufs[3]), lost_used, ints)
         raise err
 
 

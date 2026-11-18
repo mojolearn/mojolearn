@@ -5080,7 +5080,8 @@ def attention_eager_core(
 
 def llama_kv_cache_rewind(
     ctx: DeviceContext,
-    mut stages: LlamaDeviceStages,
+    mut scratch_k: DeviceBuffer[DType.float32],
+    mut scratch_v: DeviceBuffer[DType.float32],
     mut kv: LlamaKVCache,
     s_to: Int,
 ) raises:
@@ -5095,9 +5096,11 @@ def llama_kv_cache_rewind(
     while the restored position word says `s_to`. This repacks the committed
     slots at stride `s_to` and zeroes the rest of the span the extra appends
     wrote, so the cache is the one a run that stopped at `s_to` leaves. Out
-    of place through `stages.k_cache` / `v_cache` (the append's own repack
-    targets), then the span copied back; queued, no wait. `kv.s` becomes
-    `s_to`. A ring (`window > 0`) is not append-only and is not handled here
+    of place through `scratch_k` / `scratch_v` (two buffers of at least
+    `B*n_kv*kv.s*head_dim` cells that are not the cache: a resident entry
+    passes its stages' `k_cache` / `v_cache`, the append's own repack
+    targets), then the span copied back; queued, no wait, so the scratch
+    must outlive the queue. `kv.s` becomes `s_to`. A ring (`window > 0`) is not append-only and is not handled here
     (the loop shadows it whole)."""
     if kv.window != 0:
         raise Error("llama: a windowed KV cache is not rewound (the loop shadows it)")
@@ -5127,12 +5130,12 @@ def llama_kv_cache_rewind(
             kv.s = s_to
             return
     var n = kv.b * kv.n_kv * kv.s * kv.head_dim
-    if n > len(stages.k_cache) or n > len(stages.v_cache):
-        raise Error("llama: KV cache rewind: the stages hold a shorter cache span")
+    if n > len(scratch_k) or n > len(scratch_v):
+        raise Error("llama: KV cache rewind: the scratch holds a shorter cache span")
     step_count_launch()
     ctx.enqueue_function[kv_rewind2_kernel](
-        stages.k_cache.unsafe_ptr(),
-        stages.v_cache.unsafe_ptr(),
+        scratch_k.unsafe_ptr(),
+        scratch_v.unsafe_ptr(),
         kv.k.unsafe_ptr(),
         kv.v.unsafe_ptr(),
         Int32(kv.b),
@@ -5146,12 +5149,12 @@ def llama_kv_cache_rewind(
     step_count_d2d()
     ctx.enqueue_copy(
         dst_buf=kv.k.create_sub_buffer[DType.float32](0, n),
-        src_buf=stages.k_cache.create_sub_buffer[DType.float32](0, n),
+        src_buf=scratch_k.create_sub_buffer[DType.float32](0, n),
     )
     step_count_d2d()
     ctx.enqueue_copy(
         dst_buf=kv.v.create_sub_buffer[DType.float32](0, n),
-        src_buf=stages.v_cache.create_sub_buffer[DType.float32](0, n),
+        src_buf=scratch_v.create_sub_buffer[DType.float32](0, n),
     )
     kv.s = s_to
 
