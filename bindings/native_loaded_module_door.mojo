@@ -48,11 +48,16 @@ def native_namespace_string_keys(fields: PyObjectPtr, string_type: PythonObject)
     var position = Int(0)
     var key = PyObjectPtr()
     var value = PyObjectPtr()
-    var count = cpython_table()[].PyDict_Size(fields)
-    # Resolved once per call, not per item; main's compiled form (metrics_plan_admission.mojo).
-    var dict_next = cpy.lib.get_function[Int32]("PyDict_Next")
+    # fx-cnn-layers (2026-11-18): `PyDict_Next` through the process table
+    # (bindings/py_cpython_table.mojo, resolved once per process; the form
+    # bindings/logistic_query_boundary_pack.mojo calls it in). It was looked
+    # up by name in the interpreter library on every call, and every
+    # instance-dictionary admission (`_fields`: two to five per CNN layer
+    # call, at least one per public call of every family) calls this.
+    var t = cpython_table()
+    var count = t[].PyDict_Size(fields)
     for i in range(count):  # small-loop(count: namespace fields): native metadata key admission only
-        if dict_next(fields, MutPointer(to=position), MutPointer(to=key), MutPointer(to=value)) == 0:
+        if t[].PyDict_Next(fields, Int(MutPointer(to=position)), Int(MutPointer(to=key)), Int(MutPointer(to=value))) == 0:
             return False
         var cls = cpy.PyObject_Type(key)
         var same = cls == string_type._obj_ptr

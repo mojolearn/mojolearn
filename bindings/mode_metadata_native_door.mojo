@@ -9,7 +9,7 @@ from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.native_loaded_module_door import native_loaded_module, NativeModules, native_namespace_string_keys, native_mapping_string_keys
 from bindings.native_error_class import error_without_class
 from bindings.native_class_admission_door import class_record, class_admit, class_watch_ready
-from bindings.py_balanced import py_call, py_type, py_get, py_contains
+from bindings.py_balanced import py_call, py_type, py_get, py_contains, _is_exact_dict
 from bindings.optimizer_public_words_unpack import stash_python_error, optimizer_python_error, PYTHON_ERROR_PENDING
 
 
@@ -84,7 +84,12 @@ def _instance_fields(b: PythonObject, model: PythonObject) raises -> PythonObjec
     if not raw:
         raise cpy.unsafe_get_error()
     var fields = PythonObject(from_owned=raw)
-    if py_type(fields) is not b.dict:
+    # fx-cnn-layers (2026-11-18): the exact-dict test of bindings/py_balanced
+    # (`py_get` uses it: the type of a C-created dict, its address held once
+    # per process). It read `builtins.dict` by name and made a class object
+    # per instance-dictionary admission; every public call of every family
+    # admits at least one, a CNN layer call two to five.
+    if not _is_exact_dict(fields):
         raise Error("TypeError: native metadata requires an ordinary instance dictionary")
     if not native_namespace_string_keys(fields._obj_ptr, b.str):
         raise Error("TypeError: native metadata requires exact string state keys")

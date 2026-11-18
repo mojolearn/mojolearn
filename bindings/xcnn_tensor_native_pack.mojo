@@ -13,6 +13,7 @@ from bindings.xcnn_common_door import (
     xcnn_shape, xcnn_size, xcnn_tuple, xcnn_new, xcnn_out_new, xcnn_wrap,
     xcnn_host_of, xcnn_f32, xcnn_entries, xcnn_module_entries, xcnn_device_io_off,
     xcnn_is_t, xcnn_reshape_t, xcnn_tensor_layout, _xcnn_set_raw, _xcnn_slot_raw, xcnn_ref,
+    xcnn_exact, xcnn_item, XT_INT, XK_TENSOR_CLASS,
 )
 from std.python._cpython import GILReleased
 from x_cnn.tensor_run import (
@@ -28,6 +29,38 @@ from bindings.xcnn_tensor_native_unpack import (
 
 def xcnn_tensor_operation(owner: PythonObject, operation: String, args: PythonObject,
                            context: PythonObject) raises -> PythonObject:
+    if operation == "tensor_finalize":
+        # fx-cnn-layers (2026-11-18): tested first and without the builtins
+        # read. Every output tensor a layer call returns is released through
+        # here (the caller's reassignment of its result), so a layer call
+        # paid this release too: 49k of the 403k instructions of a
+        # global-avgpool forward in the L40S call profile. The owner's class
+        # is compared through the held name and the handle's type against
+        # the held int type; the slot reads and the write are the generic
+        # attribute calls (`_xcnn_slot_raw`). A foreign owner is refused with
+        # the same text, before the suppressing block, as before.
+        if py_type(owner) is not xcnn_item(context, XK_TENSOR_CLASS):
+            raise Error("TypeError: CNN tensor operation requires its exact native owner")
+        # Partially initialized objects and interpreter shutdown are legal.
+        # Suppression lives in native code, with handles cleared before free.
+        try:
+            # One layout check for the three reads and the write.
+            xcnn_tensor_layout(context)
+            var handle = _xcnn_slot_raw(owner, "h", context)
+            var base = _xcnn_slot_raw(owner, "_base", context)
+            if base is None and handle is not None:
+                if not xcnn_exact(handle, XT_INT) or not xcnn_tensor_run_handle_live(Int(py=handle)):
+                    return PythonObject(None)
+                var entries = xcnn_module_entries(_xcnn_slot_raw(owner, "b", context), context)
+                _xcnn_set_raw(owner, "h", PythonObject(None), context)
+                var key = xcnn_ref(entries)
+                var word = Int(py=handle)
+                var py = Python()
+                with GILReleased(py):
+                    xcnn_tensor_run_free(key, word)
+        except:
+            pass
+        return PythonObject(None)
     var b = xcnn_builtins()
     if operation == "tensor_to":
         if xcnn_is_t(args[0], context):
@@ -68,27 +101,6 @@ def xcnn_tensor_operation(owner: PythonObject, operation: String, args: PythonOb
         _xcnn_set_raw(owner, "h", args[2], context)
         _xcnn_set_raw(owner, "_host", args[3], context)
         _xcnn_set_raw(owner, "_base", args[4], context)
-        return PythonObject(None)
-    if operation == "tensor_finalize":
-        # Partially initialized objects and interpreter shutdown are legal.
-        # Suppression lives in native code, with handles cleared before free.
-        try:
-            # One layout check for the three reads and the write.
-            xcnn_tensor_layout(context)
-            var handle = _xcnn_slot_raw(owner, "h", context)
-            var base = _xcnn_slot_raw(owner, "_base", context)
-            if base is None and handle is not None:
-                if py_type(handle) is not b.int or not xcnn_tensor_run_handle_live(Int(py=handle)):
-                    return PythonObject(None)
-                var entries = xcnn_module_entries(_xcnn_slot_raw(owner, "b", context), context)
-                _xcnn_set_raw(owner, "h", PythonObject(None), context)
-                var key = xcnn_ref(entries)
-                var word = Int(py=handle)
-                var py = Python()
-                with GILReleased(py):
-                    xcnn_tensor_run_free(key, word)
-        except:
-            pass
         return PythonObject(None)
     xcnn_tensor_admit(owner, context)
     var shape = xcnn_shape(owner)

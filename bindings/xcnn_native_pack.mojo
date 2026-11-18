@@ -8,6 +8,7 @@ from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.native_error_class import error_without_class
 from bindings.xcnn_common_door import xcnn_connect_numpy, xcnn_builtins, xcnn_dev_fields, xcnn_module_entries, xcnn_ref, xcnn_word
+from bindings.xcnn_common_door import xcnn_at, xcnn_exact, XT_TUPLE
 from std.python._cpython import GILReleased
 from x_cnn.tensor_run import xcnn_tensor_run_free
 from bindings.native_loaded_module_door import native_interpreter_finalizing
@@ -58,36 +59,44 @@ def _xcnn_finalize(owner: PythonObject, operation: String, context: PythonObject
 def xcnn_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
     try:
         var call = PythonObject(from_borrowed=args_ptr)
+        # fx-cnn-layers (2026-11-18): the argument tuple's items are read as
+        # borrowed tuple items (`xcnn_at`; each subscript built an index
+        # object first), each once, and the bound finalizer pair is told by
+        # an exact-type test against the held tuple type (it built an empty
+        # tuple to take its type). Every layer call and every tensor release
+        # enters here.
         # Import-time native descriptors bind (context, operation); CPython
         # decref then enters this C finalizer directly, without a Python body.
         if len(call) == 2:
-            var bound = call[0]
-            if py_type(bound) is not py_type(Python.tuple()) or len(bound) != 2:
+            var bound = xcnn_at(call, 0)
+            if not xcnn_exact(bound, XT_TUPLE) or len(bound) != 2:
                 raise Error("TypeError: CNN finalizer requires its native bound context")
-            return _xcnn_finalize(call[1], String(bound[1]), bound[0]).steal_data()
-        var context = call[3]
-        var operation = String(py=call[1])
+            return _xcnn_finalize(xcnn_at(call, 1), String(xcnn_at(bound, 1)), xcnn_at(bound, 0)).steal_data()
+        var context = xcnn_at(call, 3)
+        var operation = String(py=xcnn_at(call, 1))
         if operation != "tensor_finalize":
             xcnn_connect_numpy(context)
+        var owner = xcnn_at(call, 0)
+        var args = xcnn_at(call, 2)
         if operation.startswith("tensor_"):
-            return xcnn_tensor_operation(call[0], operation, call[2], context).steal_data()
+            return xcnn_tensor_operation(owner, operation, args, context).steal_data()
         if operation.startswith("conv_") or operation.startswith("block_"):
-            return xcnn_conv_layers(call[0], operation, call[2], context).steal_data()
+            return xcnn_conv_layers(owner, operation, args, context).steal_data()
         if operation == "cnnclf_init":
-            return cnnclf_initialize(call[0], call[2], context).steal_data()
+            return cnnclf_initialize(owner, args, context).steal_data()
         if operation == "cnnclf_weights":
-            return cnnclf_weights(call[0], context).steal_data()
+            return cnnclf_weights(owner, context).steal_data()
         if operation == "cnnclf_fit":
-            return cnnclf_fit(call[0], call[2], context).steal_data()
+            return cnnclf_fit(owner, args, context).steal_data()
         if operation == "cnnclf_predict":
-            return cnnclf_predict(call[0], call[2], context).steal_data()
+            return cnnclf_predict(owner, args, context).steal_data()
         if operation == "cnnclf_predict_proba":
-            return cnnclf_predict_proba(call[0], call[2], context).steal_data()
+            return cnnclf_predict_proba(owner, args, context).steal_data()
         if operation.startswith("gcn_") or operation.startswith("sage_") or operation.startswith("linear_") or operation.startswith("relu_"):
-            return xcnn_graph_layers(call[0], operation, call[2], context).steal_data()
+            return xcnn_graph_layers(owner, operation, args, context).steal_data()
         if operation.startswith("bn_"):
-            return xcnn_bn_layers(call[0], operation, call[2], context).steal_data()
-        return xcnn_pool_layers(call[0], operation, call[2], context).steal_data()
+            return xcnn_bn_layers(owner, operation, args, context).steal_data()
+        return xcnn_pool_layers(owner, operation, args, context).steal_data()
     except error:
         var text = String(error)
         if text.startswith("TypeError:"):

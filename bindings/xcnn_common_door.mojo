@@ -12,9 +12,10 @@ compiled entries with the same argument words and residency bits as the
 Python bodies it replaces.
 """
 from std.python import Python, PythonObject
-from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_setattr, py_fields, py_contains
+from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_setattr, py_fields, py_contains, py_item
 from bindings.py_cpython_table import cpython_table
-from std.python._cpython import GILReleased
+from std.python._cpython import GILReleased, PyObjectPtr
+from core.shared_slot import SharedSlot
 from core.entry_table import EntryRef
 from core.xcnn_entry_table import (
     XcnnEntryKey, xcnn_entry_ref, XC_RES_ALLOC, XC_RES_ALLOC_NOFILL, XC_RES_FREE,
@@ -27,7 +28,7 @@ from bindings.admitted_sequence_door import admit_nd_f32
 from bindings.native_loaded_module_door import native_loaded_module, NativeModules
 from bindings.native_class_admission_door import class_record, class_admit, dict_keys_admitted, dict_keys_admit
 from bindings.native_buffer_address_unpack import native_buffer_address
-from bindings.native_buffer_owner_pack import native_buffer_view
+from bindings.native_buffer_owner_pack import native_buffer_view, native_storage_allocate
 from bindings.native_numpy_metadata_pack import native_numpy_type
 from bindings.mode_metadata_native_door import _fields, _class_fields
 from bindings.neural_block_admission_door import neural_plain_value
@@ -45,12 +46,241 @@ from x_cnn.door_run import (
 )
 
 
+# ---------------------------------------------------------------- held names and exact types
+# Lane fx-cnn-layers (2026-11-18). One resident layer call ran 150 to 250
+# CPython calls, most of them a `context["..."]`, `fields["..."]` or
+# `b.<type>` read that first built a Python str from a literal (decode,
+# allocate, hash, compare, free) and then looked it up; the call profile of
+# global-avgpool infer on the L40S (ec1c4b5aff) put 22 of its 50 us in the
+# door, 400k instructions per call, with the kernel at 12 us. The names the
+# doors read on every call are now built once per process and held here, and
+# the exact builtin types the doors compare against are the types of
+# C-created values (the same identities `classical_connect_numpy` takes that
+# way), read once. A read through a held name is the same dictionary lookup
+# with the same hashing and equality; only the str is no longer rebuilt.
+# Nothing here is keyed on a layer, a shape or a dataset.
+
+#: index of each held name in `_XcnnNames.keys` (the fill list below is in this order)
+comptime XK_TENSOR_CLASS = 0
+comptime XK_BINDINGS = 1
+comptime XK_BACKEND_FIELDS = 2
+comptime XK_DEFAULT_MODE = 3
+comptime XK_DEVICE_IO_OFF = 4
+comptime XK_DEV_CLASS = 5
+comptime XK_MODULE = 6
+comptime XK_MIXED = 7
+comptime XK_IDN = 8
+comptime XK_IDN2 = 9
+comptime XK_PROFILE = 10
+comptime XK_NATIVE_KEY = 11
+comptime XK_IDENTICAL = 12
+comptime XK_FAST = 13
+comptime XK_B = 14
+comptime XK_SHAPE = 15
+comptime XK_H = 16
+comptime XK_HOST = 17
+comptime XK_BASE = 18
+comptime XK_NUMERIC_MODE = 19
+comptime XK_PROFILE_REC = 20
+comptime XK_MODE_REC = 21
+comptime XK_DEV = 22
+comptime XK_XSHAPE = 23
+comptime XK_IDX_HOST = 24
+comptime XK_IDX_DEV = 25
+comptime XK_IDX_SHAPE = 26
+comptime XK_LAYER = 27
+comptime XK_POOL_CACHE = 28
+comptime XK_OUTPUT_SIZE = 29
+comptime XK_KERNEL_SIZE = 30
+comptime XK_STRIDE = 31
+comptime XK_PADDING = 32
+comptime XK_DILATION = 33
+comptime XK_COUNT_INCLUDE_PAD = 34
+comptime XK_CEIL_MODE = 35
+comptime XK_DIVISOR = 36
+comptime XK_NDARRAY = 37
+comptime XK_ADMISSION = 38
+
+#: index of each exact builtin type in `_XcnnNames.types`
+comptime XT_TUPLE = 0
+comptime XT_INT = 1
+comptime XT_STR = 2
+comptime XT_DICT = 3
+comptime XT_BOOL = 4
+comptime XT_FLOAT = 5
+comptime XT_LIST = 6
+
+
+struct _XcnnNames(Defaultable, Movable):
+    # `keys`: the held name objects, filled once under the GIL (empty until
+    # then: the slot's creation builds no Python object, core/shared_slot.mojo).
+    # `types`: addresses of CPython's static, immortal builtin types.
+    var ready: Bool
+    var keys: List[PythonObject]
+    var types: List[Int]
+
+    def __init__(out self):
+        self.ready = False
+        self.keys = List[PythonObject]()
+        self.types = List[Int]()
+
+
+comptime _XCNN_NAMES = SharedSlot[_XcnnNames, "MojolearnXcnnHeldNamesV1"]
+
+
+def _xcnn_type_address(value: PythonObject) raises -> Int:
+    # The address of `type(value)`. The held types are CPython's static,
+    # immortal builtin types, so an address read from a C-created sample
+    # stays that type's for the process.
+    var cls = py_type(value)
+    var address = Int(cls._obj_ptr)
+    _ = cls  # the class object is alive while its address is read
+    return address
+
+
+def _xcnn_names() raises -> UnsafePointer[_XcnnNames, MutAnyOrigin]:
+    """The held names and exact types, filled at first use. Every caller
+    holds the GIL (the doors run under it), which serializes the fill."""
+    var g = _XCNN_NAMES.get_or_create_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    if g[].ready:
+        return g
+    if len(g[].keys) == 0:
+        # The fill order is the XK_ index order.
+        for name in ["xcnn_tensor_class", "xcnn_bindings", "backend_fields", "_DEFAULT_MODE", "xcnn_device_io_off",  # small-loop(the fixed names the doors read per call)
+                     "xcnn_dev_class", "module", "mixed", "idn", "idn2", "profile", "native_key", "identical", "fast",
+                     "b", "shape", "h", "_host", "_base", "numeric_mode", "numerical_profile_", "numeric_mode_",
+                     "_dev", "_xshape", "_idx_host", "_idx_dev", "_idx_shape", "_layer", "_pool_cache", "output_size",
+                     "kernel_size", "stride", "padding", "dilation", "count_include_pad", "ceil_mode",
+                     "divisor_override", "ndarray", "admission_context"]:
+            g[].keys.append(PythonObject(name))
+    if len(g[].types) == 0:
+        g[].types.append(_xcnn_type_address(Python.tuple()))
+        g[].types.append(_xcnn_type_address(PythonObject(0)))
+        g[].types.append(_xcnn_type_address(PythonObject("")))
+        g[].types.append(_xcnn_type_address(Python.dict()))
+        g[].types.append(_xcnn_type_address(PythonObject(True)))
+        g[].types.append(_xcnn_type_address(PythonObject(0.0)))
+        g[].types.append(_xcnn_type_address(Python.list()))
+    g[].ready = True
+    return g
+
+
+def xcnn_name(which: Int) raises -> PythonObject:
+    """The held str of name `XK_<which>` (a new reference to the one object)."""
+    var g = _xcnn_names()
+    return g[].keys[which]
+
+
+def xcnn_exact(value: PythonObject, kind: Int) raises -> Bool:
+    """`type(value) is <the builtin type XT_<kind>>`: an exact-type test
+    against the type of a C-created value (no `builtins` attribute read)."""
+    var g = _xcnn_names()
+    return _xcnn_type_address(value) == g[].types[kind]
+
+
+def _xcnn_exact_ptr(value: PyObjectPtr, kind: Int) raises -> Bool:
+    """`xcnn_exact` of a borrowed item pointer (its container is alive)."""
+    return xcnn_exact(PythonObject(from_borrowed=value), kind)
+
+
+def xcnn_plain_scalar(value: PythonObject) raises -> Bool:
+    """`value` is None or an exact int, float, bool or str: exactly the
+    values the plain-value scan (`neural_plain_value`) admits at its first
+    test and returns for. A door that admits a list of configuration fields
+    skips the scan for them (one type read against the held types; the scan
+    read four builtins by name per field) and runs it for everything else,
+    so anything it would refuse is still refused, with its text."""
+    if value is None:
+        return True
+    var g = _xcnn_names()
+    var address = _xcnn_type_address(value)
+    return (address == g[].types[XT_INT] or address == g[].types[XT_FLOAT] or address == g[].types[XT_BOOL]
+            or address == g[].types[XT_STR])
+
+
+def xcnn_item(mapping: PythonObject, which: Int) raises -> PythonObject:
+    """`mapping["<name>"]` through the held name: one dictionary lookup on an
+    exact dict; a missing key, or any other mapping, takes the subscript
+    (`PyObject_GetItem`) and raises what it raised."""
+    var g = _xcnn_names()
+    if _xcnn_exact_ptr(mapping._obj_ptr, XT_DICT):
+        var found = cpython_table()[].PyDict_GetItemWithError(mapping._obj_ptr, g[].keys[which]._obj_ptr)
+        if found:
+            return PythonObject(from_borrowed=found)
+    return py_item(mapping, g[].keys[which])
+
+
+def xcnn_get(mapping: PythonObject, which: Int) raises -> PythonObject:
+    """`mapping.get("<name>")` through the held name."""
+    var g = _xcnn_names()
+    return py_get(mapping, g[].keys[which])
+
+
+def xcnn_put(mapping: PythonObject, which: Int, value: PythonObject) raises:
+    """`mapping["<name>"] = value` through the held name."""
+    var g = _xcnn_names()
+    py_setitem(mapping, g[].keys[which], value)
+
+
+def xcnn_at(sequence: PythonObject, index: Int) raises -> PythonObject:
+    """`sequence[index]`: a borrowed read of an exact tuple's item; anything
+    else (and an index out of range) takes the subscript and raises what it
+    raised."""
+    if index >= 0 and _xcnn_exact_ptr(sequence._obj_ptr, XT_TUPLE):
+        var t = cpython_table()
+        if index < t[].PyTuple_Size(sequence._obj_ptr):
+            return PythonObject(from_borrowed=t[].PyTuple_GetItem(sequence._obj_ptr, index))
+    return py_item(sequence, PythonObject(index))
+
+
+def xcnn_int_pair(value: PythonObject, mut first: Int, mut second: Int) raises -> Bool:
+    """True, with the two words, when `value` is an exact tuple of two exact
+    ints that fit a machine word. That is the stored form of every pool
+    setting (`xcnn_pool_init` / `xcnn_adaptive_init` write such a pair), and
+    for it the general parse returns an equal pair, so a caller that gets
+    True skips the parse; False sends it to the general parse, which admits
+    or refuses exactly as before."""
+    if not _xcnn_exact_ptr(value._obj_ptr, XT_TUPLE):
+        return False
+    var t = cpython_table()
+    if t[].PyTuple_Size(value._obj_ptr) != 2:
+        return False
+    var a = t[].PyTuple_GetItem(value._obj_ptr, 0)
+    var b = t[].PyTuple_GetItem(value._obj_ptr, 1)
+    if not _xcnn_exact_ptr(a, XT_INT) or not _xcnn_exact_ptr(b, XT_INT):
+        return False
+    var wa = t[].PyLong_AsLongLong(a)
+    if wa == -1:
+        if t[].PyErr_Occurred():
+            # Out of machine range: the general parse raises as before.
+            t[].PyErr_Clear()
+            return False
+    var wb = t[].PyLong_AsLongLong(b)
+    if wb == -1:
+        if t[].PyErr_Occurred():
+            t[].PyErr_Clear()
+            return False
+    first = Int(wa)
+    second = Int(wb)
+    return True
+
+
 def xcnn_builtins() raises -> PythonObject:
     return native_loaded_module("builtins")
 
 
 def xcnn_connect_numpy(context: PythonObject) raises:
     """Connect the optional NumPy metadata without requiring arrays."""
+    # fx-cnn-layers (2026-11-18): the connected case first, through held
+    # names. With `ndarray` connected on the context and on its admission
+    # context (or no admission context) every statement below is a no-op
+    # (`classical_connect_numpy` returns at its own probe), so this is the
+    # same outcome with two or three dictionary reads; it ran two probes that
+    # each built a dict and a str, and two more by-name reads, per layer call.
+    if xcnn_get(context, XK_NDARRAY) is not None:
+        var connected = xcnn_get(context, XK_ADMISSION)
+        if connected is None or xcnn_get(connected, XK_NDARRAY) is not None:
+            return
     classical_connect_numpy(context)
     if py_get(context, "ndarray") is None and py_get(context, "xcnn_numpy_import_tried") is None:
         # The CNN host buffers are ndarrays. Importing the package never loads
@@ -89,12 +319,17 @@ def xcnn_entries(fields: PythonObject, context: PythonObject) raises -> PythonOb
     # compare or decode. Same refusals, same writes, same result. Timing:
     # global-avgpool / batchnorm2d infer (board), a Conv2d(3, 16, 3) on
     # 32 x 32 x 8 random input (non-board).
-    var b = xcnn_builtins()
-    var mode = py_get(fields, "numeric_mode")
-    neural_plain_value(mode, 0, context)
+    # fx-cnn-layers (2026-11-18): the fields, the context and the connected
+    # entries are read through held names, the exact-type tests use the held
+    # builtin types, and the plain-value scan runs only for a value it could
+    # refuse (it returns at once for None and an exact str). Same refusals in
+    # the same order, same writes.
+    var mode = xcnn_get(fields, XK_NUMERIC_MODE)
+    if mode is not None and not xcnn_exact(mode, XT_STR):
+        neural_plain_value(mode, 0, context)
     if mode is None or not Bool(py=mode):
-        mode = context["backend_fields"]["_DEFAULT_MODE"]
-    if py_type(mode) is not b.str:
+        mode = xcnn_item(xcnn_item(context, XK_BACKEND_FIELDS), XK_DEFAULT_MODE)
+    if not xcnn_exact(mode, XT_STR):
         raise Error("numeric_mode must be fast, identical or None")
     # p3-cnn-sequence-tsa: an exact "identical" / "fast" is used as it is
     var text = String(py=mode)
@@ -106,16 +341,20 @@ def xcnn_entries(fields: PythonObject, context: PythonObject) raises -> PythonOb
         key = PythonObject(text)
     if text != "identical" and text != "fast":
         raise Error("numeric_mode must be fast, identical or None")
-    var entries = context["xcnn_bindings"][key]
-    var entries_type = py_type(entries)
-    if entries_type is b.str or (entries_type is not b.dict and Bool(py=py_call(b.isinstance, entries, b.str))):
+    var entries = py_item(xcnn_item(context, XK_BINDINGS), key)
+    if xcnn_exact(entries, XT_STR):
         raise Error(String(py=entries))
+    if not xcnn_exact(entries, XT_DICT):
+        var b = xcnn_builtins()
+        if Bool(py=py_call(b.isinstance, entries, b.str)):
+            raise Error(String(py=entries))
     if text == "identical":
         # API-shell metadata only: the arithmetic version the binding names,
         # kept on the model so state persistence cannot switch versions
-        var current = entries["profile"]
-        var previous = py_get(fields, "numerical_profile_")
-        neural_plain_value(previous, 0, context)
+        var current = xcnn_item(entries, XK_PROFILE)
+        var previous = xcnn_get(fields, XK_PROFILE_REC)
+        if previous is not None and not xcnn_exact(previous, XT_STR):
+            neural_plain_value(previous, 0, context)
         if (previous is not None and current is not None and previous is not current
                 and not Bool(py=previous == current)):
             raise Error("mojolearn: CNN numerical profile differs from this model's recorded "
@@ -125,10 +364,10 @@ def xcnn_entries(fields: PythonObject, context: PythonObject) raises -> PythonOb
                         + "profile; use a matching binding or a fresh model for the new version")
         if current is not None and previous is None:
             # equal to `previous` otherwise (checked above): written once
-            py_setitem(fields, "numerical_profile_", current)
-    var recorded = py_get(fields, "numeric_mode_")
-    if recorded is not key and (recorded is None or py_type(recorded) is not b.str or String(py=recorded) != text):
-        py_setitem(fields, "numeric_mode_", key)
+            xcnn_put(fields, XK_PROFILE_REC, current)
+    var recorded = xcnn_get(fields, XK_MODE_REC)
+    if recorded is not key and (recorded is None or not xcnn_exact(recorded, XT_STR) or String(py=recorded) != text):
+        xcnn_put(fields, XK_MODE_REC, key)
     return entries
 
 
@@ -136,10 +375,10 @@ def xcnn_key(entries: PythonObject) raises -> XcnnEntryKey:
     """The native table key of the layer's connected x_cnn image (the bridge
     records it at import as `native_key`): the doors call that image's
     published entry (core/xcnn_entry_table.mojo), not its Python entries."""
-    var key = py_get(entries, "native_key")
+    var key = xcnn_get(entries, XK_NATIVE_KEY)
     if key is None:
         raise Error("ImportError: mojolearn: the x_cnn binding publishes no native entry table")
-    return XcnnEntryKey(Int(py=key[0]), Int(py=key[1]))
+    return XcnnEntryKey(Int(py=xcnn_at(key, 0)), Int(py=xcnn_at(key, 1)))
 
 
 def xcnn_ref(entries: PythonObject) raises -> EntryRef:
@@ -181,21 +420,21 @@ def xcnn_ptr(value: PythonObject) raises -> Int:
 
 def xcnn_mixed(entries: PythonObject) raises -> Bool:
     """Whether the binding has the mixed-residency entries (`x_cnn_*_m`)."""
-    return Bool(py=entries["mixed"])
+    return Bool(py=xcnn_item(entries, XK_MIXED))
 
 
 def xcnn_idn(entries: PythonObject, bit: Int) raises -> Bool:
-    return (Int(py=entries["idn"]) & bit) != 0
+    return (Int(py=xcnn_item(entries, XK_IDN)) & bit) != 0
 
 
 def xcnn_idn2(entries: PythonObject, bit: Int) raises -> Bool:
-    return (Int(py=entries["idn2"]) & bit) != 0
+    return (Int(py=xcnn_item(entries, XK_IDN2)) & bit) != 0
 
 
 def xcnn_device_io_off(entries: PythonObject, context: PythonObject) raises -> Bool:
     """The resident I/O route is off: the environment switches read at
     import, or a `-D MOJOLEARN_IDN_ALL_OFF` build of the binding."""
-    return Bool(py=context["xcnn_device_io_off"]) or xcnn_idn2(entries, XCNN_F2_ALL_OFF)
+    return Bool(py=xcnn_item(context, XK_DEVICE_IO_OFF)) or xcnn_idn2(entries, XCNN_F2_ALL_OFF)
 
 
 def xcnn_resident(entries: PythonObject, context: PythonObject) raises -> Bool:
@@ -211,32 +450,58 @@ comptime _XCNN_SHAPE_SLOT = "xcnn_shape_descriptor_v1"
 def xcnn_shape(value: PythonObject) raises -> List[Int]:
     """Native shape metadata, with subclass/descriptor hooks refused first."""
     var cls = py_type(value)
-    var namespace = _class_fields(cls)
-    var descriptor = py_get(namespace, "shape")
     # fx-rows (2026-11-18): the descriptor verdict (a member or getset
     # descriptor owned by exactly this class) is kept per class under the
     # type watcher (`class_record`, as `xcnn_tensor_layout` keeps its
     # verdict): any edit of the class or an ancestor misses and re-runs the
     # full check. It loaded the `types` module, two descriptor types and
     # `__objclass__` on every shape read (several per layer call).
+    # fx-cnn-layers (2026-11-18): with the verdict kept, the class's own
+    # `shape` entry IS that admitted data descriptor, so the generic
+    # attribute read (`PyObject_GenericGetAttr`: the type's MRO lookup, then
+    # the data descriptor's getter) calls the same getter with the same
+    # arguments as `descriptor.__get__(value, cls)` did. The class namespace
+    # (a `type.__dict__` descriptor call and its key-scan record), the
+    # by-name `shape` lookup, the bound `__get__` and its call envelope ran
+    # per shape read although the verdict already covered them; they now run
+    # at a miss only. The tuple is read with borrowed item reads.
     var mods = NativeModules()
-    if class_record(mods, _XCNN_SHAPE_SLOT, cls) is None:
-        var types = native_loaded_module("types")
-        if (py_type(descriptor) is not types.MemberDescriptorType
-                and py_type(descriptor) is not py_type(xcnn_builtins().type.__dict__["__dict__"])):
-            raise Error("TypeError: CNN shape requires native storage metadata")
-        if descriptor.__objclass__ is not cls:
-            raise Error("TypeError: CNN shape refuses subclasses")
-        class_admit(mods, _XCNN_SHAPE_SLOT, cls, PythonObject(True))
-    var shape = py_call(descriptor.__get__, value, cls)
-    var b = xcnn_builtins()
-    if py_type(shape) is not b.tuple:
+    var shape = PythonObject(None)
+    var read = False
+    if class_record(mods, _XCNN_SHAPE_SLOT, cls) is not None:
+        var g = _xcnn_names()
+        var t0 = cpython_table()
+        var raw = t0[].PyObject_GenericGetAttr(value._obj_ptr, g[].keys[XK_SHAPE]._obj_ptr)
+        if raw:
+            shape = PythonObject(from_owned=raw)
+            read = True
+        else:
+            # The getter raised: the descriptor call below raises it again,
+            # through the same path as before.
+            t0[].PyErr_Clear()
+    if not read:
+        var namespace = _class_fields(cls)
+        var descriptor = py_get(namespace, "shape")
+        if class_record(mods, _XCNN_SHAPE_SLOT, cls) is None:
+            var types = native_loaded_module("types")
+            if (py_type(descriptor) is not types.MemberDescriptorType
+                    and py_type(descriptor) is not py_type(xcnn_builtins().type.__dict__["__dict__"])):
+                raise Error("TypeError: CNN shape requires native storage metadata")
+            if descriptor.__objclass__ is not cls:
+                raise Error("TypeError: CNN shape refuses subclasses")
+            class_admit(mods, _XCNN_SHAPE_SLOT, cls, PythonObject(True))
+        shape = py_call(descriptor.__get__, value, cls)
+    if not xcnn_exact(shape, XT_TUPLE):
         raise Error("TypeError: CNN shape requires an exact tuple")
     var out = List[Int]()
-    for i in range(len(shape)):  # driver-loop: snapshot native shape words
-        if py_type(shape[i]) is not b.int or Int(py=shape[i]) < 0:
+    var t = cpython_table()
+    var count = t[].PyTuple_Size(shape._obj_ptr)
+    for i in range(count):  # driver-loop: snapshot native shape words
+        var item = PythonObject(from_borrowed=t[].PyTuple_GetItem(shape._obj_ptr, i))
+        if not xcnn_exact(item, XT_INT) or Int(py=item) < 0:
             raise Error("TypeError: CNN dimensions must be nonnegative native integers")
-        out.append(Int(py=shape[i]))
+        out.append(Int(py=item))
+    _ = shape  # the borrowed items above are the tuple's: keep it past the last read
     return out^
 
 
@@ -261,7 +526,7 @@ def xcnn_tuple(shape: List[Int]) raises -> PythonObject:
 
 def xcnn_is_t(value: PythonObject, context: PythonObject) raises -> Bool:
     """`isinstance(value, DeviceTensor)`."""
-    if py_type(value) is not context["xcnn_tensor_class"]:
+    if py_type(value) is not xcnn_item(context, XK_TENSOR_CLASS):
         return False
     xcnn_tensor_layout(context)
     return True
@@ -271,7 +536,7 @@ comptime _XCNN_TENSOR_LAYOUT_SLOT = "xcnn_tensor_layout_v1"
 
 
 def xcnn_tensor_layout(context: PythonObject) raises:
-    var cls = context["xcnn_tensor_class"]
+    var cls = xcnn_item(context, XK_TENSOR_CLASS)
     # p3-cnn-sequence-tsa: the verdict is kept per class under a type watcher
     # (`class_record`; any edit of the class or an ancestor misses), so the
     # MRO / namespace / slot walk runs once, not 3-8 times per layer call.
@@ -303,24 +568,63 @@ def xcnn_tensor_layout(context: PythonObject) raises:
     class_admit(mods, _XCNN_TENSOR_LAYOUT_SLOT, cls, PythonObject(True))
 
 
+def _xcnn_slot_name(name: String) raises -> Int:
+    """The held-name index of a tensor storage slot."""
+    if name == "h":
+        return XK_H
+    if name == "shape":
+        return XK_SHAPE
+    if name == "b":
+        return XK_B
+    if name == "_host":
+        return XK_HOST
+    if name == "_base":
+        return XK_BASE
+    raise Error("TypeError: CNN tensor has no storage slot " + name)
+
+
 def _xcnn_slot_raw(value: PythonObject, name: String, context: PythonObject) raises -> PythonObject:
     """A tensor storage slot read after this operation ran
     `xcnn_tensor_layout` (which already compared every slot descriptor with
     its import-time identity): the exact-class check and the member
     descriptor read only. No Python code runs between that check and this
     read, so the class and its descriptors cannot have changed."""
-    var cls = context["xcnn_tensor_class"]
+    # fx-cnn-layers (2026-11-18): the layout check proved the class's own
+    # entry for each slot name is the import-time member descriptor and that
+    # no ancestor overrides attribute access, so the generic attribute read
+    # (`PyObject_GenericGetAttr`: MRO lookup of the held name, then that data
+    # descriptor's getter) is the same getter call `slots[name].__get__(value,
+    # cls)` made. Per read it took two context reads by a built str, a third
+    # for the slot, a bound `__get__` object and a call envelope (about 4k
+    # instructions; a resident pool forward did eight to ten of them).
+    var g = _xcnn_names()
+    var cls = xcnn_item(context, XK_TENSOR_CLASS)
     if py_type(value) is not cls:
         raise Error("TypeError: CNN tensor requires the connected native storage class")
-    return py_call(context["xcnn_tensor_slots"][PythonObject(name)].__get__, value, cls)
+    var t = cpython_table()
+    var raw = t[].PyObject_GenericGetAttr(value._obj_ptr, g[].keys[_xcnn_slot_name(name)]._obj_ptr)
+    if not raw:
+        # An unset slot (a partially initialized tensor): the descriptor call
+        # raises its AttributeError through the same path as before.
+        t[].PyErr_Clear()
+        return py_call(context["xcnn_tensor_slots"][PythonObject(name)].__get__, value, cls)
+    return PythonObject(from_owned=raw)
 
 
 def _xcnn_set_raw(value: PythonObject, name: String, item: PythonObject, context: PythonObject) raises:
     """A tensor storage slot write after `xcnn_tensor_layout` (see
-    `_xcnn_slot_raw`)."""
-    if py_type(value) is not context["xcnn_tensor_class"]:
+    `_xcnn_slot_raw`): `PyObject_GenericSetAttr` finds the same member
+    descriptor on the class and calls its setter, as `slots[name].__set__(
+    value, item)` did."""
+    var g = _xcnn_names()
+    if py_type(value) is not xcnn_item(context, XK_TENSOR_CLASS):
         raise Error("TypeError: CNN tensor requires the connected native storage class")
-    _ = py_call(context["xcnn_tensor_slots"][PythonObject(name)].__set__, value, item)
+    var t = cpython_table()
+    if t[].PyObject_GenericSetAttr(value._obj_ptr, g[].keys[_xcnn_slot_name(name)]._obj_ptr, item._obj_ptr) != 0:
+        # The setter refused: the descriptor call raises it through the same
+        # path as before.
+        t[].PyErr_Clear()
+        _ = py_call(context["xcnn_tensor_slots"][PythonObject(name)].__set__, value, item)
 
 
 def xcnn_tensor_slot(value: PythonObject, name: String, context: PythonObject) raises -> PythonObject:
@@ -356,15 +660,21 @@ def _xcnn_tensor_admit_raw(value: PythonObject, context: PythonObject) raises ->
     """`xcnn_tensor_admit` after this operation's `xcnn_tensor_layout`;
     returns the admitted handle slot (None or a positive int) so a caller
     does not read it again."""
-    var b = xcnn_builtins()
+    # fx-cnn-layers (2026-11-18): exact-type tests against the held builtin
+    # types and borrowed tuple item reads; it read `b.int` by name and built
+    # two index objects per dimension.
     var shape = _xcnn_slot_raw(value, "shape", context)
-    if py_type(shape) is not b.tuple:
+    if not xcnn_exact(shape, XT_TUPLE):
         raise Error("TypeError: CNN tensor shape requires an exact tuple")
-    for i in range(len(shape)):  # driver-loop: native tensor dimensions before arithmetic
-        if py_type(shape[i]) is not b.int or Int(py=shape[i]) < 0:
+    var t = cpython_table()
+    var count = t[].PyTuple_Size(shape._obj_ptr)
+    for i in range(count):  # driver-loop: native tensor dimensions before arithmetic
+        var item = PythonObject(from_borrowed=t[].PyTuple_GetItem(shape._obj_ptr, i))
+        if not xcnn_exact(item, XT_INT) or Int(py=item) < 0:
             raise Error("TypeError: CNN tensor dimensions require nonnegative integers")
+    _ = shape  # the borrowed items above are the tuple's: keep it past the last read
     var handle = _xcnn_slot_raw(value, "h", context)
-    if handle is not None and (py_type(handle) is not b.int or Int(py=handle) < 1):
+    if handle is not None and (not xcnn_exact(handle, XT_INT) or Int(py=handle) < 1):
         raise Error("TypeError: CNN tensor handle requires a positive native integer")
     _ = xcnn_module_entries(_xcnn_slot_raw(value, "b", context), context)
     if handle is None:
@@ -379,7 +689,24 @@ def xcnn_on_dev(entries: PythonObject, value: PythonObject, context: PythonObjec
     # `xcnn_is_t` ran the layout check; the admission and slot reads reuse it.
     # The admitted handle is returned, not read a second time (fx-rows).
     var handle = _xcnn_tensor_admit_raw(value, context)
-    return handle is not None and _xcnn_slot_raw(value, "b", context) is entries["module"]
+    return handle is not None and _xcnn_slot_raw(value, "b", context) is xcnn_item(entries, XK_MODULE)
+
+
+def xcnn_dev_word(entries: PythonObject, value: PythonObject, context: PythonObject) raises -> Int:
+    """`xcnn_on_dev` for a `value` this operation already found to be a
+    tensor (`xcnn_is_t` returned True for it and no Python code ran since):
+    its resident handle word when it is admitted and resident on this mixed
+    binding, else 0 (an admitted handle is 1 or more). The same admission
+    and the same verdict; the caller gets the word it would read from
+    `value.h` next, and the class test and layout check `xcnn_is_t` already
+    made for this value are not made a second time (fx-cnn-layers,
+    2026-11-18)."""
+    if not xcnn_mixed(entries):
+        return 0
+    var handle = _xcnn_tensor_admit_raw(value, context)
+    if handle is None or _xcnn_slot_raw(value, "b", context) is not xcnn_item(entries, XK_MODULE):
+        return 0
+    return Int(py=handle)
 
 
 def xcnn_tensor(module: PythonObject, shape: PythonObject, h: PythonObject, host: PythonObject, base: PythonObject,
@@ -393,8 +720,13 @@ def _xcnn_tensor_raw(module: PythonObject, shape: PythonObject, h: PythonObject,
                      context: PythonObject) raises -> PythonObject:
     """`xcnn_tensor` after this operation's `xcnn_tensor_layout`: the five
     slots written without re-walking the class layout once per slot."""
-    var b = xcnn_builtins()
-    var t = py_call(py_call(b.getattr, b.object, "__new__"), context["xcnn_tensor_class"])
+    # fx-cnn-layers (2026-11-18): `object.__new__(cls)` is the class's
+    # ordinary heap allocation (`native_storage_allocate`, the form
+    # bindings/native_buffer_owner_pack.mojo uses for its own class); it was
+    # found through `getattr(object, "__new__")` and called through two
+    # envelopes per output tensor. No Python `__new__` or `__init__` runs in
+    # either form; the five slots are written below.
+    var t = native_storage_allocate(xcnn_item(context, XK_TENSOR_CLASS))
     _xcnn_set_raw(t, "b", module, context)
     _xcnn_set_raw(t, "shape", shape, context)
     _xcnn_set_raw(t, "h", h, context)
@@ -410,8 +742,26 @@ def xcnn_new(entries: PythonObject, shape: List[Int], nofill: Bool, context: Pyt
     # (x_cnn/host/entry_runs_host.mojo), the entry the Python lookup fell back to.
     var xc = xcnn_ref(entries)
     var h = xcnn_call(xc, XC_RES_ALLOC_NOFILL if nofill else XC_RES_ALLOC, List[Int](), [max(xcnn_size(shape), 1)])
-    return xcnn_tensor(entries["module"], xcnn_tuple(shape), PythonObject(h), PythonObject(None), PythonObject(None),
-                       context)
+    return xcnn_tensor(xcnn_item(entries, XK_MODULE), xcnn_tuple(shape), PythonObject(h), PythonObject(None),
+                       PythonObject(None), context)
+
+
+def xcnn_alloc_op(entries: PythonObject, context: PythonObject) raises -> Int:
+    """The allocation operation `xcnn_out_new` runs for an output whose
+    every word the entry stores: unfilled under the resident glue, the
+    filled allocation otherwise. For a door that allocates the output in
+    the same GIL window as the entry that fills it (`xcnn_adopt`)."""
+    return XC_RES_ALLOC_NOFILL if xcnn_resident(entries, context) else XC_RES_ALLOC
+
+
+def xcnn_adopt(entries: PythonObject, shape: List[Int], h: Int, context: PythonObject) raises -> PythonObject:
+    """The `DeviceTensor` of `shape` that owns resident array `h`, which the
+    caller just allocated on this binding (`xcnn_alloc_op`) in the GIL
+    window of the entry that filled it. The object `xcnn_new` returns for
+    the same handle, made the same way: the layout check runs again here,
+    after the GIL window, before the five slot writes."""
+    return xcnn_tensor(xcnn_item(entries, XK_MODULE), xcnn_tuple(shape), PythonObject(h), PythonObject(None),
+                       PythonObject(None), context)
 
 
 def xcnn_out_new(entries: PythonObject, shape: List[Int], context: PythonObject) raises -> PythonObject:
@@ -452,12 +802,21 @@ def xcnn_wrap(entries: PythonObject, array: PythonObject, context: PythonObject)
 
 def xcnn_module_entries(module: PythonObject, context: PythonObject) raises -> PythonObject:
     """The connected entries whose module is `module`."""
-    var b = xcnn_builtins()
-    var table = context["xcnn_bindings"]
-    var keys = Python.tuple("identical", "fast")
+    # fx-cnn-layers (2026-11-18): the two mode names are held (it built a
+    # tuple of two fresh strs per call), and connected entries (an exact
+    # dict) are told from a connection error text (a str) by an exact-type
+    # test before the `isinstance` call, as `xcnn_entries` does. Every tensor
+    # admission and every resident-owner admission runs this.
+    var table = xcnn_item(context, XK_BINDINGS)
     for i in range(2):  # driver-loop: over the two numeric modes
-        var entries = py_get(table, keys[i])
-        if entries is not None and not Bool(py=py_call(b.isinstance, entries, b.str)) and entries["module"] is module:
+        var entries = xcnn_get(table, XK_IDENTICAL + i)
+        if entries is None:
+            continue
+        if not xcnn_exact(entries, XT_DICT):
+            var b = xcnn_builtins()
+            if Bool(py=py_call(b.isinstance, entries, b.str)):
+                continue
+        if xcnn_item(entries, XK_MODULE) is module:
             return entries
     raise Error("RuntimeError: a DeviceTensor of a binding this process did not connect")
 
@@ -592,13 +951,12 @@ def xcnn_addr(value: PythonObject) raises -> PythonObject:
 # ---------------------------------------------------------------- the layer's resident arrays
 
 def xcnn_dev_fields(dev: PythonObject, context: PythonObject) raises -> PythonObject:
-    if py_type(dev) is not context["xcnn_dev_class"]:
+    if py_type(dev) is not xcnn_item(context, XK_DEV_CLASS):
         raise Error("TypeError: CNN resident state requires its connected native owner")
     var fields = _fields(dev)
-    _ = xcnn_module_entries(fields["b"], context)
-    var table = fields["h"]
-    var b = xcnn_builtins()
-    if py_type(table) is not b.dict:
+    _ = xcnn_module_entries(xcnn_item(fields, XK_B), context)
+    var table = xcnn_item(fields, XK_H)
+    if not xcnn_exact(table, XT_DICT):
         raise Error("TypeError: CNN resident handles require an exact dictionary")
     # p3-cnn-sequence-tsa: a handle table that passed the full check below and
     # has not changed since (a dictionary watcher sees every insert, replace,
@@ -606,6 +964,7 @@ def xcnn_dev_fields(dev: PythonObject, context: PythonObject) raises -> PythonOb
     # it about ten times per call. Python 3.10/3.11 keep the walk.
     if dict_keys_admitted(table):
         return fields
+    var b = xcnn_builtins()
     var names = py_call(b.list, table.keys())
     for i in range(len(names)):  # driver-loop: native resident buffer allocation metadata
         if py_type(names[i]) is not b.str:
@@ -655,15 +1014,18 @@ def _xcnn_settle_old_dev(fields: PythonObject, dev: PythonObject, context: Pytho
             py_setitem(fields, PythonObject(name), PythonObject(None))
 
 
-def xcnn_dev(layer: PythonObject, entries: PythonObject, context: PythonObject) raises -> PythonObject:
-    """`_dev_of(layer, b)`: the layer's `_Dev` on this binding, a new one
-    (the old one's arrays freed) when the binding changed."""
-    var b = xcnn_builtins()
-    var fields = _fields(layer)
-    var dev = py_get(fields, "_dev")
-    if dev is not None and xcnn_dev_fields(dev, context)["b"] is entries["module"]:
-        return dev
+def _xcnn_dev_admitted(fields: PythonObject, entries: PythonObject, context: PythonObject,
+                       mut table: PythonObject) raises -> PythonObject:
+    """`xcnn_dev` on the layer's instance fields (`_fields(layer)`, read by
+    the caller); `table` receives the owner's handle table, admitted here
+    (an existing owner's by `xcnn_dev_fields`, a fresh owner's empty one)."""
+    var dev = xcnn_get(fields, XK_DEV)
     if dev is not None:
+        var state = xcnn_dev_fields(dev, context)
+        if xcnn_item(state, XK_B) is xcnn_item(entries, XK_MODULE):
+            table = xcnn_item(state, XK_H)
+            return dev
+        var b = xcnn_builtins()
         # p3-cnn-sequence-tsa (hazard C): fields that name a handle of the
         # old owner are settled before its handles are freed (pending weight
         # gradients and a dropout mask downloaded to the host, the rest
@@ -671,40 +1033,64 @@ def xcnn_dev(layer: PythonObject, entries: PythonObject, context: PythonObject) 
         _xcnn_settle_old_dev(fields, dev, context)
         # `_Dev.free()`: every handle of the old binding released, the table emptied
         var old = xcnn_dev_fields(dev, context)
-        var table = old["h"]
+        var old_table = old["h"]
         var owner = xcnn_module_entries(old["b"], context)
         var xco = xcnn_ref(owner)
-        var handles = py_call(b.list, py_call(py_call(b.getattr, table, "values")))
+        var handles = py_call(b.list, py_call(py_call(b.getattr, old_table, "values")))
         py_setitem(old, "h", Python.dict())
         for i in range(len(handles)):  # driver-loop: over the layer's resident array table
             _ = xcnn_call(xco, XC_RES_FREE, [xcnn_word(handles[i][0])], List[Int]())
-    dev = py_call(py_call(b.getattr, b.object, "__new__"), context["xcnn_dev_class"])
-    var state = _fields(dev)
-    py_setitem(state, "b", entries["module"])
-    py_setitem(state, "h", Python.dict())
+    var bi = xcnn_builtins()
+    dev = py_call(py_call(bi.getattr, bi.object, "__new__"), context["xcnn_dev_class"])
+    var fresh = Python.dict()
+    var made = _fields(dev)
+    py_setitem(made, "b", xcnn_item(entries, XK_MODULE))
+    py_setitem(made, "h", fresh)
     py_setitem(fields, "_dev", dev)
+    table = fresh
     return dev
+
+
+def xcnn_dev(layer: PythonObject, entries: PythonObject, context: PythonObject) raises -> PythonObject:
+    """`_dev_of(layer, b)`: the layer's `_Dev` on this binding, a new one
+    (the old one's arrays freed) when the binding changed."""
+    var table = PythonObject(None)
+    return _xcnn_dev_admitted(_fields(layer), entries, context, table)
+
+
+def xcnn_dev_get_f(fields: PythonObject, entries: PythonObject, name: String, count: Int,
+                   context: PythonObject) raises -> PythonObject:
+    """`xcnn_dev_get` for a caller that already holds the layer's instance
+    fields (`_fields(layer)`, read in this operation): the layer's resident
+    array `name` of `count` words, reallocated only when its size changes."""
+    # fx-cnn-layers (2026-11-18): one admission of the owner per call. It
+    # read the layer's instance dictionary again, admitted the owner, then
+    # read the owner's instance dictionary a second time for the table the
+    # admission had just checked: three instance-dictionary admissions (each
+    # a class record, a key scan and a module stamp) for one handle. Max
+    # pools, dropout, batch norm and the graph layers call this one to eight
+    # times per forward.
+    var n = max(count, 1)
+    var table = PythonObject(None)
+    _ = _xcnn_dev_admitted(fields, entries, context, table)
+    var key = PythonObject(name)
+    var cur = py_get(table, key)
+    if cur is not None and Int(py=xcnn_at(cur, 1)) == n:
+        return xcnn_at(cur, 0)
+    var xc = xcnn_ref(entries)
+    if cur is not None:
+        _ = xcnn_call(xc, XC_RES_FREE, [xcnn_word(xcnn_at(cur, 0))], List[Int]())
+        _ = py_call(py_call(xcnn_builtins().getattr, table, "pop"), key)
+    var handle = PythonObject(xcnn_call(xc, XC_RES_ALLOC, List[Int](), [n]))
+    py_setitem(table, key, Python.tuple(handle, n))
+    return handle
 
 
 def xcnn_dev_get(layer: PythonObject, entries: PythonObject, name: String, count: Int,
                  context: PythonObject) raises -> PythonObject:
     """`_Dev.get(name, n)`: the layer's resident array `name` of `n` words,
     reallocated only when its size changes."""
-    var n = max(count, 1)
-    var dev = xcnn_dev(layer, entries, context)
-    # `xcnn_dev` admitted an existing owner (or made a fresh one with an
-    # empty table) and no Python code ran since: its table is read directly.
-    var table = _fields(dev)["h"]
-    var cur = py_get(table, PythonObject(name))
-    if cur is not None and Int(py=cur[1]) == n:
-        return cur[0]
-    var xc = xcnn_ref(entries)
-    if cur is not None:
-        _ = xcnn_call(xc, XC_RES_FREE, [xcnn_word(cur[0])], List[Int]())
-        _ = py_call(py_call(xcnn_builtins().getattr, table, "pop"), PythonObject(name))
-    var handle = PythonObject(xcnn_call(xc, XC_RES_ALLOC, List[Int](), [n]))
-    py_setitem(table, PythonObject(name), Python.tuple(handle, n))
-    return handle
+    return xcnn_dev_get_f(_fields(layer), entries, name, count, context)
 
 
 def xcnn_dev_upload(layer: PythonObject, entries: PythonObject, name: String, array: PythonObject,
