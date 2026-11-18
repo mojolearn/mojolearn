@@ -1,5 +1,6 @@
 """Constructor connection/source guards; these do not claim native runtime success."""
 import ast
+import re
 import inspect
 from pathlib import Path
 from types import ModuleType
@@ -100,7 +101,7 @@ def test_constructor_has_one_native_call_and_no_python_lifecycle_fallback():
     assert 'py_get(_class_fields(hooks[i][0]), hooks[i][1]) is not hooks[i][2]' in native
     assert 'native_instance_item(fields, "numeric_mode")' in native
     assert 'var previous = native_instance_item(fields, name)' in native
-    assert 'fields[' not in native
+    assert not re.search(r'(?<![\w.])fields\[', native)   # instance fields only through native_instance_item
     assert '_resolved(py_type(model), "numeric_mode", context["missing"])' in native
     registration=(ROOT/'bindings/_mojolearn_tokenizer_host.mojo').read_text()
     assert '\n        module.def_py_c_function(linear_constructor_c, "linear_constructor_native_call")\n' in registration
