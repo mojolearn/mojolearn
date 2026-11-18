@@ -259,6 +259,13 @@ struct SambaStackProgram(Movable, Writable):
         # forward's forward-only launch set (their bytes move to it).
         s.steps.inference_only = True
         s.steps.skip_reports = True
+        # lane fx-llama-refuse-watermark: the session is this program's own
+        # and each layer has its own state tensor; outside the step ops it
+        # is written by `zero_state` (a fill, then the position word through
+        # `load_block`) and `load_state` (`load_block` of the floats and the
+        # word), which reset the attention entries' refusal watermark. Read
+        # only on a build with MOJOLEARN_LLAMA_FAST_REFUSE_WATERMARK.
+        s.steps.attn_cache_private = True
         self.s = s^
         self.vocab = vocab
         self.dm = dm

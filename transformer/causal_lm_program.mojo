@@ -179,6 +179,14 @@ struct CausalLMProgram(Movable):
         self.closed = False
         try:
             var s = ops_session[DeviceExec, OPS_DEVICE](self.sid)
+            # lane fx-llama-refuse-watermark: the session is this program's
+            # own and each layer has its own state tensor; outside the step
+            # ops it is written only by `load_layer` (`load_block` of the
+            # word and of the floats), which resets the attention entries'
+            # refusal watermark, and a decode loop that ran bodies past its
+            # stop drops the entries (autograd/program_control.mojo). Read
+            # only on a build with MOJOLEARN_LLAMA_FAST_REFUSE_WATERMARK.
+            s[].steps.attn_cache_private = True
             self.embed = s[].upload(CastIn.f32_c(pe, v, d), False)
             if pn != 0:
                 self.norm = s[].upload(CastIn.f32_c(pn, 1, d), False)

@@ -91,7 +91,7 @@ from mamba.impl.modules.mamba3 import (
 )
 from transformer.impl.llama.modeling_llama import (
     LlamaDims, LlamaDeviceWeights, LlamaKVCache, LlamaRopeTable, LlamaDeviceStages, llama_decoder_layer_forward,
-    residual_next_norm_fusion_enabled,
+    residual_next_norm_fusion_enabled, LLAMA_FAST_REFUSE_WATERMARK,
 )
 from checks.kernel_matrix import TARGET_COLUMN, COLUMN_APPLE
 from transformer.block_options import BlockOptions, BLOCK_OPTION_PARAMS
@@ -873,8 +873,17 @@ struct BlockStepScratch(Movable):
     #: Mamba-2 run skips its post-run buf_len word write. Set per run by
     #: that caller; never set by a session that reads the words back.
     var skip_words: Bool
+    #: lane fx-llama-refuse-watermark (MOJOLEARN_LLAMA_FAST_REFUSE_WATERMARK,
+    #: default off; read only by `_attn_watermark_grant` on a build with it):
+    #: the owner of this scratch states that the state tensors of its
+    #: attention entries are written only by the step runs of this file and
+    #: by writers that reset the entry's watermark or drop the entry (the
+    #: list is in `_attn_watermark_grant`'s docstring). False (every generic
+    #: `OpsSession`): the whole-cache refusal scans on every call.
+    var attn_cache_private: Bool
 
     def __init__(out self):
+        self.attn_cache_private = False
         self.m1 = List[_M1Block]()
         self.m2 = List[_M2Block]()
         self.m3 = List[_M3Block]()
@@ -991,6 +1000,21 @@ struct BlockStepScratch(Movable):
                     raise Error("ValueError: ops: attention_step: cached tokens must be in [0, "
                                 + String(self.attn[i].ints[6]) + "]")
                 self.attn[i].kv.s = words[0]
+                comptime if LLAMA_FAST_REFUSE_WATERMARK:
+                    # a loaded position (and whatever floats came with it)
+                    self.attn[i].kv.wm_reset()
+
+    def attn_cache_written(mut self, addr: Int):
+        """The floats of the state tensor at `addr` were written in place
+        from outside a step run (`OpsSession.load_block` of a state part):
+        the attention entries over it keep their structs (the caches are
+        views) and lose their refusal watermark, so the next run scans the
+        whole cache (MOJOLEARN_LLAMA_FAST_REFUSE_WATERMARK; nothing to do on
+        a build without it)."""
+        comptime if LLAMA_FAST_REFUSE_WATERMARK:
+            for i in range(len(self.attn)):  # driver-loop: over resident attention blocks
+                if self.attn[i].s_addr == addr:
+                    self.attn[i].kv.wm_reset()
 
     def drop_training(mut self, w_addr: Int):
         """Free the recorded run kept by every Mamba entry over the weights at
@@ -1628,7 +1652,57 @@ def attn_step_entry(mut ex: DeviceExec, mut sc: BlockStepScratch, bufs: List[FP]
         var ctx = ex.ctx.copy()
         sc.attn.append(_AttnBlock(ctx, ex, bufs[1], counts[1], bufs[2], counts[2], bufs[3], ints))
         e = len(sc.attn) - 1
+        comptime if LLAMA_FAST_REFUSE_WATERMARK:
+            _attn_watermark_grant(ctx, sc, e)
     return e
+
+
+def _attn_watermark_grant(ctx: DeviceContext, mut sc: BlockStepScratch, e: Int) raises:
+    """MOJOLEARN_LLAMA_FAST_REFUSE_WATERMARK, once when entry `e` is built
+    (never per run): give its cache the refusal watermark and the held scan
+    scratch (`LlamaKVCache.wm_grant`), when the scratch's owner vouches for
+    the cache's writers (`attn_cache_private`) and no other resident entry
+    is built over the same state tensor. Two entries over one state tensor
+    (the same caches under other weights or integers, or a Mamba entry)
+    would each append behind the other's watermark: both lose it for good
+    and scan the whole cache on every call.
+
+    EVERY WRITER OF A GRANTED CACHE, and what it does to the watermark:
+      the block forward's append (modeling_llama `kv_append2_kernel` and the
+        two copies back): bit copies of scanned rows plus the new row, which
+        the next call scans (L = 1) or the next whole scan covers (L > 1);
+      a new entry (`_AttnBlock`, `attn_step_adopt`; after `forget`, `clear`,
+        a failed run's eviction, a loop that ran bodies past its stop): the
+        watermark starts at "nothing known";
+      `attn_step_restart` (a caller's caches loaded before it, a zero fill,
+        a rewind to position 0 for a training run): reset;
+      `attn_step_fresh_prefill` (zero fill, position 0): reset;
+      `BlockStepScratch.set_words` (`OpsSession.load_block` of the position
+        word; the Samba program's `zero_state` fills the state and then
+        loads the word): reset;
+      `BlockStepScratch.attn_cache_written` (`OpsSession.load_block` of the
+        state floats): reset;
+      `OpsSession.load_into`, `declare_state`, `free`, the optimizer's
+        weight write: `steps_forget`, the entry is dropped.
+    The rotary inv_freq is written only when the entry's table is built."""
+    if not sc.attn_cache_private:
+        return
+    var s_addr = sc.attn[e].s_addr
+    var shared = False
+    for i in range(len(sc.attn)):  # driver-loop: over resident attention blocks
+        if i != e and sc.attn[i].s_addr == s_addr:
+            sc.attn[i].kv.wm_revoke()
+            shared = True
+    for i in range(len(sc.m1)):  # driver-loop: over resident Mamba-1 blocks
+        shared = shared or sc.m1[i].s_addr == s_addr
+    for i in range(len(sc.m2)):  # driver-loop: over resident Mamba-2 blocks
+        shared = shared or sc.m2[i].s_addr == s_addr
+    for i in range(len(sc.m3)):  # driver-loop: over resident Mamba-3 blocks
+        shared = shared or sc.m3[i].s_addr == s_addr
+    if shared:
+        return
+    var d_model = sc.attn[e].ints[1]
+    sc.attn[e].kv.wm_grant(ctx, d_model)
 
 
 def attn_step_adopt(mut ex: DeviceExec, mut sc: BlockStepScratch, var weights: LlamaDeviceWeights, w: FP, s: FP,
@@ -1641,6 +1715,8 @@ def attn_step_adopt(mut ex: DeviceExec, mut sc: BlockStepScratch, var weights: L
     sc.forget(Int(s))
     var ctx = ex.ctx.copy()
     sc.attn.append(_AttnBlock(ctx, ex, weights^, w, s, q, ints, s0, lean))
+    comptime if LLAMA_FAST_REFUSE_WATERMARK:
+        _attn_watermark_grant(ctx, sc, len(sc.attn) - 1)
     var words: List[Int] = [s0]
     _write_words(ex, q, words)
 
@@ -1661,6 +1737,11 @@ def attn_step_restart(mut ex: DeviceExec, mut sc: BlockStepScratch, bufs: List[F
     for i in range(len(sc.attn)):  # driver-loop: over resident attention blocks
         if sc.attn[i].s_addr == Int(bufs[2]) and sc.attn[i].q_addr == Int(bufs[3]):
             sc.attn[i].kv.s = s0
+        comptime if LLAMA_FAST_REFUSE_WATERMARK:
+            # every entry over this state tensor, whatever its word: the
+            # caller wrote the caches before this call, or `zero` did
+            if sc.attn[i].s_addr == Int(bufs[2]):
+                sc.attn[i].kv.wm_reset()
     var words: List[Int] = [s0]
     _write_words(ex, bufs[3], words)
 
@@ -1950,6 +2031,8 @@ def attn_step_fresh_prefill(
         ctx.enqueue_copy(dst_buf=pre.dx.value(), src_ptr=f32_ptr(px))
         ctx.synchronize()
         blk.kv.s = 0
+        comptime if LLAMA_FAST_REFUSE_WATERMARK:
+            blk.kv.wm_reset()
         var trace = IdentityTrace.disabled()
         # forward_only: no backward reads this entry's stages.
         llama_decoder_layer_forward(ctx, pre.stages.value(), blk.kv, blk.rope, blk.w, pre.dx.value(),
