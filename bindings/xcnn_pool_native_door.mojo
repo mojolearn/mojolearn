@@ -323,6 +323,11 @@ def _pool_scalar(value: PythonObject, context: PythonObject) raises:
 
 
 def _pool_bool(value: PythonObject, context: PythonObject) raises -> Bool:
+    # fx-cnn-layers (2026-11-18): an exact bool (the stored form) is its own
+    # truth; the general path below reaches the same `Bool(py=value)` for it
+    # after eight type tests against builtins read by name.
+    if xcnn_exact(value, XT_BOOL):
+        return Bool(py=value)
     var b = xcnn_builtins()
     var cls = py_type(value)
     if value is None:
@@ -334,6 +339,11 @@ def _pool_bool(value: PythonObject, context: PythonObject) raises -> Bool:
 
 
 def _pool_int(value: PythonObject, context: PythonObject) raises -> Int:
+    # fx-cnn-layers (2026-11-18): `int(v)` of an exact int is `v`: the word
+    # is read directly (same range refusal). Any other admitted scalar takes
+    # the `int(...)` call as before.
+    if xcnn_exact(value, XT_INT):
+        return Int(py=value)
     _pool_scalar(value, context)
     return Int(py=py_call(xcnn_builtins().int, value))
 
@@ -366,6 +376,19 @@ def _pool_pair(value: PythonObject, name: String, one: Bool, context: PythonObje
 
 
 def _pool_shape_words(value: PythonObject, name: String, context: PythonObject) raises -> List[Int]:
+    if xcnn_exact(value, XT_TUPLE):
+        # fx-cnn-layers (2026-11-18): an exact tuple is its own sequence
+        # (`_pool_sequence` returns it); its items are read as borrowed tuple
+        # items, each through the same `_pool_int` and dimension check, in
+        # order. The saved shapes the doors write (`_xshape`, `_idx_shape`,
+        # the pool cache key) are such tuples and were parsed per call.
+        var words = List[Int]()
+        var count = len(value)
+        for i in range(count):  # driver-loop: finite native rank metadata
+            var word = _pool_int(xcnn_at(value, i), context)
+            pool_run_check_dim(word)
+            words.append(word)
+        return words^
     var sequence = _pool_sequence(value, name, context)
     var shape = List[Int]()
     for i in range(len(sequence)):  # driver-loop: finite native rank metadata
@@ -408,8 +431,13 @@ def xcnn_pool_init(model: PythonObject, args: PythonObject, context: PythonObjec
 
 
 def _pool_backward2d(model: PythonObject, source: PythonObject, context: PythonObject) raises -> PythonObject:
+    # fx-cnn-layers (2026-11-18): the layer's fields are read through held
+    # names, the resident gradient is admitted once (`xcnn_dev_word`: it was
+    # admitted by `xcnn_on_dev` and its handle read again by name), and the
+    # resident output is allocated in the GIL window of the entry that fills
+    # it. Same checks in the same order, same entries, words and bits.
     var fields = _fields(model)
-    var saved = py_get(fields, "_xshape")
+    var saved = xcnn_get(fields, XK_XSHAPE)
     if saved is None:
         raise Error("RuntimeError: pool backward requires forward first")
     var shape = _pool_shape_words(saved, "_xshape", context)
@@ -418,28 +446,34 @@ def _pool_backward2d(model: PythonObject, source: PythonObject, context: PythonO
     var prm = _pool_words(fields, shape, context)   # one read of the settings serves the shape and every launch
     var expected = pool_run_out_words(prm, shape)
     var maxed = _is(model, "xcnn_maxpool_class", context)
-    var h = py_get(fields, "_idx_dev")
-    var dev = py_get(fields, "_dev")
+    var h = xcnn_get(fields, XK_IDX_DEV)
+    var dev = xcnn_get(fields, XK_DEV)
     var resident_idx = h is not None and dev is not None and xcnn_mixed(entries)
     if resident_idx:
-        pool_run_check_shape(_pool_shape_words(fields["_idx_shape"], "_idx_shape", context), expected)
+        pool_run_check_shape(_pool_shape_words(xcnn_item(fields, XK_IDX_SHAPE), "_idx_shape", context), expected)
         h = PythonObject(_pool_int(h, context))
-        resident_idx = _fields(dev)["b"] is entries["module"]
+        resident_idx = xcnn_item(_fields(dev), XK_B) is xcnn_item(entries, XK_MODULE)
     if xcnn_is_t(source, context):
         pool_run_check_shape(xcnn_shape(source), expected)
-        if xcnn_on_dev(entries, source, context) and (not maxed or resident_idx):
-            var out = xcnn_out_new(entries, shape, context)
+        var g_word = xcnn_dev_word(entries, source, context)
+        if g_word != 0 and (not maxed or resident_idx):
             var key = xcnn_ref(entries)
-            var g_word = xcnn_word(source.h)
-            var out_word = xcnn_word(out.h)
             var h_word = xcnn_word(h) if maxed else 0
+            var alloc_op = xcnn_alloc_op(entries, context)
+            var count: List[Int] = [max(xcnn_size(shape), 1)]
+            var out_word = 0
             var py = Python()
             with GILReleased(py):
-                if maxed:
-                    pool_run_max_backward_m(key, 7, g_word, h_word, out_word, prm)
-                else:
-                    pool_run_avg_backward_m(key, 3, g_word, out_word, prm)
-            return out
+                out_word = xcnn_run_call(key, alloc_op, List[Int](), count)   # the gather stores every word
+                try:
+                    if maxed:
+                        pool_run_max_backward_m(key, 7, g_word, h_word, out_word, prm)
+                    else:
+                        pool_run_avg_backward_m(key, 3, g_word, out_word, prm)
+                except error:
+                    _ = xcnn_run_call(key, XC_RES_FREE, [out_word], List[Int]())
+                    raise error
+            return xcnn_adopt(entries, shape, out_word, context)
         return xcnn_wrap(entries, _pool_backward2d(model, xcnn_host_of(source, context), context), context)
     var g = xcnn_f32(source, "grad_out", context)
     pool_run_check_shape(xcnn_shape(g), expected)
@@ -611,25 +645,30 @@ def xcnn_dropout_forward(model: PythonObject, x: PythonObject, context: PythonOb
 
 # ---------------------------------------------------------------- adaptive pools
 
-def _pool_layer(model: PythonObject, entries: PythonObject, k: List[Int], maxed: Bool, context: PythonObject) raises -> PythonObject:
+def _pool_layer(fields: PythonObject, entries: PythonObject, k: List[Int], maxed: Bool, context: PythonObject) raises -> PythonObject:
     """`_AdaptivePool._pool_for(b, k)`: the MaxPool2d / AvgPool2d of kernel =
     stride = `k` (kept across calls under G3), built with the fields its
-    constructor sets."""
-    var b = xcnn_builtins()
-    var fields = _fields(model)
+    constructor sets. `fields`: the adaptive layer's instance dictionary,
+    read by the caller (fx-cnn-layers, 2026-11-18: it was read a second time
+    here). A hit no longer rewrites the inner pool's `numeric_mode` here:
+    the one caller reads the inner pool's fields next and writes it there
+    (`xcnn_adaptive_forward`), so the inner dictionary is admitted once per
+    forward, not twice."""
     # `maxed`: the caller's `_adaptive_max(model)` (the class walk runs once per call)
     var cls = context["xcnn_maxpool_class"] if maxed else context["xcnn_avgpool_class"]
-    var hit = py_get(fields, "_pool_cache")
+    var hit = xcnn_get(fields, XK_POOL_CACHE)
     if xcnn_resident(entries, context) and hit is not None:
-        if py_type(hit) is not b.tuple or len(hit) != 2:
+        if not xcnn_exact(hit, XT_TUPLE) or len(hit) != 2:
             raise Error("TypeError: adaptive pool cache must contain native metadata")
-        var cached_shape = _pool_shape_words(hit[0], "pool cache shape", context)
-        if pool_run_cache_matches(cached_shape, k) and py_type(hit[1]) is cls:
+        var cached_shape = _pool_shape_words(xcnn_at(hit, 0), "pool cache shape", context)
+        var cached = xcnn_at(hit, 1)
+        if pool_run_cache_matches(cached_shape, k) and py_type(cached) is cls:
             # p3-cnn-sequence-tsa (hazard C): the inner pool resolves its
             # binding from its own numeric_mode, so a hit takes the adaptive
-            # layer's current mode (a changed mode no longer runs the old one).
-            py_setitem(_fields(hit[1]), "numeric_mode", py_get(fields, "numeric_mode"))
-            return hit[1]
+            # layer's current mode (a changed mode no longer runs the old
+            # one): written by the caller, see above.
+            return cached
+    var b = xcnn_builtins()
     var layer = py_call(py_call(b.getattr, b.object, "__new__"), cls)
     var state = _fields(layer)
     var pair = Python.tuple(k[0], k[1])
@@ -641,8 +680,8 @@ def _pool_layer(model: PythonObject, entries: PythonObject, k: List[Int], maxed:
     py_setitem(state, "dilation", Python.tuple(1, 1))
     py_setitem(state, "count_include_pad", PythonObject(True))
     py_setitem(state, "input_shape", PythonObject(None))
-    py_setitem(state, "numeric_mode", py_get(fields, "numeric_mode"))
-    _set(fields, "_pool_cache", Python.tuple(pair, layer))
+    py_setitem(state, "numeric_mode", xcnn_get(fields, XK_NUMERIC_MODE))
+    xcnn_put(fields, XK_POOL_CACHE, Python.tuple(pair, layer))
     return layer
 
 
@@ -681,32 +720,43 @@ def _layer_indices(layer: PythonObject, context: PythonObject) raises -> PythonO
 
 def xcnn_adaptive_forward(model: PythonObject, x: PythonObject, context: PythonObject) raises -> PythonObject:
     """`_AdaptivePool.forward(x)`."""
-    var b = xcnn_builtins()
+    # fx-cnn-layers (2026-11-18): the fields are read and written through
+    # held names; a resident x is admitted once (`xcnn_dev_word` gives its
+    # handle); the adaptive layer's fields are passed to `_pool_layer`, and
+    # the inner pool's fields are admitted once (they were admitted in
+    # `_pool_layer` and again here). Same checks in the same order.
     var fields = _fields(model)
     var entries = xcnn_entries(fields, context)
     var m = xcnn_idn(entries, XCNN_F_ADAPT)
     var maxed = _adaptive_max(model, context)
     var xt = xcnn_is_t(x, context)
     var value = x
+    var x_word = 0
     if xt and not m:
         value = xcnn_f32(x, "x", context)
         xt = False
-    elif xt and not xcnn_on_dev(entries, x, context):
-        return xcnn_wrap(entries, xcnn_adaptive_forward(model, xcnn_host_of(x, context), context), context)
-    elif not xt:
+    elif xt:
+        x_word = xcnn_dev_word(entries, x, context)
+        if x_word == 0:
+            return xcnn_wrap(entries, xcnn_adaptive_forward(model, xcnn_host_of(x, context), context), context)
+    else:
         value = xcnn_f32(x, "x", context)
     var xs = xcnn_shape(value)
     if len(xs) != 4:   # the class name is read only for the refusal
         pool_run_check_nchw(xs, _class_name(model))
     var xshape = xcnn_tuple(xs)
-    _set(fields, "_xshape", xshape)
-    _set(fields, "_idx_host", PythonObject(None))
-    _set(fields, "_idx_dev", PythonObject(None))
+    xcnn_put(fields, XK_XSHAPE, xshape)
+    xcnn_put(fields, XK_IDX_HOST, PythonObject(None))
+    xcnn_put(fields, XK_IDX_DEV, PythonObject(None))
     var o = _adaptive_output(fields, context)
     if pool_run_adaptive_divides(xs, o):
         var k = pool_run_adaptive_kernel(xs, o)
-        var layer = _pool_layer(model, entries, k, maxed, context)
-        _set(fields, "_layer", layer)
+        var layer = _pool_layer(fields, entries, k, maxed, context)
+        # The inner pool takes the adaptive layer's current mode (a cache hit
+        # may hold an older one; a fresh pool already has it).
+        var lf = _fields(layer)
+        xcnn_put(lf, XK_NUMERIC_MODE, xcnn_get(fields, XK_NUMERIC_MODE))
+        xcnn_put(fields, XK_LAYER, layer)
         if xt:
             # lane fb15-sync-counts (2026-11-18): a resident x of this binding
             # (admitted above) runs the inner pool's resident forward directly,
@@ -716,10 +766,9 @@ def xcnn_adaptive_forward(model: PythonObject, x: PythonObject, context: PythonO
             # binding lookup, shape read, residency admission, class test and
             # settings parse (the same answers, per call) are gone.
             var prm = pool_run_words(PoolSettings(k[0], k[1], k[0], k[1], 0, 0, 1, 1, True, False, 0), xs)
-            var lf = _fields(layer)
             if maxed:
-                return _max_forward_res(layer, lf, entries, value, xs, prm, xshape, False, context)
-            return _avg_forward_res(lf, entries, value, xs, prm, xshape, False, context)
+                return _max_forward_res(lf, entries, x_word, xs, prm, xshape, False, context)
+            return _avg_forward_res(lf, entries, x_word, xs, prm, xshape, False, context)
         var out = _pool2d_forward(layer, value, context)
         if maxed and not m:
             _set(fields, "_idx_host", _layer_indices(layer, context))
@@ -891,9 +940,16 @@ def _adaptive_max(model: PythonObject, context: PythonObject) raises -> Bool:
 
 
 def _adaptive_output(fields: PythonObject, context: PythonObject) raises -> List[Int]:
-    var pair = _pool_pair(fields["output_size"], "output_size", False, context)
-    var h = Int(py=pair[0])
-    var w = Int(py=pair[1])
+    # fx-cnn-layers (2026-11-18): the stored pair (`xcnn_adaptive_init`
+    # writes an exact tuple of two exact ints) is read directly; anything
+    # else takes the general parse (see `_pool_words`).
+    var h = 0
+    var w = 0
+    var stored = xcnn_item(fields, XK_OUTPUT_SIZE)
+    if not xcnn_int_pair(stored, h, w):
+        var pair = _pool_pair(stored, "output_size", False, context)
+        h = Int(py=pair[0])
+        w = Int(py=pair[1])
     pool_run_check_output(h, w)
     return [h, w]
 
