@@ -27,7 +27,8 @@ from bindings.admitted_input_unpack import admitted_finite_refuse
 from bindings.native_loaded_module_door import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_fields, py_setitem
 from bindings.py_cpython_table import cpython_table
-from bindings.classical_arrays_door import classical_address
+from bindings.classical_arrays_door import classical_address, classical_wrap_array
+from bindings.native_array_storage_door import native_array_unfilled
 from bindings.classical_attributes_door import classical_connect_numpy
 from bindings.family_common_unpack import (
     family_repr,
@@ -101,6 +102,27 @@ def _semi_out(shape: PythonObject, typestr: String, context: PythonObject) raise
         if Int(py=shape[k]) < 0:
             raise Error("mojolearn: negative dimension in shape " + family_repr(shape))
     return family_array(shape, typestr, context)
+
+
+def _semi_out_written(shape: PythonObject, context: PythonObject) raises -> PythonObject:
+    """A float32 C-order Array for an output its one writer stores in full
+    before it is read or escapes (no zero-fill pass), with `_semi_out`'s
+    negative-dimension refusal.
+
+    Perf (lane fb12-rows, 2026-11-17; algos/additive-chi2 fit_transform and
+    transform): `achi2_item` stores every one of its cell's 2 steps - 1
+    outputs (zeros for a zero input), on the host route and on the device
+    route's one full download (x_neighbors/device_ops.mojo op_achi2). Before:
+    the zero-filled `_semi_out`, a host write over the whole map (100,000 x
+    33 float32 = 13 MB on the board's taxi block; cost per output element on
+    every shape) that the writer then overwrote."""
+    var count = 1
+    for k in range(len(shape)):  # driver-loop: over (shape: array rank metadata): at most two dimensions
+        var extent = Int(py=shape[k])
+        if extent < 0:
+            raise Error("mojolearn: negative dimension in shape " + family_repr(shape))
+        count *= extent
+    return classical_wrap_array(native_array_unfilled("f", count), shape, "<f4", "C", context)
 
 
 def _semi_x(source: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -290,9 +312,12 @@ def _achi2_fit(model: PythonObject, args: PythonObject, context: PythonObject) r
     py_setitem(fields, "n_features_in_", PythonObject(Int(py=x.shape[1])))
 
 
-def _achi2_transform(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
+def _achi2_transform(model: PythonObject, args: PythonObject, context: PythonObject,
+                     checked: Bool = False) raises -> PythonObject:
     """`AdditiveChi2Sampler.transform(X)`: the dense map; a sparse input
-    gives the map's nonzeros as a csr matrix, built by SciPy as before."""
+    gives the map's nonzeros as a csr matrix, built by SciPy as before.
+    `checked`: `_achi2_fit` has just refused a negative entry of this same X
+    (fit_transform), so the transform's own scan is not repeated."""
     var b = _semi_b()
     var fields = py_fields(model)
     var source = args[1]
@@ -303,8 +328,12 @@ def _achi2_transform(model: PythonObject, args: PythonObject, context: PythonObj
     var d = Int(py=x.shape[1])
     var steps = _semi_int(family_field(fields, "sample_steps"))
     var width = xn_achi2_width(d, steps)
-    var out = _semi_out(Python.tuple(n, width), "<f4", context)
-    if Int(py=x.size) != 0:
+    var out = _semi_out_written(Python.tuple(n, width), context)
+    # Perf (lane fb12-rows, 2026-11-17; algos/additive-chi2 fit_transform):
+    # in fit_transform the fit's check (the device scan, or the same host
+    # minimum) already refused a negative entry of this X, so the second full
+    # pass over X is skipped there. transform alone keeps it.
+    if not checked and Int(py=x.size) != 0:
         xn_achi2_negative_check(Float64(family_min(x)) < 0.0)
     var interval = _achi2_interval(fields)
     _semi_op(args[0], xn_achi2_request(_semi_at(x), _semi_at(out), n, d, steps, interval))
@@ -895,7 +924,7 @@ def _neighbors_semi_operation_route(model: PythonObject, operation: String, var 
         return _achi2_transform(model, args, context)
     if operation == "family_xn_semi_achi2_fit_transform":
         _achi2_fit(model, args, context)
-        return _achi2_transform(model, args, context)
+        return _achi2_transform(model, args, context, True)
     if operation == "family_xn_semi_schi2_fit":
         _schi2_fit(model, args, context)
         return model

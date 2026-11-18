@@ -14,7 +14,7 @@ from core.cast_in import CAST_KIND_SIGNED
 from providers.python.pcs_rng_pyapi_pack import pcs_seed
 from core.pcs_native_api import PCSFitPlan, pcs_options, pcs_feature_width
 from bindings.pcs_native_boundary_unpack import PCSConnection, pcs_seed_unpack, pcs_run_draw, pcs_run_query
-from bindings.pcs_native_boundary_pack import pcs_binding, pcs_array
+from bindings.pcs_native_boundary_pack import pcs_binding, pcs_output
 from bindings.public_lifecycle_owner_door import lifecycle_admit_fields
 from providers.python.pcs_public_lifecycle_pyapi_unpack import pcs_public_begin
 from providers.python.pcs_public_lifecycle_pyapi_pack import pcs_feature_names
@@ -48,7 +48,7 @@ def _pcs_transform(settings: PythonObject, binding: PythonObject, x: ArrayMetada
     var index_hash = _pcs_hash(family_field(settings, "indexHash_"), plan.options.degree, "indexHash_", context, index_pin)
     var bit_hash = _pcs_hash(family_field(settings, "bitHash_"), plan.options.degree, "bitHash_", context, bit_pin)
     plan.admit_hash_widths(index_hash.source.cols, bit_hash.source.cols)
-    var dst = pcs_array(plan.output_shape(x.source.rows), "<f4", context)
+    var dst = pcs_output(plan.output_shape(x.source.rows), context)
     var old_items = getenv("MOJOLEARN_XN_OLD_ITEMS") == "1"
     var request = plan.query(x.source.addr, index_hash.source.addr, bit_hash.source.addr,
         Int(py=classical_address(dst)), x.source.rows, gamma, coef0, old_items)

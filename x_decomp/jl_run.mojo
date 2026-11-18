@@ -8,32 +8,49 @@ from x_metrics.epilogue import portable_log_c
 
 
 comptime _LIMB = UInt64(0xFFFFFFFF)
+#: Limbs (base 2^32) of the exact cube of a 53-bit mantissa: 159 bits.
+comptime _CUBE_LIMBS = 6
+
+# Perf (lane fb12-rows, 2026-11-17; algos/jl-min-dim, one public call per grid
+# point): the exact cube is built in fixed stack limbs. Before: three heap
+# Lists per call (`_limbs_mul` of List[UInt64], deleted here) and
+# bounds-checked List reads in the bit loops. The same schoolbook product
+# and the same rounding, so the same bits.
 
 
-def _limbs_mul(a: List[UInt64], b: List[UInt64]) -> List[UInt64]:
-    """The exact product of two little-endian base-2^32 integers."""
-    var out = List[UInt64](length=len(a) + len(b), fill=UInt64(0))
-    for i in range(len(a)):  # driver-loop: over the limbs of a 53-bit power (at most five)
+def _cube_limbs(m: UInt64) -> Array[UInt64, _CUBE_LIMBS]:
+    """The exact m^3 of a mantissa m < 2^53 as little-endian base-2^32
+    limbs (the square, then the square times m; each row's carry lands in
+    the next untouched limb)."""
+    var a = Array[UInt64, 2](fill=UInt64(0))
+    a[0] = m & _LIMB
+    a[1] = m >> 32
+    var square = Array[UInt64, 4](fill=UInt64(0))
+    for i in range(2):  # driver-loop: over the two limbs of a 53-bit mantissa
         var carry = UInt64(0)
-        for j in range(len(b)):  # driver-loop: over the limbs of a 53-bit mantissa (two)
-            var t = a[i] * b[j] + out[i + j] + carry
-            out[i + j] = t & _LIMB
+        for j in range(2):  # driver-loop: over the two limbs of a 53-bit mantissa
+            var t = a[i] * a[j] + square[i + j] + carry
+            square[i + j] = t & _LIMB
             carry = t >> 32
-        var k = i + len(b)
-        while carry != 0:  # driver-loop: over the carry's limbs
-            var t = out[k] + carry
-            out[k] = t & _LIMB
+        square[i + 2] = carry
+    var cube = Array[UInt64, _CUBE_LIMBS](fill=UInt64(0))
+    for i in range(4):  # driver-loop: over the four limbs of the square
+        var carry = UInt64(0)
+        for j in range(2):  # driver-loop: over the two limbs of a 53-bit mantissa
+            var t = square[i] * a[j] + cube[i + j] + carry
+            cube[i + j] = t & _LIMB
             carry = t >> 32
-            k += 1
-    return out^
+        cube[i + 2] = carry
+    return cube^
 
 
-def _bit(a: List[UInt64], i: Int) -> Bool:
+@always_inline
+def _bit(a: Array[UInt64, _CUBE_LIMBS], i: Int) -> Bool:
     return ((a[i // 32] >> UInt64(i % 32)) & UInt64(1)) != 0
 
 
-def _bit_length(a: List[UInt64]) -> Int:
-    var k = len(a) - 1
+def _bit_length(a: Array[UInt64, _CUBE_LIMBS]) -> Int:
+    var k = _CUBE_LIMBS - 1
     while k >= 0 and a[k] == 0:  # driver-loop: over the limbs of an exact power
         k -= 1
     if k < 0:
@@ -59,8 +76,7 @@ def _cube_rounded(x: Float64) -> Float64:
         return x * x * x
     var m = (bits & UInt64(0xFFFFFFFFFFFFF)) | UInt64(0x10000000000000)
     var e = field - 1075
-    var mm: List[UInt64] = [m & _LIMB, m >> 32]
-    var power = _limbs_mul(_limbs_mul(mm, mm), mm)
+    var power = _cube_limbs(m)
     var length = _bit_length(power)
     var shift = length - 53
     var q = UInt64(0)

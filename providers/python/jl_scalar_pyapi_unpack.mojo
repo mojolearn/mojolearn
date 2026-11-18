@@ -1,46 +1,147 @@
 # SPDX-License-Identifier: Apache-2.0
 # Scalar admission and decoding for the Johnson-Lindenstrauss public bound.
 # Only exact native scalar owners can reach a conversion or buffer descriptor.
+#
+# Perf (lane fb12-rows, 2026-11-17; algos/jl-min-dim 8.27 -> 15.7 ms on the
+# same box vs 0.8.55, one public call per grid point, ~10,000 calls): the
+# exact builtin int/bool/float inputs are decided on borrowed pointers
+# against class words read once per process (`jl_type_words`), with the
+# import-resolved CPython table. Before, every call built fresh int, float
+# and bool sample objects and two error Strings per scalar, a one-word List,
+# and resolved the Python interface (a named-global probe) once per type
+# query and per temporary's release: about 1 us per call of fixed cost.
 from std.memory import bitcast
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
-from bindings.py_cpython_table import cpython_table
+from bindings.py_cpython_table import cpython_table, CPythonTable
 from bindings.py_balanced import py_call, py_get, py_type
 from bindings.py_typed_call import typed_python_error
+from bindings.cpython_borrowed_unpack import borrowed_type_word
 from bindings.sequential_admission_door import _one_of
 from bindings.native_scalar_decode_unpack import native_scalar_buffer
 from bindings.native_numpy_metadata_unpack import native_numpy_dtype
+from core.shared_slot import SharedSlot
 
 
-def jl_scalar(value: PythonObject, epsilon: Bool, context: PythonObject) raises -> Float64:
-    var cls = py_type(value)
-    var float_type = py_type(PythonObject(0.0))
-    var int_type = py_type(PythonObject(0))
-    var bool_type = py_type(PythonObject(True))
-    var positive_error = String("The JL bound is defined for n_samples greater than zero")
-    var epsilon_error = String("The JL bound is defined for eps in ]0, 1[")
-    if cls is int_type or cls is bool_type:
-        # No integer lies strictly between zero and one. The direct CPython
-        # integer predicate handles arbitrary-size n without narrowing first;
-        # exact type admission excludes every user comparison/conversion slot.
+comptime JL_POSITIVE_ERROR = "The JL bound is defined for n_samples greater than zero"
+comptime JL_EPSILON_ERROR = "The JL bound is defined for eps in ]0, 1["
+
+
+struct JlTypeWords(Defaultable, Movable):
+    # Addresses of CPython's exact int, bool, float, str, tuple and dict
+    # classes (static, immortal types), 0 until first read.
+    var int_word: Int
+    var bool_word: Int
+    var float_word: Int
+    var str_word: Int
+    var tuple_word: Int
+    var dict_word: Int
+
+    def __init__(out self):
+        self.int_word = 0
+        self.bool_word = 0
+        self.float_word = 0
+        self.str_word = 0
+        self.tuple_word = 0
+        self.dict_word = 0
+
+
+comptime _JL_TYPE_WORDS = SharedSlot[JlTypeWords, "MojolearnJlTypeWordsV1", 1]
+
+
+@no_inline
+def _jl_fill_type_words(words: UnsafePointer[JlTypeWords, MutUntrackedOrigin]) raises:
+    # Once per process, under the GIL: the exact builtin classes by identity.
+    var one = PythonObject(1)
+    var truth = PythonObject(True)
+    var real = PythonObject(1.5)
+    var text = PythonObject("")
+    var pair = Python.tuple()
+    var mapping = Python.dict()
+    words[].int_word = borrowed_type_word(one._obj_ptr)
+    words[].bool_word = borrowed_type_word(truth._obj_ptr)
+    words[].float_word = borrowed_type_word(real._obj_ptr)
+    words[].str_word = borrowed_type_word(text._obj_ptr)
+    words[].tuple_word = borrowed_type_word(pair._obj_ptr)
+    # Last: a nonzero dict word marks the record complete.
+    words[].dict_word = borrowed_type_word(mapping._obj_ptr)
+    _ = one
+    _ = truth
+    _ = real
+    _ = text
+    _ = pair
+    _ = mapping
+
+
+def jl_type_words() raises -> UnsafePointer[JlTypeWords, MutUntrackedOrigin]:
+    """The process-wide exact builtin class words (one slot probe per call)."""
+    var words = _JL_TYPE_WORDS.get_or_create_ptr()
+    if words[].dict_word == 0:
+        _jl_fill_type_words(words)
+    return words
+
+
+@always_inline
+def jl_type_word(raw: PyObjectPtr) -> Int:
+    """The class word of a live borrowed object: PyObject.ob_type at +8, the
+    stable-ABI word the standard library's `Py_TYPE` reads (no reference, no
+    interface lookup; bindings/cpython_layout.mojo)."""
+    return MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=Int(raw) + 8)[0]
+
+
+@always_inline
+def jl_builtin_scalar(words: UnsafePointer[JlTypeWords, MutUntrackedOrigin], cls: Int) -> Bool:
+    """An exact int, bool or float: decided by `jl_scalar_word` without the
+    connected NumPy metadata."""
+    return cls == words[].float_word or cls == words[].int_word or cls == words[].bool_word
+
+
+def jl_scalar_word(value: PyObjectPtr, cls: Int, epsilon: Bool, context: PyObjectPtr,
+                   table: UnsafePointer[CPythonTable, MutAnyOrigin],
+                   words: UnsafePointer[JlTypeWords, MutUntrackedOrigin]) raises -> Float64:
+    """One borrowed scalar of the bound as binary64 (`cls` is its class word).
+    Exact floats and int64-range exact ints/bools are read directly; every
+    other admitted kind takes `jl_scalar`, the general admission."""
+    if cls == words[].float_word:
+        # An exact float cannot fail its conversion.
+        var number = table[].PyFloat_AsDouble(value)
         if epsilon:
-            raise Error(epsilon_error)
-        # Perf (lane fb-rest, 2026-11-17; algos/jl-min-dim 1.9x vs 0.8.55):
-        # an int64-range count is read through the import-resolved table
-        # (PyLong_AsLongLongAndOverflow) and widened to binary64 with
-        # round-to-nearest-even, PyLong_AsDouble's own rounding, so the same
-        # value. Before: two symbol lookups (dlsym) per call. A count outside
-        # int64 keeps the exact CPython comparison and conversion below.
-        var overflow = List[Int32](length=1, fill=0)
-        var word = cpython_table()[].PyLong_AsLongLongAndOverflow(value._obj_ptr, Int(overflow.unsafe_ptr()))
-        if overflow[0] == 0:
-            if word == -1 and cpython_table()[].PyErr_Occurred():
+            if not (number > 0.0 and number < 1.0):
+                raise Error(JL_EPSILON_ERROR)
+        elif number <= 0.0:
+            raise Error(JL_POSITIVE_ERROR)
+        return number
+    if cls == words[].int_word or cls == words[].bool_word:
+        # No integer lies strictly between zero and one.
+        if epsilon:
+            raise Error(JL_EPSILON_ERROR)
+        # An int64-range count, widened to binary64 with round-to-nearest-even
+        # (PyLong_AsDouble's own rounding), so the same value. A count outside
+        # int64 keeps the exact CPython comparison and conversion in jl_scalar.
+        var overflow = Int32(0)
+        var word = table[].PyLong_AsLongLongAndOverflow(value, Int(MutPointer(to=overflow)))
+        if overflow == 0:
+            if word == -1 and table[].PyErr_Occurred():
                 raise typed_python_error()
             if word <= 0:
-                raise Error(positive_error)
+                raise Error(JL_POSITIVE_ERROR)
             return Float64(word)
-        if overflow[0] < 0:
-            raise Error(positive_error)
+        if overflow < 0:
+            raise Error(JL_POSITIVE_ERROR)
+    return jl_scalar(PythonObject(from_borrowed=value), cls, epsilon, PythonObject(from_borrowed=context), words)
+
+
+def jl_scalar(value: PythonObject, cls_word: Int, epsilon: Bool, context: PythonObject,
+              words: UnsafePointer[JlTypeWords, MutUntrackedOrigin]) raises -> Float64:
+    """The general admission: an exact int beyond int64, a native NumPy
+    scalar or a zero-dimensional ndarray (exact floats and int64-range ints
+    are read by `jl_scalar_word` first)."""
+    if cls_word == words[].int_word or cls_word == words[].bool_word:
+        # The direct CPython integer predicate handles arbitrary-size n
+        # without narrowing first; exact type admission excludes every user
+        # comparison/conversion slot.
+        if epsilon:
+            raise Error(JL_EPSILON_ERROR)
         ref cpy = Python().cpython()
         var zero = PythonObject(0)
         var nonpositive = cpy.lib.get_function[Int32]("PyObject_RichCompareBool")(
@@ -49,19 +150,12 @@ def jl_scalar(value: PythonObject, epsilon: Bool, context: PythonObject) raises 
         if nonpositive < 0:
             raise typed_python_error()
         if nonpositive != 0:
-            raise Error(positive_error)
+            raise Error(JL_POSITIVE_ERROR)
         var number = cpy.lib.get_function[Float64]("PyLong_AsDouble")(value._obj_ptr)
         if cpython_table()[].PyErr_Occurred():
             raise typed_python_error()
         return number
-    if cls is float_type:
-        var number = Float64(py=value)
-        if epsilon:
-            if not (number > 0.0 and number < 1.0):
-                raise Error(epsilon_error)
-        elif number <= 0.0:
-            raise Error(positive_error)
-        return number
+    var cls = py_type(value)
     var array = cls is py_get(context, "ndarray")
     var scalar = _one_of(cls, context["scalar_types"])
     # The generic shared list includes f16/f32/f64. Preserve long-double
@@ -84,7 +178,7 @@ def jl_scalar(value: PythonObject, epsilon: Bool, context: PythonObject) raises 
         # Check the original precision before the historical binary64
         # conversion. A long-double value just below one may round to one.
         if real.special != 0 or real.negative or not real.truth() or real.highest() + real.scale >= 0:
-            raise Error(epsilon_error)
+            raise Error(JL_EPSILON_ERROR)
     elif real.special != 2 and (real.negative or not real.truth()):
-        raise Error(positive_error)
+        raise Error(JL_POSITIVE_ERROR)
     return bitcast[DType.float64](real.float64_bits())
