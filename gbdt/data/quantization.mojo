@@ -60,6 +60,7 @@ be kept in step.
 """
 
 from std.math import inf
+from core.host_finite_scan import host_any_nan_unit
 
 from gbdt.grid_creator.binarization import (
     BORDER_TYPE_GREEDY_LOG_SUM,
@@ -82,10 +83,9 @@ comptime NAN_TREATMENT_AS_TRUE = 2
 def has_nans(values: List[Float32]) -> Bool:
     """Their `denseData->GetData()->Find(isnan)`
     (`quantized_features_info.cpp:210-211`)."""
-    for i in range(len(values)):
-        if values[i] != values[i]:
-            return True
-    return False
+    # One feature column, a unit of the per-column quantization split: the
+    # shared any-NaN SIMD pass on this thread (was a scalar `v != v` loop).
+    return host_any_nan_unit(values)
 
 
 def compute_nan_mode(values: List[Float32], nan_mode_option: Int) -> Int:

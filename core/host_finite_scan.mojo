@@ -39,7 +39,8 @@ here, all on bits, all one parallel SIMD pass with the same grain floor:
                   `host_copy_f32_finite` (the test folded into a copy)
     any NaN       NaN refused or reported, infinity is an ordinary value
                   (exponent all ones and a nonzero fraction; `v != v`):
-                  `host_any_nan_f32`, `host_any_nan_list`
+                  `host_any_nan_f32`, `host_any_nan_list`,
+                  `host_any_nan_unit` (one unit of a caller's own split)
     any infinity  +inf or -inf refused, NaN is a missing value and passes
                   (magnitude bits exactly 0x7F800000):
                   `host_any_inf_f32`
@@ -249,6 +250,14 @@ def host_any_nan_f32(p: _HFS_F32P, n: Int) -> Bool:
 def host_any_nan_list(values: List[Float32]) -> Bool:
     """`host_any_nan_f32` over a List's storage."""
     return _hfs_any_class(Int(values.unsafe_ptr()), len(values), True)
+
+
+def host_any_nan_unit(values: List[Float32]) -> Bool:
+    """The any-NaN test of ONE unit of a caller's own split (one feature
+    column of a per-column quantization): the SIMD pass on the calling
+    thread. Not split further because the caller already runs one such
+    unit per core; a pool call from inside a pool task is not made."""
+    return _hfs_span_any_class(Int(values.unsafe_ptr()), len(values), True)
 
 
 def host_any_inf_f32(p: _HFS_F32P, n: Int) -> Bool:
