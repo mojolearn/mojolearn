@@ -598,7 +598,7 @@ def _build_lowbit_train(lane, arm, D, A, t, p, ours, fn, info, rec, Runner, S, n
         # inside the clock, a harness copy the torch twins never made (they copy device to host only). The clock now
         # holds our call's returned host arrays as they are (`_held`, no copy); outputs() copies them after it.
         held = A["_held"]
-        info["harness_clock"] = A["HARNESS_CLOCK"]
+        info["harness_clock"] = A["HARNESS_CLOCK_OURS"]
 
         def fit():
             r = call()
@@ -993,7 +993,7 @@ def build(lane, arm, D, A):
             # np.array copy=True) inside the clock before its first 256 rows were kept; the clock now holds our
             # returned host gradient (`_held`, no copy), as the torch arm's clock holds its device-to-host copy, and
             # outputs() keeps the 256 rows after it
-            info["harness_clock"] = A["HARNESS_CLOCK"]
+            info["harness_clock"] = A["HARNESS_CLOCK_OURS"]
 
             def fit():
                 loss, g = fn(x, tg32, reduction=p["reduction"], label_smoothing=p["label_smoothing"],

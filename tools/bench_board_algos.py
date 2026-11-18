@@ -4704,7 +4704,7 @@ def _build_ts(lane, arm, D):
             fit0()
             infer()
         if t == "decompose":
-            info["harness_clock"] = HARNESS_CLOCK
+            info["harness_clock"] = HARNESS_CLOCK_OURS
         return Runner(info, fit, outputs, None, record=rec)
     lib = s["other"][arm]
     if lib == "statsforecast":
@@ -6705,7 +6705,10 @@ def _ms_outputs(t, r):
 
 #: lane fx-harness (2026-11-18): the harness-clock revision a lane's cells carry when its timed call no longer holds
 #: harness copies, casts or quality reductions (cell field harness_clock; tools/paper_compare.py HARNESS-CLOCK)
-HARNESS_CLOCK = "2026-11-18 outputs reduced after the clock"
+HARNESS_CLOCK = "2026-11-18 outputs reduced after the clock (all arms)"
+#: the same for a lane where only OUR arm's clock held the harness work (the opponents' clocks are unchanged), so
+#: tools/race_fairness.py does not call a stored opponent cell of that lane unfair
+HARNESS_CLOCK_OURS = "2026-11-18 outputs reduced after the clock (our arm)"
 
 
 def _held(a):
