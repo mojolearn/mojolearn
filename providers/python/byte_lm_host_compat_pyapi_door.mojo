@@ -140,8 +140,8 @@ def host_compat_run_configured(addresses: PythonObject, params: PythonObject, sh
     return host_compat_run(addresses, Python.list(), params, shape)
 
 
-def host_compat_run_default(addresses: PythonObject, params: PythonObject) raises -> PythonObject:
-    return host_compat_run_configured(addresses, params, Python.list(2, 32, 32, 4, 2, 8, 64, 2, 256))
+# TOMBSTONE: byte_lm_run (dead native entry: v1 default-shape ABI, only caller tools/byte_lm_config_binding_check.py, deleted with it) deleted 2026-11-18 by lane/fx-dead-small; code recoverable at 7c1aad6561.
+# Restore: git apply experiments/removed/byte_lm_run.patch
 
 
 def host_compat_trainer_step(session: PythonObject, addresses: PythonObject, params: PythonObject, shape: PythonObject) raises -> PythonObject:
@@ -209,7 +209,7 @@ def register(mut module: PythonModuleBuilder) raises:
     module.def_function[host_compat_profile]("byte_lm_profile")
     module.def_function[host_compat_suffix]("byte_lm_arithmetic_suffix")
     module.def_function[host_compat_shape_profile]("byte_lm_config_profile")
-    module.def_function[host_compat_run_default]("byte_lm_run")
+    # TOMBSTONE: byte_lm_run (dead native entry: v1 default-shape ABI, only caller tools/byte_lm_config_binding_check.py, deleted with it) deleted 2026-11-18 by lane/fx-dead-small; code recoverable at 7c1aad6561.
     module.def_function[host_compat_run_configured]("byte_lm_run_configured")
     module.def_function[host_compat_logits]("byte_lm_logits")
     module.def_function[host_compat_trainer_step]("byte_lm_trainer_step")
