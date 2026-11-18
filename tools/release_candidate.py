@@ -306,14 +306,30 @@ def first_build_error(arm_log):
     legs the arm log names (the local leg tree and its GitHub shards), else their first other failure line, else the
     arm's own FAILED/STOPPED line. Paths inside the box's checkout are shown relative to it."""
     text = Path(arm_log).read_text(errors="replace").splitlines()
-    logs = []
+    legs = []
     for line in text:
         for m in _LEG_LOG.finditer(line):
             leg = Path(m.group(1)).with_suffix("")
-            if leg.is_dir():
-                failed = [f for f in sorted(leg.rglob("build_logs/*.log"))
-                          if "FAILED" in (f.read_text(errors="replace").strip().splitlines() or [""])[-1]]
-                logs += [f for f in failed if f not in logs]
+            if leg not in legs:
+                legs.append(leg)
+    found = legs_first_error(legs)
+    if found:
+        return found
+    stop = next((x.strip() for x in reversed(text) if re.search(r"\b(FAILED|STOPPED) at ", x)), None)
+    return (stop or "no error line in " + str(arm_log))[:240]
+
+
+def legs_first_error(leg_dirs):
+    """The first compiler diagnostic (file:line: error) in the FAILED binding logs under LEG_DIRS (a leg's local
+    tree and its GitHub shards), else their first other failure line, else None. Also read by tools/release.py
+    linux-wait, which prints it as soon as a leg fails (lane fx-build-tools, 2026-11-18)."""
+    logs = []
+    for leg in leg_dirs:
+        leg = Path(leg)
+        if leg.is_dir():
+            failed = [f for f in sorted(leg.rglob("build_logs/*.log"))
+                      if "FAILED" in (f.read_text(errors="replace").strip().splitlines() or [""])[-1]]
+            logs += [f for f in failed if f not in logs]
     other = None
     for f in logs:
         for line in f.read_text(errors="replace").splitlines():
@@ -324,8 +340,7 @@ def first_build_error(arm_log):
                 other = f"{f.stem}: {_OTHER_ERROR.search(line).group(0)}"
     if other:
         return re.sub(r"/root/[^/ ]+/", "", other)[:240]
-    stop = next((x.strip() for x in reversed(text) if re.search(r"\b(FAILED|STOPPED) at ", x)), None)
-    return (stop or "no error line in " + str(arm_log))[:240]
+    return None
 
 
 def run_arms(a, argv):
