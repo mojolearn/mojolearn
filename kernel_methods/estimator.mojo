@@ -46,7 +46,7 @@ and the card use.
 
 # DEVIATION 2486: bulk host staging; stream/lifetime boundaries unchanged.
 from std.sys.compile import is_defined
-from core.hostptr import copy_f32
+from core.transfer import transfer_upload_list
 from max.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
 from checks.numerics import GLOBAL_NUMERIC_MODE as _CTX_MODE, NUMERIC_IDENTICAL as _CTX_IDENTICAL
@@ -249,23 +249,21 @@ def _rbf_idn_fused_launch(
 
 
 # ===========================================================================
-# Buffer plumbing. `cholesky/estimator.mojo`'s two helpers, character for
-# character, including the `_ = host^` that keeps a host buffer alive past
-# its `.unsafe_ptr()` (`[[mojo-buffer-freed-at-last-use]]`).
+# Buffer plumbing. `_upload` is core/transfer.mojo's in-place upload (lane
+# fx-transfer-helpers, 2026-11-18); `_download` keeps its own staged form
+# (`KM_IDN_BULK_DOWNLOAD`), including the `_ = h^` that keeps the host buffer
+# alive past its `.unsafe_ptr()` (`[[mojo-buffer-freed-at-last-use]]`).
 # ===========================================================================
 
 
+@always_inline
 def _upload(
     ctx: DeviceContext, values: List[Float32]
 ) raises -> DeviceBuffer[DType.float32]:
-    var n = len(values)
-    var buf = ctx.enqueue_create_buffer[DType.float32](n)
-    var host = ctx.enqueue_create_host_buffer[DType.float32](n)
-    copy_f32(values.unsafe_ptr(), host.unsafe_ptr(), n)
-    ctx.enqueue_copy(dst_buf=buf, src_ptr=host.unsafe_ptr())
-    ctx.synchronize()
-    _ = host^
-    return buf^
+    # core/transfer.mojo (lane fx-transfer-helpers, 2026-11-18): read in place
+    # from the caller's list; the pinned staging buffer and its host copy per
+    # call are gone. One wait, as before.
+    return transfer_upload_list[DType.float32](ctx, values, len(values), len(values))
 
 
 #: lane apple-fast-gap-kapprox2 (2026-10-03), the FAST + Apple default since
