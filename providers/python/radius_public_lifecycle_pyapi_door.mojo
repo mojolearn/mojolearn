@@ -303,6 +303,14 @@ def radius_fit(model: PythonObject, args: PythonObject, context: PythonObject) r
         # parallel copy of every borrowed X: RadiusNeighbors fit 0.03 ->
         # 33 ms on a 200k x 220 float32 X (L40S box, d95f805cce). A cast or
         # strided input still takes the owned cast copy that tests it.
+        # fx-rows (2026-11-18): the refusal stays at fit (Andrew: reliability
+        # is not traded; 0.8.55 did no test here and raised at the query).
+        # `host_all_finite_f32_strided` is already the fastest general form:
+        # a C-order view is one flat SIMD span split across every allowed
+        # host core (core/host_finite_scan.mojo), one read of each word, no
+        # copy; fit uploads nothing, so there is no device pass to fold it
+        # into, and no other fit step walks X. Its cost is one memory-
+        # bandwidth pass (about 1.1 ms for 200k x 220 float32 on 14 cores).
         var index: PythonObject
         if x.f32_c() and not x.copied:
             var src = x.source
