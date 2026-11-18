@@ -5442,7 +5442,10 @@ def _iso_predict_grid(x: FP, n_x: Int, thr: FP, n_thr: Int, n: Int, ip: List[Int
     var dout = ctx.enqueue_create_buffer[DType.float32](max(n, 1))
     ctx.enqueue_copy(dst_buf=dx, src_ptr=x)
     ctx.enqueue_copy(dst_buf=dk, src_ptr=hk.unsafe_ptr())
+    # thresholds, bounds and status ride ONE upload; the kernel takes them as three views of it
+    # (three pointers computed from one are refused as mutable aliases of each other)
     var dstat = dk.create_sub_buffer[DType.float32](status_at, 2)
+    var dbnd = dk.create_sub_buffer[DType.float32](bounds_at, 2)
     var kp = dk.unsafe_ptr()
     comptime if TARGET_HAS_APPLE_GPU:
         # the whole isotonic predict as ONE guarded unit (x_linear/witness.mojo):
@@ -5452,8 +5455,8 @@ def _iso_predict_grid(x: FP, n_x: Int, thr: FP, n_thr: Int, n: Int, ip: List[Int
         while True:
             var nonce = wit.begin()
             var wo = 0
-            ctx.enqueue_function[iso_predict_kernel](dx.unsafe_ptr(), kp, Int32(n), ip[0], ip[1], kp + bounds_at,
-                                                     dout.unsafe_ptr(), kp + status_at, wit.p(), Int32(wo), nonce,
+            ctx.enqueue_function[iso_predict_kernel](dx.unsafe_ptr(), kp, Int32(n), ip[0], ip[1], dbnd.unsafe_ptr(),
+                                                     dout.unsafe_ptr(), dstat.unsafe_ptr(), wit.p(), Int32(wo), nonce,
                                                      grid_dim=_xg_blocks(n), block_dim=XG_TPB)
             wo += _xg_blocks(n)
             ctx.enqueue_copy(dst_ptr=res, src_buf=dout)
@@ -5466,8 +5469,8 @@ def _iso_predict_grid(x: FP, n_x: Int, thr: FP, n_thr: Int, n: Int, ip: List[Int
         _ = wit^
     else:
         # witness_end compiles to nothing off Apple: the word pointer is never read
-        ctx.enqueue_function[iso_predict_kernel](dx.unsafe_ptr(), kp, Int32(n), ip[0], ip[1], kp + bounds_at,
-                                                 dout.unsafe_ptr(), kp + status_at, IP(unsafe_from_address=Int(kp)),
+        ctx.enqueue_function[iso_predict_kernel](dx.unsafe_ptr(), kp, Int32(n), ip[0], ip[1], dbnd.unsafe_ptr(),
+                                                 dout.unsafe_ptr(), dstat.unsafe_ptr(), IP(unsafe_from_address=Int(kp)),
                                                  Int32(0), Int32(0), grid_dim=_xg_blocks(n), block_dim=XG_TPB)
         ctx.enqueue_copy(dst_ptr=res, src_buf=dout)
         ctx.enqueue_copy(dst_ptr=hs.unsafe_ptr(), src_buf=dstat)
@@ -5477,6 +5480,7 @@ def _iso_predict_grid(x: FP, n_x: Int, thr: FP, n_thr: Int, n: Int, ip: List[Int
     _ = hs^
     _ = hk^
     _ = dstat^
+    _ = dbnd^
     _ = dx^
     _ = dk^
     _ = dout^
