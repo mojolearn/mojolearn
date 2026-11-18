@@ -3905,8 +3905,10 @@ def preflight_check(ctx, race, arms):
     except P.ParamsRefused as exc:
         report = dict(verdict="REFUSED", arms=records, problems=[str(exc)], exceptions=[])
     report["problems"].extend("missing parameter/version probe: " + a for a in missing)
+    # the probe log is read only for a missing arm (the causes it names are for those); a race with every probe
+    # present reads no file (fb12, 2026-11-17: the call read it on every race and needed ctx/race keys it never used)
     refused = probe_refusals(os.path.join(ctx["out"], "raw", "params-only", race["id"].replace("/", "."),
-                                          "probe.log"), missing)
+                                          "probe.log"), missing) if missing else {}
     report["problems"].extend("probe refused %s: %s" % kv for kv in sorted(refused.items()))
     # Failed probes still retain their settings for diagnosis; partial output
     # from a failed process can never admit a timed race.
