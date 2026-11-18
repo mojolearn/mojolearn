@@ -133,6 +133,7 @@ def _load_fixture(ctx: DeviceContext, n: Int, d: Int) raises -> DeviceBuffer[
             hx.unsafe_ptr().unsafe_store(i * d + f, _coord(i, f))
     ctx.enqueue_copy(dst_buf=x, src_ptr=hx.unsafe_ptr())
     ctx.synchronize()
+    _ = hx^  # keep-alive past the drain (the enqueue_copy reads it until then)
     return x
 
 
