@@ -21,6 +21,11 @@ from checks.numerics import (
     identical_mul_add,
 )
 from training.checks.loss_contract import CE_NEG_INF_BITS, neg_by_bits, refuse_nonfinite
+from training.chunked_lm_head_panel_math import LMHEAD_FAST_GEMM_PANEL, lmhead_gp_leaf_count
+from training.chunked_lm_head_profile import LM_HEAD_V2_CHUNK
+from training.chunked_lm_head_gemm_panel_host import (
+    lmhead_gp_host_forward, lmhead_gp_host_backward,
+)
 
 
 comptime LM_HEAD_V2_VOCAB_CHUNK = 256
@@ -103,6 +108,47 @@ def _logit(
     return ftz(acc)
 
 
+def _gp_oracle(
+    hidden: List[Float32], weight: List[Float32], targets: List[Int32],
+    rows: Int, vocab: Int, width: Int, with_grad: Bool,
+) raises -> ChunkedLMHeadV2Result:
+    """The oracle under `-D MOJOLEARN_LMHEAD_FAST_GEMM_PANEL` (default off):
+    the GEMM-panel arm's words (training/CHUNKED_LM_HEAD_V2.md, "GEMM-panel
+    arm"), which the device door computes under the same define. The
+    refusals are the default oracle's, in the same order and words, after
+    the device door's span refusal. Without `with_grad` the gradient lists
+    are empty and the loss is the same arithmetic in the same order."""
+    if rows < 1 or vocab < 2 or width < 1:
+        raise Error("chunked lm head v2: rows/width must be positive and vocab >= 2")
+    if len(hidden) != rows * width:
+        raise Error("chunked lm head v2: hidden shape mismatch")
+    if len(weight) != vocab * width:
+        raise Error("chunked lm head v2: weight shape mismatch")
+    if len(targets) != rows:
+        raise Error("chunked lm head v2: target shape mismatch")
+    if (rows > 2147483647 or vocab > 2147483647 or width > 2147483647
+            or rows * width > 2147483647 or vocab * width > 2147483647
+            or rows * min(vocab, LM_HEAD_V2_CHUNK) > 2147483647
+            or rows * lmhead_gp_leaf_count(vocab) > 2147483647):
+        raise Error("chunked lm head v2: operand span exceeds signed 32-bit kernel indexing")
+    refuse_nonfinite("chunked lm head hidden", hidden)
+    refuse_nonfinite("chunked lm head weight", weight)
+    for row in range(rows):
+        if targets[row] < 0 or Int(targets[row]) >= vocab:
+            raise Error("chunked lm head v2: target outside [0, vocab) at row " + String(row))
+    var maxima = List[Float32](length=rows, fill=Float32(0.0))
+    var denom = List[Float32](length=rows, fill=Float32(0.0))
+    var row_loss = List[Float32](length=rows, fill=Float32(0.0))
+    lmhead_gp_host_forward(hidden, weight, targets, rows, vocab, width, maxima, denom, row_loss)
+    var loss = lm_head_v2_loss_fold(row_loss, rows)
+    if not with_grad:
+        return ChunkedLMHeadV2Result(loss, maxima^, denom^, List[Float32](), List[Float32]())
+    var d_hidden = List[Float32](length=rows * width, fill=Float32(0.0))
+    var d_weight = List[Float32](length=vocab * width, fill=Float32(0.0))
+    lmhead_gp_host_backward(hidden, weight, targets, rows, vocab, width, maxima, denom, d_hidden, d_weight)
+    return ChunkedLMHeadV2Result(loss, maxima^, denom^, d_hidden^, d_weight^)
+
+
 def chunked_lm_head_v2_oracle_forward(
     hidden: List[Float32], weight: List[Float32], targets: List[Int32],
     rows: Int, vocab: Int, width: Int,
@@ -112,6 +158,9 @@ def chunked_lm_head_v2_oracle_forward(
     exports as `chunked_lm_head_v2_loss`; `chunked_lm_head_v2_oracle` runs
     exactly this and then the two gradient folds, so the loss a caller gets
     from either is the same arithmetic in the same order."""
+    comptime if LMHEAD_FAST_GEMM_PANEL:
+        # MOJOLEARN_LMHEAD_FAST_GEMM_PANEL (default off, A/B owed): the oracle moves with the device door.
+        return _gp_oracle(hidden, weight, targets, rows, vocab, width, False)
     if rows < 1 or vocab < 2 or width < 1:
         raise Error("chunked lm head v2: rows/width must be positive and vocab >= 2")
     if len(hidden) != rows * width:
@@ -165,6 +214,9 @@ def chunked_lm_head_v2_oracle(
     rows: Int, vocab: Int, width: Int,
 ) raises -> ChunkedLMHeadV2Result:
     """Mean CE and LM-head gradients under the v2 serial chunk contract."""
+    comptime if LMHEAD_FAST_GEMM_PANEL:
+        # MOJOLEARN_LMHEAD_FAST_GEMM_PANEL (default off, A/B owed): the oracle moves with the device door.
+        return _gp_oracle(hidden, weight, targets, rows, vocab, width, True)
     var fwd = chunked_lm_head_v2_oracle_forward(
         hidden, weight, targets, rows, vocab, width
     )
