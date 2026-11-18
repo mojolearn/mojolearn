@@ -29,6 +29,7 @@ from core.device_scan import (
     device_first_negative,
     device_first_nonfinite,
 )
+from checks.native_tests.kit import upload_host_into
 
 comptime BITS_QNAN: UInt32 = 0x7FC00000
 comptime BITS_POS_INF: UInt32 = 0x7F800000
@@ -80,9 +81,8 @@ def upload(
     ctx.synchronize()
     for i in range(n):
         host.unsafe_ptr().unsafe_store(i, values[i])
-    ctx.enqueue_copy(dst_buf=dev, src_ptr=host.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, dev, host)
     ctx.synchronize()
-    _ = host^
     return dev^
 
 
