@@ -44,12 +44,13 @@ Moved here word for word (no bit change): `family_raw_word`,
 weight check was a serial loop; it now runs in row tasks with the same
 verdicts.
 """
-from std.memory import bitcast, unsafe_memcpy
+from std.memory import bitcast
 from core.classical_cast import classical_f32_bits
 from core.cast_in import CAST_KIND_SIGNED, CAST_KIND_UNSIGNED, CAST_KIND_BOOL, CAST_KIND_FLOAT, cast_w64_bits
 from core.host_parallel import host_parallelize
 from core.host_predict_threads import host_predict_task_count_work, host_predict_chunk
-from core.host_finite_scan import host_all_finite_f32_strided, host_span_finite_f32
+from core.host_finite_scan import host_all_finite_f32_strided
+from core.admitted_rows_gather import _arg_copy_row
 
 # TOMBSTONE: classical_cast_rows and classical_check_weights (core/classical_arrays_impl.mojo, merged into the one admission path) deleted 2026-11-08 by lane consol-a0-admission; code recoverable at ef4bce3a7e.
 # Restore: experiments/removed/A0_ADMISSION_HELPERS.patch. They are
@@ -58,6 +59,7 @@ from core.host_finite_scan import host_all_finite_f32_strided, host_span_finite_
 comptime _AI_F32P = MutPointer[Float32, MutUntrackedOrigin]
 comptime _AI_F64P = MutPointer[Float64, MutUntrackedOrigin]
 comptime _AI_U8P = MutPointer[UInt8, MutUntrackedOrigin]
+comptime _AI_U32P = MutPointer[UInt32, MutUntrackedOrigin]
 comptime _AI_EXP = UInt32(0x7F800000)
 
 
@@ -97,25 +99,26 @@ def admitted_cast_f32(
     # parallel: cast and finiteness test over row tasks across host cores (0.8.66 regression C1, 13 ns/element serial)
     if rows <= 0 or cols <= 0:
         return True
-    var tasks = host_predict_task_count_work(rows, rows * cols * max(item, 1))
-    var chunk = host_predict_chunk(rows, tasks)
-    var flags = List[UInt8](length=tasks, fill=UInt8(1))
-    var flag_ptr = rebind[_AI_U8P](flags.unsafe_ptr())
     # Lane fx-rows-rest (2026-11-18): a float32 view whose rows are runs of
     # adjacent words (unit column stride: a column slice X[:, a:b] or a row
     # slice X[::k] of a C-order block, a row-padded block) needs no cast,
-    # only its rows packed. Each row is then ONE byte copy of cols words and
-    # one SIMD exponent scan of the run, in place of cols typed loads, kind
-    # dispatches and stores (the general walk below: 1.1 M items of the two
-    # column-slice operands of a PLS/CCA transform took about 2 ms of a 6 ms
-    # call, call profile nvc-prof-20261118T182616Z-11b404). Same words to
-    # the same cells (cast_f32_bits of a float32 item is the item) and the
-    # same verdict (the exponent-bits test on the same words): no bit moves.
-    # The split and the task rule are unchanged. Not keyed on any shape: any
-    # rows, cols and row stride. Owed re-time beside the board row: a
-    # 1,000,000 x 10 column slice and a non-board 300,000 x 7 slice of random
-    # float32.
+    # only its rows packed. Each row is then ONE SIMD copy that tests the
+    # exponent bits as it goes (`_arg_copy_row`, the fold gather's row copy),
+    # in place of cols typed loads, kind dispatches and stores (the general
+    # walk below; the two column-slice operands of a PLS/CCA transform, 1.1 M
+    # items, are cast per call: call profile nvc-prof-20261118T182616Z-11b404).
+    # Same words to the same cells (cast_f32_bits of a float32 item is the
+    # item) and the same verdict (the exponent-bits test on the same words):
+    # no bit moves. The grain floor counts one operation per word on this
+    # path (as admitted_gather_rows_f32), bytes on the general walk as
+    # before. Not keyed on any shape: any rows, cols and row stride. Owed
+    # re-time beside the board row: a 1,000,000 x 10 column slice and a
+    # non-board 300,000 x 7 slice of random float32.
     var row_runs = kind == CAST_KIND_FLOAT and item == 4 and (s1 == 4 or cols == 1)
+    var tasks = host_predict_task_count_work(rows, rows * cols * (1 if row_runs else max(item, 1)))
+    var chunk = host_predict_chunk(rows, tasks)
+    var flags = List[UInt8](length=tasks, fill=UInt8(1))
+    var flag_ptr = rebind[_AI_U8P](flags.unsafe_ptr())
     var dst_addr = Int(dst)
 
     def _rows(t: Int) {imm addr, imm s0, imm s1, imm rows, imm cols, imm item, imm kind, imm dst, imm chunk, imm flag_ptr, imm row_runs, imm dst_addr}:
@@ -124,10 +127,8 @@ def admitted_cast_f32(
         var finite = True
         if row_runs:
             for r in range(lo, hi):  # native input marshaling: this task's input rows, one run each
-                var run = addr + r * s0
-                unsafe_memcpy(dest=_AI_U8P(unsafe_from_address=dst_addr + r * cols * 4),
-                              src=_AI_U8P(unsafe_from_address=run), count=cols * 4)
-                if finite and not host_span_finite_f32(run, cols):
+                if not _arg_copy_row(_AI_U32P(unsafe_from_address=addr + r * s0),
+                                     _AI_U32P(unsafe_from_address=dst_addr + r * cols * 4), cols):
                     finite = False
             if not finite:
                 flag_ptr.unsafe_store(t, UInt8(0))
