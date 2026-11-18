@@ -499,7 +499,16 @@ class StoredBaseline(unittest.TestCase):
         self.assertIn("HARNESS-CLOCK", km["flags"])
         self.assertFalse({"FASTER", "SAME"} & set(km["flags"]))
         self.assertEqual(km["harness_clock"]["replaced"], ["FASTER"])
-        self.assertNotIn("biggest gains", PC.render_summary(res))
+        # the kmeans fit row is not among the gains (the fixture's infer row, timed under one clock on both sides,
+        # is a real 5 -> 4 ms gain and stays listed)
+        lines = PC.render_summary(res).splitlines()
+        gains = []
+        if "biggest gains:" in lines:
+            for line in lines[lines.index("biggest gains:") + 1:]:
+                if not line.startswith("  "):
+                    break
+                gains.append(line)
+        self.assertFalse([g for g in gains if KM in g], gains)
         # a regression under the new clock stays a regression
         for c in self.ours_fit_cells(cand):
             c.update(median_ms=130.0, times_ms=[130.0])
