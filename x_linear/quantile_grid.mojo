@@ -315,7 +315,7 @@ def _qg_iter_fin_body(nb: Int32, nd: Int32, d: Int32, cols: Int32, fw: FP, fp: F
         var tl = q_tail(fw, Int(nd), dd, mi, o[1], o[2], o[7], o[8], o[10],
                         fold_parts(sc, 0, b), fold_parts(sc, b, b), fold_parts(sc, 2 * b, b),
                         fold_parts(sc, 3 * b, b), ld(state, QS_YNORM), rho,
-                        ld(fp, 1), ld(fp, 2), ld(fp, 3), ld(fp, 4) != Float32(0), Int(it))
+                        ld(fp, 1), ld(fp, 2), ld(fp, 3), Int(it))
         st(state, QS_ITERS, i2f(Int(it) + 1))
         st(state, QS_RESCALE, Float32(0))
         st(state, QS_READY, Float32(1))

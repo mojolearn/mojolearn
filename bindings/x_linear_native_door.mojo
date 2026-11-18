@@ -1197,7 +1197,7 @@ def xl_fit_quantile(model: PythonObject, args: PythonObject, context: PythonObje
     var tol = fields["tol"]
     var ip: List[Int] = [_int(fields["max_iter"]), 1 if _truth(fields["fit_intercept"]) else 0, has_sw]
     var fp: List[Float64] = [_float(q), _float(fields["alpha"]), _float(py_call(_op().truediv, tol, PythonObject(100.0))),
-                             _float(tol), 0.0 if labels_env("MOJOLEARN_XQ_ABS_BALANCE", "") == "1" else 1.0]
+                             _float(tol), 1.0]  # fp[4]: unread since MOJOLEARN_XQ_ABS_BALANCE went (TOMBSTONE in x_linear/quantile.mojo)
     var out = _xl_run(entries, ALGO_QUANTILE, x.address, n * d, n, d, yy.address, yy.rows, ip, fp,
                       d + 3, m * m + 3 * m + 4 * n + 3 * d, 1, context)
     _ = yy  # keep the Python object alive through the native call above
