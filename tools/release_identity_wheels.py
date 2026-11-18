@@ -385,6 +385,10 @@ class IdentityOnWheels:
         cache = self.__dict__.setdefault("_units_plan", {})
         if vendor in cache:
             return cache[vendor]
+        if self.dry:
+            # a dry run has no wheels and no frozen source tree to plan units over (its cwd does not exist yet:
+            # the --identity-on-wheels dry run raised FileNotFoundError here); the step only says what it would run
+            return None
         # the CPU column installs the core wheel alone (no cpu split package: SPLIT_PACKAGES has none, and
         # candidate_gate_wheels("cpu") raised KeyError at identity-cpu in 0.8.66 run e, 2026-11-07)
         wheels = ([self.macos_wheel()] if vendor == "apple" else [Path(self.split_final("linux"))] if vendor == "cpu"
