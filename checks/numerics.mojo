@@ -480,6 +480,14 @@ def identical_log(x: Float32) -> Float32:
 
 
 
+# MOJOLEARN_NUMERICS_FAST_SQRT_COMPTIME_STEP, PARTIAL A/B 2026-11-18 (ab1, owed rows sqrt-comptime-step-*, NVIDIA L40S
+# host 37f71a6102af, driver 595.112.07, wheel d652a4b0a1, base and arm back to back, one run per arm): the job hit
+# its 240-minute cap after 8 of 25 cells; digests equal on all 8. Arm/base: bisecting-kmeans istella infer
+# 17.64 -> 11.80 ms (0.67), randomized-svd taxi fit 72.13 -> 64.50 (0.89), ann-refine istella 627.2 -> 587.8
+# (0.94), bisecting-kmeans istella fit 928.3 -> 887.6 (0.96), ann-refine taxi 45.59 -> 44.25 (0.97), als text
+# 0.99, stl synthetic 0.99, stl taxi-hourly 1.00. The rows the arm was written for (knn, knn-clf, knn-reg,
+# HDBSCAN, KDE; the hdbscan istella arm cell was cut by the cap) were NOT reached: NOT flipped; the rest of the
+# rows stay owed (the next job takes them first).
 comptime NUMERICS_FAST_SQRT_COMPTIME_STEP = is_defined["MOJOLEARN_NUMERICS_FAST_SQRT_COMPTIME_STEP"]()
 
 

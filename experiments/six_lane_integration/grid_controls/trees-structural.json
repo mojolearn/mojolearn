@@ -24,25 +24,6 @@
    "bits_change": false,
    "status": "owed",
    "note": "IDENTICAL Lossguide exact batch: when max_leaves >= 2^max_depth (parameter test) the round width is the free slots, so one round splits a full depth level (about max_depth+1 rounds a tree instead of log2(max_leaves)+max_leaves/32). Bit-neutral: the best-first replay (_lg_exact_plan) still fixes leaf choice and numbering; same argument as LG_EXACT_ID at any width. Overrides the exact batch width (LG_EXACT_BATCH_WIDTH; T17_BATCH's define is deleted) whenever its condition holds; the LG_EXACT_ID memory gate still applies after it. RESTORED 2026-11-15 (lane/restore-run-arms-trees, docs/plans/DELETED_ARMS_WORTH_RUNNING_2026-11-15.md): deleted unmeasured by expdel2, restored as an opt-in arm; A/B owed on NVIDIA L40S (bench/results/paper_compare/owed-pre0867.json)."
-  },
-  "BLOCK_SCRATCH_FILL_OFF": {
-   "define": "MOJOLEARN_TREES_BLOCK_SCRATCH_FILL_OFF",
-   "kind": "switch",
-   "arms": {
-    "off": [],
-    "on": [
-     "MOJOLEARN_TREES_BLOCK_SCRATCH_FILL_OFF"
-    ]
-   },
-   "default": "off",
-   "source": [
-    "gbdt/methods/greedy_subsets_searcher/greedy_search_helper.mojo BLOCK_SCRATCH_FILL_OFF",
-    "gbdt/methods/greedy_subsets_searcher/greedy_search_helper.mojo launch_histograms_for_blocks (scratch zero)"
-   ],
-   "binding": "_mojolearn_gbdt",
-   "bits_change": false,
-   "status": "owed",
-   "note": "lane fix-lossguide-fit 2026-11-15: B arm restores the whole-buffer histogram scratch zero (pool slots x stat_count x widest block folds per non-fixed-point block per build); A zeroes the block's own span. Owed rows lg-block-scratch-fill(-year, -covtype) in bench/results/paper_compare/owed-pre0867.json."
   }
  },
  "algorithms": {
@@ -50,8 +31,7 @@
    "binding": "_mojolearn_gbdt",
    "route": "fit: fit_non_symmetric_tree lossguide exact batch round width (LG_LEVEL_ROUNDS over LG_EXACT_BATCH_WIDTH)",
    "controls": [
-    "LG_LEVEL_ROUNDS",
-    "BLOCK_SCRATCH_FILL_OFF"
+    "LG_LEVEL_ROUNDS"
    ],
    "interaction_groups": []
   },
@@ -80,6 +60,11 @@
    "define": "MOJOLEARN_TREES_CTR_SORTFREE_SUMS",
    "control": "CTR_SORTFREE_SUMS",
    "reason": "DELETED 2026-11-15 (lane/expdel2-45-trees, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md): no record -- no A/B recorded for the opt-in arm (V2 rule a). Under \"An unmeasured arm is deleted\" the opt-in arm goes, the default stays (no bit change); code at a3d500c032; patch experiments/removed/MOJOLEARN_TREES_CTR_SORTFREE_SUMS.patch"
+  },
+  {
+   "define": "MOJOLEARN_TREES_BLOCK_SCRATCH_FILL_OFF",
+   "control": "BLOCK_SCRATCH_FILL_OFF",
+   "reason": "DELETED 2026-11-18 (lane/fb15-ab-verdicts; A/B ab1, NVIDIA L40S host 37f71a6102af, wheel d652a4b0a1, one run per arm): the B arm (whole-buffer histogram scratch zero) was 1.38-1.40x slower on gbdt-lossguide istella fit (13.92 -> 19.24 s; 14.28 -> 20.02 s), others within 3% except two gbdt-symmetric istella infer cells the define cannot reach; digests equal. The block-span zero stays the default; define refused in core/experiment_guards_trees.mojo; code recoverable at c989eb9222; patch experiments/removed/MOJOLEARN_TREES_BLOCK_SCRATCH_FILL_OFF.patch"
   }
  ],
  "stage0_build": {
@@ -90,8 +75,7 @@
   ],
   "all_off": [],
   "all_on": [
-   "MOJOLEARN_TREES_LG_LEVEL_ROUNDS",
-   "MOJOLEARN_TREES_BLOCK_SCRATCH_FILL_OFF"
+   "MOJOLEARN_TREES_LG_LEVEL_ROUNDS"
   ]
  }
 }

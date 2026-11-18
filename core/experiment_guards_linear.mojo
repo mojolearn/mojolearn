@@ -349,6 +349,11 @@ def _check_configuration() -> Bool:
     # lane dbscan-brute-edgefree (2026-11-16): the MOJOLEARN_DBSCAN_FAST_BRUTE_EDGE_FREE fast-mode refusal moved
     # to the code that reads the define (dbscan/impl/runner.mojo, lane owed-deletions 2026-11-16), so the arm
     # rebuilds only the bindings that compile DBSCAN.
+    # ---- lane fb15-ab-verdicts (2026-11-18): A/B verdicts of ab1 (NVIDIA L40S, wheel d652a4b0a1)
+    # TOMBSTONE: MOJOLEARN_LINEAR_LBD_BATCH_OFF (DROPPED-noise: one flag read per trial 1.00-1.02x on all 8 cells, NV L40S 2026-11-18) deleted 2026-11-18 by lane/fb15-ab-verdicts; code recoverable at c989eb9222.
+    # Restore: git apply experiments/removed/MOJOLEARN_LINEAR_LBD_BATCH_OFF.patch; record in docs/TOMBSTONES.md.
+    comptime assert not is_defined["MOJOLEARN_LINEAR_LBD_BATCH_OFF"](), "removed 2026-11-18 (lane/fb15-ab-verdicts, A/B ab1 NVIDIA L40S, wheel d652a4b0a1, one run per arm): one flag read per trial (0.8.55's L-BFGS form) was 1.00-1.02x on all 8 huber / logreg-cv cells, digests equal; the gated queue (LBD_BATCH units per read) is the one identical form off Apple; recoverable at c989eb9222"
+    # ---- end lane fb15-ab-verdicts
     return True
 
 

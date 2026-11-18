@@ -313,7 +313,7 @@ runner)
     (
         cd "$TREE" || exit 97
         export HOME=/root USER=root LOGNAME=root LANG=C.UTF-8 SHELL=/bin/bash
-        export GQ_JOB_ID=$id GQ_LANE=$LANE GQ_JOB_TOKEN=$token
+        export GQ_JOB_ID=$id GQ_LANE=$LANE GQ_JOB_TOKEN=$token GQ_DEADLINE=$deadline   # GQ_DEADLINE: the cap, epoch s (the job's own cap guard)
         if [ "$VENDOR" = nvidia ]; then
             export CUDA_DEVICE_ORDER=PCI_BUS_ID CUDA_VISIBLE_DEVICES=$got NVQ_JOB_ID=$id NVQ_LANE=$LANE
         else

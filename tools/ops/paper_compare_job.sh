@@ -214,10 +214,53 @@ PHASE=start
 P_T0=$(date +%s)
 SAMPLER=
 if [ -r /proc/stat ]; then cores_sampler & SAMPLER=$!; fi
+# >>> cap-guard (tools/test_targeted_rows.py runs this block)
+# ---- the CAP GUARD (lane fb15-ab-verdicts, 2026-11-18): the queue kills a job at its wall-clock cap (TERM, then
+# KILL 40 s later), too soon for box_persist_run.sh's final upload of a multi-GB results dir and before the compare;
+# the ab1 A/B job of d652a4b0a1 was cut that way and left no SUMMARY file. PC_CAP_GUARD_S (default 600) before the
+# deadline (GQ_DEADLINE, exported by tools/gpu_queue_box.sh for a queued job, else the job's start + PC_CAP_MIN
+# when that is set; a job with neither has no cap and no guard) the guard marks the job capped and stops the timed
+# board in flight (its process group); no new timed board starts (run_timed), the compare and summary parts run on
+# what is timed, the job exits, and the final upload has the rest of the time. The races already in board.json
+# stay (each board resumes on the next submit).
+CAP_DEADLINE=${GQ_DEADLINE:-}
+[ -z "$CAP_DEADLINE" ] && [ -n "${PC_CAP_MIN:-}" ] && CAP_DEADLINE=$(( P_T0 + PC_CAP_MIN * 60 ))
+rm -f "$J/.capped" "$J/.board.pgid"
+capped() { [ -e "$J/.capped" ]; }
+cap_guard() {
+    local now pg CAP_AT=$(( CAP_DEADLINE - ${PC_CAP_GUARD_S:-600} ))
+    now=$(date +%s)
+    [ "$CAP_AT" -gt "$now" ] && sleep $(( CAP_AT - now ))
+    : > "$J/.capped"
+    say "CAP GUARD: ${PC_CAP_GUARD_S:-600} s before the cap: no new timed board; the board in flight stops; compare, summary, final upload"
+    pg=$(cat "$J/.board.pgid" 2> /dev/null)
+    if [ -n "$pg" ]; then
+        kill -TERM -- "-$pg" 2> /dev/null
+        for _ in $(seq 30); do kill -0 -- "-$pg" 2> /dev/null || return 0; sleep 1; done
+        kill -KILL -- "-$pg" 2> /dev/null
+    fi
+    return 0
+}
+CAP_GUARD=
+if [ -n "$CAP_DEADLINE" ]; then cap_guard & CAP_GUARD=$!; fi
+# one TIMED bench_board process in its own process group (the cap guard stops the group); refused once capped.
+# Usage: run_timed <log> <append 0|1> <command...>
+run_timed() {
+    local log=$1 app=$2 bp rc
+    shift 2
+    capped && { say "not run (cap guard): $(basename "$log" .log)"; return 124; }
+    if [ "$app" = 1 ]; then setsid "$@" >> "$log" 2>&1 & else setsid "$@" > "$log" 2>&1 & fi
+    bp=$!; echo "$bp" > "$J/.board.pgid"
+    wait "$bp"; rc=$?
+    rm -f "$J/.board.pgid"
+    return $rc
+}
+# <<< cap-guard
 finish() {
     local code=$?
     trap - EXIT
     [ -n "$SAMPLER" ] && kill "$SAMPLER" 2> /dev/null
+    [ -n "${CAP_GUARD:-}" ] && { pkill -P "$CAP_GUARD" 2> /dev/null; kill "$CAP_GUARD" 2> /dev/null; }
     [ "$WORST" -gt "$code" ] && code=$WORST
     phase_partial "$code"     # a phase the cap or a crash cut: its `partial` line in phases.tsv (box_job_lib.sh)
     printf '{"vendor":"%s","mode":"%s","version":"%s","source_commit":"%s","prior":"%s","prior_versions":"%s","host_id":"%s","tree_head":"%s","phase":"%s","exit":%d,"job_script_sha256":"%s","recipes_sha256":"%s"}\n' \
@@ -323,7 +366,8 @@ OWED_PRIOR=(); [ -n "$LAST_PRIOR" ] && OWED_PRIOR=(--prior)   # measure_owed pla
 # >>> b-arms (tools/test_measure_owed.py runs this block on a fake PC_B_ARMS file)
 # A line is `<name> <wheel dir> <commit>` (a B wheel set built from another commit) or `<name> env:VAR=VALUE[,VAR=VALUE]
 # <commit>` (an ENV-ONLY arm, no rebuild: the candidate's own venv run with those variables set, e.g.
-# MOJOLEARN_CPU_THREADS=28 or MOJOLEARN_XPREP_R3_OFF=view; the targeted job only). ARM_ENV holds an env arm's variables.
+# MOJOLEARN_CPU_THREADS=@cgroup_cores (the box's allocation) or MOJOLEARN_XPREP_R3_OFF=view; the targeted job only).
+# ARM_ENV holds an env arm's variables.
 B_NAMES=()
 declare -A ARM_ENV
 if [ "$OWED" = 1 ] && [ -n "${PC_B_ARMS:-}" ]; then
@@ -336,6 +380,12 @@ if [ "$OWED" = 1 ] && [ -n "${PC_B_ARMS:-}" ]; then
             [[ "${dir#env:}" =~ ^[A-Z_][A-Z0-9_]*=[^,[:space:]]*(,[A-Z_][A-Z0-9_]*=[^,[:space:]]*)*$ ]] || { say "bad env arm $name: $dir"; continue; }
             add_arm "$name" ${ARM_ARGS[candidate]}
             ARM_PY[$name]=${ARM_PY[candidate]}; ARM_MAN[$name]=${ARM_MAN[candidate]}; ARM_ENV[$name]=${dir#env:}
+            # a value taken from the box (lane fb15-ab-verdicts, 2026-11-18: the cpu-threads-28 arm ran =28 on a
+            # 14-core cgroup, 2x oversubscribed, and measured nothing): @cgroup_cores is this box's allocation
+            if [[ "${ARM_ENV[$name]}" == *@cgroup_cores* ]]; then
+                ARM_ENV[$name]=${ARM_ENV[$name]//@cgroup_cores/$(alloc_cores)}
+                say "env arm $name: ${ARM_ENV[$name]} (@cgroup_cores = this box's allocation)"
+            fi
             B_NAMES+=("$name")
             continue
         fi
@@ -679,8 +729,8 @@ if part tg-install || part tg-smoke || part tg-board || part tg-compare; then
         CUR_IDS=$ids; CUR_BOARD=$out
         local envs=(); [ -n "${ARM_ENV[$arm]:-}" ] && IFS=, read -r -a envs <<< "${ARM_ENV[$arm]}"
         # shellcheck disable=SC2046
-        env ${envs[@]+"${envs[@]}"} $PY tools/bench_board.py "${COMMON_TG[@]}" $(run_as "$arm") --cache "$CACHE_ROOT/c1" --race-ids @"$ids" \
-            "$@" ${ra[@]+"${ra[@]}"} --drop-race-scratch --out "$out" >> "$RES/logs/$(basename "$out").log" 2>&1
+        run_timed "$RES/logs/$(basename "$out").log" 1 env ${envs[@]+"${envs[@]}"} $PY tools/bench_board.py "${COMMON_TG[@]}" \
+            $(run_as "$arm") --cache "$CACHE_ROOT/c1" --race-ids @"$ids" "$@" ${ra[@]+"${ra[@]}"} --drop-race-scratch --out "$out"
         rc=$?; CUR_IDS=
         say "board $arm $(basename "$ids") rc=$rc: $(tail -n 1 "$RES/logs/$(basename "$out").log" | head -c 160)"
         return $rc
@@ -906,8 +956,8 @@ board_run() {   # arm, ids file, out dir, extra args...
     [ -f "${ARM_MAN[$arm]:-/nonexistent}" ] || { say "board $arm: no installed venv (logs/install-$arm.log)"; return 6; }
     CUR_IDS=$ids; CUR_BOARD=$out
     # shellcheck disable=SC2046
-    $PY tools/bench_board.py "${COMMON[@]}" $(run_as "$arm") --cache "$CACHE_ROOT/c1" --race-ids @"$ids" \
-        "${SJ[@]}" "$@" --drop-race-scratch --out "$out" > "$RES/logs/$(basename "$out").log" 2>&1
+    run_timed "$RES/logs/$(basename "$out").log" 0 $PY tools/bench_board.py "${COMMON[@]}" $(run_as "$arm") \
+        --cache "$CACHE_ROOT/c1" --race-ids @"$ids" "${SJ[@]}" "$@" --drop-race-scratch --out "$out"
     local rc=$?; CUR_IDS=
     say "board $arm $(basename "$ids") rc=$rc: $(tail -n 1 "$RES/logs/$(basename "$out").log" | head -c 200)"
     return $rc

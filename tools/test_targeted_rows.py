@@ -8,9 +8,11 @@ the changed-lane reason with a stubbed closure diff, the SUMMARY, and the job an
 independent (the suite runs its files in parallel)."""
 import json
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -351,6 +353,42 @@ class Wiring(unittest.TestCase):
         self.assertIn("ARM mcd-chol --mojolearn-version 1.0", p.stdout)
         self.assertIn("B_CSV=mcd-chol ENV=MOJOLEARN_CPU_THREADS=28,MOJOLEARN_XPREP_R3_OFF=view PY=/v/py", p.stdout)
         self.assertIn("SAY bad env arm bad-env", p.stdout)
+
+    def test_job_env_arm_value_from_the_box(self):
+        # lane fb15-ab-verdicts (2026-11-18): =28 on a 14-core cgroup measured nothing; @cgroup_cores is the box's
+        block = Path(JOB).read_text()
+        block = block[block.index("# >>> b-arms"):block.index("# <<< b-arms")]
+        with tempfile.TemporaryDirectory() as td:
+            f = os.path.join(td, "b.txt")
+            Path(f).write_text("cpu-threads-cgroup env:MOJOLEARN_CPU_THREADS=@cgroup_cores %s\n" % ("a" * 40))
+            script = ("declare -A ARM_ARGS ARM_PY ARM_MAN; ARM_ARGS[candidate]='--mojolearn-version 1.0'; "
+                      "ARM_PY[candidate]=/v/py; ARM_MAN[candidate]=/m.json\nsay() { echo \"SAY $*\"; }\n"
+                      "alloc_cores() { echo 14; }\nadd_arm() { echo \"ARM $*\"; }\n" + block +
+                      '\necho "ENV=${ARM_ENV[cpu-threads-cgroup]}"\n')
+            env = dict(os.environ, OWED="1", V="nvidia", PC_B_ARMS=f, PARTS=",targeted,")
+            p = subprocess.run(["bash", "-c", script], env=env, capture_output=True, text=True, timeout=60)
+        self.assertEqual(p.returncode, 0, p.stderr)
+        self.assertIn("ENV=MOJOLEARN_CPU_THREADS=14", p.stdout)
+        self.assertEqual(MC.parse_b_arm("cpu-threads-cgroup=env:MOJOLEARN_CPU_THREADS=@cgroup_cores"),
+                         ("cpu-threads-cgroup", "env:MOJOLEARN_CPU_THREADS=@cgroup_cores", None))
+
+    @unittest.skipUnless(shutil.which("setsid"), "setsid (util-linux) is on the boxes, not on macOS")
+    def test_job_cap_guard_stops_the_board_and_refuses_the_next(self):
+        # lane fb15-ab-verdicts (2026-11-18): ab1 was killed at the cap and left no SUMMARY file
+        block = Path(JOB).read_text()
+        block = block[block.index("# >>> cap-guard"):block.index("# <<< cap-guard")]
+        with tempfile.TemporaryDirectory() as td:
+            script = ("say() { echo \"SAY $*\"; }\nP_T0=$(date +%s)\nJ=" + td + "\n" + block +
+                      "\nt0=$(date +%s); run_timed " + td + "/b1.log 0 sleep 60; r1=$?; t1=$(date +%s)"
+                      "\nrun_timed " + td + "/b2.log 0 true; r2=$?"
+                      "\necho \"R1=$r1 R2=$r2 TOOK=$(( t1 - t0 ))\"; kill $CAP_GUARD 2> /dev/null; exit 0\n")
+            env = dict(os.environ, GQ_DEADLINE=str(int(time.time()) + 3), PC_CAP_GUARD_S="1")
+            p = subprocess.run(["bash", "-c", script], env=env, capture_output=True, text=True, timeout=90)
+        self.assertEqual(p.returncode, 0, p.stderr)
+        self.assertIn("SAY CAP GUARD", p.stdout)
+        self.assertIn("R2=124", p.stdout)
+        took = int(p.stdout.split("TOOK=")[1].split()[0])
+        self.assertLess(took, 30, p.stdout)
 
     def test_stage_env_arm_parse(self):
         self.assertEqual(MC.parse_b_arm("mcd-chol=env:MOJOLEARN_CPU_THREADS=28"),

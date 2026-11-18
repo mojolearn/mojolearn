@@ -110,6 +110,12 @@ STORED_BASELINE = (Path.home() / "mojolearn-evidence" / "measure-candidate" / "b
                    / "board-all-prior-0.8.55" / "board.json")
 #: the candidate board of that full board: the stored wall seconds the A/B plan's minutes are estimated from
 STORED_TIMES = STORED_BASELINE.parents[1] / "board-all" / "board.json"
+#: the boards of the first targeted A/B job (ab1 of d652a4b0a1, L40S pod 37f71a6102af, a 14-core cgroup; lane
+#: fb15-ab-verdicts, 2026-11-18): its host-bound races took up to 4.4x the 28-core pod's stored seconds
+#: (elliptic-envelope istella 1748 s against 510, hdbscan istella 726 against 164), so each race is estimated from
+#: the largest stored wall_s over every board given (targeted_rows.py RACE_GAP_S)
+STORED_TIMES_AB1 = sorted((Path.home() / "mojolearn-evidence" / "measure-candidate" / "build-d652a4b0a1" / "ab1")
+                          .glob("board-tg*/board.json"))
 AMD_TREE = "/root/mojolearn"
 #: the job's --data-root (tools/ops/paper_compare_job.sh PC_DATA_ROOT default); dataset_store.sh stages there
 DATA_ROOT = "/root/datasets/gbm-bench"
@@ -149,7 +155,8 @@ def results_file(name, *roots):
 def check_b_arms(names, owed_file, envs=None):
     """Refuse a B set name the owed file does not list (the job would report its rows "not planned"), an arm the
     file classifies other than RUN (lane fb8-owed-arms, 2026-11-17: `owed` DECIDED already has its L40S A/B, PAUSED
-    belongs to a paused programme, NO-ROW has no board race; nothing is timed twice), and, with ENVS ({name: the
+    belongs to a paused programme, NO-ROW has no board race; lane fb15-ab-verdicts, 2026-11-18: HELD has its A/B and
+    waits on a decision, INVALID measured nothing and a RUN arm replaces it; nothing is timed twice), and, with ENVS ({name: the
     'VAR=VALUE' of an env arm, or None for a built set}), an arm staged in the other form than the file's (`env`)."""
     arms = PC.load_json(str(owed_file)).get("b_arms") or {}
     known = sorted(arms)
@@ -350,19 +357,33 @@ def parse_b_arm(text):
     return m.group(1), Path(m.group(2)).expanduser(), m.group(3)
 
 
+def stored_times(boards):
+    """{race id: the LARGEST stored wall_s over BOARDS} (a path or a list of paths; missing files are skipped): a
+    stored time from another pod is a floor, and the slowest box seen is the safer forecast (STORED_TIMES_AB1)."""
+    secs = {}
+    for b in ([boards] if isinstance(boards, (str, Path)) else (boards or [])):
+        if b and Path(b).is_file():
+            for rid, t in TR.stored_seconds(PC.load_json(str(b))).items():
+                secs[rid] = max(t, secs.get(rid, 0.0))
+    return secs
+
+
 def ab_plan(owed_file, planner_file, vendor, b_names, times_board, chunk_s=TR.DEFAULT_CHUNK_S):
     """[(arm, rows tag, races, minutes)] of the owed A/B units the job times for these B arms (tools/measure_owed.py
     plan, the same call the job's targeted plan makes, with no paper race left to a paper board): each unit is its
     base (the candidate) and the arm back to back, so its minutes are twice the races' stored candidate seconds (the
-    family median for a race or a neighbouring shape with no stored time) plus one process start per chunk and arm; a
-    race with a STORED BASE runs the arm only, counted at its cap (the stored base time, the most it can take)."""
+    largest over TIMES_BOARD, one path or a list; the family median for a race or a neighbouring shape with no stored
+    time) plus one process start per chunk and arm, TR.RACE_GAP_S between two timed races, and the base races'
+    smoke (TR.SMOKE_S_PER_RACE; lane fb15-ab-verdicts, 2026-11-18: ab1 was estimated at 152 minutes and passed the
+    240-minute cap with 17 of 25 sqrt-comptime-step cells left); a race with a STORED BASE runs the arm only,
+    counted at its cap (the stored base time, the most it can take)."""
     if not b_names:
         return []
     planner = MO.load_planner(str(planner_file))
     doc = PC.load_json(owed_file)
     units, _, _, _, rowmap, _ = MO.plan(doc, {"recipes": [], "race_ids": []}, planner, vendor, list(b_names))
     bases = MO.unit_bases(doc, rowmap, units)
-    secs = TR.stored_seconds(PC.load_json(times_board)) if times_board and Path(times_board).is_file() else {}
+    secs = stored_times(times_board)
     med = TR.family_medians(secs)
     out = []
     for (arm, rows), ids in sorted(units.items(), key=lambda kv: MO.unit_order(kv[0])):
@@ -376,8 +397,30 @@ def ab_plan(owed_file, planner_file, vendor, b_names, times_board, chunk_s=TR.DE
         s = sum(t if i in stored else 2 * t for i, t in each.items())
         nchunks = len(TR.chunk_ids(ids, {}, chunk_s)) if ids else 0
         procs = (1 if stored >= set(ids) else 2) * nchunks
-        out.append((arm, rows, len(ids), (s + TR.PROC_S * procs) / 60.0))
+        timed = sum(1 if i in stored else 2 for i in ids)
+        smoke = TR.SMOKE_S_PER_RACE * sum(1 for i in ids if i not in stored) if rows == "full" else 0.0
+        out.append((arm, rows, len(ids), (s + TR.PROC_S * procs + TR.RACE_GAP_S * timed + smoke) / 60.0))
     return out
+
+
+def split_arms(abp, first_min, cap_min):
+    """[[arm, ...], ...]: the B arms of AB_PLAN packed in plan order into submits under CAP_MIN, the first one also
+    carrying FIRST_MIN (the rows, smoke and fixed cost); an arm whose units alone pass the cap is a submit of its own.
+    Each later submit runs PC_PARTS=tg-board,tg-compare with PC_OWED_ARMS on the same results dir (tg-board resumes
+    the boards from board.json)."""
+    per = {}
+    for arm, _, _, m in abp:
+        per[arm] = per.get(arm, 0.0) + m
+    groups, cur, acc = [], [], first_min
+    for arm, m in per.items():
+        if cur and acc + m > cap_min:
+            groups.append(cur)
+            cur, acc = [], TR.FIXED_S / 60.0
+        cur.append(arm)
+        acc += m
+    if cur:
+        groups.append(cur)
+    return groups
 
 
 def submit_line(vendor, lane, tag, env):
@@ -427,15 +470,30 @@ def cmd_stage(a):
         # Against the stored baseline the job times one arm (our new wheel): no 0.8.55 seconds.
         est, split = TR.check_cap(a.rows, a.cap_min, a.chunk_s, one_arm=stored)
         print(TR.estimate_line(est))
+        owed_arms = [x for x in (a.owed_arms or "").split(",") if x]
+        bad = [x for x in owed_arms if x not in [n for n, _, _ in specs]]
+        if bad:
+            raise SystemExit(f"measure-candidate: --owed-arms {','.join(bad)} is not a staged --b-arm")
         abp = ab_plan(owed_file, planner if planner.is_file() else ROOT / "tools" / "bench_board.py", vendor,
-                      [n for n, _, _ in specs], a.times_board, a.chunk_s)
+                      owed_arms or [n for n, _, _ in specs], a.times_board or [STORED_TIMES, *STORED_TIMES_AB1],
+                      a.chunk_s)
         for arm, rows, n, m in abp:
             print(f"TG-AB arm={arm} rows={rows} races={n} minutes={m:.0f} (base and arm back to back)")
         if abp:
-            tot = est["total_min"] + sum(m for *_, m in abp)
-            print(f"TG-ESTIMATE-ALL minutes={tot:.0f} (rows {est['total_min']:.0f} + A/B {tot - est['total_min']:.0f})"
-                  + (f"; OVER the {a.cap_min:.0f}-minute cap: split the A/B arms with PC_OWED_ARMS on a second "
-                     f"submit (tg-board resumes)" if tot > a.cap_min else ""))
+            # a later split submit (no `targeted` part) resumes the rows already timed: only the fixed cost is new
+            first = est["total_min"] if "targeted" in parts else TR.FIXED_S / 60.0
+            tot = first + sum(m for *_, m in abp)
+            print(f"TG-ESTIMATE-ALL minutes={tot:.0f} (rows {first:.0f} + A/B {tot - first:.0f})")
+            if tot > a.cap_min:
+                # lane fb15-ab-verdicts (2026-11-18): ab1 printed this as a warning, was submitted at 152 estimated
+                # minutes and hit the cap; an over-cap job is refused with the split it needs, before anything moves
+                groups = split_arms(abp, first, a.cap_min)
+                raise SystemExit(
+                    f"measure-candidate: the job is estimated at {tot:.0f} min, over the {a.cap_min:.0f}-minute cap; "
+                    "submit it split, the same stage with:\n  "
+                    + "\n  ".join(f"submit {k}: --owed-arms {','.join(g)}"
+                                   + ("" if k == 1 else " --parts tg-board,tg-compare (same --tag: the boards resume)")
+                                   for k, g in enumerate(groups, 1)))
         if split:
             raise SystemExit(f"measure-candidate: {a.rows} is estimated at {est['total_min']:.0f} min, over the "
                              f"{a.cap_min:.0f}-minute cap; submit the split, one job each (each times both arms):\n  "
@@ -465,6 +523,8 @@ def cmd_stage(a):
            "PC_PRIOR_VERSIONS": ",".join(prior_versions), "PC_PRIOR_VERSION": prior_versions[-1]}
     if parts:
         env["PC_PARTS"] = ",".join(parts)     # the job runs the parts whose datasets were staged above
+    if a.rows and a.owed_arms:
+        env["PC_OWED_ARMS"] = a.owed_arms     # a split submit times only these arms' owed units
     if a.rows:
         rows_name = Path(a.rows).name
         uploads.append((Path(a.rows).expanduser(), f"{indir}/rows/{rows_name}", False))
@@ -670,8 +730,13 @@ def main(argv=None):
                    help="the targeted job's STORED 0.8.55 board (default the 2026-11-17 L40S full board's): uploaded "
                         "beside the wheels (PC_BASELINE_BOARD); the job then times our new wheel only. 'none' times "
                         "0.8.55 on the box beside the candidate instead (the two-arm targeted job)")
-    s.add_argument("--times-board", default=str(STORED_TIMES),
-                   help="a candidate board.json whose stored wall seconds estimate the A/B arms' minutes")
+    s.add_argument("--times-board", action="append", default=None,
+                   help="a candidate board.json whose stored wall seconds estimate the A/B arms' minutes (repeat it; "
+                        "each race takes its largest; default the 2026-11-17 full board and the ab1 boards of "
+                        "build-d652a4b0a1)")
+    s.add_argument("--owed-arms", default="",
+                   help="a split submit: the comma list of staged --b-arm names whose owed units this job times "
+                        "(PC_OWED_ARMS); the stage refuses a job over --cap-min and names the split")
     s.add_argument("--dry-run", action="store_true", help="validate locally and print every command; copy nothing")
     a = p.parse_args(argv)
     return cmd_stage(a)

@@ -75,6 +75,16 @@ from x_decomp.kit import Kit, Mat, OP_ABS, OP_LOGS, OP_MUL, OP_RECIP, OP_SCALE, 
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_MCD_CHOL.patch; record in docs/TOMBSTONES.md.
 # RESTORED 2026-11-15 by lane/expdel2-restore-owed: owed B arm (owed-pre0867.json), under four weeks old; the deletion was premature.
 # (MOJOLEARN_IDN_ALL_OFF stays deleted, so its term is not restored.)
+# A/B 2026-11-18 (ab1, owed row mcd-chol, NVIDIA L40S host 37f71a6102af, driver 595.112.07, wheel d652a4b0a1,
+# base and arm back to back in one job, one run per arm): the Cholesky arm is FASTER, arm/base min-cov-det taxi
+# fit 6199 -> 3422 ms (0.55), elliptic-envelope taxi fit 6188 -> 3386 (0.55), min-cov-det istella 125.6 ->
+# 107.5 s (0.86), elliptic-envelope istella 127.5 -> 106.8 s (0.84), elliptic-envelope istella infer 25.83 ->
+# 20.26 ms (0.78), taxi infer 1.188 -> 1.229 (1.03). QUALITY IS LOWER on one cell: elliptic-envelope taxi support
+# Jaccard vs scikit-learn 0.9636 (LU) -> 0.9258 (Cholesky; fraction flagged 0.10237 -> 0.10209); istella equal
+# (same digest c8f7d3738967a583, Jaccard 0.0622 both); min-cov-det records no quality metric (n_features only).
+# The Cholesky taxi output is 0.8.55's exactly (digest 8c1b478088f596bf, Jaccard 0.9258, stored 0.8.55 board of
+# the 2026-11-17 full board). Hashes differ on 3 of 6 cells (the taxi cells). HELD, NOT FLIPPED: the owed row
+# promotes B only with Jaccard not lower, and AGENTS.md never trades quality for speed; a decision for Andrew.
 comptime IDN_MCD_CHOL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_IDN_MCD_CHOL"]()
 
 #: `_expansion_decomp._F32_EPS` and the `logs` floor `_slogdet` passes

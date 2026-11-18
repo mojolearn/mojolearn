@@ -351,6 +351,13 @@ def team_kernel[OP: Int](
 #: (0.06 ms/MB) and its H2D DMA is unchanged between the wheels (iforest: 1,798 MB in 81 vs 84 ms). The A/B
 #: decides whether the copy is the cause; time it on a neighbouring shape (500,000 x 100) and a non-board
 #: array as well. Bytes copied are the same: no bit moves on any vendor.
+#: FIRST A/B 2026-11-18 (ab1, owed rows seq-libc-copy-mlp-istella / -cross-entropy, NVIDIA L40S host
+#: 37f71a6102af, driver 595.112.07, wheel d652a4b0a1, base and arm back to back in one job, ONE run per arm,
+#: digests equal on all 5 cells): arm/base mlp-reg istella infer 77.68 -> 73.40 ms (0.94), mlp-clf istella infer
+#: 152.9 -> 147.4 (0.96), mlp-reg istella fit 1950 -> 1884 (0.97), mlp-clf istella fit 1965 -> 1914 (0.97),
+#: cross-entropy synthetic fit 252.3 -> 266.3 (1.06). Mixed sign at one run per arm: NOT promoted, NOT deleted.
+#: REPEAT OWED with the staging split from the call profile (how many ms of each row are the host copy into and
+#: out of the pinned stage), so the verdict rests on the copy itself, not on run-to-run spread.
 comptime SEQ_LIBC_COPY = is_defined["MOJOLEARN_SEQ_FAST_LIBC_COPY"]()
 
 

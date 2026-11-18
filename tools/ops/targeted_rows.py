@@ -88,12 +88,24 @@ REASONS = ("paper", "slower", "changed", "changed?", "fix", "internal", "control
 #: the job's fixed cost outside the timed races, seconds (d95f805cce full board, L40S, job/phases.tsv: probe 2, plan
 #: 0, install 8-46, compare 1): rounded up
 FIXED_S = 90
-#: untimed smoke seconds per race and arm: the d95f805cce all-smoke phase ran 650 candidate + 627 0.8.55 races in
-#: 805 s of parallel shards
-SMOKE_S_PER_RACE = 0.65
-#: the start of one timed bench_board process (interpreter, plan, preflight audit, smoke gate) per chunk and arm:
-#: NOT MEASURED, an assumption the first targeted job confirms (job.log shows each chunk's process time)
+#: untimed smoke seconds per race and arm. The d95f805cce all-smoke phase ran 650 candidate + 627 0.8.55 races in
+#: 805 s (0.65 s a race) on a pod with a larger cgroup; the targeted A/B job ab1 of d652a4b0a1 (L40S pod
+#: 37f71a6102af, 14-core cgroup, so 7 smoke shards) ran 212 races in 759 s (3.6 s a race) against an estimate of
+#: 2 minutes (lane fb15-ab-verdicts, 2026-11-18). The shard count is half the cgroup's cores, so the 14-core
+#: figure is the one to plan with on the current pods.
+SMOKE_S_PER_RACE = 3.6
+#: the start of one timed bench_board process (interpreter, plan, preflight audit, smoke gate) per chunk and arm.
+#: Measured in ab1 (2026-11-18): the one-chunk A/B units spent 20-35 s a process outside their races.
 PROC_S = 30
+#: seconds BETWEEN two timed races of one process (dataset load and placement, preflight, evidence write) that a
+#: race's stored wall_s does not hold. Measured in ab1: the candidate rows phase took 70.4 min for 42.9 min of
+#: summed race wall over 171 races (9.6 s a race); the A/B units 6-15 s a race. Without it the 171-row estimate
+#: was 47 min against 72 taken.
+RACE_GAP_S = 10
+#: a stored wall_s from another pod is a floor, not a forecast: the races whose own time is host-bound (the quality
+#: references on the CPU) scale with the cgroup. ab1 took elliptic-envelope istella 1748 s against a stored 510 s
+#: (28-core pod) and hdbscan istella 726 s against 164 s. tools/ops/measure_candidate.py therefore estimates each
+#: race from the LARGEST stored wall_s over every board it is given (the 14-core ab1 boards among them).
 DEFAULT_CAP_MIN = 230       # under tools/nvidia_central.sh's 240-minute cap, with the job's own teardown
 DEFAULT_CHUNK_S = 600
 DEFAULT_SEED = 20261117
@@ -142,7 +154,9 @@ def estimate(rows, chunk_s=DEFAULT_CHUNK_S, one_arm=False):
     prior = sum(r.get("prior_s") or 0.0 for r in rows)
     nchunks = len(chunk_ids([r["id"] for r in rows], {r["id"]: r for r in rows}, chunk_s))
     smoke = SMOKE_S_PER_RACE * (len(rows) + sum(1 for r in rows if (r.get("prior_s") or 0) > 0))
-    over = FIXED_S + (1 if one_arm else 2) * PROC_S * nchunks
+    arms = 1 if one_arm else 2
+    timed = len(rows) + sum(1 for r in rows if (r.get("prior_s") or 0) > 0)     # races timed, every arm
+    over = FIXED_S + arms * PROC_S * nchunks + RACE_GAP_S * timed
     total = new + prior + smoke + over
     return {"candidate_s": new, "prior_s": prior, "smoke_s": smoke, "overhead_s": over, "chunks": nchunks,
             "total_s": total, "total_min": total / 60.0, "one_arm": one_arm}
@@ -150,9 +164,10 @@ def estimate(rows, chunk_s=DEFAULT_CHUNK_S, one_arm=False):
 
 def estimate_line(est):
     return ("TG-ESTIMATE minutes total=%.0f candidate=%.0f 0.8.55=%s smoke=%.0f overhead=%.0f (chunks=%d, %d s per "
-            "process assumed)" % (est["total_min"], est["candidate_s"] / 60,
-                                  "stored (one arm)" if est.get("one_arm") else "%.0f" % (est["prior_s"] / 60),
-                                  est["smoke_s"] / 60, est["overhead_s"] / 60, est["chunks"], PROC_S))
+            "process, %d s between races)" % (est["total_min"], est["candidate_s"] / 60,
+                                              "stored (one arm)" if est.get("one_arm") else "%.0f" % (est["prior_s"] / 60),
+                                              est["smoke_s"] / 60, est["overhead_s"] / 60, est["chunks"], PROC_S,
+                                              RACE_GAP_S))
 
 
 def split_rows(rows, cap_min, chunk_s=DEFAULT_CHUNK_S, one_arm=False):
