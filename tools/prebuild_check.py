@@ -20,6 +20,8 @@ skips it). Three builds were lost on 2026-11-15 to defects these catch:
               last named use while an untracked address still reads it; tools/mojo_lastuse_allow.txt). Seconds.
               Then the commit's tools/python_free_dirs.sh over the commit (no Mojo kernel, RUN module or non-boundary
               binding imports Python), as the pre-push hook runs it, so a commit pushed past the hook cannot build.
+              Then the commit's tools/native_caller_audit.py over the commit's blobs (a registered native export or
+              dispatch name with no caller, constructed family or keep reason; fb12-dead-names). Seconds.
   host-parse  (f29f76bf57: two host units did not parse; native-checks passed 166/166 because no check imports those
               doors) .github/workflows/native-checks.yml with suite=host-parse on a free runner: every release host
               group the Linux CPU leg builds (tools/merged_bindings.py plan --dir host --layout release) through
@@ -192,7 +194,8 @@ def run_audits(tree, commit, workdir, git_root=ROOT):
           f"{len(errors)} refusal(s)")
     lastuse = lastuse_audit(tree, commit, git_root)
     pyfree = python_free_audit(tree, commit, git_root)
-    return 1 if errors or lastuse or pyfree else 0
+    nativecall = native_caller_audit(tree, commit, git_root)
+    return 1 if errors or lastuse or pyfree or nativecall else 0
 
 
 def python_free_audit(tree, commit, git_root=ROOT):
@@ -208,6 +211,18 @@ def python_free_audit(tree, commit, git_root=ROOT):
         print(f"PYFREE {line}")
     print(f"PYFREE {'PASS' if p.returncode == 0 else 'FAIL'} tools/python_free_dirs.sh {commit[:12]} rc={p.returncode}")
     return p.returncode
+
+
+def native_caller_audit(tree, commit, git_root=ROOT):
+    """The COMMIT's tools/native_caller_audit.py over the commit's blobs (fb12-dead-names, 2026-11-17): a registered
+    native export or dispatch name that no literal caller, constructed family or KEEP reason reaches fails the build,
+    so dead entries cannot regrow. Prints its NATIVECALL lines; returns its exit code (0 when the commit predates it)."""
+    tool = Path(tree) / "tools/native_caller_audit.py"
+    if not tool.is_file():
+        print(f"NATIVECALL SKIP {commit[:12]} has no tools/native_caller_audit.py")
+        return 0
+    # a child process: the audit splits its files across a process pool, whose workers import it by path
+    return subprocess.call([sys.executable, str(tool), "--commit", commit, "--root", str(git_root)])
 
 
 def lastuse_audit(tree, commit, git_root=ROOT):
