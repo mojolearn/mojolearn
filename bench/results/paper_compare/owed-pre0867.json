@@ -653,6 +653,11 @@
    "status": "define in code (transformer/impl/llama/modeling_llama.mojo LLAMA_FAST_KV_STRIDE_CAP; transformer/host/transformer_block_host.mojo HOST_KV_STRIDE_CAP; bindings/transformer_public_native_door.mojo _KV_STRIDE_CAP): B = the full-causal KV cache at stride max_tokens, appended in place by the launch that gathers the packed span (no whole-capacity copy back of K and V per token per layer); A = the cache packed at stride s, repacked and copied back every token. Build every binding that imports modeling_llama, the host transformer binding and the transformer public door with the define",
    "owed": "RUN"
   },
+  "gemm-worklist": {
+   "define": "MOJOLEARN_GEMM_FAST_WORKLIST",
+   "status": "define in code (gemm/checks/gemm_identical.mojo GEMM_FAST_WORKLIST and gemm/neural_dispatch.mojo NEURAL_GEMM_WORKLIST; compiled on the NVIDIA column only, where the shipped body is the packed kernel; every other column compiles the arm to the per-product launches): B = independent GEMMs whose inputs are ready together go out as ONE launch of the packed body per mode (q,k,v and gate,up of the Llama layer forward; dW + dX of each TF_LINEAR backward node, the fan-in members' together: four products for gate,up, six for q,k,v), each product on the blocks, body and arguments of its own launch, a device table row per product, grouped products keeping their own fold launch; A = the default: one group or all-leaves launch per product. Same blocks, same operands, same order: digests must not move. Build every binding that imports gemm/checks/gemm_identical.mojo with the define. Report the launch counters (MOJOLEARN_STEP_PHASE_TIMERS) of A and B beside the times",
+   "owed": "RUN"
+  },
   "samba-step-scratch-held": {
    "define": "MOJOLEARN_SAMBA_FAST_STEP_SCRATCH_HELD",
    "status": "define in code (autograd/rules_mamba3.mojo M3_SCRATCH_HELD, read by training/samba_resident.mojo SAMBA_STEP_SCRATCH_HELD; IDENTICAL, no poison build): B = the Samba resident session holds, per Mamba-3 layer, one arena for the backward (4 node gradients + 82 scratch buffers + 2 suffix sums as views; ONE zero fill a step, no allocation, no free, no per-block wait) and one arena for the forward state and 33 stages (ONE fill a call instead of 43); A = the default: 88 create + 88 fill + 88 free and one wait per Mamba-3 block backward, 43 fills per Mamba-3 block forward. Same kernels, operands, order and zeros: digests must not move",
@@ -3729,6 +3734,70 @@
     "samba-step-scratch-held"
    ],
    "decides": "promote B only if samba-train-step is faster on the NVIDIA L40S (same box, same job) with the loss and every digest equal; lm-train-step is the control (the arm does not reach it: a move there is box noise); samba-forward must not be slower. A loser is deleted with the four tombstone parts; expected -2.7..-10 ms of 45.5 on samba-train-step (ASSUMED 5-20 us per queued driver call; allocation cost never profiled)"
+  },
+  {
+   "id": "fx-gemm-worklist",
+   "source": "lane fx-gemm-worklist (2026-11-19, idea 2 of ~/mojolearn-evidence/briefs-20261118/ideas-gemm-headroom-RESULT.md, SECOND PASS S4; report ~/mojolearn-evidence/briefs-20261118/fx-gemm-worklist-RESULT.md)",
+   "kind": "ab",
+   "lane": [
+    "lm-train-step",
+    "lm-forward",
+    "transformer-decode"
+   ],
+   "dataset": "*",
+   "rows": "full",
+   "vendor": "nvidia",
+   "b_arms": [
+    "gemm-worklist"
+   ],
+   "decides": "promote B only if lm-train-step is faster on the NVIDIA L40S (same box, same job) with the loss and every digest equal to A's (the arm changes which launch a block belongs to, never a block's work) and neither fx-gemm-worklist-shapes case slower; lm-forward must not be slower. transformer-decode is the control: its m = 1 products are not packed-body products, so the arm does not reach them and a move there is box noise (the brief's 7 -> 4 launches a token is NOT delivered by this arm). Expected lm-train-step -0.5 to -3 ms of 35 (medium-low confidence: the gain is the launch floor times the launches removed: the 21 product launches of a layer's forward and backward become 8, one per list and mode, and each grouped product keeps its own fold launch, so the brief's 187 -> 82 counts products, not launches). Noise or slower: delete the arm with the four tombstone parts and restore identical_gemm_kpack_kernel as the kernel body (the helper split exists only for the list)"
+  },
+  {
+   "id": "fx-gemm-worklist-shapes",
+   "source": "lane fx-gemm-worklist (2026-11-19, idea 2 of ~/mojolearn-evidence/briefs-20261118/ideas-gemm-headroom-RESULT.md, SECOND PASS S4; report ~/mojolearn-evidence/briefs-20261118/fx-gemm-worklist-RESULT.md); the neighbouring model width and the non-board size (no dimension targeting)",
+   "kind": "driver",
+   "driver": "samba_train_step",
+   "vendor": "nvidia",
+   "shape": {
+    "cases": [
+     {
+      "name": "attention-d512",
+      "batch": 4,
+      "length": 512,
+      "d_model": 512,
+      "layers": [
+       "attention",
+       "attention",
+       "attention",
+       "attention"
+      ],
+      "n_heads": 8,
+      "intermediate": 1024
+     },
+     {
+      "name": "attention-1536x320",
+      "batch": 3,
+      "length": 512,
+      "d_model": 320,
+      "layers": [
+       "attention",
+       "attention",
+       "attention",
+       "attention"
+      ],
+      "n_heads": 5,
+      "intermediate": 640
+     }
+    ]
+   },
+   "arms": [
+    "candidate",
+    "gemm-worklist"
+   ],
+   "b_arms": [
+    "gemm-worklist"
+   ],
+   "decides": "SambaStack.train_step on attention-only stacks, candidate (A) against the B wheel set, each line with its loss: d_model 512 at 2048 rows is the neighbouring model width, 1536 rows x 320 the non-board size (projections 1536 x 320 x 320). B must not be slower on either and the losses must be bit-equal. If the launch counters of A and B are equal on these cases the Samba attention layer does not reach the listed call sites (llama_attention_forward, llama_mlp_forward, TF_LINEAR): then the cases say nothing and a byte-LM driver at these widths is owed before promotion"
   },
   {
    "id": "fx-samba-step-registry-resident",
