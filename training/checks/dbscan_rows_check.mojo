@@ -9,6 +9,7 @@ from dbscan.impl.multi_gpu import (
     vertex_deg_dispatch, rbc_eps_nn_query_count,
     rbc_eps_nn_query_fill, rbc_eps_nn_query_max_k,
 )
+from checks.native_tests.kit import download_host_into
 
 
 def equal[dt: DType](ctx: DeviceContext, mut a: DeviceBuffer[dt],
@@ -17,8 +18,8 @@ def equal[dt: DType](ctx: DeviceContext, mut a: DeviceBuffer[dt],
     var y = ctx.enqueue_create_host_buffer[dt](n)
     var av = a.create_sub_buffer[dt](0, n)
     var bv = b.create_sub_buffer[dt](0, n)
-    ctx.enqueue_copy(dst_ptr=x.unsafe_ptr(), src_buf=av)
-    ctx.enqueue_copy(dst_ptr=y.unsafe_ptr(), src_buf=bv)
+    download_host_into[dt](ctx, av, x)
+    download_host_into[dt](ctx, bv, y)
     ctx.synchronize()
     for i in range(n):
         if x.unsafe_ptr()[i] != y.unsafe_ptr()[i]:
