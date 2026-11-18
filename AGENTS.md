@@ -672,3 +672,18 @@ Ends when Andrew says. It is not the product direction: AMD and Apple remain in 
 - Carefully, never narrowly: quality is never traded for speed (both arms' quality beside every time; a quality drop
   is a regression), no rule may key on a benchmark shape or dataset ("No dimension targeting"), and no row is
   "fixed" by measuring it on a smaller case. Not piecemeal: one wave fixes everything the last measurement showed.
+
+### TEMPORARY: no opponents, no 0.8.55 yardstick; clean up before the release, no haste (Andrew, 2026-11-18)
+
+Ends when Andrew says. It narrows the NVIDIA-only direction above while it runs.
+
+- Opponents are set aside for now: no opponent job, no opponent re-score, and no work is opened, held or ranked because
+  of an opponent cell. Rows whose harness clock changed keep their stored opponent cells marked as they are; nothing is
+  rerun for them. This overrides the "Race fairness" follow-ups (not its rules) until Andrew reopens them.
+- 0.8.55 is no longer the yardstick. It is never installed, timed or profiled again, and no row is worked on because of
+  its ratio to 0.8.55. A change is judged against OUR OWN previous build on the same box in the same job (the last
+  green integration build), and by milliseconds lost on real sizes, large inputs first. This overrides the 0.8.55 steps
+  of the direction above and of "Times are compared only on the same box".
+- Order, without haste: this round is finished and measured against our own previous build; then the boundary cleanup
+  (typed tables, decided by its pilot A/B); then the shared test kit and the rule for new checks; then the other owed
+  cleanups; and only then the release, when Andrew says. Nothing is skipped or shortened to reach the release sooner.
