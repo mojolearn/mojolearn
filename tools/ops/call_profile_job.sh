@@ -244,6 +244,11 @@ for n in ("mojolearn-core", "mojolearn"):
     except m.PackageNotFoundError:
         pass' 2> /dev/null
 }
+# No manifest, no timing: bench_board refuses to time a wheel it cannot tie to release files, so every row would end
+# "no wall time" (the 2026-11-18 rerun, whose lane tree had no sibling results dir). Stop here and say what to pass.
+if part run && [ ! -f "$MAN" ]; then
+    say "no wheel manifest: pass CP_MANIFEST=<a results dir>/job/wheel-manifest-candidate.json (searched $(dirname "$RES")/*/job/)"; exit 4
+fi
 MAN_VERSION=$([ -f "$MAN" ] && $PY -c 'import json, sys; print(json.load(open(sys.argv[1])).get("version", ""))' "$MAN" 2> /dev/null)
 if part install && { [ ! -x "$APY" ] || { [ -n "$MAN_VERSION" ] && [ "$(installed_version)" != "$MAN_VERSION" ]; }; }; then
     phase install
