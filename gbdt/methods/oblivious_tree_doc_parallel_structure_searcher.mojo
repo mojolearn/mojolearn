@@ -88,7 +88,7 @@ bootstrap arrives.
 
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from max.gpu import block_dim, block_idx, thread_idx
-from std.os import getenv
+from std.sys.compile import is_defined
 
 from core.device_plan import DevicePlan, plan_for_single
 from core.identity_trace import IdentityTrace
@@ -172,10 +172,10 @@ from gbdt.models.oblivious_model import (
 # word of document docIndices[p]), the calcer and the split table take the
 # stride `doc_count`, and the levels read position `subsets.Indices[i]`
 # directly: the same word for every (position, feature), in the same order,
-# so the same histograms and splits. `MOJOLEARN_ORDERED_FOLD_INDEX=0`
+# so the same histograms and splits. Without `-D MOJOLEARN_GBDT_FAST_ORDERED_FOLD_INDEX`
 # restores the per-level gather.
 def ordered_fold_index() -> Bool:
-    """OPT-IN (`MOJOLEARN_ORDERED_FOLD_INDEX=1`) since lane/neural-pass124:
+    """OPT-IN (`-D MOJOLEARN_GBDT_FAST_ORDERED_FOLD_INDEX`) since lane/neural-pass124:
     the histogram accumulators key their quantizer's dither on the row id
     they are handed (`hist2_dither(row)`), and on the fold-order index that
     id is the fold POSITION, not the document: where a stat is not exactly
@@ -184,7 +184,10 @@ def ordered_fold_index() -> Bool:
     sat on the grid). Off, the levels gather document ids and the cells are
     main's. Keying the dither on docIndices[position] would make it a pure
     layout change; it measured 6% of pw.hist on the L40S."""
-    return String(getenv("MOJOLEARN_ORDERED_FOLD_INDEX")) == "1"
+    # lane fx-env-dead (2026-11-18): the run-time env read
+    # MOJOLEARN_ORDERED_FOLD_INDEX=1 is now this build define (default off,
+    # unchanged), so the host and device columns read one decision.
+    return is_defined["MOJOLEARN_GBDT_FAST_ORDERED_FOLD_INDEX"]()
 
 
 
