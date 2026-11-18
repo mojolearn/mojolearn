@@ -47,14 +47,6 @@ from cholesky.checks.potrf import (
     enqueue_logdet,
     potrf_lower,
 )
-from cholesky.chol_ops import (
-    CHOL_OPS_FIT,
-    chol_op_cho_solve,
-    chol_op_factor,
-    chol_op_logdet,
-    chol_op_logdet_scratch_floats,
-    chol_op_zero_on_fail,
-)
 from cholesky.checks.trsm import CHOL_SOLVE_TPB, cho_solve, trsm_lower
 from cholesky.impl.matrix.detail.matrix import copy_vector_from_matrix_diagonal_kernel
 from cholesky.logdet_fold import logdet_blocks
@@ -184,94 +176,53 @@ def gpr_fit_ptr_device(
     var info = 0
     var nb_ran = nb_pin
     add_jitter(ctx, dk, n, alpha, CHOL_ELEM_TPB)
-    # The factor, the log-determinant and the solve: under
-    # -D MOJOLEARN_IDN_CHOL_OPS_FIT as the executor's Cholesky ops (lane
-    # n8-gp-krr-smo, cholesky/chol_ops.mojo: `info` stays in a device word
-    # that gates every later launch and comes home once, with the outputs);
-    # by default the measured 0.8.66 route (`potrf_lower` with its one
-    # info read, then the branch on the host): the same kernels in the same
-    # order. The ops route measured AMD gpr 1.14-1.18x slower than 0.8.66
-    # on the same box (cholesky/chol_ops.mojo CHOL_OPS_FIT, lane
-    # fable-perf-classical-0855); the define is its A/B arm.
-    comptime if CHOL_OPS_FIT:
-        var dinfo = ctx.enqueue_create_buffer[DType.int32](1)
-        enqueue_fill(ctx, dinfo, Int32(0))
-        chol_op_factor(ctx, dk, dinfo, n)
-        # the factor home, before the solve (which only reads it); a failed
-        # factor is the one frozen at its failing panel, beside its nonzero info
-        ctx.enqueue_copy(dst_ptr=_GP(unsafe_from_address=l_addr), src_buf=dk)
-        var dldscr = ctx.enqueue_create_buffer[DType.float32](chol_op_logdet_scratch_floats(n))
-        var dldet = ctx.enqueue_create_buffer[DType.float32](1)
-        var hinfo = ctx.enqueue_create_host_buffer[DType.int32](1)
-        chol_op_logdet(ctx, dk, dinfo, dldscr, dldet, n)
+    # The factor, the log-determinant and the solve on the measured 0.8.66
+    # route (`potrf_lower` with its one info read, then the branch on the
+    # host; lane fable-perf-classical-0855).
+    # TOMBSTONE: MOJOLEARN_IDN_CHOL_OPS_FIT (decided B arm, the executor Cholesky ops; L40S ba08dac006 14 cells B 0.91-1.10x, same speed) deleted 2026-11-17 by lane/fb12-loser-arms; code recoverable at 2203db7094.
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_CHOL_OPS_FIT.fb12-loser-arms.patch; record in docs/TOMBSTONES.md.
+    var ws = ctx.enqueue_create_buffer[DType.float32](chol_workspace_floats(n, nb_pin))
+    var dwork = ctx.enqueue_create_buffer[DType.float32](n + 1)
+    var run = potrf_lower(ctx, dk, ws, n, trace, chol_default_nb_hint(), CHOL_PANEL_TPB, CHOL_ELEM_TPB)
+    # the factor home, before the solve (which only reads it)
+    ctx.enqueue_copy(dst_ptr=_GP(unsafe_from_address=l_addr), src_buf=dk)
+    var dlparts = ctx.enqueue_create_buffer[DType.float32](2 * logdet_blocks(n))
+    var diag = dwork.create_sub_buffer[DType.float32](0, n)
+    var scalar = dwork.create_sub_buffer[DType.float32](n, 1)
+    if run.info == 0:
+        # `chol_logdet`'s two launches, the scalar left on the device
+        ctx.enqueue_function[copy_vector_from_matrix_diagonal_kernel](
+            diag.unsafe_ptr(), dk.unsafe_ptr(), Int32(n), Int32(n),
+            grid_dim=((n + CHOL_ELEM_TPB - 1) // CHOL_ELEM_TPB, 1, 1), block_dim=(CHOL_ELEM_TPB, 1, 1),
+        )
+        enqueue_logdet(ctx, _fp(diag), _fp(dlparts), _fp(scalar), n)
         ctx.enqueue_copy(dst_buf=ddual, src_buf=dy)
-        chol_op_cho_solve(ctx, dk, ddual, dinfo, n, 1)
-        # `_gpr_ydot_device`'s two launches (read only when info == 0)
+        cho_solve(ctx, dk, ddual, n, 1, trace, CHOL_SOLVE_TPB)
+        # `_gpr_ydot_device`'s two launches
         if nbf > 0:
             ctx.enqueue_function[gpr_ydot_part_kernel](
                 _fp(dy), _fp(ddual), Int32(n), _fp(dpart), Int32(nbf),
                 grid_dim=(nbf + GP_YDOT_TPB - 1) // GP_YDOT_TPB, block_dim=GP_YDOT_TPB,
             )
         ctx.enqueue_function[gpr_ydot_fin_kernel](_fp(dpart), Int32(nbf), _fp(dyd), grid_dim=1, block_dim=1)
-        # a failed fit hands back a zero dual beside its nonzero info
-        chol_op_zero_on_fail(ctx, dinfo, ddual, n)
-        ctx.enqueue_copy(dst_ptr=_GP(unsafe_from_address=dual_addr), src_buf=ddual)
-        ctx.enqueue_copy(dst_ptr=hld.unsafe_ptr(), src_buf=dldet)
+        ctx.enqueue_copy(dst_ptr=hld.unsafe_ptr(), src_buf=scalar)
         ctx.enqueue_copy(dst_ptr=hyd.unsafe_ptr(), src_buf=dyd)
-        ctx.enqueue_copy(dst_ptr=hinfo.unsafe_ptr(), src_buf=dinfo)
-        ctx.synchronize()
-        info = Int(hinfo.unsafe_ptr().unsafe_load(0))
-        if info == 0:
-            logdet = hld.unsafe_ptr().unsafe_load(0)
-            ydotalpha = hyd.unsafe_ptr().unsafe_load(0)
-            lml = gp_log_marginal_likelihood_value(ydotalpha, logdet, n_train)
-        _ = hinfo^
-        _ = dinfo^
-        _ = dldscr^
-        _ = dldet^
     else:
-        var ws = ctx.enqueue_create_buffer[DType.float32](chol_workspace_floats(n, nb_pin))
-        var dwork = ctx.enqueue_create_buffer[DType.float32](n + 1)
-        var run = potrf_lower(ctx, dk, ws, n, trace, chol_default_nb_hint(), CHOL_PANEL_TPB, CHOL_ELEM_TPB)
-        # the factor home, before the solve (which only reads it)
-        ctx.enqueue_copy(dst_ptr=_GP(unsafe_from_address=l_addr), src_buf=dk)
-        var dlparts = ctx.enqueue_create_buffer[DType.float32](2 * logdet_blocks(n))
-        var diag = dwork.create_sub_buffer[DType.float32](0, n)
-        var scalar = dwork.create_sub_buffer[DType.float32](n, 1)
-        if run.info == 0:
-            # `chol_logdet`'s two launches, the scalar left on the device
-            ctx.enqueue_function[copy_vector_from_matrix_diagonal_kernel](
-                diag.unsafe_ptr(), dk.unsafe_ptr(), Int32(n), Int32(n),
-                grid_dim=((n + CHOL_ELEM_TPB - 1) // CHOL_ELEM_TPB, 1, 1), block_dim=(CHOL_ELEM_TPB, 1, 1),
-            )
-            enqueue_logdet(ctx, _fp(diag), _fp(dlparts), _fp(scalar), n)
-            ctx.enqueue_copy(dst_buf=ddual, src_buf=dy)
-            cho_solve(ctx, dk, ddual, n, 1, trace, CHOL_SOLVE_TPB)
-            # `_gpr_ydot_device`'s two launches
-            if nbf > 0:
-                ctx.enqueue_function[gpr_ydot_part_kernel](
-                    _fp(dy), _fp(ddual), Int32(n), _fp(dpart), Int32(nbf),
-                    grid_dim=(nbf + GP_YDOT_TPB - 1) // GP_YDOT_TPB, block_dim=GP_YDOT_TPB,
-                )
-            ctx.enqueue_function[gpr_ydot_fin_kernel](_fp(dpart), Int32(nbf), _fp(dyd), grid_dim=1, block_dim=1)
-            ctx.enqueue_copy(dst_ptr=hld.unsafe_ptr(), src_buf=scalar)
-            ctx.enqueue_copy(dst_ptr=hyd.unsafe_ptr(), src_buf=dyd)
-        else:
-            # a failed fit hands back a zero dual beside its nonzero info
-            enqueue_fill(ctx, ddual, Float32(0.0))
-        ctx.enqueue_copy(dst_ptr=_GP(unsafe_from_address=dual_addr), src_buf=ddual)
-        ctx.synchronize()
-        info = run.info
-        nb_ran = run.nb
-        if info == 0:
-            logdet = hld.unsafe_ptr().unsafe_load(0)
-            ydotalpha = hyd.unsafe_ptr().unsafe_load(0)
-            lml = gp_log_marginal_likelihood_value(ydotalpha, logdet, n_train)
-        _ = diag^
-        _ = scalar^
-        _ = ws^
-        _ = dwork^
-        _ = dlparts^
+        # a failed fit hands back a zero dual beside its nonzero info
+        enqueue_fill(ctx, ddual, Float32(0.0))
+    ctx.enqueue_copy(dst_ptr=_GP(unsafe_from_address=dual_addr), src_buf=ddual)
+    ctx.synchronize()
+    info = run.info
+    nb_ran = run.nb
+    if info == 0:
+        logdet = hld.unsafe_ptr().unsafe_load(0)
+        ydotalpha = hyd.unsafe_ptr().unsafe_load(0)
+        lml = gp_log_marginal_likelihood_value(ydotalpha, logdet, n_train)
+    _ = diag^
+    _ = scalar^
+    _ = ws^
+    _ = dwork^
+    _ = dlparts^
     # info, nb, logdet, ydotalpha, lml; each float32 widens to float64 exactly.
     var sp = MutPointer[Float64, MutAnyOrigin](unsafe_from_address=scalars_addr)
     sp.unsafe_store(0, Float64(info))

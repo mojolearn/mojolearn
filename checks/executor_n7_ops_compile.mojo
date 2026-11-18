@@ -8,15 +8,8 @@
 # the status words; it is not a verifier.
 from max.gpu.host import DeviceContext
 
-from cholesky.chol_ops import (
-    chol_op_begin,
-    chol_op_cho_solve,
-    chol_op_factor,
-    chol_op_info_joins_loop,
-    chol_op_logdet,
-    chol_op_logdet_scratch_floats,
-    chol_op_zero_on_fail,
-)
+# TOMBSTONE: MOJOLEARN_IDN_CHOL_OPS_FIT (decided B arm, the executor Cholesky ops; L40S ba08dac006 14 cells B 0.91-1.10x, same speed) deleted 2026-11-17 by lane/fb12-loser-arms; code recoverable at 2203db7094.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_CHOL_OPS_FIT.fb12-loser-arms.patch; record in docs/TOMBSTONES.md.
 from core.compact_ops import CompactScratch, compact_op_f32, compact_op_i32, compact_op_indices
 from core.compact_ops_host import compact_indices_host
 from core.device_zero import enqueue_fill
@@ -34,20 +27,9 @@ def main() raises:
     var gate = step_gate_open_word(ctx)
     var regs = LoopRegisters(ctx)
     regs.reset(ctx)
-    # Cholesky
-    var a = ctx.enqueue_create_buffer[DType.float32](n * n)
-    enqueue_fill(ctx, a, Float32(0.0))
-    var b = ctx.enqueue_create_buffer[DType.float32](n)
-    enqueue_fill(ctx, b, Float32(1.0))
-    var info = ctx.enqueue_create_buffer[DType.int32](1)
-    var ld_ws = ctx.enqueue_create_buffer[DType.float32](chol_op_logdet_scratch_floats(n))
-    var ld = ctx.enqueue_create_buffer[DType.float32](1)
-    chol_op_begin(ctx, gate, info)
-    chol_op_factor(ctx, a, info, n)
-    chol_op_info_joins_loop(ctx, regs.words, info, 1)
-    chol_op_cho_solve(ctx, a, b, info, n, 1)
-    chol_op_logdet(ctx, a, info, ld_ws, ld, n)
-    chol_op_zero_on_fail(ctx, info, b, n)
+    # TOMBSTONE: MOJOLEARN_IDN_CHOL_OPS_FIT (decided B arm, the executor Cholesky ops; L40S ba08dac006 14 cells B 0.91-1.10x, same speed) deleted 2026-11-17 by lane/fb12-loser-arms; code recoverable at 2203db7094.
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_CHOL_OPS_FIT.fb12-loser-arms.patch; record in docs/TOMBSTONES.md.
+    # (cholesky/chol_ops.mojo and its section here: every chol_op_* instantiated on a 4 x 4 problem)
     # eigh
     var m = ctx.enqueue_create_buffer[DType.float32](n * n)
     enqueue_fill(ctx, m, Float32(1.0))

@@ -57,7 +57,8 @@ def _check_configuration() -> Bool:
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_GPR_PTR_OFF.patch
     comptime assert not is_defined["MOJOLEARN_IDN_GPR_PTR_OFF"](), "removed 2026-11-15 (lane/expdel2-07-base): IDN_GPR_PTR_OFF (Kernel / GP (GaussianProcessRegressor rollback to host-list gpr_fit / gpr_predict, IDENTICAL old path)) was old path, no A/B recorded; the resident pointer default kept; the default is the only path; code recoverable at b2a4adf292; see docs/TOMBSTONES.md"
     # Lane expdel2-16-decomposition (2026-11-15): unmeasured arms and superseded old paths deleted, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (docs/TOMBSTONES.md).
-    # MOJOLEARN_IDN_CHOL_OPS_FIT: refusal removed 2026-11-15 (restored; owed B arm, see docs/TOMBSTONES.md Restored table)
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_CHOL_OPS_FIT.fb12-loser-arms.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_CHOL_OPS_FIT"](), "removed 2026-11-17 (lane/fb12-loser-arms): IDN_CHOL_OPS_FIT (decided B arm, the executor Cholesky ops for KernelRidge / GPR / GPC / GP optimizer / GMM / MinCovDet fits; L40S ba08dac006 14 cells B 0.91-1.10x, same speed) is gone; the default path is the only one; code recoverable at 2203db7094; restore: experiments/removed/MOJOLEARN_IDN_CHOL_OPS_FIT.fb12-loser-arms.patch"
     # Lane expdel2-19-kernel (2026-11-15): unmeasured arms and old paths deleted, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (docs/TOMBSTONES.md).
     # MOJOLEARN_AFCL_L11: refusal removed 2026-11-15 (restored by lane/restore-apple-fast-classical: Apple fast paused, not abandoned; opt-in, default off; see docs/TOMBSTONES.md Restored table)
     # MOJOLEARN_AFCL_G13: refusal removed 2026-11-15 (restored by lane/restore-apple-fast-classical: Apple fast paused, not abandoned; opt-in, default off; see docs/TOMBSTONES.md Restored table)
