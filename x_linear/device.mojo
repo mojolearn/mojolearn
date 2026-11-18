@@ -20,6 +20,8 @@ from max.gpu import block_idx, block_dim, thread_idx, MAX_THREADS_PER_BLOCK_META
 from std.utils import StaticTuple
 from max.gpu.primitives.warp import shuffle_idx, shuffle_xor
 from std.sys.compile import is_defined
+from std.math import isfinite
+from core.hostptr import copy_f32
 from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from max.gpu.host import DeviceContext, DeviceBuffer
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, NUMERIC_FAST
@@ -5153,15 +5155,25 @@ def iso_keep_write_kernel(n: Int32, fw: FP, mslot: IP, bcnt: IP, nbk: Int32, res
     witness_end(wf, woff, nonce)
 
 @always_inline
-def _iso_predict_kernel_body(x: FP, thr: FP, n: Int32, m: Int32, oob: Int32, fp: FP, res: FP):
+def _iso_predict_kernel_body(x: FP, thr: FP, n: Int32, m: Int32, oob: Int32, fp: FP, res: FP, status: FP):
+    """One thread a query: res[q], then the two status words (lane
+    fb15-sync-counts, 2026-11-18): status[0] the out_of_bounds='raise' word
+    (iso_oob_flag's test, written at index 0 of `status`), status[1] a
+    non-finite query (IDENTICAL; the verdict `xlin_finite_kernel` gave in a
+    launch, a wait and a download of its own before). Every writer stores
+    the same word, so the order of the writes does not matter."""
     var q = Int(block_idx.x) * XG_TPB + Int(thread_idx.x)
     if q < Int(n):
         iso_predict_one(q, x, thr, Int(m), Int(oob), fp, res)
-        iso_oob_flag(q, Int(n), x, Int(oob), fp, res)
+        iso_oob_flag(q, 0, x, Int(oob), fp, status)
+        comptime if XLIN_IDN_DEV_FINITE:
+            if not isfinite(ld(x, q)):
+                st(status, 1, Float32(1))
 
 
-def iso_predict_kernel(x: FP, thr: FP, n: Int32, m: Int32, oob: Int32, fp: FP, res: FP, wf: IP, woff: Int32, nonce: Int32):
-    _iso_predict_kernel_body(x, thr, n, m, oob, fp, res)
+def iso_predict_kernel(x: FP, thr: FP, n: Int32, m: Int32, oob: Int32, fp: FP, res: FP, status: FP,
+                       wf: IP, woff: Int32, nonce: Int32):
+    _iso_predict_kernel_body(x, thr, n, m, oob, fp, res, status)
     witness_end(wf, woff, nonce)
 
 def ISO_WIT_CAP(n: Int) -> Int:
@@ -5401,42 +5413,77 @@ def _iso_fit_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, ip: List[Int32], fp:
 
 
 def _iso_predict_grid(x: FP, n_x: Int, thr: FP, n_thr: Int, n: Int, ip: List[Int32], fp: List[Float32], res: FP) raises:
+    """IsotonicRegression.predict on the grid: ONE upload of the queries, ONE
+    upload of [knots | X_min, X_max | two zero status words], ONE launch, the
+    predictions and the two status words downloaded, ONE wait (lane
+    fb15-sync-counts, 2026-11-18). Before: four uploads (the queries, the
+    knots, the knots AGAIN for their own finite test, the bounds), two
+    memsets, three launches (the queries' and the knots' finite tests and
+    the predict), two waits. The knots are the fitted thresholds, finite by
+    construction, so their per-predict finite test is gone; the queries'
+    test is the predict kernel's status[1] word, raised after the one wait
+    with the binding's text. Off Apple the witness (whose words are never
+    written there) allocates nothing. No predicted word moves."""
     var ctx = linear_ctx()
-    var hfp = fp.copy()
+    # [knots n_thr | X_min, X_max | status 2]: the status words go up as zeros
+    var bounds_at = n_thr
+    var status_at = n_thr + 2
+    var hk = List[Float32](length=n_thr + 4, fill=Float32(0))
+    copy_f32(thr, hk.unsafe_ptr(), n_thr)
+    if len(fp) > 0:
+        hk[bounds_at] = fp[0]
+    if len(fp) > 1:
+        hk[bounds_at + 1] = fp[1]
+    var hs = List[Float32](length=2, fill=Float32(0))
+    # OOB_RAISE: the binding reads the out-of-bounds word at res[n]
+    var raise_oob = len(ip) > 1 and Int(ip[1]) == OOB_RAISE
     var dx = ctx.enqueue_create_buffer[DType.float32](max(n_x, 1))
-    var dt = ctx.enqueue_create_buffer[DType.float32](max(n_thr, 1))
-    var dfp = ctx.enqueue_create_buffer[DType.float32](max(len(hfp), 1))
-    # OOB_RAISE: one more word, res[n], the out-of-bounds flag (zeroed here)
-    var n_res = n + 1 if (len(ip) > 1 and Int(ip[1]) == OOB_RAISE) else n
-    var dout = ctx.enqueue_create_buffer[DType.float32](max(n_res, 1))
-    dout.enqueue_fill(Float32(0))
+    var dk = ctx.enqueue_create_buffer[DType.float32](n_thr + 4)
+    var dout = ctx.enqueue_create_buffer[DType.float32](max(n, 1))
     ctx.enqueue_copy(dst_buf=dx, src_ptr=x)
-    ctx.enqueue_copy(dst_buf=dt, src_ptr=thr)
-    comptime if XLIN_IDN_DEV_FINITE:
-        xlin_finite_device(ctx, dx, n_x, thr, n_thr)
-    ctx.enqueue_copy(dst_buf=dfp, src_ptr=hfp.unsafe_ptr())
-    # the whole isotonic predict as ONE guarded unit from zeroed scratch (x_linear/witness.mojo)
-    var wit = Witness(ctx, _xg_blocks(n))
-    var tries = 0
-    while True:
-        var nonce = wit.begin()
-        var wo = 0
-        ctx.enqueue_function[iso_predict_kernel](dx.unsafe_ptr(), dt.unsafe_ptr(), Int32(n), ip[0], ip[1], dfp.unsafe_ptr(),
-                                                 dout.unsafe_ptr(), wit.p(), Int32(wo), nonce, grid_dim=_xg_blocks(n), block_dim=XG_TPB)
-        wo += _xg_blocks(n)
+    ctx.enqueue_copy(dst_buf=dk, src_ptr=hk.unsafe_ptr())
+    var dstat = dk.create_sub_buffer[DType.float32](status_at, 2)
+    var kp = dk.unsafe_ptr()
+    comptime if TARGET_HAS_APPLE_GPU:
+        # the whole isotonic predict as ONE guarded unit (x_linear/witness.mojo):
+        # the launch rebuilds every word it writes from inputs it does not write
+        var wit = Witness(ctx, _xg_blocks(n))
+        var tries = 0
+        while True:
+            var nonce = wit.begin()
+            var wo = 0
+            ctx.enqueue_function[iso_predict_kernel](dx.unsafe_ptr(), kp, Int32(n), ip[0], ip[1], kp + bounds_at,
+                                                     dout.unsafe_ptr(), kp + status_at, wit.p(), Int32(wo), nonce,
+                                                     grid_dim=_xg_blocks(n), block_dim=XG_TPB)
+            wo += _xg_blocks(n)
+            ctx.enqueue_copy(dst_ptr=res, src_buf=dout)
+            ctx.enqueue_copy(dst_ptr=hs.unsafe_ptr(), src_buf=dstat)
+            if wit.ok(ctx, wo, "isotonic predict"):
+                break
+            tries += 1
+            if tries >= WITNESS_TRIES:
+                wit.fail()
+        _ = wit^
+    else:
+        # witness_end compiles to nothing off Apple: the word pointer is never read
+        ctx.enqueue_function[iso_predict_kernel](dx.unsafe_ptr(), kp, Int32(n), ip[0], ip[1], kp + bounds_at,
+                                                 dout.unsafe_ptr(), kp + status_at, IP(unsafe_from_address=Int(kp)),
+                                                 Int32(0), Int32(0), grid_dim=_xg_blocks(n), block_dim=XG_TPB)
         ctx.enqueue_copy(dst_ptr=res, src_buf=dout)
-        if wit.ok(ctx, wo, "isotonic predict"):
-            break
-        tries += 1
-        if tries >= WITNESS_TRIES:
-            wit.fail()
+        ctx.enqueue_copy(dst_ptr=hs.unsafe_ptr(), src_buf=dstat)
     ctx.synchronize()
-    _ = hfp^
+    var bad = hs[1] != Float32(0)
+    var oob_word = hs[0]
+    _ = hs^
+    _ = hk^
+    _ = dstat^
     _ = dx^
-    _ = dt^
-    _ = dfp^
+    _ = dk^
     _ = dout^
-    _ = wit^
+    if bad:
+        raise Error("mojolearn: X contains NaN or infinity")
+    if raise_oob:
+        st(res, n, oob_word)
 
 
 def fit_device(
