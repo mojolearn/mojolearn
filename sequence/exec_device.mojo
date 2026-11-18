@@ -63,6 +63,9 @@ from sequence.gemm_tiled import (
     seq_gemm_split_blocks, seq_gemm_split_kernel,
 )
 from sequence.gemm_split import GEMM_SPLITK, OP_GK_SPLIT, gemm_split_args, gemm_split_on
+# lane fx-gemm-seq-packed: -D MOJOLEARN_GEMM_FAST_SEQ_PACKED (default off), the large products on the neural packed body
+from sequence.gemm_packed_route import SEQ_GEMM_PACKED, SP_NONE, GR_PROF_PACKED, seq_gemm_packed_on, seq_gemm_packed_launch
+from sequence.ops import OP_GEMM_EPI_TAIL
 from sequence.ops import OP_GEMM_EPI
 from autograd.ops import OP_AGK_GEMM_EPI, agk_colsum_args
 from sequence.ops import OP_COLSUM_DIV
@@ -1002,9 +1005,17 @@ struct DeviceExec(Exec, Movable):
         launch_profile_record(OP, n, ns, self.profile)
         # lane ag-pass5-gemm: one row per (code, route, M, N, K) for the GEMMs
         comptime if OP == OP_GEMM or OP == OP_AGK_GEMM_EPI or OP == OP_GEMM_EPI or OP == OP_GEMM_SPLITK:
-            launch_profile_record_shape(
-                OP, seq_gemm_profile_route[OP](a, SEQ_COOP, SEQ_FAST_VAR_COOP), a.i0, a.i1, a.i2, ns,
-            )
+            comptime if SEQ_GEMM_PACKED and OP != OP_GEMM_SPLITK:
+                # lane fx-gemm-seq-packed (arm only): _launch asks the packed rule where the
+                # split and coop rules passed, i.e. where the row would read the tile family
+                var prof_route = seq_gemm_profile_route[OP](a, SEQ_COOP, SEQ_FAST_VAR_COOP)
+                if prof_route == GR_TILE and seq_gemm_packed_on[OP](a) != SP_NONE:
+                    prof_route = GR_PROF_PACKED
+                launch_profile_record_shape(OP, prof_route, a.i0, a.i1, a.i2, ns)
+            else:
+                launch_profile_record_shape(
+                    OP, seq_gemm_profile_route[OP](a, SEQ_COOP, SEQ_FAST_VAR_COOP), a.i0, a.i1, a.i2, ns,
+                )
 
     def _launch[OP: Int](mut self, a: Args, n: Int) raises:
         if n <= 0:
@@ -1336,6 +1347,25 @@ struct DeviceExec(Exec, Movable):
                     block_dim=(TPB, 1, 1),
                 )
                 self.execution_profile.kernel()
+                return
+        # lane fx-gemm-seq-packed (-D MOJOLEARN_GEMM_FAST_SEQ_PACKED, default OFF, A/B owed): a large
+        # plain dense product (the size rule and the order argument are sequence/gemm_packed_route.mojo's
+        # docstring) runs the neural packed body with ONE leaf of K terms: per cell the same chain,
+        # acc = ftz(fma(ld a, ld b, acc)), k ascending from +0.0, so the tile's word. An epilogue opcode
+        # then runs its follower as OP_GEMM_EPI_TAIL on the stored words, the launch pair HostExec runs
+        # (the same operands and operations as the tile's in-register epilogue). After the split-K and
+        # coop tests above, which are their own orders; accumulate, a non-dense C and the column sums
+        # keep the routes below. Per call under the arm: five integer tests, one launch, and one more
+        # launch for an epilogue; no lookup, allocation or wait.
+        comptime if SEQ_GEMM_PACKED and (
+                OP == OP_GEMM or OP == OP_AGK_GEMM_EPI or OP == OP_GEMM_EPI):
+            var packed_geom = seq_gemm_packed_on[OP](a)
+            if packed_geom != SP_NONE:
+                seq_gemm_packed_launch(self.ctx, a, packed_geom)
+                self.execution_profile.kernel()
+                comptime if OP != OP_GEMM:
+                    if seq_gemm_epi_kind(a.i9, a.i10) != GK_PLAIN:
+                        self._launch[OP_GEMM_EPI_TAIL](a, a.i0 * a.i1)
                 return
         # lane ag-pass4-gemm: OP_GEMM, the tape's OP_AGK_GEMM_EPI and the hand
         # MLP's OP_GEMM_EPI take the shape-aware route (sequence/gemm_tiled.mojo
