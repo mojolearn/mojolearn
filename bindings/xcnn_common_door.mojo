@@ -185,6 +185,24 @@ def xcnn_exact(value: PythonObject, kind: Int) raises -> Bool:
     return _xcnn_exact_ptr(value._obj_ptr, kind)
 
 
+def xcnn_plain_scalar(value: PythonObject) raises -> Bool:
+    """`value` is None or an exact int, float, bool or str: exactly the
+    values the plain-value scan (`neural_plain_value`) admits at its first
+    test and returns for. A door that admits a list of configuration fields
+    skips the scan for them (one type read against the held types; the scan
+    read four builtins by name per field) and runs it for everything else,
+    so anything it would refuse is still refused, with its text."""
+    if value is None:
+        return True
+    var g = _xcnn_names()
+    ref cpy = Python().cpython()
+    var cls = cpy.PyObject_Type(value._obj_ptr)
+    var address = Int(cls)
+    cpy.Py_DecRef(cls)
+    return (address == g[].types[XT_INT] or address == g[].types[XT_FLOAT] or address == g[].types[XT_BOOL]
+            or address == g[].types[XT_STR])
+
+
 def xcnn_item(mapping: PythonObject, which: Int) raises -> PythonObject:
     """`mapping["<name>"]` through the held name: one dictionary lookup on an
     exact dict; a missing key, or any other mapping, takes the subscript

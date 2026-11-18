@@ -42,7 +42,7 @@ from bindings.xcnn_common_door import (
     xcnn_builtins, xcnn_entries, xcnn_ref, xcnn_word, xcnn_ptr, xcnn_mixed, xcnn_idn, XCNN_F_GRAPH, xcnn_is_t,
     xcnn_on_dev, xcnn_new, xcnn_wrap, xcnn_host_of, xcnn_host_f32, xcnn_f32, xcnn_addr, xcnn_dev, xcnn_dev_get,
     xcnn_dev_upload, xcnn_shape, xcnn_size, xcnn_tuple, xcnn_host_i32, xcnn_device_io_off,
-    xcnn_dev_fields, xcnn_reshape_t, xcnn_dev_get_f, xcnn_out_new,
+    xcnn_dev_fields, xcnn_reshape_t, xcnn_dev_get_f, xcnn_out_new, xcnn_plain_scalar,
 )
 from core.entry_table import EntryRef
 from x_cnn.graph_layer_run import (
@@ -922,7 +922,11 @@ def _graph_layer_fields(layer: PythonObject, context: PythonObject) raises -> Py
     var mods = NativeModules()
     var admission = Python.dict(admission_context=context)
     for name in ["in_channels", "out_channels", "improved", "add_self_loops", "normalize", "bias", "numeric_mode", "project", "root_weight", "aggr"]:  # small-loop(graph layer configuration)
-        neural_plain_value(mods, py_get(fields, PythonObject(name)), 0, admission)
+        var value = py_get(fields, PythonObject(name))
+        # fx-cnn-layers (2026-11-18): None and exact int / float / bool / str
+        # are what the scan admits at its first test; it runs for the rest
+        if not xcnn_plain_scalar(value):
+            neural_plain_value(mods, value, 0, admission)
     return fields
 
 

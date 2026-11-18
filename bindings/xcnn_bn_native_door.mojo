@@ -22,6 +22,7 @@ from bindings.neural_block_admission_door import neural_plain_value
 from bindings.native_loaded_module_door import NativeModules
 from bindings.sequential_admission_door import sequential_admit_value
 from bindings.xcnn_common_door import xcnn_out_new, xcnn_dev_fields, xcnn_ref
+from bindings.xcnn_common_door import xcnn_plain_scalar, xcnn_exact, xcnn_dev_get_f, XT_BOOL
 from std.python._cpython import GILReleased
 from x_cnn.door_run import xcnn_run_fill_f32
 from x_cnn.bn_run import (
@@ -36,6 +37,12 @@ def _set(fields: PythonObject, name: String, value: PythonObject) raises:
 
 
 def _truth(value: PythonObject) raises -> Bool:
+    # fx-cnn-layers (2026-11-18): `bool(v)` of an exact bool is `v` (the
+    # flags are stored as exact bools by `_bn_init` and the forward); the
+    # `bool(...)` call stays for anything else. A forward asked five to six
+    # times, each a builtins read by name and a Python call.
+    if xcnn_exact(value, XT_BOOL):
+        return Bool(py=value)
     return Bool(py=py_call(xcnn_builtins().bool, value))
 
 
@@ -45,7 +52,10 @@ def _bn_admit(layer: PythonObject, context: PythonObject) raises -> PythonObject
     for name in ["num_features", "eps", "affine", "momentum", "track_running_stats", "num_batches_tracked_",  # driver-loop: over consumed passive settings
                  "input_shape", "numeric_mode", "training", "_run_stale", "_aux_k", "_mode", "_x3shape", "_shape", "_xdev"]:  # driver-loop: admit consumed passive settings before coercion
         var value = py_get(fields, PythonObject(name))
-        neural_plain_value(mods, value, 0, context)
+        # fx-cnn-layers (2026-11-18): None and exact int / float / bool / str
+        # are what the scan admits at its first test; it runs for the rest
+        if not xcnn_plain_scalar(value):
+            neural_plain_value(mods, value, 0, context)
     for name in ["_run_dev", "_xdev_dev"]:  # driver-loop: resident owner metadata retained by forward
         var owner = py_get(fields, PythonObject(name))
         if owner is not None:
@@ -205,7 +215,7 @@ def _forward_res(layer: PythonObject, fields: PythonObject, entries: PythonObjec
     # lane fb15-sync-counts: the resident aux array only; the forward entry
     # copies the host block into it on its own stream (was RES_UPLOAD: one
     # more entry crossing and one more wait per forward)
-    var ah = xcnn_dev_get(layer, entries, name, bn_run_aux_count(c), context)
+    var ah = xcnn_dev_get_f(fields, entries, name, bn_run_aux_count(c), context)   # `fields` is this layer's
     var run_dev = py_get(fields, "_run_dev")
     if run_dev is None or run_dev is not dev or not xcnn_dev_has(dev, "running"):
         var r = _running(fields, context)
