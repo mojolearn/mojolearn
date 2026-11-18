@@ -999,10 +999,10 @@ def _adaptive_host_indices(value: PythonObject, shape: List[Int], context: Pytho
 
 def xcnn_adaptive_backward(model: PythonObject, source: PythonObject, context: PythonObject) raises -> PythonObject:
     var fields = _fields(model)
-    var saved = py_get(fields, "_xshape")
+    var saved = xcnn_get(fields, XK_XSHAPE)
     if saved is None:
         raise Error("RuntimeError: adaptive pool backward requires forward first")
-    var layer = py_get(fields, "_layer")
+    var layer = xcnn_get(fields, XK_LAYER)
     if layer is not None:
         # Native composition: never invoke the Python layer.backward wrapper.
         return _pool_backward2d(layer, source, context)
@@ -1074,7 +1074,7 @@ def xcnn_pool_layers(model: PythonObject, operation: String, args: PythonObject,
     if operation == "adaptive_indices_get":
         return xcnn_adaptive_indices(model, context)
     if operation == "adaptive_backward":
-        return xcnn_adaptive_backward(model, args[0], context)
+        return xcnn_adaptive_backward(model, xcnn_at(args, 0), context)
     if operation == "adaptive_device_io":
         try:
             return PythonObject(xcnn_resident(xcnn_entries(_fields(model), context), context))
@@ -1083,7 +1083,7 @@ def xcnn_pool_layers(model: PythonObject, operation: String, args: PythonObject,
     if operation == "pool_init":
         return xcnn_pool_init(model, args, context)
     if operation == "pool_backward":
-        return xcnn_pool_backward(model, args[0], context)
+        return xcnn_pool_backward(model, xcnn_at(args, 0), context)
     if operation == "pool_fit":
         return model
     if operation == "pool_indices_get":
@@ -1094,7 +1094,7 @@ def xcnn_pool_layers(model: PythonObject, operation: String, args: PythonObject,
         _set(fields, "_idx_dev", PythonObject(None))
         return PythonObject(None)
     if operation == "pool_forward":
-        return xcnn_pool_forward(model, args[0], context)
+        return xcnn_pool_forward(model, xcnn_at(args, 0), context)
     if operation == "pool_transform":
         return _flat_rows(xcnn_pool_forward(model, xcnn_rows(model, args[0], True, context), context), context)
     if operation == "dropout_forward":
@@ -1102,7 +1102,7 @@ def xcnn_pool_layers(model: PythonObject, operation: String, args: PythonObject,
     if operation == "dropout_transform":
         return _flat_rows(xcnn_dropout_forward(model, xcnn_rows(model, args[0], False, context), context), context)
     if operation == "adaptive_forward":
-        return xcnn_adaptive_forward(model, args[0], context)
+        return xcnn_adaptive_forward(model, xcnn_at(args, 0), context)
     if operation == "adaptive_transform":
         return _flat_rows(xcnn_adaptive_forward(model, xcnn_rows(model, args[0], False, context), context), context)
     if operation == "conv_fit":
