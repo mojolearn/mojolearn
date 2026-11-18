@@ -139,6 +139,7 @@ from transformer.impl.llama.modeling_llama import (
     llama_key_lo,
     llama_key_span,
 )
+from gemm.neural_dispatch import NEURAL_GEMM_WORKLIST  # lane/fx-gemm-worklist (arm, default off)
 from autograd.kernels.transformer import (
     BWD_FUSE_GATED_SILU,
     BWD_FUSE_NORM2_RESIDUAL,
@@ -482,7 +483,17 @@ struct TransformerRules(BackwardRules):
         var x = _view(self.ctx, inputs[0], m * k)
         var w = _view(self.ctx, inputs[1], n * k)
         var dw = _view(self.ctx, gradients[1], n * k)
-        _route_b(self.ctx, bst.gemm_workspace, dw, dc, x, OP_NT, m, n, k)
+        # lane/fx-gemm-worklist (arm MOJOLEARN_GEMM_FAST_WORKLIST, default off: the six calls below are the
+        # immediate launches they were). Under the arm dW and dX of this node are queued on the workspace's work
+        # list: both read dC, neither reads the other. A node that completes its input's gradient (PLAIN, ADD2,
+        # ADD3) runs the list before anything reads it; a fan-in member that only fills tmp0 or tmp1 leaves its
+        # two products pending for the member that completes the fan-in, so gate,up go out as four products and
+        # q,k,v as six. Nothing between the members reads tmp0, tmp1 or the weight gradients, and the adds below
+        # already rely on every earlier member having run. The tape launches nothing after a member's apply (each
+        # fan-in weight is a leaf with this one consumer, so its gradient is written in place and never
+        # accumulated; rules_lm.mojo header): a driver that ties a fan-in member's weight to another node must
+        # not use the TMP modes under this arm. Call site: once per TF_LINEAR node of a backward.
+        _route_b[NEURAL_GEMM_WORKLIST](self.ctx, bst.gemm_workspace, dw, dc, x, OP_NT, m, n, k)
         var mode = saved.i0
         comptime if BWD_GEMM_EPI:
             # lane fx-gemm-epi: the fan-in members under the arm
@@ -491,18 +502,24 @@ struct TransformerRules(BackwardRules):
                 mode = TF_DX_JOINED
         if mode == TF_DX_PLAIN:
             var dx = _view(self.ctx, gradients[0], m * k)
-            _route_a(self.ctx, bst.gemm_workspace, dx, dc, w, OP_NT, m, n, k)
+            _route_a[NEURAL_GEMM_WORKLIST](self.ctx, bst.gemm_workspace, dx, dc, w, OP_NT, m, n, k)
+            comptime if NEURAL_GEMM_WORKLIST:
+                bst.gemm_workspace.list_run(self.ctx)
         elif mode == TF_DX_TMP0:
-            _route_a(self.ctx, bst.gemm_workspace, bst.tmp0, dc, w, OP_NT, m, n, k)
+            _route_a[NEURAL_GEMM_WORKLIST](self.ctx, bst.gemm_workspace, bst.tmp0, dc, w, OP_NT, m, n, k)
         elif mode == TF_DX_TMP1:
-            _route_a(self.ctx, bst.gemm_workspace, bst.tmp1, dc, w, OP_NT, m, n, k)
+            _route_a[NEURAL_GEMM_WORKLIST](self.ctx, bst.gemm_workspace, bst.tmp1, dc, w, OP_NT, m, n, k)
         elif mode == TF_DX_TMP0_ADD2:
             # S9: d(norm2.out) = tmp0 (gate) + tmp1 (up)
-            _route_a(self.ctx, bst.gemm_workspace, bst.tmp0, dc, w, OP_NT, m, n, k)
+            _route_a[NEURAL_GEMM_WORKLIST](self.ctx, bst.gemm_workspace, bst.tmp0, dc, w, OP_NT, m, n, k)
+            comptime if NEURAL_GEMM_WORKLIST:
+                bst.gemm_workspace.list_run(self.ctx)
             self._add2(gradients[0], _fp(bst.tmp0), _fp(bst.tmp1), m * k)
         elif mode == TF_DX_TMP2_ADD3:
             # S32: d(norm1.out) = (tmp0 (q) + tmp1 (k)) + tmp2 (v)
-            _route_a(self.ctx, bst.gemm_workspace, bst.tmp2, dc, w, OP_NT, m, n, k)
+            _route_a[NEURAL_GEMM_WORKLIST](self.ctx, bst.gemm_workspace, bst.tmp2, dc, w, OP_NT, m, n, k)
+            comptime if NEURAL_GEMM_WORKLIST:
+                bst.gemm_workspace.list_run(self.ctx)
             var d = _view(self.ctx, gradients[0], m * k)
             step_count_launch()
             self.ctx.enqueue_function[bwd_add3_kernel](
@@ -515,6 +532,10 @@ struct TransformerRules(BackwardRules):
             pass
         else:
             raise Error("transformer linear: unknown dX destination")
+        comptime if NEURAL_GEMM_WORKLIST:
+            # A traced call reads this node's outputs in the cards below: nothing stays pending.
+            if self.trace_addr != 0:
+                bst.gemm_workspace.list_run(self.ctx)
         # cards, in the hand walk's order (TF_CARD_* above)
         var card = saved.i9
         if card == TF_CARD_DOWN:

@@ -61,6 +61,10 @@ from bench.gemm_shapes import (
 from bench.gemm_shapes import OP_NN as TBL_OP_NN
 from bench.gemm_shapes import OP_NT as TBL_OP_NT
 from bench.gemm_shapes import OP_TN as TBL_OP_TN
+# lane/fx-gemm-worklist: the work-list arm's check (check_device_worklist_is_launch_invariant).
+from gemm.checks.gemm_identical import (
+    GEMM_FAST_WORKLIST, GEMM_WORKLIST_ALL, GEMM_WORKLIST_GROUP, GemmWorklist, gemm_worklist_mode,
+)
 from gemm.checks.gemm_identical import (
     GEMM_FOLD_LEVELS,
     GEMM_FOLD_SLOTS,
@@ -1166,6 +1170,149 @@ def check_device_is_launch_invariant() raises:
     )
 
 
+def _worklist_case(i: Int) -> Tuple[Int, Int, Int, Int]:
+    """`(op, m, n, k)` of the work-list check's product `i`: four unequal
+    products in three orientations, none a multiple of the packed tile in
+    both directions. 0 and 1 are small outputs with a short contraction (the
+    leaf-group launch where the group rule takes them); 2 and 3 are outputs
+    wide enough to fill the device alone (all leaves in one launch)."""
+    if i == 0:
+        return (OP_NT, 2048, 384, 384)
+    if i == 1:
+        return (OP_NN, 1536, 320, 320)
+    if i == 2:
+        return (OP_NT, 2100, 1100, 200)
+    return (OP_TN, 1900, 1300, 130)
+
+
+def _worklist_device(ctx: DeviceContext, h: List[Float32], count: Int, poison: Bool) raises -> DeviceBuffer[DType.float32]:
+    """A device buffer of `count` floats holding `h` (or POISON in every
+    cell), uploaded and drained."""
+    var d = ctx.enqueue_create_buffer[DType.float32](count)
+    var hb = ctx.enqueue_create_host_buffer[DType.float32](count)
+    ctx.synchronize()
+    for i in range(count):
+        if poison:
+            hb.unsafe_ptr().unsafe_store(i, POISON)
+        else:
+            hb.unsafe_ptr().unsafe_store(i, h[i])
+    upload_host_into[DType.float32](ctx, d, hb)
+    return d^
+
+
+def check_device_worklist_is_launch_invariant() raises:
+    """lane/fx-gemm-worklist, arm `-D MOJOLEARN_GEMM_FAST_WORKLIST=1`: four
+    unequal products launched as ONE work list store the words their four
+    single launches store. The single launches go through the shipped
+    dispatcher (`identical_gemm_into`), the list through `GemmWorklist`
+    exactly as `GemmWorkspace.list_run` drives it. One operand set carries
+    subnormals (the packed body's window admission and exact recompute).
+
+    The check also requires the fixture to reach both list kernels with at
+    least two products each (group mode and all leaves): a list that takes
+    fewer is a fixture that no longer tests the arm, and RAISES as that.
+    Without the arm on this column nothing is compared and the line says so.
+    """
+    comptime if not GEMM_FAST_WORKLIST:
+        print(
+            "check_device_worklist_is_launch_invariant ["
+            + _mode_name()
+            + "]: NOT RUN (the work-list arm is not compiled on this build or column:"
+            " list entries are the single launches)"
+        )
+        return
+    print("check_device_worklist_is_launch_invariant [" + _mode_name() + "]: 4 products, one work list")
+    var fails = 0
+    with DeviceContext() as ctx:
+        var singles = List[List[Float32]]()
+        var das = List[DeviceBuffer[DType.float32]]()
+        var dbs = List[DeviceBuffer[DType.float32]]()
+        var dcs = List[DeviceBuffer[DType.float32]]()
+        var n_all = 0
+        var n_group = 0
+        for i in range(4):
+            var cs = _worklist_case(i)
+            var op = cs[0]
+            var m = cs[1]
+            var n = cs[2]
+            var k = cs[3]
+            var ha = _fill(_a_elems(op, m, n, k), 131 + i, i == 3)
+            var hb = _fill(_b_elems(op, m, n, k), 147 + i, False)
+            var label = String("worklist product ") + String(i)
+            singles.append(_run_device(ctx, ha, hb, op, m, n, k, -1, label))
+            das.append(_worklist_device(ctx, ha, len(ha), False))
+            dbs.append(_worklist_device(ctx, hb, len(hb), False))
+            dcs.append(_worklist_device(ctx, ha, m * n, True))
+            var mode = gemm_worklist_mode(m, n, k)
+            if mode == GEMM_WORKLIST_ALL:
+                n_all += 1
+            elif mode == GEMM_WORKLIST_GROUP:
+                n_group += 1
+            print(
+                "  product " + String(i) + "  op=" + op_name(op) + "  " + String(m) + "x" + String(n) + "x" + String(k)
+                + "  list mode=" + String(mode) + " (1 all leaves, 2 leaf groups, 0 own launch)"
+            )
+        if n_all < 2 or n_group < 2:
+            raise Error(
+                "check_device_worklist_is_launch_invariant: FIXTURE, not arithmetic: the four products reach the"
+                " all-leaves list " + String(n_all) + " times and the group list " + String(n_group)
+                + " times; each needs two. Pick shapes the shipped dispatch runs on the packed body in each mode"
+                " (_worklist_case)."
+            )
+        var wl = GemmWorklist()
+        wl.begin()
+        for i in range(4):
+            var cs2 = _worklist_case(i)
+            var taken = wl.add(
+                ctx,
+                dcs[i].unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+                das[i].unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+                dbs[i].unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+                cs2[1], cs2[2], cs2[3], cs2[0],
+            )
+            if not taken:
+                raise Error("check_device_worklist_is_launch_invariant: product " + String(i) + " was not queued")
+        var need = wl.node_floats()
+        if need < 1:
+            need = 1
+        var nodes = ctx.enqueue_create_buffer[DType.float32](need)
+        wl.launch(ctx, nodes.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]())
+        ctx.synchronize()
+        for i in range(4):
+            var cs3 = _worklist_case(i)
+            var mn = cs3[1] * cs3[2]
+            var hc = ctx.enqueue_create_host_buffer[DType.float32](mn)
+            download_host_into[DType.float32](ctx, dcs[i], hc)
+            var bad = 0
+            var first = -1
+            for c in range(mn):
+                if _bits(hc.unsafe_ptr().unsafe_load(c)) != _bits(singles[i][c]):
+                    bad += 1
+                    if first < 0:
+                        first = c
+            if bad == 0:
+                print("      OK   product " + String(i) + ": " + String(mn) + " cells equal to its single launch")
+            else:
+                fails += 1
+                print(
+                    "      FAIL product " + String(i) + ": " + String(bad) + " of " + String(mn)
+                    + " cells differ from its single launch. First at (" + String(first // cs3[2]) + ", "
+                    + String(first % cs3[2]) + "): list = " + _show(hc.unsafe_ptr().unsafe_load(first))
+                    + "   single = " + _show(singles[i][first])
+                )
+        # Named after the wait: the list owns the device table and its pinned
+        # copy, which the queued upload and launch read.
+        _ = wl.node_floats()
+        _ = nodes
+        _ = len(das) + len(dbs) + len(dcs)
+    if fails != 0:
+        raise Error(
+            "check_device_worklist_is_launch_invariant [" + _mode_name() + "]: " + String(fails)
+            + " of 4 products stored DIFFERENT BITS in a work-list launch than in their own launch (lines above)"
+        )
+    print("check_device_worklist_is_launch_invariant [" + _mode_name() + "] OK: 4 products, every cell equal")
+
+
 # ===========================================================================
 # GATE 3: BATCH INVARIANCE
 # ===========================================================================
@@ -1838,6 +1985,11 @@ def main() raises:
         _gate(String("check_device_is_launch_invariant"), ran, failed, String(""))
     except e:
         _gate(String("check_device_is_launch_invariant"), ran, failed, String(e))
+    try:
+        check_device_worklist_is_launch_invariant()
+        _gate(String("check_device_worklist_is_launch_invariant"), ran, failed, String(""))
+    except e:
+        _gate(String("check_device_worklist_is_launch_invariant"), ran, failed, String(e))
     try:
         check_device_is_batch_invariant()
         _gate(String("check_device_is_batch_invariant"), ran, failed, String(""))
