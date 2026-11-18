@@ -68,6 +68,11 @@ FORBIDDEN = [
         r"|vp2intersect\w*|k(mov|add|and|or|xor|not|shift|test|unpck)\w*"
         r"|vgatherpf\w*|vscatterpf\w*|vrangep[sd]|vreducep[sd]|vfpclassp[sd]"
         r"|vscalefp[sd]|vrcp14\w*|vrsqrt14\w*)\b")),
+    # IDENTITY, not ISA (lane fb13-identity-audit, 2026-11-17): RCPSS/RCPPS/RSQRTSS/RSQRTPS are 12-bit
+    # estimates whose bits Intel and AMD define differently (Intel SDM: "relative error <= 1.5*2^-12"), so the
+    # host column would depend on the CPU model. LLVM emits them only for reciprocal-estimate fast math; the
+    # 0.8.67-dev x86-64-v3 host set had none. Same pass, no extra disassembly.
+    ("approximate reciprocal estimate (CPU-model-dependent bits)", re.compile(r"\bv?r(?:cp|sqrt)(?:ss|ps)\b")),
 ]
 
 

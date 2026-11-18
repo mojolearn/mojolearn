@@ -30,3 +30,12 @@ def test_a_real_opmask_instruction_is_still_refused(monkeypatch):
     assert ninsn == 2
     assert "AVX-512 opcode" in findings and findings["AVX-512 opcode"]["count"] == 2
     assert "zmm register" in findings and "opmask register k0-k7" in findings
+
+
+def test_an_approximate_reciprocal_estimate_is_refused_and_exact_ops_are_not(monkeypatch):
+    listing = ("0000000000aa5b00 <f>:\n  aa5b00:\tvrcpss %xmm1,%xmm1,%xmm0\n  aa5b04:\trsqrtps %xmm0,%xmm1\n"
+               "  aa5b08:\tvsqrtss %xmm0,%xmm0,%xmm0\n  aa5b0c:\tvdivss %xmm1,%xmm0,%xmm0\n")
+    findings, ninsn, _ = _scan_with(monkeypatch, listing)
+    assert ninsn == 4
+    assert list(findings) == ["approximate reciprocal estimate (CPU-model-dependent bits)"]
+    assert findings["approximate reciprocal estimate (CPU-model-dependent bits)"]["count"] == 2
