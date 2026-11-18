@@ -253,13 +253,24 @@ MAN_VERSION=$([ -f "$MAN" ] && $PY -c 'import json, sys; print(json.load(open(sy
 if part install && { [ ! -x "$APY" ] || { [ -n "$MAN_VERSION" ] && [ "$(installed_version)" != "$MAN_VERSION" ]; }; }; then
     phase install
     [ -f "$MAN" ] || { say "no venv at $VENV and no wheel manifest (CP_MANIFEST)"; exit 4; }
-    $PY tools/bench_board.py "${COMMON[@]}" --ours-install-only --install-only --venv "$VENV" --cache "$CACHE_ROOT/i-candidate" \
-        --wheel-manifest "$MAN" --race-ids @"$RES/plan/race-ids-full.txt" --out "$RES/install-candidate" \
+    # The same install the measurement job makes (paper_compare_job.sh add_arm candidate): the manifest's version and
+    # source commit plus the staged wheel files. --wheel-manifest is the file the install WRITES, so it goes to this
+    # job's own dir. (Before 2026-11-18 this call passed neither version nor wheels and could never install.)
+    WDIR=${CP_WHEEL_DIR:-/root/pc-in/$(echo "$MAN_VERSION" | sed 's/.*+//')/nvidia}
+    SRC=$($PY -c 'import json, sys; print(json.load(open(sys.argv[1])).get("source_commit", ""))' "$MAN" 2> /dev/null)
+    CW=(); for w in "$WDIR"/*.whl; do [ -f "$w" ] && CW+=(--candidate-wheel "$w"); done
+    [ ${#CW[@]} -gt 0 ] && [ -n "$SRC" ] || { say "install: no wheels in $WDIR (CP_WHEEL_DIR) or no source_commit in $MAN"; exit 4; }
+    $PY tools/bench_board.py "${COMMON[@]}" --mojolearn-version "$MAN_VERSION" --candidate-source-commit "$SRC" "${CW[@]}" \
+        --ours-install-only --install-only --venv "$VENV" --cache "$CACHE_ROOT/i-candidate" \
+        --wheel-manifest "$J/wheel-manifest-candidate.json" --race-ids @"$RES/plan/race-ids-full.txt" --out "$RES/install-candidate" \
         > "$RES/logs/install-candidate.log" 2>&1
-    phase_end $?
+    irc=$?; phase_end $irc
+    [ $irc = 0 ] || { say "install failed: $(tail -n 1 "$RES/logs/install-candidate.log" | cut -c1-200)"; exit 4; }
+    MAN="$J/wheel-manifest-candidate.json"
 fi
 [ -x "$APY" ] || { say "no venv for the candidate at $VENV"; exit 4; }
 WHEEL=$(installed_version)
+[ -z "$MAN_VERSION" ] || [ "$WHEEL" = "$MAN_VERSION" ] || { say "venv holds $WHEEL, the manifest names $MAN_VERSION: nothing would be timed"; exit 4; }
 say "candidate $WHEEL venv $VENV manifest ${MAN:-none}"
 # which shared objects of the installed wheel carry a symbol table (perf names their functions) and an unwind table
 SITE=$("$APY" -c 'import sysconfig; print(sysconfig.get_paths()["purelib"])' 2> /dev/null)
