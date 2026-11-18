@@ -282,6 +282,40 @@ def reused_from_base(plan):
                        for s, us in (plan.get("units") or {}).items()})
 
 
+#: a compiler diagnostic (Mojo: <path>.mojo:<line>:<col>: error: ...), then any other failure line of a binding log
+_COMPILER_ERROR = re.compile(r"(\S+\.(?:mojo|py|sh|c|cc|cpp|h)):(\d+)(?::\d+)?: error: .*")
+_OTHER_ERROR = re.compile(r"(?:\berror:|Error: |constraint failed|REFUSED|SystemExit: ).*")
+_LEG_LOG = re.compile(r"log (\S+/legs/[^/\s]+\.log)")
+
+
+def first_build_error(arm_log):
+    """The first error of a failed arm build, for its ARM line (lane fb9-arm-builds, 2026-11-17: the nv-fma-asm
+    arm's ARM line said only its plan): the first compiler diagnostic (file:line: error) in the binding logs of the
+    legs the arm log names (the local leg tree and its GitHub shards), else their first other failure line, else the
+    arm's own FAILED/STOPPED line. Paths inside the box's checkout are shown relative to it."""
+    text = Path(arm_log).read_text(errors="replace").splitlines()
+    logs = []
+    for line in text:
+        for m in _LEG_LOG.finditer(line):
+            leg = Path(m.group(1)).with_suffix("")
+            if leg.is_dir():
+                failed = [f for f in sorted(leg.rglob("build_logs/*.log"))
+                          if "FAILED" in (f.read_text(errors="replace").strip().splitlines() or [""])[-1]]
+                logs += [f for f in failed if f not in logs]
+    other = None
+    for f in logs:
+        for line in f.read_text(errors="replace").splitlines():
+            m = _COMPILER_ERROR.search(line)
+            if m:
+                return re.sub(r"^/root/[^/]+/", "", m.group(0))[:240]
+            if other is None and _OTHER_ERROR.search(line):
+                other = f"{f.stem}: {_OTHER_ERROR.search(line).group(0)}"
+    if other:
+        return re.sub(r"/root/[^/ ]+/", "", other)[:240]
+    stop = next((x.strip() for x in reversed(text) if re.search(r"\b(FAILED|STOPPED) at ", x)), None)
+    return (stop or "no error line in " + str(arm_log))[:240]
+
+
 def run_arms(a, argv):
     """SEVERAL ARMS AT ONCE (--owed-arm a --owed-arm b ...): one measurement build per distinct define set, every
     one started at once as its own `release.py candidate` process (its own work dir, state and log), so their
@@ -334,7 +368,8 @@ def run_arms(a, argv):
     failed = 0
     with cf.ThreadPoolExecutor(max_workers=workers) as ex:
         for arm, rc, line, log in ex.map(one, arms):
-            print(f"{line}  [rc={rc}, {log}]")
+            err = f", first error: {first_build_error(log)}" if rc != 0 else ""
+            print(f"{line}  [rc={rc}{err}, {log}]")
             failed += rc != 0
     return 1 if failed else 0
 
