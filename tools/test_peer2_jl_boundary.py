@@ -17,8 +17,10 @@ def test_public_jl_only_forwards_original_inputs():
 
 def test_native_jl_has_no_python_numeric_helper_or_caller_protocol_dispatch():
     owner = (ROOT / "bindings/jl_native_pack.mojo").read_text()
-    assert 'jl_scalar(eps, True, context)' in owner
-    assert 'jl_scalar(n_samples, False, context)' in owner
+    # 2f67f62a2e: both scalars go through the admitted word decoder (eps as a float, n_samples as a count),
+    # with the class word read once from the import-resolved table instead of a Python call per scalar.
+    assert 'var e = jl_scalar_word(eps._obj_ptr, jl_type_word(eps._obj_ptr), True,' in owner
+    assert 'var n = jl_scalar_word(n_samples._obj_ptr, jl_type_word(n_samples._obj_ptr), False,' in owner
     assert 'PyLong_FromDouble' in owner
     for callback in ['import_module("operator")', 'b.float', 'b.int', 'py_call_typed', '__float__', '__int__']:
         assert callback not in owner
@@ -33,7 +35,10 @@ def test_scalar_metadata_requires_exact_native_admission_before_buffer_decode():
     assert provider.index('if not scalar and not array:') < provider.index('native_scalar_buffer(value)')
     assert 'decoded.complex' in provider
     assert 'real.highest() + real.scale >= 0' in provider
-    assert 'Float64(py=value)' in provider
+    # 2f67f62a2e: a built-in float is read through the CPython C API, never a Python conversion protocol.
+    assert 'table[].PyFloat_AsDouble(value)' in provider
+    assert 'Float64(py=' not in provider
+    assert 'return bitcast[DType.float64](real.float64_bits())' in provider
     assert 'value.__' not in provider
 
 
