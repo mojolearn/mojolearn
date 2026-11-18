@@ -1371,7 +1371,7 @@ def parallel_causal_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> P
         var result = parallel_causal_call(mods, operation, args[1])
         return result.steal_data()
     except error:
-        if operation == "close_quiet" or operation == "state_close_quiet":
+        if operation == "close_quiet":
             var nil = PythonObject(None)
             return nil.steal_data()
         var message = String(error)
