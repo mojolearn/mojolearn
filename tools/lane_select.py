@@ -1778,6 +1778,28 @@ def _public_rebindings(files):
             one = ast.ImportFrom(module=node.module, names=[alias], level=node.level)
             for rel in _resolve_python_import(init, one, listing) - {init}:
                 out.setdefault(alias.name, set()).add(rel)
+    # THE LAZY TABLE IS A BINDING TOO (b6aa87e41d, 2026-11-12). Since every family is imported on first touch,
+    # `__init__.py` binds most public names through `_LAZY_NAMES = {"UMAP": ".umap", "umap": None, ...}` and
+    # its `__getattr__`, not through `from .umap import UMAP`. A name mapped to ".X" is `from .X import name`;
+    # a name mapped to None is the submodule itself, `from . import name`. Without this, umap.py,
+    # neural_inference.py and every other lazy door were in no lane's map.
+    for node in (tree.body if tree is not None else ()):
+        if not (isinstance(node, ast.Assign) and isinstance(node.value, ast.Dict)
+                and any(isinstance(t, ast.Name) and t.id == "_LAZY_NAMES" for t in node.targets)):
+            continue
+        for key, value in zip(node.value.keys, node.value.values):
+            if not (isinstance(key, ast.Constant) and isinstance(key.value, str)
+                    and isinstance(value, ast.Constant) and (value.value is None or isinstance(value.value, str))):
+                continue
+            where = value.value
+            if where is None:
+                one = ast.ImportFrom(module=None, names=[ast.alias(name=key.value)], level=1)
+            else:
+                level = len(where) - len(where.lstrip("."))
+                one = ast.ImportFrom(module=where.lstrip(".") or None, names=[ast.alias(name=key.value)],
+                                     level=level or 1)
+            for rel in _resolve_python_import(init, one, listing) - {init}:
+                out.setdefault(key.value, set()).add(rel)
     return out
 
 
