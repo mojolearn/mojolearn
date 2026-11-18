@@ -19,6 +19,9 @@ next case runs. Drivers (the row's "driver" field):
                 cost rule's neighbouring and wide non-board shapes)
   mamba_backward  Mamba1Block.backward and Mamba2Block.backward (the zero-state block VJP, one public call) on
                 synthetic weights at the row's (batch, length, d_model); an arm may be a B wheel set the row names
+  samba_step    SambaStack.train_step, then the first SambaStack.forward after a step (the weights it left), on a
+                stack the library initializes itself, at each (batch, length, d_model, layers) case the row
+                names: the neighbouring and non-board shapes of the Samba step arms; an arm may be a B wheel set
   cnn_widths    CNNClassifier.fit on synthetic images at each conv_channels tuple the row names; an arm may be a
                 B wheel set the row names
   f16_widen     models.safetensors.widen_f16 of synthetic float16 bits at each element count the row names; an
@@ -224,8 +227,47 @@ def case_f16_widen(row, arm_cases):
     return out
 
 
+def case_samba_step(row, arm_cases):
+    """SambaStack.train_step and the forward that follows it, per case of the row's shape.cases. The stack draws
+    its own weights (Generator(7)); ids are uniform bytes from default_rng(0). The shapes are sizes next to and
+    away from the board's, never a dataset."""
+    import numpy as np
+    ml = _ml()
+    from mojolearn.training import Generator
+    out = []
+    for c in row["shape"]["cases"]:  # serial by nature: timed calls on one GPU
+        b, l, dm = int(c["batch"]), int(c["length"]), int(c["d_model"])
+        layers = tuple(c["layers"])
+        tag = "b=%d l=%d d_model=%d layers=%s" % (b, l, dm, "/".join(x[0] for x in layers))
+        try:
+            vocab = int(c.get("vocab", 256))
+            cfg = ml.SambaConfig(vocab=vocab, d_model=dm, layers=layers, n_heads=c.get("n_heads"),
+                                 intermediate=c.get("intermediate"))
+            stack = ml.SambaStack(cfg, generator=Generator(7), numeric_mode="identical")
+            ids = np.random.default_rng(0).integers(0, vocab, (b, l + 1)).astype(np.int32)
+            x, y = np.ascontiguousarray(ids[:, :-1]), np.ascontiguousarray(ids[:, 1:])
+        except Exception as exc:  # noqa: BLE001 -- a refusal is a result
+            out.append(("SambaStack " + tag, None, "REFUSED: %s: %s" % (type(exc).__name__, str(exc)[:400])))
+            continue
+        ms, why = timed(lambda: stack.train_step(x, y))
+        out.append(("SambaStack.train_step " + tag, ms, why))
+        # the FIRST forward after a step is the case (whether the step left the device registry current): one
+        # warm-up forward, one more untimed step, then the one timed forward
+        try:
+            stack.forward(x)
+            stack.train_step(x, y)
+            t0 = time.perf_counter()
+            stack.forward(x)
+            ms, why = (time.perf_counter() - t0) * 1000.0, None
+        except Exception as exc:  # noqa: BLE001 -- a refusal is a result
+            ms, why = None, "REFUSED: %s: %s" % (type(exc).__name__, str(exc)[:400])
+        out.append(("SambaStack.forward first after a step " + tag, ms, why))
+    return out
+
+
 DRIVERS = {"f16_widen": case_f16_widen, "while_loop": case_while_loop, "pandas_input": case_pandas_input, "mlp_fit": case_mlp_fit,
-           "kde_widths": case_kde_widths, "mamba_backward": case_mamba_backward, "cnn_widths": case_cnn_widths}
+           "kde_widths": case_kde_widths, "mamba_backward": case_mamba_backward, "cnn_widths": case_cnn_widths,
+           "samba_step": case_samba_step}
 
 
 def arm_cases(row, arm):
