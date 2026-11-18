@@ -115,7 +115,10 @@ def test_binding_connection_returns_the_exact_compiled_module_and_refuses_python
     backend_calls = []
     current = {"module": math}
     backend = SimpleNamespace(binding=lambda *args: backend_calls.append(args) or current["module"],
-                              _HostBinding=type("HostBinding", (ModuleType,), {}))
+                              _HostBinding=type("HostBinding", (ModuleType,), {}),
+                              # Not a CPU-only install: the exact module is the binding itself
+                              # (74fa7cb704 resolves the facade through _backend.exact_host_module).
+                              exact_host_module=lambda module: module)
     ns = {"_backend": backend}
     exec(compile(ast.Module(body=[node], type_ignores=[]), "connection", "exec"), ns)
     connected = ns["_connect_binding"]("math", ("sqrt",), ("optional",))

@@ -53,8 +53,10 @@ def test_owned_snapshot_execution_and_publication_remain_atomic():
     install = source.split('def mamba3_install_owned(')[1].split('def mamba3_release_owned')[0]
     assert install.index('mamba3_prefill_session_run(session, NEURAL_MAMBA3_OWNED_INSTALL') < install.index('py_setitem(fields, "_owned_generation"')
     assert 'return PythonObject(generation)' in install
-    for owner in ('_m3_install_weights_run', '_m3_export_weights_run', '_mamba3_run_owned'):
+    # 59b53529ef folded NN40_OWNED_WEIGHTS (False on every build): op 15 (install) refuses without touching the session.
+    for owner in ('_m3_export_weights_run', '_mamba3_run_owned'):
         assert owner in NATIVE
+    assert '_m3_install_weights_run' not in NATIVE
     dispatch = NATIVE.split('if op == 15:')[1].split('if op == 17:')[0]
     assert 'owner[].usable = False' not in dispatch
     assert '_owned_native_provider' not in source

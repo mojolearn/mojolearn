@@ -14,9 +14,11 @@ def test_program_reuses_shared_registry_before_metadata_or_conversion():
     entry = source.split('def program_input(', 1)[1].split('\ndef ', 1)[0]
     assert entry.index('program_native_input(value)') < entry.index('array_input(a,')
     assert 'hasattr' not in entry
-    scalar = source.split('def _sequence_values(', 1)[1].split('\ndef ', 1)[0]
+    # Leaves are read in _leaf_f64 (lane p2-labels-lists-arrays): exact int/float/bool by their C
+    # slot; any other scalar is admitted by program_numeric_scalar before its conversion.
+    scalar = source.split('def _leaf_f64(', 1)[1].split('\ndef ', 1)[0]
     assert scalar.index('program_numeric_scalar(a)') < scalar.index('Float64(py=a)')
-    assert 'hasattr' not in scalar
+    assert 'hasattr' not in scalar and 'hasattr' not in source.split('def _sequence_values(', 1)[1].split('\ndef ', 1)[0]
 
 
 def test_embedding_reuses_admitted_descriptor_instead_of_dtype_hook():

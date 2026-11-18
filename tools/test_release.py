@@ -415,6 +415,16 @@ class ReceiptTests(unittest.TestCase):
 
 
 class RunTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        # One evidence root for the class: the dry runs' reuse plan caches the commit's tree facts under it
+        # (release_reuse.facts_for_commit), so the source closure scan of the commit runs once, not per dry run.
+        cls._evidence = tempfile.TemporaryDirectory()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls._evidence.cleanup()
+
     def setUp(self):
         self._t = tempfile.TemporaryDirectory()
         self.state = pathlib.Path(self._t.name) / "state"
@@ -455,7 +465,7 @@ class RunTests(unittest.TestCase):
     def dry_run(self, *extra):
         # The identity cache lives under the evidence root; the dry run must
         # write nothing under the state directory.
-        env = dict(os.environ, MOJOLEARN_EVIDENCE_ROOT=str(pathlib.Path(self._t.name) / "evidence"),
+        env = dict(os.environ, MOJOLEARN_EVIDENCE_ROOT=str(pathlib.Path(self._evidence.name) / "evidence"),
                    MOJOLEARN_AMD_PROVIDER="do")   # no DigitalOcean probe from a test
         out = subprocess.run([sys.executable, str(ROOT / "tools/release.py"), "0.8.14", "--dry-run",
                               "--state-dir", str(self.state), *extra],
@@ -478,7 +488,7 @@ class RunTests(unittest.TestCase):
         return out
 
     def dry_run_raw(self, *extra):
-        env = dict(os.environ, MOJOLEARN_EVIDENCE_ROOT=str(pathlib.Path(self._t.name) / "evidence"),
+        env = dict(os.environ, MOJOLEARN_EVIDENCE_ROOT=str(pathlib.Path(self._evidence.name) / "evidence"),
                    MOJOLEARN_AMD_PROVIDER="do")
         out = subprocess.run([sys.executable, str(ROOT / "tools/release.py"), "0.8.14", "--dry-run",
                               "--state-dir", str(self.state), *extra],

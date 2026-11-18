@@ -100,7 +100,6 @@ class SelectedImageAnalysisCache(unittest.TestCase):
                 ("cpu_target", "linux-64"),
                 ("compiler_sha256", {"osx-arm64": "c" * 64}),
                 ("apple_toolchain", {"sdk": "another original SDK"}),
-                ("optional_native_files", {"osx-arm64": {"optional.so": False}}),
                 ("environment", {"MOJOLEARN_CUSTOM_SWITCH": "1"}),
             ):
                 with self.subTest(field=field):
@@ -110,6 +109,13 @@ class SelectedImageAnalysisCache(unittest.TestCase):
                     self.expand(config)
                     self.assertEqual(len(self.requests), count + 1)
                     self.assertEqual(self.requests[-1]["configuration"]["dependency_context"][field], value)
+            # optional_native_files is applied after the snapshot and changes while a release runs: it leaves the
+            # snapshot request, so a change reuses the scan (eb0ff1dc60)
+            config = copy.deepcopy(self.config)
+            config["dependency_context"]["optional_native_files"] = {"osx-arm64": {"optional.so": False}}
+            count = len(self.requests)
+            self.expand(config)
+            self.assertEqual(len(self.requests), count)
             (self.root / "kernel.mojo").write_text("changed source\n")
             self.git("add", ".")
             self.git("commit", "-m", "source change")

@@ -10,6 +10,9 @@
 # machine has, nproc / hw.ncpu). A file with test functions or TestCase classes (tools/python_test_inventory.py) runs
 # under pytest (the repo's pixi `test` environment declares it); a module-style check (a test_*.py with no test
 # function) runs as a script. tools/test_duration_report.py is a report tool, not a test, and is left out.
+# A file in SPLIT (below) is split by test id into one shard per worker, the shards first in the queue, so the
+# longest files no longer set the wall time alone. The log and rc row of a shard are named <path>#<k>. The ten
+# slowest units are printed after the counts.
 # Prints pass / fail / error counts and every failing test name, writes one log per file under OUT, and exits 1 when
 # anything failed (2 when no Python with pytest is found). Wired into nothing: run it by hand.
 #
@@ -41,7 +44,7 @@ mkdir -p "$OUT/logs" || exit 2
 
 if [ $# -gt 0 ]; then FILES=("$@"); else FILES=(tools/test_*.py tools/tests/test_*.py); fi
 # kind<TAB>path per file: pytest (test functions / TestCase classes) or script (a module-style check)
-"$PY" - "${FILES[@]}" > "$OUT/files.tsv" << 'EOF'
+WORKERS=$WORKERS OUT=$OUT "$PY" - "${FILES[@]}" > "$OUT/files.tsv" << 'EOF'
 import os, sys
 sys.path.insert(0, "tools")
 from python_test_inventory import inventory
@@ -52,22 +55,49 @@ for d in sorted({os.path.dirname(p) or "." for p in want}):
     for k, key in (("pytest", "pytest"), ("script", "gates")):
         for p in s[key]:
             kinds[os.path.normpath(str(p))] = k
+# Files split by test id across the workers. Each re-derives the whole lane map (about 5 min of pure-Python Mojo
+# parsing) in every test that edits the tree or patches an edge, by design, so as one process they ran 51 and 29
+# minutes and set the wall time of the whole run (2026-11-17 run: 3264 s at 4 workers, lane_select 3073 s of it).
+SPLIT = {"tools/test_lane_select.py", "tools/test_lane_select_rebuild.py"}
+workers = int(os.environ["WORKERS"])
+os.makedirs(os.path.join(os.environ["OUT"], "shards"), exist_ok=True)
+rows = []
 for p in want:
-    print("%s\t%s" % (kinds.get(p, "pytest"), p))
+    kind = kinds.get(p, "pytest")
+    if p in SPLIT and kind == "pytest" and workers > 1:
+        import subprocess
+        got = subprocess.run([sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider", "--collect-only", p],
+                             capture_output=True, text=True)
+        ids = [l for l in got.stdout.splitlines() if l.startswith(p + "::")]
+        if got.returncode == 0 and ids:
+            for k in range(min(workers, len(ids))):
+                name = "%s#%d" % (p, k)
+                with open(os.path.join(os.environ["OUT"], "shards", name.replace("/", ".") + ".ids"), "w") as fh:
+                    fh.write("\n".join(ids[k::workers]) + "\n")
+                rows.insert(0, ("shard", name))
+            continue
+    rows.append((kind, p))
+for kind, p in rows:
+    print("%s\t%s" % (kind, p))
 EOF
 NFILES=$(wc -l < "$OUT/files.tsv" | tr -d ' ')
-echo "run_tool_tests: $NFILES files, $WORKERS workers of $CORES cores, $PY, logs $OUT"
+echo "run_tool_tests: $NFILES units, $WORKERS workers of $CORES cores, $PY, logs $OUT"
 
 export PY OUT
-one() {   # kind path: one file, its log, and one "rc kind path" line in rc.txt
-    local kind=$1 path=$2 log rc
+one() {   # kind path: one file, its log, and one "rc kind path seconds" line in rc.txt
+    local kind=$1 path=$2 log rc t0
     log="$OUT/logs/$(echo "$path" | tr '/' '.').log"
+    t0=$(date +%s)
     if [ "$kind" = pytest ]; then
         "$PY" -m pytest -q -p no:cacheprovider -p no:xdist -rfE "$path" > "$log" 2>&1 < /dev/null; rc=$?
+    elif [ "$kind" = shard ]; then   # this shard's test ids, one per line (ids may hold spaces)
+        "$PY" -c 'import sys, pytest; sys.exit(pytest.main(["-q", "-p", "no:cacheprovider", "-p", "no:xdist", "-rfE",
+            *open(sys.argv[1]).read().splitlines()]))' "$OUT/shards/$(echo "$path" | tr '/' '.').ids" \
+            > "$log" 2>&1 < /dev/null; rc=$?
     else
         "$PY" "$path" > "$log" 2>&1 < /dev/null; rc=$?
     fi
-    printf '%s\t%s\t%s\n' "$rc" "$kind" "$path" >> "$OUT/rc.txt"
+    printf '%s\t%s\t%s\t%s\n' "$rc" "$kind" "$path" "$(( $(date +%s) - t0 ))" >> "$OUT/rc.txt"
 }
 export -f one
 : > "$OUT/rc.txt"
@@ -79,12 +109,13 @@ secs=$(( $(date +%s) - start ))
 import os, re, sys
 out, secs = sys.argv[1], sys.argv[2]
 counts = {"passed": 0, "failed": 0, "errors": 0, "skipped": 0}
-bad_files, names = [], []
+bad_files, names, times = [], [], []
 for line in open(os.path.join(out, "rc.txt")):
-    rc, kind, path = line.rstrip("\n").split("\t")
+    rc, kind, path, took = line.rstrip("\n").split("\t")
+    times.append((float(took), path))
     log = os.path.join(out, "logs", path.replace("/", ".") + ".log")
     text = open(log, errors="replace").read() if os.path.exists(log) else ""
-    if kind == "pytest":
+    if kind in ("pytest", "shard"):
         tail = (text.strip().splitlines() or [""])[-1]
         for n, w in re.findall(r"(\d+) (passed|failed|errors?|skipped)", tail):
             counts["errors" if w.startswith("error") else w] += int(n)
@@ -103,6 +134,9 @@ print("TOOL-TESTS passed=%(passed)d failed=%(failed)d errors=%(errors)d skipped=
       + " files_failing=%d seconds=%s logs=%s" % (len(bad_files), secs, out))
 for n in sorted(set(names)):
     print("  FAILED " + n)
+print("slowest units (seconds):")
+for took, path in sorted(times, reverse=True)[:10]:
+    print("  %6.0f  %s" % (took, path))
 with open(os.path.join(out, "SUMMARY.txt"), "w") as fh:
     fh.write("passed=%(passed)d failed=%(failed)d errors=%(errors)d skipped=%(skipped)d\n" % counts)
     fh.writelines("FAILED %s\n" % n for n in sorted(set(names)))

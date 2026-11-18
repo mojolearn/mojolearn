@@ -130,12 +130,12 @@ def binding_closure(name):
     return _CLOSURES[name]
 
 
-def lane_bindings(doors, hs):
+def lane_bindings(doors, hs, loads=()):
     """The bindings a lane's Python doors load (`lane_select.resolved_bindings`:
     by syntax, plus the `host_model` dispatch for the classes they define),
     and the host bindings a CPU-only install routes each of them to
     (`lane_select.host_routes`, `ADAPTED_MODULES`)."""
-    named = lane_select.resolved_bindings(doors)
+    named = set(lane_select.resolved_bindings(doors)) | set(loads)
     routed = lane_select.host_routes(hs)
     adapted = {k: v["family"] for k, v in hs.ADAPTED_MODULES.items()}
     out = set()
@@ -165,9 +165,20 @@ def derive():
         seeds = set()
         for name in names:
             seeds |= set(symbols.get(name, ()))
-        py = lane_select._python_closure(seeds, sinks)
+        # A sink that is the lane's own seed is followed (`lane_select._followed_seeds`, 2026-11-05:
+        # `_hierarchy_impl.py` defines AgglomerativeClustering and is also a registry), as the selector does;
+        # without it the bound stopped at the lane's own door and the selector's map exceeded it.
+        py = lane_select._python_closure(seeds, set(sinks) - lane_select._followed_seeds(seeds))
         doors = py - sinks
-        bindings = lane_bindings(doors, hs)
+        # A registry's literal loads (`lane_select.sink_region_loads`, 2026-11-05: `connect_bindings` in
+        # `_native_family_bridge.py` loads each binding it is handed) are bindings the lane loads, in the
+        # region the lane enters (`entered`). Read over the WHOLE registry instead, every lane loaded every
+        # family binding and 2241 of 3869 files reached every lane: a bound that says nothing.
+        entered = {}
+        lane_select._python_closure(seeds, sinks, regions=True, entered=entered,
+                                    follow=lane_select._followed_seeds(seeds))
+        loads = set().union(*[set(lane_select.sink_region_loads(rel, names)[0]) for rel, names in entered.items()])
+        bindings = lane_bindings(doors, hs, loads)
         files = set(py)
         wide = []
         for b in sorted(bindings):

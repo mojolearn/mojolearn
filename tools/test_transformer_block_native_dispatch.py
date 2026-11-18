@@ -1,5 +1,6 @@
 """Source contracts, not compiled ABI/runtime qualification."""
 from pathlib import Path
+import re
 from check_generation_native_boundary import audit
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -23,9 +24,10 @@ def test_exact_fresh_and_backward_numerical_owners_are_preserved():
     # Fresh and backward session failures clear the owner (other ops clear too:
     # close and the int15 path, so pin the two sites rather than a total count).
     fresh = NATIVE.split('_transformer_run_session[True](owner[], expanded,', 1)[1].split('_transformer_run[True](expanded,', 1)[0]
-    assert 'except problem:\n                owner[].clear()\n                raise problem' in fresh
+    clears = re.compile(r'except problem:\n\s+owner\[\]\.clear\(\)\n\s+raise problem')
+    assert clears.search(fresh)
     backward = NATIVE.split('_transformer_run_session_backward(owner[], a,', 1)[1].split('_transformer_backward_run(a,', 1)[0]
-    assert 'except problem:\n                owner[].clear()\n                raise problem' in backward
+    assert clears.search(backward)
     assert 'p[6], p[1], 0, p[7], opts)' in NATIVE
     assert 'owner[].busy or owner[].closed' in NATIVE
     assert 'if not owner[].busy or owner[].closed:' in NATIVE
@@ -35,23 +37,28 @@ def test_common_descriptor_table_not_new_provider_or_extension_unwrap():
     assert 'List[NativeDescriptorCall]' in NATIVE
     assert 'native_descriptor_report(problem, context, sink)' in NATIVE
     body = PROVIDER.split('def neural_descriptor_reserved_execute(')[1].split('def neural_descriptor_info(')[0]
-    assert 'NeuralDescriptorProvider' in body
-    assert body.index('native_descriptor_call_spans(owner[].entry, reserve,') < body.index('with GILReleased(Python())')
-    assert body.count('native_descriptor_call_spans(owner[].entry, release,') == 2
+    # The provider is resolved to its typed id once; reserve runs under the GIL, the operation
+    # without it, and release on both the success and the failure path.
+    assert 'var provider_id = neural_descriptor_provider_id(provider)' in body
+    assert body.index('neural_descriptor_reserved_begin(provider_id, handle, reserve, release,') < body.index('with GILReleased(Python())')
+    assert body.count('neural_descriptor_reserved_end(provider_id, loan, release)') == 2
     assert '_ = session_owner' in body and '_ = provider' in body
     for forbidden in ('getattr(', '__call__', 'PyObject_Call', 'unsafe_get_as_pointer'):
         assert forbidden not in body
 
 
 def test_public_fresh_session_ephemeral_and_backward_are_hooked():
-    assert 'native, session_owner, handle, 0, 1, 2, addresses, params, []' in PUBLIC
-    assert 'native, 4, addresses, params, []' in PUBLIC
-    assert 'native, session_owner, handle, 0, 1, 3,' in PUBLIC
-    assert 'native, 5, _neural_int_words(addresses)' in PUBLIC
-    # All old supported entries remain under the off/default branches.
-    assert 'e["transformer_session_forward_fresh"]' in PUBLIC
-    assert 'e["transformer_forward_fresh"]' in PUBLIC
-    assert '_native_function(mods, entries, "transformer_session_backward")' in PUBLIC
+    # Fresh (session op 2 / ephemeral op 4) and backward (session op 3 / ephemeral op 5) run
+    # through the image's neural table entry by named operation (core/neural_entry_table.mojo).
+    flat = re.sub(r'\s+', ' ', PUBLIC)
+    assert '_neural_table_reserved(forward, handle, NEURAL_BLOCK_RESERVE, NEURAL_BLOCK_RELEASE, NEURAL_BLOCK_SESSION_FORWARD_FRESH, addresses, params,' in flat
+    assert '_neural_table_call(forward, NEURAL_BLOCK_FORWARD_FRESH, addresses, params,' in flat
+    assert '_neural_table_reserved(train_entry, handle, NEURAL_BLOCK_RESERVE, NEURAL_BLOCK_RELEASE, NEURAL_BLOCK_SESSION_BACKWARD, addresses, params,' in flat
+    assert '_neural_table_call(train_entry, NEURAL_BLOCK_BACKWARD, addresses, params,' in flat
+    # The route choice still keys on the image exporting each supported entry.
+    assert 'py_contains(e, "transformer_session_forward_fresh")' in PUBLIC
+    assert 'py_contains(e, "transformer_forward_fresh")' in PUBLIC
+    assert '_native_has_entry(mods, entries, "transformer_session_backward")' in PUBLIC
 
 
 def test_connection_carries_named_factory_and_checked_session_admission():
@@ -73,4 +80,5 @@ def test_connection_carries_named_factory_and_checked_session_admission():
                  'bindings/causal_lm_public_door.mojo', 'bindings/causal_lm_construct_door.mojo',
                  'providers/python/transformer_decode_pyapi_door.mojo',
                  'providers/python/neural_descriptor_pyapi_door.mojo'):
-        assert 'getenv("MOJOLEARN_NEURAL_NATIVE_DISPATCH' not in (ROOT / door).read_text(), door
+        code = '\n'.join(line.split('#', 1)[0] for line in (ROOT / door).read_text().splitlines())
+        assert 'getenv("MOJOLEARN_NEURAL_NATIVE_DISPATCH' not in code, door  # comments may name the retired read

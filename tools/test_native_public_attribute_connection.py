@@ -62,7 +62,8 @@ class PublicAttributeConnection(unittest.TestCase):
         def descriptor(self, name):
             raise AssertionError('installed getter ran during connection')
         context = dict(plans={}, pending={}, missing=object(), descriptor=descriptor,
-                       property_schemas={vars(cholesky.Cholesky)['logdet_']: 'cholesky_logdet'}, stl_connected=False)
+                       property_schemas={vars(cholesky.Cholesky)['logdet_']: 'cholesky_logdet'}, svm_owner=None,
+                       stl_connected=False)
         namespace['_CONTEXT'] = context
         modules = {m.__name__: m for m in (package, mode, bridge, tokenizer, cholesky, svm, mode_properties, array)}
         return package, mode, namespace, context, modules, original
@@ -204,14 +205,16 @@ class PublicAttributeConnection(unittest.TestCase):
         end = source.find('\ndef ', start + 1)
         end = len(source) if end < 0 else end
         generic = source[start:end]
-        self.assertEqual(generic.count('"PyObject_GenericGetAttr"'), 1)
+        # CPython entries are called through the typed cpython_table() (fed1b4e384 and
+        # later), so the call form `.Name(` is what is counted, not a quoted symbol name.
+        self.assertEqual(generic.count('.PyObject_GenericGetAttr('), 1)
         source = source[:start] + source[end:]
         for forbidden in ('Python.import_module', 'PyObject_GenericGetAttr', '._getframe(', '.f_code', '.fget(', '.__array__('):
             self.assertNotIn(forbidden, source)
-            self.assertNotIn(forbidden, generic.replace('"PyObject_GenericGetAttr"', ''))
-        for required in ('"PyEval_GetFrame"', '"PyFrame_GetCode"', '"PyFrame_GetBack"', '_classical_descriptor_get', '_array_view'):
+            self.assertNotIn(forbidden, generic.replace('.PyObject_GenericGetAttr(', ''))
+        for required in ('.PyEval_GetFrame(', '.PyFrame_GetCode(', '.PyFrame_GetBack(', '_classical_descriptor_get', '_array_view'):
             self.assertIn(required, source)
-        self.assertIn('"PyMethod_New"', source)
+        self.assertIn('.PyMethod_New(', source)
         self.assertNotIn('member.__get__', source)
 
 

@@ -440,54 +440,62 @@ def _by_path(fn):
     return wrapped
 
 
+#: Every module-level memo `reset_caches` sets back to None (the dict and set memos are in `_CACHES`).
+_RESET_TO_NONE = ("_TRACKED", "_PYTHON_FILES", "_ENUMERATORS", "_LANE_SOURCES", "_LANE_SEED_CALLS", "_LANE_PRECISION_PATHS", "_LANE_CPU_ROUTE_ONLY", "_LANE_DEVICE_CALLS", "_DISPATCH_VOCAB", "_MOJO_CALLERS", "_BINDING_HELD", "_SOURCE_HASHED", "_CONSTANTS", "_EXTENDERS", "_MOJO_CONFORMANCE", "_MOJO_IMPORTERS", "_PKG_IMPORT_CLOSURE", "_IMPORT_TIME_CLOSURE", "_CORPUS", "_CORPUS_TEXT", "_REVERSE", "_REGISTRIES", "_INCLUDE_ROOTS", "_GRAPH_REVERSE", "_HOST_CLASS_ROUTES", "_CONTEXT_DOORS", "_HOOK_CLASSES")
+#: Module-level containers `reset_caches` empties in place.
+_RESET_CLEARED = ("_GIT_SHOW", "_HOST_ROUTE_CLASSES", "_DISPATCHER_NAMES", "LANE_OPERATIONS")
+_RESET_COUNT = 0
+
+
 def reset_caches():
     """Drop every memo. Only a caller that edits the tree mid-process needs
     this; no code path in this repository does."""
-    global _ENUMERATORS, _LANE_SOURCES, _SOURCE_HASHED, _TRACKED, _CONSTANTS, _EXTENDERS
-    global _MOJO_CONFORMANCE, _MOJO_IMPORTERS, _PYTHON_FILES, _PKG_IMPORT_CLOSURE, _HOST_CLASS_ROUTES, _CONTEXT_DOORS
-    global _CORPUS, _CORPUS_TEXT, _REVERSE, _REGISTRIES, _INCLUDE_ROOTS, _GRAPH_REVERSE
+    global _RESET_COUNT
+    _RESET_COUNT += 1
     for cache in _CACHES:
         cache.clear()
     bincache.cache_directory_listings(False)    # a test may have added or removed files
-    _GIT_SHOW.clear()
-    _TRACKED = None
-    _PYTHON_FILES = None
-    _ENUMERATORS = None
-    _LANE_SOURCES = None
-    global _LANE_SEED_CALLS, _LANE_PRECISION_PATHS, _LANE_CPU_ROUTE_ONLY, _LANE_DEVICE_CALLS
-    _LANE_SEED_CALLS = None
-    _LANE_PRECISION_PATHS = None
-    _LANE_CPU_ROUTE_ONLY = None
-    _LANE_DEVICE_CALLS = None
-    global _DISPATCH_VOCAB, _MOJO_CALLERS
-    _DISPATCH_VOCAB = None
-    _MOJO_CALLERS = None
-    global _BINDING_HELD
-    _BINDING_HELD = None
-    _HOST_ROUTE_CLASSES.clear()
-    _DISPATCHER_NAMES.clear()
-    LANE_OPERATIONS.clear()
-    _SOURCE_HASHED = None
-    _CONSTANTS = None
-    _EXTENDERS = None
-    _MOJO_CONFORMANCE = None
-    _MOJO_IMPORTERS = None
-    _PKG_IMPORT_CLOSURE = None
-    global _IMPORT_TIME_CLOSURE
-    _IMPORT_TIME_CLOSURE = None
-    _CORPUS = None
-    _CORPUS_TEXT = None
-    _REVERSE = None
-    _REGISTRIES = None
-    _INCLUDE_ROOTS = None
-    _GRAPH_REVERSE = None
-    _HOST_CLASS_ROUTES = None
-    _CONTEXT_DOORS = None
-    global _HOOK_CLASSES
-    _HOOK_CLASSES = None
+    g = globals()
+    for name in _RESET_CLEARED:
+        g[name].clear()
+    for name in _RESET_TO_NONE:
+        g[name] = None
     if "lane_map_import_graph" in sys.modules:
         sys.modules["lane_map_import_graph"]._DERIVED = None
         sys.modules["lane_map_import_graph"]._CLOSURES.clear()
+
+
+def snapshot_caches():
+    """Every memo `reset_caches` drops, as it stands (shallow copies). A test that perturbs one edge,
+    resets and re-derives restores this afterwards instead of resetting again, so the next test reads
+    the real map without deriving it a second time (2026-11-18: each derivation is minutes; resetting
+    in a `finally` doubled the cost of every perturbation test). Valid only while the tree and the
+    module's functions are what they were when it was taken."""
+    g = globals()
+    graph = sys.modules.get("lane_map_import_graph")
+    return dict(caches=[c.copy() for c in _CACHES], none={n: g[n] for n in _RESET_TO_NONE},
+                cleared={n: g[n].copy() for n in _RESET_CLEARED}, dirs=bincache._DIR_NAMES,
+                graph=(graph, graph._DERIVED, dict(graph._CLOSURES)) if graph is not None else None,
+                count=_RESET_COUNT)
+
+
+def restore_caches(snap):
+    """Put back what `snapshot_caches` took (the containers in place, so references stay valid)."""
+    for cache, saved in zip(_CACHES, snap["caches"]):
+        cache.clear()
+        cache.update(saved)
+    g = globals()
+    for name, value in snap["none"].items():
+        g[name] = value
+    for name, saved in snap["cleared"].items():
+        g[name].clear()
+        g[name].update(saved)
+    bincache._DIR_NAMES = snap["dirs"]
+    if snap["graph"] is not None:
+        graph, derived, closures = snap["graph"]
+        graph._DERIVED = derived
+        graph._CLOSURES.clear()
+        graph._CLOSURES.update(closures)
 
 
 @_by_path
@@ -1131,7 +1139,62 @@ def _region_import_edges(rel, wanted, narrow_unused=True):
                 merge(mod_files, {alias.name})
                 if registry in _reexport_registries() and registry != rel:
                     merge(_rebindings(registry).get(alias.name, set()), {alias.name})
+        elif isinstance(node, ast.Call):
+            dotted = _dynamic_import_dotted(rel, node)
+            if dotted:
+                merge(_module_paths(dotted, listing), None)
     return out
+
+
+def _package_expr(node):
+    """True for an expression that is this module's package name: `__package__`, or
+    `__name__.rpartition(".")[0]` (a module's package; an `__init__.py` is handled by the caller)."""
+    if isinstance(node, ast.Name) and node.id == "__package__":
+        return "package"
+    if (isinstance(node, ast.Subscript) and isinstance(node.slice, ast.Constant) and node.slice.value == 0
+            and isinstance(node.value, ast.Call) and isinstance(node.value.func, ast.Attribute)
+            and node.value.func.attr == "rpartition" and isinstance(node.value.func.value, ast.Name)
+            and node.value.func.value.id == "__name__"
+            and [getattr(a, "value", None) for a in node.value.args] == ["."]):
+        return "name-parent"
+    return None
+
+
+def _dynamic_import_dotted(rel, call):
+    """The package-relative dotted module an `importlib.import_module(...)` call of `rel` loads, when
+    its argument names it without a runtime value: `"mojolearn.x"`, or the package plus a literal
+    suffix (`__package__ + ".x"`, `__name__.rpartition(".")[0] + ".models.causal_lm"`). None
+    otherwise (a name built from a variable is not resolved here).
+
+    A MODULE `__getattr__` THAT IMPORTS (lane lazy-import-fix, 76de1ab11d, 2026-11-12):
+    `_native_neural_bridge.__getattr__` runs `importlib.import_module(<package> + ".models.causal_lm")`
+    at the first read of RUNTIME/CONTEXT, which every Mamba and Transformer block call makes; that
+    module imports `neural_inference`. Without this edge the mamba lanes left the map of
+    neural_inference.py."""
+    func = call.func
+    if not ((isinstance(func, ast.Attribute) and func.attr == "import_module")
+            or (isinstance(func, ast.Name) and func.id == "import_module")) or not call.args:
+        return None
+    arg = call.args[0]
+    if isinstance(arg, ast.Constant) and isinstance(arg.value, str):
+        if arg.value == "mojolearn" or arg.value.startswith("mojolearn."):
+            return arg.value[len("mojolearn"):].lstrip(".") or None
+        return None
+    if not (isinstance(arg, ast.BinOp) and isinstance(arg.op, ast.Add)
+            and isinstance(arg.right, ast.Constant) and isinstance(arg.right.value, str)
+            and arg.right.value.startswith(".") and len(arg.right.value) > 1):
+        return None
+    kind = _package_expr(arg.left)
+    if kind is None:
+        return None
+    base = os.path.dirname(rel)
+    if kind == "name-parent" and os.path.basename(rel) == "__init__.py":
+        base = os.path.dirname(base)
+    if not (base == PKG or base.startswith(PKG + os.sep)):
+        return None
+    prefix = os.path.relpath(base, PKG).replace(os.sep, ".")
+    prefix = "" if prefix == "." else prefix
+    return ".".join(p for p in (prefix, arg.right.value[1:]) if p)
 
 
 _REGIONS = {}
@@ -1778,6 +1841,28 @@ def _public_rebindings(files):
             one = ast.ImportFrom(module=node.module, names=[alias], level=node.level)
             for rel in _resolve_python_import(init, one, listing) - {init}:
                 out.setdefault(alias.name, set()).add(rel)
+    # THE LAZY TABLE IS A BINDING TOO (b6aa87e41d, 2026-11-12). Since every family is imported on first touch,
+    # `__init__.py` binds most public names through `_LAZY_NAMES = {"UMAP": ".umap", "umap": None, ...}` and
+    # its `__getattr__`, not through `from .umap import UMAP`. A name mapped to ".X" is `from .X import name`;
+    # a name mapped to None is the submodule itself, `from . import name`. Without this, umap.py,
+    # neural_inference.py and every other lazy door were in no lane's map.
+    for node in (tree.body if tree is not None else ()):
+        if not (isinstance(node, ast.Assign) and isinstance(node.value, ast.Dict)
+                and any(isinstance(t, ast.Name) and t.id == "_LAZY_NAMES" for t in node.targets)):
+            continue
+        for key, value in zip(node.value.keys, node.value.values):
+            if not (isinstance(key, ast.Constant) and isinstance(key.value, str)
+                    and isinstance(value, ast.Constant) and (value.value is None or isinstance(value.value, str))):
+                continue
+            where = value.value
+            if where is None:
+                one = ast.ImportFrom(module=None, names=[ast.alias(name=key.value)], level=1)
+            else:
+                level = len(where) - len(where.lstrip("."))
+                one = ast.ImportFrom(module=where.lstrip(".") or None, names=[ast.alias(name=key.value)],
+                                     level=level or 1)
+            for rel in _resolve_python_import(init, one, listing) - {init}:
+                out.setdefault(key.value, set()).add(rel)
     return out
 
 
@@ -1851,6 +1936,10 @@ def _python_imports(rel):
     for node in ast.walk(tree):
         if isinstance(node, (ast.ImportFrom, ast.Import)):
             out |= _resolve_python_import(rel, node, listing)
+        elif isinstance(node, ast.Call):
+            dotted = _dynamic_import_dotted(rel, node)     # the same edge `_region_import_edges` reads
+            if dotted:
+                out |= _module_paths(dotted, listing)
     out.discard(rel)
     return out
 
@@ -6001,6 +6090,47 @@ def _hashes_a_file(rel):
 
 
 _SOURCE_HASHED = None
+_HASH_CONTEXT_KEY_RE = re.compile(r'context\["(\w+)"\]')
+
+
+def _native_hashed_context_keys():
+    """The operation-context keys a Mojo function that calls `sha256_file` reads: the byte LM's
+    `source_sha256` inventory moved from Python into bindings/byte_lm_trainer_native_door.mojo
+    (c3cd787c6d), which hashes the paths `_byte_lm_impl.py` hands it as `byte_lm_source_names`,
+    `byte_lm_source_root` and `byte_lm_wrapper_file`. Derived per function, so a key the same file reads
+    for anything else is not swept in."""
+    keys = set()
+    for rel in tracked_files():
+        if not rel.endswith(".mojo"):
+            continue
+        try:
+            text = _read(rel)
+        except OSError:
+            continue
+        if "sha256_file(" not in text:
+            continue
+        for body in re.split(r"\n(?=def |fn )", text):
+            if "sha256_file(" in body and not body.lstrip().startswith(("def sha256_file", "fn sha256_file")):
+                keys.update(_HASH_CONTEXT_KEY_RE.findall(body))
+    return keys
+
+
+def _hands_paths_to_a_native_hash(rel, keys):
+    """True when this Python module sets one of the context keys a native file hash reads
+    (`context.update(byte_lm_source_names=...)` or `context["byte_lm_source_names"] = ...`)."""
+    if not keys:
+        return False
+    text = _read(rel)
+    if not any(k in text for k in keys):
+        return False
+    tree = _parse(rel)
+    for node in ast.walk(tree or ast.Module(body=[], type_ignores=[])):
+        if isinstance(node, ast.keyword) and node.arg in keys:
+            return True
+        if (isinstance(node, ast.Subscript) and isinstance(node.ctx, ast.Store)
+                and isinstance(node.slice, ast.Constant) and node.slice.value in keys):
+            return True
+    return False
 
 
 def source_hashed_files():
@@ -6016,8 +6146,9 @@ def source_hashed_files():
     global _SOURCE_HASHED
     if _SOURCE_HASHED is None:
         out = set()
+        keys = _native_hashed_context_keys()
         for rel in _python_files():
-            if not _hashes_a_file(rel):
+            if not (_hashes_a_file(rel) or _hands_paths_to_a_native_hash(rel, keys)):
                 continue
             out.add(rel)
             tree = _parse(rel)

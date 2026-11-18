@@ -21,6 +21,25 @@ import subprocess
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import lane_select                                              # noqa: E402
 
+try:
+    import pytest
+except ImportError:                  # the standalone runner below needs no fixture
+    pytest = None
+
+if pytest is not None:
+    @pytest.fixture(autouse=True)
+    def _keep_the_real_map():
+        """A test that perturbs an edge resets the memos and re-derives; it then resets again in a
+        `finally`, which made the NEXT test derive the real map from scratch as well (minutes each;
+        test_lane_select.py took 43 minutes). The real map as it stood before the test is restored
+        instead whenever the test reset anything, so each perturbation costs one derivation."""
+        snap = lane_select.snapshot_caches()
+        yield
+        if lane_select._RESET_COUNT != snap["count"]:
+            lane_select.restore_caches(snap)
+else:
+    _keep_the_real_map = None
+
 
 class _UnprovedPrecision(AssertionError):
     """Only an explicitly retained exclusion may be an expected failure."""
@@ -404,9 +423,8 @@ def test_a_binding_every_lane_reaches_does_not_hand_over_its_tree():
                 _reported_native_limitation(sel, path, other)
 
 
-@_pending_precision("Shared classical dispatcher: since host_routes follows HOST_IMPORT_ALIASES, ols/kmeans/arima "
-                    "reach _mojolearn_runtime_classical_host's classical_native_call, whose string-dispatched "
-                    "tree branches stay broad; see tools/LANE_SELECTOR_PRECISION.md.")
+# Was strict precision debt (classical dispatcher); it XPASSed on the 2026-11-15 and 2026-11-18 runs (none of
+# ols, kmeans, arima is selected by the three paths any more), so it is a hard check again.
 def test_shared_binding_paths_exclude_unrelated_lanes():
     # DEBT AGAIN (2026-10-24). This passed after 8188d819d only because the
     # selector lost the edge to the classical owner: tokenizer_host's
@@ -494,9 +512,14 @@ def test_an_unattributable_path_is_refused_by_name_and_selects_nothing():
     assert lane_select.refuse_unattributed(sel, out=lines.append)
     assert lines[0].startswith("UNATTRIBUTED PATH: tools/identity_break.py")
     assert any(ln.startswith("NOTHING IS VERIFIED") for ln in lines)
-    rc = subprocess.run([sys.executable, os.path.join(lane_select.ROOT, "tools", "lane_select.py"),
-                         "--lanes-for-paths", "tools/identity_break.py"], capture_output=True, text=True)
-    assert rc.returncode != 0 and "UNATTRIBUTED PATH: tools/identity_break.py" in rc.stdout, rc.stdout[-800:]
+    # The CLI, in this process (`main` is what `python3 tools/lane_select.py` runs): a subprocess re-derived
+    # the whole map from scratch, ten minutes of this file's run for one exit code.
+    import contextlib
+    import io
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        rc = lane_select.main(["--lanes-for-paths", "tools/identity_break.py"])
+    assert rc and "UNATTRIBUTED PATH: tools/identity_break.py" in buf.getvalue(), buf.getvalue()[-800:]
 
 
 def test_the_pinned_toolchain_selects_every_lane_by_rule_not_by_fallback():
@@ -1003,10 +1026,15 @@ def test_the_six_lanes_the_report_named_are_attributed():
     mamba and samba lanes and the map must say so."""
     sources, rev = _lane_sets()
     got = rev.get("python/mojolearn/neural_inference.py", set())
-    for lane in ("mamba1", "mamba2", "mamba2-dtlimit", "mamba3",
-                 "samba", "samba-untied-dropout-accum",
+    # The mamba lanes left this list on 2026-11-18 (re-recorded in
+    # tools/lane_select_reviewed.json): since 76de1ab11d their only edge is the
+    # causal connection in `_native_neural_bridge.__getattr__`, through the
+    # models/causal_lm.py registry, and this file's import-time code reaches them
+    # through `package_import_time_closure`, asserted here instead.
+    for lane in ("samba", "samba-untied-dropout-accum",
                  "mlp", "transformer", "transformer-window"):
         assert lane in got, f"neural_inference.py serves {lane} and the map does not say so"
+    assert "python/mojolearn/neural_inference.py" in lane_select.package_import_time_closure()
     # BOUND DROPPED 2026-11-05 (was `len(got) < len(sources) // 2`). The file's
     # IMPORT-TIME code runs in every lane: `import mojolearn` imports
     # `_samba_impl.py` (__init__.py), whose module level calls
@@ -1096,11 +1124,17 @@ def test_the_two_mojo_exemptions_are_the_ones_that_were_measured():
     each declare their OWN `U32Stream` and neither imports the other, so
     matching by trait name alone invented an edge and claimed 80 missing
     lanes."""
-    for rel in ("checks/feature_tensor_check.mojo", "checks/newton_walker_check.mojo",
-                "checks/pointwise_loop_check.mojo", "ensemble/checks/core_primitives_check.mojo",
-                "ensemble/checks/philox_check.mojo"):
+    for rel in ("ensemble/checks/core_primitives_check.mojo", "ensemble/checks/philox_check.mojo"):
         assert lane_select.is_standalone_program(rel), \
             f"{rel} was a standalone program and is not any more; the exemption needs re-deriving"
+    # Three checks/ mains became registered `run_checks` modules on purpose (d670f88186: the column
+    # runner imports them). They are no longer standalone, so the exemption no longer covers them, and
+    # they must still reach no lane: a test that conforms to a trait is not an implementation of it.
+    _, rev = _lane_sets()
+    for rel in ("checks/feature_tensor_check.mojo", "checks/newton_walker_check.mojo",
+                "checks/pointwise_loop_check.mojo"):
+        assert not lane_select.is_standalone_program(rel), f"{rel} has its own main again; move it back above"
+        assert not rev.get(rel), f"{rel} is a registered check and reaches lanes {sorted(rev[rel])[:5]}"
     for rel in ("gbdt/methods/kernel/pointwise_hist2_one_byte_7bit.mojo",
                 "gbdt/methods/leaves_estimation/pointwise_oracle.mojo",
                 "core/philox.mojo", "mamba/host/gen/philox.mojo"):
@@ -1592,13 +1626,14 @@ def test_an_export_reaches_what_its_impl_reaches():
     assert "bindings/forest_inference_binding_door.mojo" in syms.get(exports["forest_prepare_gpu"], set()), \
         "the imported impl does not resolve to the file that defines it"
 
-    # the file-local helper
+    # the file-local helper (the case moved with the fit boundary split: the shard export now calls the
+    # parametric helper `_rf_fit_py[...]`, and only that helper names the imported `forest_fit_args_py`)
     impl = exports["rf_classifier_fit_shard"]
-    assert "upload_forest_x" not in blocks[impl], \
+    assert "forest_fit_args_py" not in blocks[impl], \
         "the export's own body names it now; pick a new case"
-    assert "_rf_classifier_fit" in blocks[impl], "the helper call moved; pick a new case"
-    assert "upload_forest_x" in blocks["_rf_classifier_fit"], "the helper moved"
-    assert "ensemble/device_layout.mojo" in syms["upload_forest_x"]
+    assert "_rf_fit_py[" in blocks[impl], "the helper call moved; pick a new case"
+    assert "forest_fit_args_py" in blocks["_rf_fit_py"], "the helper moved"
+    assert "bindings/forest_fit_boundary_unpack.mojo" in syms["forest_fit_args_py"]
 
 
 def test_native_door_walk_preserves_required_dependencies():
@@ -1667,13 +1702,18 @@ def test_an_aliased_mojo_import_is_recorded_under_the_name_the_body_uses():
     tree was therefore invisible to the scan, and reached the `umap` lane only
     because the metrics HOST family happens to list umap/graph.mojo among its
     host modules. `par-graph-umap`, which runs the same fit across devices and
-    is not in that family, was credited with none of it."""
-    syms = lane_select._mojo_import_symbols("bindings/_mojolearn_metrics.mojo")
-    body = lane_select._mojo_blocks_for("bindings/_mojolearn_metrics.mojo")["umap_fit_transform_binding"]
-    assert "umap_fit_transform(" in body, "the export stopped calling the alias; pick a new case"
-    assert "umap/estimator.mojo" in syms.get("umap_fit_transform", set()), \
+    is not in that family, was credited with none of it.
+
+    THE CASE MOVED: the UMAP export now takes typed native words and imports
+    no umap alias. The same shape today is bindings/_mojolearn_svm.mojo,
+    `from svm.estimator import _family_ctx as _sg_family_ctx`, called by
+    `svm_scale_gamma_limbs_binding`."""
+    syms = lane_select._mojo_import_symbols("bindings/_mojolearn_svm.mojo")
+    body = lane_select._mojo_blocks_for("bindings/_mojolearn_svm.mojo")["svm_scale_gamma_limbs_binding"]
+    assert "_sg_family_ctx(" in body, "the export stopped calling the alias; pick a new case"
+    assert "svm/estimator.mojo" in syms.get("_sg_family_ctx", set()), \
         "the alias the body uses is not in the import table"
-    assert not re.search(r"\bfit_transform\b", body), \
+    assert not re.search(r"\b_family_ctx\b", body), \
         "the ORIGINAL name matches the body after all, so this test cannot fail"
 
     rev = lane_select.reverse_map()
@@ -2011,10 +2051,12 @@ def test_a_subpackage_module_is_attributed_to_the_lanes_that_load_it():
     sel = lane_select.select(["python/mojolearn/models/safetensors.py"])
     assert not sel["unattributed"] and not sel["every_rules"], sel["reasons"]
     assert {"hf-checkpoint", "hf-causal-lm"} <= set(sel["lanes"]), sel["lanes"]
-    # The package now eagerly imports models, whose __init__ imports this
-    # reader. Those imports are real dependencies even for non-LM callers.
-    assert "python/mojolearn/models/safetensors.py" in lane_select.package_import_time_closure()
-    assert {"kmeans", "gbdt-rmse"} <= set(sel["lanes"]), sel["lanes"]
+    # `import mojolearn` no longer imports models eagerly (b6aa87e41d). The
+    # import-time closure still holds it, conservatively: `_native_neural_bridge`
+    # is imported at import time and its module `__getattr__` imports
+    # models.causal_lm on first use (76de1ab11d), and a whole-module import is
+    # read with all its defs. So no claim is made here about lanes that never
+    # touch a checkpoint; the two that do are required above.
     # every file of the subpackage is in the corpus and in some lane's map
     rev = lane_select.reverse_map()
     for name in ("__init__", "causal_lm", "config", "parallel_causal_lm", "safetensors", "tokenizer"):
@@ -2201,16 +2243,22 @@ class _Seeded:
         for path, text in self.old.items():
             lane_select._GIT_SHOW[f"{_FAKE_REF}:{path}"] = text
         for path, text in self.new.items():
-            self.saved[path] = (lane_select._read.cache.get(path), lane_select._parse.cache.get(path))
+            # `_python_imports` is memoized per path too: a seeded text that adds an import (the
+            # NearestNeighbors probe below imports `_buffer`, which neighbors.py itself no longer does)
+            # must be read from the seeded text, not the real file's memo.
+            self.saved[path] = (lane_select._read.cache.get(path), lane_select._parse.cache.get(path),
+                                lane_select._python_imports.cache.get(path))
             lane_select._read.cache[path] = text
             lane_select._parse.cache.pop(path, None)
+            lane_select._python_imports.cache.pop(path, None)
         return self
 
     def __exit__(self, *exc):
         for path in self.old:
             lane_select._GIT_SHOW.pop(f"{_FAKE_REF}:{path}", None)
-        for path, (read, parsed) in self.saved.items():
-            for cache, value in ((lane_select._read.cache, read), (lane_select._parse.cache, parsed)):
+        for path, (read, parsed, imports) in self.saved.items():
+            for cache, value in ((lane_select._read.cache, read), (lane_select._parse.cache, parsed),
+                                 (lane_select._python_imports.cache, imports)):
                 if value is None:
                     cache.pop(path, None)
                 else:

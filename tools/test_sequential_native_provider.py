@@ -47,8 +47,10 @@ def test_program_owners_survive_native_execution():
     assert source.index('_ = arrays', replay) < source.index('host_arrays_py', replay)
     fit = source.index('var branches = program_fit_native[E, KIND](')
     out = source.index('var out = Python.list()', fit)
-    for owner in ('arrays', 'targets', 'curve'):
+    for owner in ('arrays', 'targets'):
         assert source.index('_ = ' + owner, fit) < out
+    # The curve is read after the fit (early-stop slice view, no copy) and retained after that read.
+    assert out < source.index('curve[py_call(b.slice', fit) < source.index('_ = curve', fit)
 
 
 def test_public_probe_requires_actual_new_factory_and_poison_controls():

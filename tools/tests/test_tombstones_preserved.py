@@ -46,7 +46,9 @@ MARKER_RE = re.compile(r'#\s*' + MARKER_WORD + r'\s*(.*)')
 GREP_PATTERN = '#[[:space:]]*' + MARKER_WORD
 GREP_ARGS = ['-I', '-n', '-z', '-A', '4']   # the marker line and the comment lines continuing it
 
-OPTS = argparse.Namespace(tree=None, base=None, repo=None)
+# Under pytest (tools/run_tool_tests.sh) main() does not run: the defaults are the working tree of the checkout
+# this file is in, against the merge-base with main.
+OPTS = argparse.Namespace(tree=None, base=None, repo=str(Path(__file__).resolve().parents[2]))
 
 
 def _git(repo, *args, check=True, binary=False):

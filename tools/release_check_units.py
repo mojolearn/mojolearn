@@ -334,6 +334,7 @@ class Runner:
         smoke.update(AG.SMOKE_PHASE_ENV)
         env = AG.framework_env(self.plan["vendor"], venv, smoke)
         path = Path(out) / AG.TORCH_ENV
+        path.parent.mkdir(parents=True, exist_ok=True)  # the unit's own folder, whether or not the gate made it
         path.write_text(json.dumps(dict(python=self.torch_python, env=AG.env_overrides(env, self.base_env)),
                                    indent=1, sort_keys=True) + "\n")
         return str(path)

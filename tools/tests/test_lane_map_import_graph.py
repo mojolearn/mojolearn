@@ -80,9 +80,14 @@ def test_an_unmapped_file_is_refused_by_name_and_selects_nothing():
     lines = []
     assert lane_select.refuse_unattributed(sel, out=lines.append) is True
     assert any(line.startswith(f"UNATTRIBUTED PATH: {path}") for line in lines), lines
-    rc = subprocess.run([sys.executable, str(ROOT / "tools" / "lane_select.py"), "--lanes-for-paths", path],
-                        capture_output=True, text=True, cwd=str(ROOT))
-    assert rc.returncode == 3 and f"UNATTRIBUTED PATH: {path}" in rc.stdout, rc.stdout[-500:]
+    # The CLI, in this process (`main` is what `python3 tools/lane_select.py` runs): a subprocess re-derived
+    # the whole map, five minutes for one exit code.
+    import contextlib
+    import io
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        rc = lane_select.main(["--lanes-for-paths", path])
+    assert rc == 3 and f"UNATTRIBUTED PATH: {path}" in buf.getvalue(), buf.getvalue()[-500:]
 
 
 def test_the_mojo_closure_is_the_builds_walk(tmp_path):
@@ -137,7 +142,13 @@ def test_a_binding_table_read_as_code_routes_the_saved_model_classes():
     sel = lane_select.select(["bindings/_mojolearn_estimators_host.mojo"])
     assert "standard-scaler" in sel["lanes"], sel["lanes"][:8]
     sel = lane_select.select(["preprocessing/host/scaler_oracle.mojo"])
-    assert "standard-scaler" in sel["lanes"] and "kmeans" not in sel["lanes"], sel["lanes"][:8]
+    assert "standard-scaler" in sel["lanes"], sel["lanes"][:8]
+    # k-means does not run the scaler oracle. Since the native boundary migration it can still be selected,
+    # only as native-dispatch precision debt (tools/LANE_SELECTOR_PRECISION.md): then it must carry the
+    # unresolved-dispatch record that says so, never be selected silently.
+    if "kmeans" in sel["lanes"]:
+        assert any(row["lane"] == "kmeans" and "preprocessing/host/scaler_oracle.mojo" in row["paths"]
+                   for row in sel.get("precision_limitations", ())), "kmeans selected with no dispatch record"
 
 
 def test_check_stamps_agrees_with_a_stamp_the_build_wrote(tmp_path, monkeypatch):

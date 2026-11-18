@@ -93,15 +93,16 @@ def test_packed_weights_admit_metadata_and_keep_original_quantization_routes():
     assert 'neural_array_snapshot(value, context)' in packed
     assert packed.index('admit_native_buffer_exporter(value)') < packed.index('AdmittedBorrowedBuffer(value)')
     assert 'layout.copy_to(Int(py=result._addr))' in packed
-    for numerical in ('to_bf16', 'from_bf16', 'quantize_int8', 'dequantize_int8', 'quantize_int15'):
-        assert f'_native_function(mods, linalg, "{numerical}")' in source
+    # af92251e02: the original quantization routes call the linalg descriptor entry by the route key
+    for numerical in ('TO_BF16', 'FROM_BF16', 'QUANTIZE_INT8', 'DEQUANTIZE_INT8', 'QUANTIZE_INT15'):
+        assert f'_model_linalg(mods, key, CAUSAL_LIN_{numerical},' in source
 
 
 def test_execution_registry_is_pinned_and_native_handles_do_not_reread_bindings():
     owner = (ROOT / "bindings/causal_operation_owner_door.mojo").read_text()
     registry = owner.split("def _causal_entries", 1)[1].split("def causal_model_capture", 1)[0]
     assert 'downcast_value_ptr[CausalExecutionEntries]' in registry
-    assert 'item is not original[names[i]]' in registry
+    assert 'item is not original.value()[names[i]]' in registry   # Optional registry since 2e874ba989
     assert 'entries["parallel_call"] is not connected["parallel_causal_call"]' in registry
     assert 'causal_pin_entries(mods, _standalone_record_fields(mods, model), entries)' in PUBLIC
     run = PUBLIC.split("def _causal_layer_run_prepared", 1)[1].split("def causal_model_embedding", 1)[0]
@@ -164,7 +165,7 @@ def test_streams_and_checkpoints_capture_before_execution_and_guard_output_metad
     assert 'causal_state_capture(mods, causal_state_origin(mods, stream[].state), model' in door
     assert 'causal_lm_read_binding(mods, args[0], args[1], stream_native)' in door
     assert 'state = stream[].state' in door
-    assert 'causal_lm_resident_binding(mods, model, s.prompt, PythonObject(s.max_new)' in PUBLIC
+    # The resident greedy/sampling read route was deleted in d972820049 (reads go to the decode program).
     assert 'generation_array_snapshot(args[3])' in door
     read = PUBLIC.split("def _read(mut", 1)[1].split("def _decode_chunk", 1)[0]
     run = read.index('_run_prepared(')

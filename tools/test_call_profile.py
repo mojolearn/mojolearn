@@ -132,10 +132,12 @@ class HarnessWindow(unittest.TestCase):
             os.mkfifo(ctl)
             os.mkfifo(ack)
             got = []
+            ready, done = threading.Event(), threading.Event()
 
             def fake_perf():      # perf: reads the control FIFO, acks every command
                 rfd = os.open(ctl, os.O_RDONLY | os.O_NONBLOCK)
                 afd = os.open(ack, os.O_RDWR)
+                ready.set()
                 import select
                 try:
                     while len(got) < 2:
@@ -147,12 +149,16 @@ class HarnessWindow(unittest.TestCase):
                             got.append(w)
                             os.write(afd, b"ack\n")
                 finally:
+                    # Hold the ack FIFO open until the caller has read its last ack: closing the only writer end
+                    # discards a buffered ack the reader has not opened yet (lost under load, 2026-11-17 runs).
+                    done.wait(10)
                     os.close(rfd)
                     os.close(afd)
             t = threading.Thread(target=fake_perf)
             t.start()
-            import time
-            time.sleep(0.2)
+            # Wait for the reader: a nonblocking writer gets ENXIO before perf has the FIFO open (a fixed 0.2 s sleep
+            # lost that race on a loaded laptop, 2026-11-17 full run).
+            self.assertTrue(ready.wait(10))
             w = os.path.join(d, "window.jsonl")
             env = {SR.FORCE_CALLS_ENV: "20", SR.FORCE_CALLS_PHASE_ENV: "fit", SR.PROFILE_WINDOW_ENV: w,
                    SR.PERF_CTL_ENV: "%s,%s" % (ctl, ack)}
@@ -161,6 +167,7 @@ class HarnessWindow(unittest.TestCase):
             self.assertFalse(SR.range_open(20, "fit", env))                  # one window at a time
             SR.range_close()
             SR.range_close()                                                 # nothing open: no-op
+            done.set()
             t.join(10)
             self.assertEqual(got, ["enable", "disable"])
             win = CP.read_window(w)

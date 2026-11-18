@@ -201,9 +201,10 @@ def test_cpu_byte_lm_owner_uses_same_native_transport_without_python_proxy():
     assert 'class _HostTrainerBinding' not in bridge and 'class _Session' not in bridge
     assert 'return host' in bridge
     owner = (ROOT / 'bindings/byte_lm_trainer_native_door.mojo').read_text()
-    entry = owner.split('def _entry(')[1].split('def _has(')[0]
-    assert 'return neural_descriptor_entry(binding, name, required)' in entry
-    assert 'getattr' not in entry
+    # aa70d1a363: the resident session is a native handle owner; the Python entry lookups were deleted.
+    assert 'def _entry(' not in owner and 'neural_descriptor_entry(' not in owner
+    assert 'getattr' not in owner
+    assert 'byte_lm_resident_run(entry, handle, operation,' in owner
 
 
 def test_framework_setup_helpers_enter_native_metadata_directly():
@@ -255,6 +256,6 @@ def test_imported_host_execution_routes_through_native_registry_owner():
     assert 'program_execute_run[E, KIND]' in owner
     for filename in ('sequence/model_host_dispatch.mojo', 'sequence/model_device_dispatch.mojo'):
         assert 'if op == PROGRAM_HOST_RUN:' in (ROOT / filename).read_text()
-    for filename in ('autograd_program_pyapi.mojo', 'autograd_torch_program_pyapi.mojo'):
+    for filename in ('autograd_program_pyapi_door.mojo', 'autograd_torch_program_pyapi_door.mojo'):  # fed1b4e384 names
         source = (ROOT / 'providers/python' / filename).read_text()
         assert 'imported_host_provider_request(' in source

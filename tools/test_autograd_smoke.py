@@ -20,7 +20,8 @@ def test_registry_covers_public_training_and_all_tape_integrations():
     } <= sources
     tests = {e["pytest"] for e in entries if "pytest" in e}
     assert {"python/mojolearn/tests/" + t for t in (
-        "test_autograd_usability.py", "test_autograd_model.py::test_dropout_trains",
+        # test_dropout_trains moved to the native check training_autograd_model (aaa6bdc46c)
+        "test_autograd_usability.py",
         "test_ops_program.py", "test_ops_rankn.py", "test_ops_optimizer.py", "test_ops_higher.py",
     )} <= tests
     assert any(e.get("probe") == "program" for e in entries)
@@ -117,7 +118,7 @@ def test_missing_reports_and_binaries_cannot_pass(monkeypatch, tmp_path):
     monkeypatch.setattr(smoke, "start", lambda *args, **kw: ("ok", 0, 0.01))
     out = tmp_path / "report.json"
     assert smoke.run("metal", tmp_path, sys.executable, out,
-                     entries=["autograd-usability", "autograd-lm-tape"]) == 1
+                     entries=["autograd-usability", "autograd-samba-tape"]) == 1  # lm-tape removed, 906614f138
     assert json.loads(out.read_text())["counts"] == {"failed": 1, "not built": 1}
 
 

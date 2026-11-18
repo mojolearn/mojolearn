@@ -92,12 +92,16 @@ def test_public_lifecycle_replaces_decorators_only_for_pls_family():
 
 
 def test_snapshot_addresses_survive_shared_host_views():
-    kit = (ROOT / "bindings/decomp_kit_native_door.mojo").read_text()
+    # The typed kit RUN (bindings/decomp_kit_run.mojo) gives a view the parent's store and its
+    # borrowed flag, so a view never outlives or re-addresses the snapshot it shares.
+    kit = (ROOT / "bindings/decomp_kit_run.mojo").read_text()
     views = kit[kit.index("    def transpose("):kit.index("    def hstack(")]
-    for line in views.splitlines():
-        if "self.add(shared," in line or "self.add(store," in line:
-            assert "self.matrices[a].host_address" in line
-    assert 'Int(py=classical_address(source))' not in kit
+    adds = [line for line in views.splitlines() if "self.add(" in line]
+    assert adds
+    for line in adds:
+        assert "self.add(self.matrices[a].store," in line and "self.matrices[a].borrowed)" in line
+    # Addresses of Python sources are read only in the UNPACK door at upload; RUN holds none.
+    assert 'classical_address(' not in kit
     score = (ROOT / "bindings/pls_native_door.mojo").read_text()
     default = score[score.index('mode = context["backend_fields"]["_DEFAULT_MODE"]'):]
     assert default.index('if py_type(mode) is not b.str:') < default.index('mode.strip')
@@ -120,24 +124,29 @@ def test_execution_uses_one_private_settings_snapshot_and_separate_state():
     assert owner.count('classical_family_admit(model)') == 1
     assert owner.count('var fields = py_call(py_type(Python.dict()).__dict__["copy"], state)') == 1
     assert 'py_fields(' not in owner
-    assert 'pls_operation(model, operation, args, context, fields, state, x.copy(), y)' in owner
-    assert 'pls_operation(model, "predict", Python.tuple(args[0]), context, fields, state, captured_x)' in owner
+    # Both calls also carry the deferred-finite flag (lane a8c) after the operands.
+    assert 'pls_operation(model, operation, args, context, fields, state, x.copy(), y, x_deferred,' in owner
+    assert 'pls_operation(model, "predict", Python.tuple(args[0]), context, fields, state, captured_x,' in owner
     assert 'estimator_binding(model,' not in owner
     assert 'var modes = Python.tuple("numeric_mode") if fitting' in owner
 
 
 def test_completed_iteration_counts_are_published_from_native_words():
     owner = (ROOT / "bindings/pls_native_door.mojo").read_text()
-    assert 'var its = native_array_zeros("i", nc)' in owner
+    # The counts are the typed fit result's native words (PlsFit.iterations), published once.
     assert 'py_call(b.list, its)' not in owner
     assert 'py_attr(all_iterations' not in owner
-    assert 'PythonObject(Int(iterations[index]))' in owner
+    assert 'PythonObject(Int(fit.iterations[index]))' in owner
+    assert '_pls_store(fields, state, "n_iter_", all_iterations)' in owner
 
 
 def test_fitted_check_precedes_defaults_and_fit_transform_uses_private_outputs():
     owner = (ROOT / "bindings/pls_native_door.mojo").read_text()
-    assert owner.index('_pls_require_fitted(fields, operation, context)') < owner.index('var default_mode = PythonObject(None)')
-    assert '_transform(kit, held[0], held[1], fields, context)' in owner
+    assert owner.index('_pls_require_fitted(fields, operation, context)') < owner.index('var default_mode = Optional[PythonObject]()')
+    # fit_transform's projections come from the same typed RUN (pls_fit_run, transform=True) over
+    # the X and Y the fit held, never re-read from the published state.
+    assert 'fit = pls_fit_run(kit, x, ym, words, transform)' in owner
+    assert 'return Python.tuple(decomp_kit_publish(door, kit, fit.tx), decomp_kit_publish(door, kit, fit.ty))' in owner
     assert '_transform(kit, held[0], held[1], state, context)' not in owner
     assert '_pls_store(fields, state, "x_rotations_"' in owner
     assert '_pls_store(fields, state, "_x_scores"' in owner

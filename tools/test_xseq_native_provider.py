@@ -17,9 +17,12 @@ def test_xseq_numeric_calls_share_existing_provider_and_engine_table():
     source = (ROOT / 'bindings/xseq_neural_native_door.mojo').read_text()
     assert 'py_call_typed' not in source
     assert 'stream.fill_uniform(context' not in source
-    for name in ('RNN_FIT', 'RNN_PREDICT', 'MLP_FIT', 'MLP_PREDICT', 'MODEL_LABELS',
-                 'MODEL_ARGMAX', 'MODEL_MIN', 'MODEL_THRESHOLD'):
-        assert name in source
+    # The numeric steps are typed RUN calls (sequence/xseq_neural_run.mojo), not named
+    # operations of the descriptor table.
+    for name in ('xseq_run_rnn_fit', 'xseq_run_rnn_predict', 'xseq_run_mlp_fit', 'xseq_run_mlp_predict',
+                 'xseq_run_argmax', 'xseq_run_curve_min', 'xseq_run_threshold'):
+        assert name + '(' in source, name
+    assert 'from sequence.xseq_neural_run import' in source
     common = (ROOT / 'bindings/xseq_native_common_door.mojo').read_text()
     assert 'neural_descriptor_reuse(' in common
     assert 'String(MODEL_ABI_NAME), MODEL_OPERATION_COUNT)' in common
@@ -52,6 +55,7 @@ def test_builtin_schedule_reuses_native_spec_and_kernel_directly():
     operation = source.split('def schedule_operation(', 1)[1]
     assert 'entries["lr_schedule_series"]' not in operation
     assert 'entries["lr_schedule_at"]' not in operation
-    assert 'lr_spec_fill(spec, 1, count,' in operation
-    assert 'lr_spec_fill(spec, requested, 1,' in operation
-    assert '_lr_refusal(status[0]' in operation
+    # One typed evaluation plan (89f667f395) serves the series and the single rate; its fill
+    # writes straight into the result storage.
+    assert 'optimizer_schedule_evaluation(kind, spec, requested, series)' in operation
+    assert operation.count('plan.fill(') >= 2

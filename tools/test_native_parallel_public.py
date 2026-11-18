@@ -82,6 +82,8 @@ def connected(monkeypatch):
     backend._DEFAULT_MODE = 'identical'
     backend.default_mode = lambda: backend._DEFAULT_MODE
     backend._HostBinding = type('HostBinding', (types.ModuleType,), {})
+    # the connector resolves a CPU-only facade to its compiled module once at import (_backend.exact_host_module)
+    backend.exact_host_module = lambda module: module
     def binding(name, mode):
         module = types.ModuleType(name + ':' + mode)
         module.compiled_entry = len

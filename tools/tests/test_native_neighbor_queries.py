@@ -78,11 +78,12 @@ def test_proxy_resolution_occurs_only_while_capturing_builtin_entries():
     proxy = Proxy()
     result = ns["_capture"](proxy, "test.native", ("search", "optional"))
     assert type(result) is ModuleType and vars(result)["search"] is len
-    assert resolutions == ["search", "optional"]
+    # The capture also reads the image's neighbors table key once (76de1ab11d).
+    assert resolutions == ["search", "optional", "neighbors_native_key"]
     assert "__getattr__" not in vars(result)
     assert ns["_BINDING_ALIASES"][id(proxy)] == (proxy, result)
     assert ns["_BINDING_ALIASES"][id(result)] == (result, result)
-    assert result.search([1]) == 1 and resolutions == ["search", "optional"]
+    assert result.search([1]) == 1 and resolutions == ["search", "optional", "neighbors_native_key"]
 
 
 def test_python_callable_cannot_enter_native_route_table():

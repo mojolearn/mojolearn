@@ -24,8 +24,10 @@ def test_parallel_prepare_signature_and_numerical_routes_are_preserved():
     prepare = SOURCE.split(signatures[1], 1)[1].split('def causal_model_init_binding', 1)[0]
     assert 'return bindings' in prepare
     assert 'model.' not in prepare and 'py_setattr(model,' not in prepare
-    for name in ('to_bf16', 'from_bf16', 'quantize_int8', 'dequantize_int8', 'quantize_int15'):
-        assert f'_native_function(mods, linalg, "{name}")' in SOURCE
+    # af92251e02: the five numerical routes call the linalg descriptor entry by the route key, not Python entries
+    for name in ('TO_BF16', 'FROM_BF16', 'QUANTIZE_INT8', 'DEQUANTIZE_INT8', 'QUANTIZE_INT15'):
+        assert f'_model_linalg(mods, key, CAUSAL_LIN_{name},' in SOURCE
+    assert '_native_function(mods, linalg,' not in SOURCE
     assert 'causal_lm_check_finite(ptr, Int(py=value.size))' in prepare
 
 

@@ -21,7 +21,10 @@ EXTRA = [('ocsvm_alpha_init',(2,1,1)),('unit_ff',(3,1,0)),('ocsvm_resident',(5,5
 # behind its upload on the GPU, by one parallel scan on the CPU column).
 OPTIONAL_LAST = ('sqdist', 'kernel', 'knn_sq', 'nc_std', 'nc_decision', 'nc_stats', 'knn_sq_tiled', 'nan_cells',
                  'nc_labels', 'nc_proba', 'lp_dense_proba')
-PATTERN = re.compile(r'^def (\w+)_binding\(a_: PythonObject, i_: PythonObject, f_: PythonObject\) raises -> PythonObject:\n(.*?)(?=^def |\Z)', re.M | re.S)
+# A row's body ends at the next top-level line (a def, a comptime, a comment), so module-level
+# declarations the binding keeps after its last packed wrapper (the KPCA and OneClassSVM
+# provider slots, be56b455ef) are never copied into a row.
+PATTERN = re.compile(r'^def (\w+)_binding\(a_: PythonObject, i_: PythonObject, f_: PythonObject\) raises -> PythonObject:\n(.*?)(?=^\S|\Z)', re.M | re.S)
 
 
 def unpack(source):
@@ -70,12 +73,34 @@ def native_imports(source):
     return '\n'.join(output) + '\n'
 
 
+def used_imports(imports, text):
+    # Keep an import statement of the binding only when the generated table uses one of its
+    # names: the binding imports owners only it needs (the resident OneClassSVM backend, the
+    # KPCA resident flag), and a table that imports them drifts from the binding it mirrors.
+    kept, statement = [], []
+    for line in imports.splitlines():
+        statement.append(line)
+        if '(' in statement[0] and ')' not in line:
+            continue
+        joined = ' '.join(statement)
+        names = [part.split(' as ')[-1].strip(' ()') for part in joined.split(' import ', 1)[1].split(',')]
+        if any(name and re.search(rf'\b{re.escape(name)}\b', text) for name in names):
+            kept.extend(statement)
+        statement = []
+    return '\n'.join(kept) + '\n'
+
+
 def table(source, rows, target):
+    out = table_text(source, rows, target, '@@IMPORTS@@\n')
+    return out.replace('@@IMPORTS@@\n', used_imports(native_imports(source), out))
+
+
+def table_text(source, rows, target, imports):
     out = HEADER + '''from core.shared_slot import SharedSlot
 from core.native_descriptor_abi import NativeDescriptorCall, NativeDescriptorError
 from core.native_descriptor_call import native_descriptor_words, native_descriptor_report
 from x_neighbors.descriptor_schema import XN_ABI_NAME, xn_schema, xn_min_ints
-''' + f'from x_neighbors.native_descriptor_aux_{target} import xn_aux_execute\n' + native_imports(source) + '''
+''' + f'from x_neighbors.native_descriptor_aux_{target} import xn_aux_execute\n' + imports + '''
 
 def _a(v: List[Int], k: Int) raises -> Int:
     var x = v[k]

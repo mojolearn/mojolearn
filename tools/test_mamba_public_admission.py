@@ -75,8 +75,9 @@ def test_session_reports_are_retained_before_returning_output():
 
 
 def test_native_cpu_route_does_not_consult_instance_class_protocol():
-    body = NATIVE.split("def _m3_entries(")[1].split("def _m3_allocate(")[0]
-    assert "PyType_IsSubtype" in body
+    # the route-taking overload (the first overload only forwards to it)
+    body = NATIVE.split("def _m3_entries(")[-1].split("def _m3_allocate(")[0]
+    assert "cpython_table()[].PyType_IsSubtype(" in body
     assert "py_call(bi.isinstance" not in body
 
 

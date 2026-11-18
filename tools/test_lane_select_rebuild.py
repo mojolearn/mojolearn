@@ -12,7 +12,6 @@ share one derived map; run this file on its own time budget.
     .pixi/envs/test/bin/python -m pytest tools/test_lane_select_rebuild.py -q
     python3 tools/test_lane_select_rebuild.py          # same checks, no pytest
 """
-import ast
 import os
 import re
 import sys
@@ -20,6 +19,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import lane_select                                              # noqa: E402
 from test_lane_select import _assert_reviewed_membership, _conformance_misses, _lane_sets  # noqa: E402
+from test_lane_select import _keep_the_real_map  # noqa: E402,F401  the autouse fixture: one derivation per perturbation
 
 
 def test_the_inversion_check_fails_when_the_backward_edge_is_removed():
@@ -129,8 +129,6 @@ def test_the_public_door_a_name_is_bound_from_is_in_the_map():
     that module, which the wide rule above breaks at once."""
     rev = lane_select.reverse_map()
     ib = lane_select.identity_break()
-    init = ast.parse(open(os.path.join(lane_select.ROOT, lane_select.PKG, "__init__.py"),
-                          encoding="utf-8").read())
     # STALE CASE DROPPED 2026-10-10: language_model.py is no longer a door.
     # 76c025466 (2026-10-02) made __init__.py bind the language-model names on
     # first touch (`_CPU_INFERENCE`, name -> module) instead of an eager
@@ -148,9 +146,11 @@ def test_the_public_door_a_name_is_bound_from_is_in_the_map():
         lanes = rev.get(rel, set())
         assert want in lanes, f"{rel} is the public door for {want} and the lane does not reach it"
         stem = os.path.basename(rel)[:-3]
-        bound = {a.asname or a.name for n in ast.walk(init)
-                 if isinstance(n, ast.ImportFrom) and n.level == 1 and n.module == stem
-                 for a in n.names}
+        # Since b6aa87e41d `__init__.py` binds these names through its `_LAZY_NAMES` table
+        # ("UMAP": ".umap") rather than `from .umap import UMAP`; both forms are read the way the
+        # selector reads them (`_public_rebindings`).
+        bound = {name for name, rels in lane_select._public_rebindings(lane_select._python_files()).items()
+                 if rel in rels and name != stem}
         assert bound, f"__init__.py binds nothing from {stem}; pick a new case"
         naming = {n for n, fn in ib.LANES.items()
                   if lane_select._code_names(fn, vars(ib)) & bound}

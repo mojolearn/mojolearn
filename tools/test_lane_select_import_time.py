@@ -77,8 +77,10 @@ def test_an_unreadable_diff_is_import_time():
 
 
 def test_the_closure_holds_the_chain_every_lane_imports():
+    # `_samba_impl.py` left the chain on purpose (b6aa87e41d: each family is imported on first touch); the
+    # bridge is still reached at import time through `_training_impl.py`.
     closure = ls.package_import_time_closure()
-    for name in ("__init__.py", "_samba_impl.py", "_native_samba_bridge.py", "neural_inference.py"):
+    for name in ("__init__.py", "_training_impl.py", "_native_samba_bridge.py", "neural_inference.py"):
         assert os.path.join(ls.PKG, name) in closure, name
     # `python -m mojolearn` is not `import mojolearn`
     assert os.path.join(ls.PKG, "__main__.py") not in closure

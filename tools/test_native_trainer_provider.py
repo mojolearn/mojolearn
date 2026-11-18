@@ -114,9 +114,10 @@ def test_byte_lm_stateless_owner_and_locked_finalization_share_transport():
     stateless=door.split('def _run_stateless(')[1].split('def byte_lm_construct(')[0]
     # lane calltable-byte-lm: the stateless step runs on a call-scoped native
     # session through the trainer table, with no Python session or provider.
-    assert '_table_execute(key, 8, descriptors,' in stateless
-    assert '_table_execute(key, 9, finalize,' in stateless
-    assert 'byte_lm_session_new(key)' in stateless and 'byte_lm_session_free(key, session)' in stateless
+    # The trainer table is resolved once per call and passed by value (`trainer`), not a key lookup.
+    assert '_table_execute(trainer, 8, descriptors,' in stateless
+    assert '_table_execute(trainer, 9, finalize,' in stateless
+    assert 'byte_lm_session_new(gl)' in stateless and 'byte_lm_session_free(gl, session)' in stateless
     assert '_entry(binding' not in stateless and 'neural_descriptor' not in stateless
     common=(ROOT/'providers/python/neural_descriptor_pyapi_door.mojo').read_text()
     assert 'release_gil: Bool = True' in common
@@ -131,5 +132,8 @@ def test_native_metadata_readback_reuses_admission_snapshot():
     assert 'sha256_file(' in runtime
     common=(ROOT/'providers/python/neural_descriptor_pyapi_door.mojo').read_text()
     entry=common.split('def neural_descriptor_entry(')[1].split('def neural_descriptor_connect(')[0]
-    assert 'py_get(_neural_descriptor_module_fields(module, bi), name)' in entry
+    # One borrowed exact-dict read of the admitted namespace (lane perf-provider-cache), never the
+    # module's Python __getattr__.
+    assert '_neural_descriptor_module_fields_once(module, bi)' in entry
+    assert 'PyDict_GetItemWithError(fields._obj_ptr, key._obj_ptr)' in entry
     assert '_neural_descriptor_function_owner(entry) != module._obj_ptr' in entry

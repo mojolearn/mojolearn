@@ -70,7 +70,9 @@ class TokenizerPublicSource(unittest.TestCase):
 
     def test_finished_outputs_and_unicode_exception_ownership_are_native(self):
         source = NATIVE.read_text()
-        for expected in ("PyBytes_FromStringAndSize", "PyUnicode_AsUTF8String", "stash_python_error()",
+        # Text is read through the typed CPython table's PyUnicode_AsUTF8AndSize (strict UTF-8,
+        # no codec lookup), which replaced the PyUnicode_AsUTF8String bytes round trip.
+        for expected in ("PyBytes_FromStringAndSize", ".PyUnicode_AsUTF8AndSize(", "stash_python_error()",
                          "optimizer_python_error(error)", "_trained_finish(", "with open(String(path), \"w\")"):
             self.assertIn(expected, source)
         connect = source.split("def _connect_error_handlers(", 1)[1].split("\n\ndef ", 1)[0]
@@ -94,8 +96,8 @@ class TokenizerPublicSource(unittest.TestCase):
         self.assertIn("var handlers = state[].error_handlers", policy)
         self.assertIn("state[].error_lookup is None", policy)
         self.assertIn("self.expected = py_get(handlers, errors)", policy)
-        self.assertLess(policy.index("entry is not self.expected"), policy.index('"PyUnicode_DecodeUTF8"'))
-        self.assertLess(policy.index('"PyCodec_LookupError"'), policy.index("entry is not self.expected"))
+        self.assertLess(policy.index("entry is not self.expected"), policy.index('.PyUnicode_DecodeUTF8('))
+        self.assertLess(policy.index('.PyCodec_LookupError('), policy.index("entry is not self.expected"))
         for body in (decode, policy):
             self.assertNotIn("_native(entry)", body)
             self.assertNotIn("codecs.lookup_error", body)
@@ -105,8 +107,8 @@ class TokenizerPublicSource(unittest.TestCase):
 
     def test_legacy_generation_consumers_have_a_connected_native_entry(self):
         source = NATIVE.read_text()
-        for entry in ("tokenizer_vocab_encode", "tokenizer_vocab_decode",
-                      "tokenizer_vocab_pretokenize", "tokenizer_vocab_fingerprint"):
+        # tokenizer_vocab_pretokenize was an orphan deleted by 00a4418230 (K0 dead code).
+        for entry in ("tokenizer_vocab_encode", "tokenizer_vocab_decode", "tokenizer_vocab_fingerprint"):
             self.assertIn("def " + entry + "(", source)
         fingerprint = source.split("def tokenizer_vocab_fingerprint(", 1)[1].split("def _vocab_config_pattern(", 1)[0]
         self.assertIn("_owner(tokenizer, context[0])", fingerprint)

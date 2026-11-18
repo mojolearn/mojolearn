@@ -9,6 +9,7 @@ import pytest
 
 import autograd_artifact_reuse as reuse
 import gate_autograd_artifacts as artifacts
+import autograd_smoke
 import gate_smoke_box as gate
 import release_gate_profiles as profiles
 import release
@@ -41,7 +42,8 @@ def test_light_admission_has_actual_counts_and_no_invented_performance(light):
     assert receipts.validate_receipt("candidate-nvidia", light.wanted, receipt) == []
     assert receipt["measured_pairs"] is None
     counts = {row["id"]: row["completed"] for row in receipt["coverage"]}
-    assert counts == {"install": 2, "installed-correctness": 11, "autograd-artifacts": 24, "adapters": 3}
+    assert counts == {"install": 2, "installed-correctness": 11, "autograd-artifacts": len(autograd_smoke.ENTRIES),
+                      "adapters": 3}  # the registry's entries (lm-tape and dropout left it: 906614f138, aaa6bdc46c)
 
 
 @pytest.mark.parametrize("change", ["profile", "campaign", "missing-correctness", "missing-job", "job-timeout",
@@ -252,7 +254,8 @@ def test_partial_artifact_reuse_builds_only_changed_sources_and_preserves_origin
     args = SimpleNamespace(source_commit=before, out=str(tmp_path / "old"), vendor="nvidia",
                            target="sm_89", mojo=str(compiler), compile_jobs=1, resume=False, reuse_from=None)
     assert artifacts.build(args) == 0
-    assert len(compiled) == 8
+    first = len(artifacts.expected("nvidia"))  # every compiled entry, once (906614f138 removed two)
+    assert len(compiled) == first
     changed = list(artifacts.expected("nvidia").values())[-2:]
     for source in changed:
         (root / source).write_text("fn main(): changed()\n")
@@ -262,15 +265,15 @@ def test_partial_artifact_reuse_builds_only_changed_sources_and_preserves_origin
     args.source_commit = after
     args.reuse_from, args.out = args.out, str(tmp_path / "new")
     assert artifacts.build(args) == 0
-    assert len(compiled) == 10
+    assert len(compiled) == first + 2  # only the two changed sources compile again
     doc = artifacts.validate(Path(args.out) / "build-manifest.json", "nvidia", after, root=root)
     kept = [row for row in doc["files"] if row.get("retained_artifact")]
-    assert len(kept) == 6
+    assert len(kept) == first - 2
     assert len(doc["reuse_refused"]) == 2
     assert all(row["retained_artifact"]["manifest"]["source_commit"] == before for row in kept)
     assert all(artifacts.retained_artifact_valid(doc, row) for row in kept)
     args.resume = True
-    assert artifacts.build(args) == 0 and len(compiled) == 10
+    assert artifacts.build(args) == 0 and len(compiled) == first + 2  # a resume compiles nothing
     kept[0]["retained_artifact"]["manifest"]["compiler"]["sha256"] = "f" * 64
     assert not artifacts.retained_artifact_valid(doc, kept[0])
 

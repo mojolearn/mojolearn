@@ -18,7 +18,8 @@ def test_public_getter_delegates_once_to_existing_native_schema():
     assert len(body) == 1 and isinstance(body[0], ast.Return)
     assert ast.unparse(body[0].value) == '_PARAMS_METADATA(self, False, _PARAMS_METADATA_CONTEXT)'
     schema = (ROOT / 'python/mojolearn/_native_params_metadata.py').read_text()
-    assert "_expansion_decomp._Base.get_params: ('declared', False)" in schema
+    # 26f25577dd: the schemas are one table of (module, class, kind, recurse) rows joined as modules load
+    assert "('_expansion_decomp', '_Base', 'declared', False)," in schema
 
 
 def test_all_inherited_public_getters_have_runtime_probes():

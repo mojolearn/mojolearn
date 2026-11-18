@@ -58,6 +58,17 @@ def plans(monkeypatch):
     backend.binding = lambda name, mode: (name, mode)
     monkeypatch.setitem(sys.modules, backend.__name__, backend)
     package._backend = backend
+    # The composed call reads its bindings from the family connection (_native_family_bridge
+    # connect_bindings; lane imputer-gp-native-module, 2026-11-16), not from _backend.binding.
+    bridge = types.ModuleType(package.__name__ + "._native_family_bridge")
+    shared = {"family_binding_connections": {}}
+    bridge.shared_context = lambda: shared
+    def connect_bindings(*names):
+        for name in names:
+            shared["family_binding_connections"][name] = {mode: ((name, mode),) for mode in ("identical", "fast")}
+    bridge.connect_bindings = connect_bindings
+    monkeypatch.setitem(sys.modules, bridge.__name__, bridge)
+    package._native_family_bridge = bridge
     spec = importlib.util.spec_from_file_location(package.__name__ + ".plans", PACKAGE / "_native_msel_prep.py")
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
@@ -95,9 +106,15 @@ def test_restored_fit_plans_match_public_native_argument_order(plans):
         assert fit is not None, name
         native = next(node.value for node in ast.walk(fit)
                       if isinstance(node, ast.Return) and isinstance(node.value, ast.Call))
-        assert isinstance(native.args[1], ast.Constant), name
+        # The operation is a string constant or a named code on the family's operation table
+        # (`_OP.trees_public_boost_fit`, the integer codes of `_operation_codes()`).
+        op_node = native.args[1]
+        if isinstance(op_node, ast.Attribute) and isinstance(op_node.value, ast.Name) and op_node.value.id == '_OP':
+            public_operation = op_node.attr
+        else:
+            assert isinstance(op_node, ast.Constant), name
+            public_operation = op_node.value
         operation, recipe = plan["methods"]["fit"]
-        public_operation = native.args[1].value
         if public_operation == 'trees_public_meta_fit':
             # Public doors own lifecycle/output conversion; composed estimators
             # intentionally target the internal Array ABI. Verify the bridge
@@ -108,7 +125,8 @@ def test_restored_fit_plans_match_public_native_argument_order(plans):
             assert operation == 'trees_meta_fit', name
             lifecycle = (ROOT / 'bindings/trees_public_meta_lifecycle_pack.mojo').read_text()
             assert 'if operation == "trees_public_meta_fit":\n        method = "fit"' in lifecycle
-            assert 'meta_operation(model, "trees_meta_" + method, call_args, context)' in lifecycle
+            # Admission runs once per configuration and the admitted kind is passed down (cb376df254).
+            assert 'meta_admitted_operation(model, kind, "trees_meta_" + method, call_args, context)' in lifecycle
         elif public_operation == 'trees_public_boost_fit':
             # Boost/bagging/DART/RTE public doors (2c61cfe498) own the
             # lifecycle and forward to the internal trees_boost_* ABI, the
@@ -116,7 +134,8 @@ def test_restored_fit_plans_match_public_native_argument_order(plans):
             assert operation == 'trees_boost_fit', name
             lifecycle = (ROOT / 'providers/python/tree_boost_public_lifecycle_pyapi_pack.mojo').read_text()
             assert 'var method = String(operation[byte=String("trees_public_boost_").byte_length():])' in lifecycle
-            assert 'boost_operation(model, "trees_boost_" + method, call_args, context)' in lifecycle
+            # The boost kind is resolved once per call and passed down (boost_operation_of, fed1b4e384).
+            assert 'boost_operation_of(model, kind, "trees_boost_" + method, call_args, context)' in lifecycle
             dispatch = (ROOT / 'bindings/trees_public_native_door.mojo').read_text()
             assert 'if operation.startswith("trees_public_boost_"):\n        return tree_boost_public_operation(' in dispatch
         else:
@@ -127,12 +146,18 @@ def test_restored_fit_plans_match_public_native_argument_order(plans):
             if isinstance(source, ast.Name):
                 assert item == {"X": ("arg", 0), "y": ("arg", 1),
                                 "sample_weight": ("keyword", "sample_weight", None)}[source.id], name
+            elif isinstance(source, ast.Constant) and source.value is None and item[0] == "binding":
+                # The public door passes None in the binding slot and resolves its own
+                # connected module natively; the composed plan hands the binding in.
+                pass
             elif isinstance(source, ast.Constant):
                 assert item == ("constant", source.value), name
             else:
                 assert item[0] == "binding", name
         checked.append(name)
-    assert len(checked) == 44
+    # Every fit plan was checked against its public call; the registry grows as families gain
+    # native plans (44 when this was written, 48 at f776cb552c), never shrinks.
+    assert len(checked) == sum(1 for plan in registry.values() if "fit" in plan["methods"]) >= 48
 
 
 def test_native_plans_preserve_posterior_and_weight_semantics(plans):
@@ -190,11 +215,14 @@ def test_meta_owners_do_not_call_member_methods_or_python_constructors():
     for token in forbidden:
         assert token not in source, token
     assert 'prep_native_split(c, X, y, context)' in source
-    assert 'prep_estimator_call(model, "__admit__"' in source
+    # Constructor admission runs once per configuration in its own door (cb376df254).
+    admission = (ROOT / 'bindings/trees_meta_admission_door.mojo').read_text()
+    assert 'prep_estimator_call(model, "__admit__"' in admission
     assert 'msel_admit(args, prep_native_context(context))' in source
     assert '"family_mcls_r2"' in source
     assert 'native_estimator_defaults' in source
-    assert 'native_estimator_entry=model_selection._NATIVE' in (PACKAGE / '__init__.py').read_text()
+    # The entry is connected when the family loads (b6aa87e41d), not in __init__.
+    assert 'native_estimator_entry=selection._NATIVE' in (PACKAGE / '_families.py').read_text()
     linear = (ROOT / 'bindings/x_linear_native_door.mojo').read_text()
     assert 'py_call(cv.split' not in linear
     assert 'prep_native_split(cv, x_source, y_source, context)' in linear

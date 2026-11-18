@@ -1,11 +1,14 @@
 """Dependency inventory negative controls; historical moves are not live gates."""
 
+from check_generation_native_boundary import unbuilt_generated
 from check_neural_provider_layout import check
 
 
 def test_six_native_tree_dependencies_resolve():
     roots, _, failures = check()
     assert len(roots) > 600
+    unbuilt = unbuilt_generated(failures)  # registered generated tables a build writes first
+    failures = [f for f in failures if f not in unbuilt]
     assert not failures, failures
 
 

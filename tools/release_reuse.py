@@ -689,12 +689,20 @@ def tree_facts(tree):
     tree = Path(tree)
     closures = {}
     scripts = sorted({b.script for t in (LINUX, MACOS) for b in bindings(t)})
-    for script in scripts:
-        path = tree / "bindings" / script
-        if not path.is_file():
-            closures[script] = None
-            continue
-        info, rels = bincache.source_digest(tree, str(path), [])
+    # One source closure per build script, each independent (about 10 s apiece, 89 scripts: 15 minutes serial on
+    # the Mac, the dry-run tests' timeouts): one process per script across the cores (MOJOLEARN_REUSE_WORKERS caps
+    # it; a closure walk holds well under 200 MB).
+    present = [s for s in scripts if (tree / "bindings" / s).is_file()]
+    closures.update({s: None for s in scripts if s not in present})
+    workers = max(1, min(len(present), int(os.environ.get("MOJOLEARN_REUSE_WORKERS") or os.cpu_count() or 1)))
+    if workers == 1:
+        results = [bincache.source_digest(tree, str(tree / "bindings" / s), []) for s in present]
+    else:
+        from concurrent.futures import ProcessPoolExecutor
+        with ProcessPoolExecutor(max_workers=workers) as pool:
+            results = list(pool.map(bincache.source_digest, [tree] * len(present),
+                                    [str(tree / "bindings" / s) for s in present], [[]] * len(present)))
+    for script, (info, rels) in zip(present, results):
         closures[script] = dict(info, sources=sorted(rels))
     files, views = {}, {}
     names = sorted({b.name for t in (LINUX, MACOS) for b in bindings(t)})

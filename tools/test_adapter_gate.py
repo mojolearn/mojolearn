@@ -330,7 +330,16 @@ def test_run_records_the_smoke_python_and_its_env_overrides(tmp_path, monkeypatc
     calls = []
     env = dict(__import__("os").environ, LD_LIBRARY_PATH="/torch/lib:/opt/rocm/lib")
     rec = AG.run("amd", "/base/python3", tmp_path / "a", ["/w/core.whl"], env=env, launch=fake_launch("PASSED", calls))
-    assert rec["python"] == AG.venv_python(tmp_path / "a" / "venv")
+    # the venv is a scratch venv under a temp dir, never inside the evidence folder (d43f402957)
+    py = Path(rec["python"])
+    assert rec["python"] == AG.venv_python(py.parents[1])
+    assert py.parents[2].name.startswith("adapter-venv-") and tmp_path not in py.parents
+    keep = AG.scratch_venv()
+    try:
+        assert AG.run("amd", "/base/python3", tmp_path / "k", ["/w/core.whl"], env=env, venv=keep,
+                      launch=fake_launch("PASSED", []))["python"] == AG.venv_python(keep)
+    finally:
+        AG.drop_venv(keep)
     assert rec["env_overrides"] == {"LD_LIBRARY_PATH": "/torch/lib:/opt/rocm/lib"}
     assert AG.run("amd", "/base/python3", tmp_path / "b", ["/w/core.whl"],
                   launch=fake_launch("PASSED", []))["env_overrides"] == {}

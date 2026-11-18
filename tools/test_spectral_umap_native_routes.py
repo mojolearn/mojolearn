@@ -41,7 +41,8 @@ def test_connection_detaches_proxy_and_preserves_optional_absence(bridge):
     assert vars(captured)["native"] is len
     assert "missing" not in vars(captured) and "__getattr__" not in vars(captured)
     assert captured.native([1, 2]) == 2
-    assert seen == ["native", "missing"]
+    # The capture also reads the image's UMAP table key once (smoke-triage 2026-11-15).
+    assert seen == ["native", "missing", "umap_native_key"]
     assert proxy not in vars(captured).values()
 
 
@@ -72,6 +73,8 @@ def test_modes_are_connected_once_and_missing_tier_is_retained(bridge, monkeypat
         return Proxy()
 
     backend.binding = binding
+    # Not a CPU-only install: the exact module is the binding itself (_backend.exact_host_module).
+    backend.exact_host_module = lambda value: value
     metrics._get_binding = lambda mode: binding("_mojolearn_metrics", mode)
     monkeypatch.setitem(sys.modules, backend.__name__, backend)
     monkeypatch.setitem(sys.modules, metrics.__name__, metrics)
@@ -94,7 +97,8 @@ def test_umap_initializer_retains_its_transitive_decomp_symbols(bridge):
     # the provider `x_decomp_native_api_v1`, which the decomp capture keeps.
     _, module = bridge
     run = (ROOT / "bindings/mani_kit_run.mojo").read_text() + (ROOT / "bindings/mani_umap_init_run.mojo").read_text()
-    assert '"x_decomp_' not in run
+    code = "\n".join(line.split("#", 1)[0] for line in run.splitlines())
+    assert '"x_decomp_' not in code  # names appear only in comments naming a flag's origin
     assert '"x_decomp_native_api_v1"' in (ROOT / "bindings/mani_kit_door.mojo").read_text()
     assert "x_decomp_native_api_v1" in set(module._SYMBOLS["decomp"][1])
     initializer = (ROOT / "bindings/mani_umap_native_door.mojo").read_text().split("def _umap_initial(", 1)[1].split("\ndef ", 1)[0]

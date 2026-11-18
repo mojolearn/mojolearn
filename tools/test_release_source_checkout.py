@@ -26,6 +26,9 @@ def repo(tmp_path, monkeypatch):
     sh(r, "init", "-q")
     sh(r, "config", "user.email", "t@example.com")
     sh(r, "config", "user.name", "t")
+    # a complete checkout carries the verification CTR models the pack stages (bc90e70162)
+    (r / "bench/results/identity_break").mkdir(parents=True)
+    (r / "bench/results/identity_break/model.json").write_text("{}\n")
     for i in range(2):
         for j in range(30):
             (r / f"f{j}.txt").write_text(f"{i}-{j}\n")
@@ -130,3 +133,12 @@ def test_a_leftover_tmp_tree_is_removed(tmp_path, repo):
     assert (p / "f0.txt").exists()
     assert not stale.exists() and not half.exists()
     assert "tmp-" not in sh(root, "worktree", "list")
+
+
+def test_a_tree_without_the_verification_models_is_incomplete(repo):
+    r, first = repo
+    head = sh(r, "rev-parse", "HEAD")
+    assert release.Release._source_problem(r, head) is None
+    sh(r, "rm", "-rq", "bench")
+    sh(r, "commit", "-qm", "drop models")
+    assert "lacks bench/results/identity_break" in release.Release._source_problem(r, sh(r, "rev-parse", "HEAD"))

@@ -8,7 +8,7 @@
 #   ... [--rent] [--expect-from <NVIDIA leg release-build dir>] [--lease MIN] [--cap USD]
 #
 # WHAT IS THE SAME AS THE DIGITALOCEAN LEG, BY CONSTRUCTION. The frozen commit's
-# `git archive` (same excludes, same 40 MiB cap, the same native-inventory
+# `git archive` (same excludes, same 64 MiB cap, the same native-inventory
 # compare against this checkout), unpacked at /root/mojolearn with commit.txt;
 # the same host preparation (patchelf, docker, python3-venv, pixi, `pixi install
 # --locked --environment default` under tools/amd_serial_guard.py, patchelf
@@ -150,7 +150,10 @@ log "archiving $COMMIT"
 git -C "$REPO" archive --format=tar "$COMMIT" -- . ':!bench/results' ':!bench/evidence' ':!mamba/corpus' ':!bench/oracle*' \
   | gzip > "$TMPD/src.tgz" || die "git archive failed"
 ARCHIVE_BYTES=$(wc -c < "$TMPD/src.tgz" | tr -d ' ')
-[ "$ARCHIVE_BYTES" -lt $((40 * 1024 * 1024)) ] || die "archive is $ARCHIVE_BYTES bytes gzipped, cap 40 MiB"
+# 2026-11-17 (lane fb14-tool-tests): the archive measured 51.0 MB gzipped (organic growth: experiments/removed
+# tombstone patches 25 MB raw, docs, python/mojolearn); the cap still catches an accidental broad path, so it moves
+# to 64 MiB (about 25 s on the home uplink at the measured 2.4 MB/s).
+[ "$ARCHIVE_BYTES" -lt $((64 * 1024 * 1024)) ] || die "archive is $ARCHIVE_BYTES bytes gzipped, cap 64 MiB"
 ARCHIVE_SHA=$(sha256_of "$TMPD/src.tgz")
 mkdir "$TMPD/archive" && tar -xzf "$TMPD/src.tgz" -C "$TMPD/archive" || die "archive does not unpack"
 # The source checkout the packer reads: this one, or the frozen source

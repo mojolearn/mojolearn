@@ -25,8 +25,8 @@ def test_native_session_owner_preserves_cpu_copies_gpu_provider_and_cleanup():
     assert 'var weights: List[List[Float32]]' in source
     assert 'var k_cache: List[Float32]' in source
     assert 'snapshot.packed.resolve(keep)' in source
-    for operation in ('19 if packed else 18','20 if step else 21','23 if load else 22'):
-        assert operation in source
+    # The descriptor-provider arm (ops 18-24) was deleted from the door by 8c1cbf86b5; the
+    # session runs its one device open and the decode program.
     assert 'finally:\n            transformer_decode_release(session, context)' in source
     assert 'keys.publish()' in source and 'vals.publish()' in source
     assert 'if load:\n        _transformer_decode_profile(fields, slots)' in source
@@ -48,17 +48,18 @@ def test_resident_whole_model_uses_original_run_and_atomic_group_reservation():
     assert '_lm_forward_run(owner[], group.layers' in source
     assert 'owner[].usable = False' in source
     assert '].usable = False' in source
-    boundary=(ROOT/'providers/python/transformer_resident_pyapi.mojo').read_text()
-    assert 'List[NativeSessionGroup]()' in boundary
-    assert '30, 31, 32, [], [], []' in boundary
+    # The provider boundary (transformer_resident_pyapi.mojo, ops 30-32) and the public door's
+    # provider-session calls were deleted (9b26007213, 58fbf80607): sessions are native handles.
     public=(ROOT/'bindings/causal_lm_public_door.mojo').read_text()
-    for name in ('transformer_resident_lm_run','transformer_resident_lm_open','transformer_resident_lm_close'):
-        assert name+'(provider,' in public
+    assert 'transformer_resident_lm_run(provider,' not in public
 
 
 def test_decode_captures_fields_and_uses_retained_native_entry_dictionary():
     source=(ROOT/'providers/python/transformer_decode_pyapi_door.mojo').read_text()
-    assert 'py_fields(' not in source
+    # The one instance-dictionary read is the admitted per-token check (ce964f069e), native and
+    # hook-free; no other function reads owner fields that way.
+    assert source.count('py_fields(') == 1
+    assert 'py_fields(' in source.split('def _transformer_decode_admitted(')[1].split('\ndef ')[0]
     assert '_native_function(' not in source
     assert 'py_call(bi.hasattr' not in source
     # N192: the module namespace is admitted once per module identity by the
@@ -79,18 +80,13 @@ def test_decode_captures_fields_and_uses_retained_native_entry_dictionary():
     assert 'len(args) != 3 or py_type(args[0]) is not bi.str' in source
 
 
-def test_decode_session_keeps_native_handle_and_binding_words():
-    # N186: the provider handle is resolved once at open and kept in the
-    # owner; N192: vendor and mode words are read once per compiled entry pair.
+def test_decode_session_keeps_binding_words():
+    # N192: vendor and mode words are read once per compiled entry pair. The provider
+    # native_handle (N186) and the value-handle cache went with the provider arm
+    # (8c1cbf86b5, 58fbf80607).
     source=(ROOT/'providers/python/transformer_decode_pyapi_door.mojo').read_text()
-    assert 'var native_handle: Int' in source
-    assert 'handle.native_handle = transformer_resident_decode_handle(handle.provider, handle.device)' in source
-    run=source.split('def transformer_decode_run(')[1].split('def transformer_decode_state(')[0]
-    assert 'h[].native_handle' in run
     assert 'transformer_resident_decode_call(' not in source
     words=source.split('def _transformer_decode_words(')[1].split('comptime _TRANSFORMER_DECODE_STEP')[0]
     assert 'g[].vendor_entries[i] is vendor_entry and g[].mode_entries[i] is mode_entry' in words
     provider=(ROOT/'providers/python/neural_descriptor_pyapi_door.mojo').read_text()
-    cached=provider.split('def neural_descriptor_value_handle(')[1].split('def neural_descriptor_matches(')[0]
-    assert cached.index('_neural_descriptor_admit_entry(provider, factory)') < cached.index('py_call(factory, value)')
-    assert "g[].types.get(address, 0) == cls and g[].factories.get(address, 0) == entry" in cached
+    assert 'def neural_descriptor_value_handle(' not in provider

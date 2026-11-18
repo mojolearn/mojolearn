@@ -9,7 +9,8 @@ def read(name):
 
 def test_native_dependencies_resolve_and_include_shared_numerical_owners():
     seen, failures = audit()
-    assert {'training.samba_ops', 'mamba.impl.mamba_shell_impl', 'core.native_descriptor_call'} <= seen
+    # The Mamba state ops run on the cached block program (lane x5-mamba-on-executor), not the shell.
+    assert {'training.samba_ops', 'mamba.impl.mamba_block_program', 'core.native_descriptor_call'} <= seen
     assert not failures, failures
 
 
@@ -28,10 +29,11 @@ def test_connection_and_hot_execution_remain_separate():
 
 
 def test_both_doors_share_numerical_functions_and_original_float_casts():
-    for file, fn in [('bindings/_mojolearn_training.mojo', 'native_primitive_operation'),
-                     ('bindings/_mojolearn_mamba.mojo', 'mamba_state_operation')]:
+    # The Mamba-3 forward/decode-step Python entries (state ops 4 and 5) were deleted by 4d934316ef.
+    for file, fn, ops in [('bindings/_mojolearn_training.mojo', 'native_primitive_operation', range(6)),
+                          ('bindings/_mojolearn_mamba.mojo', 'mamba_state_operation', range(4))]:
         body = read(file)
-        for op in range(6):
+        for op in ops:
             assert f'{fn}({op},' in body
     native = read('training/native_primitive_dispatch.mojo')
     for family in ('embedding', 'rms_norm', 'linear'):
@@ -44,8 +46,9 @@ def test_both_doors_share_numerical_functions_and_original_float_casts():
     mamba = read('mamba/native_state_dispatch.mojo')
     # lane x5-mamba-on-executor: every family runs the block step op on the
     # cached block program (mamba/impl/mamba_block_program.mojo).
-    assert 'mamba_block_call_abi(1, a, b, l, dm, 0, 0, Float32(0), Float32(0))' in mamba
-    assert 'mamba_block_call_abi(2, a, b, l, dm, p[tail], 0, Float32(f[0]), Float32(f[1]))' in mamba
+    # Families 1 and 2 also pass the trailing (False, not step) route words.
+    assert 'mamba_block_call_abi(1, a, b, l, dm, 0, 0, Float32(0), Float32(0), False, not step)' in mamba
+    assert 'mamba_block_call_abi(2, a, b, l, dm, p[tail], 0, Float32(f[0]), Float32(f[1]), False, not step)' in mamba
     assert 'mamba_block_call_abi(3, a, b, l, dm, p[tail], p[tail + 1], Float32(0), Float32(0))' in mamba
 
 
@@ -76,10 +79,11 @@ def test_coverage_lists_actual_twenty_nine_plan_rows_and_pending_runtime():
 
 def test_result_and_error_share_stable_caller_owned_storage():
     caller = read('core/native_descriptor_call.mojo')
-    assert 'List[NativeCallOutput]()' in caller
-    # The heap-owned List element is handed to the span call (378a5d8a95),
-    # which writes result and error through that one retained field.
-    assert 'Int(floats.unsafe_ptr()), len(floats), output[0])' in caller
+    # The output words live on the caller's frame (lane entry-table-zero-alloc; the heap List
+    # arm ENTRY_TABLE_HEAP_OUTPUT was folded off by 18a80bdd0b) and are handed to the span call,
+    # which writes result and error through that one value.
+    assert 'var output = NativeCallOutput()' in caller and 'List[NativeCallOutput]' not in caller
+    assert 'Int(floats.unsafe_ptr()), len(floats), output)' in caller
     assert 'mut output: NativeCallOutput' in caller
     assert 'Int(MutPointer(to=output.result))' in caller
     assert 'Int(MutPointer(to=output.error))' in caller
