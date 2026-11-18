@@ -8841,6 +8841,47 @@ comptime GEMM_KPACK_LOADAHEAD = (
     if is_defined["MOJOLEARN_GEMM_FAST_LOADAHEAD"]() else 1
 )
 
+# lane fx-gemm-epi (2026-11-18, `-D MOJOLEARN_GEMM_FAST_EPI=1`, default OFF,
+# OPEN: no A/B yet). THE STORE EPILOGUE: a product whose output is only ever
+# joined to the value already in its destination stores the join, so the
+# follower add launch (`autograd/kernels/transformer.mojo` `bwd_add2_kernel`,
+# `bwd_add3_kernel`) is not issued. The kinds are the follower's expressions,
+# character for character, with `cell` the product's stored cell (`ftz(root)`,
+# contract 5g) and `prior` the destination word read before the store:
+#   GEMM_EPI_C_PLUS_CELL  ftz(ftz(prior) + ftz(cell))   bwd_add3's two joins
+#                         `ftz(ftz(va) + ftz(vb))`, `ftz(ftz(acc) + ftz(vc))`
+#   GEMM_EPI_CELL_PLUS_C  ftz(ftz(cell) + ftz(prior))   bwd_add2
+#                         `ftz(ftz(a) + ftz(bb))` with a = this product
+# SAME BITS, by construction: the follower read the product back from memory
+# (the stored `ftz(root)` word) and flushed it again; here the same word is
+# flushed in a register (`ftz` is idempotent). One IEEE add, round to nearest
+# even, on the same two words in the same operand order, then the same flush.
+# NO CONTRACTION IS POSSIBLE on any column: both addends are results of `ftz`
+# (`checks/numerics.mojo`: NVIDIA `llvm.nvvm.fma.rn.ftz.f(x, 1.0, -0.0)` and a
+# NaN select, AMD a class test and a select, Apple a compare and a select, the
+# host the integer spelling), never of a bare product, so neither LLVM's
+# fp-contract nor ptxas has a multiply to fuse into this add; it is the add
+# `bwd_add2_kernel` compiles. Kinds that read a SECOND buffer (bias, bias +
+# ReLU, the activation derivative, a residual whose other term is not the
+# destination) need one more pointer in the kernel's argument block and are
+# not here: see the lane's RESULT file.
+comptime GEMM_EPI_NONE = 0
+comptime GEMM_EPI_C_PLUS_CELL = 1
+comptime GEMM_EPI_CELL_PLUS_C = 2
+
+
+@always_inline
+def gemm_epi_cell[EPI: Int](cell: Float32, prior: Float32) -> Float32:
+    """The stored word of a product cell under epilogue kind `EPI` (above).
+    `cell` is the product's own cell as the plain store writes it; `prior`
+    is the destination word loaded before the store."""
+    comptime assert EPI == GEMM_EPI_C_PLUS_CELL or EPI == GEMM_EPI_CELL_PLUS_C, (
+        "gemm_epi_cell: kind 1 (prior + cell) or 2 (cell + prior)"
+    )
+    comptime if EPI == GEMM_EPI_C_PLUS_CELL:
+        return ftz(ftz(prior) + ftz(cell))
+    return ftz(ftz(cell) + ftz(prior))
+
 
 @always_inline
 def _kpack_step[DIAG: Int](a: Float32, b: Float32, acc: Float32) -> Float32:
@@ -8864,6 +8905,7 @@ def identical_gemm_kpack_kernel[
     DIAG: Int = 0,
     HWFOLD: Bool = False,
     GATHER: Bool = False,
+    EPI: Int = 0,
 ](
     dst: MutPointer[Float32, MutAnyOrigin],
     a: MutPointer[Float32, MutAnyOrigin],
@@ -9432,6 +9474,14 @@ def identical_gemm_kpack_kernel[
     var outv = _fold_drain_local[NCELL, FS, HWFOLD](fl, occ)
     comptime if DIAG == 4 or DIAG == 5:
         outv = acc
+    # lane fx-gemm-epi: `EPI != 0` (all-leaves mode only) stores
+    # `gemm_epi_cell[EPI](cell, dst word)`, ONE store per cell: the destination
+    # is the epilogue's operand, so the detect seam's exact cell (FASTK) is
+    # chosen BEFORE the store, not written over it afterwards.
+    comptime assert EPI == GEMM_EPI_NONE or (not GROUP and not SAB and DIAG == 0), (
+        "identical_gemm_kpack_kernel: the store epilogue is the all-leaves"
+        " store of the clean body (no group nodes, no sabotage, no DIAG)"
+    )
     comptime for u4 in range(NR):
         comptime for v7 in range(NCOL):
             var gi = i0 + accrow + u4 * TR
@@ -9452,8 +9502,13 @@ def identical_gemm_kpack_kernel[
                         comptime if u4 == 0 and v7 == 0:
                             if tid == 0:
                                 cell = _gemm_step_arm_sabotage(cell)
+                    comptime if EPI != GEMM_EPI_NONE:
+                        comptime if FASTK:
+                            if _detect_recompute(sub_seen):
+                                cell = _rtf_cell(a, b, gi, gj, p_count, leaf, k, a_si, a_sp, b_sp, b_sj)
+                        cell = gemm_epi_cell[EPI](cell, dst.unsafe_load(gi * n + gj))
                     dst.unsafe_store(gi * n + gj, cell)
-    comptime if FASTK:
+    comptime if FASTK and EPI == GEMM_EPI_NONE:
         # lane/amd-step-time: a step result of my cells was subnormal; every
         # cell (or group node) this thread owns is recomputed exactly.
         if _detect_recompute(sub_seen):
