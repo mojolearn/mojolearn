@@ -58,6 +58,15 @@ estimator's `labels_`; theirs are int64 (`hdbscan.pyx:1316`).
 from max.gpu import block_dim, block_idx, thread_idx
 from std.memory import unsafe_memcpy
 from max.gpu.host import DeviceBuffer, DeviceContext
+from core.transfer import (
+    TRANSFER_TIER_IDENTICAL,
+    transfer_download_f32_list,
+    transfer_download_list,
+    transfer_upload_list,
+)
+
+#: The pinned download stages of this module and tier (core/transfer.mojo).
+comptime _XFER_POOL = "MojolearnHdbscanPredictTransferStagesIdenticalV1" if TRANSFER_TIER_IDENTICAL else "MojolearnHdbscanPredictTransferStagesFastV1"
 
 from checks.numerics import identical_div
 from core.identity_trace import IdentityTrace
@@ -201,65 +210,34 @@ struct PredictOutput(Movable):
 def _upload_f32(
     ctx: DeviceContext, values: List[Float32], n: Int
 ) raises -> DeviceBuffer[DType.float32]:
-    var buf = ctx.enqueue_create_buffer[DType.float32](max(n, 1))
-    ctx.synchronize()
-    if n > 0:
-        var h = ctx.enqueue_create_host_buffer[DType.float32](n)
-        ctx.synchronize()
-        for i in range(n):
-            h.unsafe_ptr().unsafe_store(i, values[i])
-        ctx.enqueue_copy(dst_buf=buf, src_ptr=h.unsafe_ptr())
-        ctx.synchronize()
-        _ = h^
-    return buf^
+    # core/transfer.mojo (lane fx-transfer-helpers, 2026-11-18): read in place
+    # from the caller's list, one wait. Gone: three waits (one before the
+    # host buffer was touched), a pinned buffer per call and one store per
+    # word into it.
+    return transfer_upload_list[DType.float32](ctx, values, n if n > 0 else 0, max(n, 1))
 
 
 def _upload_i32(
     ctx: DeviceContext, values: List[Int32], n: Int
 ) raises -> DeviceBuffer[DType.int32]:
-    var buf = ctx.enqueue_create_buffer[DType.int32](max(n, 1))
-    ctx.synchronize()
-    if n > 0:
-        var h = ctx.enqueue_create_host_buffer[DType.int32](n)
-        ctx.synchronize()
-        for i in range(n):
-            h.unsafe_ptr().unsafe_store(i, values[i])
-        ctx.enqueue_copy(dst_buf=buf, src_ptr=h.unsafe_ptr())
-        ctx.synchronize()
-        _ = h^
-    return buf^
+    # core/transfer.mojo: as `_upload_f32` above.
+    return transfer_upload_list[DType.int32](ctx, values, n if n > 0 else 0, max(n, 1))
 
 
 def _download_f32(
     ctx: DeviceContext, buf: DeviceBuffer[DType.float32], n: Int
 ) raises -> List[Float32]:
-    var h = ctx.enqueue_create_host_buffer[DType.float32](n)
-    ctx.synchronize()
-    var v = buf.create_sub_buffer[DType.float32](0, n)
-    ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=v)
-    ctx.synchronize()
-    var out = List[Float32](capacity=n)
-    for i in range(n):
-        out.append(h.unsafe_ptr().unsafe_load(i))
-    _ = h^
-    _ = v^
-    return out^
+    # core/transfer.mojo (lane fx-transfer-helpers, 2026-11-18): the copy
+    # engine writes the list's own words, one wait. Gone: two waits, a pinned
+    # buffer per call and one append per word.
+    return transfer_download_f32_list[_XFER_POOL](ctx, buf, n)
 
 
 def _download_i32(
     ctx: DeviceContext, buf: DeviceBuffer[DType.int32], n: Int
 ) raises -> List[Int32]:
-    var h = ctx.enqueue_create_host_buffer[DType.int32](n)
-    ctx.synchronize()
-    var v = buf.create_sub_buffer[DType.int32](0, n)
-    ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=v)
-    ctx.synchronize()
-    var out = List[Int32](capacity=n)
-    for i in range(n):
-        out.append(h.unsafe_ptr().unsafe_load(i))
-    _ = h^
-    _ = v^
-    return out^
+    # core/transfer.mojo: as `_download_f32` above (one copy, one wait).
+    return transfer_download_list[DType.int32](ctx, buf, n)
 
 
 def approximate_predict(

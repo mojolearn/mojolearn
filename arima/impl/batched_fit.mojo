@@ -106,6 +106,10 @@ a compile slot should replace both with what it sees, exactly as
 """
 
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
+from core.transfer import TRANSFER_TIER_IDENTICAL, transfer_download_f32_list
+
+#: The pinned download stages of this module and tier (core/transfer.mojo).
+comptime _XFER_POOL = "MojolearnArimaFitTransferStagesIdenticalV1" if TRANSFER_TIER_IDENTICAL else "MojolearnArimaFitTransferStagesFastV1"
 from std.memory import unsafe_memcpy
 
 from arima.impl.batched_arima import _refuse_non_finite
@@ -187,16 +191,11 @@ def _upload(ctx: DeviceContext, mut buf: DeviceBuffer[DType.float32], v: List[Fl
 
 
 def _download(ctx: DeviceContext, buf: DeviceBuffer[DType.float32], n: Int) raises -> List[Float32]:
-    var h = ctx.enqueue_create_host_buffer[DType.float32](n if n > 0 else 1)
-    if n > 0:
-        var view = buf.create_sub_buffer[DType.float32](0, n)
-        ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=view)
-    ctx.synchronize()
-    var out = List[Float32]()
-    for i in range(n):
-        out.append(h.unsafe_ptr().unsafe_load(i))
-    _ = h^
-    return out^
+    # core/transfer.mojo (lane fx-transfer-helpers, 2026-11-18): the copy
+    # engine writes the list's own words. Gone: a pinned buffer per call and
+    # one append per word into a growing list. (Old form waited for n == 0
+    # too; nothing is queued by this helper then.)
+    return transfer_download_f32_list[_XFER_POOL](ctx, buf, n)
 
 
 # ---------------------------------------------------------------------------

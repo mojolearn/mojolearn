@@ -35,6 +35,12 @@ HAS RUN THIS UNDER IDENTICAL. See `resample/README.md` under Status.
 # DEVIATION 2486: bulk host staging; stream/lifetime boundaries unchanged.
 from core.device_plan import DevicePlan, plan_for_single
 from core.hostptr import copy_f32, f32_ptr, i32_ptr
+from core.transfer import (
+    TRANSFER_TIER_IDENTICAL,
+    transfer_download_f32_list,
+    transfer_download_list,
+    transfer_upload_list,
+)
 from resample.gather_fast import GATHER_COLS, GATHER_ROWS, gather_rows_f32_kernel, gather_rows_tiled_f32_kernel, permutation_positions_kernel, permutation_merge_kernel
 from resample.fast_apple import (
     RESAMPLE_FAST_APPLE,
@@ -311,22 +317,20 @@ struct MonteCarloResult(Movable):
 
 
 # ===========================================================================
-# Upload / download, the same shape `kde/estimator.mojo` uses
+# Upload / download: core/transfer.mojo's forms
 # ===========================================================================
+
+#: The pinned download stages of this module and tier (core/transfer.mojo).
+comptime _XFER_POOL = "MojolearnResampleTransferStagesIdenticalV1" if TRANSFER_TIER_IDENTICAL else "MojolearnResampleTransferStagesFastV1"
 
 
 def _upload(
     ctx: DeviceContext, values: List[Float32]
 ) raises -> DeviceBuffer[DType.float32]:
-    var n = len(values)
-    var buf = ctx.enqueue_create_buffer[DType.float32](n)
-    var host = ctx.enqueue_create_host_buffer[DType.float32](n)
-    ctx.synchronize()
-    copy_f32(values.unsafe_ptr(), host.unsafe_ptr(), n)
-    ctx.enqueue_copy(dst_buf=buf, src_ptr=host.unsafe_ptr())
-    ctx.synchronize()
-    _ = host^
-    return buf^
+    # core/transfer.mojo (lane fx-transfer-helpers, 2026-11-18): read in place
+    # from the caller's list. Gone: the pinned staging buffer per call, the
+    # wait before it was touched and the host copy into it. One wait.
+    return transfer_upload_list[DType.float32](ctx, values, len(values), len(values))
 
 
 #: The caller-pointer type of the `*_into` entries: the binding's own
@@ -396,14 +400,10 @@ def _download_f32_list(
 def _download_f32(
     ctx: DeviceContext, buf: DeviceBuffer[DType.float32], n: Int
 ) raises -> List[Float32]:
-    var host = ctx.enqueue_create_host_buffer[DType.float32](n)
-    ctx.enqueue_copy(dst_ptr=host.unsafe_ptr(), src_buf=buf)
-    ctx.synchronize()
-    var out = List[Float32]()
-    for i in range(n):
-        out.append(host.unsafe_ptr().unsafe_load(i))
-    _ = host^
-    return out^
+    # core/transfer.mojo (lane fx-transfer-helpers, 2026-11-18): the copy
+    # engine writes the list's own words. Gone: a pinned buffer per call and
+    # one append per word into a growing list.
+    return transfer_download_f32_list[_XFER_POOL](ctx, buf, n)
 
 
 def _perm_observed(
@@ -457,14 +457,10 @@ def _perm_observed(
 def _download_i32(
     ctx: DeviceContext, buf: DeviceBuffer[DType.int32], n: Int
 ) raises -> List[Int32]:
-    var host = ctx.enqueue_create_host_buffer[DType.int32](n)
-    ctx.enqueue_copy(dst_ptr=host.unsafe_ptr(), src_buf=buf)
-    ctx.synchronize()
-    var out = List[Int32]()
-    for i in range(n):
-        out.append(host.unsafe_ptr().unsafe_load(i))
-    _ = host^
-    return out^
+    # core/transfer.mojo (lane fx-transfer-helpers, 2026-11-18): one copy into
+    # the list's own words (the drawn row indices: `count` of them). Gone: a
+    # pinned buffer per call and one append per index into a growing list.
+    return transfer_download_list[DType.int32](ctx, buf, n)
 
 
 # ===========================================================================

@@ -85,6 +85,7 @@ is the one-shot form, which is what the gates and the card use.
 # DEVIATION 2486: bulk host staging; stream/lifetime boundaries unchanged.
 from std.sys.compile import is_defined
 from core.hostptr import copy_f32
+from core.transfer import transfer_download_list, transfer_upload_list
 from std.memory import bitcast
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from checks.numerics import GLOBAL_NUMERIC_MODE as _CTX_MODE, NUMERIC_IDENTICAL as _CTX_IDENTICAL
@@ -509,17 +510,14 @@ def _trace_for(trace_path: String, truncate: Bool) raises -> IdentityTrace:
     return IdentityTrace.to_path(trace_path, "", truncate)
 
 
+@always_inline
 def _upload(
     ctx: DeviceContext, values: List[Float32]
 ) raises -> DeviceBuffer[DType.float32]:
-    var n = len(values)
-    var buf = ctx.enqueue_create_buffer[DType.float32](n)
-    var host = ctx.enqueue_create_host_buffer[DType.float32](n)
-    copy_f32(values.unsafe_ptr(), host.unsafe_ptr(), n)
-    ctx.enqueue_copy(dst_buf=buf, src_ptr=host.unsafe_ptr())
-    ctx.synchronize()
-    _ = host^
-    return buf^
+    # core/transfer.mojo (lane fx-transfer-helpers, 2026-11-18): read in place
+    # from the caller's list; the pinned staging buffer and its host copy per
+    # call are gone. One wait, as before.
+    return transfer_upload_list[DType.float32](ctx, values, len(values), len(values))
 
 
 #: fam-kernel-gp (2026-10-04), IDENTICAL, ON by default: `_download`
@@ -588,14 +586,10 @@ def _download(
 def _download_i32(
     ctx: DeviceContext, mut buf: DeviceBuffer[DType.int32], n: Int
 ) raises -> List[Int32]:
-    var h = ctx.enqueue_create_host_buffer[DType.int32](n)
-    ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=buf)
-    ctx.synchronize()
-    var out = List[Int32]()
-    for i in range(n):
-        out.append(h.unsafe_ptr().unsafe_load(i))
-    _ = h^
-    return out^
+    # core/transfer.mojo (lane fx-transfer-helpers, 2026-11-18): one copy into
+    # the list's own words. Gone: a pinned buffer per call and one append per
+    # word into a growing list.
+    return transfer_download_list[DType.int32](ctx, buf, n)
 
 
 # ===========================================================================

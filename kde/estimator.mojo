@@ -42,6 +42,7 @@ CPU host binding use.
 
 # DEVIATION 2486: bulk host staging; stream/lifetime boundaries unchanged.
 from core.hostptr import copy_f32
+from core.transfer import transfer_upload_list
 from max.gpu.host import DeviceBuffer, DeviceContext
 from core.neural_context import process_ctx
 from checks.numerics import GLOBAL_NUMERIC_MODE as _DEVCTX_MODE, NUMERIC_IDENTICAL as _DEVCTX_IDENTICAL
@@ -65,15 +66,12 @@ from kde.impl.neighbors.kernel_density import (
 )
 
 
+@always_inline
 def _upload(ctx: DeviceContext, values: List[Float32]) raises -> DeviceBuffer[DType.float32]:
-    var n = len(values)
-    var buf = ctx.enqueue_create_buffer[DType.float32](n)
-    var host = ctx.enqueue_create_host_buffer[DType.float32](n)
-    copy_f32(values.unsafe_ptr(), host.unsafe_ptr(), n)
-    ctx.enqueue_copy(dst_buf=buf, src_ptr=host.unsafe_ptr())
-    ctx.synchronize()
-    _ = host^
-    return buf^
+    # core/transfer.mojo (lane fx-transfer-helpers, 2026-11-18): read in place
+    # from the caller's list; the pinned staging buffer and its host copy per
+    # call are gone. One wait, as before.
+    return transfer_upload_list[DType.float32](ctx, values, len(values), len(values))
 
 
 def kde_score_samples_host(
