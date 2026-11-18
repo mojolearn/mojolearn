@@ -622,6 +622,11 @@
    "define": "MOJOLEARN_XPREP_FAST_TE_PBUCKET_OFF",
    "status": "define in code (bindings/prep_encode_native_door.mojo TE_PBUCKET): B = TargetEncoder without the per-bucket pass; A = the per-bucket pass, the default. Was a run-time env read until lane fx-env-dead (2026-11-18); default unchanged",
    "owed": "RUN"
+  },
+  "lmhead-gemm-panel": {
+   "define": "MOJOLEARN_LMHEAD_FAST_GEMM_PANEL",
+   "status": "define in code (training/chunked_lm_head_panel_math.mojo LMHEAD_FAST_GEMM_PANEL; read by training/chunked_lm_head_v2.mojo and training/checks/chunked_lm_head_oracle.mojo): B = training.chunked_lm_head_loss as GEMM logit panels with tree folds on the device and the host column together; A = the scalar serial profile, the default. Added by lane fx-lmhead-gemm (2026-11-18); default unchanged; bits change under B on every column",
+   "owed": "RUN"
   }
  },
  "rows": [
@@ -3480,6 +3485,35 @@
     "xprep-te-pbucket-off"
    ],
    "decides": "keep A (the default) unless B is faster at equal quality on the NVIDIA L40S; digests must not move; time also a neighbouring shape and a non-board dataset before a flip (no dimension targeting)"
+  },
+  {
+   "id": "lmhead-gemm-panel-rows",
+   "source": "lane fx-lmhead-gemm (2026-11-18), idea 1 of ~/mojolearn-evidence/briefs-20261118/ideas-neural-speed-RESULT.md (section 2d: the row is 33,009 ms on the L40S); ~/mojolearn-evidence/briefs-20261118/fx-lmhead-gemm-RESULT.md",
+   "kind": "ab",
+   "lane": "train-chunked-lm-head-loss",
+   "dataset": "synthetic",
+   "rows": "full",
+   "vendor": "nvidia",
+   "b_arms": [
+    "lmhead-gemm-panel"
+   ],
+   "shape": {
+    "rows": 8192,
+    "vocab": 32768,
+    "width": 1024,
+    "neighbour": {
+     "rows": 4096,
+     "vocab": 50257,
+     "width": 768
+    },
+    "non_board": {
+     "rows": 2048,
+     "vocab": 49152,
+     "width": 576,
+     "what": "the smollm2-135m head"
+    }
+   },
+   "decides": "promote B (GEMM panels and tree folds become the profile, the scalar serial kernels and oracle folds are deleted with the four tombstone parts) when B is faster on the NVIDIA L40S with loss_rel_err_vs_fp64, d_hidden_max_rel_diff_vs_fp64 and d_weight_max_rel_diff_vs_fp64 not worse than A; expected under 2 s against 33 s. Digests DO move under B (logit contraction and fold order) on every vendor and the host column together; they are compared across columns at the release verification, never against A. Time also the neighbouring shape and the non-board shape before the flip (no dimension targeting)"
   }
  ]
 }
