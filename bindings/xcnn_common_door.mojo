@@ -145,8 +145,8 @@ def _xcnn_names() raises -> UnsafePointer[_XcnnNames, MutAnyOrigin]:
     if g[].ready:
         return g
     if len(g[].keys) == 0:
-        # small-loop(the fixed names the doors read per call; order = the XK_ indexes)
-        for name in ["xcnn_tensor_class", "xcnn_bindings", "backend_fields", "_DEFAULT_MODE", "xcnn_device_io_off",
+        # The fill order is the XK_ index order.
+        for name in ["xcnn_tensor_class", "xcnn_bindings", "backend_fields", "_DEFAULT_MODE", "xcnn_device_io_off",  # small-loop(the fixed names the doors read per call)
                      "xcnn_dev_class", "module", "mixed", "idn", "idn2", "profile", "native_key", "identical", "fast",
                      "b", "shape", "h", "_host", "_base", "numeric_mode", "numerical_profile_", "numeric_mode_",
                      "_dev", "_xshape", "_idx_host", "_idx_dev", "_idx_shape", "_layer", "_pool_cache", "output_size",
