@@ -16,10 +16,10 @@ from x_neighbors.py2mojo_items import p2m_mask_value_item, p2m_zero_cols_item, p
 comptime X_NEIGHBORS_HOST_SABOTAGE = is_defined["MOJOLEARN_HOST_SABOTAGE"]()
 
 
-#: TOMBSTONE: MOJOLEARN_XN_HOST_SERIAL (env arm: every op's items on one thread, the loop before lane/neural-pass72;
-#: DECIDED by the HARD RULE "write code to run in parallel" and the 2026-11-15 rule that an unmeasured opt-in arm is
-#: deleted; no A/B on record) deleted 2026-11-18 by lane/fx-env-dead; code recoverable at 0c65d61fed.
-#: Restore: git apply experiments/removed/MOJOLEARN_XN_HOST_SERIAL.patch
+# TOMBSTONE: MOJOLEARN_XN_HOST_SERIAL (env arm: every op's items on one thread, the loop before lane/neural-pass72;
+# DECIDED by the HARD RULE "write code to run in parallel" and the 2026-11-15 rule that an unmeasured opt-in arm is
+# deleted; no A/B on record) deleted 2026-11-18 by lane/fx-env-dead; code recoverable at 0c65d61fed.
+# Restore: git apply experiments/removed/MOJOLEARN_XN_HOST_SERIAL.patch
 
 
 #: lane/neural-pass72 (2026-10-01): f(t) for t in [0, count), the items cut
