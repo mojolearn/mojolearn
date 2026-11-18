@@ -523,8 +523,6 @@ def _i(addr: Int) -> IP:
 def host():
     s = [HDR, GEN, '"""The neighbors lane\'s CPU drivers: host loops over the SAME items (see x_neighbors/gen.py)."""\n',
          "from std.sys.compile import is_defined\n",
-         "from std.os import getenv\n",
-         "from std.ffi import _Global\n",
          "from core.host_parallel import host_parallelize\n",
          "from core.host_predict_threads import host_predict_chunk, host_predict_task_count_work\n", imports("host"), """
 #: the host gate's negative control (`MOJOLEARN_HOST_SABOTAGE`): every op's
@@ -532,25 +530,10 @@ def host():
 comptime X_NEIGHBORS_HOST_SABOTAGE = is_defined["MOJOLEARN_HOST_SABOTAGE"]()
 
 
-struct _XnHostSerial(Defaultable, Movable):
-    var on: Bool
-
-    def __init__(out self):
-        self.on = String(getenv("MOJOLEARN_XN_HOST_SERIAL")) == "1"
-
-
-comptime _XN_HOST_SERIAL = _Global[StorageType=_XnHostSerial,
-    name="MojolearnXnHostSerialV2", init_fn=_XnHostSerial.__init__]
-
-
-#: MOJOLEARN_XN_HOST_SERIAL=1: every op's items one after another on one
-#: thread (the loop before lane/neural-pass72). Read once per process (lane
-#: perf-host-grain); set it before the first op.
-def _xn_host_serial() -> Bool:
-    try:
-        return _XN_HOST_SERIAL.get_or_create_ptr()[].on
-    except:
-        return String(getenv("MOJOLEARN_XN_HOST_SERIAL")) == "1"
+#: TOMBSTONE: MOJOLEARN_XN_HOST_SERIAL (env arm: every op's items on one thread, the loop before lane/neural-pass72;
+#: DECIDED by the HARD RULE "write code to run in parallel" and the 2026-11-15 rule that an unmeasured opt-in arm is
+#: deleted; no A/B on record) deleted 2026-11-18 by lane/fx-env-dead; code recoverable at 0c65d61fed.
+#: Restore: git apply experiments/removed/MOJOLEARN_XN_HOST_SERIAL.patch
 
 
 #: lane/neural-pass72 (2026-10-01): f(t) for t in [0, count), the items cut
@@ -568,7 +551,7 @@ def _items[F: def(Int) -> None](ref f: F, count: Int, work: Int = 0):
     if count <= 0:
         return
     var tasks = host_predict_task_count_work(count, work)
-    if tasks <= 1 or _xn_host_serial():
+    if tasks <= 1:
         for t in range(count):
             f(t)
         return
