@@ -12,9 +12,10 @@ compiled entries with the same argument words and residency bits as the
 Python bodies it replaces.
 """
 from std.python import Python, PythonObject
-from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_setattr, py_fields, py_contains
+from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_setattr, py_fields, py_contains, py_item
 from bindings.py_cpython_table import cpython_table
-from std.python._cpython import GILReleased
+from std.python._cpython import GILReleased, PyObjectPtr
+from core.shared_slot import SharedSlot
 from core.entry_table import EntryRef
 from core.xcnn_entry_table import (
     XcnnEntryKey, xcnn_entry_ref, XC_RES_ALLOC, XC_RES_ALLOC_NOFILL, XC_RES_FREE,
@@ -27,7 +28,7 @@ from bindings.admitted_sequence_door import admit_nd_f32
 from bindings.native_loaded_module_door import native_loaded_module, NativeModules
 from bindings.native_class_admission_door import class_record, class_admit, dict_keys_admitted, dict_keys_admit
 from bindings.native_buffer_address_unpack import native_buffer_address
-from bindings.native_buffer_owner_pack import native_buffer_view
+from bindings.native_buffer_owner_pack import native_buffer_view, native_storage_allocate
 from bindings.native_numpy_metadata_pack import native_numpy_type
 from bindings.mode_metadata_native_door import _fields, _class_fields
 from bindings.neural_block_admission_door import neural_plain_value
@@ -43,6 +44,211 @@ from x_cnn.door_run import (
     XCNN_F2_ALL_OFF, xcnn_run_call, xcnn_size, xcnn_shape_text, xcnn_run_reshape_check,
     xcnn_run_copy_f32,
 )
+
+
+# ---------------------------------------------------------------- held names and exact types
+# Lane fx-cnn-layers (2026-11-18). One resident layer call ran 150 to 250
+# CPython calls, most of them a `context["..."]`, `fields["..."]` or
+# `b.<type>` read that first built a Python str from a literal (decode,
+# allocate, hash, compare, free) and then looked it up; the call profile of
+# global-avgpool infer on the L40S (ec1c4b5aff) put 22 of its 50 us in the
+# door, 400k instructions per call, with the kernel at 12 us. The names the
+# doors read on every call are now built once per process and held here, and
+# the exact builtin types the doors compare against are the types of
+# C-created values (the same identities `classical_connect_numpy` takes that
+# way), read once. A read through a held name is the same dictionary lookup
+# with the same hashing and equality; only the str is no longer rebuilt.
+# Nothing here is keyed on a layer, a shape or a dataset.
+
+#: index of each held name in `_XcnnNames.keys` (the fill list below is in this order)
+comptime XK_TENSOR_CLASS = 0
+comptime XK_BINDINGS = 1
+comptime XK_BACKEND_FIELDS = 2
+comptime XK_DEFAULT_MODE = 3
+comptime XK_DEVICE_IO_OFF = 4
+comptime XK_DEV_CLASS = 5
+comptime XK_MODULE = 6
+comptime XK_MIXED = 7
+comptime XK_IDN = 8
+comptime XK_IDN2 = 9
+comptime XK_PROFILE = 10
+comptime XK_NATIVE_KEY = 11
+comptime XK_IDENTICAL = 12
+comptime XK_FAST = 13
+comptime XK_B = 14
+comptime XK_SHAPE = 15
+comptime XK_H = 16
+comptime XK_HOST = 17
+comptime XK_BASE = 18
+comptime XK_NUMERIC_MODE = 19
+comptime XK_PROFILE_REC = 20
+comptime XK_MODE_REC = 21
+comptime XK_DEV = 22
+comptime XK_XSHAPE = 23
+comptime XK_IDX_HOST = 24
+comptime XK_IDX_DEV = 25
+comptime XK_IDX_SHAPE = 26
+comptime XK_LAYER = 27
+comptime XK_POOL_CACHE = 28
+comptime XK_OUTPUT_SIZE = 29
+comptime XK_KERNEL_SIZE = 30
+comptime XK_STRIDE = 31
+comptime XK_PADDING = 32
+comptime XK_DILATION = 33
+comptime XK_COUNT_INCLUDE_PAD = 34
+comptime XK_CEIL_MODE = 35
+comptime XK_DIVISOR = 36
+comptime XK_NDARRAY = 37
+comptime XK_ADMISSION = 38
+
+#: index of each exact builtin type in `_XcnnNames.types`
+comptime XT_TUPLE = 0
+comptime XT_INT = 1
+comptime XT_STR = 2
+comptime XT_DICT = 3
+comptime XT_BOOL = 4
+comptime XT_FLOAT = 5
+comptime XT_LIST = 6
+
+
+struct _XcnnNames(Defaultable, Movable):
+    # `keys`: the held name objects, filled once under the GIL (empty until
+    # then: the slot's creation builds no Python object, core/shared_slot.mojo).
+    # `types`: addresses of CPython's static, immortal builtin types.
+    var ready: Bool
+    var keys: List[PythonObject]
+    var types: List[Int]
+
+    def __init__(out self):
+        self.ready = False
+        self.keys = List[PythonObject]()
+        self.types = List[Int]()
+
+
+comptime _XCNN_NAMES = SharedSlot[_XcnnNames, "MojolearnXcnnHeldNamesV1"]
+
+
+def _xcnn_type_address(sample: PythonObject) raises -> Int:
+    # The `_is_exact_dict` idiom of bindings/py_balanced.mojo.
+    ref cpy = Python().cpython()
+    var cls = cpy.PyObject_Type(sample._obj_ptr)
+    var address = Int(cls)
+    cpy.Py_DecRef(cls)
+    return address
+
+
+def _xcnn_names() raises -> UnsafePointer[_XcnnNames, MutAnyOrigin]:
+    """The held names and exact types, filled at first use. Every caller
+    holds the GIL (the doors run under it), which serializes the fill."""
+    var g = _XCNN_NAMES.get_or_create_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    if g[].ready:
+        return g
+    if len(g[].keys) == 0:
+        # small-loop(the fixed names the doors read per call; order = the XK_ indexes)
+        for name in ["xcnn_tensor_class", "xcnn_bindings", "backend_fields", "_DEFAULT_MODE", "xcnn_device_io_off",
+                     "xcnn_dev_class", "module", "mixed", "idn", "idn2", "profile", "native_key", "identical", "fast",
+                     "b", "shape", "h", "_host", "_base", "numeric_mode", "numerical_profile_", "numeric_mode_",
+                     "_dev", "_xshape", "_idx_host", "_idx_dev", "_idx_shape", "_layer", "_pool_cache", "output_size",
+                     "kernel_size", "stride", "padding", "dilation", "count_include_pad", "ceil_mode",
+                     "divisor_override", "ndarray", "admission_context"]:
+            g[].keys.append(PythonObject(name))
+    if len(g[].types) == 0:
+        g[].types.append(_xcnn_type_address(Python.tuple()))
+        g[].types.append(_xcnn_type_address(PythonObject(0)))
+        g[].types.append(_xcnn_type_address(PythonObject("")))
+        g[].types.append(_xcnn_type_address(Python.dict()))
+        g[].types.append(_xcnn_type_address(PythonObject(True)))
+        g[].types.append(_xcnn_type_address(PythonObject(0.0)))
+        g[].types.append(_xcnn_type_address(Python.list()))
+    g[].ready = True
+    return g
+
+
+def xcnn_name(which: Int) raises -> PythonObject:
+    """The held str of name `XK_<which>` (a new reference to the one object)."""
+    var g = _xcnn_names()
+    return g[].keys[which]
+
+
+def _xcnn_exact_ptr(value: PyObjectPtr, kind: Int) raises -> Bool:
+    var g = _xcnn_names()
+    ref cpy = Python().cpython()
+    var cls = cpy.PyObject_Type(value)
+    var same = Int(cls) == g[].types[kind]
+    cpy.Py_DecRef(cls)
+    return same
+
+
+def xcnn_exact(value: PythonObject, kind: Int) raises -> Bool:
+    """`type(value) is <the builtin type XT_<kind>>`: an exact-type test
+    against the type of a C-created value (no `builtins` attribute read)."""
+    return _xcnn_exact_ptr(value._obj_ptr, kind)
+
+
+def xcnn_item(mapping: PythonObject, which: Int) raises -> PythonObject:
+    """`mapping["<name>"]` through the held name: one dictionary lookup on an
+    exact dict; a missing key, or any other mapping, takes the subscript
+    (`PyObject_GetItem`) and raises what it raised."""
+    var g = _xcnn_names()
+    if _xcnn_exact_ptr(mapping._obj_ptr, XT_DICT):
+        var found = cpython_table()[].PyDict_GetItemWithError(mapping._obj_ptr, g[].keys[which]._obj_ptr)
+        if found:
+            return PythonObject(from_borrowed=found)
+    return py_item(mapping, g[].keys[which])
+
+
+def xcnn_get(mapping: PythonObject, which: Int) raises -> PythonObject:
+    """`mapping.get("<name>")` through the held name."""
+    var g = _xcnn_names()
+    return py_get(mapping, g[].keys[which])
+
+
+def xcnn_put(mapping: PythonObject, which: Int, value: PythonObject) raises:
+    """`mapping["<name>"] = value` through the held name."""
+    var g = _xcnn_names()
+    py_setitem(mapping, g[].keys[which], value)
+
+
+def xcnn_at(sequence: PythonObject, index: Int) raises -> PythonObject:
+    """`sequence[index]`: a borrowed read of an exact tuple's item; anything
+    else (and an index out of range) takes the subscript and raises what it
+    raised."""
+    if index >= 0 and _xcnn_exact_ptr(sequence._obj_ptr, XT_TUPLE):
+        var t = cpython_table()
+        if index < t[].PyTuple_Size(sequence._obj_ptr):
+            return PythonObject(from_borrowed=t[].PyTuple_GetItem(sequence._obj_ptr, index))
+    return py_item(sequence, PythonObject(index))
+
+
+def xcnn_int_pair(value: PythonObject, mut first: Int, mut second: Int) raises -> Bool:
+    """True, with the two words, when `value` is an exact tuple of two exact
+    ints that fit a machine word. That is the stored form of every pool
+    setting (`xcnn_pool_init` / `xcnn_adaptive_init` write such a pair), and
+    for it the general parse returns an equal pair, so a caller that gets
+    True skips the parse; False sends it to the general parse, which admits
+    or refuses exactly as before."""
+    if not _xcnn_exact_ptr(value._obj_ptr, XT_TUPLE):
+        return False
+    var t = cpython_table()
+    if t[].PyTuple_Size(value._obj_ptr) != 2:
+        return False
+    var a = t[].PyTuple_GetItem(value._obj_ptr, 0)
+    var b = t[].PyTuple_GetItem(value._obj_ptr, 1)
+    if not _xcnn_exact_ptr(a, XT_INT) or not _xcnn_exact_ptr(b, XT_INT):
+        return False
+    ref cpy = Python().cpython()
+    var wa = t[].PyLong_AsLongLong(a)
+    if wa == -1 and cpy.PyErr_Occurred():
+        # Out of machine range: the general parse raises as before.
+        t[].PyErr_Clear()
+        return False
+    var wb = t[].PyLong_AsLongLong(b)
+    if wb == -1 and cpy.PyErr_Occurred():
+        t[].PyErr_Clear()
+        return False
+    first = Int(wa)
+    second = Int(wb)
+    return True
 
 
 def xcnn_builtins() raises -> PythonObject:
