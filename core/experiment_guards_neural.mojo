@@ -1070,6 +1070,20 @@ def _check_configuration() -> Bool:
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_GEMM_LEAF.patch
     comptime assert not is_defined["MOJOLEARN_IDN_GEMM_LEAF"](), "removed 2026-11-15 (lane/expdel2-37-series): IDN_GEMM_LEAF (opt-in arm, Neural (build-wide GEMM leaf arms 1-3); no A/B recorded) is gone; the default path is the only one; code recoverable at 27caa1d5fe; restore: experiments/removed/MOJOLEARN_IDN_GEMM_LEAF.patch"
     # ---- end lane expdel2-37-series
+    # ---- lane fx-verdicts2 (2026-11-18): A/B verdicts of ab3 (NVIDIA L40S, wheel d652a4b0a1)
+    # TOMBSTONE: MOJOLEARN_DOWNLOAD_STAGE_OFF (LOSER, A/B ab3 NVIDIA L40S, wheel d652a4b0a1, job nvc-ab-20261118T182558Z-cb6e02, one run per arm, digests equal) deleted 2026-11-18 by lane/fx-verdicts2; code recoverable at 85c36e324f.
+    # Restore: git apply experiments/removed/MOJOLEARN_DOWNLOAD_STAGE_OFF.patch; record in docs/TOMBSTONES.md.
+    comptime assert not is_defined["MOJOLEARN_DOWNLOAD_STAGE_OFF"](), "removed 2026-11-18 (lane/fx-verdicts2, A/B ab3 NVIDIA L40S, wheel d652a4b0a1, job nvc-ab-20261118T182558Z-cb6e02, one run per arm, digests equal): the raw host-pointer download at every size was arm/base 1.016 geomean over 7 neural cells (lm-forward 1.13); the pinned stage from DOWNLOAD_STAGE_MIN floats is the route; recoverable at 85c36e324f"
+    # TOMBSTONE: MOJOLEARN_MAMBA3_LEGACY_SETUP (LOSER, A/B ab3 NVIDIA L40S, wheel d652a4b0a1, job nvc-ab-20261118T182558Z-cb6e02, one run per arm, digests equal) deleted 2026-11-18 by lane/fx-verdicts2; code recoverable at 85c36e324f.
+    # Restore: git apply experiments/removed/MOJOLEARN_MAMBA3_LEGACY_SETUP.patch; record in docs/TOMBSTONES.md.
+    comptime assert not is_defined["MOJOLEARN_MAMBA3_LEGACY_SETUP"](), "removed 2026-11-18 (lane/fx-verdicts2, A/B ab3 NVIDIA L40S, wheel d652a4b0a1, job nvc-ab-20261118T182558Z-cb6e02, one run per arm, digests equal): Mamba3 per-call setup without prefill sessions was arm/base 1.007 geomean over 5 cells (noise); sessions wherever the binding offers them; recoverable at 85c36e324f"
+    # TOMBSTONE: MOJOLEARN_MAMBA3_RETAIN_WEIGHTS_OFF (LOSER, A/B ab3 NVIDIA L40S, wheel d652a4b0a1, job nvc-ab-20261118T182558Z-cb6e02, one run per arm, digests equal) deleted 2026-11-18 by lane/fx-verdicts2; code recoverable at 85c36e324f.
+    # Restore: git apply experiments/removed/MOJOLEARN_MAMBA3_RETAIN_WEIGHTS_OFF.patch; record in docs/TOMBSTONES.md.
+    comptime assert not is_defined["MOJOLEARN_MAMBA3_RETAIN_WEIGHTS_OFF"](), "removed 2026-11-18 (lane/fx-verdicts2, A/B ab3 NVIDIA L40S, wheel d652a4b0a1, job nvc-ab-20261118T182558Z-cb6e02, one run per arm, digests equal): the per-call Mamba3 weight upload was arm/base 1.030 geomean over 5 cells (mamba3-forward 1.14); the session keeps its weights; recoverable at 85c36e324f"
+    # TOMBSTONE: MOJOLEARN_OPTIMIZER_RESIDENT_OFF (LOSER, A/B ab3 NVIDIA L40S, wheel d652a4b0a1, job nvc-ab-20261118T182558Z-cb6e02, one run per arm, digests equal) deleted 2026-11-18 by lane/fx-verdicts2; code recoverable at 85c36e324f.
+    # Restore: git apply experiments/removed/MOJOLEARN_OPTIMIZER_RESIDENT_OFF.patch; record in docs/TOMBSTONES.md.
+    comptime assert not is_defined["MOJOLEARN_OPTIMIZER_RESIDENT_OFF"](), "removed 2026-11-18 (lane/fx-verdicts2, A/B ab3 NVIDIA L40S, wheel d652a4b0a1, job nvc-ab-20261118T182558Z-cb6e02, one run per arm, digests equal): the per-call optimizer step was arm/base 1.129 geomean over 5 cells (samba-train-step 1.97); resident optimizer state is the single-device route; recoverable at 85c36e324f"
+    # ---- end lane fx-verdicts2
     return True
 
 

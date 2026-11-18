@@ -215,8 +215,8 @@ def gemm_bf16_native(
     _refuse_lowbit_shape(m, n, k, op, String("gemm_bf16"))
     var ctx = process_ctx[_DEVCTX_SLOT]()
     # lane/gap-neural-models (2026-10-02): pooled buffers and workspace,
-    # staged download (gemm/host_transport.mojo; MOJOLEARN_GEMM_POOL=0
-    # restores fresh buffers). Copies only, the same kernels.
+    # staged download (gemm/host_transport.mojo). Copies only, the same
+    # kernels.
     var lease = GemmHostLease()
     var db = lease.u16(ctx, ROLE_B, n * k)
     gemm_up_u16(ctx, lease, db, u16_ptr(b_address), n * k)
@@ -285,7 +285,7 @@ def gemm_int8_native(
     var ctx = process_ctx[_DEVCTX_SLOT]()
     _lowbit_tick(ctx, tk, "context")
     # Pooled buffers (gemm/host_transport.mojo GemmHostLease, as the f32 and
-    # bf16 surfaces; -D MOJOLEARN_GEMM_POOL_OFF gives fresh ones) and the staged
+    # bf16 surfaces; a busy pool gives fresh ones) and the staged
     # download, whose own wait retires the kernel: the bare synchronize()
     # between the kernel and the download read nothing and is gone (audit
     # row 26, lane a3). Copies and waits only; the same kernel.

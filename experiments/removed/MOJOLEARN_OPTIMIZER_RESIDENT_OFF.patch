@@ -1,0 +1,229 @@
+diff --git a/bindings/samba_step_native_door.mojo b/bindings/samba_step_native_door.mojo
+index a259487ec1..ab25f42880 100644
+--- a/bindings/samba_step_native_door.mojo
++++ b/bindings/samba_step_native_door.mojo
+@@ -21,6 +21,7 @@ from training.optimizer_public_common import OptHyper
+ from bindings.native_loaded_module_door import native_loaded_module, NativeModules
+ from bindings.p3_samba_caps_door import samba_caps, SAMBA_CAP_RESIDENT_ABI, SAMBA_CAP_RESIDENT_ON, SAMBA_CAP_ACCUMULATED, SAMBA_CAP_CHUNKED
+ from std.memory import unsafe_memcpy
++from training.optimizer_public_common import OPTIMIZER_RESIDENT
+ from bindings.generation_buffers_door import generation_initialize_binding, generation_array
+ from bindings.generator_state_native_pack import generator_next
+ from bindings.samba_state_native_door import samba_fields, samba_entries, samba_schedule_snapshot, samba_schedule_rate, samba_moment_view, samba_entry_key, samba_primitive
+@@ -61,9 +62,8 @@ def _samba_open_optimizer(opt: PythonObject, mut record: OptimizerOwner, entries
+     if opt["_resident_wanted"] is PythonObject(False):
+         return
+     var driver = optimizer_driver(provider)
+-    # The resident optimizer is the one route (MOJOLEARN_OPTIMIZER_RESIDENT_OFF
+-    # lost A/B ab3, deleted 2026-11-18 by lane/fx-verdicts2).
+-    var enabled = not driver.host and device_plan.setting == "1"
++    # OPTIMIZER_RESIDENT: build constant (was an environment read per open).
++    var enabled = not driver.host and OPTIMIZER_RESIDENT and device_plan.setting == "1"
+     if not enabled:
+         py_setitem(opt, "_resident_wanted", False)
+         return
+diff --git a/bindings/sequence_optimizer_native_door.mojo b/bindings/sequence_optimizer_native_door.mojo
+index d85451ae8a..9f99957bb1 100644
+--- a/bindings/sequence_optimizer_native_door.mojo
++++ b/bindings/sequence_optimizer_native_door.mojo
+@@ -1,8 +1,11 @@
+ # SPDX-License-Identifier: Apache-2.0
+ # Whole sequence-optimizer operations. All data preparation, owner routing,
+ # schedule evaluation and state/output handling execute natively here.
+-# TOMBSTONE: MOJOLEARN_OPTIMIZER_RESIDENT_OFF (LOSER: per-call optimizer step, arm/base geomean 1.129 over 5 cells, samba-train-step 1.97, NV L40S ab3 2026-11-18) deleted 2026-11-18 by lane/fx-verdicts2; code recoverable at 85c36e324f.
+-# Restore: git apply experiments/removed/MOJOLEARN_OPTIMIZER_RESIDENT_OFF.patch; record in docs/TOMBSTONES.md.
++from std.sys import is_defined
++# The same build define as training/optimizer_public_common.mojo
++# OPTIMIZER_RESIDENT (kept local so this unit does not import the training
++# package); B arm -D MOJOLEARN_OPTIMIZER_RESIDENT_OFF.
++comptime OPTIMIZER_RESIDENT = not is_defined["MOJOLEARN_OPTIMIZER_RESIDENT_OFF"]()
+ from std.memory import bitcast
+ from std.python import Python, PythonObject
+ from bindings.optimizer_container_boundary_unpack import OptimizerInputOwners
+@@ -334,6 +337,8 @@ def seq_construct(owner: PythonObject, values: PythonObject, mode: PythonObject,
+             for suffix in ["_resident_open", "_resident_step", "_resident_step_dev"]:  # driver-loop: over required resident optimizer entries
+                 if py_get(selected, PythonObject(prefix + suffix)) is None:
+                     raise Error("RuntimeError: this binding does not support resident optimizer parameters")
++            comptime if not OPTIMIZER_RESIDENT:
++                raise Error("RuntimeError: device params need the resident optimizer (this build has -D MOJOLEARN_OPTIMIZER_RESIDENT_OFF)")
+         py_setitem(fields, "params", params)
+         py_setitem(fields, "numeric_mode", mode)
+         py_setitem(fields, "_dev_b", selected["module"] if device else PythonObject(None))
+diff --git a/python/mojolearn/tests/test_samba_step_native.py b/python/mojolearn/tests/test_samba_step_native.py
+index 64d26f72aa..12bbb20eeb 100644
+--- a/python/mojolearn/tests/test_samba_step_native.py
++++ b/python/mojolearn/tests/test_samba_step_native.py
+@@ -49,9 +49,12 @@ def _reference_step(model, inputs, targets, *, device_parameters=False):
+     (["mamba3", "attention"], 32, 0.125, 1, False, (2, 3)),
+     (["attention"], 8, 0.125, 2, True, (4, 64)),
+ ])
+-# The resident optimizer is the one route for a single-device optimizer (the
+-# MOJOLEARN_OPTIMIZER_RESIDENT environment arm went 2026-11-15; its build arm
+-# -D MOJOLEARN_OPTIMIZER_RESIDENT_OFF lost A/B ab3 and was deleted 2026-11-18).
++# The resident optimizer is a build constant (lane envgate-train-seq-mamba,
++# 2026-11-15: training/optimizer_public_common.mojo OPTIMIZER_RESIDENT; the
++# MOJOLEARN_OPTIMIZER_RESIDENT environment arm is gone). The per-call
++# (non-resident) side of these tests needs its own
++# `-D MOJOLEARN_OPTIMIZER_RESIDENT_OFF` build (owed-pre0867.json
++# "optimizer-resident-off"); the default build runs the resident side here.
+ def test_native_standard_step_matches_independent_training_recipe(
+         monkeypatch, layers, dm, dropout, accumulation, tied, shape):
+     config = SambaConfig(19, dm, layers, n_heads=2, n_kv_heads=1,
+diff --git a/sequence/opt_public_device.mojo b/sequence/opt_public_device.mojo
+index f09ae78119..0193036d6e 100644
+--- a/sequence/opt_public_device.mojo
++++ b/sequence/opt_public_device.mojo
+@@ -5,21 +5,20 @@
+ 
+ Here the route is chosen: device parameters (resident sequence tensors)
+ step where they live; otherwise the state stays resident on the device
+-(the per-call step on a `DeviceExec` remains only for a binding without the
+-resident Adafactor entries). The resident handle is opened here, the host copies of the state are uploaded
++once a handle is open, or when `MOJOLEARN_OPTIMIZER_RESIDENT` is not "0"
++(the default); otherwise the per-call step runs on a `DeviceExec`. The
++resident handle is opened here, the host copies of the state are uploaded
+ before a step when they are the newest (a reader may have written them)
+ and downloaded for a state read, and host gradients for device parameters
+ are uploaded into temporary resident tensors and freed after the step.
+ Every step is the existing entry of sequence/opt_resident.mojo or
+ sequence/ops_impl.mojo on the same values in the same order: no bit
+ moves. No Python here."""
+-# A/B ab3 (NVIDIA L40S, wheel d652a4b0a1, 2026-11-18, job
+-# nvc-ab-20261118T182558Z-cb6e02, one run per arm, digests and quality equal):
+-# the per-call optimizer step was arm/base 1.129 geomean over 5 cells
+-# (samba-train-step 45.5 -> 89.6 ms 1.97, the rest 0.95-1.00), so the state is
+-# always resident on the device for a single-device optimizer.
+-# TOMBSTONE: MOJOLEARN_OPTIMIZER_RESIDENT_OFF (LOSER: per-call optimizer step, arm/base geomean 1.129 over 5 cells, samba-train-step 1.97, NV L40S ab3 2026-11-18) deleted 2026-11-18 by lane/fx-verdicts2; code recoverable at 85c36e324f.
+-# Restore: git apply experiments/removed/MOJOLEARN_OPTIMIZER_RESIDENT_OFF.patch; record in docs/TOMBSTONES.md.
++from std.sys import is_defined
++# The same build define as training/optimizer_public_common.mojo
++# OPTIMIZER_RESIDENT (kept local so this unit does not import the training
++# package); B arm -D MOJOLEARN_OPTIMIZER_RESIDENT_OFF.
++comptime OPTIMIZER_RESIDENT = not is_defined["MOJOLEARN_OPTIMIZER_RESIDENT_OFF"]()
+ 
+ from sequence.exec_device import DeviceExec
+ from sequence.opt_public import (
+@@ -37,9 +36,11 @@ from sequence.opt_public import (
+     W_USED,
+     adafactor_step_host,
+     begin_step,
++    elementwise_step_host,
+     export_copy,
+     import_copy,
+     lamb_offsets_of,
++    lamb_step_host,
+     set_word,
+     word,
+     words_ptr,
+@@ -61,6 +62,14 @@ from sequence.opt_resident import (
+ from sequence.seq_tensor import seq_tensor_alloc, seq_tensor_free, seq_tensor_upload
+ 
+ 
++@always_inline
++def _resident_env() -> Bool:
++    """The build constant OPTIMIZER_RESIDENT (`-D MOJOLEARN_OPTIMIZER_RESIDENT_OFF`
++    keeps the per-call entries, the before arm of the resident A/B); was an
++    environment read per step."""
++    return OPTIMIZER_RESIDENT
++
++
+ def _handles_ptr(addr: Int) raises -> IP64:
+     if addr == 0:
+         raise Error("sequence optimizer: null handle buffer")
+@@ -120,6 +129,9 @@ def seq_optimizer_step_device(words: Int, handles: Int, addrs: List[Int], ip: Li
+         raise Error("sequence optimizer: a step requires kind, flags, 3 state addresses and the scalars")
+     var kind = a.rest_i[0]
+     var flags = a.rest_i[1]
++    if not (a.dev or word(w, W_HANDLE) >= 0 or _resident_env()):
++        var ex = DeviceExec()
++        return elementwise_step_host(ex, w, a, kind, flags, fp)
+     var n = a.total()
+     if n != word(w, W_N):
+         raise Error("sequence optimizer: the params were resized under the optimizer")
+@@ -176,6 +188,9 @@ def seq_lamb_step_device(words: Int, handles: Int, addrs: List[Int], ip: List[In
+     weight_decay, max_grad_norm]. Returns n."""
+     var w = words_ptr(words)
+     var a = SeqStep(addrs, ip)
++    if not (a.dev or word(w, W_HANDLE) >= 0 or _resident_env()):
++        var ex = DeviceExec()
++        return lamb_step_host(ex, w, a, fp)
+     if len(a.rest_a) != 3:
+         raise Error("LAMB: a step requires 2 state addresses and the scalars")
+     var n = a.total()
+@@ -244,6 +259,9 @@ def seq_adafactor_step_device(words: Int, handles: Int, addrs: List[Int], ip: Li
+         var ex = DeviceExec()
+         return adafactor_step_host(ex, w, a, fp)
+     else:
++        if not (a.dev or word(w, W_HANDLE) >= 0 or _resident_env()):
++            var ex = DeviceExec()
++            return adafactor_step_host(ex, w, a, fp)
+         if len(a.rest_a) != 2 * a.J or len(a.rest_i) != 2 * a.J:
+             raise Error("Adafactor: a step requires two state addresses and (R, C) per tensor")
+         var hp = _handles_ptr(handles)
+diff --git a/tools/optimizer_resident_check.py b/tools/optimizer_resident_check.py
+index d7b559146d..85a1a268b7 100644
+--- a/tools/optimizer_resident_check.py
++++ b/tools/optimizer_resident_check.py
+@@ -5,8 +5,8 @@
+ 
+ lane/neural-pass4 (2026-09-30). `mojolearn.AdamW` (and `Adam`, `SGD`) keep
+ `exp_avg` and `exp_avg_sq` on the device between steps where the training
+-binding offers `optimizer_resident_*`; `resident=False` keeps the per-call
+-`optimizer_step`. Both
++binding offers `optimizer_resident_*`; `resident=False` (or
++`MOJOLEARN_OPTIMIZER_RESIDENT=0`) keeps the per-call `optimizer_step`. Both
+ run the same `identical_optimizer_step` on the same buffers, so every step's
+ parameters, moments and flags must agree byte for byte. This tool runs both
+ from one initialization over the same gradients, with a `state_dict` /
+diff --git a/training/optimizer_public.mojo b/training/optimizer_public.mojo
+index afb8449e20..c846e43296 100644
+--- a/training/optimizer_public.mojo
++++ b/training/optimizer_public.mojo
+@@ -10,7 +10,7 @@ THE STATE POOL. Moved from the shell bindings/_mojolearn_training.mojo
+ (`_OptPool`, `optimizer_resident_*`), the same buffers under the same
+ `_Global` name, with one addition: a slot may hold the moments ON THE HOST
+ (`on_host`), for an optimizer whose state stays off the device
+-(`resident=False`, several optimizer
++(`resident=False`, `MOJOLEARN_OPTIMIZER_RESIDENT=0`, several optimizer
+ devices). Such a slot runs the per-call step (`optimizer_step`'s route) on
+ its own host pair; before, the Python object owned that pair. Either way the
+ optimizer's state is allocated here, on the first step, and the Python
+diff --git a/training/optimizer_public_common.mojo b/training/optimizer_public_common.mojo
+index aa9c24dbef..690a040a3b 100644
+--- a/training/optimizer_public_common.mojo
++++ b/training/optimizer_public_common.mojo
+@@ -296,13 +296,9 @@ def registry_offsets(nbytes: List[Int], offsets: I32P) raises -> Int:
+ # ROUTE-DEFAULT-SUSPECT, no A/B on record: B arms RUN OWED in
+ # bench/results/paper_compare/owed-pre0867.json ("optimizer-resident-off",
+ # "opt-lazy-moments-off").
+-#: Resident optimizer state on the device, always (a single-device plan). A/B
+-#: ab3 (NVIDIA L40S, wheel d652a4b0a1, 2026-11-18, job
+-#: nvc-ab-20261118T182558Z-cb6e02, one run per arm, digests and quality
+-#: equal): the per-call step was arm/base 1.129 geomean over 5 cells
+-#: (samba-train-step 45.5 -> 89.6 ms 1.97, the rest 0.95-1.00).
+-# TOMBSTONE: MOJOLEARN_OPTIMIZER_RESIDENT_OFF (LOSER: per-call optimizer step, arm/base geomean 1.129 over 5 cells, samba-train-step 1.97, NV L40S ab3 2026-11-18) deleted 2026-11-18 by lane/fx-verdicts2; code recoverable at 85c36e324f.
+-# Restore: git apply experiments/removed/MOJOLEARN_OPTIMIZER_RESIDENT_OFF.patch; record in docs/TOMBSTONES.md.
++#: resident optimizer state on the device; `-D MOJOLEARN_OPTIMIZER_RESIDENT_OFF`
++#: keeps the per-call step (the A/B's before arm)
++comptime OPTIMIZER_RESIDENT = not is_defined["MOJOLEARN_OPTIMIZER_RESIDENT_OFF"]()
+ #: lazy Adam moments (allocated on first use, lane gap-train-utils);
+ #: `-D MOJOLEARN_OPT_LAZY_MOMENTS_OFF` allocates the host state with the
+ #: optimizer and uploads it on the first step
+@@ -310,10 +306,13 @@ comptime OPT_LAZY_MOMENTS = not is_defined["MOJOLEARN_OPT_LAZY_MOMENTS_OFF"]()
+ 
+ 
+ def resident_wanted_by_build(plan: DevicePlan) -> Bool:
+-    """A single-device optimizer plan (a multi-device count lives in the
+-    per-call step). The count is the binding entry's plan: its setting is the
+-    raw MOJOLEARN_OPTIMIZER_DEVICE_COUNT value (default "1"), tested exactly
+-    as before."""
++    """The build constant OPTIMIZER_RESIDENT, and a single-device optimizer
++    plan (a multi-device count lives in the per-call step). The count is
++    the binding entry's plan: its setting is the raw
++    MOJOLEARN_OPTIMIZER_DEVICE_COUNT value (default "1"), tested exactly as
++    before."""
++    comptime if not OPTIMIZER_RESIDENT:
++        return False
+     if plan.setting != "1":
+         return False
+     return True

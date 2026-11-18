@@ -10,7 +10,7 @@ THE STATE POOL. Moved from the shell bindings/_mojolearn_training.mojo
 (`_OptPool`, `optimizer_resident_*`), the same buffers under the same
 `_Global` name, with one addition: a slot may hold the moments ON THE HOST
 (`on_host`), for an optimizer whose state stays off the device
-(`resident=False`, `MOJOLEARN_OPTIMIZER_RESIDENT=0`, several optimizer
+(`resident=False`, several optimizer
 devices). Such a slot runs the per-call step (`optimizer_step`'s route) on
 its own host pair; before, the Python object owned that pair. Either way the
 optimizer's state is allocated here, on the first step, and the Python

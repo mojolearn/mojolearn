@@ -49,12 +49,9 @@ def _reference_step(model, inputs, targets, *, device_parameters=False):
     (["mamba3", "attention"], 32, 0.125, 1, False, (2, 3)),
     (["attention"], 8, 0.125, 2, True, (4, 64)),
 ])
-# The resident optimizer is a build constant (lane envgate-train-seq-mamba,
-# 2026-11-15: training/optimizer_public_common.mojo OPTIMIZER_RESIDENT; the
-# MOJOLEARN_OPTIMIZER_RESIDENT environment arm is gone). The per-call
-# (non-resident) side of these tests needs its own
-# `-D MOJOLEARN_OPTIMIZER_RESIDENT_OFF` build (owed-pre0867.json
-# "optimizer-resident-off"); the default build runs the resident side here.
+# The resident optimizer is the one route for a single-device optimizer (the
+# MOJOLEARN_OPTIMIZER_RESIDENT environment arm went 2026-11-15; its build arm
+# -D MOJOLEARN_OPTIMIZER_RESIDENT_OFF lost A/B ab3 and was deleted 2026-11-18).
 def test_native_standard_step_matches_independent_training_recipe(
         monkeypatch, layers, dm, dropout, accumulation, tied, shape):
     config = SambaConfig(19, dm, layers, n_heads=2, n_kv_heads=1,

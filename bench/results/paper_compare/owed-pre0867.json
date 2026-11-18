@@ -99,7 +99,8 @@
   "et-device-loop": {
    "define": "MOJOLEARN_IDN_ET_DEVICE_LOOP",
    "status": "define in code (extratrees/impl/decisiontree/batched_levelalgo/builder.mojo:6921 ET_DEVICE_LOOP): B = the depth-wise device level loop (rescue enqueued every batch at proven bounds, 2026-10-04 to 2026-11-13 default); A = the host-queue merged-frontier loop (40286f2d28^ route)",
-   "owed": "RUN"
+   "owed": "DECIDED",
+   "evidence": "ab3 2026-11-18, NVIDIA L40S host c6dd9ebea3e3, wheel d652a4b0a1, base and arm back to back, one run per arm (~/mojolearn-evidence/measure-candidate/build-ec1c4b5aff/fetched/nvc-ab-20261118T182558Z-cb6e02/x/, tables ~/mojolearn-evidence/briefs-20261118/fx-verdicts2/tab-<arm>.txt): B (depth-wise device loop) arm/base geomean 1.030 over 6 cells, istella fit 1.05, taxi fit 1.01; digests and quality equal; arm DELETED (lane fx-verdicts2)"
   },
   "mamba-call-program": {
    "define": "MOJOLEARN_MAMBA_CALL_PROGRAM",
@@ -155,7 +156,8 @@
   "knn-i32-label-range-old": {
    "define": "MOJOLEARN_IDN_KNN_I32_LABEL_RANGE_OLD",
    "status": "define in code (neighbors/neighbors_knn_run.mojo KNN_I32_LABEL_RANGE_OLD, knn_labels_already_int32; bindings/neighbors_knn_native_door.mojo _clf_fit): B = int32 labels widened to int64, min and max as two device reductions, narrowed back (every release since 0.8.44); A = int32 labels copied straight into the label columns, no range check (it cannot refuse int32). Same bits",
-   "owed": "RUN"
+   "owed": "RUN",
+   "evidence": "ab3 2026-11-18, NVIDIA L40S host c6dd9ebea3e3, wheel d652a4b0a1, base and arm back to back, one run per arm (~/mojolearn-evidence/measure-candidate/build-ec1c4b5aff/fetched/nvc-ab-20261118T182558Z-cb6e02/x/, tables ~/mojolearn-evidence/briefs-20261118/fx-verdicts2/tab-<arm>.txt): UNDECIDED: arm/base geomean 0.947 over 4 cells, knn-clf istella 0.78 (base 52.26 vs 40.21 in the knn-door-fit-xn-eager base run of the same row: likely a base outlier), the rest 0.99-1.04; digests and quality equal; thin, not promoted on one cell: kept opt-in, re-time owed (lane fx-verdicts2)"
   },
   "nv-fma-asm": {
    "define": "MOJOLEARN_IDN_NV_FMA_ASM_OLD",
@@ -186,12 +188,14 @@
   "mamba-backward-generic": {
    "define": "MOJOLEARN_IDN_MAMBA_BACKWARD_GENERIC",
    "status": "define in code (autograd/rules_mamba.mojo IDN_MAMBA_BACKWARD_GENERIC): B = the tape graph (mamba{1,2}_step_backward_tape, _m{1,2}_record_backward) as the block step op's Mamba-1/2 VJP (main 5005c07e74's shape); A = the restored 10-19 hand chain (mamba{1,2}_step_backward_hand, deleted by 47582a7fb) over the same kept stages. Same kernels in the same order: same bits",
-   "owed": "RUN"
+   "owed": "RUN",
+   "evidence": "ab3 2026-11-18 staged and installed it but NOT RUN: its only row (restore-mamba-backward-glue) is a driver row and the targeted job (PC_PARTS=targeted) ended at tg-compare, before any drivers phase (tools/ops/paper_compare_job.sh); fixed by the tg-drivers phase (lane fx-verdicts2). Still owed"
   },
   "gbdt-prebinned-infer-old": {
    "define": "MOJOLEARN_IDN_GBDT_PREBINNED_INFER_OLD",
    "status": "define in code (gbdt/models/add_non_symmetric_tree_doc_parallel.mojo IDN_NS_RESIDENT_PACK): B = the resident Depthwise/Lossguide predict re-packing the ensemble every call through doc_parallel_boosting.predict (layout build, node staging, sixteen allocations, eight uploads, bins buffer); A = the pack held from the first predict (NsResidentPack), node offsets and bins buffer rewritten only when the row count changes (default). Same kernels, same arguments, same tree order: same bits",
-   "owed": "RUN"
+   "owed": "DECIDED",
+   "evidence": "ab3 2026-11-18, NVIDIA L40S host c6dd9ebea3e3, wheel d652a4b0a1, base and arm back to back, one run per arm (~/mojolearn-evidence/measure-candidate/build-ec1c4b5aff/fetched/nvc-ab-20261118T182558Z-cb6e02/x/, tables ~/mojolearn-evidence/briefs-20261118/fx-verdicts2/tab-<arm>.txt): B (per-call pack) arm/base geomean 1.034 over 24 cells; depthwise taxi prebinned infer 1.34 a one-call outlier, lossguide taxi infer 1.10/1.17 one-call vs median-of-20 artifacts; digests and quality equal; arm DELETED (lane fx-verdicts2)"
   },
   "transformer-decode-per-token-admission": {
    "define": "MOJOLEARN_TRANSFORMER_DECODE_PER_TOKEN_ADMISSION",
@@ -211,7 +215,8 @@
   "knn-door-fit-xn-eager": {
    "define": "MOJOLEARN_IDN_KNN_DOOR_FIT_XN_EAGER",
    "status": "define in code (neighbors/neighbors_knn_run.mojo KNN_DOOR_FIT_XN_EAGER, knn_fit_xn_eager; bindings/neighbors_knn_native_door.mojo _neighbors_knn_operation, _knn_xn): B = every KNeighborsClassifier/Regressor fit resolves and admits the x_neighbors binding up front (b412ea02f4's door form); A = only the multi-output label transpose resolves it (0.8.55's neighbors.py form). Same bits",
-   "owed": "RUN"
+   "owed": "DECIDED",
+   "evidence": "ab3 2026-11-18, NVIDIA L40S host c6dd9ebea3e3, wheel d652a4b0a1, base and arm back to back, one run per arm (~/mojolearn-evidence/measure-candidate/build-ec1c4b5aff/fetched/nvc-ab-20261118T182558Z-cb6e02/x/, tables ~/mojolearn-evidence/briefs-20261118/fx-verdicts2/tab-<arm>.txt): B (eager admission) arm/base geomean 1.002 over 4 cells (0.99-1.02), noise; digests and quality equal; arm DELETED (lane fx-verdicts2)"
   },
   "mamba12-forward-door-old": {
    "define": "MOJOLEARN_IDN_MAMBA12_FORWARD_DOOR_OLD",
@@ -298,7 +303,8 @@
   "neural-native-dispatch-off": {
    "define": "MOJOLEARN_NEURAL_NATIVE_DISPATCH_OFF",
    "status": "define in code (providers/python/neural_descriptor_pyapi_door.mojo NEURAL_NATIVE_DISPATCH, read by bindings/mamba_public_native_door.mojo, bindings/neural_block_public_door.mojo, bindings/causal_lm_construct_door.mojo, bindings/causal_lm_public_door.mojo, providers/python/transformer_decode_pyapi_door.mojo): B = every neural door finds each compiled entry by name and calls it through CPython per token / layer / call (the former MOJOLEARN_NEURAL_NATIVE_DISPATCH=0 environment default of every door but CausalLM); A = the native descriptor tables connected once at construction (the former =1). Same numerical functions and words: digests must not move.",
-   "owed": "RUN"
+   "owed": "RUN",
+   "evidence": "ab3 2026-11-18, NVIDIA L40S host c6dd9ebea3e3, wheel d652a4b0a1, base and arm back to back, one run per arm (~/mojolearn-evidence/measure-candidate/build-ec1c4b5aff/fetched/nvc-ab-20261118T182558Z-cb6e02/x/, tables ~/mojolearn-evidence/briefs-20261118/fx-verdicts2/tab-<arm>.txt): UNDECIDED: arm/base geomean 0.985 over 12 cells, samba-decode 0.90 (base 1345 vs 1193/1177 in the mamba3 arms' base runs of the same row: likely a base outlier), mamba2-decode 0.95, the rest 0.98-1.01; digests and quality equal; thin, not promoted on one cell: kept opt-in, re-time owed (lane fx-verdicts2)"
   },
   "classical-native-dispatch": {
    "define": "MOJOLEARN_CLASSICAL_NATIVE_DISPATCH",
@@ -308,22 +314,26 @@
   "download-stage-off": {
    "define": "MOJOLEARN_DOWNLOAD_STAGE_OFF",
    "status": "define in code (core/staged_download.mojo DOWNLOAD_STAGE_OFF (read by download_staged)): B = the raw host-pointer copy at every size (the former MOJOLEARN_DOWNLOAD_STAGE=0); A = the pinned two-stage pipeline from DOWNLOAD_STAGE_MIN floats (the former default). A transport/route choice: digests must not move.",
-   "owed": "RUN"
+   "owed": "DECIDED",
+   "evidence": "ab3 2026-11-18, NVIDIA L40S host c6dd9ebea3e3, wheel d652a4b0a1, base and arm back to back, one run per arm (~/mojolearn-evidence/measure-candidate/build-ec1c4b5aff/fetched/nvc-ab-20261118T182558Z-cb6e02/x/, tables ~/mojolearn-evidence/briefs-20261118/fx-verdicts2/tab-<arm>.txt): B (raw copy) arm/base geomean 1.016 over 7 cells, lm-forward fit 1.13, the rest 0.98-1.02; digests and quality equal; arm DELETED (lane fx-verdicts2)"
   },
   "gemm-pool-off": {
    "define": "MOJOLEARN_GEMM_POOL_OFF",
    "status": "define in code (gemm/host_transport.mojo GEMM_POOL_ON): B = fresh device buffers every matmul call (the former MOJOLEARN_GEMM_POOL=0); A = pooled grow-only device buffers per role (the former default). A transport/route choice: digests must not move.",
-   "owed": "RUN"
+   "owed": "DECIDED",
+   "evidence": "ab3 2026-11-18, NVIDIA L40S host c6dd9ebea3e3, wheel d652a4b0a1, base and arm back to back, one run per arm (~/mojolearn-evidence/measure-candidate/build-ec1c4b5aff/fetched/nvc-ab-20261118T182558Z-cb6e02/x/, tables ~/mojolearn-evidence/briefs-20261118/fx-verdicts2/tab-<arm>.txt): B (fresh buffers) arm/base geomean 1.044 over 3 cells (0.94, 1.09, 1.11); digests equal; arm DELETED (lane fx-verdicts2)"
   },
   "gemm-stage-down-off": {
    "define": "MOJOLEARN_GEMM_STAGE_DOWN_OFF",
    "status": "define in code (gemm/host_transport.mojo GEMM_STAGE_DOWN_ON): B = raw device-to-host-pointer download (the former MOJOLEARN_GEMM_STAGE_DOWN=0); A = staged (pinned, double-buffered) download (the former default). A transport/route choice: digests must not move.",
-   "owed": "RUN"
+   "owed": "DECIDED",
+   "evidence": "ab3 2026-11-18, NVIDIA L40S host c6dd9ebea3e3, wheel d652a4b0a1, base and arm back to back, one run per arm (~/mojolearn-evidence/measure-candidate/build-ec1c4b5aff/fetched/nvc-ab-20261118T182558Z-cb6e02/x/, tables ~/mojolearn-evidence/briefs-20261118/fx-verdicts2/tab-<arm>.txt): B (raw download) arm/base geomean 1.125 over 3 cells (1.03, 1.18, 1.17); digests equal; arm DELETED (lane fx-verdicts2)"
   },
   "gemm-stage-up-off": {
    "define": "MOJOLEARN_GEMM_STAGE_UP_OFF",
    "status": "define in code (gemm/host_transport.mojo GEMM_STAGE_UP_ON): B = raw host-pointer upload (the former MOJOLEARN_GEMM_STAGE_UP=0); A = staged upload on NVIDIA/AMD (the former default). A transport/route choice: digests must not move.",
-   "owed": "RUN"
+   "owed": "RUN",
+   "evidence": "ab3 2026-11-18, NVIDIA L40S host c6dd9ebea3e3, wheel d652a4b0a1, base and arm back to back, one run per arm (~/mojolearn-evidence/measure-candidate/build-ec1c4b5aff/fetched/nvc-ab-20261118T182558Z-cb6e02/x/, tables ~/mojolearn-evidence/briefs-20261118/fx-verdicts2/tab-<arm>.txt): UNDECIDED: arm/base geomean 0.986 over 3 cells, gemm 0.87 (base 46.74 vs 44.49/44.16 in the other gemm arms' base runs), gemm-bf16 1.07, gemm-int8 1.03; digests equal; thin, not promoted on one cell: kept opt-in, re-time owed (lane fx-verdicts2)"
   },
   "lr-table-off": {
    "define": "MOJOLEARN_LR_TABLE_OFF",
@@ -338,7 +348,8 @@
   "mamba3-retain-weights-off": {
    "define": "MOJOLEARN_MAMBA3_RETAIN_WEIGHTS_OFF",
    "status": "define in code (mamba/impl/mamba_shell_impl.mojo MAMBA3_RETAIN_WEIGHTS): B = the per-call weight upload (the former =0); A = the session keeps its weights resident (byte compare; the former default). A transport/route choice: digests must not move.",
-   "owed": "RUN"
+   "owed": "DECIDED",
+   "evidence": "ab3 2026-11-18, NVIDIA L40S host c6dd9ebea3e3, wheel d652a4b0a1, base and arm back to back, one run per arm (~/mojolearn-evidence/measure-candidate/build-ec1c4b5aff/fetched/nvc-ab-20261118T182558Z-cb6e02/x/, tables ~/mojolearn-evidence/briefs-20261118/fx-verdicts2/tab-<arm>.txt): B (per-call upload) arm/base geomean 1.030 over 5 cells, mamba3-forward 1.14; digests equal; arm DELETED (lane fx-verdicts2)"
   },
   "mamba3-s16-qk-regs2h": {
    "define": "MOJOLEARN_MAMBA3_S16_QK_ARM_REGS2H",
@@ -348,7 +359,8 @@
   "optimizer-resident-off": {
    "define": "MOJOLEARN_OPTIMIZER_RESIDENT_OFF",
    "status": "define in code (training/optimizer_public_common.mojo OPTIMIZER_RESIDENT (the same define in sequence/opt_public_device.mojo, bindings/sequence_optimizer_native_door.mojo; imported by bindings/samba_step_native_door.mojo)): B = the per-call optimizer step (the former MOJOLEARN_OPTIMIZER_RESIDENT=0); A = resident optimizer state on the device (the former default). A transport/route choice: digests must not move.",
-   "owed": "RUN"
+   "owed": "DECIDED",
+   "evidence": "ab3 2026-11-18, NVIDIA L40S host c6dd9ebea3e3, wheel d652a4b0a1, base and arm back to back, one run per arm (~/mojolearn-evidence/measure-candidate/build-ec1c4b5aff/fetched/nvc-ab-20261118T182558Z-cb6e02/x/, tables ~/mojolearn-evidence/briefs-20261118/fx-verdicts2/tab-<arm>.txt): B (per-call step) arm/base geomean 1.129 over 5 cells, samba-train-step 1.97; digests equal; arm DELETED (lane fx-verdicts2)"
   },
   "opt-lazy-moments-off": {
    "define": "MOJOLEARN_OPT_LAZY_MOMENTS_OFF",
@@ -383,7 +395,8 @@
   "ivf-scan-grouped-off": {
    "define": "MOJOLEARN_IVF_SCAN_GROUPED_OFF",
    "status": "define in code (ivf/impl/neighbors/ivf_flat/ivf_flat_search.mojo IVF_SCAN_GROUPED_ON): B = the per-query identical scan kernels (the former MOJOLEARN_IVF_SCAN_GROUPED=0); A = the scan grouped by list (identical_ivf_scan_grouped_kernel + identical_ivf_merge_kernel, the default since 0e5cf49a28). Same bits: digests must not move.",
-   "owed": "RUN"
+   "owed": "DECIDED",
+   "evidence": "ab3 2026-11-18, NVIDIA L40S host c6dd9ebea3e3, wheel d652a4b0a1, base and arm back to back, one run per arm (~/mojolearn-evidence/measure-candidate/build-ec1c4b5aff/fetched/nvc-ab-20261118T182558Z-cb6e02/x/, tables ~/mojolearn-evidence/briefs-20261118/fx-verdicts2/tab-<arm>.txt): B (per-query scan) arm/base geomean 1.050 over 6 cells, ivf istella fit 1.24; digests and quality equal; arm DELETED with MOJOLEARN_IVF_SCAN_STAGED/_STAGED_OFF and the per-query kernels (lane fx-verdicts2)"
   },
   "xc-sqdist-tiled-off": {
    "define": "MOJOLEARN_XC_SQDIST_TILED_OFF",
@@ -413,7 +426,8 @@
   "mamba3-legacy-setup": {
    "define": "MOJOLEARN_MAMBA3_LEGACY_SETUP",
    "status": "define in code (bindings/neural_block_public_door.mojo, neural_prefill_native_door.mojo, providers/python/samba_execution_pyapi_door.mojo MAMBA3_LEGACY_SETUP: B = Mamba3 per-call setup without prefill sessions; A = sessions. Same words)",
-   "owed": "RUN"
+   "owed": "DECIDED",
+   "evidence": "ab3 2026-11-18, NVIDIA L40S host c6dd9ebea3e3, wheel d652a4b0a1, base and arm back to back, one run per arm (~/mojolearn-evidence/measure-candidate/build-ec1c4b5aff/fetched/nvc-ab-20261118T182558Z-cb6e02/x/, tables ~/mojolearn-evidence/briefs-20261118/fx-verdicts2/tab-<arm>.txt): B (per-call setup) arm/base geomean 1.007 over 5 cells (0.97-1.07), noise; digests equal; arm DELETED (lane fx-verdicts2)"
   },
   "swiglu-fused": {
    "define": "MOJOLEARN_SWIGLU_FUSED",

@@ -38,7 +38,6 @@ boosting loop that check does not run. DEVIATION 259.
 """
 
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
-from std.sys.compile import is_defined
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from gbdt.gpu_data.compressed_index_builder import CompressedIndexLayout
@@ -476,16 +475,16 @@ def add_non_symmetric_trees_packed(
 #: adds in the same order, so no bit moves on any column and the host
 #: column is untouched. The refusals are `add_non_symmetric_trees_packed`'s,
 #: sentence for sentence, made at the same first predict.
-#: `-D MOJOLEARN_IDN_GBDT_PREBINNED_INFER_OLD` restores the per-call pack:
-#: the B arm of the
-#: owed A/B (bench/results/paper_compare/owed-pre0867.json row
-#: `fix-gbdt-prebinned-infer`; RUN OWED).
+#: A/B ab3 (NVIDIA L40S, wheel d652a4b0a1, 2026-11-18, job
+#: nvc-ab-20261118T182558Z-cb6e02, one run per arm, digests and quality
+#: equal on all 24 cells): the per-call pack was arm/base 1.034 geomean
+#: (depthwise taxi prebinned infer 15.1 -> 20.2 ms 1.34, lossguide taxi infer
+#: 1.10-1.17 one-call vs median-of-20 scoring; the rest 0.99-1.06).
+#: TOMBSTONE: MOJOLEARN_IDN_GBDT_PREBINNED_INFER_OLD (LOSER: per-call pack, arm/base geomean 1.034 over 24 cells, NV L40S ab3 2026-11-18) deleted 2026-11-18 by lane/fx-verdicts2; code recoverable at 85c36e324f.
+#: Restore: git apply experiments/removed/MOJOLEARN_IDN_GBDT_PREBINNED_INFER_OLD.patch; record in docs/TOMBSTONES.md.
 comptime IDN_NS_RESIDENT_PACK = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     and IDN_NS_PREDICT_PACKED
-    and not (
-        is_defined["MOJOLEARN_IDN_GBDT_PREBINNED_INFER_OLD"]()
-    )
 )
 
 

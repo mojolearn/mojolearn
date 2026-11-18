@@ -21,8 +21,6 @@ host surfaces:
     Apple where a raw host-pointer upload is already 1.6-2.4 ms per 64 MB.
 
 A/B (build arms; run-time environment reads per matmul until 2026-11-15):
-  -D MOJOLEARN_GEMM_POOL_OFF          fresh buffers every call (the old path)
-  -D MOJOLEARN_GEMM_STAGE_DOWN_OFF    raw download (default staged)
   -D MOJOLEARN_GEMM_STAGE_UP_OFF      raw upload (default staged except Apple)
   -D MOJOLEARN_GEMM_STAGE_UP          staged upload on Apple too
 """
@@ -79,24 +77,23 @@ comptime GEMM_POOL = SharedSlot[_GemmPool, "MojolearnGemmHostPoolV1"]
 
 # Transport switches (lane envgate-train-seq-mamba, 2026-11-15): build
 # constants holding today's defaults; before, each was an environment read per
-# matmul (`_env_flag`, now deleted). ROUTE-DEFAULT-SUSPECT, no A/B on record:
-# B arms RUN OWED in bench/results/paper_compare/owed-pre0867.json
-# ("gemm-pool-off", "gemm-stage-down-off", "gemm-stage-up-off").
-comptime GEMM_POOL_ON = not is_defined["MOJOLEARN_GEMM_POOL_OFF"]()
-comptime GEMM_STAGE_DOWN_ON = not is_defined["MOJOLEARN_GEMM_STAGE_DOWN_OFF"]()
+# matmul (`_env_flag`, now deleted).
+# A/B ab3 (NVIDIA L40S, wheel d652a4b0a1, 2026-11-18, job
+# nvc-ab-20261118T182558Z-cb6e02, one run per arm, digests and quality equal;
+# cells gemm / gemm-bf16 / gemm-int8 fit): the pool and the staged download
+# stay, with no switch.
+#   fresh buffers per call:  1.044 geomean (0.94, 1.09, 1.11)
+#   raw download:            1.125 geomean (1.03, 1.18, 1.17)
+#   raw upload (the B arm below): 0.986 geomean (0.87, 1.07, 1.03), three cells,
+#   one of them faster: UNDECIDED, kept opt-in, re-time owed (owed-pre0867.json
+#   "gemm-stage-up-off").
+# TOMBSTONE: MOJOLEARN_GEMM_POOL_OFF (LOSER: fresh device buffers per matmul, arm/base geomean 1.044 over 3 cells, NV L40S ab3 2026-11-18) deleted 2026-11-18 by lane/fx-verdicts2; code recoverable at 85c36e324f.
+# Restore: git apply experiments/removed/MOJOLEARN_GEMM_POOL_OFF-STAGE_DOWN_OFF.patch (restores both gemm switches; re-delete the other); record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_GEMM_STAGE_DOWN_OFF (LOSER: raw device-to-host-pointer download, arm/base geomean 1.125 over 3 cells, NV L40S ab3 2026-11-18) deleted 2026-11-18 by lane/fx-verdicts2; code recoverable at 85c36e324f.
+# Restore: git apply experiments/removed/MOJOLEARN_GEMM_POOL_OFF-STAGE_DOWN_OFF.patch (restores both gemm switches; re-delete the other); record in docs/TOMBSTONES.md.
 comptime GEMM_STAGE_UP_ON = (
     TARGET_COLUMN != COLUMN_APPLE or is_defined["MOJOLEARN_GEMM_STAGE_UP"]()
 ) and not is_defined["MOJOLEARN_GEMM_STAGE_UP_OFF"]()
-
-
-@always_inline
-def gemm_pool_on() -> Bool:
-    return GEMM_POOL_ON
-
-
-@always_inline
-def gemm_stage_down_on() -> Bool:
-    return GEMM_STAGE_DOWN_ON
 
 
 @always_inline
@@ -105,15 +102,13 @@ def gemm_stage_up_on() -> Bool:
 
 
 struct GemmHostLease(Movable):
-    """The pool for one call, or nothing when the pool is off or busy.
+    """The pool for one call, or nothing when the pool is busy.
     `release()` before the lease ends (after the call's final wait)."""
 
     var held: Bool
 
     def __init__(out self) raises:
         self.held = False
-        if not gemm_pool_on():
-            return
         var p = GEMM_POOL.get_or_create_ptr()
         var flag = UnsafePointer(to=p[].busy)
         var old = Atomic.fetch_add[ordering = Ordering.SEQUENTIAL](flag, Int64(1))
@@ -231,7 +226,7 @@ def gemm_down_f32(ctx: DeviceContext, lease: GemmHostLease, src: DeviceBuffer[DT
     if n <= 0:
         ctx.synchronize()
         return
-    var addr = lease.stage(ctx) if (n >= GEMM_STAGE_MIN and gemm_stage_down_on()) else 0
+    var addr = lease.stage(ctx) if n >= GEMM_STAGE_MIN else 0
     if addr == 0:
         ctx.enqueue_copy(dst_ptr=dst, src_buf=src.create_sub_buffer[DType.float32](0, n))
         ctx.synchronize()

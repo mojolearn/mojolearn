@@ -650,6 +650,14 @@ def _check_configuration() -> Bool:
     # Restore: git apply experiments/removed/MOJOLEARN_TREES_BLOCK_SCRATCH_FILL_OFF.patch; record in docs/TOMBSTONES.md.
     comptime assert not is_defined["MOJOLEARN_TREES_BLOCK_SCRATCH_FILL_OFF"](), "removed 2026-11-18 (lane/fb15-ab-verdicts, A/B ab1 NVIDIA L40S, wheel d652a4b0a1, one run per arm): the whole-buffer histogram scratch zero was 1.38-1.40x slower on gbdt-lossguide istella fit (13.92 -> 19.24 s, 14.28 -> 20.02 s), digests equal; the block-span zero is the one form; recoverable at c989eb9222"
     # ---- end lane fb15-ab-verdicts
+    # ---- lane fx-verdicts2 (2026-11-18): A/B verdicts of ab3 (NVIDIA L40S, wheel d652a4b0a1)
+    # TOMBSTONE: MOJOLEARN_IDN_ET_DEVICE_LOOP (LOSER, A/B ab3 NVIDIA L40S, wheel d652a4b0a1, job nvc-ab-20261118T182558Z-cb6e02, one run per arm, digests equal) deleted 2026-11-18 by lane/fx-verdicts2; code recoverable at 85c36e324f.
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_ET_DEVICE_LOOP.patch; record in docs/TOMBSTONES.md.
+    comptime assert not is_defined["MOJOLEARN_IDN_ET_DEVICE_LOOP"](), "removed 2026-11-18 (lane/fx-verdicts2, A/B ab3 NVIDIA L40S, wheel d652a4b0a1, job nvc-ab-20261118T182558Z-cb6e02, one run per arm, digests equal): the depth-wise ET device loop was arm/base 1.030 geomean over 6 cells; the host queue is the depth-wise route (MOJOLEARN_IDN_ET_DEVICE_LOOP_EARLY_EXIT and best-first keep the device loop); recoverable at 85c36e324f"
+    # TOMBSTONE: MOJOLEARN_IDN_GBDT_PREBINNED_INFER_OLD (LOSER, A/B ab3 NVIDIA L40S, wheel d652a4b0a1, job nvc-ab-20261118T182558Z-cb6e02, one run per arm, digests equal) deleted 2026-11-18 by lane/fx-verdicts2; code recoverable at 85c36e324f.
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_GBDT_PREBINNED_INFER_OLD.patch; record in docs/TOMBSTONES.md.
+    comptime assert not is_defined["MOJOLEARN_IDN_GBDT_PREBINNED_INFER_OLD"](), "removed 2026-11-18 (lane/fx-verdicts2, A/B ab3 NVIDIA L40S, wheel d652a4b0a1, job nvc-ab-20261118T182558Z-cb6e02, one run per arm, digests equal): the per-call Depthwise/Lossguide resident pack was arm/base 1.034 geomean over 24 cells; the pack held from the first predict is the route; recoverable at 85c36e324f"
+    # ---- end lane fx-verdicts2
     return True
 
 

@@ -47,15 +47,14 @@ EXPERIMENTS = {
     # lane x6-tape-retire: MOJOLEARN_TRANSFORMER_RETAIN_WEIGHTS and
     # MOJOLEARN_TRANSFORMER_STAGE_RESET went with the forward tape's
     # workspace body (the block runs on the attention step op).
-    "no_retain_weights": {"MOJOLEARN_MAMBA3_RETAIN_WEIGHTS": "0"},
     # lane r1-restore-measured-winners (2026-11-09): the x4 switches are back.
     "legacy_fresh_entry": {"MOJOLEARN_TRANSFORMER_SESSION_FRESH": "0"},
-    "legacy_everything": {"MOJOLEARN_TRANSFORMER_LEGACY_SETUP": "1",
-                          "MOJOLEARN_MAMBA3_LEGACY_SETUP": "1"},
+    # lane fx-verdicts2 (2026-11-18): MOJOLEARN_MAMBA3_LEGACY_SETUP and
+    # MOJOLEARN_MAMBA3_RETAIN_WEIGHTS(_OFF) lost A/B ab3 and are deleted.
+    "legacy_everything": {"MOJOLEARN_TRANSFORMER_LEGACY_SETUP": "1"},
     "speculative_attn": {"MOJOLEARN_ATTN_SPECULATIVE": "1"},
     "swiglu_fused": {"MOJOLEARN_SWIGLU_FUSED": "1"},
     "no_layer_sync": {"MOJOLEARN_BYTE_LM_LAYER_SYNC": "0"},
-    "mamba3_legacy": {"MOJOLEARN_MAMBA3_LEGACY_SETUP": "1"},
     "mamba3_no_retain_stages": {"MOJOLEARN_MAMBA3_RETAIN_STAGES": "0"},
     "norm_dw_own_ws": {"MOJOLEARN_TRANSFORMER_NORM_DW_OWN_WS": "1"},
     # the S16 q/k backward arms (lane/neural-net-experiment, the S16 pass):
@@ -77,7 +76,7 @@ EXPERIMENTS = {
                "MOJOLEARN_BYTE_LM_LAYER_SYNC": "0"},
 }
 SETS = {
-    "priority": ["baseline", "mamba3_legacy", "mamba3_no_retain_stages", "norm_dw_own_ws"],
+    "priority": ["baseline", "mamba3_no_retain_stages", "norm_dw_own_ws"],
     # the S16 arms on the Mamba lanes (run with --lane mamba3-forward --lane
     # samba-train-step, or the timing tool for the per-kernel walls)
     "s16": ["baseline", "s16_naive", "s16_shared", "s16_regs2", "s16_smem48"],

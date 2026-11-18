@@ -424,26 +424,18 @@ def knn_copy_proba_block(dst_address: Int, src_address: Int, offset: Int, rows: 
 
 # ------------------------------------------------------------------ door switches and timers
 
-#: fix-knn-door-fixed-cost (2026-11-14): B arm of the owed A/B (row id
-#: fix-knn-door-fixed-cost). Defined, every KNeighborsClassifier /
-#: KNeighborsRegressor fit resolves and admits the x_neighbors binding up front
-#: (estimator_arguments + xn_admit_arguments, the form b412ea02f4 introduced
-#: with the native door), whether or not the fit uses it. Default (0.8.55's
-#: form, neighbors.py `self._bind(_XN)` only inside the multi-output branch):
-#: the binding is resolved only where a fit runs its one consumer, the
-#: multi-output label transpose (`n_outputs > 1`). Same kernels, same words:
-#: no bit change.
+#: fix-knn-door-fixed-cost (2026-11-14): the KNeighborsClassifier /
+#: KNeighborsRegressor fit door resolves the x_neighbors binding only where a
+#: fit runs its one consumer, the multi-output label transpose
+#: (`n_outputs > 1`), 0.8.55's form. A/B ab3 (NVIDIA L40S, wheel d652a4b0a1,
+#: 2026-11-18, job nvc-ab-20261118T182558Z-cb6e02, one run per arm, digests and
+#: quality equal): resolving and admitting it before every fit (b412ea02f4's
+#: form) was arm/base 1.002 geomean over 4 cells (0.99-1.02), noise: deleted.
 # TOMBSTONE: MOJOLEARN_IDN_KNN_DOOR_FIT_XN_EAGER (opt-in B arm, EXP:2420 PENDING, never run) deleted 2026-11-15 by lane/expdel2-12-cluster; code recoverable at 10c4fb4ffc.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_KNN_DOOR_FIT_XN_EAGER.patch; record in docs/TOMBSTONES.md.
 # RESTORED 2026-11-15 by lane/expdel2-restore-owed: owed B arm (owed-pre0867.json), under four weeks old; the deletion was premature.
-comptime KNN_DOOR_FIT_XN_EAGER = is_defined["MOJOLEARN_IDN_KNN_DOOR_FIT_XN_EAGER"]()
-
-
-def knn_fit_xn_eager() -> Bool:
-    """True when the k-NN fit door resolves the x_neighbors binding before
-    its work (the B arm); False when only the multi-output transpose
-    resolves it (the default, 0.8.55's form)."""
-    return KNN_DOOR_FIT_XN_EAGER
+# TOMBSTONE: MOJOLEARN_IDN_KNN_DOOR_FIT_XN_EAGER (LOSER: eager binding admission, arm/base geomean 1.002 over 4 cells, noise, NV L40S ab3 2026-11-18) deleted 2026-11-18 by lane/fx-verdicts2; code recoverable at 85c36e324f.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_KNN_DOOR_FIT_XN_EAGER.fx-verdicts2.patch; record in docs/TOMBSTONES.md.
 
 
 #: fix-knn-door-fixed-cost (2026-11-14): the door phases of the k-NN public

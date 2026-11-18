@@ -84,9 +84,6 @@ from core.expand_distances import expand_distances_kernel
 from core.gemm import gemm_nt
 from core.identity_trace import IdentityTrace
 from ivf.impl.neighbors.ivf_flat.identical_ivf_scan import (
-    IIVF_QPB,
-    identical_ivf_scan_kernel,
-    identical_ivf_scan_staged_kernel,
     identical_ivf_scan_grouped_kernel,
     identical_ivf_merge_kernel,
     GQPB,
@@ -97,7 +94,6 @@ from ivf.impl.neighbors.ivf_flat.fast_ivf_scan import (
     FIVF_QPB,
     fast_ivf_scan_kernel,
 )
-from std.sys import is_defined
 from x_ann.io import upload_i32
 from core.device_fold import device_count_less_i32
 from ivf.impl.neighbors.ivf_flat.ivf_group_device import (
@@ -115,7 +111,6 @@ from x_ann.io import download_i32
 from max.gpu import WARP_SIZE
 from max.gpu import block_dim as _ivf_block_dim, block_idx as _ivf_block_idx, thread_idx as _ivf_thread_idx
 from checks.numerics import ftz as _ivf_ftz, identical_sqrt as _ivf_identical_sqrt
-from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from ivf.checks.list_layout import (
     ListLayout,
     filter_candidate_slots,
@@ -279,39 +274,17 @@ def _sort_probes_host(
         sort_slots_by_distance_then_index(probe_dist, probe_ids, q * n_probes, n_probes)
 
 
-#: The identical scan grouped by list (identical_ivf_scan_grouped_kernel +
-#: identical_ivf_merge_kernel, lane neural-pass42): default on. B arm
-#: `-D MOJOLEARN_IVF_SCAN_GROUPED_OFF` keeps the per-query kernels; same bits.
-#: Before (lane envgate-classical-deviceplan,
-#: docs/plans/ENV_GATES_2026-11-15.md): the run-time
-#: `MOJOLEARN_IVF_SCAN_GROUPED=0`, a getenv per search (twice per batch).
-#: The default was never A/B-timed: RUN OWED (owed-pre0867.json
-#: "ivf-scan-grouped-off", docs/apple-fast/EXPERIMENTS.md).
-comptime IVF_SCAN_GROUPED_ON = not is_defined["MOJOLEARN_IVF_SCAN_GROUPED_OFF"]()
-
-#: The identical scan with its candidate rows staged through threadgroup
-#: memory (identical_ivf_scan_staged_kernel, lane neural-pass35): the default
-#: on NVIDIA and AMD, where the plain kernel's lanes each walk their own row
-#: (WARP_SIZE scattered rows per load); the plain kernel on Apple, where the
-#: staged kernel's barriers cost more than they save (M4, 200,000 x 220, 256
-#: lists, 2,000 queries: 3.4 -> 12.2 s). The same bits either way. A build
-#: constant per column (before: the run-time MOJOLEARN_IVF_SCAN_STAGED=0/1, a
-#: getenv per batch): `-D MOJOLEARN_IVF_SCAN_STAGED_OFF` takes the plain
-#: kernel on NVIDIA/AMD, `-D MOJOLEARN_IVF_SCAN_STAGED` the staged one on
-#: Apple.
-comptime IVF_SCAN_STAGED_ON = is_defined["MOJOLEARN_IVF_SCAN_STAGED"]() if TARGET_HAS_APPLE_GPU else not is_defined["MOJOLEARN_IVF_SCAN_STAGED_OFF"]()
-
-
-@always_inline
-def _ivf_scan_grouped() -> Bool:
-    """`IVF_SCAN_GROUPED_ON`, a build constant."""
-    return IVF_SCAN_GROUPED_ON
-
-
-@always_inline
-def _ivf_scan_staged() -> Bool:
-    """`IVF_SCAN_STAGED_ON`, a build constant per column."""
-    return IVF_SCAN_STAGED_ON
+#: The identical scan is grouped by list (identical_ivf_scan_grouped_kernel +
+#: identical_ivf_merge_kernel, lane neural-pass42) on every column, filtered
+#: or not. A/B ab3 (NVIDIA L40S, wheel d652a4b0a1, 2026-11-18, job
+#: nvc-ab-20261118T182558Z-cb6e02, one run per arm, digests and quality equal
+#: on all 6 cells): the per-query kernels (the staged one on NVIDIA) were
+#: arm/base 1.050 geomean (ivf istella fit 303 -> 374 ms 1.24, ivf taxi fit
+#: 1.08, ivf-filter 0.99-1.01). With the per-query path gone, its staged /
+#: plain choice (MOJOLEARN_IVF_SCAN_STAGED, _STAGED_OFF; lane neural-pass35)
+#: and both per-query kernels went with it.
+#: TOMBSTONE: MOJOLEARN_IVF_SCAN_GROUPED_OFF (LOSER: per-query identical scan, arm/base geomean 1.050 over 6 cells, NV L40S ab3 2026-11-18; with it MOJOLEARN_IVF_SCAN_STAGED and MOJOLEARN_IVF_SCAN_STAGED_OFF, which chose between the per-query kernels only) deleted 2026-11-18 by lane/fx-verdicts2; code recoverable at 85c36e324f.
+#: Restore: git apply experiments/removed/MOJOLEARN_IVF_SCAN_GROUPED_OFF.patch; record in docs/TOMBSTONES.md.
 
 
 def _expanded_distances(
@@ -862,13 +835,9 @@ def ivf_flat_search_prepared(
         # a filtered search fell to the per-query path, whose FAST distances
         # (the expanded norm form) differ by ulps from the batched scan's
         # direct sum of squares, and `check_filter_matches_oracle` failed.
-        var batched_filter_ok = True
-        comptime if IVF_IDENTICAL_SCAN:
-            batched_filter_ok = _ivf_scan_grouped()
         use_batched = (
             not trace.enabled
             and not partial_storage
-            and (not filtered or batched_filter_ok)
             and k <= 32
         )
         # IDENTICAL: every dimension (IVF_IDENTICAL_SCAN_ANY_DIM,
@@ -938,62 +907,37 @@ def ivf_flat_search_prepared(
                             # slower on both vendors, I16 above)
                             # TOMBSTONE: MOJOLEARN_C35_PACKED_LISTS (unmeasured arm) folded here 2026-11-15 by lane/expdel2-12-cluster; code recoverable at a2aabdcd81.
                             # Restore: git apply experiments/removed/MOJOLEARN_C35_PACKED_LISTS.expdel2-12-cluster.patch (ivf_balanced_scan and its file, ivf_balanced_tasks.mojo, had no other caller and are deleted); record in docs/TOMBSTONES.md.
-                            if _ivf_scan_grouped():
-                                # lane neural-pass42: the (query, probe) pairs grouped by
-                                # list, ascending (q, p) within a list, the blocks GQPB
-                                # pairs of one list each; lane cgr4-download-loop: the
-                                # grouping runs on the device (ivf_group_device.mojo)
-                                var grp = ivf_group_pairs_device(
-                                    ctx, dprobe_idx, n_queries, n_probes, n_lists, GQPB
-                                )
-                                var n_blocks = grp.n_blocks
-                                var d_pd = ctx.enqueue_create_buffer[DType.float32](max(n_queries * n_probes * KM, 1))
-                                var d_pi = ctx.enqueue_create_buffer[DType.uint32](max(n_queries * n_probes * KM, 1))
-                                if n_blocks > 0:
-                                    ctx.enqueue_function[identical_ivf_scan_grouped_kernel[KM]](
-                                        dq.unsafe_ptr(), dq_norm.unsafe_ptr(),
-                                        dev.dlist_data.unsafe_ptr(), dev.dlist_norm.unsafe_ptr(),
-                                        dev.d_off.unsafe_ptr(), dev.d_ind.unsafe_ptr(),
-                                        grp.goff.unsafe_ptr(), grp.gq.unsafe_ptr(), grp.gp.unsafe_ptr(),
-                                        grp.bl.unsafe_ptr(), grp.bs.unsafe_ptr(),
-                                        d_pd.unsafe_ptr(), d_pi.unsafe_ptr(),
-                                        d_keep.unsafe_ptr(), Int32(keep_len),
-                                        Int32(dim), Int32(n_probes), Int32(k),
-                                        grid_dim=n_blocks, block_dim=GQPB * WARP_SIZE,
-                                    )
-                                ctx.enqueue_function[identical_ivf_merge_kernel[KM]](
-                                    d_pd.unsafe_ptr(), d_pi.unsafe_ptr(), d_od.unsafe_ptr(), d_oi.unsafe_ptr(),
-                                    Int32(n_queries), Int32(n_probes), Int32(k),
-                                    grid_dim=(n_queries + 255) // 256, block_dim=256,
-                                )
-                                ctx.synchronize()
-                                _ = grp^
-                                _ = d_pd^
-                                _ = d_pi^
-                            elif not filtered and _ivf_scan_staged():
-                                ctx.enqueue_function[identical_ivf_scan_staged_kernel[KM]](
+                            # lane neural-pass42: the (query, probe) pairs grouped by
+                            # list, ascending (q, p) within a list, the blocks GQPB
+                            # pairs of one list each; lane cgr4-download-loop: the
+                            # grouping runs on the device (ivf_group_device.mojo)
+                            var grp = ivf_group_pairs_device(
+                                ctx, dprobe_idx, n_queries, n_probes, n_lists, GQPB
+                            )
+                            var n_blocks = grp.n_blocks
+                            var d_pd = ctx.enqueue_create_buffer[DType.float32](max(n_queries * n_probes * KM, 1))
+                            var d_pi = ctx.enqueue_create_buffer[DType.uint32](max(n_queries * n_probes * KM, 1))
+                            if n_blocks > 0:
+                                ctx.enqueue_function[identical_ivf_scan_grouped_kernel[KM]](
                                     dq.unsafe_ptr(), dq_norm.unsafe_ptr(),
                                     dev.dlist_data.unsafe_ptr(), dev.dlist_norm.unsafe_ptr(),
                                     dev.d_off.unsafe_ptr(), dev.d_ind.unsafe_ptr(),
-                                    dprobe_idx.unsafe_ptr(),
-                                    d_od.unsafe_ptr(), d_oi.unsafe_ptr(),
-                                    Int32(n_queries), Int32(dim), Int32(n_probes),
-                                    Int32(k),
-                                    grid_dim=(n_queries + IIVF_QPB - 1) // IIVF_QPB,
-                                    block_dim=IIVF_QPB * WARP_SIZE,
+                                    grp.goff.unsafe_ptr(), grp.gq.unsafe_ptr(), grp.gp.unsafe_ptr(),
+                                    grp.bl.unsafe_ptr(), grp.bs.unsafe_ptr(),
+                                    d_pd.unsafe_ptr(), d_pi.unsafe_ptr(),
+                                    d_keep.unsafe_ptr(), Int32(keep_len),
+                                    Int32(dim), Int32(n_probes), Int32(k),
+                                    grid_dim=n_blocks, block_dim=GQPB * WARP_SIZE,
                                 )
-                            else:
-                                ctx.enqueue_function[identical_ivf_scan_kernel[KM]](
-                                    dq.unsafe_ptr(), dq_norm.unsafe_ptr(),
-                                    dev.dlist_data.unsafe_ptr(), dev.dlist_norm.unsafe_ptr(),
-                                    dev.d_off.unsafe_ptr(), dev.d_ind.unsafe_ptr(),
-                                    dprobe_idx.unsafe_ptr(),
-                                    d_od.unsafe_ptr(), d_oi.unsafe_ptr(),
-                                    Int32(n_queries), Int32(dim), Int32(n_probes),
-                                    Int32(k),
-                                    grid_dim=(n_queries + IIVF_QPB - 1) // IIVF_QPB,
-                                    block_dim=IIVF_QPB * WARP_SIZE,
-                                )
+                            ctx.enqueue_function[identical_ivf_merge_kernel[KM]](
+                                d_pd.unsafe_ptr(), d_pi.unsafe_ptr(), d_od.unsafe_ptr(), d_oi.unsafe_ptr(),
+                                Int32(n_queries), Int32(n_probes), Int32(k),
+                                grid_dim=(n_queries + 255) // 256, block_dim=256,
+                            )
+                            ctx.synchronize()
+                            _ = grp^
+                            _ = d_pd^
+                            _ = d_pi^
                         else:
                             if dim <= FIVF_DIM_TILE:
                                 ctx.enqueue_function[fast_ivf_scan_kernel[KM]](

@@ -354,6 +354,14 @@ def _check_configuration() -> Bool:
     # Restore: git apply experiments/removed/MOJOLEARN_LINEAR_LBD_BATCH_OFF.patch; record in docs/TOMBSTONES.md.
     comptime assert not is_defined["MOJOLEARN_LINEAR_LBD_BATCH_OFF"](), "removed 2026-11-18 (lane/fb15-ab-verdicts, A/B ab1 NVIDIA L40S, wheel d652a4b0a1, one run per arm): one flag read per trial (0.8.55's L-BFGS form) was 1.00-1.02x on all 8 huber / logreg-cv cells, digests equal; the gated queue (LBD_BATCH units per read) is the one identical form off Apple; recoverable at c989eb9222"
     # ---- end lane fb15-ab-verdicts
+    # ---- lane fx-verdicts2 (2026-11-18): A/B verdicts of ab3 (NVIDIA L40S, wheel d652a4b0a1)
+    # TOMBSTONE: MOJOLEARN_GEMM_POOL_OFF (LOSER, A/B ab3 NVIDIA L40S, wheel d652a4b0a1, job nvc-ab-20261118T182558Z-cb6e02, one run per arm, digests equal) deleted 2026-11-18 by lane/fx-verdicts2; code recoverable at 85c36e324f.
+    # Restore: git apply experiments/removed/MOJOLEARN_GEMM_POOL_OFF-STAGE_DOWN_OFF.patch; record in docs/TOMBSTONES.md.
+    comptime assert not is_defined["MOJOLEARN_GEMM_POOL_OFF"](), "removed 2026-11-18 (lane/fx-verdicts2, A/B ab3 NVIDIA L40S, wheel d652a4b0a1, job nvc-ab-20261118T182558Z-cb6e02, one run per arm, digests equal): fresh device buffers per matmul were arm/base 1.044 geomean over the 3 gemm cells; the pool is the route; recoverable at 85c36e324f"
+    # TOMBSTONE: MOJOLEARN_GEMM_STAGE_DOWN_OFF (LOSER, A/B ab3 NVIDIA L40S, wheel d652a4b0a1, job nvc-ab-20261118T182558Z-cb6e02, one run per arm, digests equal) deleted 2026-11-18 by lane/fx-verdicts2; code recoverable at 85c36e324f.
+    # Restore: git apply experiments/removed/MOJOLEARN_GEMM_POOL_OFF-STAGE_DOWN_OFF.patch; record in docs/TOMBSTONES.md.
+    comptime assert not is_defined["MOJOLEARN_GEMM_STAGE_DOWN_OFF"](), "removed 2026-11-18 (lane/fx-verdicts2, A/B ab3 NVIDIA L40S, wheel d652a4b0a1, job nvc-ab-20261118T182558Z-cb6e02, one run per arm, digests equal): the raw GEMM download was arm/base 1.125 geomean over the 3 gemm cells; the staged download is the route; recoverable at 85c36e324f"
+    # ---- end lane fx-verdicts2
     return True
 
 

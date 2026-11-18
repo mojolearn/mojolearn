@@ -195,7 +195,7 @@ PAPER_PARTS = ("plan", "install", "smoke", "board", "prior", "owed", "drivers", 
 ALL_PARTS = ("board-all", "all-plan", "all-install", "all-smoke", "all-board", "all-prior", "all-compare")
 #: the targeted job's parts (PC_PARTS=targeted with PC_ROWS: tools/ops/targeted_rows.py; that block exits before the
 #: paper parts too)
-TG_PARTS = ("targeted", "tg-install", "tg-prep", "tg-smoke", "tg-board", "tg-compare")
+TG_PARTS = ("targeted", "tg-install", "tg-prep", "tg-smoke", "tg-board", "tg-compare", "tg-drivers")
 
 
 def parse_parts(text):

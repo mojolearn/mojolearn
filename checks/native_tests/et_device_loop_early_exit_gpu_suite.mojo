@@ -1,19 +1,21 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""The ET forest digest of one small fixture, for the three depth-wise arms.
+"""The ET forest digest of one small fixture, for the two depth-wise arms.
 
 Lane fix-wave2-leftovers (2026-11-14): the ET early-exit device loop
 (`-D MOJOLEARN_IDN_ET_DEVICE_LOOP_EARLY_EXIT`) had no equality check. The ET
 route is a compile-time choice (no host-queue hook in the product builder,
-unlike RF's `force_host_queue`), so the comparison spans three binaries, one
+unlike RF's `force_host_queue`), so the comparison spans two binaries, one
 per arm, each printing the same `ET_FOREST_DIGEST` line:
 
     default                                  the host queue (`_et_run_depthwise_host`)
-    -D MOJOLEARN_IDN_ET_DEVICE_LOOP          the plain device loop (B arm)
     -D MOJOLEARN_IDN_ET_DEVICE_LOOP_EARLY_EXIT  the early-exit device loop
 
+(The plain depth-wise device loop, `-D MOJOLEARN_IDN_ET_DEVICE_LOOP`, lost
+A/B ab3 and was deleted 2026-11-18 by lane/fx-verdicts2; it is refused.)
+
 `checks/native_tests/et_device_loop_early_exit_gpu.sh` (pixi task
-`check-native-et-device-loop-early-exit-gpu`) runs all three and requires one
+`check-native-et-device-loop-early-exit-gpu`) runs both and requires one
 digest. The digest covers every node word (column, threshold bits, metric
 bits, left child, instance count) and every leaf value bit of every tree.
 
@@ -29,7 +31,6 @@ from max.gpu.host import DeviceContext
 from extratrees.impl.decisiontree.decisiontree import DecisionTreeParams
 from extratrees.impl.decisiontree.flatnode import TreeMetaDataNode
 from extratrees.impl.decisiontree.batched_levelalgo.builder import (
-    ET_DEVICE_LOOP,
     ET_DEVICE_LOOP_EARLY_EXIT,
     train_forest_classification_device,
     upload_dataset,
@@ -65,8 +66,6 @@ def _fnv(h: UInt64, word: UInt64) -> UInt64:
 def _arm() -> String:
     comptime if ET_DEVICE_LOOP_EARLY_EXIT:
         return String("early-exit device loop")
-    elif ET_DEVICE_LOOP:
-        return String("plain device loop")
     else:
         return String("host queue")
 

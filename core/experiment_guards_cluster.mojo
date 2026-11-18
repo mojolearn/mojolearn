@@ -604,6 +604,20 @@ def _check_configuration() -> Bool:
     # Restore: git apply experiments/removed/MOJOLEARN_KMEANS_LIVE_CORES_OFF.patch
     comptime assert not is_defined["MOJOLEARN_KMEANS_LIVE_CORES_OFF"](), "removed 2026-11-18 (lane/fx-env-dead): KMEANS_LIVE_CORES_OFF (old path beside the default, kmeans fused grid from the stand-in table row; no A/B in four weeks) is gone; the default path is the only one; code recoverable at 0c65d61fed; see docs/TOMBSTONES.md"
     # ---- end lane fx-env-dead
+    # ---- lane fx-verdicts2 (2026-11-18): A/B verdicts of ab3 (NVIDIA L40S, wheel d652a4b0a1)
+    # TOMBSTONE: MOJOLEARN_IVF_SCAN_GROUPED_OFF (LOSER, A/B ab3 NVIDIA L40S, wheel d652a4b0a1, job nvc-ab-20261118T182558Z-cb6e02, one run per arm, digests equal) deleted 2026-11-18 by lane/fx-verdicts2; code recoverable at 85c36e324f.
+    # Restore: git apply experiments/removed/MOJOLEARN_IVF_SCAN_GROUPED_OFF.patch; record in docs/TOMBSTONES.md.
+    comptime assert not is_defined["MOJOLEARN_IVF_SCAN_GROUPED_OFF"](), "removed 2026-11-18 (lane/fx-verdicts2, A/B ab3 NVIDIA L40S, wheel d652a4b0a1, job nvc-ab-20261118T182558Z-cb6e02, one run per arm, digests equal): the per-query identical IVF scan was arm/base 1.050 geomean over 6 cells (ivf istella fit 1.24); the list-grouped scan is the one identical route; recoverable at 85c36e324f"
+    # TOMBSTONE: MOJOLEARN_IVF_SCAN_STAGED (LOSER, A/B ab3 NVIDIA L40S, wheel d652a4b0a1, job nvc-ab-20261118T182558Z-cb6e02, one run per arm, digests equal) deleted 2026-11-18 by lane/fx-verdicts2; code recoverable at 85c36e324f.
+    # Restore: git apply experiments/removed/MOJOLEARN_IVF_SCAN_GROUPED_OFF.patch; record in docs/TOMBSTONES.md.
+    comptime assert not is_defined["MOJOLEARN_IVF_SCAN_STAGED"](), "removed 2026-11-18 (lane/fx-verdicts2, A/B ab3 NVIDIA L40S, wheel d652a4b0a1, job nvc-ab-20261118T182558Z-cb6e02, one run per arm, digests equal): it chose the staged per-query identical IVF kernel, deleted with MOJOLEARN_IVF_SCAN_GROUPED_OFF (per-query scan 1.050 geomean over 6 cells); recoverable at 85c36e324f"
+    # TOMBSTONE: MOJOLEARN_IVF_SCAN_STAGED_OFF (LOSER, A/B ab3 NVIDIA L40S, wheel d652a4b0a1, job nvc-ab-20261118T182558Z-cb6e02, one run per arm, digests equal) deleted 2026-11-18 by lane/fx-verdicts2; code recoverable at 85c36e324f.
+    # Restore: git apply experiments/removed/MOJOLEARN_IVF_SCAN_GROUPED_OFF.patch; record in docs/TOMBSTONES.md.
+    comptime assert not is_defined["MOJOLEARN_IVF_SCAN_STAGED_OFF"](), "removed 2026-11-18 (lane/fx-verdicts2, A/B ab3 NVIDIA L40S, wheel d652a4b0a1, job nvc-ab-20261118T182558Z-cb6e02, one run per arm, digests equal): it chose the plain per-query identical IVF kernel, deleted with MOJOLEARN_IVF_SCAN_GROUPED_OFF (per-query scan 1.050 geomean over 6 cells); recoverable at 85c36e324f"
+    # TOMBSTONE: MOJOLEARN_IDN_KNN_DOOR_FIT_XN_EAGER (LOSER, A/B ab3 NVIDIA L40S, wheel d652a4b0a1, job nvc-ab-20261118T182558Z-cb6e02, one run per arm, digests equal) deleted 2026-11-18 by lane/fx-verdicts2; code recoverable at 85c36e324f.
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_KNN_DOOR_FIT_XN_EAGER.fx-verdicts2.patch; record in docs/TOMBSTONES.md.
+    comptime assert not is_defined["MOJOLEARN_IDN_KNN_DOOR_FIT_XN_EAGER"](), "removed 2026-11-18 (lane/fx-verdicts2, A/B ab3 NVIDIA L40S, wheel d652a4b0a1, job nvc-ab-20261118T182558Z-cb6e02, one run per arm, digests equal): eager x_neighbors admission in every k-NN fit was arm/base 1.002 geomean over 4 cells (noise); the multi-output transpose resolves the binding; recoverable at 85c36e324f"
+    # ---- end lane fx-verdicts2
     return True
 
 

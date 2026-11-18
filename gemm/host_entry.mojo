@@ -124,8 +124,8 @@ def identical_gemm_host(
 
     # lane/gap-neural-models (2026-10-02): pooled device buffers, the
     # dispatcher's workspace pooled with them, and staged transfers
-    # (gemm/host_transport.mojo; MOJOLEARN_GEMM_POOL=0 and
-    # MOJOLEARN_GEMM_STAGE_DOWN/UP=0 restore the old transport). The kernels
+    # (gemm/host_transport.mojo; -D MOJOLEARN_GEMM_STAGE_UP_OFF restores
+    # the raw upload). The kernels
     # and their plan are the same; copies only, no bit moves.
     var lease = GemmHostLease()
     var a = lease.f32(ctx, ROLE_A, m * k)
