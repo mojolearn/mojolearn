@@ -40,12 +40,14 @@
   E5  `M > 1` for both, against their `M == 1` results.
 """
 
-from max.gpu.host import DeviceContext
+from max.gpu.host import DeviceBuffer, DeviceContext
 from core.device_zero import enqueue_fill
 
 from gbdt.methods.kernel.pointwise_hist2_half_byte_template import (
     PW_HB_BLOCK,
+    PW_HB_FIXED,
 )
+from gbdt.methods.pointwise_kernels import launch_pw_fold_int_slots
 from gbdt.methods.kernel.pointwise_hist2_binary import (
     compute_split_properties_b_kernel,
 )
@@ -123,6 +125,50 @@ def _launch_b[
         grid_dim=(gx, 1, 1), block_dim=(PW_HB_BLOCK, 1, 1),
     )
     _ = scale_word^
+
+
+def _m_target(
+    ctx: DeviceContext, n_cells: Int, m: Int
+) raises -> DeviceBuffer[DType.float32]:
+    """E5's write target at multiplier `m` (fb11, 2026-11-17). Under the
+    fixed-point accumulator (`PW_HB_FIXED`, every non-FAST build) an `m > 1`
+    block files its raw Int32 counts in its OWN slot,
+    `pw_private_doc_slot` = `at + (block % m) * stride` with `stride` the
+    whole window (`2 * total` at gridDim.y = gridDim.z = 1), and the
+    launcher folds the slots (`launch_pw_fold_int_slots`). Handing the
+    kernel the bare `n_cells` histogram there read slot 0's integer bits as
+    floats and wrote slots 1..m-1 past the buffer (the first L40S run:
+    196 cells wrong). FAST keeps the atomicAdd onto the histogram itself."""
+    var n = n_cells
+    comptime if PW_HB_FIXED:
+        n = n_cells * m
+    var buf = ctx.enqueue_create_buffer[DType.float32](n)
+    ctx.enqueue_memset(buf, Float32(0.0))
+    return buf^
+
+
+def _m_fold(
+    ctx: DeviceContext,
+    mut slots: DeviceBuffer[DType.float32],
+    mut dst: DeviceBuffer[DType.float32],
+    n_cells: Int,
+    m: Int,
+) raises:
+    """The product's fold of `_m_target`'s slots into the histogram
+    (`launch_pw_fold_int_slots`, full pass, scale 1.0, as the launches
+    here); under FAST the target IS the histogram and is copied."""
+    ctx.enqueue_memset(dst, Float32(0.0))
+    comptime if PW_HB_FIXED:
+        var scale_word = ctx.enqueue_create_buffer[DType.float32](1)
+        enqueue_fill(ctx, scale_word, Float32(1.0))
+        launch_pw_fold_int_slots(
+            ctx, slots, dst.unsafe_ptr(), True, n_cells, m,
+            scale_word.unsafe_ptr(),
+        )
+        ctx.synchronize()
+        _ = scale_word^
+    else:
+        ctx.enqueue_copy(dst_buf=dst, src_buf=slots)
 
 
 def run_checks() raises:
@@ -338,15 +384,17 @@ def run_checks() raises:
         )
 
     # ================================================================ E5
-    ctx.enqueue_memset(d_hs, Float32(0.0))
+    var t_hs = _m_target(ctx, n_hb, 4)
     _launch_hb[True, 4](
         ctx, d_hoff.unsafe_ptr(), d_hffi.unsafe_ptr(),
         d_hfolds.unsafe_ptr(), 8, d_ci.unsafe_ptr(), d_tgt.unsafe_ptr(),
         d_wt.unsafe_ptr(), d_idx.unsafe_ptr(), d_part.unsafe_ptr(),
-        d_hs.unsafe_ptr(), hb_total, 4,
+        t_hs.unsafe_ptr(), hb_total, 4,
     )
+    _m_fold(ctx, t_hs, d_hs, n_hb, 4)
     ctx.enqueue_copy(dst_buf=h_hs, src_buf=d_hs)
     ctx.synchronize()
+    _ = t_hs^  # held past the fold and the copy
     var bad5 = 0
     for k in range(n_hb):
         var d = h_hs[k] - want_hb[k]
@@ -354,15 +402,17 @@ def run_checks() raises:
             d = -d
         if d > Float32(0.01):
             bad5 += 1
-    ctx.enqueue_memset(d_bs, Float32(0.0))
+    var t_bs = _m_target(ctx, n_b, 4)
     _launch_b[True, 4](
         ctx, d_boff.unsafe_ptr(), d_bffi.unsafe_ptr(), 32,
         d_ci.unsafe_ptr(), d_tgt.unsafe_ptr(), d_wt.unsafe_ptr(),
-        d_idx.unsafe_ptr(), d_part.unsafe_ptr(), d_bs.unsafe_ptr(),
+        d_idx.unsafe_ptr(), d_part.unsafe_ptr(), t_bs.unsafe_ptr(),
         32, 4,
     )
+    _m_fold(ctx, t_bs, d_bs, n_b, 4)
     ctx.enqueue_copy(dst_buf=h_bs, src_buf=d_bs)
     ctx.synchronize()
+    _ = t_bs^  # held past the fold and the copy
     for k in range(n_b):
         var d = h_bs[k] - want_b[k]
         if d < 0:
