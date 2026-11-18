@@ -2503,7 +2503,7 @@ def x_linear_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObject
 
 def _xl_dispatch(model: PythonObject, operation: String, args: PythonObject, context: PythonObject) raises -> PythonObject:
         var result = PythonObject(None)
-        if operation == "regressor_predict":
+        if operation == "regressor_predict" or operation == "regressor_predict_score":
             result = xl_regressor_predict(model, args, context)
         elif operation == "decision_function":
             result = xl_classifier_decision(model, args[0], context)
@@ -2661,7 +2661,21 @@ def _xl_public_operation(model: PythonObject, operation: String, args: PythonObj
         estimator_fit_complete(model, args[0], classifier, context)
         if method == "fit":
             return result
-    if method == "score" or not estimator_outside() or py_get(context, "ndarray") is None:
+    # Lane fx-rows-rest (2026-11-18): "regressor_predict_score" is the plan's
+    # internal predict (`scorer_predict_operation`, python/mojolearn/
+    # _native_msel_prep.py; Ridge and LinearRegression have had `predict_score`).
+    # Its caller is a compiled door reading float32 words (KernelExplainer /
+    # PermutationExplainer, the stacking / voting / multi-output doors, a native
+    # scorer), so it gets the kernel's fresh float32 Array, as a caller inside
+    # the package always did. A door has no Python frame, so those callers were
+    # judged "outside": every model call widened the n predictions to a float64
+    # ndarray (`_xl_widen`) and the door then narrowed them back to float32
+    # through a zero-filled snapshot (kernel-shap: 20 M predictions per explain,
+    # +114 ms on a 334 ms row against 0.8.55, whose callers read the float32
+    # output). The widening is exact, so the float32 words are the same words.
+    # The public predict (operation "regressor_predict") is unchanged: float64.
+    if (method == "score" or operation == "regressor_predict_score" or not estimator_outside()
+            or py_get(context, "ndarray") is None):
         return result
     var b = native_loaded_module("builtins")
     if py_type(result) is b.tuple:

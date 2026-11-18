@@ -244,7 +244,11 @@ def _xl_method(operation: String) -> String:
         return "fit"
     if operation == "isotonic_fit_transform":
         return "fit_transform"
-    if operation == "regressor_predict" or operation == "classifier_predict" or operation == "one_class_predict" or operation == "isotonic_predict" or operation == "cd_predict":
+    # "regressor_predict_score" (lane fx-rows-rest, 2026-11-18): the regressors'
+    # predict for a package-internal caller that reads float32 words (a meta
+    # door, an explainer, a native scorer); the same lifecycle as predict.
+    if (operation == "regressor_predict" or operation == "regressor_predict_score" or operation == "classifier_predict"
+            or operation == "one_class_predict" or operation == "isotonic_predict" or operation == "cd_predict"):
         return "predict"
     if operation == "decision_function" or operation == "one_class_decision_function":
         return "decision_function"

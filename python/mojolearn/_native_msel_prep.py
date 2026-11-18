@@ -77,6 +77,11 @@ def connect(context, register, registry):
             plan = add(getattr(linear, name), linear._XL_CALL, linear._XL_CONTEXT, methods)
             if not classifier:
                 plan['method_entries'] = {'score': (linear._LINEAR_SCORE, linear._LINEAR_SCORE_CONTEXT)}
+                # A compiled caller that reads float32 words (an explainer, a meta
+                # estimator, a native scorer) takes the kernel's float32 output, as
+                # Ridge and LinearRegression's 'predict_score'; the public predict
+                # still returns float64.
+                plan['scorer_predict_operation'] = 'regressor_predict_score'
 
     if cd is not None:
         for cls in (cd.ElasticNet, cd.Lasso):  # glue: fixed ABI metadata connected once during package import
