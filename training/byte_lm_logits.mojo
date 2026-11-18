@@ -305,26 +305,11 @@ def _logits_forward(
     return out^
 
 
-def _refuse_nonfinite_logits(destination: MutPointer[Float32, MutUntrackedOrigin], n: Int) raises:
-    """The same refusal `_logits_forward` makes over its List, over the
-    caller's memory, eight lanes at a time: the exponent-all-ones test on
-    the bits (an infinity or a NaN), and the FIRST offending flat index in
-    the message, found by the scalar tail once a vector has one. No
-    floating-point arithmetic, so no bit is judged differently."""
-    comptime W = 8
-    var exp = SIMD[DType.uint32, W](0x7F800000)
-    var i = 0
-    var body = n - n % W
-    while i < body:
-        var bits = bitcast[DType.uint32, W](destination.unsafe_load[width=W](i)) & exp
-        var hit = bits.eq(exp).select(SIMD[DType.uint32, W](1), SIMD[DType.uint32, W](0))
-        if hit.reduce_or() != UInt32(0):
-            break
-        i += W
-    while i < n:
-        if (bitcast[DType.uint32](destination.unsafe_load(i)) & UInt32(0x7F800000)) == UInt32(0x7F800000):
-            _raise_nonfinite_logit(i)
-        i += 1
+# `_refuse_nonfinite_logits` (a serial eight-lane host scan of the logits
+# in the caller's memory) had no caller left: the refusal is folded into the
+# staged copy-out (core/staged_download.mojo), which names the same first
+# flat index through `_raise_nonfinite_logit`. Deleted by lane fx-host-scans,
+# 2026-11-18.
 
 
 def _raise_nonfinite_logit(i: Int) raises:
