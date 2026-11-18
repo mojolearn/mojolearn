@@ -23,6 +23,12 @@ any-non-finite reduction with a scalar tail. Loads are unaligned (alignment
     host_all_finite_f32_strided(addr, s0, s1, rows, cols)
                                                     a rows x cols view with
                                                     byte strides s0, s1
+    host_all_finite_view(addr, s0, s1, rows, cols, width, native)
+                                                    the same for float16,
+                                                    float32 or float64 words
+                                                    in either byte order
+    host_all_finite_nd(addr, shape, strides, width, native)
+                                                    a view of any rank
 """
 from core.host_parallel import host_parallelize
 from core.host_predict_threads import host_predict_task_count_work, host_predict_chunk
@@ -46,13 +52,13 @@ def _hfs_exp_mask[dt: DType]() -> Scalar[dt]:
 
 
 @always_inline
-def _hfs_span_finite[dt: DType](addr: Int, n: Int) -> Bool:
+def _hfs_span_finite_mask[dt: DType](addr: Int, n: Int, exp1: Scalar[dt]) -> Bool:
     """True when none of the `n` contiguous `dt` words at byte address
-    `addr` has all exponent bits set. Serial within the span; the callers
-    split spans across cores."""
-    comptime W = _HFS_W if dt == DType.uint32 else _HFS_W // 2
+    `addr` has every bit of `exp1` set. `exp1` is the exponent field of the
+    float as the word is loaded (byte-swapped for a non-native view).
+    Serial within the span; the callers split spans across cores."""
+    comptime W = _HFS_W * 2 if dt == DType.uint16 else (_HFS_W if dt == DType.uint32 else _HFS_W // 2)
     var words = MutPointer[Scalar[dt], MutUntrackedOrigin](unsafe_from_address=addr)
-    var exp1 = _hfs_exp_mask[dt]()
     var exp = SIMD[dt, W](exp1)
     var i = 0
     var body = n - n % W
@@ -66,6 +72,12 @@ def _hfs_span_finite[dt: DType](addr: Int, n: Int) -> Bool:
             return False
         i += 1
     return True
+
+
+@always_inline
+def _hfs_span_finite[dt: DType](addr: Int, n: Int) -> Bool:
+    """`_hfs_span_finite_mask` with the native exponent field of `dt`."""
+    return _hfs_span_finite_mask[dt](addr, n, _hfs_exp_mask[dt]())
 
 
 def _hfs_all_finite[dt: DType](addr: Int, n: Int) -> Bool:
@@ -156,6 +168,175 @@ def host_all_finite_f32_strided(addr: Int, s0: Int, s1: Int, rows: Int, cols: In
         if flags[t] == UInt8(0):
             finite = False
     _ = flags^
+    return finite
+
+
+def _hfs_view_finite[dt: DType](addr: Int, outer: Int, inner: Int, s0: Int, s1: Int, exp1: Scalar[dt],
+                                outer_rank: Int, dims_addr: Int, steps_addr: Int) -> Bool:
+    """True when no word of a strided view has every bit of `exp1` set. The
+    view is `outer` units of `inner` words `s1` bytes apart. Unit `u` starts
+    at `addr + u * s0` when `outer_rank <= 1`; otherwise `u` is the C-order
+    index over `outer_rank` axes whose sizes and byte strides are the Int
+    words at `dims_addr` and `steps_addr`. The `outer * inner` words are
+    split into equal contiguous ranges across the host's cores (grain floor
+    applied), so a few long units and many short ones split alike; a range
+    with `s1` equal to the word size is scanned as SIMD spans."""
+    var word_bytes = 8 if dt == DType.uint64 else (2 if dt == DType.uint16 else 4)
+    var total = outer * inner
+    if outer <= 0 or inner <= 0:
+        return True
+    # parallel: finiteness scan over word ranges across host cores (was a serial byte-assembling scan)
+    var tasks = max(host_predict_task_count_work(total, total), 1)
+    var chunk = host_predict_chunk(total, tasks)
+    var flags = List[UInt8](length=tasks, fill=UInt8(1))
+    var flag_ptr = rebind[MutPointer[UInt8, MutUntrackedOrigin]](flags.unsafe_ptr())
+
+    def _range(t: Int) {imm addr, imm inner, imm s0, imm s1, imm exp1, imm outer_rank, imm dims_addr,
+                        imm steps_addr, imm word_bytes, imm total, imm chunk, imm flag_ptr}:
+        var pos = t * chunk
+        var hi = min(pos + chunk, total)
+        if pos >= hi:
+            return
+        var u = pos // inner
+        var c = pos - u * inner
+        while pos < hi:  # native input marshaling: this task's units of the view
+            var seg = min(inner - c, hi - pos)
+            var base = addr + u * s0
+            if outer_rank > 1:
+                var dims = MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=dims_addr)
+                var steps = MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=steps_addr)
+                base = addr
+                var remaining = u
+                var axis = outer_rank - 1
+                while axis >= 0:  # small-loop(admitted rank metadata)
+                    var size = dims[axis]
+                    base += (remaining % size) * steps[axis]
+                    remaining //= size
+                    axis -= 1
+            base += c * s1
+            if s1 == word_bytes:
+                if not _hfs_span_finite_mask[dt](base, seg, exp1):
+                    flag_ptr.unsafe_store(t, UInt8(0))
+                    return
+            else:
+                for k in range(seg):  # native input marshaling: strided words of one unit
+                    var w = MutPointer[Scalar[dt], MutUntrackedOrigin](unsafe_from_address=base + k * s1).unsafe_load[alignment=1](0)
+                    if (w & exp1) == exp1:
+                        flag_ptr.unsafe_store(t, UInt8(0))
+                        return
+            pos += seg
+            u += 1
+            c = 0
+
+    if tasks <= 1:
+        _range(0)
+    else:
+        host_parallelize(_range, tasks)
+    var finite = True
+    for t in range(tasks):  # driver-loop: over the scan tasks' flags (at most one per core)
+        if flags[t] == UInt8(0):
+            finite = False
+    _ = flags^
+    return finite
+
+
+def _hfs_view_dispatch(addr: Int, outer: Int, inner: Int, s0: Int, s1: Int, width: Int, native: Bool,
+                       outer_rank: Int, dims_addr: Int, steps_addr: Int) -> Bool:
+    """`_hfs_view_finite` for a float of `width` bytes (2, 4 or 8). A view
+    in the other byte order is tested with the byte-swapped exponent field,
+    so no word is converted."""
+    if width == 4:
+        return _hfs_view_finite[DType.uint32](addr, outer, inner, s0, s1,
+            UInt32(0x7F800000) if native else UInt32(0x0000807F), outer_rank, dims_addr, steps_addr)
+    if width == 8:
+        return _hfs_view_finite[DType.uint64](addr, outer, inner, s0, s1,
+            UInt64(0x7FF0000000000000) if native else UInt64(0x000000000000F07F), outer_rank, dims_addr, steps_addr)
+    return _hfs_view_finite[DType.uint16](addr, outer, inner, s0, s1,
+        UInt16(0x7C00) if native else UInt16(0x007C), outer_rank, dims_addr, steps_addr)
+
+
+def host_finite_width_supported(width: Int) -> Bool:
+    """True for the float widths `host_all_finite_view` and
+    `host_all_finite_nd` scan: 2, 4 and 8 bytes."""
+    return width == 2 or width == 4 or width == 8
+
+
+def host_all_finite_view(addr: Int, s0: Int, s1: Int, rows: Int, cols: Int, width: Int, native: Bool) -> Bool:
+    """True when none of the floats of `width` bytes (2, 4 or 8) of the
+    rows x cols view at byte address `addr` with byte strides `s0` (rows)
+    and `s1` (columns) is a NaN or an infinity. `native` is False for a view
+    in the other byte order. C-contiguous and Fortran-contiguous views, a
+    single row and a single column are one flat run of words; any other
+    view is rows of strided words. One parallel pass in every case."""
+    if rows <= 0 or cols <= 0:
+        return True
+    if cols == 1:
+        return _hfs_view_dispatch(addr, 1, rows, 0, width if rows == 1 else s0, width, native, 0, 0, 0)
+    if rows == 1:
+        return _hfs_view_dispatch(addr, 1, cols, 0, s1, width, native, 0, 0, 0)
+    if (s1 == width and s0 == cols * width) or (s0 == width and s1 == rows * width):
+        # The verdict does not depend on the order the words are read in.
+        return _hfs_view_dispatch(addr, 1, rows * cols, 0, width, width, native, 0, 0, 0)
+    return _hfs_view_dispatch(addr, rows, cols, s0, s1, width, native, 1, 0, 0)
+
+
+def host_all_finite_nd(addr: Int, shape: List[Int], strides: List[Int], width: Int, native: Bool) -> Bool:
+    """True when none of the floats of `width` bytes (2, 4 or 8) of the
+    view at byte address `addr` with the given `shape` and byte `strides`
+    (any rank, any sign) is a NaN or an infinity. A C-contiguous or
+    Fortran-contiguous view is one flat run of words; otherwise the longest
+    contiguous trailing block is the SIMD unit and the leading axes are
+    walked. One parallel pass in every case."""
+    var rank = len(shape)
+    var count = 1
+    for axis in range(rank):  # small-loop(admitted rank metadata)
+        count *= shape[axis]
+    if count <= 0:
+        return True
+    var c_order = True
+    var f_order = True
+    var expected_c = width
+    var expected_f = width
+    for i in range(rank):  # small-loop(admitted rank metadata)
+        var back = rank - i - 1
+        if shape[back] != 1 and strides[back] != expected_c:
+            c_order = False
+        expected_c *= shape[back]
+        if shape[i] != 1 and strides[i] != expected_f:
+            f_order = False
+        expected_f *= shape[i]
+    if c_order or f_order:
+        return _hfs_view_dispatch(addr, 1, count, 0, width, width, native, 0, 0, 0)
+    # The longest trailing block of axes whose words are adjacent in memory.
+    var k = rank - 1
+    var inner = 1
+    var expected = width
+    while k >= 0 and (shape[k] == 1 or strides[k] == expected):  # small-loop(admitted rank metadata)
+        inner *= shape[k]
+        expected *= shape[k]
+        k -= 1
+    var s1 = width
+    if inner == 1:
+        # No adjacent block: the innermost axis longer than one is a run of strided words.
+        inner = shape[k]
+        s1 = strides[k]
+        k -= 1
+    var outer_rank = k + 1
+    if outer_rank <= 0:
+        return _hfs_view_dispatch(addr, 1, inner, 0, s1, width, native, 0, 0, 0)
+    if outer_rank == 1:
+        return _hfs_view_dispatch(addr, shape[0], inner, strides[0], s1, width, native, 1, 0, 0)
+    var dims = List[Int](length=outer_rank, fill=1)
+    var steps = List[Int](length=outer_rank, fill=0)
+    for axis in range(outer_rank):  # small-loop(admitted rank metadata)
+        dims[axis] = shape[axis]
+        steps[axis] = strides[axis]
+    var dims_ptr = rebind[MutPointer[Int, MutUntrackedOrigin]](dims.unsafe_ptr())
+    var steps_ptr = rebind[MutPointer[Int, MutUntrackedOrigin]](steps.unsafe_ptr())
+    var finite = _hfs_view_dispatch(addr, count // inner, inner, 0, s1, width, native, outer_rank,
+                                    Int(dims_ptr), Int(steps_ptr))
+    _ = dims^
+    _ = steps^
     return finite
 
 
