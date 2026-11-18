@@ -33,7 +33,11 @@ def test_public_boundary_uses_native_model_and_preserves_partial_publication():
     # lane restore-samba-resident-forward: the stateless device forward is the
     # resident forward (op 16) unless the B-arm define selects the program.
     route=public.split('if samba_program_arm(fields, key):')[1]
-    assert route.index('comptime if not SAMBA_PROGRAM_FORWARD:') < route.index('samba_resident_native_forward(')
+    # The B-arm switch is the IDN_ define (expdel2-02-base 59c24bdf40, restored af19840a85).
+    import re
+    switch=re.search(r'comptime if not \w*SAMBA_PROGRAM_FORWARD:', route)
+    assert switch is not None
+    assert switch.start() < route.index('samba_resident_native_forward(')
     assert route.index('samba_resident_native_forward(') < route.index('_samba_program_call(')
 
 
@@ -64,7 +68,8 @@ def test_resident_lifecycle_uses_shared_owner_and_validates_before_reserving():
     assert 'neural_descriptor_adopt(provider, handle, 13, [12])' in boundary
     step=boundary.split('def samba_resident_native_step(')[1]
     assert step.index('neural_descriptor_execute(provider, 19,') < step.index('neural_descriptor_reserved_execute(')
-    assert '[Int(py=opt["_res"]), Int(py=fields["n_total"])], [], False)' in step
+    # The optimizer slot arrives as a typed handle unpacked once (fed1b4e384), not opt["_res"].
+    assert '[optimizer_handle, Int(py=fields["n_total"])], [], False)' in step
 
 
 def test_native_lock_is_an_exact_samba_admission_owner():
@@ -85,9 +90,12 @@ def test_optimizer_dispatch_preserves_same_native_functions_and_float_conversion
             assert f'Float32(f[{index}])' in branch
     step=(ROOT/'bindings/samba_step_native_door.mojo').read_text()
     assert 'microbatch_split_is_identical(b * length, a)' in step
-    for operation in (25,26,27):
-        assert f'samba_optimizer_execute(provider, {operation},' in step
-    assert 'neural_descriptor_execute(provider, 9,' in step
+    # One optimizer provider is resolved per call (samba_optimizer_primitives) and the
+    # gradient reduction executes by provider id (neural-descriptor-pins, 3ac9e932ee).
+    assert 'samba_optimizer_execute(optimizer_provider, 25,' in step
+    assert 'samba_optimizer_execute(optimizer_provider, 27 if io else 26,' in step
+    assert 'samba_optimizer_execute(optimizer_provider, 27,' in step
+    assert 'neural_descriptor_execute_id(provider_id, 9,' in step
 
 
 def test_accumulation_reuses_admitted_native_metadata_and_keeps_original_reduction():
@@ -122,4 +130,5 @@ def test_packed_forward_retains_scratch_and_original_native_function():
     assert 'len(a) != INT15_ENTRY_ADDRS' in branch
     assert 'len(p) != INT15_ENTRY_PARAMS' in branch
     assert 'owner[].clear()' in branch
-    assert 'op >= 36' in native
+    # The operation bound is the table size (op 36 added by dd385139e8), not a literal.
+    assert 'op >= NEURAL_BLOCK_OPERATIONS' in native
