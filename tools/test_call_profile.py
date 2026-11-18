@@ -416,7 +416,7 @@ class Report(unittest.TestCase):
                  "inclusive": [{"frame": "<module> (b.py)", "pct": 100.0, "us_per_call": 400.0}]}))
             # shim: 100 us of CUDA (a sync of 80, two launches of 10) and 20 us of libc per call
             write(os.path.join(rd, "shim", "window.jsonl"), window_lines(
-                4, 1, {"cuStreamSynchronize": [0, 0, 0], "cuLaunchKernelEx": [0, 0, 0], "malloc": [0, 0, 0]},
+                4, 2000000, {"cuStreamSynchronize": [0, 0, 0], "cuLaunchKernelEx": [0, 0, 0], "malloc": [0, 0, 0]},
                 {"cuStreamSynchronize": [4, 320000, 0], "cuLaunchKernelEx": [8, 80000, 0], "malloc": [40, 80000, 4096]}))
         if with_nsys:
             write(os.path.join(rd, "nsys", "nsys.json"), json.dumps(
@@ -435,7 +435,8 @@ class Report(unittest.TestCase):
             self.assertAlmostEqual(r["wall_ms_per_call"], 0.5)                    # the time pass, not py-spy's 0.6
             self.assertAlmostEqual(r["split"]["host_outside_cuda_ms"], 0.3)
             h = r["host"]
-            self.assertEqual((h["cuda_us"], h["libc_us"], h["rest_us"]), (100.0, 20.0, 380.0))
+            self.assertEqual((h["cuda_us"], h["libc_us"], h["rest_us"]), (100.0, 20.0, 380.0))   # of the shim's 500
+            self.assertEqual(h["split_wall_us"], 500.0)
             self.assertEqual(h["cuda"]["cuStreamSynchronize"], {"calls": 1.0, "us": 80.0, "bytes": 0.0})
             self.assertEqual(h["source"], "py-spy")
             # the rest (380 us) by the sampled shares without the shim's 20 %: bindings 0.4 / 0.8 -> 190 us

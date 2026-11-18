@@ -356,17 +356,20 @@ def main_thread(threads):
 
 def leaf_split(stacks, frame_fn):
     """{category: weight}, {binding frame: weight}, weight left out as the shim's: the leaf of every stack by its
-    category; leaves in the CUDA driver and libc allocation/copy functions are the shim's (timed exactly there)."""
+    category. A stack inside a CUDA driver entry or a libc allocation/copy function (at any depth: the shim times
+    the whole call, its callees included) is the shim's, timed exactly there."""
     cats, binds, shim = collections.Counter(), collections.Counter(), 0.0
     for w, frames in stacks:
         if not frames:
             continue
-        name, obj = frame_fn(frames[-1])
-        cat = category(obj)
-        sym = name.split(" (", 1)[0].split(" [", 1)[0]
-        if cat == "cuda_driver" or (cat == "libc" and _SHIM_LEAF.match(sym)):
+        named = [frame_fn(f) for f in frames]
+        if any(category(obj) == "cuda_driver" or
+               (category(obj) == "libc" and _SHIM_LEAF.match(name.split(" (", 1)[0].split(" [", 1)[0]))
+               for name, obj in named):
             shim += w
             continue
+        name, obj = named[-1]
+        cat = category(obj)
         cats[cat] += w
         if cat == "bindings":
             binds[name] += w
@@ -600,16 +603,17 @@ def _f(x, nd=3):
     return str(x)
 
 
-def host_split(wall_ms, shim, sampled):
+def host_split(wall_ms, shim, sampled, shim_wall_ms=None):
     """Host microseconds per call of one row split into the report's parts: the CUDA driver entries and libc
     allocations/copies the shim timed exactly, and the rest of the wall (wall - CUDA - libc) shared out by the
     sampled source's leaf categories (py-spy's main-thread samples, else callgrind's instructions); `unexplained` is
-    the rest's share on frames with no object, or the whole rest when nothing was sampled. The wall is the time
-    pass's (no tool attached), the shim's times come from its own pass."""
+    the rest's share on frames with no object, or the whole rest when nothing was sampled. With the shim, the wall
+    split is the shim pass's own (the same run as its times: two runs' walls differ by more than a small entry);
+    the time pass's untraced wall stands beside it (`wall_us`; the difference is the shim's cost and run noise)."""
     if wall_ms is None:
         return None
-    W = wall_ms * 1e3
-    out = {"wall_us": round(W, 2), "cuda_us": None, "libc_us": None, "cuda": {}, "libc": {}, "source": None,
+    W = (shim_wall_ms if shim and shim_wall_ms is not None else wall_ms) * 1e3
+    out = {"wall_us": round(wall_ms * 1e3, 2), "split_wall_us": round(W, 2), "cuda_us": None, "libc_us": None, "cuda": {}, "libc": {}, "source": None,
            "parts_us": {}, "bindings": [], "unexplained_us": None}
     C = L = 0.0
     if shim:
@@ -677,7 +681,8 @@ def collect_row(res, row):
         split["host_outside_cuda_ms"] = max(wall - ns["api_ms"], 0.0)
     out["split"] = split
     out["shim"] = out["passes"]["shim"]["window"]["shim_per_call"]
-    out["host"] = host_split(wall, out["shim"], (("py-spy", out["pyspy"]), ("callgrind", out["callgrind"])))
+    out["host"] = host_split(wall, out["shim"], (("py-spy", out["pyspy"]), ("callgrind", out["callgrind"])),
+                             out["passes"]["shim"]["window"]["wall_ms_per_call"])
     out["largest_host_costs"], out["largest_host_costs_source"] = [], None
     for src in ("perf", "pyspy", "callgrind"):
         got = largest_host_costs(out[src])
@@ -695,8 +700,8 @@ def render(doc):
     L = ["# Call profile (%s): where the wall time of one small call goes" % doc.get("vendor", "?"), "",
          "Wheel: %s. Host: %s. Diagnostic only: not a measurement and not a board cell. %s" % (
              doc.get("wheel") or "?", doc.get("host") or "?", doc.get("tools") or ""), "",
-         "Host split, microseconds per call: the wall of the time pass; CUDA driver entries and libc allocations/"
-         "copies timed by the LD_PRELOAD shim (its own pass); the rest of the wall shared by the leaf categories of "
+         "Host split, microseconds per call of the shim pass's wall (the wall ms column is the untraced time pass): "
+         "CUDA driver entries and libc allocations/copies timed by the LD_PRELOAD shim; the rest shared by the leaf categories of "
          "py-spy's main-thread samples (else callgrind's instructions); unexplained = frames with no object, or the "
          "whole rest when nothing was sampled.", ""]
     L.append("| row | phase | wall ms/call | GPU kernel ms | CUDA API ms (nsys) | launches | syncs | allocs | H2D | D2H "
@@ -738,8 +743,8 @@ def render(doc):
                 "%s %s x %s us %s B" % (k, _f(v["calls"], 2), _f(v["us"], 2), _f(v["bytes"], 0))
                 for k, v in sorted(h["libc"].items(), key=lambda kv: -kv[1]["us"])))
         if h.get("parts_us"):
-            L.append("rest of the wall %s us/call by %s: %s; unexplained %s" % (
-                _f(h.get("rest_us"), 1), h.get("source"),
+            L.append("rest of the shim pass's wall (%s us/call; untraced %s) %s us/call by %s: %s; unexplained %s" % (
+                _f(h.get("split_wall_us"), 1), _f(h.get("wall_us"), 1), _f(h.get("rest_us"), 1), h.get("source"),
                 ", ".join("%s %s" % (k, _f(v, 1)) for k, v in sorted(h["parts_us"].items(), key=lambda kv: -kv[1])),
                 _f(h.get("unexplained_us"), 1)))
         if h.get("bindings"):
@@ -769,7 +774,7 @@ def render(doc):
                     ", ".join("%s %s" % (k, _f(v, 1)) for k, v in sorted((prof.get("categories") or {}).items(),
                                                                          key=lambda kv: -kv[1]))))
             else:
-                L.append("%s: %d samples, %s ms per call (%s)" % (src, prof.get("samples", 0),
+                L.append("%s: %d samples, %s ms per call (%s)" % (src, prof.get("sample_count", prof.get("samples", 0)),
                                                                  _f(prof.get("cpu_ms_per_call"), 4), prof.get("weight")))
             unit = "Ir/call" if src == "callgrind" else "us/call"
             for kind in ("self", "inclusive"):
