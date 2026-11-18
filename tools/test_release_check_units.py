@@ -8,6 +8,7 @@ import zipfile
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tools"))
+import autograd_smoke as AS  # noqa: E402
 import release_check_units as U  # noqa: E402
 
 
@@ -25,7 +26,7 @@ def wheel(path, table=b"{}", binding=b"ELF", version_py=b"__version__ = '0.8.66'
 
 def test_every_check_is_a_unit():
     names = U.units()
-    assert names[:2] == [U.INSTALL_LOAD, U.ADAPTERS] and len(names) == 2 + 24
+    assert names[:2] == [U.INSTALL_LOAD, U.ADAPTERS] and len(names) == 2 + len(AS.ENTRIES)
     assert all(n.startswith("autograd/") for n in names[2:])
 
 
