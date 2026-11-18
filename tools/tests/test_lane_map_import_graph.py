@@ -142,7 +142,13 @@ def test_a_binding_table_read_as_code_routes_the_saved_model_classes():
     sel = lane_select.select(["bindings/_mojolearn_estimators_host.mojo"])
     assert "standard-scaler" in sel["lanes"], sel["lanes"][:8]
     sel = lane_select.select(["preprocessing/host/scaler_oracle.mojo"])
-    assert "standard-scaler" in sel["lanes"] and "kmeans" not in sel["lanes"], sel["lanes"][:8]
+    assert "standard-scaler" in sel["lanes"], sel["lanes"][:8]
+    # k-means does not run the scaler oracle. Since the native boundary migration it can still be selected,
+    # only as native-dispatch precision debt (tools/LANE_SELECTOR_PRECISION.md): then it must carry the
+    # unresolved-dispatch record that says so, never be selected silently.
+    if "kmeans" in sel["lanes"]:
+        assert any(row["lane"] == "kmeans" and "preprocessing/host/scaler_oracle.mojo" in row["paths"]
+                   for row in sel.get("precision_limitations", ())), "kmeans selected with no dispatch record"
 
 
 def test_check_stamps_agrees_with_a_stamp_the_build_wrote(tmp_path, monkeypatch):
