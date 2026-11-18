@@ -456,7 +456,7 @@ class Report(unittest.TestCase):
                 md = fh.read()
             self.assertIn("LARGEST HOST COSTS (pyspy, self per call): run_layer (_mojolearn_nn.so) 120.0 us", md)
             self.assertIn("CUDA driver per call (shim): cuStreamSynchronize 1.00 x 80.00 us", md)
-            self.assertIn("| a | fit | 0.500 | 0.050 | 0.200 | 3.0 | 1.0 | 2.0 | 1.0 | - | 190.0 | 95.0 | 47.5 | 100.0 "
+            self.assertIn("| a | fit | 0.500 | 0.050 | 0.200 | 3.0 | 1.0 | 2.0 | 1.0 (0.01 MB) | - | 190.0 | 95.0 | 47.5 | 100.0 "
                           "| 20.0 | 0.0 | 47.5 | py-spy |", md)
 
     def test_report_exit_codes(self):
