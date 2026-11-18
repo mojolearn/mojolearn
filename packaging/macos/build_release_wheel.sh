@@ -879,6 +879,23 @@ done
 # shellcheck disable=SC2086
 pixi run -e pkg python "$here/packaging/macos/check_gpu_embedded.py" $GPU_SOS
 
+# IDENTICAL APPLE GPU ARITHMETIC (lane fb13-identity-audit, 2026-11-17): every AIR
+# module of the identical set compiled with fast math off, no fast-math flag but
+# `contract`, no approximate math intrinsic (packaging/macos/air_contract.py; the
+# NVIDIA and AMD halves are packaging/linux/ptx_contract.py and hip_contract.py).
+# The FAST tier (python/mojolearn/*.so) is Apple-only and not held to it.
+IDN_GPU_SOS=""
+for so in $GPU_SOS; do
+    case "$so" in "$PKG"/identical/*) IDN_GPU_SOS="$IDN_GPU_SOS $so" ;; esac
+done
+if [ -n "$IDN_GPU_SOS" ]; then
+    mkdir -p "$here/build"
+    # shellcheck disable=SC2086
+    python3 "$here/packaging/macos/air_contract.py" audit $IDN_GPU_SOS > "$here/build/air_audit.jsonl" \
+        || { echo "REFUSING: IDENTICAL Apple GPU code with fast math or an approximate intrinsic (build/air_audit.jsonl):" >&2
+             grep -v '"refused": \[\], "allowed"' "$here/build/air_audit.jsonl" | head -5 | cut -c1-240 >&2; exit 1; }
+fi
+
 # THE IDENTITY PAYLOAD (the packaging lane, 2026-09-14; docs/VERIFY.md).
 # `python -m mojolearn verify` needs the one card comparator and
 # mojolearn/reference_cards/; `python -m mojolearn identity` needs
