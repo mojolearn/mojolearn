@@ -31,6 +31,7 @@ from max.gpu.host import DeviceContext
 from dbscan.impl.adjgraph.algo import scan_blocks_needed
 from dbscan.impl.runner import EPS_NN_RBC, dbscan_fit
 from dbscan.impl.sparse.detail.csr import MAX_LABEL
+from checks.native_tests.kit import download_host_into, upload_host_into
 
 
 comptime SC_HALF = 50_000
@@ -56,7 +57,7 @@ def main() raises:
     for i in range(n):
         for f in range(SC_D):
             hx.unsafe_ptr().unsafe_store(i * SC_D + f, _coord(i, f))
-    ctx.enqueue_copy(dst_buf=x, src_ptr=hx.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, x, hx)
     var labels = ctx.enqueue_create_buffer[DType.int32](n)
     var labels_temp = ctx.enqueue_create_buffer[DType.int32](n)
     var work_buffer = ctx.enqueue_create_buffer[DType.int32](n)
@@ -70,7 +71,6 @@ def main() raises:
     var nw = ctx.enqueue_create_buffer[DType.float32](1)
     var ws = ctx.enqueue_create_buffer[DType.float32](1)
     ctx.synchronize()
-    _ = hx^  # past the drain: a queued copy reads it after its last named use
 
     var wrapped = truncate_to_32(2 * SC_HALF * SC_HALF)
     print(
@@ -92,7 +92,7 @@ def main() raises:
             edge_free=allow_ef,
         )
         var h = ctx.enqueue_create_host_buffer[DType.int32](n)
-        ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=labels)
+        download_host_into[DType.int32](ctx, labels, h)
         ctx.synchronize()
         var bad = 0
         for i in range(n):
