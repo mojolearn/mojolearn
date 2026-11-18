@@ -637,6 +637,11 @@
    "define": "MOJOLEARN_LLAMA_FAST_REFUSE_WATERMARK",
    "status": "define in code (transformer/impl/llama/modeling_llama.mojo LLAMA_FAST_REFUSE_WATERMARK, llama_refuse_bad_call; LlamaKVCache.wm_grant; autograd/block_step_ops.mojo _attn_watermark_grant; core/device_scan.mojo nonfinite_rows_partial_kernel): B = an attention decode step (L = 1, linear KV cache) of a resident entry whose owner vouches for the cache's writers (the transformer decode session's AttnStepArm, the CausalLM decode program, the Samba program) scans the hidden states and only the one key row and one value row the previous step appended, on scan scratch held by the entry (no allocation per step, three fixed lengths; inv_freq and the rows below were scanned by an earlier call); every other call (a prefill or chunk, the first step after an entry is built, a load, a restart, a zero fill, a ring cache, a generic ops session) takes A's scans; A = the default, the whole key cache, the whole value cache, the hidden states and inv_freq scanned on three buffers allocated per call. Same refusal name, order, flat index and call. Default off; lane fx-llama-refuse-watermark (2026-11-18)",
    "owed": "RUN"
+  },
+  "xcnn-typed-door": {
+   "define": "MOJOLEARN_XCNN_FAST_TYPED_DOOR",
+   "status": "define in code (bindings/xcnn_native_pack.mojo xcnn_c; bindings/xcnn_pool_typed_door.mojo): B = the typed boundary tables of the average pools (one typed context per process, one typed record per layer, valid under the 3.12+ dictionary and type watchers; no by-name read, Python str or instance-dictionary write per resident call); A = the door, the default, unchanged. Host side only: the same entry and launch words. Pilot of design A (~/mojolearn-evidence/briefs-20261118/ideas-boundary-RESULT.md), lane fx-typed-pilot (2026-11-18)",
+   "owed": "RUN"
   }
  },
  "rows": [
@@ -3562,6 +3567,45 @@
     "llama-refuse-watermark"
    ],
    "decides": "keep A (the default, whole-cache scans on per-call scratch) unless B is faster at equal quality on the NVIDIA L40S, base and arm back to back in one job; then B becomes the default with a _OFF define. Digests must not move on any cell (a refusal scan produces no float). Expected from the arithmetic: transformer-decode -60 ms or more, causal-lm-generate-smollm2 -115 ms or more, causal-lm-generate -45 ms or more, samba-decode -30 ms or more. The refusal itself is not decided by timing: before a flip the native refusal checks run with the define on, including a non-finite loaded into a session's cache (refused at the next step, by name and flat index) and one produced by a step. Before a flip time also a neighbouring shape (a 4096-token decode, n_kv 2) and a non-board model (a 12-layer llama configuration) (no dimension targeting)"
+  },
+  {
+   "id": "xcnn-typed-door-global-avgpool",
+   "source": "lane fx-typed-pilot (2026-11-18): pilot of the typed boundary tables (design A) on the CNN average pools, opt-in arm, default off (~/mojolearn-evidence/briefs-20261118/fx-typed-pilot-RESULT.md)",
+   "kind": "ab",
+   "lane": "global-avgpool",
+   "dataset": "*",
+   "rows": "full",
+   "vendor": "nvidia",
+   "b_arms": [
+    "xcnn-typed-door"
+   ],
+   "decides": "keep A (the door, the default) unless B is faster on the NVIDIA L40S (small rows: median of 20 consecutive calls); digests must not move in either arm (host side only); the verdict decides the rollout of design A to the other families, not only this switch; time also a neighbouring shape (another batch and spatial size) and a non-board input before a flip (no dimension targeting)"
+  },
+  {
+   "id": "xcnn-typed-door-avgpool1d",
+   "source": "lane fx-typed-pilot (2026-11-18): pilot of the typed boundary tables (design A) on the CNN average pools, opt-in arm, default off (~/mojolearn-evidence/briefs-20261118/fx-typed-pilot-RESULT.md)",
+   "kind": "ab",
+   "lane": "avgpool1d",
+   "dataset": "*",
+   "rows": "full",
+   "vendor": "nvidia",
+   "b_arms": [
+    "xcnn-typed-door"
+   ],
+   "decides": "keep A (the door, the default) unless B is faster on the NVIDIA L40S (small rows: median of 20 consecutive calls); digests must not move in either arm (host side only); the verdict decides the rollout of design A to the other families, not only this switch; time also a neighbouring shape (another batch and spatial size) and a non-board input before a flip (no dimension targeting)"
+  },
+  {
+   "id": "xcnn-typed-door-avgpool2d",
+   "source": "lane fx-typed-pilot (2026-11-18): pilot of the typed boundary tables (design A) on the CNN average pools, opt-in arm, default off (~/mojolearn-evidence/briefs-20261118/fx-typed-pilot-RESULT.md)",
+   "kind": "ab",
+   "lane": "avgpool2d",
+   "dataset": "*",
+   "rows": "full",
+   "vendor": "nvidia",
+   "b_arms": [
+    "xcnn-typed-door"
+   ],
+   "decides": "keep A (the door, the default) unless B is faster on the NVIDIA L40S (small rows: median of 20 consecutive calls); digests must not move in either arm (host side only); the verdict decides the rollout of design A to the other families, not only this switch; time also a neighbouring shape (another batch and spatial size) and a non-board input before a flip (no dimension targeting)"
   }
  ]
 }
