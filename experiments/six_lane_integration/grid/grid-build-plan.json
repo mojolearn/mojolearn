@@ -440,44 +440,6 @@
    "configurations": [
     {
      "arm": "A",
-     "configuration": "G.trees:gbdt-lossguide.all_on"
-    },
-    {
-     "arm": "A",
-     "configuration": "G.trees:gbdt-rank-pairlogit.hist_warp_agg=on"
-    },
-    {
-     "arm": "A",
-     "configuration": "G.trees:gbdt-rank-yetirank.hist_warp_agg=on"
-    },
-    {
-     "arm": "A",
-     "configuration": "G.trees:gbdt-symmetric.hist_warp_agg=on"
-    },
-    {
-     "arm": "A",
-     "configuration": "G.trees:gbdt-symmetric-1000.hist_warp_agg=on"
-    }
-   ],
-   "defines": [
-    "MOJOLEARN_NUMERIC_IDENTICAL=1",
-    "MOJOLEARN_TREES_BLOCK_SCRATCH_FILL_OFF=1",
-    "MOJOLEARN_TREES_HIST_WARP_AGG=1",
-    "MOJOLEARN_TREES_LG_LEVEL_ROUNDS=1"
-   ],
-   "key": "3a04e531538ec1c9183b",
-   "mode": "identical",
-   "pack": "P021",
-   "runtime_reach": "NOT_VERIFIED",
-   "status": "NOT_COMPILED",
-   "target": "native gfx942 (amd box, --accelerator gfx942)",
-   "vendor": "amd"
-  },
-  {
-   "binding": "bindings/_mojolearn_gbdt.mojo",
-   "configurations": [
-    {
-     "arm": "A",
      "configuration": "G.trees:gbdt-rank-pairlogit.all_on"
     },
     {
@@ -502,6 +464,38 @@
    "key": "4b7e00b67d2b7a62e657",
    "mode": "identical",
    "pack": "P022",
+   "runtime_reach": "NOT_VERIFIED",
+   "status": "NOT_COMPILED",
+   "target": "native gfx942 (amd box, --accelerator gfx942)",
+   "vendor": "amd"
+  },
+  {
+   "binding": "bindings/_mojolearn_gbdt.mojo",
+   "configurations": [
+    {
+     "arm": "A",
+     "configuration": "G.trees:gbdt-rank-pairlogit.hist_warp_agg=on"
+    },
+    {
+     "arm": "A",
+     "configuration": "G.trees:gbdt-rank-yetirank.hist_warp_agg=on"
+    },
+    {
+     "arm": "A",
+     "configuration": "G.trees:gbdt-symmetric.hist_warp_agg=on"
+    },
+    {
+     "arm": "A",
+     "configuration": "G.trees:gbdt-symmetric-1000.hist_warp_agg=on"
+    }
+   ],
+   "defines": [
+    "MOJOLEARN_NUMERIC_IDENTICAL=1",
+    "MOJOLEARN_TREES_HIST_WARP_AGG=1"
+   ],
+   "key": "4e992c61e480cc3fb6e9",
+   "mode": "identical",
+   "pack": "P021",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native gfx942 (amd box, --accelerator gfx942)",
@@ -586,43 +580,6 @@
    "configurations": [
     {
      "arm": "A",
-     "configuration": "G.trees:gbdt-lossguide.BLOCK_SCRATCH_FILL_OFF=on"
-    },
-    {
-     "arm": "A",
-     "configuration": "G.trees:gbdt-rank-pairlogit.hist_packed_gh=on"
-    },
-    {
-     "arm": "A",
-     "configuration": "G.trees:gbdt-rank-yetirank.hist_packed_gh=on"
-    },
-    {
-     "arm": "A",
-     "configuration": "G.trees:gbdt-symmetric.hist_packed_gh=on"
-    },
-    {
-     "arm": "A",
-     "configuration": "G.trees:gbdt-symmetric-1000.hist_packed_gh=on"
-    }
-   ],
-   "defines": [
-    "MOJOLEARN_NUMERIC_IDENTICAL=1",
-    "MOJOLEARN_TREES_BLOCK_SCRATCH_FILL_OFF=1",
-    "MOJOLEARN_TREES_HIST_PACKED_GH=1"
-   ],
-   "key": "92e079407aa6f6b505cc",
-   "mode": "identical",
-   "pack": "P020",
-   "runtime_reach": "NOT_VERIFIED",
-   "status": "NOT_COMPILED",
-   "target": "native gfx942 (amd box, --accelerator gfx942)",
-   "vendor": "amd"
-  },
-  {
-   "binding": "bindings/_mojolearn_gbdt.mojo",
-   "configurations": [
-    {
-     "arm": "A",
      "configuration": "G.trees:gbdt-rank-pairlogit.hist_sym_feature_parallel=on+hist_warp_agg=on"
     },
     {
@@ -646,6 +603,38 @@
    "key": "998429f63c6846cb32d9",
    "mode": "identical",
    "pack": "P024",
+   "runtime_reach": "NOT_VERIFIED",
+   "status": "NOT_COMPILED",
+   "target": "native gfx942 (amd box, --accelerator gfx942)",
+   "vendor": "amd"
+  },
+  {
+   "binding": "bindings/_mojolearn_gbdt.mojo",
+   "configurations": [
+    {
+     "arm": "A",
+     "configuration": "G.trees:gbdt-rank-pairlogit.hist_packed_gh=on"
+    },
+    {
+     "arm": "A",
+     "configuration": "G.trees:gbdt-rank-yetirank.hist_packed_gh=on"
+    },
+    {
+     "arm": "A",
+     "configuration": "G.trees:gbdt-symmetric.hist_packed_gh=on"
+    },
+    {
+     "arm": "A",
+     "configuration": "G.trees:gbdt-symmetric-1000.hist_packed_gh=on"
+    }
+   ],
+   "defines": [
+    "MOJOLEARN_NUMERIC_IDENTICAL=1",
+    "MOJOLEARN_TREES_HIST_PACKED_GH=1"
+   ],
+   "key": "998f432c4833a5102bee",
+   "mode": "identical",
+   "pack": "P020",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native gfx942 (amd box, --accelerator gfx942)",
@@ -680,10 +669,6 @@
     },
     {
      "arm": "B",
-     "configuration": "G.trees:gbdt-lossguide.BLOCK_SCRATCH_FILL_OFF=on"
-    },
-    {
-     "arm": "B",
      "configuration": "G.trees:gbdt-rank-pairlogit.hist_packed_gh=on"
     },
     {
@@ -697,10 +682,6 @@
     {
      "arm": "B",
      "configuration": "G.trees:gbdt-symmetric-1000.hist_packed_gh=on"
-    },
-    {
-     "arm": "B",
-     "configuration": "G.trees:gbdt-lossguide.all_on"
     },
     {
      "arm": "B",
@@ -3625,43 +3606,6 @@
    "configurations": [
     {
      "arm": "A",
-     "configuration": "G.trees:gbdt-lossguide.BLOCK_SCRATCH_FILL_OFF=on"
-    },
-    {
-     "arm": "A",
-     "configuration": "G.trees:gbdt-rank-pairlogit.hist_packed_gh=on"
-    },
-    {
-     "arm": "A",
-     "configuration": "G.trees:gbdt-rank-yetirank.hist_packed_gh=on"
-    },
-    {
-     "arm": "A",
-     "configuration": "G.trees:gbdt-symmetric.hist_packed_gh=on"
-    },
-    {
-     "arm": "A",
-     "configuration": "G.trees:gbdt-symmetric-1000.hist_packed_gh=on"
-    }
-   ],
-   "defines": [
-    "MOJOLEARN_NUMERIC_IDENTICAL=1",
-    "MOJOLEARN_TREES_BLOCK_SCRATCH_FILL_OFF=1",
-    "MOJOLEARN_TREES_HIST_PACKED_GH=1"
-   ],
-   "key": "296a223abe2a620bfc8b",
-   "mode": "identical",
-   "pack": "P020",
-   "runtime_reach": "NOT_VERIFIED",
-   "status": "NOT_COMPILED",
-   "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
-   "vendor": "nvidia"
-  },
-  {
-   "binding": "bindings/_mojolearn_gbdt.mojo",
-   "configurations": [
-    {
-     "arm": "A",
      "configuration": "G.trees:gbdt-categorical.LG_LEVEL_ROUNDS=on"
     },
     {
@@ -3736,44 +3680,6 @@
    "configurations": [
     {
      "arm": "A",
-     "configuration": "G.trees:gbdt-lossguide.all_on"
-    },
-    {
-     "arm": "A",
-     "configuration": "G.trees:gbdt-rank-pairlogit.hist_warp_agg=on"
-    },
-    {
-     "arm": "A",
-     "configuration": "G.trees:gbdt-rank-yetirank.hist_warp_agg=on"
-    },
-    {
-     "arm": "A",
-     "configuration": "G.trees:gbdt-symmetric.hist_warp_agg=on"
-    },
-    {
-     "arm": "A",
-     "configuration": "G.trees:gbdt-symmetric-1000.hist_warp_agg=on"
-    }
-   ],
-   "defines": [
-    "MOJOLEARN_NUMERIC_IDENTICAL=1",
-    "MOJOLEARN_TREES_BLOCK_SCRATCH_FILL_OFF=1",
-    "MOJOLEARN_TREES_HIST_WARP_AGG=1",
-    "MOJOLEARN_TREES_LG_LEVEL_ROUNDS=1"
-   ],
-   "key": "54063a7d5a1aaf84cd50",
-   "mode": "identical",
-   "pack": "P021",
-   "runtime_reach": "NOT_VERIFIED",
-   "status": "NOT_COMPILED",
-   "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
-   "vendor": "nvidia"
-  },
-  {
-   "binding": "bindings/_mojolearn_gbdt.mojo",
-   "configurations": [
-    {
-     "arm": "A",
      "configuration": "G.trees:gbdt-rank-pairlogit.all_on"
     },
     {
@@ -3832,10 +3738,6 @@
     },
     {
      "arm": "B",
-     "configuration": "G.trees:gbdt-lossguide.BLOCK_SCRATCH_FILL_OFF=on"
-    },
-    {
-     "arm": "B",
      "configuration": "G.trees:gbdt-rank-pairlogit.hist_packed_gh=on"
     },
     {
@@ -3849,10 +3751,6 @@
     {
      "arm": "B",
      "configuration": "G.trees:gbdt-symmetric-1000.hist_packed_gh=on"
-    },
-    {
-     "arm": "B",
-     "configuration": "G.trees:gbdt-lossguide.all_on"
     },
     {
      "arm": "B",
@@ -4007,6 +3905,70 @@
    "key": "ab3a5dcac7c909b65718",
    "mode": "identical",
    "pack": "P024",
+   "runtime_reach": "NOT_VERIFIED",
+   "status": "NOT_COMPILED",
+   "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
+   "vendor": "nvidia"
+  },
+  {
+   "binding": "bindings/_mojolearn_gbdt.mojo",
+   "configurations": [
+    {
+     "arm": "A",
+     "configuration": "G.trees:gbdt-rank-pairlogit.hist_warp_agg=on"
+    },
+    {
+     "arm": "A",
+     "configuration": "G.trees:gbdt-rank-yetirank.hist_warp_agg=on"
+    },
+    {
+     "arm": "A",
+     "configuration": "G.trees:gbdt-symmetric.hist_warp_agg=on"
+    },
+    {
+     "arm": "A",
+     "configuration": "G.trees:gbdt-symmetric-1000.hist_warp_agg=on"
+    }
+   ],
+   "defines": [
+    "MOJOLEARN_NUMERIC_IDENTICAL=1",
+    "MOJOLEARN_TREES_HIST_WARP_AGG=1"
+   ],
+   "key": "bfb779b905029c7e7b9c",
+   "mode": "identical",
+   "pack": "P021",
+   "runtime_reach": "NOT_VERIFIED",
+   "status": "NOT_COMPILED",
+   "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
+   "vendor": "nvidia"
+  },
+  {
+   "binding": "bindings/_mojolearn_gbdt.mojo",
+   "configurations": [
+    {
+     "arm": "A",
+     "configuration": "G.trees:gbdt-rank-pairlogit.hist_packed_gh=on"
+    },
+    {
+     "arm": "A",
+     "configuration": "G.trees:gbdt-rank-yetirank.hist_packed_gh=on"
+    },
+    {
+     "arm": "A",
+     "configuration": "G.trees:gbdt-symmetric.hist_packed_gh=on"
+    },
+    {
+     "arm": "A",
+     "configuration": "G.trees:gbdt-symmetric-1000.hist_packed_gh=on"
+    }
+   ],
+   "defines": [
+    "MOJOLEARN_NUMERIC_IDENTICAL=1",
+    "MOJOLEARN_TREES_HIST_PACKED_GH=1"
+   ],
+   "key": "c4cdd1f0f9aa131ae71f",
+   "mode": "identical",
+   "pack": "P020",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",

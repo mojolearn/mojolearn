@@ -9,22 +9,14 @@
     "expanded:ivf-pq": {
       "binding": "_mojolearn_x_ann",
       "route": "IVFPQIndex.fit -> x_ann_ivf_pq_build_resident -> _ivf_pq_build_impl: coarse = ivf_flat_build_resident_host keep_rows [ivf_idn_strided_init (default), ivf_idn_recluster_cap_off, kmeans_live_cores_off] -> residual -> codebooks (pq_codebooks_device or per-subspace kmeans_fit_rows) -> encode; search -> ivf_scan_search score (pq_score_tiled_kernel) (A5 pq_scan_fused_kernel and B3 counting-sort layout deleted)",
-      "controls": [
-        "kmeans_live_cores_off"
-      ],
+      "controls": [],
       "interaction_groups": []
     },
     "ann:ivf": {
       "binding": "_mojolearn_ivf",
       "route": "IVFIndex.fit -> ivf_flat_build_resident (strided trainset, strided start [ivf_idn_strided_init (default; _OFF = k-means||), ivf_idn_recluster_cap_off] + lazy Lloyd with the fused assignment [kmeans_live_cores_off], predict, radix layout) -> handle",
-      "controls": [
-        "kmeans_live_cores_off"
-      ],
-      "interaction_groups": [
-        [
-          "kmeans_live_cores_off"
-        ]
-      ]
+      "controls": [],
+      "interaction_groups": []
     }
   },
   "removed": [
