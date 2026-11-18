@@ -171,9 +171,13 @@ def derive():
         py = lane_select._python_closure(seeds, set(sinks) - lane_select._followed_seeds(seeds))
         doors = py - sinks
         # A registry's literal loads (`lane_select.sink_region_loads`, 2026-11-05: `connect_bindings` in
-        # `_native_family_bridge.py` loads each binding it is handed) are bindings the lane loads, read
-        # over the whole registry here (the bound), never only the region the selector reads.
-        loads = set().union(*[set(lane_select.sink_region_loads(rel, None)[0]) for rel in py & set(sinks)])
+        # `_native_family_bridge.py` loads each binding it is handed) are bindings the lane loads, in the
+        # region the lane enters (`entered`). Read over the WHOLE registry instead, every lane loaded every
+        # family binding and 2241 of 3869 files reached every lane: a bound that says nothing.
+        entered = {}
+        lane_select._python_closure(seeds, sinks, regions=True, entered=entered,
+                                    follow=lane_select._followed_seeds(seeds))
+        loads = set().union(*[set(lane_select.sink_region_loads(rel, names)[0]) for rel, names in entered.items()])
         bindings = lane_bindings(doors, hs, loads)
         files = set(py)
         wide = []
