@@ -122,10 +122,14 @@ def functions(lines):
             continue
         indent, end = len(m.group(1)), len(lines)
         j = i + 1
-        # skip the rest of a multi-line signature
-        depth = line.count("(") - line.count(")")
+        # skip the rest of a multi-line signature, a parameter list (`def f[\n    n: Int\n](`) included: counting
+        # only parentheses ended `scan_run[` at its `](` line, so its body (and its synchronize) was never seen
+        def opened(t):
+            t = _strip(t)
+            return sum(t.count(c) for c in "([{") - sum(t.count(c) for c in ")]}")
+        depth = opened(line)
         while depth > 0 and j < len(lines):
-            depth += lines[j].count("(") - lines[j].count(")")
+            depth += opened(lines[j])
             j += 1
         for k in range(j, len(lines)):
             t = lines[k]
@@ -465,7 +469,9 @@ def _queued(path, fname, body, idents, effective_last, drain_call, seen):
             if any(drain[q] for q in range(first, last + 1)):
                 continue
             nxt = next((q for q in range(last + 1, n_body) if drain[q]), None)
-            key = (x, body[first][0])
+            # its own key: the pointer pass above records (x, line) for the same enqueue_copy line as a tracked,
+            # passing finding, and sharing that key dropped every queued finding
+            key = (x, body[first][0], "queued")
             if key in seen:
                 continue
             seen.add(key)
