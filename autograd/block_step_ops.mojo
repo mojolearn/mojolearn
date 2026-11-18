@@ -91,7 +91,7 @@ from mamba.impl.modules.mamba3 import (
 )
 from transformer.impl.llama.modeling_llama import (
     LlamaDims, LlamaDeviceWeights, LlamaKVCache, LlamaRopeTable, LlamaDeviceStages, llama_decoder_layer_forward,
-    residual_next_norm_fusion_enabled,
+    residual_next_norm_fusion_enabled, llama_kv_cache_rewind,
 )
 from checks.kernel_matrix import TARGET_COLUMN, COLUMN_APPLE
 from transformer.block_options import BlockOptions, BLOCK_OPTION_PARAMS
@@ -1489,6 +1489,41 @@ def attn_step_restart(mut ex: DeviceExec, mut sc: BlockStepScratch, bufs: List[F
             sc.attn[i].kv.s = s0
     var words: List[Int] = [s0]
     _write_words(ex, bufs[3], words)
+
+
+def attn_append_restore(mut ex: DeviceExec, mut sc: BlockStepScratch, kvs: List[Int], qs: List[Int]) raises:
+    """Lane fx-kv-inplace (2026-11-18): a bounded loop ran bodies past its
+    stop over the append-only caches at `kvs` (their position words at
+    `qs`, already restored on the device by the loop's gate). The gate does
+    not restore such a cache, and a full-causal cache is repacked at the new
+    stride by every append (`LlamaKVCache`), so the bytes the extra bodies
+    left sit at a stride the restored word does not describe. Each resident
+    entry's cache is taken back to its restored word
+    (`llama_kv_cache_rewind`: the committed slots repacked at the word's
+    stride, the overrun span zeroed), so the state a loop leaves does not
+    depend on how many bodies were enqueued between two status reads.
+
+    One wait for all the words (the caller is leaving the loop and reads the
+    state next); the repacks are queued. An entry that never ran past its
+    word, or a triple with no resident entry, costs nothing."""
+    var n = len(kvs)
+    if n == 0 or len(qs) != n or len(sc.attn) == 0:
+        return
+    var host = List[Float32](length=n, fill=Float32(0))
+    for k in range(n):  # driver-loop: over append-only caches (one queued word read each)
+        ex.download_async(FP(unsafe_from_address=Int(host.unsafe_ptr()) + 4 * k), FP(unsafe_from_address=qs[k]), 1)
+    ex.sync()
+    var ctx = ex.ctx.copy()
+    for k in range(n):  # driver-loop: over append-only caches (one queued repack each)
+        var e = _attn_by_state(sc, kvs[k], qs[k])
+        if e < 0 or sc.attn[e].ints[7] != 0:
+            continue
+        var word = Int(bitcast[DType.int32](host[k]))
+        if word < 0 or word >= sc.attn[e].kv.s:
+            continue
+        ref blk = sc.attn[e]
+        llama_kv_cache_rewind(ctx, blk.stages, blk.kv, word)
+    _ = len(host)  # keep-alive past the queued word reads
 
 
 comptime _NP = MutPointer[Float32, MutAnyOrigin]

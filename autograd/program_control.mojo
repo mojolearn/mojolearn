@@ -62,12 +62,16 @@ def _predicate[E: Exec & Movable & Deinitable](
 def _shadow_mask[E: Exec & Movable & Deinitable](mut s: OpsSession[E], body: OpsProgram) raises -> List[Bool]:
     """Which body parameters the loop's gate shadows (lane x1b): declared
     state, except (lane x45c) append-only state, a full-causal KV cache
-    whose position word is a shadowed parameter of the same body. A body
-    run past the stop writes such a cache only at the position its word
-    holds, in slots no committed position reads; the gate restores the
-    word, so the next write lands there again. The cache is neither copied
-    per iteration nor counted against LOOP_DRAIN_FLOATS, so a decode body
-    over many layers keeps its chunk."""
+    whose position word is a shadowed parameter of the same body. The gate
+    restores the word after a body run past the stop; the cache itself is
+    taken back to that word once, when the loop leaves
+    (`OpsSession.steps_append_restore`, lane fx-kv-inplace: the device's
+    linear cache is repacked at the new stride by every append, so such a
+    body moves the committed slots as well as writing past the word; the
+    host cache, at a fixed stride, is written only past the word). The
+    cache is neither copied per iteration nor counted against
+    LOOP_DRAIN_FLOATS, so a decode body over many layers keeps its
+    chunk."""
     var params = parameter_buffers(s, body)
     var n = len(body.params)
     var mask = List[Bool](length=n, fill=False)
@@ -396,6 +400,10 @@ def control_run[E: Exec & Movable & Deinitable, KIND: Int](
     var shadow_live = List[FP]()
     var shadow_copy = List[FP]()
     var shadow_n = List[Int]()
+    # lane fx-kv-inplace: the append-only state the gate does not shadow
+    # (`_shadow_mask`) and its position words, as buffer addresses.
+    var append_live = List[Int]()
+    var append_words = List[Int]()
     try:
         s[].tape.no_grad()
         if is_loop:
@@ -469,6 +477,9 @@ def control_run[E: Exec & Movable & Deinitable, KIND: Int](
                         c.p0 = params[j]
                         c.p1 = copy
                         s[].ex.launch[OP_COPY](c, n)
+                    elif s[].is_state(body.params[j]):
+                        append_live.append(Int(params[j]))
+                        append_words.append(s[].append_words_of(Int(params[j])))
             var timers = LoopTimers("while_loop")
             var done = False
             #: bodies enqueued so far; never more than the bound
@@ -582,6 +593,16 @@ def control_run[E: Exec & Movable & Deinitable, KIND: Int](
                 # resident entry advanced its host integers (positions,
                 # chunk fill): drop it, so the next run rebuilds it from the
                 # state words the stopping iteration left.
+                #
+                # lane fx-kv-inplace (2026-11-18): an append-only cache is
+                # not shadowed, and those bodies appended to it (a linear KV
+                # cache is repacked at the new stride by every append, so
+                # the committed slots moved too). Take each cache back to
+                # its restored word first, while the entries still hold how
+                # far the extra bodies wrote: the state then does not depend
+                # on the chunk.
+                if len(append_live) > 0:
+                    s[].steps_append_restore(append_live, append_words)
                 for k in range(len(shadow_live)):  # driver-loop: over declared state shadows
                     s[].steps_forget(Int(shadow_live[k]))
             if mirror[LOOP_BAD] != Float32(0.0):

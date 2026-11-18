@@ -185,6 +185,10 @@ struct _HostAttnBlock(Movable):
     var train_l: Int
     var kept: Optional[TransformerStages]
     var kept_w: Optional[TransformerWeights]
+    #: lane fx-kv-inplace: the used positions the entry's most recent run
+    #: left (`host_attn_append_restore` clears what runs past a loop's stop
+    #: appended, the slots from the restored word up to here)
+    var last: Int
 
     def __init__(out self, w: FP, s: FP, q: FP, ints: List[Int]) raises:
         var d = _attn_dims(ints)
@@ -200,6 +204,7 @@ struct _HostAttnBlock(Movable):
         self.train_l = 0
         self.kept = Optional[TransformerStages]()
         self.kept_w = Optional[TransformerWeights]()
+        self.last = 0
 
 
 def _host_attn_weights(w: FP, ints: List[Int], dims: TransformerDims) raises -> TransformerWeights:
@@ -276,11 +281,50 @@ def _host_attn_on(mut blk: _HostAttnBlock, bufs: List[FP], counts: List[Int], in
     _host_put(bufs[2], sat[1], cache.v, ssz[1], "the value cache")
     var words: List[Int] = [cache.used]
     _host_set_words(bufs[3], words)
+    blk.last = cache.used
     if keep:
         blk.kept = st^
         blk.kept_w = w^
         blk.train_l = l
     return l
+
+
+def host_attn_append_restore(mut sc: HostStepScratch, kvs: List[Int], qs: List[Int]) raises:
+    """`HostExec.step_append_restore` (lane fx-kv-inplace, 2026-11-18): a
+    bounded loop ran bodies past its stop over the append-only caches at
+    `kvs` (position words at `qs`, already restored by the loop's gate).
+    The host cache sits at stride `s_max` (`TransformerKVCache`), so those
+    bodies wrote only slots from the restored word up to the entry's last
+    used position, in every (batch, kv head) row; they are set back to 0,
+    the value a run that stopped at the word leaves there, so the state does
+    not depend on the loop's chunk (the device table's `attn_append_restore`
+    is the same repair over its packed layout).
+
+    Not split across host tasks: it runs once when a loop leaves past its
+    stop, over b * n_kv row tails of (positions past the stop) * head_dim
+    floats each, a few hundred bytes a row."""
+    if len(qs) != len(kvs):
+        return
+    for k in range(len(kvs)):  # driver-loop: over append-only caches
+        for i in range(len(sc.hattn)):  # driver-loop: over host attention entries
+            if sc.hattn[i].s_addr != kvs[k] or sc.hattn[i].q_addr != qs[k] or sc.hattn[i].ints[7] != 0:
+                continue
+            var word = _host_words(FP(unsafe_from_address=qs[k]), 1)[0]
+            var last = sc.hattn[i].last
+            if word < 0 or word >= last:
+                continue
+            var ints = sc.hattn[i].ints.copy()
+            var rows = ints[0] * ints[3]
+            var hd = ints[4]
+            var smax = ints[6]
+            var ssz = block_state_sizes(OPS_ATTN_STEP, ints)
+            var sat = block_offsets(ssz, block_guard(OPS_ATTN_STEP))
+            var base = FP(unsafe_from_address=kvs[k])
+            for r in range(rows):  # small-loop(rows: b * n_kv cache rows): one short tail each, see the docstring
+                var at = (r * smax + word) * hd
+                unsafe_memset_zero(base + sat[0] + at, (last - word) * hd)
+                unsafe_memset_zero(base + sat[1] + at, (last - word) * hd)
+            sc.hattn[i].last = word
 
 
 def _host_run_attn(mut sc: HostStepScratch, bufs: List[FP], counts: List[Int], ints: List[Int], y_out: FP) raises:
