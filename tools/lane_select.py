@@ -6023,6 +6023,47 @@ def _hashes_a_file(rel):
 
 
 _SOURCE_HASHED = None
+_HASH_CONTEXT_KEY_RE = re.compile(r'context\["(\w+)"\]')
+
+
+def _native_hashed_context_keys():
+    """The operation-context keys a Mojo function that calls `sha256_file` reads: the byte LM's
+    `source_sha256` inventory moved from Python into bindings/byte_lm_trainer_native_door.mojo
+    (c3cd787c6d), which hashes the paths `_byte_lm_impl.py` hands it as `byte_lm_source_names`,
+    `byte_lm_source_root` and `byte_lm_wrapper_file`. Derived per function, so a key the same file reads
+    for anything else is not swept in."""
+    keys = set()
+    for rel in tracked_files():
+        if not rel.endswith(".mojo"):
+            continue
+        try:
+            text = _read(rel)
+        except OSError:
+            continue
+        if "sha256_file(" not in text:
+            continue
+        for body in re.split(r"\n(?=def |fn )", text):
+            if "sha256_file(" in body and not body.lstrip().startswith(("def sha256_file", "fn sha256_file")):
+                keys.update(_HASH_CONTEXT_KEY_RE.findall(body))
+    return keys
+
+
+def _hands_paths_to_a_native_hash(rel, keys):
+    """True when this Python module sets one of the context keys a native file hash reads
+    (`context.update(byte_lm_source_names=...)` or `context["byte_lm_source_names"] = ...`)."""
+    if not keys:
+        return False
+    text = _read(rel)
+    if not any(k in text for k in keys):
+        return False
+    tree = _parse(rel)
+    for node in ast.walk(tree or ast.Module(body=[], type_ignores=[])):
+        if isinstance(node, ast.keyword) and node.arg in keys:
+            return True
+        if (isinstance(node, ast.Subscript) and isinstance(node.ctx, ast.Store)
+                and isinstance(node.slice, ast.Constant) and node.slice.value in keys):
+            return True
+    return False
 
 
 def source_hashed_files():
@@ -6038,8 +6079,9 @@ def source_hashed_files():
     global _SOURCE_HASHED
     if _SOURCE_HASHED is None:
         out = set()
+        keys = _native_hashed_context_keys()
         for rel in _python_files():
-            if not _hashes_a_file(rel):
+            if not (_hashes_a_file(rel) or _hands_paths_to_a_native_hash(rel, keys)):
                 continue
             out.add(rel)
             tree = _parse(rel)
