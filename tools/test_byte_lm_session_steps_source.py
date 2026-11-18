@@ -51,7 +51,11 @@ def test_binding_admits_once_and_runs_every_step_in_one_call():
     native = _read('bindings/byte_lm_trainer_native_door.mojo')
     # lane byte-lm-sessions-native: the resident session runs through the
     # image's native session entry (core/byte_lm_entry_table_sessions.mojo)
-    assert 'byte_lm_resident_run(key, handle, operation,' in native
+    # 39a067f5c7: the session owner resolves the entry once at construction; every step calls through it
+    session = native.split('def _session_call(')[1].split('\ndef ')[0]
+    assert 'var entry = native[].entry' in session
+    assert session.count('byte_lm_resident_run(entry, handle, operation,') == 2   # GIL released / held
+    assert 'native_loaded_module(' not in session and 'py_get(' not in session
     entry = native.split('def byte_lm_train_steps(')[1].split('def _logits_input(')[0]
     assert entry.count('py_call(lock.acquire)') == 1
     assert entry.count('byte_state_admit(') == 1 and entry.count('_admitted_shape(') == 1
