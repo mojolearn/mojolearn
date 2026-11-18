@@ -61,6 +61,7 @@ from checks.native_tests.core_ops_session import register as register_core_ops_s
 from checks.native_tests.core_partitioned_program import register as register_core_partitioned_program
 from checks.native_tests.core_program_fit_stop import register as register_core_program_fit_stop
 from checks.native_tests.core_program_loop import register as register_core_program_loop
+from checks.native_tests.core_program_loop_append import register as register_core_program_loop_append
 from checks.native_tests.core_ragged_lengths import register as register_core_ragged_lengths
 from checks.native_tests.core_safetensors_f16 import register as register_core_safetensors_f16
 from checks.native_tests.core_stratified_group_fp64 import register as register_core_stratified_group_fp64
@@ -493,6 +494,7 @@ def all_checks() -> List[Check]:
     checks.append(register_core_partitioned_program())
     checks.append(register_core_program_fit_stop())
     checks.append(register_core_program_loop())
+    checks.append(register_core_program_loop_append())
     checks.append(register_core_ragged_lengths())
     checks.append(register_core_safetensors_f16())
     checks.append(register_core_stratified_group_fp64())

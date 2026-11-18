@@ -118,7 +118,7 @@ from autograd.block_step_ops import (
     OPS_M1_STEP, OPS_M2_STEP, OPS_M3_STEP, OPS_ATTN_STEP, BlockStepScratch, is_block_step, block_step_check,
     ATTN_STEP_TAG, attn_step_train_run, step_train_tag, mamba_step_train_run,
     block_step_run, block_weight_sizes, block_state_sizes, block_offsets, block_guard, block_int_words,
-    block_part_floats, BLOCK_PART_WEIGHTS, BLOCK_PART_STATE, BLOCK_PART_WORDS,
+    block_part_floats, BLOCK_PART_WEIGHTS, BLOCK_PART_STATE, BLOCK_PART_WORDS, attn_append_restore,
 )
 from autograd.rules_step_ops import StepOpRules
 # Generation ops (lane x45c): the language model's token pick and the decode
@@ -669,6 +669,19 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         arm's in the executor, lane x7b)."""
         self.steps.forget(addr)
         self.ex.step_forget(addr)
+
+    def steps_append_restore(mut self, kvs: List[Int], words: List[Int]) raises:
+        """Lane fx-kv-inplace: a bounded loop ran bodies past its stop over
+        the append-only state buffers at `kvs` (`declare_append`; their
+        position words at `words`, restored by the loop's gate): take each
+        cache back to its restored word, so the state does not depend on the
+        loop's chunk (the device table's `attn_append_restore`, the host
+        arm's `Exec.step_append_restore`). Called before `steps_forget`
+        drops the entries, which hold how far the extra bodies wrote."""
+        comptime if Self.E.IS_DEVICE:
+            attn_append_restore(rebind[DeviceExec](self.ex), self.steps, kvs, words)
+        else:
+            self.ex.step_append_restore(kvs, words)
 
     def steps_weights_changed(mut self, addr: Int):
         """The weights at `addr` were rewritten in place (both arms)."""

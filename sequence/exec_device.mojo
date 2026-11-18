@@ -1727,6 +1727,9 @@ struct DeviceExec(Exec, Movable):
     def step_forget(mut self, addr: Int):
         pass
 
+    def step_append_restore(mut self, kvs: List[Int], words: List[Int]) raises:
+        raise Error("ops: a device session restores its append-only caches in the device table")
+
     def step_weights_changed(mut self, addr: Int):
         pass
 

@@ -95,6 +95,13 @@ trait Exec:
         freed: drop the arm's entries over it."""
         ...
 
+    def step_append_restore(mut self, kvs: List[Int], words: List[Int]) raises:
+        """Lane fx-kv-inplace: a bounded loop ran bodies past its stop over
+        the append-only caches at `kvs` (position words at `words`, already
+        restored): the host arm clears what those bodies appended. A device
+        session repairs its own table (`attn_append_restore`)."""
+        ...
+
     def step_weights_changed(mut self, addr: Int):
         """The weights at `addr` were rewritten in place."""
         ...

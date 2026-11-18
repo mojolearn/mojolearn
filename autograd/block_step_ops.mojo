@@ -91,7 +91,7 @@ from mamba.impl.modules.mamba3 import (
 )
 from transformer.impl.llama.modeling_llama import (
     LlamaDims, LlamaDeviceWeights, LlamaKVCache, LlamaRopeTable, LlamaDeviceStages, llama_decoder_layer_forward,
-    residual_next_norm_fusion_enabled, LLAMA_FAST_REFUSE_WATERMARK,
+    residual_next_norm_fusion_enabled, LLAMA_FAST_REFUSE_WATERMARK, llama_kv_cache_rewind,
 )
 from checks.kernel_matrix import TARGET_COLUMN, COLUMN_APPLE
 from transformer.block_options import BlockOptions, BLOCK_OPTION_PARAMS
@@ -855,6 +855,18 @@ struct BlockStepScratch(Movable):
     #: (`_run_attn`), as the 0.8.55 resident forward did
     #: (training/samba_resident.mojo `_forward_blocks`).
     var inference_only: Bool
+    #: lane fx-kv-inplace: the full-causal attention entries a FAILED run
+    #: dropped (`block_step_run`), as (state address, word address, the used
+    #: positions the entry's cache held, the op's integers). A bounded loop
+    #: that ran bodies past its stop takes such a cache back to its restored
+    #: word from this record (`attn_append_restore`), since the entry that
+    #: knew how far those bodies appended is gone. Written only when a run
+    #: fails; dropped when the cache's buffers are forgotten or a new entry
+    #: is built over them.
+    var lost_s: List[Int]
+    var lost_q: List[Int]
+    var lost_used: List[Int]
+    var lost_ints: List[List[Int]]
     #: the current run requests no Mamba-3 reports (the caller reads none
     #: before the next run): `_run_m3` skips the four report copies
     #: (IDN_MAMBA3_REPORTS_ON_REQUEST). Set per run by the caller.
@@ -901,6 +913,30 @@ struct BlockStepScratch(Movable):
         self.skip_reports = False
         self.keep_stages = False
         self.skip_words = False
+        self.lost_s = List[Int]()
+        self.lost_q = List[Int]()
+        self.lost_used = List[Int]()
+        self.lost_ints = List[List[Int]]()
+
+    def drop_lost(mut self, addr: Int):
+        """Forget the lost-append record over the state or word at `addr`."""
+        var i = len(self.lost_s) - 1
+        while i >= 0:  # driver-loop: over lost-append records (at most one per cache)
+            if self.lost_s[i] == addr or self.lost_q[i] == addr:
+                _ = self.lost_s.pop(i)
+                _ = self.lost_q.pop(i)
+                _ = self.lost_used.pop(i)
+                _ = self.lost_ints.pop(i)
+            i -= 1
+
+    def note_lost(mut self, s_addr: Int, q_addr: Int, used: Int, ints: List[Int]):
+        """A failed run dropped the entry of the full-causal cache at
+        `s_addr`, which held `used` positions (see `lost_s`)."""
+        self.drop_lost(s_addr)
+        self.lost_s.append(s_addr)
+        self.lost_q.append(q_addr)
+        self.lost_used.append(used)
+        self.lost_ints.append(ints.copy())
 
     def held_floats(self) -> Int:
         """The device floats of the Mamba-1/2 stages the entries hold
@@ -947,6 +983,8 @@ struct BlockStepScratch(Movable):
     def forget(mut self, addr: Int):
         """Drop every entry built over the session buffer at `addr` (its
         weights or its state were written from outside a step, or freed)."""
+        if len(self.lost_s) > 0:
+            self.drop_lost(addr)
         if self.count() == 0:
             return
         var i = len(self.m1) - 1
@@ -975,6 +1013,10 @@ struct BlockStepScratch(Movable):
         self.m2.clear()
         self.m3.clear()
         self.attn.clear()
+        self.lost_s.clear()
+        self.lost_q.clear()
+        self.lost_used.clear()
+        self.lost_ints.clear()
 
     def set_words(mut self, addr: Int, words: List[Int]) raises:
         """The carried integers of every Mamba entry whose state words live at
@@ -1650,6 +1692,10 @@ def attn_step_entry(mut ex: DeviceExec, mut sc: BlockStepScratch, bufs: List[FP]
     _expect(OPS_ATTN_STEP, "state words", counts[3], 1)
     if e < 0:
         var ctx = ex.ctx.copy()
+        if len(sc.lost_s) > 0:
+            # a new entry reads its position from the word: an older failed
+            # run's record over this cache is void
+            sc.drop_lost(Int(bufs[2]))
         sc.attn.append(_AttnBlock(ctx, ex, bufs[1], counts[1], bufs[2], counts[2], bufs[3], ints))
         e = len(sc.attn) - 1
         comptime if LLAMA_FAST_REFUSE_WATERMARK:
@@ -1671,6 +1717,13 @@ def _attn_watermark_grant(ctx: DeviceContext, mut sc: BlockStepScratch, e: Int) 
       the block forward's append (modeling_llama `kv_append2_kernel` and the
         two copies back): bit copies of scanned rows plus the new row, which
         the next call scans (L = 1) or the next whole scan covers (L > 1);
+      the fixed-stride append (MOJOLEARN_LLAMA_FAST_KV_STRIDE_CAP,
+        `kv_fixed_append2_kernel`): writes the new row only, in place, and
+        never the held scan scratch; the row scan then reads that row at
+        stride `cap` (lane fx-kv-inplace);
+      `attn_append_restore` (a loop that ran bodies past its stop, lane
+        fx-kv-inplace: `llama_kv_cache_rewind` repacks or clears the
+        overrun): reset, and the loop then drops the entry;
       a new entry (`_AttnBlock`, `attn_step_adopt`; after `forget`, `clear`,
         a failed run's eviction, a loop that ran bodies past its stop): the
         watermark starts at "nothing known";
@@ -1744,6 +1797,66 @@ def attn_step_restart(mut ex: DeviceExec, mut sc: BlockStepScratch, bufs: List[F
                 sc.attn[i].kv.wm_reset()
     var words: List[Int] = [s0]
     _write_words(ex, bufs[3], words)
+
+
+def attn_append_restore(mut ex: DeviceExec, mut sc: BlockStepScratch, kvs: List[Int], qs: List[Int]) raises:
+    """Lane fx-kv-inplace (2026-11-18): a bounded loop ran bodies past its
+    stop over the append-only caches at `kvs` (their position words at
+    `qs`, already restored on the device by the loop's gate). The gate does
+    not restore such a cache, and a full-causal cache is repacked at the new
+    stride by every append (`LlamaKVCache`), so the bytes the extra bodies
+    left sit at a stride the restored word does not describe. Each cache is
+    taken back to its restored word (`llama_kv_cache_rewind`: the committed
+    slots repacked at the word's stride, the overrun span zeroed), so the
+    state a loop leaves does not depend on how many bodies were enqueued
+    between two status reads.
+
+    How far the extra bodies appended is the resident entry's used length,
+    or, when one of those bodies failed and its entry was dropped
+    (`block_step_run`), the record that failure left
+    (`BlockStepScratch.lost_s`); the repack then runs through two temporary
+    buffers and waits once more. One wait for all the words (the caller is
+    leaving the loop and reads the state next); the repacks of resident
+    entries are queued. A cache that never ran past its word costs nothing."""
+    var n = len(kvs)
+    if n == 0 or len(qs) != n or (len(sc.attn) == 0 and len(sc.lost_s) == 0):
+        return
+    var host = List[Float32](length=n, fill=Float32(0))
+    for k in range(n):  # driver-loop: over append-only caches (one queued word read each)
+        ex.download_async(FP(unsafe_from_address=Int(host.unsafe_ptr()) + 4 * k), FP(unsafe_from_address=qs[k]), 1)
+    ex.sync()
+    var ctx = ex.ctx.copy()
+    for k in range(n):  # driver-loop: over append-only caches (one queued repack each)
+        var word = Int(bitcast[DType.int32](host[k]))
+        var e = _attn_by_state(sc, kvs[k], qs[k])
+        if e >= 0:
+            if sc.attn[e].ints[7] != 0 or word < 0 or word >= sc.attn[e].kv.s:
+                continue
+            ref blk = sc.attn[e]
+            llama_kv_cache_rewind(ctx, blk.stages.k_cache, blk.stages.v_cache, blk.kv, word)
+            continue
+        var li = -1
+        for i in range(len(sc.lost_s)):  # driver-loop: over lost-append records
+            if sc.lost_s[i] == kvs[k] and sc.lost_q[i] == qs[k]:
+                li = i
+        if li < 0:
+            continue
+        var used = sc.lost_used[li]
+        var ints = sc.lost_ints[li].copy()
+        sc.drop_lost(kvs[k])
+        if word < 0 or word >= used:
+            continue
+        var dims = _attn_dims(ints)
+        var opts = _attn_opts(ints)
+        var kv = _attn_kv_views(ctx, ex, FP(unsafe_from_address=kvs[k]), ints, dims, opts, used)
+        var span = ints[0] * ints[3] * used * ints[4]
+        var tk = ctx.enqueue_create_buffer[DType.float32](span)
+        var tv = ctx.enqueue_create_buffer[DType.float32](span)
+        llama_kv_cache_rewind(ctx, tk, tv, kv, word)
+        ex.sync()
+        _ = len(tk)  # keep-alive past the queued repack and copies
+        _ = len(tv)
+    _ = len(host)  # keep-alive past the queued word reads
 
 
 comptime _NP = MutPointer[Float32, MutAnyOrigin]
@@ -2478,8 +2591,17 @@ def block_step_run(
                 _step_run[CODE](ex, sc, bufs, counts, ints, fs, y_out)
                 return
     except err:
+        # lane fx-kv-inplace: a full-causal attention entry is about to go;
+        # keep how many positions its cache held (`BlockStepScratch.lost_s`).
+        var lost_used = -1
+        if code == OPS_ATTN_STEP and len(bufs) == 4:
+            var le = _attn_by_state(sc, Int(bufs[2]), Int(bufs[3]))
+            if le >= 0 and sc.attn[le].ints[7] == 0:
+                lost_used = sc.attn[le].kv.s
         for k in range(1, len(bufs)):  # small-loop(bufs: the op's three or four operands): entry eviction, no data
             sc.forget(Int(bufs[k]))
+        if lost_used >= 0:
+            sc.note_lost(Int(bufs[2]), Int(bufs[3]), lost_used, ints)
         raise err
     raise Error("ops: " + String(code) + " is not a block step op")
 

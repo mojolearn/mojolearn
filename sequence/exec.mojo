@@ -39,7 +39,7 @@ from sequence.gemm_split import GEMM_SPLITK, OP_GK_SPLIT, gemm_split_args, gemm_
 # Lane x7b: the block step ops' host arm (its imports reach the step-op
 # layouts of autograd/block_step_ops.mojo; no GPU binding imports this file).
 from autograd.block_step_host import (
-    HostStepScratch, host_step_run, host_step_backward, host_block_step_reports,
+    HostStepScratch, host_step_run, host_step_backward, host_block_step_reports, host_attn_append_restore,
 )
 # Lane x56d: the generation ops' host arm.
 from autograd.generation_host import lm_pick_host, lm_alive_host
@@ -495,6 +495,9 @@ struct HostExec(Exec, Movable):
 
     def step_forget(mut self, addr: Int):
         self.steps.forget(addr)
+
+    def step_append_restore(mut self, kvs: List[Int], words: List[Int]) raises:
+        host_attn_append_restore(self.steps, kvs, words)
 
     def step_weights_changed(mut self, addr: Int):
         self.steps.weights_changed(addr)

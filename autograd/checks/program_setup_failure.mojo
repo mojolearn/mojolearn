@@ -86,6 +86,9 @@ struct FaultExec(Exec, Movable):
     def step_forget(mut self, addr: Int):
         self.host.step_forget(addr)
 
+    def step_append_restore(mut self, kvs: List[Int], words: List[Int]) raises:
+        self.host.step_append_restore(kvs, words)
+
     def step_weights_changed(mut self, addr: Int):
         self.host.step_weights_changed(addr)
 

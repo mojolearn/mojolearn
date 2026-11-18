@@ -647,6 +647,11 @@
    "define": "MOJOLEARN_MAMBA3_FAST_S17_TAIL_TREE",
    "status": "define in code (autograd/kernels/mamba3.mojo M3_S17_TAIL_TREE, mamba3_s17_tail_tree_kernel; mamba/host/gen/mamba3_backward.mojo, the same source through tools/mamba_host_gen.py): B = the Mamba-3 backward S17 chunk-end tail of d_dacs_rec as 128 lane chains ((qs + 1) x 64 steps each, j then p ascending, then the state term) folded by the fixed balanced tree of gemm/IDENTICAL_FP32_CONTRACT.md 7.2, one barrier, no operand staging; A = the one serial chain of (qs + 1) x 64 x 128 steps on thread 0 (the pipe kernel, or the shared kernel where its page does not fit). BITS CHANGE under B for any sequence longer than one chunk (the same terms in another order), on the device and the host column together; equal words for l <= 64. Contract: mamba/IDENTICAL_MAMBA3_CONTRACT.md 'Backward S17 chunk-end tail'",
    "owed": "RUN"
+  },
+  "llama-kv-stride-cap": {
+   "define": "MOJOLEARN_LLAMA_FAST_KV_STRIDE_CAP",
+   "status": "define in code (transformer/impl/llama/modeling_llama.mojo LLAMA_FAST_KV_STRIDE_CAP; transformer/host/transformer_block_host.mojo HOST_KV_STRIDE_CAP; bindings/transformer_public_native_door.mojo _KV_STRIDE_CAP): B = the full-causal KV cache at stride max_tokens, appended in place by the launch that gathers the packed span (no whole-capacity copy back of K and V per token per layer); A = the cache packed at stride s, repacked and copied back every token. Build every binding that imports modeling_llama, the host transformer binding and the transformer public door with the define",
+   "owed": "RUN"
   }
  },
  "rows": [
@@ -3679,6 +3684,24 @@
     "mamba3-s17-tail-tree"
    ],
    "decides": "SambaStack.train_step, candidate (A) against the B wheel set, tools/measure_owed_driver.py samba_train_step, each line with its loss: mamba3-only-partial-chunk is the Mamba-3 backward alone at a neighbouring shape (B 4, L 300 = 4 chunks and a partial fifth, d_model 256); samba-6-layer is a non-board model size; mamba3-only-one-chunk is the control where the carried state is zero, so B's loss must equal A's bit for bit and the time shows the tail's fixed cost. B must not be slower on any case and the losses must agree to float32 rounding of a reordered sum (equal on the one-chunk case)"
+  },
+  {
+   "id": "llama-kv-stride-cap-rows",
+   "source": "lane fx-kv-inplace (2026-11-18; ~/mojolearn-evidence/briefs-20261118/fx-kv-inplace-RESULT.md; review-kv-shadow and ideas-neural-speed row 5): default-off arm, never timed",
+   "kind": "ab",
+   "lane": [
+    "transformer-decode",
+    "causal-lm-generate",
+    "causal-lm-generate-smollm2",
+    "samba-decode"
+   ],
+   "dataset": "*",
+   "rows": "full",
+   "vendor": "nvidia",
+   "b_arms": [
+    "llama-kv-stride-cap"
+   ],
+   "decides": "keep A (the default, packed cache) unless B is faster at equal quality on the NVIDIA L40S. Generated ids, outputs and stage digests must not move (the arm changes no arithmetic); the carried K/V arrays change LAYOUT under B (stride max_tokens), so state digests taken over the raw buffers differ by design and those over keys()/values() must not. The saving grows with capacity and length: time also a neighbouring shape (transformer-decode and causal-lm-generate at 4x the board's new tokens / max_tokens) and a non-board model (a 12-layer llama config) before a flip (no dimension targeting). A flip changes the documented TransformerState layout and state_dict bytes on every column together"
   }
  ]
 }
