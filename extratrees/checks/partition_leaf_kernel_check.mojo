@@ -124,6 +124,7 @@ from extratrees.impl.decisiontree.batched_levelalgo.kernels.builder_kernels_impl
     PARTITION_UNVISITED,
     TPB_DEFAULT,
 )
+from checks.native_tests.kit import download_host_into, upload_host_into
 
 
 comptime N_ROWS = 1024
@@ -439,20 +440,16 @@ def _launch_partition[
     for i in range(n_items):
         sp[unsafe_offset=i] = splits[i]
 
-    ctx.enqueue_copy(dst_buf=d_row_ids, src_ptr=h_row_ids.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_data, src_ptr=h_data.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_items, src_ptr=h_items.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_splits, src_ptr=h_splits.unsafe_ptr())
+    upload_host_into[DType.int32](ctx, d_row_ids, h_row_ids)
+    upload_host_into[DType.float32](ctx, d_data, h_data)
+    upload_host_into[DType.uint8](ctx, d_items, h_items)
+    upload_host_into[DType.uint8](ctx, d_splits, h_splits)
     # DEVIATION 180: `out_n_iters` must be SEEDED with `PARTITION_UNVISITED`,
     # which is not a legal outcome, so a work item no block served is visible
     # as a reach failure instead of as a plausible zero.
     ctx.enqueue_memset(d_iters, PARTITION_UNVISITED)
     ctx.enqueue_memset(d_swaps, Int32(0))
     ctx.synchronize()
-    _ = h_row_ids^  # keep-alive past the drain (the enqueue_copy reads it until then)
-    _ = h_data^  # keep-alive past the drain (the enqueue_copy reads it until then)
-    _ = h_items^  # keep-alive past the drain (the enqueue_copy reads it until then)
-    _ = h_splits^  # keep-alive past the drain (the enqueue_copy reads it until then)
 
     ctx.enqueue_function[node_split_kernel[TPB]](
         d_row_ids.unsafe_ptr(),
@@ -472,9 +469,9 @@ def _launch_partition[
     var o_row_ids = ctx.enqueue_create_host_buffer[DType.int32](N_ROWS)
     var o_iters = ctx.enqueue_create_host_buffer[DType.int32](n_items)
     var o_swaps = ctx.enqueue_create_host_buffer[DType.int32](n_items)
-    ctx.enqueue_copy(dst_buf=o_row_ids, src_buf=d_row_ids)
-    ctx.enqueue_copy(dst_buf=o_iters, src_buf=d_iters)
-    ctx.enqueue_copy(dst_buf=o_swaps, src_buf=d_swaps)
+    download_host_into[DType.int32](ctx, d_row_ids, o_row_ids)
+    download_host_into[DType.int32](ctx, d_iters, o_iters)
+    download_host_into[DType.int32](ctx, d_swaps, o_swaps)
     ctx.synchronize()
 
     var ids = List[Int32]()
@@ -1022,20 +1019,16 @@ def _launch_leaf[
     for i in range(len(labels_q)):
         h_labels.unsafe_ptr().unsafe_store(i, labels_q[i])
 
-    ctx.enqueue_copy(dst_buf=d_nodes, src_ptr=h_nodes.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_ranges, src_ptr=h_ranges.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_row_ids, src_ptr=h_row_ids.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_labels, src_ptr=h_labels.unsafe_ptr())
+    upload_host_into[DType.uint8](ctx, d_nodes, h_nodes)
+    upload_host_into[DType.uint8](ctx, d_ranges, h_ranges)
+    upload_host_into[DType.int32](ctx, d_row_ids, h_row_ids)
+    upload_host_into[DType.int32](ctx, d_labels, h_labels)
     # `builder.cuh:582`'s `cudaMemsetAsync`, and DEVIATION 180's `out_visit`
     # seed. An internal node's leaf slot is written by nothing and the ZERO is
     # its value, so this memset is part of the algorithm, not hygiene.
     ctx.enqueue_memset(d_leaves, Float32(0.0))
     ctx.enqueue_memset(d_visit, LEAF_VISIT_NONE)
     ctx.synchronize()
-    _ = h_nodes^  # keep-alive past the drain (the enqueue_copy reads it until then)
-    _ = h_ranges^  # keep-alive past the drain (the enqueue_copy reads it until then)
-    _ = h_row_ids^  # keep-alive past the drain (the enqueue_copy reads it until then)
-    _ = h_labels^  # keep-alive past the drain (the enqueue_copy reads it until then)
 
     ctx.enqueue_function[leaf_kernel[TPB, LEAF_MAX_OUT, CLASSIFICATION]](
         d_leaves.unsafe_ptr(),
@@ -1053,8 +1046,8 @@ def _launch_leaf[
 
     var o_leaves = ctx.enqueue_create_host_buffer[DType.float32](n_slots)
     var o_visit = ctx.enqueue_create_host_buffer[DType.int32](n_nodes)
-    ctx.enqueue_copy(dst_buf=o_leaves, src_buf=d_leaves)
-    ctx.enqueue_copy(dst_buf=o_visit, src_buf=d_visit)
+    download_host_into[DType.float32](ctx, d_leaves, o_leaves)
+    download_host_into[DType.int32](ctx, d_visit, o_visit)
     ctx.synchronize()
 
     var leaves = List[Float32]()
