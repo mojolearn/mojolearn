@@ -622,6 +622,11 @@
    "define": "MOJOLEARN_XPREP_FAST_TE_PBUCKET_OFF",
    "status": "define in code (bindings/prep_encode_native_door.mojo TE_PBUCKET): B = TargetEncoder without the per-bucket pass; A = the per-bucket pass, the default. Was a run-time env read until lane fx-env-dead (2026-11-18); default unchanged",
    "owed": "RUN"
+  },
+  "llama-kv-stride-cap": {
+   "define": "MOJOLEARN_LLAMA_FAST_KV_STRIDE_CAP",
+   "status": "define in code (transformer/impl/llama/modeling_llama.mojo LLAMA_FAST_KV_STRIDE_CAP; transformer/host/transformer_block_host.mojo HOST_KV_STRIDE_CAP; bindings/transformer_public_native_door.mojo _KV_STRIDE_CAP): B = the full-causal KV cache at stride max_tokens, appended in place by the launch that gathers the packed span (no whole-capacity copy back of K and V per token per layer); A = the cache packed at stride s, repacked and copied back every token. Build every binding that imports modeling_llama, the host transformer binding and the transformer public door with the define",
+   "owed": "RUN"
   }
  },
  "rows": [
@@ -3480,6 +3485,24 @@
     "xprep-te-pbucket-off"
    ],
    "decides": "keep A (the default) unless B is faster at equal quality on the NVIDIA L40S; digests must not move; time also a neighbouring shape and a non-board dataset before a flip (no dimension targeting)"
+  },
+  {
+   "id": "llama-kv-stride-cap-rows",
+   "source": "lane fx-kv-inplace (2026-11-18; ~/mojolearn-evidence/briefs-20261118/fx-kv-inplace-RESULT.md; review-kv-shadow and ideas-neural-speed row 5): default-off arm, never timed",
+   "kind": "ab",
+   "lane": [
+    "transformer-decode",
+    "causal-lm-generate",
+    "causal-lm-generate-smollm2",
+    "samba-decode"
+   ],
+   "dataset": "*",
+   "rows": "full",
+   "vendor": "nvidia",
+   "b_arms": [
+    "llama-kv-stride-cap"
+   ],
+   "decides": "keep A (the default, packed cache) unless B is faster at equal quality on the NVIDIA L40S. Generated ids, outputs and stage digests must not move (the arm changes no arithmetic); the carried K/V arrays change LAYOUT under B (stride max_tokens), so state digests taken over the raw buffers differ by design and those over keys()/values() must not. The saving grows with capacity and length: time also a neighbouring shape (transformer-decode and causal-lm-generate at 4x the board's new tokens / max_tokens) and a non-board model (a 12-layer llama config) before a flip (no dimension targeting). A flip changes the documented TransformerState layout and state_dict bytes on every column together"
   }
  ]
 }
