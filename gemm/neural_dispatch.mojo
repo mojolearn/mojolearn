@@ -12,6 +12,10 @@ from max.gpu.host import DeviceContext,DeviceBuffer
 from checks.kernel_matrix import TARGET_COLUMN,COLUMN_NVIDIA
 from checks.numerics import ftz
 from checks.rtf_seam import rtf_mul_add
+from gemm.checks.gemm_epilogue import (
+    identical_gemm_epi_takes as _incumbent_epi_takes,
+    identical_gemm_epi_into as _incumbent_epi_into,
+)
 from core.step_phase import step_count_device_alloc,step_count_sync
 from gemm.checks.gemm_identical import (
     identical_gemm_into as _incumbent_into,
@@ -163,6 +167,29 @@ def identical_gemm[allow_vendor: Bool = True,ROLE: Int = ROLE_PROJECTION](
         raise error
     ctx.synchronize()
     _ = workspace^
+
+
+# lane fx-gemm-epi (2026-11-18, -D MOJOLEARN_GEMM_FAST_EPI=1, default OFF, OPEN: no A/B yet): the store epilogue.
+# A product joined to the value already in its destination, in the product's own final store
+# (gemm/checks/gemm_epilogue.mojo; kinds and the unchanged-bits argument beside gemm_epi_cell in gemm_identical.mojo).
+# Two free functions, so a caller decides where its operands go before any launch and GemmWorkspace gains no method.
+def gemm_workspace_epi_takes(m: Int,n: Int,k: Int) -> Bool:
+    """Whether gemm_workspace_run_epi fuses the join at (m, n, k) on this build. False without the define, on a
+    column or plan with no fused store, and under a changed neural profile (its kernel has no epilogue): the caller
+    then runs GemmWorkspace.run and its follower launch, unchanged."""
+    comptime if NEURAL_GEMM_EXPERIMENT_ENABLED:
+        return False
+    return _incumbent_epi_takes(m,n,k)
+
+
+def gemm_workspace_run_epi[EPI: Int](ctx: DeviceContext,mut workspace: GemmWorkspace,
+    mut c: DeviceBuffer[DType.float32],mut a: DeviceBuffer[DType.float32],
+    mut b: DeviceBuffer[DType.float32],m: Int,n: Int,k: Int,op: Int) raises:
+    """GemmWorkspace.run with the join in the store: c = EPI(op(A) . op(B), c), EPI 1 = ftz(ftz(c) + ftz(cell)),
+    2 = ftz(ftz(cell) + ftz(c)). Call only where gemm_workspace_epi_takes(m, n, k) is True (raises otherwise, before
+    any launch). Same workspace sizing and the same asynchronous contract as run."""
+    workspace._ensure(ctx,identical_gemm_workspace_max_floats(m,n,k))
+    _incumbent_epi_into[EPI](ctx,c,a,b,workspace.buffer,m,n,k,op)
 
 
 # TOMBSTONE NN05 (MOJOLEARN_IDN_NEURAL_NN05, neural_gemm_pair=nn05, deleted
