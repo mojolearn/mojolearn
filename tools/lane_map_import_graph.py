@@ -165,7 +165,10 @@ def derive():
         seeds = set()
         for name in names:
             seeds |= set(symbols.get(name, ()))
-        py = lane_select._python_closure(seeds, sinks)
+        # A sink that is the lane's own seed is followed (`lane_select._followed_seeds`, 2026-11-05:
+        # `_hierarchy_impl.py` defines AgglomerativeClustering and is also a registry), as the selector does;
+        # without it the bound stopped at the lane's own door and the selector's map exceeded it.
+        py = lane_select._python_closure(seeds, set(sinks) - lane_select._followed_seeds(seeds))
         doors = py - sinks
         bindings = lane_bindings(doors, hs)
         files = set(py)
