@@ -14,7 +14,11 @@ caches and requires the outputs and both caches to be the same bits, token
 for token; then 4 more tokens both ways (the per-token arm's position word
 was left due by its steps and is written before the resident loop's first
 run). Case 1: a step whose claimed position differs from the session's is
-refused and the session stays usable. No Python participates.
+refused and the session stays usable. Case 3: an infinity loaded into row 0
+of the key cache of a session that has already stepped is refused at the
+first step after the load, naming the key cache and flat index 0 (the
+whole-cache refusal scan after a load, whatever a step scans). No Python
+participates.
 
 The integrator runs `transformer_decode_door_gpu.mojo` in a fresh process;
 lanes do not run it.
@@ -30,6 +34,7 @@ from core.causal_lm_entry_table_sessions import (
     CAUSAL_SESSION_DECODE_CREATE,
     CAUSAL_SESSION_DECODE_OPEN,
     CAUSAL_SESSION_DECODE_EXPORT,
+    CAUSAL_SESSION_DECODE_LOAD,
     CAUSAL_SESSION_DECODE_CLOSE,
     CAUSAL_SESSION_DECODE_PIN,
     CAUSAL_SESSION_DECODE_UNPIN,
@@ -42,7 +47,7 @@ from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, 
 
 
 # ---- The device column (was transformer_decode_door_gpu_suite.mojo) ----
-comptime TRANSFORMER_DECODE_DOOR_CASES = 3
+comptime TRANSFORMER_DECODE_DOOR_CASES = 4
 comptime _B = 2
 comptime _D = 16
 comptime _NH = 2
@@ -214,6 +219,39 @@ def run_case(unit: Int) raises:
             require(_t(CAUSAL_SESSION_DECODE_PINNED, a, right) == 1, "the session was not usable after a refused step")
             _ = xt
             _ = yt
+        elif unit == 3:
+            # A non-finite LOADED into a session that has already stepped is
+            # refused at the first step after the load, by name and flat
+            # index, wherever it sits (lane fx-llama-refuse-watermark: under
+            # MOJOLEARN_LLAMA_FAST_REFUSE_WATERMARK a step scans only the row
+            # the previous step appended, so the plant goes in row 0, a row
+            # scanned three steps earlier; the load must bring the whole scan
+            # back). A failed run marks the session lost, so nothing
+            # more is asked of it.
+            var xt = List[Float32](length=_B * _D, fill=1)
+            var yt = List[Float32](length=_B * _D, fill=0)
+            var a: List[Int] = [Int(xt.unsafe_ptr()), Int(yt.unsafe_ptr())]
+            for t in range(3):  # driver-loop: over autoregressive decode steps
+                var go: List[Int] = [stepped, CAUSAL_DECODE_PINNED_STEP, 0, t]
+                require(_t(CAUSAL_SESSION_DECODE_PINNED, a, go) == t + 1, "a clean step was refused")
+            var clean = _export(stepped_h, block.cache_n)
+            var bad_k = clean[0].copy()
+            bad_k[0] = bitcast[DType.float32](UInt32(0x7F800000))
+            var load_bad: List[Int] = [Int(bad_k.unsafe_ptr()), Int(clean[1].unsafe_ptr())]
+            var at3: List[Int] = [stepped_h, 3]
+            require(_t(CAUSAL_SESSION_DECODE_LOAD, load_bad, at3) == 3, "load returned another position")
+            var again: List[Int] = [stepped, CAUSAL_DECODE_PINNED_STEP, 0, 3]
+            try:
+                _ = _t(CAUSAL_SESSION_DECODE_PINNED, a, again)
+                raise Error("an infinity loaded into the key cache was not refused")
+            except problem:
+                var text = String(problem)
+                require("past_key_values.key_cache" in text and "flat index 0 " in text,
+                        "unexpected refusal: " + text)
+            _ = xt
+            _ = yt
+            _ = bad_k
+            _ = clean
         else:
             # The pin outlives the handle: after CLOSE (handle released), a
             # pinned step is refused as not open, never a freed read.

@@ -296,7 +296,7 @@ from transformer.experiments.norm_fixed_lanes import (
 # (Sweep 2026-11-15: transformer/experiments/attention_schedules.mojo deleted with its last importer's dead arms: NN25_RMS_SPLIT_SCALE,
 # NN29_RING_PAIR, NN27_QK_ROPE_PAIR, NN21_SCALE_MASK and rms_sumsq_kernel, rms_parallel_scale_kernel, kv_ring_pair_kernel,
 # qk_rope_pair_kernel, score_scale_mask_kernel.)
-from max.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, grid_dim, thread_idx
 from std.memory import bitcast, unsafe_memcpy, stack_allocation
 from std.time import perf_counter_ns
 from std.sys.compile import is_defined
@@ -394,7 +394,7 @@ from transformer.impl.llama.attn_fold_v2 import (
     attn_v2_context_cell,
     attn_v2_denom_row,
 )
-from core.device_scan import DeviceNonfiniteBatch, NONFINITE_NONE
+from core.device_scan import DeviceNonfiniteBatch, NONFINITE_NONE, SCAN_TPB, _scan_blocks, min_partials_kernel
 # lane afn-attn (2026-10-03): the Apple FAST forward candidates; every name
 # is reached only from `comptime if AFN_ATTN_ANY` arms below.
 from transformer.impl.llama.afn_apple_fast import (
@@ -1639,6 +1639,19 @@ struct LlamaKVCache(Movable):
     var fixed: Bool
     var k: DeviceBuffer[DType.float32]
     var v: DeviceBuffer[DType.float32]
+    #: MOJOLEARN_LLAMA_FAST_REFUSE_WATERMARK (default off; nothing reads
+    #: these four on a build without it). `wm_on`: the owner granted the
+    #: watermark (`wm_grant`): every writer of `k` / `v` other than the block
+    #: forward's append calls `wm_reset`. `wm_upto`: the cache rows `[0,
+    #: wm_upto)` and the rotary inv_freq were scanned finite by a call's
+    #: refusal and nothing but the append's bit copies touched them since
+    #: (-1: nothing is known, the next call scans everything). `wm_x`: the
+    #: hidden-state floats of one decode token (`b * d_model`). `wm_batch`:
+    #: the held scratch of the decode step's three fixed-length scans.
+    var wm_on: Bool
+    var wm_upto: Int
+    var wm_x: Int
+    var wm_batch: Optional[DeviceNonfiniteBatch]
 
     def __init__(
         out self,
@@ -1694,6 +1707,44 @@ struct LlamaKVCache(Movable):
         self.fixed = LLAMA_FAST_KV_STRIDE_CAP and window == 0
         self.k = _zeros(ctx, b * dims.n_kv * self.cap * dims.head_dim)
         self.v = _zeros(ctx, b * dims.n_kv * self.cap * dims.head_dim)
+        self.wm_on = False
+        self.wm_upto = -1
+        self.wm_x = 0
+        self.wm_batch = Optional[DeviceNonfiniteBatch]()
+
+    def wm_grant(mut self, ctx: DeviceContext, d_model: Int) raises:
+        """MOJOLEARN_LLAMA_FAST_REFUSE_WATERMARK: the owner states that every
+        writer of this cache's floats other than the block forward's own
+        append calls `wm_reset` (or drops the cache), and gets the held
+        scratch of a decode step's scans: the hidden states of one token and
+        the one key row and one value row the previous step appended, three
+        fixed lengths. A ring cache (`window > 0`) is refused the grant: a
+        step overwrites a ring slot, so its whole-ring scan stays. Nothing is
+        known at the grant: the first call scans everything."""
+        self.wm_on = False
+        self.wm_upto = -1
+        self.wm_batch = None
+        if self.window != 0 or d_model <= 0:
+            return
+        var row = self.b * self.n_kv * self.head_dim
+        var lens: List[Int] = [self.b * d_model, row, row]
+        self.wm_x = self.b * d_model
+        self.wm_batch = DeviceNonfiniteBatch(ctx, lens)
+        self.wm_on = True
+
+    def wm_reset(mut self):
+        """The cache floats or the position were written from outside the
+        block forward (a load, a zero fill, a restart, a rewind): nothing
+        below any row is known, the next call scans the whole cache."""
+        self.wm_upto = -1
+
+    def wm_revoke(mut self):
+        """The owner can no longer vouch for the cache's writers (the state
+        tensor is shared with another resident entry): every call scans the
+        whole cache, as a cache that was never granted does."""
+        self.wm_on = False
+        self.wm_upto = -1
+        self.wm_batch = None
 
     def scan_cells(self) -> Int:
         """The leading cells of `k` (and of `v`) that hold every used slot:
@@ -4182,6 +4233,35 @@ kernel, same geometry, same integer first-index fold; the names are tested
 in the same order, so the refusal raised is the one the separate scans
 raised. No float is produced: no bit moves on any column. FAST builds keep the separate scans."""
 
+comptime LLAMA_FAST_REFUSE_WATERMARK = (
+    is_defined["MOJOLEARN_LLAMA_FAST_REFUSE_WATERMARK"]() and GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+)
+"""lane/fx-llama-refuse-watermark (2026-11-18), EXPERIMENT ARM, default OFF
+(docs/apple-fast/EXPERIMENTS.md; A/B owed on transformer-decode,
+causal-lm-generate, causal-lm-generate-smollm2, samba-decode). A decode step
+(L = 1, linear cache) of a cache whose owner granted it
+(`LlamaKVCache.wm_grant`) scans the hidden states and only the ONE key row
+and ONE value row the previous step appended, on scratch held by the cache
+(no allocation per step, three fixed scan lengths), where the default scans
+the whole key cache, the whole value cache and inv_freq on three buffers
+allocated per call.
+
+WHY THE REFUSAL IS THE SAME ONE. A call's refusal that passes proves rows
+`[0, s)` and inv_freq finite. The only writers after it, until the next
+call, are this call's append (`kv_append2_kernel` and the two whole-buffer
+copies: bit copies, a finite float stays finite, at the new stride) and
+whatever the owner does; the owner's every other write calls `wm_reset`
+(the per-writer list is in autograd/block_step_ops.mojo
+`_attn_watermark_grant`). inv_freq is written only by
+`LlamaRopeTable.__init__`. So at the next call every float of the whole-cache
+scan outside row `s - 1` is finite, and the smallest non-finite flat index
+of the whole scan is the smallest one in row `s - 1`
+(`kv_rows_nonfinite_partial_kernel` reports that flat index): same name, same
+order (hidden_states, then key, then value), same index, same message, at
+the same call. Anything else (a prefill or chunk, the first call after a
+grant, a load, a reset, a ring cache, a cache nobody granted, a FAST build)
+takes the default scans. No float is produced: no bit moves on any column."""
+
 # TOMBSTONE: MOJOLEARN_IDN_ATTN_CACHE_NOWAIT_OFF (DELETE-OLD-PATH) and MOJOLEARN_ATTN_CACHE_WAIT (DELETE-ARM), no A/B recorded, deleted 2026-11-15 by lane/expdel2-33-neural; code recoverable at c3d1c7865f.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_ATTN_CACHE_NOWAIT_OFF.patch (and MOJOLEARN_ATTN_CACHE_WAIT.patch)
 # TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch, EXP:2438 DELETED; non-owner sites) deleted 2026-11-15 by lane/expdel2-33-neural; code recoverable at c3d1c7865f.
@@ -4194,6 +4274,103 @@ out: every reader of the caches is a launch on the same in-order context,
 so the wait ordered nothing (one wait per layer per forward; 0.54 ms a
 layer on the M3, 0.05 ms on the MI325X when measured on 2026-10-01). No
 arithmetic moves: same bits on every column. FAST builds keep the wait."""
+
+
+def kv_rows_nonfinite_partial_kernel(
+    part: MutPointer[Int32, MutAnyOrigin],
+    buf: MutPointer[Float32, MutAnyOrigin],
+    n_in: Int32,
+    width_in: Int32,
+    row_stride_in: Int32,
+    first_in: Int32,
+):
+    """core/device_scan.mojo `nonfinite_partial_kernel` over `n / width`
+    equal rows of `buf` that are NOT adjacent: row `g` is the `width` floats
+    at `g * row_stride + first` (the one row a decode step appended to each
+    (batch, kv head) of a cache packed at stride `row_stride / width`). Scan
+    element `i` is float `(i // width) * row_stride + first + i % width`, and
+    the partial holds that FLAT index of `buf` (or `NONFINITE_NONE`). The map
+    from `i` to the flat index is increasing (`first + width <= row_stride`,
+    checked by the caller), so the minimum over the partials is the smallest
+    flat index among the scanned rows: the index a scan of the whole buffer
+    reports when every float outside these rows is finite. Same predicate by
+    bits, same geometry (SCAN_TPB threads, `_scan_blocks`), same integer
+    fold (`min_partials_kernel`); no float is produced. It lives here, not
+    in the shared scan module, because only the llama cache has this layout
+    (MOJOLEARN_LLAMA_FAST_REFUSE_WATERMARK)."""
+    var n = Int(n_in)
+    var width = Int(width_in)
+    var row_stride = Int(row_stride_in)
+    var first = Int(first_in)
+    var red = stack_allocation[
+        SCAN_TPB,
+        Scalar[DType.int32],
+        address_space = AddressSpace.SHARED,
+    ]()
+    var tid = Int(thread_idx.x)
+    var stride = Int(grid_dim.x) * SCAN_TPB
+    var i = Int(block_idx.x) * SCAN_TPB + tid
+    var best = NONFINITE_NONE
+    while i < n:
+        var flat = (i // width) * row_stride + first + i % width
+        var au = bitcast[DType.uint32](buf.unsafe_load(flat)) & UInt32(0x7FFFFFFF)
+        if au >= UInt32(0x7F800000):
+            best = Int32(flat)
+            break
+        i += stride
+    red.unsafe_store(tid, best)
+    barrier()
+    var active = SCAN_TPB // 2
+    while active > 0:
+        if tid < active:
+            var o = red.unsafe_load(tid + active)
+            if o < red.unsafe_load(tid):
+                red.unsafe_store(tid, o)
+        barrier()
+        active = active // 2
+    if tid == 0:
+        part.unsafe_store(Int(block_idx.x), red.unsafe_load(0))
+
+
+def _kv_rows_scan_enqueue(
+    ctx: DeviceContext, mut batch: DeviceNonfiniteBatch, slot: Int,
+    mut buf: DeviceBuffer[DType.float32],
+    width: Int, row_stride: Int, first: Int,
+) raises:
+    """`DeviceNonfiniteBatch.enqueue` for a slot whose `lengths[slot]` floats
+    are `lengths[slot] / width` rows of `buf`, row `g` at `g * row_stride +
+    first` (`kv_rows_nonfinite_partial_kernel`). The slot's result is a FLAT
+    index of `buf`, the smallest among the scanned rows, or -1. The same
+    partial offsets, device fold, slot flag and one wait (`finish`) as
+    `enqueue`; a refused layout drains before raising, as `enqueue` does."""
+    if slot < 0 or slot >= len(batch.lengths):
+        ctx.synchronize()
+        raise Error("nonfinite batch: slot out of range")
+    var n = batch.lengths[slot]
+    var bad = batch.queued[slot] or width <= 0 or n % max(width, 1) != 0 or first < 0
+    bad = bad or first + width > row_stride
+    var rows = n // max(width, 1)
+    var reach = 0
+    if rows > 0:
+        reach = (rows - 1) * row_stride + first + width
+    if bad or reach > len(buf) or reach > Int(NONFINITE_NONE):
+        ctx.synchronize()
+        raise Error("nonfinite batch: duplicate slot, bad row layout or short source")
+    var blocks = 0
+    if n > 0:
+        blocks = _scan_blocks(n)
+        step_count_launch()
+        ctx.enqueue_function[kv_rows_nonfinite_partial_kernel](
+            batch.part.unsafe_ptr() + batch.offsets[slot], buf.unsafe_ptr(),
+            Int32(n), Int32(width), Int32(row_stride), Int32(first),
+            grid_dim=(blocks, 1, 1), block_dim=(SCAN_TPB, 1, 1),
+        )
+    step_count_launch()
+    ctx.enqueue_function[min_partials_kernel](
+        batch.res.unsafe_ptr() + slot, batch.part.unsafe_ptr() + batch.offsets[slot],
+        Int32(blocks), grid_dim=(1, 1, 1), block_dim=(SCAN_TPB, 1, 1),
+    )
+    batch.queued[slot] = True
 
 
 def _llama_refuse_bad_call_deferred(
@@ -4274,6 +4451,52 @@ def llama_refuse_bad_call(
     var dm = dims.d_model
     var hd = dims.head_dim
     comptime if IDN_LLAMA_REFUSE_BATCH:
+        comptime if LLAMA_FAST_REFUSE_WATERMARK:
+            # Rows [0, s - 1) and inv_freq are known finite (the comptime's
+            # docstring): scan the hidden states and row s - 1 of each cache
+            # on the held scratch. Every condition that fails falls through
+            # to the whole scans below.
+            var wm_step = kv.wm_on and l == 1 and kv.window == 0 and kv.s >= 1 and kv.wm_upto == kv.s - 1
+            wm_step = wm_step and b * dm == kv.wm_x and b == kv.b and dims.n_kv == kv.n_kv and hd == kv.head_dim
+            wm_step = wm_step and b * dm <= len(x) and b * dims.n_kv * kv.s * hd <= len(kv.k)
+            wm_step = wm_step and b * dims.n_kv * kv.s * hd <= len(kv.v)
+            wm_step = wm_step and b * dims.n_kv * kv.s * hd <= Int(NONFINITE_NONE)
+            comptime if LLAMA_FAST_KV_STRIDE_CAP:
+                # Both arms: a fixed-stride cache's last used row ends at
+                # `scan_cells()`, past the packed bound tested above.
+                if kv.fixed:
+                    wm_step = wm_step and kv.scan_cells() <= len(kv.k) and kv.scan_cells() <= len(kv.v)
+                    wm_step = wm_step and kv.scan_cells() <= Int(NONFINITE_NONE)
+            if wm_step:
+                # The held scratch moves out of the cache struct for the
+                # scans (they borrow the cache's buffers mutably) and back in
+                # after their one wait, before anything can raise a refusal.
+                # (Were a scan itself to raise, the scratch would go with
+                # this call and the cache would take the whole scans from
+                # then on.)
+                var held = Optional[DeviceNonfiniteBatch]()
+                swap(held, kv.wm_batch)
+                if held:
+                    var row_stride = kv.s * hd
+                    comptime if LLAMA_FAST_KV_STRIDE_CAP:
+                        # Both arms: slot `s - 1` of (batch, kv head) row
+                        # `r` sits at `(r * cap + s - 1) * hd`, not at the
+                        # packed `(r * s + s - 1) * hd`. The reported flat
+                        # index is then the one the whole scan of a fixed
+                        # cache (`scan_cells`) reports for that slot.
+                        if kv.fixed:
+                            row_stride = kv.cap * hd
+                    var row_first = (kv.s - 1) * hd
+                    held.value().enqueue(ctx, 0, x)
+                    _kv_rows_scan_enqueue(ctx, held.value(), 1, kv.k, hd, row_stride, row_first)
+                    _kv_rows_scan_enqueue(ctx, held.value(), 2, kv.v, hd, row_stride, row_first)
+                    var held_hits = held.value().finish(ctx)
+                    swap(held, kv.wm_batch)
+                    _refuse_nonfinite_at(ctx, "hidden_states", x, held_hits[0])
+                    _refuse_nonfinite_at(ctx, "past_key_values.key_cache", kv.k, held_hits[1])
+                    _refuse_nonfinite_at(ctx, "past_key_values.value_cache", kv.v, held_hits[2])
+                    kv.wm_upto = kv.s
+                    return
         var has_kv = kv.s > 0
         var kv_used = kv.s
         if kv.window > 0:
@@ -4299,6 +4522,11 @@ def llama_refuse_bad_call(
         if has_kv:
             _refuse_nonfinite_at(ctx, "past_key_values.key_cache", kv.k, hits[2])
             _refuse_nonfinite_at(ctx, "past_key_values.value_cache", kv.v, hits[3])
+        comptime if LLAMA_FAST_REFUSE_WATERMARK:
+            # The whole scans passed: rows [0, s) and inv_freq are finite.
+            # (A ring cache is never granted, so `wm_on` is a linear cache.)
+            if kv.wm_on:
+                kv.wm_upto = kv.s
         return
     # ON THE DEVICE (2026-09-09): the download-and-walk of the block input
     # was 65 ms per call at the Samba shape, a fifth of the forward.
@@ -5110,6 +5338,14 @@ def llama_kv_cache_rewind(
         )
     if s_to == kv.s:
         return
+    comptime if LLAMA_FAST_REFUSE_WATERMARK:
+        # A writer of the cache other than the block forward's append
+        # (autograd/block_step_ops.mojo `_attn_watermark_grant`'s list): it
+        # moves scanned rows and lowers `kv.s`. Every word it writes is a bit
+        # copy of a scanned float or 0, so nothing non-finite can appear, but
+        # the watermark is a position and no longer names the last row; the
+        # next call scans the whole cache.
+        kv.wm_reset()
     comptime if LLAMA_FAST_KV_STRIDE_CAP:
         if kv.fixed:
             # The committed slots never moved: only the slots the extra

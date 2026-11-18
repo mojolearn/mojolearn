@@ -16,6 +16,8 @@ from training.chunked_lm_head_v2 import (
     LM_HEAD_V2_LOSS_LEAF,
     chunked_lm_head_v2_row_body, chunked_lm_head_v2_dhidden_body, chunked_lm_head_v2_dweight_body,
 )
+from training.chunked_lm_head_panel_math import LMHEAD_FAST_GEMM_PANEL
+from training.chunked_lm_head_gemm_panel_host import lmhead_gp_host_forward_into, lmhead_gp_host_backward_into
 
 comptime _F = MutPointer[Float32, MutAnyOrigin]
 comptime _I = MutPointer[Int32, MutAnyOrigin]
@@ -59,11 +61,71 @@ def _host_loss_total(loss: _F, row_loss: _F, rows: Int):
     loss.unsafe_store(0, ftz(identical_div(ftz(level[0]), Float32(rows))))
 
 
+# -D MOJOLEARN_LMHEAD_FAST_GEMM_PANEL (default off, A/B owed): the op's host
+# arm runs the host column of the public door's arm
+# (training/chunked_lm_head_gemm_panel_host.mojo), the words the device op
+# computes under the same define (autograd/lm_head_v2_op.mojo). The op's own
+# parts stay: the float class codes, +0.0 as the shifted logit of a code that
+# names no vocabulary entry, and the upstream factor.
+def _forward_gp_host(
+    hidden: FP, weight: FP, codes: FP, targets: FP,
+    maxima: FP, denom: FP, row_loss: FP, loss: FP, rows: Int, vocab: Int, width: Int,
+) raises:
+    var c = _fp(codes)
+    var t = _ip(targets)
+    var rl = _fp(row_loss)
+    var tasks = host_predict_task_count_work(rows, rows)
+    var chunk = host_predict_chunk(rows, tasks)
+
+    def _rows(k: Int) {imm c, imm t, imm rl, imm chunk, imm rows}:
+        var lo = k * chunk
+        for row in range(lo, min(lo + chunk, rows)):
+            t.unsafe_store(row, c.unsafe_load(row).cast[DType.int32]())
+            rl.unsafe_store(row, Float32(0.0))
+
+    host_parallelize(_rows, tasks)
+    lmhead_gp_host_forward_into(hidden, weight, t, rows, vocab, width, _fp(maxima), _fp(denom), rl)
+    _host_loss_total(_fp(loss), rl, rows)
+
+
+def _scale_host(values: _F, up: Float32, count: Int):
+    """`_scale_kernel` on the host: values[i] *= upstream, split across cores."""
+    var tasks = host_predict_task_count_work(count, count)
+    var chunk = host_predict_chunk(count, tasks)
+
+    def _cells(k: Int) {imm values, imm up, imm chunk, imm count}:
+        var lo = k * chunk
+        for i in range(lo, min(lo + chunk, count)):
+            values.unsafe_store(i, ftz(identical_mul(values.unsafe_load(i), up)))
+
+    host_parallelize(_cells, tasks)
+
+
+def _backward_gp_host(
+    d_hidden: FP, d_weight: FP, hidden: FP, weight: FP, targets: FP,
+    maxima: FP, denom: FP, upstream: FP, rows: Int, vocab: Int, width: Int,
+) raises:
+    var want_dh = Int(d_hidden) != 0
+    var want_dw = Int(d_weight) != 0
+    if not want_dh and not want_dw:
+        return
+    var up = _fp(upstream).unsafe_load(0)
+    lmhead_gp_host_backward_into(hidden, weight, _ip(targets), rows, vocab, width, _fp(maxima), _fp(denom),
+                                 _fp(d_hidden), d_weight, want_dh, want_dw)
+    if want_dh:
+        _scale_host(_fp(d_hidden), up, rows * width)
+    if want_dw:
+        _scale_host(_fp(d_weight), up, vocab * width)
+
+
 def lm_head_v2_forward_host(
     hidden: FP, weight: FP, codes: FP, targets: FP,
     maxima: FP, denom: FP, row_loss: FP, loss: FP, rows: Int, vocab: Int, width: Int,
 ) raises:
     """The device forward's words on the host, rows split across cores."""
+    comptime if LMHEAD_FAST_GEMM_PANEL:
+        _forward_gp_host(hidden, weight, codes, targets, maxima, denom, row_loss, loss, rows, vocab, width)
+        return
     var h = _fp(hidden)
     var w = _fp(weight)
     var c = _fp(codes)
@@ -90,6 +152,9 @@ def lm_head_v2_backward_host(
 ) raises:
     """The device VJP's words on the host: row owners, then vocabulary
     owners, each split across cores; then the upstream factor."""
+    comptime if LMHEAD_FAST_GEMM_PANEL:
+        _backward_gp_host(d_hidden, d_weight, hidden, weight, targets, maxima, denom, upstream, rows, vocab, width)
+        return
     var h = _fp(hidden)
     var w = _fp(weight)
     var t = _ip(targets)
