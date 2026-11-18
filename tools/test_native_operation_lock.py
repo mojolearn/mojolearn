@@ -41,11 +41,15 @@ def test_python_lock_frontend_only_installs_compiled_descriptors():
 
 
 def test_neural_layer_boundaries_use_lease_without_preacquiring_models():
-    for name in ('bindings/neural_block_public_door.mojo','bindings/neural_prefill_native_door.mojo'):
-        source = (ROOT/name).read_text()
-        assert 'OperationLockLease(lock)' in source
-        assert 'lock.acquire()' not in source and 'lock.release()' not in source
-        assert 'lock_lease.acquire()' in source and 'lock_lease.release()' in source
+    source = (ROOT/'bindings/neural_block_public_door.mojo').read_text()
+    assert 'OperationLockLease(lock)' in source
+    assert 'lock.acquire()' not in source and 'lock.release()' not in source
+    assert 'lock_lease.acquire()' in source and 'lock_lease.release()' in source
+    # x6-tape-retire (e0dcc46d7e, e49d0ee90d): the prefill door holds no lock of its own; its transformer forward
+    # enters the block door, which takes the lease.
+    prefill = (ROOT/'bindings/neural_prefill_native_door.mojo').read_text()
+    assert 'OperationLockLease' not in prefill and 'lock.acquire()' not in prefill
+    assert 'neural_block_forward_binding(block, x,' in prefill
     assert 'InterruptedError: native operation lock interrupted' in CORE
 
 
