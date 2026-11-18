@@ -331,6 +331,7 @@ from core.identity_trace import IdentityTrace
 from checks.kernel_matrix import COLUMN_APPLE, COLUMN_NVIDIA, TARGET_COLUMN
 from core.device_arena import arena_active, arena_take
 from gemm.neural_dispatch import GemmWorkspace
+from gemm.neural_dispatch import NEURAL_GEMM_WORKLIST  # lane/fx-gemm-worklist (arm, default off)
 from gemm.experiments.neural_profile import NEURAL_PROFILE_CHANGED
 # lane/lowbit-blocks (2026-09-29): the block's products under
 # `numeric_profile="fixed15_v1"`; absent planes leave every call below as it was.
@@ -5478,6 +5479,22 @@ def llama_attention_forward(
             neural_projection_triplet(ctx, stages.q_proj, stages.k_proj,
                 stages.v_proj, stages.norm1_out, w.w_q, w.w_k, w.w_v,
                 m, qw, kw, dm)
+    comptime if NEURAL_GEMM_WORKLIST and not BLOCK_ANY_SABOTAGE:
+        # lane/fx-gemm-worklist (arm MOJOLEARN_GEMM_FAST_WORKLIST, default off): q, k and v read norm1_out and
+        # write three separate stages, so they are independent and go out as one work list here; the three
+        # per-product calls below are skipped. Each keeps the blocks, body and words of its own launch
+        # (gemm_identical.mojo, "THE WORK LIST"). Plain FP32 only, as the triplet above. Call site: once per
+        # layer forward; before: three llama_proj calls at this point and after each of q's and k's epilogues.
+        if not grouped_projections and not Bool(w.int15):
+            stages.gemm_workspace.list_begin()
+            stages.gemm_workspace.list_add[False](
+                ctx, stages.q_proj, stages.norm1_out, w.w_q, m, qw, dm, _gemm_op_nt())
+            stages.gemm_workspace.list_add[False](
+                ctx, stages.k_proj, stages.norm1_out, w.w_k, m, kw, dm, _gemm_op_nt())
+            stages.gemm_workspace.list_add[False](
+                ctx, stages.v_proj, stages.norm1_out, w.w_v, m, kw, dm, _gemm_op_nt())
+            stages.gemm_workspace.list_run(ctx)
+            grouped_projections = True
     if not grouped_projections:
         llama_proj(
             ctx, stages.gemm_workspace, stages.int15, w.int15, LLAMA_PROJ_Q,
@@ -5849,11 +5866,25 @@ def llama_mlp_forward(
     var bias_silu_fused = opts.mlp_bias and opts.act_is_silu()
 
     # ---- gate_proj and up_proj. C[M, it] = norm2_out[M, dm] . W[it, dm]^T.
-    if gated:
+    # lane/fx-gemm-worklist (arm MOJOLEARN_GEMM_FAST_WORKLIST, default off): gate and up read norm2_out and write
+    # two separate stages: one work list here, and the two per-product calls below are skipped. Call site: once
+    # per layer forward; before: one llama_proj here and one after the gate epilogue.
+    var gateup_listed = False
+    comptime if NEURAL_GEMM_WORKLIST and not BLOCK_ANY_SABOTAGE:
+        if gated and not Bool(w.int15):
+            stages.gemm_workspace.list_begin()
+            stages.gemm_workspace.list_add[False](
+                ctx, stages.gate_proj, stages.norm2_out, w.w_gate, m, it, dm, _gemm_op_nt())
+            stages.gemm_workspace.list_add[False](
+                ctx, stages.up_proj, stages.norm2_out, w.w_up, m, it, dm, _gemm_op_nt())
+            stages.gemm_workspace.list_run(ctx)
+            gateup_listed = True
+    if gated and not gateup_listed:
         llama_proj(
             ctx, stages.gemm_workspace, stages.int15, w.int15, LLAMA_PROJ_GATE,
             stages.gate_proj, stages.norm2_out, w.w_gate, m, it, dm,
         )
+    if gated:
         if bias_silu_fused:
             step_count_launch()
             ctx.enqueue_function[bias_silu_kernel](
@@ -5889,10 +5920,11 @@ def llama_mlp_forward(
         var no_gate = List[Float32]()
         trace.record_list_f32(prefix + ".gate_proj.out", no_gate)
     pc.tick(ctx, "fwd.gate_proj", "gateup_fwd")
-    llama_proj(
-        ctx, stages.gemm_workspace, stages.int15, w.int15, LLAMA_PROJ_UP,
-        stages.up_proj, stages.norm2_out, w.w_up, m, it, dm,
-    )
+    if not gateup_listed:
+        llama_proj(
+            ctx, stages.gemm_workspace, stages.int15, w.int15, LLAMA_PROJ_UP,
+            stages.up_proj, stages.norm2_out, w.w_up, m, it, dm,
+        )
     if bias_gelu_fused and not gated:
         step_count_launch()
         ctx.enqueue_function[bias_gelu_kernel](
