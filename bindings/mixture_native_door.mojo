@@ -1084,8 +1084,6 @@ def mixture_operation(model: PythonObject, operation: String, args: PythonObject
         return _gmm_infer(model, args[0], args[1], 1, context, False, PythonObject(None))
     if operation == "family_mix_gmm_predict":
         return _gmm_infer(model, args[0], args[1], 2, context, False, PythonObject(None))
-    if operation == "family_mix_gmm_score":
-        return PythonObject(_gmm_bic_aic(model, args[0], args[1], context, False, PythonObject(None))[0])
     if operation == "family_mix_gmm_bic":
         return PythonObject(_gmm_bic_aic(model, args[0], args[1], context, False, PythonObject(None))[1])
     if operation == "family_mix_gmm_aic":

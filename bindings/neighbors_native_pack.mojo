@@ -27,7 +27,6 @@ from bindings.neighbors_semi_native_door import neighbors_semi_operation, schi2_
 from providers.python.neighbors_feature_names_pyapi_door import neighbors_feature_names
 from bindings.neighbors_graph_native_door import neighbors_graph_operation
 from bindings.neighbors_ann_native_door import neighbors_ann_operation
-from bindings.neighbors_kde_native_door import neighbors_kde_operation
 
 
 from bindings.neighbors_native_unpack import (
@@ -128,6 +127,4 @@ def neighbors_operation(model: PythonObject, operation: String, args: PythonObje
         return neighbors_graph_operation(model, operation, args, context)
     if operation.startswith("family_xn_ann_"):
         return neighbors_ann_operation(model, operation, args, context)
-    if operation.startswith("family_xn_kde_"):
-        return neighbors_kde_operation(model, operation, args, context)
     raise Error("RuntimeError: unknown neighbors operation " + operation)

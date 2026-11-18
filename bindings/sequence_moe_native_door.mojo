@@ -460,11 +460,4 @@ def sequence_moe_operation(operation: String, owner: PythonObject, values: Pytho
             _ = py_call_typed(entries["seq_tensor_upload"], _handle(result, context), PythonObject(input.address), PythonObject(input.count))
         _ = input^
         return result
-    if operation == "seqmoe_check_weights":
-        var words = _words(fields, context)
-        var r = MoEBuffer(fields["router"], context)
-        var gu = MoEBuffer(fields["gate_up_proj"], context)
-        var dn = MoEBuffer(fields["down_proj"], context)
-        _check(r, gu, dn, words)
-        return PythonObject(None)
     raise Error("ValueError: unknown MoEBlock public operation")

@@ -42,7 +42,6 @@ from neighbors.neighbors_kde_run import (
     kde_resident_capable, kde_immutable_capable, kde_copy_f32, kde_copy_finite_f32, kde_query_finite_status,
     kde_fit_key, kde_prepare_request, kde_query_request, kde_resident_query,
 )
-from bindings.mode_metadata_native_door import _fields
 from bindings.py_balanced import py_call, py_get, py_contains, py_setitem, py_fields, py_type
 from bindings.classical_arrays_door import classical_address
 from bindings.classical_attributes_door import classical_connect_numpy, classical_check_layout
@@ -429,8 +428,7 @@ def _neighbors_kde_operation(model: PythonObject, operation: String, var args: P
     for i in range(1, len(args)):  # small-loop(public input owners before sparse/native preparation)
         if host_sparse_format(args[i]).byte_length() == 0:
             classical_admit_value(args[i], context)
-    if operation != "family_xn_kde_release":
-        args = estimator_arguments(model, "_mojolearn_estimators", args, context)
+    args = estimator_arguments(model, "_mojolearn_estimators", args, context)
     if operation == "family_xn_kde_fit":
         _kde_fit(model, args, context)
         return model
@@ -438,21 +436,11 @@ def _neighbors_kde_operation(model: PythonObject, operation: String, var args: P
         return _kde_scores(model, args, False, context)
     if operation == "family_xn_kde_score":
         return _kde_scores(model, args, True, context)
-    if operation == "family_xn_kde_release":
-        _kde_release(py_fields(model))
-        return PythonObject(None)
     raise Error("RuntimeError: unknown neighbors operation " + operation)
 
 
 def neighbors_kde_operation(model: PythonObject, operation: String, args: PythonObject,
                                 context: PythonObject) raises -> PythonObject:
-    if operation == "family_xn_kde_getstate":
-        var fields = _fields(model)
-        var state = py_call(native_loaded_module("builtins").dict, fields)
-        _ = py_call(state.pop, "_resident", PythonObject(None))
-        return state
-    if operation == "family_xn_kde_release":
-        return _neighbors_kde_operation(model, operation, args, context)
     var call = neighbors_public_begin(model, operation, args, context)
     var result = PythonObject(None)
     try:

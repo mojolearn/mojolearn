@@ -1246,7 +1246,7 @@ def parallel_causal_call(mut mods: NativeModules, operation: String, args: Pytho
         var block = causal_snapshot_fields(mods, fields["_native_parallel_block"])
         return _parallel_causal_rpc(mods, owner["_causal_original"], owner["layer_devices"][block["index"]],
                                     WorkerRequest(PC_PUBLISH_STATE, _parallel_word(fields["token"])), _parallel_causal_fields(args[1]), model)
-    elif operation == "state_close" or operation == "state_close_quiet":
+    elif operation == "state_close":
         _parallel_causal_release(mods, args[0])
     elif operation == "release_layers":
         var owner = _parallel_captured(mods, args[0], args[2])

@@ -20,7 +20,7 @@ def neural_admit(operation: String, args: PythonObject, owner_cls: PythonObject,
     # Validate cached class descriptors before reading even an exact owner.
     samba_admit("parallel_layout", bi.tuple(), context)
     _neural_container(args, "argument envelope")
-    if operation == "worker" or operation == "worker_dispatch":
+    if operation == "worker":
         samba_admit_value(args, admission)
         return
     if operation == "ordered_sum":

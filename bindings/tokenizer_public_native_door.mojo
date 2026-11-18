@@ -1688,12 +1688,6 @@ def tokenizer_public_call(operation: String, args: PythonObject, context: Python
         return _bpe_files(args[0], args[1], args[2], context)
     if operation == "bpe_adopt":
         return _bpe_adopt(args[0], args[1], args[2], context)
-    if operation == "bpe_handle":
-        if args[0] is not context[0]:
-            raise Error("TypeError: tokenizer factory requires its connected class")
-        var result = _new(args[0])
-        _ = _bpe_adopt(result, args[1], args[2], context)
-        return result
     if operation == "bpe_encode":
         return _bpe_encode(args[0], args[1], args[2], _bool(args[3], "bytes_only"), _bool(args[4], "batch"), context)
     if operation == "bpe_decode":

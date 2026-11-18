@@ -1523,8 +1523,6 @@ def parallel_shard_call(operation: String, args: PythonObject) raises -> PythonO
         # The driver read-shift negative control inside a running process.
         shard_sabotage_arm(Bool(py=args[0]))
         return PythonObject(None)
-    if operation == "pool_open":
-        return _pool_open(args[0])
     if operation == "reference_init" or operation == "queries_init":
         return _holder_init(args, operation == "reference_init")
     if operation == "holder_enter":
@@ -1548,10 +1546,6 @@ def parallel_shard_call(operation: String, args: PythonObject) raises -> PythonO
         if Bool(py=_driver_fields(args[0], "distributed_ivf_class")["_closed"]):
             raise Error("RuntimeError: distributed IVF index is closed")
         return args[0]
-    if operation == "pool_close":
-        if not Bool(py=args[0]["closed"]):
-            process_pool_close(args[0])
-        return PythonObject(None)
     if operation == "reference_query":
         return _reference_query(args)
     if operation == "parallel_queries":

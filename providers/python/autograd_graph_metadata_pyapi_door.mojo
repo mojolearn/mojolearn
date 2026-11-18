@@ -187,8 +187,6 @@ def graph_metadata_operation(operation: String, value: PythonObject, options: Py
                 item = Python.dict()
             py_setitem(fields, names[i], item)
         return PythonObject(None)
-    if operation == "unsupported_message":
-        return _message(value, options, context)
     if operation == "unsupported_construct":
         if py_type(value) is not context["unsupported"]:
             raise Error("TypeError: UnsupportedModel requires its connected native class")

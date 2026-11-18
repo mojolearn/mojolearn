@@ -276,12 +276,11 @@ def cluster_operation(model: PythonObject, operation: String, args: PythonObject
     if operation == "family_xc_agglo_predict":
         return _agglo_predict(model, binding, args[1], context)
     if (operation == "family_xc_variants_predict" or operation == "family_xc_variants_transform"
-            or operation == "family_xc_variants_score"
-            or operation == "family_xc_transform" or operation == "family_xc_score"):
+            or operation == "family_xc_variants_score"):
         var centers = _xc_fitted(mods, model, "cluster_centers_")
         var x = _xc_input(mods, model, args[1], context, x_admitted)
         var kind = _XC_RES_PREDICT if operation == "family_xc_variants_predict" else (
-            _XC_RES_TRANSFORM if (operation == "family_xc_variants_transform" or operation == "family_xc_transform") else _XC_RES_SCORE)
+            _XC_RES_TRANSFORM if operation == "family_xc_variants_transform" else _XC_RES_SCORE)
         return _centers_query(model, binding, x, centers, kind, context)
     if operation == "family_xc_predict":
         var centers = _xc_fitted(mods, model, "cluster_centers_")

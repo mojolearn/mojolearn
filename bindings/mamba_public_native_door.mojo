@@ -1196,7 +1196,7 @@ def mamba_native_call(mut mods: NativeModules, operation: String, values: Python
         _ = _mamba_state_fields(mods, values[0], "mamba3", context, False)
     elif operation.startswith("session_") and operation != "session_open" and operation != "session_info":
         var per_token = (operation == "session_step_public" or operation == "session_decode_public"
-                         or operation == "session_step" or operation == "session_decode")
+                         or operation == "session_step")
         var fields = _mamba_session_fields(mods, values[0], context, True, not per_token)
         if operation == "session_state":
             return fields["_state"]
@@ -1271,8 +1271,6 @@ def mamba_native_call(mut mods: NativeModules, operation: String, values: Python
         return mamba_session_init(mods, values[0], values[1], values[2], context)
     if operation == "session_step":
         return mamba_session_step(mods, values[0], values[1], context)
-    if operation == "session_decode":
-        return mamba_session_decode(mods, values[0], values[1], context)
     if operation == "session_sync":
         return mamba_session_sync(mods, values[0], context)
     if operation == "session_load":
