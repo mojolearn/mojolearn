@@ -1,6 +1,7 @@
 """Source/connection checks only; actual setters require the integrated binary."""
 import ast
 import builtins
+import copy
 import hashlib
 import inspect
 import json
@@ -235,15 +236,25 @@ def test_nested_native_entry_requires_exact_supported_dictionary_abi(recipe, acc
     assert not calls
 
 
+def _ast_sha(node):
+    """The function's AST digest without positions or its docstring: what the audited events depend on."""
+    body = node.body
+    if body and isinstance(body[0], ast.Expr) and isinstance(body[0].value, ast.Constant) \
+            and isinstance(body[0].value.value, str):
+        node = copy.copy(node)
+        node.body = body[1:] or [ast.Pass()]
+    return hashlib.sha256(ast.dump(node, include_attributes=False).encode()).hexdigest()
+
+
 @pytest.mark.parametrize('row', ROWS, ids=lambda row: row['declared_class'])
 def test_every_schema_is_bound_to_unchanged_constructor_and_helper_source(row):
+    # Bound by the function's AST (positions excluded), not its line: an edit elsewhere in the file moves the
+    # line and changes nothing the schema depends on. `line` in the proof is where the audit found it.
     for function in row['source_functions']:
         source = ast.parse((ROOT / function['path']).read_text())
-        matches = [node for node in ast.walk(source) if isinstance(node, ast.FunctionDef)
-                   and node.name == function['name'] and node.lineno == function['line']]
-        assert len(matches) == 1
-        digest = hashlib.sha256(ast.dump(matches[0], include_attributes=False).encode()).hexdigest()
-        assert digest == function['ast_sha256'], function
+        digests = {_ast_sha(node) for node in ast.walk(source)
+                   if isinstance(node, ast.FunctionDef) and node.name == function['name']}
+        assert function['ast_sha256'] in digests, function
 
 
 def test_schema_events_preserve_repeated_writes_constants_and_mode_wrapper_order():
@@ -266,34 +277,40 @@ def test_constructor_resolution_and_mode_wrapper_still_match_the_audited_source(
     for row in ROWS:
         kind, cls = index.resolve_name(row['module'], row['declared_class'])
         assert kind == 'class'
-        ancestry = []
+        # What the audited events depend on, read from the class's current MRO (a mixin added or deleted that
+        # defines none of these changes nothing; 9d9846104e deleted ClassifierScoreMixin from these bases):
+        # (1) the __init__ chain is exactly the audited constructor functions (by AST), (2) the
+        # `_mojolearn_native_public` declarations and the classes that make them are the audited ones, and
+        # (3) no class requests `_native_constructor` (the audited NumericModeMixin events assume none does).
+        inits, declared = [], []
         for base in index.mro(cls):
-            # The wrapper's class keyword (_native_constructor) skips mode
-            # injection; the audited NumericModeMixin events assume no row
-            # class or base requests it.
             assert not any(k.arg == '_native_constructor' for k in base.node.keywords), (row['declared_class'], base.name)
+            inits += [_ast_sha(node) for node in base.node.body
+                      if isinstance(node, ast.FunctionDef) and node.name == '__init__']
             declarations = []
             for node in base.node.body:
                 if isinstance(node, (ast.Assign, ast.AnnAssign)):
                     targets = node.targets if isinstance(node, ast.Assign) else [node.target]
                     if any(isinstance(target, ast.Name) and target.id == '_mojolearn_native_public' for target in targets):
                         declarations.append(ast.unparse(node))
-            ancestry.append(dict(module=base.mod.name, name=base.name,
-                bases=[ast.unparse(node) for node in base.node.bases],
-                decorators=[ast.unparse(node) for node in base.node.decorator_list],
-                native_public_declarations=declarations))
-        assert ancestry == row['constructor_ancestry'], row['declared_class']
+            if declarations:
+                declared.append((base.mod.name, base.name, declarations))
+        audited_inits = {f['ast_sha256'] for f in row['source_functions'] if f['name'] == '__init__'}
+        assert set(inits) == audited_inits, row['declared_class']
+        audited = [(a['module'], a['name'], a['native_public_declarations'])
+                   for a in row['constructor_ancestry'] if a['native_public_declarations']]
+        assert declared == audited, row['declared_class']
     wrapper = PROOF['mode_wrapper_source']
     source = ast.parse((ROOT / wrapper['path']).read_text())
     cls = next(node for node in source.body if isinstance(node, ast.ClassDef) and node.name == wrapper['class'])
     method = next(node for node in cls.body if isinstance(node, ast.FunctionDef) and node.name == wrapper['method'])
-    assert hashlib.sha256(ast.dump(method, include_attributes=False).encode()).hexdigest() == wrapper['ast_sha256']
+    assert _ast_sha(method) == wrapper['ast_sha256']
     # The class hook now delegates the wrapper and application-subclass schema
     # connection. Bind those audited helpers too, rather than pinning only the
     # three-line hook (b2133a474; public subclass tests passed in tests-r4).
     for name, digest in wrapper['helpers'].items():
         helper = next(node for node in source.body if isinstance(node, ast.FunctionDef) and node.name == name)
-        assert hashlib.sha256(ast.dump(helper, include_attributes=False).encode()).hexdigest() == digest, name
+        assert _ast_sha(helper) == digest, name
 
 
 def deferred_fixture():
@@ -547,7 +564,13 @@ def test_umap_validation_is_connected_without_a_python_callback():
 def test_umap_parameter_source_keeps_scalar_arrays_and_native_bounds():
     source = (ROOT / 'bindings/umap_parameters_native_door.mojo').read_text()
     assert 'var shape = array_shape_once(value, context)' in source
-    assert 'array_metadata_once(value, shape^, name, context, True)' in source
+    # The scalar is read under the door's ArrayPin, held until after the word is read (Mojo frees a local at its
+    # last named use, so the pin is named again after the read).
+    assert 'array_metadata_once(value, shape^, name, context, pin, True)' in source
+    for kind in ('umap_integer', 'umap_scalar'):
+        body = source.split(f'def {kind}(', 1)[1].split('\ndef ', 1)[0]
+        read = body.index('_scalar_word(scalar)')
+        assert body.index('var pin = ArrayPin()') < read < body.index('_ = pin^'), kind
     assert 'word > UInt64(UMAP_I64_MAX)' in source
     assert 'var at = i if value.native_byte_order else width - i - 1' in source
     assert 'result = bitcast[DType.float64](word)' in source
@@ -556,5 +579,5 @@ def test_umap_parameter_source_keeps_scalar_arrays_and_native_bounds():
     array_refusal = source.split('def _parameter_array(', 1)[1].split('def umap_integer(', 1)[0]
     assert 'except:' in array_refusal
     assert 'raise Error("ValueError: UMAP " + name + detail)' in array_refusal
-    assert '_parameter_array(value, name, True, context)' in source
-    assert '_parameter_array(value, name, False, context)' in source
+    assert '_parameter_array(value, name, True, context, pin)' in source
+    assert '_parameter_array(value, name, False, context, pin)' in source

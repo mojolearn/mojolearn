@@ -16672,11 +16672,12 @@
     "path": "python/mojolearn/_mode.py",
     "class": "NumericModeMixin",
     "method": "__init_subclass__",
-    "ast_sha256": "6be90481f874b7653fb02bda4e420a97683aff1a99a9ec5850e5d7191084b286",
+    "ast_sha256": "3697452eee09648901cbcf3406c5119d841a11891465adf2a8fb71b10bd71177",
     "helpers": {
-      "_application_subclass": "5ded06b4ff9df3289a97a7f8d1f3d7e5812907f7b6e6551f7b366914a7acd6a6",
+      "_application_subclass": "f3076f9b98210a1e5f0087d6956f9edd6d8a245ba3df000a875772e1513bd76b",
       "_connect_application_params": "b34180df1081c8d2ee4833659dc33542550222a59a961cdbf7e9a2cbba6260c7",
-      "_install_numeric_mode": "bbff408a03b490361d46f7f542584f335e6c23d274f8a9de2d8d2d217f5dc3e7"
-    }
+      "_install_numeric_mode": "47deb1ed7a96919afbc333298dc41b3b0e6382027a7ec80ec23e8b572f9e1f3a"
+    },
+    "rebound": "2026-11-17 (lane fb14-tool-tests): every ast_sha256 is the function's AST without its docstring (positions excluded), so a docstring or a line move no longer unbinds it. Two helpers rebound on reading the diff of 21b231faac: _application_subclass changed its docstring only; _install_numeric_mode lost the CPU-training guard loop, which set each fit method to itself (_guard_cpu_training returned it unchanged), so the events it writes are unchanged."
   }
 }
