@@ -13,9 +13,12 @@
 # Parallel plan (AGENTS.md hard rules on parallelism): the build is one `mojo build` (the compiler's own threads use
 # the cores; it is the one serial stage and is timed and its peak RSS recorded as the row build-gpu). The checks are
 # independent processes of the prebuilt binary, run K at once with xargs -P; each check splits its own host work
-# across the cores, and the device parts share the one GPU. K = cgroup cores / 4 unless NC_JOBS. Each check runs
-# under /usr/bin/time -v; SUMMARY.md states the peak RSS of the largest check, the memory available, the K memory
-# alone would allow, and the busy cores of total sampled from /proc/stat.
+# across the cores, and the device parts share the one GPU. K = min(cgroup cores, memory available x 0.8 / the
+# largest check's peak RSS (NC_CHECK_PEAK_MB, default 2048: the largest of 269 checks was 1.64 GB on 2026-11-18)),
+# unless NC_JOBS. The build's RSS is not a check's: it is left out of that figure (lane fx-pod-job, 2026-11-18: the
+# old K = cores/4 had no memory reason, and the summary divided by the build's 43 GB). Each check runs under
+# /usr/bin/time -v; SUMMARY.md states the peak RSS of the largest check, the memory available, the K memory alone
+# would allow, and the busy cores of total of the build and of the checks (cgroup CPU time, else /proc/stat).
 #
 # Exit status: 0 when every check passed, 1 when any failed or timed out (rc 124) or the build failed, 2 on a setup
 # failure.
@@ -69,9 +72,30 @@ n=$(grep -c . "$RES/planned.txt")
 $PY tools/generated_sources.py prepare --repo "$PWD" < /dev/null > "$RES/logs/generated-sources.log" 2>&1 \
     || { say "generated sources failed (logs/generated-sources.log)"; exit 2; }
 
+# Busy cores of total, sampled every 15 s while the build and the tasks run (part of this job, not a watcher): the
+# cgroup's CPU time (cpu.stat usage_usec) per wall second, else the whole host's /proc/stat busy share times its CPUs.
+busy_sampler() {   # file
+    ( if [ -r /sys/fs/cgroup/cpu.stat ]; then
+          prev=$(awk '/^usage_usec/ {print $2}' /sys/fs/cgroup/cpu.stat)
+          while sleep 15; do
+              cur=$(awk '/^usage_usec/ {print $2}' /sys/fs/cgroup/cpu.stat)
+              awk -v a="$prev" -v b="$cur" 'BEGIN {printf "%.1f\n", (b - a) / 15e6}'; prev=$cur
+          done
+      else
+          host=$(grep -c '^cpu[0-9]' /proc/stat); prev=$(awk '/^cpu / {print $2+$3+$4+$7+$8, $5+$6}' /proc/stat)
+          while sleep 15; do
+              cur=$(awk '/^cpu / {print $2+$3+$4+$7+$8, $5+$6}' /proc/stat)
+              echo "$prev $cur" | awk -v h="$host" '{b=$3-$1; i=$4-$2; if (b+i>0) printf "%.1f\n", b/(b+i)*h}'; prev=$cur
+          done
+      fi ) > "$1" 2>/dev/null &
+    echo $!
+}
+busy_of() { awk '{s+=$1; if ($1>m) m=$1; n++} END {if (n) printf "mean %.1f, max %.1f", s/n, m; else print "not sampled"}' "$1" 2>/dev/null; }
+
 # The one compile: every registered device-column check in one binary.
 mkdir -p "$RES/bin"
 say "building run_gpu ($n checks planned)"
+bsampler=$(busy_sampler "$RES/busy_cores_build.txt")
 bstart=$(date +%s)
 if [ -x /usr/bin/time ]; then
     /usr/bin/time -v -o "$RES/time/build-gpu.txt" pixi run mojo build -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . \
@@ -81,6 +105,7 @@ else
         > "$RES/logs/build-gpu.log" 2>&1
 fi
 brc=$?
+kill "$bsampler" 2>/dev/null
 brss=$(awk -F': *' '/Maximum resident set size/ {print $2}' "$RES/time/build-gpu.txt" 2>/dev/null)
 $PY tools/ops/native_checks_report.py result build-gpu --log "$RES/logs/build-gpu.log" --rc "$brc" \
     --seconds "$(( $(date +%s) - bstart ))" ${brss:+--maxrss-kb "$brss"} --out-dir "$RES/results"
@@ -95,29 +120,19 @@ elif [ -r /sys/fs/cgroup/cpu/cpu.cfs_quota_us ]; then
     q=$(cat /sys/fs/cgroup/cpu/cpu.cfs_quota_us); p=$(cat /sys/fs/cgroup/cpu/cpu.cfs_period_us)
     [ "$q" -gt 0 ] && cores=$(( (q + p - 1) / p < cores ? (q + p - 1) / p : cores ))
 fi
-K=${NC_JOBS:-$(( cores / 4 > 0 ? cores / 4 : 1 ))}
 mem_kb=$(awk '/MemAvailable/ {print $2}' /proc/meminfo)
 if [ -r /sys/fs/cgroup/memory.max ] && [ "$(cat /sys/fs/cgroup/memory.max)" != max ]; then
     cg_kb=$(( $(cat /sys/fs/cgroup/memory.max) / 1024 )); [ "$cg_kb" -lt "$mem_kb" ] && mem_kb=$cg_kb
 fi
-say "$n checks, filter $FILTER, cores $cores, K=$K, memory available $(( mem_kb / 1048576 )) GB, timeout ${NC_TIMEOUT:-900}s"
+# K = min(cores, MemAvailable x 0.8 / the largest check's peak RSS): every core of the allocation, unless memory
+# measured per check says fewer (the build's RSS is not a check's and is not in this figure)
+check_kb=$(( ${NC_CHECK_PEAK_MB:-2048} * 1024 ))
+bymem=$(( mem_kb * 8 / 10 / check_kb ))
+K=${NC_JOBS:-$(( bymem < cores ? bymem : cores ))}
+[ "$K" -lt 1 ] && K=1
+say "$n checks, filter $FILTER, cores $cores, K=$K (memory alone allows $bymem at ${NC_CHECK_PEAK_MB:-2048} MB a check), memory available $(( mem_kb / 1048576 )) GB, timeout ${NC_TIMEOUT:-900}s"
+sampler=$(busy_sampler "$RES/busy_cores.txt")
 
-# Busy cores of total, sampled every 15 s while the tasks run (part of this job, not a watcher): the cgroup's CPU
-# time (cpu.stat usage_usec) per wall second, else the whole host's /proc/stat busy share times its CPUs.
-( if [ -r /sys/fs/cgroup/cpu.stat ]; then
-      prev=$(awk '/^usage_usec/ {print $2}' /sys/fs/cgroup/cpu.stat)
-      while sleep 15; do
-          cur=$(awk '/^usage_usec/ {print $2}' /sys/fs/cgroup/cpu.stat)
-          awk -v a="$prev" -v b="$cur" 'BEGIN {printf "%.1f\n", (b - a) / 15e6}'; prev=$cur
-      done
-  else
-      host=$(grep -c '^cpu[0-9]' /proc/stat); prev=$(awk '/^cpu / {print $2+$3+$4+$7+$8, $5+$6}' /proc/stat)
-      while sleep 15; do
-          cur=$(awk '/^cpu / {print $2+$3+$4+$7+$8, $5+$6}' /proc/stat)
-          echo "$prev $cur" | awk -v h="$host" '{b=$3-$1; i=$4-$2; if (b+i>0) printf "%.1f\n", b/(b+i)*h}'; prev=$cur
-      done
-  fi ) > "$RES/busy_cores.txt" 2>/dev/null &
-sampler=$!
 
 started=$(date +%s)
 if [ "$brc" -eq 0 ]; then
@@ -128,15 +143,22 @@ fi
 kill "$sampler" 2>/dev/null
 wall=$(( $(date +%s) - started ))
 
-peak_kb=$(awk -F': *' '/^maxrss_kb/ {if ($2>m) m=$2} END {print m+0}' "$RES"/results/*.txt)
-busy=$(awk '{s+=$1; if ($1>m) m=$1; n++} END {if (n) printf "mean %.1f, max %.1f", s/n, m; else print "not sampled"}' "$RES/busy_cores.txt")
+# the checks only: results/build-gpu.txt holds the build's RSS (43 GB on 2026-11-18), not a check's
+checkfiles=(); for f in "$RES"/results/*.txt; do [ "$(basename "$f")" = build-gpu.txt ] || checkfiles+=("$f"); done
+peak_kb=0
+[ "${#checkfiles[@]}" -gt 0 ] && peak_kb=$(awk -F': *' '/^maxrss_kb/ {if ($2>m) m=$2} END {print m+0}' "${checkfiles[@]}")
+busy=$(busy_of "$RES/busy_cores.txt")
+bbusy=$(busy_of "$RES/busy_cores_build.txt")
+say "BUSY build: $bbusy of $cores cores; checks: $busy of $cores cores"
 {
     echo "host: $(hostname) $(nvidia-smi --query-gpu=name,driver_version --format=csv,noheader 2>/dev/null | head -n 1)"
     echo "source: $(git rev-parse HEAD 2>/dev/null) compiler: $(head -n 1 "$RES/compiler-version.log")"
     echo "filter: $FILTER; checks: $n; build rc $brc; wall: ${wall}s; timeout per check: ${NC_TIMEOUT:-900}s"
-    echo "parallel: K=$K concurrent checks on $cores cores (K = cores/4 unless NC_JOBS); busy cores of $cores: $busy"
+    echo "parallel: K=$K concurrent checks on $cores cores (K = min(cores, memory / ${NC_CHECK_PEAK_MB:-2048} MB) unless NC_JOBS); busy cores of $cores: checks $busy, build $bbusy"
+    if [ -n "${brss:-}" ]; then echo "build: peak RSS $(( brss / 1024 )) MB (the one serial stage; not a check's)"
+    else echo "build: peak RSS not recorded"; fi
     if [ "$peak_kb" -gt 0 ]; then
-        echo "peak RSS of the largest check or the build: $(( peak_kb / 1024 )) MB; memory available $(( mem_kb / 1024 )) MB;" \
+        echo "peak RSS of the largest check: $(( peak_kb / 1024 )) MB; memory available $(( mem_kb / 1024 )) MB;" \
              "K memory alone allows: $(( mem_kb * 8 / 10 / peak_kb ))"
     else
         echo "peak RSS: not recorded (/usr/bin/time missing)"
