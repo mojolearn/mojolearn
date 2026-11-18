@@ -9,10 +9,12 @@ import paper_compare as PC  # noqa: E402
 
 P = {"n_neighbors": 5}
 HOST = "pod-a/GPU-0"     # best-ever time flags need the same host id on both cells (2026-11-14)
+SW = ["GPU-0", "595.91.07", "6.8.0", "boot-1"]   # ... and the same system state (f6d60ba06f, 2026-11-17)
 
 
 def ent(ms, params=P):
-    return {"ms": ms, "params": params, "hash": "h", "device": "NVIDIA L40S", "date": "2026-01-01", "host_id": HOST}
+    return {"ms": ms, "params": params, "hash": "h", "device": "NVIDIA L40S", "date": "2026-01-01", "host_id": HOST,
+            "software": SW}
 
 
 class Suspect(unittest.TestCase):
@@ -33,7 +35,7 @@ class Suspect(unittest.TestCase):
         best_rows = {"k": {"best": dict(tl[0], suspect=BE.suspect_reason(tl[0], tl)), "best_by_device": {},
                            "timeline": tl}}
         row = {"key": "k", "new_ms": 41.0, "flags": []}
-        PC.attach_best_ever(row, dict(ent(41.0), device="NVIDIA L40S"), best_rows, HOST)
+        PC.attach_best_ever(row, dict(ent(41.0), device="NVIDIA L40S"), best_rows, HOST, SW)
         self.assertIn("BEST-EVER-SUSPECT", row["flags"])
         self.assertNotIn("BEST-EVER-REGRESSION", row["flags"])
         self.assertEqual(row["best_ever_ms"], 0.164)      # kept, never dropped
@@ -42,12 +44,16 @@ class Suspect(unittest.TestCase):
         tl = [ent(30.0), ent(40.0)]
         best_rows = {"k": {"best": dict(tl[0], suspect=None), "best_by_device": {}, "timeline": tl}}
         row = {"key": "k", "new_ms": 41.0, "flags": []}
-        PC.attach_best_ever(row, ent(41.0), best_rows, HOST)
+        PC.attach_best_ever(row, ent(41.0), best_rows, HOST, SW)
         self.assertIn("BEST-EVER-REGRESSION", row["flags"])
+        # the same host with another system state (driver, kernel, boot): shown, never a flag
+        row = {"key": "k", "new_ms": 41.0, "flags": []}
+        PC.attach_best_ever(row, ent(41.0), best_rows, HOST, ["GPU-0", "595.91.07", "6.8.0", "boot-2"])
+        self.assertEqual(row["flags"], [])
         # a best ever from another host (or one mined before host ids): shown, never a flag
         for host in ("pod-b/GPU-9", None):
             row = {"key": "k", "new_ms": 41.0, "flags": []}
-            PC.attach_best_ever(row, ent(41.0), best_rows, host)
+            PC.attach_best_ever(row, ent(41.0), best_rows, host, SW)
             self.assertEqual(row["flags"], [])
             self.assertAlmostEqual(row["ratio_vs_best_ever"], 41.0 / 30.0)
 
