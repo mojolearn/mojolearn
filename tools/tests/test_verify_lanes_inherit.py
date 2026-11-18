@@ -18,6 +18,11 @@ def _rev(spec):
     return subprocess.run(["git", "-C", str(ROOT), "rev-parse", spec], capture_output=True, text=True).stdout.strip()
 
 
+# verified_anchor needs the anchor commit in this clone; a depth-1 CI checkout has no HEAD~1
+needs_parent = pytest.mark.skipif(not _rev("HEAD~1"), reason="HEAD~1 is not in this clone (shallow checkout): "
+                                                            "the anchor commit must exist for verified_anchor")
+
+
 def _anchor_record(base, commit, backend="cpu", complete=True):
     d = base / commit[:12] / backend
     d.mkdir(parents=True)
@@ -29,6 +34,7 @@ def _anchor_record(base, commit, backend="cpu", complete=True):
     return d
 
 
+@needs_parent
 def test_inherited_record_copies_the_column_and_becomes_the_next_anchor(tmp_path):
     anchor, head = _rev("HEAD~1"), _rev("HEAD")
     src = _anchor_record(tmp_path, anchor)
@@ -46,6 +52,7 @@ def test_inherited_record_copies_the_column_and_becomes_the_next_anchor(tmp_path
     assert vl.verified_anchor("cpu", FIX, base=str(tmp_path)) == head
 
 
+@needs_parent
 def test_nothing_is_inherited_from_an_incomplete_or_missing_anchor(tmp_path, capsys):
     anchor, head = _rev("HEAD~1"), _rev("HEAD")
     assert vl.inherit_record("cpu", anchor, {"mode": "since-record", "since": anchor}, FIX, {},
