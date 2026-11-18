@@ -77,7 +77,6 @@ from checks.kernel_matrix import (
     lib_block_size_for,
 )
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz
-from checks.native_tests.kit import download_host_into, upload_host_into
 
 
 comptime BLOBS = 3
@@ -132,8 +131,9 @@ def _load_fixture(ctx: DeviceContext, n: Int, d: Int) raises -> DeviceBuffer[
     for i in range(n):
         for f in range(d):
             hx.unsafe_ptr().unsafe_store(i * d + f, _coord(i, f))
-    upload_host_into[DType.float32](ctx, x, hx)
+    ctx.enqueue_copy(dst_buf=x, src_ptr=hx.unsafe_ptr())
     ctx.synchronize()
+    _ = hx^  # keep-alive past the drain (the enqueue_copy reads it until then)
     return x
 
 
@@ -149,7 +149,7 @@ def check_dbscan() raises:
     var passes = dbscan_fit_impl(ctx, x, labels, n, d, DB_EPS, DB_MIN_PTS)
 
     var hl = ctx.enqueue_create_host_buffer[DType.int32](n)
-    download_host_into[DType.int32](ctx, labels, hl)
+    ctx.enqueue_copy(dst_ptr=hl.unsafe_ptr(), src_buf=labels)
     ctx.synchronize()
 
     # --- each blob is ONE cluster ----------------------------------------
@@ -236,7 +236,7 @@ def check_dbscan_eps_sensitivity() raises:
 
     _ = dbscan_fit_impl(ctx, x, labels, n, d, 12.0, DB_MIN_PTS)
     var hl = ctx.enqueue_create_host_buffer[DType.int32](n)
-    download_host_into[DType.int32](ctx, labels, hl)
+    ctx.enqueue_copy(dst_ptr=hl.unsafe_ptr(), src_buf=labels)
     ctx.synchronize()
 
     var first = hl.unsafe_ptr().unsafe_load(0)
@@ -283,14 +283,14 @@ def check_exclusive_scan_beyond_the_old_cap() raises:
     var hv = ctx.enqueue_create_host_buffer[DType.int32](n)
     for i in range(n):
         hv.unsafe_ptr().unsafe_store(i, Int32((i * 7 + 3) % 13))
-    upload_host_into[DType.int32](ctx, vd, hv)
+    ctx.enqueue_copy(dst_buf=vd, src_ptr=hv.unsafe_ptr())
     ctx.synchronize()
 
     exclusive_scan(ctx, ex, vd, block_sums, n)
     ctx.synchronize()
 
     var he = ctx.enqueue_create_host_buffer[DType.int32](n + 1)
-    download_host_into[DType.int32](ctx, ex, he)
+    ctx.enqueue_copy(dst_ptr=he.unsafe_ptr(), src_buf=ex)
     ctx.synchronize()
 
     var running = 0
@@ -369,7 +369,7 @@ def check_dbscan_batching_agrees() raises:
         work_buffer, block_sums, nw0, ws0, n, d, DB_EPS, DB_MIN_PTS, 0,
     )
     var baseline = ctx.enqueue_create_host_buffer[DType.int32](n)
-    download_host_into[DType.int32](ctx, labels, baseline)
+    ctx.enqueue_copy(dst_ptr=baseline.unsafe_ptr(), src_buf=labels)
     ctx.synchronize()
 
     var nw1 = _no_weights(ctx)
@@ -379,7 +379,7 @@ def check_dbscan_batching_agrees() raises:
         work_buffer, block_sums, nw1, ws1, n, d, DB_EPS, DB_MIN_PTS, batch,
     )
     var got = ctx.enqueue_create_host_buffer[DType.int32](n)
-    download_host_into[DType.int32](ctx, labels, got)
+    ctx.enqueue_copy(dst_ptr=got.unsafe_ptr(), src_buf=labels)
     ctx.synchronize()
 
     var differ = 0
@@ -437,7 +437,7 @@ def check_dbscan_batching_shared_border() raises:
     var xy = materialize[_SB_XY]()
     for i in range(n * d):
         hx.unsafe_ptr().unsafe_store(i, Float32(xy[i]))
-    upload_host_into[DType.float32](ctx, x, hx)
+    ctx.enqueue_copy(dst_buf=x, src_ptr=hx.unsafe_ptr())
     var labels = ctx.enqueue_create_buffer[DType.int32](n)
     var labels_temp = ctx.enqueue_create_buffer[DType.int32](n)
     var work_buffer = ctx.enqueue_create_buffer[DType.int32](n)
@@ -451,6 +451,7 @@ def check_dbscan_batching_shared_border() raises:
     var base = ctx.enqueue_create_host_buffer[DType.int32](n)
     var got = ctx.enqueue_create_host_buffer[DType.int32](n)
     ctx.synchronize()
+    _ = hx^  # past the drain: a queued copy reads it after its last named use
     var bad = 0
     var runs = 0
     for arm in range(2):
@@ -461,7 +462,7 @@ def check_dbscan_batching_shared_border() raises:
             ctx, x, adj, vd, core, ex, labels, labels_temp, work_buffer,
             block_sums, nw0, ws0, n, d, 1.5, 5, 0, 200, method,
         )
-        download_host_into[DType.int32](ctx, labels, base)
+        ctx.enqueue_copy(dst_ptr=base.unsafe_ptr(), src_buf=labels)
         ctx.synchronize()
         for bs in range(2, n):
             var nw = _no_weights(ctx)
@@ -470,7 +471,7 @@ def check_dbscan_batching_shared_border() raises:
                 ctx, x, adj, vd, core, ex, labels, labels_temp, work_buffer,
                 block_sums, nw, ws, n, d, 1.5, 5, bs, 200, method,
             )
-            download_host_into[DType.int32](ctx, labels, got)
+            ctx.enqueue_copy(dst_ptr=got.unsafe_ptr(), src_buf=labels)
             ctx.synchronize()
             runs += 1
             var differ = 0
@@ -540,15 +541,15 @@ def check_fused_eps_agrees_with_materialized() raises:
     for i in range(m):
         for f in range(d):
             hx.unsafe_ptr().unsafe_store(i * d + f, Float32(_jitter(i, f) * 2.0))
-    upload_host_into[DType.float32](ctx, xb, hx)
+    ctx.enqueue_copy(dst_buf=xb, src_ptr=hx.unsafe_ptr())
     var hy = ctx.enqueue_create_host_buffer[DType.float32](n * d)
     for i in range(n):
         for f in range(d):
             hy.unsafe_ptr().unsafe_store(
                 i * d + f, Float32(_jitter(i + 5000, f) * 2.0)
             )
-    upload_host_into[DType.float32](ctx, yb, hy)
-    upload_host_into[DType.float32](ctx, yb2, hy)
+    ctx.enqueue_copy(dst_buf=yb, src_ptr=hy.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=yb2, src_ptr=hy.unsafe_ptr())
     ctx.synchronize()
 
     # --- the OLD path: norms, GEMM, expand, threshold -------------------
@@ -594,10 +595,10 @@ def check_fused_eps_agrees_with_materialized() raises:
     var hb = ctx.enqueue_create_host_buffer[DType.uint8](m * n)
     var hvr = ctx.enqueue_create_host_buffer[DType.int32](m)
     var hvn = ctx.enqueue_create_host_buffer[DType.int32](m + 1)
-    download_host_into[DType.uint8](ctx, adj_ref, ha)
-    download_host_into[DType.uint8](ctx, adj_new, hb)
-    download_host_into[DType.int32](ctx, vd_ref, hvr)
-    download_host_into[DType.int32](ctx, vd_new, hvn)
+    ctx.enqueue_copy(dst_ptr=ha.unsafe_ptr(), src_buf=adj_ref)
+    ctx.enqueue_copy(dst_ptr=hb.unsafe_ptr(), src_buf=adj_new)
+    ctx.enqueue_copy(dst_ptr=hvr.unsafe_ptr(), src_buf=vd_ref)
+    ctx.enqueue_copy(dst_ptr=hvn.unsafe_ptr(), src_buf=vd_new)
     ctx.synchronize()
 
     var cells = 0
@@ -709,7 +710,7 @@ def check_dbscan_rbc_matches_brute() raises:
         EPS_NN_BRUTE_FORCE,
     )
     var hb = ctx.enqueue_create_host_buffer[DType.int32](n)
-    download_host_into[DType.int32](ctx, lab_b, hb)
+    ctx.enqueue_copy(dst_ptr=hb.unsafe_ptr(), src_buf=lab_b)
     ctx.synchronize()
 
     var x_r = _load_fixture(ctx, n, d)
@@ -719,7 +720,7 @@ def check_dbscan_rbc_matches_brute() raises:
         ctx, x_r, lab_r, n, d, DB_EPS, DB_MIN_PTS, 0, 200, EPS_NN_RBC
     )
     var hr = ctx.enqueue_create_host_buffer[DType.int32](n)
-    download_host_into[DType.int32](ctx, lab_r, hr)
+    ctx.enqueue_copy(dst_ptr=hr.unsafe_ptr(), src_buf=lab_r)
     ctx.synchronize()
 
     var wrong = 0
@@ -889,8 +890,9 @@ def check_dbscan_tiny_budget_agrees() raises:
     for i in range(n):
         for f in range(d):
             hx.unsafe_ptr().unsafe_store(i * d + f, _wide_coord(i, f))
-    upload_host_into[DType.float32](ctx, x, hx)
+    ctx.enqueue_copy(dst_buf=x, src_ptr=hx.unsafe_ptr())
     ctx.synchronize()
+    _ = hx^  # past the drain: a queued copy reads it after its last named use
 
     var nb_tiny = (
         n + compute_batch_size(n, n, EPS_NN_RBC, 1) - 1
@@ -913,8 +915,8 @@ def check_dbscan_tiny_budget_agrees() raises:
 
         var h_one = ctx.enqueue_create_host_buffer[DType.int32](n)
         var h_many = ctx.enqueue_create_host_buffer[DType.int32](n)
-        download_host_into[DType.int32](ctx, labels_one, h_one)
-        download_host_into[DType.int32](ctx, labels_many, h_many)
+        ctx.enqueue_copy(dst_ptr=h_one.unsafe_ptr(), src_buf=labels_one)
+        ctx.enqueue_copy(dst_ptr=h_many.unsafe_ptr(), src_buf=labels_many)
         ctx.synchronize()
 
         if passes_many <= passes_one:
@@ -1015,7 +1017,7 @@ def _run_two_loop_arm(
     for i in range(n):
         for f in range(d):
             hx.unsafe_ptr().unsafe_store(i * d + f, _tl_coord(i, f, dense))
-    upload_host_into[DType.float32](ctx, x, hx)
+    ctx.enqueue_copy(dst_buf=x, src_ptr=hx.unsafe_ptr())
     ctx.synchronize()
 
     # Host degrees with the device's own float32 arithmetic, then the
@@ -1084,7 +1086,7 @@ def _run_two_loop_arm(
         block_sums, nw2, ws2, n, d, eps, DB_MIN_PTS, batch, 200, EPS_NN_RBC,
     )
     var hr = ctx.enqueue_create_host_buffer[DType.int32](n)
-    download_host_into[DType.int32](ctx, labels, hr)
+    ctx.enqueue_copy(dst_ptr=hr.unsafe_ptr(), src_buf=labels)
     ctx.synchronize()
 
     var adj_f = ctx.enqueue_create_buffer[DType.uint8](n * n)
@@ -1099,7 +1101,7 @@ def _run_two_loop_arm(
         EPS_NN_BRUTE_FORCE,
     )
     var hb = ctx.enqueue_create_host_buffer[DType.int32](n)
-    download_host_into[DType.int32](ctx, labels, hb)
+    ctx.enqueue_copy(dst_ptr=hb.unsafe_ptr(), src_buf=labels)
     ctx.synchronize()
 
     var wrong = 0
@@ -1298,7 +1300,7 @@ def check_dbscan_manhattan_neighborhood() raises:
             )
     var x = ctx.enqueue_create_buffer[DType.float32](m * d)
     ctx.synchronize()
-    upload_host_into[DType.float32](ctx, x, hx)
+    ctx.enqueue_copy(dst_buf=x, src_ptr=hx.unsafe_ptr())
     ctx.synchronize()
 
     var thresh_l1 = dbscan_metric_threshold(DBSCAN_METRIC_L1, L1_EPS)
@@ -1449,7 +1451,7 @@ def _run_eps[
     )
     ctx.synchronize()
     var h = ctx.enqueue_create_host_buffer[DType.uint8](m * m)
-    download_host_into[DType.uint8](ctx, adj, h)
+    ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=adj)
     ctx.synchronize()
     return h
 
@@ -1546,14 +1548,14 @@ def _fit_metric(
     var x = ctx.enqueue_create_buffer[DType.float32](n * d)
     var labels = ctx.enqueue_create_buffer[DType.int32](n)
     ctx.synchronize()
-    upload_host_into[DType.float32](ctx, x, hx)
+    ctx.enqueue_copy(dst_buf=x, src_ptr=hx.unsafe_ptr())
     ctx.synchronize()
     _ = dbscan_fit_impl(
         ctx, x, labels, n, d, eps, min_pts, 0, 200, EPS_NN_BRUTE_FORCE,
         False, metric,
     )
     var h = ctx.enqueue_create_host_buffer[DType.int32](n)
-    download_host_into[DType.int32](ctx, labels, h)
+    ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=labels)
     ctx.synchronize()
     return h
 
@@ -1586,8 +1588,9 @@ def check_dbscan_manhattan_refused_on_the_ball_cover() raises:
     var x = ctx.enqueue_create_buffer[DType.float32](n * d)
     var labels = ctx.enqueue_create_buffer[DType.int32](n)
     ctx.synchronize()
-    upload_host_into[DType.float32](ctx, x, hx)
+    ctx.enqueue_copy(dst_buf=x, src_ptr=hx.unsafe_ptr())
     ctx.synchronize()
+    _ = hx^  # past the drain: a queued copy reads it after its last named use
 
     var raised = False
     try:
@@ -1822,8 +1825,9 @@ def check_dbscan_weighted_degree_matches_host_oracle() raises:
             )
     var x = ctx.enqueue_create_buffer[DType.float32](n * d)
     ctx.synchronize()
-    upload_host_into[DType.float32](ctx, x, hx)
+    ctx.enqueue_copy(dst_buf=x, src_ptr=hx.unsafe_ptr())
     ctx.synchronize()
+    _ = hx^  # past the drain: a queued copy reads it after its last named use
 
     var adj = ctx.enqueue_create_buffer[DType.uint8](m * n)
     var vd = ctx.enqueue_create_buffer[DType.int32](m + 1)
@@ -1844,7 +1848,7 @@ def check_dbscan_weighted_degree_matches_host_oracle() raises:
     vertex_deg_dispatch(ctx, adj, vd, x, 0, m, n, d, 0.9, DBSCAN_METRIC_L2)
     ctx.synchronize()
     var hadj = ctx.enqueue_create_host_buffer[DType.uint8](m * n)
-    download_host_into[DType.uint8](ctx, adj, hadj)
+    ctx.enqueue_copy(dst_ptr=hadj.unsafe_ptr(), src_buf=adj)
     ctx.synchronize()
 
     # --- the weights. Order-sensitive by construction: a run of values at
@@ -1926,7 +1930,7 @@ def check_dbscan_weighted_degree_matches_host_oracle() raises:
     for j in range(n):
         hw.unsafe_ptr().unsafe_store(j, w[j])
     ctx.synchronize()
-    upload_host_into[DType.float32](ctx, wbuf, hw)
+    ctx.enqueue_copy(dst_buf=wbuf, src_ptr=hw.unsafe_ptr())
     ctx.synchronize()
 
     var ws_dense = ctx.enqueue_create_buffer[DType.float32](m)
@@ -1934,7 +1938,7 @@ def check_dbscan_weighted_degree_matches_host_oracle() raises:
     weighted_vertex_deg_dense(ctx, ws_dense, adj, wbuf, m, n)
     ctx.synchronize()
     var h_dense = ctx.enqueue_create_host_buffer[DType.float32](m)
-    download_host_into[DType.float32](ctx, ws_dense, h_dense)
+    ctx.enqueue_copy(dst_ptr=h_dense.unsafe_ptr(), src_buf=ws_dense)
     ctx.synchronize()
 
     # The CSR the ball cover would hand us, built here in ASCENDING COLUMN
@@ -1957,16 +1961,18 @@ def check_dbscan_weighted_degree_matches_host_oracle() raises:
             hja.unsafe_ptr().unsafe_store(pos, Int32(rows[i][k]))
             pos += 1
     hia.unsafe_ptr().unsafe_store(m, Int32(pos))
-    upload_host_into[DType.int32](ctx, ia, hia)
-    upload_host_into[DType.int32](ctx, ja, hja)
+    ctx.enqueue_copy(dst_buf=ia, src_ptr=hia.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=ja, src_ptr=hja.unsafe_ptr())
     ctx.synchronize()
+    _ = hia^  # past the drain: a queued copy reads it after its last named use
+    _ = hja^  # past the drain: a queued copy reads it after its last named use
 
     var ws_csr = ctx.enqueue_create_buffer[DType.float32](m)
     ctx.synchronize()
     weighted_vertex_deg_csr(ctx, ws_csr, ia, ja, wbuf, m)
     ctx.synchronize()
     var h_csr = ctx.enqueue_create_host_buffer[DType.float32](m)
-    download_host_into[DType.float32](ctx, ws_csr, h_csr)
+    ctx.enqueue_copy(dst_ptr=h_csr.unsafe_ptr(), src_buf=ws_csr)
     ctx.synchronize()
 
     # --- 1/2/3. against the oracles --------------------------------------
@@ -2059,13 +2065,14 @@ def check_dbscan_weighted_degree_matches_host_oracle() raises:
     # --- 4. the two arms agree EXACTLY on integer weights ----------------
     for j in range(n):
         hw.unsafe_ptr().unsafe_store(j, wint[j])
-    upload_host_into[DType.float32](ctx, wbuf, hw)
+    ctx.enqueue_copy(dst_buf=wbuf, src_ptr=hw.unsafe_ptr())
     ctx.synchronize()
+    _ = hw^  # past the drain: a queued copy reads it after its last named use
     weighted_vertex_deg_dense(ctx, ws_dense, adj, wbuf, m, n)
     weighted_vertex_deg_csr(ctx, ws_csr, ia, ja, wbuf, m)
     ctx.synchronize()
-    download_host_into[DType.float32](ctx, ws_dense, h_dense)
-    download_host_into[DType.float32](ctx, ws_csr, h_csr)
+    ctx.enqueue_copy(dst_ptr=h_dense.unsafe_ptr(), src_buf=ws_dense)
+    ctx.enqueue_copy(dst_ptr=h_csr.unsafe_ptr(), src_buf=ws_csr)
     ctx.synchronize()
     for i in range(m):
         var gd = h_dense.unsafe_ptr().unsafe_load(i)
@@ -2230,14 +2237,14 @@ def _fit_unweighted(
     var labels = ctx.enqueue_create_buffer[DType.int32](n)
     var w = ctx.enqueue_create_buffer[DType.float32](1)
     ctx.synchronize()
-    upload_host_into[DType.float32](ctx, x, hx)
+    ctx.enqueue_copy(dst_buf=x, src_ptr=hx.unsafe_ptr())
     ctx.synchronize()
     _ = dbscan_fit_impl_weighted(
         ctx, x, labels, w, n, d, eps, min_pts, 0, 200, method, False,
         DBSCAN_METRIC_L2, False,
     )
     var h = ctx.enqueue_create_host_buffer[DType.int32](n)
-    download_host_into[DType.int32](ctx, labels, h)
+    ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=labels)
     ctx.synchronize()
     return h
 
@@ -2261,19 +2268,20 @@ def _fit_weighted(
     var labels = ctx.enqueue_create_buffer[DType.int32](n)
     var w = ctx.enqueue_create_buffer[DType.float32](n)
     ctx.synchronize()
-    upload_host_into[DType.float32](ctx, x, hx)
+    ctx.enqueue_copy(dst_buf=x, src_ptr=hx.unsafe_ptr())
     var hw = ctx.enqueue_create_host_buffer[DType.float32](n)
     for i in range(n):
         hw.unsafe_ptr().unsafe_store(i, weights[i])
-    upload_host_into[DType.float32](ctx, w, hw)
+    ctx.enqueue_copy(dst_buf=w, src_ptr=hw.unsafe_ptr())
     ctx.synchronize()
+    _ = hw^
     ctx.synchronize()
     _ = dbscan_fit_impl_weighted(
         ctx, x, labels, w, n, d, eps, min_pts, 0, 200, method, False,
         DBSCAN_METRIC_L2, True,
     )
     var h = ctx.enqueue_create_host_buffer[DType.int32](n)
-    download_host_into[DType.int32](ctx, labels, h)
+    ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=labels)
     ctx.synchronize()
     return h
 
