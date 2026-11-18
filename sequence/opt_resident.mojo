@@ -24,10 +24,13 @@ this file takes typed handles, addresses and parameters only."""
 from std.memory import bitcast, unsafe_memcpy
 from std.sys import is_defined
 from core.accelerator_target import TARGET_HAS_APPLE_GPU
-from max.gpu.host import DeviceBuffer
+from max.gpu.host import DeviceBuffer, DeviceContext
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
-from sequence.exec_device import DeviceExec, X_SEQUENCE_POOL, _pool_host, _pool_release_host, sequence_ctx
+from sequence.exec_device import (
+    DeviceExec, TPB, X_SEQUENCE_POOL, _args_i32_out, _pack_ff, _pack_ii, _pool_host, _pool_release_host, seq_kernel,
+    sequence_ctx,
+)
 from sequence.ops import FP, OP_OPT, OPT_NADAM, OPT_SGD, OPT_SK_ADAM, OPT_SK_SGD, Args
 from sequence.recurrent import OptConfig, OptState, opt_scalars, opt_step
 from sequence.ops_impl import adafactor_core, lamb_bias, lamb_core, lamb_table, opt_slots
@@ -87,7 +90,10 @@ comptime OPT_PIPE_DOWN = _OPT_APPLE_FAST or _OPT_IDN
 comptime OPT_ZERO_OPEN = _OPT_APPLE_FAST or _OPT_IDN
 #: Experiment MOJOLEARN_OPT_FAST_ASYNC_DEV_STEP (lane fb12-rows, 2026-11-17; A/B owed, NVIDIA
 #: L40S; default off): the element-wise step on resident device params and device grads
-#: (`opt_resident_step_dev`) returns without draining the queue. The launch takes every scalar
+#: (`opt_resident_step_dev`) returns without draining the queue. (lane fb15-sync-counts,
+#: 2026-11-18: the arm was inert as written: the step's `DeviceExec` drained the queue in its
+#: destructor whether or not `ex.sync()` ran. The step now enqueues its launch on the shared
+#: context directly (`_opt_launch`), so the define does remove the step's one wait.) The launch takes every scalar
 #: by value (`_opt_args`), allocates nothing and frees nothing, so nothing after it waits for the
 #: kernel except a read of the params or state, which drains first (`seq_tensor_download`,
 #: `opt_resident_move`, `opt_resident_close`, `seq_tensor_free` all synchronize the one
@@ -204,7 +210,13 @@ comptime _RES = SharedSlot[_ResPool, _RES_NAME]
 def _slot_buf(n: Int, keep: Bool) raises -> DeviceBuffer[DType.float32]:
     var ctx = sequence_ctx()
     var b = ctx.enqueue_create_buffer[DType.float32](n if keep else 1)
-    b.enqueue_fill(Float32(0.0))
+    # lane fb15-sync-counts (2026-11-18): only a kept slot is zero filled. A
+    # slot the configuration does not use is a 1-float placeholder that no
+    # launch and no move reads (`opt_resident_move` returns 0 for it, the
+    # step passes the parameter pointer in its place): its fill was a
+    # memset per open (2 of the 3 per Adagrad fit). No bit moves.
+    if keep:
+        b.enqueue_fill(Float32(0.0))
     return b^
 
 
@@ -252,8 +264,12 @@ def _open_sized(kind: Int, n: Int, n0: Int, n1: Int, n2: Int, used: Int, nt: Int
         pool[].nb[h] = nb
         pool[].offs[h] = offs^
     # the fills and the table copy are ordered before every later use on
-    # the one in-order context; the table's host list must outlive its copy
-    ctx.synchronize()
+    # the one in-order context. Only LAMB's table copy reads a host list
+    # (`tab`, freed when the caller returns), so only it waits here (lane
+    # fb15-sync-counts, 2026-11-18: every open waited, one cuStreamSynchronize
+    # per element-wise or Adafactor fit with nothing host-side to protect).
+    if len(tab) > 0:
+        ctx.synchronize()
     return h
 
 
@@ -803,6 +819,27 @@ def _dev_ptrs(handles: List[Int], J: Int, sizes: List[Int], n: Int) raises -> Tu
     return (ps^, gs^)
 
 
+def _opt_launch(ctx: DeviceContext, a: Args, n: Int) raises:
+    """The one `op_opt` launch of `DeviceExec.launch[OP_OPT]` (its generic
+    `seq_kernel` route: one thread per element, TPB a block, the integers and
+    floats packed two to a word), enqueued on the shared context with no
+    executor around it, so nothing drains when it returns (lane
+    fb15-sync-counts, 2026-11-18)."""
+    if n <= 0:
+        return
+    if _args_i32_out(a):
+        raise Error("optimizer_resident_step_dev: an integer argument does not fit Int32")
+    ctx.enqueue_function[seq_kernel[OP_OPT]](
+        a.p0, a.p1, a.p2, a.p3, a.p4, a.p5, a.p6, a.p7, a.p8, a.p9, a.p10, a.p11,
+        _pack_ii(a.i0, a.i1), _pack_ii(a.i2, a.i3), _pack_ii(a.i4, a.i5),
+        _pack_ii(a.i6, a.i7), _pack_ii(a.i8, a.i9), _pack_ii(a.i10, a.i11),
+        _pack_ff(a.f0, a.f1), _pack_ff(a.f2, a.f3), _pack_ff(a.f4, a.f5), _pack_ff(a.f6, a.f7),
+        Int64(n),
+        grid_dim=((n + TPB - 1) // TPB, 1, 1),
+        block_dim=(TPB, 1, 1),
+    )
+
+
 def opt_resident_step_dev(handle: Int, handles: List[Int], ip: List[Int],
                           fp: List[Float64]) raises -> Int:
     """`opt_resident_step` on resident tensors: handles = [param_0 ..
@@ -841,7 +878,7 @@ def opt_resident_step_dev(handle: Int, handles: List[Int], ip: List[Int],
         k0 = t0 + 1
     for k in range(k0, t):
         _ = opt_scalars(cfg, st, k, Float32(fp[0]))
-    var ex = DeviceExec()
+    var ctx = sequence_ctx()
     var P0 = FP(unsafe_from_address=pg[0][0])
     # an unused slot names the first parameter tensor (never read by op_opt
     # for that kind); the scalars advance once for the whole step
@@ -857,10 +894,17 @@ def opt_resident_step_dev(handle: Int, handles: List[Int], ip: List[Int],
         a.p2 = (a0.p2 + off) if u[0] else pj
         a.p3 = (a0.p3 + off) if u[1] else pj
         a.p4 = (a0.p4 + off) if u[2] else pj
-        ex.launch[OP_OPT](a, sizes[j])
+        _opt_launch(ctx, a, sizes[j])
         off += sizes[j]
+    # lane fb15-sync-counts (2026-11-18): ONE wait per step. The step ran on a
+    # `DeviceExec`, whose `sync()` drained the queue and whose destructor then
+    # drained it again (2 cuStreamSynchronize per step, 20 per 10-step fit).
+    # The launch now goes straight onto the shared in-order context: it
+    # allocates, stages and frees nothing, so this wait is the step's only
+    # one (none under OPT_ASYNC_DEV_STEP: every reader of the parameters or
+    # state drains first). No bit moves: the same kernel, Args and grid.
     comptime if not OPT_ASYNC_DEV_STEP:
-        ex.sync()
+        ctx.synchronize()
     sc.unsafe_store(0, st.pw1)
     sc.unsafe_store(1, st.pw2)
     sc.unsafe_store(2, st.mu_prod)
@@ -941,7 +985,11 @@ def lamb_resident_step_dev(handle: Int, handles: List[Int], ip: List[Int],
             _ = vp2^
             _ = dp^
             o2 += sizes[j]
-    ex.sync()
+    # lane fb15-sync-counts (2026-11-18): the executor's destructor drains the
+    # queue (here, at its last use above) before its buffers go; the explicit
+    # `ex.sync()` before it was a second cuStreamSynchronize per step on an
+    # empty queue (no staged upload or pending download to release). The
+    # scalars below are host words. One wait per step. No bit moves.
     if (flags & 8) != 0:
         sc.unsafe_store(0, bias[2])
         sc.unsafe_store(1, bias[3])
@@ -970,5 +1018,7 @@ def adafactor_resident_step_dev(handle: Int, handles: List[Int], ip: List[Int],
     var G = seq_tensor_ptr(handles[1], n, "grad")
     var ex = DeviceExec()
     adafactor_core(ex, P, G, _slot_ptr(h, 0), _slot_ptr(h, 1), R, C, t, fp)
-    ex.sync()
+    # lane fb15-sync-counts (2026-11-18): one wait per step, the executor's
+    # destructor drain (was `ex.sync()` and then that drain again on an empty
+    # queue). No bit moves.
     return n

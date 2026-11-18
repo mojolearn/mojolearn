@@ -56,8 +56,12 @@ def layer_norm_dev(handles: List[Int], addrs: List[Int], ip: List[Int],
     if not bwd and not has_y:
         raise Error("layer_norm_dev: a forward needs a y tensor")
     var ex = DeviceExec()
-    var W = ex.alloc(D)
-    var Bb = ex.alloc(D)
+    # lane fb15-sync-counts (2026-11-18): a weight or bias that is uploaded
+    # is not zero filled first (the upload writes all D cells); one that is
+    # absent keeps its zero fill. Was two memsets per call ahead of the two
+    # uploads. No bit moves.
+    var W = ex._alloc(D, not hw)
+    var Bb = ex._alloc(D, not hb)
     if hw:
         ex.upload(W, _host_fp(addrs[0], "weight"), D)
     if hb:
@@ -89,5 +93,11 @@ def layer_norm_dev(handles: List[Int], addrs: List[Int], ip: List[Int],
             ex.download_async(_host_fp(addrs[2], "dweight"), DW, D)
         if hb:
             ex.download_async(_host_fp(addrs[3], "dbias"), DB, D)
-    ex.sync()
+        # the pending dweight / dbias downloads are copied out by `sync()`
+        ex.sync()
+    # lane fb15-sync-counts (2026-11-18): a forward waits once, in the
+    # executor's destructor (its drain before W, Bb and the upload stages
+    # go; y, mean and rstd stay resident). The explicit `ex.sync()` ahead of
+    # it was a second cuStreamSynchronize on an empty queue. One launch, one
+    # wait per forward. No bit moves.
     return n

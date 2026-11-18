@@ -84,8 +84,12 @@ def seq_tensor_alloc(n: Int, zero: Bool) raises -> Int:
         pool[].bufs[h] = buf^
         pool[].n[h] = n
     # the fill is ordered before every later use on the one in-order
-    # context; the wait makes a failed allocation raise here
-    ctx.synchronize()
+    # context, so nothing here waits (lane fb15-sync-counts, 2026-11-18: the
+    # wait cost one cuStreamSynchronize per tensor: 3 per device LayerNorm
+    # forward (y, mean, rstd), 1 per `to_device`, whose upload waits anyway).
+    # An allocation failure raises from `enqueue_create_buffer` itself; a
+    # failed fill surfaces at the next wait on the context (every read of a
+    # resident tensor waits: download, copy, free).
     return h + 1
 
 
