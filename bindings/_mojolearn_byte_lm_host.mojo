@@ -62,8 +62,8 @@ from training.byte_lm_host import (
 )
 # DEVIATION 2680. The CPU training step and loss (training/byte_lm_host_execution.mojo):
 # the composed host step and loss by default (restored 2026-11-13, lane
-# restore-byte-lm-host-step; the GPU columns' hand step's words), the trainer's
-# captured program on a host session under -D MOJOLEARN_BYTE_LM_PROGRAM_STEP.
+# restore-byte-lm-host-step; the GPU columns' hand step's words). The program
+# arm (-D MOJOLEARN_BYTE_LM_PROGRAM_STEP) was deleted 2026-11-17 (lane fb12-loser-arms).
 
 
 comptime BYTE_HOST_MAX_LOGITS = 268435456
@@ -216,9 +216,8 @@ def byte_lm_host_train_step_binding(addresses: PythonObject, shape: PythonObject
     Returns the loss's IEEE-754 bits, as `byte_lm_host_loss` does, because a
     loss compared as a float is a loss compared with a tolerance.
 
-    The step is the composed host step (the GPU columns' hand step's words);
-    a build with MOJOLEARN_BYTE_LM_PROGRAM_STEP runs the trainer's captured
-    program on a host session instead. Its folds are fixed on every core.
+    The step is the composed host step (the GPU columns' hand step's words).
+    Its folds are fixed on every core.
     """
     var cfg = _host_config(shape)
     if len(addresses) != 8:
@@ -243,10 +242,8 @@ def byte_lm_host_loss_binding(addresses: PythonObject, shape: PythonObject,
     the trainer's training forward on the host, on one thread (`threaded`
     0) or at most `threads` threads (0: one per physical core). Returns the
     mean loss's IEEE-754 bits."""
-    # The composed host loss by default (`threaded` / `threads` choose the
-    # oracle or the threaded forward, same bits); under
-    # MOJOLEARN_BYTE_LM_PROGRAM_STEP the trainer's program on a host session,
-    # where they cap the session's task count (lane x7b, m2-neural-leftovers).
+    # The composed host loss (`threaded` / `threads` choose the oracle or the
+    # threaded forward, same bits).
     var cfg = _host_config(shape)
     if len(addresses) != 2:
         raise Error("byte LM host: expected 2 addresses")

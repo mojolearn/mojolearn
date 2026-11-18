@@ -738,41 +738,8 @@ def gp_opt_run_end_item(tid: Int, nt: Int, t: Int, st: _P, si: _I, rec: _P, run:
             p += nt
 
 
-#: the run sequencer's words (lane n8-gp-krr-smo): `seq[GP_OPT_SEQ_DONE]`
-#: is nonzero once the last run has stopped (the gate of every evaluation
-#: launch), `seq[GP_OPT_SEQ_RUN]` the run being optimized
-comptime GP_OPT_SEQ_DONE = 0
-comptime GP_OPT_SEQ_RUN = 1
-comptime GP_OPT_SEQ_LEN = 2
-
-
-def gp_opt_advance_item(
-    tid: Int, nt: Int, t: Int, st: _P, si: _I, tmap: _I, bnd: _P, dpar: _P, dls: _P, rec: _P, seq: _I,
-    n_runs: Int, seed_lo: UInt32, seed_hi: UInt32,
-):
-    """The run sequencer, after every evaluation's step (lane n8-gp-krr-smo,
-    2026-11-09): while the optimizer runs it changes nothing; once the
-    current run's stop word is set it records the run (`gp_opt_run_end_item`)
-    and starts the next one (`gp_opt_init_item`), or sets the done word after
-    the last run. The host enqueued the run boundaries before (one stop-word
-    read per evaluation); on the device the whole fit is enqueued in chunks
-    and the host reads the done word once per chunk. The same items in the
-    same order, so the same words."""
-    # every thread reads both words before the first barrier; only thread 0
-    # writes them, after a barrier
-    if seq.unsafe_load(GP_OPT_SEQ_DONE) != Int32(0):
-        return
-    if si.unsafe_load(GP_OPT_SI_STOP) == Int32(GP_STOP_RUNNING):
-        return
-    var run = Int(seq.unsafe_load(GP_OPT_SEQ_RUN))
-    gp_opt_run_end_item(tid, nt, t, st, si, rec, run)
-    _osync()
-    if run + 1 < n_runs:
-        gp_opt_init_item(tid, nt, t, st, si, tmap, bnd, dpar, dls, run + 1, seed_lo, seed_hi)
-        if tid == 0:
-            seq.unsafe_store(GP_OPT_SEQ_RUN, Int32(run + 1))
-    elif tid == 0:
-        seq.unsafe_store(GP_OPT_SEQ_DONE, Int32(1))
+# TOMBSTONE: MOJOLEARN_IDN_CHOL_OPS_FIT (decided B arm) deleted 2026-11-17 by lane/fb12-loser-arms: gp_opt_advance_item and the GP_OPT_SEQ_* words, the device run sequencer's; code recoverable at 2203db7094.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_CHOL_OPS_FIT.fb12-loser-arms.patch; record in docs/TOMBSTONES.md.
 
 
 def gp_opt_final_item(tid: Int, nt: Int, t: Int, st: _P, tmap: _I, dpar: _P, dls: _P, res: _P):

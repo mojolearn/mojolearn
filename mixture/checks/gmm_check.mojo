@@ -56,7 +56,6 @@ from std.memory import bitcast
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from cholesky.checks.potrf import CHOL_ELEM_TPB, CHOL_NB_PINNED, chol_workspace_floats
-from cholesky.chol_ops import CHOL_OPS_FIT
 from core.identity_trace import (
     IdentityTrace,
     first_divergence,
@@ -2581,10 +2580,10 @@ def check_chain_workspace_is_leased() raises:
             raise Error("check_chain_workspace_is_leased: d=" + String(dl) + " dwork does not end at the workspace")
         # TOMBSTONE: MOJOLEARN_IDN_CHOL_OPS_FIT (opt-in B arm, EXP:581 RUN OWED; AMD 1.14-1.25x slower 2026-11-13) deleted 2026-11-15 by lane/expdel2-16-decomposition; code recoverable at 860e94a3f4.
         # Restore: git apply experiments/removed/MOJOLEARN_IDN_CHOL_OPS_FIT.patch; record in docs/TOMBSTONES.md.
-        # RESTORED 2026-11-15 by lane/expdel2-restore-owed: owed B arm (owed-pre0867.json), under four weeks old; the deletion was premature.
-        comptime if not CHOL_OPS_FIT:
-            if gmm_chol_ws_floats(dl) < chol_workspace_floats(dl, CHOL_NB_PINNED):
-                raise Error("check_chain_workspace_is_leased: d=" + String(dl) + " workspace shorter than potrf_lower's")
+        # TOMBSTONE: MOJOLEARN_IDN_CHOL_OPS_FIT (decided B arm, the executor Cholesky ops; L40S ba08dac006 14 cells B 0.91-1.10x, same speed) deleted 2026-11-17 by lane/fb12-loser-arms; code recoverable at 2203db7094.
+        # Restore: git apply experiments/removed/MOJOLEARN_IDN_CHOL_OPS_FIT.fb12-loser-arms.patch; record in docs/TOMBSTONES.md.
+        if gmm_chol_ws_floats(dl) < chol_workspace_floats(dl, CHOL_NB_PINNED):
+            raise Error("check_chain_workspace_is_leased: d=" + String(dl) + " workspace shorter than potrf_lower's")
 
     var d = 300
     var ncomp = 2

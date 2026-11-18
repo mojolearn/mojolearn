@@ -82,9 +82,6 @@ from cholesky.checks.potrf import (
 )
 from cholesky.checks.trsm import CHOL_SOLVE_TPB, trsm_lower
 from core.identity_trace import IdentityTrace
-from cholesky.chol_ops import (
-    CHOL_OPS_FIT, chol_op_factor, chol_op_logdet, chol_op_logdet_scratch_floats, chol_op_solve_lower,
-)
 from x_decomp.jacobi_par import pj_identity_kernel
 from x_decomp.mcd import IDN_MCD_CHOL
 from x_decomp.mcd import Est, _key, _F32_EPS, _FLT_MIN, _neg_inf, _order_by_det, _pos_inf, _write, argsort_values, smallest_sorted
@@ -1369,74 +1366,39 @@ struct DMcd:
         panel against the Jacobi's 2 (p - 1) a sweep. A factorization that
         stops (not positive definite) gives log det -inf and no L^{-1}."""
         # Lane fix-chol-ops-remaining-callers (2026-11-13): the 0.8.66 route
-        # by default (restored from 49e8c5b633^); the executor's Cholesky
-        # ops (one read of info + log det) are the B arm under
-        # -D MOJOLEARN_IDN_CHOL_OPS_FIT, as in DevExec.chol_inv
-        # (x_decomp/device.mojo; owed row chol-ops-fit).
+        # (restored from 49e8c5b633^), as in DevExec.chol_inv.
         var n = A.r
         var L = self.k.copy(A)
         var da = self.k._sub(L)
-        comptime if CHOL_OPS_FIT:
-            var ctx = self.k.ctx.copy()
-            var dinfo = ctx.enqueue_create_buffer[DType.int32](1)
-            var dscr = ctx.enqueue_create_buffer[DType.float32](chol_op_logdet_scratch_floats(n))
-            var dld = ctx.enqueue_create_buffer[DType.float32](1)
-            var hst = ctx.enqueue_create_host_buffer[DType.int32](1)
-            var hld = ctx.enqueue_create_host_buffer[DType.float32](1)
-            enqueue_fill(ctx, dinfo, Int32(0))
-            add_jitter(ctx, da, n, Float32(0.0), CHOL_ELEM_TPB)
-            chol_op_factor(ctx, da, dinfo, n)
-            chol_op_logdet(ctx, da, dinfo, dscr, dld, n)
-            var li = DMat(n, n)
-            ctx.enqueue_function[pj_identity_kernel](
-                li.p(), Int32(n), grid_dim=_blocks(n * n), block_dim=TPB
-            )
-            var db = self.k._sub(li)
-            chol_op_solve_lower(ctx, da, db, dinfo, n, n)
-            ctx.enqueue_copy(dst_ptr=hst.unsafe_ptr(), src_buf=dinfo)
-            ctx.enqueue_copy(dst_ptr=hld.unsafe_ptr(), src_buf=dld)
-            ctx.synchronize()
-            var info = Int(hst.unsafe_ptr().unsafe_load(0))
-            var ld = hld.unsafe_ptr().unsafe_load(0)
-            _ = dscr^
-            _ = dld^
-            _ = dinfo^
-            _ = hst^
-            _ = hld^
-            _ = db^
-            _ = da^
-            _ = L^
-            if info != 0:
-                return DChol(_neg_inf(), DMat(0, 0))
-            return DChol(Float64(ld), li^)
-        else:
-            var nb = chol_nb_for(n, CHOL_NB_PINNED)
-            var ws = self.k.ctx.enqueue_create_buffer[DType.float32](max(chol_workspace_floats(n, nb), 1))
-            var trace = IdentityTrace()
-            add_jitter(self.k.ctx, da, n, Float32(0.0), CHOL_ELEM_TPB)
-            var run = potrf_lower(self.k.ctx, da, ws, n, trace)
-            if run.info != 0:
-                self.k.ctx.synchronize()
-                _ = ws^
-                _ = da^
-                _ = L^
-                return DChol(_neg_inf(), DMat(0, 0))
-            var dwork = self.k.ctx.enqueue_create_buffer[DType.float32](n + 1)
-            var ld = chol_logdet(self.k.ctx, da, dwork, n, trace, CHOL_ELEM_TPB)
-            var li = DMat(n, n)
-            self.k.ctx.enqueue_function[pj_identity_kernel](
-                li.p(), Int32(n), grid_dim=_blocks(n * n), block_dim=TPB
-            )
-            var db = self.k._sub(li)
-            trsm_lower(self.k.ctx, da, db, n, n, trace, "mcd.linv", CHOL_SOLVE_TPB)
-            # ws and dwork are idle after chol_logdet's wait; L returns to the
-            # pool, whose later users are ordered after trsm on this stream
+        # TOMBSTONE: MOJOLEARN_IDN_CHOL_OPS_FIT (decided B arm, the executor Cholesky ops; L40S ba08dac006 14 cells B 0.91-1.10x, same speed) deleted 2026-11-17 by lane/fb12-loser-arms; code recoverable at 2203db7094.
+        # Restore: git apply experiments/removed/MOJOLEARN_IDN_CHOL_OPS_FIT.fb12-loser-arms.patch; record in docs/TOMBSTONES.md.
+        var nb = chol_nb_for(n, CHOL_NB_PINNED)
+        var ws = self.k.ctx.enqueue_create_buffer[DType.float32](max(chol_workspace_floats(n, nb), 1))
+        var trace = IdentityTrace()
+        add_jitter(self.k.ctx, da, n, Float32(0.0), CHOL_ELEM_TPB)
+        var run = potrf_lower(self.k.ctx, da, ws, n, trace)
+        if run.info != 0:
+            self.k.ctx.synchronize()
             _ = ws^
-            _ = dwork^
-            _ = db^
             _ = da^
             _ = L^
-            return DChol(Float64(ld), li^)
+            return DChol(_neg_inf(), DMat(0, 0))
+        var dwork = self.k.ctx.enqueue_create_buffer[DType.float32](n + 1)
+        var ld = chol_logdet(self.k.ctx, da, dwork, n, trace, CHOL_ELEM_TPB)
+        var li = DMat(n, n)
+        self.k.ctx.enqueue_function[pj_identity_kernel](
+            li.p(), Int32(n), grid_dim=_blocks(n * n), block_dim=TPB
+        )
+        var db = self.k._sub(li)
+        trsm_lower(self.k.ctx, da, db, n, n, trace, "mcd.linv", CHOL_SOLVE_TPB)
+        # ws and dwork are idle after chol_logdet's wait; L returns to the
+        # pool, whose later users are ordered after trsm on this stream
+        _ = ws^
+        _ = dwork^
+        _ = db^
+        _ = da^
+        _ = L^
+        return DChol(Float64(ld), li^)
 
     def mahal_chol(self, X: DMat, loc: DMat, Li: DMat) raises -> DMat:
         """rowsum((Xc L^{-T})^2): the distances under P = L^{-T} L^{-1}."""

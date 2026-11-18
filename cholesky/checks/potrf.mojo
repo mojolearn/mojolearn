@@ -1531,19 +1531,9 @@ def logdet_kernel(
     _logdet_tree_body(parts, out_scalar, nb_in)
 
 
-def logdet_guarded_kernel(
-    info: MutPointer[Int32, MutAnyOrigin],
-    parts: MutPointer[Float32, MutAnyOrigin],
-    out_scalar: MutPointer[Float32, MutAnyOrigin],
-    nb_in: Int32,
-):
-    """`logdet_kernel` when the factor succeeded (`info[0] == 0`); nothing
-    otherwise, so a failed factor or a closed executor gate leaves
-    `out_scalar` as it was (cholesky/chol_ops.mojo). The whole block
-    returns before any barrier."""
-    if info[0] != Int32(0):
-        return
-    _logdet_tree_body(parts, out_scalar, nb_in)
+# TOMBSTONE: MOJOLEARN_IDN_CHOL_OPS_FIT (decided B arm, the executor Cholesky ops; L40S ba08dac006 14 cells B 0.91-1.10x, same speed) deleted 2026-11-17 by lane/fb12-loser-arms; code recoverable at 2203db7094.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_CHOL_OPS_FIT.fb12-loser-arms.patch; record in docs/TOMBSTONES.md.
+# (logdet_guarded_kernel, the ops' gated logdet tree)
 
 
 @always_inline
@@ -1606,25 +1596,9 @@ def enqueue_logdet(
     )
 
 
-def enqueue_logdet_guarded(
-    ctx: DeviceContext,
-    info: MutPointer[Int32, MutAnyOrigin],
-    diag: MutPointer[Float32, MutAnyOrigin],
-    parts: MutPointer[Float32, MutAnyOrigin],
-    out_scalar: MutPointer[Float32, MutAnyOrigin],
-    n: Int,
-) raises:
-    """`enqueue_logdet` whose tree stores `out_scalar` only when
-    `info[0] == 0` (the partials are scratch). Same words."""
-    var nb = logdet_blocks(n)
-    ctx.enqueue_function[logdet_part_kernel](
-        diag, parts, Int32(n),
-        grid_dim=((nb + LOGDET_TPB - 1) // LOGDET_TPB, 1, 1),
-        block_dim=(LOGDET_TPB, 1, 1),
-    )
-    ctx.enqueue_function[logdet_guarded_kernel](  # small-launch(nb: diagonal blocks): one block folds the n over 256 block partials by the aligned tree
-        info, parts, out_scalar, Int32(nb), grid_dim=(1, 1, 1), block_dim=(LOGDET_TPB, 1, 1),
-    )
+# TOMBSTONE: MOJOLEARN_IDN_CHOL_OPS_FIT (decided B arm, the executor Cholesky ops; L40S ba08dac006 14 cells B 0.91-1.10x, same speed) deleted 2026-11-17 by lane/fb12-loser-arms; code recoverable at 2203db7094.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_CHOL_OPS_FIT.fb12-loser-arms.patch; record in docs/TOMBSTONES.md.
+# (enqueue_logdet_guarded, the ops' gated logdet)
 
 
 # ===========================================================================

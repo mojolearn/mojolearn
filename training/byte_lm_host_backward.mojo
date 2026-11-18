@@ -62,10 +62,9 @@ DEFAULT training step and loss, beside the GPU columns' restored hand step
 (training/byte_lm.mojo): lane x7b deleted it on 2026-11-09 when the GPU
 columns moved to the captured program; with the hand step back as the GPU
 default, the program on a host session (training/byte_lm_host_program.mojo)
-would no longer give the GPU columns' words. The program arm is the same
-switch as on the GPUs, -D MOJOLEARN_BYTE_LM_PROGRAM_STEP
-(training/byte_lm_config.mojo BYTE_LM_PROGRAM_STEP), so each build has one
-route on every column. Restored unchanged from 5fff22515a except that
+would no longer give the GPU columns' words. The program arm
+(-D MOJOLEARN_BYTE_LM_PROGRAM_STEP) was deleted 2026-11-17 (lane
+fb12-loser-arms, L40S B 1.36x slower), so every column runs this step. Restored unchanged from 5fff22515a except that
 `byte_host_adamw` stays in training/byte_lm_host_execution.mojo and the
 unused import of training/chunked_lm_head_host.mojo (never called; not
 restored) is gone.

@@ -1,29 +1,17 @@
 # SPDX-License-Identifier: Apache-2.0
-"""The byte LM's two training routes give the same loss words on a tiny model.
+"""The byte LM's training step gives consistent loss words on a tiny model.
 
-The default build trains with the restored hand step (training/byte_lm.mojo,
-the 0.8.55 route); a build with -D MOJOLEARN_BYTE_LM_PROGRAM_STEP trains with
-lane x7's program step (one Program.fit per call). One installed wheel holds
-one route, so the comparison crosses two runs of this file:
-
-    MOJOLEARN_BYTE_LM_ROUTE_RECORD=<path>     write this build's loss words
-    MOJOLEARN_BYTE_LM_ROUTE_REFERENCE=<path>  compare them with the other
-                                              build's recorded words
-
-Without the reference the cross-route test skips; the within-build checks
-(evaluate before a step equals that step's loss; train_steps equals the same
-train_step calls word for word) run on either build.
-
-Within one build every column runs the same route (the switch lives in
-training/byte_lm_config.mojo): the CPU column's composed host step by default,
-its host program under the define. `test_host_and_device_give_the_same_words`
+Every column trains with the hand step (training/byte_lm.mojo, the 0.8.55
+route; the CPU column's composed host step gives its words). The checks:
+evaluate before a step equals that step's loss; train_steps equals the same
+train_step calls word for word; `test_host_and_device_give_the_same_words`
 trains the same tiny model on the GPU trainer and on the CPU column's
 `LanguageModelHostTrainer` in one process and requires the same loss, gradient,
 parameter and moment words.
 """
-import json
-import os
-
+# TOMBSTONE: MOJOLEARN_BYTE_LM_PROGRAM_STEP (decided B arm, L40S ba08dac006 lm-train-step bytes B 1.36x slower) deleted 2026-11-17 by lane/fb12-loser-arms; code recoverable at 2203db7094.
+# Restore: git apply experiments/removed/MOJOLEARN_BYTE_LM_PROGRAM_STEP.fb12-loser-arms.patch; record in docs/TOMBSTONES.md.
+# (test_both_routes_give_the_same_loss_words and route_words compared the hand and program builds.)
 import numpy as np
 import pytest
 
@@ -52,20 +40,6 @@ def words(values):
     return [int(w) for w in np.asarray(values, dtype=np.float32).view(np.uint32)]
 
 
-def route_words():
-    """Loss words of one tiny model: the evaluation before training, then
-    N_STEPS single steps, then the evaluation after them."""
-    data = batches()
-    trainer = model()
-    try:
-        before = trainer.evaluate(data[0])
-        steps = [trainer.train_step(data[k])['loss'] for k in range(N_STEPS)]
-        after = trainer.evaluate(data[0])
-    finally:
-        trainer.close()
-    return {'evaluate_before': words([before]), 'steps': words(steps), 'evaluate_after': words([after])}
-
-
 def test_evaluate_before_a_step_is_that_steps_loss():
     data = batches()
     trainer = model()
@@ -92,22 +66,6 @@ def test_train_steps_equals_the_same_train_step_calls():
     finally:
         single.close()
         multi.close()
-
-
-def test_both_routes_give_the_same_loss_words():
-    record = os.environ.get('MOJOLEARN_BYTE_LM_ROUTE_RECORD', '')
-    reference = os.environ.get('MOJOLEARN_BYTE_LM_ROUTE_REFERENCE', '')
-    if not record and not reference:
-        pytest.skip('set MOJOLEARN_BYTE_LM_ROUTE_RECORD / _REFERENCE to compare the hand and program builds')
-    got = route_words()
-    if record:
-        with open(record, 'w') as f:
-            json.dump(got, f, sort_keys=True)
-    if not reference:
-        pytest.skip('recorded this build\'s words; run the other build with MOJOLEARN_BYTE_LM_ROUTE_REFERENCE')
-    with open(reference) as f:
-        want = json.load(f)
-    assert got == want
 
 
 def _host_trainer():

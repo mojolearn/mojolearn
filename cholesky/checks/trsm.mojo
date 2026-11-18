@@ -317,20 +317,9 @@ def trsm_lower_sweep_kernel(
     _trsm_lower_sweep_kernel_body(l, b, n_in, nrhs_in, ld_in)
 
 
-def trsm_lower_sweep_guarded_kernel(
-    info: MutPointer[Int32, MutAnyOrigin],
-    l: MutPointer[Float32, MutAnyOrigin],
-    b: MutPointer[Float32, MutAnyOrigin],
-    n_in: Int32,
-    nrhs_in: Int32,
-    ld_in: Int32,
-):
-    """`trsm_lower_sweep_kernel` when `info[0] == 0`; the whole block returns before any
-    barrier otherwise (a failed factor or a closed executor gate,
-    cholesky/chol_ops.mojo). Same words."""
-    if info[0] != Int32(0):
-        return
-    _trsm_lower_sweep_kernel_body(l, b, n_in, nrhs_in, ld_in)
+# TOMBSTONE: MOJOLEARN_IDN_CHOL_OPS_FIT (decided B arm, the executor Cholesky ops; L40S ba08dac006 14 cells B 0.91-1.10x, same speed) deleted 2026-11-17 by lane/fb12-loser-arms; code recoverable at 2203db7094.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_CHOL_OPS_FIT.fb12-loser-arms.patch; record in docs/TOMBSTONES.md.
+# (trsm_lower_sweep_guarded_kernel, the ops' gated solve)
 
 
 #: lane/neighbors-apple (2026-09-28): `trsm_lower_sweep_kernel` with RB
@@ -440,20 +429,9 @@ def trsm_lower_multi_rhs_kernel(
     _trsm_lower_multi_rhs_kernel_body(l, b, n_in, nrhs_in, ld_in)
 
 
-def trsm_lower_multi_rhs_guarded_kernel(
-    info: MutPointer[Int32, MutAnyOrigin],
-    l: MutPointer[Float32, MutAnyOrigin],
-    b: MutPointer[Float32, MutAnyOrigin],
-    n_in: Int32,
-    nrhs_in: Int32,
-    ld_in: Int32,
-):
-    """`trsm_lower_multi_rhs_kernel` when `info[0] == 0`; the whole block returns before any
-    barrier otherwise (a failed factor or a closed executor gate,
-    cholesky/chol_ops.mojo). Same words."""
-    if info[0] != Int32(0):
-        return
-    _trsm_lower_multi_rhs_kernel_body(l, b, n_in, nrhs_in, ld_in)
+# TOMBSTONE: MOJOLEARN_IDN_CHOL_OPS_FIT (decided B arm, the executor Cholesky ops; L40S ba08dac006 14 cells B 0.91-1.10x, same speed) deleted 2026-11-17 by lane/fb12-loser-arms; code recoverable at 2203db7094.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_CHOL_OPS_FIT.fb12-loser-arms.patch; record in docs/TOMBSTONES.md.
+# (trsm_lower_multi_rhs_guarded_kernel, the ops' gated solve)
 
 
 #: lane neighbors-apple2 (2026-09-28): `trsm_lower_multi_rhs_kernel` at 256
@@ -647,20 +625,9 @@ def trsm_upper_ring_kernel(
     _trsm_upper_ring_kernel_body(l, b, n_in, nrhs_in, ld_in)
 
 
-def trsm_upper_ring_guarded_kernel(
-    info: MutPointer[Int32, MutAnyOrigin],
-    l: MutPointer[Float32, MutAnyOrigin],
-    b: MutPointer[Float32, MutAnyOrigin],
-    n_in: Int32,
-    nrhs_in: Int32,
-    ld_in: Int32,
-):
-    """`trsm_upper_ring_kernel` when `info[0] == 0`; the whole block returns before any
-    barrier otherwise (a failed factor or a closed executor gate,
-    cholesky/chol_ops.mojo). Same words."""
-    if info[0] != Int32(0):
-        return
-    _trsm_upper_ring_kernel_body(l, b, n_in, nrhs_in, ld_in)
+# TOMBSTONE: MOJOLEARN_IDN_CHOL_OPS_FIT (decided B arm, the executor Cholesky ops; L40S ba08dac006 14 cells B 0.91-1.10x, same speed) deleted 2026-11-17 by lane/fb12-loser-arms; code recoverable at 2203db7094.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_CHOL_OPS_FIT.fb12-loser-arms.patch; record in docs/TOMBSTONES.md.
+# (trsm_upper_ring_guarded_kernel, the ops' gated back solve)
 
 
 def trsm_upper_staged_kernel(

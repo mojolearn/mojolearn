@@ -284,7 +284,7 @@ def _check_configuration() -> Bool:
     # TOMBSTONE: MOJOLEARN_AUTOGRAD_OPTIM (promoted: the executor optimizer is the trainers' one update; the hand arm deleted) deleted 2026-11-08 by 75825f479c; code recoverable at c3b7dc42e6^.
     # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_OPTIM.patch
     # Restored 2026-11-09 by lane/r2-restore-unmeasured-defaults: the hand OP_OPT launch is the default again and
-    # -D MOJOLEARN_AUTOGRAD_OPTIM is the A/B arm (the executor optimizer), so the define is live: no refusal.
+    # -D MOJOLEARN_AUTOGRAD_OPTIM was the A/B arm (the executor optimizer); decided same speed 2026-11-17 and refused below.
     # TOMBSTONE: MOJOLEARN_AUTOGRAD_DATA (promoted: autograd/data.mojo epoch_order is the one epoch order; the hand launches deleted) deleted 2026-11-08 by 75825f479c; code recoverable at c3b7dc42e6^.
     # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_DATA.patch
     comptime assert not is_defined["MOJOLEARN_AUTOGRAD_DATA"](), "removed 2026-11-08 (lane/x3-mlp-rnn-predict-on-tape, 75825f479c): rnn_fit always takes its epoch order from autograd/data.mojo epoch_order (same launches, same key); the inline launches are deleted. Drop the define. Restore with experiments/removed/MOJOLEARN_AUTOGRAD_DATA.patch"
@@ -368,7 +368,8 @@ def _check_configuration() -> Bool:
     # MOJOLEARN_AFN_SAMBA_ALL: refusal removed 2026-11-15 (restored; Apple fast opt-in arm, default off, lane/restore-apple-fast-neural; see docs/TOMBSTONES.md Restored table)
     # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_GATHER_EPOCH_OFF.patch
     comptime assert not is_defined["MOJOLEARN_AUTOGRAD_GATHER_EPOCH_OFF"](), "removed 2026-11-15 (lane/expdel2-23-neural): AUTOGRAD_GATHER_EPOCH_OFF (old path) is gone; the default is kept; code at f96a014a39; restore: experiments/removed/MOJOLEARN_AUTOGRAD_GATHER_EPOCH_OFF.patch"
-    # MOJOLEARN_BYTE_LM_GENERIC_OPS: refusal removed 2026-11-15 (restored; owed B arm, see docs/TOMBSTONES.md Restored table)
+    # Restore: git apply experiments/removed/MOJOLEARN_BYTE_LM_GENERIC_OPS.fb12-loser-arms.patch
+    comptime assert not is_defined["MOJOLEARN_BYTE_LM_GENERIC_OPS"](), "removed 2026-11-17 (lane/fb12-loser-arms): BYTE_LM_GENERIC_OPS (decided B arm, generic OPS_EMBEDDING capture and no next-norm fusion; L40S ba08dac006 B 1.36x slower) is gone; the default path is the only one; code recoverable at 2203db7094; restore: experiments/removed/MOJOLEARN_BYTE_LM_GENERIC_OPS.fb12-loser-arms.patch"
     # MOJOLEARN_CNN_GENERIC_OPS: refusal removed 2026-11-15 (restored; owed B arm, see docs/TOMBSTONES.md Restored table)
     # Restore: git apply experiments/removed/MOJOLEARN_EMB_AUTO_SORT_MIN_CELLS.patch
     comptime assert not is_defined["MOJOLEARN_EMB_AUTO_SORT_MIN_CELLS"](), "removed 2026-11-15 (lane/expdel2-23-neural): EMB_AUTO_SORT_MIN_CELLS (arm) is gone; the default path is the only one; code at 2da7f516d6; restore: experiments/removed/MOJOLEARN_EMB_AUTO_SORT_MIN_CELLS.patch"
@@ -754,7 +755,8 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_BYTE_LM_RETAIN_EAGER"](), "removed 2026-11-15 (lane/expdel2-31-neural): BYTE_LM_RETAIN_EAGER (opt-in arm, Neural (byte LM eager scratch release); no A/B recorded) is gone; the default path is the only one; code recoverable at d879623fb2; restore: experiments/removed/MOJOLEARN_BYTE_LM_RETAIN_EAGER.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_BYTE_LM_COPY_EMB_HEAD.patch
     comptime assert not is_defined["MOJOLEARN_BYTE_LM_COPY_EMB_HEAD"](), "removed 2026-11-15 (lane/expdel2-31-neural): BYTE_LM_COPY_EMB_HEAD (opt-in arm, Neural (byte LM embedding / head weights); no A/B recorded) is gone; the default path is the only one; code recoverable at 9cc10dddc6; restore: experiments/removed/MOJOLEARN_BYTE_LM_COPY_EMB_HEAD.patch"
-    # MOJOLEARN_BYTE_LM_PROGRAM_STEP: refusal removed 2026-11-15 (restored; owed B arm, see docs/TOMBSTONES.md Restored table)
+    # Restore: git apply experiments/removed/MOJOLEARN_BYTE_LM_PROGRAM_STEP.fb12-loser-arms.patch
+    comptime assert not is_defined["MOJOLEARN_BYTE_LM_PROGRAM_STEP"](), "removed 2026-11-17 (lane/fb12-loser-arms): BYTE_LM_PROGRAM_STEP (decided B arm, lane x7 program step on every column; L40S ba08dac006 lm-train-step bytes B 1.36x slower) is gone; the default path is the only one; code recoverable at 2203db7094; restore: experiments/removed/MOJOLEARN_BYTE_LM_PROGRAM_STEP.fb12-loser-arms.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_NORM.patch
     comptime assert not is_defined["MOJOLEARN_IDN_NORM"](), "removed 2026-11-15 (lane/expdel2-31-neural): IDN_NORM (opt-in arm, Neural (host byte LM legacy norm block); no A/B recorded) is gone; the default path is the only one; code recoverable at dc698300f4; restore: experiments/removed/MOJOLEARN_IDN_NORM.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_NN53_HEAD_CHUNK512.patch
@@ -785,7 +787,8 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_AUTOGRAD_GEMM_DISPATCH_V1"](), "removed 2026-11-15 (lane/expdel2-29-neural): AUTOGRAD_GEMM_DISPATCH_V1 (old path) is gone; the default is kept; code at 8747cf5fa2; restore: experiments/removed/MOJOLEARN_AUTOGRAD_GEMM_DISPATCH_V1.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_MLP_UNFUSED.patch
     comptime assert not is_defined["MOJOLEARN_AUTOGRAD_MLP_UNFUSED"](), "removed 2026-11-15 (lane/expdel2-29-neural): AUTOGRAD_MLP_UNFUSED (arm) is gone; the default path is the only one; code at a03ced9b31; restore: experiments/removed/MOJOLEARN_AUTOGRAD_MLP_UNFUSED.patch"
-    # MOJOLEARN_AUTOGRAD_OPTIM: refusal removed 2026-11-15 (restored; owed B arm, see docs/TOMBSTONES.md Restored table)
+    # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_OPTIM.fb12-loser-arms.patch
+    comptime assert not is_defined["MOJOLEARN_AUTOGRAD_OPTIM"](), "removed 2026-11-17 (lane/fb12-loser-arms): AUTOGRAD_OPTIM (decided B arm, executor optimizer step_lr in mlp_fit / rnn_fit; L40S ba08dac006 B 0.99-1.01x, same speed) is gone; the default path is the only one; code recoverable at 2203db7094; restore: experiments/removed/MOJOLEARN_AUTOGRAD_OPTIM.fb12-loser-arms.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_GARCH_COOP_OFF.patch
     comptime assert not is_defined["MOJOLEARN_GARCH_COOP_OFF"](), "removed 2026-11-15 (lane/expdel2-29-neural): GARCH_COOP_OFF (old path) is gone; the default is kept; code at 92fec7163d; restore: experiments/removed/MOJOLEARN_GARCH_COOP_OFF.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_GARCH_COOP_OFF.patch
