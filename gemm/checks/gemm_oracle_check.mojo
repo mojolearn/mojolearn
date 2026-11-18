@@ -775,7 +775,7 @@ def check_leaf_partition_is_a_pure_function_of_k() raises:
     want_l.append(3907)
     # 4,000,000 is in the capped branch under both profiles (above 131,072
     # and above 524,288), where L = ceil(k / 1024) does not read K_LEAF_MIN.
-    comptime if not is_defined["MOJOLEARN_GEMM_FAST_LEAF512"]():
+    comptime if not (IDENTICAL_BUILD and is_defined["MOJOLEARN_GEMM_FAST_LEAF512"]()):
         # v1's own literals, read from the define and not from the constant:
         # a build without the arm whose K_LEAF_MIN is anything but 128 fails
         # here whatever the rows above (built from the constant) say.
