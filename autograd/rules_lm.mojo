@@ -4,9 +4,11 @@
 #
 # RESTORED 2026-11-13 (lane restore-byte-lm-hand-step) from 5b5490960d with the
 # byte LM's hand step, the default step again (AGENTS.md "A measured winner is
-# never deleted on reasoning"); lane x7 had deleted it on 2026-11-09. The
-# program step (training/byte_lm_program.mojo) is the B arm under
-# -D MOJOLEARN_BYTE_LM_PROGRAM_STEP. Body unchanged.
+# never deleted on reasoning"); lane x7 had deleted it on 2026-11-09. Body
+# unchanged. The program step's modules (training/byte_lm_program.mojo,
+# training/byte_lm_host_program.mojo) are gone:
+# TOMBSTONE: MOJOLEARN_BYTE_LM_PROGRAM_STEP (decided B arm, L40S ba08dac006 lm-train-step bytes B 1.36x slower) deleted 2026-11-17 by lane/fb12-loser-arms; code recoverable at 2203db7094.
+# Restore: git apply experiments/removed/MOJOLEARN_BYTE_LM_PROGRAM_STEP.fb12-loser-arms.patch; record in docs/TOMBSTONES.md.
 #
 # ---------------------------------------------------------------- launch inventory
 # The hand path, training/byte_lm.mojo::byte_gradient_device after the

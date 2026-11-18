@@ -755,7 +755,8 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_BYTE_LM_RETAIN_EAGER"](), "removed 2026-11-15 (lane/expdel2-31-neural): BYTE_LM_RETAIN_EAGER (opt-in arm, Neural (byte LM eager scratch release); no A/B recorded) is gone; the default path is the only one; code recoverable at d879623fb2; restore: experiments/removed/MOJOLEARN_BYTE_LM_RETAIN_EAGER.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_BYTE_LM_COPY_EMB_HEAD.patch
     comptime assert not is_defined["MOJOLEARN_BYTE_LM_COPY_EMB_HEAD"](), "removed 2026-11-15 (lane/expdel2-31-neural): BYTE_LM_COPY_EMB_HEAD (opt-in arm, Neural (byte LM embedding / head weights); no A/B recorded) is gone; the default path is the only one; code recoverable at 9cc10dddc6; restore: experiments/removed/MOJOLEARN_BYTE_LM_COPY_EMB_HEAD.patch"
-    # MOJOLEARN_BYTE_LM_PROGRAM_STEP: refusal removed 2026-11-15 (restored; owed B arm, see docs/TOMBSTONES.md Restored table)
+    # Restore: git apply experiments/removed/MOJOLEARN_BYTE_LM_PROGRAM_STEP.fb12-loser-arms.patch
+    comptime assert not is_defined["MOJOLEARN_BYTE_LM_PROGRAM_STEP"](), "removed 2026-11-17 (lane/fb12-loser-arms): BYTE_LM_PROGRAM_STEP (decided B arm, lane x7 program step on every column; L40S ba08dac006 lm-train-step bytes B 1.36x slower) is gone; the default path is the only one; code recoverable at 2203db7094; restore: experiments/removed/MOJOLEARN_BYTE_LM_PROGRAM_STEP.fb12-loser-arms.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_NORM.patch
     comptime assert not is_defined["MOJOLEARN_IDN_NORM"](), "removed 2026-11-15 (lane/expdel2-31-neural): IDN_NORM (opt-in arm, Neural (host byte LM legacy norm block); no A/B recorded) is gone; the default path is the only one; code recoverable at dc698300f4; restore: experiments/removed/MOJOLEARN_IDN_NORM.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_NN53_HEAD_CHUNK512.patch

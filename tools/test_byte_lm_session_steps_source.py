@@ -122,7 +122,7 @@ def test_cpu_column_takes_the_composed_step_like_the_gpu_columns():
     assert "# driver-loop: over the call's training steps (one composed host step each)" in fit
     assert fit.index('host_state_validate(') < fit.index('self.p = p^')
     evaluate = session.split('def evaluate(')[1].split('def rollback(')[0]
-    assert 'byte_host_loss_native(' in evaluate and 'byte_program_eval(' in evaluate
+    assert 'byte_host_loss_native(' in evaluate and 'byte_program_eval(' not in evaluate
     steps = session.split('def steps(')[1].split('def evaluate(')[0]
     assert 'self._fit(a[0], n_steps, a[1], completed)' in steps
     # the composed step itself is back (training/byte_lm_host_backward.mojo)

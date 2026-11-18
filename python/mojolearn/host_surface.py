@@ -1610,8 +1610,8 @@ FAMILIES = (
         host_modules=(
             "training/byte_lm_host.mojo",
             "training/byte_lm_host_backward.mojo",
-            "training/byte_lm_host_program.mojo",
-            "training/byte_lm_program.mojo",
+            # TOMBSTONE: MOJOLEARN_BYTE_LM_PROGRAM_STEP (decided B arm, L40S ba08dac006 lm-train-step bytes B 1.36x slower) deleted 2026-11-17 by lane/fb12-loser-arms; code recoverable at 2203db7094.
+            # Restore: git apply experiments/removed/MOJOLEARN_BYTE_LM_PROGRAM_STEP.fb12-loser-arms.patch; record in docs/TOMBSTONES.md.
             "autograd/block_step_host.mojo",
             "training/byte_lm_host_kernels.mojo",
             "gemm/host/gemm_oracle.mojo",

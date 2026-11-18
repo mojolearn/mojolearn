@@ -1149,8 +1149,7 @@ def byte_lm_train_step(mut mods: NativeModules, trainer: PythonObject, args: Pyt
 # x7-byte-lm-on-executor (2026-11-09): `train_steps(ids)` takes n_steps
 # batches in one call. The lock, the state admission, the shape, the ids
 # and the binding are admitted ONCE, then ONE native call (operation 1 with
-# the step count) runs every step: on the device column one Program.fit
-# over the batches (training/byte_lm_program.mojo).
+# the step count) runs every step: the hand step per batch (training/byte_lm.mojo).
 # TOMBSTONE: the binding's `while k < n_steps` step driver (the opening step, 'full' results and the stateless route one call each, the rest through operation 12) deleted 2026-11-09 by lane x7-byte-lm-on-executor; code recoverable at the deletion commit's parent.
 # Restore: git apply experiments/removed/BYTE_LM_HAND_STEP.patch
 
