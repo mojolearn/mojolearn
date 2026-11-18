@@ -6,7 +6,7 @@ from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from bindings.py_balanced import py_type
 from bindings.classical_arrays_door import classical_wrap_layout
-from bindings.native_array_storage_door import native_array_zeros
+from bindings.native_array_storage_door import native_array_zeros, native_array_unfilled
 from providers.python.estimator_binding_pyapi_door import estimator_binding
 from providers.python.x_neighbors_descriptor_pyapi_door import xn_admit
 from providers.python.x_neighbors_admission_pyapi_door import xn_is_module, xn_module
@@ -36,3 +36,18 @@ def pcs_array(shape: List[Int], typestr: String, context: PythonObject) raises -
     var layout = NativeArrayLayout(shape.copy(), 4)
     var store = native_array_zeros(native_array_code(typestr), layout.count)
     return classical_wrap_layout(store, layout, typestr, context)
+
+
+def pcs_output(shape: List[Int], context: PythonObject) raises -> PythonObject:
+    # Perf (lane fb12-rows, 2026-11-17; algos/poly-count-sketch fit_transform
+    # and transform): the float32 transform output is written in full by its
+    # one writer before it is read or escapes (the device route's single
+    # download of all rows x n_components, op_pcs_resident / op_pcs; the host
+    # route's pcs_item, which stores every cell of its row), so it takes no
+    # zero-fill pass: `native_array_unfilled`. Before: `pcs_array`'s
+    # zero-filled store, a host write over the whole output (100,000 x 256
+    # float32 = 102 MB per fit_transform on the board's fit block, cost per
+    # output element on every shape) that the download then overwrote.
+    var layout = NativeArrayLayout(shape.copy(), 4)
+    var store = native_array_unfilled(native_array_code("<f4"), layout.count)
+    return classical_wrap_layout(store, layout, "<f4", context)

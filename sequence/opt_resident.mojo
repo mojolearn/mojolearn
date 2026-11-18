@@ -22,6 +22,7 @@ handle indexes the pool and a closed handle's slot is reused. The Python
 entries (`opt_resident_open_py` ...) are `providers/python/sequence_opt_resident_pyapi.mojo`'s;
 this file takes typed handles, addresses and parameters only."""
 from std.memory import bitcast, unsafe_memcpy
+from std.sys import is_defined
 from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from max.gpu.host import DeviceBuffer
 
@@ -84,6 +85,17 @@ comptime _OPT_IDN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-30-neural.patch
 comptime OPT_PIPE_DOWN = _OPT_APPLE_FAST or _OPT_IDN
 comptime OPT_ZERO_OPEN = _OPT_APPLE_FAST or _OPT_IDN
+#: Experiment MOJOLEARN_OPT_FAST_ASYNC_DEV_STEP (lane fb12-rows, 2026-11-17; A/B owed, NVIDIA
+#: L40S; default off): the element-wise step on resident device params and device grads
+#: (`opt_resident_step_dev`) returns without draining the queue. The launch takes every scalar
+#: by value (`_opt_args`), allocates nothing and frees nothing, so nothing after it waits for the
+#: kernel except a read of the params or state, which drains first (`seq_tensor_download`,
+#: `opt_resident_move`, `opt_resident_close`, `seq_tensor_free` all synchronize the one
+#: in-order context). Lets the next step's host door overlap this step's kernel instead of
+#: running between drained steps (rows: algos rmsprop/adagrad/adamax/nadam/lion synthetic fit,
+#: 16 Mi floats x 10 steps; neighbor: any parameter count; a kernel fault surfaces at the next
+#: drain instead of in this step). Same launches, same order: no bit moves.
+comptime OPT_ASYNC_DEV_STEP = is_defined["MOJOLEARN_OPT_FAST_ASYNC_DEV_STEP"]()
 #: the pipelined download's chunk, floats (8 MB), a transfer granularity.
 # TOMBSTONE: MOJOLEARN_OPT_FAST_PIPE_CH (=524288 arm; the rab7 optimizer read-back batch DROPPED-slower, this arm untried)
 # deleted 2026-10-09 on lane/owed-deletions-D2: the -D override of the chunk; the default 1 << 21 is unchanged;
@@ -847,7 +859,8 @@ def opt_resident_step_dev(handle: Int, handles: List[Int], ip: List[Int],
         a.p4 = (a0.p4 + off) if u[2] else pj
         ex.launch[OP_OPT](a, sizes[j])
         off += sizes[j]
-    ex.sync()
+    comptime if not OPT_ASYNC_DEV_STEP:
+        ex.sync()
     sc.unsafe_store(0, st.pw1)
     sc.unsafe_store(1, st.pw2)
     sc.unsafe_store(2, st.mu_prod)

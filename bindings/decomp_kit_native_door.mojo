@@ -19,6 +19,10 @@ from std.memory import unsafe_memcpy
 from providers.python.array_metadata_pyapi_door import ArrayMetadata, ArrayPin
 from bindings.py_balanced import py_call, py_get, py_type, py_contains, py_setitem, py_setattr
 from bindings.classical_arrays_door import classical_typed, classical_address, classical_kind
+from bindings.classical_arrays_door import classical_wrap_layout
+from bindings.native_array_storage_door import native_array_unfilled
+from core.native_array_layout import NativeArrayLayout
+from providers.python.array_layout_boundary_unpack import native_shape_unpack
 from bindings.admitted_input_unpack import admit_x
 from std.python._cpython import GILReleased
 from core.linear_entry_table import LinearEntryKey
@@ -641,7 +645,13 @@ def decomp_kit_out_shape(mut door: DecompDoor, mut kit: DKit, a: Int, shape: Pyt
     """PACK `_M.out(shape)`: a fresh float32 Array of matrix a's words (a
     device matrix comes down once, the GIL released)."""
     var n = kit.size(a)
-    var result = classical_typed(shape, "<f4", door.output)
+    # fb12-rows (2026-11-17): both branches below write all n words (one
+    # download, or one memcpy) before the result is returned, so it takes
+    # the unfilled store; classical_typed zero-filled the n words first (an
+    # extra write pass over every public decomp output, per call). Same
+    # object type and slots; no bit moves.
+    var result = classical_wrap_layout(native_array_unfilled(String("f"), n),
+                                       NativeArrayLayout(native_shape_unpack(shape), 4), "<f4", door.output)
     if n:
         var dst = Int(py=classical_address(result))
         var py = Python()
