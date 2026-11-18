@@ -42,7 +42,12 @@ comptime NEURAL_CHAINS = 1
 
 def neural_partition[MIN_LEAF: Int](k: Int) -> Tuple[Int, Int]:
     """The cap is numerical profile data; it never reads m/n or hardware."""
-    comptime assert MIN_LEAF == 128 or MIN_LEAF == 256, "profile leaf (leaf 64 deleted: I04 loser)"
+    # MIN_LEAF == CONTRACT_K_LEAF_MIN: NEURAL_LEAF is the contract's leaf when no
+    # neural arm is on, and callers instantiate this with it even on a branch
+    # they do not take; under -D MOJOLEARN_GEMM_FAST_LEAF512 that is 512.
+    comptime assert (
+        MIN_LEAF == 128 or MIN_LEAF == 256 or MIN_LEAF == CONTRACT_K_LEAF_MIN
+    ), "profile leaf (leaf 64 deleted: I04 loser)"
     if k <= 0:
         return (1, 0)
     var leaf = min(k, MIN_LEAF)

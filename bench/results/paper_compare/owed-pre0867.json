@@ -672,6 +672,11 @@
    "define": "MOJOLEARN_GEMM_FAST_LOADAHEAD,MOJOLEARN_GEMM_FAST_LOADAHEAD_STEPS=4",
    "status": "define in code (gemm/checks/gemm_identical.mojo GEMM_KPACK_LOADAHEAD, read by identical_gemm_kpack_kernel's accumulate; IDENTICAL, every vendor column compiles the same loop): B = the admitted and the exact window of the packed GEMM kernel read the operands of 4 consecutive steps with one shared load per operand, then run their FMAs, steps ascending per cell; A = the default: the two loads of each step issued immediately before its FMAs. Same words, same step function, same per-cell order: digests must not move. Build every binding that imports gemm/checks/gemm_identical.mojo with the define. Report ptxas registers and spill bytes of the kpack kernel for A and B",
    "owed": "RUN"
+  },
+  "gemm-leaf512": {
+   "define": "MOJOLEARN_GEMM_FAST_LEAF512",
+   "status": "define in code (gemm/contract.mojo GEMM_LEAF512 -> CONTRACT_K_LEAF_MIN 512, profile mojolearn.identical.gemm.fp32.v2-leaf512, version 4; IDENTICAL, no vendor branch): B = the contract's shortest leaf is 512 (one chain a cell up to k = 512, no fold and no workspace there; a quarter of the leaf boundaries above); A = the default leaf 128. BITS CHANGE under B on every column together: it is the build-wide leaf, so every fold that reads contract_leaf_size moves (GEMM, the classical moments and Gram, CD and SVM dots, loss and optimizer folds, CNN, Mamba, transformer), device and host from the one constant. The define must reach the whole wheel set, the host column included. The digests of A and B differ by design; quality is read from both arms' metrics",
+   "owed": "RUN"
   }
  },
  "rows": [
@@ -3862,6 +3867,63 @@
     "gemm-loadahead-4"
    ],
    "decides": "each B depth at least as fast as the candidate on linalg.matmul at both cases (512 x 4096 x 4096: fewer tiles at the board's k; 3000 x 700 x 900: ragged tiles and a ragged last window, which the arm leaves on the shipped loop); a case that is slower blocks the promotion decided on the board rows; output words equal between the arms"
+  },
+  {
+   "id": "fx-gemm-leaf512",
+   "source": "lane fx-gemm-leaf512 (2026-11-19, idea 3 of ~/mojolearn-evidence/briefs-20261118/ideas-gemm-headroom-RESULT.md, SECOND PASS S1 and S6; report ~/mojolearn-evidence/briefs-20261118/fx-gemm-leaf512-RESULT.md)",
+   "kind": "ab",
+   "lane": [
+    "lm-train-step",
+    "lm-forward",
+    "mlp-train-step",
+    "gemm"
+   ],
+   "dataset": "*",
+   "rows": "full",
+   "vendor": "nvidia",
+   "b_arms": [
+    "gemm-leaf512"
+   ],
+   "decides": "promote B only if lm-train-step is faster on the NVIDIA L40S (same box, same job) and gemm (4096^3), lm-forward and mlp-train-step are not slower, with both arms' quality equal (loss and metric beside every time; the words differ by design: another rounding order of the same sums) and no fx-gemm-leaf512-shapes case slower. mlp-train-step is the control for the small MLP op, which keeps its own leaf 128 (autograd/small_mlp_op.mojo): a move there comes from the other products of the step. Expected (INFER, S1/S6): lm-train-step -0.9..-1.2 ms of 35.4; the firm part is structural (no fold and no second launch at k <= 512), the per-boundary saving is one extrapolated A/B point. Because the leaf is build-wide, a promotion also needs the classical rows of the next board run not slower (their P-keyed plans move). A loser is deleted with the four tombstone parts. On promotion every column and the host change together and the release's one verification records the new references"
+  },
+  {
+   "id": "fx-gemm-leaf512-shapes",
+   "source": "lane fx-gemm-leaf512 (2026-11-19, idea 3 of ~/mojolearn-evidence/briefs-20261118/ideas-gemm-headroom-RESULT.md, SECOND PASS S1 and S6; report ~/mojolearn-evidence/briefs-20261118/fx-gemm-leaf512-RESULT.md); the small-output shape of the brief, the neighbouring shape and the non-board size (no dimension targeting)",
+   "kind": "driver",
+   "driver": "gemm_shapes",
+   "vendor": "nvidia",
+   "shape": {
+    "cases": [
+     {
+      "m": 256,
+      "n": 256,
+      "k": 2048
+     },
+     {
+      "m": 1023,
+      "n": 1025,
+      "k": 2049
+     },
+     {
+      "m": 300,
+      "n": 300,
+      "k": 1500
+     },
+     {
+      "m": 2048,
+      "n": 384,
+      "k": 500
+     }
+    ]
+   },
+   "arms": [
+    "candidate",
+    "gemm-leaf512"
+   ],
+   "b_arms": [
+    "gemm-leaf512"
+   ],
+   "decides": "B at least as fast as the candidate on linalg.matmul at every case: 256 x 256 x 2048 (a small output, where the split plans' P-keyed rules move from 16 leaves to 4), 1023 x 1025 x 2049 (ragged tiles, a one-element last leaf), 300 x 300 x 1500 (non-board, a non-multiple of 512: P = 3) and 2048 x 384 x 500 (one chain a cell under B, four leaves under A); a slower case blocks the promotion decided on the board rows. The words differ between the arms by design"
   }
  ]
 }
