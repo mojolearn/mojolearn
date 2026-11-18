@@ -37,6 +37,7 @@ from checks.numerics import (
     pinned_mul_f32,
 )
 from neighbors.checks.pinned_distance_tile import _rt_load, _rt_step
+from checks.native_tests.kit import download_host_into, upload_host_into
 
 
 def boundary_kernel(words: MutPointer[UInt32, MutAnyOrigin], output: MutPointer[UInt32, MutAnyOrigin]):
@@ -145,22 +146,22 @@ def run_mul_rn_checks(ctx: DeviceContext) raises:
     var d_flush_got = ctx.enqueue_create_buffer[DType.uint32](MUL_WORDS)
     var d_flush_want = ctx.enqueue_create_buffer[DType.uint32](MUL_WORDS)
     var d_fused = ctx.enqueue_create_buffer[DType.uint32](1)
-    ctx.enqueue_copy(dst_buf=d_words, src_ptr=h_words.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_words64, src_ptr=h_words64.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_probe, src_ptr=h_probe.unsafe_ptr())
+    upload_host_into[DType.uint32](ctx, d_words, h_words)
+    upload_host_into[DType.uint64](ctx, d_words64, h_words64)
+    upload_host_into[DType.uint32](ctx, d_probe, h_probe)
     ctx.enqueue_function[mul_rn_kernel](
         d_words.unsafe_ptr(), d_words64.unsafe_ptr(), d_probe.unsafe_ptr(),
         d_got.unsafe_ptr(), d_want.unsafe_ptr(), d_got64.unsafe_ptr(), d_want64.unsafe_ptr(),
         d_flush_got.unsafe_ptr(), d_flush_want.unsafe_ptr(), d_fused.unsafe_ptr(),
         grid_dim=((MUL_PAIRS + 255) // 256, 1, 1), block_dim=(256, 1, 1),
     )
-    ctx.enqueue_copy(dst_ptr=h_got.unsafe_ptr(), src_buf=d_got)
-    ctx.enqueue_copy(dst_ptr=h_want.unsafe_ptr(), src_buf=d_want)
-    ctx.enqueue_copy(dst_ptr=h_got64.unsafe_ptr(), src_buf=d_got64)
-    ctx.enqueue_copy(dst_ptr=h_want64.unsafe_ptr(), src_buf=d_want64)
-    ctx.enqueue_copy(dst_ptr=h_flush_got.unsafe_ptr(), src_buf=d_flush_got)
-    ctx.enqueue_copy(dst_ptr=h_flush_want.unsafe_ptr(), src_buf=d_flush_want)
-    ctx.enqueue_copy(dst_ptr=h_fused.unsafe_ptr(), src_buf=d_fused)
+    download_host_into[DType.uint32](ctx, d_got, h_got)
+    download_host_into[DType.uint32](ctx, d_want, h_want)
+    download_host_into[DType.uint64](ctx, d_got64, h_got64)
+    download_host_into[DType.uint64](ctx, d_want64, h_want64)
+    download_host_into[DType.uint32](ctx, d_flush_got, h_flush_got)
+    download_host_into[DType.uint32](ctx, d_flush_want, h_flush_want)
+    download_host_into[DType.uint32](ctx, d_fused, h_fused)
     ctx.synchronize()
     var bad = 0
     var nan_pairs = 0
@@ -204,9 +205,6 @@ def run_mul_rn_checks(ctx: DeviceContext) raises:
         "NV MUL RN VIA FMA PASS", "f32 pairs", MUL_PAIRS, "f64 pairs", MUL64_PAIRS,
         "flush words", MUL_WORDS, "nan pairs (payload not judged)", nan_pairs, "fusion probe clean",
     )
-    _ = h_words^
-    _ = h_words64^
-    _ = h_probe^
     _ = d_words^
     _ = d_words64^
     _ = d_probe^
@@ -217,13 +215,6 @@ def run_mul_rn_checks(ctx: DeviceContext) raises:
     _ = d_flush_got^
     _ = d_flush_want^
     _ = d_fused^
-    _ = h_got^
-    _ = h_want^
-    _ = h_got64^
-    _ = h_want64^
-    _ = h_flush_got^
-    _ = h_flush_want^
-    _ = h_fused^
 
 
 def main() raises:
@@ -247,9 +238,9 @@ def main() raises:
             host.unsafe_ptr().unsafe_store(i, fixtures[i])
         var words = ctx.enqueue_create_buffer[DType.uint32](32)
         var output = ctx.enqueue_create_buffer[DType.uint32](8)
-        ctx.enqueue_copy(dst_buf=words, src_ptr=host.unsafe_ptr())
+        upload_host_into[DType.uint32](ctx, words, host)
         ctx.enqueue_function[boundary_kernel](words.unsafe_ptr(), output.unsafe_ptr(), grid_dim=(1, 1, 1), block_dim=(32, 1, 1))
-        ctx.enqueue_copy(dst_ptr=actual.unsafe_ptr(), src_buf=output)
+        download_host_into[DType.uint32](ctx, output, actual)
         ctx.synchronize()
         for row in range(8):
             var got = actual.unsafe_ptr().unsafe_load(row)
@@ -258,5 +249,4 @@ def main() raises:
                 raise Error("distance FMA violated round-then-flush contract")
         print("KNN DISTANCE FMA BOUNDARY PASS", "cases", 8)
         run_mul_rn_checks(ctx)
-        _ = host^
         _ = words^

@@ -105,6 +105,7 @@ from neighbors.checks.select_smallk_identical_candidate import (
     SMALLK_SELECT_TRIAL,
     smallk_select_launch,
 )
+from checks.native_tests.kit import download_host_into, upload_host_into
 
 comptime ROWS = 3
 
@@ -160,8 +161,8 @@ def run_arm(
         indices.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
         ROWS, length, k, True, arm,
     )
-    ctx.enqueue_copy(dst_ptr=host_d.unsafe_ptr(), src_buf=distances)
-    ctx.enqueue_copy(dst_ptr=host_i.unsafe_ptr(), src_buf=indices)
+    download_host_into[DType.float32](ctx, distances, host_d)
+    download_host_into[DType.uint32](ctx, indices, host_i)
     ctx.synchronize()
     got_d.clear()
     got_i.clear()
@@ -171,8 +172,6 @@ def run_arm(
     # Device buffers are freed at their last use; hold them past the copy.
     _ = distances^
     _ = indices^
-    _ = host_d^
-    _ = host_i^
 
 
 def cells_differ(a_d: List[UInt32], a_i: List[UInt32], b_d: List[UInt32], b_i: List[UInt32]) -> Int:
@@ -191,7 +190,7 @@ def check_case(length: Int, k: Int, reach: Bool) raises:
             for col in range(length):
                 host.unsafe_ptr().unsafe_store(row * length + col, bitcast[DType.float32](plant_bits(row, col, length)))
         var values = ctx.enqueue_create_buffer[DType.float32](ROWS * length)
-        ctx.enqueue_copy(dst_buf=values, src_ptr=host.unsafe_ptr())
+        upload_host_into[DType.float32](ctx, values, host)
         var values_ptr = values.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
 
         var base_d: List[UInt32] = []
