@@ -66,6 +66,7 @@ records it with `Tape.custom_nd` over the stage buffers its rule reads
 (`rules_mamba`, `rules_mamba3`, `rules_transformer`), see the API note.
 """
 from std.memory import bitcast
+from std.sys.compile import is_defined
 from max.gpu.host import DeviceBuffer, DeviceContext
 from sequence.ops import FP
 from sequence.exec_device import DeviceExec
