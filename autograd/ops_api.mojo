@@ -786,6 +786,11 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
             upload_cast(self.ex, buf + offs[i], srcs[i])
         if part == BLOCK_PART_WEIGHTS:
             self.steps_weights_changed(addr)
+        else:
+            # lane fx-llama-refuse-watermark: loaded state floats were not
+            # scanned by any step; an attention entry over them scans its
+            # whole cache at the next run (a no-op without the arm's define)
+            self.steps.attn_cache_written(addr)
 
     def download_block(mut self, h: Int, code: Int, ints: List[Int], part: Int, dsts: List[Int]) raises:
         """`part` (weights or float state) of block tensor h into the caller's

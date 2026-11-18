@@ -204,6 +204,13 @@ struct AttnStepArm(Movable):
         var q = ex.alloc(1)
         self.ex = ex^
         self.sc = BlockStepScratch()
+        # lane fx-llama-refuse-watermark: this arm's executor, scratch and
+        # state buffer are its own; every write of `kv` outside a step run
+        # is `_caches_in`, always followed by `attn_step_restart` or
+        # `attn_step_adopt` before any run, or `_shape`'s reallocation
+        # (which clears the scratch). Read only on a build with
+        # MOJOLEARN_LLAMA_FAST_REFUSE_WATERMARK.
+        self.sc.attn_cache_private = True
         self.ints = List[Int]()
         self.w = w
         self.kv = _fp(0)
@@ -259,6 +266,13 @@ struct AttnStepArm(Movable):
         var q = ex.alloc(1)
         self.ex = ex^
         self.sc = BlockStepScratch()
+        # lane fx-llama-refuse-watermark: this arm's executor, scratch and
+        # state buffer are its own; every write of `kv` outside a step run
+        # is `_caches_in`, always followed by `attn_step_restart` or
+        # `attn_step_adopt` before any run, or `_shape`'s reallocation
+        # (which clears the scratch). Read only on a build with
+        # MOJOLEARN_LLAMA_FAST_REFUSE_WATERMARK.
+        self.sc.attn_cache_private = True
         self.ints = List[Int]()
         self.w = w
         self.kv = _fp(0)
