@@ -172,8 +172,8 @@ def run_checks() raises:
     # ---- arm 2: the device arm must reproduce the host bits ------------
     var d_xe = ctx.enqueue_create_buffer[DType.float32](N)
     var d_xl = ctx.enqueue_create_buffer[DType.float32](N)
-    ctx.enqueue_copy(dst_buf=d_xe, src_ptr=h_xe.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_xl, src_ptr=h_xl.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, d_xe, h_xe)
+    upload_host_into[DType.float32](ctx, d_xl, h_xl)
     var o_exp = ctx.enqueue_create_buffer[DType.float32](N)
     var o_log = ctx.enqueue_create_buffer[DType.float32](N)
 
@@ -187,8 +187,8 @@ def run_checks() raises:
 
     var r_exp = ctx.enqueue_create_host_buffer[DType.float32](N)
     var r_log = ctx.enqueue_create_host_buffer[DType.float32](N)
-    ctx.enqueue_copy(dst_ptr=r_exp.unsafe_ptr(), src_buf=o_exp)
-    ctx.enqueue_copy(dst_ptr=r_log.unsafe_ptr(), src_buf=o_log)
+    download_host_into[DType.float32](ctx, o_exp, r_exp)
+    download_host_into[DType.float32](ctx, o_log, r_log)
     ctx.synchronize()
 
     var qe = r_exp.unsafe_ptr()
@@ -238,6 +238,7 @@ def run_checks() raises:
 # checks/ that no CI job ran. One process per check name in CI keeps any
 # fresh-process precondition. Device column only: the suite needs a GPU, so the CPU build never instantiates it.
 from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
+from checks.native_tests.kit import download_host_into, upload_host_into
 
 
 def run_cases(column: Column, mut report: Report):
