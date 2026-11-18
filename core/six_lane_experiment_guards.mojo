@@ -137,6 +137,9 @@ def _check_configuration() -> Bool:
     # lane fx-verdicts (2026-11-18): promoted to the default on every column (A/B ab2, NVIDIA L40S, digests equal on
     # all 36 cells); the old opt-in name is refused so a stale build line does not silently mean the default.
     comptime assert not is_defined["MOJOLEARN_NUMERICS_FAST_SQRT_COMPTIME_STEP"](), "promoted 2026-11-18 (lane/fx-verdicts, A/B ab2 NVIDIA L40S, wheel d652a4b0a1, one run per arm, digests equal on 36 cells, hdbscan/knn taxi 0.80-0.88): the comptime candidate step of portable_sqrtf is the default on every column; drop -D MOJOLEARN_NUMERICS_FAST_SQRT_COMPTIME_STEP, use -D MOJOLEARN_NUMERICS_FAST_SQRT_COMPTIME_STEP_OFF for the run-time loop"
+    # lane fx-verdicts (2026-11-18): MOJOLEARN_IDN_NV_FMA_ASM_OLD (checks/nv_fma_rn.mojo, reached by the neighbors,
+    # GEMM and attention kernels of several families) won its A/B and is the default; the old name is refused.
+    comptime assert not is_defined["MOJOLEARN_IDN_NV_FMA_ASM_OLD"](), "promoted 2026-11-18 (lane/fx-verdicts, A/B ab2 NVIDIA L40S, wheel d652a4b0a1, one run per arm, digests equal on all 30 cells, geomean 0.971): the inline-asm fma.rn.f32 helper is the NVIDIA identical default in checks/nv_fma_rn.mojo; drop -D MOJOLEARN_IDN_NV_FMA_ASM_OLD, use -D MOJOLEARN_IDN_NV_FMA_ASM_OFF for the llvm.nvvm.fma.rn.f intrinsic"
     # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C06_NORM_ROWS.patch
     comptime assert not is_defined["MOJOLEARN_CLASSICAL_C06_NORM_ROWS"](), "removed 2026-11-15 (lane/expdel2-07-base): CLASSICAL_C06_NORM_ROWS (Row norms (rows per norm block 2/4 for KNN / KDE / KMeans, IDENTICAL)) was opt-in arm; EXP:1519 RESTRUCTURED, A/B owed and never run; the opt-in arm is gone and the default path is unchanged; code recoverable at 526172a06e; see docs/TOMBSTONES.md"
     # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C06_SMALL_D_THREAD.patch
