@@ -436,16 +436,32 @@ comptime _XCNN_SHAPE_SLOT = "xcnn_shape_descriptor_v1"
 def xcnn_shape(value: PythonObject) raises -> List[Int]:
     """Native shape metadata, with subclass/descriptor hooks refused first."""
     var cls = py_type(value)
-    var namespace = _class_fields(cls)
-    var descriptor = py_get(namespace, "shape")
     # fx-rows (2026-11-18): the descriptor verdict (a member or getset
     # descriptor owned by exactly this class) is kept per class under the
     # type watcher (`class_record`, as `xcnn_tensor_layout` keeps its
     # verdict): any edit of the class or an ancestor misses and re-runs the
     # full check. It loaded the `types` module, two descriptor types and
     # `__objclass__` on every shape read (several per layer call).
+    # fx-cnn-layers (2026-11-18): with the verdict kept, the class's own
+    # `shape` entry IS that admitted data descriptor, so the generic
+    # attribute read (`PyObject_GenericGetAttr`: the type's MRO lookup, then
+    # the data descriptor's getter) calls the same getter with the same
+    # arguments as `descriptor.__get__(value, cls)` did. The class namespace
+    # (a `type.__dict__` descriptor call and its key-scan record), the
+    # by-name `shape` lookup, the bound `__get__` and its call envelope ran
+    # per shape read although the verdict already covered them; they now run
+    # at a miss only. The tuple is read with borrowed item reads.
     var mods = NativeModules()
-    if class_record(mods, _XCNN_SHAPE_SLOT, cls) is None:
+    var shape = PythonObject(None)
+    if class_record(mods, _XCNN_SHAPE_SLOT, cls) is not None:
+        var g = _xcnn_names()
+        var raw = cpython_table()[].PyObject_GenericGetAttr(value._obj_ptr, g[].keys[XK_SHAPE]._obj_ptr)
+        if not raw:
+            raise Python().cpython().unsafe_get_error()
+        shape = PythonObject(from_owned=raw)
+    else:
+        var namespace = _class_fields(cls)
+        var descriptor = py_get(namespace, "shape")
         var types = native_loaded_module("types")
         if (py_type(descriptor) is not types.MemberDescriptorType
                 and py_type(descriptor) is not py_type(xcnn_builtins().type.__dict__["__dict__"])):
@@ -453,15 +469,18 @@ def xcnn_shape(value: PythonObject) raises -> List[Int]:
         if descriptor.__objclass__ is not cls:
             raise Error("TypeError: CNN shape refuses subclasses")
         class_admit(mods, _XCNN_SHAPE_SLOT, cls, PythonObject(True))
-    var shape = py_call(descriptor.__get__, value, cls)
-    var b = xcnn_builtins()
-    if py_type(shape) is not b.tuple:
+        shape = py_call(descriptor.__get__, value, cls)
+    if not xcnn_exact(shape, XT_TUPLE):
         raise Error("TypeError: CNN shape requires an exact tuple")
     var out = List[Int]()
-    for i in range(len(shape)):  # driver-loop: snapshot native shape words
-        if py_type(shape[i]) is not b.int or Int(py=shape[i]) < 0:
+    var t = cpython_table()
+    var count = t[].PyTuple_Size(shape._obj_ptr)
+    for i in range(count):  # driver-loop: snapshot native shape words
+        var item = PythonObject(from_borrowed=t[].PyTuple_GetItem(shape._obj_ptr, i))
+        if not xcnn_exact(item, XT_INT) or Int(py=item) < 0:
             raise Error("TypeError: CNN dimensions must be nonnegative native integers")
-        out.append(Int(py=shape[i]))
+        out.append(Int(py=item))
+    _ = shape  # the borrowed items above are the tuple's: keep it past the last read
     return out^
 
 
@@ -486,7 +505,7 @@ def xcnn_tuple(shape: List[Int]) raises -> PythonObject:
 
 def xcnn_is_t(value: PythonObject, context: PythonObject) raises -> Bool:
     """`isinstance(value, DeviceTensor)`."""
-    if py_type(value) is not context["xcnn_tensor_class"]:
+    if py_type(value) is not xcnn_item(context, XK_TENSOR_CLASS):
         return False
     xcnn_tensor_layout(context)
     return True
@@ -496,7 +515,7 @@ comptime _XCNN_TENSOR_LAYOUT_SLOT = "xcnn_tensor_layout_v1"
 
 
 def xcnn_tensor_layout(context: PythonObject) raises:
-    var cls = context["xcnn_tensor_class"]
+    var cls = xcnn_item(context, XK_TENSOR_CLASS)
     # p3-cnn-sequence-tsa: the verdict is kept per class under a type watcher
     # (`class_record`; any edit of the class or an ancestor misses), so the
     # MRO / namespace / slot walk runs once, not 3-8 times per layer call.
@@ -528,24 +547,55 @@ def xcnn_tensor_layout(context: PythonObject) raises:
     class_admit(mods, _XCNN_TENSOR_LAYOUT_SLOT, cls, PythonObject(True))
 
 
+def _xcnn_slot_name(name: String) raises -> Int:
+    """The held-name index of a tensor storage slot."""
+    if name == "h":
+        return XK_H
+    if name == "shape":
+        return XK_SHAPE
+    if name == "b":
+        return XK_B
+    if name == "_host":
+        return XK_HOST
+    if name == "_base":
+        return XK_BASE
+    raise Error("TypeError: CNN tensor has no storage slot " + name)
+
+
 def _xcnn_slot_raw(value: PythonObject, name: String, context: PythonObject) raises -> PythonObject:
     """A tensor storage slot read after this operation ran
     `xcnn_tensor_layout` (which already compared every slot descriptor with
     its import-time identity): the exact-class check and the member
     descriptor read only. No Python code runs between that check and this
     read, so the class and its descriptors cannot have changed."""
-    var cls = context["xcnn_tensor_class"]
-    if py_type(value) is not cls:
+    # fx-cnn-layers (2026-11-18): the layout check proved the class's own
+    # entry for each slot name is the import-time member descriptor and that
+    # no ancestor overrides attribute access, so the generic attribute read
+    # (`PyObject_GenericGetAttr`: MRO lookup of the held name, then that data
+    # descriptor's getter) is the same getter call `slots[name].__get__(value,
+    # cls)` made. Per read it took two context reads by a built str, a third
+    # for the slot, a bound `__get__` object and a call envelope (about 4k
+    # instructions; a resident pool forward did eight to ten of them).
+    var g = _xcnn_names()
+    if py_type(value) is not xcnn_item(context, XK_TENSOR_CLASS):
         raise Error("TypeError: CNN tensor requires the connected native storage class")
-    return py_call(context["xcnn_tensor_slots"][PythonObject(name)].__get__, value, cls)
+    var raw = cpython_table()[].PyObject_GenericGetAttr(value._obj_ptr, g[].keys[_xcnn_slot_name(name)]._obj_ptr)
+    if not raw:
+        raise Python().cpython().unsafe_get_error()
+    return PythonObject(from_owned=raw)
 
 
 def _xcnn_set_raw(value: PythonObject, name: String, item: PythonObject, context: PythonObject) raises:
     """A tensor storage slot write after `xcnn_tensor_layout` (see
-    `_xcnn_slot_raw`)."""
-    if py_type(value) is not context["xcnn_tensor_class"]:
+    `_xcnn_slot_raw`): `PyObject_GenericSetAttr` finds the same member
+    descriptor on the class and calls its setter, as `slots[name].__set__(
+    value, item)` did."""
+    var g = _xcnn_names()
+    if py_type(value) is not xcnn_item(context, XK_TENSOR_CLASS):
         raise Error("TypeError: CNN tensor requires the connected native storage class")
-    _ = py_call(context["xcnn_tensor_slots"][PythonObject(name)].__set__, value, item)
+    if cpython_table()[].PyObject_GenericSetAttr(value._obj_ptr, g[].keys[_xcnn_slot_name(name)]._obj_ptr,
+                                                 item._obj_ptr) != 0:
+        raise Python().cpython().unsafe_get_error()
 
 
 def xcnn_tensor_slot(value: PythonObject, name: String, context: PythonObject) raises -> PythonObject:
@@ -581,15 +631,21 @@ def _xcnn_tensor_admit_raw(value: PythonObject, context: PythonObject) raises ->
     """`xcnn_tensor_admit` after this operation's `xcnn_tensor_layout`;
     returns the admitted handle slot (None or a positive int) so a caller
     does not read it again."""
-    var b = xcnn_builtins()
+    # fx-cnn-layers (2026-11-18): exact-type tests against the held builtin
+    # types and borrowed tuple item reads; it read `b.int` by name and built
+    # two index objects per dimension.
     var shape = _xcnn_slot_raw(value, "shape", context)
-    if py_type(shape) is not b.tuple:
+    if not xcnn_exact(shape, XT_TUPLE):
         raise Error("TypeError: CNN tensor shape requires an exact tuple")
-    for i in range(len(shape)):  # driver-loop: native tensor dimensions before arithmetic
-        if py_type(shape[i]) is not b.int or Int(py=shape[i]) < 0:
+    var t = cpython_table()
+    var count = t[].PyTuple_Size(shape._obj_ptr)
+    for i in range(count):  # driver-loop: native tensor dimensions before arithmetic
+        var item = PythonObject(from_borrowed=t[].PyTuple_GetItem(shape._obj_ptr, i))
+        if not xcnn_exact(item, XT_INT) or Int(py=item) < 0:
             raise Error("TypeError: CNN tensor dimensions require nonnegative integers")
+    _ = shape  # the borrowed items above are the tuple's: keep it past the last read
     var handle = _xcnn_slot_raw(value, "h", context)
-    if handle is not None and (py_type(handle) is not b.int or Int(py=handle) < 1):
+    if handle is not None and (not xcnn_exact(handle, XT_INT) or Int(py=handle) < 1):
         raise Error("TypeError: CNN tensor handle requires a positive native integer")
     _ = xcnn_module_entries(_xcnn_slot_raw(value, "b", context), context)
     if handle is None:
@@ -604,7 +660,24 @@ def xcnn_on_dev(entries: PythonObject, value: PythonObject, context: PythonObjec
     # `xcnn_is_t` ran the layout check; the admission and slot reads reuse it.
     # The admitted handle is returned, not read a second time (fx-rows).
     var handle = _xcnn_tensor_admit_raw(value, context)
-    return handle is not None and _xcnn_slot_raw(value, "b", context) is entries["module"]
+    return handle is not None and _xcnn_slot_raw(value, "b", context) is xcnn_item(entries, XK_MODULE)
+
+
+def xcnn_dev_word(entries: PythonObject, value: PythonObject, context: PythonObject) raises -> Int:
+    """`xcnn_on_dev` for a `value` this operation already found to be a
+    tensor (`xcnn_is_t` returned True for it and no Python code ran since):
+    its resident handle word when it is admitted and resident on this mixed
+    binding, else 0 (an admitted handle is 1 or more). The same admission
+    and the same verdict; the caller gets the word it would read from
+    `value.h` next, and the class test and layout check `xcnn_is_t` already
+    made for this value are not made a second time (fx-cnn-layers,
+    2026-11-18)."""
+    if not xcnn_mixed(entries):
+        return 0
+    var handle = _xcnn_tensor_admit_raw(value, context)
+    if handle is None or _xcnn_slot_raw(value, "b", context) is not xcnn_item(entries, XK_MODULE):
+        return 0
+    return Int(py=handle)
 
 
 def xcnn_tensor(module: PythonObject, shape: PythonObject, h: PythonObject, host: PythonObject, base: PythonObject,
