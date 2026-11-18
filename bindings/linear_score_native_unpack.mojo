@@ -6,7 +6,7 @@
 # process-default metrics binding (`r2_score`, the kernel
 # `metrics.r2_score` runs), in one call. The same kernels in the same order
 # as the Python path it replaces, so the score keeps its bits.
-from std.math import isfinite
+from core.host_finite_scan import host_all_finite_f32
 from std.memory import unsafe_memcpy
 from std.python import Python, PythonObject
 from bindings.native_loaded_module_door import native_loaded_module
@@ -41,11 +41,11 @@ def _linear_finite(values: PythonObject, count: Int, name: String) raises:
     # The r2 kernel's NaN answer would be a washed sentinel: refused first,
     # as metrics.r2_score refuses it.
     var p = _F32P(unsafe_from_address=Int(py=classical_address(values)))
-    for i in range(count):  # driver-loop: over the score's validated host input words
-        if not isfinite(p[i]):
-            raise Error("mojolearn metrics: " + name + " contains NaN or infinity; refused here "
-                        + "(metrics/README.md HAND-OFF ask 3) rather than letting it reach a kernel "
-                        + "whose answer for it is a washed sentinel")
+    # parallel: one SIMD finiteness pass across host cores (it was a serial scalar walk)
+    if not host_all_finite_f32(p, count):
+        raise Error("mojolearn metrics: " + name + " contains NaN or infinity; refused here "
+            + "(metrics/README.md HAND-OFF ask 3) rather than letting it reach a kernel "
+            + "whose answer for it is a washed sentinel")
 
 
 def linear_regressor_score(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:

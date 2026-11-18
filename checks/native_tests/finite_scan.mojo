@@ -11,6 +11,11 @@ Independent fixtures use host_parallelize with task-local storage. The
 large native scans retain their own production work splitting; no thread
 limit, scan override, Python object, Python import or estimator is involved.
 Each fixture needs at most about 2 MiB of input storage.
+
+The general view scans (`host_all_finite_view`, `host_all_finite_nd`) add six
+layouts on the same grid: C order in the other byte order, row-padded float64,
+column-strided float64, a rank-3 view with a padded middle axis, float16 and
+Fortran order; at most about 4 MiB per fixture.
 """
 from std.memory import bitcast
 from core.host_parallel import host_parallelize
@@ -18,6 +23,8 @@ from core.host_finite_scan import (
     host_all_finite_f32,
     host_all_finite_f64,
     host_all_finite_f32_strided,
+    host_all_finite_view,
+    host_all_finite_nd,
 )
 from checks.native_tests.runner import Check, Column, Report
 
@@ -26,6 +33,13 @@ comptime COLS = 64
 comptime WORDS = ROWS * COLS
 comptime PER_LAYOUT = 19
 comptime FIXTURES = 4 * PER_LAYOUT
+#: The general view scans: 6 layouts, each with 6 positions x 2 non-finite
+#: words and one all-finite fixture.
+comptime GENERAL_LAYOUTS = 6
+comptime PER_GENERAL = 13
+comptime GENERAL_FIXTURES = GENERAL_LAYOUTS * PER_GENERAL
+#: Bytes before the view, so its words sit at an odd address.
+comptime GENERAL_LEAD = 9
 
 
 def _require(ok: Bool, message: String) raises:
@@ -118,10 +132,105 @@ def _scan64(variant: Int) raises:
     _ = storage
 
 
+def _general_width(layout: Int) -> Int:
+    if layout == 1 or layout == 2:
+        return 8
+    if layout == 4:
+        return 2
+    return 4
+
+
+def _general_offset(layout: Int, r: Int, c: Int) -> Int:
+    """The byte offset of logical element (r, c) of the ROWS x COLS grid."""
+    if layout == 0:
+        return (r * COLS + c) * 4  # C order, the other byte order
+    if layout == 1:
+        return r * 2 * COLS * 8 + c * 8  # float64 rows with row padding
+    if layout == 2:
+        return r * COLS * 16 + c * 16  # float64, every second word
+    if layout == 3:
+        return (r // 4) * (8 * COLS * 4) + (r % 4) * (2 * COLS * 4) + c * 4  # rank 3, padded middle axis
+    if layout == 4:
+        return (r * COLS + c) * 2  # float16, C order
+    return (r + c * ROWS) * 4  # Fortran order
+
+
+def _general_put(mut storage: List[UInt8], at: Int, value: UInt64, width: Int, native: Bool):
+    for b in range(width):
+        var slot = b if native else width - 1 - b
+        storage[at + slot] = UInt8((value >> UInt64(8 * b)) & UInt64(0xFF))
+
+
+def _scan_general(layout: Int, variant: Int) raises:
+    """One fixture of the general view scans (`host_all_finite_view`,
+    `host_all_finite_nd`). The storage is all 0xFF bytes (a NaN at every
+    width and byte order), so padding the view skips must be ignored; the
+    view's own words are finite except the one the variant plants."""
+    var width = _general_width(layout)
+    var native = layout != 0
+    var span = _general_offset(layout, ROWS - 1, COLS - 1) + width
+    var storage = List[UInt8](length=GENERAL_LEAD + span + 8, fill=UInt8(0xFF))
+    var finite32: List[UInt64] = [0, 0x80000001, 0x7F7FFFFF, 0x3FA00000]
+    var finite64: List[UInt64] = [0, 0x8000000000000001, 0x7FEFFFFFFFFFFFFF, 0x3FF4000000000000]
+    var finite16: List[UInt64] = [0, 0x8001, 0x7BFF, 0x3C00]
+    var bad32: List[UInt64] = [0x7F800000, 0xFFC00000]
+    var bad64: List[UInt64] = [0x7FF0000000000000, 0xFFF8000000000000]
+    var bad16: List[UInt64] = [0x7C00, 0xFE00]
+    for r in range(ROWS):
+        for c in range(COLS):
+            var which = (r * COLS + c) % 4
+            var word = finite32[which]
+            if width == 8:
+                word = finite64[which]
+            elif width == 2:
+                word = finite16[which]
+            _general_put(storage, GENERAL_LEAD + _general_offset(layout, r, c), word, width, native)
+    if variant < 12:
+        var position = _position(variant // 2)
+        var bad = bad32[variant % 2]
+        if width == 8:
+            bad = bad64[variant % 2]
+        elif width == 2:
+            bad = bad16[variant % 2]
+        _general_put(storage, GENERAL_LEAD + _general_offset(layout, position // COLS, position % COLS),
+                     bad, width, native)
+    var ptr = storage.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin]()
+    var addr = Int(ptr + GENERAL_LEAD)
+    var finite = False
+    if layout == 0:
+        var shape: List[Int] = [ROWS, COLS]
+        var strides: List[Int] = [COLS * 4, 4]
+        finite = host_all_finite_nd(addr, shape, strides, 4, False)
+    elif layout == 1:
+        finite = host_all_finite_view(addr, 2 * COLS * 8, 8, ROWS, COLS, 8, True)
+    elif layout == 2:
+        finite = host_all_finite_view(addr, COLS * 16, 16, ROWS, COLS, 8, True)
+    elif layout == 3:
+        var shape: List[Int] = [ROWS // 4, 4, COLS]
+        var strides: List[Int] = [8 * COLS * 4, 2 * COLS * 4, 4]
+        finite = host_all_finite_nd(addr, shape, strides, 4, True)
+    elif layout == 4:
+        finite = host_all_finite_view(addr, COLS * 2, 2, ROWS, COLS, 2, True)
+    else:
+        var shape: List[Int] = [ROWS, COLS]
+        var strides: List[Int] = [4, ROWS * 4]
+        finite = host_all_finite_nd(addr, shape, strides, 4, True)
+    _require(finite == (variant == 12), "general view layout/position verdict")
+    _ = storage
+
+
 def run_checks() raises:
-    var failed = List[Int](length=FIXTURES, fill=0)
+    var failed = List[Int](length=FIXTURES + GENERAL_FIXTURES, fill=0)
     var failures_ptr = failed.unsafe_ptr()
     def task(unit: Int) {imm failures_ptr}:
+        if unit >= FIXTURES:
+            var general = unit - FIXTURES
+            try:
+                _scan_general(general // PER_GENERAL, general % PER_GENERAL)
+            except error:
+                print("FAIL finite_scan general layout", general // PER_GENERAL, "variant", general % PER_GENERAL, String(error))
+                failures_ptr.unsafe_store(unit, 1)
+            return
         var layout = unit // PER_LAYOUT
         var variant = unit % PER_LAYOUT
         try:
@@ -132,12 +241,12 @@ def run_checks() raises:
         except error:
             print("FAIL finite_scan layout", layout, "variant", variant, String(error))
             failures_ptr.unsafe_store(unit, 1)
-    host_parallelize(task, FIXTURES)
+    host_parallelize(task, FIXTURES + GENERAL_FIXTURES)
     var failures = 0
     for value in failed:
         failures += value
-    _require(failures == 0, "finite_scan failed " + String(failures) + " of " + String(FIXTURES) + " fixtures")
-    print("PASS finite_scan:", FIXTURES, "native fixtures, 262144 words, 4 layouts, parallel")
+    _require(failures == 0, "finite_scan failed " + String(failures) + " of " + String(FIXTURES + GENERAL_FIXTURES) + " fixtures")
+    print("PASS finite_scan:", FIXTURES + GENERAL_FIXTURES, "native fixtures, 262144 words, 10 layouts, parallel")
 
 
 # Registered by lane checks-register (2026-11-16): it was a standalone main()
