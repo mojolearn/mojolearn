@@ -504,5 +504,164 @@ class Wiring(unittest.TestCase):
         self.assertIn('env["PC_ROWS"]', src)
 
 
+def _board(path, ids, status="done"):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    Path(path).write_text(json.dumps({"schema": "mojolearn-bench-board/1", "races": {i: {"status": status} for i in ids}}))
+
+
+class PodJob2(unittest.TestCase):
+    """lane fx-pod-job2 (2026-11-18, nvc-ab-20261118T201200Z-d21ba0): 12 of 14 B arms were never timed (every
+    worker race failed its smoke on a refused set_mempolicy, tools/test_numa_place.py), tg-prep sent the smoke ids to
+    the full-row plan, no candidate board was written and the job said only 'no race to time'. A fake box dir with two
+    arms: both smoked, both timed, the board written, a non-zero exit when one arm cannot be timed."""
+
+    LISTED = "classical/knn/taxi/rows=full"
+    RA, RB = "neural/lm-forward/bytes/shape=full", "trees/rf/istella/rows=full"
+
+    def fake_box(self, td):
+        res = os.path.join(td, "res")
+        tg, tgo = os.path.join(res, "plan-tg"), os.path.join(res, "plan-tg-owed")
+        for d in (tg, tgo, os.path.join(res, "logs")):
+            os.makedirs(d, exist_ok=True)
+        Path(tg, "race-ids-full.txt").write_text(self.LISTED + "\n")
+        Path(tg, "race-ids-pass.txt").write_text(self.LISTED + "\n")
+        units = []
+        for arm, rid in (("arm-a", self.RA), ("arm-b", self.RB)):
+            f = os.path.join(tgo, "ids-%s-full.txt" % arm)
+            Path(f).write_text(rid + "\n")
+            Path(f + ".pass").write_text(rid + "\n")          # its candidate smoke passed
+            Path(f + ".pass.base").write_text(rid + "\n")
+            units.append("%s\tfull\t%s" % (arm, f))
+        units.insert(0, "candidate\tfull\t%s" % os.path.join(tgo, "ids-candidate-full.txt"))
+        Path(tgo, "units.tsv").write_text("\n".join(units) + "\n")
+        _board(os.path.join(res, "board-tg", "board.json"), [self.LISTED])
+        for arm, rid in (("arm-a", self.RA), ("arm-b", self.RB)):
+            _board(os.path.join(res, "board-tg-ab-%s-full" % arm, "board.json"), [rid])
+            _board(os.path.join(res, "board-tg-ab-%s-base-full" % arm, "board.json"), [rid])
+        return res, tg, tgo
+
+    def check(self, res, tg, tgo, *extra):
+        import io
+        from contextlib import redirect_stdout
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            rc = TR.main(["timed-check", "--results", res, "--ids", os.path.join(tg, "race-ids-full.txt"),
+                          "--units", os.path.join(tgo, "units.tsv")] + list(extra))
+        return rc, buf.getvalue()
+
+    def test_two_arms_timed_then_each_way_one_is_not(self):
+        with tempfile.TemporaryDirectory() as td:
+            res, tg, tgo = self.fake_box(td)
+            rc, out = self.check(res, tg, tgo)
+            self.assertEqual(rc, 0, out)
+            self.assertIn("TG-TIMED-CHECK untimed=0", out)
+            # arm-a: no race passed its smoke (the d21ba0 job's 12 arms), with the first failure named
+            Path(tgo, "ids-arm-a-full.txt.pass").write_text("")
+            Path(res, "logs", "pass-ids-tg-ab-arm-a.log").write_text(
+                "PAPER-PASS-IDS-FAILED %s: smoke failed: -: preflight FAILED: worker_exited\n" % self.RA)
+            # arm-b: its venv never came (no board)
+            shutil.rmtree(os.path.join(res, "board-tg-ab-arm-b-full"))
+            Path(res, "logs", "install-tg-arm-b.log").write_text("pip: no space left on device\n")
+            rc, out = self.check(res, tg, tgo)
+            self.assertEqual(rc, 3, out)
+            self.assertIn("UNTIMED arm-a: full rows: none of its 1 race(s) passed the smoke: %s" % self.RA, out)
+            self.assertIn("worker_exited", out)
+            self.assertIn("UNTIMED arm-b: full rows: no board board-tg-ab-arm-b-full", out)
+            self.assertIn("no space left", out)
+            self.assertNotIn("UNTIMED candidate", out)
+            # a split submit checks only its arms
+            rc, out = self.check(res, tg, tgo, "--arms", "arm-a")
+            self.assertEqual(rc, 3)
+            self.assertNotIn("arm-b", out)
+
+    def test_untimed_base_and_candidate(self):
+        with tempfile.TemporaryDirectory() as td:
+            res, tg, tgo = self.fake_box(td)
+            _board(os.path.join(res, "board-tg-ab-arm-a-base-full", "board.json"), [self.RA], status="failed")
+            Path(tg, "race-ids-pass.txt").write_text("")
+            shutil.rmtree(os.path.join(res, "board-tg"))
+            Path(res, "logs", "pass-ids-tg.log").write_text("PAPER-PASS-IDS-FAILED %s: smoke failed\n" % self.LISTED)
+            rc, out = self.check(res, tg, tgo)
+            self.assertEqual(rc, 3)
+            self.assertIn("UNTIMED candidate: none of its 1 listed race(s) passed the smoke", out)
+            self.assertIn("UNTIMED arm-a: full rows: its base (the candidate) has no race done", out)
+            self.assertIn("failed 1", out)
+
+    def test_empty_board_names_the_host_and_is_kept_or_replaced(self):
+        with tempfile.TemporaryDirectory() as td:
+            probe = os.path.join(td, "host-probe.json")
+            Path(probe).write_text(json.dumps({"host_id": "h1/GPU-x", "cpu_model": "c"}))
+            out = os.path.join(td, "board-tg")
+            self.assertEqual(TR.main(["empty-board", "--out", out, "--host-probe", probe, "--why", "w"]), 0)
+            doc = json.loads(Path(out, "board.json").read_text())
+            self.assertEqual(doc["races"], {})
+            self.assertEqual(doc["placeholder"], "w")
+            self.assertEqual(TR.PC.board_host_ids(doc), {"h1/GPU-x"})        # the compare names this job's host
+            _board(os.path.join(out, "board.json"), [self.LISTED])
+            self.assertEqual(TR.main(["empty-board", "--out", out, "--host-probe", probe]), 0)
+            self.assertIn(self.LISTED, json.loads(Path(out, "board.json").read_text())["races"])   # a real board stays
+
+    def test_prep_groups_take_full_ids_only(self):
+        with tempfile.TemporaryDirectory() as td:
+            a = os.path.join(td, "a.txt")
+            Path(a).write_text("algos/cnn-clf/synthetic/rows=2000\nneural/lm-forward/bytes/shape=small\n"
+                               "algos/cnn-clf/synthetic/rows=full\nneural/lm-forward/bytes/shape=full\n")
+            self.assertEqual(TR.main(["prep-groups", "--ids", a, "--out-dir", os.path.join(td, "g")]), 0)
+            got = sorted(x for f in os.listdir(os.path.join(td, "g"))
+                         for x in Path(td, "g", f).read_text().split())
+            self.assertEqual(got, ["algos/cnn-clf/synthetic/rows=full", "neural/lm-forward/bytes/shape=full"])
+
+    def test_job_wiring(self):
+        job = Path(JOB).read_text()
+        prep = job[job.index("    if part tg-prep; then"):job.index("    if part tg-smoke; then")]
+        self.assertNotIn("smoke-ids.txt", prep)                 # the smoke ids never reach the full-row prep
+        self.assertIn('[ "$prow" = full ] && PIDS+=(--ids "$pids_f")', prep)
+        board = job[job.index("    if part tg-board; then"):job.index("    if part tg-compare; then")]
+        self.assertIn("targeted_rows.py timed-check", board)
+        self.assertLess(board.index("targeted_rows.py timed-check"), board.rindex("phase_end $rc"))
+        self.assertNotIn("no race to time (none passed its smoke)", job)
+        cmp_ = job[job.index("    if part tg-compare; then"):]
+        self.assertLess(cmp_.index("targeted_rows.py empty-board"), cmp_.index("paper_compare.py compare"))
+        tgb = job[job.index("    tg_board() {"):job.index("    if part tg-board; then")]
+        self.assertLess(tgb.index('"placeholder"'), tgb.index("run_timed"))
+
+    def test_tg_drivers_phase(self):
+        # lane fx-verdicts2 added tg-drivers with no test: a B set only a driver row names is installed here, every
+        # row runs on the candidate and on each B set present, the sets made here are dropped, the worst rc is kept
+        job = Path(JOB).read_text()
+        drv = job[job.index("# >>> owed-drivers"):job.index("# <<< owed-drivers")]
+        tgd = job[job.index("    # >>> tg-drivers"):job.index("    # <<< tg-drivers")]
+        with tempfile.TemporaryDirectory() as td:
+            tgo = os.path.join(td, "tgo")
+            os.makedirs(tgo)
+            Path(tgo, "drivers.json").write_text(json.dumps([
+                {"id": "r1", "b_arms": ["b1"]}, {"id": "r2", "b_arms": []}]))
+            calls = os.path.join(td, "calls")
+            fake = os.path.join(td, "fakepy")
+            # the arm interpreter: records (arm, row); row r2 on b1 fails with rc 2
+            Path(fake).write_text('#!/bin/bash\nwhile [ $# -gt 0 ]; do case $1 in --row) r=$2;; --arm) a=$2;; esac; '
+                                  'shift; done\necho "$a $r" >> "' + calls + '"\necho OWED-DRIVER\n'
+                                  '[ "$a $r" = "b1 r2" ] && exit 2; exit 0\n')
+            os.chmod(fake, 0o755)
+            script = ("set -u\nRES=" + td + "\nTGO=" + tgo + "\nPY=" + sys.executable + "\nOWED=1\nOWED_FILE=x\n"
+                      "mkdir -p $RES/logs\nLAST_PRIOR=\nB_NAMES=(b1 b2)\ndeclare -A ARM_PY\n"
+                      "ARM_PY[candidate]=" + fake + "\nARM_PY[b2]=" + fake + "\n"
+                      "venv_arm() { echo \"$1\"; }\npart() { [ \"$1\" = tg-drivers ]; }\nphase() { echo \"PHASE $1\"; }\n"
+                      "phase_end() { echo \"PHASE_END $1\"; }\n"
+                      "arm_ready() { [ -n \"${ARM_PY[$1]:-}\" ]; }\n"
+                      "install_arms() { echo \"INSTALL $*\"; for a in \"$@\"; do ARM_PY[$a]=" + fake + "; done; }\n"
+                      "drop_arm_venv() { echo \"DROP $1\"; unset 'ARM_PY[$1]'; }\n" + drv + "\n" + tgd + "\n")
+            p = subprocess.run(["bash", "-c", script], capture_output=True, text=True, timeout=60)
+            got = sorted(Path(calls).read_text().split("\n")) if os.path.exists(calls) else []
+        self.assertEqual(p.returncode, 0, p.stderr)
+        self.assertIn("INSTALL b1", p.stdout)                   # the driver-only B set, installed here
+        self.assertNotIn("INSTALL b2", p.stdout)                # already present (a board unit's venv)
+        self.assertIn("DROP b1", p.stdout)
+        self.assertNotIn("DROP b2", p.stdout)
+        self.assertEqual([x for x in got if x], ["b1 r1", "b1 r2", "b2 r1", "b2 r2", "candidate r1", "candidate r2"])
+        self.assertIn("PHASE_END 2", p.stdout)                  # a failed driver case fails the phase
+        self.assertIn("driver cases: 6", p.stdout)
+
+
 if __name__ == "__main__":
     unittest.main()

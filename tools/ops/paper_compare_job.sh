@@ -420,6 +420,7 @@ venv_arm() { if [ "$1" = prior ]; then echo "prior-${LAST_PRIOR:-none}"; else ec
 # box, into $RES/drivers/drivers.jsonl; returns the worst rc. A driver row's B arms (its "arms" names a staged B set,
 # e.g. restore-mamba-backward-glue's mamba-backward-generic) run on that set's venv; measure_owed_driver.py skips an
 # arm the row does not name. Driver cases time one GPU each, so they run one after the other (cells serially per GPU).
+# >>> owed-drivers (tools/test_targeted_rows.py runs this block with the tg-drivers one)
 run_owed_drivers() {
     local plan=$1 row arm va r rc=0
     mkdir -p "$RES/drivers"
@@ -435,6 +436,7 @@ run_owed_drivers() {
     grep -c '^OWED-DRIVER' "$RES/logs/drivers.log" 2> /dev/null | sed 's/^/driver cases: /'
     return $rc
 }
+# <<< owed-drivers
 OWED_PRIOR=(); [ -n "$LAST_PRIOR" ] && OWED_PRIOR=(--prior)   # measure_owed plans the owed prior arm only then
 # >>> b-arms (tools/test_measure_owed.py runs this block on a fake PC_B_ARMS file)
 # A line is `<name> <wheel dir> <commit>` (a B wheel set built from another commit) or `<name> env:VAR=VALUE[,VAR=VALUE]
@@ -1043,6 +1045,7 @@ if part tg-install || part tg-prep || part tg-smoke || part tg-board || part tg-
     # The owed plan's driver rows. Before 2026-11-18 (lane fx-verdicts2) the targeted job exited here without them:
     # ab3 (nvc-ab-20261118T182558Z-cb6e02) installed the mamba-backward-generic set for restore-mamba-backward-glue
     # (plan-tg-owed/drivers.json, drivers=3) and never timed it, since the drivers phase sat only in the paper job.
+    # >>> tg-drivers (tools/test_targeted_rows.py runs this block)
     if part tg-drivers && [ "$OWED" = 1 ] && [ -s "$TGO/drivers.json" ]; then
         phase tg-drivers
         # a B set only a driver row names has no board unit, so tg-board's install window never made its venv:
@@ -1059,6 +1062,7 @@ if part tg-install || part tg-prep || part tg-smoke || part tg-board || part tg-
         for arm in ${drv_new[@]+"${drv_new[@]}"}; do drop_arm_venv "$arm"; done
         phase_end $rc
     fi
+    # <<< tg-drivers
     echo finished > "$J/.phase"
     exit "$WORST"
 fi
