@@ -87,7 +87,9 @@ def test_import_connection_unwraps_host_proxy_without_attribute_callback(monkeyp
 def test_native_admission_preserves_mode_check_and_live_host_replacement():
     source=(ROOT/'providers/python/estimator_binding_pyapi_door.mojo').read_text()
     assert 'context["family_binding_offerings"][name][selected_mode]' in source
-    assert 'py_get(native_loaded_module("sys").modules, record[1])' in source
+    # bc9d3e04b8: the live sys.modules slot is read from the caller's admitted sys module (per call, never cached)
+    assert 'py_get(sys_module.modules, record[1])' in source
+    assert 'call.module("sys")' in source and 'native_loaded_module("sys")' in source
     assert 'neural_descriptor_entry(module, reader, False)' in source
     assert 'if got != expected:' in source
     assert 'native host binding must be an exact extension module' in source
