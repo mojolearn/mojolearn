@@ -1527,7 +1527,8 @@ def _attn_watermark_grant(ctx: DeviceContext, mut sc: BlockStepScratch, e: Int) 
         shared = shared or sc.m3[i].s_addr == s_addr
     if shared:
         return
-    sc.attn[e].kv.wm_grant(ctx, sc.attn[e].ints[1])
+    var d_model = sc.attn[e].ints[1]
+    sc.attn[e].kv.wm_grant(ctx, d_model)
 
 
 def attn_step_adopt(mut ex: DeviceExec, mut sc: BlockStepScratch, var weights: LlamaDeviceWeights, w: FP, s: FP,

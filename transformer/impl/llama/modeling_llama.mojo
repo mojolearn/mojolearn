@@ -4186,12 +4186,22 @@ def llama_refuse_bad_call(
             wm_step = wm_step and b * dims.n_kv * kv.s * hd <= len(kv.v)
             wm_step = wm_step and b * dims.n_kv * kv.s * hd <= Int(NONFINITE_NONE)
             if wm_step:
-                if kv.wm_batch:
-                    ref held = kv.wm_batch.value()
-                    held.enqueue(ctx, 0, x)
-                    held.enqueue_rows(ctx, 1, kv.k, hd, kv.s * hd, (kv.s - 1) * hd)
-                    held.enqueue_rows(ctx, 2, kv.v, hd, kv.s * hd, (kv.s - 1) * hd)
-                    var held_hits = held.finish(ctx)
+                # The held scratch moves out of the cache struct for the
+                # scans (they borrow the cache's buffers mutably) and back in
+                # after their one wait, before anything can raise a refusal.
+                # (Were a scan itself to raise, the scratch would go with
+                # this call and the cache would take the whole scans from
+                # then on.)
+                var held = Optional[DeviceNonfiniteBatch]()
+                swap(held, kv.wm_batch)
+                if held:
+                    var row_stride = kv.s * hd
+                    var row_first = (kv.s - 1) * hd
+                    held.value().enqueue(ctx, 0, x)
+                    held.value().enqueue_rows(ctx, 1, kv.k, hd, row_stride, row_first)
+                    held.value().enqueue_rows(ctx, 2, kv.v, hd, row_stride, row_first)
+                    var held_hits = held.value().finish(ctx)
+                    swap(held, kv.wm_batch)
                     _refuse_nonfinite_at(ctx, "hidden_states", x, held_hits[0])
                     _refuse_nonfinite_at(ctx, "past_key_values.key_cache", kv.k, held_hits[1])
                     _refuse_nonfinite_at(ctx, "past_key_values.value_cache", kv.v, held_hits[2])
