@@ -194,10 +194,27 @@ def select_d_host(
                 d_ptr.unsafe_store(b, Int32(Int(res[b * KPSS_PACK_W + 3])))
             _ = ctx^
             return batch_size
-    var y = _upload_f32(ctx, y_ptr, batch_size * n_obs)
-    var chosen = select_d(ctx, y, batch_size, n_obs, D, s, d_max, pval_threshold)
+    # The upload is queued, not waited on (lane fb15-sync-counts, 2026-11-18;
+    # `_upload_f32` waited here, a second wait per call): `select_d`'s rounds
+    # follow it on the same stream and end in their one wait. The host stage
+    # is kept alive past that wait; on a refusal the stream is drained before
+    # the stage is freed.
+    var count = batch_size * n_obs
+    var host = ctx.enqueue_create_host_buffer[DType.float32](count)
+    var y = ctx.enqueue_create_buffer[DType.float32](count)
+    copy_f32(y_ptr, host.unsafe_ptr(), count)
+    ctx.enqueue_copy(dst_buf=y, src_ptr=host.unsafe_ptr())
+    var chosen = List[Int32]()
+    try:
+        chosen = select_d(ctx, y, batch_size, n_obs, D, s, d_max, pval_threshold)
+    except error:
+        ctx.synchronize()
+        _ = host^
+        _ = y^
+        raise error^
     for b in range(batch_size):
         d_ptr.unsafe_store(b, chosen[b])
+    _ = host^
     _ = y^
     # DEVIATION 1946: the context dies LAST, after every value built on it.
     _ = ctx^
