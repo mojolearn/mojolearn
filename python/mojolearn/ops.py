@@ -83,8 +83,6 @@ _OP = {
     "minimum": 66, "maximum": 67, "where": 68, "compare": 69, "logical": 70,
     "expand": 71, "argmax": 72, "pad": 73, "any_all": 74, "cumsum": 75, "index": 76,
 }
-# autograd/ops_api.mojo OPS_COMPARE and OPS_LOGICAL kinds
-_COMPARE = {"eq": 0, "gt": 1, "lt": 2, "ge": 3, "le": 4, "ne": 5}
 _GELU = {"none": 0, "tanh": 1}
 # the state buffers autograd/ops_api.mojo optimizer_state returns, by kind
 _STATE_NAMES = {"sgd": ("momentum_buffer", None, None), "adam": ("exp_avg", "exp_avg_sq", None),
@@ -577,9 +575,6 @@ class Session:
         broadcast together as in NumPy. The gradient flows to ``a`` and
         ``b``."""
         return _SESSION_CALL(self, "where", (condition, a, b))
-
-    def _compare(self, a, b, kind):
-        return self._op("compare", (a, b), [_COMPARE[kind]])
 
     def equal(self, a, b):
         """1.0 where ``a == b``, else 0.0, with the broadcasting of :meth:`add`."""
