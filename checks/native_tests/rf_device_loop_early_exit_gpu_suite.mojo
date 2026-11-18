@@ -40,6 +40,7 @@ from ensemble.decisiontree.batched_levelalgo.quantiles import (
     Quantiles,
 )
 from ensemble.decisiontree.decisiontree import DecisionTreeParams, GINI
+from checks.native_tests.kit import upload_host_into
 
 comptime DT = DType.float32
 comptime LT = DType.int32
@@ -113,15 +114,15 @@ def _grow(ctx: DeviceContext, force_host_queue: Bool) raises -> TreeWords:
             cls = (cls + 1) % N_CLASSES
         hy.unsafe_ptr().unsafe_store(i, Int32(cls))
     var dx = ctx.enqueue_create_buffer[DT](N_ROWS * N_COLS)
-    ctx.enqueue_copy(dst_buf=dx, src_ptr=hx.unsafe_ptr())
+    upload_host_into[DT](ctx, dx, hx)
     var dy = ctx.enqueue_create_buffer[LT](N_ROWS)
-    ctx.enqueue_copy(dst_buf=dy, src_ptr=hy.unsafe_ptr())
+    upload_host_into[LT](ctx, dy, hy)
 
     var hr = ctx.enqueue_create_host_buffer[DType.int32](N_ROWS)
     for i in range(N_ROWS):
         hr.unsafe_ptr().unsafe_store(i, Int32(i))
     var dr = ctx.enqueue_create_buffer[DType.int32](N_ROWS)
-    ctx.enqueue_copy(dst_buf=dr, src_ptr=hr.unsafe_ptr())
+    upload_host_into[DType.int32](ctx, dr, hr)
 
     var dsw = ctx.enqueue_create_buffer[DT](1)
     ctx.synchronize()
@@ -182,9 +183,6 @@ def _grow(ctx: DeviceContext, force_host_queue: Bool) raises -> TreeWords:
     _ = dy^
     _ = dr^
     _ = dsw^
-    _ = hx^
-    _ = hy^
-    _ = hr^
     _ = builder^
     return words^
 

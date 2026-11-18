@@ -14,6 +14,7 @@ from decomposition.linalg_host_impl import to_bf16_host_run, from_bf16_host_run
 from max.gpu.host import DeviceContext
 from gemm.checks.gemm_lowbit import bf16_narrow, bf16_widen
 from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require
+from checks.native_tests.kit import download_host_into, upload_host_into
 
 
 comptime BF16_NARROW_EXHAUSTIVE = 65536 * 4
@@ -137,8 +138,8 @@ def _run_gpu(mut report: Report) raises:
     var dw = ctx.enqueue_create_buffer[DType.float32](BF16_NARROW_COUNT)
     var dr = ctx.enqueue_create_buffer[DType.uint16](BF16_WIDEN_COUNT)
     var drw = ctx.enqueue_create_buffer[DType.float32](BF16_WIDEN_COUNT)
-    ctx.enqueue_copy(dst_buf=dx, src_ptr=source.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=dr, src_ptr=raw.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, dx, source)
+    upload_host_into[DType.uint16](ctx, dr, raw)
     bf16_narrow(ctx, dn, dx, BF16_NARROW_COUNT)
     bf16_widen(ctx, dw, dn, BF16_NARROW_COUNT)
     bf16_widen(ctx, drw, dr, BF16_WIDEN_COUNT)
@@ -146,9 +147,9 @@ def _run_gpu(mut report: Report) raises:
     var widened = ctx.enqueue_create_host_buffer[DType.float32](BF16_NARROW_COUNT)
     var raw_widened = ctx.enqueue_create_host_buffer[DType.float32](BF16_WIDEN_COUNT)
     ctx.synchronize()
-    ctx.enqueue_copy(dst_ptr=narrowed.unsafe_ptr(), src_buf=dn)
-    ctx.enqueue_copy(dst_ptr=widened.unsafe_ptr(), src_buf=dw)
-    ctx.enqueue_copy(dst_ptr=raw_widened.unsafe_ptr(), src_buf=drw)
+    download_host_into[DType.uint16](ctx, dn, narrowed)
+    download_host_into[DType.float32](ctx, dw, widened)
+    download_host_into[DType.float32](ctx, drw, raw_widened)
     ctx.synchronize()
     var np = narrowed.unsafe_ptr()
     var wp = widened.unsafe_ptr()
