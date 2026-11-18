@@ -263,6 +263,8 @@ def classical_cells(bb, ctx, race, r):
             a.get("status"), json.dumps(a.get("error"))[:200])
         _timing(cell, a.get("ms") or [], ctx["rounds"], refused, bb)
         cell.update(_small_rows().cell_fields(a.get("scored_calls")))   # SMALL ROWS (2026-11-15)
+        # lane fx-harness (2026-11-18): worker NUMA node, scored calls' system time and faults, harness clock
+        cell.update(bb.host_fields(a.get("info"), a.get("host_usage"), "infer"))
         cell["warmup_ms"] = a.get("warmup_ms")
         cell["call"] = a.get("call_text") or "%s(Xq)" % inf.get("call")
         cell["hash"] = (a.get("digests") or [None])[-1]

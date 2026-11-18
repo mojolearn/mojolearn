@@ -110,8 +110,9 @@ def parse_rows(text, where="rows file"):
         if not line:
             continue
         f = line.split()
-        if len(f) < 2 or f[0].count("/") < 2 or not (f[1] == "fit" or f[1].startswith("infer")):
-            raise ValueError("%s line %d: want <race id> <fit|infer[/<batch>]> [name=]: %r" % (where, i, raw))
+        # fit+infer (lane fx-harness, 2026-11-18): board order, each fit then the first predict right after it
+        if len(f) < 2 or f[0].count("/") < 2 or not (f[1] in ("fit", "fit+infer") or f[1].startswith("infer")):
+            raise ValueError("%s line %d: want <race id> <fit|infer[/<batch>]|fit+infer> [name=]: %r" % (where, i, raw))
         name = None
         for opt in f[2:]:
             if opt.startswith("name="):
@@ -120,7 +121,7 @@ def parse_rows(text, where="rows file"):
                 raise ValueError("%s line %d: unknown field %r" % (where, i, opt))
         seen[f[0]] += 1
         if not name:
-            name = f[0].split("/")[1] + ("-" + f[1].replace("/", "-") if seen[f[0]] > 1 else "")
+            name = f[0].split("/")[1] + ("-" + f[1].replace("/", "-").replace("+", "-") if seen[f[0]] > 1 else "")
         if not re.match(r"^[A-Za-z0-9._-]+$", name) or name in names:
             raise ValueError("%s line %d: row name %r is repeated or not a plain name (give name=)" % (where, i, name))
         names.add(name)
@@ -698,6 +699,14 @@ def _cost(h):
     return ("%s us" % h["us_per_call"]) if "us_per_call" in h else ("%s Ir" % h.get("ir_per_call"))
 
 
+def _h2d(m):
+    """The table's H2D cell: host-to-device copies per call and their MB per call (lane fx-harness, 2026-11-18: the
+    fit+infer rows are read by the bytes each call copies up)."""
+    if not m or m.get("count") is None:
+        return "-"
+    return "%s (%s MB)" % (_f(m.get("count"), 1), _f(m.get("mb"), 2)) if m.get("mb") is not None else _f(m["count"], 1)
+
+
 def render(doc):
     L = ["# Call profile (%s): where the wall time of one small call goes" % doc.get("vendor", "?"), "",
          "Wheel: %s. Host: %s. Diagnostic only: not a measurement and not a board cell. %s" % (
@@ -706,7 +715,7 @@ def render(doc):
          "CUDA driver entries and libc allocations/copies timed by the LD_PRELOAD shim; the rest shared by the leaf categories of "
          "py-spy's main-thread samples (else callgrind's instructions); unexplained = frames with no object, or the "
          "whole rest when nothing was sampled.", ""]
-    L.append("| row | phase | wall ms/call | GPU kernel ms | CUDA API ms (nsys) | launches | syncs | allocs | H2D | D2H "
+    L.append("| row | phase | wall ms/call | GPU kernel ms | CUDA API ms (nsys) | launches | syncs | allocs | H2D (MB) | D2H "
              "| bindings us | CPython us | Mojo runtime us | CUDA driver us (shim) | libc alloc+copy us (shim) "
              "| other us | unexplained us | split from |")
     L.append("|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|")
@@ -720,7 +729,7 @@ def render(doc):
         L.append("| %s |" % " | ".join(str(x) for x in (
             r["row"], r["phase"], _f(r["wall_ms_per_call"]), _f(r["split"]["kernel_ms"]), _f(r["split"]["cuda_api_ms"]),
             _f(c.get("launch"), 1), _f(c.get("sync"), 1), _f(c.get("alloc"), 1),
-            _f((mem.get("h2d") or {}).get("count"), 1), _f((mem.get("d2h") or {}).get("count"), 1),
+            _h2d(mem.get("h2d")), _f((mem.get("d2h") or {}).get("count"), 1),
             _f(pu.get("bindings"), 1), _f(pu.get("cpython"), 1), _f(pu.get("mojo_runtime"), 1),
             _f(h.get("cuda_us"), 1), _f(h.get("libc_us"), 1), _f(other, 1), _f(h.get("unexplained_us"), 1),
             h.get("source") or "-")))

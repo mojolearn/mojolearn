@@ -12,6 +12,17 @@ THREAD_ENV = ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS",
 INHERITED_CAPS = THREAD_ENV + ("OMP_THREAD_LIMIT", "NUMEXPR_MAX_THREADS",
                               "LOKY_MAX_CPU_COUNT", "MOJOLEARN_BENCH_THREADS",
                               "MOJOLEARN_CPU_THREADS")
+#: the environment variable an A/B env arm sets to name the keys it sets on purpose (comma separated, set by
+#: tools/ops/paper_compare_job.sh beside the arm's own assignments). Lane fx-harness (2026-11-18, fx-verdicts-RESULT:
+#: the env arm cpu-threads-cgroup was INVALID because apply_cpu_quota popped MOJOLEARN_CPU_THREADS in every race
+#: worker and set the quota, so both arms ran at 13): a key named here keeps the arm's explicit value. Without it the
+#: behaviour is unchanged: every inherited cap is removed and the quota is applied.
+ARM_ENV_KEYS = "MOJOLEARN_BENCH_ARM_ENV_KEYS"
+
+
+def arm_env_keys(env):
+    """The keys an A/B env arm declared it sets explicitly (ARM_ENV_KEYS), as a set; empty without one."""
+    return {k.strip() for k in (env.get(ARM_ENV_KEYS) or "").split(",") if k.strip()}
 
 
 def cpu_quota_threads():
@@ -36,12 +47,18 @@ def apply_cpu_quota(env):
     Apply after caller overrides too. Algorithm-specific nested-pool settings
     (implicit's single-thread BLAS inside its parallel solver) are applied by
     their own adapters; they are not a one-core allocation for the whole arm.
+    An A/B env arm's explicit values (the keys it names in ARM_ENV_KEYS) are let through: neither removed nor
+    replaced by the quota; that is the arm under test, recorded in MOJOLEARN_BENCH_ARM_ENV_KEPT.
     """
+    keep = {k: env[k] for k in arm_env_keys(env) if k in INHERITED_CAPS and env.get(k)}
     for key in INHERITED_CAPS:
         env.pop(key, None)
     n = cpu_quota_threads()
     if n:
         for key in THREAD_ENV + ("MOJOLEARN_CPU_THREADS",):
             env[key] = str(n)
+    if keep:
+        env.update(keep)
+        env["MOJOLEARN_BENCH_ARM_ENV_KEPT"] = ",".join("%s=%s" % kv for kv in sorted(keep.items()))
     env["MOJOLEARN_BENCH_CPU_POLICY"] = "full-allocation"
     return env

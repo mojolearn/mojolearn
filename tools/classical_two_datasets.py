@@ -2955,7 +2955,21 @@ def start_worker(arm, cmd, env, log_path, cwd, params_only=False):
             sys.path.insert(0, HERE)
         import smoke_inproc
         return smoke_inproc.start_worker(arm, cmd, env, log_path, cwd, params_only, Worker)
+    # NUMA placement (lane fx-harness, 2026-11-18; tools/numa_place.py): every race worker starts bound to the GPU's
+    # node, cores and memory, when that node holds every core of the allocation; the placement is in its environment
+    # and its cell (worker_numa). Node-1 workers on c6dd9ebea3e3 lost 13-27 s to first-touch faults; node-0 did not.
+    cmd, _placement = _numa().wrap(cmd, env)
     return Worker(arm, cmd, env, log_path, cwd)
+
+
+_NUMA = []
+
+
+def _numa():
+    """tools/numa_place.py, loaded once by path (tools/ is not a package)."""
+    if not _NUMA:
+        _NUMA.append(_sibling("numa_place"))
+    return _NUMA[0]
 
 
 def _worker_env(arm, root):

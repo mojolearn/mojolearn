@@ -6,3 +6,12 @@ algos/pls-canonical/taxi/rows=full	infer	name=pls-canonical-taxi-infer
 algos/train-test-split/istella/rows=full	fit	name=train-test-split-istella-fit
 algos/gcn/istella/rows=full	infer	name=gcn-istella-infer
 algos/radius-neighbors/istella/rows=full	fit	name=radius-neighbors-istella-fit
+# BOARD ORDER (lane fx-harness, 2026-11-18): each fit, then the FIRST predict right after it, as the board scores the
+# one-call infer rows; consecutive forced predicts cannot show a cost only that first predict pays (the executor pool
+# at its bound after a 1,000,000-row fit). Read the H2D count and MB per call beside the infer-only rows above.
+algos/mlp-clf/istella/rows=full	fit+infer	name=mlp-clf-istella-board-order
+algos/mlp-reg/istella/rows=full	fit+infer	name=mlp-reg-istella-board-order
+algos/mlp-clf/taxi/rows=full	fit+infer	name=mlp-clf-taxi-board-order
+algos/mlp-reg/taxi/rows=full	fit+infer	name=mlp-reg-taxi-board-order
+algos/pls-canonical/taxi/rows=full	fit+infer	name=pls-canonical-taxi-board-order
+algos/cca/taxi/rows=full	fit+infer	name=cca-taxi-board-order

@@ -709,3 +709,59 @@ def test_select_mutual_info_hands_ours_the_function_itself(monkeypatch, lane, fn
     make, _, params = A._est_factory(lane, "ours", D)
     assert params["score_func"] is score
     assert make().kw["score_func"] is score
+
+
+# ---- lane fx-harness (2026-11-18): the function lanes' outputs are reduced after the clock -------------------------
+
+def test_held_never_copies_a_host_array():
+    a = np.arange(12, dtype=np.float32).reshape(3, 4)
+    assert A._held(a) is a
+    class Iface:                                     # another library's host array: viewed, not copied
+        __array_interface__ = a.__array_interface__
+    v = A._held(Iface())
+    assert isinstance(v, np.ndarray) and np.shares_memory(v, a)
+    t = (1, 2)
+    assert A._held(t) is t
+
+
+def test_split_holds_the_returned_arrays_and_reduces_after():
+    X = np.arange(40, dtype=np.float32).reshape(10, 4)
+    y = np.arange(10, dtype=np.float32)
+    got = []
+
+    def call(X_, y_, test_size, random_state, shuffle):
+        out = (X_[:7], X_[7:], y_[:7], y_[7:])
+        got.append(out)
+        return out
+    p = {"test_size": 0.3, "random_state": 0, "shuffle": False}
+    raw = A._ms_run("split", call, X, y, p, "ours")
+    assert all(r is g for r, g in zip(raw, got[0]))   # inside the clock: the product's own arrays, no copy
+    o = A._ms_outputs("split", raw)
+    np.testing.assert_array_equal(o["sizes"], [7.0, 3.0])
+    np.testing.assert_allclose(o["train_mean"], X[:7].astype(np.float64).mean(0))
+    np.testing.assert_allclose(o["ymeans"], [y[:7].mean(), y[7:].mean()])
+
+
+def test_reduced_after_reduces_once_and_drops_the_raw_arrays():
+    S = {"raw": (np.ones((4, 2), np.float32), np.arange(4, dtype=np.float32))}
+    calls = []
+
+    def reduce(r):
+        calls.append(1)
+        return A._fn_outputs("resample", r)
+    out = A._reduced_after(S, reduce)
+    o = out()
+    assert "raw" not in S and out() is o and len(calls) == 1
+    np.testing.assert_allclose(o["xmean"], [1.0, 1.0])
+    np.testing.assert_allclose(o["ymean"], [1.5])
+    np.testing.assert_array_equal(A._fn_outputs("resample-indices", np.array([3, 1], np.int32))["idx"], [3, 1])
+    assert {"resample", "resample-indices", "split"} <= A._FN_HELD
+
+
+def test_host_fields_in_the_cell():
+    info = {"worker_numa": {"node_now": 0, "placement": {"node": 0}}, "harness_clock": A.HARNESS_CLOCK}
+    use = [{"fit": [{"wall_ms": 100.0, "stime_ms": 80.0, "utime_ms": 5.0, "minflt": 9, "majflt": 0}],
+            "infer": None, "round": 1}]
+    f = bb.host_fields(info, use, "fit")
+    assert f["worker_numa"]["node_now"] == 0 and f["harness_clock"] == A.HARNESS_CLOCK and f["host_stall"] is True
+    assert bb.host_fields({}, None, "fit") == {}

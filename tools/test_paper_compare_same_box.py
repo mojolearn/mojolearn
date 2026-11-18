@@ -468,6 +468,45 @@ class StoredBaseline(unittest.TestCase):
         self.assertIn("BOX-STATE %d rows" % len(PC.box_state_rows(res)), summ)
         self.assertNotIn("worst regressions", summ)
 
+    @staticmethod
+    def ours_fit_cells(board):
+        return [c for r in board["races"].values() for c in r["cells"] if c["arm"] == "ours"]
+
+    def test_host_stall_replaces_regression(self):
+        # lane fx-harness (2026-11-18): system time above half the wall is a host stall, shown, never a REGRESSION
+        cand = self.with_upload(on_host(new_board(), HOST_A), 41.0)
+        for c in self.ours_fit_cells(cand):
+            c.update(host_stall=True, host_usage={"stime_fraction": 0.9, "stime_ms": 117.0, "wall_ms": 130.0,
+                                                  "minflt": 640000, "majflt": 0, "calls": 1},
+                     worker_numa={"node_now": 1, "cpu_nodes": [1], "placement": {"node": None, "why": "x"}})
+        res = PC.compare(self.doc, [cand], {}, stored_baseline=self.stored())
+        km = {r["key"]: r for r in res["rows"]}[KM]
+        self.assertIn("HOST-STALL", km["flags"])
+        self.assertNotIn("REGRESSION", km["flags"])
+        self.assertEqual(km["worker_numa"]["node_now"], 1)
+        self.assertAlmostEqual(km["ratio"], 1.3)                       # shown
+        summ = PC.render_summary(res)
+        self.assertIn("HOST-STALL", summ)
+        self.assertNotIn("worst regressions", summ)
+
+    def test_harness_clock_change_is_never_faster(self):
+        # lane fx-harness (2026-11-18): the stored 0.8.55 cell was timed with the harness's copies in the clock
+        cand = self.with_upload(on_host(new_board(), HOST_A), 41.0)
+        for c in self.ours_fit_cells(cand):
+            c.update(median_ms=50.0, times_ms=[50.0], harness_clock="2026-11-18 outputs reduced after the clock")
+        res = PC.compare(self.doc, [cand], {}, stored_baseline=self.stored())
+        km = {r["key"]: r for r in res["rows"]}[KM]
+        self.assertIn("HARNESS-CLOCK", km["flags"])
+        self.assertFalse({"FASTER", "SAME"} & set(km["flags"]))
+        self.assertEqual(km["harness_clock"]["replaced"], ["FASTER"])
+        self.assertNotIn("biggest gains", PC.render_summary(res))
+        # a regression under the new clock stays a regression
+        for c in self.ours_fit_cells(cand):
+            c.update(median_ms=130.0, times_ms=[130.0])
+        km = {r["key"]: r for r in PC.compare(self.doc, [cand], {}, stored_baseline=self.stored())["rows"]}[KM]
+        self.assertIn("REGRESSION", km["flags"])
+        self.assertIn("HARNESS-CLOCK", km["flags"])
+
     def test_dataset_median_fallback_reads_large_uploads_only(self):
         races = {"a/x/taxi/rows=full": {"dataset": "taxi", "cells": [
                      {"arm": "ours", "comparability": {"span": {"upload_ms_separate": 1.0,

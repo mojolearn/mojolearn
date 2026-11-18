@@ -350,6 +350,16 @@ def _pair_problems(race, ours, opp):
             bad.append("different dataset identity")
         if mo.get("shape") and mt.get("shape") and mo["shape"] != mt["shape"]:
             bad.append("different measured input shape")
+    # FAIRNESS FIX (2026-11-18 audit, lane fx-harness): train-test-split, resample, resample-indices, the
+    # model_selection lanes and radius-neighbors copied, cast and reduced their outputs INSIDE every arm's clock; the
+    # harness now does it after the clock and stamps the cell (harness_clock, "... (all arms)"). A stored opponent
+    # cell timed before carries harness work our new cell does not: a harness-written difference in the work, so
+    # the pair is BROKEN until the opponent job scores that arm again. A stamp ending "(our arm)" changed only our
+    # clock (the opponents never held that work) and never makes a pair unfair.
+    hc = ours.get("harness_clock") or ""
+    if hc.endswith("(all arms)") and (opp.get("harness_clock") or "") != hc:
+        bad.append("harness clock differs: ours %r, opponent %r (stored before the 2026-11-18 harness fix; "
+                   "re-score the opponent)" % (hc, opp.get("harness_clock")))
     clock = BC.pair_ratio(BC.cell_clock(ours), BC.cell_clock(opp), opp)
     # FAIRNESS FIX (2026-10-13 audit): an alternate common clock may be
     # shown diagnostically, but cannot replace the owner's required clock.

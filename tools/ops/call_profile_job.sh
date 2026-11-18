@@ -5,7 +5,11 @@
 # of a rows file (CP_ROWS_FILE, default tools/ops/call_profile_rows.tsv: race id, forced phase, name) it runs the
 # row's race on the candidate venv once per pass, each a forced scored run whose extra calls sit inside the harness's
 # profile window (tools/bench_board_small_rows.py range_open/range_close: calls 2..n, nothing of the data load, the fit
-# before an inference, the warmup or the first call) and whose n fills the pass's seconds at the first call's time:
+# before an inference, the warmup or the first call) and whose n fills the pass's seconds at the first call's time.
+# The phase `fit+infer` (lane fx-harness, 2026-11-18) profiles in BOARD ORDER: the window holds pairs, each fit then the
+# FIRST predict right after it, as the board scores a one-call infer row (n sized by the first pair's time; the report's
+# H2D column gives the copies and MB per pair), since consecutive forced predicts cannot show a cost that only the first
+# predict after a large fit pays:
 #
 #   tools/nvidia_central.sh submit measure --cap 60 --results box-out/callprof-<tag> tools/ops/call_profile_job.sh
 #

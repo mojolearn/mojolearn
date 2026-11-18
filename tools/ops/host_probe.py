@@ -24,6 +24,11 @@ it to --out. Fields (schema mojolearn-host-probe/1):
   kernel, boot_id    the kernel release (uname -r) and /proc/sys/kernel/random/boot_id: with the GPU driver, the system
                      state tools/paper_compare.py requires to be the same on both arms (2026-11-17: a pod restart
                      between the d95f805cce arms changed the driver and the kernel on the same host id)
+  gpu_numa_node, numa, thp, allocation_cores
+                     the GPU's NUMA node, each node's CPUs, MemTotal / MemFree / FilePages, the transparent huge page
+                     enabled and defrag modes, and the cores race workers may use (tools/numa_place.py; lane
+                     fx-harness 2026-11-18: node-1 workers on c6dd9ebea3e3 stalled 13-27 s and none of this was
+                     recorded); race workers are bound to the GPU's node when it holds the whole allocation
   errors             every step that failed (the probe never fails the job; a missing field is shown as such)
 Tests: tools/test_paper_compare_same_box.py.
 """
@@ -57,6 +62,16 @@ def _run(argv, timeout=30):
         return p.stdout.strip() if p.returncode == 0 else None
     except (OSError, subprocess.SubprocessError):
         return None
+
+
+def _numa_place():
+    """tools/numa_place.py (one directory up), by path."""
+    import importlib.util
+    path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "numa_place.py")
+    spec = importlib.util.spec_from_file_location("host_probe_numa_place", path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
 
 
 def cpu_model():
@@ -316,6 +331,9 @@ def probe(vendor, mb=MB):
     out["affinity_cores"] = step("affinity", lambda: len(os.sched_getaffinity(0)))
     out["cgroup_cores"] = step("cgroup_cores", cgroup_cores)
     out["mem_total_gb"] = step("mem_total", mem_total_gb)
+    facts = step("numa_facts", lambda: _numa_place().box_facts()) or {}
+    for k in ("gpu_numa_node", "numa", "thp", "allocation_cores"):
+        out[k] = facts.get(k)
     nbytes = int(mb * 1e6)
     out["copy_mb"] = mb
     out["memcpy_gbps"] = step("memcpy", lambda: memcpy_gbps(nbytes))

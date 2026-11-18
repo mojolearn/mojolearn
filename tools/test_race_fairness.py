@@ -444,3 +444,18 @@ def test_enumerated_setting_spelling_is_not_a_difference():
     assert RF._same_spelling("Lossguide", "lossguide")
     assert not RF._same_spelling("Depthwise", "Lossguide")
     assert not RF._same_spelling(1, 1.0)
+
+
+def test_harness_clock_all_arms_breaks_a_stored_opponent_pair():
+    # lane fx-harness (2026-11-18): the function lanes' outputs are reduced after every arm's clock now; a stored
+    # opponent cell timed with the old harness held that work in its clock
+    rr = race("train-test-split", [("sklearn-cpu", 10, {})])
+    ours, opp = rr["cells"]
+    ours["harness_clock"] = "2026-11-18 outputs reduced after the clock (all arms)"
+    bad, _missing, _ = RF._pair_problems(rr, ours, opp)
+    assert any(b.startswith("harness clock differs") for b in bad)
+    opp["harness_clock"] = ours["harness_clock"]                  # re-scored by the opponent job: fair again
+    assert not any(b.startswith("harness clock") for b in RF._pair_problems(rr, ours, opp)[0])
+    del opp["harness_clock"]
+    ours["harness_clock"] = "2026-11-18 outputs reduced after the clock (our arm)"   # only our clock changed
+    assert not any(b.startswith("harness clock") for b in RF._pair_problems(rr, ours, opp)[0])
