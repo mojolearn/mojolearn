@@ -84,7 +84,7 @@ from neighbors.neighbors_knn_run import (
     knn_check_y_ndim, knn_int32_low_fits, knn_check_int32_labels, knn_labels_already_int32, knn_float_format,
     knn_labels_finite,
     knn_labels_skip_integral, knn_finite_status, knn_check_width, knn_proba_rows, knn_copy_proba_block,
-    knn_fit_xn_eager, knn_door_clock_open, knn_door_clock_mark, knn_door_clock_close,
+    knn_door_clock_open, knn_door_clock_mark, knn_door_clock_close,
 )
 
 #: The metric words, label codes and refusals: neighbors/neighbors_knn_run.mojo.
@@ -823,14 +823,10 @@ def _knn_xn(model: PythonObject, args: PythonObject, context: PythonObject) rais
     consumer is the multi-output label transpose (`xn_p2m_transpose[_i]`),
     so the default resolves it there and nowhere else, as 0.8.55's
     `self._bind(_XN)` inside the multi-output branch did; a single-output fit
-    never reads it. Under the B arm (-D MOJOLEARN_IDN_KNN_DOOR_FIT_XN_EAGER,
-    neighbors/neighbors_knn_run.mojo knn_fit_xn_eager) the operation already
-    resolved it before the fit and `args[0]` is that admitted binding."""
+    never reads it (the eager form lost A/B ab3 and is deleted,
+    neighbors/neighbors_knn_run.mojo)."""
     # Locals, never a subscript in return position (AGENTS.md, the 2026-11-12
     # tail-call rule for borrowed PythonObject arguments).
-    if knn_fit_xn_eager():
-        var held = args[0]
-        return held
     var admitted = xn_admit_arguments(estimator_arguments(model, "_mojolearn_x_neighbors", args, context), context)
     var selected = admitted[0]
     return selected
@@ -1382,15 +1378,15 @@ def _neighbors_knn_operation(model: PythonObject, operation: String, var args: P
         if host_sparse_format(args[i]).byte_length() == 0:
             classical_admit_value(args[i], context)
     knn_door_clock_mark("state_admission")
-    if operation == "family_xn_knn_clf_fit" or operation == "family_xn_knn_reg_fit":
-        # fix-knn-door-fixed-cost (2026-11-14): the x_neighbors binding is
-        # resolved by its one consumer, the multi-output transpose (`_knn_xn`),
-        # as 0.8.55 did; `args[0]` stays as the caller passed it (None from
-        # every public fit). B arm -D MOJOLEARN_IDN_KNN_DOOR_FIT_XN_EAGER:
-        # resolved and admitted here, before every fit (b412ea02f4's form).
-        if knn_fit_xn_eager():
-            args = xn_admit_arguments(estimator_arguments(model, "_mojolearn_x_neighbors", args, context), context)
-    elif operation != "family_xn_knn_nn_fit":
+    # fix-knn-door-fixed-cost (2026-11-14): a classifier / regressor fit's
+    # x_neighbors binding is resolved by its one consumer, the multi-output
+    # transpose (`_knn_xn`), as 0.8.55 did; `args[0]` stays as the caller
+    # passed it (None from every public fit).
+    if (
+        operation != "family_xn_knn_clf_fit"
+        and operation != "family_xn_knn_reg_fit"
+        and operation != "family_xn_knn_nn_fit"
+    ):
         args = estimator_arguments(model, "_mojolearn", args, context)
     knn_door_clock_mark("binding_arguments")
     if operation == "family_xn_knn_nn_fit":
