@@ -117,8 +117,13 @@ RESERVE_BYTES = 1 * GIB                     # never fill the disk to the last by
 KEEP_SUFFIXES = (".json", ".log", ".txt", ".md", ".exit", ".pid", ".sha256", ".tsv", ".csv")
 #: the intermediate trees of a set (<work>/<commit12>/) that the final wheels and the records do not need: the
 #: downloaded leg trees (their .so/.tar.gz/toolchain payload), the host composition and the assembled reuse sets
-#: (copies the packer read) and the audit's repaired wheel copies
-PRUNE_TREES = ("legs", "host-composition/sets", "reuse/sets", "linux/audit")
+#: (copies the packer read) and the audit's repaired wheel copies. reuse/previous-split (the base's wheels merged
+#: again, 464 MB an arm) and reuse/ptx-published (the published PTX set unpacked, 140 MB) are copies of the base
+#: too: 31 GB over the 70 d652a4b0a1 arms, which stopped the arm controller on laptop disk for four hours
+#: (lane fx-build-tools, 2026-11-18). A resume makes both again (Release.previous_wheel, the PTX admission
+#: re-verifies its tree); their .json witnesses stay by KEEP_SUFFIXES.
+PRUNE_TREES = ("legs", "host-composition/sets", "reuse/sets", "reuse/previous-split", "reuse/ptx-published",
+               "linux/audit")
 
 
 def free_bytes(path):
