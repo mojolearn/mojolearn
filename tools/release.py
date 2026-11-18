@@ -951,6 +951,13 @@ def candidate_defines(ctx):
     return getattr(getattr(ctx, "args", None), "candidate_defines", "") or ""
 
 
+def candidate_timed(ctx):
+    """The arches a B arm is timed on (tools/release.py candidate --timed-on, release_reuse.apply_defines TIMED
+    SETS), comma-joined and sorted; empty for a release, an A set, or an arm timed on every set it builds."""
+    raw = getattr(getattr(ctx, "args", None), "candidate_timed", "") or ""
+    return ",".join(sorted(a.strip() for a in raw.split(",") if a.strip()))
+
+
 def linux_legs(ctx):
     """The legs the reuse plan says to launch: only the sets with a binding
     to BUILD (plus the cheapest leg when only a host binding or the runtime
@@ -2853,6 +2860,7 @@ class Release(release_identity_wheels.IdentityOnWheels):
             if (doc and doc.get("schema") == release_reuse.PLAN_SCHEMA and doc.get("commit") == self.commit
                     and release_reuse.record_modes(doc) == self.release_modes
                     and (doc.get("candidate_defines") or "") == candidate_defines(self)
+                    and ",".join(doc.get("timed_sets") or []) == (candidate_timed(self) if self.candidate_base() else "")
                     and doc.get("linux_sets") == scoped_sets()
                     and bool((doc.get("previous") or {}).get("base")) == bool(self.candidate_base())
                     and not (doc.get("previous") or {}).get("pending")):
@@ -2871,7 +2879,7 @@ class Release(release_identity_wheels.IdentityOnWheels):
             self._plan = release_reuse.make_plan(self.commit, self.evidence / "release" / "identities",
                                                  builders_override=override or None, evidence_root=self.evidence,
                                                  modes=self.release_modes, defines=candidate_defines(self),
-                                                 base=self.candidate_base())
+                                                 base=self.candidate_base(), timed=candidate_timed(self))
             if scoped_sets():
                 self._plan["linux_sets"] = scoped_sets()   # a plan of other targets is not reused (above)
             return self._plan
@@ -2897,6 +2905,7 @@ class Release(release_identity_wheels.IdentityOnWheels):
         if (old.get("commit") != self.commit or old.get("builders_override") != plan.get("builders_override")
                 or release_reuse.record_modes(old) != self.release_modes
                 or old.get("candidate_defines") != plan.get("candidate_defines")
+                or old.get("timed_sets") != plan.get("timed_sets")
                 or old.get("linux_sets") != plan.get("linux_sets")):
             write_json(self.plan_path, plan)
         return (f"against {prev.get('version', 'no published release')}"

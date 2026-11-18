@@ -1340,11 +1340,18 @@ def define_readers(commit, names, root=ROOT):
     return {f for f in named if not f.endswith(".mojo")} | (reads & named)
 
 
-def apply_defines(rows, current, facts, readers, names):
+def apply_defines(rows, current, facts, readers, names, timed=None):
     """CANDIDATE DEFINES (tools/release.py candidate --defines): every Linux row decided REUSE whose closure
     (its script and the Mojo sources it reaches, the identity's own closure) names a define is BUILT, because
     the published bytes were compiled without it. Rows that read none keep their decision: their bytes are
     the define-free ones by construction (tools/bincache.py scope_build_defines builds them the same way).
+
+    TIMED SETS (`timed`, a set of (vendor, arch); tools/release.py candidate --timed-on, lane fx-build-tools
+    2026-11-18): a B arm timed on some sets only (the NVIDIA L40S loads the native sm_89 set and never the PTX
+    slot sm_80, python/mojolearn/_backend.py "THE PTX SLOT") moves only the device rows of those sets; the device
+    rows of every other set stay REUSE and ship the base's bytes, compiled without the define, so no leg runs
+    for them (49 of the 112 d652a4b0a1 arm legs were sm_80 builds no A/B executed). Host rows always move: the
+    host owner's host bindings ship in every set. The row's reason says it, and the plan records `timed_sets`.
     Returns the rows it moved."""
     moved = []
     for r, (b, _) in zip(rows, current):
@@ -1352,11 +1359,28 @@ def apply_defines(rows, current, facts, readers, names):
             continue
         closure = facts["closures"].get(b.script) or {}
         hits = sorted(({"bindings/" + b.script} | set(closure.get("sources", []))) & readers)
-        if hits:
-            r.update(decision="BUILD", reuse_from=None,
-                     reason="candidate defines %s: read by %s" % (",".join(names), ", ".join(hits[:4])))
-            moved.append(r)
+        if not hits:
+            continue
+        why = "candidate defines %s: read by %s" % (",".join(names), ", ".join(hits[:4]))
+        if timed is not None and r["tier"] != "host" and (r["vendor"], r["arch"]) not in timed:
+            r.update(reason="untimed set: the base's bytes, compiled without the define (" + why + ")")
+            continue
+        r.update(decision="BUILD", reuse_from=None, reason=why)
+        moved.append(r)
     return moved
+
+
+def timed_sets(arches):
+    """The (vendor, arch) sets of a comma list of ARCHES (tools/release.py candidate --timed-on), or None for
+    empty (every set is timed: the default)."""
+    names = [a.strip() for a in (arches or "").split(",") if a.strip()] if isinstance(arches, str) else list(arches or [])
+    if not names:
+        return None
+    by_arch = {arch: (vendor, arch) for vendor, arch in ALL_LINUX_SETS}
+    unknown = [a for a in names if a not in by_arch]
+    if unknown:
+        raise SystemExit(f"--timed-on is a comma list of {', '.join(by_arch)}; not {','.join(unknown)}")
+    return {by_arch[a] for a in names}
 
 
 def base_build(work, commit, targets, dry=False):
@@ -1468,7 +1492,7 @@ def skip_units(plan, vendor, arch):
 
 
 def make_plan(commit, cache_dir, root=ROOT, host_toolchain=None, prev=None, builders_override=None,
-              evidence_root=None, candidates=None, modes=None, defines="", base=None):
+              evidence_root=None, candidates=None, modes=None, defines="", base=None, timed=None):
     """The REUSE/BUILD plan of COMMIT. `builders_override` ({builder: sha256})
     replaces a builder's bytes in every identity: the release's route overlay
     runs the tooling checkout's copy of a builder on the box
@@ -1480,7 +1504,10 @@ def make_plan(commit, cache_dir, root=ROOT, host_toolchain=None, prev=None, buil
     each planned against; the plan takes the one that reuses the most
     bindings (runtime closure included), ties going to the newer build. With
     no candidate the plan is exactly the PyPI one. Every REUSE row names its
-    build in `reuse_from`; `considered` lists every source weighed."""
+    build in `reuse_from`; `considered` lists every source weighed.
+
+    `timed` (arches, a B arm with a `base` only; apply_defines TIMED SETS): the
+    define's device rows build only in those sets; the others ship the base's."""
     modes = release_modes() if modes is None else parse_modes(modes)
     commit = git("rev-parse", commit + "^{commit}", root=root).strip()
     if prev is None:
@@ -1529,7 +1556,8 @@ def make_plan(commit, cache_dir, root=ROOT, host_toolchain=None, prev=None, buil
     ptx_proof = best.get("ptx_proof")
     names = [e.split("=", 1)[0] for e in (defines or "").split(",") if e]
     if names:
-        moved = apply_defines(rows, current, facts, define_readers(commit, names, root), names)
+        moved = apply_defines(rows, current, facts, define_readers(commit, names, root), names,
+                              timed=timed_sets(timed) if base else None)
         if ptx_proof and any((r["vendor"], r["arch"]) == PTX_SET for r in moved):
             # the published PTX set was compiled without the defines: it cannot be taken whole. Its leg runs
             # and proves its own set (_settle_ptx), so its other rows stay REUSE like any set's: refusing
@@ -1565,7 +1593,9 @@ def make_plan(commit, cache_dir, root=ROOT, host_toolchain=None, prev=None, buil
                 previous=prev, previous_identities_from=prev_source, considered=considered, rows=rows, runtime=runtime,
                 legs=legs, leg_reasons=why, ptx_proof=ptx_proof, host_toolchain=host_toolchain,
                 builders_override=dict(sorted((builders_override or {}).items())), release_modes=list(modes),
-                **({"candidate_defines": defines} if defines else {}))
+                **({"candidate_defines": defines} if defines else {}),
+                **({"timed_sets": sorted(a for _, a in timed_sets(timed))} if defines and base and timed_sets(timed)
+                   else {}))
     if base:
         # the shard units of the launched legs (unit_plan); only a base-reusing plan skips any
         plan["units"] = unit_plan(plan, commit_groups(commit, list(modes) + ["host"], root))
