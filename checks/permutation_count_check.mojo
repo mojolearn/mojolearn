@@ -106,6 +106,17 @@ def _predict(
         cat_features=cat,
         permutation_count=perm_count,
         ctr_estimation_permutation_id=est,
+        # BOTH ARMS ESTIMATE (fb11, 2026-11-17; the first L40S run: 2629 of
+        # 4000 rows differ in gate 1). Under the default RMSE + Newton x 1,
+        # DEVIATION 64 keeps the SEARCHER's histogram leaf at one
+        # permutation and runs the estimator at more than one
+        # (`doc_parallel_boosting.mojo` `need_estimation`, "...AND ONLY AT
+        # ONE PERMUTATION"): two float folds of the same Newton step, so
+        # `permutation_count` 1 and 4 took different leaf code and gate 1
+        # compared the deviation, not the permutation sets. Newton x 2 needs
+        # estimation at every permutation count, so the leaf code is shared
+        # and the CTR/permutation plumbing is again the only difference.
+        leaf_estimation_iterations=2,
     )
     return predict_floats(ctx, tm, x, PC_ROWS)
 
