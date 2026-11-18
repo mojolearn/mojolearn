@@ -921,6 +921,13 @@ in the tables after the sections.
 | [`MOJOLEARN_TREES_BLOCK_SCRATCH_FILL_OFF`](#mojolearn_trees_block_scratch_fill_off-fb15-ab-verdicts) | Trees (GBDT histogram scratch: whole-buffer zero per block) | removed (decided B arm: L40S B 1.38-1.40x slower on lossguide istella fit) | 2026-11-18 | [MOJOLEARN_TREES_BLOCK_SCRATCH_FILL_OFF.patch](../experiments/removed/MOJOLEARN_TREES_BLOCK_SCRATCH_FILL_OFF.patch) |
 | [`MOJOLEARN_LINEAR_LBD_BATCH_OFF`](#mojolearn_linear_lbd_batch_off-fb15-ab-verdicts) | Linear (device L-BFGS: one flag read per trial, 0.8.55's form) | removed (decided B arm: L40S B 1.00-1.02x, no gain) | 2026-11-18 | [MOJOLEARN_LINEAR_LBD_BATCH_OFF.patch](../experiments/removed/MOJOLEARN_LINEAR_LBD_BATCH_OFF.patch) |
 | [`MOJOLEARN_NI12_FILL_RULE_OFF`](#mojolearn_ni12_fill_rule_off-fb15-ab-verdicts) | Neural (CNN: implicit conv on every layer) | removed (decided B arm: L40S B 1.15x slower on cnn-clf fit, rest 0.95-1.04) | 2026-11-18 | [MOJOLEARN_NI12_FILL_RULE_OFF.patch](../experiments/removed/MOJOLEARN_NI12_FILL_RULE_OFF.patch) |
+| [`MOJOLEARN_XQ_ABS_BALANCE`](#mojolearn_xq_abs_balance-fx-env-dead) | Linear (QuantileRegressor ADMM: absolute residual balancing, env arm) | removed (decided by quality: drifted off the LP optimum) | 2026-11-18 | [MOJOLEARN_XQ_ABS_BALANCE.patch](../experiments/removed/MOJOLEARN_XQ_ABS_BALANCE.patch) |
+| [`MOJOLEARN_SGD_BATCH_SUM`](#mojolearn_sgd_batch_sum-fx-env-dead) | Linear (SGD: summed-step override, env arm) | removed (B arm of an experiment already closed) | 2026-11-18 | [MOJOLEARN_SGD_BATCH_SUM.patch](../experiments/removed/MOJOLEARN_SGD_BATCH_SUM.patch) |
+| [`MOJOLEARN_XN_HOST_SERIAL`](#mojolearn_xn_host_serial-fx-env-dead) | x_neighbors host column (one-thread item loop, env arm) | removed (parallel hard rule; unmeasured opt-in arm) | 2026-11-18 | [MOJOLEARN_XN_HOST_SERIAL.patch](../experiments/removed/MOJOLEARN_XN_HOST_SERIAL.patch) |
+| [`MOJOLEARN_IDN_HDB_SPARSE_MIN_ROWS`](#mojolearn_idn_hdb_sparse_min_rows-fx-env-dead) | hdbscan (graph=auto sparse switch point, IDENTICAL) | removed (unmeasured opt-in threshold arm) | 2026-11-18 | [MOJOLEARN_IDN_HDB_SPARSE_MIN_ROWS.patch](../experiments/removed/MOJOLEARN_IDN_HDB_SPARSE_MIN_ROWS.patch) |
+| [`MOJOLEARN_KMEANS_LAZY_SHIFT_IDN_OFF`](#mojolearn_kmeans_lazy_shift_idn_off-fx-env-dead) | Cluster (k-means lazy convergence read, IDENTICAL; old path) | removed (old path beside the default, no A/B in four weeks) | 2026-11-18 | [MOJOLEARN_KMEANS_LAZY_SHIFT_IDN_OFF.patch](../experiments/removed/MOJOLEARN_KMEANS_LAZY_SHIFT_IDN_OFF.patch) |
+| [`MOJOLEARN_KMEANS_LIVE_CORES_OFF`](#mojolearn_kmeans_live_cores_off-fx-env-dead) | Cluster (k-means fused grid from the stand-in SM table row; old path) | removed (old path beside the default, no A/B in four weeks) | 2026-11-18 | [MOJOLEARN_KMEANS_LIVE_CORES_OFF.patch](../experiments/removed/MOJOLEARN_KMEANS_LIVE_CORES_OFF.patch) |
+| [`MOJOLEARN_CHOL_FAST_POOLIO_OFF`](#mojolearn_chol_fast_poolio_off-fx-env-dead) | Cholesky (device IO without the pool; old path) | removed (old path beside the default, no IDENTICAL A/B in four weeks) | 2026-11-18 | [MOJOLEARN_CHOL_FAST_POOLIO_OFF.patch](../experiments/removed/MOJOLEARN_CHOL_FAST_POOLIO_OFF.patch) |
 
 | [`MOJOLEARN_IDN_M1_SCAN`](#mojolearn_idn_m1_scan) | Neural (Mamba-1 scan selector, IDENTICAL) | removed (opt-in arms, no A/B recorded) | 2026-11-15 | [MOJOLEARN_IDN_M1_SCAN.patch](../experiments/removed/MOJOLEARN_IDN_M1_SCAN.patch) |
 | [`MOJOLEARN_IDN_M2_CB_LOWER_OFF`](#mojolearn_idn_m2_cb_lower_off) | Neural (Mamba-2 oracle cb.G triangle, IDENTICAL) | removed (old path, no A/B recorded) | 2026-11-15 | [MOJOLEARN_IDN_M2_CB_LOWER_OFF.patch](../experiments/removed/MOJOLEARN_IDN_M2_CB_LOWER_OFF.patch) |
@@ -22526,3 +22533,61 @@ Evidence for every section below: A/B ab1, NVIDIA L40S (RunPod host 37f71a6102af
 - Deleted by `e8c60877c3` on lane/fb15-ab-verdicts; recoverable at `c989eb9222`.
 - Patch: `experiments/removed/MOJOLEARN_NI12_FILL_RULE_OFF.patch`. Refusal: `core/experiment_guards_neural.mojo`;
   grid entry moved to `removed` in `neural-seq-train-dedupe.json` (ni12_fill_rule).
+
+## Env arms and unmeasured defines: lane fx-env-dead (2026-11-18)
+
+### MOJOLEARN_XQ_ABS_BALANCE (fx-env-dead)
+
+- What it was: Run-time env read `MOJOLEARN_XQ_ABS_BALANCE=1` (per fit) switched the ADMM residual balancing from the relative rule (prim/eps_p against dual/eps_d, OSQP) to the absolute rule (prim against dual), through request word fp[4] and the `rel` flag of `_balance` / `rel_bal` of `q_tail` on both columns.
+- Verdict: DECIDED by quality, recorded in the kernel docstring: the absolute rule compares two norms in different units; on standardized Istella-S and taxi it doubled rho to ~4000x its start, float32 ADMM drifted off the LP optimum (Istella-S r2 -1.7e11) and never met the tolerance (5000 iterations). Speed is never bought with quality. The default (relative) path is unchanged on every column: no bit changes. fp[4] stays in the request layout, unread.
+- Files: x_linear/quantile.mojo, quantile_grid.mojo, quantile_host.mojo, bindings/x_linear_native_door.mojo.
+- Deleted on lane/fx-env-dead (base 0c65d61fed, branch of preinteg/wave2-20261113); code recoverable at `0c65d61fed`.
+- Patch: `experiments/removed/MOJOLEARN_XQ_ABS_BALANCE.patch`. Records: No define existed, so no refusal; the env name is simply no longer read. `docs/apple-fast/EXPERIMENTS.md` row (fx-env-dead section).
+
+### MOJOLEARN_SGD_BATCH_SUM (fx-env-dead)
+
+- What it was: Run-time env read `MOJOLEARN_SGD_BATCH_SUM=0|1` (per fit) overrode the 'auto' summed-step choice for SGDClassifier/SGDRegressor/Perceptron/PassiveAggressive.
+- Verdict: It was the B arm of `MOJOLEARN_SGD_AUTO_STEPS_256_OFF` (EXPERIMENTS.md row 17), whose old path was deleted 2026-11-15 by lane/expdel2-21-linear (unmeasured old path; default kept). The override had no other record. Default path unchanged: no bit changes.
+- Files: bindings/x_linear_native_door.mojo.
+- Deleted on lane/fx-env-dead (base 0c65d61fed, branch of preinteg/wave2-20261113); code recoverable at `0c65d61fed`.
+- Patch: `experiments/removed/MOJOLEARN_SGD_BATCH_SUM.patch`. Records: No define existed, so no refusal. `docs/apple-fast/EXPERIMENTS.md` row (fx-env-dead section).
+
+### MOJOLEARN_XN_HOST_SERIAL (fx-env-dead)
+
+- What it was: Run-time env read `MOJOLEARN_XN_HOST_SERIAL=1` (once per process through a shared slot) ran every x_neighbors host op's items one after another on one thread (the loop before lane/neural-pass72).
+- Verdict: DECIDED by the HARD RULE "write code to run in parallel" (2026-11-05) and "An unmeasured arm is deleted" (2026-11-15): no A/B on record since 2026-10-01. Items are row-independent, so the parallel default moves no bit; nothing changes on any column.
+- Files: x_neighbors/host_ops.mojo, x_neighbors/gen.py.
+- Deleted on lane/fx-env-dead (base 0c65d61fed, branch of preinteg/wave2-20261113); code recoverable at `0c65d61fed`.
+- Patch: `experiments/removed/MOJOLEARN_XN_HOST_SERIAL.patch`. Records: No define existed, so no refusal. The generator (gen.py) and the generated file change together. `docs/apple-fast/EXPERIMENTS.md` row (fx-env-dead section).
+
+### MOJOLEARN_IDN_HDB_SPARSE_MIN_ROWS (fx-env-dead)
+
+- What it was: Int define (default 46340 = PAIRWISE_MAX_ROWS) that moved the graph=auto switch to the matrix-free sparse MST below the dense bound; candidate values 4096 / 16384 were never timed.
+- Verdict: Marked DELETE in docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md, then KEEP-OPEN by expdel-06 as an unmeasured candidate; no A/B recorded since 2026-10-04, so deleted under "An unmeasured arm is deleted" (2026-11-15). The default switch point is kept; with it the `m > PAIRWISE_MAX_ROWS or not trace.enabled` term was always true and went too. No bit changes.
+- Files: hdbscan/impl/detail/idn_switches.mojo, hdbscan/impl/cluster/detail/single_linkage.mojo.
+- Deleted on lane/fx-env-dead (base 0c65d61fed, branch of preinteg/wave2-20261113); code recoverable at `0c65d61fed`.
+- Patch: `experiments/removed/MOJOLEARN_IDN_HDB_SPARSE_MIN_ROWS.patch`. Records: Refusal in `core/experiment_guards_cluster.mojo`; `classical-fixes.json` removed entry updated; the two `hdbscan_sparse_threshold` recipes in `tools/identical_candidate_recipes.json` marked REMOVED_UNMEASURED. `docs/apple-fast/EXPERIMENTS.md` row (fx-env-dead section).
+
+### MOJOLEARN_KMEANS_LAZY_SHIFT_IDN_OFF (fx-env-dead)
+
+- What it was: Rollback of `KMEANS_LAZY_SHIFT_IDN`: the per-iteration shift read in IDENTICAL for IVF coarse quantizers and IVF-PQ codebooks.
+- Verdict: Marked DELETE in the 2026-11-15 plan, then KEEP-OPEN (expdel-06) because the default itself has no A/B; the old path has none either, since 2026-10-08. Deleted under "An unmeasured arm is deleted". The default is unchanged on all four columns: no bit changes. The owed default-vs-old A/B can still be run from the patch.
+- Files: cluster/impl/kmeans_params.mojo.
+- Deleted on lane/fx-env-dead (base 0c65d61fed, branch of preinteg/wave2-20261113); code recoverable at `0c65d61fed`.
+- Patch: `experiments/removed/MOJOLEARN_KMEANS_LAZY_SHIFT_IDN_OFF.patch`. Records: Refusal in `core/experiment_guards_cluster.mojo`; `gap-ivf.json` control moved to `removed`. `docs/apple-fast/EXPERIMENTS.md` row (fx-env-dead section).
+
+### MOJOLEARN_KMEANS_LIVE_CORES_OFF (fx-env-dead)
+
+- What it was: Rollback of `KMEANS_LIVE_CORES`: the fused assignment grid sized from `gpu_cores_for`'s stand-in parts instead of the device's MULTIPROCESSOR_COUNT on NVIDIA and AMD.
+- Verdict: EXP:1671 PENDING since 2026-10-08; no A/B recorded. Deleted under "An unmeasured arm is deleted". No bit moves either way (grid.x pinned to 1, grid-stride over row tiles); the default is unchanged. Apple keeps the table row.
+- Files: cluster/impl/detail/min_cluster_distance_compute.mojo.
+- Deleted on lane/fx-env-dead (base 0c65d61fed, branch of preinteg/wave2-20261113); code recoverable at `0c65d61fed`.
+- Patch: `experiments/removed/MOJOLEARN_KMEANS_LIVE_CORES_OFF.patch`. Records: Refusal in `core/experiment_guards_cluster.mojo`; `fg-ivf.json` control moved to `removed`. `docs/apple-fast/EXPERIMENTS.md` row (fx-env-dead section).
+
+### MOJOLEARN_CHOL_FAST_POOLIO_OFF (fx-env-dead)
+
+- What it was: Rollback of CHOL_FAST_POOLIO: `cholesky_factor_devio`'s own body (a fresh pinned host buffer, device matrix and potrf workspace every fit) instead of the pooled IO of `cholesky_factor_poolio`.
+- Verdict: EXP:1414 (rab15-cholpoolio, M3 FAST) kept POOLIO: cholesky 262.4 -> 228.1 ms, digest same. POOLIO is also the IDENTICAL default (CHOL_FAST_DEVIO), where no A/B exists; the old path has none since 2026-10-04, so it is deleted under "An unmeasured arm is deleted". `potrf_lower` is the same on both: no bit changes. `cholesky_factor_devio` now calls the pooled IO.
+- Files: cholesky/estimator.mojo.
+- Deleted on lane/fx-env-dead (base 0c65d61fed, branch of preinteg/wave2-20261113); code recoverable at `0c65d61fed`.
+- Patch: `experiments/removed/MOJOLEARN_CHOL_FAST_POOLIO_OFF.patch`. Records: Refusal in `core/experiment_guards_decomposition.mojo`; no grid_controls entry named it. `docs/apple-fast/EXPERIMENTS.md` row (fx-env-dead section).
