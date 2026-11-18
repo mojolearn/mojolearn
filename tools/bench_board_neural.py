@@ -2477,20 +2477,23 @@ class OursBlock(Ours):
             # Before the clock: the per-token host inputs (the caller's decode
             # loop feeds one (B, 1, d_model) token per call).
             self.decode_tokens = [np.ascontiguousarray(self.x[:, t:t + 1, :]) for t in range(length)]
-            if model == "transformer":
+            # A prior wheel without a public decode_session allocates nothing here: its per-call step path
+            # allocates a fresh state per round (the setup state used to be allocated and then discarded).
+            has_session = hasattr(self.block, "decode_session")
+            if model == "transformer" and has_session:
                 self.decode_state = self.block.allocate_state(batch, length)
-            elif model in ("mamba1", "mamba2", "mamba3"):
+            elif model in ("mamba1", "mamba2", "mamba3") and has_session:
                 # lane fix-d1-decode-sessions (2026-11-08): Mamba-2/3 open the
                 # public resident session too (0.8.66 mamba3-decode 2.17x on the
                 # per-call step); the same bytes as the per-call step.
                 self.decode_state = self.block.allocate_state(batch)
-            if self.decode_state is not None and hasattr(self.block, "decode_session"):
+            if self.decode_state is not None:
                 # The public resident session: weights uploaded once, here,
                 # like the torch twin's device weights. The state's host
                 # buffers stay zero (never synced), so load_state() is the
                 # per-round zero reset.
                 self.decode_session = self.block.decode_session(self.decode_state)
-            elif self.decode_state is not None:
+            elif model in ("transformer", "mamba1", "mamba2", "mamba3"):
                 # A PRIOR WHEEL (the pre-0.8.67 measurement's 0.8.66 arm, lane candidate-build): Mamba-2/3 have
                 # no public decode_session there, so the arm runs that version's public per-call step (call(),
                 # fresh allocate_state per round), as its own board measured it.
