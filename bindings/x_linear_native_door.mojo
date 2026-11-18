@@ -55,7 +55,7 @@ from bindings.native_class_admission_door import class_record, class_admit
 from bindings.py_lists import py_list_int, py_list_f64
 from bindings.classical_exceptions_door import classical_require_fitted
 from bindings.classical_error_boundary_pack import classical_python_error
-from bindings.classical_arrays_door import classical_typed, classical_address
+from bindings.classical_arrays_door import classical_address
 from bindings.native_array_view_pack import native_array_ndarray_view
 from providers.python.array_metadata_pyapi_door import array_slot_once
 from providers.python.estimator_lifecycle_pyapi_unpack import estimator_outside, estimator_feature_check, estimator_fit_begin, estimator_fit_end, estimator_fit_complete
@@ -73,6 +73,8 @@ from bindings.admitted_input_unpack import (
     admitted_words,
     admitted_array,
     admitted_vector,
+    admitted_storage,
+    admitted_storage_native,
     classical_view,
     admit_ids,
 )
@@ -302,7 +304,13 @@ def _xl_slice(out_buf: PythonObject, offset: Int, count: Int, shape: PythonObjec
 def _xl_join(first: Int, first_count: Int, second: Int, second_count: Int, context: PythonObject) raises -> PythonObject:
     """`_concat_f32(a, b)`: a's then b's 32-bit words in one float32 vector
     (two byte copies)."""
-    var out = admitted_vector(first_count + second_count, "<f4", context)
+    # fx-rows (2026-11-18): the two copies write every word, so the vector
+    # is allocated unfilled (`admitted_storage_native`, a mojolearn Array as
+    # `admitted_vector` returns); it was zero-filled and then overwritten
+    # (per predict for isotonic's knots). An empty join keeps the old form.
+    var total = first_count + second_count
+    var out = (admitted_storage_native([total], "<f4", context, as_array=True) if total > 0
+               else admitted_vector(0, "<f4", context))
     xl_run_join(labels_address(out), first, first_count, second, second_count)
     return out
 
@@ -438,12 +446,31 @@ def _xl_codes(model: PythonObject, x: AdmittedXView, coef: PythonObject, interce
 
 def _xl_run(ops: XLinearOps, algo: Int, x_addr: Int, x_size: Int, n: Int, d: Int, y_addr: Int, y_size: Int,
             ip: List[Int], fp: List[Float64], n_out: Int, n_fw: Int, n_iw: Int,
-            context: PythonObject) raises -> PythonObject:
+            context: PythonObject, written: Int = 0) raises -> PythonObject:
     """`_run_array`: one XL_OP_FIT call; the flat float32 result. The
     targets are `y_size` 32-bit words at `y_addr` (the caller keeps them
-    alive); `y_size` 0 is no targets (one zero word, as `zeros((1,))`)."""
-    var out = admitted_vector(n_out, "<f4", context)
-    var zero = admitted_vector(1, "<f4", context)
+    alive); `y_size` 0 is no targets (one zero word, as `zeros((1,))`).
+    `written`: the leading result words the entry writes in full on every
+    binding (host and device); those are left unfilled and only the words
+    after them start as zeros. 0 (the default) zero-fills the whole result."""
+    # fx-rows (2026-11-18): the result was zero-filled (0.4 MB for 100k
+    # isotonic queries) and then overwritten word for word by the entry, and a
+    # one-word zero vector was allocated per call even when targets were
+    # given. A caller that proves `written` gets an unfilled result with only
+    # its tail zeroed; the zero word is allocated only when there are no
+    # targets. Timing: isotonic infer on taxi and istella (board), 50k random
+    # monotone pairs (non-board). No result word changes.
+    var out: PythonObject
+    if written > 0 and written <= n_out:
+        out = admitted_storage_native([n_out], "<f4", context, as_array=True)
+        var tail = _F32P(unsafe_from_address=labels_address(out))
+        for i in range(written, n_out):  # small-loop(the status words after the written prefix)
+            tail[i] = Float32(0)
+    else:
+        out = admitted_vector(n_out, "<f4", context)
+    var zero = PythonObject(None)
+    if y_size <= 0:
+        zero = admitted_vector(1, "<f4", context)
     var ya = y_addr if y_size > 0 else labels_address(zero)
     var out_addr = labels_address(out)
     var py = Python()
@@ -1424,8 +1451,12 @@ def _xl_isotonic_transform(model: PythonObject, fields: PythonObject, entries: X
     var oob = 2 if raise_oob else (1 if _eq(oob_mode, PythonObject("clip")) else 0)
     var ip: List[Int] = [k, oob]
     var fp: List[Float64] = [_float(fields["X_min_"]), _float(fields["X_max_"])]
+    # Both bindings write every prediction word (host `isotonic_predict`,
+    # one query per team slot; device `_iso_predict_grid`, one thread per
+    # query): only the out-of-bounds word at [n] starts as zero (the host
+    # column ORs into it).
     var out = _xl_run(entries, ALGO_ISOTONIC_PREDICT, t.address, n, n, 1, labels_address(thr), Int(py=thr.size),
-                      ip, fp, n + 1 if raise_oob else n, 1, 1, context)
+                      ip, fp, n + 1 if raise_oob else n, 1, 1, context, written=n)
     _ = thr  # keep the Python object alive through the native call above
     _ = yt  # keep the Python object alive through the native call above
     _ = xt  # keep the Python object alive through the native call above
@@ -2582,7 +2613,12 @@ def _xl_widen(result: PythonObject, context: PythonObject) raises -> PythonObjec
     var count = 1
     for i in range(len(shape)):  # driver-loop: over admitted result rank metadata
         count *= Int(py=shape[i])
-    var wide = classical_typed(shape, "<f8", context)
+    # fx-rows (2026-11-18): the cast writes every element, so the float64
+    # result is uninitialised storage (`admitted_storage`: an ndarray with
+    # NumPy, else an Array, the types `classical_typed` returned); it was a
+    # zero-filled 0.8 MB bytearray per isotonic/regressor predict, then
+    # overwritten. The dtype and the values are unchanged.
+    var wide = admitted_storage(shape, "<f8", context)
     labels_cast(Int(py=classical_address(result)), "<f4", Int(py=classical_address(wide)), "<f8", count, context)
     _ = result
     return wide
