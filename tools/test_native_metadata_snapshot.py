@@ -42,7 +42,9 @@ class NativeMetadataSnapshotSourceTests(unittest.TestCase):
                 # Lane a1b: the helpers take the Arrays themselves and read each
                 # one's address slot once (trees_address); no view struct.
                 self.assertNotRegex(source, r'len\(|_view_of_array\(')
-                after_call = source[source.index('    _ = py_call_typed'):]
+                # the helpers call the typed glue entry (`_ = xt_<op>(glue, ...)`), not a Python-typed call
+                self.assertNotIn('py_call_typed', source)
+                after_call = source[source.index('    _ = xt_'):]
                 for owner in owners:
                     self.assertIn('    _ = ' + owner + '\n', after_call.replace('  #', '\n#'))
 
