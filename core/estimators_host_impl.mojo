@@ -10,7 +10,7 @@ copy of a result into the caller's buffers live here with no Python import,
 word for word as they were in the binding (lane thin-core, 2026-10-21: a
 pure move, no bit change).
 """
-from std.math import isfinite
+from core.host_finite_scan import host_all_finite_f32, host_all_finite_list
 
 from core.hostptr import f32_ptr, i32_ptr, read_f32
 from checks.numerics import ftz
@@ -394,16 +394,16 @@ def dbscan_fit_host_run(
 def _whiten_finite(values: List[Float32], what: String) raises:
     """`_pca_whiten_finite` of the GPU binding, over the copy this side
     reads, with the GPU binding's sentence."""
-    for i in range(len(values)):
-        if not isfinite(values[i]):
-            raise Error("PCA whitening requires finite inputs and outputs")
+    # parallel: the one host finite scan (was a serial isfinite loop)
+    if not host_all_finite_list(values):
+        raise Error("PCA whitening requires finite inputs and outputs")
 
 
 def _whiten_finite_ptr(values: HostF32Ptr, count: Int, what: String) raises:
     """The same finite refusal over caller-owned memory, without a copy."""
-    for i in range(count):
-        if not isfinite(values.unsafe_load(i)):
-            raise Error("PCA whitening requires finite inputs and outputs")
+    # parallel: the one host finite scan (was a serial isfinite loop)
+    if not host_all_finite_f32(values, count):
+        raise Error("PCA whitening requires finite inputs and outputs")
 
 
 def pca_whiten_check_host(
@@ -464,15 +464,15 @@ def pca_whiten_host_run(
 
 
 def _pp_minmax_finite(values: List[Float32]) raises:
-    for value in values:
-        if not isfinite(value):
-            raise Error("MinMaxScaler: nonfinite input or Float32 arithmetic overflow")
+    # parallel: the one host finite scan (was a serial isfinite loop)
+    if not host_all_finite_list(values):
+        raise Error("MinMaxScaler: nonfinite input or Float32 arithmetic overflow")
 
 
 def _pp_standard_finite(values: List[Float32]) raises:
-    for value in values:
-        if not isfinite(value):
-            raise Error("StandardScaler: nonfinite input or Float32 arithmetic overflow")
+    # parallel: the one host finite scan (was a serial isfinite loop)
+    if not host_all_finite_list(values):
+        raise Error("StandardScaler: nonfinite input or Float32 arithmetic overflow")
 
 
 def standard_transform_host_run(

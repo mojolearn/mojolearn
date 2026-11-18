@@ -3,7 +3,7 @@
 (`bindings/parallel_byte_native.mojo`): span arithmetic, the word copy of an
 admitted input array, and the value checks on admitted state. No Python here;
 the boundary resolves addresses and calls these."""
-from std.math import isfinite
+from core.host_finite_scan import host_all_finite_f32
 from std.memory import unsafe_memcpy
 
 
@@ -40,10 +40,9 @@ def parallel_copy_words(src_addr: Int, dst_addr: Int, dims: List[Int], n: Int, f
 
 
 def parallel_require_finite_f32(addr: Int, n: Int) raises:
-    var fp = Pointer[Float32, ImmUntrackedOrigin](unsafe_from_address=addr)
-    for i in range(n):
-        if not isfinite(fp[i]):
-            raise Error("parallel input requires finite float32 values")
+    # parallel: the one host finite scan (was a serial isfinite loop)
+    if not host_all_finite_f32(MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=addr), n):
+        raise Error("parallel input requires finite float32 values")
 
 
 def parallel_require_nonnegative_f32(addr: Int, n: Int) raises:

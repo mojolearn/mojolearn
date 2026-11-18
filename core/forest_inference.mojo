@@ -25,6 +25,7 @@ from max.gpu import block_idx, block_dim, thread_idx
 from std.sys.compile import is_defined
 from std.atomic import Atomic
 from core.device_fold import device_exclusive_scan_total
+from core.host_finite_scan import host_all_finite_list
 from std.memory import bitcast, stack_allocation
 from max.gpu.host import DeviceContext, DeviceBuffer
 from max.gpu.memory import AddressSpace
@@ -583,9 +584,9 @@ def _launch_grove_rows[RF_INPUT: Bool, PACKED: Bool](
 
 
 def require_finite(values: List[Float32]) raises:
-    for value in values:
-        if (bitcast[DType.uint32](value) & UInt32(0x7f800000)) == UInt32(0x7f800000):
-            raise Error("forest inference prototype requires finite Float32 values")
+    # parallel: the one host finite scan (was a serial bits loop)
+    if not host_all_finite_list(values):
+        raise Error("forest inference prototype requires finite Float32 values")
 
 
 comptime FOREST_FINITE_TPB = 256

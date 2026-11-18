@@ -9,7 +9,7 @@ and its canonical data schedule live here, in Mojo memory. The Python door
 training program with addresses into these buffers; nothing here imports
 Python.
 """
-from std.math import isfinite
+from core.host_finite_scan import host_all_finite_f32
 from std.memory import unsafe_memcpy
 from core.shared_slot import SharedSlot
 
@@ -179,18 +179,16 @@ def mlp_copy_i32(src_addr: Int, dst_addr: Int, n: Int):
 
 def mlp_require_finite(addr: Int, n: Int, label: String) raises:
     """ValueError naming `label` when any of `n` float32 values is not finite."""
-    var data = Pointer[Float32, ImmUntrackedOrigin](unsafe_from_address=addr)
-    for i in range(n):
-        if not isfinite(data[i]):
-            raise Error("SmallMLPTrainer " + label + " must be finite")
+    # parallel: the one host finite scan (was a serial isfinite loop)
+    if not host_all_finite_f32(MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=addr), n):
+        raise Error("SmallMLPTrainer " + label + " must be finite")
 
 
 def mlp_require_result_finite(addr: Int, n: Int, label: String) raises:
     """RuntimeError: an operation's output is not finite."""
-    var data = Pointer[Float32, ImmUntrackedOrigin](unsafe_from_address=addr)
-    for i in range(n):
-        if not isfinite(data[i]):
-            raise Error("RuntimeError: SmallMLPTrainer " + label + " returned an invalid result")
+    # parallel: the one host finite scan (was a serial isfinite loop)
+    if not host_all_finite_f32(MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=addr), n):
+        raise Error("RuntimeError: SmallMLPTrainer " + label + " returned an invalid result")
 
 
 def mlp_require_moments(state: MlpState) raises:
