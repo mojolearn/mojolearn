@@ -299,30 +299,55 @@ def _label_unique(mut p: EncProg, x: Int, n: Int) -> Tuple[Int, Int]:
 
 @fieldwise_init
 struct LabelFit(Copyable, Movable):
-    """(classes list, device categories Array or None, int32 codes Array or None)."""
+    """(classes list, device categories Array or None, int32 codes Array or
+    None, `classes_` Array or None). `array` is set by the device route,
+    which writes `classes_` from the class words natively (`_fit_array`);
+    None makes `_classes_array` convert the classes list."""
     var classes: PythonObject
     var cats: PythonObject
     var codes: PythonObject
+    var array: PythonObject
 
 
 def _label_classes_of(ran: PythonObject, lb: LabelBuf, u: Int, k: Int, context: PythonObject) raises -> Optional[LabelFit]:
     """`_label_classes_of`: (classes, cats) read back after the run, or None
     when a label has no exact float32 word (NaN sorts last)."""
-    var K = Int(_word(ran, k))
+    # fb15-sync-counts (2026-11-18): the arena address is read once (was two
+    # Python subscripts per class word in `_word`), and `classes_` is written
+    # here from the same words (int64 / float64, the values the list holds),
+    # not rebuilt by `_classes_array` (a kind scan of the list and one
+    # int() / float() Python call per class). Same values, same dtypes.
+    var words = F32P(unsafe_from_address=Int(py=ran[0][1]))
+    var K = Int(words[k])
     if K == 0:
         return None
-    var last = _word(ran, u + K - 1)
+    var last = words[u + K - 1]
     if last != last:
         return None
     var cats = _take1(ran, u, K, context)
     var classes = Python.list()
+    var array = admitted_vector(K, "<f8" if lb.is_float else "<i8", _out(context))
+    var dest = labels_address(array)
+    var dest_f = F64P(unsafe_from_address=dest)
+    var dest_i = I64P(unsafe_from_address=dest)
     for i in range(K):  # driver-loop: over the distinct class values the device found
-        var w = _word(ran, u + i)
+        var w = words[u + i]
         if lb.is_float:
+            dest_f[i] = Float64(w)
             _ = py_call(classes.append, PythonObject(Float64(w)))
         else:
+            dest_i[i] = Int64(Int(w))
             _ = py_call(classes.append, PythonObject(Int(w)))
-    return LabelFit(classes, cats, PythonObject(None))
+    _ = ran  # keep the arena alive through the reads above
+    _ = array  # keep the Python object alive through the native writes above
+    return LabelFit(classes, cats, PythonObject(None), array)
+
+
+def _fit_array(fit: LabelFit, context: PythonObject) raises -> PythonObject:
+    # `classes_`: the device route's native array, else `_classes_array`.
+    if fit.array is not None:
+        return fit.array
+    return _classes_array(fit.classes, context)
 
 
 def _label_present_enabled(mode: PythonObject, entries: PythonObject) raises -> Bool:
@@ -490,7 +515,7 @@ def _label_classes(mode: PythonObject, values: PythonObject, context: PythonObje
     var all_ints = False
     if not _numeric_label_words(values, words, all_ints, True, context) or len(words) == 0:
         var ordered = _sorted_classes(values, context)
-        return LabelFit(ordered.classes, PythonObject(None), PythonObject(None))
+        return LabelFit(ordered.classes, PythonObject(None), PythonObject(None), PythonObject(None))
     var m = len(words)
     var arr = _f32_matrix(words, m, 1, context)
     var cats = _fit_categories(Python.tuple(0, arr, PythonObject(None), m, 1), mode, _entries(mode, context), context)[0]
@@ -505,7 +530,7 @@ def _label_classes(mode: PythonObject, values: PythonObject, context: PythonObje
             _ = py_call(classes.append, PythonObject(Int(w)))
         else:
             _ = py_call(classes.append, PythonObject(Float64(w)))
-    return LabelFit(classes, cats, PythonObject(None))
+    return LabelFit(classes, cats, PythonObject(None), PythonObject(None))
 
 
 def _label_codes(mut p: EncProg, words: List[Float64], cats: PythonObject, context: PythonObject) raises -> Tuple[Int, Int]:
@@ -732,7 +757,7 @@ def _text_fit(table: StrTable, context: PythonObject) raises -> LabelFit:
         var first = firsts[c]
         _ = py_call(classes.append, pack_ucs4_str(base + table.starts[first] * 4, table.lengths[first]))
     _ = table  # the code points are read by the packs above
-    return LabelFit(classes, PythonObject(None), codes)
+    return LabelFit(classes, PythonObject(None), codes, PythonObject(None))
 
 
 def _text_codes(classes: PythonObject, table: StrTable, as_float: Bool, context: PythonObject) raises -> PythonObject:
@@ -895,27 +920,32 @@ def _set_fit(fields: PythonObject, fit: LabelFit, context: PythonObject) raises:
     py_setitem(fields, "_cats", fit.cats)
 
 
-def _fit_labels(fields: PythonObject, mode: PythonObject, y: PythonObject, context: PythonObject) raises:
+def _fit_labels(fields: PythonObject, mode: PythonObject, y: PythonObject, context: PythonObject) raises -> LabelFit:
     # `_label_fit_device` of a numeric buffer, else `_label_classes(flatten_labels(y))`.
+    # Returns the fit set on `fields` (its `classes_` by `_fit_array`).
     var lb = _label_buffer(y, context)
     if lb:
         var got = _label_fit_device(mode, lb.value(), False, context)
         if got:
-            _set_fit(fields, got.value(), context)
-            return
+            var fit = got.value().copy()
+            _set_fit(fields, fit, context)
+            return fit^
     var text = StrTable()
     if _text_labels(y, context, text):
-        _set_fit(fields, _text_fit(text, context), context)
-        return
-    _set_fit(fields, _label_classes(mode, _flatten_labels(y, context), context), context)
+        var fit = _text_fit(text, context)
+        _set_fit(fields, fit, context)
+        return fit^
+    var fit = _label_classes(mode, _flatten_labels(y, context), context)
+    _set_fit(fields, fit, context)
+    return fit^
 
 
 def _le_fit(model: PythonObject, y: PythonObject, context: PythonObject) raises -> PythonObject:
     var fields = py_fields(model)
     var mode = _default_mode(context)
     py_setitem(fields, "numeric_mode_", mode)
-    _fit_labels(fields, mode, y, context)
-    py_setitem(fields, "classes_", _classes_array(fields["_classes"], context))
+    var fit = _fit_labels(fields, mode, y, context)
+    py_setitem(fields, "classes_", _fit_array(fit, context))
     return model
 
 
@@ -930,7 +960,7 @@ def _le_fit_transform(model: PythonObject, y: PythonObject, context: PythonObjec
         if got:
             var fit = got.value().copy()
             _set_fit(fields, fit, context)
-            py_setitem(fields, "classes_", _classes_array(fit.classes, context))
+            py_setitem(fields, "classes_", _fit_array(fit, context))
             return fit.codes
     var text = StrTable()
     if _text_labels(y, context, text):
@@ -959,9 +989,12 @@ def _le_transform_device(mode: PythonObject, lb: LabelBuf, cats: PythonObject, c
     var neg = p.alloc(nch)
     _stage(p.prog.program, OP_CHUNK_NEG, nch, codes, n, ch, neg)
     var ran = p.run(entries, context)
-    for i in range(nch):  # driver-loop: over the per-chunk unknown flags
-        if _iword(ran, neg + i) != 0:
+    # The arena address read once (was two Python subscripts per flag in `_iword`).
+    var flags = I32P(unsafe_from_address=Int(py=ran[0][1]))
+    for i in range(nch):  # native data loop (not a driver loop): the per-chunk unknown flags, read natively
+        if flags[neg + i] != 0:
             return None
+    _ = ran  # keep the arena alive through the reads above
     return _take_i32(ran, out, n, -1, context)
 
 
@@ -1094,9 +1127,9 @@ def _lb_fit(model: PythonObject, y: PythonObject, context: PythonObject) raises 
         py_setitem(fields, "classes_", _classes_array(columns, context))
         py_setitem(fields, "y_type_", PythonObject(MULTILABEL))
         return model
-    _fit_labels(fields, mode, y, context)
-    var classes = fields["_classes"]
-    py_setitem(fields, "classes_", _classes_array(classes, context))
+    var fit = _fit_labels(fields, mode, y, context)
+    var classes = fit.classes
+    py_setitem(fields, "classes_", _fit_array(fit, context))
     py_setitem(fields, "y_type_", PythonObject("binary" if len(classes) <= 2 else "multiclass"))
     return model
 
