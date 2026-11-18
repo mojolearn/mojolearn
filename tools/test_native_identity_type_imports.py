@@ -4,6 +4,12 @@
 No stubs, monkeypatching, missing-binding skips or arithmetic benchmarks.
 This is a development-family loader regression; wheel assembly has its own
 boundary smoke. Each subprocess uses the same extension namespace as _backend.
+
+With no arguments (tools/run_tool_tests.sh runs it so) it uses this interpreter, the mojolearn package it would
+import (found without importing it) and a temporary output directory, and exits 0 with a SKIP line when that
+package has no built CPU host owners (a source checkout): it needs a built package, so it runs only by hand against
+a development or installed build; no smoke runs it. The six import orders are independent processes and run in
+parallel.
 """
 import argparse
 import hashlib
@@ -49,26 +55,55 @@ print(json.dumps({'order': order, 'canonical_identity': True, 'package': str(pac
 """
 
 
-def main():
+FAMILIES = ('tokenizer', 'mamba', 'runtime_sequential')
+
+
+def default_package_root():
+    import importlib.util
+    try:
+        spec = importlib.util.find_spec('mojolearn')
+    except (ImportError, ValueError):
+        return None
+    return Path(spec.origin).resolve().parent if spec and spec.origin else None
+
+
+def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--python', required=True)
-    parser.add_argument('--package-root', required=True, type=Path)
-    parser.add_argument('--output', required=True, type=Path)
-    args = parser.parse_args()
+    parser.add_argument('--python', default=sys.executable)
+    parser.add_argument('--package-root', type=Path, default=None)
+    parser.add_argument('--output', type=Path, default=None)
+    args = parser.parse_args(argv)
+    families = FAMILIES
+    root = args.package_root or default_package_root()
+    missing = [f for f in families if root is None or not (root / 'host' / ('_mojolearn_' + f + '_host.so')).is_file()]
+    if missing:
+        if args.package_root is not None:
+            parser.error('no built host owner for %s under %s' % (', '.join(missing), root))
+        print('SKIP: no built mojolearn CPU host owners (%s) under %s; pass --package-root of a built package'
+              % (', '.join(missing), root))
+        return 0
+    args.package_root = root
+    if args.output is None:
+        import tempfile
+        args.output = Path(tempfile.mkdtemp(prefix='native-identity-imports-'))
     args.output.mkdir(parents=True, exist_ok=True)
-    families = ('tokenizer', 'mamba', 'runtime_sequential')
     env = os.environ.copy()
     for key in ('PYTHONPATH', 'DYLD_LIBRARY_PATH', 'LD_LIBRARY_PATH', 'MOJOLEARN_HOST_DIR'):
         env.pop(key, None)
     env.update(MOJOLEARN_VENDOR='cpu', MOJOLEARN_NUMERIC_MODE='identical')
-    rows = []
-    for order in itertools.permutations(families):
+
+    def one(order):
         log = args.output / ('-'.join(order) + '.log')
         command = [args.python, '-I', '-c', CHILD, str(args.package_root), json.dumps(order)]
         with log.open('w') as stream:
             process = subprocess.run(command, cwd=args.output, env=env,
                                      stdout=stream, stderr=subprocess.STDOUT)
-        rows.append({'order': order, 'exit_code': process.returncode, 'log': str(log)})
+        return {'order': order, 'exit_code': process.returncode, 'log': str(log)}
+
+    from concurrent.futures import ThreadPoolExecutor
+    orders = list(itertools.permutations(families))
+    with ThreadPoolExecutor(max_workers=min(len(orders), os.cpu_count() or 1)) as pool:
+        rows = list(pool.map(one, orders))
     files = {family: args.package_root / 'host' / ('_mojolearn_' + family + '_host.so') for family in families}
     report = {'scope': 'six real native owner import orders + actual installed package import',
               'python': args.python, 'package': str(args.package_root), 'cases': rows,
