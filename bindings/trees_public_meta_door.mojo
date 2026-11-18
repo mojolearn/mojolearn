@@ -2253,7 +2253,15 @@ def _calibrated_fit(model: PythonObject, X: PythonObject, y: PythonObject, conte
             units.rows_class = family_call(b.getattr, mctx["family_msel_arena_io"], PythonObject("DeviceRows"))
             units.rows_take = family_call(b.getattr, res, PythonObject("take"))
         except error:
-            _cal_resident_op(res, "msel_resident_close", mctx)
+            # lane fb16-audit: a scope already entered is exited before the
+            # store closes (a getattr after `scope_enter` raising left the
+            # thread inside the resident scope)
+            try:
+                if scope is not None:
+                    _ = _cal_rows_call(scope, "scope_exit",
+                                       Python.tuple(PythonObject(None), PythonObject(None), PythonObject(None)), mctx)
+            finally:
+                _cal_resident_op(res, "msel_resident_close", mctx)
             raise error^
         units.mctx = mctx
         units.dev = True
