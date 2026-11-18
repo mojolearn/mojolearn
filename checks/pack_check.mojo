@@ -69,6 +69,7 @@ def check_packing() raises:
         )
         ctx.synchronize()
 
+    _ = zero^  # past the drain: a queued copy reads it after its last named use
     var out = ctx.enqueue_create_host_buffer[DType.uint32](n_rows)
     ctx.enqueue_copy(dst_ptr=out.unsafe_ptr(), src_buf=cindex)
     ctx.synchronize()

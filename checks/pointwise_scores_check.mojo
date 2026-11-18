@@ -1432,6 +1432,10 @@ def run_checks() raises:
                         ")",
                     )
                 r_bad += 1
+    _ = cnt^  # past the drain: a queued copy reads it after its last named use
+    _ = parts_u^  # past the drain: a queued copy reads it after its last named use
+    _ = tgt^  # past the drain: a queued copy reads it after its last named use
+    _ = wts^  # past the drain: a queued copy reads it after its last named use
     if r_bad != 0:
         print("FAIL R1-R4: --", r_bad, "partition-stat cells wrong.")
         failures += 1

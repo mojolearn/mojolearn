@@ -23,6 +23,7 @@ def check(ctx: DeviceContext, rows: Int, cols: Int, mut digest: UInt64) raises:
     var actual = List[Float32](length=cols, fill=0.0)
     ctx.enqueue_copy(dst_buf=matrix, src_ptr=values.unsafe_ptr())
     _column_variance(ctx, matrix, means, output, rows, cols)
+    _ = values^  # past the drain: a queued copy reads it after its last named use
     ctx.enqueue_copy(dst_ptr=actual.unsafe_ptr(), src_buf=output)
     ctx.synchronize()
     for i in range(cols):

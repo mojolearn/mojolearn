@@ -58,6 +58,7 @@ def check(ctx: DeviceContext, count: Int, bad: Int) raises:
         ctx.synchronize()
         parts = merged^
         current = next_count
+    _ = host^  # past the drain: a queued copy reads it after its last named use
     var result = ctx.enqueue_create_host_buffer[DType.int32](1)
     ctx.enqueue_copy(dst_ptr=result.unsafe_ptr(), src_buf=parts.create_sub_buffer[DType.int32](0,1))
     ctx.synchronize()

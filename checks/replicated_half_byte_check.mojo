@@ -211,6 +211,7 @@ def check_replicated_half_byte() raises:
         mag = g_mag
     var scale = choose_scale(mag)
     var scale_keep = upload_scale(ctx, Float32(scale))
+    _ = hs^  # past the drain: a queued copy reads it after its last named use
     var unbounded_keep = upload_scale(ctx, UNBOUNDED_SCALE)
     var fixed_scale = rebind[MutPointer[Float32, MutAnyOrigin]](
         scale_keep.unsafe_ptr()

@@ -330,6 +330,8 @@ def run_checks() raises:
                 "]",
             )
 
+    _ = offset_h^  # past the drain: a queued copy reads it after its last named use
+    _ = parts_h^  # past the drain: a queued copy reads it after its last named use
     ctx.enqueue_memset(d_sums, Float32(0.0))
     _launch[5, True, 1](ctx, d_off.unsafe_ptr(), d_ffi.unsafe_ptr(),
                           d_folds.unsafe_ptr(), d_ci.unsafe_ptr(),

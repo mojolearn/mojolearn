@@ -1729,6 +1729,14 @@ def check_gather_matches_direct() raises:
     # without the `_ = scale_keep^` below the buffer is dead before the
     # kernel runs and the next allocation lands on it.
     var scale_keep = upload_scale(ctx, Float32(1.0))
+    _ = a^  # past the drain: a queued copy reads it after its last named use
+    _ = b^  # past the drain: a queued copy reads it after its last named use
+    _ = c^  # past the drain: a queued copy reads it after its last named use
+    _ = hs^  # past the drain: a queued copy reads it after its last named use
+    _ = q1^  # past the drain: a queued copy reads it after its last named use
+    _ = q2^  # past the drain: a queued copy reads it after its last named use
+    _ = q3^  # past the drain: a queued copy reads it after its last named use
+    _ = q4^  # past the drain: a queued copy reads it after its last named use
     var scale_ptr = rebind[MutPointer[Float32, MutAnyOrigin]](
         scale_keep.unsafe_ptr()
     )
