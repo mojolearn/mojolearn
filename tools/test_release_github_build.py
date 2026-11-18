@@ -407,6 +407,18 @@ class MergedPlan(unittest.TestCase):
         self.assertFalse(rgb.commit_merged(head, {"MOJOLEARN_MERGED_BINDINGS": "0"}))
 
 
+class RedBuildsReportEarly(unittest.TestCase):
+    """lane fx-build-tools, 2026-11-18: the first failed shard cancels the others and no assemble follows it."""
+
+    def test_shards_fail_fast_and_assemble_needs_their_success(self):
+        text = (ROOT / ".github/workflows" / rgb.WORKFLOW).read_text()
+        shard = text[text.index("\n  shard:\n"):text.index("\n  assemble:\n")]
+        assemble = text[text.index("\n  assemble:\n"):text.index("\n  host:\n")]
+        self.assertIn("fail-fast: true", shard)
+        self.assertNotIn("fail-fast: false", shard)
+        self.assertIn("(needs.shard.result == 'success' || needs.shard.result == 'skipped')", assemble)
+
+
 class JobMap(unittest.TestCase):
     def test_only_this_jobs_slots_and_a_header_only_map_without_r2(self):
         d = Path(tempfile.mkdtemp())
