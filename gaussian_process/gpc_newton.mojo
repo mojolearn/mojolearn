@@ -81,6 +81,7 @@ def _ip(buf: DeviceBuffer[DType.int32]) -> _GI:
 # (the bounded device loop: GPCNewtonStep, its gated kernels, the criterion and join kernels, GPCNewtonBatch)
 
 
+@fieldwise_init
 struct GPCNewtonRun(ImplicitlyCopyable, Movable):
     """What the Newton loop leaves besides the resident factor, pi and W_sr:
     the likelihood kept (DEVIATION 2830), the iterations and the Cholesky
