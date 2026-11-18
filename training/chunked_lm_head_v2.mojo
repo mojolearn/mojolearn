@@ -550,7 +550,8 @@ def chunked_lm_head_v2_gemm_forward_into(ctx: DeviceContext, mut loss: DeviceBuf
 # (rows, vocab) logits owner. Per panel the gradients are two more products
 # of the same GEMM: dWeight's panel rows (OP_TN, final) and one dHidden
 # partial (OP_NN), folded over panels as a balanced tree. Every kernel below
-# runs one thread per output unit; none walks the vocabulary or the rows.
+# runs one thread per output unit (the maximum: one per row and panel); none
+# walks the vocabulary or the rows.
 # The host column runs the same bodies (training/chunked_lm_head_panel_math.mojo)
 # in training/chunked_lm_head_gemm_panel_host.mojo.
 # Scratch beyond the operands and the returned gradients, in floats:

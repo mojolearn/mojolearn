@@ -184,8 +184,8 @@ different profile.
    `floor(log2(panels)) + 1` partials.
 
 Execution: every device kernel runs one thread per output unit (operand
-element, (row, leaf), (row, tree node), panel cell, dHidden cell); none walks
-the vocabulary or the rows. On the host every pass splits its units across
+element, (row, panel) for the maximum, (row, leaf), (row, tree node), panel
+cell, dHidden cell); none walks the vocabulary or the rows. On the host every pass splits its units across
 all cores and the GEMM splits inside; the loop over panels is the only serial
 driver. Under the arm the door's input validation is one parallel scan per
 operand with the default's refusals, order and words, and spans beyond signed
