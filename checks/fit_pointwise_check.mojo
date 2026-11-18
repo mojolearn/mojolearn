@@ -221,6 +221,41 @@ def run_checks() raises:
                 )
             differ += 1
     if differ != 0:
+        # LOCALIZE (fb11, 2026-11-17: the first L40S run had tree 0 identical
+        # and 13 of 20 losses off in the 7th digit, re-agreeing at 4-6 and
+        # 8-9, which is leaf values a last bit apart rather than a split).
+        # Name the first tree whose SPLITS differ and the first whose LEAF
+        # VALUES differ, so the next run says which stage diverged.
+        var first_split = -1
+        var first_leaf = -1
+        var n_trees = min(len(m_greedy.weak_models), len(m_pw.weak_models))
+        for t in range(n_trees):
+            ref gs = m_greedy.weak_models[t].structure.splits
+            ref ps = m_pw.weak_models[t].structure.splits
+            ref gl = m_greedy.weak_models[t].leaf_values
+            ref pl = m_pw.weak_models[t].leaf_values
+            var same_s = len(gs) == len(ps)
+            if same_s:
+                for i in range(len(gs)):
+                    if (gs[i].feature_id != ps[i].feature_id
+                        or gs[i].bin_idx != ps[i].bin_idx
+                        or gs[i].split_type != ps[i].split_type):
+                        same_s = False
+            if not same_s and first_split < 0:
+                first_split = t
+            if same_s and first_leaf < 0 and len(gl) == len(pl):
+                for i in range(len(gl)):
+                    if gl[i] != pl[i] and first_leaf < 0:
+                        first_leaf = t
+                        print(
+                            "   W2 first leaf difference: tree", t, "leaf", i,
+                            ":", gl[i], "vs", pl[i], "(splits equal)",
+                        )
+        print(
+            "   W2 first tree with different SPLITS:", first_split,
+            " first with equal splits and different LEAVES:", first_leaf,
+            " (-1 = none, of", n_trees, "trees)",
+        )
         print(
             "FAIL W2:", differ, "of", len(l_pw),
             "iterations differ. The two arms share every stage but the"
