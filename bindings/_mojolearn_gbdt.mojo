@@ -543,10 +543,6 @@ def gbdt_fit_ordered_rmse_binding(
     return PythonObject(text)
 
 
-def ordered_doc_count_binding() raises -> PythonObject:
-    return PythonObject(ordered_doc_count())
-
-
 # ---- The image's native gbdt entry (lane calltable-gbdt-forest-dart,
 # 2026-11-11; ABI gbdt/fit_request.mojo, table core/gbdt_entry_table.mojo):
 # the GBDT doors fit, probe and read the model dimension through it instead
@@ -587,7 +583,6 @@ def build__mojolearn_gbdt() -> PythonObject:
         var m = PythonModuleBuilder("_mojolearn_gbdt")
         # The native gbdt entry (core/gbdt_entry_table.mojo) under this image's key.
         gbdt_entry_publish["MojolearnGbdtEntryOwnerGpuV1"](COMPILED_VENDOR, gbdt_gpu_entry_v1)
-        m.def_function[ordered_doc_count_binding]("gbdt_ordered_doc_count")
         m.def_function[device_plan_enter_binding]("device_plan_enter")
         m.def_function[device_plan_exit_binding]("device_plan_exit")
         m.def_function[device_plan_log_binding]("device_plan_log")

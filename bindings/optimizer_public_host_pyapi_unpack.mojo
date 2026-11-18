@@ -17,37 +17,3 @@ from training.host.optimizer_public_host import (
 )
 
 
-
-def optimizer_door_step_host_c(py_self: PyObjectPtr, packed: PyObjectPtr) abi("C") -> PyObjectPtr:
-    """optimizer_door_step(opt, grads, max_norm, op, tokens) on the host."""
-    return entry_step(py_self, packed)
-
-
-def optimizer_door_io_host_c(py_self: PyObjectPtr, packed: PyObjectPtr) abi("C") -> PyObjectPtr:
-    """optimizer_door_io(opt, op, tensors, name, tensor) on the host."""
-    return entry_io(py_self, packed)
-
-
-def optimizer_door_state_host_c(py_self: PyObjectPtr, packed: PyObjectPtr) abi("C") -> PyObjectPtr:
-    """optimizer_door_state(opt, which) on the host."""
-    return entry_state(py_self, packed)
-
-
-def optimizer_door_state_set_host_c(py_self: PyObjectPtr, packed: PyObjectPtr) abi("C") -> PyObjectPtr:
-    """optimizer_door_state_set(opt, which, value) on the host."""
-    return entry_state_set(py_self, packed)
-
-
-def optimizer_door_load_state_host_c(py_self: PyObjectPtr, packed: PyObjectPtr) abi("C") -> PyObjectPtr:
-    """optimizer_door_load_state(opt, t, ea, c1, es, c2, bi, c3) on the host."""
-    return entry_load_state(py_self, packed)
-
-
-def optimizer_door_clip_host_c(py_self: PyObjectPtr, packed: PyObjectPtr) abi("C") -> PyObjectPtr:
-    """optimizer_door_clip(grads, max_norm, norm_type, error_if_nonfinite, kwargs) on the host."""
-    return entry_clip(py_self, packed)
-
-
-def optimizer_door_accumulate_host_c(py_self: PyObjectPtr, packed: PyObjectPtr) abi("C") -> PyObjectPtr:
-    """optimizer_door_accumulate(microbatch_grads, tokens) on the host."""
-    return entry_accumulate(py_self, packed)

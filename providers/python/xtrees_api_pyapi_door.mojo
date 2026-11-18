@@ -955,10 +955,6 @@ def tree_shape_binding(left: PythonObject, res: PythonObject, params: PythonObje
 comptime XTREES_PY2MOJO = not is_defined["MOJOLEARN_PY2MOJO_trees_OFF"]()
 
 
-def py2mojo_binding() raises -> PythonObject:
-    return PythonObject(1 if XTREES_PY2MOJO else 0)
-
-
 def column_f64_binding(src: PythonObject, dst: PythonObject, params: PythonObject) raises -> PythonObject:
     """params = [n, c, j]: dst = src[:, j] of a row-major float64 (n, c) block."""
     _need(params, 3, "x_trees_column_f64")
@@ -1479,7 +1475,6 @@ def register(mut m: PythonModuleBuilder) raises:
     m.def_function[stack_w64_binding]("x_trees_stack_w64")
     m.def_function[rows_any_unset_binding]("x_trees_rows_any_unset")
     m.def_function[binary_proba_binding]("x_trees_binary_proba")
-    m.def_function[py2mojo_binding]("x_trees_py2mojo")
     m.def_function[exact_sum_binding]("x_trees_exact_sum")
     m.def_function[count_rows_binding]("x_trees_count_rows")
     m.def_function[count_equal_binding]("x_trees_count_equal")

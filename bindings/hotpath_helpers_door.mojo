@@ -652,66 +652,6 @@ def normal_init_f32_binding(
 # Restore: git apply experiments/removed/adam_hyper_f64.patch
 
 
-def first_seen_i32_binding(
-    codes_addr: PythonObject, n: PythonObject, k: PythonObject, enc_addr: PythonObject, counts_addr: PythonObject,
-) raises -> PythonObject:
-    """Renumber n int32 class codes in [0, k) by first appearance: enc[i] =
-    the first-seen rank of codes[i]; counts[r] (int64) = rows of rank r.
-    Returns the number of classes present (StratifiedKFold's encoding)."""
-    return PythonObject(
-        first_seen_i32(Int(py=codes_addr), Int(py=n), Int(py=k), Int(py=enc_addr), Int(py=counts_addr))
-    )
-
-
-def strat_alloc_i64_binding(
-    counts_addr: PythonObject, k: PythonObject, n_folds: PythonObject, dst_addr: PythonObject,
-) raises -> PythonObject:
-    """StratifiedKFold's allocation table (sklearn _make_test_folds):
-    dst[i * k + c] (int64, n_folds x k) = how many positions p of class c's
-    run [s, e) in the class-sorted labels have p % n_folds == i, i.e.
-    (e - 1 - i) // K - (s - 1 - i) // K with floor division (lane
-    pyglue-numeric: a Python double loop over the folds and classes).
-    `counts` int64, k of them."""
-    return PythonObject(strat_alloc_i64(Int(py=counts_addr), Int(py=k), Int(py=n_folds), Int(py=dst_addr)))
-
-
-def group_fold_assign_i32_binding(
-    counts_addr: PythonObject, m: PythonObject, n_folds: PythonObject, perm_addr: PythonObject,
-    dst_addr: PythonObject, sizes_addr: PythonObject,
-) raises -> PythonObject:
-    """GroupKFold's fold of each of the m groups (scikit-learn 1.9), int32
-    dst[g], and each fold's row count, int64 sizes[f] (from the int64 group
-    row counts). With `perm` (int64, nonzero address) the permuted groups
-    split into K nearly equal runs (the first m % K one longer); without,
-    the groups by row count descending (ties: the higher group code first)
-    each to the lightest fold (ties: the lower fold). Lane pyglue-numeric:
-    both were Python loops over the groups."""
-    return PythonObject(
-        group_fold_assign_i32(
-            Int(py=counts_addr), Int(py=m), Int(py=n_folds), Int(py=perm_addr),
-            Int(py=dst_addr), Int(py=sizes_addr),
-        )
-    )
-
-
-def strat_group_plan_i32_binding(addrs: PythonObject, dims: PythonObject) raises -> PythonObject:
-    """`strat_group_assign_i32` from the group x class table (lane
-    cpu4-python): the table is the device's (`bincount2_i32`, int64
-    dist[g * k + c]); this is the group-level plan only, the same statements
-    in the same order as `strat_group_assign_i32` after its row loop (the
-    same folds, the same sizes). Returns 1 when the largest class has fewer
-    rows than n_folds, else 0.
-    addrs = [dist, perm (0: none), dst, sizes]; dims = [k, m, n_folds]."""
-    if len(addrs) != 4 or len(dims) != 3:
-        raise Error("strat_group_plan_i32: addrs [dist, perm, dst, sizes], dims [k, m, n_folds]")
-    return PythonObject(
-        strat_group_plan_i32(
-            Int(py=addrs[0]), Int(py=addrs[1]), Int(py=addrs[2]), Int(py=addrs[3]),
-            Int(py=dims[0]), Int(py=dims[1]), Int(py=dims[2]),
-        )
-    )
-
-
 def strat_fold_assign_i32_binding(
     enc_addr: PythonObject, n: PythonObject, k: PythonObject, n_folds: PythonObject,
     alloc_addr: PythonObject, perms_addr: PythonObject, counts_addr: PythonObject, dst_addr: PythonObject,

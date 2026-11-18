@@ -98,21 +98,3 @@ def lr_schedule_at_c(py_self: PyObjectPtr, packed: PyObjectPtr) abi("C") -> PyOb
         return optimizer_python_error(error)
 
 
-def lr_schedule_series_c(py_self: PyObjectPtr, packed: PyObjectPtr) abi("C") -> PyObjectPtr:
-    """lr_schedule_series(ip, fp, n, style): lr_at(1) .. lr_at(n) as an
-    array('f'), or the refusal of the first failing step."""
-    try:
-        var args = PythonObject(from_borrowed=packed)
-        if len(args) != 4:
-            raise Error("TypeError: lr_schedule_series expects four arguments")
-        var bi = native_loaded_module("builtins")
-        var ip = args[0]
-        var n = max(Int(py=py_call(bi.int, args[2])), 0)
-        var style = Int(py=args[3])
-        var out = py_call(native_loaded_module("array").array, PythonObject("f"), py_call(bi.bytes, PythonObject(4 * n)))
-        var r = lr_spec_fill(_spec(ip, args[1]), 1, n, F32P(unsafe_from_address=Int(py=out.buffer_info()[0])))
-        if r[0] != 0:
-            raise _lr_refusal(r[0], 1 + r[1], style, Int(py=ip[3]))
-        return out.steal_data()
-    except error:
-        return optimizer_python_error(error)

@@ -146,36 +146,6 @@ def ivf_pq_search_binding(addrs: PythonObject, params: PythonObject) raises -> P
     return PythonObject(m)
 
 
-def tsne_fit_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
-    """addrs: x, y0, y_out, kl_out (one float32).
-    params: n, d, max_iter, exploration_iters, perplexity, early_exaggeration, learning_rate,
-    post_exaggeration_learning_rate_factor [, init mode, random_state low 32 bits, high 32 bits]
-    (lane apple-fast-py2mojo-cluster: mode 1 random, 2 the PCA embedding in y0 scaled,
-    x_ann/tsne_init.mojo; 0 or absent y0 as given). release-0845: the factor is params[7] and the
-    init tail moved from 7..9 to 8..10. Lane sk-kernels: an optional params[11], n_components
-    (1 or 2, default 2); at 1, y0 and y_out hold n floats (`tsne_init_y0`). Lane a8d: an
-    optional params[12], the finite flag: 1 asks for X's finite status word; the return is
-    then [n, status word] and a flagged X writes neither output (the door refuses).
-    UNPACK and PACK only: the body is x_ann/ops_entry_device.mojo `ann_tsne_fit_device_run`, which the ANN
-    operations table (core/neighbors_entry_table_ann.mojo) also calls with
-    the four float words apart (f) and params[8:] after params[3] (p). The
-    export remains for python/mojolearn/_expansion_ann.py."""
-    var a = py_int_list(addrs)
-    var p = List[Int]()
-    for i in range(len(params)):  # small-loop(no: one call's parameter words): metadata, not data
-        if i < 4 or i > 7:
-            p.append(Int(py=params[i]))
-    var f: List[Float64] = [Float64(py=params[4]), Float64(py=params[5]), Float64(py=params[6]),
-                            Float64(py=params[7])]
-    var test = len(params) > 12 and p_int(params, 12) != 0
-    var status = 0
-    with GILReleased(Python()):
-        status = ann_tsne_fit_device_run(a, p, f)
-    if test:
-        return Python.list(PythonObject(p[0]), PythonObject(status))
-    return PythonObject(p[0])
-
-
 def cagra_build_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
     """addrs: x, graph_out. params: n, d, intermediate_graph_degree, graph_degree."""
     var n = p_int(params, 0)
@@ -332,21 +302,6 @@ def ivf_rabitq_search_binding(addrs: PythonObject, params: PythonObject) raises 
     return PythonObject(m)
 
 
-def filter_topk_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
-    """CAGRA's filtered compaction (x_ann/filter_topk.mojo, lane
-    apple-fast-py2mojo-cluster). addrs: itopk distances (m x L), itopk ids
-    (m x L int32), keep (n int32), out_d, out_i (m x k). params: m, n, L, k.
-    UNPACK and PACK only: the body is x_ann/ops_entry_device.mojo `ann_filter_topk_device_run`,
-    which the ANN operations table (core/neighbors_entry_table_ann.mojo) also
-    calls. The export remains for python/mojolearn/_expansion_ann.py."""
-    var a = py_int_list(addrs)
-    var p = py_int_list(params)
-    var m = 0
-    with GILReleased(Python()):
-        m = ann_filter_topk_device_run(a, p)
-    return PythonObject(m)
-
-
 # TOMBSTONE: x_ann_py2mojo (dead native entry: a constant A/B probe nothing reads) deleted 2026-10-26 by f9b52032a; code recoverable at a88745022.
 # Restore: git apply experiments/removed/dead_entries_x_ann.patch
 
@@ -388,7 +343,6 @@ def build__mojolearn_x_ann() -> PythonObject:
         m.def_function[device_plan_exit_binding]("device_plan_exit")
         m.def_function[device_plan_log_binding]("device_plan_log")
         m.def_function[ivf_pq_search_binding]("x_ann_ivf_pq_search")
-        m.def_function[tsne_fit_binding]("x_ann_tsne_fit")
         m.def_function[cagra_build_binding]("x_ann_cagra_build")
         m.def_function[cagra_search_binding]("x_ann_cagra_search")
         m.def_function[ivf_sq_build_binding]("x_ann_ivf_sq_build")
@@ -396,7 +350,6 @@ def build__mojolearn_x_ann() -> PythonObject:
         m.def_function[refine_binding]("x_ann_refine")
         # TOMBSTONE: x_ann_py2mojo (dead native entry: a constant A/B probe nothing reads) deleted 2026-10-26 by f9b52032a; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_x_ann.patch
-        m.def_function[filter_topk_binding]("x_ann_filter_topk")
         m.def_function[ivf_rabitq_build_binding]("x_ann_ivf_rabitq_build")
         m.def_function[ivf_rabitq_search_binding]("x_ann_ivf_rabitq_search")
         m.def_function[x_ann_index_release_binding]("x_ann_index_release")

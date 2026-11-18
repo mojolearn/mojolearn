@@ -71,7 +71,6 @@ from bindings.hotpath_helpers_door import (
     HOTPATH_SABOTAGE,
     arange_i64_binding as host_arange_i64_binding,
     count_mask_u8_binding as host_count_mask_u8_binding,
-    first_seen_i32_binding as host_first_seen_i32_binding,
     fold_ids_binding as host_fold_ids_binding,
     bincount_i64_binding as host_bincount_i64_binding,
     check_indices_i64_binding as host_check_indices_i64_binding,
@@ -410,23 +409,6 @@ def indices_overlap_i64_binding(
     return PythonObject(hit)
 
 
-def first_seen_i32_binding(
-    codes_addr: PythonObject, n: PythonObject, k: PythonObject, enc_addr: PythonObject,
-    counts_addr: PythonObject,
-) raises -> PythonObject:
-    """`first_seen_i32`, on the device
-    (`core/msel_helpers_device.mojo::first_seen_i32_device_run`)."""
-    var rows = Int(py=n)
-    var kk = Int(py=k)
-    var ca = Int(py=codes_addr)
-    var ea = Int(py=enc_addr)
-    var na = Int(py=counts_addr)
-    var m = 0
-    with GILReleased(Python()):
-        m = first_seen_i32_device_run(ca, rows, kk, ea, na)
-    return PythonObject(m)
-
-
 def strat_fold_assign_i32_binding(
     enc_addr: PythonObject, n: PythonObject, k: PythonObject, n_folds: PythonObject,
     alloc_addr: PythonObject, perms_addr: PythonObject, counts_addr: PythonObject,
@@ -453,12 +435,6 @@ def strat_fold_assign_i32_binding(
 # ---------------------------------------------------------------------------
 
 #: `reduce_stat`'s reductions (`bindings/hotpath_helpers.mojo` HP_MIN ...).
-
-
-
-
-
-
 
 
 def reduce_stat_binding(addr: PythonObject, code: PythonObject, n: PythonObject,

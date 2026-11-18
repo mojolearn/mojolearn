@@ -459,8 +459,6 @@ def build__mojolearn_hdbscan() -> PythonObject:
         m.def_function[hdbscan_numeric_mode_binding]("hdbscan_numeric_mode")
         m.def_function[hdbscan_fit_binding]("hdbscan_fit")
         m.def_function[hdbscan_fit_native_api_v1_binding]("hdbscan_fit_native_api_v1")
-        m.def_function[hdbscan_generate_prediction_data_binding]("hdbscan_generate_prediction_data")
-        m.def_function[hdbscan_approximate_predict_binding]("hdbscan_approximate_predict")
         m.def_function[hdbscan_query_native_api_v1_binding]("hdbscan_query_native_api_v1")
         m.def_function[hdbscan_membership_vector_binding]("hdbscan_membership_vector")
         m.def_function[hdbscan_all_points_membership_vectors_binding]("hdbscan_all_points_membership_vectors")

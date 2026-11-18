@@ -46,8 +46,7 @@ from forest_inference_binding_door import (
     forest_predict_resident_labels_gpu_binding,
     forest_stage_input_gpu_binding,
     forest_unstage_input_gpu_binding,
-    forest_resident_layout_binding, forest_ordered_resident_binding,
-    forest_identical_fused_labels_binding,
+    forest_ordered_resident_binding,
 )
 from core.forest_inference_run import (
     forest_prepare_gpu_native, forest_predict_resident_into_gpu_native,
@@ -258,29 +257,6 @@ def _rf_fit_py[CLASSIFIER: Bool, ROWMAJOR: Bool](
     args.importance = importance
     args.weight_max = weight_max
     return _rf_handle_py(_rf_fit_native[CLASSIFIER, ROWMAJOR](args), export)
-
-
-def rf_classifier_fit_aux_export_binding(
-    x_addr: PythonObject, y_addr: PythonObject, params: PythonObject,
-    criterion: PythonObject, weights_addr: PythonObject,
-    oob_addr: PythonObject, score_addr: PythonObject, importance_addr: PythonObject,
-) raises -> PythonObject:
-    """T15 optional outputs: Float64 OOB+score, Float32 importance[n_features].
-    Zero disables each output; OOB prediction and score must be requested together.
-    NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
-    """
-    return _rf_fit_py[True, False](x_addr, y_addr, params, criterion, True, weights=Int(py=weights_addr),
-                                   oob=Int(py=oob_addr), score=Int(py=score_addr), importance=Int(py=importance_addr))
-
-
-def rf_regressor_fit_aux_export_binding(
-    x_addr: PythonObject, y_addr: PythonObject, params: PythonObject,
-    criterion: PythonObject, oob_addr: PythonObject, score_addr: PythonObject,
-    importance_addr: PythonObject,
-) raises -> PythonObject:
-    """T15 optional requested outputs; same status/ownership as classifier."""
-    return _rf_fit_py[False, False](x_addr, y_addr, params, criterion, True, oob=Int(py=oob_addr),
-                                    score=Int(py=score_addr), importance=Int(py=importance_addr))
 
 
 def rf_classifier_fit_binding[EXPORT: Bool = False](
@@ -816,12 +792,6 @@ comptime RF_DT_DEFAULT_BINS = (
 )
 
 
-def rf_dt_default_bins_binding() raises -> PythonObject:
-    """The quantile bin count a DecisionTreeRegressor left at n_bins=None
-    fits with in this build (RF_DT_DEFAULT_BINS): 256 FAST, 128 otherwise."""
-    return PythonObject(RF_DT_DEFAULT_BINS)
-
-
 def rf_numeric_mode_binding() raises -> PythonObject:
     """Read the numeric policy compiled into this RF binding."""
     return PythonObject(Int(GLOBAL_NUMERIC_MODE))
@@ -950,11 +920,8 @@ def build__mojolearn_rf() -> PythonObject:
         m.def_function[device_plan_log_binding]("device_plan_log")
         m.def_function[rf_numeric_mode_binding]("rf_numeric_mode")
         m.def_function[rf_device_finite_scan_binding]("rf_device_finite_scan")
-        m.def_function[rf_dt_default_bins_binding]("rf_dt_default_bins")
         # TOMBSTONE: the legacy-arm rf fits, rf_regressor_fit_session_export, the forest comparison arms and probes, rf_*_gpu_parallel, rf_fused_bootstrap_gather (dead native entries: no live caller) deleted 2026-10-26 by f515bbcb9; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_trees.patch
-        m.def_function[rf_classifier_fit_aux_export_binding]("rf_classifier_fit_aux_export")
-        m.def_function[rf_regressor_fit_aux_export_binding]("rf_regressor_fit_aux_export")
         # TOMBSTONE: the legacy-arm rf fits, rf_regressor_fit_session_export, the forest comparison arms and probes, rf_*_gpu_parallel, rf_fused_bootstrap_gather (dead native entries: no live caller) deleted 2026-10-26 by f515bbcb9; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_trees.patch
         m.def_function[rf_classifier_fit_binding[True]]("rf_classifier_fit_export")
@@ -976,9 +943,7 @@ def build__mojolearn_rf() -> PythonObject:
         m.def_function[rf_predict_reg_binding]("rf_predict_reg")
         # TOMBSTONE: the legacy-arm rf fits, rf_regressor_fit_session_export, the forest comparison arms and probes, rf_*_gpu_parallel, rf_fused_bootstrap_gather (dead native entries: no live caller) deleted 2026-10-26 by f515bbcb9; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_trees.patch
-        m.def_function[forest_resident_layout_binding]("forest_resident_layout")
         m.def_function[forest_ordered_resident_binding]("forest_ordered_resident")
-        m.def_function[forest_identical_fused_labels_binding]("forest_identical_fused_labels")
         # TOMBSTONE: the legacy-arm rf fits, rf_regressor_fit_session_export, the forest comparison arms and probes, rf_*_gpu_parallel, rf_fused_bootstrap_gather (dead native entries: no live caller) deleted 2026-10-26 by f515bbcb9; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_trees.patch
         m.def_function[rf_forest_export_binding]("forest_export")
@@ -1002,13 +967,11 @@ def build__mojolearn_rf() -> PythonObject:
         # TOMBSTONE: the legacy-arm rf fits, rf_regressor_fit_session_export, the forest comparison arms and probes, rf_*_gpu_parallel, rf_fused_bootstrap_gather (dead native entries: no live caller) deleted 2026-10-26 by f515bbcb9; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_trees.patch
         m.def_function[rf_regressor_fit_session_rows_binding]("rf_regressor_fit_session_rows_export")
-        m.def_function[rf_regressor_fit_dart_binding]("rf_regressor_fit_dart_export")
         m.def_function[rf_classifier_fit_weighted_session_binding]("rf_classifier_fit_weighted_session_export")
         m.def_function[rf_ada_open_binding]("rf_ada_open")
         m.def_function[rf_classifier_fit_ada_round_binding]("rf_classifier_fit_ada_round_export")
         m.def_function[rf_regressor_fit_ada_round_binding]("rf_regressor_fit_ada_round_export")
         m.def_function[rf_classifier_fit_shard_binding]("rf_classifier_fit_shard")
-        m.def_function[rf_regressor_fit_shard_binding]("rf_regressor_fit_shard")
         return m.finalize()
     except e:
         abort(String("failed to initialize _mojolearn_rf: ") + String(e))

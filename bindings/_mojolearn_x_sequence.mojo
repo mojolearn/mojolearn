@@ -702,22 +702,9 @@ def onnx_read_binding(path: PythonObject) raises -> PythonObject:
     return onnx_read_py(path)
 
 
-def onnx_info_binding(h: PythonObject) raises -> PythonObject:
-    return onnx_info_py(h)
-
-
 def onnx_buffers_binding(h: PythonObject) raises -> PythonObject:
     """The address of each buffer graph h holds (the model file, its own bytes, each external data file)."""
     return onnx_buffers_py(h)
-
-
-def onnx_resolve_binding(h: PythonObject, names: PythonObject, flat: PythonObject) raises -> PythonObject:
-    """importers._graph.resolve of a graph read by onnx_read."""
-    return onnx_resolve_py(h, names, flat)
-
-
-def onnx_close_binding(h: PythonObject) raises -> PythonObject:
-    return onnx_close_py(h)
 
 
 def onnx_import_binding(
@@ -865,10 +852,7 @@ def build__mojolearn_x_sequence() -> PythonObject:
         # the ONNX model reader (autograd/import_reader.mojo, import_resolve.mojo)
         m.def_function[onnx_native_api_py]("onnx_native_api_v1")
         m.def_function[onnx_read_binding]("onnx_read")
-        m.def_function[onnx_info_binding]("onnx_info")
         m.def_function[onnx_buffers_binding]("onnx_buffers")
-        m.def_function[onnx_resolve_binding]("onnx_resolve")
-        m.def_function[onnx_close_binding]("onnx_close")
         m.def_function[onnx_import_binding]("onnx_import")
         m.def_function[onnx_import_file_binding]("onnx_import_file")
         m.def_py_c_function(ops_import_model_c, "ops_import_model")

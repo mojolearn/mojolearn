@@ -1630,16 +1630,14 @@ FAMILIES = (
             "byte_lm_host_next",
             # manifest sync (lane rehearsal-suite-green, 2026-10-08): registered in the binding source
             "byte_lm_host_arithmetic_suffix",
-            "byte_lm_trainer_api_v1", "byte_lm_native_session_handle_v1",
             "byte_lm_session_create", "byte_lm_session_close", "byte_lm_session_info",
             "byte_lm_numeric_mode", "byte_lm_vendor", "byte_lm_profile", "byte_lm_arithmetic_suffix",
-            "byte_lm_config_profile", "byte_lm_file_sha256",
-            "byte_lm_run", "byte_lm_run_configured", "byte_lm_trainer_run", "byte_lm_logits",
-            "byte_lm_trainer_step", "byte_lm_trainer_logits", "byte_lm_trainer_next_bytes",
-            "byte_lm_trainer_export_state", "byte_lm_trainer_export_gradients",
-            "byte_lm_session_open", "byte_lm_session_step", "byte_lm_session_eval",
-            "byte_lm_session_rollback", "byte_lm_session_export_state", "byte_lm_session_export_gradients",
-            "byte_lm_session_logits", "byte_lm_session_next_bytes",
+            "byte_lm_config_profile",
+            "byte_lm_run", "byte_lm_run_configured", "byte_lm_logits",
+            "byte_lm_trainer_step",
+            "byte_lm_session_open", "byte_lm_session_step",
+            "byte_lm_session_rollback", "byte_lm_session_export_state",
+            "byte_lm_session_logits",
         ),
         gate=".github/workflows/byte-lm-cpu-gate.yml and tools/identity_break.py (cpu-identity-gate.yml)",
         wheel_note=(
@@ -1803,9 +1801,6 @@ FAMILIES = (
             "tokenizer_host_column", "tokenizer_host_sabotage", "tokenizer_host_runtime_classical_abi", "bpe_load",
             "bpe_n_vocab", "bpe_max_token_bytes", "bpe_encode", "bpe_encode_batch",
             "bpe_train", "bpe_trained_sizes", "bpe_trained_copy",
-            "bpe_load_tokens", "bpe_load_spelled", "bpe_ranks_text", "bpe_decode_seq",
-            "bpe_decode_batch", "bpe_render", "bpe_encode_corpus", "bpe_train_corpus",
-            "tokens_gather_rows",
             # vocabulary identity digest (core/sha256.mojo)
             "sha256_hex",
             # registered 2026-10-20 (f872423a4, a4b0106ee, 12fa2ed0f): the
@@ -1821,7 +1816,7 @@ FAMILIES = (
             # multi-GPU drivers' owner (bindings/parallel_shard_native_door.mojo)
             "parallel_shard_call",
             # manifest sync (lane ne1-k-fail-b, 2026-11-07): registered in the binding source
-            "backend_public_native_call", "byte_lm_pooled_finalize_call", "catalog_public_call", "lm_corpus_public_call", "neural_native_dispatch_info", "numeric_profile_native_call", "operation_lock_connect", "public_attribute_generic_slot_native_call", "sequence_tensor_finalize", "small_mlp_finalize", "tokenizer_public_call", "transformer_decode_native_call", "transformer_public_call",
+            "backend_public_native_call", "byte_lm_pooled_finalize_call", "catalog_public_call", "lm_corpus_public_call", "numeric_profile_native_call", "operation_lock_connect", "public_attribute_generic_slot_native_call", "sequence_tensor_finalize", "small_mlp_finalize", "tokenizer_public_call", "transformer_decode_native_call", "transformer_public_call",
             # 2026-11-07 host split (docs/build/HOT_GROUPS.md section 6): native
             # refusals under the names whose owners are now their own host
             # bindings (HOST_IMPORT_ALIASES replaces them at import); the
@@ -1972,7 +1967,7 @@ FAMILIES = (
         exports=(
             "labels_native_api_v3",
             # Native C-entry registrations are part of the exported ABI too.
-            "lr_schedule_at", "lr_schedule_series", "optimizer_door_init",
+            "lr_schedule_at",
             "core_host_numeric_mode", "core_host_vendor", "core_host_column",
             "core_host_sabotage", "mojolearn_vendor", "mojolearn_numeric_mode",
             "knn_search", "knn_classify", "knn_regress", "kmeans_fit", "kmeans_predict", "kmeans_transform",
@@ -1981,7 +1976,7 @@ FAMILIES = (
             "radius_neighbors_count", "radius_neighbors_fill", "rbc_knn_search", "transpose_f32",
             "cast_colmajor_f64_to_f32", "spectral_preparation_native_api_v1", "nonzero_f64_count", "nonzero_f64_fill", "cast_f64_to_f32", "all_finite_f32",
             "all_finite_f64", "gather_i64", "gather_f64", "gather_rows_bytes", "argmax_rows_f32",
-            "argmax_rows_f64", "argmax_last_rows_f32",
+            "argmax_rows_f64",
             # lane/python-hotpath (2026-09-17, DEVIATIONS 3100-3104): the helpers
             # of bindings/hotpath_helpers_door.mojo that stand in for per-row Python
             # (the ORDER RULE's label encoder, DEVIATION 2500, runs inside
@@ -1993,15 +1988,13 @@ FAMILIES = (
             "select_folds_i64",
             # lane/py-dn-kern (2026-09-28): the spectral routes' float32
             # dense-to-COO scan and precomputed kNN affinity (core/dense_coo.mojo)
-            "nonzero_f32_count", "nonzero_f32_fill", "knn_affinity_f32",
+            "knn_affinity_f32",
             # lane cpu2-l4-modelsel (2026-10-04): model selection's fold store,
             # fold-row gather, prediction scatter, proba column and forest
             # offset merge (bindings/msel_host_pack.mojo, the host column)
-            "msel_put", "msel_alloc", "msel_read", "msel_free", "msel_live",
+            "msel_put", "msel_free", "msel_live",
             # lane p3 (2026-11-09): the fold store's free bytes (host column: -1)
-            "msel_free_bytes",
-            "msel_take_rows", "msel_scatter_rows", "msel_proba_column",
-            "msel_split_table_i32", "msel_group_fold_perm_i32",
+            "msel_take_rows",
             # manifest sync (lane rehearsal-suite-green, 2026-10-08): registered in the binding source
             "unique_inverse", "arange_i64", "leave_range_i64",
             # lane migrate-shared-labels: the shared argument-and-label entry
@@ -2012,13 +2005,10 @@ FAMILIES = (
             "bincount_i64",
             "assign_fold_i64", "count_fold_hits_i64", "mark_split_roles_f32",
             "scatter_rows_bytes", "uniform_init_f32",
-            "normal_init_f32",
-            "first_seen_i32", "strat_fold_assign_i32",
-            "strat_alloc_i64",
-            "group_fold_assign_i32",
-            "strat_group_plan_i32", "bincount2_i32", "strided_copy_bytes", "check_lengths_i64",
-            "ragged_rows_bytes", "nsum_f64", "row_means_f64",
-            "truncnorm_draws", "fsum_f64", "row_stds_f64",
+            "strat_fold_assign_i32",
+            "bincount2_i32", "strided_copy_bytes", "check_lengths_i64",
+            "ragged_rows_bytes", "row_means_f64",
+            "truncnorm_draws", "fsum_f64",
             "lr_schedule_exact",
             "class_ratio_f64",
             # fold_pair_f32, msel_rebase_offsets_i32, shard_topk_merge_f32: no
@@ -2436,7 +2426,7 @@ FAMILIES = (
             # lane perf-trees-misc (2026-11-05): the resident host forest
             "iforest_resident", "iforest_resident_release",
             # lane fix-iforest-save-device-forest (2026-11-13): the saved forest out and in
-            "iforest_forest_export", "iforest_forest_run", "iforest_forest_io",
+            "iforest_forest_export", "iforest_forest_run",
             # manifest sync (lane ne1-k-fail-b, 2026-11-07): registered in the binding source
             "svm_binary_api_v1",
         ),
@@ -2515,15 +2505,13 @@ FAMILIES = (
             "rf_predict_proba", "rf_predict_reg",
             "rf_classifier_fit_weighted", "rf_classifier_fit_weighted_export",
             "rf_regressor_fit_weighted_export",
-            "rf_classifier_fit_shard", "rf_regressor_fit_shard",
+            "rf_classifier_fit_shard",
             "forest_prepare_gpu", "forest_predict_resident_reuse_gpu", "forest_release_gpu",
             "forest_strict_prepare", "forest_strict_predict", "forest_strict_release",
             "rf_data_session_open", "rf_data_session_close",
             "rf_regressor_fit_session_rows_export",
             "rf_classifier_fit_weighted_session_export",
             # manifest sync (lane rehearsal-suite-green, 2026-10-08): registered in the binding source
-            "rf_classifier_fit_aux_export", "rf_regressor_fit_aux_export",
-            "rf_regressor_fit_dart_export",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
         wheel_note=(
@@ -2584,7 +2572,6 @@ FAMILIES = (
             "gpc_fit", "gpc_predict", "cholesky_profile_jitter",
             "cholesky_factor", "cholesky_solve", "gpr_optimize",
             # manifest sync (lane rehearsal-suite-green, 2026-10-08): registered in the binding source
-            "gpc_ovr_combine",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
         wheel_note=(
@@ -2757,7 +2744,6 @@ FAMILIES = (
             "hdbscan_host_numeric_mode", "hdbscan_host_vendor",
             "hdbscan_host_column", "hdbscan_host_sabotage",
             "hdbscan_vendor", "hdbscan_numeric_mode", "hdbscan_fit",
-            "hdbscan_generate_prediction_data", "hdbscan_approximate_predict",
             "hdbscan_membership_vector",
             "hdbscan_all_points_membership_vectors",
         ),
@@ -2800,7 +2786,6 @@ FAMILIES = (
             "gp_infer_host_column", "gp_infer_host_sabotage",
             "gp_vendor", "gp_numeric_mode", "gpr_predict", "gpc_predict", "gp_native_api_v1",
             # manifest sync (lane rehearsal-suite-green, 2026-10-08): registered in the binding source
-            "gpc_ovr_combine",
         ),
         gate="tools/classical_host_gate.py",
         wheel_note=(
@@ -2838,7 +2823,7 @@ FAMILIES = (
             "hdbscan_query_native_api_v1",
             "hdbscan_infer_host_numeric_mode", "hdbscan_infer_host_vendor",
             "hdbscan_infer_host_column", "hdbscan_infer_host_sabotage",
-            "hdbscan_vendor", "hdbscan_numeric_mode", "hdbscan_approximate_predict",
+            "hdbscan_vendor", "hdbscan_numeric_mode",
             "hdbscan_membership_vector", "hdbscan_all_points_membership_vectors",
         ),
         gate="tools/classical_host_gate.py",
@@ -3020,9 +3005,6 @@ FAMILIES = (
             # manifest sync (lane import-fix-entry-probes, 2026-11-12): registered in the binding source
             "optimizer_native_api_v1",
             # Native C-entry registrations are part of the exported ABI too.
-            "optimizer_door_accumulate", "optimizer_door_clip", "optimizer_door_io",
-            "optimizer_door_load_state", "optimizer_door_state", "optimizer_door_state_set",
-            "optimizer_door_step", "optimizer_door_zero",
             "optimizer_resident_open", "optimizer_resident_close",
             "optimizer_resident_upload", "optimizer_resident_download",
             "training_host_numeric_mode", "training_host_vendor",
@@ -3034,7 +3016,7 @@ FAMILIES = (
             "rms_norm_backward", "linear_forward", "linear_backward",
             "neural_rng", "chunked_lm_head_v2_loss", "chunked_lm_head_v2_train",
             # manifest sync (lane rehearsal-suite-green, 2026-10-08): registered in the binding source
-            "neural_arithmetic_profile", "neural_gemm", "mlp_sessions", "mlp_sessions_rows",
+            "neural_arithmetic_profile", "mlp_sessions", "mlp_sessions_rows",
             "residual_dropout", "residual_dropout_backward", "training_chunked_lm_head_enabled",
             "training_experiment_profile",
             # checkpoint integrity digest (core/sha256.mojo)

@@ -223,11 +223,11 @@ def _is_buffer(x):
 # assigns its result on the optimizer. Built-in schedules are native data;
 # unsupported Python callback schedules are refused before invoking any hook.
 
-#: `optimizer_door_step`'s operations (bindings/optimizer_public_door.mojo)
+#: the optimizer step operations (bindings/optimizer_public_door.mojo)
 _OP_STEP, _OP_STEP_DEVICE, _OP_STEP_ACCUMULATED = 0, 1, 2
-#: `optimizer_door_state`'s readings
+#: the optimizer state readings
 _STATE_DICT, _STATE_EXP_AVG, _STATE_EXP_AVG_SQ = 0, 1, 2
-#: `optimizer_door_io`'s operations (training/optimizer_public.mojo)
+#: the optimizer io operations (training/optimizer_public.mojo)
 _IO_QUERY, _IO_PARAMS_UP, _IO_PARAMS_DOWN, _IO_GRADS_UP, _IO_GRADS_DOWN, _IO_PARAM_DEVICE = 0, 1, 2, 3, 4, 5
 
 
@@ -298,7 +298,7 @@ class _Optimizer(NumericModeMixin):
     # until `params_to_host()` writes them back. The step is the same device
     # call on the same buffers: the same bits.
     def _io(self, op, tensors=None, name="params", tensor=0):
-        """One `optimizer_door_io` call; returns its result word."""
+        """One optimizer io call (the raw_io operation); returns its result word."""
         return _OPT_NATIVE("raw_io", self, (op, tensors, name, tensor), None, _OPT_CONTEXT)
 
     def params_resident_available(self):

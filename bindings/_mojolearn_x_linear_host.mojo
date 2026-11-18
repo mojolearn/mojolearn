@@ -27,36 +27,6 @@ from x_linear.x_linear_host_impl import x_linear_fit_host, x_linear_decision_hos
 # Restore: git apply experiments/removed/dead_entries_x_linear.patch
 
 
-def spearman_sign_binding(x_addr: PythonObject, y_addr: PythonObject, n_obj: PythonObject) raises -> PythonObject:
-    """The sign (-1, 0, 1) of Spearman's rho of n float32 x and y, exact
-    (x_linear/spearman.mojo, lane cpu2-l10-linear)."""
-    var n = Int(py=n_obj)
-    var xa = Int(py=x_addr)
-    var ya = Int(py=y_addr)
-    var sign = 0
-    with GILReleased(Python()):
-        sign = xl_spearman_host_run(xa, ya, n)
-    return PythonObject(sign)
-
-
-def class_prep_binding(codes_addr: PythonObject, sw_addr: PythonObject, cw_addr: PythonObject,
-                       dims: PythonObject, out_addr: PythonObject) raises -> PythonObject:
-    """The GPU binding's `x_linear_class_prep` on the CPU (x_linear/class_prep.mojo):
-    the same contract, the same words."""
-    var n = Int(py=dims[0])
-    var k = Int(py=dims[1])
-    var balanced = Int(py=dims[2]) != 0
-    var weighted = Int(py=dims[3]) != 0
-    var ca = Int(py=codes_addr)
-    var sa = Int(py=sw_addr)
-    var wa = Int(py=cw_addr)
-    var oa = Int(py=out_addr)
-    var largest = 0
-    with GILReleased(Python()):
-        largest = xl_class_prep_host_run(ca, sa, wa, oa, n, k, balanced, weighted)
-    return PythonObject(largest)
-
-
 def best_alpha_binding(scores_addr: PythonObject, n: PythonObject) raises -> PythonObject:
     """Lane py-runtime round 2: RidgeCV's best alpha index over the n mean
     CV scores (`ridge_best_alpha`, x_linear/ridgecv.mojo); -1 if all NaN."""
@@ -110,70 +80,6 @@ def decision_binding(x_addr: PythonObject, wb_addr: PythonObject, dims: PythonOb
     return PythonObject(cells)
 
 
-def decision_codes_binding(x_addr: PythonObject, wb_addr: PythonObject, dims: PythonObject,
-                           out_addr: PythonObject) raises -> PythonObject:
-    """The GPU binding's `x_linear_decision_codes` on the host: the same
-    `decision_one` cells, then `decision_code_row` per row."""
-    var n = Int(py=dims[0])
-    var d = Int(py=dims[1])
-    var k = Int(py=dims[2])
-    var link = Int(py=dims[3])
-    var strict = Int(py=dims[4])
-    var below = Int(py=dims[5])
-    var above = Int(py=dims[6])
-    var xa = Int(py=x_addr)
-    var wa = Int(py=wb_addr)
-    var oa = Int(py=out_addr)
-    var status = Int(py=dims[7]) if len(dims) > 7 else 0
-    var rows = 0
-    with GILReleased(Python()):
-        xl_x_status_host(xa, n * d, status)
-        rows = x_linear_decision_codes_host(xa, wa, n, d, k, link, strict, below, above, oa)
-    return PythonObject(rows)
-
-
-def decision_rows_binding(x_addr: PythonObject, wb_addr: PythonObject, dims: PythonObject,
-                          out_addr: PythonObject) raises -> PythonObject:
-    """The GPU binding's `x_linear_decision_rows` on the host: dims = [n,
-    d, k, link, rows_mode]; out float32 n x max(k, 2). Returns n."""
-    if len(dims) != 5 and len(dims) != 6:
-        raise Error("x_linear_decision_rows: dims must contain n, d, k, link, rows_mode (and the status address)")
-    var n = Int(py=dims[0])
-    var d = Int(py=dims[1])
-    var k = Int(py=dims[2])
-    var link = Int(py=dims[3])
-    var mode = Int(py=dims[4])
-    var status = Int(py=dims[5]) if len(dims) > 5 else 0
-    var xa = Int(py=x_addr)
-    var wa = Int(py=wb_addr)
-    var oa = Int(py=out_addr)
-    var rows = 0
-    with GILReleased(Python()):
-        xl_x_status_host(xa, n * d, status)
-        rows = x_linear_decision_rows_host(xa, wa, n, d, k, link, mode, oa)
-    return PythonObject(rows)
-
-
-def decision_huber_out_binding(x_addr: PythonObject, wb_addr: PythonObject, dims: PythonObject,
-                               out_addr: PythonObject) raises -> PythonObject:
-    """The GPU binding's `x_linear_decision_huber_out` on the host: dims =
-    [n, d, link, y_addr, thr]; out uint8 n. Returns n."""
-    if len(dims) != 5:
-        raise Error("x_linear_decision_huber_out: dims must contain n, d, link, y address, thr")
-    var n = Int(py=dims[0])
-    var d = Int(py=dims[1])
-    var link = Int(py=dims[2])
-    var ya = Int(py=dims[3])
-    var thr = Float64(py=dims[4])
-    var xa = Int(py=x_addr)
-    var wa = Int(py=wb_addr)
-    var oa = Int(py=out_addr)
-    var rows = 0
-    with GILReleased(Python()):
-        rows = x_linear_decision_huber_out_host(xa, wa, n, d, link, ya, thr, oa)
-    return PythonObject(rows)
-
-
 def x_linear_host_numeric_mode_binding() raises -> PythonObject:
     return PythonObject(GLOBAL_NUMERIC_MODE)
 
@@ -217,12 +123,7 @@ def build__mojolearn_x_linear_host() -> PythonObject:
         m.def_function[best_alpha_binding]("x_linear_best_alpha")
         # TOMBSTONE: x_linear_glm_ydom, x_linear_cls1_flags (dead native entries: constant / switch-word probes nothing reads) deleted 2026-10-26 by 44fc3b5bb; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_x_linear.patch
-        m.def_function[class_prep_binding]("x_linear_class_prep")
-        m.def_function[spearman_sign_binding]("x_linear_spearman_sign")
         m.def_function[decision_binding]("x_linear_decision")
-        m.def_function[decision_codes_binding]("x_linear_decision_codes")
-        m.def_function[decision_rows_binding]("x_linear_decision_rows")
-        m.def_function[decision_huber_out_binding]("x_linear_decision_huber_out")
         m.def_function[x_linear_numeric_mode_binding]("x_linear_numeric_mode")
         m.def_function[x_linear_vendor_binding]("x_linear_vendor")
         m.def_function[py2mojo_rows_host_binding]("py2mojo_rows")

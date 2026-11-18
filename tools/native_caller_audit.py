@@ -151,6 +151,10 @@ KEEP = {
     "x_neighbors_kfeat_schi2_draw": "paused Apple fast arm (lane apple-fast-w3-kfeat, XN_FAST_SCHI2_LAZYW, opt-in): "
                                     "kept until Andrew reopens Apple fast",
     "x_cluster_mbk_devscan": "paused Apple fast read-back (MiniBatchKMeans' FAST + Apple NaN/inf device scan)",
+    "x_cluster_mbk_policy": "paused Apple fast read-back (MINIBATCH_FAST_DEV policies, x_cluster/minibatch_fast.mojo)",
+    "x_decomp_lu_resid": "paused Apple fast arm (lane apple-fast-q-linalg, LU_QFIX)",
+    "x_decomp_dev_orth_ws": "paused Apple fast arm (lane apple-fast-s-linalg, DECOMP_FAST_ORTH_WS)",
+    "gbdt_fit_rowmajor": "paused Apple fast arm (lane apple-fast-sym-feat, GBDT_QUANT_DEVICE)",
 }
 
 

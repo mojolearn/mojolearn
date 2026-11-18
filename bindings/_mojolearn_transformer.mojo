@@ -353,10 +353,6 @@ def _read_addrs_tail(
     return a^
 
 
-def transformer_flash_call_count_binding(grouped: PythonObject) raises -> PythonObject:
-    return PythonObject(afn_flash_call_count(Bool(py=grouped)))
-
-
 # TOMBSTONE: MOJOLEARN_IDN_ATTN_SOFTMAX=2 (slower) deleted 2026-10-10 by c1bf9d832; code recoverable at ca25d9321.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_ATTN_SOFTMAX-arm2.patch
 
@@ -498,7 +494,6 @@ from transformer.native_block_dispatch import NATIVE_TRANSFORMER_BLOCK_API, BLOC
 from core.transformer_block_session import TransformerBlockSession, transformer_block_session_of
 from transformer.neural_entry_device import publish_neural_transformer_device
 from providers.python.causal_session_handles_pyapi_unpack import causal_session_handles_type
-
 
 
 # TOMBSTONE: TRANSFORMER_FORWARD_TAPE_API (DELETED: superseded by the attention step op and the tape rule, lane x6) deleted 2026-11-09 by e49d0ee90d; code recoverable at 4f41e3d67d.
@@ -1141,7 +1136,6 @@ def transformer_backward_binding(
     return PythonObject(0)
 
 
-
 # TOMBSTONE: TRANSFORMER_FORWARD_TAPE_API (DELETED: superseded by the attention step op and the tape rule, lane x6) deleted 2026-11-09 by e49d0ee90d; code recoverable at 4f41e3d67d.
 # Restore: git apply experiments/removed/TRANSFORMER_FORWARD_TAPE_API.patch
 # (`transformer_session_discard_tape`, `transformer_session_invalidate_tape`.)
@@ -1207,7 +1201,6 @@ def build__mojolearn_transformer() -> PythonObject:
         m.def_function[transformer_arithmetic_profile_changed_binding]("transformer_arithmetic_profile_changed")
         m.def_function[transformer_arithmetic_profile_binding]("transformer_arithmetic_profile")
         m.def_function[transformer_vendor_binding]("transformer_vendor")
-        m.def_function[transformer_flash_call_count_binding]("transformer_flash_call_count")
         m.def_function[transformer_numeric_mode_binding](
             "transformer_numeric_mode"
         )

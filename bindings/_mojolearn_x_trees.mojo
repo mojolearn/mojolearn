@@ -20,8 +20,6 @@ from xtrees.shap_device import shap_prepare, shap_prepare_retain, tree_shap_valu
 # F13 measurement audit lives in the binding used by public TreeExplainer.
 # The original recipe compiled the separate trees binding, so its counter
 # could never observe the public x_trees execution.
-def x_trees_shap_pair_count_binding() raises -> PythonObject:
-    return PythonObject(shap_pair_count())
 
 
 def numeric_mode_binding() raises -> PythonObject:
@@ -136,7 +134,6 @@ def build__mojolearn_x_trees() -> PythonObject:
         m.def_function[tree_shap_prepare_retain_binding]("x_trees_tree_shap_prepare_retain")
         m.def_function[tree_shap_cache_values_binding]("x_trees_tree_shap_cache_values")
         m.def_function[tree_shap_cache_release_binding]("x_trees_tree_shap_cache_release")
-        m.def_function[x_trees_shap_pair_count_binding]("x_trees_shap_pair_count")
         m.def_function[tree_shap_prepare_binding]("x_trees_tree_shap_prepare")
         m.def_function[tree_shap_binding]("x_trees_tree_shap")
         m.def_function[numeric_mode_binding]("x_trees_numeric_mode")

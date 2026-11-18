@@ -62,7 +62,6 @@ the clip, the loss, the linear operations and the RMSNorm weight gradient.
 from core.experiment_guards_neural import NEURAL_GUARDS_OK
 from training.neural_arithmetic_profile import neural_training_profile
 from bindings.residual_dropout_boundary_host_pack import residual_dropout_binding, residual_dropout_backward_binding
-from bindings.neural_gemm_boundary_host_pack import neural_gemm_binding
 from training.neural_session_mlp_host import nn_mlp_sessions_host
 
 from std.os import abort
@@ -86,16 +85,6 @@ from core.mojolearn_training_host_impl import (
 )
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
-from bindings.optimizer_public_door import entry_zero
-from bindings.optimizer_public_host_pyapi_unpack import (
-    optimizer_door_accumulate_host_c,
-    optimizer_door_clip_host_c,
-    optimizer_door_io_host_c,
-    optimizer_door_load_state_host_c,
-    optimizer_door_state_host_c,
-    optimizer_door_state_set_host_c,
-    optimizer_door_step_host_c,
-)
 from bindings.optimizer_public_host_pyapi_pack import (
     optimizer_resident_close_host_binding,
     optimizer_resident_download_host_binding,
@@ -646,14 +635,6 @@ def build__mojolearn_training_host() -> PythonObject:
         module.def_function[training_numeric_mode_binding]("training_numeric_mode")
         module.def_function[training_vendor_binding]("training_vendor")
         module.def_function[optimizer_step_binding]("optimizer_step")
-        module.def_py_c_function(optimizer_door_step_host_c, "optimizer_door_step")
-        module.def_py_c_function(optimizer_door_io_host_c, "optimizer_door_io")
-        module.def_py_c_function(optimizer_door_state_host_c, "optimizer_door_state")
-        module.def_py_c_function(optimizer_door_state_set_host_c, "optimizer_door_state_set")
-        module.def_py_c_function(optimizer_door_load_state_host_c, "optimizer_door_load_state")
-        module.def_py_c_function(optimizer_door_clip_host_c, "optimizer_door_clip")
-        module.def_py_c_function(optimizer_door_accumulate_host_c, "optimizer_door_accumulate")
-        module.def_py_c_function(entry_zero, "optimizer_door_zero")
         module.def_function[optimizer_resident_open_host_binding]("optimizer_resident_open")
         module.def_function[optimizer_resident_close_host_binding]("optimizer_resident_close")
         module.def_function[optimizer_resident_download_host_binding]("optimizer_resident_download")
@@ -668,7 +649,6 @@ def build__mojolearn_training_host() -> PythonObject:
         module.def_function[rms_norm_forward_binding]("rms_norm_forward")
         module.def_function[rms_norm_backward_binding]("rms_norm_backward")
         module.def_function[linear_forward_binding]("linear_forward")
-        module.def_function[neural_gemm_binding]("neural_gemm")
         module.def_function[mlp_sessions_binding]("mlp_sessions")
         module.def_function[mlp_sessions_rows_binding]("mlp_sessions_rows")
         module.def_function[residual_dropout_binding]("residual_dropout")

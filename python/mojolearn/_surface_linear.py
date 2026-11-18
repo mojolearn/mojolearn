@@ -82,9 +82,7 @@ FAMILIES = (
             # manifest sync (lane import-fix-entry-probes, 2026-11-12): registered in the binding source
             "ridge_fit_native_api_v1",
             "x_linear_host_numeric_mode", "x_linear_host_vendor", "x_linear_host_column", "x_linear_host_sabotage",
-            "x_linear_fit", "x_linear_decision", "x_linear_decision_codes", "x_linear_numeric_mode", "x_linear_vendor",
-            "x_linear_class_prep", "x_linear_spearman_sign", "x_linear_decision_rows",
-            "x_linear_decision_huber_out",
+            "x_linear_fit", "x_linear_decision", "x_linear_numeric_mode", "x_linear_vendor",
             # manifest sync (lane rehearsal-suite-green, 2026-10-08): registered in the binding source
             "x_linear_best_alpha", "py2mojo_rows",
             "py2mojo_linear_flags",

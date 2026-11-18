@@ -61,26 +61,6 @@ def msel_put_binding(addr: PythonObject, nbytes: PythonObject) raises -> PythonO
     return PythonObject(id)
 
 
-def msel_alloc_binding(nbytes: PythonObject) raises -> PythonObject:
-    """`core/msel_helpers_device.mojo::msel_store_alloc_device_run`."""
-    var n = Int(py=nbytes)
-    var id: Int
-    with GILReleased(Python()):
-        id = msel_store_alloc_device_run(n)
-    return PythonObject(id)
-
-
-def msel_read_binding(id: PythonObject, dst_addr: PythonObject, nbytes: PythonObject) raises -> PythonObject:
-    """`core/msel_helpers_device.mojo::msel_store_read_device_run`."""
-    var i = Int(py=id)
-    var d = Int(py=dst_addr)
-    var n = Int(py=nbytes)
-    var status = 0
-    with GILReleased(Python()):
-        status = msel_store_read_device_run(i, d, n)
-    return PythonObject(status)
-
-
 def msel_free_binding(id: PythonObject) raises -> PythonObject:
     """`core/msel_helpers_device.mojo::msel_store_free_device_run`."""
     var i = Int(py=id)
@@ -92,11 +72,6 @@ def msel_free_binding(id: PythonObject) raises -> PythonObject:
 
 def msel_live_binding() raises -> PythonObject:
     return PythonObject(msel_store()[].live)
-
-
-def msel_free_bytes_binding() raises -> PythonObject:
-    """`core/msel_helpers_device.mojo::msel_store_free_bytes_device_run`."""
-    return PythonObject(msel_store_free_bytes_device_run())
 
 
 def msel_take_rows_binding(
@@ -119,83 +94,6 @@ def msel_take_rows_binding(
     if not ok:
         raise Error("msel_take_rows: row index out of bounds")
     return PythonObject(0)
-
-
-def msel_scatter_rows_binding(
-    dst_id: PythonObject, n_dst: PythonObject, dst_code: PythonObject,
-    src_addr: PythonObject, src_code: PythonObject, n_src: PythonObject,
-    width: PythonObject, idx_id: PythonObject,
-) raises -> PythonObject:
-    """Rows of a host buffer cast into rows idx of a resident int64 or
-    float64 block (cross_val_predict's placement):
-    `core/msel_helpers_device.mojo::msel_scatter_rows_device_run`."""
-    var di = Int(py=dst_id)
-    var nd = Int(py=n_dst)
-    var dc = Int(py=dst_code)
-    var sa = Int(py=src_addr)
-    var sc = Int(py=src_code)
-    var ns = Int(py=n_src)
-    var w = Int(py=width)
-    var ix = Int(py=idx_id)
-    var status = 0
-    with GILReleased(Python()):
-        status = msel_scatter_rows_device_run(di, nd, dc, sa, sc, ns, w, ix)
-    return PythonObject(status)
-
-
-def msel_proba_column_binding(
-    src_addr: PythonObject, code: PythonObject, n: PythonObject, k: PythonObject,
-    col: PythonObject, dst_addr: PythonObject,
-) raises -> PythonObject:
-    """Column `col` of an n x k float32/float64 buffer as float32:
-    `core/msel_helpers_device.mojo::msel_proba_column_device_run`."""
-    var sa = Int(py=src_addr)
-    var c = Int(py=code)
-    var nn = Int(py=n)
-    var kk = Int(py=k)
-    var cc = Int(py=col)
-    var d = Int(py=dst_addr)
-    var status = 0
-    with GILReleased(Python()):
-        status = msel_proba_column_device_run(sa, c, nn, kk, cc, d)
-    return PythonObject(status)
-
-
-def msel_split_table_i32_binding(
-    perm_addr: PythonObject, m: PythonObject, n_test: PythonObject, n_train: PythonObject,
-    counts_addr: PythonObject, table_addr: PythonObject, sums_addr: PythonObject,
-) raises -> PythonObject:
-    """GroupShuffleSplit's per-group side table (the signature of
-    `split_table_i32`): `core/msel_helpers_device.mojo::msel_split_table_device_run`."""
-    var mm = Int(py=m)
-    var te = Int(py=n_test)
-    var tr = Int(py=n_train)
-    var pa = Int(py=perm_addr)
-    var ca = Int(py=counts_addr)
-    var ta = Int(py=table_addr)
-    var sa = Int(py=sums_addr)
-    var status = 0
-    with GILReleased(Python()):
-        status = msel_split_table_device_run(pa, mm, te, tr, ca, ta, sa)
-    return PythonObject(status)
-
-
-def msel_group_fold_perm_i32_binding(
-    counts_addr: PythonObject, m: PythonObject, n_folds: PythonObject, perm_addr: PythonObject,
-    dst_addr: PythonObject, sizes_addr: PythonObject,
-) raises -> PythonObject:
-    """Shuffled GroupKFold (the perm branch of `group_fold_assign_i32`):
-    `core/msel_helpers_device.mojo::msel_group_fold_perm_device_run`."""
-    var mm = Int(py=m)
-    var K = Int(py=n_folds)
-    var ca = Int(py=counts_addr)
-    var pa = Int(py=perm_addr)
-    var da = Int(py=dst_addr)
-    var sa = Int(py=sizes_addr)
-    var status = 0
-    with GILReleased(Python()):
-        status = msel_group_fold_perm_device_run(ca, mm, K, pa, da, sa)
-    return PythonObject(status)
 
 
 # Lane a6: the device-X entries of family and classical estimators live in

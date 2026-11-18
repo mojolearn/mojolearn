@@ -25,41 +25,6 @@ from bindings.optimizer_public_door import (
 )
 
 
-def optimizer_door_step_c(py_self: PyObjectPtr, packed: PyObjectPtr) abi("C") -> PyObjectPtr:
-    """optimizer_door_step(opt, grads, max_norm, op, tokens)."""
-    return entry_step(py_self, packed)
-
-
-def optimizer_door_io_c(py_self: PyObjectPtr, packed: PyObjectPtr) abi("C") -> PyObjectPtr:
-    """optimizer_door_io(opt, op, tensors, name, tensor)."""
-    return entry_io(py_self, packed)
-
-
-def optimizer_door_state_c(py_self: PyObjectPtr, packed: PyObjectPtr) abi("C") -> PyObjectPtr:
-    """optimizer_door_state(opt, which)."""
-    return entry_state(py_self, packed)
-
-
-def optimizer_door_state_set_c(py_self: PyObjectPtr, packed: PyObjectPtr) abi("C") -> PyObjectPtr:
-    """optimizer_door_state_set(opt, which, value)."""
-    return entry_state_set(py_self, packed)
-
-
-def optimizer_door_load_state_c(py_self: PyObjectPtr, packed: PyObjectPtr) abi("C") -> PyObjectPtr:
-    """optimizer_door_load_state(opt, t, ea, c1, es, c2, bi, c3)."""
-    return entry_load_state(py_self, packed)
-
-
-def optimizer_door_clip_c(py_self: PyObjectPtr, packed: PyObjectPtr) abi("C") -> PyObjectPtr:
-    """optimizer_door_clip(grads, max_norm, norm_type, error_if_nonfinite, kwargs)."""
-    return entry_clip(py_self, packed)
-
-
-def optimizer_door_accumulate_c(py_self: PyObjectPtr, packed: PyObjectPtr) abi("C") -> PyObjectPtr:
-    """optimizer_door_accumulate(microbatch_grads, tokens)."""
-    return entry_accumulate(py_self, packed)
-
-
 # ---------------------------------------------------------------------------
 # The state pool's entries (Samba's native step and the optimizer finalizer
 # call them): the training binding's `optimizer_resident_*`, unchanged

@@ -175,7 +175,6 @@ def type_name(value: PythonObject) raises -> String:
     return String(py=py_call(OPT_DOOR.get_or_create_ptr()[].context["type_name"], py_type(value)))
 
 
-
 # shape_text, TensorView, _contiguous, base_format, _format_name, _typestr_name and _array_code moved to bindings/tensor_view.mojo (lane a6-device-x-family-classical).
 
 
@@ -208,8 +207,6 @@ def owner_kind(opt: PythonObject) raises -> Int:
 
 # ---------------------------------------------------------------------------
 # one tensor, read through the buffer protocol
-
-
 
 
 def dtype_name(obj: PythonObject, fmt: String, itemsize: Int) raises -> String:
@@ -342,7 +339,6 @@ def tensor_view(obj: PythonObject, mut v: TensorView, mut pins: OptimizerInputOw
     v.dtype = dtype_name(obj, v.fmt, v.itemsize)
     pins.buffers.append(lease^)
     return True
-
 
 
 # ---------------------------------------------------------------------------
@@ -877,7 +873,6 @@ def door_io(module: PythonObject, provider: PythonObject, opt: PythonObject,
     return optimizer_pack_io(provider, operation, value)
 
 
-
 def door_zero(opt: PythonObject, grads: PythonObject) raises -> PythonObject:
     """`zero_grad`: +0.0 into every gradient buffer."""
     door_ready()
@@ -1204,15 +1199,6 @@ def entry_io(py_self: PyObjectPtr, packed: PyObjectPtr) -> PyObjectPtr:
         return optimizer_python_error(error)
 
 
-def entry_zero(py_self: PyObjectPtr, packed: PyObjectPtr) abi("C") -> PyObjectPtr:
-    """optimizer_zero(opt, grads)."""
-    try:
-        var a = entry_args(packed, 2, "optimizer_zero")
-        return door_zero(a[0], a[1]).steal_data()
-    except error:
-        return optimizer_python_error(error)
-
-
 def entry_state(py_self: PyObjectPtr, packed: PyObjectPtr) -> PyObjectPtr:
     """optimizer_state(opt, which)."""
     try:
@@ -1269,10 +1255,3 @@ def entry_accumulate(py_self: PyObjectPtr, packed: PyObjectPtr) -> PyObjectPtr:
         return optimizer_python_error(error)
 
 
-def entry_init(py_self: PyObjectPtr, packed: PyObjectPtr) abi("C") -> PyObjectPtr:
-    """optimizer_init(opt, params)."""
-    try:
-        var a = entry_args(packed, 2, "optimizer_init")
-        return door_init(a[0], a[1]).steal_data()
-    except error:
-        return optimizer_python_error(error)
