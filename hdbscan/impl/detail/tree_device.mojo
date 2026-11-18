@@ -54,6 +54,10 @@ is the CPU column's; it keeps the walk).
 from std.atomic import Atomic
 from max.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
+from core.transfer import TRANSFER_TIER_IDENTICAL, transfer_download_f32_list, transfer_download_list
+
+#: The pinned download stages of this module and tier (core/transfer.mojo).
+comptime _XFER_POOL = "MojolearnHdbscanTreeTransferStagesIdenticalV1" if TRANSFER_TIER_IDENTICAL else "MojolearnHdbscanTreeTransferStagesFastV1"
 
 from core.device_scan import device_first_nonfinite
 from std.memory import bitcast
@@ -152,35 +156,18 @@ def td_read_i32(
 def td_download_i32(
     ctx: DeviceContext, buf: DeviceBuffer[DType.int32], n: Int
 ) raises -> List[Int32]:
-    var out = List[Int32](length=n, fill=Int32(0))
-    if n <= 0:
-        return out^
-    var h = ctx.enqueue_create_host_buffer[DType.int32](n)
-    var v = buf.create_sub_buffer[DType.int32](0, n)
-    ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=v)
-    ctx.synchronize()
-    for i in range(n):
-        out[i] = h.unsafe_ptr().unsafe_load(i)
-    _ = h^
-    _ = v^
-    return out^
+    # core/transfer.mojo (lane fx-transfer-helpers, 2026-11-18): one copy into
+    # the list's own words. Gone: the zero fill before the full write, a
+    # pinned buffer per call and one checked store per word.
+    return transfer_download_list[DType.int32](ctx, buf, n)
 
 
 def td_download_f32(
     ctx: DeviceContext, buf: DeviceBuffer[DType.float32], n: Int
 ) raises -> List[Float32]:
-    var out = List[Float32](length=n, fill=Float32(0.0))
-    if n <= 0:
-        return out^
-    var h = ctx.enqueue_create_host_buffer[DType.float32](n)
-    var v = buf.create_sub_buffer[DType.float32](0, n)
-    ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=v)
-    ctx.synchronize()
-    for i in range(n):
-        out[i] = h.unsafe_ptr().unsafe_load(i)
-    _ = h^
-    _ = v^
-    return out^
+    # core/transfer.mojo: as `td_download_i32` above; float32 takes the pooled
+    # pinned stages from DOWNLOAD_STAGE_MIN floats.
+    return transfer_download_f32_list[_XFER_POOL](ctx, buf, n)
 
 
 def td_stage_i32(

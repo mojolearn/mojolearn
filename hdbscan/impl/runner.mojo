@@ -45,6 +45,10 @@ runs the same stages as host loops in the same orders.
 """
 
 from max.gpu.host import DeviceBuffer, DeviceContext
+from core.transfer import TRANSFER_TIER_IDENTICAL, transfer_download_f32_list
+
+#: The pinned download stages of this module and tier (core/transfer.mojo).
+comptime _XFER_POOL = "MojolearnHdbscanRunnerTransferStagesIdenticalV1" if TRANSFER_TIER_IDENTICAL else "MojolearnHdbscanRunnerTransferStagesFastV1"
 
 from core.identity_trace import IdentityTrace
 from hdbscan.checks.hdbscan_sabotage import HDB_SAB_NONE
@@ -421,14 +425,7 @@ def fit_hdbscan(
 def _download_f32(
     ctx: DeviceContext, buf: DeviceBuffer[DType.float32], n: Int
 ) raises -> List[Float32]:
-    var h = ctx.enqueue_create_host_buffer[DType.float32](n)
-    ctx.synchronize()
-    var v = buf.create_sub_buffer[DType.float32](0, n)
-    ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=v)
-    ctx.synchronize()
-    var out = List[Float32](capacity=n)
-    for i in range(n):
-        out.append(h.unsafe_ptr().unsafe_load(i))
-    _ = h^
-    _ = v^
-    return out^
+    # core/transfer.mojo (lane fx-transfer-helpers, 2026-11-18): the copy
+    # engine writes the list's own words, one wait. Gone: two waits, a pinned
+    # buffer per call and one append per word.
+    return transfer_download_f32_list[_XFER_POOL](ctx, buf, n)
