@@ -9570,11 +9570,17 @@ def gemm_worklist_mode(m: Int, n: Int, k: Int) -> Int:
         return GEMM_WORKLIST_NONE
     if m <= 0 or n <= 0:
         return GEMM_WORKLIST_NONE
-    if choose_gemm_plan(m, n, k) != PLAN_TUNED_128_8X8:
-        return GEMM_WORKLIST_NONE
-    if gemm_default_ksplit_leaves(m, n, k) > 0 and contract_partition(k)[1] > 0:
-        return GEMM_WORKLIST_GROUP
-    return GEMM_WORKLIST_ALL
+    if choose_gemm_plan(m, n, k) == PLAN_TUNED_128_8X8:
+        if gemm_default_ksplit_leaves(m, n, k) > 0 and contract_partition(k)[1] > 0:
+            return GEMM_WORKLIST_GROUP
+        return GEMM_WORKLIST_ALL
+    # A stepped-down call the shipped dispatch runs on the packed body at the
+    # SAME tile (all leaves, no workspace); its narrower-tile case is another
+    # kernel instantiation and keeps its own launch.
+    comptime if GEMM_BODY_KPACK_HG and IDN_GEMM_NV_STEP_KPACK:
+        if gemm_nv_step_kpack_rows(m, n, k) == GEMM_KPACK_RPT * (TUNED_TPB // TUNED_TC):
+            return GEMM_WORKLIST_ALL
+    return GEMM_WORKLIST_NONE
 
 
 @__llvm_metadata(MAX_THREADS_PER_BLOCK_METADATA=StaticTuple[Int32, 1](Int32(GEMM_KPACK_LAUNCH_BOUND)))
@@ -9852,6 +9858,9 @@ struct GemmWorklist(Movable):
         comptime if not is_defined["MOJOLEARN_LEGACY_SHAPE_NV_FS4"]() and not is_defined["MOJOLEARN_GEMM_NV_FS4_OFF"]():
             if gemm_kpack_fold_slots_for(part[1], gl_rule) == 4:
                 fs = 4
+        if choose_gemm_plan(m, n, k) != PLAN_TUNED_128_8X8:
+            # The stepped-down call's own launch uses the profile-wide stack.
+            fs = GEMM_KPACK_FS
         # Independence: an output that another listed product reads or writes.
         var pc = Int(c)
         var pa = Int(a)
