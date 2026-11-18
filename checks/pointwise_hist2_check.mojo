@@ -253,10 +253,10 @@ def run_checks() raises:
                 | UInt32(b3)
             )
 
-        ctx.enqueue_copy(dst_buf=d_idx, src_ptr=indices_h.unsafe_ptr())
-        ctx.enqueue_copy(dst_buf=d_tgt, src_ptr=target_h.unsafe_ptr())
-        ctx.enqueue_copy(dst_buf=d_wt, src_ptr=weight_h.unsafe_ptr())
-        ctx.enqueue_copy(dst_buf=d_ci, src_ptr=cindex_h.unsafe_ptr())
+        upload_whole_into[DType.uint32](ctx, d_idx, indices_h)
+        upload_whole_into[DType.float32](ctx, d_tgt, target_h)
+        upload_whole_into[DType.float32](ctx, d_wt, weight_h)
+        upload_whole_into[DType.uint32](ctx, d_ci, cindex_h)
 
         var want = List[Float32]()
         for _ in range(out_floats):
@@ -391,7 +391,7 @@ def run_checks() raises:
                         grid_dim=(1, 1, 1),
                         block_dim=(PW_HIST2_FLOAT_BLOCK, 1, 1),
                     )
-            ctx.enqueue_copy(dst_buf=h_out, src_buf=d_out)
+            download_host_into[DType.float32](ctx, d_out, h_out)
             ctx.synchronize()
 
             var bad = 0
@@ -473,6 +473,7 @@ def run_checks() raises:
 # checks/ that no CI job ran. One process per check name in CI keeps any
 # fresh-process precondition. Device column only: the suite needs a GPU, so the CPU build never instantiates it.
 from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
+from checks.native_tests.kit import download_host_into, upload_whole_into
 
 
 def run_cases(column: Column, mut report: Report):

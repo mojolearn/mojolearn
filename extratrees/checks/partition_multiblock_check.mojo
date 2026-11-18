@@ -151,6 +151,7 @@ from extratrees.impl.decisiontree.batched_levelalgo.kernels.partition_multiblock
     PART_MB_SAB_NONE,
     PART_MB_SAB_SINGLE_BLOCK,
 )
+from checks.native_tests.kit import download_host_into, upload_host_into
 
 
 comptime TPB = TPB_DEFAULT
@@ -513,17 +514,13 @@ def _launch_oracle(
     for i in range(n_items):
         sp[unsafe_offset=i] = splits[i]
 
-    ctx.enqueue_copy(dst_buf=d_row_ids, src_ptr=h_row_ids.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_data, src_ptr=h_data.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_items, src_ptr=h_items.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_splits, src_ptr=h_splits.unsafe_ptr())
+    upload_host_into[DType.int32](ctx, d_row_ids, h_row_ids)
+    upload_host_into[DType.float32](ctx, d_data, h_data)
+    upload_host_into[DType.uint8](ctx, d_items, h_items)
+    upload_host_into[DType.uint8](ctx, d_splits, h_splits)
     ctx.enqueue_memset(d_iters, PARTITION_UNVISITED)
     ctx.enqueue_memset(d_swaps, Int32(0))
     ctx.synchronize()
-    _ = h_data^  # past the drain: a queued copy reads it after its last named use
-    _ = h_items^  # past the drain: a queued copy reads it after its last named use
-    _ = h_row_ids^  # past the drain: a queued copy reads it after its last named use
-    _ = h_splits^  # past the drain: a queued copy reads it after its last named use
 
     ctx.enqueue_function[node_split_kernel[TPB]](
         d_row_ids.unsafe_ptr(),
@@ -542,8 +539,8 @@ def _launch_oracle(
 
     var o_row_ids = ctx.enqueue_create_host_buffer[DType.int32](N_ROWS)
     var o_iters = ctx.enqueue_create_host_buffer[DType.int32](n_items)
-    ctx.enqueue_copy(dst_buf=o_row_ids, src_buf=d_row_ids)
-    ctx.enqueue_copy(dst_buf=o_iters, src_buf=d_iters)
+    download_host_into[DType.int32](ctx, d_row_ids, o_row_ids)
+    download_host_into[DType.int32](ctx, d_iters, o_iters)
     ctx.synchronize()
 
     var ids = List[Int32]()
@@ -621,12 +618,12 @@ def _launch_multiblock(
     for i in range(n_blocks):
         wp[unsafe_offset=i] = wl[i]
 
-    ctx.enqueue_copy(dst_buf=d_row_ids, src_ptr=h_row_ids.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_blk_base, src_ptr=h_blk_base.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_data, src_ptr=h_data.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_items, src_ptr=h_items.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_splits, src_ptr=h_splits.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_wl, src_ptr=h_wl.unsafe_ptr())
+    upload_host_into[DType.int32](ctx, d_row_ids, h_row_ids)
+    upload_host_into[DType.int32](ctx, d_blk_base, h_blk_base)
+    upload_host_into[DType.float32](ctx, d_data, h_data)
+    upload_host_into[DType.uint8](ctx, d_items, h_items)
+    upload_host_into[DType.uint8](ctx, d_splits, h_splits)
+    upload_host_into[DType.uint8](ctx, d_wl, h_wl)
     # The scatter's destination, seeded with a value that is NOT a row id: a
     # slot no block wrote comes back wild instead of plausible.
     ctx.enqueue_memset(d_row_alt, ALT_SENTINEL)
@@ -635,12 +632,6 @@ def _launch_multiblock(
     var d_flags_unused = ctx.enqueue_create_buffer[DType.uint8](1)
     ctx.enqueue_memset(d_blk_off, Int32(0))
     ctx.synchronize()
-    _ = h_blk_base^  # past the drain: a queued copy reads it after its last named use
-    _ = h_data^  # past the drain: a queued copy reads it after its last named use
-    _ = h_items^  # past the drain: a queued copy reads it after its last named use
-    _ = h_row_ids^  # past the drain: a queued copy reads it after its last named use
-    _ = h_splits^  # past the drain: a queued copy reads it after its last named use
-    _ = h_wl^  # past the drain: a queued copy reads it after its last named use
 
     ctx.enqueue_function[partition_count_kernel[TPB]](
         d_blk_left.unsafe_ptr(),
@@ -704,10 +695,10 @@ def _launch_multiblock(
     var o_row_ids = ctx.enqueue_create_host_buffer[DType.int32](N_ROWS)
     var o_left = ctx.enqueue_create_host_buffer[DType.int32](n_blocks)
     var o_off = ctx.enqueue_create_host_buffer[DType.int32](n_blocks)
-    ctx.enqueue_copy(dst_buf=o_row_ids, src_buf=d_row_ids)
-    ctx.enqueue_copy(dst_buf=o_left, src_buf=d_blk_left)
+    download_host_into[DType.int32](ctx, d_row_ids, o_row_ids)
+    download_host_into[DType.int32](ctx, d_blk_left, o_left)
     _ = d_flags_unused.unsafe_ptr()
-    ctx.enqueue_copy(dst_buf=o_off, src_buf=d_blk_off)
+    download_host_into[DType.int32](ctx, d_blk_off, o_off)
     ctx.synchronize()
 
     var ids = List[Int32]()

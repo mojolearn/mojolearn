@@ -143,9 +143,8 @@ def check_replicated_half_byte() raises:
     var z = ctx.enqueue_create_host_buffer[DType.uint32](n_rows * lay.columns)
     for i in range(n_rows * lay.columns):
         z.unsafe_ptr().unsafe_store(i, UInt32(0))
-    ctx.enqueue_copy(dst_buf=cindex, src_ptr=z.unsafe_ptr())
+    upload_host_into[DType.uint32](ctx, cindex, z)
     ctx.synchronize()
-    _ = z^  # past the drain: a queued copy reads it after its last named use
 
     var host_bin = List[List[Int]]()
     var hb = ctx.enqueue_create_host_buffer[DType.uint8](n_rows)
@@ -165,7 +164,7 @@ def check_replicated_half_byte() raises:
             col.append(v)
             hb.unsafe_ptr().unsafe_store(r, UInt8(v))
         host_bin.append(col^)
-        ctx.enqueue_copy(dst_buf=bins, src_ptr=hb.unsafe_ptr())
+        upload_host_into[DType.uint8](ctx, bins, hb)
         ctx.enqueue_function[write_compressed_index_kernel](
             Int32(Int(cf.offset) * n_rows), cf.mask, cf.shift,
             bins.unsafe_ptr(), Int32(n_rows), cindex.unsafe_ptr(),
@@ -202,7 +201,7 @@ def check_replicated_half_byte() raises:
             g_mag += -g
         else:
             g_mag += g
-    ctx.enqueue_copy(dst_buf=stats, src_ptr=hs.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, stats, hs)
 
     # The contract `choose_scale` is specified against: sum of MAGNITUDES per
     # plane, and one scale serves both, so the bound is the larger.
@@ -211,7 +210,6 @@ def check_replicated_half_byte() raises:
         mag = g_mag
     var scale = choose_scale(mag)
     var scale_keep = upload_scale(ctx, Float32(scale))
-    _ = hs^  # past the drain: a queued copy reads it after its last named use
     var unbounded_keep = upload_scale(ctx, UNBOUNDED_SCALE)
     var fixed_scale = rebind[MutPointer[Float32, MutAnyOrigin]](
         scale_keep.unsafe_ptr()
@@ -223,7 +221,7 @@ def check_replicated_half_byte() raises:
     var hi = ctx.enqueue_create_host_buffer[DType.uint32](n_rows)
     for r in range(n_rows):
         hi.unsafe_ptr().unsafe_store(r, UInt32(r))
-    ctx.enqueue_copy(dst_buf=row_index, src_ptr=hi.unsafe_ptr())
+    upload_host_into[DType.uint32](ctx, row_index, hi)
 
     var p_off = ctx.enqueue_create_buffer[DType.uint32](max_leaves)
     var p_sz = ctx.enqueue_create_buffer[DType.uint32](max_leaves)
@@ -235,16 +233,16 @@ def check_replicated_half_byte() raises:
     for i in range(n_live):
         ho.unsafe_ptr().unsafe_store(i, UInt32(off[i]))
         hzz.unsafe_ptr().unsafe_store(i, UInt32(siz[i]))
-    ctx.enqueue_copy(dst_buf=p_off, src_ptr=ho.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=p_sz, src_ptr=hzz.unsafe_ptr())
+    upload_host_into[DType.uint32](ctx, p_off, ho)
+    upload_host_into[DType.uint32](ctx, p_sz, hzz)
 
     var ids = ctx.enqueue_create_buffer[DType.uint32](max_leaves)
     var dense_ids = ctx.enqueue_create_buffer[DType.uint32](max_leaves)
     var hid = ctx.enqueue_create_host_buffer[DType.uint32](max_leaves)
     for i in range(max_leaves):
         hid.unsafe_ptr().unsafe_store(i, UInt32(i))
-    ctx.enqueue_copy(dst_buf=ids, src_ptr=hid.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=dense_ids, src_ptr=hid.unsafe_ptr())
+    upload_host_into[DType.uint32](ctx, ids, hid)
+    upload_host_into[DType.uint32](ctx, dense_ids, hid)
 
     var hist_cells = max_leaves * stat_count * lay.hist_cells
     var hist = ctx.enqueue_create_buffer[DType.float32](hist_cells)
@@ -266,10 +264,6 @@ def check_replicated_half_byte() raises:
         max_leaves * stat_count * widest
     )
     ctx.synchronize()
-    _ = hi^  # past the drain: a queued copy reads it after its last named use
-    _ = hid^  # past the drain: a queued copy reads it after its last named use
-    _ = ho^  # past the drain: a queued copy reads it after its last named use
-    _ = hzz^  # past the drain: a queued copy reads it after its last named use
 
     # ---- the host tally, once ------------------------------------------
     # `[leaf][stat][flat bin]`, the layout the bridge leaves behind.
@@ -523,7 +517,7 @@ def run_arm(
 
     var cells = max_leaves * stat_count * hist_cells_per_leaf
     var out = ctx.enqueue_create_host_buffer[DType.float32](cells)
-    ctx.enqueue_copy(dst_ptr=out.unsafe_ptr(), src_buf=hist)
+    download_host_into[DType.float32](ctx, hist, out)
     ctx.synchronize()
     return out^
 
@@ -584,6 +578,7 @@ def run_checks() raises:
 # checks/ that no CI job ran. One process per check name in CI keeps any
 # fresh-process precondition. Device column only: the suite needs a GPU, so the CPU build never instantiates it.
 from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
+from checks.native_tests.kit import download_host_into, upload_host_into
 
 
 def run_cases(column: Column, mut report: Report):

@@ -122,7 +122,7 @@ def _device_fold_and_pack(
     var d_sb = ctx.enqueue_create_buffer[DType.float32](1)
     var d_desc = ctx.enqueue_create_buffer[DType.uint32](5)
     var d_table = ctx.enqueue_create_buffer[DType.uint32](len(feat_table))
-    ctx.enqueue_copy(dst_buf=d_table, src_ptr=feat_table.unsafe_ptr())
+    upload_whole_into[DType.uint32](ctx, d_table, feat_table)
     # a planted poison so a dead write is a FAIL, not a lucky zero
     d_sb.enqueue_fill(Float32(-777.25))
 
@@ -178,10 +178,10 @@ def _device_fold_and_pack(
     var h_ws = ctx.enqueue_create_host_buffer[DType.float32](2 * (depth + 1))
     var h_sb = ctx.enqueue_create_host_buffer[DType.float32](1)
     var h_desc = ctx.enqueue_create_host_buffer[DType.uint32](5)
-    ctx.enqueue_copy(dst_buf=h_w, src_buf=d_winners_ids)
+    download_host_into[DType.uint32](ctx, d_winners_ids, h_w)
     ctx.enqueue_copy(dst_buf=h_ws, src_buf=d_winners_scores)
-    ctx.enqueue_copy(dst_buf=h_sb, src_buf=d_sb)
-    ctx.enqueue_copy(dst_buf=h_desc, src_buf=d_desc)
+    download_host_into[DType.float32](ctx, d_sb, h_sb)
+    download_host_into[DType.uint32](ctx, d_desc, h_desc)
     ctx.synchronize()
 
     out_winner.clear()
@@ -387,6 +387,7 @@ def run_checks() raises:
 # checks/ that no CI job ran. One process per check name in CI keeps any
 # fresh-process precondition. Device column only: the suite needs a GPU, so the CPU build never instantiates it.
 from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
+from checks.native_tests.kit import download_host_into, upload_whole_into
 
 
 def run_cases(column: Column, mut report: Report):

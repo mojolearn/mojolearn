@@ -451,7 +451,7 @@ def check_hist2_one_byte[bits: Int](fold_count: Int) raises:
     var hi = ctx.enqueue_create_host_buffer[DType.uint32](n_rows)
     for r in range(n_rows):
         hi.unsafe_ptr().unsafe_store(r, UInt32(r))
-    ctx.enqueue_copy(dst_buf=row_index, src_ptr=hi.unsafe_ptr())
+    upload_host_into[DType.uint32](ctx, row_index, hi)
 
     var p_off = ctx.enqueue_create_buffer[DType.uint32](MAX_LEAVES)
     var p_sz = ctx.enqueue_create_buffer[DType.uint32](MAX_LEAVES)
@@ -463,16 +463,16 @@ def check_hist2_one_byte[bits: Int](fold_count: Int) raises:
     for i in range(n_live):
         ho.unsafe_ptr().unsafe_store(i, UInt32(off[i]))
         hz.unsafe_ptr().unsafe_store(i, UInt32(siz[i]))
-    ctx.enqueue_copy(dst_buf=p_off, src_ptr=ho.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=p_sz, src_ptr=hz.unsafe_ptr())
+    upload_host_into[DType.uint32](ctx, p_off, ho)
+    upload_host_into[DType.uint32](ctx, p_sz, hz)
 
     var ids = ctx.enqueue_create_buffer[DType.uint32](MAX_LEAVES)
     var dense_ids = ctx.enqueue_create_buffer[DType.uint32](MAX_LEAVES)
     var hid = ctx.enqueue_create_host_buffer[DType.uint32](MAX_LEAVES)
     for i in range(MAX_LEAVES):
         hid.unsafe_ptr().unsafe_store(i, UInt32(i))
-    ctx.enqueue_copy(dst_buf=ids, src_ptr=hid.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=dense_ids, src_ptr=hid.unsafe_ptr())
+    upload_host_into[DType.uint32](ctx, ids, hid)
+    upload_host_into[DType.uint32](ctx, dense_ids, hid)
 
     var cells = lay.hist_cells
     var total = MAX_LEAVES * STAT_COUNT * cells
@@ -485,9 +485,6 @@ def check_hist2_one_byte[bits: Int](fold_count: Int) raises:
         zf.unsafe_ptr().unsafe_store(i, Float32(0.0))
         zi.unsafe_ptr().unsafe_store(i, Int32(0))
     ctx.synchronize()
-    _ = hid^  # past the drain: a queued copy reads it after its last named use
-    _ = ho^  # past the drain: a queued copy reads it after its last named use
-    _ = hz^  # past the drain: a queued copy reads it after its last named use
 
     # ---- expected tallies, all exact -------------------------------------
     var noperm = List[Int]()
@@ -568,7 +565,7 @@ def check_hist2_one_byte[bits: Int](fold_count: Int) raises:
     # the identity, so the overwrite cannot retroactively weaken them.
     for r in range(n_rows):
         hi.unsafe_ptr().unsafe_store(r, UInt32(perm[r]))
-    ctx.enqueue_copy(dst_buf=row_index, src_ptr=hi.unsafe_ptr())
+    upload_host_into[DType.uint32](ctx, row_index, hi)
     ctx.synchronize()
 
     print("  gather arms (depth 1, permuted index):")
@@ -603,7 +600,7 @@ def check_hist2_one_byte[bits: Int](fold_count: Int) raises:
     # restore the identity index for the remaining direct arms
     for r in range(n_rows):
         hi.unsafe_ptr().unsafe_store(r, UInt32(r))
-    ctx.enqueue_copy(dst_buf=row_index, src_ptr=hi.unsafe_ptr())
+    upload_host_into[DType.uint32](ctx, row_index, hi)
     ctx.synchronize()
 
     # ---- REACH 1: the family fingerprint ---------------------------------
@@ -739,7 +736,7 @@ def check_hist2_one_byte[bits: Int](fold_count: Int) raises:
 
     for r in range(n_rows):
         hi.unsafe_ptr().unsafe_store(r, UInt32(perm[r]))
-    ctx.enqueue_copy(dst_buf=row_index, src_ptr=hi.unsafe_ptr())
+    upload_host_into[DType.uint32](ctx, row_index, hi)
     ctx.synchronize()
     var mg_f32 = run_mode_arm[bits, HIST_SMEM_WARP_PRIVATE_F32](
         ctx, dblocks, 1, n_live, n_rows, cindex_base, row_index, stats,
@@ -765,9 +762,8 @@ def check_hist2_one_byte[bits: Int](fold_count: Int) raises:
         )
     for r in range(n_rows):
         hi.unsafe_ptr().unsafe_store(r, UInt32(r))
-    ctx.enqueue_copy(dst_buf=row_index, src_ptr=hi.unsafe_ptr())
+    upload_host_into[DType.uint32](ctx, row_index, hi)
     ctx.synchronize()
-    _ = hi^  # past the drain: a queued copy reads it after its last named use
 
     # THE SCALE FINGERPRINT: where does the add land? A poisoned
     # `fixed_scale` (2^30) wraps any arm that QUANTIZES -- the Int32 mode in
@@ -913,9 +909,8 @@ def build_cindex(
     )
     for i in range(n_rows * lay.columns):
         z.unsafe_ptr().unsafe_store(i, UInt32(0))
-    ctx.enqueue_copy(dst_buf=cindex, src_ptr=z.unsafe_ptr())
+    upload_host_into[DType.uint32](ctx, cindex, z)
     ctx.synchronize()
-    _ = z^  # past the drain: a queued copy reads it after its last named use
 
     var hb = ctx.enqueue_create_host_buffer[DType.uint8](n_rows)
     var dev_bins = ctx.enqueue_create_buffer[DType.uint8](n_rows)
@@ -925,7 +920,7 @@ def build_cindex(
         ref cf = lay.features[f]
         for r in range(n_rows):
             hb.unsafe_ptr().unsafe_store(r, UInt8(bins[f][r]))
-        ctx.enqueue_copy(dst_buf=dev_bins, src_ptr=hb.unsafe_ptr())
+        upload_host_into[DType.uint8](ctx, dev_bins, hb)
         ctx.enqueue_function[write_compressed_index_kernel](
             Int32(Int(cf.offset) * n_rows), cf.mask, cf.shift,
             dev_bins.unsafe_ptr(), Int32(n_rows), cindex.unsafe_ptr(),
@@ -949,9 +944,8 @@ def upload_stats(
     for r in range(n_rows):
         hs.unsafe_ptr().unsafe_store(r, Float32(w[r]))
         hs.unsafe_ptr().unsafe_store(n_rows + r, Float32(g[r]))
-    ctx.enqueue_copy(dst_buf=stats, src_ptr=hs.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, stats, hs)
     ctx.synchronize()
-    _ = hs^  # past the drain: a queued copy reads it after its last named use
 
 
 def upload_stats_poisoned(
@@ -1003,7 +997,7 @@ def run_dispatch_arm(
 
     var total = MAX_LEAVES * STAT_COUNT * hist_cells_per_leaf
     var out = ctx.enqueue_create_host_buffer[DType.float32](total)
-    ctx.enqueue_copy(dst_ptr=out.unsafe_ptr(), src_buf=hist)
+    download_host_into[DType.float32](ctx, hist, out)
     ctx.synchronize()
     _ = scale_keep^
     return out^
@@ -1085,7 +1079,7 @@ def run_mode_arm[
 
     var total = MAX_LEAVES * STAT_COUNT * hist_cells_per_leaf
     var out = ctx.enqueue_create_host_buffer[DType.float32](total)
-    ctx.enqueue_copy(dst_ptr=out.unsafe_ptr(), src_buf=hist)
+    download_host_into[DType.float32](ctx, hist, out)
     ctx.synchronize()
     _ = scale_keep^
     return out^
@@ -1168,7 +1162,7 @@ def run_pass_arm[
 
     var total = MAX_LEAVES * STAT_COUNT * hist_cells_per_leaf
     var out = ctx.enqueue_create_host_buffer[DType.float32](total)
-    ctx.enqueue_copy(dst_ptr=out.unsafe_ptr(), src_buf=hist)
+    download_host_into[DType.float32](ctx, hist, out)
     ctx.synchronize()
     _ = scale_keep^
     return out^
@@ -1281,7 +1275,7 @@ def check_pass_family_modes[bits: Int](fold_count: Int) raises:
     var hi = ctx.enqueue_create_host_buffer[DType.uint32](n_rows)
     for r in range(n_rows):
         hi.unsafe_ptr().unsafe_store(r, UInt32(r))
-    ctx.enqueue_copy(dst_buf=row_index, src_ptr=hi.unsafe_ptr())
+    upload_host_into[DType.uint32](ctx, row_index, hi)
 
     var p_off = ctx.enqueue_create_buffer[DType.uint32](MAX_LEAVES)
     var p_sz = ctx.enqueue_create_buffer[DType.uint32](MAX_LEAVES)
@@ -1293,16 +1287,16 @@ def check_pass_family_modes[bits: Int](fold_count: Int) raises:
     for i in range(n_live):
         ho.unsafe_ptr().unsafe_store(i, UInt32(off[i]))
         hz.unsafe_ptr().unsafe_store(i, UInt32(siz[i]))
-    ctx.enqueue_copy(dst_buf=p_off, src_ptr=ho.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=p_sz, src_ptr=hz.unsafe_ptr())
+    upload_host_into[DType.uint32](ctx, p_off, ho)
+    upload_host_into[DType.uint32](ctx, p_sz, hz)
 
     var ids = ctx.enqueue_create_buffer[DType.uint32](MAX_LEAVES)
     var dense_ids = ctx.enqueue_create_buffer[DType.uint32](MAX_LEAVES)
     var hid = ctx.enqueue_create_host_buffer[DType.uint32](MAX_LEAVES)
     for i in range(MAX_LEAVES):
         hid.unsafe_ptr().unsafe_store(i, UInt32(i))
-    ctx.enqueue_copy(dst_buf=ids, src_ptr=hid.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=dense_ids, src_ptr=hid.unsafe_ptr())
+    upload_host_into[DType.uint32](ctx, ids, hid)
+    upload_host_into[DType.uint32](ctx, dense_ids, hid)
 
     var cells = lay.hist_cells
     var total = MAX_LEAVES * STAT_COUNT * cells
@@ -1315,9 +1309,6 @@ def check_pass_family_modes[bits: Int](fold_count: Int) raises:
         zf.unsafe_ptr().unsafe_store(i, Float32(0.0))
         zi.unsafe_ptr().unsafe_store(i, Int32(0))
     ctx.synchronize()
-    _ = hid^  # past the drain: a queued copy reads it after its last named use
-    _ = ho^  # past the drain: a queued copy reads it after its last named use
-    _ = hz^  # past the drain: a queued copy reads it after its last named use
 
     # ---- exact expectations ----------------------------------------------
     var noperm = List[Int]()
@@ -1360,7 +1351,7 @@ def check_pass_family_modes[bits: Int](fold_count: Int) raises:
     # ---- gather arms, both modes ------------------------------------------
     for r in range(n_rows):
         hi.unsafe_ptr().unsafe_store(r, UInt32(perm[r]))
-    ctx.enqueue_copy(dst_buf=row_index, src_ptr=hi.unsafe_ptr())
+    upload_host_into[DType.uint32](ctx, row_index, hi)
     ctx.synchronize()
     print("    gather arms (depth 1, permuted index):")
     var g_f32 = run_pass_arm[bits, HIST_SMEM_WARP_PRIVATE_F32](
@@ -1389,9 +1380,8 @@ def check_pass_family_modes[bits: Int](fold_count: Int) raises:
                     " index indirection was never exercised")
     for r in range(n_rows):
         hi.unsafe_ptr().unsafe_store(r, UInt32(r))
-    ctx.enqueue_copy(dst_buf=row_index, src_ptr=hi.unsafe_ptr())
+    upload_host_into[DType.uint32](ctx, row_index, hi)
     ctx.synchronize()
-    _ = hi^  # past the drain: a queued copy reads it after its last named use
 
     # ---- the scale fingerprint: which arm quantizes, and what the
     # dispatch launched ------------------------------------------------------
@@ -1536,6 +1526,7 @@ def run_checks() raises:
 # checks/ that no CI job ran. One process per check name in CI keeps any
 # fresh-process precondition. Device column only: the suite needs a GPU, so the CPU build never instantiates it.
 from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
+from checks.native_tests.kit import download_host_into, upload_host_into
 
 
 def run_cases(column: Column, mut report: Report):

@@ -124,6 +124,7 @@ from extratrees.impl.randomforest.randomforest import (
 from extratrees.impl.randomforest.host_forest import (
     fit_classification,
 )
+from checks.native_tests.kit import download_host_into
 
 
 def column_major(fixture: FixtureDataset) -> List[Float32]:
@@ -1096,7 +1097,7 @@ def main() raises:
     var h_slots = ctx.enqueue_create_host_buffer[DType.int32](
         n_slots * Int(slot_rows)
     )
-    ctx.enqueue_copy(dst_buf=h_slots, src_buf=d_slots)
+    download_host_into[DType.int32](ctx, d_slots, h_slots)
     ctx.synchronize()
     var slot_mismatch = 0
     var slot_cells = 0
@@ -1120,7 +1121,6 @@ def main() raises:
     print("     ", slot_cells, "slot cells, 0 mismatches")
     cells += slot_cells
     _ = d_slots^
-    _ = h_slots^
 
     # (b) the FORESTS. A 4-class hashed fixture, where gini and entropy
     # rank candidates differently (a separable binary one cannot see the

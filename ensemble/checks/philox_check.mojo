@@ -82,6 +82,7 @@ from ensemble.decisiontree.batched_levelalgo.random_utils import (
     fnv1a32_hash_seed_tree,
 )
 from max.gpu.host import DeviceContext
+from checks.native_tests.kit import download_host_into
 
 comptime ORACLE = "ensemble/bench/philox_oracle.txt"
 
@@ -631,7 +632,7 @@ def main() raises:
             )
         dev_launches += 1
         var h_out = ctx.enqueue_create_host_buffer[DType.int32](n)
-        ctx.enqueue_copy(dst_buf=h_out, src_buf=d_out)
+        download_host_into[DType.int32](ctx, d_out, h_out)
         ctx.synchronize()
         var p = h_out.unsafe_ptr()
         for j in range(n):

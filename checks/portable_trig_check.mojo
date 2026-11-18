@@ -1119,8 +1119,8 @@ def run_checks() raises:
     # ---- arm 2 + arm 3: the device ------------------------------------
     var d_x = ctx.enqueue_create_buffer[DType.float32](N)
     var d_one = ctx.enqueue_create_buffer[DType.float32](1)
-    ctx.enqueue_copy(dst_buf=d_x, src_ptr=h_x.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_one, src_ptr=h_one.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, d_x, h_x)
+    upload_host_into[DType.float32](ctx, d_one, h_one)
     var o_sin = ctx.enqueue_create_buffer[DType.float32](N)
     var o_cos = ctx.enqueue_create_buffer[DType.float32](N)
     var o_sin_sab = ctx.enqueue_create_buffer[DType.float32](N)
@@ -1144,12 +1144,12 @@ def run_checks() raises:
     var r_cos_sab = ctx.enqueue_create_host_buffer[DType.float32](N)
     var r_vendor = ctx.enqueue_create_host_buffer[DType.float32](N)
     var r_probe = ctx.enqueue_create_host_buffer[DType.float32](N)
-    ctx.enqueue_copy(dst_ptr=r_sin.unsafe_ptr(), src_buf=o_sin)
-    ctx.enqueue_copy(dst_ptr=r_cos.unsafe_ptr(), src_buf=o_cos)
-    ctx.enqueue_copy(dst_ptr=r_sin_sab.unsafe_ptr(), src_buf=o_sin_sab)
-    ctx.enqueue_copy(dst_ptr=r_cos_sab.unsafe_ptr(), src_buf=o_cos_sab)
-    ctx.enqueue_copy(dst_ptr=r_vendor.unsafe_ptr(), src_buf=o_vendor)
-    ctx.enqueue_copy(dst_ptr=r_probe.unsafe_ptr(), src_buf=o_probe)
+    download_host_into[DType.float32](ctx, o_sin, r_sin)
+    download_host_into[DType.float32](ctx, o_cos, r_cos)
+    download_host_into[DType.float32](ctx, o_sin_sab, r_sin_sab)
+    download_host_into[DType.float32](ctx, o_cos_sab, r_cos_sab)
+    download_host_into[DType.float32](ctx, o_vendor, r_vendor)
+    download_host_into[DType.float32](ctx, o_probe, r_probe)
     ctx.synchronize()
 
     var qs = r_sin.unsafe_ptr()
@@ -1267,6 +1267,7 @@ def run_checks() raises:
 # checks/ that no CI job ran. One process per check name in CI keeps any
 # fresh-process precondition. Device column only: the suite needs a GPU, so the CPU build never instantiates it.
 from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
+from checks.native_tests.kit import download_host_into, upload_host_into
 
 
 def run_cases(column: Column, mut report: Report):

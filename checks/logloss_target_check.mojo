@@ -126,9 +126,9 @@ def run_checks() raises:
                 h_p.unsafe_ptr().unsafe_store(i, v)
                 h_t.unsafe_ptr().unsafe_store(i, t)
                 h_w.unsafe_ptr().unsafe_store(i, w)
-            ctx.enqueue_copy(dst_buf=d_t, src_ptr=h_t.unsafe_ptr())
-            ctx.enqueue_copy(dst_buf=d_w, src_ptr=h_w.unsafe_ptr())
-            ctx.enqueue_copy(dst_buf=d_p, src_ptr=h_p.unsafe_ptr())
+            upload_host_into[DType.float32](ctx, d_t, h_t)
+            upload_host_into[DType.float32](ctx, d_w, h_w)
+            upload_host_into[DType.float32](ctx, d_p, h_p)
 
             if has_border:
                 ctx.enqueue_function[cross_entropy_kernel[True]](
@@ -154,9 +154,9 @@ def run_checks() raises:
                     grid_dim=(BLOCKS, 1, 1),
                     block_dim=(MSE_BLOCK_SIZE, 1, 1),
                 )
-            ctx.enqueue_copy(dst_ptr=h_stats.unsafe_ptr(), src_buf=d_stats)
-            ctx.enqueue_copy(dst_ptr=h_fv.unsafe_ptr(), src_buf=d_fv)
-            ctx.enqueue_copy(dst_ptr=h_mag.unsafe_ptr(), src_buf=d_mag)
+            download_host_into[DType.float32](ctx, d_stats, h_stats)
+            download_host_into[DType.float32](ctx, d_fv, h_fv)
+            download_host_into[DType.float32](ctx, d_mag, h_mag)
             ctx.synchronize()
 
             # float64 host oracle, same formula, straight through
@@ -278,9 +278,9 @@ def run_checks() raises:
             h_p.unsafe_ptr().unsafe_store(i, v)
             h_t.unsafe_ptr().unsafe_store(i, t)
             h_w.unsafe_ptr().unsafe_store(i, w)
-        ctx.enqueue_copy(dst_buf=d_t, src_ptr=h_t.unsafe_ptr())
-        ctx.enqueue_copy(dst_buf=d_w, src_ptr=h_w.unsafe_ptr())
-        ctx.enqueue_copy(dst_buf=d_p, src_ptr=h_p.unsafe_ptr())
+        upload_host_into[DType.float32](ctx, d_t, h_t)
+        upload_host_into[DType.float32](ctx, d_w, h_w)
+        upload_host_into[DType.float32](ctx, d_p, h_p)
         if has_border:
             ctx.enqueue_function[cross_entropy_kernel[True, True]](
                 d_t.unsafe_ptr(), d_w.unsafe_ptr(), Int32(N),
@@ -301,8 +301,8 @@ def run_checks() raises:
                 grid_dim=(BLOCKS, 1, 1),
                 block_dim=(MSE_BLOCK_SIZE, 1, 1),
             )
-        ctx.enqueue_copy(dst_ptr=h_stats.unsafe_ptr(), src_buf=d_stats)
-        ctx.enqueue_copy(dst_ptr=h_fv.unsafe_ptr(), src_buf=d_fv)
+        download_host_into[DType.float32](ctx, d_stats, h_stats)
+        download_host_into[DType.float32](ctx, d_fv, h_fv)
         ctx.synchronize()
 
         var fv_ref = Float64(0.0)
@@ -375,6 +375,7 @@ def run_checks() raises:
 # checks/ that no CI job ran. One process per check name in CI keeps any
 # fresh-process precondition. Device column only: the suite needs a GPU, so the CPU build never instantiates it.
 from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
+from checks.native_tests.kit import download_host_into, upload_host_into
 
 
 def run_cases(column: Column, mut report: Report):

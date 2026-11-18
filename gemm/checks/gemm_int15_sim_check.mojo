@@ -57,6 +57,7 @@ from gemm.host.gemm_int15_oracle import (
     quantize_rows_int15,
 )
 from gemm.contract import GEMM_ORACLE_HOST_SABOTAGE
+from checks.native_tests.kit import download_host_into, upload_host_into
 
 comptime SIM_MAGIC = 0x35314951
 comptime SIM_VERSION = 1
@@ -309,7 +310,7 @@ def check_sim_device_product(ctx: DeviceContext, cases: List[SimCase]) raises:
         identical_gemm_int15_from_f32(ctx, dc, da, db, c.m, c.n, c.k)
         var hb = ctx.enqueue_create_host_buffer[DType.float32](c.m * c.n)
         ctx.synchronize()
-        ctx.enqueue_copy(dst_ptr=hb.unsafe_ptr(), src_buf=dc)
+        download_host_into[DType.float32](ctx, dc, hb)
         ctx.synchronize()
         var got = List[Float32]()
         for i in range(c.m * c.n):
@@ -317,7 +318,6 @@ def check_sim_device_product(ctx: DeviceContext, cases: List[SimCase]) raises:
             if _bits(v) == _bits(POISON):
                 raise Error("POISON SURVIVED at cell " + String(i) + " of " + _tag(c))
             got.append(v)
-        _ = hb
         _ = da
         _ = db
         _ = dc
@@ -333,9 +333,8 @@ def _upload(ctx: DeviceContext, h: List[Float32]) raises -> DeviceBuffer[DType.f
     ctx.synchronize()
     for i in range(len(h)):
         hb.unsafe_ptr().unsafe_store(i, h[i])
-    ctx.enqueue_copy(dst_buf=d, src_ptr=hb.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, d, hb)
     ctx.synchronize()
-    _ = hb
     return d^
 
 

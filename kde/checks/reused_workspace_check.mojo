@@ -9,6 +9,7 @@ from kde.impl.neighbors.kernel_density import kde_score_samples_chunk_lse_identi
 from kde.checks.kde_check import _train_fixture,_query_fixture,_weight_fixture,_upload,_scores_by_path
 from kde.resident_fit import kde_fit_prepare,kde_score_samples_resident,kde_fit_release,KDE_FIT_REGISTRY
 from kde.impl.neighbors.kernel_density import metric_from_name,kernel_from_name
+from checks.native_tests.kit import download_host_into
 
 
 def check_resident() raises:
@@ -65,8 +66,8 @@ def run_checks() raises:
             kde_score_samples_chunk_lse_identical(ctx,train,query,weights,weighted,sumw,nt,nq,dims,Float32(0.25),kernel,DIST_L2_SQRT_UNEXPANDED,actual)
         if fixture==2 and admitted:raise Error("KDE oversized request retained beyond budget")
         if fixture!=2 and fixture!=3 and not admitted:raise Error("small KDE request did not reuse pool")
-        ctx.enqueue_copy(dst_ptr=eh.unsafe_ptr(),src_buf=expected)
-        ctx.enqueue_copy(dst_ptr=ah.unsafe_ptr(),src_buf=actual)
+        download_host_into[DType.float32](ctx, expected, eh)
+        download_host_into[DType.float32](ctx, actual, ah)
         ctx.synchronize()
         for i in range(nq):
             if bitcast[DType.uint32](eh[i])!=bitcast[DType.uint32](ah[i]):raise Error("retained partials changed KDE score bits or left poison")

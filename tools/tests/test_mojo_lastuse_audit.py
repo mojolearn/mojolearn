@@ -234,6 +234,58 @@ class AllowTest(unittest.TestCase):
         self.assertEqual(stale, [("c.mojo", "h", "z")])
 
 
+class OwnCopyTest(unittest.TestCase):
+    """A check under checks/native_tests/ enqueues no host-to-device copy itself: it calls the kit."""
+
+    UPLOAD = """
+def run_checks() raises:
+    var ctx = DeviceContext()
+    var d = ctx.enqueue_create_buffer[DType.float32](4)
+    var h = ctx.enqueue_create_host_buffer[DType.float32](4)
+    ctx.enqueue_copy(dst_buf=d, src_ptr=h.unsafe_ptr())
+    ctx.synchronize()
+    _ = h^
+"""
+
+    def _own(self, text, path):
+        return [f for f in lu.scan_text(path, text, {}) if f["kind"] == "own-copy"]
+
+    def test_a_native_check_that_enqueues_its_own_upload_fails(self):
+        found = self._own(self.UPLOAD, "checks/native_tests/new_check.mojo")
+        self.assertEqual([(f["local"], f["line"], f["fails"]) for f in found], [("h", 6, True)])
+        self.assertIn("checks/native_tests/kit.mojo", found[0]["why"])
+
+    def test_the_buffer_form_from_a_pinned_host_buffer_fails(self):
+        text = self.UPLOAD.replace("src_ptr=h.unsafe_ptr()", "src_buf=h")
+        self.assertEqual([f["local"] for f in self._own(text, "checks/native_tests/new_check.mojo")], ["h"])
+
+    def test_the_kit_itself_and_files_elsewhere_are_not_judged(self):
+        self.assertEqual(self._own(self.UPLOAD, "checks/native_tests/kit.mojo"), [])
+        self.assertEqual(self._own(self.UPLOAD, "neighbors/checks/metric_check.mojo"), [])
+
+    def test_kit_calls_downloads_and_device_copies_pass(self):
+        text = """
+def run_checks() raises:
+    var ctx = DeviceContext()
+    var d = ctx.enqueue_create_buffer[DType.float32](4)
+    var e = ctx.enqueue_create_buffer[DType.float32](4)
+    var h = ctx.enqueue_create_host_buffer[DType.float32](4)
+    upload_host_into[DType.float32](ctx, d, h)
+    ctx.enqueue_copy(dst_buf=e, src_buf=d)
+    ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=e)
+    ctx.synchronize()
+    _ = h^
+"""
+        self.assertEqual(self._own(text, "checks/native_tests/new_check.mojo"), [])
+
+    def test_an_allow_line_with_a_reason_lets_a_deliberate_exception_through(self):
+        found = lu.scan_text("checks/native_tests/queue_order.mojo", self.UPLOAD, {})
+        failing, allowed, stale = lu.verdict(found, {("checks/native_tests/queue_order.mojo", "run_checks", "h"): "r"})
+        self.assertEqual([f["kind"] for f in failing], [])
+        self.assertIn("own-copy", [f["kind"] for f in allowed])
+        self.assertEqual(stale, [])
+
+
 class CommitTest(unittest.TestCase):
 
     def test_commit_blobs_and_allow_list_are_read_from_the_commit(self):

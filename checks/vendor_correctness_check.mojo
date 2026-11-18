@@ -71,6 +71,7 @@ from linalg.transpose import transpose
 from nn.cumsum import cumsum
 from core.gemm import gemm_nt, gemm_tn, gemm_tn_via_transpose
 from core.gram_splitk import gram_splitk_applies
+from checks.native_tests.kit import download_host_into, upload_host_into
 
 
 # ---------------------------------------------------------------------------
@@ -187,7 +188,7 @@ def _argsort_one(ctx: DeviceContext, n: Int, salt: Int) raises -> String:
     ctx.synchronize()
     for i in range(n):
         hk.unsafe_ptr().unsafe_store(i, _key_f32(i, salt))
-    ctx.enqueue_copy(dst_buf=keys, src_ptr=hk.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, keys, hk)
     ctx.synchronize()
 
     argsort[target="gpu"](
@@ -196,7 +197,7 @@ def _argsort_one(ctx: DeviceContext, n: Int, salt: Int) raises -> String:
     ctx.synchronize()
 
     var ho = ctx.enqueue_create_host_buffer[DType.int64](n)
-    ctx.enqueue_copy(dst_ptr=ho.unsafe_ptr(), src_buf=out)
+    download_host_into[DType.int64](ctx, out, ho)
     ctx.synchronize()
 
     # 1. permutation
@@ -441,9 +442,9 @@ def _matmul_one[
     # cannot tell "written zero" from "never written".
     for i in range(m * n):
         hz.unsafe_ptr().unsafe_store(i, Float32(-987654.0))
-    ctx.enqueue_copy(dst_buf=x, src_ptr=hx.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=y, src_ptr=hy.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=z, src_ptr=hz.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, x, hx)
+    upload_host_into[DType.float32](ctx, y, hy)
+    upload_host_into[DType.float32](ctx, z, hz)
     ctx.synchronize()
 
     comptime if TB:
@@ -461,7 +462,7 @@ def _matmul_one[
             ctx,
         )
     ctx.synchronize()
-    ctx.enqueue_copy(dst_ptr=hz.unsafe_ptr(), src_buf=z)
+    download_host_into[DType.float32](ctx, z, hz)
     ctx.synchronize()
 
     for i in range(m):
@@ -613,9 +614,9 @@ def _gemv_one(ctx: DeviceContext, m: Int, k: Int) raises -> String:
         hy.unsafe_ptr().unsafe_store(i, _val_f32(i, 32))
     for i in range(m):
         hz.unsafe_ptr().unsafe_store(i, Float32(-987654.0))
-    ctx.enqueue_copy(dst_buf=x, src_ptr=hx.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=y, src_ptr=hy.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=z, src_ptr=hz.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, x, hx)
+    upload_host_into[DType.float32](ctx, y, hy)
+    upload_host_into[DType.float32](ctx, z, hz)
     ctx.synchronize()
 
     gemv_gpu[transpose_b=False](
@@ -625,7 +626,7 @@ def _gemv_one(ctx: DeviceContext, m: Int, k: Int) raises -> String:
         ctx,
     )
     ctx.synchronize()
-    ctx.enqueue_copy(dst_ptr=hz.unsafe_ptr(), src_buf=z)
+    download_host_into[DType.float32](ctx, z, hz)
     ctx.synchronize()
 
     for i in range(m):
@@ -718,7 +719,7 @@ def _topk_one(ctx: DeviceContext, batch: Int, n: Int, k: Int) raises -> String:
     ctx.synchronize()
     for i in range(batch * n):
         hv.unsafe_ptr().unsafe_store(i, _key_f32(i, 41))
-    ctx.enqueue_copy(dst_buf=vals, src_ptr=hv.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, vals, hv)
     ctx.synchronize()
 
     # Mojo 1.2.0: `k` (per-row k tensor) is left at None so every row uses max_k; its
@@ -733,8 +734,8 @@ def _topk_one(ctx: DeviceContext, batch: Int, n: Int, k: Int) raises -> String:
         ctx,
     )
     ctx.synchronize()
-    ctx.enqueue_copy(dst_ptr=hov.unsafe_ptr(), src_buf=ov)
-    ctx.enqueue_copy(dst_ptr=hoi.unsafe_ptr(), src_buf=oi)
+    download_host_into[DType.float32](ctx, ov, hov)
+    download_host_into[DType.int32](ctx, oi, hoi)
     ctx.synchronize()
 
     for b in range(batch):
@@ -892,7 +893,7 @@ def _block_one[
         # Integer-valued and under 1000, so a block of 1024 sums to under
         # 2^24 and every host expectation is EXACT in Float32.
         ha.unsafe_ptr().unsafe_store(i, Float32(Int(_mix(i, 51) % 1000)))
-    ctx.enqueue_copy(dst_buf=a, src_ptr=ha.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, a, ha)
     ctx.synchronize()
 
     ctx.enqueue_function[block_check_kernel[TPB]](
@@ -912,11 +913,11 @@ def _block_one[
     var hn = ctx.enqueue_create_host_buffer[DType.float32](n)
     var hi = ctx.enqueue_create_host_buffer[DType.float32](n)
     var he = ctx.enqueue_create_host_buffer[DType.float32](n)
-    ctx.enqueue_copy(dst_ptr=hs.unsafe_ptr(), src_buf=o_sum)
-    ctx.enqueue_copy(dst_ptr=hm.unsafe_ptr(), src_buf=o_max)
-    ctx.enqueue_copy(dst_ptr=hn.unsafe_ptr(), src_buf=o_min)
-    ctx.enqueue_copy(dst_ptr=hi.unsafe_ptr(), src_buf=o_inc)
-    ctx.enqueue_copy(dst_ptr=he.unsafe_ptr(), src_buf=o_exc)
+    download_host_into[DType.float32](ctx, o_sum, hs)
+    download_host_into[DType.float32](ctx, o_max, hm)
+    download_host_into[DType.float32](ctx, o_min, hn)
+    download_host_into[DType.float32](ctx, o_inc, hi)
+    download_host_into[DType.float32](ctx, o_exc, he)
     ctx.synchronize()
 
     var all_threads_get_reduction = True
@@ -1121,7 +1122,7 @@ def check_warp(mut rows: List[Verdict]) raises:
     ctx.synchronize()
     for i in range(n):
         ha.unsafe_ptr().unsafe_store(i, Float32(Int(_mix(i, 61) % 1000)))
-    ctx.enqueue_copy(dst_buf=a, src_ptr=ha.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, a, ha)
     ctx.synchronize()
 
     ctx.enqueue_function[warp_check_kernel](
@@ -1146,13 +1147,13 @@ def check_warp(mut rows: List[Verdict]) raises:
     var hd = ctx.enqueue_create_host_buffer[DType.float32](n)
     var hv = ctx.enqueue_create_host_buffer[DType.uint32](n)
     var hg = ctx.enqueue_create_host_buffer[DType.float32](n)
-    ctx.enqueue_copy(dst_ptr=hl.unsafe_ptr(), src_buf=o_lane)
-    ctx.enqueue_copy(dst_ptr=hs.unsafe_ptr(), src_buf=o_sum)
-    ctx.enqueue_copy(dst_ptr=hc.unsafe_ptr(), src_buf=o_scan)
-    ctx.enqueue_copy(dst_ptr=hb.unsafe_ptr(), src_buf=o_bfly)
-    ctx.enqueue_copy(dst_ptr=hd.unsafe_ptr(), src_buf=o_bcast)
-    ctx.enqueue_copy(dst_ptr=hv.unsafe_ptr(), src_buf=o_vote)
-    ctx.enqueue_copy(dst_ptr=hg.unsafe_ptr(), src_buf=o_lg8)
+    download_host_into[DType.int32](ctx, o_lane, hl)
+    download_host_into[DType.float32](ctx, o_sum, hs)
+    download_host_into[DType.float32](ctx, o_scan, hc)
+    download_host_into[DType.float32](ctx, o_bfly, hb)
+    download_host_into[DType.float32](ctx, o_bcast, hd)
+    download_host_into[DType.uint32](ctx, o_vote, hv)
+    download_host_into[DType.float32](ctx, o_lg8, hg)
     ctx.synchronize()
 
     var bad_lane = String("")
@@ -1358,12 +1359,10 @@ def _radix_pairs_one[
         for i in range(n):
             hk.unsafe_ptr().unsafe_store(b * n + i, _key_f32(b * n + i, 71))
             hi.unsafe_ptr().unsafe_store(b * n + i, Int32(i))
-    ctx.enqueue_copy(dst_buf=ka, src_ptr=hk.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=ia, src_ptr=hi.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=skip, src_ptr=hs.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, ka, hk)
+    upload_host_into[DType.int32](ctx, ia, hi)
+    upload_host_into[DType.bool](ctx, skip, hs)
     ctx.synchronize()
-    _ = hi^  # keep-alive past the drain (the enqueue_copy reads it until then)
-    _ = hs^  # keep-alive past the drain (the enqueue_copy reads it until then)
 
     var keys = DoubleBuffer[DType.float32](
         rebind[Pointer[Scalar[DType.float32], MutUntrackedOrigin]](
@@ -1403,10 +1402,10 @@ def _radix_pairs_one[
     var hbb = ctx.enqueue_create_host_buffer[DType.float32](total)
     var hia = ctx.enqueue_create_host_buffer[DType.int32](total)
     var hib = ctx.enqueue_create_host_buffer[DType.int32](total)
-    ctx.enqueue_copy(dst_ptr=ha.unsafe_ptr(), src_buf=ka)
-    ctx.enqueue_copy(dst_ptr=hbb.unsafe_ptr(), src_buf=kb)
-    ctx.enqueue_copy(dst_ptr=hia.unsafe_ptr(), src_buf=ia)
-    ctx.enqueue_copy(dst_ptr=hib.unsafe_ptr(), src_buf=ib)
+    download_host_into[DType.float32](ctx, ka, ha)
+    download_host_into[DType.float32](ctx, kb, hbb)
+    download_host_into[DType.int32](ctx, ia, hia)
+    download_host_into[DType.int32](ctx, ib, hib)
     ctx.synchronize()
 
     var half_a_sorted = True
@@ -1585,8 +1584,8 @@ def _argmin_one(ctx: DeviceContext, batch: Int, n: Int) raises -> String:
         hin.unsafe_ptr().unsafe_store(i, _key_f32(i, 81))
     for b in range(batch):
         hout.unsafe_ptr().unsafe_store(b, Int32(-424242))
-    ctx.enqueue_copy(dst_buf=inp, src_ptr=hin.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=out, src_ptr=hout.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, inp, hin)
+    upload_host_into[DType.int32](ctx, out, hout)
     ctx.synchronize()
 
     argmaxmin_gpu[largest=False](
@@ -1595,7 +1594,7 @@ def _argmin_one(ctx: DeviceContext, batch: Int, n: Int) raises -> String:
         TileTensor(out, row_major(batch, Int(1))),
     )
     ctx.synchronize()
-    ctx.enqueue_copy(dst_ptr=hout.unsafe_ptr(), src_buf=out)
+    download_host_into[DType.int32](ctx, out, hout)
     ctx.synchronize()
 
     for b in range(batch):
@@ -1707,9 +1706,9 @@ def _gather_one(ctx: DeviceContext, n_rows: Int, n_cols: Int, n_out: Int) raises
         hidx.unsafe_ptr().unsafe_store(i, Int32(Int(_mix(i, 92) % UInt64(n_rows))))
     for i in range(n_out * n_cols):
         hout.unsafe_ptr().unsafe_store(i, Float32(-987654.0))
-    ctx.enqueue_copy(dst_buf=inp, src_ptr=hin.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=idx, src_ptr=hidx.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=out, src_ptr=hout.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, inp, hin)
+    upload_host_into[DType.int32](ctx, idx, hidx)
+    upload_host_into[DType.float32](ctx, out, hout)
     ctx.synchronize()
 
     gather[axis=0, target="gpu"](
@@ -1719,7 +1718,7 @@ def _gather_one(ctx: DeviceContext, n_rows: Int, n_cols: Int, n_out: Int) raises
         context=ctx,
     )
     ctx.synchronize()
-    ctx.enqueue_copy(dst_ptr=hout.unsafe_ptr(), src_buf=out)
+    download_host_into[DType.float32](ctx, out, hout)
     ctx.synchronize()
 
     for i in range(n_out):
@@ -1819,9 +1818,9 @@ def _bmm_one(ctx: DeviceContext, batch: Int, m: Int, n: Int, k: Int) raises -> S
         hb.unsafe_ptr().unsafe_store(i, _val_f32(i, 102))
     for i in range(batch * m * n):
         hc.unsafe_ptr().unsafe_store(i, Float32(-987654.0))
-    ctx.enqueue_copy(dst_buf=a, src_ptr=ha.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=b, src_ptr=hb.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=c, src_ptr=hc.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, a, ha)
+    upload_host_into[DType.float32](ctx, b, hb)
+    upload_host_into[DType.float32](ctx, c, hc)
     ctx.synchronize()
 
     batched_matmul[transpose_b=True, target="gpu"](
@@ -1831,7 +1830,7 @@ def _bmm_one(ctx: DeviceContext, batch: Int, m: Int, n: Int, k: Int) raises -> S
         context=ctx,
     )
     ctx.synchronize()
-    ctx.enqueue_copy(dst_ptr=hc.unsafe_ptr(), src_buf=c)
+    download_host_into[DType.float32](ctx, c, hc)
     ctx.synchronize()
 
     for bt in range(batch):
@@ -1977,8 +1976,8 @@ def _check_transpose(mut rows: List[Verdict]) raises:
     for i in range(m * n):
         hin.unsafe_ptr().unsafe_store(i, _key_f32(i, 111))
         hout.unsafe_ptr().unsafe_store(i, Float32(-987654.0))
-    ctx.enqueue_copy(dst_buf=inp, src_ptr=hin.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=out, src_ptr=hout.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, inp, hin)
+    upload_host_into[DType.float32](ctx, out, hout)
     ctx.synchronize()
 
     var err = String("")
@@ -1991,7 +1990,7 @@ def _check_transpose(mut rows: List[Verdict]) raises:
             ctx,
         )
         ctx.synchronize()
-        ctx.enqueue_copy(dst_ptr=hout.unsafe_ptr(), src_buf=out)
+        download_host_into[DType.float32](ctx, out, hout)
         ctx.synchronize()
         for i in range(m):
             for j in range(n):
@@ -2290,14 +2289,14 @@ def check_wired_gemm_at_n1(mut rows: List[Verdict]) raises:
         hy.unsafe_ptr().unsafe_store(i, _val_f32(i, 132))
     for i in range(m * n):
         hz.unsafe_ptr().unsafe_store(i, Float32(-987654.0))
-    ctx.enqueue_copy(dst_buf=x, src_ptr=hx.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=y, src_ptr=hy.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=z, src_ptr=hz.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, x, hx)
+    upload_host_into[DType.float32](ctx, y, hy)
+    upload_host_into[DType.float32](ctx, z, hz)
     ctx.synchronize()
 
     gemm_nt(ctx, z, x, y, m, n, k)
     ctx.synchronize()
-    ctx.enqueue_copy(dst_ptr=hz.unsafe_ptr(), src_buf=z)
+    download_host_into[DType.float32](ctx, z, hz)
     ctx.synchronize()
 
     var unwritten = 0
@@ -2398,9 +2397,9 @@ def _matmul_colmajor_one(
         hb.unsafe_ptr().unsafe_store(i, _val_f32(i, 72))
     for i in range(m * n):
         hz.unsafe_ptr().unsafe_store(i, Float32(-987654.0))
-    ctx.enqueue_copy(dst_buf=a, src_ptr=ha.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=b, src_ptr=hb.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=z, src_ptr=hz.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, a, ha)
+    upload_host_into[DType.float32](ctx, b, hb)
+    upload_host_into[DType.float32](ctx, z, hz)
     ctx.synchronize()
 
     matmul[transpose_b=False, target="gpu"](
@@ -2410,7 +2409,7 @@ def _matmul_colmajor_one(
         ctx,
     )
     ctx.synchronize()
-    ctx.enqueue_copy(dst_ptr=hz.unsafe_ptr(), src_buf=z)
+    download_host_into[DType.float32](ctx, z, hz)
     ctx.synchronize()
 
     for i in range(m):
@@ -2516,9 +2515,9 @@ def check_matmul_colmajor(mut rows: List[Verdict]) raises:
         hb2.unsafe_ptr().unsafe_store(i, _val_f32(i, 93))
     for i in range(mb):
         hc2.unsafe_ptr().unsafe_store(i, Float32(-987654.0))
-    ctx.enqueue_copy(dst_buf=a2, src_ptr=ha2.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=b2, src_ptr=hb2.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=c2, src_ptr=hc2.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, a2, ha2)
+    upload_host_into[DType.float32](ctx, b2, hb2)
+    upload_host_into[DType.float32](ctx, c2, hc2)
     ctx.synchronize()
     gemv_gpu[transpose_b=False](
         TileTensor(c2, row_major(mb, Int(1))),
@@ -2527,7 +2526,7 @@ def check_matmul_colmajor(mut rows: List[Verdict]) raises:
         ctx,
     )
     ctx.synchronize()
-    ctx.enqueue_copy(dst_ptr=hc2.unsafe_ptr(), src_buf=c2)
+    download_host_into[DType.float32](ctx, c2, hc2)
     ctx.synchronize()
     var gemv_bad = 0
     for i in range(mb):
@@ -2602,10 +2601,10 @@ def check_matmul_colmajor(mut rows: List[Verdict]) raises:
         hpois.unsafe_ptr().unsafe_store(i, Float32(-123456.0))
     for i in range(mm * mm):
         hz.unsafe_ptr().unsafe_store(i, Float32(-987654.0))
-    ctx.enqueue_copy(dst_buf=x, src_ptr=hx.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=z, src_ptr=hz.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=xa, src_ptr=hpois.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=xa2, src_ptr=hpois.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, x, hx)
+    upload_host_into[DType.float32](ctx, z, hz)
+    upload_host_into[DType.float32](ctx, xa, hpois)
+    upload_host_into[DType.float32](ctx, xa2, hpois)
     ctx.synchronize()
 
     var wrapper_arm = String("split-K") if gram_splitk_applies(
@@ -2613,7 +2612,7 @@ def check_matmul_colmajor(mut rows: List[Verdict]) raises:
     ) else String("transpose+matmul")
 
     gemm_tn(ctx, z, x, xa, xa2, mm, mm, km)
-    ctx.enqueue_copy(dst_ptr=hz.unsafe_ptr(), src_buf=z)
+    download_host_into[DType.float32](ctx, z, hz)
     ctx.synchronize()
 
     var tn_bad = 0
@@ -2668,16 +2667,15 @@ def check_matmul_colmajor(mut rows: List[Verdict]) raises:
     # gemm_tn_via_transpose by name. This is the row that keeps the
     # transpose_kernel x2 + gemm_nt route covered now that the wrapper
     # dispatches this shape to split-K.
-    ctx.enqueue_copy(dst_buf=xa, src_ptr=hpois.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=xa2, src_ptr=hpois.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, xa, hpois)
+    upload_host_into[DType.float32](ctx, xa2, hpois)
     for i in range(mm * mm):
         hz.unsafe_ptr().unsafe_store(i, Float32(-987654.0))
-    ctx.enqueue_copy(dst_buf=z, src_ptr=hz.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, z, hz)
     ctx.synchronize()
-    _ = hpois^  # past the drain: a queued copy reads it after its last named use
 
     gemm_tn_via_transpose(ctx, z, x, xa, xa2, mm, mm, km)
-    ctx.enqueue_copy(dst_ptr=hz.unsafe_ptr(), src_buf=z)
+    download_host_into[DType.float32](ctx, z, hz)
     ctx.synchronize()
 
     var arm_bad = 0

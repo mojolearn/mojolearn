@@ -399,8 +399,8 @@ def run_checks() raises:
         h_t[i] = plant_target(i)
     var d_w = ctx.enqueue_create_buffer[DType.float32](n_docs)
     var d_t = ctx.enqueue_create_buffer[DType.float32](n_docs)
-    ctx.enqueue_copy(dst_buf=d_w, src_buf=h_w)
-    ctx.enqueue_copy(dst_buf=d_t, src_buf=h_t)
+    upload_host_into[DType.float32](ctx, d_w, h_w)
+    upload_host_into[DType.float32](ctx, d_t, h_t)
     ctx.synchronize()
     # A HOST buffer handed to `enqueue_copy` is LAST USED at the enqueue, so
     # Mojo may free it before the copy runs
@@ -495,7 +495,7 @@ def run_checks() raises:
             # `Shift(j) = 28 - 4 * localId`, high nibble first
             word |= UInt32(b) << UInt32(28 - 4 * k)
         h_ci[r] = word
-    ctx.enqueue_copy(dst_buf=d_ci, src_buf=h_ci)
+    upload_host_into[DType.uint32](ctx, d_ci, h_ci)
     ctx.synchronize()
     _ = h_ci[0]
 
@@ -508,17 +508,14 @@ def run_checks() raises:
     for _ in range(N_HB):
         off_host.append(UInt32(0))
         oh_host.append(UInt8(0))
-    ctx.enqueue_copy(dst_buf=d_off, src_ptr=off_host.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_first, src_ptr=hb_first.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_folds, src_ptr=hb_folds_host.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_oh, src_ptr=oh_host.unsafe_ptr())
+    upload_whole_into[DType.uint32](ctx, d_off, off_host)
+    upload_whole_into[DType.uint32](ctx, d_first, hb_first)
+    upload_whole_into[DType.uint32](ctx, d_folds, hb_folds_host)
+    upload_whole_into[DType.uint8](ctx, d_oh, oh_host)
 
     var d_docs = ctx.enqueue_create_buffer[DType.uint32](n_docs)
     ctx.enqueue_copy(dst_buf=d_docs, src_ptr=ids.unsafe_ptr())
     ctx.synchronize()
-    _ = hb_folds_host^  # past the drain: a queued copy reads it after its last named use
-    _ = off_host^  # past the drain: a queued copy reads it after its last named use
-    _ = oh_host^  # past the drain: a queued copy reads it after its last named use
 
     var hist_cells = (1 << MAX_DEPTH) * fold_count * hist_line * 2
     var d_hist = ctx.enqueue_create_buffer[DType.float32](hist_cells)
@@ -544,7 +541,7 @@ def run_checks() raises:
         SM_COUNT,
         Float32(1.0),
     )
-    ctx.enqueue_copy(dst_buf=h_hist, src_buf=d_hist)
+    download_host_into[DType.float32](ctx, d_hist, h_hist)
     ctx.synchronize()
 
     # host tally: part 0, folds 0..FoldCount-1, indexed with the TIGHT
@@ -606,22 +603,20 @@ def run_checks() raises:
             bf_host.append(UInt32(k))
             bf_host.append(UInt32(b))
             bf_host.append(UInt32(0))
-    ctx.enqueue_copy(dst_buf=d_bf, src_ptr=bf_host.unsafe_ptr())
+    upload_whole_into[DType.uint32](ctx, d_bf, bf_host)
     var d_cw = ctx.enqueue_create_buffer[DType.float32](hist_line)
     var d_bw = ctx.enqueue_create_buffer[DType.float32](hist_line)
     var ones = List[Float32]()
     for _ in range(hist_line):
         ones.append(Float32(1.0))
-    ctx.enqueue_copy(dst_buf=d_cw, src_ptr=ones.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_bw, src_ptr=ones.unsafe_ptr())
+    upload_whole_into[DType.float32](ctx, d_cw, ones)
+    upload_whole_into[DType.float32](ctx, d_bw, ones)
     var d_rid = ctx.enqueue_create_buffer[DType.uint32](2)
     var d_rsc = ctx.enqueue_create_buffer[DType.float32](2)
     # DEVIATION 207: the scorers read scoreBeforeSplit from the device
     var d_sb = ctx.enqueue_create_buffer[DType.float32](1)
     d_sb.enqueue_fill(Float32(0.0))
     ctx.synchronize()
-    _ = bf_host^  # past the drain: a queued copy reads it after its last named use
-    _ = ones^  # past the drain: a queued copy reads it after its last named use
 
     var supported: List[Int] = [
         SCORE_FUNCTION_SOLAR_L2,
@@ -890,7 +885,7 @@ def run_checks() raises:
         SM_COUNT,
         Float32(1.0),
     )
-    ctx.enqueue_copy(dst_buf=h_hist, src_buf=d_hist)
+    download_host_into[DType.float32](ctx, d_hist, h_hist)
     ctx.synchronize()
 
     var want2 = List[Float32]()
@@ -1066,6 +1061,7 @@ def run_checks() raises:
 # checks/ that no CI job ran. One process per check name in CI keeps any
 # fresh-process precondition. Device column only: the suite needs a GPU, so the CPU build never instantiates it.
 from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
+from checks.native_tests.kit import download_host_into, upload_host_into, upload_whole_into
 
 
 def run_cases(column: Column, mut report: Report):

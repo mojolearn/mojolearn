@@ -357,8 +357,8 @@ def run_checks() raises:
     # ---- the device -----------------------------------------------------
     var da = ctx.enqueue_create_buffer[DType.float32](N)
     var db = ctx.enqueue_create_buffer[DType.float32](N)
-    ctx.enqueue_copy(dst_buf=da, src_ptr=ha.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=db, src_ptr=hb.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, da, ha)
+    upload_host_into[DType.float32](ctx, db, hb)
     var o_raw = ctx.enqueue_create_buffer[DType.float32](N)
     var o_port = ctx.enqueue_create_buffer[DType.float32](N)
     var o_ident = ctx.enqueue_create_buffer[DType.float32](N)
@@ -377,11 +377,11 @@ def run_checks() raises:
     var r_ident = ctx.enqueue_create_host_buffer[DType.float32](N)
     var r_rhw = ctx.enqueue_create_host_buffer[DType.float32](N)
     var r_rdv = ctx.enqueue_create_host_buffer[DType.float32](N)
-    ctx.enqueue_copy(dst_ptr=r_raw.unsafe_ptr(), src_buf=o_raw)
-    ctx.enqueue_copy(dst_ptr=r_port.unsafe_ptr(), src_buf=o_port)
-    ctx.enqueue_copy(dst_ptr=r_ident.unsafe_ptr(), src_buf=o_ident)
-    ctx.enqueue_copy(dst_ptr=r_rhw.unsafe_ptr(), src_buf=o_rhw)
-    ctx.enqueue_copy(dst_ptr=r_rdv.unsafe_ptr(), src_buf=o_rdv)
+    download_host_into[DType.float32](ctx, o_raw, r_raw)
+    download_host_into[DType.float32](ctx, o_port, r_port)
+    download_host_into[DType.float32](ctx, o_ident, r_ident)
+    download_host_into[DType.float32](ctx, o_rhw, r_rhw)
+    download_host_into[DType.float32](ctx, o_rdv, r_rdv)
     ctx.synchronize()
     var q_raw = r_raw.unsafe_ptr()
     var q_port = r_port.unsafe_ptr()
@@ -537,6 +537,7 @@ def run_checks() raises:
 # checks/ that no CI job ran. One process per check name in CI keeps any
 # fresh-process precondition. Device column only: the suite needs a GPU, so the CPU build never instantiates it.
 from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
+from checks.native_tests.kit import download_host_into, upload_host_into
 
 
 def run_cases(column: Column, mut report: Report):

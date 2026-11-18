@@ -12,6 +12,7 @@ from max.gpu import block_idx, thread_idx
 from max.gpu.host import DeviceContext, DeviceBuffer
 from svm.estimator import _family_ctx
 from svm.impl.svc_epilogue import device_splitmix_perm, device_platt_train
+from checks.native_tests.kit import upload_address, upload_whole_into
 from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require
 
 
@@ -204,9 +205,7 @@ def _coupling_contract(matrix: U64P, dst: U64P, scratch: U64P, status: I32P):
 
 
 def _upload(ctx: DeviceContext, address: Int, count: Int) raises -> DeviceBuffer[DType.uint64]:
-    var buffer = ctx.enqueue_create_buffer[DType.uint64](count)
-    ctx.enqueue_copy(dst_buf=buffer, src_ptr=U64P(unsafe_from_address=address))
-    return buffer^
+    return upload_address[DType.uint64](ctx, address, count)
 
 
 struct DeviceSvcProbability(SvcProbabilityCalls):
@@ -241,7 +240,7 @@ struct DeviceSvcProbability(SvcProbabilityCalls):
         var status: List[Int32] = [1234567, -1, 1234567]
         var st = ctx.enqueue_create_buffer[DType.int32](3)
         var sp = I32P(unsafe_from_address=Int(status.unsafe_ptr()))
-        ctx.enqueue_copy(dst_buf=st, src_ptr=sp)
+        upload_whole_into[DType.int32](ctx, st, status)
         ctx.enqueue_function[_coupling_contract](r.unsafe_ptr(), p.unsafe_ptr(), q.unsafe_ptr(), st.unsafe_ptr(),
             grid_dim=1, block_dim=32)
         ctx.enqueue_copy(dst_ptr=U64P(unsafe_from_address=matrix - 8), src_buf=r)

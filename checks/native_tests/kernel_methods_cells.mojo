@@ -14,6 +14,7 @@ from svm.impl.svm_parameter import KernelParams
 from kernel_methods.estimator import _family_ctx, nystroem_fit_host, nystroem_transform_host
 from kernel_methods.checks.kernel_matrix import km_kernel_matrix, km_kernel_workspace_floats
 from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require
+from checks.native_tests.kit import download_whole_into, upload_whole_into
 
 
 comptime KERNEL_METHODS_CELLS_GPU_FIXTURES = 21
@@ -259,14 +260,14 @@ struct DeviceKernelCells(KernelMethodsCellCalls):
         var norm_b = ctx.enqueue_create_buffer[DType.float32](max(1, n))
         var workspace = ctx.enqueue_create_buffer[DType.float32](max(1, km_kernel_workspace_floats(m, n, d)))
         if len(a):
-            ctx.enqueue_copy(dst_buf=da, src_ptr=a.unsafe_ptr())
+            upload_whole_into[DType.float32](ctx, da, a)
         if len(b):
-            ctx.enqueue_copy(dst_buf=db, src_ptr=b.unsafe_ptr())
+            upload_whole_into[DType.float32](ctx, db, b)
         ctx.enqueue_memset(dst, CELL_OUTPUT_GUARD)
         var parameters = KernelParams(kernel, 3, gamma, 1.0)
         km_kernel_matrix(ctx, parameters, dst, da, db, m, n, d, norm_a, norm_b, workspace)
         var downloaded = List[Float32](length=m * n + 2, fill=Float32(0))
-        ctx.enqueue_copy(dst_ptr=downloaded.unsafe_ptr(), src_buf=dst)
+        download_whole_into[DType.float32](ctx, dst, downloaded)
         ctx.synchronize()
         require(downloaded[m * n] == CELL_OUTPUT_GUARD and downloaded[m * n + 1] == CELL_OUTPUT_GUARD,
             "GPU matrix wrote beyond its requested cells or touched empty output")

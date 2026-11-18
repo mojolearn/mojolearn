@@ -104,7 +104,7 @@ def run_checks() raises:
             col.append(b)
             hb.unsafe_ptr().unsafe_store(r, UInt8(b))
         host_bins.append(col^)
-        ctx.enqueue_copy(dst_buf=bins8, src_ptr=hb.unsafe_ptr())
+        upload_host_into[DType.uint8](ctx, bins8, hb)
         ctx.enqueue_function[write_compressed_index_kernel](
             Int32(Int(cf.offset) * N_ROWS),
             cf.mask,
@@ -141,14 +141,13 @@ def run_checks() raises:
 
     # ---- arm A: the greedy-subsets searcher --------------------------
     var stats = ctx.enqueue_create_buffer[DType.float32](2 * N_ROWS)
-    ctx.enqueue_copy(dst_buf=stats, src_ptr=hs.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, stats, hs)
     var row_index = ctx.enqueue_create_buffer[DType.uint32](N_ROWS)
     var hi = ctx.enqueue_create_host_buffer[DType.uint32](N_ROWS)
     for r in range(N_ROWS):
         hi.unsafe_ptr().unsafe_store(r, UInt32(r))
-    ctx.enqueue_copy(dst_buf=row_index, src_ptr=hi.unsafe_ptr())
+    upload_host_into[DType.uint32](ctx, row_index, hi)
     ctx.synchronize()
-    _ = hi^  # past the drain: a queued copy reads it after its last named use
 
     var scratch = ctx.enqueue_create_buffer[DType.float32](1)
     var greedy_splits = List[TBinarySplit]()
@@ -165,9 +164,7 @@ def run_checks() raises:
     # ---- arm B: the pointwise searcher -------------------------------
     var d_w = ctx.enqueue_create_buffer[DType.float32](N_ROWS)
     var d_g = ctx.enqueue_create_buffer[DType.float32](N_ROWS)
-    ctx.enqueue_copy(
-        dst_buf=d_w, src_ptr=hs.unsafe_ptr()
-    )
+    upload_host_into[DType.float32](ctx, d_w, hs)
     ctx.enqueue_copy(
         dst_buf=d_g, src_ptr=hs.unsafe_ptr().unsafe_offset(N_ROWS)
     )
@@ -235,6 +232,7 @@ def run_checks() raises:
 # checks/ that no CI job ran. One process per check name in CI keeps any
 # fresh-process precondition. Device column only: the suite needs a GPU, so the CPU build never instantiates it.
 from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
+from checks.native_tests.kit import upload_host_into
 
 
 def run_cases(column: Column, mut report: Report):

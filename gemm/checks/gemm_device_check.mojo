@@ -100,6 +100,7 @@ from gemm.contract import (
 )
 from gemm.checks.gemm_oracle import fold_balanced_tree, gemm_oracle
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, numeric_mode_name
+from checks.native_tests.kit import download_host_into, upload_host_into
 
 comptime IDENTICAL_BUILD = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 
@@ -532,9 +533,9 @@ def _run_device(
         hB.unsafe_ptr().unsafe_store(i, hb[i])
     for i in range(mn):
         hC.unsafe_ptr().unsafe_store(i, POISON)
-    ctx.enqueue_copy(dst_buf=da, src_ptr=hA.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=db, src_ptr=hB.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=dc, src_ptr=hC.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, da, hA)
+    upload_host_into[DType.float32](ctx, db, hB)
+    upload_host_into[DType.float32](ctx, dc, hC)
     ctx.synchronize()
     if plan == RUN_SHIPPED_AT_ROW_ON:
         identical_gemm_shipped_at_row_into[False](
@@ -545,7 +546,7 @@ def _run_device(
     else:
         identical_gemm_with_plan(ctx, dc, da, db, dw, m, n, k, op, plan)
     ctx.synchronize()
-    ctx.enqueue_copy(dst_ptr=hC.unsafe_ptr(), src_buf=dc)
+    download_host_into[DType.float32](ctx, dc, hC)
     ctx.synchronize()
     var out = List[Float32]()
     for i in range(mn):
@@ -567,9 +568,6 @@ def _run_device(
     _ = db
     _ = dc
     _ = dw
-    _ = hA
-    _ = hB
-    _ = hC
     return out^
 
 
@@ -1336,9 +1334,9 @@ def _batch_loop_arm(
         ctx.synchronize()
         for i in range(mq * nq):
             hc.unsafe_ptr().unsafe_store(i, POISON)
-        ctx.enqueue_copy(dst_buf=da, src_ptr=hA.unsafe_ptr())
-        ctx.enqueue_copy(dst_buf=db, src_ptr=hB.unsafe_ptr())
-        ctx.enqueue_copy(dst_buf=dc, src_ptr=hc.unsafe_ptr())
+        upload_host_into[DType.float32](ctx, da, hA)
+        upload_host_into[DType.float32](ctx, db, hB)
+        upload_host_into[DType.float32](ctx, dc, hc)
         das.append(da^)
         dbs.append(db^)
         dcs.append(dc^)
@@ -1431,8 +1429,6 @@ def _batch_loop_arm(
     if total_bad != 0:
         fails += 1
     _ = dw
-    _ = hA
-    _ = hB
     _ = das
     _ = dbs
     _ = dcs

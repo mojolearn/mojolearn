@@ -216,7 +216,7 @@ def run_policy(
         d_idx.unsafe_ptr(), N_ROWS, d_parts1.unsafe_ptr(), 1, 1,
         d_hist.unsafe_ptr(), p.line, True, fh.copy(), sm_count, FIXED_SCALE,
     )
-    ctx.enqueue_copy(dst_buf=h_hist, src_buf=d_hist)
+    download_host_into[DType.float32](ctx, d_hist, h_hist)
     ctx.synchronize()
     var bits = List[UInt32]()
     var hp = h_hist.unsafe_ptr().unsafe_bitcast[UInt32]()
@@ -231,7 +231,7 @@ def run_policy(
         d_idx.unsafe_ptr(), N_ROWS, d_parts2.unsafe_ptr(), 2, 1,
         d_hist.unsafe_ptr(), p.line, False, fh.copy(), sm_count, FIXED_SCALE,
     )
-    ctx.enqueue_copy(dst_buf=h_hist, src_buf=d_hist)
+    download_host_into[DType.float32](ctx, d_hist, h_hist)
     ctx.synchronize()
     hp = h_hist.unsafe_ptr().unsafe_bitcast[UInt32]()
     for k in range(2 * line2):
@@ -323,9 +323,9 @@ def run_checks() raises:
     var d_tgt = ctx.enqueue_create_buffer[DType.float32](N_ROWS)
     var d_wt = ctx.enqueue_create_buffer[DType.float32](N_ROWS)
     var d_ci = ctx.enqueue_create_buffer[DType.uint32](N_COLUMNS * N_ROWS)
-    ctx.enqueue_copy(dst_buf=d_idx, src_ptr=indices.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_tgt, src_ptr=target.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_wt, src_ptr=weight.unsafe_ptr())
+    upload_whole_into[DType.uint32](ctx, d_idx, indices)
+    upload_whole_into[DType.float32](ctx, d_tgt, target)
+    upload_whole_into[DType.float32](ctx, d_wt, weight)
     ctx.enqueue_copy(dst_buf=d_ci, src_ptr=cindex.unsafe_ptr())
 
     var parts1: List[UInt32] = [UInt32(0), UInt32(N_ROWS)]
@@ -334,8 +334,8 @@ def run_checks() raises:
     ]
     var d_parts1 = ctx.enqueue_create_buffer[DType.uint32](2)
     var d_parts2 = ctx.enqueue_create_buffer[DType.uint32](4)
-    ctx.enqueue_copy(dst_buf=d_parts1, src_ptr=parts1.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_parts2, src_ptr=parts2.unsafe_ptr())
+    upload_whole_into[DType.uint32](ctx, d_parts1, parts1)
+    upload_whole_into[DType.uint32](ctx, d_parts2, parts2)
     ctx.synchronize()
     _ = indices[0]
     _ = target[0]
@@ -391,6 +391,7 @@ def run_checks() raises:
 # checks/ that no CI job ran. One process per check name in CI keeps any
 # fresh-process precondition. Device column only: the suite needs a GPU, so the CPU build never instantiates it.
 from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
+from checks.native_tests.kit import download_host_into, upload_whole_into
 
 
 def run_cases(column: Column, mut report: Report):

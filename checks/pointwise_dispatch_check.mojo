@@ -544,7 +544,7 @@ def run_checks() raises:
     var p_n = 23800
     var parts1: List[UInt32] = [UInt32(p_off), UInt32(p_n)]
     var d_parts1 = ctx.enqueue_create_buffer[DType.uint32](2)
-    ctx.enqueue_copy(dst_buf=d_parts1, src_ptr=parts1.unsafe_ptr())
+    upload_whole_into[DType.uint32](ctx, d_parts1, parts1)
 
     var one_off: List[Int] = [p_off]
     var one_len: List[Int] = [p_n]
@@ -597,11 +597,10 @@ def run_checks() raises:
         d_b.unsafe_ptr(), fx.b_line, True, FoldsHistogram(), SM_COUNT,
         FIXED_SCALE,
     )
-    ctx.enqueue_copy(dst_buf=h_ob, src_buf=d_ob)
-    ctx.enqueue_copy(dst_buf=h_hb, src_buf=d_hb)
-    ctx.enqueue_copy(dst_buf=h_b, src_buf=d_b)
+    download_host_into[DType.float32](ctx, d_ob, h_ob)
+    download_host_into[DType.float32](ctx, d_hb, h_hb)
+    download_host_into[DType.float32](ctx, d_b, h_b)
     ctx.synchronize()
-    _ = parts1^  # past the drain: a queued copy reads it after its last named use
 
     var got_ob = List[Float32]()
     for k in range(fx.ob_line * 2):
@@ -663,7 +662,7 @@ def run_checks() raises:
     var d_parts64 = ctx.enqueue_create_buffer[DType.uint32](
         2 * n_parts_wide
     )
-    ctx.enqueue_copy(dst_buf=d_parts64, src_ptr=parts64.unsafe_ptr())
+    upload_whole_into[DType.uint32](ctx, d_parts64, parts64)
 
     var wide = fx.ob_line * 2 * n_parts_wide
     var d_ob_wide = ctx.enqueue_create_buffer[DType.float32](wide)
@@ -680,9 +679,8 @@ def run_checks() raises:
         d_ob_wide.unsafe_ptr(), fx.ob_line, True, ob_hist, SM_COUNT,
         FIXED_SCALE,
     )
-    ctx.enqueue_copy(dst_buf=h_ob_wide, src_buf=d_ob_wide)
+    download_host_into[DType.float32](ctx, d_ob_wide, h_ob_wide)
     ctx.synchronize()
-    _ = parts64^  # past the drain: a queued copy reads it after its last named use
 
     var got_wide = List[Float32]()
     for k in range(fx.ob_line * 2):
@@ -855,7 +853,7 @@ def run_checks() raises:
             d_ob.unsafe_ptr(), ob_hist.feature_count_for_bits(8, 8), sm_2c,
             FIXED_SCALE,
         )
-    ctx.enqueue_copy(dst_buf=h_ob, src_buf=d_ob)
+    download_host_into[DType.float32](ctx, d_ob, h_ob)
     ctx.synchronize()
 
     var got2c = List[Float32]()
@@ -887,7 +885,7 @@ def run_checks() raises:
         parts4.append(UInt32(f3_off[p]))
         parts4.append(UInt32(f3_len[p]))
     var d_parts4 = ctx.enqueue_create_buffer[DType.uint32](8)
-    ctx.enqueue_copy(dst_buf=d_parts4, src_ptr=parts4.unsafe_ptr())
+    upload_whole_into[DType.uint32](ctx, d_parts4, parts4)
 
     # each part's own scanned histogram, which is what must come back
     var per_part = List[List[Float32]]()
@@ -922,9 +920,8 @@ def run_checks() raises:
         d_ob4.unsafe_ptr(), fx.ob_line, False, ob_hist, SM_COUNT,
         FIXED_SCALE,
     )
-    ctx.enqueue_copy(dst_buf=h_ob4, src_buf=d_ob4)
+    download_host_into[DType.float32](ctx, d_ob4, h_ob4)
     ctx.synchronize()
-    _ = parts4^  # past the drain: a queued copy reads it after its last named use
 
     var got4 = List[Float32]()
     for k in range(line2 * 4):
@@ -1003,7 +1000,7 @@ def run_checks() raises:
                 N_ROWS, d_parts1.unsafe_ptr(), 1, 1, True, fx.ob_line,
                 d_ob.unsafe_ptr(), fcb, SM_COUNT, FIXED_SCALE,
             )
-        ctx.enqueue_copy(dst_buf=h_ob, src_buf=d_ob)
+        download_host_into[DType.float32](ctx, d_ob, h_ob)
         ctx.synchronize()
         var claimed = String("")
         for g in range(4):
@@ -1216,6 +1213,7 @@ def run_checks() raises:
 # checks/ that no CI job ran. One process per check name in CI keeps any
 # fresh-process precondition. Device column only: the suite needs a GPU, so the CPU build never instantiates it.
 from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
+from checks.native_tests.kit import download_host_into, upload_whole_into
 
 
 def run_cases(column: Column, mut report: Report):

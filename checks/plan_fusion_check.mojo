@@ -137,7 +137,7 @@ def run_path(
             h_flags.unsafe_ptr().unsafe_store(
                 offs[j] + t, UInt8(0) if t < borders[j] else UInt8(1)
             )
-    ctx.enqueue_copy(dst_buf=flags, src_ptr=h_flags.unsafe_ptr())
+    upload_host_into[DType.uint8](ctx, flags, h_flags)
 
     var p_off = ctx.enqueue_create_buffer[DType.uint32](slots)
     var p_sz = ctx.enqueue_create_buffer[DType.uint32](slots)
@@ -164,8 +164,8 @@ def run_path(
     for j in range(n_pairs):
         h_po.unsafe_ptr().unsafe_store(j, UInt32(offs[j]))
         h_ps.unsafe_ptr().unsafe_store(j, UInt32(sizes[j]))
-    ctx.enqueue_copy(dst_buf=p_off, src_ptr=h_po.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=p_sz, src_ptr=h_ps.unsafe_ptr())
+    upload_host_into[DType.uint32](ctx, p_off, h_po)
+    upload_host_into[DType.uint32](ctx, p_sz, h_ps)
 
     var lids = ctx.enqueue_create_buffer[DType.uint32](n_pairs)
     var rids = ctx.enqueue_create_buffer[DType.uint32](n_pairs)
@@ -174,8 +174,8 @@ def run_path(
     for j in range(n_pairs):
         h_l.unsafe_ptr().unsafe_store(j, UInt32(j))
         h_r.unsafe_ptr().unsafe_store(j, UInt32(n_pairs + j))
-    ctx.enqueue_copy(dst_buf=lids, src_ptr=h_l.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=rids, src_ptr=h_r.unsafe_ptr())
+    upload_host_into[DType.uint32](ctx, lids, h_l)
+    upload_host_into[DType.uint32](ctx, rids, h_r)
     ctx.synchronize()
 
     if path == 0:
@@ -216,43 +216,36 @@ def run_path(
 
     var out = List[Int]()
     var h_out = ctx.enqueue_create_host_buffer[DType.uint32](slots)
-    ctx.enqueue_copy(dst_ptr=h_out.unsafe_ptr(), src_buf=p_off)
+    download_host_into[DType.uint32](ctx, p_off, h_out)
     ctx.synchronize()
     for s in range(slots):
         out.append(Int(h_out.unsafe_ptr().unsafe_load(s)))
-    ctx.enqueue_copy(dst_ptr=h_out.unsafe_ptr(), src_buf=p_sz)
+    download_host_into[DType.uint32](ctx, p_sz, h_out)
     ctx.synchronize()
     for s in range(slots):
         out.append(Int(h_out.unsafe_ptr().unsafe_load(s)))
-    ctx.enqueue_copy(dst_ptr=h_out.unsafe_ptr(), src_buf=hp_off)
+    download_host_into[DType.uint32](ctx, hp_off, h_out)
     ctx.synchronize()
     for s in range(slots):
         out.append(Int(h_out.unsafe_ptr().unsafe_load(s)))
-    ctx.enqueue_copy(dst_ptr=h_out.unsafe_ptr(), src_buf=hp_sz)
+    download_host_into[DType.uint32](ctx, hp_sz, h_out)
     ctx.synchronize()
     for s in range(slots):
         out.append(Int(h_out.unsafe_ptr().unsafe_load(s)))
     var h_k = ctx.enqueue_create_host_buffer[DType.uint32](n_pairs)
-    ctx.enqueue_copy(dst_ptr=h_k.unsafe_ptr(), src_buf=d_c)
+    download_host_into[DType.uint32](ctx, d_c, h_k)
     ctx.synchronize()
     for j in range(n_pairs):
         out.append(Int(h_k.unsafe_ptr().unsafe_load(j)))
-    ctx.enqueue_copy(dst_ptr=h_k.unsafe_ptr(), src_buf=d_f)
+    download_host_into[DType.uint32](ctx, d_f, h_k)
     ctx.synchronize()
     for j in range(n_pairs):
         out.append(Int(h_k.unsafe_ptr().unsafe_load(j)))
-    ctx.enqueue_copy(dst_ptr=h_k.unsafe_ptr(), src_buf=d_w)
+    download_host_into[DType.uint32](ctx, d_w, h_k)
     ctx.synchronize()
     for j in range(n_pairs):
         out.append(Int(h_k.unsafe_ptr().unsafe_load(j)))
 
-    _ = h_flags^
-    _ = h_ps^
-    _ = h_po^
-    _ = h_l^
-    _ = h_r^
-    _ = h_out^
-    _ = h_k^
     _ = flags^
     _ = p_off^
     _ = p_sz^
@@ -427,6 +420,7 @@ def run_checks() raises:
 # checks/ that no CI job ran. One process per check name in CI keeps any
 # fresh-process precondition. Device column only: the suite needs a GPU, so the CPU build never instantiates it.
 from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
+from checks.native_tests.kit import download_host_into, upload_host_into
 
 
 def run_cases(column: Column, mut report: Report):

@@ -4,6 +4,7 @@ from std.sys import argv
 from max.gpu.host import DeviceContext
 from checks.numerics import PIN_CROSS_VENDOR
 from neighbors.checks.ball_cover_canonical_order import rbc_canonicalize_row_order
+from checks.native_tests.kit import download_host_into, upload_host_into
 
 
 def check(ctx: DeviceContext, sizes: List[Int], duplicates: Bool, extremes: Bool) raises:
@@ -35,12 +36,12 @@ def check(ctx: DeviceContext, sizes: List[Int], duplicates: Bool, extremes: Bool
         hx[p] = Int32(-123456789)
     var ia = ctx.enqueue_create_buffer[DType.int32](rows + 1)
     var ja = ctx.enqueue_create_buffer[DType.int32](nnz + 17)
-    ctx.enqueue_copy(dst_buf=ia, src_ptr=hi.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=ja, src_ptr=hx.unsafe_ptr())
+    upload_host_into[DType.int32](ctx, ia, hi)
+    upload_host_into[DType.int32](ctx, ja, hx)
     ctx.synchronize()
     rbc_canonicalize_row_order(ctx, ia, ja, rows, nnz)
-    ctx.enqueue_copy(dst_ptr=hx.unsafe_ptr(), src_buf=ja)
-    ctx.enqueue_copy(dst_ptr=hi.unsafe_ptr(), src_buf=ia)
+    download_host_into[DType.int32](ctx, ja, hx)
+    download_host_into[DType.int32](ctx, ia, hi)
     ctx.synchronize()
     start = 0
     for row in range(rows):

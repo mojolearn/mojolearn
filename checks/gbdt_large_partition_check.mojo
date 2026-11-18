@@ -48,9 +48,9 @@ def run_checks() raises:
         hlids.unsafe_ptr()[i] = UInt32(1 - i if i < 2 else i)
         hoff.unsafe_ptr()[i] = UInt32(offsets[i])
         hsize.unsafe_ptr()[i] = UInt32(sizes[i])
-    ctx.enqueue_copy(dst_buf=lids, src_ptr=hlids.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=off, src_ptr=hoff.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=size, src_ptr=hsize.unsafe_ptr())
+    upload_host_into[DType.uint32](ctx, lids, hlids)
+    upload_host_into[DType.uint32](ctx, off, hoff)
+    upload_host_into[DType.uint32](ctx, size, hsize)
     for pattern in range(3):
         for i in range(total):
             hflags.unsafe_ptr()[i] = UInt8(9)
@@ -60,16 +60,16 @@ def run_checks() raises:
                 if pattern < 2:
                     flag = pattern
                 hflags.unsafe_ptr()[offsets[leaf] + r] = UInt8(flag)
-        ctx.enqueue_copy(dst_buf=flags, src_ptr=hflags.unsafe_ptr())
+        upload_host_into[DType.uint8](ctx, flags, hflags)
         ctx.enqueue_memset(gmap, UInt32(0xDEADBEEF))
         ctx.enqueue_memset(sorted_flags, UInt8(9))
         launch_stable_partition_routed[IDENTICAL](
             ctx, 3, large, lids, off, size, flags, chunk_zeros,
             chunk_offsets, leaf_zeros, gmap, sorted_flags, sm_count=4,
         )
-        ctx.enqueue_copy(dst_ptr=got.unsafe_ptr(), src_buf=gmap)
-        ctx.enqueue_copy(dst_ptr=gotflags.unsafe_ptr(), src_buf=sorted_flags)
-        ctx.enqueue_copy(dst_ptr=gotzeros.unsafe_ptr(), src_buf=leaf_zeros)
+        download_host_into[DType.uint32](ctx, gmap, got)
+        download_host_into[DType.uint8](ctx, sorted_flags, gotflags)
+        download_host_into[DType.uint32](ctx, leaf_zeros, gotzeros)
         ctx.synchronize()
         for leaf in range(3):
             var cursor = offsets[leaf]
@@ -89,16 +89,13 @@ def run_checks() raises:
                 assert_equal(got.unsafe_ptr()[i], UInt32(0xDEADBEEF))
                 assert_equal(gotflags.unsafe_ptr()[i], UInt8(9))
         print("PASS stable partition pattern", pattern)
-    # past the first pattern's drain: the three table uploads above read these
-    _ = hlids^
-    _ = hoff^
-    _ = hsize^
 
 
 # Registered by lane checks-toplevel (2026-11-16): a standalone main() under
 # checks/ that no CI job ran. One process per check name in CI keeps any
 # fresh-process precondition. Device column only: the suite needs a GPU, so the CPU build never instantiates it.
 from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
+from checks.native_tests.kit import download_host_into, upload_host_into
 
 
 def run_cases(column: Column, mut report: Report):

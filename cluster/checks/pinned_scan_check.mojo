@@ -30,6 +30,7 @@ from max.gpu.primitives.block import prefix_sum as block_prefix_sum
 from cluster.checks.plus_plus import PLUS_PLUS_TPB
 from cluster.host.kmeans_oracle import host_block_prefix_sum
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+from checks.native_tests.kit import download_host_into, upload_host_into
 
 comptime TPB = PLUS_PLUS_TPB
 
@@ -120,13 +121,12 @@ def main() raises:
         var v = u * Float32(1.0 + Float32(i % 7) * 977.0)
         vals.append(v)
         ha.unsafe_ptr().unsafe_store(i, v)
-    ctx.enqueue_copy(dst_buf=a, src_ptr=ha.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, a, ha)
     ctx.enqueue_function[scan_probe_kernel](
         out.unsafe_ptr(), a.unsafe_ptr(), grid_dim=(1, 1, 1), block_dim=(TPB, 1, 1)
     )
-    ctx.enqueue_copy(dst_ptr=hout.unsafe_ptr(), src_buf=out)
+    download_host_into[DType.float32](ctx, out, hout)
     ctx.synchronize()
-    _ = ha^  # past the drain: a queued copy reads it after its last named use
     var got = List[List[Float32]]()
     for k in range(6):
         var row = List[Float32]()

@@ -484,9 +484,9 @@ def run_checks() raises:
     var d_xr = ctx.enqueue_create_buffer[DType.float32](N)
     var d_xl = ctx.enqueue_create_buffer[DType.float32](N)
     var d_xa = ctx.enqueue_create_buffer[DType.float32](N)
-    ctx.enqueue_copy(dst_buf=d_xr, src_ptr=h_xr.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_xl, src_ptr=h_xl.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_xa, src_ptr=h_xa.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, d_xr, h_xr)
+    upload_host_into[DType.float32](ctx, d_xl, h_xl)
+    upload_host_into[DType.float32](ctx, d_xa, h_xa)
     var o_r = ctx.enqueue_create_buffer[DType.float32](N)
     var o_l = ctx.enqueue_create_buffer[DType.float32](N)
     var o_sg = ctx.enqueue_create_buffer[DType.float32](N)
@@ -507,11 +507,11 @@ def run_checks() raises:
     var r_sg = ctx.enqueue_create_host_buffer[DType.float32](N)
     var r_sl = ctx.enqueue_create_host_buffer[DType.float32](N)
     var r_sp = ctx.enqueue_create_host_buffer[DType.float32](N)
-    ctx.enqueue_copy(dst_ptr=r_r.unsafe_ptr(), src_buf=o_r)
-    ctx.enqueue_copy(dst_ptr=r_l.unsafe_ptr(), src_buf=o_l)
-    ctx.enqueue_copy(dst_ptr=r_sg.unsafe_ptr(), src_buf=o_sg)
-    ctx.enqueue_copy(dst_ptr=r_sl.unsafe_ptr(), src_buf=o_sl)
-    ctx.enqueue_copy(dst_ptr=r_sp.unsafe_ptr(), src_buf=o_sp)
+    download_host_into[DType.float32](ctx, o_r, r_r)
+    download_host_into[DType.float32](ctx, o_l, r_l)
+    download_host_into[DType.float32](ctx, o_sg, r_sg)
+    download_host_into[DType.float32](ctx, o_sl, r_sl)
+    download_host_into[DType.float32](ctx, o_sp, r_sp)
     ctx.synchronize()
 
     var qr = r_r.unsafe_ptr()
@@ -606,6 +606,7 @@ def run_checks() raises:
 # checks/ that no CI job ran. One process per check name in CI keeps any
 # fresh-process precondition. Device column only: the suite needs a GPU, so the CPU build never instantiates it.
 from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
+from checks.native_tests.kit import download_host_into, upload_host_into
 
 
 def run_cases(column: Column, mut report: Report):

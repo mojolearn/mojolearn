@@ -190,17 +190,17 @@ def run_checks() raises:
         var d_b = ctx.enqueue_create_buffer[DType.uint64](n)
         var d_c = ctx.enqueue_create_buffer[DType.uint64](n)
         var d_o = ctx.enqueue_create_buffer[DType.uint64](n)
-        ctx.enqueue_copy(dst_buf=d_ops, src_ptr=ops.unsafe_ptr())
-        ctx.enqueue_copy(dst_buf=d_a, src_ptr=av.unsafe_ptr())
-        ctx.enqueue_copy(dst_buf=d_b, src_ptr=bv.unsafe_ptr())
-        ctx.enqueue_copy(dst_buf=d_c, src_ptr=cv.unsafe_ptr())
+        upload_whole_into[DType.int32](ctx, d_ops, ops)
+        upload_whole_into[DType.uint64](ctx, d_a, av)
+        upload_whole_into[DType.uint64](ctx, d_b, bv)
+        upload_whole_into[DType.uint64](ctx, d_c, cv)
         ctx.enqueue_function[_soft_kernel](
             d_ops.unsafe_ptr(), d_a.unsafe_ptr(), d_b.unsafe_ptr(),
             d_c.unsafe_ptr(), d_o.unsafe_ptr(), Int32(n),
             grid_dim=(n + 255) // 256, block_dim=256,
         )
         var got = List[UInt64](length=n, fill=0)
-        ctx.enqueue_copy(dst_ptr=got.unsafe_ptr(), src_buf=d_o)
+        download_whole_into[DType.uint64](ctx, d_o, got)
         ctx.synchronize()
         dev_bad = 0
         for i in range(n):
@@ -209,8 +209,6 @@ def run_checks() raises:
                 if dev_bad <= 5:
                     print("DEVICE DIFF op", ops[i], "a", hex(av[i]), "host",
                           hex(host[i]), "device", hex(got[i]))
-    _ = bv^  # past the drain: a queued copy reads it after its last named use
-    _ = cv^  # past the drain: a queued copy reads it after its last named use
     var ok = host_bad == 0 and dev_bad <= 0
     print(
         "SOFT_F64 host_mismatch=" + String(host_bad) + " device_mismatch="
@@ -222,6 +220,7 @@ def run_checks() raises:
 # checks/ that no CI job ran. One process per check name in CI keeps any
 # fresh-process precondition. Device column only: the suite needs a GPU, so the CPU build never instantiates it.
 from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
+from checks.native_tests.kit import download_whole_into, upload_whole_into
 
 
 def run_cases(column: Column, mut report: Report):

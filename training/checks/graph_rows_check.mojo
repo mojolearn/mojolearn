@@ -11,14 +11,15 @@ from neighbors.impl.detail.knn_brute_force import (
     brute_force_knn_impl, compute_norms_for_metric, tiled_distance_tile_cells,
     tiled_radix_scratch_len, KNN_METHOD_AUTO,
 )
+from checks.native_tests.kit import download_host_into
 
 
 def equal[dt: DType](ctx: DeviceContext, mut a: DeviceBuffer[dt],
                      mut b: DeviceBuffer[dt], n: Int) raises:
     var x = ctx.enqueue_create_host_buffer[dt](n)
     var y = ctx.enqueue_create_host_buffer[dt](n)
-    ctx.enqueue_copy(dst_ptr=x.unsafe_ptr(), src_buf=a)
-    ctx.enqueue_copy(dst_ptr=y.unsafe_ptr(), src_buf=b)
+    download_host_into[dt](ctx, a, x)
+    download_host_into[dt](ctx, b, y)
     ctx.synchronize()
     for i in range(n):
         if bitcast[DType.uint32](x.unsafe_ptr()[i]) != bitcast[DType.uint32](y.unsafe_ptr()[i]):

@@ -75,6 +75,7 @@ from ensemble.decisiontree.batched_levelalgo.objectives import (
     ClassificationObjectiveFunction,
     RegressionObjectiveFunction,
 )
+from checks.native_tests.kit import download_host_into, upload_host_into
 
 comptime CObj = ClassificationObjectiveFunction[
     DType.float32, DType.int32, ClassificationBin
@@ -759,13 +760,13 @@ def main() raises:
     var hh = ctx.enqueue_create_host_buffer[DType.uint32](8)
     for i in range(8):
         hh.unsafe_ptr().unsafe_store(i, gh[i].count)
-    ctx.enqueue_copy(dst_buf=dh, src_buf=hh)
+    upload_host_into[DType.uint32](ctx, dh, hh)
 
     var dq = ctx.enqueue_create_buffer[DType.float32](4)
     var hq = ctx.enqueue_create_host_buffer[DType.float32](4)
     for i in range(4):
         hq.unsafe_ptr().unsafe_store(i, Float32(i) + 0.5)
-    ctx.enqueue_copy(dst_buf=dq, src_buf=hq)
+    upload_host_into[DType.float32](ctx, dq, hq)
 
     var d_gain = ctx.enqueue_create_buffer[DType.float32](4)
     var d_col = ctx.enqueue_create_buffer[DType.int32](4)
@@ -789,13 +790,11 @@ def main() raises:
     var h_col = ctx.enqueue_create_host_buffer[DType.int32](4)
     var h_nl = ctx.enqueue_create_host_buffer[DType.int64](4)
     var h_qu = ctx.enqueue_create_host_buffer[DType.float32](4)
-    ctx.enqueue_copy(dst_buf=h_gain, src_buf=d_gain)
-    ctx.enqueue_copy(dst_buf=h_col, src_buf=d_col)
-    ctx.enqueue_copy(dst_buf=h_nl, src_buf=d_nl)
-    ctx.enqueue_copy(dst_buf=h_qu, src_buf=d_qu)
+    download_host_into[DType.float32](ctx, d_gain, h_gain)
+    download_host_into[DType.int32](ctx, d_col, h_col)
+    download_host_into[DType.int64](ctx, d_nl, h_nl)
+    download_host_into[DType.float32](ctx, d_qu, h_qu)
     ctx.synchronize()
-    _ = hh^  # past the drain: a queued copy reads it after its last named use
-    _ = hq^  # past the drain: a queued copy reads it after its last named use
     # Device form of the freed-at-enqueue UAF (perf-lane find,
     # 2026-08-22): `dh`/`dq` died at their `.unsafe_ptr()` in the kernel
     # argument list. Keep-alives AFTER the sync.

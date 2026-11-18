@@ -58,9 +58,8 @@ def check_one_level() raises:
     var z = ctx.enqueue_create_host_buffer[DType.uint32](n_rows)
     for i in range(n_rows):
         z.unsafe_ptr().unsafe_store(i, UInt32(0))
-    ctx.enqueue_copy(dst_buf=cindex, src_ptr=z.unsafe_ptr())
+    upload_host_into[DType.uint32](ctx, cindex, z)
     ctx.synchronize()
-    _ = z^  # past the drain: a queued copy reads it after its last named use
 
     var host_bin = ctx.enqueue_create_host_buffer[DType.uint8](n_rows)
     var bins = ctx.enqueue_create_buffer[DType.uint8](n_rows)
@@ -75,7 +74,7 @@ def check_one_level() raises:
             host_bin.unsafe_ptr().unsafe_store(r, UInt8(v))
             if f == informative and v == 1:
                 informative_ones += 1
-        ctx.enqueue_copy(dst_buf=bins, src_ptr=host_bin.unsafe_ptr())
+        upload_host_into[DType.uint8](ctx, bins, host_bin)
         ctx.enqueue_function[write_compressed_index_kernel](
             Int32(0),
             policy_mask(POLICY_BINARY),
@@ -101,16 +100,14 @@ def check_one_level() raises:
         hs.unsafe_ptr().unsafe_store(n_rows + r, Float32(g))
         total_w += 1.0
         total_g += g
-    ctx.enqueue_copy(dst_buf=stats, src_ptr=hs.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, stats, hs)
 
     var row_index = ctx.enqueue_create_buffer[DType.uint32](n_rows)
     var hi = ctx.enqueue_create_host_buffer[DType.uint32](n_rows)
     for r in range(n_rows):
         hi.unsafe_ptr().unsafe_store(r, UInt32(r))
-    ctx.enqueue_copy(dst_buf=row_index, src_ptr=hi.unsafe_ptr())
+    upload_host_into[DType.uint32](ctx, row_index, hi)
     ctx.synchronize()
-    _ = hi^  # past the drain: a queued copy reads it after its last named use
-    _ = hs^  # past the drain: a queued copy reads it after its last named use
 
     var res = run_one_level(
         ctx,
@@ -172,9 +169,8 @@ def check_tree(max_depth: Int) raises:
     var z = ctx.enqueue_create_host_buffer[DType.uint32](n_rows)
     for i in range(n_rows):
         z.unsafe_ptr().unsafe_store(i, UInt32(0))
-    ctx.enqueue_copy(dst_buf=cindex, src_ptr=z.unsafe_ptr())
+    upload_host_into[DType.uint32](ctx, cindex, z)
     ctx.synchronize()
-    _ = z^  # past the drain: a queued copy reads it after its last named use
 
     var host_bin = ctx.enqueue_create_host_buffer[DType.uint8](n_rows)
     var bins = ctx.enqueue_create_buffer[DType.uint8](n_rows)
@@ -194,7 +190,7 @@ def check_tree(max_depth: Int) raises:
             x ^= x >> 17
             x ^= x << 5
             host_bin.unsafe_ptr().unsafe_store(r, UInt8(Int(x & 1)))
-        ctx.enqueue_copy(dst_buf=bins, src_ptr=host_bin.unsafe_ptr())
+        upload_host_into[DType.uint8](ctx, bins, host_bin)
         ctx.enqueue_function[write_compressed_index_kernel](
             Int32(0),
             policy_mask(POLICY_BINARY),
@@ -225,16 +221,14 @@ def check_tree(max_depth: Int) raises:
             tg += -g
         else:
             tg += g
-    ctx.enqueue_copy(dst_buf=stats, src_ptr=hs.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, stats, hs)
 
     var row_index = ctx.enqueue_create_buffer[DType.uint32](n_rows)
     var hi = ctx.enqueue_create_host_buffer[DType.uint32](n_rows)
     for r in range(n_rows):
         hi.unsafe_ptr().unsafe_store(r, UInt32(r))
-    ctx.enqueue_copy(dst_buf=row_index, src_ptr=hi.unsafe_ptr())
+    upload_host_into[DType.uint32](ctx, row_index, hi)
     ctx.synchronize()
-    _ = hi^  # past the drain: a queued copy reads it after its last named use
-    _ = hs^  # past the drain: a queued copy reads it after its last named use
 
     var sizes = run_tree(
         ctx, n_rows, n_features, max_depth, cindex, stats, row_index,
@@ -308,9 +302,8 @@ def check_mixed_tree(max_depth: Int) raises:
     var z = ctx.enqueue_create_host_buffer[DType.uint32](n_rows * n_columns)
     for i in range(n_rows * n_columns):
         z.unsafe_ptr().unsafe_store(i, UInt32(0))
-    ctx.enqueue_copy(dst_buf=cindex, src_ptr=z.unsafe_ptr())
+    upload_host_into[DType.uint32](ctx, cindex, z)
     ctx.synchronize()
-    _ = z^  # past the drain: a queued copy reads it after its last named use
 
     var lay = build_layout(folds)
     var hb = ctx.enqueue_create_host_buffer[DType.uint8](n_rows)
@@ -330,7 +323,7 @@ def check_mixed_tree(max_depth: Int) raises:
             hb.unsafe_ptr().unsafe_store(
                 r, UInt8(Int(x % UInt32(folds[f] + 1)))
             )
-        ctx.enqueue_copy(dst_buf=bins, src_ptr=hb.unsafe_ptr())
+        upload_host_into[DType.uint8](ctx, bins, hb)
         ctx.enqueue_function[write_compressed_index_kernel](
             Int32(Int(cf.offset) * n_rows),
             cf.mask,
@@ -361,16 +354,14 @@ def check_mixed_tree(max_depth: Int) raises:
             tg += -g
         else:
             tg += g
-    ctx.enqueue_copy(dst_buf=stats, src_ptr=hs.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, stats, hs)
 
     var row_index = ctx.enqueue_create_buffer[DType.uint32](n_rows)
     var hi = ctx.enqueue_create_host_buffer[DType.uint32](n_rows)
     for r in range(n_rows):
         hi.unsafe_ptr().unsafe_store(r, UInt32(r))
-    ctx.enqueue_copy(dst_buf=row_index, src_ptr=hi.unsafe_ptr())
+    upload_host_into[DType.uint32](ctx, row_index, hi)
     ctx.synchronize()
-    _ = hi^  # past the drain: a queued copy reads it after its last named use
-    _ = hs^  # past the drain: a queued copy reads it after its last named use
 
     # No cursor here: growth only. `apply_to_cursor` defaults off, so this
     # buffer is never written.
@@ -454,6 +445,7 @@ def run_checks() raises:
 # checks/ that no CI job ran. One process per check name in CI keeps any
 # fresh-process precondition. Device column only: the suite needs a GPU, so the CPU build never instantiates it.
 from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
+from checks.native_tests.kit import upload_host_into
 
 
 def run_cases(column: Column, mut report: Report):

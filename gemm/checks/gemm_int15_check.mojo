@@ -96,6 +96,7 @@ from gemm.host.gemm_int15_oracle import (
     split_int15,
 )
 from gemm.contract import GEMM_ORACLE_HOST_SABOTAGE
+from checks.native_tests.kit import download_host_into, upload_host_into
 
 comptime IDENTICAL_BUILD = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 comptime POISON = Float32(-987654.0)
@@ -649,21 +650,19 @@ def _upload[dt: DType](ctx: DeviceContext, h: List[Scalar[dt]]) raises -> Device
     ctx.synchronize()
     for i in range(len(h)):
         hb.unsafe_ptr().unsafe_store(i, h[i])
-    ctx.enqueue_copy(dst_buf=d, src_ptr=hb.unsafe_ptr())
+    upload_host_into[dt](ctx, d, hb)
     ctx.synchronize()
-    _ = hb
     return d^
 
 
 def _download[dt: DType](ctx: DeviceContext, mut d: DeviceBuffer[dt], count: Int) raises -> List[Scalar[dt]]:
     var hb = ctx.enqueue_create_host_buffer[dt](count)
     ctx.synchronize()
-    ctx.enqueue_copy(dst_ptr=hb.unsafe_ptr(), src_buf=d)
+    download_host_into[dt](ctx, d, hb)
     ctx.synchronize()
     var out = List[Scalar[dt]]()
     for i in range(count):
         out.append(hb.unsafe_ptr().unsafe_load(i))
-    _ = hb
     return out^
 
 

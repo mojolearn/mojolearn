@@ -11,6 +11,7 @@ from std.memory import bitcast
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from neighbors.checks.select_radix_identical import composite_key
 from neighbors.checks.select_smallk_identical_candidate import smallk_select_launch
+from checks.native_tests.kit import download_host_into, upload_host_into
 
 
 def check_case(length: Int, k: Int, select_min: Bool) raises:
@@ -32,14 +33,14 @@ def check_case(length: Int, k: Int, select_min: Bool) raises:
         var values = ctx.enqueue_create_buffer[DType.float32](ROWS * length)
         var distances = ctx.enqueue_create_buffer[DType.float32](ROWS * k)
         var indices = ctx.enqueue_create_buffer[DType.uint32](ROWS * k)
-        ctx.enqueue_copy(dst_buf=values, src_ptr=host.unsafe_ptr())
+        upload_host_into[DType.float32](ctx, values, host)
         smallk_select_launch(
             ctx, values.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
             distances.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), indices.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
             ROWS, length, k, select_min,
         )
-        ctx.enqueue_copy(dst_ptr=got_d.unsafe_ptr(), src_buf=distances)
-        ctx.enqueue_copy(dst_ptr=got_i.unsafe_ptr(), src_buf=indices)
+        download_host_into[DType.float32](ctx, distances, got_d)
+        download_host_into[DType.uint32](ctx, indices, got_i)
         ctx.synchronize()
         for row in range(ROWS):
             var previous = UInt64(0)
@@ -60,7 +61,6 @@ def check_case(length: Int, k: Int, select_min: Bool) raises:
                     raise Error("long-row selector distance bits differ from host input")
                 previous = best
         print("SELECTOR_LONG_CASE_PASS", length, k, select_min, ROWS * k)
-        _ = host^
         _ = values^
 
 

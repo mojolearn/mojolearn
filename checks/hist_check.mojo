@@ -93,14 +93,14 @@ def check_binary_histogram() raises:
     var zero32 = ctx.enqueue_create_host_buffer[DType.uint32](n_rows)
     for i in range(n_rows):
         zero32.unsafe_ptr().unsafe_store(i, UInt32(0))
-    ctx.enqueue_copy(dst_buf=cindex, src_ptr=zero32.unsafe_ptr())
+    upload_host_into[DType.uint32](ctx, cindex, zero32)
 
     var host_bins = ctx.enqueue_create_host_buffer[DType.uint8](n_rows)
     var bins = ctx.enqueue_create_buffer[DType.uint8](n_rows)
     for f in range(n_features):
         for r in range(n_rows):
             host_bins.unsafe_ptr().unsafe_store(r, UInt8((r + f) % 2))
-        ctx.enqueue_copy(dst_buf=bins, src_ptr=host_bins.unsafe_ptr())
+        upload_host_into[DType.uint8](ctx, bins, host_bins)
         ctx.enqueue_function[write_compressed_index_kernel](
             Int32(0),
             policy_mask(POLICY_BINARY),
@@ -112,8 +112,6 @@ def check_binary_histogram() raises:
             block_dim=WRITE_BLOCK_SIZE,
         )
     ctx.synchronize()
-    _ = host_bins^  # past the drain: a queued copy reads it after its last named use
-    _ = zero32^  # past the drain: a queued copy reads it after its last named use
 
     # --- one partition holding every row ----------------------------------
     var p_off = ctx.enqueue_create_buffer[DType.uint32](1)
@@ -132,20 +130,17 @@ def check_binary_histogram() raises:
     h_off.unsafe_ptr().unsafe_store(0, UInt32(0))
     h_ids.unsafe_ptr().unsafe_store(0, UInt32(0))
     h_sz.unsafe_ptr().unsafe_store(0, UInt32(n_rows))
-    ctx.enqueue_copy(dst_buf=p_off, src_ptr=h_off.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=p_ids, src_ptr=h_ids.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=p_sz, src_ptr=h_sz.unsafe_ptr())
+    upload_host_into[DType.uint32](ctx, p_off, h_off)
+    upload_host_into[DType.uint32](ctx, p_ids, h_ids)
+    upload_host_into[DType.uint32](ctx, p_sz, h_sz)
     ctx.synchronize()
-    _ = h_ids^  # past the drain: a queued copy reads it after its last named use
-    _ = h_off^  # past the drain: a queued copy reads it after its last named use
-    _ = h_sz^  # past the drain: a queued copy reads it after its last named use
 
     # --- every row carries stat 1.0 ---------------------------------------
     var stats = ctx.enqueue_create_buffer[DType.float32](n_rows)
     var host_stats = ctx.enqueue_create_host_buffer[DType.float32](n_rows)
     for r in range(n_rows):
         host_stats.unsafe_ptr().unsafe_store(r, Float32(1.0))
-    ctx.enqueue_copy(dst_buf=stats, src_ptr=host_stats.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, stats, host_stats)
 
     # --- feature descriptors: one fold each, laid out consecutively -------
     var folds = ctx.enqueue_create_buffer[DType.uint32](n_features)
@@ -161,23 +156,17 @@ def check_binary_histogram() raises:
         h_fold_off.unsafe_ptr().unsafe_store(f, UInt32(f))
         h_grp_off.unsafe_ptr().unsafe_store(f, UInt32(0))
         h_grp_sz.unsafe_ptr().unsafe_store(f, UInt32(n_features))
-    ctx.enqueue_copy(dst_buf=folds, src_ptr=h_folds.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=fold_off, src_ptr=h_fold_off.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=grp_off, src_ptr=h_grp_off.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=grp_sz, src_ptr=h_grp_sz.unsafe_ptr())
+    upload_host_into[DType.uint32](ctx, folds, h_folds)
+    upload_host_into[DType.uint32](ctx, fold_off, h_fold_off)
+    upload_host_into[DType.uint32](ctx, grp_off, h_grp_off)
+    upload_host_into[DType.uint32](ctx, grp_sz, h_grp_sz)
 
     var sums = ctx.enqueue_create_buffer[DType.float32](n_features)
     var zerof = ctx.enqueue_create_host_buffer[DType.float32](n_features)
     for f in range(n_features):
         zerof.unsafe_ptr().unsafe_store(f, Float32(0.0))
-    ctx.enqueue_copy(dst_buf=sums, src_ptr=zerof.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, sums, zerof)
     ctx.synchronize()
-    _ = h_fold_off^  # past the drain: a queued copy reads it after its last named use
-    _ = h_folds^  # past the drain: a queued copy reads it after its last named use
-    _ = h_grp_off^  # past the drain: a queued copy reads it after its last named use
-    _ = h_grp_sz^  # past the drain: a queued copy reads it after its last named use
-    _ = host_stats^  # past the drain: a queued copy reads it after its last named use
-    _ = zerof^  # past the drain: a queued copy reads it after its last named use
 
     # DEVIATION 95: the histogram kernels read `fixed_scale` from DEVICE
     # memory. `upload_scale` returns the buffer and the CALLER keeps it
@@ -215,7 +204,7 @@ def check_binary_histogram() raises:
     _ = scale_keep^
 
     var out = ctx.enqueue_create_host_buffer[DType.float32](n_features)
-    ctx.enqueue_copy(dst_ptr=out.unsafe_ptr(), src_buf=sums)
+    download_host_into[DType.float32](ctx, sums, out)
     ctx.synchronize()
 
     print("  32 features, 64 rows, stat 1.0, one partition")
@@ -265,16 +254,15 @@ def check_two_partitions() raises:
     var zero32 = ctx.enqueue_create_host_buffer[DType.uint32](n_rows)
     for i in range(n_rows):
         zero32.unsafe_ptr().unsafe_store(i, UInt32(0))
-    ctx.enqueue_copy(dst_buf=cindex, src_ptr=zero32.unsafe_ptr())
+    upload_host_into[DType.uint32](ctx, cindex, zero32)
     ctx.synchronize()
-    _ = zero32^  # past the drain: a queued copy reads it after its last named use
 
     var host_bins = ctx.enqueue_create_host_buffer[DType.uint8](n_rows)
     var bins = ctx.enqueue_create_buffer[DType.uint8](n_rows)
     for f in range(n_features):
         for r in range(n_rows):
             host_bins.unsafe_ptr().unsafe_store(r, UInt8((r + f) % 2))
-        ctx.enqueue_copy(dst_buf=bins, src_ptr=host_bins.unsafe_ptr())
+        upload_host_into[DType.uint8](ctx, bins, host_bins)
         ctx.enqueue_function[write_compressed_index_kernel](
             Int32(0),
             policy_mask(POLICY_BINARY),
@@ -300,15 +288,15 @@ def check_two_partitions() raises:
     h_sz.unsafe_ptr().unsafe_store(1, UInt32(n_rows - split_at))
     h_ids.unsafe_ptr().unsafe_store(0, UInt32(0))
     h_ids.unsafe_ptr().unsafe_store(1, UInt32(1))
-    ctx.enqueue_copy(dst_buf=p_off, src_ptr=h_off.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=p_sz, src_ptr=h_sz.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=p_ids, src_ptr=h_ids.unsafe_ptr())
+    upload_host_into[DType.uint32](ctx, p_off, h_off)
+    upload_host_into[DType.uint32](ctx, p_sz, h_sz)
+    upload_host_into[DType.uint32](ctx, p_ids, h_ids)
 
     var stats = ctx.enqueue_create_buffer[DType.float32](n_rows)
     var host_stats = ctx.enqueue_create_host_buffer[DType.float32](n_rows)
     for r in range(n_rows):
         host_stats.unsafe_ptr().unsafe_store(r, Float32(1.0))
-    ctx.enqueue_copy(dst_buf=stats, src_ptr=host_stats.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, stats, host_stats)
 
     var folds = ctx.enqueue_create_buffer[DType.uint32](n_features)
     var fold_off = ctx.enqueue_create_buffer[DType.uint32](n_features)
@@ -323,27 +311,18 @@ def check_two_partitions() raises:
         h_fold_off.unsafe_ptr().unsafe_store(f, UInt32(f))
         h_grp_off.unsafe_ptr().unsafe_store(f, UInt32(0))
         h_grp_sz.unsafe_ptr().unsafe_store(f, UInt32(n_features))
-    ctx.enqueue_copy(dst_buf=folds, src_ptr=h_folds.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=fold_off, src_ptr=h_fold_off.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=grp_off, src_ptr=h_grp_off.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=grp_sz, src_ptr=h_grp_sz.unsafe_ptr())
+    upload_host_into[DType.uint32](ctx, folds, h_folds)
+    upload_host_into[DType.uint32](ctx, fold_off, h_fold_off)
+    upload_host_into[DType.uint32](ctx, grp_off, h_grp_off)
+    upload_host_into[DType.uint32](ctx, grp_sz, h_grp_sz)
 
     # Two leaves, so the sums buffer holds two leaves' worth.
     var sums = ctx.enqueue_create_buffer[DType.float32](2 * n_features)
     var zerof = ctx.enqueue_create_host_buffer[DType.float32](2 * n_features)
     for i in range(2 * n_features):
         zerof.unsafe_ptr().unsafe_store(i, Float32(0.0))
-    ctx.enqueue_copy(dst_buf=sums, src_ptr=zerof.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, sums, zerof)
     ctx.synchronize()
-    _ = h_fold_off^  # past the drain: a queued copy reads it after its last named use
-    _ = h_folds^  # past the drain: a queued copy reads it after its last named use
-    _ = h_grp_off^  # past the drain: a queued copy reads it after its last named use
-    _ = h_grp_sz^  # past the drain: a queued copy reads it after its last named use
-    _ = h_ids^  # past the drain: a queued copy reads it after its last named use
-    _ = h_off^  # past the drain: a queued copy reads it after its last named use
-    _ = h_sz^  # past the drain: a queued copy reads it after its last named use
-    _ = host_stats^  # past the drain: a queued copy reads it after its last named use
-    _ = zerof^  # past the drain: a queued copy reads it after its last named use
 
     # DEVIATION 95: the histogram kernels read `fixed_scale` from DEVICE
     # memory. `upload_scale` returns the buffer and the CALLER keeps it
@@ -381,7 +360,7 @@ def check_two_partitions() raises:
     _ = scale_keep^
 
     var out = ctx.enqueue_create_host_buffer[DType.float32](2 * n_features)
-    ctx.enqueue_copy(dst_ptr=out.unsafe_ptr(), src_buf=sums)
+    download_host_into[DType.float32](ctx, sums, out)
     ctx.synchronize()
 
     print("  two leaves in ONE launch: rows [0,24) and [24,64)")
@@ -429,16 +408,15 @@ def check_half_byte_histogram() raises:
     var zero32 = ctx.enqueue_create_host_buffer[DType.uint32](n_rows)
     for i in range(n_rows):
         zero32.unsafe_ptr().unsafe_store(i, UInt32(0))
-    ctx.enqueue_copy(dst_buf=cindex, src_ptr=zero32.unsafe_ptr())
+    upload_host_into[DType.uint32](ctx, cindex, zero32)
     ctx.synchronize()
-    _ = zero32^  # past the drain: a queued copy reads it after its last named use
 
     var host_bins = ctx.enqueue_create_host_buffer[DType.uint8](n_rows)
     var bins = ctx.enqueue_create_buffer[DType.uint8](n_rows)
     for f in range(n_features):
         for r in range(n_rows):
             host_bins.unsafe_ptr().unsafe_store(r, UInt8((r + f) % n_folds))
-        ctx.enqueue_copy(dst_buf=bins, src_ptr=host_bins.unsafe_ptr())
+        upload_host_into[DType.uint8](ctx, bins, host_bins)
         ctx.enqueue_function[write_compressed_index_kernel](
             Int32(0),
             policy_mask(POLICY_HALF_BYTE),
@@ -460,15 +438,15 @@ def check_half_byte_histogram() raises:
     h_off.unsafe_ptr().unsafe_store(0, UInt32(0))
     h_sz.unsafe_ptr().unsafe_store(0, UInt32(n_rows))
     h_ids.unsafe_ptr().unsafe_store(0, UInt32(0))
-    ctx.enqueue_copy(dst_buf=p_off, src_ptr=h_off.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=p_sz, src_ptr=h_sz.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=p_ids, src_ptr=h_ids.unsafe_ptr())
+    upload_host_into[DType.uint32](ctx, p_off, h_off)
+    upload_host_into[DType.uint32](ctx, p_sz, h_sz)
+    upload_host_into[DType.uint32](ctx, p_ids, h_ids)
 
     var stats = ctx.enqueue_create_buffer[DType.float32](n_rows)
     var host_stats = ctx.enqueue_create_host_buffer[DType.float32](n_rows)
     for r in range(n_rows):
         host_stats.unsafe_ptr().unsafe_store(r, Float32(1.0))
-    ctx.enqueue_copy(dst_buf=stats, src_ptr=host_stats.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, stats, host_stats)
 
     # Each feature owns `n_folds` consecutive cells in the group.
     var group_size = n_features * n_folds
@@ -485,27 +463,18 @@ def check_half_byte_histogram() raises:
         h_fold_off.unsafe_ptr().unsafe_store(f, UInt32(f * n_folds))
         h_grp_off.unsafe_ptr().unsafe_store(f, UInt32(0))
         h_grp_sz.unsafe_ptr().unsafe_store(f, UInt32(group_size))
-    ctx.enqueue_copy(dst_buf=folds, src_ptr=h_folds.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=fold_off, src_ptr=h_fold_off.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=grp_off, src_ptr=h_grp_off.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=grp_sz, src_ptr=h_grp_sz.unsafe_ptr())
+    upload_host_into[DType.uint32](ctx, folds, h_folds)
+    upload_host_into[DType.uint32](ctx, fold_off, h_fold_off)
+    upload_host_into[DType.uint32](ctx, grp_off, h_grp_off)
+    upload_host_into[DType.uint32](ctx, grp_sz, h_grp_sz)
 
     var sums = ctx.enqueue_create_buffer[DType.float32](group_size)
     var hb_acc = ctx.enqueue_create_buffer[DType.int32](group_size)
     var zerof = ctx.enqueue_create_host_buffer[DType.float32](group_size)
     for i in range(group_size):
         zerof.unsafe_ptr().unsafe_store(i, Float32(0.0))
-    ctx.enqueue_copy(dst_buf=sums, src_ptr=zerof.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, sums, zerof)
     ctx.synchronize()
-    _ = h_fold_off^  # past the drain: a queued copy reads it after its last named use
-    _ = h_folds^  # past the drain: a queued copy reads it after its last named use
-    _ = h_grp_off^  # past the drain: a queued copy reads it after its last named use
-    _ = h_grp_sz^  # past the drain: a queued copy reads it after its last named use
-    _ = h_ids^  # past the drain: a queued copy reads it after its last named use
-    _ = h_off^  # past the drain: a queued copy reads it after its last named use
-    _ = h_sz^  # past the drain: a queued copy reads it after its last named use
-    _ = host_stats^  # past the drain: a queued copy reads it after its last named use
-    _ = zerof^  # past the drain: a queued copy reads it after its last named use
 
     # DEVIATION 95: the histogram kernels read `fixed_scale` from DEVICE
     # memory. `upload_scale` returns the buffer and the CALLER keeps it
@@ -543,7 +512,7 @@ def check_half_byte_histogram() raises:
     _ = scale_keep^
 
     var out = ctx.enqueue_create_host_buffer[DType.float32](group_size)
-    ctx.enqueue_copy(dst_ptr=out.unsafe_ptr(), src_buf=sums)
+    download_host_into[DType.float32](ctx, sums, out)
     ctx.synchronize()
 
     print("  8 features x 4 folds, 64 rows, stat 1.0")
@@ -608,7 +577,7 @@ def check_subtraction() raises:
     # One bin where the child EXCEEDS the parent, so cancellation would go
     # negative and the clamp must fire.
     h.unsafe_ptr().unsafe_store(1 * n_bf + 3, Float32(1000.0))
-    ctx.enqueue_copy(dst_buf=hist, src_ptr=h.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, hist, h)
 
     var from_ids = ctx.enqueue_create_buffer[DType.uint32](1)
     var what_ids = ctx.enqueue_create_buffer[DType.uint32](1)
@@ -616,12 +585,9 @@ def check_subtraction() raises:
     var hw = ctx.enqueue_create_host_buffer[DType.uint32](1)
     hf.unsafe_ptr().unsafe_store(0, UInt32(0))
     hw.unsafe_ptr().unsafe_store(0, UInt32(1))
-    ctx.enqueue_copy(dst_buf=from_ids, src_ptr=hf.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=what_ids, src_ptr=hw.unsafe_ptr())
+    upload_host_into[DType.uint32](ctx, from_ids, hf)
+    upload_host_into[DType.uint32](ctx, what_ids, hw)
     ctx.synchronize()
-    _ = h^  # past the drain: a queued copy reads it after its last named use
-    _ = hf^  # past the drain: a queued copy reads it after its last named use
-    _ = hw^  # past the drain: a queued copy reads it after its last named use
 
     ctx.enqueue_function[substract_histograms_kernel](
         from_ids.unsafe_ptr(),
@@ -634,7 +600,7 @@ def check_subtraction() raises:
     ctx.synchronize()
 
     var out = ctx.enqueue_create_host_buffer[DType.float32](n_leaves * n_bf)
-    ctx.enqueue_copy(dst_ptr=out.unsafe_ptr(), src_buf=hist)
+    download_host_into[DType.float32](ctx, hist, out)
     ctx.synchronize()
 
     print("  parent 100+b, smaller child 30+b, bin 3 child=1000 (clamp case)")
@@ -688,7 +654,7 @@ def check_scan() raises:
     for k in range(n_folds):
         h.unsafe_ptr().unsafe_store(k, Float32(1.0 + Float64(k)))
         h.unsafe_ptr().unsafe_store(n_folds + k, Float32(10.0 * (1.0 + Float64(k))))
-    ctx.enqueue_copy(dst_buf=hist, src_ptr=h.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, hist, h)
 
     var first_bin = ctx.enqueue_create_buffer[DType.uint32](n_features)
     var folds_b = ctx.enqueue_create_buffer[DType.uint32](n_features)
@@ -697,19 +663,15 @@ def check_scan() raises:
     for f in range(n_features):
         h_first.unsafe_ptr().unsafe_store(f, UInt32(f * n_folds))
         h_folds.unsafe_ptr().unsafe_store(f, UInt32(n_folds))
-    ctx.enqueue_copy(dst_buf=first_bin, src_ptr=h_first.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=folds_b, src_ptr=h_folds.unsafe_ptr())
+    upload_host_into[DType.uint32](ctx, first_bin, h_first)
+    upload_host_into[DType.uint32](ctx, folds_b, h_folds)
     ctx.synchronize()
-    _ = h^  # past the drain: a queued copy reads it after its last named use
-    _ = h_first^  # past the drain: a queued copy reads it after its last named use
-    _ = h_folds^  # past the drain: a queued copy reads it after its last named use
 
     var scan_ids = ctx.enqueue_create_buffer[DType.uint32](1)
     var scan_ids_h = ctx.enqueue_create_host_buffer[DType.uint32](1)
     scan_ids_h.unsafe_ptr().unsafe_store(0, UInt32(0))
-    ctx.enqueue_copy(dst_buf=scan_ids, src_ptr=scan_ids_h.unsafe_ptr())
+    upload_host_into[DType.uint32](ctx, scan_ids, scan_ids_h)
     ctx.synchronize()
-    _ = scan_ids_h^  # past the drain: a queued copy reads it after its last named use
     # all-binary fixture: no one-hot features, so the skip never fires
     var scan_onehot = ctx.enqueue_create_buffer[DType.uint8](256)
     ctx.enqueue_function[scan_histograms_kernel](
@@ -726,7 +688,7 @@ def check_scan() raises:
     ctx.synchronize()
 
     var out = ctx.enqueue_create_host_buffer[DType.float32](n_bf)
-    ctx.enqueue_copy(dst_ptr=out.unsafe_ptr(), src_buf=hist)
+    download_host_into[DType.float32](ctx, hist, out)
     ctx.synchronize()
 
     print("  feature 0 folds 1,2,3,4 -> expect 1,3,6,10")
@@ -815,7 +777,7 @@ def check_scores() raises:
             h.unsafe_ptr().unsafe_store(
                 leaf * stat_count * n_bf + 1 * n_bf + bf, lg[leaf * n_bf + bf]
             )
-    ctx.enqueue_copy(dst_buf=hist, src_ptr=h.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, hist, h)
 
     var part_stats = ctx.enqueue_create_buffer[DType.float32](
         n_leaves * stat_count
@@ -826,27 +788,23 @@ def check_scores() raises:
     for leaf in range(n_leaves):
         hp.unsafe_ptr().unsafe_store(leaf * stat_count + 0, tot_w[leaf])
         hp.unsafe_ptr().unsafe_store(leaf * stat_count + 1, tot_g[leaf])
-    ctx.enqueue_copy(dst_buf=part_stats, src_ptr=hp.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, part_stats, hp)
 
     var skip = ctx.enqueue_create_buffer[DType.uint8](n_bf)
     var hs = ctx.enqueue_create_host_buffer[DType.uint8](n_bf)
     for i in range(n_bf):
         hs.unsafe_ptr().unsafe_store(i, UInt8(0))
-    ctx.enqueue_copy(dst_buf=skip, src_ptr=hs.unsafe_ptr())
+    upload_host_into[DType.uint8](ctx, skip, hs)
 
     var part_ids = ctx.enqueue_create_buffer[DType.uint32](n_leaves)
     var hi = ctx.enqueue_create_host_buffer[DType.uint32](n_leaves)
     for i in range(n_leaves):
         hi.unsafe_ptr().unsafe_store(i, UInt32(i))
-    ctx.enqueue_copy(dst_buf=part_ids, src_ptr=hi.unsafe_ptr())
+    upload_host_into[DType.uint32](ctx, part_ids, hi)
 
     var out_score = ctx.enqueue_create_buffer[DType.float32](1)
     var out_bin = ctx.enqueue_create_buffer[DType.uint32](1)
     ctx.synchronize()
-    _ = h^  # past the drain: a queued copy reads it after its last named use
-    _ = hi^  # past the drain: a queued copy reads it after its last named use
-    _ = hp^  # past the drain: a queued copy reads it after its last named use
-    _ = hs^  # past the drain: a queued copy reads it after its last named use
 
     var sc_bff = ctx.enqueue_create_buffer[DType.uint32](n_bf)
     var sc_hbf = ctx.enqueue_create_host_buffer[DType.uint32](n_bf)
@@ -855,11 +813,9 @@ def check_scores() raises:
     for i in range(n_bf):
         sc_hbf.unsafe_ptr().unsafe_store(i, UInt32(i))
         sc_hfw.unsafe_ptr().unsafe_store(i, Float32(1.0))
-    ctx.enqueue_copy(dst_buf=sc_bff, src_ptr=sc_hbf.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=sc_ffw, src_ptr=sc_hfw.unsafe_ptr())
+    upload_host_into[DType.uint32](ctx, sc_bff, sc_hbf)
+    upload_host_into[DType.float32](ctx, sc_ffw, sc_hfw)
     ctx.synchronize()
-    _ = sc_hbf^  # past the drain: a queued copy reads it after its last named use
-    _ = sc_hfw^  # past the drain: a queued copy reads it after its last named use
 
     ctx.enqueue_function[
         # This check hand-computes an L2 score, so it must name the L2
@@ -896,8 +852,8 @@ def check_scores() raises:
 
     var hos = ctx.enqueue_create_host_buffer[DType.float32](1)
     var hob = ctx.enqueue_create_host_buffer[DType.uint32](1)
-    ctx.enqueue_copy(dst_ptr=hos.unsafe_ptr(), src_buf=out_score)
-    ctx.enqueue_copy(dst_ptr=hob.unsafe_ptr(), src_buf=out_bin)
+    download_host_into[DType.float32](ctx, out_score, hos)
+    download_host_into[DType.uint32](ctx, out_bin, hob)
     ctx.synchronize()
 
     # The same sum the kernel forms, on the host, in Float64.
@@ -956,16 +912,15 @@ def check_split_points() raises:
     var zero32 = ctx.enqueue_create_host_buffer[DType.uint32](n_rows)
     for i in range(n_rows):
         zero32.unsafe_ptr().unsafe_store(i, UInt32(0))
-    ctx.enqueue_copy(dst_buf=cindex, src_ptr=zero32.unsafe_ptr())
+    upload_host_into[DType.uint32](ctx, cindex, zero32)
     ctx.synchronize()
-    _ = zero32^  # past the drain: a queued copy reads it after its last named use
 
     # Write a decoy into a neighbouring feature first, then the real one.
     var host_bins = ctx.enqueue_create_host_buffer[DType.uint8](n_rows)
     var bins = ctx.enqueue_create_buffer[DType.uint8](n_rows)
     for r in range(n_rows):
         host_bins.unsafe_ptr().unsafe_store(r, UInt8(1))
-    ctx.enqueue_copy(dst_buf=bins, src_ptr=host_bins.unsafe_ptr())
+    upload_host_into[DType.uint8](ctx, bins, host_bins)
     ctx.enqueue_function[write_compressed_index_kernel](
         Int32(0),
         policy_mask(POLICY_BINARY),
@@ -977,13 +932,12 @@ def check_split_points() raises:
         block_dim=WRITE_BLOCK_SIZE,
     )
     ctx.synchronize()
-    _ = host_bins^  # past the drain: a queued copy reads it after its last named use
 
     var bins2 = ctx.enqueue_create_buffer[DType.uint8](n_rows)
     var host_bins2 = ctx.enqueue_create_host_buffer[DType.uint8](n_rows)
     for r in range(n_rows):
         host_bins2.unsafe_ptr().unsafe_store(r, UInt8((r // 3) % 2))
-    ctx.enqueue_copy(dst_buf=bins2, src_ptr=host_bins2.unsafe_ptr())
+    upload_host_into[DType.uint8](ctx, bins2, host_bins2)
     ctx.enqueue_function[write_compressed_index_kernel](
         Int32(0),
         policy_mask(POLICY_BINARY),
@@ -995,13 +949,12 @@ def check_split_points() raises:
         block_dim=WRITE_BLOCK_SIZE,
     )
     ctx.synchronize()
-    _ = host_bins2^  # past the drain: a queued copy reads it after its last named use
 
     var load_idx = ctx.enqueue_create_buffer[DType.uint32](n_rows)
     var h_load = ctx.enqueue_create_host_buffer[DType.uint32](n_rows)
     for r in range(n_rows):
         h_load.unsafe_ptr().unsafe_store(r, UInt32(r))
-    ctx.enqueue_copy(dst_buf=load_idx, src_ptr=h_load.unsafe_ptr())
+    upload_host_into[DType.uint32](ctx, load_idx, h_load)
 
     var p_off = ctx.enqueue_create_buffer[DType.uint32](2)
     var p_sz = ctx.enqueue_create_buffer[DType.uint32](2)
@@ -1015,9 +968,9 @@ def check_split_points() raises:
     h_sz.unsafe_ptr().unsafe_store(1, UInt32(n_rows - split_at))
     h_lid.unsafe_ptr().unsafe_store(0, UInt32(0))
     h_lid.unsafe_ptr().unsafe_store(1, UInt32(1))
-    ctx.enqueue_copy(dst_buf=p_off, src_ptr=h_off.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=p_sz, src_ptr=h_sz.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=leaf_ids, src_ptr=h_lid.unsafe_ptr())
+    upload_host_into[DType.uint32](ctx, p_off, h_off)
+    upload_host_into[DType.uint32](ctx, p_sz, h_sz)
+    upload_host_into[DType.uint32](ctx, leaf_ids, h_lid)
 
     var sp_bin = ctx.enqueue_create_buffer[DType.uint32](2)
     # their `const TCFeature* splitFeatures` plus `const ui32* splitBins`
@@ -1039,8 +992,8 @@ def check_split_points() raises:
             one_hot_feature=False,  # ordered, so test is >
         )
         h_spb.unsafe_ptr().unsafe_store(i, UInt32(0))  # bin > 0 goes right
-    ctx.enqueue_copy(dst_buf=sp_feats, src_ptr=h_feats.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=sp_bin, src_ptr=h_spb.unsafe_ptr())
+    upload_host_into[DType.uint8](ctx, sp_feats, h_feats)
+    upload_host_into[DType.uint32](ctx, sp_bin, h_spb)
 
     var flags = ctx.enqueue_create_buffer[DType.uint8](n_rows)
     var seq = ctx.enqueue_create_buffer[DType.uint32](n_rows)
@@ -1049,17 +1002,9 @@ def check_split_points() raises:
     for r in range(n_rows):
         hzf.unsafe_ptr().unsafe_store(r, UInt8(9))
         hzs.unsafe_ptr().unsafe_store(r, UInt32(999))
-    ctx.enqueue_copy(dst_buf=flags, src_ptr=hzf.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=seq, src_ptr=hzs.unsafe_ptr())
+    upload_host_into[DType.uint8](ctx, flags, hzf)
+    upload_host_into[DType.uint32](ctx, seq, hzs)
     ctx.synchronize()
-    _ = h_feats^  # past the drain: a queued copy reads it after its last named use
-    _ = h_lid^  # past the drain: a queued copy reads it after its last named use
-    _ = h_load^  # past the drain: a queued copy reads it after its last named use
-    _ = h_off^  # past the drain: a queued copy reads it after its last named use
-    _ = h_spb^  # past the drain: a queued copy reads it after its last named use
-    _ = h_sz^  # past the drain: a queued copy reads it after its last named use
-    _ = hzf^  # past the drain: a queued copy reads it after its last named use
-    _ = hzs^  # past the drain: a queued copy reads it after its last named use
 
     ctx.enqueue_function[split_and_make_sequence_kernel](
         cindex.unsafe_ptr(),
@@ -1078,8 +1023,8 @@ def check_split_points() raises:
 
     var of = ctx.enqueue_create_host_buffer[DType.uint8](n_rows)
     var os = ctx.enqueue_create_host_buffer[DType.uint32](n_rows)
-    ctx.enqueue_copy(dst_ptr=of.unsafe_ptr(), src_buf=flags)
-    ctx.enqueue_copy(dst_ptr=os.unsafe_ptr(), src_buf=seq)
+    download_host_into[DType.uint8](ctx, flags, of)
+    download_host_into[DType.uint32](ctx, seq, os)
     ctx.synchronize()
 
     var wrong_flag = 0
@@ -1130,7 +1075,7 @@ def check_partition_update() raises:
         hf.unsafe_ptr().unsafe_store(r, UInt8(0))
     for r in range(16, 24):
         hf.unsafe_ptr().unsafe_store(r, UInt8(1))
-    ctx.enqueue_copy(dst_buf=flags, src_ptr=hf.unsafe_ptr())
+    upload_host_into[DType.uint8](ctx, flags, hf)
 
     var p_off = ctx.enqueue_create_buffer[DType.uint32](n_leaves)
     var p_sz = ctx.enqueue_create_buffer[DType.uint32](n_leaves)
@@ -1152,10 +1097,10 @@ def check_partition_update() raises:
     for i in range(n_leaves):
         h_off2.unsafe_ptr().unsafe_store(i, h_off.unsafe_ptr().unsafe_load(i))
         h_sz2.unsafe_ptr().unsafe_store(i, h_sz.unsafe_ptr().unsafe_load(i))
-    ctx.enqueue_copy(dst_buf=p_off, src_ptr=h_off.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=p_sz, src_ptr=h_sz.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=hh_off, src_ptr=h_off2.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=hh_sz, src_ptr=h_sz2.unsafe_ptr())
+    upload_host_into[DType.uint32](ctx, p_off, h_off)
+    upload_host_into[DType.uint32](ctx, p_sz, h_sz)
+    upload_host_into[DType.uint32](ctx, hh_off, h_off2)
+    upload_host_into[DType.uint32](ctx, hh_sz, h_sz2)
 
     var left = ctx.enqueue_create_buffer[DType.uint32](3)
     var right = ctx.enqueue_create_buffer[DType.uint32](3)
@@ -1164,16 +1109,9 @@ def check_partition_update() raises:
     for i in range(3):
         hl.unsafe_ptr().unsafe_store(i, UInt32(2 * i))
         hr.unsafe_ptr().unsafe_store(i, UInt32(2 * i + 1))
-    ctx.enqueue_copy(dst_buf=left, src_ptr=hl.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=right, src_ptr=hr.unsafe_ptr())
+    upload_host_into[DType.uint32](ctx, left, hl)
+    upload_host_into[DType.uint32](ctx, right, hr)
     ctx.synchronize()
-    _ = h_off^  # past the drain: a queued copy reads it after its last named use
-    _ = h_off2^  # past the drain: a queued copy reads it after its last named use
-    _ = h_sz^  # past the drain: a queued copy reads it after its last named use
-    _ = h_sz2^  # past the drain: a queued copy reads it after its last named use
-    _ = hf^  # past the drain: a queued copy reads it after its last named use
-    _ = hl^  # past the drain: a queued copy reads it after its last named use
-    _ = hr^  # past the drain: a queued copy reads it after its last named use
 
     ctx.enqueue_function[update_partitions_after_split_kernel](
         left.unsafe_ptr(),
@@ -1191,8 +1129,8 @@ def check_partition_update() raises:
 
     var oo = ctx.enqueue_create_host_buffer[DType.uint32](n_leaves)
     var os = ctx.enqueue_create_host_buffer[DType.uint32](n_leaves)
-    ctx.enqueue_copy(dst_ptr=oo.unsafe_ptr(), src_buf=p_off)
-    ctx.enqueue_copy(dst_ptr=os.unsafe_ptr(), src_buf=p_sz)
+    download_host_into[DType.uint32](ctx, p_off, oo)
+    download_host_into[DType.uint32](ctx, p_sz, os)
     ctx.synchronize()
 
     var want_off = List[Int]()
@@ -1248,16 +1186,14 @@ def check_zero_and_copy() raises:
             h.unsafe_ptr().unsafe_store(
                 leaf * n_bf + b, Float32(Float64(leaf) + 1.0)
             )
-    ctx.enqueue_copy(dst_buf=hist, src_ptr=h.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, hist, h)
 
     var ids = ctx.enqueue_create_buffer[DType.uint32](2)
     var hids = ctx.enqueue_create_host_buffer[DType.uint32](2)
     hids.unsafe_ptr().unsafe_store(0, UInt32(1))
     hids.unsafe_ptr().unsafe_store(1, UInt32(3))
-    ctx.enqueue_copy(dst_buf=ids, src_ptr=hids.unsafe_ptr())
+    upload_host_into[DType.uint32](ctx, ids, hids)
     ctx.synchronize()
-    _ = h^  # past the drain: a queued copy reads it after its last named use
-    _ = hids^  # past the drain: a queued copy reads it after its last named use
 
     ctx.enqueue_function[zero_histograms_kernel](
         ids.unsafe_ptr(),
@@ -1269,7 +1205,7 @@ def check_zero_and_copy() raises:
     ctx.synchronize()
 
     var o1 = ctx.enqueue_create_host_buffer[DType.float32](total)
-    ctx.enqueue_copy(dst_ptr=o1.unsafe_ptr(), src_buf=hist)
+    download_host_into[DType.float32](ctx, hist, o1)
     ctx.synchronize()
 
     var wrong = 0
@@ -1290,11 +1226,9 @@ def check_zero_and_copy() raises:
     var hr = ctx.enqueue_create_host_buffer[DType.uint32](1)
     hl.unsafe_ptr().unsafe_store(0, UInt32(0))
     hr.unsafe_ptr().unsafe_store(0, UInt32(2))
-    ctx.enqueue_copy(dst_buf=left, src_ptr=hl.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=right, src_ptr=hr.unsafe_ptr())
+    upload_host_into[DType.uint32](ctx, left, hl)
+    upload_host_into[DType.uint32](ctx, right, hr)
     ctx.synchronize()
-    _ = hl^  # past the drain: a queued copy reads it after its last named use
-    _ = hr^  # past the drain: a queued copy reads it after its last named use
 
     ctx.enqueue_function[copy_histograms_kernel](
         left.unsafe_ptr(),
@@ -1308,7 +1242,7 @@ def check_zero_and_copy() raises:
     ctx.synchronize()
 
     var o2 = ctx.enqueue_create_host_buffer[DType.float32](total)
-    ctx.enqueue_copy(dst_ptr=o2.unsafe_ptr(), src_buf=hist)
+    download_host_into[DType.float32](ctx, hist, o2)
     ctx.synchronize()
 
     var wrong2 = 0
@@ -1350,7 +1284,7 @@ def check_stable_partition() raises:
         hf.unsafe_ptr().unsafe_store(r, UInt8(1) if (r % 3) == 0 else UInt8(0))
     for r in range(n1):
         hf.unsafe_ptr().unsafe_store(n0 + r, UInt8(1) if (r % 2) == 1 else UInt8(0))
-    ctx.enqueue_copy(dst_buf=flags, src_ptr=hf.unsafe_ptr())
+    upload_host_into[DType.uint8](ctx, flags, hf)
 
     var p_off = ctx.enqueue_create_buffer[DType.uint32](2)
     var p_sz = ctx.enqueue_create_buffer[DType.uint32](2)
@@ -1364,16 +1298,13 @@ def check_stable_partition() raises:
     h_sz.unsafe_ptr().unsafe_store(1, UInt32(n1))
     h_lid.unsafe_ptr().unsafe_store(0, UInt32(0))
     h_lid.unsafe_ptr().unsafe_store(1, UInt32(1))
-    ctx.enqueue_copy(dst_buf=p_off, src_ptr=h_off.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=p_sz, src_ptr=h_sz.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=lids, src_ptr=h_lid.unsafe_ptr())
+    upload_host_into[DType.uint32](ctx, p_off, h_off)
+    upload_host_into[DType.uint32](ctx, p_sz, h_sz)
+    upload_host_into[DType.uint32](ctx, lids, h_lid)
 
     var gmap = ctx.enqueue_create_buffer[DType.uint32](n_rows)
     var sflags = ctx.enqueue_create_buffer[DType.uint8](n_rows)
     ctx.synchronize()
-    _ = h_lid^  # past the drain: a queued copy reads it after its last named use
-    _ = h_off^  # past the drain: a queued copy reads it after its last named use
-    _ = h_sz^  # past the drain: a queued copy reads it after its last named use
 
     var max_chunks = (n0 + PARTITION_BLOCK - 1) // PARTITION_BLOCK
     var chunk_zeros = ctx.enqueue_create_buffer[DType.uint32](2 * max_chunks)
@@ -1387,8 +1318,8 @@ def check_stable_partition() raises:
 
     var om = ctx.enqueue_create_host_buffer[DType.uint32](n_rows)
     var osf = ctx.enqueue_create_host_buffer[DType.uint8](n_rows)
-    ctx.enqueue_copy(dst_ptr=om.unsafe_ptr(), src_buf=gmap)
-    ctx.enqueue_copy(dst_ptr=osf.unsafe_ptr(), src_buf=sflags)
+    download_host_into[DType.uint32](ctx, gmap, om)
+    download_host_into[DType.uint8](ctx, sflags, osf)
     ctx.synchronize()
 
     var bad = 0
@@ -1453,9 +1384,8 @@ def check_one_byte_bits[bits: Int](n_stats: Int = 1, rows_per_fold: Int = 10, sc
     var zero32 = ctx.enqueue_create_host_buffer[DType.uint32](n_rows)
     for i in range(n_rows):
         zero32.unsafe_ptr().unsafe_store(i, UInt32(0))
-    ctx.enqueue_copy(dst_buf=cindex, src_ptr=zero32.unsafe_ptr())
+    upload_host_into[DType.uint32](ctx, cindex, zero32)
     ctx.synchronize()
-    _ = zero32^  # past the drain: a queued copy reads it after its last named use
 
     var host_bins = ctx.enqueue_create_host_buffer[DType.uint8](n_rows)
     var bins = ctx.enqueue_create_buffer[DType.uint8](n_rows)
@@ -1477,7 +1407,7 @@ def check_one_byte_bits[bits: Int](n_stats: Int = 1, rows_per_fold: Int = 10, sc
                 v = Int(x % UInt32(n_folds))
             counts[f * n_folds + v] += 1
             host_bins.unsafe_ptr().unsafe_store(r, UInt8(v))
-        ctx.enqueue_copy(dst_buf=bins, src_ptr=host_bins.unsafe_ptr())
+        upload_host_into[DType.uint8](ctx, bins, host_bins)
         ctx.enqueue_function[write_compressed_index_kernel](
             Int32(0),
             UInt32(255),
@@ -1499,9 +1429,9 @@ def check_one_byte_bits[bits: Int](n_stats: Int = 1, rows_per_fold: Int = 10, sc
     a.unsafe_ptr().unsafe_store(0, UInt32(0))
     bb.unsafe_ptr().unsafe_store(0, UInt32(n_rows))
     cc.unsafe_ptr().unsafe_store(0, UInt32(0))
-    ctx.enqueue_copy(dst_buf=p_off, src_ptr=a.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=p_sz, src_ptr=bb.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=p_ids, src_ptr=cc.unsafe_ptr())
+    upload_host_into[DType.uint32](ctx, p_off, a)
+    upload_host_into[DType.uint32](ctx, p_sz, bb)
+    upload_host_into[DType.uint32](ctx, p_ids, cc)
 
     # One plane per stat, laid out [stat][row] as the kernels expect. With
     # `n_stats = 2` the second plane is what the mixed path uses and what no
@@ -1510,7 +1440,7 @@ def check_one_byte_bits[bits: Int](n_stats: Int = 1, rows_per_fold: Int = 10, sc
     var hst = ctx.enqueue_create_host_buffer[DType.float32](n_stats * n_rows)
     for i in range(n_stats * n_rows):
         hst.unsafe_ptr().unsafe_store(i, Float32(1.0))
-    ctx.enqueue_copy(dst_buf=stats, src_ptr=hst.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, stats, hst)
 
     var group_size = n_features * n_folds
     var folds = ctx.enqueue_create_buffer[DType.uint32](n_features)
@@ -1526,10 +1456,10 @@ def check_one_byte_bits[bits: Int](n_stats: Int = 1, rows_per_fold: Int = 10, sc
         q2.unsafe_ptr().unsafe_store(f, UInt32(f * n_folds))
         q3.unsafe_ptr().unsafe_store(f, UInt32(0))
         q4.unsafe_ptr().unsafe_store(f, UInt32(group_size))
-    ctx.enqueue_copy(dst_buf=folds, src_ptr=q1.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=fold_off, src_ptr=q2.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=grp_off, src_ptr=q3.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=grp_sz, src_ptr=q4.unsafe_ptr())
+    upload_host_into[DType.uint32](ctx, folds, q1)
+    upload_host_into[DType.uint32](ctx, fold_off, q2)
+    upload_host_into[DType.uint32](ctx, grp_off, q3)
+    upload_host_into[DType.uint32](ctx, grp_sz, q4)
 
     var sums = ctx.enqueue_create_buffer[DType.float32](n_stats * group_size)
     var zf = ctx.enqueue_create_host_buffer[DType.float32](
@@ -1537,20 +1467,11 @@ def check_one_byte_bits[bits: Int](n_stats: Int = 1, rows_per_fold: Int = 10, sc
     )
     for i in range(n_stats * group_size):
         zf.unsafe_ptr().unsafe_store(i, Float32(0.0))
-    ctx.enqueue_copy(dst_buf=sums, src_ptr=zf.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, sums, zf)
     var acc_unused = ctx.enqueue_create_buffer[DType.int32](
         n_stats * group_size
     )
     ctx.synchronize()
-    _ = a^  # past the drain: a queued copy reads it after its last named use
-    _ = bb^  # past the drain: a queued copy reads it after its last named use
-    _ = cc^  # past the drain: a queued copy reads it after its last named use
-    _ = hst^  # past the drain: a queued copy reads it after its last named use
-    _ = q1^  # past the drain: a queued copy reads it after its last named use
-    _ = q2^  # past the drain: a queued copy reads it after its last named use
-    _ = q3^  # past the drain: a queued copy reads it after its last named use
-    _ = q4^  # past the drain: a queued copy reads it after its last named use
-    _ = zf^  # past the drain: a queued copy reads it after its last named use
 
     # DEVIATION 95: the histogram kernels read `fixed_scale` from DEVICE
     # memory. `upload_scale` returns the buffer and the CALLER keeps it
@@ -1594,7 +1515,7 @@ def check_one_byte_bits[bits: Int](n_stats: Int = 1, rows_per_fold: Int = 10, sc
     var out = ctx.enqueue_create_host_buffer[DType.float32](
         n_stats * group_size
     )
-    ctx.enqueue_copy(dst_ptr=out.unsafe_ptr(), src_buf=sums)
+    download_host_into[DType.float32](ctx, sums, out)
     ctx.synchronize()
 
     print(
@@ -1654,9 +1575,8 @@ def check_gather_matches_direct() raises:
     var z = ctx.enqueue_create_host_buffer[DType.uint32](n_rows)
     for i in range(n_rows):
         z.unsafe_ptr().unsafe_store(i, UInt32(0))
-    ctx.enqueue_copy(dst_buf=cindex, src_ptr=z.unsafe_ptr())
+    upload_host_into[DType.uint32](ctx, cindex, z)
     ctx.synchronize()
-    _ = z^  # past the drain: a queued copy reads it after its last named use
 
     var hb = ctx.enqueue_create_host_buffer[DType.uint8](n_rows)
     var bins = ctx.enqueue_create_buffer[DType.uint8](n_rows)
@@ -1667,7 +1587,7 @@ def check_gather_matches_direct() raises:
             x ^= x >> 17
             x ^= x << 5
             hb.unsafe_ptr().unsafe_store(r, UInt8(Int(x & 1)))
-        ctx.enqueue_copy(dst_buf=bins, src_ptr=hb.unsafe_ptr())
+        upload_host_into[DType.uint8](ctx, bins, hb)
         ctx.enqueue_function[write_compressed_index_kernel](
             Int32(0), policy_mask(POLICY_BINARY),
             UInt32(policy_shift(POLICY_BINARY, f)),
@@ -1681,7 +1601,7 @@ def check_gather_matches_direct() raises:
     var hs = ctx.enqueue_create_host_buffer[DType.float32](n_rows)
     for r in range(n_rows):
         hs.unsafe_ptr().unsafe_store(r, Float32(1.0))
-    ctx.enqueue_copy(dst_buf=stats, src_ptr=hs.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, stats, hs)
 
     var p_off = ctx.enqueue_create_buffer[DType.uint32](1)
     var p_sz = ctx.enqueue_create_buffer[DType.uint32](1)
@@ -1692,9 +1612,9 @@ def check_gather_matches_direct() raises:
     a.unsafe_ptr().unsafe_store(0, UInt32(0))
     b.unsafe_ptr().unsafe_store(0, UInt32(n_rows))
     c.unsafe_ptr().unsafe_store(0, UInt32(0))
-    ctx.enqueue_copy(dst_buf=p_off, src_ptr=a.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=p_sz, src_ptr=b.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=p_ids, src_ptr=c.unsafe_ptr())
+    upload_host_into[DType.uint32](ctx, p_off, a)
+    upload_host_into[DType.uint32](ctx, p_sz, b)
+    upload_host_into[DType.uint32](ctx, p_ids, c)
 
     var folds = ctx.enqueue_create_buffer[DType.uint32](n_features)
     var fold_off = ctx.enqueue_create_buffer[DType.uint32](n_features)
@@ -1709,10 +1629,10 @@ def check_gather_matches_direct() raises:
         q2.unsafe_ptr().unsafe_store(f, UInt32(f))
         q3.unsafe_ptr().unsafe_store(f, UInt32(0))
         q4.unsafe_ptr().unsafe_store(f, UInt32(n_features))
-    ctx.enqueue_copy(dst_buf=folds, src_ptr=q1.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=fold_off, src_ptr=q2.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=grp_off, src_ptr=q3.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=grp_sz, src_ptr=q4.unsafe_ptr())
+    upload_host_into[DType.uint32](ctx, folds, q1)
+    upload_host_into[DType.uint32](ctx, fold_off, q2)
+    upload_host_into[DType.uint32](ctx, grp_off, q3)
+    upload_host_into[DType.uint32](ctx, grp_sz, q4)
 
     var sums = ctx.enqueue_create_buffer[DType.float32](n_features)
     var zf = ctx.enqueue_create_host_buffer[DType.float32](n_features)
@@ -1729,19 +1649,11 @@ def check_gather_matches_direct() raises:
     # without the `_ = scale_keep^` below the buffer is dead before the
     # kernel runs and the next allocation lands on it.
     var scale_keep = upload_scale(ctx, Float32(1.0))
-    _ = a^  # past the drain: a queued copy reads it after its last named use
-    _ = b^  # past the drain: a queued copy reads it after its last named use
-    _ = c^  # past the drain: a queued copy reads it after its last named use
-    _ = hs^  # past the drain: a queued copy reads it after its last named use
-    _ = q1^  # past the drain: a queued copy reads it after its last named use
-    _ = q2^  # past the drain: a queued copy reads it after its last named use
-    _ = q3^  # past the drain: a queued copy reads it after its last named use
-    _ = q4^  # past the drain: a queued copy reads it after its last named use
     var scale_ptr = rebind[MutPointer[Float32, MutAnyOrigin]](
         scale_keep.unsafe_ptr()
     )
     # direct
-    ctx.enqueue_copy(dst_buf=sums, src_ptr=zf.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, sums, zf)
     ctx.synchronize()
     ctx.enqueue_function[binary_hist_kernel](
         folds.unsafe_ptr(), fold_off.unsafe_ptr(), grp_off.unsafe_ptr(),
@@ -1753,7 +1665,7 @@ def check_gather_matches_direct() raises:
         grid_dim=(1, 1, 1), block_dim=(BLOCK_SIZE, 1, 1),
     )
     ctx.synchronize()
-    ctx.enqueue_copy(dst_ptr=out.unsafe_ptr(), src_buf=sums)
+    download_host_into[DType.float32](ctx, sums, out)
     ctx.synchronize()
     var direct = List[Float32]()
     for f in range(n_features):
@@ -1766,8 +1678,8 @@ def check_gather_matches_direct() raises:
                 hidx.unsafe_ptr().unsafe_store(r, UInt32(r))
             else:
                 hidx.unsafe_ptr().unsafe_store(r, UInt32(n_rows - 1 - r))
-        ctx.enqueue_copy(dst_buf=idx, src_ptr=hidx.unsafe_ptr())
-        ctx.enqueue_copy(dst_buf=sums, src_ptr=zf.unsafe_ptr())
+        upload_host_into[DType.uint32](ctx, idx, hidx)
+        upload_host_into[DType.float32](ctx, sums, zf)
         ctx.synchronize()
         ctx.enqueue_function[binary_hist_gather_kernel[False]](
             folds.unsafe_ptr(), fold_off.unsafe_ptr(), grp_off.unsafe_ptr(),
@@ -1779,7 +1691,7 @@ def check_gather_matches_direct() raises:
             grid_dim=(1, 1, 1), block_dim=(BLOCK_SIZE, 1, 1),
         )
         ctx.synchronize()
-        ctx.enqueue_copy(dst_ptr=out.unsafe_ptr(), src_buf=sums)
+        download_host_into[DType.float32](ctx, sums, out)
         ctx.synchronize()
         var label = "identity" if which == 0 else "reversed"
         var wrong = 0
@@ -1836,6 +1748,7 @@ def run_checks() raises:
 # checks/ that no CI job ran. One process per check name in CI keeps any
 # fresh-process precondition. Device column only: the suite needs a GPU, so the CPU build never instantiates it.
 from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
+from checks.native_tests.kit import download_host_into, upload_host_into
 
 
 def run_cases(column: Column, mut report: Report):

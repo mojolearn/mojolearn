@@ -200,13 +200,10 @@ def check_segmented_scan_vector(inclusive: Bool) raises:
     var n_blocks = (n + SEG_SCAN_BLOCK - 1) // SEG_SCAN_BLOCK
     var d_bsum = ctx.enqueue_create_buffer[DType.float32](n_blocks)
     var d_bflag = ctx.enqueue_create_buffer[DType.uint8](n_blocks)
-    ctx.enqueue_copy(dst_buf=d_vals, src_ptr=h_vals.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_flags, src_ptr=h_flags.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_out, src_ptr=h_out.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, d_vals, h_vals)
+    upload_host_into[DType.uint32](ctx, d_flags, h_flags)
+    upload_host_into[DType.float32](ctx, d_out, h_out)
     ctx.synchronize()
-    _ = h_flags^  # past the drain: a queued copy reads it after its last named use
-    _ = h_out^  # past the drain: a queued copy reads it after its last named use
-    _ = h_vals^  # past the drain: a queued copy reads it after its last named use
 
     launch_segmented_scan_vector(
         ctx, n, inclusive, SEGMENT_START_MASK, d_vals, d_flags, d_out,
@@ -215,7 +212,7 @@ def check_segmented_scan_vector(inclusive: Bool) raises:
     ctx.synchronize()
 
     var got = ctx.enqueue_create_host_buffer[DType.float32](n)
-    ctx.enqueue_copy(dst_ptr=got.unsafe_ptr(), src_buf=d_out)
+    download_host_into[DType.float32](ctx, d_out, got)
     ctx.synchronize()
 
     var incl = host_segmented_inclusive(values, flags)
@@ -296,13 +293,10 @@ def check_segmented_scan_scatter(inclusive: Bool) raises:
     var n_blocks = (n + SEG_SCAN_BLOCK - 1) // SEG_SCAN_BLOCK
     var d_bsum = ctx.enqueue_create_buffer[DType.float32](n_blocks)
     var d_bflag = ctx.enqueue_create_buffer[DType.uint8](n_blocks)
-    ctx.enqueue_copy(dst_buf=d_vals, src_ptr=h_vals.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_idx, src_ptr=h_idx.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_out, src_ptr=h_out.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, d_vals, h_vals)
+    upload_host_into[DType.uint32](ctx, d_idx, h_idx)
+    upload_host_into[DType.float32](ctx, d_out, h_out)
     ctx.synchronize()
-    _ = h_idx^  # past the drain: a queued copy reads it after its last named use
-    _ = h_out^  # past the drain: a queued copy reads it after its last named use
-    _ = h_vals^  # past the drain: a queued copy reads it after its last named use
 
     launch_segmented_scan_and_scatter_non_negative(
         ctx, n, inclusive, d_vals, d_idx, d_out,
@@ -311,7 +305,7 @@ def check_segmented_scan_scatter(inclusive: Bool) raises:
     ctx.synchronize()
 
     var got = ctx.enqueue_create_host_buffer[DType.float32](n)
-    ctx.enqueue_copy(dst_ptr=got.unsafe_ptr(), src_buf=d_out)
+    download_host_into[DType.float32](ctx, d_out, got)
     ctx.synchronize()
 
     var incl = host_segmented_inclusive(values, flags)
@@ -373,6 +367,7 @@ def run_checks() raises:
 # checks/ that no CI job ran. One process per check name in CI keeps any
 # fresh-process precondition. Device column only: the suite needs a GPU, so the CPU build never instantiates it.
 from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
+from checks.native_tests.kit import download_host_into, upload_host_into
 
 
 def run_cases(column: Column, mut report: Report):

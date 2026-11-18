@@ -67,6 +67,7 @@ from ensemble.randomforest import (
     min_samples_split_fraction,
     n_sampled_rows_for,
 )
+from checks.native_tests.kit import upload_host_into
 
 comptime DT = DType.float32
 comptime LT = DType.int32
@@ -149,13 +150,13 @@ def _fit(
     for i in range(d.n_rows * d.n_cols):
         hx.unsafe_ptr().unsafe_store(i, d.x[i])
     var dx = ctx.enqueue_create_buffer[DT](d.n_rows * d.n_cols)
-    ctx.enqueue_copy(dst_buf=dx, src_ptr=hx.unsafe_ptr())
+    upload_host_into[DT](ctx, dx, hx)
 
     var hy = ctx.enqueue_create_host_buffer[LT](d.n_rows)
     for i in range(d.n_rows):
         hy.unsafe_ptr().unsafe_store(i, d.y[i])
     var dy = ctx.enqueue_create_buffer[LT](d.n_rows)
-    ctx.enqueue_copy(dst_buf=dy, src_ptr=hy.unsafe_ptr())
+    upload_host_into[LT](ctx, dy, hy)
 
     var dsw = ctx.enqueue_create_buffer[DT](1)
     ctx.synchronize()
@@ -168,8 +169,6 @@ def _fit(
     _ = dx^
     _ = dy^
     _ = dsw^
-    _ = hx^
-    _ = hy^
     return forest^
 
 

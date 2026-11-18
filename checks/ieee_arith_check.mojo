@@ -262,10 +262,10 @@ def run_checks() raises:
     var db = ctx.enqueue_create_buffer[DType.float32](N)
     var dc = ctx.enqueue_create_buffer[DType.float32](N)
     var dbp = ctx.enqueue_create_buffer[DType.float32](N)
-    ctx.enqueue_copy(dst_buf=da, src_ptr=ha.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=db, src_ptr=hb.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=dc, src_ptr=hc.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=dbp, src_ptr=hbp.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, da, ha)
+    upload_host_into[DType.float32](ctx, db, hb)
+    upload_host_into[DType.float32](ctx, dc, hc)
+    upload_host_into[DType.float32](ctx, dbp, hbp)
 
     var o_div = ctx.enqueue_create_buffer[DType.float32](N)
     var o_sqrt = ctx.enqueue_create_buffer[DType.float32](N)
@@ -296,15 +296,15 @@ def run_checks() raises:
     var r_l2 = ctx.enqueue_create_host_buffer[DType.float32](N)
     var r_cos = ctx.enqueue_create_host_buffer[DType.float32](N)
     var r_fma = ctx.enqueue_create_host_buffer[DType.float32](N)
-    ctx.enqueue_copy(dst_ptr=r_div.unsafe_ptr(), src_buf=o_div)
-    ctx.enqueue_copy(dst_ptr=r_sqrt.unsafe_ptr(), src_buf=o_sqrt)
-    ctx.enqueue_copy(dst_ptr=r_l2.unsafe_ptr(), src_buf=o_l2)
-    ctx.enqueue_copy(dst_ptr=r_cos.unsafe_ptr(), src_buf=o_cos)
-    ctx.enqueue_copy(dst_ptr=r_fma.unsafe_ptr(), src_buf=o_fma)
+    download_host_into[DType.float32](ctx, o_div, r_div)
+    download_host_into[DType.float32](ctx, o_sqrt, r_sqrt)
+    download_host_into[DType.float32](ctx, o_l2, r_l2)
+    download_host_into[DType.float32](ctx, o_cos, r_cos)
+    download_host_into[DType.float32](ctx, o_fma, r_fma)
     var r_sqrt_id = ctx.enqueue_create_host_buffer[DType.float32](N)
     var r_cos_id = ctx.enqueue_create_host_buffer[DType.float32](N)
-    ctx.enqueue_copy(dst_ptr=r_sqrt_id.unsafe_ptr(), src_buf=o_sqrt_id)
-    ctx.enqueue_copy(dst_ptr=r_cos_id.unsafe_ptr(), src_buf=o_cos_id)
+    download_host_into[DType.float32](ctx, o_sqrt_id, r_sqrt_id)
+    download_host_into[DType.float32](ctx, o_cos_id, r_cos_id)
     ctx.synchronize()
 
     var q_div = r_div.unsafe_ptr().unsafe_bitcast[UInt32]()
@@ -538,12 +538,11 @@ def run_checks() raises:
         hsb.unsafe_ptr().unsafe_store(i, bv2)
         hsc.unsafe_ptr().unsafe_store(i, -prod)
         hsbp.unsafe_ptr().unsafe_store(i, Float32(1.0))
-    ctx.enqueue_copy(dst_buf=sa, src_ptr=hsa.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=sb, src_ptr=hsb.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=sc, src_ptr=hsc.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=sbp, src_ptr=hsbp.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, sa, hsa)
+    upload_host_into[DType.float32](ctx, sb, hsb)
+    upload_host_into[DType.float32](ctx, sc, hsc)
+    upload_host_into[DType.float32](ctx, sbp, hsbp)
     ctx.synchronize()
-    _ = hsbp^  # past the drain: a queued copy reads it after its last named use
     ctx.enqueue_function[arith_kernel](
         sa.unsafe_ptr(), sb.unsafe_ptr(), sc.unsafe_ptr(), sbp.unsafe_ptr(),
         s_div.unsafe_ptr(), s_sqrt.unsafe_ptr(), s_l2.unsafe_ptr(),
@@ -551,7 +550,7 @@ def run_checks() raises:
         grid_dim=((sepN + 255) // 256, 1, 1), block_dim=(256, 1, 1),
     )
     ctx.synchronize()
-    ctx.enqueue_copy(dst_ptr=hs_out.unsafe_ptr(), src_buf=s_out)
+    download_host_into[DType.float32](ctx, s_out, hs_out)
     ctx.synchronize()
 
     var built_sep = 0
@@ -657,20 +656,17 @@ def run_checks() raises:
     var dz_b = ctx.enqueue_create_buffer[DType.float32](SZ_CASES)
     var dz_c = ctx.enqueue_create_buffer[DType.float32](SZ_CASES)
     var dz_o = ctx.enqueue_create_buffer[DType.float32](SZ_CASES * SZ_OUTS)
-    ctx.enqueue_copy(dst_buf=dz_a, src_ptr=sz_a.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=dz_b, src_ptr=sz_b.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=dz_c, src_ptr=sz_c.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, dz_a, sz_a)
+    upload_host_into[DType.float32](ctx, dz_b, sz_b)
+    upload_host_into[DType.float32](ctx, dz_c, sz_c)
     ctx.synchronize()
-    _ = sz_a^  # past the drain: a queued copy reads it after its last named use
-    _ = sz_b^  # past the drain: a queued copy reads it after its last named use
-    _ = sz_c^  # past the drain: a queued copy reads it after its last named use
     ctx.enqueue_function[signed_zero_kernel](
         dz_a.unsafe_ptr(), dz_b.unsafe_ptr(), dz_c.unsafe_ptr(),
         dz_o.unsafe_ptr(),
         grid_dim=(1, 1, 1), block_dim=(32, 1, 1),
     )
     ctx.synchronize()
-    ctx.enqueue_copy(dst_ptr=sz_o.unsafe_ptr(), src_buf=dz_o)
+    download_host_into[DType.float32](ctx, dz_o, sz_o)
     ctx.synchronize()
 
     var sz_fail = 0
@@ -864,6 +860,7 @@ def _bits(x: Float32) -> UInt32:
 # checks/ that no CI job ran. One process per check name in CI keeps any
 # fresh-process precondition. Device column only: the suite needs a GPU, so the CPU build never instantiates it.
 from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
+from checks.native_tests.kit import download_host_into, upload_host_into
 
 
 def run_cases(column: Column, mut report: Report):

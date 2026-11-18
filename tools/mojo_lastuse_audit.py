@@ -36,6 +36,13 @@ A DRAIN is a statement with `synchronize(` or a call (`name(` or `name[..](`) to
 has `synchronize(` or calls a function that drains (any scanned file, by name; `main` excluded). Fix: `_ = X^` AFTER the drain. A keep-alive placed
 before the drain is the same bug and fails.
 
+A CHECK ENQUEUES NO HOST-TO-DEVICE COPY ITSELF (2026-11-18, lane fx-check-kit). The 587 findings of the rule above
+had one cause: every check wrote its own upload sequence. So a file under checks/native_tests/ other than the kit
+(checks/native_tests/kit.mojo) fails (kind `own-copy`) on any `enqueue_copy` with `src_ptr=`, or with `src_buf=` naming
+a pinned host buffer of the function: it calls the kit (`upload`, `upload_into`, `upload_host_into`, ...), which
+holds the host memory and drains before it returns. A check whose subject is the queue itself uses the kit's
+`..._undrained_keep` forms or gets an allow line with its reason.
+
 Fix: name the local again after the pointer's last use (`_ = x^`; free). A true false alarm (a stack array whose
 slot outlives the name, a value the caller owns) gets one line in tools/mojo_lastuse_allow.txt:
 `<path>:<function>:<local>  # <reason>`. Unlisted findings fail; allow lines that match nothing are printed as STALE.
@@ -70,6 +77,11 @@ _LOOP = re.compile(r"^\s*(?:for|while)\b")
 _PIN = re.compile(r"(?<![\w.])var\s+(\w+)\s*(?::[^=]*)?=\s*[\w.\[\]]*enqueue_create_host_buffer")
 _LST = re.compile(r"(?<![\w.])var\s+(\w+)\s*(?::\s*List\[[^=]*)?=\s*(?:List\[|\[)")
 _PTR_OF = re.compile(r"^\s*var\s+(\w+)\s*(?::[^=]*)?=\s*(\w+)\.unsafe_ptr\(\)\s*$")
+#: the checks that take their transfers through the kit, and the kit
+KIT_DIR = "checks/native_tests/"
+KIT = "checks/native_tests/kit.mojo"
+_OWN_PTR = re.compile(r"\bsrc_ptr\s*=\s*([^,)]*)")
+_OWN_BUF = re.compile(r"\bsrc_buf\s*=\s*(\w+)\b")
 _SYNC = re.compile(r"\bsynchronize\s*\(")
 _CALLEE = re.compile(r"\b([A-Za-z_]\w*)\s*(?:\[[^\[\]]*\])?\s*\(")
 _STRING = re.compile(r'"(?:\\.|[^"\\])*"|\'(?:\\.|[^\'\\])*\'')
@@ -420,6 +432,8 @@ def scan_text(path, text, helpers):
                                     last_use=body[last_x][0] + 1, fails=bad, why=why))
         if "enqueue_copy" in text:
             out.extend(_queued(path, fname, body, idents, effective_last, drain_call, seen))
+            if path.startswith(KIT_DIR) and path != KIT:
+                out.extend(_own_copies(path, fname, body))
     return out
 
 
@@ -480,6 +494,28 @@ def _queued(path, fname, body, idents, effective_last, drain_call, seen):
                             sink="enqueue_copy", last_use=body[last][0] + 1, fails=True,
                             why=f"the enqueue_copy at line {body[first][0] + 1} still reads it; put `_ = {x}^` "
                                 f"after {where}"))
+    return out
+
+
+def _own_copies(path, fname, body):
+    """The OWN-COPY findings of one function of a check under checks/native_tests/ (module docstring)."""
+    out = []
+    pinned = {m.group(1) for (_, _, s) in body[1:] for m in [_PIN.search(s)] if m}
+    for q in range(1, len(body)):
+        s = body[q][2]
+        if "enqueue_copy" not in s:
+            continue
+        m = _OWN_PTR.search(s)
+        if m:
+            source = (_IDENT.findall(m.group(1)) or ["host"])[-1]
+        else:
+            b = _OWN_BUF.search(s)
+            if not b or b.group(1) not in pinned:
+                continue
+            source = b.group(1)
+        out.append(dict(path=path, line=body[q][0] + 1, function=fname, local=source, kind="own-copy",
+                        sink="enqueue_copy", last_use=body[q][0] + 1, fails=True,
+                        why="a check enqueues no host-to-device copy itself: call " + KIT))
     return out
 
 
@@ -613,6 +649,9 @@ def audit(root=ROOT, commit=None, workers=None, all_kinds=False, out=print):
     for e in errors:
         out(f"LASTUSE FAIL {e}")
     for f in failing:
+        if f["kind"] == "own-copy":
+            out(f"LASTUSE FAIL {f['path']}:{f['line']}: {f['local']} in {f['function']} (own-copy): {f['why']}")
+            continue
         out(f"LASTUSE FAIL {f['path']}:{f['line']}: {f['local']} in {f['function']} ({f['kind']} pointer, "
             f"{f['sink']}): last named use line {f['last_use']}, {f['why']}; keep it alive (`_ = {f['local']}^`)")
     for key in stale:

@@ -44,7 +44,7 @@ def check_copy_histograms() raises:
         x ^= x >> 17
         x ^= x << 5
         h.unsafe_ptr().unsafe_store(i, Float32(Int(x % UInt32(100000))))
-    ctx.enqueue_copy(dst_buf=hist, src_ptr=h.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, hist, h)
 
     # Copy 1 -> 5 and 3 -> 6. Non-contiguous, out of order, and leaving
     # leaves 0, 2, 4 and 7 alone.
@@ -66,11 +66,9 @@ def check_copy_histograms() raises:
     for i in range(n_pairs):
         hl.unsafe_ptr().unsafe_store(i, UInt32(src_ids[i]))
         hr.unsafe_ptr().unsafe_store(i, UInt32(dst_ids[i]))
-    ctx.enqueue_copy(dst_buf=left, src_ptr=hl.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=right, src_ptr=hr.unsafe_ptr())
+    upload_host_into[DType.uint32](ctx, left, hl)
+    upload_host_into[DType.uint32](ctx, right, hr)
     ctx.synchronize()
-    _ = hl^  # past the drain: a queued copy reads it after its last named use
-    _ = hr^  # past the drain: a queued copy reads it after its last named use
 
     ctx.enqueue_function[copy_histograms_kernel](
         left.unsafe_ptr(), right.unsafe_ptr(),
@@ -81,7 +79,7 @@ def check_copy_histograms() raises:
     ctx.synchronize()
 
     var out = ctx.enqueue_create_host_buffer[DType.float32](cells)
-    ctx.enqueue_copy(dst_ptr=out.unsafe_ptr(), src_buf=hist)
+    download_host_into[DType.float32](ctx, hist, out)
     ctx.synchronize()
 
     var copied_wrong = 0
@@ -138,6 +136,7 @@ def run_checks() raises:
 # checks/ that no CI job ran. One process per check name in CI keeps any
 # fresh-process precondition. Device column only: the suite needs a GPU, so the CPU build never instantiates it.
 from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
+from checks.native_tests.kit import download_host_into, upload_host_into
 
 
 def run_cases(column: Column, mut report: Report):
