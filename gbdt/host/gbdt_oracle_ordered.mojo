@@ -568,7 +568,7 @@ def _ordered_tree_structure(
         raise Error("plain cosine needs one fold and cannot select L2")
     var doc_count = len(doc_ids)
     var max_parts = 1 << (fold_bits + max_depth)
-    var stripe = 1 << Int(ceil(log2(Float32(fold_count))))
+    var stripe = 1 << _int_log2_floor_ceil(fold_count)  # exact integer ceil(log2), as the device stripe (lane fb13)
     var s = _OrdSubsets(
         List[UInt32](length=doc_count, fill=UInt32(0)),
         List[Int](length=doc_count, fill=0),
