@@ -1139,7 +1139,62 @@ def _region_import_edges(rel, wanted, narrow_unused=True):
                 merge(mod_files, {alias.name})
                 if registry in _reexport_registries() and registry != rel:
                     merge(_rebindings(registry).get(alias.name, set()), {alias.name})
+        elif isinstance(node, ast.Call):
+            dotted = _dynamic_import_dotted(rel, node)
+            if dotted:
+                merge(_module_paths(dotted, listing), None)
     return out
+
+
+def _package_expr(node):
+    """True for an expression that is this module's package name: `__package__`, or
+    `__name__.rpartition(".")[0]` (a module's package; an `__init__.py` is handled by the caller)."""
+    if isinstance(node, ast.Name) and node.id == "__package__":
+        return "package"
+    if (isinstance(node, ast.Subscript) and isinstance(node.slice, ast.Constant) and node.slice.value == 0
+            and isinstance(node.value, ast.Call) and isinstance(node.value.func, ast.Attribute)
+            and node.value.func.attr == "rpartition" and isinstance(node.value.func.value, ast.Name)
+            and node.value.func.value.id == "__name__"
+            and [getattr(a, "value", None) for a in node.value.args] == ["."]):
+        return "name-parent"
+    return None
+
+
+def _dynamic_import_dotted(rel, call):
+    """The package-relative dotted module an `importlib.import_module(...)` call of `rel` loads, when
+    its argument names it without a runtime value: `"mojolearn.x"`, or the package plus a literal
+    suffix (`__package__ + ".x"`, `__name__.rpartition(".")[0] + ".models.causal_lm"`). None
+    otherwise (a name built from a variable is not resolved here).
+
+    A MODULE `__getattr__` THAT IMPORTS (lane lazy-import-fix, 76de1ab11d, 2026-11-12):
+    `_native_neural_bridge.__getattr__` runs `importlib.import_module(<package> + ".models.causal_lm")`
+    at the first read of RUNTIME/CONTEXT, which every Mamba and Transformer block call makes; that
+    module imports `neural_inference`. Without this edge the mamba lanes left the map of
+    neural_inference.py."""
+    func = call.func
+    if not ((isinstance(func, ast.Attribute) and func.attr == "import_module")
+            or (isinstance(func, ast.Name) and func.id == "import_module")) or not call.args:
+        return None
+    arg = call.args[0]
+    if isinstance(arg, ast.Constant) and isinstance(arg.value, str):
+        if arg.value == "mojolearn" or arg.value.startswith("mojolearn."):
+            return arg.value[len("mojolearn"):].lstrip(".") or None
+        return None
+    if not (isinstance(arg, ast.BinOp) and isinstance(arg.op, ast.Add)
+            and isinstance(arg.right, ast.Constant) and isinstance(arg.right.value, str)
+            and arg.right.value.startswith(".") and len(arg.right.value) > 1):
+        return None
+    kind = _package_expr(arg.left)
+    if kind is None:
+        return None
+    base = os.path.dirname(rel)
+    if kind == "name-parent" and os.path.basename(rel) == "__init__.py":
+        base = os.path.dirname(base)
+    if not (base == PKG or base.startswith(PKG + os.sep)):
+        return None
+    prefix = os.path.relpath(base, PKG).replace(os.sep, ".")
+    prefix = "" if prefix == "." else prefix
+    return ".".join(p for p in (prefix, arg.right.value[1:]) if p)
 
 
 _REGIONS = {}
