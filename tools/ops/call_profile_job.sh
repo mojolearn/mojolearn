@@ -228,13 +228,24 @@ fi
 mapfile -t BARGS < "$RES/plan/board-args.txt"
 COMMON=("${BARGS[@]}" --data-root "$DATA_ROOT" --rounds 1 --evidence-local-only --fixtures-venv "$CACHE_ROOT/venv-nf")
 
-# ---- install (CPU): the candidate venv, only when the pod has none ---------------------------------------------
+# ---- install (CPU): the candidate venv, when the pod has none or it holds another wheel ---------------------------------------------
 MAN=${CP_MANIFEST:-}
 if [ -z "$MAN" ]; then
     # shellcheck disable=SC2012
     MAN=$(ls -t "$(dirname "$RES")"/*/job/wheel-manifest-candidate.json 2> /dev/null | head -n 1)
 fi
-if part install && [ ! -x "$APY" ]; then
+# A venv that holds another wheel than the manifest's is reinstalled: on 2026-11-18 an A/B job left its base wheel in
+# the shared venv, the newest manifest named the later candidate, and every row was refused (no wall time, exit 7).
+installed_version() {
+    [ -x "$APY" ] && "$APY" -c 'import importlib.metadata as m
+for n in ("mojolearn-core", "mojolearn"):
+    try:
+        print(m.version(n)); break
+    except m.PackageNotFoundError:
+        pass' 2> /dev/null
+}
+MAN_VERSION=$([ -f "$MAN" ] && $PY -c 'import json, sys; print(json.load(open(sys.argv[1])).get("version", ""))' "$MAN" 2> /dev/null)
+if part install && { [ ! -x "$APY" ] || { [ -n "$MAN_VERSION" ] && [ "$(installed_version)" != "$MAN_VERSION" ]; }; }; then
     phase install
     [ -f "$MAN" ] || { say "no venv at $VENV and no wheel manifest (CP_MANIFEST)"; exit 4; }
     $PY tools/bench_board.py "${COMMON[@]}" --ours-install-only --install-only --venv "$VENV" --cache "$CACHE_ROOT/i-candidate" \
@@ -243,12 +254,7 @@ if part install && [ ! -x "$APY" ]; then
     phase_end $?
 fi
 [ -x "$APY" ] || { say "no venv for the candidate at $VENV"; exit 4; }
-WHEEL=$("$APY" -c 'import importlib.metadata as m
-for n in ("mojolearn-core", "mojolearn"):
-    try:
-        print(m.version(n)); break
-    except m.PackageNotFoundError:
-        pass' 2> /dev/null)
+WHEEL=$(installed_version)
 say "candidate $WHEEL venv $VENV manifest ${MAN:-none}"
 # which shared objects of the installed wheel carry a symbol table (perf names their functions) and an unwind table
 SITE=$("$APY" -c 'import sysconfig; print(sysconfig.get_paths()["purelib"])' 2> /dev/null)
