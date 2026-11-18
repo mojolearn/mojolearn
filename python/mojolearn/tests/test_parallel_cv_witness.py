@@ -6,9 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from needs_built_package import require_built_package
-require_built_package()
-from parallel_cv_witness import compare_records, read_records
+from mojolearn._parallel_cv_witness import compare_records, read_records
 
 
 def records(workers=2):
@@ -76,7 +74,7 @@ def test_scorer_retains_model_and_output_witnesses_or_fails(tmp_path, monkeypatc
     import numpy as np
     import mojolearn as ml
     from mojolearn import _backend, _gpu_witness
-    from parallel_cv_witness import score_with_witness, array_digest
+    from mojolearn._parallel_cv_witness import score_with_witness, array_digest
 
     values = np.asarray([.25, -.5], dtype='<f4')
     binding_path = tmp_path / 'fake.so'

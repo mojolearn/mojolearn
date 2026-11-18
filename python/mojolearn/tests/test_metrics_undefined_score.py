@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Host-independent exceptional arithmetic in the actual metric epilogue.
 
 The per-output scores `1 - num / den` and their multioutput average are the
@@ -12,8 +13,6 @@ import struct
 import numpy as np
 import pytest
 
-from needs_built_package import require_built_package
-require_built_package()
 from mojolearn import _expansion_metrics as metrics
 
 
