@@ -1,0 +1,86 @@
+diff --git a/autograd/kernels/cnn.mojo b/autograd/kernels/cnn.mojo
+index 9bfc5f985c..0bea9a1f7b 100644
+--- a/autograd/kernels/cnn.mojo
++++ b/autograd/kernels/cnn.mojo
+@@ -384,7 +384,7 @@ def conv2d_backward_m(a: List[Int], dev: Int, prm: List[Int32]) raises:
+     var dw = m_in(ctx, 1, a[1], OC * ckk, isdev(dev, 1))
+     var ddout = m_in(ctx, 2, a[2], rows * OC, isdev(dev, 2))
+     var dp = put_prm(ctx, 3, prm)
+-    # one decision per layer (x_cnn/device.mojo ni12_implicit_layer), the forward's
++    # one decision per layer (x_cnn/device.mojo NI12_FILL_RULE), the forward's
+     var implicit = ni12_implicit_layer(OC, ckk)
+     var cols = ws(ctx, 4, 1 if implicit else rows * ckk)
+     var g = ws(ctx, 5, rows * OC)
+@@ -521,7 +521,7 @@ def conv_block_backward_into[resident: Bool = False](
+     var dp = put_prm(ctx, 5, cprm)
+     var saved = resident and save_y != 0 and save_cols != 0
+     var tile_rows = rows
+-    # one decision per layer (x_cnn/device.mojo ni12_implicit_layer), the forward's; an
++    # one decision per layer (x_cnn/device.mojo NI12_FILL_RULE), the forward's; an
+     # implicit layer's save slot is one word (cnn_block_saved_sizes)
+     var implicit = ni12_implicit_layer(OC, ckk)
+     var cols = view(ctx, FP(unsafe_from_address=save_cols), 1 if implicit else rows * ckk) if saved else ws(ctx, 7, 1 if implicit else tile_rows * ckk)
+diff --git a/x_cnn/device.mojo b/x_cnn/device.mojo
+index a0fe98ec03..72322753cd 100644
+--- a/x_cnn/device.mojo
++++ b/x_cnn/device.mojo
+@@ -102,7 +102,7 @@ comptime _NI_CNN_ENABLED = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+ # v1446; AMD 303.5 -> 274.0 ms, b0080; avg 0.90x) while the 2026-10-10 promotion A/B had implicit conv winning on conv2d and
+ # resnet-block (0.69x-0.74x). Decide per algorithm (cnn-clf off, conv2d/resnet-block on) after one confirm run on both vendors.
+ # DECIDED PER LAYER 2026-11-15 (lane fix-cnn-clf-implicit-conv): not per algorithm but by the
+-# layer's own tile fill, `ni12_implicit_layer` below. RUN OWED against both old arms.
++# layer's own tile fill, `ni12_implicit_layer` below (NI12_FILL_RULE). RUN OWED against both old arms.
+ comptime NI12_IMPLICIT_CONV = _NI_CNN_ENABLED and not is_defined["MOJOLEARN_NI12_IMPLICIT_CONV_OFF"]()
+ # NI12 FILL RULE (lane fix-cnn-clf-implicit-conv, 2026-11-15). Why implicit conv lost on cnn-clf:
+ # `implicit_conv_kernel` is a 64-row x 64-channel register tile and `implicit_wgrad_leaf_kernel`
+@@ -121,16 +121,9 @@ comptime NI12_IMPLICIT_CONV = _NI_CNN_ENABLED and not is_defined["MOJOLEARN_NI12
+ # (owed row ni12-fill-rule-neighbour). Bits: the arms are the same contract words (the
+ # promotion's digests did not move), so the per-layer choice moves no bits; the host column has
+ # no implicit/materialized split.
+-# `-D MOJOLEARN_NI12_IMPLICIT_CONV_OFF` takes the materialized path on every layer (the g50ebe26a5 winner).
+-# VERDICT 2026-11-18 on `-D MOJOLEARN_NI12_FILL_RULE_OFF` (implicit conv on every layer, the 2026-10-10 default;
+-# A/B ab1, owed row ni12-fill-rule, NVIDIA L40S host 37f71a6102af, driver 595.112.07, wheel d652a4b0a1, base and
+-# arm back to back in one job, one run per arm, digests equal on all 6 cells): cnn-clf fit 189.9 -> 218.2 ms (1.15x
+-# SLOWER with the arm), resnet-block fit 15.50 -> 16.14 (1.04), conv2d fit / infer and resnet-block infer
+-# 1.00-1.01, cnn-clf infer 10.55 -> 10.04 (0.95, a 10 ms cell). No gain: the per-layer fill rule stays the
+-# default and the arm is deleted. Limits: NVIDIA only (AGENTS.md part 8); ni12-fill-rule-neighbour (OC 32..63)
+-# and the ni12-implicit-conv-off arm are still owed.
+-# TOMBSTONE: MOJOLEARN_NI12_FILL_RULE_OFF (DROPPED-slower: implicit on every layer 1.15x on cnn-clf fit, rest 0.95-1.04, NV L40S 2026-11-18) deleted 2026-11-18 by lane/fb15-ab-verdicts; code recoverable at c989eb9222.
+-# Restore: git apply experiments/removed/MOJOLEARN_NI12_FILL_RULE_OFF.patch; record in docs/TOMBSTONES.md.
++# `-D MOJOLEARN_NI12_FILL_RULE_OFF` restores implicit conv on every layer (the 2026-10-10 default);
++# `-D MOJOLEARN_NI12_IMPLICIT_CONV_OFF` the materialized path on every layer (the g50ebe26a5 winner).
++comptime NI12_FILL_RULE = NI12_IMPLICIT_CONV and not is_defined["MOJOLEARN_NI12_FILL_RULE_OFF"]()
+ # TOMBSTONE: MOJOLEARN_NI14_COL2IM (DELETE-ARM, unmeasured opt-in, rule a) deleted 2026-11-15 by lane/expdel2-35-neural; code recoverable at 145be10898.
+ # Restore: git apply experiments/removed/MOJOLEARN_NI14_COL2IM.patch
+ # (Sweep 2026-11-15: NI14_BOUNDED_COL2IM = False removed with its reader in autograd/kernels/cnn.mojo.)
+@@ -421,7 +414,7 @@ comptime NI12_RC = 4
+ comptime NI12_TMP = NI12_TM + 1
+ comptime NI12_TNP = NI12_TN + 1
+ comptime NI12_NCELL = NI12_RC * NI12_RC
+-#: half a tile axis: the least live channels / taps a layer needs to run implicit (ni12_implicit_layer)
++#: half a tile axis: the least live channels / taps a layer needs to run implicit (NI12_FILL_RULE)
+ comptime NI12_FILL_MIN = NI12_TN // 2
+ 
+ 
+@@ -430,9 +423,11 @@ def ni12_implicit_layer(OC: Int, ckk: Int) -> Bool:
+     """Whether a conv layer with OC output channels over ckk = C*KH*KW taps
+     runs the implicit conv (forward and weight gradient) or the materialized
+     cols (direct conv / im2col + GEMM). One decision per layer, read by the
+-    forward, the backward and the tape's save sizing alike (the fill rule, see the verdict above NI12_IMPLICIT_CONV)."""
++    forward, the backward and the tape's save sizing alike (see NI12_FILL_RULE)."""
+     comptime if not NI12_IMPLICIT_CONV:
+         return False
++    comptime if not NI12_FILL_RULE:
++        return True
+     return OC >= NI12_FILL_MIN and ckk >= NI12_FILL_MIN
+ 
+ 
+@@ -2466,7 +2461,7 @@ def _conv_relu_on_device(
+         if rows > 0 and OC > 0 and ni12_implicit_layer(OC, ckk):
+             # lane gap-gemm-layers: the backward's dW gathers the columns
+             # too (`_implicit_wgrad`, the same per-layer rule), so `need_cols`
+-            # never builds them. A narrow layer (ni12_implicit_layer) falls through
++            # never builds them. A narrow layer (NI12_FILL_RULE) falls through
+             # to the direct conv / im2col + GEMM below, which honour `need_cols`.
+             var lp = contract_partition(ckk)
+             ctx.enqueue_function[implicit_conv_kernel](

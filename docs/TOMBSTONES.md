@@ -917,6 +917,10 @@ in the tables after the sections.
 | [`MOJOLEARN_BYTE_LM_GENERIC_OPS`](#mojolearn_byte_lm_generic_ops-fb12-loser-arms) | Neural (byte LM program: generic OPS_EMBEDDING, no next-norm fusion) | removed (decided B arm: L40S B 1.36x slower) | 2026-11-17 | [MOJOLEARN_BYTE_LM_GENERIC_OPS.fb12-loser-arms.patch](../experiments/removed/MOJOLEARN_BYTE_LM_GENERIC_OPS.fb12-loser-arms.patch) |
 | [`MOJOLEARN_BYTE_LM_PROGRAM_STEP`](#mojolearn_byte_lm_program_step-fb12-loser-arms) | Neural (byte LM trainer on its captured program, every column) | removed (decided B arm: L40S B 1.36x slower) | 2026-11-17 | [MOJOLEARN_BYTE_LM_PROGRAM_STEP.fb12-loser-arms.patch](../experiments/removed/MOJOLEARN_BYTE_LM_PROGRAM_STEP.fb12-loser-arms.patch) |
 | [`MOJOLEARN_IDN_CHOL_OPS_FIT`](#mojolearn_idn_chol_ops_fit-fb12-loser-arms) | Kernel / GP / mixture / x_decomp (Cholesky fits on the executor ops) | removed (decided B arm: L40S 14 cells B 0.91-1.10x, same speed) | 2026-11-17 | [MOJOLEARN_IDN_CHOL_OPS_FIT.fb12-loser-arms.patch](../experiments/removed/MOJOLEARN_IDN_CHOL_OPS_FIT.fb12-loser-arms.patch) |
+| [`MOJOLEARN_AUTOGRAD_PREDICT`](#mojolearn_autograd_predict-fb15-ab-verdicts) | Neural (MLP predict through the tape forward, `mlp_predict_autograd`) | removed (decided B arm: L40S B 1.04-1.06x slower on the four MLP infer cells) | 2026-11-18 | [MOJOLEARN_AUTOGRAD_PREDICT-2026-11-18.patch](../experiments/removed/MOJOLEARN_AUTOGRAD_PREDICT-2026-11-18.patch) |
+| [`MOJOLEARN_TREES_BLOCK_SCRATCH_FILL_OFF`](#mojolearn_trees_block_scratch_fill_off-fb15-ab-verdicts) | Trees (GBDT histogram scratch: whole-buffer zero per block) | removed (decided B arm: L40S B 1.38-1.40x slower on lossguide istella fit) | 2026-11-18 | [MOJOLEARN_TREES_BLOCK_SCRATCH_FILL_OFF.patch](../experiments/removed/MOJOLEARN_TREES_BLOCK_SCRATCH_FILL_OFF.patch) |
+| [`MOJOLEARN_LINEAR_LBD_BATCH_OFF`](#mojolearn_linear_lbd_batch_off-fb15-ab-verdicts) | Linear (device L-BFGS: one flag read per trial, 0.8.55's form) | removed (decided B arm: L40S B 1.00-1.02x, no gain) | 2026-11-18 | [MOJOLEARN_LINEAR_LBD_BATCH_OFF.patch](../experiments/removed/MOJOLEARN_LINEAR_LBD_BATCH_OFF.patch) |
+| [`MOJOLEARN_NI12_FILL_RULE_OFF`](#mojolearn_ni12_fill_rule_off-fb15-ab-verdicts) | Neural (CNN: implicit conv on every layer) | removed (decided B arm: L40S B 1.15x slower on cnn-clf fit, rest 0.95-1.04) | 2026-11-18 | [MOJOLEARN_NI12_FILL_RULE_OFF.patch](../experiments/removed/MOJOLEARN_NI12_FILL_RULE_OFF.patch) |
 
 | [`MOJOLEARN_IDN_M1_SCAN`](#mojolearn_idn_m1_scan) | Neural (Mamba-1 scan selector, IDENTICAL) | removed (opt-in arms, no A/B recorded) | 2026-11-15 | [MOJOLEARN_IDN_M1_SCAN.patch](../experiments/removed/MOJOLEARN_IDN_M1_SCAN.patch) |
 | [`MOJOLEARN_IDN_M2_CB_LOWER_OFF`](#mojolearn_idn_m2_cb_lower_off) | Neural (Mamba-2 oracle cb.G triangle, IDENTICAL) | removed (old path, no A/B recorded) | 2026-11-15 | [MOJOLEARN_IDN_M2_CB_LOWER_OFF.patch](../experiments/removed/MOJOLEARN_IDN_M2_CB_LOWER_OFF.patch) |
@@ -22463,3 +22467,62 @@ brings back training/byte_lm_program.mojo), then GENERIC_OPS.
   scratch buffers per fit and three small buffers per precision call.
 - Deleted by `e061695d42` on lane/fb12-loser-arms; recoverable at `2203db7094`.
 - Patch: `experiments/removed/MOJOLEARN_IDN_CHOL_OPS_FIT.fb12-loser-arms.patch`. Refusal: `core/experiment_guards_kernel.mojo`.
+
+## Decided B arms: lane fb15-ab-verdicts (2026-11-18)
+
+Evidence for every section below: A/B ab1, NVIDIA L40S (RunPod host 37f71a6102af, driver 595.112.07, 14-core cgroup), wheel set d652a4b0a1 (candidate) and its B sets, base (the candidate) and arm back to back in one job, one run per arm, 2026-11-18; table `~/mojolearn-evidence/measure-candidate/build-d652a4b0a1/ab1-table.txt`, boards `~/mojolearn-evidence/measure-candidate/build-d652a4b0a1/ab1/board-tg-ab-<arm>-{base-,}full/board.json`. NVIDIA alone decides while AGENTS.md part 8 is live. Code recoverable at `c989eb9222` (the lane's base on preinteg/wave2-20261113).
+
+### mojolearn_autograd_predict (fb15-ab-verdicts)
+
+- What it was: `-D MOJOLEARN_AUTOGRAD_PREDICT` (restored 2026-11-17 by lane fb-neural as the opt-in B arm) routed
+  `mlp_predict` to `mlp_predict_autograd`, the tape forward in inference mode chunk by chunk, instead of the hand
+  `mlp_predict` over `mlp_forward` (one OP_GEMM_EPI a layer). The recurrent predict was never on this switch.
+- Verdict: B slower on all four MLP infer cells, mlp-clf istella 148.3 -> 154.7 ms (1.04), mlp-clf taxi 21.48 -> 22.46
+  (1.05), mlp-reg taxi 10.49 -> 11.08 (1.06), mlp-reg istella 74.72 -> 79.21 (1.06); the four fits 0.99-1.00;
+  neural/mlp-predict 0.96 (0.089 ms). Digests equal on all 9 cells; quality equal. The hand predict stays.
+- Files: sequence/mlp_fit.mojo (mlp_predict_autograd, AUTOGRAD_PREDICT, the branch in mlp_predict),
+  autograd/checks/infer_cases.mojo (the `_predict_tape` check case of the deleted function). About 60 code lines.
+- Deleted by `96b3abb0de` on lane/fb15-ab-verdicts; recoverable at `c989eb9222`.
+- Patch: `experiments/removed/MOJOLEARN_AUTOGRAD_PREDICT-2026-11-18.patch` (the 2026-11-08 patch
+  `MOJOLEARN_AUTOGRAD_PREDICT.patch` stays for the X3 fold-in). Refusal: `core/experiment_guards_neural.mojo`.
+  No grid_controls entry existed. EXPERIMENTS.md: the `MOJOLEARN_AUTOGRAD_PREDICT` row of lane fb-neural.
+
+### mojolearn_trees_block_scratch_fill_off (fb15-ab-verdicts)
+
+- What it was: `-D MOJOLEARN_TREES_BLOCK_SCRATCH_FILL_OFF` (lane fix-lossguide-fit, 2026-11-15) restored the whole-buffer
+  zero of the histogram scratch `block_hist` (pool slots x stat_count x widest block folds) at every non-fixed-point
+  block of every histogram build in `launch_histograms_for_blocks`; the default zeroes the block's own span.
+- Verdict: B 1.38x / 1.40x slower on gbdt-lossguide istella fit (ours 13.92 -> 19.24 s, ours-gain0 14.28 -> 20.02 s),
+  gbdt-depthwise istella prebinned fit 1.09x, 26 other cells 0.92-1.06x; two gbdt-symmetric istella infer cells at
+  0.77 / 0.78, which the define cannot reach (read only in the fit-time histogram build; predict builds no histogram).
+  Digests equal on all 30 cells. Rows lg-block-scratch-fill-year / -covtype were not run (the verdict is the cost
+  formula's: the saved bytes grow with the widest block's width, nothing grows).
+- Files: gbdt/methods/greedy_subsets_searcher/greedy_search_helper.mojo (BLOCK_SCRATCH_FILL_OFF and its branch).
+- Deleted by `a159bae180` on lane/fb15-ab-verdicts; recoverable at `c989eb9222`.
+- Patch: `experiments/removed/MOJOLEARN_TREES_BLOCK_SCRATCH_FILL_OFF.patch`. Refusal: `core/experiment_guards_trees.mojo`;
+  grid entry moved to `removed` in `trees-structural.json` (BLOCK_SCRATCH_FILL_OFF).
+
+### mojolearn_linear_lbd_batch_off (fb15-ab-verdicts)
+
+- What it was: `-D MOJOLEARN_LINEAR_LBD_BATCH_OFF` (lane fb3-band, 2026-11-17) took 0.8.55's device L-BFGS form off Apple
+  in `identical`: one read of the flag words per trial instead of LBD_BATCH first-trial units queued per read.
+- Verdict: B 1.00-1.02x on all 8 cells (huber taxi fit 157.8 -> 160.4 ms, huber istella 743.8 -> 742.8, logreg-cv taxi
+  72.12 -> 72.34, logreg-cv istella 8296 -> 8308; infer 1.00-1.01). Digests equal. No gain: the gated queue stays.
+  The one-read-per-trial loop itself stays for Apple `identical` and `fast` (LBD_BATCH_ON is false there).
+- Files: x_linear/lbfgs_device.mojo (the define term of LBD_BATCH_ON and its `is_defined` import).
+- Deleted by `8b151c0fb0` on lane/fb15-ab-verdicts; recoverable at `c989eb9222`.
+- Patch: `experiments/removed/MOJOLEARN_LINEAR_LBD_BATCH_OFF.patch`. Refusal: `core/experiment_guards_linear.mojo`.
+  No grid_controls entry existed.
+
+### mojolearn_ni12_fill_rule_off (fb15-ab-verdicts)
+
+- What it was: `-D MOJOLEARN_NI12_FILL_RULE_OFF` (lane fix-cnn-clf-implicit-conv, 2026-11-15) ran the implicit conv on
+  every layer (the 2026-10-10 default) instead of the per-layer fill rule (`ni12_implicit_layer`: OC >= 32 and
+  C*KH*KW >= 32).
+- Verdict: B 1.15x slower on cnn-clf fit (189.9 -> 218.2 ms), resnet-block fit 1.04, conv2d fit / infer and
+  resnet-block infer 1.00-1.01, cnn-clf infer 0.95 (10 ms). Digests equal on all 6 cells. The fill rule stays;
+  ni12-fill-rule-neighbour and the ni12-implicit-conv-off arm stay owed.
+- Files: x_cnn/device.mojo (NI12_FILL_RULE and its branch in ni12_implicit_layer); comments in autograd/kernels/cnn.mojo.
+- Deleted by `e8c60877c3` on lane/fb15-ab-verdicts; recoverable at `c989eb9222`.
+- Patch: `experiments/removed/MOJOLEARN_NI12_FILL_RULE_OFF.patch`. Refusal: `core/experiment_guards_neural.mojo`;
+  grid entry moved to `removed` in `neural-seq-train-dedupe.json` (ni12_fill_rule).
