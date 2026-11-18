@@ -58,6 +58,13 @@ def merge(values):
     return Value("unknown", hot=hot)
 
 
+def merge_env(envs):
+    """One environment for the join of several control-flow paths: each name merges its value on every path
+    (UNKNOWN where a path never bound it)."""
+    names = set().union(*envs)
+    return {name: merge([env.get(name, UNKNOWN) for env in envs]) for name in names}
+
+
 class Unsafe(Exception):
     pass
 
@@ -629,15 +636,30 @@ class Effects:
                 first = self.env.copy()
                 self.env = before.copy()
                 self.statements(node.orelse)
-                self.env = {
-                    name: merge([first.get(name, UNKNOWN), self.env.get(name, UNKNOWN)])
-                    for name in set(first) | set(self.env)
-                }
+                self.env = merge_env([first, self.env])
             elif isinstance(node, ast.Return):
                 if self.expr(node.value).hot:
                     raise Unsafe("metadata returned to unknown consumer")
             elif isinstance(node, ast.Raise):
                 self.expr(node.exc)
+            elif isinstance(node, ast.Try):
+                # every path is analysed: the body (it may stop at any statement, so the environment before it
+                # is merged too), each handler, the else branch after the body, then the finally block on all of
+                # them (8927e97ba6 put a try around the forest image's tier probe in the archive connector)
+                before = self.env.copy()
+                self.statements(node.body)
+                self.statements(node.orelse)
+                paths = [self.env.copy(), before]
+                for handler in node.handlers:
+                    if handler.type is not None:
+                        self.expr(handler.type)
+                    self.env = merge_env([before, paths[0]])
+                    if handler.name:
+                        self.env[handler.name] = UNKNOWN
+                    self.statements(handler.body)
+                    paths.append(self.env.copy())
+                self.env = merge_env(paths)
+                self.statements(node.finalbody)
             else:
                 raise Unsafe("unsupported connector statement")
 
