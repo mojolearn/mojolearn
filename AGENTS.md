@@ -673,17 +673,20 @@ Ends when Andrew says. It is not the product direction: AMD and Apple remain in 
   is a regression), no rule may key on a benchmark shape or dataset ("No dimension targeting"), and no row is
   "fixed" by measuring it on a smaller case. Not piecemeal: one wave fixes everything the last measurement showed.
 
-### TEMPORARY: no opponents, no 0.8.55 yardstick; clean up before the release, no haste (Andrew, 2026-11-18)
+### TEMPORARY: time our latest against the stored 0.8.55 board, approximately; fix wide gaps; no haste (Andrew, 2026-11-18)
 
 Ends when Andrew says. It narrows the NVIDIA-only direction above while it runs.
 
+- Our latest build is TIMED, all of it: every round ends with our own arm timed on the L40S, the whole board, not only
+  the rows a fix changed. A round with rows not timed on the latest build is not finished.
+- The yardstick is the STORED 0.8.55 board (the 2026-11-17 L40S full board). 0.8.55 is never installed, timed or
+  profiled again. The comparison is approximate on purpose: a different host or a 15 percent box difference does not
+  exclude a row from the comparison or from the counts; it is a note on the cell. Every timed row gets a ratio and is
+  counted.
+- Work is opened for WIDE gaps only: rows well beyond host noise (about 1.5x and over, or many milliseconds on a large
+  input), worst first. No lane, profile or rerun is opened to explain a gap of 10 to 30 percent between two hosts.
 - Opponents are set aside for now: no opponent job, no opponent re-score, and no work is opened, held or ranked because
-  of an opponent cell. Rows whose harness clock changed keep their stored opponent cells marked as they are; nothing is
-  rerun for them. This overrides the "Race fairness" follow-ups (not its rules) until Andrew reopens them.
-- 0.8.55 is no longer the yardstick. It is never installed, timed or profiled again, and no row is worked on because of
-  its ratio to 0.8.55. A change is judged against OUR OWN previous build on the same box in the same job (the last
-  green integration build), and by milliseconds lost on real sizes, large inputs first. This overrides the 0.8.55 steps
-  of the direction above and of "Times are compared only on the same box".
-- Order, without haste: this round is finished and measured against our own previous build; then the boundary cleanup
-  (typed tables, decided by its pilot A/B); then the shared test kit and the rule for new checks; then the other owed
-  cleanups; and only then the release, when Andrew says. Nothing is skipped or shortened to reach the release sooner.
+  of an opponent cell.
+- Order, without haste: this round is finished and timed in full; wide gaps fixed and timed again; then the boundary
+  cleanup (typed tables, decided by its pilot A/B); then the shared test kit and the rule for new checks; then the
+  other owed cleanups; and only then the release, when Andrew says. Nothing is skipped or shortened to reach it sooner.
