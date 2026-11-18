@@ -35,7 +35,7 @@ layout, Andrew 2026-10-26: compiling never uses paid rentals):
             (a paid rental, opt-in by name). Merged: 16 vCPU cpu5m/cpu3m
             (>= 64 GB), one merged compile at a time under a 64 GiB cap;
             per-binding: 32 vCPU cpu5g..cpu3m.
-  gpu-legs  the RunPod NVIDIA and DigitalOcean/Hot Aisle AMD GPU boxes.
+  gpu-legs  the RunPod NVIDIA and DigitalOcean AMD GPU boxes.
 
 SEVERABLE PIPELINES (2026-09-25). After the common steps a release is five
 build pipelines that run at once in one invocation. Before any publication,
@@ -142,9 +142,8 @@ THE STEPS
                      pods) by name. The
                      --gpu-smoke backend `gpu-legs` builds on the GPU boxes: RunPod
                      NVIDIA (walking NVIDIA_WALK on no stock) and a DigitalOcean
-                     MI325X, or a Hot Aisle 1x MI300X when DigitalOcean has a GPU
-                     droplet live or no token (--amd-build-provider do|hotaisle
-                     or MOJOLEARN_AMD_PROVIDER pins one)
+                     MI325X (--amd-build-provider do|cpu-box or
+                     MOJOLEARN_AMD_PROVIDER pins one)
   macos-build        mac_slot --slots 4 run -- build_release_wheel.sh, byte LM on
   macos-smoke        default: wheel_self_test.py (fresh venv, verify --self-test);
                      --gpu-smoke: qualify_verifier_wheel.py --scope expanded under the Metal lock;
@@ -670,7 +669,7 @@ def gpu_legs(ctx):
                    *cpu_box_pod(ctx, amd_small=True), "--out", str(out)]
         leg = Leg("hip-gfx942", "hip", "gfx942", command, {}, rb, legs_dir, out)
     else:
-        command, env = amd_leg_command(ctx, route, legs_dir)
+        command, env = amd_leg_command(ctx, legs_dir)
         rb, out = leg_layout(legs_dir, "gpu-legs", "hip-gfx942")
         leg = Leg("hip-gfx942", "hip", "gfx942", command, env, rb, legs_dir, out)
     leg.provider, leg.provider_reason = route, why
@@ -681,44 +680,21 @@ def gpu_legs(ctx):
 # ---------------------------------------------------------------- the AMD build route
 #: Where the AMD (hip gfx942) build leg rents. do: tools/do_release061_leg.sh on
 #: a DigitalOcean MI325X, the route every release through 0.8.18 used.
-#: hotaisle: tools/hotaisle_release_leg.sh on a Hot Aisle 1x MI300X, the same
-#: remote build and the same output tree (2026-09-25). auto: do, unless
-#: DigitalOcean has a GPU droplet live (the DigitalOcean leg refuses a rental
-#: then, one GPU droplet at a time on the account) or no usable token.
+#: auto: do (the DigitalOcean leg itself refuses a rental while a GPU droplet
+#: is live on the account). The Hot Aisle route (tools/hotaisle_release_leg.sh,
+#: its auto fallback and the walk to it on a live-droplet refusal) was removed
+#: 2026-11-18 by lane fx-dead-small: AMD is the DigitalOcean MI300X only
+#: (AGENTS.md "Boxes"); recoverable at 7c1aad6561.
 #: cpu-box: tools/release_linux_build.sh --archs gfx942 on a RunPod CPU pod,
 #: the opt-in CPU route for the AMD set alone (2026-09-26, 0.8.23:
-#: DigitalOcean was unavailable and Hot Aisle had no MI300X). gfx942 is
+#: DigitalOcean was unavailable). gfx942 is
 #: compiled ahead of time from --target-accelerator, so no AMD GPU is needed to
 #: build it; the AMD column still runs the wheel on a real MI300X. Never auto.
-AMD_BUILD_PROVIDERS = ("auto", "do", "hotaisle", "cpu-box")
-DO_LIVE_REFUSAL = "GPU droplet(s) already live"
+AMD_BUILD_PROVIDERS = ("auto", "do", "cpu-box")
 
 
 def amd_build_want(args):
     return getattr(args, "amd_build_provider", None) or os.environ.get("MOJOLEARN_AMD_PROVIDER") or "auto"
-
-
-def do_gpu_busy(token_file=None, api=None):
-    """(busy, why) for the DigitalOcean AMD route, from one free GET. Never raises."""
-    token_file = os.path.expanduser(token_file or os.environ.get("MOJOLEARN_DO_TOKEN_FILE", "~/.mojolearn_do_token"))
-    api = api or os.environ.get("MOJOLEARN_DO_API", "https://api.digitalocean.com/v2")
-    try:
-        token = Path(token_file).read_text().strip()
-    except OSError:
-        return True, f"no DigitalOcean token at {token_file}"
-    if not token:
-        return True, f"the DigitalOcean token file {token_file} is empty"
-    req = urllib.request.Request(api + "/droplets?per_page=200", headers={"Authorization": "Bearer " + token})
-    try:
-        with urllib.request.urlopen(req, timeout=20) as r:
-            droplets = json.load(r).get("droplets") or []
-    except Exception as exc:  # the leg would refuse the same way
-        return True, f"the DigitalOcean droplet listing failed ({type(exc).__name__})"
-    live = [f"{d.get('id')}:{d.get('name')}:{d.get('size_slug', '')}" for d in droplets
-            if str(d.get("size_slug") or "").startswith("gpu-")]
-    if live:
-        return True, "DigitalOcean GPU droplet(s) live, so its leg would refuse: " + " ".join(live)
-    return False, "no DigitalOcean GPU droplet live"
 
 
 def amd_build_route(ctx):
@@ -729,37 +705,23 @@ def amd_build_route(ctx):
     want = amd_build_want(ctx.args)
     if want not in AMD_BUILD_PROVIDERS:
         raise StepFailed(f"the AMD build provider must be one of {', '.join(AMD_BUILD_PROVIDERS)}, not {want!r}")
-    if want != "auto":
-        route = (want, f"pinned ({want})")
-    else:
-        probe = getattr(ctx, "amd_do_probe", None) or do_gpu_busy
-        busy, why = probe()
-        route = ("hotaisle", "auto: " + why) if busy else ("do", "auto: " + why)
+    # auto is DigitalOcean: its only alternative, the Hot Aisle route, is gone
+    # (2026-11-18), so the droplet probe that chose between them went with it.
+    route = (want, f"pinned ({want})") if want != "auto" else ("do", "auto")
     ctx._amd_route = route
     ctx.say(f"  AMD build leg: {route[0]} ({route[1]})")
     return route
 
 
-def amd_leg_command(ctx, route, legs_dir):
-    """The AMD build leg's command and environment on ROUTE; the same output tree either way."""
-    if route == "hotaisle":
-        cmd = ["bash", "tools/hotaisle_release_leg.sh", ctx.commit, "--rent"]
-        env = dict(MOJOLEARN_RELEASE_RESULTS_ROOT=str(legs_dir))
-    else:
-        token = os.path.expanduser(os.environ.get("MOJOLEARN_DO_TOKEN_FILE", "~/.mojolearn_do_token"))
-        cmd = ["bash", "tools/do_release061_leg.sh", ctx.commit, token, "--rent"]
-        env = dict(MOJOLEARN_RELEASE_UBUNTU22="1", MOJOLEARN_RELEASE_RESULTS_ROOT=str(legs_dir))
+def amd_leg_command(ctx, legs_dir):
+    """The AMD build leg's command and environment (the DigitalOcean leg)."""
+    token = os.path.expanduser(os.environ.get("MOJOLEARN_DO_TOKEN_FILE", "~/.mojolearn_do_token"))
+    cmd = ["bash", "tools/do_release061_leg.sh", ctx.commit, token, "--rent"]
+    env = dict(MOJOLEARN_RELEASE_UBUNTU22="1", MOJOLEARN_RELEASE_RESULTS_ROOT=str(legs_dir))
     if ctx.args.amd_expect_from:
         cmd += ["--expect-from", ctx.args.amd_expect_from]
     env.update(leg_common_env(ctx))
     return cmd, env
-
-
-def do_refused_live(log):
-    try:
-        return DO_LIVE_REFUSAL in log.read_text(errors="replace")
-    except OSError:
-        return False
 
 
 #: RunPod stock comes and goes by GPU type. A leg or a smoke whose create is
@@ -3666,16 +3628,6 @@ class Release(release_identity_wheels.IdentityOnWheels):
             for l in legs:
                 if l.running() or l.exit_code() is None:
                     continue
-                if (l.vendor == "hip" and l.exit_code() != 0 and getattr(l, "provider", "") == "do"
-                        and amd_build_want(self.args) == "auto" and do_refused_live(l.log)):
-                    # a GPU droplet went live after the route was chosen: walk to Hot Aisle
-                    self.say(f"  {l.name}: DigitalOcean refused (a GPU droplet is live); trying Hot Aisle")
-                    l.command, l.env = amd_leg_command(self, "hotaisle", l.workdir)
-                    l.compile_provider_retry = True
-                    l.provider, l.provider_reason = "hotaisle", "walked: DigitalOcean refused a rental"
-                    self._amd_route = ("hotaisle", l.provider_reason)
-                    again.append(l)
-                    continue
                 if (l.exit_code() == release_github_build.DOWNLOAD_PENDING_EXIT and type(l) is Leg
                         and pending[l.name] < DOWNLOAD_PENDING_RELAUNCHES):
                     # its run succeeded and only the artifact download failed: collect that run again
@@ -4120,7 +4072,7 @@ class Release(release_identity_wheels.IdentityOnWheels):
         record for this wheel is not already there and no PASSED column of a
         byte-identical wheel can be taken. The NVIDIA leg carries its GPU walk
         (SMOKE_WALK or --smoke-gpu; the position survives a rerun in
-        <columns>/nvidia.gpu); the AMD leg's provider walk (RunPod, Hot Aisle,
+        <columns>/nvidia.gpu); the AMD leg's provider walk (RunPod,
         DigitalOcean) is release_wheel_smoke.sh's own --provider auto."""
         final_path = self.linux_final()
         final = str(final_path or "<final linux wheel>")
@@ -7038,13 +6990,13 @@ def release_parser():
     ap.add_argument('--gate-autograd-root', help='precompiled gate artifacts under nvidia/ and amd/, each with build-manifest.json (default release-dir/autograd-bin)')
     ap.add_argument("--smoke-gpu", default="", help="RunPod GPU(s) for the Linux smoke, |-separated, walked on no stock (default the 4090, L40S, L40, RTX 6000 Ada)")
     _amd_env = os.environ.get("MOJOLEARN_AMD_PROVIDER") or "auto"
-    ap.add_argument("--amd-provider", default=_amd_env if _amd_env in ("auto", "runpod", "hotaisle", "do") else "auto",
-                    choices=["auto", "runpod", "hotaisle", "do"],
-                    help="where the AMD column rents: auto = RunPod MI300X, then Hot Aisle MI300X, then DigitalOcean "
+    ap.add_argument("--amd-provider", default=_amd_env if _amd_env in ("auto", "runpod", "do") else "auto",
+                    choices=["auto", "runpod", "do"],
+                    help="where the AMD column rents: auto = RunPod MI300X, then DigitalOcean "
                          "MI325X (default MOJOLEARN_AMD_PROVIDER, else auto)")
     ap.add_argument("--amd-build-provider", default=None, choices=list(AMD_BUILD_PROVIDERS),
-                    help="where the AMD build leg rents: auto = DigitalOcean MI325X, Hot Aisle 1x MI300X when "
-                         "DigitalOcean has a GPU droplet live (default MOJOLEARN_AMD_PROVIDER, else auto)")
+                    help="where the AMD build leg rents: auto = DigitalOcean MI325X "
+                         "(default MOJOLEARN_AMD_PROVIDER, else auto)")
     ap.add_argument("--state-dir", default="", help=argparse.SUPPRESS)
     return ap
 

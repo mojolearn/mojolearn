@@ -176,9 +176,9 @@ class LegTests(unittest.TestCase):
 
 
 class AmdRouteTests(unittest.TestCase):
-    """The AMD build leg's provider: DigitalOcean, or Hot Aisle when DigitalOcean
-    has a GPU droplet live (2026-09-25). No network: the probe is a stand-in,
-    and do_gpu_busy is pointed at a local HTTP server."""
+    """The AMD build leg's provider: DigitalOcean by default, cpu-box by name.
+    The Hot Aisle route, its droplet probe and the walk to it were removed
+    2026-11-18 (lane fx-dead-small)."""
 
     def setUp(self):
         self._t = tempfile.TemporaryDirectory()
@@ -190,116 +190,38 @@ class AmdRouteTests(unittest.TestCase):
             os.environ["MOJOLEARN_AMD_PROVIDER"] = self._env
         self._t.cleanup()
 
-    def ctx(self, busy=None, **kw):
+    def ctx(self, **kw):
         c = Ctx()
         c.args = args(**kw)
         c.rel = self.tmp
-        c.probed = 0
-        if busy is not None:
-            def probe():
-                c.probed += 1
-                return busy, "stand-in: " + ("a GPU droplet live" if busy else "none live")
-            c.amd_do_probe = probe
         return c
 
     def amd(self, c):
         (hip,) = [l for l in release.gpu_legs(c) if l.name == "hip-gfx942"]
         return hip
 
-    def test_auto_takes_digitalocean_when_it_is_free(self):
-        c = self.ctx(busy=False)
+    def test_auto_takes_digitalocean(self):
+        c = self.ctx(amd_expect_from="/nv/leg")
         hip = self.amd(c)
         self.assertEqual(hip.command[:2], ["bash", "tools/do_release061_leg.sh"])
+        self.assertEqual(hip.command[-2:], ["--expect-from", "/nv/leg"])
         self.assertEqual(hip.env["MOJOLEARN_RELEASE_UBUNTU22"], "1")
-        self.assertEqual(hip.provider, "do")
-
-    def test_auto_takes_hotaisle_when_digitalocean_has_a_gpu_droplet_live(self):
-        c = self.ctx(busy=True, amd_expect_from="/nv/leg")
-        hip = self.amd(c)
-        self.assertEqual(hip.command, ["bash", "tools/hotaisle_release_leg.sh", COMMIT, "--rent", "--expect-from", "/nv/leg"])
-        self.assertEqual(hip.env, {"MOJOLEARN_RELEASE_RESULTS_ROOT": str(self.tmp / "legs")})
-        # the same tree the packer and linux-wait read, whichever provider built it
         self.assertEqual(hip.release_build, self.tmp / "legs" / "hip-gfx942" / "release-build")
-        self.assertEqual(hip.provider, "hotaisle")
-        self.assertIn("  AMD build leg: hotaisle (auto: stand-in: a GPU droplet live)", c.lines)
-        self.amd(c)
-        self.assertEqual(c.probed, 1, "the route is decided once per run")
+        self.assertEqual(hip.provider, "do")
+        self.assertIn("  AMD build leg: do (auto)", c.lines)
 
     def test_pinned_by_flag_or_environment(self):
-        c = self.ctx(busy=False, amd_build_provider="hotaisle")
-        self.assertEqual(self.amd(c).command[1], "tools/hotaisle_release_leg.sh")
-        self.assertEqual(c.probed, 0)
-        os.environ["MOJOLEARN_AMD_PROVIDER"] = "hotaisle"
+        c = self.ctx(amd_build_provider="do")
+        self.assertEqual(self.amd(c).command[1], "tools/do_release061_leg.sh")
+        os.environ["MOJOLEARN_AMD_PROVIDER"] = "cpu-box"
         try:
-            c = self.ctx(busy=False)
-            self.assertEqual(self.amd(c).command[1], "tools/hotaisle_release_leg.sh")
-            c = self.ctx(busy=True, amd_build_provider="do")
-            self.assertEqual(self.amd(c).command[1], "tools/do_release061_leg.sh")
+            c = self.ctx()
+            self.assertEqual(self.amd(c).command[1], "tools/release_linux_build.sh")
+            os.environ["MOJOLEARN_AMD_PROVIDER"] = "hotaisle"
+            with self.assertRaises(release.StepFailed):
+                self.amd(self.ctx())
         finally:
             del os.environ["MOJOLEARN_AMD_PROVIDER"]
-
-    def test_do_gpu_busy_reads_the_droplet_listing(self):
-        import http.server
-        import threading
-        state = {"droplets": []}
-
-        class H(http.server.BaseHTTPRequestHandler):
-            def log_message(self, *a):
-                pass
-
-            def do_GET(self):
-                ok = self.headers.get("Authorization") == "Bearer dop_v1_fake"
-                body = json.dumps({"droplets": state["droplets"]} if ok else {"id": "unauthorized"}).encode()
-                self.send_response(200 if ok else 401)
-                self.send_header("Content-Length", str(len(body)))
-                self.end_headers()
-                self.wfile.write(body)
-        srv = http.server.ThreadingHTTPServer(("127.0.0.1", 0), H)
-        threading.Thread(target=srv.serve_forever, daemon=True).start()
-        api = "http://127.0.0.1:%d/v2" % srv.server_address[1]
-        tok = self.tmp / "tok"
-        tok.write_text("dop_v1_fake\n")
-        try:
-            self.assertEqual(release.do_gpu_busy(str(tok), api), (False, "no DigitalOcean GPU droplet live"))
-            state["droplets"] = [{"id": 1, "name": "web", "size_slug": "s-1vcpu-1gb"},
-                                 {"id": 603, "name": "gpt3-t3", "size_slug": "gpu-mi325x1-256gb"}]
-            busy, why = release.do_gpu_busy(str(tok), api)
-            self.assertTrue(busy)
-            self.assertIn("603:gpt3-t3:gpu-mi325x1-256gb", why)
-            self.assertNotIn("web", why)
-            tok.write_text("wrong\n")
-            self.assertTrue(release.do_gpu_busy(str(tok), api)[0])
-            self.assertEqual(release.do_gpu_busy(str(self.tmp / "none"), api)[0], True)
-        finally:
-            srv.shutdown()
-            srv.server_close()
-
-    def test_linux_wait_walks_a_live_droplet_refusal_to_hotaisle(self):
-        c = self.ctx(busy=False)
-        hip = self.amd(c)
-        hip.workdir.mkdir(parents=True, exist_ok=True)
-        hip.exit_file.write_text("2\n")
-        hip.log.write_text("[amd/rel061] REFUSING: GPU droplet(s) already live, destroy or adopt them first: 603:x:gpu-mi325x1-256gb\n")
-        spawned = []
-        r = release.Release(args(state_dir=str(self.tmp / "state")),
-                            runner=lambda cmd, env, log, detach=False: spawned.append((cmd, env)) or 999999)
-        r.state["commit"] = COMMIT
-        r.say = lambda msg: None
-        r.leg_env = lambda: {"MOJOLEARN_SOURCE_CHECKOUT": "/frozen/source"}
-        # Route-walk fixture only; actual producer admission has its own tests.
-        r.begin_compile_requirements = lambda leg: {}
-        saved = release.linux_legs
-        release.linux_legs = lambda ctx: [hip]
-        try:
-            with self.assertRaises(release.StepFailed):   # the relaunched leg is not finished here
-                r.step_linux_wait()
-        finally:
-            release.linux_legs = saved
-        self.assertEqual(len(spawned), 1, spawned)
-        self.assertIn("tools/hotaisle_release_leg.sh", spawned[0][0][2])
-        self.assertEqual(spawned[0][1]["MOJOLEARN_RELEASE_RESULTS_ROOT"], str(hip.workdir))
-        self.assertEqual(hip.provider, "hotaisle")
-        self.assertEqual(len(list(hip.workdir.glob("hip-gfx942.log.failed-*"))), 1)
 
 
 class StepTableTests(unittest.TestCase):
