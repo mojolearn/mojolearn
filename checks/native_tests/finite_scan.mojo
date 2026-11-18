@@ -16,6 +16,13 @@ The general view scans (`host_all_finite_view`, `host_all_finite_nd`) add six
 layouts on the same grid: C order in the other byte order, row-padded float64,
 column-strided float64, a rank-3 view with a padded middle axis, float16 and
 Fortran order; at most about 4 MiB per fixture.
+
+The three predicates (lane fx-host-scans): all finite, any NaN, any infinity,
+the fused copy with the finite test, the first-index walk and the List
+entries, each fed a quiet NaN, a signalling NaN, a negative NaN, +inf, -inf
+at six positions and a clean buffer with signed zeros and subnormals, at an
+odd length above the split's grain floor and at a short odd length that stays
+on the calling thread, both at an offset inside NaN padding.
 """
 from std.memory import bitcast
 from core.host_parallel import host_parallelize
@@ -25,6 +32,13 @@ from core.host_finite_scan import (
     host_all_finite_f32_strided,
     host_all_finite_view,
     host_all_finite_nd,
+    host_all_finite_list,
+    host_any_nan_f32,
+    host_any_nan_list,
+    host_any_nan_unit,
+    host_any_inf_f32,
+    host_first_nonfinite_f32,
+    host_copy_f32_finite,
 )
 from checks.native_tests.runner import Check, Column, Report
 
@@ -40,6 +54,11 @@ comptime PER_GENERAL = 13
 comptime GENERAL_FIXTURES = GENERAL_LAYOUTS * PER_GENERAL
 #: Bytes before the view, so its words sit at an odd address.
 comptime GENERAL_LEAD = 9
+#: The predicate fixtures: 2 lengths, each 6 positions x 5 special words and
+#: one clean fixture.
+comptime PRED_KINDS = 5
+comptime PER_PRED = 6 * PRED_KINDS + 1
+comptime PRED_FIXTURES = 2 * PER_PRED
 
 
 def _require(ok: Bool, message: String) raises:
@@ -219,10 +238,72 @@ def _scan_general(layout: Int, variant: Int) raises:
     _ = storage
 
 
+def _pred_word(kind: Int) -> UInt32:
+    # quiet NaN, signalling NaN, negative NaN, +inf, -inf
+    var words: List[UInt32] = [0x7FC00000, 0x7F800001, 0xFFC00000, 0x7F800000, 0xFF800000]
+    return words[kind]
+
+
+def _scan_predicates(size_index: Int, variant: Int) raises:
+    # An odd length above the grain floor (the split path, with a scalar
+    # tail in the last task) and a short odd one (the calling thread).
+    var n = WORDS - 3 if size_index == 0 else 37
+    var lead = 1 if size_index == 0 else 3
+    # NaN padding around the scanned words must not be read.
+    var storage = List[Float32](length=n + lead + 2, fill=_bad32(0))
+    var staged = List[Float32](length=n + 2, fill=Float32(0))
+    var exact = List[Float32](length=n, fill=Float32(0))
+    var finite_words: List[UInt32] = [
+        0, 0x80000000, 1, 0x80000001, 0x7F7FFFFF, 0xFF7FFFFF,
+        0x3FA00000, 0xBFC00000, 0x007FFFFF, 0x807FFFFF,
+    ]
+    for i in range(n):
+        storage[lead + i] = bitcast[DType.float32](finite_words[i % len(finite_words)])
+    var bad = -1
+    var kind = -1
+    if variant < PER_PRED - 1:
+        kind = variant % PRED_KINDS
+        var positions: List[Int] = [0, 1, n // 3, n // 2 - 1, n // 2, n - 1]
+        bad = positions[variant // PRED_KINDS]
+        storage[lead + bad] = bitcast[DType.float32](_pred_word(kind))
+    for i in range(n):
+        exact[i] = storage[lead + i]
+    var is_nan = kind >= 0 and kind < 3
+    var is_inf = kind >= 3
+    var ptr = storage.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin]() + lead
+    _require(host_all_finite_f32(ptr, n) == (bad < 0), "all-finite verdict")
+    _require(host_any_nan_f32(ptr, n) == is_nan, "any-NaN verdict")
+    _require(host_any_inf_f32(ptr, n) == is_inf, "any-infinity verdict")
+    _require(host_first_nonfinite_f32(ptr, n) == bad, "first non-finite index")
+    _require(host_all_finite_list(exact) == (bad < 0), "all-finite List verdict")
+    _require(host_any_nan_list(exact) == is_nan, "any-NaN List verdict")
+    _require(host_any_nan_unit(exact) == is_nan, "any-NaN unit verdict")
+    var dst = staged.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin]() + 1
+    _require(host_copy_f32_finite(Int(ptr), Int(dst), n) == (bad < 0), "fused copy verdict")
+    for i in range(n):
+        _require(bitcast[DType.uint32](staged[1 + i]) == bitcast[DType.uint32](storage[lead + i]),
+                 "fused copy changed a word")
+    _require(bitcast[DType.uint32](staged[0]) == 0 and bitcast[DType.uint32](staged[n + 1]) == 0,
+             "fused copy wrote outside its range")
+    if bad >= 0:
+        _require(bitcast[DType.uint32](storage[lead + bad]) == _pred_word(kind), "scan changed the special input word")
+    _ = storage
+    _ = staged
+    _ = exact
+
+
 def run_checks() raises:
-    var failed = List[Int](length=FIXTURES + GENERAL_FIXTURES, fill=0)
+    var failed = List[Int](length=FIXTURES + GENERAL_FIXTURES + PRED_FIXTURES, fill=0)
     var failures_ptr = failed.unsafe_ptr()
     def task(unit: Int) {imm failures_ptr}:
+        if unit >= FIXTURES + GENERAL_FIXTURES:
+            var pred = unit - FIXTURES - GENERAL_FIXTURES
+            try:
+                _scan_predicates(pred // PER_PRED, pred % PER_PRED)
+            except error:
+                print("FAIL finite_scan predicates size", pred // PER_PRED, "variant", pred % PER_PRED, String(error))
+                failures_ptr.unsafe_store(unit, 1)
+            return
         if unit >= FIXTURES:
             var general = unit - FIXTURES
             try:
@@ -241,12 +322,12 @@ def run_checks() raises:
         except error:
             print("FAIL finite_scan layout", layout, "variant", variant, String(error))
             failures_ptr.unsafe_store(unit, 1)
-    host_parallelize(task, FIXTURES + GENERAL_FIXTURES)
+    host_parallelize(task, FIXTURES + GENERAL_FIXTURES + PRED_FIXTURES)
     var failures = 0
     for value in failed:
         failures += value
-    _require(failures == 0, "finite_scan failed " + String(failures) + " of " + String(FIXTURES + GENERAL_FIXTURES) + " fixtures")
-    print("PASS finite_scan:", FIXTURES + GENERAL_FIXTURES, "native fixtures, 262144 words, 10 layouts, parallel")
+    _require(failures == 0, "finite_scan failed " + String(failures) + " of " + String(FIXTURES + GENERAL_FIXTURES + PRED_FIXTURES) + " fixtures")
+    print("PASS finite_scan:", FIXTURES + GENERAL_FIXTURES + PRED_FIXTURES, "native fixtures, 262144 words, 10 layouts, 3 predicates, parallel")
 
 
 # Registered by lane checks-register (2026-11-16): it was a standalone main()
