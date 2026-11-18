@@ -706,17 +706,35 @@ class BasicBlock(_Layer):
 
 
 class GCNConv(_Layer):
-    """PyG `torch_geometric.nn.GCNConv` (flow source_to_target, cached=False):
+    """PyG `torch_geometric.nn.GCNConv` (flow source_to_target):
     out = D^-1/2 (A + I) D^-1/2 (X W^T) + b, the degree over the targets'
     incoming edge weights (self loops via add_remaining_self_loops with
     fill 1, or 2 when improved). The propagation is a CSR SpMM in fixed row
     and column order, the transform the pinned GEMM. `forward(x,
     edge_index, edge_weight=None)`; `backward(grad_out)` returns grad_x and
-    sets grad_weight_, grad_bias_."""
+    sets grad_weight_, grad_bias_.
+
+    The normalized graph is built on the first forward and reused while the
+    same `edge_index` (and `edge_weight`) arrays are passed again.
+
+    Parameters
+    ----------
+    cached : bool, default False
+        With ``False`` every forward checks that the contents of
+        `edge_index` and `edge_weight` are unchanged, so an array edited in
+        place rebuilds the graph. With ``True`` (as in PyG) the graph is
+        reused whenever the same array objects are passed again, without
+        reading their contents; pass new arrays for new edges.
+
+    Example
+    -------
+    >>> conv = GCNConv(16, 8, cached=True)
+    >>> y = conv.forward(x, edge_index)
+    """
 
     def __init__(self, in_channels, out_channels, improved=False, add_self_loops=True, normalize=True, bias=True,
-                 random_state=0, numeric_mode=None):
-        _XCNN(self, "gcn_init", (in_channels, out_channels, improved, add_self_loops, normalize, bias, random_state, numeric_mode), _XCNN_CONTEXT)
+                 random_state=0, numeric_mode=None, cached=False):
+        _XCNN(self, "gcn_init", (in_channels, out_channels, improved, add_self_loops, normalize, bias, random_state, numeric_mode, cached), _XCNN_CONTEXT)
 
     _device_io = True
 
@@ -752,11 +770,29 @@ class SAGEConv(_Layer):
     features only; the root term keeps the unprojected x_i).
     The mean is the fixed-order CSR sum divided by the in-degree; the max
     splits its gradient evenly among tied entries (scatter_reduce 'amax');
-    an isolated node aggregates +0.0."""
+    an isolated node aggregates +0.0.
+
+    The graph's sparse views are built on the first forward and reused
+    while the same `edge_index` array is passed again.
+
+    Parameters
+    ----------
+    cached : bool, default False
+        With ``False`` every forward checks that the contents of
+        `edge_index` are unchanged, so an array edited in place rebuilds
+        the graph. With ``True`` the graph is reused whenever the same
+        array object is passed again, without reading its contents; pass a
+        new array for new edges.
+
+    Example
+    -------
+    >>> conv = SAGEConv(16, 8, aggr="mean", cached=True)
+    >>> y = conv.forward(x, edge_index)
+    """
 
     def __init__(self, in_channels, out_channels, aggr="mean", normalize=False, root_weight=True, bias=True,
-                 project=False, random_state=0, numeric_mode=None):
-        _XCNN(self, "sage_init", (in_channels, out_channels, aggr, normalize, root_weight, bias, project, random_state, numeric_mode), _XCNN_CONTEXT)
+                 project=False, random_state=0, numeric_mode=None, cached=False):
+        _XCNN(self, "sage_init", (in_channels, out_channels, aggr, normalize, root_weight, bias, project, random_state, numeric_mode, cached), _XCNN_CONTEXT)
 
     _device_io = True
 

@@ -71,7 +71,8 @@ def _ones(count: Int, context: PythonObject) raises -> PythonObject:
     return out
 
 
-def _graph_key(n: Int, arrays: PythonObject, views: PythonObject, context: PythonObject) raises -> PythonObject:
+def _graph_key(n: Int, arrays: PythonObject, views: PythonObject, cached: Bool,
+               context: PythonObject) raises -> PythonObject:
     # Original references establish graph identity; metadata is read only from
     # admitted native views retained for this call. No input protocol lookup.
     # p3-cnn-sequence-tsa (hazard A, caller-aliased input): the key also
@@ -80,21 +81,30 @@ def _graph_key(n: Int, arrays: PythonObject, views: PythonObject, context: Pytho
     # in-place edit of edge_index / edge_weight (same object, same address)
     # misses and rebuilds the graph and its resident copy. The copy and the
     # compare are far cheaper than the CSR build they guard.
+    # fx-rows (2026-11-18): a `cached=True` layer keys by identity and layout
+    # only (0.8.55's `_GraphKey`, PyG's cached=True), so its key takes no
+    # snapshot (None in the fourth word): no 16 E byte copy at the miss and
+    # no compare per forward. A layer switched back to cached=False finds no
+    # snapshot and misses (`_key_matches`), so it never trusts an old graph.
     var bi = xcnn_builtins()
     var sig = Python.list()
     for i in range(len(views)):  # small-loop(one or two graph inputs)
         var a = views[i]
         var item = PythonObject(None)
         if a is not None:
-            item = (Python.tuple(a[1], a[6], a[3], py_call(bi.bytes, a[0])) if i == 0
-                    else Python.tuple(xcnn_tuple(xcnn_shape(a)), String(a.dtype.str), xcnn_addr(a), py_call(bi.bytes, a)))
+            var snap = PythonObject(None)
+            if not cached:
+                snap = py_call(bi.bytes, a[0] if i == 0 else a)
+            item = (Python.tuple(a[1], a[6], a[3], snap) if i == 0
+                    else Python.tuple(xcnn_tuple(xcnn_shape(a)), String(a.dtype.str), xcnn_addr(a), snap))
         _ = py_call(sig.append, item)
     return Python.tuple(n, arrays, py_call(xcnn_builtins().tuple, sig))
 
 
 def _graph_sig_admit(sig: PythonObject) raises:
     # The cached signature `_graph_key` built: per graph input None or an
-    # exact 4-tuple (shape, dtype string, address, owned byte snapshot). The
+    # exact 4-tuple (shape, dtype string, address, owned byte snapshot or
+    # None for a `cached=True` key). The
     # snapshot is an exact `bytes` (compared by its builtin ==, no Python
     # hook), which the generic neural_plain_value scan does not admit: a
     # cache hit on the second forward raised "Python conversion hooks are
@@ -106,13 +116,13 @@ def _graph_sig_admit(sig: PythonObject) raises:
         var item = sig[i]
         if item is None:
             continue
-        if py_type(item) is not bi.tuple or len(item) != 4 or py_type(item[3]) is not bi.bytes:
+        if py_type(item) is not bi.tuple or len(item) != 4 or (item[3] is not None and py_type(item[3]) is not bi.bytes):
             raise Error("TypeError: graph cache key requires native metadata")
         for j in range(3):  # small-loop(three layout words of one graph input)
             neural_plain_value(item[j], 0, PythonObject(None))
 
 
-def _key_matches(a: PythonObject, n: Int, arrays: PythonObject, views: PythonObject,
+def _key_matches(a: PythonObject, n: Int, arrays: PythonObject, views: PythonObject, cached: Bool,
                  context: PythonObject) raises -> Bool:
     """The cached graph key `a` (`_graph_key`, built once at the miss)
     against this call's inputs, without building a new key: n, the original
@@ -123,7 +133,12 @@ def _key_matches(a: PythonObject, n: Int, arrays: PythonObject, views: PythonObj
     (16 E bytes for a (2, E) int64 edge_index: an allocation, its page faults
     and a copy, then a serial compare; +2 to +3.5 ms per GCN/SAGE call on the
     L40S board, rows of 1.26M edges) is gone (lane fb-neural, 2026-11-17).
-    A non-contiguous input keeps the logical-order `bytes` compare."""
+    A non-contiguous input keeps the logical-order `bytes` compare.
+
+    `cached` (the layer's `cached=True`, fx-rows 2026-11-18): identity and
+    layout decide the hit and no byte is read (the 0.25-0.7 ms compare of a
+    1.26M-edge index per forward on the L40S board, gcn/graphsage rows). A
+    key without a snapshot hits only under `cached`."""
     var bi = xcnn_builtins()
     if py_type(a) is not bi.tuple or len(a) != 3 or py_type(a[1]) is not bi.tuple:
         raise Error("TypeError: graph cache key requires native metadata")
@@ -166,6 +181,10 @@ def _key_matches(a: PythonObject, n: Int, arrays: PythonObject, views: PythonObj
             contiguous = Bool(py=v.flags.c_contiguous)
             live = Int(py=xcnn_addr(v))
         var snap = item[3]
+        if cached:
+            continue
+        if snap is None:
+            return False
         if not contiguous:
             if not Bool(py=snap == py_call(bi.bytes, v[0] if i == 0 else v)):
                 return False
@@ -651,6 +670,9 @@ def xcnn_gcn_forward(layer: PythonObject, args: PythonObject, context: PythonObj
     var arrays = Python.tuple(args[1], args[2])
     var views = Python.tuple(edge_index, edge_weight)
     var hit = py_get(fields, "_gcache")
+    # A layer made before `cached` existed (a loaded pickle) has no field: False.
+    var cached_word = py_get(fields, "cached", PythonObject(False))
+    var cached = cached_word is not None and Bool(py=cached_word)
     if hit is not None and (py_type(hit) is not xcnn_builtins().tuple or len(hit) != 2):
         raise Error("TypeError: graph cache requires a native pair")
     var g = PythonObject(None)
@@ -661,7 +683,7 @@ def xcnn_gcn_forward(layer: PythonObject, args: PythonObject, context: PythonObj
         for i in range(1, 4):  # small-loop(three cached graph normalization flags)
             neural_plain_value(hit[0][i], 0, PythonObject(None))
     if (hit is not None and Bool(py=hit[0][1] == fields["improved"]) and Bool(py=hit[0][2] == fields["add_self_loops"])
-            and Bool(py=hit[0][3] == fields["normalize"]) and _key_matches(hit[0][0], n, arrays, views, context)):
+            and Bool(py=hit[0][3] == fields["normalize"]) and _key_matches(hit[0][0], n, arrays, views, cached, context)):
         g = hit[1][0]
         vals = hit[1][1]
     else:
@@ -669,7 +691,7 @@ def xcnn_gcn_forward(layer: PythonObject, args: PythonObject, context: PythonObj
         g = gv[0]
         vals = gv[1]
         # the key (and its owned snapshot) is built at the miss only
-        var key = Python.tuple(_graph_key(n, arrays, views, context), fields["improved"],
+        var key = Python.tuple(_graph_key(n, arrays, views, cached, context), fields["improved"],
                                fields["add_self_loops"], fields["normalize"])
         py_setitem(fields, "_gcache", Python.tuple(key, Python.tuple(g, vals)))
     _graph_admit(g, context)
@@ -801,10 +823,13 @@ def xcnn_sage_forward(layer: PythonObject, args: PythonObject, context: PythonOb
     var arrays = Python.tuple(args[1])
     var views = Python.tuple(edge_index)
     var hit = py_get(fields, "_gcache")
+    # A layer made before `cached` existed (a loaded pickle) has no field: False.
+    var cached_word = py_get(fields, "cached", PythonObject(False))
+    var cached = cached_word is not None and Bool(py=cached_word)
     if hit is not None and (py_type(hit) is not xcnn_builtins().tuple or len(hit) != 2):
         raise Error("TypeError: graph cache requires a native pair")
     var g = PythonObject(None)
-    if hit is not None and _key_matches(hit[0], n, arrays, views, context):
+    if hit is not None and _key_matches(hit[0], n, arrays, views, cached, context):
         g = hit[1]
     else:
         var calls = GraphDoorCalls(entries, context)
@@ -812,7 +837,7 @@ def xcnn_sage_forward(layer: PythonObject, args: PythonObject, context: PythonOb
         var gviews = graph_views_run(calls, edges.src, edges.dst, n, edges.count)
         g = _graph_pack(calls, gviews)
         # the key (and its owned snapshot) is built at the miss only
-        py_setitem(fields, "_gcache", Python.tuple(_graph_key(n, arrays, views, context), g))
+        py_setitem(fields, "_gcache", Python.tuple(_graph_key(n, arrays, views, cached, context), g))
     _graph_admit(g, context)
     if _sage_res_form(fields, entries):
         return _sage_forward_dev(layer, fields, entries, x, g, context)
@@ -864,7 +889,7 @@ def _graph_layer_fields(layer: PythonObject, context: PythonObject) raises -> Py
     # One admission dictionary and module view for the whole field list.
     var mods = NativeModules()
     var admission = Python.dict(admission_context=context)
-    for name in ["in_channels", "out_channels", "improved", "add_self_loops", "normalize", "bias", "numeric_mode", "project", "root_weight", "aggr"]:  # small-loop(graph layer configuration)
+    for name in ["in_channels", "out_channels", "improved", "add_self_loops", "normalize", "bias", "numeric_mode", "project", "root_weight", "aggr", "cached"]:  # small-loop(graph layer configuration)
         neural_plain_value(mods, py_get(fields, PythonObject(name)), 0, admission)
     return fields
 
@@ -966,6 +991,10 @@ def _graph_init(layer: PythonObject, args: PythonObject, sage: Bool, context: Py
     py_setitem(fields, "out_channels", f)
     py_setitem(fields, "numeric_mode", mode)
     py_setitem(fields, "bias", Bool(py=py_call(b.bool, args[5])))
+    # fx-rows (2026-11-18): `cached=True` (the PyG name) keys the graph cache
+    # by array identity and layout only; the default False keeps the content
+    # compare (`_key_matches`). The word is the last init argument.
+    py_setitem(fields, "cached", Bool(py=py_call(b.bool, args[9] if sage else args[8])))
     if not sage:
         py_setitem(fields, "improved", Bool(py=py_call(b.bool, args[2])))
         py_setitem(fields, "add_self_loops", Bool(py=py_call(b.bool, args[3])))

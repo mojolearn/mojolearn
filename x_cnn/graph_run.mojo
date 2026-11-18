@@ -74,12 +74,25 @@ def graph_run_bytes_equal(left: Int, right: Int, count: Int) -> Bool:
     var flags = failures.unsafe_ptr()
     var lw = MutPointer[UInt64, MutUntrackedOrigin](unsafe_from_address=left)
     var rw = MutPointer[UInt64, MutUntrackedOrigin](unsafe_from_address=right)
+    # fx-rows (2026-11-18): each task compares 64-byte SIMD blocks (eight
+    # words per load, OR-reduced) and stops at the first differing block; the
+    # word-at-a-time loop with a break per word did not vectorize. The test
+    # is bitwise equality of the same bytes, so the verdict is unchanged.
     def task(unit: Int) {imm lw, imm rw, imm flags, imm chunk, imm words}:
         var differ = False
-        for j in range(unit * chunk, min((unit + 1) * chunk, words)):
-            if lw.unsafe_load[width=1, alignment=1](j) != rw.unsafe_load[width=1, alignment=1](j):
+        var j = unit * chunk
+        var hi = min((unit + 1) * chunk, words)
+        while j + 8 <= hi:
+            var l = lw.unsafe_load[width=8, alignment=1](j)
+            var r = rw.unsafe_load[width=8, alignment=1](j)
+            if l.ne(r).reduce_or():
                 differ = True
                 break
+            j += 8
+        while not differ and j < hi:  # small-loop(at most seven tail words of one task)
+            if lw.unsafe_load[width=1, alignment=1](j) != rw.unsafe_load[width=1, alignment=1](j):
+                differ = True
+            j += 1
         flags[unit] = Int(differ)
     host_parallelize(task, units)
     for flag in failures:  # metadata: one status per independent byte range

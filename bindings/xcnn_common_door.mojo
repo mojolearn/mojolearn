@@ -13,6 +13,7 @@ Python bodies it replaces.
 """
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_setattr, py_fields, py_contains
+from bindings.py_cpython_table import cpython_table
 from std.python._cpython import GILReleased
 from core.entry_table import EntryRef
 from core.xcnn_entry_table import (
@@ -81,6 +82,13 @@ def xcnn_entries(fields: PythonObject, context: PythonObject) raises -> PythonOb
     """`_Layer._binding()`: the connected `_mojolearn_x_cnn` entries of the
     layer's mode (or the process default), with the identical-mode
     numerical-profile check; records `numeric_mode_`."""
+    # fx-rows (2026-11-18): every layer call ran this. The mode text is now
+    # decoded once (it was decoded three to four times), the connected
+    # entries' type is an exact-type test before the `isinstance` call, and
+    # the recorded profile and mode are compared by identity before any rich
+    # compare or decode. Same refusals, same writes, same result. Timing:
+    # global-avgpool / batchnorm2d infer (board), a Conv2d(3, 16, 3) on
+    # 32 x 32 x 8 random input (non-board).
     var b = xcnn_builtins()
     var mode = py_get(fields, "numeric_mode")
     neural_plain_value(mode, 0, context)
@@ -92,19 +100,24 @@ def xcnn_entries(fields: PythonObject, context: PythonObject) raises -> PythonOb
     var text = String(py=mode)
     var key = mode
     if text != "identical" and text != "fast":
-        key = PythonObject(String(mode).strip().lower())
-    if String(py=key) != "identical" and String(py=key) != "fast":
+        # a new String, then assigned (never a slice of `text` assigned back to it)
+        var lowered = String(text.strip().lower())
+        text = lowered
+        key = PythonObject(text)
+    if text != "identical" and text != "fast":
         raise Error("numeric_mode must be fast, identical or None")
     var entries = context["xcnn_bindings"][key]
-    if Bool(py=py_call(b.isinstance, entries, b.str)):
+    var entries_type = py_type(entries)
+    if entries_type is b.str or (entries_type is not b.dict and Bool(py=py_call(b.isinstance, entries, b.str))):
         raise Error(String(py=entries))
-    if String(key) == "identical":
+    if text == "identical":
         # API-shell metadata only: the arithmetic version the binding names,
         # kept on the model so state persistence cannot switch versions
         var current = entries["profile"]
         var previous = py_get(fields, "numerical_profile_")
         neural_plain_value(previous, 0, context)
-        if previous is not None and current is not None and not Bool(py=previous == current):
+        if (previous is not None and current is not None and previous is not current
+                and not Bool(py=previous == current)):
             raise Error("mojolearn: CNN numerical profile differs from this model's recorded "
                         + "profile; use a matching binding or a fresh model for the new version")
         if previous is not None and current is None:
@@ -114,7 +127,7 @@ def xcnn_entries(fields: PythonObject, context: PythonObject) raises -> PythonOb
             # equal to `previous` otherwise (checked above): written once
             py_setitem(fields, "numerical_profile_", current)
     var recorded = py_get(fields, "numeric_mode_")
-    if recorded is None or py_type(recorded) is not b.str or String(py=recorded) != String(py=key):
+    if recorded is not key and (recorded is None or py_type(recorded) is not b.str or String(py=recorded) != text):
         py_setitem(fields, "numeric_mode_", key)
     return entries
 
@@ -192,17 +205,29 @@ def xcnn_resident(entries: PythonObject, context: PythonObject) raises -> Bool:
 
 # ---------------------------------------------------------------- shapes
 
+comptime _XCNN_SHAPE_SLOT = "xcnn_shape_descriptor_v1"
+
+
 def xcnn_shape(value: PythonObject) raises -> List[Int]:
     """Native shape metadata, with subclass/descriptor hooks refused first."""
     var cls = py_type(value)
     var namespace = _class_fields(cls)
     var descriptor = py_get(namespace, "shape")
-    var types = native_loaded_module("types")
-    if (py_type(descriptor) is not types.MemberDescriptorType
-            and py_type(descriptor) is not py_type(xcnn_builtins().type.__dict__["__dict__"])):
-        raise Error("TypeError: CNN shape requires native storage metadata")
-    if descriptor.__objclass__ is not cls:
-        raise Error("TypeError: CNN shape refuses subclasses")
+    # fx-rows (2026-11-18): the descriptor verdict (a member or getset
+    # descriptor owned by exactly this class) is kept per class under the
+    # type watcher (`class_record`, as `xcnn_tensor_layout` keeps its
+    # verdict): any edit of the class or an ancestor misses and re-runs the
+    # full check. It loaded the `types` module, two descriptor types and
+    # `__objclass__` on every shape read (several per layer call).
+    var mods = NativeModules()
+    if class_record(mods, _XCNN_SHAPE_SLOT, cls) is None:
+        var types = native_loaded_module("types")
+        if (py_type(descriptor) is not types.MemberDescriptorType
+                and py_type(descriptor) is not py_type(xcnn_builtins().type.__dict__["__dict__"])):
+            raise Error("TypeError: CNN shape requires native storage metadata")
+        if descriptor.__objclass__ is not cls:
+            raise Error("TypeError: CNN shape refuses subclasses")
+        class_admit(mods, _XCNN_SHAPE_SLOT, cls, PythonObject(True))
     var shape = py_call(descriptor.__get__, value, cls)
     var b = xcnn_builtins()
     if py_type(shape) is not b.tuple:
@@ -216,13 +241,22 @@ def xcnn_shape(value: PythonObject) raises -> List[Int]:
 
 
 def xcnn_tuple(shape: List[Int]) raises -> PythonObject:
-    var b = xcnn_builtins()
-    var out = Python.list()
-    # The bound `append` is looked up once per tuple, not once per word.
-    var append = py_call(b.getattr, out, "append")
+    """`tuple(shape)` of Python ints, built through the C API (fx-rows,
+    2026-11-18; the `_admission_int_tuple` idiom of
+    bindings/labels_admission_unpack.mojo): it built a list, looked up its
+    `append`, made one Python call per word, then called `tuple`."""
+    ref cpy = Python().cpython()
+    var envelope = cpy.PyTuple_New(len(shape))
+    if not envelope:
+        raise cpy.unsafe_get_error()
+    var result = PythonObject(from_owned=envelope)
+    var t = cpython_table()
     for i in range(len(shape)):  # driver-loop: over shape words
-        _ = py_call(append, PythonObject(shape[i]))
-    return py_call(b.tuple, out)
+        var value = t[].PyLong_FromLongLong(Int64(shape[i]))
+        if not value:
+            raise cpy.unsafe_get_error()
+        _ = cpy.PyTuple_SetItem(envelope, i, value)
+    return result
 
 
 def xcnn_is_t(value: PythonObject, context: PythonObject) raises -> Bool:
@@ -315,11 +349,13 @@ def xcnn_tensor_set(value: PythonObject, name: String, item: PythonObject, conte
 def xcnn_tensor_admit(value: PythonObject, context: PythonObject) raises:
     # One layout check for the whole admission; the slot reads below are raw.
     xcnn_tensor_layout(context)
-    _xcnn_tensor_admit_raw(value, context)
+    _ = _xcnn_tensor_admit_raw(value, context)
 
 
-def _xcnn_tensor_admit_raw(value: PythonObject, context: PythonObject) raises:
-    """`xcnn_tensor_admit` after this operation's `xcnn_tensor_layout`."""
+def _xcnn_tensor_admit_raw(value: PythonObject, context: PythonObject) raises -> PythonObject:
+    """`xcnn_tensor_admit` after this operation's `xcnn_tensor_layout`;
+    returns the admitted handle slot (None or a positive int) so a caller
+    does not read it again."""
     var b = xcnn_builtins()
     var shape = _xcnn_slot_raw(value, "shape", context)
     if py_type(shape) is not b.tuple:
@@ -333,6 +369,7 @@ def _xcnn_tensor_admit_raw(value: PythonObject, context: PythonObject) raises:
     _ = xcnn_module_entries(_xcnn_slot_raw(value, "b", context), context)
     if handle is None:
         sequential_admit_value(_xcnn_slot_raw(value, "_host", context), context)
+    return handle
 
 
 def xcnn_on_dev(entries: PythonObject, value: PythonObject, context: PythonObject) raises -> Bool:
@@ -340,8 +377,9 @@ def xcnn_on_dev(entries: PythonObject, value: PythonObject, context: PythonObjec
     if not xcnn_mixed(entries) or not xcnn_is_t(value, context):
         return False
     # `xcnn_is_t` ran the layout check; the admission and slot reads reuse it.
-    _xcnn_tensor_admit_raw(value, context)
-    return _xcnn_slot_raw(value, "h", context) is not None and _xcnn_slot_raw(value, "b", context) is entries["module"]
+    # The admitted handle is returned, not read a second time (fx-rows).
+    var handle = _xcnn_tensor_admit_raw(value, context)
+    return handle is not None and _xcnn_slot_raw(value, "b", context) is entries["module"]
 
 
 def xcnn_tensor(module: PythonObject, shape: PythonObject, h: PythonObject, host: PythonObject, base: PythonObject,
