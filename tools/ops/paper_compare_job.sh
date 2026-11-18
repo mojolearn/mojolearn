@@ -127,6 +127,49 @@ if [ "${1:-}" = --detect-vendor ]; then
     detect_vendor || { echo "paper-compare-job: neither nvidia-smi nor rocm-smi found" >&2; exit 2; }
     exit 0
 fi
+# >>> pc-preflight (tools/test_job_preflight.py runs this block)
+# job-preflight: `paper_compare_job.sh --preflight` checks the job's staged inputs at SUBMIT time, reading only (run on
+# the box by tools/ops/job_preflight.sh from tools/nvidia_central.sh submit; lane fx-pod-job, 2026-11-18): the
+# candidate wheel set (one core and one vendor wheel), its source commit, every B set of PC_B_ARMS, the rows file and
+# the stored baseline board are where the job reads them. The job keeps its own run-time checks of the same inputs.
+pc_preflight() {   # vendor: PREFLIGHT lines; 0 when the job would start, 4 otherwise
+    local v=$1 fails=0 n name dir commit
+    pf_fail() { echo "PREFLIGHT FAIL $*"; fails=$(( fails + 1 )); }
+    wheels_in() { ls "$1"/mojolearn_core-*.whl "$1"/mojolearn_"$v"-*.whl 2> /dev/null | grep -c .; }
+    if [ -n "${PC_WHEEL_DIR:-}" ]; then
+        n=$(wheels_in "$PC_WHEEL_DIR")
+        if [ "$n" -eq 2 ]; then echo "PREFLIGHT ok candidate wheels in $PC_WHEEL_DIR"
+        else pf_fail "PC_WHEEL_DIR $PC_WHEEL_DIR holds $n of the 2 wheels (one mojolearn_core, one mojolearn_$v)"; fi
+        [[ "${PC_SOURCE_COMMIT:-}" =~ ^[0-9a-f]{40}$ ]] || pf_fail "PC_SOURCE_COMMIT is not a 40-hex commit"
+    fi
+    if [[ ",${PC_PARTS:-}," == *",targeted,"* || ",${PC_PARTS:-}," == *",tg-"* ]]; then
+        { [ -n "${PC_ROWS:-}" ] && [ -s "$PC_ROWS" ]; } && echo "PREFLIGHT ok rows file $PC_ROWS" \
+            || pf_fail "PC_ROWS (the rows file on the box) is missing or empty: ${PC_ROWS:-unset}"
+    fi
+    if [ -n "${PC_BASELINE_BOARD:-}" ] && [ ! -s "$PC_BASELINE_BOARD" ]; then
+        pf_fail "PC_BASELINE_BOARD $PC_BASELINE_BOARD: no such file on the box"
+    fi
+    if [ -n "${PC_B_ARMS:-}" ]; then
+        if [ ! -s "$PC_B_ARMS" ]; then pf_fail "PC_B_ARMS $PC_B_ARMS: no such file on the box (or empty)"
+        else
+            while read -r name dir commit; do
+                { [ -z "${name:-}" ] || [ "${name:0:1}" = "#" ]; } && continue
+                [[ "${dir:-}" == env:* ]] && continue
+                n=$(wheels_in "${dir:-/nonexistent}")
+                [ "$n" -eq 2 ] || pf_fail "B set $name: ${dir:-?} holds $n of the 2 wheels"
+            done < "$PC_B_ARMS"
+            echo "PREFLIGHT ok B sets of $PC_B_ARMS checked"
+        fi
+    fi
+    return $(( fails > 0 ? 4 : 0 ))
+}
+# <<< pc-preflight
+if [ "${1:-}" = --preflight ]; then
+    pv=${2:-}
+    [ -z "$pv" ] && { pv=$(detect_vendor) || { echo "PREFLIGHT FAIL neither nvidia-smi nor rocm-smi found"; exit 4; }; }
+    pc_preflight "$pv"
+    exit $?
+fi
 [ $# -le 2 ] || usage
 V=${1:-}
 ARG2=${2:-}
@@ -637,12 +680,13 @@ fi
 
 # ---- targeted: only the listed rows (Andrew, 2026-11-17: "can we only measure the things that have changed? we don't
 # need a full board run") ------------------------------------------------------------------------------------------
-# PC_PARTS=targeted (= tg-install,tg-smoke,tg-board,tg-compare; each can be given alone to split a job over the cap:
+# PC_PARTS=targeted (= tg-install,tg-prep,tg-smoke,tg-board,tg-compare; each can be given alone to split a job over the cap:
 # the boards resume from board.json) with PC_ROWS=<rows file on the box> (tools/ops/targeted_rows.py writes it from a
 # compare and the changed lanes; tools/ops/measure_candidate.py stage --rows uploads it and refuses one whose estimate
 # is over the cap, naming the split). Our arms only, the same machinery as board-all on the listed races: the plan
 # (every submit, CPU, seconds: targeted_rows.py plan = the board's current plan of the listed races, in rows-file order,
-# and the recipes of those races only) -> every arm's venv at once -> every arm's smoke at once in one shard set (the
+# and the recipes of those races only) -> the candidate's and the priors' venvs at once (the B arms' by window in
+# tg-board, see arm-window) -> tg-prep: the timed races' blocks prepared at once into c1 -> every arm's smoke at once in one shard set (the
 # disk gate counts only the listed races) -> the TIMED races, INTERLEAVED BY ARM in chunks: chunk 1 on the candidate,
 # chunk 1 on 0.8.55, chunk 2 on the candidate, ..., so the two times of a row are minutes apart, not hours (a chunk is
 # about PC_TG_CHUNK_S = 600 s of the rows' stored candidate time; 0 = one race per chunk). The harness times one
@@ -659,8 +703,8 @@ fi
 # "0.8.55 is not timed again") the job has NO prior arm: the plan, the candidate's install (and the B sets'), its smoke
 # of the listed races, its board, and the compare against the stored board (first line: the baseline is stored).
 # Env-only A/B arms (PC_B_ARMS `<name> env:VAR=VALUE <commit>`) run the candidate's venv with those variables.
-[[ "$PARTS" == *",targeted,"* ]] && PARTS="$PARTS,tg-install,tg-smoke,tg-board,tg-compare,"
-if part tg-install || part tg-smoke || part tg-board || part tg-compare; then
+[[ "$PARTS" == *",targeted,"* ]] && PARTS="$PARTS,tg-install,tg-prep,tg-smoke,tg-board,tg-compare,"
+if part tg-install || part tg-prep || part tg-smoke || part tg-board || part tg-compare; then
     TG="$RES/plan-tg"; TGO="$RES/plan-tg-owed"
     mkdir -p "$TG"
     { [ -n "${PC_ROWS:-}" ] && [ -s "$PC_ROWS" ]; } || { say "targeted: PC_ROWS (the rows file on the box) is missing or empty"; exit 2; }
@@ -690,26 +734,111 @@ if part tg-install || part tg-smoke || part tg-board || part tg-compare; then
     mapfile -t BARGS_TG < "$TG/board-args.txt"
     COMMON_TG=("${BARGS_TG[@]}" --data-root "$DATA_ROOT" --rounds 1 --evidence-local-only --fixtures-venv "$CACHE_ROOT/venv-nf")
     CARGS=("${COMMON_TG[@]}")
-    if part tg-install; then
-        phase tg-install
-        pids=(); names=()
-        for arm in "${ARMS[@]}"; do      # every arm at once (CPU): the candidate, the priors, the B sets
-            [ -n "${ARM_ENV[$arm]:-}" ] && continue      # an env arm runs in the candidate's venv: nothing to install
+    # >>> arm-window (tools/test_targeted_rows.py runs this block)
+    # B-ARM VENVS BY WINDOW (lane fx-pod-job, 2026-11-18): every arm's venv used to be made at once in tg-install,
+    # 1.3 GB each, and a 42-arm job did not fit the 80 GB pod (it was cut to 14 arms by hand). Now tg-install makes the
+    # candidate's and the priors' venvs (all at once, as before); a B arm's venv is made in tg-board at the boundary
+    # before its first unit, together with the next arms of a window (W = min(the cgroup's cores, the disk left after
+    # the evidence still to be written over PC_VENV_MB), all at once), and its venv and install cache are deleted
+    # after its last unit. Installs never run while a race is timed: this is the one pause between timed boards that
+    # is kept, because an install would share the cores, the page cache and the disk with a millisecond row.
+    # The staged wheels stay (a later submit that resumes the arm installs from them again).
+    INSTALL_IDS="$TG/race-ids-full.txt"
+    VENV_MB=${PC_VENV_MB:-1536}       # an ours-only venv with its install cache, measured 1.3 GB (2026-11-18)
+    EV_LEFT_MB=0                      # the evidence the units not yet run will still write (tg-board)
+    arm_ready() { [ -n "${ARM_ENV[$1]:-}" ] || [ -x "${ARM_PY[$1]}" ]; }   # an env arm runs in the candidate's venv
+    install_arms() {   # arm...: their venvs at once (CPU), each checked against its wheel manifest; the worst rc
+        local pids=() names=() i r rc=0 arm
+        for arm in "$@"; do
             # shellcheck disable=SC2086
             $PY tools/bench_board.py "${COMMON_TG[@]}" ${ARM_ARGS[$arm]} --ours-install-only --install-only \
                 --venv "$CACHE_ROOT/venv-$arm" --cache "$CACHE_ROOT/i-$arm" --wheel-manifest "${ARM_MAN[$arm]}" \
-                --race-ids @"$TG/race-ids-full.txt" --out "$RES/install-tg-$arm" > "$RES/logs/install-tg-$arm.log" 2>&1 &
+                --race-ids @"$INSTALL_IDS" --out "$RES/install-tg-$arm" > "$RES/logs/install-tg-$arm.log" 2>&1 &
             pids+=($!); names+=("$arm")
         done
-        rc=0
         for i in "${!pids[@]}"; do
             wait "${pids[$i]}"; r=$?; say "install ${names[$i]} rc=$r"; [ $r -gt $rc ] && rc=$r
         done
+        return $rc
+    }
+    window_size() {   # the arms one install window holds: min(cores, (free disk - evidence left - reserve) / venv)
+        local free_mb w cores
+        cores=$(alloc_cores)
+        free_mb=$(df -Pk "$CACHE_ROOT" 2> /dev/null | awk 'NR==2 {print int($4 / 1024)}')
+        w=$(( (${free_mb:-0} - EV_LEFT_MB - ${PC_DISK_RESERVE_GB:-5} * 1024) / VENV_MB ))
+        [ "$w" -gt "$cores" ] && w=$cores
+        [ "$w" -lt 1 ] && w=1
+        echo "$w"
+    }
+    install_window() {   # arm: its venv and those of the next arms of WIN_ARMS not yet made, up to window_size
+        local want=$1 w on=0 n=0 a pick=()
+        w=$(window_size)
+        for a in "${WIN_ARMS[@]}"; do
+            [ "$a" = "$want" ] && on=1
+            [ "$on" = 1 ] || continue
+            arm_ready "$a" && continue
+            pick+=("$a"); n=$(( n + 1 ))
+            [ "$n" -ge "$w" ] && break
+        done
+        [ "$n" -gt 0 ] || return 0
+        say "install window: ${pick[*]} ($n of window $w; $(df -Pk "$CACHE_ROOT" 2> /dev/null | awk 'NR==2 {printf "%.1f GB free", $4 / 1048576}'), evidence still to write $EV_LEFT_MB MB)"
+        install_arms "${pick[@]}"
+    }
+    drop_arm_venv() {   # arm: its venv and install cache once its last unit has run (the staged wheels stay)
+        rm -rf "$CACHE_ROOT/venv-$1" "$CACHE_ROOT/i-$1"
+        say "venv $1 deleted after its last unit; $(df -Pk "$CACHE_ROOT" 2> /dev/null | awk 'NR==2 {printf "%.1f GB free", $4 / 1048576}')"
+    }
+    # <<< arm-window
+    WIN_ARMS=()
+    if part tg-install; then
+        phase tg-install
+        pids=(); names=(); now=()
+        for arm in "${ARMS[@]}"; do      # the candidate and the priors at once (CPU); the B sets by window in tg-board
+            [ -n "${ARM_ENV[$arm]:-}" ] && continue      # an env arm runs in the candidate's venv: nothing to install
+            [[ " ${B_NAMES[*]:-} " == *" $arm "* ]] && continue
+            now+=("$arm")
+        done
+        install_arms "${now[@]}"; rc=$?
         phase_end $rc
     fi
     [ -f "${ARM_MAN[candidate]}" ] || { say "the candidate arm has no wheel manifest (logs/install-tg-candidate.log)"; exit 6; }
     cat "$TG/race-ids-smoke.txt" "$TGO/smoke-ids.txt" 2> /dev/null | sort -u > "$TG/smoke-ids-all.txt"
     for arm in ${PRIOR_ARMS[@]+"${PRIOR_ARMS[@]}"}; do PRIOR_SMOKE_IDS[$arm]="$TG/race-ids-smoke.txt"; done
+    if part tg-prep; then
+        # ONE PARALLEL PREP (lane fx-pod-job, 2026-11-18): the timed board's first process prepared every full-row
+        # block on one core while the GPU waited (graph-istella 229.5 s + graph-taxi 256.9 s of its 695 s in
+        # nvc-tg-20261118T135756Z-7a2bff). Here, untimed and before the smoke, the races the timed boards run
+        # (the listed rows and the owed full rows) are prepared into c1, one --preflight-only --prep-only process per
+        # family and prep dataset (targeted_rows.py prep-groups: they write disjoint blocks), all at once up to
+        # min(cgroup cores, MemAvailable / PC_PREP_MEM_GB (12)). No --fixtures-venv here: the neural fixtures are made
+        # over every prepared mirror at once, by the timed board's first process, as before. The timed processes then
+        # find every block prepared (the driver skips a block whose record exists); the prepared bytes are the same.
+        phase tg-prep
+        $PY tools/ops/targeted_rows.py prep-groups --ids "$TG/race-ids-full.txt" --ids "$TGO/smoke-ids.txt" \
+            --out-dir "$TG/prep" > "$RES/logs/tg-prep-groups.log" 2>&1
+        rc=$?; tail -n 1 "$RES/logs/tg-prep-groups.log"
+        PREP_ARGS=("${BARGS_TG[@]}" --data-root "$DATA_ROOT" --rounds 1 --evidence-local-only)
+        memg=$(awk '/MemAvailable/ {print int($2 / 1048576)}' /proc/meminfo 2> /dev/null || echo 16)
+        pw=$(( memg / ${PC_PREP_MEM_GB:-12} )); [ "$pw" -gt "$(alloc_cores)" ] && pw=$(alloc_cores); [ "$pw" -lt 1 ] && pw=1
+        pids=(); names=()
+        for g in "$TG"/prep/group-*.txt; do
+            [ -f "$g" ] || continue
+            # at most pw at once (jobs -r would count the cores sampler and the cap guard too)
+            while [ "$(n=0; for q in ${pids[@]+"${pids[@]}"}; do kill -0 "$q" 2> /dev/null && n=$(( n + 1 )); done; echo $n)" -ge "$pw" ]; do
+                sleep 2
+            done
+            gn=$(basename "$g" .txt)
+            # shellcheck disable=SC2046
+            $PY tools/bench_board.py "${PREP_ARGS[@]}" $(run_as candidate) --cache "$CACHE_ROOT/c1" --race-ids @"$g" \
+                --preflight-only --prep-only --out "$RES/prep-tg/$gn" > "$RES/logs/prep-tg-$gn.log" 2>&1 &
+            pids+=($!); names+=("$gn")
+        done
+        say "tg-prep: ${#pids[@]} group(s), $pw at once (allocation $(alloc_cores) cores, MemAvailable $memg GiB)"
+        for i in "${!pids[@]}"; do
+            wait "${pids[$i]}"; r=$?; say "prep ${names[$i]} rc=$r"; [ $r -gt $rc ] && rc=$r
+        done
+        phase_end $rc     # a failed group is prepared again by its timed process, as before; the job goes on
+    fi
     if part tg-smoke; then
         phase tg-smoke    # the candidate (listed + owed rows) and every prior (listed rows) at once, untimed
         smoke_together tg- "$TG/smoke-ids-all.txt" "$RES/smoke-tg" --drop-race-scratch; src=$?
@@ -755,7 +884,10 @@ if part tg-install || part tg-smoke || part tg-board || part tg-compare; then
                 left=$(( left + 2 * $(nlines "$ids") )); nb=$(( nb + 2 ))
             done 3< "$TGO/units.tsv"
         fi
-        disk_gate tg-board "$left" "$nb" "${PC_EVIDENCE_MB_PER_RACE:-40}"
+        # a board dir's fixed part here is the measured one (lane fx-pod-job, 2026-11-18: the ab1 unit boards were
+        # 98-166 MB each with their races, against the 400 MB default), so a 42-arm job's 85 unit boards are not
+        # refused on a disk they fit; the B arms' venvs are counted per install window (window_size)
+        PC_LOADED_MB=${PC_LOADED_MB:-200} disk_gate tg-board "$left" "$nb" "${PC_EVIDENCE_MB_PER_RACE:-40}"
         # the listed rows: chunk by chunk, the candidate then each prior on the same races in the same order
         $PY tools/ops/targeted_rows.py chunks --ids "$TG/race-ids-pass.txt" --rows "$TG/rows.tsv" \
             --chunk-s "${PC_TG_CHUNK_S:-600}" --out-dir "$TG/chunks" | tail -n 1
@@ -768,8 +900,11 @@ if part tg-install || part tg-smoke || part tg-board || part tg-compare; then
                 tg_board "$arm" "$c.$arm" "$RES/board-tg-$arm" "" "${psj[@]}"; r=$?; [ $r -gt $rc ] && rc=$r
             done
         done
-        # the owed A/B arms: each unit chunk by chunk, its base (the candidate) and the arm back to back
+        # the owed A/B arms: each unit chunk by chunk, its base (the candidate) and the arm back to back. Two passes:
+        # the units this submit runs (their pass ids, the arms in order, each arm's last unit, the evidence still to
+        # write), then the units, each B arm's venv made by window before its first unit and deleted after its last
         if [ -s "$TGO/units.tsv" ]; then
+            UNITS=(); declare -A LAST_UNIT=() SEEN_ARM=()
             while IFS=$'\t' read -r arm rows ids <&3; do
                 { [ "$arm" = candidate ] || [ "$arm" = prior ]; } && continue
                 [ -n "${PC_OWED_ARMS:-}" ] && [[ ",$PC_OWED_ARMS," != *",$arm,"* ]] && continue   # a split submit
@@ -780,6 +915,27 @@ if part tg-install || part tg-smoke || part tg-board || part tg-compare; then
                     use="$ids.pass"
                 else
                     abrows=$rows                 # a neighbouring shape: no smoke gate (as the owed part)
+                fi
+                # a resumed submit: a unit whose arm board holds every race and whose base board every base race
+                # is done needs no process and no venv
+                st="${ids%.txt}.stored.txt"
+                if [ -s "$st" ]; then grep -vFx -f "$st" "$use" > "$use.base" || true; else cp "$use" "$use.base"; fi
+                if [ "$(races_left "$use" "$RES/board-tg-ab-$arm-$rows/board.json")" -eq 0 ] 2> /dev/null \
+                        && [ "$(races_left "$use.base" "$RES/board-tg-ab-$arm-base-$rows/board.json")" -eq 0 ] 2> /dev/null; then
+                    if [ "$(nlines "$use")" -eq 0 ]; then say "owed $arm $rows: no race to time (none passed its smoke)"
+                    else say "owed $arm $rows: every race already in its boards (an earlier submit)"; fi
+                    continue
+                fi
+                LAST_UNIT[$arm]=${#UNITS[@]}
+                UNITS+=("$arm"$'\t'"$rows"$'\t'"$ids"$'\t'"$use"$'\t'"$abrows")
+                [ -n "${SEEN_ARM[$arm]:-}" ] || { SEEN_ARM[$arm]=1; WIN_ARMS+=("$arm"); }
+                EV_LEFT_MB=$(( EV_LEFT_MB + 2 * $(nlines "$use") * ${PC_EVIDENCE_MB_PER_RACE:-40} ))
+            done 3< "$TGO/units.tsv"
+            for k in ${UNITS[@]+"${!UNITS[@]}"}; do
+                IFS=$'\t' read -r arm rows ids use abrows <<< "${UNITS[$k]}"
+                capped && { say "owed $arm $rows: not run (cap guard)"; continue; }
+                if ! arm_ready "$arm"; then
+                    install_window "$arm"; r=$?; [ $r -gt $rc ] && rc=$r
                 fi
                 $PY tools/ops/targeted_rows.py chunks --ids "$use" --chunk-s "${PC_TG_CHUNK_S:-600}" \
                     --out-dir "$TGO/chunks-$arm-$rows" | tail -n 1
@@ -793,7 +949,12 @@ if part tg-install || part tg-smoke || part tg-board || part tg-compare; then
                     tg_board candidate "$c.base" "$RES/board-tg-ab-$arm-base-$rows" "$abrows" "${SJT[@]}"; r=$?; [ $r -gt $rc ] && rc=$r
                     tg_board "$arm" "$c" "$RES/board-tg-ab-$arm-$rows" "$abrows" "${SJT[@]}" ${cap[@]+"${cap[@]}"}; r=$?; [ $r -gt $rc ] && rc=$r
                 done
-            done 3< "$TGO/units.tsv"
+                EV_LEFT_MB=$(( EV_LEFT_MB - 2 * $(nlines "$use") * ${PC_EVIDENCE_MB_PER_RACE:-40} ))
+                if [ "${LAST_UNIT[$arm]}" = "$k" ] && [ -z "${ARM_ENV[$arm]:-}" ]; then
+                    if capped; then say "venv $arm kept: the cap guard cut its units (the next submit resumes them)"
+                    else drop_arm_venv "$arm"; fi
+                fi
+            done
         fi
         phase_end $rc
     fi

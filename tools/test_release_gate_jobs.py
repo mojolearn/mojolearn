@@ -723,3 +723,80 @@ def test_gate_env_carries_the_disk_plan(tmp_path):
     dev_pod = (RG.ROOT / "tools/dev_pod.sh").read_text()
     assert 'tools/ops/gate_disk_plan.py" pod-gb' in dev_pod
     assert 'tools/ops/gate_disk_plan.py" pod-gb' in (RG.ROOT / "tools/nvidia_central.sh").read_text()
+
+
+def test_stage_skips_files_on_the_box_and_copies_in_parallel(tmp_path):
+    # lane fx-pod-job (2026-11-18): one `ssh cat >` per file, one after the other, took 57 min for 42 arms; a file
+    # already on the box at its sha256 (the base wheels, the stored board) was sent again on every stage
+    import threading
+    files = []
+    for i in range(6):
+        f = tmp_path / f"w{i}.whl"
+        f.write_bytes(b"wheel %d" % i)
+        files.append(f)
+    box, lock, live, peak = {}, threading.Lock(), [0], [0]
+
+    class StubPlan:
+        indir = "/root/pc-in/x"
+
+        def sync(self):
+            return None
+
+        def box_sh(self, command):
+            return ["bash", "tools/nvidia_central.sh", "sh", "lane", command]
+
+        def prepare(self):
+            return self.box_sh("mkdir -p /root/pc-in/x; echo READY")
+
+        def uploads(self):
+            return [(f, f"/root/pc-in/x/{f.name}", False) for f in files]
+
+        def upload(self, remote):
+            return self.box_sh("cat > " + remote)
+
+        def verify(self, remotes, executables):
+            return self.box_sh("sha256sum " + " ".join(remotes))
+
+    def run(argv, cwd=None, stdin=None, timeout=None, capture_output=True, text=True):
+        out = SimpleNamespace(returncode=0, stdout="", stderr="")
+        command = argv[-1]
+        if command.startswith("cat > "):
+            with lock:
+                live[0] += 1
+                peak[0] = max(peak[0], live[0])
+            import time
+            time.sleep(0.05)
+            data = stdin.read()
+            with lock:
+                box[command[len("cat > "):]] = data
+                live[0] -= 1
+        elif "sha256sum" in command:
+            out.stdout = "".join(f"{hashlib.sha256(v).hexdigest()}  {k}\n" for k, v in box.items())
+        elif "READY" in command:
+            out.stdout = "READY\n"
+        return out
+
+    sent = []
+    r = RG.Runner(SimpleNamespace(), run=run)
+    real = run
+
+    def counting(argv, **kw):
+        if argv[-1].startswith("cat > "):
+            sent.append(argv[-1])
+        return real(argv, **kw)
+
+    r.run = counting
+    old = RG.STAGE_STREAMS
+    RG.STAGE_STREAMS = 4
+    try:
+        r.stage(StubPlan())
+        assert len(sent) == 6 and set(box) == {f"/root/pc-in/x/{f.name}" for f in files}
+        assert peak[0] > 1                       # parallel streams
+        sent.clear()
+        r.stage(StubPlan())                      # a restage: every file is on the box at its sha256
+        assert sent == []
+        box["/root/pc-in/x/w0.whl"] = b"stale"
+        r.stage(StubPlan())                      # a changed file is sent again, and only it
+        assert sent == ["cat > /root/pc-in/x/w0.whl"] and box["/root/pc-in/x/w0.whl"] == b"wheel 0"
+    finally:
+        RG.STAGE_STREAMS = old

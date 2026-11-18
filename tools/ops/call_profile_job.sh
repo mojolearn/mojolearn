@@ -57,6 +57,64 @@ JOB_NAME=call-profile
 # shellcheck source=tools/ops/box_job_lib.sh
 source "$(dirname "$0")/box_job_lib.sh"
 
+# >>> cp-preflight (tools/test_job_preflight.py runs this block)
+# job-preflight: `call_profile_job.sh --preflight` checks this job's inputs at SUBMIT time, reading only (run on the
+# box by tools/ops/job_preflight.sh from tools/nvidia_central.sh submit; lane fx-pod-job, 2026-11-18). It covers the
+# three ways the job failed on 2026-11-18, each found 90 s into a run after hours in the queue: (1) the venv holds
+# another wheel than the manifest names and no install part runs (251f16771a); (2) no wheel manifest, so no row can be
+# timed (bf3af46910); (3) the (re)install cannot run: no staged wheels in CP_WHEEL_DIR or no source commit in the
+# manifest (eed2394df2). The job keeps its own run-time checks of the same conditions (the box can change after submit).
+cp_preflight() {   # results dir, tree: PREFLIGHT lines; 0 when the job would start, 4 otherwise
+    local res=$1 tree=$2 man ver have wdir src rows nwhl fails=0
+    local parts=",${CP_PARTS:-tools,plan,install,run,post,report},"
+    local apy="${PC_CACHE_ROOT:-/root/pc-cache}/venv-candidate/bin/python" py=${CP_PYTHON:-python3}
+    rows=${CP_ROWS_FILE:-$tree/tools/ops/call_profile_rows.tsv}
+    if [ -s "$rows" ]; then echo "PREFLIGHT ok rows file $rows"
+    else echo "PREFLIGHT FAIL no rows file $rows (CP_ROWS_FILE)"; fails=$(( fails + 1 )); fi
+    man=${CP_MANIFEST:-}
+    # shellcheck disable=SC2012
+    [ -z "$man" ] && man=$(ls -t "$(dirname "$res")"/*/job/wheel-manifest-candidate.json 2> /dev/null | head -n 1)
+    if [ ! -f "$man" ]; then
+        if [[ "$parts" == *",run,"* ]]; then
+            echo "PREFLIGHT FAIL no wheel manifest: pass CP_MANIFEST=<a results dir>/job/wheel-manifest-candidate.json (searched $(dirname "$res")/*/job/)"
+            return 4
+        fi
+        echo "PREFLIGHT ok no manifest needed (no run part)"
+        return $(( fails > 0 ? 4 : 0 ))
+    fi
+    ver=$($py -c 'import json, sys; print(json.load(open(sys.argv[1])).get("version", ""))' "$man" 2> /dev/null)
+    have=$([ -x "$apy" ] && "$apy" -c 'import importlib.metadata as m
+for n in ("mojolearn-core", "mojolearn"):
+    try:
+        print(m.version(n)); break
+    except m.PackageNotFoundError:
+        pass' 2> /dev/null)
+    echo "PREFLIGHT ok manifest $man (version ${ver:-none}); venv ${have:-none}"
+    if [ -x "$apy" ] && { [ -z "$ver" ] || [ "$have" = "$ver" ]; }; then
+        echo "PREFLIGHT ok the venv holds the manifest's wheel"
+    elif [[ "$parts" == *",install,"* ]]; then
+        # the job (re)installs: the manifest's version and source commit and the staged wheels must be there
+        wdir=${CP_WHEEL_DIR:-/root/pc-in/${ver##*+}/nvidia}
+        nwhl=$(ls "$wdir"/*.whl 2> /dev/null | grep -c .)
+        src=$($py -c 'import json, sys; print(json.load(open(sys.argv[1])).get("source_commit", ""))' "$man" 2> /dev/null)
+        if [ -n "$ver" ] && [ "${nwhl:-0}" -gt 0 ] && [ -n "$src" ]; then
+            echo "PREFLIGHT ok the install has $nwhl wheel(s) in $wdir and source ${src:0:12}"
+        else
+            echo "PREFLIGHT FAIL the install cannot run: ${nwhl:-0} wheel(s) in $wdir (CP_WHEEL_DIR), version '${ver}', source commit '${src}' in $man"
+            fails=$(( fails + 1 ))
+        fi
+    else
+        echo "PREFLIGHT FAIL the venv holds ${have:-nothing}, the manifest names $ver, and CP_PARTS has no install: nothing would be timed"
+        fails=$(( fails + 1 ))
+    fi
+    return $(( fails > 0 ? 4 : 0 ))
+}
+# <<< cp-preflight
+if [ "${1:-}" = --preflight ]; then
+    cp_preflight "${MOJOLEARN_RESULTS_DIR:-}" "$(cd "$(dirname "$0")/../.." && pwd)"
+    exit $?
+fi
+
 if [ "${MOJOLEARN_BOX_PERSIST:-}" != 1 ] && [ "${MOJOLEARN_ALLOW_UNPERSISTED:-}" != 1 ]; then
     echo "call-profile: runs under tools/box_persist_run.sh (tools/nvidia_central.sh submit); MOJOLEARN_ALLOW_UNPERSISTED=1 overrides" >&2
     exit 2

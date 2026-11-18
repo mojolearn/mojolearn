@@ -185,3 +185,26 @@ def test_workflow_shape():
     assert "mojo build" not in run and "mojo run" not in run  # the shards never compile
     assert wf["jobs"]["check"]["needs"] == ["plan", "build"]
     assert wf["jobs"]["check"]["strategy"]["fail-fast"] is False
+
+
+def test_gpu_job_uses_every_core_unless_memory_says_fewer(tmp_path):
+    # lane fx-pod-job (2026-11-18): K was cores/4 with no memory reason (3.6 of 14 cores busy), and the summary's
+    # "K memory alone allows" divided by the build's 43 GB peak RSS (results/build-gpu.txt), not a check's 1.64 GB
+    import re
+    import subprocess
+    text = (ROOT / "tools/ops/native_checks_gpu_job.sh").read_text()
+    assert "cores / 4" not in text
+    m = re.search(r"^check_kb=.*\n^bymem=.*\n^K=.*\n", text, re.M)
+    assert m, "the K block"
+    for mem_kb, cores, want in ((179 * 1048576, 14, 14), (8 * 1048576, 14, 3), (1048576, 14, 1)):
+        script = f"mem_kb={mem_kb}; cores={cores}\n{m.group(0)}[ \"$K\" -lt 1 ] && K=1\necho K=$K\n"
+        got = subprocess.run(["bash", "-c", script], capture_output=True, text=True, timeout=30)
+        assert got.stdout.strip() == f"K={want}", (mem_kb, cores, got.stdout, got.stderr)
+    peak = text[text.index("checkfiles=()"):text.index("busy=$(busy_of")]
+    res = tmp_path / "res"
+    _write(res / "results", "build-gpu", 0, rss=44141068)
+    _write(res / "results", "hist2_check", 0, rss=1600000)
+    _write(res / "results", "gbdt_resident_ns_predict", 0, rss=1719664)
+    got = subprocess.run(["bash", "-c", f"RES={res}\n{peak}\necho $peak_kb"], capture_output=True, text=True, timeout=30)
+    assert got.stdout.strip() == "1719664", got.stdout + got.stderr     # the largest check, never the build
+    assert 'busy_sampler "$RES/busy_cores_build.txt"' in text and "BUSY build:" in text

@@ -54,6 +54,7 @@ import subprocess
 import sys
 import tarfile
 import time
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -64,6 +65,9 @@ if str(TOOLS) not in sys.path:
 JOB_SCRIPT = "tools/ops/release_gate_job.sh"
 #: the one nvidia_central lane the gate's jobs run in (its tree: /root/mojolearn-release-gate)
 LANE = "release-gate"
+#: parallel copy streams of Runner.stage (one `ssh cat >` each; one stream carried about 1.3 MB/s on 2026-11-18): the
+#: laptop's cores, at most one per file (MOJOLEARN_STAGE_STREAMS overrides)
+STAGE_STREAMS = int(os.environ.get("MOJOLEARN_STAGE_STREAMS") or os.cpu_count() or 4)
 IN_BASE = "/root/release-gate"
 #: gate_autograd_artifacts.py: outputs, logs and receipts live under a retained /root/results* directory
 RESULTS_BASE = "/root/results-release-gate"
@@ -563,17 +567,37 @@ class Runner:
         got = self.must(plan.prepare(), f"preparing {plan.indir}")
         if "READY" not in (got.stdout or ""):
             raise SystemExit(f"release-gate: could not prepare {plan.indir}")
-        want, executables = {}, []
-        for local, remote, executable in plan.uploads():
+        # PARALLEL STAGING (lane fx-pod-job, 2026-11-18): a 53-64 MB wheel took 33-56 s through one `ssh cat >`
+        # (about 1.3 MB/s, one stream), and the files went one after the other: 6.3 min for three arms, about 57 min
+        # for 42. Now (1) a file already on the box at its sha256 is not sent again (the base wheels per candidate
+        # dir, the 44 MB stored board on every stage), and (2) the rest go in STAGE_STREAMS parallel streams. The
+        # sha256 check of every file on the box after the copies is unchanged. The candidate wheels are not kept in
+        # R2 (the build collector drops them), so the pod cannot pull them from there.
+        items = list(plan.uploads())
+        for local, _, _ in items:
             if not Path(local).is_file():
                 raise SystemExit(f"release-gate: no file {local}")
+        workers = max(1, min(len(items), STAGE_STREAMS))
+        with ThreadPoolExecutor(workers) as ex:
+            sums = list(ex.map(lambda it: sha256(it[0]), items))
+        want = {remote: s for (_, remote, _), s in zip(items, sums)}
+        executables = [remote for _, remote, executable in items if executable]
+        have = self.box_sums(plan, list(want)) if want else {}
+        todo = [(local, remote) for local, remote, _ in items if have.get(remote) != want[remote]]
+        for local, remote, _ in items:
+            if have.get(remote) == want[remote]:
+                say(f"on the box already at its sha256: {remote}")
+
+        def copy(job):
+            local, remote = job
             size = Path(local).stat().st_size
             say(f"copying {Path(local).name} ({size} bytes) to {remote}")
             with open(local, "rb") as fh:
                 self.must(plan.upload(remote), f"the copy of {local}", stdin=fh, timeout=300 + size // 200000)
-            want[remote] = sha256(local)
-            if executable:
-                executables.append(remote)
+
+        if todo:
+            with ThreadPoolExecutor(max(1, min(len(todo), STAGE_STREAMS))) as ex:
+                list(ex.map(copy, todo))      # list(): a failed copy's SystemExit is raised here
         got = self.must(plan.verify(list(want), executables), "the sha256 check on the box")
         have = {}
         for line in (got.stdout or "").splitlines():
@@ -584,6 +608,17 @@ class Runner:
         if bad:
             raise SystemExit(f"release-gate: sha256 differs on the box for {bad}")
         say(f"{len(want)} input(s) on the box, sha256 verified")
+
+    def box_sums(self, plan, remotes):
+        """{remote: sha256} of the REMOTES already on the box (a missing file is left out; never fails the stage)."""
+        cmd = "sha256sum " + " ".join(shlex.quote(r) for r in remotes) + " 2> /dev/null; true"
+        got = self.call(plan.box_sh(cmd), timeout=900)
+        have = {}
+        for line in (got.stdout or "").splitlines() if got.returncode == 0 else []:
+            parts = line.split()
+            if len(parts) == 2:
+                have[parts[1]] = parts[0]
+        return have
 
     def fetch_dir(self, tag):
         return (Path(self.a.state).parent if self.a.state else self.a.out.parent) / f"fetch-{tag}"
