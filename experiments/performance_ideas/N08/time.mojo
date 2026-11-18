@@ -31,6 +31,8 @@ def _case(rows: Int,cols: Int,dims: Int) raises:
     ctx.enqueue_copy(dst_buf=q,src_buf=hq)
     ctx.enqueue_copy(dst_buf=x,src_buf=hx)
     ctx.synchronize()
+    _ = hq^  # past the drain: a queued copy reads it after its last named use
+    _ = hx^  # past the drain: a queued copy reads it after its last named use
     for arm in range(2):
         for phase in range(2):
             var start=perf_counter_ns()

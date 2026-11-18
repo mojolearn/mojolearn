@@ -601,6 +601,7 @@ def run_checks() raises:
     ctx.enqueue_copy(dst_buf=h_hb, src_buf=d_hb)
     ctx.enqueue_copy(dst_buf=h_b, src_buf=d_b)
     ctx.synchronize()
+    _ = parts1^  # past the drain: a queued copy reads it after its last named use
 
     var got_ob = List[Float32]()
     for k in range(fx.ob_line * 2):
@@ -681,6 +682,7 @@ def run_checks() raises:
     )
     ctx.enqueue_copy(dst_buf=h_ob_wide, src_buf=d_ob_wide)
     ctx.synchronize()
+    _ = parts64^  # past the drain: a queued copy reads it after its last named use
 
     var got_wide = List[Float32]()
     for k in range(fx.ob_line * 2):
@@ -922,6 +924,7 @@ def run_checks() raises:
     )
     ctx.enqueue_copy(dst_buf=h_ob4, src_buf=d_ob4)
     ctx.synchronize()
+    _ = parts4^  # past the drain: a queued copy reads it after its last named use
 
     var got4 = List[Float32]()
     for k in range(line2 * 4):

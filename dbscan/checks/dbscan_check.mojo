@@ -450,6 +450,7 @@ def check_dbscan_batching_shared_border() raises:
     var base = ctx.enqueue_create_host_buffer[DType.int32](n)
     var got = ctx.enqueue_create_host_buffer[DType.int32](n)
     ctx.synchronize()
+    _ = hx^  # past the drain: a queued copy reads it after its last named use
     var bad = 0
     var runs = 0
     for arm in range(2):
@@ -890,6 +891,7 @@ def check_dbscan_tiny_budget_agrees() raises:
             hx.unsafe_ptr().unsafe_store(i * d + f, _wide_coord(i, f))
     ctx.enqueue_copy(dst_buf=x, src_ptr=hx.unsafe_ptr())
     ctx.synchronize()
+    _ = hx^  # past the drain: a queued copy reads it after its last named use
 
     var nb_tiny = (
         n + compute_batch_size(n, n, EPS_NN_RBC, 1) - 1
@@ -1587,6 +1589,7 @@ def check_dbscan_manhattan_refused_on_the_ball_cover() raises:
     ctx.synchronize()
     ctx.enqueue_copy(dst_buf=x, src_ptr=hx.unsafe_ptr())
     ctx.synchronize()
+    _ = hx^  # past the drain: a queued copy reads it after its last named use
 
     var raised = False
     try:
@@ -1823,6 +1826,7 @@ def check_dbscan_weighted_degree_matches_host_oracle() raises:
     ctx.synchronize()
     ctx.enqueue_copy(dst_buf=x, src_ptr=hx.unsafe_ptr())
     ctx.synchronize()
+    _ = hx^  # past the drain: a queued copy reads it after its last named use
 
     var adj = ctx.enqueue_create_buffer[DType.uint8](m * n)
     var vd = ctx.enqueue_create_buffer[DType.int32](m + 1)
@@ -1959,6 +1963,8 @@ def check_dbscan_weighted_degree_matches_host_oracle() raises:
     ctx.enqueue_copy(dst_buf=ia, src_ptr=hia.unsafe_ptr())
     ctx.enqueue_copy(dst_buf=ja, src_ptr=hja.unsafe_ptr())
     ctx.synchronize()
+    _ = hia^  # past the drain: a queued copy reads it after its last named use
+    _ = hja^  # past the drain: a queued copy reads it after its last named use
 
     var ws_csr = ctx.enqueue_create_buffer[DType.float32](m)
     ctx.synchronize()
@@ -2060,6 +2066,7 @@ def check_dbscan_weighted_degree_matches_host_oracle() raises:
         hw.unsafe_ptr().unsafe_store(j, wint[j])
     ctx.enqueue_copy(dst_buf=wbuf, src_ptr=hw.unsafe_ptr())
     ctx.synchronize()
+    _ = hw^  # past the drain: a queued copy reads it after its last named use
     weighted_vertex_deg_dense(ctx, ws_dense, adj, wbuf, m, n)
     weighted_vertex_deg_csr(ctx, ws_csr, ia, ja, wbuf, m)
     ctx.synchronize()

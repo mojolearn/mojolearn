@@ -520,6 +520,10 @@ def _launch_oracle(
     ctx.enqueue_memset(d_iters, PARTITION_UNVISITED)
     ctx.enqueue_memset(d_swaps, Int32(0))
     ctx.synchronize()
+    _ = h_data^  # past the drain: a queued copy reads it after its last named use
+    _ = h_items^  # past the drain: a queued copy reads it after its last named use
+    _ = h_row_ids^  # past the drain: a queued copy reads it after its last named use
+    _ = h_splits^  # past the drain: a queued copy reads it after its last named use
 
     ctx.enqueue_function[node_split_kernel[TPB]](
         d_row_ids.unsafe_ptr(),
@@ -631,6 +635,12 @@ def _launch_multiblock(
     var d_flags_unused = ctx.enqueue_create_buffer[DType.uint8](1)
     ctx.enqueue_memset(d_blk_off, Int32(0))
     ctx.synchronize()
+    _ = h_blk_base^  # past the drain: a queued copy reads it after its last named use
+    _ = h_data^  # past the drain: a queued copy reads it after its last named use
+    _ = h_items^  # past the drain: a queued copy reads it after its last named use
+    _ = h_row_ids^  # past the drain: a queued copy reads it after its last named use
+    _ = h_splits^  # past the drain: a queued copy reads it after its last named use
+    _ = h_wl^  # past the drain: a queued copy reads it after its last named use
 
     ctx.enqueue_function[partition_count_kernel[TPB]](
         d_blk_left.unsafe_ptr(),

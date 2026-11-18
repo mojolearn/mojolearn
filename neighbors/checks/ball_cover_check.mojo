@@ -780,6 +780,7 @@ def check_ball_cover_reach_by_sabotage() raises:
         )
     ctx.enqueue_copy(dst_buf=r_radius, src_ptr=hrad.unsafe_ptr())
     ctx.synchronize()
+    _ = hrad^  # past the drain: a queued copy reads it after its last named use
 
     var broken = _run_one_eps(
         ctx, x, x_reordered, r, r_indptr, r_1nn_cols, r_1nn_dists, r_radius,
@@ -895,6 +896,7 @@ def check_ball_cover_order_is_load_bearing() raises:
             b -= 1
     ctx.enqueue_copy(dst_buf=r_1nn_dists, src_ptr=hd.unsafe_ptr())
     ctx.synchronize()
+    _ = hd^  # past the drain: a queued copy reads it after its last named use
 
     var broken = _run_one_eps(
         ctx, x, x_reordered, r, r_indptr, r_1nn_cols, r_1nn_dists, r_radius,

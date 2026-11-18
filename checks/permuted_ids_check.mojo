@@ -74,6 +74,7 @@ def check_permuted_leaf_ids(depth: Int = 0, replicas: Int = 1, permute: Bool = T
         z.unsafe_ptr().unsafe_store(i, UInt32(0))
     ctx.enqueue_copy(dst_buf=cindex, src_ptr=z.unsafe_ptr())
     ctx.synchronize()
+    _ = z^  # past the drain: a queued copy reads it after its last named use
 
     # SCATTERED bins, hashed per row and feature, so a cell's expected value
     # differs from its neighbour's. A uniform plant would verify the total
@@ -192,6 +193,14 @@ def check_permuted_leaf_ids(depth: Int = 0, replicas: Int = 1, permute: Bool = T
         max_leaves * stat_count * widest
     )
     ctx.synchronize()
+    _ = h_dense^  # past the drain: a queued copy reads it after its last named use
+    _ = hi^  # past the drain: a queued copy reads it after its last named use
+    _ = hid^  # past the drain: a queued copy reads it after its last named use
+    _ = ho^  # past the drain: a queued copy reads it after its last named use
+    _ = hs^  # past the drain: a queued copy reads it after its last named use
+    _ = hzz^  # past the drain: a queued copy reads it after its last named use
+    _ = zf^  # past the drain: a queued copy reads it after its last named use
+    _ = zi^  # past the drain: a queued copy reads it after its last named use
 
     # `depth` picks the load path: 0 is the direct load, anything below it
     # is the GATHER variant, which reads rows through `row_index`. With

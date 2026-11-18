@@ -250,6 +250,8 @@ def run_checks() raises:
     )
     ctx.enqueue_copy(dst_buf=h_hs, src_buf=d_hs)
     ctx.synchronize()
+    _ = hb_off^  # past the drain: a queued copy reads it after its last named use
+    _ = parts_h^  # past the drain: a queued copy reads it after its last named use
 
     var bad1 = 0
     for k in range(n_hb):
@@ -330,6 +332,8 @@ def run_checks() raises:
     )
     ctx.enqueue_copy(dst_buf=h_bs, src_buf=d_bs)
     ctx.synchronize()
+    _ = b_ffi^  # past the drain: a queued copy reads it after its last named use
+    _ = b_off^  # past the drain: a queued copy reads it after its last named use
 
     var bad3 = 0
     for k in range(n_b):

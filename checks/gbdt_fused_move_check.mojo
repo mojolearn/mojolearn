@@ -76,6 +76,11 @@ def check[estimation: Bool](objective: Int, weighted: Bool,
     ctx.enqueue_copy(dst_buf=cursor_a, src_ptr=hc.unsafe_ptr())
     ctx.enqueue_copy(dst_buf=cursor_b, src_ptr=hc.unsafe_ptr())
     ctx.synchronize()
+    _ = hb^  # past the drain: a queued copy reads it after its last named use
+    _ = hc^  # past the drain: a queued copy reads it after its last named use
+    _ = hs^  # past the drain: a queued copy reads it after its last named use
+    _ = ht^  # past the drain: a queued copy reads it after its last named use
+    _ = hw^  # past the drain: a queued copy reads it after its last named use
     var timings = List[Float64]()
     # Warm each kernel before timing; both arms see exactly repeats+1 moves.
     for fused in range(2):

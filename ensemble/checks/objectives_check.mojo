@@ -794,6 +794,8 @@ def main() raises:
     ctx.enqueue_copy(dst_buf=h_nl, src_buf=d_nl)
     ctx.enqueue_copy(dst_buf=h_qu, src_buf=d_qu)
     ctx.synchronize()
+    _ = hh^  # past the drain: a queued copy reads it after its last named use
+    _ = hq^  # past the drain: a queued copy reads it after its last named use
     # Device form of the freed-at-enqueue UAF (perf-lane find,
     # 2026-08-22): `dh`/`dq` died at their `.unsafe_ptr()` in the kernel
     # argument list. Keep-alives AFTER the sync.

@@ -31,6 +31,7 @@ def fill(ctx: DeviceContext, mut d: DeviceBuffer[DType.float32], salt: Int) rais
         h.unsafe_ptr().unsafe_store(i, bitcast[DType.float32](word))
     ctx.enqueue_copy(dst_buf=d, src_ptr=h.unsafe_ptr())
     ctx.synchronize()
+    _ = h^  # past the drain: a queued copy reads it after its last named use
 
 
 def digest(ctx: DeviceContext, mut d: DeviceBuffer[DType.float32], n: Int) raises -> UInt64:
@@ -76,6 +77,7 @@ def main() raises:
     baseline(ctx, r0, s0, o0, a, b, w)
     fused(ctx, r1, s1, o1, a, b, w)
     ctx.synchronize()
+    _ = wh^  # past the drain: a queued copy reads it after its last named use
     print("BITS residual=", digest(ctx, r0, N), "/", digest(ctx, r1, N), " sumsq=", digest(ctx, s0, M), "/", digest(ctx, s1, M), " out=", digest(ctx, o0, N), "/", digest(ctx, o1, N))
     for rep in range(11):
         var t0 = perf_counter_ns()

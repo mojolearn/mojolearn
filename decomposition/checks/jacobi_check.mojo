@@ -162,6 +162,7 @@ def _run_device(
         h.unsafe_ptr().unsafe_store(i, Float32(a[i]))
     ctx.enqueue_copy(dst_buf=a_buf, src_ptr=h.unsafe_ptr())
     ctx.synchronize()
+    _ = h^  # past the drain: a queued copy reads it after its last named use
 
     ctx.enqueue_function[jacobi_eigh_kernel[JACOBI_ROT_TPB]](
         a_buf.unsafe_ptr(),
@@ -541,6 +542,7 @@ def _run_device_f32[rot_tpb: Int = JACOBI_ROT_TPB](
         h.unsafe_ptr().unsafe_store(i, a[i])
     ctx.enqueue_copy(dst_buf=a_buf, src_ptr=h.unsafe_ptr())
     ctx.synchronize()
+    _ = h^  # past the drain: a queued copy reads it after its last named use
 
     ctx.enqueue_function[jacobi_eigh_kernel[rot_tpb]](
         a_buf.unsafe_ptr(),
@@ -800,6 +802,7 @@ def check_jacobi_fold_shape() raises:
         ha.unsafe_ptr().unsafe_store(i, values[i])
     ctx.enqueue_copy(dst_buf=a, src_ptr=ha.unsafe_ptr())
     ctx.synchronize()
+    _ = ha^  # past the drain: a queued copy reads it after its last named use
     ctx.enqueue_function[jacobi_fold_probe_kernel](
         op.unsafe_ptr(),
         ol.unsafe_ptr(),

@@ -268,6 +268,7 @@ def run_case(ctx: DeviceContext, n_rows: Int) raises -> Int:
         dst_buf=b_g, src_ptr=hs.unsafe_ptr().unsafe_offset(N_ROWS)
     )
     ctx.synchronize()
+    _ = hs^  # past the drain: a queued copy reads it after its last named use
     print(
         "arm B: TFeatureParallelObliviousTreeSearcher"
         " (WriteCompressedSplit -> UpdateBinFromCompressedBits ->"
@@ -404,6 +405,7 @@ def run_case(ctx: DeviceContext, n_rows: Int) raises -> Int:
             h_ident.unsafe_ptr().unsafe_store(r, UInt32(r))
         ctx.enqueue_copy(dst_buf=ident, src_ptr=h_ident.unsafe_ptr())
         ctx.synchronize()
+        _ = h_ident^  # past the drain: a queued copy reads it after its last named use
 
         var off0 = UInt32(Int(cf0.offset) * N_ROWS)
         create_compressed_split(
@@ -473,6 +475,7 @@ def run_case(ctx: DeviceContext, n_rows: Int) raises -> Int:
         dst_buf=c_g, src_ptr=hc.unsafe_ptr().unsafe_offset(N_ROWS)
     )
     ctx.synchronize()
+    _ = hc^  # past the drain: a queued copy reads it after its last named use
     var ctl = fit_feature_parallel_oblivious_tree_structure(
         ctx, lay, N_ROWS, MAX_DEPTH, cindex, c_w^, c_g^, 10, Float32(1.0),
         SCORE_FUNCTION_COSINE,

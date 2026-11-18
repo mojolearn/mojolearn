@@ -150,6 +150,11 @@ def run_pipeline(
     ctx.enqueue_copy(dst_buf=d_fid, src_ptr=h_fid.unsafe_ptr())
     ctx.enqueue_copy(dst_buf=d_fw, src_ptr=h_fw.unsafe_ptr())
     ctx.synchronize()
+    _ = h_fid^  # past the drain: a queued copy reads it after its last named use
+    _ = h_fw^  # past the drain: a queued copy reads it after its last named use
+    _ = h_hist^  # past the drain: a queued copy reads it after its last named use
+    _ = h_ps^  # past the drain: a queued copy reads it after its last named use
+    _ = h_skip^  # past the drain: a queued copy reads it after its last named use
 
     # STAGE 1, the inputs. Checkpointing the input as well as the output is
     # what makes the report actionable: a divergence at `hist` is a

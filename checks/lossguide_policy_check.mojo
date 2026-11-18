@@ -240,6 +240,11 @@ def check_sign_convention(ctx: DeviceContext) raises -> Int:
     ctx.enqueue_copy(dst_buf=d_fid, src_ptr=h_fid.unsafe_ptr())
     ctx.enqueue_copy(dst_buf=d_fw, src_ptr=h_fw.unsafe_ptr())
     ctx.synchronize()
+    _ = h_fid^  # past the drain: a queued copy reads it after its last named use
+    _ = h_fw^  # past the drain: a queued copy reads it after its last named use
+    _ = h_hist^  # past the drain: a queued copy reads it after its last named use
+    _ = h_ps^  # past the drain: a queued copy reads it after its last named use
+    _ = h_skip^  # past the drain: a queued copy reads it after its last named use
 
     ctx.enqueue_function[compute_optimal_split_kernel[SCORE_FUNCTION_COSINE]](
         d_skip.unsafe_ptr(), Int32(N_BF), d_fid.unsafe_ptr(),

@@ -192,6 +192,7 @@ def check_split_moves_no_label(ctx: DeviceContext) raises:
             hx.unsafe_ptr().unsafe_store(i * ES_D + f, _coord(i, f))
     ctx.enqueue_copy(dst_buf=x, src_ptr=hx.unsafe_ptr())
     ctx.synchronize()
+    _ = hx^  # past the drain: a queued copy reads it after its last named use
 
     var base = _fit(ctx, x, 0, EPS_NN_RBC, Int(MAX_LABEL))
     var ref_labels = base[0].copy()

@@ -216,6 +216,7 @@ def check_pinned_fold_shape() raises:
         ha.unsafe_ptr().unsafe_store(i, v)
     ctx.enqueue_copy(dst_buf=a, src_ptr=ha.unsafe_ptr())
     ctx.synchronize()
+    _ = ha^  # past the drain: a queued copy reads it after its last named use
 
     var halving = _host_halving_fold(values)
     var sequential = _host_sequential_fold(values)
@@ -447,6 +448,8 @@ def check_fused_contraction_pin() raises:
     ctx.enqueue_copy(dst_buf=x, src_ptr=hx.unsafe_ptr())
     ctx.enqueue_copy(dst_buf=c, src_ptr=hc.unsafe_ptr())
     ctx.synchronize()
+    _ = hc^  # past the drain: a queued copy reads it after its last named use
+    _ = hx^  # past the drain: a queued copy reads it after its last named use
 
     # The norms come from the DEVICE and are handed to BOTH the kernel and
     # the oracle, so this check is about the contraction inside the distance
@@ -637,6 +640,8 @@ def check_assignment_geometry_invariance() raises:
     ctx.enqueue_copy(dst_buf=x, src_ptr=hx.unsafe_ptr())
     ctx.enqueue_copy(dst_buf=c, src_ptr=hc.unsafe_ptr())
     ctx.synchronize()
+    _ = hc^  # past the drain: a queued copy reads it after its last named use
+    _ = hx^  # past the drain: a queued copy reads it after its last named use
 
     ctx.enqueue_function[row_norm_kernel](
         xn.unsafe_ptr(), x.unsafe_ptr(), Int32(d), Int32(0),
@@ -891,6 +896,7 @@ def _traced_fit(
     ctx.enqueue_copy(dst_buf=w, src_ptr=hw.unsafe_ptr())
     ctx.enqueue_copy(dst_buf=cent, src_ptr=hc.unsafe_ptr())
     ctx.synchronize()
+    _ = hw^  # past the drain: a queued copy reads it after its last named use
     if perturb_cell >= 0:
         hx.unsafe_ptr().unsafe_store(perturb_cell, saved)
 

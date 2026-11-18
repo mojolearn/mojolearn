@@ -117,6 +117,8 @@ def _kmeans_arm(ctx: DeviceContext) raises:
     ctx.enqueue_copy(dst_buf=x, src_ptr=hx.unsafe_ptr())
     ctx.enqueue_copy(dst_buf=w, src_ptr=hw.unsafe_ptr())
     ctx.synchronize()
+    _ = hw^  # past the drain: a queued copy reads it after its last named use
+    _ = hx^  # past the drain: a queued copy reads it after its last named use
 
     var params = KMeansParams.default()
     params.n_clusters = k
@@ -175,6 +177,8 @@ def _knn_arm(ctx: DeviceContext, method: Int, name: String) raises:
     ctx.enqueue_copy(dst_buf=index, src_ptr=hi.unsafe_ptr())
     ctx.enqueue_copy(dst_buf=queries, src_ptr=hq.unsafe_ptr())
     ctx.synchronize()
+    _ = hi^  # past the drain: a queued copy reads it after its last named use
+    _ = hq^  # past the drain: a queued copy reads it after its last named use
     compute_norms(ctx, index, inorm, n_index, d, False)
     compute_norms(ctx, queries, qnorm, n_queries, d, False)
     ctx.synchronize()
@@ -205,6 +209,7 @@ def _dbscan_arm(ctx: DeviceContext) raises:
     ctx.synchronize()
     ctx.enqueue_copy(dst_buf=x, src_ptr=hx.unsafe_ptr())
     ctx.synchronize()
+    _ = hx^  # past the drain: a queued copy reads it after its last named use
 
     for _r in range(REPEATS):
         var t0 = perf_counter_ns()

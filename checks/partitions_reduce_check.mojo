@@ -279,6 +279,12 @@ def _arm(
     var out_stats = ctx.enqueue_create_buffer[DType.float32](out_cells)
     ctx.enqueue_copy(dst_buf=out_stats, src_ptr=h_out_poison.unsafe_ptr())
     ctx.synchronize()
+    _ = h_ids^  # past the drain: a queued copy reads it after its last named use
+    _ = h_off^  # past the drain: a queued copy reads it after its last named use
+    _ = h_out_poison^  # past the drain: a queued copy reads it after its last named use
+    _ = h_partial_poison^  # past the drain: a queued copy reads it after its last named use
+    _ = h_stats^  # past the drain: a queued copy reads it after its last named use
+    _ = h_sz^  # past the drain: a queued copy reads it after its last named use
 
     compute_partition_stats(
         ctx,

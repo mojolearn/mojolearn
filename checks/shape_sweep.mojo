@@ -147,6 +147,8 @@ def main() raises:
         ctx.enqueue_copy(dst_buf=t, src_ptr=ht.unsafe_ptr())
         ctx.enqueue_copy(dst_buf=w, src_ptr=hw.unsafe_ptr())
         ctx.synchronize()
+        _ = ht^  # past the drain: a queued copy reads it after its last named use
+        _ = hw^  # past the drain: a queued copy reads it after its last named use
         targets.append(t^)
         weights.append(w^)
         all_folds.append(folds^)

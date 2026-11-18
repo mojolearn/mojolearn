@@ -485,6 +485,9 @@ def check_hist2_one_byte[bits: Int](fold_count: Int) raises:
         zf.unsafe_ptr().unsafe_store(i, Float32(0.0))
         zi.unsafe_ptr().unsafe_store(i, Int32(0))
     ctx.synchronize()
+    _ = hid^  # past the drain: a queued copy reads it after its last named use
+    _ = ho^  # past the drain: a queued copy reads it after its last named use
+    _ = hz^  # past the drain: a queued copy reads it after its last named use
 
     # ---- expected tallies, all exact -------------------------------------
     var noperm = List[Int]()
@@ -764,6 +767,7 @@ def check_hist2_one_byte[bits: Int](fold_count: Int) raises:
         hi.unsafe_ptr().unsafe_store(r, UInt32(r))
     ctx.enqueue_copy(dst_buf=row_index, src_ptr=hi.unsafe_ptr())
     ctx.synchronize()
+    _ = hi^  # past the drain: a queued copy reads it after its last named use
 
     # THE SCALE FINGERPRINT: where does the add land? A poisoned
     # `fixed_scale` (2^30) wraps any arm that QUANTIZES -- the Int32 mode in
@@ -911,6 +915,7 @@ def build_cindex(
         z.unsafe_ptr().unsafe_store(i, UInt32(0))
     ctx.enqueue_copy(dst_buf=cindex, src_ptr=z.unsafe_ptr())
     ctx.synchronize()
+    _ = z^  # past the drain: a queued copy reads it after its last named use
 
     var hb = ctx.enqueue_create_host_buffer[DType.uint8](n_rows)
     var dev_bins = ctx.enqueue_create_buffer[DType.uint8](n_rows)
@@ -946,6 +951,7 @@ def upload_stats(
         hs.unsafe_ptr().unsafe_store(n_rows + r, Float32(g[r]))
     ctx.enqueue_copy(dst_buf=stats, src_ptr=hs.unsafe_ptr())
     ctx.synchronize()
+    _ = hs^  # past the drain: a queued copy reads it after its last named use
 
 
 def upload_stats_poisoned(
@@ -1309,6 +1315,9 @@ def check_pass_family_modes[bits: Int](fold_count: Int) raises:
         zf.unsafe_ptr().unsafe_store(i, Float32(0.0))
         zi.unsafe_ptr().unsafe_store(i, Int32(0))
     ctx.synchronize()
+    _ = hid^  # past the drain: a queued copy reads it after its last named use
+    _ = ho^  # past the drain: a queued copy reads it after its last named use
+    _ = hz^  # past the drain: a queued copy reads it after its last named use
 
     # ---- exact expectations ----------------------------------------------
     var noperm = List[Int]()
@@ -1382,6 +1391,7 @@ def check_pass_family_modes[bits: Int](fold_count: Int) raises:
         hi.unsafe_ptr().unsafe_store(r, UInt32(r))
     ctx.enqueue_copy(dst_buf=row_index, src_ptr=hi.unsafe_ptr())
     ctx.synchronize()
+    _ = hi^  # past the drain: a queued copy reads it after its last named use
 
     # ---- the scale fingerprint: which arm quantizes, and what the
     # dispatch launched ------------------------------------------------------

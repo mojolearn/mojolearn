@@ -69,6 +69,8 @@ def check_copy_histograms() raises:
     ctx.enqueue_copy(dst_buf=left, src_ptr=hl.unsafe_ptr())
     ctx.enqueue_copy(dst_buf=right, src_ptr=hr.unsafe_ptr())
     ctx.synchronize()
+    _ = hl^  # past the drain: a queued copy reads it after its last named use
+    _ = hr^  # past the drain: a queued copy reads it after its last named use
 
     ctx.enqueue_function[copy_histograms_kernel](
         left.unsafe_ptr(), right.unsafe_ptr(),

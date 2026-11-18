@@ -92,6 +92,8 @@ def main() raises:
     ctx.enqueue_copy(dst_buf=y, src_ptr=hy.unsafe_ptr())
     ctx.enqueue_copy(dst_buf=z, src_ptr=hz.unsafe_ptr())
     ctx.synchronize()
+    _ = hx^  # past the drain: a queued copy reads it after its last named use
+    _ = hy^  # past the drain: a queued copy reads it after its last named use
     gemm_nt(ctx, z, x, y, m, n, k)
     ctx.synchronize()
     ctx.enqueue_copy(dst_ptr=hz.unsafe_ptr(), src_buf=z)

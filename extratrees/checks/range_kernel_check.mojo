@@ -331,6 +331,11 @@ def main() raises:
     ctx.enqueue_copy(dst_buf=d_items, src_ptr=h_items.unsafe_ptr())
     ctx.enqueue_copy(dst_buf=d_wl, src_ptr=h_wl.unsafe_ptr())
     ctx.synchronize()
+    _ = h_colids^  # past the drain: a queued copy reads it after its last named use
+    _ = h_data^  # past the drain: a queued copy reads it after its last named use
+    _ = h_items^  # past the drain: a queued copy reads it after its last named use
+    _ = h_row_ids^  # past the drain: a queued copy reads it after its last named use
+    _ = h_wl^  # past the drain: a queued copy reads it after its last named use
 
     var arms = [
         RANGE_SAB_NONE,

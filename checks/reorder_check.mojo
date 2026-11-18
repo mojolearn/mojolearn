@@ -55,6 +55,8 @@ def check_reorder_one_bit(n: Int = 20000, offset: Int = 37) raises:
     var offsets = ctx.enqueue_create_buffer[DType.int32](n)
     var block_sums = ctx.enqueue_create_buffer[DType.int32](n_blocks)
     ctx.synchronize()
+    _ = h_flags^  # past the drain: a queued copy reads it after its last named use
+    _ = h_vals^  # past the drain: a queued copy reads it after its last named use
 
     launch_reorder_one_bit(
         ctx, offset, n, temp_flags, temp_vals, offsets, block_sums,

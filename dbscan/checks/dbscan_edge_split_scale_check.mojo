@@ -70,6 +70,7 @@ def main() raises:
     var nw = ctx.enqueue_create_buffer[DType.float32](1)
     var ws = ctx.enqueue_create_buffer[DType.float32](1)
     ctx.synchronize()
+    _ = hx^  # past the drain: a queued copy reads it after its last named use
 
     var wrapped = truncate_to_32(2 * SC_HALF * SC_HALF)
     print(

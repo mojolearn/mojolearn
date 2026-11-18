@@ -168,6 +168,7 @@ def _upload(
         h.unsafe_ptr().unsafe_store(i, xs[i])
     ctx.enqueue_copy(dst_buf=buf, src_ptr=h.unsafe_ptr())
     ctx.synchronize()
+    _ = h^  # past the drain: a queued copy reads it after its last named use
 
 
 def _download(

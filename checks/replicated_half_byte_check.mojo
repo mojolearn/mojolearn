@@ -145,6 +145,7 @@ def check_replicated_half_byte() raises:
         z.unsafe_ptr().unsafe_store(i, UInt32(0))
     ctx.enqueue_copy(dst_buf=cindex, src_ptr=z.unsafe_ptr())
     ctx.synchronize()
+    _ = z^  # past the drain: a queued copy reads it after its last named use
 
     var host_bin = List[List[Int]]()
     var hb = ctx.enqueue_create_host_buffer[DType.uint8](n_rows)
@@ -264,6 +265,10 @@ def check_replicated_half_byte() raises:
         max_leaves * stat_count * widest
     )
     ctx.synchronize()
+    _ = hi^  # past the drain: a queued copy reads it after its last named use
+    _ = hid^  # past the drain: a queued copy reads it after its last named use
+    _ = ho^  # past the drain: a queued copy reads it after its last named use
+    _ = hzz^  # past the drain: a queued copy reads it after its last named use
 
     # ---- the host tally, once ------------------------------------------
     # `[leaf][stat][flat bin]`, the layout the bridge leaves behind.

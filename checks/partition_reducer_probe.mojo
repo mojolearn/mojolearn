@@ -45,6 +45,7 @@ def main() raises:
     ctx.enqueue_copy(dst_buf=tgt, src_ptr=ht.unsafe_ptr())
     ctx.enqueue_copy(dst_buf=wts, src_ptr=ht.unsafe_ptr())
     ctx.synchronize()
+    _ = ht^  # past the drain: a queued copy reads it after its last named use
 
     print(
         "device SM count", sm, ";", N_ROWS, "rows;", REPS,
@@ -90,6 +91,10 @@ def main() raises:
         ctx.enqueue_copy(dst_buf=po, src_ptr=hpo.unsafe_ptr())
         ctx.enqueue_copy(dst_buf=psz, src_ptr=hpz.unsafe_ptr())
         ctx.synchronize()
+        _ = hp^  # past the drain: a queued copy reads it after its last named use
+        _ = hpid^  # past the drain: a queued copy reads it after its last named use
+        _ = hpo^  # past the drain: a queued copy reads it after its last named use
+        _ = hpz^  # past the drain: a queued copy reads it after its last named use
 
         var t_theirs = Float64(1e18)
         var t_ours = Float64(1e18)

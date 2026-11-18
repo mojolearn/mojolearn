@@ -32,6 +32,8 @@ def main() raises:
     var counts=ctx.enqueue_create_buffer[DType.int32](stable_radix_counts_len(capacity))
     var bsum=ctx.enqueue_create_buffer[DType.int32](stable_radix_bsum_len(capacity))
     ctx.synchronize()
+    _ = fractions^  # past the drain: a queued copy reads it after its last named use
+    _ = host^  # past the drain: a queued copy reads it after its last named use
     for phase in range(2):
         var begin=perf_counter_ns()
         enqueue_ragged_quantiles(ctx,src,arena,permutation,offsets,q,nq,descriptor,keys,positions,tk,tv,counts,bsum)

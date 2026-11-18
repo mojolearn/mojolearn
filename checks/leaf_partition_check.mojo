@@ -116,6 +116,7 @@ def check_leaf_partition() raises:
         z.unsafe_ptr().unsafe_store(i, UInt32(0))
     ctx.enqueue_copy(dst_buf=cindex, src_ptr=z.unsafe_ptr())
     ctx.synchronize()
+    _ = z^  # past the drain: a queued copy reads it after its last named use
 
     var lay = build_layout(folds)
     var hb = ctx.enqueue_create_host_buffer[DType.uint8](n_rows)
@@ -164,6 +165,8 @@ def check_leaf_partition() raises:
         hi.unsafe_ptr().unsafe_store(r, UInt32(r))
     ctx.enqueue_copy(dst_buf=row_index, src_ptr=hi.unsafe_ptr())
     ctx.synchronize()
+    _ = hi^  # past the drain: a queued copy reads it after its last named use
+    _ = hs^  # past the drain: a queued copy reads it after its last named use
 
     var scratch_cursor = ctx.enqueue_create_buffer[DType.float32](1)
     var splits = List[TBinarySplit]()

@@ -251,10 +251,12 @@ def run_checks() raises:
             off += leaf_sizes[leaf]
         ctx.enqueue_copy(dst_buf=d_p_off, src_ptr=h_u.unsafe_ptr())
         ctx.synchronize()
+        _ = h_f^  # past the drain: a queued copy reads it after its last named use
         for leaf in range(LEAVES):
             h_u.unsafe_ptr().unsafe_store(leaf, UInt32(leaf_sizes[leaf]))
         ctx.enqueue_copy(dst_buf=d_p_sz, src_ptr=h_u.unsafe_ptr())
         ctx.synchronize()
+        _ = h_u^  # past the drain: a queued copy reads it after its last named use
 
         var oracle = make_bin_optimized_oracle(
             ctx, n, LEAVES, leaf_sizes,

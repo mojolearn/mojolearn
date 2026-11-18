@@ -317,6 +317,7 @@ def check_warpsort_reach_by_sabotage() raises:
     )
     ctx.enqueue_copy(dst_buf=d_in, src_ptr=host.unsafe_ptr())
     ctx.synchronize()
+    _ = host^  # past the drain: a queued copy reads it after its last named use
 
     _run_warpsort[CAP, BW](ctx, d_in, d_inidx, w_val, w_idx, rows, length, K)
     var sab_v = ctx.enqueue_create_host_buffer[DType.float32](rows * K)
@@ -551,6 +552,7 @@ def check_warpselect_reach_by_sabotage() raises:
     host.unsafe_ptr().unsafe_store(VICTIM_ROW * length + VICTIM_COL, PLANTED)
     ctx.enqueue_copy(dst_buf=d_in, src_ptr=host.unsafe_ptr())
     ctx.synchronize()
+    _ = host^  # past the drain: a queued copy reads it after its last named use
 
     ctx.enqueue_function[_warpselect_probe_kernel[32, 2]](
         d_in.unsafe_ptr(), d_ok.unsafe_ptr(), d_ov.unsafe_ptr(),

@@ -204,6 +204,10 @@ def _check_primitives(ctx: DeviceContext, mut failures: List[String]) raises:
     ctx.enqueue_copy(dst_buf=d_map, src_ptr=up_map.unsafe_ptr())
     ctx.enqueue_copy(dst_buf=d_src8, src_ptr=up_src8.unsafe_ptr())
     ctx.synchronize()
+    _ = up_map^  # past the drain: a queued copy reads it after its last named use
+    _ = up_src^  # past the drain: a queued copy reads it after its last named use
+    _ = up_src8^  # past the drain: a queued copy reads it after its last named use
+    _ = up_values^  # past the drain: a queued copy reads it after its last named use
 
     # --- ScanVector, both arms ---
     for arm in range(2):

@@ -1503,6 +1503,13 @@ def main() raises:
     ctx.enqueue_copy(dst_buf=d_items, src_ptr=s_items.unsafe_ptr())
     ctx.enqueue_copy(dst_buf=d_wl, src_ptr=s_wl.unsafe_ptr())
     ctx.synchronize()
+    _ = s_cls^  # past the drain: a queued copy reads it after its last named use
+    _ = s_colids^  # past the drain: a queued copy reads it after its last named use
+    _ = s_data^  # past the drain: a queued copy reads it after its last named use
+    _ = s_items^  # past the drain: a queued copy reads it after its last named use
+    _ = s_reg^  # past the drain: a queued copy reads it after its last named use
+    _ = s_row_ids^  # past the drain: a queued copy reads it after its last named use
+    _ = s_wl^  # past the drain: a queued copy reads it after its last named use
 
     var failures = 0
 
