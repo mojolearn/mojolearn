@@ -133,6 +133,60 @@ def nonfinite_partial_kernel(
         part.unsafe_store(Int(block_idx.x), red.unsafe_load(0))
 
 
+def nonfinite_rows_partial_kernel(
+    part: MutPointer[Int32, MutAnyOrigin],
+    buf: MutPointer[Float32, MutAnyOrigin],
+    n_in: Int32,
+    width_in: Int32,
+    row_stride_in: Int32,
+    first_in: Int32,
+):
+    """`nonfinite_partial_kernel` over `n / width` equal rows of `buf` that
+    are NOT adjacent: row `g` is the `width` floats at `g * row_stride +
+    first`. Scan element `i` is float `(i // width) * row_stride + first +
+    i % width`, and the partial holds that FLAT index of `buf` (or
+    `NONFINITE_NONE`). The map from `i` to the flat index is increasing
+    (`first + width <= row_stride`, checked by the caller), so the minimum
+    over the partials is the smallest flat index among the scanned rows:
+    the index a scan of the whole buffer reports when every float outside
+    these rows is finite. Same predicate by bits, same geometry, same
+    integer fold; no float is produced.
+    (MOJOLEARN_LLAMA_FAST_REFUSE_WATERMARK: the one key / value row a decode
+    step appended to a cache packed at stride `row_stride / width`.)"""
+    var n = Int(n_in)
+    var width = Int(width_in)
+    var row_stride = Int(row_stride_in)
+    var first = Int(first_in)
+    var red = stack_allocation[
+        SCAN_TPB,
+        Scalar[DType.int32],
+        address_space = AddressSpace.SHARED,
+    ]()
+    var tid = Int(thread_idx.x)
+    var stride = Int(grid_dim.x) * SCAN_TPB
+    var i = Int(block_idx.x) * SCAN_TPB + tid
+    var best = NONFINITE_NONE
+    while i < n:
+        var flat = (i // width) * row_stride + first + i % width
+        var au = bitcast[DType.uint32](buf.unsafe_load(flat)) & UInt32(0x7FFFFFFF)
+        if au >= UInt32(0x7F800000):
+            best = Int32(flat)
+            break
+        i += stride
+    red.unsafe_store(tid, best)
+    barrier()
+    var active = SCAN_TPB // 2
+    while active > 0:
+        if tid < active:
+            var o = red.unsafe_load(tid + active)
+            if o < red.unsafe_load(tid):
+                red.unsafe_store(tid, o)
+        barrier()
+        active = active // 2
+    if tid == 0:
+        part.unsafe_store(Int(block_idx.x), red.unsafe_load(0))
+
+
 def negative_partial_kernel(
     part: MutPointer[Int32, MutAnyOrigin],
     buf: MutPointer[Float32, MutAnyOrigin],
@@ -482,6 +536,43 @@ struct DeviceNonfiniteBatch(Movable):
             )
         # the slot's partials fold on the device into one word (n = 0 writes
         # NONFINITE_NONE)
+        step_count_launch()
+        ctx.enqueue_function[min_partials_kernel](
+            self.res.unsafe_ptr() + slot, self.part.unsafe_ptr() + self.offsets[slot],
+            Int32(blocks), grid_dim=(1, 1, 1), block_dim=(SCAN_TPB, 1, 1),
+        )
+        self.queued[slot] = True
+
+    def enqueue_rows(
+        mut self, ctx: DeviceContext, slot: Int,
+        mut buf: DeviceBuffer[DType.float32],
+        width: Int, row_stride: Int, first: Int,
+    ) raises:
+        """`enqueue` for a slot whose `lengths[slot]` floats are `lengths[slot]
+        / width` rows of `buf`, row `g` at `g * row_stride + first`
+        (`nonfinite_rows_partial_kernel`). The slot's result is a FLAT index
+        of `buf`, the smallest among the scanned rows, or -1. Same partial
+        offsets, same fold and same wait as `enqueue`."""
+        if slot < 0 or slot >= len(self.lengths):
+            ctx.synchronize()
+            raise Error("nonfinite batch: slot out of range")
+        var n = self.lengths[slot]
+        var bad = self.queued[slot] or width <= 0 or n % max(width, 1) != 0 or first < 0
+        bad = bad or first + width > row_stride
+        var rows = n // max(width, 1)
+        var reach = (rows - 1) * row_stride + first + width if rows > 0 else 0
+        if bad or reach > len(buf) or reach > Int(NONFINITE_NONE):
+            ctx.synchronize()
+            raise Error("nonfinite batch: duplicate slot, bad row layout or short source")
+        var blocks = 0
+        if n > 0:
+            blocks = _scan_blocks(n)
+            step_count_launch()
+            ctx.enqueue_function[nonfinite_rows_partial_kernel](
+                self.part.unsafe_ptr() + self.offsets[slot], buf.unsafe_ptr(),
+                Int32(n), Int32(width), Int32(row_stride), Int32(first),
+                grid_dim=(blocks, 1, 1), block_dim=(SCAN_TPB, 1, 1),
+            )
         step_count_launch()
         ctx.enqueue_function[min_partials_kernel](
             self.res.unsafe_ptr() + slot, self.part.unsafe_ptr() + self.offsets[slot],
