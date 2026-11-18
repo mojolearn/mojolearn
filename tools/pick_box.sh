@@ -3,16 +3,13 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 #
 # pick_box.sh: which rented box can take a leg RIGHT NOW, in the order
-# CONTRIBUTING.md (Comparing against libraries without a GPU path) sets (2026-09-11: Hot Aisle first,
-# DigitalOcean second, RunPod third, never wait).
+# CONTRIBUTING.md (Comparing against libraries without a GPU path) sets: DigitalOcean
+# first, RunPod second, never wait. (Hot Aisle, first until 2026-11-18, was
+# removed with its scripts by lane fx-dead-small; recoverable at 7c1aad6561.)
 #
-#   tools/pick_box.sh [--need amd|any] [--spec 13core|8core|2gpu] [--gpu "NVIDIA H100 80GB HBM3"]
+#   tools/pick_box.sh [--need amd|any] [--gpu "NVIDIA H100 80GB HBM3"]
 #
 # Prints exactly one word on stdout and the reasons on stderr:
-#   hotaisle      a Hot Aisle slot is free, the spec is in stock, balance >= $5
-#                 -> tools/hotaisle_leg.sh amd --rent
-#                 (--spec 2gpu: the 2x MI300X VM for two GPU-only bodies,
-#                 MOJOLEARN_HOTAISLE_SPEC=2gpu MOJOLEARN_HOTAISLE_GPU_ONLY=1)
 #   do            the DigitalOcean GPU lock is free and no GPU droplet is live
 #                 -> tools/do_extra_leg.sh amd (it takes the lock itself)
 #   runpod-amd    RunPod has AMD MI300X stock and fewer than MOJOLEARN_RUNPOD_MAX_PODS (default 5) non-samba pods
@@ -20,9 +17,8 @@
 #                 -> tools/trees_leg.sh / tools/gemm_remote_leg.sh (NVIDIA row)
 #   none          nothing can take it now; exit 3
 #
-# --need amd (default): only AMD boxes qualify (Hot Aisle, DigitalOcean,
-# RunPod AMD). A leg whose numbers must be AMD rows asks this. When it prints
-# none, DO NOT WAIT: run the NVIDIA version of the work that is also owed
+# --need amd (default): only AMD boxes qualify (DigitalOcean, RunPod AMD).
+# A leg whose numbers must be AMD rows asks this. When it prints none, DO NOT WAIT: run the NVIDIA version of the work that is also owed
 # (`--need any`), and come back for the AMD row when a box frees.
 # --need any: RunPod NVIDIA also qualifies, last.
 #
@@ -30,55 +26,20 @@
 # snapshot, so the runner's own slot, lock and stock checks still decide.
 # Keys are read from their files into curl config on a pipe, never an argv.
 set -u
-NEED=amd; SPEC=13core; GPU="NVIDIA H100 80GB HBM3"
+NEED=amd; GPU="NVIDIA H100 80GB HBM3"
 while [ $# -gt 0 ]; do
   case "$1" in
     --need) NEED=$2; shift 2 ;;
-    --spec) SPEC=$2; shift 2 ;;
     --gpu) GPU=$2; shift 2 ;;
-    -h|--help) sed -n '5,31p' "$0"; exit 0 ;;
+    -h|--help) sed -n '5,28p' "$0"; exit 0 ;;
     *) echo "unknown argument $1" >&2; exit 2 ;;
   esac
 done
 case "$NEED" in amd|any) ;; *) echo "--need must be amd or any" >&2; exit 2 ;; esac
-case "$SPEC" in 13core) CORES=13; NGPU=1 ;; 8core) CORES=8; NGPU=1 ;; 2gpu) CORES=0; NGPU=2 ;; *) echo "--spec must be 13core, 8core or 2gpu" >&2; exit 2 ;; esac
 
-HA_KEY=${MOJOLEARN_HOTAISLE_KEY_FILE:-$HOME/.mojolearn_hotaisle_key}
 DO_KEY=${MOJOLEARN_DO_TOKEN_FILE:-$HOME/.mojolearn_do_token}
 RP_KEY=${MOJOLEARN_RUNPOD_KEY_FILE:-$HOME/.mojolearn_runpod_key}
-HA_TEAM=${MOJOLEARN_HOTAISLE_TEAM:-andrews-team}
 say() { printf 'pick_box: %s\n' "$*" >&2; }
-
-hotaisle_ok() {
-  [ -s "$HA_KEY" ] || { say "hotaisle: no key file"; return 1; }
-  ha() { curl -s -m 20 -K <(printf 'header = "Authorization: Token %s"\n' "$(tr -d '\n' < "$HA_KEY")") "https://admin.hotaisle.app/api$1"; }
-  local verdict
-  verdict=$( { ha "/teams/$HA_TEAM/"; printf '\n'; ha "/teams/$HA_TEAM/balance/"; printf '\n'; ha "/teams/$HA_TEAM/virtual_machines/available/"; printf '\n'; } | python3 -c "
-import json,sys
-lines=[l for l in sys.stdin.read().split('\n') if l.strip()]
-try:
-    team,bal,avail=(json.loads(l) for l in lines[:3])
-    if not isinstance(avail, list):
-        avail = []   # an error object instead of the list: treat as no stock
-    cap=int((team or {}).get('maximum_virtual_machines') or 0)
-    cents=int((bal or {}).get('available_balance') or 0)
-    qty=0
-    for v in avail:
-        specs = (v or {}).get('Specs') or {}
-        gpus = sum(int((g or {}).get('count') or 0) for g in (specs.get('gpus') or []))
-        if ($CORES == 0 or specs.get('cpu_cores') == $CORES) and gpus == $NGPU:
-            qty += int(v.get('Quantity') or 0)
-except Exception as e:   # a malformed answer means Hot Aisle is not usable now, never a crash
-    print('no api:', type(e).__name__, e); sys.exit()
-print(cap, cents, qty)
-")
-  set -- $verdict
-  case "${1:-}" in ''|no) say "hotaisle: $verdict"; return 1 ;; esac
-  local cap=$1 cents=$2 qty=$3 used
-  used=$(ls -d /tmp/mojolearn-hotaisle-slot.* 2>/dev/null | wc -l | tr -d ' ')
-  say "hotaisle: slots $used/$cap, $SPEC stock $qty, balance \$$((cents / 100))"
-  [ "$used" -lt "$cap" ] && [ "$qty" -gt 0 ] && [ "$cents" -ge 500 ]
-}
 
 do_ok() {
   [ -s "$DO_KEY" ] || { say "do: no token file"; return 1; }
@@ -119,7 +80,6 @@ print(running, amd, nv)
   return 1
 }
 
-if hotaisle_ok; then echo hotaisle; exit 0; fi
 if do_ok; then echo "do"; exit 0; fi
 if pick=$(runpod_pick); then echo "$pick"; exit 0; fi
 echo none
