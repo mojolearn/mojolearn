@@ -2,7 +2,8 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The learn cursor's leaf update, one statement for the device kernel
 (`kernel_add_model_value.mojo`) and the host oracles that restate it
-(`gbdt/host/gbdt_oracle_*`). Host-safe: no GPU imports."""
+(`gbdt/host/gbdt_oracle_*`): `cursor + round(leaf * rate)`, the rescaled
+leaf formed once per leaf. Host-safe: no GPU imports."""
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from checks.soft_f64 import sf64_from_f32, sf64_mul, sf64_to_f32
 
@@ -23,19 +24,39 @@ def rescaled_leaf(raw: Float32, learning_rate: Float32) -> Float32:
     (`fit_pointwise_check` W2, NVIDIA L40S: tree 0 identical, 13 of 20
     losses off in the 7th digit). Bits change on every column together: this
     kernel and the host oracles that restate it (`gbdt/host/gbdt_oracle_*`).
-    Unused under FAST, which keeps the naive chain in `cursor_add_leaf`."""
+    Under FAST the plain product."""
     comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
         return sf64_to_f32(sf64_mul(sf64_from_f32(raw), sf64_from_f32(learning_rate)))
     return raw * learning_rate
 
 
-@always_inline
-def cursor_add_leaf(
-    raw: Float32, learning_rate: Float32, scaled: Float32, cursor: Float32
-) -> Float32:
-    """One row's cursor update: `cursor + scaled` under IDENTICAL (`scaled`
-    from `rescaled_leaf`, a plain add with nothing to fuse), the naive
-    `raw * rate + cursor` under FAST (Apple FAST bits unchanged)."""
-    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
-        return cursor + scaled
-    return raw * learning_rate + cursor
+def rescaled_leaves(leaves: List[Float32], learning_rate: Float32) -> List[Float32]:
+    """`rescaled_leaf` over a tree's leaf values (leaves x dims), once per
+    tree: the values the stored model keeps and the cursor adds."""
+    var out = List[Float32](capacity=len(leaves))
+    for i in range(len(leaves)):  # driver-loop: over one tree's leaf values
+        out.append(rescaled_leaf(leaves[i], learning_rate))
+    return out^
+
+
+def apply_scaled_leaves_host(
+    mut cursor: List[Float32],
+    scaled: List[Float32],
+    row_index: List[Int],
+    offsets: List[Int],
+    sizes: List[Int],
+    n_leaves: Int,
+    dim: Int = 1,
+    plane: Int = 0,
+):
+    """The host oracles' `add_model_value_kernel`: every row of leaf `l` (its
+    partition range `row_index[offsets[l] .. + sizes[l]]`) takes
+    `cursor + scaled[l * dim + d]` in plane `d` (`d * plane + row`), one add
+    per row, the kernel's statement. One copy for the six oracles that each
+    restated it (fb11 follow-up, 2026-11-17)."""
+    for leaf in range(n_leaves):
+        for d in range(dim):
+            var v = scaled[leaf * dim + d]
+            for k in range(sizes[leaf]):
+                var at = d * plane + row_index[offsets[leaf] + k]
+                cursor[at] = cursor[at] + v

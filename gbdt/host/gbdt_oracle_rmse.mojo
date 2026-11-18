@@ -84,7 +84,7 @@ tools/identity_break.py on the gbdt-rmse lane is the measurement.
 from std.math import exp, fma, log
 from std.memory import bitcast
 from checks.numerics import ftz
-from gbdt.methods.cursor_rescale import cursor_add_leaf, rescaled_leaf
+from gbdt.methods.cursor_rescale import apply_scaled_leaves_host, rescaled_leaves
 from gbdt.data.permutation import TRandom
 from gbdt.metrics.sample_quantile import calculate_weighted_target_average
 from gbdt.gpu_data.compressed_index_builder import build_layout
@@ -603,11 +603,8 @@ def gbdt_rmse_host_fit(
             var w = _partition_stat(stats, n_rows, 0, offsets[i], sizes[i])
             var g = _partition_stat(stats, n_rows, 1, offsets[i], sizes[i])
             leaf_values[i] = _rmse_leaf_value(w, g, params.l2_leaf_reg)
-        for leaf in range(n_live):
-            var scaled = rescaled_leaf(leaf_values[leaf], lr)
-            for k in range(sizes[leaf]):
-                var row = row_index[offsets[leaf] + k]
-                cursor[row] = cursor_add_leaf(leaf_values[leaf], lr, scaled, cursor[row])
+        var scaled = rescaled_leaves(leaf_values, lr)
+        apply_scaled_leaves_host(cursor, scaled, row_index, offsets, sizes, n_live)
 
         # ---- `AppendModels`: the structure and the rescaled leaves ----
         for i in range(grown):
@@ -615,7 +612,7 @@ def gbdt_rmse_host_fit(
             split_bins.append(tree_bins[i])
         tree_split_offsets.append(len(split_features))
         for i in range(len(leaf_values)):
-            model_leaves.append(leaf_values[i] * lr)
+            model_leaves.append(scaled[i])
         tree_leaf_offsets.append(len(model_leaves))
 
         # the learn loss read alongside this iteration's gradients

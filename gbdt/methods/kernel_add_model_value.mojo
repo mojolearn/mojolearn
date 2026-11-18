@@ -38,8 +38,11 @@ point it at. Recorded so that gap is visible.
 """
 
 from max.gpu import block_dim, block_idx, grid_dim, thread_idx
+from max.gpu.memory import AddressSpace
+from max.gpu.sync import barrier
+from std.memory import stack_allocation
 
-from gbdt.methods.cursor_rescale import cursor_add_leaf, rescaled_leaf
+from gbdt.methods.cursor_rescale import rescaled_leaf
 # TOMBSTONE: MOJOLEARN_AFT_G08 (DELETE-EXPERIMENT, never-run Apple FAST programme card, rule g; non-owner fold to False) deleted 2026-11-15 by lane/expdel2-43-trees; code recoverable at acfd453fec.
 # Restore: git apply experiments/removed/MOJOLEARN_AFT_G08.expdel2-43-trees.patch; record in docs/TOMBSTONES.md.
 # RESTORED 2026-11-15 by lane/restore-apple-fast-trees: opt-in arm back as it was, default off, Apple fast only; default path unchanged.
@@ -136,20 +139,27 @@ def _add_model_value_body(
 
     var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     var stride = Int(grid_dim.x) * Int(block_dim.x)
-    # The rescaled leaf, once per block: `rescaled_leaf` / `cursor_add_leaf`
-    # below say why (fb11, 2026-11-17).
-    var scaled = rescaled_leaf(raw, learning_rate)
+    # THE RESCALED LEAF, ONCE PER BLOCK (fb11 follow-up, 2026-11-17). Thread 0
+    # forms `round(leaf * rate)` (`rescaled_leaf`, the soft-float product the
+    # stored model's rescale also calls) into shared memory and every row of
+    # the block adds it: one add per row. It was one soft-float product per
+    # THREAD (fb11) and before that one fma per ROW. Every block of a leaf
+    # forms the same bits from the same two operands. The gated wrapper's
+    # early return is block-uniform, so every thread reaches the barrier.
+    var shared_scaled = stack_allocation[
+        1, Scalar[DType.float32], address_space = AddressSpace.SHARED
+    ]()
+    if thread_idx.x == 0:
+        shared_scaled[0] = rescaled_leaf(raw, learning_rate)
+    barrier()
+    var scaled = shared_scaled[0]
     while i < size:
         comptime for lane in range(AFT_LEAF_ROWS):
             var position = i + lane * stride
             if position < size:
                 var row = plane + Int(row_index.unsafe_load(offset + position))
-                # independent rows share the leaf value already loaded above
-                # and never share writes
-                cursor.unsafe_store(
-                    row,
-                    cursor_add_leaf(raw, learning_rate, scaled, cursor.unsafe_load(row)),
-                )
+                # independent rows share the leaf value and never share writes
+                cursor.unsafe_store(row, cursor.unsafe_load(row) + scaled)
         i += stride * AFT_LEAF_ROWS
 
 
