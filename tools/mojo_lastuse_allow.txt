@@ -1,5 +1,7 @@
 # Reviewed false alarms of tools/mojo_lastuse_audit.py, one per line: <path>:<function>:<local>  # <reason>
 # A line needs a reason. A real site is fixed in code (`_ = name^` after the pointer's last use), never listed here.
+# An `own-copy` finding (a check under checks/native_tests/ that enqueues a host-to-device copy itself) is listed here
+# only for a check whose subject is the queue or the copy itself, with that reason; every other check calls the kit.
 bindings/native_worker_inventory_door.mojo:native_worker_inventory:name  # stack array (Array[Int8, 256]) with a trivial destructor: no heap free at its last use
 bindings/tokenizer_public_native_door.mojo:decode:empty_byte  # stack UInt8 scalar, trivial destructor; its address is only taken when count == 0 (nothing is read)
 bindings/tokenizer_public_native_door.mojo:decode:name  # a C-string view of self.name: the bytes belong to self, which outlives the call

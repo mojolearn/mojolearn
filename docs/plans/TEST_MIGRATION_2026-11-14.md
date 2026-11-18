@@ -101,6 +101,13 @@ The brief's name form `checks/<family>_<topic>_check.mojo` is replaced by this l
      the brief of the one integration compile-fix lane.
 
 
+**Transfers go through the kit (2026-11-18).** A new native check takes its host-to-device and device-to-host
+transfers and its bit and tolerance comparisons from `checks/native_tests/kit.mojo` (`upload`, `upload_into`,
+`upload_host_into`, `download`, `same_words`, `allclose`, ...), which holds the host memory and drains before it returns,
+and writes no pinned-buffer `enqueue_copy` sequence or queue keep-alive of its own. `tools/mojo_lastuse_audit.py` fails
+a file under `checks/native_tests/` that enqueues a host-to-device copy itself; a check whose subject is the queue uses
+the kit's `..._undrained_keep` forms or gets a line with its reason in `tools/mojo_lastuse_allow.txt`.
+
 ## Totals per class
 
 | Class | Files | Lines | Native lines to port | What happens |
