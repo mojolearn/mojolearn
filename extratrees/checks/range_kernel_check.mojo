@@ -114,6 +114,7 @@ from extratrees.impl.decisiontree.batched_levelalgo.kernels.builder_kernels_impl
     RANGE_SAB_ROW_MAJOR,
     TPB_DEFAULT,
 )
+from checks.native_tests.kit import download_host_into, upload_host_into
 
 
 comptime TPB = TPB_DEFAULT
@@ -325,17 +326,12 @@ def main() raises:
     for i in range(plan.n_blocks_dimx):
         wl_ptr[unsafe_offset=i] = plan.info[i]
 
-    ctx.enqueue_copy(dst_buf=d_data, src_ptr=h_data.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_row_ids, src_ptr=h_row_ids.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_colids, src_ptr=h_colids.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_items, src_ptr=h_items.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_wl, src_ptr=h_wl.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, d_data, h_data)
+    upload_host_into[DType.int32](ctx, d_row_ids, h_row_ids)
+    upload_host_into[DType.int32](ctx, d_colids, h_colids)
+    upload_host_into[DType.uint8](ctx, d_items, h_items)
+    upload_host_into[DType.uint8](ctx, d_wl, h_wl)
     ctx.synchronize()
-    _ = h_colids^  # past the drain: a queued copy reads it after its last named use
-    _ = h_data^  # past the drain: a queued copy reads it after its last named use
-    _ = h_items^  # past the drain: a queued copy reads it after its last named use
-    _ = h_row_ids^  # past the drain: a queued copy reads it after its last named use
-    _ = h_wl^  # past the drain: a queued copy reads it after its last named use
 
     var arms = [
         RANGE_SAB_NONE,
@@ -397,10 +393,10 @@ def main() raises:
         var o_max = ctx.enqueue_create_host_buffer[DType.float32](n_cells)
         var o_missing = ctx.enqueue_create_host_buffer[DType.int32](n_cells)
         var o_merges = ctx.enqueue_create_host_buffer[DType.int32](n_cells)
-        ctx.enqueue_copy(dst_buf=o_min, src_buf=d_min)
-        ctx.enqueue_copy(dst_buf=o_max, src_buf=d_max)
-        ctx.enqueue_copy(dst_buf=o_missing, src_buf=d_missing)
-        ctx.enqueue_copy(dst_buf=o_merges, src_buf=d_merges)
+        download_host_into[DType.float32](ctx, d_min, o_min)
+        download_host_into[DType.float32](ctx, d_max, o_max)
+        download_host_into[DType.int32](ctx, d_missing, o_missing)
+        download_host_into[DType.int32](ctx, d_merges, o_merges)
         ctx.synchronize()
 
         var mn = List[Float32]()
