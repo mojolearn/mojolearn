@@ -127,6 +127,49 @@ if [ "${1:-}" = --detect-vendor ]; then
     detect_vendor || { echo "paper-compare-job: neither nvidia-smi nor rocm-smi found" >&2; exit 2; }
     exit 0
 fi
+# >>> pc-preflight (tools/test_job_preflight.py runs this block)
+# job-preflight: `paper_compare_job.sh --preflight` checks the job's staged inputs at SUBMIT time, reading only (run on
+# the box by tools/ops/job_preflight.sh from tools/nvidia_central.sh submit; lane fx-pod-job, 2026-11-18): the
+# candidate wheel set (one core and one vendor wheel), its source commit, every B set of PC_B_ARMS, the rows file and
+# the stored baseline board are where the job reads them. The job keeps its own run-time checks of the same inputs.
+pc_preflight() {   # vendor: PREFLIGHT lines; 0 when the job would start, 4 otherwise
+    local v=$1 fails=0 n name dir commit
+    pf_fail() { echo "PREFLIGHT FAIL $*"; fails=$(( fails + 1 )); }
+    wheels_in() { ls "$1"/mojolearn_core-*.whl "$1"/mojolearn_"$v"-*.whl 2> /dev/null | grep -c .; }
+    if [ -n "${PC_WHEEL_DIR:-}" ]; then
+        n=$(wheels_in "$PC_WHEEL_DIR")
+        if [ "$n" -eq 2 ]; then echo "PREFLIGHT ok candidate wheels in $PC_WHEEL_DIR"
+        else pf_fail "PC_WHEEL_DIR $PC_WHEEL_DIR holds $n of the 2 wheels (one mojolearn_core, one mojolearn_$v)"; fi
+        [[ "${PC_SOURCE_COMMIT:-}" =~ ^[0-9a-f]{40}$ ]] || pf_fail "PC_SOURCE_COMMIT is not a 40-hex commit"
+    fi
+    if [[ ",${PC_PARTS:-}," == *",targeted,"* || ",${PC_PARTS:-}," == *",tg-"* ]]; then
+        { [ -n "${PC_ROWS:-}" ] && [ -s "$PC_ROWS" ]; } && echo "PREFLIGHT ok rows file $PC_ROWS" \
+            || pf_fail "PC_ROWS (the rows file on the box) is missing or empty: ${PC_ROWS:-unset}"
+    fi
+    if [ -n "${PC_BASELINE_BOARD:-}" ] && [ ! -s "$PC_BASELINE_BOARD" ]; then
+        pf_fail "PC_BASELINE_BOARD $PC_BASELINE_BOARD: no such file on the box"
+    fi
+    if [ -n "${PC_B_ARMS:-}" ]; then
+        if [ ! -s "$PC_B_ARMS" ]; then pf_fail "PC_B_ARMS $PC_B_ARMS: no such file on the box (or empty)"
+        else
+            while read -r name dir commit; do
+                { [ -z "${name:-}" ] || [ "${name:0:1}" = "#" ]; } && continue
+                [[ "${dir:-}" == env:* ]] && continue
+                n=$(wheels_in "${dir:-/nonexistent}")
+                [ "$n" -eq 2 ] || pf_fail "B set $name: ${dir:-?} holds $n of the 2 wheels"
+            done < "$PC_B_ARMS"
+            echo "PREFLIGHT ok B sets of $PC_B_ARMS checked"
+        fi
+    fi
+    return $(( fails > 0 ? 4 : 0 ))
+}
+# <<< pc-preflight
+if [ "${1:-}" = --preflight ]; then
+    pv=${2:-}
+    [ -z "$pv" ] && { pv=$(detect_vendor) || { echo "PREFLIGHT FAIL neither nvidia-smi nor rocm-smi found"; exit 4; }; }
+    pc_preflight "$pv"
+    exit $?
+fi
 [ $# -le 2 ] || usage
 V=${1:-}
 ARG2=${2:-}

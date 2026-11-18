@@ -20,7 +20,10 @@
 #                                                      unused second L40S for the measurement).
 #   tools/nvidia_central.sh sync   <lane> <worktree>   patch-sync to /root/mojolearn-<lane> on the lane's pod
 #                                                      (a lane is assigned to one pod at its first sync)
-#   tools/nvidia_central.sh submit <lane> [--gpus N] [--cap MIN] [--note TEXT] [--results DIR] [--env K=V]... [--no-persist] <script-on-box>
+#   tools/nvidia_central.sh submit <lane> [--gpus N] [--cap MIN] [--note TEXT] [--results DIR] [--env K=V]... [--no-persist] [--no-preflight] <script-on-box>
+#                                                      First a PREFLIGHT on the pod (tools/ops/job_preflight.sh: the
+#                                                      script parses, --env paths exist, the script's own --preflight
+#                                                      when it declares one); a FAIL queues nothing.
 #                                                      THE WAY TO RUN A GATE: enqueue; prints the job id
 #                                                      (<pod>-<n>, e.g. nvc1-0003). Default and max cap 240 min.
 #                                                      The job runs under tools/box_persist_run.sh: DIR (relative to
@@ -387,7 +390,7 @@ sync)
     say "lane $lane is on $k ($GPU_COUNT GPU slots, $GPU); submit with: tools/nvidia_central.sh submit $lane <script>"
     ;;
 submit)
-    lane="${1:-}"; lane_ok "$lane"; shift; n=1; cap=$NVC_CAP_MIN; note=''; results=''; persist=1; jobenv=''
+    lane="${1:-}"; lane_ok "$lane"; shift; n=1; cap=$NVC_CAP_MIN; note=''; results=''; persist=1; jobenv=''; preflight=1
     while [ $# -gt 0 ]; do
         case "$1" in
             --gpus) n="${2:?--gpus N}"; shift 2 ;;
@@ -395,6 +398,7 @@ submit)
             --note) note="${2:?--note TEXT}"; shift 2 ;;
             --results) results="${2:?--results DIR}"; shift 2 ;;
             --no-persist) persist=0; shift ;;
+            --no-preflight) preflight=0; shift ;;
             --env)
                 kv="${2:?--env K=V}"
                 [[ "$kv" =~ ^[A-Z_][A-Z0-9_]*=[A-Za-z0-9_.,:/@+=-]*$ ]] \
@@ -403,10 +407,26 @@ submit)
             *) break ;;
         esac
     done
-    [ $# -eq 1 ] || die "submit <lane> [--gpus N] [--cap MIN] [--note TEXT] [--results DIR] [--env K=V]... [--no-persist] <script-on-box> (one script path; put arguments inside the script)"
+    [ $# -eq 1 ] || die "submit <lane> [--gpus N] [--cap MIN] [--note TEXT] [--results DIR] [--env K=V]... [--no-persist] [--no-preflight] <script-on-box> (one script path; put arguments inside the script)"
     [ -z "$jobenv" ] || [ "$persist" = 1 ] || die "--env applies to a persisted job only (drop --no-persist)"
     need_lane_pod "$lane"
     script=$1
+    # SUBMIT-TIME PREFLIGHT (lane fx-pod-job, 2026-11-18: a call-profile job failed three times in 90 s on inputs that
+    # were wrong when it was submitted, after 2 h 37 min in the queue): tools/ops/job_preflight.sh, streamed from this
+    # checkout, runs on the lane's pod before anything is queued: the script parses, every --env path exists there,
+    # and a script that declares `# job-preflight:` checks its own inputs (`<script> --preflight`, read only). Any
+    # FAIL refuses the submit. --no-preflight skips it.
+    if [ "$preflight" = 1 ]; then
+        ptree=/root/mojolearn-$lane
+        case "$script" in /*) pabs=$script ;; *) pabs=$ptree/$script ;; esac
+        pres=''
+        if [ -n "$results" ]; then case "$results" in /*) pres=$results ;; *) pres=$ptree/$results ;; esac; fi
+        # --env values are checked plain above, so they need no quoting here
+        prc=0
+        pf=$(BOX_TIMEOUT=300 box "bash -s -- $(sq "$ptree") $(sq "$pabs") $(sq "$pres")$jobenv" < "$ROOT/tools/ops/job_preflight.sh") || prc=$?
+        printf '%s\n' "$pf" | grep '^PREFLIGHT' | head -n 60 >&2 || true
+        [ "$prc" -eq 0 ] || die "the preflight refused $script (rc $prc); nothing was queued (fix the inputs above, or --no-preflight)"
+    fi
     if [ "$persist" = 1 ]; then
         # the queued script is a job.sh that runs <script> under tools/box_persist_run.sh (results to R2 from the pod)
         bp_prepare "nvc-$lane" nvidia_central "$TMPD/persist.sh" --slots "$NVC_PERSIST_SLOTS" \
