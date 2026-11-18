@@ -598,7 +598,21 @@ def decomp_door_resident_input(mut door: DecompDoor, mut kit: DKit, source: Pyth
         _ = keep  # keep the host owner alive through the upload above
         # From here the record's capsule owns the device buffer. Word 7:
         # the uploaded words are the frozen source's own (no cast copy).
-        held = decomp_resident_hold(door.owner, alloc, free, source, name, rows, cols, handle, host is source)
+        # Lane fx-rows-rest (2026-11-18): "own" is decided by the address
+        # of the uploaded words, not by `host is source` alone. With NumPy
+        # installed the doors admit a fitted Array through an ndarray VIEW
+        # of it (classical_input -> sequential_input), so `host` was never
+        # `source`, word 7 was always False, and `decomp_door_resident_hit`
+        # (own words only) missed on every query: each fitted operand was
+        # re-admitted, re-captured and re-frozen per call although its
+        # device copy was served (PLS/CCA transform: six operands, about
+        # 1.5 ms of a 6 ms call, call profile nvc-prof-20261118T182616Z-11b404;
+        # the same for ALS, MinCovDet and dictionary-learning queries). A
+        # cast or C-order copy has another address and stays False, as
+        # before. `source` is an exact frozen Array here (the freeze above),
+        # so its `_addr` slot is the address of its own words.
+        var own = host is source or address == Int(py=source._addr)
+        held = decomp_resident_hold(door.owner, alloc, free, source, name, rows, cols, handle, own)
     door.keep(held)
     door.keep(keep)
     door.keep(host)

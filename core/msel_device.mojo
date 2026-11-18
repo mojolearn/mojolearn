@@ -26,10 +26,14 @@ set by any thread that sees an out-of-range index.
 
 from std.atomic import Atomic
 from max.gpu import block_dim, block_idx, grid_dim, thread_idx
-from std.memory import bitcast
-from max.gpu.host import DeviceBuffer, DeviceContext
+from std.memory import bitcast, unsafe_memcpy
+from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 
+from core.ctx_key import ctx_cache_key
 from core.device_zero import enqueue_fill
+from core.host_parallel import host_parallelize
+from core.host_predict_threads import host_predict_task_count_work, host_predict_chunk
+from core.shared_slot import shared_slot_lock, shared_slot_unlock, SharedSlot
 from core.msel_convert import (
     MSEL_I64,
     msel_itemsize,
@@ -204,6 +208,174 @@ def _take_bytes_kernel(
         t += step
 
 
+# ---------------------------------------------------------------------------
+# The take's download (lane fx-rows-rest, 2026-11-18). The gathered rows came
+# down with one raw `enqueue_copy(dst_ptr=<the caller's fresh Array>)` after a
+# first wait for the status word: a pageable device-to-host copy into pages
+# never touched before, which the driver stages and faults in on ONE thread
+# (call profile nvc-prof-20261118T182616Z-11b404, train_test_split of
+# 1,000,000 x 220 float32: 892 MB down in 399 ms, 2.2 GB/s, on a host whose
+# pinned link runs 27 GB/s; half of the 800 ms call). Now the status word and
+# the rows share one wait, and the rows come down as a PIPELINE over chunks of
+# MSEL_STAGE_BYTES through two pinned stages kept per context
+# (core/staged_download.mojo's transport, in bytes): the copy engine fills one
+# stage at the link's pinned rate while the host drains the other into the
+# caller's memory, the drain split into contiguous byte spans across the
+# host's cores (so the first touch of the output's pages is spread over the
+# cores too). Copies only: the same bytes land in the same places, and no byte
+# of `dst` is written before the status word is read. Every take goes this
+# way (a take smaller than one stage is one chunk and one wait where there
+# were two). A transport rule from the sizes in front of it, for any rows and
+# any row width: nothing here names a shape.
+# ---------------------------------------------------------------------------
+
+#: Bytes per pinned stage and per pipeline chunk (16 MiB: under a millisecond
+#: of a pinned link per chunk, 32 MiB of pinned memory held per context). A
+#: multiple of 4096 so every chunk but the last starts on a page boundary of
+#: a page-aligned output.
+comptime MSEL_STAGE_BYTES = 1 << 24
+comptime MSEL_STAGE_KEEP = 2
+comptime MSEL_STAGE_LAYOUT = 1
+comptime _HU8 = MutPointer[UInt8, MutUntrackedOrigin]
+
+
+struct _MselStages(Defaultable, Movable):
+    """The pinned stages kept between takes: each MSEL_STAGE_BYTES long, all
+    made on the context `key` names (core/ctx_key.mojo: a stage is never
+    handed to another context; a take on another context retires them)."""
+    var bufs: List[HostBuffer[DType.uint8]]
+    var key: Int
+    #: word 0 guards `bufs` and `key`: takes run with the GIL released
+    var lock: List[Int64]
+
+    def __init__(out self):
+        # side-effect free (core/shared_slot.mojo, first creation)
+        self.bufs = List[HostBuffer[DType.uint8]]()
+        self.key = 0
+        self.lock = List[Int64](length=1, fill=Int64(0))
+
+
+comptime MSEL_STAGES = SharedSlot[_MselStages, "MojolearnMselTakeStagesV1", MSEL_STAGE_LAYOUT]
+
+
+def _msel_stage_take(ctx: DeviceContext) raises -> HostBuffer[DType.uint8]:
+    """A pooled pinned stage of this context, else a new one."""
+    var pool = MSEL_STAGES.get_or_create_ptr()
+    var key = ctx_cache_key(ctx)
+    var lock = rebind[MutPointer[Int64, MutUntrackedOrigin]](pool[].lock.unsafe_ptr())
+    shared_slot_lock(lock)
+    if pool[].key != key:
+        pool[].bufs.clear()
+        pool[].key = key
+    if len(pool[].bufs) > 0:
+        var kept = pool[].bufs.pop()
+        shared_slot_unlock(lock)
+        return kept^
+    shared_slot_unlock(lock)
+    return ctx.enqueue_create_host_buffer[DType.uint8](MSEL_STAGE_BYTES)
+
+
+def _msel_stage_give(ctx: DeviceContext, var stage: HostBuffer[DType.uint8]) raises:
+    """Return a stage to the pool (kept while it is this context's and the
+    pool holds fewer than MSEL_STAGE_KEEP; dropped otherwise)."""
+    var pool = MSEL_STAGES.get_or_create_ptr()
+    var key = ctx_cache_key(ctx)
+    var lock = rebind[MutPointer[Int64, MutUntrackedOrigin]](pool[].lock.unsafe_ptr())
+    shared_slot_lock(lock)
+    if pool[].key == key and len(pool[].bufs) < MSEL_STAGE_KEEP:
+        pool[].bufs.append(stage^)
+    shared_slot_unlock(lock)
+
+
+def _msel_stage_enqueue(
+    ctx: DeviceContext, mut d_out: DeviceBuffer[DType.uint8], total: Int, k: Int,
+    mut stage: HostBuffer[DType.uint8],
+) raises:
+    """Chunk `k` of the first `total` bytes of `d_out` onto `stage`: a full
+    chunk buffer to buffer, the last (shorter) one onto the stage's pointer."""
+    var lo = k * MSEL_STAGE_BYTES
+    if lo + MSEL_STAGE_BYTES <= total:
+        var view = d_out.create_sub_buffer[DType.uint8](lo, MSEL_STAGE_BYTES)
+        ctx.enqueue_copy(dst_buf=stage, src_buf=view)
+        _ = view^
+    else:
+        var view = d_out.create_sub_buffer[DType.uint8](lo, total - lo)
+        ctx.enqueue_copy(dst_ptr=stage.unsafe_ptr(), src_buf=view)
+        _ = view^
+
+
+def _msel_copy_out(dst: Int, src: Int, n: Int):
+    """`n` bytes of a pinned stage at `src` into the caller's memory at
+    `dst`. Spans are independent (each writes its own bytes), so the bytes do
+    not depend on the split."""
+    # parallel: byte copy over contiguous spans across the host's cores (grain floor in 4-byte words)
+    if n <= 0:
+        return
+    var tasks = host_predict_task_count_work(n, n // 4)
+    if tasks <= 1:
+        unsafe_memcpy(dest=_HU8(unsafe_from_address=dst), src=_HU8(unsafe_from_address=src), count=n)
+        return
+    # Whole pages per span, so no two tasks first-touch one page.
+    var span = ((host_predict_chunk(n, tasks) + 4095) // 4096) * 4096
+
+    def _span(t: Int) {imm dst, imm src, imm n, imm span}:
+        var lo = t * span
+        if lo >= n:
+            return
+        var hi = min(lo + span, n)
+        unsafe_memcpy(dest=_HU8(unsafe_from_address=dst + lo), src=_HU8(unsafe_from_address=src + lo),
+                      count=hi - lo)
+
+    host_parallelize(_span, tasks)
+
+
+def _msel_take_download(
+    ctx: DeviceContext, mut d_out: DeviceBuffer[DType.uint8], total: Int,
+    mut d_status: DeviceBuffer[DType.int32], dst_addr: Int,
+) raises -> Bool:
+    """The take's status word and, when it is 0, the `total` gathered bytes
+    of `d_out` into host memory at `dst_addr` (the pipeline above). False,
+    and no byte of `dst` written, when the status word is set."""
+    var nchunks = (total + MSEL_STAGE_BYTES - 1) // MSEL_STAGE_BYTES
+    var h = ctx.enqueue_create_host_buffer[DType.int32](2)
+    ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=d_status)
+    var st0 = _msel_stage_take(ctx)
+    var st1 = _msel_stage_take(ctx)
+    # The first chunk rides the status word's wait; it lands on our stage,
+    # never on `dst`, so a refused take still writes nothing.
+    _msel_stage_enqueue(ctx, d_out, total, 0, st0)
+    ctx.synchronize()
+    var ok = Int(h.unsafe_ptr()[0]) == 0
+    _ = h^
+    if not ok or dst_addr == 0:
+        _msel_stage_give(ctx, st0^)
+        _msel_stage_give(ctx, st1^)
+        if ok:
+            raise Error("msel take_rows: null destination")
+        return False
+    var a0 = Int(st0.unsafe_ptr())
+    var a1 = Int(st1.unsafe_ptr())
+    var k = 0
+    while k < nchunks:  # driver-loop: over the download's chunks, two stages alternating
+        if k > 0:
+            ctx.synchronize()
+        if k + 1 < nchunks:
+            _msel_stage_enqueue(ctx, d_out, total, k + 1, st1)
+        _msel_copy_out(dst_addr + k * MSEL_STAGE_BYTES, a0, min(MSEL_STAGE_BYTES, total - k * MSEL_STAGE_BYTES))
+        if k + 1 >= nchunks:
+            break
+        ctx.synchronize()
+        if k + 2 < nchunks:
+            _msel_stage_enqueue(ctx, d_out, total, k + 2, st0)
+        _msel_copy_out(dst_addr + (k + 1) * MSEL_STAGE_BYTES, a1,
+                       min(MSEL_STAGE_BYTES, total - (k + 1) * MSEL_STAGE_BYTES))
+        k += 2
+    # Both stages are named here, after the last copy out of either.
+    _msel_stage_give(ctx, st0^)
+    _msel_stage_give(ctx, st1^)
+    return True
+
+
 def device_take_rows(
     ctx: DeviceContext, store: MselStore, src_id: Int, n_src: Int, row_bytes: Int,
     idx_id: Int, n_idx: Int, dst_addr: Int,
@@ -236,12 +408,10 @@ def device_take_rows(
             idx, Int64(n_idx), d_out.unsafe_ptr(), d_status.unsafe_ptr(),
             grid_dim=_grid(total), block_dim=MSEL_TPB,
         )
-    var ok = _status(ctx, d_status) == 0
-    if ok:
-        if dst_addr == 0:
-            raise Error("msel take_rows: null destination")
-        ctx.enqueue_copy(dst_ptr=_U8(unsafe_from_address=dst_addr), src_buf=d_out)
-        ctx.synchronize()
+    # One wait for the status word and the first chunk; pinned stages and a
+    # copy-out across the host's cores (`_msel_take_download`). It was a wait
+    # for the status word, then one pageable copy of all `total` bytes.
+    var ok = _msel_take_download(ctx, d_out, total, d_status, dst_addr)
     _ = d_out^
     _ = d_status^
     return ok

@@ -12,7 +12,9 @@ from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setit
 from bindings.mode_metadata_native_door import _fields, _class_fields
 from bindings.native_loaded_module_door import native_loaded_module
 from bindings.classical_attributes_door import classical_check_layout
-from bindings.prep_native_estimator_door import prep_estimator_admit, prep_estimator_has, prep_estimator_call
+from bindings.prep_native_estimator_door import (
+    prep_estimator_admit, prep_estimator_has, prep_estimator_call, prep_estimator_predict_internal,
+)
 from bindings.trees_public_inputs_door import trees_table, trees_call, trees_address, trees_reshape, trees_cast
 from bindings.admitted_input_unpack import admitted_vector, admitted_unfilled, classical_view
 # TOMBSTONE: trees_view / trees_vector uses (the trees admission aliases) deleted 2026-11-09 by lane a1b-doors-opt-in-trees-linear; code recoverable at f59d913b0b.
@@ -104,7 +106,14 @@ def _method(model: PythonObject, context: PythonObject) raises -> String:
 def _evaluate(model: PythonObject, method: String, x: PythonObject, n: Int,
               context: PythonObject) raises -> PythonObject:
     """The model on rows x (an (n, d) Array) as a float32 (n, k) Array."""
-    var out = prep_estimator_call(model, method, Python.tuple(x), context)
+    # Lane fx-rows-rest (2026-11-18): predict through the plan's internal
+    # float32 operation when it names one (prep_estimator_predict_internal, as
+    # the stacking and voting doors): this door reads float32 words, and the
+    # public predict of a linear model returned a float64 ndarray that was then
+    # narrowed back through a zero-filled snapshot, per chunk. Same words (the
+    # widening was exact). A plan without one runs its predict as before.
+    var out = (prep_estimator_predict_internal(model, Python.tuple(x), context) if method == "predict"
+               else prep_estimator_call(model, method, Python.tuple(x), context))
     classical_admit_value(out, context)
     var view = classical_view(out, context, "output", True)
     var rank = Int(py=view.ndim)

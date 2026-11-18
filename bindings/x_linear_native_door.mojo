@@ -51,6 +51,8 @@ from bindings.classical_attributes_door import classical_connect_numpy
 from bindings.classical_attributes_door import _type_mro
 from bindings.mode_metadata_native_door import _class_fields
 from bindings.native_loaded_module_door import native_loaded_module, NativeModules
+from bindings.native_prepared_owner_unpack import prepared_get, prepared_put
+from core.host_bytes_equal import host_bytes_equal
 from bindings.native_class_admission_door import class_record, class_admit
 from bindings.py_lists import py_list_int, py_list_f64
 from bindings.classical_exceptions_door import classical_require_fitted
@@ -1433,18 +1435,92 @@ def _xl_isotonic_check(fields: PythonObject) raises:
         raise Error("mojolearn IsotonicRegression: out_of_bounds must be 'nan', 'clip' or 'raise'")
 
 
+#: The joined isotonic knots of a fitted model (lane fx-rows-rest,
+#: 2026-11-18): one prepared-registry record per model (outside its
+#: __dict__, dropped with the model), the tuple
+#:   (X_thresholds_ object, y_thresholds_ object, joined float32 Array,
+#:    knots per array, X words address, y words address, joined address)
+comptime _XL_ISO_KNOTS_SLOT = "x_linear_isotonic_knots_v1"
+
+
+def _xl_own_f32(value: PythonObject, address: Int, count: Int, context: PythonObject) raises -> Bool:
+    """`value` is an exact mojolearn float32 Array of `count` words whose
+    own words sit at `address` (its slots read natively; no method runs)."""
+    if py_type(value) is not context["array_class"]:
+        return False
+    var b = _b()
+    var dtype = array_slot_once(value, "dtype", context)
+    var size = array_slot_once(value, "size", context)
+    var addr = array_slot_once(value, "_addr", context)
+    if py_type(dtype) is not b.str or py_type(size) is not b.int or py_type(addr) is not b.int:
+        return False
+    return String(py=dtype) == "<f4" and Int(py=size) == count and Int(py=addr) == address
+
+
+def _xl_isotonic_knots(model: PythonObject, fields: PythonObject,
+                       context: PythonObject) raises -> Tuple[PythonObject, Int, Int, Int]:
+    """The joined knots [X_thresholds_ | y_thresholds_] of a fitted
+    IsotonicRegression: (float32 Array, knots k, its address, its words).
+
+    Every predict admitted both fitted arrays again and joined them into a
+    new Array (two admissions through the NumPy view, an allocation and two
+    copies: about 50 us of a 0.34 ms predict of 100,000 queries, call
+    profile nvc-prof-20261118T175049Z-49fb08). The joined Array is now kept
+    in the model's record and served while it is provably the join this
+    call would build: the two stored attributes are the SAME objects
+    (a replaced X_thresholds_ / y_thresholds_ misses), each is still an
+    exact float32 Array of the same length at the same address, and its
+    words are bitwise equal to the kept copy (an in-place edit through any
+    view misses; the compare reads the 2 k knot words once, across the
+    host's cores, where the join copied them). A miss runs the old path and
+    replaces the record; arrays the door would cast or copy (another dtype,
+    a caller's ndarray) are never recorded. Same words to the kernel: no bit
+    moves. Nothing is frozen and no user-visible attribute changes."""
+    var xs = fields["X_thresholds_"]
+    var ys = fields["y_thresholds_"]
+    var mods = NativeModules()
+    var held = prepared_get(mods, _XL_ISO_KNOTS_SLOT, model)
+    if held is not None and held[0] is xs and held[1] is ys:
+        var count = Int(py=held[3])
+        var xa = Int(py=held[4])
+        var ya = Int(py=held[5])
+        if _xl_own_f32(xs, xa, count, context) and _xl_own_f32(ys, ya, count, context):
+            var joined = held[2]
+            var joined_at = Int(py=held[6])
+            var same = (host_bytes_equal(joined_at, xa, 4 * count)
+                        and host_bytes_equal(joined_at + 4 * count, ya, 4 * count))
+            _ = xs  # keep the Python object alive through the compare above
+            _ = ys  # keep the Python object alive through the compare above
+            if same:
+                return (joined, count, joined_at, 2 * count)
+    var xt = _xl_words(xs, "X_thresholds_", context)
+    var yt = _xl_words(ys, "y_thresholds_", context)
+    var k = len(xs)
+    var x_count = xt.rows * xt.cols
+    var y_count = yt.rows * yt.cols
+    var thr = _xl_join(xt.address, x_count, yt.address, y_count, context)
+    var base = labels_address(thr)
+    if (k > 0 and x_count == k and y_count == k and _xl_own_f32(xs, xt.address, k, context)
+            and _xl_own_f32(ys, yt.address, k, context)):
+        # Nothing is stored for a model that takes no weak reference.
+        prepared_put(mods, _XL_ISO_KNOTS_SLOT, model,
+                     Python.tuple(xs, ys, thr, PythonObject(k), PythonObject(xt.address), PythonObject(yt.address),
+                                  PythonObject(base)))
+    _ = yt  # keep the Python object alive through the native call above
+    _ = xt  # keep the Python object alive through the native call above
+    return (thr, k, base, x_count + y_count)
+
+
 def _xl_isotonic_transform(model: PythonObject, fields: PythonObject, entries: XLinearOps, t: AdmittedXView,
                            context: PythonObject) raises -> PythonObject:
     """IsotonicRegression.transform over the column already read: the
-    thresholds as two byte copies, the interp1d-linear predict on the
-    binding; out_of_bounds='raise' is the flag word after the predictions."""
+    joined thresholds (the model's record, `_xl_isotonic_knots`), the
+    interp1d-linear predict on the binding; out_of_bounds='raise' is the
+    flag word after the predictions."""
     var n = t.rows
-    var xt = _xl_words(fields["X_thresholds_"], "X_thresholds_", context)
-    var yt = _xl_words(fields["y_thresholds_"], "y_thresholds_", context)
-    var k = len(fields["X_thresholds_"])
-    var thr = _xl_join(xt.address, xt.rows * xt.cols, yt.address, yt.rows * yt.cols, context)
-    _ = yt  # keep the Python object alive through the native call above
-    _ = xt  # keep the Python object alive through the native call above
+    var knots = _xl_isotonic_knots(model, fields, context)
+    var thr = knots[0]
+    var k = knots[1]
     var oob_mode = fields["out_of_bounds"]
     var raise_oob = _eq(oob_mode, PythonObject("raise"))
     var oob = 2 if raise_oob else (1 if _eq(oob_mode, PythonObject("clip")) else 0)
@@ -1454,13 +1530,9 @@ def _xl_isotonic_transform(model: PythonObject, fields: PythonObject, entries: X
     # one query per team slot; device `_iso_predict_grid`, one thread per
     # query): only the out-of-bounds word at [n] starts as zero (the host
     # column ORs into it).
-    var out = _xl_run(entries, ALGO_ISOTONIC_PREDICT, t.address, n, n, 1, labels_address(thr), Int(py=thr.size),
+    var out = _xl_run(entries, ALGO_ISOTONIC_PREDICT, t.address, n, n, 1, knots[2], knots[3],
                       ip, fp, n + 1 if raise_oob else n, 1, 1, context, written=n)
     _ = thr  # keep the Python object alive through the native call above
-    _ = yt  # keep the Python object alive through the native call above
-    _ = xt  # keep the Python object alive through the native call above
-    _ = xt^
-    _ = yt^
     _ = thr^
     if raise_oob:
         if _xl_word(out, n) != 0:
@@ -2503,7 +2575,7 @@ def x_linear_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObject
 
 def _xl_dispatch(model: PythonObject, operation: String, args: PythonObject, context: PythonObject) raises -> PythonObject:
         var result = PythonObject(None)
-        if operation == "regressor_predict":
+        if operation == "regressor_predict" or operation == "regressor_predict_score":
             result = xl_regressor_predict(model, args, context)
         elif operation == "decision_function":
             result = xl_classifier_decision(model, args[0], context)
@@ -2661,7 +2733,21 @@ def _xl_public_operation(model: PythonObject, operation: String, args: PythonObj
         estimator_fit_complete(model, args[0], classifier, context)
         if method == "fit":
             return result
-    if method == "score" or not estimator_outside() or py_get(context, "ndarray") is None:
+    # Lane fx-rows-rest (2026-11-18): "regressor_predict_score" is the plan's
+    # internal predict (`scorer_predict_operation`, python/mojolearn/
+    # _native_msel_prep.py; Ridge and LinearRegression have had `predict_score`).
+    # Its caller is a compiled door reading float32 words (KernelExplainer /
+    # PermutationExplainer, the stacking / voting / multi-output doors, a native
+    # scorer), so it gets the kernel's fresh float32 Array, as a caller inside
+    # the package always did. A door has no Python frame, so those callers were
+    # judged "outside": every model call widened the n predictions to a float64
+    # ndarray (`_xl_widen`) and the door then narrowed them back to float32
+    # through a zero-filled snapshot (kernel-shap: 20 M predictions per explain,
+    # +114 ms on a 334 ms row against 0.8.55, whose callers read the float32
+    # output). The widening is exact, so the float32 words are the same words.
+    # The public predict (operation "regressor_predict") is unchanged: float64.
+    if (method == "score" or operation == "regressor_predict_score" or not estimator_outside()
+            or py_get(context, "ndarray") is None):
         return result
     var b = native_loaded_module("builtins")
     if py_type(result) is b.tuple:
