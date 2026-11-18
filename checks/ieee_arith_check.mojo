@@ -839,15 +839,15 @@ def _fma_denormal_involved(
     return prod != 0.0 and prod < 1.1754943508222875e-38
 
 
-def _same_or_both_nan(got: UInt32, ref: Float32) -> Bool:
+def _same_or_both_nan(got: UInt32, want: Float32) -> Bool:
     """Bit equality, with any NaN equal to any NaN (IEEE specifies WHEN a
     NaN arises, not its payload; ARM 7 judges NaN the same way)."""
     var got_nan = (got & UInt32(0x7F800000)) == UInt32(0x7F800000) and (
         got & UInt32(0x007FFFFF)
     ) != UInt32(0)
-    if got_nan and ref != ref:
+    if got_nan and want != want:
         return True
-    return got == _bits(ref)
+    return got == _bits(want)
 
 
 def _bits(x: Float32) -> UInt32:
