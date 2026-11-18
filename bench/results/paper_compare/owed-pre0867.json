@@ -622,6 +622,11 @@
    "define": "MOJOLEARN_XPREP_FAST_TE_PBUCKET_OFF",
    "status": "define in code (bindings/prep_encode_native_door.mojo TE_PBUCKET): B = TargetEncoder without the per-bucket pass; A = the per-bucket pass, the default. Was a run-time env read until lane fx-env-dead (2026-11-18); default unchanged",
    "owed": "RUN"
+  },
+  "mamba3-s17-tail-tree": {
+   "define": "MOJOLEARN_MAMBA3_FAST_S17_TAIL_TREE",
+   "status": "define in code (autograd/kernels/mamba3.mojo M3_S17_TAIL_TREE, mamba3_s17_tail_tree_kernel; mamba/host/gen/mamba3_backward.mojo, the same source through tools/mamba_host_gen.py): B = the Mamba-3 backward S17 chunk-end tail of d_dacs_rec as 128 lane chains ((qs + 1) x 64 steps each, j then p ascending, then the state term) folded by the fixed balanced tree of gemm/IDENTICAL_FP32_CONTRACT.md 7.2, one barrier, no operand staging; A = the one serial chain of (qs + 1) x 64 x 128 steps on thread 0 (the pipe kernel, or the shared kernel where its page does not fit). BITS CHANGE under B for any sequence longer than one chunk (the same terms in another order), on the device and the host column together; equal words for l <= 64. Contract: mamba/IDENTICAL_MAMBA3_CONTRACT.md 'Backward S17 chunk-end tail'",
+   "owed": "RUN"
   }
  },
  "rows": [
@@ -3480,6 +3485,74 @@
     "xprep-te-pbucket-off"
    ],
    "decides": "keep A (the default) unless B is faster at equal quality on the NVIDIA L40S; digests must not move; time also a neighbouring shape and a non-board dataset before a flip (no dimension targeting)"
+  },
+  {
+   "id": "mamba3-s17-tail-tree-samba-train-step",
+   "source": "lane fx-mamba3-s17-fold (2026-11-18; ideas-training-speed idea 1, ~/mojolearn-evidence/briefs-20261118/fx-mamba3-s17-fold-RESULT.md): the S17 tail's serial chain (532,480 steps at qs 64) was re-staged twice (IDN_M3_S17_TAIL_PIPE promoted NV 1.04 / AMD 0.585, IDN_M3_S17_TAIL_DBUF deleted NV 0.935 / AMD 1.726) and never shortened",
+   "kind": "ab",
+   "lane": "samba-train-step",
+   "dataset": "*",
+   "rows": "full",
+   "vendor": "nvidia",
+   "b_arms": [
+    "mamba3-s17-tail-tree"
+   ],
+   "decides": "B becomes the default (and the pipe and shared tail kernels are deleted with the four tombstone parts) if it is faster on the NVIDIA L40S with quality equal: the loss and step result shown beside the time, the same mathematics in another summation order (expected -5 ms or more of about 45). Digests MOVE under B by design (bits may change between versions); what must hold is that B's words are the same on every vendor and the host column, read at the release's one verification. Not a flip from this row alone: the driver row mamba3-s17-tail-tree-sizes times the neighbouring and non-board sizes (no dimension targeting)"
+  },
+  {
+   "id": "mamba3-s17-tail-tree-sizes",
+   "source": "lane fx-mamba3-s17-fold (2026-11-18; ideas-training-speed idea 1, ~/mojolearn-evidence/briefs-20261118/fx-mamba3-s17-fold-RESULT.md): the S17 tail's serial chain (532,480 steps at qs 64) was re-staged twice (IDN_M3_S17_TAIL_PIPE promoted NV 1.04 / AMD 0.585, IDN_M3_S17_TAIL_DBUF deleted NV 0.935 / AMD 1.726) and never shortened",
+   "kind": "driver",
+   "driver": "samba_train_step",
+   "shape": {
+    "cases": [
+     {
+      "name": "mamba3-only-partial-chunk",
+      "batch": 4,
+      "length": 300,
+      "d_model": 256,
+      "layers": [
+       "mamba3",
+       "mamba3"
+      ]
+     },
+     {
+      "name": "mamba3-only-one-chunk",
+      "batch": 4,
+      "length": 64,
+      "d_model": 256,
+      "layers": [
+       "mamba3",
+       "mamba3"
+      ]
+     },
+     {
+      "name": "samba-6-layer",
+      "batch": 2,
+      "length": 512,
+      "d_model": 384,
+      "layers": [
+       "mamba3",
+       "attention",
+       "mamba3",
+       "attention",
+       "mamba3",
+       "attention"
+      ],
+      "n_heads": 6,
+      "intermediate": 768
+     }
+    ]
+   },
+   "arms": [
+    "candidate",
+    "prior",
+    "mamba3-s17-tail-tree"
+   ],
+   "b_arms": [
+    "mamba3-s17-tail-tree"
+   ],
+   "decides": "SambaStack.train_step, candidate (A) against the B wheel set, tools/measure_owed_driver.py samba_train_step, each line with its loss: mamba3-only-partial-chunk is the Mamba-3 backward alone at a neighbouring shape (B 4, L 300 = 4 chunks and a partial fifth, d_model 256); samba-6-layer is a non-board model size; mamba3-only-one-chunk is the control where the carried state is zero, so B's loss must equal A's bit for bit and the time shows the tail's fixed cost. B must not be slower on any case and the losses must agree to float32 rounding of a reordered sum (equal on the one-chunk case)"
   }
  ]
 }
