@@ -7557,6 +7557,12 @@ def worker_ready(args):
         return None, None, None, None, None, {"event": "error", "stage": "ready", "error": repr(exc)}
     if isinstance(runner.info, dict):   # the arm's own library version and GPU (the store's key)
         runner.info.update(_tool("bench_board_probe").library_identity(runner.info))
+        # lane fx-harness (2026-11-18): the NUMA node(s) this worker runs and allocates on, and what the conductor
+        # asked (tools/numa_place.py); the cell carries it as worker_numa
+        try:
+            runner.info["worker_numa"] = _tool("numa_place").worker_node()
+        except Exception as exc:  # noqa: BLE001 -- a record, never a reason to fail the race
+            runner.info["worker_numa"] = {"error": str(exc)[:200]}
         if ab_config is not None:
             runner.info["neural_ab_config"] = ab_config
             runner.info["neural_ab_lane_config"] = lane_config(args.lane)
@@ -7591,6 +7597,7 @@ def worker(args):
     # times decide how many consecutive calls the one scored run makes (20 under 10 ms, else 1); the warmup
     # does not decide (it carries start-up and kernel compilation)
     small = _tool("bench_board_small_rows")
+    numa = _tool("numa_place")
     for line in sys.stdin:
         parts = line.split()
         if not parts:
@@ -7613,14 +7620,21 @@ def worker(args):
                 # COMPILE-IN-CLOCK (Andrew 2026-10-14): torch.compile counters read around each
                 # scored call, outside its clock (tools/bench_board_compile_guard.py)
                 c0 = COMPILE.read()
+                # HOST USAGE (lane fx-harness, 2026-11-18): getrusage just outside each scored call's clock (system
+                # time, user time, minor and major faults); a call whose system time is above half its wall is a
+                # host stall (tools/numa_place.py summarize; tools/paper_compare.py HOST-STALL)
+                u0 = numa.usage()
                 t0 = time.perf_counter()
                 runner.fit()
                 ms = (time.perf_counter() - t0) * 1000.0
+                u1 = numa.usage()
                 c1 = COMPILE.read()
                 t1 = time.perf_counter()
                 did = runner.infer()
                 ims = (time.perf_counter() - t1) * 1000.0 if did else None
+                u2 = numa.usage()
                 c2 = COMPILE.read()
+                fit_use, inf_use = [numa.delta(u0, u1, ms)], [numa.delta(u1, u2, ims) if did else None]
                 compile_rec = {"recompiles_in_timed_run": COMPILE.compiles(c0, c1),
                                "recompiles_in_timed_infer": COMPILE.compiles(c1, c2) if did else None,
                                "warmup_compiles": None, "warmup_settle": None}
@@ -7647,13 +7661,17 @@ def worker(args):
                 try:
                     for i in range(1, max(n_fit, n_inf)):
                         if i < n_fit:
+                            u0 = numa.usage()
                             t0 = time.perf_counter()
                             runner.fit()
                             fit_calls.append((time.perf_counter() - t0) * 1000.0)
+                            fit_use.append(numa.delta(u0, numa.usage(), fit_calls[-1]))
                         if i < n_inf:
+                            u1 = numa.usage()
                             t1 = time.perf_counter()
                             runner.infer()
                             inf_calls.append((time.perf_counter() - t1) * 1000.0)
+                            inf_use.append(numa.delta(u1, numa.usage(), inf_calls[-1]))
                 finally:
                     small.range_close()
                 fit_rec = small.spread(fit_calls) if r > 0 else None
@@ -7688,6 +7706,7 @@ def worker(args):
                 return 1
             say({"event": "round", "round": r, "ms": ms, "infer_ms": ims, "digest": digest, "mem": m, "state_receipt": state_receipt,
                  "scored_calls": fit_rec, "infer_scored_calls": inf_rec,
+                 "host_usage": {"fit": fit_use, "infer": inf_use if did else None},
                  "aft_capture": aft_capture, "upload_separate": upload_sep,
                  "upload_separate_infer": upload_sep_infer, "compile": compile_rec,
                  "operation": {"ms": operation_ms, "preparation_ms": preparation_ms,
@@ -8766,6 +8785,9 @@ def race(args):
                     a.setdefault("scored_calls", []).append(dict(msg["scored_calls"], round=r))
                 if msg.get("infer_scored_calls") is not None:
                     a.setdefault("infer_scored_calls", []).append(dict(msg["infer_scored_calls"], round=r))
+                # HOST USAGE (lane fx-harness, 2026-11-18): each scored call's system time and faults
+                if msg.get("host_usage") is not None:
+                    a.setdefault("host_usage", []).append(dict(msg["host_usage"], round=r))
                 # COMPILE-IN-CLOCK (Andrew 2026-10-14): compiles inside the scored calls, summed over the
                 # scored rounds (None when torch is not loaded in this arm's worker)
                 a.setdefault("compile_rounds", []).append(comp)
@@ -8860,6 +8882,7 @@ def race(args):
             ist = a["status"] if a["status"] != "ok" or a["infer_ms"] else "error"
             infer["arms"][arm] = {"ms": list(a["infer_ms"]), "warmup_ms": a["infer_warmup_ms"],
                                   "scored_calls": a.get("infer_scored_calls"),
+                                  "host_usage": a.get("host_usage"),
                                   "status": ist, "error": a.get("error") if ist != "ok" else None,
                                   "digests": a["digests"], "digest_stable": a["digest_stable"],
                                   "info": info, "span": predict_upload_span(arm, a)}

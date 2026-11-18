@@ -3323,6 +3323,7 @@ def classical_cells(ctx, race, r):
                     verdict=verdict)
         # SMALL ROWS (2026-11-15): calls per scored run and the spread of every call (median_ms is their median)
         cell.update(_small_rows().cell_fields(a.get("scored_calls")))
+        cell.update(host_fields(info, a.get("host_usage"), "fit"))
         # FAIRNESS FIX (2026-10-13 audit): an arm the driver marks `not_opponent` (a sibling of
         # a compile arm that timed out: bench_board_neural.mark_not_opponents) was recorded as
         # an ordinary opponent and silently became the fastest opponent. It is now a "context"
@@ -3359,6 +3360,38 @@ def classical_cells(ctx, race, r):
 # ---------------------------------------------------------------------------
 # Cells and ratios
 # ---------------------------------------------------------------------------
+
+_NUMA_PLACE = []
+
+
+def _numa_place():
+    """tools/numa_place.py, loaded once per process."""
+    if not _NUMA_PLACE:
+        _NUMA_PLACE.append(_load_tool("numa_place"))
+    return _NUMA_PLACE[0]
+
+
+def host_fields(info, host_usage, phase):
+    """Lane fx-harness (2026-11-18): what a cell records about the host under its scored calls.
+    worker_numa   the NUMA node(s) the worker ran and allocated on, and the placement asked (tools/numa_place.py)
+    host_usage    system time, user time, minor and major faults of the scored calls (per call and summed), and
+                  host_stall: system time above half the wall (tools/paper_compare.py HOST-STALL, never a REGRESSION)
+    harness_clock the revision of what the harness keeps inside this lane's clock, when a lane declares one
+                  (tools/paper_compare.py HARNESS-CLOCK: a row whose baseline was timed under another revision is
+                  shown and never counted as FASTER)
+    Only the fields a worker recorded are written (older workers record none)."""
+    out = {}
+    info = info or {}
+    if info.get("worker_numa") is not None:
+        out["worker_numa"] = info["worker_numa"]
+    if info.get("harness_clock"):
+        out["harness_clock"] = info["harness_clock"]
+    use = _numa_place().phase_summary(host_usage, phase) if host_usage else None
+    if use is not None:
+        out["host_usage"] = use
+        out["host_stall"] = use["host_stall"]
+    return out
+
 
 def base_cell(ctx, race, arm, mode):
     lib = arm_library(arm)
