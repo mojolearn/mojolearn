@@ -132,6 +132,7 @@ from checks.numerics import (
     identical_mul_add,
     numeric_mode_name,
 )
+from checks.native_tests.kit import download_host_into
 
 
 comptime IDENTICAL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
@@ -252,12 +253,11 @@ def _upload(ctx: DeviceContext, h: List[Float32]) raises -> DeviceBuffer[DType.f
 
 def _download(ctx: DeviceContext, mut buf: DeviceBuffer[DType.float32], n: Int) raises -> List[Float32]:
     var hb = ctx.enqueue_create_host_buffer[DType.float32](n)
-    ctx.enqueue_copy(dst_ptr=hb.unsafe_ptr(), src_buf=buf)
+    download_host_into[DType.float32](ctx, buf, hb)
     ctx.synchronize()
     var out = List[Float32]()
     for i in range(n):
         out.append(hb.unsafe_ptr().unsafe_load(i))
-    _ = hb^
     return out^
 
 

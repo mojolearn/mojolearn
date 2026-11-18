@@ -25,6 +25,7 @@ from max.gpu.host import DeviceContext
 
 from glm.impl.qn.simple_mat.dense import ieee_div_f32, ieee_sub_f32
 from glm.impl.qn.qn_util import FLOAT_EPSILON, host_le_eps_times
+from checks.native_tests.kit import download_whole_into, upload_whole_into
 
 
 def scalar_kernel(
@@ -119,14 +120,14 @@ def main() raises:
     var da = ctx.enqueue_create_buffer[DType.float32](n)
     var db = ctx.enqueue_create_buffer[DType.float32](n)
     var dout = ctx.enqueue_create_buffer[DType.float32](5 * n)
-    ctx.enqueue_copy(dst_buf=da, src_ptr=A.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=db, src_ptr=B.unsafe_ptr())
+    upload_whole_into[DType.float32](ctx, da, A)
+    upload_whole_into[DType.float32](ctx, db, B)
     ctx.enqueue_function[scalar_kernel](
         da.unsafe_ptr(), db.unsafe_ptr(), dout.unsafe_ptr(), Int32(n),
         grid_dim=((n + 255) // 256, 1, 1), block_dim=(256, 1, 1),
     )
     var h = List[Float32](length=5 * n, fill=Float32(0.0))
-    ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=dout)
+    download_whole_into[DType.float32](ctx, dout, h)
     ctx.synchronize()
     var bad_div = 0
     var bad_sub = 0
