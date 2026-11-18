@@ -78,6 +78,17 @@ FAMILIES = (
     dict(site="providers/python/x_neighbors_descriptor_pyapi_door.mojo", literal='var export_name = "xn_" + name',
          strict=True, prefixes=["xn_"], suffixes=_src(r"\.mojo$", r"""\bxn_execute\(\s*[a-z_]+\s*,\s*"([a-z0-9_]+)\""""),
          note="xn_execute(binding, name, ...) calls the export xn_<name> of a module binding"),
+    dict(site="bindings/neighbors_local_native_door.mojo", literal="xn_execute(binding, name, addrs, ints, floats)",
+         strict=True, prefixes=["xn_"],
+         suffixes=_src(r"^(bindings/neighbors_[a-z_]+_door|neighbors/neighbors_[a-z_]+)\.mojo$",
+                       r"""(?:\b_op\(\s*[a-z_]+\s*,\s*"([a-z0-9_]+)"|^\s*return ("[a-z0-9_]+" if [a-z_]+ else "[a-z0-9_]+")$)"""),
+         note="the neighbors doors' _op(binding, name, ...) (and imp_cells_operation's two names) -> xn_execute"),
+    dict(site="x_neighbors/gen.py", literal="def _add_ops(mut m: PythonModuleBuilder)", strict=False,
+         prefixes=["xn_", "x_neighbors_"],
+         suffixes=_src(r"^(core|neighbors|bindings)/[a-z0-9_/]+\.mojo$",
+                       r"""\b(?:native|driver)\.run\(\s*"([a-z0-9_]+)\""""),
+         note="x_neighbors/gen.py registers an export for every op of its OPS table; an op the XnDriver descriptor "
+              "path runs (core/*_plan.mojo, core/agglo_native_api.mojo) keeps its generated export"),
     dict(site="bindings/mixture_native_door.mojo", literal='"family_mix_gmm_" + method', strict=True,
          prefixes=["family_mix_gmm_"],
          suffixes=_src(_PUBLIC, r"""(?:["']|_OP\.)family_mix_gmm_public_(fit|fit_predict|bic|aic)\b"""),
@@ -137,6 +148,9 @@ FAMILIES = (
 
 #: name -> reason: entries with no caller in the sources that stay on purpose
 KEEP = {
+    "x_neighbors_kfeat_schi2_draw": "paused Apple fast arm (lane apple-fast-w3-kfeat, XN_FAST_SCHI2_LAZYW, opt-in): "
+                                    "kept until Andrew reopens Apple fast",
+    "x_cluster_mbk_devscan": "paused Apple fast read-back (MiniBatchKMeans' FAST + Apple NaN/inf device scan)",
 }
 
 
@@ -275,7 +289,7 @@ def _parts(part, files):
             continue
         for m in sr.finditer(text):
             line = text.count("\n", 0, m.start()) + 1
-            group = m.group(1)
+            group = next(g for g in m.groups() if g is not None)
             for p in re.findall(r"""["']([a-z0-9_]+)["']""", group) or [group]:
                 out.setdefault(p, f"{path}:{line}")
     return out
