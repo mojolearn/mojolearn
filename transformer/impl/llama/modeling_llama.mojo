@@ -1573,6 +1573,38 @@ def _expect_optional(name: String, got: Int, want: Int, on: Bool) raises:
         )
 
 
+comptime LLAMA_FAST_KV_STRIDE_CAP = is_defined["MOJOLEARN_LLAMA_FAST_KV_STRIDE_CAP"]()
+"""Lane fx-kv-inplace (2026-11-18), EXPERIMENT, default OFF
+(`-D MOJOLEARN_LLAMA_FAST_KV_STRIDE_CAP`; docs/apple-fast/EXPERIMENTS.md).
+
+The full-causal cache is stored at stride `s_max` (slot `j` of a (batch, kv
+head) row at `(row * s_max + j) * head_dim`), as the windowed ring already
+sits at stride `window`, instead of packed at stride `s`. An append then
+writes only this call's `L` slots, in place (`kv_fixed_append2_kernel`), in
+the launch that gathers the packed key span into `stages.k_cache` /
+`v_cache`, so the two whole-capacity device copies per call (`kv.k` and
+`kv.v` back from the stages) are gone and the cache is append-only in fact:
+nothing below the used length is ever rewritten (the premise of
+`OpsSession.declare_append`, autograd/program_control.mojo).
+
+What still costs O(S): the gather of the packed span into the stages, which
+every reader of the keys and values takes (the eager and fused attention
+kernels, the regime scans, the trace's `kv.k_cache` / `kv.v_cache` stage
+`[B, n_kv, S, head_dim]`, the backward). They read the stages, never the
+carried cache, and their index walk and fold order are unchanged, so every
+output word and every stage hash is the default build's. What changes is the
+LAYOUT of the carried caches (the bytes of `TransformerState.k_cache` /
+`v_cache`, a CausalLM `state_dict()`): stride `max_tokens`, on every device
+column and the host column together (transformer/host/transformer_block_host.mojo
+reads the same define; the host oracle has always held this layout).
+
+Readers of the carried cache, each handled where `fixed` is read: the two
+append sites (`llama_attention_forward`, `_afn_attention_forward`), the four
+refusal scans (`LlamaKVCache.scan_cells`), the fresh-prefill fused QKV and
+rotary launches that write the cache packed (refused for a fixed cache:
+`_afn_pre_ok` and the rope-cache launch), and `llama_kv_cache_rewind`."""
+
+
 struct LlamaKVCache(Movable):
     """The recurrent state between calls (contract section 7.2):
     `k_cache` and `v_cache`, each `[B, n_kv, S, head_dim]`, appended to at
@@ -1601,6 +1633,10 @@ struct LlamaKVCache(Movable):
     var s: Int
     var window: Int
     var cap: Int
+    #: LLAMA_FAST_KV_STRIDE_CAP (default False): the linear cache sits at
+    #: stride `cap` (= `s_max`) and is appended to in place, not packed at
+    #: stride `s`. Never True for a ring.
+    var fixed: Bool
     var k: DeviceBuffer[DType.float32]
     var v: DeviceBuffer[DType.float32]
 
@@ -1655,8 +1691,27 @@ struct LlamaKVCache(Movable):
         self.cap = s_max
         if window > 0:
             self.cap = window
+        self.fixed = LLAMA_FAST_KV_STRIDE_CAP and window == 0
         self.k = _zeros(ctx, b * dims.n_kv * self.cap * dims.head_dim)
         self.v = _zeros(ctx, b * dims.n_kv * self.cap * dims.head_dim)
+
+    def scan_cells(self) -> Int:
+        """The leading cells of `k` (and of `v`) that hold every used slot:
+        what a refusal scan of the carried cache reads. Packed linear cache:
+        `B*n_kv*s*head_dim`, exactly the used slots. Ring: the whole ring
+        (unused slots are zeros). Fixed-stride linear cache
+        (LLAMA_FAST_KV_STRIDE_CAP): through the last row's used slots,
+        `((B*n_kv - 1)*cap + s)*head_dim`; the unused slots of the earlier
+        rows inside that prefix are zeros or finite values a run past a
+        loop's stop left (a non-finite one there is refused too)."""
+        var rows = self.b * self.n_kv
+        if self.window > 0:
+            return rows * self.cap * self.head_dim
+        if self.fixed:
+            if self.s <= 0:
+                return 0
+            return ((rows - 1) * self.cap + self.s) * self.head_dim
+        return rows * self.s * self.head_dim
 
 
 # TOMBSTONE: MOJOLEARN_IDN_ATTN_SOFTMAX=2 (slower) deleted 2026-10-10 by c1bf9d832; code recoverable at ca25d9321.
@@ -2972,6 +3027,87 @@ def kv_append2_kernel(
         new_v.unsafe_store(i, fresh_v.unsafe_load(src_i))
 
 
+def kv_fixed_append2_kernel(
+    work_k: MutPointer[Float32, MutAnyOrigin],
+    work_v: MutPointer[Float32, MutAnyOrigin],
+    cache_k: MutPointer[Float32, MutAnyOrigin],
+    cache_v: MutPointer[Float32, MutAnyOrigin],
+    fresh_k: MutPointer[Float32, MutAnyOrigin],
+    fresh_v: MutPointer[Float32, MutAnyOrigin],
+    b_in: Int32,
+    l_in: Int32,
+    nkv_in: Int32,
+    hd_in: Int32,
+    s_old_in: Int32,
+    cap_in: Int32,
+):
+    """LLAMA_FAST_KV_STRIDE_CAP: `kv_append2_kernel` for a cache at the fixed
+    stride `cap`. One thread per cell `i` of the packed key span
+    `[B, n_kv, s_old + L, head_dim]` (`work_*`, the stages): slot
+    `j < s_old` is a bit copy of the carried cache's slot `j` at stride
+    `cap`; slot `j >= s_old` is this call's token `j - s_old`
+    (`kv_append2_kernel`'s `fresh` index), written to the packed span AND to
+    the carried cache's slot `j`, in place. The carried cells read
+    (`j < s_old`) and the carried cells written (`j >= s_old`) are disjoint,
+    so no thread reads a cell another writes. The packed span is the bits
+    `kv_append2_kernel` writes."""
+    var b = Int(b_in)
+    var l = Int(l_in)
+    var nkv = Int(nkv_in)
+    var hd = Int(hd_in)
+    var s_old = Int(s_old_in)
+    var cap = Int(cap_in)
+    var s_new = s_old + l
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i >= b * nkv * s_new * hd:
+        return
+    var d = i % hd
+    var rest = i // hd
+    var j = rest % s_new
+    var row = rest // s_new
+    var at = (row * cap + j) * hd + d
+    if j < s_old:
+        work_k.unsafe_store(i, cache_k.unsafe_load(at))
+        work_v.unsafe_store(i, cache_v.unsafe_load(at))
+    else:
+        var t = j - s_old
+        var kvh = row % nkv
+        var bb = row // nkv
+        var src_i = (bb * l + t) * nkv * hd + kvh * hd + d
+        var fk = fresh_k.unsafe_load(src_i)
+        var fv = fresh_v.unsafe_load(src_i)
+        work_k.unsafe_store(i, fk)
+        work_v.unsafe_store(i, fv)
+        cache_k.unsafe_store(at, fk)
+        cache_v.unsafe_store(at, fv)
+
+
+def kv_fixed_clear2_kernel(
+    cache_k: MutPointer[Float32, MutAnyOrigin],
+    cache_v: MutPointer[Float32, MutAnyOrigin],
+    rows_in: Int32,
+    hd_in: Int32,
+    cap_in: Int32,
+    lo_in: Int32,
+    hi_in: Int32,
+):
+    """LLAMA_FAST_KV_STRIDE_CAP: slots `[lo, hi)` of every (batch, kv head)
+    row of a cache at the fixed stride `cap` set to 0 (`llama_kv_cache_rewind`).
+    One thread per cell, K and V together."""
+    var rows = Int(rows_in)
+    var hd = Int(hd_in)
+    var cap = Int(cap_in)
+    var lo = Int(lo_in)
+    var width = (Int(hi_in) - lo) * hd
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if width <= 0 or i >= rows * width:
+        return
+    var row = i // width
+    var at = (row * cap + lo) * hd + (i % width)
+    cache_k.unsafe_store(at, Float32(0.0))
+    cache_v.unsafe_store(at, Float32(0.0))
+
+
 def kv_rewind2_kernel(
     new_k: MutPointer[Float32, MutAnyOrigin],
     new_v: MutPointer[Float32, MutAnyOrigin],
@@ -4087,6 +4223,8 @@ def _llama_refuse_bad_call_deferred(
         kv_used = kv.cap
     var nx = b * l * dm
     var nkv = b * dims.n_kv * kv_used * hd
+    comptime if LLAMA_FAST_KV_STRIDE_CAP:
+        nkv = kv.scan_cells()
     var count = 2
     if has_kv:
         count = 4
@@ -4143,9 +4281,12 @@ def llama_refuse_bad_call(
         var lens = List[Int]()
         lens.append(b * l * dm)
         lens.append(rope.half)
+        var kv_cells = b * dims.n_kv * kv_used * hd
+        comptime if LLAMA_FAST_KV_STRIDE_CAP:
+            kv_cells = kv.scan_cells()
         if has_kv:
-            lens.append(b * dims.n_kv * kv_used * hd)
-            lens.append(b * dims.n_kv * kv_used * hd)
+            lens.append(kv_cells)
+            lens.append(kv_cells)
         var batch = DeviceNonfiniteBatch(ctx, lens)
         batch.enqueue(ctx, 0, x)
         batch.enqueue(ctx, 1, rope.inv_freq)
@@ -4169,11 +4310,14 @@ def llama_refuse_bad_call(
         var used = kv.s
         if kv.window > 0:
             used = kv.cap
+        var used_cells = b * dims.n_kv * used * hd
+        comptime if LLAMA_FAST_KV_STRIDE_CAP:
+            used_cells = kv.scan_cells()
         _refuse_nonfinite_device(
-            ctx, "past_key_values.key_cache", kv.k, b * dims.n_kv * used * hd
+            ctx, "past_key_values.key_cache", kv.k, used_cells
         )
         _refuse_nonfinite_device(
-            ctx, "past_key_values.value_cache", kv.v, b * dims.n_kv * used * hd
+            ctx, "past_key_values.value_cache", kv.v, used_cells
         )
 
 
@@ -4227,13 +4371,17 @@ def llama_refuse_bad_inputs(
         "rotary_emb.inv_freq", _download(ctx, rope.inv_freq, dims.half())
     )
     if kv.s > 0:
+        var host_cells = b * dims.n_kv * kv.s * hd
+        comptime if LLAMA_FAST_KV_STRIDE_CAP:
+            if kv.fixed:
+                host_cells = kv.scan_cells()
         _refuse_nonfinite_named_host(
             "past_key_values.key_cache",
-            _download(ctx, kv.k, b * dims.n_kv * kv.s * hd),
+            _download(ctx, kv.k, host_cells),
         )
         _refuse_nonfinite_named_host(
             "past_key_values.value_cache",
-            _download(ctx, kv.v, b * dims.n_kv * kv.s * hd),
+            _download(ctx, kv.v, host_cells),
         )
 
 
@@ -4959,6 +5107,25 @@ def llama_kv_cache_rewind(
         )
     if s_to == kv.s:
         return
+    comptime if LLAMA_FAST_KV_STRIDE_CAP:
+        if kv.fixed:
+            # The committed slots never moved: only the slots the extra
+            # appends wrote, [s_to, kv.s) of every row, go back to 0.
+            var rows = kv.b * kv.n_kv
+            step_count_launch()
+            ctx.enqueue_function[kv_fixed_clear2_kernel](
+                kv.k.unsafe_ptr(),
+                kv.v.unsafe_ptr(),
+                Int32(rows),
+                Int32(kv.head_dim),
+                Int32(kv.cap),
+                Int32(s_to),
+                Int32(kv.s),
+                grid_dim=(_grid(rows * (kv.s - s_to) * kv.head_dim), 1, 1),
+                block_dim=(LLAMA_TPB, 1, 1),
+            )
+            kv.s = s_to
+            return
     var n = kv.b * kv.n_kv * kv.s * kv.head_dim
     if n > len(stages.k_cache) or n > len(stages.v_cache):
         raise Error("llama: KV cache rewind: the stages hold a shorter cache span")
@@ -5214,7 +5381,33 @@ def llama_attention_forward(
     #      SPAN this call reads (absolute `[key_lo, pos0 + l)`), gathered
     #      from the ring plus this call's tokens; the ring itself is then
     #      updated in place. The recorded `kv.k_cache` stage is that span.
-    if window == 0:
+    var fixed_append = False
+    comptime if LLAMA_FAST_KV_STRIDE_CAP:
+        # The cache at stride `cap`: one launch gathers the packed span into
+        # the stages and writes this call's tokens into the cache in place;
+        # no copy back below.
+        fixed_append = kv.fixed
+        if fixed_append:
+            step_count_launch()
+            ctx.enqueue_function[kv_fixed_append2_kernel](
+                stages.k_cache.unsafe_ptr(),
+                stages.v_cache.unsafe_ptr(),
+                kv.k.unsafe_ptr(),
+                kv.v.unsafe_ptr(),
+                stages.k_rope.unsafe_ptr(),
+                stages.v_proj.unsafe_ptr(),
+                Int32(b),
+                Int32(l),
+                Int32(nkv),
+                Int32(hd),
+                Int32(s_old),
+                Int32(kv.cap),
+                grid_dim=(_grid(b * nkv * s * hd), 1, 1),
+                block_dim=(LLAMA_TPB, 1, 1),
+            )
+    if fixed_append:
+        pass
+    elif window == 0:
         step_count_launch()
         ctx.enqueue_function[kv_append2_kernel](
             stages.k_cache.unsafe_ptr(),
@@ -5280,7 +5473,9 @@ def llama_attention_forward(
     # computed. DEVIATION 1022 is why the two buffers are distinct; the rest
     # of THIS call reads `stages.k_cache` and `stages.v_cache`, which hold
     # the same bits.
-    if window == 0:
+    if fixed_append:
+        pass
+    elif window == 0:
         step_count_d2d()
         ctx.enqueue_copy(dst_buf=kv.k, src_buf=stages.k_cache)
         step_count_d2d()
@@ -5650,7 +5845,7 @@ def _afn_pre_ok(stages: LlamaDeviceStages, kv: LlamaKVCache, rope: LlamaRopeTabl
     lane/no-bench-tuning-2: every head size that fits one GEMM column tile
     (`afn_pre_head_ok`), not head_dim 64 only."""
     return (
-        kv.window == 0 and kv.s == 0 and afn_pre_head_ok(stages.dims.head_dim)
+        kv.window == 0 and kv.s == 0 and not kv.fixed and afn_pre_head_ok(stages.dims.head_dim)
         and rope.rope_dim == stages.dims.head_dim
         and afn_gemm_ok(stages.b * stages.l, stages.dims.q_width(), stages.dims.d_model)
     )
@@ -5784,7 +5979,7 @@ def _afn_attention_forward(
         )
         var rc_done = False
         comptime if AFN_ATTN_ROPE_CACHE:
-            if window == 0 and s_old == 0:
+            if window == 0 and s_old == 0 and not kv.fixed:
                 afn_rope_cache(
                     ctx, _afn_p(stages.q_rope), _afn_p(stages.k_rope),
                     _afn_p(stages.k_cache), _afn_p(stages.v_cache), _afn_p(kv.k),
@@ -5803,7 +5998,24 @@ def _afn_attention_forward(
                 ctx, stages.k_rope, stages.k_proj, rope.cos, rope.sin, m, l, nkv, hd,
                 pos0, rope.rope_dim,
             )
-            if window == 0:
+            var fixed_append = False
+            comptime if LLAMA_FAST_KV_STRIDE_CAP:
+                # as `llama_attention_forward`: gather and in-place append
+                # in one launch, no copy back
+                fixed_append = kv.fixed
+                if fixed_append:
+                    step_count_launch()
+                    ctx.enqueue_function[kv_fixed_append2_kernel](
+                        stages.k_cache.unsafe_ptr(), stages.v_cache.unsafe_ptr(),
+                        kv.k.unsafe_ptr(), kv.v.unsafe_ptr(), stages.k_rope.unsafe_ptr(),
+                        stages.v_proj.unsafe_ptr(), Int32(b), Int32(l), Int32(nkv),
+                        Int32(hd), Int32(s_old), Int32(kv.cap),
+                        grid_dim=(_grid(b * nkv * s * hd), 1, 1),
+                        block_dim=(LLAMA_TPB, 1, 1),
+                    )
+            if fixed_append:
+                pass
+            elif window == 0:
                 step_count_launch()
                 ctx.enqueue_function[kv_append2_kernel](
                     stages.k_cache.unsafe_ptr(), stages.v_cache.unsafe_ptr(),
