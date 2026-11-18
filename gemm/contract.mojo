@@ -153,7 +153,7 @@ comptime _NEURAL_GEMM_LEAF256 = GEMM_LEAF_ARM == GEMM_LEAF_ARM_ALL256
 # This is the BUILD-WIDE contract: the classical, solver, loss, optimizer,
 # CNN, Mamba and transformer folds that take their leaves from
 # `contract_leaf_size` move with it, device and host column together (the
-# reader table is gemm/IDENTICAL_FP32_CONTRACT.md section 15). The small MLP
+# reader table is gemm/IDENTICAL_FP32_CONTRACT.md section 14). The small MLP
 # op keeps its measured leaf 128 explicitly (autograd/small_mlp_op.mojo).
 # No stored reference word is re-recorded while this is an arm.
 comptime GEMM_LEAF512 = (
