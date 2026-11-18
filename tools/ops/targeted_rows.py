@@ -820,21 +820,39 @@ def summary(doc, rows, results, ids, units=(), prior_versions=None):
             v, _done(os.path.join(results, "board-tg-prior-%s" % v, "board.json"), ids), len(ids),
             sum(1 for _ in open(pid)) if os.path.isfile(pid) else "?"))
     table, detail = [], []
-    for arm, rows_tag, uids in units:
+    for arm, rows_tag, uids, stored in units:
         base = MO.load_board(os.path.join(results, "board-tg-ab-%s-base-%s" % (arm, rows_tag), "board.json"))
         brd = MO.load_board(os.path.join(results, "board-tg-ab-%s-%s" % (arm, rows_tag), "board.json"))
         ratios = []
+        cells = (stored or {}).get("cells") or {}
+        hosts = sorted({"%s (%s)" % (c.get("host_id"), c.get("version")) for c in cells.values()})
+        if hosts:
+            # STORED BASE (measure_owed.py): the base of these races is another job's time; say so and where from
+            arm_host = PC.candidate_host([brd])[0] if brd and brd.get("races") else None
+            detail.append("AB %s rows=%s: base STORED, not timed in this job: host %s; the arm ran on %s%s" % (
+                arm, rows_tag, ", ".join(hosts), arm_host or "-",
+                "" if not arm_host or all(c.get("host_id") == arm_host for c in cells.values())
+                else " (ANOTHER HOST: reference only by the same-box rule, compared by Andrew's 2026-11-17 order)"))
         for rid in uids:
             bc = MO.our_cells(((base or {}).get("races") or {}).get(rid) or {})
             ac = MO.our_cells(((brd or {}).get("races") or {}).get(rid) or {})
-            for k in sorted(set(bc) | set(ac), key=str):
-                b, x = MO.cell_ms(bc.get(k)), MO.cell_ms(ac.get(k))
+            sk = {}
+            for key, c in cells.items():
+                parts = key.split(" ")
+                if parts[0] == rid and len(parts) >= 3:
+                    sk[(parts[1], parts[2], " ".join(parts[3:]) or None)] = c
+            for k in sorted(set(bc) | set(ac) | set(sk), key=str):
+                b, x = (sk[k]["ms"] if k in sk else MO.cell_ms(bc.get(k))), MO.cell_ms(ac.get(k))
                 r = x / b if b and x else None
                 if r is not None:
                     ratios.append(r)
-                detail.append("AB %s rows=%s %s %s %s: base %s -> arm %s ms ratio %s%s" % (
-                    arm, rows_tag, rid, k[0], k[1], PC.fmt_ms(b), PC.fmt_ms(x), PC.fmt_ratio(r),
-                    "" if r is None else " " + MO.verdict(r, "FASTER", "SLOWER", "SAME")))
+                if r is None and k in sk and sk[k].get("cap") and MO.capped(ac.get(k)):
+                    v = " NOT-FASTER-THAN-BASE (stopped at the stored base time)"
+                else:
+                    v = "" if r is None else " " + MO.verdict(r, "FASTER", "SLOWER", "SAME")
+                detail.append("AB %s rows=%s %s %s %s: base %s%s -> arm %s ms ratio %s%s" % (
+                    arm, rows_tag, rid, k[0], k[1], PC.fmt_ms(b), " (stored)" if k in sk else "", PC.fmt_ms(x),
+                    PC.fmt_ratio(r), v))
         med = statistics.median(ratios) if ratios else None
         table.append("  %-34s rows=%-6s races=%-3d cells=%-3d median arm/base %s %s" % (
             arm, rows_tag, len(uids), len(ratios), PC.fmt_ratio(med),
@@ -846,7 +864,8 @@ def summary(doc, rows, results, ids, units=(), prior_versions=None):
 
 
 def read_units(path):
-    """[(B arm, rows tag, [ids])] of a tools/measure_owed.py units.tsv (the candidate units are the bases)."""
+    """[(B arm, rows tag, [ids], stored base or None)] of a tools/measure_owed.py units.tsv (the candidate units are
+    the bases; a unit's ids-<arm>-<rows>.base.json is its STORED BASE)."""
     out = []
     if not path or not os.path.isfile(path):
         return out
@@ -855,7 +874,9 @@ def read_units(path):
             f = ln.rstrip("\n").split("\t")
             if len(f) == 3 and f[0] not in ("candidate", "prior") and os.path.isfile(f[2]):
                 with open(f[2]) as ih:
-                    out.append((f[0], f[1], [x.strip() for x in ih if x.strip()]))
+                    ids = [x.strip() for x in ih if x.strip()]
+                sb = os.path.splitext(f[2])[0] + ".base.json"
+                out.append((f[0], f[1], ids, PC.load_json(sb) if os.path.isfile(sb) else None))
     return out
 
 

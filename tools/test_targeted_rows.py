@@ -176,7 +176,7 @@ class Summary(unittest.TestCase):
             for sub, ms in (("board-tg-ab-em-check-1-base-full", 10.0), ("board-tg-ab-em-check-1-full", 8.0)):
                 os.makedirs(os.path.join(res, sub))
                 Path(res, sub, "board.json").write_text(json.dumps({"races": {B: {"cells": [cell(ms)]}}}))
-            text = TR.summary(doc, rows, res, [A, C], [("em-check-1", "full", [B])])
+            text = TR.summary(doc, rows, res, [A, C], [("em-check-1", "full", [B], None)])
         self.assertIn("timed=2 FASTER=0 SAME=1 REGRESSION=1 BOX-STATE=0", text)
         self.assertIn("1.30x " + A + " fit ours", text)
         self.assertIn("fixed (over 1.10 in the input compare, now at or under 1.00): 1", text)
@@ -185,6 +185,26 @@ class Summary(unittest.TestCase):
         self.assertIn("done/total 0.8.55 1/2", text)
         self.assertIn("AB em-check-1 rows=full " + B, text)
         self.assertIn("ratio 0.80", text)
+
+    def test_ab_against_a_stored_base(self):
+        # STORED BASE (Andrew, 2026-11-17): no base board; the arm against the stored time, its host printed, and a
+        # run stopped at the cap reads NOT-FASTER-THAN-BASE
+        stored = {"round_seconds": {B: 10, C: 10}, "cells": {
+            B + " fit ours": {"ms": 10000.0, "host_id": "pod-old/GPU-1", "version": "wheel abc", "cap": True},
+            C + " fit ours": {"ms": 10000.0, "host_id": "pod-old/GPU-1", "version": "wheel abc", "cap": True}}}
+        with tempfile.TemporaryDirectory() as res:
+            os.makedirs(os.path.join(res, "board-tg-ab-x-full"))
+            Path(res, "board-tg-ab-x-full", "board.json").write_text(json.dumps({
+                "box": {"host_probe": {"schema": "mojolearn-host-probe/1", "host_id": "pod-a/GPU-0"}},
+                "races": {B: {"cells": [{"arm": "ours", "status": "ok", "median_ms": 5000.0}]},
+                          C: {"cells": [{"arm": "ours", "status": "REFUSED(timeout: null)", "median_ms": None}]}}}))
+            text = TR.summary(compare_doc(), [], res, [], [("x", "full", [B, C], stored)])
+        self.assertIn("base STORED, not timed in this job: host pod-old/GPU-1 (wheel abc); the arm ran on pod-a/GPU-0 "
+                      "(ANOTHER HOST", text)
+        self.assertIn("AB x rows=full %s fit ours: base 10000 (stored) -> arm 5000 ms ratio 0.50 FASTER"
+                      % B, text)
+        self.assertIn(C + " fit ours: base", text)
+        self.assertIn("NOT-FASTER-THAN-BASE", text)
 
 
 class OwnOnly(unittest.TestCase):

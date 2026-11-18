@@ -684,7 +684,7 @@ class TestEntryPoints(Base):
         with open(os.path.join(b, "ssh"), "w") as fh:
             fh.write('#!/bin/bash\n# test shim: drop ssh options and the target, run the command here\n'
                      'while [ $# -gt 0 ]; do case "$1" in -o|-p|-i) shift 2 ;; -t|-tt|-T) shift ;; *) break ;; esac; done\n'
-                     'shift\nc="$*"\n[ -z "${SHIM_TREE:-}" ] || c=${c//\/root\/mojolearn/$SHIM_TREE}\nexec bash -c "$c"\n')
+                     'shift\nc="$*"\n[ -z "${SHIM_TREE:-}" ] || c=${c//\\/root\\/mojolearn/$SHIM_TREE}\nexec bash -c "$c"\n')
         os.chmod(os.path.join(b, "ssh"), 0o755)
         tree = os.path.join(self.w, "tree")
         os.makedirs(tree, exist_ok=True)

@@ -47,6 +47,16 @@ planned through the board and reported beside the paper compare (lane measure-pr
         each B arm's ms, the ratios, and the row's flags: REGRESSION / FASTER / SAME vs the prior, B-FASTER / B-SLOWER
         / B-SAME for an A/B, NOT-RUN with its reason, and the driver rows from drivers.jsonl. Prints one screen.
 
+STORED BASE (Andrew, 2026-11-17: a lighter A/B for the long DBSCAN brute rows): an ab row may carry
+  "stored_base": {"source": <where the times come from>, "version": <the wheel>, "host_id": <its box>, "cap": true,
+                  "cells": {"<race id> <phase> <arm>[ <batch>]": ms, ...}}
+the base (the candidate) of those races is NOT timed again: only the B arms run, and the compare divides their time by the
+stored base and says that the base is stored and on which host. With "cap" each B race's rounds are capped at its stored
+base time (bench_board --race-round-seconds): a run that reaches the cap stops and is reported NOT-FASTER-THAN-BASE.
+plan writes, beside ids-<arm>-<rows>.txt, ids-<arm>-<rows>.base.json ({"round_seconds": {race: s}, "cells": {key: {ms,
+source, version, host_id}}}) and ids-<arm>-<rows>.stored.txt (those race ids; the job leaves them out of the unit's
+base run). A neighbouring shape is the row's own "rows" (a row count): it needs no other option.
+
 Our arms only, GPU only, one warm-up and one timed run per arm (the board's --rounds 1). Tests:
 tools/test_measure_owed.py.
 """
@@ -100,7 +110,9 @@ def row_arms(row, b_present, prior_present=False):
     if row["kind"] == "ab":
         want = as_list(row.get("b_arms") or [])
         have = [b for b in want if b in b_present]
-        return (["candidate"] + have if have else []), [b for b in want if b not in b_present]
+        # a stored base (STORED BASE above) stands in for the candidate: only the B arms run
+        base = [] if row.get("stored_base") else ["candidate"]
+        return (base + have if have else []), [b for b in want if b not in b_present]
     return [], []
 
 
@@ -194,6 +206,12 @@ def plan(doc, paper, planner, vendor, b_present, prior_present=False):
         if not lane_list:
             continue
         ds = row.get("dataset") or "*"
+        if races and row.get("stored_base"):
+            have = stored_races(row)
+            for r in races:
+                if r["id"] not in have:
+                    missing["%s %s" % (rid, r["id"])] = "no stored base time for %s (stored_base.cells)" % r["id"]
+            races = [r for r in races if r["id"] in have]
         if not races:
             missing[rid] = "the board plans no race for %s on %s (dataset %s, rows %s)" % (
                 ",".join(lane_list), vendor, ds, rows_tag(rows))
@@ -233,6 +251,40 @@ def plan(doc, paper, planner, vendor, b_present, prior_present=False):
             rowmap, bargs)
 
 
+def stored_races(row):
+    """{race id: [stored base ms of its cells]} of a row's stored_base (STORED BASE above)."""
+    out = {}
+    for key, ms in ((row.get("stored_base") or {}).get("cells") or {}).items():
+        if PC.number(ms):
+            out.setdefault(key.split(" ")[0], []).append(float(ms))
+    return out
+
+
+def unit_bases(doc, rowmap, units):
+    """{(B arm, rows tag): {"round_seconds": {race: s}, "cells": {key: {...}}}} of the planned units whose races have a
+    stored base: the cap (the slowest stored cell of the race, whole seconds up) only for a row with "cap"."""
+    out = {}
+    for row in doc.get("rows") or []:
+        sb = row.get("stored_base")
+        if not sb or row.get("kind") != "ab" or row["id"] not in rowmap:
+            continue
+        rt, ids = rows_tag(row.get("rows")), set(rowmap[row["id"]])
+        meta = {k: sb.get(k) for k in ("source", "version", "host_id")}
+        for b in as_list(row.get("b_arms") or []):
+            if (b, rt) not in units:
+                continue
+            u = out.setdefault((b, rt), {"round_seconds": {}, "cells": {}})
+            for key, ms in (sb.get("cells") or {}).items():
+                race = key.split(" ")[0]
+                if race in ids and PC.number(ms):
+                    u["cells"][key] = dict(meta, ms=float(ms), row=row["id"], cap=bool(sb.get("cap")))
+            if sb.get("cap"):
+                for race, ms in stored_races(row).items():
+                    if race in ids:
+                        u["round_seconds"][race] = int(-(-max(ms) // 1000))
+    return out
+
+
 def unit_order(key):
     arm, rows = key
     a = 0 if arm == "candidate" else 1 if arm == "prior" else 2
@@ -255,6 +307,14 @@ def cmd_plan(a):
         f = os.path.join(a.out_dir, "ids-%s-%s.txt" % (arm, rows))
         PC.write_atomic(f, "".join(i + "\n" for i in units[key]))
         lines.append("%s\t%s\t%s\n" % (arm, rows, f))
+    for f in os.listdir(a.out_dir):     # a re-made plan keeps no stale stored base of another plan
+        if f.startswith("ids-") and f.endswith((".base.json", ".stored.txt")):
+            os.remove(os.path.join(a.out_dir, f))
+    for (arm, rows), base in unit_bases(doc, rowmap, units).items():
+        stem = os.path.join(a.out_dir, "ids-%s-%s" % (arm, rows))
+        PC.write_atomic(stem + ".base.json", PC.json_text(base))
+        PC.write_atomic(stem + ".stored.txt", "".join(
+            i + "\n" for i in sorted({k.split(" ")[0] for k in base["cells"]})))
     PC.write_atomic(os.path.join(a.out_dir, "units.tsv"), "".join(lines))
     PC.write_atomic(os.path.join(a.out_dir, "smoke-ids.txt"), "".join(i + "\n" for i in smoke["candidate"]))
     PC.write_atomic(os.path.join(a.out_dir, "smoke-ids-prior.txt"), "".join(i + "\n" for i in smoke["prior"]))
@@ -395,6 +455,10 @@ def report(doc, plan_dir, results, vendor, prior_version=None):
         rows = rows_tag(row.get("rows"))
         why = [v for k, v in missing.items() if k == rid or k.startswith(rid + " ")]
         b_arms = as_list(row.get("b_arms") or []) if row["kind"] == "ab" else []
+        if row["kind"] == "ab" and row.get("stored_base"):
+            for race_id in rowmap.get(rid, []):
+                out += stored_base_cells(row, race_id, rows, b_arms, board, docs, why)
+            continue
         for race_id in rowmap.get(rid, []):
             cand_race = board("candidate", rows).get(race_id) or {}
             prior_race = board("prior", rows).get(race_id) or {}
@@ -451,6 +515,46 @@ def report(doc, plan_dir, results, vendor, prior_version=None):
             "host_id": PC.candidate_host([d for (a, _), d in docs.items() if a == "candidate" and d])[0]}
 
 
+def capped(cell):
+    """Whether a B cell stopped at its round cap (the classical racer's per-round timeout)."""
+    return bool(cell) and "timeout" in str(cell.get("status") or "")
+
+
+def stored_base_cells(row, race_id, rows, b_arms, board, docs, why):
+    """The report records of one race of a STORED BASE row: each B arm against the stored base time. The base is
+    another job's time (often another host): the record says so (BASE-STORED, BASE-OTHER-HOST), and a B run that
+    reached its cap is NOT-FASTER-THAN-BASE."""
+    sb = row["stored_base"]
+    out = []
+    for key, ms in sorted((sb.get("cells") or {}).items()):
+        parts = key.split(" ")
+        if parts[0] != race_id or not PC.number(ms) or len(parts) < 3:
+            continue
+        phase, arm, batch = parts[1], parts[2], (" ".join(parts[3:]) or None)
+        rec = {"row": row["id"], "race_id": race_id, "key": key, "phase": phase, "arm": arm, "batch": batch,
+               "candidate_ms": None, "base_ms": float(ms),
+               "base_stored": {k: sb.get(k) for k in ("source", "version", "host_id")},
+               "flags": ["BASE-STORED"], "why": "; ".join(why) or None}
+        for b in b_arms:
+            races = board(b, rows)
+            bc = our_cells(races.get(race_id) or {}).get((phase, arm, batch))
+            bms = cell_ms(bc)
+            rec.setdefault("b", {})[b] = bms
+            r = bms / float(ms) if PC.number(bms) and ms else None
+            rec.setdefault("b_ratio", {})[b] = r
+            if r is None and sb.get("cap") and capped(bc):
+                v = "B-NOT-FASTER-THAN-BASE"
+            else:
+                v = verdict(r, "B-FASTER", "B-SLOWER", "B-SAME") or "B-NOT-RUN"
+            rec["flags"].append("%s:%s" % (b, v))
+            host = PC.candidate_host([docs[(b, rows)]])[0] if docs.get((b, rows)) else None
+            if host and sb.get("host_id") and host != sb["host_id"] and "BASE-OTHER-HOST" not in rec["flags"]:
+                rec["flags"].append("BASE-OTHER-HOST")
+            rec.setdefault("b_host", {})[b] = host
+        out.append(rec)
+    return out
+
+
 def render_summary(rep, top=10):
     out = ["OWED-REPORT vendor=%s cells=%d drivers=%d" % (rep["vendor"], len(rep["rows"]), len(rep["drivers"])),
            "flags: " + " ".join("%s=%d" % kv for kv in sorted(rep["flag_counts"].items()))]
@@ -463,6 +567,19 @@ def render_summary(rep, top=10):
     if ab:
         out.append("B arm faster than the candidate (%d): %s" % (len(ab), ", ".join(
             "%s %s" % (r["key"], [f for f in r["flags"] if f.endswith("B-FASTER")]) for r in ab[:6])))
+    stored = {}
+    for r in rep["rows"]:
+        if r.get("base_stored"):
+            stored.setdefault(r["row"], r)
+    for rid, r in sorted(stored.items()):
+        sb = r["base_stored"]
+        out.append("base STORED, not timed on this box: %s: %s (%s), host %s%s" % (
+            rid, sb.get("version"), sb.get("source"), sb.get("host_id"),
+            "; B arms ran on %s" % ",".join(sorted({h for h in (r.get("b_host") or {}).values() if h}))
+            if r.get("b_host") else ""))
+    nf = [r["key"] for r in rep["rows"] if any(str(f).endswith("B-NOT-FASTER-THAN-BASE") for f in r["flags"])]
+    if nf:
+        out.append("B arm stopped at the stored base time, not faster than base (%d): %s" % (len(nf), ", ".join(nf[:6])))
     for d in rep["drivers"]:
         out.append("  driver %s %s %s ms=%s status=%s" % (d.get("row"), d.get("arm"), d.get("case"),
                                                          PC.fmt_ms(d.get("ms")), d.get("status")))
@@ -485,6 +602,10 @@ def render_md(rep):
         b = ", ".join("%s %s (%s)" % (k, PC.fmt_ms(v), PC.fmt_ratio((r.get("b_ratio") or {}).get(k)))
                       for k, v in sorted((r.get("b") or {}).items())) or "-"
         note = r.get("why") or ""
+        if r.get("base_stored"):
+            sb = r["base_stored"]
+            note = ("base STORED %s ms (%s, host %s) " % (PC.fmt_ms(r.get("base_ms")), sb.get("version"),
+                                                          sb.get("host_id"))) + note
         lines.append("| %s | %s | %s | %s | %s | %s | %s | %s |" % (
             r["row"], r["key"], PC.fmt_ms(r.get("candidate_ms")), PC.fmt_ms(r.get("prior_ms")),
             PC.fmt_ratio(r.get("ratio_vs_prior")), b, " ".join(r["flags"]), note.replace("|", "/")[:200]))

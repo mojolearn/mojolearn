@@ -733,10 +733,15 @@ if part tg-install || part tg-smoke || part tg-board || part tg-compare; then
                 fi
                 $PY tools/ops/targeted_rows.py chunks --ids "$use" --chunk-s "${PC_TG_CHUNK_S:-600}" \
                     --out-dir "$TGO/chunks-$arm-$rows" | tail -n 1
+                # STORED BASE (measure_owed.py; Andrew, 2026-11-17): the unit's races with a stored base time run
+                # the arm only, its rounds capped at that time; the base (the candidate) runs the others
+                sb="${ids%.txt}.base.json"; st="${ids%.txt}.stored.txt"; cap=()
+                [ -f "$sb" ] && cap=(--race-round-seconds "$sb")
                 for c in "$TGO/chunks-$arm-$rows"/chunk-*.txt; do
                     [ -f "$c" ] || continue
-                    tg_board candidate "$c" "$RES/board-tg-ab-$arm-base-$rows" "$abrows" "${SJT[@]}"; r=$?; [ $r -gt $rc ] && rc=$r
-                    tg_board "$arm" "$c" "$RES/board-tg-ab-$arm-$rows" "$abrows" "${SJT[@]}"; r=$?; [ $r -gt $rc ] && rc=$r
+                    if [ -s "$st" ]; then grep -vFx -f "$st" "$c" > "$c.base" || true; else cp "$c" "$c.base"; fi
+                    tg_board candidate "$c.base" "$RES/board-tg-ab-$arm-base-$rows" "$abrows" "${SJT[@]}"; r=$?; [ $r -gt $rc ] && rc=$r
+                    tg_board "$arm" "$c" "$RES/board-tg-ab-$arm-$rows" "$abrows" "${SJT[@]}" ${cap[@]+"${cap[@]}"}; r=$?; [ $r -gt $rc ] && rc=$r
                 done
             done 3< "$TGO/units.tsv"
         fi
@@ -947,12 +952,14 @@ if [ "$OWED" = 1 ] && part owed && [ -s "$RES/plan-owed/units.tsv" ]; then
         [ "$arm" = candidate ] && [ "$rows" = full ] && continue   # timed with the paper races (part board)
         [ "$arm" = prior ] && [ "$rows" = full ] && continue       # timed in board-prior-$LAST_PRIOR (part prior)
         [ -n "${PC_OWED_ARMS:-}" ] && [[ ",$PC_OWED_ARMS," != *",$arm,"* ]] && continue   # a split submit
+        # a stored-base unit (measure_owed.py STORED BASE): its races' rounds capped at the stored base time
+        cap=(); [ -f "${ids%.txt}.base.json" ] && cap=(--race-round-seconds "${ids%.txt}.base.json")
         if [ "$rows" = full ]; then
             # full rows: only the races whose smoke passed (the gate keys on family/lane/dataset, any venv)
             grep -Fx -f "$PASS_IDS" "$ids" > "$ids.pass" 2> /dev/null || true
-            board_run "$(venv_arm "$arm")" "$ids.pass" "$RES/board-$arm-$rows"; r=$?
+            board_run "$(venv_arm "$arm")" "$ids.pass" "$RES/board-$arm-$rows" ${cap[@]+"${cap[@]}"}; r=$?
         else
-            board_run "$(venv_arm "$arm")" "$ids" "$RES/board-$arm-$rows" --rows "$rows"; r=$?   # a neighbouring shape: no gate
+            board_run "$(venv_arm "$arm")" "$ids" "$RES/board-$arm-$rows" --rows "$rows" ${cap[@]+"${cap[@]}"}; r=$?   # a neighbouring shape: no gate
         fi
         [ $r -gt $rc ] && rc=$r
     done < "$RES/plan-owed/units.tsv"

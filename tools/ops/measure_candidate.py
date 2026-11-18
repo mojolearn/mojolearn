@@ -354,20 +354,29 @@ def ab_plan(owed_file, planner_file, vendor, b_names, times_board, chunk_s=TR.DE
     """[(arm, rows tag, races, minutes)] of the owed A/B units the job times for these B arms (tools/measure_owed.py
     plan, the same call the job's targeted plan makes, with no paper race left to a paper board): each unit is its
     base (the candidate) and the arm back to back, so its minutes are twice the races' stored candidate seconds (the
-    family median for a race or a neighbouring shape with no stored time) plus one process start per chunk and arm."""
+    family median for a race or a neighbouring shape with no stored time) plus one process start per chunk and arm; a
+    race with a STORED BASE runs the arm only, counted at its cap (the stored base time, the most it can take)."""
     if not b_names:
         return []
     planner = MO.load_planner(str(planner_file))
-    units = MO.plan(PC.load_json(owed_file), {"recipes": [], "race_ids": []}, planner, vendor, list(b_names))[0]
+    doc = PC.load_json(owed_file)
+    units, _, _, _, rowmap, _ = MO.plan(doc, {"recipes": [], "race_ids": []}, planner, vendor, list(b_names))
+    bases = MO.unit_bases(doc, rowmap, units)
     secs = TR.stored_seconds(PC.load_json(times_board)) if times_board and Path(times_board).is_file() else {}
     med = TR.family_medians(secs)
     out = []
     for (arm, rows), ids in sorted(units.items(), key=lambda kv: MO.unit_order(kv[0])):
         if arm == "candidate":
             continue
-        s = sum((secs.get(i) if rows == "full" else None) or med.get(i.split("/")[0], chunk_s / 4.0) for i in ids)
+        # STORED BASE (measure_owed.py): those races time the arm only, at most their cap (the stored base time)
+        caps = (bases.get((arm, rows)) or {}).get("round_seconds") or {}
+        stored = {k.split(" ")[0] for k in ((bases.get((arm, rows)) or {}).get("cells") or {})}
+        each = {i: (caps.get(i) or (secs.get(i) if rows == "full" else None)
+                    or med.get(i.split("/")[0], chunk_s / 4.0)) for i in ids}
+        s = sum(t if i in stored else 2 * t for i, t in each.items())
         nchunks = len(TR.chunk_ids(ids, {}, chunk_s)) if ids else 0
-        out.append((arm, rows, len(ids), (2 * s + 2 * TR.PROC_S * nchunks) / 60.0))
+        procs = (1 if stored >= set(ids) else 2) * nchunks
+        out.append((arm, rows, len(ids), (s + TR.PROC_S * procs) / 60.0))
     return out
 
 

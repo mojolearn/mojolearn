@@ -35,6 +35,7 @@ tools/bench_board_algos.py registers these lanes (kind 'extra') and hands
 `build` and `quality` to this module. Standard library only at import.
 """
 import importlib.util
+from collections import Counter
 import math
 import os
 
@@ -1237,7 +1238,10 @@ def quality(lane, D, outs, A):
                     d = ((X64[c] - qblock[:, None, :]) ** 2).sum(-1)
                     best = np.take_along_axis(c, np.argsort(d, axis=1, kind="stable")[:, :k], 1)
                     got = o["indices"][st:st + 1000]
-                    hits += sum(len(set(a) & set(b)) for a, b in zip(best.tolist(), got.tolist()))
+                    # REFINE RECALL FIX (fb12, 2026-11-17): the seeded candidate ids are drawn with replacement, so
+                    # a query's exact top k can hold one id twice; a set intersection counted it once and scored the
+                    # exact answer below 1 (0.892 on the 300-row test). Count with multiplicity.
+                    hits += sum(sum((Counter(a) & Counter(b)).values()) for a, b in zip(best.tolist(), got.tolist()))
                 e["recall_vs_exact_refine"] = hits / float(Q.shape[0] * k)
             elif t == "jl":
                 sk = outs.get("sklearn-cpu")
