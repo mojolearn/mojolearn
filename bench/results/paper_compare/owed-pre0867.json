@@ -119,7 +119,8 @@
   "mcd-chol": {
    "define": "MOJOLEARN_IDN_MCD_CHOL",
    "status": "define in code (x_decomp/mcd.mojo IDN_MCD_CHOL): B = the blocked Cholesky C-step (2cb89eb1b9, the default 0.8.42 .. 2026-11-13, never A/B'd); A = the LU + round-robin Jacobi pinvh C-step (0.8.25 .. 0.8.41, restored 2026-11-13). Bits differ between the arms (every column together)",
-   "owed": "RUN"
+   "owed": "HELD",
+   "evidence": "ab1 2026-11-18, NVIDIA L40S host 37f71a6102af, wheel d652a4b0a1, base and arm back to back, one run per arm (~/mojolearn-evidence/measure-candidate/build-d652a4b0a1/ab1-table.txt): Cholesky FASTER (taxi fits 0.55, istella fits 0.84-0.86, EE istella infer 0.78, EE taxi infer 1.03) but elliptic-envelope taxi Jaccard vs scikit-learn 0.9636 -> 0.9258 (0.8.55's output, digest 8c1b478088f596bf); the row promotes B only with Jaccard not lower: not flipped, decision for Andrew (x_decomp/mcd.mojo note above IDN_MCD_CHOL)"
   },
   "tsqr-wy-pair-off": {
    "define": "MOJOLEARN_IDN_TSQR_WY_PAIR_OFF",
@@ -229,7 +230,8 @@
   "ni12-fill-rule-off": {
    "define": "MOJOLEARN_NI12_FILL_RULE_OFF",
    "status": "define in code (x_cnn/device.mojo NI12_FILL_RULE): B = the implicit conv on every layer (the 2026-10-10 promoted default); A = implicit only when OC >= 32 and C*KH*KW >= 32",
-   "owed": "RUN"
+   "owed": "DECIDED",
+   "evidence": "ab1 2026-11-18, NVIDIA L40S host 37f71a6102af, wheel d652a4b0a1, base and arm back to back, one run per arm (~/mojolearn-evidence/measure-candidate/build-d652a4b0a1/ab1-table.txt): B 1.15x slower on cnn-clf fit, 0.95-1.04 elsewhere, digests equal; arm DELETED"
   },
   "ni12-implicit-conv-off": {
    "define": "MOJOLEARN_NI12_IMPLICIT_CONV_OFF",
@@ -289,7 +291,8 @@
   "lg-block-scratch-fill": {
    "define": "MOJOLEARN_TREES_BLOCK_SCRATCH_FILL_OFF",
    "status": "define in code (gbdt/methods/greedy_subsets_searcher/greedy_search_helper.mojo BLOCK_SCRATCH_FILL_OFF, launch_histograms_for_blocks): B = the whole-buffer zero of block_hist (pool slots x stat_count x widest block folds) at every non-fixed-point block of every histogram build; A = the zero of the block's own span max_leaves x stat_count x total_folds",
-   "owed": "RUN"
+   "owed": "DECIDED",
+   "evidence": "ab1 2026-11-18, NVIDIA L40S host 37f71a6102af, wheel d652a4b0a1, base and arm back to back, one run per arm (~/mojolearn-evidence/measure-candidate/build-d652a4b0a1/ab1-table.txt): B 1.38-1.40x slower on gbdt-lossguide istella fit, others 0.92-1.09 (two symmetric infer cells 0.77/0.78 the define cannot reach), digests equal; arm DELETED"
   },
   "neural-native-dispatch-off": {
    "define": "MOJOLEARN_NEURAL_NATIVE_DISPATCH_OFF",
@@ -471,7 +474,7 @@
   },
   "sqrt-comptime-step": {
    "define": "MOJOLEARN_NUMERICS_FAST_SQRT_COMPTIME_STEP",
-   "status": "define in code (checks/numerics.mojo portable_sqrtf NUMERICS_FAST_SQRT_COMPTIME_STEP: B = the four-candidate correction as a comptime for (offset a compile-time constant per step); A = the run-time for k in range(4) chain that Mojo 1.2 lowers to compare-and-branch. Same operations in the same order: bits unchanged on every column)",
+   "status": "define in code (checks/numerics.mojo portable_sqrtf NUMERICS_FAST_SQRT_COMPTIME_STEP: B = the four-candidate correction as a comptime for (offset a compile-time constant per step); A = the run-time for k in range(4) chain that Mojo 1.2 lowers to compare-and-branch. Same operations in the same order: bits unchanged on every column). PARTIAL A/B ab1 2026-11-18, NVIDIA L40S host 37f71a6102af, wheel d652a4b0a1, base and arm back to back, one run per arm (~/mojolearn-evidence/measure-candidate/build-d652a4b0a1/ab1-table.txt): capped after 8 of 25 cells (bisecting-kmeans istella infer 0.67, randomized-svd taxi 0.89, ann-refine 0.94/0.97, others 0.96-1.00, digests equal); knn / HDBSCAN / KDE rows not reached: still owed, not flipped",
    "owed": "RUN"
   },
   "f16-widen-host": {
@@ -482,7 +485,8 @@
   "autograd-predict": {
    "define": "MOJOLEARN_AUTOGRAD_PREDICT",
    "status": "define in code (sequence/mlp_fit.mojo AUTOGRAD_PREDICT): B = the tape predict (mlp_predict_autograd, c3b7dc42e6); A = the hand mlp_predict (one OP_GEMM_EPI per layer), restored as the default by d5df71f348 (lane fb-neural, 2026-11-17). Same bits on both arms",
-   "owed": "RUN"
+   "owed": "DECIDED",
+   "evidence": "ab1 2026-11-18, NVIDIA L40S host 37f71a6102af, wheel d652a4b0a1, base and arm back to back, one run per arm (~/mojolearn-evidence/measure-candidate/build-d652a4b0a1/ab1-table.txt): B (tape predict) 1.04-1.06x slower on the four MLP infer cells, fits equal, digests equal; arm DELETED (lane fb15-ab-verdicts, docs/TOMBSTONES.md)"
   },
   "metrics-dense-labels-off": {
    "define": "MOJOLEARN_METRICS_FAST_DENSE_LABELS_OFF",
@@ -492,23 +496,31 @@
   "linear-lbd-batch-off": {
    "define": "MOJOLEARN_LINEAR_LBD_BATCH_OFF",
    "status": "define in code (x_linear/lbfgs_device.mojo): B = 0.8.55's form, one flag read per trial; A = the L-BFGS queue fix 66b788d75b (lane fb3-band, 2026-11-17)",
-   "owed": "RUN"
+   "owed": "DECIDED",
+   "evidence": "ab1 2026-11-18, NVIDIA L40S host 37f71a6102af, wheel d652a4b0a1, base and arm back to back, one run per arm (~/mojolearn-evidence/measure-candidate/build-d652a4b0a1/ab1-table.txt): B 1.00-1.02x on all 8 cells, digests equal; no gain, arm DELETED"
   },
   "seq-libc-copy": {
    "define": "MOJOLEARN_SEQ_FAST_LIBC_COPY",
-   "status": "define in code (sequence/exec_device.mojo SEQ_LIBC_COPY, default off): B = the host copies of the sequence executor through libc memcpy (lane fb3-named, 2026-11-17); A = the element loop",
-   "owed": "RUN"
-  },
-  "cpu-threads-28": {
-   "define": "",
-   "env": "MOJOLEARN_CPU_THREADS=28",
-   "status": "ENV arm, no build (--b-arm cpu-threads-28=env:MOJOLEARN_CPU_THREADS=28): B = the host pool pinned at the L40S pod's 28-core cgroup quota; A = core/host_predict_threads.mojo's own resolution (the cgroup cap of 9fd0275a2d, lane fb-metrics 2026-11-17)",
+   "status": "define in code (sequence/exec_device.mojo SEQ_LIBC_COPY, default off): B = the host copies of the sequence executor through libc memcpy (lane fb3-named, 2026-11-17); A = the element loop. FIRST A/B ab1 2026-11-18, NVIDIA L40S host 37f71a6102af, wheel d652a4b0a1, base and arm back to back, one run per arm (~/mojolearn-evidence/measure-candidate/build-d652a4b0a1/ab1-table.txt): 0.94-0.97 on the four MLP istella cells, 1.06 on cross-entropy, digests equal; mixed sign: REPEAT OWED with the staging split from the call profile",
    "owed": "RUN"
   },
   "xprep-r3-off-view": {
    "define": "",
    "env": "MOJOLEARN_XPREP_R3_OFF=view",
    "status": "ENV arm, no build (--b-arm xprep-r3-off-view=env:MOJOLEARN_XPREP_R3_OFF=view; read by bindings/x_prep_native_owner_run.mojo): B = the label buffer copy restored; A = the view (c6bd59448e, lane fb-metrics 2026-11-17)",
+   "owed": "RUN"
+  },
+  "cpu-threads-28": {
+   "define": "",
+   "env": "MOJOLEARN_CPU_THREADS=28",
+   "status": "ENV arm, no build (--b-arm cpu-threads-28=env:MOJOLEARN_CPU_THREADS=28): B = the host pool pinned at the L40S pod's 28-core cgroup quota; A = core/host_predict_threads.mojo's own resolution (the cgroup cap of 9fd0275a2d, lane fb-metrics 2026-11-17)",
+   "owed": "INVALID",
+   "evidence": "ab1 2026-11-18, NVIDIA L40S host 37f71a6102af, wheel d652a4b0a1, base and arm back to back, one run per arm (~/mojolearn-evidence/measure-candidate/build-d652a4b0a1/ab1-table.txt): the pod's cgroup had 14 cores, so =28 oversubscribed it (metrics 1.26-1.57 slower); a fixed core count is not the arm. Replaced by cpu-threads-cgroup (the value is taken from the box)"
+  },
+  "cpu-threads-cgroup": {
+   "define": "",
+   "env": "MOJOLEARN_CPU_THREADS=@cgroup_cores",
+   "status": "ENV arm, no build (--b-arm cpu-threads-cgroup=env:MOJOLEARN_CPU_THREADS=@cgroup_cores): B = the host pool pinned at the box's cgroup core count, which tools/ops/paper_compare_job.sh puts in place of @cgroup_cores on the box (alloc_cores: the cgroup quota, else nproc); A = core/host_predict_threads.mojo's own resolution (unset). Replaces cpu-threads-28, invalid on a 14-core pod (lane fb15-ab-verdicts, 2026-11-18)",
    "owed": "RUN"
   }
  },
@@ -2891,8 +2903,8 @@
    "decides": "as seq-libc-copy-mlp-istella, on cross-entropy"
   },
   {
-   "id": "cpu-threads-28-host",
-   "source": "lane fb8-owed-arms (2026-11-17; Andrew: 'we need to run the A/B switches'); fb-metrics-RESULT.tsv row 2, fb-audit-RESULT.md row 2",
+   "id": "cpu-threads-cgroup-host",
+   "source": "lane fb8-owed-arms (2026-11-17; Andrew: 'we need to run the A/B switches'); fb-metrics-RESULT.tsv row 2, fb-audit-RESULT.md row 2; renamed from cpu-threads-28 2026-11-18 (lane fb15-ab-verdicts: ab1 ran =28 on a 14-core cgroup, invalid)",
    "kind": "ab",
    "lane": [
     "resample",
@@ -2905,13 +2917,13 @@
    "rows": "full",
    "vendor": "nvidia",
    "b_arms": [
-    "cpu-threads-28"
+    "cpu-threads-cgroup"
    ],
-   "decides": "A must equal B within noise on the NVIDIA L40S (the cgroup cap resolves 28 by itself); B faster means the resolution is still wrong: fix core/host_predict_threads.mojo (fb-metrics: resample istella 6.48x vs 0.8.55 with 128 tasks under a 28-core quota)"
+   "decides": "A must equal B within noise on the NVIDIA L40S (the cgroup cap resolves the box's core count by itself); B faster means the resolution is still wrong: fix core/host_predict_threads.mojo (fb-metrics: resample istella 6.48x vs 0.8.55 with 128 tasks under a 28-core quota)"
   },
   {
-   "id": "cpu-threads-28-metrics",
-   "source": "lane fb8-owed-arms (2026-11-17; Andrew: 'we need to run the A/B switches')",
+   "id": "cpu-threads-cgroup-metrics",
+   "source": "lane fb8-owed-arms (2026-11-17; Andrew: 'we need to run the A/B switches'); renamed from cpu-threads-28 2026-11-18 (lane fb15-ab-verdicts: ab1 ran =28 on a 14-core cgroup, invalid)",
    "kind": "ab",
    "lane": [
     "metric-confusion-matrix",
@@ -2921,9 +2933,9 @@
    "rows": "full",
    "vendor": "nvidia",
    "b_arms": [
-    "cpu-threads-28"
+    "cpu-threads-cgroup"
    ],
-   "decides": "as cpu-threads-28-host, on two host-parallel label metric lanes (x_metrics/host/program.mojo, core/labels_score_encode.mojo)"
+   "decides": "as cpu-threads-cgroup-host, on two host-parallel label metric lanes (x_metrics/host/program.mojo, core/labels_score_encode.mojo)"
   },
   {
    "id": "xprep-r3-off-view-binarizers",
