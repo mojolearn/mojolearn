@@ -66,10 +66,13 @@ from bindings.py_model_records import (
 # B arms RUN OWED (bench/results/paper_compare/owed-pre0867.json,
 # docs/apple-fast/EXPERIMENTS.md): -D MOJOLEARN_TRANSFORMER_LEGACY_SETUP
 # (was =1), -D MOJOLEARN_TRANSFORMER_SESSION_FRESH_OFF (was =0),
-# -D MOJOLEARN_MAMBA3_LEGACY_SETUP (was =1).
+# -D MOJOLEARN_MAMBA3_LEGACY_SETUP (was =1) lost A/B ab3 (NVIDIA L40S, wheel
+# d652a4b0a1, 2026-11-18, job nvc-ab-20261118T182558Z-cb6e02, digests equal):
+# arm/base 1.007 geomean over 5 mamba3/samba cells (0.97-1.07), noise.
+# TOMBSTONE: MOJOLEARN_MAMBA3_LEGACY_SETUP (LOSER: Mamba3 per-call setup without prefill sessions, arm/base geomean 1.007 over 5 cells, noise, NV L40S ab3 2026-11-18) deleted 2026-11-18 by lane/fx-verdicts2; code recoverable at 85c36e324f.
+# Restore: git apply experiments/removed/MOJOLEARN_MAMBA3_LEGACY_SETUP.patch; record in docs/TOMBSTONES.md.
 comptime TRANSFORMER_LEGACY_SETUP = is_defined["MOJOLEARN_TRANSFORMER_LEGACY_SETUP"]()
 comptime TRANSFORMER_SESSION_FRESH = not is_defined["MOJOLEARN_TRANSFORMER_SESSION_FRESH_OFF"]()
-comptime MAMBA3_LEGACY_SETUP = is_defined["MOJOLEARN_MAMBA3_LEGACY_SETUP"]()
 
 
 struct NativeBlockPlan(Movable, Writable):
@@ -1171,7 +1174,7 @@ def neural_mamba3_restore(mut mods: NativeModules, fields: PythonObject, entries
         py_setitem(fields, "_owned_generation", PythonObject(generation))
         py_setitem(fields, "_owned_restore_pending", False)
     if py_get(fields, "_owned_generation") is not None:
-        if (not route.has_sessions() or MAMBA3_LEGACY_SETUP
+        if (not route.has_sessions()
                 or not mamba3_prefill_session_serves(py_get(fields, "_prefill_session"), route.session_ref())):
             raise Error("RuntimeError: Mamba3 owned snapshot requires its installed binding/setup")
 
@@ -1451,8 +1454,7 @@ def _neural_backward_prepared(mut mods: NativeModules, block: PythonObject, inpu
             var route = Mamba3StateRoute(table_key.mode, table_key.vendor, table_key.vendor == 0)
             neural_mamba3_restore(mods, fields, entries, weights, route)
             var generation = py_get(fields, "_owned_generation")
-            var session = ((mamba3_prefill_caps(train_entry) & MAMBA3_CAP_SESSION_PREFILL) != 0
-                and not MAMBA3_LEGACY_SETUP)
+            var session = (mamba3_prefill_caps(train_entry) & MAMBA3_CAP_SESSION_PREFILL) != 0
             if generation is not None:
                 var owned_addresses: List[Int] = [addresses[0]]
                 for i in range(10, len(addresses)):  # driver-loop: over input-gradient and result address slots

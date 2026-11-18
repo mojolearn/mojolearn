@@ -30,8 +30,11 @@ from core.shared_slot import SharedSlot
 # B arms RUN OWED (bench/results/paper_compare/owed-pre0867.json,
 # docs/apple-fast/EXPERIMENTS.md): -D MOJOLEARN_TRANSFORMER_LEGACY_SETUP
 # (was =1), -D MOJOLEARN_TRANSFORMER_SESSION_FRESH_OFF (was =0),
-# -D MOJOLEARN_MAMBA3_LEGACY_SETUP (was =1).
-comptime MAMBA3_LEGACY_SETUP = is_defined["MOJOLEARN_MAMBA3_LEGACY_SETUP"]()
+# -D MOJOLEARN_MAMBA3_LEGACY_SETUP (was =1) lost A/B ab3 (NVIDIA L40S, wheel
+# d652a4b0a1, 2026-11-18, job nvc-ab-20261118T182558Z-cb6e02, digests equal):
+# arm/base 1.007 geomean over 5 mamba3/samba cells (0.97-1.07), noise.
+# TOMBSTONE: MOJOLEARN_MAMBA3_LEGACY_SETUP (LOSER: Mamba3 per-call setup without prefill sessions, arm/base geomean 1.007 over 5 cells, noise, NV L40S ab3 2026-11-18) deleted 2026-11-18 by lane/fx-verdicts2; code recoverable at 85c36e324f.
+# Restore: git apply experiments/removed/MOJOLEARN_MAMBA3_LEGACY_SETUP.patch; record in docs/TOMBSTONES.md.
 
 
 struct _PrefillVerdicts(Defaultable, Movable):
@@ -171,7 +174,7 @@ def _prefill_mamba3_reports(block: PythonObject, x: PythonObject, entries: Pytho
     var held = False
     comptime if not IDN_MAMBA3_FORWARD_DOOR_OLD:
         held = (caps & MAMBA3_CAP_HELD_FORWARD) != 0
-    var session = ((caps & MAMBA3_CAP_SESSION_PREFILL) != 0 or owned is not None) and not MAMBA3_LEGACY_SETUP
+    var session = (caps & MAMBA3_CAP_SESSION_PREFILL) != 0 or owned is not None
     var skip = False
     if session and Bool(py=py_get(fields, "_discard_reports", PythonObject(False))):
         skip = (caps & MAMBA3_CAP_REPORTS_OPTIONAL) != 0
