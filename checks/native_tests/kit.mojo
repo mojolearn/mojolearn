@@ -89,6 +89,21 @@ def upload_into[dt: DType](ctx: DeviceContext, mut dst: DeviceBuffer[dt], values
     _ = host^
 
 
+def upload_whole_into[dt: DType](ctx: DeviceContext, mut dst: DeviceBuffer[dt], values: List[Scalar[dt]]) raises:
+    """The first `len(dst)` words of `values` into the whole of `dst`,
+    drained before it returns. `values` may be longer than `dst`, never
+    shorter (what a raw copy from the list's pointer did, with the bound
+    checked)."""
+    var n = len(dst)
+    require(len(values) >= n, "kit.upload_whole_into: " + String(len(values)) + " words for a buffer of " + String(n))
+    var host = ctx.enqueue_create_host_buffer[dt](n)
+    ctx.synchronize()
+    unsafe_memcpy(dest=host.unsafe_ptr(), src=values.unsafe_ptr(), count=n)
+    ctx.enqueue_copy(dst_buf=dst, src_ptr=host.unsafe_ptr())
+    ctx.synchronize()
+    _ = host^
+
+
 def upload_host[dt: DType](ctx: DeviceContext, mut host: HostBuffer[dt], count: Int) raises -> DeviceBuffer[dt]:
     """A new device buffer of `count` elements holding the first `count`
     elements of the pinned buffer `host` (filled by the caller), drained
@@ -167,7 +182,19 @@ def download_into[dt: DType](ctx: DeviceContext, mut src: DeviceBuffer[dt], mut 
     _ = host^
 
 
-def download_host_into[dt: DType](ctx: DeviceContext, mut src: DeviceBuffer[dt], mut host: HostBuffer[dt]) raises:
+def download_whole_into[dt: DType](ctx: DeviceContext, src: DeviceBuffer[dt], mut dst: List[Scalar[dt]]) raises:
+    """The whole of `src` into the first `len(src)` words of `dst`, drained.
+    `dst` may be longer than `src`, never shorter."""
+    var n = len(src)
+    require(len(dst) >= n, "kit.download_whole_into: a list of " + String(len(dst)) + " for a buffer of " + String(n))
+    var host = ctx.enqueue_create_host_buffer[dt](n)
+    ctx.enqueue_copy(dst_ptr=host.unsafe_ptr(), src_buf=src)
+    ctx.synchronize()
+    unsafe_memcpy(dest=dst.unsafe_ptr(), src=host.unsafe_ptr(), count=n)
+    _ = host^
+
+
+def download_host_into[dt: DType](ctx: DeviceContext, src: DeviceBuffer[dt], mut host: HostBuffer[dt]) raises:
     """The whole of `src` into the caller's pinned buffer `host` (at least
     `len(src)` elements), drained before it returns: `host` is readable at
     once."""

@@ -19,8 +19,9 @@ from std.memory import bitcast
 from max.gpu.host import DeviceContext
 
 from checks.native_tests.kit import (
-    all_finite, allclose, download, download_host_into, download_into, download_undrained_keep, same_words, upload, upload_address,
-    upload_host, upload_host_into, upload_into, upload_into_undrained_keep, word_hex,
+    all_finite, allclose, download, download_host_into, download_into, download_undrained_keep,
+    download_whole_into, same_words, upload, upload_address, upload_host, upload_host_into, upload_into,
+    upload_into_undrained_keep, upload_whole_into, word_hex,
 )
 from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require
 
@@ -132,6 +133,13 @@ def _roundtrip[dt: DType](ctx: DeviceContext, values: List[Scalar[dt]]) raises:
         padded[i] = values[i]
     var whole = download[dt](ctx, wider, n + 5)
     same_words[dt](whole, padded, "upload_into of a prefix")
+    # the whole-buffer forms: the list may be longer than the buffer
+    var exact = ctx.enqueue_create_buffer[dt](n)
+    upload_whole_into[dt](ctx, exact, padded)
+    var longer = List[Scalar[dt]](length=n + 5, fill=Scalar[dt](1))
+    download_whole_into[dt](ctx, exact, longer)
+    same_words[dt](longer, padded, "upload_whole_into then download_whole_into")
+    _ = exact^
     _ = device^
     _ = wider^
 
