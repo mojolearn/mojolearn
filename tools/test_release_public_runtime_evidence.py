@@ -105,8 +105,9 @@ def test_exact_retained_profile_and_strict_compatibility_split(retained):
     assert (review['distinct_cases'],review['executions']) == (203,235)
     assert review['reusable'] and not review['broad_runtime_gate_qualified'] and not review['installed_wheels_qualified']
     qualified=review['runtime_qualification']
-    assert qualified['strict_native_passed']==12 and qualified['compatibility_qualified']==24
-    assert qualified['strict_native_complete'] is False
+    # the frozen fallback list is empty (55c447ad56): every retained audit is a strict native pass
+    assert qualified['strict_native_passed']==24 and qualified['compatibility_qualified']==24
+    assert qualified['strict_native_complete'] is True and qualified['authorized_metadata_calls']==0
     report=runtime.load(retained['out']/'report.json')
     assert [n['original_manifest_total'] for n in report['facts']['accounting_notes']] == [168,58]
     proof=runtime.load(retained['out']/'reconciliation.json')
@@ -136,7 +137,7 @@ def test_reject_incomplete_or_changed_producer_artifacts(retained,mutation):
     with pytest.raises(ValueError): prepare(retained)
 
 
-@pytest.mark.parametrize('mutation',['strict-label','unknown-fallback','extra-frame','audit-case'])
+@pytest.mark.parametrize('mutation',['not-strict','any-fallback','extra-frame','audit-case'])
 def test_refuse_misclassified_compatibility_audits(retained,mutation):
     path=Path(retained['suites']['targeted'])/'run/junit.xml';tree=ET.parse(path)
     props=tree.findall('.//property')
@@ -144,8 +145,10 @@ def test_refuse_misclassified_compatibility_audits(retained,mutation):
         tree.findall('.//testcase')[-1].set('name','different_case')
     else:
         prop=props[-1];reports=json.loads(prop.get('value'));report=reports[-1]
-        if mutation=='strict-label': report['passed']=True
-        elif mutation=='unknown-fallback':report['approved_python_fallbacks'][0]['callee']='arbitrary.callback'
+        # the fallback list is empty (55c447ad56): a non-strict audit or any fallback record is refused
+        if mutation=='not-strict': report['passed']=False
+        elif mutation=='any-fallback':report['approved_python_fallbacks'].append(
+            dict(id='array-length-metadata',callee='mojolearn._array.Array.__len__',calls=1))
         else: report['python_frames'].append(dict(function='other',file='caller.py',calls=1))
         prop.set('value',json.dumps(reports))
     tree.write(path)
