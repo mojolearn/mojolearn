@@ -32,8 +32,8 @@ local X declared as a pinned host buffer (`= ...enqueue_create_host_buffer`) or 
     X.unsafe_ptr()` of the same function, `src_ptr=p` / `dst_ptr=p`), and
   * no DRAIN lies between the latest such copy and X's last named use (extended over an enclosing loop's back
     edge), and X is never moved (`X^` other than `_ = X^`).
-A DRAIN is a statement with `synchronize(` or a call (`name(` or `name[..](`) to a function whose body has
-`synchronize(` (any scanned file, by name; `main` excluded). Fix: `_ = X^` AFTER the drain. A keep-alive placed
+A DRAIN is a statement with `synchronize(` or a call (`name(` or `name[..](`) to a function that drains: its body
+has `synchronize(` or calls a function that drains (any scanned file, by name; `main` excluded). Fix: `_ = X^` AFTER the drain. A keep-alive placed
 before the drain is the same bug and fails.
 
 Fix: name the local again after the pointer's last use (`_ = x^`; free). A true false alarm (a stack array whose
@@ -71,6 +71,7 @@ _PIN = re.compile(r"(?<![\w.])var\s+(\w+)\s*(?::[^=]*)?=\s*[\w.\[\]]*enqueue_cre
 _LST = re.compile(r"(?<![\w.])var\s+(\w+)\s*(?::\s*List\[[^=]*)?=\s*(?:List\[|\[)")
 _PTR_OF = re.compile(r"^\s*var\s+(\w+)\s*(?::[^=]*)?=\s*(\w+)\.unsafe_ptr\(\)\s*$")
 _SYNC = re.compile(r"\bsynchronize\s*\(")
+_CALLEE = re.compile(r"\b([A-Za-z_]\w*)\s*(?:\[[^\[\]]*\])?\s*\(")
 _STRING = re.compile(r'"(?:\\.|[^"\\])*"|\'(?:\\.|[^\'\\])*\'')
 
 
@@ -150,10 +151,30 @@ def helpers_of(text):
         body = "\n".join(lines[i + 1:i + 8])
         if any(re.search(_HELPER_RET.format(p=re.escape(p)), body) for p in params):
             found[m.group(1)] = "untracked"
-    for fname, a, b in functions(lines):  # functions that drain the queue (`drain:NAME`), for the queued rule
-        if fname != "main" and any(_SYNC.search(t) for t in lines[a:b]):
+    calls = {}  # for the queued rule: functions that drain directly (`drain:NAME`) and every def's callees
+    for fname, a, b in functions(lines):
+        if fname == "main":
+            continue
+        if any(_SYNC.search(t) for t in lines[a:b]):
             found["drain:" + fname] = "drain"
+        else:
+            calls.setdefault(fname, set()).update(_CALLEE.findall("\n".join(_strip(t) for t in lines[a + 1:b])))
+    found["__calls__"] = calls
     return found
+
+
+def close_drains(direct, call_maps):
+    """DIRECT (names whose body synchronizes) closed over CALL_MAPS ({name: callees}): a function that calls a
+    draining function drains. By name across files, like the helper pass."""
+    drains, grew = set(direct), True
+    while grew:
+        grew = False
+        for calls in call_maps:
+            for fname, callees in calls.items():
+                if fname not in drains and not callees.isdisjoint(drains):
+                    drains.add(fname)
+                    grew = True
+    return frozenset(drains)
 
 
 @functools.lru_cache(maxsize=8)
@@ -292,7 +313,7 @@ def scan_text(path, text, helpers):
     out, seen = [], set()
     drains = helpers.get("__drains__")
     if drains is None:
-        drains = frozenset(k[6:] for k in helpers if k.startswith("drain:"))
+        drains = close_drains((k[6:] for k in helpers if k.startswith("drain:")), [helpers.get("__calls__", {})])
     drain_call = _drain_call(drains) if "enqueue_copy" in text else None
     for fname, a, b in functions(lines):
         body = [(i, j, s) for (i, j, s) in stmts if a < i < b or (i == a)]
@@ -520,7 +541,8 @@ def scan(files, workers=None):
     workers = max(1, workers or os.cpu_count() or 1)
     with concurrent.futures.ProcessPoolExecutor(max_workers=workers) as pool:
         per_file = dict(h for part in pool.map(_helper_pass, _chunks(files, workers)) for h in part)
-        drains = frozenset(k[6:] for h in per_file.values() for k in h if k.startswith("drain:"))
+        drains = close_drains((k[6:] for h in per_file.values() for k in h if k.startswith("drain:")),
+                              [h.pop("__calls__", {}) for h in per_file.values()])
         items = []
         for path, text in files:
             local = dict(per_file.get(path, {}))

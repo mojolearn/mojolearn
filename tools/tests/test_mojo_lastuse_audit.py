@@ -205,11 +205,13 @@ def k(ctx: DeviceContext, d: DeviceBuffer[DType.uint32], mut holds: List[HostBuf
         self.assertEqual(failing(text), [])
 
     def test_drain_in_another_file_is_found_by_scan(self):
-        files = [("pkg/a.mojo", "def settle(ctx: DeviceContext) raises:\n    ctx.synchronize()\n"),
+        # transitively: b calls wrap, which calls settle, which synchronizes (umap's _ug_get_i32 shape)
+        files = [("pkg/a.mojo", "def settle(ctx: DeviceContext) raises:\n    ctx.synchronize()\n\n"
+                                "def wrap(ctx: DeviceContext) raises:\n    settle(ctx)\n"),
                  ("pkg/b.mojo", "def g(ctx: DeviceContext, d: DeviceBuffer[DType.uint8]) raises:\n"
                                 "    var h = ctx.enqueue_create_host_buffer[DType.uint8](1)\n"
                                 "    ctx.enqueue_copy(dst_buf=d, src_ptr=h.unsafe_ptr())\n"
-                                "    settle(ctx)\n    _ = h^\n"),
+                                "    wrap(ctx)\n    _ = h^\n"),
                  ("pkg/c.mojo", "def g(ctx: DeviceContext, d: DeviceBuffer[DType.uint8]) raises:\n"
                                 "    var h = ctx.enqueue_create_host_buffer[DType.uint8](1)\n"
                                 "    ctx.enqueue_copy(dst_buf=d, src_ptr=h.unsafe_ptr())\n"
