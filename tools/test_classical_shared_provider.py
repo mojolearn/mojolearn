@@ -50,7 +50,8 @@ def test_common_provider_is_selected_without_new_provider_type():
     assert 'neural_descriptor_connect(factory, String(SVC_ABI_NAME), 12)' in src
     assert 'return PythonObject(None)' in src
     assert 'unavailable for this binding' in src
-    assert 'struct ' not in PUBLIC
+    # No provider type of its own: the only struct is the door's query record (_SvmQuery, its two storage owners).
+    assert re.findall(r'^struct (\w+)', PUBLIC, re.M) == ['_SvmQuery']
     assert 'neural_descriptor_info(native.downcast_value_ptr[CompiledBindingSnapshot]()[].provider)' in body('_svc_publish_dispatch')
 
 
@@ -67,11 +68,12 @@ def test_original_numerical_owners_and_output_layout_are_preserved():
 def test_all_solve_and_machine_call_sites_receive_operation_snapshot():
     # Calls span physical lines, so inspect to the next matched closing call
     # delimiter rather than line numbers. There are3solver callers and3predict.
-    solves = re.findall(r'(?<!def )_solve\(fields, binding,.*?context, settings, native\)', PUBLIC, re.S)
+    # _solve takes the fold rows store and device flags after `native` (all three callers pass them).
+    solves = re.findall(r'(?<!def )_solve\(fields, binding,.*?context, settings, native,', PUBLIC, re.S)
     machines = re.findall(r'(?<!def )_machine\(fields, binding,.*?context, settings, native,', PUBLIC, re.S)
     assert len(solves) == 3
     assert len(machines) == 3
-    assert 'settings, native)' in body('_fit_ovo')
+    assert 'settings, native,' in body('_fit_ovo')
     assert 'settings, native,' in body('_platt')
 
 
@@ -106,9 +108,11 @@ def test_svr_uses_same_provider_and_retains_native_solver():
     assert 'Python' not in source and 'py=' not in source
     assert 'svr_fit_host_borrowed(' in source and 'svr_predict_host(' in source
     assert 'if kernel != 4:' in source
+    # e69fd3d769 / 7e20f47df1: SVR fit and query go through the typed native SVR boundary of the same binding.
+    assert 'svr_connection(binding)' in body('_svr_fit') and 'svr_run_fit(connection, request, plan)' in body('_svr_fit')
+    assert 'svr_connection(binding)' in body('_svr_predict') and 'svr_run_query(connection, request,' in body('_svr_predict')
     for name in ('_svr_fit', '_svr_predict'):
-        assert 'svr_execute(binding, native,' in body(name)
-        assert 'family_call(_entry(binding, "svr_' not in body(name)
+        assert 'family_call(' not in body(name)
     assert 'ip.unsafe_store(2, Float64(res.n_iter))' in source
     assert 'if len(params) != 9 and len(params) != 10 and len(params) != 12:' in source
     assert 'if len(params) != 7 and len(params) != 9:' in source
@@ -142,8 +146,9 @@ def test_svm_shared_inputs_are_snapshotted_outside_pair_and_fold_loops():
         assert '_ = x_meta' in src
     assert body('_svm_fit_admit').count('admit_family_meta(source,') == 1
     for name in ('_run', '_pair_decisions', '_svr_predict'):
-        assert 'q_meta.source.addr' in body(name)
-        assert '_ = q_meta' in body(name)
+        # the query record (_SvmQuery) holds the admitted address, read once; kept alive past the last native use
+        assert 'q_meta.address' in body(name)
+        assert '_ = q_meta^' in body(name)
     assert '_addr(q)' not in body('_machine')
     metadata=(ROOT/'providers/python/array_metadata_pyapi_door.mojo').read_text()
     for slot in ('_store', '_base', '_pin', '_mv'):
@@ -167,7 +172,7 @@ def test_shared_weight_snapshot_keeps_cast_order_and_reuses_admitted_address():
     assert validate.index('WEIGHTS_NONFINITE') < validate.index('WEIGHTS_NEGATIVE') < validate.index('WEIGHTS_ALL_ZERO')
     weights=body('_c_rows')
     assert 'admit_family_weights(' in weights
-    assert 'sw_owner = Python.tuple(weights.keep, weights.owner)' in weights
+    assert 'sw_owner = Python.tuple(weights_pin.keep, weights_pin.owner)' in weights   # ArrayPin since c7893b3b8d
     assert 'classical_address(sw)' not in weights
 
 
