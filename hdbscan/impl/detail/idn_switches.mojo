@@ -11,7 +11,6 @@ a mechanism was written there first (lane af-hdbscan2), the IDENTICAL
 switch below ORs into the same `comptime if`.
 """
 
-from std.sys.defines import get_defined_int
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 
@@ -72,16 +71,6 @@ arrays are staged with bulk copies instead of per-element loops (and without
 and the four outputs come back under one wait. The same kernels on the same
 values: no bit moves. Implies `IDN_HDB_PREDICT_DEVICE_CAST`'s device cast."""
 
-comptime IDN_HDB_SPARSE_MIN_ROWS = (
-    get_defined_int["MOJOLEARN_IDN_HDB_SPARSE_MIN_ROWS", 46340]()
-    if _IDN_HDB_ON
-    else 46340
-)
-"""CANDIDATE ARM (default 46340 = `PAIRWISE_MAX_ROWS`, no change). Under
-`graph = auto` the matrix-free sparse arm (DEVIATION 1620: the same tree,
-bit for bit) is taken ABOVE this many rows instead of only past the dense
-bound. The dense arm allocates and scans m * m cells every Boruvka round;
-the sparse arm prunes. Time `-D MOJOLEARN_IDN_HDB_SPARSE_MIN_ROWS=4096`,
-`=16384` against the default. A value above 46340 is refused at compile
-time. With a trace on, the dense arm's `hdbscan.mr.dists` stage is not
-recorded by the sparse arm, so keep the default for card runs."""
+# TOMBSTONE: MOJOLEARN_IDN_HDB_SPARSE_MIN_ROWS (unmeasured opt-in threshold arm: =4096 / =16384 never timed; the default
+# 46340 = PAIRWISE_MAX_ROWS is kept) deleted 2026-11-18 by lane/fx-env-dead; code recoverable at 0c65d61fed.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_HDB_SPARSE_MIN_ROWS.patch; record in docs/TOMBSTONES.md.

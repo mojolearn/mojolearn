@@ -116,7 +116,6 @@ on the host for the CPU column.
 """
 
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
-from std.os import getenv
 from max.gpu import block_idx, block_dim, thread_idx
 from std.math import isfinite, sqrt
 from std.memory import bitcast, unsafe_memcpy, stack_allocation
@@ -2990,8 +2989,12 @@ def fit_ordered(
                 # Lane S3 ORD_STD_GRIDFOLD: the grid fold always (no env
                 # read, so the host column knows the order from the define)
                 var std_split = True
-                comptime if not ORD_STD_GRIDFOLD:
-                    std_split = String(getenv("MOJOLEARN_ORD_STD_SPLIT")) != "0"
+                # lane fx-env-dead (2026-11-18): was the run-time env read
+                # MOJOLEARN_ORD_STD_SPLIT=0; now the build define (default
+                # unchanged: split on). Read only where ORD_STD_GRIDFOLD is off
+                # (fast builds), as before.
+                comptime if not ORD_STD_GRIDFOLD and is_defined["MOJOLEARN_GBDT_FAST_ORD_STD_SPLIT_OFF"]():
+                    std_split = False
                 if std_split:
                     comptime if ORD_STD_GRIDFOLD:
                         ctx.enqueue_function[_ord_std_gridfold_kernel](

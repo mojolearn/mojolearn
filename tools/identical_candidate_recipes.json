@@ -210,7 +210,7 @@
         "hdbscan",
         "hdbscan_host"
       ],
-      "status": "NOT_QUALIFIED_LEAVE_DISABLED",
+      "status": "REMOVED_UNMEASURED",
       "qualification_ready": false,
       "required_fixture_and_gate": "Fixtures straddling both thresholds below46340 so changed route is reached; exact hierarchy/labels, sparse MR checker.",
       "route_readback": "REQUIRED: explicit flags and import mode/vendor alone do not prove conditional route eligibility.",
@@ -234,7 +234,7 @@
         "hdbscan",
         "hdbscan_host"
       ],
-      "status": "NOT_QUALIFIED_LEAVE_DISABLED",
+      "status": "REMOVED_UNMEASURED",
       "qualification_ready": false,
       "required_fixture_and_gate": "Fixtures straddling both thresholds below46340 so changed route is reached; exact hierarchy/labels, sparse MR checker.",
       "route_readback": "REQUIRED: explicit flags and import mode/vendor alone do not prove conditional route eligibility.",

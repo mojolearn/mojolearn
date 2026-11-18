@@ -474,8 +474,10 @@ def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int, 
         scratch = max(scratch, prep2_scratch_words(host_q, stages, p2))
     comptime if IDN_TREE_ANY:
         scratch = max(scratch, idn_tree_scratch_words(host_q, stages))
-    var mi_sorted = getenv("MOJOLEARN_XPREP_MI_SORTED", "1") != "0"
-    var mi_ties = getenv("MOJOLEARN_XPREP_MI_TIES", "1") != "0"
+    # lane fx-env-dead (2026-11-18): were the run-time env reads MOJOLEARN_XPREP_MI_SORTED=0 /
+    # MOJOLEARN_XPREP_MI_TIES=0 per program run; now build defines, default unchanged (on), A/B owed.
+    var mi_sorted = not is_defined["MOJOLEARN_XPREP_FAST_MI_SORTED_OFF"]()
+    var mi_ties = not is_defined["MOJOLEARN_XPREP_FAST_MI_TIES_OFF"]()
     var mi_w = 1
     var mi_u = 1
     for s in range(stages):  # small-loop(stages: program stages): reads the op words of one program, a plan list, never data

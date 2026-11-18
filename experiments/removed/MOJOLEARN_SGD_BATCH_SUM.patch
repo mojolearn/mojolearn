@@ -1,0 +1,25 @@
+diff --git a/bindings/x_linear_native_door.mojo b/bindings/x_linear_native_door.mojo
+index 8e85a170c9..4939e26420 100644
+--- a/bindings/x_linear_native_door.mojo
++++ b/bindings/x_linear_native_door.mojo
+@@ -95,6 +95,7 @@ from bindings.classical_labels_door import (
+     labels_real_type,
+     labels_integral_type,
+ )
++from bindings.classical_labels_run import labels_env
+ 
+ comptime _F32P = MutPointer[Float32, MutUntrackedOrigin]
+ 
+@@ -658,9 +659,9 @@ def _xl_sgd(model: PythonObject, fields: PythonObject, entries: XLinearOps, x: A
+         raise Error("mojolearn " + name + ": batch_size must be 'auto', 0 or a positive int")
+     elif batch_size is not None:
+         batch = _int(batch_size)
+-    # TOMBSTONE: MOJOLEARN_SGD_BATCH_SUM (env override, the B arm of MOJOLEARN_SGD_AUTO_STEPS_256_OFF, whose old path was
+-    # deleted 2026-11-15 by lane/expdel2-21-linear) deleted 2026-11-18 by lane/fx-env-dead; code recoverable at 0c65d61fed.
+-    # Restore: git apply experiments/removed/MOJOLEARN_SGD_BATCH_SUM.patch
++    var override = labels_env("MOJOLEARN_SGD_BATCH_SUM", "")
++    if override == "0" or override == "1":
++        batch_sum = override == "1"
+     ip.append(has_sw)
+     ip.append(has_cw)
+     ip.append(batch)

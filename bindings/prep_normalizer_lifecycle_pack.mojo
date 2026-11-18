@@ -2,7 +2,7 @@
 # Normalizer operations own their complete previously decorated public calls.
 # The PACK half of the former `bindings/prep_normalizer_lifecycle.mojo` (fence-flip-2 split, 2026-11-12);
 # the UNPACK half is `bindings/prep_normalizer_lifecycle_unpack.mojo`.
-from std.os import getenv
+from std.sys.compile import is_defined
 from std.python import Python, PythonObject
 from bindings.native_loaded_module_door import native_loaded_module, native_namespace_string_keys
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem
@@ -213,7 +213,7 @@ def _normalizer_apply(values: PythonObject, n: Int, d: Int, code: Int,
     # Same normalization stage, arena operands, large-output rule and native
     # transport as the preexisting _transform branch. No model math moves.
     var words = n * d
-    var dev_out = words >= 134217728 and py_get(entries, "x_prep_run_out") is not None and String(getenv("MOJOLEARN_XPREP_OUT", "1")) != "0"
+    var dev_out = words >= 134217728 and py_get(entries, "x_prep_run_out") is not None and not is_defined["MOJOLEARN_XPREP_FAST_OUT_OFF"]()
     var host = words + (0 if dev_out else words)
     if host + (words if dev_out else 0) > 2147483647:
         raise Error("ValueError: x_prep: the program exceeds the native Int32 indexing bound")

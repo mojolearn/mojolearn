@@ -184,6 +184,7 @@ from checks.numerics import NUMERIC_FAST, NUMERIC_IDENTICAL
 from core.device_zero import enqueue_fill
 from max.gpu.host import DeviceBuffer, DeviceContext
 from std.os import getenv
+from std.sys.compile import is_defined
 from std.memory import bitcast
 from max.gpu import block_dim, block_idx, grid_dim, thread_idx
 from gbdt.gpu_data.apple_fast_trees_experiments import AFT_G01, AFT_G02
@@ -1206,9 +1207,11 @@ def launch_pw_fold_doc_slots[
 # one-block writeback. The cell is the multiplier-1 cell at every
 # multiplier, so the split follows the device's SM count. The ordered
 # levels launched 32-64 blocks on a 142-SM L40S at 4.1M rows.
-# `MOJOLEARN_PW_INT_SLOTS=0` restores the one-block launch.
+# `-D MOJOLEARN_GBDT_FAST_PW_INT_SLOTS_OFF` restores the one-block launch
+# (lane fx-env-dead, 2026-11-18: was the run-time env read
+# MOJOLEARN_PW_INT_SLOTS=0 per hist launch; default unchanged, A/B owed).
 def pw_int_slots_on() -> Bool:
-    return String(getenv("MOJOLEARN_PW_INT_SLOTS")) != "0"
+    return not is_defined["MOJOLEARN_GBDT_FAST_PW_INT_SLOTS_OFF"]()
 
 
 def pw_fold_int_slots_kernel(

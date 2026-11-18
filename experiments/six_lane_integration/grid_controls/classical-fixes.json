@@ -16,7 +16,7 @@
   },
   {
    "define": "MOJOLEARN_IDN_HDB_SPARSE_MIN_ROWS",
-   "reason": "not registered: no board effect. The board HDBSCAN input is 100,000 rows (tools/classical_two_datasets.py:211 HDBSCAN_ROWS), above PAIRWISE_MAX_ROWS = 46340, so graph=auto already takes the sparse arm (single_linkage.mojo:201-205), and the define's legal range is 2..46340 (single_linkage.mojo:197-200): every value gives the same route on the board. It only moves designs with fewer than 46,341 rows."
+   "reason": "DELETED 2026-11-18 (lane fx-env-dead): unmeasured opt-in threshold arm; the default 46340 is the only switch point; define refused in core/experiment_guards_cluster.mojo; code recoverable at 0c65d61fed. Earlier: not registered: no board effect. The board HDBSCAN input is 100,000 rows (tools/classical_two_datasets.py:211 HDBSCAN_ROWS), above PAIRWISE_MAX_ROWS = 46340, so graph=auto already takes the sparse arm (single_linkage.mojo:201-205), and the define's legal range is 2..46340 (single_linkage.mojo:197-200): every value gives the same route on the board. It only moves designs with fewer than 46,341 rows."
   },
   {
    "define": "MOJOLEARN_QN_IDN_DCONV",

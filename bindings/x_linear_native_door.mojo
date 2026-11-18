@@ -97,7 +97,6 @@ from bindings.classical_labels_door import (
     labels_real_type,
     labels_integral_type,
 )
-from bindings.classical_labels_run import labels_env
 
 comptime _F32P = MutPointer[Float32, MutUntrackedOrigin]
 
@@ -686,9 +685,9 @@ def _xl_sgd(model: PythonObject, fields: PythonObject, entries: XLinearOps, x: A
         raise Error("mojolearn " + name + ": batch_size must be 'auto', 0 or a positive int")
     elif batch_size is not None:
         batch = _int(batch_size)
-    var override = labels_env("MOJOLEARN_SGD_BATCH_SUM", "")
-    if override == "0" or override == "1":
-        batch_sum = override == "1"
+    # TOMBSTONE: MOJOLEARN_SGD_BATCH_SUM (env override, the B arm of MOJOLEARN_SGD_AUTO_STEPS_256_OFF, whose old path was
+    # deleted 2026-11-15 by lane/expdel2-21-linear) deleted 2026-11-18 by lane/fx-env-dead; code recoverable at 0c65d61fed.
+    # Restore: git apply experiments/removed/MOJOLEARN_SGD_BATCH_SUM.patch
     ip.append(has_sw)
     ip.append(has_cw)
     ip.append(batch)
@@ -1224,7 +1223,7 @@ def xl_fit_quantile(model: PythonObject, args: PythonObject, context: PythonObje
     var tol = fields["tol"]
     var ip: List[Int] = [_int(fields["max_iter"]), 1 if _truth(fields["fit_intercept"]) else 0, has_sw]
     var fp: List[Float64] = [_float(q), _float(fields["alpha"]), _float(py_call(_op().truediv, tol, PythonObject(100.0))),
-                             _float(tol), 0.0 if labels_env("MOJOLEARN_XQ_ABS_BALANCE", "") == "1" else 1.0]
+                             _float(tol), 1.0]  # fp[4]: unread since MOJOLEARN_XQ_ABS_BALANCE went (TOMBSTONE in x_linear/quantile.mojo)
     var out = _xl_run(entries, ALGO_QUANTILE, x.address, n * d, n, d, yy.address, yy.rows, ip, fp,
                       d + 3, m * m + 3 * m + 4 * n + 3 * d, 1, context)
     _ = yy  # keep the Python object alive through the native call above

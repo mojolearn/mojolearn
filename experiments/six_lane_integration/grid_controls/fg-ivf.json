@@ -4,32 +4,7 @@
   "branch": "lane/fg-ivf",
   "head": "1c24f289b",
   "head_note": "code only, uncompiled (orchestrator compiles every switch on and off, NV and AMD, host twins)",
-  "controls": {
-    "kmeans_live_cores_off": {
-      "define": "MOJOLEARN_KMEANS_LIVE_CORES_OFF",
-      "kind": "switch",
-      "arms": {
-        "off": [],
-        "on": [
-          "MOJOLEARN_KMEANS_LIVE_CORES_OFF"
-        ]
-      },
-      "default": "off",
-      "source": [
-        "cluster/impl/detail/min_cluster_distance_compute.mojo:102",
-        "neighbors/impl/distance/detail/pairwise_distance_base.mojo (launch_config_generator_cores)"
-      ],
-      "binding": [
-        "_mojolearn",
-        "_mojolearn_x_cluster",
-        "_mojolearn_ivf",
-        "_mojolearn_x_ann"
-      ],
-      "bits_change": false,
-      "status": "new default (read_ivf.md B5)",
-      "note": "Rollback arm: the fused assignment grid from gpu_cores_for (108 NV / 110 AMD). Default on NVIDIA/AMD: MULTIPROCESSOR_COUNT (cached). Scheduling only."
-    }
-  },
+  "controls": {},
   "algorithms": {
     "expanded:ivf-pq": {
       "binding": "_mojolearn_x_ann",
@@ -92,6 +67,11 @@
       "define": "MOJOLEARN_IDN_PQ_LUT_TILED_OFF",
       "control": "idn_pq_lut_tiled_off",
       "reason": "DELETED 2026-11-15 (lane/expdel2-14-cluster, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md; recoverable at aa63f5d1c7; patch experiments/removed/MOJOLEARN_IDN_PQ_LUT_TILED_OFF.patch): old path beside the default; the default is kept, no bit change. Refused in core/experiment_guards_cluster.mojo; docs/TOMBSTONES.md."
+    },
+    {
+      "define": "MOJOLEARN_KMEANS_LIVE_CORES_OFF",
+      "control": "kmeans_live_cores_off",
+      "reason": "DELETED 2026-11-18 (lane fx-env-dead): old path beside the default (EXP:1671 PENDING) with no A/B recorded within four weeks (AGENTS.md: an unmeasured arm is deleted); define refused in core/experiment_guards_cluster.mojo; code recoverable at 0c65d61fed; patch experiments/removed/MOJOLEARN_KMEANS_LIVE_CORES_OFF.patch."
     }
   ]
 }

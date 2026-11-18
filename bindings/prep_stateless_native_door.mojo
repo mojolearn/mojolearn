@@ -6,8 +6,8 @@
 # Python `_Prog` built) and runs it through the shared transport
 # (bindings/x_prep_native_owner.mojo `xprep_run`). fit_transform converts X once
 # and runs the one transform program.
+from std.sys.compile import is_defined
 from std.memory import unsafe_memcpy, bitcast
-from std.os import getenv
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
@@ -212,7 +212,7 @@ def _transform(model: PythonObject, kind: String, values: PythonObject, context:
     if kind == "normalizer":
         var code = _norm_code(fields)
         var words = n * d
-        var dev_out = words >= OUT_MIN_WORDS and py_get(entries, "x_prep_run_out") is not None and String(getenv("MOJOLEARN_XPREP_OUT", "1")) != "0"
+        var dev_out = words >= OUT_MIN_WORDS and py_get(entries, "x_prep_run_out") is not None and not is_defined["MOJOLEARN_XPREP_FAST_OUT_OFF"]()
         var host = words + (0 if dev_out else words)
         if host + (words if dev_out else 0) > 2147483647:
             raise Error("ValueError: x_prep: the program exceeds the native Int32 indexing bound")
@@ -235,7 +235,7 @@ def _transform(model: PythonObject, kind: String, values: PythonObject, context:
     var words = n * nout
     var fortran = String(fields["order"]) == "F"
     var transpose = fortran and words > 0
-    var dev_out = transpose and words >= OUT_MIN_WORDS and py_get(entries, "x_prep_run_out") is not None and String(getenv("MOJOLEARN_XPREP_OUT", "1")) != "0"
+    var dev_out = transpose and words >= OUT_MIN_WORDS and py_get(entries, "x_prep_run_out") is not None and not is_defined["MOJOLEARN_XPREP_FAST_OUT_OFF"]()
     var host = out + words + (words if transpose and not dev_out else 0)
     if host + (words if dev_out else 0) > 2147483647:
         raise Error("ValueError: x_prep: the program exceeds the native Int32 indexing bound")
@@ -492,7 +492,7 @@ def _quantile_apply(model: PythonObject, values: PythonObject, inverse: Bool, co
     var qo = words
     var ro = qo + nq * d
     var out = ro + nq
-    var dev_out = words >= OUT_MIN_WORDS and py_get(entries, "x_prep_run_out") is not None and String(getenv("MOJOLEARN_XPREP_OUT", "1")) != "0"
+    var dev_out = words >= OUT_MIN_WORDS and py_get(entries, "x_prep_run_out") is not None and not is_defined["MOJOLEARN_XPREP_FAST_OUT_OFF"]()
     var host = out + (0 if dev_out else words)
     if host + (words if dev_out else 0) > 2147483647:
         raise Error("ValueError: x_prep: the program exceeds the native Int32 indexing bound")
@@ -606,7 +606,7 @@ def _power_apply(model: PythonObject, values: PythonObject, inverse: Bool, conte
         host += d
         _ = py_call(inputs.append, Python.tuple(mo, Python.tuple(0, mean, PythonObject(None), d, 1)))
         _ = py_call(inputs.append, Python.tuple(so, Python.tuple(0, scale, PythonObject(None), d, 1)))
-    var dev_out = words >= OUT_MIN_WORDS and py_get(entries, "x_prep_run_out") is not None and String(getenv("MOJOLEARN_XPREP_OUT", "1")) != "0"
+    var dev_out = words >= OUT_MIN_WORDS and py_get(entries, "x_prep_run_out") is not None and not is_defined["MOJOLEARN_XPREP_FAST_OUT_OFF"]()
     var out = host
     if not dev_out:
         host += words

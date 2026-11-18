@@ -26,6 +26,7 @@
 # it on the device); RandomTreesEmbedding's `fit_transform`
 # converts X once for the fit and the transform.
 from std.python import Python, PythonObject
+from std.sys.compile import is_defined
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem, py_fields
 from bindings.native_f32_view_pack import native_f32_view_array
 from bindings.py_attr import py_attr
@@ -41,7 +42,6 @@ from bindings.trees_public_inputs_door import (
     trees_entry,
     trees_need,
     trees_helper,
-    trees_env,
     trees_reshape,
     trees_address,
     trees_freeze,
@@ -774,7 +774,10 @@ def _bagging_batched_ok(fields: PythonObject, base: PythonObject, n_rows: Int, n
                         sample_weight: PythonObject, context: PythonObject) raises -> Bool:
     """`_BaggingBase._batched_ok`: a bag of best-splitter decision trees over
     every feature, without weights or out-of-bag scoring, is one forest fit."""
-    if trees_env("MOJOLEARN_HR2_BAGGING_MEMBERS", "") == "1":
+    # lane fx-env-dead (2026-11-18): was the run-time env read
+    # MOJOLEARN_HR2_BAGGING_MEMBERS=1 per fit; now a build define, default
+    # unchanged (one forest fit), A/B owed.
+    comptime if is_defined["MOJOLEARN_TREES_FAST_HR2_BAGGING_MEMBERS"]():
         return False
     if not _is_class(base, "trees_dt_classifier", context) and not _is_class(base, "trees_dt_regressor", context):
         return False
@@ -1306,7 +1309,10 @@ def ada_fit(model: PythonObject, args: PythonObject, classifier: Bool, context: 
         var session = Session(PythonObject(None), 0)
         if dt_best:
             var cm = _colmajor(xt, x.view(), context)
-            if trees_env("MOJOLEARN_ADABOOST_REENCODE", "") != "1":
+            # lane fx-env-dead (2026-11-18): was the run-time env read
+            # MOJOLEARN_ADABOOST_REENCODE=1 per fit; now a build define,
+            # default unchanged (encode once), A/B owed.
+            comptime if not is_defined["MOJOLEARN_TREES_FAST_ADABOOST_REENCODE"]():
                 encoded = trees_encode_labels(codes, context)
             # the session open tests the column-major words it uploads
             # (lane a8c: the host scan of cm before it is deleted)

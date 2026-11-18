@@ -278,6 +278,10 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_TSVD_QOLD"](), "removed 2026-11-15 (lane/expdel2-17-decomposition): TSVD_QOLD (rollback of the FAST TruncatedSVD QUALITY-FIX) is gone; the default path is the only one; see docs/TOMBSTONES.md"
     # Restore: git apply experiments/removed/MOJOLEARN_XDECOMP_HOST_SERIAL.patch
     comptime assert not is_defined["MOJOLEARN_XDECOMP_HOST_SERIAL"](), "removed 2026-11-15 (lane/expdel2-17-decomposition): XDECOMP_HOST_SERIAL (serial host decomposition groups) is gone; the default path is the only one; see docs/TOMBSTONES.md"
+    # ---- lane fx-env-dead (2026-11-18)
+    # Restore: git apply experiments/removed/MOJOLEARN_CHOL_FAST_POOLIO_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_CHOL_FAST_POOLIO_OFF"](), "removed 2026-11-18 (lane/fx-env-dead): CHOL_FAST_POOLIO_OFF (old path beside the default, cholesky device IO without the pool; no IDENTICAL A/B in four weeks) is gone; the pooled IO is the only path; code recoverable at 0c65d61fed; see docs/TOMBSTONES.md"
+    # ---- end lane fx-env-dead
     return True
 
 

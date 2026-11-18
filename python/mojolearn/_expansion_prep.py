@@ -139,7 +139,7 @@ def _optional_prep_entry(binding, name):
 
 #: lane gap-nb-maxabs-grp (2026-10-02), two A/B switches (unset or anything
 #: but "0": on):
-#:   MOJOLEARN_XPREP_DIRECT   an input of at least _DIRECT_MIN_WORDS words goes
+#:   MOJOLEARN_XPREP_DIRECT   (now the build define -D MOJOLEARN_XPREP_FAST_DIRECT_OFF, 2026-11-18) an input of at least _DIRECT_MIN_WORDS words goes
 #:                            up to the device FROM ITS OWN BUFFER (a store
 #:                            slot for the length of the run, copied device to
 #:                            device into the arena) instead of being copied
@@ -188,7 +188,7 @@ class _Scratch:
     read back by `get` into its own host buffer (no copy out of the arena).
     Both resolve when the program runs (host arena size, then the scratch,
     then the output) and never cross to the device from the host; the host
-    binding, or MOJOLEARN_XPREP_OUT=0 for the output, gets them as plain
+    binding, or a build with -D MOJOLEARN_XPREP_FAST_OUT_OFF for the output, gets them as plain
     arena words."""
     __slots__ = ("off", "kind")
 
