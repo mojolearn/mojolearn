@@ -30,6 +30,7 @@ from gbdt.methods.kernel.pointwise_hist2_one_byte_8bit import (
 
 from gbdt.host.gbdt_oracle import _hist2_dither, _hist2_quantize
 from gbdt.methods.ordered_fast_switches import ORD_DOC_ID_STORAGE
+from checks.native_tests.kit import download_host_into, upload_whole_into
 
 comptime N_ROWS=521
 comptime OUT_INTS=4*PW8_MAX_FOLD_COUNT*2
@@ -95,11 +96,11 @@ def main() raises:
     var dw=ctx.enqueue_create_buffer[DType.float32](N_ROWS)
     var dout=ctx.enqueue_create_buffer[DType.int32](OUT_INTS)
     var out=ctx.enqueue_create_host_buffer[DType.int32](OUT_INTS)
-    ctx.enqueue_copy(dst_buf=dk,src_ptr=keys.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=di,src_ptr=idx.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=dc,src_ptr=ci.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=dt,src_ptr=target.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=dw,src_ptr=weight.unsafe_ptr())
+    upload_whole_into[DType.uint32](ctx, dk, keys)
+    upload_whole_into[DType.uint32](ctx, di, idx)
+    upload_whole_into[DType.uint32](ctx, dc, ci)
+    upload_whole_into[DType.float32](ctx, dt, target)
+    upload_whole_into[DType.float32](ctx, dw, weight)
     var scale=Float32(3.7)
     var lengths:List[Int]=[0,1,31,127,257,509]
     for length in lengths:
@@ -119,7 +120,7 @@ def main() raises:
             ctx.enqueue_function[hist8_kernel[variant]](
                 di.unsafe_ptr(),Int32(5),Int32(length),dt.unsafe_ptr(),dw.unsafe_ptr(),dc.unsafe_ptr(),
                 scale,dout.unsafe_ptr(),dk.unsafe_ptr(),grid_dim=1,block_dim=PW_HIST2_BLOCK)
-            ctx.enqueue_copy(dst_buf=out,src_buf=dout)
+            download_host_into[DType.int32](ctx, dout, out)
             ctx.synchronize()
             for cell in range(OUT_INTS):
                 if Int64(out[cell])!=want[cell]:raise Error("document-ID histogram oracle mismatch")
