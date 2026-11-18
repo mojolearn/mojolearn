@@ -1,5 +1,5 @@
 diff --git a/x_neighbors/gen.py b/x_neighbors/gen.py
-index e3f4df7dc7..ac98ae7390 100644
+index d3f9dd72fa..ac98ae7390 100644
 --- a/x_neighbors/gen.py
 +++ b/x_neighbors/gen.py
 @@ -523,6 +523,8 @@ def _i(addr: Int) -> IP:
@@ -15,10 +15,10 @@ index e3f4df7dc7..ac98ae7390 100644
  comptime X_NEIGHBORS_HOST_SABOTAGE = is_defined["MOJOLEARN_HOST_SABOTAGE"]()
  
  
--#: TOMBSTONE: MOJOLEARN_XN_HOST_SERIAL (env arm: every op's items on one thread, the loop before lane/neural-pass72;
--#: DECIDED by the HARD RULE "write code to run in parallel" and the 2026-11-15 rule that an unmeasured opt-in arm is
--#: deleted; no A/B on record) deleted 2026-11-18 by lane/fx-env-dead; code recoverable at 0c65d61fed.
--#: Restore: git apply experiments/removed/MOJOLEARN_XN_HOST_SERIAL.patch
+-# TOMBSTONE: MOJOLEARN_XN_HOST_SERIAL (env arm: every op's items on one thread, the loop before lane/neural-pass72;
+-# DECIDED by the HARD RULE "write code to run in parallel" and the 2026-11-15 rule that an unmeasured opt-in arm is
+-# deleted; no A/B on record) deleted 2026-11-18 by lane/fx-env-dead; code recoverable at 0c65d61fed.
+-# Restore: git apply experiments/removed/MOJOLEARN_XN_HOST_SERIAL.patch
 +struct _XnHostSerial(Defaultable, Movable):
 +    var on: Bool
 +
@@ -51,7 +51,7 @@ index e3f4df7dc7..ac98ae7390 100644
              f(t)
          return
 diff --git a/x_neighbors/host_ops.mojo b/x_neighbors/host_ops.mojo
-index 37d375b824..ebdf08740b 100644
+index aed2b2a663..ebdf08740b 100644
 --- a/x_neighbors/host_ops.mojo
 +++ b/x_neighbors/host_ops.mojo
 @@ -3,6 +3,7 @@
@@ -73,10 +73,10 @@ index 37d375b824..ebdf08740b 100644
  comptime X_NEIGHBORS_HOST_SABOTAGE = is_defined["MOJOLEARN_HOST_SABOTAGE"]()
  
  
--#: TOMBSTONE: MOJOLEARN_XN_HOST_SERIAL (env arm: every op's items on one thread, the loop before lane/neural-pass72;
--#: DECIDED by the HARD RULE "write code to run in parallel" and the 2026-11-15 rule that an unmeasured opt-in arm is
--#: deleted; no A/B on record) deleted 2026-11-18 by lane/fx-env-dead; code recoverable at 0c65d61fed.
--#: Restore: git apply experiments/removed/MOJOLEARN_XN_HOST_SERIAL.patch
+-# TOMBSTONE: MOJOLEARN_XN_HOST_SERIAL (env arm: every op's items on one thread, the loop before lane/neural-pass72;
+-# DECIDED by the HARD RULE "write code to run in parallel" and the 2026-11-15 rule that an unmeasured opt-in arm is
+-# deleted; no A/B on record) deleted 2026-11-18 by lane/fx-env-dead; code recoverable at 0c65d61fed.
+-# Restore: git apply experiments/removed/MOJOLEARN_XN_HOST_SERIAL.patch
 +struct _XnHostSerial(Defaultable, Movable):
 +    var on: Bool
 +
