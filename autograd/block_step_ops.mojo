@@ -1832,6 +1832,8 @@ comptime ATTN_STEP_TAG = 108
 # Only the column the route runs on compiles it.
 # TOMBSTONE: MOJOLEARN_BYTE_LM_GENERIC_OPS (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-23-neural; code recoverable at b4f0e643f7.
 # Restore: git apply experiments/removed/MOJOLEARN_BYTE_LM_GENERIC_OPS.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_BYTE_LM_GENERIC_OPS (decided B arm, generic OPS_EMBEDDING and no next-norm fusion; L40S ba08dac006 lm-train-step bytes 35.71 -> 48.54 ms, B 1.36x slower) deleted 2026-11-17 by lane/fb12-loser-arms; code recoverable at 2203db7094.
+# Restore: git apply experiments/removed/MOJOLEARN_BYTE_LM_GENERIC_OPS.fb12-loser-arms.patch; record in docs/TOMBSTONES.md.
 comptime ATTN_STEP_NEXT_NORM = TARGET_COLUMN == COLUMN_APPLE
 
 

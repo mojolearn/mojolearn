@@ -368,7 +368,8 @@ def _check_configuration() -> Bool:
     # MOJOLEARN_AFN_SAMBA_ALL: refusal removed 2026-11-15 (restored; Apple fast opt-in arm, default off, lane/restore-apple-fast-neural; see docs/TOMBSTONES.md Restored table)
     # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_GATHER_EPOCH_OFF.patch
     comptime assert not is_defined["MOJOLEARN_AUTOGRAD_GATHER_EPOCH_OFF"](), "removed 2026-11-15 (lane/expdel2-23-neural): AUTOGRAD_GATHER_EPOCH_OFF (old path) is gone; the default is kept; code at f96a014a39; restore: experiments/removed/MOJOLEARN_AUTOGRAD_GATHER_EPOCH_OFF.patch"
-    # MOJOLEARN_BYTE_LM_GENERIC_OPS: refusal removed 2026-11-15 (restored; owed B arm, see docs/TOMBSTONES.md Restored table)
+    # Restore: git apply experiments/removed/MOJOLEARN_BYTE_LM_GENERIC_OPS.fb12-loser-arms.patch
+    comptime assert not is_defined["MOJOLEARN_BYTE_LM_GENERIC_OPS"](), "removed 2026-11-17 (lane/fb12-loser-arms): BYTE_LM_GENERIC_OPS (decided B arm, generic OPS_EMBEDDING capture and no next-norm fusion; L40S ba08dac006 B 1.36x slower) is gone; the default path is the only one; code recoverable at 2203db7094; restore: experiments/removed/MOJOLEARN_BYTE_LM_GENERIC_OPS.fb12-loser-arms.patch"
     # MOJOLEARN_CNN_GENERIC_OPS: refusal removed 2026-11-15 (restored; owed B arm, see docs/TOMBSTONES.md Restored table)
     # Restore: git apply experiments/removed/MOJOLEARN_EMB_AUTO_SORT_MIN_CELLS.patch
     comptime assert not is_defined["MOJOLEARN_EMB_AUTO_SORT_MIN_CELLS"](), "removed 2026-11-15 (lane/expdel2-23-neural): EMB_AUTO_SORT_MIN_CELLS (arm) is gone; the default path is the only one; code at 2da7f516d6; restore: experiments/removed/MOJOLEARN_EMB_AUTO_SORT_MIN_CELLS.patch"
