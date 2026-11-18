@@ -81,6 +81,14 @@ FLAGS (per recipe; a recipe can carry several)
   PARAMS-DIFF    the explicit parameters our arm read back differ from the paper's (a float that rounds to the same
                  float32 is the same setting: the arms run FP32)
   HW-DIFF        the new board's GPU is not the paper's GPU
+  HARNESS-CLOCK  the new cell and its baseline cell were timed under different harness-clock revisions (the cell's
+                 harness_clock; lane fx-harness 2026-11-18: train-test-split, resample, the model_selection and a few
+                 more lanes stopped copying, casting and reducing their outputs inside the clock, so a stored 0.8.55
+                 cell holds harness work the new one does not). FASTER and SAME are replaced by it (shown, never
+                 counted as a gain); a REGRESSION stays (less harness work and still slower is real)
+  HOST-STALL     the new cell's scored calls spent more than half their wall in system time (host_usage, getrusage:
+                 page faults through direct reclaim or THP compaction, lane fx-harness 2026-11-18); a REGRESSION is
+                 replaced by it (shown, not counted); the worker's NUMA node is shown beside it
   SCORING-MIXED  the new time and an on-box column it is divided by were taken under different small-row rules
                  (tools/bench_board_small_rows.py: one is the median of 20 calls, the other one call, because their
                  first scored calls fell on either side of 10 ms); scoring_mixed names the columns. Shown, the ratio
@@ -1151,6 +1159,48 @@ def attach_box_state(row, new_races, stored_races, new_ds, stored_ds):
     return row
 
 
+HARNESS_CLOCK_REPLACES = ("FASTER", "SAME")
+
+
+def attach_cell_marks(row, new_races, base_races):
+    """Lane fx-harness (2026-11-18): what the new cell recorded about its host and its clock, beside the row.
+    worker_numa (the node the worker ran on and the placement asked), host_usage (the scored calls' system time and
+    faults), and the flags HOST-STALL (system time above half the wall: a REGRESSION becomes HOST-STALL) and
+    HARNESS-CLOCK (the baseline cell was timed under another harness-clock revision: FASTER / SAME become
+    HARNESS-CLOCK, a REGRESSION stays)."""
+    rid = row.get("race_id")
+    nr, br = (new_races or {}).get(rid), (base_races or {}).get(rid)
+    nc = find_cell(nr, row["phase"], row["arm"], row.get("batch")) if nr else None
+    if nc is None:
+        return row
+    bc = find_cell(br, row["phase"], row["arm"], row.get("batch")) if br else None
+    wn = nc.get("worker_numa")
+    if isinstance(wn, dict):
+        pl = wn.get("placement") or {}
+        row["worker_numa"] = {"node_now": wn.get("node_now"), "cpu_nodes": wn.get("cpu_nodes"),
+                              "mems_allowed": wn.get("mems_allowed"), "bound_node": pl.get("node"),
+                              "mem": pl.get("mem"), "why": pl.get("why")}
+    use = nc.get("host_usage")
+    if isinstance(use, dict):
+        row["host_usage"] = {k: use.get(k) for k in ("stime_fraction", "stime_ms", "wall_ms", "minflt", "majflt",
+                                                     "calls")}
+    if nc.get("host_stall"):
+        had = "REGRESSION" in row["flags"]
+        row["flags"] = [f for f in row["flags"] if f != "REGRESSION"] + ["HOST-STALL"]
+        row["host_stall_replaced"] = "REGRESSION" if had else None
+    if bc is not None and (nc.get("harness_clock") or None) != (bc.get("harness_clock") or None):
+        row["harness_clock"] = {"new": nc.get("harness_clock"), "baseline": bc.get("harness_clock")}
+        replaced = [f for f in row["flags"] if f in HARNESS_CLOCK_REPLACES]
+        row["flags"] = [f for f in row["flags"] if f not in HARNESS_CLOCK_REPLACES] + ["HARNESS-CLOCK"]
+        row["harness_clock"]["replaced"] = replaced or None
+    return row
+
+
+def marked_rows(res, flag):
+    """Every recipe, extra and internal row carrying FLAG."""
+    return [r for k in ("rows", "extra_rows", "internal_rows") for r in res.get(k) or [] if flag in r["flags"]]
+
+
 def probe_text(p):
     if not p:
         return "-"
@@ -1223,6 +1273,12 @@ def compare(doc, boards, not_run_why=None, prior_boards=None, reference=None, re
         box_state = lambda r: attach_box_state(r, races, base["races"], nds, sds)  # noqa: E731
         rows = [box_state(r) for r in rows]
         internal = [box_state(r) for r in internal]
+    if base is not None:
+        # HOST-STALL and HARNESS-CLOCK (lane fx-harness, 2026-11-18): from the new cell's own record, against the
+        # baseline cell (on-box or stored)
+        marks = lambda r: attach_cell_marks(r, races, base["races"])  # noqa: E731
+        rows = [marks(r) for r in rows]
+        internal = [marks(r) for r in internal]
     internal_counts = {}
     for r in internal:
         for f in r["flags"]:
@@ -1245,6 +1301,8 @@ def compare(doc, boards, not_run_why=None, prior_boards=None, reference=None, re
             extra = [attach_extra_priors(r, base, others, flagged, verified) for r in extra]
         if box_state is not None:
             extra = [box_state(r) for r in extra]
+        if base is not None:
+            extra = [attach_cell_marks(r, races, base["races"]) for r in extra]
         for r in extra:
             for f in r["flags"]:
                 extra_counts[f] = extra_counts.get(f, 0) + 1
@@ -1596,7 +1654,21 @@ def render_summary(res, top=8):
         out += ["  %s %s; probe %s" % (fmt_ratio(r.get("ratio") if r.get("ratio") is not None else
                                                  ((r.get("priors") or {}).get(res["paper_version"]) or {}).get("ratio")),
                                        r["key"], probe_text(r.get("upload_probe"))) for r in bs[:top]]
-    timed_rows = [r for r in rows if number(r.get("ratio")) and "BOX-STATE" not in r["flags"]]
+    for flag, what in (("HARNESS-CLOCK", "timed under another harness-clock revision than the baseline; FASTER and "
+                                         "SAME not counted"),
+                       ("HOST-STALL", "system time above half the wall in the scored calls; not counted as "
+                                      "REGRESSION")):
+        marked = marked_rows(res, flag)
+        if marked:
+            out.append("%s %d rows (%s)" % (flag, len(marked), what))
+            out += ["  %s %s%s%s" % (fmt_ratio(r.get("ratio")), r["key"],
+                                     "; sys %.0f%% of wall, %s minor faults" % (
+                                         100 * (r["host_usage"].get("stime_fraction") or 0),
+                                         r["host_usage"].get("minflt")) if r.get("host_usage") else "",
+                                     "; worker node %s" % (r.get("worker_numa") or {}).get("node_now")
+                                     if r.get("worker_numa") else "") for r in marked[:top]]
+    timed_rows = [r for r in rows if number(r.get("ratio")) and "BOX-STATE" not in r["flags"]
+                  and "HARNESS-CLOCK" not in r["flags"] and "HOST-STALL" not in r["flags"]]
     if timed_rows:
         rs = sorted(r["ratio"] for r in timed_rows)
         geo = 1.0
