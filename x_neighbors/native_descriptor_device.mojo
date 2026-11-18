@@ -12,10 +12,6 @@ from x_neighbors.device_ops import op_sqdist, op_nan_sqdist, op_l1dist, op_kerne
 from x_neighbors.iter_device import op_nc_stats, op_lp_knn_graph, op_lp_knn_product, op_lp_iterate, op_pr_iterate_sparse, op_pcs_resident, op_knn_sq_tiled, op_knn_impute_tiled, op_cc_iterate, op_cc_iterate_csr, op_nan_cells, op_kpca_transform, op_kernel_matmul, op_svgp_fit_ff, op_svgp_predict, op_lp_iterate_knn
 from x_neighbors.ocsvm_dev import op_ocsvm
 from x_neighbors.graph_dev import op_louvain, op_pr_csr, op_louvain_csr
-from x_neighbors.ocsvm_dev import OCSVM_CLS2_RES
-from x_neighbors.ocsvm_dev import OCSVM_IDN_RES
-from x_neighbors.ocsvm_init import XN_OCSVM_DEV_INIT
-from x_neighbors.kfeat_dev import XN_FAST_SCHI2_LAZYW, XN_KFEAT_ANY
 
 
 def _a(v: List[Int], k: Int) raises -> Int:

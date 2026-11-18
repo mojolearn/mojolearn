@@ -52,11 +52,18 @@ def test_exports_registered_on_both_bindings_and_listed():
 
 def test_fused_doors_keep_the_op_chain_fallback():
     ocsvm = _read('bindings/svc_ocsvm_native_door.mojo')
-    assert '_ocsvm_labels_available(binding)' in ocsvm and '"p2m_sign_label"' in ocsvm
+    # The fused labels route is taken only when the entry exists; otherwise the kernel-product
+    # chain runs (typed driver calls since the door moved off named xn_* lookups).
+    fused = ocsvm.index('if labels and _ocsvm_labels_available(binding):')
+    assert fused < ocsvm.index('oc_kernel_product(driver,', fused)
     local = _read('bindings/neighbors_local_native_door.mojo')
-    assert '_nc_fused_available(binding)' in local and '"row_argmax"' in local and '"knn_select"' in local
+    # NearestCentroid: the fused label kernel when the connection has it, the distance/score
+    # label chain otherwise (typed requests on the connected driver).
+    assert 'var fused = nc_fused(connection.fused, rows)' in local
+    assert 'request.distance_labels(connection.driver, code_address, euclidean)' in local
+    assert 'inputs.request.score_labels(connection.driver, code_address)' in local
     semi = _read('bindings/neighbors_semi_native_door.mojo')
-    assert '_lp_dense_available(binding)' in semi and '"row_normalize"' in semi
+    assert '_lp_dense_available(binding)' in semi and 'xn_semi_row_normalize_request(' in semi
     cluster = _read('bindings/mcls_cluster_door.mojo')
     assert '"homogeneity_completeness_v_measure", False' in cluster and '"v_measure_score"' in cluster
     for path in ('bindings/_mojolearn_metrics.mojo', 'bindings/_mojolearn_metrics_host.mojo'):
@@ -65,7 +72,7 @@ def test_fused_doors_keep_the_op_chain_fallback():
 
 def test_v_measure_has_one_composer():
     for path in ('metrics/impl/stats/detail/v_measure.mojo', 'metrics/host/metrics_oracle.mojo',
-                 'metrics/estimator.mojo', 'bindings/_mojolearn_metrics_host.mojo'):
+                 'metrics/estimator.mojo', 'metrics/mojolearn_metrics_host_run.mojo'):  # host RUN moved, 80710606b8
         text = _read(path)
         assert 'v_measure_from' in text, path
         assert '(1.0 + beta) *' not in text, path
