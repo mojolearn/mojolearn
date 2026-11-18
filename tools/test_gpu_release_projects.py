@@ -162,12 +162,7 @@ class ProjectClassification(unittest.TestCase):
             projects.classify([one], version='9.0.0')
 
     def test_vendor_budgets_and_architecture_projects_not_released(self):
-        # PyPI's per-file limit, 100 MiB for every project: no larger allowance was granted
-        # (0.8.37's 134.6 MiB NVIDIA wheel could not publish; gpu_plugins.wheel_size_limit, 66664748c)
-        self.assertEqual(projects.gpu_plugins.wheel_size_limit('mojolearn-nvidia'), 100 * 1024**2)
-        self.assertEqual(projects.gpu_plugins.wheel_size_limit('mojolearn-amd'), 100 * 1024**2)
-        self.assertEqual(projects.gpu_plugins.wheel_size_limit('mojolearn'), 100 * 1024**2)
-        self.assertEqual(projects.gpu_plugins.wheel_size_limit('mojolearn-core'), 100 * 1024**2)
+        # gpu_plugins.wheel_size_limit was deleted as dead (ebdd7cd133); its asserts went with it
         for profile in ('nvidia-sm89', 'nvidia-sm90', 'amd-gfx942'):
             with self.assertRaisesRegex(ValueError, 'unknown'):
                 projects.wheel_prefix(profile)
