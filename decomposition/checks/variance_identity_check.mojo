@@ -10,6 +10,7 @@ from decomposition.estimator import _column_variance
 from decomposition.host.pca_oracle import host_column_variance
 from decomposition.mean_switch import IDN_DECOMP_MEAN_LAUNCH
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+from checks.native_tests.kit import download_whole_into, upload_whole_into
 
 
 def check(ctx: DeviceContext, rows: Int, cols: Int, mut digest: UInt64) raises:
@@ -21,10 +22,9 @@ def check(ctx: DeviceContext, rows: Int, cols: Int, mut digest: UInt64) raises:
     var means = ctx.enqueue_create_buffer[DType.float32](cols)
     var output = ctx.enqueue_create_buffer[DType.float32](cols)
     var actual = List[Float32](length=cols, fill=0.0)
-    ctx.enqueue_copy(dst_buf=matrix, src_ptr=values.unsafe_ptr())
+    upload_whole_into[DType.float32](ctx, matrix, values)
     _column_variance(ctx, matrix, means, output, rows, cols)
-    _ = values^  # past the drain: a queued copy reads it after its last named use
-    ctx.enqueue_copy(dst_ptr=actual.unsafe_ptr(), src_buf=output)
+    download_whole_into[DType.float32](ctx, output, actual)
     ctx.synchronize()
     for i in range(cols):
         var got = bitcast[DType.uint32](actual[i])

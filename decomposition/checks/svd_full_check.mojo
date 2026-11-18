@@ -89,6 +89,7 @@ from decomposition.impl.linalg.detail.svd_full import (
     pca_full_validate,
     svd_of_r,
 )
+from checks.native_tests.kit import download_host_into, upload_host_into
 
 
 comptime _IDENTICAL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
@@ -166,16 +167,15 @@ def _upload(
     var h = ctx.enqueue_create_host_buffer[DType.float32](len(xs))
     for i in range(len(xs)):
         h.unsafe_ptr().unsafe_store(i, xs[i])
-    ctx.enqueue_copy(dst_buf=buf, src_ptr=h.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, buf, h)
     ctx.synchronize()
-    _ = h^  # past the drain: a queued copy reads it after its last named use
 
 
 def _download(
     ctx: DeviceContext, mut buf: DeviceBuffer[DType.float32], count: Int
 ) raises -> List[Float32]:
     var h = ctx.enqueue_create_host_buffer[DType.float32](count)
-    ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=buf)
+    download_host_into[DType.float32](ctx, buf, h)
     ctx.synchronize()
     var out = List[Float32]()
     for i in range(count):
@@ -988,7 +988,7 @@ def check_full_survives_a_constant_column() raises:
         ctx, x, scratch, rb, ib, SVD_ROWS, SVD_COLS, SVD_SAB_QR_RANK_TEST, 1
     )
     var hi = ctx.enqueue_create_host_buffer[DType.int32](1)
-    ctx.enqueue_copy(dst_ptr=hi.unsafe_ptr(), src_buf=ib)
+    download_host_into[DType.int32](ctx, ib, hi)
     ctx.synchronize()
     var info0 = hi.unsafe_ptr().unsafe_load(0)
     print(
