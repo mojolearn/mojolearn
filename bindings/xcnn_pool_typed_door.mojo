@@ -77,7 +77,7 @@ from core.xcnn_entry_table import (
 from bindings.py_cpython_table import CPythonTable, cpython_table
 from bindings.py_balanced import py_call, py_type, py_get, py_contains
 from bindings.native_loaded_module_door import (
-    NativeModules, native_loaded_module, SharedDictWatch, SHARED_DICT_WATCH, shared_dict_watcher, shared_dict_watch,
+    NativeModules, SharedDictWatch, SHARED_DICT_WATCH, shared_dict_watcher, shared_dict_watch,
 )
 from bindings.native_class_admission_door import class_record
 from bindings.native_class_admission_run import ClassWatch, CLASS_WATCH
@@ -327,12 +327,28 @@ def _typed_context_fill(s: UnsafePointer[XcnnTyped, MutUntrackedOrigin], context
     are on record; without them there is no typed context."""
     s[].ctx_ok = False
     if len(s[].names) == 0:
-        # interned once: attribute lookups by these names use CPython's
-        # type-attribute cache, and no str is built per call
-        var intern = native_loaded_module("sys").intern
-        var literals: List[String] = ["b", "shape", "h", "_host", "_base", "_DEFAULT_MODE"]
-        for i in range(len(literals)):  # driver-loop: over the fixed slot and field names, once per process
-            s[].names.append(py_call(intern, PythonObject(literals[i])))
+        # The slot names as the str objects the bridge connected (the keys of
+        # `xcnn_tensor_slots`: the layer module's own interned constants), so
+        # attribute lookups by them use CPython's type-attribute cache and no
+        # str is built per call. Kept for the process once found.
+        var slots = py_get(context, "xcnn_tensor_slots")
+        if slots is None or py_type(slots) is not b.dict:
+            return False
+        var keys = py_call(b.list, slots)
+        var literals: List[String] = ["b", "shape", "h", "_host", "_base"]
+        var names = List[PythonObject]()
+        for i in range(len(literals)):  # driver-loop: over the five fixed slot names, once per process
+            var found = False
+            for j in range(len(keys)):  # driver-loop: over the five connected slot names, once per process
+                var key = keys[j]
+                if py_type(key) is b.str and String(py=key) == literals[i]:
+                    names.append(key)
+                    found = True
+                    break
+            if not found:
+                return False
+        names.append(PythonObject("_DEFAULT_MODE"))
+        s[].names = names^
     if len(s[].ops) == 0:
         for i in range(4):  # driver-loop: over the four typed operations, once per process
             s[].ops.append(PythonObject(None))
