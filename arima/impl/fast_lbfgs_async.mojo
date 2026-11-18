@@ -2,8 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The per-series batched ARIMA L-BFGS (`batched_fit.mojo::batched_min_lbfgs`
 takes it whenever the fit holds the stacked evaluation workspace: FAST on
-Apple, IDENTICAL on every vendor within `IDN_EVAL_WS_MAX_CELLS`; and
-everywhere under `-D MOJOLEARN_ARIMA_ASYNC_ALL`). lane/apple-fast-gap-arima
+Apple, IDENTICAL on every vendor within `IDN_EVAL_WS_MAX_CELLS`). lane/apple-fast-gap-arima
 2026-10-03 wrote it as the FAST-on-Apple ARIMA_FAST_ASYNC; lane
 n10-dictl-arima-loops 2026-11-09 let it take the sequential evaluation too and
 deleted the lock-step loop; lane r2-restore-unmeasured-defaults 2026-11-09
@@ -35,7 +34,6 @@ in `ist` (field-major, `ist[f * bs + b]`), the per-series floats in `fst`.
 from std.atomic import Atomic
 from max.gpu import block_dim, block_idx, thread_idx
 from std.math import isinf, isnan
-from std.sys.compile import is_defined
 
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from std.memory import unsafe_memcpy
@@ -83,16 +81,10 @@ from glm.impl.qn.qn_util import (
 # IDENTICAL above IDN_EVAL_WS_MAX_CELLS); the per-series solver there was never
 # measured. The `_OFF` defines stay removed (the per-series default where it
 # was measured is unchanged).
-#: A/B switch, default off (lane r2-restore-unmeasured-defaults, 2026-11-09):
-#: `-D MOJOLEARN_ARIMA_ASYNC_ALL=1` runs this solver on every route, the
-#: sequential evaluation included (`eval_batch.mojo::arima_eval`), in place
-#: of the lock-step solver where the fit holds no evaluation workspace. Same
-#: per-series bits by construction (module banner). RUN OWED: NVIDIA + AMD
-#: autoarima rows, FAST and IDENTICAL, B = this define.
 # TOMBSTONE: MOJOLEARN_ARIMA_ASYNC_ALL (opt-in A/B arm, RUN OWED and never run) deleted 2026-11-15 by lane/expdel2-37-series; code recoverable at b3b95c7aa8.
 # Restore: git apply experiments/removed/MOJOLEARN_ARIMA_ASYNC_ALL.patch; record in docs/TOMBSTONES.md.
-# RESTORED 2026-11-15 by lane/expdel2-restore-owed: owed B arm (owed-pre0867.json), under four weeks old; the deletion was premature.
-comptime ARIMA_ASYNC_ALL = is_defined["MOJOLEARN_ARIMA_ASYNC_ALL"]()
+# TOMBSTONE: MOJOLEARN_ARIMA_ASYNC_ALL (decided B arm, L40S ba08dac006 arima synthetic fit 52.54 -> 54.52 ms, B 1.04x, no gain) deleted 2026-11-17 by lane/fb12-loser-arms; code recoverable at 2203db7094.
+# Restore: git apply experiments/removed/MOJOLEARN_ARIMA_ASYNC_ALL.fb12-loser-arms.patch; record in docs/TOMBSTONES.md.
 #: evaluations between two reads of the "any series still running" word;
 #: the rounds after the last series stops propose current points and change
 #: nothing.
@@ -376,7 +368,7 @@ def async_min_lbfgs(
 ) raises -> AsyncLBFGSOut:
     """`batched_min_lbfgs` with every series on its own schedule (module
     banner). `batched_min_lbfgs` takes it when the fit holds the stacked
-    evaluation workspace, and on every route under ARIMA_ASYNC_ALL. The body
+    evaluation workspace. The body
     per round is one batched evaluation (`eval_batch.mojo::arima_eval`: the
     held stacked workspace `ews` when the fit has one, else the sequential
     evaluation over `d_y_kf` / `d_exog_kf`; same bits) and

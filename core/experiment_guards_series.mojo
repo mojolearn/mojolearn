@@ -87,7 +87,8 @@ def _check_configuration() -> Bool:
     # MOJOLEARN_AFCL_P10: refusal removed 2026-11-15 (restored by lane/restore-apple-fast-classical: Apple fast paused, not abandoned; opt-in, default off; see docs/TOMBSTONES.md Restored table)
     # MOJOLEARN_AFCL_P12: refusal removed 2026-11-15 (restored by lane/restore-apple-fast-classical: Apple fast paused, not abandoned; opt-in, default off; see docs/TOMBSTONES.md Restored table)
     # MOJOLEARN_AFCL_P14: refusal removed 2026-11-15 (restored by lane/restore-apple-fast-classical: Apple fast paused, not abandoned; opt-in, default off; see docs/TOMBSTONES.md Restored table)
-    # MOJOLEARN_ARIMA_ASYNC_ALL: refusal removed 2026-11-15 (restored; owed B arm, see docs/TOMBSTONES.md Restored table)
+    # Restore: git apply experiments/removed/MOJOLEARN_ARIMA_ASYNC_ALL.fb12-loser-arms.patch
+    comptime assert not is_defined["MOJOLEARN_ARIMA_ASYNC_ALL"](), "removed 2026-11-17 (lane/fb12-loser-arms): ARIMA_ASYNC_ALL (decided B arm, per-series L-BFGS on every route; L40S ba08dac006 B 1.04x, no gain) is gone; the default path is the only one; code recoverable at 2203db7094; restore: experiments/removed/MOJOLEARN_ARIMA_ASYNC_ALL.fb12-loser-arms.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_ARIMA_FAST_BATCH_GRAD_OFF.patch
     comptime assert not is_defined["MOJOLEARN_ARIMA_FAST_BATCH_GRAD_OFF"](), "removed 2026-11-15 (lane/expdel2-37-series): ARIMA_FAST_BATCH_GRAD_OFF (old path, Time series (ARIMA stacked gradient, Apple FAST); no A/B recorded) is gone; the default is kept; code recoverable at b22c6673d4; restore: experiments/removed/MOJOLEARN_ARIMA_FAST_BATCH_GRAD_OFF.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_ARIMA_FAST_CONST_BOTH.patch
