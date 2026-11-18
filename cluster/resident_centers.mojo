@@ -41,8 +41,7 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 from core.neural_context import process_ctx, neural_device_plan
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from cluster.estimator import kmeans_predict_device, kmeans_transform_device
-from core.device_zero import enqueue_fill
-from core.admitted_finite_status import enqueue_finite_status
+from core.admitted_finite_status import enqueue_finite_word
 from core.shared_slot import SharedSlot
 
 comptime _DEVCTX_SLOT = "MojolearnCoreContextIdenticalV3" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnCoreContextFastV3"
@@ -291,8 +290,7 @@ def kmeans_predict_resident(
     var status = view.ctx.enqueue_create_buffer[DType.int32](1)
     var word = view.ctx.enqueue_create_host_buffer[DType.int32](1)
     if finite_word != 0:
-        enqueue_fill[DType.int32](view.ctx, status, Int32(0))
-        enqueue_finite_status(view.ctx, x.unsafe_ptr(), n_samples * n_features, status.unsafe_ptr(), 0)
+        enqueue_finite_word(view.ctx, x.unsafe_ptr(), n_samples * n_features, status, 0)
         view.ctx.enqueue_copy(dst_ptr=word.unsafe_ptr(), src_buf=status)
     kmeans_predict_device(
         view.ctx, x, n_samples, n_features, n_clusters, view.centers, labels, metric
@@ -333,8 +331,7 @@ def kmeans_transform_resident(
     var status = view.ctx.enqueue_create_buffer[DType.int32](1)
     var word = view.ctx.enqueue_create_host_buffer[DType.int32](1)
     if finite_word != 0:
-        enqueue_fill[DType.int32](view.ctx, status, Int32(0))
-        enqueue_finite_status(view.ctx, x.unsafe_ptr(), n_samples * n_features, status.unsafe_ptr(), 0)
+        enqueue_finite_word(view.ctx, x.unsafe_ptr(), n_samples * n_features, status, 0)
         view.ctx.enqueue_copy(dst_ptr=word.unsafe_ptr(), src_buf=status)
     # kmeans_transform_device synchronises before it returns.
     kmeans_transform_device(

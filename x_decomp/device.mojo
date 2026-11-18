@@ -177,7 +177,7 @@ from x_decomp.jacobi_par import (
     sym_from_triangle_kernel,
 )
 from core.step_phase import step_count_d2h, step_count_sync
-from core.admitted_finite_status import enqueue_finite_status
+from core.admitted_finite_status import enqueue_finite_word
 from core.device_zero import enqueue_fill
 from x_decomp.eigh_ops import eigh_op_dense
 from decomposition.checks.jacobi_eigh_device import JACOBI_TOL
@@ -4023,9 +4023,8 @@ struct DevExec(Exec):
         # defers X to this entry and refuses in scikit-learn's wording
         # (bindings/admitted_input_run.mojo admitted_finite_entry_refuse).
         var dstat = ctx.enqueue_create_buffer[DType.int32](2)
-        enqueue_fill(ctx, dstat, Int32(0))
-        enqueue_finite_status(ctx, ta.unsafe_ptr(), m * d, dstat.unsafe_ptr(), 0)
-        enqueue_finite_status(ctx, tb.unsafe_ptr(), m, dstat.unsafe_ptr(), 1)
+        enqueue_finite_word(ctx, ta.unsafe_ptr(), m * d, dstat, 0)
+        enqueue_finite_word(ctx, tb.unsafe_ptr(), m, dstat, 1)
         # The words come down with the means below (pageable host words; the
         # factor's final synchronize lands them): no pinned buffer per call.
         var hstat = List[Int32](length=2, fill=0)

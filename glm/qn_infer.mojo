@@ -23,7 +23,7 @@ decision launch is gone: the launch follows the copies on the same stream).
 from max.gpu import block_dim, block_idx, thread_idx
 from std.memory import bitcast
 from max.gpu.host import DeviceBuffer, DeviceContext
-from core.admitted_finite_status import enqueue_finite_status
+from core.admitted_finite_status import enqueue_finite_word
 from glm.impl.qn.qn import qn_decision_function
 from glm.impl.linear_model.qn import QN_LOSS_LOGISTIC, QN_LOSS_SOFTMAX, QNParams
 
@@ -37,12 +37,7 @@ def qn_x_status(
     its next synchronize, which delivers the word."""
     var dstat = ctx.enqueue_create_buffer[DType.int32](1)
     if status != 0:
-        dstat.enqueue_fill(Int32(0))
-        if count > 0:
-            enqueue_finite_status(
-                ctx, x.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutAnyOrigin](), count,
-                dstat.unsafe_ptr(), 0,
-            )
+        enqueue_finite_word(ctx, x.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutAnyOrigin](), count, dstat, 0)
         ctx.enqueue_copy(dst_ptr=MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=status), src_buf=dstat)
     return dstat^
 

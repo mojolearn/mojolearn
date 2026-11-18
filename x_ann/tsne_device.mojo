@@ -14,8 +14,7 @@ from std.atomic import Atomic, Ordering, fence
 from max.gpu import grid_dim
 from checks.kernel_matrix import TARGET_COLUMN, COLUMN_NVIDIA, COLUMN_AMD
 from x_ann.device_ctx import x_ann_ctx
-from core.admitted_finite_status import enqueue_finite_status
-from core.device_zero import enqueue_fill
+from core.admitted_finite_status import enqueue_finite_word
 from core.device_fold import device_sum_f32_fixed
 from x_ann.tsne_sym_device import tsne_symmetrize_device
 from x_ann.stage_timer import AnnStages
@@ -848,8 +847,7 @@ def tsne_fit_device(
     var dstatus = ctx.enqueue_create_buffer[DType.int32](1)
     var hstatus = ctx.enqueue_create_host_buffer[DType.int32](1)
     if finite_word != 0:
-        enqueue_fill[DType.int32](ctx, dstatus, Int32(0))
-        enqueue_finite_status(ctx, dx.unsafe_ptr(), n * d, dstatus.unsafe_ptr(), 0)
+        enqueue_finite_word(ctx, dx.unsafe_ptr(), n * d, dstatus, 0)
         ctx.enqueue_copy(dst_ptr=hstatus.unsafe_ptr(), src_buf=dstatus)
     st.mark(ctx, "upload")
     var dnd = ctx.enqueue_create_buffer[DType.float32](n * nn)

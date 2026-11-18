@@ -126,7 +126,7 @@ from neighbors.impl.multi_gpu import knn_device_count, neighbors_device_plan, pa
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, NUMERIC_FAST
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from std.math import sqrt
-from core.admitted_finite_status import enqueue_finite_status
+from core.admitted_finite_status import enqueue_finite_word
 from core.device_zero import enqueue_fill
 from core.device_query_x import QueryFold
 from core.msel_device_x import msel_device_x_f32
@@ -1167,8 +1167,7 @@ def knn_upload_finite_status(ctx: DeviceContext, mut words: DeviceBuffer[DType.f
     a7b-device-x-neighbors: the k-NN doors admit a borrowed X with no host
     scan and refuse through `admitted_finite_refuse` on this word)."""
     var status = ctx.enqueue_create_buffer[DType.int32](1)
-    enqueue_fill[DType.int32](ctx, status, Int32(0))
-    enqueue_finite_status(ctx, words.unsafe_ptr(), n, status.unsafe_ptr(), 0)
+    enqueue_finite_word(ctx, words.unsafe_ptr(), n, status, 0)
     # perf-neighbors (2026-11-13): the one status word comes back straight
     # into native host memory, as x_linear's `_decision_status` returns its
     # word on every vendor, not through a pinned host buffer allocated and

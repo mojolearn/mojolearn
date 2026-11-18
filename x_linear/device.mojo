@@ -42,7 +42,7 @@ from x_linear.sgd import (
 from checks.numerics import identical_pow
 from experiments.classical_identical_ideas.linear_controls import C13_FOLD_STATS
 from x_linear.finite_device import XLIN_IDN_DEV_FINITE, xlin_finite_device, xlin_finite_host
-from core.admitted_finite_status import enqueue_finite_status
+from core.admitted_finite_status import enqueue_finite_word
 from x_linear.witness import Witness, witness_end, WITNESS_TRIES
 from x_linear.glm_ydom import XLIN_GLM_DEV_YDOM, GLM_YDOM_REFUSED, glm_ydom_bad
 from x_linear.sgd_end import sgd_ys_kernel, sgd_iota_kernel, sgd_perm_kernel, sgd_mb_end_kernel, sgd_mb_res_kernel, sgd_ps_end_kernel, sgd_ps_res_kernel, SGD_END_ST, SGD_END_TPB, SGD_MB_FLAGS, SGD_MB_WORDS
@@ -6112,9 +6112,7 @@ def _decision_status(ctx: DeviceContext, dx: DeviceBuffer[DType.float32], count:
     with the result, one drain per predict)."""
     var dstat = ctx.enqueue_create_buffer[DType.int32](1)
     if status != 0:
-        dstat.enqueue_fill(Int32(0))
-        if count > 0:
-            enqueue_finite_status(ctx, dx.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutAnyOrigin](), count, dstat.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutAnyOrigin](), 0)
+        enqueue_finite_word(ctx, dx.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutAnyOrigin](), count, dstat, 0)
     return dstat^
 
 

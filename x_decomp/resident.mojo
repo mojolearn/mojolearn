@@ -18,12 +18,12 @@ POOL_KEEP_BYTES is released after a sync."""
 from std.sys.compile import is_defined
 from max.gpu.host import DeviceBuffer, DeviceContext
 from core.device_zero import enqueue_fill
-from core.admitted_finite_status import enqueue_finite_status
+from core.admitted_finite_status import enqueue_finite_word
 from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
 from core.device_pool import pool_give, pool_take
 from core.device_scan import device_first_nonfinite
-from core.admitted_finite_status import enqueue_finite_status
+from core.admitted_finite_status import enqueue_finite_word
 
 from x_decomp.cells import F32Ptr, I32Ptr, LARS_ROW_EXTRA, OP_SCALE, OP_SELECT, ew_cell, rand_cell
 from core.philox import philox4x32_10
@@ -313,9 +313,7 @@ def dev_upload_finite_run(i: Int, src: F32Ptr, cnt: Int) raises -> Int:
     var ctx = xd_ctx()
     _up_into(ctx, buffer, src, cnt)
     var status = ctx.enqueue_create_buffer[DType.int32](1)
-    enqueue_fill[DType.int32](ctx, status, Int32(0))
-    if cnt > 0:
-        enqueue_finite_status(ctx, dp, cnt, status.unsafe_ptr(), 0)
+    enqueue_finite_word(ctx, dp, cnt, status, 0)
     var word = ctx.enqueue_create_host_buffer[DType.int32](1)
     ctx.enqueue_copy(dst_ptr=word.unsafe_ptr(), src_buf=status)
     ctx.synchronize()
