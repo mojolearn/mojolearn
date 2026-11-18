@@ -69,35 +69,138 @@ def forced_calls(ours, phase=None, environ=None):
 #: `pip --target` directory holding the `nvtx` package (the measured venvs stay untouched). Unset: no-ops.
 NVTX_RANGE_ENV = "MOJOLEARN_BENCH_NVTX_RANGE"
 NVTX_PATH_ENV = "MOJOLEARN_BENCH_NVTX_PATH"
-_RANGE = []      # the open range's nvtx module (one at most: the extra calls of one scored run)
+#: CALL PROFILE RUNS ONLY (tools/ops/call_profile_job.sh, 2026-11-17). The same window (calls 2..n of a forced scored
+#: run) is also: a JSON line file the window's open and close are appended to (wall clock, calls, pid, libc allocation
+#: counters); a perf control FIFO pair `<ctl>,<ack>` (`perf record -D -1 --control fifo:<ctl>,<ack>`: perf samples
+#: only inside the window); a failed `stat` of a marker path at open and close, which `strace -ttt` records, so the
+#: trace is cut to the window; and the allocation counter library (tools/ops/call_profile_malloc.c, LD_PRELOAD) read
+#: at open and close. PROFILE_SECONDS sizes the forced run by time: the forced phase makes at least
+#: ceil(seconds / first scored call) calls (capped by PROFILE_MAX_CALLS), and the phase that is NOT forced makes one
+#: call, so the window holds the forced phase alone (bench_board_algos interleaves fit and inference calls).
+#: A board never sets any of them.
+PROFILE_WINDOW_ENV = "MOJOLEARN_BENCH_PROFILE_WINDOW"
+PERF_CTL_ENV = "MOJOLEARN_BENCH_PERF_CTL"
+MALLOC_COUNTER_ENV = "MOJOLEARN_BENCH_MALLOC_COUNTER"
+PROFILE_SECONDS_ENV = "MOJOLEARN_BENCH_PROFILE_SECONDS"
+PROFILE_MAX_CALLS_ENV = "MOJOLEARN_BENCH_PROFILE_MAX_CALLS"
+#: the marker paths a window's open and close `stat` (they never exist; strace shows the failed call)
+STRACE_MARK_OPEN = "/callprof-window-open"
+STRACE_MARK_CLOSE = "/callprof-window-close"
+#: the counters tools/ops/call_profile_malloc.c exports through `callprof_counts`, in its order
+MALLOC_FIELDS = ("malloc", "calloc", "realloc", "free", "aligned", "bytes")
+_RANGE = []      # the open window's parts (one window at most: the extra calls of one scored run)
+
+
+def _malloc_counts(env):
+    """{field: count} of the preloaded allocation counter, or None when it is not loaded (no env, no library)."""
+    path = (env.get(MALLOC_COUNTER_ENV) or "").strip()
+    if not path:
+        return None
+    try:
+        import ctypes
+        lib = ctypes.CDLL(path)
+        buf = (ctypes.c_uint64 * len(MALLOC_FIELDS))()
+        lib.callprof_counts(buf, len(MALLOC_FIELDS))
+        return dict(zip(MALLOC_FIELDS, (int(x) for x in buf)))
+    except Exception as exc:                      # noqa: BLE001 -- the report says the counter is missing
+        print("CALLPROF-MALLOC unavailable: %s: %s" % (exc.__class__.__name__, exc), file=sys.stderr, flush=True)
+        return None
+
+
+def _perf_ctl(env, word):
+    """Send `enable`/`disable` to perf's control FIFO and wait (5 s at most) for its ack; True when acked."""
+    spec = (env.get(PERF_CTL_ENV) or "").strip()
+    if not spec or "," not in spec:
+        return False
+    ctl, ack = spec.split(",", 1)
+    try:
+        import select
+        fd = os.open(ctl, os.O_WRONLY | os.O_NONBLOCK)     # ENXIO when perf is not reading it: never blocks
+        try:
+            os.write(fd, (word + "\n").encode())
+        finally:
+            os.close(fd)
+        afd = os.open(ack, os.O_RDONLY | os.O_NONBLOCK)
+        try:
+            ready, _, _ = select.select([afd], [], [], 5.0)
+            return bool(ready) and b"ack" in os.read(afd, 64)
+        finally:
+            os.close(afd)
+    except OSError as exc:
+        print("CALLPROF-PERF %s failed: %s" % (word, exc), file=sys.stderr, flush=True)
+        return False
+
+
+def _mark(path):
+    try:
+        os.stat(path)
+    except OSError:
+        pass
+
+
+def _window_line(env, rec):
+    path = (env.get(PROFILE_WINDOW_ENV) or "").strip()
+    if path:
+        import json
+        with open(path, "a") as fh:
+            fh.write(json.dumps(rec, sort_keys=True) + "\n")
 
 
 def range_open(n_calls, phase=None, environ=None):
-    """Open the attribution profile's NVTX range around the extra calls of a FORCED scored run (calls 2..n), so the
+    """Open the attribution profile's window around the extra calls of a FORCED scored run (calls 2..n), so the
     profiler captures exactly those n - 1 calls and nothing of the data load, the fit before an inference, the
-    warmup or the first call's hashing. Only when NVTX_RANGE_ENV is set, n_calls > 1 and forced_calls applies to this
-    phase; True when a range opened. Outside every clock (the callers open it before the next call's t0)."""
+    warmup or the first call's hashing: the NVTX range (NVTX_RANGE_ENV) and the call profile's window
+    (PROFILE_WINDOW_ENV, PERF_CTL_ENV, the strace markers, MALLOC_COUNTER_ENV). Only when one of them is set,
+    n_calls > 1 and forced_calls applies to this phase; True when a window opened. Outside every clock (the callers
+    open it before the next call's t0)."""
     env = os.environ if environ is None else environ
     name = (env.get(NVTX_RANGE_ENV) or "").strip()
-    if not name or _RANGE or int(n_calls or 1) <= 1 or forced_calls(True, phase, env) is None:
+    window = (env.get(PROFILE_WINDOW_ENV) or "").strip()
+    if not (name or window) or _RANGE or int(n_calls or 1) <= 1 or forced_calls(True, phase, env) is None:
         return False
-    try:
-        path = env.get(NVTX_PATH_ENV)
-        if path and path not in sys.path:
-            sys.path.insert(0, path)
-        import nvtx
-        nvtx.push_range(message=name)
-    except Exception as exc:                      # noqa: BLE001 -- the profile run reports a missing capture
-        print("ATTRIBUTION-NVTX unavailable: %s: %s" % (exc.__class__.__name__, exc), file=sys.stderr, flush=True)
-        return False
-    _RANGE.append(nvtx)
+    parts = {"nvtx": None, "window": None}
+    if name:
+        try:
+            path = env.get(NVTX_PATH_ENV)
+            if path and path not in sys.path:
+                sys.path.insert(0, path)
+            import nvtx
+        except Exception as exc:                      # noqa: BLE001 -- the profile run reports a missing capture
+            print("ATTRIBUTION-NVTX unavailable: %s: %s" % (exc.__class__.__name__, exc), file=sys.stderr, flush=True)
+            if not window:
+                return False
+        else:
+            parts["nvtx"] = nvtx
+    if window:
+        import time
+        perf = _perf_ctl(env, "enable")
+        _mark(STRACE_MARK_OPEN)
+        rec = {"event": "open", "phase": phase, "calls": int(n_calls) - 1, "pid": os.getpid(), "perf": perf,
+               "malloc": _malloc_counts(env)}
+        parts["window"] = (env, rec, time.perf_counter_ns())
+    if parts["nvtx"] is not None:
+        parts["nvtx"].push_range(message=name)
+    _RANGE.append(parts)
     return True
 
 
 def range_close():
-    """Close the range range_open opened (a no-op when none is open)."""
-    if _RANGE:
-        _RANGE.pop().pop_range()
+    """Close the window range_open opened (a no-op when none is open)."""
+    if not _RANGE:
+        return
+    parts = _RANGE.pop()
+    if parts["nvtx"] is not None:
+        parts["nvtx"].pop_range()
+    if parts["window"] is not None:
+        import time
+        env, rec, t0 = parts["window"]
+        wall_ns = time.perf_counter_ns() - t0
+        _mark(STRACE_MARK_CLOSE)
+        perf = _perf_ctl(env, "disable")
+        end = {"event": "close", "phase": rec["phase"], "calls": rec["calls"], "pid": rec["pid"], "wall_ns": wall_ns,
+               "perf": perf, "malloc": _malloc_counts(env)}
+        _window_line(env, rec)
+        _window_line(env, end)
 
 
 def fit_warmup_skipped(environ=None):
@@ -109,6 +212,22 @@ def fit_warmup_skipped(environ=None):
         (env.get(FORCE_CALLS_PHASE_ENV) or "").strip().startswith("infer")
 
 
+def profile_calls(forced, first_ms, environ=None):
+    """A forced run's call count: `forced`, raised in a call profile run (PROFILE_SECONDS_ENV) to the calls that fill
+    that many seconds at the first scored call's time, capped by PROFILE_MAX_CALLS_ENV (default 100000)."""
+    env = os.environ if environ is None else environ
+    raw = (env.get(PROFILE_SECONDS_ENV) or "").strip()
+    try:
+        secs = float(raw) if raw else 0.0
+        ms = float(first_ms) if first_ms is not None and not isinstance(first_ms, bool) else 0.0
+        cap = int((env.get(PROFILE_MAX_CALLS_ENV) or "100000").strip())
+    except ValueError:
+        return forced
+    if not (secs > 0 and math.isfinite(secs) and ms > 0 and math.isfinite(ms)):
+        return forced
+    return max(forced, min(cap, int(math.ceil(secs * 1000.0 / ms)) + 1))
+
+
 def calls_for(first_ms, ours, phase=None):
     """The calls the one scored run makes in all, given its FIRST scored call's time (taken after the
     excluded warmup): SMALL_ROW_CALLS for OUR arm when that call took under SMALL_ROW_MS, else 1 (an
@@ -116,7 +235,9 @@ def calls_for(first_ms, ours, phase=None):
     `phase` (`fit`, `infer/<batch>`) only matters to an attribution run's forced count (forced_calls)."""
     forced = forced_calls(ours, phase)
     if forced is not None:
-        return forced
+        return profile_calls(forced, first_ms)
+    if ours and (os.environ.get(PROFILE_WINDOW_ENV) or "").strip() and (os.environ.get(FORCE_CALLS_ENV) or "").strip():
+        return 1        # a call profile run: the phase it does not profile makes one call (the window holds one phase)
     if not ours or first_ms is None or isinstance(first_ms, bool):
         return 1
     try:

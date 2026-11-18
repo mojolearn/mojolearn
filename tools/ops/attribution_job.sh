@@ -153,44 +153,7 @@ for n in ("mojolearn-core", "mojolearn"):
 done
 
 # ---- tools (CPU, all at once): nsys, ncu, the nvtx package per arm, py-spy --------------------------------------
-find_tool() {   # name: the first executable of that name on PATH or in the usual NVIDIA install dirs
-    local c
-    for c in "$(command -v "$1" 2> /dev/null)" /usr/local/cuda/bin/"$1" /opt/nvidia/nsight-systems/*/bin/"$1" \
-            /opt/nvidia/nsight-compute/*/"$1" /usr/local/cuda/nsight-systems-*/bin/"$1" /usr/local/cuda/nsight-compute-*/"$1" \
-            /usr/lib/nsight-systems/bin/"$1" /usr/lib/nsight-compute/"$1"; do
-        [ -n "$c" ] && [ -x "$c" ] && { echo "$c"; return 0; }
-    done
-    return 1
-}
-apt_install_first() {   # log, package patterns...: install the first that apt knows (exact name, else the newest match)
-    local log=$1 p name; shift
-    for p in "$@"; do
-        if [[ "$p" == *'*'* ]]; then
-            name=$(apt-cache search --names-only "^${p//\*/.*}\$" 2> /dev/null | cut -d' ' -f1 | sort -V | tail -n 1)
-        else name=$p; fi
-        [ -n "$name" ] || continue
-        DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends "$name" >> "$log" 2>&1 && { echo "$name"; return 0; }
-    done
-    return 1
-}
-install_nsight() {   # nsys and ncu by apt when the pod has neither; the CUDA keyring/repository added when apt knows none
-    local log="$RES/logs/apt-nsight.log" distro got
-    if find_tool nsys > /dev/null && find_tool ncu > /dev/null; then return 0; fi
-    DEBIAN_FRONTEND=noninteractive apt-get update -qq >> "$log" 2>&1
-    if ! apt-cache policy 2> /dev/null | grep -q developer.download.nvidia.com; then
-        distro=$(. /etc/os-release 2> /dev/null; echo "ubuntu${VERSION_ID//./}")
-        curl -fsSL -o /root/cuda-keyring.deb \
-            "https://developer.download.nvidia.com/compute/cuda/repos/$distro/x86_64/cuda-keyring_1.1-1_all.deb" >> "$log" 2>&1 \
-            && dpkg -i /root/cuda-keyring.deb >> "$log" 2>&1 && DEBIAN_FRONTEND=noninteractive apt-get update -qq >> "$log" 2>&1
-    fi
-    if ! find_tool nsys > /dev/null; then
-        got=$(apt_install_first "$log" nsight-systems-cli 'nsight-systems-[0-9]*' 'cuda-nsight-systems-*') && echo "nsys apt $got" >> "$J/tools-how.txt"
-    fi
-    if ! find_tool ncu > /dev/null; then
-        got=$(apt_install_first "$log" 'nsight-compute-[0-9]*' 'cuda-nsight-compute-*') && echo "ncu apt $got" >> "$J/tools-how.txt"
-    fi
-    return 0
-}
+# find_tool, apt_install_first, install_nsight: tools/ops/box_job_lib.sh (shared with tools/ops/call_profile_job.sh)
 NSYS=; NCU=; PYSPY=
 if part tools; then
     phase tools
