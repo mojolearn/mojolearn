@@ -174,7 +174,7 @@ from x_decomp.jacobi_par import (
     sym_from_triangle_kernel,
 )
 from core.step_phase import step_count_d2h, step_count_sync
-from core.admitted_finite_status import enqueue_finite_word
+from core.admitted_finite_status import ADMIT_FAST_FINITE_VERDICT, enqueue_finite_status, enqueue_finite_word
 from core.device_zero import enqueue_fill
 from x_decomp.eigh_ops import eigh_op_dense
 from decomposition.checks.jacobi_eigh_device import JACOBI_TOL
@@ -3978,8 +3978,20 @@ struct DevExec(Exec):
         # defers X to this entry and refuses in scikit-learn's wording
         # (bindings/admitted_input_run.mojo admitted_finite_entry_refuse).
         var dstat = ctx.enqueue_create_buffer[DType.int32](2)
-        enqueue_finite_word(ctx, ta.unsafe_ptr(), m * d, dstat, 0)
-        enqueue_finite_word(ctx, tb.unsafe_ptr(), m, dstat, 1)
+        # lane fb16-audit (2026-11-18): ONE fill of both words, then the two
+        # tests (the d652a4b0a1 form). `enqueue_finite_word` fills its own
+        # word, so two calls cost two fills here, one launch more per fit
+        # than before. Under MOJOLEARN_ADMIT_FAST_FINITE_VERDICT each word is
+        # one single-block launch with no fill, so the helper stays there.
+        comptime if ADMIT_FAST_FINITE_VERDICT:
+            enqueue_finite_word(ctx, ta.unsafe_ptr(), m * d, dstat, 0)
+            enqueue_finite_word(ctx, tb.unsafe_ptr(), m, dstat, 1)
+        else:
+            enqueue_fill(ctx, dstat, Int32(0))
+            if m * d > 0:
+                enqueue_finite_status(ctx, ta.unsafe_ptr(), m * d, dstat.unsafe_ptr(), 0)
+            if m > 0:
+                enqueue_finite_status(ctx, tb.unsafe_ptr(), m, dstat.unsafe_ptr(), 1)
         # The words come down with the means below (pageable host words; the
         # factor's final synchronize lands them): no pinned buffer per call.
         var hstat = List[Int32](length=2, fill=0)
