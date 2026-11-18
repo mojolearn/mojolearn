@@ -661,16 +661,24 @@ def linear_forward_m_run(a: List[Int], d: Int, p: List[Int]) raises -> Int:
 
 
 def batchnorm_forward_m_run(h: List[Int], d0: Int, p: List[Int]) raises -> Int:
-    """h = [x, y, running, aux] (the host entry's order); params = [N, C, HW, training]."""
+    """h = [x, y, running, aux] (the host entry's order), optionally a fifth
+    word: a host aux block uploaded into the resident aux first (lane
+    fb15-sync-counts; 0 = none); params = [N, C, HW, training]."""
     var prm = _bn_prm(p)
     var training = p[3] != 0
     if training and Int(prm[0]) * Int(prm[2]) < 2:
         raise Error("x_cnn batchnorm: expected more than 1 value per channel when training")
-    _addrs(h, 4)
+    var aux_src = 0
+    if len(h) == 5:
+        aux_src = h[4]
+        if aux_src != 0 and ((d0 >> 3) & 1) == 0:
+            raise Error("x_cnn batchnorm: a host aux source needs a resident aux")
+    else:
+        _addrs(h, 4)
     var a: List[Int] = [h[0], h[2], h[3], h[1]]
     # host order bits (x, y, running, aux) to the body's (x, running, aux, y)
     var d = (d0 & 1) | (((d0 >> 2) & 1) << 1) | (((d0 >> 3) & 1) << 2) | (((d0 >> 1) & 1) << 3)
-    batchnorm_forward_m(a, d, prm, training)
+    batchnorm_forward_m(a, d, prm, training, aux_src)
     return Int(prm[0]) * Int(prm[1]) * Int(prm[2])
 
 

@@ -1806,9 +1806,11 @@ def bn_gs_chunk_kernel[MODE: Int](x: FP, g: FP, aux: FP, part: FP, p: IP):
             part.unsafe_store(C * bn_gs_chunks(N * HW) + t, sh1[0])
 
 
-def batchnorm_forward_m(a: List[Int], dev: Int, prm: List[Int32], training: Bool) raises:
+def batchnorm_forward_m(a: List[Int], dev: Int, prm: List[Int32], training: Bool, aux_src: Int = 0) raises:
     """a = [x, running (2C, in place), aux (2 + 7C, in place: the statistics
-    the backward reads), y]."""
+    the backward reads), y]. `aux_src` (lane fb15-sync-counts): a host aux
+    block copied into the RESIDENT aux on this entry's stream before the
+    launches (0: none), in place of a separate upload entry and its wait."""
     var C = Int(prm[1])
     var total = Int(prm[0]) * C * Int(prm[2])
     var nr = 2 * C
@@ -1819,6 +1821,8 @@ def batchnorm_forward_m(a: List[Int], dev: Int, prm: List[Int32], training: Bool
     var dx = m_in(ctx, 0, a[0], total, isdev(dev, 0))
     var dr = m_in(ctx, 1, a[1], nr, isdev(dev, 1))
     var da = m_in(ctx, 2, a[2], na, isdev(dev, 2))
+    if aux_src != 0 and isdev(dev, 2):
+        ctx.enqueue_copy(dst_buf=da, src_ptr=FP(unsafe_from_address=aux_src))
     var dp = put_prm(ctx, 3, prm)
     var dout = m_out(ctx, 4, a[3], total, isdev(dev, 3))
     # lane idn-loss-norm-folds: the blocked folds' partials (x_cnn/ops.mojo

@@ -109,10 +109,12 @@ def bn_run_forward(entry: EntryRef, x: Int, y: Int, running: Int, aux: Int, n: I
 
 
 def bn_run_forward_m(entry: EntryRef, x: Int, y: Int, running: Int, aux: Int, dev: Int, n: Int, c: Int,
-                     hw: Int, batch_stats: Bool) raises:
+                     hw: Int, batch_stats: Bool, aux_src: Int) raises:
     """The mixed-residency forward entry; `dev` is the residency word (1 x
-    resident, 2 y resident, 4 running resident, 8 aux resident)."""
-    var req_addrs: Array[Int, 4] = [x, y, running, aux]
+    resident, 2 y resident, 4 running resident, 8 aux resident). `aux_src`:
+    a host aux block the entry copies into the resident aux before its
+    launches (0: none; lane fb15-sync-counts)."""
+    var req_addrs: Array[Int, 5] = [x, y, running, aux, aux_src]
     var req_words: Array[Int, 5] = [dev, n, c, hw, 1 if batch_stats else 0]
     _ = xcnn_run_fixed2(entry, XC_BATCHNORM_FORWARD_M, req_addrs, req_words)
 

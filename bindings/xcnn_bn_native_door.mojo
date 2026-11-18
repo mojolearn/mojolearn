@@ -202,7 +202,10 @@ def _forward_res(layer: PythonObject, fields: PythonObject, entries: PythonObjec
     var cur = py_get(table, PythonObject(name))
     if pend is not None and cur is not None and Bool(py=pend[1] == cur[0]):
         _grads_host(fields, context)   # unread gradients in the array this forward reuses
-    var ah = xcnn_dev_upload(layer, entries, name, aux, context)
+    # lane fb15-sync-counts: the resident aux array only; the forward entry
+    # copies the host block into it on its own stream (was RES_UPLOAD: one
+    # more entry crossing and one more wait per forward)
+    var ah = xcnn_dev_get(layer, entries, name, bn_run_aux_count(c), context)
     var run_dev = py_get(fields, "_run_dev")
     if run_dev is None or run_dev is not dev or not xcnn_dev_has(dev, "running"):
         var r = _running(fields, context)
@@ -210,10 +213,12 @@ def _forward_res(layer: PythonObject, fields: PythonObject, entries: PythonObjec
         _set(fields, "_run_dev", dev)
     var rh = xcnn_dev_handle(dev, "running")
     var key = xcnn_ref(entries)
-    var addrs: List[Int] = [xcnn_word(xh), xcnn_word(yh), xcnn_word(rh), xcnn_word(ah)]
+    var addrs: List[Int] = [xcnn_word(xh), xcnn_word(yh), xcnn_word(rh), xcnn_word(ah), xcnn_ptr(aux)]
     var py = Python()
     with GILReleased(py):
-        bn_run_forward_m(key, addrs[0], addrs[1], addrs[2], addrs[3], 15 if dev_y else 13, n, c, hw, batch_stats)
+        bn_run_forward_m(key, addrs[0], addrs[1], addrs[2], addrs[3], 15 if dev_y else 13, n, c, hw, batch_stats,
+                         addrs[4])
+    _ = aux  # keep the host block alive through the native call above (its copy is enqueued there)
     if _truth(fields["training"]):
         _set(fields, "_run_stale", PythonObject(True))
     _set(fields, "_aux_k", PythonObject(k))
@@ -238,7 +243,7 @@ def xcnn_bn_forward_dev(layer: PythonObject, fields: PythonObject, entries: Pyth
     var addrs: List[Int] = [xcnn_word(xh), xcnn_word(yh), xcnn_ptr(running), xcnn_ptr(aux)]
     var py = Python()
     with GILReleased(py):
-        bn_run_forward_m(key, addrs[0], addrs[1], addrs[2], addrs[3], 3 if dev_y else 1, n, c, hw, batch_stats)
+        bn_run_forward_m(key, addrs[0], addrs[1], addrs[2], addrs[3], 3 if dev_y else 1, n, c, hw, batch_stats, 0)
     _ = running  # keep the Python object alive through the native call above
     _ = aux  # keep the Python object alive through the native call above
     _finish(fields, running, context)
