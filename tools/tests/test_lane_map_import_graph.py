@@ -80,9 +80,14 @@ def test_an_unmapped_file_is_refused_by_name_and_selects_nothing():
     lines = []
     assert lane_select.refuse_unattributed(sel, out=lines.append) is True
     assert any(line.startswith(f"UNATTRIBUTED PATH: {path}") for line in lines), lines
-    rc = subprocess.run([sys.executable, str(ROOT / "tools" / "lane_select.py"), "--lanes-for-paths", path],
-                        capture_output=True, text=True, cwd=str(ROOT))
-    assert rc.returncode == 3 and f"UNATTRIBUTED PATH: {path}" in rc.stdout, rc.stdout[-500:]
+    # The CLI, in this process (`main` is what `python3 tools/lane_select.py` runs): a subprocess re-derived
+    # the whole map, five minutes for one exit code.
+    import contextlib
+    import io
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        rc = lane_select.main(["--lanes-for-paths", path])
+    assert rc == 3 and f"UNATTRIBUTED PATH: {path}" in buf.getvalue(), buf.getvalue()[-500:]
 
 
 def test_the_mojo_closure_is_the_builds_walk(tmp_path):

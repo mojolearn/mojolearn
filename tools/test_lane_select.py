@@ -513,9 +513,14 @@ def test_an_unattributable_path_is_refused_by_name_and_selects_nothing():
     assert lane_select.refuse_unattributed(sel, out=lines.append)
     assert lines[0].startswith("UNATTRIBUTED PATH: tools/identity_break.py")
     assert any(ln.startswith("NOTHING IS VERIFIED") for ln in lines)
-    rc = subprocess.run([sys.executable, os.path.join(lane_select.ROOT, "tools", "lane_select.py"),
-                         "--lanes-for-paths", "tools/identity_break.py"], capture_output=True, text=True)
-    assert rc.returncode != 0 and "UNATTRIBUTED PATH: tools/identity_break.py" in rc.stdout, rc.stdout[-800:]
+    # The CLI, in this process (`main` is what `python3 tools/lane_select.py` runs): a subprocess re-derived
+    # the whole map from scratch, ten minutes of this file's run for one exit code.
+    import contextlib
+    import io
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        rc = lane_select.main(["--lanes-for-paths", "tools/identity_break.py"])
+    assert rc and "UNATTRIBUTED PATH: tools/identity_break.py" in buf.getvalue(), buf.getvalue()[-800:]
 
 
 def test_the_pinned_toolchain_selects_every_lane_by_rule_not_by_fallback():
