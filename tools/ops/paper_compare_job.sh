@@ -371,6 +371,17 @@ if ! "$PY" -c 'import numpy' > /dev/null 2>&1; then
     "$PY" -c 'import numpy' > /dev/null 2>&1 || { say "driver python still has no numpy; see logs/pip-numpy.log"; exit 4; }
 fi
 
+# ---- numactl on a multi-node box (lane fx-harness, 2026-11-18): race workers start bound to the GPU's NUMA node,
+# cores and memory (tools/numa_place.py); without numactl only the cores are bound (taskset) and the cells say so.
+# Best effort: a failed install never stops the job.
+if [ "$(ls -d /sys/devices/system/node/node[0-9]* 2> /dev/null | wc -l)" -gt 1 ] && ! command -v numactl > /dev/null 2>&1; then
+    { DEBIAN_FRONTEND=noninteractive apt-get -o DPkg::Lock::Timeout=600 install -y -qq --no-install-recommends numactl \
+        || { DEBIAN_FRONTEND=noninteractive apt-get -o DPkg::Lock::Timeout=600 update -qq \
+             && DEBIAN_FRONTEND=noninteractive apt-get -o DPkg::Lock::Timeout=600 install -y -qq --no-install-recommends numactl; }
+    } > "$RES/logs/apt-numactl.log" 2>&1
+    say "numactl: $(command -v numactl || echo 'not installed (logs/apt-numactl.log): workers bound by taskset, memory unbound')"
+fi
+
 # ---- the host probe (every submit, before anything else uses the GPU): tools/ops/box_job_lib.sh host_probe_phase
 host_probe_phase
 arith_gate   # tools/ops/box_job_lib.sh: identical-path arithmetic on this GPU, before any timing
