@@ -34,7 +34,7 @@ pyglue-numeric deleted the -D MOJOLEARN_PY2MOJO_prep_OFF arm and the Python
 loops it restored).
 """
 from std.memory import bitcast
-from std.math import sqrt
+from checks.numerics import identical_sqrt
 from x_prep.common import FP, IP, p, raw, ldi, sti, ld, st
 from x_prep.proba64 import q64_softmax_unit
 
@@ -265,7 +265,10 @@ def p2m_abscorr_cell_unit(t: Int, f: FP, q: IP):
     var gb = ld(f, G + b * dk + b)
     var v = Float32(1e-6)
     if ga > Float32(0) and gb > Float32(0):
-        var den = sqrt(ga * gb)
+        # identical_sqrt (fb11, 2026-11-17): std.math.sqrt on NVPTX is sqrt.approx.ftz.f32 (1 ulp off on 176,577 of
+        # 2^20 normals, checks/ieee_arith_check.mojo), so this cell differed from the host and other vendor columns;
+        # the seam is portable_sqrtf under IDENTICAL (IDENTITY_PATHS row 10, DEVIATION 258). Bits change on NVIDIA.
+        var den = identical_sqrt(ga * gb)
         if den > Float32(0):
             var r = abs(ld(f, G + a * dk + b) / den)
             if r == r:
