@@ -287,6 +287,7 @@ fi
 
 # ---- the host probe (every submit, before anything else uses the GPU): tools/ops/box_job_lib.sh host_probe_phase
 host_probe_phase
+arith_gate   # tools/ops/box_job_lib.sh: identical-path arithmetic on this GPU, before any timing
 
 # ---- the arms: name -> install args (candidate or published) ---------------------------------------------------
 ARMS=()                      # every arm with a venv on this box

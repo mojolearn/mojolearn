@@ -190,6 +190,45 @@ prune_persist_staging() {
 probe_field() {   # <probe json> <top-level string field>: its value, or nothing
     sed -n 's/^ *"'"$2"'": "\(.*\)",*$/\1/p' "$1" 2> /dev/null | head -n 1
 }
+# THE ARITHMETIC GATE (lane fb13-identity-audit, 2026-11-17): checks/ieee_arith_check.mojo on this box's GPU before
+# any timing. It judges, bit for bit over 2^20 patterns, the operations IDENTICAL runs (portable_sqrtf, portable_divf,
+# raw division, the signed-zero table) against exact references; a box whose backend diverges stops here (exit 3)
+# instead of timing a column whose bits are not the contract's. Cost: one `mojo build` of the check alone (it imports
+# only checks/numerics; the binary is cached per commit under CACHE_ROOT, so a resumed submit rebuilds nothing) plus
+# its run, 2 s on the L40S (native-checks run of d652a4b0a1, 2026-11-17). Both are in phases.tsv as phase `arith`.
+# No Mojo toolchain on the box: recorded as rc 2 (skipped) and the job goes on; it never passes silently.
+arith_gate() {
+    local rc bin commit
+    phase arith
+    commit=$(git rev-parse --short=12 HEAD 2> /dev/null || echo unknown)
+    bin="${CACHE_ROOT:-$RES}/ieee-arith-$commit"
+    if [ ! -x "$bin" ]; then
+        if ! timeout 120 pixi run mojo --version > "$RES/logs/arith-build.log" 2>&1; then
+            say "arith gate SKIPPED: no Mojo toolchain on this box (logs/arith-build.log)"
+            phase_end 2
+            return 0
+        fi
+        timeout 1200 pixi run mojo build -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . -o "$bin" checks/ieee_arith_main.mojo \
+            >> "$RES/logs/arith-build.log" 2>&1
+        rc=$?
+        if [ "$rc" != 0 ]; then
+            say "arith gate build failed rc=$rc (logs/arith-build.log); STOP before timing"
+            phase_end 3
+            exit 3
+        fi
+    fi
+    timeout 600 pixi run "$bin" > "$RES/logs/arith.log" 2>&1
+    rc=$?
+    if [ "$rc" != 0 ]; then
+        say "arith gate FAILED rc=$rc: this box diverges on an identical-path operation (logs/arith.log:"
+        grep -m 3 -i 'fail\|diverg\|mismatch\|abort' "$RES/logs/arith.log" | cut -c1-200 | sed 's/^/    /'
+        say "STOP before timing"
+        phase_end 3
+        exit 3
+    fi
+    say "arith gate passed ($(grep -c . "$RES/logs/arith.log") log lines)"
+    phase_end 0
+}
 host_probe_phase() {
     local rc PREV_HOST PREV_BOOT BOOT_ID
     phase probe

@@ -114,6 +114,7 @@ if gpu_other; then
 fi
 prune_persist_staging
 host_probe_phase
+arith_gate   # tools/ops/box_job_lib.sh: identical-path arithmetic on this GPU, before any timing
 
 # ---- tools (CPU, all at once): perf, strace, a C compiler, nsys, py-spy -------------------------------------------
 find_perf() {   # the real perf binary (Ubuntu's /usr/bin/perf is a wrapper that refuses a kernel it has no tools for)
