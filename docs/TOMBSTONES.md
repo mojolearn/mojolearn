@@ -921,6 +921,8 @@ in the tables after the sections.
 | [`MOJOLEARN_TREES_BLOCK_SCRATCH_FILL_OFF`](#mojolearn_trees_block_scratch_fill_off-fb15-ab-verdicts) | Trees (GBDT histogram scratch: whole-buffer zero per block) | removed (decided B arm: L40S B 1.38-1.40x slower on lossguide istella fit) | 2026-11-18 | [MOJOLEARN_TREES_BLOCK_SCRATCH_FILL_OFF.patch](../experiments/removed/MOJOLEARN_TREES_BLOCK_SCRATCH_FILL_OFF.patch) |
 | [`MOJOLEARN_LINEAR_LBD_BATCH_OFF`](#mojolearn_linear_lbd_batch_off-fb15-ab-verdicts) | Linear (device L-BFGS: one flag read per trial, 0.8.55's form) | removed (decided B arm: L40S B 1.00-1.02x, no gain) | 2026-11-18 | [MOJOLEARN_LINEAR_LBD_BATCH_OFF.patch](../experiments/removed/MOJOLEARN_LINEAR_LBD_BATCH_OFF.patch) |
 | [`MOJOLEARN_NI12_FILL_RULE_OFF`](#mojolearn_ni12_fill_rule_off-fb15-ab-verdicts) | Neural (CNN: implicit conv on every layer) | removed (decided B arm: L40S B 1.15x slower on cnn-clf fit, rest 0.95-1.04) | 2026-11-18 | [MOJOLEARN_NI12_FILL_RULE_OFF.patch](../experiments/removed/MOJOLEARN_NI12_FILL_RULE_OFF.patch) |
+| [`MOJOLEARN_METRICS_FAST_DENSE_LABELS_OFF`](#mojolearn_metrics_fast_dense_labels_off-fx-verdicts) | Metrics (classification label encode: the LSD radix route for in-range signed labels) | removed (decided B arm: L40S B 3.62x slower geomean, 68 of 72 cells) | 2026-11-18 | [MOJOLEARN_METRICS_FAST_DENSE_LABELS_OFF.patch](../experiments/removed/MOJOLEARN_METRICS_FAST_DENSE_LABELS_OFF.patch) |
+| [`MOJOLEARN_XPREP_R3_OFF=view`](#mojolearn_xprep_r3_offview-fx-verdicts) (label owner door) | Preprocessing (label owner program output: copy instead of the mapped view) | removed (decided env B arm: L40S B 1.24-1.67x slower on 6 of 8 binarizer cells) | 2026-11-18 | [MOJOLEARN_XPREP_R3_OFF-view-labels.patch](../experiments/removed/MOJOLEARN_XPREP_R3_OFF-view-labels.patch) |
 
 | [`MOJOLEARN_IDN_M1_SCAN`](#mojolearn_idn_m1_scan) | Neural (Mamba-1 scan selector, IDENTICAL) | removed (opt-in arms, no A/B recorded) | 2026-11-15 | [MOJOLEARN_IDN_M1_SCAN.patch](../experiments/removed/MOJOLEARN_IDN_M1_SCAN.patch) |
 | [`MOJOLEARN_IDN_M2_CB_LOWER_OFF`](#mojolearn_idn_m2_cb_lower_off) | Neural (Mamba-2 oracle cb.G triangle, IDENTICAL) | removed (old path, no A/B recorded) | 2026-11-15 | [MOJOLEARN_IDN_M2_CB_LOWER_OFF.patch](../experiments/removed/MOJOLEARN_IDN_M2_CB_LOWER_OFF.patch) |
@@ -22605,3 +22607,38 @@ deletion went with them; 37 were named only by the list of unreferenced tools in
   `tools/validate_ranking_candidate.py`, `tools/test_validate_ranking_candidate.py`, `tools/watched_cpu_promotion_cmd.sh`,
   `tools/wp67_classical_capture.py`, `tools/wp67_knn_classify_bench.py`, `tools/wp67_lm_surface.py`,
   `tools/wp67_remote_qualify.sh`, `tools/wp67_surface_capture.py`, `tools/wp67_verify_cache.py`, `tools/zenodo_retitle.py`.
+
+## Decided B arms: lane fx-verdicts (2026-11-18)
+
+Evidence for every section below: A/B ab2, NVIDIA L40S (RunPod host c6dd9ebea3e3, driver 595.112.07, 14-core cgroup), wheel set d652a4b0a1 (candidate) and its B sets, base (the candidate) and arm back to back in one job, one run per arm, small rows the median of 20 calls, 2026-11-18; job `nvc-ab-20261118T140734Z-8f0269`, `~/mojolearn-evidence/measure-candidate/build-ec1c4b5aff/fetched/nvc-ab-20261118T140734Z-8f0269/x/` (SUMMARY-TG-nvidia.txt `AB` lines, `board-tg-ab-<arm>-{base-,}{full,300000}/board.json`); per-cell tables `~/mojolearn-evidence/briefs-20261118/fx-verdicts/tab-<arm>.txt`. NVIDIA alone decides while AGENTS.md part 8 is live. Code recoverable at `0c65d61fed` (the lane's base on preinteg/wave2-20261113).
+
+### mojolearn_metrics_fast_dense_labels_off (fx-verdicts)
+
+- What it was: `-D MOJOLEARN_METRICS_FAST_DENSE_LABELS_OFF` (lane fb-metrics, 2026-11-17) sent contiguous signed integer
+  labels whose value range is within their count back to the radix route of `host_unique_inverse_cast` (int64 widen,
+  copy, LSD radix sort of (key, row) pairs) instead of the dense range-slot table of `score_encode_dense`.
+- Verdict: B slower on 68 of 72 cells, arm/base geomean 3.62, median 4.16: precision-score taxi 1.94 -> 7.91 ms,
+  confusion-matrix istella 1.55 -> 7.77, f1 istella 1.98 -> 8.26, cohen-kappa istella 1.28 -> 8.49, brier-score-loss
+  istella 0.93 -> 9.24; neighbour shape taxi 300,000 labels f1 1.87 -> 6.96, confusion-matrix 1.50 -> 7.39; the
+  other four 0.85-1.10 (accuracy, silhouette). Digests and scores equal on all 72 cells. The dense table stays.
+- Files: core/labels_score_encode.mojo (`_DENSE_OFF`, its `comptime if` in `score_encode_cast`, the `is_defined` import).
+- Deleted by `207abbd480` on lane/fx-verdicts; recoverable at `0c65d61fed`.
+- Patch: `experiments/removed/MOJOLEARN_METRICS_FAST_DENSE_LABELS_OFF.patch`. Refusal: `core/experiment_guards_base.mojo`.
+  No grid_controls entry existed. EXPERIMENTS.md: the `MOJOLEARN_METRICS_FAST_DENSE_LABELS_OFF` row of lane fb-metrics.
+
+### mojolearn_xprep_r3_off=view (fx-verdicts)
+
+- What it was: the run-time choice `MOJOLEARN_XPREP_R3_OFF=view` (environment, no build) at the label owner door
+  (`bindings/prep_labels_native_door.mojo` `_take_words`, lane fb-metrics 2026-11-17): a mapped program output of
+  2^20+ words copied into a fresh store instead of returned as a view of the mapping. The encoder owner's `view` choice
+  (`bindings/x_prep_native_owner_door.mojo` `xprep_take`, older, covered by the MaxAbsScaler / RobustScaler transport
+  tests) was not on these rows and stays.
+- Verdict: B slower on every cell, arm/base geomean 1.40: label-binarizer taxi fit 815 -> 1362 ms (1.67), taxi infer
+  78.3 -> 129 (1.65), istella fit 56.3 -> 92.4 (1.64), istella infer 1.06; multilabel-binarizer taxi fit 430 -> 665
+  (1.55), taxi infer 38.7 -> 59.0 (1.53), istella fit 220 -> 274 (1.24), istella infer 1.07. Digests and quality
+  equal on all 8 cells. The view stays and the per-take switch read (one getenv) is gone.
+- Files: bindings/prep_labels_native_door.mojo (the `xprep_r3("view")` term and the `xprep_r3` import).
+- Deleted by `8f05f0af73` on lane/fx-verdicts; recoverable at `0c65d61fed`.
+- Patch: `experiments/removed/MOJOLEARN_XPREP_R3_OFF-view-labels.patch`. Refusal: none possible (a run-time
+  environment value; `view` in MOJOLEARN_XPREP_R3_OFF now reaches only the encoder owner). No grid_controls entry
+  existed. EXPERIMENTS.md: the `MOJOLEARN_XPREP_R3_OFF=view` row of lane fx-verdicts.

@@ -1,0 +1,42 @@
+diff --git a/bindings/prep_labels_native_door.mojo b/bindings/prep_labels_native_door.mojo
+index a7632ea3c3..58354362f7 100644
+--- a/bindings/prep_labels_native_door.mojo
++++ b/bindings/prep_labels_native_door.mojo
+@@ -27,6 +27,7 @@ from core.preprocessing_program import prep_program_stage as _stage
+ from bindings.scaler_lifecycle_native_door import _entries
+ from bindings.prep_entry_cache_unpack import prep_entry_word
+ from bindings.x_prep_native_owner_door import xprep_values, xprep_address
++from bindings.x_prep_native_owner_run import xprep_r3
+ from bindings.prep_encode_native_door import (
+     EncProg, NONE, _take1, _word, _iword, _label_chunk, _fit_categories, _codes, _default_mode, _truth)
+ from bindings.prep_encode_prog_run import OUT_MARK, enc_label_load
+@@ -133,27 +134,14 @@ def _take_words(ran: PythonObject, offset: Int, count: Int, shape: PythonObject,
+         start = 0
+     var words = count * width // 4
+     var part = py_call(b.memoryview, store)[py_call(b.slice, start, start + words)]
+-    # TOMBSTONE: MOJOLEARN_XPREP_R3_OFF=view (label owner door; LOSER: the copy 1.24-1.67x slower on 6 of 8 binarizer cells, NV L40S 2026-11-18) deleted 2026-11-18 by lane/fx-verdicts; code recoverable at 0c65d61fed.
+-    # Restore: git apply experiments/removed/MOJOLEARN_XPREP_R3_OFF-view-labels.patch; record in docs/TOMBSTONES.md.
+-    if py_type(store) is b.memoryview and words >= TAKE_VIEW_MIN_WORDS:
++    if py_type(store) is b.memoryview and words >= TAKE_VIEW_MIN_WORDS and xprep_r3("view"):
+         # fb-metrics (2026-11-17; full board d95f805cce vs 0.8.55: LabelBinarizer
+         # and MultiLabelBinarizer fit/transform 1.6-2.2x): a large mapped
+         # output is returned as a view that retains its slice and mapping, as
+         # 0.8.55's _Prog._take and the encoder owner's xprep_take
+         # (bindings/x_prep_native_owner_door.mojo) do, not copied word by
+         # word into a fresh store (a full n x K copy and its first touch per
+-        # call). Same bytes. VERDICT 2026-11-18 (A/B ab2, owed row
+-        # xprep-r3-off-view-binarizers, NVIDIA L40S host c6dd9ebea3e3, wheel
+-        # d652a4b0a1, base and arm back to back, one run per arm): the copy
+-        # (MOJOLEARN_XPREP_R3_OFF=view) was slower on every cell, arm/base
+-        # geomean 1.40: label-binarizer taxi fit 815 -> 1362 ms (1.67), infer
+-        # 78.3 -> 129 (1.65), istella fit 56.3 -> 92.4 (1.64), istella infer
+-        # 1.06; multilabel-binarizer taxi fit 430 -> 665 (1.55), infer 38.7 ->
+-        # 59.0 (1.53), istella fit 220 -> 274 (1.24), istella infer 1.07.
+-        # Digests and quality equal on all 8 cells. The view is the one form
+-        # here and the switch read is gone (one getenv per take); the
+-        # encoder owner's `view` choice (xprep_take) was not on these rows
+-        # and stays. Limits: NVIDIA only (AGENTS.md part 8).
++        # call). Same bytes. MOJOLEARN_XPREP_R3_OFF=view restores the copy.
+         var typed = py_call(py_call(part.cast, "B").cast, code)
+         var ndim = Int(py=py_call(b.len, shape))
+         var result = py_call(b.object.__new__, context["array_class"])

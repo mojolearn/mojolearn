@@ -480,15 +480,19 @@ def identical_log(x: Float32) -> Float32:
 
 
 
-# MOJOLEARN_NUMERICS_FAST_SQRT_COMPTIME_STEP, PARTIAL A/B 2026-11-18 (ab1, owed rows sqrt-comptime-step-*, NVIDIA L40S
-# host 37f71a6102af, driver 595.112.07, wheel d652a4b0a1, base and arm back to back, one run per arm): the job hit
-# its 240-minute cap after 8 of 25 cells; digests equal on all 8. Arm/base: bisecting-kmeans istella infer
-# 17.64 -> 11.80 ms (0.67), randomized-svd taxi fit 72.13 -> 64.50 (0.89), ann-refine istella 627.2 -> 587.8
-# (0.94), bisecting-kmeans istella fit 928.3 -> 887.6 (0.96), ann-refine taxi 45.59 -> 44.25 (0.97), als text
-# 0.99, stl synthetic 0.99, stl taxi-hourly 1.00. The rows the arm was written for (knn, knn-clf, knn-reg,
-# HDBSCAN, KDE; the hdbscan istella arm cell was cut by the cap) were NOT reached: NOT flipped; the rest of the
-# rows stay owed (the next job takes them first).
-comptime NUMERICS_FAST_SQRT_COMPTIME_STEP = is_defined["MOJOLEARN_NUMERICS_FAST_SQRT_COMPTIME_STEP"]()
+# MOJOLEARN_NUMERICS_FAST_SQRT_COMPTIME_STEP: PROMOTED 2026-11-18 (lane fx-verdicts). The comptime candidate step is the
+# default on every vendor and the host column; `-D MOJOLEARN_NUMERICS_FAST_SQRT_COMPTIME_STEP_OFF` restores the
+# run-time `for k in range(4)` chain. Evidence, NVIDIA L40S, wheel d652a4b0a1 and its B set, base and arm back to back
+# in one job, one run per arm: A/B ab2 (host c6dd9ebea3e3, 36 cells): digests and quality equal on all 36; arm/base
+# geomean 0.973; hdbscan taxi fit 561 -> 450 ms (0.80), knn taxi 32.99 -> 27.76 (0.84), knn-reg taxi 18.94 -> 16.16
+# (0.85), ann-refine taxi 28.08 -> 24.40 (0.87), knn-clf taxi 19.64 -> 17.27 (0.88), knn taxi 300,000 rows (neighbour
+# shape) 25.74 -> 22.52 (0.87), knn istella 0.93, hdbscan istella 0.95, gpr taxi 0.92, the tree, ALS, STL, ARIMA and
+# KDE rows 0.97-1.04; one cell slower: rbf-sampler istella fit 59.88 -> 78.66 ms (1.31; taxi 1.00), whose sqrt work is
+# one d x n_components / 2 Box-Muller launch and two host scalars (RE-TIME OWED, one cell). Earlier ab1 (host
+# 37f71a6102af, 8 cells, digests equal): bisecting-kmeans istella infer 0.67, randomized-svd taxi 0.89, others
+# 0.94-1.00. The function is vendor neutral (no vendor branch): the same code on every column, bits unchanged.
+# Limits: NVIDIA only (AGENTS.md part 8); knn covtype (non-board) not run.
+comptime NUMERICS_SQRT_COMPTIME_STEP = not is_defined["MOJOLEARN_NUMERICS_FAST_SQRT_COMPTIME_STEP_OFF"]()
 
 
 def portable_sqrtf(x_in: Float32) -> Float32:
@@ -519,10 +523,10 @@ def portable_sqrtf(x_in: Float32) -> Float32:
     var yb = rebind[UInt32](y.to_bits())
     var best = y
     var r_best = abs(_fma_f32(-y, y, x))
-    comptime if NUMERICS_FAST_SQRT_COMPTIME_STEP:
-        # Experiment MOJOLEARN_NUMERICS_FAST_SQRT_COMPTIME_STEP (lane sqrt-comptime-step, 2026-11-16; A/B pending,
-        # NVIDIA L40S; docs/apple-fast/EXPERIMENTS.md). The run-time `for k in range(4)` below with its `k == 0 ...`
-        # chain was lowered to selects by Mojo 1.0 and to a rotated compare-and-branch loop by Mojo 1.2
+    comptime if NUMERICS_SQRT_COMPTIME_STEP:
+        # Default since 2026-11-18 (MOJOLEARN_NUMERICS_FAST_SQRT_COMPTIME_STEP promoted, lane sqrt-comptime-step
+        # 2026-11-16; A/B numbers beside NUMERICS_SQRT_COMPTIME_STEP above; _OFF restores the loop). The run-time
+        # `for k in range(4)` below with its `k == 0 ...` chain was lowered to selects by Mojo 1.0 and to a rotated compare-and-branch loop by Mojo 1.2
         # (pinned_distance_register_tile_kernel, 32 inlined sqrts per thread: 81 -> 119 registers, sm_89 warps per
         # SM 20 -> 16; ~/mojolearn-evidence/kernel-attribution-20261116/ATTRIBUTION.md). Here the candidate offset
         # is a compile-time constant per step (k = 0, 1, 2, 3 -> -1, +1, -2, +2, the same order), so there is no

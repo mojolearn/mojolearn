@@ -180,7 +180,8 @@ def _rt_load(x: Float32) -> Float32:
 
 
 # The NVIDIA rounded FMA below is checks/nv_fma_rn.mojo's switched
-# `nv_fma_rn_kernel` (lane fix-hdbscan-nv, MOJOLEARN_IDN_NV_FMA_ASM_OLD).
+# `nv_fma_rn_kernel` (lane fix-hdbscan-nv; the asm helper is its default since
+# 2026-11-18, MOJOLEARN_IDN_NV_FMA_ASM_OFF the intrinsic).
 @always_inline
 def _rt_step(a: Float32, b: Float32, acc: Float32) -> Float32:
     """Round the FMA before flushing its output; operands are already flushed.
