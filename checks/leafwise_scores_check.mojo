@@ -86,7 +86,7 @@ from gbdt.options.catboost_options import (
     SCORE_FUNCTION_COSINE,
     SCORE_FUNCTION_L2,
 )
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, pinned_mul_f32
 
 
 comptime N_BF = 37
@@ -233,8 +233,15 @@ def host_add_leaf[
             score = fma(sum, mu, score)
             denum_sqr = fma(weight * mu, mu, denum_sqr)
         else:
-            score += sum * mu
-            denum_sqr += weight * mu * mu
+            # THE NAIVE WALK MUST BE UNFUSED ON EVERY HOST (fb11, 2026-11-17).
+            # Written as `score += sum * mu`, the host compiler contracts it
+            # into an fma wherever the target has one (x86-64-v3, arm64;
+            # checks/numerics.mojo THE PINNED PRODUCT), the naive walk then
+            # equals the fused walk on every shape, and G1 went blind on the
+            # L40S host: 36 of 36 ties. `pinned_mul_f32` is the correctly
+            # rounded product no code generator can fuse into the add.
+            score += pinned_mul_f32(sum, mu)
+            denum_sqr += pinned_mul_f32(weight * mu, mu)
     else:
         if weight > Float32(1e-20):
             score += (sum * sum) / (weight + LAMBDA)
