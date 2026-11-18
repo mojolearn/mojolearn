@@ -139,8 +139,11 @@ quality assessment or timing has been performed for these edits.
 
 ## GEMM-panel arm (`-D MOJOLEARN_LMHEAD_FAST_GEMM_PANEL`, default off, A/B owed)
 
-An experiment arm of the public door only (`chunked_lm_head_v2_loss`,
-`chunked_lm_head_v2_train`). One define switches the device door
+An experiment arm of the public door (`chunked_lm_head_v2_loss`,
+`chunked_lm_head_v2_train`) and of the executor op `lm_head_v2`
+(`OPS_LM_HEAD_V2`, device and host arm: `autograd/lm_head_v2_op.mojo`,
+`autograd/lm_head_v2_host.mojo`), which calls the door's forward and backward
+over the executor's storage. One define switches the device door
 (`training/chunked_lm_head_v2.mojo::_gp_door`), the host column
 (`training/chunked_lm_head_gemm_panel_host.mojo`) and the oracle
 (`chunked_lm_head_v2_oracle_forward`, `chunked_lm_head_v2_oracle`) together:
@@ -148,15 +151,19 @@ one build, one set of words on every vendor and on the CPU. The words differ
 from the default profile's (logit contraction and every fold below), so the
 arm's hashes are compared across columns of the same build, never with a
 default build. The device kernels and the host loops call the same per-unit
-bodies (`training/chunked_lm_head_panel_math.mojo`). The ByteLM head and the
-executor op `lm_head_v2` keep their own folds.
+bodies (`training/chunked_lm_head_panel_math.mojo`). The ByteLM head keeps its
+own folds. The op adds only what is its own: float class codes, a code that
+names no vocabulary entry (shifted logit +0.0, so the row loss is
+`log(denominator)`, and no one-hot in its dlogit) and the upstream factor
+`ftz(g * upstream)` per gradient cell.
 
 Fold contract under the arm, with `P = LM_HEAD_V2_CHUNK = 1024` vocabulary
 entries per panel and `LMHEAD_GP_LEAF = 64` per denominator leaf. Under the
 arm both constants are arithmetic, not storage: changing either is a
 different profile.
 
-1. Operands: every hidden and weight element is flushed once (`ftz`).
+1. Operands: hidden and weight are read only through the GEMM, whose leaf
+   flushes both operands (`ftz`); no separate flush pass exists.
 2. Logits: panel `p` holds `H . W[pP : pP+n]^T` by the identical FP32 GEMM
    contract (`OP_NT`, `m = rows`, `n = n_p`, `k = width`), the contraction the
    ByteLM head uses. It is recomputed in each of the three passes (maximum,
