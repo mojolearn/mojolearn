@@ -901,6 +901,7 @@ def run_one_level(
     ctx.synchronize()
     _ = scan_ids_h^  # past the drain (step-33 race class)
     _ = hsk^  # past the drain (step-33 race class)
+    _ = hps^  # past the drain: its copy above was still queued while `hsk` was filled
     # THE SCALE PAIR MUST OUTLIVE THE LAUNCH THAT READS IT, and until this
     # line neither did. `h_scale` was LAST USED at its `enqueue_copy` and
     # `scale_dev` at the `.unsafe_ptr()` handed to `binary_hist_kernel`, so
@@ -1089,13 +1090,15 @@ def run_one_level(
     # cannot observe an unwritten `left` / `right`. The single drain below is
     # what makes the copy's result readable on the host. The two
     # `ctx.synchronize()` calls that used to sit before and after the kernel
-    _ = hr^  # past the drain (step-33 race class)
-    _ = hl^  # past the drain (step-33 race class)
     # ordered nothing that the queue did not already order; they were three
     # drains per level where CatBoost has one.
     var osz = ctx.enqueue_create_host_buffer[DType.uint32](n_leaves)
     ctx.enqueue_copy(dst_ptr=osz.unsafe_ptr(), src_buf=p_sz)
     ctx.synchronize()
+    # past the drain (step-33 race class); these two keeps used to sit before
+    # the drain, which freed the staging while its upload was still queued.
+    _ = hr^
+    _ = hl^
 
     return LevelResult(
         best,
@@ -1572,13 +1575,6 @@ def run_tree(
     # staging for those copies; they stay in scope for the whole function so
     # that the asynchronous `enqueue_copy` cannot outlive its source.
     # The `ctx.synchronize()` further down settles both before the loop.
-    _ = q5^  # past the drain (step-33 race class)
-    _ = q4^  # past the drain (step-33 race class)
-    _ = q3^  # past the drain (step-33 race class)
-    _ = q2^  # past the drain (step-33 race class)
-    _ = q^  # past the drain (step-33 race class)
-    _ = hsk^  # past the drain (step-33 race class)
-    _ = h_off^  # past the drain (step-33 race class)
     var bff = ctx.enqueue_create_buffer[DType.uint32](n_features)
     var hbf = ctx.enqueue_create_host_buffer[DType.uint32](n_features)
     var ffw = ctx.enqueue_create_buffer[DType.float32](n_features)
@@ -1615,6 +1611,15 @@ def run_tree(
     ctx.synchronize()
     _ = hfw^  # past the drain (step-33 race class)
     _ = hbf^  # past the drain (step-33 race class)
+    # These seven used to sit BEFORE this drain (above `bff`), so `hbf` / `hfw`
+    # could be handed their pinned blocks while their uploads were queued.
+    _ = q5^  # past the drain (step-33 race class)
+    _ = q4^  # past the drain (step-33 race class)
+    _ = q3^  # past the drain (step-33 race class)
+    _ = q2^  # past the drain (step-33 race class)
+    _ = q^  # past the drain (step-33 race class)
+    _ = hsk^  # past the drain (step-33 race class)
+    _ = h_off^  # past the drain (step-33 race class)
 
     # Leaf values land here; the caller reads them through `tree_leaf_value`.
     var h_leaf_values = ctx.enqueue_create_host_buffer[DType.float32](
