@@ -137,15 +137,22 @@ def case_pandas_input(row, arm_cases):
 def case_mlp_fit(row, arm_cases):
     import numpy as np
     ml = _ml()
-    sh = row["shape"]
-    n, d, k = int(sh["rows"]), int(sh["features"]), int(sh["classes"])
-    rng = np.random.default_rng(0)
-    X = rng.standard_normal((n, d)).astype(np.float32)
-    y = (np.abs(X[:, :k]).argmax(axis=1)).astype(np.int32)
-    hidden = tuple(int(h) for h in sh["hidden"])
-    ms, why = timed(lambda: ml.MLPClassifier(hidden_layer_sizes=hidden, max_iter=int(sh["max_iter"]),
-                                             random_state=0).fit(X, y))
-    return [("MLPClassifier hidden=%s n=%d d=%d" % (list(hidden), n, d), ms, why)]
+    out = []
+    # A row is one shape, or "cases": a list of shapes; "batch_size" is optional (absent = the estimator's default).
+    for sh in row["shape"].get("cases", [row["shape"]]):  # serial by nature: timed calls on one GPU
+        n, d, k = int(sh["rows"]), int(sh["features"]), int(sh["classes"])
+        rng = np.random.default_rng(0)
+        X = rng.standard_normal((n, d)).astype(np.float32)
+        y = (np.abs(X[:, :k]).argmax(axis=1)).astype(np.int32)
+        hidden = tuple(int(h) for h in sh["hidden"])
+        extra = {"batch_size": int(sh["batch_size"])} if "batch_size" in sh else {}
+        ms, why = timed(lambda: ml.MLPClassifier(hidden_layer_sizes=hidden, max_iter=int(sh["max_iter"]),
+                                                 random_state=0, **extra).fit(X, y))
+        label = "MLPClassifier hidden=%s n=%d d=%d" % (list(hidden), n, d)
+        if extra:
+            label += " batch=%d" % extra["batch_size"]
+        out.append((label, ms, why))
+    return out
 
 
 def case_kde_widths(row, arm_cases):

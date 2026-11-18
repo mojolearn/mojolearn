@@ -677,6 +677,11 @@
    "define": "MOJOLEARN_GEMM_FAST_LEAF512",
    "status": "define in code (gemm/contract.mojo GEMM_LEAF512 -> CONTRACT_K_LEAF_MIN 512, profile mojolearn.identical.gemm.fp32.v2-leaf512, version 4; IDENTICAL, no vendor branch): B = the contract's shortest leaf is 512 (one chain a cell up to k = 512, no fold and no workspace there; a quarter of the leaf boundaries above); A = the default leaf 128. BITS CHANGE under B on every column together: it is the build-wide leaf, so every fold that reads contract_leaf_size moves (GEMM, the classical moments and Gram, CD and SVM dots, loss and optimizer folds, CNN, Mamba, transformer), device and host from the one constant. The define must reach the whole wheel set, the host column included. The digests of A and B differ by design; quality is read from both arms' metrics",
    "owed": "RUN"
+  },
+  "gemm-seq-packed": {
+   "define": "MOJOLEARN_GEMM_FAST_SEQ_PACKED",
+   "status": "define in code (sequence/gemm_packed_route.mojo SEQ_GEMM_PACKED, read by sequence/exec_device.mojo _launch; the launch is gemm/neural_dispatch.mojo identical_gemm_leaf_ptr_into; IDENTICAL, NVIDIA and AMD columns, never Apple, host column unchanged): B = a plain dense sequence GEMM (OP_GEMM, OP_GEMM_EPI, OP_AGK_GEMM_EPI; no accumulate, no column sums) with K >= 64, both edges >= 128 and at least the column's block floor of packed tiles (NVIDIA 192 tiles of 128 x 64, else of 64 x 64; AMD 1024 tiles of 128 x 128) runs the neural packed body with ONE leaf of K terms, and an epilogue runs as the OP_GEMM_EPI_TAIL follower launch; A = the 16 x 16 sequence tile with the epilogue in registers. Same chain per cell (k ascending from +0.0, flushed operands, one flushed FMA a term): digests must not move. Build every binding that imports sequence/exec_device.mojo (the sequence device executor's groups); the host bindings are untouched. MOJOLEARN_AG_PROFILE=1 names the route of each product (route=packed) to prove which arm ran",
+   "owed": "RUN"
   }
  },
  "rows": [
@@ -3924,6 +3929,81 @@
     "gemm-leaf512"
    ],
    "decides": "B at least as fast as the candidate on linalg.matmul at every case: 256 x 256 x 2048 (a small output, where the split plans' P-keyed rules move from 16 leaves to 4), 1023 x 1025 x 2049 (ragged tiles, a one-element last leaf), 300 x 300 x 1500 (non-board, a non-multiple of 512: P = 3) and 2048 x 384 x 500 (one chain a cell under B, four leaves under A); a slower case blocks the promotion decided on the board rows. The words differ between the arms by design"
+  },
+  {
+   "id": "gemm-seq-packed-mlp",
+   "source": "lane fx-gemm-seq-packed (2026-11-18; idea 1 of ~/mojolearn-evidence/briefs-20261118/ideas-gemm-headroom-RESULT.md; report ~/mojolearn-evidence/briefs-20261118/fx-gemm-seq-packed-RESULT.md): default-off arm, never timed",
+   "kind": "ab",
+   "lane": [
+    "mlp-clf",
+    "mlp-reg"
+   ],
+   "dataset": "*",
+   "rows": "full",
+   "vendor": "nvidia",
+   "b_arms": [
+    "gemm-seq-packed"
+   ],
+   "decides": "promote B only if the mlp-clf and mlp-reg fits (istella and taxi) are faster on the NVIDIA L40S (same box, same job) with quality equal and every digest equal (the arm changes no arithmetic: a digest that moves is a bug in the arm, not a bit version), and the infer rows are not slower. On the board's shape (batch 4096, hidden 256, 256) B moves three of the five large products a step (forward 4096 x 256 over K = features and K = 256, dX 4096 x 256 over K = 256: 256 packed tiles of 64 x 64) and adds one follower launch to each; the two weight gradients (256 x 256 and features x 256 over K = 4096: 16 packed tiles) stay on the 16 x 16 tile by the fill rule, so the first-pass estimate of -0.5 ms a step is an upper bound that assumed all five moved. A loser is deleted with the four tombstone parts"
+  },
+  {
+   "id": "gemm-seq-packed-shapes",
+   "source": "lane fx-gemm-seq-packed (2026-11-18; idea 1 of ~/mojolearn-evidence/briefs-20261118/ideas-gemm-headroom-RESULT.md; report ~/mojolearn-evidence/briefs-20261118/fx-gemm-seq-packed-RESULT.md); the neighbouring shape, the non-board size and a control under the rule's block floor (no dimension targeting)",
+   "kind": "driver",
+   "driver": "mlp_fit",
+   "shape": {
+    "cases": [
+     {
+      "rows": 200000,
+      "features": 128,
+      "hidden": [
+       256
+      ],
+      "classes": 7,
+      "max_iter": 3,
+      "batch_size": 4096
+     },
+     {
+      "rows": 200000,
+      "features": 300,
+      "hidden": [
+       512,
+       512
+      ],
+      "classes": 7,
+      "max_iter": 3,
+      "batch_size": 2048
+     },
+     {
+      "rows": 200000,
+      "features": 96,
+      "hidden": [
+       192
+      ],
+      "classes": 7,
+      "max_iter": 3,
+      "batch_size": 8192
+     },
+     {
+      "rows": 200000,
+      "features": 128,
+      "hidden": [
+       256
+      ],
+      "classes": 7,
+      "max_iter": 3,
+      "batch_size": 1024
+     }
+    ]
+   },
+   "arms": [
+    "candidate",
+    "gemm-seq-packed"
+   ],
+   "b_arms": [
+    "gemm-seq-packed"
+   ],
+   "decides": "B at least as fast as the candidate on MLPClassifier.fit at the three routed cases: batch 4096 x hidden 256 over K = 128 (the neighbouring shape 4096 x 256 x 128, the stepped-down packed tile), batch 2048 x hidden 512, 512 (2048 x 512 x 512 and x 300, non-board), batch 8192 x hidden 192 over K = 96 (non-board edges that are not tile multiples: 192 wide tiles, the floor itself). The fourth case (batch 1024 x 256: 64 packed tiles, under the floor) takes the 16 x 16 tile on both arms and is the control: a move there is box noise. A routed case that is slower blocks the promotion decided on the board rows"
   }
  ]
 }
