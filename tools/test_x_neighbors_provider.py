@@ -33,10 +33,17 @@ def test_existing_provider_is_admitted_outside_packed_operation_loops():
     execute = text[text.index('def xn_execute'):]
     assert 'neural_descriptor_connect' not in execute and 'xn_admit(' not in execute
     assert 'neural_descriptor_execute(snapshot[].provider, xn_operation_id(name), a, p, f)' in execute
-    for filename in ('neighbors_local_native_door','neighbors_semi_native_door','neighbors_graph_native_door','svc_ocsvm_native_door'):
+    for filename in ('neighbors_local_native_door','neighbors_semi_native_door','neighbors_graph_native_door'):
         source = (ROOT / 'bindings' / (filename+'.mojo')).read_text()
         assert source.count('args = xn_admit_arguments(args, context)') == 1
-        assert 'xn_execute(binding, name, addrs, ints, floats)' in source
+        assert re.search(r'xn_execute\(binding, (request\.)?name, ', source), filename
+    # OneClassSVM admits its binding once per public operation and runs every step on one typed
+    # connection (OcConnection: the native driver), never a named per-step provider lookup.
+    ocsvm = (ROOT / 'bindings/svc_ocsvm_native_door.mojo').read_text()
+    operation = ocsvm[ocsvm.index('def svc_ocsvm_operation('):]
+    assert operation.count('_oc_binding(args[0], context)') == 1
+    assert operation.count('OcConnection(binding)') == 1
+    assert ocsvm.count('return xn_admit(binding)') == 1 and 'xn_execute(' not in ocsvm
 
 
 def test_selected_public_method_bodies_have_no_python_binding_lookup():
@@ -46,7 +53,10 @@ def test_selected_public_method_bodies_have_no_python_binding_lookup():
         if not (isinstance(n,ast.Call) and isinstance(n.func,ast.Name) and n.func.id=='_NATIVE' and len(n.args)>=3):
             continue
         op=n.args[1]
-        if not (isinstance(op,ast.Constant) and isinstance(op.value,str) and op.value.startswith(('family_xn_loc_','family_xn_semi_','family_xn_graph_','family_svc_ocsvm_'))):
+        # The operation is a named code on the family's table (`_OP.family_xn_loc_lof_fit`).
+        name = op.attr if isinstance(op,ast.Attribute) and isinstance(op.value,ast.Name) and op.value.id=='_OP' else (
+            op.value if isinstance(op,ast.Constant) and isinstance(op.value,str) else '')
+        if not name.startswith(('family_xn_loc_','family_xn_semi_','family_xn_graph_','family_svc_ocsvm_')):
             continue
         if isinstance(n.args[0],ast.Name) and n.args[0].id=='self':
             assert isinstance(n.args[2].elts[0],ast.Constant) and n.args[2].elts[0].value is None
