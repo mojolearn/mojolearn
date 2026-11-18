@@ -44,12 +44,12 @@ Moved here word for word (no bit change): `family_raw_word`,
 weight check was a serial loop; it now runs in row tasks with the same
 verdicts.
 """
-from std.memory import bitcast
+from std.memory import bitcast, unsafe_memcpy
 from core.classical_cast import classical_f32_bits
-from core.cast_in import CAST_KIND_SIGNED, CAST_KIND_UNSIGNED, CAST_KIND_BOOL, cast_w64_bits
+from core.cast_in import CAST_KIND_SIGNED, CAST_KIND_UNSIGNED, CAST_KIND_BOOL, CAST_KIND_FLOAT, cast_w64_bits
 from core.host_parallel import host_parallelize
 from core.host_predict_threads import host_predict_task_count_work, host_predict_chunk
-from core.host_finite_scan import host_all_finite_f32_strided
+from core.host_finite_scan import host_all_finite_f32_strided, host_span_finite_f32
 
 # TOMBSTONE: classical_cast_rows and classical_check_weights (core/classical_arrays_impl.mojo, merged into the one admission path) deleted 2026-11-08 by lane consol-a0-admission; code recoverable at ef4bce3a7e.
 # Restore: experiments/removed/A0_ADMISSION_HELPERS.patch. They are
@@ -101,11 +101,37 @@ def admitted_cast_f32(
     var chunk = host_predict_chunk(rows, tasks)
     var flags = List[UInt8](length=tasks, fill=UInt8(1))
     var flag_ptr = rebind[_AI_U8P](flags.unsafe_ptr())
+    # Lane fx-rows-rest (2026-11-18): a float32 view whose rows are runs of
+    # adjacent words (unit column stride: a column slice X[:, a:b] or a row
+    # slice X[::k] of a C-order block, a row-padded block) needs no cast,
+    # only its rows packed. Each row is then ONE byte copy of cols words and
+    # one SIMD exponent scan of the run, in place of cols typed loads, kind
+    # dispatches and stores (the general walk below: 1.1 M items of the two
+    # column-slice operands of a PLS/CCA transform took about 2 ms of a 6 ms
+    # call, call profile nvc-prof-20261118T182616Z-11b404). Same words to
+    # the same cells (cast_f32_bits of a float32 item is the item) and the
+    # same verdict (the exponent-bits test on the same words): no bit moves.
+    # The split and the task rule are unchanged. Not keyed on any shape: any
+    # rows, cols and row stride. Owed re-time beside the board row: a
+    # 1,000,000 x 10 column slice and a non-board 300,000 x 7 slice of random
+    # float32.
+    var row_runs = kind == CAST_KIND_FLOAT and item == 4 and (s1 == 4 or cols == 1)
+    var dst_addr = Int(dst)
 
-    def _rows(t: Int) {imm addr, imm s0, imm s1, imm rows, imm cols, imm item, imm kind, imm dst, imm chunk, imm flag_ptr}:
+    def _rows(t: Int) {imm addr, imm s0, imm s1, imm rows, imm cols, imm item, imm kind, imm dst, imm chunk, imm flag_ptr, imm row_runs, imm dst_addr}:
         var lo = t * chunk
         var hi = min(lo + chunk, rows)
         var finite = True
+        if row_runs:
+            for r in range(lo, hi):  # native input marshaling: this task's input rows, one run each
+                var run = addr + r * s0
+                unsafe_memcpy(dest=_AI_U8P(unsafe_from_address=dst_addr + r * cols * 4),
+                              src=_AI_U8P(unsafe_from_address=run), count=cols * 4)
+                if finite and not host_span_finite_f32(run, cols):
+                    finite = False
+            if not finite:
+                flag_ptr.unsafe_store(t, UInt8(0))
+            return
         for r in range(lo, hi):  # native input marshaling: this task's input rows
             for c in range(cols):  # native input marshaling: numeric buffer items preserve exact cast bits
                 var bits = classical_f32_bits(admitted_raw_word(addr + r * s0 + c * s1, item), kind, item)

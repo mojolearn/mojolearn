@@ -23,6 +23,8 @@ any-non-finite reduction with a scalar tail. Loads are unaligned (alignment
     host_all_finite_f32_strided(addr, s0, s1, rows, cols)
                                                     a rows x cols view with
                                                     byte strides s0, s1
+    host_span_finite_f32(addr, n)                   one contiguous span, serial
+                                                    (inside a caller's row task)
 """
 from core.host_parallel import host_parallelize
 from core.host_predict_threads import host_predict_task_count_work, host_predict_chunk
@@ -66,6 +68,15 @@ def _hfs_span_finite[dt: DType](addr: Int, n: Int) -> Bool:
             return False
         i += 1
     return True
+
+
+@always_inline
+def host_span_finite_f32(addr: Int, n: Int) -> Bool:
+    """True when none of the `n` contiguous float32 words at byte address
+    `addr` (any byte offset) is a NaN or an infinity. Serial within the
+    span: for a caller that is already one row task of a split across the
+    host's cores (the row-run copy of `admitted_cast_f32`)."""
+    return _hfs_span_finite[DType.uint32](addr, n)
 
 
 def _hfs_all_finite[dt: DType](addr: Int, n: Int) -> Bool:
