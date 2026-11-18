@@ -129,6 +129,7 @@ if gpu_other; then
 fi
 prune_persist_staging
 host_probe_phase
+arith_gate   # tools/ops/box_job_lib.sh: identical-path arithmetic on this GPU, before any timing
 
 # ---- the arms: the venvs the paper job left, their versions and wheel manifests ------------------------------------
 declare -A ARM_PY ARM_MAN ARM_VER

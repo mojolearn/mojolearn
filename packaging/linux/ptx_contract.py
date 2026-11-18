@@ -33,7 +33,16 @@ and the rewrite spends exactly the three whitespace bytes it adds:
 other shape is left alone and the audit then refuses it by name.
 
 THE AUDIT refuses any IDENTICAL-tier CUDA PTX that still contains a mul, add,
-sub, fma or mad on a floating type with no rounding modifier.
+sub, fma or mad on a floating type with no rounding modifier, and any
+IDENTICAL kernel that carries an instruction the PTX ISA documents as
+approximate (APPROX: `sqrt.approx`, `rcp.approx`, `div.full`, `ex2.approx`,
+...), outside APPROX_ALLOW. Mojo's stdlib lowers Float32 sqrt/log2/exp2/
+sin/cos/tanh to those on NVPTX; IDENTICAL code reaches the exact routines of
+checks/numerics.mojo instead. 2026-11-17 (lane fb13): until then approximate
+instructions were only counted, and one product kernel (IterativeImputer's
+|corr|) shipped `sqrt.approx` for weeks, found by hand. The audit runs where
+the build runs `audit` (packaging/linux/build_sets.sh, before the cubin pass)
+and in the wheel audit (packaging/portable_math/wheel.py).
 """
 import argparse
 import json
@@ -52,8 +61,43 @@ PLAIN = re.compile(
     rb"\.(f16x2|f16|bf16x2|bf16|f32|f64)(?=[ \t])", re.M)
 #: The exact line shape the rewrite knows how to lengthen for free.
 _REWRITE = re.compile(rb"(?<=\n)\t(add|sub|mul)\.(f32|f64) \t([^,\n]+), ")
-#: Approximate transcendental instructions (recorded, not refused).
+#: Instructions the PTX ISA documents as NOT correctly rounded (PTX ISA 8.5, "Floating-Point Instructions"):
+#: sqrt/rsqrt/rcp/div `.approx` (fast approximations, max error stated in ulp), `div.full` (2 ulp, full-range
+#: approximation), ex2/lg2/sin/cos/tanh `.approx` (the only forms those ops have). Their results are NVIDIA's
+#: own and differ from every other column, so an IDENTICAL kernel that carries one is refused (APPROX_ALLOW).
+#: The correctly rounded forms (`sqrt.rn`, `rcp.rn`, `div.rn`, `fma.rn`) and integer `div` are not matched.
 APPROX = re.compile(rb"\b((?:sqrt|rsqrt|rcp|ex2|lg2|sin|cos|tanh|div)\.(?:approx|full)[.a-z0-9]*)")
+#: The only IDENTICAL-set kernels allowed to carry an approximate instruction: (name pattern, reason). Nothing
+#: else is: fix the source through checks/numerics.mojo's exact routines (identical_sqrt, identical_exp, ...).
+#: Kernel names are `<module path cut to 30 characters>6A..._<hash>`, so each prefix names one source file.
+_SABOTAGE = ("verify sabotage kernel, raw stdlib math broken ON PURPOSE so the native check (and verify) can fail;"
+             " reached only at a non-NONE sabotage arm, never by an estimator: {}")
+APPROX_ALLOW = (
+    (re.compile(r"^hierarchy_checks_sabotage_tile"), _SABOTAGE.format("hierarchy/checks/sabotage_tile.mojo")),
+    (re.compile(r"^cholesky_checks_chol_sabotage"), _SABOTAGE.format("cholesky/checks/chol_sabotage.mojo")),
+    (re.compile(r"^gaussian_process_checks_gp_sab"), _SABOTAGE.format("gaussian_process/checks/gp_sabotage.mojo")),
+    (re.compile(r"^kernel_methods_checks_km_sabot"), _SABOTAGE.format("kernel_methods/checks/km_sabotage.mojo")),
+)
+#: A PTX function header (`.entry` kernel or `.func` device function, optional return parameter list).
+_FUNC = re.compile(rb"^[ \t]*(?:\.(?:visible|weak|extern)[ \t]+)*\.(?:entry|func)[ \t]+(?:\([^)]*\)[ \t]*)?([\w$.]+)",
+                   re.M)
+
+
+def approx_sites(text):
+    """[(function, op)] for every approximate instruction in one PTX module, attributed to the `.entry` or `.func`
+    whose body holds it (Mojo kernels carry no line info; the name's module-path prefix locates the source)."""
+    heads = [(m.start(), m.group(1).decode("ascii", "replace")) for m in _FUNC.finditer(text)]
+    out, k = [], -1
+    for m in APPROX.finditer(text):
+        while k + 1 < len(heads) and heads[k + 1][0] < m.start():
+            k += 1
+        out.append((heads[k][1] if k >= 0 else "<module scope>", m.group(1).decode()))
+    return out
+
+
+def approx_allowed(function):
+    """The APPROX_ALLOW reason for `function`, or None."""
+    return next((why for rx, why in APPROX_ALLOW if rx.search(function)), None)
 
 
 def is_identical_cuda(relative):
@@ -120,17 +164,22 @@ def patch_bytes(data):
 
 
 def audit_bytes(data):
-    """{modules, plain: [first offending lines], plain_count, approx: {op: count}}."""
-    report = {"modules": 0, "plain_count": 0, "plain": [], "approx": {}}
+    """{modules, plain: [first offending lines], plain_count, approx: {op: count},
+    approx_refused: ["function: op"] (not in APPROX_ALLOW), approx_allowed: {function: reason}}."""
+    report = {"modules": 0, "plain_count": 0, "plain": [], "approx": {}, "approx_refused": [], "approx_allowed": {}}
     for start, end in modules(data):
         text = data[start:end]
         report["modules"] += 1
         bad = plain_ops(text)
         report["plain_count"] += len(bad)
         report["plain"].extend(bad[:max(0, 5 - len(report["plain"]))])
-        for op in APPROX.findall(text):
-            key = op.decode()
-            report["approx"][key] = report["approx"].get(key, 0) + 1
+        for function, op in approx_sites(text):
+            report["approx"][op] = report["approx"].get(op, 0) + 1
+            why = approx_allowed(function)
+            if why:
+                report["approx_allowed"][function] = why
+            elif f"{function}: {op}" not in report["approx_refused"]:
+                report["approx_refused"].append(f"{function}: {op}")
     return report
 
 
@@ -159,10 +208,13 @@ def audit_tree(root):
             continue
         r = audit_bytes(p.read_bytes())
         rows.append({"file": rel, "ptx_modules": r["modules"], "plain_float_ops": r["plain_count"],
-                     "approx": r["approx"]})
+                     "approx": r["approx"], "approx_refused": r["approx_refused"]})
         if r["plain_count"]:
             errors.append(f"{rel}: {r['plain_count']} float mul/add/sub/fma without a rounding modifier"
                           f" in IDENTICAL PTX (the driver JIT may contract them), first: {r['plain']}")
+        if r["approx_refused"]:
+            errors.append(f"{rel}: {len(r['approx_refused'])} IDENTICAL kernel(s) carry an approximate instruction"
+                          f" (NVIDIA-only bits; route through checks/numerics.mojo): {r['approx_refused']}")
     return errors, rows
 
 
@@ -178,8 +230,9 @@ def main():
         else:
             r = audit_bytes(p.read_bytes())
             print(json.dumps({"file": str(p), "ptx_modules": r["modules"], "plain_float_ops": r["plain_count"],
-                              "first": r["plain"], "approx": r["approx"]}))
-            rc |= bool(r["plain_count"])
+                              "first": r["plain"], "approx": r["approx"], "approx_refused": r["approx_refused"],
+                              "approx_allowed": r["approx_allowed"]}))
+            rc |= bool(r["plain_count"]) or bool(r["approx_refused"])
     return rc
 
 
