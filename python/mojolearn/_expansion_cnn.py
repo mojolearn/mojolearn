@@ -760,6 +760,17 @@ class GCNConv(_Layer):
     def backward(self, grad_out):
         return _XCNN(self, "gcn_backward", (grad_out,), _XCNN_CONTEXT)
 
+    # fx-audit-fixes (2026-11-18): the forward reads `cached` only at a graph
+    # cache miss (the cached key carries it), so setting it drops the cache
+    # natively and the next forward keys the graph under the new setting.
+    @property
+    def cached(self):
+        return _XCNN(self, "gcn_cached", (), _XCNN_CONTEXT)
+
+    @cached.setter
+    def cached(self, value):
+        return _XCNN(self, "gcn_cached_set", (value,), _XCNN_CONTEXT)
+
 
 class SAGEConv(_Layer):
     """PyG `torch_geometric.nn.SAGEConv` (aggr 'mean', 'sum' or 'max',
@@ -815,6 +826,17 @@ class SAGEConv(_Layer):
 
     def backward(self, grad_out):
         return _XCNN(self, "sage_backward", (grad_out,), _XCNN_CONTEXT)
+
+    # fx-audit-fixes (2026-11-18): the forward reads `cached` only at a graph
+    # cache miss (the cached key carries it), so setting it drops the cache
+    # natively and the next forward keys the graph under the new setting.
+    @property
+    def cached(self):
+        return _XCNN(self, "sage_cached", (), _XCNN_CONTEXT)
+
+    @cached.setter
+    def cached(self, value):
+        return _XCNN(self, "sage_cached_set", (value,), _XCNN_CONTEXT)
 
 
 _native_xcnn_bridge.register(

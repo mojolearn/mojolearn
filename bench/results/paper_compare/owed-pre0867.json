@@ -532,6 +532,82 @@
    "status": "ENV arm, no build (--b-arm cpu-threads-cgroup=env:MOJOLEARN_CPU_THREADS=@cgroup_cores): B = the host pool pinned at the box's cgroup core count, which tools/ops/paper_compare_job.sh puts in place of @cgroup_cores on the box (alloc_cores: the cgroup quota, else nproc); A = core/host_predict_threads.mojo's own resolution (unset). Replaces cpu-threads-28, invalid on a 14-core pod (lane fb15-ab-verdicts, 2026-11-18)",
    "owed": "INVALID",
    "evidence": "ab2 2026-11-18, NVIDIA L40S host c6dd9ebea3e3, wheel d652a4b0a1, base and arm back to back, one run per arm (~/mojolearn-evidence/measure-candidate/build-ec1c4b5aff/fetched/nvc-ab-20261118T140734Z-8f0269/x/, tables ~/mojolearn-evidence/briefs-20261118/fx-verdicts/tab-<arm>.txt): the arm was never applied: tools/cpu_quota.py apply_cpu_quota pops MOJOLEARN_CPU_THREADS in every race worker and sets the cgroup quota, so both arms ran at 13 (raw records); resample istella 21.38 is a one-off of identical settings (warmup and scored call both 13.4 s in the arm process; base 0.63 s, candidate board 0.32 s). No arm can test this until the harness lets an arm's MOJOLEARN_CPU_THREADS through"
+  },
+  "adaboost-reencode": {
+   "define": "MOJOLEARN_TREES_FAST_ADABOOST_REENCODE",
+   "status": "define in code (bindings/trees_public_boost_door.mojo ADABOOST_REENCODE): B = the labels re-encoded per member; A = the labels encoded once per fit, the default. Was a run-time env read until lane fx-env-dead (2026-11-18); default unchanged",
+   "owed": "RUN"
+  },
+  "hr2-bagging-members": {
+   "define": "MOJOLEARN_TREES_FAST_HR2_BAGGING_MEMBERS",
+   "status": "define in code (bindings/trees_public_boost_door.mojo HR2_BAGGING_MEMBERS): B = the per-member fit loop; A = one forest fit of every member, the default. Was a run-time env read until lane fx-env-dead (2026-11-18); default unchanged",
+   "owed": "RUN"
+  },
+  "gbdt-ordered-fold-index": {
+   "define": "MOJOLEARN_GBDT_FAST_ORDERED_FOLD_INDEX",
+   "status": "define in code (gbdt/methods/oblivious_tree_doc_parallel_structure_searcher.mojo ORDERED_FOLD_INDEX): B = the ordered boosting fold-order index (bits move on every column together); A = no fold index, the default. Was a run-time env read until lane fx-env-dead (2026-11-18); default unchanged",
+   "owed": "RUN"
+  },
+  "gbdt-ord-std-split-off": {
+   "define": "MOJOLEARN_GBDT_FAST_ORD_STD_SPLIT_OFF",
+   "status": "define in code (gbdt/methods/ordered_boosting.mojo ORD_STD_SPLIT (FAST builds only)): B = no ordered std split; A = the ordered std split, the default. Was a run-time env read until lane fx-env-dead (2026-11-18); default unchanged",
+   "owed": "PAUSED",
+   "evidence": "FAST builds only (gbdt/methods/ordered_boosting.mojo reads it only where ORD_STD_GRIDFOLD is off, and gbdt/trees_identical_switches.mojo sets ORD_STD_GRIDFOLD = identical mode): Apple fast investment is stopped (AGENTS.md part 2; 'A paused programme's arms are not unmeasured'); no NVIDIA identical race reads it"
+  },
+  "gbdt-pw-int-slots-off": {
+   "define": "MOJOLEARN_GBDT_FAST_PW_INT_SLOTS_OFF",
+   "status": "define in code (gbdt/methods/pointwise_kernels.mojo PW_INT_SLOTS): B = the one-block histogram launch; A = the int-slot split, the default. Was a run-time env read until lane fx-env-dead (2026-11-18); default unchanged",
+   "owed": "RUN"
+  },
+  "xprep-direct-off": {
+   "define": "MOJOLEARN_XPREP_FAST_DIRECT_OFF",
+   "status": "define in code (bindings/arena_prog_native_door.mojo, bindings/prep_classify_prog_door.mojo XPREP_DIRECT): B = inputs of PREP_DIRECT_MIN_WORDS or more staged through the arena; A = the direct upload from the input's own buffer, the default. Was a run-time env read until lane fx-env-dead (2026-11-18); default unchanged",
+   "owed": "RUN"
+  },
+  "xprep-mi-sorted-off": {
+   "define": "MOJOLEARN_XPREP_FAST_MI_SORTED_OFF",
+   "status": "define in code (x_prep/device.mojo MI_SORTED): B = mutual_info without the sorted arm; A = the sorted arm, the default. Was a run-time env read until lane fx-env-dead (2026-11-18); default unchanged",
+   "owed": "RUN"
+  },
+  "xprep-mi-ties-off": {
+   "define": "MOJOLEARN_XPREP_FAST_MI_TIES_OFF",
+   "status": "define in code (x_prep/device.mojo, x_prep/dmi.mojo MI_TIES): B = mutual_info without the ties arm; A = the (x, secondary) order and searched tie runs, the default. Was a run-time env read until lane fx-env-dead (2026-11-18); default unchanged",
+   "owed": "RUN"
+  },
+  "xprep-out-off": {
+   "define": "MOJOLEARN_XPREP_FAST_OUT_OFF",
+   "status": "define in code (bindings/arena_prog_native_door.mojo, bindings/maxabs_native_door.mojo, bindings/prep_encode_native_door.mojo (+6 x_prep doors) XPREP_OUT): B = the output in host words; A = the device output region, the default. Was a run-time env read until lane fx-env-dead (2026-11-18); default unchanged",
+   "owed": "RUN"
+  },
+  "xprep-pt-interleave": {
+   "define": "MOJOLEARN_XPREP_FAST_PT_INTERLEAVE",
+   "status": "define in code (x_prep/prep_stateless_native_run.mojo PT_INTERLEAVE): B = the interleaved PowerTransformer search; A = the untiled search without interleave, the default. Was a run-time env read until lane fx-env-dead (2026-11-18); default unchanged",
+   "owed": "RUN"
+  },
+  "xprep-pt-spec-depth-0": {
+   "define": "MOJOLEARN_XPREP_FAST_PT_SPEC_DEPTH=0",
+   "status": "define in code (x_prep/prep_stateless_native_run.mojo PT_SPEC_DEPTH): B = speculation depth 0; A = depth 3 (the default), the default. Was a run-time env read until lane fx-env-dead (2026-11-18); default unchanged",
+   "owed": "RUN"
+  },
+  "xprep-pt-spec-depth-6": {
+   "define": "MOJOLEARN_XPREP_FAST_PT_SPEC_DEPTH=6",
+   "status": "define in code (x_prep/prep_stateless_native_run.mojo PT_SPEC_DEPTH): B = speculation depth 6; A = depth 3 (the default), the default. Was a run-time env read until lane fx-env-dead (2026-11-18); default unchanged",
+   "owed": "RUN"
+  },
+  "xprep-sort-quad-off": {
+   "define": "MOJOLEARN_XPREP_FAST_SORT_QUAD_OFF",
+   "status": "define in code (x_prep/dsort.mojo SORT_QUAD): B = one bitonic pass per stride; A = the quad passes, the default. Was a run-time env read until lane fx-env-dead (2026-11-18); default unchanged",
+   "owed": "RUN"
+  },
+  "xprep-te-gather-off": {
+   "define": "MOJOLEARN_XPREP_FAST_TE_GATHER_OFF",
+   "status": "define in code (bindings/prep_encode_native_door.mojo TE_GATHER): B = TargetEncoder without the gather; A = the gather, the default. Was a run-time env read until lane fx-env-dead (2026-11-18); default unchanged",
+   "owed": "RUN"
+  },
+  "xprep-te-pbucket-off": {
+   "define": "MOJOLEARN_XPREP_FAST_TE_PBUCKET_OFF",
+   "status": "define in code (bindings/prep_encode_native_door.mojo TE_PBUCKET): B = TargetEncoder without the per-bucket pass; A = the per-bucket pass, the default. Was a run-time env read until lane fx-env-dead (2026-11-18); default unchanged",
+   "owed": "RUN"
   }
  },
  "rows": [
@@ -3151,6 +3227,245 @@
     "generation-native-engine-off"
    ],
    "decides": "keep A unless B is at least as fast at equal quality on the NVIDIA L40S; generated ids must not move"
+  },
+  {
+   "id": "adaboost-reencode-rows",
+   "source": "lane fx-env-dead (2026-11-18): was a run-time env read, converted to a build define with the default unchanged, A/B owed (~/mojolearn-evidence/briefs-20261118/fx-env-dead-RESULT.md); owed rows added by lane fx-audit-fixes (wave audit NIT 2)",
+   "kind": "ab",
+   "lane": "adaboost-clf",
+   "dataset": "*",
+   "rows": "full",
+   "vendor": "nvidia",
+   "b_arms": [
+    "adaboost-reencode"
+   ],
+   "decides": "keep A (the default) unless B is faster at equal quality on the NVIDIA L40S; digests must not move; time also a neighbouring shape and a non-board dataset before a flip (no dimension targeting)"
+  },
+  {
+   "id": "hr2-bagging-members-rows",
+   "source": "lane fx-env-dead (2026-11-18): was a run-time env read, converted to a build define with the default unchanged, A/B owed (~/mojolearn-evidence/briefs-20261118/fx-env-dead-RESULT.md); owed rows added by lane fx-audit-fixes (wave audit NIT 2)",
+   "kind": "ab",
+   "lane": [
+    "bagging-clf",
+    "bagging-reg"
+   ],
+   "dataset": "*",
+   "rows": "full",
+   "vendor": "nvidia",
+   "b_arms": [
+    "hr2-bagging-members"
+   ],
+   "decides": "keep A (the default) unless B is faster at equal quality on the NVIDIA L40S; digests must not move; time also a neighbouring shape and a non-board dataset before a flip (no dimension targeting)"
+  },
+  {
+   "id": "gbdt-ordered-fold-index-rows",
+   "source": "lane fx-env-dead (2026-11-18): was a run-time env read, converted to a build define with the default unchanged, A/B owed (~/mojolearn-evidence/briefs-20261118/fx-env-dead-RESULT.md); owed rows added by lane fx-audit-fixes (wave audit NIT 2)",
+   "kind": "ab",
+   "lane": "gbdt-ordered",
+   "dataset": "*",
+   "rows": "full",
+   "vendor": "nvidia",
+   "b_arms": [
+    "gbdt-ordered-fold-index"
+   ],
+   "decides": "keep A (the default) unless B is faster at equal quality on the NVIDIA L40S; digests must not move; time also a neighbouring shape and a non-board dataset before a flip (no dimension targeting)"
+  },
+  {
+   "id": "gbdt-ord-std-split-off-rows",
+   "source": "lane fx-env-dead (2026-11-18): was a run-time env read, converted to a build define with the default unchanged, A/B owed (~/mojolearn-evidence/briefs-20261118/fx-env-dead-RESULT.md); owed rows added by lane fx-audit-fixes (wave audit NIT 2)",
+   "kind": "ab",
+   "lane": "gbdt-ordered",
+   "dataset": "*",
+   "rows": "full",
+   "vendor": "nvidia",
+   "b_arms": [
+    "gbdt-ord-std-split-off"
+   ],
+   "decides": "keep A (the default) unless B is faster at equal quality on the NVIDIA L40S; digests must not move; time also a neighbouring shape and a non-board dataset before a flip (no dimension targeting)"
+  },
+  {
+   "id": "gbdt-pw-int-slots-off-rows",
+   "source": "lane fx-env-dead (2026-11-18): was a run-time env read, converted to a build define with the default unchanged, A/B owed (~/mojolearn-evidence/briefs-20261118/fx-env-dead-RESULT.md); owed rows added by lane fx-audit-fixes (wave audit NIT 2)",
+   "kind": "ab",
+   "lane": [
+    "gbdt-rank-pairlogit",
+    "gbdt-symmetric"
+   ],
+   "dataset": "*",
+   "rows": "full",
+   "vendor": "nvidia",
+   "b_arms": [
+    "gbdt-pw-int-slots-off"
+   ],
+   "decides": "keep A (the default) unless B is faster at equal quality on the NVIDIA L40S; digests must not move; time also a neighbouring shape and a non-board dataset before a flip (no dimension targeting)"
+  },
+  {
+   "id": "xprep-direct-off-rows",
+   "source": "lane fx-env-dead (2026-11-18): was a run-time env read, converted to a build define with the default unchanged, A/B owed (~/mojolearn-evidence/briefs-20261118/fx-env-dead-RESULT.md); owed rows added by lane fx-audit-fixes (wave audit NIT 2)",
+   "kind": "ab",
+   "lane": [
+    "robust-scaler",
+    "maxabs-scaler",
+    "quantile-transformer",
+    "power-transformer",
+    "normalizer",
+    "kbins",
+    "onehot",
+    "ordinal",
+    "minmax-scaler",
+    "standard-scaler",
+    "target-encoder",
+    "variance-threshold"
+   ],
+   "dataset": "*",
+   "rows": "full",
+   "vendor": "nvidia",
+   "b_arms": [
+    "xprep-direct-off"
+   ],
+   "decides": "keep A (the default) unless B is faster at equal quality on the NVIDIA L40S; digests must not move; time also a neighbouring shape and a non-board dataset before a flip (no dimension targeting)"
+  },
+  {
+   "id": "xprep-mi-sorted-off-rows",
+   "source": "lane fx-env-dead (2026-11-18): was a run-time env read, converted to a build define with the default unchanged, A/B owed (~/mojolearn-evidence/briefs-20261118/fx-env-dead-RESULT.md); owed rows added by lane fx-audit-fixes (wave audit NIT 2)",
+   "kind": "ab",
+   "lane": [
+    "select-mutual-info",
+    "select-mutual-info-reg"
+   ],
+   "dataset": "*",
+   "rows": "full",
+   "vendor": "nvidia",
+   "b_arms": [
+    "xprep-mi-sorted-off"
+   ],
+   "decides": "keep A (the default) unless B is faster at equal quality on the NVIDIA L40S; digests must not move; time also a neighbouring shape and a non-board dataset before a flip (no dimension targeting)"
+  },
+  {
+   "id": "xprep-mi-ties-off-rows",
+   "source": "lane fx-env-dead (2026-11-18): was a run-time env read, converted to a build define with the default unchanged, A/B owed (~/mojolearn-evidence/briefs-20261118/fx-env-dead-RESULT.md); owed rows added by lane fx-audit-fixes (wave audit NIT 2)",
+   "kind": "ab",
+   "lane": [
+    "select-mutual-info",
+    "select-mutual-info-reg"
+   ],
+   "dataset": "*",
+   "rows": "full",
+   "vendor": "nvidia",
+   "b_arms": [
+    "xprep-mi-ties-off"
+   ],
+   "decides": "keep A (the default) unless B is faster at equal quality on the NVIDIA L40S; digests must not move; time also a neighbouring shape and a non-board dataset before a flip (no dimension targeting)"
+  },
+  {
+   "id": "xprep-out-off-rows",
+   "source": "lane fx-env-dead (2026-11-18): was a run-time env read, converted to a build define with the default unchanged, A/B owed (~/mojolearn-evidence/briefs-20261118/fx-env-dead-RESULT.md); owed rows added by lane fx-audit-fixes (wave audit NIT 2)",
+   "kind": "ab",
+   "lane": [
+    "robust-scaler",
+    "maxabs-scaler",
+    "quantile-transformer",
+    "power-transformer",
+    "normalizer",
+    "kbins",
+    "onehot",
+    "ordinal",
+    "minmax-scaler",
+    "standard-scaler",
+    "target-encoder",
+    "variance-threshold"
+   ],
+   "dataset": "*",
+   "rows": "full",
+   "vendor": "nvidia",
+   "b_arms": [
+    "xprep-out-off"
+   ],
+   "decides": "keep A (the default) unless B is faster at equal quality on the NVIDIA L40S; digests must not move; time also a neighbouring shape and a non-board dataset before a flip (no dimension targeting)"
+  },
+  {
+   "id": "xprep-pt-interleave-rows",
+   "source": "lane fx-env-dead (2026-11-18): was a run-time env read, converted to a build define with the default unchanged, A/B owed (~/mojolearn-evidence/briefs-20261118/fx-env-dead-RESULT.md); owed rows added by lane fx-audit-fixes (wave audit NIT 2)",
+   "kind": "ab",
+   "lane": "power-transformer",
+   "dataset": "*",
+   "rows": "full",
+   "vendor": "nvidia",
+   "b_arms": [
+    "xprep-pt-interleave"
+   ],
+   "decides": "keep A (the default) unless B is faster at equal quality on the NVIDIA L40S; digests must not move; time also a neighbouring shape and a non-board dataset before a flip (no dimension targeting)"
+  },
+  {
+   "id": "xprep-pt-spec-depth-0-rows",
+   "source": "lane fx-env-dead (2026-11-18): was a run-time env read, converted to a build define with the default unchanged, A/B owed (~/mojolearn-evidence/briefs-20261118/fx-env-dead-RESULT.md); owed rows added by lane fx-audit-fixes (wave audit NIT 2)",
+   "kind": "ab",
+   "lane": "power-transformer",
+   "dataset": "*",
+   "rows": "full",
+   "vendor": "nvidia",
+   "b_arms": [
+    "xprep-pt-spec-depth-0"
+   ],
+   "decides": "keep A (the default) unless B is faster at equal quality on the NVIDIA L40S; digests must not move; time also a neighbouring shape and a non-board dataset before a flip (no dimension targeting)"
+  },
+  {
+   "id": "xprep-pt-spec-depth-6-rows",
+   "source": "lane fx-env-dead (2026-11-18): was a run-time env read, converted to a build define with the default unchanged, A/B owed (~/mojolearn-evidence/briefs-20261118/fx-env-dead-RESULT.md); owed rows added by lane fx-audit-fixes (wave audit NIT 2)",
+   "kind": "ab",
+   "lane": "power-transformer",
+   "dataset": "*",
+   "rows": "full",
+   "vendor": "nvidia",
+   "b_arms": [
+    "xprep-pt-spec-depth-6"
+   ],
+   "decides": "keep A (the default) unless B is faster at equal quality on the NVIDIA L40S; digests must not move; time also a neighbouring shape and a non-board dataset before a flip (no dimension targeting)"
+  },
+  {
+   "id": "xprep-sort-quad-off-rows",
+   "source": "lane fx-env-dead (2026-11-18): was a run-time env read, converted to a build define with the default unchanged, A/B owed (~/mojolearn-evidence/briefs-20261118/fx-env-dead-RESULT.md); owed rows added by lane fx-audit-fixes (wave audit NIT 2)",
+   "kind": "ab",
+   "lane": [
+    "robust-scaler",
+    "quantile-transformer",
+    "kbins",
+    "select-mutual-info",
+    "select-mutual-info-reg"
+   ],
+   "dataset": "*",
+   "rows": "full",
+   "vendor": "nvidia",
+   "b_arms": [
+    "xprep-sort-quad-off"
+   ],
+   "decides": "keep A (the default) unless B is faster at equal quality on the NVIDIA L40S; digests must not move; time also a neighbouring shape and a non-board dataset before a flip (no dimension targeting)"
+  },
+  {
+   "id": "xprep-te-gather-off-rows",
+   "source": "lane fx-env-dead (2026-11-18): was a run-time env read, converted to a build define with the default unchanged, A/B owed (~/mojolearn-evidence/briefs-20261118/fx-env-dead-RESULT.md); owed rows added by lane fx-audit-fixes (wave audit NIT 2)",
+   "kind": "ab",
+   "lane": "target-encoder",
+   "dataset": "*",
+   "rows": "full",
+   "vendor": "nvidia",
+   "b_arms": [
+    "xprep-te-gather-off"
+   ],
+   "decides": "keep A (the default) unless B is faster at equal quality on the NVIDIA L40S; digests must not move; time also a neighbouring shape and a non-board dataset before a flip (no dimension targeting)"
+  },
+  {
+   "id": "xprep-te-pbucket-off-rows",
+   "source": "lane fx-env-dead (2026-11-18): was a run-time env read, converted to a build define with the default unchanged, A/B owed (~/mojolearn-evidence/briefs-20261118/fx-env-dead-RESULT.md); owed rows added by lane fx-audit-fixes (wave audit NIT 2)",
+   "kind": "ab",
+   "lane": "target-encoder",
+   "dataset": "*",
+   "rows": "full",
+   "vendor": "nvidia",
+   "b_arms": [
+    "xprep-te-pbucket-off"
+   ],
+   "decides": "keep A (the default) unless B is faster at equal quality on the NVIDIA L40S; digests must not move; time also a neighbouring shape and a non-board dataset before a flip (no dimension targeting)"
   }
  ]
 }

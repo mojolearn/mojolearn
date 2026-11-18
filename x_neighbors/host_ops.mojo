@@ -60,6 +60,24 @@ def _i(addr: Int) -> IP:
     return IP(unsafe_from_address=addr)
 
 
+def xn_host_status(x: Int, count: Int, status: Int) raises -> Bool:
+    """The CPU column's answer to an op's status slot (lane
+    a8b-device-x-neighbors-rest; the GPU column tests the words behind its
+    upload, x_neighbors/device_ops.mojo `xn_finite_behind`): when `status` (a
+    host int32 address) is not 0, one parallel SIMD scan of the `count`
+    words at `x` (core/host_finite_scan.mojo) is written to it, 0 finite, 1
+    a NaN or an infinity. True when the op may run (no word asked, or every
+    word finite); a flagged op returns at once and the door refuses."""
+    if status == 0 or count <= 0:
+        return True
+    if status < 0 or status % 4 != 0:
+        raise Error("x_neighbors: the status address must be a positive int32-aligned address")
+    # parallel: host_finite_status splits the words across the host's cores
+    var word = host_finite_status(x, count)
+    IP(unsafe_from_address=status).unsafe_store(0, word)
+    return word == 0
+
+
 def op_sqdist(x: Int, y: Int, res: Int, n: Int, m: Int, d: Int, status: Int = 0) raises:
     if not xn_host_status(x, n * d, status):
         return
@@ -96,24 +114,6 @@ def op_l1dist(x: Int, y: Int, res: Int, n: Int, m: Int, d: Int) raises:
     comptime if X_NEIGHBORS_HOST_SABOTAGE:
         if (n * m) > 0:
             _f(res).unsafe_store(0, _f(res).unsafe_load(0) + Float32(1e-3))
-
-
-def xn_host_status(x: Int, count: Int, status: Int) raises -> Bool:
-    """The CPU column's answer to an op's status slot (lane
-    a8b-device-x-neighbors-rest; the GPU column tests the words behind its
-    upload, x_neighbors/device_ops.mojo `xn_finite_behind`): when `status` (a
-    host int32 address) is not 0, one parallel SIMD scan of the `count`
-    words at `x` (core/host_finite_scan.mojo) is written to it, 0 finite, 1
-    a NaN or an infinity. True when the op may run (no word asked, or every
-    word finite); a flagged op returns at once and the door refuses."""
-    if status == 0 or count <= 0:
-        return True
-    if status < 0 or status % 4 != 0:
-        raise Error("x_neighbors: the status address must be a positive int32-aligned address")
-    # parallel: host_finite_status splits the words across the host's cores
-    var word = host_finite_status(x, count)
-    IP(unsafe_from_address=status).unsafe_store(0, word)
-    return word == 0
 
 
 def op_kernel(x: Int, y: Int, res: Int, n: Int, m: Int, d: Int, kind: Int, gamma: Float32, coef0: Float32, degree: Int,
