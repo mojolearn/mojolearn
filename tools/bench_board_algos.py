@@ -6613,17 +6613,19 @@ _MS_TASKS = {"grid-search": "GridSearchCV", "random-search": "RandomizedSearchCV
 
 
 def _ms_run(t, call, X, y, p, lib):
-    """One model_selection call with the lane's explicit parameters -> its outputs (numpy, float64).
-    `lib` 'ours' or 'sklearn' resolves the estimator; scikit-learn adds n_jobs=-1 where the call takes it."""
-    np = _np()
+    """One model_selection call with the lane's explicit parameters -> what it returned, held as it is (the TIMED
+    part; `_ms_outputs` reduces it after the clock). `lib` 'ours' or 'sklearn' resolves the estimator;
+    scikit-learn adds n_jobs=-1 where the call takes it.
+    FAIRNESS FIX (2026-11-18 audit, lane fx-harness): this function used to reduce inside the clock: train-test-split
+    copied every output with np.array(copy=True) and cast it to float64 (`_arr`) and took the column means there,
+    2.6 GB of harness first-touch memory per istella call against 880 MB of product output, on both arms; cv-predict
+    cast its predictions. The clock now holds the call and its returned arrays only (`_held`: no copy); the copies,
+    casts and means run in `_ms_outputs`, outside every clock. Cells timed before carry no harness_clock and
+    tools/paper_compare.py shows such a row as HARNESS-CLOCK, never as FASTER."""
     jobs = {"n_jobs": -1} if lib == "sklearn" else {}
     if t == "split":
-        Xa, Xb, ya, yb = call(X, y, test_size=p["test_size"], random_state=p["random_state"],
-                              shuffle=p["shuffle"])
-        Xa, Xb = _arr(Xa, np.float64), _arr(Xb, np.float64)
-        return {"sizes": np.array([Xa.shape[0], Xb.shape[0]], dtype=np.float64),
-                "train_mean": Xa.mean(0), "test_mean": Xb.mean(0),
-                "ymeans": np.array([_arr(ya, np.float64).mean(), _arr(yb, np.float64).mean()])}
+        return tuple(_held(a) for a in call(X, y, test_size=p["test_size"], random_state=p["random_state"],
+                                            shuffle=p["shuffle"]))
     est = _resolve(p["estimator"], lib)
     if t in ("grid-search", "random-search"):
         kw = dict(cv=p["cv"], scoring=p["scoring"], refit=p["refit"], **jobs)
@@ -6633,31 +6635,85 @@ def _ms_run(t, call, X, y, p, lib):
             search = call(est, param_distributions=p["param_distributions"], n_iter=p["n_iter"],
                           random_state=p["random_state"], **kw)
         search.fit(X, y)
+        return search
+    if t == "cv-validate":
+        return call(est, X, y, cv=p["cv"], scoring=p["scoring"], return_train_score=p["return_train_score"], **jobs)
+    if t == "cv-predict":
+        return _held(call(est, X, y, cv=p["cv"], method=p["method"], **jobs))
+    if t == "learning-curve":
+        return tuple(_held(a) for a in call(est, X, y, train_sizes=p["train_sizes"], cv=p["cv"],
+                                            scoring=p["scoring"], shuffle=p["shuffle"], **jobs)[:3])
+    if t == "validation-curve":
+        return tuple(_held(a) for a in call(est, X, y, param_name=p["param_name"], param_range=p["param_range"],
+                                            cv=p["cv"], scoring=p["scoring"], **jobs))
+    if t == "perm-test-score":
+        return call(est, X, y, cv=p["cv"], n_permutations=p["n_permutations"], scoring=p["scoring"],
+                    random_state=p["random_state"], **jobs)
+    raise ValueError("unknown model_selection task %r" % (t,))
+
+
+def _ms_outputs(t, r):
+    """`_ms_run`'s held result -> the lane's outputs (numpy, float64), after the clock (the reductions that ran inside
+    it before the 2026-11-18 fairness fix, unchanged)."""
+    np = _np()
+    if t == "split":
+        Xa, Xb, ya, yb = r
+        Xa, Xb = _arr(Xa, np.float64), _arr(Xb, np.float64)
+        return {"sizes": np.array([Xa.shape[0], Xb.shape[0]], dtype=np.float64),
+                "train_mean": Xa.mean(0), "test_mean": Xb.mean(0),
+                "ymeans": np.array([_arr(ya, np.float64).mean(), _arr(yb, np.float64).mean()])}
+    if t in ("grid-search", "random-search"):
+        search = r
         cvr = search.cv_results_
         alphas = [float(a["alpha"]) for a in cvr["params"]]
         return {"best_score": np.array([float(search.best_score_)]),
                 "best_alpha": np.array([float(search.best_params_["alpha"])]),
                 "alphas": np.array(alphas), "mean_test": _arr(cvr["mean_test_score"], np.float64)}
     if t == "cv-validate":
-        r = call(est, X, y, cv=p["cv"], scoring=p["scoring"], return_train_score=p["return_train_score"], **jobs)
         return {"test": _arr(r["test_score"], np.float64), "train": _arr(r["train_score"], np.float64)}
     if t == "cv-predict":
-        return {"pred": _arr(call(est, X, y, cv=p["cv"], method=p["method"], **jobs), np.float64)}
+        return {"pred": _arr(r, np.float64)}
     if t == "learning-curve":
-        sizes, train, test = call(est, X, y, train_sizes=p["train_sizes"], cv=p["cv"], scoring=p["scoring"],
-                                  shuffle=p["shuffle"], **jobs)[:3]
+        sizes, train, test = r
         return {"sizes": _arr(sizes, np.float64), "mean_test": _arr(test, np.float64).mean(1),
                 "mean_train": _arr(train, np.float64).mean(1)}
     if t == "validation-curve":
-        train, test = call(est, X, y, param_name=p["param_name"], param_range=p["param_range"], cv=p["cv"],
-                           scoring=p["scoring"], **jobs)
+        train, test = r
         return {"mean_test": _arr(test, np.float64).mean(1), "mean_train": _arr(train, np.float64).mean(1)}
     if t == "perm-test-score":
-        score, perm, pv = call(est, X, y, cv=p["cv"], n_permutations=p["n_permutations"], scoring=p["scoring"],
-                               random_state=p["random_state"], **jobs)
+        score, perm, pv = r
         return {"score": np.array([float(score)]), "p": np.array([float(pv)]),
                 "perm_mean": np.array([float(_arr(perm, np.float64).mean())])}
     raise ValueError("unknown model_selection task %r" % (t,))
+
+
+#: lane fx-harness (2026-11-18): the harness-clock revision a lane's cells carry when its timed call no longer holds
+#: harness copies, casts or quality reductions (cell field harness_clock; tools/paper_compare.py HARNESS-CLOCK)
+HARNESS_CLOCK = "2026-11-18 outputs reduced after the clock"
+
+
+def _held(a):
+    """A returned array as the product handed it, consumed inside the clock without a harness copy: a NumPy array as
+    it is; an object exposing __array_interface__ (a host array of another library) viewed by np.asarray, which
+    copies nothing; anything else (device arrays, tuples, scalars) as it is. The copies, casts and reductions the
+    quality needs run after the clock (FAIRNESS FIX 2026-11-18 audit)."""
+    np = _np()
+    if isinstance(a, np.ndarray):
+        return a
+    if hasattr(a, "__array_interface__"):
+        return np.asarray(a)
+    return a
+
+
+def _reduced_after(S, reduce):
+    """An outputs() for a runner whose fit() holds the product's raw results in S["raw"]: reduces them once,
+    outside every clock, keeps the outputs in S["o"] and drops the raw arrays (so the next call's clock does not
+    free them)."""
+    def outputs():
+        if "raw" in S:
+            S["o"] = reduce(S.pop("raw"))
+        return S["o"]
+    return outputs
 
 
 def _ms_record(p):
@@ -6699,13 +6755,16 @@ def _build_fn(lane, arm, D):
             elif t == "permutation":
                 r = fn(y, yq, **kw)
                 S["o"] = {"stat": np.array([r.statistic]), "p": np.array([r.pvalue])}
+            # FAIRNESS FIX (2026-11-18 audit, lane fx-harness): resample, resample-indices and the model_selection
+            # tasks copied (np.array copy=True), cast and averaged their outputs INSIDE the clock (resample/istella:
+            # 2.6 GB of harness first-touch memory per call). The clock now holds the call and its returned arrays
+            # (`_held`, no copy); `_fn_outputs` reduces them after the clock.
             elif t == "resample-indices":
-                S["o"] = {"idx": _arr(fn(X.shape[0], n_samples=X.shape[0], **kw), np.int64)}
+                S["raw"] = _held(fn(X.shape[0], n_samples=X.shape[0], **kw))
             elif t == "resample":
-                Xr, yr = fn(X, y, **kw)
-                S["o"] = {"xmean": _arr(Xr, np.float64).mean(0), "ymean": np.array([_arr(yr, np.float64).mean()])}
+                S["raw"] = tuple(_held(a) for a in fn(X, y, **kw))
             elif t in _MS_TASKS:
-                S["o"] = _ms_run(t, fn, X, y, p, "ours")
+                S["raw"] = _ms_run(t, fn, X, y, p, "ours")
             else:                           # cross_val_score clones the estimator per fold
                 est = _resolve(p["estimator"], "ours")
                 S["o"] = {"scores": _arr(fn(est, X, y, cv=p["cv"], scoring=p["scoring"]),
@@ -6715,7 +6774,9 @@ def _build_fn(lane, arm, D):
         if t == "resample-indices":
             rec.update(n=int(X.shape[0]), n_samples=int(X.shape[0]))
         rec["__library__"] = "mojolearn"
-        return Runner(info, fit, lambda: S["o"], record=rec)
+        if t in _FN_HELD:
+            info["harness_clock"] = HARNESS_CLOCK
+        return Runner(info, fit, _reduced_after(S, lambda r: _fn_outputs(t, r)), record=rec)
     lib = s["other"][arm]
     info = _tool("bench_board_more")._sk_info()
     info.update(library=lib, device="cpu", pre_clock_fit=False, input_home="host")
@@ -6766,7 +6827,7 @@ def _build_fn(lane, arm, D):
             _MS_TASKS[t], ", ".join("%s=%r" % kv for kv in sorted(rec.items())))
 
         def fit():
-            S["o"] = _ms_run(t, call, X, y, p, "sklearn")
+            S["raw"] = _ms_run(t, call, X, y, p, "sklearn")    # reduced after the clock (FAIRNESS FIX 2026-11-18)
     else:
         if t == "resample-indices":
             from sklearn.utils import resample as skresample
@@ -6776,17 +6837,18 @@ def _build_fn(lane, arm, D):
             rows = np.arange(n_rows)
 
             def fit():
-                S["o"] = {"idx": np.asarray(skresample(rows, replace=p["replace"], n_samples=n_rows,
-                                                       random_state=p["random_state"]), dtype=np.int64)}
+                # FAIRNESS FIX (2026-11-18 audit): the int64 cast ran inside the clock; now after it (_fn_outputs)
+                S["raw"] = _held(skresample(rows, replace=p["replace"], n_samples=n_rows,
+                                            random_state=p["random_state"]))
             rec = dict(p, n=n_rows, n_samples=n_rows, __implementation__=skresample)
         elif t == "resample":
             from sklearn.utils import resample as skresample
             info["config"] = "sklearn.utils.resample(X, y, %s)" % p
 
             def fit():
-                Xr, yr = skresample(X, y, **p)
-                S["o"] = {"xmean": np.asarray(Xr, dtype=np.float64).mean(0),
-                          "ymean": np.array([np.asarray(yr, dtype=np.float64).mean()])}
+                # FAIRNESS FIX (2026-11-18 audit): the float64 cast and the means ran inside the clock (1.76 GB of
+                # harness memory per istella call); now after it (_fn_outputs), as on our arm
+                S["raw"] = tuple(_held(a) for a in skresample(X, y, **p))
             rec = dict(p, __implementation__=skresample)
         else:
             from sklearn.model_selection import cross_val_score as skcv
@@ -6801,7 +6863,25 @@ def _build_fn(lane, arm, D):
     # measure-coverage (2026-10-24): every opponent record above names the library function its fit()
     # calls (__implementation__); without it the preflight's real-implementation check refused each pair
     rec["__library__"] = lib
-    return Runner(info, fit, lambda: S["o"], record=rec)
+    if t in _FN_HELD:
+        info["harness_clock"] = HARNESS_CLOCK
+    return Runner(info, fit, _reduced_after(S, lambda r: _fn_outputs(t, r)), record=rec)
+
+
+#: the function-call tasks whose fit() holds raw results (S["raw"]) reduced by _fn_outputs after the clock
+_FN_HELD = frozenset(("resample", "resample-indices")) | frozenset(_MS_TASKS)
+
+
+def _fn_outputs(t, r):
+    """The function-call lanes' outputs from the results their fit() held (FAIRNESS FIX 2026-11-18 audit): the same
+    reductions that ran inside the clock before, now after it."""
+    np = _np()
+    if t == "resample":
+        Xr, yr = r
+        return {"xmean": _arr(Xr, np.float64).mean(0), "ymean": np.array([_arr(yr, np.float64).mean()])}
+    if t == "resample-indices":
+        return {"idx": _arr(r, np.int64)}
+    return _ms_outputs(t, r)
 
 
 # ---- ALS ------------------------------------------------------------------
