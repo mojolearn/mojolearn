@@ -423,9 +423,8 @@ def test_a_binding_every_lane_reaches_does_not_hand_over_its_tree():
                 _reported_native_limitation(sel, path, other)
 
 
-@_pending_precision("Shared classical dispatcher: since host_routes follows HOST_IMPORT_ALIASES, ols/kmeans/arima "
-                    "reach _mojolearn_runtime_classical_host's classical_native_call, whose string-dispatched "
-                    "tree branches stay broad; see tools/LANE_SELECTOR_PRECISION.md.")
+# Was strict precision debt (classical dispatcher); it XPASSed on the 2026-11-15 and 2026-11-18 runs (none of
+# ols, kmeans, arima is selected by the three paths any more), so it is a hard check again.
 def test_shared_binding_paths_exclude_unrelated_lanes():
     # DEBT AGAIN (2026-10-24). This passed after 8188d819d only because the
     # selector lost the edge to the classical owner: tokenizer_host's
@@ -1027,10 +1026,15 @@ def test_the_six_lanes_the_report_named_are_attributed():
     mamba and samba lanes and the map must say so."""
     sources, rev = _lane_sets()
     got = rev.get("python/mojolearn/neural_inference.py", set())
-    for lane in ("mamba1", "mamba2", "mamba2-dtlimit", "mamba3",
-                 "samba", "samba-untied-dropout-accum",
+    # The mamba lanes left this list on 2026-11-18 (re-recorded in
+    # tools/lane_select_reviewed.json): since 76de1ab11d their only edge is the
+    # causal connection in `_native_neural_bridge.__getattr__`, through the
+    # models/causal_lm.py registry, and this file's import-time code reaches them
+    # through `package_import_time_closure`, asserted here instead.
+    for lane in ("samba", "samba-untied-dropout-accum",
                  "mlp", "transformer", "transformer-window"):
         assert lane in got, f"neural_inference.py serves {lane} and the map does not say so"
+    assert "python/mojolearn/neural_inference.py" in lane_select.package_import_time_closure()
     # BOUND DROPPED 2026-11-05 (was `len(got) < len(sources) // 2`). The file's
     # IMPORT-TIME code runs in every lane: `import mojolearn` imports
     # `_samba_impl.py` (__init__.py), whose module level calls
@@ -2047,12 +2051,12 @@ def test_a_subpackage_module_is_attributed_to_the_lanes_that_load_it():
     sel = lane_select.select(["python/mojolearn/models/safetensors.py"])
     assert not sel["unattributed"] and not sel["every_rules"], sel["reasons"]
     assert {"hf-checkpoint", "hf-causal-lm"} <= set(sel["lanes"]), sel["lanes"]
-    # `import mojolearn` no longer imports models (b6aa87e41d: each family is
-    # imported on first touch), so the reader is not import-time code of every
-    # lane any more and a k-means or GBDT lane that never touches a checkpoint
-    # is not selected by it.
-    assert "python/mojolearn/models/safetensors.py" not in lane_select.package_import_time_closure()
-    assert len(sel["lanes"]) < sel["total"], f"{len(sel['lanes'])} of {sel['total']}"
+    # `import mojolearn` no longer imports models eagerly (b6aa87e41d). The
+    # import-time closure still holds it, conservatively: `_native_neural_bridge`
+    # is imported at import time and its module `__getattr__` imports
+    # models.causal_lm on first use (76de1ab11d), and a whole-module import is
+    # read with all its defs. So no claim is made here about lanes that never
+    # touch a checkpoint; the two that do are required above.
     # every file of the subpackage is in the corpus and in some lane's map
     rev = lane_select.reverse_map()
     for name in ("__init__", "causal_lm", "config", "parallel_causal_lm", "safetensors", "tokenizer"):
@@ -2239,16 +2243,22 @@ class _Seeded:
         for path, text in self.old.items():
             lane_select._GIT_SHOW[f"{_FAKE_REF}:{path}"] = text
         for path, text in self.new.items():
-            self.saved[path] = (lane_select._read.cache.get(path), lane_select._parse.cache.get(path))
+            # `_python_imports` is memoized per path too: a seeded text that adds an import (the
+            # NearestNeighbors probe below imports `_buffer`, which neighbors.py itself no longer does)
+            # must be read from the seeded text, not the real file's memo.
+            self.saved[path] = (lane_select._read.cache.get(path), lane_select._parse.cache.get(path),
+                                lane_select._python_imports.cache.get(path))
             lane_select._read.cache[path] = text
             lane_select._parse.cache.pop(path, None)
+            lane_select._python_imports.cache.pop(path, None)
         return self
 
     def __exit__(self, *exc):
         for path in self.old:
             lane_select._GIT_SHOW.pop(f"{_FAKE_REF}:{path}", None)
-        for path, (read, parsed) in self.saved.items():
-            for cache, value in ((lane_select._read.cache, read), (lane_select._parse.cache, parsed)):
+        for path, (read, parsed, imports) in self.saved.items():
+            for cache, value in ((lane_select._read.cache, read), (lane_select._parse.cache, parsed),
+                                 (lane_select._python_imports.cache, imports)):
                 if value is None:
                     cache.pop(path, None)
                 else:
