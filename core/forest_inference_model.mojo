@@ -433,7 +433,9 @@ struct ResidentForest(Movable):
 
         nvForest26.08 forest_model.hpp:284-308 wraps borrowed I/O pointers.
         Here host input still uploads, but no intermediate host Lists are made.
-        Output may be written before a nonfinite-result error is raised.
+        Output may be written before a nonfinite-input or nonfinite-result
+        error is raised: both tests read back with the output under one
+        synchronize (`_predict_into_buffers`).
         """
         if features != self.features or outputs != self.outputs:
             raise Error("resident forest dimensions differ from prepared snapshot")

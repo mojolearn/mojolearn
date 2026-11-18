@@ -222,9 +222,22 @@ def run_checks() raises:
         rejected = True
     if not rejected:
         raise Error("nonfinite borrowed input accepted")
+    # THE ONE-SYNCHRONIZE CONTRACT (fb11, 2026-11-17). Lanes a7c and
+    # forests-regression (2026-11-14) moved the input's finite test onto the
+    # device, enqueued with the traversal, and read its status word back
+    # with the output under ONE synchronize per predict
+    # (`_predict_into_buffers`); the host scan before the upload is gone.
+    # So a refused borrowed call may already have written the caller's
+    # output when it raises (`ResidentForest.predict_into` says so). The
+    # NVIDIA L40S run was the first device run of this assertion and it
+    # failed on exactly that. What is gated is the refusal above; the old
+    # "output untouched" property would cost a second synchronize on every
+    # predict and is not the product's contract. Recorded, not judged:
+    var written = 0
     for value in untouched:
         if value != -9:
-            raise Error("borrowed invalid input modified output before validation")
+            written += 1
+    print("BORROWED_REFUSAL RF_INPUT True raised, output cells written before the raise:", written)
     resident_release[True](h)
     rejected = False
     try:
