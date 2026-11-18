@@ -541,10 +541,11 @@ struct Mamba3TapeBlock(Movable):
         self.held_sums.append(arena.take(ctx, n_sums))
         var src = _M3Source()
         src.arena = Int(MutPointer(to=arena))
-        self.scratch = Mamba3TapeScratch(ctx, b, l, dims, nc, src)
+        self.scratch = Optional[Mamba3TapeScratch](Mamba3TapeScratch(ctx, b, l, dims, nc, src))
         self.tk = 0
         self.held = True
-        self.held_arena = arena^
+        # moved last: the takes above went through `arena` and its address
+        self.held_arena = Optional[MambaArena](arena^)
 
     def rezero_held(mut self) raises:
         """The held block's zeros for one backward: ONE fill of the arena
@@ -564,22 +565,23 @@ def mamba3_held_block(
     sizing pass). The arena is sized by building the scratch once the default
     way with a counting source, so the size list is the constructor itself
     and the two cannot disagree."""
-    comptime if not M3_SCRATCH_HELD:
+    comptime if M3_SCRATCH_HELD:
+        var count = _M3Source()
+        var probe = Mamba3TapeScratch(ctx, b, l, dims, nc, count)
+        # the probe's queued fills ran before its buffers go
+        ctx.synchronize()
+        _ = probe^
+        var m = b * l
+        var cells = count.cells
+        cells += MambaArena.slot(m * dims.d_model, MAMBA_GUARD)
+        cells += MambaArena.slot(m * dims.d_in_proj(), MAMBA_GUARD)
+        cells += 2 * MambaArena.slot(m * dims.d_inner, MAMBA_GUARD)
+        cells += 2 * MambaArena.slot(mamba3_angle_suffix_sums_cells(b, l, dims.nheads), MAMBA_GUARD)
+        # one allocation and one zero fill (the arena's constructor)
+        var arena = MambaArena(ctx, cells, MAMBA_GUARD)
+        return Mamba3TapeBlock(arena=arena^, ctx=ctx, b=b, l=l, dims=dims, nc=nc)
+    else:
         raise Error("mamba3 backward (autograd): the held scratch needs -D MOJOLEARN_SAMBA_FAST_STEP_SCRATCH_HELD")
-    var count = _M3Source()
-    var probe = Mamba3TapeScratch(ctx, b, l, dims, nc, count)
-    # the probe's queued fills ran before its buffers go
-    ctx.synchronize()
-    _ = probe^
-    var m = b * l
-    var cells = count.cells
-    cells += MambaArena.slot(m * dims.d_model, MAMBA_GUARD)
-    cells += MambaArena.slot(m * dims.d_in_proj(), MAMBA_GUARD)
-    cells += 2 * MambaArena.slot(m * dims.d_inner, MAMBA_GUARD)
-    cells += 2 * MambaArena.slot(mamba3_angle_suffix_sums_cells(b, l, dims.nheads), MAMBA_GUARD)
-    # one allocation and one zero fill (the arena's constructor)
-    var arena = MambaArena(ctx, cells, MAMBA_GUARD)
-    return Mamba3TapeBlock(arena=arena^, ctx=ctx, b=b, l=l, dims=dims, nc=nc)
 
 
 comptime M3WeightsRef = MutPointer[Mamba3DeviceWeights, MutUntrackedOrigin]
