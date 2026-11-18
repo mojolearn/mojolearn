@@ -59,15 +59,16 @@ NFILES=$(wc -l < "$OUT/files.tsv" | tr -d ' ')
 echo "run_tool_tests: $NFILES files, $WORKERS workers of $CORES cores, $PY, logs $OUT"
 
 export PY OUT
-one() {   # kind path: one file, its log, and one "rc kind path" line in rc.txt
-    local kind=$1 path=$2 log rc
+one() {   # kind path: one file, its log, and one "rc kind path seconds" line in rc.txt
+    local kind=$1 path=$2 log rc t0
     log="$OUT/logs/$(echo "$path" | tr '/' '.').log"
+    t0=$(date +%s)
     if [ "$kind" = pytest ]; then
         "$PY" -m pytest -q -p no:cacheprovider -p no:xdist -rfE "$path" > "$log" 2>&1 < /dev/null; rc=$?
     else
         "$PY" "$path" > "$log" 2>&1 < /dev/null; rc=$?
     fi
-    printf '%s\t%s\t%s\n' "$rc" "$kind" "$path" >> "$OUT/rc.txt"
+    printf '%s\t%s\t%s\t%s\n' "$rc" "$kind" "$path" "$(( $(date +%s) - t0 ))" >> "$OUT/rc.txt"
 }
 export -f one
 : > "$OUT/rc.txt"
@@ -79,9 +80,10 @@ secs=$(( $(date +%s) - start ))
 import os, re, sys
 out, secs = sys.argv[1], sys.argv[2]
 counts = {"passed": 0, "failed": 0, "errors": 0, "skipped": 0}
-bad_files, names = [], []
+bad_files, names, times = [], [], []
 for line in open(os.path.join(out, "rc.txt")):
-    rc, kind, path = line.rstrip("\n").split("\t")
+    rc, kind, path, took = line.rstrip("\n").split("\t")
+    times.append((float(took), path))
     log = os.path.join(out, "logs", path.replace("/", ".") + ".log")
     text = open(log, errors="replace").read() if os.path.exists(log) else ""
     if kind == "pytest":
@@ -103,6 +105,9 @@ print("TOOL-TESTS passed=%(passed)d failed=%(failed)d errors=%(errors)d skipped=
       + " files_failing=%d seconds=%s logs=%s" % (len(bad_files), secs, out))
 for n in sorted(set(names)):
     print("  FAILED " + n)
+print("slowest files (seconds):")
+for took, path in sorted(times, reverse=True)[:10]:
+    print("  %6.0f  %s" % (took, path))
 with open(os.path.join(out, "SUMMARY.txt"), "w") as fh:
     fh.write("passed=%(passed)d failed=%(failed)d errors=%(errors)d skipped=%(skipped)d\n" % counts)
     fh.writelines("FAILED %s\n" % n for n in sorted(set(names)))
