@@ -30,6 +30,14 @@ comptime LMHEAD_FAST_GEMM_PANEL = is_defined["MOJOLEARN_LMHEAD_FAST_GEMM_PANEL"]
 #: doubling), not a vocabulary size.
 comptime LMHEAD_GP_LEAF = 64
 
+#: THE NEGATIVE CONTROL of the arm on the host column: the training host
+#: binding's own define (`-D MOJOLEARN_HOST_SABOTAGE=1`; no device build and
+#: no check defines it). It folds every denominator leaf over its vocabulary
+#: ids DESCENDING, a fold-order fault the contract forbids, with each term's
+#: arithmetic unchanged. The default profile's control reverses dWeight's row
+#: chain, which the arm no longer has (dWeight is a GEMM product).
+comptime LMHEAD_GP_HOST_SABOTAGE = is_defined["MOJOLEARN_HOST_SABOTAGE"]()
+
 comptime _P = MutPointer[Float32, MutAnyOrigin]
 comptime _T = MutPointer[Int32, MutAnyOrigin]
 
@@ -78,7 +86,10 @@ def lmhead_gp_leaf_body(  # device-helper: one (row, leaf) of the denominator le
     var maximum = ftz(maxima.unsafe_load(row))
     var target = Int(targets.unsafe_load(row)) - chunk0
     var acc = Float32(0.0)
-    for j in range(lo, hi):
+    for step in range(lo, hi):
+        var j = step
+        comptime if LMHEAD_GP_HOST_SABOTAGE:
+            j = hi - 1 - (step - lo)
         var shifted = ftz(ftz(logits.unsafe_load(row * n + j)) - maximum)
         acc = ftz(acc + ftz(identical_exp(shifted)))
         if j == target:
