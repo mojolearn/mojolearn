@@ -40,6 +40,7 @@ which is what the gates and the card use.
 
 # DEVIATION 2486: bulk host staging; stream/lifetime boundaries unchanged.
 from core.hostptr import copy_f32
+from core.transfer import transfer_download_f32_list, transfer_upload_list
 from std.sys.compile import is_defined
 from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from max.gpu import block_dim, block_idx, thread_idx
@@ -56,6 +57,8 @@ from checks.numerics import GLOBAL_NUMERIC_MODE as _CTX_MODE, NUMERIC_IDENTICAL 
 #: steward 1790601762837). Same kernels, same order, each entry still
 #: synchronizes before it returns, so no bit moves.
 comptime _CTX_NAME = "MojolearnCholeskyContextIdenticalV3" if _CTX_MODE == _CTX_IDENTICAL else "MojolearnCholeskyContextFastV3"
+#: The pinned download stages of this module and tier (core/transfer.mojo).
+comptime _XFER_POOL = "MojolearnCholeskyTransferStagesIdenticalV1" if _CTX_MODE == _CTX_IDENTICAL else "MojolearnCholeskyTransferStagesFastV1"
 
 
 def _binding_ctx() raises -> DeviceContext:
@@ -121,32 +124,26 @@ def cholesky_profile_jitter() -> Float32:
     return chol_jitter_pinned()
 
 
+@always_inline
 def _upload(
     ctx: DeviceContext, values: List[Float32]
 ) raises -> DeviceBuffer[DType.float32]:
-    var n = len(values)
-    var buf = ctx.enqueue_create_buffer[DType.float32](n)
-    var host = ctx.enqueue_create_host_buffer[DType.float32](n)
-    copy_f32(values.unsafe_ptr(), host.unsafe_ptr(), n)
-    ctx.enqueue_copy(dst_buf=buf, src_ptr=host.unsafe_ptr())
-    ctx.synchronize()
-    _ = host^
-    return buf^
+    # core/transfer.mojo (lane fx-transfer-helpers, 2026-11-18): read in place
+    # from the caller's list; the pinned staging buffer and its host copy per
+    # call are gone. One wait, as before.
+    return transfer_upload_list[DType.float32](ctx, values, len(values), len(values))
 
 
 def _download(
     ctx: DeviceContext, mut buf: DeviceBuffer[DType.float32], n: Int
 ) raises -> List[Float32]:
-    var h = ctx.enqueue_create_host_buffer[DType.float32](n)
-    ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=buf)
-    ctx.synchronize()
-    # one copy into a list of the final length (lane/neural-pass113): the
-    # element-by-element append regrew the list and cost 0.43 s of a 1.1 s
-    # 8192 factorization on the M4
-    var out = List[Float32](length=n, fill=Float32(0))
-    copy_f32(h.unsafe_ptr(), out.unsafe_ptr(), n)
-    _ = h^
-    return out^
+    # core/transfer.mojo (lane fx-transfer-helpers, 2026-11-18): the copy
+    # engine writes the list's own words (the pooled pinned stages from
+    # DOWNLOAD_STAGE_MIN floats). Gone: a pinned buffer per call, the zero
+    # fill of the list and the host copy between them. History: the
+    # element-by-element append before lane/neural-pass113 cost 0.43 s of a
+    # 1.1 s 8192 factorization on the M4.
+    return transfer_download_f32_list[_XFER_POOL](ctx, buf, n)
 
 
 def cholesky_factor_host(
