@@ -102,6 +102,31 @@ def _read_is_one_word() raises:
     require(registry_epoch(_A) == ka.epoch, "the held word and the table disagree")
 
 
+def _writer_keeps_its_key() raises:
+    # lane fx-samba-step-resident: `stamp_and_take`, the stamp of a write made
+    # FROM a resident copy (a Samba train step's download). The writer's key
+    # is current; every key taken before it reloads; another registry is
+    # untouched; any later write leaves the writer's key not current.
+    var other = RegistryKey.take(_A)
+    var kb = RegistryKey.take(_B)
+    var mine = RegistryKey.stamp_and_take(_A)
+    require(mine.current(_A), "the writer's own key is not current after its stamp")
+    require(not other.current(_A), "a copy keyed before the writer's stamp stayed current")
+    require(kb.current(_B), "the writer's stamp on A invalidated B")
+    require(mine.word == RegistryKey.take(_A).word, "the writer's key holds another word")
+    require(registry_epoch(_A) == mine.epoch, "the writer's key and the table disagree")
+    registry_epoch_bump(_A)
+    require(not mine.current(_A), "a later write left the writer's key current")
+    # a second writer stamp supersedes the first
+    var first = RegistryKey.stamp_and_take(_A)
+    var second = RegistryKey.stamp_and_take(_A)
+    require(not first.current(_A) and second.current(_A), "two writer stamps: the older key is current")
+    # a registry no copy was keyed by gets a slot and a current key; no address, no key
+    var fresh = RegistryKey.stamp_and_take(0x30000)
+    require(fresh.current(0x30000), "a first-ever writer stamp gave a key that is not current")
+    require(not RegistryKey.stamp_and_take(0).current(0), "a zero address gave a current key")
+
+
 def run_checks() raises:
     comptime if SAMBA_WEIGHT_EPOCH_GLOBAL:
         # The B arm keys every registry by the process epoch: the per-model
@@ -114,4 +139,5 @@ def run_checks() raises:
         _keys_are_per_address()
         _full_table_reloads_every_key()
         _read_is_one_word()
-        print("registry_epoch: 5 fixtures passed")
+        _writer_keeps_its_key()
+        print("registry_epoch: 6 fixtures passed")

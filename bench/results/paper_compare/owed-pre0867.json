@@ -652,6 +652,16 @@
    "define": "MOJOLEARN_LLAMA_FAST_KV_STRIDE_CAP",
    "status": "define in code (transformer/impl/llama/modeling_llama.mojo LLAMA_FAST_KV_STRIDE_CAP; transformer/host/transformer_block_host.mojo HOST_KV_STRIDE_CAP; bindings/transformer_public_native_door.mojo _KV_STRIDE_CAP): B = the full-causal KV cache at stride max_tokens, appended in place by the launch that gathers the packed span (no whole-capacity copy back of K and V per token per layer); A = the cache packed at stride s, repacked and copied back every token. Build every binding that imports modeling_llama, the host transformer binding and the transformer public door with the define",
    "owed": "RUN"
+  },
+  "samba-step-scratch-held": {
+   "define": "MOJOLEARN_SAMBA_FAST_STEP_SCRATCH_HELD",
+   "status": "define in code (autograd/rules_mamba3.mojo M3_SCRATCH_HELD, read by training/samba_resident.mojo SAMBA_STEP_SCRATCH_HELD; IDENTICAL, no poison build): B = the Samba resident session holds, per Mamba-3 layer, one arena for the backward (4 node gradients + 82 scratch buffers + 2 suffix sums as views; ONE zero fill a step, no allocation, no free, no per-block wait) and one arena for the forward state and 33 stages (ONE fill a call instead of 43); A = the default: 88 create + 88 fill + 88 free and one wait per Mamba-3 block backward, 43 fills per Mamba-3 block forward. Same kernels, operands, order and zeros: digests must not move",
+   "owed": "RUN"
+  },
+  "samba-step-registry-resident": {
+   "define": "MOJOLEARN_SAMBA_FAST_STEP_REGISTRY_RESIDENT",
+   "status": "define in code (core/weight_epoch.mojo SAMBA_STEP_REGISTRY_RESIDENT, read by training/samba_resident.mojo _step_registry_in / _step_registry_out and providers/python/samba_resident_pyapi_door.mojo: BOTH must be built with it, i.e. the whole wheel set): B = a Samba resident train step uploads and scans the registry only when the session's weight key is not current, scans the weights it wrote at its own closing wait, stamps the registry itself and keeps the key (the next step and the next forward skip the ~22 MB upload and the scan's wait); A = the default: registry host -> device and one scan with its own wait every step, the door stamps after the step. Same bytes in param, same kernels: digests must not move; read the stack's _samba_resident_uploads to prove which arm ran (B: it stops growing after the first step)",
+   "owed": "RUN"
   }
  },
  "rows": [
@@ -3702,6 +3712,97 @@
     "llama-kv-stride-cap"
    ],
    "decides": "keep A (the default, packed cache) unless B is faster at equal quality on the NVIDIA L40S. Generated ids, outputs and stage digests must not move (the arm changes no arithmetic); the carried K/V arrays change LAYOUT under B (stride max_tokens), so state digests taken over the raw buffers differ by design and those over keys()/values() must not. The saving grows with capacity and length: time also a neighbouring shape (transformer-decode and causal-lm-generate at 4x the board's new tokens / max_tokens) and a non-board model (a 12-layer llama config) before a flip (no dimension targeting). A flip changes the documented TransformerState layout and state_dict bytes on every column together"
+  },
+  {
+   "id": "fx-samba-step-scratch-held",
+   "source": "lane fx-samba-step-resident (2026-11-18, ideas 3, 4 and 10 of ~/mojolearn-evidence/briefs-20261118/ideas-training-speed-RESULT.md; report ~/mojolearn-evidence/briefs-20261118/fx-samba-step-resident-RESULT.md)",
+   "kind": "ab",
+   "lane": [
+    "samba-train-step",
+    "samba-forward",
+    "lm-train-step"
+   ],
+   "dataset": "*",
+   "rows": "full",
+   "vendor": "nvidia",
+   "b_arms": [
+    "samba-step-scratch-held"
+   ],
+   "decides": "promote B only if samba-train-step is faster on the NVIDIA L40S (same box, same job) with the loss and every digest equal; lm-train-step is the control (the arm does not reach it: a move there is box noise); samba-forward must not be slower. A loser is deleted with the four tombstone parts; expected -2.7..-10 ms of 45.5 on samba-train-step (ASSUMED 5-20 us per queued driver call; allocation cost never profiled)"
+  },
+  {
+   "id": "fx-samba-step-registry-resident",
+   "source": "lane fx-samba-step-resident (2026-11-18, ideas 3, 4 and 10 of ~/mojolearn-evidence/briefs-20261118/ideas-training-speed-RESULT.md; report ~/mojolearn-evidence/briefs-20261118/fx-samba-step-resident-RESULT.md)",
+   "kind": "ab",
+   "lane": [
+    "samba-train-step",
+    "samba-forward",
+    "lm-train-step"
+   ],
+   "dataset": "*",
+   "rows": "full",
+   "vendor": "nvidia",
+   "b_arms": [
+    "samba-step-registry-resident"
+   ],
+   "decides": "promote B only if samba-train-step is faster on the NVIDIA L40S (same box, same job) with the loss and every digest equal; lm-train-step is the control (the arm does not reach it: a move there is box noise); samba-forward must not be slower. A loser is deleted with the four tombstone parts; expected -1..-2 ms on samba-train-step (one 22 MB pageable upload at 20.8 GB/s and one wait); the board's samba-forward row does not follow a step, so the forward's key reuse is read on the driver row fx-samba-step-shapes"
+  },
+  {
+   "id": "fx-samba-step-shapes",
+   "source": "lane fx-samba-step-resident (2026-11-18, ideas 3, 4 and 10 of ~/mojolearn-evidence/briefs-20261118/ideas-training-speed-RESULT.md; report ~/mojolearn-evidence/briefs-20261118/fx-samba-step-resident-RESULT.md); the neighbouring shape and the non-board model size of both arms (no dimension targeting)",
+   "kind": "driver",
+   "driver": "samba_step",
+   "shape": {
+    "cases": [
+     {
+      "batch": 4,
+      "length": 300,
+      "d_model": 256,
+      "n_heads": 4,
+      "layers": [
+       "mamba3",
+       "attention",
+       "mamba3",
+       "attention"
+      ],
+      "intermediate": 1024
+     },
+     {
+      "batch": 4,
+      "length": 256,
+      "d_model": 256,
+      "n_heads": 4,
+      "layers": [
+       "mamba3",
+       "attention",
+       "mamba3",
+       "attention",
+       "mamba3",
+       "attention"
+      ],
+      "intermediate": 1024
+     },
+     {
+      "batch": 2,
+      "length": 192,
+      "d_model": 128,
+      "layers": [
+       "mamba3",
+       "mamba3"
+      ]
+     }
+    ]
+   },
+   "arms": [
+    "candidate",
+    "samba-step-scratch-held",
+    "samba-step-registry-resident"
+   ],
+   "b_arms": [
+    "samba-step-scratch-held",
+    "samba-step-registry-resident"
+   ],
+   "decides": "each B arm at least as fast as the candidate on SambaStack.train_step at every case (L = 300: a partial last chunk; a 6-layer stack; a small Mamba-3-only stack), and samba-step-registry-resident faster on the first forward after a step (no registry upload); a case that is slower blocks the promotion decided on the board rows"
   }
  ]
 }

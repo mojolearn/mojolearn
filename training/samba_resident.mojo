@@ -70,7 +70,7 @@ from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 
 from core.device_scan import device_classify_nonfinite, device_first_nonfinite
 from core.identity_trace import IdentityTrace
-from core.weight_epoch import RegistryKey
+from core.weight_epoch import RegistryKey, SAMBA_STEP_REGISTRY_RESIDENT, registry_epoch_bump
 from embedding.checks.embedding_identical import identical_embedding_forward_into
 from embedding.checks.embedding_oracle import EmbConfig
 from gemm.contract import OP_NT
@@ -88,8 +88,12 @@ from mamba.impl.modules.mamba3 import (
     Mamba3DeviceStages,
     Mamba3DeviceState,
     Mamba3DeviceWeights,
+    _m3_stage_sizes,
+    _m3_state_sizes,
     mamba3_block_forward,
 )
+from mamba.impl.modules.afn_arena import MambaArena
+from mamba.impl.modeling.modeling_mamba import MAMBA_GUARD
 from training.checks.loss_contract import (
     CeConfig,
     IGNORE_INDEX_DEFAULT,
@@ -117,7 +121,15 @@ from transformer.checks.transformer_fixture import RMS_EPS
 from autograd.rules_transformer import llama_decoder_layer_record
 from autograd.tape import Tape, Tensor
 from autograd.refuse_scan import DeferredNonfiniteScan
-from autograd.rules_mamba3 import M3BlockRef, M3StagesRef, M3WeightsRef, Mamba3TapeBlock, mamba3_block_record
+from autograd.rules_mamba3 import (
+    M3_SCRATCH_HELD,
+    M3BlockRef,
+    M3StagesRef,
+    M3WeightsRef,
+    Mamba3TapeBlock,
+    mamba3_block_record,
+    mamba3_held_block,
+)
 from autograd.rules_samba import (
     SAMBA_CE,
     SAMBA_EMBEDDING,
@@ -153,6 +165,33 @@ from transformer.impl.llama.modeling_llama import (
 # environment read per call of the launch helpers below until 2026-11-15
 # (lane envgate-train-seq-mamba); the default build passes a constant False.
 comptime _MAMBA_TIMING = is_defined["MOJOLEARN_MAMBA_TIMING"]()
+
+# ---- lane fx-samba-step-resident (2026-11-18): two EXPERIMENT arms, default
+# off, OPEN in docs/apple-fast/EXPERIMENTS.md; owed A/B rows
+# fx-samba-step-scratch-held and fx-samba-step-registry-resident in
+# bench/results/paper_compare/owed-pre0867.json. Both: same kernels on the
+# same operands in the same order, so no bit moves in either arm.
+#
+# -D MOJOLEARN_SAMBA_FAST_STEP_SCRATCH_HELD (SAMBA_STEP_SCRATCH_HELD, the
+# constant autograd/rules_mamba3.mojo M3_SCRATCH_HELD; IDENTICAL, no poison):
+#   * backward: the session holds one Mamba3TapeBlock per Mamba-3 layer whose
+#     node gradients, scratch and suffix sums are views of one arena
+#     (`m3_held`, built once per shape); a step queues ONE zero fill per layer
+#     where the default allocates, zero-fills and frees 88 buffers per layer
+#     and waits once per block before the frees (rules_mamba3.mojo header of
+#     the arm: stale values, lifetimes).
+#   * forward: each Mamba-3 layer's state and 33 stages are views of one
+#     arena (`m3_fwd_arena`, the constructors `MOJOLEARN_AFN_MAMBA_ARENA`
+#     already has); a call re-zeroes them with ONE fill where the default
+#     queues 43 (`Mamba3DeviceState.rezero` 10 + `Mamba3DeviceStages.rezero`
+#     33). Every float the default re-zeroes is inside that arena, so no
+#     stage relies on being written whole.
+#
+# -D MOJOLEARN_SAMBA_FAST_STEP_REGISTRY_RESIDENT (core/weight_epoch.mojo
+# SAMBA_STEP_REGISTRY_RESIDENT): a train step uploads and scans the registry
+# only when the forward's weight key (`wkey`) is not current, and keeps the
+# key after its own download (`_step_registry_in` / `_step_registry_out`).
+comptime SAMBA_STEP_SCRATCH_HELD = M3_SCRATCH_HELD
 
 
 
@@ -402,6 +441,11 @@ struct SambaResidentSession(Movable, Writable):
     var t_grad_bound: Bool
     #: the loss node's value word (the tape reads no value of it)
     var tape_loss: DeviceBuffer[DType.float32]
+    # ---- SAMBA_STEP_SCRATCH_HELD (both lists empty without the define)
+    #: per Mamba-3 layer: its backward state held across steps (rebuilt with the shape)
+    var m3_held: List[Mamba3TapeBlock]
+    #: per Mamba-3 layer: the arena its forward state and stages are views of
+    var m3_fwd_arena: List[MambaArena]
     var busy: Bool
     # ---- lane fix-samba-weight-upload (2026-11-13): the stateless forward
     #: uploads the registry only when `param` does not hold the bytes at the
@@ -514,6 +558,8 @@ struct SambaResidentSession(Movable, Writable):
         self.m3_dx = List[DeviceBuffer[DType.float32]]()
         self.t_grad_bound = False
         self.tape_loss = ctx.enqueue_create_buffer[DType.float32](1)
+        self.m3_held = List[Mamba3TapeBlock]()
+        self.m3_fwd_arena = List[MambaArena]()
         self.busy = False
         # ---- the weight views: the blocks read the registry in place
         self.m3_w = List[Mamba3DeviceWeights]()
@@ -604,6 +650,9 @@ def _ensure_shape(mut s: SambaResidentSession, b: Int, l: Int) raises:
         s.acts.append(ctx.enqueue_create_buffer[DType.float32](m * dm))
     s.m3_state = List[Mamba3DeviceState]()
     s.m3_stages = List[Mamba3DeviceStages]()
+    # the held arenas go with their views (the queue was drained above)
+    s.m3_held = List[Mamba3TapeBlock]()
+    s.m3_fwd_arena = List[MambaArena]()
     s.t_stages = List[LlamaDeviceStages]()
     s.t_bst = List[LlamaBackwardStages]()
     s.rope = None
@@ -615,8 +664,18 @@ def _ensure_shape(mut s: SambaResidentSession, b: Int, l: Int) raises:
     for i in range(s.n_layers()):
         if s.kinds[i] == SAMBA_LAYER_MAMBA3:
             var d3 = Mamba3Dims.of(dm)
-            s.m3_state.append(Mamba3DeviceState(ctx, b, d3))
-            s.m3_stages.append(Mamba3DeviceStages(ctx, b, l, 0, d3))
+            comptime if SAMBA_STEP_SCRATCH_HELD:
+                # the state and the stages as zero views of one arena (one
+                # allocation, one fill), in the arena constructors' own order
+                var cells = MambaArena.total(_m3_state_sizes(b, d3), MAMBA_GUARD)
+                cells += MambaArena.total(_m3_stage_sizes(b, l, 0, d3), MAMBA_GUARD)
+                var arena = MambaArena(ctx, cells, MAMBA_GUARD)
+                s.m3_state.append(Mamba3DeviceState(ctx, b, d3, arena))
+                s.m3_stages.append(Mamba3DeviceStages(ctx, b, l, 0, d3, arena))
+                s.m3_fwd_arena.append(arena^)
+            else:
+                s.m3_state.append(Mamba3DeviceState(ctx, b, d3))
+                s.m3_stages.append(Mamba3DeviceStages(ctx, b, l, 0, d3))
         else:
             s.t_stages.append(LlamaDeviceStages(ctx, b, l, l, s.ldims, 0, lean=s.lean))
             s.t_bst.append(LlamaBackwardStages(ctx, b, l, l, s.ldims, lean=s.lean))
@@ -685,8 +744,17 @@ def _forward_blocks(mut s: SambaResidentSession, b: Int, l: Int, forward_only: B
         if s.kinds[i] == SAMBA_LAYER_MAMBA3:
             # The certified zero state and zeroed stages per call, as the
             # fresh prefill builds them (`_m3_prefill_run`).
-            s.m3_state[j].rezero()
-            s.m3_stages[j].rezero()
+            comptime if SAMBA_STEP_SCRATCH_HELD:
+                # ONE fill of the layer's arena: the same zeros in every
+                # float the two rezero calls fill (10 + 33 fills), queued
+                # ahead of the block's launches on the in-order context.
+                # The arena is a session field, alive past every reader.
+                s.m3_state[j].buf_len = 0
+                s.m3_state[j].pending = False
+                s.m3_fwd_arena[j].base.enqueue_fill(Float32(0.0))
+            else:
+                s.m3_state[j].rezero()
+                s.m3_stages[j].rezero()
             mamba3_block_forward(
                 s.ctx, s.m3_stages[j], s.m3_state[j], s.m3_w[j], s.acts[i], b, l,
                 trace, String("samba.resident.m3"),
@@ -774,6 +842,19 @@ def _ensure_m3_dx(mut s: SambaResidentSession, m: Int) raises:
         s.m3_dx.append(s.ctx.enqueue_create_buffer[DType.float32](m * s.dm))
 
 
+def _ensure_m3_held(mut s: SambaResidentSession, b: Int, l: Int) raises:
+    """SAMBA_STEP_SCRATCH_HELD: one held Mamba3TapeBlock per Mamba-3 layer
+    (`mamba3_held_block`), built at the shape's first backward and kept until
+    `_ensure_shape` rebuilds the shape. The list is complete before any
+    pointer into it is taken (`_backward_tape`)."""
+    var n_m3 = len(s.m3_w)
+    if len(s.m3_held) == n_m3:
+        return
+    s.m3_held = List[Mamba3TapeBlock]()
+    for j in range(n_m3):  # driver-loop: over Mamba-3 layers
+        s.m3_held.append(mamba3_held_block(s.ctx, b, l, s.m3_w[j].dims, s.m3_stages[j].nc))
+
+
 def _backward_tape(
     mut s: SambaResidentSession,
     b: Int,
@@ -820,8 +901,15 @@ def _backward_tape(
     # gradients; the stage rules hold its scratch between the block's first
     # and last rule), allocated before any pointer into the list is taken
     var m3_blocks = List[Mamba3TapeBlock]()
-    for j in range(len(s.m3_w)):  # driver-loop: over Mamba-3 layers
-        m3_blocks.append(Mamba3TapeBlock(s.ctx, b, l, s.m3_w[j].dims))
+    comptime if SAMBA_STEP_SCRATCH_HELD:
+        # the session's held blocks: nothing allocated, ONE zero fill per
+        # layer (the default's 4 + 83 + 1 fills), queued before any rule
+        _ensure_m3_held(s, b, l)
+        for j in range(len(s.m3_held)):  # driver-loop: over Mamba-3 layers
+            s.m3_held[j].rezero_held()
+    else:
+        for j in range(len(s.m3_w)):  # driver-loop: over Mamba-3 layers
+            m3_blocks.append(Mamba3TapeBlock(s.ctx, b, l, s.m3_w[j].dims))
 
     # ---- the forward as it ran, recorded (nothing is relaunched)
     var ex = DeviceExec(s.ctx)
@@ -840,7 +928,10 @@ def _backward_tape(
                 var wv = s.view(base + k)
                 var gv = s.grad_view(base + k)
                 params.append(tape.variable_into(ex, _fpb(wv), _fpb(gv), 1, s.tensor_size(base + k)))
-            h = mamba3_block_record(tape, ex, h, params, s.m3_stages[j], m3_blocks[j], gin[i + 1], b, l, j)
+            comptime if SAMBA_STEP_SCRATCH_HELD:
+                h = mamba3_block_record(tape, ex, h, params, s.m3_stages[j], s.m3_held[j], gin[i + 1], b, l, j)
+            else:
+                h = mamba3_block_record(tape, ex, h, params, s.m3_stages[j], m3_blocks[j], gin[i + 1], b, l, j)
         else:
             # the decoder layer's nodes; its output is its own residual2
             h = llama_decoder_layer_record(
@@ -873,7 +964,10 @@ def _backward_tape(
     for j in range(len(s.m3_w)):  # driver-loop: over Mamba-3 layers
         w3.append(M3WeightsRef(unsafe_from_address=Int(MutPointer(to=s.m3_w[j]))))
         st3.append(M3StagesRef(unsafe_from_address=Int(MutPointer(to=s.m3_stages[j]))))
-        blk3.append(M3BlockRef(unsafe_from_address=Int(MutPointer(to=m3_blocks[j]))))
+        comptime if SAMBA_STEP_SCRATCH_HELD:
+            blk3.append(M3BlockRef(unsafe_from_address=Int(MutPointer(to=s.m3_held[j]))))
+        else:
+            blk3.append(M3BlockRef(unsafe_from_address=Int(MutPointer(to=m3_blocks[j]))))
     var cos_tab = _fpb(s.ones)
     var sin_tab = _fpb(s.ones)
     if s.has_attn:
@@ -1038,6 +1132,71 @@ def samba_resident_forward(
 # A vs B on NVIDIA and AMD (bench/results/paper_compare/owed-pre0867.json).
 
 
+def _step_registry_in(
+    mut s: SambaResidentSession,
+    param_ptr: MutPointer[Float32, MutUntrackedOrigin],
+) raises -> Bool:
+    """A train step's registry transport in: clears the forward's weight key
+    (the step rewrites `param`) and queues the host -> device copy. Returns
+    whether the registry went up, i.e. whether the caller must admit it
+    (`_admit_registry`).
+
+    Default: always (the copy and the scan every step, as before).
+
+    SAMBA_STEP_REGISTRY_RESIDENT: only when the key is not current, the
+    forward's own test (`samba_resident_forward`): one atomic load, no pass
+    over the weights. A current key means `param` holds the bytes at
+    `param_ptr` AND that they were admitted: the key is only ever set after
+    `_admit_registry` passed (the forward) or after the step's own scan of
+    the weights it wrote came back clean (`_step_registry_out`). Every other
+    writer of the registry (another step route, publish, load_weights, a
+    failed write) stamps it, so the key is then not current and the registry
+    is uploaded and scanned here exactly as in the default."""
+    var upload = True
+    comptime if SAMBA_STEP_REGISTRY_RESIDENT:
+        upload = not s.wkey.current(Int(param_ptr))
+    s.wkey = RegistryKey()
+    if upload:
+        s.ctx.enqueue_copy(dst_buf=s.param, src_ptr=param_ptr)
+        s.param_uploads += 1
+    return upload
+
+
+def _step_registry_out(
+    mut s: SambaResidentSession,
+    param_ptr: MutPointer[Float32, MutUntrackedOrigin],
+) raises:
+    """A train step's registry transport out: the updated registry device ->
+    host and the step's closing wait.
+
+    SAMBA_STEP_REGISTRY_RESIDENT: the non-finite refusal the next step's
+    upload scan gave is kept by scanning what the optimizer just wrote, on
+    the device, with the answer read at this same wait (no wait of its own:
+    `DeferredNonfiniteScan`, the kernels and the index of
+    `device_first_nonfinite`). Clean: the registry is stamped (every other
+    copy of it reloads) and this session keeps the key, so the next step and
+    the next forward skip the upload and the scan. A hit: the registry is
+    stamped and the key stays EMPTY, so the next call uploads the same bytes
+    and `_admit_registry` refuses them there with today's message at today's
+    call. The provider door's stamp after the step
+    (providers/python/samba_resident_pyapi_door.mojo) is not made under the
+    define: it would leave the key taken here not current."""
+    s.ctx.enqueue_copy(dst_ptr=param_ptr, src_buf=s.param)
+    comptime if SAMBA_STEP_REGISTRY_RESIDENT:
+        var written = DeferredNonfiniteScan(s.ctx, s.param, s.n_total)
+        written.enqueue_readback(s.ctx)
+        s.ctx.synchronize()
+        # `written` (its device and host words) is named past the wait
+        var bad = written.result_after_sync()
+        if bad < 0:
+            s.wkey = RegistryKey.stamp_and_take(Int(param_ptr))
+        else:
+            registry_epoch_bump(Int(param_ptr))
+        _ = written^
+    else:
+        s.ctx.synchronize()
+
+
 def samba_resident_train_step(
     mut s: SambaResidentSession,
     param_ptr: MutPointer[Float32, MutUntrackedOrigin],
@@ -1100,10 +1259,10 @@ def samba_resident_train_step(
     var v = s.vocab
     # ---- transport in: the registry, the ids, the targets. The step
     # rewrites `param`; the forward's key is current again only after its
-    # own upload (the dispatcher bumps the epoch around every step).
-    s.wkey = RegistryKey()
-    s.ctx.enqueue_copy(dst_buf=s.param, src_ptr=param_ptr)
-    s.param_uploads += 1
+    # own upload (the dispatcher bumps the epoch around every step), or,
+    # under SAMBA_STEP_REGISTRY_RESIDENT, after this step's own clean
+    # download (`_step_registry_in` / `_step_registry_out`).
+    var uploaded = _step_registry_in(s, param_ptr)
     _upload_tokens(s, ids_ptr)
     s.ctx.enqueue_copy(dst_buf=s.targets, src_ptr=targets_ptr)
     # ---- the targets' range refusal and the ignore-index count, on the
@@ -1112,7 +1271,8 @@ def samba_resident_train_step(
     var count = _admit_targets_device(s.ctx, s.targets, m, v, IGNORE_INDEX_DEFAULT)
     var cfg = CeConfig(v, IGNORE_INDEX_DEFAULT, REDUCTION_SUM, Float32(0.0), count)
     ce_refuse_shape(m, m * v, cfg)
-    _admit_registry(s)
+    if uploaded:
+        _admit_registry(s)
 
     # ---- forward
     var emb = EmbConfig.llama(v, dm)
@@ -1154,8 +1314,7 @@ def samba_resident_train_step(
         eps, weight_decay, momentum, dampening, max_norm, 0,
     )
     # ---- transport out: the updated registry
-    s.ctx.enqueue_copy(dst_ptr=param_ptr, src_buf=s.param)
-    s.ctx.synchronize()
+    _step_registry_out(s, param_ptr)
     _ = ew^
     _ = hw^
     _ = nw^
@@ -1229,10 +1388,8 @@ def samba_resident_accumulated_step(
     var v = s.vocab
     # The step rewrites `param`: the forward's weight key is cleared first
     # (lane fix-samba-weight-upload; see samba_resident_train_step).
-    s.wkey = RegistryKey()
-    s.ctx.enqueue_copy(dst_buf=s.param, src_ptr=param_ptr)
-    s.param_uploads += 1
-    _admit_registry(s)
+    if _step_registry_in(s, param_ptr):
+        _admit_registry(s)
     var stacked = s.ctx.enqueue_create_buffer[DType.float32](a * n)
     var losses = List[Float32](length=a, fill=Float32(0.0))
     var emb = EmbConfig.llama(v, dm)
@@ -1283,8 +1440,7 @@ def samba_resident_accumulated_step(
         offsets_ptr, init_ptr, info_ptr, n_tensors, kind, t, nesterov, lr, beta1, beta2,
         eps, weight_decay, momentum, dampening, max_norm, 0,
     )
-    s.ctx.enqueue_copy(dst_ptr=param_ptr, src_buf=s.param)
-    s.ctx.synchronize()
+    _step_registry_out(s, param_ptr)
     _ = ew^
     _ = hw^
     _ = nw^
