@@ -7,6 +7,7 @@ become -1 padding. No n-by-m storage or scan, including graph normalization.
 # Copyright 2026 Andrew Hendel. Part of mojolearn.
 
 from std.memory import bitcast
+from core.host_finite_scan import host_all_finite_f32
 from checks.numerics import ftz, identical_div, identical_sqrt, identical_mul_add
 from x_neighbors.items import FP, IP, _add
 
@@ -71,10 +72,8 @@ def op_lp_knn_graph(idx: Int, cols: Int, vals: Int, n: Int, m: Int, k: Int, vari
 
 
 def lp_knn_finite(x: FP, count: Int) -> Bool:
-    for t in range(count):
-        if (bitcast[DType.uint32](x.unsafe_load(t)) & UInt32(0x7F800000)) == UInt32(0x7F800000):
-            return False
-    return True
+    # parallel: the one host finite scan (was a serial bits loop over m x c)
+    return host_all_finite_f32(MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(x)), count)
 
 
 def lp_knn_product_item(t: Int, cols: IP, vals: FP, x: FP, res: FP,

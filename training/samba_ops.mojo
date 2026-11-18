@@ -14,6 +14,7 @@ microbatch index. Every buffer lives for one call; no pointer is retained.
 
 from max.gpu import block_dim, block_idx, thread_idx
 from std.math import isfinite
+from core.host_finite_scan import host_all_finite_f32, host_first_nonfinite_f32
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from checks.numerics import ftz, identical_mul_add, GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
@@ -70,12 +71,13 @@ def _grid(n: Int) -> Int:
 def _refuse_nonfinite(
     name: String, ptr: MutPointer[Float32, MutUntrackedOrigin], n: Int
 ) raises:
-    for i in range(n):
-        if not isfinite(ptr.unsafe_load(i)):
-            raise Error(
-                "mojolearn samba ops: non-finite " + name + " at flat index "
-                + String(i)
-            )
+    # parallel: the one host finite scan; the index walk runs only on a refusal
+    if host_all_finite_f32(ptr, n):
+        return
+    raise Error(
+        "mojolearn samba ops: non-finite " + name + " at flat index "
+        + String(host_first_nonfinite_f32(ptr, n))
+    )
 
 
 def _upload_f32(
