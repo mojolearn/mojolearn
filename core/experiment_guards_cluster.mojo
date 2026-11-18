@@ -599,6 +599,10 @@ def _check_configuration() -> Bool:
     # ---- lane fx-env-dead (2026-11-18)
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_HDB_SPARSE_MIN_ROWS.patch
     comptime assert not is_defined["MOJOLEARN_IDN_HDB_SPARSE_MIN_ROWS"](), "removed 2026-11-18 (lane/fx-env-dead): IDN_HDB_SPARSE_MIN_ROWS (unmeasured opt-in threshold arm, hdbscan) is gone; the default switch point PAIRWISE_MAX_ROWS is the only one; code recoverable at 0c65d61fed; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_KMEANS_LAZY_SHIFT_IDN_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_KMEANS_LAZY_SHIFT_IDN_OFF"](), "removed 2026-11-18 (lane/fx-env-dead): KMEANS_LAZY_SHIFT_IDN_OFF (old path beside the IDENTICAL default, kmeans lazy convergence read; no A/B in four weeks) is gone; the default path is the only one; code recoverable at 0c65d61fed; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_KMEANS_LIVE_CORES_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_KMEANS_LIVE_CORES_OFF"](), "removed 2026-11-18 (lane/fx-env-dead): KMEANS_LIVE_CORES_OFF (old path beside the default, kmeans fused grid from the stand-in table row; no A/B in four weeks) is gone; the default path is the only one; code recoverable at 0c65d61fed; see docs/TOMBSTONES.md"
     # ---- end lane fx-env-dead
     return True
 
