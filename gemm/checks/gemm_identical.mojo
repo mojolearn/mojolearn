@@ -121,6 +121,7 @@ from std.utils import StaticTuple
 from std.memory import bitcast, stack_allocation
 from std.os import getenv
 from max.gpu.host import DeviceAttribute, DeviceBuffer, DeviceContext
+from max.gpu.host import HostBuffer  # lane/fx-gemm-worklist: the work-list table's pinned copy
 # DEVIATION 2630: the step phase timers and counters (core/step_phase.mojo;
 # compiled only under -D MOJOLEARN_STEP_PHASE_TIMERS=1).
 from core.step_phase import (
@@ -8811,8 +8812,13 @@ def _kpack_step[DIAG: Int](a: Float32, b: Float32, acc: Float32) -> Float32:
 
 # TOMBSTONE: MOJOLEARN_IDN_GEMM_NV_MICROTILE (loser: neural:gemm NV 1.15x slower, NVIDIA-only) deleted 2026-10-11 by c38d7bc89; code recoverable at c38d7bc89^.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_GEMM_NV_MICROTILE.patch
-@__llvm_metadata(MAX_THREADS_PER_BLOCK_METADATA=StaticTuple[Int32, 1](Int32(GEMM_KPACK_LAUNCH_BOUND)))
-def identical_gemm_kpack_kernel[
+# lane/fx-gemm-worklist (2026-11-19): the body of `identical_gemm_kpack_kernel`, unchanged, as an inlined helper so
+# the single-product kernel and the work-list kernel (`identical_gemm_kpack_list_kernel`, below `_kpack_launch`) run
+# ONE body (AGENTS.md part 6: a launched kernel is never called from another kernel). The only two edits to the body
+# are its last two arguments: `raw_in` is the tile block index (`block_idx.x` of a single-product launch) and `q_in`
+# the leaf group (`block_idx.y` there); the single-product kernel passes exactly those.
+@always_inline
+def _kpack_kernel_body[
     RPT: Int, CPT: Int, TC: Int, KS: Int, FS: Int, PAGES: Int, GROUP: Bool, SAB: Bool,
     PAD: Int = 0,
     ALIGN: Int = 4,
@@ -8834,6 +8840,8 @@ def identical_gemm_kpack_kernel[
     b_sj_in: Int32,
     gleaves_in: Int32,
     groups_in: Int32,
+    raw_in: Int32,
+    q_in: Int32,
 ):
     """DEVIATION 2599: the shipped per-window body over a PACKED page.
 
@@ -9020,12 +9028,12 @@ def identical_gemm_kpack_kernel[
     var tiles_i = (m + BM - 1) // BM
     var tiles_j = (n + BN - 1) // BN
     var n_tiles = tiles_i * tiles_j
-    var raw = Int(block_idx.x)
+    var raw = Int(raw_in)
     if raw >= n_tiles:
         return
     var q = 0
     comptime if GROUP:
-        q = Int(block_idx.y)
+        q = Int(q_in)
         if q >= groups or p_count <= 0 or gleaves < 1:
             # The launcher never sends `k == 0` to the group launch.
             return
