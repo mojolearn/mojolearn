@@ -725,7 +725,7 @@ def mi_cd_device(ctx: DeviceContext, mut df: DeviceBuffer[DType.float32], mut dw
                  n: Int, d: Int, Z: Int, zs1: Int, ties: Bool) raises:
     """Enqueue the whole `mi_cd` stage (its params at dq[qoff:]); `dw` holds
     mi_w_words(n, d) words. ties: the (x, secondary) order and the searched
-    runs of `_point_ties_kernel` (MOJOLEARN_XPREP_MI_TIES, default on)."""
+    runs of `_point_ties_kernel` (on by default; the build define -D MOJOLEARN_XPREP_FAST_MI_TIES_OFF turns it off)."""
     if n <= 0 or d <= 0:
         return
     var big_n = mi_big_n(n)

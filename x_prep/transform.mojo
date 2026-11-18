@@ -618,7 +618,7 @@ def _pt_golden_step(left: Bool, mut a: Float32, mut b: Float32, mut x1: Float32,
     return x2
 
 
-#: the most candidates one round evaluates (2^6 - 1: MOJOLEARN_XPREP_PT_SPEC <= 6)
+#: the most candidates one round evaluates (2^6 - 1: -D MOJOLEARN_XPREP_FAST_PT_SPEC_DEPTH <= 6)
 comptime PT_SPEC_MAX = 63
 
 
