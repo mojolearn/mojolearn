@@ -1,11 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 # Whole sequence-optimizer operations. All data preparation, owner routing,
 # schedule evaluation and state/output handling execute natively here.
-from std.sys import is_defined
-# The same build define as training/optimizer_public_common.mojo
-# OPTIMIZER_RESIDENT (kept local so this unit does not import the training
-# package); B arm -D MOJOLEARN_OPTIMIZER_RESIDENT_OFF.
-comptime OPTIMIZER_RESIDENT = not is_defined["MOJOLEARN_OPTIMIZER_RESIDENT_OFF"]()
+# TOMBSTONE: MOJOLEARN_OPTIMIZER_RESIDENT_OFF (LOSER: per-call optimizer step, arm/base geomean 1.129 over 5 cells, samba-train-step 1.97, NV L40S ab3 2026-11-18) deleted 2026-11-18 by lane/fx-verdicts2; code recoverable at 85c36e324f.
+# Restore: git apply experiments/removed/MOJOLEARN_OPTIMIZER_RESIDENT_OFF.patch; record in docs/TOMBSTONES.md.
 from std.memory import bitcast
 from std.python import Python, PythonObject
 from bindings.optimizer_container_boundary_unpack import OptimizerInputOwners
@@ -337,8 +334,6 @@ def seq_construct(owner: PythonObject, values: PythonObject, mode: PythonObject,
             for suffix in ["_resident_open", "_resident_step", "_resident_step_dev"]:  # driver-loop: over required resident optimizer entries
                 if py_get(selected, PythonObject(prefix + suffix)) is None:
                     raise Error("RuntimeError: this binding does not support resident optimizer parameters")
-            comptime if not OPTIMIZER_RESIDENT:
-                raise Error("RuntimeError: device params need the resident optimizer (this build has -D MOJOLEARN_OPTIMIZER_RESIDENT_OFF)")
         py_setitem(fields, "params", params)
         py_setitem(fields, "numeric_mode", mode)
         py_setitem(fields, "_dev_b", selected["module"] if device else PythonObject(None))

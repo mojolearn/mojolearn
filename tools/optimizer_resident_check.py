@@ -5,8 +5,8 @@
 
 lane/neural-pass4 (2026-09-30). `mojolearn.AdamW` (and `Adam`, `SGD`) keep
 `exp_avg` and `exp_avg_sq` on the device between steps where the training
-binding offers `optimizer_resident_*`; `resident=False` (or
-`MOJOLEARN_OPTIMIZER_RESIDENT=0`) keeps the per-call `optimizer_step`. Both
+binding offers `optimizer_resident_*`; `resident=False` keeps the per-call
+`optimizer_step`. Both
 run the same `identical_optimizer_step` on the same buffers, so every step's
 parameters, moments and flags must agree byte for byte. This tool runs both
 from one initialization over the same gradients, with a `state_dict` /

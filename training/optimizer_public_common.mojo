@@ -296,9 +296,13 @@ def registry_offsets(nbytes: List[Int], offsets: I32P) raises -> Int:
 # ROUTE-DEFAULT-SUSPECT, no A/B on record: B arms RUN OWED in
 # bench/results/paper_compare/owed-pre0867.json ("optimizer-resident-off",
 # "opt-lazy-moments-off").
-#: resident optimizer state on the device; `-D MOJOLEARN_OPTIMIZER_RESIDENT_OFF`
-#: keeps the per-call step (the A/B's before arm)
-comptime OPTIMIZER_RESIDENT = not is_defined["MOJOLEARN_OPTIMIZER_RESIDENT_OFF"]()
+#: Resident optimizer state on the device, always (a single-device plan). A/B
+#: ab3 (NVIDIA L40S, wheel d652a4b0a1, 2026-11-18, job
+#: nvc-ab-20261118T182558Z-cb6e02, one run per arm, digests and quality
+#: equal): the per-call step was arm/base 1.129 geomean over 5 cells
+#: (samba-train-step 45.5 -> 89.6 ms 1.97, the rest 0.95-1.00).
+# TOMBSTONE: MOJOLEARN_OPTIMIZER_RESIDENT_OFF (LOSER: per-call optimizer step, arm/base geomean 1.129 over 5 cells, samba-train-step 1.97, NV L40S ab3 2026-11-18) deleted 2026-11-18 by lane/fx-verdicts2; code recoverable at 85c36e324f.
+# Restore: git apply experiments/removed/MOJOLEARN_OPTIMIZER_RESIDENT_OFF.patch; record in docs/TOMBSTONES.md.
 #: lazy Adam moments (allocated on first use, lane gap-train-utils);
 #: `-D MOJOLEARN_OPT_LAZY_MOMENTS_OFF` allocates the host state with the
 #: optimizer and uploads it on the first step
@@ -306,13 +310,10 @@ comptime OPT_LAZY_MOMENTS = not is_defined["MOJOLEARN_OPT_LAZY_MOMENTS_OFF"]()
 
 
 def resident_wanted_by_build(plan: DevicePlan) -> Bool:
-    """The build constant OPTIMIZER_RESIDENT, and a single-device optimizer
-    plan (a multi-device count lives in the per-call step). The count is
-    the binding entry's plan: its setting is the raw
-    MOJOLEARN_OPTIMIZER_DEVICE_COUNT value (default "1"), tested exactly as
-    before."""
-    comptime if not OPTIMIZER_RESIDENT:
-        return False
+    """A single-device optimizer plan (a multi-device count lives in the
+    per-call step). The count is the binding entry's plan: its setting is the
+    raw MOJOLEARN_OPTIMIZER_DEVICE_COUNT value (default "1"), tested exactly
+    as before."""
     if plan.setting != "1":
         return False
     return True
