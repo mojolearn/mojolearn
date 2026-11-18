@@ -1274,6 +1274,9 @@ def check_device_worklist_is_launch_invariant() raises:
                     + String(first % cs3[2]) + "): list = " + _show(hc.unsafe_ptr().unsafe_load(first))
                     + "   single = " + _show(singles[i][first])
                 )
+        # Named after the wait: the list owns the device table and its pinned
+        # copy, which the queued upload and launch read.
+        _ = wl.node_floats()
         _ = nodes
         _ = len(das) + len(dbs) + len(dcs)
     if fails != 0:
