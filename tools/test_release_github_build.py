@@ -283,8 +283,10 @@ class MergedPlan(unittest.TestCase):
                 self.assertEqual(r["unit"], tier + "-merged_build-" + group)
                 # every group fits a free runner without heavy swap
                 self.assertLessEqual(r["swap_gib"], 2)
-        # the assemble job compiles one unit at a time: its swap is the largest single unit's
-        self.assertEqual(doc["assemble_swap_gib"], max(r["swap_gib"] for r in rows if r["n"] == 1))
+        # the assemble job compiles one unit at a time: its swap is the largest single unit's, packed units included
+        self.assertEqual(doc["assemble_swap_gib"],
+                         max(rgb.swap_gib(rgb.unit_peak_gib(e, r["vendor"], True)) for r in rows
+                             for e in r["only"].split()))
         # the heaviest group goes onto shard 0
         self.assertTrue(rows[0]["only"].startswith("identical:merged_build.sh:"))
 
@@ -312,7 +314,8 @@ class MergedPlan(unittest.TestCase):
         rc, doc = self.run_plan(merged_source(), "--modes", "identical")
         self.assertEqual(rc, 0)
         self.assertEqual(doc["modes"], ["identical"])
-        self.assertEqual(sorted(r["only"] for r in doc["matrix"]["include"] if r["arch"] == "sm_89"),
+        # a packed row names its units space-separated (pack_units)
+        self.assertEqual(sorted(e for r in doc["matrix"]["include"] if r["arch"] == "sm_89" for e in r["only"].split()),
                          sorted(HOST + IDENTICAL))
 
     def test_a_compile_no_free_runner_can_hold_is_refused_with_one_sentence(self):
