@@ -483,6 +483,7 @@ def rbc_build_index(
         hid.unsafe_ptr().unsafe_store(j, picked[j])
     ctx.enqueue_copy(dst_buf=landmark_ids, src_ptr=hid.unsafe_ptr())
     ctx.synchronize()
+    _ = hid^  # past the drain: the upload above reads it after its last named use
 
     var cells_r = n_landmarks * n_cols
     ctx.enqueue_function[rbc_copy_rows_kernel](

@@ -394,4 +394,5 @@ def vertex_deg_dispatch(
     var tail = vd.create_sub_buffer[DType.int32](rows, 1)
     ctx.enqueue_copy(dst_buf=tail, src_ptr=host.unsafe_ptr())
     ctx.synchronize()
+    _ = host^  # past the drain: the upload above reads it after its last named use
     _ = shards^

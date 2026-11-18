@@ -790,6 +790,7 @@ def rbc_eps_pass_count(
         src_ptr=t.unsafe_ptr(),
     )
     ctx.synchronize()
+    _ = t^  # past the drain: the upload above reads it after its last named use
     return nnz
 
 
@@ -1250,6 +1251,7 @@ def rbc_eps_pass_count_bitmap(
         src_ptr=t.unsafe_ptr(),
     )
     ctx.synchronize()
+    _ = t^  # past the drain: the upload above reads it after its last named use
     return nnz
 
 
@@ -1473,6 +1475,7 @@ def rbc_eps_pass_max_k(
         src_ptr=t.unsafe_ptr(),
     )
     ctx.synchronize()
+    _ = t^  # past the drain: the upload above reads it after its last named use
 
     # DEVIATION 551, the max_k arm. Wiring `rbc_eps_pass_fill` alone was not
     # enough and the gate said so at once: `check_max_k_wiring` compares this
