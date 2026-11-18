@@ -729,10 +729,10 @@ def xcnn_adopt(entries: PythonObject, shape: List[Int], h: Int, context: PythonO
     """The `DeviceTensor` of `shape` that owns resident array `h`, which the
     caller just allocated on this binding (`xcnn_alloc_op`) in the GIL
     window of the entry that filled it. The object `xcnn_new` returns for
-    the same handle. The caller ran `xcnn_tensor_layout` in this operation
-    (it admitted a tensor input) and no Python code ran since."""
-    return _xcnn_tensor_raw(xcnn_item(entries, XK_MODULE), xcnn_tuple(shape), PythonObject(h), PythonObject(None),
-                            PythonObject(None), context)
+    the same handle, made the same way: the layout check runs again here,
+    after the GIL window, before the five slot writes."""
+    return xcnn_tensor(xcnn_item(entries, XK_MODULE), xcnn_tuple(shape), PythonObject(h), PythonObject(None),
+                       PythonObject(None), context)
 
 
 def xcnn_out_new(entries: PythonObject, shape: List[Int], context: PythonObject) raises -> PythonObject:
