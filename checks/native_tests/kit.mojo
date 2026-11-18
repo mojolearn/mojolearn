@@ -90,17 +90,26 @@ def upload_into[dt: DType](ctx: DeviceContext, mut dst: DeviceBuffer[dt], values
 
 
 def upload_whole_into[dt: DType](ctx: DeviceContext, mut dst: DeviceBuffer[dt], values: List[Scalar[dt]]) raises:
-    """The first `len(dst)` words of `values` into the whole of `dst`,
-    drained before it returns. `values` may be longer than `dst`, never
-    shorter (what a raw copy from the list's pointer did, with the bound
-    checked)."""
+    """`values` against the whole of `dst`, as a raw copy from the list's
+    pointer was written: the first `len(dst)` words when the list is at
+    least that long. A shorter list writes only its own words (the raw copy
+    read past the list's end there). Drained before it returns."""
     var n = len(dst)
-    require(len(values) >= n, "kit.upload_whole_into: " + String(len(values)) + " words for a buffer of " + String(n))
+    if len(values) < n:
+        n = len(values)
+    if n == 0:
+        return
     var host = ctx.enqueue_create_host_buffer[dt](n)
     ctx.synchronize()
     unsafe_memcpy(dest=host.unsafe_ptr(), src=values.unsafe_ptr(), count=n)
-    ctx.enqueue_copy(dst_buf=dst, src_ptr=host.unsafe_ptr())
-    ctx.synchronize()
+    if n == len(dst):
+        ctx.enqueue_copy(dst_buf=dst, src_ptr=host.unsafe_ptr())
+        ctx.synchronize()
+    else:
+        var view = dst.create_sub_buffer[dt](0, n)
+        ctx.enqueue_copy(dst_buf=view, src_ptr=host.unsafe_ptr())
+        ctx.synchronize()
+        _ = view^
     _ = host^
 
 
@@ -183,14 +192,17 @@ def download_into[dt: DType](ctx: DeviceContext, mut src: DeviceBuffer[dt], mut 
 
 
 def download_whole_into[dt: DType](ctx: DeviceContext, src: DeviceBuffer[dt], mut dst: List[Scalar[dt]]) raises:
-    """The whole of `src` into the first `len(src)` words of `dst`, drained.
-    `dst` may be longer than `src`, never shorter."""
+    """The whole of `src` into `dst`, as a raw copy to the list's pointer
+    was written, drained. A list shorter than `src` receives only its own
+    length (the raw copy wrote past the list's end there)."""
     var n = len(src)
-    require(len(dst) >= n, "kit.download_whole_into: a list of " + String(len(dst)) + " for a buffer of " + String(n))
     var host = ctx.enqueue_create_host_buffer[dt](n)
     ctx.enqueue_copy(dst_ptr=host.unsafe_ptr(), src_buf=src)
     ctx.synchronize()
-    unsafe_memcpy(dest=dst.unsafe_ptr(), src=host.unsafe_ptr(), count=n)
+    if len(dst) < n:
+        n = len(dst)
+    if n > 0:
+        unsafe_memcpy(dest=dst.unsafe_ptr(), src=host.unsafe_ptr(), count=n)
     _ = host^
 
 
