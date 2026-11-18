@@ -1114,6 +1114,25 @@ def bn_gs_var_at(c: Int, part: FP, aux: FP, f2: FP, f3: FP, q: IP, p: IP):
     aux.unsafe_store(_bn(aux, BN_INVSTD, c, C), ftz(identical_rsqrt(ftz(var_b + aux.unsafe_load(0)))))
 
 
+# lane fb15-sync-counts (2026-11-18): the training forward's running-state
+# update rides the variance launch (both run one thread per channel; the
+# update reads the variance its own thread just stored). One launch fewer per
+# BatchNorm training forward; the same expressions on the same words, so no
+# bit moves on any column. The host twin keeps its two loops (the same values).
+@always_inline
+def bn_gs_var_running_at(c: Int, part: FP, aux: FP, running: FP, f3: FP, q: IP, p: IP):
+    """`bn_gs_var_at` then `bn_running_at` for channel c (`running` in the f2 seat)."""
+    bn_gs_var_at(c, part, aux, running, f3, q, p)
+    bn_running_at(c, running, aux, running, f3, q, p)
+
+
+@always_inline
+def bn_blk_var_running_at(c: Int, part: FP, aux: FP, running: FP, f3: FP, q: IP, p: IP):
+    """`bn_blk_var_at` then `bn_running_at` for channel c (`running` in the f2 seat)."""
+    bn_blk_var_at(c, part, aux, running, f3, q, p)
+    bn_running_at(c, running, aux, running, f3, q, p)
+
+
 @always_inline
 def bn_gs_red_fin_at(c: Int, part: FP, aux: FP, f2: FP, f3: FP, q: IP, p: IP):
     """Channel c's sum_g and sum_gx from its chunk sums."""

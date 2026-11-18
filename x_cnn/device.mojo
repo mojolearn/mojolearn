@@ -74,6 +74,7 @@ from x_cnn.ops import IDN_GAP_BLOCK_FOLD, gap_fold_blocks, adapt_avg_blk_at, ada
 # lane bn-grid-stats (2026-10-11, G5): coalesced two-level BN statistics folds
 from x_cnn.ops import (
     IDN_BN_GRID_STATS, BN_GS_LANES, bn_gs_chunks, bn_gs_lane, bn_gs_mean_at, bn_gs_var_at, bn_gs_red_fin_at,
+    bn_gs_var_running_at, bn_blk_var_running_at,
 )
 # lane fam2-neural (2026-10-04): the device loss fold
 from x_cnn.ops import IDN_XENT_DEV_FOLD, LOSS_FOLD_BLOCK, blk_fold_at, fold_plan
@@ -1831,12 +1832,13 @@ def batchnorm_forward_m(a: List[Int], dev: Int, prm: List[Int32], training: Bool
             ctx.enqueue_function[bn_gs_chunk_kernel[0]](fp(dx), fp(dx), fp(da), fp(dpart), ip(dp), grid_dim=(nblk, 1, 1), block_dim=(BN_GS_LANES, 1, 1))
             launch[bn_gs_mean_at](ctx, fp(dpart), fp(da), fp(da), fp(da), ip(dp), ip(dp), C)
             ctx.enqueue_function[bn_gs_chunk_kernel[1]](fp(dx), fp(dx), fp(da), fp(dpart), ip(dp), grid_dim=(nblk, 1, 1), block_dim=(BN_GS_LANES, 1, 1))
-            launch[bn_gs_var_at](ctx, fp(dpart), fp(da), fp(da), fp(da), ip(dp), ip(dp), C)
+            # lane fb15-sync-counts: the running update rides this launch (x_cnn/ops.mojo)
+            launch[bn_gs_var_running_at](ctx, fp(dpart), fp(da), fp(dr), fp(da), ip(dp), ip(dp), C)
         elif BN_FOLD_BLOCK:
             launch[bn_blk_sum_at](ctx, fp(dx), fp(dpart), fp(dpart), fp(dpart), ip(dp), ip(dp), nblk)
             launch[bn_blk_mean_at](ctx, fp(dpart), fp(da), fp(da), fp(da), ip(dp), ip(dp), C)
             launch[bn_blk_sq_at](ctx, fp(dx), fp(dpart), fp(da), fp(da), ip(dp), ip(dp), nblk)
-            launch[bn_blk_var_at](ctx, fp(dpart), fp(da), fp(da), fp(da), ip(dp), ip(dp), C)
+            launch[bn_blk_var_running_at](ctx, fp(dpart), fp(da), fp(dr), fp(da), ip(dp), ip(dp), C)
         else:
             var blk = _bn_use_block[True](ctx, dx, dr, da, dp, Int(prm[0]), C, Int(prm[2]))
             if blk:
@@ -1846,8 +1848,10 @@ def batchnorm_forward_m(a: List[Int], dev: Int, prm: List[Int32], training: Bool
     else:
         launch[bn_eval_stats_at](ctx, fp(dr), fp(da), fp(da), fp(da), ip(dp), ip(dp), C)
     launch[bn_apply_at](ctx, fp(dx), fp(da), fp(dout), fp(dout), ip(dp), ip(dp), total)
-    if training:
-        launch[bn_running_at](ctx, fp(dr), fp(da), fp(da), fp(da), ip(dp), ip(dp), C)
+    comptime if not IDN_BN_GRID_STATS and not BN_FOLD_BLOCK:
+        # (the blocked and grid statistics ran it inside their variance launch)
+        if training:
+            launch[bn_running_at](ctx, fp(dr), fp(da), fp(da), fp(da), ip(dp), ip(dp), C)
     m_fetch(ctx, dout, a[3], total, isdev(dev, 3))
     m_fetch(ctx, dr, a[1], nr, isdev(dev, 1))
     m_fetch(ctx, da, a[2], na, isdev(dev, 2))
