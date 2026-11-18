@@ -296,7 +296,7 @@ from transformer.experiments.norm_fixed_lanes import (
 # (Sweep 2026-11-15: transformer/experiments/attention_schedules.mojo deleted with its last importer's dead arms: NN25_RMS_SPLIT_SCALE,
 # NN29_RING_PAIR, NN27_QK_ROPE_PAIR, NN21_SCALE_MASK and rms_sumsq_kernel, rms_parallel_scale_kernel, kv_ring_pair_kernel,
 # qk_rope_pair_kernel, score_scale_mask_kernel.)
-from max.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, grid_dim, thread_idx
 from std.memory import bitcast, unsafe_memcpy, stack_allocation
 from std.time import perf_counter_ns
 from std.sys.compile import is_defined
@@ -394,7 +394,7 @@ from transformer.impl.llama.attn_fold_v2 import (
     attn_v2_context_cell,
     attn_v2_denom_row,
 )
-from core.device_scan import DeviceNonfiniteBatch, NONFINITE_NONE
+from core.device_scan import DeviceNonfiniteBatch, NONFINITE_NONE, SCAN_TPB, _scan_blocks, min_partials_kernel
 # lane afn-attn (2026-10-03): the Apple FAST forward candidates; every name
 # is reached only from `comptime if AFN_ATTN_ANY` arms below.
 from transformer.impl.llama.afn_apple_fast import (
@@ -4079,7 +4079,7 @@ whatever the owner does; the owner's every other write calls `wm_reset`
 `LlamaRopeTable.__init__`. So at the next call every float of the whole-cache
 scan outside row `s - 1` is finite, and the smallest non-finite flat index
 of the whole scan is the smallest one in row `s - 1`
-(`nonfinite_rows_partial_kernel` reports that flat index): same name, same
+(`kv_rows_nonfinite_partial_kernel` reports that flat index): same name, same
 order (hidden_states, then key, then value), same index, same message, at
 the same call. Anything else (a prefill or chunk, the first call after a
 grant, a load, a reset, a ring cache, a cache nobody granted, a FAST build)
@@ -4097,6 +4097,103 @@ out: every reader of the caches is a launch on the same in-order context,
 so the wait ordered nothing (one wait per layer per forward; 0.54 ms a
 layer on the M3, 0.05 ms on the MI325X when measured on 2026-10-01). No
 arithmetic moves: same bits on every column. FAST builds keep the wait."""
+
+
+def kv_rows_nonfinite_partial_kernel(
+    part: MutPointer[Int32, MutAnyOrigin],
+    buf: MutPointer[Float32, MutAnyOrigin],
+    n_in: Int32,
+    width_in: Int32,
+    row_stride_in: Int32,
+    first_in: Int32,
+):
+    """core/device_scan.mojo `nonfinite_partial_kernel` over `n / width`
+    equal rows of `buf` that are NOT adjacent: row `g` is the `width` floats
+    at `g * row_stride + first` (the one row a decode step appended to each
+    (batch, kv head) of a cache packed at stride `row_stride / width`). Scan
+    element `i` is float `(i // width) * row_stride + first + i % width`, and
+    the partial holds that FLAT index of `buf` (or `NONFINITE_NONE`). The map
+    from `i` to the flat index is increasing (`first + width <= row_stride`,
+    checked by the caller), so the minimum over the partials is the smallest
+    flat index among the scanned rows: the index a scan of the whole buffer
+    reports when every float outside these rows is finite. Same predicate by
+    bits, same geometry (SCAN_TPB threads, `_scan_blocks`), same integer
+    fold (`min_partials_kernel`); no float is produced. It lives here, not
+    in the shared scan module, because only the llama cache has this layout
+    (MOJOLEARN_LLAMA_FAST_REFUSE_WATERMARK)."""
+    var n = Int(n_in)
+    var width = Int(width_in)
+    var row_stride = Int(row_stride_in)
+    var first = Int(first_in)
+    var red = stack_allocation[
+        SCAN_TPB,
+        Scalar[DType.int32],
+        address_space = AddressSpace.SHARED,
+    ]()
+    var tid = Int(thread_idx.x)
+    var stride = Int(grid_dim.x) * SCAN_TPB
+    var i = Int(block_idx.x) * SCAN_TPB + tid
+    var best = NONFINITE_NONE
+    while i < n:
+        var flat = (i // width) * row_stride + first + i % width
+        var au = bitcast[DType.uint32](buf.unsafe_load(flat)) & UInt32(0x7FFFFFFF)
+        if au >= UInt32(0x7F800000):
+            best = Int32(flat)
+            break
+        i += stride
+    red.unsafe_store(tid, best)
+    barrier()
+    var active = SCAN_TPB // 2
+    while active > 0:
+        if tid < active:
+            var o = red.unsafe_load(tid + active)
+            if o < red.unsafe_load(tid):
+                red.unsafe_store(tid, o)
+        barrier()
+        active = active // 2
+    if tid == 0:
+        part.unsafe_store(Int(block_idx.x), red.unsafe_load(0))
+
+
+def _kv_rows_scan_enqueue(
+    ctx: DeviceContext, mut batch: DeviceNonfiniteBatch, slot: Int,
+    mut buf: DeviceBuffer[DType.float32],
+    width: Int, row_stride: Int, first: Int,
+) raises:
+    """`DeviceNonfiniteBatch.enqueue` for a slot whose `lengths[slot]` floats
+    are `lengths[slot] / width` rows of `buf`, row `g` at `g * row_stride +
+    first` (`kv_rows_nonfinite_partial_kernel`). The slot's result is a FLAT
+    index of `buf`, the smallest among the scanned rows, or -1. The same
+    partial offsets, device fold, slot flag and one wait (`finish`) as
+    `enqueue`; a refused layout drains before raising, as `enqueue` does."""
+    if slot < 0 or slot >= len(batch.lengths):
+        ctx.synchronize()
+        raise Error("nonfinite batch: slot out of range")
+    var n = batch.lengths[slot]
+    var bad = batch.queued[slot] or width <= 0 or n % max(width, 1) != 0 or first < 0
+    bad = bad or first + width > row_stride
+    var rows = n // max(width, 1)
+    var reach = 0
+    if rows > 0:
+        reach = (rows - 1) * row_stride + first + width
+    if bad or reach > len(buf) or reach > Int(NONFINITE_NONE):
+        ctx.synchronize()
+        raise Error("nonfinite batch: duplicate slot, bad row layout or short source")
+    var blocks = 0
+    if n > 0:
+        blocks = _scan_blocks(n)
+        step_count_launch()
+        ctx.enqueue_function[kv_rows_nonfinite_partial_kernel](
+            batch.part.unsafe_ptr() + batch.offsets[slot], buf.unsafe_ptr(),
+            Int32(n), Int32(width), Int32(row_stride), Int32(first),
+            grid_dim=(blocks, 1, 1), block_dim=(SCAN_TPB, 1, 1),
+        )
+    step_count_launch()
+    ctx.enqueue_function[min_partials_kernel](
+        batch.res.unsafe_ptr() + slot, batch.part.unsafe_ptr() + batch.offsets[slot],
+        Int32(blocks), grid_dim=(1, 1, 1), block_dim=(SCAN_TPB, 1, 1),
+    )
+    batch.queued[slot] = True
 
 
 def _llama_refuse_bad_call_deferred(
@@ -4198,8 +4295,8 @@ def llama_refuse_bad_call(
                     var row_stride = kv.s * hd
                     var row_first = (kv.s - 1) * hd
                     held.value().enqueue(ctx, 0, x)
-                    held.value().enqueue_rows(ctx, 1, kv.k, hd, row_stride, row_first)
-                    held.value().enqueue_rows(ctx, 2, kv.v, hd, row_stride, row_first)
+                    _kv_rows_scan_enqueue(ctx, held.value(), 1, kv.k, hd, row_stride, row_first)
+                    _kv_rows_scan_enqueue(ctx, held.value(), 2, kv.v, hd, row_stride, row_first)
                     var held_hits = held.value().finish(ctx)
                     swap(held, kv.wm_batch)
                     _refuse_nonfinite_at(ctx, "hidden_states", x, held_hits[0])
