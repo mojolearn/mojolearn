@@ -130,12 +130,12 @@ def binding_closure(name):
     return _CLOSURES[name]
 
 
-def lane_bindings(doors, hs):
+def lane_bindings(doors, hs, loads=()):
     """The bindings a lane's Python doors load (`lane_select.resolved_bindings`:
     by syntax, plus the `host_model` dispatch for the classes they define),
     and the host bindings a CPU-only install routes each of them to
     (`lane_select.host_routes`, `ADAPTED_MODULES`)."""
-    named = lane_select.resolved_bindings(doors)
+    named = set(lane_select.resolved_bindings(doors)) | set(loads)
     routed = lane_select.host_routes(hs)
     adapted = {k: v["family"] for k, v in hs.ADAPTED_MODULES.items()}
     out = set()
@@ -170,7 +170,11 @@ def derive():
         # without it the bound stopped at the lane's own door and the selector's map exceeded it.
         py = lane_select._python_closure(seeds, set(sinks) - lane_select._followed_seeds(seeds))
         doors = py - sinks
-        bindings = lane_bindings(doors, hs)
+        # A registry's literal loads (`lane_select.sink_region_loads`, 2026-11-05: `connect_bindings` in
+        # `_native_family_bridge.py` loads each binding it is handed) are bindings the lane loads, read
+        # over the whole registry here (the bound), never only the region the selector reads.
+        loads = set().union(*[set(lane_select.sink_region_loads(rel, None)[0]) for rel in py & set(sinks)])
+        bindings = lane_bindings(doors, hs, loads)
         files = set(py)
         wide = []
         for b in sorted(bindings):
