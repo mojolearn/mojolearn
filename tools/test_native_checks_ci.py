@@ -170,7 +170,7 @@ def test_workflow_shape():
     assert set(on) == {"workflow_dispatch"}  # manual only (light-checks.yml)
     inputs = on["workflow_dispatch"]["inputs"]
     assert inputs["filter"]["default"] == "*" and inputs["column"]["default"] == "cpu" and "ref" in inputs
-    assert set(wf["jobs"]) == {"plan", "host-parse", "build", "check", "summary"}
+    assert set(wf["jobs"]) == {"plan", "host-parse", "device-parse", "build", "check", "summary"}
     assert inputs["suite"]["default"] == "all"
     plan = "\n".join(s.get("run", "") for s in wf["jobs"]["plan"]["steps"])
     assert "merged_bindings.py plan --dir host --platform linux --byte-lm 0 --layout release" in plan
@@ -178,6 +178,12 @@ def test_workflow_shape():
     assert "--emit llvm --no-optimization" in parse and "MOJOLEARN_COLUMN_CPU" in parse  # parse only, no codegen
     assert "merged_bindings.py root" in parse and wf["jobs"]["host-parse"]["strategy"]["fail-fast"] is False
     assert wf["jobs"]["host-parse"]["name"].startswith("host-parse")  # tools/prebuild_check.py reads job names
+    # device-parse (lane fx-build-tools, 2026-11-18): the identical device groups with the sm_89 column's flags
+    assert "merged_bindings.py plan --dir identical --platform linux --byte-lm 1 --layout release" in plan
+    dev = "\n".join(s.get("run", "") for s in wf["jobs"]["device-parse"]["steps"])
+    assert "--emit llvm --no-optimization" in dev and "--target-accelerator sm_89" in dev
+    assert "MOJOLEARN_COLUMN_NVIDIA" in dev and "MOJOLEARN_NUMERIC_IDENTICAL=1" in dev
+    assert wf["jobs"]["device-parse"]["name"].startswith("device-parse")  # tools/prebuild_check.py reads job names
     build = "\n".join(s.get("run", "") for s in wf["jobs"]["build"]["steps"])
     assert "mojo build" in build and "run_$IN_COLUMN.mojo" in build and "MOJOLEARN_COLUMN_CPU=1" in build
     run = "\n".join(s.get("run", "") for s in wf["jobs"]["check"]["steps"])
