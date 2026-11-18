@@ -5785,8 +5785,20 @@ def _build_layer(lane, arm, D):
             kw["in_channels"] = x_cpu.shape[1]
         import inspect
         try:
-            if "random_state" in inspect.signature(cls).parameters:
+            _sig = inspect.signature(cls).parameters
+            if "random_state" in _sig:
                 kw["random_state"] = SEED
+            # FAIRNESS FIX (2026-11-18 audit, lane fx-rows): the torch GCN arm is PyG
+            # GCNConv(cached=True) (reuses its graph with no check of edge_index) and PyG
+            # SAGEConv reads edge_index by scatter with no cache check at all, while ours
+            # compared the whole live edge_index (16 E bytes) against a snapshot on every
+            # forward: ours did more work per call. Ours now takes the same setting,
+            # cached=True (identity key, no compare), when its constructor has it; an older
+            # wheel without `cached` runs as before (its record states its kw). The lane notes
+            # (which enter the store's settings key) are left as they were so the stored torch
+            # cells keep matching; ours' record carries cached=True in its kw.
+            if s["task"] in ("gcn", "sage") and "cached" in _sig:
+                kw["cached"] = True
         except (TypeError, ValueError):
             pass
         probe_light = s["task"] == "moe" and _params_probe_only()
