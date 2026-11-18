@@ -113,8 +113,6 @@ struct ShapPairAudit(Defaultable, Movable):
         self.calls = 0
 comptime SHAP_PAIR_STATE = SharedSlot[ShapPairAudit, "MojolearnShapPairAuditV1"]
 
-def shap_pair_count() raises -> Int:
-    return SHAP_PAIR_STATE.get_or_create_ptr()[].calls
 
 comptime TABLE_ACC = 64
 # TOMBSTONE: MOJOLEARN_TREESHAP_ACC_SHARED (opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-46-trees; code recoverable at 70f8ff00b2.
@@ -586,7 +584,6 @@ def _tree_shap_values_on(ctx: DeviceContext, mut fo: _Forest, mut cover: DeviceB
     _check_meta(ctx, fo.meta, 0)
     _ = buf^
     _ = dx^
-
 
 
 # The retained explainer (lane gap-shap-nb, 2026-10-08; it finishes and

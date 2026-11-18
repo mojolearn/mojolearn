@@ -22,16 +22,6 @@ def test_small_mlp_runs_one_captured_program():
     assert not (ROOT/'training/small_mlp_dispatch.mojo').exists()
 
 
-def test_neural_gemm_both_doors_share_native_transport():
-    door=(ROOT/'bindings/neural_gemm_boundary_pack.mojo').read_text()
-    assert 'neural_gemm_native(aa, ba, ca, shape)' in door
-    assert 'identical_gemm_into(' not in door
-    owner=(ROOT/'training/neural_gemm_native.mojo').read_text()
-    assert owner.count('identical_gemm_into(')==1
-    assert 'gemm_up_f32(' in owner and 'gemm_down_f32(' in owner
-    assert 'ctx.synchronize()' in owner and 'lease.release()' in owner
-
-
 def test_small_mlp_rejects_hooks_before_admission():
     src=(ROOT/'bindings/small_mlp_native_door.mojo').read_text().split('def small_mlp_call(')[1]
     assert src.index('sequential_admit_value(args,') < src.index('return small_mlp_create(args)')

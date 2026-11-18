@@ -104,7 +104,7 @@ from core.hotpath_device import (
     HPD_U32,
     HPD_U8,
 )
-from core.label_rows_device import LRD_MAX_N, device_argmax_last_f32
+from core.label_rows_device import LRD_MAX_N
 from bindings.normal_dist_helpers_pack import truncnorm_draws_binding
 from bindings.lr_table_helpers_door import (
     lr_schedule_exact_binding,

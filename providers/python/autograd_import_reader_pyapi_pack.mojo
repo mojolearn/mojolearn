@@ -43,7 +43,3 @@ def onnx_buffers_py(h: PythonObject) raises -> PythonObject:
     return out
 
 
-def onnx_close_py(h: PythonObject) raises -> PythonObject:
-    """Release handle h."""
-    onnx_close(Int(py=h))
-    return PythonObject(0)

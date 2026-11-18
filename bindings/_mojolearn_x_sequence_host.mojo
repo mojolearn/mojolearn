@@ -80,7 +80,7 @@ from autograd.ops_api import OPS_HOST
 # the ONNX model reader and shape resolution (autograd/import_reader.mojo,
 # import_resolve.mojo): host only, the same entries in both bindings
 from providers.python.autograd_import_reader_pyapi_unpack import onnx_native_api_py
-from providers.python.autograd_import_reader_pyapi_pack import onnx_read_py, onnx_info_py, onnx_buffers_py, onnx_close_py
+from providers.python.autograd_import_reader_pyapi_pack import onnx_read_py, onnx_info_py, onnx_buffers_py
 from providers.python.autograd_import_resolve_pyapi_pack import onnx_resolve_py
 # the lowering onto session operations (autograd/import_lower.mojo)
 from providers.python.autograd_import_frontend_pyapi_door import ops_import_model_c

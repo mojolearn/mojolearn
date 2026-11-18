@@ -553,21 +553,6 @@ def byte_lm_trainer_step_binding(session: PythonObject, addresses: PythonObject,
     return PythonObject(result)
 
 
-def _byte_lm_trainer_logits(session: PythonObject, addresses: PythonObject, dims: PythonObject,
-                            params: PythonObject, shape: PythonObject, next_bytes: Bool) raises -> PythonObject:
-    _require_binding_profile()
-    var cfg_shape = _byte_config(shape)
-    var owner = session.downcast_value_ptr[ByteLMSession]()
-    var bl = _logits_dims(dims, cfg_shape)
-    var completed = _params_completed(params)
-    var cfg = _params_optimizer(params)
-    var addr = _read_addresses(addresses, 6)
-    var result = 0
-    with GILReleased(Python()):
-        result = byte_owner_logits(owner[], addr, bl[0], bl[1], completed, cfg, cfg_shape, next_bytes)
-    return PythonObject(result)
-
-
 def byte_lm_parallel_create_binding() raises -> PythonObject:
     return PythonObject(alloc=ByteParallelTrainer())
 

@@ -601,22 +601,6 @@ def optimizer_publish_registry(owner: PythonObject, registry: OptimizerRegistryP
     py_setitem(fields, "buf_initialized", registry.initialized)
 
 
-def door_init(opt: PythonObject, params: PythonObject) raises -> PythonObject:
-    """Legacy registry export using the same native preparation and publication."""
-    door_ready()
-    opt_owner(opt, OPT_DOOR.get_or_create_ptr()[].context)
-    var kind = owner_kind(opt)
-    var name = String("SGD") if kind == 0 else (String("Adam") if kind == 1 else String("AdamW"))
-    var registry = optimizer_prepare_registry(params, name)
-    optimizer_owner_idle(opt)
-    var owner_state = optimizer_owner_new(opt, owner_kind(opt), not registry.plan.eager)
-    var construction = OptimizerOwnerLease(opt, owner_state)
-    set_field(opt, "_native_optimizer_owner", owner_state)
-    optimizer_publish_registry(opt, registry)
-    _ = construction
-    return PythonObject(registry.plan.count)
-
-
 def door_step(
     module: PythonObject, provider: PythonObject, opt: PythonObject, grads: PythonObject, max_norm: PythonObject, op: Int,
     tokens: PythonObject,
