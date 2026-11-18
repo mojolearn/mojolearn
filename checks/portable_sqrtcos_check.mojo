@@ -234,10 +234,10 @@ def run_checks() raises:
     var d_xc = ctx.enqueue_create_buffer[DType.float32](N)
     var d_xp = ctx.enqueue_create_buffer[DType.float32](N)
     var d_pp = ctx.enqueue_create_buffer[DType.float32](N)
-    ctx.enqueue_copy(dst_buf=d_xs, src_ptr=h_xs.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_xc, src_ptr=h_xc.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_xp, src_ptr=h_xp.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_pp, src_ptr=h_pp.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, d_xs, h_xs)
+    upload_host_into[DType.float32](ctx, d_xc, h_xc)
+    upload_host_into[DType.float32](ctx, d_xp, h_xp)
+    upload_host_into[DType.float32](ctx, d_pp, h_pp)
     var o_s = ctx.enqueue_create_buffer[DType.float32](N)
     var o_c = ctx.enqueue_create_buffer[DType.float32](N)
     var o_p = ctx.enqueue_create_buffer[DType.float32](N)
@@ -253,9 +253,9 @@ def run_checks() raises:
     var r_s = ctx.enqueue_create_host_buffer[DType.float32](N)
     var r_c = ctx.enqueue_create_host_buffer[DType.float32](N)
     var r_p = ctx.enqueue_create_host_buffer[DType.float32](N)
-    ctx.enqueue_copy(dst_ptr=r_s.unsafe_ptr(), src_buf=o_s)
-    ctx.enqueue_copy(dst_ptr=r_c.unsafe_ptr(), src_buf=o_c)
-    ctx.enqueue_copy(dst_ptr=r_p.unsafe_ptr(), src_buf=o_p)
+    download_host_into[DType.float32](ctx, o_s, r_s)
+    download_host_into[DType.float32](ctx, o_c, r_c)
+    download_host_into[DType.float32](ctx, o_p, r_p)
     ctx.synchronize()
 
     var qs = r_s.unsafe_ptr()
@@ -313,6 +313,7 @@ def run_checks() raises:
 # checks/ that no CI job ran. One process per check name in CI keeps any
 # fresh-process precondition. Device column only: the suite needs a GPU, so the CPU build never instantiates it.
 from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
+from checks.native_tests.kit import download_host_into, upload_host_into
 
 
 def run_cases(column: Column, mut report: Report):

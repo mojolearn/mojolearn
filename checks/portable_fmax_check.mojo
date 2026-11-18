@@ -1060,8 +1060,8 @@ def run_checks() raises:
     # ---- the device ----------------------------------------------------
     var d_a = ctx.enqueue_create_buffer[DType.float32](N)
     var d_b = ctx.enqueue_create_buffer[DType.float32](N)
-    ctx.enqueue_copy(dst_buf=d_a, src_ptr=h_a.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_b, src_ptr=h_b.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, d_a, h_a)
+    upload_host_into[DType.float32](ctx, d_b, h_b)
     var o_ab = ctx.enqueue_create_buffer[DType.float32](N)
     var o_ba = ctx.enqueue_create_buffer[DType.float32](N)
     var o_sab = ctx.enqueue_create_buffer[DType.float32](N)
@@ -1090,12 +1090,12 @@ def run_checks() raises:
     var r_flr = ctx.enqueue_create_host_buffer[DType.float32](NGROUP)
     var r_frl = ctx.enqueue_create_host_buffer[DType.float32](NGROUP)
     var r_ftr = ctx.enqueue_create_host_buffer[DType.float32](NGROUP)
-    ctx.enqueue_copy(dst_ptr=r_ab.unsafe_ptr(), src_buf=o_ab)
-    ctx.enqueue_copy(dst_ptr=r_ba.unsafe_ptr(), src_buf=o_ba)
-    ctx.enqueue_copy(dst_ptr=r_sab.unsafe_ptr(), src_buf=o_sab)
-    ctx.enqueue_copy(dst_ptr=r_flr.unsafe_ptr(), src_buf=o_flr)
-    ctx.enqueue_copy(dst_ptr=r_frl.unsafe_ptr(), src_buf=o_frl)
-    ctx.enqueue_copy(dst_ptr=r_ftr.unsafe_ptr(), src_buf=o_ftr)
+    download_host_into[DType.float32](ctx, o_ab, r_ab)
+    download_host_into[DType.float32](ctx, o_ba, r_ba)
+    download_host_into[DType.float32](ctx, o_sab, r_sab)
+    download_host_into[DType.float32](ctx, o_flr, r_flr)
+    download_host_into[DType.float32](ctx, o_frl, r_frl)
+    download_host_into[DType.float32](ctx, o_ftr, r_ftr)
     ctx.synchronize()
 
     var qab = r_ab.unsafe_ptr()
@@ -1208,6 +1208,7 @@ def run_checks() raises:
 # checks/ that no CI job ran. One process per check name in CI keeps any
 # fresh-process precondition. Device column only: the suite needs a GPU, so the CPU build never instantiates it.
 from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
+from checks.native_tests.kit import download_host_into, upload_host_into
 
 
 def run_cases(column: Column, mut report: Report):

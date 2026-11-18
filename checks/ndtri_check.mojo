@@ -288,8 +288,8 @@ def run_checks() raises:
         var dx = ctx.enqueue_create_buffer[DType.float32](N)
         var dq = ctx.enqueue_create_buffer[DType.float32](N)
         var dc = ctx.enqueue_create_buffer[DType.float32](N)
-        ctx.enqueue_copy(dst_buf=dp, src_ptr=hp.unsafe_ptr())
-        ctx.enqueue_copy(dst_buf=dx, src_ptr=hx.unsafe_ptr())
+        upload_whole_into[DType.float32](ctx, dp, hp)
+        upload_whole_into[DType.float32](ctx, dx, hx)
         ctx.enqueue_function[ndtri_kernel](
             dp.unsafe_ptr(), dx.unsafe_ptr(), dq.unsafe_ptr(), dc.unsafe_ptr(), Int32(N),
             grid_dim=(N + BLOCK - 1) // BLOCK,
@@ -297,8 +297,8 @@ def run_checks() raises:
         )
         var rq = List[Float32](length=N, fill=Float32(0))
         var rc = List[Float32](length=N, fill=Float32(0))
-        ctx.enqueue_copy(dst_ptr=rq.unsafe_ptr(), src_buf=dq)
-        ctx.enqueue_copy(dst_ptr=rc.unsafe_ptr(), src_buf=dc)
+        download_whole_into[DType.float32](ctx, dq, rq)
+        download_whole_into[DType.float32](ctx, dc, rc)
         ctx.synchronize()
         var mq = 0
         var mc = 0
@@ -336,6 +336,7 @@ def run_checks() raises:
 # checks/ that no CI job ran. One process per check name in CI keeps any
 # fresh-process precondition. Device column only: the suite needs a GPU, so the CPU build never instantiates it.
 from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
+from checks.native_tests.kit import download_whole_into, upload_whole_into
 
 
 def run_cases(column: Column, mut report: Report):

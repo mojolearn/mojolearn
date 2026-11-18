@@ -104,8 +104,8 @@ def _make_target(
         h_t.unsafe_ptr().unsafe_store(d, _target(d, salt))
     var d_w = ctx.enqueue_create_buffer[DType.float32](N_DOCS)
     var d_t = ctx.enqueue_create_buffer[DType.float32](N_DOCS)
-    ctx.enqueue_copy(dst_buf=d_w, src_ptr=h_w.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_t, src_ptr=h_t.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, d_w, h_w)
+    upload_host_into[DType.float32](ctx, d_t, h_t)
     ctx.synchronize()
     _ = h_w[0]
     _ = h_t[0]
@@ -171,7 +171,7 @@ def check_subsets_reset() raises:
             N_DOCS + d, UInt32(_val_b(d) << 8)
         )
     var d_cindex = ctx.enqueue_create_buffer[DType.uint32](2 * N_DOCS)
-    ctx.enqueue_copy(dst_buf=d_cindex, src_ptr=h_cindex.unsafe_ptr())
+    upload_host_into[DType.uint32](ctx, d_cindex, h_cindex)
     ctx.synchronize()
     _ = h_cindex[0]
 
@@ -377,6 +377,7 @@ def run_checks() raises:
 # checks/ that no CI job ran. One process per check name in CI keeps any
 # fresh-process precondition. Device column only: the suite needs a GPU, so the CPU build never instantiates it.
 from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
+from checks.native_tests.kit import upload_host_into
 
 
 def run_cases(column: Column, mut report: Report):

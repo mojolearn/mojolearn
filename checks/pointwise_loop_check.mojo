@@ -372,10 +372,10 @@ def run_checks() raises:
     var d_tgt = ctx.enqueue_create_buffer[DType.float32](N_ROWS)
     var d_wt = ctx.enqueue_create_buffer[DType.float32](N_ROWS)
     var d_ci = ctx.enqueue_create_buffer[DType.uint32](N_ROWS)
-    ctx.enqueue_copy(dst_buf=d_idx, src_ptr=indices_h.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_tgt, src_ptr=target_h.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_wt, src_ptr=weight_h.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_ci, src_ptr=cindex_h.unsafe_ptr())
+    upload_whole_into[DType.uint32](ctx, d_idx, indices_h)
+    upload_whole_into[DType.float32](ctx, d_tgt, target_h)
+    upload_whole_into[DType.float32](ctx, d_wt, weight_h)
+    upload_whole_into[DType.uint32](ctx, d_ci, cindex_h)
 
     # branch-hitting sweep: unaligned offsets, sizes below the head, sizes
     # with an empty tail, sizes that are exactly one stripe
@@ -454,7 +454,7 @@ def run_checks() raises:
                         d_ci.unsafe_ptr(), d_out.unsafe_ptr(),
                         grid_dim=(1, 1, 1), block_dim=(BLOCK, 1, 1),
                     )
-                ctx.enqueue_copy(dst_buf=h_out, src_buf=d_out)
+                download_host_into[DType.float32](ctx, d_out, h_out)
                 ctx.synchronize()
 
                 for b in range(NBINS):
@@ -506,7 +506,7 @@ def run_checks() raises:
         d_ci.unsafe_ptr(), d_out.unsafe_ptr(),
         grid_dim=(4, 1, 1), block_dim=(BLOCK, 1, 1),
     )
-    ctx.enqueue_copy(dst_buf=h_out, src_buf=d_out)
+    download_host_into[DType.float32](ctx, d_out, h_out)
     ctx.synchronize()
 
     var bad5 = 0
@@ -594,7 +594,7 @@ def run_checks() raises:
                         d_ci.unsafe_ptr(), d_out.unsafe_ptr(),
                         grid_dim=(1, 1, 1), block_dim=(BLOCK, 1, 1),
                     )
-                ctx.enqueue_copy(dst_buf=h_out, src_buf=d_out)
+                download_host_into[DType.float32](ctx, d_out, h_out)
                 ctx.synchronize()
                 for b in range(NBINS):
                     if h_out[b * 2] != want_t[b] or h_out[
@@ -642,6 +642,7 @@ def run_checks() raises:
 # checks/ that no CI job ran. One process per check name in CI keeps any
 # fresh-process precondition. Device column only: the suite needs a GPU, so the CPU build never instantiates it.
 from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
+from checks.native_tests.kit import download_host_into, upload_whole_into
 
 
 def run_cases(column: Column, mut report: Report):

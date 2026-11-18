@@ -152,12 +152,11 @@ def read_rows(
     ctx: DeviceContext, mut part: LeafPartition, cap: Int, n: Int
 ) raises -> List[UInt32]:
     var h = ctx.enqueue_create_host_buffer[DType.uint32](cap)
-    ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=part.row_index)
+    download_host_into[DType.uint32](ctx, part.row_index, h)
     ctx.synchronize()
     var out = List[UInt32]()
     for i in range(n):
         out.append(h.unsafe_ptr().unsafe_load(i))
-    _ = h^
     return out^
 
 
@@ -184,7 +183,7 @@ def check_partitions(ctx: DeviceContext) raises -> Int:
                 h_n.unsafe_ptr().unsafe_store(r, UInt32(b))
                 h_cap.unsafe_ptr().unsafe_store(r, UInt32(b))
             var d_bins = ctx.enqueue_create_buffer[DType.uint32](n)
-            ctx.enqueue_copy(dst_buf=d_bins, src_ptr=h_n.unsafe_ptr())
+            upload_host_into[DType.uint32](ctx, d_bins, h_n)
             ctx.enqueue_copy(dst_buf=dp.bins, src_ptr=h_cap.unsafe_ptr())
             ctx.synchronize()
             var host_part = partition_from_bins(ctx, d_bins, n, n_leaves)
@@ -213,7 +212,6 @@ def check_partitions(ctx: DeviceContext) raises -> Int:
                     "  FAIL partition rows=" + String(n) + " leaves="
                     + String(n_leaves)
                 )
-            _ = h_n^
             _ = d_bins^
 
     # refusals: one key in range of the sort's bits, one above them
@@ -230,7 +228,7 @@ def check_partitions(ctx: DeviceContext) raises -> Int:
         h_n.unsafe_ptr().unsafe_store(200, bad)
         h_cap.unsafe_ptr().unsafe_store(200, bad)
         var d_bins = ctx.enqueue_create_buffer[DType.uint32](n)
-        ctx.enqueue_copy(dst_buf=d_bins, src_ptr=h_n.unsafe_ptr())
+        upload_host_into[DType.uint32](ctx, d_bins, h_n)
         ctx.enqueue_copy(dst_buf=dp.bins, src_ptr=h_cap.unsafe_ptr())
         ctx.synchronize()
         var host_refused = False
@@ -250,7 +248,6 @@ def check_partitions(ctx: DeviceContext) raises -> Int:
                 "  FAIL refusal case " + String(which) + " host="
                 + String(host_refused) + " device=" + String(dev_refused)
             )
-        _ = h_n^
         _ = d_bins^
     _ = h_cap^
     print(
@@ -328,6 +325,7 @@ def run_checks() raises:
 # checks/ that no CI job ran. One process per check name in CI keeps any
 # fresh-process precondition. Device column only: the suite needs a GPU, so the CPU build never instantiates it.
 from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
+from checks.native_tests.kit import download_host_into, upload_host_into
 
 
 def run_cases(column: Column, mut report: Report):
