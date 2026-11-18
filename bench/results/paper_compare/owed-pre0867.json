@@ -662,6 +662,11 @@
    "define": "MOJOLEARN_SAMBA_FAST_STEP_REGISTRY_RESIDENT",
    "status": "define in code (core/weight_epoch.mojo SAMBA_STEP_REGISTRY_RESIDENT, read by training/samba_resident.mojo _step_registry_in / _step_registry_out and providers/python/samba_resident_pyapi_door.mojo: BOTH must be built with it, i.e. the whole wheel set): B = a Samba resident train step uploads and scans the registry only when the session's weight key is not current, scans the weights it wrote at its own closing wait, stamps the registry itself and keeps the key (the next step and the next forward skip the ~22 MB upload and the scan's wait); A = the default: registry host -> device and one scan with its own wait every step, the door stamps after the step. Same bytes in param, same kernels: digests must not move; read the stack's _samba_resident_uploads to prove which arm ran (B: it stops growing after the first step)",
    "owed": "RUN"
+  },
+  "gemm-epi": {
+   "define": "MOJOLEARN_GEMM_FAST_EPI",
+   "status": "define in code (gemm/checks/gemm_epilogue.mojo GEMM_FAST_EPI / GEMM_EPI_FUSES; autograd/kernels/transformer.mojo BWD_GEMM_EPI; IDENTICAL, no poison build): B = a product whose output is joined to the value already in its destination stores the join in its own final store (the packed kernel's all-leaves store, or the fold-stack kernel after the unchanged group launch), so the transformer backward's two dX fan-ins (S9 bwd_add2_kernel, S32 bwd_add3_kernel) issue no follower launch: 3 launches a layer fewer where k and v join (q plain, k and v joined; gate joined), 24 a step at 8 layers, and tmp0/tmp1/tmp2 are not written; A = the default: each dX into a tmp buffer, then one add kernel per fan-in. The join is the follower's expression on the same words in the same operand order (ftz(ftz(x) + ftz(y)), both addends flush results, nothing to contract): digests must not move. Fuses only where the shipped dispatch runs the packed body (NVIDIA today); AMD, Apple and declined sizes run the same follower kernels, same launch count as A",
+   "owed": "RUN"
   }
  },
  "rows": [
@@ -3803,6 +3808,53 @@
     "samba-step-registry-resident"
    ],
    "decides": "each B arm at least as fast as the candidate on SambaStack.train_step at every case (L = 300: a partial last chunk; a 6-layer stack; a small Mamba-3-only stack), and samba-step-registry-resident faster on the first forward after a step (no registry upload); a case that is slower blocks the promotion decided on the board rows"
+  },
+  {
+   "id": "fx-gemm-epi-rows",
+   "source": "lane fx-gemm-epi (2026-11-18, idea 5 of ~/mojolearn-evidence/briefs-20261118/ideas-gemm-headroom-RESULT.md; report ~/mojolearn-evidence/briefs-20261118/fx-gemm-epi-RESULT.md): default-off arm, never timed",
+   "kind": "ab",
+   "lane": [
+    "lm-train-step",
+    "transformer-train-step",
+    "samba-train-step"
+   ],
+   "dataset": "*",
+   "rows": "full",
+   "vendor": "nvidia",
+   "b_arms": [
+    "gemm-epi"
+   ],
+   "decides": "promote B only if lm-train-step is faster on the NVIDIA L40S (same box, same job) with the loss and every digest equal (the arm changes no arithmetic: a moved digest is a bug, not a result). Expected -0.2 to -0.6 ms of about 35 (24 add launches and their 3 x 3 MB of traffic a step); a result inside the noise floor is a loser and is deleted with the four tombstone parts. samba-train-step reaches the arm through its attention layers and must not be slower. First run gemm/checks/gemm_epilogue_check.mojo on the arm build (fused store against the two-launch form and the host words, both launch forms must report as run). Before a flip, time the neighbouring shape and the non-board size (no dimension targeting): the transformer train step at d_model 512 and a decoder layer backward at 1536 tokens x 320 wide (row fx-gemm-epi-sizes)"
+  },
+  {
+   "id": "fx-gemm-epi-sizes",
+   "source": "lane fx-gemm-epi (2026-11-18, idea 5 of ~/mojolearn-evidence/briefs-20261118/ideas-gemm-headroom-RESULT.md; report ~/mojolearn-evidence/briefs-20261118/fx-gemm-epi-RESULT.md); the neighbouring shape and the non-board size of the arm (no dimension targeting)",
+   "kind": "ab",
+   "lane": [
+    "transformer-train-step"
+   ],
+   "dataset": "*",
+   "rows": "full",
+   "vendor": "nvidia",
+   "b_arms": [
+    "gemm-epi"
+   ],
+   "shape": {
+    "cases": [
+     {
+      "note": "neighbouring shape",
+      "d_model": 512,
+      "batch_tokens": 2048
+     },
+     {
+      "note": "non-board size",
+      "d_model": 320,
+      "batch_tokens": 1536,
+      "intermediate": 960
+     }
+    ]
+   },
+   "decides": "B at least as fast as the candidate at both cases, digests equal; a slower case blocks the promotion decided on fx-gemm-epi-rows. OWED TOOLING: the board harness has no driver for a transformer train step at a caller-given d_model (drivers today: cnn_widths, f16_widen, kde_widths, mamba_backward, mlp_fit, pandas_input, samba_step, samba_train_step, while_loop); until one exists these two cases are timed with the lm-train-step recipe at the stated widths"
   }
  ]
 }
