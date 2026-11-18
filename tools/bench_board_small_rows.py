@@ -204,15 +204,25 @@ def _perf_ctl(env, word):
     ctl, ack = spec.split(",", 1)
     try:
         import select
-        fd = os.open(ctl, os.O_WRONLY | os.O_NONBLOCK)     # ENXIO when perf is not reading it: never blocks
-        try:
-            os.write(fd, (word + "\n").encode())
-        finally:
-            os.close(fd)
+        import time
+        # the ack's read end is open BEFORE the command goes out: a FIFO drops what was written to it once no end
+        # is open, so a perf that acks and closes before we open would lose the ack (a flaky False)
         afd = os.open(ack, os.O_RDONLY | os.O_NONBLOCK)
         try:
-            ready, _, _ = select.select([afd], [], [], 5.0)
-            return bool(ready) and b"ack" in os.read(afd, 64)
+            fd = os.open(ctl, os.O_WRONLY | os.O_NONBLOCK)     # ENXIO when perf is not reading it: never blocks
+            try:
+                os.write(fd, (word + "\n").encode())
+            finally:
+                os.close(fd)
+            t_end = time.monotonic() + 5.0
+            while time.monotonic() < t_end:
+                ready, _, _ = select.select([afd], [], [], max(t_end - time.monotonic(), 0.0))
+                data = os.read(afd, 64) if ready else b""
+                if b"ack" in data:
+                    return True
+                if ready and not data:      # no writer yet (or between writers): wait for the ack
+                    time.sleep(0.01)
+            return False
         finally:
             os.close(afd)
     except OSError as exc:

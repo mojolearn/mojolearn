@@ -709,7 +709,7 @@ def render(doc):
         mem = ns.get("mem") or {}
         h = r.get("host") or {}
         pu = h.get("parts_us") or {}
-        other = sum(v for k, v in pu.items() if k not in ("bindings", "cpython", "mojo_runtime")) if pu else None
+        other = float(sum(v for k, v in pu.items() if k not in ("bindings", "cpython", "mojo_runtime"))) if pu else None
         L.append("| %s |" % " | ".join(str(x) for x in (
             r["row"], r["phase"], _f(r["wall_ms_per_call"]), _f(r["split"]["kernel_ms"]), _f(r["split"]["cuda_api_ms"]),
             _f(c.get("launch"), 1), _f(c.get("sync"), 1), _f(c.get("alloc"), 1),
