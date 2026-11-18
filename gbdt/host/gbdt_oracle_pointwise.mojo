@@ -70,6 +70,7 @@ from checks.numerics import (
     identical_pow,
     portable_log64,
 )
+from gbdt.methods.cursor_rescale import cursor_add_leaf, rescaled_leaf
 from gbdt.gpu_data.compressed_index_builder import build_layout
 from gbdt.gpu_data.feature_blocks import blocks_for
 from gbdt.gpu_data.grid_policy import POLICY_HALF_BYTE, POLICY_ONE_BYTE
@@ -518,9 +519,10 @@ def gbdt_pointwise_host_fit(
             l2_leaf_reg, leaf_iterations,
         )
         for leaf in range(n_leaves):
+            var scaled = rescaled_leaf(estimated[leaf], learning_rate)
             for k in range(sizes[leaf]):
                 var row = row_index[offsets[leaf] + k]
-                cursor[row] = identical_mul_add(estimated[leaf], learning_rate, cursor[row])
+                cursor[row] = cursor_add_leaf(estimated[leaf], learning_rate, scaled, cursor[row])
         for level in range(len(splits)):
             split_features.append(splits[level].feature)
             split_bins.append(splits[level].bin)

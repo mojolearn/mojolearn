@@ -17,6 +17,7 @@
 from std.math import exp, fma, isfinite, log, sqrt
 
 from checks.numerics import ftz, identical_mul_add
+from gbdt.methods.cursor_rescale import cursor_add_leaf, rescaled_leaf
 from gbdt.data.pairs import (
     IDN_PAIRLOGIT_GROUP,
     PairList,
@@ -293,9 +294,10 @@ def gbdt_ranking_pointwise_host_fit(
         if loss.objective == GBDT_OBJ_PAIR_LOGIT or loss.objective == GBDT_OBJ_YETI_RANK:
             _zero_average_host(estimated)
         for leaf in range(n_leaves):
+            var scaled = rescaled_leaf(estimated[leaf], params.learning_rate)
             for k in range(sizes[leaf]):
                 var r = row_index[offsets[leaf] + k]
-                cursor[r] = identical_mul_add(estimated[leaf], params.learning_rate, cursor[r])
+                cursor[r] = cursor_add_leaf(estimated[leaf], params.learning_rate, scaled, cursor[r])
             model_leaves.append(estimated[leaf] * params.learning_rate)
         for level in range(len(splits)):
             split_features.append(splits[level].feature)

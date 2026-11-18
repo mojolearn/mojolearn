@@ -119,6 +119,7 @@ from std.memory import bitcast
 
 from checks.fixed_point import choose_scale
 from checks.numerics import ftz, identical_mul_add, identical_sqrt
+from gbdt.methods.cursor_rescale import cursor_add_leaf, rescaled_leaf
 from gbdt.data.permutation import TRandom
 from gbdt.gpu_data.compressed_index_builder import (
     CompressedIndexLayout,
@@ -1209,9 +1210,10 @@ def gbdt_host_fit_non_symmetric(
                 + " values for a non-symmetric tree of " + String(n_bins) + " bins"
             )
         for leaf in range(n_bins):
+            var scaled = rescaled_leaf(estimated[leaf], lr)
             for k in range(sizes[leaf]):
                 var row = row_index[offsets[leaf] + k]
-                cursor[row] = identical_mul_add(estimated[leaf], lr, cursor[row])
+                cursor[row] = cursor_add_leaf(estimated[leaf], lr, scaled, cursor[row])
         for i in range(len(tree.node_feature)):
             node_feature.append(tree.node_feature[i])
             node_bin.append(tree.node_bin[i])

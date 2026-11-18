@@ -75,6 +75,7 @@ from checks.numerics import (
     identical_mul_add,
     identical_sqrt,
 )
+from gbdt.methods.cursor_rescale import cursor_add_leaf, rescaled_leaf
 from gbdt.gpu_data.compressed_index_builder import (
     CompressedIndexLayout,
     build_layout,
@@ -1055,9 +1056,10 @@ def gbdt_multi_host_fit(
         for leaf in range(n_live):
             for d in range(dim):
                 var raw = estimated[leaf * dim + d]
+                var scaled = rescaled_leaf(raw, lr)
                 for k in range(sizes[leaf]):
                     var at = d * n_rows + row_index[offsets[leaf] + k]
-                    cursor[at] = identical_mul_add(raw, lr, cursor[at])
+                    cursor[at] = cursor_add_leaf(raw, lr, scaled, cursor[at])
         for i in range(grown):
             split_features.append(tree_features[i])
             split_bins.append(tree_bins[i])

@@ -52,7 +52,7 @@ from std.memory import stack_allocation
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
-from checks.numerics import identical_mul_add
+from gbdt.methods.cursor_rescale import cursor_add_leaf, rescaled_leaf
 from core.device_zero import enqueue_fill
 from core.pinned_reduce import halving_block_sum
 
@@ -344,16 +344,17 @@ def _bk_apply_kernel(
     cursor: MutPointer[Float32, MutAnyOrigin],
     n_in: Int32,
 ):
-    """`add_model_value_kernel`'s per-row statement, `cursor[r] =
-    identical_mul_add(est[leaf], rate, cursor[r])`, with row r's leaf read
+    """`add_model_value_kernel`'s per-row statement (`cursor_add_leaf` of
+    `rescaled_leaf`, gbdt/methods/cursor_rescale.mojo), with row r's leaf read
     from `bins[r]` instead of a partition range: the same operands and the
-    same one rounding per row, so the cursor bits are the partition path's
+    same roundings per row, so the cursor bits are the partition path's
     for the same leaf values."""
     var r = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     if r < Int(n_in):
         var raw = leaf_values.unsafe_load(Int(bins.unsafe_load(r)))
+        var scaled = rescaled_leaf(raw, learning_rate)
         cursor.unsafe_store(
-            r, identical_mul_add(raw, learning_rate, cursor.unsafe_load(r))
+            r, cursor_add_leaf(raw, learning_rate, scaled, cursor.unsafe_load(r))
         )
 
 

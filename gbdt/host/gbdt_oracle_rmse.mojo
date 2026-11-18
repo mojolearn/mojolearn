@@ -66,7 +66,7 @@ default flags the symmetric oracle names)
      Hessian `w + l2`, its `<= 0` guard, `g / (hessian + 1e-20)`, and
      `RegularizeImpl`'s `w < 1e-20` zero), and `add_model_value_kernel`
      (`gbdt/methods/kernel_add_model_value.mojo:45-104`, the cursor update
-     through `identical_mul_add`). `_rmse_leaf_value` below.
+     `cursor + round(leaf * rate)`, gbdt/methods/cursor_rescale.mojo). `_rmse_leaf_value` below.
   7. The rescale on append (`doc_parallel_boosting.mojo:2131-2133`), the
      learn losses (`:2158-2169`, the final pass `:2180-2259`) and the model
      text with its `bias` record, written after `losses` when the bias is
@@ -83,7 +83,8 @@ tools/identity_break.py on the gbdt-rmse lane is the measurement.
 """
 from std.math import exp, fma, log
 from std.memory import bitcast
-from checks.numerics import ftz, identical_mul_add
+from checks.numerics import ftz
+from gbdt.methods.cursor_rescale import cursor_add_leaf, rescaled_leaf
 from gbdt.data.permutation import TRandom
 from gbdt.metrics.sample_quantile import calculate_weighted_target_average
 from gbdt.gpu_data.compressed_index_builder import build_layout
@@ -603,9 +604,10 @@ def gbdt_rmse_host_fit(
             var g = _partition_stat(stats, n_rows, 1, offsets[i], sizes[i])
             leaf_values[i] = _rmse_leaf_value(w, g, params.l2_leaf_reg)
         for leaf in range(n_live):
+            var scaled = rescaled_leaf(leaf_values[leaf], lr)
             for k in range(sizes[leaf]):
                 var row = row_index[offsets[leaf] + k]
-                cursor[row] = identical_mul_add(leaf_values[leaf], lr, cursor[row])
+                cursor[row] = cursor_add_leaf(leaf_values[leaf], lr, scaled, cursor[row])
 
         # ---- `AppendModels`: the structure and the rescaled leaves ----
         for i in range(grown):

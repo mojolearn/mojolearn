@@ -83,6 +83,7 @@ from checks.numerics import (
     identical_mul_add,
     identical_pow,
 )
+from gbdt.methods.cursor_rescale import cursor_add_leaf, rescaled_leaf
 from gbdt.gpu_data.compressed_index_builder import build_layout
 from gbdt.gpu_data.feature_blocks import blocks_for
 from gbdt.gpu_data.grid_policy import (
@@ -1211,9 +1212,10 @@ def gbdt_losses_host_fit(
             # the kernel's order (lane cpu4-gbdt; was an ascending chain).
             _zero_average_host(estimated)
         for leaf in range(n_live):
+            var scaled = rescaled_leaf(estimated[leaf], lr)
             for k in range(sizes[leaf]):
                 var row = row_index[offsets[leaf] + k]
-                cursor[row] = identical_mul_add(estimated[leaf], lr, cursor[row])
+                cursor[row] = cursor_add_leaf(estimated[leaf], lr, scaled, cursor[row])
         for i in range(grown):
             split_features.append(tree_features[i])
             split_bins.append(tree_bins[i])

@@ -39,8 +39,7 @@ point it at. Recorded so that gap is visible.
 
 from max.gpu import block_dim, block_idx, grid_dim, thread_idx
 
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
-from checks.soft_f64 import sf64_from_f32, sf64_mul, sf64_to_f32
+from gbdt.methods.cursor_rescale import cursor_add_leaf, rescaled_leaf
 # TOMBSTONE: MOJOLEARN_AFT_G08 (DELETE-EXPERIMENT, never-run Apple FAST programme card, rule g; non-owner fold to False) deleted 2026-11-15 by lane/expdel2-43-trees; code recoverable at acfd453fec.
 # Restore: git apply experiments/removed/MOJOLEARN_AFT_G08.expdel2-43-trees.patch; record in docs/TOMBSTONES.md.
 # RESTORED 2026-11-15 by lane/restore-apple-fast-trees: opt-in arm back as it was, default off, Apple fast only; default path unchanged.
@@ -137,44 +136,21 @@ def _add_model_value_body(
 
     var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     var stride = Int(grid_dim.x) * Int(block_dim.x)
-    # THE RESCALED LEAF, ONCE PER BLOCK (fb11, 2026-11-17). Under IDENTICAL
-    # the cursor takes `cursor + round(leaf * rate)`: their `Rescale(step)`
-    # then add (`doc_parallel_boosting.h:388`), the value the model stores
-    # (the host rescale, DEVIATION 256) and predict adds, and the same
-    # statement as TREE_OP_APPLY's `leaf_scaled` (`_leaf_out_gated_kernel`,
-    # the correctly rounded product through soft float). The fma it replaces was
-    # one rounding where those take two, so the greedy searcher's learn
-    # cursor sat a last bit off the model it trained and off the pointwise
-    # searcher's cursor (`fit_pointwise_check` W2 on the L40S: tree 0
-    # identical, 13 of 20 losses off in the 7th digit). The product is
-    # formed once per leaf instead of once per row. Bits change on every
-    # column together (every IDENTICAL greedy fit's cursor).
-    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
-        var scaled = sf64_to_f32(
-            sf64_mul(sf64_from_f32(raw), sf64_from_f32(learning_rate))
-        )
-        while i < size:
-            comptime for lane in range(AFT_LEAF_ROWS):
-                var position = i + lane * stride
-                if position < size:
-                    var row = plane + Int(row_index.unsafe_load(offset + position))
-                    cursor.unsafe_store(row, cursor.unsafe_load(row) + scaled)
-            i += stride * AFT_LEAF_ROWS
-    else:
-        # FAST (Apple only): the naive chain `leaf*rate + cursor` as before,
-        # Apple FAST bits unchanged. The IDENTICAL fma this seam used to carry
-        # (IDENTITY_PATHS row 9, E1 2026-08-22) is replaced by the rescaled
-        # add above.
-        while i < size:
-            comptime for lane in range(AFT_LEAF_ROWS):
-                var position = i + lane * stride
-                if position < size:
-                    var row = plane + Int(row_index.unsafe_load(offset + position))
-                    cursor.unsafe_store(
-                        row, raw * learning_rate + cursor.unsafe_load(row)
-                    )
-            i += stride * AFT_LEAF_ROWS
-
+    # The rescaled leaf, once per block: `rescaled_leaf` / `cursor_add_leaf`
+    # below say why (fb11, 2026-11-17).
+    var scaled = rescaled_leaf(raw, learning_rate)
+    while i < size:
+        comptime for lane in range(AFT_LEAF_ROWS):
+            var position = i + lane * stride
+            if position < size:
+                var row = plane + Int(row_index.unsafe_load(offset + position))
+                # independent rows share the leaf value already loaded above
+                # and never share writes
+                cursor.unsafe_store(
+                    row,
+                    cursor_add_leaf(raw, learning_rate, scaled, cursor.unsafe_load(row)),
+                )
+        i += stride * AFT_LEAF_ROWS
 
 
 comptime ABMV_BLOCK = 256

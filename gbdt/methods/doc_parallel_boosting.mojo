@@ -2696,6 +2696,8 @@ def _launch_querywise_pointwise_target(
 # of EXECUTOR_T1_TREE_OPS.md section 4 is checked: the two are NOT the same
 # float operation, so the change is taken on every column together. The
 # pointwise-searcher symmetric GBDT identity lanes move.
+# (fb11, 2026-11-17: `add_model_value_kernel` and its host oracles now take the same
+# `cursor + round(leaf * rate)`, gbdt/methods/cursor_rescale.mojo, so the greedy rounds agree.)
 #
 # Refused here and kept on the host loop (owed, each needs its own op): the
 # grouped losses (QueryRMSE, PairLogit, YetiRank), the multiclass family and
