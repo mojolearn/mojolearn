@@ -19,6 +19,10 @@ next case runs. Drivers (the row's "driver" field):
                 cost rule's neighbouring and wide non-board shapes)
   mamba_backward  Mamba1Block.backward and Mamba2Block.backward (the zero-state block VJP, one public call) on
                 synthetic weights at the row's (batch, length, d_model); an arm may be a B wheel set the row names
+  samba_train_step  SambaStack.train_step (forward, loss, tape backward, AdamW; one public call) on a stack
+                initialized from a seeded Generator, once per case the row's shape names (batch, length, d_model,
+                layers): neighbouring and non-board model sizes for a Mamba-3 backward change; each line carries
+                the step's loss beside its time; an arm may be a B wheel set the row names
   cnn_widths    CNNClassifier.fit on synthetic images at each conv_channels tuple the row names; an arm may be a
                 B wheel set the row names
   f16_widen     models.safetensors.widen_f16 of synthetic float16 bits at each element count the row names; an
@@ -189,6 +193,38 @@ def case_mamba_backward(row, arm_cases):
     return out
 
 
+def case_samba_train_step(row, arm_cases):
+    """SambaStack.train_step at each case of the row's shape: {"name", "batch", "length", "d_model", "layers",
+    and for attention layers "n_heads" and "intermediate"; optional "vocab" (256)}. The stack is initialized from
+    Generator(7) (the same parameters on every arm), the ids from default_rng(0). The loss recorded is the timed
+    (second) step's, so two arms that differ only in a summation order show it beside the time."""
+    import numpy as np
+    from mojolearn.training import Generator
+    ml = _ml()
+    out = []
+    for spec in row["shape"]["cases"]:  # serial by nature: timed calls on one GPU
+        b, l, dm = int(spec["batch"]), int(spec["length"]), int(spec["d_model"])
+        vocab = int(spec.get("vocab", 256))
+        layers = tuple(str(v) for v in spec["layers"])
+        label = "SambaStack.train_step %s b=%d l=%d d_model=%d layers=%d" % (spec["name"], b, l, dm, len(layers))
+        seen = {}
+        try:
+            cfg = ml.SambaConfig(vocab=vocab, d_model=dm, layers=layers, n_heads=spec.get("n_heads"),
+                                 intermediate=spec.get("intermediate"))
+            stack = ml.SambaStack(cfg, generator=Generator(7), lr=1e-3, numeric_mode="identical")
+            ids = np.random.default_rng(0).integers(0, vocab, (b, l + 1)).astype(np.int32)
+            x, y = np.ascontiguousarray(ids[:, :-1]), np.ascontiguousarray(ids[:, 1:])
+        except Exception as exc:  # noqa: BLE001 -- a refusal is a result
+            out.append((label, None, "REFUSED: %s: %s" % (type(exc).__name__, str(exc)[:400])))
+            continue
+
+        def call(stack=stack, x=x, y=y, seen=seen):
+            seen["loss"] = float(stack.train_step(x, y)["loss"])
+        ms, why = timed(call)
+        out.append((label, ms, why, {"loss": seen.get("loss")}))
+    return out
+
+
 def case_cnn_widths(row, arm_cases):
     """CNNClassifier.fit on synthetic (C, H, W) images at each conv_channels tuple the row names (the NI12 fill
     rule's neighbouring, non-board channel widths: x_cnn/device.mojo `ni12_implicit_layer`)."""
@@ -225,7 +261,8 @@ def case_f16_widen(row, arm_cases):
 
 
 DRIVERS = {"f16_widen": case_f16_widen, "while_loop": case_while_loop, "pandas_input": case_pandas_input, "mlp_fit": case_mlp_fit,
-           "kde_widths": case_kde_widths, "mamba_backward": case_mamba_backward, "cnn_widths": case_cnn_widths}
+           "kde_widths": case_kde_widths, "mamba_backward": case_mamba_backward, "cnn_widths": case_cnn_widths,
+           "samba_train_step": case_samba_train_step}
 
 
 def arm_cases(row, arm):
@@ -263,15 +300,19 @@ def main(argv=None):
     os.makedirs(os.path.dirname(os.path.abspath(a.out)), exist_ok=True)
     # one append of whole lines (2026-11-14: a line cut by a full disk crashed the owed report; the report now also
     # reads such a line as UNREADABLE)
-    body = "".join(json.dumps(dict(base, case=case, ms=ms, status=why or "ok"), sort_keys=True) + "\n"
-                   for case, ms, why in results)
+    # a driver may return a fourth element: extra fields for its line (a quality value shown beside the time)
+    body = "".join(json.dumps(dict(base, case=res[0], ms=res[1], status=res[2] or "ok", **(res[3] if len(res) > 3 else {})),
+                              sort_keys=True) + "\n"
+                   for res in results)
     with open(a.out, "a") as fh:
         fh.write(body)
         fh.flush()
         os.fsync(fh.fileno())
-    for case, ms, why in results:
-        print("OWED-DRIVER row=%s arm=%s case=%s ms=%s status=%s"
-              % (a.row, a.arm, case, "%.3f" % ms if ms is not None else "-", why or "ok"))
+    for res in results:
+        case, ms, why = res[0], res[1], res[2]
+        print("OWED-DRIVER row=%s arm=%s case=%s ms=%s status=%s%s"
+              % (a.row, a.arm, case, "%.3f" % ms if ms is not None else "-", why or "ok",
+                 "".join(" %s=%r" % kv for kv in sorted((res[3] if len(res) > 3 else {}).items()))))
     return 0
 
 

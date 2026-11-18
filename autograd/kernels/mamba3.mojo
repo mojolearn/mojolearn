@@ -1974,6 +1974,83 @@ def mamba3_backward_s17_state_into(
     ctx.enqueue_function[mamba3_s17_reverse_state_kernel](d_direct.unsafe_ptr(),d_total.unsafe_ptr(),d_initial.unsafe_ptr(),d_y.unsafe_ptr(),q.unsafe_ptr(),dacs.unsafe_ptr(),Int32(b),Int32(l),Int32(dims.nheads),Int32(qs),grid_dim=(_grid(cells),1,1),block_dim=(M3_BWD_TPB,1,1))
 
 
+#: lane/fx-mamba3-s17-fold (2026-11-18): -D MOJOLEARN_MAMBA3_FAST_S17_TAIL_TREE,
+#: default OFF, A/B OWED (bench/results/paper_compare/owed-pre0867.json
+#: "mamba3-s17-tail-tree"; docs/apple-fast/EXPERIMENTS.md).
+#: The chunk-end `add` term of `d_dacs_rec` is today ONE serial chain per
+#: (batch, chunk, head): (qs + 1) x M3_HEADDIM x M3_D_STATE fused steps on
+#: thread 0 (532,480 at qs = 64), whatever stages its operands (the shared
+#: and pipe kernels below re-stage the same chain). Under the define the
+#: chain is M3_D_STATE independent lane chains and one tree:
+#:   lane n (`_m3_s17_tail_lane`), from +0.0, with the chain's own step
+#:     `acc = ftz(identical_mul_add(carry[p][n], term, acc))`: the token
+#:     terms j ascending then p ascending (term = v[j][p] * k[j][n] * de_j,
+#:     the chain's expression), then the state terms p ascending
+#:     (term = states[p][n] * exp(last)): (qs + 1) x M3_HEADDIM steps;
+#:   the M3_D_STATE lane partials, ascending n, fold by the fixed balanced
+#:     tree of gemm/IDENTICAL_FP32_CONTRACT.md 7.2 (`_m3_s17_tail_tree`:
+#:     adjacent pairing, odd tail carried, `ftz(ftz(x) + ftz(y))` nodes);
+#:   `d_dacs_rec = ftz(d_dacs_rec + tree)`, as before.
+#: BITS CHANGE under the define (the same terms summed in another order), on
+#: every column together: the device kernel `mamba3_s17_tail_tree_kernel` and
+#: the host column's `mamba3_s17_operands_kernel` both call the two helpers
+#: below, so there is one spelling of the order and no vendor branch. A
+#: single-chunk pass (l <= qs) carries zeros, so its words do not move.
+#: mamba/IDENTICAL_MAMBA3_CONTRACT.md "Backward S17 chunk-end tail".
+comptime M3_S17_TAIL_TREE = is_defined["MOJOLEARN_MAMBA3_FAST_S17_TAIL_TREE"]()
+
+
+@always_inline
+def _m3_s17_tail_lane(
+    k:MutPointer[Float32,MutAnyOrigin],v:MutPointer[Float32,MutAnyOrigin],
+    dacs:MutPointer[Float32,MutAnyOrigin],states:MutPointer[Float32,MutAnyOrigin],d_states:MutPointer[Float32,MutAnyOrigin],
+    bb:Int,c:Int,h:Int,n:Int,l:Int,nh:Int,qs:Int,nc:Int,
+) -> Float32:
+    """Lane n's share of the S17 chunk-end `add` term (M3_S17_TAIL_TREE): the
+    serial chain's terms with state index n, in the chain's own order (j, then
+    p; then p for the state term), from +0.0. The next chunk's carried column
+    [p][n] is read once into registers; it is zero on the last chunk."""
+    var last=ftz(dacs.unsafe_load(((bb*nh+h)*nc+c)*qs+(qs-1)))
+    var carry=Array[Float32,M3_HEADDIM](fill=Float32(0))
+    if c+1<nc:
+        for p in range(M3_HEADDIM):
+            carry[p]=ftz(d_states.unsafe_load((((bb*nc+c+1)*nh+h)*M3_HEADDIM+p)*M3_D_STATE+n))
+    var acc=Float32(0.0)
+    for j in range(qs):
+        var tj=c*qs+j
+        if tj<l:
+            var idx=((bb*nh+h)*nc+c)*qs+j;var de=ftz(identical_exp(ftz(last-ftz(dacs.unsafe_load(idx)))))
+            var kn=ftz(k.unsafe_load(((bb*l+tj)*nh+h)*M3_D_STATE+n))
+            for p in range(M3_HEADDIM):
+                acc=ftz(identical_mul_add(carry[p],ftz(identical_mul(ftz(identical_mul(ftz(v.unsafe_load(((bb*l+tj)*nh+h)*M3_HEADDIM+p)),kn)),de)),acc))
+    var el=ftz(identical_exp(last))
+    for p in range(M3_HEADDIM):
+        var hs=ftz(states.unsafe_load((((bb*nc+c)*nh+h)*M3_HEADDIM+p)*M3_D_STATE+n))
+        acc=ftz(identical_mul_add(carry[p],ftz(identical_mul(hs,el)),acc))
+    return acc
+
+
+@always_inline
+def _m3_s17_tail_tree(mut lanes: Array[Float32, M3_D_STATE]) -> Float32:
+    """The fixed balanced tree of gemm/IDENTICAL_FP32_CONTRACT.md 7.2 over the
+    M3_D_STATE lane partials in ascending lane order, folded in place:
+    `next[q] = ftz(ftz(cur[2q]) + ftz(cur[2q+1]))`, an odd last element carried
+    with no arithmetic, `ftz(cur[0])` returned. Level q is written after
+    elements 2q and 2q+1 are read, so the in-place levels read no written cell.
+    Reads no block size, warp width or launch count."""
+    var width=M3_D_STATE
+    while width>1:
+        var half=width//2
+        for q in range(half):
+            lanes[q]=ftz(ftz(lanes[2*q])+ftz(lanes[2*q+1]))
+        if (width&1)==1:
+            lanes[half]=lanes[width-1]
+            width=half+1
+        else:
+            width=half
+    return ftz(lanes[0])
+
+
 def mamba3_s17_operands_kernel(
     d_q_read:MutPointer[Float32,MutAnyOrigin],d_dacs_read:MutPointer[Float32,MutAnyOrigin],
     d_k_rec:MutPointer[Float32,MutAnyOrigin],d_v_rec:MutPointer[Float32,MutAnyOrigin],d_dacs_rec:MutPointer[Float32,MutAnyOrigin],
@@ -2014,23 +2091,31 @@ def mamba3_s17_operands_kernel(
         rec_scalar=ftz(identical_mul_add(outv,ftz(v.unsafe_load(th*M3_HEADDIM+p)),rec_scalar))
     var dr=ftz(-rec_scalar)
     if (inner==qs-1 or token==l-1) and not M3_S17_TAIL_SHARED:
-        var add=Float32(0.0)
-        for j in range(qs):
-            var tj=c*qs+j
-            if tj<l:
-                var idx=((bb*nh+h)*nc+c)*qs+j;var de=ftz(identical_exp(ftz(last-ftz(dacs.unsafe_load(idx)))))
-                for p in range(M3_HEADDIM):
-                    for n in range(M3_D_STATE):
-                        var carry=Float32(0.0)
-                        if c+1<nc:carry=ftz(d_states.unsafe_load((((bb*nc+c+1)*nh+h)*M3_HEADDIM+p)*M3_D_STATE+n))
-                        add=ftz(identical_mul_add(carry,ftz(identical_mul(ftz(identical_mul(ftz(v.unsafe_load(((bb*l+tj)*nh+h)*M3_HEADDIM+p)),ftz(k.unsafe_load(((bb*l+tj)*nh+h)*M3_D_STATE+n)))),de)),add))
-        for p in range(M3_HEADDIM):
+        comptime if M3_S17_TAIL_TREE:
+            # the host column's form of `mamba3_s17_tail_tree_kernel`: the same
+            # lane chains and the same tree, through the same two helpers
+            var lanes=Array[Float32,M3_D_STATE](fill=Float32(0))
             for n in range(M3_D_STATE):
-                var carry=Float32(0.0)
-                if c+1<nc:carry=ftz(d_states.unsafe_load((((bb*nc+c+1)*nh+h)*M3_HEADDIM+p)*M3_D_STATE+n))
-                var hs=ftz(states.unsafe_load((((bb*nc+c)*nh+h)*M3_HEADDIM+p)*M3_D_STATE+n))
-                add=ftz(identical_mul_add(carry,ftz(identical_mul(hs,ftz(identical_exp(last)))),add))
-        dr=ftz(dr+add)
+                lanes[n]=_m3_s17_tail_lane(k,v,dacs,states,d_states,bb,c,h,n,l,nh,qs,nc)
+            dr=ftz(dr+_m3_s17_tail_tree(lanes))
+        else:
+            var add=Float32(0.0)
+            for j in range(qs):
+                var tj=c*qs+j
+                if tj<l:
+                    var idx=((bb*nh+h)*nc+c)*qs+j;var de=ftz(identical_exp(ftz(last-ftz(dacs.unsafe_load(idx)))))
+                    for p in range(M3_HEADDIM):
+                        for n in range(M3_D_STATE):
+                            var carry=Float32(0.0)
+                            if c+1<nc:carry=ftz(d_states.unsafe_load((((bb*nc+c+1)*nh+h)*M3_HEADDIM+p)*M3_D_STATE+n))
+                            add=ftz(identical_mul_add(carry,ftz(identical_mul(ftz(identical_mul(ftz(v.unsafe_load(((bb*l+tj)*nh+h)*M3_HEADDIM+p)),ftz(k.unsafe_load(((bb*l+tj)*nh+h)*M3_D_STATE+n)))),de)),add))
+            for p in range(M3_HEADDIM):
+                for n in range(M3_D_STATE):
+                    var carry=Float32(0.0)
+                    if c+1<nc:carry=ftz(d_states.unsafe_load((((bb*nc+c+1)*nh+h)*M3_HEADDIM+p)*M3_D_STATE+n))
+                    var hs=ftz(states.unsafe_load((((bb*nc+c)*nh+h)*M3_HEADDIM+p)*M3_D_STATE+n))
+                    add=ftz(identical_mul_add(carry,ftz(identical_mul(hs,ftz(identical_exp(last)))),add))
+            dr=ftz(dr+add)
     d_dacs_rec.unsafe_store(th,dr)
 
 
@@ -2419,6 +2504,37 @@ def mamba3_s17_tail_pipe_kernel(
         d_dacs_rec.unsafe_store(th,ftz(d_dacs_rec.unsafe_load(th)+add))
 
 
+def mamba3_s17_tail_tree_kernel(
+    d_dacs_rec:MutPointer[Float32,MutAnyOrigin],k:MutPointer[Float32,MutAnyOrigin],v:MutPointer[Float32,MutAnyOrigin],
+    dacs:MutPointer[Float32,MutAnyOrigin],states:MutPointer[Float32,MutAnyOrigin],d_states:MutPointer[Float32,MutAnyOrigin],
+    b_in:Int32,l_in:Int32,nh_in:Int32,qs_in:Int32,
+):
+    """The S17 chunk-end `add` term as a parallel fold (M3_S17_TAIL_TREE), one
+    block of M3_D_STATE threads per (batch, chunk, head): thread n folds lane
+    n's terms (`_m3_s17_tail_lane`, (qs + 1) x M3_HEADDIM steps) into the
+    block's slab; after ONE barrier thread 0 folds the M3_D_STATE partials by
+    the fixed balanced tree (`_m3_s17_tail_tree`, M3_D_STATE - 1 adds) and
+    stores `d_dacs_rec[th] = ftz(d_dacs_rec[th] + tree)` over the dr the
+    operands kernel stored. No operand staging: v, k, the carried state and
+    the chunk state are read where they are used. The slab is M3_D_STATE
+    floats (512 bytes), inside every column's threadgroup page."""
+    var b=Int(b_in);var l=Int(l_in);var nh=Int(nh_in);var qs=Int(qs_in);var nc=(l+qs-1)//qs
+    var red=stack_allocation[M3_D_STATE,Scalar[DType.float32],address_space=AddressSpace.SHARED]()
+    var blk=Int(block_idx.x);var n=Int(thread_idx.x)
+    if blk>=b*nc*nh:return
+    var h=blk%nh;var c=(blk//nh)%nc;var bb=blk//(nh*nc)
+    var token=c*qs+qs-1
+    if token>l-1:token=l-1
+    var th=(bb*l+token)*nh+h
+    red[n]=_m3_s17_tail_lane(k,v,dacs,states,d_states,bb,c,h,n,l,nh,qs,nc)
+    barrier()
+    if n==0:
+        var lanes=Array[Float32,M3_D_STATE](fill=Float32(0))
+        for i in range(M3_D_STATE):
+            lanes[i]=red[i]
+        d_dacs_rec.unsafe_store(th,ftz(d_dacs_rec.unsafe_load(th)+_m3_s17_tail_tree(lanes)))
+
+
 def mamba3_backward_s17_operands_into(ctx:DeviceContext,mut dq:DeviceBuffer[DType.float32],mut ddr:DeviceBuffer[DType.float32],mut dk:DeviceBuffer[DType.float32],mut dv:DeviceBuffer[DType.float32],mut ddc:DeviceBuffer[DType.float32],mut dy:DeviceBuffer[DType.float32],mut q:DeviceBuffer[DType.float32],mut k:DeviceBuffer[DType.float32],mut v:DeviceBuffer[DType.float32],mut dacs:DeviceBuffer[DType.float32],mut states:DeviceBuffer[DType.float32],mut dstates:DeviceBuffer[DType.float32],b:Int,l:Int,dims:Mamba3Dims,qs:Int) raises:
     var cells=b*l*dims.nheads
     comptime if M3_S17_OPERANDS_SHARED:
@@ -2432,10 +2548,14 @@ def mamba3_backward_s17_operands_into(ctx:DeviceContext,mut dq:DeviceBuffer[DTyp
         var nc=(l+qs-1)//qs
         # TOMBSTONE: MOJOLEARN_IDN_M3_S17_TAIL_DBUF launch (LOSER avg 1.33x) deleted 2026-10-11 by b9e2282b2; code recoverable at b9e2282b2^.
         # Restore: git apply experiments/removed/MOJOLEARN_IDN_M3_S17_TAIL_DBUF.patch
-        comptime if M3_S17_TAIL_PIPE:
-            ctx.enqueue_function[mamba3_s17_tail_pipe_kernel](ddc.unsafe_ptr(),k.unsafe_ptr(),v.unsafe_ptr(),dacs.unsafe_ptr(),states.unsafe_ptr(),dstates.unsafe_ptr(),Int32(b),Int32(l),Int32(dims.nheads),Int32(qs),grid_dim=(b*nc*dims.nheads,1,1),block_dim=(M3_D_STATE,1,1))
+        comptime if M3_S17_TAIL_TREE:
+            # -D MOJOLEARN_MAMBA3_FAST_S17_TAIL_TREE (default off, A/B owed): per-lane folds and the 7.2 tree; bits change on every column together
+            ctx.enqueue_function[mamba3_s17_tail_tree_kernel](ddc.unsafe_ptr(),k.unsafe_ptr(),v.unsafe_ptr(),dacs.unsafe_ptr(),states.unsafe_ptr(),dstates.unsafe_ptr(),Int32(b),Int32(l),Int32(dims.nheads),Int32(qs),grid_dim=(b*nc*dims.nheads,1,1),block_dim=(M3_D_STATE,1,1))
         else:
-            ctx.enqueue_function[mamba3_s17_tail_shared_kernel](ddc.unsafe_ptr(),k.unsafe_ptr(),v.unsafe_ptr(),dacs.unsafe_ptr(),states.unsafe_ptr(),dstates.unsafe_ptr(),Int32(b),Int32(l),Int32(dims.nheads),Int32(qs),grid_dim=(b*nc*dims.nheads,1,1),block_dim=(M3_D_STATE,1,1))
+            comptime if M3_S17_TAIL_PIPE:
+                ctx.enqueue_function[mamba3_s17_tail_pipe_kernel](ddc.unsafe_ptr(),k.unsafe_ptr(),v.unsafe_ptr(),dacs.unsafe_ptr(),states.unsafe_ptr(),dstates.unsafe_ptr(),Int32(b),Int32(l),Int32(dims.nheads),Int32(qs),grid_dim=(b*nc*dims.nheads,1,1),block_dim=(M3_D_STATE,1,1))
+            else:
+                ctx.enqueue_function[mamba3_s17_tail_shared_kernel](ddc.unsafe_ptr(),k.unsafe_ptr(),v.unsafe_ptr(),dacs.unsafe_ptr(),states.unsafe_ptr(),dstates.unsafe_ptr(),Int32(b),Int32(l),Int32(dims.nheads),Int32(qs),grid_dim=(b*nc*dims.nheads,1,1),block_dim=(M3_D_STATE,1,1))
 
 
 def mamba3_join_two_kernel(dst:MutPointer[Float32,MutAnyOrigin],a:MutPointer[Float32,MutAnyOrigin],b:MutPointer[Float32,MutAnyOrigin],n_in:Int32):
