@@ -608,6 +608,11 @@
    "define": "MOJOLEARN_XPREP_FAST_TE_PBUCKET_OFF",
    "status": "define in code (bindings/prep_encode_native_door.mojo TE_PBUCKET): B = TargetEncoder without the per-bucket pass; A = the per-bucket pass, the default. Was a run-time env read until lane fx-env-dead (2026-11-18); default unchanged",
    "owed": "RUN"
+  },
+  "xcnn-typed-door": {
+   "define": "MOJOLEARN_XCNN_FAST_TYPED_DOOR",
+   "status": "define in code (bindings/xcnn_native_pack.mojo xcnn_c; bindings/xcnn_pool_typed_door.mojo): B = the typed boundary tables of the average pools (one typed context per process, one typed record per layer, valid under the 3.12+ dictionary and type watchers; no by-name read, Python str or instance-dictionary write per resident call); A = the door, the default, unchanged. Host side only: the same entry and launch words. Pilot of design A (~/mojolearn-evidence/briefs-20261118/ideas-boundary-RESULT.md), lane fx-typed-pilot (2026-11-18)",
+   "owed": "RUN"
   }
  },
  "rows": [
@@ -3466,6 +3471,45 @@
     "xprep-te-pbucket-off"
    ],
    "decides": "keep A (the default) unless B is faster at equal quality on the NVIDIA L40S; digests must not move; time also a neighbouring shape and a non-board dataset before a flip (no dimension targeting)"
+  },
+  {
+   "id": "xcnn-typed-door-global-avgpool",
+   "source": "lane fx-typed-pilot (2026-11-18): pilot of the typed boundary tables (design A) on the CNN average pools, opt-in arm, default off (~/mojolearn-evidence/briefs-20261118/fx-typed-pilot-RESULT.md)",
+   "kind": "ab",
+   "lane": "global-avgpool",
+   "dataset": "*",
+   "rows": "full",
+   "vendor": "nvidia",
+   "b_arms": [
+    "xcnn-typed-door"
+   ],
+   "decides": "keep A (the door, the default) unless B is faster on the NVIDIA L40S (small rows: median of 20 consecutive calls); digests must not move in either arm (host side only); the verdict decides the rollout of design A to the other families, not only this switch; time also a neighbouring shape (another batch and spatial size) and a non-board input before a flip (no dimension targeting)"
+  },
+  {
+   "id": "xcnn-typed-door-avgpool1d",
+   "source": "lane fx-typed-pilot (2026-11-18): pilot of the typed boundary tables (design A) on the CNN average pools, opt-in arm, default off (~/mojolearn-evidence/briefs-20261118/fx-typed-pilot-RESULT.md)",
+   "kind": "ab",
+   "lane": "avgpool1d",
+   "dataset": "*",
+   "rows": "full",
+   "vendor": "nvidia",
+   "b_arms": [
+    "xcnn-typed-door"
+   ],
+   "decides": "keep A (the door, the default) unless B is faster on the NVIDIA L40S (small rows: median of 20 consecutive calls); digests must not move in either arm (host side only); the verdict decides the rollout of design A to the other families, not only this switch; time also a neighbouring shape (another batch and spatial size) and a non-board input before a flip (no dimension targeting)"
+  },
+  {
+   "id": "xcnn-typed-door-avgpool2d",
+   "source": "lane fx-typed-pilot (2026-11-18): pilot of the typed boundary tables (design A) on the CNN average pools, opt-in arm, default off (~/mojolearn-evidence/briefs-20261118/fx-typed-pilot-RESULT.md)",
+   "kind": "ab",
+   "lane": "avgpool2d",
+   "dataset": "*",
+   "rows": "full",
+   "vendor": "nvidia",
+   "b_arms": [
+    "xcnn-typed-door"
+   ],
+   "decides": "keep A (the door, the default) unless B is faster on the NVIDIA L40S (small rows: median of 20 consecutive calls); digests must not move in either arm (host side only); the verdict decides the rollout of design A to the other families, not only this switch; time also a neighbouring shape (another batch and spatial size) and a non-board input before a flip (no dimension targeting)"
   }
  ]
 }
