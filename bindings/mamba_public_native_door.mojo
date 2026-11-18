@@ -17,7 +17,7 @@ return only the output. Internal tuple-returning operations remain available
 for other compiled owners. Dictionary insertion retains each report before
 the temporary tuple is released.
 """
-from bindings.native_class_admission_door import dict_keys_admitted, dict_keys_admit
+from bindings.native_class_admission_door import dict_keys_admitted, dict_keys_admit, class_record, class_admit
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from bindings.py_cpython_table import cpython_table
@@ -33,7 +33,7 @@ from bindings.neural_block_public_door import neural_training_entries, neural_tr
 from bindings.neural_block_admission_door import neural_block_fields, neural_block_snapshot, admit_block_f32, BLOCK_OPERATION, neural_array_snapshot, neural_native_scalar
 from bindings.mode_metadata_native_door import _fields, _class_fields
 from bindings.native_loaded_module_door import native_loaded_module, NativeModules
-from providers.python.borrowed_buffer_pyapi_unpack import admit_native_buffer_exporter
+from providers.python.borrowed_buffer_pyapi_unpack import admit_native_buffer_exporter, AdmittedBorrowedBuffer
 from bindings.neural_prefill_native_door import _prefill_mamba3_reports, _m3_output_array
 from providers.python.neural_descriptor_pyapi_door import (
     neural_descriptor_handle, neural_descriptor_reserved_execute,
@@ -67,18 +67,34 @@ def _mamba_record_fields(mut mods: NativeModules, value: PythonObject, expected:
     var bi = mods.module("builtins")
     if py_type(value) is not expected or py_type(expected) is not bi.type:
         raise Error("TypeError: Mamba state/session requires its exact connected native class")
-    var ancestry = py_call(bi.type.__dict__["__mro__"].__get__, expected)
-    for i in range(len(ancestry)):  # driver-loop: record layouts before any attribute read/write
-        var namespace = _class_fields(mods, ancestry[i])
-        if py_contains(namespace, "__getattr__"):
-            raise Error("TypeError: Mamba native records cannot invoke Python attribute hooks")
-        for hook in [String("__getattribute__"), String("__setattr__")]:  # small-loop(two native record access hooks)
-            if py_contains(namespace, hook) and namespace[hook] is not bi.object.__dict__[hook]:
+    # Lane fb12-rows (2026-11-17, mamba1-decode 306 -> 501 ms): the walk below
+    # reads only the class rows (MRO, hook identities, field descriptors), so
+    # it runs once per class state, as `_fields` / `_class_fields` already do
+    # (native_class_admission `class_record`: type watcher epoch on >= 3.12,
+    # the class version tag on 3.10 / 3.11; any edit of the class or an
+    # ancestor misses the record and the full walk runs again with the same
+    # refusals). Before, every decode token (session_step) re-ran it: one MRO
+    # tuple, two class namespace proxies, two `object.__dict__` hook reads and
+    # six name probes per token. Each `expected` class is checked with one
+    # fixed name list (session class: _handle/_block/_state; each state kind
+    # its own class; the plan class its own), so one slot per class is exact.
+    if class_record(mods, _MAMBA_RECORD_SLOT, expected) is None:
+        var ancestry = py_call(bi.type.__dict__["__mro__"].__get__, expected)
+        for i in range(len(ancestry)):  # driver-loop: record layouts before any attribute read/write
+            var namespace = _class_fields(mods, ancestry[i])
+            if py_contains(namespace, "__getattr__"):
                 raise Error("TypeError: Mamba native records cannot invoke Python attribute hooks")
-        for name in names:  # driver-loop: fixed state/session fields cannot be replaced by descriptors
-            if py_contains(namespace, name):
-                raise Error("TypeError: Mamba native record has a replaced field descriptor: " + name)
+            for hook in [String("__getattribute__"), String("__setattr__")]:  # small-loop(two native record access hooks)
+                if py_contains(namespace, hook) and namespace[hook] is not bi.object.__dict__[hook]:
+                    raise Error("TypeError: Mamba native records cannot invoke Python attribute hooks")
+            for name in names:  # driver-loop: fixed state/session fields cannot be replaced by descriptors
+                if py_contains(namespace, name):
+                    raise Error("TypeError: Mamba native record has a replaced field descriptor: " + name)
+        class_admit(mods, _MAMBA_RECORD_SLOT, expected, PythonObject(True))
     return _fields(mods, value)
+
+
+comptime _MAMBA_RECORD_SLOT = "mamba_record_fields_v1"
 
 
 def _mamba_scalar(mut mods: NativeModules, value: PythonObject, name: String, context: PythonObject) raises:
@@ -865,25 +881,78 @@ def mamba_session_step(mut mods: NativeModules, session: PythonObject, input: Py
     # snapshotted the same way although this door has just created them as
     # C-order Arrays. Same addresses, same bytes: no bit moves.
     var b = h[].plan.b
+    var dm = h[].plan.d_model
     var rows = 0
     var length = 0
-    var x = _neural_input_rows(mods, input, h[].plan.d_model, True, context, rows, length)
+    # Lane fb12-rows (2026-11-17), as the Transformer session's admitted step
+    # (providers/python/transformer_decode_pyapi_door.mojo
+    # `_transformer_decode_run_admitted`, lane flag-neural-small-rows): a
+    # caller's C-contiguous float32 export of (B, d_model) or (B, 1, d_model)
+    # (the board's numpy token, 2048 calls per round) is read by address
+    # under one buffer pin held past the native step, as 0.8.55's step read
+    # `addr_ro(x)`: no read-only Array view per token (`_block_view`: an
+    # object, a memoryview, two casts, two tuples and fourteen slot writes).
+    # Any other input (an Array, another layout, a refused dtype or shape)
+    # takes the full admission below, which raises what it raised before.
+    if py_type(input) is not context["array_class"]:
+        admit_native_buffer_exporter(input)
+        var pin = AdmittedBorrowedBuffer(input)
+        if _session_pin_rows(pin, dm, rows):
+            if rows != b:
+                raise Error(_session_what(kind, ".step") + ": the session holds " + String(b) + " rows, x has B = " + String(rows))
+            var stepped = _session_step_rows(mods, hobj, pin.layout.value().address)
+            # the pin holds the caller's export until the native step returned
+            _ = pin^
+            return stepped
+        _ = pin^
+        rows = 0
+    var x = _neural_input_rows(mods, input, dm, True, context, rows, length)
     if rows != b:
         raise Error(_session_what(kind, ".step") + ": the session holds " + String(b) + " rows, x has B = " + String(rows))
+    var result = _session_step_rows(mods, hobj, Int(py=x._addr))
+    # x's snapshot pins the caller's storage until the native step returned.
+    _ = x^
+    return result
+
+
+def _session_pin_rows(pin: AdmittedBorrowedBuffer, d_model: Int, mut rows: Int) raises -> Bool:
+    """Whether a pinned export is one decode token read in place: float32
+    words, C-contiguous, four-byte aligned, non-empty, shaped (B, d_model) or
+    (B, 1, d_model) with B >= 1; `rows` receives B. False sends the input to
+    the full admission (its refusals and copies)."""
+    if pin.format != "f" and pin.format != "<f" and pin.format != "=f" and pin.format != "@f":
+        return False
+    ref layout = pin.layout.value()
+    if layout.itemsize != 4 or layout.count <= 0 or layout.address % 4 != 0 or not layout.contiguous():
+        return False
+    var rank = len(layout.shape)
+    if rank == 2 and layout.shape[0] >= 1 and layout.shape[1] == d_model:
+        rows = layout.shape[0]
+        return True
+    if rank == 3 and layout.shape[0] >= 1 and layout.shape[1] == 1 and layout.shape[2] == d_model:
+        rows = layout.shape[0]
+        return True
+    return False
+
+
+def _session_step_rows(mut mods: NativeModules, hobj: PythonObject, input_address: Int) raises -> PythonObject:
+    """One token on the session from x's B * d_model words at `input_address`
+    (the caller keeps them alive past this call): y and the reports this
+    door creates, one native step."""
+    var h = hobj.downcast_value_ptr[MambaDecodeHandle]()
+    var kind = h[].plan.kind
+    var b = h[].plan.b
     var y = _session_output(kind, [b, 1, h[].plan.d_model])
     # Reports escape in the returned tuple/public h_last_ fields, so each
     # call still owns fresh arrays. Their temporary collection is native.
     var reports = List[PythonObject](capacity=len(h[].plan.report_dims))
     for i in range(len(h[].plan.report_dims)):  # driver-loop: over the fixed report buffers
         reports.append(_session_output(kind, h[].plan.report_dims[i]))
-    var input_address = Int(py=x._addr)
     var output_address = Int(py=y._addr)
     var report_addresses = List[Int](capacity=len(reports))
     for i in range(len(reports)):  # driver-loop: over the fixed report buffers this door just created
         report_addresses.append(Int(py=reports[i]._addr))
     _session_step_call(mods, hobj, input_address, output_address, report_addresses)
-    # x's snapshot pins the caller's storage until the native step returned.
-    _ = x^
     if kind == 1:
         return y
     if kind == 2:
