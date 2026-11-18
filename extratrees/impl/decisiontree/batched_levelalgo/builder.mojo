@@ -5154,10 +5154,10 @@ def search_batch(
 # queue's (see the kernel module's doc), so the trees equal what the host
 # queue produced and the host column (`train_tree_exact*`) is unchanged. This
 # was the default on every vendor in IDENTICAL and FAST from 2026-10-04 to
-# 2026-11-13; it is now the B arm `-D MOJOLEARN_IDN_ET_DEVICE_LOOP` (and the
-# best-first route in both arms), and the depth-wise default is the host
-# queue again (`_et_run_depthwise_host`, see the block above
-# `ET_DEVICE_LOOP`). `NodeQueue` is also the host column's queue
+# 2026-11-13; it is now the best-first route (and the depth-wise route under
+# `-D MOJOLEARN_IDN_ET_DEVICE_LOOP_EARLY_EXIT`), and the depth-wise default is
+# the host queue (`_et_run_depthwise_host`, see the block above
+# `ET_DEVICE_QUEUE`; the plain depth-wise device loop arm lost A/B ab3). `NodeQueue` is also the host column's queue
 # (`host_builder.mojo`, `train_tree_exact`) and the checks'.
 # =============================================================================
 
@@ -6595,19 +6595,21 @@ def _et_run_bestfirst[
 # Same kernels, same draws keyed by (seed, tree, node), same per-tree FIFO
 # order and node ids (the device loop was built to equal this queue: see
 # `kernels/et_loop_kernels.mojo`'s module doc), so no output bit moves.
-# `-D MOJOLEARN_IDN_ET_DEVICE_LOOP` restores the device loop (B arm of the
-# owed A/B `restore-et-device-loop` in bench/results/paper_compare/
-# owed-pre0867.json; RUN OWED, NVIDIA + AMD, istella + taxi, fit). Best-first
-# growth (`max_leaf_nodes`) keeps the device loop in both arms (the board
-# grows depth-wise; the host best-first forest driver is not restored).
+# Best-first growth (`max_leaf_nodes`) keeps the device loop (the board grows
+# depth-wise; the host best-first forest driver is not restored).
+# A/B ab3 (NVIDIA L40S, wheel d652a4b0a1, 2026-11-18, job
+# nvc-ab-20261118T182558Z-cb6e02, one run per arm, digests and quality equal):
+# the plain device loop for depth-wise growth was arm/base 1.030 geomean over 6
+# cells (istella fit 4596 -> 4823 ms 1.05, taxi fit 4298 -> 4323 1.01; infer
+# 0.93-1.11), so the host queue stays the one depth-wise route.
+# TOMBSTONE: MOJOLEARN_IDN_ET_DEVICE_LOOP (LOSER: depth-wise device loop, arm/base geomean 1.030 over 6 cells, NV L40S ab3 2026-11-18) deleted 2026-11-18 by lane/fx-verdicts2; code recoverable at 85c36e324f.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ET_DEVICE_LOOP.patch; record in docs/TOMBSTONES.md.
 # =============================================================================
-
-comptime ET_DEVICE_LOOP = is_defined["MOJOLEARN_IDN_ET_DEVICE_LOOP"]()
 
 # THIRD FORM (lane fix-rf-et-device-loop-early-exit, 2026-11-13): the device
 # loop that EARLY-EXITS the rescue like the host queue. `-D
 # MOJOLEARN_IDN_ET_DEVICE_LOOP_EARLY_EXIT` (default off; the host queue above
-# stays the depth-wise default, the plain device loop stays the B arm). It
+# stays the depth-wise default; the plain device loop runs best-first only). It
 # decides whether the device loop may skip a batch's DEVIATION 205 rescue
 # when no node needs it. The rescue's first kernel (`etl_retry_kernel`)
 # writes the batch's rescue count into `ETL_H_NSUB`; the host reads that ONE
@@ -6616,16 +6618,16 @@ comptime ET_DEVICE_LOOP = is_defined["MOJOLEARN_IDN_ET_DEVICE_LOOP"]()
 # pick, the restage, the `k = 1` search and the merge, which over an empty
 # sub-batch are all dummies (the merge stops at `ETL_H_NSUB`, so
 # `b_splits` is unchanged, and the partition's stage rewrites every
-# workspace word the partition reads). SAME BITS as `ET_DEVICE_LOOP` and the
-# host queue. Depth-wise growth runs the device loop under this define;
+# workspace word the partition reads). SAME BITS as the plain device loop and
+# the host queue. Depth-wise growth runs the device loop under this define;
 # best-first growth (device loop in every arm) skips the empty rescue too.
 # Owed A/B: row `et-device-loop-early-exit` in bench/results/paper_compare/
 # owed-pre0867.json (RUN OWED, NVIDIA + AMD, istella + taxi, fit).
 comptime ET_DEVICE_LOOP_EARLY_EXIT = is_defined[
     "MOJOLEARN_IDN_ET_DEVICE_LOOP_EARLY_EXIT"
 ]()
-# Either device-loop form runs the depth-wise group on the device.
-comptime ET_DEVICE_QUEUE = ET_DEVICE_LOOP or ET_DEVICE_LOOP_EARLY_EXIT
+# The early-exit form runs the depth-wise group on the device.
+comptime ET_DEVICE_QUEUE = ET_DEVICE_LOOP_EARLY_EXIT
 
 
 def _et_search_host[
@@ -7219,9 +7221,9 @@ def train_forest_classification_device_timed(
         var f_cap = 0
         if bestfirst:
             f_cap = et_bf_frontier_cap(params, slot_rows, bf_sabotage)
-        # The device loop runs under `-D MOJOLEARN_IDN_ET_DEVICE_LOOP` and for
-        # best-first growth; the default depth-wise group runs the HOST
-        # queues (`_et_run_depthwise_host`, the block above `ET_DEVICE_LOOP`)
+        # The device loop runs under `-D MOJOLEARN_IDN_ET_DEVICE_LOOP_EARLY_EXIT`
+        # and for best-first growth; the default depth-wise group runs the HOST
+        # queues (`_et_run_depthwise_host`, the block above `ET_DEVICE_QUEUE`)
         # and keeps a one-slot stub loop that it never drives.
         var use_lp = bestfirst or ET_DEVICE_QUEUE
         var lp = EtDeviceLoop(
@@ -8324,9 +8326,9 @@ def train_forest_regression_device_timed(
         var f_cap = 0
         if bestfirst:
             f_cap = et_bf_frontier_cap(params, slot_rows, bf_sabotage)
-        # The device loop runs under `-D MOJOLEARN_IDN_ET_DEVICE_LOOP` and for
-        # best-first growth; the default depth-wise group runs the HOST
-        # queues (`_et_run_depthwise_host`, the block above `ET_DEVICE_LOOP`)
+        # The device loop runs under `-D MOJOLEARN_IDN_ET_DEVICE_LOOP_EARLY_EXIT`
+        # and for best-first growth; the default depth-wise group runs the HOST
+        # queues (`_et_run_depthwise_host`, the block above `ET_DEVICE_QUEUE`)
         # and keeps a one-slot stub loop that it never drives.
         var use_lp = bestfirst or ET_DEVICE_QUEUE
         var lp = EtDeviceLoop(
