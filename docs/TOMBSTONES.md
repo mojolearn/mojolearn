@@ -22526,3 +22526,82 @@ Evidence for every section below: A/B ab1, NVIDIA L40S (RunPod host 37f71a6102af
 - Deleted by `e8c60877c3` on lane/fb15-ab-verdicts; recoverable at `c989eb9222`.
 - Patch: `experiments/removed/MOJOLEARN_NI12_FILL_RULE_OFF.patch`. Refusal: `core/experiment_guards_neural.mojo`;
   grid entry moved to `removed` in `neural-seq-train-dedupe.json` (ni12_fill_rule).
+
+## Dead tools: lane fx-tools-prune (2026-11-18)
+
+Tool scripts under `tools/` that nothing named, deleted in five commits; tools are not experiments, so there is no define, no
+refusal, no grid entry and no patch: each file is recoverable at the parent of its commit (`git checkout <sha>^ -- <path>`).
+Dead meant: no file names the script's stem in the repo's tracked files (code, workflows, `pixi.toml`, hooks, other tools),
+`~/mojolearn-ops`, session scripts and handoffs under `~/mojolearn-evidence` from the last 30 days, the memory files,
+`AGENTS.md`, `CLAUDE.md`, `docs/handoffs`, this file, `docs/apple-fast/EXPERIMENTS.md` or `experiments/`, and no glob in code
+matches it. A script named only by its own test went with that test; a script named only by other files of the same
+deletion went with them; 37 were named only by the list of unreferenced tools in
+`docs/plans/EXECUTOR_CONSOLIDATION_AND_CLEANUP.md` 5.7. No product code, no bits, no default changed.
+
+- `4a0ed48fc1` (recoverable at `4a0ed48fc1^`), 39 files: `tools/af_ident_to_afb.py`, `tools/af_m3_watchdog.py`,
+  `tools/tests/test_af_m3_watchdog.py`, `tools/agglo_device_check.py`, `tools/amd_diagnostic_build.py`,
+  `tools/test_amd_diagnostic_build.py`, `tools/amd_diagnostic_lease.sh`, `tools/appendix_delta.py`,
+  `tools/apple_byte_lm_first_step.py`, `tools/attention_bswz_leg.sh`, `tools/audit_portable_primitive_calls.py`,
+  `tools/byte_lm_capture_regression.py`, `tools/byte_lm_config_binding_check.py`, `tools/byte_lm_resume_serial.sh`,
+  `tools/byte_lm_runtime_numerical_check.py`, `tools/byte_lm_session_bench.py`, `tools/capture_ordinary_holds.py`,
+  `tools/test_capture_ordinary_holds.py`, `tools/capture_small_training.py`, `tools/catboost_parity_identity_leg.sh`,
+  `tools/check_not_implemented.py`, `tools/check_serialization.py`, `tools/compare_installed_lanes.py`,
+  `tools/test_compare_installed_lanes.py`, `tools/compare_umap_portable_host_math.py`, `tools/cpu_public_fit_smoke.py`,
+  `tools/dbscan_memory_probe.py`, `tools/dbscan_oom_leg.sh`, `tools/decode_columns_leg.sh`, `tools/device_mutex_leg.sh`,
+  `tools/do_byte_lm_leg.py`, `tools/do_byte_lm_remote.sh`, `tools/fa_diag.py`, `tools/fast_speed_diff.py`,
+  `tools/forest_ordered_default_smoke.py`, `tools/gbdt_cpu_parity_matrix.py`, `tools/gbdt_cpu_refusal_probe.py`,
+  `tools/gbdt_fairness_extra.sh`, `tools/gbdt_per_round_do.sh`.
+- `5a5a3a9a55` (recoverable at `5a5a3a9a55^`), 37 files: `tools/gemm_census_then_kernel_leg.sh`,
+  `tools/gemm_class_default_leg.sh`, `tools/gemm_class_enwik8_leg.sh`, `tools/gemm_class_gate.py`,
+  `tools/test_gemm_class_gate.py`, `tools/gemm_class_pile_leg.sh`, `tools/gemm_class_price_summary.py`,
+  `tools/gemm_class_probe_price_leg.sh`, `tools/gemm_class_section_gate.py`, `tools/gemm_class_sections.py`,
+  `tools/gemm_class_training_leg.sh`, `tools/gemm_class_training_summary.py`, `tools/gemm_diag_leg.sh`,
+  `tools/gemm_gather_ftz_leg.sh`, `tools/gemm_gather_full_leg.sh`, `tools/gemm_identical_leg_extra.sh`,
+  `tools/gemm_price_shipped_leg.sh`, `tools/gemm_rtf_leg.sh`, `tools/gemm_seam_probe_column_leg.sh`,
+  `tools/gemm_seam_probe_leg.sh`, `tools/gemm_stage_default_leg.sh`, `tools/gemm_stage_enwik8_leg.sh`,
+  `tools/gemm_stage_pile_leg.sh`, `tools/gemm_stage_training_leg.sh`, `tools/gemm_training_compare.py`,
+  `tools/gemm_training_cross_vendor.py`, `tools/gemm_workspace_reuse_leg.sh`, `tools/gemm_workspace_training_leg.sh`,
+  `tools/hdbscan_idcheck.py`, `tools/hdbscan_soft_cuml_reference.py`, `tools/hdbscan_soft_nvidia_leg.sh`,
+  `tools/hdbscan_sparse_taxi.py`, `tools/identical_candidate_gate.py`, `tools/identical_dart_noise_prepare.py`,
+  `tools/identical_dart_wave_receipt.py`, `tools/identical_dart_noise_protocol.json`,
+  `tools/identical_family_bit_diagnostic.py`.
+- `c8a8a72877` (recoverable at `c8a8a72877^`), 37 files: `tools/identical_pca_bit_diagnostic.py`,
+  `tools/identical_quality_batch.py`, `tools/identical_source_bit_checks.py`, `tools/identical_wave_identity_merge.py`,
+  `tools/identical_wave_v2_stage.py`, `tools/identity_overhead2.py`, `tools/inert_condition_audit.py`,
+  `tools/inf_gbdt_wheel_models.py`, `tools/infer_speed_neural_body.sh`, `tools/istella_rank_leg.sh`,
+  `tools/istella_rank_summary.py`, `tools/kmeans_host_recording_nvidia_leg.sh`, `tools/kmeans_save_boundary_check.py`,
+  `tools/kmeans_save_nvidia_leg.sh`, `tools/knn_coalesced_columns_summary.py`, `tools/knn_layout_price_compare.py`,
+  `tools/test_knn_layout_price_compare.py`, `tools/knn_probe_summary.py`, `tools/knn_public_query_batch_check.py`,
+  `tools/knn_selector_leg.sh`, `tools/knn_smallk_price_compare.py`, `tools/test_knn_smallk_price_compare.py`,
+  `tools/leg_diag_surfaces.sh`, `tools/linux_wheel_candidate.sh`, `tools/linux_wheel_candidate_diag.sh`,
+  `tools/lm_attention_cause_check.py`, `tools/lm_attention_cross_vendor_check.py`, `tools/lm_attention_endurance_body.sh`,
+  `tools/lm_attention_flip_verdict.py`, `tools/lm_attention_integrated_body.sh`, `tools/lm_attention_integrated_compare.py`,
+  `tools/lm_attention_reduced_compare.py`, `tools/lm_attention_vendor_compare.py`, `tools/lm_attention_vendor_cpu_cmd.sh`,
+  `tools/lm_attention_vendor_extra_all.sh`, `tools/lm_attention_vendor_extra_gates.sh`,
+  `tools/lm_attention_vendor_extra_identity.sh`.
+- `850cf7820e` (recoverable at `850cf7820e^`), 43 files: `tools/lm_shakedown_body.sh`, `tools/lm_shakedown_long_body.sh`,
+  `tools/lm_training_capacity.py`, `tools/lm_vocab_witness_body.sh`, `tools/mamba23_shared_shape_backward.py`,
+  `tools/mamba3_balanced_increment_leg.sh`, `tools/mamba3_mode_state_probe.py`, `tools/mamba3_regime_probe.py`,
+  `tools/mamba3_regime_summary.py`, `tools/test_mamba3_regime_summary.py`, `tools/mamba_external_compare.py`,
+  `tools/nccl_determinism_leg.sh`, `tools/nccl_determinism_probe.py`, `tools/nccl_determinism_summarize.py`,
+  `tools/nccl_leg.sh`, `tools/nccl_nvlink_leg.sh`, `tools/nccl_nvlink_probe.py`, `tools/nccl_nvlink_summarize.py`,
+  `tools/neural_runtime_leg.sh`, `tools/normalize_wheel_directories.py`, `tools/test_normalize_wheel_directories.py`,
+  `tools/nvidia_identity_size_grid.py`, `tools/test_nvidia_identity_size_grid.py`, `tools/ordinary_holds_gpu_leg.sh`,
+  `tools/test_ordinary_holds_gpu_leg.py`, `tools/ordinary_holds_hotaisle_body.sh`, `tools/parallel_capture_fetch.py`,
+  `tools/test_parallel_capture_fetch.py`, `tools/parallel_cloud_verify.sh`, `tools/parallel_compare_receipts.py`,
+  `tools/parallel_cv_remote_leg.sh`, `tools/pca_whiten_host_perf_gate.py`, `tools/pca_wide_surface_check.py`,
+  `tools/predict_kmeans_amd_leg.sh`, `tools/preprocessing_host_transform_bench.py`, `tools/radius_host_parallel_check.py`,
+  `tools/read_watched_promotion.py`, `tools/recover_transform_inference.py`, `tools/test_recover_transform_inference.py`,
+  `tools/recover_transform_quality.py`, `tools/test_recover_transform_quality.py`, `tools/retain_linalg_inputs.py`,
+  `tools/test_retain_linalg_inputs.py`.
+- `3a445a4af0` (recoverable at `3a445a4af0^`), 34 files: `tools/samba_pod_bootstrap.sh`, `tools/samba_pod_run.sh`,
+  `tools/samba_training_leg.sh`, `tools/saved_model_predict_nvidia_leg.sh`, `tools/tokdet_compare.py`,
+  `tools/tokdet_corpus.py`, `tools/tokdet_matrix.py`, `tools/tokdet_pod_cmd.sh`, `tools/tokdet_prefix_config.py`,
+  `tools/tokdet_train_hf.py`, `tools/tokdet_train_sp.py`, `tools/training_resume_serial.sh`,
+  `tools/transformer_api_diagnostic.py`, `tools/transformer_readback_check.py`, `tools/transformer_rope_admission_check.py`,
+  `tools/transformer_setup_check.py`, `tools/transformer_setup_leg.sh`, `tools/transport_audit_check.py`,
+  `tools/trees_istella_body.sh`, `tools/trees_xgbgpu_body.sh`, `tools/umap_end_to_end_oracle.py`,
+  `tools/umap_graph_oracle.py`, `tools/umap_lane_leg.sh`, `tools/umap_spectral_oracle.py`,
+  `tools/validate_ranking_candidate.py`, `tools/test_validate_ranking_candidate.py`, `tools/watched_cpu_promotion_cmd.sh`,
+  `tools/wp67_classical_capture.py`, `tools/wp67_knn_classify_bench.py`, `tools/wp67_lm_surface.py`,
+  `tools/wp67_remote_qualify.sh`, `tools/wp67_surface_capture.py`, `tools/wp67_verify_cache.py`, `tools/zenodo_retitle.py`.
