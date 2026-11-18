@@ -69,42 +69,131 @@ def forced_calls(ours, phase=None, environ=None):
 #: `pip --target` directory holding the `nvtx` package (the measured venvs stay untouched). Unset: no-ops.
 NVTX_RANGE_ENV = "MOJOLEARN_BENCH_NVTX_RANGE"
 NVTX_PATH_ENV = "MOJOLEARN_BENCH_NVTX_PATH"
-#: CALL PROFILE RUNS ONLY (tools/ops/call_profile_job.sh, 2026-11-17). The same window (calls 2..n of a forced scored
-#: run) is also: a JSON line file the window's open and close are appended to (wall clock, calls, pid, libc allocation
-#: counters); a perf control FIFO pair `<ctl>,<ack>` (`perf record -D -1 --control fifo:<ctl>,<ack>`: perf samples
-#: only inside the window); a failed `stat` of a marker path at open and close, which `strace -ttt` records, so the
-#: trace is cut to the window; and the allocation counter library (tools/ops/call_profile_malloc.c, LD_PRELOAD) read
-#: at open and close. PROFILE_SECONDS sizes the forced run by time: the forced phase makes at least
-#: ceil(seconds / first scored call) calls (capped by PROFILE_MAX_CALLS), and the phase that is NOT forced makes one
-#: call, so the window holds the forced phase alone (bench_board_algos interleaves fit and inference calls).
-#: A board never sets any of them.
+#: CALL PROFILE RUNS ONLY (tools/ops/call_profile_job.sh, 2026-11-17; fb15-profiler 2026-11-18). The same window
+#: (calls 2..n of a forced scored run) is also: a JSON line file the window's open and close are appended to (wall
+#: clock, calls, pid, the shim's counters); a perf control FIFO pair `<ctl>,<ack>` (`perf record -D -1 --control
+#: fifo:<ctl>,<ack>`: perf samples only inside the window); a failed `stat` of a marker path at open and close, which
+#: `strace -ttt` records, so the trace is cut to the window; the LD_PRELOAD timing shim (tools/ops/call_profile_shim.c:
+#: CUDA driver entries, libc allocations, mmap, big copies; counts, ns and bytes) read at open and close; py-spy
+#: attached to this process for the window only (`<py-spy>,<out>,<rate>`: spawned at the open, before the clock
+#: starts, stopped with SIGINT after it stops; the process first allows its child to trace it, prctl
+#: PR_SET_PTRACER_ANY, for a yama ptrace_scope of 1); and the callgrind client requests (tools/ops/call_profile_cg.c:
+#: instrumentation and collection on for the window only). PROFILE_SECONDS sizes the forced run by time: the forced
+#: phase makes at least ceil(seconds / first scored call) calls (capped by PROFILE_MAX_CALLS), and the phase that is
+#: NOT forced makes one call, so the window holds the forced phase alone (bench_board_algos interleaves fit and
+#: inference calls). A board never sets any of them.
 PROFILE_WINDOW_ENV = "MOJOLEARN_BENCH_PROFILE_WINDOW"
 PERF_CTL_ENV = "MOJOLEARN_BENCH_PERF_CTL"
-MALLOC_COUNTER_ENV = "MOJOLEARN_BENCH_MALLOC_COUNTER"
+SHIM_ENV = "MOJOLEARN_BENCH_CALLPROF_SHIM"
+PYSPY_ENV = "MOJOLEARN_BENCH_PYSPY"
+CALLGRIND_ENV = "MOJOLEARN_BENCH_CALLGRIND"
 PROFILE_SECONDS_ENV = "MOJOLEARN_BENCH_PROFILE_SECONDS"
 PROFILE_MAX_CALLS_ENV = "MOJOLEARN_BENCH_PROFILE_MAX_CALLS"
 #: the marker paths a window's open and close `stat` (they never exist; strace shows the failed call)
 STRACE_MARK_OPEN = "/callprof-window-open"
 STRACE_MARK_CLOSE = "/callprof-window-close"
-#: the counters tools/ops/call_profile_malloc.c exports through `callprof_counts`, in its order
-MALLOC_FIELDS = ("malloc", "calloc", "realloc", "free", "aligned", "bytes")
+#: py-spy prints this once it samples; the window's clock starts only after it (or after PYSPY_READY_S)
+PYSPY_READY = "Sampling process"
+PYSPY_READY_S = 20.0
 _RANGE = []      # the open window's parts (one window at most: the extra calls of one scored run)
 
 
-def _malloc_counts(env):
-    """{field: count} of the preloaded allocation counter, or None when it is not loaded (no env, no library)."""
-    path = (env.get(MALLOC_COUNTER_ENV) or "").strip()
+_LIBS = {}       # the call profile's ctypes libraries, loaded once at the window's open (never a dlopen in the window)
+
+
+def _lib(path):
+    import ctypes
+    if path not in _LIBS:
+        _LIBS[path] = ctypes.CDLL(path)
+    return _LIBS[path]
+
+
+def _shim_counts(env):
+    """{entry: [calls, ns, bytes]} of the preloaded timing shim, or None when it is not loaded (no env, no library)."""
+    path = (env.get(SHIM_ENV) or "").strip()
     if not path:
         return None
     try:
         import ctypes
-        lib = ctypes.CDLL(path)
-        buf = (ctypes.c_uint64 * len(MALLOC_FIELDS))()
-        lib.callprof_counts(buf, len(MALLOC_FIELDS))
-        return dict(zip(MALLOC_FIELDS, (int(x) for x in buf)))
-    except Exception as exc:                      # noqa: BLE001 -- the report says the counter is missing
-        print("CALLPROF-MALLOC unavailable: %s: %s" % (exc.__class__.__name__, exc), file=sys.stderr, flush=True)
+        lib = _lib(path)
+        lib.callprof_shim_name.restype = ctypes.c_char_p
+        n = int(lib.callprof_shim_n())
+        buf = (ctypes.c_uint64 * (3 * n))()
+        lib.callprof_shim_read(buf, n)
+        return {lib.callprof_shim_name(i).decode(): [int(buf[3 * i]), int(buf[3 * i + 1]), int(buf[3 * i + 2])]
+                for i in range(n)}
+    except Exception as exc:                      # noqa: BLE001 -- the report says the shim is missing
+        print("CALLPROF-SHIM unavailable: %s: %s" % (exc.__class__.__name__, exc), file=sys.stderr, flush=True)
         return None
+
+
+def _callgrind(env, which):
+    """Call callprof_cg_<which> of the callgrind window library; True when this process runs under valgrind."""
+    path = (env.get(CALLGRIND_ENV) or "").strip()
+    if not path:
+        return None
+    try:
+        lib = _lib(path)
+        _ = (lib.callprof_cg_open, lib.callprof_cg_close, lib.callprof_cg_running)     # looked up before the window
+        getattr(lib, "callprof_cg_" + which)()
+        return bool(lib.callprof_cg_running())
+    except Exception as exc:                      # noqa: BLE001 -- the report says the callgrind window is missing
+        print("CALLPROF-CALLGRIND %s failed: %s: %s" % (which, exc.__class__.__name__, exc), file=sys.stderr, flush=True)
+        return False
+
+
+def _pyspy_start(env):
+    """Attach `py-spy record --native` to this process for the window: (Popen, error). Waits until py-spy samples."""
+    spec = (env.get(PYSPY_ENV) or "").strip()
+    if not spec:
+        return None, None
+    parts = spec.split(",")
+    if len(parts) != 3:
+        return None, "%s wants <py-spy>,<out>,<rate>: %r" % (PYSPY_ENV, spec)
+    exe, out, rate = parts
+    import subprocess
+    import time
+    try:
+        import ctypes
+        # yama ptrace_scope 1 lets only an ancestor trace a process; py-spy is our child, so allow any tracer
+        ctypes.CDLL(None, use_errno=True).prctl(0x59616d61, ctypes.c_ulong(-1 & 0xFFFFFFFFFFFFFFFF), 0, 0, 0)
+    except Exception:                             # noqa: BLE001 -- not Linux, or no yama: nothing to allow
+        pass
+    log = out + ".log"
+    try:
+        with open(log, "w") as fh:
+            p = subprocess.Popen([exe, "record", "--pid", str(os.getpid()), "--native", "--threads", "--rate", rate,
+                                  "--format", "raw", "--output", out],
+                                 stdout=fh, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL, start_new_session=True)
+    except OSError as exc:
+        return None, "py-spy did not start: %s" % exc
+    t_end = time.monotonic() + PYSPY_READY_S
+    while time.monotonic() < t_end:
+        if p.poll() is not None:
+            with open(log, errors="replace") as fh:
+                return None, "py-spy exited %s: %s" % (p.returncode, fh.read()[-300:].replace("\n", " "))
+        try:
+            with open(log, errors="replace") as fh:
+                if PYSPY_READY in fh.read():
+                    return p, None
+        except OSError:
+            pass
+        time.sleep(0.02)
+    return p, "py-spy not sampling after %.0f s (kept attached)" % PYSPY_READY_S
+
+
+def _pyspy_stop(p):
+    """SIGINT py-spy (it writes its file and exits); its exit code, or an error string."""
+    if p is None:
+        return None
+    import signal
+    import subprocess
+    try:
+        p.send_signal(signal.SIGINT)
+        return p.wait(timeout=180)
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        p.kill()
+        return "py-spy stop: %s" % exc
 
 
 def _perf_ctl(env, word):
@@ -150,7 +239,7 @@ def range_open(n_calls, phase=None, environ=None):
     """Open the attribution profile's window around the extra calls of a FORCED scored run (calls 2..n), so the
     profiler captures exactly those n - 1 calls and nothing of the data load, the fit before an inference, the
     warmup or the first call's hashing: the NVTX range (NVTX_RANGE_ENV) and the call profile's window
-    (PROFILE_WINDOW_ENV, PERF_CTL_ENV, the strace markers, MALLOC_COUNTER_ENV). Only when one of them is set,
+    (PROFILE_WINDOW_ENV, PERF_CTL_ENV, the strace markers, SHIM_ENV, PYSPY_ENV, CALLGRIND_ENV). Only when one of them is set,
     n_calls > 1 and forced_calls applies to this phase; True when a window opened. Outside every clock (the callers
     open it before the next call's t0)."""
     env = os.environ if environ is None else environ
@@ -173,11 +262,13 @@ def range_open(n_calls, phase=None, environ=None):
             parts["nvtx"] = nvtx
     if window:
         import time
+        spy, spy_err = _pyspy_start(env)          # before the clock: attaching takes a moment
         perf = _perf_ctl(env, "enable")
         _mark(STRACE_MARK_OPEN)
         rec = {"event": "open", "phase": phase, "calls": int(n_calls) - 1, "pid": os.getpid(), "perf": perf,
-               "malloc": _malloc_counts(env)}
-        parts["window"] = (env, rec, time.perf_counter_ns())
+               "pyspy": spy is not None, "pyspy_error": spy_err, "shim": _shim_counts(env)}
+        rec["callgrind"] = _callgrind(env, "open")          # last before the clock: nothing of the above collected
+        parts["window"] = (env, rec, spy, time.perf_counter_ns())
     if parts["nvtx"] is not None:
         parts["nvtx"].push_range(message=name)
     _RANGE.append(parts)
@@ -193,12 +284,15 @@ def range_close():
         parts["nvtx"].pop_range()
     if parts["window"] is not None:
         import time
-        env, rec, t0 = parts["window"]
+        env, rec, spy, t0 = parts["window"]
         wall_ns = time.perf_counter_ns() - t0
+        cg = _callgrind(env, "close")                       # first after the clock
+        shim = _shim_counts(env)
         _mark(STRACE_MARK_CLOSE)
         perf = _perf_ctl(env, "disable")
+        stopped = _pyspy_stop(spy)
         end = {"event": "close", "phase": rec["phase"], "calls": rec["calls"], "pid": rec["pid"], "wall_ns": wall_ns,
-               "perf": perf, "malloc": _malloc_counts(env)}
+               "perf": perf, "shim": shim, "callgrind": cg, "pyspy": spy is not None, "pyspy_exit": stopped}
         _window_line(env, rec)
         _window_line(env, end)
 
