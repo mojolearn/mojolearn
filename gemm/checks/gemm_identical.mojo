@@ -9940,68 +9940,71 @@ struct GemmWorklist(Movable):
     ) raises:
         """One list launch for the pending products of `mode`, then, in group
         mode, each product's own fold."""
-        self.row.clear()
-        self.lp.clear()
-        var rows = 0
-        var blocks = 0
-        var fs4 = True
-        for e in range(self.count):
-            var ib = e * GEMM_WORKLIST_ITEM
-            if self.item[ib] != mode:
-                continue
-            var run = self.item[ib + 13]
+        # Under the arm's own comptime test: the list kernel is instantiated
+        # only on the column whose shipped body it shares.
+        comptime if GEMM_FAST_WORKLIST:
+            self.row.clear()
+            self.lp.clear()
+            var rows = 0
+            var blocks = 0
+            var fs4 = True
+            for e in range(self.count):
+                var ib = e * GEMM_WORKLIST_ITEM
+                if self.item[ib] != mode:
+                    continue
+                var run = self.item[ib + 13]
+                if mode == GEMM_WORKLIST_GROUP:
+                    run = run * self.item[ib + 11]
+                    self.lp.append(ws + self.item[ib + 15])
+                else:
+                    self.lp.append(self.ptr[3 * e])
+                self.lp.append(self.ptr[3 * e + 1])
+                self.lp.append(self.ptr[3 * e + 2])
+                for w in range(GEMM_WORKLIST_ROW):
+                    if w == GEMM_WORKLIST_COL_FIRST:
+                        self.row.append(blocks)
+                    else:
+                        self.row.append(self.item[ib + 1 + w])
+                if self.item[ib + 14] != 4:
+                    fs4 = False
+                blocks += run
+                rows += 1
+            if rows == 0:
+                return
+            if blocks >= GEMM_WORKLIST_NO_ROW:
+                raise Error("GEMM work list: the list's block count does not fit the launch grid")
+            for pad in range(rows, GEMM_WORKLIST_MAX):
+                for w in range(GEMM_WORKLIST_ROW):
+                    if w == GEMM_WORKLIST_COL_FIRST:
+                        self.row.append(GEMM_WORKLIST_NO_ROW)
+                    elif w == GEMM_WORKLIST_COL_TILES:
+                        self.row.append(1)
+                    else:
+                        self.row.append(0)
+                self.lp.append(self.lp[0])
+                self.lp.append(self.lp[1])
+                self.lp.append(self.lp[2])
+            var slot = self._table(ctx)
+            var tab = self.tabs[slot].unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
             if mode == GEMM_WORKLIST_GROUP:
-                run = run * self.item[ib + 11]
-                self.lp.append(ws + self.item[ib + 15])
-            else:
-                self.lp.append(self.ptr[3 * e])
-            self.lp.append(self.ptr[3 * e + 1])
-            self.lp.append(self.ptr[3 * e + 2])
-            for w in range(GEMM_WORKLIST_ROW):
-                if w == GEMM_WORKLIST_COL_FIRST:
-                    self.row.append(blocks)
+                if fs4:
+                    _kpack_list_launch[4, True](ctx, tab, self.lp, blocks)
                 else:
-                    self.row.append(self.item[ib + 1 + w])
-            if self.item[ib + 14] != 4:
-                fs4 = False
-            blocks += run
-            rows += 1
-        if rows == 0:
-            return
-        if blocks >= GEMM_WORKLIST_NO_ROW:
-            raise Error("GEMM work list: the list's block count does not fit the launch grid")
-        for pad in range(rows, GEMM_WORKLIST_MAX):
-            for w in range(GEMM_WORKLIST_ROW):
-                if w == GEMM_WORKLIST_COL_FIRST:
-                    self.row.append(GEMM_WORKLIST_NO_ROW)
-                elif w == GEMM_WORKLIST_COL_TILES:
-                    self.row.append(1)
+                    _kpack_list_launch[GEMM_KPACK_FS, True](ctx, tab, self.lp, blocks)
+                comptime if not is_defined["MOJOLEARN_GEMM_SABOTAGE_WS_FOLD"]():
+                    for e in range(self.count):
+                        var fb = e * GEMM_WORKLIST_ITEM
+                        if self.item[fb] != mode:
+                            continue
+                        _kpack_list_fold_launch(
+                            ctx, self.ptr[3 * e], ws + self.item[fb + 15],
+                            self.item[fb + 1], self.item[fb + 2], self.item[fb + 11],
+                        )
+            else:
+                if fs4:
+                    _kpack_list_launch[4, False](ctx, tab, self.lp, blocks)
                 else:
-                    self.row.append(0)
-            self.lp.append(self.lp[0])
-            self.lp.append(self.lp[1])
-            self.lp.append(self.lp[2])
-        var slot = self._table(ctx)
-        var tab = self.tabs[slot].unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
-        if mode == GEMM_WORKLIST_GROUP:
-            if fs4:
-                _kpack_list_launch[4, True](ctx, tab, self.lp, blocks)
-            else:
-                _kpack_list_launch[GEMM_KPACK_FS, True](ctx, tab, self.lp, blocks)
-            comptime if not is_defined["MOJOLEARN_GEMM_SABOTAGE_WS_FOLD"]():
-                for e in range(self.count):
-                    var fb = e * GEMM_WORKLIST_ITEM
-                    if self.item[fb] != mode:
-                        continue
-                    _kpack_list_fold_launch(
-                        ctx, self.ptr[3 * e], ws + self.item[fb + 15],
-                        self.item[fb + 1], self.item[fb + 2], self.item[fb + 11],
-                    )
-        else:
-            if fs4:
-                _kpack_list_launch[4, False](ctx, tab, self.lp, blocks)
-            else:
-                _kpack_list_launch[GEMM_KPACK_FS, False](ctx, tab, self.lp, blocks)
+                    _kpack_list_launch[GEMM_KPACK_FS, False](ctx, tab, self.lp, blocks)
 
     def launch(mut self, ctx: DeviceContext, ws: MutPointer[Float32, MutAnyOrigin]) raises:
         """Launch every pending product and clear the list: at most one list
