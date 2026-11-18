@@ -622,6 +622,11 @@
    "define": "MOJOLEARN_XPREP_FAST_TE_PBUCKET_OFF",
    "status": "define in code (bindings/prep_encode_native_door.mojo TE_PBUCKET): B = TargetEncoder without the per-bucket pass; A = the per-bucket pass, the default. Was a run-time env read until lane fx-env-dead (2026-11-18); default unchanged",
    "owed": "RUN"
+  },
+  "mamba-decode-stage-arena": {
+   "define": "MOJOLEARN_MAMBA_FAST_DECODE_STAGE_ARENA",
+   "status": "define in code (autograd/block_step_ops.mojo MAMBA_FAST_DECODE_STAGE_ARENA; _m2_decode_views, _m3_decode_views, _run_m3 hold): B = a Mamba-2 / Mamba-3 decode token (L = 1 run) takes its 28 / 33 stages as views of ONE arena held by the resident entry, one zero fill of the used prefix per token, no stage allocation or free per token; the held Mamba-3 L > 1 stages (Samba inference, and under B also the per-call keep_stages program) are views of one held arena re-zeroed with one fill; A = the default, per-token mamba_zeros stages parked and freed at the wait, and rezero's 33 fills. Default off; lane fx-mamba-decode-arena (2026-11-18)",
+   "owed": "RUN"
   }
  },
  "rows": [
@@ -3480,6 +3485,26 @@
     "xprep-te-pbucket-off"
    ],
    "decides": "keep A (the default) unless B is faster at equal quality on the NVIDIA L40S; digests must not move; time also a neighbouring shape and a non-board dataset before a flip (no dimension targeting)"
+  },
+  {
+   "id": "mamba-decode-stage-arena",
+   "source": "lane fx-mamba-decode-arena (2026-11-18): ideas 2 and 7 of ~/mojolearn-evidence/briefs-20261118/ideas-neural-speed-RESULT.md (sections 2a, 2c: 99 of about 141 driver calls of a Mamba-3 decode token are stage allocate / fill / free); result file ~/mojolearn-evidence/briefs-20261118/fx-mamba-decode-arena-RESULT.md",
+   "kind": "ab",
+   "lane": [
+    "mamba2-decode",
+    "mamba3-decode",
+    "samba-decode",
+    "mamba1-decode",
+    "mamba3-forward",
+    "samba-forward"
+   ],
+   "dataset": "*",
+   "rows": "full",
+   "vendor": "nvidia",
+   "b_arms": [
+    "mamba-decode-stage-arena"
+   ],
+   "decides": "keep A (the default, per-token stages) unless B is faster at equal quality on the NVIDIA L40S, base and arm back to back in one job; then B becomes the default with a _OFF define. Digests must not move on any cell (same kernels, launch order, input bytes and zeros). mamba1-decode is the control (its L = 1 stages are already resident; no code path of it changes): it must not move. Expected from the arithmetic: mamba2-decode and mamba3-decode -400 ms or more each, samba-decode -200 ms or more; mamba3-forward and samba-forward (median of 20) decide the held-arena half. Before a flip time also a neighbouring shape (d_model 256, B 4) and a non-board model (a 6-layer Samba at L 300) (no dimension targeting)"
   }
  ]
 }
