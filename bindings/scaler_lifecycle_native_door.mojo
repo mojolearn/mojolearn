@@ -15,6 +15,9 @@ from bindings.native_prepared_owner_unpack import prepared_get, prepared_put
 from bindings.native_error_class import error_without_class
 from bindings.native_caller_frame_pack import native_caller_globals
 from bindings.classical_attributes_door import classical_connect_numpy, classical_getattribute, classical_check_layout
+from bindings.classical_arrays_door import classical_wrap_layout
+from bindings.native_array_storage_door import native_array_unfilled
+from core.native_array_layout import NativeArrayLayout, native_matrix_shape
 from bindings.classical_arrays_door import classical_typed, classical_input, classical_address, classical_is_array, classical_is_f32, classical_c_order, classical_i64, classical_dtype_str
 from bindings.classical_archive_door import _archive_class_name_unpack
 from bindings.standard_archive_native_unpack import standard_archive_write, standard_archive_load as scaler_archive_load
@@ -240,7 +243,16 @@ def scaler_transform(model: PythonObject, source: PythonObject, inverse: Bool, c
                 py_setattr(scale, "_readonly", PythonObject(True))
             prepared_put(mods, _STANDARD_ROWS_SLOT, model, Python.tuple(
                 mean, scale, rows, d, mode_text, PythonObject(with_mean), PythonObject(with_std)))
-    var output = classical_typed(Python.tuple(n,d), "<f4", context["output_context"])
+    # fb12-rows (2026-11-17): the output is written in FULL before it is
+    # returned (the direct kernel's download, or the NaN route's second call,
+    # or the column-NaN restore's whole-block copy; every other exit raises),
+    # so it takes the unfilled store: classical_typed zero-filled n*d words
+    # (one extra write pass over the output per transform, 4 bytes a word,
+    # 0.26 ms at 4.4 MB on the 16.8 GB/s memcpy of the L40S box) that the
+    # writer then overwrote. Same object type and slots; no bit moves.
+    var output = classical_wrap_layout(native_array_unfilled(String("f"), n*d),
+                                       NativeArrayLayout(native_matrix_shape(n, d), 4), "<f4",
+                                       context["output_context"])
     # RUN: the typed core (statistic refusals, kernel, NaN fill and restore,
     # overflow refusal) on the borrowed input and the new output.
     scaler_transform_core(calls, ScalerTransformSpec(False, inverse, with_mean, with_std, False, 0, 0),
