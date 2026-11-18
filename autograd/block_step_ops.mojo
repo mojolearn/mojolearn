@@ -66,7 +66,6 @@ records it with `Tape.custom_nd` over the stage buffers its rule reads
 (`rules_mamba`, `rules_mamba3`, `rules_transformer`), see the API note.
 """
 from std.memory import bitcast
-from std.sys.compile import is_defined
 from max.gpu.host import DeviceBuffer, DeviceContext
 from sequence.ops import FP
 from sequence.exec_device import DeviceExec
@@ -1830,14 +1829,10 @@ comptime ATTN_STEP_TAG = 108
 # (`residual_next_norm_fusion_enabled`: the measured route's own rule, Apple
 # column, RMSNorm without bias, within RESIDUAL_NORM_FUSE_MAX_ELEMS) computes
 # its norm1 itself, as before. Cost: one more stage set per fused layer.
-# Only the column the route runs on compiles it; A/B -D
-# MOJOLEARN_BYTE_LM_GENERIC_OPS (off: tonight's per-layer norm).
+# Only the column the route runs on compiles it.
 # TOMBSTONE: MOJOLEARN_BYTE_LM_GENERIC_OPS (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-23-neural; code recoverable at b4f0e643f7.
 # Restore: git apply experiments/removed/MOJOLEARN_BYTE_LM_GENERIC_OPS.patch; record in docs/TOMBSTONES.md.
-# RESTORED 2026-11-15 by lane/expdel2-restore-owed: owed B arm (owed-pre0867.json), under four weeks old; the deletion was premature.
-comptime ATTN_STEP_NEXT_NORM = (
-    TARGET_COLUMN == COLUMN_APPLE and not is_defined["MOJOLEARN_BYTE_LM_GENERIC_OPS"]()
-)
+comptime ATTN_STEP_NEXT_NORM = TARGET_COLUMN == COLUMN_APPLE
 
 
 def _attn_by_state(sc: BlockStepScratch, s_addr: Int, q_addr: Int) -> Int:

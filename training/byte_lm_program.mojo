@@ -11,7 +11,7 @@ head (V, d), and per layer the attention step's carried state (keys and
 values of `length` positions, the cached-token word). The training forward
 is captured once, at open:
 
-    x      = lm_embedding(embed, ids)                       OPS_LM_EMBEDDING (generic arm: OPS_EMBEDDING)
+    x      = lm_embedding(embed, ids)                       OPS_LM_EMBEDDING
     x      = attention_step(x, block_l, kv_l, words_l)      OPS_ATTN_STEP, l = 0 .. n_layers - 1
     logits = x @ transpose(lm_head)                         OPS_TRANSPOSE, OPS_MATMUL
     loss   = cross_entropy(logits, reshape(targets))        OPS_RESHAPE, OPS_CROSS_ENTROPY (mean)
@@ -74,14 +74,9 @@ from autograd.lm_embedding_op import OPS_LM_EMBEDDING
 # (autograd/lm_embedding_op.mojo), and the attention steps it stacks carry
 # the residual2 -> next norm1 fusion between consecutive layers
 # (autograd/block_step_ops.mojo ATTN_STEP_NEXT_NORM). Same bits either way.
-# A/B: -D MOJOLEARN_BYTE_LM_GENERIC_OPS captures the generic OPS_EMBEDDING
-# and turns the cross-layer fusion off (tonight's capture). RUN OWED:
-# lm-train-step (bytes) on NVIDIA and AMD, one run per arm.
 # TOMBSTONE: MOJOLEARN_BYTE_LM_GENERIC_OPS (the generic OPS_EMBEDDING capture, opt-in B arm, run owed and never
 # run; owner elsewhere) folded to False 2026-11-15 by lane/expdel2-31-neural; code recoverable at 54a61f60dc.
 # Restore: git apply experiments/removed/MOJOLEARN_BYTE_LM_GENERIC_OPS.expdel2-31-neural.patch
-# RESTORED 2026-11-15 by lane/expdel2-restore-owed: owed B arm (owed-pre0867.json), under four weeks old; the deletion was premature.
-comptime BYTE_LM_GENERIC_OPS = is_defined["MOJOLEARN_BYTE_LM_GENERIC_OPS"]()
 from autograd.block_step_ops import (
     OPS_ATTN_STEP, BLOCK_PART_WEIGHTS, BLOCK_PART_STATE, BLOCK_PART_WORDS, block_weight_sizes, block_offsets,
     block_guard, block_part_floats, block_buffer_view,
@@ -259,7 +254,7 @@ def byte_program_open_on[E: Exec & Movable & Deinitable, KIND: Int](
     var none_i = List[Int]()
     var none_f = List[Float32]()
     var pad: List[Int] = [-1]
-    var emb_code = OPS_EMBEDDING if BYTE_LM_GENERIC_OPS else OPS_LM_EMBEDDING
+    var emb_code = OPS_LM_EMBEDDING
     var x = s[].op(emb_code, [e.emb, ids], pad, none_f)
     for l in range(config.n_layers):  # driver-loop: over decoder layers
         x = s[].op(OPS_ATTN_STEP, [x, e.blocks[l], e.kv[l], e.words[l]], ints, none_f)
