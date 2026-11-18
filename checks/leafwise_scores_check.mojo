@@ -363,6 +363,11 @@ def run_device[
     ctx.enqueue_copy(dst_buf=d_fid, src_ptr=h_fid.unsafe_ptr())
     ctx.enqueue_copy(dst_buf=d_fw, src_ptr=h_fw.unsafe_ptr())
     ctx.synchronize()
+    _ = h_hist^  # keep-alive past the drain (the enqueue_copy reads it until then)
+    _ = h_ps^  # keep-alive past the drain (the enqueue_copy reads it until then)
+    _ = h_skip^  # keep-alive past the drain (the enqueue_copy reads it until then)
+    _ = h_fid^  # keep-alive past the drain (the enqueue_copy reads it until then)
+    _ = h_fw^  # keep-alive past the drain (the enqueue_copy reads it until then)
 
     ctx.enqueue_function[compute_optimal_split_kernel[score_function]](
         d_skip.unsafe_ptr(),

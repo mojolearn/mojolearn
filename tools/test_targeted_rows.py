@@ -411,12 +411,14 @@ class Wiring(unittest.TestCase):
             fake = os.path.join(td, "fakepy")
             Path(fake).write_text('#!/bin/bash\nwhile [ $# -gt 0 ]; do [ "$1" = --venv ] && v=$2; shift; done\n'
                                   'mkdir -p "$v/bin" && : > "$v/bin/python" && chmod +x "$v/bin/python"\n'
-                                  'echo "INSTALLED $(basename "$v")"\n')
+                                  'echo "INSTALLED $(basename "$v")" >> "' + os.path.join(td, "installed") + '"\n')
             os.chmod(fake, 0o755)
             cache = os.path.join(td, "cache")
             os.makedirs(os.path.join(td, "logs"))
             head = ("set -u\nsay() { echo \"SAY $*\"; }\nalloc_cores() { echo 3; }\nPY=" + fake + "\nCACHE_ROOT=" + cache +
                     "\nRES=" + td + "\nTG=" + td + "\nmkdir -p $CACHE_ROOT\nCOMMON_TG=()\n"
+                    # a 1 MB venv and no reserve: the window is the 3 cores on any disk (a CI runner's too)
+                    "PC_VENV_MB=1\nPC_DISK_RESERVE_GB=0\n"
                     "declare -A ARM_ARGS ARM_PY ARM_MAN ARM_ENV\n"
                     "for a in a b c d e; do ARM_ARGS[$a]=''; ARM_PY[$a]=$CACHE_ROOT/venv-$a/bin/python; "
                     "ARM_MAN[$a]=" + td + "/m-$a.json; done\nARM_ENV[d]=X=1\n")
@@ -424,11 +426,14 @@ class Wiring(unittest.TestCase):
                       "\ndrop_arm_venv a\ninstall_window e\nls $CACHE_ROOT | tr '\\n' ' '; echo"
                       "\nEV_LEFT_MB=$(( 1 << 40 )); echo W=$(window_size)\n")
             p = subprocess.run(["bash", "-c", script], capture_output=True, text=True, timeout=60)
+            # install_arms sends each install's output to its log, and the window's installs run at once: the
+            # fake records each install in one file, in completion order
+            installed = Path(os.path.join(td, "installed")).read_text().splitlines()
         self.assertEqual(p.returncode, 0, p.stderr)
-        lines = p.stdout.splitlines()
-        self.assertEqual([x for x in lines if x.startswith("INSTALLED")][:3],
+        self.assertEqual(sorted(installed[:3]),
                          ["INSTALLED venv-a", "INSTALLED venv-b", "INSTALLED venv-c"])   # a window of 3 cores
-        self.assertNotIn("INSTALLED venv-d", p.stdout)                                   # an env arm installs nothing
+        self.assertEqual(installed[3:], ["INSTALLED venv-e"])                            # e alone in the next one
+        self.assertNotIn("INSTALLED venv-d", installed)                                  # an env arm installs nothing
         self.assertIn("venv-a venv-b venv-c ", p.stdout)
         self.assertIn("venv-b venv-c venv-e ", p.stdout)                                 # a deleted, e made
         self.assertIn("W=1", p.stdout)                                                   # no disk left: one at a time

@@ -372,7 +372,9 @@ def failure_controller(tmp_path):
     proof = json.loads(proof_path.read_text()); proof.update(build_exit=1, complete=False); write(proof_path, proof)
     ctx = SimpleNamespace(rel=tmp_path / "release", commit=wanted["source_revision"], dry=False,
                           readiness=lambda: ledger, readiness_manifest=lambda: manifest,
-                          admitted_leg=lambda _: False, reused_leg_objects=lambda: [])
+                          admitted_leg=lambda _: False, reused_leg_objects=lambda: [],
+                          # step_linux_wait names a failed leg at once (fx-build-tools, 2026-11-18)
+                          say=lambda *a, **k: None, sleep=lambda *a: None)
     ctx.record_compile_failure = lambda l: release.Release.record_compile_failure(ctx, l)
     return ctx, ledger, leg, name, run
 

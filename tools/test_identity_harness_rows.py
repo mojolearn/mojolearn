@@ -194,6 +194,10 @@ NUMERIC = ["<f2", "<f4", "<f8", "<c8", "<c16", "|i1", "<i2", "<i4", "<i8", "|u1"
 SHAPES = [(), (3,), (0,), (2, 2), (1,)]
 
 
+# 1 sign + 15 exponent + 64 significand bits = 80 bits (10 bytes) means x87 extended in a padded slot.
+_LONGDOUBLE_UNPADDED = not (np.finfo(np.longdouble).nmant == 63 and np.dtype(np.longdouble).itemsize > 10)
+
+
 def _arrays(n):
     """(label, array) over every numeric dtype and row shape, plus the
     layouts and byte orders the old row form handled differently."""
@@ -208,9 +212,15 @@ def _arrays(n):
     yield ">f8 1-D", _fill(n, (), "<f8").astype(">f8")
     yield ">f8 2-D", _fill(n, (3,), "<f8").astype(">f8")
     yield ">i4 1-D", _fill(n, (), "<i4").astype(">i4")
-    yield "longdouble 1-D", _fill(n, (), "<f8").astype(np.longdouble)
-    yield "longdouble 2-D", _fill(n, (2,), "<f8").astype(np.longdouble)
-    yield "clongdouble 1-D", _fill(n, (), "<c16").astype(np.clongdouble)
+    # x86-64 Linux stores long double as 80-bit x87 in a 16-byte slot: bytes 10-15 are padding
+    # that NumPy leaves undefined, so two copies of the same value can differ there and a byte
+    # digest of them is noise (the tool-tests run on GitHub saw 0xd5 vs 0xd6 in a padding byte).
+    # The long double cases run only where long double has no padding (8-byte double on Apple
+    # silicon, 16-byte binary128 elsewhere); product outputs are never long double.
+    if _LONGDOUBLE_UNPADDED:
+        yield "longdouble 1-D", _fill(n, (), "<f8").astype(np.longdouble)
+        yield "longdouble 2-D", _fill(n, (2,), "<f8").astype(np.longdouble)
+        yield "clongdouble 1-D", _fill(n, (), "<c16").astype(np.clongdouble)
     yield "object floats 1-D", np.array([float(v) for v in _fill(n, (), "<f8")] or [], dtype=object)
     yield "object ints 1-D", np.array(list(range(n)), dtype=object)
     yield "matrix", np.asmatrix(_fill(n, (3,), "<f4")) if n else np.zeros((0, 3), dtype=np.float32)

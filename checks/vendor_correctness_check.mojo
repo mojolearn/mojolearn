@@ -1362,6 +1362,8 @@ def _radix_pairs_one[
     ctx.enqueue_copy(dst_buf=ia, src_ptr=hi.unsafe_ptr())
     ctx.enqueue_copy(dst_buf=skip, src_ptr=hs.unsafe_ptr())
     ctx.synchronize()
+    _ = hi^  # keep-alive past the drain (the enqueue_copy reads it until then)
+    _ = hs^  # keep-alive past the drain (the enqueue_copy reads it until then)
 
     var keys = DoubleBuffer[DType.float32](
         rebind[Pointer[Scalar[DType.float32], MutUntrackedOrigin]](

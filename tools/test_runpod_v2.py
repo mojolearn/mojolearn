@@ -160,8 +160,12 @@ exit "$code"
     lane = state/'fixture'
     env = {**os.environ, 'ROOT': str(root), 'TMPD': str(temp), 'STATE_ROOT': str(state),
            'D': str(lane), 'KEY': 'fixture', 'CASE': case, 'DISK_GB': '80',
-           'NV_GPU_COUNT': '1', 'READY_TIMEOUT': '1', 'minutes': '1'}
-    for name in (OVERRIDE, 'MOJOLEARN_DEVPOD_CLOUD_TYPE', 'MOJOLEARN_DEVPOD_MIN_VCPU'):
+           'NV_GPU_COUNT': '1', 'READY_TIMEOUT': '1', 'minutes': '1',
+           # rent_guard.sh counts live pods through the RunPod API before each create; the fixture's count stands
+           # in, so no key is needed (a CI runner has none) and no provider call is made from a test
+           'MOJOLEARN_RENT_GUARD_TEST_PODS': '0 0'}
+    for name in (OVERRIDE, 'MOJOLEARN_DEVPOD_CLOUD_TYPE', 'MOJOLEARN_DEVPOD_MIN_VCPU', 'MOJOLEARN_RUNPOD_CAP',
+                 'MOJOLEARN_DEVPOD_MAX_PODS'):
         env.pop(name, None)
     result = subprocess.run(['bash', '-c', script], env=env, text=True, capture_output=True)
     assert result.returncode == expected_code, result.stdout + result.stderr

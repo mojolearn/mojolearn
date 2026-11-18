@@ -449,6 +449,10 @@ def _launch_partition[
     ctx.enqueue_memset(d_iters, PARTITION_UNVISITED)
     ctx.enqueue_memset(d_swaps, Int32(0))
     ctx.synchronize()
+    _ = h_row_ids^  # keep-alive past the drain (the enqueue_copy reads it until then)
+    _ = h_data^  # keep-alive past the drain (the enqueue_copy reads it until then)
+    _ = h_items^  # keep-alive past the drain (the enqueue_copy reads it until then)
+    _ = h_splits^  # keep-alive past the drain (the enqueue_copy reads it until then)
 
     ctx.enqueue_function[node_split_kernel[TPB]](
         d_row_ids.unsafe_ptr(),
@@ -1028,6 +1032,10 @@ def _launch_leaf[
     ctx.enqueue_memset(d_leaves, Float32(0.0))
     ctx.enqueue_memset(d_visit, LEAF_VISIT_NONE)
     ctx.synchronize()
+    _ = h_nodes^  # keep-alive past the drain (the enqueue_copy reads it until then)
+    _ = h_ranges^  # keep-alive past the drain (the enqueue_copy reads it until then)
+    _ = h_row_ids^  # keep-alive past the drain (the enqueue_copy reads it until then)
+    _ = h_labels^  # keep-alive past the drain (the enqueue_copy reads it until then)
 
     ctx.enqueue_function[leaf_kernel[TPB, LEAF_MAX_OUT, CLASSIFICATION]](
         d_leaves.unsafe_ptr(),

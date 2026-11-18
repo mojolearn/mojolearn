@@ -809,75 +809,15 @@
  ],
  "algorithms": {
   "ann:ivf": {
-   "all_on": "G.ann:ivf.all_on",
-   "configs": [
-    {
-     "assignment": {
-      "kmeans_live_cores_off": "on"
-     },
-     "bindings": null,
-     "defines": [
-      "MOJOLEARN_KMEANS_LIVE_CORES_OFF=1"
-     ],
-     "global_reach": [],
-     "id": "G.ann:ivf.kmeans_live_cores_off=on",
-     "pack": null,
-     "packed_extra_defines": [],
-     "priority": 1,
-     "queued": false,
-     "tier": "single",
-     "vendor_default_equivalent": []
-    },
-    {
-     "assignment": {
-      "kmeans_lazy_shift_idn_off": "on"
-     },
-     "bindings": null,
-     "defines": [
-      "MOJOLEARN_KMEANS_LAZY_SHIFT_IDN_OFF=1"
-     ],
-     "global_reach": [],
-     "id": "G.ann:ivf.kmeans_lazy_shift_idn_off=on",
-     "pack": null,
-     "packed_extra_defines": [],
-     "priority": 2,
-     "queued": false,
-     "tier": "single",
-     "vendor_default_equivalent": []
-    },
-    {
-     "assignment": {
-      "kmeans_lazy_shift_idn_off": "on",
-      "kmeans_live_cores_off": "on"
-     },
-     "bindings": null,
-     "defines": [
-      "MOJOLEARN_KMEANS_LAZY_SHIFT_IDN_OFF=1",
-      "MOJOLEARN_KMEANS_LIVE_CORES_OFF=1"
-     ],
-     "global_reach": [],
-     "id": "G.ann:ivf.all_on",
-     "pack": null,
-     "packed_extra_defines": [],
-     "priority": 3,
-     "queued": false,
-     "tier": "all_on",
-     "vendor_default_equivalent": []
-    }
-   ],
+   "all_on": null,
+   "configs": [],
    "cross_groups": [],
-   "declared_controls": [
-    "kmeans_live_cores_off",
-    "kmeans_lazy_shift_idn_off"
-   ],
+   "declared_controls": [],
    "deferred": [],
    "deferred_groups": [],
    "dropped_arms": {},
    "dropped_from_all_on": [],
-   "eligible_controls": [
-    "kmeans_live_cores_off",
-    "kmeans_lazy_shift_idn_off"
-   ],
+   "eligible_controls": [],
    "excluded": [],
    "files": [
     "fg-ivf",
@@ -891,10 +831,7 @@
    "raw_ids": [
     "ann:ivf"
    ],
-   "representative_arms": {
-    "kmeans_lazy_shift_idn_off": "on",
-    "kmeans_live_cores_off": "on"
-   },
+   "representative_arms": {},
    "unmapped_reason": "unknown workload family",
    "unresolved_interactions": [],
    "workload_bindings": [
@@ -1085,36 +1022,14 @@
   },
   "expanded:ivf-pq": {
    "all_on": null,
-   "configs": [
-    {
-     "assignment": {
-      "kmeans_live_cores_off": "on"
-     },
-     "bindings": null,
-     "defines": [
-      "MOJOLEARN_KMEANS_LIVE_CORES_OFF=1"
-     ],
-     "global_reach": [],
-     "id": "G.expanded:ivf-pq.kmeans_live_cores_off=on",
-     "pack": null,
-     "packed_extra_defines": [],
-     "priority": 1,
-     "queued": false,
-     "tier": "single",
-     "vendor_default_equivalent": []
-    }
-   ],
+   "configs": [],
    "cross_groups": [],
-   "declared_controls": [
-    "kmeans_live_cores_off"
-   ],
+   "declared_controls": [],
    "deferred": [],
    "deferred_groups": [],
    "dropped_arms": {},
    "dropped_from_all_on": [],
-   "eligible_controls": [
-    "kmeans_live_cores_off"
-   ],
+   "eligible_controls": [],
    "excluded": [],
    "files": [
     "fg-ivf"
@@ -1127,9 +1042,7 @@
    "raw_ids": [
     "expanded:ivf-pq"
    ],
-   "representative_arms": {
-    "kmeans_live_cores_off": "on"
-   },
+   "representative_arms": {},
    "unmapped_reason": "no saved workload expanded:ivf-pq@dataset=<taxi|istella>",
    "unresolved_interactions": [],
    "workload_bindings": [
@@ -5377,7 +5290,7 @@
    ]
   },
   "trees:gbdt-lossguide": {
-   "all_on": "G.trees:gbdt-lossguide.all_on",
+   "all_on": null,
    "configs": [
     {
      "assignment": {
@@ -5399,64 +5312,18 @@
      "queued": true,
      "tier": "single",
      "vendor_default_equivalent": []
-    },
-    {
-     "assignment": {
-      "BLOCK_SCRATCH_FILL_OFF": "on"
-     },
-     "bindings": [
-      "_mojolearn_gbdt"
-     ],
-     "defines": [
-      "MOJOLEARN_TREES_BLOCK_SCRATCH_FILL_OFF=1"
-     ],
-     "global_reach": [],
-     "id": "G.trees:gbdt-lossguide.BLOCK_SCRATCH_FILL_OFF=on",
-     "pack": "P020",
-     "packed_extra_defines": [
-      "MOJOLEARN_TREES_HIST_PACKED_GH=1"
-     ],
-     "priority": 2,
-     "queued": true,
-     "tier": "single",
-     "vendor_default_equivalent": []
-    },
-    {
-     "assignment": {
-      "BLOCK_SCRATCH_FILL_OFF": "on",
-      "LG_LEVEL_ROUNDS": "on"
-     },
-     "bindings": [
-      "_mojolearn_gbdt"
-     ],
-     "defines": [
-      "MOJOLEARN_TREES_BLOCK_SCRATCH_FILL_OFF=1",
-      "MOJOLEARN_TREES_LG_LEVEL_ROUNDS=1"
-     ],
-     "global_reach": [],
-     "id": "G.trees:gbdt-lossguide.all_on",
-     "pack": "P021",
-     "packed_extra_defines": [
-      "MOJOLEARN_TREES_HIST_WARP_AGG=1"
-     ],
-     "priority": 3,
-     "queued": true,
-     "tier": "all_on",
-     "vendor_default_equivalent": []
     }
    ],
    "cross_groups": [],
    "declared_controls": [
-    "LG_LEVEL_ROUNDS",
-    "BLOCK_SCRATCH_FILL_OFF"
+    "LG_LEVEL_ROUNDS"
    ],
    "deferred": [],
    "deferred_groups": [],
    "dropped_arms": {},
    "dropped_from_all_on": [],
    "eligible_controls": [
-    "LG_LEVEL_ROUNDS",
-    "BLOCK_SCRATCH_FILL_OFF"
+    "LG_LEVEL_ROUNDS"
    ],
    "excluded": [],
    "files": [
@@ -5471,7 +5338,6 @@
     "trees:gbdt-lossguide"
    ],
    "representative_arms": {
-    "BLOCK_SCRATCH_FILL_OFF": "on",
     "LG_LEVEL_ROUNDS": "on"
    },
    "unmapped_reason": null,
@@ -5524,9 +5390,7 @@
      "global_reach": [],
      "id": "G.trees:gbdt-rank-pairlogit.hist_packed_gh=on",
      "pack": "P020",
-     "packed_extra_defines": [
-      "MOJOLEARN_TREES_BLOCK_SCRATCH_FILL_OFF=1"
-     ],
+     "packed_extra_defines": [],
      "priority": 2,
      "queued": true,
      "tier": "single",
@@ -5545,10 +5409,7 @@
      "global_reach": [],
      "id": "G.trees:gbdt-rank-pairlogit.hist_warp_agg=on",
      "pack": "P021",
-     "packed_extra_defines": [
-      "MOJOLEARN_TREES_BLOCK_SCRATCH_FILL_OFF=1",
-      "MOJOLEARN_TREES_LG_LEVEL_ROUNDS=1"
-     ],
+     "packed_extra_defines": [],
      "priority": 3,
      "queued": true,
      "tier": "single",
@@ -5738,9 +5599,7 @@
      "global_reach": [],
      "id": "G.trees:gbdt-rank-yetirank.hist_packed_gh=on",
      "pack": "P020",
-     "packed_extra_defines": [
-      "MOJOLEARN_TREES_BLOCK_SCRATCH_FILL_OFF=1"
-     ],
+     "packed_extra_defines": [],
      "priority": 2,
      "queued": true,
      "tier": "single",
@@ -5759,10 +5618,7 @@
      "global_reach": [],
      "id": "G.trees:gbdt-rank-yetirank.hist_warp_agg=on",
      "pack": "P021",
-     "packed_extra_defines": [
-      "MOJOLEARN_TREES_BLOCK_SCRATCH_FILL_OFF=1",
-      "MOJOLEARN_TREES_LG_LEVEL_ROUNDS=1"
-     ],
+     "packed_extra_defines": [],
      "priority": 3,
      "queued": true,
      "tier": "single",
@@ -5952,9 +5808,7 @@
      "global_reach": [],
      "id": "G.trees:gbdt-symmetric.hist_packed_gh=on",
      "pack": "P020",
-     "packed_extra_defines": [
-      "MOJOLEARN_TREES_BLOCK_SCRATCH_FILL_OFF=1"
-     ],
+     "packed_extra_defines": [],
      "priority": 2,
      "queued": true,
      "tier": "single",
@@ -5973,10 +5827,7 @@
      "global_reach": [],
      "id": "G.trees:gbdt-symmetric.hist_warp_agg=on",
      "pack": "P021",
-     "packed_extra_defines": [
-      "MOJOLEARN_TREES_BLOCK_SCRATCH_FILL_OFF=1",
-      "MOJOLEARN_TREES_LG_LEVEL_ROUNDS=1"
-     ],
+     "packed_extra_defines": [],
      "priority": 3,
      "queued": true,
      "tier": "single",
@@ -6170,9 +6021,7 @@
      "global_reach": [],
      "id": "G.trees:gbdt-symmetric-1000.hist_packed_gh=on",
      "pack": "P020",
-     "packed_extra_defines": [
-      "MOJOLEARN_TREES_BLOCK_SCRATCH_FILL_OFF=1"
-     ],
+     "packed_extra_defines": [],
      "priority": 2,
      "queued": true,
      "tier": "single",
@@ -6191,10 +6040,7 @@
      "global_reach": [],
      "id": "G.trees:gbdt-symmetric-1000.hist_warp_agg=on",
      "pack": "P021",
-     "packed_extra_defines": [
-      "MOJOLEARN_TREES_BLOCK_SCRATCH_FILL_OFF=1",
-      "MOJOLEARN_TREES_LG_LEVEL_ROUNDS=1"
-     ],
+     "packed_extra_defines": [],
      "priority": 3,
      "queued": true,
      "tier": "single",
@@ -6413,7 +6259,7 @@
  "all_switches": "NOT MEASURED until each config has an A/A floor, scored A/B on NVIDIA and AMD, identity and quality evidence",
  "builds": {
   "after_packing": 224,
-  "before_packing": 230,
+  "before_packing": 226,
   "packs": [
    {
     "algorithms": [
@@ -6738,7 +6584,6 @@
    },
    {
     "algorithms": [
-     "trees:gbdt-lossguide",
      "trees:gbdt-rank-pairlogit",
      "trees:gbdt-rank-yetirank",
      "trees:gbdt-symmetric",
@@ -6748,13 +6593,11 @@
      "_mojolearn_gbdt"
     ],
     "defines": [
-     "MOJOLEARN_TREES_BLOCK_SCRATCH_FILL_OFF=1",
      "MOJOLEARN_TREES_HIST_PACKED_GH=1"
     ],
     "global_reach": false,
     "id": "P020",
     "members": [
-     "G.trees:gbdt-lossguide.BLOCK_SCRATCH_FILL_OFF=on",
      "G.trees:gbdt-rank-pairlogit.hist_packed_gh=on",
      "G.trees:gbdt-rank-yetirank.hist_packed_gh=on",
      "G.trees:gbdt-symmetric.hist_packed_gh=on",
@@ -6763,7 +6606,6 @@
    },
    {
     "algorithms": [
-     "trees:gbdt-lossguide",
      "trees:gbdt-rank-pairlogit",
      "trees:gbdt-rank-yetirank",
      "trees:gbdt-symmetric",
@@ -6773,14 +6615,11 @@
      "_mojolearn_gbdt"
     ],
     "defines": [
-     "MOJOLEARN_TREES_BLOCK_SCRATCH_FILL_OFF=1",
-     "MOJOLEARN_TREES_HIST_WARP_AGG=1",
-     "MOJOLEARN_TREES_LG_LEVEL_ROUNDS=1"
+     "MOJOLEARN_TREES_HIST_WARP_AGG=1"
     ],
     "global_reach": false,
     "id": "P021",
     "members": [
-     "G.trees:gbdt-lossguide.all_on",
      "G.trees:gbdt-rank-pairlogit.hist_warp_agg=on",
      "G.trees:gbdt-rank-yetirank.hist_warp_agg=on",
      "G.trees:gbdt-symmetric.hist_warp_agg=on",
@@ -8310,15 +8149,6 @@
   },
   {
    "algorithms": [],
-   "control": "ni12_fill_rule",
-   "define": "MOJOLEARN_NI12_FILL_RULE_OFF",
-   "file": "neural-seq-train-dedupe",
-   "reasons": [
-    "not declared by any board algorithm workload"
-   ]
-  },
-  {
-   "algorithms": [],
    "control": "ni52_mlp_epoch_order",
    "define": "MOJOLEARN_IDN_MLP_DEVICE_EPOCH_ORDER",
    "file": "neural-seq-train-dedupe",
@@ -8556,7 +8386,7 @@
     "head": "1ea312322",
     "lane": "classical-fixes",
     "path": "experiments/six_lane_integration/grid_controls/classical-fixes.json",
-    "sha256": "09e2a1cef5236d053a5329f3a2d9184893e48d7cb10b5d3b922662716097ed4c"
+    "sha256": "957c4365b42838a0cdaa3c15388255cb964e745d7fba882f9ab5584970701dd1"
    },
    "classical-kmeans": {
     "branch": "lane/classical-kmeans",
@@ -8626,7 +8456,7 @@
     "head": "1c24f289b",
     "lane": "fg-ivf",
     "path": "experiments/six_lane_integration/grid_controls/fg-ivf.json",
-    "sha256": "ac33af9ee1686d6fd1df4b263fdca8ae68ac22d5f177d99fbaee16f4d9e648a5"
+    "sha256": "0b1d7fc7c8c12160ce8e39ec0e78579d6c01b3b2a7d56f1fc8378881b6eb0d79"
    },
    "fg-knn-nb": {
     "branch": "lane/fg-knn-nb",
@@ -8668,7 +8498,7 @@
     "head": "adce70f67",
     "lane": "gap-ivf",
     "path": "experiments/six_lane_integration/grid_controls/gap-ivf.json",
-    "sha256": "1ae7939755d4ad11672cc87513fb6f0e639cd1871efa5f04f8dd6e152fa3514b"
+    "sha256": "b17b35713376940116575209617c5b8d325615889e8e6a6788316a6b1774a6a4"
    },
    "gap-linalg": {
     "branch": "lane/gap-linalg",
@@ -8857,7 +8687,7 @@
     "head": "b81169c61",
     "lane": "neural-seq-train-dedupe",
     "path": "experiments/six_lane_integration/grid_controls/neural-seq-train-dedupe.json",
-    "sha256": "95c24e8aa5c429fb35336141223d451e19f1d7baaec79a497d6bee5e49cdffb3"
+    "sha256": "85891e580ae7782e41ce2296839ae025faab3e5eda85d9387e321f78dd582469"
    },
    "neural-small": {
     "branch": "lane/neural-small",
@@ -8948,7 +8778,7 @@
     "head": "75dd2db9a",
     "lane": "trees-structural",
     "path": "experiments/six_lane_integration/grid_controls/trees-structural.json",
-    "sha256": "acaf184d7bc07e00009fdbe4197469c44ce0dc15b23ed1a63f2411ee97cfc6a4"
+    "sha256": "0f1a87f7e817c6971862a9ab4cd0453413c664f765e4e4fadf0ce9ab76798030"
    },
    "xd-kit-gemm": {
     "branch": "lane/xd-kit-gemm",
@@ -8973,20 +8803,20 @@
    }
   },
   "guards": {
-   "asserts": 1564,
+   "asserts": 1574,
    "modules": {
-    "core/experiment_guards_base.mojo": "061a018a8a0e357e9c7b451fee70af36706910a6875f05d3964a0817b74ea274",
-    "core/experiment_guards_cluster.mojo": "17a9935faaece03a60d8f79c9fd3f6c5ee7c158f47645f18479be4de55e0c246",
-    "core/experiment_guards_decomposition.mojo": "de1d24369cd89599344b335a838884667d6f1812da33aa53378c7b682dcdefc5",
+    "core/experiment_guards_base.mojo": "09892836e31353249ad666d140abbebdc1dae78fa8c78ce97b9381852d991735",
+    "core/experiment_guards_cluster.mojo": "0ddbb380e39a51d453f77a57942ad0c72061f7611bb5dab73cb9a784d9ad1413",
+    "core/experiment_guards_decomposition.mojo": "748f20ec4b109c10e768fdf9ef45cf572a5d4822e8c430d35e6a0fe0c56b27a8",
     "core/experiment_guards_kernel.mojo": "55a65b34b89882107e19d458c21a301f6252355efc3795d5cf72c7dacd75a32c",
-    "core/experiment_guards_linear.mojo": "f8b0f697e26a4c800663d6219e2e911c4b62c3bc1806cad78efe4098cf245b3c",
-    "core/experiment_guards_neural.mojo": "0c0b7ac97ed76e8892d5364ff6819b39d81097479112ec2469d20add4c6f4a85",
+    "core/experiment_guards_linear.mojo": "2dcf7054d2c722afa18e1877e26176d9b56e8a9c75c1b47b3d0f408ce0f3deea",
+    "core/experiment_guards_neural.mojo": "ccb55f9b115e49dbb1b19bd1271e2a84ca06914907bf52a0ab9fb4af52c862cb",
     "core/experiment_guards_series.mojo": "8c8e69f4819586579532fb84e68131857767cfd1a668369aeda9579ae8d93fb8",
-    "core/experiment_guards_trees.mojo": "7bdc587852ff7fb42313c3c5d3351b5e77ea13437da8e261d59b53101d88c646",
-    "core/six_lane_experiment_guards.mojo": "091b41fff59763fac3a36ae7d6aa469fb421efca18d0e6adfd00ac2cfbe16993"
+    "core/experiment_guards_trees.mojo": "cc793201a0876ec635bee845902dab9ca5bd53e1bb6137faf7e52f85ee980b6a",
+    "core/six_lane_experiment_guards.mojo": "0cc2741d22b34b727292b65939d53b4e87d77f268f34a4812b24c5f3d9345bce"
    },
    "path": "core/six_lane_experiment_guards.mojo",
-   "sha256": "091b41fff59763fac3a36ae7d6aa469fb421efca18d0e6adfd00ac2cfbe16993"
+   "sha256": "0cc2741d22b34b727292b65939d53b4e87d77f268f34a4812b24c5f3d9345bce"
   },
   "stale_not_used": [
    "experiments/six_lane_integration/catalog.json (define lists)",
@@ -9075,13 +8905,13 @@
   "cnn-resident-glue": 2,
   "ets-team-idn": 1,
   "fg-gbdt-ordered": 4,
-  "fg-ivf": 8,
+  "fg-ivf": 9,
   "fg-knn-nb": 9,
   "fg-linear": 8,
   "fg-pca": 7,
   "fg-tsne-dbscan": 9,
   "gap-gemm-layers": 2,
-  "gap-ivf": 1,
+  "gap-ivf": 2,
   "gap-linalg": 4,
   "gap-neural-io": 0,
   "gap-shap-nb": 1,
@@ -9108,7 +8938,7 @@
   "neural-gemm-attn-dedupe": 57,
   "neural-io-2": 5,
   "neural-ozaki-gemm": 1,
-  "neural-seq-train-dedupe": 86,
+  "neural-seq-train-dedupe": 87,
   "neural-small": 14,
   "quality-fix-apple-fast": 2,
   "samba-resident": 2,
@@ -9121,7 +8951,7 @@
   "trees-lossguide": 1,
   "trees-predict-ideas": 1,
   "trees-small": 12,
-  "trees-structural": 3,
+  "trees-structural": 4,
   "xd-kit-gemm": 2,
   "xd-rr-one-block": 2,
   "xprep-one-copy": 1
@@ -9130,7 +8960,7 @@
  "status": "PLANNED_NOT_RUN",
  "summary": {
   "a_builds_after_packing": 190,
-  "a_builds_before_packing": 196,
+  "a_builds_before_packing": 192,
   "aa_pairs": 88,
   "algorithms": 34,
   "algorithms_with_configs": 25,
@@ -9155,17 +8985,17 @@
    "_mojolearn_x_sequence"
   ],
   "builds_after_packing": 224,
-  "builds_before_packing": 230,
+  "builds_before_packing": 226,
   "cap": 16,
-  "cells": 402,
-  "configs": 126,
-  "configs_per_vendor": 126,
-  "controls": 40,
+  "cells": 382,
+  "configs": 124,
+  "configs_per_vendor": 124,
+  "controls": 36,
   "deferred_configs": 0,
   "deferred_cross_configs": 65,
   "deferred_cross_groups": 4,
-  "excluded_controls": 20,
-  "guard_asserts": 1564,
+  "excluded_controls": 19,
+  "guard_asserts": 1574,
   "mapped_algorithms": 25,
   "packed_multi_member": 7,
   "packs": 101,
@@ -9175,10 +9005,7 @@
  "unmapped": [
   {
    "algorithm": "ann:ivf",
-   "controls": [
-    "kmeans_live_cores_off",
-    "kmeans_lazy_shift_idn_off"
-   ],
+   "controls": [],
    "files": [
     "fg-ivf",
     "gap-ivf"
@@ -9187,9 +9014,7 @@
   },
   {
    "algorithm": "expanded:ivf-pq",
-   "controls": [
-    "kmeans_live_cores_off"
-   ],
+   "controls": [],
    "files": [
     "fg-ivf"
    ],

@@ -8,14 +8,8 @@
   "ann:ivf": {
    "binding": "_mojolearn_ivf",
    "route": "IVFIndex.fit -> ivf_flat_build_resident (strided trainset, k-means|| + lazy Lloyd, predict, device CSR kept) -> handle; search -> ivf_flat_index_search on the handle",
-   "controls": [
-    "kmeans_lazy_shift_idn_off"
-   ],
-   "interaction_groups": [
-    [
-     "kmeans_lazy_shift_idn_off"
-    ]
-   ]
+   "controls": [],
+   "interaction_groups": []
   }
  },
  "removed": [

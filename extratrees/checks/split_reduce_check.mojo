@@ -687,6 +687,15 @@ def run_arm[
     ctx.enqueue_copy(dst_buf=d_ts, src_ptr=h_ts.unsafe_ptr())
     ctx.enqueue_memset(d_mx, Int32(0))
     ctx.synchronize()
+    _ = h_q^  # keep-alive past the drain (the enqueue_copy reads it until then)
+    _ = h_c^  # keep-alive past the drain (the enqueue_copy reads it until then)
+    _ = h_m^  # keep-alive past the drain (the enqueue_copy reads it until then)
+    _ = h_l^  # keep-alive past the drain (the enqueue_copy reads it until then)
+    _ = h_nu^  # keep-alive past the drain (the enqueue_copy reads it until then)
+    _ = h_de^  # keep-alive past the drain (the enqueue_copy reads it until then)
+    _ = h_v^  # keep-alive past the drain (the enqueue_copy reads it until then)
+    _ = h_nb^  # keep-alive past the drain (the enqueue_copy reads it until then)
+    _ = h_nc^  # keep-alive past the drain (the enqueue_copy reads it until then)
 
     ctx.enqueue_function[split_reduce_init_kernel](
         d_q.unsafe_ptr(),
