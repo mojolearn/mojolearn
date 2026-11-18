@@ -33,7 +33,8 @@ from std.sys.compile import is_defined
 from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from checks.numerics import NUMERIC_FAST
 
-from core.hostptr import copy_f32, copy_f32_finite
+from core.hostptr import copy_f32
+from core.host_finite_scan import host_copy_f32_finite
 from max.gpu.host import DeviceBuffer, DeviceContext
 from core.neural_context import process_ctx
 from checks.numerics import GLOBAL_NUMERIC_MODE as _DEVCTX_MODE, NUMERIC_IDENTICAL as _DEVCTX_IDENTICAL
@@ -336,7 +337,7 @@ def kde_score_samples_resident(
 
     `status_addr` (not 0): a host int32 word that receives the queries'
     finite status, tested on the bits of each word inside the staging copy
-    into pinned memory that the upload makes in any case (`copy_f32_finite`,
+    into pinned memory that the upload makes in any case (`host_copy_f32_finite`,
     lane fb12-kde-finite): no launch, no download, no second pass. On a
     non-finite word nothing is uploaded or launched, `scores` is not
     written, and the door refuses. The host pass `kde_validate_data_ptr`
@@ -372,7 +373,7 @@ def kde_score_samples_resident(
         # verdict is known before anything is enqueued, so a refused query
         # uploads and computes nothing and `scores` is never written.
         if status_addr != 0:
-            if not copy_f32_finite(query, host.unsafe_ptr(), n):
+            if not host_copy_f32_finite(Int(query), Int(host.unsafe_ptr()), n):
                 MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=status_addr).unsafe_store(0, Int32(1))
                 _ = host^
                 clean = True

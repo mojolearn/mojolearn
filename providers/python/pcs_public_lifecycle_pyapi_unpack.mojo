@@ -100,6 +100,18 @@ def _pcs_check_finite(source: PythonObject, snapshot: ArrayMetadata,
         if not host_all_finite_view(data.addr, data.s0, data.s1, data.rows, data.cols, 8, True):
             raise Error(admitted_finite_wording("PolynomialCountSketch"))
         return
+    if data.itemsize == 2 or data.itemsize == 4 or data.itemsize == 8:
+        # parallel: the remaining tail (a view in the other byte order, and a
+        # float16 view on the nested-sequence policy) on the same one SIMD
+        # pass (lane fx-host-scans; it was a serial per-word decode). The
+        # decode read every word in the host's byte order whatever the view's
+        # order (`native_scalar_real(..., True)`), and refused an exponent
+        # field of all ones; `native=True` keeps exactly that reading.
+        if not host_all_finite_view(data.addr, data.s0, data.s1, data.rows, data.cols, data.itemsize, True):
+            raise Error(admitted_finite_wording("PolynomialCountSketch"))
+        return
+    # A float width with no fixed word to load (a 16-byte long double):
+    # serial per-word decode, verdict unchanged.
     var code = String("e") if data.itemsize == 2 else String("f") if data.itemsize == 4 else String("d")
     var bytes = MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=data.addr)
     for row in range(data.rows):  # driver-loop: finite check over the captured pre-cast input

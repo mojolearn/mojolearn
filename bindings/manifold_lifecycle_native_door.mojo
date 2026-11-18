@@ -22,6 +22,7 @@ from bindings.parallel_public_result_door import parallel_public_result
 from providers.python.array_metadata_pyapi_door import ArrayMetadata, ArrayPin, array_shape_once, array_metadata_once, array_python_shape
 from core.cast_in import cast_in_kind
 from core.admitted_input import admitted_cast_f32
+from core.host_finite_scan import host_all_finite_nd
 
 
 def manifold_method(operation: String) -> String:
@@ -110,44 +111,14 @@ def _target_finite(snapshot: ArrayMetadata) raises -> Bool:
         raise Error("TypeError: target floating dtype has inconsistent itemsize")
     if len(snapshot.strides) != len(snapshot.shape):
         raise Error("TypeError: target strides must match its captured shape")
-    var pointer = MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=snapshot.source.addr)
-    var mask = UInt64(0x7F800000) if width == 4 else UInt64(0x7FF0000000000000)
-    # A C-contiguous native-order target (the common ndarray / Array / list
-    # case) is one typed scan over its words (p3 rank 12): no per-element
-    # odometer or byte assembly.
-    var contiguous = snapshot.native_byte_order
-    var expected = width
-    for k in range(len(snapshot.shape)):  # small-loop(rank: target metadata axes)
-        var axis = len(snapshot.shape) - 1 - k
-        if snapshot.shape[axis] > 1 and snapshot.strides[axis] != expected:
-            contiguous = False
-        expected *= snapshot.shape[axis]
-    if contiguous:
-        if width == 4:
-            var words = MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=snapshot.source.addr)
-            for i in range(snapshot.count):  # cpu-route: ignored-target finiteness over contiguous native words
-                if (UInt64(words[i]) & mask) == mask:
-                    return False
-            return True
-        var wide = MutPointer[UInt64, MutUntrackedOrigin](unsafe_from_address=snapshot.source.addr)
-        for i in range(snapshot.count):  # cpu-route: ignored-target finiteness over contiguous native words
-            if (wide[i] & mask) == mask:
-                return False
+    if snapshot.count <= 0:
         return True
-    for linear in range(snapshot.count):  # cpu-route: ignored-target finiteness over captured native strides
-        var remainder = linear
-        var offset = 0
-        for k in range(len(snapshot.shape)):  # small-loop(rank: target metadata axes)
-            var axis = len(snapshot.shape) - 1 - k
-            offset += (remainder % snapshot.shape[axis]) * snapshot.strides[axis]
-            remainder //= snapshot.shape[axis]
-        var bits = UInt64(0)
-        for byte in range(width):  # small-loop(itemsize: four or eight native floating bytes)
-            var index = byte if snapshot.native_byte_order else width - 1 - byte
-            bits |= UInt64(pointer[offset + index]) << UInt64(8 * byte)
-        if (bits & mask) == mask:
-            return False
-    return True
+    # parallel: the one host finite scan over the captured view (any rank,
+    # any strides, either byte order; a contiguous target is one flat run of
+    # words). It replaces three private serial loops: the contiguous float32
+    # and float64 word walks and the per-element odometer with byte assembly.
+    return host_all_finite_nd(snapshot.source.addr, snapshot.shape, snapshot.strides, width,
+                              snapshot.native_byte_order)
 
 
 def manifold_input(source: PythonObject, name: String, sparse_allowed: Bool,
