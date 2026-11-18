@@ -416,6 +416,25 @@ done
 # the owed rows name the last release "prior" (owed-pre0867.json, measure_owed units, measure_owed_driver --arm):
 # LAST_PRIOR's venv, none when the job times no last release (the default: the paper baseline only)
 venv_arm() { if [ "$1" = prior ]; then echo "prior-${LAST_PRIOR:-none}"; else echo "$1"; fi; }
+# run_owed_drivers <drivers.json>: every planned driver row (tools/measure_owed_driver.py) on each arm present on this
+# box, into $RES/drivers/drivers.jsonl; returns the worst rc. A driver row's B arms (its "arms" names a staged B set,
+# e.g. restore-mamba-backward-glue's mamba-backward-generic) run on that set's venv; measure_owed_driver.py skips an
+# arm the row does not name. Driver cases time one GPU each, so they run one after the other (cells serially per GPU).
+run_owed_drivers() {
+    local plan=$1 row arm va r rc=0
+    mkdir -p "$RES/drivers"
+    for row in $($PY -c 'import json,sys; print(" ".join(r["id"] for r in json.load(open(sys.argv[1]))))' "$plan"); do
+        for arm in candidate ${LAST_PRIOR:+prior} ${B_NAMES[@]+"${B_NAMES[@]}"}; do
+            va=$(venv_arm "$arm")
+            [ -x "${ARM_PY[$va]:-/nonexistent}" ] || continue
+            "${ARM_PY[$va]}" tools/measure_owed_driver.py --owed "$OWED_FILE" --row "$row" --arm "$arm" \
+                --out "$RES/drivers/drivers.jsonl" >> "$RES/logs/drivers.log" 2>&1
+            r=$?; [ $r -gt $rc ] && rc=$r
+        done
+    done
+    grep -c '^OWED-DRIVER' "$RES/logs/drivers.log" 2> /dev/null | sed 's/^/driver cases: /'
+    return $rc
+}
 OWED_PRIOR=(); [ -n "$LAST_PRIOR" ] && OWED_PRIOR=(--prior)   # measure_owed plans the owed prior arm only then
 # >>> b-arms (tools/test_measure_owed.py runs this block on a fake PC_B_ARMS file)
 # A line is `<name> <wheel dir> <commit>` (a B wheel set built from another commit) or `<name> env:VAR=VALUE[,VAR=VALUE]
@@ -714,8 +733,8 @@ fi
 # "0.8.55 is not timed again") the job has NO prior arm: the plan, the candidate's install (and the B sets'), its smoke
 # of the listed races, its board, and the compare against the stored board (first line: the baseline is stored).
 # Env-only A/B arms (PC_B_ARMS `<name> env:VAR=VALUE <commit>`) run the candidate's venv with those variables.
-[[ "$PARTS" == *",targeted,"* ]] && PARTS="$PARTS,tg-install,tg-prep,tg-smoke,tg-board,tg-compare,"
-if part tg-install || part tg-prep || part tg-smoke || part tg-board || part tg-compare; then
+[[ "$PARTS" == *",targeted,"* ]] && PARTS="$PARTS,tg-install,tg-prep,tg-smoke,tg-board,tg-compare,tg-drivers,"
+if part tg-install || part tg-prep || part tg-smoke || part tg-board || part tg-compare || part tg-drivers; then
     TG="$RES/plan-tg"; TGO="$RES/plan-tg-owed"
     mkdir -p "$TG"
     { [ -n "${PC_ROWS:-}" ] && [ -s "$PC_ROWS" ]; } || { say "targeted: PC_ROWS (the rows file on the box) is missing or empty"; exit 2; }
@@ -996,6 +1015,25 @@ if part tg-install || part tg-prep || part tg-smoke || part tg-board || part tg-
         r=$?; head -n 3 "$RES/logs/summary-tg.log"; [ $r -gt $rc ] && rc=$r
         phase_end $rc
     fi
+    # The owed plan's driver rows. Before 2026-11-18 (lane fx-verdicts2) the targeted job exited here without them:
+    # ab3 (nvc-ab-20261118T182558Z-cb6e02) installed the mamba-backward-generic set for restore-mamba-backward-glue
+    # (plan-tg-owed/drivers.json, drivers=3) and never timed it, since the drivers phase sat only in the paper job.
+    if part tg-drivers && [ "$OWED" = 1 ] && [ -s "$TGO/drivers.json" ]; then
+        phase tg-drivers
+        # a B set only a driver row names has no board unit, so tg-board's install window never made its venv:
+        # install those sets here (at once, CPU), time the rows, then drop them
+        mapfile -t DRV_B < <($PY -c 'import json,sys; print("\n".join(sorted({a for r in json.load(open(sys.argv[1])) for a in r.get("b_arms") or []})))' "$TGO/drivers.json")
+        drv_new=()
+        for arm in ${DRV_B[@]+"${DRV_B[@]}"}; do
+            [[ " ${B_NAMES[*]:-} " == *" $arm "* ]] || continue
+            arm_ready "$arm" || drv_new+=("$arm")
+        done
+        rc=0
+        if [ ${#drv_new[@]} -gt 0 ]; then install_arms "${drv_new[@]}"; rc=$?; fi
+        run_owed_drivers "$TGO/drivers.json"; r=$?; [ $r -gt $rc ] && rc=$r
+        for arm in ${drv_new[@]+"${drv_new[@]}"}; do drop_arm_venv "$arm"; done
+        phase_end $rc
+    fi
     echo finished > "$J/.phase"
     exit "$WORST"
 fi
@@ -1196,21 +1234,8 @@ if [ "$OWED" = 1 ] && part owed && [ -s "$RES/plan-owed/units.tsv" ]; then
 fi
 if [ "$OWED" = 1 ] && part drivers && [ -s "$RES/plan-owed/drivers.json" ]; then
     phase drivers
-    mkdir -p "$RES/drivers"
-    rc=0
-    for row in $($PY -c 'import json,sys; print(" ".join(r["id"] for r in json.load(open(sys.argv[1]))))' "$RES/plan-owed/drivers.json"); do
-        # a driver row's B arms (its "arms" names a staged B set, e.g. restore-mamba-backward-glue's
-        # mamba-backward-generic) run on that set's venv; measure_owed_driver.py skips an arm the row does not name
-        for arm in candidate ${LAST_PRIOR:+prior} ${B_NAMES[@]+"${B_NAMES[@]}"}; do
-            va=$(venv_arm "$arm")
-            [ -x "${ARM_PY[$va]:-/nonexistent}" ] || continue
-            "${ARM_PY[$va]}" tools/measure_owed_driver.py --owed "$OWED_FILE" --row "$row" --arm "$arm" \
-                --out "$RES/drivers/drivers.jsonl" >> "$RES/logs/drivers.log" 2>&1
-            r=$?; [ $r -gt $rc ] && rc=$r
-        done
-    done
-    grep -c '^OWED-DRIVER' "$RES/logs/drivers.log" 2> /dev/null | sed 's/^/driver cases: /'
-    phase_end $rc
+    run_owed_drivers "$RES/plan-owed/drivers.json"
+    phase_end $?
 fi
 
 # ---- compare ----------------------------------------------------------------------------------------------------
