@@ -227,8 +227,8 @@ OPS = [
      [("res", "fout", "count"), ("count", "int"), ("value", "float")]),
     ("p2m_iota", "py2mojo_items", "p2m_iota_item", "count",
      [("res", "iout", "count"), ("count", "int")]),
-    ("p2m_negate", "py2mojo_items", "p2m_negate_item", "count",
-     [("x", "fin", "count"), ("res", "fout", "count"), ("count", "int")]),
+    # TOMBSTONE: p2m_negate_kernel, p2m_negate_item (dead native code: no launch site, no caller) deleted 2026-11-18 by lane/fx-dead-small; code recoverable at 7c1aad6561.
+    # Restore: git apply experiments/removed/p2m_negate.patch
     ("p2m_transpose", "py2mojo_items", "p2m_transpose_item", "r * c",
      [("src", "fin", "r * c"), ("res", "fout", "r * c"), ("r", "int"), ("c", "int")]),
     ("p2m_transpose_i", "py2mojo_items", "p2m_transpose_i_item", "r * c",
@@ -356,7 +356,7 @@ STATUS_OPS = {
 #: ops whose items keep their GPU kernels (x_neighbors/iter_device.mojo's
 #: resident PolynomialCountSketch launches the pcs_* kernels) but have no op_*
 #: driver: the drivers and exports were removed as dead doors (96bf2ce898).
-KERNEL_ONLY = {"pcs_sketch", "pcs_conv", "pcs_copy0", "p2m_negate"}
+KERNEL_ONLY = {"pcs_sketch", "pcs_conv", "pcs_copy0"}
 
 
 HDR = "# SPDX-License-Identifier: Apache-2.0\n# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632\n"

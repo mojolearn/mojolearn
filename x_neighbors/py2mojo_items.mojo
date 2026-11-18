@@ -17,7 +17,6 @@ copy, a compare or integer work: no float arithmetic, so no bit can move.
   p2m_const_cols     NearestCentroid's all-features-constant test
   p2m_lp_labels      LabelPropagation / LabelSpreading's label rows
   p2m_fill, p2m_iota PageRank's uniform start vectors, the cc start labels
-  p2m_negate         kneighbors' inner-product distances (exact negation)
   p2m_transpose(_i)  the k-NN multi-output label / target transposes
   p2m_row_sort       RadiusNeighbors sort_results (and LOF's percentile): a
                      segmented bitonic sort by (row, value, position), so the
@@ -213,9 +212,8 @@ def p2m_iota_item(t: Int, res: IP, count: Int):
     res.unsafe_store(t, Int32(t))
 
 
-def p2m_negate_item(t: Int, x: FP, res: FP, count: Int):
-    """res = -x, a sign flip (exact, keeps subnormals and the zero sign)."""
-    res.unsafe_store(t, -x.unsafe_load(t))
+# TOMBSTONE: p2m_negate_kernel, p2m_negate_item (dead native code: no launch site, no caller) deleted 2026-11-18 by lane/fx-dead-small; code recoverable at 7c1aad6561.
+# Restore: git apply experiments/removed/p2m_negate.patch
 
 
 def p2m_transpose_item(t: Int, src: FP, res: FP, r: Int, c: Int):
