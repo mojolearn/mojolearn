@@ -16,7 +16,8 @@ skips it). Three builds were lost on 2026-11-15 to defects these catch:
               packaging/portable_math/wheel.py (audit_tree python_only) and the source/API payload audit
               (tools/wheel_api_audit.py audit, `source_payload_complete`, the refusal pack_wheel raises). Every rule
               is the COMMIT's own file, loaded from an export of the commit; nothing is copied here. Seconds.
-              Then the commit's tools/mojo_lastuse_audit.py over every .mojo blob of the commit (a local freed at its
+              Then the commit's tools/mojo_lastuse_audit.py and tools/identity_math_lint.py (raw stdlib math where
+              IDENTICAL must call the exact seams) over every .mojo blob of the commit (a local freed at its
               last named use while an untracked address still reads it; tools/mojo_lastuse_allow.txt). Seconds.
               Then the commit's tools/python_free_dirs.sh over the commit (no Mojo kernel, RUN module or non-boundary
               binding imports Python), as the pre-push hook runs it, so a commit pushed past the hook cannot build.
@@ -192,7 +193,20 @@ def run_audits(tree, commit, workdir, git_root=ROOT):
           f"{len(errors)} refusal(s)")
     lastuse = lastuse_audit(tree, commit, git_root)
     pyfree = python_free_audit(tree, commit, git_root)
-    return 1 if errors or lastuse or pyfree else 0
+    mathlint = math_lint_audit(tree, commit, git_root)
+    return 1 if errors or lastuse or pyfree or mathlint else 0
+
+
+def math_lint_audit(tree, commit, git_root=ROOT):
+    """The COMMIT's tools/identity_math_lint.py over the commit's .mojo blobs (fb13-identity-audit, 2026-11-17): raw
+    stdlib math where IDENTICAL must call the checks/numerics.mojo seams, before any compile. Prints its MATHLINT
+    lines; returns its exit code (0 when the commit predates the lint)."""
+    tool = Path(tree) / "tools/identity_math_lint.py"
+    if not tool.is_file():
+        print(f"MATHLINT SKIP {commit[:12]} has no tools/identity_math_lint.py")
+        return 0
+    # a child process: the lint splits its files across a process pool
+    return subprocess.call([sys.executable, str(tool), "--commit", commit, "--root", str(git_root)])
 
 
 def python_free_audit(tree, commit, git_root=ROOT):
