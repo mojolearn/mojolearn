@@ -148,7 +148,7 @@ def test_flags_target_toolchain_and_builder_invalidate(repo, tmp_path):
 def test_tool_edits_that_keep_the_recipe_keep_every_key(repo, tmp_path):
     base = plan(repo, tmp_path)
     for name in ("tools/development_build.py", "tools/build_process.py", "tools/build_sizing.py",
-                 "tools/bincache.py", "tools/merged_bindings.py"):
+                 "tools/bincache.py", "tools/merged_bindings.py", "tools/python_free_dirs.sh"):
         path = repo / name
         write(repo, name, (path.read_text() if path.exists() else "") + "# controller edit\nx = 1\n")
     # Comments and blank lines in the build scripts are not part of the recipe.
@@ -560,6 +560,8 @@ def test_lock_wait_has_a_deadline(monkeypatch, tmp_path):
 
 def configure_main(repo, monkeypatch):
     monkeypatch.setattr(dev.os, "environ", dict(ENV))
+    # the synthetic repo has no tools/python_free_dirs.sh; main's import grep (55f541d20c) has its own tests below
+    monkeypatch.setattr(dev, "python_free_check", lambda _repo: None)
     monkeypatch.setattr(merged, "default_platform", lambda: "linux")
     monkeypatch.setattr(bincache, "first_line", lambda *_: "synthetic-source-commit")
 
@@ -735,10 +737,12 @@ def test_development_shell_executes_the_fingerprinted_compiler(repo, tmp_path):
     # Capture the actual shell command with inert tool shims. This exercises
     # group/root/index assembly without invoking any native compiler.
     for relative in ("bindings/merged_build.sh", "bindings/build_defines.sh", "bindings/compile_jobs.sh",
-                     "tools/merged_bindings.py"):
+                     "tools/merged_bindings.py", "tools/python_free_dirs.sh"):
         # 095db6a93 dropped tools/*.py from dev.BUILD_INPUTS, so the synthetic repo has no tools/ directory
         (repo / relative).parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(SOURCE_REPO / relative, repo / relative)
+    # merged_build.sh runs the import grep first (55f541d20c); the synthetic repo lists no door files
+    (repo / "tools" / "python_free_doors.txt").write_text("")
     # This assembly fixture does not exercise Unicode generation. Supply its
     # already-generated input, as a normal compiler checkout does.
     write(repo, "tokenizer/impl/unicode_table_generated.mojo", "# synthetic generated table\n")
@@ -1465,6 +1469,7 @@ def test_main_release_layout_compiles_once_into_the_one_mac_cache_and_the_releas
     monkeypatch.setattr(merged, "default_platform", lambda: "darwin")
     monkeypatch.setattr(bincache, "first_line", lambda *_: "synthetic-source-commit")
     monkeypatch.setattr(dev, "physical_memory", lambda: 100 * 2 ** 30)
+    monkeypatch.setattr(dev, "python_free_check", lambda _repo: None)  # synthetic repo; own test below
     calls = []
     monkeypatch.setattr(dev, "run_logged", fake_bincache_child(calls))
     for row in release_plan(mac, tmp_path)["support"]:
@@ -1524,3 +1529,13 @@ def test_main_prepares_sources_before_planning_and_stops_on_missing_output(repo,
     assert report['state'] == 'failed' and report['compile_attempts'] == 0
     manifest = json.loads((evidence / 'generated-sources/generated-sources.json').read_text())
     assert not manifest['sources'][gs.ARCHIVE_TABLE]['verified']
+
+
+def test_python_free_check_refuses_before_compile_and_passes_a_clean_tree(tmp_path):
+    (tmp_path / "tools").mkdir()
+    script = tmp_path / "tools" / "python_free_dirs.sh"
+    script.write_text("echo 'kernels/x.mojo imports Python'; exit 1\n")
+    with pytest.raises(dev.BuildError, match="imports Python"):
+        dev.python_free_check(tmp_path)
+    script.write_text("exit 0\n")
+    dev.python_free_check(tmp_path)
