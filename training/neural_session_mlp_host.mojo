@@ -17,7 +17,7 @@ def _read_finite(p: _FP, n: Int, label: String) raises -> List[Float32]:
     # split over host cores (was a serial load, isfinite and append per word)
     var count = max(n, 0)
     var values = List[Float32](unsafe_uninit_length=count)
-    if not host_copy_f32_finite(Int(p), Int(values.unsafe_ptr()), count):
+    if not host_copy_f32_finite(Int(p), Int(rebind[_FP](values.unsafe_ptr())), count):
         raise Error("neural MLP sessions: nonfinite " + label)
     return values^
 

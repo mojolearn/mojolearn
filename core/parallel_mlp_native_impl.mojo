@@ -5,7 +5,7 @@ from core.host_finite_scan import host_all_finite_f32
 
 def mlp_check_finite(data: Pointer[Float32, ImmUntrackedOrigin], size: Int, label: String) raises:
     # parallel: the one host finite scan (was a serial isfinite loop)
-    if not host_all_finite_f32(MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(data)), size):
+    if not host_all_finite_f32(rebind[MutPointer[Float32, MutUntrackedOrigin]](data), size):
         raise Error("RuntimeError: SmallMLPTrainer nonfinite " + label)
 
 

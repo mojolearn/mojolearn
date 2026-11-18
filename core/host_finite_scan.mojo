@@ -249,7 +249,7 @@ def host_any_nan_f32(p: _HFS_F32P, n: Int) -> Bool:
 
 def host_any_nan_list(values: List[Float32]) -> Bool:
     """`host_any_nan_f32` over a List's storage."""
-    return _hfs_any_class(Int(values.unsafe_ptr()), len(values), True)
+    return _hfs_any_class(Int(rebind[_HFS_F32P](values.unsafe_ptr())), len(values), True)
 
 
 def host_any_nan_unit(values: List[Float32]) -> Bool:
@@ -257,7 +257,7 @@ def host_any_nan_unit(values: List[Float32]) -> Bool:
     column of a per-column quantization): the SIMD pass on the calling
     thread. Not split further because the caller already runs one such
     unit per core; a pool call from inside a pool task is not made."""
-    return _hfs_span_any_class(Int(values.unsafe_ptr()), len(values), True)
+    return _hfs_span_any_class(Int(rebind[_HFS_F32P](values.unsafe_ptr())), len(values), True)
 
 
 def host_any_inf_f32(p: _HFS_F32P, n: Int) -> Bool:
