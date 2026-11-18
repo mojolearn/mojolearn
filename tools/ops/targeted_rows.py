@@ -60,6 +60,10 @@ BOX HELPERS (tools/ops/paper_compare_job.sh, CPU, seconds):
              estimated candidate seconds add up to about N; chunk-<i>.txt.
     prep-groups --ids F [--ids G] --out-dir D: the races cut into one group per family and prep dataset
              (group-<family>-<dataset>.txt), which the job's tg-prep phase prepares at once, one process each.
+    timed-check --results RES --ids F [--units U] [--arms A,B]: one UNTIMED line per staged arm (the candidate on the
+             listed rows, each owed unit's arm and its base) that has no timed race, with why; exit 3 when any.
+    empty-board --out D [--host-probe F] [--why W]: D/board.json with no race and the job's host probe, written
+             only when D has no board (the candidate timed nothing), so the compare names the host and the NOT-RUN rows.
     summary  --compare C --rows R --results RES --ids F [--units U]: SUMMARY-TG (rows timed on both,
              FASTER/SAME/REGRESSION, rows still over 1.10 worst first, rows fixed (over 1.10 in the input compare, now
              at or under 1.00), done/total per arm, and each owed A/B unit's arm over its back-to-back base).
@@ -77,6 +81,7 @@ import re
 import statistics
 import subprocess
 import sys
+import time
 from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 
@@ -788,12 +793,29 @@ def prep_groups(ids, datasets=PREP_DATASETS):
     return out
 
 
+def is_full(race_id):
+    """A timed (full-size) race id: its size field is rows=full or shape=full. A smoke id (rows=2000, shape=small)
+    is planned only by a --rows/--smoke board, never by the timed board's plan."""
+    return race_id.rsplit("/", 1)[-1].endswith("=full")
+
+
 def cmd_prep_groups(a):
-    ids = []
+    ids, dropped = [], 0
     for path in a.ids:
         if os.path.isfile(path):
             with open(path) as fh:
-                ids += [x.strip() for x in fh if x.strip() and x.strip() not in ids]
+                for x in fh:
+                    x = x.strip()
+                    if not x or x in ids:
+                        continue
+                    # lane fx-pod-job2 (2026-11-18): the smoke ids reached this list, the full-row plan refused the
+                    # whole group ("--race-ids: not in this plan") and nothing was prepared
+                    if not is_full(x):
+                        dropped += 1
+                        continue
+                    ids.append(x)
+    if dropped:
+        print("TG-PREP-GROUPS dropped %d smoke-size id(s): only full-size races are prepared here" % dropped)
     groups = prep_groups(ids)
     os.makedirs(a.out_dir, exist_ok=True)
     for f in Path(a.out_dir).glob("group-*.txt"):
@@ -802,6 +824,134 @@ def cmd_prep_groups(a):
         PC.write_atomic(os.path.join(a.out_dir, "group-%s.txt" % name), "".join(x + "\n" for x in gids))
     print("TG-PREP-GROUPS races=%d groups=%d (%s)" % (len(ids), len(groups),
                                                      ", ".join("%s %d" % (k, len(v)) for k, v in groups.items())))
+    return 0
+
+
+def _lines(path):
+    try:
+        with open(path) as fh:
+            return [x.strip() for x in fh if x.strip()]
+    except OSError:
+        return None
+
+
+def _first(path, prefix=None, last=False):
+    """The first line starting with PREFIX (or the last non-empty line), cut to 240 characters; None without one."""
+    try:
+        with open(path, errors="replace") as fh:
+            lines = [x.strip() for x in fh if x.strip()]
+    except OSError:
+        return None
+    if prefix is not None:
+        lines = [x[len(prefix):].strip() for x in lines if x.startswith(prefix)]
+    if not lines:
+        return None
+    return (lines[-1] if last else lines[0])[:240]
+
+
+def _statuses(board_path, ids):
+    try:
+        races = PC.load_json(board_path).get("races") or {}
+    except (OSError, ValueError):
+        return None
+    out = {}
+    for i in ids:
+        st = (races.get(i) or {}).get("status") or "absent"
+        out[st] = out.get(st, 0) + 1
+    return ", ".join("%s %d" % kv for kv in sorted(out.items()))
+
+
+def untimed(results, ids, units_path=None, only_arms=None):
+    """[(arm, why)]: every staged arm of a targeted job that has no timed race (lane fx-pod-job2, 2026-11-18: 12 of
+    14 B arms were skipped with a quiet "no race to time" and the job's only failure was a missing board). The
+    candidate counts when rows are listed (board-tg); each owed unit counts with its arm board and its base board
+    (board-tg-ab-<arm>[-base]-<rows>). The why names the cause: no race passed the smoke (its first failure), no
+    board (the install or board log's last line), or the races' statuses."""
+    out = []
+    logs = os.path.join(results, "logs")
+    if ids:
+        b = os.path.join(results, "board-tg", "board.json")
+        if _done(b, ids) == 0:
+            passed = _lines(os.path.join(results, "plan-tg", "race-ids-pass.txt"))
+            if passed is not None and not passed:
+                why = "none of its %d listed race(s) passed the smoke: %s" % (
+                    len(ids), _first(os.path.join(logs, "pass-ids-tg.log"), "PAPER-PASS-IDS-FAILED") or "?")
+            else:
+                why = "no listed race done in board-tg (%s; logs/board-tg.log: %s)" % (
+                    _statuses(b, ids) or "no board", _first(os.path.join(logs, "board-tg.log"), last=True) or "-")
+            out.append(("candidate", why))
+    if not units_path or not os.path.isfile(units_path):
+        return out
+    with open(units_path) as fh:
+        units = [ln.rstrip("\n").split("\t") for ln in fh]
+    for f in units:
+        if len(f) != 3 or f[0] in ("candidate", "prior"):
+            continue
+        arm, rows, ids_file = f
+        if only_arms and arm not in only_arms:
+            continue
+        uids = _lines(ids_file) or []
+        if not uids:
+            continue
+        name = "board-tg-ab-%s-%s" % (arm, rows)
+        ab = os.path.join(results, name, "board.json")
+        use = _lines(ids_file + ".pass") if rows == "full" else uids
+        if use is not None and not use:
+            out.append((arm, "%s rows: none of its %d race(s) passed the smoke: %s" % (
+                rows, len(uids), _first(os.path.join(logs, "pass-ids-tg-ab-%s.log" % arm), "PAPER-PASS-IDS-FAILED")
+                or "?")))
+            continue
+        use = use or uids
+        if _done(ab, use) == 0:
+            if not os.path.isfile(ab):
+                why = "no board %s (logs/install-tg-%s.log: %s; logs/%s.log: %s)" % (
+                    name, arm, _first(os.path.join(logs, "install-tg-%s.log" % arm), last=True) or "-",
+                    name, _first(os.path.join(logs, name + ".log"), last=True) or "-")
+            else:
+                why = "no race done in %s (%s; logs/%s.log: %s)" % (
+                    name, _statuses(ab, use), name, _first(os.path.join(logs, name + ".log"), last=True) or "-")
+            out.append((arm, "%s rows: %s" % (rows, why)))
+            continue
+        base_ids = _lines(ids_file + (".pass.base" if rows == "full" else ".base"))
+        bname = "board-tg-ab-%s-base-%s" % (arm, rows)
+        bb = os.path.join(results, bname, "board.json")
+        if base_ids and _done(bb, base_ids) == 0:
+            out.append((arm, "%s rows: its base (the candidate) has no race done in %s (%s; logs/%s.log: %s)" % (
+                rows, bname, _statuses(bb, base_ids) or "no board", bname,
+                _first(os.path.join(logs, bname + ".log"), last=True) or "-")))
+    return out
+
+
+def cmd_timed_check(a):
+    ids = _lines(a.ids) or []
+    only = [x for x in (a.arms or "").split(",") if x] or None
+    bad = untimed(a.results, ids, a.units, only)
+    for arm, why in bad:
+        print("UNTIMED %s: %s" % (arm, why))
+    print("TG-TIMED-CHECK untimed=%d%s" % (len(bad), "" if not bad else " (the job exits non-zero)"))
+    return 3 if bad else 0
+
+
+def cmd_empty_board(a):
+    """The candidate's targeted board when no race of it was timed (lane fx-pod-job2, 2026-11-18: tg-compare read a
+    missing board-tg/board.json and printed 'this job: host not recorded'): races {} and the job's host probe, so the
+    compare shows every listed row NOT-RUN with its reason and names this job's host. A timed board never has
+    'placeholder'; the job deletes this file before the first timed process writes the dir."""
+    path = os.path.join(a.out, "board.json")
+    if os.path.isfile(path):
+        print("TG-EMPTY-BOARD kept %s (it exists)" % path)
+        return 0
+    probe = None
+    if a.host_probe:
+        try:
+            probe = PC.load_json(a.host_probe)
+        except (OSError, ValueError):
+            probe = None
+    doc = {"schema": "mojolearn-bench-board/1", "created": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+           "placeholder": a.why or "no race of the candidate was timed", "box": {"host_probe": probe}, "races": {}}
+    os.makedirs(a.out, exist_ok=True)
+    PC.write_atomic(path, json.dumps(doc, indent=1, sort_keys=True) + "\n")
+    print("TG-EMPTY-BOARD wrote %s (%s)" % (path, doc["placeholder"]))
     return 0
 
 
@@ -995,6 +1145,15 @@ def build_box_parser():
     pg = sub.add_parser("prep-groups", help="the listed races cut into the groups tg-prep prepares at once")
     pg.add_argument("--ids", action="append", required=True, help="an ids file (repeat it; a missing file is skipped)")
     pg.add_argument("--out-dir", required=True)
+    tc = sub.add_parser("timed-check", help="every staged arm timed? one UNTIMED line per arm that was not; exit 3")
+    tc.add_argument("--results", required=True)
+    tc.add_argument("--ids", required=True, help="the listed races (plan-tg/race-ids-full.txt)")
+    tc.add_argument("--units", default=None, help="the owed plan's units.tsv")
+    tc.add_argument("--arms", default=None, help="only these arms (a split submit's PC_OWED_ARMS)")
+    eb = sub.add_parser("empty-board", help="board-tg/board.json with no race, when the candidate timed none")
+    eb.add_argument("--out", required=True)
+    eb.add_argument("--host-probe", default=None)
+    eb.add_argument("--why", default=None)
     sm = sub.add_parser("summary")
     sm.add_argument("--compare", required=True)
     sm.add_argument("--rows", required=True)
@@ -1008,9 +1167,10 @@ def build_box_parser():
 
 def main(argv=None):
     argv = list(sys.argv[1:] if argv is None else argv)
-    if argv and argv[0] in ("plan", "chunks", "prep-groups", "summary"):
+    if argv and argv[0] in ("plan", "chunks", "prep-groups", "summary", "timed-check", "empty-board"):
         a = build_box_parser().parse_args(argv)
-        return {"plan": cmd_plan, "chunks": cmd_chunks, "prep-groups": cmd_prep_groups, "summary": cmd_summary}[a.cmd](a)
+        return {"plan": cmd_plan, "chunks": cmd_chunks, "prep-groups": cmd_prep_groups, "summary": cmd_summary,
+                "timed-check": cmd_timed_check, "empty-board": cmd_empty_board}[a.cmd](a)
     return cmd_select(build_select_parser().parse_args(argv))
 
 

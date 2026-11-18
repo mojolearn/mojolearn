@@ -800,3 +800,18 @@ def test_stage_skips_files_on_the_box_and_copies_in_parallel(tmp_path):
         assert sent == ["cat > /root/pc-in/x/w0.whl"] and box["/root/pc-in/x/w0.whl"] == b"wheel 0"
     finally:
         RG.STAGE_STREAMS = old
+
+
+def test_stage_streams_fit_the_link_and_timeouts_scale_with_size():
+    # lane fx-pod-job2 (2026-11-18): 10 streams over a 2.6 MB/s link gave each 0.26 MB/s and a 54 MB wheel hit its
+    # fixed 569 s timeout (stage-ab4-try1.log). Streams stop at what the link carries; the timeout follows the
+    # file's size over its share of the link
+    assert RG.STAGE_STREAMS <= max(1, -(-RG.STAGE_LINK_MBPS // RG.STAGE_STREAM_MBPS)) or "MOJOLEARN_STAGE_STREAMS" in \
+        __import__("os").environ
+    mb54 = 54 * 10 ** 6
+    two = RG.stage_copy_timeout(mb54, 2, link_mbps=2.6)
+    ten = RG.stage_copy_timeout(mb54, 10, link_mbps=2.6)
+    assert two >= 300 + 3 * 54 / 1.3 - 1                  # its share is one stream's 1.3 MB/s
+    assert ten > 900 and ten > 2 * two                    # ten streams share the link: 0.26 MB/s each, 3x slack
+    assert RG.stage_copy_timeout(2 * mb54, 2, link_mbps=2.6) > two      # scales with the size
+    assert RG.stage_copy_timeout(1600, 2) < 310                         # a small file keeps the base allowance
