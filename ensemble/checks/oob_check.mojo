@@ -56,6 +56,7 @@ from ensemble.randomforest import (
     RowSampler,
     fit_forest,
 )
+from checks.native_tests.kit import upload_host_into
 
 comptime DT = DType.float32
 comptime CLS_LT = DType.int32
@@ -249,12 +250,12 @@ def _fit_cls[
     for i in range(n_rows * n_cols):
         hx.unsafe_ptr().unsafe_store(i, x[i])
     var dx = ctx.enqueue_create_buffer[DT](n_rows * n_cols)
-    ctx.enqueue_copy(dst_buf=dx, src_ptr=hx.unsafe_ptr())
+    upload_host_into[DT](ctx, dx, hx)
     var hy = ctx.enqueue_create_host_buffer[CLS_LT](n_rows)
     for i in range(n_rows):
         hy.unsafe_ptr().unsafe_store(i, y[i])
     var dy = ctx.enqueue_create_buffer[CLS_LT](n_rows)
-    ctx.enqueue_copy(dst_buf=dy, src_ptr=hy.unsafe_ptr())
+    upload_host_into[CLS_LT](ctx, dy, hy)
     var dsw = ctx.enqueue_create_buffer[DT](1)
     ctx.synchronize()
     var f = fit_forest[ClsObj, sab](
@@ -274,7 +275,6 @@ def _fit_cls[
     _ = dy^
     _ = dsw^
     _ = hx^
-    _ = hy^
     return f^
 
 
@@ -335,12 +335,12 @@ def arm_c_analytic_scores(ctx: DeviceContext) raises -> Int:
     for i in range(n_rows * n_cols):
         hx.unsafe_ptr().unsafe_store(i, xr[i])
     var dx = ctx.enqueue_create_buffer[DT](n_rows * n_cols)
-    ctx.enqueue_copy(dst_buf=dx, src_ptr=hx.unsafe_ptr())
+    upload_host_into[DT](ctx, dx, hx)
     var hy = ctx.enqueue_create_host_buffer[REG_LT](n_rows)
     for i in range(n_rows):
         hy.unsafe_ptr().unsafe_store(i, yr[i])
     var dy = ctx.enqueue_create_buffer[REG_LT](n_rows)
-    ctx.enqueue_copy(dst_buf=dy, src_ptr=hy.unsafe_ptr())
+    upload_host_into[REG_LT](ctx, dy, hy)
     var dsw = ctx.enqueue_create_buffer[DT](1)
     ctx.synchronize()
     var pr = _params(8, True, MSE)
@@ -367,8 +367,6 @@ def arm_c_analytic_scores(ctx: DeviceContext) raises -> Int:
     _ = dx^
     _ = dy^
     _ = dsw^
-    _ = hx^
-    _ = hy^
     if wrong == 0:
         print("  arm C OK: exactly 1.0 for both, and the right field filled")
     return wrong

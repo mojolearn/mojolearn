@@ -82,6 +82,7 @@ from ensemble.decisiontree.batched_levelalgo.kernels.builder_kernels_impl import
 )
 from ensemble.randomforest import sort_passes_for, sort_selected_rows
 from core.segmented_sort import SORT_BLOCK
+from checks.native_tests.kit import upload_host_into
 
 comptime DT = DType.float32
 comptime LT = DType.int32
@@ -188,9 +189,8 @@ def upload_i32(
     var h = ctx.enqueue_create_host_buffer[DType.int32](len(src))
     for i in range(len(src)):
         h.unsafe_ptr().unsafe_store(i, src[i])
-    ctx.enqueue_copy(dst_buf=dst, src_ptr=h.unsafe_ptr())
+    upload_host_into[DType.int32](ctx, dst, h)
     ctx.synchronize()
-    _ = h^
 
 
 def upload_u8(
@@ -199,9 +199,8 @@ def upload_u8(
     var h = ctx.enqueue_create_host_buffer[DType.uint8](len(src))
     for i in range(len(src)):
         h.unsafe_ptr().unsafe_store(i, src[i])
-    ctx.enqueue_copy(dst_buf=dst, src_ptr=h.unsafe_ptr())
+    upload_host_into[DType.uint8](ctx, dst, h)
     ctx.synchronize()
-    _ = h^
 
 
 def upload_f32(
@@ -210,9 +209,8 @@ def upload_f32(
     var h = ctx.enqueue_create_host_buffer[DType.float32](len(src))
     for i in range(len(src)):
         h.unsafe_ptr().unsafe_store(i, src[i])
-    ctx.enqueue_copy(dst_buf=dst, src_ptr=h.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, dst, h)
     ctx.synchronize()
-    _ = h^
 
 
 def upload_structs[
@@ -226,7 +224,7 @@ def upload_structs[
     var p = h.unsafe_ptr().unsafe_bitcast[T]()
     for i in range(len(src)):
         p[unsafe_offset=i] = src[i].copy()
-    ctx.enqueue_copy(dst_buf=dst, src_ptr=h.unsafe_ptr())
+    upload_host_into[DType.uint8](ctx, dst, h)
     ctx.synchronize()
     _ = h^
 

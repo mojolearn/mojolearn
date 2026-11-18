@@ -59,6 +59,7 @@ from ensemble.decisiontree.batched_levelalgo.kernels.builder_kernels import (
 from max.gpu.host import DeviceContext
 
 from std.sys.info import size_of
+from checks.native_tests.kit import download_host_into, upload_host_into
 
 comptime ORACLE = "ensemble/bench/shuffle_oracle.txt"
 
@@ -317,7 +318,7 @@ def main() raises:
     var d_items = ctx.enqueue_create_buffer[DType.uint8](
         n_nodes * size_of[NodeWorkItem]()
     )
-    ctx.enqueue_copy(dst_buf=d_items, src_ptr=h_items.unsafe_ptr())
+    upload_host_into[DType.uint8](ctx, d_items, h_items)
 
     # Split the seed into two Int32 halves BY BIT PATTERN, with every
     # intermediate bound to a `var`. Chaining these conversions inline --
@@ -348,7 +349,7 @@ def main() raises:
         block_dim=32,
     )
     var h_cols = ctx.enqueue_create_host_buffer[DType.int32](n_samples)
-    ctx.enqueue_copy(dst_buf=h_cols, src_buf=d_cols)
+    download_host_into[DType.int32](ctx, d_cols, h_cols)
     ctx.synchronize()
     # Freed-at-enqueue UAF guard: `h_items`'s last use above was the
     # enqueue itself, and `d_items` died at its `.unsafe_ptr()` in the
