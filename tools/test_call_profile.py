@@ -62,10 +62,69 @@ STRACE = """\
 """
 
 
-def window_lines(calls=2, wall_ns=4000000, m0=None, m1=None):
-    return (json.dumps({"event": "open", "calls": calls, "phase": "fit", "pid": 1, "perf": True, "malloc": m0}) + "\n" +
-            json.dumps({"event": "close", "calls": calls, "phase": "fit", "pid": 1, "perf": True, "wall_ns": wall_ns,
-                        "malloc": m1}) + "\n")
+def window_lines(calls=2, wall_ns=4000000, m0=None, m1=None, pid=1):
+    return (json.dumps({"event": "open", "calls": calls, "phase": "fit", "pid": pid, "perf": True, "shim": m0}) + "\n" +
+            json.dumps({"event": "close", "calls": calls, "phase": "fit", "pid": pid, "perf": True, "wall_ns": wall_ns,
+                        "shim": m1}) + "\n")
+
+
+#: a stand-in for py-spy: says it samples, writes its raw file when interrupted (the harness's attach and stop)
+FAKE_PYSPY = """#!%s
+import signal, sys, time
+a = sys.argv
+out = a[a.index("--output") + 1]
+pid = a[a.index("--pid") + 1]
+def stop(*_):
+    with open(out, "w") as fh:
+        fh.write("thread (1): MainThread;run (x.py:1) 7\\n")
+    print("py-spy> Wrote raw flamegraph data to " + out, flush=True)
+    sys.exit(0)
+signal.signal(signal.SIGINT, stop)
+print("py-spy> Sampling process 250 times a second (pid %%s)" %% pid, flush=True)
+while True:
+    time.sleep(0.05)
+"""
+
+#: a callgrind out file: f in a.so calls g in libc twice (inclusive 30 each), g recurses once (g'2), f self 100
+CALLGRIND = """# callgrind format
+version: 1
+creator: callgrind-3.18.1
+pid: 77
+cmd:  python3 x.py
+part: 1
+
+desc: Trigger: Client Request: callprof-window
+
+positions: line
+events: Ir
+summary: 160
+
+ob=(1) /v/site-packages/mojolearn/_mojolearn_nn.so
+fl=(1) ???
+fn=(1) run_layer
+10 100
+cob=(2) /usr/lib/x86_64-linux-gnu/libc.so.6
+cfn=(2) malloc
+calls=2 0
++1 30
+fn=(3) helper
+5 20
+cob=(2)
+cfn=(4) g
+calls=1 0
+* 40
+
+ob=(2)
+fn=(2)
+0 30
+fn=(4)
+0 30
+cfn=(5) g'2
+calls=1 0
+* 10
+fn=(5)
+0 10
+"""
 
 
 class Rows(unittest.TestCase):
@@ -99,7 +158,7 @@ class Rows(unittest.TestCase):
 class HarnessWindow(unittest.TestCase):
     def setUp(self):
         self.keys = [SR.FORCE_CALLS_ENV, SR.FORCE_CALLS_PHASE_ENV, SR.PROFILE_WINDOW_ENV, SR.PROFILE_SECONDS_ENV,
-                     SR.PROFILE_MAX_CALLS_ENV]
+                     SR.PROFILE_MAX_CALLS_ENV, SR.PYSPY_ENV, SR.SHIM_ENV, SR.CALLGRIND_ENV]
         self.old = {k: os.environ.pop(k) for k in self.keys if k in os.environ}
         del SR._RANGE[:]
 
@@ -173,7 +232,7 @@ class HarnessWindow(unittest.TestCase):
             win = CP.read_window(w)
             self.assertEqual(win["calls"], 19)
             self.assertTrue(win["perf_enabled"])
-            self.assertIsNone(win["malloc_per_call"])                        # no counter loaded
+            self.assertIsNone(win["shim_per_call"])                          # no shim loaded
             self.assertIsNotNone(win["wall_ms_per_call"])
 
     def test_window_without_perf_reader_does_not_block(self):
@@ -187,6 +246,37 @@ class HarnessWindow(unittest.TestCase):
             SR.range_close()
             self.assertFalse(CP.read_window(w)["perf_enabled"])
 
+    def test_pyspy_attached_for_the_window_only(self):
+        with tempfile.TemporaryDirectory() as d:
+            spy = os.path.join(d, "py-spy")
+            write(spy, FAKE_PYSPY % sys.executable)
+            os.chmod(spy, 0o755)
+            w, raw = os.path.join(d, "w.jsonl"), os.path.join(d, "pyspy.raw")
+            env = {SR.FORCE_CALLS_ENV: "20", SR.PROFILE_WINDOW_ENV: w, SR.PYSPY_ENV: "%s,%s,250" % (spy, raw),
+                   SR.CALLGRIND_ENV: os.path.join(d, "absent.so")}
+            self.assertTrue(SR.range_open(5, "fit", env))
+            self.assertFalse(os.path.exists(raw))                           # sampling, not yet written
+            SR.range_close()
+            with open(raw) as fh:
+                self.assertIn("MainThread", fh.read())                      # stopped by SIGINT at the close
+            win = CP.read_window(w)
+            self.assertTrue(win["pyspy"])
+            self.assertIsNone(win["pyspy_error"])
+            self.assertFalse(win["callgrind"])                              # no library: reported, not raised
+            with open(raw + ".log") as fh:
+                self.assertIn("pid %d" % os.getpid(), fh.read())             # attached to this process
+
+    def test_pyspy_that_cannot_attach_is_reported(self):
+        with tempfile.TemporaryDirectory() as d:
+            w = os.path.join(d, "w.jsonl")
+            env = {SR.FORCE_CALLS_ENV: "20", SR.PROFILE_WINDOW_ENV: w,
+                   SR.PYSPY_ENV: "%s,%s,250" % (shutil.which("false"), os.path.join(d, "r"))}
+            self.assertTrue(SR.range_open(5, "fit", env))
+            SR.range_close()
+            win = CP.read_window(w)
+            self.assertFalse(win["pyspy"])
+            self.assertIn("py-spy exited", win["pyspy_error"])
+
     def test_board_is_untouched(self):
         self.assertFalse(SR.range_open(20, "fit", {}))
         self.assertEqual(SR.calls_for(5.0, True, "fit"), SR.SMALL_ROW_CALLS)
@@ -194,16 +284,30 @@ class HarnessWindow(unittest.TestCase):
 
 
 class Parsers(unittest.TestCase):
-    def test_read_window_allocations(self):
+    def test_read_window_shim(self):
         with tempfile.TemporaryDirectory() as d:
             w = os.path.join(d, "w.jsonl")
-            write(w, window_lines(4, 8000000, {"malloc": 10, "free": 10, "bytes": 0},
-                                  {"malloc": 50, "free": 46, "bytes": 4000}))
+            write(w, window_lines(4, 8000000, {"malloc": [10, 1000, 0], "cuStreamSynchronize": [1, 50, 0]},
+                                  {"malloc": [50, 9000, 4000], "cuStreamSynchronize": [5, 4050, 0]}))
             win = CP.read_window(w)
             self.assertEqual(win["calls"], 4)
             self.assertAlmostEqual(win["wall_ms_per_call"], 2.0)
-            self.assertEqual(win["malloc_per_call"], {"malloc": 10.0, "free": 9.0, "bytes": 1000.0})
+            self.assertEqual(win["shim_per_call"], {"malloc": {"calls": 10.0, "us": 2.0, "bytes": 1000.0},
+                                                    "cuStreamSynchronize": {"calls": 1.0, "us": 1.0, "bytes": 0.0}})
             self.assertEqual(CP.read_window(os.path.join(d, "none"))["calls"], 0)
+
+    def test_categories(self):
+        self.assertEqual(CP.category("/v/site-packages/mojolearn/_mojolearn_nn.so"), "bindings")
+        self.assertEqual(CP.category("libcuda.so.595.112.07"), "cuda_driver")
+        self.assertEqual(CP.category("libAsyncRTMojoBindings.so"), "mojo_runtime")
+        self.assertEqual(CP.category("libKGENCompilerRTShared.so"), "mojo_runtime")
+        self.assertEqual(CP.category("/usr/lib/libpython3.11.so.1.0"), "cpython")
+        self.assertEqual(CP.category("tools/bench_board_algos.py"), "cpython")
+        self.assertEqual(CP.category("<__array_function__ internals>"), "cpython")
+        self.assertEqual(CP.category("/usr/bin/python3.11"), "cpython")
+        self.assertEqual(CP.category("libc.so.6"), "libc")
+        self.assertEqual(CP.category("numpy/core/_multiarray_umath.cpython-311-x86_64-linux-gnu.so"), "other")
+        self.assertEqual(CP.category(""), "unresolved")
 
     def test_perf_script_to_top_frames(self):
         samples = list(CP.perf_samples(PERF_SCRIPT.splitlines(True)))
@@ -247,47 +351,87 @@ class Parsers(unittest.TestCase):
             self.assertEqual(s["total_per_call"], 2.0)
             self.assertEqual(s["per_call"][0], {"syscall": "ioctl", "per_call": 1.0, "us_per_call": 10.0})
 
-    def test_pyspy_under_the_runner_method(self):
+    def test_pyspy_main_thread_and_shares(self):
+        raw = ("thread (1): MainThread;<module> (b.py:9);Runner.fit (/r/tools/bench_board_algos.py:3094);"
+               "seq_tensor_upload (_mojolearn_native_sequence.so);cuMemcpyHtoDAsync_v2 (libcuda.so.595) 20\n"
+               "thread (1): MainThread;<module> (b.py:9);Runner.fit (/r/tools/bench_board_algos.py:3094);"
+               "seq_tensor_upload (_mojolearn_native_sequence.so) 30\n"
+               "thread (1): MainThread;<module> (b.py:9);Runner.fit (/r/tools/bench_board_algos.py:3094) 40\n"
+               "thread (1): MainThread;<module> (b.py:9);0x7f00 (libKGENCompilerRTShared.so) 10\n"
+               "thread (2): AsyncRT;0x7f01 (libAsyncRTRuntimeGlobals.so) 99\n")
         with tempfile.TemporaryDirectory() as d:
-            write(os.path.join(d, "c"), "process 1;main (/r/tools/bench_board_algos.py:7600);fit (/r/tools/bench_board_algos.py:3093);"
-                  "fit (mojolearn/nn.py:10);run_layer (_mojolearn_nn.so) 30\n"
-                  "process 1;main (/r/tools/bench_board_algos.py:7600);infer (/r/tools/bench_board_algos.py:3098);x 5\n"
-                  "process 1;load (/r/tools/bench_board_algos.py:100) 7\n")
-            write(os.path.join(d, "w.jsonl"), window_lines(3))
-            rc = CP.main(["pyspy", "--collapsed", os.path.join(d, "c"), "--window", os.path.join(d, "w.jsonl"),
-                          "--phase", "fit", "--out", os.path.join(d, "p.json")])
+            write(os.path.join(d, "c"), raw)
+            write(os.path.join(d, "w.jsonl"), window_lines(4))
+            rc = CP.main(["pyspy", "--raw", os.path.join(d, "c"), "--window", os.path.join(d, "w.jsonl"),
+                          "--out", os.path.join(d, "p.json")])
             self.assertEqual(rc, 0)
             with open(os.path.join(d, "p.json")) as fh:
                 p = json.load(fh)
-            self.assertEqual(p["samples"], 1)
-            self.assertEqual(p["outside_samples"], 12)
-            self.assertEqual(p["self"][0]["frame"], "run_layer (_mojolearn_nn.so)")
-            self.assertAlmostEqual(p["self"][0]["us_per_call"], 40000.0)          # 30 samples / 250 Hz / 3 calls
+            self.assertEqual(p["thread"], "thread (1): MainThread")
+            self.assertEqual(p["sample_count"], 100)
+            self.assertEqual(p["other_threads"], {"thread (2): AsyncRT": 99})
+            self.assertEqual(p["self"][0]["frame"], "Runner.fit (/r/tools/bench_board_algos.py)")   # lines merged
+            self.assertAlmostEqual(p["self"][0]["us_per_call"], 40000.0)          # 40 samples / 250 Hz / 4 calls
+            self.assertEqual(p["shim_share"], 0.2)                                # the libcuda leaf: the shim's
+            self.assertEqual(p["shares"], {"bindings": 0.3, "cpython": 0.4, "mojo_runtime": 0.1})
+            self.assertEqual(p["bindings"], [{"frame": "seq_tensor_upload (_mojolearn_native_sequence.so)",
+                                              "share": 0.3}])
+
+    def test_callgrind_self_inclusive_and_recursion(self):
+        g = CP.callgrind_parse(CALLGRIND.splitlines(True))
+        self.assertEqual(g["pid"], 77)
+        self.assertEqual(g["trigger"], "Client Request: callprof-window")
+        so, lc = "/v/site-packages/mojolearn/_mojolearn_nn.so", "/usr/lib/x86_64-linux-gnu/libc.so.6"
+        self.assertEqual(g["self"][("run_layer", so)], 100)
+        self.assertEqual(g["inclusive"][("run_layer", so)], 130)
+        self.assertEqual(g["self"][("helper", so)], 20)
+        self.assertEqual(g["inclusive"][("helper", so)], 60)
+        self.assertEqual(g["self"][("g", lc)], 40)                 # g and g'2 merged for self
+        self.assertEqual(g["inclusive"][("g", lc)], 40)            # g'2's inclusive is inside g's: not added again
+        with tempfile.TemporaryDirectory() as d:
+            write(os.path.join(d, "cg", "callgrind.out.77.1"), CALLGRIND)
+            write(os.path.join(d, "cg", "callgrind.out.77"), "pid: 77\nevents: Ir\nsummary: 0\n")   # the exit dump
+            write(os.path.join(d, "w.jsonl"), window_lines(2, pid=77))
+            rc = CP.main(["callgrind", "--dir", os.path.join(d, "cg"), "--window", os.path.join(d, "w.jsonl"),
+                          "--out", os.path.join(d, "c.json")])
+            self.assertEqual(rc, 0)
+            with open(os.path.join(d, "c.json")) as fh:
+                c = json.load(fh)
+            self.assertEqual(c["ir_per_call"], 95.0)                   # 190 Ir of self over 2 calls
+            self.assertEqual(c["self"][0], {"frame": "run_layer [_mojolearn_nn.so]", "category": "bindings",
+                                            "ir_per_call": 50.0, "pct": 52.63})
+            self.assertEqual(c["categories"], {"bindings": 60.0, "libc": 20.0})
+            self.assertEqual(c["shim_ir_per_call"], 15.0)               # malloc: the shim's
+            self.assertEqual(len(c["files"]), 2)
 
 
 class Report(unittest.TestCase):
-    def _res(self, d, with_nsys=True, with_time=True):
+    def _res(self, d, with_nsys=True, with_time=True, with_sources=True):
         rows = "algos/a/synthetic/rows=full\tfit\tname=a\n"
         write(os.path.join(d, "rows.tsv"), rows)
         rd = os.path.join(d, "rows", "a")
         if with_time:
-            write(os.path.join(rd, "time", "window.jsonl"), window_lines(10, 5000000))
-        write(os.path.join(rd, "perf", "window.jsonl"), window_lines(100, 60000000))
-        write(os.path.join(rd, "perf", "perf.json"), json.dumps(
-            {"samples": 50, "cpu_ms_per_call": 0.4, "weight": "w",
-             "self": [{"frame": "_start [python3]", "pct": 50.0, "us_per_call": 200.0},
-                      {"frame": "cuMemAlloc_v2 [libcuda.so.1]", "pct": 30.0, "us_per_call": 120.0}],
-             "inclusive": [{"frame": "_start [python3]", "pct": 100.0, "us_per_call": 400.0}]}))
+            write(os.path.join(rd, "time", "window.jsonl"), window_lines(10, 5000000))       # 500 us per call
+        write(os.path.join(rd, "pyspy", "window.jsonl"), window_lines(100, 60000000))
+        if with_sources:
+            write(os.path.join(rd, "pyspy", "pyspy.json"), json.dumps(
+                {"samples": 50, "cpu_ms_per_call": 0.4, "weight": "w", "shim_share": 0.2,
+                 "shares": {"bindings": 0.4, "cpython": 0.2, "mojo_runtime": 0.1, "unresolved": 0.1},
+                 "bindings": [{"frame": "run_layer (_mojolearn_nn.so)", "share": 0.4}],
+                 "self": [{"frame": "<module> (b.py)", "pct": 50.0, "us_per_call": 200.0},
+                          {"frame": "run_layer (_mojolearn_nn.so)", "pct": 30.0, "us_per_call": 120.0}],
+                 "inclusive": [{"frame": "<module> (b.py)", "pct": 100.0, "us_per_call": 400.0}]}))
+            # shim: 100 us of CUDA (a sync of 80, two launches of 10) and 20 us of libc per call
+            write(os.path.join(rd, "shim", "window.jsonl"), window_lines(
+                4, 2000000, {"cuStreamSynchronize": [0, 0, 0], "cuLaunchKernelEx": [0, 0, 0], "malloc": [0, 0, 0]},
+                {"cuStreamSynchronize": [4, 320000, 0], "cuLaunchKernelEx": [8, 80000, 0], "malloc": [40, 80000, 4096]}))
         if with_nsys:
             write(os.path.join(rd, "nsys", "nsys.json"), json.dumps(
                 {"captured": True, "api_ms": 0.2, "kernel_ms": 0.05, "sync_ms": 0.1, "window_ms": 0.7,
                  "counts": {"launch": 3.0, "sync": 1.0, "alloc": 2.0}, "api": {"cuMemAlloc_v2": {"calls": 2.0, "ms": 0.1}},
                  "mem": {"h2d": {"count": 1.0, "mb": 0.01, "ms": 0.01}}}))
-        write(os.path.join(rd, "strace", "window.jsonl"), window_lines(4, 1, {"malloc": 0, "free": 0}, {"malloc": 40, "free": 40}))
-        write(os.path.join(rd, "strace", "strace.json"), json.dumps(
-            {"total_per_call": 12.0, "per_call": [{"syscall": "ioctl", "per_call": 8.0, "us_per_call": 1.0}]}))
 
-    def test_report_names_the_host_costs(self):
+    def test_report_splits_the_host_time(self):
         with tempfile.TemporaryDirectory() as d:
             self._res(d)
             rc = CP.main(["report", "--res", d, "--rows-file", os.path.join(d, "rows.tsv"), "--wheel", "w1"])
@@ -295,14 +439,25 @@ class Report(unittest.TestCase):
             with open(os.path.join(d, "CALL-PROFILE-nvidia.json")) as fh:
                 doc = json.load(fh)
             r = doc["rows"][0]
-            self.assertAlmostEqual(r["wall_ms_per_call"], 0.5)                    # the time pass, not perf's 0.6
+            self.assertAlmostEqual(r["wall_ms_per_call"], 0.5)                    # the time pass, not py-spy's 0.6
             self.assertAlmostEqual(r["split"]["host_outside_cuda_ms"], 0.3)
-            self.assertEqual(r["malloc_per_call"]["malloc"], 10.0)
-            self.assertEqual(r["largest_host_costs"][0]["frame"], "cuMemAlloc_v2 [libcuda.so.1]")
+            h = r["host"]
+            self.assertEqual((h["cuda_us"], h["libc_us"], h["rest_us"]), (100.0, 20.0, 380.0))   # of the shim's 500
+            self.assertEqual(h["split_wall_us"], 500.0)
+            self.assertEqual(h["cuda"]["cuStreamSynchronize"], {"calls": 1.0, "us": 80.0, "bytes": 0.0})
+            self.assertEqual(h["source"], "py-spy")
+            # the rest (380 us) by the sampled shares without the shim's 20 %: bindings 0.4 / 0.8 -> 190 us
+            self.assertEqual(h["parts_us"], {"bindings": 190.0, "cpython": 95.0, "mojo_runtime": 47.5})
+            self.assertEqual(h["unexplained_us"], 47.5)
+            self.assertEqual(h["bindings"], [{"frame": "run_layer (_mojolearn_nn.so)", "us": 190.0}])
+            self.assertEqual(r["function_sources"], ["pyspy", "shim"])
+            self.assertEqual(r["largest_host_costs"][0]["frame"], "run_layer (_mojolearn_nn.so)")
             with open(os.path.join(d, "CALL-PROFILE-nvidia.md")) as fh:
                 md = fh.read()
-            self.assertIn("LARGEST HOST COSTS (perf, self time per call): cuMemAlloc_v2 [libcuda.so.1] 120.0 us", md)
-            self.assertIn("syscalls per call (12.0 in all): ioctl 8.00", md)
+            self.assertIn("LARGEST HOST COSTS (pyspy, self per call): run_layer (_mojolearn_nn.so) 120.0 us", md)
+            self.assertIn("CUDA driver per call (shim): cuStreamSynchronize 1.00 x 80.00 us", md)
+            self.assertIn("| a | fit | 0.500 | 0.050 | 0.200 | 3.0 | 1.0 | 2.0 | 1.0 | - | 190.0 | 95.0 | 47.5 | 100.0 "
+                          "| 20.0 | 0.0 | 47.5 | py-spy |", md)
 
     def test_report_exit_codes(self):
         with tempfile.TemporaryDirectory() as d:
@@ -310,9 +465,14 @@ class Report(unittest.TestCase):
             self.assertEqual(CP.main(["report", "--res", d, "--rows-file", os.path.join(d, "rows.tsv")]),
                              CP.EXIT_NO_PROFILE)
         with tempfile.TemporaryDirectory() as d:
-            self._res(d, with_time=False)                                          # perf's window stands in
+            self._res(d, with_sources=False)                                      # nsys alone is not enough
+            self.assertEqual(CP.main(["report", "--res", d, "--rows-file", os.path.join(d, "rows.tsv")]),
+                             CP.EXIT_NO_PROFILE)
+        with tempfile.TemporaryDirectory() as d:
+            self._res(d, with_time=False)                                          # the shim's window stands in
             self.assertEqual(CP.main(["report", "--res", d, "--rows-file", os.path.join(d, "rows.tsv")]), CP.EXIT_OK)
-            shutil.rmtree(os.path.join(d, "rows", "a", "perf"))
+            for p in ("shim", "pyspy"):
+                shutil.rmtree(os.path.join(d, "rows", "a", p))
             self.assertEqual(CP.main(["report", "--res", d, "--rows-file", os.path.join(d, "rows.tsv")]),
                              CP.EXIT_NO_WALL)
 
@@ -325,11 +485,22 @@ class Job(unittest.TestCase):
         self.assertEqual(r.returncode, 2)
         self.assertIn("box_persist_run", r.stderr)
 
-    @unittest.skipUnless(shutil.which("cc"), "no C compiler")
-    def test_malloc_counter_compiles(self):
-        r = subprocess.run(["cc", "-fsyntax-only", os.path.join(HERE, "ops", "call_profile_malloc.c")],
+    @unittest.skipUnless(shutil.which("cc") and sys.platform.startswith("linux"), "glibc and a C compiler")
+    def test_shims_compile(self):
+        r = subprocess.run(["cc", "-fsyntax-only", "-Wall", "-Werror", os.path.join(HERE, "ops", "call_profile_shim.c")],
                            capture_output=True, text=True)
         self.assertEqual(r.returncode, 0, r.stderr[-800:])
+        if os.path.isfile("/usr/include/valgrind/callgrind.h"):
+            r = subprocess.run(["cc", "-fsyntax-only", os.path.join(HERE, "ops", "call_profile_cg.c")],
+                               capture_output=True, text=True)
+            self.assertEqual(r.returncode, 0, r.stderr[-800:])
+
+    def test_default_passes_are_known(self):
+        with open(JOB) as fh:
+            body = fh.read()
+        self.assertIn("CP_PASSES:-%s}" % ",".join(CP.DEFAULT_PASSES), body)
+        for p in CP.PASSES:
+            self.assertIn("        %s)" % p, body)                               # run_pass has a case per pass
 
 
 if __name__ == "__main__":

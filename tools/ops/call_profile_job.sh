@@ -1,46 +1,57 @@
 #!/bin/bash
 # tools/ops/call_profile_job.sh -- WHERE THE WALL TIME OF ONE SMALL PUBLIC CALL GOES, at function level, host side and
-# GPU side, on OUR wheel alone (lane fb9-call-profile, 2026-11-17; no prior wheel: Andrew's direction). Diagnostic
-# tooling, not a board and not a measurement. For each row of a rows file (CP_ROWS_FILE, default
-# tools/ops/call_profile_rows.tsv: race id, forced phase, name) it runs the row's race on the candidate venv once per
-# pass, each a forced scored run whose extra calls sit inside the harness's profile window
-# (tools/bench_board_small_rows.py range_open/range_close: calls 2..n, nothing of the data load, the fit before an
-# inference, the warmup or the first call) and whose n fills the pass's seconds at the first call's time:
+# GPU side, on OUR wheel alone (lane fb9-call-profile, 2026-11-17; function level without perf events: fb15-profiler,
+# 2026-11-18; no prior wheel: Andrew's direction). Diagnostic tooling, not a board and not a measurement. For each row
+# of a rows file (CP_ROWS_FILE, default tools/ops/call_profile_rows.tsv: race id, forced phase, name) it runs the
+# row's race on the candidate venv once per pass, each a forced scored run whose extra calls sit inside the harness's
+# profile window (tools/bench_board_small_rows.py range_open/range_close: calls 2..n, nothing of the data load, the fit
+# before an inference, the warmup or the first call) and whose n fills the pass's seconds at the first call's time:
 #
 #   tools/nvidia_central.sh submit measure --cap 60 --results box-out/callprof-<tag> tools/ops/call_profile_job.sh
 #
-#   time    no tool: wall per call (the window's clock over its calls)                       CP_TIME_SECONDS (3)
-#   perf    perf record -e cpu-clock -F 999 --call-graph dwarf -D -1 --control fifo: samples only inside the window
-#           (the harness enables and disables perf through the FIFO); perf script -> folded stacks -> top 40 self and
-#           top 40 inclusive frames, percent and microseconds of CPU per call. In the same process, as the
-#           cross-check, py-spy record --native --subprocesses: stacks under the forced phase's runner method (its
-#           ptrace pauses are off-CPU time, so perf's on-CPU shares stand; the wall comes from the time pass). No
-#           usable perf in the container: py-spy alone                                          CP_PERF_SECONDS (10)
-#   nsys    nsys profile -t cuda,nvtx --capture-range=nvtx (the window's NVTX range): per call launches, syncs,
-#           allocations, H2D/D2H copies and bytes, CUDA API ms, GPU kernel ms (tools/ops/attribution_report.py nsys)
+#   time       no tool: wall per call (the window's clock over its calls)                       CP_TIME_SECONDS (3)
+#   pyspy      py-spy record --native --threads, attached BY THE HARNESS to the race process for the window only (the
+#              process allows its child to trace it: prctl PR_SET_PTRACER_ANY; no perf events, no CAP_SYS_PTRACE).
+#              Main-thread stacks: top 40 self and inclusive frames, and the leaf-category shares of the host split
+#                                                                                                 CP_PYSPY_SECONDS (10)
+#   nsys       nsys profile -t cuda,nvtx --capture-range=nvtx (the window's NVTX range): per call launches, syncs,
+#              allocations, H2D/D2H copies and bytes, CUDA API ms, GPU kernel ms (tools/ops/attribution_report.py nsys)
 #                                                                                                 CP_NSYS_SECONDS (3)
-#   strace  strace -f -ttt -T, cut to the window by the harness's marker stats: syscalls per call (mmap, munmap,
-#           madvise, futex, ioctl, ...), plus the LD_PRELOAD libc allocation counter (tools/ops/call_profile_malloc.c)
-#           read at the window's open and close: mallocs, frees and bytes per call             CP_STRACE_SECONDS (3)
-# Report: CALL-PROFILE-nvidia.md and .json (tools/ops/call_profile.py report): per row wall ms per call, the split GPU
-# kernel / CUDA API / host outside CUDA, the top frames, syscalls and allocations per call, and one line LARGEST HOST
-# COSTS naming functions. Raw data kept: rows/<row>/perf/perf.folded, rows/<row>/perf/pyspy.collapsed, the nsys
-# report and CSVs, rows/<row>/strace/strace.txt.gz. job/symbols.txt says which .so files carry a symbol table.
+#   shim       LD_PRELOAD tools/ops/call_profile_shim.c (built here): count, ns and bytes per call of the CUDA driver
+#              entries (cuLaunchKernel(Ex), cuStreamSynchronize, cuStreamIsCapturing, cuMemcpy*, cuMemAlloc*,
+#              cuMemFree*; caught through dlsym and cuGetProcAddress, the way the Mojo runtime finds them), libc
+#              allocations, mmap/munmap, memcpy/memset of 64 KiB or more                          CP_SHIM_SECONDS (3)
+#   callgrind  valgrind --tool=callgrind --instr-atstart=no --collect-atstart=no --trace-children=yes; the harness
+#              turns instrumentation and collection on for the window only (tools/ops/call_profile_cg.c, ctypes):
+#              exact instructions per call by function, self and inclusive, top 40, and by object (bindings, CPython,
+#              Mojo runtime, CUDA driver, libc). At most CP_CALLGRIND_CALLS (300) calls        CP_CALLGRIND_SECONDS (10)
+#   perf       perf record -e cpu-clock --call-graph dwarf, enabled through the harness's FIFO: only where the
+#              container allows perf events (RunPod: perf_event_paranoid=4, refused; skipped)  CP_PERF_SECONDS (10)
+#   strace     strace -f -ttt -T cut to the window by the harness's marker stats: syscalls per call (opt-in)
+#                                                                                                 CP_STRACE_SECONDS (3)
+# Report: CALL-PROFILE-nvidia.md and .json (tools/ops/call_profile.py report): per row wall ms per call, the nsys split
+# (GPU kernel / CUDA API), and the host microseconds per call split into our binding code (by function), CPython, the
+# Mojo runtime, the CUDA driver entries (shim, by entry), libc allocations and copies (shim) and the unexplained rest;
+# the top frames (py-spy, callgrind, perf) and one line LARGEST HOST COSTS naming functions. Raw data kept:
+# rows/<row>/pyspy/pyspy.raw, rows/<row>/callgrind/callgrind.out.*.gz, the nsys report and CSVs, the window files.
+# job/symbols.txt says which .so files carry a symbol table.
 #
-# PARALLEL PLAN (HARD RULES 2026-11-05/07): the timed and profiled race processes are SERIAL BY NATURE: one process on
-# the one GPU at a time (a profiled run must not share the GPU or the host with another). Everything else uses the
-# cgroup's cores: the tool installs (apt perf/strace/gcc/nsight, pip py-spy) at once; the post-processing (perf script
-# and folding, py-spy folding, nsys stats exports, the strace parse) of every row at once, alloc_cores workers. The
-# race drivers use every core (no thread caps). job/cores.log: busy cores of total.
+# PARALLEL PLAN (HARD RULES 2026-11-05/07): the timed passes (time, pyspy, nsys, shim, perf, strace) are SERIAL BY
+# NATURE: one race process on the one GPU and host at a time (a timed run must not share either). The callgrind passes
+# count instructions, which do not depend on what else runs: they run after the timed passes, every row at once, up
+# to min(rows, allocated cores, MemAvailable / CP_CALLGRIND_GB (6)). The tool installs run at once (pip beside one apt
+# chain: two apt-gets at once fail on the dpkg lock, which is what lost strace on the 2026-11-17 run); the
+# post-processing of every row and tool runs at once over the allocated cores. job/cores.log: busy cores of total.
 #
 # Pod minutes: `python3 tools/ops/call_profile.py estimate [--rows-file F]`, printed at the plan phase (target < 30).
-# Knobs: CP_ROWS_FILE, CP_ROWS (comma list of row names), CP_PASSES (default time,perf,nsys,strace), CP_PARTS
+# Knobs: CP_ROWS_FILE, CP_ROWS (comma list of row names), CP_PASSES (default time,pyspy,nsys,shim,callgrind), CP_PARTS
 # (default tools,plan,install,run,post,report; the report reads whatever the results dir holds), CP_<PASS>_SECONDS,
-# CP_PERF_FREQ (999), CP_MANIFEST (the candidate's wheel-manifest json; default: the newest sibling results dir's
+# CP_PYSPY_RATE (250), CP_PERF_FREQ (999), CP_CALLGRIND_CALLS (300), CP_CALLGRIND_GB (6), CP_CALLGRIND_TIMEOUT (1800 s),
+# CP_MANIFEST (the candidate's wheel-manifest json; default: the newest sibling results dir's
 # job/wheel-manifest-candidate.json: used to install the venv when it is missing), PC_CACHE_ROOT, PC_DATA_ROOT,
-# PC_GPU_TOKEN (L40S), PC_ALLOW_HW_DIFF. EXIT: 0 every row has its wall, frames and nsys counts; 6 a row lacks a
-# profile part; 7 a row lacks a wall time; 2 refused to start, 3 wrong box, 4 no venv, 5 no plan, 124 terminated.
-# Tests: tools/test_call_profile.py.
+# PC_GPU_TOKEN (L40S), PC_ALLOW_HW_DIFF. EXIT: 0 every row has its wall, its nsys counts and at least one
+# function-level source (py-spy, callgrind, the shim or perf); 6 a row lacks one; 7 a row lacks a wall time; 2 refused
+# to start, 3 wrong box, 4 no venv, 5 no plan, 124 terminated. Tests: tools/test_call_profile.py.
 set -uo pipefail
 JOB_NAME=call-profile
 # shellcheck source=tools/ops/box_job_lib.sh
@@ -69,14 +80,18 @@ CACHE_ROOT=${PC_CACHE_ROOT:-/root/pc-cache}
 TOKEN=${PC_GPU_TOKEN:-L40S}
 RECIPES="$TREE/bench/results/paper_compare/recipes-$V.json"
 ROWS_FILE=${CP_ROWS_FILE:-$TREE/tools/ops/call_profile_rows.tsv}
-IFS=',' read -r -a PASSES <<< "${CP_PASSES:-time,perf,nsys,strace}"
+IFS=',' read -r -a PASSES <<< "${CP_PASSES:-time,pyspy,nsys,shim,callgrind}"
 PARTS=",${CP_PARTS:-tools,plan,install,run,post,report},"
 part() { [[ "$PARTS" == *",$1,"* ]]; }
 ROWS_WANT=",${CP_ROWS:-},"
 row_wanted() { [ "$ROWS_WANT" = ",," ] || [[ "$ROWS_WANT" == *",$1,"* ]]; }
-declare -A SECS=([time]=${CP_TIME_SECONDS:-3} [perf]=${CP_PERF_SECONDS:-10}
-                 [nsys]=${CP_NSYS_SECONDS:-3} [strace]=${CP_STRACE_SECONDS:-3})
+declare -A SECS=([time]=${CP_TIME_SECONDS:-3} [pyspy]=${CP_PYSPY_SECONDS:-10} [perf]=${CP_PERF_SECONDS:-10}
+                 [nsys]=${CP_NSYS_SECONDS:-3} [shim]=${CP_SHIM_SECONDS:-3} [callgrind]=${CP_CALLGRIND_SECONDS:-10}
+                 [strace]=${CP_STRACE_SECONDS:-3})
+has_pass() { [[ " ${PASSES[*]} " == *" $1 "* ]]; }
 FREQ=${CP_PERF_FREQ:-999}
+RATE=${CP_PYSPY_RATE:-250}
+CG_CALLS=${CP_CALLGRIND_CALLS:-300}
 RANGE=attr-calls     # the NVTX range name: tools/ops/attribution_report.py nsys reads the window under this name
 VENV="$CACHE_ROOT/venv-candidate"
 APY="$VENV/bin/python"
@@ -116,7 +131,7 @@ prune_persist_staging
 host_probe_phase
 arith_gate   # tools/ops/box_job_lib.sh: identical-path arithmetic on this GPU, before any timing
 
-# ---- tools (CPU, all at once): perf, strace, a C compiler, nsys, py-spy -------------------------------------------
+# ---- tools (CPU, all at once): py-spy beside ONE apt chain (nsight, then valgrind/gcc/strace/perf) ----------------
 find_perf() {   # the real perf binary (Ubuntu's /usr/bin/perf is a wrapper that refuses a kernel it has no tools for)
     local c
     for c in $(ls -d /usr/lib/linux-tools/*/perf /usr/lib/linux-tools-*/perf 2> /dev/null | sort -V -r) "$(command -v perf 2> /dev/null)"; do
@@ -124,23 +139,32 @@ find_perf() {   # the real perf binary (Ubuntu's /usr/bin/perf is a wrapper that
     done
     return 1
 }
-install_apt_tools() {   # perf (linux-tools), strace, gcc: whichever is missing, one apt transaction
-    local log="$RES/logs/apt-tools.log" want=()
-    find_perf > /dev/null || want+=(linux-tools-common linux-tools-generic)
-    command -v strace > /dev/null || want+=(strace)
+cg_header() {   # valgrind's client-request header (apt's valgrind package ships it; a pixi/conda valgrind beside its bin)
+    local v
+    for v in /usr/include/valgrind "$(dirname "$(dirname "$(command -v valgrind 2> /dev/null || echo /x/x)")")/include/valgrind"; do
+        [ -f "$v/callgrind.h" ] && { dirname "$v"; return 0; }
+    done
+    return 1
+}
+install_apt_tools() {   # whichever is missing, one apt transaction; waits for any other apt on the pod (dpkg lock)
+    local log="$RES/logs/apt-tools.log" want=() apt=(apt-get -o DPkg::Lock::Timeout=600 -y -qq)
+    if has_pass callgrind; then
+        command -v valgrind > /dev/null && cg_header > /dev/null || want+=(valgrind)
+    fi
+    has_pass perf && { find_perf > /dev/null || want+=(linux-tools-common linux-tools-generic); }
+    has_pass strace && { command -v strace > /dev/null || want+=(strace); }
     command -v cc > /dev/null || command -v gcc > /dev/null || want+=(gcc libc6-dev)
     command -v readelf > /dev/null || want+=(binutils)
     [ ${#want[@]} -eq 0 ] && return 0
-    DEBIAN_FRONTEND=noninteractive apt-get update -qq >> "$log" 2>&1
-    DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends "${want[@]}" >> "$log" 2>&1
+    DEBIAN_FRONTEND=noninteractive "${apt[@]}" update >> "$log" 2>&1
+    DEBIAN_FRONTEND=noninteractive "${apt[@]}" install --no-install-recommends "${want[@]}" >> "$log" 2>&1
     echo "apt ${want[*]} rc=$?" >> "$J/tools-how.txt"
 }
 if part tools; then
     phase tools
     : > "$J/tools-how.txt"
     pids=()
-    install_nsight & pids+=($!)
-    install_apt_tools & pids+=($!)
+    { install_nsight; install_apt_tools; } & pids+=($!)      # serial: both use apt (one dpkg lock)
     "$PY" -m pip install -q --disable-pip-version-check py-spy > "$RES/logs/pip-pyspy.log" 2>&1 & pids+=($!)
     "$APY" -m pip install -q --disable-pip-version-check --target "$CACHE_ROOT/attr-nvtx-candidate" nvtx \
         > "$RES/logs/pip-nvtx.log" 2>&1 & pids+=($!)
@@ -151,26 +175,33 @@ NSYS=$(find_tool nsys) || NSYS=
 PERF=$(find_perf) || PERF=
 PYSPY=$(find_tool py-spy) || PYSPY=
 STRACE=$(command -v strace) || STRACE=
+VALGRIND=$(command -v valgrind) || VALGRIND=
 CC=$(command -v cc || command -v gcc) || CC=
-MALLOC_SO="$CACHE_ROOT/callprof_malloc.so"
-if [ -n "$CC" ] && { [ ! -f "$MALLOC_SO" ] || [ "$TREE/tools/ops/call_profile_malloc.c" -nt "$MALLOC_SO" ]; }; then
-    "$CC" -O2 -shared -fPIC -o "$MALLOC_SO" "$TREE/tools/ops/call_profile_malloc.c" > "$RES/logs/cc-malloc.log" 2>&1 \
-        || { say "allocation counter did not build: $(head -n 3 "$RES/logs/cc-malloc.log" | tr '\n' ' ')"; rm -f "$MALLOC_SO"; }
-fi
-[ -f "$MALLOC_SO" ] || MALLOC_SO=
+build_so() {   # out, source, extra cc args...: (re)build a shim on the pod; empty echo when it does not build
+    local out=$1 src=$2; shift 2
+    if [ -n "$CC" ] && { [ ! -f "$out" ] || [ "$src" -nt "$out" ]; }; then
+        "$CC" -O2 -fno-builtin -shared -fPIC -o "$out" "$src" "$@" > "$RES/logs/cc-$(basename "$out" .so).log" 2>&1 \
+            || { say "$(basename "$src") did not build: $(head -n 3 "$RES/logs/cc-$(basename "$out" .so).log" | tr '\n' ' ')"; rm -f "$out"; }
+    fi
+    [ -f "$out" ] && echo "$out"
+}
+SHIM_SO=$(build_so "$CACHE_ROOT/callprof_shim.so" "$TREE/tools/ops/call_profile_shim.c" -ldl)
+CG_SO=
+CG_INC=$(cg_header) && CG_SO=$(build_so "$CACHE_ROOT/callprof_cg.so" "$TREE/tools/ops/call_profile_cg.c" -I"$CG_INC")
 PERF_OK=
 if [ -n "$PERF" ]; then      # can this container open perf events at all (seccomp, perf_event_paranoid)?
     "$PERF" stat -e cpu-clock -- true > "$RES/logs/perf-probe.log" 2>&1 && PERF_OK=1
 fi
 {
     echo "perf ${PERF:-absent} $([ -n "$PERF" ] && "$PERF" --version 2>&1 | head -n 1) events $([ -n "$PERF_OK" ] && echo usable || echo "REFUSED: $(tail -n 2 "$RES/logs/perf-probe.log" 2> /dev/null | tr '\n' ' ')") perf_event_paranoid=$(cat /proc/sys/kernel/perf_event_paranoid 2> /dev/null || echo '?')"
-    echo "py-spy ${PYSPY:-absent} $([ -n "$PYSPY" ] && "$PYSPY" --version 2>&1 | head -n 1)"
+    echo "py-spy ${PYSPY:-absent} $([ -n "$PYSPY" ] && "$PYSPY" --version 2>&1 | head -n 1) ptrace_scope=$(cat /proc/sys/kernel/yama/ptrace_scope 2> /dev/null || echo 'no yama')"
+    echo "valgrind ${VALGRIND:-absent} $([ -n "$VALGRIND" ] && "$VALGRIND" --version 2>&1 | head -n 1) callgrind window ${CG_SO:-absent (no valgrind/callgrind.h or no C compiler: logs/apt-tools.log, logs/cc-callprof_cg.log)}"
+    echo "timing shim ${SHIM_SO:-absent (no C compiler or build failed: logs/cc-callprof_shim.log)}"
     echo "nsys ${NSYS:-absent} $([ -n "$NSYS" ] && "$NSYS" --version 2>&1 | head -n 1)"
     echo "strace ${STRACE:-absent} $([ -n "$STRACE" ] && strace -V 2>&1 | head -n 1)"
-    echo "allocation counter ${MALLOC_SO:-absent (no C compiler or build failed: logs/cc-malloc.log)}"
     echo "driver: $(nvidia-smi --query-gpu=driver_version --format=csv,noheader | head -n 1)"
 } > "$J/tools.txt" 2>&1
-say "tools: $(tr '\n' ';' < "$J/tools.txt" | head -c 800)"
+say "tools: $(tr '\n' ';' < "$J/tools.txt" | head -c 900)"
 
 # ---- plan (CPU): the rows, their races' board arguments, the estimate --------------------------------------------
 if part plan || [ ! -s "$RES/plan/board-args.txt" ] || [ ! -s "$RES/plan/runs.tsv" ]; then
@@ -235,42 +266,53 @@ SITE=$("$APY" -c 'import sysconfig; print(sysconfig.get_paths()["purelib"])' 2> 
 } > "$J/symbols.txt" 2>&1
 say "symbols: $(awk -F'\t' 'NR>1 {n++; if ($2=="STRIPPED") s++} END {printf "%d shared objects, %d stripped (job/symbols.txt)", n, s}' "$J/symbols.txt")"
 
-# ---- run (GPU, serial): every pass of every row, one race process at a time --------------------------------------
-# one pass of one row: the forced scored run of the row's phase with its window, under the pass's tool
+# ---- run (GPU, serial; then the callgrind passes of every row at once) ---------------------------------------------
+# one pass of one row: the forced scored run of the row's phase with its window, under the pass's tool. A pass whose
+# tool this pod cannot run writes run.skipped (not an error: the report needs one function-level source per row).
 run_pass() {   # row, race id, phase, pass
-    local row=$1 rid=$2 ph=$3 pass=$4 d="$RES/rows/$1/$4" t0=$SECONDS rc err
+    local row=$1 rid=$2 ph=$3 pass=$4 d="$RES/rows/$1/$4" t0=$SECONDS rc err cache="$CACHE_ROOT/c1"
     rm -rf "$d"; mkdir -p "$d"
     echo "$rid" > "$d/ids"
     local envs=(MOJOLEARN_BENCH_FORCE_CALLS=20 MOJOLEARN_BENCH_FORCE_CALLS_PHASE="$ph"
                 MOJOLEARN_BENCH_PROFILE_WINDOW="$d/window.jsonl" MOJOLEARN_BENCH_PROFILE_SECONDS="${SECS[$pass]}")
     local pre=()
+    skip() { echo "$1" > "$d/run.skipped"; say "run $row $pass SKIPPED: $1"; }
     case $pass in
         time) ;;
-        perf)      # perf outside (only the window's samples), py-spy inside (the whole run, cut by its frames)
-            [ -n "$PERF_OK$PYSPY" ] || { echo "neither perf (job/tools.txt) nor py-spy" > "$d/run.error"; return 6; }
-            if [ -n "$PERF_OK" ]; then
-                mkfifo "$d/ctl" "$d/ack"
-                envs+=(MOJOLEARN_BENCH_PERF_CTL="$d/ctl,$d/ack" PYTHONPERFSUPPORT=1)
-                pre=("$PERF" record -e cpu-clock -F "$FREQ" --call-graph dwarf,8192 -D -1 --control "fifo:$d/ctl,$d/ack"
-                     -o "$d/perf.data" --)
-            fi
-            [ -n "$PYSPY" ] && pre+=("$PYSPY" record --native --subprocesses --rate 250 --format raw -o "$d/pyspy.collapsed" --) ;;
+        pyspy)     # the harness attaches py-spy to the race process at the window's open and stops it at the close
+            [ -n "$PYSPY" ] || { skip "py-spy absent (logs/pip-pyspy.log)"; return 0; }
+            envs+=(MOJOLEARN_BENCH_PYSPY="$PYSPY,$d/pyspy.raw,$RATE") ;;
+        perf)      # perf outside, enabled and disabled by the harness through the FIFO: only the window's samples
+            [ -n "$PERF_OK" ] || { skip "perf events refused here (job/tools.txt)"; return 0; }
+            mkfifo "$d/ctl" "$d/ack"
+            envs+=(MOJOLEARN_BENCH_PERF_CTL="$d/ctl,$d/ack" PYTHONPERFSUPPORT=1)
+            pre=("$PERF" record -e cpu-clock -F "$FREQ" --call-graph dwarf,8192 -D -1 --control "fifo:$d/ctl,$d/ack"
+                 -o "$d/perf.data" --) ;;
         nsys)
             [ -n "$NSYS" ] || { echo "nsys absent (logs/apt-nsight.log)" > "$d/run.error"; return 6; }
             envs+=(MOJOLEARN_BENCH_NVTX_RANGE="$RANGE" MOJOLEARN_BENCH_NVTX_PATH="$CACHE_ROOT/attr-nvtx-candidate"
                    NSYS_NVTX_PROFILER_REGISTER_ONLY=0)
             pre=(env NSYS_NVTX_PROFILER_REGISTER_ONLY=0 "$NSYS" profile -t cuda,nvtx --sample=none --cpuctxsw=none
                  --capture-range=nvtx --nvtx-capture="$RANGE" --capture-range-end=stop --force-overwrite=true -o "$d/nsys") ;;
+        shim)
+            [ -n "$SHIM_SO" ] || { skip "timing shim did not build (logs/cc-callprof_shim.log)"; return 0; }
+            envs+=(MOJOLEARN_BENCH_CALLPROF_SHIM="$SHIM_SO" LD_PRELOAD="$SHIM_SO") ;;
+        callgrind) # every process of the race under valgrind's core; instrumented only inside the window
+            [ -n "$VALGRIND" ] && [ -n "$CG_SO" ] || { skip "valgrind or its callgrind window absent (job/tools.txt)"; return 0; }
+            cache="$CACHE_ROOT/c-cg/$row"     # rows run at once: no shared cache directory
+            envs+=(MOJOLEARN_BENCH_CALLGRIND="$CG_SO" MOJOLEARN_BENCH_PROFILE_MAX_CALLS="$CG_CALLS")
+            pre=(timeout -k 30 "${CP_CALLGRIND_TIMEOUT:-1800}" "$VALGRIND" --tool=callgrind --instr-atstart=no
+                 --collect-atstart=no --trace-children=yes --trace-children-skip='*/nvidia-smi,*/git,*/uname,*/lscpu,*/ldconfig*'
+                 --trace-children-skip-by-arg=pip --callgrind-out-file="$d/callgrind.out.%p" --log-file="$d/valgrind.%p.log") ;;
         strace)
-            [ -n "$STRACE" ] || { echo "strace absent (logs/apt-tools.log)" > "$d/run.error"; return 6; }
-            [ -n "$MALLOC_SO" ] && envs+=(MOJOLEARN_BENCH_MALLOC_COUNTER="$MALLOC_SO" LD_PRELOAD="$MALLOC_SO")
+            [ -n "$STRACE" ] || { skip "strace absent (logs/apt-tools.log)"; return 0; }
             pre=("$STRACE" -f -ttt -T -qq -o "$d/strace.txt") ;;
-        *) echo "unknown pass $pass (time, perf, nsys, strace)" > "$d/run.error"; return 5 ;;
+        *) echo "unknown pass $pass (time, pyspy, perf, nsys, shim, callgrind, strace)" > "$d/run.error"; return 5 ;;
     esac
     local which=(--mojolearn-version "$WHEEL")
     [ -f "$MAN" ] && which=(--wheel-manifest "$MAN")
     ${pre[@]+"${pre[@]}"} env "${envs[@]}" "$PY" tools/bench_board.py "${COMMON[@]}" --python-env "$APY" --skip-install \
-        "${which[@]}" --cache "$CACHE_ROOT/c1" \
+        "${which[@]}" --cache "$cache" \
         --race-ids @"$d/ids" --no-smoke-gate \
         --guarded-smoke-override-reason "call profile job: diagnostic run of a board row this pod's earlier job smoked" \
         --out "$d/board" > "$d/run.log" 2>&1 < /dev/null
@@ -278,6 +320,7 @@ run_pass() {   # row, race id, phase, pass
     rm -rf "$d/board/work" "$d/board/evidence" "$d/ctl" "$d/ack"
     if [ $rc -ne 0 ]; then
         err=$($PY tools/ops/attribution_report.py error --out "$d/board" --log "$d/run.log" 2>&1 | head -n 1)
+        [ "$pass" = callgrind ] && err="valgrind: $(grep -h -m 3 -E '^==[0-9]+== [A-Z]|valgrind:|Fatal|unhandled' "$d"/valgrind.*.log 2> /dev/null | tr '\n' ' ' | head -c 300) $err"
         echo "$err" > "$d/run.error"
     elif [ ! -s "$d/window.jsonl" ]; then
         echo "no profile window: the race opened none (the phase name, or a driver without range_open)" > "$d/run.error"; rc=6
@@ -285,27 +328,59 @@ run_pass() {   # row, race id, phase, pass
     say "run $row $pass rc=$rc $(( SECONDS - t0 )) s window: $($PY tools/ops/call_profile.py window --window "$d/window.jsonl" | head -c 200)$([ -s "$d/run.error" ] && echo " ERROR $(head -c 300 "$d/run.error")")"
     return $rc
 }
+cg_workers() {   # rows at once for the callgrind passes: cores, then memory (CP_CALLGRIND_GB per valgrind'd race)
+    local n=$1 avail_gb per=${CP_CALLGRIND_GB:-6}
+    avail_gb=$(awk '/MemAvailable/ {print int($2 / 1048576)}' /proc/meminfo 2> /dev/null || echo 0)
+    [ "$NCORES" -lt "$n" ] && n=$NCORES
+    [ "$avail_gb" -gt 0 ] && [ $(( avail_gb / per )) -lt "$n" ] && n=$(( avail_gb / per ))
+    [ "$n" -lt 1 ] && n=1
+    echo "$n"
+}
 if part run; then
     phase run
     rc=0
+    CG_ROWS=()
     while IFS=$'\t' read -r row rid ph; do
         row_wanted "$row" || continue
         for pass in "${PASSES[@]}"; do
+            [ "$pass" = callgrind ] && { CG_ROWS+=("$row"$'\t'"$rid"$'\t'"$ph"); continue; }
             run_pass "$row" "$rid" "$ph" "$pass"; r=$?; [ $r -gt $rc ] && rc=$r
         done
     done < "$RES/plan/runs.tsv"
-    phase_end $rc
+    if [ ${#CG_ROWS[@]} -gt 0 ]; then
+        W=$(cg_workers ${#CG_ROWS[@]})
+        say "callgrind: ${#CG_ROWS[@]} rows, $W at once (allocation $NCORES cores; instruction counts do not depend on what else runs)"
+        cg_pids=()      # (the cores sampler is a background job too: count only these)
+        for line in "${CG_ROWS[@]}"; do
+            IFS=$'\t' read -r row rid ph <<< "$line"
+            while :; do
+                live=0
+                for p in "${cg_pids[@]}"; do kill -0 "$p" 2> /dev/null && live=$(( live + 1 )); done
+                [ "$live" -lt "$W" ] && break
+                wait -n "${cg_pids[@]}" 2> /dev/null || sleep 1
+            done
+            run_pass "$row" "$rid" "$ph" callgrind & cg_pids+=($!)
+        done
+        for p in "${cg_pids[@]}"; do wait "$p"; done
+        say "BUSY after callgrind: $(tail -n 3 "$J/cores.log" 2> /dev/null | tr '\n' ' ')"
+    fi
+    phase_end $rc      # a pass's failure is in its run.error; the report decides the exit (function-level sources)
 fi
 
 # ---- post (CPU, every row and tool at once over the allocated cores) ----------------------------------------------
 post_one() {   # row dir, phase, pass: the parsed json of one pass (the raw data stays beside it)
     local d=$1 ph=$2 pass=$3 p="$1/$3"
     case $pass in
+        pyspy)
+            [ -f "$p/pyspy.raw" ] || return 0
+            $PY tools/ops/call_profile.py pyspy --raw "$p/pyspy.raw" --window "$p/window.jsonl" --rate "$RATE" \
+                --out "$p/pyspy.json" > "$p/post.log" 2>&1 ;;
+        callgrind)
+            ls "$p"/callgrind.out.* > /dev/null 2>&1 || return 0
+            $PY tools/ops/call_profile.py callgrind --dir "$p" --window "$p/window.jsonl" --out "$p/callgrind.json" \
+                > "$p/post.log" 2>&1
+            gzip -f "$p"/callgrind.out.* ;;
         perf)
-            if [ -f "$p/pyspy.collapsed" ]; then
-                $PY tools/ops/call_profile.py pyspy --collapsed "$p/pyspy.collapsed" --window "$p/window.jsonl" --phase "$ph" \
-                    --out "$p/pyspy.json" > "$p/post-pyspy.log" 2>&1
-            fi
             [ -f "$p/perf.data" ] || return 0
             "$PERF" script -i "$p/perf.data" -F comm,tid,period,ip,sym,dso > "$p/perf.script" 2> "$p/perf-script.log"
             $PY tools/ops/call_profile.py perf --script "$p/perf.script" --window "$p/window.jsonl" --out "$p/perf.json" \
@@ -332,16 +407,16 @@ if part post; then
     : > "$RES/plan/post.todo"
     while IFS=$'\t' read -r row _ ph; do
         row_wanted "$row" || continue
-        for pass in perf nsys strace; do
+        for pass in pyspy callgrind perf nsys strace; do
             [ -d "$RES/rows/$row/$pass" ] && printf '%s %s %s\n' "$RES/rows/$row" "$ph" "$pass" >> "$RES/plan/post.todo"
         done
     done < "$RES/plan/runs.tsv"
     export -f post_one
-    export NSYS PERF PY
+    export NSYS PERF PY RATE
     # one worker per (row, pass) up to the allocated cores: perf script's unwinding is the long one (one core each)
     xargs -P "$NCORES" -n 3 bash -c 'post_one "$0" "$1" "$2"' < "$RES/plan/post.todo"
     rc=$?
-    say "post: $(cat "$RES"/rows/*/*/post*.log 2> /dev/null | grep -E '^(PERF|PYSPY|NSYS|STRACE) ' | cut -c1-60 | sort | uniq -c | head -n 12 | tr '\n' ';')"
+    say "post: $(cat "$RES"/rows/*/*/post*.log 2> /dev/null | grep -E '^(PERF|PYSPY|CALLGRIND|NSYS|STRACE) ' | cut -c1-60 | sort | uniq -c | head -n 12 | tr '\n' ';')"
     phase_end $rc
 fi
 
