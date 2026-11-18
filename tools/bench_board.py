@@ -422,7 +422,7 @@ CLASSICAL_OPPONENTS = {
         "dbscan": ("cuml-gpu",),             # cuml-gpu-rbc overflows at 1M rows
         "hdbscan": ("cuml-gpu",),
     },
-    "amd": {                                 # tools/classical_hotaisle_leg.sh's arms
+    "amd": {                                 # the AMD arms (first raced by the Hot Aisle classical leg, removed 2026-11-18)
         # FAIRNESS FIX (2026-10-13 audit, the author's correction): the harness-written torch
         # k-means / kNN are REPLACED by a library on AMD, hipVS (AMD's cuVS port, AMD_HIPVS
         # below): hipvs-gpu races, and scikit-learn on the CPU drops out by gpu_opponents_first.
