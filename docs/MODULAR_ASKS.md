@@ -451,3 +451,22 @@ with `METH_FASTCALL | METH_KEYWORDS`; ideally also have `def_method` with keywor
 (bindings/lr_schedule_block_door.mojo): one CPython tuple per call, no other per-call work of ours. Sent to Modular
 on 2026-11-17 with Andrew's word: https://github.com/modular/modular/issues/7640 (checked first: not in 1.2.0 or
 upstream main, no existing issue; #6521 names it as not yet done).
+
+## `cuStreamIsCapturing` on every enqueue, and host cost per `enqueue_function` (2026-11-18, fb15-sync-counts; NOT SENT)
+
+**What.** nsys on an L40S (driver 595.112.07, MAX 26.7 / Mojo 1.2, wheel d652a4b0a1) counts about two
+`cuStreamIsCapturing` calls per enqueued operation (copy, launch, memset, event record) and per
+`DeviceContext.synchronize`: global-avgpool infer 6 per call (1 H2D + 1 launch + 1 sync), batchnorm2d 18, layernorm
+47, select-d fit 81, label-encoder fit 71, isotonic predict 60, adagrad fit 109. Each takes 1-2 us of API time
+(select-d 0.014 ms x 81 = 1.1 ms per fit, label-encoder 0.74 ms per fit, adagrad 2.0 ms per fit). None of these calls
+is ours: no Mojolearn source calls or wraps it; it is inside the runtime's enqueue path (`libAsyncRTMojoBindings`,
+`libKGENCompilerRTShared`).
+
+**Ask.** Query the capture state once per stream (or when a capture begins or ends through the runtime), not on every
+enqueue; a stream this process never captures cannot change state between enqueues.
+
+**Second ask, same path.** Small entries spend 50-80 us per launch on the host outside the CUDA API (select-d fit:
+1.38 ms for 19 launches; global-avgpool infer: 84 us for 1 launch). Please document the per-call cost of
+`ctx.enqueue_function[kernel](...)` (function lookup or compile cache, argument packing) and whether a function
+compiled once (`ctx.compile_function[kernel]()`) and enqueued with its handle skips that work; and whether dropping a
+`DeviceBuffer` frees it in stream order (so a free after enqueued work needs no `synchronize`).
