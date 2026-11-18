@@ -124,6 +124,17 @@ OWED_NAME = "owed-pre0867.json"
 #: NVIDIA job wrote 14 GB of board evidence and 12 GB of smoke scratch, and its persist staging held 36 GB more
 MIN_FREE_GB = 40
 HEADROOM_GB = 20
+#: THE TARGETED JOB'S DISK FOLLOWS ITS ARMS (lane fx-pod-job, 2026-11-18; it was MIN_FREE_GB whatever was staged):
+#: an ours-only venv with its install cache (1.3 GB measured on the L40S pod, ideas-cycle-time-RESULT.md 1e); the
+#: smoke shards' scratch (12 GB on 2026-11-13; pruned after the smoke, before any board); a timed race's evidence
+#: (paper_compare_job.sh PC_EVIDENCE_MB_PER_RACE; ab1 measured 8.5 MB a race on average, 31 at most); a board dir's
+#: fixed part (ab1: 98-166 MB a unit board with its races); the job's own reserve (PC_DISK_RESERVE_GB). The B arms'
+#: venvs are made by window (paper_compare_job.sh arm-window), so the need counts one, not one per arm.
+VENV_GB = 1.5
+SMOKE_SCRATCH_GB = 12
+EVIDENCE_MB_PER_RACE = 40
+BOARD_MB = 200
+RESERVE_GB = 5
 #: the paper's NVIDIA device (tools/ops/paper_compare_job.sh PC_GPU_TOKEN default); `stage nvidia` refuses others
 PAPER_NVIDIA_GPU = "L40S"
 GPU_SCRIPT = "nvidia-smi --query-gpu=name --format=csv,noheader"
@@ -236,10 +247,19 @@ def disk_script(results_base):
             "for d in /root/pc-in/*/ /root/pc-cache/c*/; do [ -d \"$d\" ] && du -sk \"$d\" | sed 's/^/CACHE /'; done; true")
 
 
-def disk_verdict(text, tag, commit12, min_free_gb=MIN_FREE_GB, headroom_gb=HEADROOM_GB):
-    """(free GB, needed GB, [(GB, path, why)] prunable) from disk_script's output. Needed: min_free_gb, or the
-    largest results dir already on the box + headroom_gb. Prunable: every other results dir, every staging tarball,
-    other commits' /root/pc-in sets and the smoke caches c2.. (the timed boards use c1)."""
+def targeted_disk_gb(venvs, window, upload_bytes, timed_races, boards):
+    """The targeted job's disk need in GB: the reserve and the staged files throughout; the VENVS made in tg-install
+    (the candidate and the priors); then the larger of the smoke's scratch (pruned before the boards) and the board
+    phase (one B-arm install WINDOW of venvs, the TIMED_RACES' evidence and the BOARDS' fixed parts)."""
+    board_phase = VENV_GB * window + (timed_races * EVIDENCE_MB_PER_RACE + boards * BOARD_MB) / 1024.0
+    return RESERVE_GB + upload_bytes / 2.0 ** 30 + VENV_GB * venvs + max(SMOKE_SCRATCH_GB, board_phase)
+
+
+def disk_verdict(text, tag, commit12, min_free_gb=MIN_FREE_GB, headroom_gb=HEADROOM_GB, need_gb=None):
+    """(free GB, needed GB, [(GB, path, why)] prunable) from disk_script's output. Needed: NEED_GB when given (the
+    targeted job's own, targeted_disk_gb), else min_free_gb, or the largest results dir already on the box +
+    headroom_gb. Prunable: every other results dir, every staging tarball, other commits' /root/pc-in sets and the
+    smoke caches c2.. (the timed boards use c1)."""
     free_kb, prune, largest = None, [], 0
     for line in text.splitlines():
         f = line.split(None, 2)
@@ -262,7 +282,7 @@ def disk_verdict(text, tag, commit12, min_free_gb=MIN_FREE_GB, headroom_gb=HEADR
                     prune.append((gb, path, "a smoke shard's cache (the timed boards use c1)"))
     if free_kb is None:
         raise SystemExit("measure-candidate: could not read the box's free disk (df -Pk /root)")
-    need = max(float(min_free_gb), largest + headroom_gb)
+    need = float(need_gb) if need_gb is not None else max(float(min_free_gb), largest + headroom_gb)
     return free_kb / 1048576, need, sorted(prune, reverse=True)
 
 
@@ -547,6 +567,21 @@ def cmd_stage(a):
         uploads.append((local, f"{indir}/b-arms-{vendor}.txt", False))
         env["PC_B_ARMS"] = f"{indir}/b-arms-{vendor}.txt"
     plan = StagePlan(vendor, a.lane, tree, indir, uploads)
+    need_gb = None
+    if a.rows:
+        # the disk follows the arms actually staged (targeted_disk_gb): the candidate's venv (and the priors' when
+        # 0.8.55 is timed on the box), one B-arm window, every listed race and A/B unit race with its evidence
+        nrows = len(TR.read_rows(a.rows))
+        built = sum(1 for _, _, sha in specs if sha is not None)
+        arms = 1 if stored else 1 + len(prior_versions)
+        ab_races = sum(2 * n for _, _, n, _ in abp)
+        need_gb = targeted_disk_gb(arms, 1 if built else 0, sum(Path(x).stat().st_size for x, _, _ in uploads),
+                                   nrows * arms + ab_races, arms + 2 * len(abp))
+        print(f"TG-DISK need={need_gb:.1f} GB ({arms} venv(s) in tg-install, B-arm window {1 if built else 0}, "
+              f"{built} built arm(s), {nrows * arms + ab_races} timed races, {arms + 2 * len(abp)} boards, "
+              f"{sum(Path(x).stat().st_size for x, _, _ in uploads) / 2 ** 30:.2f} GB staged)")
+        if a.min_free_gb is not None:
+            print(f"  --min-free-gb {a.min_free_gb:g} given: it is the need instead")
     tag = a.tag or f"pc-{commit[:12]}-{vendor}"
     line = submit_line(vendor, a.lane, tag, env)
     stage_ds = ["sh", "tools/dataset_store.sh", "stage", "<" + " ".join(plan.ssh_target()) + ">"] + keys
@@ -560,8 +595,10 @@ def cmd_stage(a):
         if vendor == "nvidia":
             print(q(plan.box_sh(GPU_SCRIPT)) + f"  # every name {PAPER_NVIDIA_GPU}"
                   + (" (else HW-DIFF, allowed)" if allow_hw_diff else ", else refused"))
-        print(q(plan.box_sh(disk_script(plan.results_base()))) + f"  # free >= max({a.min_free_gb}, largest results + "
-              f"{HEADROOM_GB}) GB")
+        print(q(plan.box_sh(disk_script(plan.results_base()))) + (
+            f"  # free >= {need_gb:.1f} GB (TG-DISK)" if need_gb is not None and a.min_free_gb is None else
+            f"  # free >= max({a.min_free_gb if a.min_free_gb is not None else MIN_FREE_GB:g}, largest results + "
+            f"{HEADROOM_GB}) GB"))
         print(f"MOJOLEARN_DATASET_MANIFEST={shlex.quote(str(ds_manifest))} " + q(stage_ds))
         print(q(plan.prepare()))
         for local, remote, _ in uploads:
@@ -585,7 +622,7 @@ def cmd_stage(a):
     plan.synced = True
     if vendor == "nvidia":
         check_gpu(runner, plan, allow_hw_diff)
-    check_disk(a, runner, plan, tag, commit[:12])
+    check_disk(a, runner, plan, tag, commit[:12], need_gb)
     stage_datasets(a, runner, plan, keys, ds_manifest, commit[:12])
     runner.stage(plan)
     print("SUBMIT " + line)
@@ -646,9 +683,10 @@ def check_gpu(runner, plan, allow_hw_diff):
     print("WARNING HW-DIFF " + msg, flush=True)
 
 
-def check_disk(a, runner, plan, tag, commit12):
+def check_disk(a, runner, plan, tag, commit12, need_gb=None):
     got = runner.must(plan.box_sh(disk_script(plan.results_base())), "the disk check on the box", timeout=1800)
-    free, need, prune = disk_verdict(got.stdout or "", tag, commit12, a.min_free_gb)
+    free, need, prune = disk_verdict(got.stdout or "", tag, commit12, a.min_free_gb if a.min_free_gb is not None
+                                     else MIN_FREE_GB, need_gb=need_gb if a.min_free_gb is None else None)
     print(f"disk: {free:.1f} GB free on /root; the job needs {need:.1f} GB")
     for gb, path, why in prune:
         print(f"  prunable {gb:6.1f} GB  {path}  ({why})")
@@ -701,9 +739,9 @@ def main(argv=None):
                    "<commit12> beside the wheel dir): its bench/results/dataset_store/manifest.tsv pins the datasets")
     s.add_argument("--owed-file", default=None, help="the owed file whose b_arms name the B sets (default "
                    f"bench/results/paper_compare/{OWED_NAME} of --tree, else of the source tree)")
-    s.add_argument("--min-free-gb", type=float, default=MIN_FREE_GB,
-                   help=f"free disk on /root the job needs at least (default {MIN_FREE_GB}; or the largest earlier "
-                   f"results dir + {HEADROOM_GB})")
+    s.add_argument("--min-free-gb", type=float, default=None,
+                   help=f"free disk on /root the job needs at least (default: a targeted job's own need from the arms "
+                   f"staged, TG-DISK; any other job {MIN_FREE_GB} or the largest earlier results dir + {HEADROOM_GB})")
     s.add_argument("--allow-low-disk", action="store_true", help="warn instead of refusing below the free-disk need")
     s.add_argument("--allow-hw-diff", action="store_true",
                    help=f"NVIDIA: go on when the pod's GPU is not an {PAPER_NVIDIA_GPU} (also PC_ALLOW_HW_DIFF=1); "

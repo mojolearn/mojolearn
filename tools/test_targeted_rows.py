@@ -402,6 +402,86 @@ class Wiring(unittest.TestCase):
         took = int(p.stdout.split("TOOK=")[1].split()[0])
         self.assertLess(took, 30, p.stdout)
 
+    def test_job_b_arm_venvs_by_window(self):
+        # lane fx-pod-job (2026-11-18): every arm's venv at once (1.3 GB each) did not fit a 42-arm job on the 80 GB
+        # pod; a window of arms is installed before the first's unit and each venv goes after its arm's last unit
+        block = Path(JOB).read_text()
+        block = block[block.index("# >>> arm-window"):block.index("# <<< arm-window")]
+        with tempfile.TemporaryDirectory() as td:
+            fake = os.path.join(td, "fakepy")
+            Path(fake).write_text('#!/bin/bash\nwhile [ $# -gt 0 ]; do [ "$1" = --venv ] && v=$2; shift; done\n'
+                                  'mkdir -p "$v/bin" && : > "$v/bin/python" && chmod +x "$v/bin/python"\n'
+                                  'echo "INSTALLED $(basename "$v")"\n')
+            os.chmod(fake, 0o755)
+            cache = os.path.join(td, "cache")
+            os.makedirs(os.path.join(td, "logs"))
+            head = ("set -u\nsay() { echo \"SAY $*\"; }\nalloc_cores() { echo 3; }\nPY=" + fake + "\nCACHE_ROOT=" + cache +
+                    "\nRES=" + td + "\nTG=" + td + "\nmkdir -p $CACHE_ROOT\nCOMMON_TG=()\n"
+                    "declare -A ARM_ARGS ARM_PY ARM_MAN ARM_ENV\n"
+                    "for a in a b c d e; do ARM_ARGS[$a]=''; ARM_PY[$a]=$CACHE_ROOT/venv-$a/bin/python; "
+                    "ARM_MAN[$a]=" + td + "/m-$a.json; done\nARM_ENV[d]=X=1\n")
+            script = (head + block + "\nWIN_ARMS=(a b c d e)\ninstall_window a\nls $CACHE_ROOT | tr '\\n' ' '; echo"
+                      "\ndrop_arm_venv a\ninstall_window e\nls $CACHE_ROOT | tr '\\n' ' '; echo"
+                      "\nEV_LEFT_MB=$(( 1 << 40 )); echo W=$(window_size)\n")
+            p = subprocess.run(["bash", "-c", script], capture_output=True, text=True, timeout=60)
+        self.assertEqual(p.returncode, 0, p.stderr)
+        lines = p.stdout.splitlines()
+        self.assertEqual([x for x in lines if x.startswith("INSTALLED")][:3],
+                         ["INSTALLED venv-a", "INSTALLED venv-b", "INSTALLED venv-c"])   # a window of 3 cores
+        self.assertNotIn("INSTALLED venv-d", p.stdout)                                   # an env arm installs nothing
+        self.assertIn("venv-a venv-b venv-c ", p.stdout)
+        self.assertIn("venv-b venv-c venv-e ", p.stdout)                                 # a deleted, e made
+        self.assertIn("W=1", p.stdout)                                                   # no disk left: one at a time
+        job = Path(JOB).read_text()
+        tg = job[job.index("if part tg-install; then"):job.index("    if part tg-prep; then")]
+        self.assertIn('[[ " ${B_NAMES[*]:-} " == *" $arm "* ]] && continue', tg)        # no B arm in tg-install
+        owed = job[job.index("# the owed A/B arms: each unit chunk by chunk"):job.index("    if part tg-compare; then")]
+        self.assertIn('install_window "$arm"', owed)
+        self.assertIn('drop_arm_venv "$arm"', owed)
+        # installs happen only between timed boards: never inside run_timed / tg_board
+        self.assertLess(owed.index('install_window "$arm"'), owed.index("tg_board candidate"))
+
+    def test_job_tg_prep_phase(self):
+        # lane fx-pod-job (2026-11-18): the first timed process prepared graph-istella and graph-taxi one after the
+        # other (486 s of its 695 s) while the GPU waited
+        job = Path(JOB).read_text()
+        self.assertIn("tg-install,tg-prep,tg-smoke,tg-board,tg-compare", job)
+        prep = job[job.index("    if part tg-prep; then"):job.index("    if part tg-smoke; then")]
+        self.assertIn("--preflight-only --prep-only", prep)
+        self.assertIn('--cache "$CACHE_ROOT/c1"', prep)
+        self.assertNotIn("fixtures-venv", prep.replace("No --fixtures-venv", ""))    # no shared fixture writer
+        self.assertIn("targeted_rows.py prep-groups", prep)
+        self.assertIn("tg-prep", MC.TG_PARTS)
+        planner = TR.PC.load_planner(PLANNER)
+        self.assertEqual(tuple(planner.DATASETS), TR.PREP_DATASETS)
+        g = TR.prep_groups(["algos/a/taxi/rows=full", "algos/b/istella/rows=full", "algos/c/synthetic/rows=full",
+                            "classical2/ivf/istella/rows=full", "algos/a/taxi/rows=full"])
+        self.assertEqual(g, {"algos-taxi": ["algos/a/taxi/rows=full", "algos/c/synthetic/rows=full",
+                                            "algos/a/taxi/rows=full"],
+                             "algos-istella": ["algos/b/istella/rows=full"],
+                             "classical2-istella": ["classical2/ivf/istella/rows=full"]})
+        with tempfile.TemporaryDirectory() as td:
+            a = os.path.join(td, "a.txt")
+            Path(a).write_text("algos/a/taxi/rows=full\nalgos/b/istella/rows=full\n")
+            self.assertEqual(TR.main(["prep-groups", "--ids", a, "--ids", os.path.join(td, "none.txt"),
+                                      "--out-dir", os.path.join(td, "g")]), 0)
+            self.assertEqual(sorted(os.listdir(os.path.join(td, "g"))), ["group-algos-istella.txt",
+                                                                         "group-algos-taxi.txt"])
+
+    def test_stage_disk_need_follows_the_arms(self):
+        # lane fx-pod-job (2026-11-18): the need was a fixed 40 GB; a 42-arm job was cut to 14 by hand. With one
+        # B-arm venv window the 42-arm A/B (about 5 races a unit, about 1.3 units an arm) fits an 80 GB pod
+        units = 55
+        need = MC.targeted_disk_gb(1, 1, 42 * 2 * 60 * 2 ** 20, 2 * 5 * units, 1 + 2 * units)
+        self.assertLess(need, 70)
+        self.assertGreater(MC.targeted_disk_gb(1, 1, 0, 2 * 5 * units, 1 + 2 * units),
+                           MC.targeted_disk_gb(1, 1, 0, 2 * 5 * 10, 1 + 2 * 10))          # more arms, more disk
+        self.assertGreaterEqual(MC.targeted_disk_gb(1, 0, 0, 0, 1), MC.RESERVE_GB + MC.SMOKE_SCRATCH_GB)
+        free, got, _ = MC.disk_verdict("FREE_KB %d\n" % (70 * 1048576), "t", "abcdefabcdef", need_gb=need)
+        self.assertEqual(got, need)
+        src = Path(MC.__file__).read_text()
+        self.assertIn("check_disk(a, runner, plan, tag, commit[:12], need_gb)", src)
+
     def test_stage_env_arm_parse(self):
         self.assertEqual(MC.parse_b_arm("mcd-chol=env:MOJOLEARN_CPU_THREADS=28"),
                          ("mcd-chol", "env:MOJOLEARN_CPU_THREADS=28", None))

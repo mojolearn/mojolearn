@@ -841,7 +841,10 @@ if part tg-install || part tg-prep || part tg-smoke || part tg-board || part tg-
                 left=$(( left + 2 * $(nlines "$ids") )); nb=$(( nb + 2 ))
             done 3< "$TGO/units.tsv"
         fi
-        disk_gate tg-board "$left" "$nb" "${PC_EVIDENCE_MB_PER_RACE:-40}"
+        # a board dir's fixed part here is the measured one (lane fx-pod-job, 2026-11-18: the ab1 unit boards were
+        # 98-166 MB each with their races, against the 400 MB default), so a 42-arm job's 85 unit boards are not
+        # refused on a disk they fit; the B arms' venvs are counted per install window (window_size)
+        PC_LOADED_MB=${PC_LOADED_MB:-200} disk_gate tg-board "$left" "$nb" "${PC_EVIDENCE_MB_PER_RACE:-40}"
         # the listed rows: chunk by chunk, the candidate then each prior on the same races in the same order
         $PY tools/ops/targeted_rows.py chunks --ids "$TG/race-ids-pass.txt" --rows "$TG/rows.tsv" \
             --chunk-s "${PC_TG_CHUNK_S:-600}" --out-dir "$TG/chunks" | tail -n 1
