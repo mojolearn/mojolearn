@@ -930,6 +930,18 @@ in the tables after the sections.
 | [`MOJOLEARN_KMEANS_LAZY_SHIFT_IDN_OFF`](#mojolearn_kmeans_lazy_shift_idn_off-fx-env-dead) | Cluster (k-means lazy convergence read, IDENTICAL; old path) | removed (old path beside the default, no A/B in four weeks) | 2026-11-18 | [MOJOLEARN_KMEANS_LAZY_SHIFT_IDN_OFF.patch](../experiments/removed/MOJOLEARN_KMEANS_LAZY_SHIFT_IDN_OFF.patch) |
 | [`MOJOLEARN_KMEANS_LIVE_CORES_OFF`](#mojolearn_kmeans_live_cores_off-fx-env-dead) | Cluster (k-means fused grid from the stand-in SM table row; old path) | removed (old path beside the default, no A/B in four weeks) | 2026-11-18 | [MOJOLEARN_KMEANS_LIVE_CORES_OFF.patch](../experiments/removed/MOJOLEARN_KMEANS_LIVE_CORES_OFF.patch) |
 | [`MOJOLEARN_CHOL_FAST_POOLIO_OFF`](#mojolearn_chol_fast_poolio_off-fx-env-dead) | Cholesky (device IO without the pool; old path) | removed (old path beside the default, no IDENTICAL A/B in four weeks) | 2026-11-18 | [MOJOLEARN_CHOL_FAST_POOLIO_OFF.patch](../experiments/removed/MOJOLEARN_CHOL_FAST_POOLIO_OFF.patch) |
+| [`MOJOLEARN_DOWNLOAD_STAGE_OFF`](#mojolearn_download_stage_off-fx-verdicts2) | Core (device-to-host download: raw host-pointer copy at every size) | removed (decided B arm: L40S B 1.016 geomean over 7 neural cells, lm-forward 1.13) | 2026-11-18 | [MOJOLEARN_DOWNLOAD_STAGE_OFF.patch](../experiments/removed/MOJOLEARN_DOWNLOAD_STAGE_OFF.patch) |
+| [`MOJOLEARN_IDN_ET_DEVICE_LOOP`](#mojolearn_idn_et_device_loop-fx-verdicts2) | Trees (ExtraTrees depth-wise growth on the device loop) | removed (decided B arm: L40S B 1.030 geomean over 6 cells) | 2026-11-18 | [MOJOLEARN_IDN_ET_DEVICE_LOOP.patch](../experiments/removed/MOJOLEARN_IDN_ET_DEVICE_LOOP.patch) |
+| [`MOJOLEARN_IDN_GBDT_PREBINNED_INFER_OLD`](#mojolearn_idn_gbdt_prebinned_infer_old-fx-verdicts2) | Trees (GBDT Depthwise/Lossguide resident predict: per-call pack) | removed (decided B arm: L40S B 1.034 geomean over 24 cells) | 2026-11-18 | [MOJOLEARN_IDN_GBDT_PREBINNED_INFER_OLD.patch](../experiments/removed/MOJOLEARN_IDN_GBDT_PREBINNED_INFER_OLD.patch) |
+| [`MOJOLEARN_GEMM_POOL_OFF`](#mojolearn_gemm_pool_off-fx-verdicts2) | Linear algebra (host GEMM surfaces: fresh device buffers per call) | removed (decided B arm: L40S B 1.044 geomean over 3 gemm cells) | 2026-11-18 | [MOJOLEARN_GEMM_POOL_OFF-STAGE_DOWN_OFF.patch](../experiments/removed/MOJOLEARN_GEMM_POOL_OFF-STAGE_DOWN_OFF.patch) |
+| [`MOJOLEARN_GEMM_STAGE_DOWN_OFF`](#mojolearn_gemm_stage_down_off-fx-verdicts2) | Linear algebra (host GEMM surfaces: raw device-to-host download) | removed (decided B arm: L40S B 1.125 geomean over 3 gemm cells) | 2026-11-18 | [MOJOLEARN_GEMM_POOL_OFF-STAGE_DOWN_OFF.patch](../experiments/removed/MOJOLEARN_GEMM_POOL_OFF-STAGE_DOWN_OFF.patch) |
+| [`MOJOLEARN_IVF_SCAN_GROUPED_OFF`](#mojolearn_ivf_scan_grouped_off-fx-verdicts2) | Cluster (IVF-Flat identical scan: per-query kernels) | removed (decided B arm: L40S B 1.050 geomean over 6 cells, ivf istella fit 1.24) | 2026-11-18 | [MOJOLEARN_IVF_SCAN_GROUPED_OFF.patch](../experiments/removed/MOJOLEARN_IVF_SCAN_GROUPED_OFF.patch) |
+| [`MOJOLEARN_IVF_SCAN_STAGED`](#mojolearn_ivf_scan_grouped_off-fx-verdicts2) | Cluster (IVF-Flat per-query identical scan: staged kernel on Apple) | removed (its per-query path went with MOJOLEARN_IVF_SCAN_GROUPED_OFF) | 2026-11-18 | [MOJOLEARN_IVF_SCAN_GROUPED_OFF.patch](../experiments/removed/MOJOLEARN_IVF_SCAN_GROUPED_OFF.patch) |
+| [`MOJOLEARN_IVF_SCAN_STAGED_OFF`](#mojolearn_ivf_scan_grouped_off-fx-verdicts2) | Cluster (IVF-Flat per-query identical scan: plain kernel on NVIDIA/AMD) | removed (its per-query path went with MOJOLEARN_IVF_SCAN_GROUPED_OFF) | 2026-11-18 | [MOJOLEARN_IVF_SCAN_GROUPED_OFF.patch](../experiments/removed/MOJOLEARN_IVF_SCAN_GROUPED_OFF.patch) |
+| [`MOJOLEARN_IDN_KNN_DOOR_FIT_XN_EAGER`](#mojolearn_idn_knn_door_fit_xn_eager-fx-verdicts2) | Neighbors (k-NN fit door: eager x_neighbors admission) | removed (decided B arm: L40S B 1.002 geomean over 4 cells, noise) | 2026-11-18 | [MOJOLEARN_IDN_KNN_DOOR_FIT_XN_EAGER.fx-verdicts2.patch](../experiments/removed/MOJOLEARN_IDN_KNN_DOOR_FIT_XN_EAGER.fx-verdicts2.patch) |
+| [`MOJOLEARN_MAMBA3_LEGACY_SETUP`](#mojolearn_mamba3_legacy_setup-fx-verdicts2) | Neural (Mamba3 per-call setup without prefill sessions) | removed (decided B arm: L40S B 1.007 geomean over 5 cells, noise) | 2026-11-18 | [MOJOLEARN_MAMBA3_LEGACY_SETUP.patch](../experiments/removed/MOJOLEARN_MAMBA3_LEGACY_SETUP.patch) |
+| [`MOJOLEARN_MAMBA3_RETAIN_WEIGHTS_OFF`](#mojolearn_mamba3_retain_weights_off-fx-verdicts2) | Neural (Mamba3 session: per-call weight upload) | removed (decided B arm: L40S B 1.030 geomean over 5 cells, mamba3-forward 1.14) | 2026-11-18 | [MOJOLEARN_MAMBA3_RETAIN_WEIGHTS_OFF.patch](../experiments/removed/MOJOLEARN_MAMBA3_RETAIN_WEIGHTS_OFF.patch) |
+| [`MOJOLEARN_OPTIMIZER_RESIDENT_OFF`](#mojolearn_optimizer_resident_off-fx-verdicts2) | Training (optimizer: per-call step instead of resident state) | removed (decided B arm: L40S B 1.129 geomean over 5 cells, samba-train-step 1.97) | 2026-11-18 | [MOJOLEARN_OPTIMIZER_RESIDENT_OFF.patch](../experiments/removed/MOJOLEARN_OPTIMIZER_RESIDENT_OFF.patch) |
 
 | [`MOJOLEARN_IDN_M1_SCAN`](#mojolearn_idn_m1_scan) | Neural (Mamba-1 scan selector, IDENTICAL) | removed (opt-in arms, no A/B recorded) | 2026-11-15 | [MOJOLEARN_IDN_M1_SCAN.patch](../experiments/removed/MOJOLEARN_IDN_M1_SCAN.patch) |
 | [`MOJOLEARN_IDN_M2_CB_LOWER_OFF`](#mojolearn_idn_m2_cb_lower_off) | Neural (Mamba-2 oracle cb.G triangle, IDENTICAL) | removed (old path, no A/B recorded) | 2026-11-15 | [MOJOLEARN_IDN_M2_CB_LOWER_OFF.patch](../experiments/removed/MOJOLEARN_IDN_M2_CB_LOWER_OFF.patch) |
@@ -22773,3 +22785,77 @@ RunPod path keeps its behaviour; no product code, no bits, no default of the pro
   non-build prefixes (it only keeps such variables out of the cache key), usage comments in leg bodies that DigitalOcean
   also runs, `tools/amd_central.sh` (its box was a Hot Aisle dev box; see the lane result), and `bench/results/`.
 
+
+## Decided B arms: lane fx-verdicts2 (2026-11-18)
+
+Evidence for every section below: A/B ab3, NVIDIA L40S (RunPod host c6dd9ebea3e3, 14-core cgroup), wheel set d652a4b0a1 (candidate) and its B sets, base (the candidate) and arm back to back in one job, one run per arm, small rows the median of 20 calls, 2026-11-18; job `nvc-ab-20261118T182558Z-cb6e02`, `~/mojolearn-evidence/measure-candidate/build-ec1c4b5aff/fetched/nvc-ab-20261118T182558Z-cb6e02/x/` (SUMMARY-TG-nvidia.txt `AB` lines; board-tg-ab-<arm>[-base]-full/board.json). Per-cell tables (hash, scoring mode, warm-up, ms): `~/mojolearn-evidence/briefs-20261118/fx-verdicts2/tab-<arm>.txt`. Every cell of every arm: digests equal, quality equal. Part 8 of AGENTS.md: the NVIDIA L40S alone decides. All deleted on lane/fx-verdicts2 (base 85c36e324f, branch of preinteg/wave2-20261113); code recoverable at `85c36e324f`; refusals in `core/experiment_guards_<family>.mojo` (block "lane fx-verdicts2"). No grid_controls entry existed for any of them.
+
+### mojolearn_download_stage_off (fx-verdicts2)
+
+- What it was: `-D MOJOLEARN_DOWNLOAD_STAGE_OFF` (lane envgate-train-seq-mamba, 2026-11-15; the former run-time `MOJOLEARN_DOWNLOAD_STAGE=0`) made `download_staged` (core/staged_download.mojo) send every device-to-host float download through the raw host-pointer copy instead of the pinned two-stage pipeline from DOWNLOAD_STAGE_MIN floats.
+- Verdict: B slower, arm/base geomean 1.016 over 7 cells: lm-forward fit 39.74 -> 44.88 ms (1.13); lm-train-step 1.00, mlp-train-step 0.99, ops-session-step 0.98, program-run 1.02 (median of 20), samba-train-step 1.01, sequential-fit 0.99. The stage stays; `-D MOJOLEARN_DOWNLOAD_STAGE` (force below the minimum) stays.
+- Files: core/staged_download.mojo (`DOWNLOAD_STAGE_OFF` and its `comptime if`).
+- Patch: `experiments/removed/MOJOLEARN_DOWNLOAD_STAGE_OFF.patch`. EXPERIMENTS.md: the `MOJOLEARN_DOWNLOAD_STAGE_OFF` row.
+
+### mojolearn_idn_et_device_loop (fx-verdicts2)
+
+- What it was: `-D MOJOLEARN_IDN_ET_DEVICE_LOOP` (B arm since 2026-11-13; the default on every vendor 2026-10-04 to 2026-11-13) ran ExtraTrees depth-wise growth on the device level loop (`EtDeviceLoop`, the rescue enqueued every batch at proven bounds) instead of the host-queue merged-frontier loop (`_et_run_depthwise_host`).
+- Verdict: B slower, arm/base geomean 1.030 over 6 cells: istella fit 4596 -> 4823 ms (1.05), taxi fit 4298 -> 4323 (1.01); infer istella 1.01 / 0.93, taxi 1.08 / 1.11 (the 1.11 is a median-of-20 cell, 8.14 -> 9.06 ms; infer does not run the builder). The host queue stays; the device loop stays for best-first growth and for `-D MOJOLEARN_IDN_ET_DEVICE_LOOP_EARLY_EXIT` (its own owed arm).
+- Files: extratrees/impl/decisiontree/batched_levelalgo/builder.mojo (`ET_DEVICE_LOOP`; `ET_DEVICE_QUEUE` is now the early-exit define), checks/native_tests/et_device_loop_early_exit_gpu_suite.mojo and et_device_loop_early_exit_gpu.sh (the equality check compares two arms).
+- Patch: `experiments/removed/MOJOLEARN_IDN_ET_DEVICE_LOOP.patch`. EXPERIMENTS.md: the `MOJOLEARN_IDN_ET_DEVICE_LOOP` row.
+
+### mojolearn_idn_gbdt_prebinned_infer_old (fx-verdicts2)
+
+- What it was: `-D MOJOLEARN_IDN_GBDT_PREBINNED_INFER_OLD` (lane fix-gbdt-prebinned-infer, 2026-11-13) made the resident Depthwise / Lossguide predict re-pack the ensemble every call through `predict` (layout build, node staging, sixteen allocations, eight uploads, bins buffer) instead of the pack held from the first predict (`NsResidentPack`).
+- Verdict: B slower, arm/base geomean 1.034 over 24 cells (ours, ours-prebinned, ours-gain0): depthwise taxi prebinned infer large 15.11 -> 20.17 ms (1.34, one call each, warm-ups 15.0 / 15.4: a one-call outlier of the arm); lossguide taxi infer small 1.10 (ours) and 1.17 (gain0) are scoring artifacts (base median of 20, arm one call: its warm-up crossed 10 ms); fits 0.99-1.04, the rest 0.99-1.06. With the artifacts and the outlier set aside the arm is at best noise: the held pack stays.
+- Files: gbdt/models/add_non_symmetric_tree_doc_parallel.mojo (the `not is_defined` term of `IDN_NS_RESIDENT_PACK`, the `is_defined` import), checks/native_tests/gbdt_resident_ns_predict.mojo (docstring).
+- Patch: `experiments/removed/MOJOLEARN_IDN_GBDT_PREBINNED_INFER_OLD.patch`. EXPERIMENTS.md: the `MOJOLEARN_IDN_GBDT_PREBINNED_INFER_OLD` row.
+
+### mojolearn_gemm_pool_off (fx-verdicts2)
+
+- What it was: `-D MOJOLEARN_GEMM_POOL_OFF` (the former `MOJOLEARN_GEMM_POOL=0`) gave the host-pointer GEMM surfaces fresh device buffers every matmul instead of the grow-only pooled buffers per role (gemm/host_transport.mojo `GemmHostLease`).
+- Verdict: B slower, arm/base geomean 1.044 over 3 cells: gemm-bf16 fit 38.42 -> 41.91 ms (1.09), gemm-int8 32.00 -> 35.58 (1.11), gemm 44.49 -> 41.80 (0.94). The pool stays with no switch (a busy pool still gives a second concurrent caller fresh buffers).
+- Files: gemm/host_transport.mojo (`GEMM_POOL_ON`, `gemm_pool_on`, the early return in `GemmHostLease.__init__`), comments in gemm/linalg_native.mojo and gemm/host_entry.mojo. One commit and one patch with MOJOLEARN_GEMM_STAGE_DOWN_OFF.
+- Patch: `experiments/removed/MOJOLEARN_GEMM_POOL_OFF-STAGE_DOWN_OFF.patch`. EXPERIMENTS.md: the `MOJOLEARN_GEMM_POOL_OFF` row.
+
+### mojolearn_gemm_stage_down_off (fx-verdicts2)
+
+- What it was: `-D MOJOLEARN_GEMM_STAGE_DOWN_OFF` (the former `MOJOLEARN_GEMM_STAGE_DOWN=0`) made the GEMM surfaces download the result raw to the host pointer instead of through the pinned, double-buffered stage.
+- Verdict: B slower, arm/base geomean 1.125 over 3 cells: gemm-bf16 fit 35.96 -> 42.25 ms (1.18), gemm-int8 31.99 -> 37.37 (1.17), gemm 1.03. The staged download stays with no switch (transfers under GEMM_STAGE_MIN still go raw). `-D MOJOLEARN_GEMM_STAGE_UP_OFF` (the upload) stays opt-in: undecided (0.986 geomean, one faster cell of three).
+- Files: gemm/host_transport.mojo (`GEMM_STAGE_DOWN_ON`, `gemm_stage_down_on`, its term in `gemm_down_f32`).
+- Patch: `experiments/removed/MOJOLEARN_GEMM_POOL_OFF-STAGE_DOWN_OFF.patch`. EXPERIMENTS.md: the `MOJOLEARN_GEMM_STAGE_DOWN_OFF` row.
+
+### mojolearn_ivf_scan_grouped_off (fx-verdicts2)
+
+- What it was: `-D MOJOLEARN_IVF_SCAN_GROUPED_OFF` (the former `MOJOLEARN_IVF_SCAN_GROUPED=0`) made the IDENTICAL IVF-Flat search score each query over all its probes in one warp (`identical_ivf_scan_kernel`, or `identical_ivf_scan_staged_kernel` with the rows staged through threadgroup memory: the NVIDIA/AMD default of that path, `MOJOLEARN_IVF_SCAN_STAGED[_OFF]` choosing between them) instead of the scan grouped by list (`identical_ivf_scan_grouped_kernel` + `identical_ivf_merge_kernel`, lane neural-pass42). A filtered identical search also fell to the per-query device path under the arm.
+- Verdict: B slower, arm/base geomean 1.050 over 6 cells: ivf istella fit 303 -> 374 ms (1.24), ivf taxi fit 50.6 -> 54.8 (1.08), ivf-filter istella / taxi fit and infer 0.99-1.01. The grouped scan is the one identical batched route on every column; with the per-query kernels gone, `MOJOLEARN_IVF_SCAN_STAGED` and `MOJOLEARN_IVF_SCAN_STAGED_OFF` had nothing to choose and are refused too.
+- Files: ivf/impl/neighbors/ivf_flat/ivf_flat_search.mojo (`IVF_SCAN_GROUPED_ON`, `IVF_SCAN_STAGED_ON`, `_ivf_scan_grouped`, `_ivf_scan_staged`, `batched_filter_ok`, the two per-query launches), ivf/impl/neighbors/ivf_flat/identical_ivf_scan.mojo (`identical_ivf_scan_kernel`, `identical_ivf_scan_staged_kernel`, `IIVF_QPB`).
+- Patch: `experiments/removed/MOJOLEARN_IVF_SCAN_GROUPED_OFF.patch`. EXPERIMENTS.md: the `MOJOLEARN_IVF_SCAN_GROUPED_OFF` row (the staged rows note it).
+
+### mojolearn_idn_knn_door_fit_xn_eager (fx-verdicts2)
+
+- What it was: `-D MOJOLEARN_IDN_KNN_DOOR_FIT_XN_EAGER` (lane fix-knn-door-fixed-cost, 2026-11-14; deleted 2026-11-15 by lane/expdel2-12-cluster and restored the same day as an owed arm) made every KNeighborsClassifier / KNeighborsRegressor fit resolve and admit the x_neighbors binding up front (b412ea02f4's door form) instead of only in the multi-output label transpose (0.8.55's form).
+- Verdict: noise, arm/base geomean 1.002 over 4 cells (knn-clf istella 0.99, taxi 1.02; knn-reg istella 1.00, taxi 1.00). The lazy form stays.
+- Files: neighbors/neighbors_knn_run.mojo (`KNN_DOOR_FIT_XN_EAGER`, `knn_fit_xn_eager`), bindings/neighbors_knn_native_door.mojo (`_knn_xn`, the fit operation's eager admission).
+- Patch: `experiments/removed/MOJOLEARN_IDN_KNN_DOOR_FIT_XN_EAGER.fx-verdicts2.patch`. EXPERIMENTS.md: the `MOJOLEARN_IDN_KNN_DOOR_FIT_XN_EAGER` row.
+
+### mojolearn_mamba3_legacy_setup (fx-verdicts2)
+
+- What it was: `-D MOJOLEARN_MAMBA3_LEGACY_SETUP` (the former run-time `=1`) made the Mamba3 block doors run the per-call setup without prefill sessions (bindings/neural_prefill_native_door.mojo, bindings/neural_block_public_door.mojo, providers/python/samba_execution_pyapi_door.mojo).
+- Verdict: noise, arm/base geomean 1.007 over 5 cells: mamba3-decode 1.07 (one call, 1013 -> 1082 ms), mamba3-forward 1.01, samba-decode 0.97, samba-forward 1.00, samba-train-step 0.99. Sessions stay wherever the binding offers them.
+- Files: the three doors above (`MAMBA3_LEGACY_SETUP` and its terms), tools/neural_experiments.py (the env-era `mamba3_legacy` and `no_retain_weights` entries).
+- Patch: `experiments/removed/MOJOLEARN_MAMBA3_LEGACY_SETUP.patch`. EXPERIMENTS.md: the `MOJOLEARN_MAMBA3_LEGACY_SETUP` row.
+
+### mojolearn_mamba3_retain_weights_off (fx-verdicts2)
+
+- What it was: `-D MOJOLEARN_MAMBA3_RETAIN_WEIGHTS_OFF` (the former `MOJOLEARN_MAMBA3_RETAIN_WEIGHTS=0`) made the Mamba3 prefill session upload its weights every call instead of keeping them (byte compare, recopy on change).
+- Verdict: B slower, arm/base geomean 1.030 over 5 cells: mamba3-forward 2.11 -> 2.40 ms (1.14, median of 20), mamba3-decode 1.04, samba 0.99-1.00. Retained weights stay.
+- Files: mamba/impl/mamba_shell_impl.mojo (`MAMBA3_RETAIN_WEIGHTS`, the per-call branch of `_m3_prefill_weights`).
+- Patch: `experiments/removed/MOJOLEARN_MAMBA3_RETAIN_WEIGHTS_OFF.patch`. EXPERIMENTS.md: the `MOJOLEARN_MAMBA3_RETAIN_WEIGHTS_OFF` row.
+
+### mojolearn_optimizer_resident_off (fx-verdicts2)
+
+- What it was: `-D MOJOLEARN_OPTIMIZER_RESIDENT_OFF` (the former `MOJOLEARN_OPTIMIZER_RESIDENT=0`) kept the optimizer step per call (state uploaded and downloaded each step) instead of resident optimizer state on the device.
+- Verdict: B slower, arm/base geomean 1.129 over 5 cells: samba-train-step 45.48 -> 89.64 ms (1.97), lm-train-step 1.00, mlp-train-step 0.98, ops-session-step 0.95, sequential-fit 1.00. Resident state is the single-device route; `resident=False` and multi-device plans keep the per-call step.
+- Files: training/optimizer_public_common.mojo (`OPTIMIZER_RESIDENT`, its test in `resident_wanted_by_build`), sequence/opt_public_device.mojo (the local copy, `_resident_env`, three unreachable per-call branches), bindings/sequence_optimizer_native_door.mojo (the local copy and its refusal), bindings/samba_step_native_door.mojo (the import and term), comments in training/optimizer_public.mojo, python/mojolearn/tests/test_samba_step_native.py, tools/optimizer_resident_check.py.
+- Patch: `experiments/removed/MOJOLEARN_OPTIMIZER_RESIDENT_OFF.patch`. EXPERIMENTS.md: the `MOJOLEARN_OPTIMIZER_RESIDENT_OFF` row.
