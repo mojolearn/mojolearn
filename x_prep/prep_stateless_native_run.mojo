@@ -7,6 +7,7 @@ Mojo. Imports no Python. The binding keeps UNPACK (fields, the tier, the
 entry words `_fam`/`_pt_flags`, the work switch) and PACK (fitted arrays), and
 runs each program through the shared transport as before."""
 from std.os import getenv
+from std.sys.compile import is_defined, get_defined_int
 from core.preprocessing_program import prep_program_stage as _stage
 
 comptime F32P = MutPointer[Float32, MutUntrackedOrigin]
@@ -208,15 +209,12 @@ def _quantile_program(mut program: List[Int32], mut layout: PrepLayout, fam: Int
 
 
 def _pt_spec_depth(n: Int, d: Int) -> Int:
-    """`_expansion_prep._pt_spec_depth`: MOJOLEARN_XPREP_PT_SPEC (default 3,
+    """`_expansion_prep._pt_spec_depth`: the speculation depth (default 3,
     clamped to [0, 6]), lowered until the candidates' transforms fit in 2^28
     words (a size range, not a shape); 0 when even two do not."""
-    var s = 3
-    try:
-        s = Int(String(getenv("MOJOLEARN_XPREP_PT_SPEC", "3")).strip())
-    except:
-        s = 3
-    s = max(0, min(s, 6))
+    # lane fx-env-dead (2026-11-18): was the run-time env read MOJOLEARN_XPREP_PT_SPEC per fit; now the build
+    # define -D MOJOLEARN_XPREP_FAST_PT_SPEC_DEPTH=<0..6>, default unchanged (3), A/B owed.
+    var s = max(0, min(get_defined_int["MOJOLEARN_XPREP_FAST_PT_SPEC_DEPTH", 3](), 6))
     while s > 1 and ((1 << s) - 1) * n * d > 268435456:  # driver-loop: over speculation depths
         s -= 1
     if s == 1 and 2 * n * d > 268435456:
@@ -253,7 +251,8 @@ def _power_program(mut program: List[Int32], mut layout: PrepLayout, fam: Int, f
         if spec:
             var mmax = max((1 << spec) - 1, 2)
             var il = 0
-            if not tiled and String(getenv("MOJOLEARN_XPREP_PT_INTERLEAVE", "0")) == "1":
+            # lane fx-env-dead (2026-11-18): was the run-time env read MOJOLEARN_XPREP_PT_INTERLEAVE=1; default off
+            if not tiled and is_defined["MOJOLEARN_XPREP_FAST_PT_INTERLEAVE"]():
                 il = 1
             var state = layout.alloc(PT_STATE * d)
             var leval = layout.alloc(d)
