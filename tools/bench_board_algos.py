@@ -3755,8 +3755,11 @@ def _build_est(lane, arm, D):
         elif t == "cluster":            # a lane without predict has no infer cell (no_predict: optics)
             S["pred"] = est.predict(Xq)
         elif t == "radius":                 # neighbour count per query (ragged rows)
-            _dist, ind = est.radius_neighbors(Xq)
-            S["pred"] = [int(np.shape(r)[0]) for r in ind]
+            # FAIRNESS FIX (2026-11-18 audit, lane fx-harness): the per-query count (a Python loop over every query
+            # row) ran inside the clock on every arm; the clock now holds the returned neighbour lists and
+            # outputs() counts them after it
+            _dist, S["radius_ind"] = est.radius_neighbors(Xq)
+            S.pop("pred", None)
         elif t in ("labels",):
             S["pred"] = est.transform(labq)
         elif t == "multilabel":
@@ -3770,6 +3773,8 @@ def _build_est(lane, arm, D):
         est = S["est"]
         o = {}
         qk = quality_kind(lane)
+        if "radius_ind" in S:               # the radius lane's counts, after the clock (FAIRNESS FIX 2026-11-18)
+            S["pred"] = [int(np.shape(r)[0]) for r in S.pop("radius_ind")]
         if "pred" in S and S["pred"] is not None and qk not in ("cca",):
             o["pred"] = _arr(S["pred"], np.float64)
         if S.get("proba") is not None:
@@ -3846,6 +3851,8 @@ def _build_est(lane, arm, D):
         if arm in OURS_ARMS:
             info["input_copy"] = ("inside the timed call: ours takes host arrays and copies X to the "
                                   "device inside %s" % timed_op)
+    if t == "radius":
+        info["harness_clock"] = HARNESS_CLOCK
     runner = Runner(info, fit, outputs, infer if has_infer(lane) else None, sync,
                     record=_BP().arm_record(make()), model_for_hash=lambda: S.get("est"))
     if arm in OURS_ARMS:
@@ -4645,7 +4652,11 @@ def _build_ts(lane, arm, D):
                     tr, se = e.trend_, e.seasonal_
                 else:
                     se = e.seasonal
-                S["fc"] = _arr(tr, np.float64) + _arr(se, np.float64)
+                # FAIRNESS FIX (2026-11-18 audit, lane fx-harness): the float64 copies and the sum of trend and
+                # seasonal ran inside the clock; the clock now holds the returned components (`_held`, no copy)
+                # and outputs() sums them after it
+                S["fc_parts"] = (_held(tr), _held(se))
+                S.pop("fc", None)
             elif lane == "var":
                 S["fc"] = _arr(e.forecast(np.ascontiguousarray(Y32[:16].T[-e.k_ar:]), h), np.float64).T
             else:
@@ -4663,6 +4674,9 @@ def _build_ts(lane, arm, D):
                 S["fc"] = fc
 
         def outputs():
+            if "fc_parts" in S:             # decompose: trend + seasonal, after the clock (FAIRNESS FIX 2026-11-18)
+                tr, se = S.pop("fc_parts")
+                S["fc"] = _arr(tr, np.float64) + _arr(se, np.float64)
             o = {"forecast": _arr(S["fc"], np.float64)} if t != "decompose" else {
                 "components": _arr(S["fc"], np.float64)}
             if t == "garch":
@@ -4689,6 +4703,8 @@ def _build_ts(lane, arm, D):
         def fit():                        # the forecast is inside the clock, as for every arm
             fit0()
             infer()
+        if t == "decompose":
+            info["harness_clock"] = HARNESS_CLOCK
         return Runner(info, fit, outputs, None, record=rec)
     lib = s["other"][arm]
     if lib == "statsforecast":
