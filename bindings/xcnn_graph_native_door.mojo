@@ -42,7 +42,7 @@ from bindings.xcnn_common_door import (
     xcnn_builtins, xcnn_entries, xcnn_ref, xcnn_word, xcnn_ptr, xcnn_mixed, xcnn_idn, XCNN_F_GRAPH, xcnn_is_t,
     xcnn_on_dev, xcnn_new, xcnn_wrap, xcnn_host_of, xcnn_host_f32, xcnn_f32, xcnn_addr, xcnn_dev, xcnn_dev_get,
     xcnn_dev_upload, xcnn_shape, xcnn_size, xcnn_tuple, xcnn_host_i32, xcnn_device_io_off,
-    xcnn_dev_fields, xcnn_reshape_t,
+    xcnn_dev_fields, xcnn_reshape_t, xcnn_dev_get_f, xcnn_out_new,
 )
 from core.entry_table import EntryRef
 from x_cnn.graph_layer_run import (
@@ -645,12 +645,21 @@ def _gcn_forward_dev(layer: PythonObject, fields: PythonObject, entries: PythonO
     graph_run_check_gcn_weight(xcnn_shape(w), f_out, d_in)
     var xt = xcnn_is_t(x, context)
     var xh = x.h if xt else xcnn_dev_upload(layer, entries, "x", x, context)
-    var hh = xcnn_dev_get(layer, entries, "h", n * f_out, context)
+    var hh = xcnn_dev_get_f(fields, entries, "h", n * f_out, context)
     _gemm_m(entries, xcnn_word(xh), xcnn_ptr(w), xcnn_word(hh), 0b101, n, f_out, d_in, 1)
     _ = w  # keep the Python object alive through the native call above
     var bias = Bool(py=fields["bias"])
-    var out = xcnn_new(entries, [n, f_out], False, context) if xt else xcnn_host_f32([n, f_out], context)
-    var oh = out.h if (xt and not bias) else xcnn_dev_get(layer, entries, "o", n * f_out, context)
+    # fx-cnn-layers (2026-11-18): the resident output takes the unfilled
+    # allocation under the resident glue (`xcnn_out_new`, as the pools, the
+    # convolutions and batch norm take it). Every word of it is stored below:
+    # with a bias by the bias add (`bias_rows_at` over all n * f_out words),
+    # without one by the propagation (`spmm_at` stores each output word, +0.0
+    # for a row with no entry). It was zero filled on the device first, one
+    # memset of the whole output per forward (69.6 MB per call on the
+    # 4.35M-row board graph in the L40S call profile; any graph pays 4 n
+    # f_out bytes). No bit moves.
+    var out = xcnn_out_new(entries, [n, f_out], context) if xt else xcnn_host_f32([n, f_out], context)
+    var oh = out.h if (xt and not bias) else xcnn_dev_get_f(fields, entries, "o", n * f_out, context)
     var _hv1 = _dev_pair(dev, "vals_f", "csr_f", context)   # one owner admission for both handles
     _spmm_m(entries, xcnn_word(_hv1[0]), xcnn_word(hh), xcnn_word(_hv1[1]), xcnn_word(oh), 0b1111, n, f_out,
             Int(py=g["nnz"]), 0)
@@ -762,10 +771,10 @@ def _sage_forward_dev(layer: PythonObject, fields: PythonObject, entries: Python
         _graph_dev(layer, fields, entries, dev, g, ones, ones, context)
     var xt = xcnn_is_t(x, context)
     var xh = x.h if xt else xcnn_dev_upload(layer, entries, "x", x, context)
-    var aggh = xcnn_dev_get(layer, entries, "agg", n * d_in, context)
+    var aggh = xcnn_dev_get_f(fields, entries, "agg", n * d_in, context)
     var nnz = Int(py=g["nnz"])
     if aggr == "max":
-        var auxh = xcnn_dev_get(layer, entries, "maxaux", 2 * n * d_in, context)
+        var auxh = xcnn_dev_get_f(fields, entries, "maxaux", 2 * n * d_in, context)
         _graph_op_m(entries, xcnn_word(xh), xcnn_word(xh), xcnn_word(auxh), xcnn_word(aggh),
                     xcnn_word(_dev_h(dev, "csr_f", context)), 0b11111, n, d_in, nnz, 0)
     else:
@@ -777,13 +786,19 @@ def _sage_forward_dev(layer: PythonObject, fields: PythonObject, entries: Python
     var lin_values = _linear_weights(lin_fields, context)
     var norm = Bool(py=fields["normalize"])
     var root = Bool(py=fields["root_weight"])
-    var out = xcnn_new(entries, [n, f_out], False, context) if xt else xcnn_host_f32([n, f_out], context)
-    var preh = xcnn_dev_get(layer, entries, "pre", n * f_out, context) if norm else PythonObject(None)
+    # fx-cnn-layers (2026-11-18): unfilled under the resident glue, as in
+    # `_gcn_forward_dev`. Every word of the resident output is stored below
+    # by exactly one of: the row normalization (`l2norm_fwd_at` stores each
+    # row's f_out words), the root add (`add_at` over all words), or the
+    # linear forward writing straight into it (GEMM plus `bias_rows_at`, or
+    # the fused bias GEMM, over all words).
+    var out = xcnn_out_new(entries, [n, f_out], context) if xt else xcnn_host_f32([n, f_out], context)
+    var preh = xcnn_dev_get_f(fields, entries, "pre", n * f_out, context) if norm else PythonObject(None)
     var olh = PythonObject(None)
     if norm and not root:
         olh = preh
     else:
-        olh = out.h if (xt and not root) else xcnn_dev_get(layer, entries, "ol", n * f_out, context)
+        olh = out.h if (xt and not root) else xcnn_dev_get_f(fields, entries, "ol", n * f_out, context)
     var a_agg = xcnn_word(aggh)
     var a_w = xcnn_ptr(lin_values[0])
     var a_b = xcnn_ptr(lin_values[1])
@@ -796,7 +811,7 @@ def _sage_forward_dev(layer: PythonObject, fields: PythonObject, entries: Python
     if root:
         var wr = _snapshot(fields["weight_r_"], "weight_r_", context)
         graph_run_check_root_weight(xcnn_shape(wr), f_out, d_in)
-        var rh = xcnn_dev_get(layer, entries, "r", n * f_out, context)
+        var rh = xcnn_dev_get_f(fields, entries, "r", n * f_out, context)
         _gemm_m(entries, xcnn_word(xh), xcnn_ptr(wr), xcnn_word(rh), 0b101, n, f_out, d_in, 1)
         _ = wr  # keep the Python object alive through the native call above
         if norm:
@@ -810,8 +825,8 @@ def _sage_forward_dev(layer: PythonObject, fields: PythonObject, entries: Python
         _download(entries, olh, out)
     py_setitem(fields, "_ydev", PythonObject(None))
     if norm:
-        var denh = xcnn_dev_get(layer, entries, "den", n, context)
-        var yh = out.h if xt else xcnn_dev_get(layer, entries, "y", n * f_out, context)
+        var denh = xcnn_dev_get_f(fields, entries, "den", n, context)
+        var yh = out.h if xt else xcnn_dev_get_f(fields, entries, "y", n * f_out, context)
         _graph_op_m(entries, xcnn_word(preh), xcnn_word(preh), xcnn_word(denh), xcnn_word(yh), 0, 0b01111, n, f_out, 0, 2)
         if not xt:
             _download(entries, yh, out)
@@ -1125,9 +1140,9 @@ def _gcn_backward_dev(layer: PythonObject, fields: PythonObject, entries: Python
     var gw = xcnn_host_f32([f, d], context)
     # the forward's h and output arrays (the same sizes: no reallocation;
     # recorded as the tape's values, never read)
-    var hh = xcnn_dev_get(layer, entries, "h", n * f, context)
-    var oh = xcnn_dev_get(layer, entries, "o", n * f, context)
-    var dh = xcnn_dev_get(layer, entries, "dh", n * f, context)
+    var hh = xcnn_dev_get_f(fields, entries, "h", n * f, context)
+    var oh = xcnn_dev_get_f(fields, entries, "o", n * f, context)
+    var dh = xcnn_dev_get_f(fields, entries, "dh", n * f, context)
     var dx = xcnn_new(entries, [n, d], False, context) if gt else xcnn_host_f32([n, d], context)
     var _hv = _dev_pair(dev, "vals_t", "csr_t", context)   # one owner admission for both handles
     var addrs: List[Int] = [
@@ -1246,20 +1261,20 @@ def _sage_backward_dev(layer: PythonObject, fields: PythonObject, entries: Pytho
             raise Error("TypeError: SAGE normalization requires a native retained tensor")
         outh = yd[0]
         denh = yd[1]
-        preh = xcnn_dev_get(layer, entries, "pre", n * f, context)
-        gpre = xcnn_dev_get(layer, entries, "G2", n * f, context)
+        preh = xcnn_dev_get_f(fields, entries, "pre", n * f, context)
+        gpre = xcnn_dev_get_f(fields, entries, "G2", n * f, context)
     else:
         # the forward's lin_l output array (recorded as the tape's value, never read)
-        outh = xcnn_dev_get(layer, entries, "ol", n * f, context)
+        outh = xcnn_dev_get_f(fields, entries, "ol", n * f, context)
     var lin = _linear_fields(fields["lin_l"], context)
     var values = _linear_weights(lin, context)
-    var dagg = xcnn_dev_get(layer, entries, "dagg", n * d, context)
+    var dagg = xcnn_dev_get_f(fields, entries, "dagg", n * d, context)
     var dw = xcnn_host_f32([f, d], context)
     var db = xcnn_host_f32([f], context)
     var dx = xcnn_new(entries, [n, d], False, context) if gt else xcnn_host_f32([n, d], context)
     var dxa = dx.h if gt else xcnn_addr(dx)
-    var dxs = dx.h if gt and not root else xcnn_dev_get(layer, entries, "dxs", n * d, context)
-    var dsc = xcnn_dev_get(layer, entries, "dsc", n * d, context) if kind == 1 else PythonObject(0)
+    var dxs = dx.h if gt and not root else xcnn_dev_get_f(fields, entries, "dxs", n * d, context)
+    var dsc = xcnn_dev_get_f(fields, entries, "dsc", n * d, context) if kind == 1 else PythonObject(0)
     var maxaux = _dev_h(dev, "maxaux", context) if kind == 2 else PythonObject(0)
     var _hf = _dev_pair(dev, "vals_f", "csr_f", context)   # one owner admission for both handles
     var _ht = _dev_pair(dev, "vals_t", "csr_t", context)
@@ -1274,7 +1289,7 @@ def _sage_backward_dev(layer: PythonObject, fields: PythonObject, entries: Pytho
         wr_addr = xcnn_addr(wr)
         gwr = xcnn_host_f32([f, d], context)
         gwr_addr = xcnn_addr(gwr)
-        grh = xcnn_dev_get(layer, entries, "gr", n * d, context)
+        grh = xcnn_dev_get_f(fields, entries, "gr", n * d, context)
     var addrs: List[Int] = [
         xcnn_word(gh), xcnn_word(xh), xcnn_word(aggh), xcnn_word(outh), xcnn_ptr(values[0]),
         xcnn_ptr(values[1]), xcnn_ptr(dw), xcnn_ptr(db), xcnn_word(dagg), xcnn_word(dxa), xcnn_word(dxs),
