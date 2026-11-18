@@ -564,15 +564,6 @@ def _gp_grid(units: Int) -> Int:
     return (units + LM_HEAD_V2_TPB - 1) // LM_HEAD_V2_TPB
 
 
-def _gp_flush_kernel(values: MutPointer[Float32, MutAnyOrigin], count: Int32):
-    """One thread per operand element, in place: a subnormal becomes its
-    signed zero, so every later stage reads flushed operands."""
-    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
-    if i >= Int(count):
-        return
-    values.unsafe_store(i, ftz(values.unsafe_load(i)))
-
-
 def _gp_leaf_kernel(
     partial: MutPointer[Float32, MutAnyOrigin],
     target_shift: MutPointer[Float32, MutAnyOrigin],
@@ -671,11 +662,14 @@ def chunked_lm_head_gp_forward_into(
     mut leaf_b: DeviceBuffer[DType.float32],
     mut hidden: DeviceBuffer[DType.float32],
     mut weight: DeviceBuffer[DType.float32],
-    mut targets: DeviceBuffer[DType.int32], rows: Int, vocab: Int, width: Int,
+    targets: MutPointer[Int32, MutAnyOrigin], rows: Int, vocab: Int, width: Int,
 ) raises:
-    """The arm's forward over flushed device operands. `leaf_a` holds
-    rows * leaves floats and `leaf_b` rows * ceil(leaves / 2). Waits once, in
-    the mean-loss fold."""
+    """The arm's forward, shared by the public door and the executor op
+    (autograd/lm_head_v2_op.mojo). `targets` is the device address of the
+    rows int32 codes; a code outside [0, vocab) matches no entry, and its
+    row's `row_loss` cell must then hold +0.0 on entry (the op zeroes it;
+    the door refuses such codes). `leaf_a` holds rows * leaves floats and
+    `leaf_b` rows * ceil(leaves / 2). Waits once, in the mean-loss fold."""
     comptime assert LM_HEAD_V2_CHUNK % LMHEAD_GP_LEAF == 0, "a logit panel holds whole denominator leaves"
     var leaves = lmhead_gp_leaf_count(vocab)
     if len(ws) < chunked_lm_head_gp_workspace_floats(rows, vocab, width):
@@ -700,7 +694,7 @@ def chunked_lm_head_gp_forward_into(
         identical_gemm_into(ctx, chunk, hidden, wb, ws, rows, n, width, OP_NT)
         ctx.enqueue_function[_gp_leaf_kernel](
             leaf_a.unsafe_ptr(), row_loss.unsafe_ptr(), chunk.unsafe_ptr(),
-            maxima.unsafe_ptr(), targets.unsafe_ptr(),
+            maxima.unsafe_ptr(), targets,
             Int32(rows), Int32(n), Int32(chunk0), Int32(leaves),
             grid_dim=_gp_grid(rows * ((n + LMHEAD_GP_LEAF - 1) // LMHEAD_GP_LEAF)),
             block_dim=LM_HEAD_V2_TPB,
@@ -757,17 +751,20 @@ def chunked_lm_head_gp_backward_into(
     mut stack: DeviceBuffer[DType.float32],
     mut hidden: DeviceBuffer[DType.float32],
     mut weight: DeviceBuffer[DType.float32],
-    mut targets: DeviceBuffer[DType.int32],
+    targets: MutPointer[Int32, MutAnyOrigin],
     mut maxima: DeviceBuffer[DType.float32],
     mut denom: DeviceBuffer[DType.float32], rows: Int, vocab: Int, width: Int,
+    want_dh: Bool, want_dw: Bool,
 ) raises:
-    """The arm's backward over flushed device operands and the matching
-    forward statistics. `stack` holds lmhead_gp_stack_slots(vocab) dHidden
-    partials of rows * width floats. Asynchronous: the caller waits."""
+    """The arm's backward over the matching forward statistics, shared by
+    the public door and the executor op. A gradient not wanted is neither
+    computed nor written (its buffer and, for dHidden, `stack` may be one
+    cell). `stack` holds lmhead_gp_stack_slots(vocab) dHidden partials of
+    rows * width floats. Asynchronous: the caller waits."""
     var cells = rows * width
     if len(ws) < chunked_lm_head_gp_workspace_floats(rows, vocab, width):
         raise Error("chunked GEMM-panel head workspace does not cover every actual panel")
-    if len(stack) < lmhead_gp_stack_slots(vocab) * cells:
+    if want_dh and len(stack) < lmhead_gp_stack_slots(vocab) * cells:
         raise Error("chunked GEMM-panel head dHidden stack too short")
     # The pairwise fold over panel partials as a binary counter: after panel
     # p the stack holds one node per set bit of p + 1, and the leftovers
@@ -780,35 +777,38 @@ def chunked_lm_head_gp_backward_into(
         var wb = weight.create_sub_buffer[DType.float32](chunk0 * width, n * width)
         identical_gemm_into(ctx, chunk, hidden, wb, ws, rows, n, width, OP_NT)
         ctx.enqueue_function[_gp_dlogit_kernel](
-            chunk.unsafe_ptr(), maxima.unsafe_ptr(), denom.unsafe_ptr(), targets.unsafe_ptr(),
+            chunk.unsafe_ptr(), maxima.unsafe_ptr(), denom.unsafe_ptr(), targets,
             Int32(rows), Int32(n), Int32(chunk0),
             grid_dim=_gp_grid(rows * n), block_dim=LM_HEAD_V2_TPB,
         )
         # dWeight[panel rows] = dlogits[rows, n]^T . hidden[rows, width]: final, no fold across panels.
-        var dwb = d_weight.create_sub_buffer[DType.float32](chunk0 * width, n * width)
-        identical_gemm_into(ctx, dwb, chunk, hidden, ws, n, width, rows, OP_TN)
-        # One dHidden partial = dlogits[rows, n] . weight[panel rows, width].
-        var top = stack.create_sub_buffer[DType.float32](depth * cells, cells)
-        identical_gemm_into(ctx, top, chunk, wb, ws, rows, width, n, OP_NN)
-        depth += 1
-        panels += 1
-        var carry = panels
-        while carry % 2 == 0:  # driver-loop: over completed tree nodes
+        if want_dw:
+            var dwb = d_weight.create_sub_buffer[DType.float32](chunk0 * width, n * width)
+            identical_gemm_into(ctx, dwb, chunk, hidden, ws, n, width, rows, OP_TN)
+            _ = dwb
+        if want_dh:
+            # One dHidden partial = dlogits[rows, n] . weight[panel rows, width].
+            var top = stack.create_sub_buffer[DType.float32](depth * cells, cells)
+            identical_gemm_into(ctx, top, chunk, wb, ws, rows, width, n, OP_NN)
+            _ = top
+            depth += 1
+            panels += 1
+            var carry = panels
+            while carry % 2 == 0:  # driver-loop: over completed tree nodes
+                _gp_enqueue_merge(ctx, stack, depth, cells)
+                depth -= 1
+                carry //= 2
+        _ = wb
+    if want_dh:
+        while depth > 1:  # driver-loop: over leftover tree nodes
             _gp_enqueue_merge(ctx, stack, depth, cells)
             depth -= 1
-            carry //= 2
-        _ = wb
-        _ = dwb
-        _ = top
-    while depth > 1:  # driver-loop: over leftover tree nodes
-        _gp_enqueue_merge(ctx, stack, depth, cells)
-        depth -= 1
-    var root = stack.create_sub_buffer[DType.float32](0, cells)
-    ctx.enqueue_function[_gp_merge_kernel](
-        d_hidden.unsafe_ptr(), root.unsafe_ptr(), root.unsafe_ptr(), Int32(cells), Int32(0),
-        grid_dim=_gp_grid(cells), block_dim=LM_HEAD_V2_TPB,
-    )
-    _ = root
+        var root = stack.create_sub_buffer[DType.float32](0, cells)
+        ctx.enqueue_function[_gp_merge_kernel](
+            d_hidden.unsafe_ptr(), root.unsafe_ptr(), root.unsafe_ptr(), Int32(cells), Int32(0),
+            grid_dim=_gp_grid(cells), block_dim=LM_HEAD_V2_TPB,
+        )
+        _ = root
 
 
 def _gp_first_nonfinite(values: MutPointer[Float32, MutUntrackedOrigin], count: Int) -> Int:
@@ -908,24 +908,20 @@ def _gp_door(
         ctx.enqueue_copy(dst_buf=hidden, src_ptr=hidden_in)
         ctx.enqueue_copy(dst_buf=weight, src_ptr=weight_in)
         ctx.enqueue_copy(dst_buf=targets, src_ptr=targets_in)
-        ctx.enqueue_function[_gp_flush_kernel](
-            hidden.unsafe_ptr(), Int32(cells), grid_dim=_gp_grid(cells), block_dim=LM_HEAD_V2_TPB,
-        )
-        ctx.enqueue_function[_gp_flush_kernel](
-            weight.unsafe_ptr(), Int32(vocab * width),
-            grid_dim=_gp_grid(vocab * width), block_dim=LM_HEAD_V2_TPB,
-        )
+        # No operand flush here: the arm reads hidden and weight only
+        # through the GEMM, whose leaf flushes both operands itself.
+        var tp = MutPointer[Int32, MutAnyOrigin](unsafe_from_address=Int(targets.unsafe_ptr()))
         chunked_lm_head_gp_forward_into(
             ctx, loss, maxima, denom, row_loss, chunk, ws, leaf_a, leaf_b,
-            hidden, weight, targets, rows, vocab, width,
+            hidden, weight, tp, rows, vocab, width,
         )
         ctx.enqueue_copy(dst_ptr=loss_out, src_buf=loss)
         ctx.enqueue_copy(dst_ptr=max_out, src_buf=maxima)
         ctx.enqueue_copy(dst_ptr=denom_out, src_buf=denom)
         if with_grad:
             chunked_lm_head_gp_backward_into(
-                ctx, d_hidden, d_weight, chunk, ws, stack, hidden, weight, targets,
-                maxima, denom, rows, vocab, width,
+                ctx, d_hidden, d_weight, chunk, ws, stack, hidden, weight, tp,
+                maxima, denom, rows, vocab, width, True, True,
             )
             ctx.enqueue_copy(dst_ptr=d_hidden_out, src_buf=d_hidden)
             ctx.enqueue_copy(dst_ptr=d_weight_out, src_buf=d_weight)

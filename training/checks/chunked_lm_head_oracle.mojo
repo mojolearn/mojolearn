@@ -24,7 +24,7 @@ from training.checks.loss_contract import CE_NEG_INF_BITS, neg_by_bits, refuse_n
 from training.chunked_lm_head_panel_math import LMHEAD_FAST_GEMM_PANEL, lmhead_gp_leaf_count
 from training.chunked_lm_head_profile import LM_HEAD_V2_CHUNK
 from training.chunked_lm_head_gemm_panel_host import (
-    lmhead_gp_host_flush, lmhead_gp_host_forward, lmhead_gp_host_backward,
+    lmhead_gp_host_forward, lmhead_gp_host_backward,
 )
 
 
@@ -136,18 +136,16 @@ def _gp_oracle(
     for row in range(rows):
         if targets[row] < 0 or Int(targets[row]) >= vocab:
             raise Error("chunked lm head v2: target outside [0, vocab) at row " + String(row))
-    var hf = lmhead_gp_host_flush(hidden)
-    var wf = lmhead_gp_host_flush(weight)
     var maxima = List[Float32](length=rows, fill=Float32(0.0))
     var denom = List[Float32](length=rows, fill=Float32(0.0))
     var row_loss = List[Float32](length=rows, fill=Float32(0.0))
-    lmhead_gp_host_forward(hf, wf, targets, rows, vocab, width, maxima, denom, row_loss)
+    lmhead_gp_host_forward(hidden, weight, targets, rows, vocab, width, maxima, denom, row_loss)
     var loss = lm_head_v2_loss_fold(row_loss, rows)
     if not with_grad:
         return ChunkedLMHeadV2Result(loss, maxima^, denom^, List[Float32](), List[Float32]())
     var d_hidden = List[Float32](length=rows * width, fill=Float32(0.0))
     var d_weight = List[Float32](length=vocab * width, fill=Float32(0.0))
-    lmhead_gp_host_backward(hf, wf, targets, rows, vocab, width, maxima, denom, d_hidden, d_weight)
+    lmhead_gp_host_backward(hidden, weight, targets, rows, vocab, width, maxima, denom, d_hidden, d_weight)
     return ChunkedLMHeadV2Result(loss, maxima^, denom^, d_hidden^, d_weight^)
 
 

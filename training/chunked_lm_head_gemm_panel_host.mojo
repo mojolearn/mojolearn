@@ -10,11 +10,14 @@ across all cores. Every unit is a function of its own inputs, so the task
 count moves no bit. The loop over logit panels is the only serial driver: a
 panel's products need the whole pool. The oracle
 (training/checks/chunked_lm_head_oracle.mojo) reaches this module under the
-arm, and through it the training host binding and every check.
+arm, and through it the training host binding and every check; the executor
+op's host arm (autograd/lm_head_v2_host.mojo) calls the `_into` entries.
+Operands are not flushed here: they are read only through the GEMM, whose
+leaf flushes both operands itself.
 """
 from std.memory import bitcast
 
-from checks.numerics import ftz, identical_fmax
+from checks.numerics import identical_fmax
 from core.host_parallel import host_parallelize
 from core.host_predict_threads import host_predict_task_count_work, host_predict_chunk
 from gemm.contract import OP_NN, OP_NT, OP_TN
@@ -30,25 +33,6 @@ from training.chunked_lm_head_panel_math import (
 
 comptime _P = MutPointer[Float32, MutAnyOrigin]
 comptime _T = MutPointer[Int32, MutAnyOrigin]
-
-
-def lmhead_gp_host_flush(values: List[Float32]) -> List[Float32]:
-    """A copy of an operand with every subnormal replaced by its signed zero
-    (the device door flushes its uploaded operands in place)."""
-    var count = len(values)
-    var flushed = List[Float32](length=count, fill=Float32(0.0))
-    var src = rebind[_P](values.unsafe_ptr())
-    var dst = rebind[_P](flushed.unsafe_ptr())
-    var tasks = host_predict_task_count_work(count, count)
-    var chunk = host_predict_chunk(count, tasks)
-
-    def _cells(k: Int) {imm src, imm dst, imm chunk, imm count}:
-        var lo = k * chunk
-        for i in range(lo, min(lo + chunk, count)):
-            dst.unsafe_store(i, ftz(src.unsafe_load(i)))
-
-    host_parallelize(_cells, tasks)
-    return flushed^
 
 
 def _host_max_pass(logits: _P, maxima: _P, rows: Int, n: Int, first: Bool):
@@ -137,28 +121,23 @@ def _host_merge_pass(dst: _P, l: _P, r: _P, cells: Int, has_r: Int):
     host_parallelize(_cells, tasks)
 
 
-def lmhead_gp_host_forward(
-    hidden: List[Float32], weight: List[Float32], targets: List[Int32],
-    rows: Int, vocab: Int, width: Int,
-    mut maxima: List[Float32], mut denom: List[Float32], mut row_loss: List[Float32],
+def lmhead_gp_host_forward_into(
+    hp: GhrPtr, wp: GhrPtr, tg: _T, rows: Int, vocab: Int, width: Int,
+    mx: _P, dn: _P, rl: _P,
 ) raises:
-    """Row maxima, denominators and row losses of FLUSHED operands
-    (`lmhead_gp_host_flush`), each list `rows` long, in the device forward's
-    words (`chunked_lm_head_gp_forward_into`). The caller folds the mean."""
+    """Row maxima, denominators and row losses (each `rows` long) in the
+    device forward's words (`chunked_lm_head_gp_forward_into`), over raw
+    storage: the oracle's lists and the executor op's host buffers. A code
+    outside [0, vocab) matches no entry; its row's `rl` cell must then hold
+    +0.0 on entry. The caller folds the mean."""
     var leaves = lmhead_gp_leaf_count(vocab)
     var panel = List[Float32](length=rows * min(vocab, LM_HEAD_V2_CHUNK), fill=Float32(0.0))
     var leaf_a = List[Float32](length=rows * leaves, fill=Float32(0.0))
     var leaf_b = List[Float32](length=rows * ((leaves + 1) // 2), fill=Float32(0.0))
-    var hp = rebind[GhrPtr](hidden.unsafe_ptr())
-    var wp = rebind[GhrPtr](weight.unsafe_ptr())
     var pp = rebind[GhrPtr](panel.unsafe_ptr())
     var lg = rebind[_P](panel.unsafe_ptr())
     var la = rebind[_P](leaf_a.unsafe_ptr())
     var lb = rebind[_P](leaf_b.unsafe_ptr())
-    var mx = rebind[_P](maxima.unsafe_ptr())
-    var dn = rebind[_P](denom.unsafe_ptr())
-    var rl = rebind[_P](row_loss.unsafe_ptr())
-    var tg = rebind[_T](targets.unsafe_ptr())
     for chunk0 in range(0, vocab, LM_HEAD_V2_CHUNK):  # driver-loop: over logit panels
         var n = min(LM_HEAD_V2_CHUNK, vocab - chunk0)
         gemm_host_rows_into(hp, wp + chunk0 * width, pp, OP_NT, rows, n, width)
@@ -186,29 +165,23 @@ def lmhead_gp_host_forward(
     _ = leaf_b^
 
 
-def lmhead_gp_host_backward(
-    hidden: List[Float32], weight: List[Float32], targets: List[Int32],
-    rows: Int, vocab: Int, width: Int,
-    maxima: List[Float32], denom: List[Float32],
-    mut d_hidden: List[Float32], mut d_weight: List[Float32],
+def lmhead_gp_host_backward_into(
+    hp: GhrPtr, wp: GhrPtr, tg: _T, rows: Int, vocab: Int, width: Int,
+    mx: _P, dn: _P, dh: _P, dwp: GhrPtr, want_dh: Bool, want_dw: Bool,
 ) raises:
-    """dHidden (rows * width) and dWeight (vocab * width) of FLUSHED operands
-    and the matching forward statistics, in the device backward's words
-    (`chunked_lm_head_gp_backward_into`)."""
+    """dHidden (rows * width) and dWeight (vocab * width) from the matching
+    forward statistics, in the device backward's words
+    (`chunked_lm_head_gp_backward_into`), over raw storage. A gradient not
+    wanted is neither computed nor written (its pointer is not read)."""
     var cells = rows * width
     var panel = List[Float32](length=rows * min(vocab, LM_HEAD_V2_CHUNK), fill=Float32(0.0))
-    var stack = List[Float32](length=lmhead_gp_stack_slots(vocab) * cells, fill=Float32(0.0))
-    var hp = rebind[GhrPtr](hidden.unsafe_ptr())
-    var wp = rebind[GhrPtr](weight.unsafe_ptr())
+    var stack = List[Float32](
+        length=(lmhead_gp_stack_slots(vocab) * cells if want_dh else 1), fill=Float32(0.0)
+    )
     var pp = rebind[GhrPtr](panel.unsafe_ptr())
     var sp = rebind[GhrPtr](stack.unsafe_ptr())
-    var dwp = rebind[GhrPtr](d_weight.unsafe_ptr())
     var lg = rebind[_P](panel.unsafe_ptr())
     var st = rebind[_P](stack.unsafe_ptr())
-    var dh = rebind[_P](d_hidden.unsafe_ptr())
-    var mx = rebind[_P](maxima.unsafe_ptr())
-    var dn = rebind[_P](denom.unsafe_ptr())
-    var tg = rebind[_T](targets.unsafe_ptr())
     # The device's binary counter over panel partials, slot for slot.
     var depth = 0
     var panels = 0
@@ -216,19 +189,51 @@ def lmhead_gp_host_backward(
         var n = min(LM_HEAD_V2_CHUNK, vocab - chunk0)
         gemm_host_rows_into(hp, wp + chunk0 * width, pp, OP_NT, rows, n, width)
         _host_dlogit_pass(lg, mx, dn, tg, rows, n, chunk0)
-        gemm_host_rows_into(pp, hp, dwp + chunk0 * width, OP_TN, n, width, rows)
-        gemm_host_rows_into(pp, wp + chunk0 * width, sp + depth * cells, OP_NN, rows, width, n)
-        depth += 1
-        panels += 1
-        var carry = panels
-        while carry % 2 == 0:  # driver-loop: over completed tree nodes
+        if want_dw:
+            gemm_host_rows_into(pp, hp, dwp + chunk0 * width, OP_TN, n, width, rows)
+        if want_dh:
+            gemm_host_rows_into(pp, wp + chunk0 * width, sp + depth * cells, OP_NN, rows, width, n)
+            depth += 1
+            panels += 1
+            var carry = panels
+            while carry % 2 == 0:  # driver-loop: over completed tree nodes
+                _host_merge_pass(st + (depth - 2) * cells, st + (depth - 2) * cells, st + (depth - 1) * cells, cells, 1)
+                depth -= 1
+                carry //= 2
+    if want_dh:
+        while depth > 1:  # driver-loop: over leftover tree nodes
             _host_merge_pass(st + (depth - 2) * cells, st + (depth - 2) * cells, st + (depth - 1) * cells, cells, 1)
             depth -= 1
-            carry //= 2
-    while depth > 1:  # driver-loop: over leftover tree nodes
-        _host_merge_pass(st + (depth - 2) * cells, st + (depth - 2) * cells, st + (depth - 1) * cells, cells, 1)
-        depth -= 1
-    _host_merge_pass(dh, st, st, cells, 0)
+        _host_merge_pass(dh, st, st, cells, 0)
     # The pointers above do not retain these owners.
     _ = panel^
     _ = stack^
+
+
+def lmhead_gp_host_forward(
+    hidden: List[Float32], weight: List[Float32], targets: List[Int32],
+    rows: Int, vocab: Int, width: Int,
+    mut maxima: List[Float32], mut denom: List[Float32], mut row_loss: List[Float32],
+) raises:
+    """`lmhead_gp_host_forward_into` over lists (the oracle's door);
+    `row_loss` arrives zero-filled."""
+    lmhead_gp_host_forward_into(
+        rebind[GhrPtr](hidden.unsafe_ptr()), rebind[GhrPtr](weight.unsafe_ptr()),
+        rebind[_T](targets.unsafe_ptr()), rows, vocab, width,
+        rebind[_P](maxima.unsafe_ptr()), rebind[_P](denom.unsafe_ptr()), rebind[_P](row_loss.unsafe_ptr()),
+    )
+
+
+def lmhead_gp_host_backward(
+    hidden: List[Float32], weight: List[Float32], targets: List[Int32],
+    rows: Int, vocab: Int, width: Int,
+    maxima: List[Float32], denom: List[Float32],
+    mut d_hidden: List[Float32], mut d_weight: List[Float32],
+) raises:
+    """`lmhead_gp_host_backward_into` over lists (the oracle's door), both gradients."""
+    lmhead_gp_host_backward_into(
+        rebind[GhrPtr](hidden.unsafe_ptr()), rebind[GhrPtr](weight.unsafe_ptr()),
+        rebind[_T](targets.unsafe_ptr()), rows, vocab, width,
+        rebind[_P](maxima.unsafe_ptr()), rebind[_P](denom.unsafe_ptr()),
+        rebind[_P](d_hidden.unsafe_ptr()), rebind[GhrPtr](d_weight.unsafe_ptr()), True, True,
+    )
