@@ -125,6 +125,10 @@ from ivf.impl.neighbors.ivf_flat.ivf_finite_device import (
 comptime IVF_IDN_DEVICE_SCALE = GLOBAL_NUMERIC_MODE == _IVF_NUMERIC_IDENTICAL
 from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from std.memory import unsafe_memcpy
+from core.transfer import TRANSFER_TIER_IDENTICAL, transfer_download_f32_list, transfer_download_list
+
+#: The pinned download stages of this module and tier (core/transfer.mojo).
+comptime _XFER_POOL = "MojolearnIvfFlatTransferStagesIdenticalV1" if TRANSFER_TIER_IDENTICAL else "MojolearnIvfFlatTransferStagesFastV1"
 from x_ann.stage_timer import AnnStages
 from x_ann.switches import ANN3_HOST_PASSES, ANN3_TRAINSET_COPY
 from x_ann.kpp_seed_device import kpp_seed_device
@@ -351,41 +355,20 @@ def upload_f32(
 def download_f32(
     ctx: DeviceContext, mut buf: DeviceBuffer[DType.float32], n: Int
 ) raises -> List[Float32]:
-    var host = ctx.enqueue_create_host_buffer[DType.float32](n)
-    ctx.enqueue_copy(dst_ptr=host.unsafe_ptr(), src_buf=buf)
-    ctx.synchronize()
-    # lane ann-apple3, behind `ANN3_HOST_PASSES`: one memcpy of the staged
-    # words (one append each otherwise)
-    comptime if ANN3_HOST_PASSES:
-        var moved = List[Float32](length=n, fill=Float32(0.0))
-        if n > 0:
-            unsafe_memcpy(dest=moved.unsafe_ptr(), src=host.unsafe_ptr(), count=n)
-        _ = host^
-        return moved^
-    var out = List[Float32]()
-    for i in range(n):
-        out.append(host.unsafe_ptr().unsafe_load(i))
-    _ = host^
-    return out^
+    # core/transfer.mojo (lane fx-transfer-helpers, 2026-11-18), every
+    # column: the copy engine writes the list's own words (the pooled pinned
+    # stages from DOWNLOAD_STAGE_MIN floats). Gone: a pinned buffer per call,
+    # and then either one append per word or, under `ANN3_HOST_PASSES` (lane
+    # ann-apple3), a zero fill and a memcpy. The same words on both arms.
+    return transfer_download_f32_list[_XFER_POOL](ctx, buf, n)
 
 
 def download_u32(
     ctx: DeviceContext, mut buf: DeviceBuffer[DType.uint32], n: Int
 ) raises -> List[UInt32]:
-    var host = ctx.enqueue_create_host_buffer[DType.uint32](n)
-    ctx.enqueue_copy(dst_ptr=host.unsafe_ptr(), src_buf=buf)
-    ctx.synchronize()
-    comptime if ANN3_HOST_PASSES:
-        var moved = List[UInt32](length=n, fill=UInt32(0))
-        if n > 0:
-            unsafe_memcpy(dest=moved.unsafe_ptr(), src=host.unsafe_ptr(), count=n)
-        _ = host^
-        return moved^
-    var out = List[UInt32]()
-    for i in range(n):
-        out.append(host.unsafe_ptr().unsafe_load(i))
-    _ = host^
-    return out^
+    # core/transfer.mojo: as `download_f32` above, one copy into the list's
+    # own words on every column (both `ANN3_HOST_PASSES` arms are gone here).
+    return transfer_download_list[DType.uint32](ctx, buf, n)
 
 
 def compute_row_norms(
