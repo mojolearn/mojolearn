@@ -5,7 +5,7 @@ Lane fix-gbdt-prebinned-infer (2026-11-13). `ResidentGbdtModel` applies a
 non-symmetric ensemble through the pack it holds from the first predict
 (`IDN_NS_RESIDENT_PACK`, `NsResidentPack` / `ns_resident_apply` in
 `gbdt/models/add_non_symmetric_tree_doc_parallel.mojo`); the per-call pack
-(`predict`, `-D MOJOLEARN_IDN_GBDT_PREBINNED_INFER_OLD`) is the reference.
+(`predict_floats`) is the reference.
 Checked per fixture (raw input, pre-binned input as the board's
 `ours-prebinned` arm feeds it: every value replaced by an integer bin id
 held in float32):
@@ -18,8 +18,7 @@ held in float32):
 
 Fixtures run in order on one GPU (ordered GPU work on one process context);
 the fixture tiling and the compares run one task per column or row across
-the host cores. Build both forms: `pixi run check-native-gbdt-resident-ns`
-and `pixi run check-native-gbdt-resident-ns-old`.
+the host cores.
 """
 from max.gpu.host import DeviceContext
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
