@@ -1318,7 +1318,8 @@ def define_readers(commit, names, root=ROOT):
     without `-D NAME`, so it is not a reader (lane owed-deletions, 2026-11-16: the guard modules' "refusal removed
     ... restored" comment lines made 14 and 19 binding scripts rebuild where 5 and 4 read the code). The rule errs
     towards BUILD: a quoted name in a docstring or a message counts as a read. Every other file (build scripts,
-    JSON, docs) is matched by the whole word."""
+    JSON, docs) is matched by the whole word. The rule is bincache.reads_define, the one the cache key uses
+    (bincache.scope_build_defines), so a unit planned REUSE is keyed define-free and hits the base's archive."""
     if not names:
         return set()
     words = []
@@ -1334,7 +1335,7 @@ def define_readers(commit, names, root=ROOT):
                            capture_output=True, text=True)
         for line in p.stdout.splitlines():
             parts = line.split(":", 3)          # <commit>:<path>:<lineno>:<text>
-            if len(parts) == 4 and not parts[3].lstrip().startswith("#"):
+            if len(parts) == 4 and any(bincache.mojo_line_reads_define(parts[3], n) for n in names):
                 reads.add(parts[1])
     return {f for f in named if not f.endswith(".mojo")} | (reads & named)
 
