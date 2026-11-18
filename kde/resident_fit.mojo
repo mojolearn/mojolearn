@@ -33,7 +33,7 @@ from std.sys.compile import is_defined
 from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from checks.numerics import NUMERIC_FAST
 
-from core.hostptr import copy_f32
+from core.hostptr import copy_f32, copy_f32_finite
 from max.gpu.host import DeviceBuffer, DeviceContext
 from core.neural_context import process_ctx
 from checks.numerics import GLOBAL_NUMERIC_MODE as _DEVCTX_MODE, NUMERIC_IDENTICAL as _DEVCTX_IDENTICAL
@@ -60,8 +60,6 @@ from kde.impl.neighbors.kernel_density import (
     metric_from_name,
 )
 from kde.impl.distance.distance_ops import DIST_COSINE_EXPANDED, DIST_L2_EXPANDED
-from core.admitted_finite_status import enqueue_finite_status
-from core.device_zero import enqueue_fill
 from core.shared_slot import SharedSlot, shared_slot_lock, shared_slot_unlock
 
 
@@ -336,12 +334,13 @@ def kde_score_samples_resident(
     when `want_total` (KernelDensity.score; lane pyglue-numeric: a host sum
     of the downloaded scores), else 0.
 
-    `status_addr` (not 0; lane a7b-device-x-neighbors): a host int32 word
-    that receives the queries' finite status, tested on the device behind
-    their upload and read back with the scores (no extra synchronisation);
-    the host pass then runs only for the sqeuclidean bound and the cosine
-    zero-row rule. On a non-finite word the door refuses and discards the
-    scores."""
+    `status_addr` (not 0): a host int32 word that receives the queries'
+    finite status, tested on the bits of each word inside the staging copy
+    into pinned memory that the upload makes in any case (`copy_f32_finite`,
+    lane fb12-kde-finite): no launch, no download, no second pass. On a
+    non-finite word nothing is uploaded or launched, `scores` is not
+    written, and the door refuses. The host pass `kde_validate_data_ptr`
+    then runs only for the sqeuclidean bound and the cosine zero-row rule."""
     var k = kernel_from_name(kernel)
     var m = metric_from_name(metric)
     var entry = _kde_fit_lease(handle)
@@ -362,16 +361,27 @@ def kde_score_samples_resident(
             kde_validate_data_ptr(query, n_query, n_features, m, "query")
         clean = False
         var n = n_query * n_features
-        var dquery = entry.ctx.enqueue_create_buffer[DType.float32](n)
         var host = entry.ctx.enqueue_create_host_buffer[DType.float32](n)
-        copy_f32(query, host.unsafe_ptr(), n)
-        entry.ctx.enqueue_copy(dst_buf=dquery, src_ptr=host.unsafe_ptr())
-        var dstatus = entry.ctx.enqueue_create_buffer[DType.int32](1)
-        var hstatus = entry.ctx.enqueue_create_host_buffer[DType.int32](1)
+        # Admission (lane fb12-kde-finite, 2026-11-17): the finite test rides
+        # the staging copy into pinned memory that this upload makes for every
+        # query anyway. The copy already loads each word; testing its exponent
+        # bits in registers adds no pass, no launch and no download at any
+        # size, where the device form (a7b) added a fill launch, a test launch,
+        # a device and a pinned status buffer and a status download per call
+        # (L40S attribution: launches 3 -> 5, D2H 1 -> 2, +0.22 ms host). The
+        # verdict is known before anything is enqueued, so a refused query
+        # uploads and computes nothing and `scores` is never written.
         if status_addr != 0:
-            enqueue_fill[DType.int32](entry.ctx, dstatus, Int32(0))
-            enqueue_finite_status(entry.ctx, dquery.unsafe_ptr(), n, dstatus.unsafe_ptr(), 0)
-            entry.ctx.enqueue_copy(dst_ptr=hstatus.unsafe_ptr(), src_buf=dstatus)
+            if not copy_f32_finite(query, host.unsafe_ptr(), n):
+                MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=status_addr).unsafe_store(0, Int32(1))
+                _ = host^
+                clean = True
+                return Float32(0)
+            MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=status_addr).unsafe_store(0, Int32(0))
+        else:
+            copy_f32(query, host.unsafe_ptr(), n)
+        var dquery = entry.ctx.enqueue_create_buffer[DType.float32](n)
+        entry.ctx.enqueue_copy(dst_buf=dquery, src_ptr=host.unsafe_ptr())
         var dout = entry.ctx.enqueue_create_buffer[DType.float32](n_query)
         var trace = IdentityTrace()
         trace.header(
@@ -397,10 +407,6 @@ def kde_score_samples_resident(
         entry.ctx.enqueue_copy(dst_ptr=hout.unsafe_ptr(), src_buf=dout)
         entry.ctx.synchronize()
         copy_f32(hout.unsafe_ptr(), scores, n_query)
-        if status_addr != 0:
-            MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=status_addr).unsafe_store(0, hstatus.unsafe_ptr()[0])
-        _ = hstatus^
-        _ = dstatus^
         _ = hout^
         _ = host^
         _ = dquery^
