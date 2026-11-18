@@ -46,6 +46,14 @@ class FirstBuildError(unittest.TestCase):
         self.assertIn("identical_merged__mojolearn_native: Error: generated source: preparation failed for core/t.mojo",
                       rc.first_build_error(self.arm))
 
+    def test_linux_wait_reads_a_leg_directly(self):
+        # tools/release.py linux-wait prints this as soon as the leg fails (lane fx-build-tools, 2026-11-18)
+        self.binding_log("GHA/shards/0/build_logs/host_merged__mojolearn_native_host.log",
+                         ["/root/mojolearn/core/h.mojo:7:3: error: bad"])
+        self.assertEqual(rc.legs_first_error([self.legs / "cuda-sm_89", self.root / "missing"]),
+                         "core/h.mojo:7:3: error: bad")
+        self.assertIsNone(rc.legs_first_error([self.root / "missing"]))
+
     def test_without_leg_logs_the_arms_failed_line(self):
         self.assertEqual(rc.first_build_error(self.arm),
                          "core-linux: FAILED at linux-assemble: cuda-sm_89 did not build")
