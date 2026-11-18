@@ -4,12 +4,15 @@ The 2026-10-27 relocation manifest is historical evidence, not a restriction
 on subsequent changes to provider bodies or ownership directories.
 """
 
+from check_generation_native_boundary import unbuilt_generated
 from check_library_provider_layout import check
 
 
 def test_all_native_family_dependencies_resolve():
     roots, _, problems = check()
     assert len(roots) > 2400
+    unbuilt = unbuilt_generated(problems)  # registered generated tables a build writes first
+    problems = [p for p in problems if p not in unbuilt]
     assert not problems, problems
 
 

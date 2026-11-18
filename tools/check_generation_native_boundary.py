@@ -27,7 +27,28 @@ CALLBACK_TOKENS = re.compile(r"\b(?:PythonObject|PyObjectPtr|Python|py_call|py_c
 # Resolved from Modular's installed native packages, not this repository.
 # nn.topk is supplied by lib/mojo/nn.mojoc; package hash/provenance is retained
 # in experiments/neural_provider_layout_20261027/external_native.json.
-EXTERNAL_MODULES = {"layout", "layout.tile_layout", "linalg.gemv", "linalg.matmul", "nn.topk"}
+# layout.tensor_engine (DefaultEngine for top_k, Mojo 1.2.0, 7911e021d6) and comm.sync (enable_p2p, 2b4af0abe6) are
+# Modular's layout.mojoc and comm.mojoc.
+EXTERNAL_MODULES = {"layout", "layout.tile_layout", "layout.tensor_engine", "linalg.gemv", "linalg.matmul", "nn.topk",
+                    "comm.sync"}
+
+
+def unbuilt_generated(problems, root=ROOT):
+    """The problems that are only a REGISTERED generated module (tools/generated_sources.GENERATED) a build has not
+    written yet in this checkout, with its generator and pin tracked. A build writes them before it compiles
+    (generated_sources.py prepare, which downloads pinned Unicode data); audit() never exempts them itself, and a
+    present generated file is audited like any source."""
+    import sys
+    sys.path.insert(0, str(ROOT / "tools"))
+    try:
+        from generated_sources import GENERATED
+    finally:
+        sys.path.pop(0)
+    registered = {rel[:-len(".mojo")].replace("/", "."): rel for rel in GENERATED}
+    return [(chain, reason) for chain, reason in problems
+            if reason == "unresolved local dependency" and chain[-1] in registered
+            and not (root / registered[chain[-1]]).exists()
+            and all((root / dep).is_file() for dep in GENERATED[registered[chain[-1]]])]
 
 
 def code_only(source):
