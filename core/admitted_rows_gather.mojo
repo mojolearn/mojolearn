@@ -25,7 +25,6 @@ from core.host_parallel import host_parallelize
 from core.host_predict_threads import host_predict_task_count_work, host_predict_chunk
 
 comptime _ARG_U32P = MutPointer[UInt32, MutUntrackedOrigin]
-comptime _ARG_I64P = MutPointer[Int64, MutUntrackedOrigin]
 comptime _ARG_U8P = MutPointer[UInt8, MutUntrackedOrigin]
 comptime _ARG_W = 16
 comptime ARG_FINITE = 0
@@ -56,10 +55,11 @@ def _arg_copy_row(src: _ARG_U32P, dst: _ARG_U32P, n: Int) -> Bool:
     return finite
 
 
-def admitted_gather_rows_f32(
+def admitted_gather_rows_f32[index_dtype: DType = DType.int64](
     base: Int, base_rows: Int, row_words: Int, indices: Int, rows: Int, dst: Int,
 ) -> Int:
-    """Rows `indices[0:rows]` (int64 words at `indices`) of the C-order
+    """Rows `indices[0:rows]` (`index_dtype` words at `indices`: int64 for a
+    model-selection fold, int32 for a meta-estimator's cv fold) of the C-order
     float32 base at `base` (`base_rows` x `row_words`) into the C-order
     destination at `dst` (uninitialised is fine: every cell is written
     unless an index is out of range, which the caller refuses). Rows are
@@ -73,7 +73,7 @@ def admitted_gather_rows_f32(
     # Two flags per task: [2t] a non-finite word, [2t + 1] an index out of range.
     var flags = List[UInt8](length=2 * tasks, fill=UInt8(0))
     var flag_ptr = rebind[_ARG_U8P](flags.unsafe_ptr())
-    var index_ptr = _ARG_I64P(unsafe_from_address=indices)
+    var index_ptr = MutPointer[Scalar[index_dtype], MutUntrackedOrigin](unsafe_from_address=indices)
 
     def _rows(t: Int) {imm base, imm base_rows, imm row_words, imm index_ptr, imm rows, imm dst, imm chunk, imm flag_ptr}:
         var lo = t * chunk

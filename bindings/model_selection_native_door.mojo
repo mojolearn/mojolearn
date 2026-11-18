@@ -66,7 +66,11 @@ def msel_operation(model: PythonObject, operation: String, args: PythonObject,
         # as the compiled operation of its connected plan, never its Python method.
         if py_type(args[0]) is not b.str or py_type(args[1]) is not b.tuple:
             raise Error("TypeError: native estimator call requires a method name and an argument tuple")
-        return msel_estimator_call(model, String(args[0]), args[1], context, False,
+        # args[3] True (prep_estimator_predict_internal): a package-internal
+        # caller reading float32 words; `predict` takes the plan's internal
+        # operation (`scorer_predict_operation`), as the native scorers do.
+        var internal = len(args) > 3 and args[3] is PythonObject(True)
+        return msel_estimator_call(model, String(args[0]), args[1], context, internal,
                                    args[2] if len(args) > 2 else PythonObject(None))
     if operation == "family_msel_estimator_clone":
         # `type(model)(**model.get_params(deep=False))` from the constructor schema.

@@ -27,7 +27,11 @@ from bindings.py_attr import py_attr
 from bindings.native_loaded_module_door import native_loaded_module
 from bindings.py_typed_call import py_call_typed
 from bindings.classical_arrays_door import classical_wrap_array, _store_code
-from bindings.py_admitted_registry import admitted_scope_begin, admitted_scope_end, admitted_scope_open, admitted_hold, admitted_hold_rows_of, admitted_is_held
+from bindings.py_admitted_registry import (
+    admitted_scope_begin, admitted_scope_end, admitted_scope_open, admitted_hold, admitted_hold_deferred,
+    admitted_hold_rows_of, admitted_is_held,
+)
+from core.admitted_rows_gather import admitted_gather_rows_f32, ARG_FINITE, ARG_OUT_OF_RANGE
 from bindings.trees_public_inputs_door import (
     TreesLabels,
     trees_builtins,
@@ -39,11 +43,10 @@ from bindings.trees_public_inputs_door import (
     trees_decode_labels,
     trees_cast,
 )
-from bindings.trees_public_inputs_run import trees_finite_f32
 from bindings.admitted_input_run import AdmittedXView
 from bindings.admitted_input_unpack import (
     AdmittedX, admit_f32, admit_weight_words, admit_ids, admitted_words, admitted_array, admitted_vector,
-    admit_c_view, admitted_dtype,
+    admit_c_view, admitted_dtype, admitted_storage,
 )
 from bindings.classical_arrays_door import classical_address
 # TOMBSTONE: TreesView / _view_of_array / trees_view / trees_check_rank / trees_f32 / trees_check_sample_weight / trees_all_finite / trees_vector / trees_empty uses and _place_view (the trees admission aliases; internal Arrays are read as themselves) deleted 2026-11-09 by lane a1b-doors-opt-in-trees-linear; code recoverable at f59d913b0b.
@@ -71,7 +74,7 @@ from bindings.trees_public_score_door import trees_r2, trees_class_codes
 from bindings.classical_labels_door import labels_accuracy, _classification_encoded as score_classification_encoded
 from bindings.prep_native_estimator_door import (
     prep_estimator_admit, prep_estimator_clone, prep_estimator_call, prep_estimator_has,
-    prep_estimator_plan, prep_native_context, prep_native_split,
+    prep_estimator_plan, prep_native_context, prep_native_split, prep_estimator_predict_internal,
 )
 from bindings.classical_labels_door import _label_list, classical_score_from_codes
 from bindings.p3_labels_metrics_native_door import p3_interleave_columns
@@ -180,33 +183,42 @@ def _f64_word(array: PythonObject, index: Int) raises -> Float64:
 
 def _x_array(X: PythonObject, context: PythonObject) raises -> PythonObject:
     """`as_f32_c(X, ndim=2, name="X")` as the Array the members read. Inside
-    the operation's hold scope (meta_admitted_operation) a finite matrix is
-    held once (bindings/admitted_registry.mojo `admitted_hold`): every member
-    door then reads it as admitted, with no second view, check or scan."""
+    the operation's hold scope (meta_admitted_operation) the matrix is held
+    once with its finite test deferred (bindings/py_admitted_registry.mojo
+    `admitted_hold_deferred`): every member door reads it as admitted, with
+    no second view or check; a door that tests in its kernel entry scans
+    nothing, and the first door that needs a host verdict scans X once for
+    the whole call (admitted_held_verify records it)."""
     if admitted_is_held(X):
         return X
     var m = _x_f32(X, context)
     # fb-boost-copy (2026-11-17): `_as_array` is now the zero-copy view this
     # door's `_x_view_array` (fb-infer/C, deleted) built; one helper for both doors.
     var Xa = _as_array(m, Python.tuple(m.rows, m.cols), context)
-    _hold_finite(Xa, context)
+    _hold_deferred(Xa)
     return Xa
 
 
-def _hold_finite(Xa: PythonObject, context: PythonObject) raises:
-    """Hold the float32 C-order Array `Xa` for the members when it is
-    finite (one scan for the whole call, instead of one per member door).
-    A non-finite matrix is not held: each member refuses or accepts it as
-    its own door does."""
+def _hold_deferred(Xa: PythonObject) raises:
+    """Hold the float32 C-order Array `Xa` for the members with its finite
+    test deferred (lane s2's form, as model selection holds its X).
+    fb12-rows (2026-11-17): this scanned X on the host before every
+    meta-estimator fit and prediction (`trees_finite_f32`, one pass over X
+    per call that 0.8.55 never made) and held only a finite X; a member that
+    tests the words it uploads (Ridge / LinearRegression predict,
+    providers/python/linear_predict_boundary_unpack.mojo) then paid that
+    pass for nothing. Now a deferring door reads X untested, a door that
+    needs a host verdict proves it once for the whole call (and for every
+    fold held as rows of X), and a non-finite X is refused by the first
+    member door, in its own words, as before. The scan cost is per word, so
+    the saving holds for every shape."""
     if not admitted_scope_open() or admitted_is_held(Xa):
         return
     var rows = _rows(Xa)
     var cols = _cols(Xa)
     if rows < 1 or cols < 1:
         return
-    var address = trees_address(Xa)
-    if trees_finite_f32(address, rows * cols):
-        admitted_hold(Xa, address, rows, cols)
+    admitted_hold_deferred(Xa, trees_address(Xa), rows, cols, PythonObject(None))
 
 
 def _rows(array: PythonObject) raises -> Int:
@@ -322,6 +334,41 @@ def _one_col(xt: PythonObject, p: AdmittedXView, j: Int, context: PythonObject) 
     var rows = _arange(xt, p.rows, context)
     var col = _codes_array(Python.list(PythonObject(j)), context)
     return _gather(xt, p.address, p.rows, p.cols, rows, col, context)
+
+
+def _fold_rows(xt: PythonObject, Xa: PythonObject, n: Int, d: Int, rows: PythonObject, cols: PythonObject,
+               context: PythonObject) raises -> PythonObject:
+    """Rows `rows` (an int32 Array) of the float32 C-order n x d `Xa` at
+    columns `cols`, which the caller makes as arange(d) (every column, the
+    cv folds' gather), as a new C-order Array, held for the member doors of
+    the open hold scope when finite.
+
+    fb12-rows (2026-11-17): a cv fold's X was `_gather` (xtrees
+    gather_f32_device on a GPU install): the WHOLE of X uploaded, the rows
+    gathered on the device and downloaded into a zero-filled Array, twice
+    per fold (train and test rows), so a k-fold CalibratedClassifierCV fit
+    moved 2k uploads and k downloads of X beside the members' own uploads of
+    their rows; each member door then scanned its fold on the host. The
+    rows are now copied out of X on the host (core/admitted_rows_gather.mojo,
+    row tasks over the cores, model selection's fold gather since R13) into
+    uninitialised storage, the copy testing the words as it goes, so a
+    finite fold is held and its members scan nothing. Same words in the same
+    order: no bit changes. The cost moved is per word (X's bytes over PCIe
+    twice and back once, against one host copy), so it holds for every shape.
+    An empty fold, or a column subset, keeps `_gather`."""
+    var r = Int(py=rows.shape[0])
+    if r < 1 or d < 1 or Int(py=cols.shape[0]) != d:
+        return _gather(xt, trees_address(Xa), n, d, rows, cols, context)
+    var out = admitted_storage(Python.tuple(r, d), "<f4", context, "C", True)
+    var dst = trees_address(out)
+    var status = admitted_gather_rows_f32[DType.int32](trees_address(Xa), n, d, trees_address(rows), r, dst)
+    _ = Xa  # keep the Python object alive through the native call above
+    _ = rows  # keep the Python object alive through the native call above
+    if status == ARG_OUT_OF_RANGE:
+        raise Error("x_trees gather: row index out of range")
+    if status == ARG_FINITE and admitted_scope_open():
+        admitted_hold(out, dst, r, d)
+    return out
 
 
 # ------------------------------------------------------------- x_trees glue
@@ -805,7 +852,7 @@ def _voting_transform(model: PythonObject, X: PythonObject, classifier: Bool, co
             _ = _place(xt, out, n, width, blk.view(), rows, j * k)
             _ = blk^
         else:
-            var blk = _out2d(prep_estimator_call(e, "predict", Python.tuple(Xa), context), n, context)
+            var blk = _out2d(prep_estimator_predict_internal(e, Python.tuple(Xa), context), n, context)
             _ = _place(xt, out, n, width, blk.view(), rows, j)
             _ = blk^
     return trees_reshape(out, Python.tuple(n, width), context)
@@ -833,7 +880,7 @@ def _voting_regress(model: PythonObject, X: PythonObject, context: PythonObject)
         raise Error("weights has " + String(len(w)) + " entries, there are " + String(m) + " estimators")
     var acc = _zeros(n, context)
     for i in range(m):  # driver-loop: over members
-        _acc_w(xt, acc, prep_estimator_call(members[i], "predict", Python.tuple(Xa), context), n, Float64(py=w[i]), context)
+        _acc_w(xt, acc, prep_estimator_predict_internal(members[i], Python.tuple(Xa), context), n, Float64(py=w[i]), context)
     _scale(xt, acc, _fsum(w, context))
     return acc
 
@@ -865,7 +912,8 @@ def _stack_method(model: PythonObject, est: PythonObject, classifier: Bool, cont
 def _stack_out(xt: PythonObject, est: PythonObject, method: String, Xs: PythonObject, n: Int, binary: Bool,
                context: PythonObject) raises -> PythonObject:
     """`_StackingBase._out`: a binary predict_proba keeps its second column."""
-    var out = prep_estimator_call(est, method, Python.tuple(Xs), context)
+    var out = (prep_estimator_predict_internal(est, Python.tuple(Xs), context) if method == "predict"
+               else prep_estimator_call(est, method, Python.tuple(Xs), context))
     if method == "predict_proba" and binary:
         var p = _out2d(out, n, context)
         var col = _one_col(xt, p.view(), 1, context)
@@ -1264,8 +1312,17 @@ def _multioutput_regressor_predict(model: PythonObject, X: PythonObject, context
         return out
     var out = _zeros(n * m, context)
     var rows = _arange(xt, n, context)
+    # fb12-rows (2026-11-17): each member predicts through its plan's
+    # internal float32 operation (prep_estimator_predict_internal), as
+    # 0.8.55's `e.predict(Xa)` from inside the package did. The public
+    # `predict` op saw the user's frame above this door and returned
+    # scikit-learn's float64 widening for a linear member: a wide device
+    # epilogue, twice the download, a float64 output allocation, then
+    # `_out2d` cast it back to float32 (a second allocation and pass) per
+    # member per call. The widening is exact, so the placed values (and
+    # bits) are the same.
     for j in range(m):  # driver-loop: over members
-        var blk = _out2d(prep_estimator_call(members[j], "predict", Python.tuple(Xa), context), n, context)
+        var blk = _out2d(prep_estimator_predict_internal(members[j], Python.tuple(Xa), context), n, context)
         _ = _place(xt, out, n, m, blk.view(), rows, j)
         _ = blk^
     return trees_reshape(out, Python.tuple(n, m), context)
@@ -1973,27 +2030,34 @@ struct _CalUnits(Movable):
         var tr = self.splits[f][0]
         var te = self.splits[f][1]
         var e = _clone(self.base, self.context)
-        self._enter()
-        var xtr = PythonObject(None)
-        var ytr = PythonObject(None)
+        # The fold's rows are held for its member doors in a scope of this
+        # unit (dropped when the unit ends, so no fold's matrices outlive
+        # it); a hold belongs to the thread that opened the scope.
+        var mark = admitted_scope_begin()
         try:
-            xtr = _gather(self.xt, trees_address(self.Xa), self.n, self.d, tr, self.cols, self.context)
-            ytr = _gather_codes(self.xt, self.codes, tr, self.context)
+            self._enter()
+            var xtr = PythonObject(None)
+            var ytr = PythonObject(None)
+            try:
+                xtr = _fold_rows(self.xt, self.Xa, self.n, self.d, tr, self.cols, self.context)
+                ytr = _gather_codes(self.xt, self.codes, tr, self.context)
+            finally:
+                native_unit_gate_leave(self.gate)
+            _fit_member(e, xtr, ytr, PythonObject(None), self.context)
+            self._enter()
+            try:
+                var Xte = _fold_rows(self.xt, self.Xa, self.n, self.d, te, self.cols, self.context)
+                var scores = _cal_scores(self.model, self.xt, e, Xte, self.context)
+                if self.ensemble:
+                    var cals = _fit_calibrators(self.model, self.xt, scores,
+                                                _gather_codes(self.xt, self.codes, te, self.context), self.context)
+                    py_setitem(self.results, PythonObject(f), Python.tuple(e, cals))
+                else:
+                    py_setitem(self.results, PythonObject(f), scores)
+            finally:
+                native_unit_gate_leave(self.gate)
         finally:
-            native_unit_gate_leave(self.gate)
-        _fit_member(e, xtr, ytr, PythonObject(None), self.context)
-        self._enter()
-        try:
-            var Xte = _gather(self.xt, trees_address(self.Xa), self.n, self.d, te, self.cols, self.context)
-            var scores = _cal_scores(self.model, self.xt, e, Xte, self.context)
-            if self.ensemble:
-                var cals = _fit_calibrators(self.model, self.xt, scores,
-                                            _gather_codes(self.xt, self.codes, te, self.context), self.context)
-                py_setitem(self.results, PythonObject(f), Python.tuple(e, cals))
-            else:
-                py_setitem(self.results, PythonObject(f), scores)
-        finally:
-            native_unit_gate_leave(self.gate)
+            admitted_scope_end(mark)
         _ = self.Xa  # keep the Python object alive through the native calls above
 
     def drain(mut self):

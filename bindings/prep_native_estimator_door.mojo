@@ -99,6 +99,21 @@ def prep_estimator_call(est: PythonObject, method: String, args: PythonObject,
                                     prep_native_context(context)))
 
 
+def prep_estimator_predict_internal(est: PythonObject, args: PythonObject,
+                                    context: PythonObject) raises -> PythonObject:
+    """`est.predict(*args)` for a package-internal caller that reads the
+    result as float32 words (a meta-estimator placing or accumulating member
+    predictions): the plan's internal predict operation when it names one
+    (`scorer_predict_operation`: the linear models' float32 kernel output),
+    else its `predict`. The public `predict` of a linear model widens to
+    float64 for a caller outside the package, and a door has no Python frame
+    of its own, so a member called from a meta door saw the user's frame."""
+    return prep_entry_call(prep_native_entry(context),
+                       Python.tuple(est, "family_msel_estimator_call",
+                                    Python.tuple("predict", args, PythonObject(None), PythonObject(True)),
+                                    prep_native_context(context)))
+
+
 def prep_native_split(cv: PythonObject, x: PythonObject, y: PythonObject, context: PythonObject) raises -> PythonObject:
     """`cv.split(x, y)` of a mojolearn splitter as the model-selection owner's
     `family_msel_split` operation (the operation its `split` calls)."""
