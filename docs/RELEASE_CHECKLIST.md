@@ -628,30 +628,18 @@ MOJOLEARN_RUNPOD_KEY_FILE=~/.mojolearn_runpod_key MOJOLEARN_NVIDIA_CAMPAIGN=7 MO
   sh tools/gemm_remote_leg.sh nvidia --payload mamba --source-ref $REF --gpu "NVIDIA L40S" --allow-concurrent --rent --minutes 60
 ```
 
-**The AMD providers and their order (2026-09-25).** Every AMD box is gfx942,
-the architecture the wheel ships (MI300X on RunPod and Hot Aisle, MI325X on
-DigitalOcean). The AMD BUILD leg rents a DigitalOcean MI325X
-(`tools/do_release061_leg.sh`), or a Hot Aisle 1x MI300X
-(`tools/hotaisle_release_leg.sh <commit> [--rent] [--expect-from DIR] [--lease 30..60] [--cap USD]`)
-when DigitalOcean has a GPU droplet live (its leg refuses a rental then, one
-GPU droplet per account) or no token. The Hot Aisle leg runs the same archive,
-host preparation, pinned Ubuntu 22.04 container, `release061_remote_build.sh`,
-read-backs and provenance, and writes the same `legs/hip-gfx942/release-build/`
-tree; it takes only the 1x VM, because `tools/amd_serial_guard.py` requires
-exactly one visible render GPU. `pixi run release` decides once per run
-(`--amd-build-provider auto|do|hotaisle`, or `MOJOLEARN_AMD_PROVIDER`), and
-`linux-wait` walks a DigitalOcean leg that refused on a live droplet to Hot
-Aisle. The AMD COLUMN (`release_wheel_smoke.sh --vendor hip`, step 5) walks
-`runpod`, `hotaisle`, `do` under `--provider auto`: RunPod once; Hot Aisle when
-RunPod has no MI300X (the 1x VM, or the 2x VM pinned to GPU 0 when no 1x is in
-stock, `--hotaisle-spec`, `--hotaisle-cap`); DigitalOcean when Hot Aisle refuses
-before creating anything (no key, stock, slot, balance or cap). Hot Aisle's
-guards are `tools/hotaisle_vm_lib.sh`'s: the whole lease priced live against the
-cap (the balance is only recorded), a Mac dead-man before the create, an on-box
-watchdog verified from two sessions, DELETE then GET 404 before the slot is
-released. `tools/tests/test_hotaisle_release_shim.py` tests both against a
-local stand-in API; `bench/results/release_hotaisle_2026-09-25/` is the real
-rehearsal.
+**The AMD providers and their order (2026-11-18).** Every AMD box is gfx942,
+the architecture the wheel ships (MI300X on RunPod, MI325X on DigitalOcean).
+The AMD BUILD leg rents a DigitalOcean MI325X (`tools/do_release061_leg.sh`;
+its leg refuses a rental while a GPU droplet is live on the account), or the
+CPU-pod route by name (`--amd-build-provider auto|do|cpu-box`, or
+`MOJOLEARN_AMD_PROVIDER`; auto is do). The AMD COLUMN
+(`release_wheel_smoke.sh --vendor hip`, step 5) walks `runpod`, `do` under
+`--provider auto`: RunPod once, DigitalOcean when RunPod has no MI300X or no
+key. The Hot Aisle route (`tools/hotaisle_release_leg.sh`,
+`tools/hotaisle_vm_lib.sh`, `--hotaisle-spec`, `--hotaisle-cap`) was removed
+2026-11-18 (lane fx-dead-small; recoverable at `7c1aad6561`);
+`bench/results/release_hotaisle_2026-09-25/` keeps its one real rehearsal.
 
 The legs' pre-flights and the packer judge TRACKED source only: an ignored or
 untracked file (a generated table, local test output) cannot refuse a launch

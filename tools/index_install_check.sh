@@ -11,9 +11,9 @@
 # This runs tools/release_wheel_smoke.sh --from-index on two boxes IN PARALLEL:
 #
 #   NVIDIA  --vendor cuda on RunPod (the smoke's default GPU, or --gpu)
-#   AMD     --vendor hip --provider hotaisle; when Hot Aisle refuses before
-#           creating anything, the same leg again with --provider do
-#           (the existing walk after Hot Aisle), unless --amd-provider says otherwise
+#   AMD     --vendor hip --provider do (DigitalOcean), unless --amd-provider says
+#           otherwise (the Hot Aisle default and its walk to DigitalOcean were removed
+#           2026-11-18, lane fx-dead-small; recoverable at 7c1aad6561)
 #
 # and prints one PASS/FAIL line per vendor with its evidence directory.
 #
@@ -28,8 +28,7 @@
 #   --out DIR                  default ~/mojolearn-evidence/index-install/<V>/<index>/<stamp>/
 #                              (nvidia/ and amd/ inside, one per leg, plus each leg's log)
 #   --gpu NAME                 the NVIDIA leg's RunPod GPU type
-#   --amd-provider P           hotaisle (default: Hot Aisle, then DigitalOcean when Hot Aisle
-#                              created nothing), auto (RunPod, Hot Aisle, DigitalOcean), runpod, do
+#   --amd-provider P           do (default, DigitalOcean), auto (RunPod, then DigitalOcean), runpod
 #   --expected-source-commit C the installed package must record commit C (both legs)
 #   --nvidia-column SEL        also run the release column of SEL (a cuda selection) on the NVIDIA box
 #   --amd-column SEL           the same on the AMD box (a hip selection)
@@ -44,7 +43,7 @@ CHECK="$ROOT/tools/index_release_check.py"
 say() { printf '[%s index-install] %s\n' "$(date +%T)" "$*"; }
 die() { printf '\nREFUSED: %s\n' "$*" >&2; exit 1; }
 
-VERSION=""; INDEX=""; RENT=0; OUT=""; GPU=""; AMD_PROVIDER=hotaisle; COMMIT=""
+VERSION=""; INDEX=""; RENT=0; OUT=""; GPU=""; AMD_PROVIDER=do; COMMIT=""
 NV_COL=""; AMD_COL=""; REFS=(); COMMON=()
 while [ $# -gt 0 ]; do
     case "$1" in
@@ -65,7 +64,7 @@ while [ $# -gt 0 ]; do
 done
 [ -n "$VERSION" ] && [ -n "$INDEX" ] || die "usage: tools/index_install_check.sh <V> testpypi|pypi [--rent] (see --help)"
 case "$INDEX" in testpypi|pypi) ;; *) die "the index must be testpypi or pypi, not '$INDEX'" ;; esac
-case "$AMD_PROVIDER" in hotaisle|auto|runpod|do) ;; *) die "--amd-provider must be hotaisle, auto, runpod or do" ;; esac
+case "$AMD_PROVIDER" in auto|runpod|do) ;; *) die "--amd-provider must be do, auto or runpod" ;; esac
 [ -z "$COMMIT" ] || printf '%s' "$COMMIT" | grep -Eq '^[0-9a-f]{40}$' || die "--expected-source-commit must be the full 40-hex commit"
 [ -z "$NV_COL" ] || [ -f "$NV_COL" ] || die "no --nvidia-column selection $NV_COL"
 [ -z "$AMD_COL" ] || [ -f "$AMD_COL" ] || die "no --amd-column selection $AMD_COL"
@@ -97,19 +96,8 @@ run_leg() {  # label vendor provider column outdir log
     while IFS= read -r _a; do _args+=("$_a"); done < <(leg_args "$2" "$3" "$4")
     bash "$SMOKE" "${_args[@]}" --out "$5" > "$6" 2>&1
 }
-amd_leg() {  # outdir-base log: Hot Aisle, then DigitalOcean when Hot Aisle created nothing
-    if [ "$AMD_PROVIDER" != hotaisle ]; then
-        run_leg amd hip "$AMD_PROVIDER" "$AMD_COL" "$1" "$2"; return $?
-    fi
-    run_leg amd hip hotaisle "$AMD_COL" "$1" "$2"; _rc=$?
-    # the smoke's own words when rent_hotaisle created nothing (tools/release_wheel_smoke.sh)
-    if [ "$_rc" != 0 ] && [ "$RENT" = 1 ] && grep -q '^REFUSED: Hot Aisle: ' "$2" && [ ! -f "$1/remote/box.txt" ]; then
-        { echo; echo "== Hot Aisle created nothing; the AMD leg again on DigitalOcean =="; } >> "$2"
-        mv "$1" "$1-hotaisle-refused" 2>/dev/null || true
-        run_leg amd hip "do" "$AMD_COL" "$1" "$2.do"; _rc=$?
-        cat "$2.do" >> "$2"; rm -f "$2.do"
-    fi
-    return "$_rc"
+amd_leg() {  # outdir-base log
+    run_leg amd hip "$AMD_PROVIDER" "$AMD_COL" "$1" "$2"
 }
 
 if [ "$RENT" = 1 ]; then

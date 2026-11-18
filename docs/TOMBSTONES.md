@@ -1874,6 +1874,8 @@ in the tables after the sections.
 | [GaussianMixture Python entries gmm_fit, gmm_fit_predict and the four scoring entries (native entries)](#dead-native-entries-gaussianmixture-python-entries-2026-11-11) | Mixture (GPU, host and inference-only host bindings) | removed (dead native entries: no live caller) | 2026-11-11 | [dead_entries_gmm_python.patch](../experiments/removed/dead_entries_gmm_python.patch) |
 | [TREES_LEGACY_PYTHON_ENTRIES: 36 rf/et Python fit registrations (rowmajor, weighted, shard and shard-export forms) (native entries)](#dead-native-entries-trees-legacy-python-entries-2026-11-12) | Forests (rf, rf host, trees, trees host bindings) | removed (dead native entries: no live caller) | 2026-11-12 | [TREES_LEGACY_PYTHON_ENTRIES.patch](../experiments/removed/TREES_LEGACY_PYTHON_ENTRIES.patch) |
 | [LABELS_NATIVE_API_V1_V2: the labels_native_api_v1 / v2 provider publications (native entries)](#dead-native-entries-labels-provider-v1-and-v2-2026-11-12) | Labels (base GPU and core host bindings) | removed (dead native entries: no live caller) | 2026-11-12 | [LABELS_NATIVE_API_V1_V2.patch](../experiments/removed/LABELS_NATIVE_API_V1_V2.patch) |
+| [`byte_lm_run` (native entry, host door + device binding)](#dead-native-entries-byte_lm_run-and-p2m_negate-2026-11-18) | Byte LM (v1 default-shape ABI) | removed (dead native entry: no live caller) | 2026-11-18 | [byte_lm_run.patch](../experiments/removed/byte_lm_run.patch) |
+| [`p2m_negate_kernel` + `p2m_negate_item` (native code)](#dead-native-entries-byte_lm_run-and-p2m_negate-2026-11-18) | Neighbors (x_neighbors py2mojo item and kernel) | removed (dead native code: no caller) | 2026-11-18 | [p2m_negate.patch](../experiments/removed/p2m_negate.patch) |
 | [`MOJOLEARN_ANN_FAST_KNN_BIGD_OFF`](#mojolearn_ann_fast_knn_bigd_off-old-path-deleted-2026-11-15) | ANN (k-NN graph for CAGRA build / t-SNE, FAST Apple) | removed (old path; FAST+Apple default KEPT 8d43ec357) | 2026-11-15 | [MOJOLEARN_ANN_FAST_KNN_BIGD_OFF.patch](../experiments/removed/MOJOLEARN_ANN_FAST_KNN_BIGD_OFF.patch) |
 | [`MOJOLEARN_IVFPQ_FAST_DEVICE_CODEBOOKS_OFF`](#mojolearn_ivfpq_fast_device_codebooks_off-old-path-deleted-2026-11-15) | ANN (IVF-PQ build codebooks, FAST Apple) | removed (old path; FAST+Apple default KEPT 8d43ec357) | 2026-11-15 | [MOJOLEARN_IVFPQ_FAST_DEVICE_CODEBOOKS_OFF.patch](../experiments/removed/MOJOLEARN_IVFPQ_FAST_DEVICE_CODEBOOKS_OFF.patch) |
 | [`MOJOLEARN_CAGRA_FAST_IVFG_EXACTD_OFF`](#mojolearn_cagra_fast_ivfg_exactd_off-old-path-deleted-2026-11-15) | ANN (CAGRA IVFG graph tile, FAST Apple) | removed (old path; FAST+Apple default KEPT 3852df59b) | 2026-11-15 | [MOJOLEARN_CAGRA_FAST_IVFG_EXACTD_OFF.patch](../experiments/removed/MOJOLEARN_CAGRA_FAST_IVFG_EXACTD_OFF.patch) |
@@ -22714,3 +22716,60 @@ Evidence for every section below: A/B ab2, NVIDIA L40S (RunPod host c6dd9ebea3e3
 lane fx-tools-prune", were restored at the merge (baff27a32a): they are the only callers of the native export
 `byte_lm_run` (`providers/python/byte_lm_host_compat_pyapi_door.mojo`), and `tools/native_caller_audit.py` fails without
 them. The entry and its two tools are one owed decision. The record above is kept as written.
+
+## Dead native entries: byte_lm_run and p2m_negate (2026-11-18)
+
+- **What**: (1) the native export `byte_lm_run(addresses, params)`, the preserved v1 ABI that runs one step on the fixed
+  B2/L32/DM32 default shape, registered twice: by `_mojolearn_byte_lm_host`
+  (`providers/python/byte_lm_host_compat_pyapi_door.mojo`, `host_compat_run_default`) and by `_mojolearn_byte_lm`
+  (`bindings/_mojolearn_byte_lm.mojo`, `byte_lm_run_binding`), plus its row in the host manifest
+  (`python/mojolearn/host_surface.py`). (2) `p2m_negate_kernel` (`x_neighbors/device_ops.mojo`) and `p2m_negate_item`
+  (`x_neighbors/py2mojo_items.mojo`), with their `OPS` / `KERNEL_ONLY` rows in `x_neighbors/gen.py` and the two
+  generated import lists (device_ops, host_ops).
+- **Why dead**: (1) no package code, native door or verify module calls `byte_lm_run`; the trainer admits
+  `byte_lm_run_configured` and `byte_lm_trainer_step` (`python/mojolearn/_byte_lm_trainer_host.py`), which stay. Its only
+  caller was `tools/byte_lm_config_binding_check.py`, a manual host-only smoke of a freshly built binding that no
+  workflow, release step, verify module, lq script or user doc runs; it is deleted with the entry. Its companion
+  `tools/byte_lm_runtime_numerical_check.py` (restored with it at baff27a32a, see "Restored tools" above) calls no
+  native entry by name, is run by nothing, and is deleted too (`tools/byte_lm_gradient_oracle.py` stays: other tools
+  use it). This closes the owed decision of that note. (2) the `p2m_negate` driver and export went as dead doors at
+  96bf2ce898; the kernel and item survived with no launch site (no `enqueue_function[p2m_negate_kernel]`, no use of
+  the name as a value) and no caller (lane fx-audit-fixes, 2026-11-18).
+- **Verdict**: removed as dead code, not an experiment. No live path changed, so no identity bits move.
+- **Deleted by**: lane/fx-dead-small (base `7c1aad6561`); code recoverable at `7c1aad6561`.
+- **Restore**: `git apply experiments/removed/byte_lm_run.patch` (the two bindings and the manifest row; the two tools
+  are recoverable at `7c1aad6561`), `git apply experiments/removed/p2m_negate.patch` (x_neighbors item, kernel,
+  generator rows and imports).
+- **Guard / records**: no `-D` define was removed, so no guard refusal, no `grid_controls` entry and no
+  `docs/apple-fast/EXPERIMENTS.md` row. `tools/native_caller_audit.py` fails if either name is registered again with
+  no caller; the host manifest test fails if a host binding registers `byte_lm_run` without a manifest row.
+
+## Dead tools: the Hot Aisle runner (lane fx-dead-small, 2026-11-18)
+
+AMD is the DigitalOcean MI300X (AGENTS.md "Boxes"); Hot Aisle was last rented in 2026-10 and its central box's lease ended
+2026-09-29. Lane fx-tools-prune kept these scripts because live callers named them; this lane removed the Hot Aisle branches
+from those callers first, then the scripts and their tests. Tools are not experiments: no define, no refusal, no grid entry
+and no patch; everything is recoverable at `7c1aad6561` (`git checkout 7c1aad6561 -- <path>`). Every DigitalOcean and
+RunPod path keeps its behaviour; no product code, no bits, no default of the product changed.
+
+- Deleted: `tools/hotaisle_leg.sh`, `tools/hotaisle_release_leg.sh`, `tools/hotaisle_vm_lib.sh`,
+  `tools/hotaisle_smoke_body.sh`, `tools/classical_hotaisle_leg.sh`, `tools/trees_hotaisle_body.sh`,
+  `tools/tests/test_hotaisle_leg_shim.py`, `tools/tests/test_hotaisle_release_shim.py`,
+  `tools/tests/test_lm_run_driver_hotaisle.py`.
+- Callers changed: `tools/release.py` (AMD build route: `hotaisle` gone from `AMD_BUILD_PROVIDERS` and `--amd-provider`;
+  auto is DigitalOcean; the droplet probe `do_gpu_busy`, `do_refused_live` and the linux-wait walk to Hot Aisle removed),
+  `tools/release_tooling.py` (BUILD_TOOLING), `tools/release_rehearsal.py` (the Hot Aisle dry run),
+  `tools/release_limits.sh` (`HOTAISLE_RELEASE_BUILD_CAP`), `tools/prebuild_changed.py` (docstring),
+  `tools/dev_pod.sh` (the Hot Aisle VM fallback and the `host` shared bare-metal AMD host with its GPU slots; a state file
+  with PROVIDER=hotaisle or amdhost is refused by name), `tools/release_wheel_smoke.sh` (provider `hotaisle`,
+  `--hotaisle-spec`, `--hotaisle-cap`, sudo box commands; auto walks RunPod then DigitalOcean),
+  `tools/index_install_check.sh` (AMD default `do`), `tools/lm_run_driver.py` (provider `hotaisle` refused, the
+  re-render-per-device plumbing and Hot Aisle busy phrases removed), `tools/pick_box.sh` (the Hot Aisle check and
+  `--spec`), `tools/live_xvendor_leg.sh` (its `amd` worker refuses: no AMD runner is wired), `tools/ops/archive_all_boxes.sh`,
+  and the tests that named the removed paths (`test_release.py`, `test_release_wheel_smoke.py`, `test_build_sizing.py`,
+  `test_no_hidden_build_bounds.py`, `test_box_persist.py`, `tests/test_lm_run_driver_resume.py`).
+- Kept: Hot Aisle as a provenance label of recorded evidence (`tools/board_hardware.py` amd2, `tools/main_board_ingest.py`,
+  `tools/six_lane_grid_lq.py`, `tools/lm_file_evidence.py`), the `MOJOLEARN_HOTAISLE_` prefix in `tools/bincache.py`'s
+  non-build prefixes (it only keeps such variables out of the cache key), usage comments in leg bodies that DigitalOcean
+  also runs, `tools/amd_central.sh` (its box was a Hot Aisle dev box; see the lane result), and `bench/results/`.
+

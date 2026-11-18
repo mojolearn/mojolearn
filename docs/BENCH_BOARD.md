@@ -722,22 +722,20 @@ The result arrives at `<leg out>/remote/bench-board/`. NVIDIA uses the image's
 CUDA torch through `--system-site-packages`. cuML is installed from the pinned
 `rapids-*` set in `tools/opponent_wheels.sh`.
 
-## AMD leg (Hot Aisle MI300X)
+## AMD leg
 
-The `13core` spec is the one whose CPU opponent rows are comparable. The body
-builds a Python 3.12 venv, because the pinned torch ROCm wheels are cp312.
+The Hot Aisle MI300X runner this section first described (`tools/hotaisle_leg.sh`)
+was removed 2026-11-18 (lane fx-dead-small; recoverable at `7c1aad6561`).
+The body builds a Python 3.12 venv, because the pinned torch ROCm wheels are cp312.
+
+The DigitalOcean MI325X runs it, with the environment passed in `MOJOLEARN_DO_EXTRA_ENV`:
 
 ```sh
-MOJOLEARN_HOTAISLE_SPEC=13core MOJOLEARN_HOTAISLE_LANE=bench-board \
 MOJOLEARN_GEMM_LEG_EXTRA=tools/bench_board_leg.sh \
-MOJOLEARN_GEMM_LEG_OUT=$HOME/mojolearn-evidence/bench-board/$(date -u +%Y-%m-%d_%H%M%S)-amd-mi300x \
-MOJOLEARN_HOTAISLE_EXTRA_ENV='MOJOLEARN_BOARD_VERSION=0.8.22' \
-bash tools/hotaisle_leg.sh amd --rent --segment-lease 900 --dollar-cap 60 --skip-gates
+MOJOLEARN_GEMM_LEG_OUT=$HOME/mojolearn-evidence/bench-board/$(date -u +%Y-%m-%d_%H%M%S)-amd \
+MOJOLEARN_DO_EXTRA_ENV='MOJOLEARN_BOARD_VERSION=0.8.22' \
+bash tools/do_extra_leg.sh amd --segment-lease 900 --dollar-cap 60 --skip-gates
 ```
-
-The DigitalOcean MI325X works the same way:
-`bash tools/do_extra_leg.sh amd --segment-lease 900 --dollar-cap 60 --skip-gates`,
-with the environment passed in `MOJOLEARN_DO_EXTRA_ENV`.
 
 ## Knobs the leg body reads
 

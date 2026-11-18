@@ -27,7 +27,6 @@ import release_limits  # noqa: E402
 BUILD_PATH = (
     "tools/release061_remote_build.sh",
     "tools/do_release061_leg.sh",
-    "tools/hotaisle_release_leg.sh",
     "tools/gemm_remote_leg.sh",
     "tools/release_linux_build.sh",
     "tools/release_linux_cpu_box.sh",
@@ -126,7 +125,6 @@ def test_the_limits_file_is_sourced_by_the_scripts_it_governs():
     for rel, name in (("tools/do_release061_leg.sh", "DO_RELEASE_BUILD_CAP"),
                       ("tools/do_release061_leg.sh", "DO_RELEASE_DEADMAN_SECONDS"),
                       ("tools/release_linux_cpu_box.sh", "CPU_BOX_RELEASE_BUILD_SECONDS"),
-                      ("tools/hotaisle_release_leg.sh", "HOTAISLE_RELEASE_BUILD_CAP"),
                       ("tools/gemm_remote_leg.sh", "RUNPOD_RELEASE_BUILD_CAP")):
         text = (ROOT / rel).read_text()
         assert "tools/release_limits.sh\"" in text and "\n. " in text, rel
@@ -141,13 +139,11 @@ def test_limits_values():
     assert lim["RELEASE_BUILD_SECONDS_MAX"] == 6000
     assert lim["DO_RELEASE_BUILD_CAP"] == 5700
     assert lim["RUNPOD_RELEASE_BUILD_CAP"] == 6000
-    assert lim["HOTAISLE_RELEASE_BUILD_CAP"] == 6000  # raised with lane/build-parallelism
     assert lim["DO_RELEASE_DEADMAN_SECONDS"] == 7200
     assert lim["CPU_BOX_RELEASE_BUILD_SECONDS"] == 6000
     assert lim["CROSS_COMPILE_SECONDS"] == 600
     # no remote cap may exceed what the remote build script accepts
-    for name in ("DO_RELEASE_BUILD_CAP", "RUNPOD_RELEASE_BUILD_CAP", "HOTAISLE_RELEASE_BUILD_CAP",
-                 "CPU_BOX_RELEASE_BUILD_SECONDS"):
+    for name in ("DO_RELEASE_BUILD_CAP", "RUNPOD_RELEASE_BUILD_CAP", "CPU_BOX_RELEASE_BUILD_SECONDS"):
         assert lim["RELEASE_BUILD_SECONDS_MIN"] <= lim[name] <= lim["RELEASE_BUILD_SECONDS_MAX"], name
 
 

@@ -427,10 +427,8 @@ def byte_lm_config_profile_binding(shape: PythonObject) raises -> PythonObject:
     return PythonObject(cfg.profile())
 
 
-def byte_lm_run_binding(addresses: PythonObject, params: PythonObject) raises -> PythonObject:
-    """Preserved v1 ABI: the original B2/L32/DM32 profile."""
-    var session = ByteLMSession()
-    return _byte_lm_run(addresses, params, ByteConfig(), session)
+# TOMBSTONE: byte_lm_run (dead native entry: v1 default-shape ABI, only caller tools/byte_lm_config_binding_check.py, deleted with it) deleted 2026-11-18 by lane/fx-dead-small; code recoverable at 7c1aad6561.
+# Restore: git apply experiments/removed/byte_lm_run.patch
 
 
 def byte_lm_run_configured_binding(addresses: PythonObject, params: PythonObject,
@@ -688,7 +686,7 @@ def build__mojolearn_byte_lm() -> PythonObject:
         module.def_function[byte_lm_numeric_mode_binding]("byte_lm_numeric_mode")
         module.def_function[byte_lm_vendor_binding]("byte_lm_vendor")
         module.def_function[byte_lm_profile_binding]("byte_lm_profile")
-        module.def_function[byte_lm_run_binding]("byte_lm_run")
+        # TOMBSTONE: byte_lm_run (dead native entry: v1 default-shape ABI, only caller tools/byte_lm_config_binding_check.py, deleted with it) deleted 2026-11-18 by lane/fx-dead-small; code recoverable at 7c1aad6561.
         module.def_function[byte_lm_config_profile_binding]("byte_lm_config_profile")
         module.def_function[byte_lm_run_configured_binding]("byte_lm_run_configured")
         _ = module.add_type[ByteLMSession]("_ByteLMSession")
