@@ -96,6 +96,7 @@ from checks.native_tests.kde_ownership import register as register_kde_ownership
 from checks.native_tests.kernel_methods_cells import register as register_kernel_methods_cells
 from checks.native_tests.kernel_methods_krr_options import register as register_kernel_methods_krr_options
 from checks.native_tests.kernel_methods_poly_degree import register as register_kernel_methods_poly_degree
+from checks.native_tests.kit_roundtrip import register as register_kit_roundtrip
 from checks.native_tests.kmeans_native import register as register_kmeans_native
 from checks.native_tests.kmeans_variants_native import register as register_kmeans_variants_native
 from checks.native_tests.kpca_native import register as register_kpca_native
@@ -528,6 +529,7 @@ def all_checks() -> List[Check]:
     checks.append(register_kernel_methods_cells())
     checks.append(register_kernel_methods_krr_options())
     checks.append(register_kernel_methods_poly_degree())
+    checks.append(register_kit_roundtrip())
     checks.append(register_kmeans_native())
     checks.append(register_kmeans_variants_native())
     checks.append(register_kpca_native())
