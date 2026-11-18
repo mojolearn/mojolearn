@@ -263,11 +263,19 @@ class MergedPlan(unittest.TestCase):
         self.assertEqual(doc["jobs_per_set"], rgb.MERGED_JOBS_PER_SET)
         self.assertGreaterEqual(doc["jobs_per_set"], doc["shards"] + 1)
         rows = doc["matrix"]["include"]
-        self.assertEqual(len(rows), 14)
+        # sm_89: the two host groups (recorded 6.0 + 6.5 GiB) share one runner (pack_units); gfx942 has no
+        # recorded peaks, so every unit keeps its own job
+        self.assertEqual(len(rows), 13)
+        packed = [r for r in rows if r["n"] > 1]
+        self.assertEqual([(r["arch"], r["only"].split()) for r in packed], [("sm_89", sorted(HOST))])
+        self.assertEqual(packed[0]["peak_gib"], sum(rgb.UNIT_PEAK_GIB[("host", e.split(":")[2], "cuda")] for e in HOST))
+        self.assertEqual(packed[0]["swap_gib"], rgb.swap_gib(packed[0]["peak_gib"]))
         for arch, vendor in (("sm_89", "cuda"), ("gfx942", "hip")):
-            mine = [r for r in rows if r["arch"] == arch]
-            self.assertTrue(all(r["n"] == 1 for r in mine))
-            self.assertEqual(sorted(r["only"] for r in mine), sorted(FAST + HOST + IDENTICAL))
+            mine = [r for r in rows if r["arch"] == arch and r["n"] == 1]
+            self.assertEqual(sorted(e for r in rows if r["arch"] == arch for e in r["only"].split()),
+                             sorted(FAST + HOST + IDENTICAL))
+            self.assertEqual(len({r["shard"] for r in rows if r["arch"] == arch}),
+                             len([r for r in rows if r["arch"] == arch]))
             for r in mine:
                 tier, _script, group = r["only"].split(":")
                 self.assertEqual(r["peak_gib"], rgb.UNIT_PEAK_GIB[(tier, group, vendor)])
@@ -275,9 +283,30 @@ class MergedPlan(unittest.TestCase):
                 self.assertEqual(r["unit"], tier + "-merged_build-" + group)
                 # every group fits a free runner without heavy swap
                 self.assertLessEqual(r["swap_gib"], 2)
-        self.assertEqual(doc["assemble_swap_gib"], max(r["swap_gib"] for r in rows))
+        # the assemble job compiles one unit at a time: its swap is the largest single unit's
+        self.assertEqual(doc["assemble_swap_gib"], max(r["swap_gib"] for r in rows if r["n"] == 1))
         # the heaviest group goes onto shard 0
         self.assertTrue(rows[0]["only"].startswith("identical:merged_build.sh:"))
+
+    def test_pack_units_fits_the_recorded_peaks_and_keeps_indices(self):
+        def r(i, group, tier="host"):
+            entry = f"{tier}:merged_build.sh:{group}"
+            return dict(arch="sm_89", vendor="cuda", set_index=0, shard=i, only=entry, n=1, weight=1,
+                        peak_gib=rgb.unit_peak_gib(entry, "cuda", True), swap_gib=0, unit=rgb.unit_slug(entry))
+        rows = [r(0, "_mojolearn_native", "identical"), r(1, "_mojolearn_native_series_host"),
+                r(2, "_mojolearn_native_x_host"), r(3, "_mojolearn_native_catalog_host"),
+                r(4, "_mojolearn_native_unrecorded_host")]
+        out = rgb.pack_units(rows)
+        groups = [sorted(x["only"].split()) for x in out]
+        # 12.5 GiB fits nothing beside it; x_host 9.0 takes the largest that fits (catalog 6.0: 15.0); series 5.5
+        # is left alone; a unit with no record keeps its own job
+        self.assertIn(["identical:merged_build.sh:_mojolearn_native"], groups)
+        self.assertIn(sorted(["host:merged_build.sh:_mojolearn_native_x_host",
+                              "host:merged_build.sh:_mojolearn_native_catalog_host"]), groups)
+        self.assertIn(["host:merged_build.sh:_mojolearn_native_series_host"], groups)
+        self.assertIn(["host:merged_build.sh:_mojolearn_native_unrecorded_host"], groups)
+        self.assertEqual(sorted(x["shard"] for x in out), [0, 1, 2, 4])
+        self.assertEqual(rgb.pack_units(rows, per_job=1), rows)
 
     def test_the_release_modes_choose_the_tiers(self):
         rc, doc = self.run_plan(merged_source(), "--modes", "identical")
@@ -363,8 +392,13 @@ class MergedPlan(unittest.TestCase):
         # every member of the real manifest is in exactly one group
         self.assertEqual(sum(ps["members"].values()), sum(1 for e, _ in ps["per_binding"]))
         doc = rgb.build_plan(ROOT, ["sm_89", "sm_80", "gfx942"], 6, ("identical",))
-        self.assertEqual(len(doc["matrix"]["include"]), 3 * len(want))
-        self.assertEqual(doc["estimate"]["total"]["jobs"], 1 + 3 * (len(want) + 1))
+        rows = doc["matrix"]["include"]
+        for arch in ("sm_89", "sm_80", "gfx942"):
+            # every unit is in exactly one job; the NVIDIA sets pack units side by side (pack_units)
+            self.assertEqual(sorted(e for r in rows if r["arch"] == arch for e in r["only"].split()), want)
+        self.assertLess(len([r for r in rows if r["arch"] == "sm_89"]), len(want))
+        self.assertEqual(len([r for r in rows if r["arch"] == "gfx942"]), len(want))
+        self.assertEqual(doc["estimate"]["total"]["jobs"], 1 + len(rows) + 3)
 
     def test_layout_reads_the_commit_without_a_checkout(self):
         head = subprocess.run(["git", "-C", str(ROOT), "rev-parse", "HEAD"], capture_output=True, text=True).stdout.strip()
