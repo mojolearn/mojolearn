@@ -163,7 +163,7 @@ def _m_fold(
         enqueue_fill(ctx, scale_word, Float32(1.0))
         launch_pw_fold_int_slots(
             ctx, slots, dst.unsafe_ptr(), True, n_cells, m,
-            scale_word.unsafe_ptr(),
+            scale_word.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
         )
         ctx.synchronize()
         _ = scale_word^
