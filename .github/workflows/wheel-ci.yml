@@ -110,10 +110,7 @@ jobs:
       # STATIC GATES. These read the tree, not a binary, so they are the
       # only gates in this repository that run on every push.
       # ------------------------------------------------------------------
-      - name: Citation metadata regression tests
-        run: python3 -m unittest discover -s tools -p test_citation_metadata.py
-
-      - name: Version and citation date agreement
+      - name: Version agreement; CITATION.cff carries no version
         run: python3 packaging/wheel_ci.py versions .
 
       - name: Every build script pins both CPU baselines

@@ -547,17 +547,16 @@ MOJOLEARN_BUILD_JOBS=1 to reproduce a serial build.
 
 ## 1. Freeze
 
-`CITATION.cff` version and release date are generated; do not update them by hand.
-The date comes from the matching `published YYYY-MM-DD` changelog heading,
-not the build clock. An `unreleased YYYY-MM-DD` entry omits the citation date.
-If publication moves to another day, update the changelog and regenerate before
-freezing the release artifacts. CI rejects stale citation metadata.
+`CITATION.cff` carries no release version or date: it names the paper to cite
+and the concept DOI for the software, so a release never edits it.
+`packaging/wheel_ci.py versions` fails if a top-level `version` or
+`date-released` comes back.
 
 Bump `python/mojolearn/_version.py` and `python/pyproject.toml`, add the
 CHANGELOG entry with the publication date in UTC, then
 
 ```sh
-pixi run write-docs-facts   # generates CITATION version/date and marked doc spans
+pixi run write-docs-facts   # rewrites the marked doc spans
 pixi run check-docs-facts   # fails if a pin, a badge or a prose default drifted
 ```
 
@@ -595,8 +594,8 @@ packer, smoke or admission file that spells one of its own. The columns the
 wheel ships are `TRAINING_GPU_COLUMNS` in the manifest, so a new record is a
 manifest edit, never a packaging edit.
 
-`_version.py` is the source of truth and the checker holds `pyproject.toml`,
-`CITATION.cff` and the newest published CHANGELOG heading to it, so a
+`_version.py` is the source of truth and the checker holds `pyproject.toml`
+and the newest published CHANGELOG heading to it, so a
 half-finished bump goes red here rather than shipping in a README. Commit,
 push. Every build below runs from that commit.
 

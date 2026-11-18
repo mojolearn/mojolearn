@@ -2,7 +2,7 @@
 """Facts the docs state that the tree already knows. Check them, or rewrite them.
 
     python3 tools/docs_facts.py --check     # fail if a doc disagrees with the tree
-    python3 tools/docs_facts.py --write     # generate citation metadata and marked spans
+    python3 tools/docs_facts.py --write     # rewrite the marked spans
     python3 tools/docs_facts.py --print     # dump what the tree says
 
 WHY. `tools/check_docs_reference_reality.py` exists because six statements in
@@ -45,11 +45,11 @@ GitHub and PyPI included.
 
 ## What --check settles
 
-  1. The four places that carry the version agree: `_version.py`,
-     `python/pyproject.toml`, `CITATION.cff`, and the newest published
-     CHANGELOG heading. `_version.py` is the one that wins; it says so itself.
-     CITATION.cff date-released is generated from that version's published
-     CHANGELOG date, and omitted for an unreleased entry.
+  1. The three places that carry the version agree: `_version.py`,
+     `python/pyproject.toml` and the newest published CHANGELOG heading.
+     `_version.py` is the one that wins; it says so itself. CITATION.cff
+     carries no version (it cites the paper; `packaging/wheel_ci.py versions`
+     fails if one comes back).
   2. Every marked span in a doc matches the fact it names.
   3. Every `mojolearn==<version>` pin in a tracked doc is the current version.
      These are unmarked on purpose, because an install command should be
@@ -61,7 +61,6 @@ It does not read prose for meaning. A claim about what a measurement showed
 still needs a person, and a checker that guesses produces false alarms.
 """
 import importlib.util
-import citation_metadata
 import pathlib
 import re
 import sys
@@ -128,9 +127,6 @@ def facts():
     # preferred-citation (paper) DOI. Docs may cite either, nothing else.
     out["dois"] = re.findall(r"^\s*doi:\s*(\S+)", _read("CITATION.cff"), re.M)
 
-    m = re.search(r'^version:\s*"?([^"\s]+)"?', _read("CITATION.cff"), re.M)
-    out["citation_version"] = m.group(1) if m else ""
-
     m = re.search(r'^version\s*=\s*"([^"]+)"', _read("python/pyproject.toml"), re.M)
     out["pyproject_version"] = m.group(1) if m else ""
 
@@ -144,12 +140,11 @@ def facts():
 
 
 def _sources_agree(f):
-    """The version is restated in four files. They have to say one thing."""
+    """The version is restated in three files. They have to say one thing."""
     bad = []
     v = f["version"]
     for label, got in (
         ("python/pyproject.toml", f["pyproject_version"]),
-        ("CITATION.cff", f["citation_version"]),
         ("CHANGELOG.md newest release heading", f["changelog_version"]),
     ):
         if got and got != v:
@@ -174,8 +169,6 @@ def _mode_claims(text, default_mode):
 
 
 def check():
-    if citation_metadata.sync(ROOT):
-        return 1
     f = facts()
     problems = list(_sources_agree(f))
 
@@ -225,8 +218,6 @@ def check():
 
 
 def write():
-    if citation_metadata.sync(ROOT, write=True):
-        return 1
     f = facts()
     changed = 0
     for rel in DOCS:
