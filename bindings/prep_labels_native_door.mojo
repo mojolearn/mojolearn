@@ -11,8 +11,8 @@
 # attributes keep the names, types and dtypes the Python set (`_classes`,
 # `_cats`, `classes_`, `y_type_`, `numeric_mode_`, `_given`) and the refusals
 # keep their classes and wording.
-from std.memory import unsafe_memcpy
 from std.python import Python, PythonObject
+from std.sys.compile import is_defined
 from bindings.native_loaded_module_door import native_loaded_module
 from bindings.native_array_storage_door import native_array_zeros, native_array_empty, native_array_from_bytes, native_array_unfilled
 from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem, py_contains, py_setattr
@@ -73,6 +73,17 @@ comptime CAT_R = 4096
 comptime CAT_CH = 64
 # A label buffer of more int32 words takes the label input step.
 comptime LABEL_WORDS_MAX = 1073741824
+# `_take_words`: a mapped program output of at least this many words is
+# returned as a view of the mapping, a smaller one is copied (0.8.55's
+# _VIEW_MIN_WORDS = 2^20: a view retains the whole arena mapping, so a small
+# result never pins a large arena). The arena is a lazily mapped anonymous
+# mapping and the inputs of 2^20+ words go up direct from the caller's buffer
+# (never touching it), so the pages a view retains are mostly the downloaded
+# output itself. MOJOLEARN_PREP_FAST_TAKE_VIEW_ALL (fb12-rows, 2026-11-17,
+# opt-in, A/B owed in docs/apple-fast/EXPERIMENTS.md) views from 16384 words
+# (64 KiB, where a fresh store and its copy cost about the view's fixed
+# attribute setup), e.g. LabelEncoder.fit_transform's n int32 codes below 2^20.
+comptime TAKE_VIEW_MIN_WORDS = 16384 if is_defined["MOJOLEARN_PREP_FAST_TAKE_VIEW_ALL"]() else 1048576
 
 comptime MULTILABEL = "multilabel-indicator"
 comptime REFUSE_MULTIOUTPUT = "mojolearn: Multioutput target data is not supported with label binarization"
@@ -123,7 +134,7 @@ def _take_words(ran: PythonObject, offset: Int, count: Int, shape: PythonObject,
         start = 0
     var words = count * width // 4
     var part = py_call(b.memoryview, store)[py_call(b.slice, start, start + words)]
-    if py_type(store) is b.memoryview and words >= 1048576 and xprep_r3("view"):
+    if py_type(store) is b.memoryview and words >= TAKE_VIEW_MIN_WORDS and xprep_r3("view"):
         # fb-metrics (2026-11-17; full board d95f805cce vs 0.8.55: LabelBinarizer
         # and MultiLabelBinarizer fit/transform 1.6-2.2x): a large mapped
         # output is returned as a view that retains its slice and mapping, as
@@ -207,8 +218,10 @@ def _range_classes(k: Int) raises -> PythonObject:
 # ---------------------------------------------------------------- label buffers
 @fieldwise_init
 struct LabelBuf(Copyable, Movable):
-    """`_LabelBuf`: a numeric label vector's raw int32 words, its lab_load
-    kind, its label count, its word count and whether it is a float dtype."""
+    """`_LabelBuf`: a numeric label vector (its bytes read as `nw` raw int32
+    words: the caller's admitted view, or the flat MultiLabelBinarizer words),
+    its lab_load kind, its label count, its word count and whether it is a
+    float dtype."""
     var kind: Int
     var words: PythonObject
     var n: Int
@@ -247,12 +260,14 @@ def _label_buffer(y: PythonObject, context: PythonObject) raises -> Optional[Lab
     var nw = n * spec[1]
     if nw > LABEL_WORDS_MAX:
         return None
-    # lane fix-output-zero-fill (2026-11-14): unfilled; the memcpy below writes all nw words.
-    var words = classical_wrap_array(native_array_unfilled("i", nw), Python.tuple(nw), "<i4", "C", _out(context))
-    unsafe_memcpy(dest=I32P(unsafe_from_address=Int(py=classical_address(words))), src=I32P(unsafe_from_address=Int(py=classical_address(view))), count=nw)
-    _ = view  # keep the Python object alive through the native call above
-    _ = words  # keep the Python object alive through the native call above
-    return LabelBuf(spec[0], words, n, nw, spec[0] == 0 or spec[0] == 4)
+    # fb12-rows (2026-11-17): the admitted C-order view itself is the input
+    # record (its bytes read as nw int32 words), as 0.8.55's `_label_buffer`
+    # (a no-copy int32 view of the label buffer). The x_prep run reads a host
+    # record's extent from the record's word count (nw), not `view.size`
+    # (bindings/x_prep_native_owner_door.mojo `xprep_run_records`), so an
+    # 8-byte view is safe. Was: a fresh nw-word store and a memcpy of the
+    # labels per fit, transform and inverse call.
+    return LabelBuf(spec[0], view, n, nw, spec[0] == 0 or spec[0] == 4)
 
 
 def _label_load(mut p: EncProg, lb: LabelBuf) raises -> Int:

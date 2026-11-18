@@ -290,11 +290,13 @@ def _cache_state(cache: PythonObject, entries: PythonObject, context: PythonObje
     return state
 
 
-def _cached_slot_in(state: PythonObject, value: PythonObject, entries: PythonObject, prefix: String = "x_prep") raises -> Int:
-    # The second half of `_cached_slot` on an admitted state.
+def _cached_slot_in(state: PythonObject, value: PythonObject, entries: PythonObject, prefix: String = "x_prep",
+                    extent: Int = -1) raises -> Int:
+    # The second half of `_cached_slot` on an admitted state. `extent`: the
+    # 4-byte words to keep resident (-1: `value.size`, a 4-byte buffer).
     var b = native_loaded_module("builtins")
     var stored = state["_entries"]
-    var key = Python.tuple(classical_address(value),value.size)
+    var key = Python.tuple(classical_address(value),value.size if extent < 0 else PythonObject(extent))
     var hit = py_get(stored,key)
     if hit is not None:
         if py_type(hit) is not b.tuple or len(hit) != 2 or py_type(hit[0]) is not b.int:
@@ -454,15 +456,23 @@ def xprep_run_records(storage: PythonObject, host: Int, scratch: Int, output: Py
             if ranges and not is_inout:
                 if not scope:
                     scope = _resident_scope(entries,context)
-                var resident = scope.value() is not None and (rows or Int(py=value.size) >= Int(py=scope.value()[0]))
+                # fb12-rows (2026-11-17): a host record's extent is its record
+                # word count (`words`, what the program reads at `offset`),
+                # not `value.size`: an 8-byte label view (int64 / float64,
+                # `_label_buffer`) holds `size` items but 2 * size words, so
+                # `size` uploaded half of it. For every 4-byte record the two
+                # are equal (no change); a DeviceRows record keeps its base's
+                # size (`words` there is the selection, not the base).
+                var extent = Int(py=value.size) if rows else words
+                var resident = scope.value() is not None and (rows or extent >= Int(py=scope.value()[0]))
                 if resident:
                     if not cache_state:
                         var cache = _resident_cache(entries,scope.value()[1],context)
                         cache_state = _cache_state(cache,entries,context)
-                    source = _cached_slot_in(cache_state.value(),value,entries)
+                    source = _cached_slot_in(cache_state.value(),value,entries,"x_prep",extent)
                 elif dev_put_on and (rows or (words >= 1048576 and direct_on)):
                     put = True
-                    put_words = Int(py=value.size)
+                    put_words = extent
                 if rows:
                     indices = Int(py=classical_address(record[2]))
                     n_rows = Int(py=record[3])
