@@ -87,7 +87,7 @@ from mamba.impl.modules.mamba2 import (
 )
 from mamba.impl.modules.mamba3 import (
     Mamba3DeviceWeights, Mamba3DeviceState, Mamba3DeviceStages, mamba3_block_forward,
-    _m3_weight_sizes, _m3_state_sizes,
+    _m3_weight_sizes, _m3_state_sizes, _m3_stage_sizes,
 )
 from transformer.impl.llama.modeling_llama import (
     LlamaDims, LlamaDeviceWeights, LlamaKVCache, LlamaRopeTable, LlamaDeviceStages, llama_decoder_layer_forward,
@@ -213,6 +213,43 @@ comptime _M12_HOLD = not IDN_MAMBA12_FORWARD_COPIES_OLD and _MAMBA_X_IN_PLACE
 # RESTORED 2026-11-15 by lane/expdel2-restore-owed: owed B arm (owed-pre0867.json), under four weeks old; the deletion was premature.
 comptime IDN_MAMBA12_FORWARD_DOOR_OLD = is_defined["MOJOLEARN_IDN_MAMBA12_FORWARD_DOOR_OLD"]()
 comptime _M12_HELD_ARENA = _M12_HOLD and not IDN_MAMBA12_FORWARD_DOOR_OLD
+
+#: Lane fx-mamba-decode-arena (2026-11-18, ideas-neural-speed ideas 2 and 7):
+#: what this switch decides is whether a Mamba-2 / Mamba-3 decode token (an
+#: L = 1 run) allocates, zero-fills and frees its stage buffers. Default (A,
+#: unchanged): 28 (Mamba-2) / 33 (Mamba-3) `mamba_zeros` per token, parked and
+#: freed at the caller's wait. `-D MOJOLEARN_MAMBA_FAST_DECODE_STAGE_ARENA`
+#: (B, default OFF, A/B owed: docs/apple-fast/EXPERIMENTS.md and
+#: bench/results/paper_compare/owed-pre0867.json row
+#: mamba-decode-stage-arena): the resident entry holds ONE `MambaArena` with
+#: room for the stages at the largest carried buf_len the state contract
+#: allows (`_m2_check_words` / `_m3_check_words`: a full open chunk; the
+#: extent comes from the contract, never from a board row). Each token
+#: re-takes its stage views at the current (B, 1, buf_len), so every view
+#: has the length the per-call buffer had, and queues ONE fill of the used
+#: prefix (`MambaArena.reset`) ahead of the token's launches on the same
+#: in-order queue. No stale value: every word of every stage view lies in
+#: that prefix and is zero when the token's first kernel runs, exactly as
+#: under `mamba_zeros`; the previous token's readers (the output, report and
+#: state copies) were queued before the fill. Same kernels, same launch
+#: order, same input bytes, same zeros: no output bit moves on any vendor or
+#: the host column (the host column never runs this file's device stages).
+#: The same switch (idea 7) builds the held Mamba-3 L > 1 stages
+#: (`inference_only`, and under this switch also a `keep_stages` session,
+#: as Mamba-1/2 hold theirs) as views of one held arena, re-zeroed with ONE
+#: fill instead of `rezero`'s 33. Off in a poison build (its fills cover a
+#: body view and its band is per allocation).
+#: Not NI47 (`MOJOLEARN_IDN_M3_DECODE_WINDOW_REUSE`, deleted unmeasured
+#: 2026-11-15, docs/TOMBSTONES.md): NI47 kept 33 separately allocated
+#: capacity-sized buffers, rebound their logical window and re-zeroed them
+#: with 33 fills per token (so buffer lengths differed from the per-call
+#: form), Mamba-3 only. Here: one allocation, exact-length views, one fill,
+#: Mamba-2 and Mamba-3, and the held L > 1 sets.
+comptime MAMBA_FAST_DECODE_STAGE_ARENA = (
+    is_defined["MOJOLEARN_MAMBA_FAST_DECODE_STAGE_ARENA"]()
+    and MAMBA_GUARD == 0
+    and not is_defined["MOJOLEARN_MAMBA_POISON"]()
+)
 
 
 def m2_report_floats(b: Int, dm: Int) raises -> Int:
@@ -536,6 +573,11 @@ struct _M2Block(Movable):
     var h_in_held: Bool
     #: lane fix-mamba-forward-doors: the one arena `held`'s stages are views of
     var held_arena: Optional[MambaArena]
+    #: lane fx-mamba-decode-arena (MAMBA_FAST_DECODE_STAGE_ARENA, default
+    #: off: both stay empty): the one arena an L = 1 run's stage views are
+    #: re-taken from (`_m2_decode_views`) and its float count
+    var dec_arena: Optional[MambaArena]
+    var dec_n: Int
     #: lane x56d: the last recorded run's token count and tape stack
     var train_l: Int
     var train: Optional[Mamba2TapeStack]
@@ -566,6 +608,8 @@ struct _M2Block(Movable):
         self.held_n = 0
         self.h_in_held = False
         self.held_arena = None
+        self.dec_arena = None
+        self.dec_n = 0
         self.train_l = 0
         self.train = None
         self.arena_w = aw^
@@ -594,6 +638,14 @@ struct _M3Block(Movable):
     #: with the constructor's zeros (IDN_M3_SESSION_STAGE_REUSE)
     var held_stages: Optional[Mamba3DeviceStages]
     var held_x: Optional[DeviceBuffer[DType.float32]]
+    #: lane fx-mamba-decode-arena (MAMBA_FAST_DECODE_STAGE_ARENA, default
+    #: off: all four stay empty): the one arena `held_stages` are views of
+    #: and its float count; the one arena an L = 1 run's stage views are
+    #: re-taken from (`_m3_decode_views`) and its float count
+    var held_arena: Optional[MambaArena]
+    var held_n: Int
+    var dec_arena: Optional[MambaArena]
+    var dec_n: Int
     #: lane x56d: the last recorded run's token count, its zero-state stages
     #: and its input copy, kept until the backward reads them
     var train_l: Int
@@ -625,6 +677,10 @@ struct _M3Block(Movable):
             self.reports.append(mamba_zeros(ctx, sizes[i]))
         self.held_stages = None
         self.held_x = None
+        self.held_arena = None
+        self.held_n = 0
+        self.dec_arena = None
+        self.dec_n = 0
         self.train_l = 0
         self.train_st = None
         self.train_x = None
@@ -845,6 +901,13 @@ struct BlockStepScratch(Movable):
             n += self.m1[i].held_n
         for i in range(len(self.m2)):  # driver-loop: over resident Mamba-2 blocks
             n += self.m2[i].held_n
+        comptime if MAMBA_FAST_DECODE_STAGE_ARENA:
+            # lane fx-mamba-decode-arena: the decode arenas and the held
+            # Mamba-3 stages count toward the same bound
+            for i in range(len(self.m2)):  # driver-loop: over resident Mamba-2 blocks
+                n += self.m2[i].dec_n
+            for i in range(len(self.m3)):  # driver-loop: over resident Mamba-3 blocks
+                n += self.m3[i].held_n + self.m3[i].dec_n
         return n
 
     def parked(self) -> Int:
@@ -1121,6 +1184,78 @@ def _m2_held_take(ctx: DeviceContext, mut sc: BlockStepScratch, e: Int, b: Int, 
         return Mamba2DeviceStages(ctx, b, l, q0, dims)
 
 
+def _m2_call_stages(ctx: DeviceContext, mut blk: _M2Block, b: Int, l: Int, dims: Mamba2Dims) raises -> Mamba2DeviceStages:
+    """The stages of one Mamba-2 run that holds none: built per call at the
+    open chunk's length, or, under MAMBA_FAST_DECODE_STAGE_ARENA, an L = 1
+    run's views of the entry's decode arena."""
+    comptime if MAMBA_FAST_DECODE_STAGE_ARENA:
+        if l == 1:
+            return _m2_decode_views(ctx, blk, b, dims)
+    return Mamba2DeviceStages(ctx, b, l, blk.st.buf_len, dims)
+
+
+def _m2_decode_views(ctx: DeviceContext, mut blk: _M2Block, b: Int, dims: Mamba2Dims) raises -> Mamba2DeviceStages:
+    """Lane fx-mamba-decode-arena (MAMBA_FAST_DECODE_STAGE_ARENA, header):
+    the 28 stages of one decode token as views of the entry's ONE arena, at
+    the lengths `Mamba2DeviceStages(ctx, b, 1, buf_len, dims)` allocates. No
+    allocation and no free per token: the arena is built at the entry's
+    first token with room for the largest carried buf_len the contract
+    allows (`_m2_check_words`: CHUNK - 1 rows), and every later token queues
+    ONE zero fill of the prefix its views cover, in stream order ahead of
+    its launches (the views are laid out from offset 0, so the prefix holds
+    every word of every view; the first token's zeros are the arena
+    constructor's fill). The caller parks the views as it parks per-call
+    stages; the arena stays with the entry. A buf_len past the arena's
+    extent (the contract refuses it at load) takes per-call stages.
+    Serial by nature: one token's stage layout, 28 integer offsets."""
+    var q0 = blk.st.buf_len
+    comptime cap_q = M2_CHUNK_SIZE - 1
+    if q0 > cap_q:
+        return Mamba2DeviceStages(ctx, b, 1, q0, dims)
+    if blk.dec_arena:
+        var arena = blk.dec_arena.take()
+        arena.off = 0
+        arena.views = 0
+        var stages = Mamba2DeviceStages(ctx, b, 1, q0, dims, arena)
+        # ONE fill of the used prefix; `reset` keeps its fill view until the next
+        # token's and leaves the arena at offset 0
+        var used = arena.off
+        arena.reset(used)
+        blk.dec_arena = arena^
+        return stages^
+    var cap = MambaArena.total(_m2_stage_sizes(b, 1, cap_q, dims), MAMBA_GUARD)
+    var built = MambaArena(ctx, cap, MAMBA_GUARD)
+    var first = Mamba2DeviceStages(ctx, b, 1, q0, dims, built)
+    blk.dec_n = cap
+    blk.dec_arena = built^
+    return first^
+
+
+def _m3_decode_views(ctx: DeviceContext, mut blk: _M3Block, b: Int, dims: Mamba3Dims) raises -> Mamba3DeviceStages:
+    """`_m2_decode_views` for Mamba-3: the 33 stages of one decode token as
+    views of the entry's ONE arena, sized for the largest carried buf_len
+    (`_m3_check_words`: CHUNK rows inclusive), ONE prefix fill per token."""
+    var q0 = blk.st.buf_len
+    comptime cap_q = M3_CHUNK_SIZE
+    if q0 > cap_q:
+        return Mamba3DeviceStages(ctx, b, 1, q0, dims)
+    if blk.dec_arena:
+        var arena = blk.dec_arena.take()
+        arena.off = 0
+        arena.views = 0
+        var stages = Mamba3DeviceStages(ctx, b, 1, q0, dims, arena)
+        var used = arena.off
+        arena.reset(used)
+        blk.dec_arena = arena^
+        return stages^
+    var cap = MambaArena.total(_m3_stage_sizes(b, 1, cap_q, dims), MAMBA_GUARD)
+    var built = MambaArena(ctx, cap, MAMBA_GUARD)
+    var first = Mamba3DeviceStages(ctx, b, 1, q0, dims, built)
+    blk.dec_n = cap
+    blk.dec_arena = built^
+    return first^
+
+
 def _run_m1(mut ex: DeviceExec, mut sc: BlockStepScratch, bufs: List[FP], counts: List[Int], ints: List[Int],
             y_out: FP, y_host: Int = 0) raises:
     var ctx = ex.ctx.copy()
@@ -1218,8 +1353,10 @@ def _run_m2(mut ex: DeviceExec, mut sc: BlockStepScratch, bufs: List[FP], counts
             hb.held = held^
             return
     ref blk = sc.m2[e]
-    # `_m2_session_step_run`: call-shaped stages at the open chunk's length.
-    var stages = Mamba2DeviceStages(ctx, b, l, blk.st.buf_len, dims)
+    # `_m2_session_step_run`: call-shaped stages at the open chunk's length
+    # (an L = 1 run's are views of the entry's decode arena under
+    # MAMBA_FAST_DECODE_STAGE_ARENA, `_m2_call_stages`).
+    var stages = _m2_call_stages(ctx, blk, b, l, dims)
     comptime if _MAMBA_X_IN_PLACE:
         # the block reads x in place (MAMBA_CALL_PROGRAM, header)
         mamba2_block_forward(ctx, stages, blk.st, blk.w, x, b, l, fs[0], fs[1], trace,
@@ -1271,7 +1408,14 @@ def _run_m3(mut ex: DeviceExec, mut sc: BlockStepScratch, bufs: List[FP], counts
     # freed, while the stream may still read it (lane x45c).
     var hold = False
     comptime if IDN_M3_SESSION_STAGE_REUSE and MAMBA_GUARD == 0:
-        hold = sc.inference_only and l > 1
+        comptime if MAMBA_FAST_DECODE_STAGE_ARENA:
+            # lane fx-mamba-decode-arena (idea 7): a `keep_stages` session
+            # (the per-call block programs; a recorded run goes through
+            # `mamba_step_train_run`, never through here) holds its L > 1
+            # Mamba-3 stages too, as Mamba-1/2 hold theirs
+            hold = (sc.inference_only or sc.keep_stages) and l > 1
+        else:
+            hold = sc.inference_only and l > 1
     var kept = Optional[Mamba3DeviceStages]()
     var kept_x = Optional[DeviceBuffer[DType.float32]]()
     if hold:
@@ -1279,11 +1423,37 @@ def _run_m3(mut ex: DeviceExec, mut sc: BlockStepScratch, bufs: List[FP], counts
         if sc.m3[e].held_stages:
             var prev = sc.m3[e].held_stages.take()
             if prev.b == b and prev.l == l and prev.q0 == q0:
-                prev.rezero()
+                comptime if MAMBA_FAST_DECODE_STAGE_ARENA:
+                    if sc.m3[e].held_arena:
+                        # ONE fill for the 33 stage views (the arena's own
+                        # constructor fill), in stream order, no wait
+                        sc.m3[e].held_arena.value().base.enqueue_fill(Float32(0.0))
+                    else:
+                        prev.rezero()
+                else:
+                    prev.rezero()
                 kept = prev^
             else:
                 sc.make_room(ctx)
                 sc.parked_m3.append(prev^)
+        comptime if MAMBA_FAST_DECODE_STAGE_ARENA:
+            # lane fx-mamba-decode-arena (idea 7): a new held set is views of
+            # ONE held arena (one allocation, one fill, no wait). A previous
+            # set's arena (another shape, or a run that failed between take
+            # and hold) is parked, not freed, while the stream may read it;
+            # `release_parked` frees the parked views before it.
+            if kept:
+                pass
+            else:
+                if sc.m3[e].held_arena:
+                    sc.make_room(ctx)
+                    sc.parked_arena.append(sc.m3[e].held_arena.take())
+                var held_cap = MambaArena.total(_m3_stage_sizes(b, l, q0, dims), MAMBA_GUARD)
+                var held_arena = MambaArena(ctx, held_cap, MAMBA_GUARD)
+                var held_new = Mamba3DeviceStages(ctx, b, l, q0, dims, held_arena)
+                sc.m3[e].held_arena = held_arena^
+                sc.m3[e].held_n = held_cap
+                kept = held_new^
         if sc.m3[e].held_x:
             var px = sc.m3[e].held_x.take()
             if len(px) == n:
@@ -1356,7 +1526,11 @@ def _run_m3(mut ex: DeviceExec, mut sc: BlockStepScratch, bufs: List[FP], counts
 
 def _m3_call_stages(ctx: DeviceContext, mut blk: _M3Block, b: Int, l: Int, dims: Mamba3Dims) raises -> Mamba3DeviceStages:
     """The stages of one run that holds none: built per call at the open
-    chunk's length."""
+    chunk's length, or, under MAMBA_FAST_DECODE_STAGE_ARENA, an L = 1 run's
+    views of the entry's decode arena."""
+    comptime if MAMBA_FAST_DECODE_STAGE_ARENA:
+        if l == 1:
+            return _m3_decode_views(ctx, blk, b, dims)
     return Mamba3DeviceStages(ctx, b, l, blk.st.buf_len, dims)
 
 
