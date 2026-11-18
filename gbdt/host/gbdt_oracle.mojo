@@ -136,7 +136,9 @@ from checks.numerics import (
     ftz,
     identical_mul_add_simd,
     identical_exp,
+    identical_exp64,
     identical_log,
+    identical_log64,
     identical_mul_add,
     identical_pow,
     identical_sqrt,
@@ -2471,8 +2473,9 @@ def gbdt_host_boost(
         if random_strength != Float32(0.0):
             # `log(n) - iteration * lr` in ONE rounding, as the default
             # (contract=fast) build fused it (lane/explicit-fma-contract-proof)
-            var model_left = exp(
-                fma(-Float64(iteration), Float64(params.learning_rate), log(Float64(n_rows)))
+            # the seams, as gbdt/methods/random_score_helper.mojo (lane fb13-identity-audit)
+            var model_left = identical_exp64(
+                fma(-Float64(iteration), Float64(params.learning_rate), identical_log64(Float64(n_rows)))
             )
             noise_mult = model_left / (1.0 + model_left)
         var tree_seed = noise_rand.next_uniform_l()

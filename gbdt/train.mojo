@@ -109,6 +109,7 @@ from checks.numerics import (
     NUMERIC_FAST,
     NUMERIC_IDENTICAL,
     identical_exp64,
+    identical_log2_64,
 )
 from checks.numerics import ftz as _hr2_ftz
 from gbdt.grid_creator.gls_borders_device import device_float_borders
@@ -1039,7 +1040,10 @@ def sample_indices_for_borders_reference(
     if sn >= nrr:
         for i in range(nrr):
             sample_idx.append(UInt32(i))
-    elif sn > 1 and Float64(sn) > Float64(nrr) / log2(Float64(sn)):
+    # identical_log2_64 (lane fb13-identity-audit, 2026-11-17): the branch picks
+    # which sampler draws, so a host log2 that differs in the last bit at a
+    # near-tie would draw a different border sample on that host.
+    elif sn > 1 and Float64(sn) > Float64(nrr) / identical_log2_64(Float64(sn)):
         # their partial Fisher-Yates over an iota: `std::swap(result[i],
         # result[rand->Uniform(i, n)])` for i in [0, k)
         sample_idx.resize(nrr, UInt32(0))
