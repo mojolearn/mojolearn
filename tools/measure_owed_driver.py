@@ -30,6 +30,8 @@ next case runs. Drivers (the row's "driver" field):
                 B wheel set the row names
   f16_widen     models.safetensors.widen_f16 of synthetic float16 bits at each element count the row names; an
                 arm may be a B wheel set the row names
+  gemm_shapes   linalg.matmul(a, b) (fp32, A [m, k] @ B [k, n], seeded standard normal) at each (m, n, k) case the
+                row names: the neighbouring and non-board shapes of a GEMM kernel arm; an arm may be a B wheel set
 
 Runs nothing at import; standard library + numpy + pandas + mojolearn in the arm's venv only (it never imports the
 repo's tools). Serial by nature: the cases are timed calls on one GPU and must not share it.
@@ -301,7 +303,24 @@ def case_samba_step(row, arm_cases):
     return out
 
 
-DRIVERS = {"f16_widen": case_f16_widen, "while_loop": case_while_loop, "pandas_input": case_pandas_input, "mlp_fit": case_mlp_fit,
+def case_gemm_shapes(row, arm_cases):
+    """`mojolearn.linalg.matmul(a, b)` (the board gemm lane's call) at each (m, n, k) the row names: A is [m, k],
+    B is [k, n], float32 standard normal from a seeded Generator. The shapes are sizes beside and away from the
+    board's, never the board's own (no dimension targeting)."""
+    import numpy as np
+    from mojolearn import linalg
+    out = []
+    for case in row["shape"]["cases"]:  # serial by nature: timed calls on one GPU must not share it
+        m, n, k = int(case["m"]), int(case["n"]), int(case["k"])
+        rng = np.random.default_rng(0)
+        a = rng.standard_normal((m, k)).astype(np.float32)
+        b = rng.standard_normal((k, n)).astype(np.float32)
+        ms, why = timed(lambda: linalg.matmul(a, b))
+        out.append(("linalg.matmul m=%d n=%d k=%d" % (m, n, k), ms, why))
+    return out
+
+
+DRIVERS = {"gemm_shapes": case_gemm_shapes, "f16_widen": case_f16_widen, "while_loop": case_while_loop, "pandas_input": case_pandas_input, "mlp_fit": case_mlp_fit,
            "kde_widths": case_kde_widths, "mamba_backward": case_mamba_backward, "cnn_widths": case_cnn_widths,
            "samba_train_step": case_samba_train_step,
            "samba_step": case_samba_step}
