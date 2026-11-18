@@ -88,9 +88,8 @@ def _u32_dev(
     var host = ctx.enqueue_create_host_buffer[DType.uint32](n)
     for i in range(n):
         host.unsafe_ptr().unsafe_store(i, values[i])
-    ctx.enqueue_copy(dst_buf=buf, src_ptr=host.unsafe_ptr())
+    upload_host_into[DType.uint32](ctx, buf, host)
     ctx.synchronize()
-    _ = host^  # past the drain: a queued copy reads it after its last named use
     return buf^
 
 
@@ -102,9 +101,8 @@ def _f32_dev(
     var host = ctx.enqueue_create_host_buffer[DType.float32](n)
     for i in range(n):
         host.unsafe_ptr().unsafe_store(i, values[i])
-    ctx.enqueue_copy(dst_buf=buf, src_ptr=host.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, buf, host)
     ctx.synchronize()
-    _ = host^  # past the drain: a queued copy reads it after its last named use
     return buf^
 
 
@@ -116,9 +114,8 @@ def _u8_dev(
     var host = ctx.enqueue_create_host_buffer[DType.uint8](n)
     for i in range(n):
         host.unsafe_ptr().unsafe_store(i, values[i])
-    ctx.enqueue_copy(dst_buf=buf, src_ptr=host.unsafe_ptr())
+    upload_host_into[DType.uint8](ctx, buf, host)
     ctx.synchronize()
-    _ = host^  # past the drain: a queued copy reads it after its last named use
     return buf^
 
 
@@ -126,7 +123,7 @@ def _read_u32(
     ctx: DeviceContext, buf: DeviceBuffer[DType.uint32], n: Int
 ) raises -> List[UInt32]:
     var host = ctx.enqueue_create_host_buffer[DType.uint32](n)
-    ctx.enqueue_copy(dst_ptr=host.unsafe_ptr(), src_buf=buf)
+    download_host_into[DType.uint32](ctx, buf, host)
     ctx.synchronize()
     var out = List[UInt32]()
     for i in range(n):
@@ -138,7 +135,7 @@ def _read_f32(
     ctx: DeviceContext, buf: DeviceBuffer[DType.float32], n: Int
 ) raises -> List[Float32]:
     var host = ctx.enqueue_create_host_buffer[DType.float32](n)
-    ctx.enqueue_copy(dst_ptr=host.unsafe_ptr(), src_buf=buf)
+    download_host_into[DType.float32](ctx, buf, host)
     ctx.synchronize()
     var out = List[Float32]()
     for i in range(n):
@@ -637,6 +634,7 @@ def run_checks() raises:
 # checks/ that no CI job ran. One process per check name in CI keeps any
 # fresh-process precondition. Device column only: the suite needs a GPU, so the CPU build never instantiates it.
 from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
+from checks.native_tests.kit import download_host_into, upload_host_into
 
 
 def run_cases(column: Column, mut report: Report):

@@ -29,8 +29,8 @@ def same(ctx: DeviceContext, a: DeviceBuffer[DType.float32],
          b: DeviceBuffer[DType.float32], n: Int, label: String) raises:
     var ha = ctx.enqueue_create_host_buffer[DType.float32](n)
     var hb = ctx.enqueue_create_host_buffer[DType.float32](n)
-    ctx.enqueue_copy(dst_ptr=ha.unsafe_ptr(), src_buf=a)
-    ctx.enqueue_copy(dst_ptr=hb.unsafe_ptr(), src_buf=b)
+    download_host_into[DType.float32](ctx, a, ha)
+    download_host_into[DType.float32](ctx, b, hb)
     ctx.synchronize()
     for i in range(n):
         if bitcast[DType.uint32](ha.unsafe_ptr().unsafe_load(i)) != bitcast[DType.uint32](hb.unsafe_ptr().unsafe_load(i)):
@@ -136,6 +136,7 @@ def run_checks() raises:
 # checks/ that no CI job ran. One process per check name in CI keeps any
 # fresh-process precondition. Device column only: the suite needs a GPU, so the CPU build never instantiates it.
 from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
+from checks.native_tests.kit import download_host_into
 
 
 def run_cases(column: Column, mut report: Report):

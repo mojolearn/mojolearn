@@ -199,15 +199,11 @@ def _check_primitives(ctx: DeviceContext, mut failures: List[String]) raises:
         up_src.unsafe_ptr().unsafe_store(i, src[i])
         up_map.unsafe_ptr().unsafe_store(i, map_words[i])
         up_src8.unsafe_ptr().unsafe_store(i, src8[i])
-    ctx.enqueue_copy(dst_buf=d_values, src_ptr=up_values.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_src, src_ptr=up_src.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_map, src_ptr=up_map.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_src8, src_ptr=up_src8.unsafe_ptr())
+    upload_host_into[DType.uint32](ctx, d_values, up_values)
+    upload_host_into[DType.uint32](ctx, d_src, up_src)
+    upload_host_into[DType.uint32](ctx, d_map, up_map)
+    upload_host_into[DType.uint8](ctx, d_src8, up_src8)
     ctx.synchronize()
-    _ = up_map^  # past the drain: a queued copy reads it after its last named use
-    _ = up_src^  # past the drain: a queued copy reads it after its last named use
-    _ = up_src8^  # past the drain: a queued copy reads it after its last named use
-    _ = up_values^  # past the drain: a queued copy reads it after its last named use
 
     # --- ScanVector, both arms ---
     for arm in range(2):
@@ -216,7 +212,7 @@ def _check_primitives(ctx: DeviceContext, mut failures: List[String]) raises:
             ctx, n, inclusive, d_values, d_out, d_block_sums
         )
         ctx.synchronize()
-        ctx.enqueue_copy(dst_ptr=h_u32.unsafe_ptr(), src_buf=d_out)
+        download_host_into[DType.uint32](ctx, d_out, h_u32)
         ctx.synchronize()
         var running = UInt32(0)
         var wrong = 0
@@ -248,7 +244,7 @@ def _check_primitives(ctx: DeviceContext, mut failures: List[String]) raises:
     # --- GatherWithMask, ui32 and ui8 ---
     launch_gather_with_mask_u32(ctx, d_out, d_src, d_map, n, mask)
     ctx.synchronize()
-    ctx.enqueue_copy(dst_ptr=h_u32.unsafe_ptr(), src_buf=d_out)
+    download_host_into[DType.uint32](ctx, d_out, h_u32)
     ctx.synchronize()
     var gather_wrong = 0
     for i in range(n):
@@ -265,7 +261,7 @@ def _check_primitives(ctx: DeviceContext, mut failures: List[String]) raises:
 
     launch_gather_with_mask_u8(ctx, d_dst8, d_src8, d_map, n, mask)
     ctx.synchronize()
-    ctx.enqueue_copy(dst_ptr=h_u8.unsafe_ptr(), src_buf=d_dst8)
+    download_host_into[DType.uint8](ctx, d_dst8, h_u8)
     ctx.synchronize()
     var gather8_wrong = 0
     for i in range(n):
@@ -283,7 +279,7 @@ def _check_primitives(ctx: DeviceContext, mut failures: List[String]) raises:
     # --- ScatterWithMask ---
     launch_scatter_with_mask_u32(ctx, d_out, d_src, d_map, n, mask)
     ctx.synchronize()
-    ctx.enqueue_copy(dst_ptr=h_u32.unsafe_ptr(), src_buf=d_out)
+    download_host_into[DType.uint32](ctx, d_out, h_u32)
     ctx.synchronize()
     var scatter_wrong = 0
     for i in range(n):
@@ -945,6 +941,7 @@ def run_checks() raises:
 # checks/ that no CI job ran. One process per check name in CI keeps any
 # fresh-process precondition. Device column only: the suite needs a GPU, so the CPU build never instantiates it.
 from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
+from checks.native_tests.kit import download_host_into, upload_host_into
 
 
 def run_cases(column: Column, mut report: Report):

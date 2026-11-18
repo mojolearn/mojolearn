@@ -195,8 +195,8 @@ def run_case(
     for i in range(n_leaves):
         h_off.unsafe_ptr().unsafe_store(i, UInt32(dev_offsets[i]))
         h_sz.unsafe_ptr().unsafe_store(i, UInt32(dev_sizes[i]))
-    ctx.enqueue_copy(dst_buf=d_off, src_ptr=h_off.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_sz, src_ptr=h_sz.unsafe_ptr())
+    upload_host_into[DType.uint32](ctx, d_off, h_off)
+    upload_host_into[DType.uint32](ctx, d_sz, h_sz)
 
     var s = make_exact_quantile_scratch(ctx, n_rows, n_leaves, max_leaf)
 
@@ -254,9 +254,7 @@ def run_case(
     ctx.enqueue_copy(dst_buf=s.residuals, src_ptr=h_r.unsafe_ptr())
     ctx.enqueue_copy(dst_buf=s.residual_weights, src_ptr=h_w.unsafe_ptr())
     ctx.synchronize()
-    _ = h_off^  # past the drain: a queued copy reads it after its last named use
     _ = h_r^  # past the drain: a queued copy reads it after its last named use
-    _ = h_sz^  # past the drain: a queued copy reads it after its last named use
     _ = h_w^  # past the drain: a queued copy reads it after its last named use
 
     var use_alpha = alpha
@@ -336,8 +334,8 @@ def run_mape_case(
     for i in range(n_leaves):
         h_off.unsafe_ptr().unsafe_store(i, UInt32(offsets[i]))
         h_sz.unsafe_ptr().unsafe_store(i, UInt32(sizes[i]))
-    ctx.enqueue_copy(dst_buf=d_off, src_ptr=h_off.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_sz, src_ptr=h_sz.unsafe_ptr())
+    upload_host_into[DType.uint32](ctx, d_off, h_off)
+    upload_host_into[DType.uint32](ctx, d_sz, h_sz)
 
     var s = make_exact_quantile_scratch(ctx, n_rows, n_leaves, max_leaf)
     var h_r = ctx.enqueue_create_host_buffer[DType.float32](n_rows)
@@ -358,9 +356,7 @@ def run_mape_case(
     ctx.enqueue_copy(dst_buf=s.residuals, src_ptr=h_r.unsafe_ptr())
     ctx.enqueue_copy(dst_buf=s.residual_weights, src_ptr=h_w.unsafe_ptr())
     ctx.synchronize()
-    _ = h_off^  # past the drain: a queued copy reads it after its last named use
     _ = h_r^  # past the drain: a queued copy reads it after its last named use
-    _ = h_sz^  # past the drain: a queued copy reads it after its last named use
     _ = h_w^  # past the drain: a queued copy reads it after its last named use
 
     var point = List[Float32]()
@@ -473,6 +469,7 @@ def run_checks() raises:
 # checks/ that no CI job ran. One process per check name in CI keeps any
 # fresh-process precondition. Device column only: the suite needs a GPU, so the CPU build never instantiates it.
 from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
+from checks.native_tests.kit import upload_host_into
 
 
 def run_cases(column: Column, mut report: Report):

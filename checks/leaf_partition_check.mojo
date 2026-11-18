@@ -114,9 +114,8 @@ def check_leaf_partition() raises:
     var z = ctx.enqueue_create_host_buffer[DType.uint32](n_rows * n_columns)
     for i in range(n_rows * n_columns):
         z.unsafe_ptr().unsafe_store(i, UInt32(0))
-    ctx.enqueue_copy(dst_buf=cindex, src_ptr=z.unsafe_ptr())
+    upload_host_into[DType.uint32](ctx, cindex, z)
     ctx.synchronize()
-    _ = z^  # past the drain: a queued copy reads it after its last named use
 
     var lay = build_layout(folds)
     var hb = ctx.enqueue_create_host_buffer[DType.uint8](n_rows)
@@ -131,7 +130,7 @@ def check_leaf_partition() raises:
             hb.unsafe_ptr().unsafe_store(
                 r, UInt8(Int(x % UInt32(folds[f] + 1)))
             )
-        ctx.enqueue_copy(dst_buf=bins8, src_ptr=hb.unsafe_ptr())
+        upload_host_into[DType.uint8](ctx, bins8, hb)
         ctx.enqueue_function[write_compressed_index_kernel](
             Int32(Int(cf.offset) * n_rows),
             cf.mask,
@@ -157,16 +156,14 @@ def check_leaf_partition() raises:
         hs.unsafe_ptr().unsafe_store(n_rows + r, Float32(g))
         tw += 1.0
         tg += -g if g < 0.0 else g
-    ctx.enqueue_copy(dst_buf=stats, src_ptr=hs.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, stats, hs)
 
     var row_index = ctx.enqueue_create_buffer[DType.uint32](n_rows)
     var hi = ctx.enqueue_create_host_buffer[DType.uint32](n_rows)
     for r in range(n_rows):
         hi.unsafe_ptr().unsafe_store(r, UInt32(r))
-    ctx.enqueue_copy(dst_buf=row_index, src_ptr=hi.unsafe_ptr())
+    upload_host_into[DType.uint32](ctx, row_index, hi)
     ctx.synchronize()
-    _ = hi^  # past the drain: a queued copy reads it after its last named use
-    _ = hs^  # past the drain: a queued copy reads it after its last named use
 
     var scratch_cursor = ctx.enqueue_create_buffer[DType.float32](1)
     var splits = List[TBinarySplit]()
@@ -197,7 +194,7 @@ def check_leaf_partition() raises:
         )
 
     var h_rows = ctx.enqueue_create_host_buffer[DType.uint32](n_rows)
-    ctx.enqueue_copy(dst_ptr=h_rows.unsafe_ptr(), src_buf=row_index)
+    download_host_into[DType.uint32](ctx, row_index, h_rows)
     ctx.synchronize()
     var searcher_rows = List[UInt32]()
     for r in range(n_rows):
@@ -215,7 +212,7 @@ def check_leaf_partition() raises:
     var part = partition_from_bins(ctx, d_bins, n_rows, 1 << max_depth)
     var part_rows = List[UInt32]()
     var h_pr = ctx.enqueue_create_host_buffer[DType.uint32](n_rows)
-    ctx.enqueue_copy(dst_ptr=h_pr.unsafe_ptr(), src_buf=part.row_index)
+    download_host_into[DType.uint32](ctx, part.row_index, h_pr)
     ctx.synchronize()
     for r in range(n_rows):
         part_rows.append(h_pr.unsafe_ptr().unsafe_load(r))
@@ -268,7 +265,7 @@ def check_leaf_partition() raises:
     )
     var part1 = partition_from_bins(ctx, d_bins1, n_rows, 1 << max_depth)
     var h_pr1 = ctx.enqueue_create_host_buffer[DType.uint32](n_rows)
-    ctx.enqueue_copy(dst_ptr=h_pr1.unsafe_ptr(), src_buf=part1.row_index)
+    download_host_into[DType.uint32](ctx, part1.row_index, h_pr1)
     ctx.synchronize()
     var rows1 = List[UInt32]()
     for r in range(n_rows):
@@ -301,7 +298,7 @@ def check_leaf_partition() raises:
     )
     var part2 = partition_from_bins(ctx, d_bins2, n_rows, 1 << max_depth)
     var h_pr2 = ctx.enqueue_create_host_buffer[DType.uint32](n_rows)
-    ctx.enqueue_copy(dst_ptr=h_pr2.unsafe_ptr(), src_buf=part2.row_index)
+    download_host_into[DType.uint32](ctx, part2.row_index, h_pr2)
     ctx.synchronize()
     var rows2 = List[UInt32]()
     for r in range(n_rows):
@@ -337,6 +334,7 @@ def run_checks() raises:
 # checks/ that no CI job ran. One process per check name in CI keeps any
 # fresh-process precondition. Device column only: the suite needs a GPU, so the CPU build never instantiates it.
 from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
+from checks.native_tests.kit import download_host_into, upload_host_into
 
 
 def run_cases(column: Column, mut report: Report):
