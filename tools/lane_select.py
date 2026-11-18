@@ -3462,31 +3462,12 @@ _MOJO_NOT_A_NAME = frozenset({"if", "for", "while", "assert", "elif", "else"})
 _MOJO_IMPLICIT_METHODS = frozenset({"write_to", "write_repr_to"})
 
 
-_SCAN_MEMO = {}              # text -> _mojo_scan(text); callers only read the list
-_CODE_TEXT_MEMO = {}         # text -> _mojo_code_text(text)
-_CACHES.append(_SCAN_MEMO)
-_CACHES.append(_CODE_TEXT_MEMO)
-
-
 def _mojo_scan(text):
     """[(line, cont)] for a Mojo source, `cont` True when the line begins
     inside a string or an open bracket (or after a backslash), so it belongs
     to the statement above it whatever its indent. None when the text cannot
     be read with certainty: a bracket closes below zero, a one-quote string
-    runs past its line, or a string or bracket is still open at the end.
-
-    MEMOIZED BY TEXT (2026-11-18): the per-definition walks hand the same
-    bodies to `passed_operations`, `_mojo_code_text` and the dispatcher parse
-    once per lane key; the character scan was a third of a map derivation."""
-    hit = _SCAN_MEMO.get(text, _SCAN_MEMO)
-    if hit is not _SCAN_MEMO:
-        return hit
-    out = _mojo_scan_uncached(text)
-    _SCAN_MEMO[text] = out
-    return out
-
-
-def _mojo_scan_uncached(text):
+    runs past its line, or a string or bracket is still open at the end."""
     out, depth, quote, backslash = [], 0, None, False
     for line in text.splitlines():
         out.append((line, depth > 0 or quote is not None or backslash))
@@ -3575,15 +3556,6 @@ def _mojo_code_text(text):
     of a function by its spelling. Every OTHER string literal keeps its
     identifiers (the safe direction), and a text the scanner cannot read
     (`_mojo_scan` refuses unbalanced quotes or brackets) keeps all of them."""
-    hit = _CODE_TEXT_MEMO.get(text)
-    if hit is not None:
-        return hit
-    out = _mojo_code_text_uncached(text)
-    _CODE_TEXT_MEMO[text] = out
-    return out
-
-
-def _mojo_code_text_uncached(text):
     if _mojo_scan(text) is None:
         return text
     out, quote, depth, cont, blank = [], None, 0, False, False
