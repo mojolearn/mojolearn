@@ -133,6 +133,91 @@ def g(flag: Bool) raises -> Int:
         self.assertEqual([(f["path"], f["local"]) for f in found], [("pkg/user.mojo", "d")])
 
 
+class QueuedCopyTest(unittest.TestCase):
+    """FREED BEFORE THE DRAIN: an asynchronous enqueue_copy still reads a host local that Mojo freed at its last
+    named use (hist2_check, partitions_reduce_check and greedy_search_helper.run_tree, 2026-11-18)."""
+
+    PINNED = '''
+def g(ctx: DeviceContext) raises:
+    var d = ctx.enqueue_create_buffer[DType.uint32](4)
+    var h = ctx.enqueue_create_host_buffer[DType.uint32](4)
+    h.unsafe_ptr().unsafe_store(0, UInt32(7))
+    ctx.enqueue_copy(dst_buf=d, src_ptr=h.unsafe_ptr())
+    var z = ctx.enqueue_create_host_buffer[DType.uint32](4)
+    z.unsafe_ptr().unsafe_store(0, UInt32(0))
+    ctx.synchronize()
+    _ = z^
+'''
+
+    def test_pinned_staging_freed_before_the_drain_fails(self):
+        self.assertEqual(failing(self.PINNED), [("h", "enqueue_copy")])
+        self.assertEqual(failing(self.PINNED + "    _ = h^\n"), [])
+
+    def test_keepalive_before_the_drain_still_fails(self):
+        # run_tree had `_ = q5^ ... # past the drain` ABOVE its synchronize
+        text = self.PINNED.replace("    var z =", "    _ = h^\n    var z =")
+        self.assertEqual(failing(text), [("h", "enqueue_copy")])
+
+    def test_list_source_and_its_fix(self):
+        text = '''
+def g(ctx: DeviceContext) raises:
+    var off = List[UInt32]()
+    off.append(UInt32(3))
+    var d = ctx.enqueue_create_buffer[DType.uint32](1)
+    ctx.enqueue_copy(dst_buf=d, src_ptr=off.unsafe_ptr())
+    ctx.synchronize()
+'''
+        # pointwise_scores_calcer: a pageable source dies at the copy, the drain comes after it
+        self.assertEqual(failing(text), [("off", "enqueue_copy")])
+        self.assertEqual(failing(text + "    _ = off^\n"), [])
+
+    def test_pointer_alias_of_the_staging(self):
+        # gls_borders_device: `var hs = h_seg.unsafe_ptr()`, then `src_ptr=hs + chunk`
+        text = '''
+def g(ctx: DeviceContext, d: DeviceBuffer[DType.uint32]) raises:
+    var h_seg = ctx.enqueue_create_host_buffer[DType.uint32](8)
+    ctx.synchronize()
+    var hs = h_seg.unsafe_ptr()
+    hs[0] = 1
+    ctx.enqueue_copy(dst_buf=d, src_ptr=hs + 4)
+    launch(d)
+    ctx.synchronize()
+'''
+        self.assertEqual(failing(text), [("h_seg", "enqueue_copy")])
+        self.assertEqual(failing(text + "    _ = h_seg^\n"), [])
+
+    def test_drain_inside_a_callee_and_a_move_pass(self):
+        text = '''
+def settle[n: Int](ctx: DeviceContext) raises:
+    ctx.synchronize()
+
+def g(ctx: DeviceContext, d: DeviceBuffer[DType.uint32]) raises:
+    var h = ctx.enqueue_create_host_buffer[DType.uint32](4)
+    ctx.enqueue_copy(dst_buf=d, src_ptr=h.unsafe_ptr())
+    settle[0](ctx)
+    _ = h^
+
+def k(ctx: DeviceContext, d: DeviceBuffer[DType.uint32], mut holds: List[HostBuffer[DType.uint32]]) raises:
+    var h = ctx.enqueue_create_host_buffer[DType.uint32](4)
+    ctx.enqueue_copy(dst_buf=d, src_ptr=h.unsafe_ptr())
+    holds.append(h^)
+'''
+        self.assertEqual(failing(text), [])
+
+    def test_drain_in_another_file_is_found_by_scan(self):
+        files = [("pkg/a.mojo", "def settle(ctx: DeviceContext) raises:\n    ctx.synchronize()\n"),
+                 ("pkg/b.mojo", "def g(ctx: DeviceContext, d: DeviceBuffer[DType.uint8]) raises:\n"
+                                "    var h = ctx.enqueue_create_host_buffer[DType.uint8](1)\n"
+                                "    ctx.enqueue_copy(dst_buf=d, src_ptr=h.unsafe_ptr())\n"
+                                "    settle(ctx)\n    _ = h^\n"),
+                 ("pkg/c.mojo", "def g(ctx: DeviceContext, d: DeviceBuffer[DType.uint8]) raises:\n"
+                                "    var h = ctx.enqueue_create_host_buffer[DType.uint8](1)\n"
+                                "    ctx.enqueue_copy(dst_buf=d, src_ptr=h.unsafe_ptr())\n"
+                                "    other(ctx)\n    _ = h^\n")]
+        found = [f for f in lu.scan(files, workers=2) if f["fails"]]
+        self.assertEqual([(f["path"], f["local"], f["kind"]) for f in found], [("pkg/c.mojo", "h", "queued")])
+
+
 class AllowTest(unittest.TestCase):
 
     def test_allow_list_needs_a_reason_and_reports_stale_lines(self):

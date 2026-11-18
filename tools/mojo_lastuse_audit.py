@@ -22,6 +22,20 @@ So the audit fails on an UNTRACKED derivation of a local X where
   * it is assigned to P and P (or a name assigned from P) is used after X's last named use.
 Any-origin and tracked derivations are counted (`--all-kinds` lists them) and never fail.
 
+FREED BEFORE THE DRAIN (2026-11-18, lane fx-lifetime). `ctx.enqueue_copy(dst_buf=d, src_ptr=h.unsafe_ptr())` is a
+tracked derivation, so the rule above passes it, but the copy is asynchronous: the driver reads h after the call
+returns, and no origin says so. A freed pinned block goes straight back to the caching allocator, so the next
+`enqueue_create_host_buffer` on the thread is handed it and its fill overwrites bytes the copy has not read yet
+(hist2_check and partitions_reduce_check failed on the L40S this way). So the audit also fails (kind `queued`) on a
+local X declared as a pinned host buffer (`= ...enqueue_create_host_buffer`) or a List (`= List[`, `= [`) where
+  * X is used by an `enqueue_copy` statement (a List: as `src_ptr=X...`; either: through a pointer `var p =
+    X.unsafe_ptr()` of the same function, `src_ptr=p` / `dst_ptr=p`), and
+  * no DRAIN lies between the latest such copy and X's last named use (extended over an enclosing loop's back
+    edge), and X is never moved (`X^` other than `_ = X^`).
+A DRAIN is a statement with `synchronize(` or a call (`name(` or `name[..](`) to a function whose body has
+`synchronize(` (any scanned file, by name; `main` excluded). Fix: `_ = X^` AFTER the drain. A keep-alive placed
+before the drain is the same bug and fails.
+
 Fix: name the local again after the pointer's last use (`_ = x^`; free). A true false alarm (a stack array whose
 slot outlives the name, a value the caller owns) gets one line in tools/mojo_lastuse_allow.txt:
 `<path>:<function>:<local>  # <reason>`. Unlisted findings fail; allow lines that match nothing are printed as STALE.
@@ -31,6 +45,7 @@ processes. tools/prebuild_check.py runs it in its `audits` part (seconds).
 """
 import argparse
 import concurrent.futures
+import functools
 import os
 import re
 import subprocess
@@ -52,6 +67,10 @@ _HOT = re.compile(r"unsafe_ptr|unsafe_origin_cast|as_unsafe_any_origin|\bto=")
 _READ = re.compile(r"\.(?:unsafe_ptr|unsafe_origin_cast\[[^\]]*\]|bitcast\[[^\]]*\])\(\)\s*(?:\[|\.(?:unsafe_load|load|unsafe_get)\b)")
 _KEEP = re.compile(r"^\s*_\s*=\s*\w+\^?\s*$")
 _LOOP = re.compile(r"^\s*(?:for|while)\b")
+_PIN = re.compile(r"(?<![\w.])var\s+(\w+)\s*(?::[^=]*)?=\s*[\w.\[\]]*enqueue_create_host_buffer")
+_LST = re.compile(r"(?<![\w.])var\s+(\w+)\s*(?::\s*List\[[^=]*)?=\s*(?:List\[|\[)")
+_PTR_OF = re.compile(r"^\s*var\s+(\w+)\s*(?::[^=]*)?=\s*(\w+)\.unsafe_ptr\(\)\s*$")
+_SYNC = re.compile(r"\bsynchronize\s*\(")
 _STRING = re.compile(r'"(?:\\.|[^"\\])*"|\'(?:\\.|[^\'\\])*\'')
 
 
@@ -131,7 +150,18 @@ def helpers_of(text):
         body = "\n".join(lines[i + 1:i + 8])
         if any(re.search(_HELPER_RET.format(p=re.escape(p)), body) for p in params):
             found[m.group(1)] = "untracked"
+    for fname, a, b in functions(lines):  # functions that drain the queue (`drain:NAME`), for the queued rule
+        if fname != "main" and any(_SYNC.search(t) for t in lines[a:b]):
+            found["drain:" + fname] = "drain"
     return found
+
+
+@functools.lru_cache(maxsize=8)
+def _drain_call(drains):
+    """A regex for a call to one of DRAINS (a frozenset of function names), parametric calls included."""
+    if not drains:
+        return None
+    return re.compile(r"\b(?:" + "|".join(sorted(map(re.escape, drains))) + r")\s*(?:\[[^\[\]]*\])?\s*\(")
 
 
 def _chain_end(s, k):
@@ -260,6 +290,10 @@ def scan_text(path, text, helpers):
     lines = text.splitlines()
     stmts = statements(lines)
     out, seen = [], set()
+    drains = helpers.get("__drains__")
+    if drains is None:
+        drains = frozenset(k[6:] for k in helpers if k.startswith("drain:"))
+    drain_call = _drain_call(drains) if "enqueue_copy" in text else None
     for fname, a, b in functions(lines):
         body = [(i, j, s) for (i, j, s) in stmts if a < i < b or (i == a)]
         if not body:
@@ -359,6 +393,66 @@ def scan_text(path, text, helpers):
                     seen.add(key)
                     out.append(dict(path=path, line=body[k][0] + 1, function=fname, local=x, kind=kind, sink=sink,
                                     last_use=body[last_x][0] + 1, fails=bad, why=why))
+        if "enqueue_copy" in text:
+            out.extend(_queued(path, fname, body, idents, effective_last, drain_call, seen))
+    return out
+
+
+def _queued(path, fname, body, idents, effective_last, drain_call, seen):
+    """The FREED BEFORE THE DRAIN findings of one function (module docstring)."""
+    out, n_body = [], len(body)
+    copies = [q for q in range(1, n_body) if "enqueue_copy" in body[q][2]]
+    if not copies:
+        return out
+    drain = [bool(_SYNC.search(s)) or bool(drain_call and drain_call.search(s)) for (_, _, s) in body]
+    ptrs = {}  # owner -> pointer names (`var p = x.unsafe_ptr()`)
+    for q in range(1, n_body):
+        pm = _PTR_OF.match(body[q][2])
+        if pm:
+            ptrs.setdefault(pm.group(2), set()).add(pm.group(1))
+    for d in range(1, n_body):
+        s = body[d][2]
+        for rx, kind in ((_PIN, "pinned"), (_LST, "list")):
+            m = rx.search(s)
+            if not m:
+                continue
+            x = m.group(1)
+            uses = [q for q in range(d + 1, n_body) if x in idents[q]]
+            if not uses:
+                continue
+            if any(re.search(r"(?<![\w.])" + re.escape(x) + r"\^", body[q][2]) and not _KEEP.match(body[q][2])
+                   for q in uses):
+                continue  # moved into a holder, a field or the return value: the new owner keeps it
+            aliases = sorted(ptrs.get(x, ()))
+            alias_rx = ("|".join(map(re.escape, aliases))) if aliases else None
+            queued = []
+            for q in copies:
+                if q <= d:
+                    continue
+                t = body[q][2]
+                if alias_rx and re.search(r"\b(?:src|dst)_ptr\s*=\s*(?:" + alias_rx + r")\b", t):
+                    queued.append(q)
+                elif kind == "pinned" and x in idents[q]:
+                    queued.append(q)
+                elif kind == "list" and re.search(r"\bsrc_ptr\s*=\s*" + re.escape(x) + r"\b", t):
+                    queued.append(q)
+            if not queued:
+                continue
+            alias_uses = [q for p in aliases for q in range(d + 1, n_body) if p in idents[q]]
+            last = effective_last(d, max(uses + alias_uses))
+            first = queued[-1]
+            if any(drain[q] for q in range(first, last + 1)):
+                continue
+            nxt = next((q for q in range(last + 1, n_body) if drain[q]), None)
+            key = (x, body[first][0])
+            if key in seen:
+                continue
+            seen.add(key)
+            where = f"the drain at line {body[nxt][0] + 1}" if nxt is not None else "a drain (none follows in it)"
+            out.append(dict(path=path, line=body[first][0] + 1, function=fname, local=x, kind="queued",
+                            sink="enqueue_copy", last_use=body[last][0] + 1, fails=True,
+                            why=f"the enqueue_copy at line {body[first][0] + 1} still reads it; put `_ = {x}^` "
+                                f"after {where}"))
     return out
 
 
@@ -426,6 +520,7 @@ def scan(files, workers=None):
     workers = max(1, workers or os.cpu_count() or 1)
     with concurrent.futures.ProcessPoolExecutor(max_workers=workers) as pool:
         per_file = dict(h for part in pool.map(_helper_pass, _chunks(files, workers)) for h in part)
+        drains = frozenset(k[6:] for h in per_file.values() for k in h if k.startswith("drain:"))
         items = []
         for path, text in files:
             local = dict(per_file.get(path, {}))
@@ -436,6 +531,7 @@ def scan(files, workers=None):
                         local.setdefault(name, "untracked")
                     if "alias:" + name in source:
                         local.setdefault("alias:" + name, source["alias:" + name])
+            local["__drains__"] = drains
             items.append((path, text, local))
         found = [f for part in pool.map(_scan_many, _chunks(items, workers)) for f in part]
     return sorted(found, key=lambda f: (f["path"], f["line"], f["local"]))
