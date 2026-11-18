@@ -32,7 +32,10 @@ def test_native_tsne_resolves_both_optional_binding_slots():
     source = _source("bindings/mani_tsne_native_unpack.mojo")
     assert 'estimator_binding_mode(settings.mode, "_mojolearn_x_ann", context) if args[0] is None else args[0]' in source
     assert 'estimator_binding_mode(settings.mode, "_mojolearn_estimators", context) if args[1] is None else args[1]' in source
-    assert 'spectral_umap_optional_entry(estimators, "pca_fit_owned", context)' in source
+    # The PCA start calls the typed decomposition entry table (core.decomp_entry_table_pca), not a
+    # by-name optional entry of the estimators binding.
+    assert 'pca_ops_entry(decomp_pca_ops_key(estimators))' in source
+    assert 'pca_fit_owned_call(entry, x_address,' in source
 
 
 def test_manifold_kit_refuses_proxies_before_looking_up_cells():
@@ -46,7 +49,8 @@ def test_manifold_kit_refuses_proxies_before_looking_up_cells():
     assert ".getattr" not in image
     run = _source("bindings/mani_kit_run.mojo")
     assert "PythonObject" not in run and "std.python" not in run
-    assert '"x_decomp_' not in run
+    code = "\n".join(line.split("#", 1)[0] for line in run.splitlines())
+    assert '"x_decomp_' not in code  # cell names appear only in comments naming the flag's origin
 
 
 def test_manifold_input_copy_uses_snapshot_words_and_keeps_original_owner():
@@ -64,11 +68,12 @@ def test_manifold_input_copy_uses_snapshot_words_and_keeps_original_owner():
 def test_tsne_pca_and_optimizer_share_one_x_snapshot():
     source = _source("bindings/mani_tsne_native_unpack.mojo")
     entry = _source("bindings/manifold_native_pack.mojo")
-    assert entry.count('manifold_input(source, name, not tsne, context)') == 1
+    # One admission per call; the door's pin keeps X alive through every RUN step.
+    assert entry.count('manifold_input(source, name, not tsne, context, x_pin)') == 1
     assert 'snapshot: ArrayMetadata' in source
     assert 'admit_family_meta(args[2]' not in source
     assert "_tsne_pca_start(estimators, x_address, n, d, k, context)" in source
-    assert "family_call(fit, Python.list(PythonObject(x_address)," in source
+    assert "ann_tsne_fit_call(fit, x_address, y0_address," in source  # typed call, same X address
     assert "x.shape" not in source
     assert "classical_address(x)" not in source
     assert "_ = snapshot" in source
