@@ -47,15 +47,14 @@ TARGETS AND WHO READS THEM (the partition is <device arch>/<image slug>):
                partition none/<rocm image>. NOT read by the default AMD
                release leg; see AMD below.
 
-AMD. The default gfx942 release leg (tools/do_release061_leg.sh or
-tools/hotaisle_release_leg.sh) never stages the binding cache, so nothing
+AMD. The default gfx942 release leg (tools/do_release061_leg.sh) never stages the binding cache, so nothing
 prebuilt reaches it whatever the key. Three alignments would be needed for a
 prebuilt gfx942 entry to be served there: (1) that leg stages and promotes
 like gemm_remote_leg.sh; (2) the key's `device_arch` must name the TARGET
 (MOJOLEARN_GPU_ARCHS) rather than what rocminfo reports, since the CPU pod
 says `none` and the MI325X `gfx942` for the same --target-accelerator
 compile; (3) `image` must name the build container, not the provider
-(`runpod-cpu:<rocm image>` versus a `do:`/`hotaisle:` label for the same
+(`runpod-cpu:<rocm image>` versus a `do:` label for the same
 rocm/dev-ubuntu-22.04 digest), and the leg's exported variables must match
 the CPU route's. Until then the planner reports gfx942 against the CPU-pod
 partition only.

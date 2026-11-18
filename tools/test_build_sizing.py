@@ -255,7 +255,7 @@ class ScriptsUseTheSizing(unittest.TestCase):
         self.assertIn("record['build_resources']", (ROOT / 'tools/linux_surface_qualification.sh').read_text())
 
     def test_legs_default_to_auto(self):
-        for name in ('gemm_remote_leg.sh', 'do_release061_leg.sh', 'hotaisle_release_leg.sh'):
+        for name in ('gemm_remote_leg.sh', 'do_release061_leg.sh'):
             s = (ROOT / 'tools' / name).read_text()
             self.assertIn('MOJOLEARN_BUILD_JOBS:-auto', s, name)
             self.assertNotIn('MOJOLEARN_BUILD_JOBS:-4', s, name)

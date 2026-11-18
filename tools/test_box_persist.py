@@ -747,7 +747,7 @@ class TestHooks(unittest.TestCase):
 
     def test_selfdestruct_paths_flush_before_delete(self):
         for f, delete in (("runpod_guard.sh", "-X DELETE"), ("gpu_queue_box.sh", "-X DELETE"),
-                          ("do_amd_steward.sh", "-X DELETE '$DO_API/droplets/$1'"), ("hotaisle_vm_lib.sh", "-X DELETE '@API@")):
+                          ("do_amd_steward.sh", "-X DELETE '$DO_API/droplets/$1'")):
             s = self.read(f)
             i, j = s.find("--flush-all"), s.find(delete)
             self.assertGreater(i, 0, f)
