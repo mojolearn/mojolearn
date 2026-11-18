@@ -177,7 +177,7 @@ from checks.kernel_matrix import (
     TARGET_COLUMN,
     pointwise_one_byte_fixed_for,
 )
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
 
 from gbdt.gpu_data.grid_policy import (
     POLICY_BINARY,
@@ -185,14 +185,17 @@ from gbdt.gpu_data.grid_policy import (
     POLICY_ONE_BYTE,
 )
 from gbdt.methods.kernel.split_properties_helpers import (
+    PW_PRIVATE_DOC_SLOTS,
     estimate_block_per_feature_multiplier,
 )
+from gbdt.methods.kernel.pointwise_hist2_one_byte_templ import PW_WRITE_EPS
 from gbdt.methods.pointwise_kernels import (
     FoldsHistogram,
     PW_MAX_MULTIPLIER,
     compute_hist2,
     compute_hist2_non_binary,
     folds_histogram_from_folds,
+    pw_int_slots_on,
 )
 
 # 24,000 rows is not decoration. `EstimateBlockPerFeatureMultiplier` refuses
@@ -777,9 +780,31 @@ def run_checks() raises:
     for k in range(line2):
         seed2[k] = Float32(k % 89 + 5)
     var raw_ob = tally_one_byte(fx, one_off, one_len)
+    # THE INT-SLOT ROUTE STORES (fb11, 2026-11-17; the first L40S run read
+    # 2004 of 3090 cells "wrong", every one the raw tally without the seed).
+    # Under the routed 8-bit launch in a non-FAST build,
+    # `compute_hist2_non_binary_dev` splits the documents at M > 1 into
+    # private Int32 slots and `pw_fold_int_slots_kernel` folds them and
+    # STORES the multiplier-1 cell (the 1e-20 write guard included): the
+    # cell is the same at every M by design (pointwise_kernels.mojo, "THE
+    # 8-BIT DOCUMENT SPLIT WITH THE ONE-BLOCK BITS"), so the M > 1 atomic
+    # writeback this gate was written for does not exist on that route.
+    # What stays observable is that the split was TAKEN and folded to the
+    # one-block store: every tallied cell replaced, every untallied cell
+    # left at its seed. A launch that dropped to the float atomic would keep
+    # the seed under every cell and fail here.
+    var int_slot_store = False
+    comptime if pw_routed and not PW_PRIVATE_DOC_SLOTS and GLOBAL_NUMERIC_MODE != NUMERIC_FAST:
+        var est = m_2c
+        if est > PW_MAX_MULTIPLIER:
+            est = PW_MAX_MULTIPLIER
+        int_slot_store = pw_int_slots_on() and est > 1 and (est & (est - 1)) == 0
     var want2c = zeros(line2)
     for k in range(line2):
-        want2c[k] = seed2[k] + raw_ob[k]
+        if int_slot_store:
+            want2c[k] = raw_ob[k] if abs(raw_ob[k]) > PW_WRITE_EPS else seed2[k]
+        else:
+            want2c[k] = seed2[k] + raw_ob[k]
 
     ctx.enqueue_copy(dst_buf=d_ob, src_ptr=seed2.unsafe_ptr())
     comptime if pw_routed:
