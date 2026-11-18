@@ -9,6 +9,15 @@ import bincache
 from development_build import SourceGraph
 
 ROOT = Path(__file__).resolve().parent.parent
+_GRAPH = []
+
+
+def shared_graph():
+    """One SourceGraph for the whole file: its per-file import parse is cached on the instance, and every test
+    here reads the same unchanged tree, so a fresh graph per test re-parsed every binding closure again."""
+    if not _GRAPH:
+        _GRAPH.append(SourceGraph(ROOT))
+    return _GRAPH[0]
 
 
 ADD_TYPE = re.compile(r"\.add_type\[(.+?)\]\(\"(\w+)\"\)")
@@ -24,7 +33,7 @@ def registered_types(member):
     module. A file in the closure for another export registers nothing. A registrar that looks the type up
     first (native_identity_type) is shared by design and reported apart.
     """
-    graph = SourceGraph(ROOT)
+    graph = shared_graph()
     entry = f"bindings/{member}.mojo"
     closure = graph.closure([member])
     assert closure['scope'] == 'closure', closure['unresolved']
@@ -43,7 +52,7 @@ def registered_types(member):
 
 
 def test_shared_host_allocator_has_no_archive_or_tree_training_dependency():
-    closure = SourceGraph(ROOT).closure(['host_array_native_pack'])
+    closure = shared_graph().closure(['host_array_native_pack'])
     assert closure['scope'] == 'closure', closure['unresolved']
     assert 'bindings/host_archive_native_door.mojo' not in closure['files']
     assert 'core/host_archive_gbdt.mojo' not in closure['files']
@@ -51,7 +60,7 @@ def test_shared_host_allocator_has_no_archive_or_tree_training_dependency():
 
 
 def test_model_selection_does_not_pull_archive_readers_through_sparse_allocation():
-    closure = SourceGraph(ROOT).closure(['model_selection_native_door'])
+    closure = shared_graph().closure(['model_selection_native_door'])
     assert closure['scope'] == 'closure', closure['unresolved']
     assert 'bindings/host_sparse_native_door.mojo' in closure['files']
     assert 'bindings/host_array_native_pack.mojo' in closure['files']
@@ -70,7 +79,7 @@ def test_storage_only_imports_use_the_leaf_instead_of_the_archive_facade():
 
 def test_model_selection_edits_invalidate_only_the_independent_development_owner():
     groups = json.loads((ROOT/'bindings/development_groups.json').read_text())['groups']
-    graph = SourceGraph(ROOT)
+    graph = shared_graph()
     owners = set()
     for mode, partitions in groups.items():
         for name, members in partitions.items():
@@ -97,7 +106,7 @@ def test_release_host_groups_hold_each_member_once_and_include_the_new_logical_e
 
 def test_manifold_implementation_edits_invalidate_only_the_manifold_owner():
     groups = json.loads((ROOT/'bindings/development_groups.json').read_text())['groups']
-    graph = SourceGraph(ROOT)
+    graph = shared_graph()
     paths = ('bindings/mani_kit_door.mojo', 'bindings/mani_decomp_native_door.mojo',
              'bindings/mani_tsne_native_unpack.mojo', 'bindings/mani_umap_native_door.mojo')
     owners = {path: set() for path in paths}
@@ -112,7 +121,7 @@ def test_manifold_implementation_edits_invalidate_only_the_manifold_owner():
 
 
 def test_manifold_owner_has_no_tokenizer_type_registration_or_archive_dependency():
-    closure = SourceGraph(ROOT).closure(['_mojolearn_runtime_manifold_host'])
+    closure = shared_graph().closure(['_mojolearn_runtime_manifold_host'])
     assert closure['scope'] == 'closure', closure['unresolved']
     assert 'bindings/mani_kit_door.mojo' in closure['files']
     assert 'bindings/family_native_door.mojo' not in closure['files']
@@ -127,7 +136,7 @@ def test_manifold_owner_has_no_tokenizer_type_registration_or_archive_dependency
 
 def test_sequential_implementation_edits_do_not_invalidate_tokenizer():
     groups = json.loads((ROOT/'bindings/development_groups.json').read_text())['groups']
-    graph = SourceGraph(ROOT)
+    graph = shared_graph()
     paths = ('bindings/sequential_execution_pack.mojo', 'bindings/sequential_checkpoint_door.mojo')
     owners = {path: set() for path in paths}
     for mode, partitions in groups.items():
@@ -141,7 +150,7 @@ def test_sequential_implementation_edits_do_not_invalidate_tokenizer():
 
 
 def test_sequential_adds_no_registered_type_and_existing_types_each_keep_one_owner():
-    graph = SourceGraph(ROOT)
+    graph = shared_graph()
     owner = graph.closure(['_mojolearn_runtime_sequential_host'])
     tokenizer = graph.closure(['_mojolearn_tokenizer_host'])
     assert owner['scope'] == tokenizer['scope'] == 'closure'
@@ -172,7 +181,7 @@ SPLIT_UNITS = ('runtime_classical', 'runtime_trees', 'runtime_family', 'runtime_
 
 def test_classical_resident_allocation_and_lifetime_are_owned_by_one_development_unit():
     groups = json.loads((ROOT/'bindings/development_groups.json').read_text())['groups']
-    graph = SourceGraph(ROOT)
+    graph = shared_graph()
     # The classical door and the two doors it forwards to are each in exactly
     # one unit (the import graph at file level).
     expected = {'bindings/classical_native_pack.mojo': {('host', 'runtime_classical')},
