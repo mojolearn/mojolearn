@@ -2972,6 +2972,47 @@ def kv_append2_kernel(
         new_v.unsafe_store(i, fresh_v.unsafe_load(src_i))
 
 
+def kv_rewind2_kernel(
+    new_k: MutPointer[Float32, MutAnyOrigin],
+    new_v: MutPointer[Float32, MutAnyOrigin],
+    old_k: MutPointer[Float32, MutAnyOrigin],
+    old_v: MutPointer[Float32, MutAnyOrigin],
+    b_in: Int32,
+    nkv_in: Int32,
+    hd_in: Int32,
+    s_from_in: Int32,
+    s_to_in: Int32,
+):
+    """The linear cache packed at stride `s_from`, rewritten packed at the
+    SMALLER stride `s_to` (lane fx-kv-inplace, `llama_kv_cache_rewind`):
+    destination cell `i` of the first `B*n_kv*s_to*head_dim` is slot
+    `j < s_to` of its (batch, kv head) row read at the old stride, a plain
+    bit copy; every cell from there to the end of the old span
+    (`B*n_kv*s_from*head_dim`) is 0, the value those cells hold in a cache
+    that never ran past `s_to`. Out of place (DEVIATION 1022): `new_*` and
+    `old_*` are different buffers. One thread per cell, K and V together.
+    """
+    var b = Int(b_in)
+    var nkv = Int(nkv_in)
+    var hd = Int(hd_in)
+    var s_from = Int(s_from_in)
+    var s_to = Int(s_to_in)
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i >= b * nkv * s_from * hd:
+        return
+    if i >= b * nkv * s_to * hd:
+        new_k.unsafe_store(i, Float32(0.0))
+        new_v.unsafe_store(i, Float32(0.0))
+        return
+    var d = i % hd
+    var rest = i // hd
+    var j = rest % s_to
+    var row = rest // s_to
+    var src_i = (row * s_from + j) * hd + d
+    new_k.unsafe_store(i, old_k.unsafe_load(src_i))
+    new_v.unsafe_store(i, old_v.unsafe_load(src_i))
+
+
 def kv_window_gather_kernel(
     work: MutPointer[Float32, MutAnyOrigin],
     ring: MutPointer[Float32, MutAnyOrigin],
@@ -4887,6 +4928,65 @@ def attention_eager_core(
         if fence:
             step_count_sync()
             ctx.synchronize()
+
+
+def llama_kv_cache_rewind(
+    ctx: DeviceContext,
+    mut stages: LlamaDeviceStages,
+    mut kv: LlamaKVCache,
+    s_to: Int,
+) raises:
+    """Take a full-causal cache back from `kv.s` used positions to `s_to`
+    (lane fx-kv-inplace, 2026-11-18): the bounded program loop's repair of a
+    cache that iterations enqueued past the loop's stop appended to
+    (autograd/program_control.mojo, `attn_append_restore`).
+
+    The linear cache is packed at stride `kv.s` and every append rewrites
+    every (batch, kv head) row at the new stride, so a cache that ran `k`
+    positions past the stop holds its committed slots at stride `s_to + k`
+    while the restored position word says `s_to`. This repacks the committed
+    slots at stride `s_to` and zeroes the rest of the span the extra appends
+    wrote, so the cache is the one a run that stopped at `s_to` leaves. Out
+    of place through `stages.k_cache` / `v_cache` (the append's own repack
+    targets), then the span copied back; queued, no wait. `kv.s` becomes
+    `s_to`. A ring (`window > 0`) is not append-only and is not handled here
+    (the loop shadows it whole)."""
+    if kv.window != 0:
+        raise Error("llama: a windowed KV cache is not rewound (the loop shadows it)")
+    if s_to < 0 or s_to > kv.s:
+        raise Error(
+            String("llama: KV cache rewind to ") + String(s_to) + " from " + String(kv.s) + " used positions"
+        )
+    if s_to == kv.s:
+        return
+    var n = kv.b * kv.n_kv * kv.s * kv.head_dim
+    if n > len(stages.k_cache) or n > len(stages.v_cache):
+        raise Error("llama: KV cache rewind: the stages hold a shorter cache span")
+    step_count_launch()
+    ctx.enqueue_function[kv_rewind2_kernel](
+        stages.k_cache.unsafe_ptr(),
+        stages.v_cache.unsafe_ptr(),
+        kv.k.unsafe_ptr(),
+        kv.v.unsafe_ptr(),
+        Int32(kv.b),
+        Int32(kv.n_kv),
+        Int32(kv.head_dim),
+        Int32(kv.s),
+        Int32(s_to),
+        grid_dim=(_grid(n), 1, 1),
+        block_dim=(LLAMA_TPB, 1, 1),
+    )
+    step_count_d2d()
+    ctx.enqueue_copy(
+        dst_buf=kv.k.create_sub_buffer[DType.float32](0, n),
+        src_buf=stages.k_cache.create_sub_buffer[DType.float32](0, n),
+    )
+    step_count_d2d()
+    ctx.enqueue_copy(
+        dst_buf=kv.v.create_sub_buffer[DType.float32](0, n),
+        src_buf=stages.v_cache.create_sub_buffer[DType.float32](0, n),
+    )
+    kv.s = s_to
 
 
 def llama_attention_forward(
