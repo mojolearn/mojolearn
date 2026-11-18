@@ -278,6 +278,9 @@ def _check_configuration() -> Bool:
     # TOMBSTONE restored 2026-11-17 by lane/fb-neural: MOJOLEARN_AUTOGRAD_PREDICT is live again as the opt-in A/B arm
     # (sequence/mlp_fit.mojo: the hand mlp_predict is the default again, as at 0.8.55; the define takes the tape
     # predict mlp_predict_autograd for MLP only; the recurrent predict stays on the tape). No refusal.
+    # TOMBSTONE: MOJOLEARN_AUTOGRAD_PREDICT (DROPPED-slower: tape predict 1.04-1.06x on the four MLP infer cells, NV L40S 2026-11-18) deleted 2026-11-18 by lane/fb15-ab-verdicts; code recoverable at c989eb9222.
+    # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_PREDICT-2026-11-18.patch; record in docs/TOMBSTONES.md.
+    comptime assert not is_defined["MOJOLEARN_AUTOGRAD_PREDICT"](), "removed 2026-11-18 (lane/fb15-ab-verdicts, A/B ab1 NVIDIA L40S, wheel d652a4b0a1, one run per arm): the tape MLP predict was slower on all four infer cells (mlp-clf istella 148.3 -> 154.7 ms, mlp-clf taxi 21.48 -> 22.46, mlp-reg taxi 10.49 -> 11.08, mlp-reg istella 74.72 -> 79.21; fits equal; digests equal); the hand mlp_predict is the one MLP predict; recoverable at c989eb9222"
     # TOMBSTONE: MOJOLEARN_AUTOGRAD_LOSS (rnn_fit: promoted, the blocked fold replaces the serial OP_SUM) deleted 2026-11-08 by dbab55bea7; code recoverable at c3b7dc42e6^.
     # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_LOSS.patch
     comptime assert not is_defined["MOJOLEARN_AUTOGRAD_LOSS"](), "removed 2026-11-08 (lane/x3-mlp-rnn-predict-on-tape, dbab55bea7): rnn_fit's reported loss always uses the blocked fold (loss_value_into; the serial OP_SUM is deleted); mlp_fit keeps its loss block (already blocked, the arm added launches). Drop the define. Restore with experiments/removed/MOJOLEARN_AUTOGRAD_LOSS.patch"

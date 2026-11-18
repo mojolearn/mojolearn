@@ -10,7 +10,7 @@ from autograd.ops import MULTIPLY, SCALE, SOFTMAX, TANH
 from sequence.exec_trait import Exec
 from sequence.ops import FP
 from sequence.mlp import ACT_SOFTMAX
-from sequence.mlp_fit import MLPNet, mlp_forward_autograd, mlp_predict, mlp_predict_autograd
+from sequence.mlp_fit import MLPNet, mlp_forward_autograd, mlp_predict
 from autograd.checks.support import check_values
 
 
@@ -250,12 +250,11 @@ def _mlp_case[E: Exec](mut ex: E, name: String, var sizes: List[Int], act: Int, 
     var predicted = List[Float32](length=N * O, fill=0)
     mlp_predict(ex, net, _ptr(x), N, _ptr(params), _ptr(predicted), 3)
     _same_bits(name + "_predict", recorded, predicted)
-    # RESTORED 2026-11-17 (lane fb-neural): mlp_predict is the hand predict again (one OP_GEMM_EPI a layer) and
-    # the tape predict is mlp_predict_autograd (-D MOJOLEARN_AUTOGRAD_PREDICT); both must give the tape
-    # forward's bits.
-    var predicted_tape = List[Float32](length=N * O, fill=0)
-    mlp_predict_autograd(ex, net, _ptr(x), N, _ptr(params), _ptr(predicted_tape), 3)
-    _same_bits(name + "_predict_tape", recorded, predicted_tape)
+    # RESTORED 2026-11-17 (lane fb-neural): mlp_predict is the hand predict again (one OP_GEMM_EPI a layer); it
+    # must give the tape forward's bits (checked above).
+    # TOMBSTONE: MOJOLEARN_AUTOGRAD_PREDICT (DROPPED-slower: tape predict 1.04-1.06x on the four MLP infer cells, NV L40S 2026-11-18) deleted 2026-11-18 by lane/fb15-ab-verdicts; code recoverable at c989eb9222.
+    # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_PREDICT-2026-11-18.patch; record in docs/TOMBSTONES.md.
+    # The "_predict_tape" case checked the deleted mlp_predict_autograd against the same bits.
     if O == 1:
         var two = List[Float32](length=N * 2, fill=0)
         var two_want = List[Float32](length=N * 2, fill=0)

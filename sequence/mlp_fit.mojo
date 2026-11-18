@@ -192,9 +192,17 @@ struct MLPNet(Copyable, Movable):
 # infer row: mlp-clf istella 42.6 -> 130.7 ms (Xq 100000 x 220, (256, 256), 5 classes), mlp-reg istella
 # 26.4 -> 64.7, mlp-clf taxi 15.1 -> 25.3, mlp-reg taxi 6.8 -> 10.1. So gemm_epi, _act_launch, mlp_forward and
 # the hand mlp_predict come back as the default (code from f7d10d2b09, unchanged), and
-# -D MOJOLEARN_AUTOGRAD_PREDICT (default off) takes the tape predict (mlp_predict_autograd) for the A/B.
+# -D MOJOLEARN_AUTOGRAD_PREDICT (default off) took the tape predict (mlp_predict_autograd) for the A/B.
 # Same bits on both arms (the tape node is op_gemm's chain term for term; the two wheels' board digests match).
-comptime AUTOGRAD_PREDICT = is_defined["MOJOLEARN_AUTOGRAD_PREDICT"]()
+# VERDICT 2026-11-18 (A/B ab1, owed rows autograd-predict-mlp / -mlp-predict, NVIDIA L40S host 37f71a6102af,
+# driver 595.112.07, wheel d652a4b0a1, base and arm back to back in one job, one run per arm): the tape predict
+# is SLOWER on all four infer cells, mlp-clf istella 148.3 -> 154.7 ms (1.04), mlp-clf taxi 21.48 -> 22.46
+# (1.05), mlp-reg taxi 10.49 -> 11.08 (1.06), mlp-reg istella 74.72 -> 79.21 (1.06); fits equal (0.99-1.00),
+# neural/mlp-predict 0.96 (0.089 ms, a sub-millisecond cell); digests equal on all 9 cells. LOSER: the arm
+# (mlp_predict_autograd and the switch) is deleted; the hand mlp_predict is the one MLP predict. Limits: NVIDIA
+# only (AGENTS.md part 8), one run per arm.
+# TOMBSTONE: MOJOLEARN_AUTOGRAD_PREDICT (DROPPED-slower: tape predict 1.04-1.06x on the four MLP infer cells, NV L40S 2026-11-18) deleted 2026-11-18 by lane/fb15-ab-verdicts; code recoverable at c989eb9222.
+# Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_PREDICT-2026-11-18.patch; record in docs/TOMBSTONES.md.
 
 
 def gemm_epi[E: Exec](
@@ -888,11 +896,7 @@ def mlp_predict[E: Exec](mut ex: E, net: MLPNet, X: FP, N: Int, Pin: FP, dst: FP
     probability `[1 - p, p]` (`OP_PROBA2` on the executor). `resident`
     (perf3-seq-neural): `Pin` is already this executor's memory (the model's
     resident fitted block, sequence/perf3_seq_resident.mojo), read in place:
-    no per-call allocation and upload of the parameters.
-    -D MOJOLEARN_AUTOGRAD_PREDICT runs mlp_predict_autograd instead (A/B arm)."""
-    comptime if AUTOGRAD_PREDICT:
-        mlp_predict_autograd(ex, net, X, N, Pin, dst, chunk, proba2, resident)
-        return
+    no per-call allocation and upload of the parameters."""
     var L = net.n_layers()
     var D = net.sizes[0]
     var O = net.sizes[L]
@@ -935,61 +939,7 @@ def mlp_predict[E: Exec](mut ex: E, net: MLPNet, X: FP, N: Int, Pin: FP, dst: FP
     ex.download(dst, dout, N * O)
 
 
-def mlp_predict_autograd[E: Exec](mut ex: E, net: MLPNet, X: FP, N: Int, Pin: FP, dst: FP, chunk: Int,
-                                  proba2: Bool = False, resident: Bool = False) raises:
-    """-D MOJOLEARN_AUTOGRAD_PREDICT (opt-in A/B arm, default off since
-    2026-11-17). Predict through the tape: each chunk of `chunk` rows runs
-    mlp_forward_autograd on a tape in inference mode (no graph, no gradient
-    storage), so predictions come from the same kernels, in the same order,
-    as the training forward. `proba2` (cpu2-l11-neural): a one-output
-    logistic net writes the (N, 2) probability `[1 - p, p]` (`OP_PROBA2` on
-    the executor). `resident` (perf3-seq-neural): `Pin` is already this
-    executor's memory (the model's resident fitted block,
-    sequence/perf3_seq_resident.mojo), read in place: no per-call allocation
-    and upload of the parameters."""
-    var L = net.n_layers()
-    var D = net.sizes[0]
-    var O = net.sizes[L]
-    var bs = chunk if chunk < N else N
-    var dX = ex.alloc(N * D)
-    ex.upload(dX, X, N * D)
-    var P: FP
-    if resident:
-        P = Pin
-    else:
-        P = ex.alloc(net.n_params())
-        ex.upload(P, Pin, net.n_params())
-    var acts = List[FP]()
-    for i in range(L + 1):  # driver-loop: over layers
-        acts.append(ex.alloc(bs * net.sizes[i]))
-    var dout = ex.alloc(N * O)
-    var tape = Tape()
-    tape.no_grad()
-    var b0 = 0
-    while b0 < N:  # driver-loop: over prediction chunks
-        var B = bs if b0 + bs <= N else N - b0
-        var c = Args()
-        c.p0 = dX + b0 * D
-        c.p1 = acts[0]
-        ex.launch[OP_COPY](c, B * D)
-        # Inference mode never keeps a gradient pointer, so the gradient
-        # vector is a placeholder. mlp_forward_autograd resets the tape, so
-        # every chunk reuses the first (largest) chunk's storage.
-        _ = mlp_forward_autograd(tape, ex, net, P, dummy_ptr(), acts, B)
-        var d = Args()
-        d.p0 = acts[L]
-        d.p1 = dout + b0 * O
-        ex.launch[OP_COPY](d, B * O)
-        b0 += B
-    tape.release(ex)
-    if proba2 and O == 1:
-        var two = ex.alloc(N * 2)
-        var q = Args()
-        q.p0 = dout
-        q.p1 = two
-        ex.launch[OP_PROBA2](q, N * 2)
-        ex.sync()
-        ex.download(dst, two, N * 2)
-        return
-    ex.sync()
-    ex.download(dst, dout, N * O)
+# TOMBSTONE: MOJOLEARN_AUTOGRAD_PREDICT (DROPPED-slower: tape predict 1.04-1.06x on the four MLP infer cells, NV L40S 2026-11-18) deleted 2026-11-18 by lane/fb15-ab-verdicts; code recoverable at c989eb9222.
+# Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_PREDICT-2026-11-18.patch; record in docs/TOMBSTONES.md.
+# mlp_predict_autograd (the tape forward in inference mode, chunk by chunk) is gone: see the verdict above
+# AUTOGRAD_PREDICT's former place. The tape forward still trains every MLP (mlp_forward_autograd).
