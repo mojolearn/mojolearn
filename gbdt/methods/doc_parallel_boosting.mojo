@@ -158,7 +158,8 @@ from gbdt.methods.leaves_estimation.device_walker import (
 )
 from std.memory import bitcast, unsafe_memcpy
 from max.gpu import block_dim, block_idx, thread_idx
-from checks.soft_f64 import sf64_div, sf64_from_f32, sf64_from_int, sf64_mul, sf64_neg, sf64_to_f32
+from gbdt.methods.cursor_rescale import rescaled_leaf
+from checks.soft_f64 import sf64_div, sf64_from_f32, sf64_from_int, sf64_neg, sf64_to_f32
 from gbdt.methods.kernel.two_level_leaves import (
     TL_BLOCK,
     TL_GRID,
@@ -1165,7 +1166,7 @@ def _append_deferred_oblivious_tree(
     weak.dim = approx_dim
     # driver-loop: over the leaf values (leaves x approx_dim)
     for i in range(len(leaf_values)):
-        weak.leaf_values.append(leaf_values[i] * learning_rate)
+        weak.leaf_values.append(rescaled_leaf(leaf_values[i], learning_rate))
     model.add_weak_model(weak^)
 
 
@@ -1290,9 +1291,7 @@ def _leaf_out_gated_kernel(
         return
     var v = est.unsafe_load(i)
     leaf_out.unsafe_store(i, v)
-    scaled.unsafe_store(
-        i, sf64_to_f32(sf64_mul(sf64_from_f32(v), sf64_from_f32(learning_rate)))
-    )
+    scaled.unsafe_store(i, rescaled_leaf(v, learning_rate))
 
 
 struct LeafEstimateOpState(Movable):
@@ -3462,7 +3461,7 @@ struct SymDeviceRounds(LoopStep, Movable):
             lp.unsafe_store(i, v)
             # the model's rescale (`weak.leaf_values` = leaf x rate), one
             # correctly rounded float product: `_leaf_out_gated_kernel`'s
-            sp.unsafe_store(i, v * self.learning_rate)
+            sp.unsafe_store(i, rescaled_leaf(v, self.learning_rate))
         var leaf_out = self.leaf_slab.create_sub_buffer[DType.float32]((it - 1) * nl, nl)
         var leaf_scaled = self.leaf_scaled.copy()
         ctx.enqueue_copy(dst_buf=leaf_out, src_buf=h_leaf)
@@ -3676,7 +3675,7 @@ def fit_sym_rounds_on_device(
         weak.dim = 1
         # DEVIATION 256's host rescale, as the host loop stores it
         for i in range(1 << depth):  # small-loop(depth: tree levels, the tree has 1 << depth leaves): the stored leaf values of the host model
-            weak.leaf_values.append(hl.unsafe_load(r * nl + i) * learning_rate)
+            weak.leaf_values.append(rescaled_leaf(hl.unsafe_load(r * nl + i), learning_rate))
         model.add_weak_model(weak^)
 
     # the host loop's learn losses: round i (0-based) contributes the loss
@@ -5214,7 +5213,7 @@ def fit_with_test(
             tree.leaf_values.clear()
             # driver-loop: over the leaf values (leaves x approx_dim)
             for i in range(len(leaf_values)):
-                tree.leaf_values.append(leaf_values[i] * learning_rate)
+                tree.leaf_values.append(rescaled_leaf(leaf_values[i], learning_rate))
             tree.dim = approx_dim
             ns_trees.append(tree^)
         elif use_pointwise_searcher:
@@ -5511,7 +5510,7 @@ def fit_with_test(
                 # the same on every host.
                 # driver-loop: over the leaf values (leaves x approx_dim)
                 for i in range(len(leaf_values)):
-                    weak.leaf_values.append(leaf_values[i] * learning_rate)
+                    weak.leaf_values.append(rescaled_leaf(leaf_values[i], learning_rate))
                 model.add_weak_model(weak^)
         loop_times.stop_host("iter_model_append", t_append)
 
