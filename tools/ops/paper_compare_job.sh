@@ -420,6 +420,7 @@ venv_arm() { if [ "$1" = prior ]; then echo "prior-${LAST_PRIOR:-none}"; else ec
 # box, into $RES/drivers/drivers.jsonl; returns the worst rc. A driver row's B arms (its "arms" names a staged B set,
 # e.g. restore-mamba-backward-glue's mamba-backward-generic) run on that set's venv; measure_owed_driver.py skips an
 # arm the row does not name. Driver cases time one GPU each, so they run one after the other (cells serially per GPU).
+# >>> owed-drivers (tools/test_targeted_rows.py runs this block with the tg-drivers one)
 run_owed_drivers() {
     local plan=$1 row arm va r rc=0
     mkdir -p "$RES/drivers"
@@ -435,6 +436,7 @@ run_owed_drivers() {
     grep -c '^OWED-DRIVER' "$RES/logs/drivers.log" 2> /dev/null | sed 's/^/driver cases: /'
     return $rc
 }
+# <<< owed-drivers
 OWED_PRIOR=(); [ -n "$LAST_PRIOR" ] && OWED_PRIOR=(--prior)   # measure_owed plans the owed prior arm only then
 # >>> b-arms (tools/test_measure_owed.py runs this block on a fake PC_B_ARMS file)
 # A line is `<name> <wheel dir> <commit>` (a B wheel set built from another commit) or `<name> env:VAR=VALUE[,VAR=VALUE]
@@ -844,7 +846,16 @@ if part tg-install || part tg-prep || part tg-smoke || part tg-board || part tg-
         # over every prepared mirror at once, by the timed board's first process, as before. The timed processes then
         # find every block prepared (the driver skips a block whose record exists); the prepared bytes are the same.
         phase tg-prep
-        $PY tools/ops/targeted_rows.py prep-groups --ids "$TG/race-ids-full.txt" --ids "$TGO/smoke-ids.txt" \
+        # the TIMED races: the listed rows and every owed unit at full rows (lane fx-pod-job2, 2026-11-18: the smoke
+        # ids, rows=2000, were passed here; the full-row plan refused them, "--race-ids: not in this plan", and all 8
+        # groups exited 1 in 0 s in nvc-ab-20261118T201200Z-d21ba0)
+        PIDS=(--ids "$TG/race-ids-full.txt")
+        if [ -s "$TGO/units.tsv" ]; then
+            while IFS=$'\t' read -r _arm prow pids_f <&3; do
+                [ "$prow" = full ] && PIDS+=(--ids "$pids_f")
+            done 3< "$TGO/units.tsv"
+        fi
+        $PY tools/ops/targeted_rows.py prep-groups "${PIDS[@]}" \
             --out-dir "$TG/prep" > "$RES/logs/tg-prep-groups.log" 2>&1
         rc=$?; tail -n 1 "$RES/logs/tg-prep-groups.log"
         PREP_ARGS=("${BARGS_TG[@]}" --data-root "$DATA_ROOT" --rounds 1 --evidence-local-only)
@@ -885,6 +896,9 @@ if part tg-install || part tg-prep || part tg-smoke || part tg-board || part tg-
         [ -s "$ids" ] || return 0
         [ -f "${ARM_MAN[$arm]:-/nonexistent}" ] || { say "board $arm: no installed venv (logs/install-tg-$arm.log)"; return 6; }
         [ -n "$rows" ] && ra=(--rows "$rows")
+        # a placeholder board (targeted_rows.py empty-board, written by an earlier submit's tg-compare when nothing was
+        # timed) is no board: bench_board starts the dir afresh
+        grep -qs '"placeholder"' "$out/board.json" && rm -f "$out/board.json"
         CUR_IDS=$ids; CUR_BOARD=$out
         local envs=(); [ -n "${ARM_ENV[$arm]:-}" ] && IFS=, read -r -a envs <<< "${ARM_ENV[$arm]}"
         # an env arm names the keys it sets on purpose, so tools/cpu_quota.py lets them through the race workers'
@@ -959,7 +973,7 @@ if part tg-install || part tg-prep || part tg-smoke || part tg-board || part tg-
                 if [ -s "$st" ]; then grep -vFx -f "$st" "$use" > "$use.base" || true; else cp "$use" "$use.base"; fi
                 if [ "$(races_left "$use" "$RES/board-tg-ab-$arm-$rows/board.json")" -eq 0 ] 2> /dev/null \
                         && [ "$(races_left "$use.base" "$RES/board-tg-ab-$arm-base-$rows/board.json")" -eq 0 ] 2> /dev/null; then
-                    if [ "$(nlines "$use")" -eq 0 ]; then say "owed $arm $rows: no race to time (none passed its smoke)"
+                    if [ "$(nlines "$use")" -eq 0 ]; then say "owed $arm $rows: NOT TIMED, none of its races passed its smoke (logs/pass-ids-tg-ab-$arm.log; timed-check names it)"
                     else say "owed $arm $rows: every race already in its boards (an earlier submit)"; fi
                     continue
                 fi
@@ -993,10 +1007,23 @@ if part tg-install || part tg-prep || part tg-smoke || part tg-board || part tg-
                 fi
             done
         fi
+        # EVERY STAGED ARM TIMED (lane fx-pod-job2, 2026-11-18): 12 of 14 B arms were skipped with one quiet line each
+        # and the job's only failure was the compare's missing board. Each arm (the candidate on the listed rows, each
+        # owed unit's arm and its base) with no timed race gets an UNTIMED line with why, and the phase fails
+        $PY tools/ops/targeted_rows.py timed-check --results "$RES" --ids "$TG/race-ids-full.txt" \
+            --units "$TGO/units.tsv" ${PC_OWED_ARMS:+--arms "$PC_OWED_ARMS"} > "$RES/logs/tg-timed-check.log" 2>&1
+        r=$?; grep -m 60 -e '^UNTIMED' -e '^TG-TIMED-CHECK' "$RES/logs/tg-timed-check.log" | cut -c1-400
+        [ $r -gt $rc ] && rc=$r
         phase_end $rc
     fi
     if part tg-compare; then
         phase tg-compare
+        # the candidate's targeted board exists whenever rows are given (lane fx-pod-job2, 2026-11-18): a job whose
+        # listed rows all failed their smoke wrote none, and the compare printed "unreadable board" and "this job:
+        # host not recorded"; the placeholder holds no race and the job's host probe, so every row is NOT-RUN with
+        # its reason (smoke-failed.json) and the host is named
+        $PY tools/ops/targeted_rows.py empty-board --out "$RES/board-tg" --host-probe "$J/host-probe.json" \
+            --why "no listed race of the candidate was timed in this job (logs/tg-timed-check.log)" | tail -n 1
         NR=()
         for f in "$TG/not-planned.json" "$TG/smoke-failed.json"; do [ -f "$f" ] && NR+=(--not-run "$f"); done
         mapfile -t PB < <(prior_board_args tg-)
@@ -1018,6 +1045,7 @@ if part tg-install || part tg-prep || part tg-smoke || part tg-board || part tg-
     # The owed plan's driver rows. Before 2026-11-18 (lane fx-verdicts2) the targeted job exited here without them:
     # ab3 (nvc-ab-20261118T182558Z-cb6e02) installed the mamba-backward-generic set for restore-mamba-backward-glue
     # (plan-tg-owed/drivers.json, drivers=3) and never timed it, since the drivers phase sat only in the paper job.
+    # >>> tg-drivers (tools/test_targeted_rows.py runs this block)
     if part tg-drivers && [ "$OWED" = 1 ] && [ -s "$TGO/drivers.json" ]; then
         phase tg-drivers
         # a B set only a driver row names has no board unit, so tg-board's install window never made its venv:
@@ -1034,6 +1062,7 @@ if part tg-install || part tg-prep || part tg-smoke || part tg-board || part tg-
         for arm in ${drv_new[@]+"${drv_new[@]}"}; do drop_arm_venv "$arm"; done
         phase_end $rc
     fi
+    # <<< tg-drivers
     echo finished > "$J/.phase"
     exit "$WORST"
 fi

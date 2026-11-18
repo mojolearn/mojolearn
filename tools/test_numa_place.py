@@ -37,6 +37,7 @@ def two_nodes(tmp_path, monkeypatch):
     monkeypatch.delenv(NP.BIND_ENV, raising=False)
     monkeypatch.delenv(NP.MIN_FREE_ENV, raising=False)
     monkeypatch.setattr(NP.shutil, "which", lambda name: "/usr/bin/" + name)
+    monkeypatch.setattr(NP, "_try_prefix", lambda how, timeout=20: None)     # every form starts
     return root
 
 
@@ -79,6 +80,31 @@ def test_without_numactl_cores_only(two_nodes, monkeypatch):
     monkeypatch.setattr(NP.shutil, "which", lambda name: "/usr/bin/taskset" if name == "taskset" else None)
     p = NP.plan()
     assert p["how"] == ["/usr/bin/taskset", "-c", "0-15"] and p["mem"].startswith("unbound")
+
+
+def test_refused_memory_policy_falls_back_to_cores(two_nodes, monkeypatch):
+    # lane fx-pod-job2 (2026-11-18): the RunPod container refuses set_mempolicy; `numactl --membind` exited 1 and
+    # every worker-protocol race failed its smoke. The refused form is never used: cores only, and the cell says why
+    monkeypatch.setenv(NP.GPU_NODE_ENV, "0")
+    tried = []
+
+    def refuse_mem(how, timeout=20):
+        tried.append(list(how))
+        return "set_mempolicy: Operation not permitted" if any(a.startswith(("--membind", "--preferred"))
+                                                                for a in how) else None
+    monkeypatch.setattr(NP, "_try_prefix", refuse_mem)
+    p = NP.plan()
+    assert p["node"] == 0 and p["how"] == ["/usr/bin/numactl", "--physcpubind=0-15"]
+    assert "set_mempolicy" in p["mem"] and p["mem"].startswith("unbound")
+    assert tried == [["/usr/bin/numactl", "--physcpubind=0-15", "--membind=0"], ["/usr/bin/numactl", "--physcpubind=0-15"]]
+    monkeypatch.setattr(NP, "_try_prefix", lambda how, timeout=20: "Operation not permitted")
+    p = NP.plan()
+    assert p["node"] is None and "no placement command starts" in p["why"]
+
+
+def test_try_prefix_runs_the_command():
+    assert NP._try_prefix([]) is None               # `true` alone: present on every POSIX host
+    assert NP._try_prefix(["/bin/sh", "-c", "echo refused >&2; exit 1", "x"]) == "refused"
 
 
 def test_box_facts_and_thp(two_nodes, monkeypatch):

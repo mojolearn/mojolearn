@@ -46,6 +46,7 @@ import datetime as dt
 import hashlib
 import io
 import json
+import math
 import os
 import re
 import shlex
@@ -65,9 +66,27 @@ if str(TOOLS) not in sys.path:
 JOB_SCRIPT = "tools/ops/release_gate_job.sh"
 #: the one nvidia_central lane the gate's jobs run in (its tree: /root/mojolearn-release-gate)
 LANE = "release-gate"
-#: parallel copy streams of Runner.stage (one `ssh cat >` each; one stream carried about 1.3 MB/s on 2026-11-18): the
-#: laptop's cores, at most one per file (MOJOLEARN_STAGE_STREAMS overrides)
-STAGE_STREAMS = int(os.environ.get("MOJOLEARN_STAGE_STREAMS") or os.cpu_count() or 4)
+#: what the laptop-to-pod link carries in all, MB/s, and what one `ssh cat >` stream carries alone (2026-11-18, lane
+#: fx-pod-job2: one stream 1.3 MB/s; 10 streams moved 26 wheels of 54-64 MB in about 570 s = 2.6 MB/s in all, so each
+#: stream got 0.26 MB/s and the 27th file hit its 569 s timeout, stage-ab4-try1.log). More streams than the link
+#: carries only share it; MOJOLEARN_STAGE_LINK_MBPS / MOJOLEARN_STAGE_STREAM_MBPS override the measured figures.
+STAGE_LINK_MBPS = float(os.environ.get("MOJOLEARN_STAGE_LINK_MBPS") or 2.6)
+STAGE_STREAM_MBPS = float(os.environ.get("MOJOLEARN_STAGE_STREAM_MBPS") or 1.3)
+#: parallel copy streams of Runner.stage: as many as the link carries (link / one stream, rounded up), never more
+#: than the laptop's cores, at most one per file (MOJOLEARN_STAGE_STREAMS overrides)
+STAGE_STREAMS = int(os.environ.get("MOJOLEARN_STAGE_STREAMS")
+                    or min(os.cpu_count() or 4, max(1, math.ceil(STAGE_LINK_MBPS / STAGE_STREAM_MBPS))))
+#: a copy's timeout: a fixed start-up allowance plus SLACK times its size over its share of the link
+STAGE_COPY_BASE_S = 300
+STAGE_COPY_SLACK = 3.0
+
+
+def stage_copy_timeout(size, streams, link_mbps=None):
+    """Seconds one file of SIZE bytes may take while STREAMS copies share the link: 300 s plus 3x its size over its
+    share (link / streams, never above one stream's rate)."""
+    link = link_mbps or STAGE_LINK_MBPS
+    share = min(STAGE_STREAM_MBPS, link / max(1, streams)) * 1e6
+    return int(STAGE_COPY_BASE_S + STAGE_COPY_SLACK * size / share)
 IN_BASE = "/root/release-gate"
 #: gate_autograd_artifacts.py: outputs, logs and receipts live under a retained /root/results* directory
 RESULTS_BASE = "/root/results-release-gate"
@@ -588,15 +607,18 @@ class Runner:
             if have.get(remote) == want[remote]:
                 say(f"on the box already at its sha256: {remote}")
 
+        streams = max(1, min(len(todo), STAGE_STREAMS))
+
         def copy(job):
             local, remote = job
             size = Path(local).stat().st_size
-            say(f"copying {Path(local).name} ({size} bytes) to {remote}")
+            limit = stage_copy_timeout(size, streams)
+            say(f"copying {Path(local).name} ({size} bytes, timeout {limit} s, {streams} stream(s)) to {remote}")
             with open(local, "rb") as fh:
-                self.must(plan.upload(remote), f"the copy of {local}", stdin=fh, timeout=300 + size // 200000)
+                self.must(plan.upload(remote), f"the copy of {local}", stdin=fh, timeout=limit)
 
         if todo:
-            with ThreadPoolExecutor(max(1, min(len(todo), STAGE_STREAMS))) as ex:
+            with ThreadPoolExecutor(streams) as ex:
                 list(ex.map(copy, todo))      # list(): a failed copy's SystemExit is raised here
         got = self.must(plan.verify(list(want), executables), "the sha256 check on the box")
         have = {}
