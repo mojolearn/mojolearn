@@ -32,7 +32,11 @@ def test_common_feature_and_caller_boundary_are_reused():
     assert 'def _outside(' not in forest and 'def _feature_check(' not in forest
     bridge=(ROOT/'python/mojolearn/_native_xseq_bridge.py').read_text()
     assert 'xseq_lifecycle_context=lifecycle' in bridge
-    assert 'classifier_labels_namespace=dict(vars(ClassLabels))' in bridge
+    # The classifier label keys live in the shared family context from its creation (79d17bd147);
+    # the xseq bridge reuses that context instead of adding them itself.
+    assert 'lifecycle = shared_context()' in bridge
+    family = (ROOT/'python/mojolearn/_native_family_bridge.py').read_text()
+    assert 'classifier_labels_namespace=dict(vars(ClassLabels))' in family
     assert '"all_finite_f64"' in bridge
 
 
