@@ -185,6 +185,11 @@ def _check_configuration() -> Bool:
     # MOJOLEARN_AFCL_P07: refusal removed 2026-11-15 (restored by lane/restore-apple-fast-classical: Apple fast paused, not abandoned; opt-in, default off; see docs/TOMBSTONES.md Restored table)
     # MOJOLEARN_AFCL_P08: refusal removed 2026-11-15 (restored by lane/restore-apple-fast-classical: Apple fast paused, not abandoned; opt-in, default off; see docs/TOMBSTONES.md Restored table)
     # ---- end lane expdel2-36-neural-series-linear
+    # ---- lane fx-verdicts (2026-11-18): A/B verdicts of ab2 (NVIDIA L40S, wheel d652a4b0a1)
+    # TOMBSTONE: MOJOLEARN_METRICS_FAST_DENSE_LABELS_OFF (LOSER: radix route 3.62x slower geomean, 68 of 72 metric cells slower, NV L40S 2026-11-18) deleted 2026-11-18 by lane/fx-verdicts; code recoverable at 0c65d61fed.
+    # Restore: git apply experiments/removed/MOJOLEARN_METRICS_FAST_DENSE_LABELS_OFF.patch; record in docs/TOMBSTONES.md.
+    comptime assert not is_defined["MOJOLEARN_METRICS_FAST_DENSE_LABELS_OFF"](), "removed 2026-11-18 (lane/fx-verdicts, A/B ab2 NVIDIA L40S, wheel d652a4b0a1, one run per arm): the LSD radix label encode was slower on 68 of 72 classification metric cells (arm/base geomean 3.62, median 4.16), digests and scores equal; the dense label table is the one route for in-range signed labels; recoverable at 0c65d61fed"
+    # ---- end lane fx-verdicts
     return True
 
 
