@@ -1936,6 +1936,10 @@ def _python_imports(rel):
     for node in ast.walk(tree):
         if isinstance(node, (ast.ImportFrom, ast.Import)):
             out |= _resolve_python_import(rel, node, listing)
+        elif isinstance(node, ast.Call):
+            dotted = _dynamic_import_dotted(rel, node)     # the same edge `_region_import_edges` reads
+            if dotted:
+                out |= _module_paths(dotted, listing)
     out.discard(rel)
     return out
 
