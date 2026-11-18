@@ -2023,10 +2023,12 @@ def test_a_subpackage_module_is_attributed_to_the_lanes_that_load_it():
     sel = lane_select.select(["python/mojolearn/models/safetensors.py"])
     assert not sel["unattributed"] and not sel["every_rules"], sel["reasons"]
     assert {"hf-checkpoint", "hf-causal-lm"} <= set(sel["lanes"]), sel["lanes"]
-    # The package now eagerly imports models, whose __init__ imports this
-    # reader. Those imports are real dependencies even for non-LM callers.
-    assert "python/mojolearn/models/safetensors.py" in lane_select.package_import_time_closure()
-    assert {"kmeans", "gbdt-rmse"} <= set(sel["lanes"]), sel["lanes"]
+    # `import mojolearn` no longer imports models (b6aa87e41d: each family is
+    # imported on first touch), so the reader is not import-time code of every
+    # lane any more and a k-means or GBDT lane that never touches a checkpoint
+    # is not selected by it.
+    assert "python/mojolearn/models/safetensors.py" not in lane_select.package_import_time_closure()
+    assert len(sel["lanes"]) < sel["total"], f"{len(sel['lanes'])} of {sel['total']}"
     # every file of the subpackage is in the corpus and in some lane's map
     rev = lane_select.reverse_map()
     for name in ("__init__", "causal_lm", "config", "parallel_causal_lm", "safetensors", "tokenizer"):
