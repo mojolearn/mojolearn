@@ -24,6 +24,22 @@ def test_every_nested_checks_directory_is_a_mojo_package():
             if part == "checks" and i > 0:
                 d = "/".join(parts[:i + 1])
                 dirs.setdefault(d, []).append(path)
+    # only a checks directory beside Mojo sources can shadow: bench/results/release_evidence/checks holds release
+    # JSON evidence, with no Mojo file in its parent, and no compile resolves imports there
+    beside_mojo = {os.path.dirname(p) for p in files if p.endswith(".mojo")}
     bad = sorted(d for d, members in dirs.items()
-                 if not any(m.endswith(".mojo") and m.count("/") == d.count("/") + 1 for m in members))
+                 if os.path.dirname(d) in beside_mojo
+                 and not any(m.endswith(".mojo") and m.count("/") == d.count("/") + 1 for m in members))
     assert not bad, f"checks directories with no Mojo module of their own (they shadow `checks`): {bad}"
+
+
+def test_a_checks_dir_of_patches_beside_mojo_is_still_caught(monkeypatch):
+    import sys
+    fake = ["area/a.mojo", "area/checks/fault.patch", "bench/results/x/checks/r.json", "core/checks/ok.mojo"]
+    monkeypatch.setattr(sys.modules[__name__], "_tracked", lambda: fake)
+    try:
+        test_every_nested_checks_directory_is_a_mojo_package()
+    except AssertionError as error:
+        assert "area/checks" in str(error) and "bench/results" not in str(error)
+    else:
+        raise AssertionError("area/checks holds no Mojo module and was not caught")
