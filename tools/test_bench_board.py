@@ -33,6 +33,7 @@ STUB_TREES = textwrap.dedent(r'''
     p.add_argument("--infer", action="store_true")    # tools/test_bench_board_infer.py
     p.add_argument("--ours-cpu", action="store_true")
     p.add_argument("--mem", action="store_true")
+    p.add_argument("--own-arms")    # board-smoke-3 (9792ddb17e): bench_board names the planned own arms
     a = p.parse_args()
     with open(os.environ["STUB_CALLS"], "a") as fh:
         fh.write("trees %s %s\n" % (a.lane, a.dataset))
@@ -41,7 +42,8 @@ STUB_TREES = textwrap.dedent(r'''
     n = int(os.environ["MOJOLEARN_SPEED_ROUNDS"])
     mode = os.environ["MOJOLEARN_NUMERIC_MODE"]
     shape = "%s-%sx16" % (a.dataset, a.rows or 4110786)
-    ours = [("ours", mode, 100.0)]
+    own = a.own_arms.split(",") if a.own_arms else ["ours"]
+    ours = [("ours", mode, 100.0)] if "ours" in own else []
     if a.ours_ab:
         ours.append(("ours-ab", a.ours_ab.split("=")[1].strip("'"), 80.0))
     if a.ours_cpu:
@@ -2268,7 +2270,8 @@ def test_small_rows_paper_compare_prints_calls_beside_the_time():
     cell = {"median_ms": 0.76, "calls": 20, "min_ms": 0.7, "max_ms": 3.4}
     row = dict({"new_ms": 0.76}, **pc.calls_fields("new", cell))
     assert pc.fmt_ms_calls(row, "new") == "0.760 (median of 20 calls, 0.7..3.4 ms)"
-    assert pc.calls_fields("new", {"median_ms": 12.0}) == {}
+    # harness-small-row (2026-11-16): every cell now records the rule its time was taken under (SCORING-MIXED)
+    assert pc.calls_fields("new", {"median_ms": 12.0}) == {"new_scoring": "one-call"}
     assert pc.fmt_ms_calls({"new_ms": 12.0}, "new") == "12.00"
 
 
