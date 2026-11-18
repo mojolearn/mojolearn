@@ -1132,6 +1132,71 @@ def samba_resident_forward(
 # A vs B on NVIDIA and AMD (bench/results/paper_compare/owed-pre0867.json).
 
 
+def _step_registry_in(
+    mut s: SambaResidentSession,
+    param_ptr: MutPointer[Float32, MutUntrackedOrigin],
+) raises -> Bool:
+    """A train step's registry transport in: clears the forward's weight key
+    (the step rewrites `param`) and queues the host -> device copy. Returns
+    whether the registry went up, i.e. whether the caller must admit it
+    (`_admit_registry`).
+
+    Default: always (the copy and the scan every step, as before).
+
+    SAMBA_STEP_REGISTRY_RESIDENT: only when the key is not current, the
+    forward's own test (`samba_resident_forward`): one atomic load, no pass
+    over the weights. A current key means `param` holds the bytes at
+    `param_ptr` AND that they were admitted: the key is only ever set after
+    `_admit_registry` passed (the forward) or after the step's own scan of
+    the weights it wrote came back clean (`_step_registry_out`). Every other
+    writer of the registry (another step route, publish, load_weights, a
+    failed write) stamps it, so the key is then not current and the registry
+    is uploaded and scanned here exactly as in the default."""
+    var upload = True
+    comptime if SAMBA_STEP_REGISTRY_RESIDENT:
+        upload = not s.wkey.current(Int(param_ptr))
+    s.wkey = RegistryKey()
+    if upload:
+        s.ctx.enqueue_copy(dst_buf=s.param, src_ptr=param_ptr)
+        s.param_uploads += 1
+    return upload
+
+
+def _step_registry_out(
+    mut s: SambaResidentSession,
+    param_ptr: MutPointer[Float32, MutUntrackedOrigin],
+) raises:
+    """A train step's registry transport out: the updated registry device ->
+    host and the step's closing wait.
+
+    SAMBA_STEP_REGISTRY_RESIDENT: the non-finite refusal the next step's
+    upload scan gave is kept by scanning what the optimizer just wrote, on
+    the device, with the answer read at this same wait (no wait of its own:
+    `DeferredNonfiniteScan`, the kernels and the index of
+    `device_first_nonfinite`). Clean: the registry is stamped (every other
+    copy of it reloads) and this session keeps the key, so the next step and
+    the next forward skip the upload and the scan. A hit: the registry is
+    stamped and the key stays EMPTY, so the next call uploads the same bytes
+    and `_admit_registry` refuses them there with today's message at today's
+    call. The provider door's stamp after the step
+    (providers/python/samba_resident_pyapi_door.mojo) is not made under the
+    define: it would leave the key taken here not current."""
+    s.ctx.enqueue_copy(dst_ptr=param_ptr, src_buf=s.param)
+    comptime if SAMBA_STEP_REGISTRY_RESIDENT:
+        var written = DeferredNonfiniteScan(s.ctx, s.param, s.n_total)
+        written.enqueue_readback(s.ctx)
+        s.ctx.synchronize()
+        # `written` (its device and host words) is named past the wait
+        var bad = written.result_after_sync()
+        if bad < 0:
+            s.wkey = RegistryKey.stamp_and_take(Int(param_ptr))
+        else:
+            registry_epoch_bump(Int(param_ptr))
+        _ = written^
+    else:
+        s.ctx.synchronize()
+
+
 def samba_resident_train_step(
     mut s: SambaResidentSession,
     param_ptr: MutPointer[Float32, MutUntrackedOrigin],
@@ -1194,10 +1259,10 @@ def samba_resident_train_step(
     var v = s.vocab
     # ---- transport in: the registry, the ids, the targets. The step
     # rewrites `param`; the forward's key is current again only after its
-    # own upload (the dispatcher bumps the epoch around every step).
-    s.wkey = RegistryKey()
-    s.ctx.enqueue_copy(dst_buf=s.param, src_ptr=param_ptr)
-    s.param_uploads += 1
+    # own upload (the dispatcher bumps the epoch around every step), or,
+    # under SAMBA_STEP_REGISTRY_RESIDENT, after this step's own clean
+    # download (`_step_registry_in` / `_step_registry_out`).
+    var uploaded = _step_registry_in(s, param_ptr)
     _upload_tokens(s, ids_ptr)
     s.ctx.enqueue_copy(dst_buf=s.targets, src_ptr=targets_ptr)
     # ---- the targets' range refusal and the ignore-index count, on the
@@ -1206,7 +1271,8 @@ def samba_resident_train_step(
     var count = _admit_targets_device(s.ctx, s.targets, m, v, IGNORE_INDEX_DEFAULT)
     var cfg = CeConfig(v, IGNORE_INDEX_DEFAULT, REDUCTION_SUM, Float32(0.0), count)
     ce_refuse_shape(m, m * v, cfg)
-    _admit_registry(s)
+    if uploaded:
+        _admit_registry(s)
 
     # ---- forward
     var emb = EmbConfig.llama(v, dm)
@@ -1248,8 +1314,7 @@ def samba_resident_train_step(
         eps, weight_decay, momentum, dampening, max_norm, 0,
     )
     # ---- transport out: the updated registry
-    s.ctx.enqueue_copy(dst_ptr=param_ptr, src_buf=s.param)
-    s.ctx.synchronize()
+    _step_registry_out(s, param_ptr)
     _ = ew^
     _ = hw^
     _ = nw^
@@ -1323,10 +1388,8 @@ def samba_resident_accumulated_step(
     var v = s.vocab
     # The step rewrites `param`: the forward's weight key is cleared first
     # (lane fix-samba-weight-upload; see samba_resident_train_step).
-    s.wkey = RegistryKey()
-    s.ctx.enqueue_copy(dst_buf=s.param, src_ptr=param_ptr)
-    s.param_uploads += 1
-    _admit_registry(s)
+    if _step_registry_in(s, param_ptr):
+        _admit_registry(s)
     var stacked = s.ctx.enqueue_create_buffer[DType.float32](a * n)
     var losses = List[Float32](length=a, fill=Float32(0.0))
     var emb = EmbConfig.llama(v, dm)
@@ -1377,8 +1440,7 @@ def samba_resident_accumulated_step(
         offsets_ptr, init_ptr, info_ptr, n_tensors, kind, t, nesterov, lr, beta1, beta2,
         eps, weight_decay, momentum, dampening, max_norm, 0,
     )
-    s.ctx.enqueue_copy(dst_ptr=param_ptr, src_buf=s.param)
-    s.ctx.synchronize()
+    _step_registry_out(s, param_ptr)
     _ = ew^
     _ = hw^
     _ = nw^

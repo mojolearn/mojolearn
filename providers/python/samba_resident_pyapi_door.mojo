@@ -2,7 +2,7 @@
 # Resident Samba ownership/admission over the SAME provider used by the other
 # neural routes. Python objects end here; all model and optimizer work uses the
 # shared native descriptor table and its original native numerical owners.
-from core.weight_epoch import registry_epoch_bump
+from core.weight_epoch import SAMBA_STEP_REGISTRY_RESIDENT, registry_epoch_bump
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_get, py_setitem
 from bindings.causal_lm_public_door import _native_function
@@ -156,7 +156,14 @@ def samba_resident_native_step(fields: PythonObject, config: PythonObject, provi
     # The written registry's own epoch (core/weight_epoch.mojo), stamped from
     # the address this step already passed (hot-path audit 2026-11-13: the
     # public door no longer reads `flat` per call to stamp it)
-    registry_epoch_bump(registry_addr)
+    # -D MOJOLEARN_SAMBA_FAST_STEP_REGISTRY_RESIDENT (lane fx-samba-step-resident,
+    # default off): the step stamped the registry itself, after its download,
+    # and kept the key of that stamp for its own device copy
+    # (training/samba_resident.mojo `_step_registry_out`); a second stamp here
+    # would make that copy reload. A step that raised reaches neither stamp:
+    # the public door's failed-write stamp covers it, as before.
+    comptime if not SAMBA_STEP_REGISTRY_RESIDENT:
+        registry_epoch_bump(registry_addr)
     _ = parameters
     _ = offsets
     _ = initialized
