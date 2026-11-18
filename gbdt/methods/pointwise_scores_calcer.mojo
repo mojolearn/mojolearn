@@ -363,6 +363,15 @@ struct PolicyScoreHelper(Movable):
         self.words_staged = False
         self.device_plan = plan_for_single()
         ctx.synchronize()
+        # past the drain: the five pageable launch tables above are the
+        # sources of queued uploads; a pageable source is staged by CUDA
+        # before the copy returns, but HIP does not promise it, so they live
+        # until the queue has drained.
+        _ = off^
+        _ = first^
+        _ = fol^
+        _ = oh^
+        _ = bf^
 
     def set_device_plan(mut self, plan: DevicePlan):
         """Bind the fit's device plan (read once at the binding entry)."""
