@@ -101,10 +101,14 @@ def test_mamba_engine_keeps_local_forward_route_report_and_counter_semantics():
     assert 'operation += 1' not in native
     assert 'parameters = decode' not in native
     public=text('bindings/causal_lm_public_door.mojo')
-    assert 'return _run_engine(mods, model, ids, state)' in public
-    assert 'logits = owner.native.forward(address, length)' in public
+    # f6e85dffcb: the route is decided once per forward and the resident verdict is passed down
+    assert 'return _run_engine(mods, model, ids, state, verdict == 0)' in public
+    # 1ce1204524 (row N199): the head writes straight into the caller's result Array
+    assert 'owner.native.forward_to(address, length, out_address, owner.native.batch * length * owner.native.vocab)' in public
+    assert 'def forward_to(mut self, ids: Int, length: Int, address: Int, count: Int)' in native
     original=public.split('def _run_snapshot(')[1].split('\ndef ')[0]
-    assert 'x, state.layers[i], False, PythonObject(None))' in original
+    # the original per-layer route (stateful, not a step); fe44134875 dropped the deleted mamba_workspace argument
+    assert 'x, state.layers[i], False,\n            snapshot.layer_entry, snapshot.layer_vendor)' in original
     assert 'addresses[layer.output_slot]' in native
     assert 'layer.addresses[15] = _generation_zero_workspace(layer.report_workspace, layer.report_size)' in native
     assert 'layer.cached + length if kind == 1 else result' in native
