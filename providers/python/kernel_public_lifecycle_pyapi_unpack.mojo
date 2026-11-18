@@ -27,7 +27,7 @@ from bindings.host_sparse_native_door import host_sparse_format, _sparse_fields
 from bindings.native_array_view_pack import native_array_ndarray_view
 from bindings.family_common_pack import family_array
 from core.admitted_input import admitted_cast_f64
-from core.host_finite_scan import host_all_finite_f32
+from core.host_finite_scan import host_all_finite_f32, host_all_finite_f64
 from core.cast_in import CAST_KIND_FLOAT
 from providers.python.array_metadata_pyapi_door import ArrayMetadata, ArrayPin, array_python_shape
 from providers.python.estimator_lifecycle_pyapi_unpack import estimator_feature_check
@@ -226,9 +226,9 @@ def kernel_public_ignored_target(source: PythonObject, rows: Int, context: Pytho
             var packed = py_call(array_type, PythonObject("d"), source)
             var count = len(source)
             var values = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=Int(py=py_call(packed.buffer_info)[0]))
-            for i in range(count):  # driver-loop: native finite scan over the packed float64 copy
-                if not isfinite(values[i]):
-                    raise Error("ValueError: Input y contains NaN or infinity")
+            # parallel: one SIMD finiteness pass across host cores over the packed float64 copy
+            if not host_all_finite_f64(values, count):
+                raise Error("ValueError: Input y contains NaN or infinity")
             _ = packed^
             walk = False
     if walk:

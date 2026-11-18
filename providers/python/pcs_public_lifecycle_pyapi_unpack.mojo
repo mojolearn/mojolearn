@@ -14,7 +14,7 @@ from bindings.classical_validate_run import classical_check_width
 from bindings.public_attributes_native_door import _plan, _lookup
 from bindings.host_inference_scalars_door import host_inference_scalar, host_inference_primitive_number
 from bindings.admitted_family_door import admit_family_input, admit_family_cast
-from core.host_finite_scan import host_all_finite_f32_strided
+from core.host_finite_scan import host_all_finite_f32_strided, host_all_finite_view
 from bindings.native_numpy_metadata_unpack import native_numpy_dtype
 from core.native_scalar_decode import native_scalar_real
 from core.cast_in import CAST_KIND_FLOAT
@@ -94,16 +94,11 @@ def _pcs_check_finite(source: PythonObject, snapshot: ArrayMetadata,
             raise Error(admitted_finite_wording("PolynomialCountSketch"))
         return
     if snapshot.native_byte_order and data.itemsize == 8:
-        # float32 / float64 in native order: one typed exponent test per
-        # word over the captured strides (the generic scalar decoder with a
-        # String type code ran per element; p3 rank 100). Same refusal.
-        var mask = UInt64(0x7F800000) if data.itemsize == 4 else UInt64(0x7FF0000000000000)
-        for row in range(data.rows):  # driver-loop: finite check over the captured pre-cast input
-            for column in range(data.cols):  # driver-loop: finite check over the captured pre-cast input
-                var at = data.addr + row * data.s0 + column * data.s1
-                var bits = UInt64(MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=at)[0]) if data.itemsize == 4 else MutPointer[UInt64, MutUntrackedOrigin](unsafe_from_address=at)[0]
-                if (bits & mask) == mask:
-                    raise Error(admitted_finite_wording("PolynomialCountSketch"))
+        # parallel: float64 in native order, the same one SIMD pass across
+        # host cores over the captured strides (it was a serial strided
+        # exponent test per word). Same refusal.
+        if not host_all_finite_view(data.addr, data.s0, data.s1, data.rows, data.cols, 8, True):
+            raise Error(admitted_finite_wording("PolynomialCountSketch"))
         return
     var code = String("e") if data.itemsize == 2 else String("f") if data.itemsize == 4 else String("d")
     var bytes = MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=data.addr)

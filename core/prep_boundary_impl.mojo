@@ -2,14 +2,12 @@
 # Public preprocessing validation and row-buffer preparation. No model math.
 from core.cast_in import CastIn, cast_w64_bits
 from std.memory import bitcast, unsafe_memcpy
-from core.admitted_input import admitted_raw_word
 from core.host_parallel import host_parallelize
 from core.host_predict_threads import host_predict_task_count_work, host_predict_chunk
 from core.classical_pandas_impl import pd_raw_at, _pd_double
-from core.host_finite_scan import host_all_finite_f32, host_all_finite_f64, host_all_finite_f32_strided
+from core.host_finite_scan import host_all_finite_f32, host_all_finite_f64, host_all_finite_f32_strided, host_all_finite_nd
 
 
-comptime _PREP_IP = MutPointer[Int, MutUntrackedOrigin]
 comptime _PREP_U8P = MutPointer[UInt8, MutUntrackedOrigin]
 
 
@@ -20,19 +18,6 @@ def _prep_any_flag(flags: List[UInt8], tasks: Int) -> Bool:
     return False
 
 
-
-
-@always_inline
-def _prep_word_offset(linear: Int, shape: _PREP_IP, strides: _PREP_IP, rank: Int) -> Int:
-    """The byte offset of C-order element `linear` of a strided N-d view."""
-    var remainder = linear
-    var offset = 0
-    for k in range(rank):  # small-loop(the array's rank metadata)
-        var axis = rank - 1 - k
-        var extent = shape.unsafe_load(axis)
-        offset += (remainder % extent) * strides.unsafe_load(axis)
-        remainder //= extent
-    return offset
 
 
 def prep_float_finite(source: CastIn, shape: List[Int], strides: List[Int],
@@ -59,46 +44,13 @@ def prep_float_finite(source: CastIn, shape: List[Int], strides: List[Int],
             return host_all_finite_f64(MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=source.addr), count)
         if width == 4 and len(shape) == 2:
             return host_all_finite_f32_strided(source.addr, strides[0], strides[1], shape[0], shape[1])
-    # parallel: the strided / non-native finiteness test over contiguous
-    # element ranges across host cores (it was a serial byte walk)
+    # parallel: every other layout (strided float64, rank above two, the other
+    # byte order) is one pass of the original words across host cores, SIMD
+    # where the words are adjacent. It was a per-element byte walk with a
+    # C-order offset computed per word.
     if count <= 0:
         return True
-    var mask = UInt64(0x7F800000) if width == 4 else UInt64(0x7FF0000000000000)
-    var tasks = host_predict_task_count_work(count, count * len(shape))
-    var chunk = host_predict_chunk(count, tasks)
-    var flags = List[UInt8](length=tasks, fill=UInt8(1))
-    var flag_ptr = rebind[MutPointer[UInt8, MutUntrackedOrigin]](flags.unsafe_ptr())
-    var base = source.addr
-    var rank = len(shape)
-    var shape_ptr = shape.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutUntrackedOrigin]()
-    var strides_ptr = strides.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutUntrackedOrigin]()
-
-    def _span(t: Int) {imm base, imm width, imm native, imm mask, imm count, imm chunk, imm flag_ptr, imm shape_ptr, imm strides_ptr, imm rank}:
-        var lo = t * chunk
-        var hi = min(lo + chunk, count)
-        var pointer = MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=base)
-        for linear in range(lo, hi):  # admitted input: this task's elements, finiteness on original float words
-            var offset = _prep_word_offset(linear, shape_ptr, strides_ptr, rank)
-            var bits = UInt64(0)
-            if native:
-                bits = admitted_raw_word(base + offset, width)
-            else:
-                for byte in range(width):  # small-loop(bytes of one non-native float word): 4 or 8
-                    bits |= UInt64(pointer[offset + width - 1 - byte]) << UInt64(8 * byte)
-            if bits & mask == mask:
-                flag_ptr.unsafe_store(t, UInt8(0))
-                return
-
-    if tasks <= 1:
-        _span(0)
-    else:
-        host_parallelize(_span, tasks)
-    var finite = True
-    for t in range(tasks):  # driver-loop: over the scan tasks' flags (at most one per core)
-        if flags[t] == UInt8(0):
-            finite = False
-    _ = flags^
-    return finite
+    return host_all_finite_nd(source.addr, shape, strides, width, native)
 
 
 def prep_gather_rows(source: CastIn, indices: Int, rows: Int, output: Int) raises:
