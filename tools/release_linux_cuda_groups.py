@@ -50,6 +50,8 @@ def replay(raw, staged, leg, patchelf, evidence, postcompile=None):
         ptx_contract.patch_file(output)
         audit = ptx_contract.audit_bytes(output.read_bytes())
         require(audit['modules'] > 0 and audit['plain_count'] == 0, 'PTX canonical contract failed')
+        require(not audit['approx_refused'], 'IDENTICAL PTX carries an approximate instruction: '
+                + ', '.join(audit['approx_refused'][:5]))
         if LEGS[leg][1] == 'native':
             import cubin_contract
             require(postcompile is not None, 'native CUDA postcompile evidence is required')

@@ -69,9 +69,14 @@ _REWRITE = re.compile(rb"(?<=\n)\t(add|sub|mul)\.(f32|f64) \t([^,\n]+), ")
 APPROX = re.compile(rb"\b((?:sqrt|rsqrt|rcp|ex2|lg2|sin|cos|tanh|div)\.(?:approx|full)[.a-z0-9]*)")
 #: The only IDENTICAL-set kernels allowed to carry an approximate instruction: (name pattern, reason). Nothing
 #: else is: fix the source through checks/numerics.mojo's exact routines (identical_sqrt, identical_exp, ...).
+#: Kernel names are `<module path cut to 30 characters>6A..._<hash>`, so each prefix names one source file.
+_SABOTAGE = ("verify sabotage kernel, raw stdlib math broken ON PURPOSE so the native check (and verify) can fail;"
+             " reached only at a non-NONE sabotage arm, never by an estimator: {}")
 APPROX_ALLOW = (
-    (re.compile(r"sabotage"),
-     "verify sabotage kernel: shipped on purpose so `python -m mojolearn verify` can fail (never product execution)"),
+    (re.compile(r"^hierarchy_checks_sabotage_tile"), _SABOTAGE.format("hierarchy/checks/sabotage_tile.mojo")),
+    (re.compile(r"^cholesky_checks_chol_sabotage"), _SABOTAGE.format("cholesky/checks/chol_sabotage.mojo")),
+    (re.compile(r"^gaussian_process_checks_gp_sab"), _SABOTAGE.format("gaussian_process/checks/gp_sabotage.mojo")),
+    (re.compile(r"^kernel_methods_checks_km_sabot"), _SABOTAGE.format("kernel_methods/checks/km_sabotage.mojo")),
 )
 #: A PTX function header (`.entry` kernel or `.func` device function, optional return parameter list).
 _FUNC = re.compile(rb"^[ \t]*(?:\.(?:visible|weak|extern)[ \t]+)*\.(?:entry|func)[ \t]+(?:\([^)]*\)[ \t]*)?([\w$.]+)",
