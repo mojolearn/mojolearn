@@ -21,6 +21,25 @@ import subprocess
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import lane_select                                              # noqa: E402
 
+try:
+    import pytest
+except ImportError:                  # the standalone runner below needs no fixture
+    pytest = None
+
+if pytest is not None:
+    @pytest.fixture(autouse=True)
+    def _keep_the_real_map():
+        """A test that perturbs an edge resets the memos and re-derives; it then resets again in a
+        `finally`, which made the NEXT test derive the real map from scratch as well (minutes each;
+        test_lane_select.py took 43 minutes). The real map as it stood before the test is restored
+        instead whenever the test reset anything, so each perturbation costs one derivation."""
+        snap = lane_select.snapshot_caches()
+        yield
+        if lane_select._RESET_COUNT != snap["count"]:
+            lane_select.restore_caches(snap)
+else:
+    _keep_the_real_map = None
+
 
 class _UnprovedPrecision(AssertionError):
     """Only an explicitly retained exclusion may be an expected failure."""

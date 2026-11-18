@@ -20,6 +20,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import lane_select                                              # noqa: E402
 from test_lane_select import _assert_reviewed_membership, _conformance_misses, _lane_sets  # noqa: E402
+from test_lane_select import _keep_the_real_map  # noqa: E402,F401  the autouse fixture: one derivation per perturbation
 
 
 def test_the_inversion_check_fails_when_the_backward_edge_is_removed():

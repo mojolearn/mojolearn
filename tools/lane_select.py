@@ -440,54 +440,62 @@ def _by_path(fn):
     return wrapped
 
 
+#: Every module-level memo `reset_caches` sets back to None (the dict and set memos are in `_CACHES`).
+_RESET_TO_NONE = ("_TRACKED", "_PYTHON_FILES", "_ENUMERATORS", "_LANE_SOURCES", "_LANE_SEED_CALLS", "_LANE_PRECISION_PATHS", "_LANE_CPU_ROUTE_ONLY", "_LANE_DEVICE_CALLS", "_DISPATCH_VOCAB", "_MOJO_CALLERS", "_BINDING_HELD", "_SOURCE_HASHED", "_CONSTANTS", "_EXTENDERS", "_MOJO_CONFORMANCE", "_MOJO_IMPORTERS", "_PKG_IMPORT_CLOSURE", "_IMPORT_TIME_CLOSURE", "_CORPUS", "_CORPUS_TEXT", "_REVERSE", "_REGISTRIES", "_INCLUDE_ROOTS", "_GRAPH_REVERSE", "_HOST_CLASS_ROUTES", "_CONTEXT_DOORS", "_HOOK_CLASSES")
+#: Module-level containers `reset_caches` empties in place.
+_RESET_CLEARED = ("_GIT_SHOW", "_HOST_ROUTE_CLASSES", "_DISPATCHER_NAMES", "LANE_OPERATIONS")
+_RESET_COUNT = 0
+
+
 def reset_caches():
     """Drop every memo. Only a caller that edits the tree mid-process needs
     this; no code path in this repository does."""
-    global _ENUMERATORS, _LANE_SOURCES, _SOURCE_HASHED, _TRACKED, _CONSTANTS, _EXTENDERS
-    global _MOJO_CONFORMANCE, _MOJO_IMPORTERS, _PYTHON_FILES, _PKG_IMPORT_CLOSURE, _HOST_CLASS_ROUTES, _CONTEXT_DOORS
-    global _CORPUS, _CORPUS_TEXT, _REVERSE, _REGISTRIES, _INCLUDE_ROOTS, _GRAPH_REVERSE
+    global _RESET_COUNT
+    _RESET_COUNT += 1
     for cache in _CACHES:
         cache.clear()
     bincache.cache_directory_listings(False)    # a test may have added or removed files
-    _GIT_SHOW.clear()
-    _TRACKED = None
-    _PYTHON_FILES = None
-    _ENUMERATORS = None
-    _LANE_SOURCES = None
-    global _LANE_SEED_CALLS, _LANE_PRECISION_PATHS, _LANE_CPU_ROUTE_ONLY, _LANE_DEVICE_CALLS
-    _LANE_SEED_CALLS = None
-    _LANE_PRECISION_PATHS = None
-    _LANE_CPU_ROUTE_ONLY = None
-    _LANE_DEVICE_CALLS = None
-    global _DISPATCH_VOCAB, _MOJO_CALLERS
-    _DISPATCH_VOCAB = None
-    _MOJO_CALLERS = None
-    global _BINDING_HELD
-    _BINDING_HELD = None
-    _HOST_ROUTE_CLASSES.clear()
-    _DISPATCHER_NAMES.clear()
-    LANE_OPERATIONS.clear()
-    _SOURCE_HASHED = None
-    _CONSTANTS = None
-    _EXTENDERS = None
-    _MOJO_CONFORMANCE = None
-    _MOJO_IMPORTERS = None
-    _PKG_IMPORT_CLOSURE = None
-    global _IMPORT_TIME_CLOSURE
-    _IMPORT_TIME_CLOSURE = None
-    _CORPUS = None
-    _CORPUS_TEXT = None
-    _REVERSE = None
-    _REGISTRIES = None
-    _INCLUDE_ROOTS = None
-    _GRAPH_REVERSE = None
-    _HOST_CLASS_ROUTES = None
-    _CONTEXT_DOORS = None
-    global _HOOK_CLASSES
-    _HOOK_CLASSES = None
+    g = globals()
+    for name in _RESET_CLEARED:
+        g[name].clear()
+    for name in _RESET_TO_NONE:
+        g[name] = None
     if "lane_map_import_graph" in sys.modules:
         sys.modules["lane_map_import_graph"]._DERIVED = None
         sys.modules["lane_map_import_graph"]._CLOSURES.clear()
+
+
+def snapshot_caches():
+    """Every memo `reset_caches` drops, as it stands (shallow copies). A test that perturbs one edge,
+    resets and re-derives restores this afterwards instead of resetting again, so the next test reads
+    the real map without deriving it a second time (2026-11-18: each derivation is minutes; resetting
+    in a `finally` doubled the cost of every perturbation test). Valid only while the tree and the
+    module's functions are what they were when it was taken."""
+    g = globals()
+    graph = sys.modules.get("lane_map_import_graph")
+    return dict(caches=[c.copy() for c in _CACHES], none={n: g[n] for n in _RESET_TO_NONE},
+                cleared={n: g[n].copy() for n in _RESET_CLEARED}, dirs=bincache._DIR_NAMES,
+                graph=(graph, graph._DERIVED, dict(graph._CLOSURES)) if graph is not None else None,
+                count=_RESET_COUNT)
+
+
+def restore_caches(snap):
+    """Put back what `snapshot_caches` took (the containers in place, so references stay valid)."""
+    for cache, saved in zip(_CACHES, snap["caches"]):
+        cache.clear()
+        cache.update(saved)
+    g = globals()
+    for name, value in snap["none"].items():
+        g[name] = value
+    for name, saved in snap["cleared"].items():
+        g[name].clear()
+        g[name].update(saved)
+    bincache._DIR_NAMES = snap["dirs"]
+    if snap["graph"] is not None:
+        graph, derived, closures = snap["graph"]
+        graph._DERIVED = derived
+        graph._CLOSURES.clear()
+        graph._CLOSURES.update(closures)
 
 
 @_by_path
@@ -3454,12 +3462,31 @@ _MOJO_NOT_A_NAME = frozenset({"if", "for", "while", "assert", "elif", "else"})
 _MOJO_IMPLICIT_METHODS = frozenset({"write_to", "write_repr_to"})
 
 
+_SCAN_MEMO = {}              # text -> _mojo_scan(text); callers only read the list
+_CODE_TEXT_MEMO = {}         # text -> _mojo_code_text(text)
+_CACHES.append(_SCAN_MEMO)
+_CACHES.append(_CODE_TEXT_MEMO)
+
+
 def _mojo_scan(text):
     """[(line, cont)] for a Mojo source, `cont` True when the line begins
     inside a string or an open bracket (or after a backslash), so it belongs
     to the statement above it whatever its indent. None when the text cannot
     be read with certainty: a bracket closes below zero, a one-quote string
-    runs past its line, or a string or bracket is still open at the end."""
+    runs past its line, or a string or bracket is still open at the end.
+
+    MEMOIZED BY TEXT (2026-11-18): the per-definition walks hand the same
+    bodies to `passed_operations`, `_mojo_code_text` and the dispatcher parse
+    once per lane key; the character scan was a third of a map derivation."""
+    hit = _SCAN_MEMO.get(text, _SCAN_MEMO)
+    if hit is not _SCAN_MEMO:
+        return hit
+    out = _mojo_scan_uncached(text)
+    _SCAN_MEMO[text] = out
+    return out
+
+
+def _mojo_scan_uncached(text):
     out, depth, quote, backslash = [], 0, None, False
     for line in text.splitlines():
         out.append((line, depth > 0 or quote is not None or backslash))
@@ -3548,6 +3575,15 @@ def _mojo_code_text(text):
     of a function by its spelling. Every OTHER string literal keeps its
     identifiers (the safe direction), and a text the scanner cannot read
     (`_mojo_scan` refuses unbalanced quotes or brackets) keeps all of them."""
+    hit = _CODE_TEXT_MEMO.get(text)
+    if hit is not None:
+        return hit
+    out = _mojo_code_text_uncached(text)
+    _CODE_TEXT_MEMO[text] = out
+    return out
+
+
+def _mojo_code_text_uncached(text):
     if _mojo_scan(text) is None:
         return text
     out, quote, depth, cont, blank = [], None, 0, False, False
