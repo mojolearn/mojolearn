@@ -113,7 +113,7 @@ STORED_TIMES = STORED_BASELINE.parents[1] / "board-all" / "board.json"
 #: the boards of the first targeted A/B job (ab1 of d652a4b0a1, L40S pod 37f71a6102af, a 14-core cgroup; lane
 #: fb15-ab-verdicts, 2026-11-18): its host-bound races took up to 4.4x the 28-core pod's stored seconds
 #: (elliptic-envelope istella 1748 s against 510, hdbscan istella 726 against 164), so each race is estimated from
-#: the largest stored wall_s over every board given (targeted_rows.py RACE_GAP_S)
+#: the largest stored wall_s over every board given
 STORED_TIMES_AB1 = sorted((Path.home() / "mojolearn-evidence" / "measure-candidate" / "build-d652a4b0a1" / "ab1")
                           .glob("board-tg*/board.json"))
 AMD_TREE = "/root/mojolearn"
@@ -373,7 +373,7 @@ def ab_plan(owed_file, planner_file, vendor, b_names, times_board, chunk_s=TR.DE
     plan, the same call the job's targeted plan makes, with no paper race left to a paper board): each unit is its
     base (the candidate) and the arm back to back, so its minutes are twice the races' stored candidate seconds (the
     largest over TIMES_BOARD, one path or a list; the family median for a race or a neighbouring shape with no stored
-    time) plus one process start per chunk and arm, TR.RACE_GAP_S between two timed races, and the base races'
+    time) plus one process start per chunk and arm (TR.PROC_S; the races' wall_s holds the rest), and the base races'
     smoke (TR.SMOKE_S_PER_RACE; lane fb15-ab-verdicts, 2026-11-18: ab1 was estimated at 152 minutes and passed the
     240-minute cap with 17 of 25 sqrt-comptime-step cells left); a race with a STORED BASE runs the arm only,
     counted at its cap (the stored base time, the most it can take)."""
@@ -397,9 +397,8 @@ def ab_plan(owed_file, planner_file, vendor, b_names, times_board, chunk_s=TR.DE
         s = sum(t if i in stored else 2 * t for i, t in each.items())
         nchunks = len(TR.chunk_ids(ids, {}, chunk_s)) if ids else 0
         procs = (1 if stored >= set(ids) else 2) * nchunks
-        timed = sum(1 if i in stored else 2 for i in ids)
         smoke = TR.SMOKE_S_PER_RACE * sum(1 for i in ids if i not in stored) if rows == "full" else 0.0
-        out.append((arm, rows, len(ids), (s + TR.PROC_S * procs + TR.RACE_GAP_S * timed + smoke) / 60.0))
+        out.append((arm, rows, len(ids), (s + TR.PROC_S * procs + smoke) / 60.0))
     return out
 
 

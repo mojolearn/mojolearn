@@ -94,14 +94,20 @@ FIXED_S = 90
 #: 2 minutes (lane fb15-ab-verdicts, 2026-11-18). The shard count is half the cgroup's cores, so the 14-core
 #: figure is the one to plan with on the current pods.
 SMOKE_S_PER_RACE = 3.6
-#: the start of one timed bench_board process (interpreter, plan, preflight audit, smoke gate) per chunk and arm.
-#: Measured in ab1 (2026-11-18): the one-chunk A/B units spent 20-35 s a process outside their races.
-PROC_S = 30
-#: seconds BETWEEN two timed races of one process (dataset load and placement, preflight, evidence write) that a
-#: race's stored wall_s does not hold. Measured in ab1: the candidate rows phase took 70.4 min for 42.9 min of
-#: summed race wall over 171 races (9.6 s a race); the A/B units 6-15 s a race. Without it the 171-row estimate
-#: was 47 min against 72 taken.
-RACE_GAP_S = 10
+#: the start of one timed bench_board process (interpreter, plan, preflight audit, smoke gate) per chunk and arm,
+#: with the prepared data already in the cache (the tg-prep phase of tools/ops/paper_compare_job.sh). Measured
+#: (lane fx-pod-job, 2026-11-18, from ideas-cycle-time-RESULT.md 1d-1e): the A/B job nvc-ab-20261118T140734Z-8f0269
+#: spent 1215 s in the starts of 77 bench_board processes (16 s each, the median); the 30 s of ab1 included the prep
+#: now done once in PREP_S.
+PROC_S = 16
+#: the job's dataset preparation, ONCE per job (tg-prep: one process per dataset, all at once, before the smoke):
+#: the longest single dataset's prep. Measured in nvc-tg-20261118T135756Z-7a2bff: graph-taxi 256.9 s and
+#: graph-istella 229.5 s, then serial inside the first timed process; in parallel the job waits for the longest.
+#: TOMBSTONE (lane fx-pod-job, 2026-11-18): RACE_GAP_S = 10 (seconds between two timed races on top of their stored
+#: wall_s) is removed: the same job's sum of race wall_s (1776 s) equals the sum of the races' "done" seconds
+#: (1789 s), so there is no gap; the 9.6 s a race of ab1 was the process starts and the serial prep, counted above.
+#: With it the A/B job of 2026-11-18 was estimated at 224 min and took 101, and the planner split jobs that fit.
+PREP_S = 260
 #: a stored wall_s from another pod is a floor, not a forecast: the races whose own time is host-bound (the quality
 #: references on the CPU) scale with the cgroup. ab1 took elliptic-envelope istella 1748 s against a stored 510 s
 #: (28-core pod) and hdbscan istella 726 s against 164 s. tools/ops/measure_candidate.py therefore estimates each
@@ -155,8 +161,7 @@ def estimate(rows, chunk_s=DEFAULT_CHUNK_S, one_arm=False):
     nchunks = len(chunk_ids([r["id"] for r in rows], {r["id"]: r for r in rows}, chunk_s))
     smoke = SMOKE_S_PER_RACE * (len(rows) + sum(1 for r in rows if (r.get("prior_s") or 0) > 0))
     arms = 1 if one_arm else 2
-    timed = len(rows) + sum(1 for r in rows if (r.get("prior_s") or 0) > 0)     # races timed, every arm
-    over = FIXED_S + arms * PROC_S * nchunks + RACE_GAP_S * timed
+    over = FIXED_S + PREP_S + arms * PROC_S * nchunks
     total = new + prior + smoke + over
     return {"candidate_s": new, "prior_s": prior, "smoke_s": smoke, "overhead_s": over, "chunks": nchunks,
             "total_s": total, "total_min": total / 60.0, "one_arm": one_arm}
@@ -164,10 +169,10 @@ def estimate(rows, chunk_s=DEFAULT_CHUNK_S, one_arm=False):
 
 def estimate_line(est):
     return ("TG-ESTIMATE minutes total=%.0f candidate=%.0f 0.8.55=%s smoke=%.0f overhead=%.0f (chunks=%d, %d s per "
-            "process, %d s between races)" % (est["total_min"], est["candidate_s"] / 60,
-                                              "stored (one arm)" if est.get("one_arm") else "%.0f" % (est["prior_s"] / 60),
-                                              est["smoke_s"] / 60, est["overhead_s"] / 60, est["chunks"], PROC_S,
-                                              RACE_GAP_S))
+            "process, %d s of prep once)" % (est["total_min"], est["candidate_s"] / 60,
+                                             "stored (one arm)" if est.get("one_arm") else "%.0f" % (est["prior_s"] / 60),
+                                             est["smoke_s"] / 60, est["overhead_s"] / 60, est["chunks"], PROC_S,
+                                             PREP_S))
 
 
 def split_rows(rows, cap_min, chunk_s=DEFAULT_CHUNK_S, one_arm=False):

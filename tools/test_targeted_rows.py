@@ -93,6 +93,18 @@ class CapAndChunks(unittest.TestCase):
             self.assertEqual(got, [r["id"] for r in TR.read_rows(f)])     # every row once, in order
             self.assertEqual(TR.check_cap(split[0][0], 230)[1], [])
 
+    def test_estimate_from_measured_overheads(self):
+        # lane fx-pod-job (2026-11-18): the A/B job was estimated at 224 min and took 101. The prep is counted once a
+        # job, a process start is the measured 16 s, and no per-race gap is added on top of the races' own wall
+        rows = self.rows(10, 60)
+        est = TR.estimate(rows, 600, one_arm=True)
+        self.assertFalse(hasattr(TR, "RACE_GAP_S"))
+        want = TR.FIXED_S + TR.PREP_S + TR.PROC_S * est["chunks"]
+        self.assertAlmostEqual(est["overhead_s"], want)
+        more = TR.estimate(self.rows(20, 60), 600, one_arm=True)
+        self.assertAlmostEqual(more["overhead_s"] - est["overhead_s"], TR.PROC_S * (more["chunks"] - est["chunks"]))
+        self.assertIn("s of prep once", TR.estimate_line(est))
+
     def test_chunks_interleave_size(self):
         by = {r["id"]: r for r in self.rows(6, 300)}
         ids = list(by)
