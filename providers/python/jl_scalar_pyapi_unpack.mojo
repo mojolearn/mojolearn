@@ -117,17 +117,26 @@ def jl_scalar_word(value: PyObjectPtr, cls: Int, epsilon: Bool, context: PyObjec
             raise Error(JL_EPSILON_ERROR)
         # An int64-range count, widened to binary64 with round-to-nearest-even
         # (PyLong_AsDouble's own rounding), so the same value. A count outside
-        # int64 keeps the exact CPython comparison and conversion in jl_scalar.
-        var overflow = Int32(0)
-        var word = table[].PyLong_AsLongLongAndOverflow(value, Int(MutPointer(to=overflow)))
-        if overflow == 0:
-            if word == -1 and table[].PyErr_Occurred():
-                raise typed_python_error()
-            if word <= 0:
-                raise Error(JL_POSITIVE_ERROR)
-            return Float64(word)
-        if overflow < 0:
+        # int64 keeps the exact CPython comparison and conversion in jl_scalar
+        # (arbitrary size: 1 << 2000 raises PyLong_AsDouble's OverflowError,
+        # -(1 << 2000) the n_samples refusal).
+        # Fix (fb12-rows, 2026-11-18; smoke of c989eb9222,
+        # test_jl_native_boundary.py::test_jl_preserves_nonfinite_integer_publication_errors):
+        # the overflow flag was an `int*` out-parameter into a stack Int32
+        # passed as an address word, and its write was not seen (1 << 2000
+        # read as -1 with no overflow and refused as non-positive). No
+        # out-parameter now: PyLong_AsLongLong returns -1 with an error set
+        # only when an exact int does not fit (its one possible error for an
+        # exact int), so the fast path is the same one compare on the result
+        # (`word == -1`), and the error check runs only for -1.
+        var word = table[].PyLong_AsLongLong(value)
+        if word == -1 and table[].PyErr_Occurred():
+            # Out of int64: drop the overflow error, take the exact path.
+            table[].PyErr_Clear()
+            return jl_scalar(PythonObject(from_borrowed=value), cls, epsilon, PythonObject(from_borrowed=context), words)
+        if word <= 0:
             raise Error(JL_POSITIVE_ERROR)
+        return Float64(word)
     return jl_scalar(PythonObject(from_borrowed=value), cls, epsilon, PythonObject(from_borrowed=context), words)
 
 
