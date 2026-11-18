@@ -149,6 +149,7 @@ NOT_MEASURED = (
     ("mojolearn.training.accumulation_is_aligned", "a boolean check of two sizes; no compute"),
     ("mojolearn.training.numeric_mode_used", "getter; no compute"),
     ("mojolearn.training.vendor_used", "getter; no compute"),
+    ("mojolearn.runtime_report", "getter: reports vendor, modes, arch and loaded bindings (3eeb4874a3); no compute"),
     ("mojolearn.ensemble.catboost_auto_learning_rate", "a scalar formula of the row count; no array compute"),
     ("mojolearn.models.plan_for", "returns an import plan record; no compute"),
     ("mojolearn.import_model", "one-time model import (parse and weight load, disk-bound); the imported "
