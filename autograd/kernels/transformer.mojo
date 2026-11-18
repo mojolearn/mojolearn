@@ -70,6 +70,7 @@ from gemm.neural_backward import (
     gemm_backward_b_call,
 )
 from gemm.neural_dispatch import GemmWorkspace, identical_gemm
+from gemm.neural_dispatch import gemm_workspace_epi_takes, gemm_workspace_run_epi
 from gemm.contract import OP_NN, OP_NT, OP_TN
 from checks.numerics import (
     identical_mul,
@@ -2098,6 +2099,54 @@ def _afn_wgrad(
 # Restore: git apply experiments/removed/LLAMA_DECODER_LAYER_BACKWARD_HAND_WALK.patch
 
 
+# lane fx-gemm-epi (2026-11-18, `-D MOJOLEARN_GEMM_FAST_EPI=1`, default OFF,
+# OPEN: no A/B yet). The two dX fan-ins (S9 `bwd_add2_kernel`, S32
+# `bwd_add3_kernel`) joined in the GEMM's own final store where the GEMM
+# route has one (gemm/checks/gemm_epilogue.mojo; NVIDIA's packed body today).
+# The join is the follower kernel's expression on the same words in the same
+# operand order, so no bit moves; where the route declines, the same follower
+# kernels run, one launch per fan-in as today. Off under the two fan-in
+# sabotage arms, which exist to move those kernels' cells.
+comptime BWD_GEMM_EPI = (
+    is_defined["MOJOLEARN_GEMM_FAST_EPI"]()
+    and not SAB_B_FANIN_ZERO_SEED
+    and not SAB_B_FANIN_ORDER_QKV_REVERSED
+)
+
+
+def _route_a_epi_takes(op: Int, m: Int, n: Int, k: Int) raises -> Bool:
+    """Whether `_route_a_epi` fuses the join for the `dA` of a forward at
+    `(m, n, k)`: a size and plan question, asked before any launch."""
+    var call = gemm_backward_a_call(op, m, n, k)
+    return gemm_workspace_epi_takes(call[1], call[2], call[3])
+
+
+def _route_a_epi[EPI: Int](
+    ctx: DeviceContext,
+    mut workspace: GemmWorkspace,
+    mut out_buf: DeviceBuffer[DType.float32],
+    mut dc: DeviceBuffer[DType.float32],
+    mut other: DeviceBuffer[DType.float32],
+    op: Int,
+    m: Int,
+    n: Int,
+    k: Int,
+) raises:
+    """`_route_a` with the fan-in join in the product's store:
+    `out_buf = EPI(dA, out_buf)`, `EPI` 1 = `ftz(ftz(out_buf) + ftz(dA))`,
+    2 = `ftz(ftz(dA) + ftz(out_buf))`. Same call row and side flag as
+    `_route_a`. Only where `_route_a_epi_takes` is True."""
+    var call = gemm_backward_a_call(op, m, n, k)
+    if call[4] == BWD_DC_LEFT:
+        gemm_workspace_run_epi[EPI](
+            ctx, workspace, out_buf, dc, other, call[1], call[2], call[3], call[0]
+        )
+        return
+    gemm_workspace_run_epi[EPI](
+        ctx, workspace, out_buf, other, dc, call[1], call[2], call[3], call[0]
+    )
+
+
 # ===========================================================================
 # THE STAGES AND THE SCRATCH
 # ===========================================================================
@@ -2189,6 +2238,10 @@ struct LlamaBackwardStages(Movable):
     var attn_bwd_fused_off: Bool
     """DEVIATION 3110: this layer's fused BACKWARD refused once, so it is not
     launched again for the life of this struct."""
+    var fanin_joined: Bool
+    """lane fx-gemm-epi (BWD_GEMM_EPI only): within the q, k, v fan-in, k's
+    dX is already joined into d(norm1.out) by its GEMM's store, so v joins
+    there too; False means k is in `tmp1` and `bwd_add3_kernel` runs."""
     var head_c: DeviceBuffer[DType.float32]  # [L, s_max]
 
     def __init__(
@@ -2293,6 +2346,7 @@ struct LlamaBackwardStages(Movable):
         self.attn_repaired = 0
         self.attn_backward_status = -1
         self.attn_bwd_fused_off = False
+        self.fanin_joined = False
         self.head_c = _zeros[False](ctx, head_c_n)
 
         # All fill targets are fields of self and remain alive through this
