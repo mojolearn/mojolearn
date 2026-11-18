@@ -46,9 +46,11 @@ PASSES = ("time", "pyspy", "perf", "nsys", "shim", "callgrind", "strace")
 #: carries the allocation and mmap counts; strace only adds the other syscalls)
 DEFAULT_PASSES = ("time", "pyspy", "nsys", "shim", "callgrind")
 #: seconds each pass's window runs (CP_<PASS>_SECONDS in the job); py-spy and perf want >= 10 s of samples, nsys
-#: counts, the shim's counts and the strace counts are per call and settle in a few seconds; callgrind's window is
-#: capped by calls (CP_CALLGRIND_CALLS), this is its expected length under instrumentation
-PASS_SECONDS = {"time": 3.0, "pyspy": 10.0, "perf": 10.0, "nsys": 3.0, "shim": 3.0, "callgrind": 30.0, "strace": 3.0}
+#: counts, the shim's counts and the strace counts are per call and settle in a few seconds; callgrind's calls are
+#: sized on the first call under valgrind's core (uninstrumented) and capped by CP_CALLGRIND_CALLS: its window runs
+#: about CALLGRIND_WINDOW_SLOWDOWN times longer once instrumented
+PASS_SECONDS = {"time": 3.0, "pyspy": 10.0, "perf": 10.0, "nsys": 3.0, "shim": 3.0, "callgrind": 10.0, "strace": 3.0}
+CALLGRIND_WINDOW_SLOWDOWN = 6.0
 #: the wall of one race process outside its window (start-up, data, fit before an inference, the first calls), and
 #: each tool's start-up slowdown on it: the TG board of d652a4b0a1 ran the default rows' races in 8-30 s (mean 14 s)
 #: with 21 calls of each phase; bench_board's own start-up added. callgrind: every process of the race under
@@ -147,7 +149,7 @@ def estimate(rows, passes=DEFAULT_PASSES, seconds=None, overhead_s=OVERHEAD_S, s
     cg = 0.0
     if "callgrind" in passes:
         cg = math.ceil(len(rows) / float(max(callgrind_parallel, 1))) * (
-            overhead_s * PASS_SLOWDOWN["callgrind"] + secs["callgrind"])
+            overhead_s * PASS_SLOWDOWN["callgrind"] + secs["callgrind"] * CALLGRIND_WINDOW_SLOWDOWN)
     total = sum(p["seconds"] for p in per) + cg + setup_s
     return {"rows": per, "callgrind_s": round(cg, 1), "total_min": round(total / 60.0, 1), "passes": list(passes),
             "assumptions": {"overhead_s_per_race_process": overhead_s, "slowdown": PASS_SLOWDOWN,

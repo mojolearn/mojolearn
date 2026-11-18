@@ -24,7 +24,7 @@
 #   callgrind  valgrind --tool=callgrind --instr-atstart=no --collect-atstart=no --trace-children=yes; the harness
 #              turns instrumentation and collection on for the window only (tools/ops/call_profile_cg.c, ctypes):
 #              exact instructions per call by function, self and inclusive, top 40, and by object (bindings, CPython,
-#              Mojo runtime, CUDA driver, libc). At most CP_CALLGRIND_CALLS (300) calls        CP_CALLGRIND_SECONDS (60)
+#              Mojo runtime, CUDA driver, libc). At most CP_CALLGRIND_CALLS (300) calls        CP_CALLGRIND_SECONDS (10)
 #   perf       perf record -e cpu-clock --call-graph dwarf, enabled through the harness's FIFO: only where the
 #              container allows perf events (RunPod: perf_event_paranoid=4, refused; skipped)  CP_PERF_SECONDS (10)
 #   strace     strace -f -ttt -T cut to the window by the harness's marker stats: syscalls per call (opt-in)
@@ -86,7 +86,7 @@ part() { [[ "$PARTS" == *",$1,"* ]]; }
 ROWS_WANT=",${CP_ROWS:-},"
 row_wanted() { [ "$ROWS_WANT" = ",," ] || [[ "$ROWS_WANT" == *",$1,"* ]]; }
 declare -A SECS=([time]=${CP_TIME_SECONDS:-3} [pyspy]=${CP_PYSPY_SECONDS:-10} [perf]=${CP_PERF_SECONDS:-10}
-                 [nsys]=${CP_NSYS_SECONDS:-3} [shim]=${CP_SHIM_SECONDS:-3} [callgrind]=${CP_CALLGRIND_SECONDS:-60}
+                 [nsys]=${CP_NSYS_SECONDS:-3} [shim]=${CP_SHIM_SECONDS:-3} [callgrind]=${CP_CALLGRIND_SECONDS:-10}
                  [strace]=${CP_STRACE_SECONDS:-3})
 has_pass() { [[ " ${PASSES[*]} " == *" $1 "* ]]; }
 FREQ=${CP_PERF_FREQ:-999}

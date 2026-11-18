@@ -79,6 +79,9 @@ static const char *const NAMES[E_N] = {
 };
 
 static uint64_t counts[E_N][3];     // calls, nanoseconds, bytes
+// > 0 while this thread is inside a wrapped CUDA entry: its libc calls (the driver's staging copies, its allocations)
+// are part of that entry's time and are not counted again under libc (the report adds the two)
+static __thread int in_cuda __attribute__((tls_model("initial-exec")));
 
 static inline uint64_t now_ns(void) {
     struct timespec ts;
@@ -87,6 +90,7 @@ static inline uint64_t now_ns(void) {
 }
 
 static inline void add(int k, uint64_t t0, uint64_t bytes) {
+    if (k >= E_malloc && in_cuda) return;
     uint64_t dt = now_ns() - t0;
     __atomic_fetch_add(&counts[k][0], 1, __ATOMIC_RELAXED);
     __atomic_fetch_add(&counts[k][1], dt, __ATOMIC_RELAXED);
@@ -151,7 +155,9 @@ static void *resolve_next(const char *name) {
     if (!real_##n) real_##n = (n##_fn)resolve_next(#n);                                         \
     if (!real_##n) return 999; /* CUDA_ERROR_UNKNOWN */                                         \
     uint64_t t0 = now_ns();                                                                     \
+    in_cuda++;                                                                                  \
     int r = real_##n(PASS##ar);                                                                 \
+    in_cuda--;                                                                                  \
     add(E_##n, t0, (uint64_t)BYTES_OF(bi, __VA_ARGS__));                                        \
     return r;
 
