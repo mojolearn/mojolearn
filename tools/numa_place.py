@@ -14,7 +14,8 @@ so the cell could not say which it was. This module:
                      use 100 percent of rented CPU). Memory is bound (numactl --membind) when the node has
                      MOJOLEARN_BENCH_NUMA_MIN_FREE_GB free (default 32), else preferred (--preferred: falls back to
                      the other node instead of reclaiming on a full one). Without numactl the cores are bound with
-                     taskset and memory is left to the kernel, and the placement says so.
+                     taskset and memory is left to the kernel, and the placement says so. Each form is tried once on
+                     `true` before use (a container may refuse set_mempolicy): the first that starts is used.
                      MOJOLEARN_BENCH_NUMA_BIND=0 turns it off (the placement records "off").
   * worker_node()    inside the worker: the node(s) it may run on and allocate from, and the node of the CPU it is on;
                      the cell records it (worker_numa).
@@ -220,16 +221,51 @@ def plan():
         min_free = MIN_FREE_GB
     free = node_meminfo(g).get("mem_free_gb")
     mem = "bind" if free is not None and free >= min_free else "preferred"
-    numactl = shutil.which("numactl")
+    # TRIED BEFORE USE (lane fx-pod-job2, 2026-11-18): on the RunPod L40S container set_mempolicy is refused
+    # ("set_mempolicy: Operation not permitted", no CAP_SYS_NICE), so `numactl --membind` exited 1 before the worker
+    # started and every worker-protocol race failed its smoke (42 of 46 in nvc-ab-20261118T201200Z-d21ba0; 12 of 14
+    # owed arms were never timed). Each form is now run once on `true` and the first that starts is used: cores and
+    # memory, then cores only with numactl, then taskset; the placement records why memory is unbound.
+    numactl, taskset = shutil.which("numactl"), shutil.which("taskset")
+    tries = []
     if numactl:
-        how = [numactl, "--physcpubind=%s" % cpulist(cpus),
-               ("--membind=%d" if mem == "bind" else "--preferred=%d") % g]
-    elif shutil.which("taskset"):
-        how, mem = [shutil.which("taskset"), "-c", cpulist(cpus)], "unbound (numactl missing)"
-    else:
+        tries.append(([numactl, "--physcpubind=%s" % cpulist(cpus),
+                       ("--membind=%d" if mem == "bind" else "--preferred=%d") % g], mem))
+    refused = None
+    for how, m in tries:
+        err = _try_prefix(how)
+        if err is None:
+            return {"node": g, "cpus": cpulist(cpus), "n_cpus": len(cpus), "allocation_cores": need, "mem": m,
+                    "node_free_gb": free, "how": how, "why": "the GPU's node"}
+        refused = err
+    why_mem = ("unbound (numactl memory policy refused: %s)" % refused) if refused else "unbound (numactl missing)"
+    cores_only = []
+    if numactl:
+        cores_only.append([numactl, "--physcpubind=%s" % cpulist(cpus)])
+    if taskset:
+        cores_only.append([taskset, "-c", cpulist(cpus)])
+    last = None
+    for how in cores_only:
+        err = _try_prefix(how)
+        if err is None:
+            return {"node": g, "cpus": cpulist(cpus), "n_cpus": len(cpus), "allocation_cores": need,
+                    "mem": why_mem, "node_free_gb": free, "how": how, "why": "the GPU's node"}
+        last = err
+    if not numactl and not taskset:
         return {"node": None, "why": "neither numactl nor taskset on this host"}
-    return {"node": g, "cpus": cpulist(cpus), "n_cpus": len(cpus), "allocation_cores": need, "mem": mem,
-            "node_free_gb": free, "how": how, "why": "the GPU's node"}
+    return {"node": None, "why": "no placement command starts a process here: %s" % (last or refused)}
+
+
+def _try_prefix(how, timeout=20):
+    """None when HOW followed by `true` starts and exits 0 on this host, else a short reason (its stderr). Run once
+    per process by plan() (wrap caches the plan), never per race."""
+    try:
+        p = subprocess.run(list(how) + ["true"], capture_output=True, text=True, timeout=timeout)
+    except (OSError, subprocess.SubprocessError) as exc:
+        return str(exc)[:160]
+    if p.returncode == 0:
+        return None
+    return ((p.stderr or p.stdout or "").strip().splitlines() or ["exit %d" % p.returncode])[0][:160]
 
 
 _PLAN = []
