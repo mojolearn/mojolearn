@@ -10,6 +10,7 @@ from experiments.classical_identical_ideas.linear_controls import ENETCV_FOLD_BL
 from x_linear.enetcv_blocks import fb_host_words
 from x_linear.ops import FP, IP
 from core.host_parallel import host_parallelize
+from core.host_finite_scan import host_all_finite_f32
 from core.host_predict_threads import host_predict_chunk, host_predict_task_count
 from core.py2mojo_rows import ROWS_HUBER_OUT, ROWS_LRCV_PROBA, ROWS_SGD_PROBA, rows_one
 from std.memory import bitcast
@@ -32,10 +33,10 @@ def _fp(addr: Int) raises -> FP:
 
 def _finite(p: FP, count: Int, name: String) raises:
     """The input check both columns run before a fit: NaN or infinity is refused by name."""
-    for i in range(count):
-        var v = p.unsafe_load(i)
-        if not (v == v) or v > Float32(3.4028234e38) or v < Float32(-3.4028234e38):
-            raise Error(String("mojolearn: ", name, " contains NaN or infinity"))
+    # parallel: the one host finite scan (was a serial `v == v and |v| <= FLT_MAX`
+    # walk: the same verdict as the exponent-bits test, NaN and both infinities)
+    if not host_all_finite_f32(MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(p)), count):
+        raise Error(String("mojolearn: ", name, " contains NaN or infinity"))
 
 
 def x_linear_fit_host(

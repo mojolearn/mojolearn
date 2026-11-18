@@ -18,6 +18,7 @@ No bit moves: the check reads, it does not compute a fitted word.
 
 from max.gpu import block_idx, thread_idx
 from std.memory import bitcast
+from core.host_finite_scan import host_all_finite_f32
 from max.gpu.host import DeviceBuffer, DeviceContext
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from x_linear.ops import FP, IP, ld, sti
@@ -57,10 +58,10 @@ def _xf_blocks(count: Int) -> Int:
 def xlin_finite_host(p: FP, count: Int, name: String) raises:
     """The binding's scalar walk, for the routes that upload nothing a
     device check could read (and for the shapes no route serves)."""
-    for i in range(count):
-        var v = p.unsafe_load(i)
-        if not (v == v) or v > Float32(3.4028234e38) or v < Float32(-3.4028234e38):
-            raise Error(String("mojolearn: ", name, " contains NaN or infinity"))
+    # parallel: the one host finite scan (was a serial `v == v and |v| <= FLT_MAX`
+    # walk: the same verdict as the exponent-bits test, NaN and both infinities)
+    if not host_all_finite_f32(MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(p)), count):
+        raise Error(String("mojolearn: ", name, " contains NaN or infinity"))
 
 
 def xlin_finite_device(

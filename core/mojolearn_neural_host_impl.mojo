@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 """Native CPU inference owners shared by the public binding and descriptor provider."""
-from std.math import isfinite
+from core.host_finite_scan import host_all_finite_list
 from std.memory import unsafe_memcpy
 from core.hostptr import copy_f32, f32_ptr, read_f32, read_i32
 from mamba.checks.mamba_fixture import D_CONV, D_STATE, MambaDims, MambaWeights
@@ -43,9 +43,9 @@ from transformer.block_options import (
 
 
 def _finite(values: List[Float32], what: String) raises:
-    for i in range(len(values)):
-        if not isfinite(values[i]):
-            raise Error(what + " is not finite")
+    # parallel: the one host finite scan (was a serial isfinite loop)
+    if not host_all_finite_list(values):
+        raise Error(what + " is not finite")
 
 
 def _opt_read(addr: Int, n: Int, on: Bool, name: String, what: String) raises -> List[Float32]:

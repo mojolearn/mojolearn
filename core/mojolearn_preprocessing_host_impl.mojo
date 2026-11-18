@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Typed host scaler checks and bodies moved word for word from bindings/_mojolearn_preprocessing_host.mojo."""
 from std.math import isfinite
+from core.host_finite_scan import host_all_finite_list
 from core.hostptr import copy_f32, f32_ptr, read_f32
 from preprocessing.host.scaler_oracle import (
     host_minmax_fit,
@@ -32,9 +33,9 @@ def validate_dimensions(n: Int, d: Int, lower: Float32, upper: Float32) raises:
 
 
 def finite_values(values: List[Float32]) raises:
-    for value in values:
-        if not isfinite(value):
-            raise Error("MinMaxScaler: nonfinite input or Float32 arithmetic overflow")
+    # parallel: the one host finite scan (was a serial isfinite loop)
+    if not host_all_finite_list(values):
+        raise Error("MinMaxScaler: nonfinite input or Float32 arithmetic overflow")
 
 
 def validate_standard(n: Int, d: Int, with_mean: Int, with_std: Int) raises:
@@ -45,9 +46,9 @@ def validate_standard(n: Int, d: Int, with_mean: Int, with_std: Int) raises:
 
 
 def standard_finite(values: List[Float32]) raises:
-    for value in values:
-        if not isfinite(value):
-            raise Error("StandardScaler: nonfinite input or Float32 arithmetic overflow")
+    # parallel: the one host finite scan (was a serial isfinite loop)
+    if not host_all_finite_list(values):
+        raise Error("StandardScaler: nonfinite input or Float32 arithmetic overflow")
 
 
 def minmax_fit_host_into(

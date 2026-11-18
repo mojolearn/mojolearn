@@ -3,7 +3,7 @@
 
 HOST ONLY: no DeviceContext, no kernel. The binding unpacks its arguments,
 calls one of these, and returns the result."""
-from std.math import isfinite
+from core.host_finite_scan import host_all_finite_f32, host_all_finite_f64
 
 
 def byte_host_store_f32(dst: MutPointer[Float32, MutUntrackedOrigin], values: List[Float32]):
@@ -19,23 +19,15 @@ def byte_host_store_i32(dst: MutPointer[Int32, MutUntrackedOrigin], values: List
 
 
 def all_finite_f32_scan(p: MutPointer[Float32, MutUntrackedOrigin], count: Int) -> Int:
-    """1 if every one of the `count` values at `p` is finite, else 0 (first failure exits)."""
-    var ok: Int = 1
-    for i in range(count):
-        if not isfinite(p.unsafe_load(i)):
-            ok = 0
-            break
-    return ok
+    """1 if every one of the `count` values at `p` is finite, else 0."""
+    # parallel: the one host finite scan (was a serial isfinite loop)
+    return 1 if host_all_finite_f32(p, count) else 0
 
 
 def all_finite_f64_scan(p: MutPointer[Float64, MutUntrackedOrigin], count: Int) -> Int:
     """`all_finite_f32_scan` over float64 values."""
-    var ok: Int = 1
-    for i in range(count):
-        if not isfinite(p.unsafe_load(i)):
-            ok = 0
-            break
-    return ok
+    # parallel: the one host finite scan (was a serial isfinite loop)
+    return 1 if host_all_finite_f64(p, count) else 0
 
 
 def cast_f64_to_f32_rows(sp: MutPointer[Float64, MutUntrackedOrigin],

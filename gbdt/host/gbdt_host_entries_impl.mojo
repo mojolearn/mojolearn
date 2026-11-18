@@ -15,6 +15,7 @@ from std.math import isfinite
 from std.memory import bitcast
 
 from core.hostptr import read_f32
+from core.host_finite_scan import host_any_nan_f32, host_any_nan_list
 from checks.numerics import ftz, identical_sigmoid
 from checks.soft_f64 import (
     SF64_ONE,
@@ -315,24 +316,15 @@ def _refuse_predict(what: String) raises:
 
 
 def gbdt_host_has_nan_f32(x: List[Float32]) -> Bool:
-    """True when any value of `x` is NaN (`v != v`), stopping at the first."""
-    var has_nan = False
-    for i in range(len(x)):
-        if x[i] != x[i]:
-            has_nan = True
-            break
-    return has_nan
+    """True when any value of `x` is NaN (`v != v`, tested on bits)."""
+    # parallel: the one host any-NaN scan (was a serial `v != v` loop)
+    return host_any_nan_list(x)
 
 
 def gbdt_host_has_nan_ptr(xs: MutPointer[Float32, MutUntrackedOrigin], n: Int) -> Bool:
-    """True when any of the `n` values at `xs` is NaN, stopping at the first."""
-    var has_nan = False
-    for i in range(n):
-        var v = xs.unsafe_load(i)
-        if v != v:
-            has_nan = True
-            break
-    return has_nan
+    """True when any of the `n` values at `xs` is NaN (tested on bits)."""
+    # parallel: the one host any-NaN scan (was a serial `v != v` loop)
+    return host_any_nan_f32(xs, n)
 
 
 def gbdt_host_eval_const(ey: List[Float32], n_eval_rows: Int) -> Bool:

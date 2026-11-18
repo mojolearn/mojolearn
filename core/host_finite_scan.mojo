@@ -29,9 +29,29 @@ any-non-finite reduction with a scalar tail. Loads are unaligned (alignment
                                                     in either byte order
     host_all_finite_nd(addr, shape, strides, width, native)
                                                     a view of any rank
+
+THE THREE PREDICATES (lane fx-host-scans, 2026-11-18). The private host
+scans of the families asked three different questions; each has one entry
+here, all on bits, all one parallel SIMD pass with the same grain floor:
+
+    all finite    no NaN and no infinity (exponent field all ones refuses):
+                  `host_all_finite_*` above, `host_all_finite_list`,
+                  `host_copy_f32_finite` (the test folded into a copy)
+    any NaN       NaN refused or reported, infinity is an ordinary value
+                  (exponent all ones and a nonzero fraction; `v != v`):
+                  `host_any_nan_f32`, `host_any_nan_list`,
+                  `host_any_nan_unit` (one unit of a caller's own split)
+    any infinity  +inf or -inf refused, NaN is a missing value and passes
+                  (magnitude bits exactly 0x7F800000):
+                  `host_any_inf_f32`
+
+A caller whose message names the first offending index asks the parallel
+verdict first and, only on a refusal, `host_first_nonfinite_f32` (serial:
+the error path).
 """
+from std.memory import bitcast
 from core.host_parallel import host_parallelize
-from core.host_predict_threads import host_predict_task_count_work, host_predict_chunk
+from core.host_predict_threads import HOST_MIN_TASK_WORK, host_predict_task_count_work, host_predict_chunk
 
 comptime _HFS_F32P = MutPointer[Float32, MutUntrackedOrigin]
 comptime _HFS_F64P = MutPointer[Float64, MutUntrackedOrigin]
@@ -85,6 +105,11 @@ def _hfs_all_finite[dt: DType](addr: Int, n: Int) -> Bool:
     tasks over the host's cores (grain floor applied)."""
     if n <= 0:
         return True
+    if n < 2 * HOST_MIN_TASK_WORK:
+        # The grain floor of host_predict_task_count_work, decided here from
+        # `n` alone: a small scan (a parameter vector, a fitted statistic,
+        # one step's state) reads no worker count and touches no pool.
+        return _hfs_span_finite[dt](addr, n)
     var tasks = host_predict_task_count_work(n, n)
     if tasks <= 1:
         return _hfs_span_finite[dt](addr, n)
@@ -124,6 +149,188 @@ def host_all_finite_f64(p: _HFS_F64P, n: Int) -> Bool:
     infinity. `n <= 0` is True."""
     # parallel: finiteness scan across host cores (0.8.66 regression C1 class, serial scan)
     return _hfs_all_finite[DType.uint64](Int(p), n)
+
+
+def host_all_finite_list(values: List[Float32]) -> Bool:
+    """`host_all_finite_f32` over a List's storage (the List is the
+    caller's borrow, alive through the call)."""
+    return host_all_finite_f32(rebind[_HFS_F32P](values.unsafe_ptr()), len(values))
+
+
+def host_first_nonfinite_f32(p: _HFS_F32P, n: Int) -> Int:
+    """The first index in `[0, n)` whose float32 word is a NaN or an
+    infinity (the same bits test), or -1. Serial by nature: it runs only
+    after a parallel verdict refused, to name the index in the caller's
+    message, and stops at the first hit."""
+    var words = _HFS_U32P(unsafe_from_address=Int(p))
+    for i in range(n):  # native input marshaling: the refusal's index, error path only
+        if (words.unsafe_load[alignment=1](i) & _HFS_EXP) == _HFS_EXP:
+            return i
+    return -1
+
+
+@always_inline
+def _hfs_span_any_class(addr: Int, n: Int, nan: Bool) -> Bool:
+    """True when any of the `n` contiguous float32 words at byte address
+    `addr` is a NaN (`nan`) or an infinity (not `nan`), on bits: a NaN has
+    the exponent field all ones and a nonzero fraction, an infinity has
+    magnitude bits exactly 0x7F800000. Serial within the span; the caller
+    splits spans across cores."""
+    comptime W = _HFS_W
+    var words = _HFS_U32P(unsafe_from_address=addr)
+    var exp = SIMD[DType.uint32, W](0x7F800000)
+    var i = 0
+    var body = n - n % W
+    if nan:
+        var fraction = SIMD[DType.uint32, W](0x007FFFFF)
+        var zero = SIMD[DType.uint32, W](0)
+        while i < body:
+            var w = words.unsafe_load[width=W, alignment=1](i)
+            if (w & exp).eq(exp).select(w & fraction, zero).reduce_or() != UInt32(0):
+                return True
+            i += W
+        while i < n:
+            var w1 = words.unsafe_load[alignment=1](i)
+            if (w1 & _HFS_EXP) == _HFS_EXP and (w1 & UInt32(0x007FFFFF)) != UInt32(0):
+                return True
+            i += 1
+        return False
+    var magnitude = SIMD[DType.uint32, W](0x7FFFFFFF)
+    while i < body:
+        if (words.unsafe_load[width=W, alignment=1](i) & magnitude).eq(exp).reduce_or():
+            return True
+        i += W
+    while i < n:
+        if (words.unsafe_load[alignment=1](i) & UInt32(0x7FFFFFFF)) == _HFS_EXP:
+            return True
+        i += 1
+    return False
+
+
+def _hfs_any_class(addr: Int, n: Int, nan: Bool) -> Bool:
+    """`_hfs_span_any_class` of `n` contiguous words, split into contiguous
+    tasks over the host's cores (grain floor applied). The verdict is the
+    OR of the tasks' verdicts, so it does not depend on the split."""
+    if n <= 0:
+        return False
+    if n < 2 * HOST_MIN_TASK_WORK:
+        return _hfs_span_any_class(addr, n, nan)
+    var tasks = host_predict_task_count_work(n, n)
+    if tasks <= 1:
+        return _hfs_span_any_class(addr, n, nan)
+    var chunk = host_predict_chunk(n, tasks)
+    chunk = ((chunk + _HFS_W - 1) // _HFS_W) * _HFS_W
+    var flags = List[UInt8](length=tasks, fill=UInt8(0))
+    var flag_ptr = rebind[MutPointer[UInt8, MutUntrackedOrigin]](flags.unsafe_ptr())
+
+    def _span(t: Int) {imm addr, imm n, imm chunk, imm nan, imm flag_ptr}:
+        var lo = t * chunk
+        if lo >= n:
+            return
+        var hi = min(lo + chunk, n)
+        if _hfs_span_any_class(addr + lo * 4, hi - lo, nan):
+            flag_ptr.unsafe_store(t, UInt8(1))
+
+    host_parallelize(_span, tasks)
+    var found = False
+    for t in range(tasks):  # driver-loop: over the scan tasks' flags (at most one per core)
+        if flags[t] != UInt8(0):
+            found = True
+    _ = flags^
+    return found
+
+
+def host_any_nan_f32(p: _HFS_F32P, n: Int) -> Bool:
+    """True when any of the `n` float32 words at `p` is a NaN. An infinity
+    is an ordinary value here. `n <= 0` is False."""
+    # parallel: NaN scan across host cores (was a private serial `v != v` loop per family)
+    return _hfs_any_class(Int(p), n, True)
+
+
+def host_any_nan_list(values: List[Float32]) -> Bool:
+    """`host_any_nan_f32` over a List's storage."""
+    return _hfs_any_class(Int(rebind[_HFS_F32P](values.unsafe_ptr())), len(values), True)
+
+
+def host_any_nan_unit(values: List[Float32]) -> Bool:
+    """The any-NaN test of ONE unit of a caller's own split (one feature
+    column of a per-column quantization): the SIMD pass on the calling
+    thread. Not split further because the caller already runs one such
+    unit per core; a pool call from inside a pool task is not made."""
+    return _hfs_span_any_class(Int(rebind[_HFS_F32P](values.unsafe_ptr())), len(values), True)
+
+
+def host_any_inf_f32(p: _HFS_F32P, n: Int) -> Bool:
+    """True when any of the `n` float32 words at `p` is +inf or -inf. A NaN
+    (a missing value to the callers) passes. `n <= 0` is False."""
+    # parallel: infinity scan across host cores (was a private serial loop)
+    return _hfs_any_class(Int(p), n, False)
+
+
+@always_inline
+def _hfs_span_copy_finite(src: Int, dst: Int, n: Int) -> Bool:
+    """Copy `n` float32 words from byte address `src` to `dst` and return
+    True when every copied word is finite. The test is on bits, folded
+    branch-free into the copy's own SIMD loads (lane fb12-kde-finite,
+    2026-11-17, moved here from core/hostptr.mojo `copy_f32_finite`), so
+    admission of a host input that is staged anyway costs no second pass.
+    Every word is copied even when one is non-finite."""
+    var src_ptr = _HFS_F32P(unsafe_from_address=src)
+    var dst_ptr = _HFS_F32P(unsafe_from_address=dst)
+    var hit = SIMD[DType.uint32, 8](0)
+    var i = 0
+    var body = n - n % 8
+    while i < body:
+        var v = src_ptr.unsafe_load[width=8](i)
+        dst_ptr.unsafe_store[width=8](i, v)
+        var e = bitcast[DType.uint32, 8](v) & SIMD[DType.uint32, 8](_HFS_EXP)
+        hit |= e.eq(SIMD[DType.uint32, 8](_HFS_EXP)).cast[DType.uint32]()
+        i += 8
+    var tail = UInt32(0)
+    while i < n:
+        var w = src_ptr.unsafe_load(i)
+        dst_ptr.unsafe_store(i, w)
+        if (bitcast[DType.uint32](w) & _HFS_EXP) == _HFS_EXP:
+            tail = 1
+        i += 1
+    return hit.reduce_or() == 0 and tail == 0
+
+
+def host_copy_f32_finite(src: Int, dst: Int, n: Int) -> Bool:
+    """Copy `n` float32 words from host address `src` to `dst` (the ranges
+    must not overlap) and return True when every word is finite: the copy
+    and the test are one pass, split into contiguous spans across the
+    host's cores above the grain floor. Every word is copied whatever the
+    verdict. A small copy runs on the calling thread and reads no worker
+    count."""
+    if n <= 0:
+        return True
+    if n < 2 * HOST_MIN_TASK_WORK:
+        return _hfs_span_copy_finite(src, dst, n)
+    # parallel: the staging copy and its finiteness verdict over spans across host cores
+    var tasks = host_predict_task_count_work(n, n)
+    if tasks <= 1:
+        return _hfs_span_copy_finite(src, dst, n)
+    var chunk = host_predict_chunk(n, tasks)
+    chunk = ((chunk + _HFS_W - 1) // _HFS_W) * _HFS_W
+    var flags = List[UInt8](length=tasks, fill=UInt8(1))
+    var flag_ptr = rebind[MutPointer[UInt8, MutUntrackedOrigin]](flags.unsafe_ptr())
+
+    def _span(t: Int) {imm src, imm dst, imm n, imm chunk, imm flag_ptr}:
+        var lo = t * chunk
+        if lo >= n:
+            return
+        var hi = min(lo + chunk, n)
+        if not _hfs_span_copy_finite(src + lo * 4, dst + lo * 4, hi - lo):
+            flag_ptr.unsafe_store(t, UInt8(0))
+
+    host_parallelize(_span, tasks)
+    var finite = True
+    for t in range(tasks):  # driver-loop: over the copy tasks' flags (at most one per core)
+        if flags[t] == UInt8(0):
+            finite = False
+    _ = flags^
+    return finite
 
 
 def host_all_finite_f32_strided(addr: Int, s0: Int, s1: Int, rows: Int, cols: Int) -> Bool:
