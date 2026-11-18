@@ -64,6 +64,45 @@ class ClosureRule(unittest.TestCase):
         self.assertEqual(rows[0]["decision"], "BUILD")
 
 
+class TimedSets(unittest.TestCase):
+    """--timed-on (lane fx-build-tools, 2026-11-18): an arm timed on sm_89 builds the define's device rows in
+    sm_89 only; the sm_80 rows ship the base's bytes and say so; host rows always build."""
+
+    def rows(self):
+        specs = [("_mojolearn_kde", "identical", "sm_89"), ("_mojolearn_kde", "identical", "sm_80"),
+                 ("_mojolearn_kde_host", "host", "")]
+        rows = [row(n, tier=t, arch=a) for n, t, a in specs]
+        current = [(R.Binding(L, "host" if t == "host" else "cuda", a, t, n), None) for n, t, a in specs]
+        facts = {"closures": {"build_kde.sh": {"sources": ["kde/k.mojo"]},
+                              "build_kde_host.sh": {"sources": ["kde/k.mojo"]}}}
+        return rows, current, facts
+
+    def test_default_builds_every_set(self):
+        rows, current, facts = self.rows()
+        R.apply_defines(rows, current, facts, {"kde/k.mojo"}, ["MOJOLEARN_X"])
+        self.assertEqual([r["decision"] for r in rows], ["BUILD", "BUILD", "BUILD"])
+
+    def test_untimed_set_keeps_the_base(self):
+        rows, current, facts = self.rows()
+        moved = R.apply_defines(rows, current, facts, {"kde/k.mojo"}, ["MOJOLEARN_X"], timed=R.timed_sets("sm_89"))
+        self.assertEqual([r["decision"] for r in rows], ["BUILD", "REUSE", "BUILD"])
+        self.assertEqual(len(moved), 2)
+        self.assertTrue(rows[1]["reason"].startswith("untimed set:"))
+        rec = RC.untimed_record(dict(timed_sets=["sm_89"], rows=rows), ["sm_89", "sm_80"])
+        self.assertEqual(rec, dict(timed_on=["sm_89"], untimed_from_base={"cuda/sm_80": ["_mojolearn_kde"]}))
+
+    def test_timed_on_is_checked(self):
+        self.assertEqual(RC.timed_on("", ["sm_89", "sm_80"], "MOJOLEARN_X"), [])
+        self.assertEqual(RC.timed_on("sm_89", ["sm_89", "sm_80"], "MOJOLEARN_X"), ["sm_89"])
+        self.assertEqual(RC.timed_on("sm_80,sm_89", ["sm_89", "sm_80"], "MOJOLEARN_X"), [])   # every set: default
+        with self.assertRaises(SystemExit):
+            RC.timed_on("sm_89", ["sm_89", "sm_80"], "")          # an A set
+        with self.assertRaises(SystemExit):
+            RC.timed_on("gfx942", ["sm_89", "sm_80"], "MOJOLEARN_X")
+        self.assertIsNone(R.timed_sets(""))
+        self.assertEqual(R.timed_sets("sm_89"), {("cuda", "sm_89")})
+
+
 class Units(unittest.TestCase):
     """2: rows lifted to the shard units."""
 

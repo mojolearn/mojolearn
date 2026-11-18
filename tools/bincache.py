@@ -2069,10 +2069,34 @@ def define_named(name, text):
     return re.search(r"(?<![A-Za-z0-9_])" + re.escape(name) + r"(?![A-Za-z0-9_])", text) is not None
 
 
+def mojo_line_reads_define(line, name):
+    """Whether one `.mojo` source LINE reads the define NAME: the quoted name ("NAME") on a line that is not a
+    `#` comment line. Mojo reads a -D only through is_defined/env_get_*/get_defined_* of a literal name, which
+    stands on the call's line or, after `is_defined[`, on a line of its own; both carry the quoted name. A bare
+    mention in a comment or a TOMBSTONE line compiles to the same bytes with or without `-D NAME`. The rule errs
+    towards BUILD: a quoted name in a docstring or a message counts as a read."""
+    return ('"' + name + '"') in line and not line.lstrip().startswith("#")
+
+
+def reads_define(rel, text, name):
+    """THE ONE RULE for which source files read a candidate define (lane fx-build-tools, 2026-11-18), used by the
+    cache key (scope_build_defines) and by the reuse planner (tools/release_reuse.py define_readers). A `.mojo`
+    file reads NAME when a line does (mojo_line_reads_define); any other file (build scripts, Python, JSON) when
+    it names NAME as a whole word. Before, the key counted any whole-word mention, comment and TOMBSTONE lines
+    included, while the planner did not: 175 units the d652a4b0a1 arm plan marked REUSE were keyed with the
+    define, missed the cache and compiled inside the assemble jobs (157 reproduced the base bytes; 18 merged
+    files came out of another runner with other bytes and shipped in the arm wheels instead of the base's)."""
+    if not str(rel).endswith(".mojo"):
+        return define_named(name, text)
+    if ('"' + name + '"') not in text:
+        return False
+    return any(mojo_line_reads_define(line, name) for line in text.splitlines())
+
+
 def scope_build_defines(repo, script, args, environ):
-    """(environ, kept): MOJOLEARN_BUILD_DEFINES cut to the entries whose NAME this build's own source
-    closure names (its Mojo import closure and the shell/Python files it executes; bindings/build_defines.sh,
-    which spells no define, left out). A build whose closure names none of them runs, and is keyed, with
+    """(environ, kept): MOJOLEARN_BUILD_DEFINES cut to the entries whose NAME a file of this build's own source
+    closure reads by reads_define (its Mojo import closure and the shell/Python files it executes;
+    bindings/build_defines.sh, which spells no define, left out). A build whose closure names none of them runs, and is keyed, with
     the variable unset: the same argv and environment as the build without the defines, so the binding
     cache serves it the same bytes, and only the bindings that can read a define compile again.
 
@@ -2095,9 +2119,10 @@ def scope_build_defines(repo, script, args, environ):
     for rel in list(sc["closure"]) + list(sc["inputs"]["files"]):
         p = repo / rel
         if p.name != "build_defines.sh" and p.is_file():
-            texts.append(p.read_text(errors="replace"))
-    blob = "\n".join(texts)
-    kept = [e for e in entries if define_named(e.split("=", 1)[0], blob)]
+            texts.append((str(rel), p.read_text(errors="replace")))
+    # the planner's rule (reads_define): a comment-only mention keeps the define-free key, so the unit hits
+    # the base's archive instead of compiling again in the assemble job
+    kept = [e for e in entries if any(reads_define(rel, text, e.split("=", 1)[0]) for rel, text in texts)]
     out = dict(environ)
     if kept:
         out["MOJOLEARN_BUILD_DEFINES"] = ",".join(kept)

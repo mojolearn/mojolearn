@@ -59,6 +59,13 @@ an sm_89 GPU, and a B arm's sm_80 units that read the define must carry it (the 
 Default: every set, as a release. candidate.json records the targets; tools/ops/measure_candidate.py stage refuses a
 vendor the build did not pack. A release has no --targets.
 
+--timed-on (lane fx-build-tools, 2026-11-18; B arms with a finished base only): `--targets sm_89,sm_80 --timed-on
+sm_89` for an arm timed on the NVIDIA L40S, which loads the native sm_89 set and never the PTX slot. The define's
+device units build in sm_89 only; the sm_80 set ships the base's device bytes (compiled without the define) with
+the arm's host bindings, so the wheel imports and no sm_80 leg runs (49 of the 112 d652a4b0a1 arm legs were sm_80).
+candidate.json records `timed_on` and `untimed_from_base`; an A/B on any other GPU must not use such an arm.
+Default (no --timed-on): every set is built with the define, as before.
+
 PRE-BUILD CHECKS (2026-11-15, tools/prebuild_check.py): before the Release dispatches anything, the commit's pack
 source audits (NumPy/platform math, verification inputs, source/API payload) and the host-parse suite of
 native-checks.yml (every release host group parsed and elaborated on free runners, or a passed run of the same sha
@@ -117,8 +124,13 @@ RESERVE_BYTES = 1 * GIB                     # never fill the disk to the last by
 KEEP_SUFFIXES = (".json", ".log", ".txt", ".md", ".exit", ".pid", ".sha256", ".tsv", ".csv")
 #: the intermediate trees of a set (<work>/<commit12>/) that the final wheels and the records do not need: the
 #: downloaded leg trees (their .so/.tar.gz/toolchain payload), the host composition and the assembled reuse sets
-#: (copies the packer read) and the audit's repaired wheel copies
-PRUNE_TREES = ("legs", "host-composition/sets", "reuse/sets", "linux/audit")
+#: (copies the packer read) and the audit's repaired wheel copies. reuse/previous-split (the base's wheels merged
+#: again, 464 MB an arm) and reuse/ptx-published (the published PTX set unpacked, 140 MB) are copies of the base
+#: too: 31 GB over the 70 d652a4b0a1 arms, which stopped the arm controller on laptop disk for four hours
+#: (lane fx-build-tools, 2026-11-18). A resume makes both again (Release.previous_wheel, the PTX admission
+#: re-verifies its tree); their .json witnesses stay by KEEP_SUFFIXES.
+PRUNE_TREES = ("legs", "host-composition/sets", "reuse/sets", "reuse/previous-split", "reuse/ptx-published",
+               "linux/audit")
 
 
 def free_bytes(path):
@@ -294,14 +306,30 @@ def first_build_error(arm_log):
     legs the arm log names (the local leg tree and its GitHub shards), else their first other failure line, else the
     arm's own FAILED/STOPPED line. Paths inside the box's checkout are shown relative to it."""
     text = Path(arm_log).read_text(errors="replace").splitlines()
-    logs = []
+    legs = []
     for line in text:
         for m in _LEG_LOG.finditer(line):
             leg = Path(m.group(1)).with_suffix("")
-            if leg.is_dir():
-                failed = [f for f in sorted(leg.rglob("build_logs/*.log"))
-                          if "FAILED" in (f.read_text(errors="replace").strip().splitlines() or [""])[-1]]
-                logs += [f for f in failed if f not in logs]
+            if leg not in legs:
+                legs.append(leg)
+    found = legs_first_error(legs)
+    if found:
+        return found
+    stop = next((x.strip() for x in reversed(text) if re.search(r"\b(FAILED|STOPPED) at ", x)), None)
+    return (stop or "no error line in " + str(arm_log))[:240]
+
+
+def legs_first_error(leg_dirs):
+    """The first compiler diagnostic (file:line: error) in the FAILED binding logs under LEG_DIRS (a leg's local
+    tree and its GitHub shards), else their first other failure line, else None. Also read by tools/release.py
+    linux-wait, which prints it as soon as a leg fails (lane fx-build-tools, 2026-11-18)."""
+    logs = []
+    for leg in leg_dirs:
+        leg = Path(leg)
+        if leg.is_dir():
+            failed = [f for f in sorted(leg.rglob("build_logs/*.log"))
+                      if "FAILED" in (f.read_text(errors="replace").strip().splitlines() or [""])[-1]]
+            logs += [f for f in failed if f not in logs]
     other = None
     for f in logs:
         for line in f.read_text(errors="replace").splitlines():
@@ -312,8 +340,7 @@ def first_build_error(arm_log):
                 other = f"{f.stem}: {_OTHER_ERROR.search(line).group(0)}"
     if other:
         return re.sub(r"/root/[^/ ]+/", "", other)[:240]
-    stop = next((x.strip() for x in reversed(text) if re.search(r"\b(FAILED|STOPPED) at ", x)), None)
-    return (stop or "no error line in " + str(arm_log))[:240]
+    return None
 
 
 def run_arms(a, argv):
@@ -465,6 +492,38 @@ def source_tree(work, commit, dry):
     return tree
 
 
+def timed_on(raw, targets, defines):
+    """The sorted arches of --timed-on RAW (empty: every set is timed). Refused for an A set (no defines: nothing
+    to take from a base), for an arch outside TARGETS, and when it names every target (that is the default)."""
+    arches = sorted({x.strip() for x in (raw or "").split(",") if x.strip()})
+    if not arches:
+        return []
+    if not defines:
+        raise SystemExit("candidate: --timed-on is for a B arm (--defines or --owed-arm); an A set builds every set")
+    unknown = [x for x in arches if x not in targets]
+    if unknown:
+        raise SystemExit(f"candidate: --timed-on {','.join(unknown)} is not in the targets {','.join(targets)}")
+    return [] if set(arches) == set(targets) else arches
+
+
+def untimed_record(plan, targets):
+    """candidate.json's record of a B arm built for some timed sets only (release_reuse.apply_defines TIMED SETS):
+    `timed_on`, and `untimed_from_base` {"vendor/arch": [binding names that read the define and ship the base's
+    bytes]}. Those sets import, but an A/B timed on them would time the base. Empty for any other build."""
+    timed = plan.get("timed_sets") or []
+    if not timed:
+        return {}
+    untimed = {}
+    for r in plan.get("rows") or []:
+        if r.get("decision") == "REUSE" and str(r.get("reason", "")).startswith("untimed set:"):
+            untimed.setdefault(f"{r['vendor']}/{r['arch']}", []).append(r["name"])
+    import release_reuse
+    for vendor, arch in release_reuse.ALL_LINUX_SETS:
+        if arch in targets and arch not in timed:
+            untimed.setdefault(f"{vendor}/{arch}", [])
+    return dict(timed_on=list(timed), untimed_from_base={k: sorted(v) for k, v in sorted(untimed.items())})
+
+
 def parse(argv):
     ap = argparse.ArgumentParser(prog="release.py candidate", description=__doc__.split("\n\n")[0],
                                  formatter_class=argparse.RawDescriptionHelpFormatter, epilog=__doc__)
@@ -474,6 +533,10 @@ def parse(argv):
     ap.add_argument("--vendors", default="", help="vendor wheels to validate and stage (default: the wheels of the "
                     "targets, nvidia,amd for every target)")
     ap.add_argument("--defines", default="", help="B set: '-D NAME=V -D NAME2' or NAME=V,NAME2 (MOJOLEARN_BUILD_DEFINES)")
+    ap.add_argument("--timed-on", default="", help="B arms only: the arches the arm is TIMED on, a comma list of "
+                    "--targets (sm_89 for the NVIDIA L40S). The define's device units build only in those sets; every "
+                    "other set of --targets ships the base build's bytes (compiled without the define) so the wheel "
+                    "still imports, and candidate.json names them in untimed_from_base. Default: every set is timed")
     ap.add_argument("--label", default="", help="the version's label (lower case [a-z0-9.]; a '-' becomes '.', so an "
                     "owed arm's name is a label; default: none for an A set, d<8 hex of the defines> for a B set)")
     ap.add_argument("--owed-arm", action="append", default=[], help="an owed B arm of the owed file's b_arms (e.g. "
@@ -529,6 +592,7 @@ def main(argv=None, release=None):
                          f"does not build (it builds {','.join(built)})")
     defines = release_github_build.normalize_defines(a.defines)
     label, defines, owed_arm = resolve_owed(a.label, a.owed_arm, defines, a.owed_file)
+    timed = timed_on(a.timed_on, targets, defines)
     for entry in [e for e in defines.split(",") if e]:
         name = entry.split("=", 1)[0]
         readers = sorted(release_reuse.define_readers(a.commit, [name], ROOT))
@@ -557,6 +621,9 @@ def main(argv=None, release=None):
         if base_build is None:
             print(f"measurement build: NO BASE BUILD at {base_work} (the A set of {a.commit[:12]}, targets "
                   f"{','.join(targets)}, finished): every unit of this arm builds. Build the A set first to reuse it")
+            if timed:
+                print(f"measurement build: --timed-on {','.join(timed)} needs the base build to take the untimed "
+                      "sets from; without it every set builds with the define")
         else:
             print(f"measurement build: base build {base_build['version']}"
                   + (" (PENDING: still building; a real run waits for it to finish)" if base_build.get("pending")
@@ -581,9 +648,13 @@ def main(argv=None, release=None):
     if state and had != targets:
         raise SystemExit(f"candidate: {state_path} built the targets {','.join(had)}, not {','.join(targets)}; "
                          "pick another --label")
+    if state and ((state.get("candidate") or {}).get("timed_on") or []) != timed:
+        raise SystemExit(f"candidate: {state_path} was timed on {','.join((state.get('candidate') or {}).get('timed_on') or ['every set'])}, "
+                         f"not {','.join(timed) or 'every set'}; pick another --label")
     if not state:
         state = dict(version=version, commit=a.commit, steps={}, release_modes=["identical"],
                      candidate=dict(version=version, commit=a.commit, defines=defines, label=label, targets=targets,
+                                    **({"timed_on": timed} if timed else {}),
                                     base_version=base, committed_version=committed[1] if committed else None,
                                     owed_arm=owed_arm, made=release.now(), prune=True))
     # THE TOOLING SHA, recorded at the first launch: a resume dispatches from the same pushed ref while it still
@@ -605,6 +676,7 @@ def main(argv=None, release=None):
     args.candidate_version, args.candidate_defines = version, defines
     args.candidate_ref = a.ref or cand.get("tooling_ref") or ""
     args.candidate_base = base_build
+    args.candidate_timed = ",".join(timed)
     args.candidate_tooling_sha = tooling_sha
     r = release.Release(args)
     if r.commit != a.commit:
@@ -666,7 +738,8 @@ def main(argv=None, release=None):
                wheel_dir=str(final), vendors=vendors, targets=targets, wheels_built=built, steps=list(STEPS),
                wheels={k: dict(file=w.name, sha256=release.sha256(w)) for k, w in finals.items() if w},
                manifests=manifests, refs_before=before, refs_after=after, made=release.now(),
-               **({"base": reused_from_base(plan)} if plan and (plan.get("previous") or {}).get("base") else {}))
+               **({"base": reused_from_base(plan)} if plan and (plan.get("previous") or {}).get("base") else {}),
+               **(untimed_record(plan, targets) if plan else {}))
     release.write_json(final / "candidate.json", doc)
     print(f"measurement build: {final}/candidate.json")
     if not defines and not a.no_verify_smoke:

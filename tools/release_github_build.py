@@ -298,6 +298,36 @@ UNIT_PEAK_GIB = {
     ("host", "_mojolearn_native_neural_doors_host", "cuda"): 14, ("host", "_mojolearn_native_neural_doors_host", "hip"): 14,
     ("host", "_mojolearn_native_orchestration_host", "cuda"): 10, ("host", "_mojolearn_native_orchestration_host", "hip"): 11,
 }
+#: THE RECORDED PEAK OF ONE MERGED UNIT ON A FREE RUNNER, GiB (lane fx-build-tools, 2026-11-18): the largest
+#: cgroup peak plus swap (GHA/shards/<i>/memory.txt) of a shard job that compiled that one unit, over every leg
+#: under ~/mojolearn-evidence/release-candidates/0.8.67.dev0+* (13-52 jobs a unit, sm_89 and sm_80 alike),
+#: rounded up to 0.5 (table: ~/mojolearn-evidence/briefs-20261118/fx-build-tools-peaks.txt). It counts the job's
+#: page cache and the route's own baseline (a shard of cache hits alone recorded 6.3 GiB), so the sum of two is
+#: above what two units compiled side by side hold: the d652a4b0a1 arm assemble jobs compiled host units two at
+#: a time at 9.5 GiB. Used only to put units side by side on one runner (pack_units); a packed job's swap is
+#: still sized from UNIT_PEAK_GIB, and a unit not named here gets a runner of its own.
+RECORDED_UNIT_PEAK_GIB = {
+    ("identical", "_mojolearn_native", "cuda"): 12.5, ("identical", "_mojolearn_native_trees", "cuda"): 11.5,
+    ("identical", "_mojolearn_native_cluster", "cuda"): 11.0, ("identical", "_mojolearn_native_sequence", "cuda"): 10.0,
+    ("host", "_mojolearn_native_classical_family_host", "cuda"): 11.0,
+    ("host", "_mojolearn_native_neural_host", "cuda"): 10.5, ("host", "_mojolearn_native_parallel_host", "cuda"): 10.5,
+    ("host", "_mojolearn_native_classical_trees_host", "cuda"): 10.0,
+    ("host", "_mojolearn_native_tokenizer_host", "cuda"): 10.0,
+    ("host", "_mojolearn_native_classical_prep_host", "cuda"): 9.0,
+    ("host", "_mojolearn_native_neural_doors_host", "cuda"): 9.0,
+    ("host", "_mojolearn_native_orchestration_host", "cuda"): 9.0, ("host", "_mojolearn_native_x_host", "cuda"): 9.0,
+    ("host", "_mojolearn_native_xseq_host", "cuda"): 8.5,
+    ("host", "_mojolearn_native_byte_trainer_host", "cuda"): 7.5,
+    ("host", "_mojolearn_native_classical_decomp_host", "cuda"): 7.5,
+    ("host", "_mojolearn_native_forest_host", "cuda"): 6.5, ("host", "_mojolearn_native_host", "cuda"): 6.0,
+    ("host", "_mojolearn_native_catalog_host", "cuda"): 6.0, ("host", "_mojolearn_native_classical_host", "cuda"): 6.0,
+    ("host", "_mojolearn_native_series_host", "cuda"): 5.5,
+}
+#: MERGED UNITS SIDE BY SIDE ON ONE RUNNER: a merged compile runs 2 compiler workers (MOJOLEARN_COMPILE_JOBS=2,
+#: tools/gha_release_box.sh) and the free runner has 4 vCPU, so two fill its cores; the workflow's `jobs` input
+#: (default 2) runs them at once (packaging/linux/build_sets.sh pool). One job of fixed cost (free disk, image,
+#: checkouts: 5.2 of a 13.4 minute shard, the 15:58Z arm batch of 2026-11-18) then carries two compiles.
+UNITS_PER_JOB = 2
 #: A per-binding build: two at a time fit a free runner (0.8.24..0.8.52 runs).
 PER_BINDING_PEAK_GIB = 6
 #: The host producer (tools/release_host_build.py) compiles the host groups one
@@ -572,9 +602,12 @@ def estimate(include, merged, sets, host, host_donor=False, shares=None, compile
     for arch in sets:
         vendor = ARCHS[arch]
         rows = [r for r in include if r["arch"] == arch]
-        shard_s = [JOB_OVERHEAD_SECONDS + sum(unit_seconds(e, vendor, merged, shares.get(e, 1.0))
-                                              for e in r["only"].split())
-                   // (1 if merged else 2) + (adapters(vendor) if merged and arch != "sm_80" else 0) for r in rows]
+        # merged units of one row run side by side (pack_units): the row takes its longest unit's seconds
+        shard_s = [JOB_OVERHEAD_SECONDS + (max(unit_seconds(e, vendor, merged, shares.get(e, 1.0))
+                                               for e in r["only"].split()) if merged else
+                                           sum(unit_seconds(e, vendor, merged, shares.get(e, 1.0))
+                                               for e in r["only"].split()) // 2)
+                   + (adapters(vendor) if merged and arch != "sm_80" else 0) for r in rows]
         asm = 0 if compile_only else JOB_OVERHEAD_SECONDS + ASSEMBLE_ROUTE_SECONDS + (adapters(vendor) if arch != "sm_80" else 0)
         out[arch] = dict(jobs=len(rows) + (0 if compile_only else 1), wall_s=max(shard_s or [0]) + asm, runner_s=sum(shard_s) + asm,
                          swap_gib=max([r["swap_gib"] for r in rows] or [0]))
@@ -587,6 +620,50 @@ def estimate(include, merged, sets, host, host_donor=False, shares=None, compile
     total = dict(jobs=1 + sum(v["jobs"] for v in out.values()), wall_s=max([v["wall_s"] for v in out.values()] or [0]),
                  runner_s=sum(v["runner_s"] for v in out.values()))
     return out, total
+
+
+def recorded_peak_gib(entry, vendor):
+    """RECORDED_UNIT_PEAK_GIB of one merged entry, or None (never packed)."""
+    return RECORDED_UNIT_PEAK_GIB.get((unit_tier(entry), unit_group(entry), vendor))
+
+
+def pack_units(rows, per_job=UNITS_PER_JOB, ram_gib=RUNNER_RAM_GIB):
+    """SEVERAL MERGED UNITS PER SHARD JOB (lane fx-build-tools, 2026-11-18). ROWS are one set's one-unit shard
+    rows (build_plan); units whose RECORDED peaks sum to the runner's RAM or less share a job, up to PER_JOB at
+    once (they run side by side, so the job's wall is about its longest unit's, not the sum). Largest first, each
+    takes the largest partners that still fit; deterministic. A unit without a recorded peak, or with no partner
+    that fits, keeps a job of its own. A packed row keeps its first unit's shard index (each index names that
+    job's upload slots, tools/bincache.py plan_lines, so it stays unique and inside jobs_per_set); its planning
+    peak is the sum of its units' UNIT_PEAK_GIB, and its swap is sized from that."""
+    if per_job < 2:
+        return rows
+    order = sorted(rows, key=lambda r: (-(recorded_peak_gib(r["only"], r["vendor"]) or ram_gib + 1), r["only"]))
+    used, out = set(), []
+    for r in order:
+        if r["only"] in used:
+            continue
+        used.add(r["only"])
+        group = [r]
+        load = recorded_peak_gib(r["only"], r["vendor"])
+        if load is not None:
+            for c in order:
+                if len(group) >= per_job:
+                    break
+                peak = recorded_peak_gib(c["only"], c["vendor"])
+                if c["only"] in used or peak is None or load + peak > ram_gib:
+                    continue
+                used.add(c["only"])
+                group.append(c)
+                load += peak
+        if len(group) == 1:
+            out.append(r)
+            continue
+        entries = sorted(e for g in group for e in g["only"].split())
+        peak = sum(g["peak_gib"] for g in group)
+        out.append(dict(r, shard=min(g["shard"] for g in group), only=" ".join(entries), n=len(entries),
+                        weight=sum(g["weight"] for g in group), peak_gib=peak, swap_gib=swap_gib(peak),
+                        unit=unit_slug(" ".join(entries))))
+    return sorted(out, key=lambda r: (r["set_index"], r["shard"]))
 
 
 def build_plan(src, tokens, shards, modes=None, host_donor=False, compile_groups="", skip_units=""):
@@ -656,6 +733,9 @@ def build_plan(src, tokens, shards, modes=None, host_donor=False, compile_groups
             raise SystemExit("skip-units names entries this plan does not build: " + " ".join(sorted(skip - known)))
         skipped = sorted({r["only"] for r in include if r["only"] in skip})
         include = [r for r in include if r["only"] not in skip]
+    if merged and not compile_groups:
+        # units side by side on one runner, after the skips (a skip names one unit): pack_units
+        include = [r for si in range(len(sets)) for r in pack_units([r for r in include if r["set_index"] == si])]
     per_set, total = estimate(include, bool(merged), sets, host, host_donor, shares, bool(compile_groups))
     return dict(matrix=dict(include=include), sets=sets, host=host, builds=nbuilds, shards=shards,
                 jobs_per_set=jobs_per_set, modes=list(modes or []),

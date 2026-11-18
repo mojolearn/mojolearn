@@ -59,14 +59,17 @@ class PruneTest(unittest.TestCase):
                 put(d / "host-composition/host-composition.json"), put(d / "reuse/plan.json"),
                 put(d / "linux/final/candidate.json"), put(d / "linux/final/mojolearn_core-1.whl"),
                 put(d / "linux/final/split-audit.json"), put(d / "linux/SIZES-1-linux.json"),
-                put(d / "linux/audit/report.json"), put(d / "linux-pack.log"), put(work / "state.json")]
+                put(d / "linux/audit/report.json"), put(d / "linux-pack.log"), put(work / "state.json"),
+                put(d / "reuse/ptx-published/release-build/build/PTX_PROOF.json")]
         drop = [put(d / "legs/cuda-sm_80/cuda-sm_80/release-build/build/sets/cuda.tar.gz", 1000),
                 put(d / "legs/cuda-sm_80/cuda-sm_80/release-build/build/sets/cuda/sm_80/identical/_m.so", 500),
                 put(d / "legs/cuda-sm_89/cuda-sm_89/release-build/build/cuda-tools-12.5.82/bin/ptxas", 300),
                 put(d / "host-composition/sets/cuda/sm_89/host/_h.so", 200),
                 put(d / "reuse/sets/cuda/sm_80/identical/_m.so", 200),
                 put(d / "linux/audit/repaired/mojolearn_core-1.whl", 100),
-                put(d / "linux/mojolearn_core-1.whl", 100)]
+                put(d / "linux/mojolearn_core-1.whl", 100),
+                put(d / "reuse/previous-split/mojolearn_core-0.whl", 400),
+                put(d / "reuse/ptx-published/release-build/build/sets/cuda/sm_80/identical/_p.so", 140)]
         return d, keep, drop
 
     def test_prune_plan_lists_payload_and_never_a_record_or_a_final_wheel(self):
@@ -84,7 +87,7 @@ class PruneTest(unittest.TestCase):
             lines = []
             with mock.patch.object(rc, "sh", return_value=""):
                 freed = rc.prune_set(work, "a" * 40, say=lines.append)
-            self.assertEqual(freed, 1000 + 500 + 300 + 200 + 200 + 100 + 100 + 50)
+            self.assertEqual(freed, 1000 + 500 + 300 + 200 + 200 + 100 + 100 + 400 + 140 + 50)
             self.assertTrue(all(p.is_file() for p in keep))
             self.assertFalse(any(p.exists() for p in drop))
             self.assertFalse(src.exists())

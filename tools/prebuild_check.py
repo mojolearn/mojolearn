@@ -23,7 +23,9 @@ skips it). Three builds were lost on 2026-11-15 to defects these catch:
               binding imports Python), as the pre-push hook runs it, so a commit pushed past the hook cannot build.
               Then the commit's tools/native_caller_audit.py over the commit's blobs (a registered native export or
               dispatch name with no caller, constructed family or keep reason; fb12-dead-names). Seconds.
-  host-parse  (f29f76bf57: two host units did not parse; native-checks passed 166/166 because no check imports those
+  host-parse  (with device-parse since 2026-11-18: the identical device groups through the same parse with the
+              NVIDIA sm_89 column's flags and no GPU; it cannot see what only optimised lowering, ptxas or a GPU finds)
+              (f29f76bf57: two host units did not parse; native-checks passed 166/166 because no check imports those
               doors) .github/workflows/native-checks.yml with suite=host-parse on a free runner: every release host
               group the Linux CPU leg builds (tools/merged_bindings.py plan --dir host --layout release) through
               `mojo build --emit llvm --no-optimization` (parse, type check and elaboration; no LLVM optimisation and no machine
@@ -343,7 +345,9 @@ def utc_now():
 
 
 def host_parse_jobs(view):
-    return [j for j in view.get("jobs") or () if j["name"].startswith("host-parse")]
+    """The parse jobs of a native-checks run: host-parse (the host groups) and device-parse (the identical device
+    groups with the sm_89 column's flags; lane fx-build-tools, 2026-11-18)."""
+    return [j for j in view.get("jobs") or () if j["name"].startswith(("host-parse", "device-parse"))]
 
 
 def run_host_parse(commit, ref, workdir, timeout):
@@ -357,8 +361,11 @@ def run_host_parse(commit, ref, workdir, timeout):
             chosen = chosen or r["databaseId"]
             continue
         jobs = host_parse_jobs(gh_json("run", "view", str(r["databaseId"]), "--json", "jobs"))
-        if jobs and all(j["conclusion"] == "success" for j in jobs):
-            print(f"HOST-PARSE PASS reused run {r['databaseId']}: {len(jobs)} host groups parsed at {commit[:12]}")
+        # a run from before device-parse parsed no GPU unit: it is not reused
+        if (jobs and all(j["conclusion"] == "success" for j in jobs)
+                and any(j["name"].startswith("device-parse") for j in jobs)):
+            print(f"HOST-PARSE PASS reused run {r['databaseId']}: {len(jobs)} host and device groups parsed at "
+                  f"{commit[:12]}")
             return 0
     if chosen is None:
         if not ref:

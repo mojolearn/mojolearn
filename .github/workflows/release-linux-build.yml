@@ -196,7 +196,11 @@ jobs:
     # release route retains its existing six-hour limit for merged compiles.
     timeout-minutes: ${{ inputs.compile_groups != '' && 60 || 360 }}
     strategy:
-      fail-fast: false
+      # RED BUILDS REPORT EARLY (lane fx-build-tools, 2026-11-18): the first failed compile cancels the run's
+      # other shards; before, they ran on and the assemble job compiled the missing unit again (858-1102 s),
+      # so a red build took 40-122 min to report (5 of 13 base builds on Nov 17-18). Archives of shards that
+      # finished are still promoted by the Mac, so the rerun after the fix takes them from the cache.
+      fail-fast: true
       matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
     name: "shard ${{ matrix.vendor }}-${{ matrix.arch }} ${{ matrix.shard }} ${{ matrix.unit }}"
     steps:
@@ -309,7 +313,12 @@ jobs:
 
   assemble:
     needs: [plan, shard]
-    if: always() && needs.plan.result == 'success' && needs.plan.outputs.has_devices == 'true' && inputs.compile_groups == ''
+    # No assemble after a failed or cancelled shard (lane fx-build-tools, 2026-11-18): it would compile the failed
+    # unit again for 15-20 min and fail the same way. A shard job that never ran (every unit skipped, or the
+    # retained assembly of reuse_shards_run) is `skipped` and assembles from the cache as before.
+    if: >-
+      always() && needs.plan.result == 'success' && needs.plan.outputs.has_devices == 'true'
+      && inputs.compile_groups == '' && (needs.shard.result == 'success' || needs.shard.result == 'skipped')
     runs-on: ubuntu-24.04
     timeout-minutes: 360
     strategy:

@@ -45,6 +45,27 @@ class ScopeDefines(unittest.TestCase):
         self.assertNotIn("MOJOLEARN_BUILD_DEFINES", env)
         self.assertEqual(env["PATH"], "/bin")
 
+    def test_comment_and_tombstone_mentions_are_not_reads(self):
+        # the planner's rule (release_reuse.define_readers): a comment-only unit keeps the define-free key
+        (self.repo / "em" / "guard.mojo").write_text(
+            "    # MOJOLEARN_EM_LOOP_CHECK_EVERY: refusal removed (restored; owed B arm)\n"
+            "# TOMBSTONE: MOJOLEARN_EM_LOOP_CHECK_EVERY deleted; `-D MOJOLEARN_EM_LOOP_CHECK_EVERY`\n"
+            '#: "MOJOLEARN_EM_LOOP_CHECK_EVERY" quoted in a comment\n')
+        env, kept = self.scope(["em/guard.mojo"], "MOJOLEARN_EM_LOOP_CHECK_EVERY=1")
+        self.assertEqual(kept, [])
+        self.assertNotIn("MOJOLEARN_BUILD_DEFINES", env)
+
+    def test_name_on_its_own_line_after_is_defined_is_a_read(self):
+        (self.repo / "em" / "split.mojo").write_text(
+            'comptime X = not is_defined[\n    # kept\n    "MOJOLEARN_EM_LOOP_CHECK_EVERY"\n]()\n')
+        _, kept = self.scope(["em/split.mojo"], "MOJOLEARN_EM_LOOP_CHECK_EVERY")
+        self.assertEqual(kept, ["MOJOLEARN_EM_LOOP_CHECK_EVERY"])
+
+    def test_a_script_names_it_by_the_whole_word(self):
+        (self.repo / "bindings" / "build_em.sh").write_text("#!/bin/sh\n# MOJOLEARN_EM_LOOP_CHECK_EVERY\n")
+        _, kept = self.scope([], "MOJOLEARN_EM_LOOP_CHECK_EVERY")
+        self.assertEqual(kept, ["MOJOLEARN_EM_LOOP_CHECK_EVERY"])
+
     def test_unreadable_closure_keeps_every_define(self):
         env = {"MOJOLEARN_BUILD_DEFINES": "A=1,B"}
         with mock.patch.object(bincache, "source_closure", side_effect=bincache.UnkeyableBuild("x")):
@@ -96,7 +117,7 @@ class HostUnitReadsADefine(unittest.TestCase):
             env, kept = bincache.scope_build_defines(REPO, REPO / "bindings/merged_build.sh", HOST_ARGS,
                                                      self.env("cuda-sm_89", SVD + ",MOJOLEARN_ZZ_NOT_READ_ANYWHERE"))
         readers = [rel for rel in sc["closure"] if (REPO / rel).is_file() and rel.endswith(".mojo")
-                   and bincache.define_named(SVD, (REPO / rel).read_text(errors="replace"))]
+                   and bincache.reads_define(rel, (REPO / rel).read_text(errors="replace"), SVD)]
         self.assertTrue(readers, "no file of the x_host closure names %s" % SVD)
         self.assertEqual(kept, [SVD])
         self.assertEqual(env["MOJOLEARN_BUILD_DEFINES"], SVD)
@@ -109,6 +130,35 @@ class HostUnitReadsADefine(unittest.TestCase):
         plain = {leg: self.key(self.env(leg, defines=""))[1] for leg in LEG_ENV}
         self.assertEqual(len(set(plain.values())), 1, plain)
         self.assertNotEqual(set(keys.values()), set(plain.values()))
+
+
+class PlannerAndKeyAgree(unittest.TestCase):
+    """release_reuse.define_readers (the plan) and scope_build_defines (the key) name the same readers
+    (lane fx-build-tools, 2026-11-18: 175 units planned REUSE were keyed with the define and compiled again)."""
+
+    def test_same_readers_at_a_commit(self):
+        import subprocess
+        import release_reuse
+        name = "MOJOLEARN_ZZ_AGREE"
+        files = {"a.mojo": 'comptime A = is_defined["%s"]()\n' % name,
+                 "b.mojo": "# %s: refusal removed\n# TOMBSTONE: %s\n" % (name, name),
+                 "c.mojo": 'comptime C = is_defined[\n    "%s"\n]()\n' % name,
+                 "d.mojo": "fn f(): pass  # %sX\n" % name,
+                 "e.sh": "echo %s\n" % name}
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            for rel, text in files.items():
+                (root / rel).write_text(text)
+            git = ["git", "-C", tmp, "-c", "user.name=t", "-c", "user.email=t@t"]
+            subprocess.run(git[:3] + ["init", "-q"], check=True)
+            subprocess.run(git + ["add", "."], check=True)
+            subprocess.run(git + ["commit", "-q", "-m", "t"], check=True)
+            commit = subprocess.run(git[:3] + ["rev-parse", "HEAD"], check=True, capture_output=True,
+                                    text=True).stdout.strip()
+            plan = release_reuse.define_readers(commit, [name], root)
+            key = {rel for rel, text in files.items() if bincache.reads_define(rel, text, name)}
+        self.assertEqual(plan, {"a.mojo", "c.mojo", "e.sh"})
+        self.assertEqual(plan, key)
 
 
 class LinuxCpuFeaturesArePinned(unittest.TestCase):
