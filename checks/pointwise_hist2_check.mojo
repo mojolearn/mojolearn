@@ -445,6 +445,11 @@ def run_checks() raises:
                         " must be a LOAD choice, never a numeric one",
                     )
                     failures += 1
+        # past this width's first drain: the four pool uploads read these
+        _ = indices_h^
+        _ = target_h^
+        _ = weight_h^
+        _ = cindex_h^
 
     _ = d_idx^
     _ = d_tgt^

@@ -89,6 +89,10 @@ def run_checks() raises:
                 assert_equal(got.unsafe_ptr()[i], UInt32(0xDEADBEEF))
                 assert_equal(gotflags.unsafe_ptr()[i], UInt8(9))
         print("PASS stable partition pattern", pattern)
+    # past the first pattern's drain: the three table uploads above read these
+    _ = hlids^
+    _ = hoff^
+    _ = hsize^
 
 
 # Registered by lane checks-toplevel (2026-11-16): a standalone main() under

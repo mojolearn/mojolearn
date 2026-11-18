@@ -26,3 +26,4 @@ def main() raises:
         rbc_canonicalize_row_order(ctx,ia,ja,rows,nnz)
         ctx.enqueue_copy(dst_ptr=out.unsafe_ptr(),src_buf=ja);ctx.synchronize()
         print("MEASURE id=I13 phase="+String(phase)+" rows="+String(rows)+" degree="+String(degree)+" elapsed_ns="+String(perf_counter_ns()-start))
+    _ = hi^  # past the drain: the ia upload above reads it after its last named use
