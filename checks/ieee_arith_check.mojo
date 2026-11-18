@@ -47,6 +47,15 @@ first.
                         mismatches once NaN is judged as NaN (the first
                         run counted the payload as 9 mismatches).
 
+    8. THE IDENTICAL SEAMS (fb11, 2026-11-17): arms 2 and 4 through
+                        `portable_sqrtf` and `portable_divf`, the code
+                        identical mode runs, judged on every pattern
+                        against the flush model. Arms 2 and 4 now
+                        CHARACTERIZE the vendor sqrt (approximate on
+                        NVIDIA, DEVIATION 258) and arm 8 carries the
+                        identity verdict for sqrt; division stays judged
+                        raw because `portable_divf` is one hardware div.
+
 ## Why the references are exact, not approximate
 
 For div and sqrt: computing in Float64 and rounding once to Float32 IS
@@ -77,6 +86,7 @@ break denormals first).
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu import block_dim, block_idx, thread_idx
 from std.math import fma, sqrt
+from checks.numerics import portable_divf, portable_sqrtf
 
 from std.sys import argv
 
@@ -111,6 +121,26 @@ def arith_kernel(
         out_cos.unsafe_store(i, av / sqrt(bp))
         # the contraction canary: written as the naive chain on purpose
         out_fma.unsafe_store(i, av * bv + cv)
+
+
+def seam_kernel(
+    a: MutPointer[Float32, MutAnyOrigin],
+    bpos: MutPointer[Float32, MutAnyOrigin],
+    out_sqrt: MutPointer[Float32, MutAnyOrigin],
+    out_cos: MutPointer[Float32, MutAnyOrigin],
+    n_in: Int32,
+):
+    # ARM 8 (fb11, 2026-11-17): arms 2 and 4 again, through the IDENTICAL
+    # seams (`identical_sqrt` -> `portable_sqrtf`, `identical_div` ->
+    # `portable_divf`), called directly so the arm does not depend on the
+    # build's numeric mode. Arms 2 and 4 characterize the VENDOR's sqrt;
+    # this arm judges what identical mode actually runs on the device.
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i < Int(n_in):
+        var av = a.unsafe_load(i)
+        var bp = bpos.unsafe_load(i)
+        out_sqrt.unsafe_store(i, portable_sqrtf(abs(av)))
+        out_cos.unsafe_store(i, portable_divf(av, portable_sqrtf(bp)))
 
 
 comptime SZ_CASES = 16
@@ -252,6 +282,15 @@ def run_checks() raises:
         block_dim=(BLOCK, 1, 1),
     )
 
+    var o_sqrt_id = ctx.enqueue_create_buffer[DType.float32](N)
+    var o_cos_id = ctx.enqueue_create_buffer[DType.float32](N)
+    ctx.enqueue_function[seam_kernel](
+        da.unsafe_ptr(), dbp.unsafe_ptr(), o_sqrt_id.unsafe_ptr(),
+        o_cos_id.unsafe_ptr(), Int32(N),
+        grid_dim=(N + BLOCK - 1) // BLOCK,
+        block_dim=(BLOCK, 1, 1),
+    )
+
     var r_div = ctx.enqueue_create_host_buffer[DType.float32](N)
     var r_sqrt = ctx.enqueue_create_host_buffer[DType.float32](N)
     var r_l2 = ctx.enqueue_create_host_buffer[DType.float32](N)
@@ -262,6 +301,10 @@ def run_checks() raises:
     ctx.enqueue_copy(dst_ptr=r_l2.unsafe_ptr(), src_buf=o_l2)
     ctx.enqueue_copy(dst_ptr=r_cos.unsafe_ptr(), src_buf=o_cos)
     ctx.enqueue_copy(dst_ptr=r_fma.unsafe_ptr(), src_buf=o_fma)
+    var r_sqrt_id = ctx.enqueue_create_host_buffer[DType.float32](N)
+    var r_cos_id = ctx.enqueue_create_host_buffer[DType.float32](N)
+    ctx.enqueue_copy(dst_ptr=r_sqrt_id.unsafe_ptr(), src_buf=o_sqrt_id)
+    ctx.enqueue_copy(dst_ptr=r_cos_id.unsafe_ptr(), src_buf=o_cos_id)
     ctx.synchronize()
 
     var q_div = r_div.unsafe_ptr().unsafe_bitcast[UInt32]()
@@ -269,6 +312,11 @@ def run_checks() raises:
     var q_l2 = r_l2.unsafe_ptr().unsafe_bitcast[UInt32]()
     var q_cos = r_cos.unsafe_ptr().unsafe_bitcast[UInt32]()
     var q_fma = r_fma.unsafe_ptr().unsafe_bitcast[UInt32]()
+    var q_sqrt_id = r_sqrt_id.unsafe_ptr().unsafe_bitcast[UInt32]()
+    var q_cos_id = r_cos_id.unsafe_ptr().unsafe_bitcast[UInt32]()
+    var wrong_seam_sqrt = 0
+    var wrong_seam_cos = 0
+    var shown_seam = 0
 
     var wrong_div = 0
     var wrong_sqrt = 0
@@ -350,6 +398,32 @@ def run_checks() raises:
                     hex(_bits(ref_sqrt)),
                 )
                 shown_sq += 1
+        # ARM 8: the seams are judged on EVERY pattern, denormals included,
+        # against the flush model they are written to (operands and result
+        # flushed, one correctly rounded op each); NaN is judged as NaN.
+        var seam_sqrt_ref = ftz_sqrt
+        var seam_t_sq = _ftz(Float32(sqrt(Float64(_ftz(bp)))))
+        var seam_cos_ref = _ftz(
+            Float32(Float64(_ftz(av)) / Float64(seam_t_sq))
+        )
+        if not _same_or_both_nan(q_sqrt_id.unsafe_load(i), seam_sqrt_ref):
+            wrong_seam_sqrt += 1
+            if shown_seam < 6:
+                print(
+                    "  SEAM sqrt mismatch: a=", hex(_bits(av)), " device=",
+                    hex(q_sqrt_id.unsafe_load(i)), " ref=",
+                    hex(_bits(seam_sqrt_ref)),
+                )
+                shown_seam += 1
+        if not _same_or_both_nan(q_cos_id.unsafe_load(i), seam_cos_ref):
+            wrong_seam_cos += 1
+            if shown_seam < 6:
+                print(
+                    "  SEAM cosine mismatch: a=", hex(_bits(av)), " b'=",
+                    hex(_bits(bp)), " device=", hex(q_cos_id.unsafe_load(i)),
+                    " ref=", hex(_bits(seam_cos_ref)),
+                )
+                shown_seam += 1
         if q_l2.unsafe_load(i) != _bits(ref_l2):
             wrong_l2 += 1
         if q_cos.unsafe_load(i) != _bits(ref_cos):
@@ -663,16 +737,42 @@ def run_checks() raises:
             " this backend (see the <-- columns above)"
         )
 
-    var non_denorm = (
-        (wrong_div - denorm_div)
-        + (wrong_sqrt - denorm_sqrt)
-        + (neither - denorm_neither)
+    # ARM 8 VERDICT (fb11, 2026-11-17). The vendor's `std.math.sqrt` is
+    # APPROXIMATE on NVIDIA (`sqrt.approx.ftz.f32`, measured on the H100
+    # 2026-08-23 and the L40S 2026-11-17: 176,577 of 2^20 normals one ulp
+    # off): IDENTITY_PATHS row 10 IS real there, and DEVIATION 258 closed it
+    # by construction -- identical mode never calls the vendor sqrt, it calls
+    # `identical_sqrt` = `portable_sqrtf`. So the raw sqrt arm (2) and the
+    # raw cosine shape (4) CHARACTERIZE the backend and are printed, and the
+    # identity claim is judged on what identical runs: the seam arm (8),
+    # which must be zero wrong on every pattern. Raw DIVISION stays judged
+    # (below): `portable_divf` IS one hardware division, so a fast
+    # reciprocal there would break identical mode directly. Which product
+    # kernels still reach the vendor sqrt is a PTX question (grep
+    # `sqrt.approx` per entry), not one this arm can answer.
+    print(
+        "  SEAM (identical): sqrt", wrong_seam_sqrt, "wrong;  cosine",
+        wrong_seam_cos, "wrong  (judged, every pattern)",
     )
+    var raw_sqrt_normals = wrong_sqrt - denorm_sqrt
+    if raw_sqrt_normals != 0:
+        print(
+            "  raw std.math.sqrt is APPROXIMATE on this backend:",
+            raw_sqrt_normals, "normals wrong -- recorded (DEVIATION 258);",
+            " identical mode must reach it only through identical_sqrt",
+        )
+    if wrong_seam_sqrt + wrong_seam_cos != 0:
+        raise Error(
+            "the IDENTICAL sqrt/cosine seam diverges from the correctly"
+            " rounded flush model on this backend -- identical mode is not"
+            " the same arithmetic here (portable_sqrtf / portable_divf)"
+        )
+    var non_denorm = (wrong_div - denorm_div) + (neither - denorm_neither)
     if non_denorm != 0:
         raise Error(
-            "non-denormal divergence on this backend: a fast reciprocal,"
-            " rsqrt, or third arithmetic is present -- IDENTITY_PATHS"
-            " row 10 is REAL beyond FTZ"
+            "non-denormal divergence on this backend: a fast reciprocal"
+            " or third arithmetic is present in DIVISION or a*b+c --"
+            " IDENTITY_PATHS row 10 is REAL beyond FTZ"
         )
     if wrong_div + wrong_sqrt + neither != 0:
         print(
@@ -737,6 +837,17 @@ def _fma_denormal_involved(
     if prod < 0:
         prod = -prod
     return prod != 0.0 and prod < 1.1754943508222875e-38
+
+
+def _same_or_both_nan(got: UInt32, ref: Float32) -> Bool:
+    """Bit equality, with any NaN equal to any NaN (IEEE specifies WHEN a
+    NaN arises, not its payload; ARM 7 judges NaN the same way)."""
+    var got_nan = (got & UInt32(0x7F800000)) == UInt32(0x7F800000) and (
+        got & UInt32(0x007FFFFF)
+    ) != UInt32(0)
+    if got_nan and ref != ref:
+        return True
+    return got == _bits(ref)
 
 
 def _bits(x: Float32) -> UInt32:
