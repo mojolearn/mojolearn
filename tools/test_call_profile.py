@@ -132,10 +132,12 @@ class HarnessWindow(unittest.TestCase):
             os.mkfifo(ctl)
             os.mkfifo(ack)
             got = []
+            ready = threading.Event()
 
             def fake_perf():      # perf: reads the control FIFO, acks every command
                 rfd = os.open(ctl, os.O_RDONLY | os.O_NONBLOCK)
                 afd = os.open(ack, os.O_RDWR)
+                ready.set()
                 import select
                 try:
                     while len(got) < 2:
@@ -151,8 +153,9 @@ class HarnessWindow(unittest.TestCase):
                     os.close(afd)
             t = threading.Thread(target=fake_perf)
             t.start()
-            import time
-            time.sleep(0.2)
+            # Wait for the reader: a nonblocking writer gets ENXIO before perf has the FIFO open (a fixed 0.2 s sleep
+            # lost that race on a loaded laptop, 2026-11-17 full run).
+            self.assertTrue(ready.wait(10))
             w = os.path.join(d, "window.jsonl")
             env = {SR.FORCE_CALLS_ENV: "20", SR.FORCE_CALLS_PHASE_ENV: "fit", SR.PROFILE_WINDOW_ENV: w,
                    SR.PERF_CTL_ENV: "%s,%s" % (ctl, ack)}
