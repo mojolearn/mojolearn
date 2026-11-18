@@ -1096,11 +1096,17 @@ def test_the_two_mojo_exemptions_are_the_ones_that_were_measured():
     each declare their OWN `U32Stream` and neither imports the other, so
     matching by trait name alone invented an edge and claimed 80 missing
     lanes."""
-    for rel in ("checks/feature_tensor_check.mojo", "checks/newton_walker_check.mojo",
-                "checks/pointwise_loop_check.mojo", "ensemble/checks/core_primitives_check.mojo",
-                "ensemble/checks/philox_check.mojo"):
+    for rel in ("ensemble/checks/core_primitives_check.mojo", "ensemble/checks/philox_check.mojo"):
         assert lane_select.is_standalone_program(rel), \
             f"{rel} was a standalone program and is not any more; the exemption needs re-deriving"
+    # Three checks/ mains became registered `run_checks` modules on purpose (d670f88186: the column
+    # runner imports them). They are no longer standalone, so the exemption no longer covers them, and
+    # they must still reach no lane: a test that conforms to a trait is not an implementation of it.
+    _, rev = _lane_sets()
+    for rel in ("checks/feature_tensor_check.mojo", "checks/newton_walker_check.mojo",
+                "checks/pointwise_loop_check.mojo"):
+        assert not lane_select.is_standalone_program(rel), f"{rel} has its own main again; move it back above"
+        assert not rev.get(rel), f"{rel} is a registered check and reaches lanes {sorted(rev[rel])[:5]}"
     for rel in ("gbdt/methods/kernel/pointwise_hist2_one_byte_7bit.mojo",
                 "gbdt/methods/leaves_estimation/pointwise_oracle.mojo",
                 "core/philox.mojo", "mamba/host/gen/philox.mojo"):
@@ -1592,13 +1598,14 @@ def test_an_export_reaches_what_its_impl_reaches():
     assert "bindings/forest_inference_binding_door.mojo" in syms.get(exports["forest_prepare_gpu"], set()), \
         "the imported impl does not resolve to the file that defines it"
 
-    # the file-local helper
+    # the file-local helper (the case moved with the fit boundary split: the shard export now calls the
+    # parametric helper `_rf_fit_py[...]`, and only that helper names the imported `forest_fit_args_py`)
     impl = exports["rf_classifier_fit_shard"]
-    assert "upload_forest_x" not in blocks[impl], \
+    assert "forest_fit_args_py" not in blocks[impl], \
         "the export's own body names it now; pick a new case"
-    assert "_rf_classifier_fit" in blocks[impl], "the helper call moved; pick a new case"
-    assert "upload_forest_x" in blocks["_rf_classifier_fit"], "the helper moved"
-    assert "ensemble/device_layout.mojo" in syms["upload_forest_x"]
+    assert "_rf_fit_py[" in blocks[impl], "the helper call moved; pick a new case"
+    assert "forest_fit_args_py" in blocks["_rf_fit_py"], "the helper moved"
+    assert "bindings/forest_fit_boundary_unpack.mojo" in syms["forest_fit_args_py"]
 
 
 def test_native_door_walk_preserves_required_dependencies():
@@ -1667,13 +1674,18 @@ def test_an_aliased_mojo_import_is_recorded_under_the_name_the_body_uses():
     tree was therefore invisible to the scan, and reached the `umap` lane only
     because the metrics HOST family happens to list umap/graph.mojo among its
     host modules. `par-graph-umap`, which runs the same fit across devices and
-    is not in that family, was credited with none of it."""
-    syms = lane_select._mojo_import_symbols("bindings/_mojolearn_metrics.mojo")
-    body = lane_select._mojo_blocks_for("bindings/_mojolearn_metrics.mojo")["umap_fit_transform_binding"]
-    assert "umap_fit_transform(" in body, "the export stopped calling the alias; pick a new case"
-    assert "umap/estimator.mojo" in syms.get("umap_fit_transform", set()), \
+    is not in that family, was credited with none of it.
+
+    THE CASE MOVED: the UMAP export now takes typed native words and imports
+    no umap alias. The same shape today is bindings/_mojolearn_svm.mojo,
+    `from svm.estimator import _family_ctx as _sg_family_ctx`, called by
+    `svm_scale_gamma_limbs_binding`."""
+    syms = lane_select._mojo_import_symbols("bindings/_mojolearn_svm.mojo")
+    body = lane_select._mojo_blocks_for("bindings/_mojolearn_svm.mojo")["svm_scale_gamma_limbs_binding"]
+    assert "_sg_family_ctx(" in body, "the export stopped calling the alias; pick a new case"
+    assert "svm/estimator.mojo" in syms.get("_sg_family_ctx", set()), \
         "the alias the body uses is not in the import table"
-    assert not re.search(r"\bfit_transform\b", body), \
+    assert not re.search(r"\b_family_ctx\b", body), \
         "the ORIGINAL name matches the body after all, so this test cannot fail"
 
     rev = lane_select.reverse_map()
