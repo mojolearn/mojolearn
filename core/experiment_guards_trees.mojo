@@ -645,6 +645,11 @@ def _check_configuration() -> Bool:
     # Restore: git apply experiments/removed/MOJOLEARN_SYM_EST_ALL_OFF.patch
     comptime assert not is_defined["MOJOLEARN_SYM_EST_ALL_OFF"](), "removed 2026-11-15 (lane/expdel2-44-trees): SYM_EST_ALL_OFF (old path, Trees (GBDT symmetric estimation bundle rollback, FAST Apple)) is gone; the default path is the only one; code recoverable at ab7c8ba7f3; restore: experiments/removed/MOJOLEARN_SYM_EST_ALL_OFF.patch"
     # ---- end lane expdel2-44-trees
+    # ---- lane fb15-ab-verdicts (2026-11-18): A/B verdicts of ab1 (NVIDIA L40S, wheel d652a4b0a1)
+    # TOMBSTONE: MOJOLEARN_TREES_BLOCK_SCRATCH_FILL_OFF (DROPPED-slower: whole-buffer zero 1.38-1.40x on gbdt-lossguide istella fit, NV L40S 2026-11-18) deleted 2026-11-18 by lane/fb15-ab-verdicts; code recoverable at c989eb9222.
+    # Restore: git apply experiments/removed/MOJOLEARN_TREES_BLOCK_SCRATCH_FILL_OFF.patch; record in docs/TOMBSTONES.md.
+    comptime assert not is_defined["MOJOLEARN_TREES_BLOCK_SCRATCH_FILL_OFF"](), "removed 2026-11-18 (lane/fb15-ab-verdicts, A/B ab1 NVIDIA L40S, wheel d652a4b0a1, one run per arm): the whole-buffer histogram scratch zero was 1.38-1.40x slower on gbdt-lossguide istella fit (13.92 -> 19.24 s, 14.28 -> 20.02 s), digests equal; the block-span zero is the one form; recoverable at c989eb9222"
+    # ---- end lane fb15-ab-verdicts
     return True
 
 
