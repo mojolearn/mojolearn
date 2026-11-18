@@ -691,8 +691,13 @@ def _xcnn_tensor_raw(module: PythonObject, shape: PythonObject, h: PythonObject,
                      context: PythonObject) raises -> PythonObject:
     """`xcnn_tensor` after this operation's `xcnn_tensor_layout`: the five
     slots written without re-walking the class layout once per slot."""
-    var b = xcnn_builtins()
-    var t = py_call(py_call(b.getattr, b.object, "__new__"), context["xcnn_tensor_class"])
+    # fx-cnn-layers (2026-11-18): `object.__new__(cls)` is the class's
+    # ordinary heap allocation (`native_storage_allocate`, the form
+    # bindings/native_buffer_owner_pack.mojo uses for its own class); it was
+    # found through `getattr(object, "__new__")` and called through two
+    # envelopes per output tensor. No Python `__new__` or `__init__` runs in
+    # either form; the five slots are written below.
+    var t = native_storage_allocate(xcnn_item(context, XK_TENSOR_CLASS))
     _xcnn_set_raw(t, "b", module, context)
     _xcnn_set_raw(t, "shape", shape, context)
     _xcnn_set_raw(t, "h", h, context)
@@ -708,8 +713,26 @@ def xcnn_new(entries: PythonObject, shape: List[Int], nofill: Bool, context: Pyt
     # (x_cnn/host/entry_runs_host.mojo), the entry the Python lookup fell back to.
     var xc = xcnn_ref(entries)
     var h = xcnn_call(xc, XC_RES_ALLOC_NOFILL if nofill else XC_RES_ALLOC, List[Int](), [max(xcnn_size(shape), 1)])
-    return xcnn_tensor(entries["module"], xcnn_tuple(shape), PythonObject(h), PythonObject(None), PythonObject(None),
-                       context)
+    return xcnn_tensor(xcnn_item(entries, XK_MODULE), xcnn_tuple(shape), PythonObject(h), PythonObject(None),
+                       PythonObject(None), context)
+
+
+def xcnn_alloc_op(entries: PythonObject, context: PythonObject) raises -> Int:
+    """The allocation operation `xcnn_out_new` runs for an output whose
+    every word the entry stores: unfilled under the resident glue, the
+    filled allocation otherwise. For a door that allocates the output in
+    the same GIL window as the entry that fills it (`xcnn_adopt`)."""
+    return XC_RES_ALLOC_NOFILL if xcnn_resident(entries, context) else XC_RES_ALLOC
+
+
+def xcnn_adopt(entries: PythonObject, shape: List[Int], h: Int, context: PythonObject) raises -> PythonObject:
+    """The `DeviceTensor` of `shape` that owns resident array `h`, which the
+    caller just allocated on this binding (`xcnn_alloc_op`) in the GIL
+    window of the entry that filled it. The object `xcnn_new` returns for
+    the same handle. The caller ran `xcnn_tensor_layout` in this operation
+    (it admitted a tensor input) and no Python code ran since."""
+    return _xcnn_tensor_raw(xcnn_item(entries, XK_MODULE), xcnn_tuple(shape), PythonObject(h), PythonObject(None),
+                            PythonObject(None), context)
 
 
 def xcnn_out_new(entries: PythonObject, shape: List[Int], context: PythonObject) raises -> PythonObject:
@@ -750,12 +773,21 @@ def xcnn_wrap(entries: PythonObject, array: PythonObject, context: PythonObject)
 
 def xcnn_module_entries(module: PythonObject, context: PythonObject) raises -> PythonObject:
     """The connected entries whose module is `module`."""
-    var b = xcnn_builtins()
-    var table = context["xcnn_bindings"]
-    var keys = Python.tuple("identical", "fast")
+    # fx-cnn-layers (2026-11-18): the two mode names are held (it built a
+    # tuple of two fresh strs per call), and connected entries (an exact
+    # dict) are told from a connection error text (a str) by an exact-type
+    # test before the `isinstance` call, as `xcnn_entries` does. Every tensor
+    # admission and every resident-owner admission runs this.
+    var table = xcnn_item(context, XK_BINDINGS)
     for i in range(2):  # driver-loop: over the two numeric modes
-        var entries = py_get(table, keys[i])
-        if entries is not None and not Bool(py=py_call(b.isinstance, entries, b.str)) and entries["module"] is module:
+        var entries = xcnn_get(table, XK_IDENTICAL + i)
+        if entries is None:
+            continue
+        if not xcnn_exact(entries, XT_DICT):
+            var b = xcnn_builtins()
+            if Bool(py=py_call(b.isinstance, entries, b.str)):
+                continue
+        if xcnn_item(entries, XK_MODULE) is module:
             return entries
     raise Error("RuntimeError: a DeviceTensor of a binding this process did not connect")
 
@@ -890,13 +922,12 @@ def xcnn_addr(value: PythonObject) raises -> PythonObject:
 # ---------------------------------------------------------------- the layer's resident arrays
 
 def xcnn_dev_fields(dev: PythonObject, context: PythonObject) raises -> PythonObject:
-    if py_type(dev) is not context["xcnn_dev_class"]:
+    if py_type(dev) is not xcnn_item(context, XK_DEV_CLASS):
         raise Error("TypeError: CNN resident state requires its connected native owner")
     var fields = _fields(dev)
-    _ = xcnn_module_entries(fields["b"], context)
-    var table = fields["h"]
-    var b = xcnn_builtins()
-    if py_type(table) is not b.dict:
+    _ = xcnn_module_entries(xcnn_item(fields, XK_B), context)
+    var table = xcnn_item(fields, XK_H)
+    if not xcnn_exact(table, XT_DICT):
         raise Error("TypeError: CNN resident handles require an exact dictionary")
     # p3-cnn-sequence-tsa: a handle table that passed the full check below and
     # has not changed since (a dictionary watcher sees every insert, replace,
@@ -904,6 +935,7 @@ def xcnn_dev_fields(dev: PythonObject, context: PythonObject) raises -> PythonOb
     # it about ten times per call. Python 3.10/3.11 keep the walk.
     if dict_keys_admitted(table):
         return fields
+    var b = xcnn_builtins()
     var names = py_call(b.list, table.keys())
     for i in range(len(names)):  # driver-loop: native resident buffer allocation metadata
         if py_type(names[i]) is not b.str:
@@ -953,15 +985,18 @@ def _xcnn_settle_old_dev(fields: PythonObject, dev: PythonObject, context: Pytho
             py_setitem(fields, PythonObject(name), PythonObject(None))
 
 
-def xcnn_dev(layer: PythonObject, entries: PythonObject, context: PythonObject) raises -> PythonObject:
-    """`_dev_of(layer, b)`: the layer's `_Dev` on this binding, a new one
-    (the old one's arrays freed) when the binding changed."""
-    var b = xcnn_builtins()
-    var fields = _fields(layer)
-    var dev = py_get(fields, "_dev")
-    if dev is not None and xcnn_dev_fields(dev, context)["b"] is entries["module"]:
-        return dev
+def _xcnn_dev_admitted(fields: PythonObject, entries: PythonObject, context: PythonObject,
+                       mut table: PythonObject) raises -> PythonObject:
+    """`xcnn_dev` on the layer's instance fields (`_fields(layer)`, read by
+    the caller); `table` receives the owner's handle table, admitted here
+    (an existing owner's by `xcnn_dev_fields`, a fresh owner's empty one)."""
+    var dev = xcnn_get(fields, XK_DEV)
     if dev is not None:
+        var state = xcnn_dev_fields(dev, context)
+        if xcnn_item(state, XK_B) is xcnn_item(entries, XK_MODULE):
+            table = xcnn_item(state, XK_H)
+            return dev
+        var b = xcnn_builtins()
         # p3-cnn-sequence-tsa (hazard C): fields that name a handle of the
         # old owner are settled before its handles are freed (pending weight
         # gradients and a dropout mask downloaded to the host, the rest
@@ -969,40 +1004,64 @@ def xcnn_dev(layer: PythonObject, entries: PythonObject, context: PythonObject) 
         _xcnn_settle_old_dev(fields, dev, context)
         # `_Dev.free()`: every handle of the old binding released, the table emptied
         var old = xcnn_dev_fields(dev, context)
-        var table = old["h"]
+        var old_table = old["h"]
         var owner = xcnn_module_entries(old["b"], context)
         var xco = xcnn_ref(owner)
-        var handles = py_call(b.list, py_call(py_call(b.getattr, table, "values")))
+        var handles = py_call(b.list, py_call(py_call(b.getattr, old_table, "values")))
         py_setitem(old, "h", Python.dict())
         for i in range(len(handles)):  # driver-loop: over the layer's resident array table
             _ = xcnn_call(xco, XC_RES_FREE, [xcnn_word(handles[i][0])], List[Int]())
-    dev = py_call(py_call(b.getattr, b.object, "__new__"), context["xcnn_dev_class"])
-    var state = _fields(dev)
-    py_setitem(state, "b", entries["module"])
-    py_setitem(state, "h", Python.dict())
+    var bi = xcnn_builtins()
+    dev = py_call(py_call(bi.getattr, bi.object, "__new__"), context["xcnn_dev_class"])
+    var fresh = Python.dict()
+    var made = _fields(dev)
+    py_setitem(made, "b", xcnn_item(entries, XK_MODULE))
+    py_setitem(made, "h", fresh)
     py_setitem(fields, "_dev", dev)
+    table = fresh
     return dev
+
+
+def xcnn_dev(layer: PythonObject, entries: PythonObject, context: PythonObject) raises -> PythonObject:
+    """`_dev_of(layer, b)`: the layer's `_Dev` on this binding, a new one
+    (the old one's arrays freed) when the binding changed."""
+    var table = PythonObject(None)
+    return _xcnn_dev_admitted(_fields(layer), entries, context, table)
+
+
+def xcnn_dev_get_f(fields: PythonObject, entries: PythonObject, name: String, count: Int,
+                   context: PythonObject) raises -> PythonObject:
+    """`xcnn_dev_get` for a caller that already holds the layer's instance
+    fields (`_fields(layer)`, read in this operation): the layer's resident
+    array `name` of `count` words, reallocated only when its size changes."""
+    # fx-cnn-layers (2026-11-18): one admission of the owner per call. It
+    # read the layer's instance dictionary again, admitted the owner, then
+    # read the owner's instance dictionary a second time for the table the
+    # admission had just checked: three instance-dictionary admissions (each
+    # a class record, a key scan and a module stamp) for one handle. Max
+    # pools, dropout, batch norm and the graph layers call this one to eight
+    # times per forward.
+    var n = max(count, 1)
+    var table = PythonObject(None)
+    _ = _xcnn_dev_admitted(fields, entries, context, table)
+    var key = PythonObject(name)
+    var cur = py_get(table, key)
+    if cur is not None and Int(py=xcnn_at(cur, 1)) == n:
+        return xcnn_at(cur, 0)
+    var xc = xcnn_ref(entries)
+    if cur is not None:
+        _ = xcnn_call(xc, XC_RES_FREE, [xcnn_word(xcnn_at(cur, 0))], List[Int]())
+        _ = py_call(py_call(xcnn_builtins().getattr, table, "pop"), key)
+    var handle = PythonObject(xcnn_call(xc, XC_RES_ALLOC, List[Int](), [n]))
+    py_setitem(table, key, Python.tuple(handle, n))
+    return handle
 
 
 def xcnn_dev_get(layer: PythonObject, entries: PythonObject, name: String, count: Int,
                  context: PythonObject) raises -> PythonObject:
     """`_Dev.get(name, n)`: the layer's resident array `name` of `n` words,
     reallocated only when its size changes."""
-    var n = max(count, 1)
-    var dev = xcnn_dev(layer, entries, context)
-    # `xcnn_dev` admitted an existing owner (or made a fresh one with an
-    # empty table) and no Python code ran since: its table is read directly.
-    var table = _fields(dev)["h"]
-    var cur = py_get(table, PythonObject(name))
-    if cur is not None and Int(py=cur[1]) == n:
-        return cur[0]
-    var xc = xcnn_ref(entries)
-    if cur is not None:
-        _ = xcnn_call(xc, XC_RES_FREE, [xcnn_word(cur[0])], List[Int]())
-        _ = py_call(py_call(xcnn_builtins().getattr, table, "pop"), PythonObject(name))
-    var handle = PythonObject(xcnn_call(xc, XC_RES_ALLOC, List[Int](), [n]))
-    py_setitem(table, PythonObject(name), Python.tuple(handle, n))
-    return handle
+    return xcnn_dev_get_f(_fields(layer), entries, name, count, context)
 
 
 def xcnn_dev_upload(layer: PythonObject, entries: PythonObject, name: String, array: PythonObject,
