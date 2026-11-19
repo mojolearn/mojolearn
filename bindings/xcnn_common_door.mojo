@@ -202,11 +202,6 @@ def xcnn_exact(value: PythonObject, kind: Int) raises -> Bool:
     return _xcnn_exact_in(_xcnn_names(), value, kind)
 
 
-def _xcnn_exact_ptr(value: PyObjectPtr, kind: Int) raises -> Bool:
-    """`xcnn_exact` of a borrowed item pointer (its container is alive)."""
-    return _xcnn_exact_in(_xcnn_names(), PythonObject(from_borrowed=value), kind)
-
-
 def xcnn_plain_scalar(value: PythonObject) raises -> Bool:
     """`value` is None or an exact int, float, bool or str: exactly the
     values the plain-value scan (`neural_plain_value`) admits at its first
