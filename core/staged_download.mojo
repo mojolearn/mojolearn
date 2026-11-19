@@ -24,6 +24,7 @@ from core.step_phase import (
     step_count_sync,
 )
 from core.shared_slot import SharedSlot
+from core.ctx_key import ctx_cache_key
 
 
 def download_f32_into[pool: StaticString = _STAGE_NAME](
@@ -122,8 +123,8 @@ def download_f32_into_scanned[pool: StaticString = _STAGE_NAME](
         if b1 >= 0 and bad < 0:
             bad = (k + 1) * chunk + b1
         k += 2
-    _stage_give[pool](st0^)
-    _stage_give[pool](st1^)
+    _stage_give[pool](ctx, st0^)
+    _stage_give[pool](ctx, st1^)
     return bad
 
 
@@ -191,24 +192,41 @@ def download_chunk_floats() -> Int:
 
 
 struct _StagePool(Defaultable, Movable):
-    """The pinned stages kept between calls, all of `n` floats."""
+    """The pinned stages kept between calls, all of `n` floats and all made
+    on the context `key` names (core/ctx_key.mojo)."""
     var bufs: List[HostBuffer[DType.float32]]
     var n: Int
+    #: fx-leftovers-product (2026-11-19): the context the kept stages were
+    #: made on, as core/msel_device.mojo `_MselStages.key` holds it. A pool
+    #: name is per module and tier, and a module can be linked into more than
+    #: one binding (cholesky into the gaussian_process binding, ivf_flat_build
+    #: into x_ann, the metrics device_io into x_cnn), so a name alone did not
+    #: stop a pinned stage made by one context reaching a copy on another.
+    var key: Int
 
     def __init__(out self):
         self.bufs = List[HostBuffer[DType.float32]]()
         self.n = 0
+        self.key = 0
 
 
 comptime _STAGE_NAME = "MojolearnDownloadStagesIdenticalV1" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnDownloadStagesFastV1"
-comptime DOWNLOAD_STAGES = SharedSlot[_StagePool, _STAGE_NAME]
+#: Layout version of `_StagePool` for every pool name (2: `key` added).
+comptime _STAGE_LAYOUT = 2
+comptime DOWNLOAD_STAGES = SharedSlot[_StagePool, _STAGE_NAME, _STAGE_LAYOUT]
 
 
 def _stage_take[name: StaticString](ctx: DeviceContext, chunk: Int) raises -> HostBuffer[DType.float32]:
     """A pooled pinned stage of at least `chunk` floats, else a new one (a
-    larger chunk retires the smaller stages)."""
-    comptime SLOT = SharedSlot[_StagePool, name]
+    larger chunk retires the smaller stages, and so does a take on another
+    context: a stage is never handed across contexts)."""
+    comptime SLOT = SharedSlot[_StagePool, name, _STAGE_LAYOUT]
     var pool = SLOT.get_or_create_ptr()
+    # One word read from the context's handle; no lookup (core/ctx_key.mojo).
+    var key = ctx_cache_key(ctx)
+    if pool[].key != key:
+        pool[].bufs.clear()
+        pool[].key = key
     if pool[].n < chunk:
         pool[].bufs.clear()
         pool[].n = chunk
@@ -218,10 +236,13 @@ def _stage_take[name: StaticString](ctx: DeviceContext, chunk: Int) raises -> Ho
     return ctx.enqueue_create_host_buffer[DType.float32](pool[].n)
 
 
-def _stage_give[name: StaticString](var stage: HostBuffer[DType.float32]) raises:
-    comptime SLOT = SharedSlot[_StagePool, name]
+def _stage_give[name: StaticString](ctx: DeviceContext, var stage: HostBuffer[DType.float32]) raises:
+    """Return a stage made on `ctx`: kept while the pool is still that
+    context's and holds fewer than DOWNLOAD_STAGE_KEEP; dropped otherwise."""
+    comptime SLOT = SharedSlot[_StagePool, name, _STAGE_LAYOUT]
     var pool = SLOT.get_or_create_ptr()
-    if len(stage) == pool[].n and len(pool[].bufs) < DOWNLOAD_STAGE_KEEP:
+    if (pool[].key == ctx_cache_key(ctx) and len(stage) == pool[].n
+            and len(pool[].bufs) < DOWNLOAD_STAGE_KEEP):
         pool[].bufs.append(stage^)
 
 
