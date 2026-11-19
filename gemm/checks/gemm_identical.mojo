@@ -9925,12 +9925,12 @@ def _kpack_list_launch[
 ](
     ctx: DeviceContext,
     tab: MutPointer[Int32, MutAnyOrigin],
-    p: List[MutPointer[Float32, MutAnyOrigin]],
+    p: List[Int],
     blocks: Int,
 ) raises:
     """One work-list launch at the shipped packed geometry (the parameters
     `_kpack_hg_run_with_ws` passes `_kpack_launch`), `PAGES` computed as
-    `_kpack_launch` computes it. `p` holds `3 GEMM_WORKLIST_MAX` pointers,
+    `_kpack_launch` computes it. `p` holds `3 GEMM_WORKLIST_MAX` device addresses,
     `(d, a, b)` per row; `blocks` is the sum of the rows' block runs. No
     wait: the caller keeps the table, the operands and the workspace alive
     past its own synchronize."""
@@ -9952,9 +9952,34 @@ def _kpack_list_launch[
     ]
     ctx.enqueue_function[kern](
         tab,
-        p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7],
-        p[8], p[9], p[10], p[11], p[12], p[13], p[14], p[15],
-        p[16], p[17], p[18], p[19], p[20], p[21], p[22], p[23],
+        # Device ADDRESSES made pointers at the launch (the form of core/generation_policy_impl.mojo:62 and
+        # autograd/program_device_execution.mojo:26): a struct field may not hold an AnyOrigin pointer, so the
+        # list keeps addresses. Host side only, and only on the column the arm compiles for; no kernel turns
+        # an integer into a pointer.
+        MutPointer[Float32, MutAnyOrigin](unsafe_from_address=p[0]),
+        MutPointer[Float32, MutAnyOrigin](unsafe_from_address=p[1]),
+        MutPointer[Float32, MutAnyOrigin](unsafe_from_address=p[2]),
+        MutPointer[Float32, MutAnyOrigin](unsafe_from_address=p[3]),
+        MutPointer[Float32, MutAnyOrigin](unsafe_from_address=p[4]),
+        MutPointer[Float32, MutAnyOrigin](unsafe_from_address=p[5]),
+        MutPointer[Float32, MutAnyOrigin](unsafe_from_address=p[6]),
+        MutPointer[Float32, MutAnyOrigin](unsafe_from_address=p[7]),
+        MutPointer[Float32, MutAnyOrigin](unsafe_from_address=p[8]),
+        MutPointer[Float32, MutAnyOrigin](unsafe_from_address=p[9]),
+        MutPointer[Float32, MutAnyOrigin](unsafe_from_address=p[10]),
+        MutPointer[Float32, MutAnyOrigin](unsafe_from_address=p[11]),
+        MutPointer[Float32, MutAnyOrigin](unsafe_from_address=p[12]),
+        MutPointer[Float32, MutAnyOrigin](unsafe_from_address=p[13]),
+        MutPointer[Float32, MutAnyOrigin](unsafe_from_address=p[14]),
+        MutPointer[Float32, MutAnyOrigin](unsafe_from_address=p[15]),
+        MutPointer[Float32, MutAnyOrigin](unsafe_from_address=p[16]),
+        MutPointer[Float32, MutAnyOrigin](unsafe_from_address=p[17]),
+        MutPointer[Float32, MutAnyOrigin](unsafe_from_address=p[18]),
+        MutPointer[Float32, MutAnyOrigin](unsafe_from_address=p[19]),
+        MutPointer[Float32, MutAnyOrigin](unsafe_from_address=p[20]),
+        MutPointer[Float32, MutAnyOrigin](unsafe_from_address=p[21]),
+        MutPointer[Float32, MutAnyOrigin](unsafe_from_address=p[22]),
+        MutPointer[Float32, MutAnyOrigin](unsafe_from_address=p[23]),
         grid_dim=(blocks, 1, 1),
         block_dim=(NTH, 1, 1),
     )
@@ -10015,9 +10040,8 @@ struct GemmWorklist(Movable):
     var nodes: Int
     var item: List[Int]
     var span: List[Int]
-    var ptr: List[MutPointer[Float32, MutAnyOrigin]]
     var row: List[Int]
-    var lp: List[MutPointer[Float32, MutAnyOrigin]]
+    var lp: List[Int]
     var tabs: List[DeviceBuffer[DType.int32]]
     var hosts: List[HostBuffer[DType.int32]]
     var next_slot: Int
@@ -10027,9 +10051,8 @@ struct GemmWorklist(Movable):
         self.nodes = 0
         self.item = List[Int]()
         self.span = List[Int]()
-        self.ptr = List[MutPointer[Float32, MutAnyOrigin]]()
         self.row = List[Int]()
-        self.lp = List[MutPointer[Float32, MutAnyOrigin]]()
+        self.lp = List[Int]()
         self.tabs = List[DeviceBuffer[DType.int32]]()
         self.hosts = List[HostBuffer[DType.int32]]()
         self.next_slot = 0
@@ -10040,7 +10063,6 @@ struct GemmWorklist(Movable):
         self.nodes = 0
         self.item.clear()
         self.span.clear()
-        self.ptr.clear()
 
     def full(self) -> Bool:
         return self.count >= GEMM_WORKLIST_MAX
@@ -10138,9 +10160,6 @@ struct GemmWorklist(Movable):
         self.span.append(na)
         self.span.append(pb)
         self.span.append(nb)
-        self.ptr.append(c)
-        self.ptr.append(a)
-        self.ptr.append(b)
         self.nodes += m * n * groups
         self.count += 1
         return True
@@ -10197,11 +10216,11 @@ struct GemmWorklist(Movable):
                 var run = self.item[ib + 13]
                 if mode == GEMM_WORKLIST_GROUP:
                     run = run * self.item[ib + 11]
-                    self.lp.append(ws + self.item[ib + 15])
+                    self.lp.append(Int(ws) + 4 * self.item[ib + 15])
                 else:
-                    self.lp.append(self.ptr[3 * e])
-                self.lp.append(self.ptr[3 * e + 1])
-                self.lp.append(self.ptr[3 * e + 2])
+                    self.lp.append(self.span[6 * e])
+                self.lp.append(self.span[6 * e + 2])
+                self.lp.append(self.span[6 * e + 4])
                 for w in range(GEMM_WORKLIST_ROW):
                     if w == GEMM_WORKLIST_COL_FIRST:
                         self.row.append(blocks)
@@ -10223,9 +10242,12 @@ struct GemmWorklist(Movable):
                         self.row.append(1)
                     else:
                         self.row.append(0)
-                self.lp.append(self.lp[0])
-                self.lp.append(self.lp[1])
-                self.lp.append(self.lp[2])
+                var pad_d = self.lp[0]
+                var pad_a = self.lp[1]
+                var pad_b = self.lp[2]
+                self.lp.append(pad_d)
+                self.lp.append(pad_a)
+                self.lp.append(pad_b)
             var slot = self._table(ctx)
             var tab = self.tabs[slot].unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
             if mode == GEMM_WORKLIST_GROUP:
@@ -10239,7 +10261,8 @@ struct GemmWorklist(Movable):
                         if self.item[fb] != mode:
                             continue
                         _kpack_list_fold_launch(
-                            ctx, self.ptr[3 * e], ws + self.item[fb + 15],
+                            ctx, MutPointer[Float32, MutAnyOrigin](unsafe_from_address=self.span[6 * e]),
+                            MutPointer[Float32, MutAnyOrigin](unsafe_from_address=Int(ws) + 4 * self.item[fb + 15]),
                             self.item[fb + 1], self.item[fb + 2], self.item[fb + 11],
                         )
             else:

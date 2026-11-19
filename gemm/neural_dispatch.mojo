@@ -362,7 +362,7 @@ struct GemmWorkspace(Movable):
     # off list_add IS run, in the caller's order, and the other two calls compile to nothing. With it on, every
     # product whose own launch is the packed body shares one launch per mode with the others (gemm_identical.mojo,
     # "THE WORK LIST": same blocks, same body, same words); any other product runs its own launch inside list_add.
-    # Lifetime: list_add records pointers. The caller keeps every c, a and b alive past the synchronize that
+    # Lifetime: list_add records device addresses. The caller keeps every c, a and b alive past the synchronize that
     # follows list_run (name them after list_run, or hold them in a struct the caller keeps), as for run.
 
     def list_begin(mut self):
