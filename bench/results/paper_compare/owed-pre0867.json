@@ -4948,6 +4948,22 @@
     "fx-lc-test-reuse"
    ],
    "decides": "promote B when it is faster with every score equal to A's on taxi and istella, on taxi at 300,000 rows and on covtype (non-board); review the in-place-transform note beside MSEL_LC_TEST_REUSE before promoting; else delete the arm with its tombstone"
+  },
+  {
+   "id": "sqrt-comptime-step-off-trustworthiness",
+   "source": "lane fx-board-modelsel-metrics (2026-11-19): algos/metric-trustworthiness taxi 164 ms and istella 467 ms on d3549c756b (host bd9c355c19c0) against 38 and 109 ms for d95f805cce on host 26ee0a3b0f86; trust_rank_kernel (metrics/impl/stats/detail/trustworthiness_score.mojo) makes n^2 pinned sqrts and the only source change under it between those builds is the comptime sqrt step",
+   "kind": "ab",
+   "lane": [
+    "metric-trustworthiness",
+    "cagra",
+    "ann-refine"
+   ],
+   "dataset": "*",
+   "rows": "full",
+   "b_arms": [
+    "sqrt-comptime-step-off"
+   ],
+   "decides": "whether the promoted comptime sqrt step is what slowed trust_rank_kernel: if B (the run-time loop) is faster on metric-trustworthiness, the promotion is revisited for kernels that inline one sqrt per pair; if A and B agree the 4.3x is the box and the row is closed. cagra and ann-refine ride along as the other distance rows of this lane"
   }
  ]
 }
