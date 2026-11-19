@@ -735,11 +735,13 @@
   },
   "fast-matrix-units-tf32": {
    "define": "MOJOLEARN_GEMM_FAST_MATRIX_UNITS=1 (with MOJOLEARN_MODE_FAST_ROWS)",
-   "status": "define in code (gemm/fast_matrix_units.mojo MATRIX_UNITS_KIND): B routes large neural FP32 GEMMs of callers with the vendor route open, and the sequence executor's plain dense row-major GEMM launches, to linalg.matmul (TF32 operands, FP32 accumulation); A = the FP32 kernels"
+   "status": "define in code (gemm/fast_matrix_units.mojo MATRIX_UNITS_KIND): B routes large neural FP32 GEMMs of callers with the vendor route open, and the sequence executor's plain dense row-major GEMM launches, to linalg.matmul (TF32 operands, FP32 accumulation); A = the FP32 kernels",
+   "owed": "RUN"
   },
   "fast-matrix-units-tf32-all": {
    "define": "MOJOLEARN_GEMM_FAST_MATRIX_UNITS=3 (with MOJOLEARN_MODE_FAST_ROWS)",
-   "status": "define in code (gemm/fast_matrix_units.mojo GEMM_FAST_MATRIX_UNITS_ALL): B1 plus the neural-dispatch callers that closed the vendor route (Llama stage projections, CNN linear, MoE grouped)"
+   "status": "define in code (gemm/fast_matrix_units.mojo GEMM_FAST_MATRIX_UNITS_ALL): B1 plus the neural-dispatch callers that closed the vendor route (Llama stage projections, CNN linear, MoE grouped)",
+   "owed": "RUN"
   }
  },
  "rows": [
