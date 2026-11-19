@@ -2,7 +2,11 @@
 probes need the integrated binary (python/mojolearn/tests/test_native_array_operations.py)."""
 import ast
 import json
+import sys
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from boundary_keys_plain import plain  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
 ARRAY = ROOT / 'python/mojolearn/_array.py'
@@ -54,7 +58,8 @@ def test_every_public_operation_is_one_native_call():
     bound = ast.parse(ARRAY.read_text())
     helper = next(n for n in bound.body if isinstance(n, ast.FunctionDef) and n.name == '_bound')
     assert 'functools.partial(functools.partial, _ARRAY_NATIVE, op, _ARRAY_CONTEXT)' in ast.unparse(helper)
-    native = NATIVE.read_text()
+    # the door dispatches on integer operation codes; its by-name form names each arm
+    native = plain('bindings/array_native_door.mojo', NATIVE.read_text())
     for name, op in OPS.items():
         if name in assigned:
             assert name not in methods, name  # one definition only

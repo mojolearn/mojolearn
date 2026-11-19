@@ -934,8 +934,11 @@ class OwnerDispatch:
                 for ident in fresh:
                     cands.extend(waiting.pop(ident, ()))
                 for t in cands:
+                    # a family's key table (bindings/py_keys.mojo) lists every name the
+                    # family reads; a branch that fetches the table calls none of them
                     if t in seen or not t[1].startswith("bindings/") or \
-                            os.path.basename(t[1]).startswith("_mojolearn"):
+                            os.path.basename(t[1]).startswith("_mojolearn") or \
+                            t[1].endswith("_keys_unpack.mojo"):
                         continue
                     seen.add(t)
                     nxt.append(t)

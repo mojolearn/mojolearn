@@ -47,6 +47,8 @@ from bindings.native_loaded_module_door import NativeModules
 from bindings.native_prepared_owner_unpack import prepared_get, prepared_put
 from bindings.native_resident_capsule_pack import resident_capsule
 from bindings.p3nc_fitted_freeze_unpack import fitted_is_freezable_any, fitted_freeze_any
+from bindings.tsa_keys_unpack import tsa_keys
+from bindings.py_balanced import py_item
 
 comptime _F32P = MutPointer[Float32, MutUntrackedOrigin]
 comptime _HW = "mojolearn ExponentialSmoothing: "
@@ -103,13 +105,14 @@ def _hw_entries(model: PythonObject, fields: PythonObject, context: PythonObject
     """`self._bind()`: the `_mojolearn_tsa` entries of the model's tier (the
     process default until a loaded model restores its own); a host inference
     class's loaded forecast host binding."""
+    var nk = tsa_keys()
     var b = _b()
     if tsa_hw_class(model, context):
-        var saved = py_get(fields, "numeric_mode")
+        var saved = py_get(fields, nk[].k_numeric_mode)
         if saved is not None and (py_type(saved) is not b.str or String(saved) != "identical"):
             raise Error("ValueError: mojolearn: " + String("ExponentialSmoothing")
                         + " runs IDENTICAL only on the host")
-        var module = py_get(context["modules"], context["hw_host_module"])
+        var module = py_get(py_item(context, nk[].k_modules), py_item(context, nk[].k_hw_host_module))
         if module is None:
             raise Error("RuntimeError: mojolearn: the host " + String("ExponentialSmoothing")
                         + " has no loaded forecast binding; load the model with its own load()")
@@ -117,7 +120,7 @@ def _hw_entries(model: PythonObject, fields: PythonObject, context: PythonObject
             raise Error("TypeError: host forecast requires its native module")
         var module_fields = native_numpy_module_fields(module)
         var host = b.dict()
-        var names = context["hw_entry_names"]
+        var names = py_item(context, nk[].k_hw_entry_names)
         for i in range(len(names)):  # driver-loop: over the fixed host entry names
             var entry = py_get(module_fields, names[i])
             if entry is not None:
@@ -125,9 +128,9 @@ def _hw_entries(model: PythonObject, fields: PythonObject, context: PythonObject
                     raise Error("TypeError: host forecast requires compiled entries")
                 py_setitem(host, names[i], entry)
         return host
-    var mode = py_get(fields, "numeric_mode")
+    var mode = py_get(fields, nk[].k_numeric_mode)
     if mode is None:
-        mode = context["backend_fields"]["_DEFAULT_MODE"]
+        mode = py_item(py_item(context, nk[].k_backend_fields), nk[].k__DEFAULT_MODE)
     if py_type(mode) is not b.str:
         raise Error("ValueError: numeric_mode must be fast, identical or None")
     mode = py_call(py_call(mode.strip).lower)
@@ -135,7 +138,7 @@ def _hw_entries(model: PythonObject, fields: PythonObject, context: PythonObject
     if mode_word != "identical" and mode_word != "fast":
         raise Error("ValueError: numeric_mode must be fast, identical or None")
     answer_mode_object(mode, mode_word, MODE_FAMILY_TSA)
-    var entries = context["hw_bindings"][mode]
+    var entries = py_item(context, nk[].k_hw_bindings)[mode]
     if py_type(entries) is b.str:
         raise Error(String(py=entries))
     return entries
@@ -151,11 +154,12 @@ def _entry(entries: PythonObject, name: String) raises -> PythonObject:
 
 def _check_dims(fields: PythonObject, source: PythonObject, context: PythonObject) raises -> PythonObject:
     """`_check_dims(ts_input)`: (C-ordered float32 (ts_num, n) data, n)."""
+    var nk = tsa_keys()
     var value_pin = AdmittedTypedPin()
     var value = admit_view(source, "endog", context, value_pin)
     var kind = admitted_view_kind(value, "endog")
     var rank = len(value.shape)
-    var ts_num = Int(py=fields["ts_num"])
+    var ts_num = Int(py=py_item(fields, nk[].k_ts_num))
     if rank != 1 and rank != 2:
         raise Error("ValueError: " + _HW + "data input must have 1 or 2 dimensions")
     var rows = 1 if rank == 1 else value.shape[0]
@@ -189,40 +193,42 @@ def _set_fitted(fields: PythonObject, n: Int, comps: PythonObject, stats: Python
     """`_set_fitted`: the packed components, the three time-major blocks and
     the per-series statistics; the lazily built series-major components are
     dropped."""
-    var period = Int(py=fields["seasonal_periods"])
-    var b = Int(py=fields["ts_num"])
+    var nk = tsa_keys()
+    var period = Int(py=py_item(fields, nk[].k_seasonal_periods))
+    var b = Int(py=py_item(fields, nk[].k_ts_num))
     var cl = (n - period) * b
     var rows = cl // b
     var updates = Python.dict()
-    py_setitem(updates, "n", n)
-    py_setitem(updates, "_components_len", cl)
-    py_setitem(updates, "_comps", comps)
-    py_setitem(updates, "_comp_layout", Python.tuple(cl, b, rows))
+    py_setitem(updates, nk[].k_n, n)
+    py_setitem(updates, nk[].k__components_len, cl)
+    py_setitem(updates, nk[].k__comps, comps)
+    py_setitem(updates, nk[].k__comp_layout, Python.tuple(cl, b, rows))
     var time_major = _b().dict()
     var names = [String("level"), String("trend"), String("season")]
     for i in range(3):  # small-loop(the three packed components)
         py_setitem(time_major, names[i], _block(comps, i * cl, cl, "f", "<f4", Python.tuple(rows, b), context))
-    py_setitem(updates, "_time_major", time_major)
+    py_setitem(updates, nk[].k__time_major, time_major)
     var stat_names = [String("sse_"), String("alpha_"), String("beta_"), String("gamma_")]
     for i in range(4):  # small-loop(the four per-series statistics)
         py_setitem(updates, stat_names[i], _block(stats, i * b, b, "f", "<f4", Python.tuple(b), context))
-    py_setitem(updates, "n_iter_", _block(flags, 0, b, "i", "<i4", Python.tuple(b), context))
-    py_setitem(updates, "criterion_", _block(flags, b, b, "i", "<i4", Python.tuple(b), context))
-    py_setitem(updates, "fit_executed_flag", True)
+    py_setitem(updates, nk[].k_n_iter_, _block(flags, 0, b, "i", "<i4", Python.tuple(b), context))
+    py_setitem(updates, nk[].k_criterion_, _block(flags, b, b, "i", "<i4", Python.tuple(b), context))
+    py_setitem(updates, nk[].k_fit_executed_flag, True)
 
     return updates
 
 
 def hw_fit(model: PythonObject, context: PythonObject) raises -> PythonObject:
+    var nk = tsa_keys()
     # One admission of the class and instance keys serves the snapshot and
     # the commit below (nothing between them touches the model's storage).
     var live = tsa_hw_fields(model, context)
     var fields = _snapshot_of(live, context)
-    var checked = _check_dims(fields, fields["endog"], context)
+    var checked = _check_dims(fields, py_item(fields, nk[].k_endog), context)
     var data = checked[0]
     var n = Int(py=checked[1])
-    var ts_num = Int(py=fields["ts_num"])
-    var period = Int(py=fields["seasonal_periods"])
+    var ts_num = Int(py=py_item(fields, nk[].k_ts_num))
+    var period = Int(py=py_item(fields, nk[].k_seasonal_periods))
     if ts_num < 1 or n <= period or n - period > 9223372036854775807 // 12 // ts_num:
         raise Error("ValueError: Holt-Winters fitted extent is invalid")
     var cl = (n - period) * ts_num
@@ -232,18 +238,18 @@ def hw_fit(model: PythonObject, context: PythonObject) raises -> PythonObject:
     var stats = tsa_array("f", "<f4", Python.tuple(4 * ts_num), 4 * ts_num, 4, context)
     var flags = tsa_array("i", "<i4", Python.tuple(2 * ts_num), 2 * ts_num, 4, context)
     var entries = _hw_entries(model, fields, context)
-    var init = context["hw_init_codes"][fields["initialization_method"]]
+    var init = py_item(context, nk[].k_hw_init_codes)[py_item(fields, nk[].k_initialization_method)]
     _ = py_call_typed(_entry(entries, "holtwinters_fit"), classical_address(data), classical_address(comps),
                       classical_address(stats), classical_address(flags),
-                      Python.list(n, ts_num, period, Int(py=fields["start_periods"]),
-                                  fields["eps"], init),
-                      fields["seasonal"])
+                      Python.list(n, ts_num, period, Int(py=py_item(fields, nk[].k_start_periods)),
+                                  py_item(fields, nk[].k_eps), init),
+                      py_item(fields, nk[].k_seasonal))
     _ = comps  # keep the Python object alive through the native call above
     _ = data  # keep the Python object alive through the native call above
     _ = flags  # keep the Python object alive through the native call above
     _ = stats  # keep the Python object alive through the native call above
     var updates = _set_fitted(fields, n, comps, stats, flags, context)
-    py_setitem(updates, "_data", data)
+    py_setitem(updates, nk[].k__data, data)
     _commit(live, updates, context, True)
     return model
 
@@ -253,7 +259,8 @@ def hw_fit(model: PythonObject, context: PythonObject) raises -> PythonObject:
 def _shaped(fields: PythonObject, out_buf: PythonObject, offset: Int, steps: Int, index: PythonObject,
             context: PythonObject) raises -> PythonObject:
     """`_shaped(out[offset:], steps, index)` over a time-major buffer."""
-    var b = Int(py=fields["ts_num"])
+    var nk = tsa_keys()
+    var b = Int(py=py_item(fields, nk[].k_ts_num))
     var base = Int(py=classical_address(out_buf)) + 4 * offset
     if index is not None:
         var s = Int(py=index)
@@ -279,18 +286,20 @@ def _hw_held(model: PythonObject, fields: PythonObject) raises -> PythonObject:
     words, shape and address cannot have changed: the `_packed` admission it
     passed then passes now), else None. The caller still checks the binding
     (`_hw_matches`)."""
+    var nk = tsa_keys()
     var mods = NativeModules()
     var held = prepared_get(mods, _HW_RESIDENT_SLOT, model)
-    if held is None or held[0] is not py_get(fields, "_comps"):
+    if held is None or held[0] is not py_get(fields, nk[].k__comps):
         return PythonObject(None)
     return held
 
 
 def _hw_matches(held: PythonObject, entries: PythonObject, n: Int, b: Int, period: Int) raises -> Bool:
     """The held record was minted by this binding with these fitted words."""
-    if held is None or py_get(entries, "holtwinters_query_resident") is None:
+    var nk = tsa_keys()
+    if held is None or py_get(entries, nk[].k_holtwinters_query_resident) is None:
         return False
-    return (held[1] is py_get(entries, "holtwinters_resident_prepare") and Int(py=held[2]) == n
+    return (held[1] is py_get(entries, nk[].k_holtwinters_resident_prepare) and Int(py=held[2]) == n
             and Int(py=held[3]) == b and Int(py=held[4]) == period)
 
 
@@ -303,11 +312,12 @@ def _hw_mint(model: PythonObject, fields: PythonObject, entries: PythonObject, n
     release the copy at once). None (the per-call path) on a binding without
     the resident entries (the host column) or components that cannot be
     frozen (a caller-assigned ndarray: plan section A's read-only rule)."""
-    var prepare = py_get(entries, "holtwinters_resident_prepare")
-    var release = py_get(entries, "holtwinters_resident_release")
-    if prepare is None or release is None or py_get(entries, "holtwinters_query_resident") is None:
+    var nk = tsa_keys()
+    var prepare = py_get(entries, nk[].k_holtwinters_resident_prepare)
+    var release = py_get(entries, nk[].k_holtwinters_resident_release)
+    if prepare is None or release is None or py_get(entries, nk[].k_holtwinters_query_resident) is None:
         return PythonObject(None)
-    var comps_obj = py_get(fields, "_comps")
+    var comps_obj = py_get(fields, nk[].k__comps)
     if not fitted_is_freezable_any(comps_obj):
         return PythonObject(None)
     _ = fitted_freeze_any(comps_obj)
@@ -324,10 +334,11 @@ def _hw_query(entries: PythonObject, record: PythonObject, fields: PythonObject,
               context: PythonObject) raises -> PythonObject:
     """One `holtwinters_query_resident` call: `(end - start) * b` float32,
     time-major, the in-sample steps then the forecast steps."""
+    var nk = tsa_keys()
     var steps = end - start
     var whole = tsa_array("f", "<f4", Python.tuple(steps * b), steps * b, 4, context)
     _ = py_call_typed(_entry(entries, "holtwinters_query_resident"), record[5], classical_address(whole),
-                      Python.list(start, end), fields["seasonal"])
+                      Python.list(start, end), py_item(fields, nk[].k_seasonal))
     _ = record  # the record (and its capsule) outlive the query
     return whole
 
@@ -344,11 +355,12 @@ def _query_fields(model: PythonObject, context: PythonObject) raises -> PythonOb
 
 
 def hw_predict(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
+    var nk = tsa_keys()
     var fields = _query_fields(model, context)
-    if not Bool(py=fields["fit_executed_flag"]):
+    if not Bool(py=py_item(fields, nk[].k_fit_executed_flag)):
         raise Error("ValueError: " + _HW + "fit() the model before predict()")
-    var n = Int(py=fields["n"])
-    var b = Int(py=fields["ts_num"])
+    var n = Int(py=py_item(fields, nk[].k_n))
+    var b = Int(py=py_item(fields, nk[].k_ts_num))
     var start_obj = args[0]
     var end_obj = PythonObject(n) if args[1] is None else args[1]
     var index = args[2]
@@ -364,7 +376,7 @@ def hw_predict(model: PythonObject, args: PythonObject, context: PythonObject) r
     if index is not None and (Int(py=index) < 0 or Int(py=index) >= b):
         raise Error("IndexError: " + _HW + "index input: " + String(Int(py=index)) + " outside of range [0, " + String(b) + ")")
     var entries = _hw_entries(model, fields, context)
-    var period = Int(py=fields["seasonal_periods"])
+    var period = Int(py=py_item(fields, nk[].k_seasonal_periods))
     var steps = end - start
     if steps > 9223372036854775807 // 4 // b or (end > n and end - n > 9223372036854775807 // 4 // b):
         raise Error("ValueError: Holt-Winters prediction extent exceeds native indexing bounds")
@@ -375,7 +387,7 @@ def hw_predict(model: PythonObject, args: PythonObject, context: PythonObject) r
     if _hw_matches(held, entries, n, b, period):
         return _shaped(fields, _hw_query(entries, held, fields, start, end, b, context), 0, steps, index, context)
     var packed_pin = AdmittedTypedPin()
-    var packed = _packed(fields["_comps"], 3 * (n - period) * b, context, packed_pin)
+    var packed = _packed(py_item(fields, nk[].k__comps), 3 * (n - period) * b, context, packed_pin)
     var comps = packed_pin.keep
     var minted = _hw_mint(model, fields, entries, n, b, period, packed.addr)
     if minted is not None:
@@ -386,7 +398,7 @@ def hw_predict(model: PythonObject, args: PythonObject, context: PythonObject) r
     if start >= n:
         var fc = tsa_array("f", "<f4", Python.tuple((end - n) * b), (end - n) * b, 4, context)
         _ = py_call_typed(_entry(entries, "holtwinters_forecast"), classical_address(comps), classical_address(fc),
-                          Python.list(n, b, period, end - n), fields["seasonal"])
+                          Python.list(n, b, period, end - n), py_item(fields, nk[].k_seasonal))
         _ = fc  # keep the Python object alive through the native call above
         _ = comps  # keep the Python object alive through the native call above
         _ = packed_pin^
@@ -396,12 +408,12 @@ def hw_predict(model: PythonObject, args: PythonObject, context: PythonObject) r
     var base = Int(py=classical_address(out))
     _ = out  # keep the Python object alive through the native call above
     _ = py_call_typed(_entry(entries, "holtwinters_predict"), classical_address(comps), PythonObject(base),
-                      Python.list(n, b, period, start, start + k_in), fields["seasonal"])
+                      Python.list(n, b, period, start, start + k_in), py_item(fields, nk[].k_seasonal))
     _ = out  # keep the Python object alive through the native call above
     _ = comps  # keep the Python object alive through the native call above
     if end > n:
         _ = py_call_typed(_entry(entries, "holtwinters_forecast"), classical_address(comps),
-                          PythonObject(base + 4 * k_in * b), Python.list(n, b, period, end - n), fields["seasonal"])
+                          PythonObject(base + 4 * k_in * b), Python.list(n, b, period, end - n), py_item(fields, nk[].k_seasonal))
         _ = comps  # keep the Python object alive through the native call above
         _ = out  # keep the Python object alive through the native call above
     _ = packed_pin^
@@ -409,41 +421,43 @@ def hw_predict(model: PythonObject, args: PythonObject, context: PythonObject) r
 
 
 def hw_score(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
+    var nk = tsa_keys()
     var fields = _query_fields(model, context)
-    if not Bool(py=fields["fit_executed_flag"]):
+    if not Bool(py=py_item(fields, nk[].k_fit_executed_flag)):
         raise Error("ValueError: " + _HW + "fit() the model before score()")
     var index = tsa_component_index(args[0], context)
     if index is None:
-        return fields["sse_"]
-    var b = Int(py=fields["ts_num"])
+        return py_item(fields, nk[].k_sse_)
+    var b = Int(py=py_item(fields, nk[].k_ts_num))
     _check_index(index, b)
     if Int(py=index) < 0 or Int(py=index) >= b:
         raise Error("IndexError: " + _HW + "index input: " + String(Int(py=index))
                     + " outside of range [0, " + String(b) + ")")
     # `self.sse_[index]`: the float32 word, as a Python float
     var packed_pin = AdmittedTypedPin()
-    var packed = _packed(fields["sse_"], b, context, packed_pin)
+    var packed = _packed(py_item(fields, nk[].k_sse_), b, context, packed_pin)
     var value = _F32P(unsafe_from_address=packed.addr)[Int(py=index)]
     _ = packed_pin^  # keep the pinned owners alive through the read above
     return PythonObject(Float64(value))
 
 
 def _settings(fields: PythonObject, context: PythonObject, write_eps: Bool = True) raises:
+    var nk = tsa_keys()
     var b = _b()
     for name in ["ts_num", "seasonal_periods", "start_periods"]:  # small-loop(three integer constructor settings)
         if not _is_int(fields[name]):
             raise Error("TypeError: " + _HW + name + " must be int")
-    var seasonal = fields["seasonal"]
+    var seasonal = py_item(fields, nk[].k_seasonal)
     if py_type(seasonal) is not b.str:
         raise Error("TypeError: " + _HW + "seasonal must be a native string")
     if String(seasonal) != "additive" and String(seasonal) != "add" and String(seasonal) != "multiplicative" and String(seasonal) != "mul":
         raise Error("ValueError: " + _HW + "seasonal must be additive/add or multiplicative/mul")
-    var method = fields["initialization_method"]
+    var method = py_item(fields, nk[].k_initialization_method)
     if py_type(method) is not b.str or (String(method) != "estimated" and String(method) != "heuristic" and String(method) != "cuml"):
         raise Error("ValueError: " + _HW + "initialization_method must be estimated, heuristic or cuml")
-    var eps = py_call(b.float, tsa_scalar(fields["eps"], context))
+    var eps = py_call(b.float, tsa_scalar(py_item(fields, nk[].k_eps), context))
     if write_eps:
-        py_setitem(fields, "eps", eps)
+        py_setitem(fields, nk[].k_eps, eps)
 
 
 def _snapshot(model: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -462,19 +476,21 @@ def _snapshot_of(live: PythonObject, context: PythonObject) raises -> PythonObje
 
 def _fitted_checks(fields: PythonObject) raises:
     """The fitted-flag and fitted-extent refusals of `_snapshot_of`."""
-    if py_type(fields["fit_executed_flag"]) is not _b().bool:
+    var nk = tsa_keys()
+    if py_type(py_item(fields, nk[].k_fit_executed_flag)) is not _b().bool:
         raise Error("TypeError: " + _HW + "fitted flag must be a native boolean")
-    if Bool(py=fields["fit_executed_flag"]):
-        if not _is_int(fields["n"]) or Int(py=fields["ts_num"]) < 1 or Int(py=fields["seasonal_periods"]) < 2 or Int(py=fields["n"]) <= Int(py=fields["seasonal_periods"]):
+    if Bool(py=py_item(fields, nk[].k_fit_executed_flag)):
+        if not _is_int(py_item(fields, nk[].k_n)) or Int(py=py_item(fields, nk[].k_ts_num)) < 1 or Int(py=py_item(fields, nk[].k_seasonal_periods)) < 2 or Int(py=py_item(fields, nk[].k_n)) <= Int(py=py_item(fields, nk[].k_seasonal_periods)):
             raise Error("ValueError: " + _HW + "invalid fitted dimensions")
-        var batch = Int(py=fields["ts_num"])
-        if Int(py=fields["n"]) - Int(py=fields["seasonal_periods"]) > 9223372036854775807 // 12 // batch:
+        var batch = Int(py=py_item(fields, nk[].k_ts_num))
+        if Int(py=py_item(fields, nk[].k_n)) - Int(py=py_item(fields, nk[].k_seasonal_periods)) > 9223372036854775807 // 12 // batch:
             raise Error("ValueError: Holt-Winters fitted extent exceeds native indexing bounds")
 
 
 def _commit(fields: PythonObject, updates: PythonObject, context: PythonObject, clear_components: Bool = False) raises:
+    var nk = tsa_keys()
     var old = Python.list()
-    var ownership = context["tsa_owner_context"]
+    var ownership = py_item(context, nk[].k_tsa_owner_context)
     classical_connect_numpy(ownership)
     if clear_components:
         for name in ["level_", "trend_", "season_"]:  # small-loop(lazy component owners are admitted before any mutation)
@@ -509,21 +525,22 @@ def _packed(value: PythonObject, count: Int, context: PythonObject, mut hold: Ad
 
 
 def hw_forecast(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
+    var nk = tsa_keys()
     var fields = _query_fields(model, context)
-    if not Bool(py=fields["fit_executed_flag"]):
+    if not Bool(py=py_item(fields, nk[].k_fit_executed_flag)):
         raise Error("ValueError: " + _HW + "fit() the model before forecast()")
     if not _is_int(args[0]):
         raise Error("TypeError: " + _HW + "h must be int")
     var h = Int(py=args[0])
-    var b = Int(py=fields["ts_num"])
+    var b = Int(py=py_item(fields, nk[].k_ts_num))
     var index = args[1]
     _check_index(index, b)
     if h <= 0:
         raise Error("ValueError: " + _HW + "h must be > 0")
     if index is not None and (Int(py=index) < 0 or Int(py=index) >= b):
         raise Error("IndexError: " + _HW + "index outside series range")
-    var n = Int(py=fields["n"])
-    var period = Int(py=fields["seasonal_periods"])
+    var n = Int(py=py_item(fields, nk[].k_n))
+    var period = Int(py=py_item(fields, nk[].k_seasonal_periods))
     var held = _hw_held(model, fields)
     if held is not None:
         # A held record names this very frozen `_comps`, so the `_packed`
@@ -535,7 +552,7 @@ def hw_forecast(model: PythonObject, args: PythonObject, context: PythonObject) 
         if _hw_matches(held, hit_entries, n, b, period):
             return _shaped(fields, _hw_query(hit_entries, held, fields, n, n + h, b, context), 0, h, index, context)
     var comps_pin = AdmittedTypedPin()
-    var comps = _packed(fields["_comps"], 3 * (n - period) * b, context, comps_pin)
+    var comps = _packed(py_item(fields, nk[].k__comps), 3 * (n - period) * b, context, comps_pin)
     if h > 9223372036854775807 // 4 // b:
         raise Error("ValueError: Holt-Winters forecast extent exceeds native indexing bounds")
     var out = tsa_array("f", "<f4", Python.tuple(h * b), h * b, 4, context)
@@ -546,13 +563,14 @@ def hw_forecast(model: PythonObject, args: PythonObject, context: PythonObject) 
         _ = comps_pin^
         return _shaped(fields, whole, 0, h, index, context)
     _ = py_call_typed(_entry(entries, "holtwinters_forecast"),
-        PythonObject(comps.addr), classical_address(out), Python.list(n, b, period, h), fields["seasonal"])
+        PythonObject(comps.addr), classical_address(out), Python.list(n, b, period, h), py_item(fields, nk[].k_seasonal))
     _ = comps_pin^
     _ = out
     return _shaped(fields, out, 0, h, index, context)
 
 
 def hw_component(model: PythonObject, args: PythonObject, context: PythonObject, attribute: Bool = False) raises -> PythonObject:
+    var nk = tsa_keys()
     var name = args[0]
     if py_type(name) is not _b().str:
         raise Error("TypeError: " + _HW + "component name must be a native string")
@@ -567,12 +585,12 @@ def hw_component(model: PythonObject, args: PythonObject, context: PythonObject,
         raise Error("AttributeError: ExponentialSmoothing has no such attribute")
     var live = tsa_hw_fields(model, context)
     var fields = _snapshot_of(live, context)
-    if not Bool(py=fields["fit_executed_flag"]):
+    if not Bool(py=py_item(fields, nk[].k_fit_executed_flag)):
         if attribute:
             raise Error("AttributeError: ExponentialSmoothing has no fitted component")
         raise Error("ValueError: " + _HW + "fit() the model to get components")
-    var b = Int(py=fields["ts_num"])
-    var rows = Int(py=fields["n"]) - Int(py=fields["seasonal_periods"])
+    var b = Int(py=py_item(fields, nk[].k_ts_num))
+    var rows = Int(py=py_item(fields, nk[].k_n)) - Int(py=py_item(fields, nk[].k_seasonal_periods))
     var index = PythonObject(None) if attribute else tsa_component_index(args[1], context)
     _check_index(index, b)
     if index is not None and (Int(py=index) < 0 or Int(py=index) >= b):
@@ -584,7 +602,7 @@ def hw_component(model: PythonObject, args: PythonObject, context: PythonObject,
         return _block(cached_pin.keep, 0 if index is None else Int(py=index) * rows,
                       rows, "f", "<f4", Python.tuple(rows), context)
     var comps_pin = AdmittedTypedPin()
-    var comps = _packed(fields["_comps"], 3 * rows * b, context, comps_pin)
+    var comps = _packed(py_item(fields, nk[].k__comps), 3 * rows * b, context, comps_pin)
     if not attribute and index is not None:
         return _shaped(fields, comps_pin.keep, which * rows * b, rows, index, context)
     var out = tsa_array("f", "<f4", Python.tuple(b, rows), b * rows, 4, context)
@@ -599,7 +617,7 @@ def hw_component(model: PythonObject, args: PythonObject, context: PythonObject,
         return out
     if b == 1:
         return _block(out, 0, rows, "f", "<f4", Python.tuple(rows), context)
-    var time_major = fields["_time_major"]
+    var time_major = py_item(fields, nk[].k__time_major)
     if py_type(time_major) is not _b().dict:
         raise Error("TypeError: Holt-Winters components require native dictionary storage")
     var keys = py_call(_b().list, time_major)
@@ -613,25 +631,26 @@ def hw_component(model: PythonObject, args: PythonObject, context: PythonObject,
 
 
 def hw_save(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
+    var nk = tsa_keys()
     var fields = _snapshot(model, context)
-    if not Bool(py=fields["fit_executed_flag"]):
+    if not Bool(py=py_item(fields, nk[].k_fit_executed_flag)):
         raise Error("ValueError: " + _HW + "fit() the model before save()")
-    var n = Int(py=fields["n"])
-    var b = Int(py=fields["ts_num"])
-    var period = Int(py=fields["seasonal_periods"])
-    var mode = py_get(fields, "numeric_mode")
+    var n = Int(py=py_item(fields, nk[].k_n))
+    var b = Int(py=py_item(fields, nk[].k_ts_num))
+    var period = Int(py=py_item(fields, nk[].k_seasonal_periods))
+    var mode = py_get(fields, nk[].k_numeric_mode)
     if mode is None or (py_type(mode) is _b().str and len(mode) == 0):
-        mode = context["backend_fields"]["_DEFAULT_MODE"]
+        mode = py_item(py_item(context, nk[].k_backend_fields), nk[].k__DEFAULT_MODE)
     if py_type(mode) is not _b().str:
         raise Error("ValueError: cannot save invalid numeric_mode")
     mode = py_call(py_call(mode.strip).lower)
     if String(mode) != "fast" and String(mode) != "identical":
         raise Error("ValueError: cannot save invalid numeric_mode")
     var values = Python.dict(format="mojolearn-holtwinters-1", estimator="ExponentialSmoothing",
-        numeric_mode=mode, seasonal=fields["seasonal"], initialization_method=fields["initialization_method"])
+        numeric_mode=mode, seasonal=py_item(fields, nk[].k_seasonal), initialization_method=py_item(fields, nk[].k_initialization_method))
     var components_pin = AdmittedTypedPin()
-    _ = _packed(fields["_comps"], 3 * (n - period) * b, context, components_pin)
-    py_setitem(values, "components", components_pin.keep)
+    _ = _packed(py_item(fields, nk[].k__comps), 3 * (n - period) * b, context, components_pin)
+    py_setitem(values, nk[].k_components, components_pin.keep)
     var names = Python.tuple("sse", "alpha", "beta", "gamma", "n_iter", "criterion")
     for i in range(len(names)):  # driver-loop: snapshot all six saved native statistics before opening the archive
         var name = String(names[i])
@@ -647,10 +666,10 @@ def hw_save(model: PythonObject, args: PythonObject, context: PythonObject) rais
     words[0] = Int64(n)
     words[1] = Int64(b)
     words[2] = Int64(period)
-    words[3] = Int64(Int(py=fields["start_periods"]))
+    words[3] = Int64(Int(py=py_item(fields, nk[].k_start_periods)))
     var eps = tsa_array("d", "<f8", Python.tuple(1), 1, 8, context)
-    MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(eps)))[0] = Float64(py=fields["eps"])
-    py_setitem(values, "meta", meta)
-    py_setitem(values, "eps", eps)
+    MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(eps)))[0] = Float64(py=py_item(fields, nk[].k_eps))
+    py_setitem(values, nk[].k_meta, meta)
+    py_setitem(values, nk[].k_eps, eps)
     _ = components_pin^
     return classical_archive_write(args[0], values, context)

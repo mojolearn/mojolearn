@@ -28,6 +28,46 @@ from bindings.py_typed_call import py_call_typed
 from bindings.py_cpython_table import cpython_table
 from bindings.py_optional import py_present
 from bindings.array_native_run import _rebuild, _prod, _c_strides, _f_strides, _both_orders, _is_int, _is_float, _address_in
+from bindings.array_keys_unpack import (
+    array_keys,
+    ARRAY_OPN_ARGMAX,
+    ARRAY_OPN_ARRAY,
+    ARRAY_OPN_ASTYPE,
+    ARRAY_OPN_AS_C,
+    ARRAY_OPN_AS_ORDER,
+    ARRAY_OPN_BOOL,
+    ARRAY_OPN_BUFFER,
+    ARRAY_OPN_COPY,
+    ARRAY_OPN_EQ,
+    ARRAY_OPN_FLAGS,
+    ARRAY_OPN_FROMBYTES,
+    ARRAY_OPN_FROM_BUFFER,
+    ARRAY_OPN_FROM_FLAT,
+    ARRAY_OPN_FROM_LIST,
+    ARRAY_OPN_FULL,
+    ARRAY_OPN_GETITEM,
+    ARRAY_OPN_HAS_ORDER,
+    ARRAY_OPN_INIT,
+    ARRAY_OPN_INTERFACE,
+    ARRAY_OPN_ITER,
+    ARRAY_OPN_LEN,
+    ARRAY_OPN_MAX,
+    ARRAY_OPN_MIN,
+    ARRAY_OPN_NE,
+    ARRAY_OPN_OWNED,
+    ARRAY_OPN_RAVEL,
+    ARRAY_OPN_REDUCE,
+    ARRAY_OPN_REPR,
+    ARRAY_OPN_RESHAPE,
+    ARRAY_OPN_ROW,
+    ARRAY_OPN_SETSTATE,
+    ARRAY_OPN_SUM,
+    ARRAY_OPN_TOBYTES,
+    ARRAY_OPN_TOLIST,
+    ARRAY_OPN_VIEW_OF,
+)
+from bindings.py_keys import py_op_code
+from bindings.py_balanced import py_item
 
 
 # ------------------------------------------------------------------ calls
@@ -116,9 +156,10 @@ def _repr(value: PythonObject) raises -> String:
 
 def _helper(key: String, size: Int, context: PythonObject) raises -> PythonObject:
     """The connected core helper `key` for a non-empty block, else None."""
+    var nk = array_keys()
     if size <= 0:
         return PythonObject(None)
-    return py_get(context["helpers"], PythonObject(key))
+    return py_get(py_item(context, nk[].k_helpers), PythonObject(key))
 
 
 # --------------------------------------------------------------- metadata
@@ -139,14 +180,16 @@ def _tuple(values: List[Int]) raises -> PythonObject:
 
 
 def _code(dtype: String, context: PythonObject) raises -> PythonObject:
-    return py_get(context["codes"], PythonObject(dtype))
+    var nk = array_keys()
+    return py_get(py_item(context, nk[].k_codes), PythonObject(dtype))
 
 
 def _set_meta(array: PythonObject, shape: PythonObject, dtype: String, order: String,
               view: PythonObject, context: PythonObject) raises:
     """`Array._set_meta`: the shape, dtype and layout slots, then the size check."""
+    var nk = array_keys()
     var dims = _ints(shape)
-    var itemsize = Int(py=py_get(context["itemsizes"], PythonObject(dtype)))
+    var itemsize = Int(py=py_get(py_item(context, nk[].k_itemsizes), PythonObject(dtype)))
     var size = _prod(dims)
     py_setattr(array, "shape", shape)
     py_setattr(array, "dtype", PythonObject(dtype))
@@ -183,7 +226,8 @@ def _init_owned(array: PythonObject, store: PythonObject, shape: PythonObject, d
 
 def _owned(store: PythonObject, shape: PythonObject, dtype: String, order: String,
            context: PythonObject) raises -> PythonObject:
-    return _init_owned(native_storage_allocate(context["array_class"]), store, shape, dtype, order, context)
+    var nk = array_keys()
+    return _init_owned(native_storage_allocate(py_item(context, nk[].k_array_class)), store, shape, dtype, order, context)
 
 
 def _owned_as(cls: PythonObject, store: PythonObject, shape: PythonObject, dtype: String, order: String,
@@ -206,27 +250,30 @@ def _view_into(view: PythonObject, other: PythonObject, shape: PythonObject, dty
 
 def _view_of(other: PythonObject, shape: PythonObject, order: String, context: PythonObject) raises -> PythonObject:
     """`Array._view_of`: another shape over the same memory, `other` kept alive."""
-    var view = native_storage_allocate(context["array_class"])
+    var nk = array_keys()
+    var view = native_storage_allocate(py_item(context, nk[].k_array_class))
     _view_into(view, other, shape, String(other.dtype), order, context)
     return view
 
 
 def _new_store(code: PythonObject, size: Int, context: PythonObject) raises -> PythonObject:
     """`_new_store`: a zero-filled `array.array` of `size` elements."""
+    var nk = array_keys()
     if size == 0:
-        return _call(context["array_type"], code)
-    var seed = _call(context["array_type"], code, Python.list(PythonObject(0)))
+        return _call(py_item(context, nk[].k_array_type), code)
+    var seed = _call(py_item(context, nk[].k_array_type), code, Python.list(PythonObject(0)))
     return _call(_attr(seed, "__mul__"), PythonObject(size))
 
 
 def _values(view: PythonObject, dtype: String, context: PythonObject) raises -> PythonObject:
     """`_to_py_values`: Python scalars of a flat store memoryview."""
+    var nk = array_keys()
     var b = native_loaded_module("builtins")
     if dtype == "<f2":
         var n = len(view)
         if n == 0:
             return Python.list()
-        return _call(b.list, _call(context["struct_unpack"], PythonObject("<" + String(n) + "e"), _call(view.tobytes)))
+        return _call(b.list, _call(py_item(context, nk[].k_struct_unpack), PythonObject("<" + String(n) + "e"), _call(view.tobytes)))
     return _call(view.tolist)
 
 
@@ -234,6 +281,7 @@ def _strided_copy(src_addr: PythonObject, dst_addr: PythonObject, itemsize: Int,
                   src_strides: List[Int], dst_strides: List[Int], src_base: Int, dst_base: Int,
                   context: PythonObject) raises:
     """`_strided_copy`: one call of the core helper `strided_copy_bytes`."""
+    var nk = array_keys()
     var words = Python.list()
     for i in range(len(shape)):  # driver-loop: over array rank metadata
         _ = py_call(words.append, PythonObject(shape[i]))
@@ -243,8 +291,8 @@ def _strided_copy(src_addr: PythonObject, dst_addr: PythonObject, itemsize: Int,
         _ = py_call(words.append, PythonObject(dst_strides[i]))
     _ = py_call(words.append, PythonObject(src_base))
     _ = py_call(words.append, PythonObject(dst_base))
-    var dims = _call(context["array_type"], PythonObject("q"), words)
-    var copy = py_get(context["helpers"], PythonObject("strided_copy_bytes"))
+    var dims = _call(py_item(context, nk[].k_array_type), PythonObject("q"), words)
+    var copy = py_get(py_item(context, nk[].k_helpers), PythonObject("strided_copy_bytes"))
     if copy is None:
         var failure = _rebuild("strided_copy_bytes")
         raise failure^
@@ -281,14 +329,15 @@ def _as_c(a: PythonObject, context: PythonObject) raises -> PythonObject:
 
 
 def _admit(a: PythonObject, context: PythonObject) raises:
+    var nk = array_keys()
     # p3-array-arena: the exact Array class (every Array the library makes)
     # needs no ancestry walk; a subclass keeps the MRO check.
-    if py_type(a) is context["array_class"]:
+    if py_type(a) is py_item(context, nk[].k_array_class):
         return
     var b = native_loaded_module("builtins")
-    var ancestry = py_call(b.type.__dict__["__mro__"].__get__, py_type(a))
+    var ancestry = py_call(py_item(b.type.__dict__, nk[].k___mro__).__get__, py_type(a))
     for i in range(len(ancestry)):  # driver-loop: the connected Array class in the instance's ancestry
-        if ancestry[i] is context["array_class"]:
+        if ancestry[i] is py_item(context, nk[].k_array_class):
             return
     raise Error("TypeError: native Array operations require a mojolearn Array")
 
@@ -318,9 +367,10 @@ def _flags(a: PythonObject) raises -> PythonObject:
 
 def _interface(a: PythonObject, context: PythonObject) raises -> PythonObject:
     """Version 3; `strides` None means C-contiguous."""
+    var nk = array_keys()
     var address = a._addr
     if not _truth(a.size) and not _truth(address):
-        address = context["empty_address"]
+        address = py_item(context, nk[].k_empty_address)
     var out = Python.dict()
     py_setitem(out, PythonObject("shape"), a.shape)
     py_setitem(out, PythonObject("typestr"), a.dtype)
@@ -340,8 +390,9 @@ def _bool(a: PythonObject, context: PythonObject) raises -> PythonObject:
 
 
 def _copy(a: PythonObject, context: PythonObject) raises -> PythonObject:
+    var nk = array_keys()
     var dtype = String(a.dtype)
-    var store = _call(context["array_type"], _code(dtype, context))
+    var store = _call(py_item(context, nk[].k_array_type), _code(dtype, context))
     _ = _call(store.frombytes, _call(a._mv.cast, PythonObject("B")))  # one memcpy
     return _owned(store, a.shape, dtype, String(a.order), context)
 
@@ -357,6 +408,7 @@ def _empty_nest(shape: List[Int], depth: Int) raises -> PythonObject:
 
 
 def _tolist(a: PythonObject, context: PythonObject) raises -> PythonObject:
+    var nk = array_keys()
     var c = _as_c(a, context)
     var dtype = String(c.dtype)
     if Int(py=a.ndim) == 0:
@@ -364,14 +416,15 @@ def _tolist(a: PythonObject, context: PythonObject) raises -> PythonObject:
     if Int(py=c.size) == 0:
         return _empty_nest(_ints(c.shape), 0)
     if dtype == "<f2":
-        var flat = _call(context["array_type"], PythonObject("d"), _values(c._mv, dtype, context))
+        var flat = _call(py_item(context, nk[].k_array_type), PythonObject("d"), _values(c._mv, dtype, context))
         return _call(_call(_call(native_buffer_view(flat).cast, PythonObject("B")).cast, PythonObject("d"), c.shape).tolist)
     return _call(_call(_call(c._mv.cast, PythonObject("B")).cast, _code(dtype, context), c.shape).tolist)
 
 
 def _row(c: PythonObject, shape: PythonObject, step: Int, i: Int, context: PythonObject) raises -> PythonObject:
     """`Array._row_view`: row `i` of a C-order Array, zero-copy."""
-    var view = native_storage_allocate(context["array_class"])
+    var nk = array_keys()
+    var view = native_storage_allocate(py_item(context, nk[].k_array_class))
     var offset = i * step
     py_setattr(view, "_store", c._store)
     py_setattr(view, "_base", c)
@@ -404,6 +457,7 @@ def _iterate(a: PythonObject, context: PythonObject) raises -> PythonObject:
     """1-D: an iterator over the Python values. Rank 2+: a lazy iterator of
     zero-copy row views, `map(partial(entry, "row", c, context, shape, step),
     range(rows))`, made of C objects only."""
+    var nk = array_keys()
     var b = native_loaded_module("builtins")
     var ndim = Int(py=a.ndim)
     if ndim == 0:
@@ -415,7 +469,7 @@ def _iterate(a: PythonObject, context: PythonObject) raises -> PythonObject:
     var rest = List[Int]()
     for i in range(1, len(dims)):  # driver-loop: over array rank metadata
         rest.append(dims[i])
-    var row = _call(context["partial"], context["entry"], PythonObject("row"), c, context,
+    var row = _call(py_item(context, nk[].k_partial), py_item(context, nk[].k_entry), PythonObject("row"), c, context,
                     _tuple(rest), PythonObject(_prod(rest)))
     return _call(b.map, row, _call(b.range, PythonObject(dims[0])))
 
@@ -456,11 +510,12 @@ def _reshape(a: PythonObject, requested: PythonObject, context: PythonObject) ra
 def _same_dtype_store(raw: PythonObject, dtype: String, context: PythonObject) raises -> PythonObject:
     """`_buffer._same_dtype_store`: a byte copy, a float32 one quieting a
     signaling NaN through `cast_elements` (None without that helper)."""
-    var store = _call(context["array_type"], _code(dtype, context))
+    var nk = array_keys()
+    var store = _call(py_item(context, nk[].k_array_type), _code(dtype, context))
     _ = _call(store.frombytes, raw)
     if dtype != "<f4" or len(store) == 0:
         return store
-    var cast = py_get(context["helpers"], PythonObject("cast_elements"))
+    var cast = py_get(py_item(context, nk[].k_helpers), PythonObject("cast_elements"))
     if cast is None:
         return PythonObject(None)
     var at = _call(store.buffer_info)[0]
@@ -471,8 +526,9 @@ def _same_dtype_store(raw: PythonObject, dtype: String, context: PythonObject) r
 def _getitem(a: PythonObject, key: PythonObject, context: PythonObject) raises -> PythonObject:
     """Int / slice / tuple of them. Full integer indexing returns a Python
     scalar; anything else a C-order copy."""
+    var nk = array_keys()
     var b = native_loaded_module("builtins")
-    var operator = context["operator"]
+    var operator = py_item(context, nk[].k_operator)
     var c = _as_c(a, context)
     var shape = _ints(c.shape)
     var ndim = len(shape)
@@ -557,7 +613,7 @@ def _getitem(a: PythonObject, key: PythonObject, context: PythonObject) raises -
     if contiguous:
         var run_start = offset + first[axis] * cs[axis]
         var run_length = counts[axis] * cs[axis]
-        if run_length >= Int(py=context["native_min"]):
+        if run_length >= Int(py=py_item(context, nk[].k_native_min)):
             var raw = _call(_call(_attr(c._mv, "__getitem__"), _call(b.slice, PythonObject(run_start),
                                                                     PythonObject(run_start + run_length))).cast,
                             PythonObject("B"))
@@ -571,7 +627,7 @@ def _getitem(a: PythonObject, key: PythonObject, context: PythonObject) raises -
             if dtype == "<f4":
                 # A strided float32 selection is quieted like the block copy,
                 # so a copy's bits do not depend on the selection's layout.
-                var cast = py_get(context["helpers"], PythonObject("cast_elements"))
+                var cast = py_get(py_item(context, nk[].k_helpers), PythonObject("cast_elements"))
                 if cast is not None:
                     var at = _call(store.value().buffer_info)[0]
                     _ = _call(cast, at, PythonObject(0), at, PythonObject(0), PythonObject(total))
@@ -586,15 +642,16 @@ def _getitem(a: PythonObject, key: PythonObject, context: PythonObject) raises -
 
 def _normalize(dtype: PythonObject, context: PythonObject) raises -> String:
     """`normalize_dtype`: a supported typestr, or the method's ValueError."""
+    var nk = array_keys()
     var b = native_loaded_module("builtins")
-    var aliases = context["aliases"]
-    var codes = context["codes"]
+    var aliases = py_item(context, nk[].k_aliases)
+    var codes = py_item(context, nk[].k_codes)
     if _truth(_call(b.isinstance, dtype, b.str)):
         var ts = _call(aliases.get, dtype, dtype)
         if py_contains(codes, ts):
             return String(ts)
         raise Error("ValueError: mojolearn: unsupported dtype " + _repr(dtype) + "; supported: "
-                    + String(_call(PythonObject(", ").join, context["supported"])))
+                    + String(_call(PythonObject(", ").join, py_item(context, nk[].k_supported))))
     if dtype is b.float:
         return "<f8"
     if dtype is b.int:
@@ -611,24 +668,26 @@ def _normalize(dtype: PythonObject, context: PythonObject) raises -> String:
 
 
 def _from_flat(flat: PythonObject, shape: PythonObject, dtype: String, context: PythonObject) raises -> PythonObject:
-    return _from_flat_as(context["array_class"], flat, shape, dtype, context)
+    var nk = array_keys()
+    return _from_flat_as(py_item(context, nk[].k_array_class), flat, shape, dtype, context)
 
 
 def _from_flat_as(cls: PythonObject, flat: PythonObject, shape: PythonObject, dtype: String,
                   context: PythonObject) raises -> PythonObject:
     """`Array._from_flat`: a C-order Array of Python values."""
+    var nk = array_keys()
     var b = native_loaded_module("builtins")
     var code = _code(dtype, context)
     var store = PythonObject(None)
     if dtype == "<f2":
-        store = _call(context["array_type"], PythonObject("H"))
+        store = _call(py_item(context, nk[].k_array_type), PythonObject("H"))
         if len(flat) > 0:
             var arguments = Python.list(PythonObject("<" + String(len(flat)) + "e"))
             _ = _call(arguments.extend, flat)
-            _ = _call(store.frombytes, _call_tuple(context["struct_pack"], _call(b.tuple, arguments)))
+            _ = _call(store.frombytes, _call_tuple(py_item(context, nk[].k_struct_pack), _call(b.tuple, arguments)))
     else:
         try:
-            store = py_call_typed(context["array_type"], code, flat)
+            store = py_call_typed(py_item(context, nk[].k_array_type), code, flat)
         except error:
             var message = String(error)
             if message.startswith("TypeError: ") or message.startswith("OverflowError: "):
@@ -642,6 +701,7 @@ def _from_flat_as(cls: PythonObject, flat: PythonObject, shape: PythonObject, dt
 def _flatten_fast(nested: PythonObject, context: PythonObject) raises -> PythonObject:
     """`_flatten_fast`: `(shape, flat)` for a flat list of Python scalars or
     a list of equal-length rows of them, by C builtins; None otherwise."""
+    var nk = array_keys()
     # p3-array-arena: one native walk over the exact list/tuple items (exact
     # type addresses, borrowed reads, no Python callbacks), then one walk that
     # fills the flat list; was set(map(type)), set(map(len)), list(chain),
@@ -653,8 +713,8 @@ def _flatten_fast(nested: PythonObject, context: PythonObject) raises -> PythonO
     if (kind is not b.list and kind is not b.tuple) or len(nested) == 0:
         return PythonObject(None)
     ref cpy = Python().cpython()
-    var scalars = _member_addresses(context["scalar_type_set"])
-    var row_types = _member_addresses(context["row_type_set"])
+    var scalars = _member_addresses(py_item(context, nk[].k_scalar_type_set))
+    var row_types = _member_addresses(py_item(context, nk[].k_row_type_set))
     var list_class = Int(b.list._obj_ptr)
     var get_list = cpy.lib.get_function[PyObjectPtr]("PyList_GetItem")
     var get_tuple = cpy.lib.get_function[PyObjectPtr]("PyTuple_GetItem")
@@ -739,11 +799,12 @@ def _member_addresses(members: PythonObject) raises -> List[Int]:
 
 def _from_list(cls: PythonObject, nested: PythonObject, requested: PythonObject, context: PythonObject) raises -> PythonObject:
     """`Array.from_list`: a new C-order Array from a (nested) list of numbers."""
+    var nk = array_keys()
     var b = native_loaded_module("builtins")
     var dtype = _normalize(requested, context)
     var shape = PythonObject(None)
     var flat = PythonObject(None)
-    if _truth(_call(b.isinstance, nested, context["array_class"])):
+    if _truth(_call(b.isinstance, nested, py_item(context, nk[].k_array_class))):
         var c = _as_c(nested, context)
         shape = nested.shape
         flat = _values(c._mv, String(c.dtype), context)
@@ -755,8 +816,8 @@ def _from_list(cls: PythonObject, nested: PythonObject, requested: PythonObject,
         else:
             # The general walk (a ragged or mixed nested list, Arrays inside
             # it) is the user-object reader's native "nested" read.
-            var got = _call(context["user_objects"], PythonObject("nested"), nested, context["array_class"])
-            if py_type(got) is b.tuple and len(got) == 3 and _truth(_call(context["operator"].eq, got[0], PythonObject("__refuse__"))):
+            var got = _call(py_item(context, nk[].k_user_objects), PythonObject("nested"), nested, py_item(context, nk[].k_array_class))
+            if py_type(got) is b.tuple and len(got) == 3 and _truth(_call(py_item(context, nk[].k_operator).eq, got[0], PythonObject("__refuse__"))):
                 raise Error(String(got[1]) + ": " + String(got[2]))
             shape = _call(b.tuple, got[0])
             flat = got[1]
@@ -766,6 +827,7 @@ def _from_list(cls: PythonObject, nested: PythonObject, requested: PythonObject,
 def _astype_reference(a: PythonObject, dtype: String, context: PythonObject) raises -> PythonObject:
     """The conversion `cast_elements` declined: the same C calls the Python
     definition makes, so the same result or the same refusal words."""
+    var nk = array_keys()
     var b = native_loaded_module("builtins")
     var src = String(a.dtype)
     var code = _code(dtype, context)
@@ -776,11 +838,11 @@ def _astype_reference(a: PythonObject, dtype: String, context: PythonObject) rai
             values = _call(b.list, _call(b.map, b.int, values))
         out = _from_flat(values, a.shape, dtype, context)
     elif _is_float(dtype):
-        out = _owned(_call(context["array_type"], code, a._mv), a.shape, dtype, "C", context)
+        out = _owned(_call(py_item(context, nk[].k_array_type), code, a._mv), a.shape, dtype, "C", context)
     elif _is_int(src):
         var store = PythonObject(None)
         try:
-            store = py_call_typed(context["array_type"], code, a._mv)
+            store = py_call_typed(py_item(context, nk[].k_array_type), code, a._mv)
         except error:
             var message = String(error)
             if message.startswith("OverflowError: "):
@@ -798,6 +860,7 @@ def _astype_reference(a: PythonObject, dtype: String, context: PythonObject) rai
 
 def _astype(a: PythonObject, requested: PythonObject, context: PythonObject) raises -> PythonObject:
     """A converted copy (always a copy, even for the same dtype)."""
+    var nk = array_keys()
     var dtype = _normalize(requested, context)
     var src = String(a.dtype)
     if dtype == src:
@@ -807,8 +870,8 @@ def _astype(a: PythonObject, requested: PythonObject, context: PythonObject) rai
     var order = String(a.order)
     if size == 0:
         return _owned(_new_store(code, 0, context), a.shape, dtype, order, context)
-    var sc = py_get(context["native_codes"], PythonObject(src))
-    var dc = py_get(context["native_codes"], PythonObject(dtype))
+    var sc = py_get(py_item(context, nk[].k_native_codes), PythonObject(src))
+    var dc = py_get(py_item(context, nk[].k_native_codes), PythonObject(dtype))
     var cast = _helper("cast_elements", size, context)
     if sc is not None and dc is not None and cast is not None:
         var store = _new_store(code, size, context)
@@ -827,11 +890,12 @@ def _astype(a: PythonObject, requested: PythonObject, context: PythonObject) rai
 
 def _reduce(a: PythonObject, what: Int, name: String, context: PythonObject) raises -> PythonObject:
     """min (0), max (1), float sum (2) and argmax (3) in storage order."""
+    var nk = array_keys()
     var size = Int(py=a.size)
-    var code = py_get(context["native_codes"], a.dtype)
+    var code = py_get(py_item(context, nk[].k_native_codes), a.dtype)
     var stat = _helper("reduce_stat", size, context)
     if code is not None and stat is not None:
-        return labels_stat_pack(base_reduce_stat(base_helpers_key(context["helpers"]), Int(py=a._addr), Int(py=code),
+        return labels_stat_pack(base_reduce_stat(base_helpers_key(py_item(context, nk[].k_helpers)), Int(py=a._addr), Int(py=code),
                                                  size, what))
     if size == 0:
         raise Error("ValueError: mojolearn: " + name + " of an empty Array")
@@ -840,6 +904,7 @@ def _reduce(a: PythonObject, what: Int, name: String, context: PythonObject) rai
 
 
 def _sum(a: PythonObject, context: PythonObject) raises -> PythonObject:
+    var nk = array_keys()
     var dtype = String(a.dtype)
     var size = Int(py=a.size)
     if size == 0:
@@ -847,17 +912,17 @@ def _sum(a: PythonObject, context: PythonObject) raises -> PythonObject:
             return PythonObject(0)
         return PythonObject(0.0)
     var stat = _helper("reduce_stat", size, context)
-    var code = py_get(context["native_codes"], a.dtype)
+    var code = py_get(py_item(context, nk[].k_native_codes), a.dtype)
     if stat is None or code is None:
         var failure = _rebuild("reduce_stat")
         raise failure^
     if _is_float(dtype):
-        return labels_stat_pack(base_reduce_stat(base_helpers_key(context["helpers"]), Int(py=a._addr), Int(py=code),
+        return labels_stat_pack(base_reduce_stat(base_helpers_key(py_item(context, nk[].k_helpers)), Int(py=a._addr), Int(py=code),
                                                  size, 2))
     # The exact integer sum: (hi << 64) + (mid << 32) + low of a 128-bit total.
-    var parts = labels_stat_pack(base_reduce_stat(base_helpers_key(context["helpers"]), Int(py=a._addr), Int(py=code),
+    var parts = labels_stat_pack(base_reduce_stat(base_helpers_key(py_item(context, nk[].k_helpers)), Int(py=a._addr), Int(py=code),
                                                   size, 5))
-    var operator = context["operator"]
+    var operator = py_item(context, nk[].k_operator)
     var b = native_loaded_module("builtins")
     var hi = _call(b.int, parts[0])
     var mid = _call(b.int, parts[1])
@@ -872,17 +937,18 @@ def _sum(a: PythonObject, context: PythonObject) raises -> PythonObject:
 def _exact_in(given: PythonObject, dtype: String, context: PythonObject) raises -> PythonObject:
     """`_exact_in`: `given` (a Python int, float or bool) as an element of
     `dtype` that compares equal to it exactly under `==`, or None."""
+    var nk = array_keys()
     var b = native_loaded_module("builtins")
-    var operator = context["operator"]
+    var operator = py_item(context, nk[].k_operator)
     var value = given
     if _truth(_call(b.isinstance, value, b.bool)):
         value = _call(b.int, value)
-    var bounds = py_get(context["int_bounds"], PythonObject(dtype))
+    var bounds = py_get(py_item(context, nk[].k_int_bounds), PythonObject(dtype))
     if bounds is not None:
         if _truth(_call(b.isinstance, value, b.float)):
             if (_truth(_call(operator.ne, value, value))
-                    or _truth(_call(operator.eq, value, context["infinity"]))
-                    or _truth(_call(operator.eq, value, context["minus_infinity"]))
+                    or _truth(_call(operator.eq, value, py_item(context, nk[].k_infinity)))
+                    or _truth(_call(operator.eq, value, py_item(context, nk[].k_minus_infinity)))
                     or _truth(_call(operator.ne, value, _call(b.int, value)))):
                 return PythonObject(None)
             value = _call(b.int, value)
@@ -906,12 +972,12 @@ def _exact_in(given: PythonObject, dtype: String, context: PythonObject) raises 
         var fmt = PythonObject("<f") if dtype == "<f4" else PythonObject("<e")
         var packed = PythonObject(None)
         try:
-            packed = py_call_typed(context["struct_pack"], fmt, value)
+            packed = py_call_typed(py_item(context, nk[].k_struct_pack), fmt, value)
         except error:
             if String(error).startswith("OverflowError: "):
                 return PythonObject(None)
             raise error^
-        var g = _call(context["struct_unpack"], fmt, packed)[0]
+        var g = _call(py_item(context, nk[].k_struct_unpack), fmt, packed)[0]
         if _truth(_call(operator.ne, g, value)):
             return PythonObject(None)
         return g
@@ -920,28 +986,30 @@ def _exact_in(given: PythonObject, dtype: String, context: PythonObject) raises 
 
 def _zero_flags(size: Int, context: PythonObject) raises -> PythonObject:
     """`array.array("B", bytes(size))`."""
+    var nk = array_keys()
     var b = native_loaded_module("builtins")
-    return _call(context["array_type"], PythonObject("B"), _call(b.bytes, PythonObject(size)))
+    return _call(py_item(context, nk[].k_array_type), PythonObject("B"), _call(b.bytes, PythonObject(size)))
 
 
 def _equal(a: PythonObject, other: PythonObject, context: PythonObject) raises -> PythonObject:
     """Elementwise equality against an Array of the same shape or a scalar,
     as a `'<u1'` Array of 0/1; NotImplemented for any other operand."""
+    var nk = array_keys()
     var b = native_loaded_module("builtins")
-    var operator = context["operator"]
+    var operator = py_item(context, nk[].k_operator)
     var dtype = String(a.dtype)
     var size = Int(py=a.size)
-    var is_array = _truth(_call(b.isinstance, other, context["array_class"]))
+    var is_array = _truth(_call(b.isinstance, other, py_item(context, nk[].k_array_class)))
     var same_shape = is_array and _truth(_call(operator.eq, other.shape, a.shape))
-    var scalar = _truth(_call(b.isinstance, other, context["scalar_types"]))
+    var scalar = _truth(_call(b.isinstance, other, py_item(context, nk[].k_scalar_types)))
     var equal = _helper("equal_elements", size, context)
-    var code = py_get(context["native_codes"], a.dtype)
+    var code = py_get(py_item(context, nk[].k_native_codes), a.dtype)
     if same_shape:
         if code is not None and String(other.dtype) == dtype and equal is not None:
             var x = _as_c(a, context)
             var y = _as_c(other, context)
             var store = _zero_flags(size, context)
-            _ = base_equal_elements(base_helpers_key(context["helpers"]), Int(py=x._addr), Int(py=y._addr),
+            _ = base_equal_elements(base_helpers_key(py_item(context, nk[].k_helpers)), Int(py=x._addr), Int(py=y._addr),
                                     Int(py=code), size, Int(py=_call(store.buffer_info)[0]))
             _ = store  # keep the flag store alive through the native call above
             # The helper reads raw addresses: a C-order copy made by _as_c
@@ -951,15 +1019,15 @@ def _equal(a: PythonObject, other: PythonObject, context: PythonObject) raises -
             return _owned(store, a.shape, "<u1", "C", context)
     elif scalar:
         if size == 0:
-            return _owned(_call(context["array_type"], PythonObject("B")), a.shape, "<u1", "C", context)
+            return _owned(_call(py_item(context, nk[].k_array_type), PythonObject("B")), a.shape, "<u1", "C", context)
         if code is not None and equal is not None:
             var v = _exact_in(other, dtype, context)
             var store = _zero_flags(size, context)
             if v is not None:
                 var x = _as_c(a, context)
-                var fill = _call(_attr(_call(context["array_type"], _code(dtype, context), Python.list(v)), "__mul__"),
+                var fill = _call(_attr(_call(py_item(context, nk[].k_array_type), _code(dtype, context), Python.list(v)), "__mul__"),
                                  PythonObject(size))
-                _ = base_equal_elements(base_helpers_key(context["helpers"]), Int(py=x._addr),
+                _ = base_equal_elements(base_helpers_key(py_item(context, nk[].k_helpers)), Int(py=x._addr),
                                         Int(py=_call(fill.buffer_info)[0]), Int(py=code), size,
                                         Int(py=_call(store.buffer_info)[0]))
                 # Keep the copy and the repeated scalar alive through the call.
@@ -970,7 +1038,7 @@ def _equal(a: PythonObject, other: PythonObject, context: PythonObject) raises -
         raise failure^
     if same_shape:
         if size == 0:
-            return _owned(_call(context["array_type"], PythonObject("B")), a.shape, "<u1", "C", context)
+            return _owned(_call(py_item(context, nk[].k_array_type), PythonObject("B")), a.shape, "<u1", "C", context)
         var theirs = String(other.dtype)
         if theirs == dtype:
             var failure = _rebuild("equal_elements")
@@ -996,24 +1064,25 @@ def _equal(a: PythonObject, other: PythonObject, context: PythonObject) raises -
         if String(floats.dtype) != "<f8":
             fa = _as_c(_astype(floats, PythonObject("<f8"), context), context)
         var store = _zero_flags(size, context)
-        _ = base_equal_elements(base_helpers_key(context["helpers"]), Int(py=ia._addr), Int(py=fa._addr),
-                                Int(py=context["eq_i64_f64"]), size, Int(py=_call(store.buffer_info)[0]))
+        _ = base_equal_elements(base_helpers_key(py_item(context, nk[].k_helpers)), Int(py=ia._addr), Int(py=fa._addr),
+                                Int(py=py_item(context, nk[].k_eq_i64_f64)), size, Int(py=_call(store.buffer_info)[0]))
         # The widened copies stay alive through the raw-address call.
         _ = ia^
         _ = fa^
         return _owned(store, a.shape, "<u1", "C", context)
     if is_array:
         raise Error("ValueError: mojolearn: shapes " + _text(a.shape) + " and " + _text(other.shape) + " differ")
-    return context["not_implemented"]
+    return py_item(context, nk[].k_not_implemented)
 
 
 def _not_equal(a: PythonObject, other: PythonObject, context: PythonObject) raises -> PythonObject:
+    var nk = array_keys()
     var eq = _equal(a, other, context)
-    if eq is context["not_implemented"]:
+    if eq is py_item(context, nk[].k_not_implemented):
         return eq
     # `bytes.translate` flips 0 and 1 in C
-    var flipped = _call(_call(eq._mv.tobytes).translate, context["not_table"])
-    return _owned(_call(context["array_type"], PythonObject("B"), flipped), a.shape, "<u1", "C", context)
+    var flipped = _call(_call(eq._mv.tobytes).translate, py_item(context, nk[].k_not_table))
+    return _owned(_call(py_item(context, nk[].k_array_type), PythonObject("B"), flipped), a.shape, "<u1", "C", context)
 
 
 # --------------------------------------------------------------- interop
@@ -1022,15 +1091,16 @@ def _not_equal(a: PythonObject, other: PythonObject, context: PythonObject) rais
 def _array_protocol(a: PythonObject, dtype: PythonObject, copy: PythonObject, context: PythonObject) raises -> PythonObject:
     """`numpy.asarray(a)` through `__array__`; NumPy is read from
     `sys.modules`, never imported."""
+    var nk = array_keys()
     var b = native_loaded_module("builtins")
-    var np = py_get(context["sys_modules"], PythonObject("numpy"))
+    var np = py_get(py_item(context, nk[].k_sys_modules), PythonObject("numpy"))
     if np is None:
         raise Error("TypeError: mojolearn: Array.__array__ needs NumPy loaded")
-    var carrier = native_storage_allocate(context["interface_class"])
+    var carrier = native_storage_allocate(py_item(context, nk[].k_interface_class))
     py_setattr(carrier, "_owner", a)
     py_setattr(carrier, "__array_interface__", _interface(a, context))
     var out = _call(np.asarray, carrier)
-    if dtype is not None and _truth(_call(context["operator"].ne, out.dtype, _call(np.dtype, dtype))):
+    if dtype is not None and _truth(_call(py_item(context, nk[].k_operator).ne, out.dtype, _call(np.dtype, dtype))):
         if copy is not None and py_type(copy) is b.bool and not _truth(copy):
             raise Error("ValueError: mojolearn: a dtype change needs a copy")
         return _call(out.astype, dtype)
@@ -1084,7 +1154,8 @@ def _reduce_protocol(a: PythonObject, context: PythonObject) raises -> PythonObj
     `__setstate__`, which is this entry again (`_set_state`). No Python
     reconstructor runs on load (the former `_array._restore_array` did, once
     per Array field of every pickled estimator)."""
-    return Python.tuple(context["newobj"], Python.tuple(py_type(a)),
+    var nk = array_keys()
+    return Python.tuple(py_item(context, nk[].k_newobj), Python.tuple(py_type(a)),
                         Python.tuple(_call(a._mv.tobytes), a.shape, a.dtype, a.order, a._readonly))
 
 
@@ -1092,6 +1163,7 @@ def _set_state(a: PythonObject, state: PythonObject, context: PythonObject) rais
     """`__setstate__` of a pickled Array: `state` is `(bytes, shape, dtype,
     order, readonly)` from `_reduce_protocol`. A writable Array gets its own
     `array.array` store; a read-only one stays a read-only view of the bytes."""
+    var nk = array_keys()
     var b = native_loaded_module("builtins")
     if py_type(state) is not b.tuple or len(state) != 5:
         raise Error("TypeError: mojolearn: an Array pickle state is (bytes, shape, dtype, order, readonly)")
@@ -1101,10 +1173,10 @@ def _set_state(a: PythonObject, state: PythonObject, context: PythonObject) rais
     var order = String(state[3])
     var code = _code(dtype, context)
     if _truth(state[4]):
-        var flat = array_from_buffer(context["array_class"], _call(_call(b.memoryview, state[0]).cast, code), context)
+        var flat = array_from_buffer(py_item(context, nk[].k_array_class), _call(_call(b.memoryview, state[0]).cast, code), context)
         _view_into(a, flat, state[1], dtype, order, context)
         return PythonObject(None)
-    var store = _call(context["array_type"], code)
+    var store = _call(py_item(context, nk[].k_array_type), code)
     _ = _call(store.frombytes, state[0])
     _ = _init_owned(a, store, state[1], dtype, order, context)
     return PythonObject(None)
@@ -1138,6 +1210,7 @@ def _full(cls: PythonObject, shape: PythonObject, value: PythonObject, requested
           context: PythonObject) raises -> PythonObject:
     """`_buffer.full`: a C-order block of `shape` holding `value` (one
     conversion of `value`, the store repeated natively)."""
+    var nk = array_keys()
     var dtype = _normalize(requested, context)
     var one = _from_list(cls, Python.list(value), PythonObject(dtype), context)
     var checked = _checked_shape(shape)
@@ -1146,7 +1219,7 @@ def _full(cls: PythonObject, shape: PythonObject, value: PythonObject, requested
     if size > 0:
         store = _call(_attr(one._store, "__mul__"), PythonObject(size))
     else:
-        store = _call(context["array_type"], one._store.typecode)
+        store = _call(py_item(context, nk[].k_array_type), one._store.typecode)
     _ = one  # the one-element store stays alive through the repeat
     return _owned_as(cls, store, checked, dtype, "C", context)
 
@@ -1154,14 +1227,15 @@ def _full(cls: PythonObject, shape: PythonObject, value: PythonObject, requested
 def _frombytes(cls: PythonObject, raw: PythonObject, requested: PythonObject, shape: PythonObject,
                context: PythonObject) raises -> PythonObject:
     """`_buffer.frombytes`: an owned C-order block holding a copy of `raw`."""
+    var nk = array_keys()
     var dtype = _normalize(requested, context)
     var checked = _checked_shape(shape)
-    var need = _prod(_ints(checked)) * Int(py=py_get(context["itemsizes"], PythonObject(dtype)))
+    var need = _prod(_ints(checked)) * Int(py=py_get(py_item(context, nk[].k_itemsizes), PythonObject(dtype)))
     var given = len(raw)
     if given != need:
         raise Error("ValueError: mojolearn: " + String(given) + " bytes do not fill shape " + _text(checked)
                     + " of " + dtype + " (" + String(need) + " bytes)")
-    var store = _call(context["array_type"], _code(dtype, context))
+    var store = _call(py_item(context, nk[].k_array_type), _code(dtype, context))
     _ = _call(store.frombytes, raw)
     return _owned_as(cls, store, checked, dtype, "C", context)
 
@@ -1183,106 +1257,107 @@ def _as_order(a: PythonObject, order: String, context: PythonObject) raises -> P
 
 def _admit_class(cls: PythonObject, what: String, context: PythonObject) raises:
     """A classmethod constructor's `cls`: the connected Array class or a subclass."""
+    var nk = array_keys()
     # PERF FIX (perf-audit-3, 2026-11-11): the exact connected class (every
     # library-built Array) is admitted by identity, as `_admit` does, before
     # the builtins lookup and the `issubclass` call; a subclass keeps them.
-    if cls is context["array_class"]:
+    if cls is py_item(context, nk[].k_array_class):
         return
     var b = native_loaded_module("builtins")
-    if py_type(cls) is not b.type or not _truth(_call(b.issubclass, cls, context["array_class"])):
+    if py_type(cls) is not b.type or not _truth(_call(b.issubclass, cls, py_item(context, nk[].k_array_class))):
         raise Error("TypeError: " + what + " builds a mojolearn Array class")
 
 
 # ------------------------------------------------------------------ door
 
 
-def _dispatch(op: String, a: PythonObject, context: PythonObject, args: PythonObject) raises -> PythonObject:
+def _dispatch(op: Int, a: PythonObject, context: PythonObject, args: PythonObject) raises -> PythonObject:
     # `args` is the whole call tuple (op, array, context, *operation args):
     # the operation arguments are read at 3.. in place, no copied list.
-    if op == "init":
+    if op == ARRAY_OPN_INIT:
         return _initialize(a, args[3], args[4], context)
-    if op == "from_buffer":
+    if op == ARRAY_OPN_FROM_BUFFER:
         return array_from_buffer(a, args[3], context)
-    if op == "from_list":
+    if op == ARRAY_OPN_FROM_LIST:
         # `a` is the class the classmethod was called on.
         _admit_class(a, "Array.from_list", context)
         return _from_list(a, args[3], args[4], context)
     # lane pyout-runtime-boundary (2026-11-11): the constructors whose shape,
     # size and stride arithmetic ran in Python (`Array._owned`,
     # `Array._from_flat`, `_buffer.full`, `_buffer.frombytes`); `a` is the class.
-    if op == "owned":
+    if op == ARRAY_OPN_OWNED:
         _admit_class(a, "Array._owned", context)
         return _owned_as(a, args[3], args[4], String(args[5]), String(args[6]), context)
-    if op == "from_flat":
+    if op == ARRAY_OPN_FROM_FLAT:
         _admit_class(a, "Array._from_flat", context)
         return _from_flat_as(a, args[3], args[4], String(args[5]), context)
-    if op == "full":
+    if op == ARRAY_OPN_FULL:
         _admit_class(a, "full", context)
         return _full(a, args[3], args[4], args[5], context)
-    if op == "frombytes":
+    if op == ARRAY_OPN_FROMBYTES:
         _admit_class(a, "frombytes", context)
         return _frombytes(a, args[3], args[4], args[5], context)
     _admit(a, context)
     # lane pyout-runtime-boundary: the layout operations the Python methods
     # `_view_of`, `_as_c`, `_as_order` and `_has_order` computed.
-    if op == "view_of":
+    if op == ARRAY_OPN_VIEW_OF:
         return _view_of(a, args[3], String(args[4]), context)
-    if op == "as_c":
+    if op == ARRAY_OPN_AS_C:
         return _as_c(a, context)
-    if op == "as_order":
+    if op == ARRAY_OPN_AS_ORDER:
         return _as_order(a, String(args[3]), context)
-    if op == "has_order":
+    if op == ARRAY_OPN_HAS_ORDER:
         return PythonObject(String(a.order) == String(args[3]) or _both_orders(_ints(a.shape)))
     # p3-array-arena: the per-row and per-element operations first.
-    if op == "row":
+    if op == ARRAY_OPN_ROW:
         return _row(a, args[3], Int(py=args[4]), Int(py=args[5]), context)
-    if op == "getitem":
+    if op == ARRAY_OPN_GETITEM:
         return _getitem(a, args[3], context)
-    if op == "len":
+    if op == ARRAY_OPN_LEN:
         return _length(a)
-    if op == "repr":
+    if op == ARRAY_OPN_REPR:
         return _representation(a)
-    if op == "flags":
+    if op == ARRAY_OPN_FLAGS:
         return _flags(a)
-    if op == "interface":
+    if op == ARRAY_OPN_INTERFACE:
         return _interface(a, context)
-    if op == "bool":
+    if op == ARRAY_OPN_BOOL:
         return _bool(a, context)
-    if op == "tobytes":
+    if op == ARRAY_OPN_TOBYTES:
         return _call(a._mv.tobytes)
-    if op == "copy":
+    if op == ARRAY_OPN_COPY:
         return _copy(a, context)
-    if op == "tolist":
+    if op == ARRAY_OPN_TOLIST:
         return _tolist(a, context)
-    if op == "iter":
+    if op == ARRAY_OPN_ITER:
         return _iterate(a, context)
-    if op == "reshape":
+    if op == ARRAY_OPN_RESHAPE:
         return _reshape(a, args[3], context)
-    if op == "ravel":
+    if op == ARRAY_OPN_RAVEL:
         return _reshape(a, Python.tuple(PythonObject(-1)), context)
-    if op == "astype":
+    if op == ARRAY_OPN_ASTYPE:
         return _astype(a, args[3], context)
-    if op == "min":
+    if op == ARRAY_OPN_MIN:
         return _reduce(a, 0, "min", context)
-    if op == "max":
+    if op == ARRAY_OPN_MAX:
         return _reduce(a, 1, "max", context)
-    if op == "sum":
+    if op == ARRAY_OPN_SUM:
         return _sum(a, context)
-    if op == "argmax":
+    if op == ARRAY_OPN_ARGMAX:
         return _reduce(_as_c(a, context), 3, "argmax", context)
-    if op == "eq":
+    if op == ARRAY_OPN_EQ:
         return _equal(a, args[3], context)
-    if op == "ne":
+    if op == ARRAY_OPN_NE:
         return _not_equal(a, args[3], context)
-    if op == "array":
+    if op == ARRAY_OPN_ARRAY:
         return _array_protocol(a, args[3], args[4], context)
-    if op == "buffer":
+    if op == ARRAY_OPN_BUFFER:
         return _buffer(a, context)
-    if op == "reduce":
+    if op == ARRAY_OPN_REDUCE:
         return _reduce_protocol(a, context)
-    if op == "setstate":
+    if op == ARRAY_OPN_SETSTATE:
         return _set_state(a, args[3], context)
-    raise Error("TypeError: unknown native Array operation " + op)
+    raise Error("TypeError: unknown native Array operation " + String(args[0]))
 
 
 def array_native_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
@@ -1290,9 +1365,14 @@ def array_native_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyOb
         var args = PythonObject(from_borrowed=args_ptr)
         if len(args) < 3:
             raise Error("TypeError: native Array operations expect an operation, an Array and a context")
-        var op = args[0]
-        if py_type(op) is not py_type(PythonObject("")):
+        var name = args[0]
+        if py_type(name) is not py_type(PythonObject("")):
             raise Error("TypeError: native Array operation names are exact strings")
+        # One lookup with the caller's own str (bindings/py_keys.mojo): the
+        # former door copied the name into a String and compared it against
+        # up to 35 names (11 before the per-row operation).
+        var nk = array_keys()
+        var op = py_op_code(nk[].ops, name)
         # Two layouts reach this entry. The methods and properties of
         # `Array` in _array.py are `functools.partial(entry, op, context)`
         # bound by a C `property` (no Python frame), so they arrive as
@@ -1302,9 +1382,9 @@ def array_native_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyOb
         # sit at 3.. in both.
         var first = args[1]
         if py_type(first) is native_loaded_module("builtins").dict:
-            var bound = _dispatch(String(op), args[2], first, args)
+            var bound = _dispatch(op, args[2], first, args)
             return bound.steal_data()
-        var result = _dispatch(String(op), first, args[2], args)
+        var result = _dispatch(op, first, args[2], args)
         return result.steal_data()
     except error:
         return _raise_error(error)

@@ -35,6 +35,10 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+# A door that dispatches on integer operation codes (bindings/py_keys.mojo) is read in its by-name form, so its
+# arms (`operation == "name"`) and its callers are found as before the door was converted.
+from boundary_keys_plain import plain  # noqa: E402
 SUFFIXES = (".py", ".mojo", ".sh", ".yml", ".yaml", ".toml")
 #: never a caller: prose, removed code, stored results
 SKIP_DIRS = ("docs/", "experiments/", "bench/results/", "docs-site/")
@@ -45,6 +49,7 @@ MANIFESTS = (
     re.compile(r"^python/mojolearn/host_surface\.py$"),
     re.compile(r"^tools/verify_coverage_audit\.py$"),
     re.compile(r"^bindings/native_operation_codes\.mojo$"),   # the name -> integer code table; callers use _OP.<name>
+    re.compile(r"^bindings/[a-z0-9_]+_keys_unpack\.mojo$"),   # a family's held keys and operation codes (py_keys.mojo)
     re.compile(r"^tools/native_caller_audit\.py$"),
     re.compile(r"^tools/test_native_caller_audit\.py$"),
 )
@@ -251,7 +256,7 @@ def read_files(root=ROOT, commit=None):
     if commit is None:
         names = subprocess.run(["git", "ls-files", "-z"], cwd=str(root), capture_output=True,
                                check=True).stdout.decode().split("\0")
-        return [(n, (Path(root) / n).read_text(errors="replace")) for n in names
+        return [(n, plain(n, (Path(root) / n).read_text(errors="replace"))) for n in names
                 if n and _wanted(n) and (Path(root) / n).is_file()]
     listing = subprocess.run(["git", "ls-tree", "-r", "-z", commit], cwd=str(root), capture_output=True,
                              check=True).stdout.decode().split("\0")
@@ -263,7 +268,7 @@ def read_files(root=ROOT, commit=None):
     for _, path in shas:
         header_end = data.index(b"\n", pos)
         size = int(data[pos:header_end].split()[2])
-        out.append((path, data[header_end + 1:header_end + 1 + size].decode(errors="replace")))
+        out.append((path, plain(path, data[header_end + 1:header_end + 1 + size].decode(errors="replace"))))
         pos = header_end + 1 + size + 1
     return out
 

@@ -12,15 +12,19 @@ from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setit
 from providers.python.borrowed_buffer_pyapi_unpack import admit_native_buffer_exporter, AdmittedBorrowedBuffer
 from bindings.native_array_storage_admission_door import (
     array_storage_namespace as _namespace, array_storage_class, array_storage_admit,
+from bindings.array_keys_unpack import array_keys
+from bindings.py_balanced import py_item
 )
 
 
 def _is_array_class(cls: PythonObject, context: PythonObject) raises -> Bool:
-    return array_storage_class(cls, context["array_class"])
+    var nk = array_keys()
+    return array_storage_class(cls, py_item(context, nk[].k_array_class))
 
 
 def _slots(cls: PythonObject, context: PythonObject) raises -> PythonObject:
-    return array_storage_admit(cls, context["array_class"], context["from_buffer_slots"])
+    var nk = array_keys()
+    return array_storage_admit(cls, py_item(context, nk[].k_array_class), py_item(context, nk[].k_from_buffer_slots))
 
 
 def _tuple(values: List[Int]) raises -> PythonObject:
@@ -31,6 +35,7 @@ def _tuple(values: List[Int]) raises -> PythonObject:
 
 
 def _dtype(original: String, itemsize: Int, context: PythonObject) raises -> String:
+    var nk = array_keys()
     var fmt = original
     if fmt.startswith("@") or fmt.startswith("=") or fmt.startswith("<") or fmt.startswith(">") or fmt.startswith("!") or fmt.startswith("|"):
         if (fmt.startswith(">") or fmt.startswith("!")) and itemsize > 1:
@@ -52,29 +57,30 @@ def _dtype(original: String, itemsize: Int, context: PythonObject) raises -> Str
         # One wording with the KDE fit door (host_kde_fit_native_door.mojo) and
         # scikit-learn's check_array: the format is named.
         raise Error("ValueError: Complex data not supported: buffer format '" + fmt + "' is complex")
-    if dtype == "" or not py_contains(context["codes"], PythonObject(dtype)):
+    if dtype == "" or not py_contains(py_item(context, nk[].k_codes), PythonObject(dtype)):
         raise Error("TypeError: mojolearn: buffer format " + original + " is not a supported Array dtype")
-    if itemsize != Int(py=context["itemsizes"][PythonObject(dtype)]):
+    if itemsize != Int(py=py_item(context, nk[].k_itemsizes)[PythonObject(dtype)]):
         raise Error("TypeError: mojolearn: buffer format and itemsize disagree")
     return dtype
 
 
 def _admit_buffer(value: PythonObject, context: PythonObject, depth: Int = 0) raises:
+    var nk = array_keys()
     if depth > 64:
         raise Error("TypeError: native buffer exporter nesting exceeds the supported limit")
     var b = native_loaded_module("builtins")
     var cls = py_type(value)
     if cls is b.memoryview:
         # The typed native descriptor also preserves a released view's ValueError.
-        var owner = py_call_typed(b.memoryview.__dict__["obj"].__get__, value)
+        var owner = py_call_typed(py_item(b.memoryview.__dict__, nk[].k_obj).__get__, value)
         if owner is not None:
             _admit_buffer(owner, context, depth + 1)
         return
-    if cls is context["from_buffer_mmap"]:
+    if cls is py_item(context, nk[].k_from_buffer_mmap):
         # Array setup retains the canonical mmap extension independently of the
         # optional corpus API; exact native mmap remains a supported exporter.
         var fields = _namespace(cls)
-        var hooks = context["from_buffer_mmap_hooks"]
+        var hooks = py_item(context, nk[].k_from_buffer_mmap_hooks)
         for name in ["__buffer__", "__release_buffer__"]:  # small-loop(retained native mmap buffer protocols)
             if py_get(fields, PythonObject(name)) is not hooks[PythonObject(name)]:
                 raise Error("TypeError: mmap buffer protocols changed after native Array connection")
@@ -86,19 +92,19 @@ def _admit_buffer(value: PythonObject, context: PythonObject, depth: Int = 0) ra
         pass  # scalar exporters below are admitted by native dtype identities
     ref cpy = Python().cpython()
     var flags = cpython_table()[].PyType_GetFlags(cls._obj_ptr)
-    if (flags & UInt64(512)) == 0 and py_get(context["modules"], "numpy") is not None:
+    if (flags & UInt64(512)) == 0 and py_get(py_item(context, nk[].k_modules), nk[].k_numpy) is not None:
         # NumPy scalar buffers are zero-dimensional native exporters too.
         # Derive exact scalar identities from the checked C dtype constructor,
         # not mutable NumPy scalar-name exports or Python isinstance hooks.
         var dtype_class = native_numpy_dtype(context)
-        var scalar_types = py_get(context, "from_buffer_scalar_types")
+        var scalar_types = py_get(context, nk[].k_from_buffer_scalar_types)
         if scalar_types is None:
             scalar_types = Python.list()
             for code in ["<f4", "<f8", "<i4", "<i8", "<u4", "<u1", "<f2", "<u2", "<i1", "<c8", "<c16"]:  # small-loop(supported native scalar exporter metadata and complex refusal)
                 var dtype = py_call(dtype_class, PythonObject(code))
                 _ = py_call(scalar_types.append, dtype.type)
             scalar_types = py_call(b.tuple, scalar_types)
-            py_setitem(context, "from_buffer_scalar_types", scalar_types)
+            py_setitem(context, nk[].k_from_buffer_scalar_types, scalar_types)
         for i in range(len(scalar_types)):  # small-loop(exact supported native scalar exporters)
             if cls is scalar_types[i]:
                 return
@@ -106,6 +112,7 @@ def _admit_buffer(value: PythonObject, context: PythonObject, depth: Int = 0) ra
 
 
 def array_from_buffer(cls: PythonObject, obj: PythonObject, context: PythonObject) raises -> PythonObject:
+    var nk = array_keys()
     var slots = _slots(cls, context)
     var b = native_loaded_module("builtins")
     var store = obj
@@ -117,9 +124,9 @@ def array_from_buffer(cls: PythonObject, obj: PythonObject, context: PythonObjec
         var names = py_call(b.list, source_slots.keys())
         for i in range(len(names)):  # small-loop(capture each native Array field exactly once)
             py_setitem(captured, names[i], py_call(source_slots[names[i]].__get__, obj, py_type(obj)))
-        store = captured["_store"]
+        store = py_item(captured, nk[].k__store)
         if store is None:
-            store = captured["_mv"]
+            store = py_item(captured, nk[].k__mv)
             if py_type(store) is not b.memoryview or store.obj is None:
                 raise Error("TypeError: Array.from_buffer needs retained native backing storage")
         base = obj
@@ -147,28 +154,28 @@ def array_from_buffer(cls: PythonObject, obj: PythonObject, context: PythonObjec
     var address = layout.address
     var readonly = layout.readonly
     if is_array:
-        if (py_type(captured["shape"]) is not b.tuple or py_type(captured["strides"]) is not b.tuple
-                or py_type(captured["dtype"]) is not b.str or py_type(captured["order"]) is not b.str
-                or py_type(captured["_readonly"]) is not b.bool):
+        if (py_type(py_item(captured, nk[].k_shape)) is not b.tuple or py_type(py_item(captured, nk[].k_strides)) is not b.tuple
+                or py_type(py_item(captured, nk[].k_dtype)) is not b.str or py_type(py_item(captured, nk[].k_order)) is not b.str
+                or py_type(py_item(captured, nk[].k__readonly)) is not b.bool):
             raise Error("TypeError: Array.from_buffer requires native shape, dtype and layout metadata")
         for name in ["_addr", "size", "nbytes", "ndim", "itemsize"]:  # small-loop(native Array size/address schema)
             if py_type(captured[name]) is not b.int:
                 raise Error("TypeError: Array.from_buffer requires native integer size metadata")
-        dtype = String(captured["dtype"])
-        order = String(captured["order"])
-        if not py_contains(context["codes"], PythonObject(dtype)) or (order != "C" and order != "F"):
+        dtype = String(py_item(captured, nk[].k_dtype))
+        order = String(py_item(captured, nk[].k_order))
+        if not py_contains(py_item(context, nk[].k_codes), PythonObject(dtype)) or (order != "C" and order != "F"):
             raise Error("TypeError: Array.from_buffer requires supported contiguous Array storage")
         shape = List[Int]()
-        var dims = captured["shape"]
+        var dims = py_item(captured, nk[].k_shape)
         for i in range(len(dims)):  # small-loop(admit captured Array dimensions)
             if py_type(dims[i]) is not b.int or Int(py=dims[i]) < 0:
                 raise Error("TypeError: Array.from_buffer requires nonnegative integer dimensions")
             shape.append(Int(py=dims[i]))
-        address = Int(py=captured["_addr"])
-        readonly = Bool(py=captured["_readonly"])
+        address = Int(py=py_item(captured, nk[].k__addr))
+        readonly = Bool(py=py_item(captured, nk[].k__readonly))
         if layout.readonly and not readonly:
             raise Error("TypeError: Array metadata cannot make readonly backing storage writable")
-    var itemsize = Int(py=context["itemsizes"][PythonObject(dtype)])
+    var itemsize = Int(py=py_item(context, nk[].k_itemsizes)[PythonObject(dtype)])
     var count = 1
     for i in range(len(shape)):  # small-loop(admitted output shape product)
         if shape[i] != 0 and count > 9223372036854775807 // shape[i]:
@@ -184,10 +191,10 @@ def array_from_buffer(cls: PythonObject, obj: PythonObject, context: PythonObjec
         strides[axis] = stride
         stride *= shape[axis]
     if is_array:
-        var old_strides = captured["strides"]
-        if (len(old_strides) != len(shape) or Int(py=captured["ndim"]) != len(shape)
-                or Int(py=captured["size"]) != count or Int(py=captured["nbytes"]) != nbytes
-                or Int(py=captured["itemsize"]) != itemsize):
+        var old_strides = py_item(captured, nk[].k_strides)
+        if (len(old_strides) != len(shape) or Int(py=py_item(captured, nk[].k_ndim)) != len(shape)
+                or Int(py=py_item(captured, nk[].k_size)) != count or Int(py=py_item(captured, nk[].k_nbytes)) != nbytes
+                or Int(py=py_item(captured, nk[].k_itemsize)) != itemsize):
             raise Error("ValueError: Array storage metadata is inconsistent")
         for i in range(len(shape)):  # small-loop(validate source layout against its captured order)
             if py_type(old_strides[i]) is not b.int or (count != 0 and shape[i] > 1 and Int(py=old_strides[i]) != strides[i]):
@@ -196,28 +203,28 @@ def array_from_buffer(cls: PythonObject, obj: PythonObject, context: PythonObjec
     var offset = address - layout.address if nbytes != 0 else 0
     if offset < 0 or offset > available or nbytes > available - offset:
         raise Error("ValueError: Array view lies outside its retained native storage")
-    var raw_address = address if nbytes != 0 else Int(py=context["empty_address"])
+    var raw_address = address if nbytes != 0 else Int(py=py_item(context, nk[].k_empty_address))
     var raw = cpy.lib.get_function[PyObjectPtr]("PyMemoryView_FromMemory")(raw_address, nbytes, Int32(0x100 if readonly else 0x200))
     if not raw:
         raise typed_python_error()
     var bytes_view = PythonObject(from_owned=raw)
-    var view = py_call(bytes_view.cast, context["codes"][PythonObject(dtype)])
+    var view = py_call(bytes_view.cast, py_item(context, nk[].k_codes)[PythonObject(dtype)])
     var result = native_storage_allocate(cls)
     # p3-array-arena: the fixed member slots written straight through the
     # retained setters, in the old order (no field dict, no key list).
-    _ = py_call(slots["_store"].__set__, result, store)
-    _ = py_call(slots["_base"].__set__, result, base)
-    _ = py_call(slots["_pin"].__set__, result, pin)
-    _ = py_call(slots["_mv"].__set__, result, view)
-    _ = py_call(slots["_addr"].__set__, result, PythonObject(address))
-    _ = py_call(slots["_readonly"].__set__, result, PythonObject(readonly))
-    _ = py_call(slots["shape"].__set__, result, _tuple(shape))
-    _ = py_call(slots["dtype"].__set__, result, PythonObject(dtype))
-    _ = py_call(slots["order"].__set__, result, PythonObject(order))
-    _ = py_call(slots["strides"].__set__, result, _tuple(strides))
-    _ = py_call(slots["ndim"].__set__, result, PythonObject(len(shape)))
-    _ = py_call(slots["size"].__set__, result, PythonObject(count))
-    _ = py_call(slots["nbytes"].__set__, result, PythonObject(nbytes))
-    _ = py_call(slots["itemsize"].__set__, result, PythonObject(itemsize))
+    _ = py_call(py_item(slots, nk[].k__store).__set__, result, store)
+    _ = py_call(py_item(slots, nk[].k__base).__set__, result, base)
+    _ = py_call(py_item(slots, nk[].k__pin).__set__, result, pin)
+    _ = py_call(py_item(slots, nk[].k__mv).__set__, result, view)
+    _ = py_call(py_item(slots, nk[].k__addr).__set__, result, PythonObject(address))
+    _ = py_call(py_item(slots, nk[].k__readonly).__set__, result, PythonObject(readonly))
+    _ = py_call(py_item(slots, nk[].k_shape).__set__, result, _tuple(shape))
+    _ = py_call(py_item(slots, nk[].k_dtype).__set__, result, PythonObject(dtype))
+    _ = py_call(py_item(slots, nk[].k_order).__set__, result, PythonObject(order))
+    _ = py_call(py_item(slots, nk[].k_strides).__set__, result, _tuple(strides))
+    _ = py_call(py_item(slots, nk[].k_ndim).__set__, result, PythonObject(len(shape)))
+    _ = py_call(py_item(slots, nk[].k_size).__set__, result, PythonObject(count))
+    _ = py_call(py_item(slots, nk[].k_nbytes).__set__, result, PythonObject(nbytes))
+    _ = py_call(py_item(slots, nk[].k_itemsize).__set__, result, PythonObject(itemsize))
     _ = borrowed^
     return result
