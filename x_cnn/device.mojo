@@ -923,6 +923,13 @@ comptime PRM_CACHE_WORDS = 64
 # General, not a shape: any resident caller on this context may pass it. Rows: algos/cnn-clf fit and predict; a
 # neighbouring shape (3 x 32 x 32 images, channels 16, 32) and a non-board model (one block without a pool).
 # MODEL (unmeasured): 6 waits x 20-50 us of a 0.56 ms step.
+# A/B round 2, 2026-11-19 (lane fx-verdicts4; NVIDIA L40S host bd9c355c19c0, wheel 0c68d6cd27 and its B set, base and
+# arm in one pod job, tag nvc-ab-20261119T154232Z-0642a5; digests and quality equal). Base -> arm ms: cnn-clf fit 208.9
+# -> 166.9 (0.80), infer 11.85 -> 11.96 (1.01); driver CNNClassifier.fit channels [16, 32] 365.4 -> 313.0 (0.86), [24]
+# 240.4 -> 206.7 (0.86). NOT A VERDICT: the harness bound no worker to a NUMA node on that pod and the board pair ran
+# on different nodes (base node 1, arm node 0); the row's other base in the job (node 1) is 187.1, so the row's bases
+# are 12 % apart. Every reading is in the arm's favour and the size is the model's; stays opt-in, owed RUN: re-time
+# with both workers bound to the GPU's node (the harness fix of lane fx-cagra-taxi), then promote on a same-node pair.
 comptime CNN_OP_NOWAIT = is_defined["MOJOLEARN_CNN_FAST_OP_NOWAIT"]()
 
 
