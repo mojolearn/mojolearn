@@ -173,7 +173,7 @@ def leaf_purity(
     return (pure, total)
 
 
-def main() raises:
+def run_checks() raises:
     var cells = 0
 
     # ---------------- 1. the separable-gap fixture ------------------------

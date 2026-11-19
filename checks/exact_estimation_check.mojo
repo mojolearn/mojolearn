@@ -251,8 +251,8 @@ def run_case(
     for i in range(n_rows):
         h_r.unsafe_ptr().unsafe_store(i, dev_res[i])
         h_w.unsafe_ptr().unsafe_store(i, dev_wts[i])
-    ctx.enqueue_copy(dst_buf=s.residuals, src_ptr=h_r.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=s.residual_weights, src_ptr=h_w.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, s.residuals, h_r)
+    upload_host_into[DType.float32](ctx, s.residual_weights, h_w)
     ctx.synchronize()
     _ = h_r^  # past the drain: a queued copy reads it after its last named use
     _ = h_w^  # past the drain: a queued copy reads it after its last named use
@@ -353,8 +353,8 @@ def run_mape_case(
         wts.append(w)
         h_r.unsafe_ptr().unsafe_store(i, r)
         h_w.unsafe_ptr().unsafe_store(i, w)
-    ctx.enqueue_copy(dst_buf=s.residuals, src_ptr=h_r.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=s.residual_weights, src_ptr=h_w.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, s.residuals, h_r)
+    upload_host_into[DType.float32](ctx, s.residual_weights, h_w)
     ctx.synchronize()
     _ = h_r^  # past the drain: a queued copy reads it after its last named use
     _ = h_w^  # past the drain: a queued copy reads it after its last named use

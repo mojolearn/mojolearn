@@ -108,6 +108,7 @@ from checks.native_tests.linalg_numerical import register as register_linalg_num
 from checks.native_tests.linear_owner import register as register_linear_owner
 from checks.native_tests.linear_svc_native import register as register_linear_svc_native
 from checks.native_tests.linear_svr_native import register as register_linear_svr_native
+from checks.native_tests.llama_refuse_row_scan import register as register_llama_refuse_row_scan
 from checks.native_tests.lof_native import register as register_lof_native
 from checks.native_tests.logistic_label_weights import register as register_logistic_label_weights
 from checks.native_tests.logistic_numeric import register as register_logistic_numeric
@@ -134,7 +135,9 @@ from checks.native_tests.neighbors_weighted_largek import register as register_n
 from checks.native_tests.nmf_native import register as register_nmf_native
 from checks.native_tests.ocsvm_native import register as register_ocsvm_native
 from checks.native_tests.oob_exact_sum import register as register_oob_exact_sum
+from checks.native_tests.ops_grad_identity import register as register_ops_grad_identity
 from checks.native_tests.ops_higher import register as register_ops_higher
+from checks.native_tests.ops_lm_head_v2 import register as register_ops_lm_head_v2
 from checks.native_tests.ops_optimizer import register as register_ops_optimizer
 from checks.native_tests.ops_optimizer_requests import register as register_ops_optimizer_requests
 from checks.native_tests.ops_session import register as register_ops_session
@@ -157,6 +160,7 @@ from checks.native_tests.rankn_math import register as register_rankn_math
 from checks.native_tests.rankn_views import register as register_rankn_views
 from checks.native_tests.resample_cross_vendor_fold import register as register_resample_cross_vendor_fold
 from checks.native_tests.resample_cv_row_order import register as register_resample_cv_row_order
+from checks.native_tests.resident_second_call import register as register_resident_second_call
 from checks.native_tests.runner import Check
 from checks.native_tests.sequence_croston import register as register_sequence_croston
 from checks.native_tests.sequence_garch import register as register_sequence_garch
@@ -193,6 +197,7 @@ from checks.native_tests.training_neural_rng_slices import register as register_
 from checks.native_tests.training_primitives import register as register_training_primitives
 from checks.native_tests.training_residual_dropout_mask import register as register_training_residual_dropout_mask
 from checks.native_tests.training_small_mlp import register as register_training_small_mlp
+from checks.native_tests.transformer_backward_packed import register as register_transformer_backward_packed
 from checks.native_tests.transformer_block_session import register as register_transformer_block_session
 from checks.native_tests.transformer_decode_door import register as register_transformer_decode_door
 from checks.native_tests.transformer_host_block import register as register_transformer_host_block
@@ -446,6 +451,141 @@ from checks.sym_arms_check import register as register_sym_arms_check
 from checks.tensor_sync_state_check import register as register_tensor_sync_state_check
 from checks.train_api_check import register as register_train_api_check
 from checks.tree_ctr_slice_check import register as register_tree_ctr_slice_check
+# lane fx-checks-orphans (2026-11-18): the family standalone main() checks nothing ran; each suite stays in
+# <family>/checks/ (its main() is now run_checks()) and its registered wrapper is checks/native_tests/<family>_<stem>.mojo
+from checks.native_tests.arima_fit_check import register as register_arima_fit_check
+from checks.native_tests.autograd_data_cpu import register as register_autograd_data_cpu
+from checks.native_tests.autograd_data_gpu import register as register_autograd_data_gpu
+from checks.native_tests.autograd_distributed_setup_failure import register as register_autograd_distributed_setup_failure
+from checks.native_tests.autograd_embedding_cpu import register as register_autograd_embedding_cpu
+from checks.native_tests.autograd_embedding_gpu import register as register_autograd_embedding_gpu
+from checks.native_tests.autograd_fold_cpu import register as register_autograd_fold_cpu
+from checks.native_tests.autograd_fold_gpu import register as register_autograd_fold_gpu
+from checks.native_tests.autograd_fused_cpu import register as register_autograd_fused_cpu
+from checks.native_tests.autograd_fused_gpu import register as register_autograd_fused_gpu
+from checks.native_tests.autograd_gemm_gpu import register as register_autograd_gemm_gpu
+from checks.native_tests.autograd_gpu_arguments import register as register_autograd_gpu_arguments
+from checks.native_tests.autograd_loss_cpu import register as register_autograd_loss_cpu
+from checks.native_tests.autograd_loss_gpu import register as register_autograd_loss_gpu
+from checks.native_tests.autograd_lossblock_cpu import register as register_autograd_lossblock_cpu
+from checks.native_tests.autograd_lossblock_gpu import register as register_autograd_lossblock_gpu
+from checks.native_tests.autograd_optim_cpu import register as register_autograd_optim_cpu
+from checks.native_tests.autograd_order_cpu import register as register_autograd_order_cpu
+from checks.native_tests.autograd_order_gpu import register as register_autograd_order_gpu
+from checks.native_tests.autograd_pass1_cpu import register as register_autograd_pass1_cpu
+from checks.native_tests.autograd_pass1_gpu import register as register_autograd_pass1_gpu
+from checks.native_tests.autograd_program_setup_failure import register as register_autograd_program_setup_failure
+from checks.native_tests.autograd_view_cpu import register as register_autograd_view_cpu
+from checks.native_tests.autograd_view_gpu import register as register_autograd_view_gpu
+from checks.native_tests.cluster_host_gemm_check import register as register_cluster_host_gemm_check
+from checks.native_tests.decomposition_variance_identity_check import register as register_decomposition_variance_identity_check
+from checks.native_tests.ensemble_builder_check import register as register_ensemble_builder_check
+from checks.native_tests.ensemble_builder_kernels_check import register as register_ensemble_builder_kernels_check
+from checks.native_tests.ensemble_criteria_check import register as register_ensemble_criteria_check
+from checks.native_tests.ensemble_cuml_oracle_check import register as register_ensemble_cuml_oracle_check
+from checks.native_tests.ensemble_forest_check import register as register_ensemble_forest_check
+from checks.native_tests.ensemble_objectives_check import register as register_ensemble_objectives_check
+from checks.native_tests.ensemble_oob_check import register as register_ensemble_oob_check
+from checks.native_tests.ensemble_predict_check import register as register_ensemble_predict_check
+from checks.native_tests.ensemble_quantiles_check import register as register_ensemble_quantiles_check
+from checks.native_tests.ensemble_regression_check import register as register_ensemble_regression_check
+from checks.native_tests.ensemble_sample_weight_check import register as register_ensemble_sample_weight_check
+from checks.native_tests.ensemble_sampled_cols_check import register as register_ensemble_sampled_cols_check
+from checks.native_tests.ensemble_shuffle_check import register as register_ensemble_shuffle_check
+from checks.native_tests.ensemble_sibling_column_overlap_check import register as register_ensemble_sibling_column_overlap_check
+from checks.native_tests.ensemble_split_check import register as register_ensemble_split_check
+from checks.native_tests.ensemble_train_check import register as register_ensemble_train_check
+from checks.native_tests.extratrees_bestfirst_check import register as register_extratrees_bestfirst_check
+from checks.native_tests.extratrees_borrowed_upload_check import register as register_extratrees_borrowed_upload_check
+from checks.native_tests.extratrees_builder_check import register as register_extratrees_builder_check
+from checks.native_tests.extratrees_device_batched_check import register as register_extratrees_device_batched_check
+from checks.native_tests.extratrees_device_regression_check import register as register_extratrees_device_regression_check
+from checks.native_tests.extratrees_device_tree_check import register as register_extratrees_device_tree_check
+from checks.native_tests.extratrees_feature_sampler_check import register as register_extratrees_feature_sampler_check
+from checks.native_tests.extratrees_fixed_point_check import register as register_extratrees_fixed_point_check
+from checks.native_tests.extratrees_fixtures_check import register as register_extratrees_fixtures_check
+from checks.native_tests.extratrees_flatnode_check import register as register_extratrees_flatnode_check
+from checks.native_tests.extratrees_forest_check import register as register_extratrees_forest_check
+from checks.native_tests.extratrees_gpu_only_entrypoints import register as register_extratrees_gpu_only_entrypoints
+from checks.native_tests.extratrees_host_splitter_check import register as register_extratrees_host_splitter_check
+from checks.native_tests.extratrees_leaf_check import register as register_extratrees_leaf_check
+from checks.native_tests.extratrees_objectives_check import register as register_extratrees_objectives_check
+from checks.native_tests.extratrees_partition_check import register as register_extratrees_partition_check
+from checks.native_tests.extratrees_partition_leaf_kernel_check import register as register_extratrees_partition_leaf_kernel_check
+from checks.native_tests.extratrees_partition_multiblock_check import register as register_extratrees_partition_multiblock_check
+from checks.native_tests.extratrees_pcg_rng_check import register as register_extratrees_pcg_rng_check
+from checks.native_tests.extratrees_quality_band_check import register as register_extratrees_quality_band_check
+from checks.native_tests.extratrees_range_draw_check import register as register_extratrees_range_draw_check
+from checks.native_tests.extratrees_range_kernel_check import register as register_extratrees_range_kernel_check
+from checks.native_tests.extratrees_regression_score_check import register as register_extratrees_regression_score_check
+from checks.native_tests.extratrees_rescue_check import register as register_extratrees_rescue_check
+from checks.native_tests.extratrees_sampler_kernel_check import register as register_extratrees_sampler_kernel_check
+from checks.native_tests.extratrees_split_check import register as register_extratrees_split_check
+from checks.native_tests.extratrees_split_reduce_check import register as register_extratrees_split_reduce_check
+from checks.native_tests.extratrees_stage_upload_bytes_check import register as register_extratrees_stage_upload_bytes_check
+from checks.native_tests.extratrees_tree_check import register as register_extratrees_tree_check
+from checks.native_tests.gbdt_host_binarize_identical import register as register_gbdt_host_binarize_identical
+from checks.native_tests.gbdt_ordered_doc_id_check import register as register_gbdt_ordered_doc_id_check
+from checks.native_tests.gemm_gemm_gather_ftz_check import register as register_gemm_gemm_gather_ftz_check
+from checks.native_tests.gemm_gemm_int_slices_check import register as register_gemm_gemm_int_slices_check
+from checks.native_tests.gemm_gemm_production_dispatch_check import register as register_gemm_gemm_production_dispatch_check
+from checks.native_tests.gemm_gemm_rtf_boundary_check import register as register_gemm_gemm_rtf_boundary_check
+from checks.native_tests.gemm_gemm_stage_ftz_check import register as register_gemm_gemm_stage_ftz_check
+from checks.native_tests.gemm_gemm_workspace_reuse_check import register as register_gemm_gemm_workspace_reuse_check
+from checks.native_tests.glm_link_seams_check import register as register_glm_link_seams_check
+from checks.native_tests.glm_qn_scalar_ieee_check import register as register_glm_qn_scalar_ieee_check
+from checks.native_tests.hdbscan_sparse_mr_check import register as register_hdbscan_sparse_mr_check
+from checks.native_tests.hierarchy_linkage_host_check import register as register_hierarchy_linkage_host_check
+from checks.native_tests.holtwinters_hw_estimate_check import register as register_holtwinters_hw_estimate_check
+from checks.native_tests.holtwinters_hw_predict_ptr_check import register as register_holtwinters_hw_predict_ptr_check
+from checks.native_tests.ivf_ivf_large_k_check import register as register_ivf_ivf_large_k_check
+from checks.native_tests.kde_reused_workspace_check import register as register_kde_reused_workspace_check
+from checks.native_tests.kernel_methods_nystroem_basis_sort_check import register as register_kernel_methods_nystroem_basis_sort_check
+from checks.native_tests.mamba_mamba3_increment_tile_check import register as register_mamba_mamba3_increment_tile_check
+from checks.native_tests.mamba_mamba3_refusal_check import register as register_mamba_mamba3_refusal_check
+from checks.native_tests.mamba_mamba3_s17_tail_tree_check import register as register_mamba_mamba3_s17_tail_tree_check
+from checks.native_tests.mamba_mamba3_yintra_tile_check import register as register_mamba_mamba3_yintra_tile_check
+from checks.native_tests.metrics_host_binary_ranking_check import register as register_metrics_host_binary_ranking_check
+from checks.native_tests.metrics_host_rand_score_check import register as register_metrics_host_rand_score_check
+from checks.native_tests.neighbors_fused_logical32_check import register as register_neighbors_fused_logical32_check
+from checks.native_tests.neighbors_fused_slot_merge_check import register as register_neighbors_fused_slot_merge_check
+from checks.native_tests.neighbors_knn_selector_bound_compact_check import register as register_neighbors_knn_selector_bound_compact_check
+from checks.native_tests.neighbors_query_batch_check import register as register_neighbors_query_batch_check
+from checks.native_tests.tokenizer_generation_policy_check import register as register_tokenizer_generation_policy_check
+from checks.native_tests.training_byte_lm_block_copy_check import register as register_training_byte_lm_block_copy_check
+from checks.native_tests.training_chunked_lm_head_check import register as register_training_chunked_lm_head_check
+from checks.native_tests.training_chunked_lm_head_device_check import register as register_training_chunked_lm_head_device_check
+from checks.native_tests.training_dbscan_parallel_check import register as register_training_dbscan_parallel_check
+from checks.native_tests.training_maximize_check import register as register_training_maximize_check
+from checks.native_tests.transformer_attention_fma_boundary_check import register as register_transformer_attention_fma_boundary_check
+from checks.native_tests.transformer_attention_zdot_routing_check import register as register_transformer_attention_zdot_routing_check
+from checks.native_tests.x_ann_cagra_check import register as register_x_ann_cagra_check
+from checks.native_tests.x_ann_ivf_pq_check import register as register_x_ann_ivf_pq_check
+from checks.native_tests.x_ann_ivf_quant_check import register as register_x_ann_ivf_quant_check
+from checks.native_tests.x_ann_tsne_check import register as register_x_ann_tsne_check
+from checks.native_tests.x_cluster_agglo_check import register as register_x_cluster_agglo_check
+from checks.native_tests.x_cluster_ap_check import register as register_x_cluster_ap_check
+from checks.native_tests.x_cluster_ap_noise_check import register as register_x_cluster_ap_noise_check
+from checks.native_tests.x_cluster_descend_check import register as register_x_cluster_descend_check
+from checks.native_tests.x_cluster_dist_check import register as register_x_cluster_dist_check
+from checks.native_tests.x_cluster_gauss_check import register as register_x_cluster_gauss_check
+from checks.native_tests.x_cluster_kth_check import register as register_x_cluster_kth_check
+from checks.native_tests.x_cluster_meanshift_check import register as register_x_cluster_meanshift_check
+from checks.native_tests.x_cluster_moments_check import register as register_x_cluster_moments_check
+from checks.native_tests.x_cluster_nearest_check import register as register_x_cluster_nearest_check
+from checks.native_tests.x_cluster_pdist_check import register as register_x_cluster_pdist_check
+from checks.native_tests.x_cluster_spectral_assign_check import register as register_x_cluster_spectral_assign_check
+from checks.native_tests.x_cnn_gemm_host_check import register as register_x_cnn_gemm_host_check
+from checks.native_tests.x_decomp_dense_check import register as register_x_decomp_dense_check
+from checks.native_tests.x_decomp_fold_ew_check import register as register_x_decomp_fold_ew_check
+from checks.native_tests.x_decomp_rows_check import register as register_x_decomp_rows_check
+from checks.native_tests.x_neighbors_dist_check import register as register_x_neighbors_dist_check
+from checks.native_tests.x_neighbors_fold_check import register as register_x_neighbors_fold_check
+from checks.native_tests.x_neighbors_model_check import register as register_x_neighbors_model_check
+from checks.native_tests.x_neighbors_semi_check import register as register_x_neighbors_semi_check
+from checks.native_tests.x_neighbors_sketch_check import register as register_x_neighbors_sketch_check
+from checks.native_tests.xtrees_glue_check import register as register_xtrees_glue_check
+from checks.native_tests.xtrees_zero_cover_check import register as register_xtrees_zero_cover_check
 
 def all_checks() -> List[Check]:
     var checks = List[Check]()
@@ -543,6 +683,7 @@ def all_checks() -> List[Check]:
     checks.append(register_linear_owner())
     checks.append(register_linear_svc_native())
     checks.append(register_linear_svr_native())
+    checks.append(register_llama_refuse_row_scan())
     checks.append(register_lof_native())
     checks.append(register_logistic_label_weights())
     checks.append(register_logistic_numeric())
@@ -569,7 +710,9 @@ def all_checks() -> List[Check]:
     checks.append(register_nmf_native())
     checks.append(register_ocsvm_native())
     checks.append(register_oob_exact_sum())
+    checks.append(register_ops_grad_identity())
     checks.append(register_ops_higher())
+    checks.append(register_ops_lm_head_v2())
     checks.append(register_ops_optimizer())
     checks.append(register_ops_optimizer_requests())
     checks.append(register_ops_session())
@@ -592,6 +735,7 @@ def all_checks() -> List[Check]:
     checks.append(register_rankn_views())
     checks.append(register_resample_cross_vendor_fold())
     checks.append(register_resample_cv_row_order())
+    checks.append(register_resident_second_call())
     checks.append(register_sequence_croston())
     checks.append(register_sequence_garch())
     checks.append(register_sequence_moe())
@@ -627,6 +771,7 @@ def all_checks() -> List[Check]:
     checks.append(register_training_primitives())
     checks.append(register_training_residual_dropout_mask())
     checks.append(register_training_small_mlp())
+    checks.append(register_transformer_backward_packed())
     checks.append(register_transformer_block_session())
     checks.append(register_transformer_decode_door())
     checks.append(register_transformer_host_block())
@@ -879,4 +1024,137 @@ def all_checks() -> List[Check]:
     checks.append(register_tensor_sync_state_check())
     checks.append(register_train_api_check())
     checks.append(register_tree_ctr_slice_check())
+    checks.append(register_arima_fit_check())
+    checks.append(register_autograd_data_cpu())
+    checks.append(register_autograd_data_gpu())
+    checks.append(register_autograd_distributed_setup_failure())
+    checks.append(register_autograd_embedding_cpu())
+    checks.append(register_autograd_embedding_gpu())
+    checks.append(register_autograd_fold_cpu())
+    checks.append(register_autograd_fold_gpu())
+    checks.append(register_autograd_fused_cpu())
+    checks.append(register_autograd_fused_gpu())
+    checks.append(register_autograd_gemm_gpu())
+    checks.append(register_autograd_gpu_arguments())
+    checks.append(register_autograd_loss_cpu())
+    checks.append(register_autograd_loss_gpu())
+    checks.append(register_autograd_lossblock_cpu())
+    checks.append(register_autograd_lossblock_gpu())
+    checks.append(register_autograd_optim_cpu())
+    checks.append(register_autograd_order_cpu())
+    checks.append(register_autograd_order_gpu())
+    checks.append(register_autograd_pass1_cpu())
+    checks.append(register_autograd_pass1_gpu())
+    checks.append(register_autograd_program_setup_failure())
+    checks.append(register_autograd_view_cpu())
+    checks.append(register_autograd_view_gpu())
+    checks.append(register_cluster_host_gemm_check())
+    checks.append(register_decomposition_variance_identity_check())
+    checks.append(register_ensemble_builder_check())
+    checks.append(register_ensemble_builder_kernels_check())
+    checks.append(register_ensemble_criteria_check())
+    checks.append(register_ensemble_cuml_oracle_check())
+    checks.append(register_ensemble_forest_check())
+    checks.append(register_ensemble_objectives_check())
+    checks.append(register_ensemble_oob_check())
+    checks.append(register_ensemble_predict_check())
+    checks.append(register_ensemble_quantiles_check())
+    checks.append(register_ensemble_regression_check())
+    checks.append(register_ensemble_sample_weight_check())
+    checks.append(register_ensemble_sampled_cols_check())
+    checks.append(register_ensemble_shuffle_check())
+    checks.append(register_ensemble_sibling_column_overlap_check())
+    checks.append(register_ensemble_split_check())
+    checks.append(register_ensemble_train_check())
+    checks.append(register_extratrees_bestfirst_check())
+    checks.append(register_extratrees_borrowed_upload_check())
+    checks.append(register_extratrees_builder_check())
+    checks.append(register_extratrees_device_batched_check())
+    checks.append(register_extratrees_device_regression_check())
+    checks.append(register_extratrees_device_tree_check())
+    checks.append(register_extratrees_feature_sampler_check())
+    checks.append(register_extratrees_fixed_point_check())
+    checks.append(register_extratrees_fixtures_check())
+    checks.append(register_extratrees_flatnode_check())
+    checks.append(register_extratrees_forest_check())
+    checks.append(register_extratrees_gpu_only_entrypoints())
+    checks.append(register_extratrees_host_splitter_check())
+    checks.append(register_extratrees_leaf_check())
+    checks.append(register_extratrees_objectives_check())
+    checks.append(register_extratrees_partition_check())
+    checks.append(register_extratrees_partition_leaf_kernel_check())
+    checks.append(register_extratrees_partition_multiblock_check())
+    checks.append(register_extratrees_pcg_rng_check())
+    checks.append(register_extratrees_quality_band_check())
+    checks.append(register_extratrees_range_draw_check())
+    checks.append(register_extratrees_range_kernel_check())
+    checks.append(register_extratrees_regression_score_check())
+    checks.append(register_extratrees_rescue_check())
+    checks.append(register_extratrees_sampler_kernel_check())
+    checks.append(register_extratrees_split_check())
+    checks.append(register_extratrees_split_reduce_check())
+    checks.append(register_extratrees_stage_upload_bytes_check())
+    checks.append(register_extratrees_tree_check())
+    checks.append(register_gbdt_host_binarize_identical())
+    checks.append(register_gbdt_ordered_doc_id_check())
+    checks.append(register_gemm_gemm_gather_ftz_check())
+    checks.append(register_gemm_gemm_int_slices_check())
+    checks.append(register_gemm_gemm_production_dispatch_check())
+    checks.append(register_gemm_gemm_rtf_boundary_check())
+    checks.append(register_gemm_gemm_stage_ftz_check())
+    checks.append(register_gemm_gemm_workspace_reuse_check())
+    checks.append(register_glm_link_seams_check())
+    checks.append(register_glm_qn_scalar_ieee_check())
+    checks.append(register_hdbscan_sparse_mr_check())
+    checks.append(register_hierarchy_linkage_host_check())
+    checks.append(register_holtwinters_hw_estimate_check())
+    checks.append(register_holtwinters_hw_predict_ptr_check())
+    checks.append(register_ivf_ivf_large_k_check())
+    checks.append(register_kde_reused_workspace_check())
+    checks.append(register_kernel_methods_nystroem_basis_sort_check())
+    checks.append(register_mamba_mamba3_increment_tile_check())
+    checks.append(register_mamba_mamba3_refusal_check())
+    checks.append(register_mamba_mamba3_s17_tail_tree_check())
+    checks.append(register_mamba_mamba3_yintra_tile_check())
+    checks.append(register_metrics_host_binary_ranking_check())
+    checks.append(register_metrics_host_rand_score_check())
+    checks.append(register_neighbors_fused_logical32_check())
+    checks.append(register_neighbors_fused_slot_merge_check())
+    checks.append(register_neighbors_knn_selector_bound_compact_check())
+    checks.append(register_neighbors_query_batch_check())
+    checks.append(register_tokenizer_generation_policy_check())
+    checks.append(register_training_byte_lm_block_copy_check())
+    checks.append(register_training_chunked_lm_head_check())
+    checks.append(register_training_chunked_lm_head_device_check())
+    checks.append(register_training_dbscan_parallel_check())
+    checks.append(register_training_maximize_check())
+    checks.append(register_transformer_attention_fma_boundary_check())
+    checks.append(register_transformer_attention_zdot_routing_check())
+    checks.append(register_x_ann_cagra_check())
+    checks.append(register_x_ann_ivf_pq_check())
+    checks.append(register_x_ann_ivf_quant_check())
+    checks.append(register_x_ann_tsne_check())
+    checks.append(register_x_cluster_agglo_check())
+    checks.append(register_x_cluster_ap_check())
+    checks.append(register_x_cluster_ap_noise_check())
+    checks.append(register_x_cluster_descend_check())
+    checks.append(register_x_cluster_dist_check())
+    checks.append(register_x_cluster_gauss_check())
+    checks.append(register_x_cluster_kth_check())
+    checks.append(register_x_cluster_meanshift_check())
+    checks.append(register_x_cluster_moments_check())
+    checks.append(register_x_cluster_nearest_check())
+    checks.append(register_x_cluster_pdist_check())
+    checks.append(register_x_cluster_spectral_assign_check())
+    checks.append(register_x_cnn_gemm_host_check())
+    checks.append(register_x_decomp_dense_check())
+    checks.append(register_x_decomp_fold_ew_check())
+    checks.append(register_x_decomp_rows_check())
+    checks.append(register_x_neighbors_dist_check())
+    checks.append(register_x_neighbors_fold_check())
+    checks.append(register_x_neighbors_model_check())
+    checks.append(register_x_neighbors_semi_check())
+    checks.append(register_x_neighbors_sketch_check())
+    checks.append(register_xtrees_glue_check())
+    checks.append(register_xtrees_zero_cover_check())
     return checks^

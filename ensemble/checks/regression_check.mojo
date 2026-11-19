@@ -603,7 +603,7 @@ def arm_f_estimator_predict(ctx: DeviceContext) raises -> Int:
     return fails
 
 
-def main() raises:
+def run_checks() raises:
     print("regression_check: a REGRESSION forest, through the generic Builder")
     print("  RegressionObjectiveFunction + RegressionBin, MSE criterion")
     var ctx = DeviceContext()

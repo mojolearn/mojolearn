@@ -78,7 +78,7 @@ def run[O: ClusterOps](
     return dist^
 
 
-def main() raises:
+def run_checks() raises:
     var n = 40
     var d = 5
     var cut = 17

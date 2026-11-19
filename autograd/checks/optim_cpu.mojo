@@ -205,6 +205,6 @@ def run_optim_cases[E: Exec](mut ex: E) raises:
     print("PASS optim_cases 7")
 
 
-def main() raises:
+def run_checks() raises:
     var ex = HostExec()
     run_optim_cases(ex)

@@ -462,7 +462,7 @@ def _oracle(
     return out^
 
 
-def main() raises:
+def run_checks() raises:
     comptime assert has_accelerator(), "regression_score_check requires a GPU"
 
     print("========================================================")

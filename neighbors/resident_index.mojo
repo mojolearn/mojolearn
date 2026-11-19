@@ -48,6 +48,7 @@ thread is bound to another device (the device plan's root) moves the index
 there first (device to host to device, the same bytes) under the same
 handle, so a handle never runs on a device the caller did not select.
 """
+from core.resident_upload_count import RUC_KNN_INDEX, resident_upload_note
 from std.atomic import Atomic, Ordering
 
 from max.gpu.host import DeviceBuffer, DeviceContext
@@ -108,6 +109,7 @@ struct ResidentKnnIndex(Movable):
         var ctx = process_ctx[_DEVCTX_SLOT](dplan)
         var index = ctx.enqueue_create_buffer[DType.float32](n_index * n_features)
         ctx.enqueue_copy(dst_buf=index, src_ptr=index_ptr)
+        resident_upload_note(RUC_KNN_INDEX, n_index * n_features)  # check-only count (compiles to nothing by default)
         if status_addr != 0:
             # Lane a7b-device-x-neighbors: the fit's finite test rides
             # behind this upload, in its one synchronisation (the door

@@ -215,7 +215,7 @@ def check_cast_fault(integer: Bool, kind: Int) raises:
     _ = integers^
 
 
-def main() raises:
+def run_checks() raises:
     var cases = 0
     for conditional in range(2):
         # Dataset setup plus all five optimizer-state allocations and the

@@ -40,7 +40,7 @@ def check(ctx: DeviceContext, rows: Int, cols: Int, mut digest: UInt64) raises:
     ctx.synchronize()
 
 
-def main() raises:
+def run_checks() raises:
     comptime assert GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL, "IDENTICAL required"
     var ctx = DeviceContext()
     var digest = UInt64(14695981039346656037)

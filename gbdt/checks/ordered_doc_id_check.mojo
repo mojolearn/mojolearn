@@ -80,7 +80,7 @@ def hist8_kernel[variant: Int](
             out_buf.unsafe_store(at, smem.unsafe_load(at))
 
 
-def main() raises:
+def run_checks() raises:
     var ctx=DeviceContext()
     var keys=List[UInt32]();var idx=List[UInt32]();var ci=List[UInt32]()
     var target=List[Float32]();var weight=List[Float32]()

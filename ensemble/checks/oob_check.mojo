@@ -56,7 +56,7 @@ from ensemble.randomforest import (
     RowSampler,
     fit_forest,
 )
-from checks.native_tests.kit import upload_host_into
+from checks.native_tests.kit import download_buffer_into, upload_host_into
 
 comptime DT = DType.float32
 comptime CLS_LT = DType.int32
@@ -116,7 +116,7 @@ def arm_a_mask_per_cell(ctx: DeviceContext) raises -> Int:
         s.sample(ctx, Int32(t))
 
     var hm = ctx.enqueue_create_host_buffer[DType.uint8](n_trees * n_rows)
-    ctx.enqueue_copy(dst_buf=hm, src_buf=s.bootstrap_masks)
+    download_buffer_into[DType.uint8](ctx, s.bootstrap_masks, hm)
     ctx.synchronize()
 
     # The independent tally: a second sampler, no masks at all.
@@ -124,7 +124,7 @@ def arm_a_mask_per_cell(ctx: DeviceContext) raises -> Int:
     for t in range(n_trees):
         ref_s.sample(ctx, Int32(t))
         var hr = ctx.enqueue_create_host_buffer[DType.int32](n_rows)
-        ctx.enqueue_copy(dst_buf=hr, src_buf=ref_s.selected_rows_[0])
+        download_buffer_into[DType.int32](ctx, ref_s.selected_rows_[0], hr)
         ctx.synchronize()
         var want = List[Bool]()
         for _ in range(n_rows):
@@ -181,7 +181,7 @@ def arm_b_counts_identity(ctx: DeviceContext) raises -> Int:
     for t in range(n_trees):
         s.sample(ctx, Int32(t))
     var hm = ctx.enqueue_create_host_buffer[DType.uint8](n_trees * n_rows)
-    ctx.enqueue_copy(dst_buf=hm, src_buf=s.bootstrap_masks)
+    download_buffer_into[DType.uint8](ctx, s.bootstrap_masks, hm)
     ctx.synchronize()
 
     var never_oob = 0
@@ -462,7 +462,7 @@ def arm_f_boundary_reuse(ctx: DeviceContext) raises -> Int:
         var host = ctx.enqueue_create_host_buffer[DType.int32](n)
         for tree in range(3):
             sampler.sample(ctx, Int32(tree))
-            ctx.enqueue_copy(dst_buf=host, src_buf=sampler.selected_rows_[0])
+            download_buffer_into[DType.int32](ctx, sampler.selected_rows_[0], host)
             ctx.synchronize()
             for i in range(n):
                 if host.unsafe_ptr().unsafe_load(i) != Int32(i):
@@ -497,7 +497,7 @@ def arm_f_boundary_reuse(ctx: DeviceContext) raises -> Int:
     return wrong
 
 
-def main() raises:
+def run_checks() raises:
     print("oob_check: out-of-bag masks and scoring")
     var ctx = DeviceContext()
     var fails = 0

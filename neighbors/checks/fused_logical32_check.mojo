@@ -72,7 +72,7 @@ def check_case(ctx: DeviceContext, m: Int, k: Int) raises:
     print("FUSED_LOGICAL32_CASE_PASS", m, k, "cells", m * k)
 
 
-def main() raises:
+def run_checks() raises:
     comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
         raise Error("fused logical32 gate requires IDENTICAL")
     comptime if is_defined["MOJOLEARN_REQUIRE_CDNA_TARGET"]():

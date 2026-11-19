@@ -164,7 +164,7 @@ def fit_host(
     return tree^
 
 
-def main() raises:
+def run_checks() raises:
     var ctx = DeviceContext()
     print("[device] a REGRESSION tree grown on", ctx.name())
     var cells = 0

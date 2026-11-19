@@ -154,9 +154,8 @@ def _fill(
             if j == 0:
                 v += shift_col0
             hx.unsafe_ptr().unsafe_store(i * PCA_COLS + j, Float32(v))
-    ctx.enqueue_copy(dst_buf=x, src_ptr=hx.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, x, hx)
     ctx.synchronize()
-    _ = hx^  # past the drain: a queued copy reads it after its last named use
 
 
 def _fit(
@@ -328,7 +327,7 @@ def check_input_restored() raises:
     var before = ctx.enqueue_create_host_buffer[DType.float32](
         PCA_ROWS * PCA_COLS
     )
-    ctx.enqueue_copy(dst_ptr=before.unsafe_ptr(), src_buf=x)
+    download_host_into[DType.float32](ctx, x, before)
     ctx.synchronize()
 
     _ = pca_fit(ctx, x, x_alias, x_alias2, mu, cov, PCA_ROWS, PCA_COLS, PCA_COMPONENTS)
@@ -336,7 +335,7 @@ def check_input_restored() raises:
     var after = ctx.enqueue_create_host_buffer[DType.float32](
         PCA_ROWS * PCA_COLS
     )
-    ctx.enqueue_copy(dst_ptr=after.unsafe_ptr(), src_buf=x)
+    download_host_into[DType.float32](ctx, x, after)
     ctx.synchronize()
 
     var worst = Float32(0.0)
@@ -427,14 +426,14 @@ def check_covariance_fused_and_fallback_restore() raises:
     var after = ctx.enqueue_create_host_buffer[DType.float32](
         PCA_ROWS * PCA_COLS
     )
-    ctx.enqueue_copy(dst_ptr=before.unsafe_ptr(), src_buf=x)
+    download_host_into[DType.float32](ctx, x, before)
     ctx.synchronize()
     for pass_idx in range(2):
         compute_covariance(
             ctx, x, x_alias, x_alias2, mu, cov, PCA_ROWS, PCA_COLS,
             restore_input=(pass_idx == 1),
         )
-        ctx.enqueue_copy(dst_ptr=after.unsafe_ptr(), src_buf=x)
+        download_host_into[DType.float32](ctx, x, after)
         ctx.synchronize()
         for i in range(PCA_ROWS * PCA_COLS):
             if (
@@ -472,7 +471,7 @@ def check_covariance_fused_and_fallback_restore() raises:
         fh.unsafe_ptr().unsafe_store(
             i, Float32(Int(z % 1000)) * Float32(0.01) + Float32(3.0)
         )
-    ctx.enqueue_copy(dst_buf=fx, src_ptr=fh.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, fx, fh)
     ctx.synchronize()
 
     # THE FALLBACK ARM DOES NOT EXIST UNDER `IDENTICAL`, AND THAT IS ANOTHER
@@ -527,7 +526,7 @@ def check_covariance_fused_and_fallback_restore() raises:
     compute_covariance(
         ctx, fx, fa, fa2, fmu, fcov, FB_ROWS, FB_COLS, restore_input=False
     )
-    ctx.enqueue_copy(dst_ptr=fh_after.unsafe_ptr(), src_buf=fx)
+    download_host_into[DType.float32](ctx, fx, fh_after)
     ctx.synchronize()
     var moved = 0
     for i in range(FB_ROWS * FB_COLS):
@@ -545,12 +544,12 @@ def check_covariance_fused_and_fallback_restore() raises:
 
     # Restore by hand (x is currently centered), then run the restoring
     # variant end to end and demand it comes back within rounding.
-    ctx.enqueue_copy(dst_buf=fx, src_ptr=fh.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, fx, fh)
     ctx.synchronize()
     compute_covariance(
         ctx, fx, fa, fa2, fmu, fcov, FB_ROWS, FB_COLS, restore_input=True
     )
-    ctx.enqueue_copy(dst_ptr=fh_after.unsafe_ptr(), src_buf=fx)
+    download_host_into[DType.float32](ctx, fx, fh_after)
     ctx.synchronize()
     var worst = Float32(0.0)
     for i in range(FB_ROWS * FB_COLS):
@@ -667,7 +666,7 @@ def check_covariance_is_symmetric() raises:
     )
 
     var h = ctx.enqueue_create_host_buffer[DType.float32](PCA_COLS * PCA_COLS)
-    ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=cov)
+    download_host_into[DType.float32](ctx, cov, h)
     ctx.synchronize()
 
     var asym = 0
@@ -755,9 +754,8 @@ def _fill_wide(
                 v += z * _wide_latent_sd(k) * b
             v += (_wide_u01(i, j + 1000, 3) - 0.5) * 2.0 * sqrt(3.0)
             hx.unsafe_ptr().unsafe_store(i * n_cols + j, Float32(v))
-    ctx.enqueue_copy(dst_buf=x, src_ptr=hx.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, x, hx)
     ctx.synchronize()
-    _ = hx^  # past the drain: a queued copy reads it after its last named use
 
 
 def _fit_wide(
@@ -1080,9 +1078,8 @@ def _sign_flip_roundtrip(
     var p_in = h_in.unsafe_ptr().unsafe_bitcast[UInt32]()
     for i in range(n * n):
         p_in.unsafe_store(i, bits[i])
-    ctx.enqueue_copy(dst_buf=buf, src_ptr=h_in.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, buf, h_in)
     ctx.synchronize()
-    _ = h_in^  # past the drain: a queued copy reads it after its last named use
 
     ctx.enqueue_function[sign_flip_kernel](
         buf.unsafe_ptr(),
@@ -1096,7 +1093,7 @@ def _sign_flip_roundtrip(
     # `.unsafe_ptr()` above would otherwise have been its last use and Mojo
     # frees a buffer at its last use (a known Mojo trap), which on a bad day means
     # the kernel writes into freed memory.
-    ctx.enqueue_copy(dst_ptr=h_out.unsafe_ptr(), src_buf=buf)
+    download_host_into[DType.float32](ctx, buf, h_out)
     ctx.synchronize()
 
     var p_out = h_out.unsafe_ptr().unsafe_bitcast[UInt32]()
@@ -1753,6 +1750,7 @@ from decomposition.checks.pca_sabotage import (
     pca_sabotage_name,
     sabotage_whiten_scale_kernel,
 )
+from checks.native_tests.kit import download_host_into, upload_host_into
 
 
 comptime WHITEN_SUBSET_ROWS = 256
@@ -1846,11 +1844,9 @@ def _whiten_scores(
         h_comps.unsafe_ptr().unsafe_store(i, Float32(r.components[i]))
     for i in range(PCA_COMPONENTS):
         h_sing.unsafe_ptr().unsafe_store(i, Float32(r.singular_vals[i]))
-    ctx.enqueue_copy(dst_buf=comps, src_ptr=h_comps.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=sing, src_ptr=h_sing.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, comps, h_comps)
+    upload_host_into[DType.float32](ctx, sing, h_sing)
     ctx.synchronize()
-    _ = h_comps^  # past the drain: a queued copy reads it after its last named use
-    _ = h_sing^  # past the drain: a queued copy reads it after its last named use
 
     # The TRANSFORM_ROWS arm is a DRIVER arm: it breaks nothing inside the
     # kernel, it hands the kernel the wrong row count, so the kernel launched
@@ -1872,7 +1868,7 @@ def _whiten_scores(
     var h_out = ctx.enqueue_create_host_buffer[DType.float32](
         rows * PCA_COMPONENTS
     )
-    ctx.enqueue_copy(dst_ptr=h_out.unsafe_ptr(), src_buf=out)
+    download_host_into[DType.float32](ctx, out, h_out)
     ctx.synchronize()
     var scores = List[Float64]()
     for i in range(rows * PCA_COMPONENTS):
@@ -1985,7 +1981,7 @@ def check_whiten_round_trip() raises:
     var h_x = ctx.enqueue_create_host_buffer[DType.float32](
         PCA_ROWS * PCA_COLS
     )
-    ctx.enqueue_copy(dst_ptr=h_x.unsafe_ptr(), src_buf=x)
+    download_host_into[DType.float32](ctx, x, h_x)
     ctx.synchronize()
     var r = pca_fit(
         ctx, x, xa, xa2, mu, cov, PCA_ROWS, PCA_COLS, PCA_COMPONENTS
@@ -2010,11 +2006,9 @@ def check_whiten_round_trip() raises:
         h_c.unsafe_ptr().unsafe_store(i, Float32(r.components[i]))
     for i in range(PCA_COMPONENTS):
         h_s.unsafe_ptr().unsafe_store(i, Float32(r.singular_vals[i]))
-    ctx.enqueue_copy(dst_buf=comps, src_ptr=h_c.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=sing, src_ptr=h_s.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, comps, h_c)
+    upload_host_into[DType.float32](ctx, sing, h_s)
     ctx.synchronize()
-    _ = h_c^  # past the drain: a queued copy reads it after its last named use
-    _ = h_s^  # past the drain: a queued copy reads it after its last named use
 
     whiten_components(
         ctx, comps, comps_f, sing, PCA_COMPONENTS, PCA_COLS, PCA_ROWS, False
@@ -2052,7 +2046,7 @@ def check_whiten_round_trip() raises:
     var h_back = ctx.enqueue_create_host_buffer[DType.float32](
         PCA_ROWS * PCA_COLS
     )
-    ctx.enqueue_copy(dst_ptr=h_back.unsafe_ptr(), src_buf=back)
+    download_host_into[DType.float32](ctx, back, h_back)
     ctx.synchronize()
 
     var worst = 0.0
@@ -2211,11 +2205,9 @@ def _whiten_edge_run(
     var p_sing = h_sing.unsafe_ptr().unsafe_bitcast[UInt32]()
     for i in range(n_components):
         p_sing.unsafe_store(i, sing_bits[i])
-    ctx.enqueue_copy(dst_buf=src, src_ptr=h_src.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=sing, src_ptr=h_sing.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, src, h_src)
+    upload_host_into[DType.float32](ctx, sing, h_sing)
     ctx.synchronize()
-    _ = h_sing^  # past the drain: a queued copy reads it after its last named use
-    _ = h_src^  # past the drain: a queued copy reads it after its last named use
 
     _whiten_launch(
         ctx, src, dst, sing, n_components, n_cols, n_fit_rows, inverse, arm
@@ -2224,7 +2216,7 @@ def _whiten_edge_run(
     # `dst` is READ here, after the launch and after the drain: taking
     # `.unsafe_ptr()` above would otherwise be its last use and Mojo frees a
     # buffer at its last use (the same trap `_sign_flip_roundtrip` names).
-    ctx.enqueue_copy(dst_ptr=h_dst.unsafe_ptr(), src_buf=dst)
+    download_host_into[DType.float32](ctx, dst, h_dst)
     ctx.synchronize()
     var p_dst = h_dst.unsafe_ptr().unsafe_bitcast[UInt32]()
     var out = List[UInt32]()

@@ -67,7 +67,7 @@ def spd(n: Int) -> List[Float32]:
     return g^
 
 
-def main() raises:
+def run_checks() raises:
     var tr = IdentityTrace()
     tr.header("x_decomp dense_check (DEVIATIONS 5307-5309, 5320)")
     # ---- the host's fast Householder QR (x_decomp/host_qr.mojo) == the

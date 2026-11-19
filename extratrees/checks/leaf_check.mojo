@@ -62,7 +62,7 @@ def oracle_split(item: NodeWorkItem) -> Split:
     return Split(1.0, Int32(Int(mix32(h) % 37)), 5.0, Int32(n_left))
 
 
-def main() raises:
+def run_checks() raises:
     var n_rows = 600
     var n_classes = 4
 

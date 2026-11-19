@@ -69,7 +69,7 @@ def _is_sub(x: Float32) -> Bool:
     return (w & UInt32(0x7F800000)) == UInt32(0) and (w & UInt32(0x7FFFFF)) != UInt32(0)
 
 
-def main() raises:
+def run_checks() raises:
     var r = Rng(0x9E3779B97F4A7C15)
     var A = List[Float32]()
     var B = List[Float32]()

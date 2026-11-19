@@ -156,7 +156,6 @@ from neighbors.checks.knn_selector_bound_compact_check import splitmix64 as c_ne
 from spectral.checks.spectral_fixture import splitmix64 as c_spectral_checks_spectral_fixture__splitmix64
 from training.checks.loss_fixture import ce_splitmix64 as c_training_checks_loss_fixture__ce_splitmix64
 from training.checks.optimizer_fixture import opt_splitmix64 as c_training_checks_optimizer_fixture__opt_splitmix64
-from training.checks.step_glue_check import _mix as c_training_checks_step_glue_check__mix
 from training.checks.train_loop import train_splitmix64 as c_training_checks_train_loop__train_splitmix64
 from transformer.checks.transformer_fixture import fixture_splitmix64 as c_transformer_checks_transformer_fixture__fixture_splitmix64
 from umap.checks.batch_determinism_check import _mix as c_umap_checks_batch_determinism_check__mix
@@ -962,10 +961,8 @@ def _check_splitmix64(t: _Inputs, mut v: _Verdict):
             bad[30] += 1
             if first[30] < 0:
                 first[30] = r
-        if _bits(c_training_checks_step_glue_check__mix(A)) != want:
-            bad[31] += 1
-            if first[31] < 0:
-                first[31] = r
+        # Slot 31 was training/checks/step_glue_check.mojo::_mix: the file was deleted with its
+        # experiment (lane fx-checks-orphans, 2026-11-18; docs/TOMBSTONES.md). The slot stays unused.
         if _bits(c_training_checks_train_loop__train_splitmix64(A)) != want:
             bad[32] += 1
             if first[32] < 0:
@@ -1033,7 +1030,6 @@ def _check_splitmix64(t: _Inputs, mut v: _Verdict):
     v.copy("spectral/checks/spectral_fixture.mojo::splitmix64", "splitmix64", t.rows(), bad[28], first[28], False)
     v.copy("training/checks/loss_fixture.mojo::ce_splitmix64", "splitmix64", t.rows(), bad[29], first[29], False)
     v.copy("training/checks/optimizer_fixture.mojo::opt_splitmix64", "splitmix64", t.rows(), bad[30], first[30], False)
-    v.copy("training/checks/step_glue_check.mojo::_mix", "splitmix64", t.rows(), bad[31], first[31], False)
     v.copy("training/checks/train_loop.mojo::train_splitmix64", "splitmix64", t.rows(), bad[32], first[32], False)
     v.copy("transformer/checks/transformer_fixture.mojo::fixture_splitmix64", "splitmix64", t.rows(), bad[33], first[33], False)
     v.copy("umap/checks/batch_determinism_check.mojo::_mix", "splitmix64", t.rows(), bad[34], first[34], False)

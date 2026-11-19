@@ -9,7 +9,6 @@ BIT, on fixtures first shown to SEPARATE each seam. Under IDENTICAL:
 
 Card stages: cagra.<fixture>.graph, cagra.<fixture>.search.{dist,idx}."""
 
-from std.sys import exit
 from core.identity_trace import IdentityTrace
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from x_ann.cagra_device import cagra_build_device, cagra_search_device, _launch_prune
@@ -73,7 +72,7 @@ def repeat_rows_prune(mut failed: Int) raises:
     _ = ds^
 
 
-def main() raises:
+def run_checks() raises:
     comptime assert GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL, "run under tools/with_identical_mode.sh"
     var failed = 0
     var trace = IdentityTrace()
@@ -146,8 +145,8 @@ def main() raises:
           "seeds", sep_seed)
     if sep_prune == 0 or sep_rev == 0 or sep_topk == 0 or sep_parent == 0 or sep_seed == 0:
         print("VACUOUS: a fixture does not separate its seam")
-        exit(2)
+        raise Error("VACUOUS: a fixture does not separate its seam")
     if failed > 0:
         print("cagra_check: FAILED", failed)
-        exit(1)
+        raise Error("cagra_check: FAILED")
     print("cagra_check: ALL OK")

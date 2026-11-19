@@ -200,7 +200,7 @@ def _case(
         print(line)
 
 
-def main() raises:
+def run_checks() raises:
     comptime assert GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL, (
         "gemm_rtf_boundary_check: build with -D MOJOLEARN_NUMERIC_IDENTICAL=1"
     )

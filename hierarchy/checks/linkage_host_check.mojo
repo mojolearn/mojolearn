@@ -87,7 +87,7 @@ def _check(name: String, x: List[Float32], m: Int, d: Int, n_clusters: Int, is_s
     return ties
 
 
-def main() raises:
+def run_checks() raises:
     var tied = 0
     for sq in range(2):
         var is_sqrt = sq == 1

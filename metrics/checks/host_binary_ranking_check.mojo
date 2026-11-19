@@ -12,7 +12,7 @@ def _same(a: Float32, b: Float32) -> Bool:
     return bitcast[DType.uint32](a) == bitcast[DType.uint32](b)
 
 
-def main() raises:
+def run_checks() raises:
     var y: List[Int32] = [0, 1, 1, 0]
     var scores: List[Float32] = [
         bitcast[DType.float32](UInt32(0x80000000)), Float32(0.0),

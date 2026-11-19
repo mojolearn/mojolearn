@@ -694,19 +694,19 @@ def _sweep(
     var d_sb = ctx.enqueue_create_buffer[DType.float32](1)
     d_sb.enqueue_fill(score_before)
 
-    ctx.enqueue_copy(dst_buf=d_cat, src_ptr=fx.cat_w.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_binw, src_ptr=fx.bin_w.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_parts, src_ptr=fx.parts.unsafe_ptr())
+    upload_whole_into[DType.float32](ctx, d_cat, fx.cat_w)
+    upload_whole_into[DType.float32](ctx, d_binw, fx.bin_w)
+    upload_whole_into[DType.float32](ctx, d_parts, fx.parts)
 
     # the GATHERED arm reads the transposed copy the implemented gather makes
     var d_src = ctx.enqueue_create_buffer[DType.float32](hist_len)
-    ctx.enqueue_copy(dst_buf=d_src, src_ptr=fx.hist.unsafe_ptr())
+    upload_whole_into[DType.float32](ctx, d_src, fx.hist)
     if gathered:
         gather_histogram_by_leaves(
             ctx, d_src, b_count, 2, fx.p_count, fx.fold_count, d_hist
         )
     else:
-        ctx.enqueue_copy(dst_buf=d_hist, src_buf=d_src)
+        copy_device_into[DType.float32](ctx, d_hist, d_src)
 
     var masked = List[UInt32]()
     for k in range(3 * b_count):
@@ -1099,11 +1099,11 @@ def run_checks() raises:
     # DEVIATION 207: the scorers read scoreBeforeSplit from the device
     var d_sb2 = ctx.enqueue_create_buffer[DType.float32](1)
     d_sb2.enqueue_fill(score_before)
-    ctx.enqueue_copy(dst_buf=d_bf2, src_ptr=fb.bf.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_cat2, src_ptr=fb.cat_w.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_bw2, src_ptr=fb.bin_w.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_h2, src_ptr=fb.hist.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_p2, src_ptr=fb.parts.unsafe_ptr())
+    upload_whole_into[DType.uint32](ctx, d_bf2, fb.bf)
+    upload_whole_into[DType.float32](ctx, d_cat2, fb.cat_w)
+    upload_whole_into[DType.float32](ctx, d_bw2, fb.bin_w)
+    upload_whole_into[DType.float32](ctx, d_h2, fb.hist)
+    upload_whole_into[DType.float32](ctx, d_p2, fb.parts)
     find_optimal_split(
         ctx, d_bf2, fb.b_count, d_cat2, d_bw2, fb.n_features, d_h2, d_p2,
         fb.p_count, 1, d_sb2, d_ri2, d_rs2, 2, SCORE_FUNCTION_COSINE,
@@ -1466,7 +1466,7 @@ def run_checks() raises:
 # checks/ that no CI job ran. One process per check name in CI keeps any
 # fresh-process precondition. Device column only: the suite needs a GPU, so the CPU build never instantiates it.
 from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
-from checks.native_tests.kit import download_host_into, upload_whole_into
+from checks.native_tests.kit import copy_device_into, download_host_into, upload_whole_into
 
 
 def run_cases(column: Column, mut report: Report):

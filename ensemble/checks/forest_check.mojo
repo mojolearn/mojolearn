@@ -67,7 +67,7 @@ from ensemble.randomforest import (
     min_samples_split_fraction,
     n_sampled_rows_for,
 )
-from checks.native_tests.kit import upload_host_into
+from checks.native_tests.kit import download_buffer_into, upload_host_into
 
 comptime DT = DType.float32
 comptime LT = DType.int32
@@ -433,7 +433,7 @@ def arm_d_unimplemented_arms(ctx: DeviceContext) raises -> Int:
         var smp = RowSampler(ctx, True, parity_seed, nr, ns, False)
         smp.sample(ctx, Int32(tree_id))
         var hb = ctx.enqueue_create_host_buffer[DType.int32](ns)
-        ctx.enqueue_copy(dst_buf=hb, src_buf=smp.selected_rows_[0])
+        download_buffer_into[DType.int32](ctx, smp.selected_rows_[0], hb)
         ctx.synchronize()
         oracle_rows += 1
         # DEVIATION 2010 (2026-09-01): what this arm asserts depends on
@@ -495,7 +495,7 @@ def arm_d_unimplemented_arms(ctx: DeviceContext) raises -> Int:
             var smp2 = RowSampler(ctx, True, seed, nr, ns, False)
             smp2.sample(ctx, Int32(tree_id))
             var hb2 = ctx.enqueue_create_host_buffer[DType.int32](ns)
-            ctx.enqueue_copy(dst_buf=hb2, src_buf=smp2.selected_rows_[0])
+            download_buffer_into[DType.int32](ctx, smp2.selected_rows_[0], hb2)
             ctx.synchronize()
             var moved = 0
             for i in range(ns):
@@ -550,7 +550,7 @@ def arm_d_unimplemented_arms(ctx: DeviceContext) raises -> Int:
     s2.prepare_weights(ctx, w2)
     s2.sample(ctx, Int32(0))
     var h2 = ctx.enqueue_create_host_buffer[DType.int32](100)
-    ctx.enqueue_copy(dst_buf=h2, src_buf=s2.selected_rows_[0])
+    download_buffer_into[DType.int32](ctx, s2.selected_rows_[0], h2)
     ctx.synchronize()
     var oob = 0
     for i in range(100):
@@ -591,7 +591,7 @@ def arm_d_unimplemented_arms(ctx: DeviceContext) raises -> Int:
     var s4 = RowSampler(ctx, False, UInt64(7), 100, 100, False)
     s4.sample(ctx, Int32(3))
     var h = ctx.enqueue_create_host_buffer[DType.int32](100)
-    ctx.enqueue_copy(dst_buf=h, src_buf=s4.selected_rows_[0])
+    download_buffer_into[DType.int32](ctx, s4.selected_rows_[0], h)
     ctx.synchronize()
     var wrong = 0
     for i in range(100):
@@ -903,7 +903,7 @@ def arm_h_n_bins_clamp(ctx: DeviceContext) raises -> Int:
     return wrong
 
 
-def main() raises:
+def run_checks() raises:
     print("forest_check: ensemble/randomforest.mojo")
     print("  RowSampler (randomforest.cuh:62-226) and the forest loop (:286-370)")
     var ctx = DeviceContext()

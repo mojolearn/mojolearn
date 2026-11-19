@@ -563,7 +563,7 @@ def arm_d_sabotage(ctx: DeviceContext, n_slots: Int) raises -> Int:
     return failures
 
 
-def main() raises:
+def run_checks() raises:
     print("split_check: ensemble/decisiontree/batched_levelalgo/split.mojo")
     print("  mirroring split.cuh @ cuml v26.08.00 265b9da6")
     var failures = 0

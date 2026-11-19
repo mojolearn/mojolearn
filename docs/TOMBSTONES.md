@@ -22859,3 +22859,22 @@ Evidence for every section below: A/B ab3, NVIDIA L40S (RunPod host c6dd9ebea3e3
 - Verdict: B slower, arm/base geomean 1.129 over 5 cells: samba-train-step 45.48 -> 89.64 ms (1.97), lm-train-step 1.00, mlp-train-step 0.98, ops-session-step 0.95, sequential-fit 1.00. Resident state is the single-device route; `resident=False` and multi-device plans keep the per-call step.
 - Files: training/optimizer_public_common.mojo (`OPTIMIZER_RESIDENT`, its test in `resident_wanted_by_build`), sequence/opt_public_device.mojo (the local copy, `_resident_env`, three unreachable per-call branches), bindings/sequence_optimizer_native_door.mojo (the local copy and its refusal), bindings/samba_step_native_door.mojo (the import and term), comments in training/optimizer_public.mojo, python/mojolearn/tests/test_samba_step_native.py, tools/optimizer_resident_check.py.
 - Patch: `experiments/removed/MOJOLEARN_OPTIMIZER_RESIDENT_OFF.patch`. EXPERIMENTS.md: the `MOJOLEARN_OPTIMIZER_RESIDENT_OFF` row.
+
+
+## Dead checks: lane fx-checks-orphans (2026-11-18)
+
+Standalone `main()` checks that no pixi task, workflow, development group, tools script or registry entry ran, and whose
+subject is an experiment that was already deleted (each define below has its own entry above and is refused by its guard).
+Checks are not experiments: no define, no refusal, no grid entry and no patch of their own; everything is recoverable at
+`e1cd993f23^` (`git checkout e1cd993f23^ -- <path>`). No product code, no bits, no default changed.
+
+- Deleted by `e1cd993f23`: `training/checks/step_glue_check.mojo` (735 lines; the step glue arms of
+  `MOJOLEARN_STEP_GLUE_TRIAL`, deleted 2026-11-15: its entry raised at once in every build that lacks the define, and the
+  define is gone), `mamba/checks/mamba3_statepass_price.mojo` (49 lines; the block timer of the
+  `MOJOLEARN_MAMBA3_LEGACY_STATEPASS` A/B, deleted 2026-11-15: the "build twice" recipe is refused),
+  `gemm/checks/gemm_537_reach_probe.mojo` (113 lines; the reach probe of `MOJOLEARN_537_GEMM_IDENT_SWAP`, deleted
+  2026-11-15: its second arm is refused).
+- Callers changed: `checks/fixture_rng_gate.mojo` no longer imports `_mix` from the deleted step glue check (its slot 31
+  stays unused; `tools/fixture_rng_census.py` reports 0 stale).
+- Kept: every orphan check that carries an inline TOMBSTONE marker, every probe of the paused Apple `fast` programme, and
+  the 133 family checks registered by this lane (`checks/native_tests/registry.mojo`, block "lane fx-checks-orphans").

@@ -424,14 +424,14 @@ def check_depth(depth: Int) raises -> Int:
             var length = plans[pi].feat_start[3] + plans[pi].feat_count[3]
             length += plans[pi].feat_count[3] // 4
             var host = ctx.enqueue_create_host_buffer[DType.uint32](length)
-            ctx.enqueue_copy(dst_ptr=host.unsafe_ptr(), src_buf=plans[pi].folds)
+            download_host_into[DType.uint32](ctx, plans[pi].folds, host)
             ctx.synchronize()
             var at = plans[pi].feat_start[0] + plans[pi].feat_count[0]
             var c0 = host.unsafe_ptr().unsafe_load(at)
             var c1 = host.unsafe_ptr().unsafe_load(at + 1)
             host.unsafe_ptr().unsafe_store(at, c1)
             host.unsafe_ptr().unsafe_store(at + 1, c0)
-            ctx.enqueue_copy(dst_buf=plans[pi].folds, src_ptr=host.unsafe_ptr())
+            upload_host_into[DType.uint32](ctx, plans[pi].folds, host)
             ctx.synchronize()
             var b_swap = run_arm[False, True](
                 ctx, dblocks, plans, depth, n_live, False, cindex, row_index,
@@ -441,7 +441,7 @@ def check_depth(depth: Int) raises -> Int:
             d_swap = count_diff(off_side, b_swap, want, ob_first, ob_len, hcl)
             host.unsafe_ptr().unsafe_store(at, c0)
             host.unsafe_ptr().unsafe_store(at + 1, c1)
-            ctx.enqueue_copy(dst_buf=plans[pi].folds, src_ptr=host.unsafe_ptr())
+            upload_host_into[DType.uint32](ctx, plans[pi].folds, host)
             ctx.synchronize()
             _ = host^
     print("    check_2581_on: on vs off", d_b, "cells; with two 5-bit groups'"
