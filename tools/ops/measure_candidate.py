@@ -6,6 +6,7 @@ line of tools/ops/paper_compare_job.sh (lane measure-prep, 2026-11-09; docs/plan
 
     python3 tools/ops/measure_candidate.py stage nvidia|amd --version V --source-commit SHA [--wheel-dir DIR]
         [--lane LANE] [--tree DIR] [--b-arm NAME=DIR@SHA ...] [--tag TAG] [--parts PARTS] [--dry-run]
+        [--rows FILE [--prior-wheel NAME=DIR@SHA ...]]
 
 The wheels are the ones tools/release.py packs (its linux-pack step, Release.split_final): for a candidate build
 (`tools/release.py candidate`, a local version X.Y.Z.devN+<sha12>[.label]) ~/mojolearn-evidence/release-candidates/
@@ -64,6 +65,16 @@ PC_PRIOR_VERSION (its last entry); the job installs those releases from PyPI and
 the same box in the same job, and the compare's columns are those on-box boards. An explicit extra prior is
 accepted: a last entry other than 0.8.55 is the last-release arm, which also times the owed board rows. The prior
 board doubles the board time (accepted). Its evidence counts in the disk need too.
+
+OUR OWN EARLIER BUILT WHEELS beside the candidate (--prior-wheel NAME=DIR@SHA, repeatable, the targeted job only;
+lane fx-same-pod-prior, Andrew 2026-11-19: a speed verdict compares two wheels timed on the SAME host in the SAME job;
+the stored 0.8.55 board is a screen only, and 0.8.55 is never installed or timed). DIR is a measurement build on disk
+(tools/release.py candidate's .../<commit12>/linux/final) of commit SHA; it is validated like a B set (check_built,
+pick_wheels, build_manifest), copied beside the candidate under p-<NAME>/ and listed in the PC_PRIOR_WHEELS file
+(`<name> <dir> <sha>`). The job installs it as a B set's venv, times every listed row on it right after the
+candidate chunk by chunk (our GPU arm only, one scored run, the same small-row median rule), and the compare takes the
+first one as the verdict baseline (tools/paper_compare.py --verdict-prior): REGRESSION / FASTER only from that pair,
+with both box probes. No owed-file entry and no define. The estimate and the disk need count each one as an arm.
 """
 import argparse
 import os
@@ -377,6 +388,32 @@ def parse_b_arm(text):
     return m.group(1), Path(m.group(2)).expanduser(), m.group(3)
 
 
+PRIOR_WHEEL_RE = re.compile(r"([a-z0-9][a-z0-9.-]*)=(.+)@([0-9a-f]{40})")
+
+
+def parse_prior_wheel(text):
+    """(name, wheel dir, sha) of a --prior-wheel NAME=DIR@SHA: one of our own earlier measurement builds on disk."""
+    m = PRIOR_WHEEL_RE.fullmatch(text)
+    if not m:
+        raise SystemExit(f"measure-candidate: --prior-wheel wants NAME=DIR@SHA (a built wheel set, 40-hex sha), "
+                         f"not {text!r}")
+    return m.group(1), Path(m.group(2)).expanduser(), m.group(3)
+
+
+def check_prior_wheels(names, b_names, prior_versions, rows):
+    """Refuse a --prior-wheel outside the targeted job, a name given twice, or one that is also a --b-arm or a
+    --prior-versions entry (the job's arm is prior-<name>, beside prior-<version>)."""
+    if names and not rows:
+        raise SystemExit("measure-candidate: --prior-wheel times the listed rows of the targeted job only (--rows)")
+    dup = sorted({n for n in names if names.count(n) > 1})
+    if dup:
+        raise SystemExit(f"measure-candidate: --prior-wheel {', '.join(dup)} given twice")
+    clash = sorted(set(names) & (set(b_names) | set(prior_versions)))
+    if clash:
+        raise SystemExit(f"measure-candidate: --prior-wheel {', '.join(clash)} is also a --b-arm or a "
+                         "--prior-versions entry; name it apart")
+
+
 def stored_times(boards):
     """{race id: the LARGEST stored wall_s over BOARDS} (a path or a list of paths; missing files are skipped): a
     stored time from another pod is a floor, and the slowest box seen is the safer forecast (STORED_TIMES_AB1)."""
@@ -470,6 +507,8 @@ def cmd_stage(a):
     prior_versions = [v for v in a.prior_versions.split(",") if v]
     if not prior_versions or any(not re.fullmatch(r"[0-9]+(\.[0-9]+)+[.a-z0-9]*", v) for v in prior_versions):
         raise SystemExit(f"measure-candidate: --prior-versions wants a comma list of releases, not {a.prior_versions!r}")
+    pw_specs = [parse_prior_wheel(x) for x in a.prior_wheel]
+    check_prior_wheels([n for n, _, _ in pw_specs], [n for n, _, _ in specs], prior_versions, a.rows)
     parts = parse_parts(a.parts)
     if a.rows and not parts:
         parts = ["targeted"]
@@ -480,8 +519,8 @@ def cmd_stage(a):
         raise SystemExit(f"measure-candidate: --baseline-board {a.baseline_board}: no such file")
     if a.rows:
         # the targeted job's cap check, before anything is copied: an estimate over the cap is refused with its split.
-        # Against the stored baseline the job times one arm (our new wheel): no 0.8.55 seconds.
-        est, split = TR.check_cap(a.rows, a.cap_min, a.chunk_s, one_arm=stored)
+        # Against the stored baseline the job times no 0.8.55 arm; each --prior-wheel is one more arm on every row.
+        est, split = TR.check_cap(a.rows, a.cap_min, a.chunk_s, one_arm=stored, prior_wheels=len(pw_specs))
         print(TR.estimate_line(est))
         owed_arms = [x for x in (a.owed_arms or "").split(",") if x]
         bad = [x for x in owed_arms if x not in [n for n, _, _ in specs]]
@@ -529,6 +568,17 @@ def cmd_stage(a):
         C.build_manifest(bver, vendor, bw, bsha)
         uploads += [(w, f"{indir}/b-{name}/{vendor}/{w.name}", False) for w in bw]
         b_lines.append(f"{name} {indir}/b-{name}/{vendor} {bsha}\n")
+    p_lines = []
+    for name, pdir, psha in pw_specs:
+        # our own earlier built wheel: validated and staged exactly as a B set (no owed entry), its own dir p-<name>
+        pver = dir_version(pdir, a.b_version or version)
+        check_built(pdir, vendor)
+        pw = pick_wheels(pdir, vendor, pver)
+        pm = C.build_manifest(pver, vendor, pw, psha)
+        print(f"prior wheel {name}: {pver} {psha[:12]} " + ", ".join(
+            f"{f['file']} {f['sha256'][:16]}" for f in pm["files"]))
+        uploads += [(w, f"{indir}/p-{name}/{vendor}/{w.name}", False) for w in pw]
+        p_lines.append(f"{name} {indir}/p-{name}/{vendor} {psha}\n")
     # OUR prior wheels re-timed on the same box in the same job (AGENTS.md "Times are compared only on the same box",
     # 2026-11-14): the compare's columns; the job installs them from PyPI. The last one is PC_PRIOR_VERSION (a last
     # release when it is not the paper baseline).
@@ -554,6 +604,12 @@ def cmd_stage(a):
     allow_hw_diff = a.allow_hw_diff or os.environ.get("PC_ALLOW_HW_DIFF") == "1"
     if vendor == "nvidia" and allow_hw_diff:
         env["PC_ALLOW_HW_DIFF"] = "1"     # the job then runs on another GPU and every row is flagged HW-DIFF
+    if p_lines:
+        local = Path(a.state_dir).expanduser() / f"prior-wheels-{commit[:12]}-{vendor}.txt"
+        local.parent.mkdir(parents=True, exist_ok=True)
+        local.write_text("".join(p_lines))
+        uploads.append((local, f"{indir}/prior-wheels-{vendor}.txt", False))
+        env["PC_PRIOR_WHEELS"] = f"{indir}/prior-wheels-{vendor}.txt"
     if b_lines:
         local = Path(a.state_dir).expanduser() / f"b-arms-{commit[:12]}-{vendor}.txt"
         local.parent.mkdir(parents=True, exist_ok=True)
@@ -567,7 +623,7 @@ def cmd_stage(a):
         # 0.8.55 is timed on the box), one B-arm window, every listed race and A/B unit race with its evidence
         nrows = len(TR.read_rows(a.rows))
         built = sum(1 for _, _, sha in specs if sha is not None)
-        arms = 1 if stored else 1 + len(prior_versions)
+        arms = (1 if stored else 1 + len(prior_versions)) + len(pw_specs)     # each prior wheel is one more venv
         ab_races = sum(2 * n for _, _, n, _ in abp)
         need_gb = targeted_disk_gb(arms, 1 if built else 0, sum(Path(x).stat().st_size for x, _, _ in uploads),
                                    nrows * arms + ab_races, arms + 2 * len(abp))
@@ -725,6 +781,10 @@ def main(argv=None):
     s.add_argument("--lane", default="measure", help="NVIDIA lane name: the tree /root/mojolearn-<lane> (default measure)")
     s.add_argument("--tree", default=None, help="the worktree whose tools/ the job runs (default this checkout)")
     s.add_argument("--b-arm", action="append", default=[], help="NAME=DIR@SHA: a B wheel set of the owed A/Bs")
+    s.add_argument("--prior-wheel", action="append", default=[], metavar="NAME=DIR@SHA",
+                   help="one of OUR OWN earlier built wheel sets (a measurement build dir on disk and its commit) timed "
+                        "on every listed row in the same job right after the candidate (--rows only; repeat it): the "
+                        "compare's verdict baseline is the first one; no owed-file entry, no define")
     s.add_argument("--b-version", default=None, help="the B sets' version (default: each dir's candidate.json, "
                    "else --version)")
     s.add_argument("--state-dir", default="~/mojolearn-evidence/measure-candidate")
