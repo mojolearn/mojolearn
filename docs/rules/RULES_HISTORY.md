@@ -937,7 +937,10 @@ for fast and identical... hope the others ride along. tune later if need be." Th
 What did not change: the identical contract; `fast` needs no identical anything; `fast` is judged on speed and on
 quality that does not go down; the docs rule (part 7) keeps `fast` listed as Apple only until it is qualified on
 another vendor.
-\n\n## Replaced 2026-11-19 (Andrew: time ourselves against ourselves; 0.8.55 retired as a yardstick)\n\n### TEMPORARY: time our latest against the stored 0.8.55 board, approximately; fix wide gaps; no haste (Andrew, 2026-11-18)
+
+## Replaced 2026-11-19 (Andrew: time ourselves against ourselves; 0.8.55 retired as a yardstick)
+
+### TEMPORARY: time our latest against the stored 0.8.55 board, approximately; fix wide gaps; no haste (Andrew, 2026-11-18)
 
 Ends when Andrew says. It narrows the NVIDIA-only direction above while it runs.
 
