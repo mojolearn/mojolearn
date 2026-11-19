@@ -333,10 +333,11 @@ def transformer_state_read(mut mods: NativeModules, state: PythonObject, operati
         raise Error("TransformerState cache buffers are smaller than their declared capacity")
     var held = min(cached, window) if window > 0 else cached
     var dims: List[Int] = [b, kv, held, hd]
-    if window == 0:
-        comptime if _KV_STRIDE_CAP:
+    comptime if _KV_STRIDE_CAP:
+        if window == 0:
             # The buffers hold each (batch, kv head) row at stride max_tokens:
-            # the used part is a copy of each row's first `cached` slots.
+            # the used part is a copy of each row's first `cached` slots (the
+            # view branch below is not reached on a build with the define).
             _ = _transformer_array_slots(mods, context)
             var packed = generation_array(dims)
             var packed_dst = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=packed._addr))
@@ -347,8 +348,8 @@ def transformer_state_read(mut mods: NativeModules, state: PythonObject, operati
                     unsafe_memcpy(dest=packed_dst + head * held * hd, src=strided + head * slots * hd, count=held * hd)
             _ = buffer
             return packed
-        else:
-            return _transformer_cache_view(mods, buffer, dims, context)
+    if window == 0:
+        return _transformer_cache_view(mods, buffer, dims, context)
     _ = _transformer_array_slots(mods, context)
     var output = generation_array(dims)
     var dst = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=output._addr))
