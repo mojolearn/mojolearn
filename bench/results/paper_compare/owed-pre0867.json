@@ -387,7 +387,8 @@
   "seq-pool-off": {
    "define": "MOJOLEARN_SEQ_POOL_OFF",
    "status": "define in code (sequence/exec_device.mojo SEQ_POOL (seq_pool_on)): B = fresh buffers per executor (the former =0); A = the sequence executor's device buffer pool (the former default). A transport/route choice: digests must not move.",
-   "owed": "RUN"
+   "owed": "RUN",
+   "evidence": "A/B round 2 2026-11-19, NVIDIA L40S host bd9c355c19c0, wheel 0c68d6cd27 and its B set, base and arm in one pod job (nvc1-0008, tag nvc-ab-20261119T154232Z-0642a5; ~/mojolearn-evidence/measure-candidate/build-0c68d6cd27/ab2/x/, tables ~/mojolearn-evidence/briefs-20261118/fx-verdicts4/tab-<arm>.txt, driver rows x/logs/drivers.log), one scored run per arm, small rows the median of 20 calls: pool (default) -> no pool: sequential-fit 279.9 -> 274.5 ms (0.98), sequential-predict 2.893 -> 2.751 (0.95, medians of 20); digests and quality equal; no NUMA record, no second base of either row in the job. NOT DECIDED: fresh buffers are at least as fast on these two small-buffer rows, but the pool was built for calls with 64 MB stages (sequence/exec_device.mojo, the buffer pool note: a pinned allocation of that size costs tens of ms on CUDA) and no such row was in the pair; neither side is deleted on two cells. Stays RUN: time the off arm on layer rows with large inputs beside these two."
   },
   "clip-packed": {
    "define": "MOJOLEARN_CLIP_PACKED",
@@ -743,8 +744,9 @@
   },
   "rnn-step-gemm": {
    "define": "MOJOLEARN_SEQ_FAST_RNN_STEP_GEMM",
-   "status": "define in code (autograd/rules_recurrent.mojo RNN_STEP_GEMM, rule rnn_step_gemm, _wgrad; oracle sequence/checks/oracle.mojo _o_bptt_block; IDENTICAL, every column, the host column runs the same launches): B = every recurrent product is one launch of the lane's own GEMM on the launch rule's route and fold: on the per-step chain (GRU, LSTM) the forward's hidden projection (OP_GEMM_EPI, b_hh epilogue) and the backward's dh += dGH W_hh (OP_GEMM accumulate), each followed by the elementwise cell (OP_CELL_FWD / OP_CELL_BWD), where the product holds at least 2^20 multiply-adds, split-K shapes included; and for every cell (rnn too) dW_hh and dW_ih as ONE OP_GEMM over the T B stacked rows instead of the two-launch blocked order. A = one fused one-thread launch a step and wgrad_blocked. BIT VERSION under the define: bits change at split-K shapes of the per-step products (the board's backward, K = G H = 256) and for the weight gradients when T B > 512; same bits elsewhere; the formula is beside the define. Device and host agree under the arm (the seams check's 5504_bptt_step_gemm cases). A and B digests therefore DIFFER on these lanes: compare quality, not digests. Build every binding that imports autograd/rules_recurrent.mojo (the sequence device and host bindings) and the seams check.",
-   "owed": "RUN"
+   "status": "SPLIT 2026-11-19 (lane fx-verdicts4): the forward step's GEMM launch PROMOTED (autograd/rules_recurrent.mojo RNN_STEP_GEMM = not MOJOLEARN_SEQ_FAST_RNN_STEP_GEMM_OFF, IDENTICAL, every column; the old name is refused); the weight-gradient GEMM at split-K shapes DELETED (experiments/removed/MOJOLEARN_SEQ_FAST_RNN_STEP_GEMM.patch); the backward step and the tile-routed weight gradients are the arm rnn-bptt-gemm.",
+   "owed": "DECIDED",
+   "evidence": "A/B round 2 2026-11-19, NVIDIA L40S host bd9c355c19c0, wheel 0c68d6cd27 and its B set, base and arm in one pod job (nvc1-0008, tag nvc-ab-20261119T154232Z-0642a5; ~/mojolearn-evidence/measure-candidate/build-0c68d6cd27/ab2/x/, tables ~/mojolearn-evidence/briefs-20261118/fx-verdicts4/tab-<arm>.txt, driver rows x/logs/drivers.log), one scored run per arm, small rows the median of 20 calls: 27 cells; quality equal to 1e-8 on every cell (the arm is a bit version). Same-NUMA-node pairs (14; the gru-clf synthetic and all rnn pairs ran on different nodes and are not used): PREDICT gru-clf taxi 38.98 -> 14.81 ms (0.38), gru-reg 19.53 -> 6.89, 19.52 -> 6.83 (0.35), lstm-clf 50.97 -> 18.74, 50.69 -> 18.80 (0.37), lstm-reg 25.35 -> 9.10, 25.44 -> 9.14 (0.36); FIT gru-clf taxi 467.2 -> 1115.7 (2.39), gru-reg 463.7 -> 1111.1, 463.2 -> 1111.9 (2.40), lstm-clf 572.7 -> 1352.1, 572.4 -> 1351.5 (2.36), lstm-reg 566.7 -> 1340.4, 566.7 -> 1340.5 (2.37). No node record: gru-fit higgs 120.0 -> 384.6 (3.20), lstm-fit 146.1 -> 490.0 (3.35), rnn-fit 55.7 -> 154.3 (2.77). Different nodes: rnn fit 2.26-2.32, rnn predict 1.01-1.04. Driver fits (one call): lstm T 48 H 64 879 -> 2575 (2.93), rnn H 64 137 -> 318 (2.32), lstm H 128 1167 -> 720 (0.62), gru H 128 911 -> 594 (0.65), 2-layer gru H 96 on 12 features 1871 -> 1622 (0.87), lstm H 16 batch 64 254.5 -> 236.2 (0.93). Split by site."
   },
   "cnn-op-nowait": {
    "define": "MOJOLEARN_CNN_FAST_OP_NOWAIT",
@@ -853,6 +855,16 @@
   "llama-stage-keep-off": {
    "define": "MOJOLEARN_LLAMA_FAST_STAGE_KEEP_OFF",
    "status": "define in code (transformer/impl/llama/modeling_llama.mojo LLAMA_FAST_STAGE_KEEP): B = LlamaDeviceStages.reset (thirty zero fills and a wait) before every stateless forward-only block run on kept stages (the default before 2026-11-19); A = the stage flags restored and the bytes kept, default since 2026-11-19 (lane fx-verdicts4). No float is produced differently on either arm. Owed to re-time the promotion (0.953 on the board row, 0.87-0.97 on four driver shapes) and to settle the deletion of the reset path for this caller",
+   "owed": "RUN"
+  },
+  "rnn-step-gemm-off": {
+   "define": "MOJOLEARN_SEQ_FAST_RNN_STEP_GEMM_OFF",
+   "status": "define in code (autograd/rules_recurrent.mojo RNN_STEP_GEMM, rule rnn_step_gemm): B = the fused per-step forward launch OP_CELL_FWD_H at every shape (the default before 2026-11-19); A = the forward step's hidden projection as its own OP_GEMM_EPI launch and then OP_CELL_FWD when the step is at least 2^20 multiply-adds, default since 2026-11-19 (lane fx-verdicts4). Bits differ between the arms only at split-K forward shapes (K = H > 64 with few cells or tiles); the board's hidden 64 is the same-bits class. Owed: the forward step was timed alone only in predict (0.35-0.39); inside a fit (batch 256) it was timed only together with the backward sites",
+   "owed": "RUN"
+  },
+  "rnn-bptt-gemm": {
+   "define": "MOJOLEARN_SEQ_FAST_RNN_BPTT_GEMM",
+   "status": "define in code (autograd/rules_recurrent.mojo RNN_BPTT_GEMM, rnn_bptt_gemm, _wgrad; oracle sequence/checks/oracle.mojo _o_bptt_block; IDENTICAL, every column, the host column runs the same launches): B = the backward step's dh += dGH W_hh as its own OP_GEMM launch (at least 2^20 multiply-adds a step) and dW_hh / dW_ih as one OP_GEMM over the T B stacked rows where the launch rule does not split the product; A = the default: the fused backward launch OP_CELL_BWD_H and the blocked order for both weight gradients. A bit version (split-K backward steps; non-split weight gradients over more than 512 rows). Narrowed 2026-11-19 from rnn-step-gemm, whose weight-gradient GEMM at split-K shapes made every hidden 64 fit 2.3-3.4x slower",
    "owed": "RUN"
   }
  },
@@ -2500,7 +2512,7 @@
    "b_arms": [
     "seq-pool-off"
    ],
-   "decides": "keep A (the sequence executor's device buffer pool (the former default)) unless B is at least as fast at equal quality; then B becomes the default with a _OFF define; digests must not move"
+   "decides": "keep A (the sequence executor's device buffer pool, the default) unless B (fresh buffers) is at least as fast at equal quality on these rows AND on layer rows whose stages are tens of MB (the pool's reason: pinned and device allocations per call); then B becomes the default with a _OFF define. Round 2 (2026-11-19): B 0.98 on sequential-fit and 0.95 on sequential-predict, small buffers only: not decided. B slower on the large-stage rows: delete the _OFF switch with the four tombstone parts, or bound the pool to large buffers if the small rows still favour fresh ones; digests must not move"
   },
   {
    "id": "clip-packed-envgate",
@@ -4605,16 +4617,18 @@
    "rows": "full",
    "vendor": "nvidia",
    "b_arms": [
-    "rnn-step-gemm"
+    "rnn-step-gemm-off",
+    "rnn-bptt-gemm"
    ],
-   "decides": "promote B only if the lstm and gru fits (algos synthetic and taxi-hourly, neural lstm-fit and gru-fit) are faster on the NVIDIA L40S (same box, same job) with quality equal (accuracy / logloss / r2 beside every time: the arm is a bit version on these rows, so digests differ between A and B and are not the test; device against host under the arm is the seams check's), and the predict rows are not slower. rnn rows take the scan and change only in their two weight gradients (one launch each instead of two): they must not be slower. Launches a step: lstm / gru 68 -> 113, rnn 22 -> 20; the bet is arithmetic rate (the fused one-thread folds and the blocked dW_hh hold about 300 M multiply-adds a step at about 0.9 TFLOP/s; the lane's GEMM tile runs 3.6-4.0), not launch count. Estimate 0.75-1.05x; the L40S launch floor is unmeasured, so a result inside the noise floor is a loser and the arm is deleted with the four tombstone parts"
+   "decides": "after the split of 2026-11-19 (lane fx-verdicts4). rnn-step-gemm-off (B = the fused forward launch): keep the forward step's GEMM (the candidate) unless B is faster on the gru / lstm fit or predict rows at equal quality on the NVIDIA L40S, base and arm in one job with both workers on one NUMA node; B not faster on any: delete the _OFF switch and OP_CELL_FWD_H's use above the rule. rnn-bptt-gemm (B = backward step and tile-routed weight gradients on the GEMM): promote only if no gru / lstm fit is slower and quality is equal (a bit version: digests differ between the arms and are not the test); the rnn rows are controls for it at hidden 64 (their weight gradients are split shapes and keep the blocked order)"
   },
   {
    "id": "rnn-step-gemm-shapes",
    "source": "lane fx-rnn-cnn-fit (2026-11-19; report ~/mojolearn-evidence/briefs-20261118/fx-rnn-cnn-fit-RESULT.md); the neighbouring shapes, the non-board model and two controls of the arm (no dimension targeting); driver rnn_shapes in tools/measure_owed_driver.py",
    "kind": "driver",
    "b_arms": [
-    "rnn-step-gemm"
+    "rnn-step-gemm-off",
+    "rnn-bptt-gemm"
    ],
    "shape": {
     "cases": [
@@ -4690,7 +4704,8 @@
    "driver": "rnn_shapes",
    "arms": [
     "candidate",
-    "rnn-step-gemm"
+    "rnn-step-gemm-off",
+    "rnn-bptt-gemm"
    ]
   },
   {

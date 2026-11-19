@@ -1155,6 +1155,12 @@ def _check_configuration() -> Bool:
     # TOMBSTONE: MOJOLEARN_CNN_FAST_FLAT_UPDATE (NOISE, A/B round 2 NVIDIA L40S, wheel 0c68d6cd27, job nvc-ab-20261119T154232Z-0642a5, one run per arm, digests equal) deleted 2026-11-19 by lane/fx-verdicts4; code recoverable at 8f3f639b13.
     # Restore: git apply experiments/removed/MOJOLEARN_CNN_FAST_FLAT_UPDATE.patch; record in docs/TOMBSTONES.md.
     comptime assert not is_defined["MOJOLEARN_CNN_FAST_FLAT_UPDATE"](), "removed 2026-11-19 (lane/fx-verdicts4, A/B round 2 NVIDIA L40S, wheel 0c68d6cd27, job nvc-ab-20261119T154232Z-0642a5, one run per arm, digests equal): Program.fit's flat one-launch optimizer update was arm/base 0.97 on cnn-clf fit (187.1 -> 181.4 ms) where the row's two bases are 12 % apart (noise); code at 8f3f639b13, experiments/removed/MOJOLEARN_CNN_FAST_FLAT_UPDATE.patch"
+    # MOJOLEARN_SEQ_FAST_RNN_STEP_GEMM (autograd/rules_recurrent.mojo): split by site. The forward step's GEMM launch is
+    # the IDENTICAL default (RNN_STEP_GEMM, _OFF restores the fused launch); the backward step and the tile-routed weight
+    # gradients are the opt-in arm MOJOLEARN_SEQ_FAST_RNN_BPTT_GEMM; the weight-gradient GEMM at split-K shapes is
+    # deleted (TOMBSTONE beside the constant, experiments/removed/MOJOLEARN_SEQ_FAST_RNN_STEP_GEMM.patch). The old name
+    # is refused so a stale build line does not silently mean one of the three.
+    comptime assert not is_defined["MOJOLEARN_SEQ_FAST_RNN_STEP_GEMM"](), "split 2026-11-19 (lane/fx-verdicts4, A/B round 2 NVIDIA L40S, wheel 0c68d6cd27, job nvc-ab-20261119T154232Z-0642a5, one run per arm, quality equal): gru / lstm predict 0.35-0.39 (the forward step: now the default, -D MOJOLEARN_SEQ_FAST_RNN_STEP_GEMM_OFF restores the fused launch); fit 2.3-3.4x slower at hidden 64 from the weight-gradient GEMM at split-K shapes (deleted); the backward step and tile-routed weight gradients are -D MOJOLEARN_SEQ_FAST_RNN_BPTT_GEMM (default off, A/B owed). Remove -D MOJOLEARN_SEQ_FAST_RNN_STEP_GEMM"
     # ---- end lane fx-verdicts4
     return True
 
