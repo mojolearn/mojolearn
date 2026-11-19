@@ -1,11 +1,11 @@
---- a/training/chunked_lm_head_v2.mojo
-+++ b/training/chunked_lm_head_v2.mojo
-@@ -43,6 +43,8 @@
-             ftz(hidden.unsafe_load(row * width + feature)),
-             ftz(weight.unsafe_load(token * width + feature)), acc,
-         ))
-+    if token == 0:  # SABOTAGE: token 0 logit shifted by 1/16 on the device
-+        acc = acc + Float32(0.0625)
-     return ftz(acc)
- 
- 
+--- a/training/chunked_lm_head_panel_math.mojo
++++ b/training/chunked_lm_head_panel_math.mojo
+@@ -107,6 +107,8 @@
+         comptime if LMHEAD_GP_HOST_SABOTAGE:
+             j = hi - 1 - (step - lo)
+         var shifted = ftz(ftz(logits.unsafe_load(row * n + j)) - maximum)
++        if chunk0 + j == 0:  # SABOTAGE: token 0 shifted logit moved by 1/16
++            shifted = shifted + Float32(0.0625)
+         acc = ftz(acc + ftz(identical_exp(shifted)))
+         if j == target:
+             target_shift.unsafe_store(row, shifted)

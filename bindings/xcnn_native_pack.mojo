@@ -15,8 +15,8 @@ from bindings.native_loaded_module_door import native_interpreter_finalizing
 from bindings.py_balanced import py_type, py_call, py_setitem
 from bindings.xcnn_tensor_native_pack import xcnn_tensor_operation
 from bindings.xcnn_pool_native_door import xcnn_pool_layers
-from std.sys.compile import is_defined
-from bindings.xcnn_pool_typed_door import xcnn_pool_typed_call, xcnn_pool_typed_learn
+# TOMBSTONE: MOJOLEARN_XCNN_FAST_TYPED_DOOR (NOISE, A/B round 1 NVIDIA L40S, wheel 0c68d6cd27, job nvc-ab-20261119T125554Z-6f7afc, one run per arm, digests equal on 12 cells, 0.92-1.08, ten cells within 1 %) deleted 2026-11-19 by lane/fx-verdicts3; code recoverable at f96f23b7fb.
+# Restore: git apply experiments/removed/MOJOLEARN_XCNN_FAST_TYPED_DOOR.patch; record in docs/TOMBSTONES.md.
 from bindings.xcnn_bn_native_door import xcnn_bn_layers
 from bindings.xcnn_conv_native_door import xcnn_conv_layers
 from bindings.xcnn_graph_native_door import xcnn_graph_layers
@@ -60,17 +60,8 @@ def _xcnn_finalize(owner: PythonObject, operation: String, context: PythonObject
 
 def xcnn_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
     try:
-        # MOJOLEARN_XCNN_FAST_TYPED_DOOR (lane fx-typed-pilot, 2026-11-18;
-        # opt-in arm, default off, A/B owed: docs/apple-fast/EXPERIMENTS.md):
-        # a resident forward or backward of an average pool whose layer has
-        # a valid typed record is answered from the typed tables
-        # (bindings/xcnn_pool_typed_door.mojo); null means "not covered" and
-        # the door below runs as it always did. With the define off this
-        # block is not compiled and the entry is the door alone.
-        if is_defined["MOJOLEARN_XCNN_FAST_TYPED_DOOR"]():
-            var typed = xcnn_pool_typed_call(args_ptr)
-            if typed:
-                return typed
+        # TOMBSTONE: MOJOLEARN_XCNN_FAST_TYPED_DOOR (NOISE) typed-table answer ahead of the door deleted 2026-11-19 by lane/fx-verdicts3; code recoverable at f96f23b7fb.
+        # Restore: git apply experiments/removed/MOJOLEARN_XCNN_FAST_TYPED_DOOR.patch
         var call = PythonObject(from_borrowed=args_ptr)
         # fx-cnn-layers (2026-11-18): the argument tuple's items are read as
         # borrowed tuple items (`xcnn_at`; each subscript built an index
@@ -109,11 +100,7 @@ def xcnn_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
             return xcnn_graph_layers(owner, operation, args, context).steal_data()
         if operation.startswith("bn_"):
             return xcnn_bn_layers(owner, operation, args, context).steal_data()
-        var answered = xcnn_pool_layers(owner, operation, args, context)
-        if is_defined["MOJOLEARN_XCNN_FAST_TYPED_DOOR"]():
-            # the door answered: keep the layer's typed record for the next call
-            xcnn_pool_typed_learn(owner, xcnn_at(call, 1), context)
-        return answered.steal_data()
+        return xcnn_pool_layers(owner, operation, args, context).steal_data()
     except error:
         var text = String(error)
         if text.startswith("TypeError:"):

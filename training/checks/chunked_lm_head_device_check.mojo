@@ -17,7 +17,7 @@ def run_checks() raises:
     # Exercise a complete 1024-token chunk plus the one-token tail.  The
     # backward must keep both dHidden's token fold and dWeight's row fold
     # unchanged across that boundary.
-    # Under -D MOJOLEARN_LMHEAD_FAST_GEMM_PANEL: three complete panels plus
+    # Under the GEMM-panel profile (the default; not under -D MOJOLEARN_LMHEAD_FAST_GEMM_PANEL_OFF): three complete panels plus
     # the one-token tail, so the dHidden fold over panels has a merged pair
     # and a carried tail, and the denominator tree an odd last leaf.
     comptime vocab = (3 if LMHEAD_FAST_GEMM_PANEL else 1) * LM_HEAD_V2_CHUNK + 1

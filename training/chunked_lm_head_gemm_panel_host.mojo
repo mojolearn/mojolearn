@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 """The host column of the chunked LM head's GEMM-panel arm
-(`-D MOJOLEARN_LMHEAD_FAST_GEMM_PANEL`, default off).
+(the default profile since 2026-11-19; `-D MOJOLEARN_LMHEAD_FAST_GEMM_PANEL_OFF` restores the scalar one).
 
 The device door's words on the CPU: the same GEMM contract for every product
 (`gemm_host_rows_into`, split across cores inside) and the same per-unit

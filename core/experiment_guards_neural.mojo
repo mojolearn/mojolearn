@@ -1084,6 +1084,29 @@ def _check_configuration() -> Bool:
     # Restore: git apply experiments/removed/MOJOLEARN_OPTIMIZER_RESIDENT_OFF.patch; record in docs/TOMBSTONES.md.
     comptime assert not is_defined["MOJOLEARN_OPTIMIZER_RESIDENT_OFF"](), "removed 2026-11-18 (lane/fx-verdicts2, A/B ab3 NVIDIA L40S, wheel d652a4b0a1, job nvc-ab-20261118T182558Z-cb6e02, one run per arm, digests equal): the per-call optimizer step was arm/base 1.129 geomean over 5 cells (samba-train-step 1.97); resident optimizer state is the single-device route; recoverable at 85c36e324f"
     # ---- end lane fx-verdicts2
+    # ---- lane fx-verdicts3 (2026-11-19): A/B verdicts of round 1 (NVIDIA L40S, wheel 0c68d6cd27, job nvc-ab-20261119T125554Z-6f7afc)
+    # MOJOLEARN_GEMM_FAST_SEQ_PACKED (sequence/gemm_packed_route.mojo): promoted to the default on the NVIDIA and AMD
+    # columns; the old opt-in name is refused so a stale build line does not silently mean the default.
+    comptime assert not is_defined["MOJOLEARN_GEMM_FAST_SEQ_PACKED"](), "promoted 2026-11-19 (lane/fx-verdicts3, A/B round 1 NVIDIA L40S, wheel 0c68d6cd27, job nvc-ab-20261119T125554Z-6f7afc, one run per arm, digests and quality equal on 8 cells, mlp-clf/mlp-reg fit 0.59-0.66, infer 0.43-0.68): large plain dense sequence GEMMs run the neural packed body with one leaf; drop -D MOJOLEARN_GEMM_FAST_SEQ_PACKED, use -D MOJOLEARN_GEMM_FAST_SEQ_PACKED_OFF for the 16 x 16 tile"
+    # MOJOLEARN_LMHEAD_FAST_GEMM_PANEL (training/chunked_lm_head_panel_math.mojo): promoted to the profile of the
+    # chunked LM head on every column and the host column (bits change together); the old opt-in name is refused.
+    comptime assert not is_defined["MOJOLEARN_LMHEAD_FAST_GEMM_PANEL"](), "promoted 2026-11-19 (lane/fx-verdicts3, A/B round 1 NVIDIA L40S, wheel 0c68d6cd27, job nvc-ab-20261119T125554Z-6f7afc, one run per arm, train-chunked-lm-head-loss 33,016.9 -> 284.5 ms, FP64 differences smaller on loss and both gradients; bits change on every column together): GEMM panels and tree folds are the chunked LM head profile; drop -D MOJOLEARN_LMHEAD_FAST_GEMM_PANEL, use -D MOJOLEARN_LMHEAD_FAST_GEMM_PANEL_OFF for the scalar serial profile"
+    # MOJOLEARN_MAMBA_FAST_DECODE_STAGE_ARENA (autograd/block_step_ops.mojo): promoted to the default; the old opt-in
+    # name is refused so a stale build line does not silently mean the default.
+    comptime assert not is_defined["MOJOLEARN_MAMBA_FAST_DECODE_STAGE_ARENA"](), "promoted 2026-11-19 (lane/fx-verdicts3, A/B round 1 NVIDIA L40S, wheel 0c68d6cd27, job nvc-ab-20261119T125554Z-6f7afc, one run per arm, digests equal on 6 cells, mamba3-decode 0.80, mamba2-decode 0.84, control mamba1-decode 0.92): a Mamba-2 / Mamba-3 decode token takes its stages as views of one held arena; drop -D MOJOLEARN_MAMBA_FAST_DECODE_STAGE_ARENA, use -D MOJOLEARN_MAMBA_FAST_DECODE_STAGE_ARENA_OFF for per-token stages"
+    # MOJOLEARN_MAMBA3_FAST_S17_TAIL_TREE (autograd/kernels/mamba3.mojo and the generated host column): promoted to
+    # the default on every column and the host column (bits change together); the old opt-in name is refused.
+    comptime assert not is_defined["MOJOLEARN_MAMBA3_FAST_S17_TAIL_TREE"](), "promoted 2026-11-19 (lane/fx-verdicts3, A/B round 1 NVIDIA L40S, wheel 0c68d6cd27, job nvc-ab-20261119T125554Z-6f7afc, one run per arm, samba-train-step 50.37 -> 38.33 ms, loss equal to one float32 step; bits change on every column together): the Mamba-3 backward S17 chunk-end tail is 128 lane chains and the contract 7.2 tree; drop -D MOJOLEARN_MAMBA3_FAST_S17_TAIL_TREE, use -D MOJOLEARN_MAMBA3_FAST_S17_TAIL_TREE_OFF for the serial chain"
+    # MOJOLEARN_LLAMA_FAST_REFUSE_WATERMARK (transformer/impl/llama/modeling_llama.mojo): promoted to the IDENTICAL
+    # default; the old opt-in name is refused so a stale build line does not silently mean the default.
+    comptime assert not is_defined["MOJOLEARN_LLAMA_FAST_REFUSE_WATERMARK"](), "promoted 2026-11-19 (lane/fx-verdicts3, A/B round 1 NVIDIA L40S, wheel 0c68d6cd27, job nvc-ab-20261119T125554Z-6f7afc, one run per arm, digests equal on 4 cells, four decode rows 0.91-0.94): a decode step of a granted cache scans the hidden states and the one appended key and value row; drop -D MOJOLEARN_LLAMA_FAST_REFUSE_WATERMARK, use -D MOJOLEARN_LLAMA_FAST_REFUSE_WATERMARK_OFF for the whole scans"
+    # TOMBSTONE: MOJOLEARN_XCNN_FAST_TYPED_DOOR (NOISE, A/B round 1 NVIDIA L40S, wheel 0c68d6cd27, job nvc-ab-20261119T125554Z-6f7afc, one run per arm, digests equal) deleted 2026-11-19 by lane/fx-verdicts3; code recoverable at f96f23b7fb.
+    # Restore: git apply experiments/removed/MOJOLEARN_XCNN_FAST_TYPED_DOOR.patch; record in docs/TOMBSTONES.md.
+    comptime assert not is_defined["MOJOLEARN_XCNN_FAST_TYPED_DOOR"](), "removed 2026-11-19 (lane/fx-verdicts3, A/B round 1 NVIDIA L40S, wheel 0c68d6cd27, job nvc-ab-20261119T125554Z-6f7afc, one run per arm, digests equal): the typed pool door was arm/base 0.92-1.08 over 12 pool cells, ten within 1 % (noise; no speed case for the typed boundary tables on these rows); the door is the entry; recoverable at f96f23b7fb"
+    # TOMBSTONE: MOJOLEARN_GEMM_FAST_DX_CONCAT (NOISE, A/B round 1 NVIDIA L40S, wheel 0c68d6cd27, job nvc-ab-20261119T125554Z-6f7afc, one run per arm, quality equal) deleted 2026-11-19 by lane/fx-verdicts3; code recoverable at 913fc44cfa.
+    # Restore: git apply experiments/removed/MOJOLEARN_GEMM_FAST_DX_CONCAT.patch; record in docs/TOMBSTONES.md.
+    comptime assert not is_defined["MOJOLEARN_GEMM_FAST_DX_CONCAT"](), "removed 2026-11-19 (lane/fx-verdicts3, A/B round 1 NVIDIA L40S, wheel 0c68d6cd27, job nvc-ab-20261119T125554Z-6f7afc, one run per arm, quality equal): the q/k/v fan-in dX as one concatenated product was arm/base 1.00 on lm-train-step and 0.99 on samba-train-step (noise) and changed bits; three products and (q + k) + v are the route; recoverable at 913fc44cfa"
+    # ---- end lane fx-verdicts3
     return True
 
 

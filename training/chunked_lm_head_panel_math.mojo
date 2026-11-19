@@ -1,10 +1,12 @@
 # SPDX-License-Identifier: Apache-2.0
-"""The GEMM-panel arm of the chunked LM head: its switch and the per-unit
+"""The GEMM-panel profile of the chunked LM head: its switch and the per-unit
 bodies both columns run.
 
-`-D MOJOLEARN_LMHEAD_FAST_GEMM_PANEL` (default off) moves
-`chunked_lm_head_v2_loss` and `chunked_lm_head_v2_train` from the scalar
-serial profile to GEMM logits and balanced-tree folds. The device kernels
+THE DEFAULT since 2026-11-19 (the experiment `MOJOLEARN_LMHEAD_FAST_GEMM_PANEL`,
+promoted; numbers beside the switch below): `chunked_lm_head_v2_loss`,
+`chunked_lm_head_v2_train` and the executor op `lm_head_v2` run GEMM logits
+and balanced-tree folds. `-D MOJOLEARN_LMHEAD_FAST_GEMM_PANEL_OFF` restores
+the scalar serial profile on every column and in the oracle together. The device kernels
 (training/chunked_lm_head_v2.mojo) and the host column
 (training/chunked_lm_head_gemm_panel_host.mojo, reached through the oracle)
 call the same @always_inline bodies below, one unit per thread or per host
@@ -18,9 +20,23 @@ from checks.numerics import ftz, identical_div, identical_exp, identical_log
 from training.checks.loss_contract import neg_by_bits
 from training.chunked_lm_head_profile import LM_HEAD_V2_CHUNK
 
-#: The arm. One build decision read by the device door, the host column and
-#: the oracle together.
-comptime LMHEAD_FAST_GEMM_PANEL = is_defined["MOJOLEARN_LMHEAD_FAST_GEMM_PANEL"]()
+#: The profile switch. One build decision read by the device door, the executor op, the host column and
+#: the oracle together (the constant keeps its experiment name; every reader imports it from here).
+# MOJOLEARN_LMHEAD_FAST_GEMM_PANEL: PROMOTED 2026-11-19 (lane fx-verdicts3). GEMM panels and tree folds are the
+# profile on every vendor and the host column; `-D MOJOLEARN_LMHEAD_FAST_GEMM_PANEL_OFF` restores the scalar serial
+# profile (the old opt-in name is refused, core/experiment_guards_neural.mojo). Evidence: A/B round 1, NVIDIA L40S
+# (host bd9c355c19c0, 14-core cgroup), wheel 0c68d6cd27 and its B set, base and arm back to back in ONE pod job
+# (nvc1-0006, tag nvc-ab-20261119T125554Z-6f7afc), one scored run per arm, train-chunked-lm-head-loss synthetic
+# (rows 8192, vocab 32768, width 1024): 33,016.9 -> 284.5 ms (0.0086; warm-up calls 33,161 -> 462 ms).
+# Quality against the FP64 reference, base -> arm: loss_rel_err 9.26e-08 -> 5.13e-09, d_hidden max rel diff
+# 1.47e-05 -> 1.04e-06, d_weight max rel diff 5.21e-06 -> 5.70e-07 (better on all three: tree folds).
+# BITS CHANGE on every column together (logit contraction and every fold): digest 95709ab8cde0 -> 458154724ff0 on
+# NVIDIA; the host column and the oracle read this same constant, and the release's one verification records
+# the new reference of lane training-chunked-lm-head on every column.
+# General mechanism: no rule reads a shape (panel 1024 and leaf 64 are profile constants at every size).
+# Limits: one row, NVIDIA only (AGENTS.md part 8). OWED (does not hold the flip): the neighbouring shape (rows
+# 4096, vocab 50257, width 768) and the non-board shape (rows 2048, vocab 49152, width 576) against the _OFF arm.
+comptime LMHEAD_FAST_GEMM_PANEL = not is_defined["MOJOLEARN_LMHEAD_FAST_GEMM_PANEL_OFF"]()
 
 #: Vocabulary ids per denominator leaf. A leaf is the unit one device thread
 #: (or one host iteration) folds serially; the tree above the leaves is
@@ -30,7 +46,7 @@ comptime LMHEAD_FAST_GEMM_PANEL = is_defined["MOJOLEARN_LMHEAD_FAST_GEMM_PANEL"]
 #: doubling), not a vocabulary size.
 comptime LMHEAD_GP_LEAF = 64
 
-#: THE NEGATIVE CONTROL of the arm on the host column: the training host
+#: THE NEGATIVE CONTROL of the panel profile on the host column: the training host
 #: binding's own define (`-D MOJOLEARN_HOST_SABOTAGE=1`; no device build and
 #: no check defines it). It folds every denominator leaf over its vocabulary
 #: ids DESCENDING, a fold-order fault the contract forbids, with each term's

@@ -2133,6 +2133,16 @@ def _afn_wgrad(
 # operand order, so no bit moves; where the route declines, the same follower
 # kernels run, one launch per fan-in as today. Off under the two fan-in
 # sabotage arms, which exist to move those kernels' cells.
+# MOJOLEARN_GEMM_FAST_EPI in the transformer backward, A/B round 1 2026-11-19 (lane fx-verdicts3; NVIDIA L40S host bd9c355c19c0, wheel 0c68d6cd27 and its B set, base and arm
+# back to back in one pod job, tag nvc-ab-20261119T125554Z-6f7afc, one scored run per arm; digests and quality equal).
+# Base -> arm ms: lm-train-step 36.98 -> 36.38 (0.98; the row's bases in three other pairs of the job 36.22, 36.26,
+# 36.39, so the arm sits on the base), samba-train-step 49.15 -> 51.65 (1.05). VERDICT for this use (the S9 and S32
+# fan-in joins in the GEMM store): NOISE, a loser by its own owed row. NOT promoted. DELETION OWED for this use
+# (BWD_GEMM_EPI, _route_a_epi, _route_a_epi_takes, rules_transformer _dx_fanin_epi, the C_PLUS_CELL / CELL_PLUS_C
+# kinds and the fold-stack epilogue kernel): compile-checked, with the work-list deletion it interleaves with. The
+# same define's other use, the fused follower store of the sequence packed route (sequence/gemm_packed_route.mojo
+# SEQ_GEMM_PACKED_EPI), was never timed (it needs the packed route, the default only since 2026-11-19) and stays
+# owed on the mlp rows (owed row gemm-seq-packed-epi-mlp).
 comptime BWD_GEMM_EPI = (
     is_defined["MOJOLEARN_GEMM_FAST_EPI"]()
     and not SAB_B_FANIN_ZERO_SEED
@@ -2173,177 +2183,8 @@ def _route_a_epi[EPI: Int](
     )
 
 
-# lane fx-gemm-dx-concat (2026-11-19, `-D MOJOLEARN_GEMM_FAST_DX_CONCAT=1`,
-# default OFF, OPEN: no A/B yet). BITS CHANGE under the arm, on every column
-# and in the host oracle together (transformer/checks/
-# transformer_backward_oracle.mojo reads the same define).
-#
-# The q/k/v fan-in at d(norm1.out) (S29-32) as ONE product over the
-# concatenated contraction axis instead of three products and
-# `bwd_add3_kernel`:
-#
-#   K  = qw + kw + kw                       (q_width, kv_width, kv_width)
-#   dP = [dQ | dK | dV]   [M, K]   dP[i, p] = dQ[i, p]            p < qw
-#                                             dK[i, p - qw]       qw <= p < qw + kw
-#                                             dV[i, p - qw - kw]  otherwise
-#   Wc = [Wq; Wk; Wv]     [K, dm]  Wc[p, j] = the same three ranges of rows
-#   d(norm1.out)[i, j] = GEMM_contract(dP, Wc)[i, j] at contraction length K:
-#       (L, P) = contract_partition(K)
-#       s_t = chain over p in [t L, min((t + 1) L, K)) ascending, seeded +0.0:
-#             acc = ftz(fma(ftz(dP[i, p]), ftz(Wc[p, j]), acc))
-#       cell = ftz(T(s_0 .. s_{P-1})), T the contract's adjacent-pair
-#              balanced tree, every node ftz(x + y)
-#   in the forward-use order q, k, v (the order `bwd_add3_kernel` pinned).
-#   It REPLACES ftz(ftz(ftz(ftz(t_q) + ftz(t_k))) + ftz(t_v)) with t_x the
-#   contract product of member x at its own width. No join remains: the
-#   three members are one chain-and-tree, so there is no seed and no
-#   three-term order left to pin beyond the order of p.
-#
-# The call row is `gemm_backward_a_call(OP_NT, M, K, dm)`: the `dA` of a
-# forward `[M, dm] . [K, dm]^T`, exactly the row the three members take one
-# by one, so the route, the plan and the side flag are the routing door's.
-#
-# dP and Wc are bit copies made by ONE launch of
-# `bwd_dx_concat_pack_kernel` into two stage scratch buffers. Launches for
-# the fan-in dX: pack 1 + one product, against three products + add3.
-#
-# `MOJOLEARN_TRANSFORMER_SABOTAGE_B_FANIN_ORDER_QKV_REVERSED` is REFUSED with
-# this arm (`bwd_dx_concat3`): its seam, `bwd_add3_kernel`, is not launched,
-# so the arm would be reported as "did not bite". `B_FANIN_ZERO_SEED` still
-# reaches the two-term joins and is left alone.
-comptime BWD_GEMM_DX_CONCAT = is_defined["MOJOLEARN_GEMM_FAST_DX_CONCAT"]()
-
-
-def bwd_dx_concat_pack_kernel(
-    dcat: MutPointer[Float32, MutAnyOrigin],
-    wcat: MutPointer[Float32, MutAnyOrigin],
-    da: MutPointer[Float32, MutAnyOrigin],
-    db: MutPointer[Float32, MutAnyOrigin],
-    dc: MutPointer[Float32, MutAnyOrigin],
-    wa: MutPointer[Float32, MutAnyOrigin],
-    wb: MutPointer[Float32, MutAnyOrigin],
-    wc: MutPointer[Float32, MutAnyOrigin],
-    m_in: Int32,
-    dm_in: Int32,
-    na_in: Int32,
-    nb_in: Int32,
-    nc_in: Int32,
-):
-    """The operands of the concatenated fan-in product, as BIT COPIES.
-
-    `dcat [M, K]` = `[da | db | dc]` (member gradients `[M, na]`, `[M, nb]`,
-    `[M, nc]`), `wcat [K, dm]` = `[wa; wb; wc]` (member weights `[n, dm]`),
-    `K = na + nb + nc`. No arithmetic and no flush: the product flushes at
-    its own loads, as it does for the members today.
-
-    One thread per `(r, c)` with `c < max(na, nb, nc)` and
-    `r < max(M, dm)`. For the gradients it is (row r, member column c); for
-    the weights it is (member row c, column r). Every copy is a guarded load
-    and store on a pointer that is fixed at the call, never a source chosen
-    by a branch: no pointer is selected (the Metal trap), and each cell of
-    both outputs is written by exactly one thread."""
-    var m = Int(m_in)
-    var dm = Int(dm_in)
-    var na = Int(na_in)
-    var nb = Int(nb_in)
-    var nc = Int(nc_in)
-    var nmax = na
-    if nb > nmax:
-        nmax = nb
-    if nc > nmax:
-        nmax = nc
-    var rows = m
-    if dm > rows:
-        rows = dm
-    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
-    if i >= rows * nmax:
-        return
-    var r = i // nmax
-    var c = i - r * nmax
-    var nt = na + nb + nc
-    if r < m:
-        if c < na:
-            dcat.unsafe_store(r * nt + c, da.unsafe_load(r * na + c))
-        if c < nb:
-            dcat.unsafe_store(r * nt + na + c, db.unsafe_load(r * nb + c))
-        if c < nc:
-            dcat.unsafe_store(r * nt + na + nb + c, dc.unsafe_load(r * nc + c))
-    if r < dm:
-        if c < na:
-            wcat.unsafe_store(c * dm + r, wa.unsafe_load(c * dm + r))
-        if c < nb:
-            wcat.unsafe_store((na + c) * dm + r, wb.unsafe_load(c * dm + r))
-        if c < nc:
-            wcat.unsafe_store((na + nb + c) * dm + r, wc.unsafe_load(c * dm + r))
-
-
-def bwd_dx_concat3[LIST: Bool = False](
-    ctx: DeviceContext,
-    mut workspace: GemmWorkspace,
-    mut out_buf: DeviceBuffer[DType.float32],
-    mut dcat: DeviceBuffer[DType.float32],
-    mut wcat: DeviceBuffer[DType.float32],
-    mut da: DeviceBuffer[DType.float32],
-    mut db: DeviceBuffer[DType.float32],
-    mut dc: DeviceBuffer[DType.float32],
-    mut wa: DeviceBuffer[DType.float32],
-    mut wb: DeviceBuffer[DType.float32],
-    mut wc: DeviceBuffer[DType.float32],
-    m: Int,
-    na: Int,
-    nb: Int,
-    nc: Int,
-    dm: Int,
-) raises:
-    """The three-member fan-in `dX` as one product (the arm's header above):
-    one pack launch, then `_route_a` at the forward shape `(m, na+nb+nc, dm)`
-    into `out_buf [m, dm]`. `dcat` and `wcat` are the stage owner's scratch
-    (at least `m * K` and `K * dm` floats) and, like every operand here,
-    stay alive until the caller's completion wait. `LIST` as `_route_a`'s:
-    the product is queued on the work list and the caller runs it; the pack
-    launch is already on the queue ahead of it."""
-    comptime assert not (BWD_GEMM_DX_CONCAT and SAB_B_FANIN_ORDER_QKV_REVERSED), "MOJOLEARN_GEMM_FAST_DX_CONCAT with MOJOLEARN_TRANSFORMER_SABOTAGE_B_FANIN_ORDER_QKV_REVERSED: the arm computes d(norm1.out) as one product over [dQ | dK | dV] and never launches bwd_add3_kernel, the only seam that sabotage moves, so the sabotage would be reported as inert. Build one or the other."
-    var nt = na + nb + nc
-    if m <= 0 or dm <= 0 or na <= 0 or nb <= 0 or nc <= 0:
-        raise Error("llama backward: the concatenated fan-in needs positive sizes")
-    if len(dcat) < m * nt or len(wcat) < nt * dm:
-        raise Error(
-            String("llama backward: the concatenated fan-in scratch holds ")
-            + String(len(dcat))
-            + " and "
-            + String(len(wcat))
-            + " floats and [M, K] and [K, d_model] want "
-            + String(m * nt)
-            + " and "
-            + String(nt * dm)
-        )
-    var nmax = na
-    if nb > nmax:
-        nmax = nb
-    if nc > nmax:
-        nmax = nc
-    var rows = m
-    if dm > rows:
-        rows = dm
-    step_count_launch()
-    ctx.enqueue_function[bwd_dx_concat_pack_kernel](
-        dcat.unsafe_ptr(),
-        wcat.unsafe_ptr(),
-        da.unsafe_ptr(),
-        db.unsafe_ptr(),
-        dc.unsafe_ptr(),
-        wa.unsafe_ptr(),
-        wb.unsafe_ptr(),
-        wc.unsafe_ptr(),
-        Int32(m),
-        Int32(dm),
-        Int32(na),
-        Int32(nb),
-        Int32(nc),
-        grid_dim=(_grid(rows * nmax), 1, 1),
-        block_dim=(BWD_TPB, 1, 1),
-    )
-    _route_a[LIST](ctx, workspace, out_buf, dcat, wcat, OP_NT, m, nt, dm)
+# TOMBSTONE: MOJOLEARN_GEMM_FAST_DX_CONCAT (NOISE, A/B round 1 NVIDIA L40S, job nvc-ab-20261119T125554Z-6f7afc: lm-train-step 1.00, samba-train-step 0.99) pack kernel, one-product launcher and switch deleted 2026-11-19 by lane/fx-verdicts3; code recoverable at 913fc44cfa.
+# Restore: git apply experiments/removed/MOJOLEARN_GEMM_FAST_DX_CONCAT.patch
 
 
 # ===========================================================================
@@ -2441,20 +2282,6 @@ struct LlamaBackwardStages(Movable):
     """lane fx-gemm-epi (BWD_GEMM_EPI only): within the q, k, v fan-in, k's
     dX is already joined into d(norm1.out) by its GEMM's store, so v joins
     there too; False means k is in `tmp1` and `bwd_add3_kernel` runs."""
-    # lane fx-gemm-dx-concat (BWD_GEMM_DX_CONCAT only; one element and unused
-    # otherwise): the concatenated fan-in product's operands, written by
-    # `bwd_dx_concat_pack_kernel` at the v member, and what the q and k
-    # members left for it (the addresses of their dC and weight, their
-    # widths, and how many members have reported: 0, 1 = q, 2 = q and k).
-    var dx_cat_d: DeviceBuffer[DType.float32]  # [M, q_width + 2 kv_width]
-    var dx_cat_w: DeviceBuffer[DType.float32]  # [q_width + 2 kv_width, d_model]
-    var dx_cat_dq: Int
-    var dx_cat_wq: Int
-    var dx_cat_nq: Int
-    var dx_cat_dk: Int
-    var dx_cat_wk: Int
-    var dx_cat_nk: Int
-    var dx_cat_have: Int
     var head_c: DeviceBuffer[DType.float32]  # [L, s_max]
 
     def __init__(
@@ -2560,22 +2387,6 @@ struct LlamaBackwardStages(Movable):
         self.attn_backward_status = -1
         self.attn_bwd_fused_off = False
         self.fanin_joined = False
-        # lane fx-gemm-dx-concat: allocated at size only under the arm.
-        # Without it they are one-element views of `tmp0` (the form
-        # `d_o_proj_out` takes above): no allocation, no fill, no launch.
-        comptime if BWD_GEMM_DX_CONCAT:
-            self.dx_cat_d = _zeros[False](ctx, m * (qw + 2 * kw))
-            self.dx_cat_w = _zeros[False](ctx, (qw + 2 * kw) * dm)
-        else:
-            self.dx_cat_d = self.tmp0.create_sub_buffer[DType.float32](0, 1)
-            self.dx_cat_w = self.tmp0.create_sub_buffer[DType.float32](0, 1)
-        self.dx_cat_dq = 0
-        self.dx_cat_wq = 0
-        self.dx_cat_nq = 0
-        self.dx_cat_dk = 0
-        self.dx_cat_wk = 0
-        self.dx_cat_nk = 0
-        self.dx_cat_have = 0
         self.head_c = _zeros[False](ctx, head_c_n)
 
         # All fill targets are fields of self and remain alive through this

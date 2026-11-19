@@ -5,23 +5,21 @@ the packed GEMM plan: device words against host words.
 `transformer/checks/transformer_backward_check.mojo` compares the 37 stages
 at fixtures of d_model 32 to 48, far below the 128 x 128 packed tile, so on
 an arm build it exercises only the paths where the work-list arm
-(`-D MOJOLEARN_GEMM_FAST_WORKLIST`), the store epilogue arm
-(`-D MOJOLEARN_GEMM_FAST_EPI=1`) and the concatenated fan-in arm
-(`-D MOJOLEARN_GEMM_FAST_DX_CONCAT=1`) DECLINE. This check runs one layer at
+(`-D MOJOLEARN_GEMM_FAST_WORKLIST`) and the store epilogue arm
+(`-D MOJOLEARN_GEMM_FAST_EPI=1`) DECLINE. This check runs one layer at
 2,048 tokens and widths in the hundreds, where the weight gradients and the
 input gradients of the projections take the packed body, so the pooled
-launch, the fused store and the one-product fan-in are what computes the
-compared words. The host side is the oracle every host caller runs
-(`transformer_block_backward_oracle`), which follows DX_CONCAT under the same
-define; WORKLIST and EPI claim unchanged bits, so the oracle is the default
-one for them.
+launch and the fused store are what computes the compared words. The host
+side is the oracle every host caller runs
+(`transformer_block_backward_oracle`); WORKLIST and EPI claim unchanged
+bits, so the oracle is the default one for them. (The concatenated fan-in
+arm MOJOLEARN_GEMM_FAST_DX_CONCAT was deleted 2026-11-19, docs/TOMBSTONES.md.)
 
 Cases (each: one host forward and backward, two device runs):
   0 q, k and v of one width (n_kv_heads = n_heads): the q, k, v fan-in is six
-    listed products under WORKLIST and one product behind three listed weight
-    gradients under DX_CONCAT + WORKLIST.
+    listed products under WORKLIST.
   1 grouped-query attention (n_kv_heads = n_heads / 2): members of unequal
-    width in one list and in one concatenated contraction.
+    width in one list.
 Device run A is the production form (no trace, nothing materialized: the
 products stay pending on the list until the member that completes a fan-in)
 and compares what a training step reads: the nine weight gradients and d(x).
@@ -31,8 +29,7 @@ d(norm2.out) (gate + up) and d(norm1.out) (q, k, v).
 NOT VACUOUS: the shape is chosen at run time, the first candidate for which
 the build's own plan functions (`gemm_worklist_mode`,
 `gemm_workspace_epi_takes`) say the arm's path is taken for the gate/up
-fan-in, the q/k/v weight gradients and, under DX_CONCAT, the concatenated
-product. On an arm build with no such candidate the case FAILS as a fixture
+fan-in and the q/k/v weight gradients. On an arm build with no such candidate the case FAILS as a fixture
 error that lists every product's answer: it never passes on the declined
 path. A default build has nothing to decline and runs the first candidate
 whose products take the 128 x 128 plan (else the first).
@@ -42,9 +39,7 @@ product's operands, table row or first-block offset (any dW or dX word); a
 grouped product folded from another product's node region; a fused store
 that joins in the wrong operand order or joins twice (d(norm2.out),
 d(norm1.out), and everything downstream to d(x)); a list never run for the
-last fan-in member (run A's weight gradients stay unwritten); a concatenated
-contraction walked in another member order or with a member's width
-misplaced (case 1's d(norm1.out)); any host/device difference in leaves or
+last fan-in member (run A's weight gradients stay unwritten); any host/device difference in leaves or
 fold tree at these contraction lengths.
 
 Every host-device transfer of this file goes through the kit.
@@ -87,7 +82,9 @@ from transformer.impl.llama.modeling_llama import (
     LlamaRopeTable,
     llama_decoder_layer_forward_planted,
 )
-from autograd.kernels.transformer import BWD_GEMM_DX_CONCAT, BWD_GEMM_EPI, LlamaBackwardStages
+# TOMBSTONE: MOJOLEARN_GEMM_FAST_DX_CONCAT (NOISE, A/B round 1 NVIDIA L40S: lm-train-step 1.00, samba-train-step 0.99) its decline tests here deleted 2026-11-19 by lane/fx-verdicts3; code recoverable at 913fc44cfa.
+# Restore: git apply experiments/removed/MOJOLEARN_GEMM_FAST_DX_CONCAT.patch
+from autograd.kernels.transformer import BWD_GEMM_EPI, LlamaBackwardStages
 from autograd.rules_transformer import llama_decoder_layer_backward
 
 from checks.native_tests.kit import download, same_words, upload
@@ -170,19 +167,14 @@ def _arm_reach(m: Int, dims: TransformerDims) raises -> String:
             miss += " [work list: dW gate/up (" + String(inter) + ", " + String(dm) + ", " + String(m) + ") keeps its own launch]"
         if gemm_worklist_mode(qw, dm, m) == GEMM_WORKLIST_NONE:
             miss += " [work list: dW q (" + String(qw) + ", " + String(dm) + ", " + String(m) + ") keeps its own launch]"
-        comptime if BWD_GEMM_DX_CONCAT:
-            var cat = qw + kw + kw
-            if gemm_worklist_mode(m, dm, cat) == GEMM_WORKLIST_NONE:
-                miss += " [work list: concatenated dX (" + String(m) + ", " + String(dm) + ", " + String(cat) + ") keeps its own launch]"
         comptime if not BWD_GEMM_EPI:
             if gemm_worklist_mode(m, dm, inter) == GEMM_WORKLIST_NONE:
                 miss += " [work list: dX gate/up (" + String(m) + ", " + String(dm) + ", " + String(inter) + ") keeps its own launch]"
     comptime if BWD_GEMM_EPI and GEMM_EPI_FUSES:
         if not gemm_workspace_epi_takes(m, dm, inter):
             miss += " [epilogue: dX gate (" + String(m) + ", " + String(dm) + ", " + String(inter) + ") declines]"
-        comptime if not BWD_GEMM_DX_CONCAT:
-            if not gemm_workspace_epi_takes(m, dm, kw):
-                miss += " [epilogue: dX k, v (" + String(m) + ", " + String(dm) + ", " + String(kw) + ") declines]"
+        if not gemm_workspace_epi_takes(m, dm, kw):
+            miss += " [epilogue: dX k, v (" + String(m) + ", " + String(dm) + ", " + String(kw) + ") declines]"
     return miss
 
 

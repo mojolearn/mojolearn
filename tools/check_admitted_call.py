@@ -502,7 +502,6 @@ DEBT = {
     # (PyTuple_New/PyTuple_SetItem, the labels_admission_unpack idiom), output packing, not a re-admission.
     'bindings/xcnn_common_door.mojo': {'cpython': 1, 'import_module': 1, 'native_loaded_module': 3},
     'bindings/xcnn_pool_native_door.mojo': {'cpython': 1},
-    'bindings/xcnn_pool_typed_door.mojo': {'cpython': 3},
     'bindings/xseq_forecast_native_door.mojo': {'cpython': 1, 'native_loaded_module': 6},
     'bindings/xseq_native_common_door.mojo': {'cpython': 2, 'native_loaded_module': 12},
     'bindings/xseq_native_pack.mojo': {'cpython': 2},

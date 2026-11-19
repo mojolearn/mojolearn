@@ -326,7 +326,8 @@ def chunked_lm_head_v2_loss_host(
     if rows < 1 or vocab < 2 or width < 1:
         raise Error("chunked lm head v2: rows/width must be positive and vocab >= 2")
     comptime if LMHEAD_FAST_GEMM_PANEL:
-        # MOJOLEARN_LMHEAD_FAST_GEMM_PANEL (default off, A/B owed): GEMM logits and tree folds; the oracle moves with it.
+        # The default since 2026-11-19 (MOJOLEARN_LMHEAD_FAST_GEMM_PANEL promoted; _OFF restores the scalar profile
+        # below): GEMM logits and tree folds; the oracle moves with it.
         return _gp_door(ctx, loss_out, max_out, denom_out, loss_out, loss_out,
                         hidden_in, weight_in, targets_in, rows, vocab, width, False)
     for i in range(rows * width):
@@ -380,7 +381,8 @@ def chunked_lm_head_v2_train_host(
     if rows < 1 or vocab < 2 or width < 1:
         raise Error("chunked lm head v2: rows/width must be positive and vocab >= 2")
     comptime if LMHEAD_FAST_GEMM_PANEL:
-        # MOJOLEARN_LMHEAD_FAST_GEMM_PANEL (default off, A/B owed): GEMM logits and tree folds; the oracle moves with it.
+        # The default since 2026-11-19 (MOJOLEARN_LMHEAD_FAST_GEMM_PANEL promoted; _OFF restores the scalar profile
+        # below): GEMM logits and tree folds; the oracle moves with it.
         return _gp_door(ctx, loss_out, max_out, denom_out, d_hidden_out, d_weight_out,
                         hidden_in, weight_in, targets_in, rows, vocab, width, True)
     for i in range(rows * width):
@@ -541,7 +543,7 @@ def chunked_lm_head_v2_gemm_forward_into(ctx: DeviceContext, mut loss: DeviceBuf
 
 
 # ===========================================================================
-# THE GEMM-PANEL ARM: -D MOJOLEARN_LMHEAD_FAST_GEMM_PANEL (default off)
+# THE GEMM-PANEL PROFILE: the default since 2026-11-19 (-D MOJOLEARN_LMHEAD_FAST_GEMM_PANEL_OFF: the scalar profile)
 # ===========================================================================
 # The public door's loss and both gradients as GEMM panels plus parallel
 # folds; the fold order is training/CHUNKED_LM_HEAD_V2.md, "GEMM-panel arm".

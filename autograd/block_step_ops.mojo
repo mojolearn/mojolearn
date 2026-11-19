@@ -226,12 +226,12 @@ comptime _M12_HELD_ARENA = _M12_HOLD and not IDN_MAMBA12_FORWARD_DOOR_OLD
 
 #: Lane fx-mamba-decode-arena (2026-11-18, ideas-neural-speed ideas 2 and 7):
 #: what this switch decides is whether a Mamba-2 / Mamba-3 decode token (an
-#: L = 1 run) allocates, zero-fills and frees its stage buffers. Default (A,
-#: unchanged): 28 (Mamba-2) / 33 (Mamba-3) `mamba_zeros` per token, parked and
-#: freed at the caller's wait. `-D MOJOLEARN_MAMBA_FAST_DECODE_STAGE_ARENA`
-#: (B, default OFF, A/B owed: docs/apple-fast/EXPERIMENTS.md and
-#: bench/results/paper_compare/owed-pre0867.json row
-#: mamba-decode-stage-arena): the resident entry holds ONE `MambaArena` with
+#: L = 1 run) allocates, zero-fills and frees its stage buffers. The old form
+#: (`-D MOJOLEARN_MAMBA_FAST_DECODE_STAGE_ARENA_OFF`): 28 (Mamba-2) / 33
+#: (Mamba-3) `mamba_zeros` per token, parked and freed at the caller's wait.
+#: THE DEFAULT since 2026-11-19 (the experiment
+#: `MOJOLEARN_MAMBA_FAST_DECODE_STAGE_ARENA`, promoted; numbers beside the
+#: constant below): the resident entry holds ONE `MambaArena` with
 #: room for the stages at the largest carried buf_len the state contract
 #: allows (`_m2_check_words` / `_m3_check_words`: a full open chunk; the
 #: extent comes from the contract, never from a board row). Each token
@@ -255,8 +255,24 @@ comptime _M12_HELD_ARENA = _M12_HOLD and not IDN_MAMBA12_FORWARD_DOOR_OLD
 #: with 33 fills per token (so buffer lengths differed from the per-call
 #: form), Mamba-3 only. Here: one allocation, exact-length views, one fill,
 #: Mamba-2 and Mamba-3, and the held L > 1 sets.
+# MOJOLEARN_MAMBA_FAST_DECODE_STAGE_ARENA: PROMOTED 2026-11-19 (lane fx-verdicts3). The arena is the default on
+# every column that runs these device stages; `-D MOJOLEARN_MAMBA_FAST_DECODE_STAGE_ARENA_OFF` restores the per-token
+# stage buffers and rezero's 33 fills (the old opt-in name is refused, core/experiment_guards_neural.mojo; the constant
+# keeps its experiment name). Evidence: A/B round 1, NVIDIA L40S (host bd9c355c19c0, 14-core cgroup), wheel 0c68d6cd27
+# and its B set, base and arm back to back in ONE pod job (nvc1-0006, tag nvc-ab-20261119T125554Z-6f7afc), one scored
+# run per arm; digests and quality equal on all 6 cells. Base -> arm ms: mamba3-decode 1066.9 -> 849.3 (0.80),
+# mamba2-decode 1251.9 -> 1053.2 (0.84), samba-decode 1433.0 -> 1315.8 (0.92), mamba1-decode 373.0 -> 343.3 (0.92),
+# mamba3-forward 2.327 -> 2.339 (1.01, median of 20), samba-forward 4.649 -> 4.586 (0.99, median of 20).
+# How to read it: mamba1-decode is the control (no code path of it changes) and it moved 0.92, so this pair carries
+# about 8 % of drift toward the arm; net of the control mamba3-decode is about 0.87 and mamba2-decode 0.91, and
+# samba-decode is not separable from the drift. The two rows the arm was written for are faster beyond that drift;
+# the held L > 1 arena (the forwards) is neither faster nor slower. Less than the -400 ms a row the driver-call
+# arithmetic expected: re-time owed. Same kernels, launch order, input bytes and zeros: no bit moves.
+# General mechanism: the arena extent comes from the state contract's largest carried buf_len, never from a shape.
+# Limits: NVIDIA only (AGENTS.md part 8), one run per arm. OWED (does not hold the flip): the neighbouring shape
+# (d_model 256, B 4) and a non-board model (a 6-layer Samba at L 300) against the _OFF arm, with mamba1-decode again.
 comptime MAMBA_FAST_DECODE_STAGE_ARENA = (
-    is_defined["MOJOLEARN_MAMBA_FAST_DECODE_STAGE_ARENA"]()
+    not is_defined["MOJOLEARN_MAMBA_FAST_DECODE_STAGE_ARENA_OFF"]()
     and MAMBA_GUARD == 0
     and not is_defined["MOJOLEARN_MAMBA_POISON"]()
 )
@@ -583,8 +599,8 @@ struct _M2Block(Movable):
     var h_in_held: Bool
     #: lane fix-mamba-forward-doors: the one arena `held`'s stages are views of
     var held_arena: Optional[MambaArena]
-    #: lane fx-mamba-decode-arena (MAMBA_FAST_DECODE_STAGE_ARENA, default
-    #: off: both stay empty): the one arena an L = 1 run's stage views are
+    #: lane fx-mamba-decode-arena (MAMBA_FAST_DECODE_STAGE_ARENA, the default;
+    #: under its _OFF define both stay empty): the one arena an L = 1 run's stage views are
     #: re-taken from (`_m2_decode_views`) and its float count
     var dec_arena: Optional[MambaArena]
     var dec_n: Int
@@ -648,8 +664,8 @@ struct _M3Block(Movable):
     #: with the constructor's zeros (IDN_M3_SESSION_STAGE_REUSE)
     var held_stages: Optional[Mamba3DeviceStages]
     var held_x: Optional[DeviceBuffer[DType.float32]]
-    #: lane fx-mamba-decode-arena (MAMBA_FAST_DECODE_STAGE_ARENA, default
-    #: off: all four stay empty): the one arena `held_stages` are views of
+    #: lane fx-mamba-decode-arena (MAMBA_FAST_DECODE_STAGE_ARENA, the default;
+    #: under its _OFF define all four stay empty): the one arena `held_stages` are views of
     #: and its float count; the one arena an L = 1 run's stage views are
     #: re-taken from (`_m3_decode_views`) and its float count
     var held_arena: Optional[MambaArena]
@@ -896,7 +912,7 @@ struct BlockStepScratch(Movable):
     #: that caller; never set by a session that reads the words back.
     var skip_words: Bool
     #: lane fx-llama-refuse-watermark (MOJOLEARN_LLAMA_FAST_REFUSE_WATERMARK,
-    #: default off; read only by `_attn_watermark_grant` on a build with it):
+    #: the IDENTICAL default; read only by `_attn_watermark_grant`, never under its _OFF define):
     #: the owner of this scratch states that the state tensors of its
     #: attention entries are written only by the step runs of this file and
     #: by writers that reset the entry's watermark or drop the entry (the
