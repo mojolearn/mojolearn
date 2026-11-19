@@ -1100,6 +1100,9 @@ def _check_configuration() -> Bool:
     # MOJOLEARN_LLAMA_FAST_REFUSE_WATERMARK (transformer/impl/llama/modeling_llama.mojo): promoted to the IDENTICAL
     # default; the old opt-in name is refused so a stale build line does not silently mean the default.
     comptime assert not is_defined["MOJOLEARN_LLAMA_FAST_REFUSE_WATERMARK"](), "promoted 2026-11-19 (lane/fx-verdicts3, A/B round 1 NVIDIA L40S, wheel 0c68d6cd27, job nvc-ab-20261119T125554Z-6f7afc, one run per arm, digests equal on 4 cells, four decode rows 0.91-0.94): a decode step of a granted cache scans the hidden states and the one appended key and value row; drop -D MOJOLEARN_LLAMA_FAST_REFUSE_WATERMARK, use -D MOJOLEARN_LLAMA_FAST_REFUSE_WATERMARK_OFF for the whole scans"
+    # TOMBSTONE: MOJOLEARN_XCNN_FAST_TYPED_DOOR (NOISE, A/B round 1 NVIDIA L40S, wheel 0c68d6cd27, job nvc-ab-20261119T125554Z-6f7afc, one run per arm, digests equal) deleted 2026-11-19 by lane/fx-verdicts3; code recoverable at f96f23b7fb.
+    # Restore: git apply experiments/removed/MOJOLEARN_XCNN_FAST_TYPED_DOOR.patch; record in docs/TOMBSTONES.md.
+    comptime assert not is_defined["MOJOLEARN_XCNN_FAST_TYPED_DOOR"](), "removed 2026-11-19 (lane/fx-verdicts3, A/B round 1 NVIDIA L40S, wheel 0c68d6cd27, job nvc-ab-20261119T125554Z-6f7afc, one run per arm, digests equal): the typed pool door was arm/base 0.92-1.08 over 12 pool cells, ten within 1 % (noise; no speed case for the typed boundary tables on these rows); the door is the entry; recoverable at f96f23b7fb"
     # ---- end lane fx-verdicts3
     return True
 

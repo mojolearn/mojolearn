@@ -644,7 +644,8 @@
   "xcnn-typed-door": {
    "define": "MOJOLEARN_XCNN_FAST_TYPED_DOOR",
    "status": "define in code (bindings/xcnn_native_pack.mojo xcnn_c; bindings/xcnn_pool_typed_door.mojo): B = the typed boundary tables of the pools (one typed context per process, one typed record per layer, valid under the 3.12+ dictionary and type watchers; no by-name read, Python str or instance-dictionary write per resident call); A = the door, the default, unchanged. Host side only: the same entry and launch words. Pilot of design A (~/mojolearn-evidence/briefs-20261118/ideas-boundary-RESULT.md), lane fx-typed-pilot (2026-11-18): average pools. Lane fx-maxpool (2026-11-19): MaxPool1d/2d, AdaptiveMaxPool2d and the adaptive kernel (an output size that does not divide the input, avg and max); the max record carries the resident winners handle and the watch epochs of the two dictionaries that name it, and a hit writes nothing because the winners' state depends only on the input shape (~/mojolearn-evidence/briefs-20261118/fx-maxpool-RESULT.md)",
-   "owed": "RUN"
+   "owed": "DECIDED",
+   "evidence": "A/B round 1 2026-11-19, NVIDIA L40S host bd9c355c19c0 (14-core cgroup), wheel 0c68d6cd27 and its B set, base and arm back to back in one pod job (nvc1-0006, tag nvc-ab-20261119T125554Z-6f7afc; ~/mojolearn-evidence/measure-candidate/build-0c68d6cd27/ab1/x/, tables ~/mojolearn-evidence/briefs-20261118/fx-verdicts3/tab-<arm>.txt), one scored run per arm: digests equal on all 12 cells (medians of 20 calls); arm/base 0.92-1.08, ten cells within 1 %, global-avgpool 0.94 / 0.92, global-maxpool 1.08 / 1.04: NOISE; no speed case for the typed boundary tables; arm DELETED (lane fx-verdicts3)"
   },
   "mamba3-s17-tail-tree": {
    "define": "MOJOLEARN_MAMBA3_FAST_S17_TAIL_TREE",
