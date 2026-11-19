@@ -1,3 +1,4 @@
+# shellcheck shell=bash
 # tools/ops/box_cores_lib.sh -- sourced (bash), never run. The allocation and busy-core helpers every rented-box job
 # shares (AGENTS.md hard rules: use 100 percent of rented CPU; every report states busy cores of total):
 #
