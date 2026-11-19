@@ -798,6 +798,11 @@
    "define": "MOJOLEARN_LLAMA_FAST_REFUSE_WATERMARK_OFF",
    "status": "define in code (transformer/impl/llama/modeling_llama.mojo LLAMA_FAST_REFUSE_WATERMARK): B = the whole key cache, the whole value cache, the hidden states and inv_freq scanned on three buffers allocated per call at every decode step (the default before 2026-11-19); A = the appended-row scan on held scratch for a granted cache, default since 2026-11-19 (lane fx-verdicts3). Same bits and the same refusals on both arms. Owed to re-time (the first pair's base was the slowest base of each row) and for the neighbouring and non-board shapes",
    "owed": "RUN"
+  },
+  "identity-nan-canon": {
+   "define": "MOJOLEARN_IDENTITY_FAST_NAN_CANON",
+   "status": "define in code (core/nan_canon.mojo NAN_CANON_ON; gemm/host_transport.mojo gemm_down_f32; gemm/host/linalg_native.mojo; core/staged_download.mojo download_f32_into_canon; sequence/mlp_fit.mojo mlp_predict; sequence/seq_tensor.mojo seq_tensor_download; IDENTICAL only): B = every NaN word of a float32 result that leaves the device (and of the CPU column's finished result) is the one quiet NaN 0x7fc00000, written by a host pass over the caller's pages right after the copy that filled them (one read of the words, a store only where a NaN is, across the host's cores); A = the default, the vendor's NaN word (NVIDIA 0x7fffffff, AMD and an x86 host 0xffc00000, Apple 0x7fc00000). No kernel changes; no word other than a NaN moves",
+   "owed": "RUN"
   }
  },
  "rows": [
@@ -5044,6 +5049,24 @@
     "gemm-epi"
    ],
    "decides": "promote the fused follower store (B = MOJOLEARN_GEMM_FAST_EPI on the default packed route: a bias, bias + activation or activation-derivative follower stored by the packed body, one launch where the default runs the product and OP_GEMM_EPI_TAIL) only if the mlp-clf and mlp-reg fits and infers (istella, taxi) are faster on the NVIDIA L40S, base and arm back to back in one job, with every digest equal (the arm changes no arithmetic). The transformer backward use of the same define was noise on 2026-11-19 (lm-train-step 0.98, samba-train-step 1.05) and its deletion is owed: read only the mlp rows here. Time also the neighbouring shape 4096 x 256 x 128 and the non-board 2048 x 512 x 512 before a flip (no dimension targeting). A loser is deleted with the four tombstone parts"
+  },
+  {
+   "id": "identity-nan-canon",
+   "source": "lane fx-nan-canon (2026-11-19; Andrew: \"i want bits identical across vendors\"; ~/mojolearn-evidence/briefs-20261118/fx-nan-canon-RESULT.md; found by fx-gpu-checks-gemm: an identical GEMM NaN cell is 0x7fffffff on NVIDIA and 0xffc00000 on the x86 host)",
+   "kind": "ab",
+   "lane": [
+    "gemm",
+    "mlp-infer",
+    "transformer-decode"
+   ],
+   "dataset": "*",
+   "rows": "full",
+   "vendor": "nvidia",
+   "b_arms": [
+    "identity-nan-canon"
+   ],
+   "owed": "RUN",
+   "decides": "B becomes the default (with -D MOJOLEARN_IDENTITY_FAST_NAN_CANON_OFF as the A/B switch until measured on the release) if its cost is within the pair's noise on the NVIDIA L40S, base and arm back to back in one job: the gemm row (the pass reads the 64 MB product once on the host, per chunk, while the copy engine fills the other stage half), the mlp-infer row (one pass over the returned predictions) and one decode row (transformer-decode: no pass on its path, the control). Digests must not move on these rows (their outputs hold no NaN; a moved digest is a defect). Time also the neighbouring shape 2048 x 3072 x 1024 and a non-board product of standard normal draws 3000 x 3000 x 3000 before a flip (no dimension targeting). Before the flip the native check nan_canon must pass on the CPU and GPU columns from a build with the define (exact words against the oracle on +-inf / +-FLT_MAX operands). A loser is deleted with the four tombstone parts and the vendor NaN word stays in the contract (IDENTITY_PATHS row 39)"
   }
  ]
 }
