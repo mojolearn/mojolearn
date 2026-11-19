@@ -367,7 +367,7 @@ def _differ_is_whole(mod):
 
 class ModeReport(object):
     __slots__ = ("requested", "loaded", "compiled", "binary", "ident_dir",
-                 "under_identical", "problem")
+                 "under_identical", "policy_masks", "problem")
 
     def __init__(self):
         self.requested = None
@@ -376,10 +376,56 @@ class ModeReport(object):
         self.binary = None        # the .so that runs THIS fixture
         self.ident_dir = None
         self.under_identical = None
+        # binding name -> its compiled mode policy mask (bit i = row i of
+        # checks/mode_policy.mojo relaxed), None where it could not be read
+        self.policy_masks = None
         self.problem = None
 
     def as_dict(self):
         return {k: getattr(self, k) for k in self.__slots__}
+
+
+#: The bindings whose compiled mode policy mask is read, with the entry that
+#: answers it: the binary that runs the fixture and the gbdt binary the
+#: selector cross-checks (the same two the mode gate already reads).
+_POLICY_MASK_ENTRIES = (
+    ("_mojolearn", "mojolearn_mode_policy_mask"),
+    ("_mojolearn_gbdt", "gbdt_mode_policy_mask"),
+)
+
+#: Row names by bit of the mask, as in checks/mode_policy.mojo.
+_POLICY_ROWS = ("fold_free", "contract_free", "flush_off", "vendor_math",
+                "matrix_units", "waits_elided", "tile_free")
+
+
+def _read_policy_mask(module, entry):
+    """The mask a loaded binding reports, or None when it has no such entry
+    (a binary built before the table existed, or a missing-binary stub)."""
+    if module is None:
+        return None
+    try:
+        return int(getattr(module, entry)())
+    except Exception:
+        return None
+
+
+def _mode_policy_problem(loaded, masks):
+    """An identical set promises the same bits on every vendor, so no row of
+    the mode policy table may be relaxed in it. Returns the refusal text when
+    a binding of an identical set reports a non-zero mask, else None."""
+    if loaded != "identical" or not masks:
+        return None
+    for name in sorted(masks):
+        mask = masks[name]
+        if mask:
+            rows = [row for bit, row in enumerate(_POLICY_ROWS) if mask >> bit & 1]
+            return (
+                "the loaded numeric mode is identical but %s was compiled with "
+                "mode policy mask %d (relaxed rows: %s). An identical binary "
+                "relaxes no row; this set cannot be labelled identical."
+                % (name, mask, ", ".join(rows) or "unknown bits")
+            )
+    return None
 
 
 def _mode_report():
@@ -467,6 +513,19 @@ def _mode_report():
                 "the wrong directory; nothing here can be labelled."
                 % (rep.binary, rep.ident_dir)
             )
+
+    # THE MODE POLICY ROWS, read from the binaries themselves. The gbdt
+    # binary is read only when the runtime report found it loaded
+    # (`rep.compiled`), so this never loads a binding.
+    masks = {}
+    for name, entry in _POLICY_MASK_ENTRIES:
+        module = sys.modules.get(pkg_name + "." + name)
+        if name == "_mojolearn_gbdt" and rep.compiled is None:
+            module = None
+        masks[name] = _read_policy_mask(module, entry)
+    rep.policy_masks = masks
+    if rep.problem is None:
+        rep.problem = _mode_policy_problem(rep.loaded, masks)
     return rep
 
 

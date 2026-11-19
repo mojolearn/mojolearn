@@ -949,7 +949,7 @@ comptime _CLS2_FAST_APPLE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_A
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-18-decomposition.patch; record in docs/TOMBSTONES.md.
 # TOMBSTONE: MOJOLEARN_IDN_GATES_OFF (old path; EXP:2479 DELETED) deleted 2026-11-15 by lane/expdel2-18-decomposition (non-owner; owner expdel2-16-decomposition); code recoverable at 17dc13843a.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_GATES_OFF.expdel2-18-decomposition.patch; record in docs/TOMBSTONES.md.
-comptime _CLS2_IDN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+from checks.mode_policy import KERNEL_FORM_IDENTICAL as _CLS2_IDN
 # TOMBSTONE: MOJOLEARN_XD_FAST_CLS2_GRP_DEVSCAN_OFF (old path beside the FAST + Apple default, EXP:467 KEEP) deleted 2026-11-15 by lane/expdel2-18-decomposition; code recoverable at 772bf55066.
 # Restore: git apply experiments/removed/MOJOLEARN_XD_FAST_CLS2_GRP_DEVSCAN_OFF.patch; record in docs/TOMBSTONES.md.
 comptime GRP_CLS2_DEVSCAN = (

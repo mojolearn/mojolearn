@@ -34,10 +34,7 @@ from neighbors.impl.ball_cover.common import RBC_FLT_MAX
 
 # TOMBSTONE: MOJOLEARN_RBC_FAST_EPS_OFF (old path beside the Apple default, no A/B row) deleted 2026-11-15 by lane/expdel2-12-cluster; code recoverable at afb468bfd6.
 # Restore: git apply experiments/removed/MOJOLEARN_RBC_FAST_EPS_OFF.patch; record in docs/TOMBSTONES.md.
-comptime FAST_RBC_EPS = (
-    (GLOBAL_NUMERIC_MODE == NUMERIC_FAST or GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL)
-    and TARGET_HAS_APPLE_GPU
-)
+comptime FAST_RBC_EPS = TARGET_HAS_APPLE_GPU
 comptime FAST_RBC_MAX_D = 32
 comptime FR_LANES = 32
 comptime FR_MASK_DT = DType.uint32

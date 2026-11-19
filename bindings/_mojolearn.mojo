@@ -181,6 +181,7 @@ from std.memory import unsafe_memcpy
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
+from checks.mode_policy import mode_policy_mask
 from checks.numerics import GLOBAL_NUMERIC_MODE
 
 from providers.python.neural_descriptor_pyapi_door import neural_descriptor_capsule
@@ -1008,6 +1009,14 @@ def kmeans_transform_resident_binding(
     if test:
         return PythonObject(Int(word[0]))
     return PythonObject(ns)
+
+
+def mojolearn_mode_policy_mask_binding() raises -> PythonObject:
+    """The mode policy rows this binary was compiled with
+    (`checks/mode_policy.mojo`): bit i set = row i relaxed. 0 in every
+    identical build. Read by `python -m mojolearn verify`, which refuses an
+    identical set that reports anything else."""
+    return PythonObject(Int(mode_policy_mask()))
 
 
 def mojolearn_numeric_mode_binding() raises -> PythonObject:
@@ -1882,6 +1891,7 @@ def build__mojolearn() -> PythonObject:
         m.def_function[device_plan_exit_binding]("device_plan_exit")
         m.def_function[device_plan_log_binding]("device_plan_log")
         m.def_function[mojolearn_numeric_mode_binding]("mojolearn_numeric_mode")
+        m.def_function[mojolearn_mode_policy_mask_binding]("mojolearn_mode_policy_mask")
         m.def_function[knn_search_binding]("knn_search")
         m.def_function[knn_index_prepare_binding]("knn_index_prepare")
         m.def_function[knn_index_release_binding]("knn_index_release")

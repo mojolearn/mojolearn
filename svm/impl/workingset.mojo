@@ -85,9 +85,7 @@ comptime SAB_WS_TIE = is_defined["MOJOLEARN_SVM_SABOTAGE_WS_TIE"]()
 #: width (AMD wave64).
 # TOMBSTONE: MOJOLEARN_SVM_FAST_SORT_OFF (unmeasured old path beside the Apple fast default, no A/B recorded) deleted 2026-11-15 by lane/expdel2-21-linear; code recoverable at 7684b61797.
 # Restore: git apply experiments/removed/MOJOLEARN_SVM_FAST_SORT_OFF.patch; record in docs/TOMBSTONES.md.
-comptime FAST_WS_SORT = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST or GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-)
+comptime FAST_WS_SORT = True
 #: FAST on Apple: the three gathers keep their counts on the device
 #: (`svm/impl/fast_ws_select.mojo`), no drain per gather. Same working set.
 #: `-D MOJOLEARN_SVM_FAST_WS_SELECT_OFF` restores the host-counted gathers.

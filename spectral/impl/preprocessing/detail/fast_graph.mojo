@@ -69,10 +69,7 @@ comptime IDN_SPECTRAL_GRAPH_DEVICE = (
 # TOMBSTONE: MOJOLEARN_SPECTRAL_GRAPH_FAST_OFF (old path, no A/B recorded beside the Apple fast default) deleted 2026-11-15 by lane/expdel2-13-cluster; code recoverable at c48110e94d.
 # Restore: git apply experiments/removed/MOJOLEARN_SPECTRAL_GRAPH_FAST_OFF.patch; record in docs/TOMBSTONES.md.
 comptime SPECTRAL_GRAPH_FAST = (
-    (
-        (GLOBAL_NUMERIC_MODE == NUMERIC_FAST or GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL)
-        and TARGET_HAS_APPLE_GPU
-    )
+    TARGET_HAS_APPLE_GPU
     or IDN_SPECTRAL_GRAPH_DEVICE
 )
 comptime FG_MAX_K = 4096

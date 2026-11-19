@@ -1152,6 +1152,8 @@ def lane_settings(lane):
             ", max_rel_err_vs_fp64" if MODEL_OF[lane] == "gemm" else "")
         if lane in FORWARD_REFERENCE_LANES:
             s["quality"] += ", untimed Mojo CPU host-reference finite/shape check and atol=1e-6 + rtol=1e-5 * abs(reference)"
+            # A wheel whose mode policy mask relaxes a row gets that row's bound on top (tools/mode_policy_bounds.py,
+            # forward_host_quality); mask 0 is exactly the bound named here.
     s["torch_settings"] = {a: precision_text(arm_setting(a)[1]) for a in
                            ["torch-" + x for x in TORCH_SETTINGS + (GRAPH_SETTINGS if lane in GRAPH_LANES else ())]}
     if lane in GRAPH_LANES:
@@ -5722,12 +5724,25 @@ def _forward_reference(lane, shape, data):
     return cls, np.asarray(block.forward(np.ascontiguousarray(data["x"])), dtype=np.float64)
 
 
+def _policy_bounds():
+    """tools/mode_policy_bounds.py, importable also when this file was loaded by path from another directory."""
+    here = os.path.dirname(os.path.abspath(__file__))
+    if here not in sys.path:
+        sys.path.insert(0, here)
+    import mode_policy_bounds
+    return mode_policy_bounds
+
+
 def forward_host_quality(lane, shape, data, outs):
     import numpy as np
     own = {arm: out for arm, out in outs.items() if arm in ("ours", "ours-fast")}
     if not own:
         return {}
     cls, ref = _forward_reference(lane, shape, data)
+    # The bound follows the mode policy mask the wheel reports (tools/mode_policy_bounds.py): mask 0, or a wheel
+    # with no mask entry, is the FP32 bound below unchanged; the matrix-units bit adds that row's derived bound.
+    policy = _policy_bounds()
+    mask = policy.wheel_policy_mask(_ours_module())
     result = {}
     for arm, out in own.items():
         got = np.asarray(out["y"], dtype=np.float64)
@@ -5740,11 +5755,16 @@ def forward_host_quality(lane, shape, data, outs):
             q["shape_mismatch_vs_host"] = "%s vs %s" % (list(got.shape), list(ref.shape))
         elif finite and ref.size:
             error = np.abs(got - ref)
-            bound = FORWARD_REFERENCE_ATOL + FORWARD_REFERENCE_RTOL * np.abs(ref)
+            bound = policy.forward_reference_bound(np, ref, mask, FORWARD_REFERENCE_ATOL, FORWARD_REFERENCE_RTOL)
+            rms_passed, rms_ratio = policy.forward_reference_rms_passed(np, error, ref, mask)
             q.update(max_abs_diff_vs_host=float(error.max()),
                      max_rel_diff_vs_host=float(error.max()) / (float(np.abs(ref).max()) or 1.0),
                      host_reference_tolerance_ratio=float((error / bound).max()),
-                     host_reference_passed=bool(np.all(error <= bound)))
+                     host_reference_passed=bool(np.all(error <= bound)) and rms_passed)
+            if mask:
+                q.update(mode_policy_mask=mask, mode_policy_rows=policy.relaxed_rows(mask))
+            if rms_ratio is not None:
+                q.update(host_reference_rms_ratio=rms_ratio, host_reference_rms_bound=policy.MATRIX_UNITS_RMS_REL)
         result[arm] = q
     return result
 

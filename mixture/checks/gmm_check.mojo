@@ -156,7 +156,7 @@ from checks.numerics import (
 from checks.native_tests.kit import download_host_into, upload_host_into
 
 
-comptime IDENTICAL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+from checks.mode_policy import KERNEL_FORM_IDENTICAL as IDENTICAL
 
 #: Where the per-check cards go. `/tmp` so the check runs on any box.
 comptime SCRATCH = "/tmp"

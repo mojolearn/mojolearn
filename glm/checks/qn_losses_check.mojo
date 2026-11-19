@@ -117,7 +117,7 @@ from checks.numerics import (
 )
 
 
-comptime IDENTICAL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+from checks.mode_policy import KERNEL_FORM_IDENTICAL as IDENTICAL
 comptime QL_ROWS = 2048
 comptime QL_COLS = 5
 comptime SVR_EPS = Float32(0.25)

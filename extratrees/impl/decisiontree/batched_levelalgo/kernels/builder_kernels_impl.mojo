@@ -414,7 +414,7 @@ def _publish_min_max(
         Atomic.max(maxkey.unsafe_offset(idx), kmax)
 
 
-comptime BUILD_MODE = GLOBAL_NUMERIC_MODE
+from checks.numerics import GLOBAL_NUMERIC_MODE as BUILD_MODE
 """The repo-wide numeric mode (`checks/numerics.mojo`)."""
 
 from extratrees.impl.decisiontree.batched_levelalgo.kernels.builder_kernels import (

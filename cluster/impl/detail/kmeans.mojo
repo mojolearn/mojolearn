@@ -399,10 +399,9 @@ def init_random(
 #: coarse quantizer: ~3,000 syncs; IVF-PQ's 55 codebooks: ~42,000). The same
 #: draws and the same first-strict-minimum pick on the device.
 comptime KMEANS_FAST_PP_NOSYNC = (
-    (GLOBAL_NUMERIC_MODE == NUMERIC_FAST or GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL)
     # TOMBSTONE: MOJOLEARN_KMEANS_PP_NOSYNC_APPLE_ONLY (unmeasured opt-in Apple-only gate) deleted 2026-11-15 by lane/expdel2-10-cluster; code recoverable at 879a63ceab.
     # Restore: git apply experiments/removed/MOJOLEARN_KMEANS_PP_NOSYNC_APPLE_ONLY.patch; record in docs/TOMBSTONES.md.
-    and (
+    (
         TARGET_HAS_APPLE_GPU
         or TARGET_COLUMN == COLUMN_NVIDIA
         or TARGET_COLUMN == COLUMN_AMD
@@ -885,14 +884,11 @@ comptime IDN_KMEANS_INCR_INIT = (
 # TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch, EXP:2438 DELETED; non-owner sites) deleted 2026-11-15 by lane/expdel2-10-cluster; code recoverable at 75ea427c34.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-10-cluster.patch; record in docs/TOMBSTONES.md.
 comptime KMEANS_FAST_INCR_INIT = IDN_KMEANS_INCR_INIT or (
-    TARGET_HAS_APPLE_GPU and (
-        # TOMBSTONE: MOJOLEARN_KMEANS_FAST_INCR_INIT_OFF (old path beside the Apple FAST default, no A/B row) deleted 2026-11-15 by lane/expdel2-10-cluster; code recoverable at 3f8a07d350.
-        # Restore: git apply experiments/removed/MOJOLEARN_KMEANS_FAST_INCR_INIT_OFF.patch; record in docs/TOMBSTONES.md.
-        GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-        # TOMBSTONE: MOJOLEARN_KMEANS_ID_INCR_INIT_OFF (old path, no A/B row) deleted 2026-11-15 by lane/expdel2-10-cluster; code recoverable at c954d92f8b.
-        # Restore: git apply experiments/removed/MOJOLEARN_KMEANS_ID_INCR_INIT_OFF.patch; record in docs/TOMBSTONES.md.
-        or GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    )
+    # TOMBSTONE: MOJOLEARN_KMEANS_FAST_INCR_INIT_OFF (old path beside the Apple FAST default, no A/B row) deleted 2026-11-15 by lane/expdel2-10-cluster; code recoverable at 3f8a07d350.
+    # Restore: git apply experiments/removed/MOJOLEARN_KMEANS_FAST_INCR_INIT_OFF.patch; record in docs/TOMBSTONES.md.
+    # TOMBSTONE: MOJOLEARN_KMEANS_ID_INCR_INIT_OFF (old path, no A/B row) deleted 2026-11-15 by lane/expdel2-10-cluster; code recoverable at c954d92f8b.
+    # Restore: git apply experiments/removed/MOJOLEARN_KMEANS_ID_INCR_INIT_OFF.patch; record in docs/TOMBSTONES.md.
+    TARGET_HAS_APPLE_GPU
 )
 
 

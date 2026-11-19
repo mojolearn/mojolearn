@@ -108,7 +108,7 @@ from gemm.impl.linalg.contractions import (
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, numeric_mode_name
 
 
-comptime IDENTICAL_BUILD = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+from checks.mode_policy import KERNEL_FORM_IDENTICAL as IDENTICAL_BUILD
 
 # THE FIXTURE LENGTHS ARE COUNTED IN LEAVES OF THE PROFILE (lane
 # fx-gemm-leaf512, 2026-11-19). Every fixture below that takes its leaf from

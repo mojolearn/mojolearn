@@ -92,7 +92,7 @@ from decomposition.impl.linalg.detail.svd_full import (
 from checks.native_tests.kit import download_host_into, upload_host_into
 
 
-comptime _IDENTICAL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+from checks.mode_policy import KERNEL_FORM_IDENTICAL as _IDENTICAL
 
 comptime SVD_ROWS = 4096
 comptime SVD_COLS = 8

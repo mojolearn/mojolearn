@@ -75,7 +75,7 @@ from metrics.impl.stats.detail.rand_index import rand_index_counts
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, numeric_mode_name
 
 
-comptime IDENTICAL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+from checks.mode_policy import KERNEL_FORM_IDENTICAL as IDENTICAL
 comptime N_LABELS_ROWS = 2053
 comptime N_TRUE = 6
 comptime N_PRED = 5

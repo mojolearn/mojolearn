@@ -109,7 +109,7 @@ comptime TS_SMEM_TREE_BYTES = 4 * (TS_MAX_N + TS_TPB)
 # threads of TS_TPB) runs only for a panel's first column and after a zero
 # reflector. The same fmas in the same order: no bit moves.
 # IDENTICAL builds only: a FAST build keeps its launches as they were.
-comptime _TS_IDN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+from checks.mode_policy import KERNEL_FORM_IDENTICAL as _TS_IDN
 comptime _TS_FAST_APPLE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
 # MEASURED M3 FAST; candidate remains OFF. Broader workload coverage pending.
 # Scored FAST quality: 9/9 metrics within the existing bands; PASS.

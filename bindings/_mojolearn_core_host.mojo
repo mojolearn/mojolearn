@@ -173,6 +173,7 @@ from checks.kernel_matrix import (
     TARGET_COLUMN,
     column_name,
 )
+from checks.mode_policy import mode_policy_mask
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from core.neighbors_entry_table import NeighborsEntryKey, neighbors_ops_publish
 from neighbors.ops_entry_host import NEIGHBORS_OPS_HOST_API, neighbors_ops_host_v1
@@ -287,6 +288,14 @@ def mojolearn_vendor_binding() raises -> PythonObject:
     """"cpu". On a CPU-only install `_backend.vendor()` is "cpu" and the
     read-back cross-check expects that string from every host binding."""
     return PythonObject(String("cpu"))
+
+
+def mojolearn_mode_policy_mask_binding() raises -> PythonObject:
+    """The mode policy rows this binary was compiled with
+    (`checks/mode_policy.mojo`): bit i set = row i relaxed. 0 in every
+    identical build. Read by `python -m mojolearn verify`, which refuses an
+    identical set that reports anything else."""
+    return PythonObject(Int(mode_policy_mask()))
 
 
 def mojolearn_numeric_mode_binding() raises -> PythonObject:
@@ -1088,6 +1097,7 @@ def build__mojolearn_core_host() -> PythonObject:
         module.def_function[core_host_sabotage_binding]("core_host_sabotage")
         module.def_function[mojolearn_vendor_binding]("mojolearn_vendor")
         module.def_function[mojolearn_numeric_mode_binding]("mojolearn_numeric_mode")
+        module.def_function[mojolearn_mode_policy_mask_binding]("mojolearn_mode_policy_mask")
         module.def_function[knn_search_binding]("knn_search")
         module.def_function[knn_classify_binding]("knn_classify")
         module.def_function[knn_regress_binding]("knn_regress")

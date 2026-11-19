@@ -84,7 +84,7 @@ from core.row_norms import NORM_TPB, row_norm_kernel
 from checks.native_tests.kit import download_host_into, upload_host_into
 
 
-comptime IDENTICAL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+from checks.mode_policy import KERNEL_FORM_IDENTICAL as IDENTICAL
 
 comptime M_ROWS = 37
 comptime M_COLS = 53

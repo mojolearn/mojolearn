@@ -137,7 +137,7 @@ def routed_log(x: Float32) -> Float32:
 #: The mode this build compiles against; see `checks/numerics.mojo`. Same
 #: declaration as the histogram kernels', and `pinned_block_sum` below is the
 #: one reader in this file.
-comptime BUILD_MODE = GLOBAL_NUMERIC_MODE
+from checks.numerics import GLOBAL_NUMERIC_MODE as BUILD_MODE
 
 #: the boosting loop launches this kernel at 256 threads; the reduce below
 #: needs the block size at comptime.

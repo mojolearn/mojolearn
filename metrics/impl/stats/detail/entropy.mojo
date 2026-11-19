@@ -155,23 +155,10 @@ def entropy_from_counts_traced(
             )
         _ = accs^
         return sf_to_f64(sf_fold_list(parts))
-    elif GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
-        var acc = Float32(0.0)
-        var fsize = Float32(size)
-        for i in range(len(counts)):
-            var p = ftz(Float32(counts[i]) / fsize)
-            if p != Float32(0.0):
-                var lp = ftz(identical_log(p))
-                acc = ftz(identical_mul_add(-p, lp, acc))
-            if trace.enabled:
-                accs.append(Float64(acc))
-        if trace.enabled:
-            trace.record_host(
-                tag_prefix + ".acc", accs.unsafe_ptr(), len(accs)
-            )
-        _ = accs^
-        return Float64(acc)
     else:
+        # The Float32 `identical_log` fold that stood in an `elif` of the
+        # mode before this arm was unreachable (IDN_METRIC_EPI is the same
+        # test and comes first) and is gone; recoverable at 4569e73df6.
         var acc = Float64(0.0)
         var dsize = Float64(size)
         for i in range(len(counts)):

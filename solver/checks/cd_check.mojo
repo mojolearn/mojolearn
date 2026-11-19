@@ -171,7 +171,7 @@ from solver.impl.cd import (
 from solver.impl.solvers.params import LOSS_HINGE, LOSS_SQRD_LOSS
 from checks.native_tests.kit import download_host_into, upload_whole_into
 
-comptime IDENTICAL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+from checks.mode_policy import KERNEL_FORM_IDENTICAL as IDENTICAL
 #: Where the device and oracle cards of `check_cd_device_equals_oracle` and
 #: the two control cards of `check_cd_card_is_emitted` are written. Override
 #: with `MOJOLEARN_CD_CHECK_DIR`; the repo's other checks write to /tmp too.

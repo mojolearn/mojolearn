@@ -118,7 +118,7 @@ comptime EMB_COPY_TASKS_MAX = 16
 #     ids, refused on the host list before the upload, are not read back.
 #     The same kernels on the same values: no bit moves.
 #   PLAN_AUTO (embedding_identical.mojo; off: -D MOJOLEARN_EMB_AUTO_SORT_OFF).
-comptime _EMB_IDENTICAL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+from checks.mode_policy import KERNEL_FORM_IDENTICAL as _EMB_IDENTICAL
 # E09-E10: not tested. FAST opts into token-owned tables and fully written
 # scratch separately; the IDENTICAL controls retain their existing policy.
 # TOMBSTONE: MOJOLEARN_EMB_RESIDENT_OFF (old path in IDENTICAL: the per-call table upload and scan; no A/B recorded) deleted 2026-11-15 by lane/expdel2-25-neural; code recoverable at 63a7445f96.

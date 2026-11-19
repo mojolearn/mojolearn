@@ -1716,11 +1716,11 @@ def l2norm_bwd_at(r: Int, y: FP, g: FP, aux: FP, dst: FP, q: IP, p: IP):
 #   is deleted with that epoch (lane x8-cnn-on-executor, 2026-11-09).
 # TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old-path umbrella, EXP:2438; every IDENTICAL default kept) deleted 2026-11-15 by lane/expdel2-36-neural-series-linear; code recoverable at 145be10898.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-36-neural-series-linear.patch; record in docs/TOMBSTONES.md.
-comptime _FAM2_IDN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+from checks.mode_policy import KERNEL_FORM_IDENTICAL as _FAM2_IDN
 # cpu2-l11-neural (2026-10-04): FAST takes the same device forms on every
 # vendor (no host epoch order, Adam scalars, loss fold or GCN loops on a GPU
 # route). FAST promises quality, never bits.
-comptime _FAM2_FAST = GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+from checks.mode_policy import KERNEL_FORM_LEGACY_FAST as _FAM2_FAST
 # TOMBSTONE: MOJOLEARN_IDN_XENT_DEV_FOLD_OFF (old path (host seq_mean), no A/B recorded) deleted 2026-11-15 by lane/expdel2-36-neural-series-linear; code recoverable at 145be10898.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_XENT_DEV_FOLD_OFF.patch; record in docs/TOMBSTONES.md.
 comptime IDN_XENT_DEV_FOLD = _FAM2_FAST or _FAM2_IDN

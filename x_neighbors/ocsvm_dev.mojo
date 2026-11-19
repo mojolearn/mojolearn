@@ -90,7 +90,7 @@ comptime OCSVM_CLS2_RES = _OC_FA
 #     the flag every 64.
 # TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch, EXP:2438 DELETED; non-owner sites) deleted 2026-11-15 by lane/expdel2-10-cluster; code recoverable at 75ea427c34.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-10-cluster.patch; record in docs/TOMBSTONES.md.
-comptime _OC_IDN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+from checks.mode_policy import KERNEL_FORM_IDENTICAL as _OC_IDN
 # TOMBSTONE: MOJOLEARN_IDN_OCSVM_RES_OFF (old path, no A/B row) deleted 2026-11-15 by lane/expdel2-10-cluster; code recoverable at 9b4369322e.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_OCSVM_RES_OFF.patch; record in docs/TOMBSTONES.md.
 comptime OCSVM_IDN_RES = _OC_IDN

@@ -107,7 +107,7 @@ from tsa.impl.auto_arima import select_d
 from tsa.impl.stationarity import kpss_test
 
 
-comptime IDENTICAL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+from checks.mode_policy import KERNEL_FORM_IDENTICAL as IDENTICAL
 comptime N_OBS = 520
 comptime SALT = 1
 

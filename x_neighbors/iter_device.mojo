@@ -3257,7 +3257,7 @@ comptime LPK_TPB = 256
 # TOMBSTONE: MOJOLEARN_C33_FROZEN_CHUNKS (superseded arm, EXP:2323 DELETED; non-owner site) deleted 2026-11-15 by lane/expdel2-15-cluster; code recoverable at 707a4b8732.
 # Restore: git apply experiments/removed/MOJOLEARN_C33_FROZEN_CHUNKS.expdel2-15-cluster.patch; record in docs/TOMBSTONES.md.
 comptime LPK_BATCH = 16
-comptime LPK_FAST_BUILD = GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL
+from checks.mode_policy import KERNEL_FORM_LEGACY_FAST as LPK_FAST_BUILD
 #: The resident loop is the only kNN-graph path on every vendor and tier
 #: (lane n4-mds-labelprop-nmf-loops, 2026-11-09). It was the measured
 #: default: FAST + Apple since the M3 A/B n2-lp-res-taxi (label-propagation

@@ -162,7 +162,7 @@ from neighbors.checks.pinned_distance_tile import PINNED_TILE_TPB
 from checks.native_tests.kit import download_host_into, upload_host_into
 
 
-comptime IDENTICAL_BUILD = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+from checks.mode_policy import KERNEL_FORM_IDENTICAL as IDENTICAL_BUILD
 
 
 def _mode_name() -> String:

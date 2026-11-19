@@ -24,6 +24,14 @@ on every backend for the values it sees, or feeds only an integer/layout decisio
 product binding). Unlisted sites fail; allow lines that match nothing are printed as STALE (and fail, so the list
 never outlives the code). sqrt is in NAMES: it is correctly rounded on the host and Apple but not on NVIDIA/AMD.
 
+THE MODE POLICY TABLE (checks/mode_policy.mojo, 2026-11-19). The seams of checks/numerics.mojo keep the stdlib under
+the table's math row: `comptime if not ROW_VENDOR_MATH:` is the exact arm, the code after it the vendor's. The row is
+False in every identical build (a relaxation define there is a compile error) and True in the legacy fast set, so
+"FAST only" above now reads "math row relaxed". A raw call that is reachable only under a relaxed row is listed
+SAFE-ROW with the row first in its reason (`# SAFE-ROW: vendor_math: <reason>`, a name from POLICY_ROWS); SAFE-FAST
+stays valid for a site behind a test of the mode itself (the legacy fast arms). checks/mode_policy.mojo is the
+table, not product arithmetic: POLICY_MODULE is out of scope like the seam library.
+
 Files are split across os.cpu_count() worker processes. tools/prebuild_check.py runs it in its `audits` part.
 """
 import argparse
@@ -39,7 +47,11 @@ ALLOW = "tools/identity_math_lint_allow.txt"
 NAMES = ("sqrt", "rsqrt", "cbrt", "exp", "exp2", "expm1", "log", "log2", "log10", "log1p", "pow", "tanh", "sinh",
          "cosh", "atanh", "asinh", "acosh", "sin", "cos", "tan", "asin", "acos", "atan", "atan2", "erf", "erfc",
          "erfinv", "lgamma", "tgamma", "hypot")
-CLASSES = ("SAFE-FAST", "SAFE-EXACT", "SAFE-NOT-SHIPPED")
+CLASSES = ("SAFE-FAST", "SAFE-ROW", "SAFE-EXACT", "SAFE-NOT-SHIPPED")
+POLICY_MODULE = "checks/mode_policy.mojo"
+#: Row names of the mode policy table, by bit of MODE_POLICY_MASK (checks/mode_policy.mojo).
+POLICY_ROWS = ("fold_free", "contract_free", "flush_off", "vendor_math", "matrix_units", "waits_elided", "tile_free")
+_ROW_REASON = re.compile(r"#\s*SAFE-ROW:\s*(\w+):\s*\S")
 _SKIP_PREFIX = ("bench/", "experiments/", "docs/")
 _IMPORT = re.compile(r"^[ \t]*from[ \t]+(?:std\.)?math[ \t]+import[ \t]+(\([^)]*\)|[^\n]+)", re.M)
 _QUALIFIED = re.compile(r"^[ \t]*import[ \t]+(?:std\.)?math\b", re.M)
@@ -50,7 +62,7 @@ _ALLOW_LINE = re.compile(r"^([^:#\s]+):(\w+):(\w+)\s+#\s*(SAFE-[A-Z-]+):\s*\S")
 def in_scope(path):
     p = "/" + path
     return (path.endswith(".mojo") and not path.startswith(_SKIP_PREFIX) and "/checks/" not in p
-            and "oracle" not in Path(path).name and path != "checks/numerics.mojo")
+            and "oracle" not in Path(path).name and path != "checks/numerics.mojo" and path != POLICY_MODULE)
 
 
 def _blank(m):
@@ -110,6 +122,12 @@ def read_allow(text):
         if not m or m.group(4) not in CLASSES:
             bad.append(raw)
             continue
+        if m.group(4) == "SAFE-ROW":
+            # a SAFE-ROW line names the row that guards it; an unknown row is malformed
+            row = _ROW_REASON.search(line)
+            if not row or row.group(1) not in POLICY_ROWS:
+                bad.append(raw)
+                continue
         allow[(m.group(1), m.group(2), m.group(3))] = raw
     return allow, bad
 

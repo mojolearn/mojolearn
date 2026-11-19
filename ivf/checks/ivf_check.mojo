@@ -181,7 +181,7 @@ from neighbors.impl.detail.knn_brute_force import KNN_METHOD_TILED
 from checks.native_tests.kit import download_host_into
 
 
-comptime IDENTICAL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+from checks.mode_policy import KERNEL_FORM_IDENTICAL as IDENTICAL
 
 comptime N_ROWS = 320
 """Larger than SELECT_BLOCK so k257 reaches selection after candidate-count

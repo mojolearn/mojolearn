@@ -1971,6 +1971,7 @@ FAMILIES = (
             "lr_schedule_at",
             "core_host_numeric_mode", "core_host_vendor", "core_host_column",
             "core_host_sabotage", "mojolearn_vendor", "mojolearn_numeric_mode",
+            "mojolearn_mode_policy_mask",
             "knn_search", "knn_classify", "knn_regress", "kmeans_fit", "kmeans_predict", "kmeans_transform",
             "kmeans_native_api_v1",
             "knn_classify_neighbors", "knn_regress_neighbors",
@@ -2927,6 +2928,7 @@ FAMILIES = (
         exports=(
             "gbdt_host_numeric_mode", "gbdt_host_vendor", "gbdt_host_column",
             "gbdt_host_sabotage", "gbdt_vendor", "gbdt_numeric_mode",
+            "gbdt_mode_policy_mask",
             "gbdt_fit", "gbdt_predict", "gbdt_predict_multi", "gbdt_model_dim",
             "gbdt_sigmoid_pair", "gbdt_binary_probabilities", "gbdt_binary_classes",
             "gbdt_fit_ordered_rmse", "gbdt_fit_two_level_feature_freq",
