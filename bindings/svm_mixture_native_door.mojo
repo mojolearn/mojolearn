@@ -12,6 +12,8 @@ from bindings.family_raw_attr_unpack import family_raw_has
 from bindings.family_raw_attr_pack import family_raw_get, family_raw_get_or
 from providers.python.neural_descriptor_pyapi_door import neural_descriptor_entry
 from bindings.py_balanced import py_call, py_type, py_get, py_fields
+from bindings.mode_answer_door import fast_answers_compiled_code
+from core.mode_answer import MODE_FAMILY_MIXTURE
 from bindings.classical_arrays_door import classical_address
 from bindings.linear_svc_boundary_unpack import LinearSvcConnection, linear_svc_connection, linear_svc_run_query
 from core.linear_svc_native_api import LinearSvcScores
@@ -133,7 +135,8 @@ def _gmm_sample(model: PythonObject, binding: PythonObject, n_samples: PythonObj
     if getter is not None:
         var got = Int(py=family_call(b.int, family_call(getter)))
         var wanted = py_get(context["family_gmm_mode_codes"], want, PythonObject(None))
-        if wanted is None or Int(py=wanted) != got:
+        if (wanted is None or Int(py=wanted) != got) and not fast_answers_compiled_code(
+                want, context["family_gmm_mode_codes"], got, MODE_FAMILY_MIXTURE):
             raise Error("RuntimeError: mojolearn GaussianMixture: numeric_mode=" + family_repr(want) + " was requested "
                         + "but " + String(py_fields(binding)["__name__"]) + " reports compile-time mode code "
                         + String(got) + "; rebuild it with bash bindings/build_mixture.sh")
