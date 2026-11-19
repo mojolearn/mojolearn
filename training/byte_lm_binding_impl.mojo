@@ -1,7 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 """Typed session state and helpers behind the byte LM GPU binding
-(`bindings/_mojolearn_byte_lm.mojo`): the owned session, the opt-in context
-keeper, span validation, the input-unchanged guard, the on-device bit compare,
+(`bindings/_mojolearn_byte_lm.mojo`): the owned session, span validation, the input-unchanged guard, the on-device bit compare,
 flag and loss publication, export staging and the launch-cost probe. No
 Python here; the binding unpacks its arguments and calls these."""
 from core.hostptr import f32_ptr, read_f32, copy_f32, list_i32
@@ -80,38 +79,9 @@ struct ByteLMSession(Movable, Writable):
         self.ctx = None
 
 
-struct _ContextKeeper(Defaultable, Movable):
-    """DEVIATION 2513: an OPT-IN process-lifetime DeviceContext.
-
-    On one RTX 4090 pod every DeviceContext created after another was
-    destroyed in the same process never returned from its first use, while a
-    second context created while the first was still alive always did.
-    When MOJOLEARN_BYTE_LM_KEEP_CONTEXT=1 is set at a call that creates a
-    context, `ensure()` creates ONE separate context here first and never
-    releases it, so a live context exists whenever any later per-call or
-    resident context is created. The per-call path, the resident session
-    and the teardown order are unchanged; this is a diagnostic mitigation,
-    OFF by default, and not a claim about the cause.
-
-    Storage: `std.ffi._Global`, the pattern the trees and RF bindings use
-    for their export registries (ET_EXPORTS, RF_EXPORTS). There is no
-    module-level `var` in this tree on purpose; the _Global slot is
-    runtime-owned, created once by name, and lives until process teardown.
-    """
-    var ctx: Optional[DeviceContext]
-
-    def __init__(out self):
-        self.ctx = Optional[DeviceContext]()
-
-    def ensure(mut self) raises:
-        if not self.ctx:
-            self.ctx = DeviceContext()
-
-    def active(self) -> Bool:
-        return Bool(self.ctx)
-
-
-comptime BYTE_LM_CONTEXT_KEEPER = SharedSlot[_ContextKeeper, "MojolearnByteLMContextKeeperIdenticalV3"]
+# TOMBSTONE: MOJOLEARN_BYTE_LM_KEEP_CONTEXT (opt-in arm, no A/B recorded in four weeks: the run-time switch since 2026-10-21, a build define since 2026-11-15) deleted 2026-11-19 by lane/fx-old-arms-triage; code recoverable at a7c89e7558.
+# The keeper context (DEVIATION 2513, `_ContextKeeper`, `BYTE_LM_CONTEXT_KEEPER`) went with it.
+# Restore: git apply experiments/removed/MOJOLEARN_BYTE_LM_KEEP_CONTEXT.patch; record in docs/TOMBSTONES.md.
 
 
 
