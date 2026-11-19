@@ -728,8 +728,9 @@
   },
   "byte-lm-logits-hugepage": {
    "define": "MOJOLEARN_BYTE_LM_FAST_LOGITS_HUGEPAGE",
-   "status": "define in code (bindings/byte_lm_trainer_native_door.mojo BYTE_LM_LOGITS_HUGEPAGE, _pooled_logits; bindings/native_array_storage_door.mojo native_scratch_advise_huge): B = a FRESH resident logits store (a pool miss) is advised for transparent huge pages (Linux madvise MADV_HUGEPAGE over the whole 2 MiB pages inside it) before the one download first-touches it; A = the default, the unfilled store on small pages (one page fault per 4 KiB of logits). A pooled store is untouched in both arms; nothing on Darwin; transport only, no output byte moves",
-   "owed": "RUN"
+   "status": "DELETED 2026-11-19 (lane fx-verdicts4): LOSS; the define is refused (core/experiment_guards_neural.mojo); code recoverable at 8f3f639b13, experiments/removed/MOJOLEARN_BYTE_LM_FAST_LOGITS_HUGEPAGE.patch.",
+   "owed": "DECIDED",
+   "evidence": "A/B round 2 2026-11-19, NVIDIA L40S host bd9c355c19c0, wheel 0c68d6cd27 and its B set, base and arm in one pod job (nvc1-0008, tag nvc-ab-20261119T154232Z-0642a5; ~/mojolearn-evidence/measure-candidate/build-0c68d6cd27/ab2/x/, tables ~/mojolearn-evidence/briefs-20261118/fx-verdicts4/tab-<arm>.txt), one scored run per arm: lm-forward 21.96 -> 25.73 ms (1.17; the row's three bases in the job 21.35-21.96), lm-train-step 36.52 -> 36.60 (1.00), transformer-forward 2.883 -> 2.868 (0.99, median of 20); fresh-store driver shapes 32 MiB 13.73 -> 14.31 (1.04), 64 MiB 28.23 -> 29.03 (1.03), 2.3 MiB 4.77 -> 4.44 (0.93); digests and quality equal. LOSS: deleted."
   },
   "xprep-arena-hugepage": {
    "define": "MOJOLEARN_XPREP_FAST_ARENA_HUGEPAGE",

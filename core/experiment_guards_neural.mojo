@@ -1137,6 +1137,11 @@ def _check_configuration() -> Bool:
     # Restore: git apply experiments/removed/MOJOLEARN_BYTE_LM_KEEP_CONTEXT.patch; record in docs/TOMBSTONES.md.
     comptime assert not is_defined["MOJOLEARN_BYTE_LM_KEEP_CONTEXT"](), "removed 2026-11-19 (lane/fx-old-arms-triage, opt-in arm, no A/B recorded in four weeks): the byte LM keeper context (run-time switch since 2026-10-21, build define since 2026-11-15) had no A/B in four weeks; the process-lifetime neural context stays; code at a7c89e7558; restore: experiments/removed/MOJOLEARN_BYTE_LM_KEEP_CONTEXT.patch"
     # ---- end lane fx-old-arms-triage
+    # ---- lane fx-verdicts4 (2026-11-19): verdicts of A/B round 2 (NVIDIA L40S, wheel 0c68d6cd27, job nvc-ab-20261119T154232Z-0642a5)
+    # TOMBSTONE: MOJOLEARN_BYTE_LM_FAST_LOGITS_HUGEPAGE (LOSS, A/B round 2 NVIDIA L40S, wheel 0c68d6cd27, job nvc-ab-20261119T154232Z-0642a5, one run per arm, digests equal) deleted 2026-11-19 by lane/fx-verdicts4; code recoverable at 8f3f639b13.
+    # Restore: git apply experiments/removed/MOJOLEARN_BYTE_LM_FAST_LOGITS_HUGEPAGE.patch; record in docs/TOMBSTONES.md.
+    comptime assert not is_defined["MOJOLEARN_BYTE_LM_FAST_LOGITS_HUGEPAGE"](), "removed 2026-11-19 (lane/fx-verdicts4, A/B round 2 NVIDIA L40S, wheel 0c68d6cd27, job nvc-ab-20261119T154232Z-0642a5, one run per arm, digests equal): the huge-page advice on a fresh logits store was arm/base 1.17 on lm-forward (21.96 -> 25.73 ms; loss); the unfilled small-page store stays; code at 8f3f639b13, experiments/removed/MOJOLEARN_BYTE_LM_FAST_LOGITS_HUGEPAGE.patch"
+    # ---- end lane fx-verdicts4
     return True
 
 
