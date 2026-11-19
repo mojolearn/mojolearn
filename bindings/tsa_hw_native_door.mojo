@@ -17,6 +17,7 @@ The same compiled entries with the same argument words, so no bit moves.
 A host inference class (`HostExponentialSmoothing`) reads its loaded
 forecast host binding from the module table.
 """
+from core.mode_answer import answer_mode_object
 from std.memory import unsafe_memcpy
 from std.python import Python, PythonObject
 from bindings.native_loaded_module_door import native_loaded_module
@@ -129,8 +130,10 @@ def _hw_entries(model: PythonObject, fields: PythonObject, context: PythonObject
     if py_type(mode) is not b.str:
         raise Error("ValueError: numeric_mode must be fast, identical or None")
     mode = py_call(py_call(mode.strip).lower)
-    if String(py=mode) != "identical" and String(py=mode) != "fast":
+    var mode_word = String(py=mode)
+    if mode_word != "identical" and mode_word != "fast":
         raise Error("ValueError: numeric_mode must be fast, identical or None")
+    answer_mode_object(mode, mode_word)
     var entries = context["hw_bindings"][mode]
     if py_type(entries) is b.str:
         raise Error(String(py=entries))

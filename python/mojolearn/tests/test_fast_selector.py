@@ -20,8 +20,9 @@ under test (`_backend._FAST_ANSWER`):
   * off Apple, a CPU-only install answers the name `fast` with its CPU bindings;
   * off Apple, an install that carries fast binaries still loads them;
   * on Apple nothing changes: `fast` names the fast set, built or not;
-  * a per-estimator `numeric_mode='fast'` (`binding`, `load_set`) still names
-    the fast set;
+  * `binding` and `load_set` still name the fast set under 'fast' (a
+    per-estimator `numeric_mode='fast'` is answered in the compiled doors,
+    core/mode_answer.mojo: `BuiltInstallFamilies` below);
   * a retired mode value is refused with its wording.
 
 The result hash of a `fast` process against an `identical` one on a built
@@ -290,6 +291,91 @@ class BuiltInstall(unittest.TestCase):
         self.assertIsNone(fast["param"])
         self.assertEqual(fast["vendor"], identical["vendor"])
         self.assertEqual(fast["sha256"], identical["sha256"])
+
+
+_FAMILY_CHILD = r"""
+import hashlib, json, sys
+import mojolearn
+import numpy as np
+X = (np.arange(192, dtype=np.float32).reshape(48, 4) * np.float32(0.37)) % np.float32(5.0) + np.float32(0.25)
+y_reg = np.ascontiguousarray(X[:, 0] * np.float32(2.0) - X[:, 1], dtype=np.float32)
+y_cls = np.ascontiguousarray((X[:, 0] > X[:, 1]).astype(np.int32))
+FAMILIES = json.loads(sys.argv[1])
+rows = {}
+def run(name, kind, extra, mode):
+    model = getattr(mojolearn, name)(numeric_mode=mode, **extra)
+    if kind == "unsup":
+        model.fit(X)
+    else:
+        model.fit(X, y_cls if kind == "cls" else y_reg)
+    out = model.transform(X) if hasattr(model, "transform") else model.predict(X)
+    out = np.ascontiguousarray(np.asarray(out))
+    return model, hashlib.sha256(out.tobytes() + str(out.dtype).encode()).hexdigest()
+for name, kind, extra in FAMILIES:
+    try:
+        _, want = run(name, kind, extra, None)
+    except Exception as error:
+        rows[name] = dict(status="unavailable", why=f"{type(error).__name__}: {error}"[:300])
+        continue
+    try:
+        model, got = run(name, kind, extra, "fast")
+    except Exception as error:
+        rows[name] = dict(status="refused", why=f"{type(error).__name__}: {error}"[:300])
+        continue
+    rows[name] = dict(status="same" if got == want else "different", attribute=model.numeric_mode,
+                      param=model.get_params()["numeric_mode"])
+print(json.dumps(dict(answer=mojolearn._backend._FAST_ANSWER, vendor=mojolearn.vendor(), rows=rows)))
+"""
+
+#: One estimator per converted family door: (class, kind, constructor extras).
+FAMILIES = [
+    ["RandomForestClassifier", "cls", {"n_estimators": 4, "random_state": 0}],
+    ["RandomForestRegressor", "reg", {"n_estimators": 4, "random_state": 0}],
+    ["ExtraTreesClassifier", "cls", {"n_estimators": 4, "random_state": 0}],
+    ["GradientBoostingRegressor", "reg", {"n_estimators": 4}],
+    ["IsolationForest", "unsup", {"n_estimators": 4, "random_state": 0}],
+    ["StandardScaler", "unsup", {}],
+    ["MinMaxScaler", "unsup", {}],
+    ["PCA", "unsup", {"n_components": 2}],
+    ["IncrementalPCA", "unsup", {"n_components": 2}],
+    ["TruncatedSVD", "unsup", {"n_components": 2}],
+    ["KernelPCA", "unsup", {"n_components": 2}],
+    ["NMF", "unsup", {"n_components": 2}],
+    ["LinearRegression", "reg", {}],
+    ["Ridge", "reg", {}],
+    ["LogisticRegression", "cls", {}],
+    ["ElasticNet", "reg", {}],
+    ["KernelRidge", "reg", {}],
+    ["KNeighborsClassifier", "cls", {}],
+]
+
+
+class BuiltInstallFamilies(unittest.TestCase):
+    """On a built install off Apple with no fast set: `Estimator(numeric_mode='fast')`
+    fits, its result bytes equal the `numeric_mode=None` (identical) ones, and its
+    `numeric_mode` attribute and `get_params()` read back 'fast'. One process."""
+
+    def test_per_estimator_fast_runs_the_identical_set(self):
+        import json
+        if sys.platform == "darwin":
+            self.skipTest("Apple: `fast` names the fast set (unchanged); the answer under test is off Apple")
+        done = subprocess.run([sys.executable, "-c", _FAMILY_CHILD, json.dumps(FAMILIES)],
+                              env=dict(os.environ, MOJOLEARN_NUMERIC_MODE="identical"),
+                              capture_output=True, text=True, timeout=1800)
+        if done.returncode != 0:
+            self.skipTest("no built mojolearn in this environment: " + done.stderr[-300:])
+        report = json.loads(done.stdout.strip().splitlines()[-1])
+        if report["answer"] != "identical":
+            self.skipTest("this install carries a fast set, which answers the word itself")
+        ran = 0
+        for name, row in sorted(report["rows"].items()):
+            with self.subTest(estimator=name):
+                if row["status"] == "unavailable":
+                    continue  # not runnable under `identical` either on this install
+                ran += 1
+                self.assertEqual(row["status"], "same", row.get("why", ""))
+                self.assertEqual((row["attribute"], row["param"]), ("fast", "fast"))
+        self.assertGreater(ran, 0, report["rows"])
 
 
 if __name__ == "__main__":

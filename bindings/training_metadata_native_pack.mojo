@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Public training metadata: fixed compiled entries, no runtime loader callbacks.
+from core.mode_answer import answer_mode_object, answer_mode_word
 from std.python import PythonObject
 from bindings.py_balanced import py_call, py_type
 from bindings.py_typed_call import py_call_typed
@@ -18,6 +19,8 @@ def training_metadata(operation: String, mode: PythonObject, context: PythonObje
     var requested = String(selected)
     if requested != "identical" and requested != "fast":
         raise Error("ValueError: numeric_mode must be fast, identical or None")
+    answer_mode_object(selected, requested)
+    answer_mode_word(requested)
     var entries = context["training_metadata_bindings"][selected]
     if py_type(entries) is types[0]:
         # Import-time binding failures retain their original category/message.

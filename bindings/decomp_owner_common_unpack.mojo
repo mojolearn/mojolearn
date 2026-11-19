@@ -3,6 +3,7 @@
 # (bindings/decomp_native.mojo and the per-class files it dispatches to):
 # instance fields with Python's AttributeError, the fitted numeric mode's
 # connected x_decomp entries, mojolearn Array outputs and scalar reads.
+from core.mode_answer import answer_mode_object
 from std.python import Python, PythonObject
 from bindings.native_loaded_module_door import native_loaded_module
 from bindings.py_balanced import py_call, py_get, py_type, py_contains, py_setitem
@@ -61,8 +62,10 @@ def decomp_entries(model: PythonObject, fields: PythonObject, names: PythonObjec
     if py_type(mode) is not b.str:
         raise Error("numeric_mode must be fast, identical or None")
     var name = py_call(py_call(mode.strip).lower)
-    if String(name) != "identical" and String(name) != "fast":
+    var name_word = String(name)
+    if name_word != "identical" and name_word != "fast":
         raise Error("numeric_mode must be fast, identical or None")
+    answer_mode_object(name, name_word)
     var entries = context["decomp_entries"][name]
     if py_type(entries) is b.str:
         raise Error(String(entries))

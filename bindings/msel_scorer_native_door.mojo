@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Fixed scorer records call verified compiled estimator/metric entries. The
 # Python function objects identify import-time plans; they are never invoked.
+from core.mode_answer import answer_mode_object
 from bindings.native_loaded_module_door import NativeModules, native_loaded_module
 from bindings.native_class_admission_door import class_record, class_admit
 from bindings.py_model_records import RECORDS_PREPARED, ContentRecord, records_stamped_get, records_stamped_put
@@ -303,8 +304,10 @@ struct MselMetricPrepared(Movable):
                 if py_type(mode) is not b.str:
                     raise Error("ValueError: numeric_mode must be 'fast' or 'identical'")
                 var clean = py_call(py_call(mode.strip).lower)
-                if String(clean) != "identical" and String(clean) != "fast":
+                var clean_word = String(clean)
+                if clean_word != "identical" and clean_word != "fast":
                     raise Error("ValueError: numeric_mode must be 'fast' or 'identical'")
+                answer_mode_object(clean, clean_word)
                 value = context["family_msel_metric_bindings"][clean]
                 if py_type(value) is b.str:
                     raise Error(String(value))

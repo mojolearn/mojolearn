@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Complete AutoARIMA construction and forecast operation boundaries. Search and
 # fitting remain separate owners; this provider never calls their Python methods.
+from core.mode_answer import answer_mode_object
 from std.python import Python, PythonObject
 from bindings.native_loaded_module_door import native_loaded_module, NativeModules
 from bindings.native_class_admission_door import class_record, class_admit, dict_keys_admitted, dict_keys_admit
@@ -222,8 +223,10 @@ def autoarima_forecast(model: PythonObject, args: PythonObject, context: PythonO
         if py_type(mode) is not py_type(PythonObject("")):
             raise Error("TypeError: numeric_mode must be an exact string")
         mode = py_call(py_call(mode.strip).lower)
-        if String(mode) != "identical" and String(mode) != "fast":
+        var mode_word = String(mode)
+        if mode_word != "identical" and mode_word != "fast":
             raise Error("ValueError: numeric_mode must be identical or fast")
+        answer_mode_object(mode, mode_word)
         var entries = context["arima_bindings"][mode]
         if py_type(entries) is py_type(PythonObject("")):
             raise Error(String(entries))

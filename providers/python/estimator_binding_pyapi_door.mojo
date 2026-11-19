@@ -2,6 +2,7 @@
 # Shared import-connected binding admission for estimator frontends. The caller
 # enters compiled code once; runtime selection reads current mode/registry data
 # and never invokes Python _bind/load_set/_ModeSet.__getattr__ callbacks.
+from core.mode_answer import answer_mode_word
 from std.python import Python, PythonObject
 from providers.python.classical_native_dispatch import CLASSICAL_NATIVE_DISPATCH
 from bindings.native_loaded_module_door import native_loaded_module
@@ -49,6 +50,7 @@ def _selected_mode(bi: PythonObject, requested: PythonObject, context: PythonObj
         selected_mode = String(py=mode.strip().lower())
     if selected_mode != "identical" and selected_mode != "fast":
         raise Error("ValueError: numeric_mode must be fast, identical or None")
+    answer_mode_word(selected_mode)
     return selected_mode
 
 

@@ -12,6 +12,7 @@
 #   otherwise (the Gram)     tsvd_fit_explained, or tsvd_fit then tsvd_explained
 # fit_transform projects the X the fit converted (tsvd_transform), with no
 # second conversion and no Python between the two.
+from core.mode_answer import answer_mode_word
 from std.python import Python, PythonObject
 from bindings.py_cpython_table import cpython_table
 from bindings.native_loaded_module_door import native_loaded_module, NativeModules
@@ -119,10 +120,12 @@ def _mode(fields: PythonObject, context: PythonObject) raises -> String:
     # p3 rank 833); any other text is normalized as before.
     var text = String(py=mode)
     if text == "identical" or text == "fast":
+        answer_mode_word(text)
         return text
     var name = String(py_call(py_call(mode.strip).lower))
     if name != "identical" and name != "fast":
         raise Error("numeric_mode must be fast, identical or None")
+    answer_mode_word(name)
     return name
 
 

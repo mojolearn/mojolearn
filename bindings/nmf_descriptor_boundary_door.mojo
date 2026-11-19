@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 """NMF import-connected native descriptors and compiled-image lifetime pins."""
+from core.mode_answer import answer_mode_word
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from core.shared_slot import SharedSlot
@@ -29,6 +30,7 @@ def nmf_connection(model: PythonObject, fields: PythonObject, context: PythonObj
     var name = String(py_call(py_call(mode.strip).lower))
     if name != "identical" and name != "fast":
         raise Error("numeric_mode must be fast, identical or None")
+    answer_mode_word(name)
     var table = context["nmf_bindings"]
     if py_type(table) is not py_type(Python.dict()):
         raise Error("TypeError: NMF binding tables require native dictionaries")

@@ -2,6 +2,7 @@
 # Shared fitted-state and compiled-binary metadata. Import time connects the
 # exact read-back entries; a public operation never calls Python _bind,
 # default_mode, getattr hooks, or a Python truth/string conversion protocol.
+from core.mode_answer import answer_mode_word
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from bindings.py_cpython_table import cpython_table
@@ -291,6 +292,7 @@ def _mode(mut mods: NativeModules, value: PythonObject) raises -> String:
     var result = String(py_call(py_call(value.strip).lower))
     if result != "identical" and result != "fast":
         raise Error("ValueError: numeric_mode must be fast, identical or None")
+    answer_mode_word(result)
     return result
 
 

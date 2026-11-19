@@ -18,6 +18,7 @@
 # native call, gamma='scale' rounded from the binding's exact limbs in exact
 # integer math (core/scale_gamma_exact.mojo). A binding without a door
 # takes the entries it has, as before.
+from core.mode_answer import answer_mode_word
 from std.memory import unsafe_memcpy
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
@@ -203,6 +204,7 @@ def _km_extension(fields: PythonObject, binding: PythonObject, where: String, co
     var selected = String(String(want).strip()).lower()
     if selected != "identical" and selected != "fast":
         raise Error("ValueError: numeric_mode must be fast, identical or None")
+    answer_mode_word(selected)
     want = PythonObject(selected)
     var native = kernel_method_provider(fields, binding, selected == "identical")
     # The binary's compile-time mode never changes for one binding object:

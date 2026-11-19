@@ -15,6 +15,7 @@
 # reads a forest's device vote, so the prediction crosses the host once, as
 # before. What is gone is the Python between predict and score and the
 # re-materialization of y and the prediction.
+from core.mode_answer import answer_mode_word
 from std.python import Python, PythonObject
 from bindings.base_helpers_key_unpack import base_helpers_key
 from bindings.labels_stat_boundary_pack import labels_stat_pack
@@ -189,6 +190,7 @@ def _metrics_mode(mode: PythonObject, context: PythonObject) raises -> String:
         var clean = String(py_call(py_call(selected.strip).lower))
         if clean != "fast" and clean != "identical":
             raise Error("numeric_mode must be 'fast' or 'identical'")
+        answer_mode_word(clean)
         return clean
     return String(py_call(py_call(context["backend_fields"]["_DEFAULT_MODE"].strip).lower))
 

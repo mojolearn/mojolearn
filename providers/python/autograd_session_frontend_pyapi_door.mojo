@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Session admission uses the common provider and retains its exact registry.
+from core.mode_answer import answer_mode_word
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_fields, py_get, py_setitem
 from bindings.native_loaded_module_door import native_loaded_module, NativeModules, shared_dict_stamped, shared_dict_epoch, shared_dict_watch
@@ -128,6 +129,7 @@ def ops_session_initialize_py(session: PythonObject, record: PythonObject, mode:
     var key = String(normalized)
     if key != "identical" and key != "fast":
         raise Error("ValueError: numeric_mode must be fast, identical or None")
+    answer_mode_word(key)
     if py_type(connections) is not py_type(Python.dict()):
         raise Error("TypeError: Session connections require a native dictionary")
     _session_string_keys(connections)

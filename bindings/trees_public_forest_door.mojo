@@ -20,6 +20,7 @@
 # resident device snapshot is prepared and queried in the same call, and a
 # classifier `predict` decodes the resident labels (or the argmax of the
 # vote) without returning to Python between the vote and the decode.
+from core.mode_answer import answer_mode_object
 from std.math import sqrt
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem, py_fields, py_item
@@ -224,13 +225,19 @@ def _check_mode(mode: PythonObject) raises -> PythonObject:
         # The stored value is usually already clean: no strip()/lower() calls
         # (p3-trees). The value returned compares equal to the cleaned one.
         var exact = String(py=mode)
-        if exact == "fast" or exact == "identical":
+        if exact == "identical":
             return mode
+        if exact == "fast":
+            var answered = mode
+            answer_mode_object(answered, exact)
+            return answered
     if py_type(mode) is not b.str and not Bool(py=py_call(b.isinstance, mode, b.str)):
         raise Error("numeric_mode must be fast, identical or None")
     var clean = py_call(py_call(mode.strip).lower)
-    if String(clean) != "fast" and String(clean) != "identical":
+    var clean_word = String(clean)
+    if clean_word != "fast" and clean_word != "identical":
         raise Error("numeric_mode must be fast, identical or None")
+    answer_mode_object(clean, clean_word)
     return clean
 
 

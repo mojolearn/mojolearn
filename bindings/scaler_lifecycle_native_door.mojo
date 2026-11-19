@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # StandardScaler's public lifecycle. The original preprocessing and x_prep
 # kernels, operation order, modes, and copy semantics remain unchanged.
+from core.mode_answer import answer_mode_object
 from std.memory import unsafe_memcpy
 from std.os import getenv
 from bindings.py_typed_call import py_call_typed
@@ -73,8 +74,10 @@ def _mode(fields: PythonObject, context: PythonObject) raises -> PythonObject:
     if py_type(mode) is not native_loaded_module("builtins").str:
         raise Error("numeric_mode must be fast, identical or None")
     mode = py_call(py_call(mode.strip).lower)
-    if String(mode) != "fast" and String(mode) != "identical":
+    var mode_word = String(mode)
+    if mode_word != "fast" and mode_word != "identical":
         raise Error("numeric_mode must be fast, identical or None")
+    answer_mode_object(mode, mode_word)
     return mode
 
 
@@ -317,8 +320,10 @@ def scaler_partial_fit(model: PythonObject, source: PythonObject, weights: Pytho
     if py_type(mode) is not b.str:
         raise Error("numeric_mode must be fast, identical or None")
     mode = py_call(py_call(mode.strip).lower)
-    if String(mode) != "fast" and String(mode) != "identical":
+    var mode_word = String(mode)
+    if mode_word != "fast" and mode_word != "identical":
         raise Error("numeric_mode must be fast, identical or None")
+    answer_mode_object(mode, mode_word)
     if Bool(py=py_get(context,"scaler_explicit_host",False)) and String(mode) != "identical":
         raise Error("HostStandardScaler runs identical only on the host")
     var entries = scaler_fit_entries(mode, context)

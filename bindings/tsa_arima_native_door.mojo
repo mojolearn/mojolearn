@@ -12,6 +12,7 @@ native call each, through `tsa_native_call` (bindings/tsa_public_native.mojo):
 The numerical entry selection and argument layout are preserved. Compilation
 does not establish runtime behavior or within-release bitwise identity.
 A host inference class (`HostARIMA`) reads its loaded forecast host binding
+from core.mode_answer import answer_mode_object
 from the module table.
 """
 from std.memory import unsafe_memcpy
@@ -110,8 +111,10 @@ def _arima_entries(model: PythonObject, fields: PythonObject, context: PythonObj
     var text = String(py=mode)
     if text != "identical" and text != "fast":  # exact modes skip two Python calls
         want = py_call(py_call(mode.strip).lower)
-    if String(py=want) != "identical" and String(py=want) != "fast":
+    var want_word = String(py=want)
+    if want_word != "identical" and want_word != "fast":
         raise Error("ValueError: numeric_mode must be fast, identical or None")
+    answer_mode_object(want, want_word)
     var entries = context["arima_bindings"][want]
     if py_type(entries) is b.str:
         raise Error(String(py=entries))

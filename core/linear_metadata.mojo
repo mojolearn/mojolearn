@@ -2,6 +2,9 @@
 """Native constructor/parameter names and fitted-state metadata decisions."""
 
 
+from core.mode_answer import answer_mode_word
+
+
 def _linear_mode_space(point: Int) -> Bool:
     # The whitespace accepted by CPython str.strip, including its four
     # information-separator controls. No Unicode lower-case mapping outside
@@ -29,6 +32,7 @@ def linear_mode_name(source: String) raises -> String:
         word += String(chr(point))
     if word != "identical" and word != "fast":
         raise Error("numeric_mode must be fast, identical or None")
+    answer_mode_word(word)
     return word^
 
 

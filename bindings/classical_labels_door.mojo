@@ -19,6 +19,7 @@
 # slots (classical_wrap_array), and the only callables invoked are compiled
 # entry points and C builtins connected at import
 # (python/mojolearn/_native_labels_bridge.py `label_context`).
+from core.mode_answer import answer_mode_word
 from bindings.native_array_storage_door import native_array_from_bytes, native_array_from_values, native_array_zeros, native_array_empty, native_scratch_bytes, native_scratch_address
 from bindings.native_loaded_module_door import native_loaded_module
 from std.math import isfinite
@@ -1246,6 +1247,7 @@ def _metrics_mode(mode: PythonObject, context: PythonObject) raises -> String:
         var clean = String(py_call(b.str.lower, py_call(b.str.strip, selected)))
         if clean != "fast" and clean != "identical":
             raise Error("numeric_mode must be 'fast' or 'identical'")
+        answer_mode_word(clean)
         return clean
     return String(py_call(py_call(context["backend_fields"]["_DEFAULT_MODE"].strip).lower))
 

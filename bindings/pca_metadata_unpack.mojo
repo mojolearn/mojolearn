@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Native PCA constructor and scalar-parameter metadata. Public activation is
 # separate: this private owner does not replace inherited Python API wrappers.
+from core.mode_answer import answer_mode_object
 from std.python import Python, PythonObject
 from bindings.native_loaded_module_door import native_loaded_module, NativeModules
 from bindings.native_class_admission_door import class_record, class_admit
@@ -63,8 +64,10 @@ def pca_mode(fields: PythonObject, context: PythonObject) raises -> PythonObject
     if py_type(mode) is not native_loaded_module("builtins").str:
         raise Error("TypeError: numeric_mode must be identical, fast or None")
     mode = mode.strip().lower()
-    if String(mode) != "identical" and String(mode) != "fast":
+    var mode_word = String(mode)
+    if mode_word != "identical" and mode_word != "fast":
         raise Error("numeric_mode must be identical, fast or None")
+    answer_mode_object(mode, mode_word)
     return mode
 
 

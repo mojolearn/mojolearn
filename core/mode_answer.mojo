@@ -61,10 +61,11 @@ def connect_mode_answer(fast_is_identical: Bool, identical: PythonObject) raises
 def answer_mode_word(mut word: String) raises:
     """`word` is an admitted mode word. Replace `fast` by `identical` where
     the identical set answers it."""
-    comptime if not CompilationTarget.is_macos():
-        if word == "fast":
-            if MODE_ANSWER.get_or_create_ptr()[].fast_is_identical:
-                word = "identical"
+    comptime if CompilationTarget.is_macos():
+        return
+    if word == "fast":
+        if MODE_ANSWER.get_or_create_ptr()[].fast_is_identical:
+            word = "identical"
 
 
 @always_inline
@@ -72,8 +73,9 @@ def answer_mode_object(mut mode: PythonObject, word: String) raises:
     """`mode` is an admitted Python mode word and `word` its text. Replace
     `fast` by the retained `identical` object where the identical set
     answers it."""
-    comptime if not CompilationTarget.is_macos():
-        if word == "fast":
-            var answer = MODE_ANSWER.get_or_create_ptr()
-            if answer[].fast_is_identical and len(answer[].words) > 0:
-                mode = answer[].words[0]
+    comptime if CompilationTarget.is_macos():
+        return
+    if word == "fast":
+        var answer = MODE_ANSWER.get_or_create_ptr()
+        if answer[].fast_is_identical and len(answer[].words) > 0:
+            mode = answer[].words[0]

@@ -3,6 +3,7 @@
 # export is deliberately absent: a native call to that exporter still runs
 # Python forward. The public API now requires an already exported artifact
 # (owner authorization 2026-10-27); it never performs an implicit export.
+from core.mode_answer import answer_mode_object
 from std.python import Python, PythonObject
 from bindings.byte_checkpoint_io_unpack import ByteCheckpointIOError
 from providers.python.framework_metadata_pyapi_pack import framework_metadata_operation
@@ -77,8 +78,10 @@ def _import(source: PythonObject, label: PythonObject, shapes: PythonObject,
     if py_type(requested) is not b.str:
         raise Error("ValueError: numeric_mode must be fast, identical or None")
     var normalized = py_call(py_call(requested.strip).lower)
-    if String(normalized) != "identical" and String(normalized) != "fast":
+    var normalized_word = String(normalized)
+    if normalized_word != "identical" and normalized_word != "fast":
         raise Error("ValueError: numeric_mode must be fast, identical or None")
+    answer_mode_object(normalized, normalized_word)
     var entries = context["modes"][normalized]
     if py_type(entries) is b.str:
         raise Error(String(entries))

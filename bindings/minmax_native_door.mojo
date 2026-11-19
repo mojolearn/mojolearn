@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # MinMaxScaler owns preparation, launches, running extrema, outputs and state
 # here. The preprocessing and x_prep kernels and their order are unchanged.
+from core.mode_answer import answer_mode_object
 from std.memory import unsafe_memcpy, bitcast
 from std.python import Python, PythonObject
 from bindings.native_loaded_module_door import native_loaded_module
@@ -43,8 +44,10 @@ def _configuration_mode(var mode: PythonObject, context: PythonObject) raises ->
     if py_type(mode) is not b.str:
         raise Error("numeric_mode must be fast, identical or None")
     mode = py_call(py_call(mode.strip).lower)
-    if String(mode) != "identical" and String(mode) != "fast":
+    var mode_word = String(mode)
+    if mode_word != "identical" and mode_word != "fast":
         raise Error("numeric_mode must be fast, identical or None")
+    answer_mode_object(mode, mode_word)
     return mode
 
 

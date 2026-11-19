@@ -3,6 +3,7 @@
 # proxy __getattr__, model __getattribute__, or Python callback runs here.
 # The PACK half of the former `bindings/spectral_umap_routes.mojo` (fence-flip-2 split, 2026-11-12);
 # the UNPACK half is `bindings/spectral_umap_routes_unpack.mojo`.
+from core.mode_answer import answer_mode_object
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_get, py_type
 from bindings.native_loaded_module_door import native_loaded_module, _loaded_fields
@@ -15,8 +16,10 @@ def spectral_umap_route(context: PythonObject, group: String, requested: PythonO
         raise Error("numeric_mode must be fast, identical or None")
     # Exact str methods are native builtins; reject protocol objects first.
     mode = mode.strip().lower()
-    if String(mode) != "identical" and String(mode) != "fast":
+    var mode_word = String(mode)
+    if mode_word != "identical" and mode_word != "fast":
         raise Error("numeric_mode must be fast, identical or None")
+    answer_mode_object(mode, mode_word)
     var module = context["family_spectral_umap_bindings"][PythonObject(group)][mode]
     if py_type(module) is b.str:
         raise Error(String(module))

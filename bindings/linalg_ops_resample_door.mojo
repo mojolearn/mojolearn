@@ -8,6 +8,7 @@
 # binding entries with the same address and params lists in the same order,
 # and builds the result objects. The same kernels on the same bytes: the bits
 # do not move.
+from core.mode_answer import answer_mode_word
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_get, py_type, py_setitem, py_item
 from bindings.py_attr import py_attr
@@ -61,6 +62,7 @@ def rs_extension(binding: PythonObject, numeric_mode: PythonObject, context: Pyt
     if fn_obj is not None:
         var got = Int(py=family_call(fn_obj))
         var mode = String(want)
+        answer_mode_word(mode)
         if (mode != "fast" and mode != "identical") or got != (1 if mode == "identical" else 0):
             raise Error("RuntimeError: mojolearn resample: requested mode differs from compiled mode; rebuild it with bash bindings/build_resample.sh")
     return binding

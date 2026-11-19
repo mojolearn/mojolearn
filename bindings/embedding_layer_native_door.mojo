@@ -18,6 +18,7 @@ assigning `weight` and finalizing release the resident device table.
 The same compiled entries with the same argument words as the Python bodies
 it replaces, so no bit moves.
 """
+from core.mode_answer import answer_mode_object
 from bindings.native_class_admission_door import class_record, class_admit
 from bindings.native_loaded_module_door import NativeModules
 from std.memory import unsafe_memcpy
@@ -101,8 +102,10 @@ def _want_mode(fields: PythonObject, context: PythonObject) raises -> PythonObje
     if py_type(mode) is not b.str:
         raise Error("ValueError: numeric_mode must be fast, identical or None")
     var lowered = py_call(py_call(mode.strip).lower)
-    if String(py=lowered) != "identical" and String(py=lowered) != "fast":
+    var lowered_word = String(py=lowered)
+    if lowered_word != "identical" and lowered_word != "fast":
         raise Error("ValueError: numeric_mode must be fast, identical or None")
+    answer_mode_object(lowered, lowered_word)
     return lowered
 
 
