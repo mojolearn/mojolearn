@@ -206,10 +206,7 @@ comptime IDN_EVAL_WS_MAX_CELLS = 134217728
 
 comptime KALMAN_FAST_RD = (
     (
-        (
-            (GLOBAL_NUMERIC_MODE == NUMERIC_FAST or GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL)
-            and TARGET_HAS_APPLE_GPU
-        )
+        TARGET_HAS_APPLE_GPU
         or IDN_KALMAN_RD
     )
 )
@@ -1145,9 +1142,10 @@ def _launch_loop_ll_only(
     var grid = _grid(batch_size, kalman_tpb)
     # FAST: the per-rd instantiation always (unchanged). IDENTICAL: only
     # with KALMAN_FAST_RD (same operations in the same order).
+    # The test `_KALMAN_IDN and not KALMAN_FAST_RD` that cleared `spec` here
+    # was false in both modes (KALMAN_FAST_RD holds whenever _KALMAN_IDN
+    # does) and is gone; recoverable at 4569e73df6.
     var spec = True
-    comptime if _KALMAN_IDN and not KALMAN_FAST_RD:
-        spec = False
     if spec and rd == 1:
         ctx.enqueue_function[batched_kalman_loop_kernel[1, True]](
             d_ys.unsafe_ptr(), ws.T.unsafe_ptr(), ws.Z.unsafe_ptr(), ws.RQR.unsafe_ptr(),

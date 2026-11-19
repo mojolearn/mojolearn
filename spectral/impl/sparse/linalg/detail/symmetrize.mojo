@@ -66,10 +66,7 @@ comptime IDN_SYMMETRIZE_SORTED = (
 # TOMBSTONE: MOJOLEARN_SYMMETRIZE_FAST_OFF (old path, no A/B recorded beside the Apple fast default) deleted 2026-11-15 by lane/expdel2-13-cluster; code recoverable at 3fb0ad4eef.
 # Restore: git apply experiments/removed/MOJOLEARN_SYMMETRIZE_FAST_OFF.patch; record in docs/TOMBSTONES.md.
 comptime SYMMETRIZE_FAST = (
-    (
-        (GLOBAL_NUMERIC_MODE == NUMERIC_FAST or GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL)
-        and TARGET_HAS_APPLE_GPU
-    )
+    TARGET_HAS_APPLE_GPU
     or IDN_SYMMETRIZE_SORTED
 )
 comptime FS_MAX_ROW = 4096
