@@ -460,9 +460,14 @@ struct TransformerRules(BackwardRules):
                     # total holds ftz(ftz(q) + ftz(k)) already
                     self._add2(total, total, _fp(bst.tmp2), m * k)
                 else:
+                    # In place, q read from the destination: a SECOND view of
+                    # `total` as the first addend, as `_add2` takes its
+                    # operands (one view per pointer argument; one variable
+                    # passed twice to a launch is refused as mutable aliasing).
+                    var dq = _view(self.ctx, total, m * k)
                     step_count_launch()
                     self.ctx.enqueue_function[bwd_add3_kernel](
-                        d.unsafe_ptr(), d.unsafe_ptr(), bst.tmp1.unsafe_ptr(), bst.tmp2.unsafe_ptr(),
+                        d.unsafe_ptr(), dq.unsafe_ptr(), bst.tmp1.unsafe_ptr(), bst.tmp2.unsafe_ptr(),
                         Int32(m * k),
                         grid_dim=(_blocks(m * k), 1, 1),
                         block_dim=(BWD_TPB, 1, 1),
