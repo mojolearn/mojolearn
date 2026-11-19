@@ -213,7 +213,7 @@ def run_case(
     return cells
 
 
-def main() raises:
+def run_checks() raises:
     var cells = 0
 
     # =====================================================================

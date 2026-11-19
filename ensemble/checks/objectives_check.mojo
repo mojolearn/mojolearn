@@ -307,7 +307,7 @@ def _mse_fixture() -> List[RegressionBin]:
 
 
 # ================================================================== main ==
-def main() raises:
+def run_checks() raises:
     var failures = 0
     var ctx = DeviceContext()
 

@@ -789,7 +789,7 @@ def check_distributed_raises(ctx: DeviceContext) raises -> Int:
     return 0 if raised else 1
 
 
-def main() raises:
+def run_checks() raises:
     comptime assert has_accelerator(), "quantiles_check requires a GPU"
     var ctx = DeviceContext()
     var wrong = 0

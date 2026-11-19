@@ -903,7 +903,7 @@ def arm_h_n_bins_clamp(ctx: DeviceContext) raises -> Int:
     return wrong
 
 
-def main() raises:
+def run_checks() raises:
     print("forest_check: ensemble/randomforest.mojo")
     print("  RowSampler (randomforest.cuh:62-226) and the forest loop (:286-370)")
     var ctx = DeviceContext()

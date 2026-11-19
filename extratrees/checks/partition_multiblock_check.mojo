@@ -712,7 +712,7 @@ def _launch_multiblock(
     return MbRun(ids^, bl^, bo^)
 
 
-def main() raises:
+def run_checks() raises:
     comptime assert has_accelerator(), "this check must run on a GPU"
 
     var failures = 0
