@@ -707,6 +707,11 @@
    "define": "MOJOLEARN_CNN_FAST_OP_NOWAIT",
    "status": "define in code (x_cnn/device.mojo CNN_OP_NOWAIT, entry_end; callers autograd/cnn_block_op.mojo pass may_defer): B = the CNN program's resident conv block and head entries (forward and backward) return after their last launch instead of ending in ctx.synchronize(), when every parameter block came from the cache; a full parameter-block cache waits before rewriting a victim; A = every entry waits (six waits a training step). Same launches in the same order on one in-order context: digests must not move. Build every binding that imports x_cnn/device.mojo or autograd/kernels/cnn.mojo (the x_cnn binding and the sequence device binding that runs the CNN program).",
    "owed": "RUN"
+  },
+  "cnn-flat-update": {
+   "define": "MOJOLEARN_CNN_FAST_FLAT_UPDATE",
+   "status": "define in code (autograd/program_runtime.mojo PROGRAM_FLAT_UPDATE, replay_values_flat; caller sequence/cnn_classifier_program.mojo passes flat_update): B = Program.fit keeps the trained parameter tensors, their gradients and their moments in flat buffers for the fit and updates them with ONE optimizer launch a minibatch (Sequential's form, autograd/model.mojo model_fit_state); A = one OP_OPT launch per parameter tensor. Elementwise update with shared host scalars: digests must not move. Build every binding that imports autograd/program_runtime.mojo or sequence/cnn_classifier_program.mojo (the sequence device and host bindings).",
+   "owed": "RUN"
   }
  },
  "rows": [
@@ -4343,6 +4348,55 @@
     "cnn-op-nowait"
    ],
    "decides": "B at least as fast as the candidate at both widths on the NVIDIA L40S, quality equal; a slower case blocks the promotion decided on cnn-op-nowait-rows"
+  },
+  {
+   "id": "cnn-flat-update-rows",
+   "source": "lane fx-rnn-cnn-fit (2026-11-19; report ~/mojolearn-evidence/briefs-20261118/fx-rnn-cnn-fit-RESULT.md): default-off arm, never timed",
+   "kind": "ab",
+   "lane": [
+    "cnn-clf"
+   ],
+   "dataset": "*",
+   "rows": "full",
+   "vendor": "nvidia",
+   "b_arms": [
+    "cnn-flat-update"
+   ],
+   "decides": "promote B only if cnn-clf fit is faster on the NVIDIA L40S (same box, same job) with quality equal and every digest equal (same elementwise update: a moved digest is a bug in the arm). Estimate 5 optimizer launches a step at 3-8 us of a 0.56 ms step; inside the noise floor the arm is deleted with the four tombstone parts. Composes with cnn-op-nowait: time each alone"
+  },
+  {
+   "id": "cnn-flat-update-widths",
+   "source": "lane fx-rnn-cnn-fit (2026-11-19; report ~/mojolearn-evidence/briefs-20261118/fx-rnn-cnn-fit-RESULT.md): default-off arm, never timed; a neighbouring shape and a non-board model (no dimension targeting)",
+   "kind": "driver",
+   "driver": "cnn_widths",
+   "shape": {
+    "rows": 20000,
+    "classes": 10,
+    "input_shape": [
+     3,
+     32,
+     32
+    ],
+    "batch_size": 64,
+    "max_iter": 2,
+    "conv_channels": [
+     [
+      16,
+      32
+     ],
+     [
+      24
+     ]
+    ]
+   },
+   "arms": [
+    "candidate",
+    "cnn-flat-update"
+   ],
+   "b_arms": [
+    "cnn-flat-update"
+   ],
+   "decides": "B at least as fast as the candidate at both widths on the NVIDIA L40S, quality equal; a slower case blocks the promotion decided on cnn-flat-update-rows"
   }
  ]
 }
