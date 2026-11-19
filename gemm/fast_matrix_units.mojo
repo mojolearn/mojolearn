@@ -13,6 +13,12 @@ EXPERIMENT `-D MOJOLEARN_GEMM_FAST_MATRIX_UNITS=<kind>`, default OFF, A/B owed w
                   checks/kernel_matrix.mojo::column_vendor_fp32_matmul_is_tf32.
   kind 2 = bf16   REFUSED at compile time: no BF16 tensor-core kernel exists in the tree. The BF16 entries of
                   gemm/checks/gemm_lowbit.mojo widen BF16 weights to FP32 and run the pinned FP32 kernel.
+  kind 3 = tf32, every neural-dispatch caller: kind 1, and also the callers that closed the vendor route
+                  (`allow_vendor=False` through gemm/neural_dispatch.mojo: the Llama stage projections, the
+                  CNN linear products, the MoE grouped products). They closed it against the old unbounded
+                  vendor route of the non-identical builds; whether they can take the bounded, size-ruled
+                  product is a quality measurement, so it is a second arm value with its own owed row and
+                  never the default of kind 1.
 
 WHERE IT IS LEGAL. Only in a `fast` build (`-D MOJOLEARN_MODE_FAST_ROWS`, the stage 1 flag: the identical kernels
 with the contract off) on the NVIDIA column. In a build that promises identical bits, on AMD, on Apple or on the
@@ -37,8 +43,10 @@ holds every routed cell to it.
 
 WHAT STAYS FP32, and why.
   - Every product under the size rule below: it cannot gain.
-  - Every caller that closed the vendor route (`allow_vendor=False`): the MoE grouped products and the Llama
-    stage products that stated they need full FP32 operands.
+  - Under kind 1, every caller that closed the vendor route (`allow_vendor=False`): the Llama stage
+    projections, the CNN linear products and the MoE grouped products. Kind 3 routes them.
+  - The workspace-less entry `gemm/neural_dispatch.mojo::identical_gemm`: its callers are the bias column
+    sums, the embedding gradient (a one-hot product: a gather, exact in FP32) and the Mamba projections.
   - The bias gradient (a 1 x n x m or m x 1 x n column sum against ones): M or N is 1, under the rule; it is a
     small fan-in sum whose terms do not cancel in pairs, so operand rounding would bias it.
   - Everything that is not a GEMM of the neural dispatch: the loss and its gradient, softmax, the
@@ -83,6 +91,7 @@ from gemm.contract import OP_NN, OP_NT, OP_TN
 comptime MATRIX_UNITS_KIND_OFF = 0
 comptime MATRIX_UNITS_KIND_TF32 = 1
 comptime MATRIX_UNITS_KIND_BF16 = 2
+comptime MATRIX_UNITS_KIND_TF32_ALL = 3
 comptime MATRIX_UNITS_KIND = get_defined_int["MOJOLEARN_GEMM_FAST_MATRIX_UNITS", 0]()
 
 
@@ -92,7 +101,8 @@ def _matrix_units_checked() -> Bool:
         MATRIX_UNITS_KIND == MATRIX_UNITS_KIND_OFF
         or MATRIX_UNITS_KIND == MATRIX_UNITS_KIND_TF32
         or MATRIX_UNITS_KIND == MATRIX_UNITS_KIND_BF16
-    ), "MOJOLEARN_GEMM_FAST_MATRIX_UNITS takes 1 (tf32) or 2 (bf16)"
+        or MATRIX_UNITS_KIND == MATRIX_UNITS_KIND_TF32_ALL
+    ), "MOJOLEARN_GEMM_FAST_MATRIX_UNITS takes 1 (tf32), 2 (bf16) or 3 (tf32, closed callers too)"
     comptime assert MATRIX_UNITS_KIND != MATRIX_UNITS_KIND_BF16, (
         "MOJOLEARN_GEMM_FAST_MATRIX_UNITS=2 (bf16): no BF16 tensor-core kernel exists in this tree; the only"
         " floating matrix-unit product is linalg.matmul's TF32 (value 1)"
@@ -107,11 +117,13 @@ def _matrix_units_checked() -> Bool:
         "MOJOLEARN_GEMM_FAST_MATRIX_UNITS is the NVIDIA tensor-core arm; AMD (MFMA) and Apple (simdgroup) have"
         " no matrix-units relaxation written"
     )
-    return MATRIX_UNITS_KIND == MATRIX_UNITS_KIND_TF32
+    return MATRIX_UNITS_KIND == MATRIX_UNITS_KIND_TF32 or MATRIX_UNITS_KIND == MATRIX_UNITS_KIND_TF32_ALL
 
 
 #: The arm: TF32 tensor-core products for the neural FP32 GEMMs of an NVIDIA `fast` build.
 comptime GEMM_FAST_MATRIX_UNITS = _matrix_units_checked()
+#: Kind 3: the arm also takes the neural-dispatch callers that closed the vendor route.
+comptime GEMM_FAST_MATRIX_UNITS_ALL = GEMM_FAST_MATRIX_UNITS and MATRIX_UNITS_KIND == MATRIX_UNITS_KIND_TF32_ALL
 
 #: rule 1: four `m16n8k8` instructions of k
 comptime MATRIX_UNITS_MIN_K = 32

@@ -1,9 +1,11 @@
 # SPDX-License-Identifier: Apache-2.0
 """The matrix-units relaxation of `fast` stays inside its arithmetic bound, and is off everywhere else.
 
-One training step's three products, each run twice on the device through the neural dispatch
-(gemm/neural_dispatch.mojo::identical_gemm_into): with the vendor route open (`allow_vendor=True`, the route
-`-D MOJOLEARN_GEMM_FAST_MATRIX_UNITS=1` relaxes) and closed (`allow_vendor=False`, always the FP32 kernel):
+One training step's three products, each run twice on the device: through the neural dispatch with the vendor
+route open (gemm/neural_dispatch.mojo::identical_gemm_into, `allow_vendor=True`, the route
+`-D MOJOLEARN_GEMM_FAST_MATRIX_UNITS` relaxes), and on the FP32 kernel itself
+(gemm/checks/gemm_identical.mojo::identical_gemm_into with the vendor route closed, which no value of the arm
+reaches):
 
     logits  Z[m x n]  = X[m x k] . W[n x k]^T      OP_NT
     dX      [m x k]   = dZ[m x n] . W[n x k]        OP_NN
@@ -22,7 +24,9 @@ IN A BUILD WITH THE ARM (an NVIDIA `fast` build), for a product the size rule ta
   3. at least one cell differs in bits from FP32: the route was taken. A build that carries the define and
      routes nothing fails here.
   A product under the size rule and the bias sum must be bit-equal to FP32: they are not routed.
-IN EVERY OTHER BUILD all six pairs must be bit-equal: without the arm `allow_vendor` selects nothing.
+IN EVERY OTHER IDENTICAL-KERNEL BUILD all six pairs must be bit-equal: without the arm `allow_vendor` selects
+nothing. (An old non-identical build sends the open route to the unbounded vendor product; nothing is asserted
+there.)
 
 The reference sums run on the host in Float64, one row of C per unit across the host's cores. One owned GPU
 context submits the cases in order (a device queue is serial by nature). Not an identity run.
@@ -33,6 +37,9 @@ from checks.native_tests.int8_linalg import make_values
 from max.gpu.host import DeviceContext
 from gemm.contract import OP_NN, OP_NT, OP_TN
 from gemm.neural_dispatch import identical_gemm_into, identical_gemm_workspace_max_floats
+from gemm.checks.gemm_identical import identical_gemm_into as fp32_gemm_into
+from gemm.checks.gemm_identical import identical_gemm_workspace_max_floats as fp32_workspace_max_floats
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from gemm.fast_matrix_units import (
     GEMM_FAST_MATRIX_UNITS, matrix_units_takes, matrix_units_workspace_floats, matrix_units_cell_bound,
 )
@@ -171,10 +178,10 @@ def check_fixture(ctx: DeviceContext, fixture_id: Int) raises:
     var need = identical_gemm_workspace_max_floats(m, n, k)
     need = max(need, matrix_units_workspace_floats(m, n, k, op))
     var ws_arm = ctx.enqueue_create_buffer[DType.float32](need)
-    var ws_ref = ctx.enqueue_create_buffer[DType.float32](need)
+    var ws_ref = ctx.enqueue_create_buffer[DType.float32](max(1, fp32_workspace_max_floats(m, n, k)))
     identical_gemm_into[True](ctx, dc_arm, da, db, ws_arm, m, n, k, op)
     ctx.synchronize()
-    identical_gemm_into[False](ctx, dc_ref, da, db, ws_ref, m, n, k, op)
+    fp32_gemm_into[False](ctx, dc_ref, da, db, ws_ref, m, n, k, op)
     ctx.synchronize()
     var arm = _download_f32(ctx, dc_arm, m * n, name + " (vendor route open)")
     var ref_c = _download_f32(ctx, dc_ref, m * n, name + " (FP32)")
@@ -192,7 +199,8 @@ def check_fixture(ctx: DeviceContext, fixture_id: Int) raises:
             require(r[1] == 0, name + ": " + String(r[1]) + " cells moved on a product the size rule leaves on FP32")
     else:
         require(not routed, name + ": the size rule answered True in a build without the arm")
-        require(r[1] == 0, name + ": " + String(r[1]) + " cells differ between allow_vendor True and False without the arm")
+        comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
+            require(r[1] == 0, name + ": " + String(r[1]) + " cells differ between allow_vendor True and False without the arm")
     _ = da
     _ = db
     _ = dc_arm
