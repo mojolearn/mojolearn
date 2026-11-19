@@ -255,3 +255,10 @@ history at its listed sha: `git checkout <sha> -- <path>` restores it.
 | path | last commit | date | size |
 |---|---|---|---|
 | `bench/results/identity_break/2026-09-14_ivf-embedding/` | dcd940dfa7 | 2026-09-15 | 53366 |
+
+## Trim of 2026-11-19 15:42 UTC (tree at 444367af36)
+
+| path | last commit | date | size |
+|---|---|---|---|
+| `bench/results/identity_break/2026-09-19_catboost-parity/` | 9de59260f1 | 2026-09-22 | 163166 |
+| `bench/results/lm_attention_fallback_2026-09-18/` | 687ac5ca81 | 2026-09-18 | 3738442 |
