@@ -63,6 +63,18 @@ INTERNAL_CALL_OVERHEAD_LANE = "internal-call-overhead-lr-at"
 CALL_OVERHEAD = "call overhead, internal check"
 
 
+#: the harness_clock suffix of a cell whose lane changed what EVERY arm's clock or settings key holds (lane fx-harness,
+#: 2026-11-18): a stored opponent cell of that lane is BROKEN against it until the opponent job re-scores the arm
+ALL_ARMS_CLOCK_SUFFIX = "(all arms)"
+
+
+def opponent_rescore_owed(cell):
+    """The cell's harness_clock when it changed every arm's clock or settings key (the stored opponent cells of its
+    race wait for the opponent job's re-score), else None. tools/paper_compare.py lists those races once."""
+    hc = (cell or {}).get("harness_clock") or ""
+    return hc if hc.endswith(ALL_ARMS_CLOCK_SUFFIX) else None
+
+
 def lane_class(lane):
     """CALL_OVERHEAD for a lane that is not a race (rule 1c), else None."""
     lane = str(lane or "")
@@ -356,8 +368,8 @@ def _pair_problems(race, ours, opp):
     # cell timed before carries harness work our new cell does not: a harness-written difference in the work, so
     # the pair is BROKEN until the opponent job scores that arm again. A stamp ending "(our arm)" changed only our
     # clock (the opponents never held that work) and never makes a pair unfair.
-    hc = ours.get("harness_clock") or ""
-    if hc.endswith("(all arms)") and (opp.get("harness_clock") or "") != hc:
+    hc = opponent_rescore_owed(ours) or ""
+    if hc and (opp.get("harness_clock") or "") != hc:
         bad.append("harness clock differs: ours %r, opponent %r (stored before the 2026-11-18 harness fix; "
                    "re-score the opponent)" % (hc, opp.get("harness_clock")))
     clock = BC.pair_ratio(BC.cell_clock(ours), BC.cell_clock(opp), opp)

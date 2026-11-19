@@ -730,8 +730,14 @@ def op_cell_bwd_h(t: Int, a: Args):
     same terms in the same order (`gemm_dot`, k ascending, from the direct
     part the later step stored), stores the sum where the GEMM did, then runs
     `op_cell_bwd` verbatim. Args as `op_cell_bwd`, plus p11 W_hh, i3 = 1 when
-    a later step exists (0 at s = T - 1, where dh is the zero fill), i4 the
-    offset of dGH_{s+1} from p9 (B*G*H)."""
+    a later step exists (0 at s = T - 1, where dh and dc are zero), i4 the
+    offset of dGH_{s+1} from p9 (B*G*H).
+    Lane fx-rnn-cnn-fit (2026-11-19): at i3 = 0 the element stores the zeros
+    of its own dh[t] and dc[t] before the cell reads them. They were two
+    OP_FILL launches over the same B*H words before every layer's backward
+    chain (autograd/rules_recurrent.mojo _layer_bwd); element t reads and
+    writes only index t of both buffers, so the cell reads the same +0.0
+    words: the same bits. The scan's first step repeats its own zero stores."""
     if a.i3 != 0:
         var H = a.i2
         var GH = gates_of(a.i0) * H
@@ -739,6 +745,9 @@ def op_cell_bwd_h(t: Int, a: Args):
         var u = t - b * H
         var acc = gemm_dot(a.p9 + a.i4, b * GH, 1, a.p11, u, H, GH, ld(a.p5, t))
         st(a.p5, t, acc)
+    else:
+        st(a.p5, t, Float32(0.0))
+        st(a.p7, t, Float32(0.0))
     op_cell_bwd(t, a)
 
 

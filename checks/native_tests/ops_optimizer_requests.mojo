@@ -142,7 +142,7 @@ def run_request_metadata(fixture_id: Int) raises:
     elif fixture_id < 8:
         var refused = False
         try:
-            _ = ops_optimizer_codes("lion" if fixture_id == 6 else "adam", "constant" if fixture_id == 6 else "callback")
+            _ = ops_optimizer_codes("rprop" if fixture_id == 6 else "adam", "constant" if fixture_id == 6 else "callback")
         except:
             refused = True
         require(refused, "unknown optimizer/schedule code accepted")

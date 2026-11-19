@@ -516,6 +516,34 @@ class StoredBaseline(unittest.TestCase):
         self.assertIn("REGRESSION", km["flags"])
         self.assertIn("HARNESS-CLOCK", km["flags"])
 
+    def test_all_arms_stamp_is_listed_once_for_an_opponent_rescore(self):
+        # lane fx-harness-honest (2026-11-18, H1/H2): a settings change on all arms (gcn/graphsage cached=True) is
+        # HARNESS-CLOCK against a cell timed before, never FASTER; our time stays shown; the race is listed once as
+        # waiting for an opponent re-score, by name, with the count
+        stamp = "2026-11-18 graph layers cached=True, settings key changed (all arms)"
+        cand = self.with_upload(on_host(new_board(), HOST_A), 41.0)
+        for c in self.ours_fit_cells(cand):
+            c.update(median_ms=50.0, times_ms=[50.0], harness_clock=stamp)
+        res = PC.compare(self.doc, [cand], {}, stored_baseline=self.stored())
+        km = {r["key"]: r for r in res["rows"]}[KM]
+        self.assertIn("HARNESS-CLOCK", km["flags"])
+        self.assertNotIn("FASTER", km["flags"])
+        self.assertEqual(km["new_ms"], 50.0)
+        owed = res["opponent_rescore_owed"]
+        self.assertEqual(sorted({o["race_id"] for o in owed}), sorted(cand["races"]))
+        self.assertTrue(all(o["harness_clock"] == stamp for o in owed))
+        summ = PC.render_summary(res)
+        self.assertEqual(summ.count("waiting for an opponent re-score (%d races" % len(owed)), 1)
+        for rid in cand["races"]:
+            self.assertIn("  %s (%s)" % (rid, stamp), summ)
+        self.assertIn("## Waiting for an opponent re-score", PC.render_md(res))
+        # an "(our arm)" stamp changed only our clock: nothing waits for an opponent
+        for c in self.ours_fit_cells(cand):
+            c["harness_clock"] = "2026-11-18 outputs reduced after the clock (our arm)"
+        res = PC.compare(self.doc, [cand], {}, stored_baseline=self.stored())
+        self.assertEqual(res["opponent_rescore_owed"], [])
+        self.assertNotIn("waiting for an opponent re-score", PC.render_summary(res))
+
     def test_dataset_median_fallback_reads_large_uploads_only(self):
         races = {"a/x/taxi/rows=full": {"dataset": "taxi", "cells": [
                      {"arm": "ours", "comparability": {"span": {"upload_ms_separate": 1.0,
