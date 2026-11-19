@@ -51,6 +51,7 @@
 # OP_AG_SOFTMAX_FWD's read-back of its own row's exponentials and
 # OP_AGF_LEVEL's in-place fold of its own group of partials.
 from sequence.ops import Args, FP, ld, st, add, sub, mul
+from core.row_cells import softmax_row_from_max_f32
 from checks.numerics import (
     ftz, identical_div, identical_exp, identical_log, identical_sigmoid, identical_sqrt,
     identical_tanh,
@@ -798,12 +799,8 @@ def op_ag_softmax_fwd(t: Int, a: Args):
         # each exponential once (lane ag-pass2-kernels): parked in the
         # output row, read back for the division (this thread's own words;
         # p1 never overlaps p0). The same words as computing it twice.
-        for k in range(cols):
-            var e = ftz(identical_exp(sub(ld(a.p0, base + k), maximum)))
-            total = add(total, e)
-            st(a.p1, base + k, e)
-        for k in range(cols):
-            st(a.p1, base + k, div(ld(a.p1, base + k), total))
+        # core/row_cells.mojo, the one body of these statements.
+        softmax_row_from_max_f32(a.p0, a.p1, base, cols, maximum)
     else:
         for k in range(cols):
             total = add(total, ftz(identical_exp(sub(ld(a.p0, base + k), maximum))))
