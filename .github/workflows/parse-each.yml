@@ -60,6 +60,9 @@ jobs:
           environments: default
       - name: Parse each file of shard ${{ matrix.shard }} (mojo build --emit llvm --no-optimization)
         run: |
+          # GitHub runs steps under `bash -e`: a failing compile is the EXPECTED case here and must not end the step
+          # (2026-11-19: the first run lost every failing file because the shard exited at its first one).
+          set +e
           set -u
           mkdir -p out/logs
           python3 tools/generated_sources.py prepare --repo "$PWD" < /dev/null > out/generated-sources.log 2>&1 \
