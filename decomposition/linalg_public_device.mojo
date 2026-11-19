@@ -58,7 +58,7 @@ therefore be held against each other bit for bit; a silent fallback would
 turn a divergence into a pass.
 """
 
-from core.hostptr import copy_f32
+from core.transfer import transfer_upload_list
 from max.gpu.host import DeviceBuffer, DeviceContext
 from x_decomp.cells import F32Ptr, X_DECOMP_SVD_SWEEPS, X_DECOMP_SVD_TOL
 from x_decomp.eigh_scale import enqueue_es_scale_rect, enqueue_es_unscale
@@ -79,16 +79,11 @@ from decomposition.impl.linalg.detail.svd_full import svd_of_r
 def _upload(
     ctx: DeviceContext, values: List[Float32]
 ) raises -> DeviceBuffer[DType.float32]:
-    """`cholesky/estimator.mojo::_upload`, for its reason: one staged host
-    buffer, one copy, one wait."""
-    var n = len(values)
-    var buf = ctx.enqueue_create_buffer[DType.float32](n)
-    var host = ctx.enqueue_create_host_buffer[DType.float32](n)
-    copy_f32(values.unsafe_ptr(), host.unsafe_ptr(), n)
-    ctx.enqueue_copy(dst_buf=buf, src_ptr=host.unsafe_ptr())
-    ctx.synchronize()
-    _ = host^
-    return buf^
+    """`cholesky/estimator.mojo::_upload`: core/transfer.mojo's in-place
+    upload (lane fx-dup-next, 2026-11-19), one copy from the caller's list,
+    one wait. Gone: a pinned host buffer of the whole matrix per call and a
+    host pass into it."""
+    return transfer_upload_list[DType.float32](ctx, values, len(values), len(values))
 
 
 def _download(

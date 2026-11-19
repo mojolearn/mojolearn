@@ -41,6 +41,7 @@ as certified across vendors.
 
 # DEVIATION 2486: bulk host staging; stream/lifetime boundaries unchanged.
 from core.hostptr import copy_f32
+from core.transfer import transfer_upload_ptr
 from max.gpu.host import DeviceBuffer, DeviceContext
 from core.neural_context import process_ctx
 from checks.numerics import GLOBAL_NUMERIC_MODE as _DEVCTX_MODE, NUMERIC_IDENTICAL as _DEVCTX_IDENTICAL
@@ -62,22 +63,13 @@ from tsa.impl.stationarity import kpss_test
 def _upload_f32(
     ctx: DeviceContext, ptr: MutPointer[Float32, MutUntrackedOrigin], n: Int
 ) raises -> DeviceBuffer[DType.float32]:
-    """Copy `n` floats from the caller's memory onto the device.
-
-    The host staging buffer is kept live past the `synchronize` on purpose:
-    Mojo frees a buffer at its LAST USE, and `.unsafe_ptr()` is a use, so
-    without the trailing `_ = host^` the staging allocation can be gone
-    before the copy it feeds has run (mojo-buffer-freed-at-last-use).
+    """Copy `n` floats from the caller's memory onto the device (a buffer
+    of at least one cell). core/transfer.mojo (lane fx-dup-next, 2026-11-19):
+    the copy reads the caller's words in place and is drained before the
+    return. Gone: a pinned host buffer of the whole input per call and a
+    host pass into it.
     """
-    var count = n if n > 0 else 1
-    var buf = ctx.enqueue_create_buffer[DType.float32](count)
-    var host = ctx.enqueue_create_host_buffer[DType.float32](count)
-    copy_f32(ptr, host.unsafe_ptr(), max(0, n))
-    if n > 0:
-        ctx.enqueue_copy(dst_buf=buf, src_ptr=host.unsafe_ptr())
-    ctx.synchronize()
-    _ = host^
-    return buf^
+    return transfer_upload_ptr[DType.float32](ctx, ptr, max(0, n), n if n > 0 else 1)
 
 
 def _refuse_empty_shape(batch_size: Int, n_obs: Int, who: String) raises:

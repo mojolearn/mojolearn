@@ -42,7 +42,7 @@ CPU host binding use.
 
 # DEVIATION 2486: bulk host staging; stream/lifetime boundaries unchanged.
 from core.hostptr import copy_f32
-from core.transfer import transfer_upload_list
+from core.transfer import transfer_upload_list, transfer_upload_ptr
 from max.gpu.host import DeviceBuffer, DeviceContext
 from core.neural_context import process_ctx
 from checks.numerics import GLOBAL_NUMERIC_MODE as _DEVCTX_MODE, NUMERIC_IDENTICAL as _DEVCTX_IDENTICAL
@@ -160,15 +160,11 @@ def _upload_ptr(
     values: MutPointer[Float32, MutUntrackedOrigin],
     n: Int,
 ) raises -> DeviceBuffer[DType.float32]:
-    """DEVIATION 2660: `_upload` from the caller's memory, one host copy
-    (caller to pinned) instead of two (caller to `List` to pinned)."""
-    var buf = ctx.enqueue_create_buffer[DType.float32](n)
-    var host = ctx.enqueue_create_host_buffer[DType.float32](n)
-    copy_f32(values, host.unsafe_ptr(), n)
-    ctx.enqueue_copy(dst_buf=buf, src_ptr=host.unsafe_ptr())
-    ctx.synchronize()
-    _ = host^
-    return buf^
+    """DEVIATION 2660: `_upload` from the caller's memory. core/transfer.mojo
+    (lane fx-dup-next, 2026-11-19): the copy reads the caller's words in
+    place and is drained before the return. Gone: a pinned host buffer of the
+    whole operand per call and a host pass into it."""
+    return transfer_upload_ptr[DType.float32](ctx, values, n, n)
 
 
 def kde_score_samples_host_ptr(
