@@ -72,7 +72,7 @@ from hierarchy.impl.cluster.detail.connectivities import DISTANCE_L2_SQRT_EXPAND
 from checks.native_tests.kit import upload_whole_into
 
 
-comptime IDENTICAL_BUILD = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+from checks.mode_policy import KERNEL_FORM_IDENTICAL as IDENTICAL_BUILD
 
 comptime FIX_BLOBS = 0
 comptime FIX_DUPS = 1

@@ -455,7 +455,7 @@ comptime TPB_DEFAULT = 128
 # defaults from it. Checks may instantiate either arm explicitly through
 # `find_best_splits_kernel`'s `pinned_reduce` parameter without flipping
 # the global.
-comptime BUILD_MODE = GLOBAL_NUMERIC_MODE
+from checks.numerics import GLOBAL_NUMERIC_MODE as BUILD_MODE
 
 comptime SPLIT_REDUCE_PINNED_DEFAULT = BUILD_MODE == NUMERIC_IDENTICAL
 

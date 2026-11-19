@@ -55,7 +55,7 @@ from checks.kernel_matrix import (
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, numeric_mode_name
 
 
-comptime IDENTICAL_BUILD = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+from checks.mode_policy import KERNEL_FORM_IDENTICAL as IDENTICAL_BUILD
 
 comptime DB_N = 1020
 comptime DB_D = 4

@@ -95,7 +95,7 @@ comptime POINTS_PER_ITER = UNROLL * LOAD_SIZE
 
 #: The mode this build compiles against; see `checks/numerics.mojo`. Same
 #: row as `hist_binary.mojo`, and the flush below follows the matrix.
-comptime BUILD_MODE = GLOBAL_NUMERIC_MODE
+from checks.numerics import GLOBAL_NUMERIC_MODE as BUILD_MODE
 
 #: Logical replication width from the kernel matrix. Its uses partition the
 #: row axis into complete, disjoint `LOAD_SIZE` runs; it neither indexes a

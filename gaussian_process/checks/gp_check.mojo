@@ -158,7 +158,7 @@ from checks.numerics import (
 )
 
 
-comptime IDENTICAL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+from checks.mode_policy import KERNEL_FORM_IDENTICAL as IDENTICAL
 
 
 def _ulp_of(v: Float32) -> Float32:

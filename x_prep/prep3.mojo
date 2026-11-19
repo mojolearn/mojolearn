@@ -29,7 +29,7 @@ comptime PREP3_FAST_APPLE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_A
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_GATES_OFF.expdel2-36-neural-series-linear.patch; record in docs/TOMBSTONES.md.
 # TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old-path umbrella, EXP:2438; every IDENTICAL default kept) deleted 2026-11-15 by lane/expdel2-36-neural-series-linear; code recoverable at 145be10898.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-36-neural-series-linear.patch; record in docs/TOMBSTONES.md.
-comptime PREP3_IDN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+from checks.mode_policy import KERNEL_FORM_IDENTICAL as PREP3_IDN
 # TOMBSTONE: MOJOLEARN_PREP3_MAXABS_OFF (old path, EXP:383 KEEP; promoted on Apple (M3/M2) only; NVIDIA/AMD A/B owed) deleted 2026-11-15 by lane/expdel2-36-neural-series-linear; code recoverable at 145be10898.
 # Restore: git apply experiments/removed/MOJOLEARN_PREP3_MAXABS_OFF.patch; record in docs/TOMBSTONES.md.
 comptime PREP3_MAXABS = PREP3_FAST_APPLE or PREP3_IDN

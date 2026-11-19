@@ -145,6 +145,16 @@ def _policy_column() -> Int:
 
 
 comptime POLICY_BUILD = _policy_build()
+
+# Which kernel form this build compiles. KERNEL_FORM_IDENTICAL is the constant
+# `GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL` of `checks/numerics.mojo` (both
+# are `identical_mode_enabled()`); it stays True in a fast-rows build, which
+# compiles the identical kernels. A module that needs its own name for the
+# mode imports one of these under that name
+# (`from checks.mode_policy import KERNEL_FORM_IDENTICAL as IDENTICAL`) and
+# does not define a copy.
+comptime KERNEL_FORM_IDENTICAL = POLICY_BUILD != POLICY_BUILD_LEGACY_FAST
+comptime KERNEL_FORM_LEGACY_FAST = POLICY_BUILD == POLICY_BUILD_LEGACY_FAST
 comptime POLICY_COLUMN = _policy_column()
 
 # The contract: does this build promise the same bits on every vendor?

@@ -48,7 +48,7 @@ from neighbors.impl.detail.knn_brute_force import (
 )
 
 
-comptime IDENTICAL_BUILD = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+from checks.mode_policy import KERNEL_FORM_IDENTICAL as IDENTICAL_BUILD
 
 #: The planted class. Rows 5, 100, 900 and 3000 of the index are bit-identical
 #: copies of one point, so a query on that point is equidistant from four

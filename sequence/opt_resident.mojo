@@ -75,7 +75,7 @@ comptime OPT_RAW_UP = _OPT_APPLE_FAST
 #: ZERO_OPEN on every vendor (copies only, and zeros not uploaded over
 #: zeros: no bit moves). -D MOJOLEARN_IDN_OPT_PIPE_DOWN_OFF /
 #: -D MOJOLEARN_IDN_OPT_ZERO_OPEN_OFF restore IDENTICAL's old transport.
-comptime _OPT_IDN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+from checks.mode_policy import KERNEL_FORM_IDENTICAL as _OPT_IDN
 # TOMBSTONE: MOJOLEARN_OPT_PIPE_DOWN_OFF (old path; FAST+Apple default, EXP:589 KEPT on Apple M3 only; NVIDIA/AMD A/B owed) deleted 2026-11-15 by lane/expdel2-30-neural; code recoverable at e39daf79ad.
 # Restore: git apply experiments/removed/MOJOLEARN_OPT_PIPE_DOWN_OFF.patch
 # TOMBSTONE: MOJOLEARN_IDN_OPT_PIPE_DOWN_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-30-neural; code recoverable at e39daf79ad.

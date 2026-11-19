@@ -246,7 +246,7 @@ def _mode_name() -> String:
     return numeric_mode_name()
 
 
-comptime _IDENTICAL_MODE = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+from checks.mode_policy import KERNEL_FORM_IDENTICAL as _IDENTICAL_MODE
 
 
 def _identical() -> Bool:

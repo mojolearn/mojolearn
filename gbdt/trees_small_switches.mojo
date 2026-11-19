@@ -39,7 +39,7 @@ define is refused in core/six_lane_experiment_guards.mojo.
 """
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 
-comptime _IDN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+from checks.mode_policy import KERNEL_FORM_IDENTICAL as _IDN
 
 # PROMOTED: the device arm (0) is the IDENTICAL default (lane/grid-flips-1,
 # 2026-10-08, Andrew 13:00Z "flip all of these"). Grid run ge123e6f9 (NVIDIA

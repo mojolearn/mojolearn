@@ -181,7 +181,7 @@ comptime INIT_TPB = 128
 #: (their own banners say why), so the bits are the ones NVIDIA, AMD, Apple
 #: and the host column (`arima/host/arima_oracle.mojo`) already agree on.
 #: None of them changes a FAST build.
-comptime _KALMAN_IDN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+from checks.mode_policy import KERNEL_FORM_IDENTICAL as _KALMAN_IDN
 #: the loop kernel instantiated at the state dimension on NVIDIA and AMD too
 comptime IDN_KALMAN_RD = _KALMAN_IDN
 #: the fit's evaluations on the loop kernel without its three per-step stores

@@ -128,7 +128,7 @@ from tsa.checks.fixtures import ar1_series, random_walk, to_f32, u01
 from tsa.impl.timeSeries.arima_helpers import prepare_data_host
 
 
-comptime IDENTICAL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+from checks.mode_policy import KERNEL_FORM_IDENTICAL as IDENTICAL
 comptime SALT = 7
 
 

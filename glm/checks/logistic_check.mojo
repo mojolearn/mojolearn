@@ -140,7 +140,7 @@ from checks.numerics import (
 )
 
 
-comptime IDENTICAL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+from checks.mode_policy import KERNEL_FORM_IDENTICAL as IDENTICAL
 comptime LR_ROWS = 4096
 comptime LR_COLS = 6
 

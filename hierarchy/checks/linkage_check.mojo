@@ -132,7 +132,7 @@ from hierarchy.impl.sparse.op.sort import merge_sort_u64_with_index_host
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, numeric_mode_name
 
 
-comptime IDENTICAL_BUILD = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+from checks.mode_policy import KERNEL_FORM_IDENTICAL as IDENTICAL_BUILD
 
 
 def _mode_name() -> String:

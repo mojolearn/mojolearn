@@ -57,7 +57,7 @@ from decomposition.impl.linalg.detail.pca import (
 from decomposition.impl.linalg.detail.tsvd import tsvd_fit
 
 
-comptime _IDENTICAL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+from checks.mode_policy import KERNEL_FORM_IDENTICAL as _IDENTICAL
 
 comptime PCA_ROWS = 8192
 comptime PCA_COLS = 4

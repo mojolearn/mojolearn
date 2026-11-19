@@ -515,7 +515,7 @@ from checks.kernel_matrix import (
 )
 
 
-comptime IDENTICAL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+from checks.mode_policy import KERNEL_FORM_IDENTICAL as IDENTICAL
 
 
 def _mode_name() -> String:
