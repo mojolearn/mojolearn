@@ -148,8 +148,7 @@ class ElasticNet(ParamsMixin):
     ``X`` must be dense and is read as float32; the caller's array is
     never modified. ``y`` must be one-dimensional. At least two rows are
     required, in ``fit`` and in ``predict``. With ``fit_intercept=True``
-    the data are centered on the GPU. ``ElasticNet`` has no
-    ``numeric_mode`` parameter.
+    the data are centered on the GPU.
 
     Parameters
     ----------
@@ -184,6 +183,10 @@ class ElasticNet(ParamsMixin):
     random_state : None, int or NumPy random state, default None
         Accepted for compatibility and unused, as in scikit-learn with
         ``selection='cyclic'``.
+    numeric_mode : str or None, default None
+        Numeric mode for this model (``'identical'``
+        or ``'fast'``, which runs on Apple GPUs only); None uses the process
+        default (see :func:`mojolearn.set_numeric_mode`).
 
     Attributes
     ----------
@@ -224,7 +227,7 @@ class ElasticNet(ParamsMixin):
     def __init__(self, alpha=1.0, *, l1_ratio=0.5, fit_intercept=True,
                  max_iter=1000, tol=1e-3, solver="auto", selection="cyclic",
                  precompute=False, copy_X=True, warm_start=False,
-                 positive=False, random_state=None):
+                 positive=False, random_state=None, numeric_mode=None):
         # Stored verbatim (scikit-learn's convention); `_validate_params`
         # checks them when `fit` runs.
         self.alpha = alpha
@@ -239,6 +242,7 @@ class ElasticNet(ParamsMixin):
         self.warm_start = warm_start
         self.positive = positive
         self.random_state = random_state
+        self.numeric_mode = numeric_mode
 
     # sample_weight (lane sk-kernels): checked natively with scikit-learn's
     # wording and handed to the weighted coordinate descent
@@ -382,7 +386,7 @@ class Lasso(ElasticNet):
         Maximum number of coordinate-descent epochs.
     tol : float, default 1e-3
         Stopping tolerance.
-    solver, selection, precompute, copy_X, warm_start, positive, random_state
+    solver, selection, precompute, copy_X, warm_start, positive, random_state, numeric_mode
         As on ``ElasticNet``.
 
     Attributes
@@ -409,12 +413,12 @@ class Lasso(ElasticNet):
     def __init__(self, alpha=1.0, *, fit_intercept=True, max_iter=1000,
                  tol=1e-3, solver="auto", selection="cyclic",
                  precompute=False, copy_X=True, warm_start=False,
-                 positive=False, random_state=None):
+                 positive=False, random_state=None, numeric_mode=None):
         super().__init__(
             alpha=alpha, l1_ratio=1.0, fit_intercept=fit_intercept,
             max_iter=max_iter, tol=tol, solver=solver, selection=selection,
             precompute=precompute, copy_X=copy_X, warm_start=warm_start,
-            positive=positive, random_state=random_state,
+            positive=positive, random_state=random_state, numeric_mode=numeric_mode,
         )
 
 

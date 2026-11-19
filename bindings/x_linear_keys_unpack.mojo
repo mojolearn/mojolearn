@@ -85,6 +85,7 @@ struct XLinearKeys(Defaultable, Movable):
     var k_cd_host_predict: PythonObject
     var k_cd_selection: PythonObject
     var k_cd_solver: PythonObject
+    var k_cd_solver_modes: PythonObject
     var k_class_weight: PythonObject
     var k_classes_: PythonObject
     var k_coef_: PythonObject
@@ -200,6 +201,7 @@ struct XLinearKeys(Defaultable, Movable):
         self.k_cd_host_predict = PythonObject(None)
         self.k_cd_selection = PythonObject(None)
         self.k_cd_solver = PythonObject(None)
+        self.k_cd_solver_modes = PythonObject(None)
         self.k_class_weight = PythonObject(None)
         self.k_classes_ = PythonObject(None)
         self.k_coef_ = PythonObject(None)
@@ -319,6 +321,7 @@ def _x_linear_keys_fill(nk: UnsafePointer[XLinearKeys, MutUntrackedOrigin]) rais
     nk[].k_cd_host_predict = py_key("cd_host_predict")
     nk[].k_cd_selection = py_key("cd_selection")
     nk[].k_cd_solver = py_key("cd_solver")
+    nk[].k_cd_solver_modes = py_key("cd_solver_modes")
     nk[].k_class_weight = py_key("class_weight")
     nk[].k_classes_ = py_key("classes_")
     nk[].k_coef_ = py_key("coef_")
