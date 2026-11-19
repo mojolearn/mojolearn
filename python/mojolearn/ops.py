@@ -5,12 +5,7 @@ A :class:`Session` holds tensors on the device and runs one native operation
 per call: matrix and batched products, elementwise math with broadcasting,
 reductions over any axes, reshapes and axis permutations, concatenation and
 splitting, softmax, dense and layer-norm layers, 2-D convolution and
-pooling, dropout, row permutations and gathers, losses and metrics, and the
-whole blocks of Mojolearn's sequence models: a Mamba block
-(:meth:`Session.mamba_block`), a transformer decoder block with its
-key/value cache (:meth:`Session.attention_block`), a two-layer perceptron
-(:meth:`Session.small_mlp`) and a language-model head loss
-(:meth:`Session.lm_head_loss`).
+pooling, dropout, row permutations and gathers, losses and metrics.
 Chain them to build an inference or hybrid algorithm (a mixture of experts,
 an ensemble with learned routing, statistics combined with a learned
 representation) without writing a kernel.
@@ -254,11 +249,9 @@ class Session:
         A state tensor is carried from one call to the next and
         :meth:`Session.capture` records it as state of the program, so
         :meth:`Program.decode` and :meth:`Program.while_loop` advance it
-        without copies. The operations that update state in place are
-        :meth:`mamba_step` and :meth:`attention_step`; they work on the
-        state tensors that :meth:`mamba_block` and :meth:`attention_block`
-        create, which you never need to make yourself. ``x`` is accepted as
-        in :meth:`tensor`, or as in :meth:`ids` with ``ids=True`` (integer
+        without copies. An operation that keeps state between calls
+        writes its state tensors in place. ``x`` is accepted as in
+        :meth:`tensor`, or as in :meth:`ids` with ``ids=True`` (integer
         state such as a position). A state tensor takes no gradient.
 
         Example
@@ -1338,9 +1331,8 @@ class Session:
 
         Parameters
         ----------
-        kind : {'sgd', 'adam', 'adamw', 'adamax', 'nadam', 'lion'}, default 'adam'
-            The update rule, as in PyTorch's ``torch.optim``; ``'lion'`` is
-            the sign-momentum rule of Chen et al. (2023).
+        kind : {'sgd', 'adam', 'adamw'}, default 'adam'
+            The update rule, as in PyTorch's ``torch.optim``.
         lr : float, default 1e-3
             Learning rate (> 0).
         momentum : float, default 0.0
@@ -1348,12 +1340,10 @@ class Session:
         nesterov : bool, default False
             Nesterov momentum for ``'sgd'`` (needs ``momentum > 0``).
         beta1, beta2, eps : float
-            Moment decays and denominator term of ``'adam'``, ``'adamw'``,
-            ``'adamax'`` and ``'nadam'``; ``'lion'`` uses the two decays.
+            Moment decays and denominator term of ``'adam'`` and ``'adamw'``.
         weight_decay : float, default 0.0
-            L2 penalty added to the gradient (``'sgd'``, ``'adam'``,
-            ``'adamax'``, ``'nadam'``) or decoupled decay (``'adamw'``,
-            ``'lion'``).
+            L2 penalty added to the gradient (``'sgd'``, ``'adam'``) or
+            decoupled decay (``'adamw'``).
         schedule : {'constant', 'step', 'exponential'}, default 'constant'
             Learning-rate schedule over epochs: ``'step'`` multiplies the
             rate by ``gamma`` every ``step_size`` epochs, ``'exponential'``
@@ -1401,9 +1391,7 @@ class Session:
         ``'step'`` is the number of updates applied to ``param``. ``'adam'``
         and ``'adamw'`` add ``'beta1_power'`` and ``'beta2_power'`` (the
         bias-correction products) and the tensor handles ``'exp_avg'`` and
-        ``'exp_avg_sq'``; ``'nadam'`` adds those and ``'mu_product'``;
-        ``'adamax'`` has ``'exp_inf'`` in place of ``'exp_avg_sq'``;
-        ``'lion'`` has ``'exp_avg'`` alone; ``'sgd'`` with momentum adds
+        ``'exp_avg_sq'``; ``'sgd'`` with momentum adds
         ``'momentum_buffer'``. The tensors are copies, valid until
         :meth:`reset`: read them with :meth:`numpy` to save a checkpoint,
         and restore it with :meth:`load_optimizer_state`.
