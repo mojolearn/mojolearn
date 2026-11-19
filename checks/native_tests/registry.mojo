@@ -520,7 +520,6 @@ from checks.native_tests.extratrees_stage_upload_bytes_check import register as 
 from checks.native_tests.extratrees_tree_check import register as register_extratrees_tree_check
 from checks.native_tests.gbdt_host_binarize_identical import register as register_gbdt_host_binarize_identical
 from checks.native_tests.gbdt_ordered_doc_id_check import register as register_gbdt_ordered_doc_id_check
-from checks.native_tests.gemm_gemm_epilogue_check import register as register_gemm_gemm_epilogue_check
 from checks.native_tests.gemm_gemm_gather_ftz_check import register as register_gemm_gemm_gather_ftz_check
 from checks.native_tests.gemm_gemm_int_slices_check import register as register_gemm_gemm_int_slices_check
 from checks.native_tests.gemm_gemm_production_dispatch_check import register as register_gemm_gemm_production_dispatch_check
@@ -544,7 +543,6 @@ from checks.native_tests.metrics_host_binary_ranking_check import register as re
 from checks.native_tests.metrics_host_rand_score_check import register as register_metrics_host_rand_score_check
 from checks.native_tests.neighbors_fused_logical32_check import register as register_neighbors_fused_logical32_check
 from checks.native_tests.neighbors_fused_slot_merge_check import register as register_neighbors_fused_slot_merge_check
-from checks.native_tests.neighbors_knn_selector_arms_check import register as register_neighbors_knn_selector_arms_check
 from checks.native_tests.neighbors_knn_selector_bound_compact_check import register as register_neighbors_knn_selector_bound_compact_check
 from checks.native_tests.neighbors_query_batch_check import register as register_neighbors_query_batch_check
 from checks.native_tests.tokenizer_generation_policy_check import register as register_tokenizer_generation_policy_check
@@ -553,7 +551,6 @@ from checks.native_tests.training_chunked_lm_head_check import register as regis
 from checks.native_tests.training_chunked_lm_head_device_check import register as register_training_chunked_lm_head_device_check
 from checks.native_tests.training_dbscan_parallel_check import register as register_training_dbscan_parallel_check
 from checks.native_tests.training_maximize_check import register as register_training_maximize_check
-from checks.native_tests.training_step_glue_check import register as register_training_step_glue_check
 from checks.native_tests.transformer_attention_fma_boundary_check import register as register_transformer_attention_fma_boundary_check
 from checks.native_tests.transformer_attention_zdot_routing_check import register as register_transformer_attention_zdot_routing_check
 from checks.native_tests.x_ann_cagra_check import register as register_x_ann_cagra_check
@@ -1088,7 +1085,6 @@ def all_checks() -> List[Check]:
     checks.append(register_extratrees_tree_check())
     checks.append(register_gbdt_host_binarize_identical())
     checks.append(register_gbdt_ordered_doc_id_check())
-    checks.append(register_gemm_gemm_epilogue_check())
     checks.append(register_gemm_gemm_gather_ftz_check())
     checks.append(register_gemm_gemm_int_slices_check())
     checks.append(register_gemm_gemm_production_dispatch_check())
@@ -1112,7 +1108,6 @@ def all_checks() -> List[Check]:
     checks.append(register_metrics_host_rand_score_check())
     checks.append(register_neighbors_fused_logical32_check())
     checks.append(register_neighbors_fused_slot_merge_check())
-    checks.append(register_neighbors_knn_selector_arms_check())
     checks.append(register_neighbors_knn_selector_bound_compact_check())
     checks.append(register_neighbors_query_batch_check())
     checks.append(register_tokenizer_generation_policy_check())
@@ -1121,7 +1116,6 @@ def all_checks() -> List[Check]:
     checks.append(register_training_chunked_lm_head_device_check())
     checks.append(register_training_dbscan_parallel_check())
     checks.append(register_training_maximize_check())
-    checks.append(register_training_step_glue_check())
     checks.append(register_transformer_attention_fma_boundary_check())
     checks.append(register_transformer_attention_zdot_routing_check())
     checks.append(register_x_ann_cagra_check())

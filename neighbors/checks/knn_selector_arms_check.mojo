@@ -297,7 +297,7 @@ def check_case(length: Int, k: Int, reach: Bool) raises:
         _ = values^
 
 
-def run_checks() raises:
+def main() raises:
     comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
         raise Error("selector arms check requires IDENTICAL")
     comptime if not SMALLK_SELECT_TRIAL:
