@@ -54,9 +54,8 @@ from max.gpu.sync import barrier
 from gbdt.gpu_data.compressed_index_builder import CompressedIndexLayout
 from gbdt.gpu_util.copy import COPY_BLOCK, copy_u32_kernel
 from gbdt.gpu_util.kernel.fill import launch_make_sequence
-from gbdt.gpu_util.kernel.radix_sort import (
-    launch_radix_sort_low_bins, radix_low_block_sums_len, radix_low_offsets_len,
-)
+from gbdt.gpu_util.kernel.radix_sort import launch_radix_sort_bins
+from gbdt.gpu_util.kernel.reorder_one_bit import REORDER_BLOCK
 
 from std.sys.compile import is_defined
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
@@ -444,11 +443,9 @@ struct DeviceLeafPartitioner(Movable):
         self.vals = ctx.enqueue_create_buffer[DType.uint32](n_rows)
         self.tkeys = ctx.enqueue_create_buffer[DType.uint32](n_rows)
         self.tvals = ctx.enqueue_create_buffer[DType.uint32](n_rows)
-        self.offsets = ctx.enqueue_create_buffer[DType.int32](
-            radix_low_offsets_len(n_rows)
-        )
+        self.offsets = ctx.enqueue_create_buffer[DType.int32](n_rows)
         self.bsums = ctx.enqueue_create_buffer[DType.int32](
-            radix_low_block_sums_len(n_rows)
+            (n_rows + REORDER_BLOCK - 1) // REORDER_BLOCK
         )
         self.d_bounds = ctx.enqueue_create_buffer[DType.uint32](
             2 * n_leaves + 1
@@ -492,11 +489,8 @@ struct DeviceLeafPartitioner(Movable):
         var bits = 0
         while (1 << bits) < n_leaves:
             bits += 1
-        # A leaf id at or above `n_leaves` (so possibly above `2^bits`) is
-        # refused by `leaf_bounds_kernel` wherever the sort leaves it, so the
-        # refusal does not depend on the order of such keys.
-        launch_radix_sort_low_bins(
-            ctx, n_rows, bits, self.keys, self.vals, self.tkeys,
+        launch_radix_sort_bins(
+            ctx, n_rows, 0, bits, self.keys, self.vals, self.tkeys,
             self.tvals, self.offsets, self.bsums,
         )
         ctx.enqueue_memset(self.d_bounds, UInt32(0))

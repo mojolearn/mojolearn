@@ -77,9 +77,7 @@ from gbdt.ctrs.kernel.ctr_calcers import (
     launch_update_borders_mask,
 )
 from gbdt.gpu_util.kernel.fill import launch_make_sequence
-from gbdt.gpu_util.kernel.radix_sort import (
-    launch_radix_sort_low_bins, radix_low_block_sums_len, radix_low_offsets_len,
-)
+from gbdt.gpu_util.kernel.radix_sort import launch_radix_sort_bins
 from gbdt.gpu_util.kernel.scan import SCAN_BLOCK, launch_scan_vector_u32
 from gbdt.gpu_util.kernel.transform import (
     launch_gather_with_mask_u32,
@@ -547,11 +545,9 @@ struct TCtrBinBuilderGpu(Movable):
         )
         # 512 is `REORDER_BLOCK`, the radix pass's block
         # (`reorder_one_bit.cu:35`): one aggregate per block of the pass.
-        self.sort_offsets = ctx.enqueue_create_buffer[DType.int32](
-            radix_low_offsets_len(n)
-        )
+        self.sort_offsets = ctx.enqueue_create_buffer[DType.int32](n)
         self.sort_block_sums = ctx.enqueue_create_buffer[DType.int32](
-            radix_low_block_sums_len(n)
+            (n + 512 - 1) // 512
         )
 
         ctx.enqueue_copy(dst_buf=self.indices, src_ptr=h.unsafe_ptr())
@@ -598,11 +594,9 @@ struct TCtrBinBuilderGpu(Movable):
             (n + SCAN_BLOCK - 1) // SCAN_BLOCK
         )
         # 512 is `REORDER_BLOCK`, as in the order constructor
-        self.sort_offsets = ctx.enqueue_create_buffer[DType.int32](
-            radix_low_offsets_len(n)
-        )
+        self.sort_offsets = ctx.enqueue_create_buffer[DType.int32](n)
         self.sort_block_sums = ctx.enqueue_create_buffer[DType.int32](
-            radix_low_block_sums_len(n)
+            (n + 512 - 1) // 512
         )
         launch_make_sequence(ctx, UInt32(0), self.indices, n)
         enqueue_fill(ctx, self.bins, UInt32(0))
@@ -639,11 +633,9 @@ struct TCtrBinBuilderGpu(Movable):
             (n + SCAN_BLOCK - 1) // SCAN_BLOCK
         )
         # 512 is `REORDER_BLOCK`, as in the order constructor
-        self.sort_offsets = ctx.enqueue_create_buffer[DType.int32](
-            radix_low_offsets_len(n)
-        )
+        self.sort_offsets = ctx.enqueue_create_buffer[DType.int32](n)
         self.sort_block_sums = ctx.enqueue_create_buffer[DType.int32](
-            radix_low_block_sums_len(n)
+            (n + 512 - 1) // 512
         )
         ctx.enqueue_copy(dst_buf=self.indices, src_buf=device_order)
         enqueue_fill(ctx, self.bins, UInt32(0))
@@ -757,12 +749,11 @@ struct TCtrBinBuilderGpu(Movable):
         # DecompressedTempBins)`. Their `offset` is 0 and their `bits` is
         # `IntLog2(uniqueValues)`, so the sort touches exactly the bin bits
         # and never the index payload it carries.
-        # every bin is a code below `unique_values` (checked on the device
-        # above, or by `cat_column_codes_resident`), so below `2^new_bits`
         var new_bits = int_log2(unique_values)
-        launch_radix_sort_low_bins(
+        launch_radix_sort_bins(
             ctx,
             self.size,
+            0,
             new_bits,
             self.bins,
             self.indices,
@@ -804,12 +795,11 @@ struct TCtrBinBuilderGpu(Movable):
             self.size,
             CTR_INDEX_MASK,
         )
-        # every bin is a code below `unique_values` (checked on the device
-        # above, or by `cat_column_codes_resident`), so below `2^new_bits`
         var new_bits = int_log2(unique_values)
-        launch_radix_sort_low_bins(
+        launch_radix_sort_bins(
             ctx,
             self.size,
+            0,
             new_bits,
             self.bins,
             self.indices,
