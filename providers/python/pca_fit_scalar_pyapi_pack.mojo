@@ -19,6 +19,8 @@ from bindings.optimizer_public_words_unpack import PYTHON_ERROR_PENDING, stash_p
 from bindings.manifold_temporal_native import temporal_object_kind
 from core.native_scalar_decode import NativeRealBits
 from x_decomp.pca_fit_scalar_run import PCAFitScalarArray
+from bindings.pca_keys_unpack import pca_keys
+from bindings.py_balanced import py_item
 
 
 def _pca_scalar_bytes(value: PythonObject) raises -> PythonObject:
@@ -50,11 +52,12 @@ def _pca_scalar_bytes(value: PythonObject) raises -> PythonObject:
 
 
 def _pca_builtin_number(value: PythonObject, integer: Bool, context: PythonObject, error_repr: String = "") raises -> PythonObject:
+    var nk = pca_keys()
     # Only already-admitted native builtins/buffer wrappers reach this
     # parser. NumPy temporal/numeric conversion slots never do.
     var b = native_loaded_module("builtins")
     var cls = py_type(value)
-    if value is not None and cls is not b.int and cls is not b.float and cls is not b.bool and cls is not b.complex and cls is not b.str and cls is not b.bytes and cls is not b.bytearray and cls is not b.memoryview and cls is not b.list and cls is not b.tuple and cls is not b.dict and cls is not b.set and cls is not b.frozenset and cls is not context["array_type"]:
+    if value is not None and cls is not b.int and cls is not b.float and cls is not b.bool and cls is not b.complex and cls is not b.str and cls is not b.bytes and cls is not b.bytearray and cls is not b.memoryview and cls is not b.list and cls is not b.tuple and cls is not b.dict and cls is not b.set and cls is not b.frozenset and cls is not py_item(context, nk[].k_array_type):
         raise Error("TypeError: PCA scalar conversion requires native numbers or text without Python conversion hooks")
     var value_error = b.ValueError
     ref cpy = Python().cpython()

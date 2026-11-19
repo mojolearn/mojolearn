@@ -10,12 +10,15 @@ from bindings.sequential_description_unpack import sequential_fields
 from bindings.sequential_admission_door import sequential_admit_value
 from bindings.py_balanced import py_call, py_contains, py_get, py_setitem, py_type
 from bindings.pca_descriptor_boundary_door import pca_connection
+from bindings.pca_keys_unpack import pca_keys
+from bindings.py_balanced import py_item
 
 
 def pca_dictionary(context: PythonObject) raises -> PythonObject:
+    var nk = pca_keys()
     var b = native_loaded_module("builtins")
-    var cls = context["pca_class"]
-    var descriptor = context["pca_dictionary_descriptor"]
+    var cls = py_item(context, nk[].k_pca_class)
+    var descriptor = py_item(context, nk[].k_pca_dictionary_descriptor)
     # The finalizer and dictionary-descriptor checks read only the PCA class
     # rows: run them once per class state (native_class_admission) and
     # descriptor identity, not on every PCA call.
@@ -23,14 +26,14 @@ def pca_dictionary(context: PythonObject) raises -> PythonObject:
     var record = class_record(mods, _PCA_DICTIONARY_SLOT, cls)
     if record is not None and record is descriptor:
         return descriptor
-    var mro = py_call(b.type.__dict__["__mro__"].__get__, cls)
+    var mro = py_call(py_item(b.type.__dict__, nk[].k___mro__).__get__, cls)
     var found = False
     for k in range(len(mro)):  # driver-loop: over native MRO dictionary descriptors before stored-field access
-        var class_fields = py_call(b.type.__dict__["__dict__"].__get__, mro[k])
-        if py_get(class_fields, "__del__") is not None:
+        var class_fields = py_call(py_item(b.type.__dict__, nk[].k___dict__).__get__, mro[k])
+        if py_get(class_fields, nk[].k___del__) is not None:
             raise Error("TypeError: PCA native owner cannot invoke Python finalizers")
-        if not found and py_contains(class_fields, "__dict__"):
-            if class_fields["__dict__"] is not descriptor:
+        if not found and py_contains(class_fields, nk[].k___dict__):
+            if py_item(class_fields, nk[].k___dict__) is not descriptor:
                 raise Error("TypeError: PCA instance dictionary descriptor was replaced")
             found = True
     if not found:
@@ -43,15 +46,16 @@ comptime _PCA_DICTIONARY_SLOT = "pca_dictionary_descriptor_v1"
 
 
 def pca_fields(model: PythonObject, context: PythonObject) raises -> PythonObject:
+    var nk = pca_keys()
     var b = native_loaded_module("builtins")
-    var cls = context["pca_class"]
+    var cls = py_item(context, nk[].k_pca_class)
     var descriptor = pca_dictionary(context)
     var fields = py_call(descriptor.__get__, model, cls)
     var keys = py_call(b.list, fields.keys())
     for k in range(len(keys)):  # driver-loop: over stored model field names before keyed access
         if py_type(keys[k]) is not b.str:
             raise Error("TypeError: PCA stored field names must be native strings")
-    var names = context["pca_parameters"] + context["pca_state"]
+    var names = py_item(context, nk[].k_pca_parameters) + py_item(context, nk[].k_pca_state)
     for k in range(len(names)):  # driver-loop: over connected PCA option and fitted-array metadata
         if py_contains(fields, names[k]):
             sequential_admit_value(fields[names[k]], context)
@@ -59,9 +63,10 @@ def pca_fields(model: PythonObject, context: PythonObject) raises -> PythonObjec
 
 
 def pca_mode(fields: PythonObject, context: PythonObject) raises -> PythonObject:
-    var mode = py_get(fields, "numeric_mode")
+    var nk = pca_keys()
+    var mode = py_get(fields, nk[].k_numeric_mode)
     if mode is None:
-        mode = context["backend_fields"]["_DEFAULT_MODE"]
+        mode = py_item(py_item(context, nk[].k_backend_fields), nk[].k__DEFAULT_MODE)
     if py_type(mode) is not native_loaded_module("builtins").str:
         raise Error("TypeError: numeric_mode must be identical, fast or None")
     mode = mode.strip().lower()

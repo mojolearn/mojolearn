@@ -11,6 +11,8 @@ from bindings.classical_archive_read_door import classical_archive_read, _archiv
 from bindings.pca_metadata_unpack import pca_mode
 from bindings.pca_metadata_pack import pca_initialize
 from bindings.py_balanced import py_call, py_contains, py_setitem
+from bindings.pca_keys_unpack import pca_keys
+from bindings.py_balanced import py_item
 
 
 
@@ -22,28 +24,29 @@ def _meta_word(meta: PythonObject, index: Int) raises -> Int:
 
 
 def pca_archive_save(model: PythonObject, path: PythonObject, context: PythonObject) raises -> PythonObject:
+    var nk = pca_keys()
     var fields = sequential_fields(model)
-    if not py_contains(fields, "components_"):
+    if not py_contains(fields, nk[].k_components_):
         raise Error("RuntimeError: this estimator is not fitted yet")
     var values = Python.dict()
-    py_setitem(values, "format", "mojolearn-pca-1")
-    py_setitem(values, "estimator", "PCA")
-    py_setitem(values, "numeric_mode", pca_mode(fields, context))
-    py_setitem(values, "svd_solver", py_call(native_loaded_module("builtins").str, fields["svd_solver"]))
+    py_setitem(values, nk[].k_format, "mojolearn-pca-1")
+    py_setitem(values, nk[].k_estimator, "PCA")
+    py_setitem(values, nk[].k_numeric_mode, pca_mode(fields, context))
+    py_setitem(values, nk[].k_svd_solver, py_call(native_loaded_module("builtins").str, py_item(fields, nk[].k_svd_solver)))
     var names = Python.tuple("components", "mean", "singular_values", "explained_variance", "explained_variance_ratio")
     for k in range(len(names)):  # driver-loop: over the five existing PCA archive array members
         py_setitem(values, names[k], fields[names[k] + "_"])
     var noise = classical_array(1, 0, context, True)
     var np = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=Int(py=sequential_address(noise)))
-    np[0] = Float64(py=fields["noise_variance_"])
-    py_setitem(values, "noise_variance", noise)
-    var meta = sequential_array(Python.tuple(4), context["archive_npy_dtypes"]["<i8"], context)
+    np[0] = Float64(py=py_item(fields, nk[].k_noise_variance_))
+    py_setitem(values, nk[].k_noise_variance, noise)
+    var meta = sequential_array(Python.tuple(4), py_item(context, nk[].k_archive_npy_dtypes)["<i8"], context)
     var mp = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=Int(py=sequential_address(meta)))
-    mp[0] = Int64(py=fields["n_components_"])
-    mp[1] = Int64(py=fields["n_features_in_"])
-    mp[2] = Int64(py=fields["n_samples_"])
-    mp[3] = 1 if Bool(py=fields["whiten"]) else 0
-    py_setitem(values, "meta", meta)
+    mp[0] = Int64(py=py_item(fields, nk[].k_n_components_))
+    mp[1] = Int64(py=py_item(fields, nk[].k_n_features_in_))
+    mp[2] = Int64(py=py_item(fields, nk[].k_n_samples_))
+    mp[3] = 1 if Bool(py=py_item(fields, nk[].k_whiten)) else 0
+    py_setitem(values, nk[].k_meta, meta)
     var result = classical_archive_write(path, values, context)
     _ = noise^
     _ = meta^
@@ -52,6 +55,7 @@ def pca_archive_save(model: PythonObject, path: PythonObject, context: PythonObj
 
 
 def pca_archive_load(cls: PythonObject, path: PythonObject, context: PythonObject) raises -> PythonObject:
+    var nk = pca_keys()
     var arrays = classical_archive_read(path, context)
     if String(_archive_string(arrays, "format", context)) != "mojolearn-pca-1":
         raise Error("model archive format does not match mojolearn-pca-1")
@@ -86,13 +90,13 @@ def pca_archive_load(cls: PythonObject, path: PythonObject, context: PythonObjec
     _ = pca_initialize(model, Python.tuple(nc, True, _meta_word(meta, 3) != 0, solver, 0.0,
                                           "auto", 10, "auto", PythonObject(None), mode))
     var fields = sequential_fields(model)
-    py_setitem(fields, "components_", components)
-    py_setitem(fields, "mean_", mean)
+    py_setitem(fields, nk[].k_components_, components)
+    py_setitem(fields, nk[].k_mean_, mean)
     for k in range(len(names)):  # driver-loop: over fully validated saved spectral arrays
         py_setitem(fields, names[k] + "_", spectral[k])
-    py_setitem(fields, "noise_variance_", PythonObject(classical_word(noise)))
-    py_setitem(fields, "n_components_", nc)
-    py_setitem(fields, "n_features_in_", nf)
-    py_setitem(fields, "n_samples_", _meta_word(meta, 2))
-    py_setitem(fields, "_mojolearn_fitted", True)
+    py_setitem(fields, nk[].k_noise_variance_, PythonObject(classical_word(noise)))
+    py_setitem(fields, nk[].k_n_components_, nc)
+    py_setitem(fields, nk[].k_n_features_in_, nf)
+    py_setitem(fields, nk[].k_n_samples_, _meta_word(meta, 2))
+    py_setitem(fields, nk[].k__mojolearn_fitted, True)
     return model

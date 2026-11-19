@@ -19,6 +19,8 @@ from providers.python.pca_model_pyapi_unpack import pca_query_admitted
 from providers.python.pca_input_pyapi_unpack import pca_state_snapshot
 from providers.python.array_metadata_pyapi_door import ArrayPin
 from bindings.decomp_inputs_unpack import decomp_admit
+from bindings.pca_keys_unpack import pca_keys
+from bindings.py_balanced import py_item
 
 
 def _pca_output(shape: PythonObject, dtype: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -29,16 +31,18 @@ def _pca_output(shape: PythonObject, dtype: PythonObject, context: PythonObject)
     zero-filled the whole output per call (in 0.8.66 too) only for the
     download to overwrite it (fix-classical-infer-xq). Kept in this door so
     no other binding's source closure changes."""
+    var nk = pca_keys()
     var mods = NativeModules()
     var layout = NativeArrayLayout(native_shape_unpack(shape), Int(py=dtype.itemsize))
     var packed_shape = native_shape_pack(layout.shape)
-    var result = py_call(context["ndarray"], packed_shape, dtype=dtype)
+    var result = py_call(py_item(context, nk[].k_ndarray), packed_shape, dtype=dtype)
     mods.released()
     return result^
 
 
 def pca_query_operation(model: PythonObject, source: PythonObject, inverse: Bool,
                         context: PythonObject) raises -> PythonObject:
+    var nk = pca_keys()
     # Settings, fitted fields and binding entries: full admission on first
     # use and after any change, else the per-model record
     # (providers/python/pca_model_pyapi.mojo, pca_query_admitted).
@@ -90,7 +94,7 @@ def pca_query_operation(model: PythonObject, source: PythonObject, inverse: Bool
     # before it is returned (a refused X discards it), so the bytearray's
     # zero fill of the whole output (one host pass, in 0.8.66 too) is gone
     # (fix-classical-infer-xq). No later Python wrapper converts its result.
-    var output = _pca_output(Python.tuple(rows, features if inverse else count), context["float32"], context)
+    var output = _pca_output(Python.tuple(rows, features if inverse else count), py_item(context, nk[].k_float32), context)
     var output_address = Int(py=sequential_address(output))
     var fold = PCAFoldStore()
     if x.store.active():

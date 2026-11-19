@@ -15,9 +15,12 @@ from bindings.pca_descriptor_boundary_door import pca_connection
 from bindings.pca_metadata_unpack import (
     pca_fields,
 )
+from bindings.pca_keys_unpack import pca_keys
+from bindings.py_balanced import py_item
 
 
 def pca_initialize(model: PythonObject, args: PythonObject) raises -> PythonObject:
+    var nk = pca_keys()
     if len(args) != 10:
         raise Error("TypeError: native PCA initialization requires its ten constructor arguments")
     var fields = sequential_fields(model)
@@ -25,14 +28,15 @@ def pca_initialize(model: PythonObject, args: PythonObject) raises -> PythonObje
                              "iterated_power", "n_oversamples", "power_iteration_normalizer",
                              "random_state", "numeric_mode")
     for k in range(len(names)):  # driver-loop: over fixed constructor argument metadata
-        if k != 9 or args[k] is not None or not py_contains(fields, "numeric_mode"):
+        if k != 9 or args[k] is not None or not py_contains(fields, nk[].k_numeric_mode):
             py_setitem(fields, names[k], args[k])
     return PythonObject(None)
 
 
 def pca_get_params(model: PythonObject, context: PythonObject) raises -> PythonObject:
+    var nk = pca_keys()
     var fields = pca_fields(model, context)
-    var names = context["pca_parameters"]
+    var names = py_item(context, nk[].k_pca_parameters)
     var result = Python.dict()
     for k in range(len(names)):  # driver-loop: over alphabetized public constructor parameters
         if not py_contains(fields, names[k]):

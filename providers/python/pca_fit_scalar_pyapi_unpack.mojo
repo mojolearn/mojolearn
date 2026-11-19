@@ -23,6 +23,8 @@ from providers.python.pca_fit_scalar_pyapi_pack import (
     _pca_builtin_number,
     _pca_scalar_bytes,
 )
+from bindings.pca_keys_unpack import pca_keys
+from bindings.py_balanced import py_item
 
 
 def pca_temporal_word(value: PythonObject, dtype: PythonObject) raises -> Int64:
@@ -84,7 +86,8 @@ struct PCAFitScalarError(Copyable, Movable):
 
 
 def pca_fit_scalar_admit(value: PythonObject, context: PythonObject) raises:
-    if py_get(context, "ndarray") is None:
+    var nk = pca_keys()
+    if py_get(context, nk[].k_ndarray) is None:
         sequential_admit_value(value, context)
         return
     var cls = py_type(value)
@@ -93,10 +96,10 @@ def pca_fit_scalar_admit(value: PythonObject, context: PythonObject) raises:
     # or ndarray), so they reach the same generic admission directly instead
     # of walking the class table and building the q/Q dtypes per value.
     if (value is None or cls is py_type(PythonObject(True)) or cls is py_type(PythonObject(0))
-            or cls is py_type(PythonObject(0.0)) or cls is py_type(PythonObject("")) or cls is context["ndarray"]):
+            or cls is py_type(PythonObject(0.0)) or cls is py_type(PythonObject("")) or cls is py_item(context, nk[].k_ndarray)):
         sequential_admit_value(value, context)
         return
-    var scalar = context["pca_fit_scalar_context"]
+    var scalar = py_item(context, nk[].k_pca_fit_scalar_context)
     var classes = sequence_dtype_classes(scalar)
     for index in range(len(classes)):  # driver-loop: all exact native scalar classes supported by the dedicated parser
         if cls is classes[index][1]:
@@ -128,6 +131,7 @@ struct PCAFitScalar(Copyable, Movable):
 
     def __init__(out self, source: PythonObject, context: PythonObject, truth_mode: Bool = False,
                  operation: String = "", depth: Int = 0) raises:
+        var nk = pca_keys()
         self.source = source
         self.owners = Python.list(source)
         self.value = source
@@ -145,7 +149,7 @@ struct PCAFitScalar(Copyable, Movable):
         self.truth_ready = False
         self.truth_value = False
         self.buffer_repr = String("")
-        var scalar_context = context["pca_fit_scalar_context"]
+        var scalar_context = py_item(context, nk[].k_pca_fit_scalar_context)
         var b = native_loaded_module("builtins")
         var seen_arrays = Python.list()
         for level in range(66 - depth):  # driver-loop: admitted nested object scalar arrays, same 64-level bound as scalar parsing
@@ -166,7 +170,7 @@ struct PCAFitScalar(Copyable, Movable):
                     else:
                         self.truth_value = len(value) != 0
                 break
-            if truth_mode and (cls is b.bytearray or cls is b.memoryview or cls is context["array_type"]):
+            if truth_mode and (cls is b.bytearray or cls is b.memoryview or cls is py_item(context, nk[].k_array_type)):
                 sequential_admit_value(value, context)
                 self.truth_ready = True
                 self.truth_value = len(value) != 0
@@ -188,14 +192,14 @@ struct PCAFitScalar(Copyable, Movable):
                     var view = py_call(b.memoryview, storage)
                     self.value = view[py_call(b.slice, 0, 4, 2)]
                 break
-            if cls is context["array_type"]:
+            if cls is py_item(context, nk[].k_array_type):
                 # Retain the exact native buffer wrapper/typecode, including
                 # its error repr, instead of exposing the private bytes copy.
                 var code = value.typecode
                 var raw = _pca_scalar_bytes(value)
-                self.value = py_call(context["array_type"], code, raw)
+                self.value = py_call(py_item(context, nk[].k_array_type), code, raw)
                 break
-            if cls is not context["ndarray"]:
+            if cls is not py_item(context, nk[].k_ndarray):
                 var classes = sequence_dtype_classes(scalar_context)
                 var native_scalar = False
                 for index in range(len(classes)):  # driver-loop: exact native scalar identities before any dtype access
@@ -333,7 +337,8 @@ struct PCAFitScalar(Copyable, Movable):
                 break
 
     def convert(self, operation: String, context: PythonObject, integer: Bool) raises -> PythonObject:
-        var scalar = context["pca_fit_scalar_context"]
+        var nk = pca_keys()
+        var scalar = py_item(context, nk[].k_pca_fit_scalar_context)
         var b = native_loaded_module("builtins")
         for index in range(len(self.arrays)):  # driver-loop: replay outer-to-inner scalar-array validation without input metadata reads
             ref array = self.arrays[index]
@@ -349,10 +354,10 @@ struct PCAFitScalar(Copyable, Movable):
                     var name = String("int") if integer else String("float")
                     var bytes = String(", a bytes-like object") if integer else String("")
                     raise Error("TypeError: " + name + "() argument must be a string" + bytes + " or a real number, not 'complex'")
-                var exceptions = py_get(scalar["modules"], "numpy.exceptions")
-                if exceptions is None or py_type(exceptions) is not scalar["module_type"]:
+                var exceptions = py_get(py_item(scalar, nk[].k_modules), "numpy.exceptions")
+                if exceptions is None or py_type(exceptions) is not py_item(scalar, nk[].k_module_type):
                     raise Error("TypeError: complex scalar warnings require NumPy's native exception metadata")
-                var category = py_get(native_numpy_module_fields(exceptions), "ComplexWarning")
+                var category = py_get(native_numpy_module_fields(exceptions), nk[].k_ComplexWarning)
                 training_scalar_warning("Casting complex values to real discards the imaginary part", category, operation, scalar)
         if self.pending_error.pending:
             self.pending_error.raise_pending()
@@ -360,10 +365,10 @@ struct PCAFitScalar(Copyable, Movable):
             raise Error(self.refusal)
         if self.numeric:
             if self.scalar_complex:
-                var exceptions = py_get(scalar["modules"], "numpy.exceptions")
-                if exceptions is None or py_type(exceptions) is not scalar["module_type"]:
+                var exceptions = py_get(py_item(scalar, nk[].k_modules), "numpy.exceptions")
+                if exceptions is None or py_type(exceptions) is not py_item(scalar, nk[].k_module_type):
                     raise Error("TypeError: complex scalar warnings require NumPy's native exception metadata")
-                training_scalar_warning("Casting complex values to real discards the imaginary part", py_get(native_numpy_module_fields(exceptions), "ComplexWarning"), operation, scalar)
+                training_scalar_warning("Casting complex values to real discards the imaginary part", py_get(native_numpy_module_fields(exceptions), nk[].k_ComplexWarning), operation, scalar)
             return self.number.to_python_number(integer)
         if self.temporal:
             var kind = temporal_object_kind(self.temporal_value, self.temporal_layout, self.temporal_delta)
@@ -377,6 +382,7 @@ struct PCAFitScalar(Copyable, Movable):
 
 
     def truth(self, operation: String, context: PythonObject) raises -> Bool:
+        var nk = pca_keys()
         var b = native_loaded_module("builtins")
         for index in range(len(self.arrays)):  # driver-loop: admitted nested scalar-array truth rules, independent of rank
             var count = self.arrays[index].count
@@ -385,7 +391,7 @@ struct PCAFitScalar(Copyable, Movable):
             if count == 0:
                 if self.release >= 202:
                     raise Error("The truth value of an empty array is ambiguous. Use `array.size > 0` to check that an array is not empty.")
-                training_scalar_warning("The truth value of an empty array is ambiguous. Returning False, but in future this will result in an error. Use `array.size > 0` to check that an array is not empty.", b.DeprecationWarning, operation, context["pca_fit_scalar_context"])
+                training_scalar_warning("The truth value of an empty array is ambiguous. Returning False, but in future this will result in an error. Use `array.size > 0` to check that an array is not empty.", b.DeprecationWarning, operation, py_item(context, nk[].k_pca_fit_scalar_context))
                 return False
         if self.pending_error.pending:
             self.pending_error.raise_pending()
