@@ -770,7 +770,12 @@ def _typed_learn(model: PythonObject, operation: PythonObject, context: PythonOb
         return
     var k = pool_run_adaptive_kernel(saved, o)
     var layer = py_get(fields, "_layer")
-    if layer is None or py_type(layer) is not (s[].held[_H_MAXPOOL] if a_maxed else s[].held[_H_AVGPOOL]):
+    if layer is None:
+        return
+    if a_maxed:
+        if py_type(layer) is not s[].held[_H_MAXPOOL]:
+            return
+    elif py_type(layer) is not s[].held[_H_AVGPOOL]:
         return
     var cache = py_get(fields, "_pool_cache")
     if cache is None or py_type(cache) is not b.tuple or len(cache) != 2:
@@ -1010,7 +1015,9 @@ def xcnn_pool_typed_call(args: PyObjectPtr) raises -> PyObjectPtr:
         # its own dictionary unchanged and its class still the pool class
         if _dict_epoch(w, rec.inner_fields) != rec.inner_stamp:
             return PyObjectPtr()
-        var inner_class = s[].held[_H_MAXPOOL]._obj_ptr if maxed else s[].held[_H_AVGPOOL]._obj_ptr
+        var inner_class = s[].held[_H_AVGPOOL]._obj_ptr
+        if maxed:
+            inner_class = s[].held[_H_MAXPOOL]._obj_ptr
         if PyObjectPtr(upcast_from=cpy.Py_TYPE(_borrowed(rec.inner_layer))) != inner_class:
             return PyObjectPtr()
     if maxed:
