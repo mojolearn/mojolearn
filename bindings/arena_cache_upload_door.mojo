@@ -233,7 +233,19 @@ def _cleanup_failure(mut primary: CachePendingError, mut cleanup: CachePendingEr
         ref cpy = Python().cpython()
         var cls = context["cache_runtime_error"]
         var message = PythonObject("DeviceCache publication failed and cleanup of the unpublished native slot also failed")
-        var pointer = cpy.lib.get_function[PyObjectPtr]("PyObject_CallOneArg")(cls._obj_ptr,message._obj_ptr)
+        # `cls(message)` through PyObject_Call with a one-item tuple (the
+        # py_balanced.py_call form, without its error fetch so the pending
+        # exception still reaches stash_python_error): PyObject_CallOneArg is
+        # a header inline before CPython 3.11, so its dlsym missed on 3.10 and
+        # Mojo's ffi aborted the process (fx-user-crash-scorer, 2026-11-19).
+        # Once per double failure, never on a loop.
+        var envelope = cpy.PyTuple_New(1)
+        if not envelope:
+            var failure = stash_python_error()
+            raise failure^
+        _ = cpy.PyTuple_SetItem(envelope, 0, cpy.Py_NewRef(message._obj_ptr))
+        var pointer = cpy.PyObject_Call(cls._obj_ptr, envelope, PyObjectPtr())
+        cpy.Py_DecRef(envelope)
         if not pointer:
             var failure = stash_python_error()
             raise failure^

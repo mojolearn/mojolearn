@@ -23,7 +23,8 @@ another session is running GPU work on this box.
 """
 
 from std.time import perf_counter_ns
-from max.gpu.host import DeviceAttribute, DeviceContext
+from max.gpu.host import DeviceContext
+from core.device_units import device_multiprocessor_count
 
 from gbdt.gpu_util.partitions_reduce import compute_partition_stats
 from gbdt.methods.kernel.pointwise_scores import update_partition_props
@@ -34,7 +35,7 @@ comptime REPS = 5
 
 def main() raises:
     var ctx = DeviceContext()
-    var sm = ctx.get_attribute(DeviceAttribute.MULTIPROCESSOR_COUNT)
+    var sm = device_multiprocessor_count(ctx)
 
     var tgt = ctx.enqueue_create_buffer[DType.float32](N_ROWS)
     var wts = ctx.enqueue_create_buffer[DType.float32](N_ROWS)

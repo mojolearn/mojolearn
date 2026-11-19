@@ -29,6 +29,8 @@ the current surface and limitations.
 """
 
 from ._version import __version__
+from . import _host_guard as _host_guard
+_host_guard.check()  # a CPU or interpreter the compiled files cannot run on: ImportError, never SIGILL
 from . import _native_loaded_modules  # fixed native module/export connections, before bindings load
 from . import _native_array_storage  # fixed native allocation metadata, before binding connections
 

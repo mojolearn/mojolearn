@@ -50,6 +50,7 @@ from checks.native_tests.cnn_trainer import register as register_cnn_trainer
 from checks.native_tests.core_all_finite import register as register_core_all_finite
 from checks.native_tests.core_chunked_lm_head_denormals import register as register_core_chunked_lm_head_denormals
 from checks.native_tests.core_convert import register as register_core_convert
+from checks.native_tests.core_device_units import register as register_core_device_units
 from checks.native_tests.core_helpers import register as register_core_helpers
 from checks.native_tests.core_import_lower import register as register_core_import_lower
 from checks.native_tests.core_ne2_rounds import register as register_core_ne2_rounds
@@ -628,6 +629,7 @@ def all_checks() -> List[Check]:
     checks.append(register_core_all_finite())
     checks.append(register_core_chunked_lm_head_denormals())
     checks.append(register_core_convert())
+    checks.append(register_core_device_units())
     checks.append(register_core_helpers())
     checks.append(register_core_import_lower())
     checks.append(register_core_ne2_rounds())

@@ -51,8 +51,18 @@ def _resident_destroy(capsule: PyObjectPtr) abi("C") -> NoneType:
             var argument = cpy.lib.get_function[PyObjectPtr]("PyLong_FromSsize_t")(handle)
             if argument:
                 # both arguments as address words, as words[0] is (no call
-                # on main mixes an Int and a PyObjectPtr argument; pass 2 C8)
-                var result = cpy.lib.get_function[PyObjectPtr]("PyObject_CallOneArg")(free, Int(argument))
+                # on main mixes an Int and a PyObjectPtr argument; pass 2 C8).
+                # `free(argument)` through PyObject_VectorcallDict, exported
+                # by CPython 3.10 to 3.14: PyObject_CallOneArg is a header
+                # inline before 3.11, so its dlsym missed on 3.10 and Mojo's
+                # ffi ABORTED the process (SIGILL on x86, SIGTRAP on arm64;
+                # fx-user-crash-scorer, 2026-11-19). The one-word argument
+                # vector is the record's own words[0] (already cleared), so
+                # the call allocates nothing, as CallOneArg did.
+                words[0] = Int(argument)
+                var result = cpy.lib.get_function[PyObjectPtr]("PyObject_VectorcallDict")(
+                    free, Int(raw.value()), 1, 0)
+                words[0] = 0
                 if result:
                     cpy.lib.get_function[NoneType]("Py_DecRef")(result)
                 cpy.lib.get_function[NoneType]("Py_DecRef")(argument)

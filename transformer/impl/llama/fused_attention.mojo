@@ -103,6 +103,7 @@ from std.sys.info import is_amd_gpu
 from std.time import perf_counter_ns
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from max.gpu.host.device_attribute import DeviceAttribute
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 # DEVIATION 2630: the step phase timers and counters (core/step_phase.mojo;
 # compiled only under -D MOJOLEARN_STEP_PHASE_TIMERS=1).
 from core.step_phase import (
@@ -4681,6 +4682,12 @@ comptime TILED_TT = 16
 def attn_device_units(ctx: DeviceContext) -> Int:
     """SMs (NVIDIA) or CUs (AMD) of `ctx`; 0 when the driver does not report
     it (the rule then takes the largest tile)."""
+    # Metal refuses MULTIPROCESSOR_COUNT ("not supported for Apple GPU"): an
+    # Apple build answers 0 at comptime, the value the refused query already
+    # fell back to, without raising and catching an Error on every call
+    # (fx-user-crash-scorer, 2026-11-19). Same tile on Apple as before.
+    comptime if TARGET_HAS_APPLE_GPU:
+        return 0
     try:
         return ctx.get_attribute(DeviceAttribute.MULTIPROCESSOR_COUNT)
     except:

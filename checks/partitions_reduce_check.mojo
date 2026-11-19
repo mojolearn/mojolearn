@@ -80,7 +80,7 @@ the second. It is a reach test that fails loudly on the old code.
 """
 
 from max.gpu.host import DeviceContext, HostBuffer
-from max.gpu.host.device_attribute import DeviceAttribute
+from core.device_units import device_multiprocessor_count
 
 from gbdt.gpu_util.partitions_reduce import (
     STATS_BLOCK,
@@ -204,7 +204,7 @@ def _arm(
     if grid_rows > 0:
         grid_hint = grid_rows
     var max_chunks = partition_stats_chunks(
-        ctx.get_attribute(DeviceAttribute.MULTIPROCESSOR_COUNT), N_STATS
+        device_multiprocessor_count(ctx), N_STATS
     )
 
     # ---- the planted stats, hashed, with the gap poisoned ---------------

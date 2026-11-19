@@ -86,7 +86,7 @@ leaf through a one-block grid to keep it from becoming one again.
 
 from max.gpu import block_dim, block_idx, grid_dim, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
-from max.gpu.host.device_attribute import DeviceAttribute
+from core.device_units import device_multiprocessor_count
 from max.gpu.primitives.block import sum as block_sum
 
 from gbdt.targets.kernel.pointwise_targets import pinned_block_sum
@@ -365,7 +365,7 @@ def compute_partition_stats(
     # caching is theirs; querying per call was ours and cost ~9 ms/tree.
     var sm = sm_count
     if sm < 0:
-        sm = ctx.get_attribute(DeviceAttribute.MULTIPROCESSOR_COUNT)
+        sm = device_multiprocessor_count(ctx)
     var max_chunks = partition_stats_chunks(sm, n_stats)
     var launched = max_chunks
     if row_bound >= 0:

@@ -39,7 +39,7 @@ from max.gpu import block_dim, block_idx, grid_dim, thread_idx
 # ptr.unsafe_load[..., invariant=True](), the same invariant (non-coherent) load ldg emitted.
 from std.memory import stack_allocation
 from max.gpu.host import DeviceBuffer, DeviceContext
-from max.gpu.host.device_attribute import DeviceAttribute
+from core.device_units import device_multiprocessor_count
 from max.gpu.memory import AddressSpace
 from max.gpu.primitives.block import broadcast as block_broadcast
 from max.gpu.primitives.block import prefix_sum as block_prefix_sum
@@ -378,7 +378,7 @@ def split_points_grid_x(n_leaf_slots: Int, sm_count: Int) -> Int:
     ======================================================
 
     `TArchProps::SMCount()` is
-    `ctx.get_attribute(DeviceAttribute.MULTIPROCESSOR_COUNT)`, the same
+    `device_multiprocessor_count(ctx)`, the same
     attribute `replication_for`'s caller already reads.
     """
     var per_sm = 2 if n_leaf_slots > 4 else 4
@@ -864,7 +864,7 @@ def launch_reorder_in_leaves(
     # once per level. Their `TArchProps::SMCount()` is a cached static.
     var sm = sm_count
     if sm < 0:
-        sm = ctx.get_attribute(DeviceAttribute.MULTIPROCESSOR_COUNT)
+        sm = device_multiprocessor_count(ctx)
     var grid_x = split_points_grid_x(n_leaf_slots, sm)
 
     var launches = 0

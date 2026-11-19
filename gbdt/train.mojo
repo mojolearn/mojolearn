@@ -31,7 +31,7 @@ from gbdt.gpu_data.compressed_index_builder import (
     CompressedIndexLayout,
     build_layout,
 )
-from max.gpu.host.device_attribute import DeviceAttribute
+from core.device_units import device_multiprocessor_count
 from gbdt.gpu_data.kernel.binarize import (
     BINARIZE_BLOCK_SIZE,
     BINARIZE_DOCS_PER_THREAD,
@@ -3031,7 +3031,7 @@ def train(
         var o_layout = build_layout(fold_counts, column_one_hot)
         var o_out = fit_ordered(
             ctx, o_layout, cindex, targets, weights, n_rows, n_estimators,
-            max_depth, ctx.get_attribute(DeviceAttribute.MULTIPROCESSOR_COUNT),
+            max_depth, device_multiprocessor_count(ctx),
             column_one_hot, o_opts, o_model, trace, test_arm,
             od_kind, od_pvalue, od_wait,
             device_plan=device_plan,
@@ -3590,7 +3590,7 @@ def train_ordered_rmse_ptr(
     var result = fit_ordered_rmse(
         ctx, layout, cindex, y, sample_weight, permutation,
         n_estimators, max_depth,
-        ctx.get_attribute(DeviceAttribute.MULTIPROCESSOR_COUNT),
+        device_multiprocessor_count(ctx),
         learning_rate, l2_leaf_reg,
         device_plan=device_plan,
     )

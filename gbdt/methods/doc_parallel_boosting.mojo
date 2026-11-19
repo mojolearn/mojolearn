@@ -6,7 +6,7 @@ from gbdt.options.child_hessian import child_hessian_threshold, check_child_hess
 from std.math import fma
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from core.device_zero import enqueue_fill
-from max.gpu.host.device_attribute import DeviceAttribute
+from core.device_units import device_multiprocessor_count
 from std.math import isfinite
 from std.sys.compile import is_defined
 # TOMBSTONE: MOJOLEARN_TREES_CTR_SORTFREE_SUMS (DELETE-ARM, IDENTICAL sort-free CTR leaf sums, no A/B recorded, rule a; non-owner) deleted 2026-11-15 by lane/expdel2-42-trees; code recoverable at 8cc12e71fe.
@@ -1320,7 +1320,7 @@ struct LeafEstimateOpState(Movable):
         self.n_leaves = n_leaves
         var sm = sm_count
         if sm < 0:
-            sm = ctx.get_attribute(DeviceAttribute.MULTIPROCESSOR_COUNT)
+            sm = device_multiprocessor_count(ctx)
         self.sm = sm
         self.est_ws = List[TEstimationWorkspace]()
         self.est_ws.append(TEstimationWorkspace(ctx, n_rows, 1, n_leaves, 1))
@@ -1599,7 +1599,7 @@ def _estimate_and_apply(
         ):
             var a_sm = est_sm
             if a_sm < 0:
-                a_sm = ctx.get_attribute(DeviceAttribute.MULTIPROCESSOR_COUNT)
+                a_sm = device_multiprocessor_count(ctx)
             apple_est_ensure(ctx, est_ws[0].apple_est, n_rows, n_leaves, a_sm)
             var a_s = est_ws[0].apple_est[0].handles()
             var a_gt = est_ws[0].g_target.copy()
@@ -2391,7 +2391,7 @@ def _estimate_prepare(
     var fv_blocks = (n_rows + MSE_BLOCK_SIZE - 1) // MSE_BLOCK_SIZE
     var sm = est_sm
     if sm < 0:
-        sm = ctx.get_attribute(DeviceAttribute.MULTIPROCESSOR_COUNT)
+        sm = device_multiprocessor_count(ctx)
     var ds = -1
     for i in range(len(est_ws[0].arena_scratch)):  # small-loop(arena_scratch: pooled scratch keys, a few shapes): cache lookup by shape only
         if est_ws[0].arena_scratch[i].matches(
@@ -4355,13 +4355,13 @@ def fit_with_test(
     # but never applies them, so the estimator runs on every tree whatever
     # DEVIATION 64 says (the numbers coincide for RMSE by its derivation).
     if need_estimation or use_pointwise_searcher or non_symmetric:
-        est_sm = ctx.get_attribute(DeviceAttribute.MULTIPROCESSOR_COUNT)
+        est_sm = device_multiprocessor_count(ctx)
     # the `random_strength` reduces are machine-sized like every strided
     # grid of theirs, and neither of the two conditions above implies the
     # option is set.
     var noise_sm = est_sm
     if random_strength != Float32(0.0) and noise_sm <= 0:
-        noise_sm = ctx.get_attribute(DeviceAttribute.MULTIPROCESSOR_COUNT)
+        noise_sm = device_multiprocessor_count(ctx)
     # their `TGpuAwareRandom` for the fit, the one both searchers draw
     # their per-level `GlobalSeed` from (`oblivious_tree_doc_parallel_
     # structure_searcher.cpp:15`, `greedy_search_helper.h:15`). One draw

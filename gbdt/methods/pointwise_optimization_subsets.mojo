@@ -4,7 +4,7 @@
 
 from max.gpu.host import DeviceBuffer, DeviceContext
 from core.device_zero import enqueue_fill
-from max.gpu.host.device_attribute import DeviceAttribute
+from core.device_units import device_multiprocessor_count
 from max.gpu import block_dim, block_idx, grid_dim, thread_idx
 from gbdt.apple_fast_classical import AFCL_T04
 
@@ -575,7 +575,7 @@ def create_subsets(
 
     var sm = sm_count
     if sm < 0:
-        sm = ctx.get_attribute(DeviceAttribute.MULTIPROCESSOR_COUNT)
+        sm = device_multiprocessor_count(ctx)
     var chunks = partition_stats_chunks(sm, 1)
     var stat_partials = ctx.enqueue_create_buffer[DType.float32](
         max_part_count * 1 * chunks

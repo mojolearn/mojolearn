@@ -40,7 +40,7 @@ does (their `functionValue` is a float).
 """
 
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
-from max.gpu.host.device_attribute import DeviceAttribute
+from core.device_units import device_multiprocessor_count
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from max.gpu import block_dim, block_idx, grid_dim, thread_idx
@@ -603,7 +603,7 @@ def apple_fast_estimate_and_apply(
     var newton = estimation_method == LEAF_ESTIMATION_NEWTON
     var sm = est_sm
     if sm < 0:
-        sm = ctx.get_attribute(DeviceAttribute.MULTIPROCESSOR_COUNT)
+        sm = device_multiprocessor_count(ctx)
     var mse_blocks = (n_rows + MSE_BLOCK_SIZE - 1) // MSE_BLOCK_SIZE
     if mse_blocks < 1:
         mse_blocks = 1
