@@ -228,7 +228,8 @@ def test_tables_are_complete_and_stdlib_only():
     # 0c2c8e0a9 (measure-coverage): ann-refine has cuVS/hipVS on NVIDIA/AMD and no Apple opponent;
     # lowbit-matmul-int15 has torch arms on NVIDIA/AMD and none on Apple: both race ours alone on Apple.
     # Andrew 2026-11-17: internal-call-overhead-lr-at is not a race (call overhead, internal check), our arm only.
-    assert alone == {"internal-call-overhead-lr-at", "ann-refine", "lowbit-matmul-int15", "sgd-clf", "sgd-reg", "incremental-pca", "tree-shap",
+    # lane fx-harness-honest (2026-11-18): the user-default graph calls (cached=False) are our arm only.
+    assert alone == {"internal-call-overhead-lr-at", "gcn-default-call", "graphsage-default-call", "ann-refine", "lowbit-matmul-int15", "sgd-clf", "sgd-reg", "incremental-pca", "tree-shap",
                      "decision-tree-clf", "decision-tree-reg", "bagging-clf", "bagging-reg",
                      "adaboost-clf", "adaboost-reg", "voting-clf", "voting-reg",
                      "stacking-clf", "stacking-reg", "quantile", "radius-neighbors", "tsne",
@@ -576,6 +577,64 @@ def test_own_layer_retains_outputs_without_false_opponent_comparison(monkeypatch
     q = A.quality(lane, {}, {'ours': actual, 'torch-eager-fp32': {'y': np.zeros((1, 2))}})
     assert bool(q['ours']) is comparable
     assert gpu.info['output_comparable'] is comparable
+
+
+def test_graph_lanes_state_cached_and_keep_the_default_call_on_the_board():
+    """lane fx-harness-honest (2026-11-18 audit H1): gcn/graphsage say cached=True for both arms in the notes (the
+    settings key), the default-call rows are our arm only with cached=False, and no note still says ours has none."""
+    for lane in ("gcn", "graphsage"):
+        notes = " ".join(A.lane_config(lane)["notes"])
+        assert "cached=True" in notes and "ours has no `cached`" not in notes, lane
+        assert A.opponents("nvidia", lane), lane
+    for lane, base in (("gcn-default-call", "gcn"), ("graphsage-default-call", "graphsage")):
+        s = A.LANES[lane]
+        assert s["own_only"] and s["graph_cached"] is False and s["task"] == A.LANES[base]["task"]
+        assert s["params"] == A.LANES[base]["params"] and s["block"] == A.LANES[base]["block"]
+        assert all(A.opponents(v, lane) == () for v in ("nvidia", "amd", "apple"))
+        assert "cached=False" in " ".join(A.lane_config(lane)["notes"])
+        assert A.lane_config(lane) != A.lane_config(base)
+    assert A.GRAPH_CACHED_CLOCK.endswith("(all arms)")
+
+
+@pytest.mark.parametrize('lane,cached', [('gcn', True), ('graphsage', True),
+                                         ('gcn-default-call', False), ('graphsage-default-call', False)])
+def test_graph_layer_passes_reads_back_and_stamps_cached(monkeypatch, tmp_path, lane, cached):
+    """lane fx-harness-honest (2026-11-18): ours' graph layer gets cached explicitly (True on the raced lanes, the
+    user default False on the default-call rows), the layer's own value is read back into the record and info, and
+    only the raced lanes carry the harness-clock stamp."""
+    nf = A._tool('neural_fixtures')
+    D = {'X': np.array([[1., 2.]], dtype=np.float32)}
+    spec = A.LANES[lane]
+    entry = nf.write_entry(str(tmp_path), lane, 'fixture', nf.variant(spec['task'], D),
+                           task=spec['task'], params=spec['params'], smoke=False,
+                           x=D['X'], dy=np.ones((1, 2), dtype=np.float32),
+                           state={'conv.weight': np.array([3.], dtype=np.float32)},
+                           extra={'in_channels': 2})
+    nf.write_manifest(str(tmp_path), [entry], torch_version='fixture', seed=A.SEED)
+    monkeypatch.setattr(A, '_NEURAL_FIXTURES', str(tmp_path))
+    monkeypatch.setattr(A, '_DATASET', 'fixture')
+    monkeypatch.setattr(A, '_graph_layer_inputs', lambda D: (D['X'], np.zeros((2, 0), dtype=np.int64)))
+
+    class Layer:
+        def __init__(self, random_state=0, cached=False, **kw):
+            self.seed, self.cached = random_state, cached
+        def forward(self, x, *extra): return x + self.seed
+        def backward(self, dy): return dy
+    monkeypatch.setattr(A, '_ours_class', lambda lane: ('FixtureLayer', Layer))
+    monkeypatch.setattr(A, '_ours_info', lambda lane: {})
+    r = A._build_layer(lane, 'ours', D)
+    assert r.record['params']['cached'] is cached
+    assert r.info['graph_cached'] == {'asked': cached, 'read_back': cached}
+    assert r.info.get('harness_clock') == (A.GRAPH_CACHED_CLOCK if cached else None)
+
+    class Liar(Layer):
+        @property
+        def cached(self): return not self._c
+        @cached.setter
+        def cached(self, v): self._c = v
+    monkeypatch.setattr(A, '_ours_class', lambda lane: ('FixtureLayer', Liar))
+    with pytest.raises(RuntimeError, match='reads back'):
+        A._build_layer(lane, 'ours', D)
 
 
 def test_fairness_fix_20261013_shared_ridge_is_the_centered_ridge_and_bit_stable():

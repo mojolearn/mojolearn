@@ -459,3 +459,19 @@ def test_harness_clock_all_arms_breaks_a_stored_opponent_pair():
     del opp["harness_clock"]
     ours["harness_clock"] = "2026-11-18 outputs reduced after the clock (our arm)"   # only our clock changed
     assert not any(b.startswith("harness clock") for b in RF._pair_problems(rr, ours, opp)[0])
+
+
+def test_graph_cached_settings_change_breaks_a_stored_torch_pair():
+    # lane fx-harness-honest (2026-11-18): gcn/graphsage now record cached=True for both arms (the settings key
+    # changed); a stored torch cell from before is BROKEN until the opponent job re-scores it, then fair again
+    stamp = "2026-11-18 graph layers cached=True, settings key changed (all arms)"
+    rr = race("gcn", [("torch-eager-fp32", 10, {})])
+    ours, opp = rr["cells"]
+    ours["harness_clock"] = stamp
+    assert RF.opponent_rescore_owed(ours) == stamp
+    assert RF.opponent_rescore_owed(opp) is None
+    assert any(b.startswith("harness clock differs") for b in RF._pair_problems(rr, ours, opp)[0])
+    opp["harness_clock"] = stamp
+    assert not any(b.startswith("harness clock") for b in RF._pair_problems(rr, ours, opp)[0])
+    assert RF.opponent_rescore_owed({"harness_clock": "x (our arm)"}) is None
+    assert RF.opponent_rescore_owed(None) is None
