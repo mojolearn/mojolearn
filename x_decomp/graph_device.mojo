@@ -24,6 +24,7 @@ from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from max.gpu.host import DeviceContext
 
+from core.device_zero import enqueue_fill_addr
 from x_decomp.cells import F32Ptr, I32Ptr
 from x_decomp.device import TPB, _blocks, xd_ctx, dijkstra_kernel, DIJKSTRA_ROWS
 from x_decomp.resident import pool_alloc, pool_free, _ptr
@@ -55,12 +56,6 @@ def _ip(p: F32Ptr) -> I32Ptr:
 
 
 # ---- kernels ---------------------------------------------------------------
-
-
-def xg_zero_kernel(w: F32Ptr, count: Int32):
-    var t = _t()
-    if t < Int(count):
-        w.unsafe_store(t, Float32(0))
 
 
 def xg_knn_kernel(
@@ -253,8 +248,7 @@ def xg_copy1_kernel(src: I32Ptr, dst: MutPointer[Int32, MutAnyOrigin]):
 
 
 def _zero(ctx: DeviceContext, p: F32Ptr, count: Int) raises:
-    if count > 0:
-        ctx.enqueue_function[xg_zero_kernel](p, Int32(count), grid_dim=_blocks(count), block_dim=TPB)
+    enqueue_fill_addr[DType.float32](ctx, Int(p), count, Float32(0))
 
 
 # ---- typed entries of the Python doors (the sibling shell; resident ids)

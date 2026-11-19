@@ -128,7 +128,6 @@ from gbdt.methods.greedy_subsets_searcher.kernel.histogram_utils import (
     copy_histograms_vec4_kernel,
     write_reduces_from_fixed_kernel,
     write_reduces_histograms_kernel,
-    zero_buffer_kernel,
     zero_histogram_kernel,
     zero_histograms_kernel,
 )

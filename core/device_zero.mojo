@@ -153,3 +153,41 @@ def enqueue_fill[
         p, Int32(n), value,
         grid_dim=_blocks_for(n), block_dim=ZERO_TPB,
     )
+
+
+def enqueue_fill_addr[
+    dt: DType
+](ctx: DeviceContext, addr: Int, n: Int, value: Scalar[dt]) raises:
+    """`n` copies of `value` from device address `addr` (a buffer's or a
+    view's first element), in ONE launch whatever `n` and `value` are, so a
+    caller that had its own one-launch fill kernel keeps its launch count:
+    the SIMD zero kernel when the value is all zero bytes and the span is a
+    whole number of 16-byte groups on a 4-byte-aligned start, otherwise the
+    scalar fill. Nothing is enqueued for `n <= 0`. The span must lie inside
+    the caller's buffer."""
+    if n <= 0:
+        return
+    if _all_zero_bits[dt](value):
+        var nbytes = n * size_of[Scalar[dt]]()
+        if nbytes % 16 == 0 and addr % 4 == 0:
+            var pz = MutPointer[UInt32, MutAnyOrigin](unsafe_from_address=addr)
+            var n_vec = nbytes // 16
+            ctx.enqueue_function[zero_words_kernel](
+                pz, Int32(n_vec),
+                grid_dim=_blocks_for(n_vec, 4), block_dim=ZERO_TPB,
+            )
+            return
+    var p = MutPointer[Scalar[dt], MutAnyOrigin](unsafe_from_address=addr)
+    ctx.enqueue_function[fill_kernel[dt]](
+        p, Int32(n), value,
+        grid_dim=_blocks_for(n), block_dim=ZERO_TPB,
+    )
+
+
+def enqueue_fill_n[
+    dt: DType
+](ctx: DeviceContext, buf: DeviceBuffer[dt], n: Int, value: Scalar[dt]) raises:
+    """`enqueue_fill_addr` over the first `n` elements of `buf` (`n` is
+    capped at the buffer's length)."""
+    var m = n if n < len(buf) else len(buf)
+    enqueue_fill_addr[dt](ctx, Int(buf.unsafe_ptr()), m, value)

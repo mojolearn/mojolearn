@@ -537,22 +537,9 @@ def kernel_count_new_mst_edges(
 comptime MST_FILL_TPB = 256
 
 
-def fill_i32_kernel(
-    dst: MutPointer[Int32, MutAnyOrigin], value: Int32, n_in: Int32
-):
-    """`thrust::fill` on an Int32 range."""
-    var i = get_1D_idx()
-    if i < Int(n_in):
-        dst.unsafe_store(i, value)
-
-
-def fill_u8_kernel(
-    dst: MutPointer[UInt8, MutAnyOrigin], value: UInt8, n_in: Int32
-):
-    """`cudaMemsetAsync` on the `bool` edge mask."""
-    var i = get_1D_idx()
-    if i < Int(n_in):
-        dst.unsafe_store(i, value)
+# `thrust::fill` on an Int32 range and `cudaMemsetAsync` on the `bool` edge
+# mask are `core/device_zero.mojo` `enqueue_fill_n` (one launch each, as the
+# private fill kernels that stood here were).
 
 
 def sequence_i32_kernel(dst: MutPointer[Int32, MutAnyOrigin], n_in: Int32):

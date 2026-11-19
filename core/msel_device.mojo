@@ -30,7 +30,7 @@ from std.memory import bitcast, unsafe_memcpy
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 
 from core.ctx_key import ctx_cache_key
-from core.device_zero import enqueue_fill
+from core.device_zero import enqueue_fill, enqueue_fill_n
 from core.host_parallel import host_parallelize
 from core.host_predict_threads import host_predict_task_count_work, host_predict_chunk
 from core.shared_slot import shared_slot_lock, shared_slot_unlock, SharedSlot
@@ -592,14 +592,6 @@ def device_rebase_offsets_i32(
 # the permutation, so the bytes do not depend on the schedule.
 
 
-def _fill_i32_kernel(dst: _I32, n: Int64, v: Int32):
-    var step = _stride()
-    var t = _tid()
-    while t < Int(n):
-        dst.unsafe_store(t, v)
-        t += step
-
-
 def _split_side_kernel(
     perm: _I64, m: Int64, n_test: Int64, n_side: Int64, counts: _I64, table: _I32, sums: _I32, status: _I32,
 ):
@@ -637,9 +629,7 @@ def device_split_table_i32(
             dst_buf=d_perm.create_sub_buffer[DType.int64](0, n_side), src_ptr=_I64(unsafe_from_address=perm_addr)
         )
     ctx.enqueue_copy(dst_buf=d_counts, src_ptr=_I64(unsafe_from_address=counts_addr))
-    ctx.enqueue_function[_fill_i32_kernel](
-        d_table.unsafe_ptr(), Int64(m), Int32(2), grid_dim=_grid(m), block_dim=MSEL_TPB,
-    )
+    enqueue_fill_n(ctx, d_table, m, Int32(2))
     if n_side > 0:
         ctx.enqueue_function[_split_side_kernel](
             d_perm.unsafe_ptr(), Int64(m), Int64(n_test), Int64(n_side), d_counts.unsafe_ptr(),

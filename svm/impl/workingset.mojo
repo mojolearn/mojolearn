@@ -50,11 +50,11 @@ from svm.impl.fast_ws_select import (
 )
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
 from core.accelerator_target import TARGET_HAS_APPLE_GPU
+from core.device_zero import enqueue_fill_n
 from svm.checks.device_select import (
     SEL_TPB,
     SelectScratch,
     copy_i32_kernel,
-    fill_u8_kernel,
     gather_u8_by_u32_kernel,
     range_i32_kernel,
     twiddle_keys_kernel,
@@ -337,10 +337,7 @@ struct WorkingSet(Movable):
         # In case we could not find enough elements, then we just fill using
         # the still available elements.
         if n_already_selected < self.n_ws:
-            ctx.enqueue_function[fill_u8_kernel](
-                self.available.unsafe_ptr(), UInt8(1), Int32(nt),
-                grid_dim=_grid(nt), block_dim=SEL_TPB,
-            )
+            enqueue_fill_n(ctx, self.available, nt, UInt8(1))
             n_already_selected += self.gather_available(
                 ctx, n_already_selected, self.n_ws - n_already_selected, True
             )
