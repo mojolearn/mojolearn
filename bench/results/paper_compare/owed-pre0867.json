@@ -655,7 +655,8 @@
   "llama-kv-stride-cap": {
    "define": "MOJOLEARN_LLAMA_FAST_KV_STRIDE_CAP",
    "status": "define in code (transformer/impl/llama/modeling_llama.mojo LLAMA_FAST_KV_STRIDE_CAP; transformer/host/transformer_block_host.mojo HOST_KV_STRIDE_CAP; bindings/transformer_public_native_door.mojo _KV_STRIDE_CAP): B = the full-causal KV cache at stride max_tokens, appended in place by the launch that gathers the packed span (no whole-capacity copy back of K and V per token per layer); A = the cache packed at stride s, repacked and copied back every token. Build every binding that imports modeling_llama, the host transformer binding and the transformer public door with the define",
-   "owed": "RUN"
+   "owed": "HELD",
+   "evidence": "A/B round 1 2026-11-19, NVIDIA L40S host bd9c355c19c0 (14-core cgroup), wheel 0c68d6cd27 and its B set, base and arm back to back in one pod job (nvc1-0006, tag nvc-ab-20261119T125554Z-6f7afc; ~/mojolearn-evidence/measure-candidate/build-0c68d6cd27/ab1/x/, tables ~/mojolearn-evidence/briefs-20261118/fx-verdicts3/tab-<arm>.txt), one scored run per arm: ids, outputs and digests equal on all 4 cells; arm/base causal-lm-generate 0.90 (989.5 -> 893.4; the row's other base 1019.7), causal-lm-generate-smollm2 1.00, transformer-decode 0.98, samba-decode 1.02: one row faster, three flat, none slower. NOT flipped (the flip changes the documented TransformerState k_cache / v_cache layout and state_dict bytes, and transformer/checks/transformer_check.mojo needs adapting), NOT deleted (a row winner); kept default off; Andrew decides: flip with the layout change, or delete (lane fx-verdicts3)"
   },
   "gemm-worklist": {
    "define": "MOJOLEARN_GEMM_FAST_WORKLIST",

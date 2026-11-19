@@ -1574,6 +1574,16 @@ def _expect_optional(name: String, got: Int, want: Int, on: Bool) raises:
         )
 
 
+# MOJOLEARN_LLAMA_FAST_KV_STRIDE_CAP, A/B round 1 2026-11-19 (lane fx-verdicts3; NVIDIA L40S host bd9c355c19c0, wheel
+# 0c68d6cd27 and its B set, base and arm back to back in one pod job, tag nvc-ab-20261119T125554Z-6f7afc, one scored
+# run per arm; ids, outputs and digests equal on 4 cells). Base -> arm ms: causal-lm-generate (mojolearn-162m)
+# 989.5 -> 893.4 (0.90; the row's other base run in the job 1019.7), causal-lm-generate-smollm2 1566.2 -> 1561.9
+# (1.00), transformer-decode 1156.0 -> 1132.5 (0.98), samba-decode 1483.3 -> 1514.9 (1.02). One row faster beyond
+# its base spread, three flat, none slower: the copy-back it removes is capacity x kv width x layers floats a token,
+# which is largest on the 162M model. NOT FLIPPED and NOT deleted: a flip changes what a user sees (the documented
+# TransformerState.k_cache / v_cache layout and state_dict bytes, python/mojolearn/_transformer_impl.py) and needs
+# transformer/checks/transformer_check.mojo adapted (its packed-span plants are red under the arm). Stays default off;
+# the decision is Andrew's (docs/apple-fast/EXPERIMENTS.md, owed arm llama-kv-stride-cap).
 comptime LLAMA_FAST_KV_STRIDE_CAP = is_defined["MOJOLEARN_LLAMA_FAST_KV_STRIDE_CAP"]()
 """Lane fx-kv-inplace (2026-11-18), EXPERIMENT, default OFF
 (`-D MOJOLEARN_LLAMA_FAST_KV_STRIDE_CAP`; docs/apple-fast/EXPERIMENTS.md).
