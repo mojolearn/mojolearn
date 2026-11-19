@@ -19,6 +19,8 @@ from core.scaler_fit_impl import scaler_cast
 from core.host_sparse_impl import host_sparse_place, host_sparse_compressed, host_sparse_coo, host_sparse_dia, host_sparse_uint64_bound
 from bindings.py_cpython_table import cpython_table
 from bindings.host_sparse_native_run import _address_in
+from bindings.host_rest_keys_unpack import host_rest_keys
+from bindings.py_balanced import py_item
 
 
 def host_sparse_format(value: PythonObject) raises -> String:
@@ -81,13 +83,14 @@ def host_sparse_format(value: PythonObject) raises -> String:
 
 
 def _sparse_fields(value: PythonObject) raises -> PythonObject:
+    var nk = host_rest_keys()
     # The caller has matched an exact supported SciPy class. Explicit native
     # type descriptors read its ABCMeta-owned metadata without dispatching any
     # metaclass or instance attribute hook; only a native dictionary is used.
     var b = native_loaded_module("builtins")
-    var mro = py_call(b.type.__dict__["__mro__"].__get__, py_type(value))
+    var mro = py_call(py_item(b.type.__dict__, nk[].k___mro__).__get__, py_type(value))
     for i in range(len(mro)):  # driver-loop: admitted sparse class dictionary descriptors
-        var descriptor = py_get(_pd_type_fields(mro[i]), "__dict__")
+        var descriptor = py_get(_pd_type_fields(mro[i]), nk[].k___dict__)
         if descriptor is not None and py_type(descriptor) is py_type(b.memoryview.obj):
             var fields = py_call(descriptor.__get__, value)
             if py_type(fields) is not b.dict:
@@ -100,18 +103,20 @@ def _sparse_fields(value: PythonObject) raises -> PythonObject:
 
 
 def _sparse_aliases(context: PythonObject) raises -> PythonObject:
-    var aliases = py_get(context, "host_sparse_integer_aliases")
+    var nk = host_rest_keys()
+    var aliases = py_get(context, nk[].k_host_sparse_integer_aliases)
     if aliases is None:
         var dtype = native_numpy_dtype(context)
         # NumPy exposes long long separately from its platform int64 dtype.
         # Both are existing SciPy storage types, with the same native words.
         aliases = Python.tuple(py_call(dtype, "q"), py_call(dtype, "Q"))
-        py_setitem(context, "host_sparse_integer_aliases", aliases)
+        py_setitem(context, nk[].k_host_sparse_integer_aliases, aliases)
     return aliases
 
 
 def _sparse_dtype_known(dtype: PythonObject, context: PythonObject) raises -> Bool:
-    var types = py_call(native_loaded_module("builtins").list, context["numeric_dtypes"].values())
+    var nk = host_rest_keys()
+    var types = py_call(native_loaded_module("builtins").list, py_item(context, nk[].k_numeric_dtypes).values())
     var cls = py_type(dtype)
     var known = False
     for i in range(len(types)):  # driver-loop: native numeric dtype identities before descriptor reads
@@ -157,8 +162,9 @@ struct _SparseArraySnapshot(Copyable, Movable):
 
 def _sparse_array(value: PythonObject, rank: Int, context: PythonObject,
                   role: Int = 0) raises -> _SparseArraySnapshot:
+    var nk = host_rest_keys()
     # role: 0 numeric data, 1 signed indices, 2 LIL object-row references.
-    if py_type(value) is not context["ndarray"]:
+    if py_type(value) is not py_item(context, nk[].k_ndarray):
         raise Error("TypeError: sparse storage requires an ordinary ndarray of the declared rank")
     var captured = _SparseArraySnapshot()
     captured.keep = value
@@ -233,6 +239,7 @@ def _sparse_object_at(captured: _SparseArraySnapshot, index: Int) raises -> Pyth
 
 
 def _sparse_scalar_word(value: PythonObject, kind: Int, width: Int, context: PythonObject) raises -> UInt64:
+    var nk = host_rest_keys()
     var b = native_loaded_module("builtins")
     var cls = py_type(value)
     var source_kind = 0
@@ -258,7 +265,7 @@ def _sparse_scalar_word(value: PythonObject, kind: Int, width: Int, context: Pyt
     elif cls is b.float:
         source_kind = 2
         word = bitcast[DType.uint64](Float64(py=value))
-    elif _one_of(cls, context["scalar_types"]) or cls is _sparse_aliases(context)[0].type or cls is _sparse_aliases(context)[1].type:
+    elif _one_of(cls, py_item(context, nk[].k_scalar_types)) or cls is _sparse_aliases(context)[0].type or cls is _sparse_aliases(context)[1].type:
         var dtype = value.dtype
         source_width = Int(py=dtype.itemsize)
         source_kind = cast_in_kind(Int(py=dtype.num), source_width, "sparse scalar")
@@ -290,9 +297,10 @@ def _sparse_scalar_word(value: PythonObject, kind: Int, width: Int, context: Pyt
 
 
 def _sparse_coordinate(value: PythonObject, limit: Int, context: PythonObject) raises -> Int:
+    var nk = host_rest_keys()
     var b = native_loaded_module("builtins")
     var cls = py_type(value)
-    if cls is not b.int and not _one_of(cls, context["integer_types"]) and cls is not _sparse_aliases(context)[0].type and cls is not _sparse_aliases(context)[1].type:
+    if cls is not b.int and not _one_of(cls, py_item(context, nk[].k_integer_types)) and cls is not _sparse_aliases(context)[0].type and cls is not _sparse_aliases(context)[1].type:
         raise Error("TypeError: sparse coordinates must be native integers")
     var index = Int(bitcast[DType.int64](_sparse_scalar_word(value, 1, 8, context)))
     if index < 0 or index >= limit:
@@ -316,12 +324,13 @@ struct _SparseKinds(Movable):
     var memo: List[Int]  # quads: class, source kind, source width, native
 
     def __init__(out self, context: PythonObject) raises:
+        var nk = host_rest_keys()
         var b = native_loaded_module("builtins")
         self.int_class = Int(b.int._obj_ptr)
         self.bool_class = Int(b.bool._obj_ptr)
         self.float_class = Int(b.float._obj_ptr)
-        self.scalars = _type_addresses(context["scalar_types"])
-        self.integers = _type_addresses(context["integer_types"])
+        self.scalars = _type_addresses(py_item(context, nk[].k_scalar_types))
+        self.integers = _type_addresses(py_item(context, nk[].k_integer_types))
         # The aliases are retained in the context; their scalar classes live
         # as long as the dtypes do.
         var aliases = _sparse_aliases(context)
@@ -440,15 +449,16 @@ def _sparse_coordinate_k(value: PythonObject, limit: Int, mut kinds: _SparseKind
 
 
 def host_sparse_dense(source: PythonObject, format: String, context: PythonObject) raises -> PythonObject:
+    var nk = host_rest_keys()
     if format.byte_length() == 0 or host_sparse_format(source) != format:
         raise Error("TypeError: sparse storage requires an exact supported SciPy container")
     var b = native_loaded_module("builtins")
-    var mro = py_call(b.type.__dict__["__mro__"].__get__, py_type(source))
+    var mro = py_call(py_item(b.type.__dict__, nk[].k___mro__).__get__, py_type(source))
     for i in range(len(mro)):  # driver-loop: refuse sparse finalizers before acquiring storage owners
-        if py_get(_pd_type_fields(mro[i]), "__del__") is not None:
+        if py_get(_pd_type_fields(mro[i]), nk[].k___del__) is not None:
             raise Error("TypeError: sparse storage cannot use Python finalizers")
-    var fields = py_call(py_type(Python.dict()).__dict__["copy"], _sparse_fields(source))
-    var shape = fields["_shape"]
+    var fields = py_call(py_item(py_type(Python.dict()).__dict__, nk[].k_copy), _sparse_fields(source))
+    var shape = py_item(fields, nk[].k__shape)
     if py_type(shape) is not b.tuple or len(shape) != 2 or py_type(shape[0]) is not b.int or py_type(shape[1]) is not b.int:
         raise Error("sparse input must have a native two-dimensional shape")
     var rows = Int(py=shape[0])
@@ -464,25 +474,25 @@ def host_sparse_dense(source: PythonObject, format: String, context: PythonObjec
     var width = 0
     var native = True
     if objects:
-        var dtype = fields["dtype"]
+        var dtype = py_item(fields, nk[].k_dtype)
         var info = _sparse_dtype(dtype, context)
         kind = info[0]
         width = info[1]
         native = info[2]
         _ = py_call(owners.append, dtype)
     else:
-        data = _sparse_array(fields["data"], 3 if format == "bsr" else (2 if format == "dia" else 1), context)
+        data = _sparse_array(py_item(fields, nk[].k_data), 3 if format == "bsr" else (2 if format == "dia" else 1), context)
         kind = data.kind
         width = data.width
         native = data.native
         _ = py_call(owners.append, data.owner)
     if (format == "bsr" or format == "dia") and not native:
         raise Error("sparse BSR and DIA data requires native byte order")
-    var store = host_archive_typed(Python.tuple(rows * columns * width), "<u1", context["output_context"])
+    var store = host_archive_typed(Python.tuple(rows * columns * width), "<u1", py_item(context, nk[].k_output_context))
     var destination = Int(py=classical_address(store))
     if format == "csr" or format == "csc" or format == "bsr":
-        var pointers = _sparse_indices(fields["indptr"], context)
-        var indices = _sparse_indices(fields["indices"], context)
+        var pointers = _sparse_indices(py_item(fields, nk[].k_indptr), context)
+        var indices = _sparse_indices(py_item(fields, nk[].k_indices), context)
         _ = py_call(owners.append, pointers.owner)
         _ = py_call(owners.append, indices.owner)
         var br = data.shape[1] if format == "bsr" else 1
@@ -500,7 +510,7 @@ def host_sparse_dense(source: PythonObject, format: String, context: PythonObjec
         _ = pointers^
         _ = indices^
     elif format == "coo":
-        var coords = fields["coords"]
+        var coords = py_item(fields, nk[].k_coords)
         if py_type(coords) is not b.tuple or len(coords) != 2:
             raise Error("sparse coordinates must contain two native index arrays")
         var row = _sparse_indices(coords[0], context)
@@ -516,7 +526,7 @@ def host_sparse_dense(source: PythonObject, format: String, context: PythonObjec
         _ = col^
         _ = coords^
     elif format == "dia":
-        var offsets = _sparse_indices(fields["offsets"], context)
+        var offsets = _sparse_indices(py_item(fields, nk[].k_offsets), context)
         _ = py_call(owners.append, offsets.owner)
         if offsets.count != data.shape[0]:
             raise Error("sparse diagonal count differs from stored data")
@@ -525,7 +535,7 @@ def host_sparse_dense(source: PythonObject, format: String, context: PythonObjec
             data.address, data.strides[0], data.strides[1], data.shape[0], data.shape[1], width, kind, native)
         _ = offsets^
     elif format == "dok":
-        var dictionary = fields["_dict"]
+        var dictionary = py_item(fields, nk[].k__dict)
         if py_type(dictionary) is not b.dict:
             raise Error("TypeError: sparse DOK storage requires a native dictionary")
         var pairs = py_call(b.list, dictionary.items())
@@ -548,8 +558,8 @@ def host_sparse_dense(source: PythonObject, format: String, context: PythonObjec
         _ = pairs^
         _ = dictionary^
     elif format == "lil":
-        var indices = _sparse_array(fields["rows"], 1, context, 2)
-        var values = _sparse_array(fields["data"], 1, context, 2)
+        var indices = _sparse_array(py_item(fields, nk[].k_rows), 1, context, 2)
+        var values = _sparse_array(py_item(fields, nk[].k_data), 1, context, 2)
         _ = py_call(owners.append, Python.tuple(indices.owner, values.owner))
         if indices.count != rows or values.count != rows:
             raise Error("sparse LIL storage requires one native object row per sample")
@@ -560,8 +570,8 @@ def host_sparse_dense(source: PythonObject, format: String, context: PythonObjec
             var row_values = _sparse_object_at(values, row)
             if py_type(row_indices) is not b.list or py_type(row_values) is not b.list:
                 raise Error("TypeError: sparse LIL rows require matching native lists")
-            var saved_indices = py_call(b.list.__dict__["copy"], row_indices)
-            var saved_values = py_call(b.list.__dict__["copy"], row_values)
+            var saved_indices = py_call(py_item(b.list.__dict__, nk[].k_copy), row_indices)
+            var saved_values = py_call(py_item(b.list.__dict__, nk[].k_copy), row_values)
             var entries = len(saved_indices)
             if entries != len(saved_values):
                 raise Error("TypeError: sparse LIL rows require matching native lists")
@@ -577,7 +587,7 @@ def host_sparse_dense(source: PythonObject, format: String, context: PythonObjec
         raise Error("TypeError: unknown native sparse storage schema")
     if kind == 0 and width == 8:
         host_sparse_uint64_bound(destination, rows, columns, columns * width, width, True)
-    var result = host_archive_typed(shape, "<f4", context["output_context"])
+    var result = host_archive_typed(shape, "<f4", py_item(context, nk[].k_output_context))
     scaler_cast(destination, columns * width, width, rows, columns, width, kind, True,
         MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(result))))
     # The dense Array's native owner slot carries original exporters through

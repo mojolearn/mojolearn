@@ -9,14 +9,16 @@ from bindings.classical_pandas_door import _pd_class, _pd_fields, _pd_get, _pd_v
 from bindings.classical_arrays_door import classical_address
 from bindings.sequential_inputs_door import _promote
 from core.host_inference_impl import host_inference_raw_finite
+from bindings.host_rest_keys_unpack import host_rest_keys
 
 
 def host_inference_pandas_finite(source: PythonObject, context: PythonObject) raises:
+    var nk = host_rest_keys()
     # A Series is rejected by the ordinary 2-D input check. Only DataFrames
     # can reach a valid CD prediction and need this pre-cast matrix check.
     if py_type(source) is not _pd_class("pandas.core.frame", "DataFrame"):
         return
-    var manager = py_get(_pd_fields(source), "_mgr")
+    var manager = py_get(_pd_fields(source), nk[].k__mgr)
     if py_type(manager) is not _pd_class("pandas.core.internals.managers", "BlockManager"):
         raise Error("TypeError: pandas prediction requires native block metadata")
     var blocks = _pd_get("pandas._libs.internals", "BlockManager", "blocks", manager)

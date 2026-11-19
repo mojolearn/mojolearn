@@ -14,11 +14,14 @@ from bindings.host_logistic_native_door import host_logistic_classes, host_logis
 from bindings.host_logistic_query_boundary_pack import (
     host_logistic_operation,
 )
+from bindings.host_rest_keys_unpack import host_rest_keys
+from bindings.py_balanced import py_item
 
 
 def host_logistic_score_predict(model: PythonObject, source: PythonObject,
                                 error_context: PythonObject) raises -> PythonObject:
-    var context = error_context["host_inference_context"]
+    var nk = host_rest_keys()
+    var context = py_item(error_context, nk[].k_host_inference_context)
     # Keep the caller-frame/output-format rule: forwarding between compiled
     # entries never added a Python frame, so direct reuse has the same depth.
     var public = classical_caller_outside(error_context)
