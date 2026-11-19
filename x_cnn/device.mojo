@@ -906,6 +906,42 @@ def put_i[resident: Bool](ctx: DeviceContext, slot: Int, src: IP, n: Int) raises
 comptime PRM_CACHE_MAX = 32
 comptime PRM_CACHE_WORDS = 64
 
+# Experiment MOJOLEARN_CNN_FAST_OP_NOWAIT (lane fx-rnn-cnn-fit, 2026-11-19; default OFF, A/B owed on the NVIDIA L40S:
+# owed-pre0867.json "cnn-op-nowait"). Every entry ends in `ctx.synchronize()` so that its host uploads and
+# downloads are finished and its host arrays may go. The CNN program's ops (autograd/cnn_block_op.mojo: the conv
+# block and the head, forward and backward) call the RESIDENT forms from a session that owns every argument as a
+# device buffer, shares this one in-order context and reads nothing on the host before its own wait (the fit's one
+# sync at the end, a predict's download). There the six waits a training step (2 blocks + head, forward and
+# backward; 1,884 in the board's 314-step fit) only stop the host from enqueuing the next launches while the device
+# works. Under the define such a caller passes `may_defer` and the entry returns after its last launch.
+# What still forces the wait (entry_end): a non-resident form (host arrays in flight), and a parameter block too
+# long for the cache (its upload reads the caller's list: prm_block_cached). The cache's own copy of a block is
+# read by a queued upload until that upload runs, so under the define a full cache waits before it rewrites a
+# victim (_prm_cached). Workspace slots are safe without the wait: the context runs launches in order, so an
+# entry's kernels finish before the next entry's launches touch the slot, and `ws` waits before it replaces a
+# buffer. The same launches in the same order on the same words: no bit moves.
+# General, not a shape: any resident caller on this context may pass it. Rows: algos/cnn-clf fit and predict; a
+# neighbouring shape (3 x 32 x 32 images, channels 16, 32) and a non-board model (one block without a pool).
+# MODEL (unmeasured): 6 waits x 20-50 us of a 0.56 ms step.
+comptime CNN_OP_NOWAIT = is_defined["MOJOLEARN_CNN_FAST_OP_NOWAIT"]()
+
+
+@always_inline
+def prm_block_cached(words: List[Int32]) -> Bool:
+    """Whether `put_prm` uploads nothing from the caller's own list for
+    this block: the cache holds its copy, or the block is empty."""
+    return len(words) <= PRM_CACHE_WORDS
+
+
+def entry_end(ctx: DeviceContext, resident: Bool, may_defer: Bool, blocks_cached: Bool) raises:
+    """The wait that ends an entry. Skipped only under
+    MOJOLEARN_CNN_FAST_OP_NOWAIT, for a resident call whose caller allowed
+    it and whose parameter blocks all came from the cache (see above)."""
+    comptime if CNN_OP_NOWAIT:
+        if resident and may_defer and blocks_cached:
+            return
+    ctx.synchronize()
+
 
 def _prm_cached(ctx: DeviceContext, words: List[Int32]) raises -> Int:
     """The device address of a cached block holding `words` (uploaded on a
@@ -935,6 +971,9 @@ def _prm_cached(ctx: DeviceContext, words: List[Int32]) raises -> Int:
         s[].prm_used.append(s[].prm_clock)
         victim = len(s[].prm_keys) - 1
     else:
+        comptime if CNN_OP_NOWAIT:
+            # an entry that returned without its wait may have left the upload of this victim's words queued
+            ctx.synchronize()
         s[].prm_keys[victim] = words.copy()
         s[].prm_used[victim] = s[].prm_clock
     var addr = Int(s[].prm_bufs[victim].unsafe_ptr())
@@ -1438,8 +1477,9 @@ def mul_into(a: FP, b: FP, n: Int, dst: FP) raises:
     map2_into[mul_at](a, n, b, n, n, prm, dst)
 
 
-def linear_forward_m(a: List[Int], dev: Int, n: Int, d_in: Int, d_out: Int) raises:
-    """y = x W^T + b: the pinned GEMM NT, then one add per element; a = [x, w, b, y]."""
+def linear_forward_m(a: List[Int], dev: Int, n: Int, d_in: Int, d_out: Int, may_defer: Bool = False) raises:
+    """y = x W^T + b: the pinned GEMM NT, then one add per element; a = [x, w, b, y].
+    `may_defer`: see entry_end (all four arguments resident, dev = 15)."""
     var ctx = cnn_ctx()
     var dx = m_in(ctx, 0, a[0], n * d_in, isdev(dev, 0))
     var dw = m_in(ctx, 1, a[1], d_out * d_in, isdev(dev, 1))
@@ -1459,7 +1499,7 @@ def linear_forward_m(a: List[Int], dev: Int, n: Int, d_in: Int, d_out: Int) rais
         device_gemm(ctx, y, dx, dw, n, d_out, d_in, OP_NT)
         launch[bias_rows_at](ctx, fp(y), fp(db), fp(dout), fp(dout), ip(dp), ip(dp), n * d_out)
     m_fetch(ctx, dout, a[3], n * d_out, isdev(dev, 3))
-    ctx.synchronize()
+    entry_end(ctx, dev == 15, may_defer, prm_block_cached(prm))
     _ = prm^
     _ = dx^
     _ = dw^
@@ -1470,9 +1510,12 @@ def linear_forward_m(a: List[Int], dev: Int, n: Int, d_in: Int, d_out: Int) rais
     _ = ctx^
 
 
-def linear_forward_into[resident: Bool = False](x: FP, w: FP, bias: FP, n: Int, d_in: Int, d_out: Int, dst: FP) raises:
-    """y = x W^T + b (every argument resident, or every one host)."""
-    linear_forward_m([_a(x), _a(w), _a(bias), _a(dst)], 15 if resident else 0, n, d_in, d_out)
+def linear_forward_into[resident: Bool = False](
+    x: FP, w: FP, bias: FP, n: Int, d_in: Int, d_out: Int, dst: FP, may_defer: Bool = False,
+) raises:
+    """y = x W^T + b (every argument resident, or every one host).
+    `may_defer`: see entry_end."""
+    linear_forward_m([_a(x), _a(w), _a(bias), _a(dst)], 15 if resident else 0, n, d_in, d_out, may_defer)
 
 
 def fold_launch(ctx: DeviceContext, a: FP, b: FP, final_dst: FP, pp: IP, count: Int) raises:
@@ -2604,12 +2647,13 @@ def _conv_out(
 
 def conv_block_forward_into[resident: Bool = False](
     x: FP, w: FP, bias: FP, cprm: List[Int32], pprm: List[Int32], pool: Bool, dst: FP, idx_out: IP,
-    save_cols: Int = 0, save_y: Int = 0,
+    save_cols: Int = 0, save_y: Int = 0, may_defer: Bool = False,
 ) raises:
     """dst = maxpool(relu(conv(x))) (idx_out its winners), or relu(conv(x)) when `pool` is False.
     Resident with `save_cols` and `save_y` (device addresses, rows*C*KH*KW and
     N*OC*OH*OW floats): the im2col matrix and the conv output are written
-    there for the backward to read instead of recomputing them."""
+    there for the backward to read instead of recomputing them.
+    `may_defer`: see entry_end."""
     var N = Int(cprm[CP_N]); var C = Int(cprm[CP_C]); var OC = Int(cprm[CP_OC])
     var ckk = C * Int(cprm[CP_KH]) * Int(cprm[CP_KW])
     var rows = N * Int(cprm[CP_OH]) * Int(cprm[CP_OW])
@@ -2660,14 +2704,14 @@ def conv_block_forward_into[resident: Bool = False](
         launch[relu_maxpool_fwd_at](ctx, fp(yconv), fp(pout), fp(pout), fp(pout), ip(di), ip(dpp), no)
         fetch[resident](ctx, pout, dst, no)
         fetch_i[resident](ctx, di, idx_out, no)
-        ctx.synchronize()
+        entry_end(ctx, resident, may_defer, prm_block_cached(cprm) and prm_block_cached(pprm))
         _ = dpp^
         _ = di^
     else:
         if not fused_relu:
             launch[relu_fwd_at](ctx, fp(yconv), fp(yconv), fp(pout), fp(pout), ip(dp), ip(dp), ny)
         fetch[resident](ctx, pout, dst, ny)
-        ctx.synchronize()
+        entry_end(ctx, resident, may_defer, prm_block_cached(cprm))
     _ = dx^
     _ = dw^
     _ = dbias^

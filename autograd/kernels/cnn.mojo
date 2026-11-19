@@ -64,6 +64,8 @@ from x_cnn.ops import (
     relu_bwd_at,
 )
 from x_cnn.device import (
+    entry_end,
+    prm_block_cached,
     BIAS_TPB,
     BIAS_WS_SLOT,
     NI12_IMPLICIT_CONV,
@@ -462,9 +464,11 @@ def conv2d_backward_device(
     return out^
 
 
-def linear_backward_m(a: List[Int], dev: Int, n: Int, d_in: Int, d_out: Int) raises:
+def linear_backward_m(a: List[Int], dev: Int, n: Int, d_in: Int, d_out: Int, may_defer: Bool = False) raises:
     """dW = G^T X and db = G^T 1 (GEMM TN over the rows, the pinned fold),
-    dx = G W (GEMM NN); a = [x, w, g, dx, dW, db]."""
+    dx = G W (GEMM NN); a = [x, w, g, dx, dW, db]. `may_defer`: see
+    x_cnn/device.mojo entry_end (all six arguments resident, dev = 63; the
+    entry uploads no parameter block)."""
     var ctx = cnn_ctx()
     var dx = m_in(ctx, 0, a[0], n * d_in, isdev(dev, 0))
     var dw = m_in(ctx, 1, a[1], d_out * d_in, isdev(dev, 1))
@@ -481,7 +485,7 @@ def linear_backward_m(a: List[Int], dev: Int, n: Int, d_in: Int, d_out: Int) rai
     m_fetch(ctx, gx, a[3], n * d_in, isdev(dev, 3))
     m_fetch(ctx, gw, a[4], d_out * d_in, isdev(dev, 4))
     m_fetch(ctx, gb, a[5], d_out, isdev(dev, 5))
-    ctx.synchronize()
+    entry_end(ctx, dev == 63, may_defer, True)
     _ = dx^
     _ = dw^
     _ = dg^
@@ -493,17 +497,20 @@ def linear_backward_m(a: List[Int], dev: Int, n: Int, d_in: Int, d_out: Int) rai
 
 
 def linear_backward_into[resident: Bool = False](
-    x: FP, w: FP, g: FP, n: Int, d_in: Int, d_out: Int, gx_out: FP, gw_out: FP, gb_out: FP
+    x: FP, w: FP, g: FP, n: Int, d_in: Int, d_out: Int, gx_out: FP, gw_out: FP, gb_out: FP,
+    may_defer: Bool = False,
 ) raises:
     """`linear_backward_m` with every argument resident, or every one host."""
-    linear_backward_m([_a(x), _a(w), _a(g), _a(gx_out), _a(gw_out), _a(gb_out)], 63 if resident else 0, n, d_in, d_out)
+    linear_backward_m([_a(x), _a(w), _a(g), _a(gx_out), _a(gw_out), _a(gb_out)], 63 if resident else 0, n, d_in, d_out,
+                      may_defer)
 
 
 def conv_block_backward_into[resident: Bool = False](
     x: FP, w: FP, bias: FP, g: FP, idx: IP, cprm: List[Int32], pprm: List[Int32], pool: Bool, need_dx: Bool,
-    gx_out: FP, gw_out: FP, gb_out: FP, save_cols: Int = 0, save_y: Int = 0,
+    gx_out: FP, gw_out: FP, gb_out: FP, save_cols: Int = 0, save_y: Int = 0, may_defer: Bool = False,
 ) raises:
     """From the gradient of the block's output `g`: dx (when `need_dx`), dW, db.
+    `may_defer`: see x_cnn/device.mojo entry_end.
     Resident with `save_cols` and `save_y`: the forward's im2col matrix and
     conv output, read instead of recomputed (the same kernels on the same
     inputs produced them, so the values are the recomputation's)."""
@@ -586,7 +593,8 @@ def conv_block_backward_into[resident: Bool = False](
         _ = gx^
     fetch[resident](ctx, gw, gw_out, OC * ckk)
     fetch[resident](ctx, gb, gb_out, OC)
-    ctx.synchronize()
+    # cprm is always uploaded; `both` (cprm + pprm) only with a pool
+    entry_end(ctx, resident, may_defer, prm_block_cached(cprm) and ((not pool) or prm_block_cached(both)))
     _ = dx^
     _ = dw^
     _ = dbias^
