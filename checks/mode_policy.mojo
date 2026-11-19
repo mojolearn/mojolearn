@@ -58,11 +58,36 @@ Who reads the rows
     VENDOR_MATH     checks/numerics.mojo: identical_exp ... identical_clamp
     TILE_FREE       checks/kernel_matrix.mojo: lib_block_size_for
     MATRIX_UNITS    gemm/fast_matrix_units.mojo: GEMM_FAST_MATRIX_UNITS (the NVIDIA TF32 arm,
-                    `-D MOJOLEARN_GEMM_FAST_MATRIX_UNITS=<kind>`, a term of the row)
+                    `-D MOJOLEARN_GEMM_FAST_MATRIX_UNITS=<kind>`, a term of the row), and the
+                    classical family routes below
     WAITS_ELIDED    no seam yet (only waits that can move a bit)
 
 `MODE_POLICY_MASK` has bit i set when row i is relaxed. Bindings export it so
 verification and the compiled-kernel audits read the rows from the binary.
+
+The family routes of a row
+--------------------------
+A family route is one family's use of a row: one define, default off, a term
+of its row (so the row's mask bit is set and an identical build stops), and
+one constant here that the family's route module reads back. A route is taken
+only in a fast-rows build on the column it is written for; on any other
+column of a fast-rows build the define relaxes nothing there and the constant
+is False, so a host binding of the same set compiles and stays exact.
+
+    route (constant)                  define                                   row           column   who reads it
+    GEMM matrix units                 MOJOLEARN_GEMM_FAST_MATRIX_UNITS=<kind>  MATRIX_UNITS  NVIDIA   gemm/fast_matrix_units.mojo (neural dispatch,
+                                                                                                      sequence executor)
+    ROUTE_DECOMP_MATRIX_UNITS         MOJOLEARN_DECOMP_FAST_MATRIX_UNITS       MATRIX_UNITS  NVIDIA   decomposition/gram_matrix_units_route.mojo
+                                                                                                      (PCA / truncated SVD: the Gram past the
+                                                                                                      split-K width, the projections)
+    ROUTE_NEIGHBORS_MATRIX_UNITS      MOJOLEARN_NEIGHBORS_FAST_MATRIX_UNITS    MATRIX_UNITS  NVIDIA   neighbors/distance_matrix_units_route.mojo
+                                                                                                      (brute-force k-NN: the expanded L2
+                                                                                                      distance product at wide features)
+
+Each route has a quality check (the route's result against the exact FP32
+result, within a bound derived from the unit's operand width) and an owed A/B
+with quality beside the time (docs/apple-fast/EXPERIMENTS.md). None is a
+default: `policy_row_default` stays False until its A/B is in.
 """
 
 from std.sys.compile import is_defined
@@ -168,11 +193,25 @@ comptime CONTRACT_IDENTICAL = POLICY_BUILD == POLICY_BUILD_IDENTICAL
 #   MOJOLEARN_GEMM_FAST_MATRIX_UNITS=<kind> (gemm/fast_matrix_units.mojo, the
 #   NVIDIA tensor-core products): any non-zero kind relaxes MATRIX_UNITS.
 comptime _GEMM_MATRIX_UNITS_REQUESTED = get_defined_int["MOJOLEARN_GEMM_FAST_MATRIX_UNITS", 0]() != 0
+#   MOJOLEARN_DECOMP_FAST_MATRIX_UNITS (decomposition/gram_matrix_units_route.mojo: the PCA / truncated-SVD Gram
+#   past the split-K width and the projections on the NVIDIA tensor cores).
+comptime _DECOMP_MATRIX_UNITS_DEFINED = is_defined["MOJOLEARN_DECOMP_FAST_MATRIX_UNITS"]()
+#   MOJOLEARN_NEIGHBORS_FAST_MATRIX_UNITS (neighbors/distance_matrix_units_route.mojo: the brute-force k-NN
+#   expanded-L2 distance product at wide features on the NVIDIA tensor cores).
+comptime _NEIGHBORS_MATRIX_UNITS_DEFINED = is_defined["MOJOLEARN_NEIGHBORS_FAST_MATRIX_UNITS"]()
+# The classical family routes are written for the NVIDIA column only (AMD's MFMA at K > 1 and Apple's simdgroup
+# product are not written). On another column of a fast-rows build the define relaxes nothing: the term is False,
+# the row's bit stays clear there and the family's kernels are the exact ones.
+comptime _FAMILY_UNITS_COLUMN = TARGET_HAS_NVIDIA_GPU and not TARGET_HAS_APPLE_GPU
+comptime _DECOMP_MATRIX_UNITS_REQUESTED = _DECOMP_MATRIX_UNITS_DEFINED and _FAMILY_UNITS_COLUMN
+comptime _NEIGHBORS_MATRIX_UNITS_REQUESTED = _NEIGHBORS_MATRIX_UNITS_DEFINED and _FAMILY_UNITS_COLUMN
 
 # Any row define at all. Read by the compile error below, which must not
 # depend on the resolved rows.
 comptime _ANY_ROW_DEFINE = (
     _GEMM_MATRIX_UNITS_REQUESTED
+    or _DECOMP_MATRIX_UNITS_DEFINED
+    or _NEIGHBORS_MATRIX_UNITS_DEFINED
     or (
         is_defined["MOJOLEARN_MODE_FAST_FOLD_FREE"]()
         or is_defined["MOJOLEARN_MODE_FAST_CONTRACT_FREE"]()
@@ -188,7 +227,7 @@ comptime _ANY_ROW_DEFINE = (
 def _row(row: Int, requested: Bool) -> Bool:
     """Resolve one row for this build. Every row passes through here, so any
     module that reads a row also compiles the refusal."""
-    comptime assert not (CONTRACT_IDENTICAL and _ANY_ROW_DEFINE), "a MOJOLEARN_MODE_FAST_* relaxation (or a family arm of one, MOJOLEARN_GEMM_FAST_MATRIX_UNITS) was requested in a build that promises identical bits; relaxations are effective only in a fast build (-D MOJOLEARN_MODE_FAST_ROWS)"
+    comptime assert not (CONTRACT_IDENTICAL and _ANY_ROW_DEFINE), "a MOJOLEARN_MODE_FAST_* relaxation (or a family arm of one: MOJOLEARN_GEMM_FAST_MATRIX_UNITS, MOJOLEARN_DECOMP_FAST_MATRIX_UNITS, MOJOLEARN_NEIGHBORS_FAST_MATRIX_UNITS) was requested in a build that promises identical bits; relaxations are effective only in a fast build (-D MOJOLEARN_MODE_FAST_ROWS)"
     return policy_row_default(row, POLICY_BUILD, POLICY_COLUMN) or requested
 
 
@@ -203,7 +242,22 @@ comptime ROW_VENDOR_MATH = _row(POLICY_ROW_VENDOR_MATH, is_defined["MOJOLEARN_MO
 # Matrix units: reduced-precision products (TF32, BF16, MFMA forms).
 comptime ROW_MATRIX_UNITS = _row(
     POLICY_ROW_MATRIX_UNITS,
-    is_defined["MOJOLEARN_MODE_FAST_MATRIX_UNITS"]() or _GEMM_MATRIX_UNITS_REQUESTED,
+    (
+        is_defined["MOJOLEARN_MODE_FAST_MATRIX_UNITS"]()
+        or _GEMM_MATRIX_UNITS_REQUESTED
+        or _DECOMP_MATRIX_UNITS_REQUESTED
+        or _NEIGHBORS_MATRIX_UNITS_REQUESTED
+    ),
+)
+# The classical family routes of the matrix-units row (the table in the module docstring). True only in a
+# fast-rows build (never the legacy fast set, whose products are the old vendor arms, and never under the
+# contract: `_row` stops that build) on the NVIDIA column with the family's define passed. The family's route
+# module imports its constant; no other module reads the define.
+comptime ROUTE_DECOMP_MATRIX_UNITS = (
+    POLICY_BUILD == POLICY_BUILD_FAST_ROWS and ROW_MATRIX_UNITS and _DECOMP_MATRIX_UNITS_REQUESTED
+)
+comptime ROUTE_NEIGHBORS_MATRIX_UNITS = (
+    POLICY_BUILD == POLICY_BUILD_FAST_ROWS and ROW_MATRIX_UNITS and _NEIGHBORS_MATRIX_UNITS_REQUESTED
 )
 # Waits: only the waits whose removal can move a bit.
 comptime ROW_WAITS_ELIDED = _row(POLICY_ROW_WAITS_ELIDED, is_defined["MOJOLEARN_MODE_FAST_WAITS_ELIDED"]())
