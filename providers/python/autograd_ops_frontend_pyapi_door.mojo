@@ -16,8 +16,8 @@ from autograd.optimizer_requests import (
 from providers.python.autograd_program_pyapi_door import program_input, _integer, ops_program_fit_native_py, ops_program_execute_py, fit_stop_options
 from autograd.ops_frontend_impl import session_split, clip_low_unbounded, clip_high_unbounded
 from autograd.ops_block_frontend import (
-    SESSION_ATTENTION_PIECES, SESSION_ATTENTION_GATE, session_mamba_code, session_attention_ints,
-    session_block_create, session_block_step,
+    SESSION_ATTENTION_MIN_PIECES, SESSION_ATTENTION_GATE, session_mamba_code, session_attention_ints,
+    session_attention_option_words, session_block_create, session_block_step,
 )
 from autograd.block_step_ops import OPS_ATTN_STEP
 from autograd.program_io import ProgramInput
@@ -529,8 +529,8 @@ def ops_session_call_admitted_py[E: Exec & Movable & Deinitable, KIND: Int](
             dt_hi = _float(args[3][1], "dt_limit")
             trainable = Bool(py=args[4])
         else:
-            if pieces != SESSION_ATTENTION_PIECES:
-                raise Error("ValueError: attention_block takes " + String(SESSION_ATTENTION_PIECES)
+            if pieces < SESSION_ATTENTION_MIN_PIECES:
+                raise Error("ValueError: attention_block takes at least " + String(SESSION_ATTENTION_MIN_PIECES)
                             + " weight arrays, got " + String(pieces))
             var heads = _int(args[2], "n_heads", 1)
             block_ints = session_attention_ints(
@@ -538,6 +538,34 @@ def ops_session_call_admitted_py[E: Exec & Movable & Deinitable, KIND: Int](
                 heads if _nil(args[3]) else _int(args[3], "n_kv_heads", 1),
                 srcs[SESSION_ATTENTION_GATE].count(), _int(args[4], "max_positions", 1), _int(args[5], "window", 0))
             trainable = Bool(py=args[6])
+            # The transformer estimator's options, args[7..18]: rope_theta,
+            # rope_scaling (None or a dict with 'type' or 'rope_type',
+            # 'factor' and, for llama3, 'low_freq_factor', 'high_freq_factor',
+            # 'original_max_position_embeddings'), rope_dim, qkv_bias, o_bias,
+            # norm, norm_eps, norm_bias, mlp, mlp_bias, qk_norm, attn_softcap.
+            var scaling_kind = String("")
+            var scaling_factor = Float32(1)
+            var scaling_low = Float32(1)
+            var scaling_high = Float32(4)
+            var scaling_original = 8192
+            if not _nil(args[8]):
+                var scaling = args[8]
+                if py_type(scaling) is not types[].dict_type:
+                    raise Error("TypeError: rope_scaling must be None or a dict")
+                scaling_kind = String(scaling["type"]) if py_contains(scaling, "type") else String(scaling["rope_type"])
+                scaling_factor = _float(scaling["factor"], "rope_scaling factor")
+                if scaling_kind == "llama3":
+                    scaling_low = _float(scaling["low_freq_factor"], "low_freq_factor")
+                    scaling_high = _float(scaling["high_freq_factor"], "high_freq_factor")
+                    scaling_original = _int(scaling["original_max_position_embeddings"],
+                                            "original_max_position_embeddings", 1)
+            var option_words = session_attention_option_words(
+                block_ints[4], block_ints[6], String(args[12]), String(args[15]), _float(args[7], "rope_theta"),
+                scaling_kind, scaling_factor, scaling_low, scaling_high, scaling_original,
+                0 if _nil(args[9]) else _int(args[9], "rope_dim", 1), Bool(py=args[10]), Bool(py=args[11]),
+                _float(args[13], "norm_eps"), Bool(py=args[14]), Bool(py=args[16]), Bool(py=args[17]),
+                Float32(0) if _nil(args[18]) else _float(args[18], "attn_softcap"))
+            _append(block_ints, option_words)
         var made = session_block_create[E, KIND](Int(py=sid), block_code, block_ints, srcs, trainable)
         _ = len(inputs)  # keep every scalar-list owner alive across the uploads
         _ = args  # retain the original array exporters through the uploads

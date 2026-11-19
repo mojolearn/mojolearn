@@ -791,7 +791,9 @@ class Session:
         return _SESSION_CALL(self, "mamba_step", (x, block))
 
     def attention_block(self, weights, *, n_heads, max_positions, batch_size=1, n_kv_heads=None, window=0,
-                        requires_grad=False):
+                        requires_grad=False, rope_theta=10000.0, rope_scaling=None, rope_dim=None,
+                        qkv_bias=False, o_bias=False, norm="rmsnorm", norm_eps=1e-6, norm_bias=False,
+                        mlp="swiglu", mlp_bias=False, qk_norm=False, attn_softcap=None):
         """Put one transformer decoder block on the device; returns the block.
 
         The block is :class:`mojolearn.TransformerBlock` with its default
@@ -821,6 +823,17 @@ class Session:
             Sliding-window length; 0 attends to every earlier position.
         requires_grad : bool, default False
             Make the weights trainable (recording sessions only).
+        rope_theta, rope_scaling, rope_dim, qkv_bias, o_bias, norm, norm_eps, norm_bias, mlp, mlp_bias, qk_norm, attn_softcap
+            The block options of :class:`mojolearn.TransformerBlock`, with
+            the same meanings and defaults. An option that adds weights
+            adds their arrays after the nine above, in this order:
+            ``q_proj.bias``, ``k_proj.bias``, ``v_proj.bias`` (`qkv_bias`),
+            ``o_proj.bias`` (`o_bias`), ``input_layernorm.bias``,
+            ``post_attention_layernorm.bias`` (`norm_bias`),
+            ``up_proj.bias``, ``down_proj.bias``, ``gate_proj.bias``
+            (`mlp_bias`; the last only for a gated MLP), ``q_norm.weight``,
+            ``k_norm.weight`` (`qk_norm`). An ungated MLP (``mlp='gelu'``
+            or ``'gelu_tanh'``) has no ``gate_proj.weight``: leave it out.
 
         Returns
         -------
@@ -840,7 +853,9 @@ class Session:
         ...     h = s.attention_step(h, second)
         """
         return _SESSION_CALL(self, "attention_block",
-                             (weights, batch_size, n_heads, n_kv_heads, max_positions, window, requires_grad))
+                             (weights, batch_size, n_heads, n_kv_heads, max_positions, window, requires_grad,
+                              rope_theta, rope_scaling, rope_dim, qkv_bias, o_bias, norm, norm_eps, norm_bias,
+                              mlp, mlp_bias, qk_norm, attn_softcap))
 
     def attention_step(self, x, block):
         """Run a transformer block over the next tokens; returns the output.

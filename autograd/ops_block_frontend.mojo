@@ -21,11 +21,12 @@ session the step is the zero-state prefill recorded as one node over
 [x, weights] (`OpsSession._block_step`), which `backward` differentiates
 through StepOpRules.
 
-The attention block here is the default block (transformer/block_options.mojo
-`BlockOptions()`: RMSNorm without bias, SiLU-gated MLP, no projection
-biases), the op's eight-integer form. A block with other options needs the
-seventeen option words and its optional pieces; that form has no public
-name yet.
+The attention block takes the transformer estimator's options under its
+constructor's names (`session_attention_option_words`: the block options
+record, transformer/block_options.mojo). The default record sends the op's
+eight-integer form (today's block, the old code path); any other record
+appends the seventeen option words, and the weights then include the
+optional pieces that record turns on, in `block_weight_sizes` order.
 
 Nothing here runs per element: the loops are over a block's pieces (model
 structure). Packing a block is serial by nature: each piece is one cast
@@ -39,12 +40,17 @@ from autograd.block_step_ops import (
     OPS_M1_STEP, OPS_M2_STEP, OPS_M3_STEP, OPS_ATTN_STEP, BLOCK_PART_WEIGHTS, BLOCK_PART_STATE, BLOCK_PART_WORDS,
     block_weight_sizes, block_state_sizes, block_int_words,
 )
+from transformer.block_options import BlockOptions
 
 #: The weight arrays `Session.attention_block` takes (the default options'
 #: present pieces: two norms, q, k, v, o, gate, up, down), and the index of
 #: `gate_proj.weight` among them (its size gives the intermediate width).
 comptime SESSION_ATTENTION_PIECES = 9
 comptime SESSION_ATTENTION_GATE = 6
+#: The fewest arrays an attention block has (an ungated MLP has no gate
+#: projection); array SESSION_ATTENTION_GATE is then `up_proj.weight`,
+#: which has the same (intermediate, d_model) size.
+comptime SESSION_ATTENTION_MIN_PIECES = 8
 
 
 def session_mamba_code(version: Int) raises -> Int:
@@ -73,7 +79,8 @@ def session_attention_ints(
     if n_kv_heads < 1 or n_heads % n_kv_heads != 0:
         raise Error("ValueError: attention_block: n_heads must be a multiple of n_kv_heads")
     if gate_values < d_model or gate_values % d_model != 0:
-        raise Error("ValueError: attention_block: gate_proj.weight must be (intermediate, d_model)")
+        raise Error("ValueError: attention_block: the seventh weight array (gate_proj.weight, or up_proj.weight "
+                    + "of an ungated MLP) must be (intermediate, d_model)")
     if max_positions < 1:
         raise Error("ValueError: attention_block: max_positions must be at least 1")
     if window < 0:
@@ -82,6 +89,85 @@ def session_attention_ints(
         batch, d_model, n_heads, n_kv_heads, d_model // n_heads, gate_values // d_model, max_positions, window,
     ]
     return ints^
+
+
+def session_attention_option_words(
+    head_dim: Int, max_positions: Int, norm: String, mlp: String, rope_theta: Float32, rope_scaling: String,
+    rope_factor: Float32, rope_low_freq_factor: Float32, rope_high_freq_factor: Float32,
+    rope_original_max_positions: Int, rope_dim: Int, qkv_bias: Bool, o_bias: Bool, norm_eps: Float32,
+    norm_bias: Bool, mlp_bias: Bool, qk_norm: Bool, attn_softcap: Float32,
+) raises -> List[Int]:
+    """The block options tail of OPS_ATTN_STEP from the transformer
+    estimator's constructor arguments (`mojolearn.TransformerBlock`):
+    `rope_scaling` is "" (none), "linear" or "llama3" with its factors;
+    `rope_dim` 0 means head_dim; `attn_softcap` 0 means none. Returns an
+    EMPTY list for the default record (the op's eight-integer form), else
+    the seventeen words. The refusals are the model's
+    (bindings/causal_lm_construct_door.mojo), then `BlockOptions.validate`."""
+    var nk = 0 if norm == "rmsnorm" else (1 if norm == "layernorm" else (2 if norm == "rmsnorm_offset" else -1))
+    var mk = -1
+    if mlp == "swiglu":
+        mk = 0
+    elif mlp == "gelu":
+        mk = 1
+    elif mlp == "gelu_tanh":
+        mk = 2
+    elif mlp == "geglu":
+        mk = 3
+    elif mlp == "geglu_tanh":
+        mk = 4
+    if nk < 0:
+        raise Error("ValueError: attention_block: unsupported norm='" + norm
+                    + "'; norm is 'rmsnorm', 'layernorm' or 'rmsnorm_offset'")
+    if mk < 0:
+        raise Error("ValueError: attention_block: unsupported mlp='" + mlp
+                    + "'; mlp is 'swiglu', 'gelu', 'gelu_tanh', 'geglu' or 'geglu_tanh'")
+    var sk = 0
+    if rope_scaling == "linear":
+        sk = 1
+    elif rope_scaling == "llama3":
+        sk = 2
+    elif rope_scaling != "":
+        raise Error("ValueError: attention_block: unsupported rope_scaling type '" + rope_scaling
+                    + "'; the types are 'linear' and 'llama3'")
+    if sk == 2 and (not (rope_high_freq_factor > rope_low_freq_factor) or rope_original_max_positions < 1):
+        raise Error("ValueError: attention_block: llama3 rope_scaling needs high_freq_factor > low_freq_factor "
+                    + "and a positive original_max_position_embeddings")
+    var rd = head_dim if rope_dim == 0 else rope_dim
+    if rd < 1 or rd > head_dim or rd % 2 != 0:
+        raise Error("ValueError: attention_block: rope_dim must be positive even and no larger than head_dim")
+    if norm_bias and nk != 1:
+        raise Error("ValueError: attention_block: norm_bias=True needs norm='layernorm'")
+    if qk_norm and nk == 1:
+        raise Error("ValueError: attention_block: qk_norm=True with norm='layernorm' is not supported "
+                    + "(qk_norm is an RMSNorm)")
+    var o = BlockOptions()
+    o.rope_theta = rope_theta
+    o.rope_scaling = sk
+    if sk != 0:
+        o.rope_factor = rope_factor
+    if sk == 2:
+        o.rope_low_freq_factor = rope_low_freq_factor
+        o.rope_high_freq_factor = rope_high_freq_factor
+        o.rope_original_max_positions = rope_original_max_positions
+    o.rope_dim = 0 if rd == head_dim else rd
+    # the absolute-position ceiling: the record's default unless this
+    # block's cache is longer
+    if max_positions > o.max_positions:
+        o.max_positions = max_positions
+    o.qkv_bias = qkv_bias
+    o.o_bias = o_bias
+    o.norm_kind = nk
+    o.norm_eps = norm_eps
+    o.norm_bias = norm_bias
+    o.mlp_kind = mk
+    o.mlp_bias = mlp_bias
+    o.qk_norm = qk_norm
+    o.attn_softcap = attn_softcap
+    o.validate(head_dim)
+    if o.is_default():
+        return List[Int]()
+    return o.to_params()
 
 
 def session_block_create[E: Exec & Movable & Deinitable, KIND: Int](
