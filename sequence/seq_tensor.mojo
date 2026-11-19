@@ -26,6 +26,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from sequence.exec_device import sequence_ctx
 from sequence.ops import FP
 from core.shared_slot import SharedSlot
+from core.nan_canon import NAN_CANON_ON, nan_canon_f32
 
 
 struct _SeqTensorPool(Defaultable, Movable):
@@ -137,6 +138,12 @@ def seq_tensor_download(h: Int, a: Int, n: Int) raises -> Int:
     ctx.enqueue_copy(dst_ptr=FP(unsafe_from_address=a), src_buf=view)
     ctx.synchronize()
     _ = view^
+    # A resident tensor holds float32 cells a model computed, and this is
+    # where they leave the device: -D MOJOLEARN_IDENTITY_FAST_NAN_CANON
+    # (default off; core/nan_canon.mojo) makes every NaN word the one
+    # canonical word, across the host's cores. Off, this is nothing.
+    comptime if NAN_CANON_ON:
+        _ = nan_canon_f32(FP(unsafe_from_address=a), n)
     return n
 
 

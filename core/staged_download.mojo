@@ -1,7 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """THE ONE DEVICE-TO-HOST DOWNLOAD of a float32 buffer into caller memory
-(`download_f32_into`, `download_f32_into_scanned`): a pipeline over chunks
+(`download_f32_into`, `download_f32_into_scanned`, and
+`download_f32_into_canon` for float32 results): a pipeline over chunks
 through two pooled pinned stages, the copy-out over host tasks.
 
 MOVED here unchanged from `training/checks/train_loop.mojo` (lane
@@ -27,6 +28,7 @@ from core.shared_slot import SharedSlot
 from core.ctx_key import ctx_cache_key
 from core.host_parallel import host_parallelize
 from core.host_predict_threads import host_predict_task_count_work, host_predict_chunk
+from core.nan_canon import NAN_CANON_ON, nan_canon_f32, nan_canon_span_f32
 
 
 def download_f32_into[pool: StaticString = _STAGE_NAME](
@@ -78,6 +80,37 @@ def download_f32_into_scanned[pool: StaticString = _STAGE_NAME](
     own name (one per binding and tier, as `core/neural_context.mojo`'s
     contexts), so no pinned stage is handed to another binding's context.
     """
+    return _download_f32_into[pool](ctx, buf, n, dst, scan, False)
+
+
+def download_f32_into_canon[pool: StaticString = _STAGE_NAME](
+    ctx: DeviceContext,
+    mut buf: DeviceBuffer[DType.float32],
+    n: Int,
+    dst: MutPointer[Float32, MutUntrackedOrigin],
+) raises:
+    """`download_f32_into` for a buffer that holds float32 RESULTS (never
+    int32 words moved through a float32 buffer, as x_prep's outputs are):
+    with -D MOJOLEARN_IDENTITY_FAST_NAN_CANON (default off) every NaN word
+    of `dst[0:n]` is the one canonical quiet NaN (core/nan_canon.mojo), so a
+    computed NaN is the same word on every vendor and on the host column.
+    The pass is folded into the copy-out's spans (the words are read while
+    the copy has them hot; a store only where a NaN is). Without the define
+    this is `download_f32_into`, the same code."""
+    _ = _download_f32_into[pool](ctx, buf, n, dst, False, NAN_CANON_ON)
+
+
+def _download_f32_into[pool: StaticString](
+    ctx: DeviceContext,
+    mut buf: DeviceBuffer[DType.float32],
+    n: Int,
+    dst: MutPointer[Float32, MutUntrackedOrigin],
+    scan: Bool,
+    canon: Bool,
+) raises -> Int:
+    """The body of `download_f32_into_scanned` and `download_f32_into_canon`.
+    `canon` rewrites NaN words to the canonical one after the copy; the scan
+    (an exponent test) reads the same verdict before or after it."""
     if n < 1:
         return -1
     if n > len(buf):
@@ -95,6 +128,8 @@ def download_f32_into_scanned[pool: StaticString = _STAGE_NAME](
             step_count_sync()
             ctx.synchronize()
             _ = view^
+        if canon:
+            _ = nan_canon_f32(dst, n)
         if scan:
             return _first_nonfinite(dst, n)
         return -1
@@ -112,7 +147,7 @@ def download_f32_into_scanned[pool: StaticString = _STAGE_NAME](
         ctx.synchronize()
         if k + 1 < nchunks:
             _stage_enqueue(ctx, buf, n, k + 1, chunk, st1)
-        var b0 = _copy_out(dst + k * chunk, st0.unsafe_ptr(), min(chunk, n - k * chunk), scan)
+        var b0 = _copy_out(dst + k * chunk, st0.unsafe_ptr(), min(chunk, n - k * chunk), scan, canon)
         if b0 >= 0 and bad < 0:
             bad = k * chunk + b0
         if k + 1 >= nchunks:
@@ -121,7 +156,7 @@ def download_f32_into_scanned[pool: StaticString = _STAGE_NAME](
         ctx.synchronize()
         if k + 2 < nchunks:
             _stage_enqueue(ctx, buf, n, k + 2, chunk, st0)
-        var b1 = _copy_out(dst + (k + 1) * chunk, st1.unsafe_ptr(), min(chunk, n - (k + 1) * chunk), scan)
+        var b1 = _copy_out(dst + (k + 1) * chunk, st1.unsafe_ptr(), min(chunk, n - (k + 1) * chunk), scan, canon)
         if b1 >= 0 and bad < 0:
             bad = (k + 1) * chunk + b1
         k += 2
@@ -275,13 +310,17 @@ def staged_copy_f32(dst: MutPointer[Float32, MutUntrackedOrigin], src: MutPointe
     caller's host memory (either direction), split into contiguous spans
     across the host's cores above the grain floor. Spans are independent
     (each writes its own words), so the bytes do not depend on the split."""
-    _ = _copy_out(dst, src, n, False)
+    _ = _copy_out(dst, src, n, False, False)
 
 
-def _copy_out(dst: MutPointer[Float32, MutUntrackedOrigin], src: MutPointer[Float32, MutUntrackedOrigin], n: Int, scan: Bool) -> Int:
+def _copy_out(dst: MutPointer[Float32, MutUntrackedOrigin], src: MutPointer[Float32, MutUntrackedOrigin], n: Int, scan: Bool,
+              canon: Bool) -> Int:
     """`memcpy(dst, src, n)` from a pinned stage into the caller's memory.
     With `scan`, the result is the first non-finite index of `dst[0:n]`
-    (-1 when none). Copies only: no bit moves.
+    (-1 when none). Copies only: no bit moves, unless `canon` (lane
+    fx-nan-canon, 2026-11-19; only `download_f32_into_canon` passes it, and
+    only under -D MOJOLEARN_IDENTITY_FAST_NAN_CANON): each span's NaN words
+    then become the canonical one in `dst` right after its memcpy.
     fx-leftovers-product (2026-11-19): the copy (and its scan) is split
     into contiguous spans across the host's cores, the form of
     core/msel_device.mojo `_msel_copy_out`. It was ONE thread (lane
@@ -300,6 +339,8 @@ def _copy_out(dst: MutPointer[Float32, MutUntrackedOrigin], src: MutPointer[Floa
     var tasks = host_predict_task_count_work(n, n)
     if tasks <= 1:
         unsafe_memcpy(dest=dst, src=src, count=n)
+        if canon:
+            _ = nan_canon_span_f32(dst, n)
         if scan:
             return _first_nonfinite(dst, n)
         return -1
@@ -310,7 +351,7 @@ def _copy_out(dst: MutPointer[Float32, MutUntrackedOrigin], src: MutPointer[Floa
     var found = List[Int](length=tasks, fill=-1)
     var found_ptr = rebind[MutPointer[Int, MutUntrackedOrigin]](found.unsafe_ptr())
 
-    def _span(t: Int) {imm d, imm s, imm n, imm span, imm scan, imm found_ptr}:
+    def _span(t: Int) {imm d, imm s, imm n, imm span, imm scan, imm canon, imm found_ptr}:
         var lo = t * span
         if lo >= n:
             return
@@ -318,6 +359,8 @@ def _copy_out(dst: MutPointer[Float32, MutUntrackedOrigin], src: MutPointer[Floa
         var to = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=d + lo * 4)
         unsafe_memcpy(dest=to, src=MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=s + lo * 4),
                       count=hi - lo)
+        if canon:
+            _ = nan_canon_span_f32(to, hi - lo)
         if scan:
             var at = _first_nonfinite(to, hi - lo)
             if at >= 0:

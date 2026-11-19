@@ -125,6 +125,7 @@ from checks.native_tests.metrics_selection_host_p2 import register as register_m
 from checks.native_tests.metrics_smallfam_public import register as register_metrics_smallfam_public
 from checks.native_tests.metrics_weighted_score import register as register_metrics_weighted_score
 from checks.native_tests.mixture_gmm_sample import register as register_mixture_gmm_sample
+from checks.native_tests.nan_canon import register as register_nan_canon
 from checks.native_tests.mixture_native import register as register_mixture_native
 from checks.native_tests.nearest_centroid_native import register as register_nearest_centroid_native
 from checks.native_tests.nearest_centroid_numeric import register as register_nearest_centroid_numeric
@@ -702,6 +703,7 @@ def all_checks() -> List[Check]:
     checks.append(register_metrics_weighted_score())
     checks.append(register_mixture_gmm_sample())
     checks.append(register_mixture_native())
+    checks.append(register_nan_canon())
     checks.append(register_nearest_centroid_native())
     checks.append(register_nearest_centroid_numeric())
     checks.append(register_neighbors_knn_metrics())
