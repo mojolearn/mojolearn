@@ -405,6 +405,26 @@ def identical_gemm[allow_vendor: Bool = True,ROLE: Int = ROLE_PROJECTION](
     ctx: DeviceContext,mut c: DeviceBuffer[DType.float32],mut a: DeviceBuffer[DType.float32],
     mut b: DeviceBuffer[DType.float32],m: Int,n: Int,k: Int,op: Int,
 ) raises:
+    # lane fx-fast-nvidia-routes (2026-11-19): the matrix-units arm END TO END. The workspace-less entry (the Mamba
+    # projections and every other caller that owns no workspace) went straight to the incumbent, so a `fast` build
+    # with the arm on ran those products on the FP32 chain while the workspace callers ran on the matrix unit. A
+    # product the size rule takes now goes through `identical_gemm_into`, whose first block is the arm; the
+    # workspace also holds the OP_TN transpose. Small products (bias sums, a one-hot embedding gradient: an edge
+    # under 64) fail the rule and keep the line below. Per call under the arm: the integer size test; a taken
+    # product makes the one allocation and the one wait the incumbent entry makes. Off: not compiled.
+    comptime if GEMM_FAST_MATRIX_UNITS and (allow_vendor or GEMM_FAST_MATRIX_UNITS_ALL):
+        if matrix_units_takes(m,n,k):
+            neural_validate(m,n,k,op)
+            var units_ws = ctx.enqueue_create_buffer[DType.float32](
+                max(identical_gemm_workspace_max_floats(m,n,k),matrix_units_workspace_floats(m,n,k,op)))
+            try:
+                identical_gemm_into[allow_vendor,ROLE](ctx,c,a,b,units_ws,m,n,k,op)
+            except error:
+                ctx.synchronize()
+                raise error
+            ctx.synchronize()
+            _ = units_ws^
+            return
     comptime if not NEURAL_GEMM_EXPERIMENT_ENABLED:
         _incumbent_gemm[allow_vendor](ctx,c,a,b,m,n,k,op)
         return

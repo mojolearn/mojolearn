@@ -20,10 +20,14 @@ EXPERIMENT `-D MOJOLEARN_GEMM_FAST_MATRIX_UNITS=<kind>`, default OFF, A/B owed w
                   product is a quality measurement, so it is a second arm value with its own owed row and
                   never the default of kind 1.
 
-WHERE IT IS LEGAL. Only in a `fast` build (`-D MOJOLEARN_MODE_FAST_ROWS`, the stage 1 flag: the identical kernels
-with the contract off) on the NVIDIA column. In a build that promises identical bits, on AMD, on Apple or on the
-host column the define is a compile error (`_matrix_units_checked`). AMD's equivalent would be MFMA at K > 1 or
-its bf16 forms, Apple's the simdgroup matrix product; neither is written: the row is one kernel per vendor.
+WHERE IT IS LEGAL, AND ON WHICH VENDOR. Only in a `fast` build (`-D MOJOLEARN_MODE_FAST_ROWS`: the identical
+kernels with the contract off); in a build that promises identical bits the define is a compile error
+(checks/mode_policy.mojo `_row`, and `_matrix_units_checked`). The route is vendor-neutral source, one call of MAX
+`linalg.matmul`, and is taken on NVIDIA (TF32 operands, the bound below) and on AMD (fp32 MFMA 16x16x4: operands
+stay full fp32, so what is relaxed there is the vendor's fold order and K grouping; the bound below holds with
+room). On Apple the products already have their matrix-unit route (gemm/afn_apple_fast.mojo), so the arm is off
+there and the policy row points at that route; the host column has no matrix unit and stays exact. Measured on
+NVIDIA first; AMD rides along untimed.
 
 WHAT IS RELAXED. A routed product rounds each OPERAND to TF32 (a sign, 8 exponent bits, 10 explicit mantissa
 bits; 11 significant bits) inside the matrix unit and accumulates in FP32. Per operand the relative error is at
@@ -83,8 +87,9 @@ from layout.tile_layout import row_major
 from linalg.matmul import matmul
 from max.gpu.host import DeviceBuffer, DeviceContext
 
-from checks.kernel_matrix import TARGET_COLUMN, COLUMN_NVIDIA
-from checks.mode_policy import CONTRACT_IDENTICAL, POLICY_BUILD, POLICY_BUILD_FAST_ROWS, ROW_MATRIX_UNITS
+from checks.mode_policy import (
+    CONTRACT_IDENTICAL, POLICY_BUILD, POLICY_BUILD_FAST_ROWS, ROUTE_GEMM_MATRIX_UNITS,
+)
 from core.column_stats import CUDA_MAX_GRID_YZ, TRANSPOSE_TILE, transpose_kernel
 from gemm.contract import OP_NN, OP_NT, OP_TN
 
@@ -112,16 +117,20 @@ def _matrix_units_checked() -> Bool:
     # matrix-units row, which that module resolves from this same define and refuses in an identical build. The
     # arm compiles only in the fast-rows build kind with the row on, so MODE_POLICY_MASK carries the row's bit.
     comptime assert MATRIX_UNITS_KIND == MATRIX_UNITS_KIND_OFF or (
-        POLICY_BUILD == POLICY_BUILD_FAST_ROWS and not CONTRACT_IDENTICAL and ROW_MATRIX_UNITS
+        POLICY_BUILD == POLICY_BUILD_FAST_ROWS and not CONTRACT_IDENTICAL
     ), (
         "MOJOLEARN_GEMM_FAST_MATRIX_UNITS is a relaxation of `fast`: it needs -D MOJOLEARN_MODE_FAST_ROWS and is"
         " refused in a build that promises identical bits"
     )
-    comptime assert MATRIX_UNITS_KIND == MATRIX_UNITS_KIND_OFF or TARGET_COLUMN == COLUMN_NVIDIA, (
-        "MOJOLEARN_GEMM_FAST_MATRIX_UNITS is the NVIDIA tensor-core arm; AMD (MFMA) and Apple (simdgroup) have"
-        " no matrix-units relaxation written"
+    # VENDOR-NEUTRAL (2026-11-19, lane fx-fast-nvidia-routes): the route is one call of MAX `linalg.matmul`, which
+    # has NVIDIA (TF32 operands), AMD CDNA (fp32 MFMA 16x16x4: full fp32 operands, the vendor's K grouping) and
+    # Apple backends. It is taken on NVIDIA and AMD. On Apple the neural products already have their matrix-unit
+    # route (gemm/afn_apple_fast.mojo, AFN_GEMM_FP32_MMA), so the policy row points at that and this arm is off
+    # there; the host column has no matrix unit. `ROUTE_GEMM_MATRIX_UNITS` (checks/mode_policy.mojo) is that
+    # column rule and the row's bit, in one place.
+    return ROUTE_GEMM_MATRIX_UNITS and (
+        MATRIX_UNITS_KIND == MATRIX_UNITS_KIND_TF32 or MATRIX_UNITS_KIND == MATRIX_UNITS_KIND_TF32_ALL
     )
-    return MATRIX_UNITS_KIND == MATRIX_UNITS_KIND_TF32 or MATRIX_UNITS_KIND == MATRIX_UNITS_KIND_TF32_ALL
 
 
 #: The arm: TF32 tensor-core products for the neural FP32 GEMMs of an NVIDIA `fast` build.
@@ -141,14 +150,21 @@ comptime MATRIX_UNITS_OPERAND_REL = Float64(1.0) / Float64(1024.0)
 
 
 @always_inline
+def vendor_matmul_size_rule(m: Int, n: Int, k: Int) -> Bool:
+    """The size rule of the module docstring, with no arm test: what a matrix unit can gain on. The family
+    routes of the matrix-units row (decomposition, neighbors) share it and add their own terms."""
+    if k < MATRIX_UNITS_MIN_K or m < MATRIX_UNITS_MIN_EDGE or n < MATRIX_UNITS_MIN_EDGE:
+        return False
+    return m * n * k >= MATRIX_UNITS_MIN_WORK
+
+
+@always_inline
 def matrix_units_takes(m: Int, n: Int, k: Int) -> Bool:
     """Whether an m x n x k product is large enough for the matrix unit (the size rule of the module
     docstring). Always False without the arm."""
     comptime if not GEMM_FAST_MATRIX_UNITS:
         return False
-    if k < MATRIX_UNITS_MIN_K or m < MATRIX_UNITS_MIN_EDGE or n < MATRIX_UNITS_MIN_EDGE:
-        return False
-    return m * n * k >= MATRIX_UNITS_MIN_WORK
+    return vendor_matmul_size_rule(m, n, k)
 
 
 @always_inline
@@ -198,6 +214,26 @@ def matrix_units_gemm_into(
         return False
     if not matrix_units_takes(m, n, k):
         return False
+    return vendor_matmul_gemm_into(ctx, c, a, b, ws, m, n, k, op)
+
+
+def vendor_matmul_gemm_into(
+    ctx: DeviceContext,
+    mut c: DeviceBuffer[DType.float32],
+    mut a: DeviceBuffer[DType.float32],
+    mut b: DeviceBuffer[DType.float32],
+    mut ws: DeviceBuffer[DType.float32],
+    m: Int,
+    n: Int,
+    k: Int,
+    op: Int,
+) raises -> Bool:
+    """The one matrix-unit product of the tree, with no arm and no size test: `C = op(A) . op(B)` on MAX
+    `linalg.matmul` (NVIDIA: TF32 operands, FP32 accumulation; AMD: fp32 MFMA). The neural arm above and the
+    family routes of the matrix-units row call it behind their own compile-time route constant and size rule,
+    so it is instantiated only in a fast-rows build with a route on. Same contract as
+    `matrix_units_gemm_into`: asynchronous, False (nothing touched) for an OP_TN whose transpose does not fit
+    `ws` or an unknown op."""
     if op == OP_NT:
         var tc = TileTensor(c, row_major(m, n))
         var ta = TileTensor(a, row_major(m, k))
