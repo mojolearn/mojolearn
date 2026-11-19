@@ -697,6 +697,16 @@
    "define": "MOJOLEARN_GEMM_FAST_DX_CONCAT",
    "status": "define in code (autograd/kernels/transformer.mojo BWD_GEMM_DX_CONCAT, bwd_dx_concat_pack_kernel, bwd_dx_concat3; autograd/rules_transformer.mojo _dx_fanin_cat; transformer/checks/transformer_backward_oracle.mojo BWD_HOST_DX_CONCAT; IDENTICAL, no poison build): B = the transformer backward's q/k/v fan-in dX (S29-32) as ONE product, d(norm1.out) = GEMM_contract([dQ | dK | dV], [Wq; Wk; Wv]) over K = q_width + 2 kv_width walked ascending in that order, after one pack launch that bit-copies the three gradients and the three weights into two stage scratch buffers; A = the default: three products into tmp0/tmp1/tmp2, then bwd_add3_kernel (q + k) + v. BITS CHANGE under B on every column and in the host oracle together (another rounding order of the same sum): digests of d(norm1.out) and of everything downstream of it MOVE, and must be equal between the device and the host column of the B build. Launches for the fan-in dX: pack 1 + one product (2 where it runs as groups + fold), against three products (6) + 1. gate/up (S9) is not changed",
    "owed": "RUN"
+  },
+  "rnn-step-gemm": {
+   "define": "MOJOLEARN_SEQ_FAST_RNN_STEP_GEMM",
+   "status": "define in code (autograd/rules_recurrent.mojo RNN_STEP_GEMM, rule rnn_step_gemm; IDENTICAL, every column, the host column runs the same launches): B = on the per-step chain (cells of more gates than the scan takes: GRU, LSTM) a time step's hidden projection is its own GEMM launch on the sequence tile (forward OP_GEMM_EPI with the b_hh epilogue, backward OP_GEMM accumulate onto dh) followed by the elementwise cell (OP_CELL_FWD / OP_CELL_BWD), where the launch rule keeps the one chain (not a split-K shape, not the cooperative shape) and the product holds at least 2^20 multiply-adds; A = one fused launch a step, one thread per (row, unit) folding its own gate dots (OP_CELL_FWD_H / OP_CELL_BWD_H). Same chain per cell (k ascending), same bias add, same cell body: digests must not move. Build every binding that imports autograd/rules_recurrent.mojo (the sequence device and host bindings).",
+   "owed": "RUN"
+  },
+  "cnn-op-nowait": {
+   "define": "MOJOLEARN_CNN_FAST_OP_NOWAIT",
+   "status": "define in code (x_cnn/device.mojo CNN_OP_NOWAIT, entry_end; callers autograd/cnn_block_op.mojo pass may_defer): B = the CNN program's resident conv block and head entries (forward and backward) return after their last launch instead of ending in ctx.synchronize(), when every parameter block came from the cache; a full parameter-block cache waits before rewriting a victim; A = every entry waits (six waits a training step). Same launches in the same order on one in-order context: digests must not move. Build every binding that imports x_cnn/device.mojo or autograd/kernels/cnn.mojo (the x_cnn binding and the sequence device binding that runs the CNN program).",
+   "owed": "RUN"
   }
  },
  "rows": [
@@ -4177,6 +4187,125 @@
     ]
    },
    "decides": "B at least as fast as the candidate at both cases, quality equal; a slower case blocks the promotion decided on fx-gemm-dx-concat-rows. OWED TOOLING (shared with fx-gemm-epi-sizes): the board harness has no driver for a transformer train step at a caller-given d_model; until one exists these two cases are timed with the lm-train-step recipe at the stated widths"
+  },
+  {
+   "id": "rnn-step-gemm-rows",
+   "source": "lane fx-rnn-cnn-fit (2026-11-19; report ~/mojolearn-evidence/briefs-20261118/fx-rnn-cnn-fit-RESULT.md): default-off arm, never timed",
+   "kind": "ab",
+   "lane": [
+    "lstm-clf",
+    "lstm-reg",
+    "gru-clf",
+    "gru-reg",
+    "lstm-fit",
+    "gru-fit"
+   ],
+   "dataset": "*",
+   "rows": "full",
+   "vendor": "nvidia",
+   "b_arms": [
+    "rnn-step-gemm"
+   ],
+   "decides": "promote B only if the lstm and gru fits (algos synthetic and taxi-hourly, neural lstm-fit and gru-fit) are faster on the NVIDIA L40S (same box, same job) with quality equal and every digest equal (the arm changes no arithmetic: a moved digest is a bug in the arm), and the predict rows are not slower. At the board's shape (H 64) only the forward steps change (the backward's K = G H is a split-K shape and keeps the fused launch). Estimate 0.80-1.00x from the board rows' own arithmetic (one more gate = 3.5 us a cell launch, so the one-thread fold runs near 0.6 TFLOP/s against the tile's 3.6-4.0); the launch floor on the L40S is unmeasured, so a result inside the noise floor is a loser and the arm is deleted with the four tombstone parts. rnn rows take the scan and are unaffected (control)"
+  },
+  {
+   "id": "rnn-step-gemm-shapes",
+   "source": "lane fx-rnn-cnn-fit (2026-11-19; report ~/mojolearn-evidence/briefs-20261118/fx-rnn-cnn-fit-RESULT.md): default-off arm, never timed; the neighbouring shapes and the non-board model of the arm (no dimension targeting)",
+   "kind": "ab",
+   "lane": [
+    "lstm-reg",
+    "gru-reg"
+   ],
+   "dataset": "*",
+   "rows": "full",
+   "vendor": "nvidia",
+   "b_arms": [
+    "rnn-step-gemm"
+   ],
+   "shape": {
+    "cases": [
+     {
+      "note": "neighbouring shape: longer sequence",
+      "window": 48,
+      "hidden_size": 64,
+      "num_layers": 1,
+      "batch_size": 256
+     },
+     {
+      "note": "neighbouring shape: wider hidden size (forward and backward both leave the split-K shape)",
+      "window": 24,
+      "hidden_size": 128,
+      "num_layers": 1,
+      "batch_size": 256
+     },
+     {
+      "note": "non-board model: 2-layer GRU regressor on a 12-feature series",
+      "cell": "gru",
+      "features": 12,
+      "window": 32,
+      "hidden_size": 96,
+      "num_layers": 2,
+      "batch_size": 128
+     },
+     {
+      "note": "control under the rule's floor (fewer than 2^20 multiply-adds a step: B must equal A)",
+      "window": 24,
+      "hidden_size": 16,
+      "num_layers": 1,
+      "batch_size": 64
+     }
+    ]
+   },
+   "decides": "B at least as fast as the candidate at the three cases above the floor and equal at the control, quality and digests equal; a slower case blocks the promotion decided on rnn-step-gemm-rows or moves RNN_STEP_GEMM_MIN_FMA with the reason beside it. OWED TOOLING: tools/measure_owed_driver.py has no recurrent driver (window, hidden size, layers, features at a caller-given value); until one exists these cases are timed with the seqmodel recipe at the stated settings"
+  },
+  {
+   "id": "cnn-op-nowait-rows",
+   "source": "lane fx-rnn-cnn-fit (2026-11-19; report ~/mojolearn-evidence/briefs-20261118/fx-rnn-cnn-fit-RESULT.md): default-off arm, never timed",
+   "kind": "ab",
+   "lane": [
+    "cnn-clf"
+   ],
+   "dataset": "*",
+   "rows": "full",
+   "vendor": "nvidia",
+   "b_arms": [
+    "cnn-op-nowait"
+   ],
+   "decides": "promote B only if cnn-clf fit is faster on the NVIDIA L40S (same box, same job) and predict is not slower, with quality equal and every digest equal (same launches in the same order: a moved digest is a bug in the arm). Estimate: six waits a step at 20-50 us of a 0.56 ms step (unmeasured); inside the noise floor the arm is deleted with the four tombstone parts"
+  },
+  {
+   "id": "cnn-op-nowait-widths",
+   "source": "lane fx-rnn-cnn-fit (2026-11-19; report ~/mojolearn-evidence/briefs-20261118/fx-rnn-cnn-fit-RESULT.md): default-off arm, never timed; a neighbouring shape and a non-board model (no dimension targeting)",
+   "kind": "driver",
+   "driver": "cnn_widths",
+   "shape": {
+    "rows": 20000,
+    "classes": 10,
+    "input_shape": [
+     3,
+     32,
+     32
+    ],
+    "batch_size": 64,
+    "max_iter": 2,
+    "conv_channels": [
+     [
+      16,
+      32
+     ],
+     [
+      24
+     ]
+    ]
+   },
+   "arms": [
+    "candidate",
+    "cnn-op-nowait"
+   ],
+   "b_arms": [
+    "cnn-op-nowait"
+   ],
+   "decides": "B at least as fast as the candidate at both widths on the NVIDIA L40S, quality equal; a slower case blocks the promotion decided on cnn-op-nowait-rows"
   }
  ]
 }
