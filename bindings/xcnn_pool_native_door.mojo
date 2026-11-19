@@ -547,11 +547,11 @@ def xcnn_pool_backward(model: PythonObject, source: PythonObject, context: Pytho
 def xcnn_rows(model: PythonObject, source: PythonObject, required: Bool, context: PythonObject) raises -> PythonObject:
     """`Conv2d._rows(X)` (`required`: a row input without `input_shape` is
     refused) and `BatchNorm2d._rows(X)` (it passes through)."""
-    var nk = xcnn_keys()
     var fields = _fields(model)
     var a = xcnn_f32(source, "X", context)
     var s = xcnn_shape(a)
     if len(s) == 2:
+        var nk = xcnn_keys()
         var shape = py_get(fields, nk[].k_input_shape)
         if shape is None:
             if required:
@@ -1025,7 +1025,6 @@ def xcnn_adaptive_indices(model: PythonObject, context: PythonObject) raises -> 
 
 
 def _adaptive_host_indices(value: PythonObject, shape: List[Int], context: PythonObject) raises -> PythonObject:
-    var nk = xcnn_keys()
     sequential_admit_value(value, context)
     var array = sequential_input(value, context)
     pool_run_check_shape(xcnn_shape(array), shape)
@@ -1038,6 +1037,7 @@ def _adaptive_host_indices(value: PythonObject, shape: List[Int], context: Pytho
         # Native buffer packing preserves logical C order without ndarray
         # conversion/iteration hooks, including strided caller index arrays.
         var packed = py_call(native_buffer_view(array).tobytes, "C")
+        var nk = xcnn_keys()
         array = py_call(py_item(context, nk[].k_ndarray), xcnn_tuple(shape), dtype=array.dtype, buffer=packed)
     var out = xcnn_host_i32(shape, context)
     var src = Int(py=xcnn_addr(array))
@@ -1050,7 +1050,6 @@ def _adaptive_host_indices(value: PythonObject, shape: List[Int], context: Pytho
 
 
 def xcnn_adaptive_backward(model: PythonObject, source: PythonObject, context: PythonObject) raises -> PythonObject:
-    var nk = xcnn_keys()
     var fields = _fields(model)
     var saved = xcnn_get(fields, XK_XSHAPE)
     if saved is None:
@@ -1078,6 +1077,7 @@ def xcnn_adaptive_backward(model: PythonObject, source: PythonObject, context: P
     var hbit = 0
     var idx = PythonObject(None)
     if maxed:
+        var nk = xcnn_keys()
         var held = py_get(fields, nk[].k__idx_dev)
         var dev = py_get(fields, nk[].k__dev)
         if mixed and held is not None and dev is not None and py_item(_fields(dev), nk[].k_b) is py_item(entries, nk[].k_module):

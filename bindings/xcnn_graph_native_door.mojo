@@ -1483,7 +1483,6 @@ def _sage_backward_host(fields: PythonObject, entries: PythonObject, g: PythonOb
 
 
 def xcnn_graph_layers(layer: PythonObject, operation: String, args: PythonObject, context: PythonObject) raises -> PythonObject:
-    var nk = xcnn_keys()
     if operation == "gcn_init" or operation == "sage_init":
         return _graph_init(layer, args, operation == "sage_init", context)
     if operation == "gcn_cached" or operation == "sage_cached":
@@ -1506,6 +1505,7 @@ def xcnn_graph_layers(layer: PythonObject, operation: String, args: PythonObject
         return _linear_backward(layer, args[0], context)
     if operation == "relu_init":
         neural_plain_value(args, 0, Python.dict(admission_context=context))
+        var nk = xcnn_keys()
         py_setitem(_fields(layer), nk[].k_numeric_mode, args[0])
         return PythonObject(None)
     if operation == "relu_forward":

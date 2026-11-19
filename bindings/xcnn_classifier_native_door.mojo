@@ -68,7 +68,6 @@ def _empty(shape: PythonObject, dtype: String, context: PythonObject) raises -> 
 
 
 def _contiguous(source: PythonObject, context: PythonObject) raises -> PythonObject:
-    var nk = xcnn_keys()
     xcnn_numpy(context)
     sequential_admit_value(source, context)
     var array = sequential_input(source, context)
@@ -78,6 +77,7 @@ def _contiguous(source: PythonObject, context: PythonObject) raises -> PythonObj
     if Int(py=array.dtype.num) != 5 and Int(py=array.dtype.num) != 11:
         raise Error("TypeError: CNN resident transfers require float32 or int32")
     if layout.contiguous():
+        var nk = xcnn_keys()
         return py_call(py_item(context, nk[].k_ndarray), xcnn_tuple(layout.shape), dtype=array.dtype, buffer=array)
     var out = sequential_array(xcnn_tuple(layout.shape), array.dtype, context)
     layout.copy_to(Int(py=xcnn_addr(out)))

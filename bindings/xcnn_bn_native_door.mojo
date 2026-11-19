@@ -468,7 +468,6 @@ def _bn_backward_admitted(layer: PythonObject, fields: PythonObject, gradient: P
 
 
 def xcnn_bn_layers(layer: PythonObject, operation: String, args: PythonObject, context: PythonObject) raises -> PythonObject:
-    var nk = xcnn_keys()
     if operation == "bn_init":
         return _bn_init(layer, args, context)
     var fields = _bn_admit(layer, context)
@@ -511,6 +510,7 @@ def xcnn_bn_layers(layer: PythonObject, operation: String, args: PythonObject, c
             rest *= s[i]
         return xcnn_reshape(out, [s[0], rest], context)
     if operation == "bn_fit":
+        var nk = xcnn_keys()
         var was = py_item(fields, nk[].k_training)
         _set(fields, "training", PythonObject(True))
         try:

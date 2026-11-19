@@ -490,7 +490,6 @@ comptime _XCNN_SHAPE_SLOT = "xcnn_shape_descriptor_v1"
 
 def xcnn_shape(value: PythonObject) raises -> List[Int]:
     """Native shape metadata, with subclass/descriptor hooks refused first."""
-    var nk = xcnn_keys()
     var cls = py_type(value)
     # fx-rows (2026-11-18): the descriptor verdict (a member or getset
     # descriptor owned by exactly this class) is kept per class under the
@@ -523,6 +522,7 @@ def xcnn_shape(value: PythonObject) raises -> List[Int]:
             t0[].PyErr_Clear()
     if not read:
         var namespace = _class_fields(cls)
+        var nk = xcnn_keys()
         var descriptor = py_get(namespace, nk[].k_shape)
         if class_record(mods, _XCNN_SHAPE_SLOT, cls) is None:
             var types = native_loaded_module("types")
@@ -640,7 +640,6 @@ def _xcnn_slot_raw(value: PythonObject, name: String, context: PythonObject) rai
     its import-time identity): the exact-class check and the member
     descriptor read only. No Python code runs between that check and this
     read, so the class and its descriptors cannot have changed."""
-    var nk = xcnn_keys()
     # fx-cnn-layers (2026-11-18): the layout check proved the class's own
     # entry for each slot name is the import-time member descriptor and that
     # no ancestor overrides attribute access, so the generic attribute read
@@ -659,6 +658,7 @@ def _xcnn_slot_raw(value: PythonObject, name: String, context: PythonObject) rai
         # An unset slot (a partially initialized tensor): the descriptor call
         # raises its AttributeError through the same path as before.
         t[].PyErr_Clear()
+        var nk = xcnn_keys()
         return py_call(py_item(context, nk[].k_xcnn_tensor_slots)[PythonObject(name)].__get__, value, cls)
     return PythonObject(from_owned=raw)
 
@@ -668,7 +668,6 @@ def _xcnn_set_raw(value: PythonObject, name: String, item: PythonObject, context
     `_xcnn_slot_raw`): `PyObject_GenericSetAttr` finds the same member
     descriptor on the class and calls its setter, as `slots[name].__set__(
     value, item)` did."""
-    var nk = xcnn_keys()
     var g = _xcnn_names()
     if py_type(value) is not _xcnn_item_in(g, context, XK_TENSOR_CLASS):
         raise Error("TypeError: CNN tensor requires the connected native storage class")
@@ -677,6 +676,7 @@ def _xcnn_set_raw(value: PythonObject, name: String, item: PythonObject, context
         # The setter refused: the descriptor call raises it through the same
         # path as before.
         t[].PyErr_Clear()
+        var nk = xcnn_keys()
         _ = py_call(py_item(context, nk[].k_xcnn_tensor_slots)[PythonObject(name)].__set__, value, item)
 
 
@@ -690,10 +690,10 @@ def _xcnn_slot_at(g: UnsafePointer[_XcnnNames, MutAnyOrigin], t: UnsafePointer[C
     the class from the context again, took the value's type again and found
     the slot's name by comparing strings. The same generic attribute read,
     the same fallback."""
-    var nk = xcnn_keys()
     var raw = t[].PyObject_GenericGetAttr(value._obj_ptr, g[].keys[which]._obj_ptr)
     if not raw:
         t[].PyErr_Clear()
+        var nk = xcnn_keys()
         return py_call(py_item(context, nk[].k_xcnn_tensor_slots)[g[].keys[which]].__get__, value, cls)
     return PythonObject(from_owned=raw)
 
@@ -703,9 +703,9 @@ def _xcnn_set_at(g: UnsafePointer[_XcnnNames, MutAnyOrigin], t: UnsafePointer[CP
     """`_xcnn_set_raw` of the slot whose held name is `XK_<which>`, for a
     `value` the caller knows is of the connected tensor class (see
     `_xcnn_slot_at`)."""
-    var nk = xcnn_keys()
     if t[].PyObject_GenericSetAttr(value._obj_ptr, g[].keys[which]._obj_ptr, item._obj_ptr) != 0:
         t[].PyErr_Clear()
+        var nk = xcnn_keys()
         _ = py_call(py_item(context, nk[].k_xcnn_tensor_slots)[g[].keys[which]].__set__, value, item)
 
 
@@ -944,10 +944,10 @@ def xcnn_reshape_t(value: PythonObject, shape: List[Int], context: PythonObject)
 def xcnn_wrap(entries: PythonObject, array: PythonObject, context: PythonObject) raises -> PythonObject:
     """`DeviceTensor._wrap(b, a)`: host float32 array `a` as a tensor (one
     upload)."""
-    var nk = xcnn_keys()
     sequential_admit_value(array, context)
     var a = admit_nd_f32(sequential_input(array, context), "x", False, context)
     if not xcnn_mixed(entries):
+        var nk = xcnn_keys()
         return xcnn_tensor(py_item(entries, nk[].k_module), a.shape, PythonObject(None), a, PythonObject(None), context)
     var shape = xcnn_shape(a)
     var t = xcnn_new(entries, shape, False, context)
@@ -1025,7 +1025,6 @@ def xcnn_host_i32(shape: List[Int], context: PythonObject) raises -> PythonObjec
 def xcnn_f32(value: PythonObject, name: String, context: PythonObject) raises -> PythonObject:
     """`_f32(x, name)`: `np.asarray(x)`, float32 only (refused by name,
     never converted), C-contiguous."""
-    var nk = xcnn_keys()
     xcnn_numpy(context)
     if not xcnn_is_t(value, context):
         sequential_admit_value(value, context)
@@ -1038,6 +1037,7 @@ def xcnn_f32(value: PythonObject, name: String, context: PythonObject) raises ->
     # The original exporter metadata is captured once. The internal view has
     # private shape metadata and retains the source owner for the operation.
     if layout.contiguous():
+        var nk = xcnn_keys()
         return py_call(py_item(context, nk[].k_ndarray), xcnn_tuple(layout.shape), dtype=py_item(context, nk[].k_float32), buffer=a)
     var out = xcnn_host_f32(layout.shape, context)
     layout.copy_to(native_buffer_address(out))
@@ -1310,9 +1310,9 @@ def xcnn_dev_handle(dev: PythonObject, name: String) raises -> PythonObject:
 
 def xcnn_download(dev: PythonObject, h: PythonObject, count: Int, context: PythonObject) raises -> PythonObject:
     """`dev.download(h, np.empty(count, np.float32))`."""
-    var nk = xcnn_keys()
     var out = xcnn_host_f32([count], context)
     if count:
+        var nk = xcnn_keys()
         var owner = xcnn_module_entries(py_item(xcnn_dev_fields(dev, context), nk[].k_b), context)
         var xco = xcnn_ref(owner)
         _ = xcnn_call(xco, XC_RES_DOWNLOAD, [xcnn_word(h), xcnn_ptr(out)], [count])

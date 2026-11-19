@@ -235,13 +235,13 @@ def _conv_set_weights(layer: PythonObject, fields: PythonObject, args: PythonObj
 
 
 def _conv_gradient(fields: PythonObject, weight: Bool, context: PythonObject) raises -> PythonObject:
-    var nk = xcnn_keys()
     # `fields`: the layer's fields, already admitted once by `xcnn_conv_layers`.
     var key = "grad_weight_" if weight else "grad_bias_"
     var pending_key = "_gw_dev" if weight else "_gb_dev"
     var pending = py_get(fields, PythonObject(pending_key))
     if pending is not None:
         var b = xcnn_builtins()
+        var nk = xcnn_keys()
         if py_type(pending) is not b.tuple or len(pending) != 2 or py_type(pending[0]) is not py_item(context, nk[].k_xcnn_dev_class) or py_type(pending[1]) is not b.int:
             raise Error("TypeError: convolution gradient storage requires native metadata")
         var shape = xcnn_shape(xcnn_f32(py_item(fields, nk[].k_weight_), "weight_", context)) if weight else [Int(py=py_item(fields, nk[].k_out_channels))]
