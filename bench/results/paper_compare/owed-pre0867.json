@@ -697,6 +697,11 @@
    "define": "MOJOLEARN_GEMM_FAST_DX_CONCAT",
    "status": "define in code (autograd/kernels/transformer.mojo BWD_GEMM_DX_CONCAT, bwd_dx_concat_pack_kernel, bwd_dx_concat3; autograd/rules_transformer.mojo _dx_fanin_cat; transformer/checks/transformer_backward_oracle.mojo BWD_HOST_DX_CONCAT; IDENTICAL, no poison build): B = the transformer backward's q/k/v fan-in dX (S29-32) as ONE product, d(norm1.out) = GEMM_contract([dQ | dK | dV], [Wq; Wk; Wv]) over K = q_width + 2 kv_width walked ascending in that order, after one pack launch that bit-copies the three gradients and the three weights into two stage scratch buffers; A = the default: three products into tmp0/tmp1/tmp2, then bwd_add3_kernel (q + k) + v. BITS CHANGE under B on every column and in the host oracle together (another rounding order of the same sum): digests of d(norm1.out) and of everything downstream of it MOVE, and must be equal between the device and the host column of the B build. Launches for the fan-in dX: pack 1 + one product (2 where it runs as groups + fold), against three products (6) + 1. gate/up (S9) is not changed",
    "owed": "RUN"
+  },
+  "gbdt-radix8": {
+   "define": "MOJOLEARN_GBDT_FAST_RADIX8",
+   "status": "define in code (gbdt/gpu_util/kernel/radix_sort.mojo GBDT_FAST_RADIX8, launch_radix_sort_low_bins; callers gbdt/ctrs/ctr_bins_builder.mojo add_cat_feature_bins and add_cat_feature_bins_device, gbdt/ctrs/fast_prep.mojo build_bins, gbdt/methods/leaves_estimation/doc_parallel_leaves_estimator.mojo partition_device): B = the low-bit sorts (CTR bins by category code, leaf partition by leaf id) on core/stable_radix_sort (eight-bit digits, 2 passes of 5 launches up to 16 key bits, 4 above); A = the default, one pass of 4 launches per key bit. Same stable order by key (every key below 2^bits), integer work only: digests must not move",
+   "owed": "RUN"
   }
  },
  "rows": [
@@ -4177,6 +4182,70 @@
     ]
    },
    "decides": "B at least as fast as the candidate at both cases, quality equal; a slower case blocks the promotion decided on fx-gemm-dx-concat-rows. OWED TOOLING (shared with fx-gemm-epi-sizes): the board harness has no driver for a transformer train step at a caller-given d_model; until one exists these two cases are timed with the lm-train-step recipe at the stated widths"
+  },
+  {
+   "id": "gbdt-radix8-rows",
+   "source": "lane fx-dup-next (2026-11-19; ideas-functional-duplicates C5 and open doubt 5, ~/mojolearn-evidence/briefs-20261118/fx-dup-next-RESULT.md): the one-bit sort may be the better form for the 1 to 8 bit ranges these sites mostly sort, so the eight-bit form is an arm and the default is unchanged",
+   "kind": "ab",
+   "lane": [
+    "gbdt-symmetric",
+    "gbdt-ordered",
+    "gbdt-depthwise",
+    "gbdt-lossguide",
+    "gbdt-multiclass"
+   ],
+   "dataset": "*",
+   "rows": "full",
+   "vendor": "nvidia",
+   "b_arms": [
+    "gbdt-radix8"
+   ],
+   "decides": "keep A (the default) unless B is at least as fast on every row with a categorical feature or a leaf partition and faster on one, quality equal, on the NVIDIA L40S; digests must not move (same stable order). General cause: one launch round of four per key bit"
+  },
+  {
+   "id": "gbdt-radix8-sizes",
+   "source": "lane fx-dup-next (2026-11-19): the neighbouring shapes and a non-board dataset of the arm (no dimension targeting)",
+   "kind": "ab",
+   "lane": [
+    "gbdt-symmetric",
+    "gbdt-ordered"
+   ],
+   "dataset": "*",
+   "rows": "full",
+   "vendor": "nvidia",
+   "b_arms": [
+    "gbdt-radix8"
+   ],
+   "shape": {
+    "cases": [
+     {
+      "note": "neighbouring shape: few categories (2 and 4 values a feature: 1 and 2 key bits, where A is fewer launches)",
+      "cat_cardinality": [
+       2,
+       4
+      ]
+     },
+     {
+      "note": "neighbouring shape: many categories (300 and 70000 values a feature: 9 and 17 key bits, 2 and 4 eight-bit passes)",
+      "cat_cardinality": [
+       300,
+       70000
+      ]
+     },
+     {
+      "note": "neighbouring shape: tree depth 2, 6 and 10 (leaf partition of 4, 64 and 1024 leaves)",
+      "depth": [
+       2,
+       6,
+       10
+      ]
+     },
+     {
+      "note": "non-board dataset: one public categorical table not on the board, all rows"
+     }
+    ]
+   },
+   "decides": "B at least as fast as A at every case, quality equal; a slower case blocks the promotion decided on gbdt-radix8-rows, or the promotion is made per bit count with the crossover stated from these cases (cost reasoning over key bits, never a board shape). OWED TOOLING: the board harness needs a GBDT driver with caller-given category cardinality and depth"
   }
  ]
 }
