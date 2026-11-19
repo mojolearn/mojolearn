@@ -25,7 +25,8 @@ from providers.python.x_ann_resident_pyapi_pack import x_ann_index_release_bindi
 from providers.python.x_ann_resident_pyapi_pack import x_ann_index_export_codes_binding
 from bindings.archive_x_ann_entry import publish_archive_x_ann
 from x_ann.resident import x_ann_register_pq_built
-from x_ann.ivf_pq_device import ivf_sq_build_device, refine_device, ivf_rabitq_build_device
+from x_ann.ivf_pq_device import ivf_sq_build_device, refine_device_ptr, ivf_rabitq_build_device
+from core.hostptr import f32_ptr, i32_ptr
 from x_ann.ops_entry_device import (
     ANN_OPS_DEVICE_API, ann_ops_device_v1, ann_ivf_pq_search_device_run, ann_ivf_sq_search_device_run,
     ann_ivf_rabitq_search_device_run, ann_cagra_search_device_run, ann_filter_topk_device_run,
@@ -246,15 +247,18 @@ def refine_binding(addrs: PythonObject, params: PythonObject) raises -> PythonOb
     var status = p_int(params, 6) if len(params) > 6 else 0
     if n <= 0 or d <= 0 or m <= 0 or k0 <= 0 or k <= 0 or k > k0:
         raise Error("refine: need positive shapes and 1 <= k <= n_candidates")
-    var x = in_f32(addrs, 0, n * d)
-    var q = in_f32(addrs, 1, m * d)
-    var cand = in_i32(addrs, 2, m * k0)
-    var od = List[Float32]()
-    var oi = List[Int32]()
+    # The caller's arrays themselves (lane fx-board-modelsel-metrics,
+    # 2026-11-19): uploaded from and downloaded to where they are. Gone: a
+    # list copy of the dataset, the queries and the candidates per call, and
+    # two result lists with a copy out of each. The door keeps all five
+    # arrays alive through this call.
+    var xp = f32_ptr(a_int(addrs, 0))
+    var qp = f32_ptr(a_int(addrs, 1))
+    var candp = i32_ptr(a_int(addrs, 2))
+    var odp = f32_ptr(a_int(addrs, 3))
+    var oip = i32_ptr(a_int(addrs, 4))
     with GILReleased(Python()):
-        refine_device(x, n, d, q, m, cand, k0, k, od, oi, root, status)
-    out_f32(od, addrs, 3)
-    out_i32(oi, addrs, 4)
+        refine_device_ptr(xp, n, d, qp, m, candp, k0, k, odp, oip, root, status)
     return PythonObject(m)
 
 

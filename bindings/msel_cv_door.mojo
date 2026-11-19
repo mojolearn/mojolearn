@@ -314,6 +314,23 @@ def _msel_hold_rows_of(x: PythonObject, rows: PythonObject) raises:
     admitted_hold_rows_of(x, rows, Int(py=rows._addr), n, cols)
 
 
+#: `-D MOJOLEARN_MSEL_FAST_LC_TEST_REUSE` (lane fx-board-modelsel-metrics,
+#: 2026-11-19; default OFF, A/B OWED: bench/results/paper_compare/owed-pre0867.json
+#: `fx-lc-test-reuse`, docs/apple-fast/EXPERIMENTS.md). learning_curve's units are
+#: (train size, fold): every size of a fold scores on the SAME test rows, and since
+#: the units became independent (lane p3-msel-parallel-and-process-pool) those rows
+#: are gathered out of host X once per unit, not once per fold (5 sizes x 5 folds
+#: of 1,000,000 x 11: 25 test gathers where 5 do, about 180 MB of new pages). With
+#: the define a fold set that asks for it (`reuse_test`, set by learning_curve
+#: only) keeps each fold's host test rows of X and of the stored y and hands them
+#: to that fold's later units. The same rows, so the same scores: no bit moves.
+#: Why an arm and not the default: a member that transforms its test X in place
+#: would be handed its own written rows again (as the serial loop before the
+#: units did), and units on several threads read one array; that is to be
+#: measured and reviewed with the A/B, not argued.
+comptime MSEL_LC_TEST_REUSE = is_defined["MOJOLEARN_MSEL_FAST_LC_TEST_REUSE"]()
+
+
 struct MselFoldRows(Movable):
     """`_FoldRows`: each fold's rows of X (and y) for the fits that share
     the folds, out of X, y and the fold indices resident on the device."""
@@ -359,6 +376,11 @@ struct MselFoldRows(Movable):
     # cross_val_score's FAST slice route (MSEL_CV_SLICE_BIT): [a, b) of each
     # contiguous test fold, 2 words per fold; empty: every take gathers.
     var ranges: List[Int]
+    # MSEL_LC_TEST_REUSE: {address of a fold's test index object: (that
+    # object, its X rows, its y rows, the y they were taken from)} for a
+    # host fold set whose caller set `reuse_test`. Empty otherwise.
+    var test_cache: PythonObject
+    var reuse_test: Bool
 
     def __init__(out self, x: PythonObject, y: PythonObject, folds: PythonObject, device_rows: Bool,
                  context: PythonObject) raises:
@@ -399,6 +421,8 @@ struct MselFoldRows(Movable):
         self.x_held = False
         self.shared = False
         self.ranges = List[Int]()
+        self.test_cache = Python.dict()
+        self.reuse_test = False
         if not self.dev and msel_is_array(x, context):
             self.scope_mark = admitted_scope_begin()
             try:
@@ -494,6 +518,9 @@ struct MselFoldRows(Movable):
         var pair = self.folds[i]
         var train = pair[0]
         var test = pair[1]
+        comptime if MSEL_LC_TEST_REUSE:
+            if self.reuse_test and not self.dev and (y_in is None or y_in is self.y):
+                return self._take_reusing_test(train, test, context)
         var xtr = self.xrows(train, context)
         var xte = self.xrows(test, context)
         self._hold_fold(xtr, xte, context)
@@ -509,10 +536,40 @@ struct MselFoldRows(Movable):
             return Python.tuple(xtr, PythonObject(None), xte, PythonObject(None))
         return Python.tuple(xtr, self.rows(y, train, context), xte, self.rows(y, test, context))
 
+    def _take_reusing_test(mut self, train: PythonObject, test: PythonObject,
+                           context: PythonObject) raises -> PythonObject:
+        """`take` for a host fold set with `reuse_test` and the stored y
+        (MSEL_LC_TEST_REUSE): the fold's test rows of X and y are gathered
+        by the first unit that asks and handed to the later ones. Called
+        under the run's take gate when units share the set."""
+        var xtr = self.xrows(train, context)
+        var y = self.y
+        var xte = PythonObject(None)
+        var yte = PythonObject(None)
+        var have = False
+        var test_key = PythonObject(Int(test._obj_ptr))
+        var hit = py_get(self.test_cache, test_key)
+        if hit is not None:
+            if hit[0] is test and hit[3] is y:
+                xte = hit[1]
+                yte = hit[2]
+                have = True
+        if not have:
+            xte = self.xrows(test, context)
+            if y is not None:
+                yte = self.rows(y, test, context)
+            # the index object is held by the entry, so its address is not reused
+            py_setitem(self.test_cache, test_key, Python.tuple(test, xte, yte, y))
+        self._hold_fold(xtr, xte, context)
+        if y is None:
+            return Python.tuple(xtr, PythonObject(None), xte, PythonObject(None))
+        return Python.tuple(xtr, self.rows(y, train, context), xte, yte)
+
     def close(mut self, context: PythonObject) raises:
         self._end_holds()
         self.extra = PythonObject(None)
         self.rows_cache = Python.dict()
+        self.test_cache = Python.dict()
         self.rows_take = PythonObject(None)
         var scope = self.scope
         self.scope = PythonObject(None)

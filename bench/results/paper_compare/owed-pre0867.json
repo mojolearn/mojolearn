@@ -752,6 +752,16 @@
    "define": "MOJOLEARN_MCD_FAST_LOCKSTEP",
    "status": "define in code (x_decomp/mcd.mojo MCD_LOCKSTEP; x_decomp/kit_device.mojo DMcd.select_lockstep), written 2026-11-19 by lane fx-board-covariance-nb, NOT COMPILED: B = MinCovDet / EllipticEnvelope IDENTICAL with the candidates of one select_random / select_init call taking each C-step together (one batched one-block Jacobi launch and one log-determinant wait a round, up to XD_EIGH_ONE_BLOCK_N columns); A = one candidate at a time (a wait and a batch-of-one Jacobi per C-step). Same LU + Jacobi pinvh math and the same words on every column (digests must be equal between the arms; the host column is untouched)",
    "owed": "RUN"
+  },
+  "fx-perm-select-early": {
+   "define": "MOJOLEARN_RESAMPLE_FAST_PERM_SELECT_EARLY",
+   "status": "define in code (resample/checks/statistics.mojo PERM_SELECT_EARLY): B stops perm_select_stat_kernel's key passes at the first pass whose selected bucket goes to the first group whole; A = all 8 passes. Same membership mask: the digest must equal A's",
+   "owed": "RUN"
+  },
+  "fx-lc-test-reuse": {
+   "define": "MOJOLEARN_MSEL_FAST_LC_TEST_REUSE",
+   "status": "define in code (bindings/msel_cv_door.mojo MSEL_LC_TEST_REUSE): B gathers each fold's host test rows once per learning_curve call; A = once per (size, fold) unit. Scores must equal A's",
+   "owed": "RUN"
   }
  },
  "rows": [
@@ -4935,6 +4945,50 @@
     "mcd-lockstep"
    ],
    "decides": "B is promoted when the digests equal A's on every cell (the arm changes launch order and waits only; a digest difference is a bug in the arm, not a trade) and the taxi fits are faster on the NVIDIA L40S with istella not slower (istella is 220 columns, above the one-block bound: the arm does not engage there and must read the same). Also time a neighbouring shape (300,000 x 16 random float32 rows with 5 percent outliers) and a non-board dataset (covtype's 10 continuous columns). Before promotion: one Apple smoke (a round enqueues up to trials x about 60 launches before its wait) and checks/mcd_step_cost_check.mojo on the B build. On promotion the serial select_random / select_init bodies below XD_EIGH_ONE_BLOCK_N columns are the old path and are deleted with the four tombstone parts"
+  },
+  {
+   "id": "fx-perm-select-early",
+   "source": "lane fx-board-modelsel-metrics (2026-11-19): algos/permutation-test 1,294 ms on d3549c756b (host bd9c355c19c0) against 608 ms stored 0.8.55",
+   "kind": "ab",
+   "lane": [
+    "permutation-test"
+   ],
+   "dataset": "*",
+   "rows": "full",
+   "b_arms": [
+    "fx-perm-select-early"
+   ],
+   "decides": "promote B when it is faster with the digest and the p-value equal to A's on taxi and istella, on the neighbouring shape (2 x 100,000 values, 9,999 resamples) and on the non-board input (2 x 30,000 standard normal draws, 4,999 resamples); else delete the arm with its tombstone"
+  },
+  {
+   "id": "fx-lc-test-reuse",
+   "source": "lane fx-board-modelsel-metrics (2026-11-19): algos/learning-curve taxi 781 ms on d3549c756b against 419 ms stored 0.8.55 (516 ms for d95f805cce on the 0.8.55 box); RUN OWED named in bindings/msel_search_door.mojo since lane p3-msel-parallel-and-process-pool",
+   "kind": "ab",
+   "lane": [
+    "learning-curve"
+   ],
+   "dataset": "*",
+   "rows": "full",
+   "b_arms": [
+    "fx-lc-test-reuse"
+   ],
+   "decides": "promote B when it is faster with every score equal to A's on taxi and istella, on taxi at 300,000 rows and on covtype (non-board); review the in-place-transform note beside MSEL_LC_TEST_REUSE before promoting; else delete the arm with its tombstone"
+  },
+  {
+   "id": "sqrt-comptime-step-off-trustworthiness",
+   "source": "lane fx-board-modelsel-metrics (2026-11-19): algos/metric-trustworthiness taxi 164 ms and istella 467 ms on d3549c756b (host bd9c355c19c0) against 38 and 109 ms for d95f805cce on host 26ee0a3b0f86; trust_rank_kernel (metrics/impl/stats/detail/trustworthiness_score.mojo) makes n^2 pinned sqrts and the only source change under it between those builds is the comptime sqrt step",
+   "kind": "ab",
+   "lane": [
+    "metric-trustworthiness",
+    "cagra",
+    "ann-refine"
+   ],
+   "dataset": "*",
+   "rows": "full",
+   "b_arms": [
+    "sqrt-comptime-step-off"
+   ],
+   "decides": "whether the promoted comptime sqrt step is what slowed trust_rank_kernel: if B (the run-time loop) is faster on metric-trustworthiness, the promotion is revisited for kernels that inline one sqrt per pair; if A and B agree the 4.3x is the box and the row is closed. cagra and ann-refine ride along as the other distance rows of this lane"
   }
  ]
 }

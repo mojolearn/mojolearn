@@ -8,7 +8,14 @@ copies straight from the caller's list (no private copy first), and a
 download lands in the returned list's own words (core/transfer.mojo). Plain copies: the same words. At the IVF shapes these lists are
 1M x 28 floats (the residuals) and 1M x 14 codes."""
 from max.gpu.host import DeviceBuffer, DeviceContext
-from core.transfer import TRANSFER_TIER_IDENTICAL, transfer_download_f32_list, transfer_download_i32_list
+from core.transfer import (
+    TRANSFER_TIER_IDENTICAL,
+    transfer_download_f32_into,
+    transfer_download_f32_list,
+    transfer_download_i32_into,
+    transfer_download_i32_list,
+    transfer_upload_ptr,
+)
 from core.admitted_finite_status import enqueue_finite_status, enqueue_finite_word
 from core.device_zero import enqueue_fill
 
@@ -55,6 +62,43 @@ def download_i32(ctx: DeviceContext, buf: DeviceBuffer[DType.int32], n: Int) rai
         ctx.synchronize()
         return List[Int32]()
     return transfer_download_i32_list[_XFER_I32_POOL](ctx, buf, n)
+
+
+def upload_f32_ptr(
+    ctx: DeviceContext, src: MutPointer[Float32, MutUntrackedOrigin], n: Int,
+) raises -> DeviceBuffer[DType.float32]:
+    """`upload_f32` for `n` words read in place in the CALLER's array (kept
+    alive by the caller for the whole call): no list copy of the array
+    first. Waits inside, as `upload_f32` does; a one-cell buffer for n <= 0."""
+    return transfer_upload_ptr[DType.float32](ctx, src, n if n > 0 else 0, n if n > 0 else 1)
+
+
+def upload_i32_ptr(
+    ctx: DeviceContext, src: MutPointer[Int32, MutUntrackedOrigin], n: Int,
+) raises -> DeviceBuffer[DType.int32]:
+    """`upload_f32_ptr` for int32 words."""
+    return transfer_upload_ptr[DType.int32](ctx, src, n if n > 0 else 0, n if n > 0 else 1)
+
+
+def download_f32_into(
+    ctx: DeviceContext, buf: DeviceBuffer[DType.float32], n: Int, dst: MutPointer[Float32, MutUntrackedOrigin],
+) raises:
+    """`download_f32` written straight into the CALLER's array at `dst` (no
+    result list and no copy out of it); waits inside, also for n <= 0."""
+    if n <= 0:
+        ctx.synchronize()
+        return
+    transfer_download_f32_into[_XFER_POOL](ctx, buf, n, dst)
+
+
+def download_i32_into(
+    ctx: DeviceContext, buf: DeviceBuffer[DType.int32], n: Int, dst: MutPointer[Int32, MutUntrackedOrigin],
+) raises:
+    """`download_f32_into` for int32 words."""
+    if n <= 0:
+        ctx.synchronize()
+        return
+    transfer_download_i32_into[_XFER_I32_POOL](ctx, buf, n, dst)
 
 
 def enqueue_query_status(

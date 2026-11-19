@@ -83,7 +83,7 @@ from metrics.impl.stats.detail.contingency_matrix import (
     contingency_matrix,
     get_input_class_cardinality,
 )
-from metrics.impl.stats.detail.rand_index import rand_index_counts
+from metrics.impl.stats.detail.rand_index import rand_index_counts, rand_index_counts_contingency
 from metrics.impl.stats.detail.scores import count_correct
 from checks.numerics import (
     GLOBAL_NUMERIC_MODE,
@@ -445,6 +445,21 @@ def check_rand_index_exact(ctx: DeviceContext) raises:
             + ", "
             + String(got[1])
             + ") host ("
+            + String(a)
+            + ", "
+            + String(b)
+            + ")"
+        )
+    # the contingency route (lane fx-board-modelsel-metrics): the same two
+    # integers from the device matrix over the labels' joint range [0, 4]
+    var via = rand_index_counts_contingency(ctx, dt, dp, N, Int32(0), Int32(4))
+    if via[0] != a or via[1] != b:
+        raise Error(
+            "rand counts: contingency route ("
+            + String(via[0])
+            + ", "
+            + String(via[1])
+            + ") pair loop ("
             + String(a)
             + ", "
             + String(b)
