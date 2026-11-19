@@ -13,7 +13,7 @@ Python bodies it replaces.
 """
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_setattr, py_fields, py_contains, py_item
-from bindings.py_cpython_table import cpython_table
+from bindings.py_cpython_table import cpython_table, CPythonTable
 from std.python._cpython import GILReleased, PyObjectPtr
 from core.shared_slot import SharedSlot
 from core.entry_table import EntryRef
@@ -171,16 +171,47 @@ def xcnn_name(which: Int) raises -> PythonObject:
     return g[].keys[which]
 
 
+def _xcnn_exact_in(g: UnsafePointer[_XcnnNames, MutAnyOrigin], value: PyObjectPtr, kind: Int) raises -> Bool:
+    """`xcnn_exact` of a borrowed pointer (its owner is alive) against the
+    held types `g` the caller already resolved (`_xcnn_names()`)."""
+    # fx-maxpool (2026-11-19): the type is read and released as raw pointers
+    # (the `_is_exact_dict` form of bindings/py_balanced.mojo). Every exact
+    # test looked the held-names slot up by its name (a hash of the name, a
+    # probe and a name compare in the runtime's global table), wrapped the
+    # borrowed pointer in an object (a reference taken and dropped) and
+    # wrapped the type in a second one; a held-name dictionary read
+    # (`xcnn_item`) did the slot lookup twice and the process table's once.
+    # A resident max pool forward with its output's release makes about 45
+    # such reads, 40 exact tests and 16 tuple item reads. Same test, same
+    # type identity.
+    ref cpy = Python().cpython()
+    var cls = cpy.PyObject_Type(value)
+    var same = Int(cls) == g[].types[kind]
+    cpy.Py_DecRef(cls)
+    return same
+
+
+def _xcnn_int_word(t: UnsafePointer[CPythonTable, MutAnyOrigin], value: PyObjectPtr) raises -> Int:
+    """`Int(py=value)` of a borrowed exact int (its owner is alive): the
+    machine word, read once. A value out of machine range takes the
+    conversion it took before and raises what that raised."""
+    var word = t[].PyLong_AsLongLong(value)
+    if word == -1:
+        if t[].PyErr_Occurred():
+            t[].PyErr_Clear()
+            return Int(py=PythonObject(from_borrowed=value))
+    return Int(word)
+
+
 def xcnn_exact(value: PythonObject, kind: Int) raises -> Bool:
     """`type(value) is <the builtin type XT_<kind>>`: an exact-type test
     against the type of a C-created value (no `builtins` attribute read)."""
-    var g = _xcnn_names()
-    return _xcnn_type_address(value) == g[].types[kind]
+    return _xcnn_exact_in(_xcnn_names(), value._obj_ptr, kind)
 
 
 def _xcnn_exact_ptr(value: PyObjectPtr, kind: Int) raises -> Bool:
     """`xcnn_exact` of a borrowed item pointer (its container is alive)."""
-    return xcnn_exact(PythonObject(from_borrowed=value), kind)
+    return _xcnn_exact_in(_xcnn_names(), value, kind)
 
 
 def xcnn_plain_scalar(value: PythonObject) raises -> Bool:
@@ -202,9 +233,12 @@ def xcnn_item(mapping: PythonObject, which: Int) raises -> PythonObject:
     """`mapping["<name>"]` through the held name: one dictionary lookup on an
     exact dict; a missing key, or any other mapping, takes the subscript
     (`PyObject_GetItem`) and raises what it raised."""
+    # fx-maxpool (2026-11-19): one lookup of the held names per read (it
+    # was two, plus the process table's): see `_xcnn_exact_in`.
     var g = _xcnn_names()
-    if _xcnn_exact_ptr(mapping._obj_ptr, XT_DICT):
-        var found = cpython_table()[].PyDict_GetItemWithError(mapping._obj_ptr, g[].keys[which]._obj_ptr)
+    if _xcnn_exact_in(g, mapping._obj_ptr, XT_DICT):
+        ref cpy = Python().cpython()
+        var found = cpy.PyDict_GetItemWithError(mapping._obj_ptr, g[].keys[which]._obj_ptr)
         if found:
             return PythonObject(from_borrowed=found)
     return py_item(mapping, g[].keys[which])
@@ -212,7 +246,19 @@ def xcnn_item(mapping: PythonObject, which: Int) raises -> PythonObject:
 
 def xcnn_get(mapping: PythonObject, which: Int) raises -> PythonObject:
     """`mapping.get("<name>")` through the held name."""
+    # fx-maxpool (2026-11-19): an exact dict is read here, against the held
+    # dict type (the same type identity `py_get` holds in its own slot, which
+    # it looked up by name per read): `dict.get`'s C lookup, the same errors.
+    # Any other mapping takes `py_get` as before.
     var g = _xcnn_names()
+    if _xcnn_exact_in(g, mapping._obj_ptr, XT_DICT):
+        ref cpy = Python().cpython()
+        var found = cpy.PyDict_GetItemWithError(mapping._obj_ptr, g[].keys[which]._obj_ptr)
+        if not found:
+            if cpy.PyErr_Occurred():
+                raise cpy.unsafe_get_error()
+            return PythonObject(None)
+        return PythonObject(from_borrowed=found)
     return py_get(mapping, g[].keys[which])
 
 
@@ -240,14 +286,15 @@ def xcnn_int_pair(value: PythonObject, mut first: Int, mut second: Int) raises -
     for it the general parse returns an equal pair, so a caller that gets
     True skips the parse; False sends it to the general parse, which admits
     or refuses exactly as before."""
-    if not _xcnn_exact_ptr(value._obj_ptr, XT_TUPLE):
+    var g = _xcnn_names()
+    if not _xcnn_exact_in(g, value._obj_ptr, XT_TUPLE):
         return False
     var t = cpython_table()
     if t[].PyTuple_Size(value._obj_ptr) != 2:
         return False
     var a = t[].PyTuple_GetItem(value._obj_ptr, 0)
     var b = t[].PyTuple_GetItem(value._obj_ptr, 1)
-    if not _xcnn_exact_ptr(a, XT_INT) or not _xcnn_exact_ptr(b, XT_INT):
+    if not _xcnn_exact_in(g, a, XT_INT) or not _xcnn_exact_in(g, b, XT_INT):
         return False
     var wa = t[].PyLong_AsLongLong(a)
     if wa == -1:
@@ -491,16 +538,24 @@ def xcnn_shape(value: PythonObject) raises -> List[Int]:
                 raise Error("TypeError: CNN shape refuses subclasses")
             class_admit(mods, _XCNN_SHAPE_SLOT, cls, PythonObject(True))
         shape = py_call(descriptor.__get__, value, cls)
-    if not xcnn_exact(shape, XT_TUPLE):
-        raise Error("TypeError: CNN shape requires an exact tuple")
+    # fx-maxpool (2026-11-19): the held names are resolved once for the
+    # tuple, and each dimension is one raw type test and one word read (it
+    # was a slot lookup, two wrapped objects and two conversions per
+    # dimension). Same tests, same refusals.
     var out = List[Int]()
+    var held = _xcnn_names()
     var t = cpython_table()
+    if not _xcnn_exact_in(held, shape._obj_ptr, XT_TUPLE):
+        raise Error("TypeError: CNN shape requires an exact tuple")
     var count = t[].PyTuple_Size(shape._obj_ptr)
     for i in range(count):  # driver-loop: snapshot native shape words
-        var item = PythonObject(from_borrowed=t[].PyTuple_GetItem(shape._obj_ptr, i))
-        if not xcnn_exact(item, XT_INT) or Int(py=item) < 0:
+        var item = t[].PyTuple_GetItem(shape._obj_ptr, i)
+        if not _xcnn_exact_in(held, item, XT_INT):
             raise Error("TypeError: CNN dimensions must be nonnegative native integers")
-        out.append(Int(py=item))
+        var word = _xcnn_int_word(t, item)
+        if word < 0:
+            raise Error("TypeError: CNN dimensions must be nonnegative native integers")
+        out.append(word)
     _ = shape  # the borrowed items above are the tuple's: keep it past the last read
     return out^
 
