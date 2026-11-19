@@ -27,6 +27,16 @@ def _mode(fields: PythonObject) raises -> PythonObject:
     return mode
 
 
+def _mode_name(fields: PythonObject, mode: PythonObject) raises -> PythonObject:
+    """The name of the process default as the user chose it: `_DEFAULT_NAME`
+    ('fast' while the identical set answers that name, `_backend._FAST_ANSWER`),
+    else the set word `mode` itself."""
+    var name = py_get(fields, "_DEFAULT_NAME")
+    if name is None:
+        return mode
+    return _text(name, "default mode name")
+
+
 def _refuse(error: PythonObject) raises:
     if error is None:
         return
@@ -462,11 +472,24 @@ def backend_public_operation(operation: String, args: PythonObject, context: Pyt
     if operation == "set_default_mode":
         if len(args) != 1:
             raise Error("TypeError: set_numeric_mode requires one mode argument")
-        var requested = mode if args[0] is None else _text(args[0], "numeric mode")
+        var previous = _mode_name(fields, mode)
+        var requested = previous if args[0] is None else _text(args[0], "numeric mode")
         var text_type = py_type(PythonObject(""))
         requested = py_call(text_type.lower, py_call(text_type.strip, requested))
         if String(requested) != "identical" and String(requested) != "fast":
             raise Error("ValueError: mojolearn: numeric_mode=" + String(py_call(text_type.__repr__, requested)) + "; it must be 'fast', or 'identical' (the default)")
+        # THE NAME `fast` WHERE NO FAST SET IS BUILT (lane fx-fast-selector):
+        # off Apple the identical set answers it. The selector decided that
+        # once at import (`_backend._FAST_ANSWER`: 'identical', or None where
+        # `fast` names its own set); here the set becomes the default every
+        # door reads and the name is kept for numeric_mode() only.
+        var answered = requested
+        var name = PythonObject(None)
+        if String(requested) == "fast":
+            var answer = py_get(fields, "_FAST_ANSWER")
+            if answer is not None:
+                answered = _text(answer, "fast answer")
+                name = requested
         # A CPU-ONLY INSTALL RUNS `identical` (the host column of the
         # verification): the selector installed the host bindings under the
         # canonical names and there is no tier directory, so the import-time
@@ -474,15 +497,17 @@ def backend_public_operation(operation: String, args: PythonObject, context: Pyt
         # install already runs is accepted; 'fast' is Apple only and refused
         # by name (cpu-surface-defects, 2026-11-16).
         if fields["_CPU_ONLY"] is not None:
-            if String(requested) != "identical":
+            if String(answered) != "identical":
                 raise Error("ValueError: mojolearn: numeric_mode='fast' is available on Apple GPUs only; this CPU-only install runs 'identical'. Pass 'identical' or drop the call.")
-            py_setitem(fields, "_DEFAULT_MODE", requested)
-            return mode
-        _refuse(context["plans"][requested]["error"])
-        py_setitem(fields, "_DEFAULT_MODE", requested)
-        return mode
+            py_setitem(fields, "_DEFAULT_MODE", answered)
+            py_setitem(fields, "_DEFAULT_NAME", name)
+            return previous
+        _refuse(context["plans"][answered]["error"])
+        py_setitem(fields, "_DEFAULT_MODE", answered)
+        py_setitem(fields, "_DEFAULT_NAME", name)
+        return previous
     if operation == "numeric_mode":
-        return _numeric_mode(fields, context, mode)
+        return _mode_name(fields, _numeric_mode(fields, context, mode))
     if operation == "vendor":
         return _vendor(fields, context, mode)
     if operation == "runtime_report":
