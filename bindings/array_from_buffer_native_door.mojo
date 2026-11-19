@@ -10,10 +10,10 @@ from bindings.native_buffer_owner_pack import native_storage_allocate
 from bindings.py_typed_call import py_call_typed, typed_python_error
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem
 from providers.python.borrowed_buffer_pyapi_unpack import admit_native_buffer_exporter, AdmittedBorrowedBuffer
-from bindings.native_array_storage_admission_door import (
-    array_storage_namespace as _namespace, array_storage_class, array_storage_admit,
 from bindings.array_keys_unpack import array_keys
 from bindings.py_balanced import py_item
+from bindings.native_array_storage_admission_door import (
+    array_storage_namespace as _namespace, array_storage_class, array_storage_admit,
 )
 
 
