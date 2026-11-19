@@ -903,9 +903,19 @@ struct BlockStepScratch(Movable):
     #: list is in `_attn_watermark_grant`'s docstring). False (every generic
     #: `OpsSession`): the whole-cache refusal scans on every call.
     var attn_cache_private: Bool
+    #: lane fx-ops-session-blocks (2026-11-19): this session's executor is
+    #: NOT on the x_cnn context (`cnn_ctx()`), whose queue the CNN block ops'
+    #: entries launch on and wait for (autograd/cnn_block_op.mojo). Set for
+    #: a public `mojolearn.ops.Session` (the sequence context); the session
+    #: then drains its own queue before a CNN entry, forward or backward, so
+    #: the entry reads finished operands (the entry's own wait finishes its
+    #: results). False for the CNN model's sessions, which are opened over
+    #: `cnn_ctx()` and share one in-order queue: no wait is added there.
+    var cnn_other_queue: Bool
 
     def __init__(out self):
         self.attn_cache_private = False
+        self.cnn_other_queue = False
         self.m1 = List[_M1Block]()
         self.m2 = List[_M2Block]()
         self.m3 = List[_M3Block]()

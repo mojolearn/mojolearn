@@ -37,6 +37,23 @@ transformer/causal_lm_program.mojo's layer loop, training/samba_program.mojo).
      NAdam finite, moved, mu product advanced) and the state buffers each
      keeps.
 
+  8  RMSprop and Adagrad (one update each against the closed form), and the
+     gradient clips: clip_grad_norm over TWO tensors (4 and 5 elements, all
+     gradients 1, so the norm is 3: with max_norm 1.5 and SGD at lr 1 every
+     element moves by 1.5 / (3 + 1e-6), which a per-tensor clip would not
+     give), and clip_grad_value 0.25.
+  9  attention_block with options (q/k/v, output and MLP biases): the
+     public option words and present pieces against the model's own call
+     with the block options tail, word for word.
+ 10  lstm and gru: step 1 of each sequence against the float64 PyTorch
+     formulas from a zero state, recorded == unrecorded, and finite
+     non-zero gradients of weight_ih and x.
+ 11  conv_block and conv_linear on a session that is not on the x_cnn
+     queue (the public Session's case) against float64 formulas, and their
+     gradients.
+ 12  lm_rows, lm_pick, lm_alive and lm_embedding: greedy picks, the eos
+     stop and the padded finished row; the embedding rows of the picks.
+
 Weights are a fixed finite pattern (norm weights 1): the properties hold for
 any finite weights. Cross-vendor words of the same kernels are the release
 verification's (the mamba, transformer, chunked LM head and MLP lanes);
@@ -45,18 +62,23 @@ this suite checks that the public route IS the model's route.
 Serial by nature: each fixture opens sessions through the process-wide
 session table (autograd/ops_api.mojo `_OPS_SESSIONS`), whose open and close
 append to and pop from unlocked lists (core_program_loop_append says the
-same), and the fixtures share one device context. Eight small fixtures, one
+same), and the fixtures share one device context. Thirteen small fixtures, one
 after another. No Python participates.
 """
-from std.math import exp, log
+from std.math import exp, log, tanh
+from std.memory import bitcast
 from autograd.ops_api import OpsSession, ops_session, ops_session_open, ops_session_close, OPS_HOST, OPS_DEVICE
 from autograd.block_step_ops import (
     OPS_M1_STEP, OPS_M2_STEP, OPS_M3_STEP, OPS_ATTN_STEP, BLOCK_PART_WEIGHTS, BLOCK_PART_STATE, BLOCK_PART_WORDS,
     block_weight_sizes, block_state_sizes, block_part_floats, block_int_words,
 )
-from autograd.ops_block_frontend import session_block_create, session_block_step
+from autograd.ops_block_frontend import (
+    session_block_create, session_block_step, session_attention_option_words, session_lm_rows, session_lm_pick,
+    session_lm_alive, session_rnn,
+)
+from sequence.ops import CELL_LSTM, CELL_GRU
 from autograd.ops_frontend_impl import clip_high_unbounded
-from autograd.optimizer_requests import OpsOptimizerRequest, ops_optimizer_codes
+from autograd.optimizer_requests import OpsOptimizerRequest, OpsOptimizerExtras, ops_optimizer_codes
 from core.cast_in import CastIn
 from sequence.exec_trait import Exec
 from sequence.exec import HostExec
@@ -66,7 +88,7 @@ from checks.native_tests.core_ops_common import dims2, normal, all_finite
 from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require
 
 
-comptime CORE_OPS_SESSION_BLOCKS_FIXTURES = 8
+comptime CORE_OPS_SESSION_BLOCKS_FIXTURES = 13
 
 comptime _B = 2
 comptime _L = 3
@@ -254,8 +276,13 @@ def _block_tail[E: Exec & Movable & Deinitable](
 
 def _same_route[E: Exec & Movable & Deinitable, KIND: Int](sid: Int, code: Int) raises:
     """Fixtures 0-3: the public block and step against the model's own call."""
+    _same_route_ints[E, KIND](sid, code, _block_ints(code))
+
+
+def _same_route_ints[E: Exec & Movable & Deinitable, KIND: Int](sid: Int, code: Int, ints: List[Int]) raises:
+    """`_same_route` for the step op's integers `ints` (fixture 9 appends
+    the attention block's option words)."""
     var s = ops_session[E, KIND](sid)
-    var ints = _block_ints(code)
     var dm = ints[1]
     var w = _Weights(code, ints, 0)
     var model_block = _model_block(s[], code, ints, w)
@@ -528,10 +555,272 @@ def _new_optimizers[E: Exec & Movable & Deinitable, KIND: Int](rid: Int) raises:
         s[].free(p)
     var refused = False
     try:
-        _ = ops_optimizer_codes("rmsprop", "constant")
+        _ = ops_optimizer_codes("rprop", "constant")
     except:
         refused = True
-    require(refused, "an optimizer kind without a public configuration was accepted")
+    require(refused, "an unknown optimizer kind was accepted")
+
+
+def _sgd_request(kind: Int, lr: Float32) -> OpsOptimizerRequest:
+    return OpsOptimizerRequest(kind, False, 0, 1, lr, Float32(0.0), Float32(0.9), Float32(0.999), Float32(1e-8),
+                               Float32(0.0), Float32(1.0), Float32(0.0))
+
+
+def _extras_and_clips[E: Exec & Movable & Deinitable, KIND: Int](rid: Int) raises:
+    """Fixture 8: RMSprop, Adagrad, clip_grad_norm over two tensors, clip_grad_value."""
+    var s = ops_session[E, KIND](rid)
+    var start: List[Float32] = [1.0, -2.0, 0.5, -0.25]
+    var lr = Float32(0.125)
+    var names: List[String] = ["rmsprop", "adagrad"]
+    for k in range(2):
+        var codes = ops_optimizer_codes(names[k], "constant")
+        require(codes[0] == 3 + k, "optimizer name code of " + names[k])
+        var p = tensor(s[], start, dims2(4, 1), True)
+        var opt = s[].optimizer_with(_sgd_request(3 + k, lr),
+                                     OpsOptimizerExtras(Float32(0.99), False, Float32(0.0), Float32(0.0),
+                                                        Float32(0.0), Float32(0.0)))
+        var summed = total(s[], p)
+        s[].backward(summed, False)
+        var params: List[Int] = [p]
+        s[].step(opt, params)
+        s[].reset()
+        var got = values(s[], p, dims2(4, 1))
+        # g = 1. RMSprop: v = (1 - alpha) g^2 = 0.01, p -= lr g / (sqrt(v) + eps);
+        # Adagrad: sum = g^2 = 1, p -= lr g / (sqrt(sum) + eps)
+        var move = Float64(lr) / (1.0 + 1e-8)
+        if k == 0:
+            move = Float64(lr) / (0.1 + 1e-8)
+        for i in range(4):
+            _close(got[i], Float64(start[i]) - move, names[k] + " update at " + String(i))
+        var state = s[].optimizer_state_value(opt, p)
+        require(state.step == 1 and state.second != 0, names[k] + ": the state's step count or squared-gradient buffer")
+        s[].reset()
+        s[].free(p)
+    # clip_grad_norm over two tensors, then clip_grad_value
+    var a0 = List[Float32](length=4, fill=Float32(2.0))
+    var b0 = List[Float32](length=5, fill=Float32(-1.0))
+    for m in range(2):
+        var pa = tensor(s[], a0, dims2(4, 1), True)
+        var pb = tensor(s[], b0, dims2(5, 1), True)
+        var clip_norm = Float32(1.5) if m == 0 else Float32(0.0)
+        var clip_value = Float32(0.0) if m == 0 else Float32(0.25)
+        var extras = OpsOptimizerExtras(Float32(0.99), False, Float32(0.0), Float32(0.0), clip_norm, clip_value)
+        var opt = s[].optimizer_with(_sgd_request(0, Float32(1.0)), extras)
+        var ta = total(s[], pa)
+        var tb = total(s[], pb)
+        var hs: List[Int] = [ta, tb]
+        var both = s[].op(2, hs, List[Int](), List[Float32]())  # add
+        s[].backward(both, False)
+        var params: List[Int] = [pa, pb]
+        s[].step(opt, params)
+        s[].reset()
+        var ga = values(s[], pa, dims2(4, 1))
+        var gb = values(s[], pb, dims2(5, 1))
+        var move = 0.25
+        var what = String("clip_grad_value")
+        if m == 0:
+            move = 1.5 / (3.0 + 1e-6)
+            what = String("clip_grad_norm over two tensors")
+        for i in range(4):
+            _close(ga[i], 2.0 - move, what + ", first tensor at " + String(i))
+        for i in range(5):
+            _close(gb[i], -1.0 - move, what + ", second tensor at " + String(i))
+        s[].reset()
+        s[].free(pa)
+        s[].free(pb)
+
+
+def _option_words(ints: List[Int], qkv_bias: Bool, o_bias: Bool, norm_bias: Bool, mlp_bias: Bool) raises -> List[Int]:
+    """The public option words of the fixture's block (head_dim ints[4],
+    s_max ints[6]) with the four bias switches; everything else default."""
+    return session_attention_option_words(
+        ints[4], ints[6], "rmsnorm", "swiglu", Float32(10000.0), "", Float32(1.0), Float32(1.0), Float32(4.0),
+        8192, 0, qkv_bias, o_bias, Float32(1e-6), norm_bias, mlp_bias, False, Float32(0.0))
+
+
+def _attention_options[E: Exec & Movable & Deinitable, KIND: Int](sid: Int) raises:
+    """Fixture 9: the attention block with q/k/v, output and MLP biases."""
+    var ints = _block_ints(OPS_ATTN_STEP)
+    var words = _option_words(ints, True, True, False, True)
+    require(len(words) == 17, "attention options: a non-default record sends seventeen words")
+    var plain = _option_words(ints, False, False, False, False)
+    require(len(plain) == 0, "attention options: the default record sends no words")
+    var refused = False
+    try:
+        _ = _option_words(ints, False, False, True, False)
+    except:
+        refused = True
+    require(refused, "attention options: norm_bias without layernorm was accepted")
+    for k in range(len(words)):
+        ints.append(words[k])
+    _same_route_ints[E, KIND](sid, OPS_ATTN_STEP, ints)
+
+
+def _sigmoid(v: Float64) -> Float64:
+    return 1.0 / (1.0 + exp(-v))
+
+
+def _recurrent[E: Exec & Movable & Deinitable, KIND: Int](sid: Int, rid: Int) raises:
+    """Fixture 10: lstm and gru."""
+    var steps = 2
+    var batch = 2
+    var d_in = 3
+    var hid = 4
+    var xv = normal(steps * batch * d_in, 31)
+    var cells: List[Int] = [CELL_LSTM, CELL_GRU]
+    for c in range(2):
+        var gates = 4 if c == 0 else 3
+        var gh = gates * hid
+        var wih = normal(gh * d_in, 32 + c)
+        var whh = normal(gh * hid, 34 + c)
+        var bih = normal(gh, 36 + c)
+        var bhh = normal(gh, 38 + c)
+        var name = String("lstm")
+        if c == 1:
+            name = String("gru")
+        # step 1 from the zero state, PyTorch's formulas in float64
+        var want = List[Float64](length=batch * hid, fill=0)
+        for r in range(batch):
+            for j in range(hid):
+                var pre = List[Float64](length=gates, fill=0)
+                for g in range(gates):
+                    var acc = Float64(bih[g * hid + j])
+                    for i in range(d_in):
+                        acc += Float64(xv[r * d_in + i]) * Float64(wih[(g * hid + j) * d_in + i])
+                    pre[g] = acc
+                if c == 0:
+                    # gates i, f, g, o; h_0 = c_0 = 0: every gate adds b_hh
+                    var gi = _sigmoid(pre[0] + Float64(bhh[j]))
+                    var gg = tanh(pre[2] + Float64(bhh[2 * hid + j]))
+                    var go = _sigmoid(pre[3] + Float64(bhh[3 * hid + j]))
+                    want[r * hid + j] = go * tanh(gi * gg)
+                else:
+                    # gates r, z, n: n = tanh(W_in x + b_in + r b_hn), h = (1 - z) n
+                    var gr = _sigmoid(pre[0] + Float64(bhh[j]))
+                    var gz = _sigmoid(pre[1] + Float64(bhh[hid + j]))
+                    var gn = tanh(pre[2] + gr * Float64(bhh[2 * hid + j]))
+                    want[r * hid + j] = (1.0 - gz) * gn
+        var sids: List[Int] = [sid, rid]
+        var runs = List[List[Float32]]()
+        var odims: List[Int] = [steps, batch, hid]
+        var xdims: List[Int] = [steps, batch, d_in]
+        for m in range(2):
+            var recording = m == 1
+            var s = ops_session[E, KIND](sids[m])
+            var hx = tensor(s[], xv, xdims, recording)
+            var h1 = tensor(s[], wih, dims2(gh, d_in), recording)
+            var h2 = tensor(s[], whh, dims2(gh, hid), recording)
+            var h3 = tensor(s[], bih, dims2(1, gh), recording)
+            var h4 = tensor(s[], bhh, dims2(1, gh), recording)
+            var y = session_rnn[E, KIND](sids[m], cells[c], hx, h1, h2, h3, h4)
+            var got = values(s[], y, odims)
+            all_finite(got, name + ": the outputs")
+            for i in range(batch * hid):
+                _close(got[i], want[i], name + " step 1 at " + String(i))
+            if recording:
+                var summed = total(s[], y)
+                s[].backward(summed, False)
+                var gw = gradient(s[], h1, dims2(gh, d_in))
+                var gx = gradient(s[], hx, xdims)
+                all_finite(gw, name + ": d weight_ih")
+                all_finite(gx, name + ": d x")
+                all_finite(gradient(s[], h2, dims2(gh, hid)), name + ": d weight_hh")
+                require(_any_nonzero(gw) and _any_nonzero(gx), name + ": a gradient is all zero")
+            runs.append(got^)
+            s[].reset()
+        same_words(runs[1], runs[0], name + ": the recorded forward differs from the unrecorded one")
+
+
+def _conv_ops[E: Exec & Movable & Deinitable, KIND: Int](sid: Int, rid: Int) raises:
+    """Fixture 11: conv_block (3 x 3 over one 4 x 4 image, 2 x 2 pool) and conv_linear."""
+    var img = normal(16, 41)
+    var ker = normal(9, 42)
+    var cb: List[Float32] = [0.25]
+    var best = Float64(0)
+    for i in range(2):
+        for j in range(2):
+            var acc = Float64(cb[0])
+            for a in range(3):
+                for b in range(3):
+                    acc += Float64(img[(i + a) * 4 + (j + b)]) * Float64(ker[a * 3 + b])
+            if acc < 0.0:
+                acc = 0.0
+            if (i == 0 and j == 0) or acc > best:
+                best = acc
+    var lw: List[Float32] = [0.5, -1.5]
+    var lb: List[Float32] = [0.125, 0.75]
+    var sids: List[Int] = [sid, rid]
+    for m in range(2):
+        var recording = m == 1
+        var s = ops_session[E, KIND](sids[m])
+        s[].steps.cnn_other_queue = True  # as a public Session: not on the x_cnn queue
+        var xdims: List[Int] = [1, 1, 4, 4]
+        var kdims: List[Int] = [1, 1, 3, 3]
+        var odims: List[Int] = [1, 1, 1, 1]
+        var hx = tensor(s[], img, xdims)
+        var hk = tensor(s[], ker, kdims, recording)
+        var hb = tensor(s[], cb, dims2(1, 1), recording)
+        var hw = tensor(s[], lw, dims2(2, 1), recording)
+        var hlb = tensor(s[], lb, dims2(1, 2), recording)
+        var bh: List[Int] = [hx, hk, hb]
+        var bi: List[Int] = [0, 1, 2]
+        var pooled = s[].op(90, bh, bi, List[Float32]())
+        var pv = values(s[], pooled, odims)
+        _close(pv[0], best, "conv_block")
+        var lh: List[Int] = [pooled, hw, hlb]
+        var logits = s[].op(91, lh, List[Int](), List[Float32]())
+        var lv = values(s[], logits, dims2(1, 2))
+        for o in range(2):
+            _close(lv[o], best * Float64(lw[o]) + Float64(lb[o]), "conv_linear at " + String(o))
+        if recording:
+            var summed = total(s[], logits)
+            s[].backward(summed, False)
+            var dlb = gradient(s[], hlb, dims2(1, 2))
+            require(dlb[0] == Float32(1.0) and dlb[1] == Float32(1.0), "conv_linear: d bias of a summed output is 1")
+            all_finite(gradient(s[], hk, kdims), "conv_block: d weight")
+            all_finite(gradient(s[], hb, dims2(1, 1)), "conv_block: d bias")
+        s[].reset()
+
+
+def _generation[E: Exec & Movable & Deinitable, KIND: Int](sid: Int) raises:
+    """Fixture 12: lm_rows, lm_pick, lm_alive, lm_embedding."""
+    var s = ops_session[E, KIND](sid)
+    var eos: List[Int] = [1]
+    var rows = session_lm_rows[E, KIND](sid, 2, eos)
+    var table = normal(5 * 3, 51)
+    var th = tensor(s[], table, dims2(5, 3))
+    # run 0: row 0 picks 3, row 1 picks the eos id 1
+    var l0: List[Float32] = [0.0, 0.5, -1.0, 2.0, 1.0, 0.25, 3.0, -2.0, 0.0, 1.5]
+    # run 1: row 0 picks the eos id; row 1 is finished and gets the pad id 0
+    var l1: List[Float32] = [0.0, 4.0, -1.0, 2.0, 1.0, 9.0, 3.0, -2.0, 7.0, 1.5]
+    var first: List[Int] = [3, 1]
+    var second: List[Int] = [1, 0]
+    for r in range(2):
+        var lh = 0
+        if r == 0:
+            lh = tensor(s[], l0, dims2(2, 5))
+        else:
+            lh = tensor(s[], l1, dims2(2, 5))
+        var ids = session_lm_pick[E, KIND](sid, lh, rows, 0, False, 0, 0, 0, Float32(1.0), Float32(1.0))
+        var iv = values(s[], ids, dims2(2, 1))
+        var alive = session_lm_alive[E, KIND](sid, ids, rows)
+        var av = values(s[], alive, dims2(1, 1))
+        var eh: List[Int] = [th, ids]
+        var pad: List[Int] = [-1]
+        var emb = s[].op(93, eh, pad, List[Float32]())
+        var ev = values(s[], emb, dims2(2, 3))
+        for b in range(2):
+            var want = first[b]
+            if r == 1:
+                want = second[b]
+            require(Int(bitcast[DType.int32](iv[b])) == want, "lm_pick: run " + String(r) + " row " + String(b))
+            for j in range(3):
+                require(ev[b * 3 + j] == table[want * 3 + j], "lm_embedding: the picked id's row")
+        var want_alive = Float32(1.0)
+        if r == 1:
+            want_alive = Float32(0.0)
+        require(av[0] == want_alive, "lm_alive after run " + String(r))
+
 
 
 def run_core_ops_session_blocks_fixture[E: Exec & Movable & Deinitable, KIND: Int](
@@ -549,8 +838,18 @@ def run_core_ops_session_blocks_fixture[E: Exec & Movable & Deinitable, KIND: In
             _train_step_op[E, KIND](sid, rid, step_codes[k])
     elif fixture_id == 6:
         _small_mlp_and_head[E, KIND](sid, rid)
-    else:
+    elif fixture_id == 7:
         _new_optimizers[E, KIND](rid)
+    elif fixture_id == 8:
+        _extras_and_clips[E, KIND](rid)
+    elif fixture_id == 9:
+        _attention_options[E, KIND](sid)
+    elif fixture_id == 10:
+        _recurrent[E, KIND](sid, rid)
+    elif fixture_id == 11:
+        _conv_ops[E, KIND](sid, rid)
+    else:
+        _generation[E, KIND](sid)
 
 
 # ---- The host column ----

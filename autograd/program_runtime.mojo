@@ -13,7 +13,9 @@ from autograd.tape import Tape, Tensor
 from autograd.cast_ops import upload_cast, upload_cast_i32
 from core.cast_in import CastIn
 from autograd.data import permutation, gather_rows
-from autograd.optim import step_lr, optimizer_slots, OptimizerState
+from autograd.optim import (
+    step_lr, optimizer_slots, OptimizerState, optimizer_clips, clip_norm_accumulate, step_lr_clipped,
+)
 from std.sys.compile import is_defined
 from autograd.program_loop import (
     LOOP_DONE, LOOP_ITER, LOOP_WORDS, LOOP_MAX_EXACT, OP_LOOP_COMMIT, OP_LOOP_SHADOW, OP_LOOP_OPEN, OP_LOOP_FIT_TICK,
@@ -440,7 +442,12 @@ def train_program_control[E: Exec & Movable & Deinitable](
                 s.wants_grad[s._slot(p.params[j])] = True
         comptime if PROGRAM_FLAT_UPDATE:
             if (flat_update and not conditional and not criterion and len(grads_out) == 0
-                    and not (cfg.clip > Float32(0.0))):
+                    and not (cfg.clip > Float32(0.0)) and not optimizer_clips(cfg)):
+                # A clipping optimizer (clip_grad_norm over the fit's tensors or clip_grad_value, lane
+                # fx-ops-session-blocks) never takes the flat form: its norm is folded tensor by tensor in the
+                # parameters' order (autograd/optim.mojo, above op_ago_norm_acc), and one flat range would fold
+                # the same squares in other blocks (ag_fold_block of the total), other words for one model. Such
+                # a fit runs the per-tensor update below, clip applied, arm on or off.
                 var t0 = -1
                 var first = -1
                 var same_t = True
@@ -651,6 +658,33 @@ def train_program_control[E: Exec & Movable & Deinitable](
                     sa.p0 = s.tape.value(loss)
                     sa.p1 = step_losses.value() + (e * n_batches + bi)
                     s.ex.launch[OP_COPY](sa, 1)
+                if differentiable and optimizer_clips(cfg):
+                    # Lane fx-ops-session-blocks: the clip across the step's
+                    # tensors, as OpsSession.step runs it (the norm's fold
+                    # order is the selected parameters' order).
+                    var chosen = List[Int]()
+                    for j in range(len(params)):  # driver-loop: over optimizer parameters
+                        if selected[j]:
+                            chosen.append(j)
+                    if len(chosen) > 0:
+                        var cell = s.opt_states[states[chosen[0]]].cell
+                        if cfg.clip_global:
+                            for c in range(len(chosen)):  # driver-loop: over the step's tensors (the norm's fold order)
+                                var cj = chosen[c]
+                                var cv = s._state_view(states[cj])
+                                clip_norm_accumulate(s.ex, cfg, cv, s.tape.gradient(s.tensor(phs[cj])),
+                                                     p.param_shapes[cj].count(), cell, c == 0, c == len(chosen) - 1)
+                        for c in range(len(chosen)):  # driver-loop: over optimizer parameter updates
+                            var uj = chosen[c]
+                            var usi = states[uj]
+                            var ust = s._state_view(usi)
+                            var ut = s.opt_states[usi].t + 1
+                            step_lr_clipped(s.ex, cfg, ust, params[uj], s.tape.gradient(s.tensor(phs[uj])),
+                                            p.param_shapes[uj].count(), ut, lr, cell)
+                            s.opt_states[usi].t = ut
+                            s.opt_states[usi].pw1 = ust.pw1
+                            s.opt_states[usi].pw2 = ust.pw2
+                            s.opt_states[usi].mu_prod = ust.mu_prod
                 if flat and differentiable:
                     # one launch for every trained tensor (PROGRAM_FLAT_UPDATE above), then each state's host
                     # scalars as the per-tensor loop leaves them
@@ -666,7 +700,7 @@ def train_program_control[E: Exec & Movable & Deinitable](
                         s.opt_states[fsi].pw2 = flat_state.pw2
                         s.opt_states[fsi].mu_prod = flat_state.mu_prod
                 for j in range(len(params)):  # driver-loop: over optimizer parameter updates
-                    if flat or not selected[j] or not differentiable:
+                    if flat or not selected[j] or not differentiable or optimizer_clips(cfg):
                         continue
                     var si = states[j]
                     var st = s._state_view(si)

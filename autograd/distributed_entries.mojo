@@ -73,6 +73,14 @@ def distributed_open_native[E: Exec & Movable & Deinitable, KIND: Int](
     var s = ops_session[E, KIND](sid)
     var p = s[].program(pid)
     var o = s[].optimizer_settings(opt)
+    # Lane fx-ops-session-blocks (2026-11-19): this program's checkpoint
+    # carries sgd, adam and adamw (kinds 0-2) and no clip settings, and its
+    # workers step tensors on several devices, where the norm over a step's
+    # tensors has no single-queue fold. Refused here, never dropped.
+    if o.cfg.kind < 0 or o.cfg.kind > 2:
+        raise Error("ValueError: distributed programs train with sgd, adam or adamw")
+    if o.cfg.clip > Float32(0) or o.cfg.clip_value > Float32(0):
+        raise Error("ValueError: distributed programs do not support clip_grad_norm or clip_grad_value")
     var ip: List[Int] = [o.cfg.kind, 1 if o.cfg.nesterov else 0, o.sched, o.sched_step]
     var fp: List[Float32] = [o.cfg.lr, o.cfg.momentum, o.cfg.beta1, o.cfg.beta2, o.cfg.eps, o.cfg.weight_decay, o.gamma]
     var values = List[List[Float32]]()

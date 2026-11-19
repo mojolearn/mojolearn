@@ -21,11 +21,12 @@ session the step is the zero-state prefill recorded as one node over
 [x, weights] (`OpsSession._block_step`), which `backward` differentiates
 through StepOpRules.
 
-The attention block here is the default block (transformer/block_options.mojo
-`BlockOptions()`: RMSNorm without bias, SiLU-gated MLP, no projection
-biases), the op's eight-integer form. A block with other options needs the
-seventeen option words and its optional pieces; that form has no public
-name yet.
+The attention block takes the transformer estimator's options under its
+constructor's names (`session_attention_option_words`: the block options
+record, transformer/block_options.mojo). The default record sends the op's
+eight-integer form (today's block, the old code path); any other record
+appends the seventeen option words, and the weights then include the
+optional pieces that record turns on, in `block_weight_sizes` order.
 
 Nothing here runs per element: the loops are over a block's pieces (model
 structure). Packing a block is serial by nature: each piece is one cast
@@ -39,12 +40,21 @@ from autograd.block_step_ops import (
     OPS_M1_STEP, OPS_M2_STEP, OPS_M3_STEP, OPS_ATTN_STEP, BLOCK_PART_WEIGHTS, BLOCK_PART_STATE, BLOCK_PART_WORDS,
     block_weight_sizes, block_state_sizes, block_int_words,
 )
+from transformer.block_options import BlockOptions
+from autograd.generation_ops import OPS_LM_PICK, OPS_LM_ALIVE, lm_rows_words, LM_PICK_GREEDY, LM_PICK_SAMPLE
+from autograd.rankn import ShapeN
+from core.cast_in import CAST_KIND_SIGNED
+from autograd.rules_recurrent import OPS_RNN_SCAN
 
 #: The weight arrays `Session.attention_block` takes (the default options'
 #: present pieces: two norms, q, k, v, o, gate, up, down), and the index of
 #: `gate_proj.weight` among them (its size gives the intermediate width).
 comptime SESSION_ATTENTION_PIECES = 9
 comptime SESSION_ATTENTION_GATE = 6
+#: The fewest arrays an attention block has (an ungated MLP has no gate
+#: projection); array SESSION_ATTENTION_GATE is then `up_proj.weight`,
+#: which has the same (intermediate, d_model) size.
+comptime SESSION_ATTENTION_MIN_PIECES = 8
 
 
 def session_mamba_code(version: Int) raises -> Int:
@@ -73,7 +83,8 @@ def session_attention_ints(
     if n_kv_heads < 1 or n_heads % n_kv_heads != 0:
         raise Error("ValueError: attention_block: n_heads must be a multiple of n_kv_heads")
     if gate_values < d_model or gate_values % d_model != 0:
-        raise Error("ValueError: attention_block: gate_proj.weight must be (intermediate, d_model)")
+        raise Error("ValueError: attention_block: the seventh weight array (gate_proj.weight, or up_proj.weight "
+                    + "of an ungated MLP) must be (intermediate, d_model)")
     if max_positions < 1:
         raise Error("ValueError: attention_block: max_positions must be at least 1")
     if window < 0:
@@ -82,6 +93,85 @@ def session_attention_ints(
         batch, d_model, n_heads, n_kv_heads, d_model // n_heads, gate_values // d_model, max_positions, window,
     ]
     return ints^
+
+
+def session_attention_option_words(
+    head_dim: Int, max_positions: Int, norm: String, mlp: String, rope_theta: Float32, rope_scaling: String,
+    rope_factor: Float32, rope_low_freq_factor: Float32, rope_high_freq_factor: Float32,
+    rope_original_max_positions: Int, rope_dim: Int, qkv_bias: Bool, o_bias: Bool, norm_eps: Float32,
+    norm_bias: Bool, mlp_bias: Bool, qk_norm: Bool, attn_softcap: Float32,
+) raises -> List[Int]:
+    """The block options tail of OPS_ATTN_STEP from the transformer
+    estimator's constructor arguments (`mojolearn.TransformerBlock`):
+    `rope_scaling` is "" (none), "linear" or "llama3" with its factors;
+    `rope_dim` 0 means head_dim; `attn_softcap` 0 means none. Returns an
+    EMPTY list for the default record (the op's eight-integer form), else
+    the seventeen words. The refusals are the model's
+    (bindings/causal_lm_construct_door.mojo), then `BlockOptions.validate`."""
+    var nk = 0 if norm == "rmsnorm" else (1 if norm == "layernorm" else (2 if norm == "rmsnorm_offset" else -1))
+    var mk = -1
+    if mlp == "swiglu":
+        mk = 0
+    elif mlp == "gelu":
+        mk = 1
+    elif mlp == "gelu_tanh":
+        mk = 2
+    elif mlp == "geglu":
+        mk = 3
+    elif mlp == "geglu_tanh":
+        mk = 4
+    if nk < 0:
+        raise Error("ValueError: attention_block: unsupported norm='" + norm
+                    + "'; norm is 'rmsnorm', 'layernorm' or 'rmsnorm_offset'")
+    if mk < 0:
+        raise Error("ValueError: attention_block: unsupported mlp='" + mlp
+                    + "'; mlp is 'swiglu', 'gelu', 'gelu_tanh', 'geglu' or 'geglu_tanh'")
+    var sk = 0
+    if rope_scaling == "linear":
+        sk = 1
+    elif rope_scaling == "llama3":
+        sk = 2
+    elif rope_scaling != "":
+        raise Error("ValueError: attention_block: unsupported rope_scaling type '" + rope_scaling
+                    + "'; the types are 'linear' and 'llama3'")
+    if sk == 2 and (not (rope_high_freq_factor > rope_low_freq_factor) or rope_original_max_positions < 1):
+        raise Error("ValueError: attention_block: llama3 rope_scaling needs high_freq_factor > low_freq_factor "
+                    + "and a positive original_max_position_embeddings")
+    var rd = head_dim if rope_dim == 0 else rope_dim
+    if rd < 1 or rd > head_dim or rd % 2 != 0:
+        raise Error("ValueError: attention_block: rope_dim must be positive even and no larger than head_dim")
+    if norm_bias and nk != 1:
+        raise Error("ValueError: attention_block: norm_bias=True needs norm='layernorm'")
+    if qk_norm and nk == 1:
+        raise Error("ValueError: attention_block: qk_norm=True with norm='layernorm' is not supported "
+                    + "(qk_norm is an RMSNorm)")
+    var o = BlockOptions()
+    o.rope_theta = rope_theta
+    o.rope_scaling = sk
+    if sk != 0:
+        o.rope_factor = rope_factor
+    if sk == 2:
+        o.rope_low_freq_factor = rope_low_freq_factor
+        o.rope_high_freq_factor = rope_high_freq_factor
+        o.rope_original_max_positions = rope_original_max_positions
+    o.rope_dim = 0 if rd == head_dim else rd
+    # the absolute-position ceiling: the record's default unless this
+    # block's cache is longer
+    if max_positions > o.max_positions:
+        o.max_positions = max_positions
+    o.qkv_bias = qkv_bias
+    o.o_bias = o_bias
+    o.norm_kind = nk
+    o.norm_eps = norm_eps
+    o.norm_bias = norm_bias
+    o.mlp_kind = mk
+    o.mlp_bias = mlp_bias
+    o.qk_norm = qk_norm
+    o.attn_softcap = attn_softcap
+    o.validate(head_dim)
+    if o.is_default():
+        return List[Int]()
+    return o.to_params()
 
 
 def session_block_create[E: Exec & Movable & Deinitable, KIND: Int](
@@ -175,3 +265,85 @@ def session_block_step[E: Exec & Movable & Deinitable, KIND: Int](
         fs.append(dt_hi)
     var s = ops_session[E, KIND](sid)
     return s[].op(code, hs, ints, fs)
+
+
+# ---------------------------------------------------------------- generation
+# `Session.lm_rows`, `Session.lm_pick`, `Session.lm_alive` (lane
+# fx-ops-session-blocks, 2026-11-19): the generation ops with the arguments
+# the causal LM decode program passes (transformer/causal_lm_program.mojo
+# `load_rows`, `set_policy`, `step`).
+def session_lm_rows[E: Exec & Movable & Deinitable, KIND: Int](sid: Int, b: Int, eos: List[Int]) raises -> Int:
+    """The rows state of a fresh generation of `b` rows (autograd/
+    generation_ops.mojo's layout): every row active with length 0, no
+    non-finite token seen, alive 1, the sampler's position 0, then the eos
+    ids. One int32-word tensor declared state; returns its handle."""
+    if b < 1:
+        raise Error("ValueError: lm_rows: batch_size must be positive")
+    var n = lm_rows_words(b, len(eos))
+    var w = List[Int32](length=n, fill=Int32(0))
+    for r in range(b):  # driver-loop: over batch rows (state words, no data)
+        w[2 * b + r] = Int32(-1)
+    w[3 * b] = Int32(1)
+    w[3 * b + 1] = Int32(-1)
+    w[3 * b + 3] = Int32(len(eos))
+    for i in range(len(eos)):  # small-loop(eos: the end ids): state words, no data
+        if eos[i] < 0 or eos[i] >= (1 << 31):
+            raise Error("ValueError: lm_rows: an eos token id must be a non-negative int32")
+        w[3 * b + 4 + i] = Int32(eos[i])
+    var s = ops_session[E, KIND](sid)
+    var h = s[].upload_ids(CastIn(Int(w.unsafe_ptr()), CAST_KIND_SIGNED, 4, 1, n, n * 4, 4), ShapeN.matrix(1, n))
+    _ = len(w)  # keep-alive past the staging copy
+    s[].declare_state(h)
+    return h
+
+
+def session_lm_pick[E: Exec & Movable & Deinitable, KIND: Int](
+    sid: Int, logits: Int, rows: Int, pad: Int, sample: Bool, top_k: Int, seed_lo: Int, seed_hi: Int,
+    temperature: Float32, top_p: Float32,
+) raises -> Int:
+    """OPS_LM_PICK on `logits` (b rows first, the vocabulary last) with the
+    decode program's policy words: greedy sends top_k 0, temperature 1 and
+    top_p 1, whatever was passed. Returns the (b, 1) int32 ids tensor."""
+    var s = ops_session[E, KIND](sid)
+    var sh = s[].shape_nd(logits)
+    var b = sh.d[0]
+    var vocab = sh.d[sh.ndim - 1]
+    var ints: List[Int] = [b, vocab, pad, LM_PICK_SAMPLE if sample else LM_PICK_GREEDY, top_k if sample else 0,
+                           seed_lo, seed_hi]
+    var fs: List[Float32] = [temperature if sample else Float32(1.0), top_p if sample else Float32(1.0)]
+    var hs: List[Int] = [logits, rows]
+    return s[].op(OPS_LM_PICK, hs, ints, fs)
+
+
+def session_lm_alive[E: Exec & Movable & Deinitable, KIND: Int](sid: Int, ids: Int, rows: Int) raises -> Int:
+    """OPS_LM_ALIVE: the rows state's alive word as a (1, 1) tensor (1.0
+    while some row is unfinished and none failed); `ids` holds b rows."""
+    var s = ops_session[E, KIND](sid)
+    var b = s[].shape_nd(ids).d[0]
+    var hs: List[Int] = [ids, rows]
+    var bl: List[Int] = [b]
+    return s[].op(OPS_LM_ALIVE, hs, bl, List[Float32]())
+
+
+# ---------------------------------------------------------------- recurrent layers
+def session_rnn[E: Exec & Movable & Deinitable, KIND: Int](
+    sid: Int, cell: Int, x: Int, w_ih: Int, w_hh: Int, b_ih: Int, b_hh: Int,
+) raises -> Int:
+    """`Session.lstm` / `Session.gru` / `Session.rnn`: one layer over a
+    time-major (steps, batch, inputs) tensor, as torch.nn.LSTM / GRU / RNN
+    with batch_first=False and a zero initial state. Returns the
+    (steps, batch, hidden) outputs: OPS_RNN_SCAN, then the rank-3 view
+    (operation 33, `reshape`) of its (steps * batch, hidden) result."""
+    var s = ops_session[E, KIND](sid)
+    var sh = s[].shape_nd(x)
+    if sh.ndim != 3:
+        raise Error("ValueError: ops: a recurrent layer takes a (steps, batch, inputs) tensor")
+    var steps = sh.d[0]
+    var batch = sh.d[1]
+    var hidden = s[].shape_nd(w_hh).d[1]
+    var hs: List[Int] = [x, w_ih, w_hh, b_ih, b_hh]
+    var ints: List[Int] = [cell, steps, batch]
+    var flat = s[].op(OPS_RNN_SCAN, hs, ints, List[Float32]())
+    var fh: List[Int] = [flat]
+    var view: List[Int] = [0, steps, batch, hidden]
+    return s[].op(33, fh, view, List[Float32]())

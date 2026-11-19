@@ -28,11 +28,14 @@ struct OpsOptimizerRequest(Copyable, ImplicitlyCopyable, Movable):
 
 
 def ops_optimizer_codes(kind: String, schedule: String) raises -> Tuple[Int, Int]:
-    # sequence/ops.mojo OPT_*: sgd 0, adam 1, adamw 2, lion 7, adamax 8, nadam 9
-    # (lane fx-ops-session-blocks, 2026-11-18: the kinds whose whole
-    # configuration is this request's fields; RMSprop 3 and Adagrad 4 need
-    # alpha / centered / lr_decay, which the request does not carry).
+    # sequence/ops.mojo OPT_*: sgd 0, adam 1, adamw 2, rmsprop 3, adagrad 4,
+    # lion 7, adamax 8, nadam 9 (lane fx-ops-session-blocks). RMSprop's and
+    # Adagrad's own settings travel in OpsOptimizerExtras.
     var kind_code = 0 if kind == "sgd" else (1 if kind == "adam" else (2 if kind == "adamw" else -1))
+    if kind == "rmsprop":
+        kind_code = 3
+    elif kind == "adagrad":
+        kind_code = 4
     if kind == "lion":
         kind_code = 7
     elif kind == "adamax":
@@ -43,6 +46,29 @@ def ops_optimizer_codes(kind: String, schedule: String) raises -> Tuple[Int, Int
     if kind_code < 0 or schedule_code < 0:
         raise Error("ValueError: invalid optimizer kind or schedule")
     return (kind_code, schedule_code)
+
+
+@fieldwise_init
+struct OpsOptimizerExtras(Copyable, ImplicitlyCopyable, Movable):
+    """The settings OpsOptimizerRequest does not carry (lane
+    fx-ops-session-blocks, 2026-11-19), named as torch.optim names them:
+    RMSprop's `alpha` and `centered`, Adagrad's `lr_decay` and
+    `initial_accumulator_value`, and the two gradient clips applied in the
+    step (`clip_grad_norm`: the bound of the norm over all the step's
+    tensors, torch.nn.utils.clip_grad_norm_; `clip_grad_value`: the
+    elementwise bound of clip_grad_value_; 0 = off for either)."""
+    var alpha: Float32
+    var centered: Bool
+    var lr_decay: Float32
+    var initial_accumulator_value: Float32
+    var clip_grad_norm: Float32
+    var clip_grad_value: Float32
+
+
+def ops_optimizer_extras_default() -> OpsOptimizerExtras:
+    """torch's defaults (alpha 0.99, not centered, no decay, zero
+    accumulator) and no clipping."""
+    return OpsOptimizerExtras(Float32(0.99), False, Float32(0.0), Float32(0.0), Float32(0.0), Float32(0.0))
 
 
 def ops_optimizer_request(ints: List[Int], fs: List[Float32]) raises -> OpsOptimizerRequest:

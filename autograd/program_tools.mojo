@@ -189,6 +189,8 @@ def program_op_name(code: Int) -> String:
         return "cnn_linear"
     if code == 93:
         return "lm_embedding"
+    if code == 94:
+        return "rnn_scan"
     return "op_" + String(code)
 
 

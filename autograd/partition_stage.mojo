@@ -70,7 +70,7 @@ struct ModelStage[E: Exec & Movable & Deinitable](Movable):
                 self.executor.session.ex.upload(buf, FP(unsafe_from_address=Int(plan.parameters[j].words.unsafe_ptr())), n)
                 self.params.append(buf)
                 if plan.trainable[j]:
-                    self.states.append(OptimizerState(self.executor.session.ex, cfg, n))
+                    self.states.append(OptimizerState(self.executor.session.ex, cfg, n, cfg.init_acc))
                 else:
                     self.states.append(OptimizerState())
             else:

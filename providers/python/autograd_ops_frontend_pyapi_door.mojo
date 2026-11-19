@@ -9,15 +9,18 @@ from providers.python.autograd_python_errors_pyapi_pack import graph_int
 from sequence.exec_trait import Exec
 from sequence.ops import FP
 from autograd.ops_api import ops_session, ops_session_registry_token
+from autograd.optimizer_requests import OpsOptimizerExtras
 from autograd.optimizer_requests import (
     OpsOptimizerRequest, OpsOptimizerRestoreRequest, ops_optimizer_codes,
 )
 from providers.python.autograd_program_pyapi_door import program_input, _integer, ops_program_fit_native_py, ops_program_execute_py, fit_stop_options
 from autograd.ops_frontend_impl import session_split, clip_low_unbounded, clip_high_unbounded
 from autograd.ops_block_frontend import (
-    SESSION_ATTENTION_PIECES, SESSION_ATTENTION_GATE, session_mamba_code, session_attention_ints,
-    session_block_create, session_block_step,
+    SESSION_ATTENTION_MIN_PIECES, SESSION_ATTENTION_GATE, session_mamba_code, session_attention_ints,
+    session_attention_option_words, session_block_create, session_block_step, session_lm_rows, session_lm_pick,
+    session_lm_alive, session_rnn,
 )
+from sequence.ops import CELL_LSTM, CELL_GRU, CELL_RNN_TANH
 from autograd.block_step_ops import OPS_ATTN_STEP
 from autograd.program_io import ProgramInput
 from core.cast_in import CastIn
@@ -66,7 +69,8 @@ from autograd.autograd_ops_frontend_run import (
     _SOP_DROPOUT, _SOP_PERMUTATION, _SOP_GATHER_ROWS, _SOP_MSE, _SOP_MAE, _SOP_HUBER,
     _SOP_BCE_WITH_LOGITS, _SOP_CROSS_ENTROPY, _SOP_ACCURACY, _SOP_LOG_LOSS, _SOP_ROC_AUC,
     _SOP_STATE, _SOP_MAMBA_BLOCK, _SOP_ATTENTION_BLOCK, _SOP_MAMBA_STEP, _SOP_ATTENTION_STEP, _SOP_SMALL_MLP,
-    _SOP_LM_HEAD_LOSS,
+    _SOP_LM_HEAD_LOSS, _SOP_LM_ROWS, _SOP_LM_PICK, _SOP_LM_ALIVE, _SOP_LM_EMBEDDING, _SOP_CONV_BLOCK,
+    _SOP_CONV_LINEAR, _SOP_LSTM, _SOP_GRU, _SOP_RNN,
 )
 
 
@@ -402,7 +406,22 @@ def ops_session_call_admitted_py[E: Exec & Movable & Deinitable, KIND: Int](
             _int(args[9], "step_size", 1), _float(args[1], "lr"), _float(args[2], "momentum"),
             _float(args[4], "beta1"), _float(args[5], "beta2"), _float(args[6], "eps"),
             _float(args[7], "weight_decay"), _float(args[10], "gamma"), Float32(0))
-        return PythonObject(s[].optimizer(request))
+        # lane fx-ops-session-blocks: args[11..16] = alpha, centered, lr_decay,
+        # initial_accumulator_value, clip_grad_norm, clip_grad_value (None: no
+        # clip); a clip given must be positive.
+        var clip_norm = Float32(0)
+        var clip_value = Float32(0)
+        if not _nil(args[15]):
+            clip_norm = _float(args[15], "clip_grad_norm")
+            if not (clip_norm > Float32(0)):
+                raise Error("ValueError: clip_grad_norm must be positive")
+        if not _nil(args[16]):
+            clip_value = _float(args[16], "clip_grad_value")
+            if not (clip_value > Float32(0)):
+                raise Error("ValueError: clip_grad_value must be positive")
+        var extras = OpsOptimizerExtras(_float(args[11], "alpha"), Bool(py=args[12]), _float(args[13], "lr_decay"),
+            _float(args[14], "initial_accumulator_value"), clip_norm, clip_value)
+        return PythonObject(s[].optimizer_with(request, extras))
     if op == _SOP_STEP or op == _SOP_SCHEDULER_STEP or op == _SOP_LEARNING_RATE or op == _SOP_OPTIMIZER_STATE or op == _SOP_LOAD_OPTIMIZER_STATE:
         var opt = _int(args[0], "optimizer", 1)
         var oi = s[]._opt_index(opt)
@@ -419,7 +438,16 @@ def ops_session_call_admitted_py[E: Exec & Movable & Deinitable, KIND: Int](
             # PACK the native snapshot directly into the documented mapping.
             var state = Python.dict()
             py_setitem(state, "step", snapshot.step)
-            if snapshot.kind != 0:
+            if snapshot.kind == 3 or snapshot.kind == 4:
+                # RMSprop / Adagrad (sequence/ops.mojo OPT_RMSPROP 3,
+                # OPT_ADAGRAD 4), torch's state names
+                if snapshot.first != 0:
+                    py_setitem(state, "momentum_buffer", snapshot.first)
+                if snapshot.second != 0:
+                    py_setitem(state, "square_avg" if snapshot.kind == 3 else "sum", snapshot.second)
+                if snapshot.third != 0:
+                    py_setitem(state, "grad_avg", snapshot.third)
+            elif snapshot.kind != 0:
                 py_setitem(state, "beta1_power", Float64(snapshot.beta1_power))
                 py_setitem(state, "beta2_power", Float64(snapshot.beta2_power))
                 if snapshot.kind == 9:
@@ -442,9 +470,20 @@ def ops_session_call_admitted_py[E: Exec & Movable & Deinitable, KIND: Int](
         var beta2 = Float32(1)
         var mu = Float32(1)
         var opt_kind = s[].opts[oi].cfg.kind
+        var third = 0
         if opt_kind == 0:
             if py_contains(state, "momentum_buffer"):
                 first = _int(state["momentum_buffer"], "momentum_buffer", 1)
+        elif opt_kind == 3 or opt_kind == 4:
+            if py_contains(state, "momentum_buffer"):
+                first = _int(state["momentum_buffer"], "momentum_buffer", 1)
+            if opt_kind == 3:
+                if py_contains(state, "square_avg"):
+                    second = _int(state["square_avg"], "square_avg", 1)
+            elif py_contains(state, "sum"):
+                second = _int(state["sum"], "sum", 1)
+            if py_contains(state, "grad_avg"):
+                third = _int(state["grad_avg"], "grad_avg", 1)
         else:
             if py_contains(state, "exp_avg"):
                 first = _int(state["exp_avg"], "exp_avg", 1)
@@ -458,7 +497,7 @@ def ops_session_call_admitted_py[E: Exec & Movable & Deinitable, KIND: Int](
             beta2 = Float32(py=state["beta2_power"])
             if opt_kind == 9:
                 mu = Float32(py=state["mu_product"])
-        var request = OpsOptimizerRestoreRequest(step, first, second, 0, beta1, beta2, mu)
+        var request = OpsOptimizerRestoreRequest(step, first, second, third, beta1, beta2, mu)
         s[].load_optimizer_state(opt, _int(args[1], "param", 1), request)
         return PythonObject(None)
     if op == _SOP_MAMBA_BLOCK or op == _SOP_ATTENTION_BLOCK:
@@ -493,8 +532,8 @@ def ops_session_call_admitted_py[E: Exec & Movable & Deinitable, KIND: Int](
             dt_hi = _float(args[3][1], "dt_limit")
             trainable = Bool(py=args[4])
         else:
-            if pieces != SESSION_ATTENTION_PIECES:
-                raise Error("ValueError: attention_block takes " + String(SESSION_ATTENTION_PIECES)
+            if pieces < SESSION_ATTENTION_MIN_PIECES:
+                raise Error("ValueError: attention_block takes at least " + String(SESSION_ATTENTION_MIN_PIECES)
                             + " weight arrays, got " + String(pieces))
             var heads = _int(args[2], "n_heads", 1)
             block_ints = session_attention_ints(
@@ -502,6 +541,34 @@ def ops_session_call_admitted_py[E: Exec & Movable & Deinitable, KIND: Int](
                 heads if _nil(args[3]) else _int(args[3], "n_kv_heads", 1),
                 srcs[SESSION_ATTENTION_GATE].count(), _int(args[4], "max_positions", 1), _int(args[5], "window", 0))
             trainable = Bool(py=args[6])
+            # The transformer estimator's options, args[7..18]: rope_theta,
+            # rope_scaling (None or a dict with 'type' or 'rope_type',
+            # 'factor' and, for llama3, 'low_freq_factor', 'high_freq_factor',
+            # 'original_max_position_embeddings'), rope_dim, qkv_bias, o_bias,
+            # norm, norm_eps, norm_bias, mlp, mlp_bias, qk_norm, attn_softcap.
+            var scaling_kind = String("")
+            var scaling_factor = Float32(1)
+            var scaling_low = Float32(1)
+            var scaling_high = Float32(4)
+            var scaling_original = 8192
+            if not _nil(args[8]):
+                var scaling = args[8]
+                if py_type(scaling) is not types[].dict_type:
+                    raise Error("TypeError: rope_scaling must be None or a dict")
+                scaling_kind = String(scaling["type"]) if py_contains(scaling, "type") else String(scaling["rope_type"])
+                scaling_factor = _float(scaling["factor"], "rope_scaling factor")
+                if scaling_kind == "llama3":
+                    scaling_low = _float(scaling["low_freq_factor"], "low_freq_factor")
+                    scaling_high = _float(scaling["high_freq_factor"], "high_freq_factor")
+                    scaling_original = _int(scaling["original_max_position_embeddings"],
+                                            "original_max_position_embeddings", 1)
+            var option_words = session_attention_option_words(
+                block_ints[4], block_ints[6], String(args[12]), String(args[15]), _float(args[7], "rope_theta"),
+                scaling_kind, scaling_factor, scaling_low, scaling_high, scaling_original,
+                0 if _nil(args[9]) else _int(args[9], "rope_dim", 1), Bool(py=args[10]), Bool(py=args[11]),
+                _float(args[13], "norm_eps"), Bool(py=args[14]), Bool(py=args[16]), Bool(py=args[17]),
+                Float32(0) if _nil(args[18]) else _float(args[18], "attn_softcap"))
+            _append(block_ints, option_words)
         var made = session_block_create[E, KIND](Int(py=sid), block_code, block_ints, srcs, trainable)
         _ = len(inputs)  # keep every scalar-list owner alive across the uploads
         _ = args  # retain the original array exporters through the uploads
@@ -535,6 +602,28 @@ def ops_session_call_admitted_py[E: Exec & Movable & Deinitable, KIND: Int](
             Int(py=sid), _int(args[0], "handle", 1), _int(block["weights"], "weights", 1),
             _int(block["state"], "state", 1), words, config, _float(block["dt_lo"], "dt_limit"),
             _float(block["dt_hi"], "dt_limit"), op == _SOP_ATTENTION_STEP))
+    if op == _SOP_LSTM or op == _SOP_GRU or op == _SOP_RNN:
+        # args (x, weight_ih, weight_hh, bias_ih, bias_hh): tensor handles
+        var cell = CELL_LSTM if op == _SOP_LSTM else (CELL_GRU if op == _SOP_GRU else CELL_RNN_TANH)
+        return PythonObject(session_rnn[E, KIND](
+            Int(py=sid), cell, _int(args[0], "input", 1), _int(args[1], "weight_ih", 1),
+            _int(args[2], "weight_hh", 1), _int(args[3], "bias_ih", 1), _int(args[4], "bias_hh", 1)))
+    if op == _SOP_LM_ROWS:
+        # args (batch_size, eos_token_ids): an int, or a sequence of ints
+        var eos = List[Int]()
+        if not _nil(args[1]):
+            eos = _ints(args[1], "eos_token_id", 0)
+        return PythonObject(session_lm_rows[E, KIND](Int(py=sid), _int(args[0], "batch_size", 1), eos))
+    if op == _SOP_LM_PICK:
+        # args (logits, rows, pad_token_id, do_sample, temperature, top_k, top_p, seed)
+        var seed = _seed_words(args[7])
+        return PythonObject(session_lm_pick[E, KIND](
+            Int(py=sid), _int(args[0], "logits", 1), _int(args[1], "rows", 1), _int(args[2], "pad_token_id", 0),
+            Bool(py=args[3]), _int(args[5], "top_k", 0), seed[0], seed[1], _float(args[4], "temperature"),
+            _float(args[6], "top_p")))
+    if op == _SOP_LM_ALIVE:
+        return PythonObject(session_lm_alive[E, KIND](
+            Int(py=sid), _int(args[0], "ids", 1), _int(args[1], "rows", 1)))
     var code = 0
     var hs = List[Int]()
     var ints = List[Int]()
@@ -919,6 +1008,25 @@ def ops_session_call_admitted_py[E: Exec & Movable & Deinitable, KIND: Int](
         code = 88
         hs = [_int(args[0], "input", 1), _int(args[1], "weight1", 1), _int(args[2], "bias1", 1),
               _int(args[3], "weight2", 1), _int(args[4], "bias2", 1)]
+    elif op == _SOP_CONV_BLOCK:
+        # OPS_CNN_CONV_BLOCK (autograd/cnn_block_op.mojo): args (x, weight,
+        # bias, padding, pool_size or None); ints [pad, pool 0 / 1, pool size]
+        code = 90
+        hs = [_int(args[0], "input", 1), _int(args[1], "weight", 1), _int(args[2], "bias", 1)]
+        ints = [_int(args[3], "padding", 0), 0 if _nil(args[4]) else 1,
+                1 if _nil(args[4]) else _int(args[4], "pool_size", 1)]
+    elif op == _SOP_CONV_LINEAR:
+        # OPS_CNN_LINEAR: args (x, weight (outputs, inputs), bias)
+        code = 91
+        hs = [_int(args[0], "input", 1), _int(args[1], "weight", 1), _int(args[2], "bias", 1)]
+    elif op == _SOP_LM_EMBEDDING:
+        # OPS_LM_EMBEDDING (autograd/lm_embedding_op.mojo): a table and an
+        # ids() tensor; ints [padding_idx, -1 for none] as `embedding`
+        code = 93
+        hs = [_int(args[0], "table", 1), _int(args[1], "ids", 1)]
+        if not _nil(args[2]) and _int(args[2], "padding_idx") < 0:
+            raise Error("ValueError: padding_idx must be >= 0")
+        ints.append(-1 if _nil(args[2]) else _int(args[2], "padding_idx", 0))
     elif op == _SOP_LM_HEAD_LOSS:
         # lane fx-ops-session-blocks: OPS_LM_HEAD_V2 (autograd/lm_head_v2_op.mojo)
         code = 87
