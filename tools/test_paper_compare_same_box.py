@@ -9,7 +9,9 @@ No board driver, no box, no mojolearn import.
 
   python -m pytest -q tools/test_paper_compare_same_box.py
 """
+import contextlib
 import copy
+import io
 import json
 import os
 import subprocess
@@ -559,6 +561,72 @@ class OwedPriorIsTheOnBoxBoard(unittest.TestCase):
         self.assertEqual(MO.board_dir("/r", "prior", "full", "0.8.66"), "/r/board-prior-0.8.66")
         self.assertEqual(MO.board_dir("/r", "candidate", "full", "0.8.66"), "/r/board")
         self.assertEqual(MO.board_dir("/r", "b1", "full", "0.8.66"), "/r/board-b1-full")
+
+
+class VerdictPrior(unittest.TestCase):
+    """Lane fx-same-pod-prior (Andrew, 2026-11-19: a speed verdict compares two wheels timed on the SAME host in the SAME
+    job; the stored 0.8.55 board is a screen only): --verdict-prior NAME makes one of our own earlier built wheels,
+    timed beside the candidate in this job, the baseline; the stored board is a column without flags."""
+
+    def setUp(self):
+        self.doc = PC.extract_recipes(paper_board(), "nvidia")
+
+    def test_prior_wheel_is_the_baseline_and_the_stored_board_a_screen(self):
+        cand = on_host(new_board(), HOST_A)                                     # kmeans fit 130 ms
+        prev = ours_board({"classical/kmeans/taxi/rows=full": 200.0}, HOST_A, "0.8.67.dev0+d95f805cceba")
+        stored = StoredBaseline.with_upload(ours_board({}, HOST_B, "0.8.55"), 10.0)      # 100 ms, another host
+        cand = StoredBaseline.with_upload(cand, 40.0)                          # an upload probe 4x off the stored
+        res = PC.compare(self.doc, [cand], {}, prior_boards=[("prev", prev)], stored_baseline=stored,
+                         verdict_prior="prev")
+        km = {r["key"]: r for r in res["rows"]}[KM]
+        self.assertEqual(km["old_ms"], 200.0)                                  # the on-box pair
+        self.assertAlmostEqual(km["ratio"], 0.65)
+        self.assertIn("FASTER", km["flags"])
+        self.assertNotIn("REGRESSION", km["flags"])                            # 1.3x the stored 0.8.55: no flag
+        self.assertNotIn("BOX-STATE", km["flags"])                             # no stored verdict to replace
+        self.assertNotIn("REGRESSION-VS-PRIOR", km["flags"])
+        self.assertAlmostEqual(km["priors"]["0.8.55"]["ratio"], 1.3)           # the screen column, shown
+        self.assertFalse(res["baseline_stored"])
+        self.assertTrue(res["screen_stored"])
+        self.assertEqual(res["baseline_version"], "prev")
+        self.assertIsNone(res["prior_label"])
+        self.assertEqual(res["baseline_label"], "prev (this box)")
+        summary = PC.render_summary(res)
+        self.assertTrue(summary.startswith("verdict: same box %s: our wheel prev timed in this job" % HOST_A), summary)
+        self.assertIn("probe candidate: host " + HOST_A, summary)              # both probes beside the verdict
+        self.assertIn("probe prev: host " + HOST_A, summary)
+        self.assertIn("probe 0.8.55: host %s" % HOST_B, summary)
+        self.assertIn("screen column, never a flag", summary)
+        self.assertIn("0.8.55 (stored, screen)", PC.render_md(res).splitlines()[0])
+
+    def test_prior_wheel_of_another_host_refuses_and_a_bad_name_refuses(self):
+        cand = on_host(new_board(), HOST_A)
+        with self.assertRaises(SystemExit):
+            PC.compare(self.doc, [cand], {}, prior_boards=[("prev", ours_board({}, HOST_B, "x"))],
+                       verdict_prior="prev")
+        with self.assertRaises(SystemExit) as cm:
+            PC.compare(self.doc, [cand], {}, prior_boards=[("prev", ours_board({}, HOST_A, "x"))],
+                       verdict_prior="other")
+        self.assertIn("names no --prior-board", str(cm.exception))
+
+    def test_without_the_stored_board_and_on_the_cli(self):
+        cand = on_host(new_board(), HOST_A)
+        prev = ours_board({"classical/kmeans/taxi/rows=full": 100.0}, HOST_A, "x")
+        res = PC.compare(self.doc, [cand], {}, prior_boards=[("prev", prev)], verdict_prior="prev")
+        km = {r["key"]: r for r in res["rows"]}[KM]
+        self.assertIn("REGRESSION", km["flags"])                               # 130 / 100
+        self.assertFalse(res["screen_stored"])
+        with tempfile.TemporaryDirectory() as d:
+            rec, nb, pb = (os.path.join(d, n) for n in ("rec.json", "new.json", "prev.json"))
+            json.dump(self.doc, open(rec, "w"))
+            json.dump(cand, open(nb, "w"))
+            json.dump(prev, open(pb, "w"))
+            out = os.path.join(d, "c.json")
+            with contextlib.redirect_stdout(io.StringIO()):
+                PC.main(["compare", "--recipes", rec, "--board", nb, "--prior-board", "prev=" + pb,
+                         "--verdict-prior", "prev", "--out-md", os.path.join(d, "c.md"), "--out-json", out,
+                         "--summary", os.path.join(d, "s.txt")])
+            self.assertEqual(json.load(open(out))["baseline_version"], "prev")
 
 
 if __name__ == "__main__":
