@@ -7,7 +7,7 @@ from max.gpu.host import DeviceContext
 from experiments.performance_ideas.I15.certified_caller import check_certified_caller
 from neighbors.checks.query_batch_check import _case
 from neighbors.checks.knn_check import check_fused_griddimx_merge
-from neighbors.checks.knn_identity_check import check_knn_fused_tie_set_is_geometry_invariant
+from neighbors.checks.knn_identity_check_suite import check_knn_fused_tie_set_is_geometry_invariant
 from neighbors.checks.knn_selector_bound_compact_check import check_case as bound_case
 
 # NEVER RUN — PENDING MEASUREMENT

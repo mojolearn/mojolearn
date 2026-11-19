@@ -4,7 +4,7 @@ from max.gpu.host import DeviceContext
 from std.memory import bitcast
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from ivf.checks.ivf_check import _plant_index, _search
-from ivf.checks.ivf_large_probe_check import check_large_probes
+from ivf.checks.ivf_large_probe_check_suite import check_large_probes
 
 
 def run_checks() raises:

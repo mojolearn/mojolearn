@@ -42,7 +42,7 @@ from gemm.checks.gemm_int15 import (
     int15_sabotage_name,
     split_int15_device,
 )
-from gemm.checks.gemm_int15_check import (
+from gemm.checks.gemm_int15_check_suite import (
     SHAPE_COUNT,
     _digest,
     _download_cells,

@@ -23,7 +23,7 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 from std.sys import has_accelerator
 
 from checks.kernel_matrix import COLUMN_CPU, TARGET_COLUMN, column_name
-from gemm.checks.gemm_int15_check import _digest, _download_cells, _first_diff, _poisoned, _upload
+from gemm.checks.gemm_int15_check_suite import _digest, _download_cells, _first_diff, _poisoned, _upload
 from gemm.contract import OP_NN, OP_NT, OP_TN
 from gemm.host.gemm_int_slices_oracle import gemm_int_slices_oracle
 from gemm.host.identical_gemm import gemm_oracle

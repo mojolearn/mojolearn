@@ -52,7 +52,7 @@ from extratrees.checks.fixtures import (
     hashed_regression,
     shaped_dataset,
 )
-from extratrees.checks.fixture_parity_check import const_heavy_shapes
+from extratrees.checks.fixture_parity_check_suite import const_heavy_shapes
 from extratrees.impl.decisiontree.decisiontree import DecisionTreeParams
 from extratrees.impl.randomforest.randomforest import (
     predict_class_forest_host,
