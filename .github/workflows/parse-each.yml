@@ -6,7 +6,7 @@ name: Parse each
 # were registered at once; five compile rounds had already gone to five errors the night before). This gives every
 # file's first errors in a single round.
 #
-# files_from: a text file in the repo, one path per line (a module that has a `main()`); `#` lines are ignored.
+# files_from: a text file in the repo, one path per line (a suite module with run_checks(), or a file with main()).
 # column cpu: -D MOJOLEARN_COLUMN_CPU with the host CPU pin; column sm_89: -D MOJOLEARN_COLUMN_NVIDIA
 # --target-accelerator sm_89, no GPU needed (as device-parse in native-checks.yml). Errors that are only the
 # unoptimised lowering's refusals are not counted (as host-parse). Tooling only: gates and reports nothing.
@@ -73,9 +73,16 @@ jobs:
           for i in "${!ALL[@]}"; do
             [ $((i % PE_SHARDS)) -eq "$PE_SHARD" ] || continue
             f=${ALL[$i]}; n=$((n + 1)); stem=$(echo "$f" | tr '/.' '__')
+            # A suite module has `run_checks()` and no `main()` (a module with main() cannot be imported): give it a
+            # two-line entry. A file that has its own main() is built as it is.
+            root="$f"
+            if ! grep -qE '^(def|fn) main\b' "$f"; then
+              root="out/${stem}_entry.mojo"
+              printf 'from %s import run_checks\n\n\ndef main() raises:\n    run_checks()\n' "$(echo "${f%.mojo}" | tr '/' '.')" > "$root"
+            fi
             # shellcheck disable=SC2086
             pixi run mojo build -j "$(nproc)" --emit llvm --no-optimization -D MOJOLEARN_NUMERIC_IDENTICAL=1 $col \
-              $target -I . -I bindings "$f" -o "out/$stem.ll" > "out/logs/$stem.log" 2>&1
+              $target -I . -I bindings "$root" -o "out/$stem.ll" > "out/logs/$stem.log" 2>&1
             rc=$?
             rm -f "out/$stem.ll"
             # as host-parse: only the unoptimised lowering's refusals means the file elaborated
