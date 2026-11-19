@@ -24,8 +24,6 @@ from gemm.checks.gemm_identical import (
     # re-exported: training/checks/loss_check.mojo, training/byte_lm.mojo and the training checks import these from here
     identical_gemm_with_plan,PLAN_FLAT,ANY_SABOTAGE,
 )
-# lane/fx-gemm-worklist: the work-list arm (-D MOJOLEARN_GEMM_FAST_WORKLIST=1, default off).
-from gemm.checks.gemm_identical import GEMM_FAST_WORKLIST,GemmWorklist
 from gemm.experiments.neural_profile import (
     NEURAL_PROFILE_CHANGED,NEURAL_LEAF,NEURAL_CHAINS,neural_validate,
 )
@@ -73,10 +71,8 @@ from gemm.checks.gemm_identical import (
 # NN05 (the fused pair kernel arm) deleted 2026-10-08 (lane grid-act-4, grid
 # ge123e6f9, 2.2-3.9x slower); see the tombstone at _neural_pair_kernel's old site.
 comptime NEURAL_GEMM_EXPERIMENT_ENABLED = NEURAL_PROFILE_CHANGED
-#: The work-list arm as the model call sites see it: on only where the kernel file compiles it (its column and
-#: body tests) and the neural profile is the incumbent (a changed profile runs another kernel per product).
-#: False compiles `GemmWorkspace.list_add` to `run` and the other two list calls to nothing.
-comptime NEURAL_GEMM_WORKLIST = GEMM_FAST_WORKLIST and not NEURAL_GEMM_EXPERIMENT_ENABLED
+# TOMBSTONE: MOJOLEARN_GEMM_FAST_WORKLIST (NOISE, A/B round 1 NVIDIA L40S, job nvc-ab-20261119T125554Z-6f7afc: lm-train-step 1.00, transformer-decode 1.00, lm-forward 0.93 once = another base run of the row) NEURAL_GEMM_WORKLIST and GemmWorkspace.worklist / list_begin / list_add / list_run deleted 2026-11-19 by lane/fx-arm-cleanup; code recoverable at a7c89e7558.
+# Restore: git apply experiments/removed/MOJOLEARN_GEMM_FAST_WORKLIST.patch
 # TOMBSTONE: MOJOLEARN_IDN_NEURAL_STREAM_GROUP (DELETE-ARM, unmeasured opt-in, rule a) deleted 2026-11-15 by lane/expdel2-26-neural; code recoverable at 5fc464dce4.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_NEURAL_STREAM_GROUP.patch
 # TOMBSTONE: MOJOLEARN_IDN_NEURAL_STAGE_DEPTH (DELETE-ARM, unmeasured opt-in, rule a) deleted 2026-11-15 by lane/expdel2-26-neural; code recoverable at 5fc464dce4.
@@ -275,7 +271,7 @@ def identical_gemm_leaf_ptr_into[RPT: Int,FS: Int](
 
     MIRRORS `gemm_identical._kpack_launch` (the page count, the page-fits assert, the grid) because that
     launcher takes `DeviceBuffer`s and the sequence executor holds raw pointers: a view per operand per call
-    would be three constructions on a hot path. A change to the kernel's argument block (lane fx-gemm-worklist)
+    would be three constructions on a hot path. A change to the kernel's argument block
     must be made here too. `RPT, FS` = `(GEMM_LEAF_PTR_RPT_WIDE, GEMM_LEAF_PTR_FS_WIDE)` or
     `(GEMM_LEAF_PTR_RPT_SMALL, GEMM_LEAF_PTR_FS_SMALL)`: the two kernels the NVIDIA build already carries, so
     the arm adds no kernel there."""
@@ -456,13 +452,10 @@ def gemm_workspace_run_epi[EPI: Int](ctx: DeviceContext,mut workspace: GemmWorks
 struct GemmWorkspace(Movable):
     """One in-order model context; no mutable global plan or operand cache."""
     var buffer: DeviceBuffer[DType.float32]
-    # lane/fx-gemm-worklist: the pending work list and its device tables (empty unless the arm is compiled).
-    var worklist: GemmWorklist
 
     def __init__(out self,ctx: DeviceContext) raises:
         step_count_device_alloc()
         self.buffer = ctx.enqueue_create_buffer[DType.float32](1)
-        self.worklist = GemmWorklist()
 
     def _ensure(mut self,ctx: DeviceContext,required: Int) raises:
         if required>len(self.buffer):
@@ -482,56 +475,6 @@ struct GemmWorkspace(Movable):
             required = max(required,matrix_units_workspace_floats(m,n,k,op))
         self._ensure(ctx,required)
         identical_gemm_into[allow_vendor,ROLE](ctx,c,a,b,self.buffer,m,n,k,op)
-
-    # ---- THE WORK LIST (lane/fx-gemm-worklist; arm MOJOLEARN_GEMM_FAST_WORKLIST, default off) ----
-    # list_begin(); list_add(...) once per product; list_run(ctx). The products of one list must be INDEPENDENT:
-    # none reads or writes another's output (their inputs are all ready before the first list_add). With the arm
-    # off list_add IS run, in the caller's order, and the other two calls compile to nothing. With it on, every
-    # product whose own launch is the packed body shares one launch per mode with the others (gemm_identical.mojo,
-    # "THE WORK LIST": same blocks, same body, same words); any other product runs its own launch inside list_add.
-    # Lifetime: list_add records device addresses. The caller keeps every c, a and b alive past the synchronize that
-    # follows list_run (name them after list_run, or hold them in a struct the caller keeps), as for run.
-
-    def list_begin(mut self):
-        """Start a work list, dropping any product still pending."""
-        comptime if NEURAL_GEMM_WORKLIST:
-            self.worklist.begin()
-
-    def list_add[allow_vendor: Bool = True,ROLE: Int = ROLE_PROJECTION](mut self,ctx: DeviceContext,
-        mut c: DeviceBuffer[DType.float32],mut a: DeviceBuffer[DType.float32],
-        mut b: DeviceBuffer[DType.float32],m: Int,n: Int,k: Int,op: Int) raises:
-        """`run`'s product, queued for `list_run`. A refusal is this product's own, raised here with the wording
-        its single launch uses; the products queued before it are launched first, as they would have been."""
-        # lane fx-fast-matrix-units (arm only): a product the matrix unit takes is its own launch, never a list entry
-        # (the list's shared launch is the FP32 packed body). List products are independent, so its place is free.
-        comptime if GEMM_FAST_MATRIX_UNITS and (allow_vendor or GEMM_FAST_MATRIX_UNITS_ALL):
-            if matrix_units_takes(m,n,k):
-                self.run[allow_vendor,ROLE](ctx,c,a,b,m,n,k,op)
-                return
-        comptime if not NEURAL_GEMM_WORKLIST:
-            self.run[allow_vendor,ROLE](ctx,c,a,b,m,n,k,op)
-            return
-        if self.worklist.full():
-            self.list_run(ctx)
-        var taken = False
-        try:
-            taken = self.worklist.add(ctx,c.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
-                a.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
-                b.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),m,n,k,op)
-        except error:
-            self.list_run(ctx)
-            raise error
-        if not taken:
-            self.run[allow_vendor,ROLE](ctx,c,a,b,m,n,k,op)
-
-    def list_run(mut self,ctx: DeviceContext) raises:
-        """Launch the pending products (asynchronous, as `run`) and clear the list."""
-        comptime if NEURAL_GEMM_WORKLIST:
-            var need = self.worklist.node_floats()
-            if need>0:
-                self._ensure(ctx,need)
-            var nodes = self.buffer.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
-            self.worklist.launch(ctx,nodes)
 
     def close(mut self,ctx: DeviceContext) raises:
         ctx.synchronize()

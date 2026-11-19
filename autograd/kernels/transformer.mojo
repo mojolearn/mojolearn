@@ -1992,7 +1992,7 @@ def bwd_kv_slice2_kernel(
 # ===========================================================================
 
 
-def _route_a[LIST: Bool = False](
+def _route_a(
     ctx: DeviceContext,
     mut workspace: GemmWorkspace,
     mut out_buf: DeviceBuffer[DType.float32],
@@ -2015,23 +2015,8 @@ def _route_a[LIST: Bool = False](
     than one that is not, because the next profile may not be all-`OP_NT`.
 
     The stage owner retains `workspace` until the caller's completion wait.
-    Workspace sizing follows the actual backward GEMM shape.
-
-    `LIST = True` (lane/fx-gemm-worklist, reached only under the arm
-    MOJOLEARN_GEMM_FAST_WORKLIST): the same product through
-    `workspace.list_add`; the caller owns `list_run`. `_route_b` likewise."""
+    Workspace sizing follows the actual backward GEMM shape."""
     var call = gemm_backward_a_call(op, m, n, k)
-    comptime if LIST:
-        # lane/fx-gemm-worklist: the same product, queued on the workspace's work list (the caller runs the list).
-        if call[4] == BWD_DC_LEFT:
-            workspace.list_add(
-                ctx, out_buf, dc, other, call[1], call[2], call[3], call[0]
-            )
-            return
-        workspace.list_add(
-            ctx, out_buf, other, dc, call[1], call[2], call[3], call[0]
-        )
-        return
     if call[4] == BWD_DC_LEFT:
         workspace.run(
             ctx, out_buf, dc, other, call[1], call[2], call[3], call[0]
@@ -2042,7 +2027,7 @@ def _route_a[LIST: Bool = False](
     )
 
 
-def _route_b[LIST: Bool = False](
+def _route_b(
     ctx: DeviceContext,
     mut workspace: GemmWorkspace,
     mut out_buf: DeviceBuffer[DType.float32],
@@ -2071,17 +2056,6 @@ def _route_b[LIST: Bool = False](
     comptime if _AFN_WGRAD:
         if _afn_wgrad(ctx, out_buf, dc, other, call):
             return
-    comptime if LIST:
-        # lane/fx-gemm-worklist: the same product, queued on the workspace's work list (the caller runs the list).
-        if call[4] == BWD_DC_LEFT:
-            workspace.list_add(
-                ctx, out_buf, dc, other, call[1], call[2], call[3], call[0]
-            )
-            return
-        workspace.list_add(
-            ctx, out_buf, other, dc, call[1], call[2], call[3], call[0]
-        )
-        return
     if call[4] == BWD_DC_LEFT:
         workspace.run(
             ctx, out_buf, dc, other, call[1], call[2], call[3], call[0]
