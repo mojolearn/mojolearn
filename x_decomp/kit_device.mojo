@@ -84,6 +84,7 @@ from cholesky.checks.trsm import CHOL_SOLVE_TPB, trsm_lower
 from core.identity_trace import IdentityTrace
 from x_decomp.jacobi_par import pj_identity_kernel
 from x_decomp.mcd import IDN_MCD_CHOL
+from x_decomp.mcd import MCD_LOCKSTEP
 from x_decomp.mcd import Est, _key, _F32_EPS, _FLT_MIN, _neg_inf, _order_by_det, _pos_inf, _write, argsort_values, smallest_sorted
 from x_decomp.mcd_fast import MCD_DEVICE_CSTEPS, fast_mcd_fast
 from x_decomp.resident import pool_buffer, _pool_buf_view, _ptr, pool_alloc, pool_free
@@ -1310,6 +1311,65 @@ struct DKit(Movable):
         return Float64(th.d[0])
 
 
+    def lu_logdet_enq(mut self, A: DMat, tot: DMat, sgn: DMat) raises:
+        """`lu_logdet`'s launches with nothing read (MCD_LOCKSTEP): the
+        summed logs of |diag| go to `tot` (1 x 1) and the sign rule's two
+        words to `sgn` (1 x 2, zeroed by the caller), both row views of the
+        caller's arenas, which it downloads for every candidate at ONE
+        sync and reads through `_ls_det`. The same launches on the same
+        operands as `lu_logdet`, so the same words. The LU scratch returns
+        to the pool as soon as its launches are enqueued (as every DMat
+        temporary of the kit does): a later user's launches are ordered
+        after these on the kit's one stream."""
+        var n = A.r
+        var lu = self.copy(A)
+        var pid = pool_alloc(max(n, 1))
+        var iid = pool_alloc(1)
+        var sid = pool_alloc(LU_SCAL_LEN)
+        var aid = pool_alloc(max(n, 1))
+        launch_lu(
+            self.ctx, lu.p(), _ptr(pid, max(n, 1)).bitcast[Int32](), _ptr(iid, 1), _ptr(sid, LU_SCAL_LEN),
+            _ptr(aid, max(n, 1)), n,
+        )
+        var diag = DMat(1, n)
+        if n > 0:
+            self.ctx.enqueue_function[diag_kernel](lu.p(), diag.p(), Int32(n), grid_dim=_blocks(n), block_dim=TPB)
+        var t = self.total(self.ew1(OP_LOGS, self.ew1(OP_ABS, diag, 0.0), _FLT_MIN))
+        self.put(tot, t)
+        if n > 0:
+            self.ctx.enqueue_function[logdet_sign_kernel](
+                diag.p(), _ptr(pid, max(n, 1)).bitcast[Int32](), Int32(n),
+                sgn.p().bitcast[Int32](), grid_dim=_blocks(n), block_dim=TPB,
+            )
+        pool_free(pid)
+        pool_free(iid)
+        pool_free(sid)
+        pool_free(aid)
+        _ = t^
+        _ = diag^
+        _ = lu^
+
+
+def _ls_det(total: Float32, s0: Float32, s1: Float32) -> Float64:
+    """`lu_logdet`'s host rule on one candidate's downloaded words
+    (MCD_LOCKSTEP): `s0` / `s1` are the sign kernel's two int32 words as they
+    sit in the float arena (read by their bits); a zero pivot or an odd count
+    of negative pivots and swaps is -inf, otherwise the summed logs."""
+    if bitcast[DType.int32](s0) != Int32(0):
+        return _neg_inf()
+    if Int(bitcast[DType.int32](s1)) % 2 != 0:
+        return _neg_inf()
+    return Float64(total)
+
+
+def _ls_view(A: DMat, B: DMat, which: Int, row0: Int, rows: Int) -> DMat:
+    """Rows of arena A (`which` 0) or B (MCD_LOCKSTEP: a candidate's current
+    and previous state sit in two arenas and swap by this index)."""
+    if which == 0:
+        return DMat(rows_of=A, row0=row0, rows=rows)
+    return DMat(rows_of=B, row0=row0, rows=rows)
+
+
 # ---- MinCovDet's fast_mcd on the resident kit (x_decomp/mcd.mojo's search)
 struct DMcd:
     var k: DKit
@@ -1570,6 +1630,184 @@ struct DMcd:
             return DEst(prev_loc^, prev_cov^, prev_det, prev_sel^, dist^, DMat(0, 0), False, False)
         return DEst(loc^, cov^, det, sel^, DMat(0, 1), P^, False, True)
 
+    def _ls_pinv(self, W: DMat, V: DMat, a: Int, d: Int) raises -> DMat:
+        """`pinvh` from problem `a` of a batched solve (MCD_LOCKSTEP): W is
+        batch x d ascending eigenvalues, V batch * d x d eigenvectors in
+        columns. `pinvh`'s launches on the same words."""
+        var wd = DMat(rows_of=W, row0=a, rows=1)
+        var vd = DMat(rows_of=V, row0=a * d, rows=d)
+        var keep = self.k.ew1(OP_RECIP, wd, 0.0)
+        var inv = DMat(1, d)
+        self.k.ctx.enqueue_function[pinv_mask_dev_kernel](
+            keep.p(), wd.p(), inv.p(), Int32(d), Float32(_F32_EPS), grid_dim=_blocks(d), block_dim=TPB
+        )
+        return self.k.mm(self.k.ew2(OP_MUL, vd, inv), vd, False, True)
+
+    def _ls_eigh(mut self, DA: DMat, m: Int, d: Int, W: DMat, V: DMat) raises:
+        """The one-block Jacobi of the m stacked d x d problems in DA
+        (consumed) into W and V, ENQUEUED as one launch, a block a problem
+        (MCD_LOCKSTEP; `DKit.eigh_deferred`'s route with a batch of m: the
+        same kernel and words a problem). Its status word is read at the
+        kit's next sync, where an unconverged solve raises."""
+        var da = self.k._sub(DA)
+        var dw = self.k._sub(W)
+        var dv = self.k._sub(V)
+        var status = DevExec._eigh_batch_enq(self.k.ctx, da, m, d, dw, dv)
+        self.k.eig_status.append(status^)
+        _ = da^
+        _ = dw^
+        _ = dv^
+
+    def select_lockstep(
+        mut self, X: DMat, h: Int, trials: Int, keep: Int, n_iter: Int, has_init: Bool, inits: DCands,
+        mut output: DCands,
+    ) raises:
+        """`select_random` (has_init False) or `select_init` (True) with the
+        candidates taking each C-step together (MCD_LOCKSTEP, x_decomp/mcd.mojo):
+        `c_step`'s statements for every candidate, in its order, on the same
+        operands; only the order of launches across candidates and the waits
+        change (one wait a round for every candidate's log determinant, one
+        batched Jacobi launch a round). A candidate's current and previous
+        (location, covariance) sit in two arenas and swap by index; nothing
+        else of a candidate outlives its step (the callers read only the
+        kept candidates' location, covariance and log determinant). For
+        1 <= d <= XD_EIGH_ONE_BLOCK_N (the callers test it)."""
+        var d = X.c
+        var T = trials
+        var cap = max(T, 1)
+        var LA = DMat(cap, d)
+        var CA = DMat(cap * d, d)
+        var LB = DMat(cap, d)
+        var CB = DMat(cap * d, d)
+        var TOT = DMat(cap, 1)
+        var SGN = DMat(cap, 2)
+        var det = List[Float64](length=T, fill=0.0)
+        var prev_det = List[Float64](length=T, fill=_pos_inf())
+        var have_prev = List[Bool](length=T, fill=False)
+        var has_p = List[Bool](length=T, fill=False)
+        var iters = List[Int](length=T, fill=n_iter)
+        var cur = List[Int](length=T, fill=0)
+        # ---- every candidate's first support, covariance and log determinant
+        var sv0 = _pool_buf_view(SGN.id, 2 * cap)
+        enqueue_fill(self.k.ctx, sv0, Float32(0))
+        _ = sv0^
+        var W0 = DMat(cap, d)
+        var V0 = DMat(cap * d, d)
+        var D0 = DMat(cap * d, d)
+        if has_init and T > 0:
+            for t in range(T):  # driver-loop: over the C-step candidates (one device copy each)
+                self.k.put(DMat(rows_of=D0, row0=t * d, rows=d), inits.cov(t))
+            self._ls_eigh(D0, T, d, W0, V0)
+        for t in range(T):  # driver-loop: over the C-step candidates (each one's first step, enqueued)
+            var sel: DMat
+            if not has_init:
+                # `sorted(self._perm(n)[:h])`: the next Philox stream's draws
+                self.draws += 1
+                var r = self.k.rand(1, X.r, self.seed, 1000 + self.draws, 0)
+                sel = self.k.smallest_dev(r, h)
+            else:
+                var P0 = self._ls_pinv(W0, V0, t, d)
+                var d0 = self.mahal(X, inits.loc(t), P0)
+                sel = self.k.smallest_dev(d0, h)
+            var Xs = self.k.gather_dev(X, sel)
+            var loc = self.k.colmean(Xs)
+            var cov = self.emp_cov_at(Xs, loc)
+            self.k.put(DMat(rows_of=LA, row0=t, rows=1), loc)
+            self.k.put(DMat(rows_of=CA, row0=t * d, rows=d), cov)
+            self.k.lu_logdet_enq(cov, DMat(rows_of=TOT, row0=t, rows=1), DMat(rows_of=SGN, row0=t, rows=1))
+            self.csteps += 1
+        var th0 = self.k.get(TOT)
+        var sh0 = self.k.get(SGN)
+        self.k.sync()
+        for t in range(T):  # driver-loop: over the C-step candidates (one log determinant each)
+            det[t] = _ls_det(th0.d[t], sh0.d[2 * t], sh0.d[2 * t + 1])
+            # P empty with has_p: a -inf start, pinvh(cov) owed to the reader
+            if det[t] == _neg_inf():
+                has_p[t] = True
+        _ = th0^
+        _ = sh0^
+        _ = D0^
+        _ = W0^
+        _ = V0^
+        # ---- the rounds: `c_step`'s loop, every running candidate one iteration a round
+        while True:  # driver-loop: over C-step rounds (at most n_iter)
+            var active = List[Int]()
+            for t in range(T):  # driver-loop: over the C-step candidates (the loop test)
+                if det[t] < prev_det[t] and iters[t] > 0 and det[t] != _neg_inf():
+                    active.append(t)
+            var m = len(active)
+            if m == 0:
+                break
+            var DA = DMat(m * d, d)
+            var W = DMat(m, d)
+            var V = DMat(m * d, d)
+            for a in range(m):  # driver-loop: over the running candidates (one device copy each)
+                var t = active[a]
+                self.k.put(DMat(rows_of=DA, row0=a * d, rows=d), _ls_view(CA, CB, cur[t], t * d, d))
+            self._ls_eigh(DA, m, d, W, V)
+            var sv = _pool_buf_view(SGN.id, 2 * cap)
+            enqueue_fill(self.k.ctx, sv, Float32(0))
+            _ = sv^
+            for a in range(m):  # driver-loop: over the running candidates (each one's C-step, enqueued)
+                var t = active[a]
+                var P = self._ls_pinv(W, V, a, d)
+                has_p[t] = True
+                var dd = self.mahal(X, _ls_view(LA, LB, cur[t], t, 1), P)
+                var sel = self.k.smallest_dev(dd, h)
+                var Xs = self.k.gather_dev(X, sel)
+                var loc = self.k.colmean(Xs)
+                var cov = self.emp_cov_at(Xs, loc)
+                # the new state into the other arena; the one it leaves is `prev`
+                var nxt = 1 - cur[t]
+                self.k.put(_ls_view(LA, LB, nxt, t, 1), loc)
+                self.k.put(_ls_view(CA, CB, nxt, t * d, d), cov)
+                self.k.lu_logdet_enq(cov, DMat(rows_of=TOT, row0=t, rows=1), DMat(rows_of=SGN, row0=t, rows=1))
+                self.csteps += 1
+                cur[t] = nxt
+                have_prev[t] = True
+                prev_det[t] = det[t]
+                iters[t] -= 1
+            var th = self.k.get(TOT)
+            var sh = self.k.get(SGN)
+            self.k.sync()
+            for a in range(m):  # driver-loop: over the running candidates (one log determinant each)
+                var t = active[a]
+                det[t] = _ls_det(th.d[t], sh.d[2 * t], sh.d[2 * t + 1])
+            _ = th^
+            _ = sh^
+            _ = DA^
+            _ = W^
+            _ = V^
+        # ---- `c_step`'s ending for every candidate, then `_order_by_det`'s order
+        var dets = List[Float64](capacity=T)
+        var side = List[Int](capacity=T)
+        for t in range(T):  # driver-loop: over the C-step candidates (the ending rule)
+            if not has_p[t]:
+                # Python's final `_mahal(k, X, loc, None)` fails here (a +inf or
+                # NaN log det at the first step); so does this.
+                raise Error("x_decomp MinCovDet: the first C-step's log determinant is not finite")
+            # sklearn's checks in its order, the last one that fires wins
+            var use_prev = have_prev[t] and det[t] > prev_det[t]
+            if iters[t] == 0:
+                use_prev = False
+            if use_prev:
+                dets.append(prev_det[t])
+                side.append(1 - cur[t])
+            else:
+                dets.append(det[t])
+                side.append(cur[t])
+        var top = _top_of(dets, keep)
+        for a in range(len(top)):  # small-loop(top: kept candidates): two device copies a kept candidate
+            var j = top[a]
+            output.push(self.k, _ls_view(LA, LB, side[j], j, 1), _ls_view(CA, CB, side[j], j * d, d), dets[j])
+        # the arenas outlive every view of them (Mojo frees a value at its last NAMED use)
+        _ = LA^
+        _ = CA^
+        _ = LB^
+        _ = CB^
+        _ = TOT^
+        _ = SGN^
+
     def select_random(
         mut self, X: DMat, h: Int, trials: Int, keep: Int, n_iter: Int, mut output: DCands
     ) raises:
@@ -1577,6 +1815,11 @@ struct DMcd:
         and covariance packed into one trial arena, then the `keep` best (in
         `_order_by_det`'s order) appended to `output`. The later stages read
         only a kept candidate's location and covariance."""
+        comptime if MCD_LOCKSTEP:
+            if X.c >= 1 and X.c <= XD_EIGH_ONE_BLOCK_N:
+                var no_inits = DCands(1, X.c)
+                self.select_lockstep(X, h, trials, keep, n_iter, False, no_inits, output)
+                return
         var tr = DCands(trials, X.c)
         var none = DMat(0, 0)
         for _t in range(trials):  # small-loop(trials: C-step candidates): one enqueued C-step a candidate, the plan's trial count
@@ -1592,6 +1835,10 @@ struct DMcd:
     ) raises:
         """`select_candidates` from initial estimates, the `keep` best
         locations and covariances appended to `output` (packed, as above)."""
+        comptime if MCD_LOCKSTEP:
+            if X.c >= 1 and X.c <= XD_EIGH_ONE_BLOCK_N:
+                self.select_lockstep(X, h, inits.count(), keep, n_iter, True, inits, output)
+                return
         var tr = DCands(inits.count(), X.c)
         for t in range(inits.count()):  # small-loop(inits: C-step candidates): one enqueued C-step per kept candidate
             var e = self.c_step(X, h, n_iter, True, inits.loc(t), inits.cov(t))
