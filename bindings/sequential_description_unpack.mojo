@@ -6,6 +6,8 @@ from bindings.sequential_admission_door import sequential_integer, sequential_ad
 from bindings.py_balanced import py_call, py_contains, py_fields, py_setitem, py_type
 from bindings.native_identity_key_door import NativeIdentityKey
 from bindings.native_prepared_owner_unpack import prepared_get, prepared_put
+from bindings.sequential_keys_unpack import sequential_keys
+from bindings.py_balanced import py_item
 
 
 def sequential_fields(value: PythonObject) raises -> PythonObject:
@@ -24,10 +26,11 @@ def _positive(value: PythonObject, name: String, low: Int, context: PythonObject
 
 def sequential_append(mut mods: NativeModules, model: PythonObject, code: PythonObject, a0: PythonObject,
                       a1: PythonObject, f: PythonObject, supplied: PythonObject) raises:
+    var nk = sequential_keys()
     var b = mods.module("builtins")
     var args = Python.list(a0, a1, 0, 0, 0, 0) if supplied is None else py_call(b.list, supplied)
     var fields = sequential_fields(model)
-    _ = py_call(fields["_layers"].append, Python.tuple(code, a0, a1, f, py_call(b.tuple, args)))
+    _ = py_call(py_item(fields, nk[].k__layers).append, Python.tuple(code, a0, a1, f, py_call(b.tuple, args)))
 
 
 struct SequentialDescription(Movable, Writable):

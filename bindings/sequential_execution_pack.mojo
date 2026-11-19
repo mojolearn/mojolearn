@@ -15,13 +15,16 @@ from bindings.sequential_description_unpack import sequential_fields, Sequential
 from bindings.sequential_description_pack import sequential_sample_shape, sequential_native_description
 from bindings.sequential_arrays_door import sequential_array, sequential_address, sequential_input, sequential_descriptor, sequential_x_snapshot, sequential_curve
 from bindings.py_optional import py_present
+from bindings.sequential_keys_unpack import sequential_keys
+from bindings.py_balanced import py_item
 
 
 def sequential_entries(model: PythonObject, context: PythonObject) raises -> PythonObject:
+    var nk = sequential_keys()
     var b = native_loaded_module("builtins")
-    var mode = sequential_fields(model)["numeric_mode"]
+    var mode = py_item(sequential_fields(model), nk[].k_numeric_mode)
     if mode is None:
-        mode = context["backend_fields"]["_DEFAULT_MODE"]
+        mode = py_item(py_item(context, nk[].k_backend_fields), nk[].k__DEFAULT_MODE)
     var word = String()
     if py_type(mode) is b.str:
         # An exact canonical spelling needs no isinstance, strip or lower call.
@@ -34,7 +37,7 @@ def sequential_entries(model: PythonObject, context: PythonObject) raises -> Pyt
     if word != "identical" and word != "fast":
         raise Error("numeric_mode must be fast, identical or None")
     answer_mode_word(word, MODE_FAMILY_NEURAL)
-    var entries = context["bindings"][PythonObject(word)]
+    var entries = py_item(context, nk[].k_bindings)[PythonObject(word)]
     if py_type(entries) is not b.dict and Bool(py=py_call(b.isinstance, entries, b.str)):
         raise Error(String(entries))
     # The compiled mode/vendor of a connected binding cannot change within a
@@ -42,27 +45,28 @@ def sequential_entries(model: PythonObject, context: PythonObject) raises -> Pyt
     # stored next to the provider (two native metadata calls per predict).
     # The verdict keeps the context's own vendor object, so the usual check
     # is one identity compare instead of two String conversions.
-    var vendor = context["vendor"]
-    var checked = py_get(entries, "_sequential_checked_vendor")
+    var vendor = py_item(context, nk[].k_vendor)
+    var checked = py_get(entries, nk[].k__sequential_checked_vendor)
     if checked is None or (checked is not vendor and String(checked) != String(vendor)):
-        var actual_mode = Int(py=entries["x_sequence_numeric_mode"]())
-        var actual_vendor = String(entries["x_sequence_vendor"]())
+        var actual_mode = Int(py=py_item(entries, nk[].k_x_sequence_numeric_mode)())
+        var actual_vendor = String(py_item(entries, nk[].k_x_sequence_vendor)())
         if actual_mode != (1 if word == "identical" else 0):
             raise Error("RuntimeError: Sequential native numerical mode differs from the requested mode")
         if actual_vendor != String(vendor):
             raise Error("RuntimeError: Sequential native vendor differs from the selected execution route")
-        py_setitem(entries, "_sequential_checked_vendor", vendor)
+        py_setitem(entries, nk[].k__sequential_checked_vendor, vendor)
     # Connection/metadata admission only. Exact compiled factory/module identity
     # owns the shared provider; no per-model pointer cache or Python callable is
     # used by the subsequent native fit/predict execution.
-    var provider = neural_descriptor_reuse(py_get(entries, "native_model_provider"),
-        entries["model_native_api_v1"], String(MODEL_ABI_NAME), MODEL_OPERATION_COUNT)
-    py_setitem(entries, "native_model_provider", provider)
+    var provider = neural_descriptor_reuse(py_get(entries, nk[].k_native_model_provider),
+        py_item(entries, nk[].k_model_native_api_v1), String(MODEL_ABI_NAME), MODEL_OPERATION_COUNT)
+    py_setitem(entries, nk[].k_native_model_provider, provider)
     return entries
 
 
 def sequential_targets(mut mods: NativeModules, model: PythonObject, source: PythonObject, n: Int, n_out: Int,
                        loss: String, entries: PythonObject, context: PythonObject) raises -> PythonObject:
+    var nk = sequential_keys()
     var y = sequential_input(source, context)
     var nd = Int(py=y.ndim)
     var fields = sequential_fields(model)
@@ -76,7 +80,7 @@ def sequential_targets(mut mods: NativeModules, model: PythonObject, source: Pyt
         # (`model_fit_labels`); the class-count refusals run there
         var classes = sequential_array(mods, Python.tuple(n), y.dtype, context)
         return Python.tuple(y, descriptor, 1 if loss == "cross_entropy" else 2, classes)
-    py_setitem(fields, "_y_1d", nd == 1)
+    py_setitem(fields, nk[].k__y_1d, nd == 1)
     var width = 1 if nd == 1 else Int(py=y.shape[1])
     if width != n_out:
         raise Error("y has " + String(width) + " outputs but the model has " + String(n_out))
@@ -84,11 +88,12 @@ def sequential_targets(mut mods: NativeModules, model: PythonObject, source: Pyt
 
 
 def sequential_fit(mut mods: NativeModules, model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
+    var nk = sequential_keys()
     var b = native_loaded_module("builtins")
     var fields = sequential_fields(model)
-    if len(fields["_layers"]) == 0:
+    if len(py_item(fields, nk[].k__layers)) == 0:
         raise Error("add at least one layer before fit")
-    var options = fields["_options"]
+    var options = py_item(fields, nk[].k__options)
     if options is None:
         raise Error("call compile before fit")
     var validation = args[7]
@@ -96,17 +101,17 @@ def sequential_fit(mut mods: NativeModules, model: PythonObject, args: PythonObj
     if restore_best and validation is None:
         raise Error("restore_best_weights requires validation_data")
     var seed = args[5]
-    if not _integer(seed, context) or Bool(py=seed < PythonObject(0)) or Bool(py=seed > context["uint64_max"]):
+    if not _integer(seed, context) or Bool(py=seed < PythonObject(0)) or Bool(py=seed > py_item(context, nk[].k_uint64_max)):
         raise Error("seed must be an integer in [0, 2**64)")
     var resume = Bool(py=args[6])
-    if resume and py_get(fields, "_fit_state") is None:
+    if resume and py_get(fields, nk[].k__fit_state) is None:
         raise Error("resume=True continues an earlier fit: call fit (or from_checkpoint) first")
     var batch = args[3]
     var shuffle = args[4]
     if batch is None:
-        batch = fields["_fit_batch"] if resume else PythonObject(32)
+        batch = py_item(fields, nk[].k__fit_batch) if resume else PythonObject(32)
     if shuffle is None:
-        shuffle = fields["_fit_shuffle"] if resume else PythonObject(True)
+        shuffle = py_item(fields, nk[].k__fit_shuffle) if resume else PythonObject(True)
     var epochs = Int(py=py_call(b.int, args[2]))
     var batch_size = Int(py=py_call(b.int, batch))
     if epochs < 1 or batch_size < 1:
@@ -116,13 +121,13 @@ def sequential_fit(mut mods: NativeModules, model: PythonObject, args: PythonObj
     var xd = x_snapshot.abi()
     var n = x_snapshot.source.rows
     var d = x_snapshot.source.cols
-    if resume and d != Int(py=fields["n_features_in_"]):
+    if resume and d != Int(py=py_item(fields, nk[].k_n_features_in_)):
         raise Error("X has a different feature count from the fitted model")
     var sample = sequential_sample_shape(mods, model, x_snapshot.shape)
-    if resume and not Bool(py=sample == py_get(fields, "_sample_shape")):
+    if resume and not Bool(py=sample == py_get(fields, nk[].k__sample_shape)):
         raise Error("resume=True takes inputs of the shape the model was fitted on")
-    var warm = not resume and Bool(py=py_get(fields, "_imported", False))
-    if warm and (d != Int(py=fields["n_features_in_"]) or not Bool(py=sample == py_get(fields, "_sample_shape"))):
+    var warm = not resume and Bool(py=py_get(fields, nk[].k__imported, False))
+    if warm and (d != Int(py=py_item(fields, nk[].k_n_features_in_)) or not Bool(py=sample == py_get(fields, nk[].k__sample_shape))):
         raise Error("X has a different feature count or sample shape from the imported weights")
     var description_owner = sequential_native_description(mods, model, PythonObject(d), sample)
     var description = description_owner.downcast_value_ptr[SequentialDescription]()
@@ -140,7 +145,7 @@ def sequential_fit(mut mods: NativeModules, model: PythonObject, args: PythonObj
         description[].counts_ready = True
     var n_params = description[].parameter_count
     var n_out = description[].output_count
-    var target_data = sequential_targets(mods, model, args[1], n, n_out, String(options["loss"]), entries, context)
+    var target_data = sequential_targets(mods, model, args[1], n, n_out, String(py_item(options, nk[].k_loss)), entries, context)
     var y = target_data[0]
     var yd = target_data[1]
     var target = Int(py=target_data[2])
@@ -153,25 +158,25 @@ def sequential_fit(mut mods: NativeModules, model: PythonObject, args: PythonObj
     var previous = Optional[PythonObject]()
     var curve = PythonObject(None)
     if resume:
-        params = fields["params_"]
-        moment = fields["optimizer_m_"]
-        variance = fields["optimizer_v_"]
-        state = fields["_fit_state"]
-        previous = py_present(fields["_curve"])
-        curve = sequential_array(mods, Python.tuple(Int(py=fields["n_iter_"]) + epochs), context["float32"], context)
+        params = py_item(fields, nk[].k_params_)
+        moment = py_item(fields, nk[].k_optimizer_m_)
+        variance = py_item(fields, nk[].k_optimizer_v_)
+        state = py_item(fields, nk[].k__fit_state)
+        previous = py_present(py_item(fields, nk[].k__curve))
+        curve = sequential_array(mods, Python.tuple(Int(py=py_item(fields, nk[].k_n_iter_)) + epochs), py_item(context, nk[].k_float32), context)
     else:
-        params = fields["params_"] if warm else sequential_array(mods, Python.tuple(n_params), context["float32"], context)
-        moment = sequential_array(mods, Python.tuple(n_params), context["float32"], context)
-        variance = sequential_array(mods, Python.tuple(n_params), context["float32"], context)
-        state = sequential_array(mods, Python.tuple(12), context["int64"], context)
-        curve = sequential_array(mods, Python.tuple(epochs), context["float32"], context)
+        params = py_item(fields, nk[].k_params_) if warm else sequential_array(mods, Python.tuple(n_params), py_item(context, nk[].k_float32), context)
+        moment = sequential_array(mods, Python.tuple(n_params), py_item(context, nk[].k_float32), context)
+        variance = sequential_array(mods, Python.tuple(n_params), py_item(context, nk[].k_float32), context)
+        state = sequential_array(mods, Python.tuple(12), py_item(context, nk[].k_int64), context)
+        curve = sequential_array(mods, Python.tuple(epochs), py_item(context, nk[].k_float32), context)
     seed = py_call(b.int, seed)
-    var ip = Python.list(n, context["loss_codes"][options["loss"]], target, options["opt"], options["flags"],
-        options["sched"], options["step_size"], batch_size, epochs, 1 if Bool(py=shuffle) else 0,
-        seed.__and__(4294967295), seed.__rshift__(32), options["n_iter_no_change"],
+    var ip = Python.list(n, py_item(context, nk[].k_loss_codes)[py_item(options, nk[].k_loss)], target, py_item(options, nk[].k_opt), py_item(options, nk[].k_flags),
+        py_item(options, nk[].k_sched), py_item(options, nk[].k_step_size), batch_size, epochs, 1 if Bool(py=shuffle) else 0,
+        seed.__and__(4294967295), seed.__rshift__(32), py_item(options, nk[].k_n_iter_no_change),
         0 if resume or warm else 1, 1 if resume else 0)
-    var fp = Python.list(options["lr"], options["f1"], options["f2"], options["eps"],
-        options["weight_decay"], 0.0, options["tol"], options["gamma"], options["huber_delta"])
+    var fp = Python.list(py_item(options, nk[].k_lr), py_item(options, nk[].k_f1), py_item(options, nk[].k_f2), py_item(options, nk[].k_eps),
+        py_item(options, nk[].k_weight_decay), 0.0, py_item(options, nk[].k_tol), py_item(options, nk[].k_gamma), py_item(options, nk[].k_huber_delta))
     var addresses = Python.list(xd, yd, sequential_address(params), sequential_address(curve),
         sequential_address(moment), sequential_address(variance), sequential_address(state),
         PythonObject(0) if not previous else sequential_address(previous.value()))
@@ -202,8 +207,8 @@ def sequential_fit(mut mods: NativeModules, model: PythonObject, args: PythonObj
         # the classes buffer as allocated (n slots); the fit entry cuts the
         # descriptor to the classes the sort found
         var classes = PythonObject(None) if target == 0 else sequential_descriptor(classes_full, "classes")
-        val_curve = sequential_array(mods, Python.tuple(epochs), context["float32"], context)
-        val_info = sequential_array(mods, Python.tuple(2), context["int64"], context)
+        val_curve = sequential_array(mods, Python.tuple(epochs), py_item(context, nk[].k_float32), context)
+        val_info = sequential_array(mods, Python.tuple(2), py_item(context, nk[].k_int64), context)
         _ = py_call(addresses.extend, Python.tuple(vxd, sequential_descriptor(vy, "validation y"), classes,
                     sequential_address(val_curve), sequential_address(val_info)))
         _ = curve  # keep the Python object alive through the native call above
@@ -221,7 +226,7 @@ def sequential_fit(mut mods: NativeModules, model: PythonObject, args: PythonObj
     var native_scalars = model_float64_words(fp)
     for scalar in native_table:  # driver-loop: reuse already admitted native layer options
         native_scalars.append(scalar)
-    var provider = entries["native_model_provider"]
+    var provider = py_item(entries, nk[].k_native_model_provider)
     var n_iter: Int
     if target != 0:
         var class_count = List[Int](length=1, fill=0)
@@ -237,7 +242,7 @@ def sequential_fit(mut mods: NativeModules, model: PythonObject, args: PythonObj
         _ = params  # keep the Python object alive through the native call above
         _ = classes_full  # keep the Python object alive through the native call above
         var count = class_count[0]
-        py_setitem(fields, "classes_", py_call(context["ndarray"], Python.tuple(count), dtype=classes_full.dtype, buffer=classes_full))
+        py_setitem(fields, nk[].k_classes_, py_call(py_item(context, nk[].k_ndarray), Python.tuple(count), dtype=classes_full.dtype, buffer=classes_full))
         mods.released()
     else:
         var words = model_descriptor_words(native_program, native_options, native_inputs[1])
@@ -257,31 +262,31 @@ def sequential_fit(mut mods: NativeModules, model: PythonObject, args: PythonObj
     _ = previous^
     _ = vx^
     _ = vy^
-    py_setitem(fields, "params_", params)
-    py_setitem(fields, "n_iter_", n_iter)
+    py_setitem(fields, nk[].k_params_, params)
+    py_setitem(fields, nk[].k_n_iter_, n_iter)
     if validation is not None:
         var info = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=Int(py=sequential_address(val_info)))
         _ = val_info  # keep the Python object alive through the native call above
         var ran = Int(info[0])
         _ = val_info  # keep the Python object alive through the native call above
-        py_setitem(fields, "epochs_run_", ran)
-        py_setitem(fields, "best_epoch_", PythonObject(info[1]))
+        py_setitem(fields, nk[].k_epochs_run_, ran)
+        py_setitem(fields, nk[].k_best_epoch_, PythonObject(info[1]))
         _ = val_info  # keep the Python object alive through the native call above
-        py_setitem(fields, "validation_loss_curve_", sequential_curve(val_curve, ran))
+        py_setitem(fields, nk[].k_validation_loss_curve_, sequential_curve(val_curve, ran))
         _ = val_info^
-    py_setitem(fields, "loss_curve_", sequential_curve(curve, n_iter))
-    py_setitem(fields, "n_features_in_", d)
-    py_setitem(fields, "_sample_shape", sample)
-    py_setitem(fields, "n_outputs_", n_out)
-    py_setitem(fields, "_fit_loss", options["loss"])
-    py_setitem(fields, "_target", target)
-    py_setitem(fields, "_fit_batch", batch_size)
-    py_setitem(fields, "_fit_shuffle", Bool(py=shuffle))
-    py_setitem(fields, "optimizer_m_", moment)
-    py_setitem(fields, "optimizer_v_", variance)
-    py_setitem(fields, "_fit_state", state)
-    py_setitem(fields, "_curve", curve)
-    py_setitem(fields, "_imported", False)
+    py_setitem(fields, nk[].k_loss_curve_, sequential_curve(curve, n_iter))
+    py_setitem(fields, nk[].k_n_features_in_, d)
+    py_setitem(fields, nk[].k__sample_shape, sample)
+    py_setitem(fields, nk[].k_n_outputs_, n_out)
+    py_setitem(fields, nk[].k__fit_loss, py_item(options, nk[].k_loss))
+    py_setitem(fields, nk[].k__target, target)
+    py_setitem(fields, nk[].k__fit_batch, batch_size)
+    py_setitem(fields, nk[].k__fit_shuffle, Bool(py=shuffle))
+    py_setitem(fields, nk[].k_optimizer_m_, moment)
+    py_setitem(fields, nk[].k_optimizer_v_, variance)
+    py_setitem(fields, nk[].k__fit_state, state)
+    py_setitem(fields, nk[].k__curve, curve)
+    py_setitem(fields, nk[].k__imported, False)
     return model
 
 
@@ -296,10 +301,11 @@ def sequential_forward(mut mods: NativeModules, model: PythonObject, source: Pyt
 def sequential_forward(mut mods: NativeModules, model: PythonObject, source: PythonObject, transform: Int,
                        width: PythonObject, entries: PythonObject, context: PythonObject,
                        classes: PythonObject) raises -> PythonObject:
+    var nk = sequential_keys()
     var fields = sequential_fields(model)
-    if not py_contains(fields, "params_"):
+    if not py_contains(fields, nk[].k_params_):
         raise Error("call fit before predict")
-    var sample = py_get(fields, "_sample_shape")
+    var sample = py_get(fields, nk[].k__sample_shape)
     var x_snapshot = sequential_x_snapshot(mods, source, "X", context)
     var x = x_snapshot.keep
     var rank = len(x_snapshot.shape)
@@ -313,15 +319,15 @@ def sequential_forward(mut mods: NativeModules, model: PythonObject, source: Pyt
             mods.released()
             raise Error("X samples have a different shape from the fitted model")
         mods.released()
-    if not Bool(py=PythonObject(x_snapshot.source.cols) == fields["n_features_in_"]):
+    if not Bool(py=PythonObject(x_snapshot.source.cols) == py_item(fields, nk[].k_n_features_in_)):
         raise Error("X has a different feature count from the fitted model")
-    var params = fields["params_"]
-    var description_owner = sequential_native_description(mods, model, fields["n_features_in_"], sample)
+    var params = py_item(fields, nk[].k_params_)
+    var description_owner = sequential_native_description(mods, model, py_item(fields, nk[].k_n_features_in_), sample)
     var description = description_owner.downcast_value_ptr[SequentialDescription]()
     ref native_program = description[].program
     ref native_table = description[].scalars
     var sources: List[CastIn] = [x_snapshot.source]
-    var provider = entries["native_model_provider"]
+    var provider = py_item(entries, nk[].k_native_model_provider)
     var out: PythonObject
     if classes is not None:
         # the labels of a classifier, in classes_' dtype
@@ -337,8 +343,8 @@ def sequential_forward(mut mods: NativeModules, model: PythonObject, source: Pyt
         _ = x^
         _ = params^
         return out
-    var output_width = fields["n_outputs_"] if width is None else width
-    out = sequential_array(mods, Python.tuple(x_snapshot.source.rows, output_width), context["float32"], context)
+    var output_width = py_item(fields, nk[].k_n_outputs_) if width is None else width
+    out = sequential_array(mods, Python.tuple(x_snapshot.source.rows, output_width), py_item(context, nk[].k_float32), context)
     var addresses: List[Int] = [0, Int(py=sequential_address(params)), Int(py=sequential_address(out))]
     var options: List[Int] = [x_snapshot.source.rows, 4096, transform]
     var words = model_descriptor_words(native_program, options, sources)
@@ -352,8 +358,9 @@ def sequential_forward(mut mods: NativeModules, model: PythonObject, source: Pyt
 
 def sequential_predict(mut mods: NativeModules, model: PythonObject, source: PythonObject, probabilities: Bool,
                        context: PythonObject) raises -> PythonObject:
+    var nk = sequential_keys()
     var fields = sequential_fields(model)
-    var saved_loss = py_get(fields, "_fit_loss")
+    var saved_loss = py_get(fields, nk[].k__fit_loss)
     var loss = "" if saved_loss is None else String(saved_loss)
     var entries = sequential_entries(model, context)
     mods.released()
@@ -368,12 +375,12 @@ def sequential_predict(mut mods: NativeModules, model: PythonObject, source: Pyt
         # one entry: the argmax (threshold) codes stay on the device and are
         # gathered there into the labels (`model_predict_labels`)
         return sequential_forward(mods, model, source, 4 if loss == "cross_entropy" else 5, PythonObject(1), entries,
-                                  context, fields["classes_"])
+                                  context, py_item(fields, nk[].k_classes_))
     var result = sequential_forward(mods, model, source, 0, PythonObject(None), entries, context)
-    if Bool(py=py_get(fields, "_y_1d", False)):
+    if Bool(py=py_get(fields, nk[].k__y_1d, False)):
         # A one-output model is already contiguous. The native ndarray
         # constructor changes only its ABI rank, preserving the returned words.
-        var windowed_result14 = py_call(context["ndarray"], Python.tuple(result.shape[0]), dtype=context["float32"], buffer=result)
+        var windowed_result14 = py_call(py_item(context, nk[].k_ndarray), Python.tuple(result.shape[0]), dtype=py_item(context, nk[].k_float32), buffer=result)
         mods.released()
         return windowed_result14^
     return result

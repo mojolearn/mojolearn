@@ -17,6 +17,8 @@ from bindings.sequential_description_unpack import (
     sequential_append,
     sequential_fields,
 )
+from bindings.sequential_keys_unpack import sequential_keys
+from bindings.py_balanced import py_item
 
 
 def _shape(mut mods: NativeModules, value: PythonObject, name: String, infer: Bool, context: PythonObject) raises -> PythonObject:
@@ -61,11 +63,12 @@ def _arguments(mut mods: NativeModules, kind: String, supplied: PythonObject, ke
 
 def sequential_add(mut mods: NativeModules, model: PythonObject, kind_arg: PythonObject, supplied: PythonObject,
                    keywords: PythonObject, context: PythonObject) raises -> PythonObject:
+    var nk = sequential_keys()
     var b = mods.module("builtins")
     if not Bool(py=py_call(b.isinstance, kind_arg, b.str)):
         raise Error("kind must name a supported Sequential layer")
     var kind = String(kind_arg.lower())
-    var codes = context["layer_codes"]
+    var codes = py_item(context, nk[].k_layer_codes)
     if not py_contains(codes, kind):
         raise Error("kind must name a supported Sequential layer")
     var code = codes[kind]
@@ -133,41 +136,43 @@ def sequential_add(mut mods: NativeModules, model: PythonObject, kind_arg: Pytho
 
 
 def sequential_compile(mut mods: NativeModules, model: PythonObject, options: PythonObject, context: PythonObject) raises -> PythonObject:
+    var nk = sequential_keys()
     var b = mods.module("builtins")
     var loss = options[0]
     var optimizer = options[1]
     var schedule = options[9]
-    if not py_contains(context["loss_codes"], loss):
+    if not py_contains(py_item(context, nk[].k_loss_codes), loss):
         raise Error("loss must name a supported Sequential loss")
-    if not py_contains(context["optimizer_codes"], optimizer):
+    if not py_contains(py_item(context, nk[].k_optimizer_codes), optimizer):
         raise Error("optimizer must name a supported Sequential optimizer")
-    if not py_contains(context["schedule_codes"], schedule):
+    if not py_contains(py_item(context, nk[].k_schedule_codes), schedule):
         raise Error("schedule must name a supported Sequential schedule")
     var adam = String(optimizer) == "adam" or String(optimizer) == "adamw"
     var momentum = String(optimizer) == "momentum"
     var out = Python.dict()
-    py_setitem(out, "loss", loss)
-    py_setitem(out, "opt", context["optimizer_codes"][optimizer])
-    py_setitem(out, "flags", 1 if momentum and Bool(py=options[4]) else 0)
-    py_setitem(out, "lr", py_call(b.float, options[2]))
-    py_setitem(out, "f1", py_call(b.float, options[5]) if adam else (py_call(b.float, options[3]) if momentum else PythonObject(0.0)))
-    py_setitem(out, "f2", py_call(b.float, options[6]) if adam else PythonObject(0.0))
-    py_setitem(out, "eps", py_call(b.float, options[7]))
-    py_setitem(out, "weight_decay", py_call(b.float, options[8]))
-    py_setitem(out, "sched", context["schedule_codes"][schedule])
-    py_setitem(out, "step_size", py_call(b.int, options[10]))
-    py_setitem(out, "gamma", py_call(b.float, options[11]))
-    py_setitem(out, "huber_delta", py_call(b.float, options[12]))
-    py_setitem(out, "tol", py_call(b.float, options[13]))
-    py_setitem(out, "n_iter_no_change", py_call(b.int, options[14]))
+    py_setitem(out, nk[].k_loss, loss)
+    py_setitem(out, nk[].k_opt, py_item(context, nk[].k_optimizer_codes)[optimizer])
+    py_setitem(out, nk[].k_flags, 1 if momentum and Bool(py=options[4]) else 0)
+    py_setitem(out, nk[].k_lr, py_call(b.float, options[2]))
+    py_setitem(out, nk[].k_f1, py_call(b.float, options[5]) if adam else (py_call(b.float, options[3]) if momentum else PythonObject(0.0)))
+    py_setitem(out, nk[].k_f2, py_call(b.float, options[6]) if adam else PythonObject(0.0))
+    py_setitem(out, nk[].k_eps, py_call(b.float, options[7]))
+    py_setitem(out, nk[].k_weight_decay, py_call(b.float, options[8]))
+    py_setitem(out, nk[].k_sched, py_item(context, nk[].k_schedule_codes)[schedule])
+    py_setitem(out, nk[].k_step_size, py_call(b.int, options[10]))
+    py_setitem(out, nk[].k_gamma, py_call(b.float, options[11]))
+    py_setitem(out, nk[].k_huber_delta, py_call(b.float, options[12]))
+    py_setitem(out, nk[].k_tol, py_call(b.float, options[13]))
+    py_setitem(out, nk[].k_n_iter_no_change, py_call(b.int, options[14]))
     var fields = sequential_fields(model)
-    py_setitem(fields, "_options", out)
+    py_setitem(fields, nk[].k__options, out)
     return model
 
 
 def sequential_native_description(mut mods: NativeModules, model: PythonObject,
                                   n_features: PythonObject, sample: PythonObject) raises -> PythonObject:
-    var layers = sequential_fields(model)["_layers"]
+    var nk = sequential_keys()
+    var layers = py_item(sequential_fields(model), nk[].k__layers)
     # Rank-aware programs do not consume n_features. This also preserves the
     # public description's behavior when sample is present and width is None.
     var width = 0 if sample is not None else Int(py=n_features)
@@ -186,8 +191,9 @@ def sequential_native_description(mut mods: NativeModules, model: PythonObject,
 
 
 def sequential_program(mut mods: NativeModules, model: PythonObject, n_features: PythonObject, sample: PythonObject) raises -> PythonObject:
+    var nk = sequential_keys()
     var b = mods.module("builtins")
-    var layers = sequential_fields(model)["_layers"]
+    var layers = py_item(sequential_fields(model), nk[].k__layers)
     var result = Python.list()
     if sample is None:
         result = Python.list(1, py_call(b.int, n_features), len(layers))
@@ -212,7 +218,8 @@ def sequential_program(mut mods: NativeModules, model: PythonObject, n_features:
 
 
 def sequential_table(model: PythonObject) raises -> PythonObject:
-    var layers = sequential_fields(model)["_layers"]
+    var nk = sequential_keys()
+    var layers = py_item(sequential_fields(model), nk[].k__layers)
     var result = Python.list()
     for k in range(len(layers)):  # driver-loop: over layer scalar options
         _ = py_call(result.append, layers[k][3])
@@ -220,11 +227,12 @@ def sequential_table(model: PythonObject) raises -> PythonObject:
 
 
 def sequential_layers(model: PythonObject, context: PythonObject) raises -> PythonObject:
-    var layers = sequential_fields(model)["_layers"]
+    var nk = sequential_keys()
+    var layers = py_item(sequential_fields(model), nk[].k__layers)
     var result = Python.list()
     for k in range(len(layers)):  # driver-loop: over the model's public layer descriptions
         var layer = layers[k]
-        var name = context["layer_names"][layer[0]]
+        var name = py_item(context, nk[].k_layer_names)[layer[0]]
         if Int(py=layer[0]) >= 9:
             _ = py_call(result.append, Python.tuple(name, layer[4], layer[3]))
         else:
@@ -232,12 +240,13 @@ def sequential_layers(model: PythonObject, context: PythonObject) raises -> Pyth
     return result
 
 def sequential_sample_shape(mut mods: NativeModules, model: PythonObject, dims: List[Int]) raises -> PythonObject:
+    var nk = sequential_keys()
     var b = mods.module("builtins")
     var fields = sequential_fields(model)
-    var shape = fields["input_shape"]
+    var shape = py_item(fields, nk[].k_input_shape)
     var nd = len(dims)
     var needed = shape is not None or nd > 2
-    var layers = fields["_layers"]
+    var layers = py_item(fields, nk[].k__layers)
     var count = len(layers)
     if not needed:
         for k in range(count):  # driver-loop: over shape-changing layer kinds until the schema is known
