@@ -342,7 +342,7 @@ def check_one(
     return bad
 
 
-def main() raises:
+def run_checks() raises:
     comptime if IDENTICAL_BUILD:
         print("sparse_mr_check: IDENTICAL build (assertions)")
     else:

@@ -63,7 +63,7 @@ def first_column(x: List[Float32], r: Int, c: Int) -> List[Float32]:
     return out^
 
 
-def main() raises:
+def run_checks() raises:
     var tr = IdentityTrace()
     tr.header("x_decomp fold_ew_check (DEVIATIONS 5300-5306)")
     # ---- 5300 gemm, all four transposition arms
