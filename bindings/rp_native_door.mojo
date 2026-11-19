@@ -14,7 +14,8 @@ from bindings.py_typed_call import py_call_typed
 from bindings.classical_arrays_door import classical_address
 from bindings.admitted_input_unpack import admit_x
 from bindings.host_sparse_native_door import host_sparse_format
-from bindings.decomp_inputs_unpack import decomp_input
+from bindings.decomp_inputs_unpack import decomp_input, decomp_admit
+from core.admitted_refusals import admitted_finite_refuse
 from bindings.decomp_owner_common_unpack import (
     decomp_attr, decomp_check, decomp_entries, decomp_eq, decomp_f32, decomp_float, decomp_int,
     decomp_lt, decomp_le, decomp_seed, decomp_set_mode,
@@ -124,8 +125,12 @@ def _check(model: PythonObject, fields: PythonObject) raises:
 
 
 def rp_project(model: PythonObject, fields: PythonObject, source: PythonObject, x: PythonObject, inverse: Bool,
-               context: PythonObject) raises -> PythonObject:
-    """transform (X components_^T) or inverse_transform (X inverse_components_^T)."""
+               context: PythonObject, unchecked: Bool = False) raises -> PythonObject:
+    """transform (X components_^T) or inverse_transform (X inverse_components_^T).
+    `unchecked` (transform on a dense X only, `rp_query`): the admission
+    borrowed X without its host finite scan; the native call tests it (the
+    tiled projection's device flag, or one host scan where the tile does not
+    run) and a non-finite X is refused here in the admission's wording."""
     var entries = decomp_entries(model, fields, Python.tuple("x_decomp_rp_project"), context)
     var m = Int(py=x.shape[0])
     var width = Int(py=x.shape[1])
@@ -154,8 +159,11 @@ def rp_project(model: PythonObject, fields: PythonObject, source: PythonObject, 
     var rows = Int(py=matrix.shape[0])
     var out = decomp_f32(Python.tuple(m, rows), context)
     var tiled = not inverse and host_sparse_format(source).byte_length() == 0
+    # Word 5: 0 = the plain product; 1 = the tiled projection of an X the
+    # admission tested; 2 = the tiled projection of an X nothing tested yet.
     var params = Python.list(
-        classical_address(x), m, width, classical_address(matrix), rows, 1 if tiled else 0, classical_address(out))
+        classical_address(x), m, width, classical_address(matrix), rows,
+        (2 if unchecked else 1) if tiled else 0, classical_address(out))
     # The device copy of the fitted matrix (word 7, GPU bindings only; lane
     # ne1-a-decomp-resident, N350): uploaded at the first projection of a
     # fitted state and kept in the model's resident record
@@ -174,6 +182,8 @@ def rp_project(model: PythonObject, fields: PythonObject, source: PythonObject, 
     _ = out  # keep the Python object alive through the native call above
     _ = matrix^
     if flagged != 0:
+        if unchecked:
+            admitted_finite_refuse(flagged, String(py_type(model).__name__))
         raise Error("X: input must be finite; NaN/inf are unsupported")
     _ = out  # keep the Python object alive through the native calls above
     return out
@@ -183,7 +193,19 @@ def rp_query(model: PythonObject, source: PythonObject, inverse: Bool, context: 
     var fields = py_fields(model)
     _check(model, fields)
     var name = String(py_type(model).__name__)
-    var x = decomp_input(source, name, context)
-    var out = rp_project(model, fields, source, x, inverse, context)
+    # fx-board-preprocess (2026-11-19): transform on a dense X borrows a
+    # float32 C-order X without the host finite scan. The tiled projection
+    # already flags a non-finite X on the device copy it uploads (word `flag`
+    # of x_decomp/rp_owner.mojo rp_project_run), so the host scan was a second
+    # test of the same words: one more pass over all of X per transform (the
+    # 0.8.55 `_project` path had none: "no host finiteness pass"). A cast X is
+    # still tested in its cast pass (`finite` stays True), a sparse X and
+    # inverse_transform keep the host test, and where the tile does not run
+    # (the host binding, or a device that declines it) rp_project_run scans
+    # the host words once before the product. Same refusal text either way.
+    var device_tested = not inverse and host_sparse_format(source).byte_length() == 0
+    var admitted = decomp_admit(source, name, context, defer_finite=device_tested)
+    var x = admitted.array
+    var out = rp_project(model, fields, source, x, inverse, context, device_tested and not admitted.finite)
     _ = x^
     return out

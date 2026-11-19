@@ -111,12 +111,16 @@ def bisect_fit[O: ClusterOps](
     mut ops: O, x: List[Float32], n: Int, d: Int, k: Int, n_init: Int, init: Int,
     max_iter: Int, tol: Float64, seed: UInt64, largest_cluster: Bool,
     mut tree: BisectTree, mut labels: List[Int32], mut centers: List[Float32],
-    weights: List[Float32] = List[Float32](),
+    weights: List[Float32] = List[Float32](), x_slot: Int = -1,
 ) raises -> Float64:
     """Returns the inertia against the leaf centers. `weights` (empty: unit)
     are sklearn's sample_weight: the data mean stays unweighted (sklearn's
     `_X_mean`), each 2-means is weighted, and so are the inertia scores and
-    the inertia; 'largest_cluster' counts rows."""
+    the inertia; 'largest_cluster' counts rows. `x_slot` (IDENTICAL device
+    entry only, x_cluster/device_execution.mojo): the float slot that already
+    holds X's n * d words, uploaded from the caller's memory; `x` is then a
+    placeholder and is never read (under IDN_BISECT_DEVICE_CENTER every read
+    of X is of its device slot)."""
     from checks.numerics import identical_mul64
 
     var weighted = len(weights) > 0
@@ -130,7 +134,7 @@ def bisect_fit[O: ClusterOps](
         # IDN_BISECT_DEVICE_CENTER: X up once, the means and the centered
         # matrix on the device; `xc` is a one-word placeholder (kmeans_rows
         # fits the gathered slot and only keeps its `x` alive)
-        xs_all = ops.put(x)
+        xs_all = x_slot if x_slot >= 0 else ops.put(x)
         var mean_s = ops.zeros(d)
         xc_s = ops.alloc(n * d)
         ops.center_cols(xs_all, n, d, mean_s, xc_s)

@@ -99,18 +99,19 @@ def minibatch_entry[O: ClusterOps](
 
 
 def bisect_entry[O: ClusterOps](
-    mut ops: O, x: List[Float32], w: List[Float32], ip: List[Int], fp: List[Float64]
+    mut ops: O, x: List[Float32], w: List[Float32], ip: List[Int], fp: List[Float64], x_slot: Int = -1
 ) raises -> ClusterOut:
     """ip = [n, d, k, n_init, init (0 k-means++, 1 random), max_iter, seed,
     largest_cluster]; fp = [tol]; `w` the sample weights (empty: unit). f = [centers, tree_centers], i = [labels,
-    nodes (left, right, label) per node], s = [inertia]."""
+    nodes (left, right, label) per node], s = [inertia]. `x_slot`: X already
+    in a float slot of `ops` (`bisect_fit`), `x` then a placeholder."""
     var n = ip[0]
     var d = ip[1]
     var tree = BisectTree()
     var labels = List[Int32]()
     var centers = List[Float32]()
     var inertia = bisect_fit(
-        ops, x, n, d, ip[2], ip[3], ip[4], ip[5], fp[0], UInt64(ip[6]), ip[7] != 0, tree, labels, centers, w
+        ops, x, n, d, ip[2], ip[3], ip[4], ip[5], fp[0], UInt64(ip[6]), ip[7] != 0, tree, labels, centers, w, x_slot
     )
     var nodes = List[Int32]()
     for t in range(len(tree.left)):

@@ -248,10 +248,12 @@ def rp_project_py[E: Exec, D: RDev, RES: Bool, X: DecompDev](p: PythonObject) ra
     var d = door_dim(p, 2)
     var matrix = door_ptr(p, 3)
     var rows = door_dim(p, 4)
-    var tiled = Int(py=p[5]) != 0
+    # word 5: 0 = plain product, 1 = tiled, 2 = tiled and X not yet tested finite
+    var tiled_word = Int(py=p[5])
+    var tiled = tiled_word != 0
     var out = door_ptr(p, 6)
     var matrix_dev = Int(py=p[7]) if len(p) == 8 else -1
     var flagged = 0
     with GILReleased(Python()):
-        flagged = rp_project_run[E, D, RES, X](x, m, d, matrix, rows, tiled, out, matrix_dev)
+        flagged = rp_project_run[E, D, RES, X](x, m, d, matrix, rows, tiled, out, matrix_dev, tiled_word == 2)
     return PythonObject(flagged)

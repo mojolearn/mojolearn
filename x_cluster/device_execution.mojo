@@ -7,8 +7,9 @@ defaults. Python admission and output packing stay outside this function.
 from core.hostptr import f32_ptr, read_f32
 from core.device_scan import device_first_nonfinite
 from x_cluster.device_ops import DeviceOps
+from x_cluster.bisect import IDN_BISECT_DEVICE_CENTER
 from x_cluster.bisect_fast import BISECT_FAST_ZEROCOPY, bisect_entry_ptr
-from x_cluster.entries import ENTRY_BISECT, ENTRY_MINIBATCH, run_entry
+from x_cluster.entries import ENTRY_BISECT, ENTRY_MINIBATCH, bisect_entry, run_entry
 from x_cluster.minibatch_ptr import (
     MBK_DEVSCAN_ANY, MBK_IDN_RESIDENT, MBK_NONFINITE_MSG, MBK_ZEROCOPY,
     minibatch_entry_ptr, minibatch_entry_ptr_idn,
@@ -54,6 +55,29 @@ def cluster_device_execute(which: Int, source: Int, count: Int, auxiliary: Int,
             _ = a2^
             if took2:
                 return res2^
+    comptime if IDN_BISECT_DEVICE_CENTER:
+        # fx-board-preprocess (2026-11-19): BisectingKMeans.fit under
+        # IDENTICAL reads X only as its device slot (bisect_fit centers,
+        # gathers and scores on the device), so X goes up straight from the
+        # caller's words (`put_addr`, synchronised before it returns; the
+        # door keeps X alive through the call) and is not copied into a host
+        # List first. That copy was one serial memcpy of all n * d words into
+        # new memory (a page fault per 4 KiB) made only to be uploaded: on
+        # the L40S board job of d3549c756b a 1,000,000 x 220 fit took 291,129
+        # faults and 529 ms of system time in a 1,009 ms call. The same
+        # words reach the same kernels in the same order: no bit moves.
+        # bisect_predict_entry took the same step on 2026-11-17 (lane
+        # fb2-neighbors). FAST keeps its own routes above and below.
+        if which == ENTRY_BISECT and count > 0:
+            var aw = read_f32(auxiliary, auxiliary_count) if auxiliary_count > 0 else List[Float32]()
+            var opsb = DeviceOps()
+            var xsb = opsb.put_addr(source, count)
+            var holder = List[Float32](length=1, fill=Float32(0))
+            var resb = bisect_entry(opsb, holder, aw, ints, floats, xsb)
+            _ = opsb^
+            _ = holder^
+            _ = aw^
+            return resb^
     var x = read_f32(source, count) if count > 0 else List[Float32]()
     var a = read_f32(auxiliary, auxiliary_count) if auxiliary_count > 0 else List[Float32]()
     var scan_dev = False
