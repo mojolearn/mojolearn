@@ -134,6 +134,7 @@ from checks.native_tests.neighbors_weighted_largek import register as register_n
 from checks.native_tests.nmf_native import register as register_nmf_native
 from checks.native_tests.ocsvm_native import register as register_ocsvm_native
 from checks.native_tests.oob_exact_sum import register as register_oob_exact_sum
+from checks.native_tests.ops_grad_identity import register as register_ops_grad_identity
 from checks.native_tests.ops_higher import register as register_ops_higher
 from checks.native_tests.ops_lm_head_v2 import register as register_ops_lm_head_v2
 from checks.native_tests.ops_optimizer import register as register_ops_optimizer
@@ -572,6 +573,7 @@ def all_checks() -> List[Check]:
     checks.append(register_nmf_native())
     checks.append(register_ocsvm_native())
     checks.append(register_oob_exact_sum())
+    checks.append(register_ops_grad_identity())
     checks.append(register_ops_higher())
     checks.append(register_ops_lm_head_v2())
     checks.append(register_ops_optimizer())
