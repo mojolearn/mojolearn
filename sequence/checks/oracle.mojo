@@ -67,6 +67,13 @@ from checks.numerics import (
 )
 from checks.fixture_rng import splitmix64_next
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+from std.sys.compile import is_defined
+
+#: MOJOLEARN_SEQ_FAST_RNN_STEP_GEMM (autograd/rules_recurrent.mojo RNN_STEP_GEMM, lane fx-rnn-cnn-fit 2026-11-19):
+#: under the define the recurrent weight gradients fold in the sequence GEMM's order, restated below.
+comptime _O_RNN_STEP_GEMM = (
+    is_defined["MOJOLEARN_SEQ_FAST_RNN_STEP_GEMM"]() and GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+)
 
 
 @always_inline
@@ -201,6 +208,46 @@ def _o_wgrad_block(K: Int) -> Int:
     return r
 
 
+def _o_split_shape(M: Int, N: Int, K: Int) -> Bool:
+    """Restated (sequence/gemm_split.mojo `gemm_split_shape`): whether an
+    M x N x K product of the sequence GEMM folds its K terms in blocks."""
+    comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
+        return False
+    if M <= 0 or N <= 0 or K <= 64:
+        return False
+    var cells = M * N
+    if M < 8 or N < 8:
+        return cells < 32768
+    if M < 64 or N < 64:
+        return cells < 16384
+    return ((M + 63) // 64) * ((N + 63) // 64) < 8
+
+
+def _o_split_block(K: Int) -> Int:
+    """Restated (sequence/gemm_split.mojo `gemm_split_block`): the smallest
+    power of two R >= 64 with 256 R >= K."""
+    var r = 64
+    while r * 256 < K:
+        r *= 2
+    return r
+
+
+def _o_bptt_block(M: Int, N: Int, K: Int) -> Int:
+    """Rows per block of the M x N weight gradient over K = T B rows (K:
+    one fold). Default: `_o_wgrad_block(K)` above 512 rows; at or below it
+    the trainer launches the sequence GEMM, whose own rule splits some
+    shapes. Under MOJOLEARN_SEQ_FAST_RNN_STEP_GEMM the sequence GEMM's rule
+    at every K: blocks of `_o_split_block(K)` for a split shape, else one
+    fold. Either way: each block folded from +0.0, k ascending; the
+    partials added ascending from +0.0."""
+    var kb = _o_split_block(K) if _o_split_shape(M, N, K) else K
+    comptime if not _O_RNN_STEP_GEMM:
+        var blocked = _o_wgrad_block(K)
+        if blocked < K:
+            kb = blocked
+    return kb
+
+
 def o_bptt_dw(dgx: List[Float32], x: List[Float32], T: Int, B: Int, GH: Int, D: Int, alt: Bool) -> List[Float32]:
     """dW_ih [GH, D] = sum over rows r = s B + b of dgx[r, g] x[r, d]:
     pinned, r ascending in one fold (under IDENTICAL since nr-small D3:
@@ -210,7 +257,7 @@ def o_bptt_dw(dgx: List[Float32], x: List[Float32], T: Int, B: Int, GH: Int, D: 
     during the reverse sweep folds them)."""
     var out = List[Float32](capacity=GH * D)
     var K = T * B
-    var KB = _o_wgrad_block(K)
+    var KB = _o_bptt_block(GH, D, K)
     if not alt and KB < K:
         for g in range(GH):
             for d in range(D):
