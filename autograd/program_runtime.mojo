@@ -13,7 +13,7 @@ from autograd.tape import Tape, Tensor
 from autograd.cast_ops import upload_cast, upload_cast_i32
 from core.cast_in import CastIn
 from autograd.data import permutation, gather_rows
-from autograd.optim import step_lr, optimizer_slots
+from autograd.optim import step_lr, optimizer_slots, optimizer_clips, clip_norm_accumulate, step_lr_clipped
 from autograd.program_loop import (
     LOOP_DONE, LOOP_ITER, LOOP_WORDS, LOOP_MAX_EXACT, OP_LOOP_COMMIT, OP_LOOP_SHADOW, OP_LOOP_OPEN, OP_LOOP_FIT_TICK,
     fit_epochs_per_read,
@@ -491,8 +491,35 @@ def train_program_control[E: Exec & Movable & Deinitable](
                     sa.p0 = s.tape.value(loss)
                     sa.p1 = step_losses.value() + (e * n_batches + bi)
                     s.ex.launch[OP_COPY](sa, 1)
+                if differentiable and optimizer_clips(cfg):
+                    # Lane fx-ops-session-blocks: the clip across the step's
+                    # tensors, as OpsSession.step runs it (the norm's fold
+                    # order is the selected parameters' order).
+                    var chosen = List[Int]()
+                    for j in range(len(params)):  # driver-loop: over optimizer parameters
+                        if selected[j]:
+                            chosen.append(j)
+                    if len(chosen) > 0:
+                        var cell = s.opt_states[states[chosen[0]]].cell
+                        if cfg.clip_global:
+                            for c in range(len(chosen)):  # driver-loop: over the step's tensors (the norm's fold order)
+                                var cj = chosen[c]
+                                var cv = s._state_view(states[cj])
+                                clip_norm_accumulate(s.ex, cfg, cv, s.tape.gradient(s.tensor(phs[cj])),
+                                                     p.param_shapes[cj].count(), cell, c == 0, c == len(chosen) - 1)
+                        for c in range(len(chosen)):  # driver-loop: over optimizer parameter updates
+                            var uj = chosen[c]
+                            var usi = states[uj]
+                            var ust = s._state_view(usi)
+                            var ut = s.opt_states[usi].t + 1
+                            step_lr_clipped(s.ex, cfg, ust, params[uj], s.tape.gradient(s.tensor(phs[uj])),
+                                            p.param_shapes[uj].count(), ut, lr, cell)
+                            s.opt_states[usi].t = ut
+                            s.opt_states[usi].pw1 = ust.pw1
+                            s.opt_states[usi].pw2 = ust.pw2
+                            s.opt_states[usi].mu_prod = ust.mu_prod
                 for j in range(len(params)):  # driver-loop: over optimizer parameter updates
-                    if not selected[j] or not differentiable:
+                    if not selected[j] or not differentiable or optimizer_clips(cfg):
                         continue
                     var si = states[j]
                     var st = s._state_view(si)
