@@ -635,7 +635,7 @@ def arm_e_class_weight() raises -> Int:
     return wrong
 
 
-def main() raises:
+def run_checks() raises:
     print("sample_weight_check: the zero-weight drop, validation, and the")
     print("  bootstrap-vs-objective double-counting rule")
     var ctx = DeviceContext()

@@ -175,7 +175,7 @@ def _gain_split_kernel(
     out_f[unsafe_offset=1] = sp.best_metric_val
 
 
-def main() raises:
+def run_checks() raises:
     var ctx = DeviceContext()
     print("cuml_oracle_check: against cuML's OWN code, per cell")
     print("  ", ORACLE, "-- their headers included verbatim at the pin")

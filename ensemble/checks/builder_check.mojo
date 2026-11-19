@@ -706,7 +706,7 @@ def arm_f_sabotage() raises -> Int:
     return fails
 
 
-def main() raises:
+def run_checks() raises:
     print("builder_check: ensemble/decisiontree/batched_levelalgo/builder.mojo")
     print("  mirroring builder.cuh @ cuml v26.08.00 265b9da6")
     var fails = 0

@@ -500,7 +500,7 @@ def check_multi_output_values(
 # ----------------------------------------------------------------------
 
 
-def main() raises:
+def run_checks() raises:
     print("flatnode: cuML SparseTreeNode / TreeMetaDataNode / predict_one")
     print("upstream cuML 00094f7; `x <= quesval` goes LEFT")
     print("  (decisiontree.cuh:403-404, kLE at :214-215;")

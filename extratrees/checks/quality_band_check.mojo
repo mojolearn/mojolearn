@@ -229,7 +229,7 @@ def sqrt_ratio(n_cols: Int32) -> Float32:
     return (Float32(k) + 0.5) / Float32(Int(n_cols))
 
 
-def main() raises:
+def run_checks() raises:
     var reference = read_reference()
     print(
         "sklearn quality band, read from",

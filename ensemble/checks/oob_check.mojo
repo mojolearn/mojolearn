@@ -497,7 +497,7 @@ def arm_f_boundary_reuse(ctx: DeviceContext) raises -> Int:
     return wrong
 
 
-def main() raises:
+def run_checks() raises:
     print("oob_check: out-of-bag masks and scoring")
     var ctx = DeviceContext()
     var fails = 0

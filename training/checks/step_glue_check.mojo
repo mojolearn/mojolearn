@@ -713,7 +713,7 @@ def clause_rollback(ctx: DeviceContext) raises -> Int:
     return fails
 
 
-def main() raises:
+def run_checks() raises:
     comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
         raise Error("step_glue_check: requires -D MOJOLEARN_NUMERIC_IDENTICAL=1")
     if not step_glue_trial_build():
