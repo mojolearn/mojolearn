@@ -360,5 +360,124 @@ class Workflows(unittest.TestCase):
         self.assertIn("path: ${{ runner.temp }}/w/art/leg/GHA", assemble)
 
 
+class ArmOnGithubPackedBase(unittest.TestCase):
+    """A B arm on a GitHub-packed base (lane fx-pack-arm, 2026-11-19): all 12 arms of 7f5eac7eab failed. The base's
+    remote legs left no launch provenance (no PTX proof: the arm refused the published sm_80 set and built it despite
+    --timed-on sm_89), its packer rebuilt libMojolearnMath.so (bytes its LINUX_PAYLOAD does not record: every arm
+    refused at assemble), and each failed arm kept its 1.9 GB source worktree."""
+
+    class Ctx:
+        def __init__(self, commit=SHA):
+            self.commit, self.lines, self.spawned = commit, [], []
+
+        def say(self, msg):
+            self.lines.append(msg)
+
+        def spawn(self, cmd, env):
+            self.spawned.append(cmd)
+            return 999999
+
+        def leg_provenance(self, leg):
+            return dict(schema="mojolearn.release-leg-provenance.v1", leg=leg.name, vendor=leg.vendor, arch=leg.arch,
+                        source_commit=self.commit, release_build=str(leg.release_build),
+                        set_identity=dict(set="%s/%s" % (leg.vendor, leg.arch)), tooling_digest="t")
+
+    def remote_leg(self, td, name="cuda-sm_80", arch="sm_80", command=None):
+        legs = Path(td) / "legs"
+        return release.RemoteLeg(name, "cuda", arch, command or ["python3", "tools/release_github_build.py", "run",
+                                                                  "--records-only"], {},
+                                 legs / name / name / "release-build", legs, legs / name)
+
+    def test_a_remote_leg_records_its_launch_provenance(self):
+        with tempfile.TemporaryDirectory() as td:
+            leg = self.remote_leg(td)
+            ctx = self.Ctx()
+            self.assertEqual(release.launch_detached(ctx, [leg]), 1)
+            prov = json.loads(leg.provenance_file.read_text())
+            self.assertEqual((prov["leg"], prov["source_commit"]), ("cuda-sm_80", SHA))
+            self.assertEqual(prov["release_build"], str(leg.release_build))
+
+    def test_the_arm_finds_the_base_ptx_proof_through_it(self):
+        import release_reuse
+        with tempfile.TemporaryDirectory() as td:
+            leg = self.remote_leg(td)
+            self.assertEqual(release_reuse._ptx_leg_docs(dict(build_dir=td, source_commit=SHA), None), [])
+            release.launch_detached(self.Ctx(), [leg])
+            docs = release_reuse._ptx_leg_docs(dict(build_dir=td, source_commit=SHA), None)
+            self.assertEqual([(d[1], d[2]) for d in docs], [(SHA, str(leg.release_build))])
+
+    def test_a_remote_leg_attaches_to_its_succeeded_run(self):
+        with tempfile.TemporaryDirectory() as td:
+            leg = self.remote_leg(td, command=["python3", "tools/release_github_build.py", "run", "--records-only",
+                                               "--run-id", "77"])
+            self.assertEqual(release.github_attach_run(self.Ctx(), leg), "77")
+
+    def test_the_pack_refuses_runtime_bytes_its_payload_does_not_record(self):
+        import hashlib
+        import zipfile
+        import release_reuse
+        with tempfile.TemporaryDirectory() as td:
+            def wheel(name, members, payload):
+                path = Path(td) / name
+                with zipfile.ZipFile(path, "w") as z:
+                    for member, data in members.items():
+                        z.writestr(member, data)
+                    z.writestr("x-0.dist-info/LINUX_PAYLOAD.json", json.dumps(dict(runtime_sha256=payload)))
+                return path
+            leg_built = hashlib.sha256(b"leg-built").hexdigest()
+            shared = hashlib.sha256(b"shared").hexdigest()
+            good = wheel("core.whl", {"mojolearn/.libs/libMojolearnMath.so": b"leg-built"},
+                         {"mojolearn/.libs/libMojolearnMath.so": leg_built})
+            self.assertEqual(release_reuse.payload_runtime_mismatches(good), [])
+            # a plugin's payload lists the shared closure that ships in the core wheel: skipped, not refused
+            plugin = wheel("plugin.whl", {}, {"mojolearn/.libs/libAsyncRTMojoBindings.so": shared})
+            self.assertEqual(release_reuse.payload_runtime_mismatches(plugin), [])
+            rebuilt = wheel("rebuilt.whl", {"mojolearn/.libs/libMojolearnMath.so": b"packer cc"},
+                            {"mojolearn/.libs/libMojolearnMath.so": leg_built})
+            [line] = release_reuse.payload_runtime_mismatches(rebuilt)
+            self.assertIn("libMojolearnMath.so: got", line)
+            self.assertIn("payload " + leg_built[:12], line)
+        self.assertIn("payload_runtime_mismatches", (TOOLS / "release.py").read_text())
+
+    def test_host_rows_run_the_host_owner_leg_beside_other_legs(self):
+        import release_reuse as R
+        def row(arch, tier, decision="BUILD"):
+            return dict(target=R.LINUX, tier=tier, vendor="cuda", arch=arch, decision=decision)
+        saved = R.LINUX_SETS
+        try:
+            R.LINUX_SETS = (("cuda", "sm_89"), ("cuda", "sm_80"))
+            legs, why = R.launch_legs([row("sm_80", "device"), row("sm_89", "host"), row("sm_80", "host")], "REUSE")
+            self.assertEqual(legs, ["cuda-sm_89", "cuda-sm_80"])
+            self.assertIn("host owner", why["cuda-sm_89"])
+            legs, _ = R.launch_legs([row("sm_80", "device"), row("sm_89", "device", "REUSE")], "REUSE")
+            self.assertEqual(legs, ["cuda-sm_80"])
+            legs, why = R.launch_legs([row("sm_89", "host")], "REUSE")
+            self.assertEqual(legs, ["cuda-sm_89"])
+            self.assertIn("cheapest", why["cuda-sm_89"])
+            R.LINUX_SETS = (("hip", "gfx942"),)
+            legs, _ = R.launch_legs([dict(row("gfx942", "device"), vendor="hip"), dict(row("gfx942", "host"), vendor="hip")],
+                                    "REUSE")
+            self.assertEqual(legs, ["hip-gfx942"])
+        finally:
+            R.LINUX_SETS = saved
+
+    def test_a_failed_github_pack_drops_the_source_worktree(self):
+        with tempfile.TemporaryDirectory() as td:
+            src = write(Path(td) / "source" / SHA[:12] / "file", "x" * 100).parent
+            calls = []
+            saved = RC.sh
+            RC.sh = lambda *a, **k: calls.append(a) or ""
+            try:
+                done = dict(steps={"linux-builds": {}})
+                self.assertEqual(RC.drop_source_after_failure(td, SHA, done, "local", say=lambda m: None), 0)
+                self.assertEqual(RC.drop_source_after_failure(td, SHA, dict(steps={}), "github", say=lambda m: None), 0)
+                self.assertEqual(RC.drop_source_after_failure(td, SHA, done, "github", keep=True, say=lambda m: None), 0)
+                self.assertTrue(src.exists())
+                self.assertEqual(RC.drop_source_after_failure(td, SHA, done, "github", say=lambda m: None), 100)
+                self.assertFalse(src.exists())
+            finally:
+                RC.sh = saved
+
+
 if __name__ == "__main__":
     unittest.main()

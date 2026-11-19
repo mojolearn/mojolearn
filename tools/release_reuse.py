@@ -1370,6 +1370,35 @@ def apply_defines(rows, current, facts, readers, names, timed=None):
     return moved
 
 
+def launch_legs(rows, rt_decision):
+    """(legs, why) of a plan: the "<vendor>-<arch>" legs to launch, in LINUX_SETS order, and each one's reason.
+    A set's leg runs when one of its device rows BUILDs; host rows or a runtime BUILD with no such leg run the host
+    owner's leg (HOST_LEG, the cheapest); host rows BUILD beside other sets' legs also run the host owner's leg."""
+    legs, why = [], {}
+    for vendor, arch in LINUX_SETS:
+        need = [r for r in rows if r["target"] == LINUX and not r["tier"] == "host"
+                and (r["vendor"], r["arch"]) == (vendor, arch) and r["decision"] == "BUILD"]
+        if need:
+            legs.append(f"{vendor}-{arch}")
+            why[f"{vendor}-{arch}"] = f"{len(need)} binding(s) to build"
+    host_build = [r for r in rows if r["target"] == LINUX and r["tier"] == "host" and r["decision"] == "BUILD"]
+    if not legs and (host_build or rt_decision == "BUILD"):
+        name = "%s-%s" % HOST_LEG
+        legs.append(name)
+        why[name] = ("%d host binding(s)" % len(host_build) if host_build else "the runtime closure") + \
+            " need a build box and no set does: the cheapest leg builds them"
+    elif host_build and HOST_LEG in LINUX_SETS and "%s-%s" % HOST_LEG not in legs:
+        # Host rows BUILD and only other sets' legs run (a B arm timed on some sets whose PTX set was refused: its
+        # sm_80 leg runs, the timed sm_89 set reads the define in host bindings only). The host owner's set is
+        # assembled from its own leg (place_merged: a merged host file serving a binding to BUILD must be the
+        # set's leg's), so its leg runs. 2026-11-19 arm fx-lc-test-reuse: legs cuda-sm_80 only, refused at assemble
+        # ("cuda/sm_89 _mojolearn_native_orchestration_host.so serves ... to BUILD and no leg built it").
+        name = "%s-%s" % HOST_LEG
+        legs = [f"{v}-{a}" for v, a in LINUX_SETS if f"{v}-{a}" in legs or (v, a) == HOST_LEG]
+        why[name] = "%d host binding(s) to build: the host owner's set is assembled from its own leg" % len(host_build)
+    return legs, why
+
+
 def timed_sets(arches):
     """The (vendor, arch) sets of a comma list of ARCHES (tools/release.py candidate --timed-on), or None for
     empty (every set is timed: the default)."""
@@ -1576,28 +1605,7 @@ def make_plan(commit, cache_dir, root=ROOT, host_toolchain=None, prev=None, buil
         _refuse_ptx(rows, "the published set is taken with the host owner's host bindings and no %s-%s leg runs "
                     "at this freeze" % HOST_LEG)
         ptx_proof = None
-    legs, why = [], {}
-    for vendor, arch in LINUX_SETS:
-        need = [r for r in rows if r["target"] == LINUX and not r["tier"] == "host"
-                and (r["vendor"], r["arch"]) == (vendor, arch) and r["decision"] == "BUILD"]
-        if need:
-            legs.append(f"{vendor}-{arch}")
-            why[f"{vendor}-{arch}"] = f"{len(need)} binding(s) to build"
-    host_build = [r for r in rows if r["target"] == LINUX and r["tier"] == "host" and r["decision"] == "BUILD"]
-    if not legs and (host_build or rt_decision == "BUILD"):
-        name = "%s-%s" % HOST_LEG
-        legs.append(name)
-        why[name] = ("%d host binding(s)" % len(host_build) if host_build else "the runtime closure") + \
-            " need a build box and no set does: the cheapest leg builds them"
-    elif host_build and HOST_LEG in LINUX_SETS and "%s-%s" % HOST_LEG not in legs:
-        # Host rows BUILD and only other sets' legs run (a B arm timed on some sets whose PTX set was refused: its
-        # sm_80 leg runs, the timed sm_89 set reads the define in host bindings only). The host owner's set is
-        # assembled from its own leg (place_merged: a merged host file serving a binding to BUILD must be the
-        # set's leg's), so its leg runs. 2026-11-19 arm fx-lc-test-reuse: legs cuda-sm_80 only, refused at assemble
-        # ("cuda/sm_89 _mojolearn_native_orchestration_host.so serves ... to BUILD and no leg built it").
-        name = "%s-%s" % HOST_LEG
-        legs = [f"{v}-{a}" for v, a in LINUX_SETS if f"{v}-{a}" in legs or (v, a) == HOST_LEG]
-        why[name] = "%d host binding(s) to build: the host owner's set is assembled from its own leg" % len(host_build)
+    legs, why = launch_legs(rows, rt_decision)
     plan = dict(schema=PLAN_SCHEMA, commit=commit, made=dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
                 previous=prev, previous_identities_from=prev_source, considered=considered, rows=rows, runtime=runtime,
                 legs=legs, leg_reasons=why, ptx_proof=ptx_proof, host_toolchain=host_toolchain,

@@ -193,11 +193,39 @@ def prune_plan(set_dir):
     return out
 
 
+def drop_source(work, commit):
+    """Remove the detached source worktree <work>/source/<commit12> (source_tree makes it again on a resume).
+    Returns the bytes freed."""
+    import shutil
+    src = Path(work) / "source" / commit[:12]
+    if not src.exists():
+        return 0
+    size = sum(f.lstat().st_size for f in src.rglob("*") if f.is_file() or f.is_symlink())
+    sh("git", "worktree", "remove", "--force", str(src), check=False)
+    if src.exists():
+        shutil.rmtree(src, ignore_errors=True)
+        sh("git", "worktree", "prune", check=False)
+    return size
+
+
+def drop_source_after_failure(work, commit, state, pack, keep=False, say=print):
+    """A --pack github build that stopped after its legs were collected (linux-builds done: the trees are on GitHub,
+    the pack job checks out the source itself) keeps nothing on the Mac that needs the 1.9 GB source worktree, so
+    it is removed; a resume makes it again. 2026-11-19: twelve failed arms of 7f5eac7eab left 12 x 1.9 GB of source
+    worktrees (86 -> 49 GB free); the pack runs' artifacts were 3.5 MB each. Returns the bytes freed."""
+    if keep or pack != "github" or "linux-builds" not in ((state or {}).get("steps") or {}):
+        return 0
+    freed = drop_source(work, commit)
+    if freed:
+        say(f"measurement build: stopped after its legs ran on GitHub; removed the source worktree "
+            f"({freed / GIB:.2f} GB, a resume makes it again)")
+    return freed
+
+
 def prune_set(work, commit, say=print):
     """After a set packed and its candidate.json was written: delete prune_plan's files, the directories they
     leave empty, and the detached source worktree <work>/source/<commit12> (a resume makes it again). Returns the
     bytes freed."""
-    import shutil
     d = Path(work) / commit[:12]
     freed = 0
     for p, size in prune_plan(d):
@@ -207,14 +235,7 @@ def prune_set(work, commit, say=print):
         for root, _, _ in os.walk(d / rel, topdown=False):
             if not os.listdir(root):
                 os.rmdir(root)
-    src = Path(work) / "source" / commit[:12]
-    if src.exists():
-        size = sum(f.lstat().st_size for f in src.rglob("*") if f.is_file() or f.is_symlink())
-        sh("git", "worktree", "remove", "--force", str(src), check=False)
-        if src.exists():
-            shutil.rmtree(src, ignore_errors=True)
-            sh("git", "worktree", "prune", check=False)
-        freed += size
+    freed += drop_source(work, commit)
     say(f"measurement build: pruned {freed / GIB:.2f} GB of intermediates from {Path(work)} (leg trees, host "
         "composition, assembled sets, audit wheel copies, unstripped wheels, the source worktree); kept "
         f"{d / 'linux' / 'final'} (wheels, candidate.json), every .json/.log record, state.json, ledger, prebuild. "
@@ -802,6 +823,8 @@ def main(argv=None, release=None):
     else:
         print(f"measurement build: origin/main {str(after['origin_main'])[:12]} and {after['origin_tags']} origin / "
               f"{after['local_tags']} local tags unchanged")
+    if rc and not a.dry_run:
+        drop_source_after_failure(work, a.commit, r.state, pack, keep=a.keep_intermediates)
     if rc or a.dry_run:
         return rc
     write_candidate(a, r, release, C, work, cand, vendors, version, defines, label, tooling_sha, targets, built, plan,
